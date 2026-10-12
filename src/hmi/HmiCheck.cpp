@@ -260,9 +260,16 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
         const auto& a = list[i];
         const std::string where = actionLabel(i, a);
         const Id obj = o ? o->id : kNoId;
+        // 1.12.13 : un geste sur un tableau - les parametres qu'il passe (Ligne, Colonne, Element, Titre...) sont des noms
+        // connus de ses actions ; Element^ se lit Element (comme le moteur).
+        std::set<std::string> received;
+        if (o && o->kind == Kind::Table && triggerIsTable(a.trigger))
+            for (const auto& prm : table::receivedParams(p, *o, a.trigger)) received.insert(upperText(prm.name));
+        const auto knownHere = [&](const std::string& name) { return received.count(upperText(name)) != 0 || known(p, plc, name, &v); };
         // 1.11 (REP) : les $ d'un repere sont transparents ($V[2]$.Cmd se lit V[2].Cmd) ;
         // l'ancien $Vanne$ qui n'est pas une variable : l'erreur ordinaire, et la phrase.
-        const std::string target = markers::strip(a.target, operationWritesVariable(a.operation) ? markers::Mode::Expression : markers::Mode::Text);
+        const std::string target = table::withoutCaret(
+            markers::strip(a.target, operationWritesVariable(a.operation) ? markers::Mode::Expression : markers::Mode::Text));
         if (triggerWatches(a.trigger) && a.watch.empty())
             add(out, S::Error, "Action", v.id, obj, where, "aucune expression surveill\xC3\xA9" "e");
         if ((a.trigger == Trigger::Click || a.trigger == Trigger::DoubleClick || a.trigger == Trigger::LongPress) && !o)
@@ -286,7 +293,7 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
         }
         if (operationWritesVariable(a.operation)) {
             if (a.target.empty()) add(out, S::Error, "Action", v.id, obj, where, "aucune variable \xC3\xA0 \xC3\xA9" "crire");
-            else if (!known(p, plc, target, &v) && !known(p, plc, scanRoots(target).empty() ? target : scanRoots(target).front(), &v))
+            else if (!knownHere(target) && !knownHere(scanRoots(target).empty() ? target : scanRoots(target).front()))
                 add(out, S::Error, "Action", v.id, obj, where,
                     "variable inexistante : " + target
                         + dup::markerHint(a.target, scanRoots(target).empty() ? target : scanRoots(target).front()));
@@ -325,11 +332,11 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
             for (auto& r : scanRoots(a.value)) roots.push_back(r);
         if (a.operation == Operation::Log) for (auto& r : TextTemplate::compile(a.value).roots()) roots.push_back(r);
         if (a.operation == Operation::RunScript)
-            for (const auto& u : scriptNames(a.value)) roots.push_back(u.name);
+            for (const auto& u : scriptNames(received.empty() ? a.value : table::withoutCaret(a.value))) roots.push_back(u.name);
         std::set<std::string> said;
         const std::string fieldsText = a.watch + "\n" + a.guard + "\n" + a.value;
         for (const auto& r : roots)
-            if (!known(p, plc, r, &v) && said.insert(r).second)
+            if (!knownHere(r) && said.insert(r).second)
                 add(out, S::Error, "Variable", v.id, obj, where, std::string(unknownVariablePrefix()) + r + dup::markerHint(fieldsText, r));
     }
 }
@@ -375,7 +382,8 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         if (!isIdentifier(ty.name)) add(out, S::Error, cat, kNoId, kNoId, ty.name, "nom de type invalide : '" + ty.name + "'");
         else if (types::isElementary(ty.name)) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : le nom d'un type \xC3\xA9l\xC3\xA9mentaire");
         else if (!typeNames.insert(upperText(ty.name)).second) add(out, S::Error, cat, kNoId, kNoId, ty.name, "type IHM en double : " + ty.name);
-        if (ty.members.empty()) add(out, S::Warning, cat, kNoId, kNoId, ty.name, ty.name + " : aucun membre");
+        // 1.12.13 : une enumeration n'a pas de membres (ses valeurs) - pas d'avertissement.
+        if (ty.members.empty() && ty.kind != HmiTypeKind::Enumeration) add(out, S::Warning, cat, kNoId, kNoId, ty.name, ty.name + " : aucun membre");
         std::set<std::string> members;
         for (const auto& m : ty.members) {
             std::string why;
@@ -3481,15 +3489,27 @@ struct ExprWalker {
         Id          script{kNoId};
     };
 
+    // 1.12.13 : les parametres qu'un geste sur un tableau passe a l'action verifiee (Ligne, Element, Titre... en
+    // majuscules) : des noms connus le temps de ses expressions.
+    std::set<std::string> received{};
+
     exprcheck::Context context(const View* v) const {
         exprcheck::Context c;
         c.project = &p;
         c.view = v;
         const Project* pp = &p;
         const NameExists* names = &plc;
-        c.known = [pp, names, v](std::string_view root) { return known(*pp, *names, root, v); };
+        c.known = [pp, names, v, extra = received](std::string_view root) {
+            return extra.count(upperText(root)) != 0 || known(*pp, *names, root, v);
+        };
         c.plc = paths;
         return c;
+    }
+    static std::set<std::string> receivedBy(const Project& pr, const Object* o, const Action& a) {
+        std::set<std::string> names;
+        if (o && o->kind == Kind::Table && triggerIsTable(a.trigger))
+            for (const auto& prm : table::receivedParams(pr, *o, a.trigger)) names.insert(upperText(prm.name));
+        return names;
     }
 
     void push(const Where& w, std::string msg, const std::string& unknownName = {}, const std::string& suggestion = {},
@@ -3565,13 +3585,18 @@ struct ExprWalker {
         for (std::size_t i = 0; i < list.size(); ++i) {
             const auto& a = list[i];
             const Where w{&v, o ? o->id : kNoId, "Action", actionLabel(i, a)};
+            received = receivedBy(p, o, a);   // 1.12.13 : un geste sur un tableau
+            struct Forget {
+                std::set<std::string>& names;
+                ~Forget() { names.clear(); }
+            } forget{received};
             expr(w, a.watch, W::Any, "expression surveill\xC3\xA9" "e ");
             expr(w, a.guard, W::Bool, "condition ");
             const bool writes = a.operation == Operation::Toggle || a.operation == Operation::Set || a.operation == Operation::Reset
                              || a.operation == Operation::Increment || a.operation == Operation::Decrement || a.operation == Operation::Assign;
             if (a.operation == Operation::Assign) expr(w, a.value, W::Any, "valeur ");
             if (a.operation == Operation::Increment || a.operation == Operation::Decrement) expr(w, a.value, W::Number, "pas ");
-            if (writes) target(w, a.target, "cible ");
+            if (writes) target(w, received.empty() ? a.target : table::withoutCaret(a.target), "cible ");
             if (a.operation == Operation::Log) text(w, a.value, "message ");
             if (operationTakesArguments(a.operation)) {
                 const View* opened = p.viewByName(trimmedCopy(a.target));
@@ -3712,6 +3737,7 @@ struct ExprWalker {
         bool            write{false};    // la cible d'une ecriture
         std::string     prefix;
         bool            strict{true};    // 1.12.6 : un type qui ne convient pas est une erreur (sinon un avertissement)
+        std::set<std::string> received{};   // 1.12.13 : les parametres d'un geste sur un tableau (une action)
     };
 
     std::vector<Site> sitesOf(const Object& o, const View* view) const {
@@ -3747,11 +3773,12 @@ struct ExprWalker {
         for (std::size_t i = 0; i < o.actions.size(); ++i) {
             const auto& a = o.actions[i];
             const std::string label = actionLabel(i, a);
-            s.push_back(Site{"Action", label, a.guard, W::Bool, false, false, "condition "});
-            if (a.operation == Operation::Assign) s.push_back(Site{"Action", label, a.value, W::Any, false, false, "valeur "});
+            const auto names = receivedBy(p, &o, a);   // 1.12.13 : un geste sur un tableau
+            s.push_back(Site{"Action", label, a.guard, W::Bool, false, false, "condition ", true, names});
+            if (a.operation == Operation::Assign) s.push_back(Site{"Action", label, a.value, W::Any, false, false, "valeur ", true, names});
             const bool writes = a.operation == Operation::Toggle || a.operation == Operation::Set || a.operation == Operation::Reset
                              || a.operation == Operation::Increment || a.operation == Operation::Decrement || a.operation == Operation::Assign;
-            if (writes) s.push_back(Site{"Action", label, a.target, W::Any, false, true, "cible "});
+            if (writes) s.push_back(Site{"Action", label, names.empty() ? a.target : table::withoutCaret(a.target), W::Any, false, true, "cible ", true, names});
         }
         return s;
     }
@@ -3764,7 +3791,10 @@ struct ExprWalker {
         const auto one = [&](const std::string& source, exprcheck::Want want, const std::string& shown) {
             const std::string t = trimmedCopy(source);
             if (t.empty() || !Expression::compile(t).valid()) return;
-            for (auto& pb : s.write ? exprcheck::checkTarget(context(&in), t) : exprcheck::check(context(&in), t, want, s.strict))
+            auto ctx = context(&in);
+            if (!s.received.empty())   // 1.12.13 : les parametres d'un geste sur un tableau
+                ctx.known = [names = s.received, base = ctx.known](std::string_view root) { return names.count(upperText(root)) != 0 || !base || base(root); };
+            for (auto& pb : s.write ? exprcheck::checkTarget(ctx, t) : exprcheck::check(ctx, t, want, s.strict))
                 found.emplace_back(shown.empty() ? t : shown, std::move(pb));
         };
         if (s.templ) {

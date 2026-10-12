@@ -3,6 +3,9 @@
 
 #include "HmiEdit.hpp"
 #include "HmiOperators.hpp"   // 1.10
+#include "HmiEnums.hpp"       // 1.12.13 : l'enumeration du modele Tableaux dynamiques (toString, fromString)
+#include "HmiTable.hpp"       // 1.12.13 : ses colonnes dynamiques
+#include "HmiWidgets.hpp"     // 1.12.13 : formatCells (ses cases fixes)
 
 #include <algorithm>
 #include <cctype>
@@ -524,6 +527,11 @@ const std::vector<ViewTemplate>& viewTemplates() {
         {"communication", "Communication", "L'\xC3\xA9tat de la communication, le diagnostic de l'automate, l'historique.", "",
          {"vue", "modele"}},
         {"production", "Production", "Les compteurs de production et le TRS, une courbe, le tableau des variables.", "", {"vue", "modele"}},
+        // 1.12.13 : le Tableau en lignes dynamiques, une source de chaque genre (ses types et ses variables crees s'ils manquent).
+        {"tableaux_dynamiques", "Tableaux dynamiques",
+         "Un tableau par genre de source : ARRAY de structures, LIST, MAP et plusieurs MAP par la cl\xC3\xA9, structure, \xC3\xA9" "num\xC3\xA9ration, "
+         "une liste par colonne, cases fixes R/W ; ses types et ses variables sont cr\xC3\xA9\xC3\xA9s s'ils manquent, ses scripts les font vivre.",
+         "", {"vue"}},
         // ... des popups (a parametres, aucune variable du projet en dur)...
         {"confirmation", "Confirmation", "Une popup \xC3\xA0 param\xC3\xA8tres (Question, Reponse) : la question, Oui et Non.", "popup",
          {"popup"}, 420, 200},
@@ -556,6 +564,377 @@ const ViewTemplate* viewTemplate(std::string_view key) {
         if (t.key == key || t.label == key) return &t;
     return nullptr;
 }
+
+// ===================================================== 1.12.13 : le modele Tableaux dynamiques ===
+//  UN TABLEAU PAR GENRE DE SOURCE, en marche des la simulation (fillTablesDemo) :
+//    Cuves      ARRAY[1..4] OF T_Cuve : [#], des membres, une formule (%), les seuils de la variable, une formule de
+//               couleur, Consigne R/W, un texte a trous (la vanne), une autre liste (Debits[*] : "..." sur la 4e
+//               ligne) ; la ligne choisie ecrit Cuve_Choisie ; un double clic : Element.Consigne := Element.Capacite / 2
+//               (Element par reference) ; Case saisie : Ancienne et Nouvelle ; un clic sur un en-tete trie (Tri_Cuves).
+//    Recette    T_Recette, une structure : une ligne par membre, Valeur R/W.
+//    Alarmes    LIST OF T_Alarme : une ligne par alarme (LIST_ADD), "Aucune alarme" sans ligne ; un clic sur Active la
+//               bascule ; + Alarme et - Alarme la font grandir et retrecir.
+//    Stock      MAP[STRING] OF INT, avec Prix et Seuils (d'autres MAP lues par la cle) : "..." ou une cle manque ;
+//               triee par quantite ; la ligne choisie ecrit Article (la cle) ; + Article ajoute une cle sans prix.
+//    T_Etat     une enumeration : Nom, Valeur, Texte.
+//    Listes     sans source : une liste par colonne (Lignes[*], Cadences[*] R/W, Debits[*]) - la plus longue fait les
+//               lignes, "..." ailleurs.
+//    Reglages   des cases fixes, la colonne du milieu R/W (colAccess R;W;R).
+//  Les types et les variables sont crees s'ils manquent (rangees dans le dossier "Tableaux dynamiques") ; un nom deja
+//  pris par autre chose prend _Ex, et les tableaux citent le nom retenu. Les scripts de la vue donnent les valeurs de
+//  depart (a l'ouverture, une fois) et font vivre les cuves (a chaque cycle : le niveau suit la consigne).
+namespace {
+
+// Un type du modele : repris s'il existe a l'identique (les memes membres, les memes valeurs), cree sinon (une
+// enumeration avec son toString et son fromString) ; un nom pris par un autre type : Nom_Ex, Nom_Ex2... Rend le nom retenu.
+std::string demoType(Project& p, HmiType t, const std::string& folder) {
+    const std::string base = t.name;
+    for (int n = 1; n < 100; ++n) {
+        const HmiType* have = p.hmiTypeByName(t.name);
+        if (!have) break;
+        if (have->kind == t.kind && have->members == t.members && have->values == t.values) return have->name;
+        t.name = base + "_Ex" + (n > 1 ? std::to_string(n) : std::string{});
+    }
+    t.id = p.allocate();
+    t.folder = folder;
+    if (t.kind == HmiTypeKind::Enumeration) (void)regenerateEnumConversions(p, t);
+    const std::string name = t.name;
+    p.programs.types.push_back(std::move(t));
+    return name;
+}
+
+// Une variable du modele : reprise si elle existe avec le meme type (sa valeur aussi), creee sinon ; un nom pris par une
+// variable d'un autre type : Nom_Ex... Rend le nom retenu.
+std::string demoVariable(Project& p, const std::string& base, const std::string& type, const std::string& initial,
+                         const std::string& description, const std::string& folder) {
+    std::string name = base;
+    for (int n = 1; n < 100; ++n) {
+        const Variable* have = p.variable(name);
+        if (!have) break;
+        if (upperCopy(have->type) == upperCopy(type)) return have->name;
+        name = base + "_Ex" + (n > 1 ? std::to_string(n) : std::string{});
+    }
+    Variable v;
+    v.id = p.allocate();
+    v.name = name;
+    v.type = type;
+    v.initial = initial;
+    v.description = description;
+    v.folder = folder;
+    p.programs.variables.push_back(std::move(v));
+    return name;
+}
+
+// Une ligne d'Unites et formats (la plage, les seuils) pour un chemin, si le projet n'en a pas.
+void demoDisplay(Project& p, const std::string& path, const char* unit, const char* format, const char* min, const char* max,
+                 const char* high, const char* highAlarm) {
+    for (const auto& d : p.displays)
+        if (upperCopy(d.path) == upperCopy(path)) return;
+    VariableDisplay d;
+    d.path = path;
+    d.unit = unit;
+    d.format = format;
+    d.min = min;
+    d.max = max;
+    d.high = high;
+    d.highAlarm = highAlarm;
+    p.displays.push_back(std::move(d));
+}
+
+table::Column demoColumn(const char* title, std::string content, double width = 1.0, bool write = false, const char* format = "",
+                         const char* unit = "") {
+    table::Column c;
+    c.title = title;
+    c.content = std::move(content);
+    c.width = width;
+    c.write = write;
+    c.format = format;
+    c.unit = unit;
+    return c;
+}
+
+void demoGesture(Object& o, Trigger t, Operation op, std::string target, std::string value, std::string column = {}) {
+    Action a;
+    a.trigger = t;
+    a.operation = op;
+    a.target = std::move(target);
+    a.value = std::move(value);
+    a.column = std::move(column);
+    o.actions.push_back(std::move(a));
+}
+
+void fillTablesDemo(Project& p, View& v) {
+    namespace tb = table;
+    const std::string folder = "Tableaux dynamiques";
+    // ---- les types
+    HmiType etat;
+    etat.name = "T_Etat";
+    etat.kind = HmiTypeKind::Enumeration;
+    etat.description = "L'\xC3\xA9tat d'une cuve (le mod\xC3\xA8le Tableaux dynamiques)";
+    etat.values = {{"ARRET", 0, "Arr\xC3\xAAt", ""}, {"MARCHE", 1, "En marche", ""}, {"DEFAUT", 2, "D\xC3\xA9" "faut", ""}};
+    const std::string tEtat = demoType(p, etat, folder);
+    HmiType vanne;
+    vanne.name = "T_Vanne";
+    vanne.description = "La vanne de remplissage d'une cuve";
+    vanne.members = {{"Ouverture", "REAL", "", "Son ouverture (%)"}, {"Ouverte", "BOOL", "", "Ouverte (plus de 1 %)"}};
+    const std::string tVanne = demoType(p, vanne, folder);
+    HmiType cuve;
+    cuve.name = "T_Cuve";
+    cuve.description = "Une cuve : son niveau suit sa consigne";
+    cuve.members = {{"Nom", "STRING", "", "Son nom"},
+                    {"Niveau", "REAL", "", "Son niveau (m)"},
+                    {"Capacite", "REAL", "10.0", "Sa hauteur utile (m)"},
+                    {"Consigne", "REAL", "", "Le niveau vis\xC3\xA9 (m)"},
+                    {"Etat", tEtat, "", "Arr\xC3\xAAt, en marche ou en d\xC3\xA9" "faut"},
+                    {"Vanne", tVanne, "", "Sa vanne de remplissage"}};
+    const std::string tCuve = demoType(p, cuve, folder);
+    HmiType alarme;
+    alarme.name = "T_Alarme";
+    alarme.description = "Une alarme de la liste";
+    alarme.members = {{"Message", "STRING", "", "Ce qu'elle dit"}, {"Priorite", "INT", "", "1 : la plus forte"},
+                      {"Active", "BOOL", "", "Toujours l\xC3\xA0"}};
+    const std::string tAlarme = demoType(p, alarme, folder);
+    HmiType recette;
+    recette.name = "T_Recette";
+    recette.description = "Une recette de cuisson";
+    recette.members = {{"Nom", "STRING", "", "Son nom"}, {"Temperature", "REAL", "", "La temp\xC3\xA9rature du four (\xC2\xB0" "C)"},
+                       {"Duree", "INT", "", "La dur\xC3\xA9" "e (min)"}, {"Vapeur", "BOOL", "", "Avec de la vapeur"}};
+    const std::string tRecette = demoType(p, recette, folder);
+    // ---- les variables
+    const auto var = [&](const char* name, const std::string& type, const char* initial, const char* description) {
+        return demoVariable(p, name, type, initial, description, folder);
+    };
+    const std::string cuves = var("Cuves", "ARRAY[1..4] OF " + tCuve, "", "Quatre cuves : un tableau de structures (ARRAY)");
+    const std::string debits = var("Debits", "ARRAY[1..3] OF REAL", "", "Trois d\xC3\xA9" "bits (m\xC2\xB3/h) : une liste plus courte que Cuves");
+    const std::string alarmes = var("Alarmes", "LIST OF " + tAlarme, "", "Les alarmes : une LIST qui grandit et r\xC3\xA9tr\xC3\xA9" "cit");
+    const std::string stock = var("Stock", "MAP[STRING] OF INT", "['vis' := 30, 'ecrou' := 50, 'rondelle' := 12]",
+                                  "Le stock de chaque article : une MAP");
+    const std::string prix = var("Prix", "MAP[STRING] OF REAL", "['vis' := 0.12, 'ecrou' := 0.08]",
+                                 "Le prix de chaque article : une autre MAP de m\xC3\xAAme cl\xC3\xA9 (la rondelle n'en a pas)");
+    const std::string seuils = var("Seuils", "MAP[STRING] OF INT", "['vis' := 20, 'ecrou' := 20, 'rondelle' := 20]",
+                                   "Le stock minimal de chaque article : une troisi\xC3\xA8me MAP");
+    const std::string recetteV = var("Recette", tRecette, "", "Une recette : une structure (STRUCT)");
+    const std::string lignes = var("Lignes", "LIST OF STRING", "['L1', 'L2', 'L3', 'L4']", "Quatre lignes : une LIST de textes");
+    const std::string cadences = var("Cadences", "LIST OF INT", "[120, 95, 101, 88, 130]", "Cinq cadences : la plus longue des listes");
+    const std::string choisie = var("Cuve_Choisie", "INT", "1", "La cuve choisie d'un clic (Ligne choisie \xE2\x86\x92)");
+    const std::string article = var("Article", "STRING", "'vis'", "L'article choisi d'un clic (sa cl\xC3\xA9)");
+    const std::string tri = var("Tri_Cuves", "STRING", "''", "La colonne du tri des cuves (un clic sur un en-t\xC3\xAAte)");
+    const std::string triDesc = var("Tri_Desc", "BOOL", "FALSE", "Le tri des cuves d\xC3\xA9" "croissant (un second clic)");
+    const std::string saisie = var("Derniere_Saisie", "STRING", "''", "La derni\xC3\xA8re case saisie (Case saisie : Ancienne, Nouvelle)");
+    const std::string ajoutes = var("Articles_Ajoutes", "INT", "0", "Les articles ajout\xC3\xA9s par le bouton + Article");
+    // La plage et les seuils des cuves : le niveau change de couleur au-dessus de 8 m, rougit au-dessus de 9 m ; la consigne
+    // se saisit de 0 a 10 m.
+    demoDisplay(p, cuves + "[].Niveau", "m", "0.0", "0", "10", "8", "9");
+    demoDisplay(p, cuves + "[].Consigne", "m", "0.0", "0", "10", "", "");
+    // ---- les scripts de la vue
+    const auto decl = [&](const char* name, const std::string& type) {
+        Declaration d;
+        d.id = p.allocate();
+        d.name = name;
+        d.type = type;
+        return d;
+    };
+    const auto c = [&](const char* i) { return cuves + "[" + i + "]"; };
+    Script open;
+    open.id = p.allocate();
+    open.name = "Valeurs_De_Depart";
+    open.event = "OnOpen";
+    open.description = "Les valeurs de d\xC3\xA9part des tableaux (une fois)";
+    open.decls = {decl("a", tAlarme)};
+    open.body = "IF " + c("1") + ".Nom = '' THEN\n"
+                "    " + c("1") + ".Nom := 'Cuve A'; " + c("1") + ".Niveau := 2.0; " + c("1") + ".Consigne := 3.0;\n"
+                "    " + c("2") + ".Nom := 'Cuve B'; " + c("2") + ".Niveau := 7.5; " + c("2") + ".Consigne := 7.5;\n"
+                "    " + c("3") + ".Nom := 'Cuve C'; " + c("3") + ".Niveau := 6.0; " + c("3") + ".Consigne := 9.6;\n"
+                "    " + c("4") + ".Nom := 'Cuve D'; " + c("4") + ".Niveau := 0.5; " + c("4") + ".Consigne := 0.0;\n"
+                "END_IF;\n"
+                "IF LIST_COUNT(" + alarmes + ") = 0 THEN\n"
+                "    a.Message := 'Niveau haut cuve C'; a.Priorite := 1; a.Active := TRUE; LIST_ADD(" + alarmes + ", a);\n"
+                "    a.Message := 'Pompe 2 en d\xC3\xA9" "faut'; a.Priorite := 2; a.Active := FALSE; LIST_ADD(" + alarmes + ", a);\n"
+                "    a.Message := 'Porte armoire ouverte'; a.Priorite := 3; a.Active := TRUE; LIST_ADD(" + alarmes + ", a);\n"
+                "END_IF;\n"
+                "IF " + recetteV + ".Nom = '' THEN\n"
+                "    " + recetteV + ".Nom := 'Pain de mie'; " + recetteV + ".Temperature := 210.0; " + recetteV + ".Duree := 35; "
+                + recetteV + ".Vapeur := TRUE;\n"
+                "END_IF;\n";
+    v.scripts.push_back(std::move(open));
+    Script cycle;
+    cycle.id = p.allocate();
+    cycle.name = "Faire_Vivre";
+    cycle.event = "OnCycle";
+    cycle.description = "Le niveau suit la consigne, la vanne s'ouvre, l'\xC3\xA9tat suit ; les d\xC3\xA9" "bits suivent les vannes";
+    cycle.decls = {decl("i", "INT")};
+    cycle.body = "FOR i := 1 TO 4 DO\n"
+                 "    " + c("i") + ".Niveau := " + c("i") + ".Niveau + (" + c("i") + ".Consigne - " + c("i") + ".Niveau) * 0.05;\n"
+                 "    " + c("i") + ".Vanne.Ouverture := LIMIT(0.0, (" + c("i") + ".Consigne - " + c("i") + ".Niveau) * 40.0, 100.0);\n"
+                 "    " + c("i") + ".Vanne.Ouverte := " + c("i") + ".Vanne.Ouverture > 1.0;\n"
+                 "    IF " + c("i") + ".Niveau > 9.0 THEN " + c("i") + ".Etat := " + tEtat + "#DEFAUT;\n"
+                 "    ELSIF " + c("i") + ".Vanne.Ouverte THEN " + c("i") + ".Etat := " + tEtat + "#MARCHE;\n"
+                 "    ELSE " + c("i") + ".Etat := " + tEtat + "#ARRET;\n"
+                 "    END_IF;\n"
+                 "END_FOR;\n"
+                 "FOR i := 1 TO 3 DO\n"
+                 "    " + debits + "[i] := " + c("i") + ".Vanne.Ouverture * 0.2;\n"
+                 "END_FOR;\n";
+    v.scripts.push_back(std::move(cycle));
+    // ---- la mise en page : un titre, puis 3 x 3 cases (Cuves en prend deux)
+    const double W = v.width, H = v.height;
+    const double m = std::max(12.0, W * 0.012);
+    const double top = 56;
+    const double cw = (W - 4 * m) / 3, rh = (H - top - 3 * m) / 3;
+    const double font = rh < 260 ? 12 : 14;
+    const double headH = 34, noteH = std::clamp(rh * 0.2, 34.0, 52.0);   // un bouton du titre : 32 px (un doigt)
+    auto& t0 = title(p, v, "Tableaux dynamiques : un tableau par genre de source", m, 8, W - 2 * m, 22);
+    t0.name = freshName(v, "Titre_Tableaux", t0.id);
+    struct Place {
+        double x, y, w, h;
+    };
+    // Une case : son titre, son explication en bas ; rend la place du tableau.
+    const auto card = [&](const std::string& stem, int col, int row, int span, const std::string& head, const std::string& explain) {
+        const double x = m + col * (cw + m), y = top + row * (rh + m), w = span * cw + (span - 1) * m;
+        auto& h = addAt(p, v, Kind::Text, "Titre_" + stem, x, y, w, headH);
+        h.set("text", head);
+        h.setNumber("fontSize", 15);
+        h.set("align", "gauche");
+        h.set("textColor", "#E6EAF0");
+        auto& n = addAt(p, v, Kind::Text, "Note_" + stem, x, y + rh - noteH, w, noteH);
+        n.set("text", explain);
+        n.setNumber("fontSize", 12);
+        n.set("align", "gauche");
+        n.set("textColor", "#9AA6B8");
+        n.setFlag("wrap", true);
+        return Place{x, y + headH + 4, w, rh - headH - noteH - 8};
+    };
+    const auto dynTable = [&](const std::string& name, const Place& at, const std::string& from, const std::vector<tb::Column>& cols) -> Object& {
+        auto& o = addAt(p, v, Kind::Table, name, at.x, at.y, at.w, at.h);
+        o.set(std::string(tb::kModeKey), std::string(tb::modeLabel(tb::Mode::Rows)));
+        o.set("rowsFrom", from);
+        o.set(std::string(tb::kColumnsKey), tb::formatColumns(cols));
+        o.setNumber("fontSize", font);
+        return o;
+    };
+    // Un bouton a droite du titre d'une case (son code : un script de l'action).
+    const auto headButton = [&](const std::string& stem, const std::string& text, const Place& at, int fromRight, const std::string& code) {
+        const double bw = std::min(130.0, at.w * 0.2);
+        auto& b = addAt(p, v, Kind::Button, stem, at.x + at.w - (fromRight + 1) * (bw + 6), at.y - headH - 4, bw, headH - 2);
+        b.set("text", text);
+        b.setNumber("fontSize", 12);
+        demoGesture(b, Trigger::Click, Operation::RunScript, "", code);
+        return &b;
+    };
+    // -- Cuves : ARRAY de structures
+    const Place pc = card("Cuves", 0, 0, 2, "ARRAY[1..4] OF " + tCuve + " - " + cuves + " : une ligne par \xC3\xA9l\xC3\xA9ment",
+                          "[#] le rang ; [*].Niveau un membre (les seuils d'Unit\xC3\xA9s et formats) ; % une formule ; \xC3\x89tat une formule de couleur ; "
+                          "Consigne R/W (un clic : la saisie, de 0 \xC3\xA0 10) ; Vanne un texte \xC3\xA0 trous ; D\xC3\xA9" "bit une autre liste (" + debits
+                          + "[*] : \xC2\xAB ... \xC2\xBB sur la 4e ligne). Un clic choisit la ligne (" + choisie + ") ; un double clic : Element.Consigne := "
+                          "Element.Capacite / 2 (Element par r\xC3\xA9" "f\xC3\xA9rence) ; un clic sur un en-t\xC3\xAAte trie, un second inverse.");
+    std::vector<tb::Column> cc = {demoColumn("N\xC2\xB0", "[#]", 0.5),
+                                  demoColumn("Nom", "[*].Nom", 1.1),
+                                  demoColumn("Niveau", "[*].Niveau"),
+                                  demoColumn("%", "=[*].Niveau * 100 / [*].Capacite", 0.6, false, "0"),
+                                  demoColumn("\xC3\x89tat", "[*].Etat", 1.1),
+                                  demoColumn("Consigne", "[*].Consigne", 1.0, true, "0.0", "m"),
+                                  demoColumn("Vanne", "{[*].Vanne.Ouverture:0} %", 0.8),
+                                  demoColumn("D\xC3\xA9" "bit", debits + "[*]", 0.9, false, "0.0", "m\xC2\xB3/h")};
+    cc[2].color = "seuils";
+    cc[4].color = "formule";
+    cc[4].colorExpr = "=SEL([*].Etat = " + tEtat + "#DEFAUT, SEL([*].Etat = " + tEtat + "#MARCHE, '#8B949E', '#2EA043'), '#E5534B')";
+    auto& tc = dynTable("Tableau_Cuves", pc, cuves, cc);
+    tc.set(std::string(tb::kPickKey), choisie);
+    tc.setExpr(std::string(tb::kSortKey), tri);
+    tc.setExpr(std::string(tb::kSortOrderKey), "SEL(" + triDesc + ", 'croissant', 'd\xC3\xA9" "croissant')");
+    demoGesture(tc, Trigger::CellDoubleClick, Operation::RunScript, "", "Element.Consigne := Element.Capacite / 2.0;");
+    demoGesture(tc, Trigger::CellEdit, Operation::Assign, saisie,
+                "CONCAT('Cuve ', TO_STRING(Index), ' : ', TO_STRING(Ancienne), ' \xE2\x86\x92 ', TO_STRING(Nouvelle))");
+    demoGesture(tc, Trigger::HeaderClick, Operation::RunScript, "",
+                "IF " + tri + " = Titre THEN " + triDesc + " := NOT " + triDesc + "; ELSE " + tri + " := Titre; " + triDesc
+                    + " := FALSE; END_IF;");
+    // -- Recette : une structure
+    const Place pr = card("Recette", 2, 0, 1, tRecette + " - " + recetteV + " : une ligne par membre",
+                          "[*].Membre le nom du membre, [*].Valeur sa valeur ; R/W : chaque membre se saisit dans son type.");
+    (void)dynTable("Tableau_Recette", pr, recetteV, {demoColumn("Membre", "[*].Membre"), demoColumn("Valeur", "[*].Valeur", 1.0, true)});
+    // -- Alarmes : une LIST de structures
+    const Place pa = card("Alarmes", 0, 1, 1, "LIST OF " + tAlarme + " - " + alarmes,
+                          "Une ligne par \xC3\xA9l\xC3\xA9ment : la liste grandit (+ Alarme : LIST_ADD) et r\xC3\xA9tr\xC3\xA9" "cit (- Alarme) ; vide : \xC2\xAB Aucune "
+                          "alarme \xC2\xBB. Un clic sur Active la bascule (Element.Active := NOT Element.Active).");
+    std::vector<tb::Column> ca = {demoColumn("Message", "[*].Message", 2.2), demoColumn("Prio.", "[*].Priorite", 0.6, true),
+                                  demoColumn("Active", "[*].Active", 0.7)};
+    ca[2].color = "formule";
+    ca[2].colorExpr = "=SEL([*].Active, '#8B949E', '#E5534B')";
+    auto& ta = dynTable("Tableau_Alarmes", pa, alarmes, ca);
+    ta.set(std::string(tb::kEmptyKey), "Aucune alarme");
+    demoGesture(ta, Trigger::CellClick, Operation::RunScript, "", "Element.Active := NOT Element.Active;", "Active");
+    (void)headButton("Btn_Retirer_Alarme", "- Alarme", pa, 0, "IF LIST_COUNT(" + alarmes + ") > 0 THEN LIST_REMOVE_AT(" + alarmes + ", 0); END_IF;");
+    (void)headButton("Btn_Ajouter_Alarme", "+ Alarme", pa, 1,
+                     "VAR a : " + tAlarme + "; END_VAR\n"
+                     "a.Message := CONCAT('Alarme ', TO_STRING(LIST_COUNT(" + alarmes + ") + 1)); a.Priorite := 2; a.Active := TRUE;\n"
+                     "LIST_ADD(" + alarmes + ", a);");
+    // -- Stock : plusieurs MAP de meme cle
+    const Place ps = card("Stock", 1, 1, 1, "MAP[STRING] OF INT - " + stock + ", avec " + prix + " et " + seuils,
+                          "[*].Cle la cl\xC3\xA9, [*].Valeur la quantit\xC3\xA9 (R/W, rouge sous le seuil) ; " + prix + "[[*].Cle] lit une autre MAP "
+                          "par la cl\xC3\xA9 : \xC2\xAB ... \xC2\xBB o\xC3\xB9 elle manque ; tri\xC3\xA9" "e par quantit\xC3\xA9 ; un clic \xC3\xA9" "crit l'article (" + article + ").");
+    std::vector<tb::Column> cs = {demoColumn("Article", "[*].Cle", 1.2),
+                                  demoColumn("Qt\xC3\xA9", "[*].Valeur", 0.7, true),
+                                  demoColumn("Seuil", seuils + "[[*].Cle]", 0.7),
+                                  demoColumn("Prix", prix + "[[*].Cle]", 0.8, true, "0.00", "\xE2\x82\xAC"),
+                                  demoColumn("Valeur", "=" + stock + "[[*].Cle] * " + prix + "[[*].Cle]", 0.9, false, "0.00", "\xE2\x82\xAC")};
+    cs[1].color = "formule";
+    cs[1].colorExpr = "=SEL([*].Valeur < " + seuils + "[[*].Cle], '#2EA043', '#E5534B')";
+    auto& ts = dynTable("Tableau_Stock", ps, stock, cs);
+    ts.set(std::string(tb::kPickKey), article);
+    ts.set(std::string(tb::kSortKey), "Qt\xC3\xA9");
+    ts.set(std::string(tb::kSortOrderKey), "d\xC3\xA9" "croissant");
+    (void)headButton("Btn_Reappro", "R\xC3\xA9" "appro.", ps, 0, stock + "['rondelle'] := " + stock + "['rondelle'] + 25;");
+    (void)headButton("Btn_Ajouter_Article", "+ Article", ps, 1,
+                     ajoutes + " := " + ajoutes + " + 1;\n" + stock + "[CONCAT('joint ', TO_STRING(" + ajoutes + "))] := 5 * " + ajoutes
+                         + ";\n" + seuils + "[CONCAT('joint ', TO_STRING(" + ajoutes + "))] := 10;");
+    // -- T_Etat : une enumeration
+    const Place pe = card("Etats", 2, 1, 1, tEtat + " : une ligne par valeur (une \xC3\xA9num\xC3\xA9ration)",
+                          "[*].Nom l'identifiant, [*].Valeur le nombre, [*].Texte le texte montr\xC3\xA9.");
+    (void)dynTable("Tableau_Etats", pe, tEtat,
+                   {demoColumn("Nom", "[*].Nom"), demoColumn("Valeur", "[*].Valeur", 0.6), demoColumn("Texte", "[*].Texte")});
+    // -- sans source : une liste par colonne
+    const Place pl = card("Listes", 0, 2, 1, "Sans source : une liste par colonne",
+                          lignes + "[*] (4), " + cadences + "[*] (5, R/W), " + debits + "[*] (3) : la plus longue fait les lignes, "
+                          "\xC2\xAB ... \xC2\xBB l\xC3\xA0 o\xC3\xB9 une liste s'arr\xC3\xAAte.");
+    (void)dynTable("Tableau_Listes", pl, "",
+                   {demoColumn("Ligne", lignes + "[*]"), demoColumn("Cadence", cadences + "[*]", 1.0, true),
+                    demoColumn("D\xC3\xA9" "bit", debits + "[*]", 1.0, false, "0.0", "m\xC2\xB3/h")});
+    // -- des cases fixes, la colonne du milieu R/W
+    const Place pf = card("Reglages", 1, 2, 1, "Cases fixes : la colonne Valeur en R/W",
+                          "Chaque case est un texte, un texte \xC3\xA0 trous ou =formule ; R/W par colonne (R;W;R) : une case qui n'a qu'une "
+                          "variable s'\xC3\xA9" "crit au clic.");
+    auto& tf = addAt(p, v, Kind::Table, "Tableau_Reglages", pf.x, pf.y, pf.w, pf.h);
+    tf.set(std::string(tb::kModeKey), std::string(tb::modeLabel(tb::Mode::Fixed)));
+    tf.set("columns", "R\xC3\xA9glage;Valeur;Unit\xC3\xA9");
+    tf.set("cells", formatCells({{"Consigne de la cuve A", "{" + c("1") + ".Consigne:0.0}", "m"},
+                                 {"Consigne de la cuve B", "{" + c("2") + ".Consigne:0.0}", "m"},
+                                 {"Prix de la vis", "=" + prix + "['vis']", "\xE2\x82\xAC"},
+                                 {"Article choisi", "{" + article + "}", ""}}));
+    tf.setNumber("rows", 4);
+    tf.set(std::string(tb::kAccessKey), "R;W;R");
+    tf.set("widths", "2;1;1");
+    tf.setNumber("fontSize", font);
+    // -- en marche : ce que les gestes ecrivent
+    const Place pm = card("En_Marche", 2, 2, 1, "En marche",
+                          "En simulation : un clic sur une case Consigne, Qt\xC3\xA9 ou Prix ouvre la saisie ; + Article ajoute une cl\xC3\xA9 sans "
+                          "prix ; R\xC3\xA9" "appro. fait remonter la rondelle dans le tri.");
+    const char* lines[] = {"Cuve choisie : {Cuve_Choisie}", "Article choisi : {Article}", "Tri des cuves : {Tri_Cuves}",
+                           "Derni\xC3\xA8re saisie : {Derniere_Saisie}"};
+    const std::string names[] = {choisie, article, tri, saisie};
+    const std::string stems[] = {"Cuve_Choisie", "Article", "Tri_Cuves", "Derniere_Saisie"};
+    const double lh = std::min(30.0, pm.h / 4);
+    for (int k = 0; k < 4; ++k) {
+        std::string text = lines[k];
+        const std::string hole = "{" + stems[k] + "}";
+        if (const auto at = text.find(hole); at != std::string::npos) text.replace(at, hole.size(), "{" + names[k] + "}");
+        auto& l = addAt(p, v, Kind::Text, "Texte_" + stems[k], pm.x, pm.y + k * lh, pm.w, lh);
+        l.set("text", text);
+        l.setNumber("fontSize", 14);
+        l.set("align", "gauche");
+    }
+}
+
+} // namespace
 
 void fillFromTemplate(Project& p, View& v, std::string_view key) {
     const double W = v.width, H = v.height;
@@ -743,6 +1122,11 @@ void fillFromTemplate(Project& p, View& v, std::string_view key) {
         (void)addAt(p, v, Kind::ProductionCounter, "Compteurs", m, 72, half, hh);
         (void)addAt(p, v, Kind::Trend, "Courbe", 2 * m + half, 72, half, hh);
         (void)addAt(p, v, Kind::VariableTable, "Variables", m, 72 + hh + m, W - 2 * m, hh);
+        return;
+    }
+    // 1.12.13 : un tableau par genre de source (ses types, ses variables, ses scripts de vue).
+    if (key == "tableaux_dynamiques") {
+        fillTablesDemo(p, v);
         return;
     }
     // -- des popups

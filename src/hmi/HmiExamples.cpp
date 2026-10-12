@@ -9,6 +9,7 @@
 #include "HmiGuide.hpp"
 #include "HmiRuntime.hpp"
 #include "HmiWidgets.hpp"
+#include "HmiTable.hpp"     // 1.12.13 : l'exemple du tableau en lignes dynamiques, ses chapitres
 
 #include <algorithm>
 #include <cmath>
@@ -442,21 +443,93 @@ Example gauge() {
 }
 
 Example table() {
+    // 1.12.13 : LE TABLEAU EN LIGNES DYNAMIQUES - une ligne par cuve (ARRAY[1..4] OF T_Cuve), ses colonnes liees a la
+    // source ([#], [*].Nom, [*].Niveau et ses seuils, une formule de couleur, Consigne R/W, une autre liste qui s'arrete
+    // avant : "...") ; le niveau suit la consigne. Le scenario choisit une ligne, saisit une consigne au clavier
+    // virtuel (Case saisie la dit), puis trie d'un clic sur l'en-tete Niveau.
     Maker m;
-    m.var("PA", "REAL", "18.0");
-    m.var("PB", "REAL", "24.0");
-    m.cyclic("PA := 18.0 + 4.0 * SIN(T);\nPB := 24.0 + 3.0 * COS(T * 0.7);");
-    auto& t = m.add(Kind::Table, "Mesures", 30, 30, 540, 150);
-    t.set("columns", "Mesure;Valeur;Unit\xC3\xA9");
-    t.set("cells", formatCells({{"Pression A", "{PA:0.0}", "bar"},
-                                {"Pression B", "{PB:0.0}", "bar"},
-                                {"D\xC3\xA9" "bit", "{PA * 1.8:0.0}", "kg/h"},
-                                {"\xC3\x89tat", "=SEL(PA > 20.0, 'normale', 'haute')", ""}}));
-    t.setNumber("rows", 4);
-    m.note("Explication", 30, 200, 540, 90,
-           "Chaque case : un texte, un texte \xC3\xA0 trous ({{PA:0.0}}) ou =expression. Le contenu se r\xC3\xA8gle dans l'onglet "
-           "Contenu ; un tableau peut aussi montrer un fichier externe.");
-    return m.done(12);
+    auto& p = m.project();
+    HmiType etat;
+    etat.id = p.allocate();
+    etat.name = "T_Etat";
+    etat.kind = HmiTypeKind::Enumeration;
+    etat.values = {{"ARRET", 0, "Arr\xC3\xAAt", ""}, {"MARCHE", 1, "En marche", ""}, {"DEFAUT", 2, "D\xC3\xA9" "faut", ""}};
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    cuve.members = {{"Nom", "STRING", "", ""}, {"Niveau", "REAL", "", ""}, {"Consigne", "REAL", "", ""}, {"Etat", "T_Etat", "", ""}};
+    p.programs.types = {etat, cuve};
+    m.var("Cuves", "ARRAY[1..4] OF T_Cuve", "");
+    m.var("Debits", "ARRAY[1..3] OF REAL", "");
+    m.var("Cuve_Choisie", "INT", "1");
+    m.var("Tri", "STRING", "''");
+    m.var("Saisie", "STRING", "''");
+    VariableDisplay niveau;
+    niveau.path = "Cuves[].Niveau";
+    niveau.unit = "m";
+    niveau.format = "0.0";
+    niveau.high = "8";
+    niveau.highAlarm = "9";
+    p.displays.push_back(niveau);
+    VariableDisplay consigne;
+    consigne.path = "Cuves[].Consigne";
+    consigne.format = "0.0";
+    consigne.min = "0";
+    consigne.max = "10";
+    p.displays.push_back(consigne);
+    m.cyclic("IF Cuves[1].Nom = '' THEN\n"
+             "    Cuves[1].Nom := 'Cuve A'; Cuves[1].Consigne := 3.0; Cuves[2].Nom := 'Cuve B'; Cuves[2].Consigne := 7.5;\n"
+             "    Cuves[3].Nom := 'Cuve C'; Cuves[3].Consigne := 9.6; Cuves[3].Niveau := 9.6; Cuves[4].Nom := 'Cuve D';\n"
+             "END_IF;\n"
+             "Cuves[1].Niveau := Cuves[1].Niveau + (Cuves[1].Consigne - Cuves[1].Niveau) * 0.05;\n"
+             "Cuves[2].Niveau := Cuves[2].Niveau + (Cuves[2].Consigne - Cuves[2].Niveau) * 0.05;\n"
+             "Cuves[3].Niveau := Cuves[3].Niveau + (Cuves[3].Consigne - Cuves[3].Niveau) * 0.05;\n"
+             "Debits[1] := (Cuves[1].Consigne - Cuves[1].Niveau) * 8.0; Debits[2] := (Cuves[2].Consigne - Cuves[2].Niveau) * 8.0;\n"
+             "Debits[3] := (Cuves[3].Consigne - Cuves[3].Niveau) * 8.0;\n"
+             "IF Cuves[3].Niveau > 9.0 THEN Cuves[3].Etat := T_Etat#DEFAUT; ELSE Cuves[3].Etat := T_Etat#MARCHE; END_IF;\n"
+             "IF ABS(Cuves[1].Consigne - Cuves[1].Niveau) > 0.05 THEN Cuves[1].Etat := T_Etat#MARCHE; ELSE Cuves[1].Etat := T_Etat#ARRET; END_IF;\n"
+             "IF ABS(Cuves[2].Consigne - Cuves[2].Niveau) > 0.05 THEN Cuves[2].Etat := T_Etat#MARCHE; ELSE Cuves[2].Etat := T_Etat#ARRET; END_IF;");
+    auto& t = m.add(Kind::Table, "Cuves", 20, 16, 560, 150);
+    std::vector<table::Column> cols(6);
+    cols[0] = {"N\xC2\xB0", "[#]", "", "", 0.5, "", false, 0, "", ""};
+    cols[1] = {"Nom", "[*].Nom", "", "", 1.2, "", false, 0, "", ""};
+    cols[2] = {"Niveau", "[*].Niveau", "", "", 1.0, "", false, 0, "seuils", ""};
+    cols[3] = {"\xC3\x89tat", "[*].Etat", "", "", 1.1, "", false, 0, "formule",
+               "=SEL([*].Etat = T_Etat#DEFAUT, SEL([*].Etat = T_Etat#MARCHE, '#8B949E', '#2EA043'), '#E5534B')"};
+    cols[4] = {"Consigne", "[*].Consigne", "0.0", "m", 1.0, "", true, 0, "", ""};
+    cols[5] = {"D\xC3\xA9" "bit", "Debits[*]", "0.0", "m\xC2\xB3/h", 0.9, "", false, 0, "", ""};
+    t.set(std::string(table::kModeKey), std::string(table::modeLabel(table::Mode::Rows)));
+    t.set("rowsFrom", "Cuves");
+    t.set(std::string(table::kColumnsKey), table::formatColumns(cols));
+    t.set(std::string(table::kPickKey), "Cuve_Choisie");
+    t.setExpr(std::string(table::kSortKey), "Tri");
+    t.setNumber("fontSize", 13);
+    Action edit;
+    edit.trigger = Trigger::CellEdit;
+    edit.operation = Operation::Assign;
+    edit.target = "Saisie";
+    edit.value = "CONCAT('cuve ', TO_STRING(Index), ' : ', TO_STRING(Ancienne), ' \xE2\x86\x92 ', TO_STRING(Nouvelle))";
+    t.actions.push_back(edit);
+    Action sort;
+    sort.trigger = Trigger::HeaderClick;
+    sort.operation = Operation::Assign;
+    sort.target = "Tri";
+    sort.value = "Titre";
+    t.actions.push_back(sort);
+    m.title("Choix", 20, 172, 560, "Ligne choisie : {Cuve_Choisie} - derni\xC3\xA8re saisie : {Saisie}", 14);
+    m.note("Explication", 20, 204, 560, 90,
+           "Lignes dynamiques : une ligne par \xC3\xA9l\xC3\xA9ment de Cuves (ARRAY[1..4] OF T_Cuve). [#] le rang, [*].Niveau un membre "
+           "(ses seuils), \xC3\x89tat une formule de couleur, Consigne R/W (un clic : la saisie), D\xC3\xA9" "bit une autre liste "
+           "(Debits[*]) : \xC2\xAB ... \xC2\xBB o\xC3\xB9 elle s'arr\xC3\xAAte. Un clic sur un en-t\xC3\xAAte trie.");
+    m.step(1.0, "partie", "Cuves", "case:1:1");
+    m.step(3.0, "partie", "Cuves", "case:0:4");
+    m.step(3.8, "clavier", "", "8");
+    m.step(4.5, "clavier", "", "\xE2\x86\xB5");
+    m.step(7.0, "partie", "Cuves", "entete:2");
+    m.step(10.0, "partie", "Cuves", "case:2:4");
+    m.step(10.8, "clavier", "", "3");
+    m.step(11.5, "clavier", "", "\xE2\x86\xB5");
+    return m.done(14);
 }
 
 Example history() {
@@ -2383,7 +2456,12 @@ std::string partLabel(const std::string& part) {
     if (head == "champ") return rest.empty() ? std::string("le champ") : rest == "motdepasse" ? std::string("le champ du mot de passe") : "le champ " + rest;
     if (head == "suivant") return "la suivante";
     if (head == "precedent") return "la pr\xC3\xA9" "c\xC3\xA9" "dente";
-    if (head == "entete") return "son bandeau";
+    if (head == "entete") return rest.empty() ? std::string("son bandeau") : number("l'en-t\xC3\xAAte de la colonne");   // 1.12.13 : un tableau
+    // 1.12.13 : "case:R:C" - la case d'un tableau (ligne R + 1, colonne C + 1).
+    if (head == "case" && rest.find(':') != std::string::npos) {
+        const auto sep = rest.find(':');
+        return "la case ligne " + std::to_string(std::atol(rest.c_str()) + 1) + ", colonne " + std::to_string(std::atol(rest.c_str() + sep + 1) + 1);
+    }
     if (head == "fraction") return "\xC3\xA0 " + std::to_string(static_cast<int>(std::lround(std::atof(rest.c_str()) * 100))) + " %";
     return part;
 }
@@ -2410,6 +2488,57 @@ std::string lowerFirst(std::string s) {
 bool startsYourTurn(std::string_view title) {
     const std::string f = guide::fold(title);
     return f.rfind("a toi", 0) == 0;
+}
+
+// 1.12.13 : un geste sur un tableau ("case:R:C", "entete:C") - le titre et la bulle d'un chapitre : la colonne touchee
+// (son titre), ce qui part (la saisie d'une case R/W, la ligne choisie, les actions de ce geste).
+bool tableChapter(const Object& o, const std::string& part, std::string& title, std::string& text) {
+    if (o.kind != Kind::Table) return false;
+    const auto trim = [](const std::string& t) {
+        const auto b = t.find_first_not_of(" \t");
+        return b == std::string::npos ? std::string{} : t.substr(b, t.find_last_not_of(" \t") - b + 1);
+    };
+    const bool header = part.rfind("entete:", 0) == 0;
+    if (!header && part.rfind("case:", 0) != 0) return false;
+    const auto colon = part.rfind(':');
+    const int column = std::atoi(part.c_str() + colon + 1);
+    const long row = header ? -1 : std::atol(part.c_str() + part.find(':') + 1);
+    const bool rows = table::modeOf(o) == table::Mode::Rows;
+    const auto cols = rows ? table::columnsOf(o) : std::vector<table::Column>{};
+    std::string name;
+    bool writable = false;
+    if (rows && column >= 0 && static_cast<std::size_t>(column) < cols.size()) {
+        name = cols[static_cast<std::size_t>(column)].title;
+        writable = cols[static_cast<std::size_t>(column)].write;
+    } else if (!rows) {
+        const auto titles = splitSemicolons(o.text("columns"));
+        if (column >= 0 && static_cast<std::size_t>(column) < titles.size()) name = titles[static_cast<std::size_t>(column)];
+        const auto access = table::fixedAccess(o, std::max<std::size_t>(titles.size(), static_cast<std::size_t>(column) + 1));
+        writable = column >= 0 && static_cast<std::size_t>(column) < access.size() && access[static_cast<std::size_t>(column)];
+    }
+    const std::string shown = name.empty() ? "colonne " + std::to_string(column + 1) : "\xC2\xAB " + name + " \xC2\xBB";
+    const Trigger t = header ? Trigger::HeaderClick : Trigger::CellClick;
+    std::string acts;
+    for (const auto& a : o.actions)
+        if (a.trigger == t && (a.column.empty() || a.column == name)) acts += (acts.empty() ? "" : " ; ") + lowerFirst(actionWords(a));
+    if (header) {
+        title = "En-t\xC3\xAAte " + shown;
+        text = "Un clic sur l'en-t\xC3\xAAte " + shown + " : Clic sur un en-t\xC3\xAAte re\xC3\xA7oit Colonne et Titre"
+             + (acts.empty() ? std::string(".") : " - " + acts + ".");
+        if (!trim(o.find(std::string(table::kSortKey)) ? o.find(std::string(table::kSortKey))->expr : std::string{}).empty())
+            text += " Le tri suit sa formule : le tableau se range par cette colonne.";
+        return true;
+    }
+    title = "Case " + shown + ", ligne " + std::to_string(row + 1);
+    text = "Un clic sur la case " + shown + " de la ligne " + std::to_string(row + 1);
+    std::vector<std::string> what;
+    if (rows && !trim(o.text(std::string(table::kPickKey))).empty())
+        what.push_back("la ligne est choisie (" + trim(o.text(std::string(table::kPickKey))) + " := son num\xC3\xA9ro)");
+    if (writable) what.push_back("la case est R/W : le clavier virtuel s'ouvre, dans la plage de la variable");
+    if (!acts.empty()) what.push_back(acts);
+    for (std::size_t k = 0; k < what.size(); ++k) text += (k ? " ; " : " : ") + what[k];
+    text += ".";
+    return true;
 }
 
 } // namespace
@@ -2491,6 +2620,7 @@ std::vector<Chapter> tutorialFor(Kind kind, const Example& ex) {
             c.title = partLabel(s.arg);
             if (!c.title.empty() && c.title[0] >= 'a' && c.title[0] <= 'z') c.title[0] = static_cast<char>(c.title[0] - 'a' + 'A');
             c.text = "Sur " + quoted(s.object) + ", " + partLabel(s.arg) + ".";
+            if (o) (void)tableChapter(*o, s.arg, c.title, c.text);   // 1.12.13 : une case, un en-tete de tableau
         } else if (s.op == "texte") {
             c.title = "Au clavier";
             c.text = "On tape " + quoted(s.arg) + ".";
@@ -2582,7 +2712,13 @@ std::size_t play(const Example& ex, Runtime& rt, double from, double to, double 
             rt.press(id, now);
             rt.release(id, now, true);
         } else if (s.op == "partie") {
-            rt.objectPart(idOf(s.object), s.arg, now);
+            const Id id = idOf(s.object);
+            rt.objectPart(id, s.arg, now);
+            // 1.12.13 : la case d'un tableau - le clic qui suit la touche (ses actions, la ligne choisie, la saisie R/W).
+            if (s.arg.rfind("case:", 0) == 0) {
+                rt.press(id, now);
+                rt.release(id, now, true);
+            }
         } else if (s.op == "texte") {
             rt.typeText(s.arg, now);
         } else if (s.op == "clavier") {

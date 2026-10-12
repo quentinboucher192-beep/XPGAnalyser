@@ -4426,6 +4426,11 @@ void exemplesLot8() {
             if (key == "LogoutButton" && std::fabs(t - 4.0) < 0.025) probes[4.0] = rt.userLogin();
             if (key == "UserManager" && std::fabs(t - 3.0) < 0.025) probes[3.0] = ex->project.security.users[3].enabled ? "actif" : "inactif";
             if (key == "UserManager" && std::fabs(t - 6.0) < 0.025) probes[6.0] = ex->project.security.users[3].enabled ? "actif" : "inactif";
+            // 1.12.13 : le tableau en lignes dynamiques - la ligne choisie, la consigne saisie au clavier, Case saisie, le tri.
+            if (key == "Table" && std::fabs(t - 2.0) < 0.025) probes[2.0] = rt.variable("Cuve_Choisie") ? formatValue(*rt.variable("Cuve_Choisie")) : "?";
+            if (key == "Table" && std::fabs(t - 5.5) < 0.025) probes[5.5] = rt.variable("Cuves[1].Consigne") ? formatValue(*rt.variable("Cuves[1].Consigne"), "0.0") : "?";
+            if (key == "Table" && std::fabs(t - 5.5) < 0.025) probes[5.6] = rt.variable("Saisie") ? rt.variable("Saisie")->asString() : "?";
+            if (key == "Table" && std::fabs(t - 8.0) < 0.025) probes[8.0] = rt.variable("Tri") ? rt.variable("Tri")->asString() : "?";
             if (key == "PasswordChange" && std::fabs(t - 8.5) < 0.025)
                 probes[8.5] = passwordMatches(ex->project.security.users[0].salt, ex->project.security.users[0].passwordHash, "Abc2027") ? "change" : "ancien";
         }
@@ -4434,6 +4439,10 @@ void exemplesLot8() {
         else dirty += std::string(kindKey(k)) + " ";
         const std::string key(kindKey(k));
         if (key == "Button") check(probes[1.5] == "on" && probes[4.0] == "off", "Bouton : le clic bascule Marche, le second la remet");
+        if (key == "Table")
+            check(probes[2.0] == "2" && probes[5.5] == "8.0" && probes[5.6].find('8') != std::string::npos && probes[8.0] == "Niveau",
+                  "Tableau : la ligne choisie (2), la consigne saisie au clavier virtuel (8), Case saisie (" + probes[5.6]
+                      + "), le tri d'un clic sur l'en-t\xC3\xAAte (" + probes[8.0] + ")");
         if (key == "RecipeManager") same(probes[2.5], "9", "Gestion de recettes : le jeu Argon appliqu\xC3\xA9 (Seuil_A = 9)");
         if (key == "InputField") check(probes[5.0] == "18.5" && probes[9.0] == "18.5", "Champ de saisie : 18,5 \xC3\xA9" "crit, 45 refus\xC3\xA9 (hors bornes)");
         if (key == "LoginPanel") same(probes[4.0], "operateur", "Connexion : operateur connect\xC3\xA9 par son mot de passe");
@@ -8907,10 +8916,10 @@ void conceptionLot12() {
         if ((tpl.key == "vide") != mv.objects.empty()) empty += std::string(tpl.key) + " ";
         if (tpl.key == "equipement" && (mv.role != "popup" || !mv.param("Equipement"))) empty += "equipement(role) ";
     }
-    // 1.10.2 : treize de plus (accueil... pied), dix-neuf en tout.
-    check(viewTemplates().size() == 19 && empty.empty() && viewTemplate("Tableau de bord") && viewTemplate("alarmes")
+    // 1.10.2 : treize de plus (accueil... pied), dix-neuf en tout ; 1.12.13 : Tableaux dynamiques, vingt.
+    check(viewTemplates().size() == 20 && empty.empty() && viewTemplate("Tableau de bord") && viewTemplate("alarmes")
               && viewTemplate("Popup moteur") && viewTemplate("pied"),
-          "dix-neuf mod\xC3\xA8les : vide ne pose rien, les autres leurs objets ; la popup d'\xC3\xA9quipement a son param\xC3\xA8tre " + empty);
+          "vingt mod\xC3\xA8les : vide ne pose rien, les autres leurs objets ; la popup d'\xC3\xA9quipement a son param\xC3\xA8tre " + empty);
 
     // ---- l'espacement egal
     {
@@ -13182,6 +13191,15 @@ void tutorielsLot16() {
     bool keyboard = false;
     for (const auto& c : field) keyboard = keyboard || (c.target == "#clavier" && c.title.find("18,5") != std::string::npos);
     check(keyboard, "le champ de saisie : les touches du clavier virtuel, en un chapitre (18,5)");
+    // 1.12.13 : le tableau - la case R/W (le clavier virtuel s'ouvre) et le clic sur un en-tete, dits par leur colonne.
+    const auto tabEx = examples::exampleFor(Kind::Table);
+    const auto tab = tabEx ? examples::tutorialFor(Kind::Table, *tabEx) : std::vector<examples::Chapter>{};
+    bool rwCell = false, headerCell = false;
+    for (const auto& c : tab) {
+        rwCell = rwCell || (c.title.find("Consigne") != std::string::npos && c.text.find("R/W") != std::string::npos);
+        headerCell = headerCell || c.title == "En-t\xC3\xAAte \xC2\xAB Niveau \xC2\xBB";
+    }
+    check(rwCell && headerCell, "le tableau : la case Consigne (R/W, le clavier virtuel) et l'en-t\xC3\xAAte Niveau, nomm\xC3\xA9s par leur colonne");
     const auto gaugeEx = examples::exampleFor(Kind::Gauge);
     const auto gauge = gaugeEx ? examples::tutorialFor(Kind::Gauge, *gaugeEx) : std::vector<examples::Chapter>{};
     check(gauge.size() == 4 && gauge[1].title == "En marche" && gauge[2].title.find("param") != std::string::npos,
@@ -27115,6 +27133,171 @@ void tableauGenererDupliquer11213() {
           "... la source de la copie se lit sans ses $ : Alarmes, une LIST");
 }
 
+// Le modele de vue « Tableaux dynamiques » : un tableau par genre de source, ses types et ses variables crees s'ils
+// manquent (repris a l'identique, _Ex pour un nom deja pris), Generer sans faute, en marche sans erreur ; les gestes :
+// la saisie R/W et Case saisie, le double clic par reference, le tri d'un clic sur l'en-tete, les boutons qui font
+// grandir une LIST et une MAP, la bascule d'une alarme, les cuves qui vivent.
+void tableauxDynamiques11213() {
+    std::printf("1.12.13 : le modele de vue Tableaux dynamiques (ARRAY, LIST, MAP, plusieurs MAP, structure, enumeration, listes, cases fixes)\n");
+    Project p;
+    View made = makeView(p, "Tableaux");
+    made.width = 1920;
+    made.height = 1080;
+    hmi::design::fillFromTemplate(p, made, "tableaux_dynamiques");
+    p.config.startView = made.id;
+    p.views.push_back(made);
+    const View& v = p.views[0];
+    check(p.programs.types.size() == 5 && p.programs.variables.size() == 15 && p.displays.size() == 2 && v.scripts.size() == 2,
+          "le mod\xC3\xA8le cr\xC3\xA9" "e 5 types, 15 variables, 2 lignes d'Unit\xC3\xA9s et formats, 2 scripts de vue");
+    const auto* etat = p.hmiTypeByName("T_Etat");
+    check(etat && etat->kind == HmiTypeKind::Enumeration && etat->operators.size() == 2 && etat->folder == "Tableaux dynamiques",
+          "T_Etat : une \xC3\xA9num\xC3\xA9ration, son toString et son fromString, rang\xC3\xA9" "e dans son dossier");
+    const auto named = [&](const char* name) -> const Object* {
+        for (const auto& o : v.objects)
+            if (o.name == name) return &o;
+        return nullptr;
+    };
+    std::size_t tables = 0;
+    bool inside = true;
+    for (const auto& o : v.objects) {
+        tables += o.kind == Kind::Table ? 1 : 0;
+        const double x = o.number("x", 0), y = o.number("y", 0), w = o.number("w", 0), h = o.number("h", 0);
+        inside = inside && x >= 0 && y >= 0 && x + w <= v.width + 0.5 && y + h <= v.height + 0.5 && w > 0 && h > 0;
+    }
+    check(tables == 7 && inside, "sept tableaux, tous les objets dans la vue");
+    // Generer : ni erreur ni avertissement.
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    std::string bad;
+    for (const auto& i : issues)
+        if (i.severity != Issue::Severity::Info) bad += i.message + " | ";
+    check(bad.empty(), "G\xC3\xA9n\xC3\xA9rer : ni erreur ni avertissement" + (bad.empty() ? std::string{} : " : " + bad));
+    // ---- en marche
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    double now = 0.0;
+    const auto ticks = [&](int n) {
+        for (int k = 0; k < n; ++k) {
+            now += 0.1;
+            rt.tick(now);
+        }
+    };
+    ticks(2);
+    const auto model = [&](const char* name) {
+        tb::Model m;
+        const Object* o = named(name);
+        check(o && rt.tableShown(v.id, *o, m), std::string("le mod\xC3\xA8le se fait : ") + name);
+        return m;
+    };
+    const auto clean = [](const tb::Model& m) {
+        if (!m.error.empty()) return false;
+        for (const auto& r : m.rows)
+            for (const auto& c : r.cells)
+                if (c.error) return false;
+        return true;
+    };
+    const char* all[] = {"Tableau_Cuves", "Tableau_Recette", "Tableau_Alarmes", "Tableau_Stock", "Tableau_Etats", "Tableau_Listes", "Tableau_Reglages"};
+    std::string dirty;
+    for (const char* name : all)
+        if (!clean(model(name))) dirty += std::string(name) + " ";
+    check(dirty.empty(), "aucune case en faute (###)" + (dirty.empty() ? std::string{} : " : " + dirty));
+    const auto real = [&](const char* path) { return rt.variable(path) ? rt.variable(path)->asReal() : -999.0; };
+    const auto text = [&](const char* path) { return rt.variable(path) ? rt.variable(path)->asString() : std::string("?"); };
+    auto mc = model("Tableau_Cuves");
+    const auto rc = rowsText(mc);
+    check(rc.size() == 4 && rc[0].rfind("1|Cuve A|", 0) == 0 && rc[3].rfind("4|Cuve D|", 0) == 0, "Cuves (ARRAY) : 4 lignes, de la cuve A \xC3\xA0 la cuve D");
+    check(mc.rows.size() == 4 && mc.rows[3].cells[7].missing && !mc.rows[2].cells[7].missing, "Debits n'a que 3 \xC3\xA9l\xC3\xA9ments : \xC2\xAB ... \xC2\xBB sur la 4e ligne");
+    same(rowsText(model("Tableau_Recette")).size() == 4 ? rowsText(model("Tableau_Recette"))[0] : std::string{}, "Nom|Pain de mie",
+         "Recette (structure) : une ligne par membre, la 1re Nom");
+    check(model("Tableau_Alarmes").rows.size() == 3, "Alarmes (LIST) : les 3 alarmes de d\xC3\xA9part");
+    const auto ms = rowsText(model("Tableau_Stock"));
+    check(ms.size() == 3 && ms[0].rfind("ecrou|50|20|", 0) == 0 && ms[2].rfind("rondelle|12|20|...|...", 0) == 0,
+          "Stock, Prix, Seuils (trois MAP) : tri\xC3\xA9es par quantit\xC3\xA9, la rondelle sans prix (\xC2\xAB ... \xC2\xBB) : "
+              + (ms.empty() ? std::string{} : ms[0] + " / " + ms.back()));
+    check(rowsText(model("Tableau_Etats")).size() == 3, "T_Etat (\xC3\xA9num\xC3\xA9ration) : 3 lignes");
+    const auto ml = rowsText(model("Tableau_Listes"));
+    check(ml.size() == 5 && ml[4].rfind("...|130|...", 0) == 0, "une liste par colonne : 5 lignes (Cadences), \xC2\xAB ... \xC2\xBB o\xC3\xB9 Lignes et Debits s'arr\xC3\xAAtent");
+    const auto mf = model("Tableau_Reglages");
+    check(mf.writable.size() == 3 && mf.writable[1] && !mf.writable[0] && mf.rows.size() == 4, "les cases fixes : la colonne Valeur en R/W");
+    // ---- la saisie R/W d'une consigne, Case saisie
+    const Object* tc = named("Tableau_Cuves");
+    const auto clickCell = [&](const Object* o, const char* part) {
+        rt.objectPart(o->id, part, now);
+        rt.press(o->id, now);
+        rt.release(o->id, now + 0.02, true);
+        now += 0.05;
+    };
+    clickCell(tc, "case:0:5");
+    check(rt.promptShown() && rt.keyboardPrompt()->target == "Cuves[1].Consigne" && rt.keyboardPrompt()->max && *rt.keyboardPrompt()->max == 10,
+          "un clic sur la consigne de la cuve A : la saisie de Cuves[1].Consigne, de 0 \xC3\xA0 10");
+    rt.typeText("8", now);
+    rt.typeKey(EditKey::Enter, now + 0.01);
+    near(real("Cuves[1].Consigne"), 8.0, "8 : \xC3\xA9" "crit");
+    check(text("Derniere_Saisie").rfind("Cuve 1 : 3", 0) == 0 && text("Derniere_Saisie").find("8") != std::string::npos,
+          "Case saisie : Derniere_Saisie dit l'ancienne et la nouvelle (" + text("Derniere_Saisie") + ")");
+    check(rt.variable("Cuve_Choisie") && rt.variable("Cuve_Choisie")->asInteger() == 1, "la ligne choisie : Cuve_Choisie = 1");
+    // ---- le double clic : Element par reference
+    rt.objectPart(tc->id, "case:1:1", now);
+    rt.doubleClick(tc->id, now);
+    near(real("Cuves[2].Consigne"), 5.0, "double clic sur la cuve B : Element.Consigne := Element.Capacite / 2 (5 m)");
+    // ---- le tri d'un clic sur l'en-tete Nom, puis l'ordre inverse
+    rt.objectPart(tc->id, "entete:1", now);
+    mc = model("Tableau_Cuves");
+    check(text("Tri_Cuves") == "Nom" && mc.sortColumn == 1 && !mc.sortDescending, "un clic sur l'en-t\xC3\xAAte Nom : Tri_Cuves = Nom, croissant");
+    rt.objectPart(tc->id, "entete:1", now);
+    mc = model("Tableau_Cuves");
+    check(mc.sortDescending && !rowsText(mc).empty() && rowsText(mc)[0].rfind("4|Cuve D|", 0) == 0,
+          "un second clic : d\xC3\xA9" "croissant, la cuve D en t\xC3\xAAte (son rang [#] la suit)");
+    // ---- les boutons : une MAP et une LIST qui grandissent
+    const auto clickObj = [&](const char* name) {
+        const Object* o = named(name);
+        if (!o) return;
+        rt.press(o->id, now);
+        rt.release(o->id, now + 0.02, true);
+        now += 0.05;
+    };
+    clickObj("Btn_Ajouter_Article");
+    auto ms2 = rowsText(model("Tableau_Stock"));
+    check(ms2.size() == 4 && ms2.back().rfind("joint 1|5|10|...|...", 0) == 0, "+ Article : une cl\xC3\xA9 de plus (joint 1), sans prix : \xC2\xAB ... \xC2\xBB");
+    clickObj("Btn_Reappro");
+    ms2 = rowsText(model("Tableau_Stock"));
+    check(ms2.size() == 4 && ms2[1].rfind("rondelle|37|", 0) == 0, "R\xC3\xA9" "appro. : la rondelle (37) remonte dans le tri");
+    const Object* ta = named("Tableau_Alarmes");
+    clickCell(ta, "case:0:2");
+    check(rt.variable("Alarmes[0].Active") ? !rt.variable("Alarmes[0].Active")->isTruthy() : rowsText(model("Tableau_Alarmes"))[0].find("|Faux") != std::string::npos,
+          "un clic sur Active : l'alarme bascule (Element.Active := NOT Element.Active)");
+    clickObj("Btn_Ajouter_Alarme");
+    auto ma = model("Tableau_Alarmes");
+    check(ma.rows.size() == 4 && rowsText(ma).back().rfind("Alarme 4|2|", 0) == 0, "+ Alarme : LIST_ADD, une 4e ligne (Alarme 4)");
+    for (int k = 0; k < 5; ++k) clickObj("Btn_Retirer_Alarme");
+    ma = model("Tableau_Alarmes");
+    check(ma.rows.empty() && ma.emptyText == "Aucune alarme", "- Alarme jusqu'au bout : plus de ligne, \xC2\xAB Aucune alarme \xC2\xBB");
+    // ---- les cuves vivent : la cuve C (consigne 9,6) passe en defaut au-dessus de 9 m
+    ticks(200);
+    near(real("Cuves[3].Niveau"), 9.6, "la cuve C a rejoint sa consigne (9,6 m)", 0.05);
+    mc = model("Tableau_Cuves");
+    bool redC = false;
+    for (const auto& r : mc.rows)
+        if (r.element == "Cuves[3]") redC = r.cells[4].colored && r.cells[4].color == 0xE5534B && r.cells[2].tone == 2;
+    check(redC, "... son \xC3\xA9tat (D\xC3\xA9" "faut) en rouge, son niveau au-del\xC3\xA0 de l'alarme haute");
+    std::string errors;
+    for (const auto& e : rt.journal())
+        if (e.kind == "Erreur") errors += e.message + " | ";
+    check(errors.empty(), "le journal : aucune erreur" + (errors.empty() ? std::string{} : " : " + errors));
+    // ---- reprendre le modele : ce qui existe a l'identique est repris ; un nom pris par autre chose : _Ex
+    View again = makeView(p, "Tableaux_2");
+    hmi::design::fillFromTemplate(p, again, "tableaux_dynamiques");
+    check(p.programs.types.size() == 5 && p.programs.variables.size() == 15, "le mod\xC3\xA8le une seconde fois : ses types et ses variables repris, rien en double");
+    Project q;
+    q.programs.variables.push_back(hmiVar(q, "Cuves", "INT"));
+    View other = makeView(q, "Tableaux");
+    hmi::design::fillFromTemplate(q, other, "tableaux_dynamiques");
+    const Object* qc = nullptr;
+    for (const auto& o : other.objects)
+        if (o.name == "Tableau_Cuves") qc = &o;
+    check(q.variable("Cuves_Ex") && qc && qc->text("rowsFrom") == "Cuves_Ex", "une variable Cuves d'un autre type : le mod\xC3\xA8le cr\xC3\xA9" "e Cuves_Ex et s'y lie");
+}
+
 int main(int argc, char** argv) {
     // 1.12.13 : HMI_TEST_11213=1 - le Tableau, un mode a la fois, seul.
     if (const char* only = std::getenv("HMI_TEST_11213"); only && *only == '1') {
@@ -27123,6 +27306,7 @@ int main(int argc, char** argv) {
         tableauMoteur11213();
         tableauGestes11213();
         tableauGenererDupliquer11213();
+        tableauxDynamiques11213();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -27341,6 +27525,7 @@ int main(int argc, char** argv) {
     tableauMoteur11213();             // 1.12.13 : le Tableau en marche (les sources, « ... », seuils, tri)
     tableauGestes11213();             // 1.12.13 : les gestes sur un tableau (parametres, Element, R/W, ligne choisie)
     tableauGenererDupliquer11213();   // 1.12.13 : Generer et Dupliquer sur le Tableau v2
+    tableauxDynamiques11213();        // 1.12.13 : le modele de vue Tableaux dynamiques
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

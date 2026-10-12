@@ -27,6 +27,7 @@
 #include "HmiCallCheck.hpp"     // 1.11.20 : les appels, controles comme le moteur les fait
 #include "../sim/DialectLib.hpp"   // 1.12.7 : les natives des conteneurs, std::numeric, <bit>, les templates
 #include "HmiOverload.hpp"      // 1.11.20 : les signatures (E/S, sorties) et les surcharges
+#include "HmiTable.hpp"         // 1.12.13 : les parametres qu'un geste sur un tableau passe a ses actions
 
 // 1.10 (decisions 13 et 13 bis) : le dialecte IHM du chantier S1 - ses
 // fonctions internes, ses noms et ses constats (hmi::lang110::analyze ; voir
@@ -1978,7 +1979,17 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
             for (std::size_t k = 0; k < list.size(); ++k) {
                 const auto& a = list[k];
                 if (a.operation != Operation::RunScript) continue;
-                for (const auto& f : check(scopeFor(&v, nullptr), a.value)) {
+                // 1.12.13 : un geste sur un tableau - les parametres qu'il passe (Ligne, Element, Titre...) sont connus, sans
+                // type (ils dependent de la ligne) ; Element^ se lit Element, comme le moteur.
+                Scope scope = scopeFor(&v, nullptr);
+                std::string code = a.value;
+                if (o && o->kind == hmi::Kind::Table && triggerIsTable(a.trigger)) {
+                    std::set<std::string> names;
+                    for (const auto& prm : table::receivedParams(p, *o, a.trigger)) names.insert(up(prm.name));
+                    scope.plcKnown = [names, prev = scope.plcKnown](std::string_view root) { return names.count(up(root)) != 0 || !prev || prev(root); };
+                    code = table::withoutCaret(a.value);
+                }
+                for (const auto& f : check(scope, code)) {
                     Issue i;
                     i.category = "Action";
                     i.view = v.id;
