@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <optional>
 #include <sstream>
 #include <vector>
 
@@ -1681,10 +1682,30 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
                 poly.insert(poly.end(), inner.rbegin(), inner.rend());
                 shapes::fillPolygon(r, c.map(poly), col);
             };
+            // 1.12.10 (lot F) : ses seuils (les siens, sinon ceux de sa variable) - au-dela, l'arc et la valeur prennent la
+            // couleur des seuils (des alarmes au-dela d'une alarme) ; chaque seuil, un trait au bord de l'arc (au bout s'il
+            // sort de la plage).
+            std::optional<gfx::Color> beyond;
+            const auto threshold = [&](const char* key, double& t) { return hmi::parseNumber(src.text(o, key), t); };
+            {
+                double t = 0;
+                if ((threshold("lowAlarm", t) && v < t) || (threshold("highAlarm", t) && v > t)) beyond = c.color("colorAlarm", gfx::Color::rgb(0xE5534B));
+                else if ((threshold("low", t) && v < t) || (threshold("high", t) && v > t)) beyond = c.color("colorWarning", gfx::Color::rgb(0xF2C94C));
+            }
             band(135, 405, c.color("background", gfx::Color::rgb(0x2A313C)));
-            if (f > 0) band(135, static_cast<float>(135 + 270 * f), c.color("fill", gfx::Color::rgb(0x2F6FD6)));
+            if (f > 0) band(135, static_cast<float>(135 + 270 * f), beyond ? *beyond : c.color("fill", gfx::Color::rgb(0x2F6FD6)));
+            for (const char* key : {"lowAlarm", "low", "high", "highAlarm"}) {
+                double t = 0;
+                if (!threshold(key, t) || mx <= mn) continue;
+                const bool strong = std::string_view(key) == "lowAlarm" || std::string_view(key) == "highAlarm";
+                const float at = static_cast<float>((135 + 270 * std::clamp((t - mn) / (mx - mn), 0.0, 1.0)) * 3.14159265358979 / 180.0);
+                const gfx::Point a{centre.x + std::cos(at) * rad * 0.74f, centre.y + std::sin(at) * rad * 0.74f};
+                const gfx::Point b{centre.x + std::cos(at) * rad * 1.02f, centre.y + std::sin(at) * rad * 1.02f};
+                shapes::strokePolyline(r, c.map({a, b}), false,
+                                       strong ? c.color("colorAlarm", gfx::Color::rgb(0xE5534B)) : c.color("colorWarning", gfx::Color::rgb(0xF2C94C)), 2.f);
+            }
             text(c, hmi::formatNumber(std::round(v * 10) / 10) + " " + src.text(o, "unit"), 0, h * 0.30, w, h * 0.4,
-                 fade(c.seen(gfx::Color::rgb(0xE6EAF0)), alpha), std::max(10.0, h * 0.14), "centre");
+                 beyond ? *beyond : fade(c.seen(gfx::Color::rgb(0xE6EAF0)), alpha), std::max(10.0, h * 0.14), "centre");
             break;
         }
         case Kind::Table: {

@@ -29964,6 +29964,19 @@ void lotF11210_editeur() {
         TextColorRecorder ir2;
         app::paintHmiObject(ir2, dv, *dv.object(isa), {}, app::HmiPropertySource{}, theme, live);
         check(ir2.colorOf("8.5", vc) && vc.r == 0xF2 && vc.g == 0xC9 && vc.b == 0x4C, "F : ... \xC3\xA0 8,5 (seuil haut 8) : la couleur des seuils");
+        // Une jauge, un thermometre : leurs seuils (avant : ils n'en avaient pas).
+        const Id jauge = hmi::edit::add(dp, dv, Kind::Gauge, 10, 300);
+        dv.object(jauge)->set("value", "95");
+        dv.object(jauge)->set("highAlarm", "90");
+        TextColorRecorder gr;
+        app::paintHmiObject(gr, dv, *dv.object(jauge), {}, app::HmiPropertySource{}, theme, live);
+        check(gr.colorOf("95", vc) && vc.r == 0xE5 && vc.g == 0x53 && vc.b == 0x4B, "F : une jauge \xC3\xA0 95 (alarme haute 90) : sa valeur en couleur d'alarme");
+        const Id thermo = hmi::edit::add(dp, dv, Kind::Thermometer, 300, 300);
+        dv.object(thermo)->set("value", "45");
+        dv.object(thermo)->set("high", "40");
+        TextColorRecorder tr;
+        app::paintHmiObject(tr, dv, *dv.object(thermo), {}, app::HmiPropertySource{}, theme, live);
+        check(tr.colorOf("45", vc) && vc.r == 0xF2 && vc.g == 0xC9 && vc.b == 0x4C, "F : un thermom\xC3\xA8tre \xC3\xA0 45 (seuil haut 40) : sa valeur en couleur des seuils");
     }
     {
         // L'ecran des variables : la valeur initiale d'une structure, d'un tableau de structures.

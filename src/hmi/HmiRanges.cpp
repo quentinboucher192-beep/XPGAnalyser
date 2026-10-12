@@ -304,12 +304,13 @@ Inherited inheritedOf(const Project& p, std::string_view path, std::string_view 
 // ============================================================ les objets =====
 std::vector<std::string_view> inheritedKeys(Kind k) {
     switch (k) {
-        case Kind::ProgressBar: case Kind::Gauge: case Kind::Bargraph: case Kind::Thermometer: case Kind::Dial:
+        case Kind::ProgressBar: case Kind::Bargraph: case Kind::Dial:
         case Kind::Slider: case Kind::Knob: case Kind::InputField: case Kind::Cylinder:
             return {"min", "max"};
         case Kind::NumericDisplay: case Kind::IsaInstrument:
             return {"lowAlarm", "low", "high", "highAlarm"};
         case Kind::Tank: case Kind::GasBottle: case Kind::Silo: case Kind::Hopper:
+        case Kind::Gauge: case Kind::Thermometer:   // la jauge et le thermometre : leurs seuils, ceux de la variable
             return {"min", "max", "lowAlarm", "low", "high", "highAlarm"};
         case Kind::Trend:
             return {"ymin", "ymax"};

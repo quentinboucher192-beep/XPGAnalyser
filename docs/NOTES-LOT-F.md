@@ -44,10 +44,10 @@ qu'on ne règle pas de plage ; un objet d'un projet existant garde son aspect (v
   mise à l'échelle (0..27648 → 0..10), la ligne montre en gris « 0 (mise à l'échelle) » et « 10 (mise à
   l'échelle) » tant qu'on n'a rien tapé ; les objets à échelle neufs les prennent.
 - **Les objets en héritent** [objet-jauge, objet-bargraphe, objet-cuve, objet-curseur, objet-champ-de-saisie,
-  objet-courbe…] : la jauge, la barre de progression, le bargraphe, le cadran, le thermomètre, le curseur, le
-  potentiomètre, le champ de saisie, l'afficheur numérique (ses seuils), la cuve, le silo, la trémie, la
-  bouteille (Min, Max et leurs seuils), le vérin, la courbe (son axe Y : l'union des plages de ses plumes),
-  l'instrument ISA (ses seuils), la vanne (la plage de son ouverture). Ce qui est réglé sur l'objet l'emporte ;
+  objet-courbe…] : la barre de progression, le bargraphe, le cadran (et ses zones vides), le curseur, le
+  potentiomètre, le champ de saisie, le vérin (Min et Max) ; la jauge, le thermomètre, la cuve, le silo, la
+  trémie, la bouteille (Min, Max et leurs seuils) ; l'afficheur numérique, l'instrument ISA (leurs seuils) ; la
+  courbe (son axe Y : l'union des plages de ses plumes) ; la vanne (la plage de son ouverture). Ce qui est réglé sur l'objet l'emporte ;
   un objet posé depuis la palette naît avec Min et Max vides ; un objet existant ne change pas.
 - **L'inspecteur le montre** [proprietes] : une case vide montre en gris ce que l'objet en fera, « 10 (de
   Pression_Ligne) », « 0 (mise à l'échelle de Debit) », « 100 (par défaut) ». La case « Format de la variable »
@@ -70,6 +70,10 @@ qu'on ne règle pas de plage ; un objet d'un projet existant garde son aspect (v
 - **L'instrument ISA : ses seuils** [objet-instrument-isa] : alarme basse, seuil bas, seuil haut, alarme haute
   (vides : ceux de sa variable) ; au-delà d'un seuil, la bulle et la valeur prennent la couleur des seuils, au-delà
   d'une alarme celle des alarmes.
+- **La jauge et le thermomètre : leurs seuils** [objet-jauge, objet-thermometre] : les mêmes quatre seuils (vides :
+  ceux de la variable), chacun un trait à son niveau (au bord de l'arc, à gauche du tube ; au bout s'il sort de la
+  plage) ; au-delà, l'arc de la jauge et la valeur prennent la couleur des seuils ou des alarmes. Avant : ni seuil
+  ni zone.
 - **Les zones d'un bargraphe, d'un cadran : les seuils de la variable** [objet-bargraphe, objet-cadran-a-zones] :
   posés depuis la palette, leurs zones sont vides - elles suivent les seuils de la variable (sous l'alarme basse et
   au-dessus de l'alarme haute la couleur des alarmes, entre une alarme et son seuil celle des seuils, entre les
@@ -116,6 +120,9 @@ qu'on ne règle pas de plage ; un objet d'un projet existant garde son aspect (v
   vides, la plage de la variable de l'ouverture dans Unités et formats, sinon 0..100. »
 - *objet-instrument-isa* : « 1.12.10 : quatre seuils (vides : ceux de la variable) ; au-delà, la bulle et la
   valeur prennent la couleur des seuils ou des alarmes. »
+- *objet-jauge, objet-thermometre* : « 1.12.10 : quatre seuils (alarme basse, seuil bas, seuil haut, alarme haute ;
+  vides : ceux de la variable), marqués d'un trait ; au-delà, la valeur (et l'arc de la jauge) prend la couleur des
+  seuils ou des alarmes. »
 - *proprietes* : « 1.12.10 : la case « Unité, format et plage de la variable » : cochée (par défaut), l'objet
   prend l'unité, le format, la plage et les seuils de sa variable pour ce qu'il laisse vide. »
 - *variables-ihm, types-ihm* : « 1.12.10 : une structure prend une valeur initiale `(Marche := TRUE, Consigne :=
@@ -172,7 +179,9 @@ Le message d'un seuil hors de la plage d'une cuve dit maintenant « il se dessin
 - Dans `lotF11210` aussi : la vanne (une ouverture 0..27648 à 13824 : 50 % ; une variable 0..1 d'Unités et formats :
   25 % sans formule ; une vanne sans plage inchangée), l'instrument ISA qui prend les seuils de sa variable,
   l'alarme « niveau très haut » d'une cuve qui prend l'alarme haute de sa variable ; dans `lotF11210_editeur`, le
-  dessin d'une cuve dont l'alarme haute (150) dépasse la plage 0..100 : son étiquette HH se dessine (avant : rien).
+  dessin d'une cuve dont l'alarme haute (150) dépasse la plage 0..100 : son étiquette HH se dessine (avant : rien) ;
+  une jauge qui prend les quatre seuils de sa variable ; dans `lotF11210_editeur`, une jauge au-delà de son alarme
+  haute et un thermomètre au-delà de son seuil haut dessinent leur valeur dans la couleur voulue.
 
 Trois essais existants ont changé, parce que le comportement qu'ils figeaient a changé exprès :
 - `hmi` (lot 9) : une borne `abc` sur un curseur était « n'est pas un nombre » (une erreur) ; `abc` est maintenant un
@@ -187,8 +196,8 @@ Trois essais existants ont changé, parce que le comportement qu'ils figeaient a
 - **Les zones d'un bargraphe, d'un cadran à partir des seuils** : seulement pour des zones vides (un objet neuf, ou
   des zones effacées) et des seuils en nombres (un seuil qui est une variable n'y compte pas) ; des zones écrites
   ne changent jamais.
-- **La jauge et le thermomètre n'ont toujours pas de seuils** (ni de zones) : ils prennent Min et Max seulement.
-  Le graphique en barres, l'histogramme, la courbe XY gardent leurs bornes (plusieurs variables, ou une autre
+- **La barre de progression n'a pas de seuils** ; la jauge et le thermomètre n'ont pas de zones (leurs seuils sont
+  des traits et une couleur). Le graphique en barres, l'histogramme, la courbe XY gardent leurs bornes (plusieurs variables, ou une autre
   sémantique : la tolérance d'un histogramme, le TRS d'un compteur) ; la courbe prend l'union des plages de ses
   plumes.
 - **Le dessin hors plage** : seuls les contenants (cuve, silo, trémie, bouteille) dessinent un seuil hors de la plage

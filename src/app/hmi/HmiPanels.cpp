@@ -2738,12 +2738,12 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                          || o->kind == hmi::Kind::PieChart || o->kind == hmi::Kind::RadarChart || o->kind == hmi::Kind::Histogram;
         if (!charts && (o->find("unit") || o->find("format") || hmi::ranges::inherits(o->kind)) && !o->find("varFormat"))   // 1.12.10 : et la plage
             allProps.push_back({"varFormat", "TRUE", ""});
-        // 1.12.10 (lot F) : la plage de l'ouverture d'une vanne, les seuils d'un instrument ISA (absents d'un objet
-        // neuf : rien ne change dans son fichier ; vides, ceux de la variable).
+        // 1.12.10 (lot F) : la plage de l'ouverture d'une vanne, les seuils d'un instrument ISA, d'une jauge, d'un
+        // thermometre (absents d'un objet neuf : rien ne change dans son fichier ; vides, ceux de la variable).
         if (o->kind == hmi::Kind::Valve && !many)
             for (const char* key : {"openingMin", "openingMax"})
                 if (!o->find(key)) allProps.push_back({key, "", ""});
-        if (o->kind == hmi::Kind::IsaInstrument && !many)
+        if ((o->kind == hmi::Kind::IsaInstrument || o->kind == hmi::Kind::Gauge || o->kind == hmi::Kind::Thermometer) && !many)
             for (const char* key : {"lowAlarm", "low", "high", "highAlarm", "colorWarning", "colorAlarm"})
                 if (!o->find(key))
                     allProps.push_back({key, std::string_view(key) == "colorWarning" ? "#F2C94C" : std::string_view(key) == "colorAlarm" ? "#E5534B" : "", ""});

@@ -262,9 +262,9 @@ inline constexpr KeyRole kKeyRoles[] = {
     const bool bounds = key == "min" || key == "max";
     const bool thresholds = key == "lowAlarm" || key == "low" || key == "high" || key == "highAlarm";
     switch (k) {
-        case Kind::ProgressBar: case Kind::Gauge: case Kind::Thermometer: case Kind::Dial: case Kind::Slider: case Kind::Knob:
-        case Kind::InputField: case Kind::Cylinder:
+        case Kind::ProgressBar: case Kind::Dial: case Kind::Slider: case Kind::Knob: case Kind::InputField: case Kind::Cylinder:
             return bounds;
+        case Kind::Gauge: case Kind::Thermometer: return bounds || thresholds;   // 1.12.10 : leurs seuils (ceux de la variable)
         case Kind::Bargraph: return bounds || key == "setpoint";
         case Kind::NumericDisplay: case Kind::IsaInstrument: return thresholds;
         case Kind::Tank: case Kind::GasBottle: case Kind::Silo: case Kind::Hopper: return bounds || thresholds;

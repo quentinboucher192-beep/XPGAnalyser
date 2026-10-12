@@ -24861,6 +24861,8 @@ void lotF11210() {
              "F : une cuve prend les quatre seuils de sa variable");
         same(at(cuveMain, "high"), "7", "F : ... un seuil r\xC3\xA9gl\xC3\xA9 sur l'objet l'emporte");
         same(at(afficheur, "low") + ";" + at(afficheur, "highAlarm"), "2;9", "F : un afficheur num\xC3\xA9rique aussi");
+        same(at(jaugeNeuve, "lowAlarm") + ";" + at(jaugeNeuve, "low") + ";" + at(jaugeNeuve, "high") + ";" + at(jaugeNeuve, "highAlarm"), "1;2;8;9",
+             "F : une jauge prend aussi les seuils de sa variable (avant : elle n'avait pas de seuils)");
         same(at(courbe, "ymin") + ".." + at(courbe, "ymax"), "-5..50", "F : une courbe : l'union des plages de ses plumes (0..10 et -5..50)");
         same(at(bouteille, "max"), "200", "F : une bouteille neuve sans plage de variable : 0..200, comme avant");
         same(shown.object(curseurNom)->expr("max"), "Consigne_Max", "F : Max tap\xC3\xA9 Consigne_Max (sans =) : la variable, lue comme une formule");
