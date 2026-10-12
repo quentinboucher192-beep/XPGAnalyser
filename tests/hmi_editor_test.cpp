@@ -29899,6 +29899,15 @@ void lotF11210_editeur() {
         app::paintHmiObject(rec, dv, *dv.object(t), {}, app::HmiPropertySource{}, theme, opt);
         check(before.wrote("H") && !before.wrote("HH") && rec.wrote("HH"),
               "F : une alarme haute 150 sur une cuve 0..100 : son \xC3\xA9tiquette HH se dessine au bord (avant : rien)");
+        // Une vanne reglante 0..27648 dans l'editeur : son ouverture fixe (13824) dessinee a 50 %.
+        const Id vanne = hmi::edit::add(dp, dv, Kind::Valve, 300, 10);
+        dv.object(vanne)->set("opening", "13824");
+        dv.object(vanne)->set("openingMin", "0");
+        dv.object(vanne)->set("openingMax", "27648");
+        Recorder vr;
+        opt.project = &dp;   // l'apercu de l'editeur lit le projet
+        app::paintHmiObject(vr, dv, *dv.object(vanne), {}, app::HmiPropertySource{}, theme, opt);
+        check(vr.wrote("50 %") && !vr.wrote("100 %"), "F : une vanne 0..27648 ouverte \xC3\xA0 13824 se dessine \xC3\xA0 50 % (avant : 100 %)");
     }
     {
         // L'ecran des variables : la valeur initiale d'une structure, d'un tableau de structures.

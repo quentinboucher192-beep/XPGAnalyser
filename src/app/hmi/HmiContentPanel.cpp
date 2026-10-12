@@ -2255,6 +2255,12 @@ void HmiContentPanel::rebuildGrid() {
                                                                     + hmi::formatNumber(scaled.number("max", 100)),
                                                "Min et Max (Propri\xC3\xA9t\xC3\xA9s ; vides : ceux de la variable). Une zone en % les suit quand ils changent."));
             info.properties.push_back(readOnly("Zones", std::to_string(bands.size())));
+            // 1.12.10 (lot F) : aucune zone ecrite - celles des seuils de la variable, sinon celles d'un objet neuf.
+            if (bands.empty())
+                if (const auto* sv = doc_->project.view(view_))
+                    info.properties.push_back(readOnly("Sans zone \xC3\xA9" "crite", hmi::ranges::hint(doc_->project, *sv, *o, "zones"),
+                                                       "Vides, les zones suivent les seuils de la variable (Configuration > Unit\xC3\xA9s et formats) ; "
+                                                       "sans seuil, celles d'un objet neuf, en % de l'\xC3\xA9" "chelle. Ajouter en \xC3\xA9" "crit."));
             cats.push_back(std::move(info));
             break;
         }

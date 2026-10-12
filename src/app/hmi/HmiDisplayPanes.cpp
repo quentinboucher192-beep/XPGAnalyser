@@ -775,7 +775,7 @@ void HmiUnitsPane::refresh() {
     if (selectedDisplay().empty() && !order_.empty()) table_->selectModelRows({0});
     refreshing_ = false;
     rebuildProperties();
-    status_->setMessage(std::to_string(p.displays.size()) + " variable(s) avec une unit\xC3\xA9 ou un format", ui::StatusBar::Severity::Info);
+    status_->setMessage(std::to_string(p.displays.size()) + " variable(s) avec une unit\xC3\xA9, un format ou une plage", ui::StatusBar::Severity::Info);
     invalidate();
 }
 

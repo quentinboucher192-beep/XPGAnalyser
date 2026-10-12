@@ -71,6 +71,64 @@ std::string ownValue(const Object& o, std::string_view key) {
     return defaultOf(o.kind, key);
 }
 
+// Les zones d'un objet neuf de ce genre (bargraphe, cadran), en % de l'echelle : 0..100 les dessine comme les
+// zones ecrites d'avant, une plage prise a la variable les garde a leur place.
+std::string percentZones(Kind k) {
+    std::string out;
+    for (const auto& z : parseZones(defaultOf(k, "zones")))
+        out += (out.empty() ? "" : "; ") + formatNumber(z.from) + " %.." + formatNumber(z.to) + " % = " + z.color;
+    return out;
+}
+
+// Une borne de l'objet telle qu'il la lira (la sienne, sinon celle de sa variable, sinon celle d'un objet neuf).
+bool boundOf(const Project& p, const Object& o, std::string_view key, const View* in, double& out) {
+    const auto* prop = o.find(key);
+    if (prop && !prop->expr.empty()) return false;
+    std::string text = prop ? trim(prop->value) : defaultOf(o.kind, key);
+    if (text.empty() && followsVariableFormat(o)) text = inheritedFor(p, o, key, in).value;
+    if (text.empty()) text = defaultOf(o.kind, key);
+    return parseNumber(text, out);
+}
+
+// Les zones que donnent les seuils de la variable (en nombres) sur l'echelle de l'objet : sous l'alarme basse et
+// au-dessus de l'alarme haute, la couleur des alarmes ; entre une alarme et son seuil, celle des seuils ; entre les
+// seuils, le vert. Vide : la variable n'a pas de seuil en nombre (ou l'echelle ne se lit pas).
+std::string thresholdZones(const Project& p, const Object& o, const View* in) {
+    double lo = 0, hi = 0;
+    if (!boundOf(p, o, "min", in, lo) || !boundOf(p, o, "max", in, hi) || lo >= hi) return {};
+    double t[4] = {0, 0, 0, 0};
+    bool has[4] = {false, false, false, false};
+    bool any = false;
+    for (int k = 0; k < 4; ++k) {
+        const Inherited inh = inheritedFor(p, o, kThresholds[k], in);
+        has[k] = !inh.value.empty() && parseNumber(inh.value, t[k]);
+        any = any || has[k];
+    }
+    if (!any) return {};
+    std::vector<double> cuts{lo, hi};
+    for (int k = 0; k < 4; ++k)
+        if (has[k] && t[k] > lo && t[k] < hi) cuts.push_back(t[k]);
+    std::sort(cuts.begin(), cuts.end());
+    cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+    const auto colorAt = [&](double mid) -> std::string {
+        if ((has[0] && mid < t[0]) || (has[3] && mid > t[3])) return "#E5534B";
+        if ((has[1] && mid < t[1]) || (has[2] && mid > t[2])) return "#F2C94C";
+        return "#2ECC71";
+    };
+    std::string out, color;
+    double from = cuts.front();
+    for (std::size_t i = 0; i + 1 < cuts.size(); ++i) {
+        const std::string c = colorAt((cuts[i] + cuts[i + 1]) / 2);
+        if (i > 0 && c != color) {
+            out += (out.empty() ? "" : "; ") + formatNumber(from) + ".." + formatNumber(cuts[i]) + " = " + color;
+            from = cuts[i];
+        }
+        color = c;
+    }
+    out += (out.empty() ? "" : "; ") + formatNumber(from) + ".." + formatNumber(cuts.back()) + " = " + color;
+    return out;
+}
+
 // Les changements d'un objet (sans la vanne : son ouverture a part).
 std::vector<Change> changesOf(const Project& p, const Object& o, const View* in) {
     std::vector<Change> out;
@@ -101,6 +159,14 @@ std::vector<Change> changesOf(const Project& p, const Object& o, const View* in)
         // Rien de la variable : la valeur d'un objet neuf (une jauge neuve : 0..100).
         if (!def.empty() && (!prop || prop->value != def)) out.push_back({std::string(key), def, {}});
     }
+    // Les zones laissees vides d'un bargraphe, d'un cadran (un objet pose depuis la palette) : les seuils de la variable,
+    // sinon celles d'un objet neuf, en % de l'echelle.
+    if (o.kind == Kind::Bargraph || o.kind == Kind::Dial)
+        if (const auto* zones = o.find("zones"); zones && zones->expr.empty() && trim(zones->value).empty()) {
+            std::string z = follows ? thresholdZones(p, o, in) : std::string{};
+            if (z.empty()) z = percentZones(o.kind);
+            if (!z.empty()) out.push_back({"zones", z, {}});
+        }
     return out;
 }
 
@@ -367,6 +433,9 @@ bool preview(const Project& p, const View& v, const Object& o, Object& out) {
         if (!valveOpening(p, o, &v, opening) || !opening.expr.empty()) return false;   // une formule : l'editeur ne la calcule pas
         out = o;
         *out.find("opening") = std::move(opening);
+        // Deja en % : la copie dessinee ne se recalcule pas (le dessin la repasse ici).
+        out.set(std::string(kOpeningMin), "0");
+        out.set(std::string(kOpeningMax), "100");
         return true;
     }
     const auto changes = changesOf(p, o, &v);
@@ -381,6 +450,13 @@ bool preview(const Project& p, const View& v, const Object& o, Object& out) {
 }
 
 std::string hint(const Project& p, const View& v, const Object& o, std::string_view key) {
+    if (key == "zones" && (o.kind == Kind::Bargraph || o.kind == Kind::Dial)) {
+        const auto* zones = o.find("zones");
+        if (!zones || !zones->expr.empty() || !trim(zones->value).empty()) return {};
+        const std::string var = variableOf(o);
+        if (followsVariableFormat(o) && !thresholdZones(p, o, &v).empty()) return "les seuils de " + var;
+        return percentZones(o.kind) + " (par d\xC3\xA9" "faut)";
+    }
     bool ours = false;
     for (const auto kk : inheritedKeys(o.kind)) ours = ours || kk == key;
     if (!ours) return {};
@@ -405,15 +481,11 @@ void followVariable(Object& o) {
             prop->value.clear();
             prop->expr.clear();
         }
-    // Les zones d'un bargraphe, d'un cadran neufs : en % de l'echelle (1.12.7, lot D) - 0..100 les dessine comme
-    // avant, une plage 0..10 prise a la variable les garde a leur place (avant : 0-60 couvrait tout).
+    // Les zones d'un bargraphe, d'un cadran neufs : vides - les seuils de la variable, sinon celles d'un objet neuf en %
+    // de l'echelle (une plage 0..10 prise a la variable les garde a leur place ; avant, 0-60 couvrait tout).
     if (auto* zones = o.find("zones"); zones && zones->expr.empty() && (o.kind == Kind::Bargraph || o.kind == Kind::Dial)
-                                       && trim(zones->value) == defaultOf(o.kind, "zones")) {
-        std::string percent;
-        for (const auto& z : parseZones(zones->value))
-            percent += (percent.empty() ? "" : "; ") + formatNumber(z.from) + " %-" + formatNumber(z.to) + " % = " + z.color;
-        if (!percent.empty()) zones->value = percent;
-    }
+                                       && trim(zones->value) == defaultOf(o.kind, "zones"))
+        zones->value.clear();
 }
 
 // ============================================================ Generer ========

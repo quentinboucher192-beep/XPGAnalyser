@@ -2826,6 +2826,9 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             p.placeholder = hmi::ranges::hint(*project, view, *o, prop.key);
             if (p.type == PG::ValueType::Real) p.type = PG::ValueType::Text;
         }
+        // ... et les zones vides d'un bargraphe, d'un cadran : « les seuils de Pression_Ligne », sinon celles d'un objet neuf.
+        if (project && !many && prop.expr.empty() && prop.key == "zones" && (o->kind == hmi::Kind::Bargraph || o->kind == hmi::Kind::Dial))
+            p.placeholder = hmi::ranges::hint(*project, view, *o, prop.key);
         if (info) p.enumValues = info->choices;
         // Les ressources du projet, en liste : on choisit une image parmi les
         // images, une police parmi les polices ; la source d'un Tableau parmi

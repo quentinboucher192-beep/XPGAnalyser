@@ -3090,7 +3090,10 @@ void checkDisplay(const Project& p, const NameExists& plc, std::vector<Issue>& o
         const bool param = std::any_of(p.views.begin(), p.views.end(), [&](const View& v) { return v.param(root) != nullptr; });
         if (!param && !known(p, plc, root)) issue(S::Warning, d.path + (core::hasApi() ? " : variable inconnue (ni IHM, ni de l'automate)" : " : variable inconnue (pas une variable de l'IHM)"));
         else if (displayUses(p, d).empty()) issue(S::Info, d.path + " : aucun objet ne la montre encore");
-        if (d.unit.empty() && d.format.empty()) issue(S::Info, d.path + " : ni unit\xC3\xA9 ni format - la ligne ne change rien");
+        // 1.12.10 (lot F) : une ligne qui ne donne qu'une plage ou des seuils change quelque chose.
+        if (d.unit.empty() && d.format.empty() && d.min.empty() && d.max.empty() && d.low.empty() && d.high.empty() && d.lowAlarm.empty()
+            && d.highAlarm.empty())
+            issue(S::Info, d.path + " : ni unit\xC3\xA9 ni format - la ligne ne change rien");
     }
     const auto& c = p.config;
     if (c.textScale < 50 || c.textScale > 300)

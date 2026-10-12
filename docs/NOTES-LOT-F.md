@@ -67,9 +67,13 @@ qu'on ne règle pas de plage ; un objet d'un projet existant garde son aspect (v
 - **L'instrument ISA : ses seuils** [objet-instrument-isa] : alarme basse, seuil bas, seuil haut, alarme haute
   (vides : ceux de sa variable) ; au-delà d'un seuil, la bulle et la valeur prennent la couleur des seuils, au-delà
   d'une alarme celle des alarmes.
-- **Les zones d'un bargraphe, d'un cadran neufs en % de l'échelle** [objet-bargraphe, objet-cadran-a-zones] :
-  posés depuis la palette, leurs zones s'écrivent `0 %-60 %…` - sur 0..100 comme avant, et à leur place sur la
-  plage prise à la variable (0..10).
+- **Les zones d'un bargraphe, d'un cadran : les seuils de la variable** [objet-bargraphe, objet-cadran-a-zones] :
+  posés depuis la palette, leurs zones sont vides - elles suivent les seuils de la variable (sous l'alarme basse et
+  au-dessus de l'alarme haute la couleur des alarmes, entre une alarme et son seuil celle des seuils, entre les
+  seuils le vert) ; sans seuil, celles d'un objet neuf, en % de l'échelle (`0 %..60 %`), qui restent à leur place
+  sur une plage prise à la variable (avant, 0-60 couvrait toute une échelle 0..10). L'inspecteur et Contenu disent
+  d'où elles viennent (« les seuils de Pression_Ligne »). Des zones écrites (un objet existant, ou Contenu) restent
+  les leurs.
 - **La valeur initiale d'une structure** [variables-ihm, types-ihm] : une variable `Pompe : T_Pompe` accepte
   `(Marche := TRUE, Consigne := 12.5)` - les membres nommés, les autres gardent la valeur de leur type. Un tableau
   de structures accepte un littéral par élément : `Cuves : ARRAY[1..3] OF T_Cuve := [(Nom := 'Cuve A', Niveau :=
@@ -95,6 +99,9 @@ qu'on ne règle pas de plage ; un objet d'un projet existant garde son aspect (v
   variable (Configuration › Unités et formats, ou sa mise à l'échelle) ; l'inspecteur la montre en gris. Un
   objet posé depuis la palette naît ainsi ; une valeur tapée l'emporte. Min et Max acceptent aussi une variable
   tapée sans = (`Consigne_Max`). »
+- *objet-bargraphe, objet-cadran-a-zones* : « 1.12.10 : des zones vides (un objet posé depuis la palette) suivent
+  les seuils de la variable - alarmes en rouge, seuils en jaune, le vert entre les seuils ; sans seuil, celles d'un
+  objet neuf en % de l'échelle. Des zones écrites dans Contenu restent les leurs. »
 - *objet-cuve, objet-silo, objet-tremie, objet-bouteille-de-gaz* : « 1.12.10 : Min, Max et les quatre seuils
   laissés vides viennent de la variable. Un seuil hors de Min..Max se dessine au bord, marqué d'une flèche. »
 - *objet-afficheur-numerique* : « 1.12.10 : les seuils laissés vides sont ceux de la variable (Unités et
@@ -135,7 +142,8 @@ Le message d'un seuil hors de la plage d'une cuve dit maintenant « il se dessin
 - `hmi_test` : `lotF11210` - la ligne enregistrée et relue (une ligne sans plage s'écrit comme en 1.12.9) ;
   l'héritage (une jauge neuve 0..10, une jauge existante 0..100 inchangée, une variable sans plage, la mise à
   l'échelle, la case décochée, les quatre seuils d'une cuve, un seuil réglé sur l'objet qui l'emporte, un
-  afficheur, une courbe et l'union de ses plumes, une bouteille neuve à 0..200) ; un nom tapé sans = devenu
+  afficheur, une courbe et l'union de ses plumes, une bouteille neuve à 0..200 ; les zones d'un bargraphe neuf
+  tirées des seuils, celles d'un cadran neuf en %, celles d'un bargraphe existant inchangées) ; un nom tapé sans = devenu
   formule (Max d'un curseur, consigne d'un bargraphe) ; l'aide grise de l'inspecteur ; en marche, le dessin (la
   jauge sur 0..10, la consigne à 8), un curseur poussé au bout qui écrit 10 puis 8, un champ de saisie qui refuse
   12 ; Générer (Min ≥ Max, un nom inconnu, le désordre, une alarme hors plage dans Unités et formats ; un seuil
@@ -168,9 +176,9 @@ Trois essais existants ont changé, parce que le comportement qu'ils figeaient a
 
 ## Ce qui n'est pas fait
 
-- **Les seuils de la variable en zones** d'un bargraphe ou d'un cadran (« proposés en zones », § 3 de l'audit) :
-  leurs zones restent les leurs. Un bargraphe ou un cadran neuf a ses zones en % de l'échelle, qui suivent donc
-  la plage prise à la variable ; ils ne prennent pas les seuils.
+- **Les zones d'un bargraphe, d'un cadran à partir des seuils** : seulement pour des zones vides (un objet neuf, ou
+  des zones effacées) et des seuils en nombres (un seuil qui est une variable n'y compte pas) ; des zones écrites
+  ne changent jamais.
 - **La jauge et le thermomètre n'ont toujours pas de seuils** (ni de zones) : ils prennent Min et Max seulement.
   Le graphique en barres, l'histogramme, la courbe XY gardent leurs bornes (plusieurs variables, ou une autre
   sémantique : la tolérance d'un histogramme, le TRS d'un compteur) ; la courbe prend l'union des plages de ses
@@ -216,7 +224,9 @@ Trois essais existants ont changé, parce que le comportement qu'ils figeaient a
   déjà (1.12.6), son message change.
 - **Un objet posé depuis la palette** (jauge, barre, bargraphe, cadran, thermomètre, curseur, potentiomètre,
   cuve, silo, trémie, bouteille, vérin, courbe) a Min et Max vides dans son fichier (la valeur de sa variable, ou
-  celle d'un objet neuf) ; un objet créé autrement (modèles, exemples, Dupliquer, copier-coller) garde ses valeurs.
+  celle d'un objet neuf), et un bargraphe ou un cadran ses zones vides ; un objet créé autrement (modèles,
+  exemples, Dupliquer, copier-coller) garde ses valeurs. Ouvert dans une 1.12.9, un tel objet se dessinerait sur
+  la plage par défaut de son dessin (0..100), sans zone ni seuil hérité.
 - **Le moteur compose une vue de plus** : une vue qui a un objet à plage héritée (ou un nom dans une borne) est
   recomposée à chaque cycle (100 ms), comme une vue à joker (lot E) ; le coût n'est pas mesuré sur un gros projet.
 - **Les rôles** : Min, Max, les seuils (et l'axe Y, la consigne, la plage de l'ouverture) d'un objet à échelle sont

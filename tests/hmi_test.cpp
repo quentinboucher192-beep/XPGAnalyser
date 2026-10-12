@@ -24835,6 +24835,10 @@ void lotF11210() {
     const Id barre = put(Kind::Bargraph, "Bargraphe", 1800, true);
     v.object(barre)->setExpr("value", "Pression_Ligne");
     v.object(barre)->set("setpoint", "Consigne_Max");
+    const Id cadran = put(Kind::Dial, "Cadran_Libre", 1900, true);
+    v.object(cadran)->setExpr("value", "Libre");
+    const Id barreAncienne = put(Kind::Bargraph, "Bargraphe_Ancien", 1950, false);
+    v.object(barreAncienne)->setExpr("value", "Pression_Ligne");
     const Id courbe = put(Kind::Trend, "Courbe", 2000, true);
     v.object(courbe)->set("variables", "Pression_Ligne;Autre");
     const Id bouteille = put(Kind::GasBottle, "Bouteille", 2200, true);
@@ -24861,6 +24865,12 @@ void lotF11210() {
         same(at(bouteille, "max"), "200", "F : une bouteille neuve sans plage de variable : 0..200, comme avant");
         same(shown.object(curseurNom)->expr("max"), "Consigne_Max", "F : Max tap\xC3\xA9 Consigne_Max (sans =) : la variable, lue comme une formule");
         same(shown.object(barre)->expr("setpoint"), "Consigne_Max", "F : ... la consigne d'un bargraphe aussi");
+        same(at(barre, "zones"), "0..1 = #E5534B; 1..2 = #F2C94C; 2..8 = #2ECC71; 8..9 = #F2C94C; 9..10 = #E5534B",
+             "F : un bargraphe neuf (zones vides) : les zones des seuils de sa variable (alarmes, seuils, entre les deux)");
+        same(at(cadran, "zones"), "0 %..60 % = #2ECC71; 60 %..85 % = #F2C94C; 85 %..100 % = #E5534B",
+             "F : un cadran neuf sans seuils de variable : les zones d'un cadran neuf, en % de l'\xC3\xA9" "chelle");
+        same(at(barreAncienne, "zones") + " | " + at(barreAncienne, "max"), "0-60 = #2ECC71; 60-80 = #F2C94C; 80-100 = #E5534B | 100",
+             "F : un bargraphe d'un projet existant garde ses zones et sa plage");
         check(!ranges::needed(p, shown), "F : une fois pr\xC3\xA9par\xC3\xA9" "e, plus rien \xC3\xA0 prendre");
     }
     {
@@ -24999,6 +25009,8 @@ void lotF11210() {
         check(!says("Cuve_Nom", "n'est pas un nombre", Issue::Severity::Error), "F : une alarme haute tap\xC3\xA9" "e Consigne_Max : accept\xC3\xA9" "e (la variable)");
         check(says("Curseur_Inconnu", "Max \xC2\xAB Consigne_Mx \xC2\xBB : variable inconnue"), "F : un Max tap\xC3\xA9 Consigne_Mx : variable inconnue, dite");
         check(says("Jauge_Vide", "la plage est vide"), "F : une jauge 10..5 : la plage est vide (avant : rien)");
+        check(!says("", "Autre : ni unit\xC3\xA9 ni format", Issue::Severity::Info),
+              "F : une ligne qui ne donne qu'une plage n'est plus \xC2\xAB une ligne qui ne change rien \xC2\xBB");
         check(says("Cuve_Hors", "Alarme haute 15 hors de la plage 0..10"), "F : un seuil hors de la plage h\xC3\xA9rit\xC3\xA9" "e (0..10 de Pression_Ligne) : dit");
     }
 }
