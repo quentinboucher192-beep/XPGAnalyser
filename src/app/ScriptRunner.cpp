@@ -5171,13 +5171,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             }
         }
         if (!ok) { fail("sous-onglet introuvable : " + arg(1)); return Step::Next; }
-        // Lot 13 : la barre defile - un en-tete hors de vue est choisi directement. 1.12.13 : un en-tete etroit aussi
-        // (l'icone seule, l'inspecteur serre : un clic tomberait sur le menu des onglets voisin).
-        if (const auto b = owner->bounds(); r.x < b.x || r.x + 24.f > b.right() || r.w < 48.f) {
-            owner->setCurrentIndex(index);
-            return Step::Yield;
-        }
-        click({r.x + 24.f, r.y + r.h * 0.5f}, MouseButton::Left, 1, {});
+        // Lot 13 : la barre defile - un en-tete hors de vue est choisi directement. 1.12.13 : toujours (l'inspecteur
+        // serre cache les en-tetes sous ses fleches et son menu des onglets : un clic y tombait).
+        owner->setCurrentIndex(index);
         return Step::Yield;
     }
     if (cmd == "editeur") {
