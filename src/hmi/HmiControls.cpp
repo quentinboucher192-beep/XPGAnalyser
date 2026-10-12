@@ -551,6 +551,32 @@ std::string tableHit(const Object& o, double w, double h, double x, double y, st
     return {};
 }
 
+std::string tableCellHit(const Object& o, double w, double h, double x, double y, std::size_t count, std::size_t first,
+                         const std::vector<double>& widths) {
+    if (x < 0 || y < 0 || x > w || y > h) return {};
+    const auto l = tableLayout(o, w, h, count, first);
+    if (l.bar.w > 0 && l.bar.contains(x, y)) return {};
+    const double width = std::max(1.0, w - l.bar.w);
+    double total = 0;
+    for (const double c : widths) total += c > 0 ? c : 1.0;
+    int column = 0;
+    if (total > 0) {
+        double at = 0;
+        column = static_cast<int>(widths.size()) - 1;
+        for (std::size_t k = 0; k < widths.size(); ++k) {
+            at += (widths[k] > 0 ? widths[k] : 1.0) / total * width;
+            if (x < at) {
+                column = static_cast<int>(k);
+                break;
+            }
+        }
+    }
+    if (y < l.headerH) return "entete:" + std::to_string(column);
+    const auto i = static_cast<std::size_t>((y - l.headerH) / l.rowH);
+    if (i >= l.fit || l.first + i >= count) return "case:-1:-1";
+    return "case:" + std::to_string(l.first + i) + ":" + std::to_string(column);
+}
+
 std::string comboHit(const Object& o, double w, double h, double x, double y, std::size_t count, bool open, std::size_t first) {
     if (open) {
         const auto l = comboLayout(o, w, h, count, first);

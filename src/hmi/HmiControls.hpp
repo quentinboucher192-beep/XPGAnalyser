@@ -161,6 +161,12 @@ struct TableLayout {
 };
 [[nodiscard]] TableLayout tableLayout(const Object&, double w, double h, std::size_t count, std::size_t first);
 [[nodiscard]] std::string tableHit(const Object&, double w, double h, double x, double y, std::size_t count, std::size_t first);
+// 1.12.13 : LA CASE TOUCHEE d'un tableau (lignes dynamiques, cases fixes : la meme mise en page) - "entete:C" (l'en-tete
+// de la colonne C, 0...), "case:R:C" (la ligne R du modele, la premiere montree comprise, et sa colonne), "case:-1:-1"
+// ailleurs dans l'objet (sous les lignes) ; "" sur la barre de defilement (tableHit) ou dehors. `widths` : les largeurs
+// relatives des colonnes (vide : une seule).
+[[nodiscard]] std::string tableCellHit(const Object&, double w, double h, double x, double y, std::size_t count, std::size_t first,
+                                       const std::vector<double>& widths);
 // "ouvrir" (la boite), "choix:3", "defiler:-1" / "defiler:1", "" (rien).
 [[nodiscard]] std::string comboHit(const Object&, double w, double h, double x, double y, std::size_t count, bool open,
                                    std::size_t first);

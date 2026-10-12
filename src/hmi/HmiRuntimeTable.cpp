@@ -18,6 +18,7 @@
 // =============================================================================
 #include "HmiRuntime.hpp"
 
+#include "HmiActionKinds.hpp"   // le clavier d'une case R/W
 #include "HmiDisplay.hpp"
 #include "HmiEnums.hpp"
 #include "HmiExpr.hpp"
@@ -27,6 +28,7 @@
 #include "HmiRoles.hpp"
 #include "HmiSources.hpp"
 #include "HmiTable.hpp"
+#include "HmiTypeRegistry.hpp"  // la plage d'un entier (une case R/W)
 #include "HmiTypes.hpp"
 #include "HmiWidgets.hpp"
 
@@ -650,6 +652,295 @@ bool Runtime::tableModel(Id view, const Object& o, table::Model& out) const {
             return desc ? r > 0 : r < 0;
         });
     }
+    return true;
+}
+
+// ============================================================ les gestes sur un tableau (1.12.13)
+bool Runtime::tableShown(Id view, const Object& o, table::Model& out) const {
+    out = {};
+    switch (table::modeOf(o)) {
+        case table::Mode::Rows:
+            return tableModel(view, o, out);
+        case table::Mode::File:
+            return false;
+        case table::Mode::Fixed:
+            break;
+    }
+    // Les cases fixes : leur texte calcule (une formule, un texte a trous), comme l'ecran les montre.
+    const auto cells = parseCells(o.text("cells"));
+    if (cells.empty() || !env_) return false;
+    std::size_t n = splitSemicolons(o.text("columns")).size();
+    for (const auto& r : cells) n = std::max(n, r.size());
+    n = std::max<std::size_t>(1, n);
+    out.headers = splitSemicolons(o.text("columns"));
+    out.headers.resize(n);
+    out.widths = columnFractions(o, n);
+    out.aligns.assign(n, "gauche");
+    const auto access = table::fixedAccess(o, n);
+    out.writable = access;
+    const Scope* scope = viewScope(view);
+    for (std::size_t i = 0; i < cells.size(); ++i) {
+        table::ModelRow row;
+        row.position = static_cast<long long>(i);
+        row.index = std::to_string(i + 1);
+        for (std::size_t k = 0; k < n; ++k) {
+            table::ModelCell c;
+            const std::string raw = k < cells[i].size() ? cells[i][k] : std::string{};
+            if (cellIsExpression(raw)) {
+                const std::string code = raw.substr(1);
+                auto it = expressions_.find(code);
+                if (it == expressions_.end()) it = expressions_.emplace(code, Expression::compile(code)).first;
+                bool ok = false;
+                if (it->second.valid())
+                    if (auto val = it->second.evaluate(envOf(), scope)) {
+                        c.text = roles::displayText(*val);
+                        ok = true;
+                    }
+                if (!ok) {
+                    c.error = true;
+                    c.text = "###";
+                }
+            } else if (cellIsTemplate(raw)) {
+                c.text = TextTemplate::compile(raw).render(envOf(), scope);
+            } else {
+                c.text = raw;
+            }
+            row.cells.push_back(std::move(c));
+        }
+        out.rows.push_back(std::move(row));
+    }
+    return true;
+}
+
+void Runtime::tablePart(const View& v, const Object& o, std::string_view part, double now) {
+    auto& cell = tableCells_[o.id];
+    if (part.rfind("entete:", 0) == 0) {
+        cell.row = -1;
+        cell.column = std::atoi(std::string(part.substr(7)).c_str());
+        table::Model m;
+        if (tableShown(v.id, o, m)) tableFire(v, o, Trigger::HeaderClick, m, -1, cell.column, now);
+        return;
+    }
+    // "case:R:C" : la ligne montree R (0...), la colonne C ; "case:-1:-1" : hors des cases.
+    const std::string rest(part.substr(5));
+    const auto colon = rest.find(':');
+    cell.row = std::atoll(rest.substr(0, colon).c_str());
+    cell.column = colon == std::string::npos ? -1 : std::atoi(rest.substr(colon + 1).c_str());
+}
+
+void Runtime::tableGesture(const View& v, const Object& o, Trigger t, double now) {
+    const auto it = tableCells_.find(o.id);
+    if (it == tableCells_.end() || it->second.row < 0) return;
+    const long long row = it->second.row;
+    const int column = it->second.column;
+    table::Model m;
+    if (!tableShown(v.id, o, m) || row >= static_cast<long long>(m.rows.size())) return;
+    tableFire(v, o, t, m, row, column, now);
+    if (t != Trigger::CellClick) return;
+    // La ligne choisie : la variable de « Ligne choisie → » (son numero, ou sa cle), puis ses actions - quand elle change.
+    const auto& r = m.rows[static_cast<std::size_t>(row)];
+    auto& cell = tableCells_[o.id];
+    if (m.columns || table::modeOf(o) == table::Mode::Rows) {
+        const std::string pick = trimmedText(markers::strip(o.text(table::kPickKey)));
+        if (cell.picked != r.position) {
+            cell.picked = r.position;
+            if (!pick.empty()) {
+                sim::Value cur;
+                const auto aliases = viewAliases(v.id);
+                if (envOf().read(pick, cur)) {
+                    const sim::Value next = cur.type() == sim::Type::String ? sim::Value::text(r.index)
+                                                                            : sim::Value::integer(cur.type() == sim::Type::Unknown ? sim::Type::Int : cur.type(),
+                                                                                                  r.position + 1);
+                    if (write(pick, next, where(v, &o))) log("Action", where(v, &o), "ligne choisie : " + pick + " := " + formatValue(next));
+                }
+            }
+            tableFire(v, o, Trigger::RowPick, m, row, column, now);
+        }
+    }
+    // Une case R/W : sa saisie (le clavier virtuel), Case saisie apres.
+    if (column >= 0 && static_cast<std::size_t>(column) < m.writable.size() && m.writable[static_cast<std::size_t>(column)])
+        (void)tablePrompt(v, o, m, row, column);
+}
+
+void Runtime::tableFire(const View& v, const Object& o, Trigger t, const table::Model& m, long long row, int column, double now,
+                        const sim::Value* before, const sim::Value* after) {
+    const std::string title = column >= 0 && static_cast<std::size_t>(column) < m.headers.size() ? m.headers[static_cast<std::size_t>(column)] : std::string{};
+    std::vector<Action> list;
+    for (const auto& a : o.actions)
+        if (a.trigger == t && (a.column.empty() || t == Trigger::RowPick || (!title.empty() && sameText(trimmedText(a.column), trimmedText(title)))))
+            list.push_back(a);
+    if (list.empty()) return;
+    std::string why;
+    if (!objectAllowed(o, &why)) {
+        event("Acc\xC3\xA8s refus\xC3\xA9", where(v, &o), why);
+        return;
+    }
+    // Les parametres recus : une portee fille de celle de la vue (Ligne, Colonne, Valeur, Valeurs ; Index, Cle,
+    // Membre, Element en lignes dynamiques ; Ancienne, Nouvelle ; Titre).
+    const auto parent = scopePtr(v.id);
+    auto sc = std::make_shared<Scope>(parent.get());
+    const auto integer = [](long long x) { return sim::Value::integer(sim::Type::DInt, x); };
+    if (t == Trigger::HeaderClick) {
+        sc->setValue("Colonne", integer(column + 1));
+        sc->setValue("Titre", sim::Value::text(title));
+    } else if (row >= 0 && static_cast<std::size_t>(row) < m.rows.size()) {
+        const auto& r = m.rows[static_cast<std::size_t>(row)];
+        sc->setValue("Ligne", integer(row + 1));
+        if (table::modeOf(o) == table::Mode::Rows && m.kind != table::SourceKind::None) {
+            table::RowPaths rp;
+            table::Source src;
+            if (tableRowScope(v.id, o, r.position, *sc, &rp, &src)) {
+                switch (src.kind) {
+                    case table::SourceKind::Array:
+                    case table::SourceKind::List: sc->setValue("Index", integer(std::atoll(r.index.c_str()))); break;
+                    case table::SourceKind::Map:
+                        if (src.key == "STRING" || src.key.empty()) sc->setValue("Cle", sim::Value::text(r.index));
+                        else sc->setValue("Cle", integer(std::atoll(r.index.c_str())));
+                        break;
+                    case table::SourceKind::Struct: sc->setValue("Membre", sim::Value::text(r.index)); break;
+                    default: break;
+                }
+                // Element : l'element de la ligne, par reference (un alias vers Cuves[2], l'objet en place d'une LIST).
+                if (src.kind != table::SourceKind::Enum) {
+                    if (auto obj = sc->object(table::kElt)) sc->setObject("Element", obj);
+                    else if (const auto* al = sc->alias(table::kElt)) sc->setAlias("Element", *al);
+                }
+            }
+        }
+        if (t != Trigger::RowPick && column >= 0 && static_cast<std::size_t>(column) < r.cells.size()) {
+            sc->setValue("Colonne", integer(column + 1));
+            sc->setValue("Valeur", sim::Value::text(r.cells[static_cast<std::size_t>(column)].text));
+        }
+        if (!r.cells.empty()) {
+            auto td = std::make_shared<sim::TypeDesc>();
+            td->kind = sim::TypeDesc::Kind::Array;
+            td->bounds = {{1, static_cast<std::int64_t>(r.cells.size())}};
+            td->element = sim::scalarType(sim::Type::String);
+            auto arr = sim::makeObj(td);
+            for (std::size_t k = 0; k < r.cells.size() && k < arr->items.size(); ++k)
+                if (arr->items[k]) arr->items[k]->value = sim::Value::text(r.cells[k].text);
+            sc->setObject("Valeurs", arr);
+        }
+        if (t == Trigger::CellEdit) {
+            if (before) sc->setValue("Ancienne", *before);
+            if (after) sc->setValue("Nouvelle", *after);
+        }
+    }
+    // Le geste : fire() prend cette portee pour les actions de cette vue (une popup ouverte garde la sienne).
+    struct Restore {
+        Runtime& rt;
+        std::shared_ptr<const Scope> scope;
+        Id view;
+        ~Restore() {
+            rt.gestureScope_ = std::move(scope);
+            rt.gestureView_ = view;
+        }
+    } restore{*this, gestureScope_, gestureView_};
+    gestureScope_ = sc;
+    gestureView_ = v.id;
+    for (auto& a : list) {
+        // Element^ (une reference deref, comme un REF_TO) se lit Element : l'alias suit deja l'element.
+        a.target = table::withoutCaret(a.target);
+        a.value = table::withoutCaret(a.value);
+        a.guard = table::withoutCaret(a.guard);
+        a.params = table::withoutCaret(a.params);
+        fire(v, &o, a, now, true);
+    }
+}
+
+bool Runtime::tablePrompt(const View& v, const Object& o, const table::Model& m, long long row, int column) {
+    if (row < 0 || static_cast<std::size_t>(row) >= m.rows.size() || column < 0) return false;
+    const auto& r = m.rows[static_cast<std::size_t>(row)];
+    const auto k = static_cast<std::size_t>(column);
+    if (k >= r.cells.size() || r.cells[k].missing) return false;
+    const std::string source = where(v, &o);
+    std::string path, unit;
+    if (table::modeOf(o) == table::Mode::Rows) {
+        const auto cols = table::columnsOf(o);
+        if (k >= cols.size()) return false;
+        // Le niveau pour ecrire de la colonne (sous securite).
+        if (cols[k].level > 0 && project_ && project_->security.enabled && cols[k].level > level()) {
+            event("Acc\xC3\xA8s refus\xC3\xA9", source, "colonne " + cols[k].title + " : niveau " + std::to_string(cols[k].level) + " requis pour \xC3\xA9" "crire");
+            return false;
+        }
+        Scope sc;
+        table::RowPaths rp;
+        table::Source src;
+        if (!tableRowScope(v.id, o, r.position, sc, &rp, &src)) return false;
+        path = table::writePathOf(cols[k].content, src, rp, project_);
+        unit = cols[k].unit;
+    } else {
+        const auto cells = parseCells(o.text("cells"));
+        if (static_cast<std::size_t>(row) >= cells.size() || k >= cells[static_cast<std::size_t>(row)].size()) return false;
+        path = table::fixedWritePath(cells[static_cast<std::size_t>(row)][k]);
+    }
+    if (path.empty()) return false;
+    const auto aliases = viewAliases(v.id);
+    sim::Value cur;
+    // Une variable a plat (Cuves[2].Consigne) se lit directement ; un objet (Stock['vis'], Alarmes[1].Priorite) par
+    // l'interpreteur.
+    const bool flat = envOf().read(path, cur);
+    if (!flat) {
+        auto it = expressions_.find(path);
+        if (it == expressions_.end()) it = expressions_.emplace(path, Expression::compile(path)).first;
+        auto val = it->second.valid() ? it->second.evaluate(envOf()) : decltype(it->second.evaluate(envOf())){};
+        if (!it->second.valid() || !val) {
+            log("Erreur", source, "case R/W : " + path + " ne se lit pas");
+            return false;
+        }
+        cur = *val;
+    }
+    KeyboardPrompt p;
+    p.target = resolvedPath(path, flat);
+    p.type = cur.type();
+    p.source = source;
+    p.tableView = v.id;
+    p.tableObject = o.id;
+    p.tableRow = row;
+    p.tableColumn = column;
+    p.before = cur;
+    const std::string head = k < m.headers.size() ? m.headers[k] : std::string{};
+    const std::string first = r.cells.empty() ? std::string{} : r.cells.front().text;
+    p.title = (head.empty() ? p.target : head) + (first.empty() || k == 0 ? std::string{} : " \xC2\xB7 " + first);
+    // La plage : celle de la variable (Unites et formats), sinon celle de son type (un INT : -32768 a 32767).
+    if (project_) {
+        const View* shownIn = project_->view(v.id);
+        const auto bound = [&](std::string_view key) -> std::optional<double> {
+            const std::string t = trimmedText(ranges::inheritedOf(*project_, p.target, key, shownIn).value);
+            if (t.empty()) return std::nullopt;
+            double x = 0;
+            if (roles::readNumber(t, x)) return x;
+            if (const auto* var = variable(markers::strip(t)); var && sim::isNumeric(var->type())) return var->asReal();
+            return std::nullopt;
+        };
+        p.min = bound("min");
+        p.max = bound("max");
+        if (const auto* d = displayOf(*project_, p.target, shownIn); d && unit.empty()) unit = d->unit;
+        Expression e = Expression::compile(p.target);
+        if (e.valid()) {
+            const std::string declared = e.pathType(envOf(), nullptr);
+            if (!declared.empty() && findEnumeration(*project_, declared)) p.enumType = declared;
+            const auto num = typereg::numericOf(declared.empty() ? std::string(sim::toString(cur.type())) : declared);
+            if (num.family == typereg::Family::Integer && p.enumType.empty()) {
+                if (!p.min) p.min = static_cast<double>(num.low);
+                if (!p.max) p.max = static_cast<double>(num.high);
+            }
+        }
+    }
+    p.unit = unit;
+    p.keyboard = std::string(actionkinds::keyboardFor(std::string(sim::toString(cur.type())), p.enumType.empty() ? std::string_view{} : "complet"));
+    const std::string target = p.target;
+    prompt_ = std::move(p);
+    promptForm_ = FormState{};
+    promptForm_.focus = "valeur";
+    promptForm_.text["valeur"] = formatValue(cur);
+    if (!prompt_->enumType.empty() && project_)
+        if (const auto* e = findEnumeration(*project_, prompt_->enumType))
+            for (const auto& ev : e->values)
+                if (ev.value == cur.asInteger()) promptForm_.text["valeur"] = ev.name;
+    promptForm_.caret["valeur"] = promptForm_.text["valeur"].size();
+    promptForm_.fresh = true;
+    log("Action", source, "case R/W : " + target);
     return true;
 }
 

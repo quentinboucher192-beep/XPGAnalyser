@@ -1049,6 +1049,9 @@ void Runtime::bind(const Project* project, sim::Environment* plc) {
 
 sim::Environment& Runtime::environment() { return *env_; }
 sim::Environment& Runtime::envOf() const { return *env_; }
+std::string Runtime::resolvedPath(std::string_view path, bool concrete) {
+    return concrete ? env_->concretePath(env_->resolved(path)) : env_->resolved(path);
+}
 
 const sim::Value* Runtime::variable(std::string_view name) const {
     const auto it = env_->vars.find(upper(name));
@@ -2170,7 +2173,8 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
         fire(v, o, plain, now, byUser);
         return;
     }
-    AliasGuard aliasGuard(env_->aliases, scopePtr(v.id));
+    // 1.12.13 : une action d'un geste sur un tableau voit ses parametres (Ligne, Colonne, Element...), fils de la vue.
+    AliasGuard aliasGuard(env_->aliases, gestureScope_ && gestureView_ == v.id ? gestureScope_ : scopePtr(v.id));
     // Lot API 8 : l'action d'un geste de l'operateur (clic, double clic, appui
     // long) et le script qu'elle execute : IHM_EXPORTER y demande ou ; une action
     // qui part seule (timer, front, ouverture de vue...) : jamais, meme au milieu d'un geste.
@@ -3488,6 +3492,8 @@ void Runtime::release(Id object, double now, bool inside) {
     if (o->kind == Kind::AlarmBanner)
         if (const int k = bannerAlarm(snapshot.id, *snapshot.object(object)); k >= 0) selectAlarm(alarms_[static_cast<std::size_t>(k)].name);
     runActions(snapshot, snapshot.object(object), Trigger::Click, now);
+    // 1.12.13 : un tableau - la case cliquee (ses actions, la ligne choisie, la saisie R/W).
+    if (o->kind == Kind::Table) tableGesture(snapshot, *snapshot.object(object), Trigger::CellClick, now);
 }
 
 void Runtime::doubleClick(Id object, double now) {
@@ -3500,6 +3506,7 @@ void Runtime::doubleClick(Id object, double now) {
     evaluateProps(snapshot.id, *snapshot.object(object));   // 1.12.6 (lot B) : tel que l'ecran le montre
     GestureGuard gesture(*this, where(snapshot, snapshot.object(object)));         // lot 13 : l'audit
     runActions(snapshot, snapshot.object(object), Trigger::DoubleClick, now);
+    if (o->kind == Kind::Table) tableGesture(snapshot, *snapshot.object(object), Trigger::CellDoubleClick, now);   // 1.12.13
 }
 
 void Runtime::watchTriggers(const View& v, double now, bool cycleTick) {
@@ -3627,15 +3634,17 @@ void Runtime::tick(double now) {
             if (const auto* o = v->object(pressed_)) {
                 int shortest = -1;
                 for (const auto& a : o->actions)
-                    if (a.trigger == Trigger::LongPress) {
+                    if (a.trigger == Trigger::LongPress || a.trigger == Trigger::CellLongPress) {   // 1.12.13 : une case tenue aussi
                         const int d = a.delayMs > 0 ? a.delayMs : 800;
                         shortest = shortest < 0 ? d : std::min(shortest, d);
                     }
                 if (shortest >= 0 && now - pressStart_ >= shortest / 1000.0) {
                     longFired_ = true;
                     const View snapshot = *v;
-                    GestureGuard gesture(*this, where(snapshot, snapshot.object(pressed_)));   // lot 13 : l'audit
-                    runActions(snapshot, snapshot.object(pressed_), Trigger::LongPress, now);
+                    const Id held = pressed_;
+                    GestureGuard gesture(*this, where(snapshot, snapshot.object(held)));   // lot 13 : l'audit
+                    runActions(snapshot, snapshot.object(held), Trigger::LongPress, now);
+                    if (const Object* t = snapshot.object(held); t && t->kind == Kind::Table) tableGesture(snapshot, *t, Trigger::CellLongPress, now);
                 }
             }
         }
@@ -4736,7 +4745,26 @@ void Runtime::promptSubmit(double now) {
         case sim::Type::String: next = sim::Value::text(text); break;
         default: {
             double x = 0;
-            if (!parseNumber(text, x)) { fail("un nombre est attendu"); return; }
+            // 1.12.13 : une enumeration du projet (une case R/W d'un tableau) - le nom ou le texte d'une valeur aussi.
+            bool numeric = parseNumber(text, x);
+            if (!numeric && !p.enumType.empty() && project_)
+                if (const auto* e = findEnumeration(*project_, p.enumType)) {
+                    std::string u = upper(text);
+                    if (const auto hash = u.find('#'); hash != std::string::npos) u = u.substr(hash + 1);
+                    for (const auto& ev : e->values)
+                        if (upper(ev.name) == u || (!ev.text.empty() && upper(ev.text) == upper(text))) {
+                            x = static_cast<double>(ev.value);
+                            numeric = true;
+                            break;
+                        }
+                    if (!numeric) {
+                        std::string names;
+                        for (const auto& ev : e->values) names += (names.empty() ? "" : ", ") + ev.name;
+                        fail("une valeur de " + e->name + " : " + names);
+                        return;
+                    }
+                }
+            if (!numeric) { fail("un nombre est attendu"); return; }
             if ((p.min && x < *p.min) || (p.max && x > *p.max)) {
                 fail("hors limites : de " + (p.min ? formatNumber(*p.min) : std::string("-")) + " \xC3\xA0 "
                      + (p.max ? formatNumber(*p.max) : std::string("-")));
@@ -4753,12 +4781,42 @@ void Runtime::promptSubmit(double now) {
     }
     const std::string target = p.target, source = p.source;
     const bool mask = p.mask;
+    const KeyboardPrompt was = p;                       // 1.12.13 : une case de tableau (Case saisie ensuite)
     GestureGuard gesture(*this, source);                // l'audit : un geste de l'operateur
-    if (!write(target, next, source)) { fail("\xC3\xA9" "criture refus\xC3\xA9" "e"); return; }
     sim::Value after;
-    (void)env_->read(target, after);
-    log("Action", source, "clavier virtuel : " + target + " = " + (mask ? std::string("********") : formatValue(after)));
+    if (was.tableObject != kNoId && !env_->exists(target)) {
+        // 1.12.13 : une case d'un objet (Stock['vis'], Alarmes[1].Priorite) - ecrite par une instruction, comme un script.
+        const auto parent = scopePtr(was.tableView);
+        auto sc = std::make_shared<Scope>(parent.get());
+        sc->setValue("__TABLE_V__", next);
+        std::string err;
+        bool ok = false;
+        {
+            AliasGuard guard(env_->aliases, sc);
+            ok = runStatements(target + " := __TABLE_V__;", source, now, &err);
+        }
+        if (!ok) {
+            fail("\xC3\xA9" "criture refus\xC3\xA9" "e" + (err.empty() ? std::string{} : " : " + err));
+            return;
+        }
+        auto e = Expression::compile(target);
+        if (auto val = e.evaluate(*env_)) after = *val;
+    } else {
+        if (!write(target, next, source)) { fail("\xC3\xA9" "criture refus\xC3\xA9" "e"); return; }
+        (void)env_->read(target, after);
+    }
+    log("Action", source, (was.tableObject != kNoId ? std::string("case saisie : ") : std::string("clavier virtuel : ")) + target + " = "
+                              + (mask ? std::string("********") : formatValue(after)));
     prompt_.reset();
+    // 1.12.13 : Case saisie - les actions du tableau, avec Ancienne et Nouvelle.
+    if (was.tableObject != kNoId)
+        if (const View* tv = viewOf(was.tableView); tv && tv->object(was.tableObject)) {
+            View snapshot = *tv;
+            evaluateProps(snapshot.id, *snapshot.object(was.tableObject));
+            table::Model m;
+            if (tableShown(snapshot.id, *snapshot.object(was.tableObject), m))
+                tableFire(snapshot, *snapshot.object(was.tableObject), Trigger::CellEdit, m, was.tableRow, was.tableColumn, now, &was.before, &after);
+        }
 }
 
 void Runtime::promptPart(std::string_view part, double now) {
@@ -4835,6 +4893,13 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
     const View* v = shownViewOf(object);
     const Object* found = v ? v->object(object) : nullptr;
     if (!found) return;
+    // 1.12.13 : la case (ou l'en-tete) touchee d'un tableau - retenue pour le geste qui suit (HmiRuntimeTable.cpp).
+    if (found->kind == Kind::Table && (part.rfind("case:", 0) == 0 || part.rfind("entete:", 0) == 0)) {
+        View snapshot = *v;
+        evaluateProps(snapshot.id, *snapshot.object(object));
+        tablePart(snapshot, *snapshot.object(object), part, now);
+        return;
+    }
     if (found->kind == Kind::RecipeManager) {
         GestureGuard gesture(*this, where(*v, found));   // lot 13 : l'audit
         recipeManagerClick(object, part, now);

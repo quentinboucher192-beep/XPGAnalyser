@@ -1777,6 +1777,13 @@ constexpr TriggerName kTriggerNames[] = {
     {Trigger::KeyRelease, "Touche rel\xC3\xA2" "ch\xC3\xA9" "e"},
     {Trigger::KeyHold, "Touche maintenue"},
     {Trigger::KeyRepeat, "Touche r\xC3\xA9p\xC3\xA9t\xC3\xA9" "e"},
+    // 1.12.13 : les gestes sur un tableau
+    {Trigger::CellClick, "Clic sur une case"},
+    {Trigger::CellDoubleClick, "Double clic sur une case"},
+    {Trigger::CellLongPress, "Appui long sur une case"},
+    {Trigger::CellEdit, "Case saisie"},
+    {Trigger::RowPick, "Ligne choisie"},
+    {Trigger::HeaderClick, "Clic sur un en-t\xC3\xAAte"},
 };
 struct OperationName { Operation o; const char* label; };
 constexpr OperationName kOperationNames[] = {
@@ -1893,7 +1900,8 @@ bool triggerWatches(Trigger t) noexcept {
     return t == Trigger::RisingEdge || t == Trigger::FallingEdge || t == Trigger::ValueChange;
 }
 bool triggerWaits(Trigger t) noexcept {
-    return t == Trigger::LongPress || t == Trigger::Timer || t == Trigger::KeyHold || t == Trigger::KeyRepeat;   // 1.11.23
+    return t == Trigger::LongPress || t == Trigger::Timer || t == Trigger::KeyHold || t == Trigger::KeyRepeat   // 1.11.23
+        || t == Trigger::CellLongPress;                                                                       // 1.12.13
 }
 bool operationWritesVariable(Operation o) noexcept {
     return o == Operation::Toggle || o == Operation::Set || o == Operation::Reset || o == Operation::Increment
@@ -1936,7 +1944,8 @@ std::string popupPlacementFromLabel(std::string_view label) {
 std::string describeAction(const Action& a) {
     std::string s(triggerLabel(a.trigger));
     if (triggerWatches(a.trigger) && !a.watch.empty()) s += " de " + a.watch;
-    if (a.trigger == Trigger::LongPress) s += " (" + std::to_string(a.delayMs > 0 ? a.delayMs : 800) + " ms)";
+    if (a.trigger == Trigger::LongPress || a.trigger == Trigger::CellLongPress) s += " (" + std::to_string(a.delayMs > 0 ? a.delayMs : 800) + " ms)";
+    if (triggerIsTable(a.trigger) && !a.column.empty()) s += " \xC2\xAB " + a.column + " \xC2\xBB";   // 1.12.13 : sa colonne
     if (a.trigger == Trigger::Timer) s += " (" + formatDuration((a.delayMs > 0 ? a.delayMs : 1000) / 1000.0) + ")";
     // 1.11.23 : un raccourci - "Touche maintenue Ctrl+F5 (1000 ms) -> ..."
     if (triggerIsKey(a.trigger)) {

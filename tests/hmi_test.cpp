@@ -26926,12 +26926,121 @@ void tableauMoteur11213() {
           "... ses en-tetes et ses cases, tels que tableRows (le meme dessin)");
 }
 
+void tableauGestes11213() {
+    std::printf("1.12.13 : le Tableau en marche, les gestes (clic sur une case, Element par reference, ligne choisie, saisie R/W, en-tete)\n");
+    Project p = projetTableau11213();
+    p.programs.variables.push_back(hmiVar(p, "Choix", "INT"));
+    p.programs.variables.push_back(hmiVar(p, "Titre_Clic", "STRING"));
+    VariableDisplay d;
+    d.path = "Cuves[].Consigne";
+    d.min = "0";
+    d.max = "10";
+    p.displays.push_back(d);
+    const Id tCuves = addTable11213(p, "Cuves", "Cuves", {tcol("Nom", "[*].Nom"), tcol("Niveau", "[*].Niveau"), tcol("Consigne", "[*].Consigne", true),
+                                                         tcol("Etat", "[*].Etat", true)});
+    const Id tAl = addTable11213(p, "Alarmes", "Alarmes", {tcol("Message", "[*].Message"), tcol("Active", "[*].Active")});
+    const Id tStock = addTable11213(p, "Stock", "Stock", {tcol("Article", "[*].Cle"), tcol("Qte", "[*].Valeur", true)});
+    View& v = p.views[0];
+    {
+        Object* o = v.object(tCuves);
+        o->set(std::string(tb::kPickKey), "Cuve_Choisie");
+        o->actions.push_back(act(Trigger::CellClick, Operation::Log, {}, "case {Ligne} {Index} {Colonne} {Valeur} {Valeurs[1]}"));
+        auto byName = act(Trigger::CellClick, Operation::Assign, "Element.Consigne", "Ligne * 1.5");
+        byName.column = "Nom";
+        o->actions.push_back(byName);
+        o->actions.push_back(act(Trigger::RowPick, Operation::Assign, "Choix", "Index"));
+        o->actions.push_back(act(Trigger::CellEdit, Operation::Log, {}, "saisie {Ancienne} -> {Nouvelle}"));
+        o->actions.push_back(act(Trigger::HeaderClick, Operation::Assign, "Titre_Clic", "Titre"));
+        o->actions.push_back(act(Trigger::CellDoubleClick, Operation::RunScript, {}, "Element^.Etat := T_Etat#MARCHE;"));
+        v.object(tAl)->actions.push_back(act(Trigger::CellClick, Operation::RunScript, {}, "Element.Active := NOT Element.Active;"));
+        v.object(tStock)->actions.push_back(act(Trigger::CellClick, Operation::Assign, "Article", "Cle"));
+    }
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    const auto click = [&](Id id, const char* part, double t) {
+        rt.objectPart(id, part, t);
+        rt.press(id, t);
+        rt.release(id, t + 0.02, true);
+    };
+    const auto real = [&](const char* path) { return rt.variable(path) ? rt.variable(path)->asReal() : -999.0; };
+    const auto said = [&](const std::string& text) {
+        for (const auto& e : rt.journal())
+            if (e.message.find(text) != std::string::npos) return true;
+        return false;
+    };
+    // Un clic sur la case Nom de la 2e ligne : ses actions, avec leurs parametres.
+    click(tCuves, "case:1:0", 1.0);
+    check(said("case 2 2 1 B B"), "Clic sur une case : Ligne 2, Index 2, Colonne 1, Valeur B, Valeurs[1] B (le message les lit)");
+    near(real("Cuves[2].Consigne"), 3.0, "Element.Consigne := Ligne * 1.5 : Element est Cuves[2], par r\xC3\xA9" "f\xC3\xA9rence - la cuve change");
+    check(rt.variable("Cuve_Choisie") && rt.variable("Cuve_Choisie")->asInteger() == 2 && rt.variable("Choix") && rt.variable("Choix")->asInteger() == 2,
+          "la ligne choisie : Cuve_Choisie := 2, puis Ligne choisie (Choix := Index)");
+    check(!rt.promptShown(), "la colonne Nom est en lecture : pas de saisie");
+    // La colonne filtre : un clic sur Niveau ne lance pas l'action de la colonne Nom.
+    click(tCuves, "case:0:1", 2.0);
+    near(real("Cuves[1].Consigne"), 0.0, "un clic sur Niveau : l'action de la colonne Nom ne part pas");
+    check(said("case 1 1 2 3.2 m A"), "... celle de toutes les colonnes part (Colonne 2, Valeur 3.2 m)");
+    // La saisie R/W : Consigne de la 1re cuve.
+    click(tCuves, "case:0:2", 3.0);
+    check(rt.promptShown() && rt.keyboardPrompt() && rt.keyboardPrompt()->target == "Cuves[1].Consigne" && rt.keyboardPrompt()->max
+              && *rt.keyboardPrompt()->max == 10,
+          "un clic sur une case R/W ouvre la saisie : Cuves[1].Consigne, de 0 \xC3\xA0 10 (la plage de la variable)");
+    rt.typeText("12", 3.1);
+    rt.typeKey(EditKey::Enter, 3.11);
+    check(rt.promptShown() && rt.promptForm().error && rt.promptForm().message.find("hors limites") != std::string::npos, "12 : refus\xC3\xA9 (hors limites)");
+    for (int k = 0; k < 3; ++k) rt.typeKey(EditKey::Backspace, 3.12);
+    rt.typeText("6.5", 3.13);
+    rt.typeKey(EditKey::Enter, 3.14);
+    near(real("Cuves[1].Consigne"), 6.5, "6.5 : \xC3\xA9" "crit dans Cuves[1].Consigne");
+    check(!rt.promptShown() && said("saisie 0 -> 6.5"), "Case saisie : Ancienne 0, Nouvelle 6.5");
+    // Une enumeration se saisit par son nom.
+    click(tCuves, "case:2:3", 4.0);
+    check(rt.promptShown() && rt.keyboardPrompt() && rt.keyboardPrompt()->enumType == "T_Etat", "la case Etat (une \xC3\xA9num\xC3\xA9ration) : la saisie l'accepte par son nom");
+    for (int k = 0; k < 10; ++k) rt.typeKey(EditKey::Backspace, 4.1);
+    rt.typeText("DEFAUT", 4.11);
+    rt.typeKey(EditKey::Enter, 4.12);
+    check(rt.variable("Cuves[3].Etat") && rt.variable("Cuves[3].Etat")->asInteger() == 2, "DEFAUT : Cuves[3].Etat vaut 2");
+    // Un en-tete, un double clic.
+    rt.objectPart(tCuves, "entete:1", 5.0);
+    check(rt.variable("Titre_Clic") && rt.variable("Titre_Clic")->asString() == "Niveau", "Clic sur un en-t\xC3\xAAte : Titre := Niveau");
+    rt.objectPart(tCuves, "case:1:1", 6.0);
+    rt.press(tCuves, 6.0);
+    rt.release(tCuves, 6.02, true);
+    rt.doubleClick(tCuves, 6.05);
+    check(rt.variable("Cuves[2].Etat") && rt.variable("Cuves[2].Etat")->asInteger() == 1, "Double clic : Element^.Etat := MARCHE (Element^ se lit Element)");
+    // Une LIST de structures : Element est l'objet en place.
+    const auto activeOf = [&](int i) {
+        auto e = Expression::compile("Alarmes[" + std::to_string(i) + "].Active");
+        auto r = e.evaluate(rt.environment());
+        return r ? r->isTruthy() : false;
+    };
+    const bool was = activeOf(1);
+    click(tAl, "case:1:0", 7.0);
+    check(activeOf(1) == !was && activeOf(0), "une LIST : Element.Active := NOT Element.Active change Alarmes[1] (en place), pas Alarmes[0]");
+    // Une MAP : la cle de la ligne.
+    click(tStock, "case:2:0", 8.0);
+    check(rt.variable("Article") && rt.variable("Article")->asString() == "vis", "une MAP : Article := Cle (vis, 3e ligne)");
+    click(tStock, "case:0:1", 9.0);
+    check(rt.promptShown() && rt.keyboardPrompt() && rt.keyboardPrompt()->target == "Stock['ecrou']", "la valeur d'une MAP se saisit : Stock['ecrou']");
+    for (int k = 0; k < 5; ++k) rt.typeKey(EditKey::Backspace, 9.1);
+    rt.typeText("44", 9.11);
+    rt.typeKey(EditKey::Enter, 9.12);
+    auto stockE = Expression::compile("Stock['ecrou']").evaluate(rt.environment());
+    check(stockE && stockE->asInteger() == 44 && !rt.promptShown(), "44 : \xC3\xA9" "crit dans la MAP");
+    // Hors des cases : rien.
+    const auto before = rt.journal().size();
+    click(tCuves, "case:-1:-1", 10.0);
+    check(rt.journal().size() == before, "un clic sous les lignes : aucune action de case");
+}
+
 int main(int argc, char** argv) {
     // 1.12.13 : HMI_TEST_11213=1 - le Tableau, un mode a la fois, seul.
     if (const char* only = std::getenv("HMI_TEST_11213"); only && *only == '1') {
         tableauModes11213();
         tableauAnalyse11213();
         tableauMoteur11213();
+        tableauGestes11213();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -27148,6 +27257,7 @@ int main(int argc, char** argv) {
     tableauModes11213();              // 1.12.13 : le Tableau, un mode a la fois (reserve, R/W des cases fixes)
     tableauAnalyse11213();            // 1.12.13 : le Tableau, l'analyse sans moteur
     tableauMoteur11213();             // 1.12.13 : le Tableau en marche (les sources, « ... », seuils, tri)
+    tableauGestes11213();             // 1.12.13 : les gestes sur un tableau (parametres, Element, R/W, ligne choisie)
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

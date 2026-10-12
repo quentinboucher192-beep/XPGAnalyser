@@ -37,6 +37,7 @@
 #include "HmiExport.hpp"
 #include "HmiProduction.hpp"
 #include "HmiChoiceLists.hpp"  // 1.12.7 (lot D) : les colonnes choisies d'une source
+#include "HmiTable.hpp"         // 1.12.13 : le Tableau, un mode a la fois
 #include "HmiDisplay.hpp"      // lot 13
 #include "HmiTypes.hpp"        // lot 16
 #include "HmiTypeForms.hpp"    // 1.12.2 : la valeur initiale d'une variable objet
@@ -857,6 +858,109 @@ void checkSupervision(const Project& p, const NameExists& plc, std::vector<Issue
 //  Ecrans modeles, en-tetes et pieds ; gestionnaire de recettes, image
 //  animee, cases de tableau ; les actions sur les ressources.
 namespace {
+// 1.12.13 : LE TABLEAU, UN MODE A LA FOIS. Ce qui est en reserve (garde, non utilise) se dit ; en lignes dynamiques :
+// la source, chaque colonne (son contenu, R/W), la ligne choisie, le tri ; les actions de ses gestes (une colonne qui
+// n'existe pas, Element hors des lignes dynamiques) ; en cases fixes : une colonne R/W sans case qui s'ecrive. Un
+// tableau d'avant (sans colonnes dynamiques) : ses nouvelles remarques sont des avertissements.
+void checkTable(const Project& p, const NameExists& plc, const View& v, const Object& o, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    const auto mode = table::modeOf(o);
+    for (const auto m : table::kModes)
+        if (m != mode && !table::modeEmpty(o, m))
+            add(out, S::Info, "Objet", v.id, o.id, std::string(table::kModeKey),
+                "\xC2\xAB " + std::string(table::modeTitle(m)) + " \xC2\xBB en r\xC3\xA9serve (" + table::modeSummary(o, m)
+                    + ") : gard\xC3\xA9, non utilis\xC3\xA9 - le tableau montre \xC2\xAB " + std::string(table::modeTitle(mode)) + " \xC2\xBB");
+    std::vector<std::string> titles;
+    if (mode == table::Mode::Rows) {
+        const bool v2 = table::hasColumns(o);
+        const auto legacy = v2 ? S::Error : S::Warning;
+        const auto src = table::analyzeSource(p, o.text("rowsFrom"));
+        // La source : ce que la verification d'avant (plus bas) ne voit pas - un element seul (Textes[0]), un membre inconnu.
+        if (src.kind == table::SourceKind::Error && !p.variable(trimmedCopy(markers::strip(o.text("rowsFrom")))))
+            add(out, legacy, "Objet", v.id, o.id, "rowsFrom",
+                "lignes depuis : " + src.error + (src.fix.empty() ? std::string{} : " Correction : " + src.fix + "."));
+        if (v2) {
+            const auto cols = table::columnsOf(o);
+            if (cols.empty()) add(out, S::Warning, "Objet", v.id, o.id, std::string(table::kColumnsKey), "lignes dynamiques sans colonne (onglet Contenu)");
+            for (const auto& c : cols) {
+                titles.push_back(c.title);
+                const std::string where = "colonne \xC2\xAB " + (c.title.empty() ? c.content : c.title) + " \xC2\xBB";
+                const auto info = table::analyzeColumn(p, src, c);
+                if (!info.error.empty())
+                    add(out, S::Error, "Objet", v.id, o.id, std::string(table::kColumnsKey),
+                        where + " : " + info.error + (info.fix.empty() ? std::string{} : " Correction : " + info.fix + "."));
+                else if (!info.warning.empty())
+                    add(out, S::Warning, "Objet", v.id, o.id, std::string(table::kColumnsKey), where + " : " + info.warning);
+                if (c.write && !info.writable && info.error.empty())
+                    add(out, S::Error, "Objet", v.id, o.id, std::string(table::kColumnsKey), where + " en R/W : " + info.writeWhy);
+                // Les variables lues par une formule ou un texte a trous (hors [*], [#] et des listes nommees).
+                if (plc && (info.kind == table::Content::Formula || info.kind == table::Content::Template)) {
+                    const std::string code = table::compileContent(c.content, src, &p, nullptr);
+                    std::vector<std::string> roots = info.kind == table::Content::Formula ? scanRoots(code) : TextTemplate::compile(code).roots();
+                    for (const auto& r : roots) {
+                        if (r.rfind("__TABLE_", 0) == 0) continue;
+                        if (!known(p, plc, r, &v))
+                            add(out, S::Error, "Variable", v.id, o.id, std::string(table::kColumnsKey), where + " : " + std::string(unknownVariablePrefix()) + r);
+                    }
+                }
+                if (c.color == "formule" && trimmedCopy(c.colorExpr).empty())
+                    add(out, S::Warning, "Objet", v.id, o.id, std::string(table::kColumnsKey), where + " : couleur selon une formule, mais pas de formule");
+            }
+        } else {
+            for (const auto& c : table::legacyColumns(p, o)) titles.push_back(c.title);
+        }
+        // La ligne choisie : une variable entiere (son numero) ou texte (sa cle).
+        if (const std::string pick = trimmedCopy(markers::strip(o.text(table::kPickKey))); !pick.empty()) {
+            if (const auto* var = p.variable(pick)) {
+                std::string u = var->type;
+                for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                const auto num = typereg::numericOf(u);
+                if (num.family != typereg::Family::Integer && u != "STRING")
+                    add(out, S::Error, "Objet", v.id, o.id, std::string(table::kPickKey),
+                        "ligne choisie \xE2\x86\x92 " + pick + " est un " + var->type + " : la ligne choisie attend un entier (son num\xC3\xA9ro) ou un STRING (sa cl\xC3\xA9)");
+            } else if (!known(p, plc, pick, &v)) {
+                add(out, S::Error, "Variable", v.id, o.id, std::string(table::kPickKey), "ligne choisie : " + std::string(unknownVariablePrefix()) + pick);
+            }
+        }
+        if (const std::string by = trimmedCopy(o.text(table::kSortKey)); !by.empty() && v2 && table::sortColumnOf(o, table::columnsOf(o)) < 0)
+            add(out, S::Warning, "Objet", v.id, o.id, std::string(table::kSortKey), "trier par \xC2\xAB " + by + " \xC2\xBB : pas de colonne de ce titre (l'ordre de la source reste)");
+    } else if (mode == table::Mode::Fixed) {
+        titles = splitSemicolons(o.text("columns"));
+        const auto cells = parseCells(o.text("cells"));
+        std::size_t n = titles.size();
+        for (const auto& r : cells) n = std::max(n, r.size());
+        const auto access = table::fixedAccess(o, n);
+        for (std::size_t k = 0; k < access.size(); ++k) {
+            if (!access[k]) continue;
+            bool any = false;
+            for (const auto& r : cells) any = any || (k < r.size() && !table::fixedWritePath(r[k]).empty());
+            if (!any)
+                add(out, S::Warning, "Objet", v.id, o.id, std::string(table::kAccessKey),
+                    "colonne " + std::to_string(k + 1) + " en R/W : aucune de ses cases ne montre une seule variable ({PA:0.0} bar, =PA) - rien ne se saisit");
+        }
+    }
+    // Les actions des gestes : leur colonne, Element hors des lignes dynamiques.
+    for (std::size_t i = 0; i < o.actions.size(); ++i) {
+        const auto& a = o.actions[i];
+        if (!triggerIsTable(a.trigger)) continue;
+        const std::string where = "action " + std::to_string(i + 1) + " (" + std::string(triggerLabel(a.trigger)) + ")";
+        if (!a.column.empty() && mode != table::Mode::File
+            && std::none_of(titles.begin(), titles.end(), [&](const std::string& t) { return trimmedCopy(t) == trimmedCopy(a.column); }))
+            add(out, S::Warning, "Action", v.id, o.id, where, "colonne \xC2\xAB " + a.column + " \xC2\xBB : le tableau n'a pas de colonne de ce titre - l'action ne partira pas");
+        const std::string text = a.target + " " + a.value + " " + a.guard + " " + a.params;
+        bool element = false;
+        for (std::size_t at = text.find("Element"); at != std::string::npos; at = text.find("Element", at + 7)) {
+            const bool before = at > 0 && (std::isalnum(static_cast<unsigned char>(text[at - 1])) != 0 || text[at - 1] == '_');
+            const bool after = at + 7 < text.size() && (std::isalnum(static_cast<unsigned char>(text[at + 7])) != 0 || text[at + 7] == '_');
+            element = element || (!before && !after);
+        }
+        if (element && (mode != table::Mode::Rows || table::analyzeSource(p, o.text("rowsFrom")).kind == table::SourceKind::None
+                        || table::analyzeSource(p, o.text("rowsFrom")).kind == table::SourceKind::Enum))
+            add(out, S::Warning, "Action", v.id, o.id, where,
+                "Element n'existe qu'en lignes dynamiques avec une source (l'\xC3\xA9l\xC3\xA9ment de la ligne) : ici, Ligne, Colonne, Valeur et Valeurs");
+    }
+}
+
 void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
     using S = Issue::Severity;
     if (const auto* start = p.view(p.config.startView); start && isTemplateRole(start->role))
@@ -927,7 +1031,8 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                             if (!known(p, plc, r, &v)) add(out, S::Error, "Variable", v.id, o.id, "states", where + " : variable inexistante : " + r);
                 }
             }
-            if (o.kind == Kind::Table && plc) {
+            // 1.12.13 : les cases d'un tableau en cases fixes (en reserve, il ne les montre pas : elles ne comptent pas).
+            if (o.kind == Kind::Table && plc && table::modeOf(o) == table::Mode::Fixed) {
                 const auto rows = parseCells(o.text("cells"));
                 std::set<std::string> said;
                 for (const auto& row : rows)
@@ -940,9 +1045,12 @@ void checkLot6(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                                 add(out, S::Error, "Variable", v.id, o.id, "cells", "case : " + std::string(unknownVariablePrefix()) + r);
                     }
             }
+            // 1.12.13 : LE TABLEAU, UN MODE A LA FOIS - ce qui est en reserve se dit ; les colonnes dynamiques (leur
+            // contenu, R/W), la ligne choisie, le tri, les actions de ses gestes ; R/W des cases fixes.
+            if (o.kind == Kind::Table) checkTable(p, plc, v, o, out);
             // 1.12.2 : les lignes venues d'une variable (rowsFrom) - une LIST, un VECTOR, une MAP ou un
             // tableau de l'IHM : une ligne par element, autant qu'il en a.
-            if (o.kind == Kind::Table) {
+            if (o.kind == Kind::Table && table::modeOf(o) == table::Mode::Rows) {
                 // 1.12.5 (lot A) : verifiee aussi avec un repere ($Lignes$ : Lignes) - avant, sautee.
                 const std::string from = trimmedCopy(markers::strip(o.text("rowsFrom"), markers::Mode::Expression));
                 if (!from.empty()) {
@@ -4272,7 +4380,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
                             "d\xC3\xA9part sur action, mais aucune action (Jouer le GIF) ni aucun script ne le joue");
                 }
             }
-            if (o.kind == Kind::Table) {
+            if (o.kind == Kind::Table && table::modeOf(o) == table::Mode::File) {   // 1.12.13 : en reserve, il ne compte pas
                 const auto source = o.text("source");
                 if (!source.empty() && !p.externalByName(source))
                     add(out, S::Warning, "Fichier externe", v.id, o.id, "source", "fichier externe '" + source + "' introuvable dans le projet");

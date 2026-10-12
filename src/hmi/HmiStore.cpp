@@ -365,6 +365,7 @@ std::string serializeAction(Id owner, const Action& a) {
     if (!a.placement.empty()) s += field("position", a.placement);   // lot 8
     if (!a.params.empty()) s += field("parametres", a.params);        // 1.11.6 : Maths, clavier virtuel
     if (!a.key.empty()) s += field("touche", a.key);                  // 1.11.23 : un raccourci
+    if (!a.column.empty()) s += field("colonne", a.column);           // 1.12.13 : la colonne d'un geste sur un tableau
     // Lot API 8 : "Demander ou enregistrer", ecrit seulement decoche - absent (un
     // projet d'avant, ou coche) se relit coche : les fichiers d'avant ne changent pas.
     if (!a.askWhere) s += fieldBool("demander_ou", false);
@@ -495,6 +496,7 @@ bool parseAction(const Record& r, Action& a, std::string& why) {
     a.key = toStr(r.get("touche"));
     if (const auto chord = keys::parseChord(a.key)) a.key = keys::canonical(*chord);
     a.askWhere = toBool(r.get("demander_ou"), true);        // Lot API 8 : absent (projet d'avant) = coche
+    a.column = toStr(r.get("colonne"));                     // 1.12.13
     auto& t = a.transition;
     t.kind = transitionFromLabel(toStr(r.get("transition"))).value_or(TransitionKind::Instant);
     t.durationMs = static_cast<int>(toInt(r.get("duree"), 400));
@@ -815,7 +817,14 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         shortcuts = shortcuts || keyed(v.actions);
         for (const auto& o : v.objects) shortcuts = shortcuts || keyed(o.actions);
     }
-    const int format = shortcuts ? kFormatVersion : declared ? 23 : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
+    // 1.12.13 : le format 25 n'ajoute que les gestes sur un tableau (Clic sur une case, Case saisie...) ; un projet
+    // qui n'en a pas s'ecrit au format 24 (ou 23, 22, 21) : la 1.12.12 l'ouvre (ses tableaux d'avant aussi ; les
+    // nouveaux reglages du Tableau sont des proprietes qu'elle garde sans les lire).
+    bool tableGestures = false;
+    for (const auto& v : p.views)
+        for (const auto& o : v.objects)
+            tableGestures = tableGestures || std::any_of(o.actions.begin(), o.actions.end(), [](const Action& a) { return triggerIsTable(a.trigger); });
+    const int format = tableGestures ? kFormatVersion : shortcuts ? 24 : declared ? 23 : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# XpgAnalyzer - projet IHM (format " + std::to_string(format) + ")\n";
     index += "ihm" + fieldInt("format", format) + fieldInt("prochain_id", p.nextId) + "\n";

@@ -12,6 +12,8 @@
 #include "HmiIcons.hpp"
 #include "../../hmi/HmiLoginMenu.hpp"
 #include "../../hmi/HmiModel.hpp"
+#include "../../hmi/HmiTable.hpp"         // 1.12.13 : les gestes sur un tableau, leurs parametres
+#include "../../hmi/HmiWidgets.hpp"       // 1.12.13 : les en-tetes des cases fixes
 #include "../../hmi/HmiSystemMenu.hpp"          // 1.9 : les onglets de Parametres systeme
 #include "../../hmi/HmiMedia.hpp"
 #include "../../ui/Theme.hpp"
@@ -650,17 +652,61 @@ void HmiActionsPanel::rebuildGrid() {
     const auto pointer = [](Trigger t) { return t == Trigger::Click || t == Trigger::DoubleClick || t == Trigger::LongPress; };
     for (auto t : hmi::kTriggers)
         if (!(viewAction && pointer(t) && t != a.trigger)) triggerNames.emplace_back(hmi::triggerLabel(t));
+    // 1.12.13 : un tableau - les gestes sur ses cases, sa ligne choisie, ses en-tetes (ils passent des parametres).
+    const hmi::Object* table = nullptr;
+    if (const auto* v = doc_->project.view(view_); v && owner_ != kNoId)
+        if (const auto* ob = v->object(owner_); ob && ob->kind == hmi::Kind::Table) table = ob;
+    if (table)
+        for (auto t : hmi::kTableTriggers) triggerNames.emplace_back(hmi::triggerLabel(t));
+    else if (hmi::triggerIsTable(a.trigger))
+        triggerNames.emplace_back(hmi::triggerLabel(a.trigger));
     trig.properties.push_back(prop("D\xC3\xA9" "clencheur", std::string(hmi::triggerLabel(a.trigger)), PG::ValueType::Enum, triggerNames,
                                    commitWith([](Action& n, std::string_view v) {
                                        const auto t = hmi::triggerFromLabel(v);
                                        if (!t) return false;
                                        n.trigger = *t;
-                                       if (n.trigger == Trigger::LongPress && n.delayMs <= 0) n.delayMs = 800;
+                                       if ((n.trigger == Trigger::LongPress || n.trigger == Trigger::CellLongPress) && n.delayMs <= 0) n.delayMs = 800;
                                        if (n.trigger == Trigger::Timer && n.delayMs <= 0) n.delayMs = 1000;
+                                       if (!hmi::triggerIsTable(n.trigger) || n.trigger == Trigger::RowPick) n.column.clear();
                                        return true;
                                    }),
                                    "Ce qui lance l'action. Clic, double clic, appui long : sur l'objet. Ouverture, fermeture, "
-                                   "timer : avec la vue. Fronts et changement : une expression surveill\xC3\xA9" "e \xC3\xA0 chaque cycle IHM."));
+                                   "timer : avec la vue. Fronts et changement : une expression surveill\xC3\xA9" "e \xC3\xA0 chaque cycle IHM."
+                                   + std::string(table ? " Un tableau : un clic, un double clic, un appui long sur une case, une case "
+                                                         "R/W saisie, la ligne choisie, un en-t\xC3\xAAte clic\xC3\xA9 - l'action re\xC3\xA7oit alors "
+                                                         "Ligne, Colonne, Valeur... (ci-dessous)."
+                                                       : "")));
+    // 1.12.13 : un geste sur un tableau - sa colonne (vide : toutes), et ce que l'action recoit.
+    if (table && hmi::triggerIsTable(a.trigger)) {
+        if (a.trigger != Trigger::RowPick) {
+            std::vector<std::string> titles{"(toutes)"};
+            if (hmi::table::modeOf(*table) == hmi::table::Mode::Rows) {
+                const auto cols = hmi::table::hasColumns(*table) ? hmi::table::columnsOf(*table) : hmi::table::legacyColumns(doc_->project, *table);
+                for (const auto& c : cols)
+                    if (!c.title.empty()) titles.push_back(c.title);
+            } else {
+                for (const auto& h : hmi::splitSemicolons(table->text("columns")))
+                    if (!h.empty()) titles.push_back(h);
+            }
+            if (!a.column.empty() && std::find(titles.begin(), titles.end(), a.column) == titles.end()) titles.push_back(a.column);
+            trig.properties.push_back(prop("Colonne", a.column.empty() ? std::string("(toutes)") : a.column, PG::ValueType::Enum, titles,
+                                           commitWith([](Action& n, std::string_view v) {
+                                               n.column = v == "(toutes)" ? std::string{} : std::string(v);
+                                               return true;
+                                           }),
+                                           "La colonne dont une case (ou l'en-t\xC3\xAAte) lance l'action, par son titre. (toutes) : n'importe "
+                                           "laquelle - le param\xC3\xA8tre Colonne dit laquelle."));
+        }
+        for (const auto& prm : hmi::table::receivedParams(doc_->project, *table, a.trigger)) {
+            auto r = prop("  " + prm.name, prm.type + "  \xC2\xB7  " + prm.pass + "  \xC2\xB7  " + prm.what, PG::ValueType::ReadOnly, {}, nullptr,
+                          "Re\xC3\xA7u par l'action : il se lit dans sa valeur, sa condition, son script, ses arguments ({Ligne} dans un "
+                          "message ; Cuve := Element dans une popup ; Valeurs[1] ; Element.Consigne := 0 dans un script)."
+                              + std::string(prm.pass == "copie" ? " Une copie : l'\xC3\xA9" "crire ne change pas le tableau."
+                                                                : " Une r\xC3\xA9" "f\xC3\xA9rence : l'\xC3\xA9" "crire change l'\xC3\xA9l\xC3\xA9ment de la ligne."));
+            r.valueTone = prm.pass == "copie" ? ui::Tone::Muted : ui::Tone::Accent;
+            trig.properties.push_back(std::move(r));
+        }
+    }
     if (viewAction && pointer(a.trigger))
         trig.properties.push_back(prop("\xE2\x9A\xA0 Ne partira jamais",
                                        "un clic se fait sur un objet : choisis un autre d\xC3\xA9" "clencheur, ou refais l'action sur l'objet",
@@ -672,7 +718,7 @@ void HmiActionsPanel::rebuildGrid() {
                                        commitWith([](Action& n, std::string_view v) { n.watch = std::string(v); return true; }),
                                        "Ex. : Armoires[0].bouteille_vide ; Niveau > 90.0 ; Etat = 5"));
     if (hmi::triggerWatches(a.trigger)) ui::exprfield::markWhole(trig.properties.back(), ui::exprfield::Expect::Bool);   // 1.10 (chantier K)
-    if (a.trigger == Trigger::LongPress || a.trigger == Trigger::Timer)
+    if (a.trigger == Trigger::LongPress || a.trigger == Trigger::Timer || a.trigger == Trigger::CellLongPress)
         trig.properties.push_back(prop(a.trigger == Trigger::Timer ? "P\xC3\xA9riode (ms)" : "Dur\xC3\xA9" "e de l'appui (ms)",
                                        std::to_string(a.delayMs > 0 ? a.delayMs : (a.trigger == Trigger::Timer ? 1000 : 800)),
                                        PG::ValueType::Integer, {},

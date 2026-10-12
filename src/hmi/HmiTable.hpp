@@ -173,6 +173,21 @@ struct RowPaths {
 // La colonne du tri (sortBy : son titre, ou son contenu) ; -1 : l'ordre de la source.
 [[nodiscard]] int sortColumnOf(const Object&, const std::vector<Column>&);
 
+// ---- les gestes sur un tableau (Trigger::CellClick...) : ce que recoit l'action -----------------
+//  Ligne (la ligne montree, 1...), Colonne (1...), Valeur (le texte de la case), Valeurs (ceux de la ligne,
+//  Valeurs[1]...) : des copies. En lignes dynamiques avec une source : Index (un tableau, une LIST), Cle (une
+//  MAP), Membre (une structure) - des copies - et Element, l'element de la ligne PAR REFERENCE (Element.Consigne
+//  := 5 ecrit Cuves[2].Consigne ; Element^ se lit pareil). Case saisie : Ancienne et Nouvelle. Clic sur un
+//  en-tete : Colonne et Titre.
+struct Param {
+    std::string name, type, pass, what;   // pass : « copie » ou « rÃ©" "fÃ©rence »
+};
+[[nodiscard]] std::vector<Param> receivedParams(const Project&, const Object& table, Trigger);
+inline constexpr std::string_view kParamNames[] = {"Ligne", "Index", "Cle", "Membre", "Element", "Colonne", "Valeur", "Valeurs",
+                                                   "Ancienne", "Nouvelle", "Titre"};
+// Le texte d'une action ecrit avec Element^ (une reference deref) : Element (l'alias le suit deja).
+[[nodiscard]] std::string withoutCaret(std::string_view text);
+
 // ---- ce que montre le tableau en marche (Runtime::tableModel) -------------------------------
 struct ModelCell {
     std::string   text;

@@ -816,7 +816,9 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
 // Un tableau a cases (cells) : l'en-tete des colonnes, puis ses lignes, chaque
 // case a sa largeur relative (widths). En marche, les cases pilotees arrivent
 // deja evaluees ; dans l'editeur, leur source se lit telle quelle.
-void drawTableCells(const Ctx& c, const std::vector<std::string>& headers, const std::vector<std::vector<std::string>>& rows) {
+// 1.12.13 : `writable` - les cases qui se saisissent (une colonne R/W, une case qui montre une seule variable) : leur coin bleu.
+void drawTableCells(const Ctx& c, const std::vector<std::string>& headers, const std::vector<std::vector<std::string>>& rows,
+                    const std::vector<std::vector<bool>>* writable) {
     fillAndStroke(c, rectLocal(c.w(), c.h()));
     // La taille du texte (fontSize, 14 par defaut) donne la hauteur des lignes.
     const double fs = std::clamp(c.src.number(c.o, "fontSize", 14), 8.0, 40.0);
@@ -852,6 +854,13 @@ void drawTableCells(const Ctx& c, const std::vector<std::string>& headers, const
             // Dans l'editeur, une case pilotee se distingue (bleutee).
             const bool driven = c.opt.editor && (hmi::cellIsExpression(cell) || hmi::cellIsTemplate(cell));
             text(c, fitted(c, cell, cw - 8, fs), xs[k], y, cw, rh, driven ? dyn : txt, fs, "gauche");
+            if (writable && i < writable->size() && k < (*writable)[i].size() && (*writable)[i][k]) {
+                const double s = std::min(7.0, rh / 3);
+                shapes::fillPolygon(c.r, c.map({{static_cast<float>(xs[k + 1] - 1), static_cast<float>(y + rh - 1 - s)},
+                                                {static_cast<float>(xs[k + 1] - 1), static_cast<float>(y + rh - 1)},
+                                                {static_cast<float>(xs[k + 1] - 1 - s), static_cast<float>(y + rh - 1)}}),
+                                    c.fixed(0x7FB8FF));
+            }
         }
     }
 }
@@ -1894,7 +1903,27 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
                 for (const auto& f : opt.assets->files) if (f.name == source) file = &f;
             const auto cells = mode == hmi::table::Mode::Fixed ? src.text(o, "cells") : std::string{};
             if (file) drawTableData(c, *hmiExternalData(*file));
-            else if (!cells.empty()) drawTableCells(c, split(src.text(o, "columns"), ';'), hmi::parseCells(cells));
+            else if (!cells.empty()) {
+                // 1.12.13 : les cases R/W (une colonne en R/W, une case qui montre une seule variable) - lues dans les cases
+                // ecrites (en marche, la vue montre leur valeur calculee).
+                const hmi::View* own = opt.project ? opt.project->view(view.id) : nullptr;
+                const hmi::Object* raw = own ? own->object(o.id) : nullptr;
+                const auto rawCells = hmi::parseCells(raw ? raw->text("cells") : cells);
+                std::size_t n = 0;
+                for (const auto& line : rawCells) n = std::max(n, line.size());
+                const auto access = hmi::table::fixedAccess(raw ? *raw : o, n);
+                std::vector<std::vector<bool>> rw;
+                bool any = false;
+                for (const auto& cellsOfRow : rawCells) {
+                    std::vector<bool> line(cellsOfRow.size(), false);
+                    for (std::size_t k = 0; k < cellsOfRow.size(); ++k) {
+                        line[k] = k < access.size() && access[k] && !hmi::table::fixedWritePath(cellsOfRow[k]).empty();
+                        any = any || line[k];
+                    }
+                    rw.push_back(std::move(line));
+                }
+                drawTableCells(c, split(src.text(o, "columns"), ';'), hmi::parseCells(cells), any ? &rw : nullptr);
+            }
             else drawTable(c, split(src.text(o, "columns"), ';'), static_cast<int>(src.number(o, "rows", 4)));
             break;
         }

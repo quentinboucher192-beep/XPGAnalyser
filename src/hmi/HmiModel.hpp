@@ -350,6 +350,12 @@ enum class Trigger : std::uint8_t {
     // maintenue delayMs (une fois), repetee toutes les delayMs tant qu'elle est tenue. Des
     // actions de la vue seulement (kTriggers ne les propose pas aux objets) ; hmi/HmiKeys.hpp.
     KeyPress, KeyRelease, KeyHold, KeyRepeat,
+    // 1.12.13 : LES GESTES SUR UN TABLEAU - une case cliquee, double-cliquee, tenue (delayMs) ; une case R/W saisie
+    // (Ancienne, Nouvelle) ; la ligne choisie ; un en-tete clique. L'action recoit des parametres : Ligne, Colonne,
+    // Valeur, Valeurs ; en lignes dynamiques aussi Index, Cle ou Membre, et Element - l'element de la ligne PAR
+    // REFERENCE (Cuves[2] : ce que l'action y ecrit change la cuve). Action::column : la colonne (vide : toutes).
+    // Des actions du Tableau seulement (kTableTriggers) ; hmi/HmiTable.hpp.
+    CellClick, CellDoubleClick, CellLongPress, CellEdit, RowPick, HeaderClick,
 };
 enum class Operation : std::uint8_t {
     Toggle, Set, Reset, Increment, Decrement, Assign, Navigate, Popup, ClosePopup, RunScript, CallScript, Log,
@@ -393,6 +399,13 @@ inline constexpr Trigger kTriggers[] = {
     Trigger::Click, Trigger::DoubleClick, Trigger::RisingEdge, Trigger::FallingEdge, Trigger::LongPress,
     Trigger::ValueChange, Trigger::ViewOpen, Trigger::ViewClose, Trigger::Timer,
 };
+// 1.12.13 : les declencheurs d'un Tableau (en plus de kTriggers).
+inline constexpr Trigger kTableTriggers[] = {Trigger::CellClick, Trigger::CellDoubleClick, Trigger::CellLongPress, Trigger::CellEdit,
+                                             Trigger::RowPick, Trigger::HeaderClick};
+[[nodiscard]] constexpr bool triggerIsTable(Trigger t) noexcept {
+    return t == Trigger::CellClick || t == Trigger::CellDoubleClick || t == Trigger::CellLongPress || t == Trigger::CellEdit
+        || t == Trigger::RowPick || t == Trigger::HeaderClick;
+}
 // 1.11.23 : les declencheurs d'un raccourci (la section Raccourcis d'une vue).
 inline constexpr Trigger kKeyTriggers[] = {Trigger::KeyPress, Trigger::KeyRelease, Trigger::KeyHold, Trigger::KeyRepeat};
 [[nodiscard]] constexpr bool triggerIsKey(Trigger t) noexcept {
@@ -495,6 +508,8 @@ struct Action {
     // hmi::keys::canonical) ; vide : pas un raccourci. delayMs : maintenue, la duree ;
     // repetee, la periode.
     std::string key;
+    // 1.12.13 : un geste sur un tableau (triggerIsTable) - la colonne qui le declenche, par son titre (vide : toutes).
+    std::string column;
     bool operator==(const Action&) const = default;
 };
 // "Clic -> Naviguer vers Vue_Donnees (Glissement, 400 ms)" : ce que montre la liste.

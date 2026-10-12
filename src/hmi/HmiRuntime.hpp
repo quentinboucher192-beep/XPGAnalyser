@@ -1043,6 +1043,10 @@ public:
     // (l'element, la valeur, la cle ecrite). Faux : la ligne n'existe plus.
     bool tableRowScope(Id view, const Object& o, long long position, Scope& scope, table::RowPaths* paths = nullptr,
                        table::Source* source = nullptr) const;
+    // Le tableau tel qu'il se montre, dans les modes qui passent par le moteur : les lignes dynamiques (tableModel) et
+    // les cases fixes (leur texte calcule, R/W par colonne : une case qui montre une seule variable). Faux : un fichier
+    // externe (ses lignes se lisent a l'ecran), ou rien a montrer. Les gestes sur ses cases s'y retrouvent.
+    bool tableShown(Id view, const Object& o, table::Model& out) const;
     // Le programmateur horaire : ses plages (celles de sa variable, ou de l'objet).
     [[nodiscard]] const WeekSchedule* schedule(Id object) const;
     // La date et l'heure : celle en cours de reglage, sinon celle de la variable
@@ -1281,6 +1285,12 @@ public:
         bool                  mask{false};         // un code : des points
         sim::Type             type{sim::Type::Unknown};
         std::string           source;              // l'objet de l'action (le journal)
+        // 1.12.13 : une case R/W d'un tableau - Case saisie part apres l'ecriture (Ancienne, Nouvelle).
+        Id                    tableView{kNoId}, tableObject{kNoId};
+        long long             tableRow{-1};
+        int                   tableColumn{-1};
+        sim::Value            before;
+        std::string           enumType;            // une enumeration du projet : la saisie accepte le nom d'une valeur
     };
     [[nodiscard]] bool promptShown() const noexcept { return prompt_.has_value(); }
     [[nodiscard]] const KeyboardPrompt* keyboardPrompt() const noexcept { return prompt_ ? &*prompt_ : nullptr; }
@@ -1334,8 +1344,28 @@ private:
     struct TableRowSource;
     struct TableSourceRow;
     bool tableSource(Id view, const Object& o, TableRowSource& out) const;
+    // 1.12.13 : LES GESTES SUR UN TABLEAU (HmiRuntimeTable.cpp) - la case appuyee ("case:R:C" a l'appui ; R : la ligne
+    // montree), relue au relachement (Clic sur une case, la ligne choisie, la saisie R/W), au double clic, a l'appui
+    // long ; un en-tete ("entete:C"). Les actions recoivent leurs parametres (Ligne, Colonne, Element...) dans une
+    // portee fille de celle de la vue : fire() la prend pour elles (gestureScope_, le temps du geste).
+    struct TableCell {
+        long long row{-1};
+        int       column{-1};
+        long long picked{-1};      // la derniere ligne choisie (son rang dans la source) : Ligne choisie part au changement
+    };
+    std::map<Id, TableCell>      tableCells_;
+    std::shared_ptr<const Scope> gestureScope_;
+    Id                           gestureView_{kNoId};
+    void tablePart(const View&, const Object&, std::string_view part, double now);
+    void tableGesture(const View&, const Object&, Trigger, double now);
+    void tableFire(const View&, const Object&, Trigger, const table::Model&, long long row, int column, double now,
+                   const sim::Value* before = nullptr, const sim::Value* after = nullptr);
+    bool tablePrompt(const View&, const Object&, const table::Model&, long long row, int column);
     // L'environnement des expressions, depuis une methode const (Env n'est complet que dans HmiRuntime.cpp).
     [[nodiscard]] sim::Environment& envOf() const;
+    // Le chemin vrai d'une variable, avec les parametres de la vue en place (viewAliases) : C.Niveau -> V[0].Niveau,
+    // Cuves[Idx].Consigne -> Cuves[2].Consigne. `concrete` faux : les parametres seuls (un objet : Stock['vis'] reste).
+    [[nodiscard]] std::string resolvedPath(std::string_view path, bool concrete = true);
     struct TriggerState {
         bool        known{false};
         std::string last;          // la derniere valeur vue (en texte)

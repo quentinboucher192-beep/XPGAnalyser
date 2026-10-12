@@ -1148,6 +1148,60 @@ std::string fixedWritePath(std::string_view cell) {
     return one.find("[*]") == std::string::npos && one.find("[#]") == std::string::npos ? one : std::string{};
 }
 
+std::vector<Param> receivedParams(const Project& p, const Object& o, Trigger t) {
+    std::vector<Param> out;
+    if (!triggerIsTable(t)) return out;
+    const std::string copy = "copie";
+    if (t == Trigger::HeaderClick) {
+        out.push_back({"Colonne", "INT", copy, "la colonne cliqu\xC3\xA9" "e (1, 2...)"});
+        out.push_back({"Titre", "STRING", copy, "son titre"});
+        return out;
+    }
+    out.push_back({"Ligne", "INT", copy, "la ligne montr\xC3\xA9" "e (1, 2... ; tri\xC3\xA9" "e, elle peut diff\xC3\xA9rer de l'indice)"});
+    const Mode m = modeOf(o);
+    std::string column;   // le type de la colonne (Case saisie)
+    if (m == Mode::Rows) {
+        const auto src = analyzeSource(p, o.text("rowsFrom"));
+        switch (src.kind) {
+            case SourceKind::Array:
+            case SourceKind::List:
+                out.push_back({"Index", "INT", copy, "l'indice de l'\xC3\xA9l\xC3\xA9ment dans " + src.name});
+                break;
+            case SourceKind::Map: out.push_back({"Cle", src.key.empty() ? "STRING" : src.key, copy, "la cl\xC3\xA9 de la ligne"}); break;
+            case SourceKind::Struct: out.push_back({"Membre", "STRING", copy, "le nom du membre de la ligne"}); break;
+            default: break;
+        }
+        if (src.kind == SourceKind::Array || src.kind == SourceKind::List || src.kind == SourceKind::Map || src.kind == SourceKind::Struct
+            || src.kind == SourceKind::Unknown)
+            out.push_back({"Element", "REF_TO " + (src.kind == SourceKind::Struct ? std::string("(le membre)") : src.element.empty() ? std::string("ANY") : src.element),
+                           "r\xC3\xA9" "f\xC3\xA9rence",
+                           src.kind == SourceKind::Map ? "la valeur de la ligne (" + src.name + "[Cle]) : l'\xC3\xA9" "crire change la MAP"
+                                                       : "l'\xC3\xA9l\xC3\xA9ment de la ligne (" + src.name + "[Index]) : Element.Membre := ... l'\xC3\xA9" "crit"});
+    }
+    if (t != Trigger::RowPick) {
+        out.push_back({"Colonne", "INT", copy, "la colonne de la case (1, 2...)"});
+        out.push_back({"Valeur", "STRING", copy, "le texte de la case"});
+    }
+    out.push_back({"Valeurs", "ARRAY[1..n] OF STRING", copy, "les textes de la ligne : Valeurs[1], Valeurs[2]..."});
+    if (t == Trigger::CellEdit) {
+        out.push_back({"Ancienne", "(le type de la case)", copy, "la valeur avant la saisie"});
+        out.push_back({"Nouvelle", "(le type de la case)", copy, "la valeur saisie"});
+    }
+    return out;
+}
+
+std::string withoutCaret(std::string_view text) {
+    std::string out;
+    bool quoted = false;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '\'') quoted = !quoted;
+        if (!quoted && c == '^' && i >= 7 && same(text.substr(i - 7, 7), "Element") && (i == 7 || !identChar(text[i - 8]))) continue;
+        out += c;
+    }
+    return out;
+}
+
 bool sortDescending(const Object& o) {
     const std::string s = trimmed(o.text(kSortOrderKey));
     return !s.empty() && (s.front() == 'd' || s.front() == 'D');

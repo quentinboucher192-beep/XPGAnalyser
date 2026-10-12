@@ -1727,15 +1727,25 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
             }
         }
         // 1.12.2 : la barre d'un tableau dynamique (rowsFrom) - une page plus haut, plus bas ; ailleurs,
-        // le tableau garde ses actions.
-        if (o->kind == hmi::Kind::Table && runtime_ && o->text("rowsFrom").find_first_not_of(" \t") != std::string::npos) {
-            std::vector<std::string> headers;
-            std::vector<std::vector<std::string>> rows;
-            if (runtime_->tableRows(*o, headers, rows))
-                if (const std::string part = hmi::tableHit(*o, box.w, box.h, lx, ly, rows.size(), runtime_->listFirst(o->id)); !part.empty()) {
+        // le tableau garde ses actions. 1.12.13 : la case (ou l'en-tete) touchee - retenue par le moteur pour le geste
+        // qui suit (Clic sur une case, la saisie R/W, la ligne choisie...) ; le clic de l'objet suit, comme avant.
+        if (o->kind == hmi::Kind::Table && runtime_) {
+            hmi::table::Model m;
+            const bool rows = hmi::table::modeOf(*o) == hmi::table::Mode::Rows;
+            if (runtime_->tableShown(layers_[layer].view.id, *o, m)) {
+                const std::size_t first = rows ? runtime_->listFirst(o->id) : 0;
+                if (rows)
+                    if (const std::string part = hmi::tableHit(*o, box.w, box.h, lx, ly, m.rows.size(), first); !part.empty()) {
+                        partClicked->emit(id, part);
+                        return;
+                    }
+                std::vector<double> widths = m.widths;
+                if (!m.columns) widths = hmi::columnFractions(*o, std::max<std::size_t>(1, m.headers.size()));
+                // Les cases fixes ne defilent pas : les lignes qui tiennent (pas de barre).
+                const std::size_t count = rows ? m.rows.size() : std::min(m.rows.size(), hmi::tableLayout(*o, box.w, box.h, 0, 0).fit);
+                if (const std::string part = hmi::tableCellHit(*o, box.w, box.h, lx, ly, count, first, widths); !part.empty())
                     partClicked->emit(id, part);
-                    return;
-                }
+            }
         }
         // Lot 9 : les commandes a parties (selecteur, boutons radio, liste deroulante,
         // date et heure, programmateur) ; le curseur et le potentiometre se tirent.
