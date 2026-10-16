@@ -80,6 +80,13 @@ inline std::string_view triggerText(hmi::Trigger t) {
         case hmi::Trigger::KeyRelease:  return "Touche rel\xC3\xA2" "ch\xC3\xA9" "e";
         case hmi::Trigger::KeyHold:     return "Touche maintenue";
         case hmi::Trigger::KeyRepeat:   return "Touche r\xC3\xA9p\xC3\xA9t\xC3\xA9" "e";
+        // 1.12.14 : les gestes sur un tableau (1.12.13), dits comme dans l'onglet Actions (l'arbre disait ?).
+        case hmi::Trigger::CellClick:
+        case hmi::Trigger::CellDoubleClick:
+        case hmi::Trigger::CellLongPress:
+        case hmi::Trigger::CellEdit:
+        case hmi::Trigger::RowPick:
+        case hmi::Trigger::HeaderClick: return hmi::triggerLabel(t);
     }
     return "?";
 }
