@@ -287,6 +287,7 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
     std::vector<NameUse> out;
     int line = 1;
     std::size_t i = 0;
+    std::string open;   // 1.12.14 : les parentheses et crochets ouverts, le plus interieur a la fin
     const auto advanceTo = [&](std::size_t to) {
         for (; i < to && i < s.size(); ++i) if (s[i] == '\n') ++line;
     };
@@ -321,6 +322,14 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
             std::size_t k = i;
             while (k < s.size() && (s[k] == ' ' || s[k] == '\t')) ++k;
             const bool call = k < s.size() && s[k] == '(';
+            // 1.12.14 : (Nom := 'A', Niveau := 2.5) - le membre nomme d'une structure ecrite (ou l'argument
+            // nomme d'un appel) n'est pas une variable : un nom suivi de :=, juste apres ( ou une virgule,
+            // entre parentheses. Une cle de MAP ecrite ([Cle := 3]) reste lue.
+            if (!open.empty() && open.back() == '(' && k + 1 < s.size() && s[k] == ':' && s[k + 1] == '=') {
+                std::size_t b = start;
+                while (b > 0 && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\n' || s[b - 1] == '\r')) --b;
+                if (b > 0 && (s[b - 1] == '(' || s[b - 1] == ',')) continue;
+            }
             if (typed) {
                 ++i;
                 while (i < s.size() && (identChar(s[i]) || s[i] == '.')) ++i;
@@ -356,6 +365,8 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
             if (!seen) out.push_back({word, line});
             continue;
         }
+        if (c == '(' || c == '[') open += c;
+        else if ((c == ')' || c == ']') && !open.empty()) open.pop_back();
         ++i;
     }
     return out;

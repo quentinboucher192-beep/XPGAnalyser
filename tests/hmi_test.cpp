@@ -27168,11 +27168,15 @@ void imbriques11214() {
     p.programs.variables.push_back(hmiVar(p, "Cuves", "LIST OF T_Cuve", "[(Nom := 'C1', Niveau := 1.5), (Nom := 'C2')]"));
     p.programs.variables.push_back(hmiVar(p, "Total", "REAL"));
     p.programs.variables.push_back(hmiVar(p, "Texte", "STRING"));
+    p.programs.variables.push_back(hmiVar(p, "Ajout", "LIST OF T_Cuve"));
+    p.programs.variables.push_back(hmiVar(p, "Somme", "REAL"));
     Script sc;
     sc.id = p.allocate();
     sc.name = "Init";
     sc.event = "Demarrage";
-    sc.body = "Total := Parc['a'][1].Niveau + Cuves[0].Niveau;\nTexte := Cuves[1].Nom + Parc['a'][0].Nom;\nParc['a'][0].Nom := 'Z';";
+    sc.body = "Total := Parc['a'][1].Niveau + Cuves[0].Niveau;\nTexte := Cuves[1].Nom + Parc['a'][0].Nom;\nParc['a'][0].Nom := 'Z';\n"
+              "Ajout := [(Nom := 'S1', Niveau := 7.5), (Nom := 'S2')];\nParc['b'] := [(Nom := 'Q', Niveau := 3)];\n"
+              "Somme := Ajout[0].Niveau + Parc['b'][0].Niveau + Ajout[1].Niveau;";
     p.programs.scripts.push_back(sc);
     const Id barre = edit::add(p, a, Kind::ProgressBar, 10, 10);
     a.object(barre)->setExpr("value", "Parc['a'][1].Niveau * 10.0");
@@ -27185,6 +27189,10 @@ void imbriques11214() {
     for (const auto& i : issues)
         if (i.severity != Issue::Severity::Info) bad += i.message + " | ";
     check(bad.empty(), "G\xC3\xA9n\xC3\xA9rer suit Parc['a'][1].Niveau, Cuves[1].Nom : ni erreur ni avertissement" + (bad.empty() ? std::string{} : " : " + bad));
+    // Compiler (l'editeur du script) : les membres nommes d'une structure ecrite ne sont pas des variables.
+    std::string compiled;
+    for (const auto& f : n110::run(p, sc.body)) compiled += f.message + " | ";
+    check(compiled.empty(), "Compiler : (Nom := 'S1', Niveau := 7.5) dans un script, sans faute" + (compiled.empty() ? std::string{} : " : " + compiled));
     // Une vraie faute, au fond : un membre qui n'existe pas, un texte dans un REAL.
     Project q = p;
     q.programs.scripts.back().body = "Total := Parc['a'][1].Pression;\nTotal := Cuves[0].Nom;";
@@ -27204,6 +27212,11 @@ void imbriques11214() {
     const auto* texte = rt.variable("Texte");
     check(total && std::fabs(total->asReal() - 5.5) < 1e-9, "Total := Parc['a'][1].Niveau + Cuves[0].Niveau = 5,5 (" + (total ? total->display() : std::string("?")) + ")");
     check(texte && texte->asString() == "C2A", "Texte := Cuves[1].Nom + Parc['a'][0].Nom = C2A (" + (texte ? texte->asString() : std::string("?")) + ")");
+    // Le litteral d'une structure dans un script : une LIST de structures, une MAP de VECTOR (le membre absent : 0).
+    const auto* somme = rt.variable("Somme");
+    check(somme && std::fabs(somme->asReal() - 10.5) < 1e-9,
+          "dans un script : Ajout := [(Nom := 'S1', Niveau := 7.5), (Nom := 'S2')] ; Parc['b'] := [(Nom := 'Q', Niveau := 3)] -> 10,5 ("
+              + (somme ? somme->display() : std::string("?")) + ")");
 }
 
 void tableauxDynamiques11213() {
