@@ -102,3 +102,13 @@ attendre 4
 touche f1
 attendre 8
 capture 1214_ihm_22_aide_ensemble.png
+
+# ---- Tout l'arbre : chaque noeud, sa carte, son menu du clic droit, son onglet ----
+#  (avec XPG_TEXT_CENSUS, un noeud par image et les textes neufs de chacun)
+arbre-parcourir "Simulation"
+attendre 4
+arbre-parcourir "IHM"
+attendre 4
+arbre-parcourir "Versions"
+attendre 4
+capture 1214_ihm_23_fin_parcours.png

@@ -2586,9 +2586,23 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             crawling_ = true;
             std::printf("[script] arbre-parcourir \"%s\" : %zu noeud(s)\n", arg(1).c_str(), crawl_.size());
         }
-        for (int k = 0; k < 4 && crawlAt_ < crawl_.size(); ++k) {
+        // 1.12.14 : le releve des textes (XPG_TEXT_CENSUS) - un noeud par image ; ce
+        // que l'image d'apres montre (son onglet), sa carte et son menu, les textes
+        // pas encore vus du parcours seulement, sous le nom du noeud qui les montre.
+        const bool census = gfx::census::enabled();
+        if (census && crawlAt_ > 0) {
+            std::ofstream out(gfx::census::state().path, std::ios::binary | std::ios::app);
+            out << "== parcours " << crawlName_ << "\n";
+            for (const auto& t : crawlNoted_)
+                if (crawlSeen_.insert(t).second) out << t << "\n";
+            for (const auto& t : gfx::census::frame())
+                if (crawlSeen_.insert(t).second) out << t << "\n";
+            crawlNoted_.clear();
+        }
+        for (int k = 0; k < (census ? 1 : 4) && crawlAt_ < crawl_.size(); ++k) {
             const auto n = static_cast<ui::NodeId>(crawl_[crawlAt_++]);
-            const auto text = screen->visitTreeNode(n);
+            const auto text = screen->visitTreeNode(n, census ? &crawlNoted_ : nullptr);
+            if (census) crawlName_ = text;
             if (crawlAt_ % 100 == 0 || crawlAt_ == crawl_.size())
                 std::printf("[script] arbre-parcourir : %zu / %zu (%s)\n", crawlAt_, crawl_.size(), text.c_str());
             if (!dynamic_cast<MainAnalysisScreen*>(app_.menus().top())) break;   // une fenetre : l'image suivante
@@ -2600,6 +2614,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         std::printf("[script] arbre-parcourir : fini, %zu noeud(s) visit\xC3\xA9(s), sans plantage\n", crawl_.size());
         crawl_.clear();
         crawling_ = false;
+        crawlSeen_.clear();
+        crawlNoted_.clear();
         return Step::Yield;
     }
     if (cmd == "arbre-epingler") {

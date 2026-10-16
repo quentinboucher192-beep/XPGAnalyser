@@ -770,11 +770,12 @@ std::vector<ui::NodeId> MainAnalysisScreen::treeSubtree(ui::NodeId from, std::si
     return out;
 }
 
-std::string MainAnalysisScreen::visitTreeNode(ui::NodeId node) {
+std::string MainAnalysisScreen::visitTreeNode(ui::NodeId node, std::vector<std::string>* census) {
     if (!treeModel_ || node == ui::kInvalidNode) return {};
     std::string text = treeModel_->text(node);
     (void)treeModel_->style(node);
-    (void)treeCardText(node);
+    const auto card = treeCardText(node);
+    if (census && !card.empty()) census->push_back("[carte] " + card);
     // Le menu du clic droit, construit comme a l'ouverture (sans s'ouvrir).
     if (!contextMenu_ || !contextMenu_->isOpen()) {
         contextNode_ = node;
@@ -782,6 +783,17 @@ std::string MainAnalysisScreen::visitTreeNode(ui::NodeId node) {
         TreeKeys keys;
         buildExplorerMenu(node, items, keys);
         contextCalls_.clear();
+        if (census) {
+            const std::function<void(const std::vector<ui::PopupMenu::Item>&)> note = [&](const std::vector<ui::PopupMenu::Item>& list) {
+                for (const auto& it : list) {
+                    if (it.separator) continue;
+                    if (!it.label.empty()) census->push_back("[menu] " + it.label);
+                    if (!it.disabledReason.empty()) census->push_back("[menu] " + it.disabledReason);
+                    note(it.children);
+                }
+            };
+            note(items);
+        }
     }
     onTreeSelection(node);
     return text;

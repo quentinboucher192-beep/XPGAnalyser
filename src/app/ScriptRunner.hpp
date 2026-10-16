@@ -111,6 +111,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <set>
 #include <vector>
 
 namespace gfx { class IRenderer; }
@@ -172,6 +173,10 @@ private:
     std::vector<std::uint64_t> crawl_;
     std::size_t                crawlAt_{0};
     bool                       crawling_{false};
+    // 1.12.14 : le releve des textes du parcours (XPG_TEXT_CENSUS).
+    std::string                crawlName_;
+    std::vector<std::string>   crawlNoted_;
+    std::set<std::string>      crawlSeen_;
     int                        crawlStuck_{0};
 };
 

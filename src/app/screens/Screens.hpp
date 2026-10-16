@@ -428,7 +428,8 @@ public:
     //  1.11.11 plantait sur un clic sur Fonctions ou Popups d'un symbole).
     [[nodiscard]] ui::NodeId treeNodeOfPath(const std::string& path) const;
     [[nodiscard]] std::vector<ui::NodeId> treeSubtree(ui::NodeId from, std::size_t cap) const;
-    std::string visitTreeNode(ui::NodeId node);
+    // 1.12.14 : `census` (le releve des textes) : la carte et chaque entree du menu, mot pour mot.
+    std::string visitTreeNode(ui::NodeId node, std::vector<std::string>* census = nullptr);
     [[nodiscard]] bool isTreePinned(ui::NodeId node) const;
     [[nodiscard]] static bool treePinnable(ui::NodeId node);   // pas les titres ni les lignes du lot
     void tickTree(double now);                            // a chaque image (tickApiPanes)
