@@ -35,7 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.12.13", "12/10/2026", "livr\xC3\xA9" "e le 12/10 au soir"},
+    {"1.12.13", "16/10/2026", "livr\xC3\xA9" "e le 16/10 au matin"},
     {"1.12.12", "12/10/2026", "livr\xC3\xA9" "e le 12/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.11", "12/10/2026", "livr\xC3\xA9" "e le 12/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.10", "12/10/2026", "livr\xC3\xA9" "e le 12/10 dans l'apr\xC3\xA8s-midi"},
@@ -119,7 +119,7 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
-        // 1.12.13 (12/10/2026) : voir docs/LIVRAISON-1.12.13.md.
+        // 1.12.13 (16/10/2026) : voir docs/LIVRAISON-1.12.13.md.
         note("1.12.13", "Tableau", Kind::New,
          "LE TABLEAU, UN MODE \xC3\x80 LA FOIS : \xC2\xAB Le tableau montre \xC2\xBB coche cases fixes, lignes dynamiques ou fichier externe. Les r\xC3\xA9glages des autres modes restent en r\xC3\xA9serve (\xC2\xAB en r\xC3\xA9serve \xC2\xB7 non utilis\xC3\xA9 \xC2\xBB, \xC2\xAB vide \xC2\xBB) et \xC2\xAB effacer \xC2\xBB les vide ; changer de mode se reprend d'un Ctrl+Z. Un tableau d'avant garde le mode qu'il avait.",
          "objet-tableau", ""),
