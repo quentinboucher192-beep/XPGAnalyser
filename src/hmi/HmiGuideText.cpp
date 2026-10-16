@@ -12449,6 +12449,11 @@ const std::vector<Topic>& topics() {
                          "chang\xC3\xA9 passe si elle tient dans le nouveau type : 300 passe de DINT \xC3\xA0 INT, "
                          "40000 non (sa valeur initiale reprend, et le journal le dit).", {}, "1.11.19"},
              {K::Paragraph, "1.12.10 : une structure prend une valeur initiale (Marche := TRUE, Consigne := 12.5) ; un tableau de structures, une par \xC3\xA9l\xC3\xA9ment [(Nom := 'Cuve A'), (Nom := 'Cuve B')]. Les membres non nomm\xC3\xA9s et les \xC3\xA9l\xC3\xA9ments en moins gardent les valeurs du type. Ce qui ne peut pas s'appliquer (un membre inconnu, un texte pour un REAL, trop d'\xC3\xA9l\xC3\xA9ments) est refus\xC3\xA9 \xC3\xA0 la saisie, et dit par G\xC3\xA9n\xC3\xA9rer et la Console.", {}, "1.12.10"},
+             {K::Heading, "Les types imbriqu\xC3\xA9s (1.12.14)", {}, "1.12.14"},
+             {K::Paragraph, "La case **Type** (une variable IHM, un membre, une d\xC3\xA9" "claration, le retour d'une fonction, le param\xC3\xA8tre d'une popup ou d'un symbole) ouvre le **s\xC3\xA9lecteur de types**. Une forme se coche autour de l'\xC3\xA9l\xC3\xA9ment (Tableau, Liste, Vecteur, Dictionnaire (MAP), Tuple...), et **Composer l'\xC3\xA9l\xC3\xA9ment\xE2\x80\xA6** ouvre un second s\xC3\xA9lecteur pour l'\xC3\xA9l\xC3\xA9ment lui-m\xC3\xAAme : `MAP[STRING] OF VECTOR OF T_Cuve`, `LIST OF TUPLE(INT, T_Cuve)`, \xC3\xA0 toute profondeur. L'\xC3\xA9l\xC3\xA9ment compos\xC3\xA9 vient en t\xC3\xAAte de la liste (\xC2\xAB Compos\xC3\xA9 ici \xC2\xBB).", {}, "1.12.14"},
+             {K::Bullet, "Un type entier \xC3\xA9" "crit dans la recherche (`MAP[STRING] OF LIST OF T_Four`) se prend tel quel ; un type qui ne se lit pas grise **Choisir** et dit pourquoi.", {}, "1.12.14"},
+             {K::Bullet, "Un type rouvert garde tous ses niveaux : la forme du dehors coch\xC3\xA9" "e, l'\xC3\xA9l\xC3\xA9ment compos\xC3\xA9 pr\xC3\xAAt \xC3\xA0 reprendre.", {}, "1.12.14"},
+             {K::Paragraph, "La valeur d'une structure, `(Nom := 'A', Niveau := 2.5)`, s'\xC3\xA9" "crit aussi dans une LIST, un VECTOR, une MAP, un TUPLE, \xC3\xA0 toute profondeur : `['a' := [(Nom := 'A', Niveau := 2.5), (Nom := 'B')]]` pour une `MAP[STRING] OF VECTOR OF T_Cuve`, en valeur initiale comme dans un script. Un membre inconnu ou une valeur du mauvais type est refus\xC3\xA9 \xC3\xA0 la saisie, et la raison nomme le membre.", {}, "1.12.14"},
          },
          {"variables-ihm", "tableaux-ihm", "variables-liees", "dossiers", "parametres-popups", "operateurs", "types-excel", "enum-scripts"},
          {"type IHM", "types IHM", "structure", "T_Four", "membre", "membres", "DDT", "STRUCT", "d\xC3\xA9" "calage",
@@ -13742,6 +13747,10 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Dans un bloc `VAR`, apr\xC3\xA8s `nom :`, les types IHM "
                          "(\xC3\xA9num\xC3\xA9rations et structures) en plus des types "
                          "\xC3\xA9l\xC3\xA9mentaires.", {}},
+             {K::Heading, "Vers le type attendu (1.12.14)", {}, "1.12.14"},
+             {K::Paragraph, "L\xC3\xA0 o\xC3\xB9 un type est attendu (`n := ` pour un INT, l'argument d'une fonction, `IF m = `, une case fx), la liste propose d'abord ce qui est de ce type, puis **ce qui y m\xC3\xA8ne**, \xC3\xA0 toute profondeur : `BATEAU[0]` (\xE2\x86\x92 `.Taille : INT`), `Capitaine.` (\xE2\x86\x92 `.Age : INT`), `Flotte['\xE2\x80\xA6'][0].Taille`. Le d\xC3\xA9tail dit le chemin et le type au bout ; choisir `BATEAU[0].` rouvre la liste sur ses membres, le bon en t\xC3\xAAte. Les variables, les membres, les variables syst\xC3\xA8me, les fonctions (par ce qu'elles rendent) et les \xC3\xA9num\xC3\xA9rations le suivent.", {}, "1.12.14"},
+             {K::Bullet, "Les acc\xC3\xA8s imbriqu\xC3\xA9s se suivent : apr\xC3\xA8s `Parc['a'][1].`, les membres de T_Cuve ; **G\xC3\xA9n\xC3\xA9rer** lit `Parc['a'][1].Niveau` et dit au fond un membre inconnu ou un mauvais type.", {}, "1.12.14"},
+             {K::Bullet, "Le **s\xC3\xA9lecteur de valeur** s'ouvre \xC3\xA0 toute profondeur (`BATEAU[0].Taille`, `Flotte['cle'][0].Taille`) ; filtr\xC3\xA9 par type, il garde les structures et les listes qui m\xC3\xA8nent \xC3\xA0 une valeur de ce type.", {}, "1.12.14"},
          },
          {"scripts", "variables-locales", "fonctions", "proprietes", "parametres-popups", "variables-esclaves", "champs-expressions", "fonctions-internes", "enum-scripts", "operateurs", "variables-api"},
          {},
@@ -15321,6 +15330,7 @@ const std::vector<Topic>& topics() {
                          "D\xC3\xA9" "boguer pas \xC3\xA0 pas \xC2\xBB et \xC2\xAB Modifier pendant une "
                          "pause \xC2\xBB le font faire : Aide \xE2\x80\xBA Nouveaut\xC3\xA9s\xE2\x80\xA6 "
                          "\xE2\x80\xBA Versions pr\xC3\xA9" "c\xC3\xA9" "dentes \xE2\x80\xBA La 1.8.0.", {}},
+             {K::Paragraph, "1.12.14 : dans XPGAnalyser IHM, Simuler (F5), le clic droit du dossier Simulation et les courbes d\xC3\xA9marrent l'IHM seule ; la Vue d'ensemble, le journal, les for\xC3\xA7" "ages, les courbes et la barre du haut ne parlent que de l'IHM.", {}, "1.12.14"},
              {K::Heading, "La barre", {}, "1.10"},
              {K::Paragraph, "La barre de l'onglet pilote l'IHM, plus l'automate : ses deux pastilles (IHM, API) "
                          "et leurs boutons, la vue en cours, l'utilisateur, les rep\xC3\xA8res, le zoom de "

@@ -17,12 +17,12 @@ struct ByExtension {
 
 inline constexpr ByExtension kByExtension[] = {
     {".h", 0, 0},
-    {".hpp", 412, 68265},
+    {".hpp", 413, 68330},
     {".c", 0, 0},
-    {".cpp", 544, 474828},
+    {".cpp", 544, 475870},
 };
-inline constexpr int        kTotalFiles = 956;
-inline constexpr long long  kTotalLines = 543093;
+inline constexpr int        kTotalFiles = 957;
+inline constexpr long long  kTotalLines = 544200;
 inline constexpr const char* kCountedOn = "16/10/2026";
 
 } // namespace xpg::codestats

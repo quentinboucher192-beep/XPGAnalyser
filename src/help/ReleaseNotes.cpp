@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.14", "16/10/2026", "livr\xC3\xA9" "e le 16/10 en fin de matin\xC3\xA9" "e"},
     {"1.12.13", "16/10/2026", "livr\xC3\xA9" "e le 16/10 au matin"},
     {"1.12.12", "12/10/2026", "livr\xC3\xA9" "e le 12/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.11", "12/10/2026", "livr\xC3\xA9" "e le 12/10 dans l'apr\xC3\xA8s-midi"},
@@ -119,6 +120,22 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.14 (16/10/2026) : voir docs/LIVRAISON-1.12.14.md.
+        note("1.12.14", "Types", Kind::New,
+         "LES TYPES IMBRIQU\xC3\x89S : la case Type (une variable IHM, un membre, une d\xC3\xA9" "claration, le retour d'une fonction, le param\xC3\xA8tre d'une popup ou d'un symbole) ouvre le s\xC3\xA9lecteur de types, plus la longue liste. \xC2\xAB Composer l'\xC3\xA9l\xC3\xA9ment\xE2\x80\xA6 \xC2\xBB ouvre un second s\xC3\xA9lecteur pour l'\xC3\xA9l\xC3\xA9ment : MAP[STRING] OF VECTOR OF T_Cuve, LIST OF TUPLE(INT, T_Cuve), \xC3\xA0 toute profondeur. Un type entier \xC3\xA9" "crit dans la recherche se prend tel quel ; un type rouvert garde tous ses niveaux.",
+         "types-ihm", ""),
+        note("1.12.14", "Types", Kind::New,
+         "LA VALEUR D'UNE STRUCTURE PARTOUT : (Nom := 'A', Niveau := 2.5) s'\xC3\xA9" "crit dans une LIST, un VECTOR, une MAP, un TUPLE, un tableau, \xC3\xA0 toute profondeur - ['a' := [(Nom := 'A', Niveau := 2.5), (Nom := 'B')]] pour une MAP[STRING] OF VECTOR OF T_Cuve -, en valeur initiale comme dans un script. Un membre inconnu ou une valeur du mauvais type est refus\xC3\xA9 \xC3\xA0 la saisie ; la raison nomme le membre.",
+         "types-ihm", ""),
+        note("1.12.14", "G\xC3\xA9n\xC3\xA9rer", Kind::Fixed,
+         "LES ACC\xC3\x88S IMBRIQU\xC3\x89S : G\xC3\xA9n\xC3\xA9rer, le moteur et l'aide \xC3\xA0 la saisie suivent Parc['a'][1].Niveau \xC3\xA0 toute profondeur. Un membre inconnu ou un mauvais type est dit au fond (Parc['a'][1].Pression : T_Cuve n'a pas de membre Pression) ; apr\xC3\xA8s Parc['a'][1]. l'aide propose les membres de T_Cuve.",
+         "aide-saisie", ""),
+        note("1.12.14", "Aide \xC3\xA0 la saisie", Kind::New,
+         "CE QUI M\xC3\x88NE AU TYPE ATTENDU : l\xC3\xA0 o\xC3\xB9 un INT est attendu, l'aide propose les INT, puis ce qui y m\xC3\xA8ne - BATEAU[0] (\xE2\x86\x92 .Taille : INT), Capitaine. (\xE2\x86\x92 .Age : INT), Flotte['\xE2\x80\xA6'][0].Taille -, \xC3\xA0 toute profondeur : variables, membres, variables syst\xC3\xA8me, fonctions (par ce qu'elles rendent), \xC3\xA9num\xC3\xA9rations. Le s\xC3\xA9lecteur de valeur s'ouvre aussi \xC3\xA0 toute profondeur ; filtr\xC3\xA9 par type, il garde le chemin qui m\xC3\xA8ne \xC3\xA0 chaque valeur du type.",
+         "aide-saisie", ""),
+        note("1.12.14", "Simulation", Kind::Fixed,
+         "XPGANALYSER IHM NE PR\xC3\x89PARE PLUS L'AUTOMATE : fini \xC2\xAB aucune section en ST de la t\xC3\xA2" "che MAST \xC2\xBB. Simuler (F5), le clic droit du dossier Simulation et les courbes d\xC3\xA9marrent l'IHM ; la Vue d'ensemble, le journal, les for\xC3\xA7" "ages, les courbes et la barre du haut ne parlent que de l'IHM. XPGAnalyser (avec l'automate) ne change pas.",
+         "simulation", ""),
         // 1.12.13 (16/10/2026) : voir docs/LIVRAISON-1.12.13.md.
         note("1.12.13", "Tableau", Kind::New,
          "LE TABLEAU, UN MODE \xC3\x80 LA FOIS : \xC2\xAB Le tableau montre \xC2\xBB coche cases fixes, lignes dynamiques ou fichier externe. Les r\xC3\xA9glages des autres modes restent en r\xC3\xA9serve (\xC2\xAB en r\xC3\xA9serve, non utilis\xC3\xA9 \xC2\xBB, \xC2\xAB vide \xC2\xBB) et \xC2\xAB effacer \xC2\xBB les vide ; changer de mode se reprend d'un Ctrl+Z. Un tableau d'avant garde le mode qu'il avait.",
