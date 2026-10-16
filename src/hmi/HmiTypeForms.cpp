@@ -264,10 +264,9 @@ std::string compose(const Shape& s) {
     if (e.empty()) e = "INT";
     if (s.reference) e = "REF_TO " + e;
     std::string p = trimmed(s.parameter);
-    // Des bornes ecrites [0..9] : sans leurs crochets.
-    while (!p.empty() && (p.front() == '[' || p.front() == '(')) p.erase(p.begin());
-    while (!p.empty() && (p.back() == ']' || p.back() == ')')) p.pop_back();
-    p = trimmed(p);
+    // Des bornes ecrites [0..9] (des types ecrits (A, B)) : sans le couple qui les entoure, et lui
+    // seul (1.12.14 : TUPLE(INT, TUPLE(A, B)), LIST OF TUPLE(..), STRING[20] gardaient mal leur fin).
+    while (p.size() >= 2 && (p.front() == '[' || p.front() == '(') && closing(p, 0) == p.size() - 1) p = trimmed(std::string_view(p).substr(1, p.size() - 2));
     if (p.empty() && s.form != Form::Tuple) p = defaultParameter(s.form);   // un tuple d'un seul type reste seul
     switch (s.form) {
         case Form::Simple: return e;

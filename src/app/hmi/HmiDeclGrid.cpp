@@ -177,6 +177,14 @@ public:
             default: return {};
         }
     }
+    // 1.12.14 : la case Type ouvre le selecteur de types (il compose aussi les types imbriques) ; sans
+    // hote (un essai), la liste et « Autre type... ».
+    bool editInDialog(ui::RowIndex r, std::size_t c) override {
+        if (r >= rows.size() || c >= columns.size() || columns[c] == kUses || !askPickType || !typepicker::available()) return false;
+        if (static_cast<de::Column>(columns[c]) != de::Column::Type) return false;
+        askPickType(r);
+        return true;
+    }
     bool setCellText(ui::RowIndex r, std::size_t c, std::string_view text) override {
         if (r >= rows.size() || c >= columns.size() || columns[c] == kUses || !commit) return false;
         const auto col = static_cast<de::Column>(columns[c]);

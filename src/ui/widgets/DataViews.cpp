@@ -2862,6 +2862,12 @@ void PropertyGrid::beginEdit(std::size_t row) {
     // ("=Marche"), meme une bascule, une liste ou une couleur : on modifie
     // l'expression, pas la valeur fixe qu'elle cache.
     const bool exprText = exprfield::accepts(p) && (!p.expression.empty() || gForceExprText);
+    // 1.12.14 : une case qui s'edite dans une fenetre (le selecteur de types).
+    if (p.dialog && !exprText) {
+        const auto open = p.dialog;      // la grille peut etre refaite pendant
+        open();
+        return;
+    }
 
     // Une bascule n'a pas besoin de champ : le clic EST la modification.
     if (p.type == ValueType::Boolean && !exprText) {
@@ -2995,6 +3001,7 @@ void PropertyGrid::beginEdit(std::size_t row) {
 bool TableView::beginCellEdit(RowIndex modelRow, std::size_t col) {
     if (cellEditor_) finishCellEdit(false, {});
     if (!model_ || col >= columns_.size() || !columns_[col].visible || !model_->editable(modelRow, col)) return false;
+    if (model_->editInDialog(modelRow, col)) return true;     // 1.12.14 : le selecteur de types
     const auto it = std::find(view_.begin(), view_.end(), modelRow);
     if (it == view_.end()) return false;
     const auto vi = static_cast<std::size_t>(it - view_.begin());

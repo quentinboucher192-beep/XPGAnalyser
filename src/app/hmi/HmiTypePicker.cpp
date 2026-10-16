@@ -51,6 +51,21 @@ std::string useLabel(unsigned use) {
 
 bool canReference(unsigned use) { return tf::referenceAllowed(use); }
 
+// 1.12.14 : un type COMPOSE (un tableau, une liste, une MAP, un tuple... d'autre chose) - pas un nom.
+bool composedText(std::string_view t) {
+    std::string u(t);
+    for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    if (u.rfind("REF_TO ", 0) == 0) return false;
+    return tf::decompose(t).form != tf::Form::Simple;
+}
+// Un texte tape dans la recherche qui ressemble a un type entier (pas a un nom a chercher).
+bool looksLikeType(std::string_view t) {
+    std::string u(t);
+    for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    return u.find('[') != std::string::npos || u.find('(') != std::string::npos || u.find(" OF ") != std::string::npos
+        || u.rfind("REF_TO ", 0) == 0;
+}
+
 void paintCheck(const ui::PaintContext& ctx, const gfx::Rect& box, bool on, bool enabled) {
     auto& r = ctx.r;
     const auto& c = ctx.theme.color;
@@ -85,6 +100,14 @@ public:
             params_[static_cast<std::size_t>(form_)] = t;
             invalidate();
         });
+        // 1.12.14 : LES TYPES IMBRIQUES - le type des elements compose a son tour (MAP[STRING] OF
+        // VECTOR OF T_Cuve), dans un second selecteur pose sur celui-ci, aussi profond qu'on veut.
+        compose_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Composer l'\xC3\xA9l\xC3\xA9ment\xE2\x80\xA6",
+                                                                                    "dialog.typePicker.composer")));
+        compose_->setTooltip("Le type des \xC3\xA9l\xC3\xA9ments est lui-m\xC3\xAAme un tableau, une liste, un vecteur, une MAP, un tuple\xE2\x80\xA6 : "
+                             "le composer dans un second s\xC3\xA9lecteur (MAP[STRING] OF VECTOR OF T_Cuve). On peut aussi \xC3\xA9" "crire le "
+                             "type entier dans la recherche.");
+        links_ += compose_->clicked->connect([this] { composeElement(); });
         cancel_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Annuler", "dialog.typePicker.annuler")));
         open_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Ouvrir la d\xC3\xA9" "finition", "dialog.typePicker.definition")));
         ok_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Choisir", "dialog.typePicker.choisir")));
@@ -112,6 +135,7 @@ public:
     // Le type qu'on choisirait : l'entree, une reference (REF_TO), puis la forme (1.12.2 : Tableau,
     // Tableau 2D, Liste, Vecteur, Dictionnaire, Tuple).
     [[nodiscard]] std::string result() const {
+        if (!typed_.empty()) return typed_;          // 1.12.14 : un type entier ecrit dans la recherche
         const auto* e = selected();
         if (!e) return {};
         if (!constructible(e)) return e->name;
@@ -123,6 +147,8 @@ public:
         return tf::compose(sh);
     }
     [[nodiscard]] std::string problem() const {
+        if (!typed_.empty()) return {};
+        if (!typedWhy_.empty()) return typedWhy_;
         const auto* e = selected();
         if (!e) return "choisissez un type dans la liste";
         const auto r = reg_->resolve(result(), spec_.use);
@@ -130,12 +156,15 @@ public:
     }
     [[nodiscard]] std::string notice() const { return notice_; }
     [[nodiscard]] std::string elementName() const {
-        const auto* e = selected();
-        return e ? e->name : std::string{};
+        // Les recents gardent un type nomme : celui du fond d'un type compose.
+        const std::string t = typed_.empty() ? (selected() ? selected()->name : std::string{}) : typed_;
+        if (t.empty() || !composedText(t)) return t;
+        const auto r = reg_->resolve(t, tr::UseAll);
+        return r.entry ? r.entry->name : std::string{};
     }
     [[nodiscard]] std::string openKey() const {
         const auto* e = selected();
-        return e && (e->category == tr::Category::Structure || e->category == tr::Category::Enumeration || e->category == tr::Category::PlcType)
+        return e && e != &composedEntry_ && (e->category == tr::Category::Structure || e->category == tr::Category::Enumeration || e->category == tr::Category::PlcType)
                    ? e->key
                    : std::string{};
     }
@@ -207,10 +236,52 @@ public:
         bounds_->setPlaceholder(std::string(tf::parameterHint(f)));
         bounds_->setTooltip(std::string(tf::parameterHint(f)));
         relayout();
+        if (compose_) compose_->setEnabled(f != tf::Form::Simple);
         invalidate();
         return true;
     }
     [[nodiscard]] tf::Form form() const noexcept { return form_; }
+
+    // 1.12.14 : l'element compose - sa ligne (Collections, « compos\xC3\xA9 ici ») en tete de la liste, choisie.
+    // Un type nomme revenu du second selecteur : sa ligne a lui, simplement.
+    void setComposed(const std::string& text) {
+        const auto r = reg_->resolve(text, tr::UseAll);
+        const std::string t = !r.text.empty() ? r.text : trimmed(text);
+        if (!composedText(t)) {
+            composed_.clear();
+            chip_ = kAll;
+            filter();
+            (void)select(r.entry ? r.entry->name : t);
+            return;
+        }
+        composed_ = t;
+        composedEntry_ = tr::Entry{};
+        composedEntry_.key = r.key;
+        composedEntry_.name = t;
+        composedEntry_.category = tr::Category::Collection;
+        composedEntry_.provenance = "Compos\xC3\xA9 ici";
+        composedEntry_.doc = "Un type compos\xC3\xA9 : la forme choisie dessous le met dans un autre (" + std::string(tf::label(form_)) + ").";
+        composedEntry_.uses = tr::UseAll;
+        if (chip_ != kAll && chip_ != static_cast<int>(tr::Category::Collection)) chip_ = kAll;
+        filter();
+        (void)select(t);
+    }
+    // Composer l'element : un second selecteur, sur l'element d'aujourd'hui.
+    void composeElement() {
+        if (form_ == tf::Form::Simple || !typepicker::available()) return;
+        HmiTypePicker::Spec s;
+        s.field = "\xC3\xA9l\xC3\xA9ments de " + (spec_.field.empty() ? std::string("ce type") : spec_.field);
+        const auto* e = selected();
+        s.current = e ? e->name : std::string{};
+        s.use = spec_.use;
+        s.doc = spec_.doc;
+        s.plc = spec_.plc;
+        s.recents = spec_.recents;
+        typepicker::ask(std::move(s), [this](const HmiTypePicker::Answer& a) {
+            if (!a.type.empty()) setComposed(a.type);
+        });
+    }
+
 
 protected:
     void onLayout() override {
@@ -252,6 +323,12 @@ protected:
             bounds_->setBounds({});
         }
         if (canReference(spec_.use)) refBox_ = {x, y + 5.f, 24.f + kRefLabel, 16.f};
+        // 1.12.14 : Composer l'element, au bout de la ligne (une forme permise ici, sinon rien).
+        if (compose_) {
+            const bool any = shownForms().size() > 1;
+            compose_->setBounds(any ? gfx::Rect{panel_.right() - 16.f - 200.f, y - 1.f, 200.f, 28.f} : gfx::Rect{});
+            compose_->setEnabled(form_ != tf::Form::Simple);
+        }
     }
     [[nodiscard]] bool formAllowed(tf::Form f) const {
         if (spec_.fixedOnly && tf::memoryOnly(f)) return false;
@@ -344,7 +421,8 @@ protected:
         if (shown_.empty())
             r.drawText({rows.x + 12.f, rows.y + 10.f},
                        fit(r,
-                           chip_ == kRecents ? std::string("Aucun type r\xC3\xA9" "cent : ceux que vous choisirez s'ajouteront ici.")
+                           !typed_.empty() ? std::string("Le type \xC3\xA9" "crit est bon : Choisir (ou Entr\xC3\xA9" "e) le prend tel quel.")
+                           : chip_ == kRecents ? std::string("Aucun type r\xC3\xA9" "cent : ceux que vous choisirez s'ajouteront ici.")
                                              : "Aucun type ne correspond. Un type cr\xC3\xA9\xC3\xA9 dans Types IHM appara\xC3\xAEt ici aussit\xC3\xB4t.",
                            kSmall, rows.w - 24.f),
                        kSmall, c.textMuted);
@@ -476,6 +554,12 @@ private:
             (void)setForm(sh.form);
         }
         ref_ = sh.reference || tf::decompose(sh.element).reference;
+        // 1.12.14 : un element compose (MAP[STRING] OF VECTOR OF T_X : VECTOR OF T_X) reste entier ; il
+        // se choisissait par son type le plus profond, et le type rouvert perdait un niveau sans le dire.
+        if (sh.form != tf::Form::Simple && formAllowed(sh.form) && composedText(sh.element)) {
+            setComposed(sh.element);
+            return;
+        }
         if (r.entry && !select(r.entry->name)) {
             // hors de la puce montree : tout montrer
             chip_ = kAll;
@@ -485,12 +569,26 @@ private:
     }
 
     [[nodiscard]] std::size_t countIn(tr::Category cat) const {
+        if (cat == tr::Category::Collection && !composed_.empty()) return 1;
         return static_cast<std::size_t>(std::count_if(usable_.begin(), usable_.end(), [cat](const tr::Entry* e) { return e->category == cat; }));
     }
 
     void filter() {
-        const std::string q = ui::foldForSearch(trimmed(search_ ? search_->text() : std::string{}));
+        const std::string raw = trimmed(search_ ? search_->text() : std::string{});
+        const std::string q = ui::foldForSearch(raw);
         shown_.clear();
+        // 1.12.14 : un type entier ecrit dans la recherche (MAP[STRING] OF VECTOR OF T_Cuve) : s'il est
+        // bon, c'est le resultat ; sinon, pourquoi.
+        typed_.clear();
+        typedWhy_.clear();
+        if (reg_ && looksLikeType(raw)) {
+            const auto r = reg_->resolve(raw, spec_.use);
+            if (r.ok) typed_ = r.text;
+            else typedWhy_ = "le type \xC3\xA9" "crit : " + (r.why.empty() ? std::string("illisible") : r.why);
+        }
+        if (!composed_.empty() && (chip_ == kAll || chip_ == static_cast<int>(tr::Category::Collection))
+            && (q.empty() || ui::containsFolded(composed_, q)))
+            shown_.push_back(&composedEntry_);
         std::vector<const tr::Entry*> pool;
         if (chip_ == kRecents) {
             for (const auto& n : spec_.recents)
@@ -605,8 +703,9 @@ private:
             }
             // Ce que la forme est (une liste vit dans la memoire de l'IHM...).
             const float sx = (refBox_.w > 0.f ? refBox_.right() : (bounds_->bounds().w > 0.f ? bounds_->bounds().right() : x0 + 96.f)) + 18.f;
+            const float sr = compose_ && compose_->bounds().w > 0.f ? compose_->bounds().x - 10.f : panel_.right() - 16.f;   // 1.12.14
             if (form_ != tf::Form::Simple)
-                r.drawText({sx, y + 5.f}, fit(r, std::string(tf::summary(form_)), kSmall, panel_.right() - 16.f - sx), kSmall, c.textMuted);
+                r.drawText({sx, y + 5.f}, fit(r, std::string(tf::summary(form_)), kSmall, sr - sx), kSmall, c.textMuted);
             y += 36.f;
         }
         // ---- le resultat ----
@@ -634,6 +733,12 @@ private:
     std::array<std::string, std::size(tf::kForms)> params_{};                       // son parametre, par forme
     std::vector<std::pair<gfx::Rect, tf::Form>> formChips_;
     std::string                            notice_;
+    // 1.12.14 : les types imbriques - l'element compose (sa ligne en tete de la liste), le type entier
+    // ecrit dans la recherche (bon : typed_ ; sinon typedWhy_).
+    std::string                            composed_;
+    tr::Entry                              composedEntry_;
+    std::string                            typed_, typedWhy_;
+    ui::Button*                            compose_{nullptr};
     float                                  scroll_{0.f}, bottom_{0.f}, constructY_{0.f}, detailY_{0.f};
     bool                                   revealPending_{false};   // la ligne choisie, a montrer des la mise en page
     ui::InputText*                         search_{nullptr};
@@ -707,6 +812,7 @@ bool HmiTypePicker::setForm(std::string_view labelOrKey) {
     const auto f = tf::fromText(labelOrKey);
     return body_ && f && body_->setForm(*f);
 }
+void HmiTypePicker::composeElement() { if (body_) body_->composeElement(); }
 std::vector<std::string> HmiTypePicker::shownNames() const { return body_ ? body_->shownNames() : std::vector<std::string>{}; }
 std::string HmiTypePicker::result() const { return body_ ? body_->result() : std::string{}; }
 std::string HmiTypePicker::resultProblem() const { return body_ ? body_->problem() : std::string("pas de s\xC3\xA9lecteur"); }

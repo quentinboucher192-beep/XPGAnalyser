@@ -1263,10 +1263,6 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
                     comm->selectBound(name);   // 1.11.4 : le Plan d'adressage, sur sa ligne
                 }
             };
-            vh.arrayType = [this](const std::string& current, std::function<void(const std::string&)> done) { askHmiArrayType(current, std::move(done)); };
-            vh.shapedType = [this](const std::string& current, const std::string& form, std::function<void(const std::string&)> done) {   // 1.12.2
-                askHmiShapedType(current, form, /*fixedOnly*/ false, std::move(done));
-            };
             vh.newType = [this] {
                 if (auto* p2 = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
                     p2->showTab(HmiScriptsPane::TabTypes);
@@ -1391,10 +1387,6 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         }
         if (auto* types = pane->typesPane()) {
             HmiTypesPane::Hosts th;
-            th.arrayType = [this](const std::string& current, std::function<void(const std::string&)> done) { askHmiArrayType(current, std::move(done)); };
-            th.shapedType = [this](const std::string& current, const std::string& form, std::function<void(const std::string&)> done) {   // 1.12.4
-                askHmiShapedType(current, form, /*fixedOnly*/ false, std::move(done));
-            };
             th.exportItems = [this](hmi::Id t) { askHmiExportPrograms(0, t); };   // 1.11.2 (decision 174)
             th.importAny = [this] { askHmiImport(); };
             types->setHosts(std::move(th));
@@ -2927,55 +2919,6 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
             return;
         }
         if (auto* vars = pane->variablesPane()) (void)vars->setFolder(made, folder);
-    });
-}
-
-// Lot 16 : Tableau... - les bornes (une ou deux dimensions) et le type des cases ; 1.12.2 : la forme
-// d'un type (askHmiShapedType), ouverte sur Tableau.
-void MainAnalysisScreen::askHmiArrayType(const std::string& current, std::function<void(const std::string&)> done) {
-    const auto sh = hmi::typeform::decompose(current);
-    askHmiShapedType(current, sh.form == hmi::typeform::Form::Array2D ? "tableau2d" : "tableau", /*fixedOnly*/ true, std::move(done));
-}
-
-void MainAnalysisScreen::askHmiShapedType(const std::string& current, const std::string& form, bool fixedOnly,
-                                          std::function<void(const std::string&)> done) {
-    auto doc = app_.hmi();
-    if (!doc) return;
-    namespace tf = hmi::typeform;
-    tf::Shape shape = tf::decompose(current);
-    const auto wanted = tf::fromText(form).value_or(tf::Form::Array);
-    const bool same = shape.form == wanted;
-    if (!same) {
-        shape.form = wanted;
-        shape.parameter = tf::defaultParameter(wanted);
-    }
-    if (shape.parameter.empty()) shape.parameter = tf::defaultParameter(wanted);
-    const bool simpleElement = !shape.reference && tf::decompose(shape.element).form == tf::Form::Simple;
-    const std::string element = simpleElement && !shape.element.empty() ? shape.element : std::string("INT");
-    std::vector<std::string> forms;
-    for (const auto f : tf::kForms)
-        if (!fixedOnly || !tf::memoryOnly(f)) forms.emplace_back(tf::label(f));
-    std::vector<FormDialog::Field> fields;
-    fields.push_back({"Forme", std::string(tf::label(shape.form)), "", false, forms});
-    fields.push_back({"Bornes, cl\xC3\xA9, types suivants ou capacit\xC3\xA9", shape.parameter, std::string(tf::parameterHint(shape.form)), false, {}});
-    fields.push_back({"Type des \xC3\xA9l\xC3\xA9ments", element, "", false, elementChoices(doc->project, hmi::typereg::UseVariable, element)});
-    fields.push_back({"Type \xC3\xA9" "crit (facultatif)", simpleElement ? std::string{} : current, "il remplace les choix", false, {}});
-    auto dialog = std::make_unique<FormDialog>("dialog.hmiArray", fixedOnly ? "Tableau" : "Forme du type",
-        "Tableau : ARRAY[0..9] OF REAL, ARRAY[0..3, 0..9] OF INT, ARRAY[1..4] OF T_Four - ses cases s'\xC3\xA9" "crivent T[i] ou M[i, j], "
-        "ses propri\xC3\xA9t\xC3\xA9s T.Length, .Low, .High, .Rows, .Columns se lisent partout."
-        + std::string(fixedOnly ? "" : " Liste (LIST OF REAL) et vecteur (VECTOR OF REAL) : une taille variable, L[0], L.Count, LIST_ADD, VECTOR_PUSH ; "
-                                       "dictionnaire (MAP[STRING] OF REAL) : M['cl\xC3\xA9'] ; tuple (TUPLE(INT, STRING)) : t.Item1, t.Item2 ; "
-                                       "ensemble (SET OF STRING) : chaque valeur une fois, rang\xC3\xA9" "e, SET_ADD ; tampon (RING[100] OF REAL) : "
-                                       "les 100 derni\xC3\xA8res valeurs, RING_ADD. "
-                                       "Ces objets vivent dans la m\xC3\xA9moire de l'IHM : sans \xC3\xA9quipement ni adresse."),
-        std::move(fields), "Appliquer");
-    const ShapeFields at{0, 1, 3, std::string::npos};
-    dialog->setRules(shapeRules(at));
-    app_.menus().ShowDialog(std::move(dialog), [done = std::move(done), at](const menu::DialogResult& r) {
-        if (!r.accepted() || !done) return;
-        const auto v = FormDialog::split(r.payload);
-        if (v.size() < 3) return;
-        done(shapedTypeOf(v, at, v[2]));
     });
 }
 

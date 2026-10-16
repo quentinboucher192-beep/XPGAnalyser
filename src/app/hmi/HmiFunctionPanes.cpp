@@ -572,6 +572,8 @@ void HmiFunctionsPane::rebuildProperties() {
         PG::ValueType::Enum, [this, id](std::string_view v) { return setReturnType(id, std::string(v)); },
         "Aucun : une proc\xC3\xA9" "dure, appel\xC3\xA9" "e seule sur sa ligne. Sinon le corps affecte le r\xC3\xA9sultat "
         "\xC3\xA0 son nom : Moyenne := ... ;", types));
+    // 1.12.14 : la case ouvre le selecteur de types (les types imbriques aussi), plus la liste.
+    if (typepicker::available()) c.properties.back().dialog = [this, id] { (void)setReturnType(id, typepicker::kChoose); };
     c.properties.push_back(hmikit::prop("Description", f->description, PG::ValueType::Text,
         [this, id](std::string_view v) { return setDescription(id, std::string(v)); }));
     c.properties.push_back(hmikit::prop("Signature", hmi::functionSignature(*f), PG::ValueType::ReadOnly));

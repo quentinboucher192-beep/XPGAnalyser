@@ -3954,12 +3954,23 @@ void membresObjetsEcran1124() {
     const int etapes = rowOf("Etapes");
     check(etapes >= 0 && model->cellText(static_cast<ui::RowIndex>(etapes), 3) == "\xE2\x80\x94" && model->cellText(static_cast<ui::RowIndex>(etapes), 4) == "objet (IHM)",
           "Etapes : ni d\xC3\xA9" "calage ni mots, \xC2\xAB objet (IHM) \xC2\xBB");
+    // 1.12.14 : sans selecteur de types (un essai), la liste courte : les types, plus les entrees
+    // Tableau..., Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple... ; avec lui, la case l'ouvre.
     const auto choices = etapes >= 0 ? model->cellChoices(static_cast<ui::RowIndex>(etapes), 1) : std::vector<std::string>{};
     const auto has = [&](const std::string& c) { return std::find(choices.begin(), choices.end(), c) != choices.end(); };
-    check(has("Liste\xE2\x80\xA6") && has("Vecteur\xE2\x80\xA6") && has("Dictionnaire (MAP)\xE2\x80\xA6") && has("Tuple\xE2\x80\xA6") && has("Tableau\xE2\x80\xA6"),
-          "le choix du type d'un membre : Tableau\xE2\x80\xA6, Liste\xE2\x80\xA6, Vecteur\xE2\x80\xA6, Dictionnaire (MAP)\xE2\x80\xA6, Tuple\xE2\x80\xA6");
+    check(has("REAL") && has("STRING") && !has("Liste\xE2\x80\xA6") && !has("Tableau\xE2\x80\xA6") && !has("Tuple\xE2\x80\xA6"),
+          "le choix du type d'un membre : les types seuls, plus Tableau\xE2\x80\xA6, Liste\xE2\x80\xA6, Tuple\xE2\x80\xA6 au bout");
     const int marche = rowOf("Marche");
-    check(marche >= 0 && model->setCellText(static_cast<ui::RowIndex>(marche), 1, "Liste\xE2\x80\xA6"), "Liste\xE2\x80\xA6 sur Marche (BOOL)");
+    std::vector<app::HmiTypePicker::Spec> asked;
+    app::typepicker::setHost([&](app::HmiTypePicker::Spec spec, app::typepicker::Done done) {
+        asked.push_back(spec);
+        app::HmiTypePicker::Answer a;
+        a.type = "MAP[STRING] OF VECTOR OF " + spec.current;      // un type imbrique, compose au selecteur
+        done(a);
+    });
+    check(marche >= 0 && types.memberTable().beginCellEdit(static_cast<ui::RowIndex>(marche), 1) && !types.memberTable().cellEditing(),
+          "la case Type de Marche ouvre le s\xC3\xA9lecteur (ni liste ni champ)");
+    app::typepicker::setHost({});
     const auto* t = doc->project.hmiType(rec);
     const auto memberType = [&](const std::string& name) {
         for (const auto& m : t->members)
@@ -3967,7 +3978,9 @@ void membresObjetsEcran1124() {
         return std::string("?");
     };
     t = doc->project.hmiType(rec);
-    check(t && memberType("Marche") == "LIST OF BOOL", "sans fen\xC3\xAAtre : la forme sur le type actuel - LIST OF BOOL (" + (t ? memberType("Marche") : std::string("?")) + ")");
+    check(asked.size() == 1 && asked[0].current == "BOOL" && asked[0].field == "Type de T_Recette.Marche" && t
+              && memberType("Marche") == "MAP[STRING] OF VECTOR OF BOOL",
+          "Marche : MAP[STRING] OF VECTOR OF BOOL, rendu par le s\xC3\xA9lecteur (" + (t ? memberType("Marche") : std::string("?")) + ")");
     model = types.memberTable().model();
     check(model && model->setCellText(static_cast<ui::RowIndex>(rowOf("Etapes")), 2, "['P\xC3\xA9trir', 'Cuire']"), "la valeur initiale d'Etapes : un litt\xC3\xA9ral");
     model = types.memberTable().model();
@@ -12620,23 +12633,31 @@ void v19_parametres_popups() {
     check(typeProp && has(typeProp->enumValues, "T_Moteur") && has(typeProp->enumValues, "REAL") && has(typeProp->enumValues, "ANY")
               && has(typeProp->enumValues, "TIME"),
           "le choix du type : les types de base et les types IHM du projet");
-    // 1.12.4 : avec le selecteur de types (l'application en a un), les formes au bout de la liste -
-    // elles l'ouvrent sur elles - puis Choisir un type... (la liste se refait au choix suivant).
-    app::typepicker::setHost([](app::HmiTypePicker::Spec, app::typepicker::Done) {});
-    check(deepCommit(ed.properties(), "Moteur", "Type", "T_Moteur"), "Moteur : T_Moteur");
-    ed.layout();
+    // 1.12.14 : avec le selecteur de types (l'application en a un), la case Type l'ouvre (plus les
+    // formes au bout de la liste, ni Choisir un type...) ; sa reponse est le type entier.
     {
+        std::string seen;
+        app::typepicker::setHost([&](app::HmiTypePicker::Spec spec, app::typepicker::Done done) {
+            seen = spec.current;
+            app::HmiTypePicker::Answer a;
+            a.type = "LIST OF TUPLE(STRING, " + spec.current + ")";
+            done(a);
+        });
+        check(deepCommit(ed.properties(), "Moteur", "Type", "T_Moteur"), "Moteur : T_Moteur");
+        ed.layout();
         const auto* withPicker = deepProp(ed.properties().categories(), "Moteur", "Type");
         const std::vector<std::string> none;
         const auto& values = withPicker ? withPicker->enumValues : none;
-        const auto at = [&](const char* x) { return std::find(values.begin(), values.end(), x) - values.begin(); };
-        const auto n = static_cast<std::ptrdiff_t>(values.size());
-        check(n >= 6 && at("Tableau\xE2\x80\xA6") == n - 6 && at("Liste\xE2\x80\xA6") == n - 5 && at("Vecteur\xE2\x80\xA6") == n - 4
-                  && at("Dictionnaire (MAP)\xE2\x80\xA6") == n - 3 && at("Tuple\xE2\x80\xA6") == n - 2,
-              "le choix du type d'un param\xC3\xA8tre : Tableau\xE2\x80\xA6, Liste\xE2\x80\xA6, Vecteur\xE2\x80\xA6, Dictionnaire (MAP)\xE2\x80\xA6, Tuple\xE2\x80\xA6, "
-              "puis Choisir un type\xE2\x80\xA6 (" + [&] { std::string s; for (const auto& x : values) s += x + "|"; return s; }() + ")");
+        check(withPicker && withPicker->dialog && std::find(values.begin(), values.end(), "Liste\xE2\x80\xA6") == values.end()
+                  && std::find(values.begin(), values.end(), app::typepicker::kChoose) == values.end(),
+              "le type d'un param\xC3\xA8tre : la case ouvre le s\xC3\xA9lecteur, plus de Liste\xE2\x80\xA6 ni Choisir un type\xE2\x80\xA6");
+        if (withPicker && withPicker->dialog) withPicker->dialog();
+        check(seen == "T_Moteur" && p.view(popId)->param("Moteur")->type == "LIST OF TUPLE(STRING, T_Moteur)",
+              "... le s\xC3\xA9lecteur rend LIST OF TUPLE(STRING, T_Moteur) (" + p.view(popId)->param("Moteur")->type + ")");
+        app::typepicker::setHost({});
+        check(deepCommit(ed.properties(), "Moteur", "Type", "T_Moteur"), "Moteur : T_Moteur de nouveau");
+        ed.layout();
     }
-    app::typepicker::setHost({});
     check(deepCommit(ed.properties(), "Seuil", "Type", "REAL") && deepCommit(ed.properties(), "Nom", "Type", "STRING"), "Seuil : REAL, Nom : STRING");
     ed.layout();
     check(p.view(popId)->param("Moteur")->type == "T_Moteur" && p.view(popId)->param("Seuil")->type == "REAL", "les types enregistr\xC3\xA9s");
@@ -28459,6 +28480,81 @@ void surcharges1120() {
     check(clash, "Convertir(SINT) et Convertir(INT) : le moteur les calcule pareil - dites de m\xC3\xAAme forme");
 }
 
+// 1.12.14 : LES TYPES IMBRIQUES AU SELECTEUR - un type rouvert garde tous ses niveaux, l'element se
+// compose dans un second selecteur, un type entier s'ecrit dans la recherche ; compose() garde les
+// parentheses et les crochets d'un parametre ecrit.
+void selecteurImbrique11214() {
+    std::printf("1.12.14 : le s\xC3\xA9lecteur compose les types imbriqu\xC3\xA9s\n");
+    namespace tr = hmi::typereg;
+    namespace tf = hmi::typeform;
+    auto doc = std::make_shared<Document>();
+    HmiType four;
+    four.id = doc->project.allocate();
+    four.name = "T_Four";
+    four.members.push_back({"Temperature", "REAL", "", ""});
+    doc->project.programs.types.push_back(four);
+    menu::MenuManager mm{menu::MenuFactory{}};
+    std::vector<app::HmiTypePicker::Answer> answers;
+    const auto open = [&](app::HmiTypePicker::Spec spec) -> app::HmiTypePicker* {
+        mm.ShowDialog(std::make_unique<app::HmiTypePicker>(std::move(spec)), [&](const menu::DialogResult& r) {
+            if (r.accepted()) answers.push_back(app::HmiTypePicker::parse(r.payload));
+        });
+        mm.applyPending();
+        return dynamic_cast<app::HmiTypePicker*>(mm.top());
+    };
+    app::HmiTypePicker::Spec spec;
+    spec.field = "Type de Fours";
+    spec.current = "MAP[STRING] OF VECTOR OF T_Four";
+    spec.use = tr::UseVariable;
+    spec.doc = doc;
+    auto* picker = open(spec);
+    check(picker && picker->result() == "MAP[STRING] OF VECTOR OF T_Four" && picker->resultProblem().empty(),
+          "rouvert, MAP[STRING] OF VECTOR OF T_Four garde ses trois niveaux (" + (picker ? picker->result() : std::string("?")) + ")");
+    if (!picker) return;
+    const auto shown = picker->shownNames();
+    check(!shown.empty() && shown.front() == "VECTOR OF T_Four", "l'\xC3\xA9l\xC3\xA9ment compos\xC3\xA9 en t\xC3\xAAte de la liste : VECTOR OF T_Four");
+    check(picker->setForm("Liste") && picker->result() == "LIST OF VECTOR OF T_Four", "Liste autour : " + picker->result());
+    check(picker->setForm("Tableau") && picker->result() == "ARRAY[0..9] OF VECTOR OF T_Four", "Tableau autour : " + picker->result());
+    // Composer l'element : un second selecteur (l'hote), qui rend un type entier.
+    std::vector<app::HmiTypePicker::Spec> asked;
+    app::typepicker::setHost([&](app::HmiTypePicker::Spec s, app::typepicker::Done done) {
+        asked.push_back(s);
+        app::HmiTypePicker::Answer a;
+        a.type = "TUPLE(STRING, LIST OF T_Four)";
+        done(a);
+    });
+    check(picker->setForm("Dictionnaire (MAP)"), "Dictionnaire");
+    picker->composeElement();
+    app::typepicker::setHost({});
+    check(asked.size() == 1 && asked[0].current == "VECTOR OF T_Four" && asked[0].field == "\xC3\xA9l\xC3\xA9ments de Type de Fours",
+          "Composer l'\xC3\xA9l\xC3\xA9ment : un second s\xC3\xA9lecteur, sur VECTOR OF T_Four");
+    check(picker->result() == "MAP[STRING] OF TUPLE(STRING, LIST OF T_Four)" && picker->resultProblem().empty(),
+          "... il rend TUPLE(STRING, LIST OF T_Four) : " + picker->result());
+    // Un type entier ecrit dans la recherche.
+    picker->setSearch("map[string] of list of tuple(int, t_four)");
+    check(picker->result() == "MAP[STRING] OF LIST OF TUPLE(INT, T_Four)" && picker->resultProblem().empty(),
+          "un type \xC3\xA9" "crit dans la recherche : " + picker->result());
+    picker->setSearch("MAP[REAL] OF INT");
+    check(!picker->resultProblem().empty(), "un type \xC3\xA9" "crit faux : la raison (" + picker->resultProblem() + ")");
+    picker->setSearch("MAP[STRING] OF VECTOR OF T_Four");
+    picker->choose();
+    mm.applyPending();
+    check(answers.size() == 1 && answers[0].type == "MAP[STRING] OF VECTOR OF T_Four" && answers[0].element == "T_Four",
+          "Choisir : le type \xC3\xA9" "crit, et T_Four pour les r\xC3\xA9" "cents");
+    // compose() : un parametre ecrit garde ses parentheses et ses crochets.
+    tf::Shape sh;
+    sh.form = tf::Form::Tuple;
+    sh.element = "INT";
+    sh.parameter = "TUPLE(A, B)";
+    check(tf::compose(sh) == "TUPLE(INT, TUPLE(A, B))", "TUPLE(INT, TUPLE(A, B)) : " + tf::compose(sh));
+    sh.parameter = "(REAL, STRING[20])";
+    check(tf::compose(sh) == "TUPLE(INT, REAL, STRING[20])", "TUPLE(INT, REAL, STRING[20]) : " + tf::compose(sh));
+    sh.form = tf::Form::Map;
+    sh.element = "VECTOR OF T_Four";
+    sh.parameter = "[STRING]";
+    check(tf::compose(sh) == "MAP[STRING] OF VECTOR OF T_Four", "MAP[STRING] OF VECTOR OF T_Four : " + tf::compose(sh));
+}
+
 void selecteurTypes1119() {
     std::printf("1.11.19 (refonte, lot 6) : le s\xC3\xA9lecteur de types\n");
     namespace tr = hmi::typereg;
@@ -28694,12 +28790,14 @@ void selecteurTypes1119() {
         check(row >= 0, "Variables IHM : la ligne Consigne");
         if (row >= 0) {
             const auto choices = vp.table().model()->cellChoices(static_cast<ui::RowIndex>(row), 1);
-            check(has(choices, app::typepicker::kChoose), "Variables IHM : la liste des types propose Choisir un type\xE2\x80\xA6");
+            check(!has(choices, app::typepicker::kChoose) && !has(choices, "Liste\xE2\x80\xA6"),
+                  "Variables IHM : plus de Choisir un type\xE2\x80\xA6 ni de Liste\xE2\x80\xA6 dans la liste");
             reply = "T_Four";
             asked.clear();
-            (void)vp.table().model()->setCellText(static_cast<ui::RowIndex>(row), 1, app::typepicker::kChoose);
-            check(asked.size() == 1 && asked[0].use == tr::UseVariable && asked[0].current == "REAL" && doc->project.variable("Consigne")->type == "T_Four",
-                  "Variables IHM : l'h\xC3\xB4te, puis Consigne devient un T_Four");
+            const bool opened = vp.table().beginCellEdit(static_cast<ui::RowIndex>(row), 1);
+            check(opened && !vp.table().cellEditing() && asked.size() == 1 && asked[0].use == tr::UseVariable && asked[0].current == "REAL"
+                      && doc->project.variable("Consigne")->type == "T_Four",
+                  "Variables IHM : la case Type ouvre le s\xC3\xA9lecteur, puis Consigne devient un T_Four");
         }
     }
     // Le retour d'une fonction
@@ -30824,6 +30922,7 @@ int main(int argc, char** argv) {
     // 1.11.19 (refonte, lot 6) : HMI_TEST_LOT6=1 - le selecteur de types, seul.
     if (const char* only = std::getenv("HMI_TEST_LOT6"); only && *only == '1') {
         selecteurTypes1119();
+        selecteurImbrique11214();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -31170,6 +31269,7 @@ int main(int argc, char** argv) {
     jumeauValeurs1112();                    // 1.11.2 (BLK) : les valeurs du jumeau, 2 000 lignes, plus de n x n x n par image
     onglets1118();                          // 1.11.18 (refonte, lot 5) : les onglets de declarations, Migrer ce code
     selecteurTypes1119();                   // 1.11.19 (refonte, lot 6) : le selecteur de types
+    selecteurImbrique11214();               // 1.12.14 : le selecteur compose les types imbriques
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges
     direct1121();                           // 1.11.21 : les diagnostics en direct au panneau du bas
     explorateurs1121();                     // 1.11.21 : les explorateurs deplient les codes

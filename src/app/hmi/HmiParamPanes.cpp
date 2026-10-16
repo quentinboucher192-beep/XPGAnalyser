@@ -247,14 +247,10 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
                                       "Tape le nom du nouveau param\xC3\xA8tre (Moteur, Consigne) : il s'ajoute en fin de liste, "
                                       "en R\xC3\xA9" "f\xC3\xA9rence, type ANY.",
                                       {}, field("param19:ajouter")));
-        // Les types proposes : base, types IHM, DDT de l'API (dans cet ordre) ; 1.12.4 : puis les formes
-        // (Tableau..., Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple...) et le selecteur.
+        // Les types proposes : base, types IHM, DDT de l'API (dans cet ordre) - sans hote (un essai) ;
+        // 1.12.14 : avec lui, la case Type ouvre le selecteur de types (les formes, les types imbriques).
         std::vector<std::string> typeChoices;
         for (const auto& c : hmi::params::proposedTypes(p, plc)) typeChoices.push_back(c.name);
-        if (typepicker::available()) {                                  // 1.11.19 : le selecteur de types
-            for (const auto& f : typepicker::formChoices()) typeChoices.push_back(f);
-            typeChoices.push_back(typepicker::kChoose);
-        }
         std::vector<std::string> modeChoices;
         for (const auto m : hmi::params::kParamModes) modeChoices.emplace_back(hmi::params::paramModeLabel(m));
         for (std::size_t i = 0; i < v.params.size(); ++i) {
@@ -278,9 +274,12 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
                                           typeGroup(p, prm.type, plc) + ". Types de base, types IHM du projet (structures, "
                                           "\xC3\xA9num\xC3\xA9rations), DDT de l'API" + (plc.names ? std::string(" (import\xC3\xA9s du programme)")
                                                                                   : std::string(" (aucun programme charg\xC3\xA9)"))
-                                              + ". Tableau\xE2\x80\xA6 (ARRAY[1..10] OF REAL), Liste\xE2\x80\xA6, Vecteur\xE2\x80\xA6, "
-                                                "Dictionnaire (MAP)\xE2\x80\xA6, Tuple\xE2\x80\xA6 : la forme, au s\xC3\xA9lecteur de types.",
+                                              + ". Un clic ouvre le s\xC3\xA9lecteur de types : un tableau (ARRAY[1..10] OF REAL), une liste, "
+                                                "un vecteur, une MAP, un tuple, imbriqu\xC3\xA9s \xC3\xA0 volont\xC3\xA9 (MAP[STRING] OF VECTOR OF T_Cuve).",
                                           choices, field(key + "type")));
+            // 1.12.14 : la case ouvre le selecteur de types (« Choisir un type... » de toujours, sans la liste).
+            if (typepicker::available())
+                if (auto commit = row.properties.back().commit) row.properties.back().dialog = [commit] { (void)commit(typepicker::kChoose); };
             if (symbol)
                 row.properties.push_back(prop("Mode", "R\xC3\xA9" "f\xC3\xA9rence (REF)", PG::ValueType::ReadOnly,
                                               "Un symbole n'a que le mode R\xC3\xA9" "f\xC3\xA9rence : l'instance est d\xC3\xA9velopp\xC3\xA9" "e en texte."));

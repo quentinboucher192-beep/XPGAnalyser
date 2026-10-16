@@ -73,21 +73,6 @@ enum Col : std::size_t { CName, CType, CInitial, CRetain, CEquipment, CAddress, 
 const std::string kDash = "\xE2\x80\x94";
 const std::string kRW = "lecture, \xC3\xA9" "criture";
 const std::string kRO = "lecture seule";
-const std::string kArray = "Tableau\xE2\x80\xA6";
-// 1.12.2 : les types objets (dans la memoire de l'IHM, sans equipement).
-const std::string kList = "Liste\xE2\x80\xA6";
-const std::string kVector = "Vecteur\xE2\x80\xA6";
-const std::string kMap = "Dictionnaire (MAP)\xE2\x80\xA6";
-const std::string kTuple = "Tuple\xE2\x80\xA6";
-// La forme d'une entree Liste..., Vecteur... ; vide : pas une telle entree.
-std::string shapeOfChoice(const std::string& text) {
-    if (text == kList) return "liste";
-    if (text == kVector) return "vecteur";
-    if (text == kMap) return "map";
-    if (text == kTuple) return "tuple";
-    return {};
-}
-const std::string& kPickType = typepicker::kChoose;              // 1.11.19 (lot 6) : le selecteur de types
 constexpr long long kShown = 200;       // les cases montrees d'un tableau deplie
 
 std::string upper(std::string_view s) {
@@ -142,17 +127,31 @@ std::string placeOf(const std::string& address, const std::string& type) {
     return address.front() == '%' ? pt.placeText() : eq::modiconText(pt);
 }
 
-// `except` : un type IHM a ne pas proposer (celui du membre). 1.12.2 : un membre avait une place fixe ;
-// 1.12.4 : un membre peut aussi etre une liste, un vecteur, une MAP, un tuple (un membre objet).
+// `except` : un type IHM a ne pas proposer (celui du membre). 1.12.14 : la liste courte, sans hote
+// (un essai) ; avec lui, la case Type ouvre le selecteur de types (askTypeIn).
 std::vector<std::string> typeChoices(const hmi::Project& p, std::string_view except = {}) {
     std::vector<std::string> out;
     for (const auto& t : hmi::typereg::baseRegistry().names(hmi::typereg::UseVariable)) out.push_back(t);   // 1.11.19 : le registre
     for (const auto& t : p.programs.types)
         if (except.empty() || !sameText(t.name, except)) out.push_back(t.name);
-    out.push_back(kArray);
-    for (const auto* k : {&kList, &kVector, &kMap, &kTuple}) out.push_back(*k);    // 1.12.2
-    if (app::typepicker::available()) out.push_back(kPickType);
     return out;
+}
+
+// 1.12.14 : LA CASE TYPE OUVRE LE SELECTEUR DE TYPES - plus la liste a rallonge (les types de base,
+// ceux du projet, puis Tableau..., Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple..., Choisir un
+// type...) : un seul endroit, qui cherche, filtre, et compose les types imbriques (MAP[STRING] OF
+// VECTOR OF T_Cuve). Faux : pas d'hote (un essai) - la case garde la liste courte.
+bool askTypeIn(const hmi::DocumentPtr& doc, std::string field, std::string current, std::function<void(const std::string&)> apply) {
+    if (!app::typepicker::available()) return false;
+    app::HmiTypePicker::Spec spec;
+    spec.field = std::move(field);
+    spec.current = std::move(current);
+    spec.use = hmi::typereg::UseVariable;         // 1.12.4 : toutes les formes (un membre objet : sans place Modbus)
+    spec.doc = doc;
+    app::typepicker::ask(std::move(spec), [apply = std::move(apply)](const app::HmiTypePicker::Answer& a) {
+        if (!a.type.empty()) apply(a.type);
+    });
+    return true;
 }
 
 bool validInitial(const hmi::Project& p, const std::string& type, const std::string& initial, std::string* why) {
@@ -382,6 +381,10 @@ public:
         return choices_ ? choices_(r, c) : std::vector<std::string>{};
     }
     bool setCellText(ui::RowIndex r, std::size_t c, std::string_view text) override { return commit_ && commit_(r, c, std::string(text)); }
+    // 1.12.14 : une case qui s'edite dans une fenetre (le type : le selecteur de types).
+    using Dialog = std::function<bool(std::size_t, std::size_t)>;
+    void setDialog(Dialog d) { dialog_ = std::move(d); }
+    bool editInDialog(ui::RowIndex r, std::size_t c) override { return dialog_ && dialog_(r, c); }
     // Glisser une variable sur un dossier (ou sous les lignes : la racine) - pas
     // sur celui ou elle est deja.
     [[nodiscard]] bool canDrop(ui::RowIndex from, ui::RowIndex to) const override {
@@ -429,6 +432,7 @@ private:
     Editable editable_;
     Choices  choices_;
     Commit   commit_;
+    Dialog   dialog_;
 };
 
 // Un modele simple : du texte, un style, et l'edition.
@@ -455,6 +459,10 @@ public:
         return choices_ ? choices_(r, c) : std::vector<std::string>{};
     }
     bool setCellText(ui::RowIndex r, std::size_t c, std::string_view text) override { return commit_ && commit_(r, c, std::string(text)); }
+    // 1.12.14 : une case qui s'edite dans une fenetre (le type d'un membre : le selecteur de types).
+    using Dialog = std::function<bool(std::size_t, std::size_t)>;
+    void setDialog(Dialog d) { dialog_ = std::move(d); }
+    bool editInDialog(ui::RowIndex r, std::size_t c) override { return dialog_ && dialog_(r, c); }
 private:
     std::vector<std::string> headers_;
     std::vector<std::vector<std::string>> rows_;
@@ -462,6 +470,7 @@ private:
     Editable editable_;
     Choices  choices_;
     Commit   commit_;
+    Dialog   dialog_;
 };
 
 using PG = ui::PropertyGrid;
@@ -1102,10 +1111,26 @@ void HmiVariablesPane::refresh() {
         for (const auto& v : p.programs.variables) kept += passes(v) ? 1u : 0u;
         table_->setColumnFilterCounts(kept, p.programs.variables.size());
     }
-    model_ = std::make_shared<VarModel>(
-        rows_, &doc_->project, [this](std::size_t r, std::size_t c) { return cellEditable(r, c); },
-        [this](std::size_t r, std::size_t c) { return choicesFor(r, c); },
-        [this](std::size_t r, std::size_t c, const std::string& text) { return commitCell(r, c, text); });
+    {
+        auto vm = std::make_shared<VarModel>(
+            rows_, &doc_->project, [this](std::size_t r, std::size_t c) { return cellEditable(r, c); },
+            [this](std::size_t r, std::size_t c) { return choicesFor(r, c); },
+            [this](std::size_t r, std::size_t c, const std::string& text) { return commitCell(r, c, text); });
+        // 1.12.14 : la case Type d'une variable ouvre le selecteur de types.
+        vm->setDialog([this](std::size_t r, std::size_t c) {
+            if (c != CType || r >= rows_.size() || rows_[r].kind != Row::Kind::Variable) return false;
+            const auto* v = doc_->project.variableById(rows_[r].var);
+            if (!v) return false;
+            const Id id = rows_[r].var;
+            const std::weak_ptr<int> alive = alive_;
+            return askTypeIn(doc_, "Type de " + v->name, v->type, [this, id, alive](const std::string& type) {
+                if (alive.expired()) return;
+                std::string w;
+                if (!setType(id, type, &w)) say("Type refus\xC3\xA9 : " + w, true);
+            });
+        });
+        model_ = std::move(vm);
+    }
     syncing_ = true;
     table_->setModel(model_);
     int keep = -1;
@@ -1199,61 +1224,7 @@ bool HmiVariablesPane::commitCell(std::size_t row, std::size_t col, const std::s
                     }
                     ok = setName(r.var, text, &why);
                     break;
-                case CType:
-                    if (text == kPickType) {
-                        // 1.11.19 (lot 6) : le selecteur de types (les types d'une variable IHM).
-                        const auto* v = doc_->project.variableById(r.var);
-                        app::HmiTypePicker::Spec spec;
-                        spec.field = "Type de " + (v ? v->name : std::string{});
-                        spec.current = v ? v->type : std::string{};
-                        spec.use = hmi::typereg::UseVariable;
-                        spec.doc = doc_;
-                        const Id id = r.var;
-                        const std::weak_ptr<int> alive = alive_;
-                        app::typepicker::ask(std::move(spec), [this, id, alive](const app::HmiTypePicker::Answer& a) {
-                            if (alive.expired() || a.type.empty()) return;
-                            std::string w;
-                            if (!setType(id, a.type, &w)) say("Type refus\xC3\xA9 : " + w, true);
-                        });
-                        return false;
-                    }
-                    if (const std::string shape = shapeOfChoice(text); !shape.empty()) {
-                        // 1.12.2 : Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple... : la forme et le type
-                        // des elements dans une fenetre ; sans hote, la forme sur le type actuel.
-                        const auto* v = doc_->project.variableById(r.var);
-                        const std::string current = v ? v->type : std::string("INT");
-                        const Id id = r.var;
-                        if (hosts_.shapedType) {
-                            hosts_.shapedType(current, shape, [this, id](const std::string& type) {
-                                std::string w;
-                                if (!setType(id, type, &w)) say("Type refus\xC3\xA9 : " + w, true);
-                            });
-                            return true;
-                        }
-                        auto sh = hmi::typeform::decompose(current);
-                        sh.form = hmi::typeform::fromText(shape).value_or(hmi::typeform::Form::List);
-                        sh.parameter.clear();
-                        sh.reference = false;
-                        ok = setType(r.var, hmi::typeform::compose(sh), &why);
-                    } else if (text == kArray) {
-                        // Tableau... : les bornes et le type des cases, dans une fenetre.
-                        const auto* v = doc_->project.variableById(r.var);
-                        const std::string current = v ? v->type : std::string("INT");
-                        const Id id = r.var;
-                        if (hosts_.arrayType) {
-                            hosts_.arrayType(current, [this, id](const std::string& type) {
-                                std::string w;
-                                if (!setType(id, type, &w)) say("Type refus\xC3\xA9 : " + w, true);
-                            });
-                            return true;
-                        }
-                        ty::Spec s;
-                        const std::string element = ty::parseSpec(current, s) ? s.element : std::string("INT");
-                        ok = setType(r.var, "ARRAY[0..9] OF " + element, &why);
-                    } else {
-                        ok = setType(r.var, text, &why);
-                    }
-                    break;
+                case CType: ok = setType(r.var, text, &why); break;
                 case CInitial: ok = setInitial(r.var, text, &why); break;
                 case CEquipment: ok = setEquipment(r.var, text, &why); break;
                 case CAddress: ok = setAddress(r.var, text, &why); break;
@@ -3089,6 +3060,22 @@ void HmiTypesPane::refreshMembers() {
             return typeChoices(doc_->project, t2 ? t2->name : std::string_view{});   // 1.12.4 : les membres objets aussi
         },
         [this](std::size_t r, std::size_t c, const std::string& text) { return commitMemberCell(r, c, text); });
+    // 1.12.14 : la case Type d'un membre ouvre le selecteur de types (les types imbriques aussi).
+    static_cast<Rows&>(*memberModel_).setDialog([this, tid](std::size_t r, std::size_t c) {
+        const auto* t2 = doc_->project.hmiType(tid);
+        if (c != 1 || !t2 || r >= t2->members.size()) return false;
+        const std::weak_ptr<int> alive = alive_;
+        return askTypeIn(doc_, "Type de " + t2->name + "." + t2->members[r].name, t2->members[r].type,
+                         [this, tid, r, alive](const std::string& type) {
+                             if (alive.expired()) return;
+                             const auto* t3 = doc_->project.hmiType(tid);
+                             if (!t3 || r >= t3->members.size()) return;
+                             hmi::TypeMember m2 = t3->members[r];
+                             m2.type = type;
+                             std::string why;
+                             if (!setMember(tid, r, m2, &why)) say("Refus\xC3\xA9 : " + why, true);
+                         });
+    });
     syncing_ = true;
     members_->setModel(memberModel_);
     if (t && member_ >= 0 && member_ < static_cast<int>(t->members.size())) members_->selectModelRows({static_cast<ui::RowIndex>(member_)}, false);
@@ -3101,68 +3088,7 @@ bool HmiTypesPane::commitMemberCell(std::size_t row, std::size_t col, const std:
     if (!t || row >= t->members.size()) return false;
     hmi::TypeMember m = t->members[row];
     const Id tid = t->id;
-    if (col == 1 && text == kPickType) {
-        // 1.11.19 (lot 6) : le selecteur de types (un membre : les types d'une variable IHM).
-        app::HmiTypePicker::Spec spec;
-        spec.field = "Type de " + t->name + "." + m.name;
-        spec.current = m.type;
-        spec.use = hmi::typereg::UseVariable;     // 1.12.4 : toutes les formes (un membre objet : sans place Modbus)
-        spec.doc = doc_;
-        const std::size_t index = row;
-        const std::weak_ptr<int> alive = alive_;
-        app::typepicker::ask(std::move(spec), [this, tid, index, alive](const app::HmiTypePicker::Answer& a) {
-            if (alive.expired() || a.type.empty()) return;
-            const auto* t2 = doc_->project.hmiType(tid);
-            if (!t2 || index >= t2->members.size()) return;
-            hmi::TypeMember m2 = t2->members[index];
-            m2.type = a.type;
-            std::string why;
-            if (!setMember(tid, index, m2, &why)) say("Refus\xC3\xA9 : " + why, true);
-        });
-        return false;
-    }
-    if (const std::string shape = col == 1 ? shapeOfChoice(text) : std::string{}; !shape.empty()) {
-        // 1.12.4 : Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple... - un membre objet (dans la memoire
-        // de l'IHM) : la forme et le type des elements dans une fenetre ; sans hote, la forme sur le type actuel.
-        const std::size_t index = row;
-        const auto apply = [this, tid, index](const std::string& type) {
-            const auto* t2 = doc_->project.hmiType(tid);
-            if (!t2 || index >= t2->members.size()) return false;
-            hmi::TypeMember m2 = t2->members[index];
-            m2.type = type;
-            std::string why;
-            if (!setMember(tid, index, m2, &why)) {
-                say("Refus\xC3\xA9 : " + why, true);
-                return false;
-            }
-            return true;
-        };
-        if (hosts_.shapedType) {
-            hosts_.shapedType(m.type, shape, [apply](const std::string& type) { (void)apply(type); });
-            return true;
-        }
-        auto sh = hmi::typeform::decompose(m.type);
-        sh.form = hmi::typeform::fromText(shape).value_or(hmi::typeform::Form::List);
-        sh.parameter.clear();
-        sh.reference = false;
-        return apply(hmi::typeform::compose(sh));
-    }
-    if (col == 1 && text == kArray) {
-        const std::size_t index = row;
-        if (hosts_.arrayType) {
-            hosts_.arrayType(m.type, [this, tid, index](const std::string& type) {
-                const auto* t2 = doc_->project.hmiType(tid);
-                if (!t2 || index >= t2->members.size()) return;
-                hmi::TypeMember m2 = t2->members[index];
-                m2.type = type;
-                std::string why;
-                if (!setMember(tid, index, m2, &why)) say("Refus\xC3\xA9 : " + why, true);
-            });
-            return true;
-        }
-        ty::Spec s;
-        m.type = "ARRAY[0..9] OF " + (ty::parseSpec(m.type, s) ? s.element : std::string("INT"));
-    } else if (col == 0) m.name = trimmed(text);
+    if (col == 0) m.name = trimmed(text);
     else if (col == 1) m.type = ty::normalized(text);
     else if (col == 2) m.initial = trimmed(text);
     else if (col == 5) m.description = text;

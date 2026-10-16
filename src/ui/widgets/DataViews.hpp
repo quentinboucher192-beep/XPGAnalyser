@@ -454,6 +454,9 @@ public:
     virtual bool setCellText(RowIndex, std::size_t, std::string_view) { return false; }
     // Lot 16 : une case editable qui se choisit dans une liste (vide : un champ).
     [[nodiscard]] virtual std::vector<std::string> cellChoices(RowIndex, std::size_t) const { return {}; }
+    // 1.12.14 : une case qui s'edite dans une fenetre (le selecteur de types) : vrai, le modele l'a
+    // ouverte - ni liste ni champ dans la case ; la reponse revient par le modele lui-meme.
+    virtual bool editInDialog(RowIndex, std::size_t) { return false; }
     // Lot 16 : l'infobulle d'une ligne, au survol (vide : celle de la table).
     [[nodiscard]] virtual std::string rowTooltip(RowIndex) const { return {}; }
     // Lot 16 : glisser la ligne `from` sur la ligne `to` (lignes du modele) est-il
@@ -871,6 +874,9 @@ public:
         // pleine, case teintee et barre d'accent, l'expression en chasse fixe.
         std::string  expression{};
         std::string  exprError{};     // non vide : elle ne peut pas marcher (pastille rouge, souligne rouge)
+        // 1.12.14 : la case s'edite dans une fenetre (le selecteur de types) : la cliquer l'ouvre, sans
+        // champ ni liste ; la fenetre ecrit la valeur elle-meme.
+        std::function<void()> dialog{};
         std::string  exprValue{};     // sa valeur pendant la simulation (infobulle) ; vide : aucune
         // ---- 1.9 : l'esclave simule lie ----
         // REPRISE D'AILLEURS (le vrai appareil la donne a son esclave) : en lecture

@@ -87,6 +87,7 @@ public:
     void setReference(bool on);
     void setMap(bool on);
     bool setForm(std::string_view labelOrKey);         // 1.12.2 : "Liste", "vecteur", "Dictionnaire (MAP)"...
+    void composeElement();                             // 1.12.14 : Composer l'element... (un second selecteur)
     [[nodiscard]] std::vector<std::string> shownNames() const;
     [[nodiscard]] std::string result() const;          // le type qu'on choisirait
     [[nodiscard]] std::string resultProblem() const;   // vide : il est bon
