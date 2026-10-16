@@ -1,0 +1,104 @@
+# =============================================================================
+#  Session 1214 IHM : XPGAnalyser IHM 1.12.14 - plus rien de l'automate.
+#  Armoire_Gaz (projet IHM) : chaque ecran de la Simulation (Vue d'ensemble,
+#  IHM, Equipements, Forcages, Courbes, Journal), arretee puis en marche ; F5 et
+#  le clic droit du dossier Simulation (qui preparaient le programme de MAST et
+#  disaient « aucune section en ST de la tache MAST ») ; la barre du haut, ses
+#  menus, la cloche ; l'aide de la Simulation. Avec XPG_TEXT_CENSUS, chaque
+#  capture ecrit aussi ce que l'ecran dit : rien ne doit parler de l'automate,
+#  de l'API, de MAST ni du programme.
+# =============================================================================
+attendre 3
+theme Dark
+attendre 8
+capture 1214_ihm_01_accueil.png
+ouvrir "${PROJETS}/ihm/Armoire_Gaz"
+attendre-projet
+attendre 10
+arbre-lignes
+capture 1214_ihm_02_arbre.png
+
+# ---- La Simulation, arretee ----
+centre ensemble
+attendre 6
+etat-bandeau
+capture 1214_ihm_03_ensemble_arretee.png
+touche f5
+attendre 6
+etat-bandeau
+capture 1214_ihm_04_ensemble_apres_f5.png
+touche f10
+attendre 4
+capture 1214_ihm_05_ensemble_apres_f10.png
+arbre-menu "Simulation"
+attendre 3
+capture 1214_ihm_06_menu_dossier_simulation.png
+touche escape
+attendre 2
+arbre-menu "Simulation/Vue d'ensemble"
+attendre 3
+capture 1214_ihm_07_menu_vue_ensemble.png
+touche escape
+attendre 2
+centre forcages
+attendre 4
+capture 1214_ihm_08_forcages.png
+centre courbes
+attendre 4
+capture 1214_ihm_09_courbes.png
+centre journal
+attendre 4
+capture 1214_ihm_10_journal.png
+centre equipements
+attendre 6
+capture 1214_ihm_11_equipements.png
+centre ihm
+attendre 6
+capture 1214_ihm_12_ihm_arretee.png
+
+# ---- La Simulation, en marche ----
+touche f8
+attendre 30
+capture 1214_ihm_13_ihm_en_marche.png
+centre ensemble
+attendre 8
+etat-bandeau
+capture 1214_ihm_14_ensemble_en_marche.png
+centre journal
+attendre 4
+capture 1214_ihm_15_journal_en_marche.png
+centre forcages
+attendre 4
+capture 1214_ihm_16_forcages_en_marche.png
+centre courbes
+attendre 4
+capture 1214_ihm_17_courbes_en_marche.png
+
+# ---- La barre du haut ----
+barre projet
+attendre 3
+capture 1214_ihm_18_menu_projet.png
+touche escape
+attendre 2
+barre affichage
+attendre 3
+capture 1214_ihm_19_menu_affichage.png
+touche escape
+attendre 2
+barre aide
+attendre 3
+capture 1214_ihm_20_menu_aide.png
+touche escape
+attendre 2
+bandeau-cloche
+attendre 3
+capture 1214_ihm_21_cloche.png
+touche escape
+attendre 2
+
+# ---- L'aide de la Vue d'ensemble ----
+centre ensemble
+attendre 4
+touche f1
+attendre 8
+capture 1214_ihm_22_aide_ensemble.png

@@ -95,6 +95,7 @@
 #include "TutorialsLot8.hpp"                // Lot API 8 : didacticiels et aide (aide-nouveautes, aide-raccourcis, aide-page)
 #include "../ui/widgets/PathBrowse.hpp"         // parcourir : le bouton ... d'un champ de chemin
 #include "hmi/HmiObjectAlarmPanes.hpp"           // 1.9 : les sous-onglets d'un symbole (sous-onglet Alarmes)
+#include "../platform/TextCensus.hpp"          // 1.12.14 : le releve des textes de chaque capture
 
 #include <cmath>
 #include <algorithm>
@@ -108,6 +109,7 @@
 #include <fstream>
 #include <iterator>
 #include <sstream>
+#include <set>
 
 namespace app {
 
@@ -936,6 +938,20 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         const auto path = (capturesDir_ / arg(1)).string();
         if (auto r = captureToPng(renderer, path); !r) fail("capture " + path + " : " + r.error().message());
         else std::printf("[script] capture %s\n", path.c_str());
+        // 1.12.14 : XPG_TEXT_CENSUS - ce que l'image dit, mot pour mot (une ligne par
+        // texte, sans doublon), puis les bulles des widgets a l'ecran : le releve que
+        // l'on relit pour trouver un mot qui ne devrait plus y etre.
+        if (gfx::census::enabled()) {
+            std::ofstream out(gfx::census::state().path, std::ios::binary | std::ios::app);
+            out << "== " << arg(1) << "\n";
+            std::set<std::string> seen;
+            for (const auto& t : gfx::census::frame())
+                if (seen.insert(t).second) out << t << "\n";
+            if (auto* root = top())
+                walk(*root, [&](ui::Widget& x) {
+                    if (!x.tooltip().empty() && shown(x) && seen.insert(x.tooltip()).second) out << "[bulle] " << x.tooltip() << "\n";
+                });
+        }
         return Step::Next;
     }
     // 1.11.15 : ihm-carte "<libelle>" - un bouton de la carte de l'IHM arretee (Demarrer

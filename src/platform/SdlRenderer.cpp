@@ -15,6 +15,7 @@
 
 #include "FontAtlas.hpp"
 #include "RoundedCorner.hpp"
+#include "TextCensus.hpp"        // 1.12.14 : le releve des textes (sessions)
 
 #include <map>
 #include <vector>
@@ -122,6 +123,7 @@ namespace gfx {
 
     // ------------------------------------------------------------------ frame ---
     void SdlRenderer::beginFrame(Color clear) {
+        census::newFrame();
         impl_->clipStack.clear();
         SDL_SetRenderClipRect(impl_->renderer, nullptr);
         SDL_SetRenderDrawColor(impl_->renderer, clear.r, clear.g, clear.b, 255);
@@ -288,6 +290,7 @@ namespace gfx {
 
     void SdlRenderer::drawText(Point origin, std::string_view utf8, FontId font, Color c) {
         if (utf8.empty()) return;
+        census::record(utf8);
 
         // LE CHEMIN NORMAL : une vraie police, glyphe par glyphe.
         if (auto* face = impl_->faceFor(font)) {
@@ -473,6 +476,7 @@ namespace gfx {
         if (std::fabs(angleDeg) < 0.01f) { drawText(origin, utf8, font, c); return; }
         auto* face = impl_->faceFor(font);
         if (!face) { drawText(origin, utf8, font, c); return; }
+        census::record(utf8);
 
         struct Placed { Glyph g; float x, y; };
         std::vector<Placed> glyphs;
