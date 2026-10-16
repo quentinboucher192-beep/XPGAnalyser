@@ -27149,6 +27149,63 @@ void tableauGenererDupliquer11213() {
 // manquent (repris a l'identique, _Ex pour un nom deja pris), Generer sans faute, en marche sans erreur ; les gestes :
 // la saisie R/W et Case saisie, le double clic par reference, le tri d'un clic sur l'en-tete, les boutons qui font
 // grandir une LIST et une MAP, la bascule d'une alarme, les cuves qui vivent.
+// 1.12.14 : LES TYPES IMBRIQUES DE BOUT EN BOUT - une MAP de vecteurs de structures, une liste de
+// structures (leur valeur initiale ecrite (Nom := 'A', Niveau := 2.5)) ; Generer suit Parc['a'][1].Niveau
+// dans un script et dans une formule (sans fausse faute, et la vraie faute dite) ; le moteur les lit et
+// les ecrit.
+void imbriques11214() {
+    std::printf("1.12.14 : les types imbriques - Generer et le moteur suivent Parc['a'][1].Niveau\n");
+    Project p;
+    View a = makeView(p, "Vue_A");
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    cuve.members.push_back({"Nom", "STRING", "", ""});
+    cuve.members.push_back({"Niveau", "REAL", "", ""});
+    p.programs.types.push_back(cuve);
+    p.programs.variables.push_back(hmiVar(p, "Parc", "MAP[STRING] OF VECTOR OF T_Cuve",
+                                          "['a' := [(Nom := 'A', Niveau := 2.5), (Nom := 'B', Niveau := 4)]]"));
+    p.programs.variables.push_back(hmiVar(p, "Cuves", "LIST OF T_Cuve", "[(Nom := 'C1', Niveau := 1.5), (Nom := 'C2')]"));
+    p.programs.variables.push_back(hmiVar(p, "Total", "REAL"));
+    p.programs.variables.push_back(hmiVar(p, "Texte", "STRING"));
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = "Init";
+    sc.event = "Demarrage";
+    sc.body = "Total := Parc['a'][1].Niveau + Cuves[0].Niveau;\nTexte := Cuves[1].Nom + Parc['a'][0].Nom;\nParc['a'][0].Nom := 'Z';";
+    p.programs.scripts.push_back(sc);
+    const Id barre = edit::add(p, a, Kind::ProgressBar, 10, 10);
+    a.object(barre)->setExpr("value", "Parc['a'][1].Niveau * 10.0");
+    const Id titre = edit::add(p, a, Kind::Text, 10, 100);
+    a.object(titre)->set("text", "{Parc['a'][0].Nom} : {Cuves[0].Niveau:0.0}");
+    p.config.startView = a.id;
+    p.views.push_back(a);
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    std::string bad;
+    for (const auto& i : issues)
+        if (i.severity != Issue::Severity::Info) bad += i.message + " | ";
+    check(bad.empty(), "G\xC3\xA9n\xC3\xA9rer suit Parc['a'][1].Niveau, Cuves[1].Nom : ni erreur ni avertissement" + (bad.empty() ? std::string{} : " : " + bad));
+    // Une vraie faute, au fond : un membre qui n'existe pas, un texte dans un REAL.
+    Project q = p;
+    q.programs.scripts.back().body = "Total := Parc['a'][1].Pression;\nTotal := Cuves[0].Nom;";
+    const auto faults = generate(q, [](std::string_view) { return false; });
+    std::string said;
+    for (const auto& i : faults)
+        if (i.severity == Issue::Severity::Error) said += i.message + " | ";
+    check(said.find("Pression") != std::string::npos, "un membre inconnu au fond : dit (" + said + ")");
+    check(said.find("Nom") != std::string::npos || said.find("STRING") != std::string::npos,
+          "un STRING dans un REAL au fond : dit (" + said + ")");
+    // ---- en marche
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    for (int k = 0; k < 3; ++k) rt.tick(0.1 * (k + 1));
+    const auto* total = rt.variable("Total");
+    const auto* texte = rt.variable("Texte");
+    check(total && std::fabs(total->asReal() - 5.5) < 1e-9, "Total := Parc['a'][1].Niveau + Cuves[0].Niveau = 5,5 (" + (total ? total->display() : std::string("?")) + ")");
+    check(texte && texte->asString() == "C2A", "Texte := Cuves[1].Nom + Parc['a'][0].Nom = C2A (" + (texte ? texte->asString() : std::string("?")) + ")");
+}
+
 void tableauxDynamiques11213() {
     std::printf("1.12.13 : le modele de vue Tableaux dynamiques (ARRAY, LIST, MAP, plusieurs MAP, structure, enumeration, listes, cases fixes)\n");
     Project p;
@@ -27322,6 +27379,7 @@ int main(int argc, char** argv) {
         tableauGestes11213();
         tableauGenererDupliquer11213();
         tableauxDynamiques11213();
+        imbriques11214();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -27541,6 +27599,7 @@ int main(int argc, char** argv) {
     tableauGestes11213();             // 1.12.13 : les gestes sur un tableau (parametres, Element, R/W, ligne choisie)
     tableauGenererDupliquer11213();   // 1.12.13 : Generer et Dupliquer sur le Tableau v2
     tableauxDynamiques11213();        // 1.12.13 : le modele de vue Tableaux dynamiques
+    imbriques11214();                 // 1.12.14 : les types imbriques de bout en bout
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

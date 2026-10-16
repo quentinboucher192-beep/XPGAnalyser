@@ -18,6 +18,7 @@
 #include "../src/app/SimJournal.hpp"
 #include "../src/app/SimStatus.hpp"
 #include "../src/app/SimCenter.hpp"   // lot API 8 (le moteur) : SimForcing::programSays
+#include "../src/core/Edition.hpp"    // 1.12.14 : XPGAnalyser IHM, sans automate
 
 #include <cstdio>
 #include <string>
@@ -365,6 +366,54 @@ void programmeDirait() {
     check(model.forcings[1].programSays.empty(), "la case d'un jumeau : sans objet (vide)");
 }
 
+// 1.12.14 : XPGAnalyser IHM N'A PAS D'AUTOMATE - une erreur de preparation (qu'elle ne fait plus) ne se
+// montre pas ; ni le bandeau, ni les cartes, ni la chaine, ni l'attention, ni la pastille ne parlent de
+// l'automate, de MAST ou du programme ; ses forcages sont des cases des esclaves simules.
+void ihmSeule11214() {
+    std::printf("1.12.14 : XPGAnalyser IHM - rien de l'automate\n");
+    core::setEdition(core::Edition::Ihm);
+    auto s = running();
+    s.plc = ss::PlcFacts{};
+    s.plc.prepareError = "aucune section en ST de la t\xC3\xA2" "che MAST n'a pu \xC3\xAAtre pr\xC3\xA9par\xC3\xA9" "e";
+    s.equip.list.clear();
+    s.equip.exchangesPerSecond = 0;
+    auto r = ss::compute(s);
+    check(!findAttention(r, "preparation"), "pas de \xC2\xAB La simulation ne se pr\xC3\xA9pare pas \xC2\xBB");
+    const auto said = [&](const ss::Report& rep) {
+        std::string all = rep.banner.title + " " + rep.banner.meaning + " " + rep.folderBadge;
+        for (const auto& c : rep.cards) all += " " + c.sentence + " " + c.state;
+        for (const auto& l : rep.chain) all += " " + l.text + " " + l.why;
+        for (const auto& a : rep.attention) all += " " + a.text + " " + a.detail;
+        return all;
+    };
+    std::string all = said(r);
+    check(!has(all, "automate") && !has(all, "MAST") && !has(all, "programme"), "ni automate, ni MAST, ni programme (" + all + ")");
+    check(has(r.cards[1].sentence, "Elle tourne et affiche Vue_Armoire_A") && has(r.cards[2].sentence, "tourne seule"),
+          "les cartes : l'IHM tourne et affiche sa vue ; sans \xC3\xA9quipement, elle tourne seule");
+    check(r.folderBadge == "en marche" && r.folderTone == ss::Tone::Ok, "la pastille du dossier : l'IHM en marche");
+    s.hmi.running = false;
+    r = ss::compute(s);
+    check(has(r.cards[1].sentence, "F8") && r.folderBadge == "arr\xC3\xAAt\xC3\xA9" "e" && !has(said(r), "automate"),
+          "arr\xC3\xAAt\xC3\xA9" "e : D\xC3\xA9marrer l'IHM (F8) ; la pastille arr\xC3\xAAt\xC3\xA9" "e");
+    s.hmi.running = true;
+    s.plc.forced = 2;
+    s.plc.oldestForced = "Balance A 400001";
+    s.plc.oldestForcedSeconds = 30;
+    r = ss::compute(s);
+    const auto* f = findAttention(r, "forcages");
+    check(f && has(f->text, "esclaves simul") && !has(f->detail, "programme"), "les for\xC3\xA7" "ages : des cases d'esclaves simul\xC3\xA9s");
+    check(!has(SimJournal::defaultExplanation("ihm-demarrage", SimSource::Ihm, SimSeverity::Ok), "automate")
+              && !has(SimJournal::defaultExplanation("ihm-arret", SimSource::Ihm, SimSeverity::Info), "automate"),
+          "le journal : l'IHM d\xC3\xA9marre et s'arr\xC3\xAAte sans automate");
+    check(has(SimJournal::defaultExplanation("forcage", SimSource::Equipements, SimSeverity::Warning), "esclave simul"),
+          "un for\xC3\xA7" "age d'\xC3\xA9quipement : l'esclave simul\xC3\xA9, pas le programme");
+    SimJournal j;
+    j.add(SimSource::Ihm, SimSeverity::Ok, "ihm-demarrage", "L'IHM d\xC3\xA9marre", {}, "ihm");
+    check(j.csv().rfind("Heure;Source;", 0) == 0, "le CSV du journal : sans colonne Cycle");
+    core::setEdition(core::Edition::Both);
+    check(ss::compute(s).cards[1].sentence.find("automate") != std::string::npos, "XPGAnalyser API (et les essais) : comme avant");
+}
+
 } // namespace
 
 int main() {
@@ -373,6 +422,7 @@ int main() {
     mots();
     journal();
     programmeDirait();   // lot API 8 (le moteur)
+    ihmSeule11214();     // 1.12.14 : XPGAnalyser IHM, sans automate
     std::printf("\n%s (%d)\n", failures == 0 ? "simstatus : tout va bien" : "simstatus : ECHECS", failures);
     return failures == 0 ? 0 : 1;
 }

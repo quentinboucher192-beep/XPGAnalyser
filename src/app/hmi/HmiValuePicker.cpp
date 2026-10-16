@@ -2,6 +2,8 @@
 //  app/hmi/HmiValuePicker.cpp - voir HmiValuePicker.hpp
 // =============================================================================
 #include "HmiValuePicker.hpp"
+#include "../../hmi/HmiRoles.hpp"       // 1.12.14 : le decoupeur (les bornes, les items d'un tuple)
+#include "../../hmi/HmiTypeForms.hpp"   // 1.12.14 : le catalogue a toute profondeur
 #include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de source API
 
 #include "HmiAssist.hpp"
@@ -151,21 +153,83 @@ std::vector<Node> buildCatalog(const hmi::Project* hp, const hmi::View* view, co
         }
     }
     // ---- l'IHM : ses variables, leurs cases et leurs membres ----
+    //  1.12.14 : A TOUTE PROFONDEUR - une structure, ses membres, et les leurs ; un tableau, ses cases
+    //  (16 au plus ; au-dela, la premiere, pour le chemin) ; une liste, un vecteur, un ensemble, un
+    //  tampon : leur premier element ; une MAP : une cle (la premiere de sa valeur initiale) ; un tuple :
+    //  Item1, Item2... Le filtre sur le type attendu garde un noeud si l'un de ses descendants convient :
+    //  BATEAU, puis BATEAU[0], menent a BATEAU[0].Taille (INT).
     if (hp) {
         const int g = group(Style::Hmi, zoneLong(Style::Hmi));
+        namespace tf = hmi::typeform;
+        std::size_t budget = 20000;
+        const std::function<void(int, const std::string&, const std::string&, const std::string&, int)> expand =
+            [&](int parent, const std::string& path, const std::string& type, const std::string& initial, int depth) {
+                if (depth > 12 || budget == 0) return;
+                const auto sh = tf::decompose(type);
+                if (sh.reference) return;
+                const auto child = [&](std::string label, std::string childPath, std::string childType, std::string detail,
+                                       const std::string& childInitial = {}) {
+                    if (budget == 0) return;
+                    --budget;
+                    const int c = leaf(parent, Style::Hmi, std::move(label), childPath, childType, std::move(detail));
+                    expand(c, childPath, childType, childInitial, depth + 1);
+                };
+                switch (sh.form) {
+                    case tf::Form::Array:
+                    case tf::Form::Array2D: {
+                        hmi::types::Spec spec;
+                        if (sh.form == tf::Form::Array && hmi::types::parseSpec(type, spec) && spec.array() && spec.dims == 1) {
+                            const long long last = spec.count(0) <= 16 ? spec.high[0] : spec.low[0];
+                            for (long long i = spec.low[0]; i <= last; ++i)
+                                child("[" + std::to_string(i) + "]", path + "[" + std::to_string(i) + "]", sh.element,
+                                      spec.count(0) > 16 ? std::to_string(spec.count(0)) + " cases : la premi\xC3\xA8re, pour le chemin" : std::string{});
+                            return;
+                        }
+                        // 2D, ou des bornes ecrites autrement : la premiere case.
+                        std::string lows;
+                        for (const auto& part : hmi::roles::splitList(sh.parameter, ',')) {
+                            const auto dots = part.find("..");
+                            lows += (lows.empty() ? "" : ", ") + (dots == std::string::npos ? std::string("0") : part.substr(0, dots));
+                        }
+                        child("[" + lows + "]", path + "[" + lows + "]", sh.element, "la premi\xC3\xA8re case, pour le chemin");
+                        return;
+                    }
+                    case tf::Form::List:
+                    case tf::Form::Vector:
+                    case tf::Form::Set:
+                    case tf::Form::Ring:
+                        child("[0]", path + "[0]", sh.element, "le premier \xC3\xA9l\xC3\xA9ment, pour le chemin");
+                        return;
+                    case tf::Form::Map: {
+                        std::string key = "'cle'";
+                        std::vector<std::string> items;
+                        if (tf::literalItems(initial, items) && !items.empty())
+                            if (const auto at = items.front().find(":="); at != std::string::npos) {
+                                std::string k = items.front().substr(0, at);
+                                while (!k.empty() && k.back() == ' ') k.pop_back();
+                                while (!k.empty() && k.front() == ' ') k.erase(k.begin());
+                                if (!k.empty()) key = k;
+                            }
+                        child("[" + key + "]", path + "[" + key + "]", sh.element, "une cl\xC3\xA9, pour le chemin");
+                        return;
+                    }
+                    case tf::Form::Tuple: {
+                        std::vector<std::string> parts{sh.element};
+                        for (auto& x : hmi::roles::splitList(sh.parameter, ','))
+                            if (!x.empty()) parts.push_back(x);
+                        for (std::size_t k = 0; k < parts.size(); ++k)
+                            child("Item" + std::to_string(k + 1), path + ".Item" + std::to_string(k + 1), parts[k], {});
+                        return;
+                    }
+                    case tf::Form::Simple: break;
+                }
+                for (const auto& m : hmi::types::membersOf(*hp, type)) child(m.name, path + "." + m.name, m.type, m.description, m.initial);
+            };
         for (const auto& hv : hp->programs.variables) {
             std::string detail = "initiale " + (hv.initial.empty() ? std::string("0") : hv.initial);
             if (!hv.description.empty()) detail += " \xC2\xB7 " + hv.description;
             const int v = leaf(g, Style::Hmi, hv.name, hv.name, hv.type, detail);
-            hmi::types::Spec spec;
-            if (hmi::types::parseSpec(hv.type, spec) && spec.array()) {
-                if (spec.dims == 1 && spec.count(0) <= 16)
-                    for (long long i = spec.low[0]; i <= spec.high[0]; ++i)
-                        leaf(v, Style::Hmi, "[" + std::to_string(i) + "]", hv.name + "[" + std::to_string(i) + "]", spec.element, {});
-            } else {
-                for (const auto& m : hmi::types::membersOf(*hp, hv.type))
-                    leaf(v, Style::Hmi, m.name, hv.name + "." + m.name, m.type, m.description);
-            }
+            expand(v, hv.name, hv.type, hv.initial, 0);
         }
     }
     // ---- SYS. : par domaine ----
@@ -244,6 +308,15 @@ public:
         classify();
     }
 
+    // 1.12.14 : les chemins des lignes montrees (les groupes : leur libelle), pour les essais.
+    [[nodiscard]] std::vector<std::string> shownPaths() const {
+        std::vector<std::string> out;
+        for (const auto& r : rows_) {
+            const Node& nd = nodes_[static_cast<std::size_t>(r.node)];
+            out.push_back(nd.group ? nd.label : nd.path);
+        }
+        return out;
+    }
     // ---- l'etat ----
     [[nodiscard]] std::string resultText() const { return result_->text(); }
     [[nodiscard]] bool fx() const noexcept { return fx_; }
@@ -891,6 +964,7 @@ void HmiValuePicker::setResult(const std::string& text, bool fx) { if (body_) bo
 std::string HmiValuePicker::result() const { return body_ ? body_->resultText() : std::string{}; }
 bool HmiValuePicker::resultFx() const { return body_ && body_->fx(); }
 std::size_t HmiValuePicker::shownCount() const { return body_ ? body_->shownCount() : 0; }
+std::vector<std::string> HmiValuePicker::shownPaths() const { return body_ ? body_->shownPaths() : std::vector<std::string>{}; }
 const valuekind::Result& HmiValuePicker::classification() const {
     static const valuekind::Result none;
     return body_ ? body_->res() : none;

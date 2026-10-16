@@ -2,6 +2,7 @@
 //  app/SimJournal.cpp - lot API 8 : le journal de la simulation
 // =============================================================================
 #include "SimJournal.hpp"
+#include "../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - sans automate
 
 #include <algorithm>
 #include <cctype>
@@ -227,6 +228,10 @@ std::string SimJournal::defaultExplanation(std::string_view kind, SimSource sour
     if (kind == "preparation")
         return severity == SimSeverity::Error ? "Le simulateur n'a pas pu lire le programme : rien ne peut tourner tant que ce n'est pas corrig\xC3\xA9."
                                               : "Le simulateur a lu le programme de MAST : il est pr\xC3\xAAt \xC3\xA0 tourner.";
+    // 1.12.14 : une case d'un esclave simule (Equipements) - pas le programme.
+    if (kind == "forcage" && source == SimSource::Equipements)
+        return "L'esclave simul\xC3\xA9 r\xC3\xA9pond cette valeur, plus ce que dit sa m\xC3\xA9moire, jusqu'\xC3\xA0 ce que tu la rel\xC3\xA2" "ches.";
+    if (kind == "relache" && source == SimSource::Equipements) return "L'esclave simul\xC3\xA9 r\xC3\xA9pond de nouveau ce que dit sa m\xC3\xA9moire.";
     if (kind == "forcage")
         return "Le programme n'\xC3\xA9" "crit plus dans cette variable : elle relit toujours la valeur forc\xC3\xA9" "e, jusqu'\xC3\xA0 ce que tu la rel\xC3\xA2" "ches.";
     if (kind == "relache") return "Le programme \xC3\xA9" "crit de nouveau dans cette variable.";
@@ -238,8 +243,11 @@ std::string SimJournal::defaultExplanation(std::string_view kind, SimSource sour
                    : "Le programme a chang\xC3\xA9 sans arr\xC3\xAAter la simulation : les valeurs sont gard\xC3\xA9" "es, le nouveau code tourne d\xC3\xA8s le cycle suivant.";
     if (kind == "point-arret" || kind == "arret")
         return "La simulation s'est mise en pause sur un point d'arr\xC3\xAAt : tu peux lire les valeurs de la ligne, puis continuer.";
-    if (kind == "ihm-demarrage") return "L'IHM tourne sur l'automate simul\xC3\xA9 : ses vues lisent et \xC3\xA9" "crivent ses variables.";
-    if (kind == "ihm-arret") return "L'IHM ne tourne plus : ses vues ne lisent plus l'automate.";
+    if (kind == "ihm-demarrage")       // 1.12.14 : XPGAnalyser IHM - sans automate
+        return core::hasApi() ? "L'IHM tourne sur l'automate simul\xC3\xA9 : ses vues lisent et \xC3\xA9" "crivent ses variables."
+                              : "L'IHM tourne : ses vues lisent et \xC3\xA9" "crivent ses variables, et celles de ses \xC3\xA9quipements.";
+    if (kind == "ihm-arret")
+        return core::hasApi() ? "L'IHM ne tourne plus : ses vues ne lisent plus l'automate." : "L'IHM ne tourne plus : ses vues sont fig\xC3\xA9" "es.";
     if (kind == "vue") return "L'IHM affiche cette vue : c'est ce que verrait l'op\xC3\xA9rateur.";
     if (kind == "alarme")
         return "Une alarme de l'IHM est apparue : sa condition est vraie. Elle reste dans la liste tant qu'elle est active ou pas acquitt\xC3\xA9" "e.";
@@ -279,10 +287,13 @@ std::string SimJournal::line(const SimEvent& e) {
 }
 
 std::string SimJournal::csv() const {
-    std::string out = "Heure;Cycle;Source;Gravit\xC3\xA9;Genre;\xC3\x89v\xC3\xA9nement;Ce que \xC3\xA7" "a veut dire;R\xC3\xA9p\xC3\xA9t\xC3\xA9\r\n";
+    // 1.12.14 : XPGAnalyser IHM - pas de cycle d'automate : pas de colonne Cycle.
+    const bool cycles = core::hasApi();
+    std::string out = std::string("Heure;") + (cycles ? "Cycle;" : "") + "Source;Gravit\xC3\xA9;Genre;\xC3\x89v\xC3\xA9nement;Ce que \xC3\xA7" "a veut dire;R\xC3\xA9p\xC3\xA9t\xC3\xA9\r\n";
     for (const auto& e : events_)
-        out += cell(e.clock) + ";" + std::to_string(e.cycle) + ";" + cell(sourceName(e.source)) + ";" + cell(severityName(e.severity)) + ";"
-             + cell(e.kind) + ";" + cell(e.text) + ";" + cell(explanationOf(e)) + ";" + std::to_string(e.repeats) + "\r\n";
+        out += cell(e.clock) + ";" + (cycles ? std::to_string(e.cycle) + ";" : std::string{}) + cell(sourceName(e.source)) + ";"
+             + cell(severityName(e.severity)) + ";" + cell(e.kind) + ";" + cell(e.text) + ";" + cell(explanationOf(e)) + ";"
+             + std::to_string(e.repeats) + "\r\n";
     return out;
 }
 

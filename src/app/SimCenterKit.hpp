@@ -7,6 +7,8 @@
 // =============================================================================
 #pragma once
 
+#include "../core/Edition.hpp"   // 1.12.14 : les mots de XPGAnalyser IHM
+
 #include "SimJournal.hpp"
 #include "SimStatus.hpp"
 #include "../ui/Icons.hpp"
@@ -236,7 +238,8 @@ inline std::string goLabel(const std::string& key) {
     if (key == "alarmes") return "les alarmes de l'IHM";
     if (key == "bibliotheque") return "la mise \xC3\xA0 jour depuis la biblioth\xC3\xA8que";
     if (key == "relancer") return "relancer depuis z\xC3\xA9ro";
-    if (key == "sim.run") return "Simuler";
+    if (key == "sim.run") return core::hasApi() ? "Simuler" : "D\xC3\xA9marrer l'IHM";        // 1.12.14 : XPGAnalyser IHM
+    if (!core::hasApi() && key == "sim.stop") return "Arr\xC3\xAAter l'IHM";
     if (key == "sim.pause") return "Pause";
     if (key == "sim.step") return "Un cycle";
     if (key == "sim.stop") return "Arr\xC3\xAAter";

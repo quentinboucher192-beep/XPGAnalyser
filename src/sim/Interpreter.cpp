@@ -411,7 +411,8 @@ struct Expr {
         Conditional, Coalesce, InList, Between,
         // 1.12.2 (dialecte IHM) : un litteral de collection (les elements dans more) -
         // [a, b, c] (op vide), ['a' := 1, 'b' := 2] (op "MAP" : des Binary ":=" cle, valeur),
-        // (a, b) (op "TUPLE").
+        // (a, b) (op "TUPLE") ; 1.12.14 : (Nom := 'A', Niveau := 2.5) (op "STRUCT" : les membres
+        // dans arguments, nom et valeur ; leurs valeurs aussi dans more, pour qui parcourt l'arbre).
         Collection,
     };
     Kind          kind{Kind::Literal};
@@ -1279,6 +1280,28 @@ private:
         }
         if (accept("(")) {
             const auto line = t.line;
+            // 1.12.14 (dialecte IHM) : (Nom := 'Cuve A', Niveau := 2.5) - une structure, membre par membre
+            // (ceux qui manquent gardent leur valeur par defaut) ; dans une liste, une MAP, un tableau aussi.
+            if (dialect_ && peek().kind == Tok::Identifier && peek(1).kind == Tok::Punct && peek(1).text == ":=") {
+                auto node = std::make_shared<Expr>();
+                node->kind = Expr::Kind::Collection;
+                node->op   = "STRUCT";
+                node->line = line;
+                for (;;) {
+                    const Token& m = peek();
+                    if (m.kind != Tok::Identifier) return error("expected a member name: (Name := value, ...)");
+                    const std::string member = m.raw;
+                    advance();
+                    if (!accept(":=")) return error("expected ':=' after the member " + member);
+                    auto value = expression();
+                    if (!value) return value;
+                    node->arguments.emplace_back(member, *value);
+                    node->more.push_back(*value);
+                    if (!accept(",")) break;
+                }
+                if (!accept(")")) return error("expected ')' at the end of the structure (Name := value, ...)");
+                return node;
+            }
             auto inner = expression();
             if (!inner) return inner;
             // 1.12.2 (dialecte IHM) : (a, b, c) - un tuple.
@@ -1762,7 +1785,7 @@ std::string exprText(const Expr& e, int depth = 0) {
         case Expr::Kind::Coalesce:
             return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + " ?? " + (e.rhs ? exprText(*e.rhs, depth + 1) : std::string{});
         case Expr::Kind::InList: return (e.lhs ? exprText(*e.lhs, depth + 1) : std::string{}) + " IN [...]";
-        case Expr::Kind::Collection: return e.op == "TUPLE" ? "(...)" : "[...]";
+        case Expr::Kind::Collection: return e.op == "TUPLE" || e.op == "STRUCT" ? "(...)" : "[...]";
         case Expr::Kind::Between:
             return (e.lhs ? exprText(*e.lhs, depth + 1) + " ENTRE " : std::string{}) + (e.rhs ? exprText(*e.rhs, depth + 1) : std::string{})
                  + (e.lhs ? " ET " : "..") + (e.rhs2 ? exprText(*e.rhs2, depth + 1) : std::string{});
@@ -3365,6 +3388,24 @@ private:
             if (why) *why = std::move(w);
             return false;
         };
+        // 1.12.14 : une structure ecrite (Nom := 'A', Niveau := 2.5) - membre par membre, par leur nom ;
+        // ceux qui manquent gardent leur valeur.
+        if (ft.kind == TypeDesc::Kind::Struct) {
+            if (t.kind != TypeDesc::Kind::Struct)
+                return fail("une structure (Membre := valeur, ...) ne va pas dans un " + t.text());
+            for (std::size_t k = 0; k < ft.members.size() && k < from.items.size(); ++k) {
+                std::size_t at = t.members.size();
+                for (std::size_t j = 0; j < t.members.size(); ++j)
+                    if (upperOf(t.members[j].first) == upperOf(ft.members[k].first)) at = j;
+                if (at >= t.members.size() || at >= into.items.size() || !into.items[at])
+                    return fail(t.name + " n'a pas de membre " + ft.members[k].first);
+                if (!storeItem(*into.items[at], itemValue(from.items[k]), why)) {
+                    if (why) *why = ft.members[k].first + " : " + *why;
+                    return false;
+                }
+            }
+            return true;
+        }
         if (ft.kind == TypeDesc::Kind::Map) {
             if (t.kind != TypeDesc::Kind::Map) return fail("une MAP (['cl\xC3\xA9' := valeur]) ne va pas dans un " + t.text());
             std::map<std::string, ObjRef> texts;
@@ -3470,6 +3511,20 @@ private:
         auto t = std::make_shared<TypeDesc>();
         t->literal = true;
         auto o = std::make_shared<Obj>();
+        if (e.op == "STRUCT") {                  // 1.12.14 : (Nom := 'A', Niveau := 2.5)
+            t->kind = TypeDesc::Kind::Struct;
+            for (const auto& [member, ex] : e.arguments) {
+                if (!ex) continue;
+                auto v = rich(*ex);
+                if (!v) return v;
+                ObjRef value = v->o ? v->o : makeObj(scalarType(v->v.type()));
+                if (!v->o) value->value = v->v;
+                t->members.emplace_back(member, value->type);
+                o->items.push_back(value);
+            }
+            o->type = t;
+            return RV{{}, o};
+        }
         if (e.op == "MAP") {
             t->kind = TypeDesc::Kind::Map;
             bool textual = false, integral = false;

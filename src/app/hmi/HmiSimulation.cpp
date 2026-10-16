@@ -2417,8 +2417,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
                              "avec elle : sans l'API, l'IHM lit et \xC3\xA9" "crit la m\xC3\xA9moire de l'automate simul\xC3\xA9 (sans cycle).");
     hmiStopBtn_ = &bar->addButton("Arr\xC3\xAAter l'IHM", "hmi.stop", ui::Icon::Stop);
     hmiStopBtn_->setTooltip("Arr\xC3\xAAter l'IHM seule (Maj+F8) : l'API continue (ou reste arr\xC3\xAAt\xC3\xA9" "e)");
-    bar->addButton("Red\xC3\xA9marrer l'IHM", "hmi.restart", ui::Icon::Refresh)
-        .setTooltip("Red\xC3\xA9marrer (apr\xC3\xA8s confirmation) : les donn\xC3\xA9" "es de simulation et l'\xC3\xA9tat r\xC3\xA9manent effac\xC3\xA9s, "
+    auto& restartBtn = bar->addButton("Red\xC3\xA9marrer l'IHM", "hmi.restart", ui::Icon::Refresh);
+    restartBtn.setTooltip("Red\xC3\xA9marrer (apr\xC3\xA8s confirmation) : les donn\xC3\xA9" "es de simulation et l'\xC3\xA9tat r\xC3\xA9manent effac\xC3\xA9s, "
                     "variables IHM \xC3\xA0 leur valeur initiale, esclaves simul\xC3\xA9s \xC3\xA0 leur d\xC3\xA9part, scripts et vue de d\xC3\xA9marrage "
                     "(l'API ne bouge pas)");
     // 1.11.15 : Generer et redemarrer - les donnees gardees, seul ce qui a change est refait.
@@ -2447,6 +2447,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         bar->setSlotHidden(*plcBtn_, true);
         hmiStartBtn_->setTooltip("D\xC3\xA9marrer l'IHM (F8) : scripts, actions, alarmes, vues ; ses variables, les esclaves simul\xC3\xA9s de ses \xC3\xA9quipements.");
         hmiStopBtn_->setTooltip("Arr\xC3\xAAter l'IHM (Maj+F8)");
+        restartBtn.setTooltip("Red\xC3\xA9marrer (apr\xC3\xA8s confirmation) : les donn\xC3\xA9" "es de simulation et l'\xC3\xA9tat r\xC3\xA9manent effac\xC3\xA9s, "
+                              "variables IHM \xC3\xA0 leur valeur initiale, esclaves simul\xC3\xA9s \xC3\xA0 leur d\xC3\xA9part, scripts et vue de d\xC3\xA9marrage");   // 1.12.14
     }
     bar->addSeparator();
     {
@@ -3199,7 +3201,9 @@ void HmiSimulationPane::ensureStarted(double now) {
     sim::Environment* link = host_.link ? host_.link() : nullptr;
     // 1.10 : L'IHM SEULE - pas d'automate simule prepare : sa memoire se prepare
     // (sans cycle, l'API reste arretee) ; l'IHM y lit et y ecrit.
-    if (!started_ && !rt && !link && host_.transport) {
+    // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - l'IHM ne demande plus sa memoire (chaque demarrage
+    // essayait de preparer le programme de MAST, et le disait).
+    if (core::hasApi() && !started_ && !rt && !link && host_.transport) {
         host_.transport("sim.prepare");
         rt = host_.runtime ? host_.runtime() : nullptr;
     }

@@ -1,4 +1,6 @@
 #include "HmiAssist.hpp"
+#include "../../hmi/HmiRoles.hpp"       // 1.12.14 : le decoupeur (bornes, items d'un tuple)
+#include "../../hmi/HmiTypeForms.hpp"   // 1.12.14 : ce qui mene au type attendu
 #include "../../sim/DialectLib.hpp"   // 1.12.7 : les templates (NUMERIC_LIMITS<T>, NUMBERS), les natives
 #include "../../hmi/HmiNatives.hpp"   // 1.12.0 : les natives de l'IHM (completion, signature, survol)
 #include "../../core/Edition.hpp"     // 1.12.0 : XPGAnalyser IHM - ni API, ni bibliotheque de l'automate
@@ -662,6 +664,11 @@ std::string walkType(const hmi::Project& hp, std::string type, std::string_view 
         if (c == '[') {
             int depth = 1;
             for (++i; i < rest.size() && depth > 0; ++i) depth += rest[i] == '[' ? 1 : rest[i] == ']' ? -1 : 0;
+            // 1.12.14 : a toute profondeur - une liste, un vecteur, un ensemble, un tampon aussi.
+            if (const auto st = hmi::types::stepIndex(hp, type); !st.type.empty()) {
+                type = st.type;
+                continue;
+            }
             std::string k, v;
             type = mapTypes(type, k, v) ? v : arrayElement(type);
             continue;
@@ -677,6 +684,7 @@ std::string walkType(const hmi::Project& hp, std::string type, std::string_view 
             if (next.empty())                                  // 1.10.1 (U2) : un symbole (a.Debit)
                 for (const auto& m : hmi::operandMembers(hp, type))
                     if (iequals(m.name, name)) { next = m.type; break; }
+            if (next.empty()) next = hmi::types::stepMember(hp, type, name).type;   // 1.12.14 : t.Item2, L.First, L.Count...
             type = std::move(next);
             continue;
         }
@@ -2518,12 +2526,225 @@ ui::KindBadge badgeOf(Nature n, Origin o) {
 }
 ui::KindBadge badgeOf(const Item& it) { return badgeOf(it.nature, it.origin); }
 
+// ---- 1.12.14 : LE TYPE ATTENDU, ET CE QUI Y MENE ----------------------------------------------
+//  x := | (x un INT), x = |, x + |, F(a, | (le 2e parametre de F) : le type attendu. Ce qui convient
+//  vient d'abord ; puis ce qui y MENE, a toute profondeur - une structure, un tableau, une liste, un
+//  vecteur, une MAP, un tuple dont un membre ou un element (ou un des leurs) convient : BATEAU, dont
+//  BATEAU[0].Taille est un INT. Le chemin est dit ; BATEAU[0] est propose aussi, et choisir BATEAU (ou
+//  BATEAU[0]) rouvre la liste sur ses membres, Taille en tete. Les variables IHM, les locales, les
+//  membres, les variables systeme, les fonctions (leur retour), les enumerations (des entiers).
+namespace {
+
+bool typeFits(const hmi::Project& hp, std::string_view type, std::string_view expected) {
+    const std::string a = upper(trimmed(type)), b = upper(trimmed(expected));
+    if (a.empty() || b.empty() || b == "ANY" || a == "ANY") return false;
+    if (a == b) return true;
+    if (hmi::typereg::conversion(a, b).safe()) return true;
+    // Une enumeration est un entier (T_MODE#Auto dans un INT), et l'inverse vers elle-meme seulement.
+    return hmi::typereg::isInteger(b) && hmi::findEnumeration(hp, trimmed(type)) != nullptr;
+}
+
+struct Lead {
+    std::string first;     // le premier pas : "[0]", "['\xE2\x80\xA6']", ".Taille", ".Item2"
+    std::string path;      // tout le chemin : "[0].Taille"
+    std::string target;    // le type au bout : "INT"
+};
+
+class Reach {
+public:
+    Reach(const hmi::Project& hp, std::function<bool(const std::string&)> fits) : hp_(hp), fits_(std::move(fits)) {}
+    [[nodiscard]] bool fits(const std::string& type) const { return !trimmed(type).empty() && fits_(trimmed(type)); }
+    std::optional<Lead> lead(const std::string& type) { return find(trimmed(type), 0); }
+
+private:
+    // Le premier indice d'un type indexable, ecrit : la borne basse d'un tableau, 0 d'une liste, une cle.
+    static std::string indexStep(const std::string& t) {
+        const auto sh = hmi::typeform::decompose(t);
+        if (sh.form == hmi::typeform::Form::Array || sh.form == hmi::typeform::Form::Array2D) {
+            std::string lows;
+            for (const auto& part : hmi::roles::splitList(sh.parameter, ',')) {
+                const auto dots = part.find("..");
+                lows += (lows.empty() ? "" : ", ") + trimmed(dots == std::string::npos ? std::string("0") : part.substr(0, dots));
+            }
+            return "[" + (lows.empty() ? std::string("0") : lows) + "]";
+        }
+        if (sh.form == hmi::typeform::Form::Map)
+            return hmi::typereg::isInteger(trimmed(sh.parameter)) ? std::string("[0]") : std::string("['\xE2\x80\xA6']");
+        return "[0]";
+    }
+    std::optional<Lead> find(const std::string& t, int depth) {
+        if (t.empty() || depth > 16) return std::nullopt;
+        const std::string key = upper(t);
+        if (const auto it = memo_.find(key); it != memo_.end()) return it->second;
+        memo_[key] = std::nullopt;                               // en cours : un cycle ne mene nulle part
+        std::optional<Lead> got;
+        const auto tryStep = [&](const std::string& step, const std::string& next) {
+            if (got || trimmed(next).empty()) return;
+            if (fits_(trimmed(next))) {
+                got = Lead{step, step, trimmed(next)};
+                return;
+            }
+            if (auto sub = find(trimmed(next), depth + 1)) got = Lead{step, step + sub->path, sub->target};
+        };
+        if (const auto st = hmi::types::stepIndex(hp_, t); !st.type.empty()) tryStep(indexStep(t), st.type);
+        const auto sh = hmi::typeform::decompose(t);
+        if (!got && sh.form == hmi::typeform::Form::Tuple) {
+            std::vector<std::string> items{sh.element};
+            for (auto& x : hmi::roles::splitList(sh.parameter, ','))
+                if (!trimmed(x).empty()) items.push_back(x);
+            for (std::size_t k = 0; k < items.size() && !got; ++k) tryStep(".Item" + std::to_string(k + 1), items[k]);
+        } else if (!got && sh.form == hmi::typeform::Form::Simple && !sh.reference) {
+            for (const auto& m : hmi::types::membersOf(hp_, t)) {
+                tryStep("." + m.name, m.type);
+                if (got) break;
+            }
+            if (!got)
+                for (const auto& m : hmi::operandMembers(hp_, t)) {      // un symbole : ses variables
+                    tryStep("." + m.name, m.type);
+                    if (got) break;
+                }
+        }
+        memo_[key] = got;
+        return got;
+    }
+    const hmi::Project&                          hp_;
+    std::function<bool(const std::string&)>      fits_;
+    std::map<std::string, std::optional<Lead>>   memo_;
+};
+
+// Le type attendu la ou l'on ecrit : `head` est le texte avant le mot (et avant son chemin).
+std::string expectedTypeAt(const Scope& sc, std::string_view head) {
+    std::size_t end = head.size();
+    while (end > 0 && (head[end - 1] == ' ' || head[end - 1] == '\t' || head[end - 1] == '\n')) --end;
+    const std::string_view h = head.substr(0, end);
+    const auto endsWith = [&](std::string_view op) { return h.size() >= op.size() && h.substr(h.size() - op.size()) == op; };
+    if (endsWith(":=")) return trimmed(sc.typeOf(pathBefore(h.substr(0, h.size() - 2))));
+    for (const std::string_view op : {"<>", "<=", ">=", "=", "<", ">", "+", "-", "*", "/"})
+        if (endsWith(op)) {
+            const std::string left = pathBefore(h.substr(0, h.size() - op.size()));
+            return left.empty() ? std::string{} : trimmed(sc.typeOf(left));
+        }
+    // L'argument d'un appel : la parenthese ouverte la plus proche, le rang de l'argument.
+    int depth = 0;
+    std::size_t commas = 0;
+    for (std::size_t i = h.size(); i > 0; --i) {
+        const char c = h[i - 1];
+        if (c == ')' || c == ']') ++depth;
+        else if (c == '[') --depth;
+        else if (c == '(') {
+            if (depth > 0) {
+                --depth;
+                continue;
+            }
+            const std::string callee = calleeAt(h, i - 1);
+            return callee.empty() ? std::string{} : trimmed(sc.paramTypeOf(callee, commas));
+        } else if (c == ',' && depth == 0) ++commas;
+        else if (c == ';' && depth == 0) break;
+    }
+    return {};
+}
+
+// Le type d'une proposition : une variable, une locale, un membre (apres "chemin."), le retour
+// d'une fonction, une enumeration (T_MODE#) ; vide : on ne sait pas.
+std::string itemType(const hmi::Project& hp, const Scope& sc, const Item& it, const Where& where) {
+    // Une valeur d'enumeration (T_MODE#Auto), ou l'enumeration a completer (T_MODE#...) : son type.
+    if (const auto hash = it.text.find('#'); hash != std::string::npos && hash > 0)
+        if (hmi::findEnumeration(hp, it.text.substr(0, hash))) return it.text.substr(0, hash);
+    switch (it.kind) {
+        case Kind::HmiVariable:
+        case Kind::LocalVariable:
+        case Kind::Member:
+        case Kind::SysVariable:
+        case Kind::InstanceVariable:
+            return trimmed(sc.typeOf(where.context == Context::Member ? where.path + "." + it.text : it.text));
+        case Kind::UserFunction:
+            if (const auto* f = sc.script ? sc.analysis.function(it.text) : nullptr) return trimmed(f->returnType);
+            if (const auto* hf = hp.functionByName(it.text)) return trimmed(hf->returnType);
+            return {};
+        case Kind::Function:
+        case Kind::HmiFunction: {
+            // Une native (son retour, s'il est un type ecrit : ANY_NUM, T se jugent mal - on ne dit rien).
+            if (const auto* nf = hmi::natives::function(it.text)) {
+                const std::string r = trimmed(nf->returns);
+                return r.rfind("ANY", 0) == 0 || r.size() <= 1 ? std::string{} : r;
+            }
+            return {};
+        }
+        case Kind::DerivedType: {
+            const auto hash = it.text.find('#');
+            return hash == std::string::npos ? std::string{} : it.text.substr(0, hash);
+        }
+        default: return {};
+    }
+}
+
+bool variableLike(Kind k) {
+    return k == Kind::HmiVariable || k == Kind::LocalVariable || k == Kind::Member || k == Kind::SysVariable || k == Kind::InstanceVariable;
+}
+
+void rankByExpected(const hmi::Project& hp, std::vector<Item>& items, std::string_view before, const Where& where, hmi::Id op) {
+    const Scope sc = makeScope(hp, before, true, op);
+    const std::string_view head = where.context == Context::Member && !before.empty()
+                                      ? before.substr(0, pathStart(before, before.size() - 1))
+                                      : before.substr(0, std::min(where.from, before.size()));
+    const std::string expected = expectedTypeAt(sc, head);
+    if (expected.empty() || upper(expected) == "ANY") return;
+    Reach reach(hp, [&](const std::string& t) { return typeFits(hp, t, expected); });
+    std::vector<Item> extra;
+    for (auto& it : items) {
+        const std::string type = itemType(hp, sc, it, where);
+        if (type.empty()) continue;
+        if (reach.fits(type)) {
+            it.rank -= 1000;
+            continue;
+        }
+        const auto lead = reach.lead(type);
+        if (!lead) continue;
+        it.rank -= 500;
+        const std::string name = it.insert.empty() ? it.text : it.insert;
+        it.detail += kDot + "\xE2\x86\x92 " + it.text + lead->path + " : " + lead->target;
+        if (!variableLike(it.kind)) continue;
+        if (lead->first.front() == '.') {
+            // Une structure, un tuple : choisir le nom ouvre ses membres.
+            it.insert = name + ".";
+            it.caret = std::string::npos;
+            it.chain = true;
+            continue;
+        }
+        // Un indice d'abord : BATEAU[0] aussi (une MAP : Parc[' - la cle a ecrire).
+        Item x = it;
+        x.text = it.text + lead->first;
+        x.rank = it.rank - 1;
+        x.detail = "\xE2\x86\x92 " + x.text + lead->path.substr(lead->first.size()) + " : " + lead->target;
+        if (lead->first.rfind("['", 0) == 0) {
+            x.insert = name + "['";
+            x.chain = false;
+        } else {
+            const std::string rest = lead->path.substr(lead->first.size());
+            x.insert = name + lead->first + (!rest.empty() && rest.front() == '.' ? "." : "");
+            x.chain = !rest.empty() && rest.front() == '.';
+        }
+        x.caret = std::string::npos;
+        extra.push_back(std::move(x));
+    }
+    for (auto& x : extra)
+        if (std::none_of(items.begin(), items.end(), [&](const Item& i) { return iequals(i.text, x.text); })) items.push_back(std::move(x));
+    std::stable_sort(items.begin(), items.end(), [](const Item& a, const Item& b) {
+        if (a.rank != b.rank) return a.rank < b.rank;
+        return lower(a.text) < lower(b.text);
+    });
+}
+
+} // namespace
+
 std::vector<Item> suggest(const hmi::Project& hp, const domain::Project* plc, std::string_view before,
                           std::string_view prefix, bool code, bool templateText, hmi::Id op) {
     auto items = suggestItems(hp, plc, before, prefix, code, templateText, op);
     if (items.empty()) return items;
     const auto where = locate(before, templateText);
     for (auto& it : items) classify(it, hp, plc, where);
+    // 1.12.14 : le type attendu - ce qui convient, puis ce qui y mene (a toute profondeur).
+    if (code && (where.context == Context::Code || where.context == Context::Member)) rankByExpected(hp, items, before, where, op);
     return items;
 }
 
@@ -3239,7 +3460,40 @@ static ui::InputText::Assist typedAssist(ui::InputText::Assist base, Sources src
                     }
                 }
             }
-        for (auto* list : {&good, &unknown, &bad})
+        // 1.12.14 : ce qui MENE au type attendu (une structure, un tableau, une liste, une MAP, un tuple
+        // dont un membre ou un element convient, a toute profondeur) juste apres ce qui convient, avec son
+        // chemin (BATEAU -> BATEAU[0].Taille : INT) ; BATEAU[0] aussi.
+        std::vector<ui::InputText::Suggestion> leads;
+        if (hp && !unknown.empty()) {
+            Reach reach(*hp, [expect](const std::string& t) { return fits(expect, upper(t)) > 0; });
+            std::vector<ui::InputText::Suggestion> rest;
+            for (auto& sg : unknown) {
+                const std::string path = sg.insert.empty() ? sg.text : sg.insert;
+                const std::string type = hmi::types::typeOfPath(*hp, path);
+                const auto lead = type.empty() ? std::optional<Lead>{} : reach.lead(type);
+                if (!lead) {
+                    rest.push_back(std::move(sg));
+                    continue;
+                }
+                const std::string after = lead->path.substr(lead->first.size());
+                if (lead->first.front() == '[' && lead->first.rfind("['", 0) != 0) {
+                    ui::InputText::Suggestion x;
+                    x.text = sg.text + lead->first;
+                    x.insert = path + lead->first + (!after.empty() && after.front() == '.' ? "." : "");
+                    x.chain = !after.empty() && after.front() == '.';      // ses membres, Taille en tete
+                    x.badge = sg.badge;
+                    x.detail = "\xE2\x86\x92 " + x.text + after + " : " + lead->target;
+                    leads.push_back(std::move(x));
+                } else if (lead->first.front() == '.') {
+                    sg.insert = path + ".";                                // une structure : ses membres
+                    sg.chain = true;
+                }
+                sg.detail += "  \xC2\xB7  \xE2\x86\x92 " + sg.text + lead->path + " : " + lead->target;
+                leads.push_back(std::move(sg));
+            }
+            unknown = std::move(rest);
+        }
+        for (auto* list : {&good, &leads, &unknown, &bad})
             for (auto& sg : *list) out.push_back(std::move(sg));
         // Une couleur ou une vue par expression : aussi les valeurs entre quotes.
         if (equals && (expect == Expect::Color || expect == Expect::View) && hp) {

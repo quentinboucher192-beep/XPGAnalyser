@@ -351,11 +351,14 @@ Card hmiCard(const Snapshot& s) {
     } else if (h.running) {
         c.tone = h.scriptErrors ? Tone::Error : h.unacked ? Tone::Warning : Tone::Ok;
         c.state = "en marche";
-        c.sentence = "Elle tourne sur l'automate simul\xC3\xA9" + (h.view.empty() ? std::string(".") : " et affiche " + h.view + ".");
+        // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - l'IHM tourne seule.
+        c.sentence = std::string(core::hasApi() ? "Elle tourne sur l'automate simul\xC3\xA9" : "Elle tourne")
+                   + (h.view.empty() ? std::string(".") : " et affiche " + h.view + ".");
     } else {
         c.tone = Tone::Off;
         c.state = "arr\xC3\xAAt\xC3\xA9" "e";
-        c.sentence = "Arr\xC3\xAAt\xC3\xA9" "e : Ouvrir l'IHM la lance sur l'automate simul\xC3\xA9, sur sa vue de d\xC3\xA9marrage.";
+        c.sentence = core::hasApi() ? "Arr\xC3\xAAt\xC3\xA9" "e : Ouvrir l'IHM la lance sur l'automate simul\xC3\xA9, sur sa vue de d\xC3\xA9marrage."
+                                    : "Arr\xC3\xAAt\xC3\xA9" "e : D\xC3\xA9marrer l'IHM (F8) la lance sur sa vue de d\xC3\xA9marrage.";
     }
     auto& f0 = c.figures[0];
     f0.label = "Vue affich\xC3\xA9" "e";
@@ -397,8 +400,9 @@ Card equipCard(const Snapshot& s) {
     if (all == 0) {
         c.tone = Tone::Off;
         c.state = "aucun";
-        c.sentence = e.list.empty() ? "Le projet n'a pas d'\xC3\xA9quipement : l'IHM ne parle qu'\xC3\xA0 l'automate."
-                                    : "Aucun \xC3\xA9quipement actif : ils sont tous d\xC3\xA9sactiv\xC3\xA9s.";
+        c.sentence = !e.list.empty() ? std::string("Aucun \xC3\xA9quipement actif : ils sont tous d\xC3\xA9sactiv\xC3\xA9s.")
+                   : core::hasApi()    ? std::string("Le projet n'a pas d'\xC3\xA9quipement : l'IHM ne parle qu'\xC3\xA0 l'automate.")
+                                       : std::string("Le projet n'a pas d'\xC3\xA9quipement : l'IHM tourne seule, sur ses variables.");   // 1.12.14
     } else if (!mute.empty()) {
         c.tone = Tone::Error;
         c.state = mute.size() == 1 ? "1 ne r\xC3\xA9pond pas" : std::to_string(mute.size()) + " ne r\xC3\xA9pondent pas";
@@ -467,6 +471,10 @@ std::array<Link, 2> chain(const Snapshot& s) {
     auto& b = out[1];
     b.from = "automate";
     b.to = "ihm";
+    if (!core::hasApi()) {           // 1.12.14 : XPGAnalyser IHM - pas d'automate, pas de lien vers lui
+        b.idle = true;
+        return out;
+    }
     const auto& p = s.plc;
     const std::string reads = plural(s.hmi.plcReads, "variable lue", "variables lues");
     if (!s.hmi.exists) {
@@ -507,9 +515,12 @@ std::vector<Attention> attention(const Snapshot& s) {
         out.push_back(std::move(a));
     };
     if (!s.project) return out;
-    if (!p.prepared && !p.prepareError.empty())
+    // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - ni sa preparation ("aucune section en ST de la
+    // tache MAST"), ni ses haltes, ses fonctions non simulees, ses cycles, ses sections, son code.
+    const bool plc = core::hasApi();
+    if (plc && !p.prepared && !p.prepareError.empty())
         add("preparation", Tone::Error, 380, "La simulation ne se pr\xC3\xA9pare pas", p.prepareError, {"R\xC3\xA9" "essayer", "sim.run"});
-    if (p.prepared && p.state == State::Halted) {
+    if (plc && p.prepared && p.state == State::Halted) {
         std::string detail = place(p.haltSection, p.haltLine);
         if (detail.empty()) detail = "au cycle " + thousands(p.cycle);
         else detail += ", au cycle " + thousands(p.cycle);
@@ -533,14 +544,14 @@ std::vector<Attention> attention(const Snapshot& s) {
             {"R\xC3\xA9tablir la liaison", "reconnecter:" + one->name});
         out.back().second = {"Ouvrir les \xC3\xA9quipements", "equipements"};
     }
-    if (p.online && p.onlineFailed)
+    if (plc && p.online && p.onlineFailed)
         add("en-ligne", Tone::Error, 340, "La modification en ligne n'est pas pass\xC3\xA9" "e", p.onlineSummary, {"Voir le journal", "journal"});
     if (s.hmi.running && s.hmi.scriptErrors)
         add("scripts", Tone::Warning, 260,
             s.hmi.scriptErrors == 1 ? std::string("Un script de l'IHM s'est arr\xC3\xAAt\xC3\xA9 sur une erreur")
                                     : std::to_string(s.hmi.scriptErrors) + " erreurs de scripts dans l'IHM",
             s.hmi.lastScriptError, {"Voir le journal", "journal"});
-    if (p.prepared && !p.unknown.empty()) {
+    if (plc && p.prepared && !p.unknown.empty()) {
         const auto& first = p.unknown.front();
         std::string detail = "Premier appel : " + place(first.section, first.line);
         if (first.section.empty()) detail = "Appel\xC3\xA9" "es";
@@ -562,15 +573,19 @@ std::vector<Attention> attention(const Snapshot& s) {
     }
     if (p.forced) {
         const bool old = p.oldestForcedSeconds >= 300.0;
+        // 1.12.14 : XPGAnalyser IHM - ses forcages sont des cases des esclaves simules.
+        const std::string what = plc ? (p.forced == 1 ? std::string("Une variable forc\xC3\xA9" "e") : std::to_string(p.forced) + " variables forc\xC3\xA9" "es")
+                                     : (p.forced == 1 ? std::string("Une case forc\xC3\xA9" "e dans un esclave simul\xC3\xA9")
+                                                      : std::to_string(p.forced) + " cases forc\xC3\xA9" "es dans les esclaves simul\xC3\xA9s");
         add("forcages", old ? Tone::Warning : Tone::Info, old ? 220 : 120,
-            (p.forced == 1 ? std::string("Une variable forc\xC3\xA9" "e") : std::to_string(p.forced) + " variables forc\xC3\xA9" "es")
-                + (p.oldestForced.empty() ? std::string{} : ", depuis " + duration(p.oldestForcedSeconds) + " pour " + p.oldestForced),
+            what + (p.oldestForced.empty() ? std::string{} : ", depuis " + duration(p.oldestForcedSeconds) + " pour " + p.oldestForced),
             old ? "Un for\xC3\xA7" "age oubli\xC3\xA9 fausse la suite des essais : rel\xC3\xA2" "che-le quand tu as fini."
-                : "Le programme n'\xC3\xA9" "crit plus dans une variable forc\xC3\xA9" "e : elle relit sa valeur forc\xC3\xA9" "e.",
+                : plc ? "Le programme n'\xC3\xA9" "crit plus dans une variable forc\xC3\xA9" "e : elle relit sa valeur forc\xC3\xA9" "e."
+                      : "L'esclave simul\xC3\xA9 r\xC3\xA9pond la valeur forc\xC3\xA9" "e, plus ce que dit sa m\xC3\xA9moire.",
             {"Voir les for\xC3\xA7" "ages", "forcages"});
         out.back().second = {"Tout rel\xC3\xA2" "cher", "forcages:tout-relacher"};   // la maquette : deux boutons
     }
-    if (p.prepared && p.state == State::Running && p.cycle > 0 && p.scanMicros > 0) {
+    if (plc && p.prepared && p.state == State::Running && p.cycle > 0 && p.scanMicros > 0) {
         const double ms = cycleMs(p);
         const double period = static_cast<double>(std::max<std::int64_t>(1, p.periodMs));
         if (ms > period) {
@@ -586,7 +601,7 @@ std::vector<Attention> attention(const Snapshot& s) {
     }
     // 1.10.2 : des sections qui ne tournent pas - leur condition d'activation est
     // fausse (comme sur l'automate) ; dit, pour qu'on ne cherche pas un defaut.
-    if (p.prepared && p.inactiveSections > 0)
+    if (plc && p.prepared && p.inactiveSections > 0)
         add("sections-inactives", Tone::Info, 100,
             p.inactiveSections == 1 ? std::string("Une section ne tourne pas : sa condition d'activation est fausse")
                                     : std::to_string(p.inactiveSections) + " sections ne tournent pas : leur condition d'activation est fausse",
@@ -594,15 +609,15 @@ std::vector<Attention> attention(const Snapshot& s) {
                 + (p.inactiveSections > 1 ? std::string(", et d'autres") : std::string{})
                 + ". Elle reprend quand la condition devient vraie.",
             {"Voir les temps", "debogage"});
-    if (p.prepared && p.breakHit)
+    if (plc && p.prepared && p.breakHit)
         add("point-arret", Tone::Info, 170, "En pause sur un point d'arr\xC3\xAAt : " + place(p.breakSection, static_cast<std::uint32_t>(std::max(0, p.breakLine))),
             "Continuer reprend jusqu'au prochain point d'arr\xC3\xAAt.", {"Ouvrir le d\xC3\xA9" "bogage", "debogage"});
-    if (p.prepared && p.stale)
+    if (plc && p.prepared && p.stale)
         add("ancien-code", Tone::Info, 160, "Le programme a chang\xC3\xA9 depuis le lancement",
             "La simulation tourne sur l'ancien code jusqu'\xC3\xA0 Arr\xC3\xAAter ; Relancer prend le nouveau.", {"Relancer", "relancer"});
-    if (p.online && !p.onlineFailed && p.onlineAgeSeconds < 60.0)
+    if (plc && p.online && !p.onlineFailed && p.onlineAgeSeconds < 60.0)
         add("en-ligne", Tone::Info, 130, "Modification en ligne faite", p.onlineSummary, {"Voir le journal", "journal"});
-    if (s.hmi.exists && !s.hmi.running && p.prepared && p.state == State::Running)
+    if (plc && s.hmi.exists && !s.hmi.running && p.prepared && p.state == State::Running)
         add("ihm-arretee", Tone::Info, 90, "L'IHM ne tourne pas", "L'automate tourne seul : lance l'IHM pour voir ses vues vivre.",
             {"Lancer l'IHM", "ihm"});
     std::stable_sort(out.begin(), out.end(), [](const Attention& x, const Attention& y) { return x.weight > y.weight; });
@@ -671,7 +686,7 @@ std::string bannerLine(const Report& r) {
 Report compute(const Snapshot& s) {
     Report r;
     r.banner = banner(s);
-    r.cards[0] = plcCard(s);
+    r.cards[0] = core::hasApi() ? plcCard(s) : Card{};    // 1.12.14 : XPGAnalyser IHM - pas de carte de l'automate
     r.cards[1] = hmiCard(s);
     r.cards[2] = equipCard(s);
     r.chain = chain(s);
@@ -679,6 +694,9 @@ Report compute(const Snapshot& s) {
     const auto& p = s.plc;
     if (!s.project) {
         r.folderTone = Tone::Off;
+    } else if (!core::hasApi()) {     // 1.12.14 : XPGAnalyser IHM - la simulation est celle de l'IHM
+        r.folderBadge = s.hmi.running ? "en marche" : "arr\xC3\xAAt\xC3\xA9" "e";
+        r.folderTone = s.hmi.running ? Tone::Ok : Tone::Off;
     } else if (p.prepared && p.state == State::Running) {
         r.folderBadge = "en marche";
         r.folderTone = Tone::Ok;

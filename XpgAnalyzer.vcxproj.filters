@@ -2632,6 +2632,9 @@
     <ClInclude Include="src\platform\AtlasSymbols.hpp">
       <Filter>platform</Filter>
     </ClInclude>
+    <ClInclude Include="src\platform\TextCensus.hpp">
+      <Filter>platform</Filter>
+    </ClInclude>
     <ClInclude Include="src\project\ActivationConditions.hpp">
       <Filter>project</Filter>
     </ClInclude>

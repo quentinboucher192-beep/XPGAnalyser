@@ -1858,7 +1858,7 @@ void MainAnalysisScreen::runSimulationTransport(std::string_view id) {
     // 1.10 : l'IHM seule - la memoire de l'automate simule, preparee sans cycle
     // (l'API reste arretee) : l'IHM y lit et y ecrit.
     if (id == "sim.prepare") {
-        if (sim.attached()) return;
+        if (sim.attached() || !core::hasApi()) return;      // 1.12.14 : XPGAnalyser IHM - pas d'automate
         if (std::string why; !attachSimulation(&why)) {
             status_->setTransientMessage("La m\xC3\xA9moire de l'automate simul\xC3\xA9 n'est pas pr\xC3\xAAte : " + SimulationPane::frenchMessage(why)
                                          + ". L'IHM tourne sans elle.", 10.0, StatusBar::Severity::Warning);

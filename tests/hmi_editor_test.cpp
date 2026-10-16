@@ -28480,6 +28480,81 @@ void surcharges1120() {
     check(clash, "Convertir(SINT) et Convertir(INT) : le moteur les calcule pareil - dites de m\xC3\xAAme forme");
 }
 
+// 1.12.14 : L'AIDE A LA SAISIE TYPEE - le type attendu (x := | avec x un INT) : ce qui convient
+// d'abord, puis ce qui y mene a toute profondeur (BATEAU[0].Taille est un INT), BATEAU[0] propose (il
+// rouvre la liste sur ses membres, Taille en tete) ; un acces imbrique (Flotte['a'][0].) donne ses
+// membres ; le selecteur de valeur filtre sur INT et garde BATEAU, BATEAU[0], BATEAU[0].Taille.
+void aideTypee11214() {
+    std::printf("1.12.14 : l'aide \xC3\xA0 la saisie typ\xC3\xA9" "e - ce qui m\xC3\xA8ne au type attendu\n");
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    HmiType bateau;
+    bateau.id = p.allocate();
+    bateau.name = "T_Bateau";
+    bateau.members.push_back({"Nom", "STRING", "", ""});
+    bateau.members.push_back({"Taille", "INT", "", ""});
+    p.programs.types.push_back(bateau);
+    const auto var = [&](const char* name, const char* type) {
+        Variable v;
+        v.id = p.allocate();
+        v.name = name;
+        v.type = type;
+        p.programs.variables.push_back(v);
+    };
+    var("BATEAU", "ARRAY[0..3] OF T_Bateau");
+    var("Flotte", "MAP[STRING] OF VECTOR OF T_Bateau");
+    var("Capitaine", "T_Bateau");
+    var("Compte", "INT");
+    var("Texte", "STRING");
+    const auto npos = std::string::npos;
+    const std::string decl = "VAR\n  x : INT;\nEND_VAR\n";
+    auto items = app::assist::suggest(p, nullptr, decl + "x := ", "", true);
+    const auto at = [&](const std::string& text) {
+        for (std::size_t i = 0; i < items.size(); ++i)
+            if (items[i].text == text) return static_cast<int>(i);
+        return -1;
+    };
+    const int compte = at("Compte"), bat0 = at("BATEAU[0]"), bat = at("BATEAU"), cap = at("Capitaine"), texte = at("Texte"), flotte = at("Flotte");
+    check(compte >= 0 && bat0 >= 0 && bat >= 0 && cap >= 0 && texte >= 0 && flotte >= 0,
+          "x := (x un INT) : Compte, BATEAU[0], BATEAU, Capitaine, Flotte, Texte propos\xC3\xA9s");
+    if (compte < 0 || bat0 < 0 || bat < 0 || cap < 0 || texte < 0 || flotte < 0) return;
+    check(compte < bat0 && bat0 < texte && bat < texte && cap < texte && flotte < texte,
+          "Compte (un INT) d'abord, puis ce qui y m\xC3\xA8ne (BATEAU[0], BATEAU, Capitaine, Flotte), puis Texte");
+    check(items[static_cast<std::size_t>(bat0)].insert == "BATEAU[0]." && items[static_cast<std::size_t>(bat0)].chain
+              && items[static_cast<std::size_t>(bat0)].detail.find("BATEAU[0].Taille : INT") != npos,
+          "BATEAU[0] : il rouvre la liste sur ses membres, son chemin dit (" + items[static_cast<std::size_t>(bat0)].detail + ")");
+    check(items[static_cast<std::size_t>(cap)].insert == "Capitaine." && items[static_cast<std::size_t>(cap)].chain
+              && items[static_cast<std::size_t>(cap)].detail.find("Capitaine.Taille : INT") != npos,
+          "Capitaine : ses membres, Capitaine.Taille dit");
+    check(items[static_cast<std::size_t>(flotte)].detail.find("Flotte['\xE2\x80\xA6'][0].Taille : INT") != npos,
+          "Flotte : la MAP, le vecteur, puis Taille (" + items[static_cast<std::size_t>(flotte)].detail + ")");
+    // Les membres d'un acces imbrique, le bon type en tete.
+    items = app::assist::suggest(p, nullptr, decl + "x := Flotte['a'][0].", "", true);
+    check(!items.empty() && items.front().text == "Taille", "Flotte['a'][0]. : les membres de T_Bateau, Taille (INT) en t\xC3\xAAte"
+                                                                 + (items.empty() ? std::string{} : " (" + items.front().text + ")"));
+    items = app::assist::suggest(p, nullptr, decl + "Texte := BATEAU[1].", "", true);
+    check(!items.empty() && items.front().text == "Nom", "Texte := BATEAU[1]. : Nom (STRING) en t\xC3\xAAte");
+    // Le selecteur de valeur, filtre sur INT : les chemins qui y menent, a toute profondeur.
+    menu::MenuManager mm{menu::MenuFactory{}};
+    app::HmiValuePicker::Spec spec;
+    spec.field = "Valeur";
+    spec.expected = "INT";
+    spec.doc = doc;
+    mm.ShowDialog(std::make_unique<app::HmiValuePicker>(spec), [](const menu::DialogResult&) {});
+    mm.applyPending();
+    auto* picker = dynamic_cast<app::HmiValuePicker*>(mm.top());
+    check(picker != nullptr, "le s\xC3\xA9lecteur de valeur s'ouvre");
+    if (!picker) return;
+    picker->setTypeFilter(true);
+    const auto paths = picker->shownPaths();
+    const auto shows = [&](const char* x) { return std::find(paths.begin(), paths.end(), x) != paths.end(); };
+    std::string all;
+    for (const auto& x : paths) all += x + "|";
+    check(shows("Compte") && shows("BATEAU") && shows("BATEAU[0]") && shows("BATEAU[0].Taille") && shows("Flotte['cle'][0].Taille")
+              && shows("Capitaine.Taille") && !shows("Texte") && !shows("BATEAU[0].Nom"),
+          "filtre INT : Compte, BATEAU, BATEAU[0], BATEAU[0].Taille, Flotte['cle'][0].Taille, Capitaine.Taille - ni Texte ni .Nom (" + all + ")");
+}
+
 // 1.12.14 : LES TYPES IMBRIQUES AU SELECTEUR - un type rouvert garde tous ses niveaux, l'element se
 // compose dans un second selecteur, un type entier s'ecrit dans la recherche ; compose() garde les
 // parentheses et les crochets d'un parametre ecrit.
@@ -30923,6 +30998,7 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_LOT6"); only && *only == '1') {
         selecteurTypes1119();
         selecteurImbrique11214();
+        aideTypee11214();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -31270,6 +31346,7 @@ int main(int argc, char** argv) {
     onglets1118();                          // 1.11.18 (refonte, lot 5) : les onglets de declarations, Migrer ce code
     selecteurTypes1119();                   // 1.11.19 (refonte, lot 6) : le selecteur de types
     selecteurImbrique11214();               // 1.12.14 : le selecteur compose les types imbriques
+    aideTypee11214();                       // 1.12.14 : l'aide a la saisie typee, ce qui mene au type attendu
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges
     direct1121();                           // 1.11.21 : les diagnostics en direct au panneau du bas
     explorateurs1121();                     // 1.11.21 : les explorateurs deplient les codes

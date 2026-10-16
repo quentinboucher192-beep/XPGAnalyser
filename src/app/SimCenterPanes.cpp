@@ -2,6 +2,7 @@
 //  app/SimCenterPanes.cpp - lot API 8 : Simulation > Forcages, Courbes, Journal
 // =============================================================================
 #include "SimCenter.hpp"
+#include "../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - sans automate
 #include "SimCenterKit.hpp"
 
 #include "../ui/widgets/Controls.hpp"
@@ -113,7 +114,10 @@ public:
         std::string out = f.what + " forc\xC3\xA9" "e \xC3\xA0 " + f.value;
         if (!f.sinceText.empty()) out += ", depuis " + f.sinceText;
         if (!f.who.empty()) out += ", par " + f.who;
-        out += ".\nLe programme n'y \xC3\xA9" "crit plus : elle relit toujours cette valeur. Double-clic (ou Rel\xC3\xA2" "cher) : la rendre au programme.";
+        if (f.source == SimForcing::Source::Equipement)        // 1.12.14 : une case d'un esclave simule
+            out += ".\nL'esclave simul\xC3\xA9 r\xC3\xA9pond cette valeur, plus ce que dit sa m\xC3\xA9moire. Double-clic (ou Rel\xC3\xA2" "cher) : la rel\xC3\xA2" "cher.";
+        else
+            out += ".\nLe programme n'y \xC3\xA9" "crit plus : elle relit toujours cette valeur. Double-clic (ou Rel\xC3\xA2" "cher) : la rendre au programme.";
         if (!f.programSays.empty())   // lot API 8 (le moteur)
             out += "\nSans le for\xC3\xA7" "age, le programme dirait " + f.programSays + " (ce qu'elle prendra une fois rel\xC3\xA2" "ch\xC3\xA9" "e).";
         return out;
@@ -138,10 +142,13 @@ SimForcingPane::SimForcingPane(std::string id, std::shared_ptr<SimCenterModel> m
         cols[i].title = tableModel_->headerText(i);
         cols[i].width = widths[i];
     }
+    if (!core::hasApi()) cols[Model::CProgram].visible = false;   // 1.12.14 : XPGAnalyser IHM - pas de programme
     table_->setColumns(std::move(cols));
     table_->setSelectionMode(ui::SelectionMode::Extended);
-    table_->setTooltip("Tous les for\xC3\xA7" "ages de la simulation : l'automate, ceux pos\xC3\xA9s depuis l'IHM, les cases des esclaves simul\xC3\xA9s. "
-                       "Double-clic : rel\xC3\xA2" "cher ; Ctrl+clic : en choisir plusieurs.");
+    table_->setTooltip(core::hasApi() ? "Tous les for\xC3\xA7" "ages de la simulation : l'automate, ceux pos\xC3\xA9s depuis l'IHM, les cases des esclaves simul\xC3\xA9s. "
+                                        "Double-clic : rel\xC3\xA2" "cher ; Ctrl+clic : en choisir plusieurs."
+                                      : "Tous les for\xC3\xA7" "ages de la simulation : les cases des esclaves simul\xC3\xA9s. "
+                                        "Double-clic : rel\xC3\xA2" "cher ; Ctrl+clic : en choisir plusieurs.");
     links_ += table_->activated->connect([this](RowIndex row) {
         const auto& rows = tableModel_->rows();
         if (row < rows.size() && hosts_.release) hosts_.release({rows[row].key});
@@ -230,8 +237,11 @@ void SimForcingPane::onPaint(const ui::PaintContext& ctx) {
     const std::string big = list.empty() ? std::string("Aucun for\xC3\xA7" "age")
                                          : ss::plural(list.size(), "variable forc\xC3\xA9" "e", "variables forc\xC3\xA9" "es");
     drawBold(ctx, {head.x + 38.f, head.y + 11.f}, big, gfx::FontId{17}, c.text);
-    std::string line = list.empty() ? std::string("Le programme \xC3\xA9" "crit librement dans toutes ses variables ; les esclaves simul\xC3\xA9s r\xC3\xA9pondent ce que dit leur m\xC3\xA9moire.")
-                                    : "Automate " + std::to_string(plc) + kMid + "depuis l'IHM " + std::to_string(ihm) + kMid + "esclaves simul\xC3\xA9s " + std::to_string(eq);
+    // 1.12.14 : XPGAnalyser IHM - ni programme, ni automate : les esclaves simules.
+    std::string line = list.empty() ? (core::hasApi() ? std::string("Le programme \xC3\xA9" "crit librement dans toutes ses variables ; les esclaves simul\xC3\xA9s r\xC3\xA9pondent ce que dit leur m\xC3\xA9moire.")
+                                                      : std::string("Les esclaves simul\xC3\xA9s r\xC3\xA9pondent ce que dit leur m\xC3\xA9moire."))
+                     : core::hasApi() ? "Automate " + std::to_string(plc) + kMid + "depuis l'IHM " + std::to_string(ihm) + kMid + "esclaves simul\xC3\xA9s " + std::to_string(eq)
+                                      : "esclaves simul\xC3\xA9s " + std::to_string(eq) + (ihm ? kMid + std::string("depuis l'IHM ") + std::to_string(ihm) : std::string{});
     if (oldest && model_->now >= oldest->since)
         line += kMid + std::string("le plus ancien : ") + oldest->what + ", depuis " + ss::duration(model_->now - oldest->since);
     ctx.r.drawText({head.x + 38.f, head.y + 36.f}, fit(ctx, line, kSmall, head.w - 52.f), kSmall, c.textMuted);
@@ -242,9 +252,12 @@ void SimForcingPane::onPaint(const ui::PaintContext& ctx) {
         ui::drawIcon(ctx.r, ui::Icon::Force, {x, y, 24.f, 24.f}, c.textMuted);
         drawBold(ctx, {x + 38.f, y}, "Rien n'est forc\xC3\xA9", gfx::FontId{16}, c.text);
         const auto lines = wrap(ctx,
-                                "Forcer, c'est imposer une valeur \xC3\xA0 une variable : le programme n'y \xC3\xA9" "crit plus. On force depuis "
-                                "Simulation \xE2\x80\xBA Automate (double-clic sur une valeur), depuis l'IHM en marche (Forcer\xE2\x80\xA6), ou une case d'un "
-                                "esclave simul\xC3\xA9 (\xC3\x89quipements \xE2\x80\xBA Valeurs simul\xC3\xA9" "es). Tout se retrouve ici, avec qui l'a pos\xC3\xA9 et depuis quand.",
+                                core::hasApi()
+                                    ? "Forcer, c'est imposer une valeur \xC3\xA0 une variable : le programme n'y \xC3\xA9" "crit plus. On force depuis "
+                                      "Simulation \xE2\x80\xBA Automate (double-clic sur une valeur), depuis l'IHM en marche (Forcer\xE2\x80\xA6), ou une case d'un "
+                                      "esclave simul\xC3\xA9 (\xC3\x89quipements \xE2\x80\xBA Valeurs simul\xC3\xA9" "es). Tout se retrouve ici, avec qui l'a pos\xC3\xA9 et depuis quand."
+                                    : "Forcer, c'est imposer une valeur \xC3\xA0 une case d'un esclave simul\xC3\xA9 : il la r\xC3\xA9pond, plus ce que dit sa "
+                                      "m\xC3\xA9moire. On force depuis \xC3\x89quipements \xE2\x80\xBA Valeurs simul\xC3\xA9" "es. Tout se retrouve ici, avec qui l'a pos\xC3\xA9 et depuis quand.",
                                 kBody, w - 38.f, 5);
         for (std::size_t k = 0; k < lines.size(); ++k)
             ctx.r.drawText({x + 38.f, y + 28.f + static_cast<float>(k) * 18.f}, lines[k], kBody, c.textMuted);
@@ -255,9 +268,12 @@ void SimForcingPane::onPaint(const ui::PaintContext& ctx) {
 SimTrendsPane::SimTrendsPane(std::string id, std::shared_ptr<SimCenterModel> model, SimCenterHosts hosts)
     : ui::Widget(std::move(id)), model_(std::move(model)), hosts_(std::move(hosts)) {
     field_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(this->id() + ".ajouter")));
-    field_->setPlaceholder("Ajouter une variable (automate ou IHM) : Armoires[0].ana.PT1.mes, Pompe_Marche\xE2\x80\xA6");
-    field_->setTooltip("Un chemin de l'automate (un membre, une case d'un tableau) ou une variable de l'IHM (\"ihm:\" devant, si le nom "
-                       "existe des deux c\xC3\xB4t\xC3\xA9s). Entr\xC3\xA9" "e l'ajoute ; huit courbes au plus.");
+    // 1.12.14 : XPGAnalyser IHM - les variables de l'IHM seules.
+    field_->setPlaceholder(core::hasApi() ? "Ajouter une variable (automate ou IHM) : Armoires[0].ana.PT1.mes, Pompe_Marche\xE2\x80\xA6"
+                                          : "Ajouter une variable de l'IHM : Consigne, Cuves[0].Niveau\xE2\x80\xA6");
+    field_->setTooltip(core::hasApi() ? "Un chemin de l'automate (un membre, une case d'un tableau) ou une variable de l'IHM (\"ihm:\" devant, si le nom "
+                                        "existe des deux c\xC3\xB4t\xC3\xA9s). Entr\xC3\xA9" "e l'ajoute ; huit courbes au plus."
+                                      : "Une variable de l'IHM (un membre, une case d'un tableau). Entr\xC3\xA9" "e l'ajoute ; huit courbes au plus.");
     if (hosts_.assist) hosts_.assist(*field_);
     links_ += field_->editingDone->connect([this](const std::string&) { addTyped(); });
 }
@@ -425,7 +441,9 @@ void SimTrendsPane::onPaint(const ui::PaintContext& ctx) {
         ui::drawIcon(ctx.r, ui::Icon::Chart, {lx, ly, 24.f, 24.f}, c.textMuted);
         drawBold(ctx, {lx + 38.f, ly}, "Aucune courbe", gfx::FontId{16}, c.text);
         const auto lines = wrap(ctx,
-                                "Ajoute jusqu'\xC3\xA0 huit variables, de l'automate ou de l'IHM : chacune a sa piste, dans le temps. Les bool\xC3\xA9" "ens "
+                                std::string(core::hasApi() ? "Ajoute jusqu'\xC3\xA0 huit variables, de l'automate ou de l'IHM : "
+                                                           : "Ajoute jusqu'\xC3\xA0 huit variables de l'IHM : ")
+                                    + "chacune a sa piste, dans le temps. Les bool\xC3\xA9" "ens "
                                 "en marches d'escalier, les nombres \xC3\xA0 leur \xC3\xA9" "chelle. Figer arr\xC3\xAAte l'affichage, un clic pose un curseur "
                                 "qui lit toutes les valeurs \xC3\xA0 cet instant, Exporter (CSV) ouvre le tout dans Excel.",
                                 kBody, w - 38.f, 5);
@@ -483,7 +501,7 @@ void SimTrendsPane::onPaint(const ui::PaintContext& ctx) {
             ctx.r.line({xr.x + 5.f, xr.y + 5.f}, {xr.right() - 5.f, xr.bottom() - 5.f}, c.textMuted, 1.5f);
             ctx.r.line({xr.x + 5.f, xr.bottom() - 5.f}, {xr.right() - 5.f, xr.y + 5.f}, c.textMuted, 1.5f);
         }
-        hits_.push_back({{area.x + 8.f, y, labelW - 40.f, laneH}, "piste:" + tr.path, tr.path + (tr.hmi ? " (IHM)" : " (automate)")});
+        hits_.push_back({{area.x + 8.f, y, labelW - 40.f, laneH}, "piste:" + tr.path, tr.path + (!core::hasApi() ? "" : tr.hmi ? " (IHM)" : " (automate)")});
         // L'echelle : ce qui se voit, avec un peu de marge.
         double lo = std::numeric_limits<double>::infinity(), hi = -lo;
         for (std::size_t k = k0; k < k1 && k < tr.values.size(); ++k)
@@ -685,6 +703,7 @@ SimJournalPane::SimJournalPane(std::string id, std::shared_ptr<SimCenterModel> m
         cols[i].sortable = false;
     }
     cols[Model::CCycle].align = ui::Align::End;
+    if (!core::hasApi()) cols[Model::CCycle].visible = false;     // 1.12.14 : XPGAnalyser IHM - pas de cycle d'automate
     table_->setColumns(std::move(cols));
     table_->setSelectionMode(ui::SelectionMode::Single);
     links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>&) {
@@ -831,6 +850,7 @@ void SimJournalPane::onPaint(const ui::PaintContext& ctx) {
     for (const auto s : {SimSource::Automate, SimSource::Ihm, SimSource::Equipements, SimSource::Debogage, SimSource::Simulation}) {
         const std::size_t n = j ? j->count(s) : 0;
         if (n == 0 && s == SimSource::Simulation) continue;
+        if (!core::hasApi() && (s == SimSource::Automate || (s == SimSource::Debogage && n == 0))) continue;   // 1.12.14
         chips.push_back({SimJournal::sourceName(s), "source:" + lowerAscii(SimJournal::sourceName(s)), static_cast<int>(s), n});
     }
     // "equipements" et "debogage" : des cles sans accents.

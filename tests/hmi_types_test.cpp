@@ -15,6 +15,7 @@
 //    les operateurs (matchCost) aussi, seuls des couts changent (liste exacte) ;
 //    une valeur gardee (simdata::convert) passe ou non exactement comme avant.
 // =============================================================================
+#include "../src/hmi/HmiDeclEdit.hpp"
 #include "../src/hmi/HmiExpr.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiPopupParams.hpp"
@@ -639,6 +640,35 @@ void objets1122() {
     check(tf::literalOf({"1", " 2 ", ""}) == "[1, 2]" && tf::literalOf({"1", "'x'"}, true) == "(1, 'x')", "literalOf : [1, 2] ; (1, 'x')");
 }
 
+// 1.12.14 : LA VALEUR D'UNE STRUCTURE (Temperature := 20.5, Consigne := 80) - seule, dans une liste,
+// une MAP, un tableau, un tuple, a toute profondeur ; les membres manquants gardent leur valeur ; un
+// membre inconnu, une valeur du mauvais type : refuses, la raison dite. Et le texte d'une valeur.
+void structures11214() {
+    std::printf("-- 1.12.14 : la valeur d'une structure, dans les types imbriques\n");
+    Project p = projet();
+    namespace tf = hmi::typeform;
+    const auto npos = std::string::npos;
+    std::string why;
+    check(tf::valueFits(p, "T_Four", "(Temperature := 20.5, Consigne := 80)", &why), "T_Four : (Temperature := 20.5, Consigne := 80) (" + why + ")");
+    check(tf::valueFits(p, "LIST OF T_Four", "[(Temperature := 20.5, Consigne := 80), (Consigne := 60)]", &why),
+          "LIST OF T_Four : deux structures, la seconde sans Temperature (" + why + ")");
+    check(tf::valueFits(p, "MAP[STRING] OF T_Four", "['four1' := (Consigne := 80), 'four2' := (Temperature := 1.5)]", &why),
+          "MAP[STRING] OF T_Four (" + why + ")");
+    check(tf::valueFits(p, "ARRAY[0..1] OF T_Four", "[(Consigne := 1), (Consigne := 2)]", &why), "ARRAY[0..1] OF T_Four (" + why + ")");
+    check(tf::valueFits(p, "MAP[STRING] OF VECTOR OF T_Four", "['a' := [(Consigne := 1), (Consigne := 2)], 'b' := []]", &why),
+          "MAP[STRING] OF VECTOR OF T_Four : imbriqu\xC3\xA9 (" + why + ")");
+    check(tf::valueFits(p, "LIST OF TUPLE(STRING, T_Four)", "[('a', (Consigne := 3))]", &why), "LIST OF TUPLE(STRING, T_Four) (" + why + ")");
+    check(!tf::valueFits(p, "LIST OF T_Four", "[(Pression := 1)]", &why) && why.find("Pression") != npos,
+          "un membre inconnu : refus\xC3\xA9 (" + why + ")");
+    check(!tf::valueFits(p, "LIST OF T_Four", "[(Consigne := 'chaud')]", &why) && why.find("Consigne") != npos,
+          "un texte pour un REAL : refus\xC3\xA9, le membre dit (" + why + ")");
+    check(!tf::valueFits(p, "LIST OF REAL", "[(Consigne := 1)]", &why), "une structure dans une LIST OF REAL : refus\xC3\xA9e (" + why + ")");
+    // une declaration (une constante, une locale) : sa valeur, jugee comme une variable IHM
+    check(hmi::decledit::valueMisfit(p, "LIST OF T_Four", "[(Consigne := 80)]").empty(), "une d\xC3\xA9" "claration LIST OF T_Four : sa valeur accept\xC3\xA9" "e");
+    check(hmi::decledit::valueMisfit(p, "T_Four", "(Consigne := 80)").empty(), "une d\xC3\xA9" "claration T_Four : (Consigne := 80) accept\xC3\xA9" "e");
+    check(!hmi::decledit::valueMisfit(p, "LIST OF T_Four", "[(Bidon := 80)]").empty(), "... et un membre inconnu refus\xC3\xA9");
+}
+
 } // namespace
 
 int main() {
@@ -651,6 +681,7 @@ int main() {
     moteur();
     cles();
     objets1122();
+    structures11214();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

@@ -211,6 +211,17 @@ bool propertyValue(const Aggregate&, std::string_view name, sim::Value& out);
 // "T_Four", "Four1.Vannes" -> "ARRAY[1..3] OF T_Vanne", "Consignes[2]" ->
 // "REAL" (les indices ne sont pas evalues) ; vide : pas une variable IHM.
 [[nodiscard]] std::string typeOfPath(const Project&, std::string_view path);
+// 1.12.14 : UN PAS DANS UN TYPE, a toute profondeur - [..] ou .Nom dans une structure, un tableau, une
+// liste, un vecteur, un ensemble, un tampon, une MAP, un tuple (MAP[STRING] OF VECTOR OF T_Cuve :
+// [..] -> VECTOR OF T_Cuve, [..] -> T_Cuve, .Niveau -> REAL). `type` vide : on ne sait pas (un nom
+// inconnu) ; `why` non vide : impossible, dit apres le chemin ("(T_Cuve) n'a pas de membre X").
+struct TypeStep {
+    std::string type;
+    std::string why;
+    bool        property{false};     // une propriete (L.Count, T.Length) : lue seulement
+};
+[[nodiscard]] TypeStep stepIndex(const Project&, std::string_view type);
+[[nodiscard]] TypeStep stepMember(const Project&, std::string_view type, std::string_view member);
 // Les membres d'un type IHM (vide : pas une structure).
 [[nodiscard]] std::vector<TypeMember> membersOf(const Project&, std::string_view typeName);
 // "structure T_Four : 6 membres, 13 mots", "tableau de 10 REAL (0..9), 20 mots".

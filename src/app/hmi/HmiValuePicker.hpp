@@ -79,6 +79,7 @@ public:
     [[nodiscard]] std::string result() const;
     [[nodiscard]] bool resultFx() const;
     [[nodiscard]] std::size_t shownCount() const;    // les variables montrees (sans les groupes)
+    [[nodiscard]] std::vector<std::string> shownPaths() const;   // 1.12.14 : les chemins des lignes montrees, dans l'ordre
     [[nodiscard]] const valuekind::Result& classification() const;
     bool applyFix(std::size_t diag, std::size_t fix);
     void validate(bool force = false);

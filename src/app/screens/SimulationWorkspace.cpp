@@ -18,6 +18,7 @@
 //  (simCenterGo) : un onglet, une ligne, une variable, Simuler...
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - la simulation de l'IHM seule
 
 #include "../ApiPanes.hpp"
 #include "../App.hpp"
@@ -542,7 +543,7 @@ void MainAnalysisScreen::pollSimCenter(double t) {
     }
     st.hmiRunning = running;
     // Les variables de l'automate que l'IHM lit : un parcours de toute l'IHM, toutes les dix secondes.
-    if (t - st.plcReadsAt > 10.0) {
+    if (core::hasApi() && t - st.plcReadsAt > 10.0) {      // 1.12.14 : XPGAnalyser IHM - pas d'automate
         st.plcReadsAt = t;
         st.plcReads = hmiReadsOfPlc().size();
     }
@@ -717,6 +718,15 @@ ss::Snapshot MainAnalysisScreen::simSnapshot(double t) {
         s.equip.list.push_back(std::move(one));
     }
     s.equip.exchangesPerSecond = st.exchangeRate;
+    // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - rien de lui dans la Vue d'ensemble (ni preparation,
+    // ni cycle, ni section) ; les forcages restent : les cases des esclaves simules.
+    if (!core::hasApi()) {
+        ss::PlcFacts none;
+        none.forced = s.plc.forced;
+        none.oldestForced = s.plc.oldestForced;
+        none.oldestForcedSeconds = s.plc.oldestForcedSeconds;
+        s.plc = std::move(none);
+    }
     return s;
 }
 
@@ -900,22 +910,42 @@ bool MainAnalysisScreen::openSimCenter(const std::string& key) {
         auto pane = std::make_unique<SimOverviewPane>("analysis.sim.ensemble.volet", model, hosts);
         frame = std::make_unique<ApiFrame>("analysis.sim.ensemble", std::move(pane));
         auto& t = frame->tools();
-        t.add(1, HmiGlyph::Play, "Lance le programme ici m\xC3\xAAme, cycle apr\xC3\xA8s cycle (reprend apr\xC3\xA8s une pause) \xC2\xB7 F5", "Simuler");
-        t.add(2, HmiGlyph::Stop, "Met la simulation en pause : les valeurs restent fig\xC3\xA9" "es", "Pause");
-        t.add(3, HmiGlyph::Forward, "Ex\xC3\xA9" "cute exactement un cycle, puis pause", "Un cycle");
-        t.add(4, HmiGlyph::Refresh, "Arr\xC3\xAAte et remet tout \xC3\xA0 z\xC3\xA9ro \xC2\xB7 Maj+F5", "Arr\xC3\xAAter");
-        t.add(9, HmiGlyph::Refresh, "Arr\xC3\xAAte, remet tout \xC3\xA0 z\xC3\xA9ro et relance (la maquette)", "Relancer du cycle 0");
+        // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - Demarrer et Arreter l'IHM (Simuler, Pause, Un cycle,
+        // Relancer du cycle 0 preparaient le programme de MAST, qu'il n'a pas).
+        const bool plc = core::hasApi();
+        if (plc) {
+            t.add(1, HmiGlyph::Play, "Lance le programme ici m\xC3\xAAme, cycle apr\xC3\xA8s cycle (reprend apr\xC3\xA8s une pause) \xC2\xB7 F5", "Simuler");
+            t.add(2, HmiGlyph::Stop, "Met la simulation en pause : les valeurs restent fig\xC3\xA9" "es", "Pause");
+            t.add(3, HmiGlyph::Forward, "Ex\xC3\xA9" "cute exactement un cycle, puis pause", "Un cycle");
+            t.add(4, HmiGlyph::Refresh, "Arr\xC3\xAAte et remet tout \xC3\xA0 z\xC3\xA9ro \xC2\xB7 Maj+F5", "Arr\xC3\xAAter");
+            t.add(9, HmiGlyph::Refresh, "Arr\xC3\xAAte, remet tout \xC3\xA0 z\xC3\xA9ro et relance (la maquette)", "Relancer du cycle 0");
+        } else {
+            t.add(1, HmiGlyph::Play, "D\xC3\xA9marre l'IHM : ses scripts, ses alarmes, ses vues ; ses variables, les esclaves simul\xC3\xA9s de ses "
+                                     "\xC3\xA9quipements \xC2\xB7 F8", "D\xC3\xA9marrer l'IHM");
+            t.add(4, HmiGlyph::Stop, "Arr\xC3\xAAte l'IHM \xC2\xB7 Maj+F8", "Arr\xC3\xAAter l'IHM");
+        }
         t.separator();
-        t.add(5, HmiGlyph::Lock, "Tous les for\xC3\xA7" "ages : l'automate, l'IHM, les esclaves simul\xC3\xA9s", "For\xC3\xA7" "ages");
+        t.add(5, HmiGlyph::Lock, plc ? "Tous les for\xC3\xA7" "ages : l'automate, l'IHM, les esclaves simul\xC3\xA9s"
+                                     : "Tous les for\xC3\xA7" "ages : les cases des esclaves simul\xC3\xA9s", "For\xC3\xA7" "ages");
         t.add(6, HmiGlyph::Trend, "Jusqu'\xC3\xA0 huit variables dans le temps", "Courbes");
         t.add(7, HmiGlyph::List, "Tout ce qui s'est pass\xC3\xA9, expliqu\xC3\xA9", "Journal");
         t.separator();
         t.add(8, HmiGlyph::Help, "L'aide (F1)", "Aide");
         using State = SimulationHost::State;
-        t.setEnabledWhen(1, [this] { return !(app_.simulation().attached() && (app_.simulation().state() == State::Running || app_.simulation().state() == State::Halted)); });
-        t.setEnabledWhen(2, [this] { return app_.simulation().attached() && app_.simulation().state() == State::Running; });
-        t.setEnabledWhen(3, [this] { return !(app_.simulation().attached() && app_.simulation().state() == State::Halted); });
-        t.setEnabledWhen(4, [this] { return app_.simulation().attached() && app_.simulation().state() != State::Stopped; });
+        if (plc) {
+            t.setEnabledWhen(1, [this] { return !(app_.simulation().attached() && (app_.simulation().state() == State::Running || app_.simulation().state() == State::Halted)); });
+            t.setEnabledWhen(2, [this] { return app_.simulation().attached() && app_.simulation().state() == State::Running; });
+            t.setEnabledWhen(3, [this] { return !(app_.simulation().attached() && app_.simulation().state() == State::Halted); });
+            t.setEnabledWhen(4, [this] { return app_.simulation().attached() && app_.simulation().state() != State::Stopped; });
+        } else {
+            const auto hmiOn = [this] {
+                auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+                if (const auto tab = hmiTabs_.find("simulation"); !sim && tab != hmiTabs_.end()) sim = dynamic_cast<HmiSimulationPane*>(tab->second);
+                return sim && sim->hmiRunning();
+            };
+            t.setEnabledWhen(1, [hmiOn] { return !hmiOn(); });
+            t.setEnabledWhen(4, [hmiOn] { return hmiOn(); });
+        }
         paneLinks_ += t.triggered->connect([this](int a) {
             static const char* const keys[] = {"", "sim.run", "sim.pause", "sim.step", "sim.stop", "forcages", "courbes", "journal"};
             if (a >= 1 && a <= 7) simCenterGo(keys[a]);
@@ -937,9 +967,11 @@ bool MainAnalysisScreen::openSimCenter(const std::string& key) {
         t.add(1, HmiGlyph::Unlock, "Rend les lignes choisies au programme (double-clic : une ligne)", "Rel\xC3\xA2" "cher");
         t.add(2, HmiGlyph::Unlock, "Rend toutes les variables et toutes les cases forc\xC3\xA9" "es", "Tout rel\xC3\xA2" "cher");
         t.separator();
-        t.add(3, HmiGlyph::Lock, "Forcer une variable de l'automate (l'onglet Automate, la variable choisie)", "Forcer\xE2\x80\xA6");
-        t.add(4, HmiGlyph::Export, "Exporter les for\xC3\xA7" "ages de l'automate dans un fichier (les rejouer plus tard)", "Exporter\xE2\x80\xA6");
-        t.separator();
+        if (core::hasApi()) {            // 1.12.14 : XPGAnalyser IHM - pas d'onglet Automate
+            t.add(3, HmiGlyph::Lock, "Forcer une variable de l'automate (l'onglet Automate, la variable choisie)", "Forcer\xE2\x80\xA6");
+            t.add(4, HmiGlyph::Export, "Exporter les for\xC3\xA7" "ages de l'automate dans un fichier (les rejouer plus tard)", "Exporter\xE2\x80\xA6");
+            t.separator();
+        }
         t.add(5, HmiGlyph::Help, "L'aide (F1)", "Aide");
         t.setEnabledWhen(2, [model] { return !model->forcings.empty(); });
         paneLinks_ += t.triggered->connect([this, raw](int a) {
@@ -986,7 +1018,8 @@ bool MainAnalysisScreen::openSimCenter(const std::string& key) {
                     break;
             }
         });
-        frame->setHint("Huit variables au plus, automate ou IHM \xC2\xB7 un clic dans les traces pose le curseur \xC2\xB7 Figer arr\xC3\xAAte l'affichage, pas la mesure");
+        frame->setHint(std::string(core::hasApi() ? "Huit variables au plus, automate ou IHM" : "Huit variables de l'IHM au plus")   // 1.12.14
+                       + " \xC2\xB7 un clic dans les traces pose le curseur \xC2\xB7 Figer arr\xC3\xAAte l'affichage, pas la mesure");
         title = "Simulation \xC2\xB7 Courbes";
         icon = ui::Icon::Chart;
     } else {
@@ -1095,6 +1128,14 @@ void MainAnalysisScreen::simCenterGo(const std::string& key) {
     ensureSimCenter();
     auto& st = *simCenter_;
     if (key == "sim.run" || key == "sim.pause" || key == "sim.stop" || key == "sim.step" || key == "relancer") {
+        // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - Simuler demarre l'IHM, Arreter l'arrete ; rien ne
+        // prepare plus le programme de MAST ("La simulation ne se prepare pas - aucune section en ST").
+        if (!core::hasApi()) {
+            if (key != "sim.pause" && key != "sim.step") (void)topBarLot8Action(key == "sim.stop" ? "hmi.stop" : "hmi.start");
+            st.prepareError.clear();
+            st.reportDirty = true;
+            return;
+        }
         if (key == "relancer") runSimulationTransport("sim.stop");
         // La raison d'un refus de preparer : le bandeau la dira.
         if ((key == "sim.run" || key == "sim.step" || key == "relancer") && !app_.simulation().attached()) {
@@ -1185,6 +1226,7 @@ bool MainAnalysisScreen::addSimTrend(const std::string& raw, std::string* why) {
         return false;
     }
     auto& model = *simCenter_->model;
+    if (!core::hasApi()) hmiOnly = true;      // 1.12.14 : XPGAnalyser IHM - pas d'automate a preparer
     if (!hmiOnly) {
         // L'automate : prepare au besoin (sans lancer), pour savoir si le chemin existe.
         if (!app_.simulation().attached() && app_.project()) (void)attachSimulation(nullptr);
@@ -1244,7 +1286,8 @@ void MainAnalysisScreen::releaseSimForcings(const std::vector<std::string>& keys
     simCenter_->nextPoll = 0;      // la liste suit tout de suite
     if (status_)
         status_->setTransientMessage(done ? ss::plural(done, "for\xC3\xA7" "age rel\xC3\xA2" "ch\xC3\xA9", "for\xC3\xA7" "ages rel\xC3\xA2" "ch\xC3\xA9" "s")
-                                                + " : le programme y \xC3\xA9" "crit de nouveau."
+                                                + (core::hasApi() ? " : le programme y \xC3\xA9" "crit de nouveau."
+                                                                  : " : les esclaves simul\xC3\xA9s r\xC3\xA9pondent de nouveau leur m\xC3\xA9moire.")
                                           : std::string("Rien \xC3\xA0 rel\xC3\xA2" "cher."),
                                      6.0);
 }

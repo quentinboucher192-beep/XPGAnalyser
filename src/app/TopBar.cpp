@@ -151,12 +151,15 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
          Menu::None, true);
     part("cycle", "Un cycle", "Ex\xC3\xA9" "cute exactement un cycle", "sim.step", ui::Icon::StepOnce, Menu::None, true);
     // 1.10 : l'IHM a cote de l'API, son etat et son bouton.
-    part("ihm", "IHM", "L'IHM simul\xC3\xA9" "e : un clic la d\xC3\xA9marre ou l'arr\xC3\xAAte, sans toucher \xC3\xA0 l'API (le programme). "
-         "Ses commandes compl\xC3\xA8tes : l'onglet Simulation \xC2\xB7 IHM", "hmi.toggle", ui::Icon::Screen, Menu::None, true);
+    part("ihm", "IHM", core::hasApi() ? "L'IHM simul\xC3\xA9" "e : un clic la d\xC3\xA9marre ou l'arr\xC3\xAAte, sans toucher \xC3\xA0 l'API (le programme). "
+                                        "Ses commandes compl\xC3\xA8tes : l'onglet Simulation \xC2\xB7 IHM"
+                                      : "L'IHM simul\xC3\xA9" "e : un clic la d\xC3\xA9marre ou l'arr\xC3\xAAte. Ses commandes compl\xC3\xA8tes : l'onglet Simulation \xC2\xB7 IHM",
+         "hmi.toggle", ui::Icon::Screen, Menu::None, true);
     // 1.10 (maquette, scene 2) : ses deux boutons, et le menu des deux (l'API et l'IHM).
-    part("ihm-demarrer", "D\xC3\xA9marrer l'IHM", "D\xC3\xA9marrer l'IHM (F8) : l'API ne d\xC3\xA9marre pas avec elle", "hmi.start", ui::Icon::Play,
-         Menu::None, true);
-    part("ihm-arreter", "Arr\xC3\xAAter l'IHM", "Arr\xC3\xAAter l'IHM (Maj+F8) : l'API continue", "hmi.stop", ui::Icon::Stop, Menu::None, true);
+    part("ihm-demarrer", "D\xC3\xA9marrer l'IHM", core::hasApi() ? "D\xC3\xA9marrer l'IHM (F8) : l'API ne d\xC3\xA9marre pas avec elle" : "D\xC3\xA9marrer l'IHM (F8)",
+         "hmi.start", ui::Icon::Play, Menu::None, true);
+    part("ihm-arreter", "Arr\xC3\xAAter l'IHM", core::hasApi() ? "Arr\xC3\xAAter l'IHM (Maj+F8) : l'API continue" : "Arr\xC3\xAAter l'IHM (Maj+F8)",
+         "hmi.stop", ui::Icon::Stop, Menu::None, true);
     part("les-deux", "Les deux", "L'API et l'IHM ensemble : D\xC3\xA9marrer les deux, Tout arr\xC3\xAAter", {}, ui::Icon::None, Menu::Both);
     part("control-expert", "Vers Control Expert", "\xC3\x89" "crit src/MAST.XPG et src/CONFIG.XHW, pr\xC3\xAAts \xC3\xA0 r\xC3\xA9importer dans Control Expert",
          "project.exportSources", ui::Icon::Export, Menu::None, false, true);

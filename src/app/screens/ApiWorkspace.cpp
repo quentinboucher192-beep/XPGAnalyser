@@ -13,6 +13,7 @@
 //  blocs, l'ordre, les variables et les tables d'animation suivent (lots 3 a 5).
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM ne prepare pas d'automate
 #include "../SectionComparePane.hpp"   // 1.8.0 : le comparateur de sections
 #include "../../project/ProjectIcon.hpp"
 
@@ -1164,6 +1165,12 @@ void MainAnalysisScreen::openApiTabFromAction(const std::string& key) {
 // (Lancer, Un cycle). `why` : la raison seule - l'onglet en fait sa phrase
 // (« La simulation ne demarre pas : ... ») et traduit celle du moteur.
 bool MainAnalysisScreen::attachSimulation(std::string* why) {
+    // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - rien ne prepare son programme (la Vue d'ensemble
+    // disait "La simulation ne se prepare pas - aucune section en ST de la tache MAST").
+    if (!core::hasApi()) {
+        if (why) *why = "XPGAnalyser IHM n'a pas d'automate";
+        return false;
+    }
     const auto project = app_.project();
     if (!project) {
         if (why) *why = "aucun projet ouvert";

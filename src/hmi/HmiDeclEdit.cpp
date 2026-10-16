@@ -3,6 +3,7 @@
 //  declarations d'un code (voir HmiDeclEdit.hpp)
 // =============================================================================
 #include "HmiDeclEdit.hpp"
+#include "HmiTypeForms.hpp"     // 1.12.14 : la valeur d'une structure (le moteur la range)
 
 #include "HmiEnums.hpp"
 #include "HmiGuide.hpp"       // guide::fold : sans casse ni accents
@@ -748,6 +749,12 @@ std::string valueMisfit(const Project& p, std::string_view type, std::string_vie
     if (value.empty()) return {};
     const auto r = typereg::Registry::build(p)->resolve(type, typereg::UseAll);
     if (!r.ok) return {};                                         // un type inconnu : on ne sait pas
+    // 1.12.14 : une structure ecrite (Nom := 'A', Niveau := 2.5) - seule, dans un tableau, une liste, une
+    // MAP, a toute profondeur : le moteur la range dans le type ; ce qui ne va pas est dit.
+    if ((value.front() == '(' || value.front() == '[') && r.entry && r.entry->category == typereg::Category::Structure) {
+        std::string why;
+        return hmi::typeform::valueFits(p, r.text, value, &why) ? std::string{} : why;
+    }
     auto category = r.category;
     std::string target = r.text;
     const bool array = category == typereg::Category::Collection;

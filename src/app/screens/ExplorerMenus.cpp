@@ -29,6 +29,7 @@
 //  menu de ce noeud (treeKey) - ou disent pourquoi elles sont grisees.
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - sans automate
 #include "../hmi/HmiNativesCards.hpp"   // 1.12.0 : ce qu'Inserer pose
 
 #include "../AnimationTablesPane.hpp"
@@ -1122,6 +1123,13 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
             default:               m.add("Ouvrir la vue d'ensemble", Icon::Info, open("ensemble")); break;
         }
         m.separator();
+        // 1.12.14 : XPGAnalyser IHM - la simulation est celle de l'IHM (Simuler, Un cycle preparaient le
+        // programme de MAST, qu'il n'a pas).
+        if (!core::hasApi()) {
+            m.add("D\xC3\xA9marrer l'IHM", Icon::Play, [this] { (void)topBarLot8Action("hmi.start"); }, "F8");
+            m.add("Arr\xC3\xAAter l'IHM", Icon::Stop, [this] { (void)topBarLot8Action("hmi.stop"); }, "Maj+F8");
+            break;
+        }
         m.add(running ? "Pause" : "Simuler", running ? Icon::Pause : Icon::Play,
               [this, running] { simCenterGo(running ? "sim.pause" : "sim.run"); }, {}, haltedWhy);
         m.add("Un cycle", Icon::StepOnce, [this] { simCenterGo("sim.step"); }, {}, haltedWhy);

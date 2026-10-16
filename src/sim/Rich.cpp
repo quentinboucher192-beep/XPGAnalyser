@@ -401,6 +401,16 @@ bool literalText(const Obj& o, std::string& out) {
             out = s + "]";
             return true;
         }
+        case TypeDesc::Kind::Struct: {           // 1.12.14 : (Nom := 'A', Niveau := 2.5)
+            std::string s = "(";
+            for (std::size_t i = 0; i < o.items.size() && i < o.type->members.size(); ++i) {
+                std::string item;
+                if (!o.items[i] || !literalText(*o.items[i], item)) return false;
+                s += (i ? ", " : "") + o.type->members[i].first + " := " + item;
+            }
+            out = s + ")";
+            return true;
+        }
         default: return false;
     }
 }

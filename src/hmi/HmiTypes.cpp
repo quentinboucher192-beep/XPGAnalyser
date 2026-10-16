@@ -7,6 +7,7 @@
 #include "HmiMarkers.hpp"   // 1.11.1 (REP) : pathProblems lit un script sans les $ de ses reperes
 #include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types elementaires d'une variable
 #include "HmiExpr.hpp"           // 1.12.10 (lot F) : la valeur d'un membre, lue comme le moteur la lira
+#include "HmiTypeForms.hpp"      // 1.12.14 : les pas dans les types imbriques (la forme d'un type)
 
 #include <algorithm>
 #include <cctype>
@@ -1007,6 +1008,110 @@ bool propertyValue(const Aggregate& a, std::string_view name, sim::Value& out) {
 }
 
 // ------------------------------------------------------ les chemins ---------
+// 1.12.14 : les pas dans un type, a toute profondeur (voir HmiTypes.hpp).
+TypeStep stepIndex(const Project& p, std::string_view type) {
+    (void)p;
+    TypeStep st;
+    const std::string t = normalized(type);
+    const auto sh = typeform::decompose(t);
+    if (sh.reference) return st;                                   // une reference : on ne sait pas
+    switch (sh.form) {
+        case typeform::Form::Array:
+        case typeform::Form::Array2D:
+        case typeform::Form::List:
+        case typeform::Form::Vector:
+        case typeform::Form::Set:
+        case typeform::Form::Ring:
+        case typeform::Form::Map: st.type = normalized(sh.element); return st;
+        case typeform::Form::Tuple:
+            st.why = "est un " + t + " : ses \xC3\xA9l\xC3\xA9ments se lisent .Item1, .Item2\xE2\x80\xA6, pas entre crochets";
+            return st;
+        case typeform::Form::Simple: break;
+    }
+    if (t.empty()) return st;
+    if (isElementary(t) || p.hmiTypeByName(t)) st.why = "est un " + t + " : pas d'indice entre crochets";
+    return st;
+}
+
+TypeStep stepMember(const Project& p, std::string_view type, std::string_view member) {
+    TypeStep st;
+    const std::string t = normalized(type);
+    const auto sh = typeform::decompose(t);
+    if (sh.reference || member.empty()) return st;
+    std::string m(member);
+    for (auto& ch : m) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    const auto dint = [&](std::initializer_list<const char*> names) {
+        for (const char* n : names)
+            if (m == n) {
+                st.type = "DINT";
+                st.property = true;
+                return true;
+            }
+        return false;
+    };
+    switch (sh.form) {
+        case typeform::Form::Array:
+        case typeform::Form::Array2D:
+            if (dint({"LENGTH", "SIZE", "COUNT", "MAXSIZE", "LOW", "HIGH", "ROWS", "COLUMNS", "COLS", "DIMENSIONS"})) return st;
+            st.why = "est un tableau : ." + std::string(member) + " n'existe pas (Length, Low, High\xE2\x80\xA6 ou [i] pour une case)";
+            return st;
+        case typeform::Form::List:
+        case typeform::Form::Vector:
+        case typeform::Form::Set:
+        case typeform::Form::Ring:
+            if (dint({"LENGTH", "SIZE", "COUNT", "LOW", "HIGH"}) || (sh.form == typeform::Form::Ring && dint({"CAPACITY"}))) return st;
+            if (m == "FIRST" || m == "LAST") {
+                st.type = normalized(sh.element);
+                return st;
+            }
+            if (m == "EMPTY" || m == "ISEMPTY" || (sh.form == typeform::Form::Ring && m == "FULL")) {
+                st.type = "BOOL";
+                st.property = true;
+                return st;
+            }
+            st.why = "est un " + t + " : ." + std::string(member) + " n'existe pas (Count, First, Last, Empty\xE2\x80\xA6 ou [i] pour un \xC3\xA9l\xC3\xA9ment)";
+            return st;
+        case typeform::Form::Map:
+            if (dint({"LENGTH", "SIZE", "COUNT"})) return st;
+            st.why = "est un " + t + " : ." + std::string(member) + " n'existe pas (Count, ou ['cl\xC3\xA9'] pour une valeur)";
+            return st;
+        case typeform::Form::Tuple: {
+            std::vector<std::string> items{sh.element};
+            if (!trimmed(sh.parameter).empty())
+                for (auto& x : splitList(sh.parameter)) items.push_back(x);
+            if (m.rfind("ITEM", 0) == 0 && m.size() > 4) {
+                const auto n = std::strtoul(m.c_str() + 4, nullptr, 10);
+                if (n >= 1 && n <= items.size()) {
+                    st.type = normalized(items[n - 1]);
+                    return st;
+                }
+            }
+            st.why = "(" + t + ") n'a pas de membre " + std::string(member) + " (Item1 \xC3\xA0 Item" + std::to_string(items.size()) + ")";
+            return st;
+        }
+        case typeform::Form::Simple: break;
+    }
+    if (isElementary(t)) {
+        if (!std::isdigit(static_cast<unsigned char>(member[0]))) st.why = "est un " + t + " : pas de membre ." + std::string(member);
+        return st;
+    }
+    const auto* ty = p.hmiTypeByName(t);
+    if (!ty) return st;
+    for (const auto& mm : ty->members)
+        if (sameText(mm.name, member)) {
+            st.type = normalized(mm.type);
+            return st;
+        }
+    if (const PropertyInfo* pi = property(member); pi && !pi->arrayOnly) {
+        st.property = true;
+        return st;
+    }
+    std::string list;
+    for (const auto& mm : ty->members) list += (list.empty() ? "" : ", ") + mm.name;
+    st.why = "(" + ty->name + ") n'a pas de membre " + std::string(member) + (list.empty() ? std::string{} : " (membres : " + list + ")");
+    return st;
+}
+
 std::string typeOfPath(const Project& p, std::string_view path) {
     // La racine : une variable IHM.
     std::size_t i = 0;
@@ -1014,6 +1119,7 @@ std::string typeOfPath(const Project& p, std::string_view path) {
     const auto* v = p.variable(path.substr(0, i));
     if (!v) return {};
     std::string type = normalized(v->type);
+    // 1.12.14 : chaque pas, a toute profondeur (Parc['a'][1].Niveau : MAP, VECTOR, T_Cuve, REAL).
     while (i < path.size()) {
         const char c = path[i];
         if (std::isspace(static_cast<unsigned char>(c))) {
@@ -1029,25 +1135,18 @@ std::string typeOfPath(const Project& p, std::string_view path) {
                 else if (path[j] == ']' && --depth == 0) break;
             }
             if (j >= path.size()) return {};
-            Spec s;
-            if (!parseSpec(type, s) || !s.array()) return {};
-            type = s.element;
+            const auto st = stepIndex(p, type);
+            if (st.type.empty()) return {};
+            type = st.type;
             i = j + 1;
             continue;
         }
         if (c == '.') {
             std::size_t j = i + 1;
             while (j < path.size() && (std::isalnum(static_cast<unsigned char>(path[j])) || path[j] == '_')) ++j;
-            const std::string_view member = path.substr(i + 1, j - i - 1);
-            Spec s;
-            if (!parseSpec(type, s) || s.array() || isElementary(s.element)) return {};
-            const auto* ty = p.hmiTypeByName(s.element);
-            if (!ty) return {};
-            const TypeMember* found = nullptr;
-            for (const auto& m : ty->members)
-                if (sameText(m.name, member)) found = &m;
-            if (!found) return {};
-            type = normalized(found->type);
+            const auto st = stepMember(p, type, path.substr(i + 1, j - i - 1));
+            if (st.type.empty()) return {};
+            type = st.type;
             i = j;
             continue;
         }
@@ -1131,9 +1230,54 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
         std::string path(name);
         const int at = line;
         while (true) {
-            // 1.12.2/1.12.4 : un objet (une variable LIST, un membre MAP...) : ses indices et ses
-            // membres (L[0], M['cle'], T.Item1, L.Count) se verifient en marche, pas ici.
-            if (isRich(type)) break;
+            // 1.12.14 : un objet (une LIST, une MAP, un tuple, a toute profondeur) : ses indices et ses
+            // membres (L[0], M['cle'][2].Niveau, T.Item1, L.Count) se verifient ici aussi - ils
+            // passaient en marche seulement.
+            if (isRich(type)) {
+                std::size_t k = i;
+                while (k < n && (code[k] == ' ' || code[k] == '\t')) ++k;
+                if (k < n && code[k] == '[') {
+                    int depth = 0;
+                    std::size_t e = k;
+                    for (; e < n; ++e) {
+                        if (code[e] == '[') ++depth;
+                        else if (code[e] == ']' && --depth == 0) break;
+                        else if (code[e] == '\n') break;
+                    }
+                    if (e >= n || code[e] != ']') break;
+                    const std::string inside(code.substr(k + 1, e - k - 1));
+                    const auto st = stepIndex(p, type);
+                    i = e + 1;
+                    if (!st.why.empty()) out.push_back({at, path + " " + st.why});
+                    if (st.type.empty()) break;
+                    path += "[" + inside + "]";
+                    type = st.type;
+                    continue;
+                }
+                if (k < n && code[k] == '.' && k + 1 < n && isStart(code[k + 1])) {
+                    std::size_t e = k + 1;
+                    while (e < n && isPart(code[e])) ++e;
+                    const std::string member(code.substr(k + 1, e - k - 1));
+                    i = e;
+                    const auto st = stepMember(p, type, member);
+                    if (!st.why.empty()) {
+                        out.push_back({at, path + " " + st.why});
+                        break;
+                    }
+                    if (st.property) {
+                        std::size_t q = e;
+                        while (q < n && (code[q] == ' ' || code[q] == '\t')) ++q;
+                        if (q + 1 < n && code[q] == ':' && code[q + 1] == '=')
+                            out.push_back({at, path + "." + member + " : une propri\xC3\xA9t\xC3\xA9 se lit seulement"});
+                        break;
+                    }
+                    if (st.type.empty()) break;
+                    path += "." + member;
+                    type = st.type;
+                    continue;
+                }
+                break;
+            }
             std::size_t k = i;
             while (k < n && (code[k] == ' ' || code[k] == '\t')) ++k;
             if (k < n && code[k] == '[') {

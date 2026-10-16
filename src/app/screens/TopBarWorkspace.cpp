@@ -15,6 +15,7 @@
 //    - Deposer un fichier... : l'explorateur, puis la question du depot.
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - sans automate
 
 #include "../ApiListKit.hpp"
 #include "../App.hpp"
@@ -224,7 +225,8 @@ bool MainAnalysisScreen::topBarLot8Action(std::string_view id) {
         }
         sim->command(start ? "hmi.start" : "hmi.stop");
         if (status_)
-            status_->setTransientMessage(start ? "IHM d\xC3\xA9marr\xC3\xA9" "e (l'API ne bouge pas)" : "IHM arr\xC3\xAAt\xC3\xA9" "e (l'API ne bouge pas)", 4.0);
+            status_->setTransientMessage(std::string(start ? "IHM d\xC3\xA9marr\xC3\xA9" "e" : "IHM arr\xC3\xAAt\xC3\xA9" "e")
+                                             + (core::hasApi() ? " (l'API ne bouge pas)" : ""), 4.0);   // 1.12.14
         refreshSimulationIndicator();
         return true;
     }
