@@ -3996,8 +3996,15 @@ void membresObjetsEcran1124() {
     check(row >= 0 && vars.table().model()->cellText(static_cast<ui::RowIndex>(row), 1) == "LIST OF STRING"
               && vars.table().model()->cellText(static_cast<ui::RowIndex>(row), 2) == "['P\xC3\xA9trir', 'Cuire']",
           "Recette d\xC3\xA9pli\xC3\xA9" "e : Recette.Etapes, LIST OF STRING, sa valeur initiale");
+    // 1.12.14 : un membre objet se deplie - ses proprietes (Count = 2...), puis ses elements (sa valeur initiale).
     vars.setExpanded("Recette.Etapes", true);
-    check(vars.rowOf("Recette.Stock") == vars.rowOf("Recette.Etapes") + 1, "un membre objet ne se d\xC3\xA9plie pas en cases");
+    const auto cellOf = [&](const std::string& key, std::size_t c) {
+        const int at = vars.rowOf(key);
+        return at >= 0 ? vars.table().model()->cellText(static_cast<ui::RowIndex>(at), c) : std::string("?");
+    };
+    check(vars.rowOf("Recette.Etapes.Count") == vars.rowOf("Recette.Etapes") + 1 && cellOf("Recette.Etapes.Count", 2) == "2"
+              && cellOf("Recette.Etapes[1]", 2) == "'Cuire'" && vars.rowOf("Recette.Stock") == vars.rowOf("Recette.Etapes[1]") + 1,
+          "un membre objet se d\xC3\xA9plie : Etapes.Count = 2, Etapes[0], Etapes[1] = 'Cuire' (" + cellOf("Recette.Etapes[1]", 2) + ")");
 }
 
 void communes1123() {
@@ -17258,18 +17265,18 @@ void centreAide111() {
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
     // 1.12.5 : 38 ; 1.12.6 : 39.
     const auto& rel = hn::releases();
-    check(rel.size() == 47 && rel.front().version == "1.12.14" && rel[1].version == "1.12.13" && rel[2].version == "1.12.12" && rel[3].version == "1.12.11" && rel[4].version == "1.12.10" && rel[5].version == "1.12.9" && rel[6].version == "1.12.8" && rel[7].version == "1.12.7" && rel[8].version == "1.12.6" && rel[9].version == "1.12.5" && rel[10].version == "1.12.4" && rel[11].version == "1.12.3" && rel[12].version == "1.12.2" && rel[13].version == "1.12.1"
-              && rel[14].version == "1.12.0" && rel[15].version == "1.11.24" && rel[16].version == "1.11.23"
-              && rel[17].version == "1.11.22" && rel[18].version == "1.11.21" && rel[19].version == "1.11.20" && rel[20].version == "1.11.19"
-              && rel[21].version == "1.11.18" && rel[22].version == "1.11.17"
-              && rel[23].version == "1.11.16" && rel[24].version == "1.11.15"
-              && rel[25].version == "1.11.14" && rel[26].version == "1.11.13" && rel[27].version == "1.11.12"
-              && rel[28].version == "1.11.11" && rel[29].version == "1.11.10"
-              && rel[30].version == "1.11.9" && rel[31].version == "1.11.8"
-              && rel[32].version == "1.11.7" && rel[33].version == "1.11.6" && rel[34].version == "1.11.5"
-              && rel[35].version == "1.11.4" && rel[36].version == "1.11.3" && rel[37].version == "1.11.2"
-              && rel[38].version == "1.11.1" && rel[39].version == "1.11" && rel[40].version == "1.10.4",
-          "notes : 47 versions, la 1.12.14 en tete, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 48 && rel.front().version == "1.12.15" && rel[1].version == "1.12.14" && rel[2].version == "1.12.13" && rel[3].version == "1.12.12" && rel[4].version == "1.12.11" && rel[5].version == "1.12.10" && rel[6].version == "1.12.9" && rel[7].version == "1.12.8" && rel[8].version == "1.12.7" && rel[9].version == "1.12.6" && rel[10].version == "1.12.5" && rel[11].version == "1.12.4" && rel[12].version == "1.12.3" && rel[13].version == "1.12.2" && rel[14].version == "1.12.1"
+              && rel[15].version == "1.12.0" && rel[16].version == "1.11.24" && rel[17].version == "1.11.23"
+              && rel[18].version == "1.11.22" && rel[19].version == "1.11.21" && rel[20].version == "1.11.20" && rel[21].version == "1.11.19"
+              && rel[22].version == "1.11.18" && rel[23].version == "1.11.17"
+              && rel[24].version == "1.11.16" && rel[25].version == "1.11.15"
+              && rel[26].version == "1.11.14" && rel[27].version == "1.11.13" && rel[28].version == "1.11.12"
+              && rel[29].version == "1.11.11" && rel[30].version == "1.11.10"
+              && rel[31].version == "1.11.9" && rel[32].version == "1.11.8"
+              && rel[33].version == "1.11.7" && rel[34].version == "1.11.6" && rel[35].version == "1.11.5"
+              && rel[36].version == "1.11.4" && rel[37].version == "1.11.3" && rel[38].version == "1.11.2"
+              && rel[39].version == "1.11.1" && rel[40].version == "1.11" && rel[41].version == "1.10.4",
+          "notes : 48 versions, la 1.12.15 en tete, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -17540,7 +17547,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 335,   // 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 337,   // 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -17683,7 +17690,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 209, "centre : L'IHM a les 209 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 47, "centre : 11 expressions, 47 notes (1.12.14)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 48, "centre : 11 expressions, 48 notes (1.12.15)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -17745,10 +17752,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 47
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 48
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.12.14" && hc::notesPage("9.9").version == "1.12.14",
+        check(hc::notesPage("").version == "1.12.15" && hc::notesPage("9.9").version == "1.12.15",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -18092,7 +18099,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 47;   // 1.11.3 a 1.12.14 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 48;   // 1.11.3 a 1.12.15 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -28555,6 +28562,111 @@ void aideTypee11214() {
           "filtre INT : Compte, BATEAU, BATEAU[0], BATEAU[0].Taille, Flotte['cle'][0].Taille, Capitaine.Taille - ni Texte ni .Nom (" + all + ")");
 }
 
+// 1.12.15 : LE DEBALLAGE A TOUTE PROFONDEUR - dans la liste des variables IHM, un type a taille montre ses
+// proprietes publiques (Count, Length, Capacity...) avec leur valeur au demarrage, ses elements (ceux de
+// sa valeur initiale, sinon un element type), une entree de MAP ses deux cotes (first, second) ; un tableau
+// et une structure IHM leurs proprietes ; le selecteur de valeur propose les proprietes a chaque niveau.
+void deballage11215() {
+    std::printf("1.12.15 : le d\xC3\xA9" "ballage - propri\xC3\xA9t\xC3\xA9s publiques, \xC3\xA9l\xC3\xA9ments, first et second, \xC3\xA0 toute profondeur\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    auto& p = doc->project;
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    cuve.members.push_back({"Nom", "STRING", "", ""});
+    cuve.members.push_back({"Niveau", "REAL", "", ""});
+    p.programs.types.push_back(cuve);
+    HmiType point;
+    point.id = p.allocate();
+    point.name = "T_Point";
+    point.members.push_back({"X", "INT", "", ""});
+    point.members.push_back({"Y", "INT", "", ""});
+    p.programs.types.push_back(point);
+    const auto var = [&](const char* name, const char* type, const char* initial) {
+        hmi::Variable v;
+        v.id = p.allocate();
+        v.name = name;
+        v.type = type;
+        v.initial = initial;
+        p.programs.variables.push_back(v);
+    };
+    var("Parc", "MAP[STRING] OF VECTOR OF T_Cuve", "['a' := [(Nom := 'A', Niveau := 2.5), (Nom := 'B')]]");
+    var("Vide", "MAP[STRING] OF LIST OF INT", "");
+    var("Tampon", "RING[5] OF REAL", "[1.5, 2.5]");
+    var("Seuils", "ARRAY[0..3] OF INT", "");
+    var("Origine", "T_Point", "");
+    app::HmiVariablesPane vars("vars11215", doc, apply);
+    vars.setBounds({0, 0, 1600, 900});
+    vars.layout();
+    const auto cell = [&](const std::string& key, std::size_t c) {
+        const int at = vars.rowOf(key);
+        const auto model = vars.table().model();
+        return at >= 0 && model ? model->cellText(static_cast<ui::RowIndex>(at), c) : std::string("?");
+    };
+    const auto npos = std::string::npos;
+    // ---- une MAP de VECTOR de structures, sur sa valeur initiale ----
+    vars.setExpanded("Parc", true);
+    check(cell("Parc.Count", 1) == "DINT" && cell("Parc.Count", 2) == "1" && cell("Parc.Count", 6) == "lecture seule"
+              && cell("Parc.Count", 7).find("aussi Size, Length") != npos,
+          "Parc d\xC3\xA9pli\xC3\xA9 : Parc.Count, DINT, 1 au d\xC3\xA9marrage, lecture seule, aussi Size et Length (" + cell("Parc.Count", 7) + ")");
+    check(cell("Parc['a']", 1) == "STRING \xE2\x86\x92 VECTOR OF T_Cuve" && vars.rowOf("Parc['a']#first") < 0,
+          "Parc['a'] : une entr\xC3\xA9" "e, STRING \xE2\x86\x92 VECTOR OF T_Cuve, repli\xC3\xA9" "e (" + cell("Parc['a']", 1) + ")");
+    check(vars.table().model() && !vars.table().model()->editable(static_cast<ui::RowIndex>(vars.rowOf("Parc.Count")), 2),
+          "une ligne du d\xC3\xA9" "ballage se lit seulement");
+    vars.setExpanded("Parc['a']", true);
+    check(cell("Parc['a']#first", 0) == "first (la cl\xC3\xA9)" && cell("Parc['a']#first", 2) == "'a'" && cell("Parc['a']#second", 0) == "second (la valeur)"
+              && cell("Parc['a']#second", 1) == "VECTOR OF T_Cuve",
+          "l'entr\xC3\xA9" "e d\xC3\xA9pli\xC3\xA9" "e : first = 'a', second : VECTOR OF T_Cuve (" + cell("Parc['a']#first", 2) + ")");
+    vars.setExpanded("Parc['a']#second", true);
+    check(cell("Parc['a'].Count", 2) == "2" && cell("Parc['a'].First", 1) == "T_Cuve" && cell("Parc['a'][0]", 1) == "T_Cuve"
+              && cell("Parc['a'][1]", 1) == "T_Cuve" && vars.rowOf("Parc['a'].Count") < vars.rowOf("Parc['a'][0]"),
+          "second d\xC3\xA9pli\xC3\xA9 : Parc['a'].Count = 2, .First (T_Cuve), puis Parc['a'][0], Parc['a'][1] (" + cell("Parc['a'].Count", 2) + ")");
+    vars.setExpanded("Parc['a'][1]", true);
+    check(cell("Parc['a'][1].Nom", 2) == "'B'" && cell("Parc['a'][1].Niveau", 1) == "REAL",
+          "Parc['a'][1] d\xC3\xA9pli\xC3\xA9 : Nom = 'B', Niveau (REAL) (" + cell("Parc['a'][1].Nom", 2) + ")");
+    // ---- une MAP vide : l'entr\xC3\xA9" "e type, et ce qu'elle contient ----
+    vars.setExpanded("Vide", true);
+    check(cell("Vide.Count", 2) == "0" && vars.rowOf("Vide['\xE2\x80\xA6']") >= 0, "Vide : Count = 0, une entr\xC3\xA9" "e type ['\xE2\x80\xA6']");
+    vars.setExpanded("Vide['\xE2\x80\xA6']", true);
+    vars.setExpanded("Vide['\xE2\x80\xA6']#second", true);
+    check(cell("Vide['\xE2\x80\xA6'].Count", 1) == "DINT" && cell("Vide['\xE2\x80\xA6'].Count", 2).empty() && cell("Vide['\xE2\x80\xA6'][i]", 1) == "INT"
+              && cell("Vide['\xE2\x80\xA6'][i]", 7).find("chaque \xC3\xA9l\xC3\xA9ment") != npos && cell("Vide['\xE2\x80\xA6'].Empty", 1) == "BOOL",
+          "second d'une entr\xC3\xA9" "e type : .Count, .Empty, puis Vide['\xE2\x80\xA6'][i] : chaque \xC3\xA9l\xC3\xA9ment (" + cell("Vide['\xE2\x80\xA6'][i]", 7) + ")");
+    // ---- un tampon : sa capacite, sous ses deux noms ----
+    vars.setExpanded("Tampon", true);
+    check(cell("Tampon.Count", 2) == "2" && cell("Tampon.Capacity", 2) == "5" && cell("Tampon.Capacity", 7).find("MaxSize") != npos
+              && cell("Tampon.Full", 2) == "FALSE" && !cell("Tampon.Last", 2).empty(),
+          "Tampon : Count = 2, Capacity = 5 (aussi MaxSize), Full = FALSE, Last (" + cell("Tampon.Last", 2) + ")");
+    // ---- un tableau et une structure IHM : leurs proprietes ----
+    vars.setExpanded("Seuils", true);
+    check(cell("Seuils.Length", 2) == "4" && cell("Seuils.Length", 7).find("aussi Size, MaxSize") != npos && cell("Seuils.Low", 2) == "0"
+              && cell("Seuils.High", 2) == "3" && vars.rowOf("Seuils.Length") < vars.rowOf("Seuils[0]"),
+          "Seuils : Length = 4 (aussi Size, MaxSize), Low 0, High 3, avant ses cases");
+    vars.setExpanded("Origine", true);
+    check(vars.rowOf("Origine.X") >= 0 && vars.rowOf("Origine.Words") > vars.rowOf("Origine.Y") && cell("Origine.Words", 2) == "2",
+          "Origine : ses membres, puis Bytes, Words = 2 (" + cell("Origine.Words", 2) + ")");
+    // ---- le selecteur de valeur : les proprietes, a chaque niveau ----
+    menu::MenuManager mm{menu::MenuFactory{}};
+    app::HmiValuePicker::Spec spec;
+    spec.field = "Valeur";
+    spec.expected = "DINT";
+    spec.doc = doc;
+    mm.ShowDialog(std::make_unique<app::HmiValuePicker>(spec), [](const menu::DialogResult&) {});
+    mm.applyPending();
+    auto* picker = dynamic_cast<app::HmiValuePicker*>(mm.top());
+    check(picker != nullptr, "le s\xC3\xA9lecteur de valeur s'ouvre");
+    if (!picker) return;
+    picker->setTypeFilter(true);
+    const auto paths = picker->shownPaths();
+    const auto shows = [&](const char* x) { return std::find(paths.begin(), paths.end(), x) != paths.end(); };
+    std::string all;
+    for (const auto& x : paths) all += x + "|";
+    check(shows("Parc.Count") && shows("Parc['a'].Count") && shows("Tampon.Capacity") && shows("Seuils.Length"),
+          "filtre DINT : Parc.Count, Parc['a'].Count, Tampon.Capacity, Seuils.Length (" + all + ")");
+}
+
 // 1.12.14 : LES TYPES IMBRIQUES AU SELECTEUR - un type rouvert garde tous ses niveaux, l'element se
 // compose dans un second selecteur, un type entier s'ecrit dans la recherche ; compose() garde les
 // parentheses et les crochets d'un parametre ecrit.
@@ -28605,6 +28717,30 @@ void selecteurImbrique11214() {
           "Composer l'\xC3\xA9l\xC3\xA9ment : un second s\xC3\xA9lecteur, sur VECTOR OF T_Four");
     check(picker->result() == "MAP[STRING] OF TUPLE(STRING, LIST OF T_Four)" && picker->resultProblem().empty(),
           "... il rend TUPLE(STRING, LIST OF T_Four) : " + picker->result());
+    // 1.12.14 : le second selecteur sait ou il est - le type complet du premier ({} : ce qu'il choisit),
+    // son niveau ; il montre le Resultat final a chaque choix, et un troisieme niveau le suit.
+    check(asked.size() == 1 && asked[0].outer == "MAP[STRING] OF {}" && asked[0].level == 2,
+          "le second s\xC3\xA9lecteur : MAP[STRING] OF {}, niveau 2 (" + (asked.empty() ? std::string("?") : asked[0].outer) + ")");
+    if (!asked.empty()) {
+        menu::MenuManager mm2{menu::MenuFactory{}};
+        mm2.ShowDialog(std::make_unique<app::HmiTypePicker>(asked[0]), [](const menu::DialogResult&) {});
+        mm2.applyPending();
+        auto* inner = dynamic_cast<app::HmiTypePicker*>(mm2.top());
+        check(inner && inner->result() == "VECTOR OF T_Four" && inner->finalResult() == "MAP[STRING] OF VECTOR OF T_Four",
+              "niveau 2 : R\xC3\xA9sultat final MAP[STRING] OF VECTOR OF T_Four (" + (inner ? inner->finalResult() : std::string("?")) + ")");
+        if (inner) {
+            check(inner->setForm("Liste") && inner->finalResult() == "MAP[STRING] OF LIST OF T_Four",
+                  "niveau 2, Liste : le r\xC3\xA9sultat final suit (" + inner->finalResult() + ")");
+            std::vector<app::HmiTypePicker::Spec> deeper;
+            app::typepicker::setHost([&](app::HmiTypePicker::Spec s, app::typepicker::Done) { deeper.push_back(s); });
+            inner->composeElement();
+            app::typepicker::setHost({});
+            check(deeper.size() == 1 && deeper[0].outer == "MAP[STRING] OF LIST OF {}" && deeper[0].level == 3
+                      && deeper[0].field == "\xC3\xA9l\xC3\xA9ments de Type de Fours",
+                  "niveau 3 : MAP[STRING] OF LIST OF {}, le m\xC3\xAAme champ (" + (deeper.empty() ? std::string("?") : deeper[0].outer + " / " + deeper[0].field) + ")");
+            check(picker->finalResult().empty(), "le premier s\xC3\xA9lecteur : son R\xC3\xA9sultat est le r\xC3\xA9sultat final");
+        }
+    }
     // Un type entier ecrit dans la recherche.
     picker->setSearch("map[string] of list of tuple(int, t_four)");
     check(picker->result() == "MAP[STRING] OF LIST OF TUPLE(INT, T_Four)" && picker->resultProblem().empty(),
@@ -29268,16 +29404,20 @@ void calculees_grille() {
     // Le deballage : Seuils (calculee), puis Noms (ecrite, ses vrais indices), rien pour Base.
     grid.selectRows({1});
     auto* u = grid.unfoldTable();
-    check(u && u->model() && u->model()->rowCount() == 3 && u->model()->cellText(1, 0) == "'bas'" && u->model()->cellText(2, 2) == "30",
-          "Seuils d\xC3\xA9" "ball\xC3\xA9" "e : la racine, 'bas', 'haut' = 30");
+    // 1.12.14 : ses proprietes d'abord (.Count = 2), puis une entree par cle (une paire : first, second).
+    check(u && u->model() && u->model()->rowCount() == 4 && u->model()->cellText(1, 0) == ".Count" && u->model()->cellText(1, 2) == "2"
+              && u->model()->cellText(2, 0) == "['bas']" && u->model()->cellText(3, 2) == "30",
+          "Seuils d\xC3\xA9" "ball\xC3\xA9" "e : la racine, .Count = 2, ['bas'], ['haut'] = 30");
     // La session Wine 1127 l'a vu : une table sans colonnes ne montre rien (ses lignes, vides).
     check(u && u->columns().size() == 3 && u->columns()[0].title == "\xC3\x89l\xC3\xA9ment" && u->columns()[2].title == "Valeur",
           "le d\xC3\xA9" "ballage a ses trois colonnes (\xC3\x89l\xC3\xA9ment, Type, Valeur)");
     grid.selectRows({2});
     u = grid.unfoldTable();
-    check(u && u->model() && u->model()->rowCount() == 4 && u->model()->cellText(1, 0) == "[1]" && u->model()->cellText(3, 0) == "[3]"
-              && u->model()->cellText(1, 2) == "'a'",
-          "Noms d\xC3\xA9" "ball\xC3\xA9" ": [1] = 'a' ... [3] (ses bornes) - " + (u && u->model() ? std::to_string(u->model()->rowCount()) + " lignes, "
+    // 1.12.14 : .Length, .Low, .High (3, 1, 3), puis les cases.
+    check(u && u->model() && u->model()->rowCount() == 7 && u->model()->cellText(1, 0) == ".Length" && u->model()->cellText(1, 2) == "3"
+              && u->model()->cellText(2, 2) == "1" && u->model()->cellText(3, 2) == "3" && u->model()->cellText(4, 0) == "[1]"
+              && u->model()->cellText(6, 0) == "[3]" && u->model()->cellText(4, 2) == "'a'",
+          "Noms d\xC3\xA9" "ball\xC3\xA9" ": .Length = 3, .Low = 1, .High = 3, [1] = 'a' ... [3] - " + (u && u->model() ? std::to_string(u->model()->rowCount()) + " lignes, "
                                                                       + u->model()->cellText(0, 2) + " | " + u->model()->cellText(1, 0) + " = "
                                                                       + u->model()->cellText(1, 2)
                                                                 : std::string("pas de d\xC3\xA9" "ballage")));
@@ -29339,8 +29479,8 @@ void calculees_grille() {
             dlg.showLocals(true);
             dlg.selectLocal(0);
             const auto* lu = dlg.localsUnfold();
-            check(static_cast<bool>(seen.valueOf) && lu && lu->model() && lu->model()->rowCount() == 4 && lu->model()->cellText(1, 0) == "[1]"
-                      && lu->model()->cellText(3, 2) == "15" && lu->columns().size() == 3,
+            check(static_cast<bool>(seen.valueOf) && lu && lu->model() && lu->model()->rowCount() == 7 && lu->model()->cellText(1, 0) == ".Length"
+                      && lu->model()->cellText(4, 0) == "[1]" && lu->model()->cellText(6, 2) == "15" && lu->columns().size() == 3,
                   "les locales d\xC3\xA9" "ball\xC3\xA9" "es : t, ses cases [1]..[3] (15) - "
                       + (lu && lu->model() ? std::to_string(lu->model()->rowCount()) + " lignes" : std::string("pas de d\xC3\xA9" "ballage")));
             dlg.selectLocal(1);
@@ -31347,6 +31487,7 @@ int main(int argc, char** argv) {
     selecteurTypes1119();                   // 1.11.19 (refonte, lot 6) : le selecteur de types
     selecteurImbrique11214();               // 1.12.14 : le selecteur compose les types imbriques
     aideTypee11214();                       // 1.12.14 : l'aide a la saisie typee, ce qui mene au type attendu
+    deballage11215();                       // 1.12.15 : le deballage, ses proprietes, first et second
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges
     direct1121();                           // 1.11.21 : les diagnostics en direct au panneau du bas
     explorateurs1121();                     // 1.11.21 : les explorateurs deplient les codes

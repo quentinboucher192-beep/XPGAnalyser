@@ -19,6 +19,9 @@
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 #include "HmiTypePicker.hpp"                // 1.11.19 (refonte, lot 6) : "Choisir un type..."
 #include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement suit le type et ses membres
+#include "../../hmi/HmiRoles.hpp"           // 1.12.14 : les types d'un tuple
+#include "../../hmi/HmiRuntime.hpp"         // 1.12.14 : la valeur initiale deballee (Runtime::valueObject)
+#include "HmiUnfold.hpp"                    // 1.12.14 : la valeur d'une partie, d'une propriete
 
 #include <algorithm>
 #include <iterator>
@@ -74,6 +77,25 @@ const std::string kDash = "\xE2\x80\x94";
 const std::string kRW = "lecture, \xC3\xA9" "criture";
 const std::string kRO = "lecture seule";
 constexpr long long kShown = 200;       // les cases montrees d'un tableau deplie
+constexpr int       kUnfoldDepth = 16;   // 1.12.14 : la profondeur la plus grande d'un deballage
+constexpr std::size_t kUnfoldRows = 20000;
+
+// 1.12.14 : la valeur d'une partie (la colonne Valeur initiale) - le texte d'une valeur simple, le resume
+// d'une valeur a taille ("2 elements ..."). Nulle : rien.
+std::string partText(const sim::ObjRef& o) { return o ? app::HmiUnfoldModel::valueOf(o) : std::string{}; }
+// Un type qui se deplie : a taille, un tableau, une structure IHM.
+bool unfoldable(const hmi::Project& p, const std::string& type) {
+    const auto sh = hmi::typeform::decompose(type);
+    if (sh.reference) return false;
+    return sh.form != hmi::typeform::Form::Simple || !hmi::types::membersOf(p, type).empty();
+}
+// L'indice d'un element type : i, puis j, k... a mesure que les listes s'emboitent (Parc['...'][i][j]).
+std::string indexLetter(const std::string& path) {
+    static const char* const letters[] = {"i", "j", "k", "l", "m", "n"};
+    std::size_t used = 0;
+    for (const char* l : letters) used += path.find("[" + std::string(l) + "]") != std::string::npos ? 1 : 0;
+    return used < std::size(letters) ? letters[used] : "i";
+}
 
 std::string upper(std::string_view s) {
     std::string out(s);
@@ -359,6 +381,13 @@ public:
                 }
                 case Row::Kind::Member: break;
                 case Row::Kind::More: st.fgTone = ui::Tone::Muted; break;
+                case Row::Kind::Detail:   // 1.12.14 : une propriete, en gris, a son icone ; un element, simplement
+                    if (row.property) {
+                        st.icon = ui::Icon::Constant;
+                        st.iconTone = ui::Tone::Muted;
+                        st.fgTone = ui::Tone::Muted;
+                    }
+                    break;
             }
         }
         if (row.kind == Row::Kind::Folder && c != CName) st.fgTone = ui::Tone::Muted;
@@ -369,6 +398,7 @@ public:
         if (c == CAddress && row.kind == Row::Kind::Member && row.cells.size() > c && row.cells[c].find('\xE2') != std::string::npos)
             st.fgTone = ui::Tone::Warning;           // une adresse corrigee (le crayon)
         if (c == CQuality) st.fgTone = tone(row.tone);
+        if (row.kind == Row::Kind::Detail && (c == CPlace || c == CAccess)) st.fgTone = ui::Tone::Muted;   // 1.12.14
         // 1.11.16 : Remanente - oui en vert, non en gris ; liee mais cochee : l'avertissement.
         if (c == CRetain && row.kind == Row::Kind::Variable && row.cells.size() > c)
             st.fgTone = row.cells[c] == "oui" ? ui::Tone::Ok : row.cells[c] == "non" || row.cells[c] == kDash ? ui::Tone::Muted : ui::Tone::Warning;
@@ -936,12 +966,22 @@ void HmiVariablesPane::emitVariable(const hmi::Variable& v, int depth) {
                v.bound() ? (v.address.empty() ? std::string("(sans)") : v.address) : kDash, v.bound() ? (v.readOnly ? kRO : kRW) : kDash, place, quality};
     rows_.push_back(std::move(r));
     if (!isOpen) return;
+    // 1.12.14 : un type a taille (LIST, VECTOR, SET, RING, MAP, TUPLE) se deballe a toute profondeur, sur
+    // sa valeur initiale.
+    if (ty::isRich(v.type)) {
+        emitRich(v, v.name, v.type, hmi::Runtime::valueObject(p, v.type, v.initial), depth + 1);
+        return;
+    }
     Leaves leaves;
     for (auto& l : ty::leafVariables(p, v)) {
         std::string key = upper(l.name);
         leaves.emplace(std::move(key), std::move(l));
     }
+    // 1.12.14 : ses proprietes (Length, Low, High... avant les cases ; Bytes, Words apres les membres).
+    const bool array = parsed && spec.array();
+    if (array) emitAggregateProperties(v, v.name, ty::normalized(v.type), depth + 1);
     emitMembers(v, leaves, v.name, {}, ty::normalized(v.type), depth + 1);
+    if (!array) emitAggregateProperties(v, v.name, ty::normalized(v.type), depth + 1);
 }
 
 void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves, const std::string& path, const std::string& rel,
@@ -983,8 +1023,9 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
         // 1.12.4 : un membre objet (une liste, une MAP... dans la structure) : une ligne, sans cases dessous.
         const bool object = ty::isRich(k.type);
         const bool composite = !object && ty::isComposite(k.type);
-        const bool isOpen = composite && (expandAllOn_ || open_.count(upper(k.path)));
-        r.expander = composite ? (isOpen ? 1 : 0) : -1;
+        // 1.12.14 : un membre objet (une liste, une MAP...) se deplie aussi : ses proprietes, ses elements.
+        const bool isOpen = (composite || object) && (expandAllOn_ || open_.count(upper(k.path)));
+        r.expander = composite || object ? (isOpen ? 1 : 0) : -1;
         std::string initial, address, place;
         const hmi::Variable* leaf = nullptr;
         if (const auto it = leaves.find(upper(k.path)); it != leaves.end()) leaf = &it->second;
@@ -1041,6 +1082,7 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
             r.cells = {k.path, k.type, initial, std::string{}, v.bound() ? std::string("dans l'IHM") : std::string{}, std::string{},
                        v.bound() ? std::string("IHM") : std::string{}, place, std::string{}};
             rows_.push_back(std::move(r));
+            if (isOpen) emitRich(v, k.path, k.type, hmi::Runtime::valueObject(p, k.type, k.initial), depth + 1);
             continue;
         }
         qualityOf(v, k.path, !composite, quality, r.tone);
@@ -1054,7 +1096,13 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
                    !v.bound() ? std::string{} : internal ? std::string("IHM") : "(" + v.name + ")",
                    place.empty() && v.bound() ? std::string("sans place") : place, quality};
         rows_.push_back(std::move(r));
-        if (isOpen) emitMembers(v, leaves, k.path, k.rel, k.type, depth + 1);
+        if (isOpen) {
+            ty::Spec ks;
+            const bool array = ty::parseSpec(k.type, ks) && ks.array();
+            if (array) emitAggregateProperties(v, k.path, k.type, depth + 1);
+            emitMembers(v, leaves, k.path, k.rel, k.type, depth + 1);
+            if (!array) emitAggregateProperties(v, k.path, k.type, depth + 1);
+        }
     }
     if (hidden > 0) {
         Row more;
@@ -1065,6 +1113,179 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
         more.cells = {"\xE2\x80\xA6 " + std::to_string(hidden) + " autres cases (d\xC3\xA9pli\xC3\xA9" "es : les " + std::to_string(kShown) + " premi\xC3\xA8res)",
                       "", "", "", "", "", "", "", ""};
         rows_.push_back(std::move(more));
+    }
+}
+
+// ---------------------------------------------- 1.12.14 : le deballage ----
+// Une ligne du deballage : son chemin (la cle), ce qu'elle montre, et - `under` non vide - ce qui se deplie
+// dessous (les parties de `type`, a partir du chemin `under`, sur la valeur `value` si on la connait).
+void HmiVariablesPane::emitDetail(const hmi::Variable& v, const std::string& key, const std::string& name, const std::string& type,
+                                  const std::string& initial, const std::string& access, const std::string& what, const sim::ObjRef& value,
+                                  const std::string& under, int depth) {
+    if (rows_.size() > kUnfoldRows) return;
+    Row r;
+    r.kind = Row::Kind::Detail;
+    r.key = key;
+    r.var = v.id;
+    r.type = type;
+    r.depth = depth;
+    r.property = !access.empty();
+    const bool can = !under.empty() && depth < kUnfoldDepth && unfoldable(doc_->project, type);
+    const bool isOpen = can && (open_.count(upper(key)) || (expandAllOn_ && depth < 8));
+    r.expander = can ? (isOpen ? 1 : 0) : -1;
+    r.cells = {name, type, initial, std::string{}, std::string{}, std::string{}, access, what, std::string{}};
+    rows_.push_back(std::move(r));
+    if (isOpen) emitRich(v, under, type, value, depth + 1);
+}
+
+// Une entree d'une MAP, une paire : first (sa cle), second (sa valeur, qui se deplie a son tour).
+void HmiVariablesPane::emitEntry(const hmi::Variable& v, const std::string& path, const std::string& key, const std::string& keyType,
+                                 const std::string& valueType, const sim::ObjRef& value, int depth) {
+    if (rows_.size() > kUnfoldRows) return;
+    const std::string at = path + "[" + key + "]";
+    Row r;
+    r.kind = Row::Kind::Detail;
+    r.key = at;
+    r.var = v.id;
+    r.type = valueType;
+    r.depth = depth;
+    const bool can = depth < kUnfoldDepth;
+    const bool isOpen = can && (open_.count(upper(at)) || (expandAllOn_ && depth < 8));
+    r.expander = can ? (isOpen ? 1 : 0) : -1;
+    r.cells = {at, keyType + " \xE2\x86\x92 " + valueType, partText(value), std::string{}, std::string{}, std::string{}, std::string{},
+               std::string(value ? "une entr\xC3\xA9" "e" : "chaque entr\xC3\xA9" "e") + " : first, sa cl\xC3\xA9 ; second, sa valeur", std::string{}};
+    rows_.push_back(std::move(r));
+    if (!isOpen) return;
+    Row first;
+    first.kind = Row::Kind::Detail;
+    first.key = at + "#first";
+    first.var = v.id;
+    first.type = keyType;
+    first.depth = depth + 1;
+    first.cells = {"first (la cl\xC3\xA9)", keyType, value ? key : std::string{}, std::string{}, std::string{}, std::string{}, std::string{},
+                   "la cl\xC3\xA9 (FOR EACH cle, valeur IN " + path + ")", std::string{}};
+    rows_.push_back(std::move(first));
+    emitDetail(v, at + "#second", "second (la valeur)", valueType, partText(value), {}, "la valeur : " + at, value, at, depth + 1);
+}
+
+// Les parties d'un type, a partir du chemin `path` : ses proprietes publiques d'abord (avec leur valeur au
+// demarrage, quand la valeur initiale la dit), puis ses elements - ceux de la valeur, sinon un element type
+// ([i], une entree ['...']) -, les Item d'un tuple, les cases d'un tableau, les membres d'une structure.
+void HmiVariablesPane::emitRich(const hmi::Variable& v, const std::string& path, const std::string& type, const sim::ObjRef& value, int depth) {
+    namespace tf = hmi::typeform;
+    if (depth > kUnfoldDepth || rows_.size() > kUnfoldRows) return;
+    const auto& p = doc_->project;
+    const std::string t = ty::normalized(type);
+    for (const auto& pp : ty::publicProperties(t))
+        emitDetail(v, path + "." + pp.name, path + "." + pp.name, pp.type, value ? HmiUnfoldModel::propertyValue(value, pp.name) : std::string{}, kRO,
+                   "propri\xC3\xA9t\xC3\xA9" + (pp.also.empty() ? std::string{} : " \xC2\xB7 aussi " + pp.also) + " : " + pp.what, nullptr, {}, depth);
+    const auto more = [&](std::size_t hidden) {
+        Row m;
+        m.kind = Row::Kind::More;
+        m.key = path + "#plus";
+        m.var = v.id;
+        m.depth = depth;
+        m.cells = {"\xE2\x80\xA6 " + std::to_string(hidden) + " de plus (les " + std::to_string(kShown) + " premiers montr\xC3\xA9s)", "", "", "", "", "", "", "", ""};
+        rows_.push_back(std::move(m));
+    };
+    const auto sh = tf::decompose(t);
+    switch (sh.form) {
+        case tf::Form::List:
+        case tf::Form::Vector:
+        case tf::Form::Set:
+        case tf::Form::Ring: {
+            const std::string e = ty::normalized(sh.element);
+            if (value && !value->items.empty()) {
+                const std::size_t shown = std::min(value->items.size(), static_cast<std::size_t>(kShown));
+                for (std::size_t k = 0; k < shown; ++k) {
+                    const std::string at = path + "[" + std::to_string(k) + "]";
+                    emitDetail(v, at, at, e, partText(value->items[k]), {}, {}, value->items[k], at, depth);
+                }
+                if (value->items.size() > shown) more(value->items.size() - shown);
+            } else {
+                const std::string i = indexLetter(path);
+                const std::string at = path + "[" + i + "]";
+                emitDetail(v, at, at, e, {}, {}, "chaque \xC3\xA9l\xC3\xA9ment (" + i + " de 0 \xC3\xA0 Count - 1)", nullptr, at, depth);
+            }
+            return;
+        }
+        case tf::Form::Map: {
+            const std::string kt = trimmed(sh.parameter).empty() ? std::string("STRING") : ty::normalized(sh.parameter);
+            const std::string vt = ty::normalized(sh.element);
+            std::size_t n = 0;
+            if (value) {
+                for (const auto& [k, o] : value->textKeys)
+                    if (n++ < static_cast<std::size_t>(kShown)) emitEntry(v, path, "'" + k + "'", kt, vt, o, depth);
+                for (const auto& [k, o] : value->intKeys)
+                    if (n++ < static_cast<std::size_t>(kShown)) emitEntry(v, path, std::to_string(k), kt, vt, o, depth);
+            }
+            if (n == 0) emitEntry(v, path, upper(kt) == "STRING" ? "'\xE2\x80\xA6'" : "\xE2\x80\xA6", kt, vt, nullptr, depth);
+            if (n > static_cast<std::size_t>(kShown)) more(n - static_cast<std::size_t>(kShown));
+            return;
+        }
+        case tf::Form::Tuple: {
+            std::vector<std::string> items{sh.element};
+            for (auto& x : hmi::roles::splitList(sh.parameter, ','))
+                if (!trimmed(x).empty()) items.push_back(trimmed(x));
+            for (std::size_t k = 0; k < items.size(); ++k) {
+                const std::string at = path + ".Item" + std::to_string(k + 1);
+                const sim::ObjRef part = value && k < value->items.size() ? value->items[k] : nullptr;
+                emitDetail(v, at, at, ty::normalized(items[k]), partText(part), {}, {}, part, at, depth);
+            }
+            return;
+        }
+        case tf::Form::Array:
+        case tf::Form::Array2D: {
+            ty::Spec spec;
+            if (!ty::parseSpec(t, spec) || !spec.array()) return;
+            const std::string e = ty::normalized(spec.element);
+            std::size_t flat = 0, hidden = 0;
+            const auto cell = [&](const std::string& idx) {
+                const sim::ObjRef part = value && flat < value->items.size() ? value->items[flat] : nullptr;
+                ++flat;
+                if (flat > static_cast<std::size_t>(kShown)) {
+                    ++hidden;
+                    return;
+                }
+                const std::string at = path + idx;
+                emitDetail(v, at, at, e, partText(part), {}, {}, part, at, depth);
+            };
+            if (spec.dims == 1)
+                for (long long i = spec.low[0]; i <= spec.high[0]; ++i) cell("[" + std::to_string(i) + "]");
+            else
+                for (long long i = spec.low[0]; i <= spec.high[0]; ++i)
+                    for (long long j = spec.low[1]; j <= spec.high[1]; ++j) cell("[" + std::to_string(i) + "," + std::to_string(j) + "]");
+            if (hidden) more(hidden);
+            return;
+        }
+        case tf::Form::Simple: break;
+    }
+    // Une structure : ses membres (leur valeur : celle de la valeur initiale, sinon celle du type).
+    for (const auto& m : ty::membersOf(p, t)) {
+        sim::ObjRef part;
+        if (value && value->type)
+            for (std::size_t k = 0; k < value->type->members.size() && k < value->items.size(); ++k)
+                if (sameText(value->type->members[k].first, m.name)) part = value->items[k];
+        const std::string at = path + "." + m.name;
+        emitDetail(v, at, at, ty::normalized(m.type), part ? partText(part) : m.initial, {}, m.description, part, at, depth);
+    }
+}
+
+// Les proprietes d'un tableau ou d'une structure IHM (celles de la fiche de droite) : Length (Size et
+// MaxSize, ses autres noms, dits avec lui), Low, High, Rows, Columns, Dimensions, Bytes, Words...
+void HmiVariablesPane::emitAggregateProperties(const hmi::Variable& v, const std::string& path, const std::string& type, int depth) {
+    const auto flat = ty::flatten(doc_->project, path, type, {}, v.packBools);
+    if (!flat.ok() || flat.aggregates.empty()) return;
+    const auto& a = flat.aggregates.back();
+    for (const auto& pi : ty::properties()) {
+        if ((pi.arrayOnly && !a.array) || (pi.twoD && a.spec.dims != 2)) continue;
+        if (sameText(pi.name, "Size") || sameText(pi.name, "MaxSize")) continue;    // dits avec Length
+        sim::Value value;
+        if (!ty::propertyValue(a, pi.name, value)) continue;
+        const std::string name(pi.name);
+        emitDetail(v, path + "." + name, path + "." + name, std::string(pi.type), value.display(), kRO,
+                   "propri\xC3\xA9t\xC3\xA9" + std::string(sameText(name, "Length") ? " \xC2\xB7 aussi Size, MaxSize" : "") + " : " + std::string(pi.help),
+                   nullptr, {}, depth);
     }
 }
 
@@ -1175,6 +1396,7 @@ bool HmiVariablesPane::cellEditable(std::size_t row, std::size_t col) const {
         }
         case Row::Kind::Member: return col == CAddress && r.editableAddress;
         case Row::Kind::More: return false;
+        case Row::Kind::Detail: return false;   // 1.12.14 : le deballage se lit
     }
     return false;
 }
@@ -1245,6 +1467,7 @@ bool HmiVariablesPane::commitCell(std::size_t row, std::size_t col, const std::s
             }
             break;
         case Row::Kind::More: break;
+        case Row::Kind::Detail: break;
     }
     if (!ok && !why.empty()) say("Refus\xC3\xA9 : " + why, true);
     return ok;
@@ -2256,6 +2479,20 @@ void HmiVariablesPane::rebuildProperties() {
     }
     const Id id = v->id;
     const bool composite = ty::isComposite(v->type) && !hmi::findEnumeration(p, v->type);   // 1.10 (chantier U) : une enumeration est un DINT
+    // 1.12.14 : une ligne du deballage - son chemin, son type, sa valeur au demarrage, ce qu'elle est.
+    if (row.kind == Row::Kind::Detail) {
+        PG::Category c;
+        c.name = row.property ? "Propri\xC3\xA9t\xC3\xA9" : "D\xC3\xA9" "ballage";
+        const auto cell = [&](std::size_t k) { return row.cells.size() > k ? row.cells[k] : std::string{}; };
+        c.properties.push_back(prop("Chemin", row.key.find('#') == std::string::npos ? row.key : cell(CName)));
+        c.properties.push_back(prop("Type", cell(CType)));
+        c.properties.push_back(prop("Variable", v->name + " (" + v->type + ")"));
+        if (!cell(CInitial).empty()) c.properties.push_back(prop("Au d\xC3\xA9marrage", cell(CInitial)));
+        if (!cell(CPlace).empty()) c.properties.push_back(prop("Ce que c'est", cell(CPlace)));
+        cats.push_back(std::move(c));
+        props_->setCategories(std::move(cats));
+        return;
+    }
     if (row.kind == Row::Kind::Member) {
         PG::Category c;
         c.name = "Membre";

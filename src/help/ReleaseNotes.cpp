@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.15", "16/10/2026", "livr\xC3\xA9" "e le 16/10 en d\xC3\xA9" "but d'apr\xC3\xA8s-midi"},
     {"1.12.14", "16/10/2026", "livr\xC3\xA9" "e le 16/10 en fin de matin\xC3\xA9" "e"},
     {"1.12.13", "16/10/2026", "livr\xC3\xA9" "e le 16/10 au matin"},
     {"1.12.12", "12/10/2026", "livr\xC3\xA9" "e le 12/10 dans l'apr\xC3\xA8s-midi"},
@@ -120,6 +121,13 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.15 (16/10/2026) : voir docs/LIVRAISON-1.12.15.md.
+        note("1.12.15", "Types", Kind::New,
+         "LE R\xC3\x89SULTAT FINAL \xC3\x80 CHAQUE NIVEAU : un s\xC3\xA9lecteur ouvert par \xC2\xAB Composer l'\xC3\xA9l\xC3\xA9ment\xE2\x80\xA6 \xC2\xBB montre, sous son R\xC3\xA9sultat, le type complet qui sortira du premier s\xC3\xA9lecteur, ce qu'on y choisit en \xC3\xA9vidence (MAP[STRING] OF VECTOR OF \xE2\x80\xA6), mis \xC3\xA0 jour \xC3\xA0 chaque choix ; son titre dit le niveau (niveau 2, niveau 3\xE2\x80\xA6). On ne se perd plus dans les types imbriqu\xC3\xA9s.",
+         "types-ihm", ""),
+        note("1.12.15", "Variables", Kind::New,
+         "LE D\xC3\x89" "BALLAGE \xC3\x80 TOUTE PROFONDEUR : dans Variables IHM, une LIST, un VECTOR, un SET, un RING, une MAP, un TUPLE se d\xC3\xA9plient, et ce qu'ils contiennent aussi. \xC3\x80 chaque niveau, les propri\xC3\xA9t\xC3\xA9s publiques d'abord, lues seulement, avec leur valeur au d\xC3\xA9marrage - Count (aussi Size, Length), Empty, First, Last, Low, High ; Capacity (aussi MaxSize) et Full d'un RING ; Length, Low, High d'un tableau ; Bytes, Words d'une structure -, puis les \xC3\xA9l\xC3\xA9ments de la valeur initiale (sinon un \xC3\xA9l\xC3\xA9ment type [i], une entr\xC3\xA9" "e ['\xE2\x80\xA6']). Une entr\xC3\xA9" "e de MAP montre ses deux c\xC3\xB4t\xC3\xA9s : first (la cl\xC3\xA9), second (la valeur). Le d\xC3\xA9" "ballage sous les grilles et le s\xC3\xA9lecteur de valeur montrent les m\xC3\xAAmes propri\xC3\xA9t\xC3\xA9s ; Tampon.MaxSize se lit comme Tampon.Capacity.",
+         "variables-ihm", ""),
         // 1.12.14 (16/10/2026) : voir docs/LIVRAISON-1.12.14.md.
         note("1.12.14", "Types", Kind::New,
          "LES TYPES IMBRIQU\xC3\x89S : la case Type (une variable IHM, un membre, une d\xC3\xA9" "claration, le retour d'une fonction, le param\xC3\xA8tre d'une popup ou d'un symbole) ouvre le s\xC3\xA9lecteur de types, plus la longue liste. \xC2\xAB Composer l'\xC3\xA9l\xC3\xA9ment\xE2\x80\xA6 \xC2\xBB ouvre un second s\xC3\xA9lecteur pour l'\xC3\xA9l\xC3\xA9ment : MAP[STRING] OF VECTOR OF T_Cuve, LIST OF TUPLE(INT, T_Cuve), \xC3\xA0 toute profondeur. Un type entier \xC3\xA9" "crit dans la recherche se prend tel quel ; un type rouvert garde tous ses niveaux.",

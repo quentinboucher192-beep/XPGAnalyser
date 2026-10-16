@@ -167,6 +167,14 @@ std::vector<Node> buildCatalog(const hmi::Project* hp, const hmi::View* view, co
                 if (depth > 12 || budget == 0) return;
                 const auto sh = tf::decompose(type);
                 if (sh.reference) return;
+                // 1.12.14 : ses proprietes publiques d'abord, a chaque niveau (Parc.Count, Parc['a'].Count,
+                // Cuves.First, T.Length...) - des feuilles : on les choisit, elles ne se deplient pas.
+                for (const auto& pp : hmi::types::publicProperties(type)) {
+                    if (budget == 0) return;
+                    --budget;
+                    (void)leaf(parent, Style::Hmi, pp.name, path + "." + pp.name, pp.type,
+                               "propri\xC3\xA9t\xC3\xA9" + (pp.also.empty() ? std::string{} : " \xC2\xB7 aussi " + pp.also) + " : " + pp.what);
+                }
                 const auto child = [&](std::string label, std::string childPath, std::string childType, std::string detail,
                                        const std::string& childInitial = {}) {
                     if (budget == 0) return;

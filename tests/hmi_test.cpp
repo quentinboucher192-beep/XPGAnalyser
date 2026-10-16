@@ -27219,6 +27219,38 @@ void imbriques11214() {
               + (somme ? somme->display() : std::string("?")) + ")");
 }
 
+// 1.12.15 : un RING dit sa capacite par .Capacity et par .MaxSize (comme un tableau) - Generer, Compiler et
+// le moteur.
+void tampon11215() {
+    std::printf("1.12.15 : RING[N] - .Capacity et .MaxSize\n");
+    Project p;
+    View a = makeView(p, "Vue_A");
+    p.programs.variables.push_back(hmiVar(p, "Tampon", "RING[5] OF REAL", "[1.5, 2.5]"));
+    p.programs.variables.push_back(hmiVar(p, "Capa", "DINT"));
+    p.programs.variables.push_back(hmiVar(p, "Nb", "DINT"));
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = "Init";
+    sc.event = "Demarrage";
+    sc.body = "Capa := Tampon.MaxSize + Tampon.Capacity;\nNb := Tampon.Count;";
+    p.programs.scripts.push_back(sc);
+    p.config.startView = a.id;
+    p.views.push_back(a);
+    std::string bad;
+    for (const auto& i : generate(p, [](std::string_view) { return false; }))
+        if (i.severity != Issue::Severity::Info) bad += i.message + " | ";
+    for (const auto& f : n110::run(p, sc.body)) bad += f.message + " | ";
+    check(bad.empty(), "Tampon.MaxSize : ni Generer ni Compiler ne disent rien" + (bad.empty() ? std::string{} : " : " + bad));
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    for (int k = 0; k < 3; ++k) rt.tick(0.1 * (k + 1));
+    const auto* capa = rt.variable("Capa");
+    const auto* nb = rt.variable("Nb");
+    check(capa && capa->asReal() == 10.0 && nb && nb->asReal() == 2.0,
+          "Capa := Tampon.MaxSize + Tampon.Capacity = 10, Nb := Tampon.Count = 2 (" + (capa ? capa->display() : std::string("?")) + ")");
+}
+
 void tableauxDynamiques11213() {
     std::printf("1.12.13 : le modele de vue Tableaux dynamiques (ARRAY, LIST, MAP, plusieurs MAP, structure, enumeration, listes, cases fixes)\n");
     Project p;
@@ -27613,6 +27645,7 @@ int main(int argc, char** argv) {
     tableauGenererDupliquer11213();   // 1.12.13 : Generer et Dupliquer sur le Tableau v2
     tableauxDynamiques11213();        // 1.12.13 : le modele de vue Tableaux dynamiques
     imbriques11214();                 // 1.12.14 : les types imbriques de bout en bout
+    tampon11215();                    // 1.12.15 : RING[N] - .Capacity et .MaxSize
     enumerationsLangage110();         // 1.10 (S1, decision 15) : les enumerations dans les scripts
     operateurs110();                  // 1.10 (chantier S2) : les operateurs des symboles et des types IHM
     operateurs1101();                 // 1.10.1 (chantier U2) : a, b et Resultat (types, legende, exemple, Compiler)

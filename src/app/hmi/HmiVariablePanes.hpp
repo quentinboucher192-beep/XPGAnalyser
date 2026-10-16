@@ -38,6 +38,7 @@
 #include "../../ui/widgets/FilterMemory.hpp"   // lot API 8 : la recherche retenue
 #include "../../ui/widgets/PathBrowse.hpp"     // 1.11.16 : exporter, importer les valeurs remanentes
 #include "../../hmi/HmiRetain.hpp"             // 1.11.16 : la remanence d'exploitation
+#include "../../sim/Rich.hpp"                  // 1.12.14 : la valeur initiale deballee
 
 #include <functional>
 #include <map>
@@ -191,7 +192,9 @@ public:
 
     // Une ligne du tableau (exposee pour le modele et les essais).
     struct Row {
-        enum class Kind : std::uint8_t { Folder, Variable, Member, More } kind{Kind::Variable};
+        // 1.12.14 : Detail - une ligne du deballage d'un type a taille (une propriete publique, un element,
+        // une entree d'une MAP et ses deux cotes), lue seulement.
+        enum class Kind : std::uint8_t { Folder, Variable, Member, More, Detail } kind{Kind::Variable};
         std::string key;               // le dossier ("Ligne/Convoyeur"), ou le chemin ("Four1.Vannes[2]")
         hmi::Id     var{hmi::kNoId};
         std::string rel;               // un membre : relatif a la variable ("Vannes[2]")
@@ -201,6 +204,7 @@ public:
         std::vector<std::string> cells;
         int         tone{0};           // qualite : 1 bonne, 2 ancienne, 3 mauvaise
         bool        editableAddress{false};
+        bool        property{false};   // 1.12.14 : une propriete publique (Count, Length...)
     };
     [[nodiscard]] const std::vector<Row>& rows() const noexcept { return rows_; }
     // Lot 21 : le depot d'un glisser (lignes du modele) : ranger dans un dossier,
@@ -220,6 +224,15 @@ private:
     void emitVariable(const hmi::Variable&, int depth);
     using Leaves = std::map<std::string, hmi::Variable, std::less<>>;   // cle : le chemin en majuscules
     void emitMembers(const hmi::Variable&, const Leaves&, const std::string& path, const std::string& rel, const std::string& type, int depth);
+    // 1.12.14 : LE DEBALLAGE A TOUTE PROFONDEUR - les proprietes publiques (Count, Length...), les elements
+    // d'un type a taille (ceux de la valeur initiale, sinon un element type qui se deplie a son tour),
+    // first et second d'une entree de MAP ; et les proprietes d'un tableau ou d'une structure IHM.
+    void emitRich(const hmi::Variable&, const std::string& path, const std::string& type, const sim::ObjRef& value, int depth);
+    void emitDetail(const hmi::Variable&, const std::string& key, const std::string& name, const std::string& type, const std::string& initial,
+                    const std::string& access, const std::string& what, const sim::ObjRef& value, const std::string& under, int depth);
+    void emitEntry(const hmi::Variable&, const std::string& path, const std::string& key, const std::string& keyType,
+                   const std::string& valueType, const sim::ObjRef& value, int depth);
+    void emitAggregateProperties(const hmi::Variable&, const std::string& path, const std::string& type, int depth);
     void qualityOf(const hmi::Variable& owner, const std::string& path, bool leaf, std::string& text, int& tone) const;
     // Lot recherche : la recherche (mots, "phrases", -exclus : le nom, le type,
     // l'equipement, l'adresse, la DESCRIPTION, le dossier) et les filtres des

@@ -58,6 +58,14 @@ bool composedText(std::string_view t) {
     if (u.rfind("REF_TO ", 0) == 0) return false;
     return tf::decompose(t).form != tf::Form::Simple;
 }
+// 1.12.14 : la place de l'element dans le type complet d'un selecteur imbrique (Spec::outer).
+constexpr std::string_view kSlot = "{}";
+std::string slotted(std::string_view outer, std::string_view inner) {
+    std::string out(outer);
+    if (const auto at = out.find(kSlot); at != std::string::npos) out.replace(at, kSlot.size(), inner);
+    return out;
+}
+
 // Un texte tape dans la recherche qui ressemble a un type entier (pas a un nom a chercher).
 bool looksLikeType(std::string_view t) {
     std::string u(t);
@@ -145,6 +153,12 @@ public:
         sh.parameter = trimmed(bounds_->text());
         sh.reference = ref_ && canReference(spec_.use);
         return tf::compose(sh);
+    }
+    // 1.12.14 : un selecteur imbrique - le type complet qui sortira du premier, avec ce qu'on choisit ici.
+    [[nodiscard]] std::string finalResult() const {
+        if (spec_.outer.empty()) return {};
+        const std::string res = result();
+        return slotted(spec_.outer, res.empty() ? std::string("\xE2\x80\xA6") : res);
     }
     [[nodiscard]] std::string problem() const {
         if (!typed_.empty()) return {};
@@ -270,7 +284,16 @@ public:
     void composeElement() {
         if (form_ == tf::Form::Simple || !typepicker::available()) return;
         HmiTypePicker::Spec s;
-        s.field = "\xC3\xA9l\xC3\xA9ments de " + (spec_.field.empty() ? std::string("ce type") : spec_.field);
+        // Le titre nomme le champ une fois (le niveau dit la profondeur), et le second selecteur sait dans
+        // quel type complet va ce qu'on y choisira : il le montre (Resultat final).
+        s.field = spec_.level > 1 ? spec_.field : "\xC3\xA9l\xC3\xA9ments de " + (spec_.field.empty() ? std::string("ce type") : spec_.field);
+        tf::Shape here;
+        here.form = form_;
+        here.element = std::string(kSlot);
+        here.parameter = trimmed(bounds_->text());
+        here.reference = ref_ && canReference(spec_.use);
+        s.outer = spec_.outer.empty() ? tf::compose(here) : slotted(spec_.outer, tf::compose(here));
+        s.level = spec_.level + 1;
         const auto* e = selected();
         s.current = e ? e->name : std::string{};
         s.use = spec_.use;
@@ -293,7 +316,7 @@ protected:
         // 1.12.2 : trois lignes - Forme : [Simple] [Tableau] ... [Tuple] ; le parametre et [x] REF_TO ;
         // le resultat. Sans forme ni reference (un operande) : le resultat seul.
         const bool construct = shownForms().size() > 1 || canReference(spec_.use);
-        constructY_ = bottom_ - (construct ? 110.f : 40.f);
+        constructY_ = bottom_ - (construct ? 110.f : 40.f) - (spec_.outer.empty() ? 0.f : 26.f);   // 1.12.14 : Resultat final
         detailY_ = constructY_ - 64.f;
         list_ = {panel_.x + 16.f, panel_.y + 150.f, panel_.w - 32.f, detailY_ - 8.f - (panel_.y + 150.f)};
         relayout();
@@ -347,8 +370,9 @@ protected:
         r.fillRect(panel_, c.panelBg);
         r.strokeRect(panel_, c.borderStrong, 1.f);
         // ---- le titre ----
-        const std::string title = spec_.field.empty() ? std::string("Choisir un type")
-                                                      : "Choisir un type \xC2\xB7 \xC2\xAB " + spec_.field + " \xC2\xBB";
+        std::string title = spec_.field.empty() ? std::string("Choisir un type")
+                                                : "Choisir un type \xC2\xB7 \xC2\xAB " + spec_.field + " \xC2\xBB";
+        if (spec_.level > 1) title += " \xC2\xB7 niveau " + std::to_string(spec_.level);   // 1.12.14
         r.drawText({panel_.x + 16.f, panel_.y + 13.f}, fit(r, title, kTitle, panel_.w * 0.62f), kTitle, c.text);
         const std::string forUse = "pour : " + useLabel(spec_.use);
         r.drawText({panel_.right() - 50.f - r.measure(forUse, kSmall).width, panel_.y + 16.f}, forUse, kSmall, c.textMuted);
@@ -718,6 +742,28 @@ private:
             const float px = rx + std::min(panel_.w * 0.5f, r.measure(res, kMono).width) + 14.f;
             r.drawText({px, y + 4.f}, fit(r, bad, kSmall, panel_.right() - 16.f - px), kSmall, c.error);
         }
+        // 1.12.14 : un selecteur pose par Composer l'element - le type complet qui en sortira, ce qu'on
+        // choisit ici en evidence : a chaque niveau, on sait ou l'on est.
+        if (!spec_.outer.empty()) {
+            y += 26.f;
+            const std::string label = "R\xC3\xA9sultat final :";
+            r.drawText({x0, y + 2.f}, label, kBody, c.text);
+            const float fx = x0 + r.measure(label, kBody).width + 10.f;
+            const float room = panel_.right() - 16.f - fx;
+            const std::string inner = res.empty() ? std::string("\xE2\x80\xA6") : res;
+            const auto at = spec_.outer.find(kSlot);
+            const std::string before = at == std::string::npos ? spec_.outer : spec_.outer.substr(0, at);
+            const std::string after = at == std::string::npos ? std::string{} : spec_.outer.substr(at + kSlot.size());
+            const float wb = r.measure(before, kMono).width, wi = r.measure(inner, kMono).width, wa = r.measure(after, kMono).width;
+            if (wb + wi + wa <= room) {
+                r.drawText({fx, y + 3.f}, before, kMono, c.textMuted);
+                r.fillRoundedRect({fx + wb - 2.f, y + 1.f, wi + 4.f, r.lineHeight(kMono) + 4.f}, c.accent.withAlpha(45), 3.f);
+                r.drawText({fx + wb, y + 3.f}, inner, kMono, c.text);
+                r.drawText({fx + wb + wi, y + 3.f}, after, kMono, c.textMuted);
+            } else {
+                r.drawText({fx, y + 3.f}, fit(r, before + inner + after, kMono, room), kMono, c.text);
+            }
+        }
     }
 
     HmiTypePicker&                         owner_;
@@ -813,6 +859,7 @@ bool HmiTypePicker::setForm(std::string_view labelOrKey) {
     return body_ && f && body_->setForm(*f);
 }
 void HmiTypePicker::composeElement() { if (body_) body_->composeElement(); }
+std::string HmiTypePicker::finalResult() const { return body_ ? body_->finalResult() : std::string{}; }
 std::vector<std::string> HmiTypePicker::shownNames() const { return body_ ? body_->shownNames() : std::vector<std::string>{}; }
 std::string HmiTypePicker::result() const { return body_ ? body_->result() : std::string{}; }
 std::string HmiTypePicker::resultProblem() const { return body_ ? body_->problem() : std::string("pas de s\xC3\xA9lecteur"); }

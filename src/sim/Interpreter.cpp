@@ -1829,7 +1829,7 @@ public:
                             return "DINT";
                         if ((*t)->kind == TypeDesc::Kind::List && (m == "FIRST" || m == "LAST") && (*t)->element) return (*t)->element->text();
                         if ((*t)->kind == TypeDesc::Kind::List && m == "EMPTY") return "BOOL";
-                        if (isRingType(**t) && m == "CAPACITY") return "DINT";      // 1.12.7
+                        if (isRingType(**t) && (m == "CAPACITY" || m == "MAXSIZE")) return "DINT";      // 1.12.7 ; 1.12.14 : MaxSize
                         if (isRingType(**t) && m == "FULL") return "BOOL";
                     }
                 }
@@ -3845,7 +3845,7 @@ private:
                     if (m == "LENGTH" || m == "SIZE" || m == "COUNT") { value = static_cast<std::int64_t>(p.obj->items.size()); known = true; }
                     else if (m == "LOW") { value = 0; known = true; }
                     else if (m == "HIGH") { value = static_cast<std::int64_t>(p.obj->items.size()) - 1; known = true; }
-                    else if (m == "CAPACITY" && isRingType(type)) { value = type.capacity; known = true; }     // 1.12.7 : RING[N] : N
+                    else if ((m == "CAPACITY" || m == "MAXSIZE") && isRingType(type)) { value = type.capacity; known = true; }     // 1.12.7 : RING[N] : N
                     else if (m == "EMPTY" || m == "ISEMPTY" || (m == "FULL" && isRingType(type))) {
                         auto tmp = makeObj(scalarType(Type::Bool));
                         tmp->value = Value::boolean(m == "FULL" ? static_cast<std::int64_t>(p.obj->items.size()) >= type.capacity : p.obj->items.empty());

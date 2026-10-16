@@ -643,6 +643,28 @@ void objets1122() {
 // 1.12.14 : LA VALEUR D'UNE STRUCTURE (Temperature := 20.5, Consigne := 80) - seule, dans une liste,
 // une MAP, un tableau, un tuple, a toute profondeur ; les membres manquants gardent leur valeur ; un
 // membre inconnu, une valeur du mauvais type : refuses, la raison dite. Et le texte d'une valeur.
+// 1.12.15 : les proprietes publiques d'un type a taille, a chaque forme (le deballage, le selecteur de valeur).
+void proprietes11215() {
+    std::printf("1.12.15 : les proprietes publiques d'un type a taille\n");
+    const auto names = [](std::string_view type) {
+        std::string out;
+        for (const auto& pp : hmi::types::publicProperties(type)) out += pp.name + ",";
+        return out;
+    };
+    check(names("LIST OF INT") == "Count,Empty,First,Last,Low,High,", "LIST : Count, Empty, First, Last, Low, High (" + names("LIST OF INT") + ")");
+    check(names("RING[5] OF REAL") == "Count,Empty,First,Last,Low,High,Capacity,Full,", "RING : + Capacity, Full (" + names("RING[5] OF REAL") + ")");
+    check(names("MAP[STRING] OF VECTOR OF INT") == "Count,", "MAP : Count");
+    check(names("ARRAY[0..9] OF INT") == "Length,Low,High,", "ARRAY : Length, Low, High");
+    check(names("ARRAY[0..3, 0..9] OF INT") == "Length,Rows,Columns,Low,High,Dimensions,", "ARRAY 2D : + Rows, Columns, Dimensions");
+    check(names("TUPLE(INT, STRING)").empty() && names("T_Four").empty() && names("INT").empty(), "ni tuple, ni structure, ni type simple");
+    const auto ring = hmi::types::publicProperties("RING[5] OF REAL");
+    check(ring.size() == 8 && ring[2].type == "REAL" && ring[6].also == "MaxSize" && ring[0].also == "Size, Length",
+          "RING : First est un REAL, Capacity aussi MaxSize, Count aussi Size et Length");
+    Project p;
+    check(hmi::types::stepMember(p, "RING[5] OF REAL", "MaxSize").type == "DINT" && hmi::types::stepMember(p, "LIST OF REAL", "MaxSize").type.empty(),
+          "stepMember : RING.MaxSize est un DINT ; une LIST n'en a pas");
+}
+
 void structures11214() {
     std::printf("-- 1.12.14 : la valeur d'une structure, dans les types imbriques\n");
     Project p = projet();
@@ -682,6 +704,7 @@ int main() {
     cles();
     objets1122();
     structures11214();
+    proprietes11215();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

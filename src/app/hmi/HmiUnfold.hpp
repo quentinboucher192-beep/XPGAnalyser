@@ -5,16 +5,22 @@
 //  dimensions avec ses vrais indices, TUPLE, structure) lue element par element,
 //  en arbre : une ligne par element (element, type, valeur), chaque element a
 //  taille se deplie a son tour. Sous la grille des declarations (HmiDeclGrid) et
-//  sous celle des locales d'un calcul (HmiCalcDialog).
+//  sous celle des locales d'un calcul (HmiCalcDialog). 1.12.14 : a chaque niveau,
+//  ses proprietes publiques d'abord (.Count, .Empty, .First... ; .Length, .Low,
+//  .High d'un tableau ; .Capacity d'un tampon), avec leur valeur ; une entree de
+//  MAP se deplie en first (la cle) et second (la valeur), comme une paire.
 // =============================================================================
 #pragma once
 
+#include "../../hmi/HmiTypeForms.hpp"   // 1.12.14 : la cle d'une MAP
+#include "../../hmi/HmiTypes.hpp"       // 1.12.14 : ses proprietes publiques
 #include "../../sim/Rich.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
 #include <cstdint>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace app {
@@ -47,16 +53,54 @@ public:
         const std::string of = sim::isRingType(*o->type) ? " sur " + std::to_string(o->type->capacity) : std::string{};
         return std::to_string(n) + (n > 1 ? " \xC3\xA9l\xC3\xA9ments" : " \xC3\xA9l\xC3\xA9ment") + of + "  " + text;
     }
+    // 1.12.14 : la valeur d'une propriete publique (hmi::types::publicProperties), lue sur la valeur.
+    static std::string propertyValue(const sim::ObjRef& o, std::string_view name) {
+        if (!o || !o->type) return {};
+        const auto& t = *o->type;
+        const bool array = t.kind == sim::TypeDesc::Kind::Array;
+        const std::size_t n = t.kind == sim::TypeDesc::Kind::Map ? o->textKeys.size() + o->intKeys.size() : o->items.size();
+        const auto span = [&](std::size_t d) {
+            return d < t.bounds.size() ? std::to_string(t.bounds[d].second - t.bounds[d].first + 1) : std::string("1");
+        };
+        if (name == "Count" || name == "Length") return array ? std::to_string(t.count()) : std::to_string(n);
+        if (name == "Empty") return n == 0 ? "TRUE" : "FALSE";
+        if (name == "First" || name == "Last") {
+            if (o->items.empty()) return "(vide)";
+            const auto& x = name == "First" ? o->items.front() : o->items.back();
+            return sized(x) ? sim::display(*x) : x->value.display();
+        }
+        if (name == "Low") return array && !t.bounds.empty() ? std::to_string(t.bounds[0].first) : std::string("0");
+        if (name == "High") return array && !t.bounds.empty() ? std::to_string(t.bounds[0].second) : std::to_string(static_cast<long long>(n) - 1);
+        if (name == "Rows") return span(0);
+        if (name == "Columns") return span(1);
+        if (name == "Dimensions") return std::to_string(t.bounds.size());
+        if (name == "Capacity") return std::to_string(t.capacity);
+        if (name == "Full") return static_cast<std::int64_t>(n) >= t.capacity ? "TRUE" : "FALSE";
+        return {};
+    }
     void add(const sim::ObjRef& o, const std::string& label, const std::string& path, int depth) {
         if (lines.size() > 2000) return;                         // une tres grande valeur : le debut
         lines.push_back({label, typeOf(o), valueOf(o), path, depth, sized(o)});
         if (!sized(o) || !open.count(path)) return;
         const auto& t = *o->type;
+        // 1.12.14 : ses proprietes publiques d'abord, avec leur valeur (lues seulement).
+        for (const auto& pp : hmi::types::publicProperties(typeOf(o)))
+            lines.push_back({"." + pp.name, pp.type, propertyValue(o, pp.name), path + "/." + pp.name, depth + 1, false});
         switch (t.kind) {
-            case sim::TypeDesc::Kind::Map:
-                for (const auto& [k, v] : o->textKeys) add(v, "'" + k + "'", path + "/'" + k + "'", depth + 1);
-                for (const auto& [k, v] : o->intKeys) add(v, std::to_string(k), path + "/" + std::to_string(k), depth + 1);
+            case sim::TypeDesc::Kind::Map: {
+                // 1.12.14 : une entree, une paire - first (la cle), second (la valeur, qui se deplie a son tour).
+                const std::string keyType = hmi::typeform::decompose(t.text()).parameter;
+                const auto entry = [&](const std::string& key, const sim::ObjRef& v) {
+                    const std::string at = path + "/[" + key + "]";
+                    lines.push_back({"[" + key + "]", keyType + " \xE2\x86\x92 " + typeOf(v), valueOf(v), at, depth + 1, true});
+                    if (!open.count(at)) return;
+                    lines.push_back({"first (la cl\xC3\xA9)", keyType, key, at + "/first", depth + 2, false});
+                    add(v, "second (la valeur)", at + "/second", depth + 2);
+                };
+                for (const auto& [k, v] : o->textKeys) entry("'" + k + "'", v);
+                for (const auto& [k, v] : o->intKeys) entry(std::to_string(k), v);
                 break;
+            }
             case sim::TypeDesc::Kind::Struct:
             case sim::TypeDesc::Kind::Tuple:
                 for (std::size_t k = 0; k < o->items.size(); ++k) {

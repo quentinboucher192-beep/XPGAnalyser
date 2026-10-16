@@ -62,6 +62,10 @@ public:
         hmi::params::PlcTypes    plc{};                                    // les DDT du programme (vides : inconnus)
         std::vector<std::string> recents{};                                // les derniers types choisis (les plus recents d'abord)
         bool                     fixedOnly{false};                         // 1.12.2 : un membre de type IHM (ni liste, ni MAP, ni tuple)
+        // 1.12.14 : un selecteur pose par « Composer l'element... » - le type complet du premier
+        // selecteur, {} a la place de ce qu'on choisit ici (MAP[STRING] OF VECTOR OF {}), et son niveau.
+        std::string              outer{};
+        int                      level{1};
     };
     struct Answer {
         std::string type;                                                  // le type choisi (ecrit : "ARRAY[0..9] OF REAL")
@@ -90,6 +94,7 @@ public:
     void composeElement();                             // 1.12.14 : Composer l'element... (un second selecteur)
     [[nodiscard]] std::vector<std::string> shownNames() const;
     [[nodiscard]] std::string result() const;          // le type qu'on choisirait
+    [[nodiscard]] std::string finalResult() const;     // 1.12.14 : le type complet du premier selecteur (vide : on y est)
     [[nodiscard]] std::string resultProblem() const;   // vide : il est bon
     [[nodiscard]] std::string notice() const;          // le type actuel introuvable, dit
     [[nodiscard]] bool selectionVisible() const;       // la ligne choisie se voit dans la liste (une fois placee)

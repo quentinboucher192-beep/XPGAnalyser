@@ -1059,7 +1059,7 @@ TypeStep stepMember(const Project& p, std::string_view type, std::string_view me
         case typeform::Form::Vector:
         case typeform::Form::Set:
         case typeform::Form::Ring:
-            if (dint({"LENGTH", "SIZE", "COUNT", "LOW", "HIGH"}) || (sh.form == typeform::Form::Ring && dint({"CAPACITY"}))) return st;
+            if (dint({"LENGTH", "SIZE", "COUNT", "LOW", "HIGH"}) || (sh.form == typeform::Form::Ring && dint({"CAPACITY", "MAXSIZE"}))) return st;
             if (m == "FIRST" || m == "LAST") {
                 st.type = normalized(sh.element);
                 return st;
@@ -1110,6 +1110,45 @@ TypeStep stepMember(const Project& p, std::string_view type, std::string_view me
     for (const auto& mm : ty->members) list += (list.empty() ? "" : ", ") + mm.name;
     st.why = "(" + ty->name + ") n'a pas de membre " + std::string(member) + (list.empty() ? std::string{} : " (membres : " + list + ")");
     return st;
+}
+
+std::vector<PublicProperty> publicProperties(std::string_view type) {
+    const auto sh = typeform::decompose(normalized(type));
+    if (sh.reference) return {};
+    const std::string e = normalized(sh.element);
+    switch (sh.form) {
+        case typeform::Form::Array:
+            return {{"Length", "DINT", "Size, Count, MaxSize", "le nombre de cases"},
+                    {"Low", "DINT", "", "le premier indice"},
+                    {"High", "DINT", "", "le dernier indice"}};
+        case typeform::Form::Array2D:
+            return {{"Length", "DINT", "Size, Count, MaxSize", "le nombre de cases (Rows \xC3\x97 Columns)"},
+                    {"Rows", "DINT", "", "le nombre de lignes (la premi\xC3\xA8re dimension)"},
+                    {"Columns", "DINT", "Cols", "le nombre de colonnes (la deuxi\xC3\xA8me dimension)"},
+                    {"Low", "DINT", "", "le premier indice de la premi\xC3\xA8re dimension"},
+                    {"High", "DINT", "", "le dernier indice de la premi\xC3\xA8re dimension"},
+                    {"Dimensions", "DINT", "", "le nombre de dimensions (2)"}};
+        case typeform::Form::List:
+        case typeform::Form::Vector:
+        case typeform::Form::Set:
+        case typeform::Form::Ring: {
+            std::vector<PublicProperty> out{{"Count", "DINT", "Size, Length", "le nombre d'\xC3\xA9l\xC3\xA9ments"},
+                                            {"Empty", "BOOL", "IsEmpty", "vrai : aucun \xC3\xA9l\xC3\xA9ment"},
+                                            {"First", e, "", "le premier \xC3\xA9l\xC3\xA9ment"},
+                                            {"Last", e, "", "le dernier \xC3\xA9l\xC3\xA9ment"},
+                                            {"Low", "DINT", "", "le premier indice (0)"},
+                                            {"High", "DINT", "", "le dernier indice (Count - 1)"}};
+            if (sh.form == typeform::Form::Ring) {
+                out.push_back({"Capacity", "DINT", "MaxSize", "la capacit\xC3\xA9 (le N de RING[N])"});
+                out.push_back({"Full", "BOOL", "", "vrai : plein (Count = Capacity)"});
+            }
+            return out;
+        }
+        case typeform::Form::Map: return {{"Count", "DINT", "Size, Length", "le nombre d'entr\xC3\xA9" "es"}};
+        case typeform::Form::Tuple:
+        case typeform::Form::Simple: break;
+    }
+    return {};
 }
 
 std::string typeOfPath(const Project& p, std::string_view path) {

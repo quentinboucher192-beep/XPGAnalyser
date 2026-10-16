@@ -222,6 +222,14 @@ struct TypeStep {
 };
 [[nodiscard]] TypeStep stepIndex(const Project&, std::string_view type);
 [[nodiscard]] TypeStep stepMember(const Project&, std::string_view type, std::string_view member);
+// 1.12.14 : LES PROPRIETES PUBLIQUES d'un type a taille, celles qu'un point lit (Cuves.Count, Cuves.First,
+// T.Length) - les memes que stepMember et le moteur, dans l'ordre ou on les montre : le nom, son type
+// (DINT, BOOL, ou celui de l'element pour First et Last), ses autres noms, ce qu'elle dit. Vide : ni
+// tableau, ni liste, ni vecteur, ni ensemble, ni tampon, ni MAP.
+struct PublicProperty {
+    std::string name, type, also, what;
+};
+[[nodiscard]] std::vector<PublicProperty> publicProperties(std::string_view type);
 // Les membres d'un type IHM (vide : pas une structure).
 [[nodiscard]] std::vector<TypeMember> membersOf(const Project&, std::string_view typeName);
 // "structure T_Four : 6 membres, 13 mots", "tableau de 10 REAL (0..9), 20 mots".
