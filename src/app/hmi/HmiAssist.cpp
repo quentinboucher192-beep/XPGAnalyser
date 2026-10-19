@@ -3350,14 +3350,17 @@ bool returnFits(const hmi::Project& hp, const std::string& returns, const std::s
     return true;
 }
 
-// Une fonction du projet, d'une vue ou d'un symbole, comme le selecteur la montre.
-HmiFunctionPicker::Entry userEntry(const hmi::HmiFunction& f, std::string family) {
+// Une fonction du projet, d'une vue ou d'un symbole, comme le selecteur la montre. 1.12.17 :
+// rangee dans Mes fonctions (`path`), avec ses premieres lignes.
+HmiFunctionPicker::Entry userEntry(const hmi::HmiFunction& f, std::vector<std::string> path, std::string family) {
     HmiFunctionPicker::Entry e;
     e.name = f.name;
     e.family = std::move(family);
-    e.group = "Ici";
+    e.group = "Mes fonctions";
+    e.path = std::move(path);
     e.returns = trimmed(f.returnType);
     e.summary = f.description;
+    e.function = f.id;
     const auto modeWord = [](bool inOut, bool out) {
         return std::string(inOut ? "par r\xC3\xA9" "f\xC3\xA9rence (VAR_IN_OUT)" : out ? "rendu par la fonction (VAR_OUTPUT)" : "");
     };
@@ -3374,9 +3377,24 @@ HmiFunctionPicker::Entry userEntry(const hmi::HmiFunction& f, std::string family
     for (const auto& p : e.params) args += (args.empty() ? "" : ", ") + p.name + " : " + p.type;
     e.signature = f.name + "(" + args + ")" + (e.returns.empty() ? std::string{} : " : " + e.returns);
     e.expression = !e.returns.empty();
-    e.example = HmiFunctionPicker::callOf(e).text;
     if (e.summary.empty())
         e.summary = e.returns.empty() ? std::string("Sans retour : elle s'appelle comme une instruction.") : "Elle rend un " + e.returns + ".";
+    // Ses premieres lignes, comme le sous-onglet les montre.
+    std::string code = "FUNCTION " + f.name + (e.returns.empty() ? std::string{} : " : " + e.returns) + "\n";
+    std::size_t lines = 0, at = 0;
+    const std::string& body = f.body;
+    while (at < body.size() && lines < 6) {
+        auto nl = body.find('\n', at);
+        if (nl == std::string::npos) nl = body.size();
+        const std::string line = body.substr(at, nl - at);
+        if (!trimmed(line).empty()) {
+            code += "    " + line + "\n";
+            ++lines;
+        }
+        at = nl + 1;
+    }
+    if (at < body.size() && !trimmed(body.substr(at)).empty()) code += "    \xE2\x80\xA6\n";
+    e.code = code + "END_FUNCTION";
     return e;
 }
 
@@ -3391,16 +3409,71 @@ HmiFunctionPicker::Spec pickerSpec(const hmi::Project& hp, std::string_view head
     spec.expected = expected;
     spec.expressionOnly = !code;      // une case fx : seulement ce qui s'ecrit dans une expression
     if (!expected.empty()) spec.fits = [&hp, expected](const std::string& r) { return returnFits(hp, r, expected); };
-    // Ici d'abord : les fonctions de la vue (d'un symbole, celles du symbole aussi dans ses
-    // popups), puis celles du projet.
-    if (const auto* av = hmiparams::editedView(hp)) {
-        const hmi::View* sym = hmi::isSymbolView(*av) ? av : hmi::popupOwner(hp, *av);
-        if (sym)
-            for (const auto& f : sym->functions) spec.extra.push_back(userEntry(f, "Fonctions de " + sym->name));
-        if (av != sym)
-            for (const auto& f : av->functions) spec.extra.push_back(userEntry(f, "Fonctions de " + av->name));
+    // 1.12.17 : MES FONCTIONS - toutes celles qu'on peut appeler d'ici, rangees comme le projet :
+    // Programmation generale > Fonctions IHM ; Vues, Popups, Modeles > la vue > Fonctions (les
+    // publiques ; une privee chez elle seulement) ; Symboles > le symbole > Fonctions (d'ailleurs,
+    // par une de ses instances). L'appel tel qu'il s'ecrit d'ici : Vue_Cuves.Niveau_Moyen().
+    const hmi::View* here = hmiparams::editedView(hp);
+    const hmi::View* hereSymbol = here ? (hmi::isSymbolView(*here) ? here : hmi::popupOwner(hp, *here)) : nullptr;
+    spec.from = here ? here->name : std::string{};
+    const std::string pg = "Programmation g\xC3\xA9n\xC3\xA9rale";
+    for (const auto& f : hp.programs.functions) {
+        auto e = userEntry(f, {pg, "Fonctions IHM"}, "Fonctions IHM");
+        e.where = pg + " \xE2\x80\xBA Fonctions IHM";
+        e.access = "du projet";
+        e.here = here == nullptr;
+        spec.extra.push_back(std::move(e));
     }
-    for (const auto& f : hp.programs.functions) spec.extra.push_back(userEntry(f, "Fonctions du projet"));
+    const auto topOf = [&hp](const hmi::View& v) {
+        if (hmi::isSymbolView(v) || hmi::popupOwner(hp, v)) return std::string("Symboles");
+        if (v.role == "popup") return std::string("Popups");
+        if (hmi::isTemplateRole(v.role)) return std::string("Mod\xC3\xA8les");
+        return std::string("Vues");
+    };
+    for (const char* top : {"Vues", "Popups", "Symboles", "Mod\xC3\xA8les"})
+        for (const auto& v : hp.views) {
+            if (v.functions.empty() || topOf(v) != top) continue;
+            const bool symbol = hmi::isSymbolView(v);
+            const hmi::View* owner = symbol ? nullptr : hmi::popupOwner(hp, v);
+            const bool isHere = &v == here;
+            if (owner && !isHere) continue;    // la popup d'un symbole : chez elle seulement
+            std::vector<std::string> path{top};
+            if (owner) path.push_back(owner->name);
+            path.push_back(v.name);
+            path.push_back("Fonctions");
+            std::string where;
+            for (const auto& p : path) where += (where.empty() ? "" : " \xE2\x80\xBA ") + (p == "Fonctions" ? std::string("sous-onglet Fonctions") : p);
+            // Les instances d'un symbole, celles de la vue editee d'abord : Vanne_1 (ici), Vue.Vanne_2 (ailleurs).
+            std::vector<std::string> instances;
+            if (symbol && hereSymbol != &v) {
+                std::vector<std::string> others;
+                for (const auto& [iv, obj] : hmi::instancesOf(hp, v.name))
+                    (iv == here ? instances : others).push_back(iv == here ? obj->name : iv->name + "." + obj->name);
+                instances.insert(instances.end(), others.begin(), others.end());
+            }
+            for (const auto& f : v.functions) {
+                if (!symbol && f.visibility == hmi::Visibility::Private && !isHere) continue;
+                auto e = userEntry(f, path, v.name);
+                e.where = where;
+                e.view = v.id;
+                e.here = isHere || (symbol && hereSymbol == &v);
+                if (symbol) {
+                    e.access = f.isVirtual ? "virtuelle" : "";
+                    if (hereSymbol != &v) {          // d'ailleurs : par une instance (la premiere, d'office)
+                        e.byInstance = true;
+                        e.instances = instances;
+                        e.prefix = instances.empty() ? std::string{} : instances.front() + ".";
+                    }
+                } else {
+                    e.access = f.visibility == hmi::Visibility::Private ? "priv\xC3\xA9" "e, visible ici" : "publique";
+                    e.prefix = isHere ? std::string{} : v.name + ".";
+                }
+                e.example = HmiFunctionPicker::callOf(e).text;
+                spec.extra.push_back(std::move(e));
+            }
+        }
+    for (auto& e : spec.extra)
+        if (e.example.empty()) e.example = HmiFunctionPicker::callOf(e).text;
     return spec;
 }
 

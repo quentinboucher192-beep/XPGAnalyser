@@ -459,10 +459,14 @@ void MainAnalysisScreen::bindHmi() {
     typepicker::setHost([this](HmiTypePicker::Spec spec, typepicker::Done done) { askHmiType(std::move(spec), std::move(done)); });
     // 1.12.16 : "Choisir une fonction..." - la derniere ligne des listes d'aide a la saisie, Ctrl+I.
     functionpicker::setHost([this](HmiFunctionPicker::Spec spec, functionpicker::Done done) {
-        app_.menus().ShowDialog(std::make_unique<HmiFunctionPicker>(std::move(spec)), [done = std::move(done)](const menu::DialogResult& r) {
-            if (!r.accepted() || !done) return;
+        app_.menus().ShowDialog(std::make_unique<HmiFunctionPicker>(std::move(spec)), [this, done = std::move(done)](const menu::DialogResult& r) {
+            if (!r.accepted()) return;
             const auto a = HmiFunctionPicker::parse(r.payload);
-            if (!a.text.empty()) done(a);
+            if (a.open) {                       // 1.12.17 : Ouvrir sa definition - le sous-onglet Fonctions, sur elle
+                openHmiFunctionDefinition(a.view, a.function);
+                return;
+            }
+            if (done && !a.text.empty()) done(a);
         });
     });
     // 1.12.2 : les elements d'une valeur (une liste, un tableau, un dictionnaire, un tuple), un par ligne.
@@ -3062,6 +3066,28 @@ void MainAnalysisScreen::openHmiFunctions(std::uint64_t functionId, int line) {
     openHmiPane("fonctions");
     auto* pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
     if (pane && functionId != hmi::kNoId) pane->goTo(asId(functionId), line);
+}
+
+// 1.12.17 : une fonction du projet (view 0), d'une vue, d'une popup ou d'un symbole : son sous-onglet
+// Fonctions, elle choisie (Ouvrir sa definition, dans Choisir une fonction...).
+void MainAnalysisScreen::openHmiFunctionDefinition(std::uint64_t viewId, std::uint64_t functionId) {
+    if (viewId == 0) {
+        openHmiFunctions(functionId);
+        return;
+    }
+    const auto doc = app_.hmi();
+    const auto* v = doc ? doc->project.view(asId(viewId)) : nullptr;
+    if (!v) return;
+    openHmiView(viewId);
+    auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(viewId)));
+    if (!editor) return;
+    if (editor->symbolTabs() && editor->symbolFunctions()) {
+        editor->symbolTabs()->setCurrent(HmiSymbolTabs::Functions);
+        editor->symbolFunctions()->selectFunction(asId(functionId));
+    } else if (editor->viewTabs() && editor->viewFunctions()) {
+        editor->viewTabs()->setCurrent(HmiSymbolTabs::Functions);
+        editor->viewFunctions()->selectFunction(asId(functionId));
+    }
 }
 
 void MainAnalysisScreen::askHmiNewFunction(std::uint64_t symbolView) {

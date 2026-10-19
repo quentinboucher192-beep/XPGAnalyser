@@ -506,6 +506,58 @@ void types1121() {
 // 1.12.17 - LE RANGEMENT : chaque native a une place, une seule ; un dossier a sous-dossiers
 // ne garde aucune fonction ; De A a Z les a toutes ; les types en cinq dossiers (41 fiches) ;
 // les enumerations, chacune une fois ; l'exemple de chaque conteneur, joue dans le moteur.
+// 1.12.17 : CE QUI LIT UN CONTENEUR S'ECRIT AUSSI DANS UNE EXPRESSION fx (le filtre « Dans une
+// expression » du selecteur) : chaque native de lecture, evaluee comme une case de l'inspecteur,
+// et le catalogue le dit (expression vrai). Ce qui change son premier argument reste une instruction.
+void lecturesExpression1217() {
+    std::printf("-- 1.12.17 : les lectures des conteneurs, dans une expression fx\n");
+    Project p;
+    const auto var = [&p](const char* n, const char* t, const char* init) {
+        Variable v;
+        v.id = p.allocate();
+        v.name = n;
+        v.type = t;
+        v.initial = init;
+        p.programs.variables.push_back(v);
+    };
+    var("Mesures", "LIST OF REAL", "[1.0, 2.0, 6.0]");
+    var("Postes", "SET OF STRING", "['P1', 'P3']");
+    var("Seuils", "MAP[STRING] OF REAL", "['bas' := 10.0, 'haut' := 90.0]");
+    View v = makeView(p, "Vue_Essai");
+    p.views.push_back(v);
+    p.config.startView = p.views.back().id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    const std::pair<const char*, const char*> cases[] = {
+        {"LIST_COUNT(Mesures)", "3"}, {"LIST_CONTAINS(Mesures, 2.0)", "TRUE"}, {"LIST_INDEX_OF(Mesures, 6.0)", "2"},
+        {"LIST_FIRST(Mesures)", "1.0"}, {"LIST_LAST(Mesures)", "6.0"}, {"LIST_GET(Mesures, 1, 0.0)", "2.0"},
+        {"LIST_SUM(Mesures)", "9.0"}, {"LIST_MIN(Mesures)", "1.0"}, {"LIST_MAX(Mesures)", "6.0"}, {"LIST_AVG(Mesures)", "3.0"},
+        {"LIST_LAST_INDEX_OF(Mesures, 2.0)", "1"}, {"LIST_COUNT_OF(Mesures, 2.0)", "1"}, {"LIST_MIN_INDEX(Mesures)", "0"},
+        {"LIST_MAX_INDEX(Mesures)", "2"}, {"LIST_IS_SORTED(Mesures)", "TRUE"}, {"LIST_MEDIAN(Mesures)", "2.0"},
+        {"JOIN(Mesures, ';')", "1;2;6"}, {"LIST_COUNT(SPLIT('a;b', ';'))", "2"}, {"LIST_COUNT(LIST_SLICE(Mesures, 0, 2))", "2"},
+        {"LIST_COUNT(LIST_CONCAT(Mesures, Mesures))", "6"}, {"MAP_SIZE(Seuils)", "2"},
+        {"SET_HAS(Postes, 'P3')", "TRUE"}, {"MAP_HAS(Seuils, 'bas')", "TRUE"}, {"MAP_GET(Seuils, 'haut', 0.0)", "90.0"},
+        {"JOIN(MAP_KEYS(Seuils), ';')", "bas;haut"}, {"JOIN(MAP_VALUES(Seuils), ';')", "10;90"}};
+    std::string bad, stale;
+    for (const auto& [expr, want] : cases) {
+        const auto e = Expression::compile(expr);
+        std::string got, err;
+        if (!e.valid()) err = e.error();
+        else if (auto r = e.evaluate(rt.environment())) got = shown(*r);
+        else err = r.error().message();
+        if (!err.empty() || !sameValue(got, want)) bad += std::string(" ") + expr + " = " + (err.empty() ? got : "[" + err + "]");
+        std::string name(expr);
+        name = name.substr(0, name.find('('));
+        if (const auto* f = nt::function(name); f && !f->expression) stale += " " + name;
+    }
+    check(bad.empty(), "chaque lecture de conteneur s'\xC3\xA9value dans une expression" + bad);
+    check(stale.empty(), "le catalogue le dit : expression" + stale);
+    for (const char* n : {"LIST_ADD", "LIST_SORT", "LIST_CLEAR", "MAP_SET", "SET_ADD", "RING_ADD"})
+        if (const auto* f = nt::function(n)) check(!f->expression, std::string(n) + " change son argument : une instruction");
+}
+
 void rangement1217() {
     std::printf("-- 1.12.17 : le rangement des natives, les types, les exemples des conteneurs\n");
     std::vector<int> seen(nt::functions().size(), 0);
@@ -587,6 +639,7 @@ int main() {
     langage1121();
     types1121();
     rangement1217();
+    lecturesExpression1217();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

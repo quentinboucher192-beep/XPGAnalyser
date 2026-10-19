@@ -832,6 +832,7 @@ private:
     void askHmiDeleteVariable(std::uint64_t variableId);
     // Le lot 7 : les fonctions IHM (Programmation generale > Fonctions).
     void openHmiFunctions(std::uint64_t functionId = 0, int line = 0);
+    void openHmiFunctionDefinition(std::uint64_t viewId, std::uint64_t functionId);   // 1.12.17 : view 0 - une fonction du projet
     // 1.11.21 : un noeud du contenu d'un code (l'arbre) : son code, a l'onglet ou a la ligne voulus.
     void openHmiCodeTarget(const ProjectTreeModel::CodeTarget& t);
     void askHmiNewFunction(std::uint64_t symbolView = 0);   // 1.11.22 : aussi pour les fonctions d'un symbole

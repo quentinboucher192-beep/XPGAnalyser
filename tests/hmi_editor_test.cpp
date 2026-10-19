@@ -31244,7 +31244,7 @@ void choisir11216() {
     const auto spec = as::pickerSpec(p, "Consigne := ", true);
     check(spec.expected == "REAL" && !spec.expressionOnly && static_cast<bool>(spec.fits),
           "Consigne := | : le s\xC3\xA9lecteur attend un REAL (" + spec.expected + ")");
-    check(spec.extra.size() == 2 && spec.extra[0].name == "Pourcent" && spec.extra[0].family == "Fonctions du projet"
+    check(spec.extra.size() == 2 && spec.extra[0].name == "Pourcent" && spec.extra[0].family == "Fonctions IHM"   // 1.12.17 : rangee comme le projet
               && spec.extra[0].signature == "Pourcent(V : REAL, M : REAL) : REAL" && spec.extra[0].example == "Pourcent(V, M)"
               && spec.extra[0].expression && !spec.extra[1].expression,
           "les fonctions du projet : Pourcent(V : REAL, M : REAL) : REAL ; Journal, sans retour, pas dans une expression ("
@@ -31271,9 +31271,9 @@ void choisir11216() {
     auto* picker = open(spec);
     check(picker != nullptr, "le s\xC3\xA9lecteur s'ouvre");
     if (!picker) return;
-    const auto families = picker->families();
-    check(!families.empty() && families.front() == "Fonctions du projet",
-          "les familles : celles d'ici d'abord (" + (families.empty() ? std::string("aucune") : families.front()) + ")");
+    const auto folders = picker->folders();          // 1.12.17 : les natives en haut, Mes fonctions en bas
+    check(!folders.empty() && folders.front() == "Natives" && folders.back() == "Mes fonctions \xE2\x80\xBA Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Fonctions IHM",
+          "les dossiers : les natives, puis Mes fonctions en bas (" + (folders.empty() ? std::string("aucun") : folders.back()) + ")");
     auto shown = picker->shownNames();
     const auto has = [&](std::string_view n) { return std::find(shown.begin(), shown.end(), n) != shown.end(); };
     check(has("Pourcent") && !has("Journal") && has("LIMIT") && !has("MAP_HAS") && !has("LEFT"),
@@ -31285,7 +31285,8 @@ void choisir11216() {
     shown = picker->shownNames();
     check(!shown.empty() && shown.front() == "LIMIT", "chercher LIMI : LIMIT en t\xC3\xAAte");
     picker->setSearch("");
-    check(picker->setFamily("Fonctions du projet") && picker->shownNames().size() == 2, "la famille du projet : ses deux fonctions");
+    check(picker->setFolder("Mes fonctions \xE2\x80\xBA Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Fonctions IHM") && picker->shownNames().size() == 2,
+          "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Fonctions IHM : ses deux fonctions");
     check(picker->select("Pourcent") && picker->selectedName() == "Pourcent", "Pourcent choisie");
     picker->insert(false);
     mm.applyPending();
@@ -31409,6 +31410,242 @@ void choisir11216() {
         ed.insertText("Consigne := Po");
         check(ed.completionOpen() && !ed.completions().back().action, "sans h\xC3\xB4te : pas de ligne d'action");
     }
+}
+
+// ---- 1.12.17 : Choisir une fonction... - Mes fonctions (en bas, en violet, rangees comme le projet),
+// les instances d'un symbole, la liste Rend, Ouvrir sa definition ----
+void choisir1217() {
+    std::printf("1.12.17 : Choisir une fonction\xE2\x80\xA6 - Mes fonctions, les instances d'un symbole, la liste Rend\n");
+    namespace as = app::assist;
+    namespace hp = app::hmiparams;
+    using app::HmiFunctionPicker;
+    using R = HmiFunctionPicker::Returns;
+    const auto join = [](const std::vector<std::string>& v) {
+        std::string out;
+        for (const auto& s : v) out += (out.empty() ? "" : ", ") + s;
+        return out;
+    };
+    // ---- la famille de ce qu'elle rend ----
+    const auto cl = [](std::string_view r) { return HmiFunctionPicker::classify(r); };
+    check(cl("") == R::Void && cl("BOOL") == R::Bool && cl("un entier") == R::Integer && cl("DINT") == R::Integer && cl("LREAL") == R::Real
+              && cl("STRING") == R::Text && cl("TIME_OF_DAY") == R::Time && cl("WORD") == R::Word && cl("LIST OF T") == R::Container
+              && cl("ARRAY OF cl\xC3\xA9") == R::Container && cl("REF_TO type de X") == R::Reference && cl("MAP_ITERATOR") == R::Reference
+              && cl("comme IN") == R::Generic && cl("T") == R::Generic && cl("T_FOUR") == R::Other,
+          "Rend : chaque retour dans sa famille (sans retour, BOOL, entiers, r\xC3\xA9" "els, textes, dur\xC3\xA9" "es, mots, conteneurs, r\xC3\xA9" "f\xC3\xA9rences, "
+          "comme son argument, vos types)");
+    std::size_t nativeVoid = 0;
+    for (const auto& e : HmiFunctionPicker::natives()) nativeVoid += cl(e.returns) == R::Void ? 1 : 0;
+    check(nativeVoid == 0, "aucune native ne rend rien (les IHM_ rendent un BOOL)");
+
+    // ---- le projet de la maquette ----
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    const auto fn = [&p](const char* name, const char* ret, std::vector<std::pair<const char*, const char*>> params, const char* body) {
+        hmi::HmiFunction f;
+        f.id = p.allocate();
+        f.name = name;
+        f.returnType = ret;
+        f.body = body;
+        for (const auto& [n, t] : params) {
+            hmi::Declaration d;
+            d.id = p.allocate();
+            d.kind = hmi::DeclKind::Parameter;
+            d.name = n;
+            d.type = t;
+            f.decls.push_back(d);
+        }
+        return f;
+    };
+    hmi::Variable consigne;
+    consigne.id = p.allocate();
+    consigne.name = "Consigne";
+    consigne.type = "REAL";
+    p.programs.variables.push_back(consigne);
+    p.programs.functions.push_back(fn("Moyenne_Glissante", "REAL", {{"L", "LIST OF REAL"}, {"N", "INT"}}, "Moyenne_Glissante := LIST_AVG(L);"));
+    p.programs.functions.push_back(fn("Journaliser", "", {{"Message", "STRING"}}, "IHM_JOURNAL(Message);"));
+    View sym = makeView(p, "Sym_Vanne");
+    sym.role = "symbole";
+    sym.functions.push_back(fn("Ouvrir", "", {}, "Pos := 100;"));
+    const Id symId = sym.id;
+    p.views.push_back(sym);
+    View cuves = makeView(p, "Vue_Cuves");
+    {
+        auto f = fn("Niveau_Moyen", "REAL", {}, "RETURN LIST_AVG(Niveaux);");
+        f.description = "La moyenne des niveaux des trois cuves, en %.";
+        cuves.functions.push_back(f);
+        cuves.functions.push_back(fn("Remplir", "", {{"Cuve", "INT"}}, ";"));
+    }
+    const Id v1 = placeSymbol(p, cuves, "Sym_Vanne", 10, 10);
+    cuves.object(v1)->name = "Vanne_1";
+    const Id v2 = placeSymbol(p, cuves, "Sym_Vanne", 60, 10);
+    cuves.object(v2)->name = "Vanne_2";
+    const Id cuvesId = cuves.id;
+    const Id niveauId = cuves.functions[0].id;
+    p.views.push_back(cuves);
+    View four = makeView(p, "Vue_Four");
+    four.functions.push_back(fn("Pourcent", "REAL", {{"t", "REAL"}}, "Pourcent := t;"));
+    {
+        auto f = fn("Couleur", "STRING", {{"t", "REAL"}}, "Couleur := 'rouge';");
+        f.visibility = hmi::Visibility::Private;
+        four.functions.push_back(f);
+    }
+    const Id gaz = placeSymbol(p, four, "Sym_Vanne", 10, 10);
+    four.object(gaz)->name = "Vanne_Gaz";
+    const Id fourId = four.id;
+    p.views.push_back(four);
+    View reg = makeView(p, "Pop_Reglage");
+    reg.role = "popup";
+    reg.functions.push_back(fn("Monter", "REAL", {{"c", "REAL"}}, "Monter := c + 1.0;"));
+    p.views.push_back(reg);
+
+    // ---- depuis Vue_Four : tout ce qu'on peut appeler d'ici, l'appel tel qu'il s'ecrit d'ici ----
+    hp::setAssistView(fourId);
+    const auto spec = as::pickerSpec(p, "x := ", true);
+    const auto entry = [&spec](std::string_view n) -> const HmiFunctionPicker::Entry* {
+        for (const auto& e : spec.extra)
+            if (e.name == n) return &e;
+        return nullptr;
+    };
+    check(spec.from == "Vue_Four" && spec.extra.size() == 8, "depuis Vue_Four : 8 de mes fonctions (" + std::to_string(spec.extra.size()) + ")");
+    const auto* niveau = entry("Niveau_Moyen");
+    check(niveau && niveau->example == "Vue_Cuves.Niveau_Moyen()" && niveau->where == "Vues \xE2\x80\xBA Vue_Cuves \xE2\x80\xBA sous-onglet Fonctions"
+              && niveau->access == "publique" && niveau->view == cuvesId && niveau->group == "Mes fonctions",
+          "Niveau_Moyen : Vue_Cuves.Niveau_Moyen(), rang\xC3\xA9" "e dans Vues \xE2\x80\xBA Vue_Cuves \xE2\x80\xBA Fonctions");
+    check(niveau && niveau->code.rfind("FUNCTION Niveau_Moyen : REAL", 0) == 0 && niveau->code.find("RETURN LIST_AVG(Niveaux);") != std::string::npos,
+          "sa fiche : ses premi\xC3\xA8res lignes");
+    const auto* pourcent = entry("Pourcent");
+    const auto* couleur = entry("Couleur");
+    check(pourcent && pourcent->here && pourcent->example == "Pourcent(t)" && couleur && couleur->access == "priv\xC3\xA9" "e, visible ici",
+          "chez elle : Pourcent(t), sans Vue_Four devant ; Couleur, priv\xC3\xA9" "e, visible ici");
+    const auto* ouvrir = entry("Ouvrir");
+    check(ouvrir && ouvrir->byInstance && ouvrir->instances == std::vector<std::string>{"Vanne_Gaz", "Vue_Cuves.Vanne_1", "Vue_Cuves.Vanne_2"}
+              && ouvrir->example == "Vanne_Gaz.Ouvrir()" && ouvrir->path.front() == "Symboles",
+          "Ouvrir (Sym_Vanne) : par une instance - Vanne_Gaz (ici), Vue_Cuves.Vanne_1, Vue_Cuves.Vanne_2"
+              + (ouvrir ? " (" + join(ouvrir->instances) + ")" : std::string{}));
+    const auto* monter = entry("Monter");
+    check(monter && monter->example == "Pop_Reglage.Monter(c)" && monter->path.front() == "Popups", "Monter : Pop_Reglage.Monter(c), sous Popups");
+    const auto* moyenne = entry("Moyenne_Glissante");
+    check(moyenne && moyenne->example == "Moyenne_Glissante(L, N)" && !moyenne->here && moyenne->view == 0,
+          "Moyenne_Glissante : une fonction du projet, son nom seul");
+    // Depuis Vue_Cuves : la privee de Vue_Four n'y est pas ; ses instances sans la vue devant.
+    hp::setAssistView(cuvesId);
+    {
+        const auto s = as::pickerSpec(p, "x := ", true);
+        bool hasCouleur = false;
+        std::string call;
+        for (const auto& e : s.extra) {
+            hasCouleur = hasCouleur || e.name == "Couleur";
+            if (e.name == "Ouvrir") call = e.example;
+        }
+        check(!hasCouleur && call == "Vanne_1.Ouvrir()", "depuis Vue_Cuves : pas Couleur (priv\xC3\xA9" "e de Vue_Four) ; Vanne_1.Ouvrir() (" + call + ")");
+    }
+    // Dans le symbole : sans instance.
+    hp::setAssistView(symId);
+    {
+        const auto s = as::pickerSpec(p, "", true);
+        std::string call;
+        for (const auto& e : s.extra)
+            if (e.name == "Ouvrir") call = e.example + (e.byInstance ? " (par une instance)" : "");
+        check(call == "Ouvrir()", "dans Sym_Vanne : Ouvrir(), sans instance (" + call + ")");
+    }
+    hp::setAssistView(fourId);
+
+    // ---- le selecteur : les dossiers ----
+    menu::MenuManager mm{menu::MenuFactory{}};
+    std::vector<HmiFunctionPicker::Answer> answers;
+    const auto open = [&](HmiFunctionPicker::Spec s) {
+        mm.ShowDialog(std::make_unique<HmiFunctionPicker>(std::move(s)), [&](const menu::DialogResult& r) {
+            if (r.accepted()) answers.push_back(HmiFunctionPicker::parse(r.payload));
+        });
+        mm.applyPending();
+        return dynamic_cast<HmiFunctionPicker*>(mm.top());
+    };
+    auto* picker = open(spec);
+    check(picker != nullptr, "le s\xC3\xA9lecteur s'ouvre");
+    if (!picker) return;
+    auto folders = picker->folders();
+    const auto at = [&folders](std::string_view k) {
+        return static_cast<std::size_t>(std::find(folders.begin(), folders.end(), k) - folders.begin());
+    };
+    check(!folders.empty() && folders.front() == "Natives" && at("Natives \xE2\x80\xBA Nombres") < at("Mes fonctions")
+              && at("Mes fonctions") < at("Mes fonctions \xE2\x80\xBA Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Fonctions IHM")
+              && at("Mes fonctions \xE2\x80\xBA Vues \xE2\x80\xBA Vue_Four \xE2\x80\xBA Fonctions") < folders.size() && at("Natives \xE2\x80\xBA Conteneurs \xE2\x80\xBA Listes") == folders.size(),
+          "les dossiers : les natives (ferm\xC3\xA9" "es) en haut, Mes fonctions en bas, d\xC3\xA9pli\xC3\xA9" "es (" + std::to_string(folders.size()) + ")");
+    same_text(picker->hereFolder(), "Mes fonctions \xE2\x80\xBA Vues \xE2\x80\xBA Vue_Four", "le dossier d'o\xC3\xB9 l'on vient : Vue_Four, marqu\xC3\xA9 ici");
+    check(picker->expand("Natives \xE2\x80\xBA Conteneurs", true), "d\xC3\xA9plier Natives \xE2\x80\xBA Conteneurs");
+    folders = picker->folders();
+    check(at("Natives \xE2\x80\xBA Conteneurs \xE2\x80\xBA Listes") < folders.size() && at("Natives \xE2\x80\xBA Conteneurs \xE2\x80\xBA Listes \xE2\x80\xBA Calculer") == folders.size(),
+          "... ses sous-dossiers : Listes (ferm\xC3\xA9)");
+    check(picker->setFolder("Natives \xE2\x80\xBA Conteneurs \xE2\x80\xBA Listes \xE2\x80\xBA Calculer"), "Natives \xE2\x80\xBA Conteneurs \xE2\x80\xBA Listes \xE2\x80\xBA Calculer");
+    auto shown = picker->shownNames();
+    check(std::find(shown.begin(), shown.end(), "LIST_AVG") != shown.end() && std::find(shown.begin(), shown.end(), "LIST_ADD") == shown.end(),
+          "Calculer : LIST_AVG, pas LIST_ADD (" + std::to_string(shown.size()) + ")");
+    check(picker->setFolder("Mes fonctions \xE2\x80\xBA Vues \xE2\x80\xBA Vue_Cuves \xE2\x80\xBA Fonctions"), "Mes fonctions \xE2\x80\xBA Vues \xE2\x80\xBA Vue_Cuves \xE2\x80\xBA Fonctions");
+    shown = picker->shownNames();
+    check(shown.size() == 8 && shown[0] == "Niveau_Moyen" && shown[1] == "Remplir" && shown[2] == "Moyenne_Glissante",
+          "Vue_Cuves : ses deux fonctions, puis les autres (Ailleurs dans Mes fonctions) : " + join(shown));
+    check(picker->select("Niveau_Moyen") && picker->selectedCall() == "Vue_Cuves.Niveau_Moyen()", "Niveau_Moyen : Vue_Cuves.Niveau_Moyen()");
+    check(picker->select("Ouvrir") && picker->selectedCall() == "Vanne_Gaz.Ouvrir()", "Ouvrir : par Vanne_Gaz d'office (" + picker->selectedCall() + ")");
+    check(picker->select("Ouvrir", 2) && picker->selectedCall() == "Vue_Cuves.Vanne_2.Ouvrir()",
+          "Ouvrir se d\xC3\xA9plie : l'instance Vue_Cuves.Vanne_2 (" + picker->selectedCall() + ")");
+    picker->insert(false);
+    mm.applyPending();
+    check(answers.size() == 1 && answers[0].text == "Vue_Cuves.Vanne_2.Ouvrir()" && answers[0].holes.empty() && !answers[0].open,
+          "Ins\xC3\xA9rer : Vue_Cuves.Vanne_2.Ouvrir()");
+
+    // ---- Rend ----
+    picker = open(spec);
+    if (!picker) return;
+    check(picker->returnsFilter() == R::All, "rien d'attendu au curseur : Rend s'ouvre sur Tout");
+    const auto countOf = [&picker](R r) {
+        for (const auto& [ret, n] : picker->returnCounts())
+            if (ret == r) return n;
+        return static_cast<std::size_t>(-1);
+    };
+    const std::size_t all = countOf(R::All);
+    check(all == HmiFunctionPicker::natives().size() + 8 && countOf(R::Void) == 3 && countOf(R::Fits) == static_cast<std::size_t>(-1),
+          "les nombres : Tout = les natives et 8 des miennes, 3 sans retour, pas de Ce qui convient ici (" + std::to_string(all) + ")");
+    check(picker->setReturns(R::Void), "Sans retour (VOID)");
+    shown = picker->shownNames();
+    check(shown == std::vector<std::string>{"Journaliser", "Remplir", "Ouvrir"}, "Sans retour : Journaliser, Remplir, Ouvrir - aucune native (" + join(shown) + ")");
+    check(picker->setReturns(R::Real), "R\xC3\xA9" "els");
+    shown = picker->shownNames();
+    check(shown.size() > 4 && shown[0] == "Pourcent" && std::find(shown.begin(), shown.end(), "Couleur") == shown.end()
+              && std::find(shown.begin(), shown.end(), "SQRT") != shown.end(),
+          "R\xC3\xA9" "els : Pourcent (ici) d'abord, SQRT ; pas Couleur (STRING)");
+    picker->setSearch("LIST");
+    check(countOf(R::All) < all && countOf(R::Container) > 0, "chercher LIST les recompte (" + std::to_string(countOf(R::All)) + ")");
+    picker->setSearch("");
+    (void)picker->setReturns(R::All);
+    check(picker->select("Niveau_Moyen"), "Niveau_Moyen choisie");
+    picker->openDefinition();
+    mm.applyPending();
+    check(answers.size() == 2 && answers[1].open && answers[1].view == cuvesId && answers[1].function == niveauId && answers[1].text.empty(),
+          "Ouvrir sa d\xC3\xA9" "finition : Vue_Cuves, Niveau_Moyen - rien \xC3\xA0 ins\xC3\xA9rer");
+
+    // ---- une case fx : Dans une expression cochee d'office, Sans retour grise ----
+    picker = open(as::pickerSpec(p, "", false));
+    if (!picker) return;
+    check(!picker->setReturns(R::Void), "une case fx : Sans retour gris\xC3\xA9");
+    picker->setExpressionOnly(false);
+    shown = picker->shownNames();
+    check(std::find(shown.begin(), shown.end(), "Journaliser") == shown.end() && std::find(shown.begin(), shown.end(), "Pourcent") != shown.end(),
+          "... Dans une expression ne s'y d\xC3\xA9" "coche pas : Journaliser n'y est pas, Pourcent oui");
+    picker->finish(false);
+    mm.applyPending();
+
+    // ---- un REAL attendu : Ce qui convient ici ----
+    picker = open(as::pickerSpec(p, "Consigne := ", true));
+    if (!picker) return;
+    check(picker->returnsFilter() == R::Fits, "Consigne := | : Rend s'ouvre sur Ce qui convient ici");
+    shown = picker->shownNames();
+    const auto has = [&shown](std::string_view n) { return std::find(shown.begin(), shown.end(), n) != shown.end(); };
+    check(has("Pourcent") && has("Niveau_Moyen") && has("Moyenne_Glissante") && has("Monter") && has("LIMIT") && !has("Couleur") && !has("Journaliser"),
+          "... Pourcent, Niveau_Moyen, Moyenne_Glissante, Monter, LIMIT ; ni Couleur ni Journaliser");
+    picker->finish(false);
+    mm.applyPending();
+    check(answers.size() == 2, "Annuler : rien");
+    hp::setAssistView(kNoId);
 }
 
 // ---- 1.12.16 (T4) : la valeur initiale, en brut ou en code (une fenetre, par type) ----
@@ -32095,6 +32332,14 @@ void vueOnglets11216() {
 }
 
 int main(int argc, char** argv) {
+    // 1.12.17 : HMI_TEST_1217=1 - les natives rangees, Choisir une fonction... (Mes fonctions, Rend), seuls.
+    if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
+        natives1217();
+        choisir11216();
+        choisir1217();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.16 : HMI_TEST_11216=1 - Choisir une fonction..., la valeur initiale, seuls.
     if (const char* only = std::getenv("HMI_TEST_11216"); only && *only == '1') {
         choisir11216();
@@ -32542,6 +32787,7 @@ int main(int argc, char** argv) {
     aideTypee11214();                       // 1.12.14 : l'aide a la saisie typee, ce qui mene au type attendu
     deballage11215();                       // 1.12.15 : le deballage, ses proprietes, first et second
     choisir11216();                         // 1.12.16 : Choisir une fonction... (le selecteur, la derniere ligne, Ctrl+I)
+    choisir1217();                          // 1.12.17 : Choisir une fonction... - Mes fonctions, les instances, Rend
     valeurInitiale11216();                  // 1.12.16 (T4) : la valeur initiale, en brut ou en code
     vueOnglets11216();                      // 1.12.16 (T2) : les sous-onglets Constantes et Fonctions d'une vue
     courbes11216();                         // 1.12.16 : Pilotable, Visible si par plume

@@ -15,6 +15,9 @@
 #include "hmi/HmiCommPanes.hpp"         // lot 15 : les equipements, le reseau du PC
 #include "hmi/HmiEditor.hpp"
 #include "hmi/HmiValuePicker.hpp"        // 1.11.3 : le selecteur de valeur (selecteur-...)
+#include "hmi/HmiFunctionPicker.hpp"   // 1.12.17 : les commandes fonction-...
+#include "hmi/HmiAssist.hpp"           // 1.12.17 : pickerSpec (fonction-choisir)
+#include "hmi/HmiParamPanes.hpp"       // 1.12.17 : la vue d ou l on ecrit (fonction-choisir)
 #include "hmi/HmiTypePicker.hpp"   // 1.11.19 (refonte, lot 6) : les commandes choix-type-...
 #include "hmi/HmiActionDialogs.hpp"      // 1.11.9 : les fenetres des actions (fenetre-action)
 #include "hmi/HmiDuplicateDialog.hpp"  // 1.10.2 (chantier D) : "Dupliquer..."
@@ -5452,6 +5455,74 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         fail("varihm : " + what + " ? (deplier, replier, choisir, menu, remanente, remanence-reinit, remanence-exporter, remanence-importer, "
              "remanence-etat, fiche)");
         return Step::Next;
+    }
+    // 1.12.17 : « Choisir une fonction... » -
+    //   fonction-choisir ["Vue"] ["avant le curseur"]   le selecteur, comme Ctrl+I dans un script de la vue
+    //                                  (sans vue : Programmation generale) ; le texte dit le type attendu
+    //   fonction-dossier "Mes fonctions > Vues > Vue_Cuves > Fonctions"   (le separateur : celui de l'ecran ; "" : toutes)
+    //   fonction-deplier "Natives > Conteneurs" oui|non | fonction-chercher "texte"
+    //   fonction-rend tout|ici|vide|bool|entiers|reels|textes|durees|mots|conteneurs|references|comme|autres
+    //   fonction-rend-liste oui|non     la liste Rend, ouverte | fonction-ligne "Ouvrir" [instance]
+    //   fonction-inserer | fonction-definition | fonction-fermer
+    if (cmd == "fonction-choisir") {
+        const auto doc = app_.hmi();
+        if (!doc) {
+            fail("fonction-choisir : pas d'IHM ouverte");
+            return Step::Next;
+        }
+        const auto* v = arg(1).empty() ? nullptr : doc->project.viewByName(arg(1));
+        if (!arg(1).empty() && !v) {
+            fail("fonction-choisir : vue inconnue : " + arg(1));
+            return Step::Next;
+        }
+        hmiparams::setAssistView(v ? v->id : hmi::kNoId);
+        functionpicker::ask(assist::pickerSpec(doc->project, arg(2), true), [](const HmiFunctionPicker::Answer& a) {
+            std::printf("[script] fonction choisie : %s\n", a.text.c_str());
+        });
+        sinceInput_ = 0;
+        return Step::Yield;
+    }
+    if (cmd.rfind("fonction-", 0) == 0) {
+        auto* picker = dynamic_cast<HmiFunctionPicker*>(app_.menus().top());
+        if (!picker) {
+            if (retries_ < 30) return Step::Retry;
+            fail(cmd + " : le s\xC3\xA9lecteur de fonctions n'est pas ouvert");
+            return Step::Next;
+        }
+        // Le chemin tape avec > : le separateur de l'ecran.
+        std::string path = arg(1);
+        for (std::size_t at = path.find(" > "); at != std::string::npos; at = path.find(" > ", at)) path.replace(at, 3, " \xE2\x80\xBA ");
+        using R = HmiFunctionPicker::Returns;
+        if (cmd == "fonction-dossier") {
+            if (!picker->setFolder(path)) fail("fonction-dossier : dossier inconnu : " + arg(1));
+        } else if (cmd == "fonction-deplier") {
+            if (!picker->expand(path, lower(arg(2)) != "non")) fail("fonction-deplier : dossier inconnu : " + arg(1));
+        } else if (cmd == "fonction-chercher") {
+            picker->setSearch(arg(1));
+        } else if (cmd == "fonction-rend") {
+            static const std::pair<const char*, R> kWords[] = {
+                {"tout", R::All}, {"ici", R::Fits}, {"vide", R::Void}, {"bool", R::Bool}, {"entiers", R::Integer}, {"reels", R::Real},
+                {"textes", R::Text}, {"durees", R::Time}, {"mots", R::Word}, {"conteneurs", R::Container}, {"references", R::Reference},
+                {"comme", R::Generic}, {"autres", R::Other}};
+            bool done = false;
+            for (const auto& [word, r] : kWords)
+                if (lower(arg(1)) == word) done = picker->setReturns(r);
+            if (!done) fail("fonction-rend : choix inconnu ou gris\xC3\xA9 : " + arg(1));
+        } else if (cmd == "fonction-rend-liste") {
+            picker->showReturnsMenu(lower(arg(1)) != "non");
+        } else if (cmd == "fonction-ligne") {
+            if (!picker->select(arg(1), arg(2).empty() ? -1 : std::atoi(arg(2).c_str()))) fail("fonction-ligne : pas montr\xC3\xA9" "e : " + arg(1));
+        } else if (cmd == "fonction-inserer") {
+            picker->insert(false);
+        } else if (cmd == "fonction-definition") {
+            picker->openDefinition();
+        } else if (cmd == "fonction-fermer") {
+            picker->finish(false);
+        } else {
+            fail(cmd + " ? (fonction-choisir, -dossier, -deplier, -chercher, -rend, -rend-liste, -ligne, -inserer, -definition, -fermer)");
+        }
+        sinceInput_ = 0;
+        return Step::Yield;
     }
     // 1.12.0 : les natives -
     //   natives "fonction:LIMIT"       la fiche d'une cle (le volet Natives s'ouvre ; app::natives)
