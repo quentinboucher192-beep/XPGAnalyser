@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.17", "19/10/2026", "livr\xC3\xA9" "e le 19/10 au soir"},
     {"1.12.16", "19/10/2026", "livr\xC3\xA9" "e le 19/10"},
     {"1.12.15", "16/10/2026", "livr\xC3\xA9" "e le 16/10 en d\xC3\xA9" "but d'apr\xC3\xA8s-midi"},
     {"1.12.14", "16/10/2026", "livr\xC3\xA9" "e le 16/10 en fin de matin\xC3\xA9" "e"},
@@ -122,6 +123,25 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.17 (19/10/2026) : voir docs/LIVRAISON-1.12.17.md.
+        note("1.12.17", "G\xC3\xA9n\xC3\xA9rer", Kind::Fixed,
+         "UN TABLEAU ENTIER L\xC3\x80 O\xC3\x99 UNE VALEUR SEULE EST ATTENDUE : une plume TABLEAU (au lieu de TABLEAU[0]) passait sans un mot et ne tra\xC3\xA7" "ait rien. G\xC3\xA9n\xC3\xA9rer et Compiler le disent maintenant en erreur, partout o\xC3\xB9 une valeur seule est attendue : les plumes et leur Visible si, les mesures des graphiques (barres, secteurs, radar, XY, chronogramme), les variables archiv\xC3\xA9" "es, la variable d'une jauge, d'un afficheur, d'un voyant, d'une commande, d'un champ de saisie, d'un programmateur, une condition, une couleur, un calcul (TABLEAU * 2, ABS(TABLEAU), TABLEAU > 5), la cible d'une action (Mettre \xC3\xA0 1, Incr\xC3\xA9menter, :=). Un tableau, une liste, un vecteur, une MAP, un ensemble, un tampon circulaire, un tuple ou une structure entiers ; le message dit quoi \xC3\xA9" "crire (TABLEAU[0], L[0] ou L.Count, CUVE.Niveau). Un texte \xC3\xA0 trous ({TABLEAU} montre [1, 2, 3]) et Tableau := Autre_Tableau du m\xC3\xAAme type passent toujours.",
+         "champs-expressions", ""),
+        note("1.12.17", "Natives", Kind::New,
+         "LES NATIVES RANG\xC3\x89" "ES PAR CE QU'ON VEUT FAIRE : huit th\xC3\xA8mes (Nombres, Textes, Dates et heures, Couleurs, Conteneurs, Conversions, L'IHM, R\xC3\xA9" "f\xC3\xA9rences et \xC3\xA9" "changes), des sous-dossiers par geste (Nombres \xE2\x80\xBA Trigonom\xC3\xA9trie, Hasard, Bits\xE2\x80\xA6), les conversions en un dossier, les \xC3\xA9num\xC3\xA9rations par usage et De A \xC3\xA0 Z. Types en cinq dossiers : Nombres et bits, Textes dur\xC3\xA9" "es et dates, Conteneurs (ARRAY, LIST, VECTOR, MAP, SET, RING, TUPLE : une fiche chacun - quand le choisir, le d\xC3\xA9" "clarer, le lire et l'\xC3\xA9" "crire, ses propri\xC3\xA9t\xC3\xA9s, le parcourir, ses fonctions, un exemple jou\xC3\xA9 par le moteur - et \xC2\xAB Lequel choisir ? \xC2\xBB), R\xC3\xA9" "f\xC3\xA9rences, G\xC3\xA9n\xC3\xA9riques.",
+         "reference", ""),
+        note("1.12.17", "Scripts", Kind::New,
+         "CHOISIR UNE FONCTION\xE2\x80\xA6 : MES FONCTIONS ET REND. En bas du s\xC3\xA9lecteur, en violet, Mes fonctions : les fonctions IHM rang\xC3\xA9" "es par onglets, celles des vues et des popups par vue et sous-onglet, celles des symboles avec leurs instances (Vue.Instance.Fonction). La liste Rend ne garde que ce qui rend un type : Sans retour, BOOL, les entiers, les r\xC3\xA9" "els, STRING, une liste, une MAP, vos types ; chacun son nombre. Une fonction choisie m\xC3\xA8ne \xC3\xA0 sa d\xC3\xA9" "finition.",
+         "aide-saisie", ""),
+        note("1.12.17", "Simulation", Kind::New,
+         "LES PERFORMANCES DANS LE TEMPS : la Vue d'ensemble de la Simulation garde une mesure par seconde - le cycle IHM (sa m\xC3\xA9" "diane, son p95, son maximum), la charge de la p\xC3\xA9riode, les d\xC3\xA9passements, le dessin, les expressions, les \xC3\xA9" "critures, les \xC3\xA9" "changes avec les \xC3\xA9quipements - sur 1 min, 10 min, 1 h ou depuis le lancement. Le survol dit la seconde ; \xC2\xAB O\xC3\xB9 passe le temps \xC2\xBB range chaque script, les alarmes, les courbes. Remettre \xC3\xA0 z\xC3\xA9ro, Exporter en CSV. L'onglet Performances de l'IHM en marche y m\xC3\xA8ne (\xC2\xAB Dans le temps \xE2\x80\xBA \xC2\xBB).",
+         "performances", ""),
+        note("1.12.17", "Simulation", Kind::New,
+         "LE JOURNAL DES LENTEURS : ce qui a dur\xC3\xA9 anormalement longtemps - plus de 50 ms, ou plus de 5 fois son temps habituel (et au moins 10 ms), un cycle plus long que sa p\xC3\xA9riode. Un clic et ce qu'il d\xC3\xA9" "clenche, un script, l'affichage d'une vue, l'ouverture d'une popup, une lecture lente d'un \xC3\xA9quipement : l'heure \xC3\xA0 la milliseconde, la dur\xC3\xA9" "e, son temps habituel, o\xC3\xB9, qui, et ce qui a pris le temps dedans. Aller \xC3\xA0 ; les filtres ; les seuils pour le projet ; Vider (une confirmation d'abord) ; Exporter en CSV. Les 500 derni\xC3\xA8res, d'une marche \xC3\xA0 l'autre.",
+         "performances", ""),
+        note("1.12.17", "Simulation", Kind::New,
+         "LA SIMULATION D\xC3\x89PLI\xC3\x89" "E dans l'arbre : sous Vue d'ensemble, Performances (le cycle de la derni\xC3\xA8re minute), Lenteurs, \xC3\x80 surveiller ; sous IHM, Affich\xC3\xA9 (la vue et les popups, depuis quand), Scripts (leur temps moyen), Alarmes, Utilisateur ; sous \xC3\x89quipements, chacun (ses \xC3\xA9" "changes par seconde) et ses Lues, \xC3\x89" "crites ; sous Journal, une ligne par source. Une fois par seconde ; l'IHM arr\xC3\xAAt\xC3\xA9" "e, sa derni\xC3\xA8re marche en gris. Un clic m\xC3\xA8ne au bon endroit ; ce qui est d\xC3\xA9pli\xC3\xA9 le reste.",
+         "simulation", ""),
         // 1.12.16 (19/10/2026) : voir docs/LIVRAISON-1.12.16.md.
         note("1.12.16", "Vues", Kind::New,
          "LES CONSTANTES ET LES FONCTIONS D'UNE VUE (et d'une popup) : deux sous-onglets au-dessus du dessin, Constantes et Fonctions. Une constante s'\xC3\xA9" "crit, ou se calcule au d\xC3\xA9marrage, ou \xC3\xA0 chaque ouverture (d'office quand elle lit un param\xC3\xA8tre de la popup) ; une fonction rend sa valeur par RETURN. Par leur nom dans la vue (les fx des objets, les textes \xC3\xA0 trous, les scripts, les actions), par Vue.Nom ailleurs (les publiques) ; l'aide \xC3\xA0 la saisie les propose, G\xC3\xA9n\xC3\xA9rer refuse une priv\xC3\xA9" "e lue d'ailleurs, une constante \xC3\xA9" "crite, un nom d\xC3\xA9j\xC3\xA0 pris. Le mod\xC3\xA8le de vue \xC2\xAB Constantes et fonctions \xC2\xBB en pose un exemple complet, la page d'aide un exemple anim\xC3\xA9.",
