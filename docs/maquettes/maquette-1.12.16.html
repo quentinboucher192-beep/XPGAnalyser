@@ -1,0 +1,1160 @@
+<title>Maquette XPGAnalyser 1.12.16</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Mise en page : un fil de sections ; chacune pose une fenetre de l'application (largeur fixe, defilable sur un telephone)
+   a cote de ses notes. Les couleurs reprennent celles de XPGAnalyser IHM : gris acier, bleu des boutons, violet du code. */
+:root {
+  --bg: #e9edf1;
+  --panel: #f6f8fa;
+  --window: #ffffff;
+  --chrome: #dde3e9;
+  --line: #c6cfd8;
+  --line-soft: #e1e6eb;
+  --fg: #1c2631;
+  --muted: #5a6876;
+  --accent: #1e5ea8;
+  --accent-fg: #ffffff;
+  --accent-soft: #d9e6f5;
+  --code: #6a3d9e;
+  --code-soft: #ece4f7;
+  --ok: #24764a;
+  --ok-soft: #dcefe3;
+  --warn: #8f5d00;
+  --warn-soft: #f6ead0;
+  --err: #b0261d;
+  --err-soft: #f7dcda;
+  --sel: #c9dcf2;
+  --mono-bg: #f2f4f7;
+  --shadow: 0 1px 2px rgba(20, 30, 45, .08), 0 8px 24px rgba(20, 30, 45, .10);
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-head: "IBM Plex Sans Condensed", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151a; --panel: #171c22; --window: #1c222a; --chrome: #252d36; --line: #36414c; --line-soft: #2a323b;
+    --fg: #e2e8ee; --muted: #9ba8b5; --accent: #6aa6ff; --accent-fg: #0d1520; --accent-soft: #1c3352;
+    --code: #c29dff; --code-soft: #2b2340; --ok: #5ccb8c; --ok-soft: #173426; --warn: #e5b450; --warn-soft: #3a2e14;
+    --err: #ff7f76; --err-soft: #3d1c1a; --sel: #24456c; --mono-bg: #151a20;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151a; --panel: #171c22; --window: #1c222a; --chrome: #252d36; --line: #36414c; --line-soft: #2a323b;
+  --fg: #e2e8ee; --muted: #9ba8b5; --accent: #6aa6ff; --accent-fg: #0d1520; --accent-soft: #1c3352;
+  --code: #c29dff; --code-soft: #2b2340; --ok: #5ccb8c; --ok-soft: #173426; --warn: #e5b450; --warn-soft: #3a2e14;
+  --err: #ff7f76; --err-soft: #3d1c1a; --sel: #24456c; --mono-bg: #151a20;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-body); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { padding-block: 28px 14px; }
+.eyebrow { font: 600 12px/1 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 600 30px/1.15 var(--f-head); margin: 8px 0 10px; text-wrap: balance; }
+h2 { font: 600 22px/1.2 var(--f-head); margin: 0; text-wrap: balance; }
+h3 { font: 600 15px/1.3 var(--f-body); margin: 0 0 6px; }
+p { margin: 0 0 10px; max-width: 70ch; }
+.ask { border-left: 3px solid var(--line); padding: 6px 0 6px 12px; color: var(--muted); font-size: 13px; max-width: 90ch; }
+.ask b { color: var(--fg); font-weight: 500; }
+nav.toc { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--bg); }
+nav.toc .wrap { display: flex; gap: 4px; overflow-x: auto; padding-block: 8px; }
+nav.toc a { white-space: nowrap; text-decoration: none; color: var(--muted); font-weight: 500; padding: 6px 10px; border-radius: 6px; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); background: var(--chrome); outline: none; }
+section.sec { padding-block: 34px 10px; scroll-margin-top: 56px; }
+.sec-head { display: grid; gap: 6px; margin-bottom: 16px; }
+.sec-head .lead { color: var(--muted); max-width: 80ch; margin: 0; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+@media (max-width: 1060px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.scroller { overflow-x: auto; padding-bottom: 6px; min-width: 0; }
+.notes { display: grid; gap: 12px; min-width: 0; }
+.note { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 8px; padding: 12px 14px; }
+.note p, .note li { font-size: 13px; }
+.note ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.note.decide { border-color: var(--accent); }
+.note.decide h3 { color: var(--accent); }
+code, .mono { font-family: var(--f-mono); font-size: 12.5px; }
+code { background: var(--mono-bg); border: 1px solid var(--line-soft); border-radius: 4px; padding: 0 4px; }
+
+/* ---- la fenetre de l'application ---- */
+.win { min-width: 880px; background: var(--window); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; position: relative; }
+.win-bar { display: flex; align-items: center; gap: 10px; background: var(--chrome); border-bottom: 1px solid var(--line); padding: 7px 12px; font-size: 12.5px; color: var(--muted); }
+.win-bar .dots { display: flex; gap: 6px; }
+.win-bar .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: block; }
+.win-bar b { color: var(--fg); font-weight: 600; }
+.win-body { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 430px; }
+.tree { background: var(--panel); border-right: 1px solid var(--line); padding: 8px 0; font-size: 13px; }
+.tree .t { display: flex; align-items: center; gap: 6px; padding: 3px 10px; cursor: default; white-space: nowrap; }
+.tree .t.l1 { padding-left: 22px; } .tree .t.l2 { padding-left: 38px; } .tree .t.l3 { padding-left: 54px; }
+.tree .t.sel { background: var(--sel); }
+.tree .t .ic { width: 14px; text-align: center; color: var(--muted); font-size: 11px; }
+.tree .t .n { color: var(--muted); font-size: 11.5px; }
+.tree .t.new::after { content: "nouveau"; font-size: 10px; font-weight: 600; letter-spacing: .04em; color: var(--ok); background: var(--ok-soft); border-radius: 3px; padding: 0 4px; margin-left: 4px; }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); background: var(--panel); padding: 6px 8px 0; }
+.subtabs button { font: 500 13px var(--f-body); color: var(--muted); background: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; padding: 6px 12px; cursor: pointer; }
+.subtabs button[aria-selected="true"] { background: var(--window); color: var(--fg); border-color: var(--line); margin-bottom: -1px; }
+.subtabs button .badge { margin-left: 6px; }
+.subtabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pane { padding: 12px; display: grid; gap: 10px; min-width: 0; }
+.toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.btn { font: 500 13px var(--f-body); color: var(--fg); background: var(--window); border: 1px solid var(--line); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
+.btn:hover { background: var(--panel); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.small { padding: 2px 8px; font-size: 12px; }
+.btn.ghost { border-color: transparent; background: none; color: var(--accent); }
+.badge { display: inline-block; font: 600 11px/1.6 var(--f-body); border-radius: 10px; padding: 0 7px; background: var(--chrome); color: var(--muted); }
+.badge.ok { background: var(--ok-soft); color: var(--ok); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.err { background: var(--err-soft); color: var(--err); }
+.badge.fx { background: var(--code-soft); color: var(--code); }
+.badge.acc { background: var(--accent-soft); color: var(--accent); }
+table.grid { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.grid th { text-align: left; font-weight: 600; font-size: 12px; color: var(--muted); background: var(--panel); border-bottom: 1px solid var(--line); padding: 6px 8px; white-space: nowrap; }
+table.grid td { border-bottom: 1px solid var(--line-soft); padding: 5px 8px; vertical-align: top; }
+table.grid tr.sel td { background: var(--sel); }
+table.grid td.val { font-family: var(--f-mono); font-size: 12px; cursor: pointer; }
+table.grid td.val:hover { text-decoration: underline; text-decoration-color: var(--accent); }
+table.grid td.t { font-family: var(--f-mono); font-size: 12px; color: var(--accent); white-space: nowrap; }
+.fxmark { font-family: var(--f-mono); color: var(--code); font-weight: 600; margin-right: 4px; }
+pre.code { margin: 0; background: var(--mono-bg); border: 1px solid var(--line-soft); border-radius: 6px; padding: 10px 12px; font: 12.5px/1.6 var(--f-mono); overflow-x: auto; white-space: pre; }
+.k { color: var(--accent); font-weight: 500; } .c { color: var(--muted); font-style: italic; } .s { color: var(--ok); } .nfn { color: var(--code); }
+.ro { color: var(--muted); background: var(--panel); }
+.split { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 10px; min-width: 0; }
+.list { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--window); }
+.list .it { padding: 6px 10px; border-bottom: 1px solid var(--line-soft); font-size: 13px; cursor: pointer; }
+.list .it:last-child { border-bottom: none; }
+.list .it.sel { background: var(--sel); }
+.list .it small { display: block; color: var(--muted); font-family: var(--f-mono); font-size: 11.5px; }
+.drawing { position: relative; height: 340px; background: repeating-linear-gradient(0deg, transparent 0 19px, var(--line-soft) 19px 20px), repeating-linear-gradient(90deg, transparent 0 19px, var(--line-soft) 19px 20px); border: 1px solid var(--line); border-radius: 6px; }
+.obj { position: absolute; border: 1px dashed var(--accent); border-radius: 3px; font-size: 12px; padding: 4px 6px; background: var(--window); }
+.obj .lbl { position: absolute; top: -17px; left: 0; font-size: 10.5px; color: var(--accent); white-space: nowrap; }
+
+/* ---- l'editeur et la liste de l'aide a la saisie ---- */
+.editor { position: relative; border: 1px solid var(--line); border-radius: 6px; background: var(--window); font: 13px/1.7 var(--f-mono); min-height: 300px; }
+.editor .ln { display: grid; grid-template-columns: 36px minmax(0, 1fr); }
+.editor .ln span:first-child { color: var(--muted); text-align: right; padding-right: 10px; user-select: none; background: var(--panel); }
+.editor .ln span:last-child { padding-left: 10px; white-space: pre; }
+.caret { display: inline-block; width: 1.5px; height: 15px; background: var(--fg); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .caret { animation: none; } }
+.ph { background: var(--accent-soft); color: var(--accent); border-radius: 3px; padding: 0 2px; }
+.complete { position: absolute; left: 180px; top: 74px; width: 430px; background: var(--window); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); font: 12.5px/1.4 var(--f-body); overflow: hidden; z-index: 3; }
+.complete .row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 4px 8px; cursor: default; }
+.complete .row .ic { font: 600 11px var(--f-mono); color: var(--accent); text-align: center; }
+.complete .row .ic.f { color: var(--code); }
+.complete .row .nm { font-family: var(--f-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.complete .row .dt { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.complete .row.first { background: var(--sel); }
+.complete .row.choose { border-top: 1px solid var(--line); background: var(--code-soft); cursor: pointer; }
+.complete .row.choose .nm { font-family: var(--f-body); font-weight: 600; color: var(--code); }
+.complete .row.choose:hover, .complete .row.choose:focus-visible { outline: 2px solid var(--code); outline-offset: -2px; }
+
+/* ---- les fenetres modales dans la fenetre ---- */
+.veil { position: absolute; inset: 31px 0 0 0; background: rgba(20, 28, 38, .35); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 14px; }
+.dlg { background: var(--window); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); width: 100%; max-width: 1000px; display: flex; flex-direction: column; max-height: 100%; }
+.dlg-h { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel); border-radius: 8px 8px 0 0; }
+.dlg-h b { font-weight: 600; }
+.dlg-h .x { margin-left: auto; }
+.dlg-f { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--panel); border-radius: 0 0 8px 8px; }
+.dlg-f .hint { color: var(--muted); font-size: 12px; margin-right: auto; }
+input.f, select.f, textarea.f { font: 13px var(--f-body); color: var(--fg); background: var(--window); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; min-width: 0; }
+input.f.mono, textarea.f { font-family: var(--f-mono); font-size: 12.5px; }
+input.f:focus, select.f:focus, textarea.f:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+input.f.bad { border-color: var(--err); background: var(--err-soft); }
+.picker { display: grid; grid-template-columns: 210px 300px minmax(0, 1fr); min-height: 380px; max-height: 470px; }
+.picker > div { overflow-y: auto; min-width: 0; }
+.pk-cats { border-right: 1px solid var(--line); background: var(--panel); padding: 6px 0; font-size: 12.5px; }
+.pk-cats .g { padding: 8px 12px 3px; font: 600 11px var(--f-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.pk-cats button { display: flex; width: 100%; justify-content: space-between; gap: 6px; text-align: left; font: 13px var(--f-body); color: var(--fg); background: none; border: none; padding: 3px 12px 3px 18px; cursor: pointer; }
+.pk-cats button[aria-pressed="true"] { background: var(--sel); }
+.pk-cats button span { color: var(--muted); font-size: 11.5px; }
+.pk-list { border-right: 1px solid var(--line); }
+.pk-list button { display: block; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--line-soft); padding: 6px 10px; cursor: pointer; color: var(--fg); }
+.pk-list button[aria-selected="true"] { background: var(--sel); }
+.pk-list button b { font: 500 12.5px var(--f-mono); }
+.pk-list button small { display: block; color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-list .empty { padding: 14px; color: var(--muted); font-size: 13px; }
+.pk-detail { padding: 12px 14px; display: grid; gap: 8px; align-content: start; }
+.pk-detail .sig { font: 500 13px/1.5 var(--f-mono); color: var(--code); word-break: break-word; }
+.pk-detail table { border-collapse: collapse; font-size: 12.5px; }
+.pk-detail td { padding: 2px 8px 2px 0; vertical-align: top; }
+.pk-detail td:first-child { font-family: var(--f-mono); white-space: nowrap; }
+.pk-detail td:nth-child(2) { font-family: var(--f-mono); color: var(--accent); white-space: nowrap; }
+.pk-top { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.pk-top input { flex: 1 1 240px; }
+.chip { font: 500 12px var(--f-body); border: 1px solid var(--line); background: var(--window); color: var(--muted); border-radius: 12px; padding: 3px 10px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--code-soft); border-color: var(--code); color: var(--code); }
+
+/* ---- la valeur initiale ---- */
+.vi { display: grid; grid-template-columns: minmax(0, 1fr) 300px; min-height: 420px; }
+.vi-left { padding: 12px 14px; display: grid; gap: 10px; align-content: start; min-width: 0; border-right: 1px solid var(--line); }
+.vi-right { padding: 12px 14px; background: var(--panel); display: grid; gap: 10px; align-content: start; font-size: 12.5px; min-width: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: 500 13px var(--f-body); background: var(--window); color: var(--muted); border: none; padding: 5px 14px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.seg button.fx[aria-pressed="true"] { background: var(--code); color: var(--window); }
+.typepill { font: 500 12.5px var(--f-mono); color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 2px 8px; }
+.ttree { font: 12px/1.7 var(--f-mono); }
+.ttree div span { color: var(--muted); font-family: var(--f-body); font-size: 12px; }
+.lit { font: 12.5px/1.5 var(--f-mono); background: var(--mono-bg); border: 1px solid var(--line-soft); border-radius: 6px; padding: 8px 10px; word-break: break-word; }
+.state { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; }
+.rowedit { display: grid; gap: 6px; }
+.rowedit .r { display: grid; gap: 6px; align-items: center; }
+.rowedit .hdr { font-size: 12px; color: var(--muted); font-weight: 600; }
+.card { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; display: grid; gap: 6px; background: var(--window); }
+.card .h { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.card .h b { font-family: var(--f-mono); color: var(--fg); font-weight: 500; }
+.dropped { text-decoration: line-through; color: var(--muted); }
+.codebox { display: grid; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.codebox .fixed { font: 12.5px/1.6 var(--f-mono); padding: 4px 10px; background: var(--panel); color: var(--muted); }
+.codebox textarea { border: none; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); border-radius: 0; min-height: 170px; resize: vertical; padding: 8px 10px; line-height: 1.6; }
+.tpls { display: flex; gap: 6px; flex-wrap: wrap; }
+.eg { display: grid; gap: 4px; }
+.natchips { display: flex; gap: 4px; flex-wrap: wrap; }
+.natchips code { cursor: default; }
+
+/* ---- std:: ---- */
+.stdtools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+table.std { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 13px; background: var(--window); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+table.std th { text-align: left; font-size: 12px; color: var(--muted); background: var(--panel); padding: 7px 10px; border-bottom: 1px solid var(--line); }
+table.std td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+table.std tr.grp td { background: var(--panel); font: 600 12px var(--f-body); letter-spacing: .04em; color: var(--muted); }
+table.std td.n { font: 500 12.5px var(--f-mono); white-space: nowrap; }
+table.std td.ex { font: 12px var(--f-mono); color: var(--code); }
+table.std td.cpp { font: 12px var(--f-mono); color: var(--muted); }
+table.std input { width: 16px; height: 16px; accent-color: var(--accent); }
+.copied { color: var(--ok); font-weight: 500; }
+
+/* ---- l'exemple ---- */
+.ex-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 860px) { .ex-grid { grid-template-columns: minmax(0, 1fr); } }
+.ex-card { background: var(--window); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+.ex-card h3 { display: flex; gap: 8px; align-items: center; }
+.decisions { display: grid; gap: 10px; counter-reset: d; }
+.decisions li { list-style: none; background: var(--window); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px 10px 44px; position: relative; }
+.decisions li::before { counter-increment: d; content: counter(d); position: absolute; left: 14px; top: 10px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 600 12px/20px var(--f-body); text-align: center; }
+.decisions li b { font-weight: 600; }
+.decisions li .prop { color: var(--ok); font-weight: 500; }
+footer.end { padding-block: 30px 40px; color: var(--muted); font-size: 12.5px; }
+</style>
+
+<header class="top wrap">
+  <div class="eyebrow">XPGAnalyser IHM · proposition pour la 1.12.16</div>
+  <h1>Constantes et fonctions des vues, sélecteur de natives, valeur initiale en brut ou en code</h1>
+  <p class="ask">Ta demande du 19/10 : <b>« ajoute les constantes et fonctions sur les VUES/POPUP stp ; fait un helper modal pour choisir les fonctions parmi les natives dans tous les fichiers ST, tous les endroits avec aide à la saisie, dans les complétions ajouter 'Choisir...' et ça ouvre ça ; grandement améliorer l'aide aux valeurs d'inits des constantes, car il faut pouvoir écrire du code ou en brut, la partie avec du code ça appellerait un callback qui renverrait le même type que la variable modifiée, optimisé pour faciliter la compréhension de chaque type spé ; proposer d'ajouter des std:: utiles ; ajouter une sorte d'exemple et proposer maquette pour tout ça »</b></p>
+  <p>Tout ce qui suit est cliquable : les sous-onglets de la vue, la liste de l'aide à la saisie, le sélecteur de fonctions (les 227 natives du catalogue, telles quelles), l'éditeur de valeur initiale (neuf types) et la liste des std::. Rien n'est encore codé : dis-moi ce qui te va, et ce que tu changes.</p>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <div class="wrap">
+    <a href="#vues">1. Vues et popups</a>
+    <a href="#choisir">2. Choisir une fonction…</a>
+    <a href="#valeur">3. Valeur initiale</a>
+    <a href="#std">4. std:: proposées</a>
+    <a href="#exemple">5. L'exemple</a>
+    <a href="#decider">6. À décider</a>
+  </div>
+</nav>
+
+<main>
+<!-- ================================================================ 1 ================ -->
+<section class="sec wrap" id="vues">
+  <div class="sec-head">
+    <div class="eyebrow">1 · Programmation d'une vue</div>
+    <h2>Une vue et une popup ont leurs constantes et leurs fonctions</h2>
+    <p class="lead">Comme un symbole depuis la 1.11.10 : deux sous-onglets de plus sous la vue, Constantes et Fonctions. Ce qu'ils déclarent se lit partout dans la vue (ses objets ƒx, ses scripts, ses actions) et, s'il est public, de partout ailleurs par <code>Vue_Four.Nom</code>.</p>
+  </div>
+  <div class="cols">
+    <div class="scroller">
+      <div class="win" id="win1">
+        <div class="win-bar"><div class="dots"><i></i><i></i><i></i></div><b>XPGAnalyser IHM</b> — Armoire_Gaz · IHM › Vues › Vue_Four</div>
+        <div class="win-body">
+          <div class="tree" aria-label="Arbre du projet">
+            <div class="t"><span class="ic">▾</span>IHM</div>
+            <div class="t l1"><span class="ic">▾</span>Vues</div>
+            <div class="t l2 sel"><span class="ic">▾</span>Vue_Four</div>
+            <div class="t l3"><span class="ic">◇</span>Dessin <span class="n">7 objets</span></div>
+            <div class="t l3 new"><span class="ic">π</span>Constantes <span class="n">4</span></div>
+            <div class="t l3 new"><span class="ic">ƒ</span>Fonctions <span class="n">2</span></div>
+            <div class="t l3"><span class="ic">≡</span>Scripts <span class="n">1</span></div>
+            <div class="t l2"><span class="ic">▸</span>Vue_Accueil</div>
+            <div class="t l1"><span class="ic">▾</span>Popups</div>
+            <div class="t l2"><span class="ic">▾</span>Pop_Reglage</div>
+            <div class="t l3"><span class="ic">◇</span>Dessin</div>
+            <div class="t l3"><span class="ic">⇢</span>Paramètres <span class="n">1</span></div>
+            <div class="t l3 new"><span class="ic">π</span>Constantes <span class="n">2</span></div>
+            <div class="t l3 new"><span class="ic">ƒ</span>Fonctions <span class="n">1</span></div>
+            <div class="t l1"><span class="ic">▸</span>Symboles</div>
+            <div class="t l1"><span class="ic">▸</span>Programmation générale</div>
+          </div>
+          <div class="main">
+            <div class="subtabs" role="tablist" aria-label="Sous-onglets de Vue_Four">
+              <button role="tab" id="st-dessin" aria-selected="false" data-pane="p-dessin">Dessin</button>
+              <button role="tab" id="st-const" aria-selected="true" data-pane="p-const">Constantes<span class="badge acc">4</span></button>
+              <button role="tab" id="st-fn" aria-selected="false" data-pane="p-fn">Fonctions<span class="badge fx">2</span></button>
+            </div>
+            <div class="pane" id="p-const" role="tabpanel">
+              <div class="toolbar">
+                <button class="btn">+ Constante</button>
+                <button class="btn">Valeur initiale…</button>
+                <button class="btn">Supprimer</button>
+                <span class="badge">double-clic sur une valeur : l'éditeur de la section 3</span>
+              </div>
+              <table class="grid" aria-label="Constantes de Vue_Four">
+                <thead><tr><th>Nom</th><th>Type</th><th>Valeur initiale</th><th>Portée</th><th>Calculée</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td class="mono">Seuil_Haut</td><td class="t">REAL</td><td class="val" data-goto="Seuil">85.0</td><td>publique</td><td>—</td><td>Au-dessus : l'alarme haute</td></tr>
+                  <tr><td class="mono">Couleurs</td><td class="t">MAP[STRING] OF STRING</td><td class="val" data-goto="Constante2">['haut' := '#E5534B', 'ok' := '#2EA043']</td><td>privée</td><td>—</td><td>La couleur de chaque état</td></tr>
+                  <tr class="sel"><td class="mono">Paliers</td><td class="t">ARRAY[0..4] OF REAL</td><td class="val" data-goto="Paliers"><span class="fxmark">ƒx</span>[0.0, 25.0, 50.0, 75.0, 100.0]</td><td>publique</td><td><span class="badge fx">au démarrage</span></td><td>Les graduations du bargraphe</td></tr>
+                  <tr><td class="mono">Recette_Defaut</td><td class="t">T_Recette</td><td class="val" data-goto="Recette">(Nom := 'Pain', Temperature := 220.0, …)</td><td>publique</td><td>—</td><td>Ce que propose Nouvelle recette</td></tr>
+                </tbody>
+              </table>
+              <p style="font-size:12.5px;color:var(--muted);margin:0">La même grille que les constantes d'un script (1.11.18), avec deux colonnes de plus : <b>Portée</b> (publique : lue ailleurs par <code>Vue_Four.Paliers</code> ; privée : dans la vue seulement) et <b>Calculée</b> (quand le code d'une constante tourne).</p>
+            </div>
+            <div class="pane" id="p-fn" role="tabpanel" hidden>
+              <div class="toolbar"><button class="btn">+ Fonction</button><button class="btn">Dupliquer</button><button class="btn">Supprimer</button><span class="badge">le même éditeur que les fonctions d'un symbole</span></div>
+              <div class="split">
+                <div class="list" aria-label="Fonctions de Vue_Four">
+                  <div class="it sel">Pourcent <span class="badge ok">publique</span><small>(Valeur : REAL; Max : REAL) : REAL</small></div>
+                  <div class="it">CouleurNiveau <span class="badge">privée</span><small>(N : REAL) : STRING</small></div>
+                </div>
+<pre class="code"><span class="k">FUNCTION</span> Pourcent : REAL
+<span class="k">VAR_INPUT</span>
+    Valeur : REAL;
+    Max    : REAL;
+<span class="k">END_VAR</span>
+<span class="c">(* la part de Max que fait Valeur, bornee de 0 a 100 *)</span>
+<span class="k">IF</span> Max = 0.0 <span class="k">THEN</span>
+    <span class="k">RETURN</span> 0.0;
+<span class="k">END_IF</span>
+<span class="k">RETURN</span> <span class="nfn">LIMIT</span>(0.0, Valeur * 100.0 / Max, 100.0);
+<span class="k">END_FUNCTION</span>
+
+<span class="c">(* CouleurNiveau : privee - lue par les objets de la vue seulement *)</span>
+<span class="k">FUNCTION</span> CouleurNiveau : STRING
+<span class="k">VAR_INPUT</span> N : REAL; <span class="k">END_VAR</span>
+<span class="k">RETURN</span> <span class="nfn">SEL</span>(N &gt;= Seuil_Haut, Couleurs[<span class="s">'ok'</span>], Couleurs[<span class="s">'haut'</span>]);
+<span class="k">END_FUNCTION</span></pre>
+              </div>
+            </div>
+            <div class="pane" id="p-dessin" role="tabpanel" hidden>
+              <div class="drawing" aria-label="Le dessin de Vue_Four">
+                <div class="obj" style="left:30px;top:40px;width:70px;height:230px;"><span class="lbl">Barre_Niveau</span>graduations<br><span class="mono">= Paliers</span></div>
+                <div class="obj" style="left:140px;top:60px;"><span class="lbl">Txt_Pourcent</span><span class="mono">{Pourcent(Niveau, Seuil_Haut):0} %</span></div>
+                <div class="obj" style="left:140px;top:120px;"><span class="lbl">Voyant_Etat</span>couleur <span class="mono">= CouleurNiveau(Niveau)</span></div>
+                <div class="obj" style="left:140px;top:180px;"><span class="lbl">Btn_Regler</span>Ouvrir <span class="mono">Pop_Reglage(Cuve := Cuves[0])</span></div>
+                <div class="obj" style="left:140px;top:240px;"><span class="lbl">Txt_Recette</span><span class="mono">{Recette_Defaut.Nom}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <div class="note">
+        <h3>Où on s'en sert</h3>
+        <ul>
+          <li><b>Dans la vue</b> (ses objets ƒx, ses scripts, ses actions, ses alarmes) : <code>Seuil_Haut</code>, <code>Pourcent(Niveau, 100.0)</code>.</li>
+          <li><b>Ailleurs</b> (une autre vue, un script général, une alarme) : <code>Vue_Four.Seuil_Haut</code>, <code>Vue_Four.Pourcent(…)</code>. Les publiques seulement ; une privée lue d'ailleurs, Générer la refuse et dit pourquoi.</li>
+          <li><b>Une popup</b> : pareil, <code>Pop_Reglage.Pas</code>. Une constante calculée <b>à l'ouverture</b> lit les paramètres reçus : <code>Pas := Cuve.Capacite / 20.0</code>.</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>Les règles</h3>
+        <ul>
+          <li>Un nom pris par un objet de la vue est refusé (<code>Vue_Four.Paliers</code> doit rester sans ambiguïté).</li>
+          <li>L'aide à la saisie les propose en tête dans la vue, et après <code>Vue_Four.</code> ailleurs, avec leur type.</li>
+          <li>Les surcharges, l'import et l'export des fonctions : comme pour un symbole.</li>
+          <li>Dupliquer une vue duplique ses constantes et ses fonctions.</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================================================================ 2 ================ -->
+<section class="sec wrap" id="choisir">
+  <div class="sec-head">
+    <div class="eyebrow">2 · Partout où l'aide à la saisie s'ouvre</div>
+    <h2>« Choisir une fonction… » ouvre le catalogue des natives</h2>
+    <p class="lead">La dernière ligne de chaque liste de l'aide à la saisie ouvre un sélecteur : les familles à gauche, les fonctions au milieu, la fiche à droite. Clique la ligne violette ci-dessous. Le catalogue est celui de l'application : 227 fonctions en 26 familles, plus les fonctions du projet et de la vue.</p>
+  </div>
+  <div class="cols">
+    <div class="scroller">
+      <div class="win" id="win2">
+        <div class="win-bar"><div class="dots"><i></i><i></i><i></i></div><b>Vue_Four</b> — script « Ouverture »</div>
+        <div style="padding:12px">
+          <div class="editor" id="ed2" aria-label="Le script Ouverture de Vue_Four">
+            <div class="ln"><span>1</span><span><span class="c">(* a l'ouverture : la moyenne des cuves, en % du seuil *)</span></span></div>
+            <div class="ln"><span>2</span><span>Niveaux := <span class="nfn">MAP_VALUES</span>(Parc_Niveaux);</span></div>
+            <div class="ln"><span>3</span><span id="ed2-line">Moyenne := <span class="caret"></span></span></div>
+            <div class="ln"><span>4</span><span></span></div>
+            <div class="ln"><span>5</span><span>Txt_Pourcent.Text := <span class="nfn">TO_STRING</span>(Pourcent(Moyenne, Seuil_Haut));</span></div>
+            <div class="ln"><span>6</span><span></span></div>
+            <div class="ln"><span>7</span><span></span></div>
+            <div class="ln"><span>8</span><span></span></div>
+            <div class="ln"><span>9</span><span></span></div>
+            <div class="ln"><span>10</span><span></span></div>
+            <div class="complete" id="complete" role="listbox" aria-label="Propositions">
+              <div class="row first"><span class="ic">R</span><span class="nm">Niveau</span><span class="dt">REAL · variable IHM</span></div>
+              <div class="row"><span class="ic">π</span><span class="nm">Seuil_Haut</span><span class="dt">REAL · constante de la vue</span></div>
+              <div class="row"><span class="ic f">ƒ</span><span class="nm">Pourcent(Valeur, Max)</span><span class="dt">REAL · fonction de la vue</span></div>
+              <div class="row"><span class="ic f">ƒ</span><span class="nm">LIST_AVG(L)</span><span class="dt">REAL · native</span></div>
+              <div class="row"><span class="ic f">ƒ</span><span class="nm">LIMIT(MN, IN, MX)</span><span class="dt">comme IN · native</span></div>
+              <div class="row choose" id="open-picker" role="option" tabindex="0"><span class="ic f">⋯</span><span class="nm">Choisir une fonction…</span><span class="dt">Ctrl+Maj+Espace</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="veil" id="veil2" hidden>
+          <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="pk-title">
+            <div class="dlg-h"><b id="pk-title">Choisir une fonction</b><span class="badge acc">attendu ici : REAL (Moyenne)</span><button class="btn small x" id="pk-close">Fermer</button></div>
+            <div class="pk-top">
+              <input class="f" id="pk-search" type="search" placeholder="Chercher : nom, ce qu'elle fait (moyenne, borner, clé…)" aria-label="Chercher une fonction">
+              <button class="chip" id="pk-typed" aria-pressed="true">Rend un REAL</button>
+              <button class="chip" id="pk-expr" aria-pressed="false">Dans une expression</button>
+            </div>
+            <div class="picker">
+              <div class="pk-cats" id="pk-cats"></div>
+              <div class="pk-list" id="pk-list" role="listbox" aria-label="Fonctions"></div>
+              <div class="pk-detail" id="pk-detail"></div>
+            </div>
+            <div class="dlg-f"><span class="hint">↑↓ parcourir · Entrée : insérer · Échap : fermer</span><button class="btn" id="pk-ex">Insérer l'exemple</button><button class="btn primary" id="pk-insert">Insérer</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <div class="note">
+        <h3>Où « Choisir une fonction… » apparaît</h3>
+        <ul>
+          <li>Tous les éditeurs ST : scripts généraux, de vue, de popup, de symbole ; fonctions ; opérateurs ; le code d'une constante calculée.</li>
+          <li>Toutes les cases à aide à la saisie : cases ƒx de l'inspecteur, actions, conditions d'alarmes, colonnes du Tableau, textes à trous.</li>
+          <li>Aussi au clavier : <b>Ctrl+Maj+Espace</b>, sans passer par la liste.</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>Ce que fait le sélecteur</h3>
+        <ul>
+          <li>Il sait le type attendu à la place du curseur (1.12.14) : « Rend un REAL » ne garde que ce qui convient ; décoche pour tout voir.</li>
+          <li>« Dans une expression » écarte ce qui ne s'écrit qu'en instruction (IHM_POPUP…), pour une case ƒx.</li>
+          <li><b>Insérer</b> écrit l'appel avec ses arguments à remplir, le premier choisi ; Tab passe au suivant.</li>
+          <li>Les familles des fonctions du projet, de la vue, du symbole viennent en tête quand il y en a.</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================================================================ 3 ================ -->
+<section class="sec wrap" id="valeur">
+  <div class="sec-head">
+    <div class="eyebrow">3 · Constantes et variables</div>
+    <h2>La valeur initiale : en brut, ou en code qui rend le type</h2>
+    <p class="lead">Une seule fenêtre remplace « Éléments… » et « ƒx Calcul… ». <b>Brut</b> : un éditeur fait pour le type (une table pour une MAP, une fiche pour une structure, une ligne par case pour un tableau…). <b>Code</b> : une fonction dont l'en-tête est fixe et rend exactement le type de la constante. À droite, le type expliqué. Choisis un type pour voir son éditeur.</p>
+  </div>
+  <div class="scroller">
+    <div class="win" id="win3">
+      <div class="win-bar"><div class="dots"><i></i><i></i><i></i></div><b id="vi-title">Valeur initiale de Constante2</b></div>
+      <div class="pane" style="border-bottom:1px solid var(--line);grid-auto-flow:column;justify-content:start;align-items:center;gap:12px">
+        <label for="vi-type" style="font-size:12.5px;color:var(--muted)">Voir un autre type :</label>
+        <select class="f" id="vi-type"></select>
+        <span class="typepill" id="vi-pill">MAP[STRING] OF REAL</span>
+        <div class="seg" role="group" aria-label="Brut ou code">
+          <button id="vi-raw" aria-pressed="true">Brut</button>
+          <button id="vi-code" class="fx" aria-pressed="false">Code ƒx</button>
+        </div>
+      </div>
+      <div class="vi">
+        <div class="vi-left" id="vi-left"></div>
+        <div class="vi-right" id="vi-right"></div>
+      </div>
+      <div class="dlg-f">
+        <span class="hint" id="vi-hint">Le littéral ci-dessus est ce qui sera enregistré. Ctrl+Z reprend la valeur appliquée.</span>
+        <button class="btn" id="vi-tocode">Passer en code</button>
+        <button class="btn">Annuler</button>
+        <button class="btn primary">Appliquer</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 4 ================ -->
+<section class="sec wrap" id="std">
+  <div class="sec-head">
+    <div class="eyebrow">4 · Bibliothèques</div>
+    <h2>Les std:: que je propose d'ajouter</h2>
+    <p class="lead">Rien de cette liste n'existe aujourd'hui (vérifié dans le catalogue et le moteur). Elles suivent les règles des natives actuelles : un nom ST en majuscules, l'équivalent C et C++ dans la fiche, un exemple joué par les essais. Les cases cochées sont celles que je recommande ; coche, décoche, puis « Copier ma sélection » et colle-la dans ta réponse.</p>
+  </div>
+  <div class="stdtools">
+    <span class="badge acc" id="std-count">0 cochées</span>
+    <button class="btn" id="std-copy">Copier ma sélection</button>
+    <button class="btn ghost" id="std-all">Tout cocher</button>
+    <button class="btn ghost" id="std-rec">Revenir à la recommandation</button>
+    <span id="std-msg" class="copied" aria-live="polite"></span>
+  </div>
+  <div class="scroller">
+    <table class="std" id="std-table" aria-label="Fonctions std proposées"></table>
+  </div>
+  <textarea class="f" id="std-out" readonly rows="3" style="width:100%;margin-top:10px" aria-label="Ta sélection, à copier" hidden></textarea>
+</section>
+
+<!-- ================================================================ 5 ================ -->
+<section class="sec wrap" id="exemple">
+  <div class="sec-head">
+    <div class="eyebrow">5 · Pour apprendre en le voyant</div>
+    <h2>L'exemple : Vue_Four et Pop_Reglage</h2>
+    <p class="lead">Livré comme un modèle de vue, « Nouvelle vue › Constantes et fonctions », à la manière de « Tableaux dynamiques » (1.12.13) : la vue, la popup, leurs constantes et fonctions, et les types et variables qu'elles lisent, créés s'ils manquent. L'aide (F1 sur « Constantes ») en joue une version animée.</p>
+  </div>
+  <div class="ex-grid">
+    <div class="ex-card">
+      <h3>Vue_Four · Constantes <span class="badge acc">4</span></h3>
+<pre class="code">Seuil_Haut     : REAL := 85.0;                        <span class="c">(* publique *)</span>
+Couleurs       : MAP[STRING] OF STRING
+               := [<span class="s">'haut'</span> := <span class="s">'#E5534B'</span>, <span class="s">'ok'</span> := <span class="s">'#2EA043'</span>];  <span class="c">(* privee *)</span>
+Recette_Defaut : T_Recette := (Nom := <span class="s">'Pain'</span>, Temperature := 220.0);
+Paliers        : ARRAY[0..4] OF REAL := <span class="fxmark">ƒx</span>   <span class="c">(* calculee au demarrage *)</span>
+    <span class="k">FUNCTION</span> Init_Paliers : ARRAY[0..4] OF REAL
+    <span class="k">VAR</span> t : ARRAY[0..4] OF REAL; <span class="k">END_VAR</span>
+    <span class="nfn">IOTA</span>(t, 0.0, Seuil_Haut / 4.0);   <span class="c">(* 0, 21.25 ... 85 *)</span>
+    <span class="k">RETURN</span> t;</pre>
+    </div>
+    <div class="ex-card">
+      <h3>Vue_Four · Fonctions <span class="badge fx">2</span></h3>
+<pre class="code"><span class="k">FUNCTION</span> Pourcent : REAL                <span class="c">(* publique *)</span>
+<span class="k">VAR_INPUT</span> Valeur, Max : REAL; <span class="k">END_VAR</span>
+<span class="k">IF</span> Max = 0.0 <span class="k">THEN RETURN</span> 0.0; <span class="k">END_IF</span>
+<span class="k">RETURN</span> <span class="nfn">LIMIT</span>(0.0, Valeur * 100.0 / Max, 100.0);
+
+<span class="k">FUNCTION</span> CouleurNiveau : STRING          <span class="c">(* privee *)</span>
+<span class="k">VAR_INPUT</span> N : REAL; <span class="k">END_VAR</span>
+<span class="k">RETURN</span> <span class="nfn">SEL</span>(N &gt;= Seuil_Haut, Couleurs[<span class="s">'ok'</span>], Couleurs[<span class="s">'haut'</span>]);</pre>
+    </div>
+    <div class="ex-card">
+      <h3>Pop_Reglage · une constante à l'ouverture <span class="badge fx">à l'ouverture</span></h3>
+<pre class="code"><span class="c">(* parametre : Cuve : T_Cuve (passe par Btn_Regler) *)</span>
+Pas : REAL := <span class="fxmark">ƒx</span>
+    <span class="k">FUNCTION</span> Init_Pas : REAL
+    <span class="k">RETURN</span> <span class="nfn">CEIL</span>(Cuve.Capacite / 20.0);   <span class="c">(* CEIL : section 4 *)</span>
+
+<span class="c">(* le bouton + de la popup *)</span>
+Cuve.Consigne := <span class="nfn">LIMIT</span>(0.0, Cuve.Consigne + Pas, Cuve.Capacite);</pre>
+    </div>
+    <div class="ex-card">
+      <h3>Ailleurs : un script général, une autre vue</h3>
+<pre class="code"><span class="c">(* Reglages (script general), au demarrage *)</span>
+Alarme_Haute := Niveau &gt; Vue_Four.Seuil_Haut;
+Texte_Bilan  := <span class="nfn">FORMAT</span>(<span class="s">'{:.1f} % du seuil'</span>,       <span class="c">(* FORMAT : section 4 *)</span>
+                        Vue_Four.Pourcent(Niveau, Vue_Four.Seuil_Haut));
+
+<span class="c">(* refuse par Generer : CouleurNiveau est privee *)</span>
+C := Vue_Four.CouleurNiveau(Niveau);</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ 6 ================ -->
+<section class="sec wrap" id="decider">
+  <div class="sec-head">
+    <div class="eyebrow">6 · Avant de coder</div>
+    <h2>À décider</h2>
+    <p class="lead">Ma proposition est en vert. Réponds seulement là où tu veux autre chose.</p>
+  </div>
+  <ol class="decisions">
+    <li><b>Quand se calcule une constante écrite en code ?</b> <span class="prop">Au démarrage, par défaut ; « à chaque ouverture » au choix, et d'office pour une popup qui lit ses paramètres.</span></li>
+    <li><b>La portée par défaut d'une constante ou d'une fonction de vue ?</b> <span class="prop">Publique, comme les objets d'une vue (Vue.Objet.Propriété est déjà public).</span></li>
+    <li><b>Le code d'une valeur initiale : RETURN, ou écrire dans le nom ?</b> <span class="prop">RETURN, dans une fonction à l'en-tête fixe ; écrire dans le nom de la fonction reste permis (le ST classique), et les calculs de la 1.12.7 s'ouvrent tels quels.</span></li>
+    <li><b>Où mettre « Choisir une fonction… » dans la liste ?</b> <span class="prop">Toujours en dernier, et Ctrl+Maj+Espace pour l'ouvrir directement.</span></li>
+    <li><b>Quelles std:: ajouter ?</b> <span class="prop">Les cases cochées de la section 4 ; « Copier ma sélection » te donne la liste à coller.</span></li>
+    <li><b>L'exemple ?</b> <span class="prop">Un modèle de vue « Constantes et fonctions » et son exemple animé dans l'aide.</span></li>
+  </ol>
+</section>
+</main>
+<footer class="end wrap">Maquette XPGAnalyser 1.12.16 · 19/10/2026 · les natives de la section 2 sont lues dans le catalogue de la 1.12.15.</footer>
+
+<script>
+const NAT = {"cats":[{"id":"math","t":"Mathématiques","s":"Valeur absolue, racine, puissances, logarithmes, trigonométrie, arrondis.","g":"Fonctions standard"},{"id":"select","t":"Sélection et bornes","s":"Choisir une valeur, la plus petite, la plus grande, borner.","g":"Fonctions standard"},{"id":"texte","t":"Chaînes de caractères","s":"Longueur, extraits, recherche, assemblage, majuscules.","g":"Fonctions standard"},{"id":"bits","t":"Bits et décalages","s":"Décaler et faire tourner les bits d'un mot ; compter, tester, mettre à 1 ou à 0 un bit (<bit>).","g":"Fonctions standard"},{"id":"conv","t":"Conversions","s":"Passer d'un type à l'autre : TO_xxx et X_TO_Y.","g":"Fonctions standard"},{"id":"tab","t":"Tableaux","s":"Taille et bornes d'un tableau.","g":"Le dialecte de l'IHM"},{"id":"map","t":"MAP et itérateurs","s":"Les tables associatives (clé → valeur) et leur parcours.","g":"Le dialecte de l'IHM"},{"id":"liste","t":"Listes, vecteurs et tuples","s":"Les collections de taille variable (LIST OF T, VECTOR OF T) : ajouter, retirer, chercher, trier ; les TUPLE. Ce qui ne change pas la taille lit aussi un ARRAY.","g":"Le dialecte de l'IHM"},{"id":"ensembles","t":"Ensembles et tampons (SET, RING)","s":"SET OF T : chaque valeur une fois, rangée (std::set) ; RING[N] OF T : les N dernières valeurs, la plus ancienne part quand il est plein.","g":"Le dialecte de l'IHM"},{"id":"ref","t":"Références et pointeurs","s":"Désigner une variable sans la copier.","g":"Le dialecte de l'IHM"},{"id":"numeric","t":"std::numeric","s":"Plier, cumuler, remplir une suite ; PGCD, PPCM, milieu ; le calcul saturé (C++26).","g":"Bibliothèques"},{"id":"limits","t":"std::numeric_limits","s":"Les bornes et les caractéristiques de chaque type numérique : NUMERIC_LIMITS<T>.MEMBRE.","g":"Bibliothèques"},{"id":"numbers","t":"std::numbers","s":"Les constantes mathématiques : NUMBERS.PI, NUMBERS<REAL>.E…","g":"Bibliothèques"},{"id":"nav","t":"Navigation et vues","s":"Changer de vue, revenir, l'accueil.","g":"Fonctions IHM_"},{"id":"popup","t":"Popups","s":"Ouvrir, remplacer, centrer, fermer une popup.","g":"Fonctions IHM_"},{"id":"journal","t":"Journal et Console","s":"Écrire une ligne dans le journal ou la Console.","g":"Fonctions IHM_"},{"id":"script","t":"Scripts et temps","s":"Appeler un script, le temps de l'IHM.","g":"Fonctions IHM_"},{"id":"user","t":"Utilisateurs","s":"Qui est connecté, son groupe, son niveau ; déconnecter.","g":"Fonctions IHM_"},{"id":"alarme","t":"Alarmes","s":"Mettre de côté, remettre, faire taire.","g":"Fonctions IHM_"},{"id":"affichage","t":"Affichage et son","s":"Langue, thème, paramètres système, sons.","g":"Fonctions IHM_"},{"id":"gif","t":"GIF animés","s":"Jouer, mettre en pause, arrêter, rejouer.","g":"Fonctions IHM_"},{"id":"equip","t":"Équipements et réseau","s":"État, ping, esclave simulé.","g":"Fonctions IHM_"},{"id":"export","t":"Exports","s":"Exporter des données en CSV, XLSX ou PDF.","g":"Fonctions IHM_"},{"id":"couleur","t":"Couleurs","s":"Composer, mélanger, éclaircir une couleur ; une couleur selon une valeur.","g":"Couleurs et aléatoire"},{"id":"alea","t":"Aléatoire","s":"Des nombres au hasard, et une suite qu'on peut rejouer.","g":"Couleurs et aléatoire"},{"id":"date","t":"Dates et heures","s":"Maintenant, la date ou l'heure d'une date et heure, les assembler.","g":"Couleurs et aléatoire"},{"id":"op","t":"Opérateurs","s":"Calculer, comparer, combiner : + - * / MOD ** AND OR...","g":"Le langage"},{"id":"instr","t":"Instructions","s":"IF, CASE, FOR, FOR EACH, WHILE, REPEAT, EXIT, CONTINUE, RETURN, TRY, ASSERT.","g":"Le langage"}],"fns":[{"n":"ABS","c":"math","sig":"ABS(IN : ANY_NUM) : comme IN","r":"comme IN","s":"La valeur absolue : le nombre sans son signe.","st":"Ecart := ABS(Consigne - Mesure);","p":[["IN","ANY_NUM","un nombre",false]]},{"n":"SQRT","c":"math","sig":"SQRT(IN : REAL) : REAL","r":"REAL","s":"La racine carrée.","st":"Norme := SQRT(X * X + Y * Y);","p":[["IN","REAL","un nombre positif ou nul",false]]},{"n":"LN","c":"math","sig":"LN(IN : REAL) : REAL","r":"REAL","s":"Le logarithme népérien (base e).","st":"T := LN(Rapport) / K;","p":[["IN","REAL","un nombre strictement positif",false]]},{"n":"LOG","c":"math","sig":"LOG(IN : REAL) : REAL","r":"REAL","s":"Le logarithme décimal (base 10).","st":"Decibels := 20.0 * LOG(Gain);","p":[["IN","REAL","un nombre strictement positif",false]]},{"n":"EXP","c":"math","sig":"EXP(IN : REAL) : REAL","r":"REAL","s":"L'exponentielle : e puissance IN.","st":"Decharge := EXP(-T / Tau);","p":[["IN","REAL","l'exposant",false]]},{"n":"EXPT","c":"math","sig":"EXPT(IN1 : REAL; IN2 : ANY_NUM) : REAL","r":"REAL","s":"IN1 puissance IN2.","st":"Surface := 3.14159 * EXPT(Rayon, 2);","p":[["IN1","REAL","la base",false],["IN2","ANY_NUM","l'exposant",false]]},{"n":"SIN","c":"math","sig":"SIN(IN : REAL) : REAL","r":"REAL","s":"Le sinus d'un angle en radians.","st":"Y := SIN(Angle);","p":[["IN","REAL","un angle en radians",false]]},{"n":"COS","c":"math","sig":"COS(IN : REAL) : REAL","r":"REAL","s":"Le cosinus d'un angle en radians.","st":"Y := COS(Angle);","p":[["IN","REAL","un angle en radians",false]]},{"n":"TAN","c":"math","sig":"TAN(IN : REAL) : REAL","r":"REAL","s":"La tangente d'un angle en radians.","st":"Y := TAN(Angle);","p":[["IN","REAL","un angle en radians",false]]},{"n":"ASIN","c":"math","sig":"ASIN(IN : REAL) : REAL","r":"REAL","s":"L'arc sinus, en radians (de -π/2 à π/2).","st":"Y := ASIN(Angle);","p":[["IN","REAL","un nombre",false]]},{"n":"ACOS","c":"math","sig":"ACOS(IN : REAL) : REAL","r":"REAL","s":"L'arc cosinus, en radians (de 0 à π).","st":"Y := ACOS(Angle);","p":[["IN","REAL","un nombre",false]]},{"n":"ATAN","c":"math","sig":"ATAN(IN : REAL) : REAL","r":"REAL","s":"L'arc tangente, en radians (de -π/2 à π/2).","st":"Y := ATAN(Angle);","p":[["IN","REAL","un nombre",false]]},{"n":"TRUNC","c":"math","sig":"TRUNC(IN : REAL) : DINT","r":"DINT","s":"La partie entière, vers zéro : TRUNC(2.7) = 2, TRUNC(-2.7) = -2.","st":"Entier := TRUNC(Niveau);","p":[["IN","REAL","un réel",false]]},{"n":"ROUND","c":"math","sig":"ROUND(IN : REAL; [N : INT]) : REAL","r":"REAL","s":"L'arrondi au plus proche : à l'entier, ou à N décimales.","st":"Affiche := ROUND(Niveau, 1);","p":[["IN","REAL","un réel",false],["N","INT","le nombre de décimales",true]]},{"n":"NEG","c":"math","sig":"NEG(IN : ANY_NUM) : comme IN","r":"comme IN","s":"L'opposé : NEG(x) = -x.","st":"Oppose := NEG(Vitesse);","p":[["IN","ANY_NUM","un nombre",false]]},{"n":"SEL","c":"select","sig":"SEL(G : BOOL; IN0 : ANY; IN1 : ANY) : comme IN0","r":"comme IN0","s":"IN0 si G est faux, IN1 si G est vrai.","st":"Couleur := SEL(Marche, '#808080', '#2ECC71');","p":[["G","BOOL","la condition",false],["IN0","ANY","si G est faux",false],["IN1","ANY","si G est vrai",false]]},{"n":"MUX","c":"select","sig":"MUX(K : INT; IN0…INn : ANY) : comme IN0","r":"comme IN0","s":"La valeur de rang K : IN0 pour 0, IN1 pour 1...","st":"Libelle := MUX(Etape, 'Arrêt', 'Démarrage', 'Production');","p":[["K","INT","le rang (0 : IN0)",false],["IN0…INn","ANY","les valeurs",false]]},{"n":"MIN","c":"select","sig":"MIN(IN1…INn : ANY) : comme IN1","r":"comme IN1","s":"La plus petite des valeurs.","st":"Bas := MIN(Mesure_1, Mesure_2, Mesure_3);","p":[["IN1…INn","ANY","deux valeurs ou plus",false]]},{"n":"MAX","c":"select","sig":"MAX(IN1…INn : ANY) : comme IN1","r":"comme IN1","s":"La plus grande des valeurs.","st":"Haut := MAX(Mesure_1, Mesure_2);","p":[["IN1…INn","ANY","deux valeurs ou plus",false]]},{"n":"LIMIT","c":"select","sig":"LIMIT(MN : ANY; IN : ANY; MX : ANY) : comme IN","r":"comme IN","s":"IN borné entre MN et MX.","st":"Consigne := LIMIT(0.0, Saisie, 100.0);","p":[["MN","ANY","la borne basse",false],["IN","ANY","la valeur",false],["MX","ANY","la borne haute",false]]},{"n":"LEN","c":"texte","sig":"LEN(IN : STRING) : INT","r":"INT","s":"Le nombre de caractères.","st":"Longueur := LEN(Texte);","p":[["IN","STRING","le texte",false]]},{"n":"LEFT","c":"texte","sig":"LEFT(IN : STRING; L : INT) : STRING","r":"STRING","s":"Les L premiers caractères.","st":"Prefixe := LEFT(Texte, 5);","p":[["IN","STRING","le texte",false],["L","INT","le nombre de caractères",false]]},{"n":"RIGHT","c":"texte","sig":"RIGHT(IN : STRING; L : INT) : STRING","r":"STRING","s":"Les L derniers caractères.","st":"Suffixe := RIGHT(Texte, 1);","p":[["IN","STRING","le texte",false],["L","INT","le nombre de caractères",false]]},{"n":"MID","c":"texte","sig":"MID(IN : STRING; L : INT; P : INT) : STRING","r":"STRING","s":"L caractères à partir de la position P.","st":"Milieu := MID(Texte, 3, 2);","p":[["IN","STRING","le texte",false],["L","INT","le nombre de caractères",false],["P","INT","la position du premier (1 : le début)",false]]},{"n":"CONCAT","c":"texte","sig":"CONCAT(IN1…INn : STRING) : STRING","r":"STRING","s":"Les textes mis bout à bout.","st":"Titre := CONCAT('Vanne ', Nom, ' : ', Etat);","p":[["IN1…INn","STRING","deux textes ou plus",false]]},{"n":"INSERT","c":"texte","sig":"INSERT(IN1 : STRING; IN2 : STRING; P : INT) : STRING","r":"STRING","s":"IN2 inséré dans IN1 après la position P.","st":"Code := INSERT('AB', '-', 1);","p":[["IN1","STRING","le texte",false],["IN2","STRING","ce qu'on insère",false],["P","INT","après ce caractère",false]]},{"n":"DELETE","c":"texte","sig":"DELETE(IN : STRING; L : INT; P : INT) : STRING","r":"STRING","s":"Le texte sans ses L caractères à partir de P.","st":"Court := DELETE(Texte, 2, 1);","p":[["IN","STRING","le texte",false],["L","INT","le nombre de caractères",false],["P","INT","la position du premier",false]]},{"n":"REPLACE","c":"texte","sig":"REPLACE(IN1 : STRING; IN2 : STRING; L : INT; P : INT) : STRING","r":"STRING","s":"L caractères de IN1, à partir de P, remplacés par IN2.","st":"Nouveau := REPLACE(Texte, 'Vanne', 5, 1);","p":[["IN1","STRING","le texte",false],["IN2","STRING","le remplaçant",false],["L","INT","le nombre de caractères remplacés",false],["P","INT","la position du premier",false]]},{"n":"FIND","c":"texte","sig":"FIND(IN1 : STRING; IN2 : STRING) : INT","r":"INT","s":"La position de IN2 dans IN1 (1 : au début), 0 s'il n'y est pas.","st":"IF FIND(Message, 'Défaut') > 0 THEN Alerte := TRUE; END_IF","p":[["IN1","STRING","le texte",false],["IN2","STRING","ce qu'on cherche",false]]},{"n":"TO_UPPER","c":"texte","sig":"TO_UPPER(IN : STRING) : STRING","r":"STRING","s":"Le texte en majuscules.","st":"Code := TO_UPPER(Saisie);","p":[["IN","STRING","le texte",false]]},{"n":"TO_LOWER","c":"texte","sig":"TO_LOWER(IN : STRING) : STRING","r":"STRING","s":"Le texte en minuscules.","st":"Cle := TO_LOWER(Saisie);","p":[["IN","STRING","le texte",false]]},{"n":"SHL","c":"bits","sig":"SHL(IN : ANY_BIT; N : INT) : comme IN","r":"comme IN","s":"Les bits décalés de N vers la gauche (des zéros entrent à droite).","st":"Masque := SHL(Mot, 4);","p":[["IN","ANY_BIT","le mot",false],["N","INT","le nombre de bits",false]]},{"n":"SHR","c":"bits","sig":"SHR(IN : ANY_BIT; N : INT) : comme IN","r":"comme IN","s":"Les bits décalés de N vers la droite (des zéros entrent à gauche).","st":"Haut := SHR(Mot, 4);","p":[["IN","ANY_BIT","le mot",false],["N","INT","le nombre de bits",false]]},{"n":"ROL","c":"bits","sig":"ROL(IN : ANY_BIT; N : INT) : comme IN","r":"comme IN","s":"Les bits tournés de N vers la gauche (ceux qui sortent reviennent à droite).","st":"Tourne := ROL(Mot, 8);","p":[["IN","ANY_BIT","le mot",false],["N","INT","le nombre de bits",false]]},{"n":"ROR","c":"bits","sig":"ROR(IN : ANY_BIT; N : INT) : comme IN","r":"comme IN","s":"Les bits tournés de N vers la droite.","st":"Tourne := ROR(Mot, 4);","p":[["IN","ANY_BIT","le mot",false],["N","INT","le nombre de bits",false]]},{"n":"TO_STRING","c":"conv","sig":"TO_STRING(IN : ANY) : STRING","r":"STRING","s":"La valeur convertie en STRING, quel que soit son type.","st":"Resultat := TO_STRING(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_REAL","c":"conv","sig":"TO_REAL(IN : ANY) : REAL","r":"REAL","s":"La valeur convertie en REAL, quel que soit son type.","st":"Resultat := TO_REAL(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_LREAL","c":"conv","sig":"TO_LREAL(IN : ANY) : LREAL","r":"LREAL","s":"La valeur convertie en LREAL, quel que soit son type.","st":"Resultat := TO_LREAL(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_BOOL","c":"conv","sig":"TO_BOOL(IN : ANY) : BOOL","r":"BOOL","s":"La valeur convertie en BOOL, quel que soit son type.","st":"Resultat := TO_BOOL(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_INT","c":"conv","sig":"TO_INT(IN : ANY) : INT","r":"INT","s":"La valeur convertie en INT, quel que soit son type.","st":"Resultat := TO_INT(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_DINT","c":"conv","sig":"TO_DINT(IN : ANY) : DINT","r":"DINT","s":"La valeur convertie en DINT, quel que soit son type.","st":"Resultat := TO_DINT(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_UINT","c":"conv","sig":"TO_UINT(IN : ANY) : UINT","r":"UINT","s":"La valeur convertie en UINT, quel que soit son type.","st":"Resultat := TO_UINT(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_UDINT","c":"conv","sig":"TO_UDINT(IN : ANY) : UDINT","r":"UDINT","s":"La valeur convertie en UDINT, quel que soit son type.","st":"Resultat := TO_UDINT(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_SINT","c":"conv","sig":"TO_SINT(IN : ANY) : SINT","r":"SINT","s":"La valeur convertie en SINT, quel que soit son type.","st":"Resultat := TO_SINT(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_USINT","c":"conv","sig":"TO_USINT(IN : ANY) : USINT","r":"USINT","s":"La valeur convertie en USINT, quel que soit son type.","st":"Resultat := TO_USINT(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_LINT","c":"conv","sig":"TO_LINT(IN : ANY) : LINT","r":"LINT","s":"La valeur convertie en LINT, quel que soit son type.","st":"Resultat := TO_LINT(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_ULINT","c":"conv","sig":"TO_ULINT(IN : ANY) : ULINT","r":"ULINT","s":"La valeur convertie en ULINT, quel que soit son type.","st":"Resultat := TO_ULINT(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_WORD","c":"conv","sig":"TO_WORD(IN : ANY) : WORD","r":"WORD","s":"La valeur convertie en WORD, quel que soit son type.","st":"Resultat := TO_WORD(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_DWORD","c":"conv","sig":"TO_DWORD(IN : ANY) : DWORD","r":"DWORD","s":"La valeur convertie en DWORD, quel que soit son type.","st":"Resultat := TO_DWORD(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_BYTE","c":"conv","sig":"TO_BYTE(IN : ANY) : BYTE","r":"BYTE","s":"La valeur convertie en BYTE, quel que soit son type.","st":"Resultat := TO_BYTE(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"TO_TIME","c":"conv","sig":"TO_TIME(IN : ANY) : TIME","r":"TIME","s":"La valeur convertie en TIME, quel que soit son type.","st":"Resultat := TO_TIME(Valeur);","p":[["IN","ANY","la valeur à convertir",false]]},{"n":"SIZEOF","c":"tab","sig":"SIZEOF(IN : ARRAY ou MAP) : DINT","r":"DINT","s":"Le nombre de cases d'un tableau (toutes dimensions), ou de clés d'une MAP.","st":"FOR i := 1 TO SIZEOF(Tab) DO Somme := Somme + Tab[i]; END_FOR","p":[["IN","ARRAY ou MAP","un tableau, une MAP",false]]},{"n":"LOWER_BOUND","c":"tab","sig":"LOWER_BOUND(IN : ARRAY; [DIM : INT]) : DINT","r":"DINT","s":"Le premier indice d'une dimension.","st":"FOR i := LOWER_BOUND(Tab, 1) TO UPPER_BOUND(Tab, 1) DO ... END_FOR","p":[["IN","ARRAY","le tableau",false],["DIM","INT","la dimension (1 : la première)",true]]},{"n":"UPPER_BOUND","c":"tab","sig":"UPPER_BOUND(IN : ARRAY; [DIM : INT]) : DINT","r":"DINT","s":"Le dernier indice d'une dimension.","st":"Dernier := Tab[UPPER_BOUND(Tab, 1)];","p":[["IN","ARRAY","le tableau",false],["DIM","INT","la dimension (1 : la première)",true]]},{"n":"MAP_HAS","c":"map","sig":"MAP_HAS(M : MAP; CLE : comme la clé) : BOOL","r":"BOOL","s":"Vrai si la clé est dans la MAP.","st":"IF MAP_HAS(Stock, 'vis') THEN Stock['vis'] := Stock['vis'] - 1.0; END_IF","p":[["M","MAP","la MAP",false],["CLE","comme la clé","la clé cherchée",false]]},{"n":"MAP_GET","c":"map","sig":"MAP_GET(M : MAP; CLE : comme la clé; [DEFAUT : comme les valeurs]) : comme les valeurs","r":"comme les valeurs","s":"La valeur d'une clé, sans la créer (DEFAUT si elle manque).","st":"Qte := MAP_GET(Stock, 'vis', 0.0);","p":[["M","MAP","la MAP",false],["CLE","comme la clé","la clé",false],["DEFAUT","comme les valeurs","la valeur si la clé manque",true]]},{"n":"MAP_REMOVE","c":"map","sig":"MAP_REMOVE(M : MAP; CLE : comme la clé) : BOOL","r":"BOOL","s":"Retire une clé ; vrai si elle y était.","st":"MAP_REMOVE(Stock, 'ecrou');","p":[["M","MAP","la MAP",false],["CLE","comme la clé","la clé à retirer",false]]},{"n":"MAP_SIZE","c":"map","sig":"MAP_SIZE(M : MAP) : DINT","r":"DINT","s":"Le nombre de clés.","st":"Nb := MAP_SIZE(Stock);","p":[["M","MAP","la MAP",false]]},{"n":"MAP_CLEAR","c":"map","sig":"MAP_CLEAR(M : MAP) : BOOL","r":"BOOL","s":"Retire toutes les clés.","st":"MAP_CLEAR(Stock);","p":[["M","MAP","la MAP",false]]},{"n":"MAP_KEYS","c":"map","sig":"MAP_KEYS(M : MAP) : ARRAY OF clé","r":"ARRAY OF clé","s":"Les clés, dans l'ordre (un tableau).","st":"Cles := MAP_KEYS(Stock);","p":[["M","MAP","la MAP",false]]},{"n":"MAP_BEGIN","c":"map","sig":"MAP_BEGIN(M : MAP) : MAP_ITERATOR","r":"MAP_ITERATOR","s":"Un itérateur sur la première clé.","st":"it := MAP_BEGIN(Stock);\nWHILE NOT MAP_END(it) DO\n    Total := Total + it.Value;\n    MAP_NEXT(it);\nEND_WHILE","p":[["M","MAP","la MAP",false]]},{"n":"MAP_NEXT","c":"map","sig":"MAP_NEXT(IT : MAP_ITERATOR) : BOOL","r":"BOOL","s":"Passe à la clé suivante ; faux à la fin.","st":"MAP_NEXT(it);","p":[["IT","MAP_ITERATOR","l'itérateur",false]]},{"n":"MAP_END","c":"map","sig":"MAP_END(IT : MAP_ITERATOR) : BOOL","r":"BOOL","s":"Vrai quand l'itérateur a passé la dernière clé.","st":"WHILE NOT MAP_END(it) DO ... END_WHILE","p":[["IT","MAP_ITERATOR","l'itérateur",false]]},{"n":"LIST_ADD","c":"liste","sig":"LIST_ADD(L : LIST OF T; X : T) : DINT","r":"DINT","s":"Ajoute la valeur à la fin ; rend le nombre d'éléments.","st":"LIST_ADD(Mesures, Niveau);","p":[["L","LIST OF T","la liste",false],["X","T","la valeur ajoutée",false]]},{"n":"LIST_INSERT","c":"liste","sig":"LIST_INSERT(L : LIST OF T; I : DINT; X : T) : DINT","r":"DINT","s":"Insère la valeur à l'indice ; rend le nombre d'éléments.","st":"LIST_INSERT(Alarmes, 0, 'Defaut pompe');","p":[["L","LIST OF T","la liste",false],["I","DINT","l'indice (0 : en tête)",false],["X","T","la valeur",false]]},{"n":"LIST_REMOVE_AT","c":"liste","sig":"LIST_REMOVE_AT(L : LIST OF T; I : DINT) : BOOL","r":"BOOL","s":"Retire l'élément de cet indice ; faux s'il est hors de la liste.","st":"LIST_REMOVE_AT(Alarmes, 0);","p":[["L","LIST OF T","la liste",false],["I","DINT","l'indice",false]]},{"n":"LIST_REMOVE","c":"liste","sig":"LIST_REMOVE(L : LIST OF T; X : T) : BOOL","r":"BOOL","s":"Retire la première valeur égale ; faux si elle n'y est pas.","st":"LIST_REMOVE(Alarmes, 'Defaut pompe');","p":[["L","LIST OF T","la liste",false],["X","T","la valeur à retirer",false]]},{"n":"LIST_CLEAR","c":"liste","sig":"LIST_CLEAR(L : LIST OF T) : BOOL","r":"BOOL","s":"Vide la liste.","st":"LIST_CLEAR(Mesures);","p":[["L","LIST OF T","la liste",false]]},{"n":"LIST_COUNT","c":"liste","sig":"LIST_COUNT(L : LIST OF T) : DINT","r":"DINT","s":"Le nombre d'éléments (comme L.Count).","st":"Nb := LIST_COUNT(Mesures);","p":[["L","LIST OF T","la liste",false]]},{"n":"LIST_CONTAINS","c":"liste","sig":"LIST_CONTAINS(L : LIST, VECTOR, ARRAY; X : T) : BOOL","r":"BOOL","s":"Vrai si la valeur est dans la liste.","st":"IF LIST_CONTAINS(Actifs, 'Four') THEN ... END_IF","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["X","T","la valeur cherchée",false]]},{"n":"LIST_INDEX_OF","c":"liste","sig":"LIST_INDEX_OF(L : LIST, VECTOR, ARRAY; X : T) : DINT","r":"DINT","s":"L'indice de la première valeur égale ; -1 si elle n'y est pas.","st":"i := LIST_INDEX_OF(Recettes, 'Pain');","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["X","T","la valeur cherchée",false]]},{"n":"LIST_FIRST","c":"liste","sig":"LIST_FIRST(L : LIST OF T) : T","r":"T","s":"Le premier élément (comme L.First) ; une liste vide : une erreur.","st":"Premier := LIST_FIRST(File);","p":[["L","LIST OF T","la liste",false]]},{"n":"LIST_LAST","c":"liste","sig":"LIST_LAST(L : LIST OF T) : T","r":"T","s":"Le dernier élément (comme L.Last) ; une liste vide : une erreur.","st":"Dernier := LIST_LAST(Mesures);","p":[["L","LIST OF T","la liste",false]]},{"n":"LIST_GET","c":"liste","sig":"LIST_GET(L : LIST, VECTOR, ARRAY; I : DINT; DEFAUT : T) : T","r":"T","s":"L'élément de l'indice, ou DEFAUT hors de la liste (sans erreur).","st":"V := LIST_GET(Mesures, 5, 0.0);","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["I","DINT","l'indice",false],["DEFAUT","T","la valeur hors de la liste",false]]},{"n":"LIST_SORT","c":"liste","sig":"LIST_SORT(L : LIST, VECTOR, ARRAY; [DECROISSANT : BOOL]) : BOOL","r":"BOOL","s":"Trie la liste (des nombres, des textes, des durées).","st":"LIST_SORT(Mesures);   (* LIST_SORT(Mesures, TRUE) : décroissant *)","p":[["L","LIST, VECTOR, ARRAY","des valeurs simples",false],["DECROISSANT","BOOL","TRUE : du plus grand au plus petit",true]]},{"n":"LIST_REVERSE","c":"liste","sig":"LIST_REVERSE(L : LIST, VECTOR, ARRAY) : BOOL","r":"BOOL","s":"Renverse l'ordre des éléments.","st":"LIST_REVERSE(Historique);","p":[["L","LIST, VECTOR, ARRAY","la liste",false]]},{"n":"LIST_SUM","c":"liste","sig":"LIST_SUM(L : LIST, VECTOR, ARRAY) : comme les éléments","r":"comme les éléments","s":"La somme des nombres de la liste.","st":"Total := LIST_SUM(Pesees);","p":[["L","LIST, VECTOR, ARRAY","des nombres",false]]},{"n":"LIST_MIN","c":"liste","sig":"LIST_MIN(L : LIST, VECTOR, ARRAY) : T","r":"T","s":"La plus petite valeur ; une liste vide : une erreur.","st":"Mini := LIST_MIN(Mesures);","p":[["L","LIST, VECTOR, ARRAY","des valeurs simples",false]]},{"n":"LIST_MAX","c":"liste","sig":"LIST_MAX(L : LIST, VECTOR, ARRAY) : T","r":"T","s":"La plus grande valeur ; une liste vide : une erreur.","st":"Maxi := LIST_MAX(Mesures);","p":[["L","LIST, VECTOR, ARRAY","des valeurs simples",false]]},{"n":"LIST_AVG","c":"liste","sig":"LIST_AVG(L : LIST, VECTOR, ARRAY) : REAL","r":"REAL","s":"La moyenne des nombres ; une liste vide : une erreur.","st":"Moyenne := LIST_AVG(Mesures);","p":[["L","LIST, VECTOR, ARRAY","des nombres",false]]},{"n":"VECTOR_PUSH","c":"liste","sig":"VECTOR_PUSH(V : VECTOR OF T; X : T) : DINT","r":"DINT","s":"Ajoute la valeur à la fin (comme LIST_ADD) ; rend la taille.","st":"VECTOR_PUSH(Pile, Code);","p":[["V","VECTOR OF T","le vecteur",false],["X","T","la valeur ajoutée",false]]},{"n":"VECTOR_POP","c":"liste","sig":"VECTOR_POP(V : VECTOR OF T) : T","r":"T","s":"Retire le dernier élément et le rend ; un vecteur vide : une erreur.","st":"Code := VECTOR_POP(Pile);","p":[["V","VECTOR OF T","le vecteur",false]]},{"n":"VECTOR_INSERT","c":"liste","sig":"VECTOR_INSERT(V : VECTOR OF T; I : DINT; X : T) : DINT","r":"DINT","s":"Insère la valeur à l'indice (comme LIST_INSERT).","st":"VECTOR_INSERT(Etapes, 1, 'Rincage');","p":[["V","VECTOR OF T","le vecteur",false],["I","DINT","l'indice",false],["X","T","la valeur",false]]},{"n":"VECTOR_ERASE","c":"liste","sig":"VECTOR_ERASE(V : VECTOR OF T; I : DINT) : BOOL","r":"BOOL","s":"Retire l'élément de cet indice (comme LIST_REMOVE_AT).","st":"VECTOR_ERASE(Etapes, 0);","p":[["V","VECTOR OF T","le vecteur",false],["I","DINT","l'indice",false]]},{"n":"VECTOR_CLEAR","c":"liste","sig":"VECTOR_CLEAR(V : VECTOR OF T) : BOOL","r":"BOOL","s":"Vide le vecteur.","st":"VECTOR_CLEAR(Pile);","p":[["V","VECTOR OF T","le vecteur",false]]},{"n":"VECTOR_SIZE","c":"liste","sig":"VECTOR_SIZE(V : VECTOR OF T) : DINT","r":"DINT","s":"Le nombre d'éléments (comme V.Count).","st":"n := VECTOR_SIZE(Pile);","p":[["V","VECTOR OF T","le vecteur",false]]},{"n":"VECTOR_RESIZE","c":"liste","sig":"VECTOR_RESIZE(V : VECTOR OF T; N : DINT; [X : T]) : DINT","r":"DINT","s":"Change la taille : coupe, ou ajoute des éléments (X, sinon la valeur du type).","st":"VECTOR_RESIZE(Courbe, 100, 0.0);","p":[["V","VECTOR OF T","le vecteur",false],["N","DINT","la nouvelle taille",false],["X","T","la valeur des nouveaux éléments",true]]},{"n":"VECTOR_FRONT","c":"liste","sig":"VECTOR_FRONT(V : VECTOR OF T) : T","r":"T","s":"Le premier élément.","st":"Premier := VECTOR_FRONT(Etapes);","p":[["V","VECTOR OF T","le vecteur",false]]},{"n":"VECTOR_BACK","c":"liste","sig":"VECTOR_BACK(V : VECTOR OF T) : T","r":"T","s":"Le dernier élément.","st":"Dernier := VECTOR_BACK(Etapes);","p":[["V","VECTOR OF T","le vecteur",false]]},{"n":"JOIN","c":"liste","sig":"JOIN(L : LIST, VECTOR, ARRAY; [SEP : STRING]) : STRING","r":"STRING","s":"Les éléments en un seul texte, séparés.","st":"Texte := JOIN(Actifs, ', ');","p":[["L","LIST, VECTOR, ARRAY","des valeurs simples",false],["SEP","STRING","le séparateur (', ' sans lui)",true]]},{"n":"SPLIT","c":"liste","sig":"SPLIT(TEXTE : STRING; SEP : STRING) : LIST OF STRING","r":"LIST OF STRING","s":"Le texte coupé à chaque séparateur : une liste de textes.","st":"Mots := SPLIT('a;b;c', ';');","p":[["TEXTE","STRING","le texte à couper",false],["SEP","STRING","le séparateur",false]]},{"n":"REF","c":"ref","sig":"REF(X : une variable) : REF_TO type de X","r":"REF_TO type de X","s":"Une référence vers une variable : l'écrire par la référence écrit la variable.","st":"VAR r : REF_TO REAL; END_VAR\nr := REF(Niveau);\nr^ := 50.0;   (* Niveau vaut 50 *)","p":[["X","une variable","pas une valeur calculée",false]]},{"n":"ADR","c":"ref","sig":"ADR(X : une variable) : POINTER TO type de X","r":"POINTER TO type de X","s":"Un pointeur vers une variable (comme REF, pour POINTER TO).","st":"VAR p : POINTER TO INT; END_VAR\np := ADR(Compteur);\np^ := p^ + 1;","p":[["X","une variable","pas une valeur calculée",false]]},{"n":"LIST_SET","c":"liste","sig":"LIST_SET(L : LIST, VECTOR, ARRAY; I : DINT; X : T) : BOOL","r":"BOOL","s":"Écrit x à l'indice i ; FALSE, sans erreur, hors de la liste (rien n'est écrit).","st":"IF NOT LIST_SET(Mesures, Rang, Niveau) THEN\n    IHM_JOURNAL('Rang hors de la liste');\nEND_IF","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["I","DINT","l'indice",false],["X","T","la valeur",false]]},{"n":"MAP_SET","c":"map","sig":"MAP_SET(M : MAP; CLE : comme les clés; V : comme les valeurs) : BOOL","r":"BOOL","s":"Écrit la valeur de la clé, en la créant si elle manque (comme m[clé] := v) ; TRUE si la clé est nouvelle.","st":"IF MAP_SET(Stock, Piece, Qte) THEN\n    IHM_JOURNAL(CONCAT('Nouvelle pièce : ', Piece));\nEND_IF","p":[["M","MAP","la MAP",false],["CLE","comme les clés","la clé",false],["V","comme les valeurs","la valeur",false]]},{"n":"TUPLE_GET","c":"liste","sig":"TUPLE_GET(T : TUPLE; N : une constante, 1 à la taille) : le type du champ N","r":"le type du champ N","s":"Le champ n du TUPLE (1 : le premier), comme t.Item1.","st":"Valeur := TUPLE_GET(Point, 2);   (* = Point.Item2 *)","p":[["T","TUPLE","le tuple",false],["N","une constante, 1 à la taille","le numéro du champ",false]]},{"n":"TUPLE_SET","c":"liste","sig":"TUPLE_SET(T : TUPLE; N : une constante; X : le type du champ) : BOOL","r":"BOOL","s":"Écrit le champ n (1 : le premier), comme t.Item1 := x.","st":"TUPLE_SET(Point, 1, 'etuve');   (* = Point.Item1 := 'etuve' *)","p":[["T","TUPLE","le tuple",false],["N","une constante","le numéro du champ",false],["X","le type du champ","la valeur",false]]},{"n":"MAP_FIRST_KEY","c":"map","sig":"MAP_FIRST_KEY(M : MAP; [DEFAUT : comme les clés]) : comme les clés","r":"comme les clés","s":"La plus petite clé (les clés sont rangées) ; une MAP vide : DEFAUT, ou une erreur sans lui.","st":"Premiere := MAP_FIRST_KEY(Stock);","p":[["M","MAP","la MAP",false],["DEFAUT","comme les clés","pour une MAP vide",true]]},{"n":"MAP_LAST_KEY","c":"map","sig":"MAP_LAST_KEY(M : MAP; [DEFAUT : comme les clés]) : comme les clés","r":"comme les clés","s":"La plus grande clé ; une MAP vide : DEFAUT, ou une erreur sans lui.","st":"Derniere := MAP_LAST_KEY(Paliers);","p":[["M","MAP","la MAP",false],["DEFAUT","comme les clés","pour une MAP vide",true]]},{"n":"TUPLE_SIZE","c":"liste","sig":"TUPLE_SIZE(T : TUPLE) : DINT","r":"DINT","s":"Le nombre de champs du TUPLE (une constante : 2 pour un TUPLE(STRING, REAL)).","st":"n := TUPLE_SIZE(Point);","p":[["T","TUPLE","le tuple",false]]},{"n":"MAP_INSERT","c":"map","sig":"MAP_INSERT(M : MAP; CLE : comme les clés; V : comme les valeurs) : BOOL","r":"BOOL","s":"Ajoute la clé seulement si elle manque : n'écrase jamais. TRUE si elle a été ajoutée.","st":"MAP_INSERT(Stock, 'rondelle', 0.0);   (* un départ, sans écraser *)","p":[["M","MAP","la MAP",false],["CLE","comme les clés","la clé",false],["V","comme les valeurs","sa valeur, si elle est nouvelle",false]]},{"n":"LIST_INSERT_SORTED","c":"liste","sig":"LIST_INSERT_SORTED(L : LIST, VECTOR; X : T; [DECROISSANT : BOOL]) : DINT","r":"DINT","s":"Insère la valeur à sa place dans une liste triée, après celles qui lui sont égales ; rend l'indice où elle est rangée.","st":"LIST_INSERT_SORTED(Echeances, Prochaine);","p":[["L","LIST, VECTOR","une liste triée",false],["X","T","la valeur",false],["DECROISSANT","BOOL","TRUE pour une liste du plus grand au plus petit",true]]},{"n":"LIST_POP_FIRST","c":"liste","sig":"LIST_POP_FIRST(L : LIST, VECTOR) : T","r":"T","s":"Retire le premier élément et le rend : une file d'attente (le premier entré sort le premier). Une liste vide : une erreur.","st":"WHILE File.Count > 0 DO\n    Commande := LIST_POP_FIRST(File);\n    (* envoyer la commande *)\nEND_WHILE","p":[["L","LIST, VECTOR","la liste",false]]},{"n":"LIST_REMOVE_ALL","c":"liste","sig":"LIST_REMOVE_ALL(L : LIST, VECTOR; X : T) : DINT","r":"DINT","s":"Retire toutes les valeurs égales ; rend le nombre retiré (0 si aucune).","st":"n := LIST_REMOVE_ALL(Actifs, 'P2');","p":[["L","LIST, VECTOR","la liste",false],["X","T","la valeur à retirer",false]]},{"n":"LIST_REMOVE_IF","c":"liste","sig":"LIST_REMOVE_IF(L : LIST, VECTOR; COMPARAISON : COMPARAISON; VALEUR : T, ou le type du membre; [MEMBRE : STRING]) : DINT","r":"DINT","s":"Retire les éléments qui vérifient la comparaison avec VALEUR ; rend le nombre retiré.","st":"n := LIST_REMOVE_IF(Mesures, COMPARAISON#Inferieur, 0.0);   (* les mesures négatives *)","p":[["L","LIST, VECTOR","la liste",false],["COMPARAISON","COMPARAISON","#Egal, #Different, #Inferieur, #InferieurOuEgal, #Superieur, #SuperieurOuEgal",false],["VALEUR","T, ou le type du membre","à quoi comparer",false],["MEMBRE","STRING","'Poids' pour une liste de structures",true]]},{"n":"MAP_REMOVE_IF","c":"map","sig":"MAP_REMOVE_IF(M : MAP; COMPARAISON : COMPARAISON; VALEUR : comme les valeurs) : DINT","r":"DINT","s":"Retire les clés dont la valeur vérifie la comparaison ; rend le nombre retiré.","st":"MAP_REMOVE_IF(Stock, COMPARAISON#InferieurOuEgal, 0.0);   (* les pièces épuisées *)","p":[["M","MAP","la MAP",false],["COMPARAISON","COMPARAISON","#Egal, #Different, #Inferieur, #InferieurOuEgal, #Superieur, #SuperieurOuEgal",false],["VALEUR","comme les valeurs","à quoi comparer",false]]},{"n":"LIST_DISTINCT","c":"liste","sig":"LIST_DISTINCT(L : LIST, VECTOR) : DINT","r":"DINT","s":"Retire les doublons : garde la première de chaque valeur, dans l'ordre ; rend le nombre retiré.","st":"LIST_DISTINCT(Codes_Vus);","p":[["L","LIST, VECTOR","la liste",false]]},{"n":"MAP_INCREMENT","c":"map","sig":"MAP_INCREMENT(M : MAP de nombres; CLE : comme les clés; [X : comme les valeurs]) : comme les valeurs","r":"comme les valeurs","s":"Ajoute x (1 sans lui) à la valeur de la clé, en partant de 0 si elle manque ; rend la nouvelle valeur.","st":"MAP_INCREMENT(Pieces_Par_Poste, Poste);\n(* au lieu de : IF MAP_HAS(...) THEN m[k] := m[k] + 1 ELSE m[k] := 1 END_IF *)","p":[["M","MAP de nombres","la MAP",false],["CLE","comme les clés","la clé",false],["X","comme les valeurs","ce qu'on ajoute : 1 sans lui",true]]},{"n":"LIST_APPEND","c":"liste","sig":"LIST_APPEND(L : LIST, VECTOR; AUTRE : LIST, VECTOR, ARRAY) : DINT","r":"DINT","s":"Ajoute à la fin tous les éléments d'une autre liste (ou d'un ARRAY) ; rend le nombre d'éléments.","st":"LIST_APPEND(Historique, Lot_Courant);","p":[["L","LIST, VECTOR","la liste",false],["AUTRE","LIST, VECTOR, ARRAY","les éléments à ajouter",false]]},{"n":"MAP_MERGE","c":"map","sig":"MAP_MERGE(M : MAP; AUTRE : MAP du même type; [REMPLACER : BOOL]) : DINT","r":"DINT","s":"Ajoute les clés d'une autre MAP ; une clé déjà là garde sa valeur, sauf avec REMPLACER à TRUE. Rend le nombre de clés ajoutées.","st":"MAP_MERGE(Stock, Livraison, TRUE);","p":[["M","MAP","la MAP",false],["AUTRE","MAP du même type","les clés à ajouter",false],["REMPLACER","BOOL","FALSE sans lui",true]]},{"n":"LIST_FILL","c":"liste","sig":"LIST_FILL(L : ARRAY, LIST, VECTOR; X : T) : DINT","r":"DINT","s":"Met x dans toutes les cases, sans changer la taille ; rend le nombre de cases.","st":"LIST_FILL(Niveaux, 0.0);","p":[["L","ARRAY, LIST, VECTOR","le tableau ou la liste",false],["X","T","la valeur",false]]},{"n":"LIST_LAST_INDEX_OF","c":"liste","sig":"LIST_LAST_INDEX_OF(L : LIST, VECTOR, ARRAY; X : T) : DINT","r":"DINT","s":"L'indice de la dernière valeur égale ; −1 si elle n'y est pas.","st":"i := LIST_LAST_INDEX_OF(Journal, 'Arret');","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["X","T","la valeur cherchée",false]]},{"n":"MAP_KEY_OF","c":"map","sig":"MAP_KEY_OF(M : MAP; V : comme les valeurs; DEFAUT : comme les clés) : comme les clés","r":"comme les clés","s":"La première clé (dans leur ordre) dont la valeur est égale à v ; DEFAUT si aucune. La recherche à l'envers d'une MAP.","st":"Piece := MAP_KEY_OF(Stock, 0.0, '');   (* une pièce épuisée *)","p":[["M","MAP","la MAP",false],["V","comme les valeurs","la valeur cherchée",false],["DEFAUT","comme les clés","si aucune",false]]},{"n":"LIST_COUNT_OF","c":"liste","sig":"LIST_COUNT_OF(L : LIST, VECTOR, ARRAY; X : T) : DINT","r":"DINT","s":"Le nombre de fois où la valeur est dans la liste.","st":"Arrets := LIST_COUNT_OF(Journal, 'Arret');","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["X","T","la valeur comptée",false]]},{"n":"LIST_FIND_IF","c":"liste","sig":"LIST_FIND_IF(L : LIST, VECTOR, ARRAY; COMPARAISON : COMPARAISON; VALEUR : T, ou le type du membre; [MEMBRE : STRING]) : DINT","r":"DINT","s":"L'indice du premier élément qui vérifie la comparaison ; −1 si aucun.","st":"i := LIST_FIND_IF(Recettes, COMPARAISON#Egal, 'Pain', 'Nom');\nIF i >= 0 THEN Recette := Recettes[i]; END_IF","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["COMPARAISON","COMPARAISON","#Egal, #Superieur…",false],["VALEUR","T, ou le type du membre","à quoi comparer",false],["MEMBRE","STRING","le membre comparé",true]]},{"n":"LIST_COUNT_IF","c":"liste","sig":"LIST_COUNT_IF(L : LIST, VECTOR, ARRAY; COMPARAISON : COMPARAISON; VALEUR : T, ou le type du membre; [MEMBRE : STRING]) : DINT","r":"DINT","s":"Le nombre d'éléments qui vérifient la comparaison.","st":"Hors_Tolerance := LIST_COUNT_IF(Mesures, COMPARAISON#Superieur, Seuil);","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["COMPARAISON","COMPARAISON","#Superieur…",false],["VALEUR","T, ou le type du membre","à quoi comparer",false],["MEMBRE","STRING","le membre comparé",true]]},{"n":"LIST_ALL","c":"liste","sig":"LIST_ALL(L : LIST, VECTOR, ARRAY; COMPARAISON : COMPARAISON; VALEUR : T, ou le type du membre; [MEMBRE : STRING]) : BOOL","r":"BOOL","s":"Vrai si tous les éléments vérifient la comparaison (vrai pour une liste vide).","st":"Tout_Ok := LIST_ALL(Pressions, COMPARAISON#Inferieur, P_Max);","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["COMPARAISON","COMPARAISON","#Egal, #Different, #Inferieur, #InferieurOuEgal, #Superieur, #SuperieurOuEgal",false],["VALEUR","T, ou le type du membre","à quoi comparer",false],["MEMBRE","STRING","le membre comparé",true]]},{"n":"LIST_ANY","c":"liste","sig":"LIST_ANY(L : LIST, VECTOR, ARRAY; COMPARAISON : COMPARAISON; VALEUR : T, ou le type du membre; [MEMBRE : STRING]) : BOOL","r":"BOOL","s":"Vrai si au moins un élément vérifie la comparaison.","st":"Alerte := LIST_ANY(Temperatures, COMPARAISON#Superieur, 90.0);","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["COMPARAISON","COMPARAISON","#Egal, #Different, #Inferieur, #InferieurOuEgal, #Superieur, #SuperieurOuEgal",false],["VALEUR","T, ou le type du membre","à quoi comparer",false],["MEMBRE","STRING","le membre comparé",true]]},{"n":"LIST_NONE","c":"liste","sig":"LIST_NONE(L : LIST, VECTOR, ARRAY; COMPARAISON : COMPARAISON; VALEUR : T, ou le type du membre; [MEMBRE : STRING]) : BOOL","r":"BOOL","s":"Vrai si aucun élément ne vérifie la comparaison.","st":"Aucun_Defaut := LIST_NONE(Etats, COMPARAISON#Egal, 2);","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["COMPARAISON","COMPARAISON","#Egal, #Different, #Inferieur, #InferieurOuEgal, #Superieur, #SuperieurOuEgal",false],["VALEUR","T, ou le type du membre","à quoi comparer",false],["MEMBRE","STRING","le membre comparé",true]]},{"n":"LIST_MIN_INDEX","c":"liste","sig":"LIST_MIN_INDEX(L : LIST, VECTOR, ARRAY; [MEMBRE : STRING]) : DINT","r":"DINT","s":"L'indice de la plus petite valeur (la première, s'il y en a plusieurs) ; −1 pour une liste vide.","st":"Poste_Lent := Postes[LIST_MIN_INDEX(Cadences)];","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["MEMBRE","STRING","pour une liste de structures",true]]},{"n":"LIST_MAX_INDEX","c":"liste","sig":"LIST_MAX_INDEX(L : LIST, VECTOR, ARRAY; [MEMBRE : STRING]) : DINT","r":"DINT","s":"L'indice de la plus grande valeur (la première, s'il y en a plusieurs) ; −1 pour une liste vide.","st":"Plus_Lourd := Lots[LIST_MAX_INDEX(Lots, 'Poids')].Nom;","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["MEMBRE","STRING","pour une liste de structures",true]]},{"n":"MAP_FLOOR_KEY","c":"map","sig":"MAP_FLOOR_KEY(M : MAP; K : comme les clés; DEFAUT : comme les clés) : comme les clés","r":"comme les clés","s":"La plus grande clé inférieure ou égale à k ; DEFAUT s'il n'y en a pas.","st":"Coef := Paliers[MAP_FLOOR_KEY(Paliers, Debit, 0)];","p":[["M","MAP","les paliers",false],["K","comme les clés","la valeur cherchée",false],["DEFAUT","comme les clés","s'il n'y a pas de palier dessous",false]]},{"n":"MAP_CEIL_KEY","c":"map","sig":"MAP_CEIL_KEY(M : MAP; K : comme les clés; DEFAUT : comme les clés) : comme les clés","r":"comme les clés","s":"La plus petite clé supérieure ou égale à k ; DEFAUT s'il n'y en a pas.","st":"Prochain := MAP_CEIL_KEY(Paliers, Debit, -1);","p":[["M","MAP","la MAP",false],["K","comme les clés","la valeur cherchée",false],["DEFAUT","comme les clés","s'il n'y en a pas au-dessus",false]]},{"n":"LIST_SORT_BY","c":"liste","sig":"LIST_SORT_BY(L : LIST, VECTOR, ARRAY de structures; MEMBRE : STRING; [DECROISSANT : BOOL]) : BOOL","r":"BOOL","s":"Trie une liste de structures (ou de TUPLE : 'Item2') par un de ses membres.","st":"LIST_SORT_BY(Lots, 'Poids', TRUE);   (* le plus lourd d'abord *)","p":[["L","LIST, VECTOR, ARRAY de structures","la liste",false],["MEMBRE","STRING","'Poids', 'Nom', 'Item2'…",false],["DECROISSANT","BOOL","TRUE : du plus grand au plus petit",true]]},{"n":"LIST_IS_SORTED","c":"liste","sig":"LIST_IS_SORTED(L : LIST, VECTOR, ARRAY; [DECROISSANT : BOOL]) : BOOL","r":"BOOL","s":"Vrai si la liste est triée (dans le sens demandé).","st":"ASSERT(LIST_IS_SORTED(Seuils), 'les seuils doivent croître');","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["DECROISSANT","BOOL","TRUE : du plus grand au plus petit",true]]},{"n":"LIST_SWAP","c":"liste","sig":"LIST_SWAP(L : LIST, VECTOR, ARRAY; I : DINT; J : DINT) : BOOL","r":"BOOL","s":"Échange deux éléments ; FALSE si un indice est hors de la liste.","st":"LIST_SWAP(Etapes, Rang, Rang - 1);   (* le bouton ↑ d'un tableau *)","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["I","DINT","un indice",false],["J","DINT","l'autre",false]]},{"n":"LIST_MOVE","c":"liste","sig":"LIST_MOVE(L : LIST, VECTOR, ARRAY; DE : DINT; VERS : DINT) : BOOL","r":"BOOL","s":"Déplace un élément d'un indice à un autre ; ceux d'entre les deux glissent d'une place. FALSE hors de la liste.","st":"LIST_MOVE(Etapes, 3, 0);   (* l'étape 3 passe en premier *)","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["DE","DINT","l'indice de l'élément",false],["VERS","DINT","son nouvel indice",false]]},{"n":"LIST_ROTATE","c":"liste","sig":"LIST_ROTATE(L : LIST, VECTOR, ARRAY; N : DINT) : BOOL","r":"BOOL","s":"Fait tourner les éléments de n places vers le début (n négatif : vers la fin) ; ce qui sort revient de l'autre côté.","st":"LIST_ROTATE(Equipes, 1);   (* l'équipe suivante prend le premier poste *)","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["N","DINT","le nombre de places",false]]},{"n":"LIST_SLICE","c":"liste","sig":"LIST_SLICE(L : LIST, VECTOR, ARRAY; DEBUT : DINT; NOMBRE : DINT) : LIST OF T","r":"LIST OF T","s":"Une copie d'une partie : NOMBRE éléments à partir de DEBUT (ce qui dépasse la fin est ignoré).","st":"Dernieres := LIST_SLICE(Mesures, Mesures.Count - 10, 10);   (* les 10 dernières *)","p":[["L","LIST, VECTOR, ARRAY","la liste",false],["DEBUT","DINT","l'indice du premier",false],["NOMBRE","DINT","combien",false]]},{"n":"LIST_CONCAT","c":"liste","sig":"LIST_CONCAT(A : LIST, VECTOR, ARRAY; B : LIST, VECTOR, ARRAY du même type) : LIST OF T","r":"LIST OF T","s":"Une nouvelle liste : les éléments de A, puis ceux de B. A et B ne changent pas.","st":"Tous := LIST_CONCAT(Ligne_1, Ligne_2);","p":[["A","LIST, VECTOR, ARRAY","les premiers",false],["B","LIST, VECTOR, ARRAY du même type","les suivants",false]]},{"n":"LIST_COPY","c":"liste","sig":"LIST_COPY(SOURCE : ARRAY, LIST, VECTOR; DESTINATION : ARRAY, LIST, VECTOR du même type d'éléments) : DINT","r":"DINT","s":"Copie SOURCE dans DESTINATION, case par case depuis le début ; DESTINATION garde sa taille. Rend le nombre copié.","st":"LIST_COPY(Consignes, Automate.Consignes);   (* une LIST vers un ARRAY[0..9] *)","p":[["SOURCE","ARRAY, LIST, VECTOR","les valeurs",false],["DESTINATION","ARRAY, LIST, VECTOR du même type d'éléments","écrite en place",false]]},{"n":"TO_LIST","c":"liste","sig":"TO_LIST(X : ARRAY, VECTOR, LIST) : LIST OF T","r":"LIST OF T","s":"Les éléments d'un ARRAY (ligne par ligne s'il a deux dimensions), d'un VECTOR, d'une liste : une nouvelle LIST.","st":"Valeurs := TO_LIST(Automate.Mesures);   (* un ARRAY[0..9] OF REAL *)","p":[["X","ARRAY, VECTOR, LIST","les éléments",false]]},{"n":"MAP_VALUES","c":"map","sig":"MAP_VALUES(M : MAP) : LIST OF valeur","r":"LIST OF valeur","s":"Les valeurs, dans l'ordre des clés : une LIST (pour LIST_SUM, LIST_MAX…).","st":"Total := LIST_SUM(MAP_VALUES(Stock));","p":[["M","MAP","la MAP",false]]},{"n":"MAP_ITEMS","c":"map","sig":"MAP_ITEMS(M : MAP) : LIST OF TUPLE(clé, valeur)","r":"LIST OF TUPLE(clé, valeur)","s":"Les paires (clé, valeur), dans l'ordre des clés : une LIST de TUPLE.","st":"Classement := MAP_ITEMS(Stock);\nLIST_SORT_BY(Classement, 'Item2', TRUE);   (* la plus grande quantité d'abord *)","p":[["M","MAP","la MAP",false]]},{"n":"TUPLE_TO_STRING","c":"liste","sig":"TUPLE_TO_STRING(T : TUPLE) : STRING","r":"STRING","s":"Le TUPLE écrit comme un littéral : ('four', 850.0). Pour un journal, une étiquette.","st":"IHM_JOURNAL(TUPLE_TO_STRING(Point));","p":[["T","TUPLE","le tuple",false]]},{"n":"TUPLE_UNPACK","c":"liste","sig":"TUPLE_UNPACK(T : TUPLE; A, B… : des variables) : BOOL","r":"BOOL","s":"Écrit chaque champ dans une variable, dans l'ordre : autant de variables que de champs.","st":"TUPLE_UNPACK(Point, Nom, Valeur);   (* Nom := Point.Item1 ; Valeur := Point.Item2 *)","p":[["T","TUPLE","le tuple",false],["A, B…","des variables","une par champ, chacune du bon type",false]]},{"n":"SET_ADD","c":"ensembles","sig":"SET_ADD(S : SET OF T; X : T) : BOOL","r":"BOOL","s":"Ajoute la valeur à sa place (le SET reste rangé) : TRUE si elle est nouvelle ; déjà là, rien ne change (FALSE).","st":"IF SET_ADD(Postes_Actifs, Poste) THEN\n    IHM_JOURNAL(CONCAT('Nouveau poste : ', Poste));\nEND_IF","p":[["S","SET OF T","l'ensemble",false],["X","T","la valeur",false]]},{"n":"SET_REMOVE","c":"ensembles","sig":"SET_REMOVE(S : SET OF T; X : T) : BOOL","r":"BOOL","s":"Retire la valeur : TRUE si elle y était.","st":"SET_REMOVE(Postes_Actifs, Poste);","p":[["S","SET OF T","l'ensemble",false],["X","T","la valeur",false]]},{"n":"SET_HAS","c":"ensembles","sig":"SET_HAS(S : SET OF T; X : T) : BOOL","r":"BOOL","s":"Vrai si la valeur est dans le SET.","st":"IF SET_HAS(Postes_Actifs, 'P2') THEN ... END_IF","p":[["S","SET OF T","l'ensemble",false],["X","T","la valeur",false]]},{"n":"SET_UNION","c":"ensembles","sig":"SET_UNION(A : SET OF T; B : SET OF T) : SET OF T","r":"SET OF T","s":"Un SET neuf : les valeurs de A et celles de B, chacune une fois, rangées.","st":"Tous := SET_UNION(Postes_Actifs, Autre_Choix);","p":[["A","SET OF T","le premier",false],["B","SET OF T","le second",false]]},{"n":"SET_INTERSECTION","c":"ensembles","sig":"SET_INTERSECTION(A : SET OF T; B : SET OF T) : SET OF T","r":"SET OF T","s":"Un SET neuf : les valeurs qui sont dans A et dans B (ce que deux choix ont en commun).","st":"Communs := SET_INTERSECTION(Postes_Actifs, Autre_Choix);","p":[["A","SET OF T","le premier",false],["B","SET OF T","le second",false]]},{"n":"SET_DIFFERENCE","c":"ensembles","sig":"SET_DIFFERENCE(A : SET OF T; B : SET OF T) : SET OF T","r":"SET OF T","s":"Un SET neuf : les valeurs de A qui ne sont pas dans B.","st":"Seulement_A := SET_DIFFERENCE(Postes_Actifs, Autre_Choix);","p":[["A","SET OF T","le premier",false],["B","SET OF T","ce qu'on retire",false]]},{"n":"RING_ADD","c":"ensembles","sig":"RING_ADD(R : RING[N] OF T; X : T) : DINT","r":"DINT","s":"Ajoute la valeur à la fin ; plein (N valeurs), la plus ancienne part. Rend le nombre de valeurs (au plus N).","st":"RING_ADD(Dernieres, Mesure);\nMoyenne := LIST_AVG(Dernieres);   (* les 100 dernières mesures *)","p":[["R","RING[N] OF T","le tampon circulaire",false],["X","T","la valeur",false]]},{"n":"ACCUMULATE","c":"numeric","sig":"ACCUMULATE(T : ARRAY, LIST, VECTOR de nombres; INIT : un nombre; [OP : OPERATION]) : comme INIT","r":"comme INIT","s":"Plie les éléments de T dans INIT, du premier au dernier : la somme, ou avec OP le produit, le minimum, le maximum.","st":"Total_Pas := ACCUMULATE(Pas_Mesure, 0.0);","p":[["T","ARRAY, LIST, VECTOR de nombres","les éléments",false],["INIT","un nombre","le départ : 0.0 pour une somme, 1 pour un produit",false],["OP","OPERATION","#Somme (par défaut), #Produit, #Min, #Max, #Et, #Ou",true]]},{"n":"REDUCE","c":"numeric","sig":"REDUCE(T : ARRAY, LIST, VECTOR de nombres; [INIT : un nombre]; [OP : OPERATION]) : comme les éléments","r":"comme les éléments","s":"Comme ACCUMULATE, sans ordre imposé (le C++ peut le paralléliser) ; en ST, le même résultat. INIT vaut 0 s'il manque.","st":"Somme_Seuils := REDUCE(Seuils);","p":[["T","ARRAY, LIST, VECTOR de nombres","les éléments",false],["INIT","un nombre","0 sans lui",true],["OP","OPERATION","#Somme sans lui",true]]},{"n":"INNER_PRODUCT","c":"numeric","sig":"INNER_PRODUCT(A : ARRAY, LIST, VECTOR; B : idem, au moins aussi long; INIT : un nombre) : comme INIT","r":"comme INIT","s":"Le produit scalaire : INIT plus la somme des A[i] × B[i]. Une moyenne pondérée, une énergie (puissances × durées).","st":"Note := INNER_PRODUCT(Seuils, Poids, 0.0);   (* Poids : [0.5, 0.3, 0.2] *)","p":[["A","ARRAY, LIST, VECTOR","les valeurs",false],["B","idem, au moins aussi long","les poids",false],["INIT","un nombre","le départ, 0.0",false]]},{"n":"TRANSFORM_REDUCE","c":"numeric","sig":"TRANSFORM_REDUCE(T : ARRAY, LIST, VECTOR de nombres; INIT : un nombre; OP : OPERATION; TRANSFORMATION : TRANSFORMATION) : comme INIT","r":"comme INIT","s":"Transforme chaque élément (Abs, Carre, Racine…), puis plie avec OP : la somme des carrés, la somme des valeurs absolues.","st":"Energie := TRANSFORM_REDUCE(Ecarts, 0.0, OPERATION#Somme, TRANSFORMATION#Carre);","p":[["T","ARRAY, LIST, VECTOR de nombres","les éléments",false],["INIT","un nombre","le départ",false],["OP","OPERATION","#Somme, #Produit, #Min, #Max…",false],["TRANSFORMATION","TRANSFORMATION","#Identite, #Abs, #Carre, #Racine, #Neg, #Inverse",false]]},{"n":"PARTIAL_SUM","c":"numeric","sig":"PARTIAL_SUM(T : ARRAY, LIST, VECTOR de nombres; [OP : OPERATION]) : comme T","r":"comme T","s":"Les sommes cumulées : [a, a+b, a+b+c…] ; avec OP, le produit cumulé, le minimum atteint…","st":"Couples_Cumules := PARTIAL_SUM(Couples);","p":[["T","ARRAY, LIST, VECTOR de nombres","les éléments",false],["OP","OPERATION","#Somme sans lui",true]]},{"n":"INCLUSIVE_SCAN","c":"numeric","sig":"INCLUSIVE_SCAN(T : ARRAY, LIST, VECTOR; [OP : OPERATION]) : comme T","r":"comme T","s":"Comme PARTIAL_SUM, sans ordre imposé : le maximum atteint jusque-là, le minimum…","st":"Pics := INCLUSIVE_SCAN(Mesures, OPERATION#Max);","p":[["T","ARRAY, LIST, VECTOR","les éléments",false],["OP","OPERATION","#Somme sans lui",true]]},{"n":"EXCLUSIVE_SCAN","c":"numeric","sig":"EXCLUSIVE_SCAN(T : ARRAY, LIST, VECTOR; INIT : un nombre; [OP : OPERATION]) : comme T","r":"comme T","s":"Le cumul de ce qui précède : [init, init+a, init+a+b…]. Des positions de départ à partir de longueurs.","st":"Debuts := EXCLUSIVE_SCAN(Longueurs, 0);","p":[["T","ARRAY, LIST, VECTOR","les éléments",false],["INIT","un nombre","la première valeur",false],["OP","OPERATION","#Somme sans lui",true]]},{"n":"TRANSFORM_INCLUSIVE_SCAN","c":"numeric","sig":"TRANSFORM_INCLUSIVE_SCAN(T : ARRAY, LIST, VECTOR; OP : OPERATION; TRANSFORMATION : TRANSFORMATION) : comme T","r":"comme T","s":"Transforme chaque élément, puis cumule : le chemin parcouru à partir de déplacements signés (Abs), l'énergie cumulée (Carre).","st":"Parcours := TRANSFORM_INCLUSIVE_SCAN(Deplacements, OPERATION#Somme, TRANSFORMATION#Abs);","p":[["T","ARRAY, LIST, VECTOR","les éléments",false],["OP","OPERATION","#Somme, #Max…",false],["TRANSFORMATION","TRANSFORMATION","#Abs, #Carre…",false]]},{"n":"TRANSFORM_EXCLUSIVE_SCAN","c":"numeric","sig":"TRANSFORM_EXCLUSIVE_SCAN(T : ARRAY, LIST, VECTOR; INIT : un nombre; OP : OPERATION; TRANSFORMATION : TRANSFORMATION) : comme T","r":"comme T","s":"Transforme chaque élément, puis cumule ce qui précède : la position où commence chaque déplacement.","st":"Departs := TRANSFORM_EXCLUSIVE_SCAN(Deplacements, 0.0, OPERATION#Somme, TRANSFORMATION#Abs);","p":[["T","ARRAY, LIST, VECTOR","les éléments",false],["INIT","un nombre","la première valeur",false],["OP","OPERATION","#Somme…",false],["TRANSFORMATION","TRANSFORMATION","#Abs, #Carre…",false]]},{"n":"ADJACENT_DIFFERENCE","c":"numeric","sig":"ADJACENT_DIFFERENCE(T : ARRAY, LIST, VECTOR de nombres) : comme T","r":"comme T","s":"Les écarts entre voisins : [a, b−a, c−b…]. Des pas, des vitesses à partir de positions.","st":"Ecarts := ADJACENT_DIFFERENCE(Seuils);","p":[["T","ARRAY, LIST, VECTOR de nombres","les éléments",false]]},{"n":"IOTA","c":"numeric","sig":"IOTA(T : ARRAY, LIST, VECTOR; DEPART : un nombre; [PAS : un nombre]) : DINT","r":"DINT","s":"Remplit T de départ, départ + pas, départ + 2 pas… ; rend le nombre de cases.","st":"IOTA(Pas_Mesure, 0.0, 2.5);","p":[["T","ARRAY, LIST, VECTOR","à remplir, en place",false],["DEPART","un nombre","la première valeur",false],["PAS","un nombre","1 sans lui",true]]},{"n":"GCD","c":"numeric","sig":"GCD(A : un entier; B : un entier) : un entier","r":"un entier","s":"Le plus grand diviseur commun de deux entiers ; 0 si les deux sont nuls.","st":"Pgcd := GCD(Reglages.Cadence_A, Reglages.Cadence_B);","p":[["A","un entier","",false],["B","un entier","",false]]},{"n":"LCM","c":"numeric","sig":"LCM(A : un entier; B : un entier) : un entier","r":"un entier","s":"Le plus petit multiple commun de deux entiers ; 0 si l'un est nul.","st":"Cadence_Commune := LCM(Reglages.Cadence_A, Reglages.Cadence_B);","p":[["A","un entier","",false],["B","un entier","",false]]},{"n":"MIDPOINT","c":"numeric","sig":"MIDPOINT[<T>](A : un nombre; B : un nombre) : T, ou le type de A","r":"T, ou le type de A","s":"Le milieu de a et b sans débordement : en INT, 32000 et 32002 donnent 32001, là où (a + b) / 2 déborde.","st":"Milieu := MIDPOINT<INT>(32000, 32002);","p":[["<T>","un type numérique","facultatif : INT, DINT, REAL…",true],["A","un nombre","",false],["B","un nombre","",false]]},{"n":"ADD_SAT","c":"numeric","sig":"ADD_SAT[<T>](A : un entier; B : un entier) : T, ou le type de A","r":"T, ou le type de A","s":"a + b, bloqué aux bornes de T au lieu de boucler : en INT, 32000 + 1000 donne 32767 (et non −32536).","st":"Total := ADD_SAT<INT>(32000, 1000);","p":[["<T>","un type entier","facultatif : il fixe les bornes",true],["A","un entier","",false],["B","un entier","",false]]},{"n":"SUB_SAT","c":"numeric","sig":"SUB_SAT[<T>](A : un entier; B : un entier) : T, ou le type de A","r":"T, ou le type de A","s":"a − b, bloqué aux bornes : en INT, −32000 − 1000 donne −32768 ; en UINT, 5 − 8 donne 0.","st":"Ecart := SUB_SAT<INT>(-32000, 1000);","p":[["<T>","un type entier","facultatif : il fixe les bornes",true],["A","un entier","",false],["B","un entier","",false]]},{"n":"MUL_SAT","c":"numeric","sig":"MUL_SAT[<T>](A : un entier; B : un entier) : T, ou le type de A","r":"T, ou le type de A","s":"a × b, bloqué aux bornes : en INT, 300 × 200 donne 32767.","st":"Produit := MUL_SAT<INT>(300, 200);","p":[["<T>","un type entier","facultatif : il fixe les bornes",true],["A","un entier","",false],["B","un entier","",false]]},{"n":"DIV_SAT","c":"numeric","sig":"DIV_SAT[<T>](A : un entier; B : un entier non nul) : T, ou le type de A","r":"T, ou le type de A","s":"a / b, bloqué : en INT, −32768 / −1 donne 32767, le seul cas qui déborde. b = 0 reste une erreur.","st":"Q := DIV_SAT<INT>(-32768, -1);","p":[["<T>","un type entier","facultatif : il fixe les bornes",true],["A","un entier","",false],["B","un entier non nul","",false]]},{"n":"SATURATE_CAST","c":"numeric","sig":"SATURATE_CAST<T>(X : un nombre) : T","r":"T","s":"Convertit x vers T en bloquant aux bornes : 40000 donne 32767 en INT, −5 donne 0 en UINT, là où TO_INT et TO_UINT bouclent.","st":"Consigne := SATURATE_CAST<INT>(Mesure_Brute);   (* 40000 *)","p":[["<T>","un type entier","obligatoire : SATURATE_CAST<INT>(x)",false],["X","un nombre","arrondi, puis borné",false]]},{"n":"NUMERIC_LIMITS","c":"limits","sig":"NUMERIC_LIMITS<T>.MEMBRE : T (une fonction), BOOL ou DINT (une constante)","r":"T (une fonction), BOOL ou DINT (une constante)","s":"Les bornes et les caractéristiques d'un type numérique, comme std::numeric_limits : NUMERIC_LIMITS<UINT>.MAX() = 65535.","st":"IF Compteur_Pieces = NUMERIC_LIMITS<UINT>.MAX() THEN\n    Compteur_Pieces := 0;   (* il bouclerait *)\nEND_IF","p":[["<T>","SINT … ULINT, BYTE … LWORD, REAL, LREAL, BOOL","obligatoire",false],["MEMBRE","un des 32 membres","MIN() … : une fonction (avec ()) ; DIGITS … : une constante (sans)",false]]},{"n":"NUMBERS","c":"numbers","sig":"NUMBERS[<T>].CONSTANTE : T (LREAL sans <T>)","r":"T (LREAL sans <T>)","s":"Les constantes mathématiques de std::numbers : NUMBERS.PI (en LREAL), NUMBERS<REAL>.PI (arrondi au REAL).","st":"Surface := NUMBERS.PI * Rayon * Rayon;","p":[["<T>","REAL ou LREAL","facultatif : LREAL",true],["CONSTANTE","une des 13 constantes","sans parenthèses",false]]},{"n":"BIT_COUNT","c":"bits","sig":"BIT_COUNT(W : ANY_BIT ou un entier) : DINT","r":"DINT","s":"Le nombre de bits à 1 : combien de défauts dans un mot d'alarme.","st":"Nb_Defauts := BIT_COUNT(Defauts);","p":[["W","ANY_BIT ou un entier","le mot",false]]},{"n":"BIT_FIRST","c":"bits","sig":"BIT_FIRST(W : ANY_BIT ou un entier) : DINT","r":"DINT","s":"Le numéro du plus bas bit à 1 (0 : le bit de poids faible) ; −1 si aucun.","st":"Premier_Defaut := BIT_FIRST(Defauts);","p":[["W","ANY_BIT ou un entier","le mot",false]]},{"n":"BIT_TEST","c":"bits","sig":"BIT_TEST(W : ANY_BIT ou un entier; N : INT) : BOOL","r":"BOOL","s":"Vrai si le bit n est à 1.","st":"Defaut_Pompe := BIT_TEST(Defauts, 4);","p":[["W","ANY_BIT ou un entier","le mot",false],["N","INT","le numéro du bit (0 : le plus bas)",false]]},{"n":"BIT_SET","c":"bits","sig":"BIT_SET(W : ANY_BIT ou un entier; N : INT) : comme W","r":"comme W","s":"La valeur avec le bit n à 1 ; le mot ne change pas (écrire Mot := BIT_SET(Mot, n) pour le changer).","st":"Commande := BIT_SET(Commande, 0);","p":[["W","ANY_BIT ou un entier","le mot",false],["N","INT","le numéro du bit",false]]},{"n":"BIT_RESET","c":"bits","sig":"BIT_RESET(W : ANY_BIT ou un entier; N : INT) : comme W","r":"comme W","s":"La valeur avec le bit n à 0 ; le mot ne change pas.","st":"Commande := BIT_RESET(Commande, 0);","p":[["W","ANY_BIT ou un entier","le mot",false],["N","INT","le numéro du bit",false]]},{"n":"IHM_NAVIGUER","c":"nav","sig":"IHM_NAVIGUER(VUE : STRING; [TRANSITION : STRING]; [PARAMETRES : STRING]) : BOOL","r":"BOOL","s":"Affiche une autre vue, avec une transition et des paramètres.","st":"IHM_NAVIGUER('Vue_Armoire_A', 'Glissement');","p":[["VUE","STRING","le nom de la vue",false],["TRANSITION","STRING","Fondu, Glissement, Zoom, Rotation...",true],["PARAMETRES","STRING","'Moteur := Pompes[3]'",true]]},{"n":"IHM_PRECEDENTE","c":"nav","sig":"IHM_PRECEDENTE() : BOOL","r":"BOOL","s":"Revient à la vue d'avant (l'historique) ; vrai si la vue a changé.","st":"IHM_PRECEDENTE();","p":[]},{"n":"IHM_SUIVANTE","c":"nav","sig":"IHM_SUIVANTE() : BOOL","r":"BOOL","s":"Repart vers la vue quittée par Précédente.","st":"IHM_SUIVANTE();","p":[]},{"n":"IHM_ACCUEIL","c":"nav","sig":"IHM_ACCUEIL() : BOOL","r":"BOOL","s":"Ouvre la vue d'accueil : celle du groupe de l'utilisateur, sinon la vue de démarrage.","st":"IHM_ACCUEIL();","p":[]},{"n":"IHM_VUE","c":"nav","sig":"IHM_VUE() : STRING","r":"STRING","s":"Le nom de la vue affichée.","st":"IF IHM_VUE() = 'Vue_Accueil' THEN ... END_IF","p":[]},{"n":"IHM_POPUP","c":"popup","sig":"IHM_POPUP(VUE : STRING; [PARAMETRES : STRING]; [POSITION : STRING]) : BOOL","r":"BOOL","s":"Ouvre une popup, avec ses paramètres et sa place ; déjà ouverte, elle revient devant.","st":"IHM_POPUP('Popup_Pompe', 'Moteur := Pompes[3]', 'objet');","p":[["VUE","STRING","la popup",false],["PARAMETRES","STRING","'Moteur := Pompes[3]'",true],["POSITION","STRING","centre, objet, haut-droite, derniere, x,y",true]]},{"n":"IHM_CHANGER_POPUP","c":"popup","sig":"IHM_CHANGER_POPUP(VUE : STRING; [PARAMETRES : STRING]) : BOOL","r":"BOOL","s":"Remplace la popup du dessus par une autre (ou la même, avec d'autres paramètres), au même endroit.","st":"IHM_CHANGER_POPUP('Popup_Pompe', 'Moteur := Pompes[4]');","p":[["VUE","STRING","la popup",false],["PARAMETRES","STRING","ses paramètres",true]]},{"n":"IHM_POPUP_PRECEDENTE","c":"popup","sig":"IHM_POPUP_PRECEDENTE() : BOOL","r":"BOOL","s":"Revient à la popup d'avant le changement, à sa place.","st":"IHM_POPUP_PRECEDENTE();","p":[]},{"n":"IHM_CENTRER_POPUP","c":"popup","sig":"IHM_CENTRER_POPUP([VUE : STRING]) : BOOL","r":"BOOL","s":"Ramène une popup au milieu de la vue.","st":"IHM_CENTRER_POPUP();","p":[["VUE","STRING","la popup (sans : celle du dessus)",true]]},{"n":"IHM_FERMER_POPUP","c":"popup","sig":"IHM_FERMER_POPUP([VUE : STRING]) : BOOL","r":"BOOL","s":"Ferme la popup du dessus (ou celle-ci).","st":"IHM_FERMER_POPUP();","p":[["VUE","STRING","la popup (sans : celle du dessus)",true]]},{"n":"IHM_FERMER_POPUPS","c":"popup","sig":"IHM_FERMER_POPUPS() : BOOL","r":"BOOL","s":"Ferme toutes les popups.","st":"IHM_FERMER_POPUPS();","p":[]},{"n":"IHM_POPUP_OUVERTE","c":"popup","sig":"IHM_POPUP_OUVERTE(VUE : STRING) : BOOL","r":"BOOL","s":"Vrai si cette popup est ouverte.","st":"IF NOT IHM_POPUP_OUVERTE('Popup_Aide') THEN IHM_POPUP('Popup_Aide'); END_IF","p":[["VUE","STRING","la popup",false]]},{"n":"IHM_JOURNAL","c":"journal","sig":"IHM_JOURNAL(MESSAGE : STRING) : BOOL","r":"BOOL","s":"Écrit une ligne dans le journal de la séance.","st":"IHM_JOURNAL('Passage en maintenance à {IHM_TEMPS():t}');","p":[["MESSAGE","STRING","{Variable} ou {Variable:0.0} y met sa valeur",false]]},{"n":"IHM_LOG","c":"journal","sig":"IHM_LOG(NIVEAU : NIVEAU_LOG; MESSAGE : STRING) : BOOL","r":"BOOL","s":"Écrit une ligne dans la Console : l'heure, le niveau, la source et la ligne du code.","st":"IHM_LOG(WARNING, 'Pression haute : {Pression:0.00} bar');","p":[["NIVEAU","NIVEAU_LOG","TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR, CRITICAL",false],["MESSAGE","STRING","{Variable} y met sa valeur",false]]},{"n":"IHM_APPELER","c":"script","sig":"IHM_APPELER(SCRIPT : STRING) : BOOL","r":"BOOL","s":"Exécute tout de suite un script général.","st":"IHM_APPELER('Recalcul');","p":[["SCRIPT","STRING","un script général",false]]},{"n":"IHM_TEMPS","c":"script","sig":"IHM_TEMPS() : TIME","r":"TIME","s":"Le temps écoulé depuis le lancement de l'IHM.","st":"IF IHM_TEMPS() > T#10s THEN ... END_IF","p":[]},{"n":"IHM_UTILISATEUR","c":"user","sig":"IHM_UTILISATEUR() : STRING","r":"STRING","s":"L'identifiant de l'utilisateur connecté ('' sans).","st":"IF IHM_UTILISATEUR() = '' THEN IHM_MENU_CONNEXION(); END_IF","p":[]},{"n":"IHM_NOM_UTILISATEUR","c":"user","sig":"IHM_NOM_UTILISATEUR() : STRING","r":"STRING","s":"Le nom de l'utilisateur connecté.","st":"Bienvenue := CONCAT('Bonjour ', IHM_NOM_UTILISATEUR());","p":[]},{"n":"IHM_GROUPE","c":"user","sig":"IHM_GROUPE() : STRING","r":"STRING","s":"Le groupe de l'utilisateur connecté.","st":"Admin := IHM_GROUPE() = 'Maintenance';","p":[]},{"n":"IHM_NIVEAU","c":"user","sig":"IHM_NIVEAU() : INT","r":"INT","s":"Le niveau d'accès de l'utilisateur connecté : 0 si personne ne l'est ; sans gestion des utilisateurs, 99 (tous les droits).","st":"Reglage_Permis := IHM_NIVEAU() >= 2;","p":[]},{"n":"IHM_DECONNECTER","c":"user","sig":"IHM_DECONNECTER() : BOOL","r":"BOOL","s":"Déconnecte l'utilisateur.","st":"IHM_DECONNECTER();","p":[]},{"n":"IHM_MENU_CONNEXION","c":"user","sig":"IHM_MENU_CONNEXION([ONGLET : STRING]) : BOOL","r":"BOOL","s":"Ouvre le menu natif de connexion (sur cet onglet, s'il se voit).","st":"IHM_MENU_CONNEXION('Mon compte');","p":[["ONGLET","STRING","Comptes, Accès, Journal, Mon compte",true]]},{"n":"IHM_METTRE_DE_COTE","c":"alarme","sig":"IHM_METTRE_DE_COTE(ALARME : STRING; [MINUTES : REAL]; [RAISON : STRING]) : INT","r":"INT","s":"Met une alarme de côté : elle n'apparaît plus jusqu'à la fin du délai ; rend le nombre mis de côté.","st":"IHM_METTRE_DE_COTE('Pression_Haute', 30.0, 'Capteur en réparation');","p":[["ALARME","STRING","une alarme, ou 'groupe:Zone'",false],["MINUTES","REAL","0 : sans limite",true],["RAISON","STRING","pour le journal",true]]},{"n":"IHM_REMETTRE","c":"alarme","sig":"IHM_REMETTRE(ALARME : STRING) : INT","r":"INT","s":"Remet en service une alarme mise de côté.","st":"IHM_REMETTRE('*');","p":[["ALARME","STRING","'*' : toutes",false]]},{"n":"IHM_FAIRE_TAIRE","c":"alarme","sig":"IHM_FAIRE_TAIRE() : BOOL","r":"BOOL","s":"Coupe le son des alarmes jusqu'à la prochaine apparition.","st":"IHM_FAIRE_TAIRE();","p":[]},{"n":"IHM_LANGUE","c":"affichage","sig":"IHM_LANGUE(LANGUE : STRING) : BOOL","r":"BOOL","s":"Change la langue de l'IHM ; vrai si elle est connue (Configuration › Langues).","st":"IHM_LANGUE('en');","p":[["LANGUE","STRING","un code ('en'), un nom ('English') ou 'suivante'",false]]},{"n":"IHM_THEME","c":"affichage","sig":"IHM_THEME([THEME : STRING]) : BOOL","r":"BOOL","s":"Change le thème de l'IHM.","st":"IHM_THEME('nuit');","p":[["THEME","STRING","'jour', 'nuit' ; sans : l'autre",true]]},{"n":"IHM_PARAMETRES_SYSTEME","c":"affichage","sig":"IHM_PARAMETRES_SYSTEME([ONGLET : STRING]) : BOOL","r":"BOOL","s":"Ouvre le menu natif Paramètres système.","st":"IHM_PARAMETRES_SYSTEME('Diagnostic');","p":[["ONGLET","STRING","'Diagnostic' ; sinon Réglages",true]]},{"n":"IHM_SON","c":"affichage","sig":"IHM_SON(SON : STRING) : BOOL","r":"BOOL","s":"Joue un son des ressources.","st":"IHM_SON('Bip.wav');","p":[["SON","STRING","un son des ressources (WAV, MP3, OGG)",false]]},{"n":"IHM_GIF_JOUER","c":"gif","sig":"IHM_GIF_JOUER(OBJET : STRING; [TOURS : INT]) : BOOL","r":"BOOL","s":"Joue un GIF animé ; en pause, il reprend là où il s'était arrêté.","st":"IHM_GIF_JOUER('Vue_Ligne.Gif_Convoyeur');","p":[["OBJET","STRING","le GIF de la vue (ou d'une popup ouverte)",false],["TOURS","INT","0 : sans fin",true]]},{"n":"IHM_GIF_PAUSE","c":"gif","sig":"IHM_GIF_PAUSE(OBJET : STRING) : BOOL","r":"BOOL","s":"Fige un GIF animé sur l'image montrée.","st":"IHM_GIF_PAUSE('Vue_Ligne.Gif_Convoyeur');","p":[["OBJET","STRING","le GIF",false]]},{"n":"IHM_GIF_ARRETER","c":"gif","sig":"IHM_GIF_ARRETER(OBJET : STRING) : BOOL","r":"BOOL","s":"Ramène un GIF à sa première image ; il attend.","st":"IHM_GIF_ARRETER('Vue_Ligne.Gif_Convoyeur');","p":[["OBJET","STRING","le GIF",false]]},{"n":"IHM_GIF_REJOUER","c":"gif","sig":"IHM_GIF_REJOUER(OBJET : STRING; TOURS : INT) : BOOL","r":"BOOL","s":"Rejoue un GIF depuis le début, pour ce nombre de tours.","st":"IHM_GIF_REJOUER('Vue_Ligne.Gif_Convoyeur', 3);","p":[["OBJET","STRING","le GIF",false],["TOURS","INT","0 : sans fin",false]]},{"n":"IHM_EQUIPEMENT_OK","c":"equip","sig":"IHM_EQUIPEMENT_OK(EQUIPEMENT : STRING) : BOOL","r":"BOOL","s":"Vrai si l'équipement est actif et répond.","st":"Voyant_Reseau := IHM_EQUIPEMENT_OK('Variateur_ATV320');","p":[["EQUIPEMENT","STRING","Configuration › Équipements",false]]},{"n":"IHM_EQUIPEMENT_PING","c":"equip","sig":"IHM_EQUIPEMENT_PING(EQUIPEMENT : STRING) : REAL","r":"REAL","s":"Le dernier ping de l'équipement, en ms (-1 : pas de réponse).","st":"Latence := IHM_EQUIPEMENT_PING('Variateur_ATV320');","p":[["EQUIPEMENT","STRING","l'équipement",false]]},{"n":"IHM_ESCLAVE_SIMULE","c":"equip","sig":"IHM_ESCLAVE_SIMULE(EQUIPEMENT : STRING) : BOOL","r":"BOOL","s":"Vrai si l'IHM lit cet équipement sur son esclave simulé.","st":"Bandeau_Simule := IHM_ESCLAVE_SIMULE('Centrale_PM5560');","p":[["EQUIPEMENT","STRING","l'équipement",false]]},{"n":"IHM_EXPORTER","c":"export","sig":"IHM_EXPORTER(SOURCE : STRING; [FICHIER : STRING]; [DEMANDER : BOOL]) : BOOL","r":"BOOL","s":"Exporte des données dans exports/ du projet.","st":"IHM_EXPORTER('alarmes', 'alarmes_du_jour.xlsx');","p":[["SOURCE","STRING","alarmes, historique, evenements, systeme, mesures, recette:Nom, objet:Nom",false],["FICHIER","STRING","l'extension choisit le format (.csv, .xlsx, .pdf)",true],["DEMANDER","BOOL","FALSE : ne jamais demander où enregistrer",true]]},{"n":"RGB","c":"couleur","sig":"RGB(R : INT; G : INT; B : INT) : STRING","r":"STRING","s":"La couleur de ces trois composantes : '#RRGGBB'.","st":"Fond := RGB(46, 204, 113);","p":[["R","INT","le rouge, 0 à 255",false],["G","INT","le vert, 0 à 255",false],["B","INT","le bleu, 0 à 255",false]]},{"n":"RGBA","c":"couleur","sig":"RGBA(R : INT; G : INT; B : INT; A : INT) : STRING","r":"STRING","s":"La couleur et son opacité : '#RRGGBBAA'.","st":"Voile := RGBA(0, 0, 0, 128);","p":[["R","INT","le rouge, 0 à 255",false],["G","INT","le vert",false],["B","INT","le bleu",false],["A","INT","l'opacité, 0 (transparent) à 255",false]]},{"n":"HSL","c":"couleur","sig":"HSL(H : REAL; S : REAL; L : REAL) : STRING","r":"STRING","s":"La couleur d'une teinte, d'une saturation et d'une luminosité.","st":"Teinte := HSL(Niveau * 1.2, 80.0, 50.0);","p":[["H","REAL","la teinte, 0 à 360°",false],["S","REAL","la saturation, 0 à 100 %",false],["L","REAL","la luminosité, 0 à 100 %",false]]},{"n":"COULEUR_MELANGER","c":"couleur","sig":"COULEUR_MELANGER(C1 : STRING; C2 : STRING; T : REAL) : STRING","r":"STRING","s":"Le mélange de deux couleurs (opacité comprise).","st":"Milieu := COULEUR_MELANGER('#000000', '#FFFFFF', 0.5);","p":[["C1","STRING","la première couleur",false],["C2","STRING","la seconde",false],["T","REAL","0 : C1 ; 1 : C2 ; 0.5 : à mi-chemin",false]]},{"n":"COULEUR_DEGRADE","c":"couleur","sig":"COULEUR_DEGRADE(V : REAL; MIN : REAL; MAX : REAL; C1 : STRING; C2 : STRING) : STRING","r":"STRING","s":"La couleur d'une valeur sur un dégradé : C1 à MIN, C2 à MAX, entre les deux au prorata.","st":"Couleur_Barre := COULEUR_DEGRADE(Niveau, 0.0, 100.0, '#2ECC71', '#E74C3C');","p":[["V","REAL","la valeur",false],["MIN","REAL","la valeur de C1",false],["MAX","REAL","la valeur de C2",false],["C1","STRING","la couleur à MIN",false],["C2","STRING","la couleur à MAX",false]]},{"n":"COULEUR_ECLAIRCIR","c":"couleur","sig":"COULEUR_ECLAIRCIR(C : STRING; P : REAL) : STRING","r":"STRING","s":"La couleur mêlée de blanc : 100 % donne du blanc.","st":"Survol := COULEUR_ECLAIRCIR(Fond, 20.0);","p":[["C","STRING","la couleur",false],["P","REAL","de combien, 0 à 100 %",false]]},{"n":"COULEUR_ASSOMBRIR","c":"couleur","sig":"COULEUR_ASSOMBRIR(C : STRING; P : REAL) : STRING","r":"STRING","s":"La couleur mêlée de noir : 100 % donne du noir.","st":"Appui := COULEUR_ASSOMBRIR(Fond, 20.0);","p":[["C","STRING","la couleur",false],["P","REAL","de combien, 0 à 100 %",false]]},{"n":"COULEUR_OPACITE","c":"couleur","sig":"COULEUR_OPACITE(C : STRING; P : REAL) : STRING","r":"STRING","s":"La même couleur, avec cette opacité : '#RRGGBBAA'.","st":"Voile := COULEUR_OPACITE('#000000', 40.0);","p":[["C","STRING","la couleur",false],["P","REAL","l'opacité, 0 (transparent) à 100 %",false]]},{"n":"COULEUR_CONTRASTE","c":"couleur","sig":"COULEUR_CONTRASTE(C : STRING) : STRING","r":"STRING","s":"Le noir ou le blanc, celui qui se lit le mieux sur ce fond.","st":"Couleur_Texte := COULEUR_CONTRASTE(Fond);","p":[["C","STRING","la couleur du fond",false]]},{"n":"COULEUR_ROUGE","c":"couleur","sig":"COULEUR_ROUGE(C : STRING) : INT","r":"INT","s":"Le rouge d'une couleur, 0 à 255.","st":"R := COULEUR_ROUGE(Fond);","p":[["C","STRING","la couleur",false]]},{"n":"COULEUR_VERT","c":"couleur","sig":"COULEUR_VERT(C : STRING) : INT","r":"INT","s":"Le vert d'une couleur, 0 à 255.","st":"G := COULEUR_VERT(Fond);","p":[["C","STRING","la couleur",false]]},{"n":"COULEUR_BLEU","c":"couleur","sig":"COULEUR_BLEU(C : STRING) : INT","r":"INT","s":"Le bleu d'une couleur, 0 à 255.","st":"B := COULEUR_BLEU(Fond);","p":[["C","STRING","la couleur",false]]},{"n":"COULEUR_ALPHA","c":"couleur","sig":"COULEUR_ALPHA(C : STRING) : INT","r":"INT","s":"L'opacité d'une couleur, 0 (transparent) à 255 ; 255 sans opacité écrite.","st":"A := COULEUR_ALPHA(Fond);","p":[["C","STRING","la couleur",false]]},{"n":"RANDOM","c":"alea","sig":"RANDOM() : REAL","r":"REAL","s":"Un réel au hasard, de 0 (compris) à 1 (exclu).","st":"IF RANDOM() < 0.1 THEN Panne := TRUE; END_IF   (* une fois sur dix *)","p":[]},{"n":"RANDOM_INT","c":"alea","sig":"RANDOM_INT(MIN : DINT; MAX : DINT) : DINT","r":"DINT","s":"Un entier au hasard, de MIN à MAX compris.","st":"De := RANDOM_INT(1, 6);","p":[["MIN","DINT","le plus petit",false],["MAX","DINT","le plus grand (compris)",false]]},{"n":"RANDOM_REAL","c":"alea","sig":"RANDOM_REAL(MIN : REAL; MAX : REAL) : REAL","r":"REAL","s":"Un réel au hasard, de MIN (compris) à MAX (exclu).","st":"Mesure_Simulee := RANDOM_REAL(18.0, 22.0);","p":[["MIN","REAL","le plus petit",false],["MAX","REAL","la borne haute (exclue)",false]]},{"n":"RANDOM_SEED","c":"alea","sig":"RANDOM_SEED(N : DINT) : BOOL","r":"BOOL","s":"Fait repartir la suite : la même graine donne les mêmes nombres (pour rejouer un essai).","st":"RANDOM_SEED(42);","p":[["N","DINT","la graine",false]]},{"n":"MAINTENANT","c":"date","sig":"MAINTENANT() : DATE_AND_TIME","r":"DATE_AND_TIME","s":"La date et l'heure du poste (en simulation : celles du PC), à la milliseconde.","st":"Debut := MAINTENANT();","p":[]},{"n":"DT_TO_DATE","c":"date","sig":"DT_TO_DATE(IN : DATE_AND_TIME) : DATE","r":"DATE","s":"La date d'une date et heure (à minuit).","st":"Jour := DT_TO_DATE(MAINTENANT());","p":[["IN","DATE_AND_TIME","une date et heure",false]]},{"n":"DT_TO_TOD","c":"date","sig":"DT_TO_TOD(IN : DATE_AND_TIME) : TIME_OF_DAY","r":"TIME_OF_DAY","s":"L'heure du jour d'une date et heure.","st":"Heure := DT_TO_TOD(MAINTENANT());","p":[["IN","DATE_AND_TIME","une date et heure",false]]},{"n":"CONCAT_DATE_TOD","c":"date","sig":"CONCAT_DATE_TOD(D : DATE; TOD : TIME_OF_DAY) : DATE_AND_TIME","r":"DATE_AND_TIME","s":"Une date et une heure du jour assemblées en une date et heure.","st":"Rendez_vous := CONCAT_DATE_TOD(D#2026-10-09, TOD#14:30:00);","p":[["D","DATE","la date",false],["TOD","TIME_OF_DAY","l'heure",false]]}]};
+
+// ------------------------------------------------------------ 1. les sous-onglets ------
+(function () {
+  const tabs = document.querySelectorAll('#win1 .subtabs button');
+  tabs.forEach(function (b) {
+    b.addEventListener('click', function () {
+      tabs.forEach(function (o) {
+        o.setAttribute('aria-selected', o === b ? 'true' : 'false');
+        document.getElementById(o.dataset.pane).hidden = o !== b;
+      });
+    });
+  });
+  document.querySelectorAll('#win1 td.val').forEach(function (td) {
+    td.tabIndex = 0;
+    td.title = "Ouvrir l'éditeur de valeur initiale (section 3)";
+    td.addEventListener('click', function () { openValue(td.dataset.goto); });
+    td.addEventListener('keydown', function (e) { if (e.key === 'Enter') openValue(td.dataset.goto); });
+  });
+})();
+function openValue(key) {
+  const sel = document.getElementById('vi-type');
+  if (TYPES[key]) { sel.value = key; setType(key); }
+  document.getElementById('valeur').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ------------------------------------------------------------ 2. le selecteur de natives ------
+const PROJECT_FNS = [
+  { n: 'Pourcent', c: '@vue', sig: 'Pourcent(Valeur : REAL; Max : REAL) : REAL', r: 'REAL', s: "La part de Max que fait Valeur, bornée de 0 à 100. Fonction publique de Vue_Four.", st: 'Taux := Pourcent(Niveau, Seuil_Haut);', p: [['Valeur', 'REAL', 'la mesure', false], ['Max', 'REAL', 'le maximum', false]], expr: true },
+  { n: 'CouleurNiveau', c: '@vue', sig: 'CouleurNiveau(N : REAL) : STRING', r: 'STRING', s: "La couleur d'un niveau : verte sous le seuil, rouge au-dessus. Fonction privée de Vue_Four.", st: "Voyant_Etat.Fill := CouleurNiveau(Niveau);", p: [['N', 'REAL', 'le niveau', false]], expr: true },
+  { n: 'Moyenne_Ponderee', c: '@projet', sig: 'Moyenne_Ponderee(L : LIST OF REAL; Poids : LIST OF REAL) : REAL', r: 'REAL', s: "Fonction IHM du projet (Programmation générale › Fonctions).", st: 'M := Moyenne_Ponderee(Mesures, Coefs);', p: [['L', 'LIST OF REAL', 'les valeurs', false], ['Poids', 'LIST OF REAL', 'leurs poids', false]], expr: true }
+];
+const pk = { cat: '*', typed: true, expr: false, q: '', sel: 0, shown: [] };
+function allFns() {
+  const out = PROJECT_FNS.slice();
+  NAT.fns.forEach(function (f) { out.push(f); });
+  return out;
+}
+function fits(f) {
+  // Ce qui rend un REAL, ou un nombre generique (comme IN, ANY_NUM, ANY_REAL...)
+  const r = (f.r || '').toUpperCase();
+  return r === 'REAL' || r === 'LREAL' || r.indexOf('COMME') === 0 || r.indexOf('ANY_NUM') >= 0 || r.indexOf('ANY_REAL') >= 0 || r.indexOf('UN NOMBRE') >= 0;
+}
+function isExpr(f) { return f.expr !== false && !/^IHM_(POPUP|NAVIGUER|FERMER|CHANGER|CENTRER|PRECEDENTE|SUIVANTE|ACCUEIL|APPELER|SON|DECONNECTER|MENU|EXPORTER|GIF|METTRE|REMETTRE|FAIRE)/.test(f.n); }
+function fold(s) { return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+function catTitle(id) {
+  if (id === '@vue') return 'Fonctions de Vue_Four';
+  if (id === '@projet') return 'Fonctions du projet';
+  const c = NAT.cats.find(function (x) { return x.id === id; });
+  return c ? c.t : id;
+}
+function filtered() {
+  const q = fold(pk.q);
+  return allFns().filter(function (f) {
+    if (pk.cat !== '*' && f.c !== pk.cat) return false;
+    if (pk.typed && !fits(f)) return false;
+    if (pk.expr && !isExpr(f)) return false;
+    if (q && fold(f.n + ' ' + f.s).indexOf(q) < 0) return false;
+    return true;
+  });
+}
+function renderCats() {
+  const box = document.getElementById('pk-cats');
+  const fns = allFns();
+  const count = function (id) {
+    return fns.filter(function (f) { return (id === '*' || f.c === id) && (!pk.typed || fits(f)) && (!pk.expr || isExpr(f)); }).length;
+  };
+  let html = '<button aria-pressed="' + (pk.cat === '*') + '" data-cat="*">Toutes <span>' + count('*') + '</span></button>';
+  html += '<div class="g">Ici</div>';
+  ['@vue', '@projet'].forEach(function (id) {
+    html += '<button aria-pressed="' + (pk.cat === id) + '" data-cat="' + id + '">' + esc(catTitle(id)) + ' <span>' + count(id) + '</span></button>';
+  });
+  let group = '';
+  NAT.cats.forEach(function (c) {
+    if (!fns.some(function (f) { return f.c === c.id; })) return;
+    if (c.g !== group) { group = c.g; html += '<div class="g">' + esc(group) + '</div>'; }
+    html += '<button aria-pressed="' + (pk.cat === c.id) + '" data-cat="' + c.id + '">' + esc(c.t) + ' <span>' + count(c.id) + '</span></button>';
+  });
+  box.innerHTML = html;
+  box.querySelectorAll('button').forEach(function (b) {
+    b.addEventListener('click', function () { pk.cat = b.dataset.cat; pk.sel = 0; renderPicker(); });
+  });
+}
+function shortSig(f) {
+  return f.n + '(' + (f.p || []).map(function (p) { return p[3] ? '[' + p[0] + ']' : p[0]; }).join(', ') + ')';
+}
+function renderList() {
+  const box = document.getElementById('pk-list');
+  pk.shown = filtered();
+  if (pk.sel >= pk.shown.length) pk.sel = Math.max(0, pk.shown.length - 1);
+  if (!pk.shown.length) {
+    box.innerHTML = '<div class="empty">Aucune fonction ne convient. Décoche « Rend un REAL » ou change la recherche.</div>';
+    return;
+  }
+  box.innerHTML = pk.shown.map(function (f, i) {
+    return '<button role="option" aria-selected="' + (i === pk.sel) + '" data-i="' + i + '"><b>' + esc(shortSig(f)) + '</b><small>' + esc(f.r) + ' · ' + esc(catTitle(f.c)) + '</small></button>';
+  }).join('');
+  box.querySelectorAll('button').forEach(function (b) {
+    b.addEventListener('click', function () { pk.sel = +b.dataset.i; renderList(); renderDetail(); });
+    b.addEventListener('dblclick', function () { pk.sel = +b.dataset.i; insertFn(false); });
+  });
+  const cur = box.querySelector('[aria-selected="true"]');
+  if (cur) cur.scrollIntoView({ block: 'nearest' });
+}
+function renderDetail() {
+  const box = document.getElementById('pk-detail');
+  const f = pk.shown[pk.sel];
+  if (!f) { box.innerHTML = ''; return; }
+  let html = '<div class="sig">' + esc(f.sig) + '</div><p style="margin:0">' + esc(f.s) + '</p>';
+  if (f.p && f.p.length) {
+    html += '<table aria-label="Arguments">' + f.p.map(function (p) {
+      return '<tr><td>' + esc(p[0]) + (p[3] ? ' <span class="badge">facultatif</span>' : '') + '</td><td>' + esc(p[1]) + '</td><td>' + esc(p[2]) + '</td></tr>';
+    }).join('') + '</table>';
+  }
+  html += '<div><span class="badge acc">rend ' + esc(f.r) + '</span> <span class="badge">' + esc(catTitle(f.c)) + '</span></div>';
+  if (f.st) html += '<pre class="code">' + esc(f.st) + '</pre>';
+  box.innerHTML = html;
+}
+function renderPicker() { renderCats(); renderList(); renderDetail(); }
+function openPicker() {
+  document.getElementById('veil2').hidden = false;
+  renderPicker();
+  document.getElementById('pk-search').focus();
+}
+function closePicker() {
+  document.getElementById('veil2').hidden = true;
+  document.getElementById('open-picker').focus();
+}
+function insertFn(example) {
+  const f = pk.shown[pk.sel];
+  if (!f) return;
+  const line = document.getElementById('ed2-line');
+  if (example && f.st) {
+    line.innerHTML = 'Moyenne := <span class="c">(* ' + esc(f.st) + ' *)</span>';
+  } else {
+    const args = (f.p || []).filter(function (p) { return !p[3]; }).map(function (p, i) { return '<span class="ph">' + esc(p[0]) + '</span>'; });
+    line.innerHTML = 'Moyenne := <span class="nfn">' + esc(f.n) + '</span>(' + args.join(', ') + ');<span class="caret"></span>';
+  }
+  document.getElementById('complete').hidden = true;
+  closePicker();
+}
+(function () {
+  const open = document.getElementById('open-picker');
+  open.addEventListener('click', openPicker);
+  open.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); } });
+  document.getElementById('pk-close').addEventListener('click', closePicker);
+  document.getElementById('pk-insert').addEventListener('click', function () { insertFn(false); });
+  document.getElementById('pk-ex').addEventListener('click', function () { insertFn(true); });
+  document.getElementById('pk-search').addEventListener('input', function (e) { pk.q = e.target.value; pk.sel = 0; renderPicker(); });
+  document.getElementById('pk-typed').addEventListener('click', function (e) {
+    pk.typed = !pk.typed; e.currentTarget.setAttribute('aria-pressed', pk.typed); pk.sel = 0; renderPicker();
+  });
+  document.getElementById('pk-expr').addEventListener('click', function (e) {
+    pk.expr = !pk.expr; e.currentTarget.setAttribute('aria-pressed', pk.expr); pk.sel = 0; renderPicker();
+  });
+  document.getElementById('veil2').addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { e.preventDefault(); closePicker(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); pk.sel = Math.min(pk.shown.length - 1, pk.sel + 1); renderList(); renderDetail(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); pk.sel = Math.max(0, pk.sel - 1); renderList(); renderDetail(); }
+    else if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') { e.preventDefault(); insertFn(false); }
+  });
+})();
+
+// ------------------------------------------------------------ 3. la valeur initiale ------
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+const TYPES = {
+  Constante2: {
+    name: 'Constante2', type: 'MAP[STRING] OF REAL', kind: 'map', key: 'STRING', val: 'REAL',
+    data: [['bas', '10.0'], ['haut', '30.0'], ['alarme', '45.5']],
+    tree: [['MAP', 'un dictionnaire'], ['  [STRING]', 'la clé : un texte, unique'], ['  OF REAL', 'la valeur : un réel']],
+    plain: "À chaque clé (un texte, unique) sa valeur (un réel). Les clés sont rangées dans l'ordre alphabétique : l'ordre d'écriture ne compte pas.",
+    read: "Constante2['bas'] lit une valeur. Une clé absente arrête le script : MAP_HAS(Constante2, 'x') d'abord, ou MAP_GET(Constante2, 'x', 0.0).",
+    cpp: 'std::map<std::string, float>',
+    nat: ['MAP_HAS', 'MAP_GET', 'MAP_SIZE', 'MAP_KEYS', 'MAP_VALUES', 'FOR EACH k, v IN'],
+    tpl: [
+      { l: 'Écrire les entrées', c: "VAR\n    m : MAP[STRING] OF REAL;\nEND_VAR\nm['bas'] := 10.0;\nm['haut'] := 30.0;\nm['alarme'] := m['haut'] * 1.5;\nRETURN m;", r: "['alarme' := 45.0, 'bas' := 10.0, 'haut' := 30.0]" },
+      { l: 'Une entrée par nom', c: "VAR\n    m : MAP[STRING] OF REAL;\n    noms : LIST OF STRING := ['F1', 'F2', 'F3'];\n    i : DINT;\nEND_VAR\nFOR i := 0 TO noms.Count - 1 DO\n    m[noms[i]] := 20.0 + i * 5.0;\nEND_FOR\nRETURN m;", r: "['F1' := 20.0, 'F2' := 25.0, 'F3' := 30.0]" },
+      { l: "Partir d'une autre constante", c: "VAR\n    m : MAP[STRING] OF REAL;\nEND_VAR\nm := Reglages.Seuils;          (* une copie *)\nMAP_SET(m, 'alarme', Vue_Four.Seuil_Haut);\nRETURN m;", r: "['alarme' := 85.0, 'bas' := 10.0, 'haut' := 30.0]" }
+    ]
+  },
+  Cuves: {
+    name: 'Cuves', type: 'LIST OF T_Cuve', kind: 'list', members: [['Nom', 'STRING', "''"], ['Niveau', 'REAL', '0.0'], ['Capacite', 'REAL', '0.0']],
+    data: [{ Nom: "'Cuve A'", Niveau: '2.5', Capacite: '10.0' }, { Nom: "'Cuve B'", Niveau: '', Capacite: '12.0' }],
+    tree: [['LIST', 'une liste, dans l’ordre'], ['  OF T_Cuve', 'une structure IHM'], ['    .Nom', 'STRING'], ['    .Niveau', 'REAL'], ['    .Capacite', 'REAL']],
+    plain: "Des T_Cuve dans l'ordre, de 0 à Count - 1. Elle grandit et rétrécit en marche. Un membre laissé vide garde la valeur du type.",
+    read: "Cuves[0].Nom ; Cuves.Count ; Cuves.First ; FOR EACH c IN Cuves DO … END_FOR.",
+    cpp: 'std::list<T_Cuve>   // ou std::vector',
+    nat: ['LIST_ADD', 'LIST_REMOVE_AT', 'LIST_FIND_IF', 'LIST_SORT_BY', 'LIST_COUNT'],
+    tpl: [
+      { l: 'Quatre cuves numérotées', c: "VAR\n    l : LIST OF T_Cuve;\n    c : T_Cuve;\n    i : DINT;\nEND_VAR\nFOR i := 1 TO 4 DO\n    c.Nom := CONCAT('Cuve ', TO_STRING(i));\n    c.Capacite := 10.0 * i;\n    LIST_ADD(l, c);\nEND_FOR\nRETURN l;", r: "[(Nom := 'Cuve 1', Niveau := 0.0, Capacite := 10.0), (Nom := 'Cuve 2', …), (Nom := 'Cuve 3', …), (Nom := 'Cuve 4', Niveau := 0.0, Capacite := 40.0)]" },
+      { l: 'Écrire les éléments', c: "RETURN [(Nom := 'Cuve A', Niveau := 2.5, Capacite := 10.0),\n        (Nom := 'Cuve B', Capacite := 12.0)];", r: "[(Nom := 'Cuve A', Niveau := 2.5, Capacite := 10.0), (Nom := 'Cuve B', Niveau := 0.0, Capacite := 12.0)]" }
+    ]
+  },
+  Recette: {
+    name: 'Recette_Defaut', type: 'T_Recette', kind: 'struct',
+    members: [['Nom', 'STRING', "''", "'Pain'"], ['Temperature', 'REAL', '0.0', '220.0'], ['Duree', 'TIME', 'T#0s', 'T#25m'], ['Etapes', 'LIST OF STRING', '[]', "['Pétrir', 'Cuire']"]],
+    tree: [['T_Recette', 'une structure IHM'], ['  .Nom', 'STRING'], ['  .Temperature', 'REAL'], ['  .Duree', 'TIME'], ['  .Etapes', 'LIST OF STRING']],
+    plain: "Une structure : un champ par membre. Un membre laissé vide garde la valeur du type (écrite en gris).",
+    read: "Recette_Defaut.Nom ; Recette_Defaut.Etapes[0] ; une copie : r := Recette_Defaut.",
+    cpp: 'struct T_Recette { std::string Nom; float Temperature; … };',
+    nat: ['TO_STRING', 'LIST_ADD', 'CONCAT'],
+    tpl: [
+      { l: 'Remplir membre par membre', c: "VAR\n    r : T_Recette;\nEND_VAR\nr.Nom := 'Pain';\nr.Temperature := 220.0;\nr.Duree := T#25m;\nLIST_ADD(r.Etapes, 'Pétrir');\nLIST_ADD(r.Etapes, 'Cuire');\nRETURN r;", r: "(Nom := 'Pain', Temperature := 220.0, Duree := T#25m, Etapes := ['Pétrir', 'Cuire'])" },
+      { l: 'Le littéral', c: "RETURN (Nom := 'Pain', Temperature := 220.0, Duree := T#25m);", r: "(Nom := 'Pain', Temperature := 220.0, Duree := T#25m, Etapes := [])" }
+    ]
+  },
+  Paliers: {
+    name: 'Paliers', type: 'ARRAY[0..4] OF REAL', kind: 'array', low: 0, high: 4, elem: 'REAL',
+    data: ['0.0', '25.0', '50.0', '75.0', '100.0'],
+    tree: [['ARRAY[0..4]', 'un tableau de 5 cases, indices 0 à 4'], ['  OF REAL', 'chaque case : un réel']],
+    plain: "Cinq cases, toujours cinq : leur nombre ne change pas en marche. Une case laissée vide vaut 0.0.",
+    read: "Paliers[2] ; Paliers.Length (5) ; Paliers.Low (0), Paliers.High (4).",
+    cpp: 'std::array<float, 5>',
+    nat: ['IOTA', 'LIST_SUM', 'LIST_AVG', 'LOWER_BOUND', 'UPPER_BOUND'],
+    tpl: [
+      { l: 'Une suite (IOTA)', c: "VAR\n    t : ARRAY[0..4] OF REAL;\nEND_VAR\nIOTA(t, 0.0, 25.0);        (* 0, 25, 50, 75, 100 *)\nRETURN t;", r: '[0.0, 25.0, 50.0, 75.0, 100.0]' },
+      { l: "Jusqu'au seuil de la vue", c: "VAR\n    t : ARRAY[0..4] OF REAL;\nEND_VAR\nIOTA(t, 0.0, Seuil_Haut / 4.0);\nRETURN t;", r: '[0.0, 21.25, 42.5, 63.75, 85.0]' }
+    ]
+  },
+  Codes: {
+    name: 'Codes_Defaut', type: 'SET OF STRING', kind: 'set', elem: 'STRING',
+    data: ['E12', 'E07', 'E12', 'A01'],
+    tree: [['SET', 'un ensemble'], ['  OF STRING', 'chaque valeur une seule fois']],
+    plain: "Chaque valeur une seule fois, rangée : un doublon disparaît, l'ordre d'écriture ne compte pas.",
+    read: "SET_HAS(Codes_Defaut, 'E07') ; Codes_Defaut.Count ; FOR EACH c IN Codes_Defaut (dans l'ordre).",
+    cpp: 'std::set<std::string>',
+    nat: ['SET_ADD', 'SET_HAS', 'SET_REMOVE', 'SET_UNION', 'SET_INTERSECTION'],
+    tpl: [{ l: 'Ajouter une à une', c: "VAR\n    s : SET OF STRING;\nEND_VAR\nSET_ADD(s, 'E12');\nSET_ADD(s, 'E07');\nSET_ADD(s, 'E12');      (* deja la : rien ne change *)\nRETURN s;", r: "['E07', 'E12']" }]
+  },
+  Dernieres: {
+    name: 'Dernieres', type: 'RING[5] OF REAL', kind: 'ring', cap: 5, elem: 'REAL',
+    data: ['1.5', '3.0', '4.5', '6.0', '7.5', '9.0', '10.5'],
+    tree: [['RING[5]', 'un tampon : les 5 dernières valeurs'], ['  OF REAL', 'chaque valeur : un réel']],
+    plain: "Au plus cinq valeurs ; plein, la plus ancienne part quand une nouvelle arrive. Écrire plus de cinq valeurs n'en garde que les cinq dernières.",
+    read: "Dernieres.Count ; Dernieres.Capacity (aussi MaxSize) ; Dernieres.Full ; LIST_AVG(Dernieres).",
+    cpp: 'std::deque<float>   // borné à 5',
+    nat: ['RING_ADD', 'LIST_AVG', 'LIST_MIN', 'LIST_MAX'],
+    tpl: [{ l: 'Sept valeurs, cinq gardées', c: "VAR\n    r : RING[5] OF REAL;\n    i : DINT;\nEND_VAR\nFOR i := 1 TO 7 DO\n    RING_ADD(r, i * 1.5);\nEND_FOR\nRETURN r;             (* 4.5 ... 10.5 *)", r: '[4.5, 6.0, 7.5, 9.0, 10.5]' }]
+  },
+  Mode: {
+    name: 'Mode_Defaut', type: 'T_MODE', kind: 'enum', values: [['Arret', 0, 'Arrêt'], ['Auto', 1, 'Automatique'], ['Manu', 2, 'Manuel']], data: 'Auto',
+    tree: [['T_MODE', 'une énumération IHM'], ['  #Arret', '0 · Arrêt'], ['  #Auto', '1 · Automatique'], ['  #Manu', '2 · Manuel']],
+    plain: "Une valeur parmi trois, écrite par son nom. Son nombre sert pour un équipement ; son texte pour l'écran.",
+    read: "IF Mode_Defaut = T_MODE#Auto THEN … ; TO_STRING(Mode_Defaut) donne « Automatique ».",
+    cpp: 'enum class T_MODE { Arret = 0, Auto = 1, Manu = 2 };',
+    nat: ['TO_STRING', 'TO_DINT', 'SEL'],
+    tpl: [{ l: 'Selon un réglage', c: "IF Reglages.DemarrageAuto THEN\n    RETURN T_MODE#Auto;\nEND_IF\nRETURN T_MODE#Arret;", r: 'T_MODE#Auto' }]
+  },
+  Delai: {
+    name: 'Delai', type: 'TIME', kind: 'time', data: { h: '0', m: '1', s: '30', ms: '250' },
+    tree: [['TIME', 'une durée']],
+    plain: "Une durée, écrite T#… : des heures, minutes, secondes et millisecondes. Elle s'additionne à une autre durée, se compare, se divise.",
+    read: "IF IHM_TEMPS() - Debut > Delai THEN … ; TO_DINT(Delai) en millisecondes.",
+    cpp: 'std::chrono::milliseconds',
+    nat: ['TO_TIME', 'TO_DINT', 'IHM_TEMPS'],
+    tpl: [{ l: 'Depuis des secondes', c: "RETURN TO_TIME(Reglages.Delai_s * 1000);   (* des ms *)", r: 'T#1m30s' }]
+  },
+  Point: {
+    name: 'Point_Zero', type: 'TUPLE(STRING, REAL)', kind: 'tuple', items: [['Item1', 'STRING'], ['Item2', 'REAL']], data: ["'Origine'", '0.0'],
+    tree: [['TUPLE', 'des valeurs de types fixes, dans l’ordre'], ['  Item1', 'STRING'], ['  Item2', 'REAL']],
+    plain: "Deux valeurs liées, chacune son type. Elles se lisent par leur rang : Item1, Item2.",
+    read: "Point_Zero.Item1 ; Point_Zero.Item2 ; TUPLE_TO_STRING(Point_Zero).",
+    cpp: 'std::tuple<std::string, float>',
+    nat: ['TUPLE_GET', 'TUPLE_SET', 'TUPLE_TO_STRING'],
+    tpl: [{ l: 'Le littéral', c: "RETURN ('Origine', 0.0);", r: "('Origine', 0.0)" }]
+  },
+  Seuil: {
+    name: 'Seuil_Haut', type: 'REAL', kind: 'scalar', data: '85.0',
+    tree: [['REAL', 'un réel 32 bits (environ 7 chiffres significatifs)']],
+    plain: "Un nombre à virgule. Écris 85.0 (le point décimal), ou 8.5E1.",
+    read: "IF Niveau > Seuil_Haut THEN … ; ailleurs : Vue_Four.Seuil_Haut.",
+    cpp: 'float',
+    nat: ['LIMIT', 'MIN', 'MAX', 'ROUND'],
+    tpl: [{ l: "D'un autre réglage", c: "RETURN Reglages.Seuils['haut'] * 1.5;", r: '45.0' }]
+  }
+};
+const vi = { key: 'Constante2', mode: 'raw', tpl: 0, code: '' };
+function setType(key) {
+  vi.key = key; vi.tpl = 0; vi.code = TYPES[key].tpl[0].c;
+  const t = TYPES[key];
+  document.getElementById('vi-title').textContent = 'Valeur initiale de ' + t.name;
+  document.getElementById('vi-pill').textContent = t.type;
+  renderVI();
+}
+function setMode(m) {
+  vi.mode = m;
+  document.getElementById('vi-raw').setAttribute('aria-pressed', m === 'raw');
+  document.getElementById('vi-code').setAttribute('aria-pressed', m === 'code');
+  document.getElementById('vi-tocode').hidden = m === 'code';
+  document.getElementById('vi-hint').textContent = m === 'raw'
+    ? 'Le littéral ci-dessus est ce qui sera enregistré. Ctrl+Z reprend la valeur appliquée.'
+    : "Le code tourne au démarrage (ou à l'ouverture) ; son résultat devient la valeur. L'aperçu le refait à chaque frappe.";
+  renderVI();
+}
+function num(v) { return v !== '' && !isNaN(Number(v)); }
+function literal(t) {
+  switch (t.kind) {
+    case 'map': {
+      const seen = {}; const out = [];
+      t.data.forEach(function (r) { if (r[0] !== '') seen[r[0]] = r[1] === '' ? '0.0' : r[1]; });
+      Object.keys(seen).sort().forEach(function (k) { out.push("'" + k + "' := " + seen[k]); });
+      return '[' + out.join(', ') + ']';
+    }
+    case 'list':
+      return '[' + t.data.map(function (o) {
+        return '(' + t.members.filter(function (m) { return o[m[0]] !== ''; }).map(function (m) { return m[0] + ' := ' + o[m[0]]; }).join(', ') + ')';
+      }).join(', ') + ']';
+    case 'struct':
+      return '(' + t.members.filter(function (m) { return m[3] !== ''; }).map(function (m) { return m[0] + ' := ' + m[3]; }).join(', ') + ')';
+    case 'array': return '[' + t.data.map(function (v) { return v === '' ? '0.0' : v; }).join(', ') + ']';
+    case 'set': {
+      const u = Array.from(new Set(t.data.filter(function (v) { return v !== ''; }))).sort();
+      return '[' + u.map(function (v) { return "'" + v + "'"; }).join(', ') + ']';
+    }
+    case 'ring': return '[' + t.data.slice(-t.cap).join(', ') + ']';
+    case 'enum': return t.name === 'Mode_Defaut' ? 'T_MODE#' + t.data : t.data;
+    case 'time': {
+      const d = t.data; let s = 'T#';
+      if (+d.h) s += d.h + 'h'; if (+d.m) s += d.m + 'm'; if (+d.s) s += d.s + 's'; if (+d.ms) s += d.ms + 'ms';
+      return s === 'T#' ? 'T#0s' : s;
+    }
+    case 'tuple': return '(' + t.data.join(', ') + ')';
+    default: return t.data;
+  }
+}
+function problems(t) {
+  const out = [];
+  if (t.kind === 'map') {
+    const keys = {};
+    t.data.forEach(function (r) {
+      if (r[0] === '') out.push(['warn', 'une ligne sans clé ne compte pas']);
+      else if (keys[r[0]]) out.push(['err', "la clé '" + r[0] + "' est écrite deux fois : la dernière gagne"]);
+      keys[r[0]] = 1;
+      if (r[1] !== '' && !num(r[1])) out.push(['err', "'" + r[1] + "' n'est pas un REAL"]);
+    });
+  }
+  if (t.kind === 'array' || t.kind === 'ring') t.data.forEach(function (v, i) { if (v !== '' && !num(v)) out.push(['err', '[' + i + '] : ' + v + " n'est pas un REAL"]); });
+  if (t.kind === 'set') {
+    const n = t.data.filter(function (v) { return v !== ''; }).length - new Set(t.data.filter(function (v) { return v !== ''; })).size;
+    if (n) out.push(['warn', n + ' doublon' + (n > 1 ? 's' : '') + ' : gardé une seule fois']);
+  }
+  if (t.kind === 'ring' && t.data.length > t.cap) out.push(['warn', (t.data.length - t.cap) + ' valeur(s) au-delà de la capacité : les plus anciennes partent']);
+  if (t.kind === 'list') t.data.forEach(function (o, i) { ['Niveau', 'Capacite'].forEach(function (m) { if (o[m] !== '' && !num(o[m])) out.push(['err', '[' + i + '].' + m + " : '" + o[m] + "' n'est pas un REAL"]); }); });
+  return out;
+}
+function rawEditor(t) {
+  const L = document.getElementById('vi-left');
+  let h = '';
+  switch (t.kind) {
+    case 'map':
+      h += '<div class="rowedit"><div class="r hdr" style="grid-template-columns:1fr 1fr 70px"><span>Clé (' + t.key + ')</span><span>Valeur (' + t.val + ')</span><span></span></div>';
+      t.data.forEach(function (r, i) {
+        h += '<div class="r" style="grid-template-columns:1fr 1fr 70px"><input class="f mono" id="mk' + i + '" data-i="' + i + '" data-c="0" value="' + esc(r[0]) + '" aria-label="Clé ' + (i + 1) + '"><input class="f mono' + (r[1] !== '' && !num(r[1]) ? ' bad' : '') + '" id="mv' + i + '" data-i="' + i + '" data-c="1" value="' + esc(r[1]) + '" aria-label="Valeur ' + (i + 1) + '"><button class="btn small" data-del="' + i + '">Retirer</button></div>';
+      });
+      h += '</div><div class="toolbar"><button class="btn small" id="add">+ Entrée</button><button class="btn small" id="sort">Ranger par clé</button><span class="badge">les clés sont rangées à l’enregistrement</span></div>';
+      break;
+    case 'list':
+      t.data.forEach(function (o, i) {
+        h += '<div class="card"><div class="h"><b>Cuves[' + i + ']</b> T_Cuve<span style="margin-left:auto"></span><button class="btn small" data-up="' + i + '">Monter</button><button class="btn small" data-del="' + i + '">Retirer</button></div><div class="rowedit">';
+        t.members.forEach(function (m) {
+          h += '<div class="r" style="grid-template-columns:110px 80px 1fr"><span class="mono">.' + m[0] + '</span><span class="mono" style="color:var(--accent)">' + m[1] + '</span><input class="f mono" id="l' + i + m[0] + '" data-i="' + i + '" data-m="' + m[0] + '" value="' + esc(o[m[0]]) + '" placeholder="' + esc(m[2]) + ' (du type)" aria-label="' + m[0] + ' de Cuves[' + i + ']"></div>';
+        });
+        h += '</div></div>';
+      });
+      h += '<div class="toolbar"><button class="btn small" id="add">+ Élément</button><span class="badge">un membre vide : la valeur du type</span></div>';
+      break;
+    case 'struct':
+      h += '<div class="rowedit"><div class="r hdr" style="grid-template-columns:120px 130px 1fr"><span>Membre</span><span>Type</span><span>Valeur</span></div>';
+      t.members.forEach(function (m, i) {
+        h += '<div class="r" style="grid-template-columns:120px 130px 1fr"><span class="mono">.' + m[0] + '</span><span class="mono" style="color:var(--accent)">' + m[1] + '</span><input class="f mono" id="s' + i + '" data-i="' + i + '" value="' + esc(m[3]) + '" placeholder="' + esc(m[2]) + ' (du type)" aria-label="' + m[0] + '"></div>';
+      });
+      h += '</div>';
+      break;
+    case 'array':
+      h += '<div class="rowedit"><div class="r hdr" style="grid-template-columns:60px 1fr"><span>Indice</span><span>Valeur (REAL)</span></div>';
+      t.data.forEach(function (v, i) {
+        h += '<div class="r" style="grid-template-columns:60px 1fr"><span class="mono">[' + (t.low + i) + ']</span><input class="f mono' + (v !== '' && !num(v) ? ' bad' : '') + '" id="a' + i + '" data-i="' + i + '" value="' + esc(v) + '" placeholder="0.0" aria-label="Case ' + (t.low + i) + '"></div>';
+      });
+      h += '</div><div class="toolbar"><button class="btn small" id="fill0">Tout à 0</button><button class="btn small" id="iota">Suite : de 0, pas de 25</button><span class="badge">5 cases, toujours</span></div>';
+      break;
+    case 'set':
+    case 'ring':
+      h += '<div class="rowedit">';
+      t.data.forEach(function (v, i) {
+        const gone = t.kind === 'ring' && i < t.data.length - t.cap;
+        const dup = t.kind === 'set' && t.data.indexOf(v) < i;
+        h += '<div class="r" style="grid-template-columns:60px 1fr 120px"><span class="mono' + (gone ? ' dropped' : '') + '">' + (i + 1) + '</span><input class="f mono" id="e' + i + '" data-i="' + i + '" value="' + esc(v) + '" aria-label="Valeur ' + (i + 1) + '"><span>' + (gone ? '<span class="badge warn">partira</span>' : dup ? '<span class="badge warn">doublon</span>' : '') + '</span></div>';
+      });
+      h += '</div><div class="toolbar"><button class="btn small" id="add">+ Valeur</button>' + (t.kind === 'ring' ? '<span class="badge">capacité 5 : les 5 dernières restent</span>' : '<span class="badge">rangées, sans doublon</span>') + '</div>';
+      break;
+    case 'enum':
+      h += '<div class="rowedit">' + t.values.map(function (v) {
+        return '<label class="r" style="grid-template-columns:24px 120px 40px 1fr;cursor:pointer"><input type="radio" name="enumv" id="ev' + v[0] + '" value="' + v[0] + '"' + (t.data === v[0] ? ' checked' : '') + '><span class="mono">#' + v[0] + '</span><span class="mono" style="color:var(--muted)">' + v[1] + '</span><span>' + esc(v[2]) + '</span></label>';
+      }).join('') + '</div>';
+      break;
+    case 'time':
+      h += '<div class="rowedit"><div class="r" style="grid-template-columns:repeat(4, 1fr)">' + [['h', 'heures'], ['m', 'minutes'], ['s', 'secondes'], ['ms', 'millisecondes']].map(function (p) {
+        return '<label style="display:grid;gap:2px;font-size:12px;color:var(--muted)">' + p[1] + '<input class="f mono" id="tm' + p[0] + '" data-p="' + p[0] + '" value="' + esc(t.data[p[0]]) + '" inputmode="numeric"></label>';
+      }).join('') + '</div></div>';
+      break;
+    case 'tuple':
+      h += '<div class="rowedit">' + t.items.map(function (it, i) {
+        return '<div class="r" style="grid-template-columns:80px 90px 1fr"><span class="mono">' + it[0] + '</span><span class="mono" style="color:var(--accent)">' + it[1] + '</span><input class="f mono" id="tu' + i + '" data-i="' + i + '" value="' + esc(t.data[i]) + '" aria-label="' + it[0] + '"></div>';
+      }).join('') + '</div>';
+      break;
+    default:
+      h += '<div class="rowedit"><div class="r" style="grid-template-columns:90px 1fr"><span class="mono" style="color:var(--accent)">' + t.type + '</span><input class="f mono" id="sc" value="' + esc(t.data) + '" aria-label="Valeur"></div></div>';
+  }
+  const probs = problems(t);
+  h += '<div><div class="eyebrow" style="margin-bottom:4px">Le littéral enregistré</div><div class="lit" id="lit">' + esc(literal(t)) + '</div></div>';
+  h += '<div class="state">' + (probs.length ? probs.map(function (p) { return '<span class="badge ' + p[0] + '">' + esc(p[1]) + '</span>'; }).join('') : '<span class="badge ok">bon pour ' + esc(t.type) + '</span>') + '</div>';
+  L.innerHTML = h;
+  wireRaw(t);
+}
+function wireRaw(t) {
+  const L = document.getElementById('vi-left');
+  const again = function (focusId) { rawEditor(t); if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch (e) {} } } };
+  L.querySelectorAll('input.f').forEach(function (inp) {
+    inp.addEventListener('input', function () {
+      const i = +inp.dataset.i;
+      if (t.kind === 'map') t.data[i][+inp.dataset.c] = inp.value;
+      else if (t.kind === 'list') t.data[i][inp.dataset.m] = inp.value;
+      else if (t.kind === 'struct') t.members[i][3] = inp.value;
+      else if (t.kind === 'array' || t.kind === 'set' || t.kind === 'ring') t.data[i] = inp.value;
+      else if (t.kind === 'time') t.data[inp.dataset.p] = inp.value;
+      else if (t.kind === 'tuple') t.data[i] = inp.value;
+      else t.data = inp.value;
+      again(inp.id);
+    });
+  });
+  L.querySelectorAll('input[name="enumv"]').forEach(function (r) { r.addEventListener('change', function () { t.data = r.value; again(r.id); }); });
+  L.querySelectorAll('[data-del]').forEach(function (b) { b.addEventListener('click', function () { t.data.splice(+b.dataset.del, 1); again(); }); });
+  L.querySelectorAll('[data-up]').forEach(function (b) { b.addEventListener('click', function () { const i = +b.dataset.up; if (i > 0) { const x = t.data[i]; t.data[i] = t.data[i - 1]; t.data[i - 1] = x; } again(); }); });
+  const add = document.getElementById('add');
+  if (add) add.addEventListener('click', function () {
+    if (t.kind === 'map') t.data.push(['', '']);
+    else if (t.kind === 'list') t.data.push({ Nom: '', Niveau: '', Capacite: '' });
+    else t.data.push('');
+    again();
+  });
+  const sort = document.getElementById('sort');
+  if (sort) sort.addEventListener('click', function () { t.data.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }); again(); });
+  const f0 = document.getElementById('fill0');
+  if (f0) f0.addEventListener('click', function () { t.data = t.data.map(function () { return '0.0'; }); again(); });
+  const io = document.getElementById('iota');
+  if (io) io.addEventListener('click', function () { t.data = t.data.map(function (v, i) { return (i * 25).toFixed(1); }); again(); });
+}
+function codeEditor(t) {
+  const L = document.getElementById('vi-left');
+  const tp = t.tpl[vi.tpl];
+  let h = '<div class="tpls"><span style="font-size:12.5px;color:var(--muted);align-self:center">Partir d’un exemple :</span>' + t.tpl.map(function (x, i) {
+    return '<button class="chip" data-tpl="' + i + '" aria-pressed="' + (i === vi.tpl) + '">' + esc(x.l) + '</button>';
+  }).join('') + '</div>';
+  h += '<div class="codebox"><div class="fixed"><span class="k">FUNCTION</span> Init_' + esc(t.name) + ' : ' + esc(t.type) + '   <span class="c">(* fixe : le type de la constante *)</span></div>';
+  h += '<textarea class="f" id="vi-src" spellcheck="false" aria-label="Le code de la valeur initiale">' + esc(vi.code) + '</textarea>';
+  h += '<div class="fixed"><span class="k">END_FUNCTION</span></div></div>';
+  h += '<div class="state"><span class="badge ok">rend ' + esc(t.type) + '</span><span class="badge fx">calculée au démarrage</span><span style="color:var(--muted)">Ctrl+Espace : l’aide à la saisie, et « Choisir une fonction… »</span></div>';
+  h += '<div><div class="eyebrow" style="margin-bottom:4px">Valeur au démarrage (aperçu)</div><div class="lit">' + esc(tp.r) + '</div></div>';
+  L.innerHTML = h;
+  L.querySelectorAll('[data-tpl]').forEach(function (b) {
+    b.addEventListener('click', function () { vi.tpl = +b.dataset.tpl; vi.code = t.tpl[vi.tpl].c; renderVI(); });
+  });
+  document.getElementById('vi-src').addEventListener('input', function (e) { vi.code = e.target.value; });
+}
+function explain(t) {
+  const R = document.getElementById('vi-right');
+  let h = '<div class="eyebrow">Le type, expliqué</div>';
+  h += '<div class="ttree">' + t.tree.map(function (n) { return '<div>' + esc(n[0]).replace(/ /g, '&nbsp;') + ' <span>· ' + esc(n[1]) + '</span></div>'; }).join('') + '</div>';
+  h += '<p style="margin:0">' + esc(t.plain) + '</p>';
+  h += '<div class="eg"><b style="font-size:12px">Le lire</b><span>' + esc(t.read) + '</span></div>';
+  h += '<div class="eg"><b style="font-size:12px">En C++</b><code>' + esc(t.cpp) + '</code></div>';
+  h += '<div class="eg"><b style="font-size:12px">Les natives qui vont avec</b><div class="natchips">' + t.nat.map(function (n) { return '<code>' + esc(n) + '</code>'; }).join('') + '</div></div>';
+  if (vi.mode === 'code') h += '<div class="eg"><b style="font-size:12px">Le code</b><span>Une fonction qui rend un ' + esc(t.type) + '. Elle lit les constantes et les variables déjà prêtes (Reglages.Seuils, Vue_Four.Seuil_Haut) ; un mauvais type rendu est dit à sa ligne, avant d’appliquer.</span></div>';
+  R.innerHTML = h;
+}
+function renderVI() {
+  const t = TYPES[vi.key];
+  if (vi.mode === 'raw') rawEditor(t); else codeEditor(t);
+  explain(t);
+}
+function toCode(t) {
+  const lit = literal(t);
+  return '(* le brut, en code : a ajuster *)\nRETURN ' + lit + ';';
+}
+(function () {
+  const sel = document.getElementById('vi-type');
+  sel.innerHTML = Object.keys(TYPES).map(function (k) { return '<option value="' + k + '">' + esc(TYPES[k].name + ' : ' + TYPES[k].type) + '</option>'; }).join('');
+  sel.addEventListener('change', function () { setType(sel.value); });
+  document.getElementById('vi-raw').addEventListener('click', function () { setMode('raw'); });
+  document.getElementById('vi-code').addEventListener('click', function () { setMode('code'); });
+  document.getElementById('vi-tocode').addEventListener('click', function () {
+    const t = TYPES[vi.key];
+    vi.code = toCode(t);
+    vi.tpl = -1;
+    vi.mode = 'code';
+    document.getElementById('vi-raw').setAttribute('aria-pressed', 'false');
+    document.getElementById('vi-code').setAttribute('aria-pressed', 'true');
+    document.getElementById('vi-tocode').hidden = true;
+    const L = document.getElementById('vi-left');
+    codeEditorFrom(t, literal(t));
+    explain(t);
+  });
+  setType('Constante2');
+})();
+function codeEditorFrom(t, result) {
+  // "Passer en code" : le code part du brut ; l'apercu est le brut lui-meme.
+  const saved = t.tpl;
+  t.tpl = [{ l: 'Depuis le brut', c: vi.code, r: result }].concat(saved.filter(function (x) { return x.l !== 'Depuis le brut'; }));
+  vi.tpl = 0;
+  codeEditor(t);
+}
+
+// ------------------------------------------------------------ 4. std:: ------
+const STD = [
+  ['<cmath>', 'CEIL', 'CEIL(IN : REAL) : REAL', 'Nb := CEIL(Volume / 20.0);', 'std::ceil', "Arrondir au-dessus : un nombre de bacs, de pas.", 1],
+  ['<cmath>', 'FLOOR', 'FLOOR(IN : REAL) : REAL', 'Plein := FLOOR(Volume / 20.0);', 'std::floor', "Arrondir au-dessous (ROUND et TRUNC existent déjà).", 1],
+  ['<cmath>', 'FMOD', 'FMOD(X : REAL; Y : REAL) : REAL', 'Angle := FMOD(Angle + 15.0, 360.0);', 'std::fmod', "Le reste d'une division réelle (MOD n'accepte que des entiers).", 1],
+  ['<cmath>', 'HYPOT', 'HYPOT(X : REAL; Y : REAL) : REAL', 'Distance := HYPOT(Dx, Dy);', 'std::hypot', "La longueur d'un vecteur, sans débordement.", 1],
+  ['<cmath>', 'ATAN2', 'ATAN2(Y : REAL; X : REAL) : REAL', 'Cap := ATAN2(Dy, Dx) * 180.0 / NUMBERS.PI;', 'std::atan2', "L'angle d'un point, dans le bon quadrant (ATAN seul se trompe de moitié).", 1],
+  ['<cmath>', 'LERP', 'LERP(A : REAL; B : REAL; T : REAL) : REAL', 'Couleur_Pct := LERP(0.0, 100.0, Avance);', 'std::lerp (C++20)', "Interpoler entre deux valeurs : une mise à l'échelle, une animation.", 1],
+  ['<cmath>', 'ISNAN, ISFINITE', 'ISNAN(IN : REAL) : BOOL', 'IF ISNAN(Mesure) THEN Defaut := TRUE; END_IF', 'std::isnan, std::isfinite', "Un capteur en défaut rend NaN : le dire au lieu de l'afficher.", 1],
+  ['<cmath>', 'SIGN', 'SIGN(IN : REAL) : INT', 'Sens := SIGN(Vitesse);   (* -1, 0 ou 1 *)', 'std::signbit', "Le sens d'une vitesse, d'un écart.", 0],
+  ['<cmath>', 'LOG2', 'LOG2(IN : REAL) : REAL', 'Bits := CEIL(LOG2(Plage));', 'std::log2', "Le nombre de bits d'une plage (LN et LOG existent).", 0],
+  ['<string>', 'STARTS_WITH, ENDS_WITH', "STARTS_WITH(S : STRING; DEBUT : STRING) : BOOL", "IF STARTS_WITH(Code, 'E') THEN … END_IF", 's.starts_with (C++20)', "Trier des codes d'alarme, des noms de fichiers.", 1],
+  ['<string>', 'CONTAINS', 'CONTAINS(S : STRING; PARTIE : STRING) : BOOL', "Trouve := CONTAINS(Message, 'défaut');", 's.contains (C++23)', "Plus lisible que FIND(…) > 0.", 1],
+  ['<string>', 'TRIM, TRIM_LEFT, TRIM_RIGHT', 'TRIM(S : STRING) : STRING', 'Nom := TRIM(Saisie);', 'std::ranges + isspace', "Les espaces d'une saisie au clavier virtuel, d'un fichier.", 1],
+  ['<format>', 'FORMAT', "FORMAT(MODELE : STRING; …) : STRING", "Txt := FORMAT('{:.1f} bar à {}', Pression, Poste);", 'std::format (C++20)', "Composer un texte dans un script, comme les textes à trous des objets.", 1],
+  ['<chrono>', 'YEAR, MONTH, DAY, HOUR, MINUTE, SECOND', 'YEAR(DT : DATE_AND_TIME) : INT', 'IF HOUR(MAINTENANT()) >= 22 THEN … END_IF', 'std::chrono::year_month_day, hh_mm_ss', "Les parties d'une date et heure, sans passer par un texte.", 1],
+  ['<chrono>', 'WEEKDAY', 'WEEKDAY(DT : DATE_AND_TIME) : INT', 'Weekend := WEEKDAY(MAINTENANT()) >= 6;', 'std::chrono::weekday', "Le jour de la semaine (1 lundi … 7 dimanche) : un planning.", 1],
+  ['<chrono>', 'ADD_DAYS, DAYS_BETWEEN', 'ADD_DAYS(DT : DATE_AND_TIME; N : DINT) : DATE_AND_TIME', 'Echeance := ADD_DAYS(Livraison, 30);', 'std::chrono::sys_days', "Une échéance, un âge en jours.", 1],
+  ['<chrono>', 'FORMAT_DT', "FORMAT_DT(DT : DATE_AND_TIME; MODELE : STRING) : STRING", "Txt := FORMAT_DT(MAINTENANT(), '%d/%m %H:%M');", 'std::format + chrono', "Écrire une date à la française.", 1],
+  ['<algorithm>', 'LIST_LOWER_BOUND, LIST_BINARY_SEARCH', 'LIST_LOWER_BOUND(L : LIST; VALEUR : T) : DINT', 'i := LIST_LOWER_BOUND(Paliers, Niveau);', 'std::lower_bound, std::binary_search', "Chercher vite dans une liste triée (une table de paliers). LOWER_BOUND garde son sens : la borne d'un tableau.", 1],
+  ['<algorithm>', 'LIST_TRANSFORM', "LIST_TRANSFORM(L : LIST; T : TRANSFORMATION, ou une fonction du projet) : LIST", "Kelvins := LIST_TRANSFORM(Celsius, 'VersKelvin');", 'std::ranges::transform', "Appliquer une fonction à chaque élément ; une fonction du projet en argument, comme une lambda.", 1],
+  ['<algorithm>', 'LIST_SHUFFLE', 'LIST_SHUFFLE(L : LIST) : BOOL', 'LIST_SHUFFLE(Ordre_Essai);', 'std::shuffle', "Un ordre au hasard (avec RANDOM_SEED : rejouable).", 0],
+  ['<algorithm>', 'SET_SYMMETRIC_DIFFERENCE, SET_INCLUDES', 'SET_INCLUDES(A : SET; B : SET) : BOOL', 'Tout_Pret := SET_INCLUDES(Postes_Prets, Postes_Requis);', 'std::set_symmetric_difference, std::includes', "Comparer deux ensembles : ce qui change, ce qui manque.", 1],
+  ['statistiques', 'LIST_MEDIAN, LIST_VARIANCE, LIST_STDDEV', 'LIST_MEDIAN(L : LIST OF nombres) : REAL', 'Filtree := LIST_MEDIAN(Dernieres);', 'std::nth_element + calcul', "Une médiane filtre une mesure bruitée mieux qu'une moyenne (hors std, très demandé).", 1],
+  ['interpolation', 'INTERPOLER_TABLE', 'INTERPOLER_TABLE(X : LIST OF REAL; Y : LIST OF REAL; V : REAL) : REAL', 'Debit := INTERPOLER_TABLE(Ouvertures, Debits, Ouverture);', 'std::lower_bound + std::lerp', "La courbe d'une vanne, d'un capteur : une table de points (hors std, très courant).", 1],
+  ['<random>', 'RANDOM_NORMAL', 'RANDOM_NORMAL(MOYENNE : REAL; ECART : REAL) : REAL', 'Mesure := Consigne + RANDOM_NORMAL(0.0, 0.2);', 'std::normal_distribution', "Un bruit réaliste pour un esclave simulé.", 1],
+  ['<random>', 'RANDOM_CHOICE', 'RANDOM_CHOICE(L : LIST) : comme les éléments', 'Recette := RANDOM_CHOICE(Recettes);', 'std::sample (1 élément)', "Tirer un élément d'une liste.", 0],
+  ['<bit>', 'BYTESWAP, WORDSWAP', 'BYTESWAP(IN : WORD, DWORD) : comme IN', 'Valeur := BYTESWAP(Brut);', 'std::byteswap (C++23)', "L'ordre des octets d'un équipement Modbus qui ne suit pas la norme.", 1],
+  ['<bit>', 'HAS_SINGLE_BIT, BIT_WIDTH', 'HAS_SINGLE_BIT(IN : ANY_INT) : BOOL', 'Un_Seul := HAS_SINGLE_BIT(Etats);', 'std::has_single_bit, std::bit_width', "Un seul défaut actif dans un mot d'état.", 0],
+  ['<utility>', 'SWAP', 'SWAP(A : T; B : T)', 'SWAP(Cuve_Haute, Cuve_Basse);', 'std::swap', "Échanger deux variables sans troisième.", 1],
+  ['<utility>', 'EXCHANGE', 'EXCHANGE(X : T; NOUVELLE : T) : T', 'Ancienne := EXCHANGE(Etat, Nouvel_Etat);', 'std::exchange', "Écrire et garder l'ancienne valeur : un front, un changement d'état.", 1]
+];
+function renderStd() {
+  const tb = document.getElementById('std-table');
+  let h = '<thead><tr><th></th><th>ST</th><th>Signature</th><th>Exemple</th><th>C++</th><th>Pour quoi faire dans une IHM</th></tr></thead><tbody>';
+  let grp = '';
+  STD.forEach(function (r, i) {
+    if (r[0] !== grp) { grp = r[0]; h += '<tr class="grp"><td colspan="6">' + esc(grp) + '</td></tr>'; }
+    h += '<tr><td><input type="checkbox" id="std' + i + '" data-i="' + i + '"' + (r[7] ? ' checked' : '') + ' aria-label="Ajouter ' + esc(r[1]) + '"></td><td class="n">' + esc(r[1]) + (r[6] ? ' <span class="badge ok">recommandée</span>' : '') + '</td><td class="ex" style="color:var(--fg)">' + esc(r[2]) + '</td><td class="ex">' + esc(r[3]) + '</td><td class="cpp">' + esc(r[4]) + '</td><td>' + esc(r[5]) + '</td></tr>';
+  });
+  tb.innerHTML = h + '</tbody>';
+  tb.querySelectorAll('input').forEach(function (c) { c.addEventListener('change', function () { STD[+c.dataset.i][7] = c.checked ? 1 : 0; countStd(); }); });
+  countStd();
+}
+function countStd() {
+  const n = STD.filter(function (r) { return r[7]; }).length;
+  document.getElementById('std-count').textContent = n + ' cochée' + (n > 1 ? 's' : '') + ' sur ' + STD.length;
+}
+(function () {
+  STD.forEach(function (r) { r[7] = r[6]; });
+  renderStd();
+  document.getElementById('std-all').addEventListener('click', function () { STD.forEach(function (r) { r[7] = 1; }); renderStd(); });
+  document.getElementById('std-rec').addEventListener('click', function () { STD.forEach(function (r) { r[7] = r[6]; }); renderStd(); });
+  document.getElementById('std-copy').addEventListener('click', function () {
+    const text = 'std:: retenues : ' + STD.filter(function (r) { return r[7]; }).map(function (r) { return r[1]; }).join(' ; ');
+    const out = document.getElementById('std-out');
+    const msg = document.getElementById('std-msg');
+    const shown = function () { out.hidden = false; out.value = text; out.focus(); out.select(); msg.textContent = 'Sélectionnée : copie-la (Ctrl+C).'; };
+    try {
+      navigator.clipboard.writeText(text).then(function () { out.hidden = false; out.value = text; msg.textContent = 'Copiée.'; }, shown);
+    } catch (e) { shown(); }
+  });
+})();
+</script>
