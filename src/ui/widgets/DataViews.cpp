@@ -1953,8 +1953,12 @@ void TableView::onPaint(const PaintContext& ctx) {
             }
             // Lot recherche : les mots cherches, surlignes sous le texte.
             if (!highlight_.empty()) paintHighlights(ctx, text, tx, r.y, rowH, avail, font);
-            drawMaybeBold(ctx, {tx, r.y + textY}, text, font,
-                          textColourOf(ctx.theme, st, selected), avail, st.bold);
+            // 1.12.16 (T4) : une case vide montre son texte d'attente, en gris.
+            if (text.empty() && !st.placeholder.empty())
+                drawMaybeBold(ctx, {tx, r.y + textY}, st.placeholder, font, selected ? c.selectionText : c.textMuted, avail, false);
+            else
+                drawMaybeBold(ctx, {tx, r.y + textY}, text, font,
+                              textColourOf(ctx.theme, st, selected), avail, st.bold);
             // Lot 20 : une case refusee au collage - un cadre rouge.
             if (!marks_.empty() && markOf(row, static_cast<int>(col), MarkKind::Refused))
                 ctx.r.strokeRect({x + 1.f, r.y + 1.f, cellW - 2.f, rowH - 2.f}, c.error, 1.5f);

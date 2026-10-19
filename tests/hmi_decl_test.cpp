@@ -2071,6 +2071,145 @@ void calculees() {
               "une constante calculee : juste dans un script ; refusee dans une fonction");
     }
 }
+
+// ------------------------------------- 1.12.16 (T4) : le code qui rend la valeur initiale ----
+//  FUNCTION Init_<Nom> : <type> - l'en-tete fixe ; le code RENVOIE la valeur (RETURN, ou Init_<Nom> :=
+//  comme en ST classique) ; le style 1.12.7 (le code ecrit la declaration) tourne tel quel ; un retour du
+//  mauvais type est refuse, a sa ligne (le moteur, Generer, l'analyse de la fenetre).
+void calculeesRetour11216() {
+    std::printf("-- 1.12.16 (T4) : le code qui rend la valeur initiale (RETURN, Init_Nom :=, le style 1.12.7)\n");
+    const auto withCalc = [](Project& p, const std::string& name, const std::string& type, const std::string& calc,
+                             std::vector<Declaration> locals = {}) {
+        p.programs.scripts[0].decls.push_back(computedDecl(DeclKind::Constant, name, type, calc, std::move(locals)));
+        uniqueDeclarationIds(p);
+        return p.programs.scripts[0].decls.size() - 1;
+    };
+    const auto value = [](const Project& p, const std::string& name, std::string* error = nullptr) {
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        if (error) *error = rt.startError();
+        const auto o = rt.computedValue(p.programs.scripts[0].id, name);
+        return o ? sim::display(*o) : std::string("rien");
+    };
+    // Le code qui tourne : la fonction Init_Nom sur la ligne 1, ses lignes gardees, puis Nom := Init_Nom().
+    {
+        Project p = calcProject();
+        const std::size_t k = withCalc(p, "Double", "REAL", "(* le double de Base *)\nRETURN Base * 2.0;\n");
+        const auto& d = p.programs.scripts[0].decls[k];
+        check(calc::initName(d) == "Init_Double" && calc::returnsValue(d), "Init_Double : le calcul rend sa valeur (RETURN)");
+        const std::string body = calc::bodyOf(d);
+        check(body.rfind("FUNCTION Init_Double : REAL; (* le double de Base *)\nRETURN Base * 2.0;\nEND_FUNCTION\nDouble := Init_Double();", 0) == 0,
+              "le corps : la fonction a l'en-tete fixe, puis Double := Init_Double()\n" + body);
+        const std::string code = calc::runnableCode(p.programs.scripts[0], d);
+        const auto at = code.find("FUNCTION Init_Double : REAL;");
+        check(at != std::string::npos && code.find('\n') > at && code.find("VAR CONSTANT Base : REAL := 10.0;") != std::string::npos,
+              "le code complet : les declarations puis la fonction, sur la ligne 1 du calcul\n" + code);
+        // Le style 1.12.7 : tel quel.
+        const auto& seuils = p.programs.scripts[0].decls[1];
+        check(!calc::returnsValue(seuils) && calc::bodyOf(seuils) == seuils.calc
+                  && calc::runnableCode(p.programs.scripts[0], seuils).find("FUNCTION") == std::string::npos,
+              "le style 1.12.7 (Seuils[...] := ...) : le calcul tel quel, sans fonction");
+        Declaration bare = computedDecl(DeclKind::Constant, "B", "INT", "B := 1;\nIF B > 0 THEN\n    RETURN;\nEND_IF\nB := 2;\n");
+        check(!calc::returnsValue(bare), "un RETURN seul (sortir) : le style 1.12.7");
+    }
+    // Le moteur : RETURN, plusieurs RETURN, une MAP rendue par sa locale, Init_Nom :=, le style 1.12.7 a cote.
+    {
+        Project p = calcProject();
+        withCalc(p, "Double", "REAL", "RETURN Base * 2.0;\n");
+        withCalc(p, "Choix", "REAL", "IF Base > 5.0 THEN\n    RETURN 1.0;\nEND_IF\nRETURN 2.0;\n");
+        withCalc(p, "Table", "MAP[STRING] OF REAL", "m['bas'] := Base;\nm['haut'] := Base * 3.0;\nRETURN m;\n",
+                 {declared(DeclKind::Variable, "m", "MAP[STRING] OF REAL", "")});
+        withCalc(p, "Plus", "REAL", "Init_Plus := Base + 1.0;\n");
+        withCalc(p, "Paliers", "ARRAY[0..4] OF REAL", "IOTA(t, 0.0, Base * 2.5);\nRETURN t;\n",
+                 {declared(DeclKind::Variable, "t", "ARRAY[0..4] OF REAL", "")});
+        withCalc(p, "Litteral", "LIST OF STRING", "RETURN ['a', 'b'];\n");
+        std::string error;
+        check(value(p, "Double", &error) == "20" && error.empty(), "RETURN Base * 2.0 : 20 - " + value(p, "Double") + " " + error);
+        check(value(p, "Choix") == "1", "deux RETURN : le premier qui passe (1) - " + value(p, "Choix"));
+        check(value(p, "Table") == "{'bas': 10, 'haut': 30}", "une MAP faite dans sa locale, rendue : " + value(p, "Table"));
+        check(value(p, "Plus") == "11", "Init_Plus := Base + 1.0 (le ST classique) : 11 - " + value(p, "Plus"));
+        check(value(p, "Paliers") == "[0, 25, 50, 75, 100]", "IOTA dans une locale, rendue : " + value(p, "Paliers"));
+        check(value(p, "Litteral") == "['a', 'b']", "un litteral rendu : " + value(p, "Litteral"));
+        check(value(p, "Seuils") == "{'bas': 10, 'haut': 30, 'moyen': 20}" && value(p, "Total") == "40",
+              "le style 1.12.7 tourne a cote, inchange : Seuils, Total = " + value(p, "Total"));
+        // Les controles du projet acceptent les deux styles.
+        std::string bad;
+        for (const auto& i : generate(p, [](std::string_view) { return false; }))
+            if (i.category == "Script" && i.severity == Issue::Severity::Error) bad += "G " + i.property + " : " + i.message + "\n";
+        for (const auto& i : compile(p))
+            if (i.category == "Script" && i.severity == Issue::Severity::Error) bad += "C " + i.property + " : " + i.message + "\n";
+        check(bad.empty(), "Generer et Compiler : aucune erreur (RETURN, Init_Nom :=, le style 1.12.7)\n" + bad);
+        const auto a = calc::analyse(p, p.programs.scripts[0], p.programs.scripts[0].decls.back());
+        check(a.assigns && !a.hasError(), "l'analyse : un calcul qui rend sa valeur la donne (pas d'avertissement \xC2\xAB ne re\xC3\xA7oit aucune valeur \xC2\xBB)");
+        const auto t = calc::analyse(p, p.programs.scripts[0], p.programs.scripts[0].decls[p.programs.scripts[0].decls.size() - 4]);
+        check(t.uses == std::vector<std::string>{"Base"}, "Table lit Base (m est sa locale)");
+    }
+    // Un retour du mauvais type : refuse a sa ligne, avec un message clair (le moteur, Generer, l'analyse).
+    {
+        Project p = calcProject();
+        const std::size_t k = withCalc(p, "Seuil", "REAL", "IF Base > 1.0 THEN\n    RETURN 'abc';\nEND_IF\nRETURN 1.0;\n");
+        const auto& d = p.programs.scripts[0].decls[k];
+        const auto issues = calc::returnIssues(p, p.programs.scripts[0], d);
+        check(issues.size() == 1 && issues[0].error && issues[0].line == 2
+                  && issues[0].message == "Init_Seuil rend un REAL : un STRING ('abc') ne va pas dans un REAL",
+              "RETURN 'abc' pour un REAL : refuse, ligne 2 - " + (issues.empty() ? std::string("rien") : issues[0].message));
+        std::string error;
+        (void)value(p, "Seuil", &error);
+        check(error.find("calcul Reglages.Seuil : ligne 2 : Init_Seuil rend un REAL") != std::string::npos,
+              "le moteur : le demarrage s'arrete, le calcul et sa ligne - " + error);
+        std::string said;
+        for (const auto& i : generate(p, [](std::string_view) { return false; }))
+            if (i.message.find("Init_Seuil") != std::string::npos) said += i.message + " @" + std::to_string(i.line) + " " + i.declaration + "\n";
+        check(said.find("calcul de Seuil, ligne 2 : Init_Seuil rend un REAL") != std::string::npos && said.find("@2 Seuil") != std::string::npos,
+              "Generer : la faute du retour, sa ligne, sa declaration\n" + said);
+        // D'autres retours mal types : une locale, une liste pour une MAP, une structure pour un nombre, une native.
+        const auto says = [&](const std::string& type, const std::string& calc, std::vector<Declaration> locals = {}) {
+            Project q = calcProject();
+            const std::size_t i = withCalc(q, "X", type, calc, std::move(locals));
+            std::string all;
+            for (const auto& is : calc::returnIssues(q, q.programs.scripts[0], q.programs.scripts[0].decls[i]))
+                all += std::to_string(is.line) + " " + is.message + "\n";
+            return all;
+        };
+        const std::string l1 = says("MAP[STRING] OF REAL", "RETURN l;\n", {declared(DeclKind::Variable, "l", "LIST OF REAL", "")});
+        check(l1 == "1 Init_X rend un MAP[STRING] OF REAL : l est un LIST OF REAL\n", "une locale LIST rendue pour une MAP - " + l1);
+        const std::string l2 = says("MAP[STRING] OF REAL", "RETURN [1.0, 2.0];\n");
+        check(l2.find("une MAP s'\xC3\xA9" "crit ['cl\xC3\xA9' := valeur") != std::string::npos, "une liste ecrite pour une MAP - " + l2);
+        const std::string l3 = says("REAL", "x := 1;\nRETURN (Nom := 'A');\n");
+        check(l3.rfind("2 Init_X rend un REAL : (Nom := 'A') est une structure", 0) == 0, "une structure pour un REAL, ligne 2 - " + l3);
+        const std::string l4 = says("REAL", "RETURN TO_STRING(Base);\n");
+        check(l4.find("TO_STRING(\xE2\x80\xA6) rend un STRING") != std::string::npos, "une native qui rend un STRING pour un REAL - " + l4);
+        const std::string l5 = says("LIST OF STRING", "Init_X := ['a' := 1];\n");
+        check(l5.find("entr\xC3\xA9" "es 'cl\xC3\xA9' := valeur (une MAP)") != std::string::npos, "Init_X := une MAP pour une LIST - " + l5);
+        const std::string ok = says("REAL", "RETURN Base * 2.0 + Total;\n") + says("MAP[STRING] OF REAL", "RETURN ['a' := 1.0];\n")
+                             + says("LIST OF STRING", "RETURN [];\n") + says("REAL", "RETURN 3;\n") + says("REAL", "RETURN (Base + 1.0) * 2.0;\n");
+        check(ok.empty(), "des retours justes (une expression, une MAP, une liste vide, un entier pour un REAL) : rien - " + ok);
+        // Le moteur refuse aussi ce qu'il voit en marche (un objet d'une autre forme rendu par une expression).
+        Project r = calcProject();
+        withCalc(r, "Y", "MAP[STRING] OF REAL", "RETURN LIST_COPY(l);\n", {declared(DeclKind::Variable, "l", "LIST OF REAL", "[1.0]")});
+        (void)value(r, "Y", &error);
+        check(error.find("calcul Reglages.Y : ligne 1") != std::string::npos && error.find("Init_Y") != std::string::npos,
+              "le moteur : une LIST rendue pour une MAP, vue en marche, a sa ligne - " + error);
+    }
+    // Une faute du code garde sa ligne (la fonction est sur la ligne 1 du calcul).
+    {
+        Project p = calcProject();
+        withCalc(p, "Z", "REAL", "x := 1;\ny := 2;\nRETURN Inconnu_Z * 2.0;\n");
+        std::string said;
+        for (const auto& i : generate(p, [](std::string_view) { return false; }))
+            if (i.message.find("Inconnu_Z") != std::string::npos) said += i.message + " @" + std::to_string(i.line) + "\n";
+        check(said.find("calcul de Z, ligne 3 : variable inexistante : Inconnu_Z") != std::string::npos && said.find("@3") != std::string::npos,
+              "Generer : le nom inconnu du calcul, ligne 3 (pas Init_Z)\n" + said);
+        check(said.find("Init_Z") == std::string::npos, "Init_Z n'est pas une variable inexistante\n" + said);
+        Project syn = calcProject();
+        withCalc(syn, "W", "REAL", "x := 1;\nRETURN (Base * 2.0;\n");
+        std::string bad;
+        for (const auto& i : compile(syn))
+            if (i.category == "Script" && i.message.find("calcul de W") != std::string::npos) bad += i.message + " @" + std::to_string(i.line) + "\n";
+        check(bad.find("calcul de W, ligne 2") != std::string::npos, "Compiler : la syntaxe d'un calcul qui rend sa valeur, sa ligne\n" + bad);
+    }
+}
 }
 
 // ------------------------------------- 1.12.16 : les constantes et fonctions des vues ----
@@ -2327,6 +2466,7 @@ int main(int argc, char** argv) {
     edition();
     persistante();
     calculees();
+    calculeesRetour11216();     // 1.12.16 (T4) : le code qui rend la valeur initiale
     vueConstantes11216();                    // 1.12.16 : les constantes et fonctions des vues et des popups
     Tally t;
     std::printf("-- le corpus : %s\n", argv[1]);

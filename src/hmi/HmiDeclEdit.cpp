@@ -1029,4 +1029,13 @@ bool setCalculation(Project& p, const Place& at, Tab t, std::size_t row, std::st
     return true;
 }
 
+bool setReopen(Project& p, const Place& at, Tab t, std::size_t row, bool on, std::string* why) {
+    Code c = locate(p, at);
+    if (!ready(c, t, why)) return false;
+    const std::size_t i = indexOf(c, t, row);
+    if (i == npos) return fail(why, "ligne " + std::to_string(row + 1) + " introuvable");
+    (*c.decls)[i].reopen = on;
+    return true;
+}
+
 } // namespace hmi::decledit

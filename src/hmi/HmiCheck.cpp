@@ -101,7 +101,7 @@ std::vector<std::pair<ScriptDiagnostic, std::string>> checkCalculations(const Sc
     for (const auto& d : sc.decls) {
         if (!d.computed || d.calc.find_first_not_of(" \t\r\n") == std::string::npos) continue;
         Script cs = sc;
-        cs.body = d.calc;
+        cs.body = calc::bodyOf(d);              // 1.12.16 : un calcul qui rend sa valeur, dans sa fonction Init_Nom
         cs.decls = calc::declarationsFor(sc, d);
         for (auto x : checkScript(cs, knownType)) {
             x.message = "calcul de " + d.name + (x.line > 0 ? ", ligne " + std::to_string(x.line) : std::string{}) + " : " + x.message;
@@ -472,7 +472,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         for (const auto& d : sc.decls) {
             if (!d.computed) continue;
             Script cs = sc;
-            cs.body = d.calc;
+            cs.body = calc::bodyOf(d);              // 1.12.16 : un calcul qui rend sa valeur, dans sa fonction Init_Nom
             cs.decls = calc::declarationsFor(sc, d);
             const std::string ccode = decl::codeOf(cs);
             const auto where = [&](int line) {

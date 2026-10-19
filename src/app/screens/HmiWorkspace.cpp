@@ -493,8 +493,24 @@ void MainAnalysisScreen::bindHmi() {
         s.line = spec.line;
         s.valueOf = spec.valueOf;
         if (!s.preview) s.preview = [info = spec.info](const std::string&, const std::string&) { return info; };
-        app_.menus().ShowDialog(std::make_unique<HmiCalcDialog>(std::move(s)), [done = std::move(done)](const menu::DialogResult& r) {
-            if (!r.accepted() || !done) return;
+        // 1.12.16 (T4) : la fenetre « Valeur initiale » - le Brut ou le Code, le type explique.
+        s.project = spec.project;
+        s.value = spec.value;
+        s.code = spec.code;
+        s.codeRefused = spec.codeRefused;
+        s.owner = spec.owner;
+        for (const auto& [n, t] : spec.readable) s.readable.push_back({n, t});
+        s.reopen = spec.reopen;
+        s.reopenForced = spec.reopenForced;
+        app_.menus().ShowDialog(std::make_unique<HmiCalcDialog>(std::move(s)),
+                                [done = std::move(done), outcome = spec.outcome, unified = spec.project != nullptr](const menu::DialogResult& r) {
+            if (!r.accepted()) return;
+            if (unified && outcome) {
+                const auto o = HmiCalcDialog::outcomeOf(r.payload);
+                outcome({o.code, o.calc, o.locals, o.value, o.reopen});
+                return;
+            }
+            if (!done) return;
             const auto v = core::splitFields(r.payload);
             done(v.empty() ? std::string{} : v[0], v.size() > 1 ? v[1] : std::string{});
         });

@@ -93,6 +93,11 @@ public:
     // locales ; l'hote ouvre la fenetre, calceditor). Faux : pas un script, pas d'hote.
     // `line` > 0 : la fenetre s'ouvre a cette ligne du code (une faute de la Console, de Compiler).
     bool editCalculation(std::size_t row, int line = 0);
+    // 1.12.16 (T4) : « Valeur initiale... » - UNE fenetre a la place d'« Elements... » et de « fx Calcul... » :
+    // le Brut (un editeur fait pour le type) ou le Code (FUNCTION Init_<Nom> : <type>, qui rend la valeur),
+    // le type explique. `mode` : -1 celui de la declaration (Code si calculee), 0 le Brut, 1 le Code.
+    // editItems et editCalculation y menent. Faux : pas de valeur ici, pas d'hote.
+    bool editInitial(std::size_t row, int mode = -1, int line = 0);
     // 1.11.19 (lot 6) : "Choisir un type..." dans la case Type - le selecteur de types (par son
     // hote, app::typepicker) ; le type choisi va a la declaration (retrouvee par son identifiant :
     // la grille a pu changer entre-temps). Sans hote : la barre le dit.

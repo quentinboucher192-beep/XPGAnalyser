@@ -4,8 +4,13 @@
 #include "HmiCalc.hpp"
 
 #include "HmiDecl.hpp"
-#include "HmiDeclEdit.hpp"   // usesIn : le code qui lit une declaration
+#include "HmiDeclEdit.hpp"   // usesIn : le code qui lit une declaration ; 1.12.16 : valueMisfit
+#include "HmiEnums.hpp"        // 1.12.16 : le type rendu (une enumeration)
+#include "HmiNatives.hpp"      // 1.12.16 : ce que rend une native
 #include "HmiScript.hpp"
+#include "HmiTypeForms.hpp"    // 1.12.16 : la forme du type rendu, un litteral dans son type
+#include "HmiTypeRegistry.hpp"
+#include "HmiTypes.hpp"
 #include "HmiSymbols.hpp"   // 1.12.16 : les constantes des vues (viewmembers)
 
 #include <algorithm>
@@ -194,7 +199,252 @@ std::vector<Declaration> declarationsFor(const Script& owner, const Declaration&
 }
 
 std::string runnableCode(const Script& owner, const Declaration& d) {
-    return decl::composeCode(d.calc, declarationsFor(owner, d), decl::Role::Script).text;
+    return decl::composeCode(bodyOf(d), declarationsFor(owner, d), decl::Role::Script).text;   // 1.12.16 : bodyOf
+}
+
+// ---- 1.12.16 : le code qui rend la valeur ----------------------------------------------------
+namespace {
+
+// Les mots qui ferment un bloc : un RETURN juste devant ne rend rien (RETURN END_IF).
+bool blockEndWord(const std::string& u) {
+    return u == "END_IF" || u == "ELSIF" || u == "ELSE" || u == "END_CASE" || u == "END_FOR" || u == "END_WHILE" || u == "UNTIL"
+        || u == "END_REPEAT" || u == "END_FUNCTION" || u == "END_TRY" || u == "CATCH";
+}
+
+// Un retour du calcul (hors de ses fonctions internes) : RETURN expr, ou Init_Nom ecrit - sa ligne et
+// le texte de l'expression rendue (vide : Init_Nom ecrit autrement, ou lu).
+struct Returned {
+    int         line{0};
+    std::string expr;
+};
+
+std::vector<Returned> returnedValues(const Declaration& d) {
+    std::vector<Returned> out;
+    const std::string_view code = d.calc;
+    const auto all = decl::lex(code);
+    const Tokens t = meaningful(all);
+    const std::string init = upper(initName(d));
+    const auto punct = [&](std::size_t i, std::string_view s) {
+        return i < t.size() && t[i]->kind == decl::TokenKind::Punct && t[i]->text(code) == s;
+    };
+    const auto wordAt = [&](std::size_t i) {
+        return i < t.size() && t[i]->kind == decl::TokenKind::Word ? upper(t[i]->text(code)) : std::string{};
+    };
+    // L'expression qui commence au jeton `from` : jusqu'au ';' de son niveau, ou au mot qui ferme un bloc.
+    const auto expressionFrom = [&](std::size_t from) {
+        int depth = 0;
+        std::size_t k = from, last = from;
+        for (; k < t.size(); ++k) {
+            if (t[k]->kind == decl::TokenKind::Punct) {
+                const auto s = t[k]->text(code);
+                if (s == "(" || s == "[") ++depth;
+                else if (s == ")" || s == "]") --depth;
+                else if (s == ";" && depth <= 0) break;
+            } else if (depth <= 0 && k > from && blockEndWord(wordAt(k))) {
+                break;
+            }
+            last = k;
+        }
+        if (k == from || from >= t.size()) return std::string{};
+        return std::string(code.substr(t[from]->begin, t[last]->end - t[from]->begin));
+    };
+    int inner = 0;
+    for (std::size_t i = 0; i < t.size(); ++i) {
+        const std::string u = wordAt(i);
+        if (u.empty()) continue;
+        if (u == "FUNCTION") {
+            ++inner;
+            continue;
+        }
+        if (u == "END_FUNCTION") {
+            if (inner > 0) --inner;
+            continue;
+        }
+        if (inner > 0 || (i > 0 && punct(i - 1, "."))) continue;
+        if (u == "RETURN") {
+            if (i + 1 >= t.size() || t[i + 1]->line != t[i]->line || punct(i + 1, ";") || blockEndWord(wordAt(i + 1))) continue;
+            out.push_back({t[i]->line, expressionFrom(i + 1)});
+        } else if (u == init) {
+            out.push_back({t[i]->line, punct(i + 1, ":=") ? expressionFrom(i + 2) : std::string{}});
+        }
+    }
+    return out;
+}
+
+std::string trimmedText(std::string_view s) {
+    const auto a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string_view::npos) return {};
+    const auto b = s.find_last_not_of(" \t\r\n");
+    return std::string(s.substr(a, b - a + 1));
+}
+
+bool identifierPath(std::string_view s) {
+    if (s.empty() || !(std::isalpha(static_cast<unsigned char>(s[0])) || s[0] == '_')) return false;
+    for (const char c : s)
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.')) return false;
+    return s.back() != '.';
+}
+
+// Un appel seul : NOM( ... ) jusqu'au bout ; son nom (vide : pas un appel seul).
+std::string calleeOf(std::string_view s) {
+    const auto open = s.find('(');
+    if (open == std::string_view::npos || open == 0 || s.back() != ')') return {};
+    const std::string name = trimmedText(s.substr(0, open));
+    if (!identifierPath(name)) return {};
+    int depth = 0;
+    for (std::size_t i = open; i < s.size(); ++i) {
+        if (s[i] == '(') ++depth;
+        else if (s[i] == ')' && --depth == 0 && i + 1 != s.size()) return {};   // (a) + (b) : une expression
+    }
+    return name;
+}
+
+// Seulement des litteraux (des nombres, des textes, TRUE, T#5s, T_MODE#Auto, les noms des membres
+// d'un litteral de structure) : le moteur peut le lire sans rien executer.
+bool onlyLiterals(std::string_view s) {
+    const auto all = decl::lex(s);
+    const Tokens t = meaningful(all);
+    for (std::size_t i = 0; i < t.size(); ++i) {
+        if (t[i]->kind != decl::TokenKind::Word) continue;
+        const std::string w(t[i]->text(s));
+        const std::string u = upper(w);
+        if (u == "TRUE" || u == "FALSE" || w.find('#') != std::string::npos) continue;
+        if (i + 1 < t.size() && t[i + 1]->kind == decl::TokenKind::Punct && t[i + 1]->text(s) == ":=") continue;
+        return false;
+    }
+    return true;
+}
+
+bool knownSimple(const Project& p, std::string_view type) {
+    return typereg::baseRegistry().byName(type) != nullptr || !types::membersOf(p, type).empty() || findEnumeration(p, type) != nullptr;
+}
+
+// Deux types qui ne vont pas l'un dans l'autre (sans l'executer : une autre forme, une autre structure,
+// une conversion interdite) ; faux : ils vont, ou on ne sait pas le dire.
+bool typesClash(const Project& p, const std::string& have, const std::string& want) {
+    if (have.empty() || want.empty() || typereg::comparable(have) == typereg::comparable(want)) return false;
+    const auto a = typeform::decompose(have), b = typeform::decompose(want);
+    if (a.form != b.form) return true;
+    if (a.form != typeform::Form::Simple) return typesClash(p, a.element, b.element);
+    if (!knownSimple(p, have) || !knownSimple(p, want)) return false;            // un DDT, un nom inconnu : on ne sait pas
+    const bool userA = typereg::baseRegistry().byName(have) == nullptr, userB = typereg::baseRegistry().byName(want) == nullptr;
+    if (userA || userB) return true;                                              // une structure, une enumeration : la meme
+    return typereg::conversion(have, want).kind == typereg::Conversion::Forbidden;
+}
+
+// Le type d'un nom (une locale, une declaration du script, Reglages.X, une variable IHM et ses membres).
+std::string nameType(const Project& p, const Script& owner, const Declaration& d, const std::string& name) {
+    if (name.find('.') == std::string::npos) {
+        if (sameWord(name, d.name) || sameWord(name, initName(d))) return d.type;
+        for (const auto& l : d.locals)
+            if (sameWord(l.name, name)) return l.type;
+        for (const auto& s : owner.decls)
+            if (sameWord(s.name, name)) return s.type;
+        if (const Variable* v = p.variable(name)) return v->type;
+        return {};
+    }
+    const std::string root = name.substr(0, name.find('.'));
+    if (!p.variable(root) && p.generalScript(root)) {
+        const Declaration* q = qualified(p, name, nullptr, nullptr, owner.id);
+        return q && name.find('.', root.size() + 1) == std::string::npos ? q->type : std::string{};
+    }
+    return p.variable(root) ? types::typeOfPath(p, name) : std::string{};
+}
+
+// Ce que rend un appel : une fonction du projet, une native au type ecrit, une conversion X_TO_Y.
+std::string callType(const Project& p, const std::string& callee) {
+    if (const HmiFunction* f = p.functionByName(callee)) return f->returnType;
+    if (const auto* nf = natives::function(callee)) {
+        const std::string r = trimmedText(nf->returns);
+        const auto* e = typereg::baseRegistry().byName(r);
+        return e && (e->category == typereg::Category::Elementary || e->category == typereg::Category::TextTime) ? r : std::string{};
+    }
+    if (const auto c = natives::conversion(callee)) return c->to;
+    return {};
+}
+
+// Pourquoi l'expression rendue ne va pas dans le type de `d` ; vide : elle va, ou on ne sait pas le dire.
+std::string returnMisfit(const Project& p, const Script& owner, const Declaration& d, const std::string& text) {
+    const std::string expr = trimmedText(text);
+    if (expr.empty()) return {};
+    const std::string& want = d.type;
+    const std::string u = upper(expr);
+    if (identifierPath(expr) && u != "TRUE" && u != "FALSE") {
+        const std::string have = nameType(p, owner, d, expr);
+        return typesClash(p, have, want) ? expr + " est un " + have : std::string{};
+    }
+    if (const std::string callee = calleeOf(expr); !callee.empty()) {
+        const std::string have = callType(p, callee);
+        return typesClash(p, have, want) ? callee + "(\xE2\x80\xA6) rend un " + have : std::string{};
+    }
+    if (expr.front() == '[' || expr.front() == '(') {
+        std::vector<std::string> items;
+        if (typeform::literalItems(expr, items)) {
+            const auto shape = typeform::decompose(want);
+            const bool simple = shape.form == typeform::Form::Simple;
+            const bool structure = simple && !types::membersOf(p, want).empty();
+            bool entries = false;                                 // 'cle' := valeur, Membre := valeur
+            for (const auto& it : items) {
+                int depth = 0;
+                for (std::size_t k = 0; k + 1 < it.size() && !entries; ++k) {
+                    if (it[k] == '(' || it[k] == '[') ++depth;
+                    else if (it[k] == ')' || it[k] == ']') --depth;
+                    else if (depth == 0 && it[k] == ':' && it[k + 1] == '=') entries = true;
+                }
+            }
+            if (expr.front() == '[') {
+                if (simple) return expr + " est une liste (entre crochets) : un " + want + " ne s'\xC3\xA9" "crit pas ainsi";
+                if (shape.form == typeform::Form::Tuple) return "un TUPLE s'\xC3\xA9" "crit entre parenth\xC3\xA8ses : (a, b), pas " + expr;
+                if (shape.form == typeform::Form::Map && !items.empty() && !entries)
+                    return expr + " est une liste : une MAP s'\xC3\xA9" "crit ['cl\xC3\xA9' := valeur, \xE2\x80\xA6]";
+                if (shape.form != typeform::Form::Map && entries)
+                    return expr + " a des entr\xC3\xA9" "es 'cl\xC3\xA9' := valeur (une MAP) : un " + want + " s'\xC3\xA9" "crit [a, b, \xE2\x80\xA6]";
+            } else if (entries && !structure) {
+                return expr + " est une structure (Membre := valeur) : un " + want + " n'a pas de membres";
+            } else if (!entries && items.size() > 1 && shape.form != typeform::Form::Tuple && !structure) {
+                return expr + " est un TUPLE : un " + want + " ne s'\xC3\xA9" "crit pas ainsi";
+            } else if (!entries && items.size() <= 1) {
+                return {};                                        // (a + b) : une expression entre parentheses
+            }
+            std::string why;
+            if (onlyLiterals(expr) && !typeform::valueFits(p, want, expr, &why)) return why.empty() ? expr + " ne va pas dans le type" : why;
+            return {};
+        }
+    }
+    return decledit::valueMisfit(p, want, expr);                 // un nombre, un texte, une duree, T_MODE#Auto
+}
+
+} // namespace
+
+std::string initName(const Declaration& d) { return "Init_" + d.name; }
+
+bool returnsValue(const Declaration& d) {
+    if (d.calc.find_first_not_of(" \t\r\n") == std::string::npos) return false;
+    return !returnedValues(d).empty();
+}
+
+std::string bodyOf(const Declaration& d) {
+    if (!returnsValue(d)) return d.calc;
+    // L'en-tete sur la ligne 1 du calcul : ses lignes ne bougent pas (une faute garde sa ligne).
+    std::string body = "FUNCTION " + initName(d) + " : " + d.type + "; " + d.calc;
+    if (body.back() != '\n') body += '\n';
+    body += "END_FUNCTION\n" + d.name + " := " + initName(d) + "();\n";
+    return body;
+}
+
+std::vector<Issue> returnIssues(const Project& p, const Script& owner, const Declaration& d) {
+    std::vector<Issue> out;
+    for (const auto& r : returnedValues(d)) {
+        const std::string why = returnMisfit(p, owner, d, r.expr);
+        if (why.empty()) continue;
+        Issue x;
+        x.error = true;
+        x.line = r.line;
+        x.message = initName(d) + " rend un " + d.type + " : " + why;
+        if (std::none_of(out.begin(), out.end(), [&](const Issue& y) { return y.line == x.line && y.message == x.message; }))
+            out.push_back(std::move(x));
+    }
+    return out;
 }
 
 const Declaration* qualified(const Project& p, std::string_view path, const Script** script, std::string* why, Id from) {
@@ -260,6 +510,7 @@ Analysis analyse(const Project& p, const Script& owner, const Declaration& d, co
         a.issues.push_back(std::move(x));
     };
     const std::string self = upper(d.name);
+    const std::string selfInit = upper(initName(d));                   // 1.12.16
     std::set<std::string> locals;
     for (const auto& l : d.locals) locals.insert(upper(l.name));
     for (const auto& v : loopVariables(code, t)) locals.insert(upper(v.name));
@@ -319,6 +570,10 @@ Analysis analyse(const Project& p, const Script& owner, const Declaration& d, co
         const bool written = assigned || (firstArg && mutating(fn)) || secondWritten;
         if (u == self) {
             if (assigned || firstArg || secondWritten) a.assigns = true;
+            i = j;
+            continue;
+        }
+        if (u == selfInit) {                                            // 1.12.16 : Init_Nom, ce que le calcul rend
             i = j;
             continue;
         }
@@ -385,6 +640,13 @@ Analysis analyse(const Project& p, const Script& owner, const Declaration& d, co
             issue(false, i, w + " est li\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9quipement " + v->equipment
                                 + " : au d\xC3\xA9marrage, elle vaut sa valeur initiale (l'\xC3\xA9quipement n'est pas encore lu)");
         i = j;
+    }
+    // 1.12.16 : un calcul qui rend sa valeur (RETURN, Init_Nom := ...) - la valeur, c'est ce qu'il rend ;
+    // un retour du mauvais type est dit a sa ligne.
+    if (returnsValue(d)) {
+        a.assigns = true;
+        for (auto& is : returnIssues(p, owner, d))
+            if (std::none_of(a.issues.begin(), a.issues.end(), [&](const Issue& y) { return y.message == is.message; })) a.issues.push_back(std::move(is));
     }
     if (!a.assigns)
         issue(false, t.size(),

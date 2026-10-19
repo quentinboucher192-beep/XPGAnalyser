@@ -553,8 +553,10 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(VRename, HmiGlyph::Text, "Renommer (F2, ou double-clic sur le nom) : ce qui la cite suit, montr\xC3\xA9 avant ; un dossier se renomme sur place", "Renommer");
     tools->add(VDuplicate, HmiGlyph::Duplicate, "Dupliquer la variable", "Dupliquer");
     tools->add(VDelete, HmiGlyph::Delete, "Supprimer la variable ou le dossier (ses variables montent d'un cran) - Ctrl+Z le rend", "Supprimer");
-    tools->add(VItems, HmiGlyph::List, "\xC3\x89" "diter les \xC3\xA9l\xC3\xA9ments de la valeur initiale (une liste, un vecteur, un tableau, un dictionnaire, "
-               "un tuple) : un par ligne", "\xC3\x89l\xC3\xA9ments\xE2\x80\xA6");
+    // 1.12.16 : la fenetre « Valeur initiale » (Brut) : un editeur fait pour le type, le type explique.
+    tools->add(VItems, HmiGlyph::List, "Valeur initiale : un \xC3\xA9" "diteur fait pour le type (une ligne par \xC3\xA9l\xC3\xA9ment, par entr\xC3\xA9" "e, par membre ; "
+               "les valeurs d'une \xC3\xA9num\xC3\xA9ration ; une dur\xC3\xA9" "e en heures, minutes, secondes), le type expliqu\xC3\xA9",
+               "Valeur initiale\xE2\x80\xA6");
     tools->separator();
     // 1.10 (chantier O) : les variables choisies dans une fenetre graphique temporaire.
     tools->add(VTrend, HmiGlyph::Trend, "Ouvrir une visualisation graphique des variables choisies (aussi au clic droit) : "
@@ -575,6 +577,8 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
         const auto* v = doc_->project.variableById(selectedVariable());
         ty::Spec s;
         // 1.12.10 (lot F) : un tableau de structures aussi - une ligne par element, son litteral (Nom := 'Cuve A', ...).
+        // 1.12.16 : la fenetre « Valeur initiale » (Brut) sait aussi une structure, une enumeration, une duree.
+        if (variableChosen() && v && app::calceditor::available()) return true;
         return variableChosen() && v && app::itemseditor::available() && (ty::isRich(v->type) || (ty::parseSpec(v->type, s) && s.array()));
     });
     tools_->setEnabledWhen(VDelete, [this] { return (selectedVariable() != kNoId && selectedPath().empty()) || !selectedFolder().empty(); });
@@ -709,9 +713,26 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
             case VDuplicate:
                 if (sel) (void)duplicateVariable(sel);
                 break;
-            case VItems:   // 1.12.2 : la valeur initiale, un element par ligne
+            case VItems:   // 1.12.2 : la valeur initiale, un element par ligne ; 1.12.16 : la fenetre « Valeur initiale », en Brut
                 if (const auto* v = doc_->project.variableById(sel)) {
                     const std::weak_ptr<int> alive = alive_;
+                    if (app::calceditor::available()) {
+                        app::calceditor::Spec spec;
+                        spec.title = "Valeur initiale de " + v->name;
+                        spec.name = v->name;
+                        spec.type = v->type;
+                        spec.constant = false;
+                        spec.project = &doc_->project;
+                        spec.value = v->initial;
+                        spec.codeRefused = "une variable IHM prend une valeur \xC3\xA9" "crite (le code calcule une constante ou une variable d'un script)";
+                        spec.outcome = [this, alive, sel](const app::calceditor::Spec::Outcome& o) {
+                            if (alive.expired() || o.code) return;
+                            std::string why;
+                            if (!setInitial(sel, o.value, &why)) say("Valeur initiale refus\xC3\xA9" "e : " + why, true);
+                        };
+                        app::calceditor::ask(std::move(spec), {});
+                        break;
+                    }
                     app::itemseditor::ask({"\xC3\x89l\xC3\xA9ments de " + v->name, v->type, v->initial}, [this, alive, sel](const std::string& text) {
                         if (alive.expired()) return;
                         std::string why;

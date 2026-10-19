@@ -47,6 +47,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <utility>
 
 namespace ui { class MultiLineText; }
 
@@ -179,6 +180,24 @@ struct Spec {
     std::function<void(ui::MultiLineText& code, std::function<std::string()> locals)> assist{};
     // Le deballage d'une locale : sa valeur initiale (vide : celle de son type) ; nulle : `why` dit pourquoi.
     std::function<sim::ObjRef(const std::string& type, const std::string& value, std::string* why)> valueOf{};
+    // ---- 1.12.16 (T4) : « VALEUR INITIALE DE ... » - EN BRUT OU EN CODE, UNE SEULE FENETRE ----
+    // `project` non nul : la fenetre a deux modes - Brut (un editeur fait pour le type) et Code (une
+    // fonction a l'en-tete fixe qui rend le type) - et le type explique a droite ; `outcome` recoit ce
+    // qui est applique. Nul : la fenetre du calcul de la 1.12.7 (`done`).
+    const hmi::Project*                          project{nullptr};
+    std::string                                  value;          // la valeur ecrite
+    bool                                         code{false};    // s'ouvre en Code (la declaration est calculee)
+    std::string                                  codeRefused;    // non vide : pas de Code ici, et pourquoi
+    std::string                                  owner;          // Reglages, Vue_Four : « Le lire » d'ailleurs
+    std::vector<std::pair<std::string, std::string>> readable;   // (nom, type) que le code peut lire
+    int                                          reopen{-1};     // -1 : pas de choix ; 0 : au demarrage ; 1 : a chaque ouverture
+    bool                                         reopenForced{false};   // une popup qui lit ses parametres
+    struct Outcome {
+        bool        code{false};
+        std::string calc, locals, value;
+        int         reopen{-1};
+    };
+    std::function<void(const Outcome&)>          outcome{};
 };
 using Done = std::function<void(const std::string& calc, const std::string& locals)>;
 using Host = std::function<void(Spec, Done)>;

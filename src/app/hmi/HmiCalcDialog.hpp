@@ -23,9 +23,26 @@
 //  « Deplacer dans Locales » (un bloc VAR colle dans le code) range ses declarations
 //  dans la grille. Appliquer rend le code et les locales (core::joinFields) ; Echap
 //  annule.
+//
+//  1.12.16 (T4) : « VALEUR INITIALE DE ... » - avec Spec::project, la meme fenetre a
+//  deux modes, comme la maquette 1.12.16 :
+//    Brut     un editeur fait pour le type (app::initvalue) : une ligne par entree
+//             d'une MAP, par element d'une liste, par case d'un tableau, par membre
+//             d'une structure ; les valeurs d'une enumeration a choisir ; une duree en
+//             heures, minutes, secondes, millisecondes ; la case vide montre la
+//             valeur du type, en gris. Dessous, le litteral enregistre et ses
+//             problemes (une faute grise Appliquer). « Passer en code » le reprend.
+//    Code fx  une fonction a l'en-tete fixe, FUNCTION Init_<Nom> : <type> - le code
+//             RENVOIE la valeur (RETURN) ; « Partir d'un exemple » (faits du type) ;
+//             ses Locales ; l'apercu en direct ; « calculee au demarrage » ou « a
+//             chaque ouverture » pour une constante de vue ou de popup.
+//  A droite, LE TYPE, EXPLIQUE : son arbre, ce qu'il est, le lire, en C++, les natives
+//  qui vont avec. Appliquer rend (core::joinFields) : le code, les locales, "code" ou
+//  "brut", la valeur ecrite, le moment du calcul (outcomeOf).
 // =============================================================================
 #pragma once
 
+#include "HmiInitModel.hpp"
 #include "HmiUnfold.hpp"
 #include "../../menu/IMenu.hpp"
 #include "../../sim/Rich.hpp"
@@ -59,6 +76,15 @@ public:
         // Le deballage d'une locale (sous la grille) : sa valeur initiale, lue dans son type (vide : celle
         // de son type) ; nulle : `why` dit pourquoi. Sans lui : pas de deballage.
         std::function<sim::ObjRef(const std::string& type, const std::string& value, std::string* why)> valueOf;
+        // ---- 1.12.16 (T4) : la valeur initiale, en brut ou en code (voir l'en-tete) ----
+        const hmi::Project*          project{nullptr};   // non nul : la fenetre a deux modes
+        std::string                  value;              // la valeur ecrite (le Brut)
+        bool                         code{false};        // s'ouvre en Code (la declaration est calculee)
+        std::string                  codeRefused;        // non vide : pas de Code ici, et pourquoi
+        std::string                  owner;              // Reglages, Vue_Four : « Le lire » d'ailleurs
+        std::vector<initvalue::Name> readable;           // ce que le code peut lire (les exemples s'en servent)
+        int                          reopen{-1};         // -1 : pas de choix ; 0 : au demarrage ; 1 : a chaque ouverture
+        bool                         reopenForced{false};   // une popup qui lit ses parametres : a chaque ouverture
     };
     // Une locale de la grille.
     struct Local {
@@ -76,6 +102,14 @@ public:
         std::vector<Problem> problems;
     };
     class LocalsModel;
+    class RawModel;
+    // 1.12.16 (T4) : ce que rend Appliquer dans la fenetre a deux modes.
+    struct Outcome {
+        bool        code{false};
+        std::string calc, locals, value;
+        int         reopen{-1};
+    };
+    [[nodiscard]] static Outcome outcomeOf(const std::string& payload);
 
     explicit HmiCalcDialog(Spec spec);
     ~HmiCalcDialog() override;
@@ -105,6 +139,34 @@ public:
     void revert();                                   // « Revenir au calcul d'origine »
     bool goToProblem(std::size_t index);             // la ligne d'un probleme, dans le code
 
+    // ---- 1.12.16 (T4) : la valeur initiale, en brut ou en code ----
+    [[nodiscard]] bool unified() const noexcept { return spec_.project != nullptr; }
+    [[nodiscard]] bool codeShown() const noexcept { return codeShown_; }      // le mode Code (sinon le Brut)
+    bool showCode(bool on);                                                   // faux : refuse (codeRefused)
+    [[nodiscard]] const initvalue::Raw& raw() const noexcept { return raw_; }
+    [[nodiscard]] std::string rawLiteral() const;                             // le litteral enregistre
+    [[nodiscard]] const std::vector<initvalue::Problem>& rawProblems() const noexcept { return rawProblems_; }
+    // Les gestes du Brut (comme la souris) : une case (Map : la valeur), une cle, + Ligne, Retirer...
+    bool setRawCell(std::size_t row, std::size_t cell, const std::string& text);
+    bool setRawKey(std::size_t row, const std::string& text);
+    bool rawAdd();
+    bool rawRemove(std::size_t row);
+    bool rawMove(std::size_t row, int delta);
+    bool rawSortByKey();
+    bool rawFillZero();
+    bool rawSequence(double start, double step);
+    bool rawChoose(int option);
+    bool rawLeaveFreeText();
+    bool toCode();                                                            // « Passer en code »
+    [[nodiscard]] const std::vector<initvalue::Template>& templates() const noexcept { return templates_; }
+    bool useTemplate(std::size_t index);                                      // « Partir d'un exemple »
+    [[nodiscard]] const initvalue::Explanation& explanation() const noexcept { return explanation_; }
+    [[nodiscard]] int reopen() const noexcept { return reopen_; }
+    bool setReopen(bool atOpen);                                              // faux : pas de choix, ou d'office
+    [[nodiscard]] const ui::TableView* rawTable() const noexcept { return rawTable_; }
+    [[nodiscard]] bool canApply() const;                                      // le Brut sans faute (le Code : toujours)
+    void apply() { finish(true); }
+
     // Les locales d'un texte (une par ligne), et le texte de locales.
     [[nodiscard]] static std::vector<Local> parseLocals(const std::string& text);
     [[nodiscard]] static std::string composeLocals(const std::vector<Local>& rows);
@@ -120,6 +182,11 @@ private:
     void refreshButtons();
     void refreshUnfold();
     [[nodiscard]] std::size_t selectedLocal() const;
+    core::Status buildUnified();
+    void setLocalsRows(const std::string& text);              // les locales d'un texte, la grille avertie
+    [[nodiscard]] std::shared_ptr<ui::ITableModel> localsModel() const;
+    void rawChanged();                     // 1.12.16 : le litteral, ses problemes, la table, les boutons
+    void refreshUnified();                 // 1.12.16 : les modes, le moment, les gestes du Brut, Appliquer
 
     Spec                         spec_;
     std::shared_ptr<LocalsModel> model_;
@@ -139,6 +206,23 @@ private:
     double                       changedAt_{0.0};
     double                       now_{0.0};
     bool                         done_{false};
+    // 1.12.16 (T4) : la valeur initiale, en brut ou en code.
+    initvalue::Raw                    raw_;
+    std::string                       literal_;
+    std::vector<initvalue::Problem>   rawProblems_;
+    std::vector<initvalue::Template>  templates_;
+    initvalue::Explanation            explanation_;
+    std::shared_ptr<RawModel>         rawModel_;
+    ui::TableView*                    rawTable_{nullptr};
+    std::vector<ui::Button*>          rawBar_;
+    std::vector<ui::Button*>          templateButtons_;
+    ui::Button*                       modeRaw_{nullptr};
+    ui::Button*                       modeCode_{nullptr};
+    ui::Button*                       reopenButton_{nullptr};
+    ui::Button*                       toCodeButton_{nullptr};
+    bool                              codeShown_{false};
+    bool                              syncing_{false};
+    int                               reopen_{-1};
     core::ConnectionScope        links_;
 };
 

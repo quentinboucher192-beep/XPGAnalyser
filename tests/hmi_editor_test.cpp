@@ -27,6 +27,8 @@
 #include "../src/app/Brand.hpp"
 #include "../src/core/CallTrail.hpp"           // 1.10.4 (K1) : le diagnostic qui echoue, dans le journal interne
 #include "../src/app/hmi/HmiCalcDialog.hpp"    // 1.12.7 : la fenetre du calcul
+#include "../src/app/hmi/HmiInitModel.hpp"     // 1.12.16 (T4) : la valeur initiale, sans ecran
+#include "../src/core/FieldCodec.hpp"          // 1.12.16 (T4) : ce que rend la fenetre
 #include "../src/app/hmi/HmiItemsDialog.hpp"   // 1.12.7 : le tableau des elements
 #include "../src/app/hmi/HmiDeclGrid.hpp"
 #include "../src/app/hmi/HmiActionsPanel.hpp"
@@ -29400,7 +29402,7 @@ void calculees_grille() {
           "la case Valeur d'une constante calcul\xC3\xA9" "e : \xC6\x92x et sa valeur - " + (m && vc >= 0 ? m->cellText(1, static_cast<std::size_t>(vc)) : std::string("?")));
     check(m && !m->editable(1, static_cast<std::size_t>(vc)) && m->editable(0, static_cast<std::size_t>(vc)),
           "la case d'une valeur calcul\xC3\xA9" "e ne s'\xC3\xA9" "crit pas (\xC6\x92x Calcul\xE2\x80\xA6) ; celle d'une valeur \xC3\xA9" "crite, oui");
-    check(grid.tools().actionByTip("Calculer la valeur au d\xC3\xA9marrage") >= 0, "l'outil \xC6\x92x Calcul\xE2\x80\xA6");
+    check(grid.tools().actionByTip("Valeur initiale") >= 0, "l'outil Valeur initiale\xE2\x80\xA6 (1.12.16 : \xC3\xA0 la place de \xC6\x92x Calcul\xE2\x80\xA6)");
     // Le deballage : Seuils (calculee), puis Noms (ecrite, ses vrais indices), rien pour Base.
     grid.selectRows({1});
     auto* u = grid.unfoldTable();
@@ -31272,7 +31274,324 @@ void choisir11216() {
     }
 }
 
+// ---- 1.12.16 (T4) : la valeur initiale, en brut ou en code (une fenetre, par type) ----
+void valeurInitiale11216() {
+    std::printf("1.12.16 (T4) : la valeur initiale - le brut par type, le code qui rend la valeur, le type expliqu\xC3\xA9\n");
+    namespace iv = app::initvalue;
+    namespace de = hmi::decledit;
+    constexpr auto npos = std::string::npos;
+    Project p;
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    cuve.members = {{"Nom", "STRING", "", ""}, {"Niveau", "REAL", "", ""}, {"Capacite", "REAL", "100.0", ""}};
+    p.programs.types.push_back(cuve);
+    HmiType mode;
+    mode.id = p.allocate();
+    mode.name = "T_MODE";
+    mode.kind = HmiTypeKind::Enumeration;
+    mode.values = {{"Arret", 0, "Arr\xC3\xAAt", ""}, {"Auto", 1, "Automatique", ""}, {"Manu", 2, "Manuel", ""}};
+    p.programs.types.push_back(mode);
+    const auto errorWith = [](const std::vector<iv::Problem>& v, const std::string& part) {
+        for (const auto& x : v)
+            if (x.error && x.text.find(part) != std::string::npos) return true;
+        return false;
+    };
+    const auto warningWith = [](const std::vector<iv::Problem>& v, const std::string& part) {
+        for (const auto& x : v)
+            if (!x.error && x.text.find(part) != std::string::npos) return true;
+        return false;
+    };
+    // ---- le genre de chaque type : son editeur
+    struct K {
+        const char* type;
+        iv::Kind    kind;
+    };
+    for (const K k : {K{"MAP[STRING] OF REAL", iv::Kind::Map}, K{"LIST OF T_Cuve", iv::Kind::List}, K{"T_Cuve", iv::Kind::Struct},
+                      K{"ARRAY[0..4] OF REAL", iv::Kind::Array}, K{"ARRAY[1..2, 0..2] OF INT", iv::Kind::Matrix}, K{"SET OF STRING", iv::Kind::Set},
+                      K{"RING[3] OF REAL", iv::Kind::Ring}, K{"T_MODE", iv::Kind::Enum}, K{"TIME", iv::Kind::Time},
+                      K{"TUPLE(STRING, INT)", iv::Kind::Tuple}, K{"REAL", iv::Kind::Scalar}})
+        check(iv::shapeOf(p, k.type).kind == k.kind, std::string("le genre de ") + k.type + " : " + std::string(iv::kindKey(iv::shapeOf(p, k.type).kind)));
+    // ---- MAP : une ligne par entree, les cles rangees, la derniere gagne
+    {
+        auto r = iv::load(p, "MAP[STRING] OF REAL", "['haut' := 30.0, 'bas' := 10.0]");
+        check(r.rows.size() == 2 && r.rows[0].key == "haut" && r.rows[0].cells.size() == 1 && r.rows[0].cells[0] == "30.0",
+              "MAP : une ligne par entr\xC3\xA9" "e, la cl\xC3\xA9 sans apostrophes");
+        check(iv::literal(r) == "['bas' := 10.0, 'haut' := 30.0]", "MAP : le litt\xC3\xA9ral range les cl\xC3\xA9s - " + iv::literal(r));
+        check(iv::addRow(r) && iv::setKey(r, 2, "moyen") && iv::literal(r) == "['bas' := 10.0, 'haut' := 30.0, 'moyen' := 0.0]",
+              "MAP : + Entr\xC3\xA9" "e, sa valeur vide vaut celle du type (0.0) - " + iv::literal(r));
+        check(iv::placeholder(r, 2, 0) == "0.0 (du type)", "MAP : la case vide montre la valeur du type, en gris - " + iv::placeholder(r, 2, 0));
+        check(iv::setKey(r, 2, "bas") && errorWith(iv::problems(p, r), "deux fois") && iv::problems(p, r)[0].row == 2,
+              "MAP : une cl\xC3\xA9 \xC3\xA9" "crite deux fois - une faute, \xC3\xA0 sa ligne");
+        check(iv::literal(r) == "['bas' := 0.0, 'haut' := 30.0]", "MAP : ... la derni\xC3\xA8re gagne - " + iv::literal(r));
+        check(iv::setCell(r, 0, 0, "abc") && errorWith(iv::problems(p, r), "n'est pas un REAL"), "MAP : une valeur qui n'est pas un REAL - une faute");
+        check(iv::sortByKey(r) && r.rows[0].key == "bas" && r.rows[2].key == "haut", "MAP : Ranger par cl\xC3\xA9");
+        check(iv::removeRow(r, 0) && r.rows.size() == 2, "MAP : Retirer une entr\xC3\xA9" "e");
+        check(!iv::moveRow(r, 0, 1), "MAP : Monter, Descendre - non (une MAP se range)");
+    }
+    // ---- une liste de structures : une fiche par element, les membres vides gardent la valeur du type
+    {
+        auto r = iv::load(p, "LIST OF T_Cuve", "[(Nom := 'A', Niveau := 2.5)]");
+        check(r.shape.structElements && r.rows.size() == 1 && r.rows[0].cells.size() == 3 && r.rows[0].cells[0] == "A" && r.rows[0].cells[1] == "2.5"
+                  && r.rows[0].cells[2].empty(),
+              "LIST OF T_Cuve : une ligne par \xC3\xA9l\xC3\xA9ment, une case par membre");
+        check(iv::cellLabels(r).size() == 3 && iv::cellLabels(r)[0] == "Nom (STRING)", "... ses colonnes : Nom (STRING), Niveau, Capacite");
+        check(iv::placeholder(r, 0, 2) == "100.0 (du type)", "... Capacite vide : la valeur initiale du membre (100.0) - " + iv::placeholder(r, 0, 2));
+        check(iv::addRow(r) && iv::setCell(r, 1, 0, "B") && iv::literal(r) == "[(Nom := 'A', Niveau := 2.5), (Nom := 'B')]",
+              "+ \xC3\x89l\xC3\xA9ment : (Nom := 'B') - " + iv::literal(r));
+        check(iv::moveRow(r, 1, -1) && r.rows[0].cells[0] == "B", "Monter un \xC3\xA9l\xC3\xA9ment");
+        check(iv::setCell(r, 0, 1, "haut") && errorWith(iv::problems(p, r), "[0].Niveau"), "un membre faux : [0].Niveau, une faute");
+    }
+    // ---- une structure : un membre par ligne
+    {
+        auto r = iv::load(p, "T_Cuve", "(Niveau := 5.0)");
+        check(r.rows.size() == 3 && r.rows[1].cells[0] == "5.0" && r.rows[0].cells[0].empty() && iv::rowLabel(r, 0) == ".Nom", "une structure : un membre par ligne");
+        check(iv::literal(r) == "(Niveau := 5.0)", "... son litt\xC3\xA9ral : (Niveau := 5.0)");
+        check(iv::placeholder(r, 0, 0) == "'' (du type)", "... Nom vide : '' (du type)");
+        check(iv::setCell(r, 0, 0, "Cuve 1") && iv::literal(r) == "(Nom := 'Cuve 1', Niveau := 5.0)", "... un texte s'\xC3\xA9" "crit sans apostrophes - " + iv::literal(r));
+        check(!iv::addRow(r) && !iv::resizable(r), "... ni + ni Retirer");
+    }
+    // ---- un tableau : une ligne par case, leur nombre fixe ; Tout a 0, Suite
+    {
+        auto r = iv::load(p, "ARRAY[0..4] OF REAL", "[1.0, 2.0]");
+        check(r.rows.size() == 5 && iv::rowLabel(r, 4) == "[4]" && iv::literal(r) == "[1.0, 2.0]", "ARRAY[0..4] : cinq cases, toujours - " + iv::literal(r));
+        check(!iv::addRow(r) && !iv::removeRow(r, 0), "... ni + ni Retirer");
+        check(iv::sequence(r, 0.0, 25.0) && iv::literal(r) == "[0.0, 25.0, 50.0, 75.0, 100.0]", "Suite : de 0, pas de 25 - " + iv::literal(r));
+        check(iv::fillZero(r) && iv::literal(r) == "[0.0, 0.0, 0.0, 0.0, 0.0]", "Tout \xC3\xA0 0 - " + iv::literal(r));
+        auto m = iv::load(p, "ARRAY[1..2, 0..2] OF INT", "[1, 2, 3, 4, 5, 6]");
+        check(m.rows.size() == 2 && m.rows[1].cells.size() == 3 && m.rows[1].cells[2] == "6" && iv::literal(m) == "[1, 2, 3, 4, 5, 6]"
+                  && iv::cellLabels(m)[2] == "[.., 2]",
+              "un tableau \xC3\xA0 deux dimensions : une ligne par premi\xC3\xA8re dimension, une case par colonne");
+    }
+    // ---- SET : un doublon est dit ; RING : celles au-dela de la capacite partiront
+    {
+        auto s = iv::load(p, "SET OF STRING", "['b', 'a', 'b']");
+        check(s.rows.size() == 3 && iv::rowMark(s, 2) == "doublon" && warningWith(iv::problems(p, s), "doublon") && iv::literal(s) == "['a', 'b']",
+              "SET : le doublon marqu\xC3\xA9, le litt\xC3\xA9ral rang\xC3\xA9 sans doublon - " + iv::literal(s));
+        auto g = iv::load(p, "RING[3] OF REAL", "[1.0, 2.0, 3.0, 4.0]");
+        check(iv::rowMark(g, 0) == "partira" && iv::rowMark(g, 1).empty() && warningWith(iv::problems(p, g), "au-del") && iv::literal(g) == "[2.0, 3.0, 4.0]",
+              "RING[3] : la plus ancienne partira, les trois derni\xC3\xA8res restent - " + iv::literal(g));
+    }
+    // ---- une enumeration, une duree, un tuple, une valeur simple, une valeur qui n'est pas un litteral
+    {
+        auto e = iv::load(p, "T_MODE", "T_MODE#Auto");
+        check(e.choice == 1 && iv::literal(e) == "T_MODE#Auto" && iv::choose(e, 2) && iv::literal(e) == "T_MODE#Manu", "une \xC3\xA9num\xC3\xA9ration : la valeur choisie");
+        check(iv::load(p, "T_MODE", "Auto").choice == 1 && iv::load(p, "T_MODE", "2").choice == 2, "... lue par son nom, ou son nombre");
+        auto t = iv::load(p, "TIME", "T#1m30s");
+        check(t.rows.size() == 1 && t.rows[0].cells == std::vector<std::string>{"0", "1", "30", "0"} && iv::literal(t) == "T#1m30s",
+              "TIME : heures, minutes, secondes, millisecondes - " + iv::literal(t));
+        check(iv::setCell(t, 0, 0, "2") && iv::literal(t) == "T#2h1m30s", "... 2 heures de plus : T#2h1m30s - " + iv::literal(t));
+        check(iv::setCell(t, 0, 2, "x") && errorWith(iv::problems(p, t), "secondes"), "... des secondes qui ne sont pas un nombre : une faute");
+        auto u = iv::load(p, "TUPLE(STRING, INT)", "('a', 3)");
+        check(u.rows.size() == 2 && u.rows[0].cells[0] == "a" && iv::rowLabel(u, 1) == "Item2" && iv::literal(u) == "('a', 3)", "un tuple : un \xC3\xA9l\xC3\xA9ment par ligne");
+        auto v = iv::load(p, "REAL", "85.0");
+        check(iv::literal(v) == "85.0" && iv::setCell(v, 0, 0, "abc") && errorWith(iv::problems(p, v), "n'est pas un REAL"), "une valeur simple, et sa faute");
+        auto f = iv::load(p, "LIST OF REAL", "Base_Liste");
+        check(f.freeText && iv::literal(f) == "Base_Liste" && warningWith(iv::problems(p, f), "telle quelle"), "un nom : gard\xC3\xA9 tel quel, et dit");
+        check(iv::leaveFreeText(f) && !f.freeText && iv::literal(f) == "[]", "Repartir de l'\xC3\xA9" "diteur du type");
+    }
+    // ---- le code : l'en-tete fixe, Passer en code, les exemples - et chacun TOURNE (le moteur, au demarrage)
+    check(iv::header("Seuils", "MAP[STRING] OF REAL") == "FUNCTION Init_Seuils : MAP[STRING] OF REAL", "l'en-t\xC3\xAAte fixe : FUNCTION Init_Seuils : MAP[STRING] OF REAL");
+    check(iv::toCode("[1, 2]").find("RETURN [1, 2];") != npos, "Passer en code : RETURN et le litt\xC3\xA9ral");
+    const auto runs = [&](const std::string& type, const iv::Template& t, std::string& said) {
+        Project q = p;
+        Script sc;
+        sc.id = q.allocate();
+        sc.name = "Reglages";
+        sc.event = "Appel";
+        sc.lang = ScriptLang::ST;
+        Declaration d;
+        d.kind = DeclKind::Constant;
+        d.name = "X";
+        d.type = type;
+        d.computed = true;
+        d.calc = t.calc;
+        std::string loc, why;
+        std::size_t from = 0;
+        while (from < t.locals.size()) {
+            const auto nl = t.locals.find('\n', from);
+            std::string line = t.locals.substr(from, nl == npos ? npos : nl - from);
+            from = nl == npos ? t.locals.size() : nl + 1;
+            if (line.empty()) continue;
+            if (line.back() != ';') line += ';';
+            loc += line + "\n";
+        }
+        if (!de::parseLocals(q, loc, d.locals, &why)) {
+            said = "locales : " + why;
+            return false;
+        }
+        sc.decls = {d};
+        q.programs.scripts.push_back(sc);
+        uniqueDeclarationIds(q);
+        std::string error;
+        const auto values = hmi::Runtime::computedObjects(q, &error);
+        const auto it = values.find(std::to_string(sc.id) + ":X");
+        if (it == values.end() || !it->second) {
+            said = error.empty() ? std::string("pas de valeur") : error;
+            return false;
+        }
+        said = sim::display(*it->second);
+        return true;
+    };
+    std::size_t ran = 0, all = 0;
+    for (const char* type : {"MAP[STRING] OF REAL", "MAP[INT] OF STRING", "LIST OF REAL", "VECTOR OF INT", "LIST OF T_Cuve", "SET OF STRING", "RING[3] OF REAL",
+                             "ARRAY[0..4] OF REAL", "ARRAY[1..3] OF INT", "ARRAY[1..2, 0..2] OF INT", "T_Cuve", "T_MODE", "TIME", "TUPLE(STRING, INT)", "REAL",
+                             "BOOL", "STRING"}) {
+        const auto ts = iv::templates(p, "X", type);
+        check(!ts.empty(), std::string("des exemples pour ") + type);
+        for (const auto& t : ts) {
+            std::string said;
+            const bool ok = runs(type, t, said);
+            ++all;
+            ran += ok ? 1 : 0;
+            check(ok, std::string("l'exemple \xC2\xAB ") + t.label + " \xC2\xBB de " + type + " tourne - " + said + "\n" + t.calc);
+        }
+    }
+    std::printf("   %zu exemples sur %zu tournent\n", ran, all);
+    // ---- le type, explique
+    {
+        const auto e = iv::explain(p, "Seuils", "MAP[STRING] OF REAL", "Reglages");
+        check(!e.tree.empty() && e.tree[0].label == "MAP" && e.tree.size() == 3 && e.tree[1].label == "[STRING]", "le type expliqu\xC3\xA9 : MAP, [STRING], OF REAL");
+        check(e.cpp == "std::map<std::string, float>" && e.read.find("Reglages.Seuils") != npos, "... en C++ : std::map<std::string, float> ; lu ailleurs : Reglages.Seuils");
+        check(std::find(e.natives.begin(), e.natives.end(), "MAP_HAS") != e.natives.end(), "... les natives qui vont avec (MAP_HAS)");
+        check(iv::cppOf(p, "ARRAY[0..4] OF REAL") == "std::array<float, 5>" && iv::cppOf(p, "TIME") == "std::chrono::milliseconds"
+                  && iv::cppOf(p, "SET OF STRING") == "std::set<std::string>",
+              "en C++ : std::array<float, 5>, std::chrono::milliseconds, std::set<std::string>");
+        const auto t = iv::explain(p, "Cuves", "LIST OF T_Cuve");
+        bool member = false;
+        for (const auto& l : t.tree) member = member || l.label == ".Niveau";
+        check(member, "une liste de structures : l'arbre descend jusqu'aux membres (.Niveau)");
+    }
+    // ---- la fenetre elle-meme : le Brut, Passer en code, les exemples, le moment du calcul
+    {
+        app::HmiCalcDialog::Spec s;
+        s.title = "Valeur initiale de Seuils";
+        s.name = "Seuils";
+        s.type = "MAP[STRING] OF REAL";
+        s.project = &p;
+        s.value = "['bas' := 10.0]";
+        s.reopen = 0;
+        s.preview = [](const std::string&, const std::string&) { return std::string("Valeur au d\xC3\xA9marrage : {'x': 1}\n"); };
+        app::HmiCalcDialog dlg(s);
+        check(static_cast<bool>(dlg.Initialize()) && dlg.unified() && !dlg.codeShown(), "la fen\xC3\xAAtre \xC2\xAB Valeur initiale \xC2\xBB s'ouvre en Brut (une valeur \xC3\xA9" "crite)");
+        const auto* rt = dlg.rawTable();
+        check(rt && rt->model() && rt->model()->rowCount() == 1 && rt->columns().size() == 2 && rt->columns()[0].title == "Cl\xC3\xA9 (STRING)",
+              "le Brut d'une MAP : Cl\xC3\xA9 (STRING), Valeur (REAL)");
+        check(dlg.rawAdd() && dlg.setRawKey(1, "haut") && dlg.setRawCell(1, 0, "30.0") && dlg.rawLiteral() == "['bas' := 10.0, 'haut' := 30.0]",
+              "+ Entr\xC3\xA9" "e, 'haut', 30.0 : le litt\xC3\xA9ral suit - " + dlg.rawLiteral());
+        check(dlg.setRawCell(1, 0, "abc") && !dlg.canApply(), "une faute dans le brut : Appliquer attend");
+        check(dlg.setRawCell(1, 0, "30.0") && dlg.canApply(), "... corrig\xC3\xA9" "e : Appliquer");
+        check(dlg.explanation().cpp == "std::map<std::string, float>" && !dlg.explanation().tree.empty(), "\xC3\xA0 droite, le type expliqu\xC3\xA9");
+        check(dlg.templates().size() >= 2 && dlg.templates()[0].label == "\xC3\x89" "crire les entr\xC3\xA9" "es", "les exemples du type");
+        check(dlg.toCode() && dlg.codeShown() && dlg.calcText().find("RETURN ['bas' := 10.0, 'haut' := 30.0];") != npos,
+              "Passer en code : le brut devient RETURN [...] - " + dlg.calcText());
+        check(dlg.useTemplate(0) && dlg.calcText() == dlg.templates()[0].calc && dlg.locals().size() == 1 && dlg.locals()[0].name == "m",
+              "Partir d'un exemple : son code et sa locale m");
+        check(dlg.facts().value == "{'x': 1}", "l'aper\xC3\xA7u du code - " + dlg.previewText());
+        check(dlg.reopen() == 0 && dlg.setReopen(true) && dlg.reopen() == 1, "calcul\xC3\xA9" "e au d\xC3\xA9marrage, puis \xC3\xA0 chaque ouverture");
+        check(dlg.showCode(false) && !dlg.codeShown(), "revenir au Brut");
+        app::HmiCalcDialog::Spec r = s;
+        r.codeRefused = "un param\xC3\xA8tre prend une valeur par d\xC3\xA9" "faut \xC3\xA9" "crite";
+        r.reopen = -1;
+        app::HmiCalcDialog dlg2(r);
+        check(static_cast<bool>(dlg2.Initialize()) && !dlg2.showCode(true) && !dlg2.codeShown() && !dlg2.setReopen(true), "pas de Code pour un param\xC3\xA8tre : refus\xC3\xA9, et dit");
+        app::HmiCalcDialog::Spec e = s;
+        e.name = "Mode";
+        e.type = "T_MODE";
+        e.value = "T_MODE#Auto";
+        app::HmiCalcDialog dlg3(e);
+        check(static_cast<bool>(dlg3.Initialize()) && dlg3.rawTable() && dlg3.rawTable()->model()->rowCount() == 3 && dlg3.raw().choice == 1,
+              "une \xC3\xA9num\xC3\xA9ration : ses trois valeurs, Auto choisie");
+        check(dlg3.rawChoose(2) && dlg3.rawLiteral() == "T_MODE#Manu", "... choisir Manu : T_MODE#Manu");
+        app::HmiCalcDialog::Spec c = s;
+        c.code = true;
+        c.calc = "RETURN ['a' := 1.0];\n";
+        app::HmiCalcDialog dlg4(c);
+        check(static_cast<bool>(dlg4.Initialize()) && dlg4.codeShown() && dlg4.calcText() == c.calc, "une constante calcul\xC3\xA9" "e : la fen\xC3\xAAtre s'ouvre en Code");
+        const auto o = app::HmiCalcDialog::outcomeOf(core::joinFields({"RETURN 1;", "", "code", "", "1"}));
+        const auto b = app::HmiCalcDialog::outcomeOf(core::joinFields({"", "", "brut", "[1, 2]", ""}));
+        check(o.code && o.calc == "RETURN 1;" && o.reopen == 1 && !b.code && b.value == "[1, 2]" && b.reopen == -1, "ce que rend Appliquer : le Code, ou le Brut");
+    }
+    // ---- la grille : un seul outil, " Valeur initiale... " ; le Brut et le Code appliques en une commande
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        auto apply = [&](core::CommandPtr cmd) { (void)stack.push(std::move(cmd)); };
+        Script r;
+        r.id = doc->project.allocate();
+        r.name = "Reglages";
+        r.event = "Appel";
+        r.lang = ScriptLang::ST;
+        r.body = "x := Base;\n";
+        Declaration base;
+        base.kind = DeclKind::Constant;
+        base.name = "Base";
+        base.type = "REAL";
+        base.value = "10.0";
+        Declaration seuils = base;
+        seuils.name = "Seuils";
+        seuils.type = "MAP[STRING] OF REAL";
+        seuils.value.clear();
+        seuils.computed = true;
+        seuils.calc = "Seuils['bas'] := Base;\n";
+        Declaration noms = base;
+        noms.name = "Noms";
+        noms.type = "ARRAY[1..3] OF STRING";
+        noms.value = "['a', 'b']";
+        r.decls = {base, seuils, noms};
+        doc->project.programs.scripts.push_back(r);
+        uniqueDeclarationIds(doc->project);
+        app::HmiDeclGrid grid("valeur", doc, apply, de::Tab::Constants);
+        grid.setBounds({0, 0, 1000, 600});
+        de::Place at;
+        at.kind = de::Place::Kind::Script;
+        at.id = r.id;
+        grid.setPlace(at);
+        grid.layout();
+        app::calceditor::Spec seen;
+        bool asked = false;
+        app::calceditor::setHost([&](app::calceditor::Spec spec, app::calceditor::Done) {
+            seen = std::move(spec);
+            asked = true;
+        });
+        const auto& ds = doc->project.programs.scripts[0].decls;
+        check(grid.tools().actionByTip("Valeur initiale") >= 0 && grid.tools().actionByTip("Calculer la valeur") < 0
+                  && grid.tools().actionByTip("\xC3\x89" "diter les \xC3\xA9l\xC3\xA9ments") < 0,
+              "un seul outil : Valeur initiale\xE2\x80\xA6 (\xC3\xA0 la place d'\xC3\x89l\xC3\xA9ments\xE2\x80\xA6 et de \xC6\x92x Calcul\xE2\x80\xA6)");
+        check(grid.editInitial(2) && asked && seen.project && !seen.code && seen.value == "['a', 'b']" && seen.title == "Valeur initiale de Noms"
+                  && seen.codeRefused.empty() && static_cast<bool>(seen.outcome),
+              "Noms (\xC3\xA9" "crite) : la fen\xC3\xAAtre en Brut");
+        bool reads = false;
+        for (const auto& [n, t] : seen.readable) reads = reads || (n == "Base" && t == "REAL");
+        check(reads && seen.owner == "Reglages", "... ce que le code peut lire (Base : REAL), le script (Reglages.Noms d'ailleurs)");
+        if (seen.outcome) seen.outcome({false, "", "", "['x', 'y', 'z']", -1});
+        check(ds[2].value == "['x', 'y', 'z']" && !ds[2].computed, "Appliquer le Brut : la valeur \xC3\xA9" "crite - " + ds[2].value);
+        check(stack.undo() && ds[2].value == "['a', 'b']", "... Ctrl+Z la rend");
+        asked = false;
+        check(grid.editInitial(1) && asked && seen.code && seen.calc == seuils.calc, "Seuils (calcul\xC3\xA9" "e) : la fen\xC3\xAAtre en Code");
+        if (seen.outcome) seen.outcome({true, "RETURN ['k' := Base * 2.0];\n", "", "", -1});
+        check(ds[1].computed && ds[1].calc == "RETURN ['k' := Base * 2.0];\n", "Appliquer le Code : RETURN [...]");
+        std::string error;
+        const auto values = hmi::Runtime::computedObjects(doc->project, &error);
+        const auto it = values.find(std::to_string(r.id) + ":SEUILS");
+        check(it != values.end() && it->second && sim::display(*it->second) == "{'k': 20}", "... et la valeur au d\xC3\xA9marrage : {'k': 20} - " + error);
+        check(grid.editInitial(1) && seen.outcome, "Seuils, encore");
+        if (seen.outcome) seen.outcome({false, "", "", "['b' := 2.0]", -1});
+        check(!ds[1].computed && ds[1].value == "['b' := 2.0]", "le Brut appliqu\xC3\xA9 \xC3\xA0 une calcul\xC3\xA9" "e : elle redevient \xC3\xA9" "crite - " + ds[1].value);
+        check(stack.undo() && ds[1].computed, "... Ctrl+Z : calcul\xC3\xA9" "e de nouveau");
+        check(grid.editCalculation(2) && seen.code, "editCalculation (une faute de Compiler) : la fen\xC3\xAAtre en Code");
+        app::calceditor::setHost({});
+    }
+}
+
 int main(int argc, char** argv) {
+    // 1.12.16 : HMI_TEST_11216=1 - Choisir une fonction..., la valeur initiale, seuls.
+    if (const char* only = std::getenv("HMI_TEST_11216"); only && *only == '1') {
+        choisir11216();
+        valeurInitiale11216();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.13 : HMI_TEST_11213=1 - le Tableau dans l'editeur, seul (et le Contenu du lot D qu'il remplace).
     if (const char* only = std::getenv("HMI_TEST_11213"); only && *only == '1') {
         tableauEditeur11213();
@@ -31708,6 +32027,7 @@ int main(int argc, char** argv) {
     aideTypee11214();                       // 1.12.14 : l'aide a la saisie typee, ce qui mene au type attendu
     deballage11215();                       // 1.12.15 : le deballage, ses proprietes, first et second
     choisir11216();                         // 1.12.16 : Choisir une fonction... (le selecteur, la derniere ligne, Ctrl+I)
+    valeurInitiale11216();                  // 1.12.16 (T4) : la valeur initiale, en brut ou en code
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges
     direct1121();                           // 1.11.21 : les diagnostics en direct au panneau du bas
     explorateurs1121();                     // 1.11.21 : les explorateurs deplient les codes

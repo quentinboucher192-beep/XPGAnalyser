@@ -207,7 +207,7 @@ public:
             tip += "  (\xC6\x92x calcul\xC3\xA9" "e au d\xC3\xA9marrage)\n" + row.d.calc;
             if (!row.d.locals.empty()) tip += "Locales :\n" + de::localsText(row.d.locals);
             if (!row.preview.empty()) tip += (row.previewError ? "Erreur : " : "= ") + row.preview + "\n";
-            tip += "\xC2\xAB \xC6\x92x Calcul\xE2\x80\xA6 \xC2\xBB pour le changer.";
+            tip += "\xC2\xAB Valeur initiale\xE2\x80\xA6 \xC2\xBB pour le changer.";
         } else if (!row.d.value.empty()) {
             tip += " := " + row.d.value;
         }
@@ -239,17 +239,17 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     tools->separator();
     tools->add(GUses, HmiGlyph::Search, "Aller \xC3\xA0 ses utilisations dans le code (l'onglet Code, la suivante \xC3\xA0 chaque clic)",
                "Utilisations");
-    // 1.12.2 : la valeur d'une liste, d'un tableau, d'un dictionnaire, d'un tuple - un element par ligne.
-    tools->add(GItems, HmiGlyph::List, "\xC3\x89" "diter les \xC3\xA9l\xC3\xA9ments de la valeur (une liste, un vecteur, un tableau, un dictionnaire, "
-               "un tuple) : un par ligne", "\xC3\x89l\xC3\xA9ments\xE2\x80\xA6");
-    // 1.12.7 : la valeur calculee au demarrage (un script : une constante, la valeur initiale d'une variable).
-    tools->add(GCalc, HmiGlyph::Code, "Calculer la valeur au d\xC3\xA9marrage : un code ST qui l'\xC3\xA9" "crit une fois, comme un final de Java "
-               "(il lit les constantes du script, Reglages.X des autres scripts, les variables IHM et les natives)",
-               "\xC6\x92x Calcul\xE2\x80\xA6");
+    // 1.12.16 (T4) : la valeur initiale - en brut (un editeur fait pour le type) ou en code (une fonction qui
+    // rend le type), une seule fenetre (a la place d'« Elements... » 1.12.2 et de « fx Calcul... » 1.12.7).
+    tools->add(GCalc, HmiGlyph::Code, "Valeur initiale : en brut (un \xC3\xA9" "diteur fait pour le type : une ligne par entr\xC3\xA9" "e, par \xC3\xA9l\xC3\xA9ment, "
+               "par membre) ou en code (FUNCTION Init_Nom : son type - le code rend la valeur, au d\xC3\xA9marrage) ; le type expliqu\xC3\xA9",
+               "Valeur initiale\xE2\x80\xA6");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     const auto one = [this] { return usable() && selectedRows().size() == 1; };
     tools_->setEnabledWhen(GCalc, [this, one] {
-        return one() && role_ == hmi::decl::Role::Script && tab_ != de::Tab::Parameters && calceditor::available();
+        if (!one() || !calceditor::available() || tableColumnOf(de::Column::Value) < 0) return false;
+        const auto r = selectedRows().front();
+        return r < rows_->rows.size();
     });
     tools_->setEnabledWhen(GAdd, [this] { return usable(); });
     tools_->setEnabledWhen(GRemove, [this] { return usable() && !selectedRows().empty(); });
@@ -257,11 +257,6 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     tools_->setEnabledWhen(GUp, [this, one] { return one() && selectedRows().front() > 0; });
     tools_->setEnabledWhen(GDown, [this, one] { return one() && selectedRows().front() + 1 < count(); });
     tools_->setEnabledWhen(GUses, one);
-    tools_->setEnabledWhen(GItems, [this, one] {
-        if (!one() || !itemseditor::available() || tableColumnOf(de::Column::Value) < 0) return false;
-        const auto r = selectedRows().front();
-        return r < rows_->rows.size() && itemseditor::editable(rows_->rows[r].d.type);
-    });
     search_ = &static_cast<ui::SearchField&>(addChild(std::make_unique<ui::SearchField>(
         base + ".search", "Rechercher\xE2\x80\xA6",
         "Filtrer les lignes : chaque mot dans l'une des colonnes (tous les mots), sans casse ni accents ; \"une phrase\" ; -mot : l'exclure.")));
@@ -299,11 +294,8 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
                 if (const auto sel = selectedRows(); sel.size() == 1 && sel.front() < rows_->rows.size())
                     usesRequested->emit(rows_->rows[sel.front()].d.name);
                 break;
-            case GItems:
-                if (const auto sel = selectedRows(); sel.size() == 1) editItems(sel.front());
-                break;
             case GCalc:
-                if (const auto sel = selectedRows(); sel.size() == 1) editCalculation(sel.front());
+                if (const auto sel = selectedRows(); sel.size() == 1) editInitial(sel.front());
                 break;
             default: break;
         }
@@ -670,26 +662,8 @@ bool HmiDeclGrid::setCell(std::size_t row, de::Column column, const std::string&
     return true;
 }
 
-// 1.12.2 : l'editeur des elements de la valeur (une liste, un tableau, un dictionnaire, un tuple).
-bool HmiDeclGrid::editItems(std::size_t row) {
-    if (row >= rows_->rows.size() || !usable() || !itemseditor::available()) return false;
-    const auto& d = rows_->rows[row].d;
-    if (!itemseditor::editable(d.type)) {
-        say(d.name + " : " + d.type + " n'a pas d'\xC3\xA9l\xC3\xA9ments (une valeur simple)", true);
-        return false;
-    }
-    const hmi::Id id = d.id;
-    const std::weak_ptr<Rows> alive = rows_;
-    itemseditor::ask({"\xC3\x89l\xC3\xA9ments de " + d.name, d.type, d.value}, [this, alive, id](const std::string& text) {
-        if (alive.expired()) return;
-        for (std::size_t i = 0; i < rows_->rows.size(); ++i)
-            if (rows_->rows[i].d.id == id) {
-                (void)setCell(i, de::Column::Value, text);
-                return;
-            }
-    });
-    return true;
-}
+// 1.12.2 : l'editeur des elements de la valeur ; 1.12.16 : la fenetre « Valeur initiale », en Brut.
+bool HmiDeclGrid::editItems(std::size_t row) { return editInitial(row, 0); }
 
 void HmiDeclGrid::refreshUnfold() {
     if (!unfold_ || !unfoldModel_) return;
@@ -772,9 +746,18 @@ void HmiDeclGrid::fillPreviews(const de::Code& code) {
     }
 }
 
-bool HmiDeclGrid::editCalculation(std::size_t row, int line) {
+// 1.12.7 : « fx Calcul... » ; 1.12.16 : la fenetre « Valeur initiale », en Code (a la ligne `line`).
+bool HmiDeclGrid::editCalculation(std::size_t row, int line) { return editInitial(row, 1, line); }
+
+// 1.12.16 (T4) : « Valeur initiale... » - le Brut ou le Code, une seule fenetre (calceditor, Spec::project).
+bool HmiDeclGrid::editInitial(std::size_t row, int mode, int line) {
     if (row >= rows_->rows.size() || !usable() || !calceditor::available()) return false;
-    if (role_ != hmi::decl::Role::Script || tab_ == de::Tab::Parameters) {
+    std::string refused;
+    if (role_ != hmi::decl::Role::Script)
+        refused = "le code ne calcule qu'une constante ou une variable d'un script ou d'une vue ; ici, la valeur s'\xC3\xA9" "crit (en brut)";
+    else if (tab_ == de::Tab::Parameters)
+        refused = "un param\xC3\xA8tre prend une valeur par d\xC3\xA9" "faut \xC3\xA9" "crite (en brut)";
+    if (mode == 1 && !refused.empty()) {
         say("Seule une constante ou une variable d'un script se calcule au d\xC3\xA9marrage.", true);
         return false;
     }
@@ -784,13 +767,30 @@ bool HmiDeclGrid::editCalculation(std::size_t row, int line) {
     const auto& r = rows_->rows[row];
     const auto& d = r.d;
     calceditor::Spec spec;
-    spec.title = "Valeur calcul\xC3\xA9" "e de " + d.name;
+    spec.title = "Valeur initiale de " + d.name;
     spec.name = d.name;
     spec.type = d.type;
     spec.constant = d.kind == hmi::DeclKind::Constant;
     spec.calc = d.computed || !d.calc.empty() ? d.calc : calceditor::starter(d.name, d.type);
     spec.locals = de::localsText(d.locals);
     spec.line = line;
+    // 1.12.16 : la fenetre a deux modes - le Brut (la valeur ecrite) et le Code (la declaration calculee).
+    spec.project = &doc_->project;
+    spec.value = d.value;
+    spec.code = mode == 1 || (mode < 0 && d.computed);
+    spec.codeRefused = refused;
+    if (sc && place_ && place_->kind == de::Place::Kind::Script) spec.owner = sc->name;
+    // Ce que le code peut lire : les declarations du script (ses constantes d'abord), les variables IHM.
+    if (sc) {
+        for (const auto& x : sc->decls)
+            if (x.id != d.id && x.kind == hmi::DeclKind::Constant) spec.readable.emplace_back(x.name, x.type);
+        for (const auto& x : sc->decls)
+            if (x.id != d.id && x.kind == hmi::DeclKind::Variable) spec.readable.emplace_back(x.name, x.type);
+    }
+    for (const auto& v : doc_->project.programs.variables) {
+        if (spec.readable.size() >= 60) break;
+        spec.readable.emplace_back(v.name, v.type);
+    }
     // Le deballage d'une locale : sa valeur initiale lue dans son type (vide : la valeur de son type).
     spec.valueOf = [doc = doc_](const std::string& type, const std::string& value, std::string* why) -> sim::ObjRef {
         return doc ? hmi::Runtime::valueObject(doc->project, type, value, why) : nullptr;
@@ -879,6 +879,43 @@ bool HmiDeclGrid::editCalculation(std::size_t row, int line) {
             assist::attach(editor, std::move(src));
         };
     const std::weak_ptr<Rows> alive = rows_;
+    // 1.12.16 : ce que la fenetre applique - le Brut (la valeur ecrite ; une declaration calculee le redevient)
+    // ou le Code (le calcul, ses locales, le moment), en une commande (un Ctrl+Z).
+    spec.outcome = [this, alive, id](const calceditor::Spec::Outcome& o) {
+        if (alive.expired()) return;
+        for (std::size_t i = 0; i < rows_->rows.size(); ++i) {
+            if (rows_->rows[i].d.id != id) continue;
+            const std::string name = rows_->rows[i].d.name;
+            const bool wasComputed = rows_->rows[i].d.computed;
+            const auto t = tab_;
+            const auto at = place_;
+            if (!at) return;
+            if (!o.code) {
+                const std::string value = o.value;
+                if (change("Valeur initiale de " + name, [=](hmi::Project& p, std::string* why) {
+                        if (wasComputed && !de::setCalculation(p, *at, t, i, "", "", why)) return false;
+                        return de::set(p, *at, t, i, de::Column::Value, value, why);
+                    }))
+                    say(name + " := " + (value.empty() ? std::string("la valeur du type") : value)
+                            + (wasComputed ? std::string(" - la valeur redevient \xC3\xA9" "crite.") : std::string{}),
+                        false);
+                return;
+            }
+            const std::string calc = o.calc, locals = o.locals;
+            const int reopen = o.reopen;
+            if (change((calc.find_first_not_of(" \t\r\n") == std::string::npos ? "Valeur \xC3\xA9" "crite de " : "Calcul de ") + name,
+                       [=](hmi::Project& p, std::string* why) {
+                           if (!de::setCalculation(p, *at, t, i, calc, locals, why)) return false;
+                           return reopen < 0 || de::setReopen(p, *at, t, i, reopen == 1, why);
+                       }))
+                say(calc.find_first_not_of(" \t\r\n") == std::string::npos
+                        ? name + " : la valeur redevient \xC3\xA9" "crite."
+                        : name + (reopen == 1 ? " : calcul\xC3\xA9" "e \xC3\xA0 chaque ouverture" : " : calcul\xC3\xA9" "e au d\xC3\xA9marrage")
+                              + " (Compiler dit ses fautes ; la case Valeur, ce qu'elle vaut).",
+                    false);
+            return;
+        }
+    };
     calceditor::ask(std::move(spec), [this, alive, id](const std::string& calc, const std::string& locals) {
         if (alive.expired()) return;
         for (std::size_t i = 0; i < rows_->rows.size(); ++i)

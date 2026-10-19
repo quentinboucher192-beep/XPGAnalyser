@@ -1996,6 +1996,14 @@ bool Runtime::computeOne(const Script& sc, const Declaration& d, Id view, sim::O
                          std::shared_ptr<const Scope> scope) {
     const View* v = view != kNoId && project_ ? project_->view(view) : nullptr;
     const std::string source = "calcul " + calc::pathOf(sc, d, v);
+    // 1.12.16 : un calcul qui rend sa valeur (RETURN, Init_Nom := ...) tourne dans sa fonction Init_Nom
+    // (runnableCode) ; un retour qui ne va pas dans le type est refuse, a sa ligne, avant de tourner.
+    if (project_ && calc::returnsValue(d))
+        for (const auto& is : calc::returnIssues(*project_, sc, d))
+            if (is.error) {
+                why = (is.line > 0 ? "ligne " + std::to_string(is.line) + " : " : std::string{}) + is.message;
+                return false;
+            }
     const Prepared& prep = prepare(calc::runnableCode(sc, d), source, false);
     if (!prep.program) {
         why = prep.error;

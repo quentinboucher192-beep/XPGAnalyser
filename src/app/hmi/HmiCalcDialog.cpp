@@ -359,6 +359,7 @@ menu::MenuTraits HmiCalcDialog::traits() const {
 }
 
 core::Status HmiCalcDialog::buildUi() {
+    if (unified()) return buildUnified();   // 1.12.16 (T4) : Brut | Code (HmiInitDialog.cpp)
     const std::string help = "Le code \xC3\xA9" "crit " + spec_.name + " (" + spec_.type + ") sous son nom ; il tourne une fois au d\xC3\xA9marrage"
                            + (spec_.constant ? std::string(", puis la constante est fig\xC3\xA9" "e (comme un final de Java).")
                                              : std::string(", apr\xC3\xA8s les constantes ; ensuite les scripts \xC3\xA9" "crivent la variable comme toute autre."))
@@ -444,6 +445,13 @@ core::Status HmiCalcDialog::buildUi() {
     return core::ok();
 }
 
+void HmiCalcDialog::setLocalsRows(const std::string& text) {
+    model_->rows = parseLocals(text);
+    model_->modelReset->emit();
+}
+
+std::shared_ptr<ui::ITableModel> HmiCalcDialog::localsModel() const { return model_; }
+
 std::string HmiCalcDialog::calcText() const { return code_ ? code_->text() : spec_.calc; }
 std::string HmiCalcDialog::localsText() const { return composeLocals(model_->rows); }
 const std::vector<HmiCalcDialog::Local>& HmiCalcDialog::locals() const { return model_->rows; }
@@ -491,6 +499,7 @@ void HmiCalcDialog::refreshButtons() {
         b->invalidateLayout();
         b->invalidate();
     }
+    if (unified()) refreshUnified();   // 1.12.16 (T4)
 }
 
 void HmiCalcDialog::showLocals(bool on) {
@@ -607,7 +616,7 @@ void HmiCalcDialog::Update(const menu::FrameContext& f) {
 ui::EventResult HmiCalcDialog::HandleEvent(const ui::InputEvent& ev) {
     if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
         // Echap : d'abord la liste de l'aide a la saisie, ou la case en cours d'ecriture.
-        const bool busy = (code_ && code_->completionOpen()) || (table_ && table_->cellEditing());
+        const bool busy = (code_ && code_->completionOpen()) || (table_ && table_->cellEditing()) || (rawTable_ && rawTable_->cellEditing());
         if (k->key == ui::Key::Escape && !busy) {
             finish(false);
             return ui::EventResult::Consumed;
@@ -622,9 +631,18 @@ ui::EventResult HmiCalcDialog::HandleEvent(const ui::InputEvent& ev) {
 
 void HmiCalcDialog::finish(bool ok) {
     if (done_) return;
+    if (ok && !canApply()) {   // 1.12.16 : une faute dans le brut - Appliquer attend
+        refreshButtons();
+        return;
+    }
     done_ = true;
-    manager().CloseDialog(menu::DialogResult{ok ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel,
-                                             ok ? core::joinFields({calcText(), localsText()}) : std::string{}});
+    std::string payload;
+    if (ok && unified())
+        payload = core::joinFields({codeShown_ ? calcText() : std::string{}, codeShown_ ? localsText() : std::string{}, codeShown_ ? "code" : "brut",
+                                    codeShown_ ? std::string{} : rawLiteral(), reopen_ < 0 ? std::string{} : std::to_string(reopen_)});
+    else if (ok)
+        payload = core::joinFields({calcText(), localsText()});
+    manager().CloseDialog(menu::DialogResult{ok ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel, payload});
 }
 
 } // namespace app

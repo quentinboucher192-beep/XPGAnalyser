@@ -171,6 +171,9 @@ struct CellStyle {
     // Generer, Demarrer, Creer une version) : TreeView::headActionClicked (noeud, rang).
     std::string       subtitle{};
     std::vector<Chip> headActions{};
+    // 1.12.16 (T4) : LE TEXTE D'ATTENTE d'une case vide (TableView), en gris : la valeur du type
+    // ("0.0 (du type)"). Il ne s'ecrit pas : la case editee part vide.
+    std::string       placeholder{};
 };
 
 // ============================================================== ListView ====

@@ -49,6 +49,7 @@ struct Analysis {
 // (DINT), les constantes de son script - et ses variables, pour le calcul d'une variable.
 [[nodiscard]] std::vector<Declaration> declarationsFor(const Script& owner, const Declaration& d);
 // Son code complet : ces declarations reconstruites sur sa ligne 1 (les lignes du calcul ne bougent pas).
+// 1.12.16 : un calcul qui rend sa valeur (returnsValue) : dans sa fonction Init_<Nom> (bodyOf).
 [[nodiscard]] std::string runnableCode(const Script& owner, const Declaration& d);
 
 // Les fautes propres a un calcul (les noms inexistants et la syntaxe : les controles du projet et
@@ -87,5 +88,24 @@ struct Plan {
 
 // Le nom le plus proche parmi `names` (sans casse, a deux fautes de frappe au plus) ; "" : aucun.
 [[nodiscard]] std::string closest(std::string_view name, const std::vector<std::string>& names);
+
+// ---- 1.12.16 : LE CODE QUI REND LA VALEUR ------------------------------------------------------
+//  Le code d'une valeur calculee est le corps d'une fonction a l'en-tete fixe, FUNCTION
+//  Init_<Nom> : <type> : il RENVOIE la valeur (RETURN expr ; ou Init_<Nom> := expr, comme en ST
+//  classique), et ce qu'il rend devient la valeur de la declaration. Un code ecrit comme en 1.12.7
+//  (il ecrit la declaration sous son nom) tourne tel quel. Le moteur, Compiler et Generer lisent le
+//  calcul par bodyOf : une fonction Init_<Nom> sur la ligne 1 du calcul (ses lignes ne bougent pas),
+//  puis <Nom> := Init_<Nom>(); apres sa derniere ligne.
+[[nodiscard]] std::string initName(const Declaration& d);         // "Init_Seuils"
+// Le calcul rend-il sa valeur ? (un RETURN avec une valeur, ou Init_<Nom> ecrit, hors des fonctions
+// internes du calcul)
+[[nodiscard]] bool returnsValue(const Declaration& d);
+// Le code qui tourne, sans les declarations : le calcul tel quel, ou enveloppe dans Init_<Nom>.
+[[nodiscard]] std::string bodyOf(const Declaration& d);
+// Les retours qui ne vont pas dans le type de la declaration, a leur ligne : un litteral d'un autre
+// type (RETURN 'abc' pour un REAL, RETURN [1, 2] pour une MAP), un nom d'un autre type (une locale,
+// une constante du script, une variable IHM), une fonction qui rend autre chose. Ce qui ne se juge
+// pas sans l'executer (une expression) : rien ici, le moteur le dit en marche.
+[[nodiscard]] std::vector<Issue> returnIssues(const Project&, const Script& owner, const Declaration& d);
 
 } // namespace hmi::calc

@@ -152,6 +152,8 @@ bool set(Project&, const Place&, Tab, std::size_t row, Column, std::string_view 
 //  Faux et `why` : refuse (pas un script, un parametre, une locale illisible, en double, d'un type
 //  inconnu, du nom de la declaration) - le projet n'a pas bouge.
 bool setCalculation(Project&, const Place&, Tab, std::size_t row, std::string_view calc, std::string_view locals, std::string* why);
+// 1.12.16 : une constante calculee « a chaque ouverture » de sa vue ou de sa popup (faux : au demarrage).
+bool setReopen(Project&, const Place&, Tab, std::size_t row, bool on, std::string* why);
 // Les locales en texte (une ligne chacune) et l'inverse (faux et `why` : illisible).
 [[nodiscard]] std::string localsText(const std::vector<Declaration>& locals);
 bool parseLocals(const Project&, std::string_view text, std::vector<Declaration>& out, std::string* why);
