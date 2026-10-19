@@ -895,6 +895,15 @@ struct InstanceParam {
     const View& objects = borrowed ? *borrowed : *v;
     const Object* o = nullptr;
     for (const auto& x : objects.objects) if (same(x.name, parts[1])) { o = &x; break; }
+    // 1.12.16 : Vue.Constante, Vue.Fonction - les membres de la vue (HmiSymbols.hpp : viewmembers),
+    // pas un chemin public ; un objet du meme nom passe avant (Generer refuse le doublon).
+    if (!o) {
+        for (const auto& d : v->constants)
+            if (same(d.name, parts[1])) { r.what = Resolved::What::None; return r; }
+        if (v->role != "symbole")
+            for (const auto& f : v->functions)
+                if (same(f.name, parts[1])) { r.what = Resolved::What::None; return r; }
+    }
     if (parts.size() == 2) {
         if (const auto* i = viewInfo(parts[1])) {
             r.what = Resolved::What::ViewMember;

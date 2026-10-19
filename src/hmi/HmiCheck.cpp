@@ -199,6 +199,8 @@ bool known(const Project& p, const NameExists& plc, std::string_view name, const
         // 1.11.13 : une instance de symbole de la vue est une racine (Vanne_4.GetActiveCount(30),
         // depuis la 1.11.11) ; l'appel lui-meme est verifie a part (la fonction, ses arguments).
         if (const Object* o = v->objectByName(name); o && o->kind == Kind::SymbolInstance) return true;
+        // 1.12.16 : une constante ou une fonction de la vue (son chemin entier : qualifiedUses).
+        if (viewmembers::constant(*v, name) || !viewmembers::functions(*v, name).empty()) return true;
     }
     // Lot 9 : SYS et les noms de vue ouvrent les variables systeme et d'instances
     // (le chemin entier est verifie a part, par checkPublicVars).
@@ -417,12 +419,31 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
     }
     // 1.12.7 : Reglages.Seuils - la constante d'un script general, lue d'ailleurs : publique, existante,
     // jamais ecrite. `report` recoit le message et sa ligne.
-    const auto qualifiedUses = [&](const std::string& code, Id from, const std::function<void(const std::string&, int)>& report) {
+    const auto qualifiedUses = [&](const std::string& code, Id from, const std::function<void(const std::string&, int)>& report,
+                                   const View* fromView = nullptr) {
         const auto locals = decl::extract(code);
         for (const auto& pu : scriptPaths(code)) {
             const auto dot = pu.path.find('.');
+            // 1.12.16 : une constante de la vue (Seuil_Haut) ne s'ecrit pas ; Vue_Four.Nom d'ailleurs : publique.
+            const std::string head = pu.path.substr(0, std::min(pu.path.find_first_of(".["), pu.path.size()));
+            if (fromView && !locals.find(head) && !fromView->param(head))
+                if (const Declaration* c = viewmembers::constant(*fromView, head); c && pu.assigned) {
+                    report(c->name + " est une constante de la vue " + fromView->name + " : elle ne s'\xC3\xA9" "crit pas", pu.line);
+                    continue;
+                }
             if (dot == std::string::npos) continue;
             const std::string root = pu.path.substr(0, dot);
+            if (!p.variable(root) && !locals.find(root) && p.viewByName(root)) {
+                viewmembers::Member m;
+                std::string why;
+                if (viewmembers::resolve(p, pu.path, m, &why, fromView)) {
+                    if (m.constant && pu.assigned)
+                        report(m.view->name + "." + m.constant->name + " est une constante : elle ne s'\xC3\xA9" "crit pas", pu.line);
+                } else if (!why.empty()) {
+                    report(why, pu.line);
+                }
+                continue;
+            }
             if (p.variable(root) || !p.generalScript(root) || locals.find(root)) continue;
             std::string why;
             const Script* gs = nullptr;
@@ -445,7 +466,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
             add(out, S::Error, "Script", view, kNoId, sc.name, pp.message, sc.id, pp.line);
         qualifiedUses(code, sc.id, [&](const std::string& message, int line) {
             add(out, S::Error, "Script", view, kNoId, sc.name, message, sc.id, line);
-        });
+        }, owner);
         // 1.12.7 : les valeurs calculees au demarrage - leur code se verifie comme celui du script (ses
         // noms, ses chemins), avec les fautes qui lui sont propres (HmiCalc). La ligne : celle du calcul.
         for (const auto& d : sc.decls) {
@@ -493,7 +514,90 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                 if (!known(p, plc, r)) add(out, S::Error, "Script", kNoId, kNoId, sc.name, "variable inexistante : " + r, sc.id);
         names(sc, kNoId);
     }
+    // 1.12.16 : LES CONSTANTES ET LES FONCTIONS D'UNE VUE (ou d'une popup) - leur nom (unique dans la vue, ni
+    // objet ni parametre), leur valeur ecrite (dans son type) ou leur calcul (ses noms, ses chemins, au
+    // demarrage ou a l'ouverture), le corps des fonctions (ses noms, ses chemins).
+    const TypeKnown knownType = [&p](std::string_view t) {
+        return !types::membersOf(p, t).empty() || findEnumeration(p, t) != nullptr;
+    };
+    const auto viewMembers = [&](const View& v) {
+        if (!viewmembers::any(v)) return;
+        const Script holder = viewmembers::constantsScript(v);
+        const auto faults = decl::declarationFaults(v.constants, decl::Role::Script, {}, knownType);
+        for (std::size_t k = 0; k < v.constants.size(); ++k) {
+            const Declaration& d = v.constants[k];
+            const auto issue = [&](Issue::Severity sev, std::string msg, int line = 0) {
+                Issue i;
+                i.severity = sev;
+                i.category = "Constante";
+                i.view = v.id;
+                i.property = d.name;
+                i.message = std::move(msg);
+                i.line = line;
+                i.declaration = d.name;
+                out.push_back(std::move(i));
+            };
+            for (const auto& why : faults[k]) issue(S::Error, d.name + " : " + why);
+            if (d.kind != DeclKind::Constant) issue(S::Error, d.name + " : une vue ne porte que des constantes");
+            std::string what;
+            if (viewmembers::nameTaken(v, d.name, &what, &d)) issue(S::Error, d.name + " : nom d\xC3\xA9j\xC3\xA0 pris dans la vue par " + what);
+            if (!d.computed) {
+                std::string why;
+                if (!d.value.empty() && !typeform::valueFits(p, d.type, d.value, &why))
+                    issue(S::Error, d.name + " := " + d.value + " : " + (why.empty() ? std::string("pas une valeur de ") + d.type : why));
+                continue;
+            }
+            Script cs = holder;
+            cs.body = d.calc;
+            cs.decls = calc::declarationsFor(holder, d);
+            const std::string ccode = decl::codeOf(cs);
+            const auto cdialect = scriptcheck::dialectDeclared(ccode);
+            const auto where = [&](int line) { return "calcul de " + d.name + (line > 0 ? ", ligne " + std::to_string(line) : std::string{}) + " : "; };
+            for (const auto& u : scriptNames(ccode))
+                if (!known(p, plc, u.name, &v) && !cdialect.count(upperText(u.name))) issue(S::Error, where(u.line) + "variable inexistante : " + u.name, u.line);
+            for (const auto& pp : types::pathProblems(p, ccode)) issue(S::Error, where(pp.line) + pp.message, pp.line);
+            qualifiedUses(ccode, kNoId, [&](const std::string& m, int line) { issue(S::Error, where(line) + m, line); }, &v);
+            const auto a = calc::analyse(p, holder, d, nullptr);
+            for (const auto& is : a.issues) issue(is.error ? S::Error : S::Warning, where(is.line) + is.message, is.line);
+            if (!viewmembers::computedAtOpen(p, v, d))
+                for (const auto& r : a.reads)
+                    if (const Declaration* o = r.find('.') == std::string::npos ? viewmembers::constant(v, r) : nullptr;
+                        o && viewmembers::computedAtOpen(p, v, *o))
+                        issue(S::Error, d.name + " se calcule au d\xC3\xA9marrage : elle ne lit pas " + o->name
+                                            + ", calcul\xC3\xA9" "e \xC3\xA0 l'ouverture de la vue (coche \xC2\xAB \xC3\xA0 chaque ouverture \xC2\xBB)");
+        }
+        if (isSymbolView(v)) return;
+        const auto clashes = overload::clashes(v.functions);
+        for (const auto& f : v.functions) {
+            const auto issue = [&](Issue::Severity sev, std::string msg, int line = 0) {
+                Issue i;
+                i.severity = sev;
+                i.category = "Fonction";
+                i.view = v.id;
+                i.property = v.name + "." + f.name;
+                i.message = std::move(msg);
+                i.item = f.id;
+                i.line = line;
+                out.push_back(std::move(i));
+            };
+            if (!isIdentifier(f.name)) issue(S::Error, "nom invalide : '" + f.name + "'");
+            for (const auto& c : clashes)
+                if (c.function == f.id) issue(S::Error, c.message);
+            std::string what;
+            if (const Object* o = v.objectByName(f.name)) issue(S::Error, f.name + " : nom d\xC3\xA9j\xC3\xA0 pris dans la vue par l'objet " + o->name);
+            else if (const ViewParam* prm = v.param(f.name)) issue(S::Error, f.name + " : nom d\xC3\xA9j\xC3\xA0 pris dans la vue par le param\xC3\xA8tre " + prm->name);
+            else if (viewmembers::constant(v, f.name)) issue(S::Error, f.name + " : nom d\xC3\xA9j\xC3\xA0 pris dans la vue par la constante " + f.name);
+            const std::string code = decl::codeOf(f);
+            const auto dialect = scriptcheck::dialectDeclared(code);
+            const std::string key = upperText(f.name);
+            for (const auto& u : scriptNames(code))
+                if (upperText(u.name) != key && !known(p, plc, u.name, &v) && !dialect.count(upperText(u.name)))
+                    issue(S::Error, "variable inexistante : " + u.name, u.line);
+            qualifiedUses(code, kNoId, [&](const std::string& m, int line) { issue(S::Error, m, line); }, &v);
+        }
+    };
     for (const auto& v : p.views) {
+        viewMembers(v);
         for (const auto& sc : v.scripts) {
             if (std::find(std::begin(kViewEvents), std::end(kViewEvents), sc.event) == std::end(kViewEvents))
                 add(out, S::Error, "Script", v.id, kNoId, sc.name, "\xC3\xA9v\xC3\xA9nement de vue inconnu : " + sc.event, sc.id);

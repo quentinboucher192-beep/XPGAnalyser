@@ -271,6 +271,8 @@ struct Member {
 // Le nom d'un membre de la vue est-il pris (un objet, un parametre, une autre constante ou
 // fonction) ? `what` : par quoi ("l'objet Barre_Niveau"). Pour Generer et la grille.
 [[nodiscard]] bool nameTaken(const View&, std::string_view name, std::string* what = nullptr, const void* self = nullptr);
+// Le type au bout d'un chemin qui part de `type` (".Nom", "[2].X", ".Count") ; vide : on ne sait pas.
+[[nodiscard]] std::string typeAlong(const Project&, std::string type, std::string_view rest);
 } // namespace viewmembers
 
 // ---- 1.11.10 : les popups d'un symbole ----------------------------------------------

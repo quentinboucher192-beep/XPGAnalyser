@@ -562,6 +562,7 @@ private:
     [[nodiscard]] bool knownElsewhere(std::string_view n) const {
         const Project* p = sc_.project;
         if (local(n) || param(n) || counter(n) || selfName(n)) return true;
+        if (viewConstant(n) || viewFunctionHere(n)) return true;      // 1.12.16 : un membre de la vue
         if (p && (p->variable(n) || pub::isSysRoot(n) || pub::viewNamed(*p, n) || p->functionByName(n))) return true;
         return !sc_.plcKnown || sc_.plcKnown(n);     // l'automate inconnu : tout peut etre a lui
     }
@@ -573,6 +574,16 @@ private:
         if (const auto* l = local(root)) return cut == std::string::npos ? l->type : std::string{};
         if (counter(root)) return cut == std::string::npos ? std::string("INT") : std::string{};
         if (p && param(root)) return params::expressionType(*p, sc_.view, s);
+        // 1.12.16 : une constante de la vue (Seuil_Haut), ou d'une vue nommee (Vue_Four.Seuil_Haut).
+        if (const Declaration* c = viewConstant(root); p && c) return walkTypeOf(*p, c->type, cut == std::string::npos ? std::string_view{} : std::string_view(s).substr(cut));
+        if (p && cut != std::string::npos && s[cut] == '.') {
+            viewmembers::Member m;
+            if (viewmembers::resolve(*p, s, m, nullptr, sc_.view) && m.constant) {
+                std::size_t rest = cut + 1;
+                while (rest < s.size() && s[rest] != '.' && s[rest] != '[') ++rest;
+                return walkTypeOf(*p, m.constant->type, std::string_view(s).substr(rest));
+            }
+        }
         if (p && p->variable(root)) return types::typeOfPath(*p, s);
         if (p && (pub::isSysRoot(root) || pub::viewNamed(*p, root))) return pub::resolve(*p, s, pub::viewNamed(*p, root)).type;
         if (!sc_.plc.rootType || !sc_.plcKnown || !sc_.plcKnown(root)) return {};
@@ -774,6 +785,16 @@ private:
     [[nodiscard]] const LocalVar* local(std::string_view name) const { return parts_.local(name); }
     [[nodiscard]] bool counter(std::string_view name) const { return counters_.count(up(name)) > 0; }
     [[nodiscard]] bool selfName(std::string_view name) const { return sc_.function && up(sc_.function->name) == up(name); }
+    // 1.12.16 : une constante, une fonction de la vue du code (une vue ou une popup ; pas un symbole).
+    [[nodiscard]] const Declaration* viewConstant(std::string_view name) const {
+        return sc_.view ? viewmembers::constant(*sc_.view, name) : nullptr;
+    }
+    [[nodiscard]] bool viewFunctionHere(std::string_view name) const {
+        return sc_.view && !viewmembers::functions(*sc_.view, name).empty();
+    }
+    [[nodiscard]] static std::string walkTypeOf(const Project& p, std::string type, std::string_view rest) {
+        return viewmembers::typeAlong(p, std::move(type), rest);
+    }
     [[nodiscard]] const ViewParam* param(std::string_view name) const {
         if (!sc_.view) return nullptr;
         if (const auto* prm = sc_.view->param(name)) return prm;
@@ -914,6 +935,14 @@ private:
         // variable d'une fonction interne, variable d'un FOR EACH, declaration
         // d'un type du dialecte), une fonction interne : son type, c'est S1.
         if (dialectName(root.text, root.at) || internalFunction(root.text)) return {};
+        // 1.12.16 : une constante de la vue, par son nom (Seuil_Haut, Paliers[2], Recette_Defaut.Nom).
+        if (const Declaration* c = p ? viewConstant(root.text) : nullptr; c && !param(root.text)) {
+            if (write) {
+                reportTok(i, i + 1, S::Error, root.text + " est une constante de la vue " + sc_.view->name + " : elle ne s'\xC3\xA9" "crit pas");
+                return {};
+            }
+            return types::isRich(c->type) && !segs.empty() ? std::string{} : walkTypeOf(*p, c->type, textOf(i, j).substr(root.text.size()));
+        }
         // Un parametre de la vue (popup, symbole) : son type declare.
         if (param(root.text)) {
             if (p) return params::expressionType(*p, sc_.view, textOf(i, j));
@@ -940,6 +969,30 @@ private:
             for (const auto& pp : types::pathProblems(*p, write ? text + " := 0;" : text))
                 reportTok(i, j, S::Error, pp.message);
             return types::typeOfPath(*p, text);
+        }
+        // 1.12.16 : Vue_Four.Seuil_Haut - la constante d'une vue (ou d'une popup) : publique d'ailleurs.
+        if (p && pub::viewNamed(*p, root.text) && !segs.empty() && !segs.front().index) {
+            viewmembers::Member m;
+            std::string why;
+            const std::size_t cut = segs.front().tok + 1;
+            if (viewmembers::resolve(*p, root.text + "." + segs.front().member, m, &why, sc_.view)) {
+                if (m.constant) {
+                    if (write) {
+                        reportTok(i, cut, S::Error, m.view->name + "." + m.constant->name + " est une constante : elle ne s'\xC3\xA9" "crit pas");
+                        return {};
+                    }
+                    const std::string text = textOf(i, j);
+                    std::size_t rest = root.text.size() + 1;
+                    while (rest < text.size() && text[rest] != '.' && text[rest] != '[') ++rest;
+                    return types::isRich(m.constant->type) && segs.size() > 1 ? std::string{}
+                                                                              : walkTypeOf(*p, m.constant->type, std::string_view(text).substr(rest));
+                }
+                return {};
+            }
+            if (!why.empty()) {
+                reportTok(i, cut, S::Error, why);
+                return {};
+            }
         }
         // SYS.X, Vue.Objet.Propriete : le chemin public (l'index le coupe).
         if (p && (pub::isSysRoot(root.text) || pub::viewNamed(*p, root.text))) {
@@ -1150,7 +1203,13 @@ private:
     }
     // Un appel de fonction d'instance : ses arguments controles comme ceux d'une fonction IHM.
     std::size_t instanceCall(std::size_t i, std::size_t j, const HmiFunction& f, bool statement) {
-        (void)i;
+        // 1.12.16 : Vue_Four.CouleurNiveau(...) d'ailleurs - une fonction privee de la vue.
+        if (sc_.project && f.visibility == Visibility::Private)
+            for (const auto& v : sc_.project->views)
+                if (!isSymbolView(v) && std::any_of(v.functions.begin(), v.functions.end(), [&](const HmiFunction& g) { return &g == &f; })
+                    && (!sc_.view || sc_.view->id != v.id))
+                    reportTok(i, j, Finding::Severity::Error,
+                              v.name + "." + f.name + " est priv\xC3\xA9" "e : seule " + v.name + " l'appelle (rends-la publique)");
         pendingSymbolFn_ = &f;
         const std::size_t after = call(j - 1, statement);
         pendingSymbolFn_ = nullptr;
@@ -1165,6 +1224,9 @@ private:
         const HmiFunction* ownFn = nullptr;
         if (!pendingSymbolFn_)
             if (const View* sv = symbolHere()) ownFn = symbolFunction(*sv, name.text);
+        // 1.12.16 : une fonction de la vue (ou de la popup), par son nom - elle passe avant celles du projet.
+        if (!pendingSymbolFn_ && !ownFn && sc_.view && !internalFunction(name.text))
+            if (const auto fs = viewmembers::functions(*sc_.view, name.text); !fs.empty()) ownFn = fs.front();
         if (ownFn) pendingSymbolFn_ = ownFn;
         struct Reset { const HmiFunction*& p; bool on; ~Reset() { if (on) p = nullptr; } } reset{pendingSymbolFn_, ownFn != nullptr};
         std::size_t k = i + 2;
@@ -1975,6 +2037,19 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
                 fill(std::move(i), f);
             }
         }
+        // 1.12.16 : les fonctions de la vue (ou de la popup) - elles voient ses constantes et ses fonctions.
+        if (!isSymbolView(v))
+            for (const auto& fn : v.functions) {
+                if (focus && !focus->functions.count(fn.id)) continue;
+                for (const auto& f : check(scopeFor(&v, &fn), fn.body, fn.decls, decl::Role::Function)) {
+                    Issue i;
+                    i.category = "Fonction";
+                    i.view = v.id;
+                    i.property = v.name + "." + fn.name;
+                    i.item = fn.id;
+                    fill(std::move(i), f);
+                }
+            }
         const auto actions = [&](const Object* o, const std::vector<Action>& list) {
             for (std::size_t k = 0; k < list.size(); ++k) {
                 const auto& a = list[k];

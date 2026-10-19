@@ -374,7 +374,7 @@ Analysis analyse(const Project& p, const Script& owner, const Declaration& d, co
             }
         }
         if (p.variable(w)) a.uses.push_back(w);
-        if (view && view->param(w))
+        if (view && view->param(w) && !p.view(owner.id))     // 1.12.16 : une constante de vue qui le lit se calcule a l'ouverture
             issue(true, i, w + " est un param\xC3\xA8tre de la vue : il n'existe pas encore au d\xC3\xA9marrage");
         if (const Variable* v = p.variable(w); v && !v->equipment.empty())
             issue(false, i, w + " est li\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9quipement " + v->equipment

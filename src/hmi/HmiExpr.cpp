@@ -85,6 +85,13 @@ public:
         // l'appeler depuis une vue la ferait avancer d'un cycle. L'interpreteur
         // passe le meme nom pour les deux : on ne laisse passer que les
         // fonctions standard, qui n'ont pas d'etat.
+        // 1.12.16 : une fonction de la vue, par son nom (la portee de la vue y mene : Vue_Four.Pourcent) -
+        // avant celles du projet.
+        if (auto* host = dynamic_cast<FunctionHost*>(&plc_); host && scope_ && name.find('.') == std::string_view::npos) {
+            const std::string resolved = scope_->resolve(name);
+            if (resolved != name && resolved.find('.') != std::string::npos && host->hostsFunction(resolved))
+                return host->callFromExpression(resolved, arguments, result);
+        }
         // Lot 7 : une fonction IHM du projet (en lecture seule).
         if (auto* host = dynamic_cast<FunctionHost*>(&plc_); host && host->hostsFunction(name))
             return host->callFromExpression(name, arguments, result);

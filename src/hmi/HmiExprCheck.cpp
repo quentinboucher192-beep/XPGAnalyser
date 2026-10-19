@@ -477,6 +477,11 @@ private:
                             at_ = k;
                             std::string dotted;
                             for (const auto& sg : segs) dotted += (dotted.empty() ? "" : ".") + sg;
+                            // 1.12.16 : Vue_Four.CouleurNiveau(...) d'ailleurs - une fonction privee de la vue.
+                            if (segs.size() == 2 && fn->visibility == Visibility::Private && ctx_.project)
+                                if (const View* owner = ctx_.project->viewByName(segs[0]);
+                                    owner && !isSymbolView(*owner) && (!ctx_.view || ctx_.view->id != owner->id))
+                                    problem(owner->name + "." + fn->name + " est priv\xC3\xA9" "e : seule " + owner->name + " l'appelle (rends-la publique)");
                             pendingFn_ = fn;
                             return call(dotted);
                         }
@@ -606,6 +611,31 @@ private:
                 }
             if (prm && !prm->type.empty()) {
                 if (const auto ty = params::expressionType(*p, where, text); !ty.empty()) v.type = typeOfName(ty);
+                return v;
+            }
+        }
+        // 1.12.16 : une constante de la vue (Seuil_Haut), ou d'une vue nommee (Vue_Four.Seuil_Haut) - publique
+        // d'ailleurs ; une fonction de vue nommee sans parentheses : dite par son appel.
+        if (p) {
+            const Declaration* c = ctx_.view ? viewmembers::constant(*ctx_.view, root) : nullptr;
+            std::string_view rest = std::string_view(text).substr(std::min(text.size(), root.size()));
+            if (!c && !segs.empty() && !segs.front().index && pub::viewNamed(*p, root)) {
+                viewmembers::Member m;
+                std::string why;
+                if (viewmembers::resolve(*p, root + "." + segs.front().member, m, &why, ctx_.view)) {
+                    if (!m.constant) return v;
+                    c = m.constant;
+                    rest = std::string_view(text).substr(std::min(text.size(), root.size() + 1 + segs.front().member.size()));
+                } else if (!why.empty()) {
+                    Problem pb;
+                    pb.message = why;
+                    for (const auto& q : problems) if (q.message == pb.message) return v;
+                    problems.push_back(std::move(pb));
+                    return v;
+                }
+            }
+            if (c) {
+                if (const std::string t = viewmembers::typeAlong(*p, c->type, rest); !t.empty()) v.type = typeOfName(t);
                 return v;
             }
         }
@@ -772,6 +802,9 @@ private:
         pendingFn_ = nullptr;
         if (!symFn)
             if (const View* sv = symbolHere()) symFn = symbolFunction(*sv, name);
+        // 1.12.16 : une fonction de la vue (ou de la popup), par son nom - elle passe avant celles du projet.
+        if (!symFn && ctx_.view)
+            if (const auto fs = viewmembers::functions(*ctx_.view, name); !fs.empty()) symFn = fs.front();
         next();    // (
         std::vector<Val> args;
         if (!isOp(")"))

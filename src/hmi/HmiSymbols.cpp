@@ -11,6 +11,7 @@
 #include "HmiEnums.hpp"            // 1.11.3 : Auto -> T_MODE#Auto (un parametre de type enumeration)
 #include "HmiOperators.hpp"
 #include "HmiExpr.hpp"
+#include "HmiTypes.hpp"
 #include "HmiRuntime.hpp"
 #include "HmiScript.hpp"        // 1.11.10 : splitDeclarations (les noms qu'une fonction de symbole cache)
 #include "HmiSources.hpp"       // 1.12.7 (lot E) : le joker [*], le dossier /*
@@ -1684,6 +1685,29 @@ bool nameTaken(const View& v, std::string_view name, std::string* what, const vo
     for (const auto& f : v.functions)
         if (&f != self && sameName(f.name, name)) return say("la fonction " + f.name);
     return false;
+}
+
+std::string typeAlong(const Project& p, std::string type, std::string_view rest) {
+    std::size_t k = 0;
+    while (k < rest.size() && !type.empty()) {
+        if (rest[k] == '[') {
+            int depth = 0;
+            std::size_t e = k;
+            for (; e < rest.size(); ++e) {
+                if (rest[e] == '[') ++depth;
+                else if (rest[e] == ']' && --depth == 0) break;
+            }
+            type = types::stepIndex(p, type).type;
+            k = e + 1;
+            continue;
+        }
+        if (rest[k] != '.') return {};
+        std::size_t e = k + 1;
+        while (e < rest.size() && rest[e] != '.' && rest[e] != '[') ++e;
+        type = types::stepMember(p, type, rest.substr(k + 1, e - k - 1)).type;
+        k = e;
+    }
+    return type;
 }
 
 } // namespace viewmembers

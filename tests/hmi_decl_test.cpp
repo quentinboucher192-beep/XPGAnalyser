@@ -2118,6 +2118,15 @@ Project vueProject() {
     open.event = "OnOpen";
     open.body = "R1 := Pourcent(Niveau, Seuil_Haut);\nC := CouleurNiveau(Niveau);\nR2 := Paliers[2];\n";
     four.scripts.push_back(open);
+    Object txt;
+    txt.id = p.allocate();
+    txt.kind = Kind::Text;
+    txt.name = "Txt_Pourcent";
+    txt.props.push_back({"text", "", "Pourcent(Niveau, Seuil_Haut)"});
+    txt.props.push_back({"textColor", "", "CouleurNiveau(Niveau)"});
+    txt.props.push_back({"w", "", "Paliers[1] * 4.0"});
+    txt.layer = four.layers.empty() ? kNoId : four.layers.front().id;
+    four.objects.push_back(txt);
     p.views.push_back(four);
     View pop = makeView(p, "Pop_Reglage");
     pop.role = "popup";
@@ -2133,6 +2142,15 @@ Project vueProject() {
     popOpen.body = "Pas_Lu := Pas;\n";
     pop.scripts.push_back(popOpen);
     p.views.push_back(pop);
+    View accueil = makeView(p, "Vue_Accueil");
+    Object resume;
+    resume.id = p.allocate();
+    resume.kind = Kind::Text;
+    resume.name = "Txt_Resume";
+    resume.props.push_back({"text", "", "Vue_Four.Pourcent(Niveau, Vue_Four.Seuil_Haut)"});
+    resume.layer = accueil.layers.empty() ? kNoId : accueil.layers.front().id;
+    accueil.objects.push_back(resume);
+    p.views.push_back(accueil);
     Script bilan;
     bilan.id = p.allocate();
     bilan.name = "Bilan";
@@ -2158,7 +2176,7 @@ void vueConstantes11216() {
                   && all.find("ouverture=oui") != std::string::npos && all.find("format=26") != std::string::npos,
               "sur disque : constantes_vue, portee=privee, ouverture=oui, format 26");
         const auto back = parseProject(readerOf(files));
-        check(back.has_value() && back.value().views.size() == 2 && back.value().views[0].constants == q.views[0].constants
+        check(back.has_value() && back.value().views.size() == 3 && back.value().views[0].constants == q.views[0].constants
                   && back.value().views[0].functions == q.views[0].functions && back.value().views[1].constants == q.views[1].constants,
               "relu : les memes constantes et fonctions des vues");
         Project none = p;
@@ -2209,6 +2227,16 @@ void vueConstantes11216() {
         const auto v = [&](const char* n) { const auto* x = rt.variable(n); return x ? x->display() : std::string("?"); };
         journal.clear();
         for (const auto& e : rt.journal()) journal += e.source + " " + e.message + "\n";
+        const auto fx = [&](const View& view, const char* key) {
+            for (const auto& pr : view.objects.front().props)
+                if (pr.key == key)
+                    if (auto r = rt.evaluatedProp(view.id, Kind::Text, pr)) return *r;
+            return std::string("?");
+        };
+        check(fx(four, "text").rfind("58.82", 0) == 0 && fx(four, "textColor") == "#2EA043" && fx(four, "w") == "85",
+              "les fx de la vue : Pourcent(...) = " + fx(four, "text") + ", CouleurNiveau(...) = " + fx(four, "textColor")
+                  + ", Paliers[1] * 4.0 = " + fx(four, "w"));
+        check(fx(p.views[2], "text").rfind("58.82", 0) == 0, "une fx ailleurs : Vue_Four.Pourcent(...) = " + fx(p.views[2], "text"));
         check(v("R1").rfind("58.82", 0) == 0 && v("C") == "'#2EA043'" && v("R2") == "42.5",
               "dans la vue, par leur nom : Pourcent(Niveau, Seuil_Haut) = " + v("R1") + ", CouleurNiveau(Niveau) = " + v("C")
                   + ", Paliers[2] = " + v("R2") + "\n" + journal);
@@ -2220,6 +2248,50 @@ void vueConstantes11216() {
         journal.clear();
         for (const auto& e : rt.journal()) journal += e.source + " " + e.message + "\n";
         check(v("Pas_Lu") == "2", "Pas, calculee a l'ouverture, lit Cuve.Capacite : " + v("Pas_Lu") + "\n" + journal);
+    }
+    // Generer et Compiler : le projet est bon.
+    {
+        const auto said = [](const std::vector<Issue>& list) {
+            std::string out;
+            for (const auto& i : list)
+                if (i.severity != Issue::Severity::Info) out += "  [" + std::string(toString(i.severity)) + "] " + i.category + " " + i.property + " l" + std::to_string(i.line) + " : " + i.message + "\n";
+            return out;
+        };
+        const NameExists none = [](std::string_view) { return false; };   // pas d'automate : un nom inconnu est une faute
+        const auto g = generate(p, none);
+        const auto c = compileWith(p, none);
+        check(count(g).errors == 0 && count(c).errors == 0, "Generer et Compiler : aucune erreur\n" + said(g) + "--\n" + said(c));
+        // Ce qu'ils refusent : une privee lue d'ailleurs, une constante ecrite, un nom pris, un membre inconnu,
+        // une constante du demarrage qui lit une de l'ouverture.
+        Project q = vueProject();
+        q.programs.scripts[0].body = "C := Vue_Four.Couleurs['ok'];\nC := Vue_Four.CouleurNiveau(1.0);\nVue_Four.Seuil_Haut := 2.0;\nR1 := Vue_Four.Inconnu;\n";
+        q.views[0].scripts[0].body += "Seuil_Haut := 3.0;\n";
+        q.views[2].objects.front().props.push_back({"textColor", "", "Vue_Four.Couleurs['ok']"});
+        Object barre;
+        barre.id = q.allocate();
+        barre.kind = Kind::Rectangle;
+        barre.name = "Paliers";
+        barre.layer = q.views[0].layers.empty() ? kNoId : q.views[0].layers.front().id;
+        q.views[0].objects.push_back(barre);
+        q.views[1].constants.push_back(computedDecl(DeclKind::Constant, "Double", "REAL", "Double := Pas * 2.0;\n"));
+        q.views[1].constants.back().reopen = false;
+        q.views[1].constants[0].reopen = true;
+        uniqueDeclarationIds(q);
+        const auto g2 = generate(q, none);
+        const auto c2 = compileWith(q, none);
+        const std::string all = said(g2) + said(c2);
+        const auto saidIt = [&](const char* part) { return all.find(part) != std::string::npos; };
+        check(saidIt("Vue_Four.Couleurs est priv\xC3\xA9" "e : seule Vue_Four la lit"), "Vue_Four.Couleurs d'ailleurs : privee\n" + all);
+        check(saidIt("Vue_Four.CouleurNiveau est priv\xC3\xA9" "e : seule Vue_Four l'appelle"), "Vue_Four.CouleurNiveau() d'ailleurs : privee");
+        check(saidIt("Vue_Four.Seuil_Haut est une constante : elle ne s'\xC3\xA9" "crit pas"), "Vue_Four.Seuil_Haut := ... : refuse");
+        check(saidIt("Seuil_Haut est une constante de la vue Vue_Four"), "Seuil_Haut := ... dans la vue : refuse");
+        check(saidIt("Paliers : nom d\xC3\xA9j\xC3\xA0 pris dans la vue par l'objet Paliers"), "un objet du meme nom : refuse");
+        check(saidIt("Inconnu"), "Vue_Four.Inconnu : dit");
+        check(std::count_if(g2.begin(), g2.end(), [](const Issue& i) {
+                  return i.category != "Script" && i.message.find("Vue_Four.Couleurs est priv") != std::string::npos;
+              }) >= 1,
+              "une fx d'une autre vue qui lit Vue_Four.Couleurs : privee aussi");
+        check(saidIt("Double se calcule au d\xC3\xA9marrage : elle ne lit pas Pas"), "une du demarrage qui lit une de l'ouverture : refuse");
     }
     // Ecrire une constante de vue : refuse.
     {
