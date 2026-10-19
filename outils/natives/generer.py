@@ -101,7 +101,9 @@ def main():
         w("         %s," % cstr(f["st"]))
         w("         %s," % cstr(f["c"]))
         w("         %s," % cstr(f["cpp"]))
-        w("         Avail::%s, Avail::%s, %s, %s, %s, {%s}}," % (mode(f["c"], name), mode(f["cpp"], name), "true" if expression else "false",
+        inc = f.get("inc") or mode(f["c"], name)            # 1.12.16 : ce que dit la fiche, sinon devine
+        incpp = f.get("incpp") or mode(f["cpp"], name)
+        w("         Avail::%s, Avail::%s, %s, %s, %s, {%s}}," % (inc, incpp, "true" if expression else "false",
                                                              "true" if ro else "false", ex, notes))
     w("    };")
     w("    return k;")

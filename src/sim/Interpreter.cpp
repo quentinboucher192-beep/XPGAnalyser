@@ -5590,6 +5590,9 @@ private:
         if (info->group == "map") return std::optional<core::Result<RV>>(mapNative(u, e));
         if (info->group == "tuple") return std::optional<core::Result<RV>>(tupleNative(u, e));
         if (info->group == "set" || info->group == "ring") return std::optional<core::Result<RV>>(setNative(u, e));    // 1.12.7
+        if (info->group == "math" || info->group == "texte" || info->group == "date")                                 // 1.12.16
+            return std::optional<core::Result<RV>>(valueNative(u, e));
+        if (info->group == "utility") return std::optional<core::Result<RV>>(utilityNative(u, e));                    // 1.12.16
         return std::optional<core::Result<RV>>(listNative(u, *info, e));
     }
 
@@ -5665,10 +5668,27 @@ private:
         if (!sa) return core::Err<core::Error>(sa.error());
         auto sb = asSet(*B->obj);
         if (!sb) return core::Err<core::Error>(sb.error());
+        const auto in = [](const Obj& set, const ObjRef& x) {
+            bool present = false;
+            (void)setPlace(set, x->value, present);
+            return present;
+        };
+        // 1.12.16 : SET_INCLUDES (std::includes) - chaque valeur de B est dans A (un B vide : vrai).
+        if (u == "SET_INCLUDES") {
+            for (const auto& x : (*sb)->items)
+                if (!in(**sa, x)) return RV{Value::boolean(false), nullptr};
+            return RV{Value::boolean(true), nullptr};
+        }
         auto out = makeObj(setType(elem));
         if (u == "SET_UNION") {
             out->items = (*sa)->items;
             for (const auto& x : (*sb)->items) out->items.push_back(x);
+            normalizeList(*out);
+        } else if (u == "SET_SYMMETRIC_DIFFERENCE") {      // 1.12.16 : les valeurs d'un seul des deux
+            for (const auto& x : (*sa)->items)
+                if (!in(**sb, x)) out->items.push_back(x);
+            for (const auto& x : (*sb)->items)
+                if (!in(**sa, x)) out->items.push_back(x);
             normalizeList(*out);
         } else {
             const bool keepCommon = u == "SET_INTERSECTION";
@@ -5767,7 +5787,7 @@ private:
         auto lowR = lowOf(u, L);
         // Les fonctions qui ne prennent pas d'indice lisent aussi un ARRAY a deux dimensions.
         const bool indexed = u == "LIST_SET" || u == "LIST_LAST_INDEX_OF" || u == "LIST_FIND_IF" || u == "LIST_MIN_INDEX" || u == "LIST_MAX_INDEX"
-                          || u == "LIST_SWAP" || u == "LIST_MOVE" || u == "LIST_SLICE";
+                          || u == "LIST_SWAP" || u == "LIST_MOVE" || u == "LIST_SLICE" || u == "LIST_LOWER_BOUND";     // 1.12.16
         if (!lowR && indexed) return core::Err<core::Error>(lowR.error());
         const std::int64_t low = lowR ? *lowR : 0;
 
@@ -6009,6 +6029,53 @@ private:
             }
             return RV{{}, out};
         }
+        // ---- 1.12.16 : chercher dans une liste triee (std::lower_bound, std::binary_search) ----
+        if (u == "LIST_LOWER_BOUND" || u == "LIST_BINARY_SEARCH") {
+            if (auto bad = scalarsOnly()) return *bad;
+            auto given = rich(arg(1));
+            if (!given) return given;
+            auto fitted = fitTo(u, elem, *given);            // 'abc' dans une liste de REAL : refuse
+            if (!fitted) return core::Err<core::Error>(fitted.error());
+            const Value& v = (*fitted)->value;
+            // La premiere place dont l'element n'est pas plus petit que v (par moities).
+            const auto at = std::lower_bound(L.items.begin(), L.items.end(), v, [](const ObjRef& x, const Value& y) { return x->value.compare(y) < 0; });
+            if (u == "LIST_BINARY_SEARCH") return boolean(at != L.items.end() && (*at)->value.compare(v) == 0);
+            return integer(static_cast<std::int64_t>(at - L.items.begin()) + low);     // aucun : L.Count (la fin)
+        }
+        // ---- 1.12.16 : les statistiques (la mediane, la variance, l'ecart type) ----
+        if (u == "LIST_MEDIAN" || u == "LIST_VARIANCE" || u == "LIST_STDDEV") {
+            std::vector<double> xs;
+            for (const auto& i : L.items) {
+                if (!i || !i->type || i->type->kind != TypeDesc::Kind::Scalar || !isNumeric(i->value.type()) || i->value.type() == Type::Time)
+                    return dialectError(u + " : des nombres sont attendus, pas un " + L.type->text());
+                xs.push_back(i->value.asReal());
+            }
+            bool sample = false;
+            if (argc > 1) {
+                auto d = boolArg(u, arg(1));
+                if (!d) return core::Err<core::Error>(d.error());
+                sample = *d;
+            }
+            if (xs.empty()) return dialectError(u + " : la liste est vide");
+            const auto real = [](double r) { return core::Result<RV>(RV{Value::real(r), nullptr}); };
+            if (u == "LIST_MEDIAN") {
+                std::sort(xs.begin(), xs.end());
+                const std::size_t mid = xs.size() / 2;
+                return real(xs.size() % 2 ? xs[mid] : (xs[mid - 1] + xs[mid]) / 2.0);
+            }
+            if (sample && xs.size() < 2)
+                return dialectError(u + " : un \xC3\xA9" "chantillon d'une seule valeur n'a pas de variance (n - 1 = 0)");
+            // En deux passes : la moyenne, puis les carres des ecarts (plus juste qu'une seule somme des carres).
+            double mean = 0.0;
+            for (const double x : xs) mean += x;
+            mean /= static_cast<double>(xs.size());
+            double squares = 0.0;
+            for (const double x : xs) squares += (x - mean) * (x - mean);
+            const double variance = squares / static_cast<double>(sample ? xs.size() - 1 : xs.size());
+            return real(u == "LIST_VARIANCE" ? variance : std::sqrt(variance));
+        }
+        // ---- 1.12.16 : LIST_TRANSFORM (std::ranges::transform) - une TRANSFORMATION ou une fonction du projet ----
+        if (u == "LIST_TRANSFORM") return transformList(u, La, arg(1), arg(2), e.line);
         return dialectError(u + " : pas encore prise en charge");
     }
 
@@ -6531,6 +6598,40 @@ private:
             if (!c) return core::Err<core::Error>(c.error());
             return RV{Value::integer(Type::DInt, static_cast<std::int64_t>(s->obj->items.size())), nullptr};
         }
+        // ---- 1.12.16 : INTERPOLER_TABLE - une courbe donnee par des points, lue en ligne droite entre deux points ;
+        // avant le premier, la premiere valeur, apres le dernier, la derniere.
+        if (u == "INTERPOLER_TABLE") {
+            ObjArg sx;
+            auto xs = numbers(0, &sx);
+            if (!xs) return core::Err<core::Error>(xs.error());
+            auto ys = numbers(1, nullptr);
+            if (!ys) return core::Err<core::Error>(ys.error());
+            auto v = value(2);
+            if (!v) return core::Err<core::Error>(v.error());
+            const std::size_t n = xs->size();
+            if (n == 0) return dialectError(u + " : la table est vide (X n'a aucun point)");
+            if (ys->size() != n)
+                return dialectError(u + " : X a " + std::to_string(n) + " valeur" + (n > 1 ? "s" : "") + ", Y en a " + std::to_string(ys->size())
+                                    + " \xE2\x80\x94 il en faut autant");
+            // Les indices dits : ceux d'un ARRAY (a ses bornes), ou a partir de 0.
+            const TypeDesc& tx = *sx.obj->type;
+            const std::int64_t low = tx.kind == TypeDesc::Kind::Array && tx.bounds.size() == 1 ? tx.bounds[0].first : 0;
+            std::vector<double> x(n), y(n);
+            for (std::size_t k = 0; k < n; ++k) {
+                x[k] = (*xs)[k].asReal();
+                y[k] = (*ys)[k].asReal();
+                if (k > 0 && !(x[k] > x[k - 1]))
+                    return dialectError(u + " : X doit cro\xC3\xAEtre : X[" + std::to_string(low + static_cast<std::int64_t>(k)) + "] = " + (*xs)[k].display()
+                                        + " ne d\xC3\xA9passe pas X[" + std::to_string(low + static_cast<std::int64_t>(k) - 1) + "] = " + (*xs)[k - 1].display());
+            }
+            const double at = v->asReal();
+            if (std::isnan(at)) return dialectError(u + " : V n'est pas un nombre (NaN)");
+            if (at <= x.front()) return RV{Value::real(y.front()), nullptr};
+            if (at >= x.back()) return RV{Value::real(y.back()), nullptr};
+            const std::size_t i = static_cast<std::size_t>(std::upper_bound(x.begin(), x.end(), at) - x.begin());     // x[i - 1] <= at < x[i]
+            const double t = (at - x[i - 1]) / (x[i] - x[i - 1]);
+            return RV{Value::real(std::lerp(y[i - 1], y[i], t)), nullptr};
+        }
         // ---- les entiers : GCD, LCM ; MIDPOINT et les saturations (un <T>, ou le type de a)
         const auto integerValue = [&](std::size_t k) -> core::Result<Value> {
             auto v = value(k);
@@ -6623,6 +6724,7 @@ private:
 
     // ---- <bit> : BIT_COUNT, BIT_FIRST, BIT_TEST, BIT_SET, BIT_RESET ----------------------
     core::Result<RV> bitNative(const std::string& u, const Expr& e) {
+        if (u == "BYTESWAP" || u == "WORDSWAP") return swapNative(u, *e.arguments[0].second);       // 1.12.16
         const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
         auto w = rich(arg(0));
         if (!w) return w;
@@ -6662,6 +6764,560 @@ private:
         std::int64_t out = static_cast<std::int64_t>(r);
         if (isSigned && width < 64 && ((r >> (width - 1)) & 1u) != 0) out = static_cast<std::int64_t>(r | ~mask);     // le signe
         return RV{Value::integer(w->v.type(), truncateTo(w->v.type(), out)), nullptr};
+    }
+
+    // =====================================================================================
+    // 1.12.16 : LES NATIVES std:: - <cmath>, <string>, <format>, <chrono> sur des valeurs simples ;
+    // <bit> (BYTESWAP, WORDSWAP) ; <utility> (SWAP, EXCHANGE : des variables) ; LIST_TRANSFORM (une
+    // TRANSFORMATION, ou une fonction du projet par son nom, comme une lambda).
+    // =====================================================================================
+    static constexpr std::int64_t kDayMs = 86400000;
+    static std::int64_t floorDivision(std::int64_t a, std::int64_t b) { return a / b - ((a % b != 0) && ((a < 0) != (b < 0))); }
+
+    core::Result<RV> valueNative(const std::string& u, const Expr& e) {
+        std::vector<Value> a;
+        for (const auto& given : e.arguments) {
+            auto v = rich(*given.second);
+            if (!v) return v;
+            if (v->o) return dialectError(u + " : une valeur simple est attendue, pas un " + typeNameOf(*v));
+            a.push_back(v->v);
+        }
+        const auto out = [](Value v) { return core::Result<RV>(RV{std::move(v), nullptr}); };
+        // Un nombre (ni un BOOL, ni une duree, ni une date) ; un texte.
+        const auto number = [&](std::size_t k) -> core::Result<double> {
+            const Type t = a[k].type();
+            if (!isNumeric(t) || t == Type::Time) return dialectError(u + " : un nombre est attendu, pas " + a[k].display());
+            return a[k].asReal();
+        };
+        const auto text = [&](std::size_t k) -> core::Result<std::string> {
+            if (a[k].type() != Type::String) return dialectError(u + " : un texte est attendu, pas " + a[k].display());
+            return a[k].asString();
+        };
+        // ---- <cmath>
+        if (u == "CEIL" || u == "FLOOR") {
+            auto x = number(0);
+            if (!x) return core::Err<core::Error>(x.error());
+            if (a[0].type() != Type::Real) return out(a[0]);              // un entier l'est deja, dans son type
+            return out(Value::real(u == "CEIL" ? std::ceil(*x) : std::floor(*x)));
+        }
+        if (u == "ISNAN" || u == "ISFINITE") {
+            auto x = number(0);
+            if (!x) return core::Err<core::Error>(x.error());
+            return out(Value::boolean(u == "ISNAN" ? std::isnan(*x) : std::isfinite(*x)));
+        }
+        if (u == "FMOD" || u == "HYPOT" || u == "ATAN2" || u == "LERP") {
+            double x[3] = {0.0, 0.0, 0.0};
+            for (std::size_t k = 0; k < a.size() && k < 3; ++k) {
+                auto v = number(k);
+                if (!v) return core::Err<core::Error>(v.error());
+                x[k] = *v;
+            }
+            if (u == "FMOD") {
+                if (x[1] == 0.0) return dialectError(u + " : division par z\xC3\xA9ro");
+                return out(Value::real(std::fmod(x[0], x[1])));
+            }
+            if (u == "HYPOT") return out(Value::real(std::hypot(x[0], x[1])));
+            if (u == "ATAN2") return out(Value::real(std::atan2(x[0], x[1])));
+            return out(Value::real(std::lerp(x[0], x[1], x[2])));
+        }
+        // ---- <string>, <format>
+        if (u == "STARTS_WITH" || u == "ENDS_WITH" || u == "CONTAINS") {
+            auto s = text(0);
+            if (!s) return core::Err<core::Error>(s.error());
+            auto p = text(1);
+            if (!p) return core::Err<core::Error>(p.error());
+            if (u == "CONTAINS") return out(Value::boolean(s->find(*p) != std::string::npos));
+            if (p->size() > s->size()) return out(Value::boolean(false));
+            const std::size_t from = u == "STARTS_WITH" ? 0 : s->size() - p->size();
+            return out(Value::boolean(s->compare(from, p->size(), *p) == 0));
+        }
+        if (u == "TRIM" || u == "TRIM_LEFT" || u == "TRIM_RIGHT") {
+            auto s = text(0);
+            if (!s) return core::Err<core::Error>(s.error());
+            static constexpr const char* kBlanks = " \t\r\n";
+            std::string r = *s;
+            if (u != "TRIM_LEFT") {
+                const auto last = r.find_last_not_of(kBlanks);
+                r.erase(last == std::string::npos ? 0 : last + 1);
+            }
+            if (u != "TRIM_RIGHT") r.erase(0, std::min(r.find_first_not_of(kBlanks), r.size()));
+            return out(Value::text(std::move(r)));
+        }
+        if (u == "FORMAT") {
+            auto model = text(0);
+            if (!model) return core::Err<core::Error>(model.error());
+            auto f = formatText(u, *model, std::vector<Value>(a.begin() + 1, a.end()));
+            if (!f) return core::Err<core::Error>(f.error());
+            return out(Value::text(std::move(*f)));
+        }
+        // ---- <chrono> : une date (DATE, DATE_AND_TIME), une heure (DATE_AND_TIME, TIME_OF_DAY) - ses jours
+        // depuis le 1970-01-01, ses millisecondes depuis minuit (l'heure du mur, sans fuseau).
+        struct When {
+            std::int64_t days{0}, clock{0};
+            bool         dated{true};
+        };
+        const auto when = [&](std::size_t k, bool date, bool clock) -> core::Result<When> {
+            const Type t = a[k].type();
+            if (!(t == Type::Dt || (t == Type::Date && !clock) || (t == Type::Tod && !date))) {
+                const char* want = date && !clock ? "une date est attendue (DATE_AND_TIME, DATE)"
+                                 : clock && !date ? "une heure est attendue (DATE_AND_TIME, TIME_OF_DAY)"
+                                                  : "une date ou une heure est attendue (DATE_AND_TIME, DATE, TIME_OF_DAY)";
+                return dialectError(u + " : " + want + ", pas " + a[k].display());
+            }
+            When w;
+            const std::int64_t ms = a[k].asInteger(), day = floorDivision(ms, kDayMs);
+            w.dated = t != Type::Tod;
+            w.days = w.dated ? day : 0;
+            w.clock = ms - day * kDayMs;
+            return w;
+        };
+        const auto weekday = [](std::int64_t days) { return static_cast<int>(((days + 3) % 7 + 7) % 7); };   // 0 : lundi (le 1970-01-01, un jeudi)
+        if (u == "YEAR" || u == "MONTH" || u == "DAY" || u == "WEEKDAY") {
+            auto w = when(0, true, false);
+            if (!w) return core::Err<core::Error>(w.error());
+            if (u == "WEEKDAY") return out(Value::integer(Type::Int, weekday(w->days) + 1));     // ISO 8601 : 1 lundi ... 7 dimanche
+            std::int64_t y = 0;
+            unsigned m = 0, d = 0;
+            civilFromDays(w->days, y, m, d);
+            return out(Value::integer(Type::Int, u == "YEAR" ? y : u == "MONTH" ? static_cast<std::int64_t>(m) : static_cast<std::int64_t>(d)));
+        }
+        if (u == "HOUR" || u == "MINUTE" || u == "SECOND") {
+            auto w = when(0, false, true);
+            if (!w) return core::Err<core::Error>(w.error());
+            const std::int64_t s = w->clock / 1000;
+            return out(Value::integer(Type::Int, u == "HOUR" ? s / 3600 : u == "MINUTE" ? s / 60 % 60 : s % 60));
+        }
+        if (u == "ADD_DAYS") {
+            auto w = when(0, true, false);
+            if (!w) return core::Err<core::Error>(w.error());
+            const Type nt = a[1].type();
+            if (!isInteger(nt) || nt == Type::Time) return dialectError(u + " : N est un nombre entier de jours, pas " + a[1].display());
+            const std::int64_t n = a[1].asInteger();
+            std::int64_t y = n > 0 ? 10000 : 0;                    // au-dela de dix mille ans : hors du calendrier
+            unsigned m = 0, d = 0;
+            if (n >= -3660000 && n <= 3660000) civilFromDays(w->days + n, y, m, d);
+            if (y < 1 || y > 9999) return dialectError(u + " : la date sort du calendrier (ann\xC3\xA9" "es 1 \xC3\xA0 9999)");
+            return out(Value::integer(a[0].type(), a[0].asInteger() + n * kDayMs));         // a la meme heure, du meme type
+        }
+        if (u == "DAYS_BETWEEN") {
+            auto from = when(0, true, false);
+            if (!from) return core::Err<core::Error>(from.error());
+            auto to = when(1, true, false);
+            if (!to) return core::Err<core::Error>(to.error());
+            // Des jours entiers, vers zero (18 jours et 6 h font 18 ; B avant A, le meme nombre, negatif) ; en
+            // millisecondes sur 64 bits, pas en TIME (49 jours au plus).
+            return out(Value::integer(Type::DInt, (a[1].asInteger() - a[0].asInteger()) / kDayMs));
+        }
+        if (u == "FORMAT_DT") {
+            auto w = when(0, false, false);
+            if (!w) return core::Err<core::Error>(w.error());
+            auto model = text(1);
+            if (!model) return core::Err<core::Error>(model.error());
+            static const char* const kDays[7] = {"lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"};
+            static const char* const kShortDays[7] = {"lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."};
+            static const char* const kMonths[12] = {"janvier", "f\xC3\xA9vrier", "mars", "avril", "mai", "juin", "juillet", "ao\xC3\xBBt",
+                                                    "septembre", "octobre", "novembre", "d\xC3\xA9" "cembre"};
+            static const char* const kShortMonths[12] = {"janv.", "f\xC3\xA9vr.", "mars", "avr.", "mai", "juin", "juil.", "ao\xC3\xBBt",
+                                                         "sept.", "oct.", "nov.", "d\xC3\xA9" "c."};
+            std::int64_t y = 1970;
+            unsigned m = 1, d = 1;
+            civilFromDays(w->days, y, m, d);
+            const std::int64_t s = w->clock / 1000;
+            const auto digits = [](std::int64_t v, int n) {
+                char buf[32];
+                std::snprintf(buf, sizeof buf, "%0*lld", n, static_cast<long long>(v));
+                return std::string(buf);
+            };
+            const std::string& f = *model;
+            std::string r;
+            for (std::size_t i = 0; i < f.size(); ++i) {
+                if (f[i] != '%') {
+                    r += f[i];
+                    continue;
+                }
+                if (i + 1 >= f.size()) return dialectError(u + " : un % seul \xC3\xA0 la fin du mod\xC3\xA8le (%% pour un %)");
+                const char c = f[++i];
+                if (c == '%') {
+                    r += '%';
+                    continue;
+                }
+                const bool dated = c == 'd' || c == 'm' || c == 'Y' || c == 'y' || c == 'A' || c == 'a' || c == 'B' || c == 'b';
+                if (dated && !w->dated) return dialectError(u + " : %" + std::string(1, c) + " : un TIME_OF_DAY n'a pas de date");
+                switch (c) {
+                    case 'd': r += digits(d, 2); break;
+                    case 'm': r += digits(m, 2); break;
+                    case 'Y': r += digits(y, 4); break;
+                    case 'y': r += digits((y % 100 + 100) % 100, 2); break;
+                    case 'H': r += digits(s / 3600, 2); break;
+                    case 'M': r += digits(s / 60 % 60, 2); break;
+                    case 'S': r += digits(s % 60, 2); break;
+                    case 'A': r += kDays[weekday(w->days)]; break;
+                    case 'a': r += kShortDays[weekday(w->days)]; break;
+                    case 'B': r += kMonths[(m + 11) % 12]; break;
+                    case 'b': r += kShortMonths[(m + 11) % 12]; break;
+                    default:
+                        return dialectError(u + " : %" + std::string(1, c) + " inconnu (%d %m %Y %y %H %M %S %A %a %B %b %%)");
+                }
+            }
+            return out(Value::text(std::move(r)));
+        }
+        return dialectError(u + " : pas encore prise en charge");
+    }
+
+    // ---- FORMAT : std::format, en petit. {} : la valeur suivante ; {:[[remplissage]alignement][signe][#][0][largeur][.precision][type]}
+    // (alignement < > ^ ; type d x X b B o pour un entier, f F e E g G pour un reel, s pour un texte) ; {{ et }} : une accolade.
+    // Une largeur compte des caracteres (UTF-8), pas des octets.
+    static std::size_t utf8Length(const std::string& s) {
+        std::size_t n = 0;
+        for (const char c : s) n += (static_cast<unsigned char>(c) & 0xC0) != 0x80 ? 1 : 0;
+        return n;
+    }
+    static std::string utf8Prefix(const std::string& s, std::size_t count) {
+        std::size_t n = 0, i = 0;
+        for (; i < s.size(); ++i)
+            if ((static_cast<unsigned char>(s[i]) & 0xC0) != 0x80) {
+                if (n == count) break;
+                ++n;
+            }
+        return s.substr(0, i);
+    }
+    core::Result<std::string> formatOne(const std::string& u, const std::string& spec, const Value& v) {
+        const std::string hole = spec.empty() ? std::string("{}") : "{:" + spec + "}";
+        const auto bad = [&](const std::string& why) { return dialectError(u + " : " + hole + " : " + why); };
+        const auto isAlign = [](char c) { return c == '<' || c == '>' || c == '^'; };
+        const auto isDigit = [](char c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; };
+        std::size_t i = 0, width = 0;
+        char fill = ' ', align = 0, sign = '-', type = 0;
+        bool alt = false, zero = false;
+        int precision = -1;
+        if (spec.size() >= 2 && isAlign(spec[1])) {
+            fill = spec[0];
+            align = spec[1];
+            i = 2;
+        } else if (!spec.empty() && isAlign(spec[0])) {
+            align = spec[0];
+            i = 1;
+        }
+        if (i < spec.size() && (spec[i] == '+' || spec[i] == '-' || spec[i] == ' ')) sign = spec[i++];
+        if (i < spec.size() && spec[i] == '#') {
+            alt = true;
+            ++i;
+        }
+        if (i < spec.size() && spec[i] == '0') {
+            zero = true;
+            ++i;
+        }
+        while (i < spec.size() && isDigit(spec[i])) {
+            width = width * 10 + static_cast<std::size_t>(spec[i++] - '0');
+            if (width > 1000) return bad("largeur trop grande (1000 au plus)");
+        }
+        if (i < spec.size() && spec[i] == '.') {
+            if (++i >= spec.size() || !isDigit(spec[i])) return bad("le nombre de d\xC3\xA9" "cimales manque apr\xC3\xA8s le point ({:.2f})");
+            precision = 0;
+            while (i < spec.size() && isDigit(spec[i])) {
+                precision = precision * 10 + (spec[i++] - '0');
+                if (precision > 50) return bad("50 d\xC3\xA9" "cimales au plus");
+            }
+        }
+        if (i < spec.size()) type = spec[i++];
+        if (i != spec.size() || (type != 0 && std::string_view("dxXbBofFeEgGs").find(type) == std::string_view::npos))
+            return bad("format inconnu (d, x, X, b, o, f, e, g, s ; {:.2f}, {:5}, {:05}, {:<8})");
+        const Type t = v.type();
+        const bool floatType = type != 0 && std::string_view("fFeEgG").find(type) != std::string_view::npos;
+        const bool intType = type != 0 && std::string_view("dxXbBo").find(type) != std::string_view::npos;
+        const bool integral = isInteger(t) && t != Type::Time;
+        std::string head, body;           // le signe (et 0x...), puis les chiffres ou le texte
+        bool numeric = true;
+        if (t == Type::Real || (integral && floatType)) {
+            if (intType) return bad("va avec un entier, pas " + v.display());
+            if (type == 's') return bad("va avec un texte, pas " + v.display());
+            const double x = v.asReal();
+            if (std::signbit(x) && !std::isnan(x)) head = "-";
+            else if (sign == '+' || sign == ' ') head = std::string(1, sign);
+            const double m = std::fabs(x);
+            if (!type && precision < 0) {
+                body = Value::real(m).display();                    // comme TO_STRING
+            } else {
+                const char fmt[] = {'%', '.', '*', type ? type : 'g', '\0'};
+                char buf[400];
+                std::snprintf(buf, sizeof buf, fmt, precision < 0 ? 6 : precision, m);
+                body = buf;
+            }
+        } else if (integral) {
+            if (type == 's') return bad("va avec un texte, pas " + v.display());
+            if (precision >= 0) return bad("la pr\xC3\xA9" "cision va avec un r\xC3\xA9" "el ({:.2f}), pas " + v.display());
+            std::uint64_t mag = static_cast<std::uint64_t>(v.asInteger());
+            if (t != Type::ULInt && t != Type::LWord && v.asInteger() < 0) {
+                head = "-";
+                mag = std::uint64_t{0} - mag;
+            } else if (sign == '+' || sign == ' ') {
+                head = std::string(1, sign);
+            }
+            const unsigned base = type == 'x' || type == 'X' ? 16u : type == 'b' || type == 'B' ? 2u : type == 'o' ? 8u : 10u;
+            const char* digit = type == 'X' ? "0123456789ABCDEF" : "0123456789abcdef";
+            do {
+                body.insert(body.begin(), digit[mag % base]);
+                mag /= base;
+            } while (mag != 0);
+            if (alt && base != 10) head += base == 16 ? (type == 'X' ? "0X" : "0x") : base == 2 ? (type == 'B' ? "0B" : "0b") : "0";
+        } else {
+            // Un texte, un BOOL, une duree, une date : leur texte (TRUE, T#1500ms, D#2026-10-19).
+            if (type != 0 && type != 's') return bad("va avec un nombre, pas " + v.display());
+            numeric = false;
+            body = t == Type::String ? v.asString() : v.display();
+            if (precision >= 0) body = utf8Prefix(body, static_cast<std::size_t>(precision));
+        }
+        const std::size_t length = utf8Length(head) + utf8Length(body);
+        if (width <= length) return head + body;
+        const std::size_t pad = width - length;
+        if (numeric && zero && !align) return head + std::string(pad, '0') + body;          // {:05} : des zeros apres le signe
+        const char side = align ? align : numeric ? '>' : '<';
+        const std::size_t left = side == '<' ? 0 : side == '>' ? pad : pad / 2;
+        return std::string(left, fill) + head + body + std::string(pad - left, fill);
+    }
+    core::Result<std::string> formatText(const std::string& u, const std::string& model, const std::vector<Value>& values) {
+        std::string out;
+        std::size_t holes = 0;
+        for (std::size_t i = 0; i < model.size(); ++i) {
+            const char c = model[i];
+            if (c == '}') {
+                if (i + 1 < model.size() && model[i + 1] == '}') {
+                    out += '}';
+                    ++i;
+                    continue;
+                }
+                return dialectError(u + " : une } seule \xE2\x80\x94 }} pour une accolade");
+            }
+            if (c != '{') {
+                out += c;
+                continue;
+            }
+            if (i + 1 < model.size() && model[i + 1] == '{') {
+                out += '{';
+                ++i;
+                continue;
+            }
+            const auto close = model.find('}', i + 1);
+            if (close == std::string::npos) return dialectError(u + " : une { sans } \xE2\x80\x94 {{ pour une accolade");
+            const std::string inside = model.substr(i + 1, close - i - 1);
+            i = close;
+            if (!inside.empty() && inside.front() != ':')
+                return dialectError(u + " : {" + inside + "} \xE2\x80\x94 {} prend la valeur suivante, {:.1f} la met en forme");
+            if (holes < values.size()) {
+                auto piece = formatOne(u, inside.empty() ? std::string{} : inside.substr(1), values[holes]);
+                if (!piece) return piece;
+                out += *piece;
+            }
+            ++holes;
+        }
+        if (holes != values.size())
+            return dialectError(u + " : " + std::to_string(holes) + " {} pour " + std::to_string(values.size()) + (values.size() > 1 ? " valeurs" : " valeur"));
+        return out;
+    }
+
+    // ---- BYTESWAP, WORDSWAP (std::byteswap, les mots de 16 bits) : la largeur du type ecrit (une variable),
+    // d'un litteral sans type (la plus petite qui le tient : 16 bits, 32 pour WORDSWAP, puis 64), ou de la valeur.
+    core::Result<RV> swapNative(const std::string& u, const Expr& a) {
+        auto w = rich(a);
+        if (!w) return w;
+        const bool words = u == "WORDSWAP";
+        const std::string want = words ? " : un entier de 32 bits (ou 64) est attendu (DWORD, DINT, UDINT, LWORD), pas "
+                                       : " : un mot ou un entier est attendu (WORD, DWORD, INT, DINT, UINT, UDINT, LWORD), pas ";
+        if (w->o || !isInteger(w->v.type()) || w->v.type() == Type::Time)
+            return dialectError(u + want + (w->o ? "un " + typeNameOf(*w) : w->v.type() == Type::String ? w->v.display() : std::string(toString(w->v.type()))));
+        Type type = w->v.type();
+        std::string name = valueTypeText(type);
+        int width = bitWidth(type);
+        bool isSigned = type == Type::Int || type == Type::DInt || type == Type::LInt;
+        const Expr* lit = &a;
+        if (lit->kind == Expr::Kind::Unary && (lit->op == "-" || lit->op == "+") && lit->lhs) lit = lit->lhs.get();
+        const std::string written = writtenType(a);
+        lib::IntType it;
+        if (!written.empty() && lib::intType(written, it)) {
+            width = it.bits;
+            name = written;
+            isSigned = it.isSigned;
+            type = it.type;
+        } else if (lit->kind == Expr::Kind::Literal && lit->literalType.empty()) {
+            const std::int64_t v = w->v.asInteger();
+            const bool negative = v < 0 && type != Type::ULInt && type != Type::LWord;
+            const std::uint64_t mag = negative ? std::uint64_t{0} - static_cast<std::uint64_t>(v) : static_cast<std::uint64_t>(v);
+            width = !words && mag <= (negative ? 0x8000u : 0xFFFFu) ? 16 : mag <= (negative ? 0x80000000ull : 0xFFFFFFFFull) ? 32 : 64;
+            isSigned = negative;
+            type = width == 16 ? (negative ? Type::Int : Type::Word) : width == 32 ? (negative ? Type::DInt : Type::DWord) : (negative ? Type::LInt : Type::LWord);
+            name = valueTypeText(type);
+        }
+        if (width < 16) return dialectError(u + " : un " + name + " n'a qu'un octet (rien \xC3\xA0 inverser)");
+        if (words && width < 32) return dialectError(u + want + "un " + name);
+        const std::uint64_t mask = width >= 64 ? ~std::uint64_t{0} : (std::uint64_t{1} << width) - 1;
+        const std::uint64_t bits = static_cast<std::uint64_t>(w->v.asInteger()) & mask;
+        const int unit = words ? 16 : 8;
+        const std::uint64_t part = words ? 0xFFFFu : 0xFFu;
+        std::uint64_t r = 0;
+        for (int k = 0; k < width / unit; ++k) r |= ((bits >> (unit * k)) & part) << (width - unit - unit * k);
+        std::int64_t out = static_cast<std::int64_t>(r);
+        if (isSigned && width < 64 && ((r >> (width - 1)) & 1u) != 0) out = static_cast<std::int64_t>(r | ~mask);     // le signe
+        return RV{Value::integer(type, truncateTo(type, out)), nullptr};
+    }
+
+    // ---- <utility> : SWAP(A, B) echange deux variables du meme type ; EXCHANGE(X, NOUVELLE) ecrit X et rend son
+    // ancienne valeur. Des variables (un nom, un membre, une case), comme un VAR_IN_OUT : ni une valeur calculee,
+    // ni une constante.
+    core::Result<RV> utilityNative(const std::string& u, const Expr& e) {
+        const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
+        const auto variable = [&](std::size_t k) -> core::Result<Place> {
+            const Expr& a = arg(k);
+            const std::string nth = k == 0 ? "1er" : "2e";
+            if (!isDesignator(a)) return dialectError(u + " : une variable est attendue en " + nth + " argument, pas " + exprText(a));
+            auto p = locate(a, true);
+            if (!p) return p;
+            if (p->temp)
+                return dialectError(u + " : une variable est attendue en " + nth + " argument, pas une valeur calcul\xC3\xA9" "e (" + exprText(a) + ")");
+            if (p->constant) return constantRefused(u);
+            if (p->setItem) return dialectError(u + " : " + std::string(kSetItemRefused));
+            return p;
+        };
+        // Le type d'un emplacement : celui de son objet, ou celui que l'environnement declare (sa valeur, sinon).
+        const auto typeOfPlace = [&](const Place& p) -> std::string {
+            if (p.obj && p.obj->type) return p.obj->type->kind == TypeDesc::Kind::Scalar ? scalarTypeName(*p.obj->type) : p.obj->type->text();
+            std::string t = upperOf(env_.declaredType(p.name));
+            if (t.empty()) {
+                Value probe;
+                if (env_.read(p.name, probe)) t = valueTypeText(probe.type());
+            }
+            return t;
+        };
+        // Deux ecritures du meme type : STRING[20] et STRING, TOD et TIME_OF_DAY, LREAL et REAL (le moteur les calcule pareil).
+        const auto same = [](const std::string& x, const std::string& y) {
+            const auto base = [](const std::string& s) {
+                const std::string t = upperOf(s);
+                if (t == "LREAL") return std::string("REAL");
+                const Type ty = typeFromName(t);
+                return ty == Type::String || ty == Type::Bool || isDateType(ty) ? std::string(toString(ty)) : t;
+            };
+            return base(x) == base(y);
+        };
+        const auto copyOf = [](const RV& v) { return v.o ? RV{{}, deepCopy(*v.o)} : v; };
+        if (u == "SWAP") {
+            auto pa = variable(0);
+            if (!pa) return core::Err<core::Error>(pa.error());
+            auto pb = variable(1);
+            if (!pb) return core::Err<core::Error>(pb.error());
+            const std::string ta = typeOfPlace(*pa), tb = typeOfPlace(*pb);
+            if (!ta.empty() && !tb.empty() && !same(ta, tb))
+                return dialectError(u + " : " + exprText(arg(0)) + " est un " + ta + ", " + exprText(arg(1)) + " un " + tb
+                                    + " \xE2\x80\x94 deux variables du m\xC3\xAAme type");
+            auto va = readPlace(*pa);
+            if (!va) return va;
+            auto vb = readPlace(*pb);
+            if (!vb) return vb;
+            const RV first = copyOf(*va), second = copyOf(*vb);     // des copies : ecrire l'une ne change pas l'autre
+            std::string why;
+            if (!writePlace(*pa, second, &why) || !writePlace(*pb, first, &why)) return dialectError(u + " : " + why);
+            return RV{Value::boolean(true), nullptr};
+        }
+        // EXCHANGE : NOUVELLE d'abord (comme l'argument d'un appel C++), puis l'ancienne valeur de X, puis X ecrit.
+        auto px = variable(0);
+        if (!px) return core::Err<core::Error>(px.error());
+        auto fresh = rich(arg(1));
+        if (!fresh) return fresh;
+        auto old = readPlace(*px);
+        if (!old) return old;
+        const RV kept = copyOf(*old);
+        RV next = *fresh;
+        // Une valeur simple va dans le type de X, refusee comme LIST_SET la refuse ('abc' n'est pas un INT, 7.5 pas un entier).
+        TypeRef target;
+        if (px->obj && px->obj->type && px->obj->type->kind == TypeDesc::Kind::Scalar) {
+            target = px->obj->type;
+        } else if (!px->obj) {
+            if (const std::string text = env_.declaredType(px->name); !text.empty())
+                if (auto t = typeFromText(text); t && *t && (*t)->kind == TypeDesc::Kind::Scalar) target = *t;
+        }
+        if (target && !next.o) {
+            auto made = fitTo(u, target, next);
+            if (!made) return core::Err<core::Error>(made.error());
+            next = valueOfItem(*made);
+        }
+        std::string why;
+        if (!writePlace(*px, next, &why)) return dialectError(u + " : " + why);
+        return kept;
+    }
+
+    // ---- LIST_TRANSFORM(SOURCE, DESTINATION, OP) : DESTINATION videe, puis un resultat par element ; rend leur nombre.
+    // OP : une TRANSFORMATION (TRANSFORMATION#Carre...), ou le nom d'une fonction (du script, du projet) a un parametre.
+    core::Result<RV> transformList(const std::string& u, const ObjArg& src, const Expr& destination, const Expr& opx, std::uint32_t line) {
+        auto dst = seqArg(u, destination, false);          // une LIST ou un VECTOR : un ARRAY a une taille fixe
+        if (!dst) return core::Err<core::Error>(dst.error());
+        if (dst->constant) return constantRefused(u);
+        Obj& D = *dst->obj;
+        if (isSetType(*D.type)) return setRefused(u);
+        const std::string want = u + " : OP est une TRANSFORMATION (TRANSFORMATION#Carre\xE2\x80\xA6) ou le nom d'une fonction du projet ('VersKelvin'), pas ";
+        if (opx.kind == Expr::Kind::Reference && opx.name.find('#') != std::string::npos
+            && upperOf(opx.name.substr(0, opx.name.find('#'))) != "TRANSFORMATION")
+            return dialectError(want + opx.name);
+        auto op = rich(opx);
+        if (!op) return op;
+        const std::vector<ObjRef> from = src.obj->items;      // une copie des pointeurs : SOURCE et DESTINATION peuvent etre la meme
+        std::vector<ObjRef> made;
+        made.reserve(from.size());
+        if (!op->o && op->v.type() == Type::String) {
+            for (const auto& x : from) {
+                auto r = callNamed(u, op->v.asString(), valueOfItem(x), line);
+                if (!r) return r;
+                auto m = fitTo(u, D.type->element, *r);
+                if (!m) return core::Err<core::Error>(m.error());
+                made.push_back(*m);
+            }
+        } else if (!op->o && isInteger(op->v.type()) && op->v.type() != Type::Time && op->v.asInteger() >= 0 && op->v.asInteger() <= 5) {
+            const int tr = static_cast<int>(op->v.asInteger());
+            for (const auto& x : from) {
+                if (!x || !x->type || x->type->kind != TypeDesc::Kind::Scalar || !isNumeric(x->value.type()) || x->value.type() == Type::Time)
+                    return dialectError(u + " : une TRANSFORMATION calcule sur des nombres, pas sur un " + src.obj->type->text());
+                auto m = fitTo(u, D.type->element, RV{transform(tr, x->value), nullptr});
+                if (!m) return core::Err<core::Error>(m.error());
+                made.push_back(*m);
+            }
+        } else {
+            return dialectError(want + (op->o ? "un " + typeNameOf(*op) : op->v.display()));
+        }
+        D.items = std::move(made);
+        normalizeList(D);                                     // un RING : les N derniers
+        auto c = commitArg(u, *dst);
+        if (!c) return core::Err<core::Error>(c.error());
+        return RV{Value::integer(Type::DInt, static_cast<std::int64_t>(from.size())), nullptr};
+    }
+    // Une fonction par son nom, appelee avec une valeur : une fonction interne du script, ou une fonction IHM du
+    // projet (ses surcharges : celle qui prend cette valeur). Ce qu'elle rend.
+    core::Result<RV> callNamed(const std::string& u, std::string name, const RV& x, std::uint32_t line) {
+        while (!name.empty() && std::isspace(static_cast<unsigned char>(name.back()))) name.pop_back();
+        while (!name.empty() && std::isspace(static_cast<unsigned char>(name.front()))) name.erase(0, 1);
+        if (name.empty()) return dialectError(u + " : OP est vide \xE2\x80\x94 le nom d'une fonction du projet ('VersKelvin') ou TRANSFORMATION#Carre\xE2\x80\xA6");
+        ArgShape shape;
+        shape.type = x.o ? typeNameOf(x) : valueTypeText(x.v.type());
+        shape.text = x.o ? typeNameOf(x) : x.v.display();
+        if (const auto inner = findFunctions(name); !inner.empty()) {
+            std::size_t k = 0;
+            if (inner.size() > 1) {
+                std::string why;
+                const int chosen = env_.chooseInner(inner, {shape}, why);
+                if (chosen < 0) return dialectError(u + " : " + why);
+                k = static_cast<std::size_t>(chosen);
+            }
+            return runFunction(*inner[k], {Bound{x, {}, false}}, line, false);
+        }
+        std::string key = name;
+        const int count = env_.overloads(name);
+        if (count > 1) {
+            std::string why;
+            if (!env_.chooseOverload(name, {shape}, key, why)) return dialectError(u + " : " + why);
+        }
+        if (auto f = env_.dialectFunction(key)) return runFunction(*f, {Bound{x, {}, false}}, line, true);
+        if (count == 0)
+            return dialectError(u + " : " + name + " n'est pas une fonction du projet \xE2\x80\x94 OP : TRANSFORMATION#Carre\xE2\x80\xA6 ou le nom d'une fonction IHM du projet \xC3\xA0 un param\xC3\xA8tre");
+        if (x.o) return dialectError(u + " : " + name + " prend une valeur simple, pas un " + typeNameOf(x));
+        Value result;
+        if (!env_.call(key, key, {{std::string{}, x.v}}, result)) return dialectError(u + " : l'appel de " + name + " a \xC3\xA9" "chou\xC3\xA9");
+        return RV{result, nullptr};
     }
 
     // ---- les templates de classe : NUMERIC_LIMITS<T>.MEMBRE, NUMBERS[<T>].CONSTANTE ------

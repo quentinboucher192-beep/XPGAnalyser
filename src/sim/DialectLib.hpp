@@ -17,6 +17,9 @@
 //    - les natives de la 1.12.7 (conteneurs, std::numeric, <bit>) : leur nombre
 //      d'arguments, leur signature, ce qu'elles font, si elles ecrivent leur premier
 //      argument, si elles changent sa taille (un ARRAY est alors refuse) ;
+//    - 1.12.16 : les natives std:: (<cmath>, <string>, <format>, <chrono>, <algorithm>,
+//      les statistiques, <bit>, <utility>) - SWAP et EXCHANGE ecrivent leurs arguments
+//      (SWAP les deux, EXCHANGE le premier), LIST_TRANSFORM sa destination ;
 //    - "veux-tu dire ... ?" (la distance d'edition, comme la maquette).
 //
 //  Les valeurs de NUMERIC_LIMITS sont celles du C++ (libstdc++, x86) ; elles ne
@@ -131,7 +134,8 @@ struct NativeInfo {
     bool             resizes{false};        // elle change sa taille : un ARRAY est refuse
     bool             arrayOk{false};        // elle lit aussi un ARRAY
     bool             member{false};         // son dernier argument facultatif est un membre ('Poids')
-    std::string_view group;                 // "liste", "map", "tuple", "numeric", "bits" ; 1.12.7 : "set", "ring"
+    std::string_view group;                 // "liste", "map", "tuple", "numeric", "bits" ; 1.12.7 : "set", "ring" ;
+                                            // 1.12.16 : "math", "texte", "date", "utility"
     std::string_view signature;             // "LIST_SET(L, i, x) : BOOL"
     std::string_view summary;
 };

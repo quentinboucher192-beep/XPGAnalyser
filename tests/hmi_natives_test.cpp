@@ -47,15 +47,30 @@ void check(bool ok, const std::string& what) {
     }
 }
 
-bool sameValue(const std::string& got, std::string_view want) {
+// Un nombre ecrit en decimal, ou en litteral IEC (1.12.16 : 16#3412, 2#1010, 8#17 - l'attendu de BYTESWAP) ;
+// faux : pas un nombre.
+bool numberOf(const std::string& s, double& out) {
     char* end = nullptr;
-    const std::string w(want);
-    const double b = std::strtod(w.c_str(), &end);
-    if (!w.empty() && end && *end == '\0') {
-        char* e2 = nullptr;
-        const double a = std::strtod(got.c_str(), &e2);
-        if (!got.empty() && e2 && *e2 == '\0') return std::fabs(a - b) <= 1e-4 * std::max(1.0, std::fabs(b));
+    if (const auto hash = s.find('#'); hash != std::string::npos && hash > 0) {
+        const long base = std::strtol(s.substr(0, hash).c_str(), &end, 10);
+        if (!end || *end != '\0' || (base != 2 && base != 8 && base != 16)) return false;
+        std::string digits;
+        for (const char c : s.substr(hash + 1))
+            if (c != '_') digits += c;
+        if (digits.empty()) return false;
+        const unsigned long long v = std::strtoull(digits.c_str(), &end, static_cast<int>(base));
+        if (!end || *end != '\0') return false;
+        out = static_cast<double>(v);
+        return true;
     }
+    out = std::strtod(s.c_str(), &end);
+    return !s.empty() && end && *end == '\0';
+}
+
+bool sameValue(const std::string& got, std::string_view want) {
+    const std::string w(want);
+    double a = 0.0, b = 0.0;
+    if (numberOf(w, b) && numberOf(got, a)) return std::fabs(a - b) <= 1e-4 * std::max(1.0, std::fabs(b));
     return got == w;
 }
 

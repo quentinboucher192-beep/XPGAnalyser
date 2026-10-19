@@ -616,6 +616,23 @@ std::string unescapeText(std::string_view s) {
 }
 
 // --------------------------------------------------------- TextTemplate ----
+// 1.12.16 : la fin d'un trou {...} - la premiere '}' hors des chaines ('...', "...", $' y est une apostrophe) :
+// {FORMAT('{:.1f} bar', P)}. Une chaine qui ne se ferme pas : la premiere '}', comme avant.
+std::size_t templateHoleEnd(std::string_view text, std::size_t from) noexcept {
+    char quote = 0;
+    for (std::size_t k = from; k < text.size(); ++k) {
+        const char c = text[k];
+        if (quote) {
+            if (c == '$' && k + 1 < text.size()) ++k;
+            else if (c == quote) quote = 0;
+            continue;
+        }
+        if (c == '\'' || c == '"') quote = c;
+        else if (c == '}') return k;
+    }
+    return text.find('}', from);
+}
+
 TextTemplate TextTemplate::compile(std::string_view source) {
     TextTemplate t;
     t.source_ = std::string(source);
@@ -631,7 +648,7 @@ TextTemplate TextTemplate::compile(std::string_view source) {
         if (c == '{' && i + 1 < text.size() && text[i + 1] == '{') { literal += '{'; i += 2; continue; }
         if (c == '}' && i + 1 < text.size() && text[i + 1] == '}') { literal += '}'; i += 2; continue; }
         if (c != '{') { literal += c; ++i; continue; }
-        const auto close = text.find('}', i + 1);
+        const auto close = templateHoleEnd(text, i + 1);
         if (close == std::string_view::npos) { literal += text.substr(i); break; }
         if (!literal.empty()) {
             Piece p;

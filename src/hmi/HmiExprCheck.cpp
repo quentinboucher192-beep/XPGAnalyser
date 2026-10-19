@@ -837,7 +837,10 @@ private:
         // 1.12.7 : les natives des conteneurs, de std::numeric et de <bit> : le dialecte les sert dans une
         // expression (une copie des objets). Une fonction du projet du meme nom passe avant.
         if (const auto* nat = sim::lib::native(u); nat && !(ctx_.project && !ctx_.project->functionsNamed(name).empty())) {
-            if (nat->writes || u == "TUPLE_UNPACK" || u == "LIST_COPY")
+            if (u == "SWAP" || u == "EXCHANGE")             // 1.12.16 : elles ecrivent des variables
+                problem(u + (u == "SWAP" ? " \xC3\xA9" "change deux variables" : " \xC3\xA9" "crit sa variable")
+                        + " : une expression ne change rien ; fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB)");
+            else if (nat->writes || u == "TUPLE_UNPACK" || u == "LIST_COPY" || u == "LIST_TRANSFORM")
                 problem(u + " change son objet : une expression en lit une copie et ne change rien ; "
                             "fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB)");
             if (n < nat->min || (nat->max >= 0 && n > nat->max))
@@ -850,6 +853,7 @@ private:
             const std::string_view ret = colon == std::string_view::npos ? std::string_view{} : sig.substr(colon + 3);
             r.type = ret == "BOOL" ? T::Bool : ret == "STRING" ? T::Text : ret == "DINT" || nat->group == "numeric" ? T::Num : T::Unknown;
             if (u == "MIDPOINT" || u.find("_SAT") != std::string::npos || u == "SATURATE_CAST" || u == "BIT_SET" || u == "BIT_RESET") r.type = T::Num;
+            if (ret == "INT" || ret == "REAL" || (ret == "comme IN" && nat->group != "utility")) r.type = T::Num;    // 1.12.16 : YEAR, FMOD, CEIL, BYTESWAP...
             return r;
         }
         // 1.12.4 : les fonctions des listes, des vecteurs, des MAP et des tableaux (JOIN, LIST_COUNT,
@@ -1204,15 +1208,16 @@ std::vector<Problem> checkTarget(const Context& ctx, std::string_view target) {
 
 std::vector<std::string> templateExpressions(std::string_view text) {
     // Le meme decoupage que TextTemplate::compile : {{ et }} sont des accolades
-    // litterales, un trou va jusqu'a la premiere '}', son format est apres le
-    // dernier ':' (pas celui d'un ":=") s'il en a l'air, ou ":u".
+    // litterales, un trou va jusqu'a la premiere '}' (1.12.16 : hors des chaines,
+    // templateHoleEnd), son format est apres le dernier ':' (pas celui d'un ":=")
+    // s'il en a l'air, ou ":u".
     std::vector<std::string> out;
     std::size_t i = 0;
     while (i < text.size()) {
         const char c = text[i];
         if ((c == '{' || c == '}') && i + 1 < text.size() && text[i + 1] == c) { i += 2; continue; }
         if (c != '{') { ++i; continue; }
-        const auto close = text.find('}', i + 1);
+        const auto close = templateHoleEnd(text, i + 1);
         if (close == std::string_view::npos) break;
         std::string inside(text.substr(i + 1, close - i - 1));
         const auto colon = inside.rfind(':');

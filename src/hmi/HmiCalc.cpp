@@ -43,7 +43,8 @@ bool mutating(const std::string& u) {
     static const std::set<std::string> kNames = {
         "LIST_ADD",    "LIST_INSERT",   "LIST_REMOVE_AT", "LIST_REMOVE",   "LIST_CLEAR",   "LIST_SORT",   "LIST_REVERSE",
         "VECTOR_PUSH", "VECTOR_POP",    "VECTOR_INSERT",  "VECTOR_ERASE",  "VECTOR_CLEAR", "VECTOR_RESIZE", "MAP_REMOVE",
-        "MAP_CLEAR",   "MAP_SET",       "MAP_INSERT",     "MAP_INCREMENT", "LIST_SET",     "TUPLE_SET",   "IOTA"};
+        "MAP_CLEAR",   "MAP_SET",       "MAP_INSERT",     "MAP_INCREMENT", "LIST_SET",     "TUPLE_SET",   "IOTA",
+        "SWAP",        "EXCHANGE"};                                                                    // 1.12.16 : <utility>
     if (kNames.count(u)) return true;
     // Les familles des conteneurs (1.12.7 et apres) : LIST_REMOVE_IF, LIST_SORT_BY, LIST_ROTATE...
     static const char* kFamilies[] = {"LIST_", "VECTOR_", "MAP_", "TUPLE_", "SET_", "RING_", "ARRAY_"};
@@ -311,9 +312,13 @@ Analysis analyse(const Project& p, const Script& owner, const Declaration& d, co
         // Le premier argument d'un appel : LIST_ADD(Seuils, x).
         const bool firstArg = i >= 2 && punct(i - 1, "(") && word(i - 2) && !isReservedWord(text(i - 2));
         const std::string fn = firstArg ? upper(text(i - 2)) : std::string{};
-        const bool written = assigned || (firstArg && mutating(fn));
+        // 1.12.16 : le second argument, quand le premier est un nom - SWAP(A, B), LIST_TRANSFORM(S, D, OP) et LIST_COPY(S, D) l'ecrivent.
+        const bool secondArg = i >= 4 && punct(i - 1, ",") && word(i - 2) && punct(i - 3, "(") && word(i - 4) && !isReservedWord(text(i - 4));
+        const std::string fn2 = secondArg ? upper(text(i - 4)) : std::string{};
+        const bool secondWritten = fn2 == "SWAP" || fn2 == "LIST_TRANSFORM" || fn2 == "LIST_COPY";
+        const bool written = assigned || (firstArg && mutating(fn)) || secondWritten;
         if (u == self) {
-            if (assigned || firstArg) a.assigns = true;
+            if (assigned || firstArg || secondWritten) a.assigns = true;
             i = j;
             continue;
         }

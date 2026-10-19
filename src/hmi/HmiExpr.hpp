@@ -151,6 +151,9 @@ private:
 [[nodiscard]] bool looksLikeFormat(std::string_view) noexcept;
 // "\n" ecrit dans un texte : un retour a la ligne.
 [[nodiscard]] std::string unescapeText(std::string_view);
+// 1.12.16 : la fin d'un trou d'un texte a trous ouvert avant `from` - la premiere '}' hors des chaines ('...',
+// "...") : {FORMAT('{:.1f} bar', P)} ; une chaine qui ne se ferme pas : la premiere '}'. npos : aucune.
+[[nodiscard]] std::size_t templateHoleEnd(std::string_view text, std::size_t from) noexcept;
 // Une fonction standard sans etat (ABS, MIN, LIMIT, INT_TO_REAL...) : ce
 // qu'une expression de vue peut appeler de l'automate (lot 7 : et le banc
 // d'essai des fonctions IHM).

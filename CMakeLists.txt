@@ -583,6 +583,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_natives1127_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_setring_test tests/hmi_setring_test.cpp)      # 1.12.7 : SET OF T et RING[N] OF T
     xpg_target_link_libraries(hmi_setring_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(hmi_natives1216_test tests/hmi_natives1216_test.cpp)   # 1.12.16 : les 39 natives std::
+    xpg_target_link_libraries(hmi_natives1216_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_qr_test tests/hmi_qr_test.cpp)                # 1.12.12 (lot H) : le code QR, versions 1 a 40
     xpg_target_link_libraries(hmi_qr_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_video_test tests/hmi_video_test.cpp)          # 1.12.12 (lot H) : le Motion-JPEG en AVI, la lecture
@@ -717,6 +719,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
     xpg_add_test(NAME hminatives1127 COMMAND hmi_natives1127_test)           # ---- 1.12.7 : les natives des conteneurs, std::numeric, templates, <bit> ----
     xpg_add_test(NAME hmisetring   COMMAND hmi_setring_test)                 # ---- 1.12.7 : SET OF T et RING[N] OF T ----
+    xpg_add_test(NAME hminatives1216 COMMAND hmi_natives1216_test)           # ---- 1.12.16 : les 39 natives std:: ----
     xpg_add_test(NAME hmiqr        COMMAND hmi_qr_test)                      # ---- 1.12.12 (lot H) : le code QR, versions 1 a 40 ----
     xpg_add_test(NAME hmivideo     COMMAND hmi_video_test)                   # ---- 1.12.12 (lot H) : le Motion-JPEG en AVI, la lecture ----
     xpg_add_test(NAME edition      COMMAND edition_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # ---- 1.12.0 : deux applications ----

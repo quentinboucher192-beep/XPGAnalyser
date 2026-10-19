@@ -423,6 +423,17 @@ std::string withArticle(const std::string& type) {
     const bool feminine = u.rfind("LIST", 0) == 0 || u.rfind("MAP", 0) == 0 || u.rfind("STRING", 0) == 0 || u.rfind("STRUCT", 0) == 0;
     return (feminine ? "une " : "un ") + type;
 }
+// 1.12.16 : un type ecrit, tel que le moteur le calcule (SWAP compare deux variables) : STRING[20], CHAR et WSTRING
+// sont des STRING, LREAL un REAL, TOD un TIME_OF_DAY, DT un DATE_AND_TIME.
+std::string sameWritten(const std::string& type) {
+    const std::string u = up(trimmedText(type));
+    if (u.rfind("STRING", 0) == 0 || u.rfind("WSTRING", 0) == 0 || u == "CHAR") return "STRING";
+    if (u == "LREAL") return "REAL";
+    if (u == "TOD") return "TIME_OF_DAY";
+    if (u == "DT") return "DATE_AND_TIME";
+    if (u == "EBOOL") return "BOOL";
+    return u;
+}
 
 // Les constantes locales (VAR CONSTANT ... END_VAR) : un script ne les ecrit pas.
 // Les noms avant le ':' de chaque declaration (a, b : INT := 1;).
@@ -1369,8 +1380,9 @@ private:
                                                          "VECTOR_CLEAR", "VECTOR_RESIZE", "MAP_REMOVE", "MAP_CLEAR"};
         const auto args = argsOf(i + 1, close);
         std::size_t from = 0, to = 0;                          // les arguments ecrits [from, to)
-        if (U == "LIST_COPY") from = 1, to = 2;
+        if (U == "LIST_COPY" || U == "LIST_TRANSFORM") from = 1, to = 2;      // 1.12.16 : LIST_TRANSFORM ecrit sa destination
         else if (U == "TUPLE_UNPACK") from = 1, to = args.size();
+        else if (U == "SWAP") from = 0, to = 2;                                // 1.12.16 : SWAP ecrit ses deux variables
         else if (info ? info->writes : kOldWrites.count(U) > 0) from = 0, to = 1;
         for (std::size_t k = from; k < to && k < args.size(); ++k) {
             const auto [a, b] = args[k];
@@ -1403,11 +1415,12 @@ private:
         // 1.12.7 : un SET se range tout seul - ce qui ecrit a une place lui est refuse (une erreur : SET est nouveau).
         const std::string t0 = designated ? typeOfName(textOf(a0, b0)) : std::string{};
         if (setText(t0) && setRefusedNative(U)) reportTok(i, i + 1, S::Error, U + kSetRefusedText);
-        if (U == "LIST_COPY" && args.size() >= 2) {
+        if ((U == "LIST_COPY" || U == "LIST_TRANSFORM") && args.size() >= 2) {
             const auto [a1, b1] = args[1];
             if (isIdent(a1) && pathEnd(a1) == b1 && setText(typeOfName(textOf(a1, b1)))) reportTok(i, i + 1, S::Error, U + kSetRefusedText);
         }
         if (!info) return;
+        stdChecks(i, U, args);                                                  // 1.12.16
         // SET_ADD, SET_REMOVE, SET_HAS : un SET ; RING_ADD : un RING (quand le type est connu) ; la valeur
         // ecrite, un litteral, dans le type des elements ('abc' dans un SET OF INT).
         if (info->group == "set" && (U == "SET_ADD" || U == "SET_REMOVE" || U == "SET_HAS") && !t0.empty() && !setText(t0))
@@ -1457,6 +1470,107 @@ private:
             } else if (elementary(ct.element)) {
                 reportTok(am, bm, S::Error, U + " : des " + up(ct.element) + " n'ont pas de membres");
             }
+        }
+    }
+    // ---- 1.12.16 : les natives std:: - FORMAT (ses {} et ses valeurs, quand le modele est ecrit), SWAP et EXCHANGE
+    // (des variables ; pour SWAP, du meme type), LIST_TRANSFORM (son OP : une TRANSFORMATION, ou une fonction du
+    // projet a un parametre, du type des elements). Les memes mots que le moteur.
+    void stdChecks(std::size_t i, const std::string& U, const std::vector<std::pair<std::size_t, std::size_t>>& args) {
+        using S = Finding::Severity;
+        const auto quoted = [&](std::size_t a, std::size_t b, std::string& text) {
+            if (b != a + 1 || toks_[a].k != Tok::K::Str || toks_[a].text.size() < 2) return false;
+            text = toks_[a].text.substr(1, toks_[a].text.size() - 2);
+            return true;
+        };
+        const auto variable = [&](std::size_t k) { return k < args.size() && isIdent(args[k].first) && pathEnd(args[k].first) == args[k].second; };
+        if (U == "FORMAT" && !args.empty()) {
+            std::string model, bad;
+            if (quoted(args[0].first, args[0].second, model)) {
+                std::size_t holes = 0;
+                for (std::size_t k = 0; k < model.size() && bad.empty(); ++k) {
+                    if (model[k] == '}') {
+                        if (k + 1 < model.size() && model[k + 1] == '}') ++k;
+                        else bad = "une } seule \xE2\x80\x94 }} pour une accolade";
+                    } else if (model[k] == '{') {
+                        if (k + 1 < model.size() && model[k + 1] == '{') {
+                            ++k;
+                            continue;
+                        }
+                        const auto close = model.find('}', k + 1);
+                        if (close == std::string::npos) {
+                            bad = "une { sans } \xE2\x80\x94 {{ pour une accolade";
+                            break;
+                        }
+                        const std::string inside = model.substr(k + 1, close - k - 1);
+                        if (!inside.empty() && inside.front() != ':') bad = "{" + inside + "} \xE2\x80\x94 {} prend la valeur suivante, {:.1f} la met en forme";
+                        ++holes;
+                        k = close;
+                    }
+                }
+                const std::size_t values = args.size() - 1;
+                if (!bad.empty()) reportTok(args[0].first, args[0].second, S::Error, U + " : " + bad);
+                else if (holes != values)
+                    reportTok(i, i + 1, S::Error, U + " : " + std::to_string(holes) + " {} pour " + std::to_string(values) + (values > 1 ? " valeurs" : " valeur"));
+            }
+        }
+        if (U == "SWAP" || U == "EXCHANGE") {
+            for (std::size_t k = 0; k < (U == "SWAP" ? 2u : 1u) && k < args.size(); ++k)
+                if (!variable(k))
+                    reportTok(args[k].first, args[k].second, S::Error,
+                              U + " : une variable est attendue en " + (k == 0 ? "1er" : "2e") + " argument, pas " + textOf(args[k].first, args[k].second));
+            if (U == "SWAP" && variable(0) && variable(1)) {
+                const std::string a = textOf(args[0].first, args[0].second), b = textOf(args[1].first, args[1].second);
+                const std::string ta = typeOfName(a), tb = typeOfName(b);
+                if (!ta.empty() && !tb.empty() && sameWritten(ta) != sameWritten(tb))
+                    reportTok(i, i + 1, S::Error, U + " : " + a + " est un " + ta + ", " + b + " un " + tb + " \xE2\x80\x94 deux variables du m\xC3\xAAme type");
+            }
+        }
+        if (U == "LIST_TRANSFORM" && args.size() == 3) {
+            const std::size_t a2 = args[2].first, b2 = args[2].second;
+            if (b2 == a2 + 1 && toks_[a2].k == Tok::K::Lit && up(toks_[a2].text.substr(0, toks_[a2].text.find('#'))) != "TRANSFORMATION")
+                reportTok(a2, b2, S::Error, U + " : OP est une TRANSFORMATION (TRANSFORMATION#Carre\xE2\x80\xA6) ou le nom d'une fonction du projet ('VersKelvin'), pas "
+                                                + toks_[a2].text);
+            std::string name;
+            if (!quoted(a2, b2, name) || !sc_.project || internalFunction(name)) return;
+            const auto fs = sc_.project->functionsNamed(name);
+            if (fs.empty()) {
+                std::vector<std::string> pool;
+                for (const auto& f : sc_.project->programs.functions) pool.push_back(f.name);
+                reportTok(a2, b2, S::Error, U + " : " + name + " n'est pas une fonction du projet" + sim::lib::closest(name, pool));
+                return;
+            }
+            if (fs.size() > 1) return;                                          // ses surcharges : le moteur choisit
+            const auto sig = overload::signatureOf(*fs.front());
+            const std::string& fn = fs.front()->name;
+            int required = 0;
+            for (const auto& p : sig.params) required += p.optional ? 0 : 1;
+            if (sig.params.empty() || required > 1) {
+                reportTok(a2, b2, S::Error, U + " : " + fn + (sig.params.empty() ? std::string(" ne prend aucun param\xC3\xA8tre") : " prend " + plural(required, "param\xC3\xA8tre"))
+                                                + " \xE2\x80\x94 OP est une fonction \xC3\xA0 un param\xC3\xA8tre");
+                return;
+            }
+            if (sig.params.front().mode != overload::Mode::In) {
+                reportTok(a2, b2, S::Error, U + " : le param\xC3\xA8tre de " + fn + " est un VAR_IN_OUT ou un VAR_OUTPUT \xE2\x80\x94 OP lui donne une valeur");
+                return;
+            }
+            if (trimmedText(sig.result).empty()) {
+                reportTok(a2, b2, S::Error, U + " : " + fn + " ne rend pas de valeur");
+                return;
+            }
+            // Les types : son parametre et les elements de SOURCE, ce qu'elle rend et ceux de DESTINATION (quand on les connait).
+            const auto elementOf = [&](std::size_t k) -> std::string {
+                if (!variable(k)) return {};
+                const ContainerType ct = containerOf(typeOfName(textOf(args[k].first, args[k].second)));
+                return ct.kind == ContainerType::K::List || ct.kind == ContainerType::K::Array ? ct.element : std::string{};
+            };
+            const std::string source = elementOf(0), destination = elementOf(1);
+            const Kind param = kindOf(sig.params.front().type), result = kindOf(sig.result);
+            if (!source.empty() && param != Kind::Other && kindOf(source) != Kind::Other && param != kindOf(source))
+                reportTok(a2, b2, S::Error, U + " : " + fn + " prend " + withArticle(up(sig.params.front().type)) + ", les \xC3\xA9l\xC3\xA9ments de "
+                                                + textOf(args[0].first, args[0].second) + " sont des " + up(source));
+            if (!destination.empty() && result != Kind::Other && kindOf(destination) != Kind::Other && result != kindOf(destination))
+                reportTok(a2, b2, S::Error, U + " : " + fn + " rend " + withArticle(up(sig.result)) + ", " + textOf(args[1].first, args[1].second)
+                                                + " attend des " + up(destination));
         }
     }
     // Un template a l'index k : NUMERIC_LIMITS<UINT>.MAX(), NUMBERS<REAL>.PI, NUMBERS.PI, SATURATE_CAST<INT>(x),
@@ -1629,7 +1743,10 @@ private:
             const auto& m = pb.message;
             if (!pb.unknownName.empty() || members.count(m) || m.rfind("fonction inconnue", 0) == 0 || m.find(" prend ") != std::string::npos
                 || m.find("ne rend pas de valeur") != std::string::npos || m.find("hors des bornes") != std::string::npos
-                || m.find("n'a pas de membre") != std::string::npos)
+                || m.find("n'a pas de membre") != std::string::npos
+                // 1.12.16 : une native qui ecrit (Ancien := EXCHANGE(Etat, Nouvel_Etat), n := LIST_REMOVE_ALL(L, x)) ecrit
+                // vraiment dans un script : ce que l'expression fx en dit ne vaut pas ici.
+                || m.find(" : une expression en lit une copie") != std::string::npos || m.find(" : une expression ne change rien") != std::string::npos)
                 continue;
             out.push_back(m);
         }

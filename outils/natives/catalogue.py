@@ -30,6 +30,7 @@ CATS = [
     ("numeric", "std::numeric", "Plier, cumuler, remplir une suite ; PGCD, PPCM, milieu ; le calcul saturé (C++26).", "Bibliothèques"),
     ("limits", "std::numeric_limits", "Les bornes et les caractéristiques de chaque type numérique : NUMERIC_LIMITS<T>.MEMBRE.", "Bibliothèques"),
     ("numbers", "std::numbers", "Les constantes mathématiques : NUMBERS.PI, NUMBERS<REAL>.E…", "Bibliothèques"),
+    ("utility", "std::utility", "Échanger deux variables ; écrire en gardant l'ancienne valeur.", "Bibliothèques"),   # 1.12.16
     ("nav", "Navigation et vues", "Changer de vue, revenir, l'accueil.", "Fonctions IHM_"),
     ("popup", "Popups", "Ouvrir, remplacer, centrer, fermer une popup.", "Fonctions IHM_"),
     ("journal", "Journal et Console", "Écrire une ligne dans le journal ou la Console.", "Fonctions IHM_"),
@@ -51,6 +52,8 @@ CATS = [
 #   st (exemple ST), c, cpp (la meme chose en C, en C++), essai=(type R, expression, attendu, prelude),
 #   ou : 'S F X T' (Script, Fonction, eXpression fx, Texte {}) ; plc : l'equivalent dans l'automate.
 #   1.12.7 : expr=False - pas dans une expression fx (elle ecrit son argument), quelle que soit la categorie.
+#   1.12.16 : inc=, incpp= - 'Same', 'Equivalent' ou 'None' : le C et le C++ que dit la fiche (sans elles,
+#   le generateur les devine : le meme nom ecrit en majuscules, sinon une autre ecriture).
 F = []
 def fn(**k):
     F.append(k)
@@ -975,6 +978,264 @@ fn(name="CONCAT_DATE_TOD", cat="date", params=[("D", "DATE", "la date", False), 
    short="Une date et une heure du jour assemblées en une date et heure.", st="Rendez_vous := CONCAT_DATE_TOD(D#2026-10-09, TOD#14:30:00);",
    c="/* pas d'équivalent : mktime() sur un struct tm rempli */", cpp="auto rdv = jour + heure;   // std::chrono",
    essai=("BOOL", "CONCAT_DATE_TOD(D#2026-10-09, TOD#14:30:00) = DT#2026-10-09-14:30:00", "TRUE"), plc="CONCAT_DATE_TOD (EF)")
+
+# ------------------------------------------------ 1.12.16 : les natives std:: (39 fonctions) --
+#  La maquette 1.12.16 (natives1216.py) : <cmath> (CEIL, FLOOR, FMOD, HYPOT, ATAN2, LERP, ISNAN,
+#  ISFINITE), <string> et <format> (STARTS_WITH, ENDS_WITH, CONTAINS, TRIM, FORMAT), <chrono> (YEAR
+#  ... WEEKDAY, ADD_DAYS, DAYS_BETWEEN, FORMAT_DT), <algorithm> et les statistiques (LIST_LOWER_BOUND,
+#  LIST_BINARY_SEARCH, LIST_TRANSFORM, LIST_MEDIAN, LIST_VARIANCE, LIST_STDDEV, INTERPOLER_TABLE), les
+#  ensembles (SET_SYMMETRIC_DIFFERENCE, SET_INCLUDES), RANDOM_NORMAL, <bit> (BYTESWAP, WORDSWAP) et
+#  <utility> (SWAP, EXCHANGE : elles ecrivent leurs arguments, jamais dans une expression fx).
+#  inc / incpp : le C et le C++ que dit la fiche (le generateur ne devine pas std::ceil).
+fn(name="CEIL", cat="math", params=[("IN", "ANY_NUM", "un nombre", False)], ret="comme IN",
+   short="L'entier supérieur ou égal, dans le type de IN : CEIL(2.1) = 3.0, CEIL(-2.1) = -2.0.",
+   notes=["ROUND arrondit au plus proche, TRUNC vers zéro ; CEIL toujours vers le haut."],
+   st="Bacs := CEIL(Volume / 20.0);   (* 41 litres : 3 bacs *)",
+   c="bacs = ceilf(volume / 20.0f);",
+   cpp="bacs = std::ceil(volume / 20.0f);",
+   essai=("REAL", "CEIL(2.1)", "3.0"), inc="Same", incpp="Same", expr=True, ou="S F X T")
+fn(name="FLOOR", cat="math", params=[("IN", "ANY_NUM", "un nombre", False)], ret="comme IN",
+   short="L'entier inférieur ou égal, dans le type de IN : FLOOR(2.9) = 2.0, FLOOR(-2.1) = -3.0.",
+   notes=["TRUNC(-2.1) vaut -2.0 : FLOOR descend, TRUNC va vers zéro."],
+   st="Pleins := FLOOR(Volume / 20.0);   (* 41 litres : 2 bacs pleins *)",
+   c="pleins = floorf(volume / 20.0f);",
+   cpp="pleins = std::floor(volume / 20.0f);",
+   essai=("REAL", "FLOOR(-2.1)", "-3.0"), inc="Same", incpp="Same", expr=True, ou="S F X T")
+fn(name="FMOD", cat="math", params=[("X", "REAL", "le dividende", False), ("Y", "REAL", "le diviseur (pas 0)", False)], ret="REAL",
+   short="Le reste réel de X / Y, du signe de X : FMOD(370.0, 360.0) = 10.0. MOD ne prend que des entiers.",
+   notes=["Y = 0 : une erreur (division par zéro), comme MOD."],
+   st="Angle := FMOD(Angle + 15.0, 360.0);",
+   c="angle = fmodf(angle + 15.0f, 360.0f);",
+   cpp="angle = std::fmod(angle + 15.0f, 360.0f);",
+   essai=("REAL", "FMOD(370.0, 360.0)", "10.0"), inc="Same", incpp="Same", expr=True, ou="S F X T")
+fn(name="HYPOT", cat="math", params=[("X", "REAL", "un côté", False), ("Y", "REAL", "l'autre côté", False)], ret="REAL",
+   short="La longueur SQRT(X² + Y²), sans débordement : la distance entre deux points, le module d'un vecteur.",
+   st="Distance := HYPOT(X2 - X1, Y2 - Y1);",
+   c="distance = hypotf(x2 - x1, y2 - y1);",
+   cpp="distance = std::hypot(x2 - x1, y2 - y1);",
+   essai=("REAL", "HYPOT(3.0, 4.0)", "5.0"), inc="Same", incpp="Same", expr=True, ou="S F X T")
+fn(name="ATAN2", cat="math", params=[("Y", "REAL", "l'ordonnée", False), ("X", "REAL", "l'abscisse", False)], ret="REAL",
+   short="L'angle du point (X, Y), en radians de -π à π, dans le bon quadrant (ATAN(Y / X) se trompe de moitié pour X < 0).",
+   notes=["L'ordre des arguments est celui de C : Y d'abord, puis X."],
+   st="Cap := ATAN2(Dy, Dx) * 180.0 / NUMBERS.PI;   (* en degrés *)",
+   c="cap = atan2f(dy, dx) * 180.0f / M_PI;",
+   cpp="cap = std::atan2(dy, dx) * 180.0f / std::numbers::pi_v<float>;",
+   essai=("REAL", "ATAN2(1.0, 1.0) * 4.0", "3.1415927"), inc="Same", incpp="Same", expr=True, ou="S F X T")
+fn(name="LERP", cat="math", params=[("A", "REAL", "la valeur à T = 0", False), ("B", "REAL", "la valeur à T = 1", False), ("T", "REAL", "la position (0 à 1, ou au-delà)", False)], ret="REAL",
+   short="L'interpolation linéaire A + T × (B - A) : une mise à l'échelle, une animation, un mélange. T = 0.5 : le milieu.",
+   notes=["T hors de 0..1 extrapole (LIMIT(0.0, T, 1.0) pour rester entre A et B)."],
+   st="Ouverture := LERP(Mini, Maxi, Avance);   (* Avance de 0.0 à 1.0 *)",
+   c="ouverture = mini + avance * (maxi - mini);",
+   cpp="ouverture = std::lerp(mini, maxi, avance);   // C++20",
+   essai=("REAL", "LERP(10.0, 20.0, 0.25)", "12.5"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="ISNAN", cat="math", params=[("IN", "REAL", "un réel", False)], ret="BOOL",
+   short="Vrai si IN n'est pas un nombre (NaN) : un capteur en défaut, un calcul 0.0 / 0.0.",
+   st="IF ISNAN(Mesure) THEN Defaut_Capteur := TRUE; END_IF",
+   c="if (isnan(mesure)) defaut_capteur = true;",
+   cpp="if (std::isnan(mesure)) defaut_capteur = true;",
+   essai=("BOOL", "ISNAN(NUMERIC_LIMITS<REAL>.QUIET_NAN())", "TRUE"), inc="Same", incpp="Same", expr=True, ou="S F X T")
+fn(name="ISFINITE", cat="math", params=[("IN", "REAL", "un réel", False)], ret="BOOL",
+   short="Vrai si IN est un nombre fini : ni NaN, ni l'infini. Une mesure à afficher.",
+   st="IF NOT ISFINITE(Debit) THEN Debit := 0.0; END_IF",
+   c="if (!isfinite(debit)) debit = 0.0f;",
+   cpp="if (!std::isfinite(debit)) debit = 0.0f;",
+   essai=("BOOL", "ISFINITE(1.0 / 3.0)", "TRUE"), inc="Same", incpp="Same", expr=True, ou="S F X T")
+fn(name="STARTS_WITH", cat="texte", params=[("S", "STRING", "le texte", False), ("DEBUT", "STRING", "ce par quoi il commence", False)], ret="BOOL",
+   short="Vrai si S commence par DEBUT (majuscules et minuscules comptent).",
+   st="IF STARTS_WITH(Code, 'E') THEN Erreurs := Erreurs + 1; END_IF",
+   c="if (strncmp(code, \"E\", 1) == 0) erreurs++;",
+   cpp="if (code.starts_with(\"E\")) ++erreurs;   // C++20",
+   essai=("BOOL", "STARTS_WITH('E12-four', 'E12')", "TRUE"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="ENDS_WITH", cat="texte", params=[("S", "STRING", "le texte", False), ("FIN", "STRING", "ce par quoi il finit", False)], ret="BOOL",
+   short="Vrai si S finit par FIN (majuscules et minuscules comptent).",
+   st="IF ENDS_WITH(Fichier, '.csv') THEN … END_IF",
+   c="/* comparer la fin : strlen, strcmp */",
+   cpp="if (fichier.ends_with(\".csv\")) { … }   // C++20",
+   essai=("BOOL", "ENDS_WITH('releve.csv', '.csv')", "TRUE"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="CONTAINS", cat="texte", params=[("S", "STRING", "le texte", False), ("PARTIE", "STRING", "ce qu'on y cherche", False)], ret="BOOL",
+   short="Vrai si PARTIE est dans S. Plus lisible que FIND(S, PARTIE) > 0.",
+   st="Alerte := CONTAINS(Message, 'défaut');",
+   c="alerte = strstr(message, \"defaut\") != NULL;",
+   cpp="alerte = message.contains(\"défaut\");   // C++23",
+   essai=("BOOL", "CONTAINS('pompe en défaut', 'défaut')", "TRUE"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="TRIM", cat="texte", params=[("S", "STRING", "le texte", False)], ret="STRING",
+   short="S sans les espaces, tabulations et retours à la ligne du début et de la fin.",
+   st="Nom := TRIM(Saisie);",
+   c="/* avancer le debut, reculer la fin (isspace) */",
+   cpp="auto b = s.find_first_not_of(\" \\t\\r\\n\"); auto e = s.find_last_not_of(\" \\t\\r\\n\");",
+   essai=("STRING", "TRIM('  Four 2  ')", "Four 2"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="TRIM_LEFT", cat="texte", params=[("S", "STRING", "le texte", False)], ret="STRING",
+   short="S sans les espaces du début.",
+   st="Ligne := TRIM_LEFT(Ligne);",
+   c="/* avancer le debut (isspace) */",
+   cpp="s.erase(0, s.find_first_not_of(\" \\t\\r\\n\"));",
+   essai=("STRING", "CONCAT(TRIM_LEFT('  a '), '|')", "a |"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="TRIM_RIGHT", cat="texte", params=[("S", "STRING", "le texte", False)], ret="STRING",
+   short="S sans les espaces de la fin.",
+   st="Ligne := TRIM_RIGHT(Ligne);",
+   c="/* reculer la fin (isspace) */",
+   cpp="s.erase(s.find_last_not_of(\" \\t\\r\\n\") + 1);",
+   essai=("STRING", "CONCAT(TRIM_RIGHT('  a '), '|')", "  a|"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="FORMAT", cat="texte", params=[("MODELE", "STRING", "le texte, ses {} à remplir", False), ("VALEURS", "ANY", "une valeur par {} (autant que de {})", False)], ret="STRING",
+   short="Compose un texte : chaque {} prend la valeur suivante. {:.1f} : 1 décimale ; {:5} : 5 caractères au moins ; {:05} : des zéros devant ; {:x} : en hexadécimal ; {{ et }} : une accolade.",
+   notes=["Plus de {} que de valeurs, ou l'inverse : une erreur qui dit combien."],
+   st="Txt := FORMAT('{:.1f} bar au poste {}', Pression, Poste);",
+   c="snprintf(txt, sizeof txt, \"%.1f bar au poste %d\", pression, poste);",
+   cpp="txt = std::format(\"{:.1f} bar au poste {}\", pression, poste);   // C++20",
+   essai=("STRING", "FORMAT('{:.1f} bar au poste {:02}', 2.345, 7)", "2.3 bar au poste 07"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="YEAR", cat="date", params=[("DT", "DATE_AND_TIME, DATE", "la date", False)], ret="INT",
+   short="L'année d'une date (2026).",
+   st="An := YEAR(MAINTENANT());",
+   c="an = tm.tm_year + 1900;",
+   cpp="an = int(std::chrono::year_month_day{std::chrono::floor<std::chrono::days>(t)}.year());",
+   essai=("INT", "YEAR(DT#2026-10-19-14:30:05)", "2026"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="MONTH", cat="date", params=[("DT", "DATE_AND_TIME, DATE", "la date", False)], ret="INT",
+   short="Le mois d'une date, de 1 (janvier) à 12.",
+   st="Mois := MONTH(MAINTENANT());",
+   c="mois = tm.tm_mon + 1;",
+   cpp="mois = unsigned(ymd.month());",
+   essai=("INT", "MONTH(DT#2026-10-19-14:30:05)", "10"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="DAY", cat="date", params=[("DT", "DATE_AND_TIME, DATE", "la date", False)], ret="INT",
+   short="Le jour du mois d'une date, de 1 à 31.",
+   st="Jour := DAY(MAINTENANT());",
+   c="jour = tm.tm_mday;",
+   cpp="jour = unsigned(ymd.day());",
+   essai=("INT", "DAY(DT#2026-10-19-14:30:05)", "19"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="HOUR", cat="date", params=[("DT", "DATE_AND_TIME, TIME_OF_DAY", "l'heure", False)], ret="INT",
+   short="L'heure, de 0 à 23.",
+   st="IF HOUR(MAINTENANT()) >= 22 THEN Nuit := TRUE; END_IF",
+   c="heure = tm.tm_hour;",
+   cpp="heure = std::chrono::hh_mm_ss{t - jour}.hours().count();",
+   essai=("INT", "HOUR(DT#2026-10-19-14:30:05)", "14"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="MINUTE", cat="date", params=[("DT", "DATE_AND_TIME, TIME_OF_DAY", "l'heure", False)], ret="INT",
+   short="La minute, de 0 à 59.",
+   st="Minute := MINUTE(MAINTENANT());",
+   c="minute = tm.tm_min;",
+   cpp="minute = hms.minutes().count();",
+   essai=("INT", "MINUTE(DT#2026-10-19-14:30:05)", "30"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="SECOND", cat="date", params=[("DT", "DATE_AND_TIME, TIME_OF_DAY", "l'heure", False)], ret="INT",
+   short="La seconde, de 0 à 59.",
+   st="Seconde := SECOND(MAINTENANT());",
+   c="seconde = tm.tm_sec;",
+   cpp="seconde = hms.seconds().count();",
+   essai=("INT", "SECOND(DT#2026-10-19-14:30:05)", "5"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="WEEKDAY", cat="date", params=[("DT", "DATE_AND_TIME, DATE", "la date", False)], ret="INT",
+   short="Le jour de la semaine : 1 lundi … 7 dimanche (la norme ISO 8601).",
+   notes=["Le 19/10/2026 est un lundi."],
+   st="Weekend := WEEKDAY(MAINTENANT()) >= 6;",
+   c="jour = tm.tm_wday == 0 ? 7 : tm.tm_wday;",
+   cpp="jour = std::chrono::weekday{std::chrono::floor<std::chrono::days>(t)}.iso_encoding();",
+   essai=("INT", "WEEKDAY(DT#2026-10-19-14:30:05)", "1"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="ADD_DAYS", cat="date", params=[("DT", "DATE_AND_TIME, DATE", "la date", False), ("N", "DINT", "le nombre de jours (négatif : en arrière)", False)], ret="comme DT",
+   short="La date N jours plus tard (ou plus tôt), à la même heure.",
+   st="Echeance := ADD_DAYS(Livraison, 30);",
+   c="t += n * 86400;",
+   cpp="t += std::chrono::days{n};",
+   essai=("BOOL", "ADD_DAYS(DT#2026-10-19-14:30:05, 14) = DT#2026-11-02-14:30:05", "TRUE"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="DAYS_BETWEEN", cat="date", params=[("A", "DATE_AND_TIME, DATE", "la première date", False), ("B", "DATE_AND_TIME, DATE", "la seconde", False)], ret="DINT",
+   short="Le nombre de jours entiers de A à B (négatif si B est avant A).",
+   st="Age := DAYS_BETWEEN(Mise_En_Service, MAINTENANT());",
+   c="jours = (long)((b - a) / 86400);",
+   cpp="jours = std::chrono::floor<std::chrono::days>(b - a).count();",
+   essai=("DINT", "DAYS_BETWEEN(DT#2026-10-01-08:00:00, DT#2026-10-19-14:30:05)", "18"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="FORMAT_DT", cat="date", params=[("DT", "DATE_AND_TIME, DATE, TIME_OF_DAY", "la date", False), ("MODELE", "STRING", "%d %m %Y %y %H %M %S %A %a %B %b %%", False)], ret="STRING",
+   short="Écrit une date selon un modèle : %d jour, %m mois, %Y année, %H:%M:%S l'heure, %A lundi, %a lun., %B octobre, %b oct.",
+   notes=["Les jours et les mois en français."],
+   st="Txt := FORMAT_DT(MAINTENANT(), '%A %d %B, %H:%M');",
+   c="strftime(txt, sizeof txt, \"%d/%m %H:%M\", &tm);",
+   cpp="txt = std::format(\"{:%d/%m %H:%M}\", t);   // C++20",
+   essai=("STRING", "FORMAT_DT(DT#2026-10-19-14:30:05, '%A %d %B, %H:%M')", "lundi 19 octobre, 14:30"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="LIST_LOWER_BOUND", cat="liste", params=[("L", "LIST, VECTOR, ARRAY triée", "la liste, rangée en croissant", False), ("VALEUR", "T", "la valeur cherchée", False)], ret="DINT",
+   short="Le premier indice dont l'élément est ≥ VALEUR, dans une liste triée ; L.Count si aucun. Une recherche rapide (par moitiés).",
+   notes=["Une liste non triée donne un indice sans valeur : LIST_SORT d'abord. LOWER_BOUND (sans LIST_) reste la borne basse d'un tableau."],
+   st="i := LIST_LOWER_BOUND(Paliers, Niveau);",
+   c="/* une recherche par dichotomie */",
+   cpp="i = std::ranges::lower_bound(paliers, niveau) - paliers.begin();",
+   essai=("DINT", "LIST_LOWER_BOUND(L, 30.0)", "2", "VAR\n    L : LIST OF REAL := [10.0, 20.0, 30.0, 40.0];\nEND_VAR"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="LIST_BINARY_SEARCH", cat="liste", params=[("L", "LIST, VECTOR, ARRAY triée", "la liste, rangée en croissant", False), ("VALEUR", "T", "la valeur cherchée", False)], ret="BOOL",
+   short="Vrai si VALEUR est dans la liste triée (une recherche par moitiés, plus rapide que LIST_CONTAINS sur une grande liste).",
+   st="Connu := LIST_BINARY_SEARCH(Codes_Tries, Code);",
+   c="/* bsearch */",
+   cpp="connu = std::ranges::binary_search(codes, code);",
+   essai=("BOOL", "LIST_BINARY_SEARCH(L, 25.0)", "FALSE", "VAR\n    L : LIST OF REAL := [10.0, 20.0, 30.0, 40.0];\nEND_VAR"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="LIST_TRANSFORM", cat="liste", params=[("SOURCE", "LIST, VECTOR, ARRAY", "les éléments", False), ("DESTINATION", "LIST, VECTOR", "vidée, puis un résultat par élément", False), ("OP", "TRANSFORMATION, ou STRING", "TRANSFORMATION#Carre… ou le nom d'une fonction IHM du projet à un paramètre", False)], ret="DINT",
+   short="Applique OP à chaque élément de SOURCE et range les résultats dans DESTINATION ; rend leur nombre. OP peut être une fonction IHM du projet (son nom) : comme une lambda.",
+   notes=["La fonction nommée prend un paramètre du type des éléments et rend le type des éléments de DESTINATION ; Compiler le vérifie."],
+   st="LIST_TRANSFORM(Celsius, Kelvins, 'VersKelvin');",
+   c="for (i = 0; i < n; ++i) kelvins[i] = vers_kelvin(celsius[i]);",
+   cpp="std::ranges::transform(celsius, std::back_inserter(kelvins), vers_kelvin);",
+   essai=("DINT", "LIST_TRANSFORM(L, Carres, TRANSFORMATION#Carre)", "3", "VAR\n    L : LIST OF REAL := [1.0, 2.0, 3.0];\n    Carres : LIST OF REAL;\nEND_VAR"), inc="Equivalent", incpp="Same", expr=False, ou="S F")
+fn(name="LIST_MEDIAN", cat="liste", params=[("L", "LIST, VECTOR, ARRAY, RING de nombres", "les valeurs", False)], ret="REAL",
+   short="La médiane : la valeur du milieu une fois rangées (la moyenne des deux du milieu pour un nombre pair). Elle filtre une mesure bruitée mieux qu'une moyenne.",
+   notes=["Une liste vide : une erreur (la Console le dit)."],
+   st="Filtree := LIST_MEDIAN(Dernieres);   (* un RING des 5 dernieres mesures *)",
+   c="/* copier, trier (qsort), prendre le milieu */",
+   cpp="std::ranges::nth_element(v, v.begin() + v.size() / 2);",
+   essai=("REAL", "LIST_MEDIAN(L)", "3.0", "VAR\n    L : LIST OF REAL := [9.0, 1.0, 3.0, 2.0, 4.0];\nEND_VAR"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="LIST_VARIANCE", cat="liste", params=[("L", "LIST, VECTOR, ARRAY, RING de nombres", "les valeurs", False), ("ECHANTILLON", "BOOL", "TRUE : divise par n - 1 (un échantillon)", True)], ret="REAL",
+   short="La variance : la moyenne des carrés des écarts à la moyenne (divisée par n, ou par n - 1 pour un échantillon).",
+   st="Dispersion := LIST_VARIANCE(Mesures);",
+   c="/* deux boucles : la moyenne, puis les carres des ecarts */",
+   cpp="auto m = std::reduce(v.begin(), v.end()) / v.size();",
+   essai=("REAL", "LIST_VARIANCE(L)", "4.0", "VAR\n    L : LIST OF REAL := [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];\nEND_VAR"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="LIST_STDDEV", cat="liste", params=[("L", "LIST, VECTOR, ARRAY, RING de nombres", "les valeurs", False), ("ECHANTILLON", "BOOL", "TRUE : divise par n - 1 (un échantillon)", True)], ret="REAL",
+   short="L'écart type : la racine de la variance. À peu près 68 % des valeurs sont à moins d'un écart type de la moyenne.",
+   st="IF ABS(Mesure - LIST_AVG(Mesures)) > 3.0 * LIST_STDDEV(Mesures) THEN Aberrante := TRUE; END_IF",
+   c="/* sqrt de la variance */",
+   cpp="auto ecart = std::sqrt(variance);",
+   essai=("REAL", "LIST_STDDEV(L)", "2.0", "VAR\n    L : LIST OF REAL := [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];\nEND_VAR"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="INTERPOLER_TABLE", cat="numeric", params=[("X", "LIST, ARRAY de nombres croissants", "les abscisses des points", False), ("Y", "LIST, ARRAY de nombres", "les ordonnées (autant que X)", False), ("V", "REAL", "là où lire la courbe", False)], ret="REAL",
+   short="Lit une courbe donnée par des points, en ligne droite entre deux points : la courbe d'une vanne, d'un capteur. Avant le premier point, la première valeur ; après le dernier, la dernière.",
+   notes=["X doit croître, et X et Y avoir autant de valeurs : sinon une erreur qui le dit."],
+   st="Debit := INTERPOLER_TABLE(Ouvertures, Debits, Ouverture);",
+   c="/* chercher l'intervalle, puis interpoler */",
+   cpp="auto it = std::ranges::upper_bound(x, v); /* ... */ std::lerp(y[i - 1], y[i], t);",
+   essai=("REAL", "INTERPOLER_TABLE(X, Y, 15.0)", "150.0", "VAR\n    X : LIST OF REAL := [0.0, 10.0, 20.0];\n    Y : LIST OF REAL := [0.0, 100.0, 200.0];\nEND_VAR"), inc="Equivalent", incpp="Equivalent", expr=True, ou="S F X T")
+fn(name="SET_SYMMETRIC_DIFFERENCE", cat="ensembles", params=[("A", "SET", "un ensemble", False), ("B", "SET", "un autre, du même type", False)], ret="comme A",
+   short="Les valeurs qui sont dans un seul des deux ensembles : ce qui a changé entre deux relevés.",
+   st="Changes := SET_SYMMETRIC_DIFFERENCE(Actifs_Avant, Actifs);",
+   c="/* deux boucles */",
+   cpp="std::ranges::set_symmetric_difference(a, b, std::inserter(r, r.end()));",
+   essai=("STRING", "JOIN(SET_SYMMETRIC_DIFFERENCE(A, B), ',')", "P1,P4", "VAR\n    A : SET OF STRING := ['P1', 'P2', 'P3'];\n    B : SET OF STRING := ['P2', 'P3', 'P4'];\nEND_VAR"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="SET_INCLUDES", cat="ensembles", params=[("A", "SET", "l'ensemble", False), ("B", "SET", "celui qui doit y être", False)], ret="BOOL",
+   short="Vrai si chaque valeur de B est dans A : tout ce qui est requis est là.",
+   st="Pret := SET_INCLUDES(Postes_Prets, Postes_Requis);",
+   c="/* une boucle */",
+   cpp="pret = std::ranges::includes(prets, requis);",
+   essai=("BOOL", "SET_INCLUDES(A, B)", "TRUE", "VAR\n    A : SET OF STRING := ['P1', 'P2', 'P3'];\n    B : SET OF STRING := ['P3', 'P1'];\nEND_VAR"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="RANDOM_NORMAL", cat="alea", params=[("MOYENNE", "REAL", "la valeur du milieu", False), ("ECART", "REAL", "l'écart type (≥ 0)", False)], ret="REAL",
+   short="Un nombre au hasard selon une loi normale (une cloche autour de MOYENNE) : un bruit réaliste pour une mesure simulée. RANDOM_SEED la rend rejouable.",
+   notes=["ECART = 0 : toujours MOYENNE."],
+   st="Mesure := Consigne + RANDOM_NORMAL(0.0, 0.2);",
+   c="/* Box-Muller : deux rand() */",
+   cpp="std::normal_distribution<float> loi(0.0f, 0.2f); mesure = consigne + loi(gen);",
+   essai=("REAL", "RANDOM_NORMAL(5.0, 0.0)", "5.0"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="BYTESWAP", cat="bits", params=[("IN", "WORD, DWORD, INT, DINT, UINT, UDINT, LWORD", "un entier", False)], ret="comme IN",
+   short="Les octets de IN dans l'ordre inverse : 16#1234 devient 16#3412. Pour un équipement Modbus qui envoie ses octets à l'envers.",
+   st="Valeur := BYTESWAP(Brut);",
+   c="v = (uint16_t)((brut >> 8) | (brut << 8));",
+   cpp="v = std::byteswap(brut);   // C++23",
+   essai=("WORD", "BYTESWAP(16#1234)", "16#3412"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="WORDSWAP", cat="bits", params=[("IN", "DWORD, DINT, UDINT, LWORD", "un entier de 32 bits (ou 64)", False)], ret="comme IN",
+   short="Les mots de 16 bits de IN dans l'ordre inverse : 16#12345678 devient 16#56781234. L'ordre des registres d'un équipement Modbus.",
+   st="Compteur := WORDSWAP(Brut);",
+   c="v = (brut >> 16) | (brut << 16);",
+   cpp="v = std::rotl(brut, 16);",
+   essai=("DWORD", "WORDSWAP(16#12345678)", "16#56781234"), inc="Equivalent", incpp="Same", expr=True, ou="S F X T")
+fn(name="SWAP", cat="utility", params=[("A", "T (une variable)", "reçoit la valeur de B", False), ("B", "T (une variable)", "reçoit la valeur de A", False)], ret="BOOL",
+   short="Échange les valeurs de deux variables du même type ; rend TRUE.",
+   notes=["Deux variables (ou membres, ou éléments) ; pas une expression."],
+   st="SWAP(Cuve_Haute, Cuve_Basse);",
+   c="tmp = a; a = b; b = tmp;",
+   cpp="std::swap(a, b);",
+   essai=("INT", "A * 10 + B", "21", "VAR\n    A : INT := 1;\n    B : INT := 2;\nEND_VAR\nSWAP(A, B);"), inc="Equivalent", incpp="Same", expr=False, ou="S F")
+fn(name="EXCHANGE", cat="utility", params=[("X", "T (une variable)", "la variable écrite", False), ("NOUVELLE", "T", "sa nouvelle valeur", False)], ret="comme X",
+   short="Écrit NOUVELLE dans X et rend l'ancienne valeur de X : un changement d'état, un front.",
+   st="Ancien := EXCHANGE(Etat, Nouvel_Etat);\nIF Ancien <> Nouvel_Etat THEN Changements := Changements + 1; END_IF",
+   c="ancien = etat; etat = nouvel_etat;",
+   cpp="ancien = std::exchange(etat, nouvel_etat);",
+   essai=("INT", "EXCHANGE(A, 7) * 10 + A", "37", "VAR\n    A : INT := 3;\nEND_VAR"), inc="Equivalent", incpp="Same", expr=False, ou="S F")
+
 
 # ------------------------------------------------------------ enumerations natives --
 #  Un litteral NOM#Valeur vaut son nombre (un DINT), comme une enumeration du projet ;

@@ -1,5 +1,6 @@
 #include "HmiNatives.hpp"
 #include "HmiTypeRegistry.hpp"
+#include "../sim/DialectLib.hpp"   // 1.12.16 : les natives que le dialecte sert
 
 #include <algorithm>
 #include <cctype>
@@ -413,7 +414,8 @@ std::string propertyProblem(std::string_view kind, std::string_view key, std::st
 // ------------------------------------------------------- les fonctions propres a l'IHM ---
 bool isOwnFunction(std::string_view name) noexcept {
     const auto* f = function(name);
-    return f && (f->category == "couleur" || f->category == "alea" || f->category == "date");   // date : 1.12.1
+    // 1.12.16 : YEAR, ADD_DAYS, FORMAT_DT... sont dans la categorie date, mais le dialecte les sert (sim::lib::natives).
+    return f && (f->category == "couleur" || f->category == "alea" || f->category == "date") && !sim::lib::native(name);   // date : 1.12.1
 }
 
 bool parseColor(std::string_view t, std::uint8_t& r, std::uint8_t& g, std::uint8_t& b, std::uint8_t& a) noexcept {
@@ -451,7 +453,7 @@ void seedRandom(std::uint32_t seed) noexcept {
 bool call(std::string_view name, const std::vector<sim::Value>& args, sim::Value& out, std::string* why) {
     const std::string u = upper(name);
     const auto* f = function(u);
-    if (!f || (f->category != "couleur" && f->category != "alea" && f->category != "date")) return false;
+    if (!f || (f->category != "couleur" && f->category != "alea" && f->category != "date") || sim::lib::native(u)) return false;
     int min = 0, max = 0;
     (void)arity(u, min, max);
     const int n = static_cast<int>(args.size());
@@ -547,6 +549,28 @@ bool call(std::string_view name, const std::vector<sim::Value>& args, sim::Value
     if (u == "RANDOM_SEED") {
         seedRandom(static_cast<std::uint32_t>(args[0].asInteger()));
         out = sim::Value::boolean(true);
+        return true;
+    }
+    // 1.12.16 : une loi normale (Box-Muller) sur deux tirages de la meme suite : rejouable apres RANDOM_SEED, la
+    // meme d'une machine a l'autre (std::normal_distribution ne l'est pas). Deux tirages a chaque appel, quel
+    // que soit l'ecart : la suite ne depend pas des valeurs donnees.
+    if (u == "RANDOM_NORMAL") {
+        for (int k = 0; k < 2; ++k) {
+            const auto t = args[static_cast<std::size_t>(k)].type();
+            if (!sim::isNumeric(t) || t == sim::Type::Time) {
+                if (why) *why = u + " : un nombre est attendu, pas " + args[static_cast<std::size_t>(k)].display();
+                return false;
+            }
+        }
+        const double mean = real(0), deviation = real(1);
+        if (std::isnan(deviation) || deviation < 0.0) {
+            if (why) *why = u + " : l'\xC3\xA9" "cart type est positif ou nul, pas " + args[1].display();
+            return false;
+        }
+        const double u1 = (static_cast<double>(nextRandom()) + 1.0) / 4294967296.0;     // ]0, 1] : jamais log(0)
+        const double u2 = static_cast<double>(nextRandom()) / 4294967296.0;             // [0, 1[
+        const double z = std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * 3.14159265358979323846 * u2);
+        out = sim::Value::real(deviation == 0.0 ? mean : mean + deviation * z);
         return true;
     }
     // 1.12.1 : les dates et heures.
