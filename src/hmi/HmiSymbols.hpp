@@ -231,6 +231,48 @@ struct BoundFunction {
 // elle-meme n'est pas renommee : a l'appelant).
 std::size_t renameSymbolFunction(Project&, std::string_view symbol, std::string_view from, std::string_view to);
 
+// ---- 1.12.16 : LES CONSTANTES ET LES FONCTIONS D'UNE VUE (ou d'une popup) ---------------
+//  Comme celles d'un symbole : View::constants et View::functions. Dans la vue (ses objets fx,
+//  ses scripts, ses actions, ses fonctions), par leur nom ; ailleurs, par Vue.Nom - les publiques
+//  seulement. Le moteur les lit sous leur nom qualifie (Vue_Four.Seuil_Haut, comme Reglages.Seuil
+//  d'un script general) ; dans la vue, la portee de la vue y mene (un alias par nom).
+namespace viewmembers {
+// La constante `name` de la vue (sans casse) ; nulle : aucune.
+[[nodiscard]] const Declaration* constant(const View&, std::string_view name);
+// Les fonctions `name` d'une vue ou d'une popup (pas d'un symbole : ses fonctions s'appellent par
+// ses instances) ; "Pourcent#702" (la cle d'une surcharge) : celle-la.
+[[nodiscard]] std::vector<const HmiFunction*> functions(const View&, std::string_view name);
+// La vue porte-t-elle des constantes, ou des fonctions a elle (hors symbole) ?
+[[nodiscard]] bool any(const View&);
+// "Vue.Nom" (Vue.Nom[2].X, Vue.Nom.Membre : sa racine) : la vue, la constante ou les fonctions.
+// `from` : la vue qui lit (elle lit aussi ses privees). Faux et `why` vide : ce n'est pas un
+// membre d'une vue (Vue n'est pas une vue, un symbole, ou Nom est un objet de la vue, ou
+// une propriete publique : Vue.Open) ; faux et `why` dit pourquoi : prive.
+struct Member {
+    const View*                     view{nullptr};
+    const Declaration*              constant{nullptr};
+    std::vector<const HmiFunction*> functions;
+};
+[[nodiscard]] bool resolve(const Project&, std::string_view path, Member& out, std::string* why = nullptr,
+                           const View* from = nullptr);
+// Le code `code` de la vue, ses constantes et ses fonctions sous leur nom qualifie (Seuil_Haut
+// -> Vue_Four.Seuil_Haut, Pourcent( -> Vue_Four.Pourcent() ; `hidden` : les noms que le code
+// declare lui-meme (ses parametres, ses locales : ils passent avant). Chaines et commentaires intacts.
+[[nodiscard]] std::string qualify(std::string_view code, const View&, const std::vector<std::string>& hidden = {});
+// Le porteur des constantes pour les calculs (calc::plan, le moteur) : un script du nom de la vue,
+// de l'identifiant de la vue, dont les declarations sont les constantes.
+[[nodiscard]] Script constantsScript(const View&);
+// Une constante calculee a chaque ouverture de la vue : la case cochee (reopen), ou d'office quand
+// son code lit un parametre de la vue (ou du symbole qui porte la popup).
+[[nodiscard]] bool computedAtOpen(const Project&, const View&, const Declaration&);
+// "Vue_Four.Pourcent" (ou "Vue_Four.Pourcent#702") : la fonction prete a appeler - son corps
+// qualifie (ses constantes et ses voisines sous leur nom complet), un identifiant a elle.
+[[nodiscard]] bool bound(const Project&, std::string_view call, HmiFunction& out);
+// Le nom d'un membre de la vue est-il pris (un objet, un parametre, une autre constante ou
+// fonction) ? `what` : par quoi ("l'objet Barre_Niveau"). Pour Generer et la grille.
+[[nodiscard]] bool nameTaken(const View&, std::string_view name, std::string* what = nullptr, const void* self = nullptr);
+} // namespace viewmembers
+
 // ---- 1.11.10 : les popups d'un symbole ----------------------------------------------
 //  UNE POPUP DU SYMBOLE (View::ownerSymbol) connait d'office les parametres du symbole :
 //  ouverte depuis une instance (une action Ouvrir une popup de ses objets, ou

@@ -2549,6 +2549,7 @@ std::string uniqueFunctionName(const Project& p, std::string_view wanted) {
 namespace {
 template <class V, class F>
 void visitViewDeclarations(V& v, F& f) {
+    f(v.constants);                                    // 1.12.16 : les constantes de la vue
     for (auto& sc : v.scripts) f(sc.decls);
     for (auto& fn : v.functions) f(fn.decls);
     for (auto& o : v.operators) f(o.decls);

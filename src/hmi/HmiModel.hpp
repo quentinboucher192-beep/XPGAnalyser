@@ -593,11 +593,15 @@ struct Declaration {
     bool                     computed{false};
     std::string              calc{};
     std::vector<Declaration> locals{};
+    // 1.12.16 : une constante d'une vue (ou d'une popup) calculee par son code A CHAQUE OUVERTURE
+    // de la vue, plutot qu'une fois au demarrage (d'office quand son code lit un parametre de la
+    // popup : hmi::viewmembers::computedAtOpen). Sans effet ailleurs.
+    bool                     reopen{false};
     // La cle lue n'est pas la declaration : deux declarations egales le restent sans elle.
     bool operator==(const Declaration& o) const {
         return id == o.id && kind == o.kind && name == o.name && type == o.type && value == o.value && description == o.description
             && storage == o.storage && mode == o.mode && visibility == o.visibility && computed == o.computed && calc == o.calc
-            && locals == o.locals;
+            && locals == o.locals && reopen == o.reopen;
     }
 };
 [[nodiscard]] std::string_view           declKindKey(DeclKind) noexcept;       // "constante", "variable", "parametre"
@@ -758,6 +762,9 @@ struct HmiFunction {
     // peut la redefinir (Object::functionOverrides). Sans effet sur une fonction IHM.
     bool        isVirtual{false};
     std::vector<Declaration> decls{};   // 1.11.18 (lot 3) : ses parametres (dans l'ordre), constantes et variables
+    // 1.12.16 : une fonction d'une vue (ou d'une popup) : publique, elle s'appelle d'ailleurs par
+    // Vue.Fonction(...) ; privee, de la vue seulement. Sans effet sur une fonction du projet ou d'un symbole.
+    Visibility  visibility{Visibility::Public};
     bool operator==(const HmiFunction&) const = default;
 };
 
@@ -834,11 +841,17 @@ struct View {
     std::vector<AlarmDef>  alarms;
     // ---- 1.10 : les operateurs d'un symbole (voir HmiOperator). Vide pour les autres vues.
     std::vector<HmiOperator> operators{};
-    // ---- 1.11.10 : les fonctions d'un symbole (HmiSymbols.hpp : symbolFunction, boundSymbolFunction) ;
-    //  vide pour les autres vues.
+    // ---- 1.11.10 : les fonctions d'un symbole (HmiSymbols.hpp : symbolFunction, boundSymbolFunction).
     //  Elles lisent et ecrivent les parametres du symbole (ceux de l'instance qui les
     //  appelle) ; une virtuelle se redefinit dans une instance.
+    //  1.12.16 : celles d'une vue ou d'une popup (HmiSymbols.hpp : viewmembers) - appelees par leur
+    //  nom dans la vue, par Vue.Fonction(...) ailleurs (les publiques).
     std::vector<HmiFunction> functions{};
+    // ---- 1.12.16 : LES CONSTANTES D'UNE VUE (ou d'une popup) : des Declaration de genre Constante,
+    //  lues par leur nom dans la vue (ses objets fx, ses scripts, ses actions, ses fonctions) et
+    //  par Vue.Nom ailleurs (les publiques). Une valeur ecrite, ou calculee par un code (au
+    //  demarrage, ou a chaque ouverture : Declaration::reopen). Vide pour un symbole.
+    std::vector<Declaration> constants{};
     // ---- 1.11.10 : une popup d'un symbole : le symbole qui la porte (kNoId : une popup du
     //  projet). Elle connait les parametres et les fonctions de l'instance qui l'ouvre.
     Id                       ownerSymbol{kNoId};

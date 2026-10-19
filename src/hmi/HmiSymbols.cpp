@@ -1502,6 +1502,11 @@ bool instanceAt(const Project& p, std::string_view path, InstanceAt& out) {
 
 std::vector<const HmiFunction*> symbolFunctionsAt(const Project& p, std::string_view call) {
     auto segs = dottedSegments(call);
+    // 1.12.16 : "Vue_Four.Pourcent" - les fonctions d'une vue ou d'une popup.
+    if (segs.size() == 2) {
+        const View* v = p.viewByName(segs[0]);
+        return v && !isSymbolView(*v) ? viewmembers::functions(*v, segs[1]) : std::vector<const HmiFunction*>{};
+    }
     if (segs.size() < 3) return {};
     const std::string name = segs.back();
     segs.pop_back();
@@ -1515,6 +1520,14 @@ std::vector<const HmiFunction*> symbolFunctionsAt(const Project& p, std::string_
 
 bool boundSymbolFunction(const Project& p, std::string_view call, BoundFunction& out) {
     auto segs = dottedSegments(call);
+    // 1.12.16 : "Vue_Four.Pourcent" - une fonction d'une vue ou d'une popup.
+    if (segs.size() == 2) {
+        if (!viewmembers::bound(p, call, out.function)) return false;
+        out.instance.clear();
+        out.symbol = segs[0];
+        out.overridden = false;
+        return true;
+    }
     if (segs.size() < 3) return false;
     const std::string name = segs.back();         // 1.11.20 : "Ouvrir#702" designe une surcharge
     segs.pop_back();
@@ -1549,6 +1562,131 @@ bool boundSymbolFunction(const Project& p, std::string_view call, BoundFunction&
     out.overridden = overridden;
     return true;
 }
+
+// ---- 1.12.16 : les constantes et les fonctions d'une vue (ou d'une popup) ----------
+namespace viewmembers {
+
+const Declaration* constant(const View& v, std::string_view name) {
+    for (const auto& d : v.constants)
+        if (sameName(d.name, name)) return &d;
+    return nullptr;
+}
+
+std::vector<const HmiFunction*> functions(const View& v, std::string_view name) {
+    if (isSymbolView(v)) return {};
+    if (name.find('#') != std::string_view::npos) {
+        const HmiFunction* f = symbolFunction(v, name);
+        return f ? std::vector<const HmiFunction*>{f} : std::vector<const HmiFunction*>{};
+    }
+    return symbolFunctions(v, name);
+}
+
+bool any(const View& v) { return !v.constants.empty() || (!isSymbolView(v) && !v.functions.empty()); }
+
+bool resolve(const Project& p, std::string_view path, Member& out, std::string* why, const View* from) {
+    out = Member{};
+    if (why) why->clear();
+    const auto dot = path.find('.');
+    if (dot == std::string_view::npos || dot == 0) return false;
+    const std::string root = trimmedCopy(path.substr(0, dot));
+    std::string member(path.substr(dot + 1));
+    if (const auto cut = member.find_first_of(".[("); cut != std::string::npos) member.resize(cut);
+    member = trimmedCopy(member);
+    const View* v = p.viewByName(root);
+    if (!v || isSymbolView(*v) || member.empty() || v->objectByName(member)) return false;
+    const Declaration* c = constant(*v, member);
+    auto fs = functions(*v, member);
+    if (!c && fs.empty()) return false;
+    const bool own = from && from->id == v->id;
+    const bool hidden = c ? c->visibility == Visibility::Private
+                          : std::all_of(fs.begin(), fs.end(), [](const HmiFunction* f) { return f->visibility == Visibility::Private; });
+    if (hidden && !own) {
+        if (why)
+            *why = v->name + "." + (c ? c->name : fs.front()->name) + " est priv\xC3\xA9" "e : seule " + v->name
+                 + (c ? " la lit (rends-la publique)" : " l'appelle (rends-la publique)");
+        return false;
+    }
+    if (!own) fs.erase(std::remove_if(fs.begin(), fs.end(), [](const HmiFunction* f) { return f->visibility == Visibility::Private; }), fs.end());
+    out.view = v;
+    out.constant = c;
+    out.functions = std::move(fs);
+    return true;
+}
+
+std::string qualify(std::string_view code, const View& v, const std::vector<std::string>& hidden) {
+    if (!any(v)) return std::string(code);
+    std::set<std::string> skip;
+    for (const auto& h : hidden) skip.insert(upperCopy(h));
+    std::vector<std::string> segs;
+    return rewriteRoots(code, true, [&](std::string_view s, std::size_t b, std::size_t e) -> Replacement {
+        const std::string_view root = s.substr(b, e - b);
+        if (skip.count(upperCopy(root))) return std::nullopt;
+        if (constant(v, root)) return std::make_pair(e, v.name + "." + std::string(root));
+        if (!functions(v, root).empty() && callChain(s, e, segs) && segs.empty()) return std::make_pair(e, v.name + "." + std::string(root));
+        return std::nullopt;
+    });
+}
+
+Script constantsScript(const View& v) {
+    Script s;
+    s.id = v.id;
+    s.name = v.name;
+    s.lang = ScriptLang::ST;
+    s.decls = v.constants;
+    return s;
+}
+
+bool computedAtOpen(const Project& p, const View& v, const Declaration& d) {
+    if (!d.computed) return false;
+    if (d.reopen) return true;
+    const View* owner = popupOwner(p, v);
+    if (v.params.empty() && !(owner && !owner->params.empty())) return false;
+    bool reads = false;
+    std::set<std::string> locals;
+    for (const auto& l : d.locals) locals.insert(upperCopy(l.name));
+    (void)rewriteRoots(d.calc, true, [&](std::string_view s, std::size_t b, std::size_t e) -> Replacement {
+        const std::string_view root = s.substr(b, e - b);
+        if (!reads && !locals.count(upperCopy(root)) && (v.param(root) || (owner && owner->param(root)))) reads = true;
+        return std::nullopt;
+    });
+    return reads;
+}
+
+bool bound(const Project& p, std::string_view call, HmiFunction& out) {
+    const auto segs = dottedSegments(call);
+    if (segs.size() != 2) return false;
+    const View* v = p.viewByName(segs[0]);
+    if (!v || isSymbolView(*v)) return false;
+    const HmiFunction* f = symbolFunction(*v, segs[1]);
+    if (!f) return false;
+    const std::string body = decl::codeOf(*f);
+    // Ses parametres, ses locales et son nom passent avant les constantes de la vue.
+    std::vector<std::string> hidden{f->name};
+    for (const auto& l : splitDeclarations(body, true).locals) hidden.push_back(l.name);
+    out = *f;
+    out.decls.clear();                                         // dans le texte (une copie pour l'appel)
+    out.body = qualify(body, *v, hidden);
+    std::uint64_t h = 1469598103934665603ull;
+    for (const char c : upperCopy(call)) { h ^= static_cast<unsigned char>(c); h *= 1099511628211ull; }
+    out.id = static_cast<Id>(0x80000000u | static_cast<std::uint32_t>((h ^ (h >> 29)) & 0x7FFFFFFFu));
+    return true;
+}
+
+bool nameTaken(const View& v, std::string_view name, std::string* what, const void* self) {
+    const auto say = [&](std::string w) {
+        if (what) *what = std::move(w);
+        return true;
+    };
+    if (const Object* o = v.objectByName(name)) return say("l'objet " + o->name);
+    if (const ViewParam* prm = v.param(name)) return say("le param\xC3\xA8tre " + prm->name);
+    for (const auto& d : v.constants)
+        if (&d != self && sameName(d.name, name)) return say("la constante " + d.name);
+    for (const auto& f : v.functions)
+        if (&f != self && sameName(f.name, name)) return say("la fonction " + f.name);
+    return false;
+}
+
+} // namespace viewmembers
 
 namespace {
 // La fin de la chaine ".a.b" qui suit une tete de chemin (l'index apres le dernier nom).

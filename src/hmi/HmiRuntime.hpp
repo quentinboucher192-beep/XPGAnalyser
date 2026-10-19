@@ -1648,7 +1648,13 @@ private:
     std::map<std::string, sim::ObjRef, std::less<>> qualified_;
     std::string                                     startError_;
     bool computeDeclarations();
-    bool computeOne(const Script&, const Declaration&, Id view, sim::ObjRef& out, std::string& why);
+    // `scope` : la portee ou il tourne (1.12.16 : une constante calculee a l'ouverture d'une popup lit
+    // ses parametres) ; nulle : le demarrage, ni vue ni parametres.
+    bool computeOne(const Script&, const Declaration&, Id view, sim::ObjRef& out, std::string& why,
+                    std::shared_ptr<const Scope> scope = nullptr);
+    // 1.12.16 : les constantes de la vue calculees a chaque ouverture (viewmembers::computedAtOpen),
+    // avec ses parametres du moment ; une erreur est dite a la Console, la vue s'ouvre quand meme.
+    void computeAtOpen(Id view);
     // La constante qualifiee qui commence le chemin (Reglages.Seuils, Reglages.Seuils['bas']) : son
     // objet, et le reste du chemin (`rest`) ; nul : aucune.
     [[nodiscard]] sim::ObjRef qualifiedRoot(std::string_view path, std::string* rest = nullptr) const;

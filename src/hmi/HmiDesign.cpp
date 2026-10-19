@@ -339,6 +339,13 @@ void walk(P& p, const FindOptions& o, F&& fn) {
         }
         for (auto& prm : v.params) fn(prm.defaultValue, v.id, kNoId, v.name + dot + "param\xC3\xA8tre " + prm.name);
         fn(v.popup.title, v.id, kNoId, v.name + dot + "titre de la popup");
+        // 1.12.16 : ses constantes (type, valeur, calcul) et ses fonctions (corps, declarations).
+        declarations(v.constants, v.id, v.name + dot + "constantes");
+        for (auto& d : v.constants) fn(d.calc, v.id, kNoId, v.name + dot + "constante " + d.name + " (calcul)");
+        for (auto& f : v.functions) {
+            fn(f.body, v.id, kNoId, v.name + dot + "fonction " + f.name);
+            declarations(f.decls, v.id, v.name + dot + "fonction " + f.name);
+        }
     }
     if (o.view != kNoId) return;
     for (auto& s : p.programs.scripts) {
@@ -413,6 +420,7 @@ Id duplicateViewReplacing(Project& p, Id viewId, const std::string& newName, std
         if (ids.count(o.parent)) o.parent = ids[o.parent];
     }
     for (auto& s : copy.scripts) s.id = p.allocate();
+    for (auto& f : copy.functions) f.id = p.allocate();        // 1.12.16 : ses fonctions (les constantes : changeProject)
     copyOperators(p, copy.operators, src->name, copy.name);   // 1.10 : les operateurs d'un symbole
     copy.activeLayer = ids.count(copy.activeLayer) ? ids[copy.activeLayer] : (copy.layers.empty() ? kNoId : copy.layers.front().id);
     // Le remplacement, dans la copie seule.

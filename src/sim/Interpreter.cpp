@@ -4510,6 +4510,20 @@ private:
     // RETURN expr : la valeur rendue par la fonction en cours.
     Flow returnValue(const Stmt& s) {
         if (frames_.size() < 2 || !frames_.back().fn) {
+            // 1.12.16 : le corps d'une fonction IHM - la valeur va dans le nom de la fonction.
+            if (!limits_.returnTo.empty() && frames_.size() < 2) {
+                auto v = rich(*s.value);
+                if (!v) {
+                    if (!aborted_) fail(s.line, v.error().message());
+                    return {Flow::Kind::Aborted};
+                }
+                if (v->o) {
+                    fail(s.line, limits_.returnTo + " : une fonction de ce type rend une valeur simple");
+                    return {Flow::Kind::Aborted};
+                }
+                if (!assignName(limits_.returnTo, v->v, s.line)) return {Flow::Kind::Aborted};
+                return {Flow::Kind::Return};
+            }
             fail(s.line, "RETURN avec une valeur : seulement dans une fonction");
             return {Flow::Kind::Aborted};
         }

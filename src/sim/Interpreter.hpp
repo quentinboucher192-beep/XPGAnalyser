@@ -334,6 +334,10 @@ struct RunLimits {
     const Locals*  initials{nullptr};
     // 1.10 : la profondeur d'appel des fonctions du dialecte, au plus.
     std::uint32_t  maxCallDepth{64};
+    // 1.12.16 : le programme est le corps d'une fonction IHM (du projet, d'une vue, d'un symbole) :
+    // RETURN valeur ; ecrit cette variable (le nom de la fonction) et rend la main. Vide : RETURN
+    // valeur n'est permis que dans une FUNCTION du dialecte.
+    std::string    returnTo{};
 };
 
 // Lot API 7 : une horloge monotone, en microsecondes (le budget du cycle).

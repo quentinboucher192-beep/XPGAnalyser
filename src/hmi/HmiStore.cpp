@@ -214,6 +214,7 @@ std::string serializeDeclarations(const std::vector<Declaration>& decls) {
         if (!d.description.empty()) s += field("description", d.description);
         // 1.12.7 : calculee au demarrage - son code, puis ses locales sur les lignes "locale" qui suivent.
         if (d.computed) s += fieldBare("calculee", "oui") + field("calcul", d.calc);
+        if (d.computed && d.reopen) s += fieldBare("ouverture", "oui");        // 1.12.16 : a chaque ouverture de la vue
         s += "\n";
         if (d.computed)
             for (const auto& l : d.locals) {
@@ -250,6 +251,7 @@ bool parseDeclaration(const Record& r, Declaration& d) {
     d.visibility = visibilityFromKey(toStr(r.get("visibilite"))).value_or(Visibility::Public);
     d.computed = toStr(r.get("calculee")) == "oui";               // 1.12.7
     d.calc = toStr(r.get("calcul"));
+    d.reopen = d.computed && toStr(r.get("ouverture")) == "oui";  // 1.12.16
     return !d.name.empty();
 }
 // Le message d'une ligne "declaration" ignoree.
@@ -419,11 +421,15 @@ std::string serializeView(const View& v) {
            + field("description", a.description) + field("consigne", a.instruction) + "\n";
     for (const auto& o : v.operators) s += serializeOperator("operateur_symbole", o);   // 1.10
     // 1.11.10 : les fonctions d'un symbole, leur corps sur la ligne (une version plus ancienne les ignore).
+    // 1.12.16 : celles d'une vue ou d'une popup aussi ; une privee le dit (portee=privee).
     for (const auto& fn : v.functions)
         s += "fonction_symbole" + fieldInt("id", fn.id) + field("nom", fn.name) + field("retour", fn.returnType)
            + (fn.isVirtual ? fieldBool("virtuelle", true) : std::string{})
+           + (fn.visibility == Visibility::Private ? fieldBare("portee", "privee") : std::string{})
            + (fn.description.empty() ? std::string{} : field("description", fn.description)) + field("corps", fn.body) + "\n"
            + serializeDeclarations(fn.decls);                                     // 1.11.18 (lot 3)
+    // 1.12.16 : les constantes de la vue, sur les lignes "declaration" qui suivent leur porteur.
+    if (!v.constants.empty()) s += "constantes_vue\n" + serializeDeclarations(v.constants);
     s += "grille" + fieldBool("visible", v.grid.visible) + fieldInt("pas", v.grid.step)
        + fieldBool("magnetisme_grille", v.grid.snapGrid)
        + fieldBool("magnetisme_objets", v.grid.snapObjects)
@@ -618,11 +624,14 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             fn.name = toStr(r.get("nom"));
             fn.returnType = toStr(r.get("retour"));
             fn.isVirtual = toBool(r.get("virtuelle"), false);
+            fn.visibility = toStr(r.get("portee")) == "privee" ? Visibility::Private : Visibility::Public;   // 1.12.16
             fn.description = toStr(r.get("description"));
             fn.body = toStr(r.get("corps"));
             if (fn.name.empty()) { warn("ligne " + std::to_string(lineNo) + " : fonction de symbole sans nom"); continue; }
             v.functions.push_back(std::move(fn));
             holder = &v.functions.back().decls;
+        } else if (r.word == "constantes_vue") {                      // 1.12.16 : les constantes de la vue suivent
+            holder = &v.constants;
         } else if (r.word == "redefinition") {                        // 1.11.10
             if (!current) { warn("ligne " + std::to_string(lineNo) + " : red\xC3\xA9" "finition hors d'un objet"); continue; }
             FunctionOverride fo;
@@ -824,7 +833,13 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     for (const auto& v : p.views)
         for (const auto& o : v.objects)
             tableGestures = tableGestures || std::any_of(o.actions.begin(), o.actions.end(), [](const Action& a) { return triggerIsTable(a.trigger); });
-    const int format = tableGestures ? kFormatVersion : shortcuts ? 24 : declared ? 23 : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
+    // 1.12.16 : le format 26 n'ajoute que les constantes et les fonctions des vues et des popups ; un projet
+    // qui n'en a pas s'ecrit au format 25 (ou 24...) : la 1.12.15 l'ouvre.
+    bool viewMembers = false;
+    for (const auto& v : p.views)
+        viewMembers = viewMembers || !v.constants.empty() || (v.role != "symbole" && !v.functions.empty());
+    const int format = viewMembers ? kFormatVersion : tableGestures ? 25 : shortcuts ? 24 : declared ? 23
+                     : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# XpgAnalyzer - projet IHM (format " + std::to_string(format) + ")\n";
     index += "ihm" + fieldInt("format", format) + fieldInt("prochain_id", p.nextId) + "\n";

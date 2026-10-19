@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <deque>
 #include <iterator>
 
 namespace hmi {
@@ -509,6 +510,8 @@ public:
               const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result) override {
         const auto u = upper(name);
         if (u.rfind("IHM_", 0) == 0) return ihm(u, args, result);
+        // 1.12.16 : une fonction de la vue, par son nom dans la vue (elle passe avant celles du projet).
+        if (const auto* f = viewFunction(name)) return rt_.callFunction(*f, args, result);
         // Lot 7 : une fonction IHM du projet passe avant celles de l'automate.
         if (rt_.project_)
             if (const auto* f = rt_.project_->functionByKey(name)) return rt_.callFunction(*f, args, result);   // 1.11.20 : "Nom#id"
@@ -539,15 +542,27 @@ public:
     // et les fonctions IHM_ qui ne font que lire (l'utilisateur, la vue...).
     [[nodiscard]] bool hostsFunction(std::string_view name) const override {
         if (readOnlyIhm(upper(name))) return true;
+        if (const_cast<Env*>(this)->viewFunction(name)) return true;   // 1.12.16 : une fonction de la vue
         if (rt_.project_ && rt_.project_->functionByKey(name) != nullptr) return true;
         return const_cast<Env*>(this)->symbolCall(name) != nullptr;   // 1.11.10 : {Vanne_3.Etat()}
     }
     // 1.11.10 : "Vue.Instance.Fonction" (ou un parametre de popup qui y mene) : la fonction
     // de l'instance, prete a tourner ; nul : ce n'est pas une fonction d'instance.
+    // 1.12.16 : "Vue.Fonction" aussi (une fonction d'une vue ou d'une popup).
     const HmiFunction* symbolCall(std::string_view name) {
         if (!rt_.project_ || name.find('.') == std::string_view::npos) return nullptr;
         const std::string r = resolved(name);
         return rt_.symbolCall(r.empty() ? std::string(name) : r);
+    }
+    // 1.12.16 : un nom sans point que la portee de la vue mene a "Vue.Fonction" (une fonction de la
+    // vue) ; "Pourcent#702" (une surcharge) aussi. Nul : pas une fonction de la vue.
+    const HmiFunction* viewFunction(std::string_view name) {
+        if (!rt_.project_ || !aliases || name.find('.') != std::string_view::npos) return nullptr;
+        const auto hash = name.find('#');
+        const std::string_view base = name.substr(0, hash);
+        const std::string* to = aliases->alias(base);
+        if (!to || to->find('.') == std::string::npos) return nullptr;
+        return rt_.symbolCall(*to + std::string(hash == std::string_view::npos ? std::string_view{} : name.substr(hash)));
     }
     bool callFromExpression(std::string_view name, const std::vector<std::pair<std::string, sim::Value>>& args,
                             sim::Value& result) override {
@@ -558,7 +573,8 @@ public:
             --rt_.readOnly_;
             return ok;
         }
-        const auto* f = rt_.project_ ? rt_.project_->functionByKey(name) : nullptr;
+        const HmiFunction* f = viewFunction(name);       // 1.12.16 : une fonction de la vue
+        if (!f && rt_.project_) f = rt_.project_->functionByKey(name);
         if (!f) f = symbolCall(name);                     // 1.11.10 : {Vanne_3.Etat()}
         if (!f) return false;
         ++rt_.readOnly_;
@@ -654,6 +670,9 @@ public:
         if (aliases && (aliases->object(n) || aliases->value(n))) return false;
         const std::string r = resolved(n);
         if (!r.empty() && r[0] == '$') return rt_.copyHasObjects(r);
+        // 1.12.16 : une constante de la vue (Couleurs -> Vue_Four.Couleurs) qui est un objet.
+        if (!rt_.qualified_.empty() && r.find('.') != std::string::npos && r != n)
+            if (auto o = rt_.qualifiedRoot(r); o && o->type && o->type->kind != sim::TypeDesc::Kind::Scalar) return true;
         if (rt_.rich_.empty()) return false;
         return rt_.hasRichUnder(r.empty() ? std::string(n) : r);
     }
@@ -682,7 +701,8 @@ public:
     // POINTER TO, ARRAY, MAP, structure) tourne dans le dialecte, appelee du
     // script avec ses arguments riches ; une fonction simple, comme avant (env.call).
     std::shared_ptr<const sim::Function> dialectFunction(std::string_view name) override {
-        const auto* f = rt_.project_ ? rt_.project_->functionByKey(name) : nullptr;        // 1.11.20 : "Nom#id" aussi
+        const HmiFunction* f = viewFunction(name);       // 1.12.16 : une fonction de la vue
+        if (!f && rt_.project_) f = rt_.project_->functionByKey(name);                      // 1.11.20 : "Nom#id" aussi
         if (!f) f = symbolCall(name);                     // 1.11.10 : une fonction d'instance aux types riches
         if (!f) return nullptr;
         const std::string text = functionText(*f);
@@ -697,7 +717,12 @@ public:
     // ("Vue.Vanne_3.Ouvrir", un parametre de popup qui y mene).
     std::vector<const HmiFunction*> named(std::string_view name) {
         if (!rt_.project_ || name.find('#') != std::string_view::npos) return {};
-        if (name.find('.') == std::string_view::npos) return rt_.project_->functionsNamed(name);
+        if (name.find('.') == std::string_view::npos) {
+            // 1.12.16 : une fonction de la vue (par son nom dans la vue) passe avant celles du projet.
+            if (const std::string* to = aliases ? aliases->alias(name) : nullptr; to && to->find('.') != std::string::npos)
+                if (auto fs = symbolFunctionsAt(*rt_.project_, *to); !fs.empty()) return fs;
+            return rt_.project_->functionsNamed(name);
+        }
         const std::string r = resolved(name);
         return symbolFunctionsAt(*rt_.project_, r.empty() ? std::string(name) : r);
     }
@@ -739,7 +764,8 @@ public:
     std::string resultType(std::string_view name, const std::vector<sim::ArgShape>& args) override {
         const auto fs = named(name);
         if (fs.empty()) {
-            const HmiFunction* f = rt_.project_ ? rt_.project_->functionByKey(name) : nullptr;
+            const HmiFunction* f = viewFunction(name);   // 1.12.16
+            if (!f && rt_.project_) f = rt_.project_->functionByKey(name);
             if (!f && name.find('.') != std::string_view::npos) f = symbolCall(name);
             return f ? f->returnType : std::string{};
         }
@@ -1767,6 +1793,7 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     limits.maxIterationsPerLoop = 100000;
     limits.maxStatementsPerScan = 200000;
     limits.trace = &trace_;
+    if (!f.returnType.empty()) limits.returnTo = f.name;      // 1.12.16 : RETURN valeur ;
     const auto run = sim::execute(*prep.program, *env_, limits);
     --depth_;
     trace_ = callerTrace;
@@ -1965,7 +1992,8 @@ sim::ObjRef Runtime::valueObject(const Project& p, std::string_view type, std::s
     return sim::makeRichValue(type, value, *rt.env_, why);
 }
 
-bool Runtime::computeOne(const Script& sc, const Declaration& d, Id view, sim::ObjRef& out, std::string& why) {
+bool Runtime::computeOne(const Script& sc, const Declaration& d, Id view, sim::ObjRef& out, std::string& why,
+                         std::shared_ptr<const Scope> scope) {
     const View* v = view != kNoId && project_ ? project_->view(view) : nullptr;
     const std::string source = "calcul " + calc::pathOf(sc, d, v);
     const Prepared& prep = prepare(calc::runnableCode(sc, d), source, false);
@@ -1982,7 +2010,7 @@ bool Runtime::computeOne(const Script& sc, const Declaration& d, Id view, sim::O
             if (!local)
                 if (auto o = it->second.find(x.name)) given.set(x.name, o);
         }
-    AliasGuard aliasGuard(env_->aliases, nullptr);           // ni vue ni parametres : le demarrage
+    AliasGuard aliasGuard(env_->aliases, scope);             // ni vue ni parametres au demarrage (1.12.16 : ceux de l'ouverture)
     Env::Frame frame;
     env_->frames.push_back(&frame);
     sim::Locals mine;                                         // ses declarations, le temps du calcul
@@ -2052,6 +2080,24 @@ bool Runtime::computeDeclarations() {
             else written.emplace_back(&sc, &d);
         }
     }
+    // 1.12.16 : les constantes des vues et des popups, publiques et privees (Generer dit qui les lit) :
+    // leur porteur est un script du nom de la vue. Celles de l'ouverture attendent l'ouverture.
+    std::deque<Script> holders;
+    for (const auto& v : project_->views) {
+        if (v.constants.empty()) continue;
+        holders.push_back(viewmembers::constantsScript(v));
+        for (const auto& d : holders.back().decls) {
+            if (d.kind != DeclKind::Constant || d.computed) continue;
+            std::string why;
+            if (auto o = sim::makeRichValue(d.type, d.value, *env_, &why)) qualified_[upper(v.name + "." + d.name)] = std::move(o);
+            else written.emplace_back(&holders.back(), &d);
+        }
+    }
+    const auto holderOf = [&](Id id) -> const Script* {
+        for (const auto& h : holders)
+            if (h.id == id) return &h;
+        return nullptr;
+    };
     const auto writtenByCode = [&] {
         for (const auto& [sc, d] : written) {
             Declaration tmp = *d;
@@ -2079,6 +2125,7 @@ bool Runtime::computeDeclarations() {
         if (step.view == kNoId) {
             for (const auto& g : project_->programs.scripts)
                 if (g.id == step.script) sc = &g;
+            if (!sc) sc = holderOf(step.script);                  // 1.12.16 : les constantes d'une vue
         } else if (const View* v = project_->view(step.view)) {
             for (const auto& vs : v->scripts)
                 if (vs.id == step.script) sc = &vs;
@@ -2102,12 +2149,52 @@ bool Runtime::computeDeclarations() {
             return false;
         }
         initials_[sc->id].set(d->name, value);
-        if (step.view == kNoId && d->kind == DeclKind::Constant && d->visibility == Visibility::Public)
+        if (step.view == kNoId && d->kind == DeclKind::Constant && (d->visibility == Visibility::Public || holderOf(sc->id)))
             qualified_[upper(sc->name + "." + d->name)] = value;
         log("Calcul", step.path, "= " + sim::display(*value));
     }
     writtenByCode();
     return true;
+}
+
+void Runtime::computeAtOpen(Id id) {
+    const View* v = project_ ? project_->view(id) : nullptr;
+    if (!v || v->constants.empty()) return;
+    std::vector<const Declaration*> todo;
+    for (const auto& d : v->constants)
+        if (d.kind == DeclKind::Constant && viewmembers::computedAtOpen(*project_, *v, d)) todo.push_back(&d);
+    if (todo.empty()) return;
+    const Script holder = viewmembers::constantsScript(*v);
+    const auto scope = scopePtr(id);
+    // Dans l'ordre ou elles se lisent : une qui en lit une autre de l'ouverture passe apres (au plus
+    // autant de tours que de constantes ; ce qui reste est une boucle, que Generer dit).
+    std::set<std::string> pending;
+    for (const auto* d : todo) pending.insert(upper(d->name));
+    for (std::size_t round = 0; round <= todo.size() && !pending.empty(); ++round)
+        for (const auto* d : todo) {
+            if (!pending.count(upper(d->name))) continue;
+            const auto a = calc::analyse(*project_, holder, *d, nullptr);
+            const bool ready = std::none_of(a.reads.begin(), a.reads.end(), [&](const std::string& r) {
+                return r.find('.') == std::string::npos && pending.count(upper(r)) && upper(r) != upper(d->name);
+            });
+            if (!ready && round < todo.size()) continue;
+            pending.erase(upper(d->name));
+            const Declaration* inHolder = nullptr;
+            for (const auto& x : holder.decls)
+                if (x.id == d->id) inHolder = &x;
+            sim::ObjRef value;
+            std::string why;
+            if (!inHolder || !computeOne(holder, *inHolder, kNoId, value, why, scope)) {
+                const std::string path = v->name + "." + d->name;
+                const CodeOrigin was = origin_;
+                origin_ = CodeOrigin{"calcul " + path, id, kNoId, kNoId, kNoId, d->name};
+                logAt(LogLevel::Error, "Erreur", "calcul " + path + " (\xC3\xA0 l'ouverture)", why, announcedLine(why));
+                origin_ = was;
+                continue;
+            }
+            initials_[holder.id].set(d->name, value);
+            qualified_[upper(v->name + "." + d->name)] = value;
+        }
 }
 
 void Runtime::runViewScript(const View& v, std::string_view event, double now) {
@@ -2616,6 +2703,8 @@ void Runtime::openView(Id id, double now, bool popup) {
     };
     arm(0, v->actions);
     for (const auto& o : v->objects) arm(o.id, o.actions);
+    computeAtOpen(id);                  // 1.12.16 : ses constantes de l'ouverture, avant son script d'ouverture
+    if ((v = viewOf(id)) == nullptr) return;
     runViewScript(*v, "OnOpen", now);
     if ((v = viewOf(id)) == nullptr) return;
     const View snapshot = *v;
@@ -4506,7 +4595,7 @@ Scope designScope(const View& v) {
 
 std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view arguments) {
     const auto given = parseArguments(arguments);
-    if (v.params.empty() && given.empty()) return nullptr;
+    if (v.params.empty() && given.empty() && !viewmembers::any(v)) return nullptr;
     auto scope = std::make_shared<Scope>();
     const auto bind = [&](const std::string& name, const std::string& text, const std::string& type) {
         // 1.11.7 : un repere dans un argument (IN_V := $V[0]$, pose par Dupliquer...) : ses $ sont
@@ -4586,6 +4675,14 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
             const ViewParam* own = owner ? owner->param(name) : nullptr;
             bind(name, text, own ? own->type : std::string{});
         }
+    // 1.12.16 : ses constantes et ses fonctions, par leur nom dans la vue (Seuil_Haut -> Vue_Four.Seuil_Haut :
+    // le moteur les lit sous leur nom qualifie). Un parametre du meme nom passe avant (Generer le refuse).
+    const auto member = [&](const std::string& name) {
+        if (!v.param(name) && !scope->alias(name) && !scope->value(name) && !scope->object(name)) scope->setAlias(name, v.name + "." + name);
+    };
+    for (const auto& d : v.constants) member(d.name);
+    if (!isSymbolView(v))
+        for (const auto& f : v.functions) member(f.name);
     if (scope->empty()) return nullptr;
     return scope;
 }

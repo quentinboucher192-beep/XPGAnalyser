@@ -35,6 +35,7 @@
 #include "../src/hmi/HmiScriptCheck.hpp"
 #include "../src/hmi/HmiScriptFile.hpp"
 #include "../src/hmi/HmiStore.hpp"
+#include "../src/hmi/HmiSymbols.hpp"   // 1.12.16 : viewmembers
 
 #include <algorithm>
 #include <cstdio>
@@ -2070,7 +2071,169 @@ void calculees() {
               "une constante calculee : juste dans un script ; refusee dans une fonction");
     }
 }
-} // namespace
+}
+
+// ------------------------------------- 1.12.16 : les constantes et fonctions des vues ----
+// Vue_Four : Seuil_Haut (ecrite, publique), Couleurs (MAP, privee), Paliers (calculee au demarrage, lit
+// Seuil_Haut), Pourcent (publique, RETURN), CouleurNiveau (privee, lit Seuil_Haut et Couleurs) ; son
+// script d'ouverture les lit par leur nom. Pop_Reglage : Pas (lit son parametre Cuve : a l'ouverture).
+// Bilan (un script general) : Vue_Four.Pourcent(...), Vue_Four.Seuil_Haut, Vue_Four.Paliers[4].
+Project vueProject() {
+    Project p;
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    cuve.members.push_back({"Capacite", "REAL", "", ""});
+    cuve.members.push_back({"Consigne", "REAL", "", ""});
+    p.programs.types.push_back(cuve);
+    p.programs.variables.push_back(hmiVariable(p, "Niveau", "REAL"));
+    p.programs.variables.back().initial = "50.0";
+    for (const char* n : {"R1", "R2", "R3", "Pas_Lu"}) p.programs.variables.push_back(hmiVariable(p, n, "REAL"));
+    p.programs.variables.push_back(hmiVariable(p, "C", "STRING"));
+    p.programs.variables.push_back(hmiVariable(p, "Cuve_A", "T_Cuve"));
+    p.programs.variables.back().initial = "(Capacite := 40.0, Consigne := 10.0)";
+    View four = makeView(p, "Vue_Four");
+    four.constants = {declared(DeclKind::Constant, "Seuil_Haut", "REAL", "85.0"),
+                      declared(DeclKind::Constant, "Couleurs", "MAP[STRING] OF STRING", "['haut' := '#E5534B', 'ok' := '#2EA043']"),
+                      computedDecl(DeclKind::Constant, "Paliers", "ARRAY[0..4] OF REAL",
+                                   "FOR i := 0 TO 4 DO\n    Paliers[i] := Seuil_Haut / 4.0 * i;\nEND_FOR;\n")};
+    four.constants[1].visibility = Visibility::Private;
+    HmiFunction pourcent;
+    pourcent.id = p.allocate();
+    pourcent.name = "Pourcent";
+    pourcent.returnType = "REAL";
+    pourcent.body = "IF Max = 0.0 THEN\n    RETURN 0.0;\nEND_IF;\nRETURN LIMIT(0.0, Valeur * 100.0 / Max, 100.0);\n";
+    pourcent.decls = {declared(DeclKind::Parameter, "Valeur", "REAL"), declared(DeclKind::Parameter, "Max", "REAL")};
+    HmiFunction couleur;
+    couleur.id = p.allocate();
+    couleur.name = "CouleurNiveau";
+    couleur.returnType = "STRING";
+    couleur.visibility = Visibility::Private;
+    couleur.body = "CouleurNiveau := SEL(N >= Seuil_Haut, Couleurs['ok'], Couleurs['haut']);\n";
+    couleur.decls = {declared(DeclKind::Parameter, "N", "REAL")};
+    four.functions = {pourcent, couleur};
+    Script open;
+    open.id = p.allocate();
+    open.name = "Ouverture";
+    open.event = "OnOpen";
+    open.body = "R1 := Pourcent(Niveau, Seuil_Haut);\nC := CouleurNiveau(Niveau);\nR2 := Paliers[2];\n";
+    four.scripts.push_back(open);
+    p.views.push_back(four);
+    View pop = makeView(p, "Pop_Reglage");
+    pop.role = "popup";
+    ViewParam prm;
+    prm.name = "Cuve";
+    prm.type = "T_Cuve";
+    pop.params.push_back(prm);
+    pop.constants = {computedDecl(DeclKind::Constant, "Pas", "REAL", "Pas := Cuve.Capacite / 20.0;\n")};
+    Script popOpen;
+    popOpen.id = p.allocate();
+    popOpen.name = "Ouverture";
+    popOpen.event = "OnOpen";
+    popOpen.body = "Pas_Lu := Pas;\n";
+    pop.scripts.push_back(popOpen);
+    p.views.push_back(pop);
+    Script bilan;
+    bilan.id = p.allocate();
+    bilan.name = "Bilan";
+    bilan.event = "Appel";
+    bilan.body = "R1 := Vue_Four.Pourcent(Niveau, Vue_Four.Seuil_Haut);\nR2 := Vue_Four.Paliers[4];\nR3 := Vue_Four.Seuil_Haut;\n";
+    p.programs.scripts.push_back(bilan);
+    uniqueDeclarationIds(p);
+    return p;
+}
+
+void vueConstantes11216() {
+    std::printf("-- 1.12.16 : les constantes et fonctions des vues et des popups\n");
+    const Project p = vueProject();
+    const View& four = p.views[0];
+    // Le disque : constantes_vue, la portee privee d'une fonction, calculee a l'ouverture - relus a l'identique.
+    {
+        Project q = p;
+        q.views[1].constants[0].reopen = true;
+        const auto files = serializeProject(q);
+        std::string all;
+        for (const auto& [name, data] : files) all += fileText(files, name);
+        check(all.find("constantes_vue\n") != std::string::npos && all.find("portee=privee") != std::string::npos
+                  && all.find("ouverture=oui") != std::string::npos && all.find("format=26") != std::string::npos,
+              "sur disque : constantes_vue, portee=privee, ouverture=oui, format 26");
+        const auto back = parseProject(readerOf(files));
+        check(back.has_value() && back.value().views.size() == 2 && back.value().views[0].constants == q.views[0].constants
+                  && back.value().views[0].functions == q.views[0].functions && back.value().views[1].constants == q.views[1].constants,
+              "relu : les memes constantes et fonctions des vues");
+        Project none = p;
+        for (auto& v : none.views) { v.constants.clear(); v.functions.clear(); }
+        std::string plain;
+        const auto noneFiles = serializeProject(none);
+        for (const auto& [name, data] : noneFiles) plain += fileText(noneFiles, name);
+        check(plain.find("format=26") == std::string::npos, "sans elles : le format d'avant (une 1.12.15 l'ouvre)");
+    }
+    // Ce que la vue porte, et qui la lit.
+    {
+        viewmembers::Member m;
+        std::string why;
+        check(viewmembers::resolve(p, "Vue_Four.Seuil_Haut", m, &why) && m.constant && m.constant->name == "Seuil_Haut",
+              "Vue_Four.Seuil_Haut : la constante publique");
+        check(!viewmembers::resolve(p, "Vue_Four.Couleurs['ok']", m, &why) && why.find("priv\xC3\xA9" "e") != std::string::npos,
+              "Vue_Four.Couleurs d'ailleurs : privee, dit pourquoi - " + why);
+        check(viewmembers::resolve(p, "Vue_Four.Couleurs", m, &why, &four) && m.constant, "... la vue elle-meme la lit");
+        check(viewmembers::resolve(p, "Vue_Four.Pourcent", m, &why) && m.functions.size() == 1, "Vue_Four.Pourcent : la fonction publique");
+        check(!viewmembers::resolve(p, "Vue_Four.CouleurNiveau", m, &why) && why.find("l'appelle") != std::string::npos,
+              "Vue_Four.CouleurNiveau d'ailleurs : privee - " + why);
+        check(!viewmembers::resolve(p, "Vue_Four.Open", m, &why) && why.empty(), "Vue_Four.Open : pas un membre (une propriete publique)");
+        const std::string q = viewmembers::qualify("x := Pourcent(Seuil_Haut, 'Seuil_Haut') + v.Seuil_Haut; (* Seuil_Haut *)\nSeuil_Haut2 := 1;", four);
+        check(q == "x := Vue_Four.Pourcent(Vue_Four.Seuil_Haut, 'Seuil_Haut') + v.Seuil_Haut; (* Seuil_Haut *)\nSeuil_Haut2 := 1;",
+              "qualifier le code de la vue : les noms seuls, ni chaines, ni commentaires, ni membres\n" + q);
+        check(viewmembers::computedAtOpen(p, p.views[1], p.views[1].constants[0]) && !viewmembers::computedAtOpen(p, four, four.constants[2]),
+              "Pas lit le parametre Cuve : a l'ouverture ; Paliers : au demarrage");
+        std::string what;
+        check(viewmembers::nameTaken(four, "seuil_haut", &what) && what == "la constante Seuil_Haut" && !viewmembers::nameTaken(four, "Autre"),
+              "un nom pris : " + what);
+    }
+    // L'ordre des calculs : Paliers (au demarrage) ; Pas attend l'ouverture.
+    {
+        const auto pl = calc::plan(p);
+        std::string order;
+        for (const auto& s : pl.order) order += s.path + " ";
+        check(pl.cycle.empty() && order == "Vue_Four.Paliers ", "le plan : Vue_Four.Paliers seule - " + order);
+    }
+    // Le moteur.
+    {
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        std::string journal;
+        for (const auto& e : rt.journal()) journal += e.source + " " + e.message + "\n";
+        check(rt.running() && rt.startError().empty(), "demarre (" + rt.startError() + ")\n" + journal);
+        check(rt.navigate(four.id, Transition{}, 0.1), "Vue_Four s'ouvre");
+        const auto v = [&](const char* n) { const auto* x = rt.variable(n); return x ? x->display() : std::string("?"); };
+        journal.clear();
+        for (const auto& e : rt.journal()) journal += e.source + " " + e.message + "\n";
+        check(v("R1").rfind("58.82", 0) == 0 && v("C") == "'#2EA043'" && v("R2") == "42.5",
+              "dans la vue, par leur nom : Pourcent(Niveau, Seuil_Haut) = " + v("R1") + ", CouleurNiveau(Niveau) = " + v("C")
+                  + ", Paliers[2] = " + v("R2") + "\n" + journal);
+        std::string why;
+        const bool ok = rt.callScript("Bilan", 0.2, &why);
+        check(ok && v("R1").rfind("58.82", 0) == 0 && v("R2") == "85" && v("R3") == "85",
+              "ailleurs, par Vue_Four. : Pourcent = " + v("R1") + ", Paliers[4] = " + v("R2") + ", Seuil_Haut = " + v("R3") + " " + why);
+        check(rt.openPopup(p.views[1].id, Transition{}, 0.3, "Cuve := Cuve_A", {}, kNoId), "Pop_Reglage s'ouvre (Cuve := Cuve_A)");
+        journal.clear();
+        for (const auto& e : rt.journal()) journal += e.source + " " + e.message + "\n";
+        check(v("Pas_Lu") == "2", "Pas, calculee a l'ouverture, lit Cuve.Capacite : " + v("Pas_Lu") + "\n" + journal);
+    }
+    // Ecrire une constante de vue : refuse.
+    {
+        Project q = vueProject();
+        q.programs.scripts[0].body = "Vue_Four.Seuil_Haut := 1.0;\n";
+        Runtime rt;
+        rt.bind(&q, nullptr);
+        rt.start(0.0);
+        std::string why;
+        const bool ok = rt.callScript("Bilan", 0.1, &why);
+        check(!ok && why.find("constante") != std::string::npos, "Vue_Four.Seuil_Haut := 1.0 : refuse - " + why);
+    }
+}
+ // namespace
 
 
 int main(int argc, char** argv) {
@@ -2092,6 +2255,7 @@ int main(int argc, char** argv) {
     edition();
     persistante();
     calculees();
+    vueConstantes11216();                    // 1.12.16 : les constantes et fonctions des vues et des popups
     Tally t;
     std::printf("-- le corpus : %s\n", argv[1]);
     corpusFile(argv[1], t);

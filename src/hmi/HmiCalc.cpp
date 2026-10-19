@@ -6,9 +6,11 @@
 #include "HmiDecl.hpp"
 #include "HmiDeclEdit.hpp"   // usesIn : le code qui lit une declaration
 #include "HmiScript.hpp"
+#include "HmiSymbols.hpp"   // 1.12.16 : les constantes des vues (viewmembers)
 
 #include <algorithm>
 #include <cctype>
+#include <deque>
 #include <functional>
 #include <map>
 #include <set>
@@ -350,6 +352,27 @@ Analysis analyse(const Project& p, const Script& owner, const Declaration& d, co
             i = j;
             continue;
         }
+        // 1.12.16 : Vue_Four.Seuil_Haut - la constante d'une vue (publique, ou de la vue qui calcule).
+        if (path.find('.') != std::string::npos && !p.variable(w)) {
+            const View* from = view ? view : p.view(owner.id);        // le porteur des constantes d'une vue : la vue
+            viewmembers::Member m;
+            std::string why;
+            if (viewmembers::resolve(p, path, m, &why, from) && m.constant) {
+                const std::string q = m.view->name + "." + m.constant->name;
+                const bool me = m.view->id == owner.id && sameWord(m.constant->name, d.name);
+                if (written) issue(true, i, q + " est une constante : elle ne s'\xC3\xA9" "crit pas");
+                else if (me) a.assigns = a.assigns || assigned;
+                else if (m.constant->computed) a.reads.push_back(q);
+                if (!written && !me) a.uses.push_back(q);
+                i = j;
+                continue;
+            }
+            if (!why.empty()) {
+                issue(true, i, why);
+                i = j;
+                continue;
+            }
+        }
         if (p.variable(w)) a.uses.push_back(w);
         if (view && view->param(w))
             issue(true, i, w + " est un param\xC3\xA8tre de la vue : il n'existe pas encore au d\xC3\xA9marrage");
@@ -424,8 +447,10 @@ bool hasComputed(const Project& p) noexcept {
         return std::any_of(sc.decls.begin(), sc.decls.end(), [](const Declaration& d) { return d.computed; });
     };
     if (std::any_of(p.programs.scripts.begin(), p.programs.scripts.end(), any)) return true;
-    for (const auto& v : p.views)
+    for (const auto& v : p.views) {
         if (std::any_of(v.scripts.begin(), v.scripts.end(), any)) return true;
+        if (std::any_of(v.constants.begin(), v.constants.end(), [](const Declaration& d) { return d.computed; })) return true;   // 1.12.16
+    }
     return false;
 }
 
@@ -440,10 +465,11 @@ Plan plan(const Project& p) {
     const auto keyOf = [](Id script, std::string_view name) { return std::to_string(script) + ":" + upper(name); };
     std::map<std::string, Node> nodes;
     std::vector<std::string>    order;     // l'ordre du projet
-    const auto collect = [&](const Script& sc, const View* view) {
+    const auto collect = [&](const Script& sc, const View* view, const View* holderOf = nullptr) {
         if (sc.lang != ScriptLang::ST) return;
         for (const auto& d : sc.decls) {
             if (!d.computed || d.kind == DeclKind::Parameter) continue;
+            if (holderOf && viewmembers::computedAtOpen(p, *holderOf, d)) continue;   // 1.12.16 : a l'ouverture de la vue
             const std::string key = keyOf(sc.id, d.name);
             if (nodes.count(key)) continue;
             Node n;
@@ -458,6 +484,14 @@ Plan plan(const Project& p) {
     for (const auto& sc : p.programs.scripts) collect(sc, nullptr);
     for (const auto& v : p.views)
         for (const auto& sc : v.scripts) collect(sc, &v);
+    // 1.12.16 : les constantes des vues calculees au demarrage - leur porteur, un script du nom de la vue
+    // (son identifiant : celui de la vue), garde le temps du plan.
+    std::deque<Script> holders;
+    for (const auto& v : p.views)
+        if (std::any_of(v.constants.begin(), v.constants.end(), [](const Declaration& d) { return d.computed; })) {
+            holders.push_back(viewmembers::constantsScript(v));
+            collect(holders.back(), nullptr, &v);
+        }
     for (auto& [key, n] : nodes) {
         const Analysis a = analyse(p, *n.sc, *n.d, n.view);
         for (const auto& r : a.reads) {
@@ -466,6 +500,8 @@ Plan plan(const Project& p) {
                 n.deps.push_back(keyOf(n.sc->id, r));
             } else if (const Script* gs = p.generalScript(std::string_view(r).substr(0, dot))) {
                 n.deps.push_back(keyOf(gs->id, std::string_view(r).substr(dot + 1)));
+            } else if (const View* vv = p.viewByName(std::string_view(r).substr(0, dot))) {   // 1.12.16 : Vue.Constante
+                n.deps.push_back(keyOf(vv->id, std::string_view(r).substr(dot + 1)));
             }
         }
     }
