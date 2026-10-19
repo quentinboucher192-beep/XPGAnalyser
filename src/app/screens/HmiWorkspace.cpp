@@ -457,6 +457,14 @@ void MainAnalysisScreen::bindHmi() {
     });
     // 1.11.19 (refonte, lot 6) : le selecteur de types, demande par une grille ou un volet.
     typepicker::setHost([this](HmiTypePicker::Spec spec, typepicker::Done done) { askHmiType(std::move(spec), std::move(done)); });
+    // 1.12.16 : "Choisir une fonction..." - la derniere ligne des listes d'aide a la saisie, Ctrl+I.
+    functionpicker::setHost([this](HmiFunctionPicker::Spec spec, functionpicker::Done done) {
+        app_.menus().ShowDialog(std::make_unique<HmiFunctionPicker>(std::move(spec)), [done = std::move(done)](const menu::DialogResult& r) {
+            if (!r.accepted() || !done) return;
+            const auto a = HmiFunctionPicker::parse(r.payload);
+            if (!a.text.empty()) done(a);
+        });
+    });
     // 1.12.2 : les elements d'une valeur (une liste, un tableau, un dictionnaire, un tuple), un par ligne.
     // 1.12.2 : les elements d'une valeur (une liste, un tableau, un dictionnaire, un tuple). 1.12.7 : un
     // tableau, une ligne par element (HmiItemsDialog), a la place du texte « un par ligne ».

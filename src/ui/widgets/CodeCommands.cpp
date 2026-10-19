@@ -281,6 +281,7 @@ bool MultiLineText::runCommand(std::string_view id) {
     if (id == "signetSuivant") return stepBookmark(false);
     if (id == "signetPrecedent") return stepBookmark(true);
     if (id == "completer") { requestCompletion(); return true; }
+    if (id == "choisirFonction") return runCompletionAction();   // 1.12.16
     if (id == "infoParametres") return parameterInfo();
     if (id == "infoRapide") return quickInfo();
     if (id == "plier") return foldAtCaret();

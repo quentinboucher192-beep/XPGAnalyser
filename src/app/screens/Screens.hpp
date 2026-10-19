@@ -29,6 +29,7 @@
 #include "../hmi/HmiTrails.hpp"         // lot 21 : les parcours du didacticiel
 #include "../hmi/HmiValueKind.hpp"      // 1.11.3 : la demande du carre de legende
 #include "../hmi/HmiTypePicker.hpp"     // 1.11.19 (lot 6) : le selecteur de types
+#include "../hmi/HmiFunctionPicker.hpp"  // 1.12.16 : Choisir une fonction...
 #include "../RackView.hpp"
 #include "../ViewModels.hpp"
 #include "../../core/CodeIcons.hpp"          // 1.8.0 : les icones au choix

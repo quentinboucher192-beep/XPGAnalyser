@@ -35,6 +35,7 @@
 #include "../../hmi/HmiModel.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
+#include "HmiFunctionPicker.hpp"   // 1.12.16 : Choisir une fonction...
 
 #include <functional>
 #include <memory>
@@ -199,6 +200,13 @@ struct Sources {
 [[nodiscard]] std::string declarationsPrefix(const std::vector<hmi::Declaration>&, hmi::decl::Role,
                                              const std::vector<hmi::Declaration>* inherited = nullptr);
 void attach(ui::MultiLineText&, Sources);
+
+// 1.12.16 : ce que "Choisir une fonction..." montre la ou l'on ecrit : le type attendu au
+// curseur (`head` : le texte avant le mot commence ; `code` : un script, sinon une case fx,
+// qui ne prend que ce qui s'ecrit dans une expression) et les fonctions d'ici - de la vue
+// editee (d'un symbole aussi dans ses popups), puis du projet. La derniere ligne des listes
+// (attach, fieldAssist) l'ouvre par functionpicker::ask.
+[[nodiscard]] HmiFunctionPicker::Spec pickerSpec(const hmi::Project&, std::string_view head, bool code, hmi::Id op = hmi::kNoId);
 
 // La meme aide pour un champ d'une ligne (une variable, une expression, un
 // texte a trous) : ce que ui::InputText::setAssist attend.

@@ -52,6 +52,20 @@ namespace ui {
         bool                         pressed_{ false };
     };
 
+    // ---------------------------------------------------- une ligne d'action ---
+    //  1.12.16 : "Choisir une fonction..." - la derniere ligne d'une liste d'aide a la
+    //  saisie (un champ, un editeur de code), posee par celui qui remplit la liste. `open` recoit
+    //  le texte avant le mot commence et de quoi rendre le choix : le champ ou l'editeur met
+    //  `text` a la place du mot et choisit le premier trou (debut, longueur dans `text`). Rien
+    //  n'est rendu si l'on annule. Une liste qui n'a que des actions ne s'ouvre pas en tapant :
+    //  Ctrl+Espace la montre, Ctrl+I lance l'action sans la liste.
+    struct Chosen {
+        std::string                      text;
+        std::vector<std::pair<int, int>> holes;
+    };
+    using ChooseDone = std::function<void(const Chosen&)>;
+    using ChooseOpen = std::function<void(std::string_view before, ChooseDone done)>;
+
     // ------------------------------------------------------------- InputText ---
     class InputText : public Widget {
     public:
@@ -85,6 +99,9 @@ namespace ui {
             // 1.11.2 (API-V, decision 161) : la nature et la provenance, tracees
             // devant le nom a la place de `icon` ; sa legende au pied de la liste.
             KindBadge   badge{};
+            // 1.12.16 : une ligne d'action (Choisir une fonction...) : toujours la derniere ;
+            // la choisir l'ouvre au lieu d'inserer.
+            ChooseOpen  action{};
         };
         using Assist = std::function<void(std::string_view before, std::size_t& from, std::vector<Suggestion>& out)>;
         void setAssist(Assist a) { assist_ = std::move(a); }
@@ -95,6 +112,9 @@ namespace ui {
         void openSuggestions();                      // Ctrl+Espace
         void closeSuggestions();
         bool acceptSuggestion(std::size_t index);
+        // 1.12.16 : Ctrl+I - l'action de la liste (Choisir une fonction...), sans ouvrir la
+        // liste. Faux : le champ n'en propose pas ici.
+        bool runAction();
         // La liste est dessinee au-dessus de tout et doit recevoir le clic.
         [[nodiscard]] bool      requestsOverlayPass() const override { return !suggestions_.empty(); }
         [[nodiscard]] gfx::Rect eventBounds() const override;
@@ -121,6 +141,7 @@ namespace ui {
 
     private:
         void updateSuggestions(bool forced);
+        void startAction(const ChooseOpen& open, std::size_t from);   // 1.12.16
         void insert(std::string_view utf8);
         void eraseSelection();
         void copySelection() const;
@@ -148,6 +169,7 @@ namespace ui {
         std::size_t             suggestionFirst_{ 0 };     // la premiere ligne montree
         mutable gfx::Rect       suggestionBox_{};
         mutable float           suggestionLegendH_{ 0.f };  // 1.11.2 : le pied de la liste (la legende)
+        std::shared_ptr<char>   alive_{ std::make_shared<char>(0) };   // 1.12.16 : le choix rendu apres coup
     };
 
     // -------------------------------------------------------- MultiLineText ---
@@ -190,6 +212,9 @@ namespace ui {
             // 1.11.2 (API-V, decision 161) : what it is and where it comes from,
             // drawn in front of the name instead of `icon`; its legend at the foot.
             KindBadge   badge{};
+            // 1.12.16 : une ligne d'action (Choisir une fonction...) : toujours la derniere ;
+            // la choisir l'ouvre au lieu d'inserer.
+            ChooseOpen  action{};
         };
 
         // What a call looks like, shown while the arguments are being typed.
@@ -264,9 +289,13 @@ namespace ui {
         [[nodiscard]] const Signature& signature() const noexcept { return signature_; }
         [[nodiscard]] std::size_t activeParameter() const noexcept { return activeParameter_; }
         void requestCompletion();               // Ctrl+Space
+        // 1.12.16 : Ctrl+I - l'action de la liste (Choisir une fonction...), sans ouvrir la
+        // liste. Faux : l'editeur n'en propose pas ici.
+        bool runCompletionAction();
         void dismissCompletion();
         [[nodiscard]] bool completionOpen() const noexcept { return !completions_.empty(); }
         [[nodiscard]] std::size_t completionCount() const noexcept { return completions_.size(); }
+        [[nodiscard]] const std::vector<Completion>& completions() const noexcept { return completions_; }   // 1.12.16 : les essais
         [[nodiscard]] std::string completionPrefix() const;
         void acceptCompletion();
         // Le curseur, en octets depuis le debut du texte : un fournisseur de
@@ -497,6 +526,8 @@ namespace ui {
         [[nodiscard]] std::size_t offsetOf(Caret) const;
         [[nodiscard]] Caret       caretFromOffset(std::size_t offset) const;
         void updateCompletion();
+        void fillCompletion(bool forced);                 // 1.12.16 : la liste ; sans `forced`, pas d'actions seules
+        void startCompletionAction(const ChooseOpen& open, std::size_t start);   // 1.12.16
         void updateSignature();
         void drawCompletion(const PaintContext&) const;
         void drawSignature(const PaintContext&) const;
@@ -632,6 +663,7 @@ namespace ui {
         mutable gfx::Rect          barBox_{}, barField0_{}, barField1_{}, barPrev_{}, barNext_{}, barClose_{},
                                    barCase_{}, barWord_{}, barOne_{}, barAll_{};
         int                        pickKind_{ 0 };          // la liste ouverte : 0 la completion, 1 Entourer de, 2 un extrait
+        std::shared_ptr<char>      alive_{ std::make_shared<char>(0) };   // 1.12.16 : le choix rendu apres coup
         std::string                lineClip_;               // ce que Ctrl+C sans selection a copie (la ligne entiere)
         gfx::Point                 barMouse_{};             // la souris, pour les boutons de la barre
         // ---- fin 1.12.2 ----

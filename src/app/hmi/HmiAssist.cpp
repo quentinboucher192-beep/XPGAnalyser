@@ -23,6 +23,7 @@
 #include "../../project/EditCommands.hpp"
 #include "../../ui/widgets/ColorPalette.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
+#include "HmiFunctionPicker.hpp"                // 1.12.16 : Choisir une fonction...
 
 #include <algorithm>
 #include <set>
@@ -820,6 +821,15 @@ struct Scope {
             const auto decls = hmi::splitDeclarations(hmi::decl::codeOf(*hf), true, [this](std::string_view t) { return lang::knownHmiType(hp, t); });
             const auto ins = decls.parameters();      // 1.11.20 : E/S et sorties comprises, dans l'ordre
             return index < ins.size() ? ins[index]->type : std::string{};
+        }
+        // 1.12.16 : une native, quand son parametre a un type ecrit (ni ANY_NUM, ni T, ni "comme...").
+        if (const auto* nf = hmi::natives::function(name)) {
+            if (index >= nf->params.size()) return {};
+            const std::string t = trimmed(nf->params[index].type);
+            const std::string u = upper(t);
+            const bool generic = t.size() <= 1 || u.rfind("ANY", 0) == 0 || u.find(" T") != std::string::npos || t.find(',') != std::string::npos
+                              || std::any_of(t.begin(), t.end(), [](char ch) { return std::islower(static_cast<unsigned char>(ch)) != 0; });
+            return generic ? std::string{} : t;
         }
         return {};
     }
@@ -3191,6 +3201,104 @@ std::string declarationsPrefix(const std::vector<hmi::Declaration>& decls, hmi::
     return hmi::decl::composeCode({}, decls, role, inherited).text;
 }
 
+// ---- 1.12.16 : "Choisir une fonction..." - la derniere ligne des listes, Ctrl+I ----
+namespace {
+
+// Le type qu'impose la case (un champ BOOL, un nombre...), pose par typedAssist le temps de
+// l'appel de l'action de fieldAssist : la case le sait mieux que le texte tape.
+thread_local std::string tExpectedOverride;
+
+// Le type rendu, tel que le catalogue l'ecrit, convient-il au type attendu ? Generique (T,
+// comme IN, un entier...) : la forme seule (LIST OF T pour une LIST) ; sinon on ne sait pas
+// juger et la fonction reste.
+bool returnFits(const hmi::Project& hp, const std::string& returns, const std::string& expected) {
+    const std::string r = trimmed(returns);
+    if (r.empty()) return false;                                  // une procedure ne rend rien
+    const std::string u = upper(r);
+    const bool lowerCase = std::any_of(r.begin(), r.end(), [](char ch) { return std::islower(static_cast<unsigned char>(ch)) != 0; });
+    const bool generic = lowerCase || u == "T" || u.find(" T") != std::string::npos || u.find("(T") != std::string::npos
+                         || u.rfind("T ", 0) == 0 || u.rfind("T,", 0) == 0;
+    if (!generic) return typeFits(hp, r, expected);
+    const auto form = [](const std::string& t) {
+        const std::string x = upper(trimmed(t));
+        const auto cut = x.find_first_of(" ([");
+        return cut == std::string::npos ? x : x.substr(0, cut);
+    };
+    const std::string head = form(r);
+    static const char* kForms[] = {"LIST", "SET", "VECTOR", "MAP", "ARRAY", "TUPLE", "RING"};
+    if (std::any_of(std::begin(kForms), std::end(kForms), [&](const char* f) { return head == f; })) return form(expected) == head;
+    if (u.rfind("UN ENTIER", 0) == 0) return hmi::typereg::isInteger(upper(trimmed(expected)));
+    return true;
+}
+
+// Une fonction du projet, d'une vue ou d'un symbole, comme le selecteur la montre.
+HmiFunctionPicker::Entry userEntry(const hmi::HmiFunction& f, std::string family) {
+    HmiFunctionPicker::Entry e;
+    e.name = f.name;
+    e.family = std::move(family);
+    e.group = "Ici";
+    e.returns = trimmed(f.returnType);
+    e.summary = f.description;
+    const auto modeWord = [](bool inOut, bool out) {
+        return std::string(inOut ? "par r\xC3\xA9" "f\xC3\xA9rence (VAR_IN_OUT)" : out ? "rendu par la fonction (VAR_OUTPUT)" : "");
+    };
+    for (const auto& d : f.decls)
+        if (d.kind == hmi::DeclKind::Parameter)
+            e.params.push_back({d.name, d.type,
+                                d.description.empty() ? modeWord(d.mode == hmi::PassMode::InOut, d.mode == hmi::PassMode::Out) : d.description,
+                                !d.value.empty()});
+    if (e.params.empty())     // une fonction d'avant le modele des declarations : VAR_INPUT dans son code
+        for (const auto* p : hmi::splitDeclarations(hmi::decl::codeOf(f), true).parameters())
+            e.params.push_back({p->name, p->type,
+                                modeWord(p->section == hmi::LocalVar::Section::InOut, p->section == hmi::LocalVar::Section::Output), false});
+    std::string args;
+    for (const auto& p : e.params) args += (args.empty() ? "" : ", ") + p.name + " : " + p.type;
+    e.signature = f.name + "(" + args + ")" + (e.returns.empty() ? std::string{} : " : " + e.returns);
+    e.expression = !e.returns.empty();
+    e.example = HmiFunctionPicker::callOf(e).text;
+    if (e.summary.empty())
+        e.summary = e.returns.empty() ? std::string("Sans retour : elle s'appelle comme une instruction.") : "Elle rend un " + e.returns + ".";
+    return e;
+}
+
+} // namespace
+
+HmiFunctionPicker::Spec pickerSpec(const hmi::Project& hp, std::string_view head, bool code, hmi::Id op) {
+    HmiFunctionPicker::Spec spec;
+    std::string expected = tExpectedOverride;
+    if (expected.empty()) expected = expectedTypeAt(makeScope(hp, head, code, op), head);
+    expected = trimmed(expected);
+    if (upper(expected) == "ANY") expected.clear();
+    spec.expected = expected;
+    spec.expressionOnly = !code;      // une case fx : seulement ce qui s'ecrit dans une expression
+    if (!expected.empty()) spec.fits = [&hp, expected](const std::string& r) { return returnFits(hp, r, expected); };
+    // Ici d'abord : les fonctions de la vue (d'un symbole, celles du symbole aussi dans ses
+    // popups), puis celles du projet.
+    if (const auto* av = hmiparams::editedView(hp)) {
+        const hmi::View* sym = hmi::isSymbolView(*av) ? av : hmi::popupOwner(hp, *av);
+        if (sym)
+            for (const auto& f : sym->functions) spec.extra.push_back(userEntry(f, "Fonctions de " + sym->name));
+        if (av != sym)
+            for (const auto& f : av->functions) spec.extra.push_back(userEntry(f, "Fonctions de " + av->name));
+    }
+    for (const auto& f : hp.programs.functions) spec.extra.push_back(userEntry(f, "Fonctions du projet"));
+    return spec;
+}
+
+namespace {
+// La ligne "Choisir une fonction..." : `head` est le texte avant le mot commence, tel que
+// l'aide le lit (les declarations du modele devant, pour un editeur).
+ui::ChooseOpen chooser(Sources src, bool code, std::function<std::string(std::string_view)> headOf) {
+    return [src = std::move(src), code, headOf = std::move(headOf)](std::string_view before, ui::ChooseDone done) {
+        const auto* hp = src.hmi ? src.hmi() : nullptr;
+        if (!hp) return;
+        const std::string head = headOf(before);
+        functionpicker::ask(pickerSpec(*hp, head, code, src.op ? src.op() : hmi::kNoId),
+                            [done = std::move(done)](const HmiFunctionPicker::Answer& a) { done(ui::Chosen{a.text, a.holes}); });
+    };
+}
+} // namespace
+
 void attach(ui::MultiLineText& editor, Sources src) {
     auto* ed = &editor;
     editor.setCompleteAfterDot(true);
@@ -3209,6 +3317,17 @@ void attach(ui::MultiLineText& editor, Sources src) {
         toCompletions(suggest(*hp, plc.get(), std::string_view(text).substr(0, start), prefix, true, false, src.op ? src.op() : hmi::kNoId),
                       out);
         tAfterCaret = {};
+        // 1.12.16 : la derniere ligne, "Choisir une fonction..." (du code, pas apres un point).
+        if (functionpicker::available() && locate(std::string_view(text).substr(0, start), false).context == Context::Code) {
+            ui::MultiLineText::Completion c;
+            c.text = functionpicker::kChoose;
+            c.detail = "Ctrl+I";
+            c.icon = ui::Icon::Library;
+            c.action = chooser(src, true, [src](std::string_view before) {
+                return (src.declarations ? src.declarations() : std::string{}) + std::string(before);
+            });
+            out.push_back(std::move(c));
+        }
     });
     editor.setSignatureProvider([ed, src](std::string_view name, ui::MultiLineText::Signature& out) {
         if (ed->language() != ui::Language::StructuredText) return false;
@@ -3247,7 +3366,24 @@ ui::InputText::Assist fieldAssist(Sources src, bool templateText) {
         // Une liste des la premiere lettre (un champ est court), apres un point
         // (les membres), ou dans une accolade ouverte ; 1.10 (K2) : apres "T_MODE#".
         const bool literal = head.size() > 1 && head.back() == '#' && identChar(head[head.size() - 2]);
-        if (prefix.empty() && !literal && where.context != Context::Member && where.context != Context::Placeholder) return;
+        // 1.12.16 : la derniere ligne, "Choisir une fonction..." - une expression (pas apres un
+        // point, pas un texte hors de ses accolades) ; seule, elle n'ouvre pas la liste en tapant.
+        const auto action = [&] {
+            if (!functionpicker::available() || literal) return;
+            if (where.context != Context::Code) return;
+            ui::InputText::Suggestion a;
+            a.text = functionpicker::kChoose;
+            a.detail = "Ctrl+I";
+            a.icon = ui::Icon::Library;
+            a.action = chooser(src, false, [h = std::string(head)](std::string_view) { return h; });
+            from = std::min(from, start);
+            out.push_back(std::move(a));
+        };
+        if (prefix.empty() && !literal && where.context != Context::Member && where.context != Context::Placeholder) {
+            from = start;
+            action();
+            return;
+        }
         auto items = suggest(*hp, plc.get(), head, prefix, false, templateText);
         from = start;
         for (auto& it : items) {
@@ -3263,6 +3399,7 @@ ui::InputText::Assist fieldAssist(Sources src, bool templateText) {
             s.chain = it.chain;
             out.push_back(std::move(s));
         }
+        action();
     };
 }
 
@@ -3415,9 +3552,22 @@ static ui::InputText::Assist typedAssist(ui::InputText::Assist base, Sources src
         base(before, from, out);
         // Le bon type d'abord, puis ce qu'on ne sait pas juger (une structure, ses
         // membres), puis ce qui ne convient pas - grise par son detail.
-        std::vector<ui::InputText::Suggestion> good, unknown, bad;
+        std::vector<ui::InputText::Suggestion> good, unknown, bad, actions;
         for (std::size_t i = first; i < out.size(); ++i) {
             auto sg = std::move(out[i]);
+            if (sg.action) {
+                // 1.12.16 : Choisir une fonction... - le selecteur part du type de la case.
+                const std::string want = expect == Expect::Bool ? "BOOL" : expect == Expect::Number ? "REAL"
+                                       : expect == Expect::Text ? "STRING" : expect == Expect::Time ? "TIME" : "";
+                if (!want.empty())
+                    sg.action = [inner = std::move(sg.action), want](std::string_view b, ui::ChooseDone done) {
+                        tExpectedOverride = want;
+                        inner(b, std::move(done));
+                        tExpectedOverride.clear();
+                    };
+                actions.push_back(std::move(sg));
+                continue;
+            }
             const std::string type = detailType(sg.detail);
             // La valeur actuelle en simulation, si elle existe.
             if (src.live) {
@@ -3493,7 +3643,7 @@ static ui::InputText::Assist typedAssist(ui::InputText::Assist base, Sources src
             }
             unknown = std::move(rest);
         }
-        for (auto* list : {&good, &leads, &unknown, &bad})
+        for (auto* list : {&good, &leads, &unknown, &bad, &actions})
             for (auto& sg : *list) out.push_back(std::move(sg));
         // Une couleur ou une vue par expression : aussi les valeurs entre quotes.
         if (equals && (expect == Expect::Color || expect == Expect::View) && hp) {

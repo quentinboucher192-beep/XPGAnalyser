@@ -318,6 +318,13 @@ namespace ui {
         std::vector<Suggestion> found;
         std::size_t from = caret_;
         assist_(std::string_view(text_).substr(0, caret_), from, found);
+        // 1.12.16 : les lignes d'action (Choisir une fonction...) a part : toujours en dernier,
+        // et jamais seules en tapant (la liste s'ouvrirait sur chaque mot).
+        std::vector<Suggestion> actions;
+        for (auto it = found.begin(); it != found.end();) {
+            if (it->action) { actions.push_back(std::move(*it)); it = found.erase(it); }
+            else ++it;
+        }
         // Le mot tape est DEJA un nom de la liste (a la casse pres) : elle se
         // ferme. Elle ne sert qu'a finir un mot ; ouverte sur un nom complet,
         // elle cacherait le champ du dessous et prendrait son clic. Ctrl+Espace
@@ -343,6 +350,8 @@ namespace ui {
                 std::rotate(found.begin(), it, it + 1);
         }
         if (found.size() > 200) found.resize(200);
+        if (!found.empty() || forced)
+            for (auto& a : actions) found.push_back(std::move(a));
         suggestions_ = std::move(found);
         suggestionFrom_ = std::min(from, caret_);
         suggestionIndex_ = 0;
@@ -362,6 +371,11 @@ namespace ui {
         if (index >= suggestions_.size()) return false;
         const auto chosen = suggestions_[index];
         suggestions_.clear();
+        if (chosen.action) {                                   // 1.12.16 : Choisir une fonction...
+            invalidate();
+            startAction(chosen.action, std::min(suggestionFrom_, caret_));
+            return true;
+        }
         const std::string& put = chosen.insert.empty() ? chosen.text : chosen.insert;
         const auto from = std::min(suggestionFrom_, caret_);
         std::string candidate = text_;
@@ -374,6 +388,47 @@ namespace ui {
         textChanged->emit(text_);
         if (chosen.chain) updateSuggestions(false);
         return true;
+    }
+
+    // 1.12.16 : Ctrl+I - l'action de la liste, sans la montrer.
+    bool InputText::runAction() {
+        if (!assist_ || readOnly_ || masked_) return false;
+        std::vector<Suggestion> found;
+        std::size_t from = caret_;
+        assist_(std::string_view(text_).substr(0, caret_), from, found);
+        const auto it = std::find_if(found.begin(), found.end(), [](const Suggestion& x) { return static_cast<bool>(x.action); });
+        if (it == found.end()) return false;
+        closeSuggestions();
+        startAction(it->action, std::min(from, caret_));
+        return true;
+    }
+
+    // Le selecteur rend son choix plus tard (une fenetre) : il remplace alors le mot commence
+    // (de `from` au curseur d'alors) et choisit le premier trou, que la frappe remplace.
+    void InputText::startAction(const ChooseOpen& open, std::size_t from) {
+        const std::weak_ptr<char> alive = alive_;
+        const std::size_t to = caret_;
+        open(std::string_view(text_).substr(0, std::min(from, text_.size())), [this, alive, from, to](const Chosen& c) {
+            if (alive.expired() || readOnly_) return;
+            const std::size_t a = std::min(from, text_.size());
+            const std::size_t b = std::min(std::max(to, a), text_.size());
+            std::string candidate = text_;
+            candidate.replace(a, b - a, c.text);
+            if (candidate.size() > maxLength_) return;
+            if (validator_ && !validator_(candidate)) return;
+            text_ = std::move(candidate);
+            caret_ = selAnchor_ = a + c.text.size();
+            if (!c.holes.empty()) {
+                const auto [h, n] = c.holes.front();
+                if (h >= 0 && n >= 0 && static_cast<std::size_t>(h + n) <= c.text.size()) {
+                    selAnchor_ = a + static_cast<std::size_t>(h);
+                    caret_ = selAnchor_ + static_cast<std::size_t>(n);
+                }
+            }
+            grabFocus();
+            invalidate();
+            textChanged->emit(text_);
+        });
     }
 
     gfx::Rect InputText::eventBounds() const {
@@ -433,6 +488,9 @@ namespace ui {
             const bool unfit = suggestionUnfit(item);
             if (unfit && i > 0 && !suggestionUnfit(suggestions_[i - 1]))
                 ctx.r.line({ row.x + 4.f, row.y }, { row.right() - 4.f, row.y }, c.textDisabled, 1.f);
+            // 1.12.16 : la ligne d'action, sous un trait, dans la couleur des liens.
+            if (item.action && i > 0 && !suggestions_[i - 1].action)
+                ctx.r.line({ row.x + 4.f, row.y }, { row.right() - 4.f, row.y }, c.border, 1.f);
             float tx = row.x + 6.f;
             gfx::Color swatch{};
             if (item.badge.set()) {
@@ -450,7 +508,8 @@ namespace ui {
                 tx += 20.f;
             }
             const float ty = row.y + (rowH - ctx.r.lineHeight(f)) * 0.5f;
-            ctx.r.drawText({ tx, ty }, item.text, f, unfit ? c.textDisabled : item.badge.accent ? item.badge.color : c.text);
+            ctx.r.drawText({ tx, ty }, item.text, f,
+                           unfit ? c.textDisabled : item.action ? c.accent : item.badge.accent ? item.badge.color : c.text);
             if (!item.detail.empty()) {
                 const auto dm = ctx.r.measure(item.detail, ctx.theme.font.smallUi);
                 const float dx = std::max(tx + ctx.r.measure(item.text, f).width + 12.f, row.right() - dm.width - 8.f);
@@ -628,6 +687,10 @@ namespace ui {
             openSuggestions();
             return EventResult::Consumed;
         }
+        // 1.12.16 : Ctrl+I - Choisir une fonction... (quand le champ en propose une).
+        if (const auto* k = std::get_if<KeyDown>(&ev); k && focused() && assist_ && k->mods.ctrl && !k->mods.alt && !k->mods.shift
+            && k->key == Key::I && runAction())
+            return EventResult::Consumed;
 
         if (const auto* d = std::get_if<MouseDown>(&ev)) {
             if (!bounds().contains(d->pos)) return EventResult::Ignored;
@@ -1069,21 +1132,23 @@ namespace ui {
         // list then stays closed.
         if (completeAfterDot_ && prefix.empty()) {
             const auto at = offsetOf(caret_);
-            if (at > 0 && buffer_[at - 1] == '.') { requestCompletion(); return; }
+            if (at > 0 && buffer_[at - 1] == '.') { fillCompletion(false); return; }
         }
         // 1.10 (chantier K2) : "T_MODE#" et la premiere lettre d'une valeur - les valeurs de
         // l'enumeration (apres T#, 16#..., le fournisseur ne repond rien : la liste reste fermee).
         if (completeAfterDot_ && prefix.size() < 2) {
             const auto start = offsetOf(caret_) - prefix.size();
-            if (start > 1 && buffer_[start - 1] == '#' && identChar(buffer_[start - 2])) { requestCompletion(); return; }
+            if (start > 1 && buffer_[start - 1] == '#' && identChar(buffer_[start - 2])) { fillCompletion(false); return; }
         }
         // Two characters before offering anything: one character matches half the
         // dictionary and the list becomes noise that hides the code behind it.
         if (prefix.size() < 2) { dismissCompletion(); return; }
-        requestCompletion();
+        fillCompletion(false);
     }
 
-    void MultiLineText::requestCompletion() {
+    void MultiLineText::requestCompletion() { fillCompletion(true); }
+
+    void MultiLineText::fillCompletion(bool forced) {
         pickKind_ = 0;                       // 1.12.2 : la frappe remplace la liste d'Entourer de
         if (!completionProvider_ || readOnly_) return;
 
@@ -1092,6 +1157,13 @@ namespace ui {
 
         completions_.clear();
         completionProvider_(prefix, completions_);
+        // 1.12.16 : les lignes d'action (Choisir une fonction...) a part : toujours en dernier,
+        // et jamais seules en tapant (la liste s'ouvrirait sur chaque mot) - Ctrl+Espace, oui.
+        std::vector<Completion> actions;
+        for (auto it = completions_.begin(); it != completions_.end();) {
+            if (it->action) { actions.push_back(std::move(*it)); it = completions_.erase(it); }
+            else ++it;
+        }
 
         // Prefix matches before substring matches, then alphabetical. Ranking is the
         // difference between a list and a useful list.
@@ -1101,14 +1173,82 @@ namespace ui {
                 return a.text < b.text;
             });
         if (completions_.size() > 12) completions_.resize(12);
+        if (!completions_.empty() || forced)
+            for (auto& a : actions) completions_.push_back(std::move(a));
         completionIndex_ = 0;
         invalidate();
+    }
+
+    // 1.12.16 : Ctrl+I - l'action de la liste, sans la montrer.
+    bool MultiLineText::runCompletionAction() {
+        if (!completionProvider_ || readOnly_) return false;
+        const auto prefix = completionPrefix();
+        const std::size_t start = offsetOf(caret_) - prefix.size();
+        std::vector<Completion> found;
+        completionProvider_(prefix, found);
+        const auto it = std::find_if(found.begin(), found.end(), [](const Completion& c) { return static_cast<bool>(c.action); });
+        if (it == found.end()) return false;
+        dismissCompletion();
+        startCompletionAction(it->action, start);
+        return true;
+    }
+
+    // Le selecteur rend son choix plus tard (une fenetre) : il remplace alors le mot commence
+    // (de `start` au curseur d'alors), les lignes suivantes a l'indentation de la ligne, et
+    // choisit le premier trou, que la frappe remplace.
+    void MultiLineText::startCompletionAction(const ChooseOpen& open, std::size_t start) {
+        const std::weak_ptr<char> alive = alive_;
+        const std::size_t at = offsetOf(caret_);
+        open(std::string_view(buffer_).substr(0, std::min(start, buffer_.size())), [this, alive, start, at](const Chosen& c) {
+            if (alive.expired() || readOnly_) return;
+            const std::size_t a = std::min(start, buffer_.size());
+            const std::size_t b = std::min(std::max(at, a), buffer_.size());
+            const Caret lineOf = caretFromOffset(a);
+            std::string indent;
+            if (lineOf.line < lines_.size()) {
+                const auto& l = lines_[lineOf.line];
+                for (std::size_t i = l.begin; i < l.end; ++i) {
+                    if (buffer_[i] != ' ' && buffer_[i] != '\t') break;
+                    indent.push_back(buffer_[i]);
+                }
+            }
+            std::string expanded;
+            std::vector<std::size_t> shift(c.text.size() + 1, 0);   // l'indentation ajoutee avant chaque octet
+            for (std::size_t i = 0; i < c.text.size(); ++i) {
+                shift[i] = expanded.size() - i;
+                expanded.push_back(c.text[i]);
+                if (c.text[i] == '\n') expanded.append(indent);
+            }
+            shift[c.text.size()] = expanded.size() - c.text.size();
+            dismissCompletion();
+            applyEdit(a, b, expanded);
+            std::size_t from = a + expanded.size(), to = from;
+            if (!c.holes.empty()) {
+                const auto [h, n] = c.holes.front();
+                if (h >= 0 && n >= 0 && static_cast<std::size_t>(h + n) <= c.text.size()) {
+                    from = a + static_cast<std::size_t>(h) + shift[static_cast<std::size_t>(h)];
+                    to = a + static_cast<std::size_t>(h + n) + shift[static_cast<std::size_t>(h + n)];
+                }
+            }
+            anchor_ = caretFromOffset(from);
+            caret_ = caretFromOffset(to);
+            grabFocus();
+            ensureCaretVisible();
+            updateSignature();
+            invalidate();
+        });
     }
 
     void MultiLineText::acceptCompletion() {
         if (completions_.empty()) return;
         if (pickKind_ != 0) { applyPicked(std::min(completionIndex_, completions_.size() - 1)); return; }   // 1.12.2
         const auto& chosen = completions_[std::min(completionIndex_, completions_.size() - 1)];
+        if (chosen.action) {                                   // 1.12.16 : Choisir une fonction...
+            const auto open = chosen.action;
+            dismissCompletion();
+            startCompletionAction(open, completionStart_);
+            return;
+        }
         const auto  at = offsetOf(caret_);
 
         // The indentation of the line the snippet lands on. Continuation lines get
@@ -1146,7 +1286,7 @@ namespace ui {
         caret_ = anchor_ = caretFromOffset(start + caretInExpanded);
         ensureCaretVisible();
         updateSignature();
-        if (chain) requestCompletion();
+        if (chain) fillCompletion(false);
         invalidate();
     }
 
@@ -2109,6 +2249,10 @@ namespace ui {
                                 width - 4.f, rowH };
             const bool selected = i == completionIndex_;
             if (selected) ctx.r.fillRect(row, c.selectionBg);
+            // 1.12.16 : la ligne d'action, sous un trait, dans la couleur des liens.
+            const bool action = static_cast<bool>(completions_[i].action);
+            if (action && i > 0 && !completions_[i - 1].action)
+                ctx.r.line({ row.x + 4.f, row.y }, { row.right() - 4.f, row.y }, c.border, 1.f);
 
             float tx = row.x + 6.f;
             if (completions_[i].badge.set()) {
@@ -2124,7 +2268,7 @@ namespace ui {
                 tx += side + 6.f;
             }
             ctx.r.drawText({ tx, row.y + 3.f }, completions_[i].text, f,
-                selected ? c.selectionText : completions_[i].badge.accent ? completions_[i].badge.color : c.text);
+                selected ? c.selectionText : action ? c.accent : completions_[i].badge.accent ? completions_[i].badge.color : c.text);
             if (!completions_[i].detail.empty()) {
                 // A droite, apres le nom : coupe avec "..." si la place manque.
                 const float from = tx + ctx.r.measure(completions_[i].text, f).width + 12.f;
@@ -2410,6 +2554,9 @@ namespace ui {
                 }
             }
             if (k->mods.ctrl && k->key == Key::Space) { requestCompletion(); return EventResult::Consumed; }
+            // 1.12.16 : Ctrl+I - Choisir une fonction... (sans les raccourcis de Visual Studio aussi).
+            if (k->mods.ctrl && !k->mods.alt && !k->mods.shift && k->key == Key::I && runCompletionAction())
+                return EventResult::Consumed;
             // Lot API 8 : F9 (Ctrl+F9 : activer / desactiver) sur la ligne du
             // curseur - seulement avec la colonne des points d'arret ; sinon F9
             // passe (l'ecran y ouvre la simulation).

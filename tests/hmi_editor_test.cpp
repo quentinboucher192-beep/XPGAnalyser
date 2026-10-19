@@ -17174,10 +17174,10 @@ void centreAide111() {
 
     // ---- la table des raccourcis ----
     // 1.12.2 : les editeurs de code au profil Visual Studio - 31 lignes de plus (36 en tout).
-    // 1.12.3 : + Ctrl+Maj+K (Projet > Disposition...).
-    check(hk::all().size() == 95 && hk::ofContext(hk::Context::Scripts).size() == 36,
+    // 1.12.3 : + Ctrl+Maj+K (Projet > Disposition...). 1.12.16 : + Ctrl+I (Choisir une fonction...).
+    check(hk::all().size() == 96 && hk::ofContext(hk::Context::Scripts).size() == 37,
           "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17), "
-          "les 31 des \xC3\xA9" "diteurs de code (1.12.2) et Ctrl+Maj+K (1.12.3)");
+          "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3) et Ctrl+I (1.12.16)");
     check(hk::ofContext(hk::Context::General).size() == 26 && hk::ofContext(hk::Context::Help).size() == 7,
           "raccourcis : General 26 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,
@@ -31053,6 +31053,225 @@ void tableauEditeur11213() {
           "... les lignes dynamiques en r\xC3\xA9serve : depuis Cuves, 3 colonnes");
 }
 
+// ---- 1.12.16 : "Choisir une fonction..." - le selecteur, la derniere ligne des listes, Ctrl+I ----
+void choisir11216() {
+    std::printf("1.12.16 : Choisir une fonction\xE2\x80\xA6 - le s\xC3\xA9lecteur, la derni\xC3\xA8re ligne des listes, Ctrl+I\n");
+    namespace as = app::assist;
+    using app::HmiFunctionPicker;
+    using Hole = std::pair<int, int>;
+    // ---- le catalogue ----
+    const auto natives = HmiFunctionPicker::natives();
+    const auto native = [&](std::string_view n) {
+        const auto it = std::find_if(natives.begin(), natives.end(), [&](const HmiFunctionPicker::Entry& e) { return e.name == n; });
+        return it == natives.end() ? nullptr : &*it;
+    };
+    check(natives.size() >= 200 && native("LIMIT") && native("LIST_AVG") && !native("INT_TO_REAL"),
+          "le catalogue : " + std::to_string(natives.size()) + " natives, LIMIT, LIST_AVG, sans les conversions X_TO_Y");
+    if (!native("LIMIT")) return;
+    const auto limit = HmiFunctionPicker::callOf(*native("LIMIT"));
+    check(limit.text == "LIMIT(MN, IN, MX)" && limit.holes.size() == 3 && limit.holes[0] == Hole{6, 2} && limit.holes[2] == Hole{14, 2},
+          "l'appel de LIMIT, ses trois arguments \xC3\xA0 remplir : " + limit.text);
+
+    // ---- le projet : une variable REAL, une fonction, une procedure ----
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    hmi::Variable consigne;
+    consigne.id = p.allocate();
+    consigne.name = "Consigne";
+    consigne.type = "REAL";
+    p.programs.variables.push_back(consigne);
+    hmi::HmiFunction pourcent;
+    pourcent.id = p.allocate();
+    pourcent.name = "Pourcent";
+    pourcent.returnType = "REAL";
+    pourcent.description = "La part de V dans M, en %.";
+    pourcent.body = "Pourcent := V / M * 100.0;";
+    for (const char* n : {"V", "M"}) {
+        hmi::Declaration d;
+        d.id = p.allocate();
+        d.kind = hmi::DeclKind::Parameter;
+        d.name = n;
+        d.type = "REAL";
+        pourcent.decls.push_back(d);
+    }
+    p.programs.functions.push_back(pourcent);
+    hmi::HmiFunction journal;
+    journal.id = p.allocate();
+    journal.name = "Journal";
+    journal.body = ";";
+    p.programs.functions.push_back(journal);
+
+    // ---- ce que le selecteur sait la ou l'on ecrit ----
+    const auto spec = as::pickerSpec(p, "Consigne := ", true);
+    check(spec.expected == "REAL" && !spec.expressionOnly && static_cast<bool>(spec.fits),
+          "Consigne := | : le s\xC3\xA9lecteur attend un REAL (" + spec.expected + ")");
+    check(spec.extra.size() == 2 && spec.extra[0].name == "Pourcent" && spec.extra[0].family == "Fonctions du projet"
+              && spec.extra[0].signature == "Pourcent(V : REAL, M : REAL) : REAL" && spec.extra[0].example == "Pourcent(V, M)"
+              && spec.extra[0].expression && !spec.extra[1].expression,
+          "les fonctions du projet : Pourcent(V : REAL, M : REAL) : REAL ; Journal, sans retour, pas dans une expression ("
+              + (spec.extra.empty() ? std::string("aucune") : spec.extra[0].signature) + ")");
+    check(spec.fits && spec.fits("REAL") && spec.fits("comme IN") && spec.fits("T") && !spec.fits("BOOL") && !spec.fits("")
+              && !spec.fits("STRING") && spec.fits("LIST OF T") == false,
+          "Rend un REAL : REAL, comme IN, T oui ; BOOL, STRING, une proc\xC3\xA9" "dure, une liste non");
+    check(as::pickerSpec(p, "x := Pourcent(1.0, ", true).expected == "REAL", "Pourcent(1.0, | : le 2e argument attend un REAL");
+    check(as::pickerSpec(p, "x := LEFT('abc', ", true).expected == "INT", "LEFT('abc', | : une native - L attend un INT");
+    check(as::pickerSpec(p, "x := LIMIT(", true).expected.empty(), "LIMIT(| : ANY ne se juge pas, rien d'attendu");
+    const auto fx = as::pickerSpec(p, "", false);
+    check(fx.expressionOnly && fx.expected.empty(), "une case fx : seulement ce qui s'\xC3\xA9" "crit dans une expression");
+
+    // ---- le selecteur lui-meme ----
+    menu::MenuManager mm{menu::MenuFactory{}};
+    std::vector<HmiFunctionPicker::Answer> answers;
+    const auto open = [&](HmiFunctionPicker::Spec s) {
+        mm.ShowDialog(std::make_unique<HmiFunctionPicker>(std::move(s)), [&](const menu::DialogResult& r) {
+            if (r.accepted()) answers.push_back(HmiFunctionPicker::parse(r.payload));
+        });
+        mm.applyPending();
+        return dynamic_cast<HmiFunctionPicker*>(mm.top());
+    };
+    auto* picker = open(spec);
+    check(picker != nullptr, "le s\xC3\xA9lecteur s'ouvre");
+    if (!picker) return;
+    const auto families = picker->families();
+    check(!families.empty() && families.front() == "Fonctions du projet",
+          "les familles : celles d'ici d'abord (" + (families.empty() ? std::string("aucune") : families.front()) + ")");
+    auto shown = picker->shownNames();
+    const auto has = [&](std::string_view n) { return std::find(shown.begin(), shown.end(), n) != shown.end(); };
+    check(has("Pourcent") && !has("Journal") && has("LIMIT") && !has("MAP_HAS") && !has("LEFT"),
+          "Rend un REAL, coch\xC3\xA9 d'office : Pourcent, LIMIT ; ni Journal, ni MAP_HAS (BOOL), ni LEFT (STRING)");
+    picker->setTyped(false);
+    shown = picker->shownNames();
+    check(has("Journal") && has("MAP_HAS") && has("LEFT") && shown.size() > natives.size(), "d\xC3\xA9" "coch\xC3\xA9 : toutes, " + std::to_string(shown.size()));
+    picker->setSearch("LIMI");
+    shown = picker->shownNames();
+    check(!shown.empty() && shown.front() == "LIMIT", "chercher LIMI : LIMIT en t\xC3\xAAte");
+    picker->setSearch("");
+    check(picker->setFamily("Fonctions du projet") && picker->shownNames().size() == 2, "la famille du projet : ses deux fonctions");
+    check(picker->select("Pourcent") && picker->selectedName() == "Pourcent", "Pourcent choisie");
+    picker->insert(false);
+    mm.applyPending();
+    check(answers.size() == 1 && answers[0].name == "Pourcent" && answers[0].text == "Pourcent(V, M)" && answers[0].holes.size() == 2
+              && answers[0].holes[0] == Hole{9, 1} && answers[0].holes[1] == Hole{12, 1},
+          "Ins\xC3\xA9rer : Pourcent(V, M), V puis M \xC3\xA0 remplir");
+    picker = open(fx);
+    if (picker) {
+        shown = picker->shownNames();
+        check(!has("Journal") && !has("LIST_ADD") && has("LEFT") && has("Pourcent"),
+              "dans une case fx : ni Journal ni LIST_ADD (une instruction), LEFT et Pourcent oui");
+        check(picker->select("LEFT"), "LEFT choisie");
+        picker->insert(true);
+        mm.applyPending();
+        check(answers.size() == 2 && answers[1].name == "LEFT" && answers[1].text == native("LEFT")->example && answers[1].holes.empty(),
+              "Ins\xC3\xA9rer l'exemple : celui de la fiche, sans trou");
+    }
+
+    // ---- la derniere ligne des listes : l'hote repond LIMIT(MN, IN, MX) ----
+    std::vector<HmiFunctionPicker::Spec> asked;
+    app::functionpicker::setHost([&](HmiFunctionPicker::Spec s, app::functionpicker::Done done) {
+        asked.push_back(std::move(s));
+        HmiFunctionPicker::Answer a;
+        a.name = "LIMIT";
+        a.text = "LIMIT(MN, IN, MX)";
+        a.holes = {{6, 2}, {10, 2}, {14, 2}};
+        done(a);
+    });
+    as::Sources src;
+    src.hmi = [&p]() -> const hmi::Project* { return &p; };
+    {
+        ui::MultiLineText ed;
+        ed.setReadOnly(false);
+        ed.setLanguage(ui::Language::StructuredText);
+        as::attach(ed, src);
+        ed.insertText("Consigne := Po");
+        const auto& items = ed.completions();
+        check(ed.completionOpen() && items.size() >= 2 && items.front().text == "Pourcent" && items.back().action
+                  && items.back().text == app::functionpicker::kChoose,
+              "l'\xC3\xA9" "diteur, Po : Pourcent, puis \xC2\xAB Choisir une fonction\xE2\x80\xA6 \xC2\xBB en derni\xC3\xA8re ligne");
+    }
+    {
+        ui::MultiLineText ed;
+        ed.setReadOnly(false);
+        ed.setLanguage(ui::Language::StructuredText);
+        as::attach(ed, src);
+        ed.insertText("Consigne := Zz");
+        check(!ed.completionOpen(), "Zz : rien \xC3\xA0 proposer, la liste reste ferm\xC3\xA9" "e (pas l'action seule en tapant)");
+        ed.requestCompletion();
+        check(ed.completionOpen() && ed.completionCount() == 1 && ed.completions().front().action, "Ctrl+Espace : l'action seule");
+        ed.acceptCompletion();
+        check(asked.size() == 1 && asked[0].expected == "REAL" && !asked[0].expressionOnly && asked[0].extra.size() == 2,
+              "la choisir ouvre le s\xC3\xA9lecteur : un REAL attendu, les fonctions du projet");
+        same_text(ed.text(), "Consigne := LIMIT(MN, IN, MX)", "l'appel remplace le mot commenc\xC3\xA9");
+        same_text(ed.selectedText(), "MN", "le premier argument est choisi");
+        ed.insertText("0.0");
+        same_text(ed.text(), "Consigne := LIMIT(0.0, IN, MX)", "la frappe le remplace");
+    }
+    {
+        ui::MultiLineText ed;
+        ed.setReadOnly(false);
+        ed.setLanguage(ui::Language::StructuredText);
+        as::attach(ed, src);
+        ed.insertText("x := ");
+        check(ed.runCompletionAction() && asked.size() == 2, "Ctrl+I : le s\xC3\xA9lecteur, sans la liste");
+        same_text(ed.text(), "x := LIMIT(MN, IN, MX)", "Ctrl+I ins\xC3\xA8re au curseur");
+        ed.insertText("1;\n(* Zz");
+        ed.requestCompletion();
+        check(!ed.completionOpen() && !ed.runCompletionAction() && asked.size() == 2, "dans un commentaire : rien, pas m\xC3\xAAme l'action");
+    }
+    {
+        ui::InputText field("f11216");
+        field.setBounds({10, 10, 300, 26});
+        field.setAssist(as::fieldAssist(as::sourcesFor(doc)));
+        (void)field.dispatch(ui::MouseDown{{20, 20}, ui::MouseButton::Left, 1, {}});
+        (void)field.dispatch(ui::TextInput{"Po"});
+        check(field.suggestionsOpen() && field.suggestions().front().text == "Pourcent" && static_cast<bool>(field.suggestions().back().action),
+              "un champ, Po : Pourcent, puis \xC2\xAB Choisir une fonction\xE2\x80\xA6 \xC2\xBB en derni\xC3\xA8re ligne");
+        (void)field.dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+        (void)field.dispatch(ui::TextInput{" + Zz"});
+        check(!field.suggestionsOpen(), "Zz : la liste reste ferm\xC3\xA9" "e");
+        (void)field.dispatch(ui::KeyDown{ui::Key::Space, ui::KeyMods{true, false, false, false}, false});
+        check(field.suggestionsOpen() && field.suggestions().size() == 1 && static_cast<bool>(field.suggestions().front().action),
+              "Ctrl+Espace : l'action seule");
+        (void)field.dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        check(asked.size() == 3 && asked.back().expressionOnly, "Entr\xC3\xA9" "e l'ouvre : une case fx, seulement les expressions");
+        same_text(field.text(), "Po + LIMIT(MN, IN, MX)", "l'appel remplace Zz");
+        (void)field.dispatch(ui::TextInput{"1"});
+        same_text(field.text(), "Po + LIMIT(1, IN, MX)", "MN \xC3\xA9tait choisi : la frappe le remplace");
+        (void)field.dispatch(ui::KeyDown{ui::Key::End, {}, false});
+        (void)field.dispatch(ui::TextInput{" * "});
+        (void)field.dispatch(ui::KeyDown{ui::Key::I, ui::KeyMods{true, false, false, false}, false});
+        check(asked.size() == 4, "Ctrl+I dans le champ : le s\xC3\xA9lecteur");
+        same_text(field.text(), "Po + LIMIT(1, IN, MX) * LIMIT(MN, IN, MX)", "Ctrl+I ins\xC3\xA8re au curseur");
+    }
+    {
+        // Une case BOOL de la grille : le selecteur part de son type.
+        auto rule = as::gridAssist(as::sourcesFor(doc));
+        ui::PropertyGrid::Property prop;
+        prop.name = "Visibilit\xC3\xA9 (expression)";
+        prop.type = ui::PropertyGrid::ValueType::Text;
+        prop.value = "TRUE";
+        prop.commit = [](std::string_view) { return true; };
+        prop.placeholder = std::string(ui::exprfield::invite(ui::exprfield::Expect::Bool));
+        std::vector<ui::InputText::Suggestion> out;
+        std::size_t from = 0;
+        if (auto a = rule("", prop)) a("Po", from, out);
+        check(!out.empty() && static_cast<bool>(out.back().action), "une case de la grille : l'action en derni\xC3\xA8re ligne");
+        if (!out.empty() && out.back().action) {
+            out.back().action("", [](const ui::Chosen&) {});
+            check(asked.size() == 5 && asked.back().expected == "BOOL" && asked.back().expressionOnly,
+                  "Visibilit\xC3\xA9 (expression) : le s\xC3\xA9lecteur attend un BOOL (" + asked.back().expected + ")");
+        }
+    }
+    app::functionpicker::setHost({});
+    {
+        ui::MultiLineText ed;
+        ed.setReadOnly(false);
+        ed.setLanguage(ui::Language::StructuredText);
+        as::attach(ed, src);
+        ed.insertText("Consigne := Po");
+        check(ed.completionOpen() && !ed.completions().back().action, "sans h\xC3\xB4te : pas de ligne d'action");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.12.13 : HMI_TEST_11213=1 - le Tableau dans l'editeur, seul (et le Contenu du lot D qu'il remplace).
     if (const char* only = std::getenv("HMI_TEST_11213"); only && *only == '1') {
@@ -31488,6 +31707,7 @@ int main(int argc, char** argv) {
     selecteurImbrique11214();               // 1.12.14 : le selecteur compose les types imbriques
     aideTypee11214();                       // 1.12.14 : l'aide a la saisie typee, ce qui mene au type attendu
     deballage11215();                       // 1.12.15 : le deballage, ses proprietes, first et second
+    choisir11216();                         // 1.12.16 : Choisir une fonction... (le selecteur, la derniere ligne, Ctrl+I)
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges
     direct1121();                           // 1.11.21 : les diagnostics en direct au panneau du bas
     explorateurs1121();                     // 1.11.21 : les explorateurs deplient les codes

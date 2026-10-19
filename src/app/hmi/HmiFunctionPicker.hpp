@@ -2,7 +2,7 @@
 //  app/hmi/HmiFunctionPicker.hpp - 1.12.16 : « CHOISIR UNE FONCTION… »
 // -----------------------------------------------------------------------------
 //  Le catalogue des fonctions, a portee de clavier, partout ou l'aide a la saisie
-//  s'ouvre : la derniere ligne de chaque liste (ou Ctrl+Maj+Espace) ouvre ce
+//  s.ouvre : la derniere ligne de chaque liste (ou Ctrl+I) ouvre ce
 //  selecteur. A gauche les familles (celles de la vue, du symbole et du projet en
 //  tete, puis les natives par groupe), au milieu les fonctions, a droite la fiche
 //  (signature, ce qu'elle fait, ses arguments, ce qu'elle rend, un exemple).

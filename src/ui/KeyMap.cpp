@@ -113,6 +113,7 @@ const std::vector<Command>& catalog() {
         // ---- Aide a la saisie
         { "completer", "Compl\xC3\xA9ter le mot", "Aide \xC3\xA0 la saisie" },
         { "infoParametres", "Les param\xC3\xA8tres de l'appel", "Aide \xC3\xA0 la saisie" },
+        { "choisirFonction", "Choisir une fonction\xE2\x80\xA6 (les natives, celles du projet)", "Aide \xC3\xA0 la saisie" },
         { "infoRapide", "Info rapide (le type, la signature)", "Aide \xC3\xA0 la saisie" },
         // ---- Plis
         { "plier", "Replier / d\xC3\xA9plier le bloc", "Plis" },
@@ -151,6 +152,7 @@ constexpr std::pair<std::string_view, std::string_view> kVs[] = {
     { "Ctrl+K, Ctrl+K", "signet" }, { "Ctrl+K, Ctrl+N", "signetSuivant" }, { "Ctrl+K, Ctrl+P", "signetPrecedent" },
     { "Ctrl+T", "allerA" }, { "Ctrl+,", "allerA" },
     { "Ctrl+Espace", "completer" }, { "Ctrl+Maj+Espace", "infoParametres" }, { "Ctrl+K, Ctrl+I", "infoRapide" },
+    { "Ctrl+I", "choisirFonction" },
     { "Ctrl+M, Ctrl+M", "plier" }, { "Ctrl+M, Ctrl+L", "plierTout" }, { "Ctrl+M, Ctrl+O", "plierNiveau" },
     { "Ctrl+F7", "compiler" }, { "Ctrl+Maj+B", "generer" }, { "F5", "simuler" }, { "Maj+F5", "arreter" },
     { "Ctrl+F4", "fermer" },
