@@ -563,6 +563,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiModbusCyclic.cpp" />
     <ClCompile Include="src\hmi\HmiNatives.cpp" />
     <ClCompile Include="src\hmi\HmiNativesData.cpp" />
+    <ClCompile Include="src\hmi\HmiNativesShelf.cpp" />
     <ClCompile Include="src\hmi\HmiObjectAlarms.cpp" />
     <ClCompile Include="src\hmi\HmiOperators.cpp" />
     <ClCompile Include="src\hmi\HmiOverload.cpp" />

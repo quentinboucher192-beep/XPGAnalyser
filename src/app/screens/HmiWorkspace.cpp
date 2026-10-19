@@ -873,6 +873,7 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::NativesConversions: case NK::NativesConvSource: case NK::NativesConversion: case NK::NativesTypes:
         case NK::NativesType: case NK::NativesOperators: case NK::NativesOperator: case NK::NativesInstructions:
         case NK::NativesInstruction: case NK::NativesEnums: case NK::NativesEnum: case NK::NativesEnumValue:
+        case NK::NativesTypeShelf: case NK::NativesEnumShelf: case NK::NativesIndex: case NK::NativesIndexEntry:   // 1.12.17
             (void)openNative(treeModel_->nativeKeyOf(n));
             break;
         // ---- lot 9 : les variables systeme et d'instances, dans leur volet ------------

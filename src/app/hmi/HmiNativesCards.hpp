@@ -8,12 +8,14 @@
 //
 //  LES CLES (le volet, l'arbre, les liens d'une fiche a l'autre, les sessions) :
 //    natives                          la branche : son sommaire
-//    fonctions | categorie:<id> | fonction:<NOM>
+//    types | types-dossier:<cle> | type:<NOM> | generique:<NOM>       (1.12.17 : 5 dossiers)
+//    fonctions | dossier:<cle> | fonction:<NOM>                        (1.12.17 : par theme ;
+//        categorie:<id>, la cle d'avant, mene au dossier de la categorie)
 //    conversions | conv-source:<TYPE> | conversion:<X_TO_Y>
-//    types | type:<NOM>
 //    operateurs | operateur:<rang>
 //    instructions | instruction:<rang>
-//    enumerations | enum:<NOM> | enum-valeur:<NOM>#<Valeur>
+//    enumerations | enums-dossier:<cle> | enum:<NOM> | enum-valeur:<NOM>#<Valeur>
+//    index | index:<NOM>              De A a Z (1.12.17)
 //  Une fiche se lit dans la notation choisie (ST, C, C++ : celle de l'aide,
 //  gardee dans les reglages) ; son selecteur rend "notation:<N>".
 // =============================================================================

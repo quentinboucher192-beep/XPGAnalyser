@@ -359,7 +359,7 @@ bool MainAnalysisScreen::revealTreeNode(ui::NodeId node, gfx::Rect* rowOut) {
     std::vector<ui::NodeId> path;
     std::function<bool(ui::NodeId, int)> find = [&](ui::NodeId at, int depth) -> bool {
         if (at == node) return true;
-        if (depth > 8) return false;
+        if (depth > 10) return false;   // 1.12.17 : Natives > Fonctions > Conteneurs > Listes > Ajouter et retirer > LIST_ADD
         const auto kind = ProjectTreeModel::kindOf(at);
         // Lot API 7 : et le dossier API, ses tables d'animation, ses macros, ses
         // taches (les parcours de l'API y montrent une table, une macro, la

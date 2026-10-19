@@ -1408,7 +1408,8 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     case NK::NativesFolder: case NK::NativesFunctions: case NK::NativesCategory: case NK::NativesFunction:
     case NK::NativesConversions: case NK::NativesConvSource: case NK::NativesConversion: case NK::NativesTypes:
     case NK::NativesType: case NK::NativesOperators: case NK::NativesOperator: case NK::NativesInstructions:
-    case NK::NativesInstruction: case NK::NativesEnums: case NK::NativesEnum: case NK::NativesEnumValue: {
+    case NK::NativesInstruction: case NK::NativesEnums: case NK::NativesEnum: case NK::NativesEnumValue:
+    case NK::NativesTypeShelf: case NK::NativesEnumShelf: case NK::NativesIndex: case NK::NativesIndexEntry: {   // 1.12.17
         m.add("Ouvrir la fiche", Icon::Open, [this, node] { openHmiNode(node); });
         const auto what = natives::insertText(treeModel_ ? treeModel_->nativeKeyOf(node) : std::string{});
         if (!what.empty()) {

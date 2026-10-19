@@ -29201,7 +29201,7 @@ void natives1200() {
     check(app::ProjectTreeModel::kindOf(root) == NK::NativesFolder, "natives : le 7e dossier de Programmation g\xC3\xA9n\xC3\xA9rale");
     same_text(tree.text(root), "Natives", "natives : son nom");
     check(tree.style(root).icon == ui::Icon::Lock, "natives : le cadenas");
-    check(tree.childCount(root) == 5, "natives : Fonctions, Types, Op\xC3\xA9rateurs, Instructions, \xC3\x89num\xC3\xA9rations");
+    check(tree.childCount(root) == 6, "natives : Types, Fonctions, Op\xC3\xA9rateurs, Instructions, \xC3\x89num\xC3\xA9rations, De A \xC3\xA0 Z");   // 1.12.17
     // Tout l'arbre des natives : chaque noeud a un texte, une cle, une fiche ; la cle rend le noeud.
     const auto keys = app::natives::allKeys();
     std::vector<ui::NodeId> stack{root};
@@ -29278,11 +29278,101 @@ void natives1200() {
     same_text(pane.current(), "fonction:LIMIT", "volet natives : ... LIMIT reste");
     check(pane.follow("notation:C++") && help::news::session().helpNotation == "C++", "volet natives : C++ choisie, gardee pour l'aide");
     check(!pane.follow("notation:C++"), "volet natives : la meme notation, rien a faire");
-    check(pane.follow("native:categorie:" + std::string(hmi::natives::function("LIMIT")->category)) && shownKey.rfind("categorie:", 0) == 0,
+    check(pane.follow("native:categorie:" + std::string(hmi::natives::function("LIMIT")->category)) && shownKey.rfind("dossier:", 0) == 0,   // 1.12.17 : son dossier
           "volet natives : un lien, l'arbre suit (" + shownKey + ")");
     check(pane.back() && pane.current() == "fonction:LIMIT", "volet natives : Pr\xC3\xA9" "c\xC3\xA9" "dente");
     check(pane.insertCurrent() && inserted == "LIMIT()", "volet natives : Ins\xC3\xA9rer (" + inserted + ")");
     help::news::session().helpNotation = before;
+}
+
+// 1.12.17 : LE RANGEMENT DES NATIVES. L'arbre dans l'ordre de la maquette (Types d'abord,
+// De A a Z a la fin) ; les fonctions par theme, une seule place chacune, ou la fiche mene ;
+// les conteneurs ont leur fiche (F1 sur LIST), avec leurs proprietes et un exemple ;
+// une categorie d'avant (un lien, une session) mene a son dossier.
+void natives1217() {
+    std::printf("1.12.17 : le rangement des natives - les th\xC3\xA8mes, les types, De A \xC3\xA0 Z\n");
+    namespace hn = hmi::natives;
+    using NK = app::ProjectTreeModel::NodeKind;
+    using K = ui::HelpBlockKind;
+    auto doc = std::make_shared<Document>();
+    Project& p = doc->project;
+    p.views = {makeView(p, "Vue_1")};
+    auto plc = std::make_shared<domain::Project>();
+    app::ProjectTreeModel tree(plc);
+    tree.setHmi(doc);
+    const auto names = [&tree](ui::NodeId n) {
+        std::string out;
+        for (std::size_t k = 0; k < tree.childCount(n); ++k) {
+            const auto t = tree.text(tree.childAt(n, k));
+            out += (out.empty() ? "" : " | ") + t.substr(0, t.find("  ["));
+        }
+        return out;
+    };
+    const auto root = tree.nativeNodeOf("natives");
+    check(app::ProjectTreeModel::kindOf(root) == NK::NativesFolder, "rangement : le dossier Natives");
+    same_text(names(root), "Types | Fonctions | Op\xC3\xA9rateurs | Instructions | \xC3\x89num\xC3\xA9rations | De A \xC3\xA0 Z", "rangement : l'ordre de la maquette");
+    same_text(names(tree.nativeNodeOf("fonctions")),
+              "Nombres | Textes | Dates et heures | Couleurs | Conteneurs | Conversions | L'IHM (IHM_) | R\xC3\xA9" "f\xC3\xA9rences et \xC3\xA9" "changes",
+              "rangement : les 8 th\xC3\xA8mes");
+    same_text(names(tree.nativeNodeOf("types")), "Nombres et bits | Textes, dur\xC3\xA9" "es et dates | Conteneurs | R\xC3\xA9" "f\xC3\xA9rences | G\xC3\xA9n\xC3\xA9riques",
+              "rangement : les 5 dossiers des types");
+    // Une fonction : son noeud est dans son dossier, le chemin de sa fiche le dit.
+    const auto add = tree.nativeNodeOf("fonction:LIST_ADD");
+    const auto shelfNode = tree.nativeNodeOf("dossier:conteneurs/listes/ajouter");
+    bool inside = false;
+    for (std::size_t k = 0; k < tree.childCount(shelfNode); ++k) inside = inside || tree.childAt(shelfNode, k) == add;
+    check(add != 0 && inside, "LIST_ADD : dans Conteneurs \xE2\x80\xBA Listes \xE2\x80\xBA Ajouter et retirer");
+    const auto card = app::natives::article("fonction:LIST_ADD", "ST");
+    std::string crumbs;
+    for (const auto& l : card.blocks.front().links) crumbs += (crumbs.empty() ? "" : " > ") + l.text;
+    check(crumbs.find("Conteneurs > Listes > Ajouter et retirer") != std::string::npos, "la fiche de LIST_ADD : son chemin (" + crumbs + ")");
+    // Une categorie d'avant : son dossier ; une conversion reste dans Conversions.
+    same_text(app::natives::canonicalKey("categorie:map"), "dossier:conteneurs/map", "categorie:map -> le dossier MAP");
+    check(tree.nativeNodeOf("categorie:map") == tree.nativeNodeOf("dossier:conteneurs/map"), "categorie:map -> son noeud");
+    check(tree.nativeNodeOf("conversion:INT_TO_REAL") != 0 && tree.nativeNodeOf("conversions") != 0, "INT_TO_REAL : dans Conversions");
+    // De A a Z : toutes les fonctions, dans l'ordre ; la fiche est celle de la fonction.
+    const auto index = tree.nativeNodeOf("index");
+    check(tree.childCount(index) == hn::alphabetical().size() && hn::alphabetical().size() == hn::functions().size(),
+          "De A \xC3\xA0 Z : chaque fonction (" + std::to_string(tree.childCount(index)) + ")");
+    same_text(tree.nativeKeyOf(tree.childAt(index, 0)), "index:" + std::string(hn::functions()[hn::alphabetical().front()].name),
+              "De A \xC3\xA0 Z : la premi\xC3\xA8re");
+    check(app::natives::article("index:LIMIT", "ST").blocks.size() == app::natives::article("fonction:LIMIT", "ST").blocks.size(),
+          "De A \xC3\xA0 Z : la fiche de LIMIT");
+    same_text(app::natives::insertText("index:LIMIT"), "LIMIT()", "De A \xC3\xA0 Z : Ins\xC3\xA9rer pose l'appel");
+    // F1 sur un conteneur, une reference, un generique : leur fiche.
+    same_text(app::natives::keyOfWord("LIST"), "type:LIST OF", "F1 sur LIST");
+    same_text(app::natives::keyOfWord("ring"), "type:RING", "F1 sur ring");
+    same_text(app::natives::keyOfWord("Tuple"), "type:TUPLE", "F1 sur Tuple");
+    same_text(app::natives::keyOfWord("POINTER"), "type:POINTER TO", "F1 sur POINTER");
+    same_text(app::natives::keyOfWord("ANY_NUM"), "generique:ANY_NUM", "F1 sur ANY_NUM : sa fiche");
+    // La fiche d'un conteneur : quand le choisir, ses proprietes, ses fonctions, l'exemple et ce qu'il vaut.
+    for (const char* name : {"ARRAY", "LIST OF", "VECTOR OF", "MAP", "SET OF", "RING", "TUPLE"}) {
+        const auto a = app::natives::article(std::string("type:") + name, "C++");
+        bool when = false, props = false, example = false, after = false;
+        for (const auto& b : a.blocks) {
+            when = when || (b.kind == K::Callout && b.label == "Quand le choisir");
+            props = props || (b.kind == K::Heading && b.text == "Ses propri\xC3\xA9t\xC3\xA9s");
+            example = example || (b.kind == K::Heading && b.text.find("L'exemple") == 0);
+            after = after || (b.kind == K::Table && b.text.rfind("Apr\xC3\xA8s l'exemple", 0) == 0 && b.text.find('\n') != std::string::npos);
+        }
+        check(!a.empty() && when && props && example && after, std::string("la fiche de ") + name + " : quand, propri\xC3\xA9t\xC3\xA9s, exemple, r\xC3\xA9sultat");
+        const auto* g = hn::typeGuide(name);
+        same_text(app::natives::insertText(std::string("type:") + name), g ? std::string(g->declare) : std::string("?"),
+                  std::string("Ins\xC3\xA9rer la d\xC3\xA9" "claration : ") + name);
+    }
+    const auto conteneurs = app::natives::article("types-dossier:conteneurs", "ST");
+    bool choose = false;
+    for (const auto& b : conteneurs.blocks) choose = choose || (b.kind == K::Heading && b.text == "Lequel choisir ?");
+    check(choose, "le dossier Conteneurs : Lequel choisir ?");
+    const auto anyNum = app::natives::article("generique:ANY_NUM", "ST");
+    bool users = false;
+    for (const auto& b : anyNum.blocks) users = users || (b.kind == K::Links && !b.links.empty() && b.links.front().target.rfind("native:fonction:", 0) == 0);
+    check(users, "la fiche de ANY_NUM : les natives qui le prennent");
+    // Les enumerations par usage.
+    same_text(names(tree.nativeNodeOf("enumerations")),
+              "Pour les fonctions IHM_ | Pour les listes et les cumuls | Dates | Pour vos variables | Pour les propri\xC3\xA9t\xC3\xA9s des objets",
+              "les \xC3\xA9num\xC3\xA9rations : rang\xC3\xA9" "es par usage");
+    check(tree.nativeNodeOf("enum:TRANSITION") != 0 && tree.nativeNodeOf("enum-valeur:TRANSITION#Fondu") != 0, "TRANSITION et TRANSITION#Fondu : leurs noeuds");
 }
 
 // 1.12.1 : LES ENUMERATIONS NATIVES ET L'INSPECTEUR. Chaque liste d'un objet de la
@@ -32073,6 +32163,7 @@ int main(int argc, char** argv) {
     // 1.12.0 : HMI_TEST_NATIVES=1 - les natives, seules.
     if (const char* only = std::getenv("HMI_TEST_NATIVES"); only && *only == '1') {
         natives1200();
+        natives1217();                           // 1.12.17 : le rangement
         saisieNatives1127();                     // 1.12.7
         setRing1127();                           // 1.12.7 : SET et RING
         enumsInspecteur1121();
@@ -32464,6 +32555,7 @@ int main(int argc, char** argv) {
     raccourcis1123();                       // 1.11.23 : l'onglet Raccourcis d'une vue
     explorateur1123();                      // 1.11.23 : l'explorateur - puces, titres de domaine
     natives1200();                          // 1.12.0 : les natives - l'arbre, les fiches, le volet
+    natives1217();                          // 1.12.17 : le rangement des natives - themes, types, De A a Z
     saisieNatives1127();                    // 1.12.7 : l'aide a la saisie des templates et des nouvelles natives
     setRing1127();                          // 1.12.7 : SET et RING - l'aide a la saisie, le tableau des elements
     enumsInspecteur1121();                  // 1.12.1 : les enumerations natives des proprietes et l'inspecteur

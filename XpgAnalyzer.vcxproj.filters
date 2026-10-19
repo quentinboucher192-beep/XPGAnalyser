@@ -1324,6 +1324,9 @@
     <ClCompile Include="src\hmi\HmiNativesData.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiNativesShelf.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiObjectAlarms.cpp">
       <Filter>hmi</Filter>
     </ClCompile>

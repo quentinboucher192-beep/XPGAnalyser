@@ -21,6 +21,8 @@
 #include "../src/hmi/HmiTypeRegistry.hpp"
 #include "../src/sim/Interpreter.hpp"     // 1.12.1 : le ST de l'automate (sans le dialecte)
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -501,6 +503,78 @@ void types1121() {
           "le type du moteur : DT, TOD, CHAR (un texte)");
 }
 
+// 1.12.17 - LE RANGEMENT : chaque native a une place, une seule ; un dossier a sous-dossiers
+// ne garde aucune fonction ; De A a Z les a toutes ; les types en cinq dossiers (41 fiches) ;
+// les enumerations, chacune une fois ; l'exemple de chaque conteneur, joue dans le moteur.
+void rangement1217() {
+    std::printf("-- 1.12.17 : le rangement des natives, les types, les exemples des conteneurs\n");
+    std::vector<int> seen(nt::functions().size(), 0);
+    std::size_t mixed = 0, empty = 0;
+    for (const auto& s : nt::shelves()) {
+        for (const auto f : s.functions) ++seen[f];
+        if (!s.folders.empty() && !s.functions.empty()) ++mixed;
+        if (s.folders.empty() && s.functions.empty() && !s.conversions) ++empty;
+    }
+    std::size_t none = 0, twice = 0, homeBad = 0;
+    for (std::size_t i = 0; i < seen.size(); ++i) {
+        none += seen[i] == 0;
+        twice += seen[i] > 1;
+        const auto h = nt::homeOf(i);
+        if (h >= nt::shelves().size() || std::find(nt::shelves()[h].functions.begin(), nt::shelves()[h].functions.end(), i) == nt::shelves()[h].functions.end())
+            ++homeBad;
+    }
+    check(none == 0 && twice == 0, "chaque native a une place, une seule (" + std::to_string(none) + " sans, " + std::to_string(twice) + " deux fois)");
+    check(homeBad == 0, "homeOf : le dossier qui la garde");
+    check(mixed == 0, "un dossier a sous-dossiers ne garde aucune fonction (" + std::to_string(mixed) + ")");
+    check(empty == 0, "aucun dossier vide");
+    check(nt::shelves().front().folders.size() == 8, "huit themes");
+    check(nt::shelves().front().total == nt::functions().size() + nt::conversions().size(), "Fonctions : toutes, X_TO_Y compris");
+    std::size_t over = 0;
+    for (const auto& s : nt::shelves())
+        if (s.folders.empty() && s.functions.size() > 20) ++over;
+    check(over == 0, "au-dela de 20 fonctions, des sous-dossiers par geste");
+    const auto* add = nt::function("LIST_ADD");
+    check(add && nt::shelfPath(nt::homeOf(static_cast<std::size_t>(add - nt::functions().data())), " > ") == "Conteneurs > Listes > Ajouter et retirer",
+          "LIST_ADD : Conteneurs > Listes > Ajouter et retirer");
+    check(nt::categoryShelf("map") == nt::shelfIndex("conteneurs/map"), "la categorie map (les liens d'avant) : le dossier MAP");
+    const auto& alpha = nt::alphabetical();
+    bool sorted = alpha.size() == nt::functions().size();
+    for (std::size_t i = 1; sorted && i < alpha.size(); ++i) {
+        std::string a(nt::functions()[alpha[i - 1]].name), b(nt::functions()[alpha[i]].name);
+        for (auto& c : a) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        for (auto& c : b) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        sorted = a <= b;
+    }
+    check(sorted, "De A a Z : toutes, dans l'ordre");
+    check(nt::cppHeader(*nt::function("ACCUMULATE")) == "<numeric>" && nt::cppHeader(*nt::function("LIST_ADD")).empty(),
+          "l'en-tete C++ : une etiquette (<numeric>)");
+    // Les types
+    std::size_t types = 0;
+    for (const auto& s : nt::typeShelves()) types += s.entries.size();
+    check(nt::typeShelves().size() == 5 && types == 41, "les types : 5 dossiers, 41 fiches (" + std::to_string(types) + ")");
+    check(nt::typeShelves()[2].entries.size() == 7 && nt::typeGuides().size() == 7, "Conteneurs : 7, chacun sa fiche");
+    for (const auto& g : nt::typeGuides()) {
+        check(!g.lead.empty() && !g.declare.empty() && !g.access.empty() && !g.lives.empty() && !g.cpp.empty() && nt::shelf(g.shelf),
+              std::string(g.name) + " : sa fiche est complete (son dossier de fonctions : " + std::string(g.shelf) + ")");
+        compiles(std::string(g.name) + " (declarer)", g.declare, true);
+        for (const auto& c : g.checks) {
+            Bench b(std::string(c.type), std::string(g.example) + "\nR := " + std::string(c.expression) + ";");
+            std::string err;
+            const std::string got = b.runScript(&err);
+            check(err.empty() && sameValue(got, c.expected), std::string(g.name) + " : apres l'exemple, " + std::string(c.expression) + " = " + got
+                                                                 + (err.empty() ? "" : " [" + err + "]") + ", attendu " + std::string(c.expected));
+        }
+    }
+    // Les enumerations : chacune une fois
+    std::vector<int> en(nt::enums().size(), 0);
+    for (const auto& s : nt::enumShelves())
+        for (const auto e : s.enums) ++en[e];
+    check(std::all_of(en.begin(), en.end(), [](int c) { return c == 1; }), "les enumerations : chacune dans un dossier, une fois");
+    check(nt::enumShelves().front().folders.size() == 5 && nt::enumShelves().front().total == nt::enums().size(), "enumerations : 5 dossiers par usage");
+    check(nt::enumShelves()[nt::enumShelfOf(static_cast<std::size_t>(nt::nativeEnum("TRANSITION") - nt::enums().data()))].key == "fonctions",
+          "TRANSITION : pour les fonctions IHM_");
+}
+
 int main() {
     std::printf("1.12.0 : les natives de l'IHM (catalogue, exemples, conversions, types, enumerations, couleurs, aleatoire)\n");
     catalogueComplet();
@@ -512,6 +586,7 @@ int main() {
     couleursEtHasard();
     langage1121();
     types1121();
+    rangement1217();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

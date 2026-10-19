@@ -183,4 +183,66 @@ struct Tree {
 // conversionTypes) ; vide : hors bornes, ou le meme type.
 [[nodiscard]] std::string conversionName(std::size_t from, std::size_t to);
 
+// ------------------------------------------------------------ 1.12.17 : le rangement ---
+// (HmiNativesShelf.cpp) L'arbre Natives et le selecteur de fonctions rangent les
+// fonctions par ce qu'on veut faire : huit themes (Nombres, Textes, Dates et heures,
+// Couleurs, Conteneurs, Conversions, L'IHM, References et echanges), des sous-dossiers
+// par geste au-dela de 20 fonctions (Listes : Ajouter et retirer, Lire et chercher...).
+// Une fonction a une place, et une seule ; De A a Z (alphabetical) les montre toutes.
+struct Shelf {
+    std::string              key;                 // "conteneurs/listes/ajouter" ; "" : Fonctions (la racine)
+    std::string              title, summary;
+    std::vector<std::size_t> folders;             // les sous-dossiers (rangs dans shelves())
+    std::vector<std::size_t> functions;           // ses fonctions (rangs dans functions())
+    bool                     conversions{false};  // Conversions : les X_TO_Y apres ses sous-dossiers
+    std::size_t              total{0};            // les fonctions dessous (X_TO_Y compris)
+    std::size_t              parent{static_cast<std::size_t>(-1)};
+};
+[[nodiscard]] const std::vector<Shelf>& shelves();                       // [0] : Fonctions
+[[nodiscard]] std::size_t   shelfIndex(std::string_view key) noexcept;   // -1 : aucun
+[[nodiscard]] const Shelf*  shelf(std::string_view key) noexcept;
+[[nodiscard]] std::size_t   homeOf(std::size_t function) noexcept;       // son dossier (le plus profond)
+// Le chemin d'un dossier sous Fonctions : "Conteneurs > Listes" (le separateur donne).
+[[nodiscard]] std::string   shelfPath(std::size_t shelf, std::string_view separator);
+// Le plus proche dossier commun des fonctions d'une categorie du catalogue (les anciennes
+// cles "categorie:<id>") ; -1 : aucune fonction.
+[[nodiscard]] std::size_t   categoryShelf(std::string_view category);
+[[nodiscard]] const std::vector<std::size_t>& alphabetical();            // De A a Z
+// L'en-tete C++ d'une fonction ("<numeric>"), une etiquette de sa fiche ; vide : aucun.
+[[nodiscard]] std::string_view cppHeader(const Function&) noexcept;
+
+// Les types en cinq dossiers : Nombres et bits, Textes durees et dates (avec STRING[n]),
+// Conteneurs, References, Generiques.
+struct TypeEntry {
+    enum class Kind : std::uint8_t { Base, Constructed, Generic };
+    Kind        kind{Kind::Base};
+    std::size_t index{0};                         // tree().types, constructed(), generics()
+    std::string name;                             // "INT", "LIST OF", "ANY_NUM"
+};
+struct TypeShelf { std::string key, title, summary; std::vector<TypeEntry> entries; };
+[[nodiscard]] const std::vector<TypeShelf>& typeShelves();
+// Un conteneur explique (sa fiche) ; l'essai natives joue son exemple et compare ce
+// qu'il vaut (type de R, expression, valeur montree).
+struct TypeCheck { std::string_view type, expression, expected; };
+struct TypeGuide {
+    std::string_view       name, title, lead, when, declare, access, iterate, lives, c, cpp;
+    std::string_view       shelf;                 // le dossier de ses fonctions ("conteneurs/listes")
+    std::string_view       sample;                // un type pour lire ses proprietes ("LIST OF REAL")
+    std::string_view       example;               // le script de l'exemple
+    std::vector<TypeCheck> checks;                // ce qu'il vaut apres
+};
+[[nodiscard]] const std::vector<TypeGuide>& typeGuides();
+[[nodiscard]] const TypeGuide* typeGuide(std::string_view name) noexcept;
+
+// Les enumerations par usage : pour les IHM_, pour les listes, les dates, vos
+// variables, les proprietes des objets (en neuf familles).
+struct EnumShelf {
+    std::string              key, title, summary;
+    std::vector<std::size_t> folders, enums;      // enums : rangs dans enums()
+    std::size_t              total{0};
+    std::size_t              parent{static_cast<std::size_t>(-1)};
+};
+[[nodiscard]] const std::vector<EnumShelf>& enumShelves();               // [0] : Enumerations
+[[nodiscard]] std::size_t enumShelfOf(std::size_t enumeration) noexcept;
+
 } // namespace hmi::natives
