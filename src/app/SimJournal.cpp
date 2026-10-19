@@ -199,6 +199,7 @@ std::string SimJournal::sourceName(SimSource s) {
         case SimSource::Ihm:         return "IHM";
         case SimSource::Equipements: return "\xC3\x89quipements";
         case SimSource::Debogage:    return "D\xC3\xA9" "bogage";
+        case SimSource::Lenteurs:    return "Lenteurs";        // 1.12.17
         case SimSource::Simulation:  break;
     }
     return "Simulation";
@@ -263,6 +264,8 @@ std::string SimJournal::defaultExplanation(std::string_view kind, SimSource sour
     if (kind == "politique") return "Ce que fait le simulateur devant une fonction qu'il ne conna\xC3\xAEt pas.";
     if (kind == "vitesse") return "La vitesse de la simulation : x1 suit l'horloge, x10 va dix fois plus vite, au plus vite encha\xC3\xAEne les cycles.";
     if (source == SimSource::Debogage) return "Un \xC3\xA9v\xC3\xA9nement du d\xC3\xA9" "bogage.";
+    if (kind == "lenteur" || source == SimSource::Lenteurs)      // 1.12.17
+        return "Une action a dur\xC3\xA9 anormalement longtemps : sa ligne, dans Vue d'ensemble \xE2\x80\xBA Lenteurs, dit ce qui a pris le temps dedans.";
     switch (severity) {
         case SimSeverity::Error:   return "Quelque chose s'est arr\xC3\xAAt\xC3\xA9 ou coup\xC3\xA9 : regarde ce que dit la ligne.";
         case SimSeverity::Warning: return "\xC3\x80 surveiller : la simulation continue, mais pas tout \xC3\xA0 fait comme tu l'attends.";

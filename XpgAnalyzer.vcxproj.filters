@@ -1093,6 +1093,9 @@
     <ClCompile Include="src\app\NoveltyCenter.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\SimCenterPerf.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiApiVarsPane.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1336,6 +1339,9 @@
     <ClCompile Include="src\hmi\HmiOverload.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiPerfHistory.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiPipeline.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1367,6 +1373,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRuntimeSlaves.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeSlow.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiScriptCheck.cpp">
@@ -2591,6 +2600,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiOverload.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiPerfHistory.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiPipeline.hpp">

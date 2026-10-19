@@ -232,6 +232,18 @@ struct PublicProperty {
 [[nodiscard]] std::vector<PublicProperty> publicProperties(std::string_view type);
 // Les membres d'un type IHM (vide : pas une structure).
 [[nodiscard]] std::vector<TypeMember> membersOf(const Project&, std::string_view typeName);
+// 1.12.17 : CE QUI N'EST PAS UNE VALEUR SEULE - un tableau, une liste, un vecteur, un ensemble, un tampon
+// circulaire, une MAP, un tuple, une structure (un type IHM qui a des membres ; `project` nul : pas de
+// structure connue). Une plume, la valeur d'une jauge, une condition, une cible qu'on met a 1 en veulent
+// une : `what` dit ce que c'est ("un tableau"), `entire` le meme entier ("un tableau entier"), `pick`
+// ce qu'on ecrit a sa place d'apres `shown`, le chemin ecrit ("un element : TABLEAU[0]").
+// Tout vide : une valeur seule (un nombre, un booleen, un texte, une duree, une date, une enumeration),
+// ou un type inconnu.
+struct Whole {
+    std::string what, entire, pick;
+    [[nodiscard]] bool empty() const noexcept { return what.empty(); }
+};
+[[nodiscard]] Whole wholeOf(const Project* project, std::string_view type, std::string_view shown);
 // "structure T_Four : 6 membres, 13 mots", "tableau de 10 REAL (0..9), 20 mots".
 [[nodiscard]] std::string summary(const Project&, std::string_view type, bool packBools = true);
 

@@ -796,13 +796,18 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::ApiFolder:           return 11;
         // ---- Lot API 8 : Centre de simulation ----
         case NodeKind::SimFolder:           return simFolderList(hmi_ != nullptr).size();   // sans IHM : ni IHM ni Equipements ; 1.12.0 : IHM seule
-        case NodeKind::SimOverview:
-        case NodeKind::SimEquipment:
         case NodeKind::SimDebug:            return simRows_[0].size();   // 1.11.22 : ses points d'arret
         case NodeKind::SimForcing:          return simRows_[1].size();   // ... chaque forcage
         case NodeKind::SimTrends:           return simRows_[2].size();   // ... chaque courbe
-        case NodeKind::SimRow:
-        case NodeKind::SimJournal:          return 0;
+        // 1.12.17 : la Simulation depliee - Vue d'ensemble, IHM, Equipements, Journal ; une ligne, ses lignes dessous.
+        case NodeKind::SimOverview:         return simRows_[static_cast<std::size_t>(SimList::Overview)].size();
+        case NodeKind::HmiSimulation:       return simRows_[static_cast<std::size_t>(SimList::Hmi)].size();
+        case NodeKind::SimEquipment:        return simRows_[static_cast<std::size_t>(SimList::Equipments)].size();
+        case NodeKind::SimJournal:          return simRows_[static_cast<std::size_t>(SimList::Journal)].size();
+        case NodeKind::SimRow: {
+            const auto* r = (subOf(n) >> 4) == 0 ? simRowOf(n) : nullptr;
+            return r ? r->children.size() : 0;
+        }
         // ---- fin Lot API 8 ----
         case NodeKind::ApiSimulation:
         case NodeKind::ApiStatistics:       return 0;
@@ -1332,9 +1337,21 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         // ---- 1.11.22 : le deballage du dossier Simulation ----
         case NodeKind::SimDebug:
         case NodeKind::SimForcing:
-        case NodeKind::SimTrends: {
-            const Index list = kindOf(n) == NodeKind::SimDebug ? 0 : kindOf(n) == NodeKind::SimForcing ? 1 : 2;
-            return k < simRows_[list].size() ? pack(NodeKind::SimRow, static_cast<Index>(k), list) : ui::kInvalidNode;
+        case NodeKind::SimTrends:
+        case NodeKind::SimOverview:                                     // 1.12.17 : la Simulation depliee
+        case NodeKind::HmiSimulation:
+        case NodeKind::SimEquipment:
+        case NodeKind::SimJournal: {
+            const auto kind = kindOf(n);
+            const SimList list = kind == NodeKind::SimDebug ? SimList::Breakpoints : kind == NodeKind::SimForcing ? SimList::Forcings
+                               : kind == NodeKind::SimTrends ? SimList::Trends : kind == NodeKind::SimOverview ? SimList::Overview
+                               : kind == NodeKind::HmiSimulation ? SimList::Hmi : kind == NodeKind::SimEquipment ? SimList::Equipments
+                                                                 : SimList::Journal;
+            return k < simRows_[static_cast<std::size_t>(list)].size() ? simRowNode(list, k) : ui::kInvalidNode;
+        }
+        case NodeKind::SimRow: {                                        // 1.12.17 : ses lignes dessous
+            const auto* r = (subOf(n) >> 4) == 0 ? simRowOf(n) : nullptr;
+            return r && k < r->children.size() ? simRowNode(simListOf(n), indexOf(n), static_cast<int>(k)) : ui::kInvalidNode;
         }
         // ---- fin Lot API 8 ----
         case NodeKind::HmiConfig: {
@@ -3487,8 +3504,19 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             s.iconTone = list == SimList::Breakpoints ? (r && r->off ? ui::Tone::Muted : ui::Tone::Error)
                        : list == SimList::Forcings ? ui::Tone::Warning : ui::Tone::Info;
             if (r) {
+                if (r->icon != ui::Icon::None) {                          // 1.12.17 : son icone, sa couleur
+                    s.icon = r->icon;
+                    s.iconTone = r->tone;
+                }
                 s.hint = r->hint;
-                if (r->off) s.fgTone = ui::Tone::Muted;
+                if (!r->badge.empty()) {
+                    s.badge = r->badge;
+                    s.badgeTone = r->badgeTone;
+                }
+                if (r->off) {
+                    s.fgTone = ui::Tone::Muted;
+                    s.iconTone = ui::Tone::Muted;
+                }
             }
             break;
         }
@@ -4055,22 +4083,45 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
     bool ProjectTreeModel::setSimRows(SimList list, std::vector<SimRow> rows) {
         auto& mine = simRows_[static_cast<std::size_t>(list)];
         if (mine == rows) return false;
-        bool structure = mine.size() != rows.size();
-        for (std::size_t k = 0; !structure && k < rows.size(); ++k) structure = mine[k].key != rows[k].key;
+        // Une autre liste (des cles qui changent, ici ou dessous) : les noeuds sont refaits.
+        const auto sameKeys = [](const std::vector<SimRow>& a, const std::vector<SimRow>& b, auto&& self) -> bool {
+            if (a.size() != b.size()) return false;
+            for (std::size_t k = 0; k < a.size(); ++k)
+                if (a[k].key != b[k].key || !self(a[k].children, b[k].children, self)) return false;
+            return true;
+        };
+        const bool structure = !sameKeys(mine, rows, sameKeys);
         mine = std::move(rows);
-        if (structure) {
-            const auto parent = list == SimList::Breakpoints ? pack(NodeKind::SimDebug, 0)
-                              : list == SimList::Forcings ? pack(NodeKind::SimForcing, 0) : pack(NodeKind::SimTrends, 0);
-            childrenReady->emit(parent);
-        }
+        if (structure) childrenReady->emit(simListNode(list));
         return true;
+    }
+
+    ui::NodeId ProjectTreeModel::simListNode(SimList list) noexcept {
+        switch (list) {
+            case SimList::Breakpoints: return pack(NodeKind::SimDebug, 0);
+            case SimList::Forcings:    return pack(NodeKind::SimForcing, 0);
+            case SimList::Trends:      return pack(NodeKind::SimTrends, 0);
+            case SimList::Overview:    return pack(NodeKind::SimOverview, 0);
+            case SimList::Hmi:         return pack(NodeKind::HmiSimulation, 0);
+            case SimList::Equipments:  return pack(NodeKind::SimEquipment, 0);
+            case SimList::Journal:     return pack(NodeKind::SimJournal, 0);
+        }
+        return ui::kInvalidNode;
+    }
+
+    ui::NodeId ProjectTreeModel::simRowNode(SimList list, std::size_t top, int child) noexcept {
+        return pack(NodeKind::SimRow, static_cast<Index>(top), static_cast<Index>(static_cast<unsigned>(list) | (static_cast<unsigned>(child + 1) << 4)));
     }
 
     const ProjectTreeModel::SimRow* ProjectTreeModel::simRowOf(ui::NodeId n) const {
         if (kindOf(n) != NodeKind::SimRow) return nullptr;
         const auto list = static_cast<std::size_t>(simListOf(n));
         const auto i = indexOf(n);
-        return list < simRows_.size() && i < simRows_[list].size() ? &simRows_[list][i] : nullptr;
+        if (list >= simRows_.size() || i >= simRows_[list].size()) return nullptr;
+        const auto child = subOf(n) >> 4;                                   // 1.12.17 : une ligne dessous
+        if (child == 0) return &simRows_[list][i];
+        const auto& kids = simRows_[list][i].children;
+        return child - 1 < kids.size() ? &kids[child - 1] : nullptr;
     }
 
     bool ProjectTreeModel::setSimBadge(NodeKind kind, std::string text, ui::Tone tone) {

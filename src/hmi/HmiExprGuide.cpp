@@ -304,7 +304,8 @@ const TypeEntry* forWant(exprcheck::Want w) {
         case exprcheck::Want::Number: return forKind(Kind::Real);
         case exprcheck::Want::Text:   return forKind(Kind::Text);
         case exprcheck::Want::Color:  return forKind(Kind::Color);
-        case exprcheck::Want::Any:    break;
+        case exprcheck::Want::Any:
+        case exprcheck::Want::Value:  break;    // 1.12.17
     }
     return forKind(Kind::Member);
 }

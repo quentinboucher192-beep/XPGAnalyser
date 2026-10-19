@@ -124,6 +124,7 @@ struct MainAnalysisScreen::SimCenterState {
     std::string           hmiUser;
     std::map<std::uint64_t, std::string> alarms; // actives : id -> message
     double                hmiJournalTime{-1};
+    std::uint64_t         slowSeen{0};           // 1.12.17 : la derniere lenteur passee au journal
     std::size_t           scriptErrors{0};
     std::string           lastScriptError;
     std::size_t           plcReads{0};
@@ -139,6 +140,12 @@ struct MainAnalysisScreen::SimCenterState {
     std::uint64_t         reportShown{0};
     std::weak_ptr<ProjectTreeModel> badgeModel;
     std::string           badgesShown;
+    // 1.12.17 : la Simulation depliee - quand, depuis quand chaque vue ou popup est a l'ecran
+    // ("14:03:10"), les requetes de chaque equipement a la derniere fois (ses echanges par seconde).
+    double                treeRowsAt{-10};
+    bool                  treeRunning{false};
+    std::map<std::uint64_t, std::string>                    shownSince;
+    std::map<std::string, std::pair<std::uint64_t, double>> treeRequests;
 };
 
 // ------------------------------------------------------------ l'installation ----
@@ -542,6 +549,21 @@ void MainAnalysisScreen::pollSimCenter(double t) {
         st.hmiUser.clear();
     }
     st.hmiRunning = running;
+    // 1.12.17 : chaque lenteur passe aussi au journal (le filtre Lenteurs) ; un clic l'ouvre dans la Vue d'ensemble.
+    if (hmiPane) {
+        const auto& slow = hmiPane->runtime().slowLog();
+        if (slow.lastSerial() < st.slowSeen) st.slowSeen = 0;
+        for (const auto& e : slow.entries()) {
+            if (e.serial <= st.slowSeen) continue;
+            std::string text = hmi::slowKindName(e.kind) + " : " + e.what + " - " + hmi::slowMs(e.ms);
+            if (e.kind == hmi::SlowKind::Cycle) text += " (p\xC3\xA9riode " + hmi::slowMs(e.period) + ")";
+            else if (e.usual > 0) text += " (habituel " + hmi::slowMs(e.usual) + ")";
+            if (!e.where.empty() && e.where != "IHM") text += ", " + e.where;
+            journal.add(SimSource::Lenteurs, e.kind == hmi::SlowKind::Cycle ? SimSeverity::Error : SimSeverity::Warning, "lenteur", text, {},
+                        "lenteur:" + std::to_string(e.serial));
+        }
+        st.slowSeen = slow.lastSerial();
+    }
     // Les variables de l'automate que l'IHM lit : un parcours de toute l'IHM, toutes les dix secondes.
     if (core::hasApi() && t - st.plcReadsAt > 10.0) {      // 1.12.14 : XPGAnalyser IHM - pas d'automate
         st.plcReadsAt = t;
@@ -782,6 +804,7 @@ void MainAnalysisScreen::refreshSimBadges() {
         rows = treeModel_->setSimRows(ProjectTreeModel::SimList::Trends, std::move(trs)) || rows;
         const auto journal = app_.simJournal().size();
         rows = treeModel_->setSimBadge(NK::SimJournal, journal ? std::to_string(journal) : std::string{}, ui::Tone::None) || rows;
+        rows = refreshSimTreeRows() || rows;                   // 1.12.17 : la Simulation depliee
     }
     // ---- fin 1.11.22 ----
     const std::string shown = rep.folderBadge + "|" + ss::toneName(rep.folderTone) + "|" + rep.hmiBadge + "|" + rep.equipBadge + "|"
@@ -799,6 +822,252 @@ void MainAnalysisScreen::refreshSimBadges() {
     changed = treeModel_->setSimBadge(NK::SimForcing, forcings, ui::Tone::Warning) || changed;
     changed = treeModel_->setSimBadge(NK::SimTrends, trends, ui::Tone::None) || changed;
     if (changed) explorer_->invalidate();
+}
+
+// ------------------------------------------------- 1.12.17 : la Simulation depliee ----
+//  Sous Vue d'ensemble : Performances (le cycle de la derniere minute), Lenteurs, A surveiller.
+//  Sous IHM : Affiche (la vue, les popups, depuis quand), Scripts (leur temps moyen), Alarmes,
+//  Utilisateur. Sous Equipements : chacun (son etat, ses echanges), ses Lues et Ecrites. Sous
+//  Journal : une ligne par source. Une fois par seconde ; l'IHM arretee : sa derniere marche, grisee.
+bool MainAnalysisScreen::refreshSimTreeRows() {
+    if (!treeModel_ || !simCenter_) return false;
+    auto& st = *simCenter_;
+    const double t = st.model->now;
+    if (st.treeRowsAt > -10 && t >= st.treeRowsAt && t - st.treeRowsAt < 1.0) return false;
+    st.treeRowsAt = t;
+    using SR = ProjectTreeModel::SimRow;
+    using SL = ProjectTreeModel::SimList;
+    const std::string mid = " \xC2\xB7 ";
+    auto* hmiPane = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+    hmi::Runtime* rt = hmiPane ? &hmiPane->runtime() : nullptr;
+    const bool running = rt && rt->running();
+    const bool ran = rt && (running || !rt->perfHistory().seconds().empty());
+    if (running && !st.treeRunning) st.shownSince.clear();          // une nouvelle marche
+    st.treeRunning = running;
+    const auto doc = app_.hmi();
+    bool changed = false;
+    // ---- Vue d'ensemble ----
+    {
+        std::vector<SR> ov;
+        if (core::hasIhm()) {
+            SR perf;
+            perf.text = "Performances";
+            perf.icon = ui::Icon::Chart;
+            perf.key = "performances";
+            perf.hint = "pas encore de mesure";
+            if (ran) {
+                const auto sm = rt->perfHistory().summary(rt->runNow(), 60);
+                if (sm.cycles) perf.hint = "cycle " + hmi::slowMs(sm.mean) + mid + "p95 " + hmi::slowMs(sm.p95);
+                if (sm.overruns) {
+                    perf.badge = std::to_string(sm.overruns);
+                    perf.badgeTone = ui::Tone::Error;
+                }
+                perf.off = !running;
+            }
+            ov.push_back(std::move(perf));
+            SR slow;
+            slow.text = "Lenteurs";
+            slow.icon = ui::Icon::History;
+            slow.key = "lenteurs";
+            slow.hint = "aucune";
+            if (rt && !rt->slowLog().entries().empty()) {
+                const auto& log = rt->slowLog().entries();
+                slow.hint = "la derni\xC3\xA8re \xC3\xA0 " + log.back().clock.substr(0, 8);
+                slow.badge = std::to_string(log.size());
+                slow.badgeTone = ui::Tone::Warning;
+            }
+            ov.push_back(std::move(slow));
+        }
+        SR watch;
+        watch.text = "\xC3\x80 surveiller";
+        watch.icon = ui::Icon::Warning;
+        watch.key = "ensemble";
+        const auto& att = st.model->report.attention;
+        watch.hint = att.empty() ? std::string("rien") : att.front().text;
+        watch.tone = att.empty() ? ui::Tone::Muted : ui::Tone::Warning;
+        if (!att.empty()) {
+            watch.badge = std::to_string(att.size());
+            watch.badgeTone = att.front().tone == ss::Tone::Error ? ui::Tone::Error : ui::Tone::Warning;
+        }
+        ov.push_back(std::move(watch));
+        changed = treeModel_->setSimRows(SL::Overview, std::move(ov)) || changed;
+    }
+    // ---- IHM : Affiche, Scripts, Alarmes, Utilisateur (la derniere marche, grisee) ----
+    {
+        std::vector<SR> hm;
+        if (ran && doc) {
+            const auto& p = doc->project;
+            const bool off = !running;
+            SR shown;
+            shown.text = "Affich\xC3\xA9";
+            shown.icon = ui::Icon::Screen;
+            shown.key = "ihm";
+            shown.off = off;
+            std::vector<hmi::Id> ids;
+            if (rt->currentView() != hmi::kNoId) ids.push_back(rt->currentView());
+            for (const auto id : rt->popups()) ids.push_back(id);
+            std::set<std::uint64_t> still;
+            for (std::size_t i = 0; i < ids.size(); ++i) {
+                const auto* v = p.view(ids[i]);
+                if (!v) continue;
+                const auto key = static_cast<std::uint64_t>(ids[i]);
+                still.insert(key);
+                auto it = st.shownSince.find(key);
+                if (it == st.shownSince.end() && running) it = st.shownSince.emplace(key, hmi::wallClockMs().substr(0, 8)).first;
+                const std::string since = it != st.shownSince.end() ? it->second : std::string{};
+                SR r;
+                r.text = v->name;
+                r.icon = ui::Icon::Screen;
+                r.tone = i == 0 ? ui::Tone::None : ui::Tone::Family2;
+                r.hint = i == 0 ? (since.empty() ? std::string{} : "depuis " + since)
+                                : "popup" + (since.empty() ? std::string{} : ", ouverte \xC3\xA0 " + since);
+                r.key = i == 0 ? "vue:" + v->name : std::string("ihm");
+                r.off = off;
+                shown.children.push_back(std::move(r));
+            }
+            if (running)
+                for (auto it = st.shownSince.begin(); it != st.shownSince.end();) it = still.count(it->first) ? std::next(it) : st.shownSince.erase(it);
+            shown.badge = std::to_string(shown.children.size());
+            hm.push_back(std::move(shown));
+            // Les scripts : les plus longs d'abord, leur temps moyen.
+            SR scripts;
+            scripts.text = "Scripts";
+            scripts.icon = ui::Icon::Code;
+            scripts.key = "ihm";
+            scripts.off = off;
+            std::vector<std::pair<hmi::Id, const hmi::ScriptPerf*>> ran1;
+            for (const auto& [id, s] : rt->perf().scripts)
+                if (s.time.count) ran1.push_back({id, &s});
+            std::stable_sort(ran1.begin(), ran1.end(), [](const auto& a, const auto& b) { return a.second->time.mean() > b.second->time.mean(); });
+            for (std::size_t i = 0; i < ran1.size() && i < 50; ++i) {
+                const auto& [id, s] = ran1[i];
+                SR r;
+                r.text = s->name;
+                r.icon = ui::Icon::Code;
+                r.hint = hmi::slowMs(s->time.mean()) + " en moyenne" + mid + std::to_string(s->time.count) + " fois";
+                r.key = "script:" + std::to_string(static_cast<std::uint64_t>(id));
+                r.off = off;
+                if (i < 2) scripts.hint += (scripts.hint.empty() ? std::string{} : mid) + s->name + " " + hmi::slowMs(s->time.mean());
+                scripts.children.push_back(std::move(r));
+            }
+            if (!ran1.empty()) scripts.badge = std::to_string(ran1.size());
+            hm.push_back(std::move(scripts));
+            // Les alarmes : chacune, son etat.
+            SR alarms;
+            alarms.text = "Alarmes";
+            alarms.icon = ui::Icon::Warning;
+            alarms.key = "alarmes";
+            alarms.off = off;
+            std::size_t active = 0, toAck = 0;
+            for (const auto& a : rt->alarms()) {
+                active += a.active ? 1u : 0u;
+                toAck += !a.acked && a.ackRequired ? 1u : 0u;
+                if (alarms.children.size() >= 50) continue;
+                SR r;
+                r.text = a.message.empty() ? a.name : a.message;
+                r.icon = ui::Icon::Warning;
+                r.tone = a.active ? ui::Tone::Warning : ui::Tone::Muted;
+                r.hint = a.state();
+                r.key = "alarmes";
+                r.off = off;
+                alarms.children.push_back(std::move(r));
+            }
+            alarms.hint = std::to_string(active) + (active > 1 ? " actives" : " active")
+                        + (toAck ? mid + std::to_string(toAck) + " \xC3\xA0 acquitter" : std::string{});
+            if (!rt->alarms().empty()) {
+                alarms.badge = std::to_string(rt->alarms().size());
+                alarms.badgeTone = active ? ui::Tone::Warning : ui::Tone::None;
+            }
+            hm.push_back(std::move(alarms));
+            SR user;
+            user.text = "Utilisateur";
+            user.icon = ui::Icon::User;
+            user.key = "ihm";
+            user.off = off;
+            const int level = rt->level();
+            user.hint = rt->userLogin().empty() ? std::string("personne")
+                                                 : rt->userLogin() + (level > 0 && level < 99 ? mid + "niveau " + std::to_string(level) : std::string{});
+            hm.push_back(std::move(user));
+        }
+        changed = treeModel_->setSimRows(SL::Hmi, std::move(hm)) || changed;
+    }
+    // ---- Equipements : chacun, ses Lues et Ecrites ----
+    {
+        std::vector<SR> eqs;
+        if (core::hasIhm())
+            for (const auto& e : app_.equipments().statuses()) {
+                SR r;
+                r.text = e.name;
+                r.icon = ui::Icon::Network;
+                r.key = "equipement:" + e.name;
+                const bool simulated = e.simulated || e.viaTwin;
+                std::string hint = !e.enabled ? std::string("d\xC3\xA9sactiv\xC3\xA9") : simulated ? std::string("simul\xC3\xA9")
+                                 : e.reachable ? std::string("joignable") : e.tested ? std::string("muet") : std::string("pas essay\xC3\xA9");
+                r.tone = !e.enabled ? ui::Tone::Muted : simulated ? ui::Tone::Info : e.reachable ? ui::Tone::Ok : e.tested ? ui::Tone::Error : ui::Tone::None;
+                std::size_t reads = 0;
+                std::uint64_t writes = 0;
+                if (auto* lk = rt ? rt->equipmentLink(e.name) : nullptr) {
+                    const auto d = lk->diagnostics();
+                    reads = d.subscribed;
+                    writes = d.writes;
+                    auto& seen = st.treeRequests[e.name];
+                    if (running && seen.second < t && d.requests >= seen.first && seen.first > 0) {
+                        const double rate = static_cast<double>(d.requests - seen.first) / (t - seen.second);
+                        char buf[32];
+                        std::snprintf(buf, sizeof buf, rate < 10 ? "%.1f" : "%.0f", rate);
+                        std::string txt(buf);
+                        for (auto& ch : txt)
+                            if (ch == '.') ch = ',';
+                        if (rate > 0) hint += mid + txt + " \xC3\xA9" "changes/s";
+                    }
+                    seen = {d.requests, t};
+                    if (d.avgMs > 0) hint += mid + hmi::slowMs(d.avgMs);
+                }
+                r.hint = hint;
+                r.off = rt && !running;
+                SR in;
+                in.text = "Lues";
+                in.icon = ui::Icon::LocatedVariable;
+                in.tone = ui::Tone::Input;
+                in.badge = std::to_string(reads);
+                in.hint = reads == 1 ? "variable" : "variables";
+                in.key = "equipement-lues:" + e.name;
+                in.off = r.off;
+                SR out;
+                out.text = "\xC3\x89" "crites";
+                out.icon = ui::Icon::LocatedVariable;
+                out.tone = ui::Tone::Output;
+                out.badge = std::to_string(writes);
+                out.hint = writes == 1 ? "\xC3\xA9" "criture" : "\xC3\xA9" "critures";
+                out.key = "equipement-ecrites:" + e.name;
+                out.off = r.off;
+                r.children = {std::move(in), std::move(out)};
+                eqs.push_back(std::move(r));
+            }
+        changed = treeModel_->setSimRows(SL::Equipments, std::move(eqs)) || changed;
+    }
+    // ---- Journal : une ligne par source (le filtre du Journal) ----
+    {
+        std::vector<SR> jr;
+        const auto& j = app_.simJournal();
+        for (const auto s : {SimSource::Automate, SimSource::Ihm, SimSource::Equipements, SimSource::Debogage, SimSource::Lenteurs, SimSource::Simulation}) {
+            const auto n = j.count(s);
+            if (!core::hasApi() && (s == SimSource::Automate || s == SimSource::Debogage)) continue;
+            if (!core::hasIhm() && (s == SimSource::Ihm || s == SimSource::Equipements || s == SimSource::Lenteurs) && n == 0) continue;
+            if (s == SimSource::Simulation && n == 0) continue;
+            SR r;
+            r.text = SimJournal::sourceName(s);
+            r.icon = s == SimSource::Ihm ? ui::Icon::Screen : s == SimSource::Equipements ? ui::Icon::Network : s == SimSource::Lenteurs ? ui::Icon::History
+                   : s == SimSource::Automate ? ui::Icon::Cpu : s == SimSource::Debogage ? ui::Icon::Halt : ui::Icon::Play;
+            r.key = std::string("journal:") + (s == SimSource::Ihm ? "ihm" : s == SimSource::Equipements ? "equipements" : s == SimSource::Lenteurs ? "lenteurs"
+                                             : s == SimSource::Automate ? "automate" : s == SimSource::Debogage ? "debogage" : "simulation");
+            if (n) r.badge = std::to_string(n);
+            if (n && s == SimSource::Lenteurs) r.badgeTone = ui::Tone::Warning;
+            jr.push_back(std::move(r));
+        }
+        changed = treeModel_->setSimRows(SL::Journal, std::move(jr)) || changed;
+    }
+    return changed;
 }
 
 // ---------------------------------------------------------------- les onglets ----
@@ -835,6 +1104,13 @@ bool MainAnalysisScreen::routeSimNode(ui::NodeId node) {
                     return true;
                 case ProjectTreeModel::SimList::Trends:
                     (void)openSimCenter("courbes");
+                    return true;
+                // 1.12.17 : la Simulation depliee - la cle de la ligne dit ou aller.
+                case ProjectTreeModel::SimList::Overview:
+                case ProjectTreeModel::SimList::Hmi:
+                case ProjectTreeModel::SimList::Equipments:
+                case ProjectTreeModel::SimList::Journal:
+                    if (row) simCenterGo(row->key);
                     return true;
             }
             return true;
@@ -903,6 +1179,48 @@ bool MainAnalysisScreen::openSimCenter(const std::string& key) {
     hosts.assist = [this](ui::InputText& field) {
         if (auto doc = app_.hmi()) field.setAssist(assist::fieldAssist(assist::sourcesFor(doc)));
     };
+    // 1.12.17 : les performances dans le temps, les lenteurs - celles du moteur de l'IHM, lues a chaque dessin.
+    hosts.perfView = [this]() {
+        SimPerfView v;
+        if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) {
+            const auto& rt = sim->runtime();
+            v.perf = &rt.perfHistory();
+            v.slow = &rt.slowLog();
+            v.rules = rt.slowRules();
+            v.now = rt.runNow();
+            v.running = rt.running();
+        } else if (auto doc = app_.hmi()) {
+            v.rules.absoluteMs = doc->project.config.slowMs;
+            v.rules.factor = doc->project.config.slowFactor;
+        }
+        return v;
+    };
+    hosts.resetPerf = [this] {
+        if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) sim->runtime().resetPerfHistory();
+    };
+    hosts.clearSlow = [this] {
+        if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) sim->runtime().clearSlowLog();
+        if (status_) status_->setTransientMessage("Le journal des lenteurs est vide.", 4.0);
+    };
+    hosts.setSlowRules = [this](const hmi::SlowRules& r) {
+        if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) sim->runtime().setSlowRules(r);
+        if (auto doc = app_.hmi())       // pour le projet (Ctrl+Z le reprend)
+            if (auto cmd = hmi::changeProject(doc, "Seuils des lenteurs", [&r](hmi::Project& p) {
+                    p.config.slowMs = static_cast<int>(std::lround(r.absoluteMs));
+                    p.config.slowFactor = static_cast<int>(std::lround(r.factor));
+                }))
+                app_.apply(std::move(cmd));
+        if (status_)
+            status_->setTransientMessage("Une lenteur : plus de " + hmi::slowMs(r.absoluteMs) + ", ou plus de " + std::to_string(static_cast<int>(r.factor))
+                                             + " fois son temps habituel (pour le projet).", 5.0);
+    };
+    hosts.exportCsv = [this](const std::string& which) {
+        auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+        if (!sim) return;
+        if (which == "lenteurs") saveApiCsv("lenteurs_ihm", sim->runtime().slowLog().csv());
+        else saveApiCsv("performances_ihm", sim->runtime().perfHistory().csv());
+    };
+    hosts.goSlow = [this](std::uint64_t serial) { goToSlow(serial); };
     std::unique_ptr<ApiFrame> frame;
     std::string title;
     ui::Icon icon = ui::Icon::Play;
@@ -1123,10 +1441,71 @@ bool MainAnalysisScreen::simCenterShortcut(const ui::KeyDown& k) {
 }
 
 // ------------------------------------------------------------------ aller a ----
+// 1.12.17 : Aller a d'une lenteur - le script (a sa vue), l'objet du geste, la vue ou la popup ;
+// un depassement : les performances ; un echange : les equipements.
+void MainAnalysisScreen::goToSlow(std::uint64_t serial) {
+    auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+    const auto* e = sim ? sim->runtime().slowLog().find(serial) : nullptr;
+    if (!e) return;
+    if (e->kind == hmi::SlowKind::Cycle) {
+        simCenterGo("performances");
+        return;
+    }
+    if (e->kind == hmi::SlowKind::Equipment) {
+        simCenterGo("equipements");
+        return;
+    }
+    if (e->scriptId != hmi::kNoId) {
+        openHmiScripts(e->viewId, e->scriptId);
+        return;
+    }
+    if (e->viewId != hmi::kNoId) openHmiView(e->viewId, -1, e->objectId);
+}
+
 void MainAnalysisScreen::simCenterGo(const std::string& key) {
     if (key.empty()) return;
     ensureSimCenter();
     auto& st = *simCenter_;
+    // 1.12.17 : la Vue d'ensemble, sur un bloc ; une lenteur, ouverte ; le Journal, filtre Lenteurs.
+    if (key == "performances" || key == "lenteurs" || key.rfind("lenteur:", 0) == 0) {
+        if (!openSimCenter("ensemble")) return;
+        if (auto* overview = centerPaneOf<SimOverviewPane>(apiTab("sim:ensemble"))) {
+            if (key.rfind("lenteur:", 0) == 0) {
+                overview->setSlowFilter(-1);
+                overview->openSlow(std::strtoull(key.c_str() + 8, nullptr, 10));
+            }
+            overview->reveal(key == "performances" ? "performances" : "lenteurs");
+        }
+        return;
+    }
+    if (key == "journal-lenteurs") {
+        if (!openSimCenter("journal")) return;
+        if (auto* pane = centerPaneOf<SimJournalPane>(apiTab("sim:journal"))) (void)pane->setSource("lenteurs");
+        return;
+    }
+    // 1.12.17 : les lignes de la Simulation depliee - le Journal d'une source, un script, un equipement.
+    if (key.rfind("journal:", 0) == 0) {
+        if (!openSimCenter("journal")) return;
+        if (auto* pane = centerPaneOf<SimJournalPane>(apiTab("sim:journal"))) (void)pane->setSource(key.substr(8));
+        return;
+    }
+    if (key.rfind("script:", 0) == 0) {
+        const auto doc = app_.hmi();
+        if (!doc) return;
+        const auto id = std::strtoull(key.c_str() + 7, nullptr, 10);
+        openHmiScripts(doc->project.viewOfScript(static_cast<hmi::Id>(id)), id);
+        return;
+    }
+    if (key.rfind("equipement:", 0) == 0 || key.rfind("equipement-lues:", 0) == 0 || key.rfind("equipement-ecrites:", 0) == 0) {
+        const auto colon = key.find(':');
+        const std::string name = key.substr(colon + 1);
+        if (!openSimCenter("equipements")) return;
+        if (auto* comm = dynamic_cast<HmiCommPane*>(hmiTab("communication"))) {
+            comm->tabs().setCurrentIndex(static_cast<std::size_t>(key.rfind("equipement:", 0) == 0 ? HmiCommPane::TEquipments : HmiCommPane::TValues));
+            comm->selectEquipment(name);
+        }
+        return;
+    }
     if (key == "sim.run" || key == "sim.pause" || key == "sim.stop" || key == "sim.step" || key == "relancer") {
         // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - Simuler demarre l'IHM, Arreter l'arrete ; rien ne
         // prepare plus le programme de MAST ("La simulation ne se prepare pas - aucune section en ST").

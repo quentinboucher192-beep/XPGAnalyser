@@ -536,6 +536,40 @@ private:
     ui::TableView* table_{nullptr};
 };
 
+// 1.12.17 : la page Performances - l'instantane (le tableau) et, au-dessus, le lien vers la
+// Vue d'ensemble de Simulation, ou elles sont dans le temps (une mesure par seconde, les lenteurs).
+class PerfPage final : public ui::Widget {
+public:
+    PerfPage(std::string id, std::unique_ptr<ui::TableView> table) : ui::Widget(std::move(id)) {
+        auto link = std::make_unique<ui::Button>("Dans le temps \xE2\x80\xBA", this->id() + ".temps");
+        link->setStyle(ui::Button::Style::Flat);
+        link_ = &static_cast<ui::Button&>(addChild(std::move(link)));
+        table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
+    }
+    [[nodiscard]] ui::Button& link() noexcept { return *link_; }
+protected:
+    void onLayout() override {
+        const auto b = bounds();
+        const float w = std::min(std::max(0.f, b.w - 16.f), std::max(110.f, link_->sizeHint().preferred.w));
+        link_->setBounds({b.x + b.w - 8.f - w, b.y + 4.f, w, 26.f});
+        table_->setBounds({b.x, b.y + 34.f, b.w, std::max(0.f, b.h - 34.f)});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto& c = ctx.theme.color;
+        const auto b = bounds();
+        ctx.r.fillRect({b.x, b.y, b.w, 34.f}, c.panelBg);
+        const gfx::FontId font = ctx.theme.font.smallUi;
+        const float room = b.w - 24.f - (link_->bounds().w + 8.f);
+        if (room > 120.f)
+            ctx.r.drawText({b.x + 10.f, b.y + (34.f - ctx.r.lineHeight(font)) / 2.f},
+                           room > 330.f ? "Maintenant : le dernier cycle, la moyenne et le maximum depuis le d\xC3\xA9part"
+                                        : "Maintenant", font, c.textMuted);
+    }
+private:
+    ui::Button*    link_{nullptr};
+    ui::TableView* table_{nullptr};
+};
+
 } // namespace
 
 // ------------------------------------------------------------ le dessin ----
@@ -2733,7 +2767,12 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         table->setColumns({{"Mesure", 300.f}, {"Derni\xC3\xA8re", 100.f}, {"Moyenne", 100.f}, {"Maximum", 100.f}, {"Nombre", 96.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         perf_ = table.get();
-        tabs->addTab(ui::TabControl::Tab{"Performances", ui::Icon::Chart, false, false}, std::move(table));
+        // 1.12.17 : au-dessus du tableau, « Dans le temps > » (la Vue d'ensemble de Simulation).
+        auto page = std::make_unique<PerfPage>(base + ".perfPage", std::move(table));
+        links_ += page->link().clicked->connect([this]() {
+            if (host_.goSimCenter) host_.goSimCenter("performances");
+        });
+        tabs->addTab(ui::TabControl::Tab{"Performances", ui::Icon::Chart, false, false}, std::move(page));
     }
     {
         // Lot 18 : les jumeaux - animer, la zone de mouvement, forcer, pendant la marche.

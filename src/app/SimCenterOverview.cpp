@@ -158,6 +158,13 @@ SimOverviewPane::Plan SimOverviewPane::plan(float width) const {
             y += cardH + pl.gap;
         }
     }
+    // 1.12.17 : les performances dans le temps, les lenteurs (l'IHM).
+    if (core::hasIhm()) {
+        pl.perf = {pl.pad, y, inner, perfHeight()};
+        y += pl.perf.h + pl.gap;
+        pl.slow = {pl.pad, y, inner, slowHeight()};
+        y += pl.slow.h + pl.gap;
+    }
     const std::size_t rows = std::max<std::size_t>(1, model_ ? model_->report.attention.size() : 0);
     const float attH = 48.f + static_cast<float>(rows) * 52.f + 6.f;
     const float chainH = 210.f;
@@ -209,7 +216,7 @@ bool SimOverviewPane::activate(std::string_view key) {
     for (const auto& h : hits_)
         if (h.key == key) {
             const auto go = h.go;       // une copie : go() peut tout redessiner
-            if (!go.empty() && hosts_.go) hosts_.go(go);
+            click(go);                  // 1.12.17 : une cle @... est celle du volet
             return !go.empty();
         }
     return false;
@@ -224,6 +231,7 @@ int SimOverviewPane::hitAt(gfx::Point p) const {
 }
 
 std::string SimOverviewPane::liveTooltip(gfx::Point mouse) const {
+    if (auto tip = chartTip(mouse); !tip.empty()) return tip;   // 1.12.17 : la seconde survolee
     const int h = hitAt(mouse);
     return h >= 0 ? hits_[static_cast<std::size_t>(h)].tip : std::string{};
 }
@@ -237,12 +245,19 @@ void SimOverviewPane::onPaint(const ui::PaintContext& ctx) {
     if (!model_) return;
     const auto pl = plan(b.w);
     contentH_ = pl.height;
+    if (!revealPending_.empty()) {                                 // 1.12.17 : l'arbre y mene
+        const gfx::Rect& target = revealPending_ == "lenteurs" ? pl.slow : pl.perf;
+        if (target.h > 0.f) scrollY_ = std::clamp(target.y - 8.f, 0.f, std::max(0.f, contentH_ - b.h));
+        revealPending_.clear();
+    }
     scrollY_ = std::clamp(scrollY_, 0.f, maxScroll());
     const auto at = [&](const gfx::Rect& r) { return gfx::Rect{b.x + r.x, b.y + r.y - scrollY_, r.w, r.h}; };
     ctx.r.pushClip(b);
     paintBanner(ctx, at(pl.banner));
     for (int i = 0; i < 3; ++i)
         if (pl.cards[i].w > 0.f) paintCard(ctx, at(pl.cards[i]), model_->report.cards[static_cast<std::size_t>(i)]);   // 1.12.0
+    if (pl.perf.w > 0.f) paintPerf(ctx, at(pl.perf));            // 1.12.17
+    if (pl.slow.w > 0.f) paintSlow(ctx, at(pl.slow));
     if (pl.chain.w > 0.f) paintChain(ctx, at(pl.chain));
     paintAttention(ctx, at(pl.attention));
     paintTimeline(ctx, at(pl.timeline));
@@ -642,7 +657,7 @@ ui::EventResult SimOverviewPane::onEvent(const ui::InputEvent& ev) {
         pressed_ = -1;
         if (click) {
             const auto go = hits_[static_cast<std::size_t>(h)].go;
-            if (!go.empty() && hosts_.go) hosts_.go(go);
+            this->click(go);            // 1.12.17 : une cle @... est celle du volet
             return ui::EventResult::Consumed;
         }
     }

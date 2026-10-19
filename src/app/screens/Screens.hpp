@@ -306,6 +306,7 @@ public:
     //  "equipements", "debogage", "forcages", "courbes", "journal". Faux : cle
     //  inconnue (ou pas de projet, pas d'IHM : la barre d'etat le dit).
     bool openSimCenter(const std::string& key);
+    void goToSlow(std::uint64_t serial);          // 1.12.17 : Aller a d'une lenteur (l'objet, le script, la popup)
     // 1.12.0 : la fiche d'une native (app::natives : "fonction:LIMIT"...) dans le volet
     // Natives ; faux : cle inconnue. Inserer d'une fiche : le dernier script (ou la
     // derniere fonction) montre au centre ; faux : aucun.
@@ -336,6 +337,7 @@ private:
     void pollSimCenter(double t);                // le collecteur : ce qui a change
     [[nodiscard]] simstatus::Snapshot simSnapshot(double t);
     void refreshSimBadges();                     // les pastilles du dossier Simulation
+    bool refreshSimTreeRows();                   // 1.12.17 : la Simulation depliee (une fois par seconde)
     // Les raccourcis de la maquette (handleShortcut, apres les widgets) : F5
     // Simuler / Continuer, Maj+F5 Arreter, F10 la section suivante - pas quand
     // on tape (un champ, un editeur de code), ni quand l'onglet Debogage les prend.

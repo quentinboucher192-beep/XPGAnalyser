@@ -144,6 +144,7 @@ inline ui::Icon sourceIcon(SimSource s) {
         case SimSource::Ihm:         return ui::Icon::Screen;
         case SimSource::Equipements: return ui::Icon::Network;
         case SimSource::Debogage:    return ui::Icon::Halt;
+        case SimSource::Lenteurs:    return ui::Icon::History;   // 1.12.17
         case SimSource::Simulation:  break;
     }
     return ui::Icon::Play;
@@ -235,6 +236,10 @@ inline std::string goLabel(const std::string& key) {
     if (key == "courbes") return "Simulation \xE2\x80\xBA Courbes";
     if (key == "journal") return "Simulation \xE2\x80\xBA Journal";
     if (key == "ensemble") return "la vue d'ensemble";
+    if (key == "performances") return "Vue d'ensemble \xE2\x80\xBA Performances";                  // 1.12.17
+    if (key == "lenteurs") return "Vue d'ensemble \xE2\x80\xBA Lenteurs";
+    if (key.rfind("lenteur:", 0) == 0) return "cette lenteur, ouverte dans la vue d'ensemble";
+    if (key == "journal-lenteurs") return "Simulation \xE2\x80\xBA Journal, filtre Lenteurs";
     if (key == "alarmes") return "les alarmes de l'IHM";
     if (key == "bibliotheque") return "la mise \xC3\xA0 jour depuis la biblioth\xC3\xA8que";
     if (key == "relancer") return "relancer depuis z\xC3\xA9ro";

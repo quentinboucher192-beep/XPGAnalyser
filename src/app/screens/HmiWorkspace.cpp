@@ -1178,6 +1178,8 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         };
         host.confirmRestart = [this](std::function<void(bool)> answer) { askHmiRestart(std::move(answer)); };
         host.rebuild = [this](const std::string& mode) { rebuildHmiFor(mode); };
+        // 1.12.17 : « Dans le temps > » de l'onglet Performances - la Vue d'ensemble de Simulation.
+        host.goSimCenter = [this](const std::string& where) { simCenterGo(where); };
         // 1.10 (decision 12) : le plein ecran de l'IHM - la fenetre en plein ecran, puis
         // rendue comme avant (deja en plein ecran par F11 : elle le reste).
         host.fullScreenWindow = [this, before = std::make_shared<bool>(false)](bool on) {

@@ -29,6 +29,7 @@
 
 #include "SimJournal.hpp"
 #include "SimStatus.hpp"
+#include "../hmi/HmiPerfHistory.hpp"   // 1.12.17 : les performances dans le temps, les lenteurs
 #include "../ui/Widget.hpp"
 #include "../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
@@ -120,6 +121,16 @@ private:
 };
 
 // ------------------------------------------------------------ le Centre ----
+// 1.12.17 : ce que la Vue d'ensemble lit de l'IHM en marche (arretee : sa derniere marche). Les
+// pointeurs vivent le temps d'un dessin : l'ecran les rend a chaque fois (nuls : pas d'IHM).
+struct SimPerfView {
+    const hmi::PerfHistory* perf{nullptr};
+    const hmi::SlowLog*     slow{nullptr};
+    hmi::SlowRules          rules{};
+    double                  now{0};        // l'heure de marche du moteur (s)
+    bool                    running{false};
+};
+
 // Ce que les volets demandent a l'ecran.
 struct SimCenterHosts {
     std::function<void(const std::string& key)> go;                       // une cle "aller a"
@@ -130,6 +141,13 @@ struct SimCenterHosts {
     std::function<void(const std::string& text)> status;                  // la barre d'etat
     // L'aide a la saisie d'un chemin (les variables de l'automate et de l'IHM).
     std::function<void(ui::InputText& field)> assist;
+    // ---- 1.12.17 : les performances dans le temps, les lenteurs (la Vue d'ensemble) ----
+    std::function<SimPerfView()>               perfView;
+    std::function<void()>                      resetPerf;        // Remettre a zero, sans arreter l'IHM
+    std::function<void()>                      clearSlow;        // Vider le journal des lenteurs
+    std::function<void(const hmi::SlowRules&)> setSlowRules;     // les seuils (pour le projet)
+    std::function<void(const std::string&)>    exportCsv;        // "performances" | "lenteurs"
+    std::function<void(std::uint64_t serial)>  goSlow;           // Aller a : l'objet, le script, la popup, l'equipement
 };
 
 // ----------------------------------------------------- la vue d'ensemble ----
@@ -148,6 +166,18 @@ public:
     [[nodiscard]] float scrollOffset() const noexcept { return scrollY_; }
     void scrollTo(float y);
     [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
+    // ---- 1.12.17 : les performances dans le temps, les lenteurs ----
+    // La periode montree (s ; <= 0 : depuis le lancement) ; le filtre des lenteurs (-1 : tout ;
+    // sinon un hmi::SlowKind, Vue et Popup ensemble) ; la lenteur ouverte (0 : aucune).
+    void setPerfPeriod(double seconds);
+    [[nodiscard]] double perfPeriod() const noexcept { return perfPeriod_; }
+    void setSlowFilter(int kind);
+    [[nodiscard]] int slowFilter() const noexcept { return slowFilter_; }
+    void openSlow(std::uint64_t serial);
+    [[nodiscard]] std::uint64_t openedSlow() const noexcept { return openedSlow_; }
+    [[nodiscard]] bool clearAsked() const noexcept { return confirmClear_; }
+    // Le bloc a l'ecran : "performances", "lenteurs" (l'arbre y mene).
+    void reveal(std::string_view block);
 
 protected:
     void            onPaint(const ui::PaintContext&) override;
@@ -164,6 +194,7 @@ private:
     struct Plan {
         float     pad{16.f}, gap{12.f};
         gfx::Rect banner{}, cards[3]{}, chain{}, attention{}, timeline{};
+        gfx::Rect perf{}, slow{};                                    // 1.12.17
         float     height{0.f};
         bool      wide{true};
     };
@@ -175,6 +206,15 @@ private:
     void paintChain(const ui::PaintContext&, const gfx::Rect&);
     void paintAttention(const ui::PaintContext&, const gfx::Rect&);
     void paintTimeline(const ui::PaintContext&, const gfx::Rect&);
+    // 1.12.17 : SimCenterPerf.cpp
+    void paintPerf(const ui::PaintContext&, const gfx::Rect&);
+    void paintSlow(const ui::PaintContext&, const gfx::Rect&);
+    [[nodiscard]] float perfHeight() const;
+    [[nodiscard]] float slowHeight() const;
+    [[nodiscard]] std::vector<const hmi::SlowEntry*> slowShown(const hmi::SlowLog&) const;
+    bool local(const std::string& key);              // une cle du volet lui-meme ("@periode:60"...)
+    void click(const std::string& go);
+    [[nodiscard]] std::string chartTip(gfx::Point mouse) const;
 
     std::shared_ptr<SimCenterModel> model_;
     SimCenterHosts                  hosts_;
@@ -184,6 +224,14 @@ private:
     float                           scrollY_{0.f};
     ui::PaintedScrollBar            sbar_;   // 1.11.4 : la barre se tire
     float                           contentH_{0.f};
+    // 1.12.17
+    double                          perfPeriod_{600};
+    int                             slowFilter_{-1};
+    std::uint64_t                   openedSlow_{0};
+    bool                            confirmClear_{false};
+    std::string                     revealPending_;
+    mutable gfx::Rect               chartRect_{};
+    mutable double                  chartFrom_{0}, chartTo_{0};
 };
 
 // ------------------------------------------------------------- les forcages ----

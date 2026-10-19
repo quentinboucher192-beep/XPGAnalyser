@@ -422,6 +422,7 @@ public:
                 }
             }
             ++rt_.perf_.writes;                                   // lot 13 : les performances
+            rt_.perfHistory_.write();                             // 1.12.17 : dans le temps
             // Lot 13 : un geste de l'operateur - le journal d'audit garde avant et apres.
             if (rt_.auditingWrites()) {
                 const sim::Value before = it->second;
@@ -467,6 +468,7 @@ public:
         }
         if (!rt_.plc_) return false;
         ++rt_.perf_.writes;                                       // lot 13 : les performances
+        rt_.perfHistory_.write();                                 // 1.12.17 : dans le temps
         const std::string pn = plcOf(r);                          // 1.11.1 : sans API.
         if (rt_.auditingWrites()) {
             sim::Value before, after;
@@ -1835,6 +1837,13 @@ bool Runtime::runScript(const Script& sc, const std::string& source, double now,
     ++depth_;
     // Lot 13 : chaque execution, mesuree (onglet Performances de la simulation).
     const auto t0 = std::chrono::steady_clock::now();
+    // 1.12.17 : son cadre (le journal des lenteurs) ; dans un geste, une ligne de son « Dedans ».
+    const Id scriptView = project_ ? project_->viewOfScript(sc.id) : kNoId;
+    const View* ownerView = scriptView != kNoId ? viewOf(scriptView) : nullptr;
+    const bool cyclic = inCycle_ && depth_ == 1;
+    SlowGuard slowFrame(*this, SlowKind::Script, "script:" + std::to_string(sc.id),
+                        "Script " + sc.name + (cyclic && ownerView ? ", \xC3\xA0 chaque cycle" : std::string{}),
+                        ownerView ? ownerView->name : std::string("IHM"), scriptView, kNoId, sc.id);
     XPG_PORTEE_TEXTE("script IHM", source);   // 1.10.2 (CR) : un script bloque se voit dans la pile
     // 1.11.2 (BLK) : la raison, meme quand l'appelant n'en veut pas (les scripts
     // cycliques et "sur changement" passent nullptr) : la trace du rapport la dit.
@@ -1852,7 +1861,15 @@ bool Runtime::runScript(const Script& sc, const std::string& source, double now,
     if (!ok) XPG_TRACE(Script, "erreur du script %s : %s", source.c_str(), why->empty() ? "(raison inconnue)" : why->c_str());
     auto& sp = perf_.scripts[sc.id];
     if (sp.name.empty()) sp.name = source;
-    sp.time.add(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+    const double scriptMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    sp.time.add(scriptMs);
+    if (cyclic) {                                 // 1.12.17 : un poste du cycle
+        std::string label = ownerView ? "Script " + sc.name + " (" + ownerView->name + ")"
+                                      : "Script g\xC3\xA9n\xC3\xA9ral " + sc.name
+                                            + (sc.event == "Cyclique" ? " (toutes les " + perfMs(std::max(10, sc.periodMs)) + ")"
+                                                                      : std::string(" (sur changement)"));
+        cyclePost("script:" + std::to_string(sc.id), label, scriptMs);
+    }
     --depth_;
     return ok;
 }
@@ -2004,6 +2021,10 @@ bool Runtime::computeOne(const Script& sc, const Declaration& d, Id view, sim::O
                 why = (is.line > 0 ? "ligne " + std::to_string(is.line) + " : " : std::string{}) + is.message;
                 return false;
             }
+    // 1.12.17 : un calcul se mesure (a l'ouverture d'une popup : une ligne de son « Dedans »).
+    SlowGuard slowFrame(*this, SlowKind::Script, "calcul:" + std::to_string(sc.id) + ":" + d.name,
+                        d.name + (v ? ", constante calcul\xC3\xA9" "e \xC3\xA0 l'ouverture" : ", valeur calcul\xC3\xA9" "e au d\xC3\xA9marrage"),
+                        v ? v->name : std::string("IHM"), view, kNoId, sc.id);
     const Prepared& prep = prepare(calc::runnableCode(sc, d), source, false);
     if (!prep.program) {
         why = prep.error;
@@ -2750,6 +2771,9 @@ bool Runtime::navigate(Id id, const Transition& t, double now, std::string_view 
         return false;
     }
     ++depth_;
+    // 1.12.17 : afficher une vue se mesure (le journal des lenteurs).
+    SlowGuard slowFrame(*this, SlowKind::View, "vue:" + std::to_string(id),
+                        "Afficher " + viewOf(id)->name + " (" + std::to_string(viewOf(id)->objects.size()) + " objets)", "IHM", id);
     // Lot 8 : les parametres se resolvent chez l'appelant (un alias de la vue
     // qui navigue), avant de fermer quoi que ce soit.
     auto scope = buildScope(*viewOf(id), arguments);
@@ -2875,6 +2899,11 @@ bool Runtime::openPopup(Id id, const Transition& t, double now, std::string_view
     if (depth_ >= kMaxDepth) { log("Erreur", source_, "ouverture de popup circulaire"); return false; }
     ++depth_;
     const Id under = topView();
+    // 1.12.17 : ouvrir une popup se mesure (le journal des lenteurs).
+    const View* underView = viewOf(under);
+    SlowGuard slowFrame(*this, SlowKind::Popup, "popup:" + std::to_string(id),
+                        "Ouvrir " + v->name + (arguments.empty() ? std::string{} : " (" + std::string(arguments) + ")"),
+                        underView ? underView->name : std::string("IHM"), id);
     PopupSlot slot;
     slot.view = id;
     slot.arguments = std::string(arguments);
@@ -3068,6 +3097,18 @@ void Runtime::start(double now) {
     resetInput();                       // 1.11.23 : ni touche tenue ni bouton enfonce
     running_ = true;
     now_ = startNow_ = now;
+    // 1.12.17 : les performances dans le temps repartent ; le journal des lenteurs reste. Les seuils :
+    // ceux du projet.
+    if (project_) {
+        slowRules_.absoluteMs = std::max(1, project_->config.slowMs);
+        slowRules_.factor = std::max(2, project_->config.slowFactor);
+    }
+    resetPerfHistory();
+    usual_.clear();
+    slowStack_.clear();
+    cycleParts_.clear();
+    exchangeRequests_.clear();
+    exchangeSampled_ = -1;
     startWallMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::system_clock::now().time_since_epoch()).count();
     lastCycle_ = -1;
@@ -3515,7 +3556,7 @@ void Runtime::press(Id object, double now) {
         if (const auto* v = shownViewOf(object); v && v->object(object)) {
             View snapshot = *v;
             evaluateProps(snapshot.id, *snapshot.object(object));   // 1.12.6 (lot B) : tel que l'ecran le montre
-            GestureGuard gesture(*this, where(snapshot, snapshot.object(object)));     // lot 13 : l'audit
+            GestureGuard gesture(*this, where(snapshot, snapshot.object(object)), "Appui sur");     // lot 13 : l'audit
             controlPress(snapshot, *snapshot.object(object), now);
         }
 }
@@ -3533,7 +3574,7 @@ void Runtime::release(Id object, double now, bool inside) {
     View snapshot = *v;
     evaluateProps(snapshot.id, *snapshot.object(object));
     const Object* o = snapshot.object(object);
-    GestureGuard gesture(*this, where(snapshot, snapshot.object(object)));         // lot 13 : l'audit
+    GestureGuard gesture(*this, where(snapshot, snapshot.object(object)), "Clic sur");         // lot 13 : l'audit
     // Lot 13 : une commande a signature attend le panneau - la bascule avant de
     // basculer, le bouton apres sa confirmation.
     const bool signs = click && signatureNeeded(snapshot, *snapshot.object(object));
@@ -3602,7 +3643,7 @@ void Runtime::doubleClick(Id object, double now) {
     if (!running_ || !o) return;
     View snapshot = *v;
     evaluateProps(snapshot.id, *snapshot.object(object));   // 1.12.6 (lot B) : tel que l'ecran le montre
-    GestureGuard gesture(*this, where(snapshot, snapshot.object(object)));         // lot 13 : l'audit
+    GestureGuard gesture(*this, where(snapshot, snapshot.object(object)), "Double-clic sur");         // lot 13 : l'audit
     runActions(snapshot, snapshot.object(object), Trigger::DoubleClick, now);
     if (o->kind == Kind::Table) tableGesture(snapshot, *snapshot.object(object), Trigger::CellDoubleClick, now);   // 1.12.13
 }
@@ -3662,8 +3703,20 @@ void Runtime::watchTriggers(const View& v, double now, bool cycleTick) {
 
 void Runtime::cycle(double now) {
     if (!project_) return;
+    // 1.12.17 : ou passe le temps - chaque script (runScript le dit), les alarmes, les courbes et
+    // archives, le reste.
+    auto lapStart = std::chrono::steady_clock::now();
+    const auto lap = [&lapStart] {
+        const auto t = std::chrono::steady_clock::now();
+        const double ms = std::chrono::duration<double, std::milli>(t - lapStart).count();
+        lapStart = t;
+        return ms;
+    };
     gifsCycle(now);                     // lot 16 : les GIF animes (conditions, fin de lecture)
     mediasCycle(now);                   // 1.12.12 (lot H) : les videos, les textes defilants, les codes QR
+    double rest = lap();
+    double scripted = 0;
+    for (const auto& part : cycleParts_) scripted += part.ms;
     // Les scripts generaux : cycliques a leur periode, "sur changement" quand
     // leur expression change.
     for (const auto& sc : project_->programs.scripts) {
@@ -3697,16 +3750,24 @@ void Runtime::cycle(double now) {
         if (id != current_ && std::find(popups_.begin(), popups_.end(), id) == popups_.end()) continue;
         watchTriggers(*v, now, true);
     }
+    {
+        double nowScripted = 0;
+        for (const auto& part : cycleParts_) nowScripted += part.ms;
+        rest += std::max(0.0, lap() - (nowScripted - scripted));     // les scripts ont deja leur ligne
+    }
     evaluateAlarms(now);
     alarmsCycle(now);        // lot 11 : la fin des mises de cote, les sons repetes
+    cyclePost("alarmes", "Alarmes (" + std::to_string(project_->alarms.size()) + " conditions)", lap());
     sampleTrends(now);
     sampleCharts(now);       // lot 11 : chronogrammes, courbes XY, histogrammes
     sampleArchive(now);
+    cyclePost("courbes", "Courbes et archives", lap());
     controlsCycle(now);      // lot 9 : compteurs horaires, fleches de tendance, programmateurs
     zoneMapsCycle();         // 1.12.12 (lot H) : la zone choisie par un programme
     productionCycle(now);    // lot 11 : compteurs de production
     editorsCycle();          // lot 11 : les valeurs de l'installation, pour les editeurs de recette
     reportsCycle(now);       // lot 14 : les rapports periodiques a leur heure
+    cyclePost("reste", "Le reste (compteurs, horloges, m\xC3\xA9" "dias, rapports)", rest + lap());
     ++cycles_;               // lot 9 : SYS.CycleCount
 }
 
@@ -3740,7 +3801,7 @@ void Runtime::tick(double now) {
                     longFired_ = true;
                     const View snapshot = *v;
                     const Id held = pressed_;
-                    GestureGuard gesture(*this, where(snapshot, snapshot.object(held)));   // lot 13 : l'audit
+                    GestureGuard gesture(*this, where(snapshot, snapshot.object(held)), "Appui long sur");   // lot 13 : l'audit
                     runActions(snapshot, snapshot.object(held), Trigger::LongPress, now);
                     if (const Object* t = snapshot.object(held); t && t->kind == Kind::Table) tableGesture(snapshot, *t, Trigger::CellLongPress, now);
                 }
@@ -3757,12 +3818,38 @@ void Runtime::tick(double now) {
         lastCycle_ = now;
         // Lot 13 : le travail du cycle, mesure ; plus long que la periode : un depassement.
         const auto t0 = std::chrono::steady_clock::now();
+        cycleParts_.clear();
+        inCycle_ = true;
         cycle(now);
+        inCycle_ = false;
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
         perf_.cycle.add(ms);
         perf_.periodMs = period * 1000.0;
         if (ms > perf_.periodMs) ++perf_.overruns;
+        // 1.12.17 : dans le temps ; un cycle plus long que sa periode est toujours une lenteur,
+        // ses postes les plus longs dedans.
+        perfHistory_.cycle(now, ms, perf_.periodMs);
+        const double usualCycle = usual_.usual("cycle");
+        usual_.add("cycle", ms, ms > perf_.periodMs);
+        if (ms > perf_.periodMs) {
+            SlowEntry e;
+            e.kind = SlowKind::Cycle;
+            e.ms = ms;
+            e.usual = usualCycle;
+            e.period = perf_.periodMs;
+            e.what = "D\xC3\xA9passement : le cycle a pass\xC3\xA9 sa p\xC3\xA9riode";
+            e.where = "IHM";
+            e.runs = usual_.runs("cycle");
+            e.slowRuns = usual_.slowRuns("cycle");
+            auto parts = cycleParts_;
+            std::stable_sort(parts.begin(), parts.end(), [](const SlowPart& a, const SlowPart& b) { return a.ms > b.ms; });
+            if (parts.size() > 8) parts.resize(8);
+            e.inside = std::move(parts);
+            slowNote(std::move(e));
+        }
     }
+    perfHistory_.advance(now);          // 1.12.17 : les secondes passees se ferment
+    sampleExchanges(now);               // ... et les echanges, une fois par seconde
     // Deconnexion automatique apres N minutes sans un clic (lot 10 : le reglage du
     // poste, sinon celui du projet).
     const int idle = autoLogoutMinutes();
@@ -4916,7 +5003,7 @@ void Runtime::promptSubmit(double now) {
     const std::string target = p.target, source = p.source;
     const bool mask = p.mask;
     const KeyboardPrompt was = p;                       // 1.12.13 : une case de tableau (Case saisie ensuite)
-    GestureGuard gesture(*this, source);                // l'audit : un geste de l'operateur
+    GestureGuard gesture(*this, source, "Saisie :");                // l'audit : un geste de l'operateur
     sim::Value after;
     if (was.tableObject != kNoId && !env_->exists(target)) {
         // 1.12.13 : une case d'un objet (Stock['vis'], Alarmes[1].Priorite) - ecrite par une instruction, comme un script.
@@ -5035,13 +5122,13 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
         return;
     }
     if (found->kind == Kind::RecipeManager) {
-        GestureGuard gesture(*this, where(*v, found));   // lot 13 : l'audit
+        GestureGuard gesture(*this, where(*v, found), "Clic sur");   // lot 13 : l'audit
         recipeManagerClick(object, part, now);
         return;
     }
     // 1.12.16 : le bouton Pause / Continuer d'une courbe pilotable.
     if (found->kind == Kind::Trend && part == "pause") {
-        GestureGuard gesture(*this, where(*v, found));
+        GestureGuard gesture(*this, where(*v, found), "Clic sur");
         (void)setTrendPaused(v->id, object, !trendPausedAt(v->id, object).has_value());
         return;
     }
@@ -5230,7 +5317,7 @@ void Runtime::typeKey(EditKey k, double now) {
     const Id object = focused_;
     auto& f = forms_[object];
     if (f.focus.empty()) return;
-    GestureGuard gesture(*this, where(*v, o));          // lot 13 : l'audit (Entree, Tab valident)
+    GestureGuard gesture(*this, where(*v, o), "Saisie de");          // lot 13 : l'audit (Entree, Tab valident)
     auto& buffer = f.text[f.focus];
     auto& caret = f.caret[f.focus];
     caret = std::min(caret, buffer.size());
@@ -5313,7 +5400,7 @@ void Runtime::unfocus(double now, Id towards) {
     const Object* o = v ? v->object(object) : nullptr;
     if (o && o->kind == Kind::InputField && o->flag("validateOnExit", false)) {
         const View snapshot = *v;
-        GestureGuard gesture(*this, where(snapshot, snapshot.object(object)));     // lot 13 : l'audit
+        GestureGuard gesture(*this, where(snapshot, snapshot.object(object)), "Saisie de");     // lot 13 : l'audit
         submitForm(snapshot, *snapshot.object(object), now);
     }
     if (focused_ == object) {

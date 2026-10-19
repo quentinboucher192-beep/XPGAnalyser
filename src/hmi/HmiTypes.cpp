@@ -1201,6 +1201,62 @@ std::vector<TypeMember> membersOf(const Project& p, std::string_view typeName) {
     return ty ? ty->members : std::vector<TypeMember>{};
 }
 
+// 1.12.17 : un conteneur, une structure - ce qui n'est pas une valeur seule (la forme la plus exterieure
+// du type, typeform::decompose ; une reference REF_TO : rien de dit).
+Whole wholeOf(const Project* project, std::string_view type, std::string_view shown) {
+    Whole w;
+    const std::string t = trimmed(type);
+    if (t.empty()) return w;
+    const std::string s(shown);
+    const auto set = [&w](const char* what, const char* entire, std::string pick) {
+        w.what = what;
+        w.entire = entire;
+        w.pick = std::move(pick);
+    };
+    const auto shape = typeform::decompose(t);
+    if (shape.reference) return w;
+    switch (shape.form) {
+        case typeform::Form::List:
+            set("une liste", "une liste enti\xC3\xA8re", "un \xC3\xA9l\xC3\xA9ment ou une propri\xC3\xA9t\xC3\xA9 : " + s + "[0] ou " + s + ".Count");
+            break;
+        case typeform::Form::Vector:
+            set("un vecteur", "un vecteur entier", "un \xC3\xA9l\xC3\xA9ment ou une propri\xC3\xA9t\xC3\xA9 : " + s + "[0] ou " + s + ".Count");
+            break;
+        case typeform::Form::Set:
+            set("un ensemble", "un ensemble entier", "une propri\xC3\xA9t\xC3\xA9 : " + s + ".Count");
+            break;
+        case typeform::Form::Ring:
+            set("un tampon circulaire", "un tampon circulaire entier", "un \xC3\xA9l\xC3\xA9ment ou une propri\xC3\xA9t\xC3\xA9 : " + s + ".Last ou " + s + ".Count");
+            break;
+        case typeform::Form::Map:
+            set("une MAP", "une MAP enti\xC3\xA8re", "une entr\xC3\xA9" "e ou une propri\xC3\xA9t\xC3\xA9 : " + s + "['cl\xC3\xA9'] ou " + s + ".Count");
+            break;
+        case typeform::Form::Tuple:
+            set("un tuple", "un tuple entier", "un \xC3\xA9l\xC3\xA9ment : " + s + ".Item1");
+            break;
+        case typeform::Form::Array:
+        case typeform::Form::Array2D: {
+            Spec spec;
+            std::string first = shape.form == typeform::Form::Array2D ? "0, 0" : "0";
+            if (parseSpec(t, spec) && spec.array())
+                first = std::to_string(spec.low[0]) + (spec.dims > 1 ? ", " + std::to_string(spec.low[1]) : std::string{});
+            set("un tableau", "un tableau entier", "un \xC3\xA9l\xC3\xA9ment : " + s + "[" + first + "]");
+            break;
+        }
+        case typeform::Form::Simple:
+            if (project) {
+                const auto members = membersOf(*project, t);
+                if (!members.empty()) {
+                    std::string pick;
+                    for (std::size_t k = 0; k < members.size() && k < 3; ++k) pick += (k ? ", " : "") + s + "." + members[k].name;
+                    set("une structure", "une structure enti\xC3\xA8re", "un membre : " + pick);
+                }
+            }
+            break;
+    }
+    return w;
+}
+
 std::string summary(const Project& p, std::string_view type, bool packBools) {
     Spec s;
     if (!parseSpec(type, s)) return {};

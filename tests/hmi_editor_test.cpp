@@ -32331,12 +32331,100 @@ void vueOnglets11216() {
     check(eds.symbolTabs() && !eds.viewTabs() && eds.symbolTabs()->order().size() == 6, "un symbole : ses six sous-onglets, pas Constantes");
 }
 
+// 1.12.17 : LA SIMULATION DEPLIEE - Vue d'ensemble, IHM, Equipements, Journal : leurs lignes, les
+// lignes dessous (Affiche > la vue, Automate_1 > Lues), les icones, les pastilles, le gris ; les
+// rangs du haut ne bougent pas (ce qui est deplie le reste).
+void simDepliee1217() {
+    std::printf("== 1.12.17 : la Simulation d\xC3\xA9pli\xC3\xA9" "e ==\n");
+    using NK = app::ProjectTreeModel::NodeKind;
+    using SL = app::ProjectTreeModel::SimList;
+    using SR = app::ProjectTreeModel::SimRow;
+    auto doc = std::make_shared<Document>();
+    auto plc = std::make_shared<domain::Project>();
+    app::ProjectTreeModel tree(plc);
+    tree.setHmi(doc);
+    const auto overview = app::ProjectTreeModel::simListNode(SL::Overview);
+    const auto hmiNode = app::ProjectTreeModel::simListNode(SL::Hmi);
+    const auto equip = app::ProjectTreeModel::simListNode(SL::Equipments);
+    const auto journal = app::ProjectTreeModel::simListNode(SL::Journal);
+    check(tree.kindOf(overview) == NK::SimOverview && tree.kindOf(hmiNode) == NK::HmiSimulation && tree.kindOf(equip) == NK::SimEquipment
+              && tree.kindOf(journal) == NK::SimJournal && !tree.hasChildren(overview) && !tree.hasChildren(hmiNode),
+          "sans ligne : Vue d'ensemble et IHM sont des feuilles");
+    int ready = 0;
+    core::ConnectionScope links;
+    links += tree.childrenReady->connect([&](ui::NodeId) { ++ready; });
+    SR perf{"Performances", "cycle 4,2 ms \xC2\xB7 p95 9,8 ms", "performances"};
+    perf.icon = ui::Icon::Chart;
+    SR slow{"Lenteurs", "la derni\xC3\xA8re \xC3\xA0 14:08:55", "lenteurs"};
+    slow.icon = ui::Icon::History;
+    slow.badge = "7";
+    slow.badgeTone = ui::Tone::Warning;
+    check(tree.setSimRows(SL::Overview, {perf, slow}) && ready == 1 && tree.childCount(overview) == 2, "Vue d'ensemble : deux lignes (childrenReady)");
+    const auto slowNode = tree.childAt(overview, 1);
+    const auto st = tree.style(slowNode);
+    check(tree.text(slowNode) == "Lenteurs" && st.icon == ui::Icon::History && st.badge == "7" && st.badgeTone == ui::Tone::Warning
+              && st.hint == "la derni\xC3\xA8re \xC3\xA0 14:08:55",
+          "Lenteurs : son ic\xC3\xB4ne, sa pastille (7, orange), la derni\xC3\xA8re");
+    // L'IHM : Affiche > la vue et la popup ; Scripts > un script.
+    SR shown{"Affich\xC3\xA9", "", "ihm"};
+    shown.icon = ui::Icon::Screen;
+    shown.badge = "2";
+    shown.children = {SR{"Vue_Four", "depuis 14:03:10", "vue:Vue_Four"}, SR{"Pop_Reglage", "popup, ouverte \xC3\xA0 14:05:12", "ihm"}};
+    SR scripts{"Scripts", "Chauffer 1,8 ms", "ihm"};
+    scripts.children = {SR{"Chauffer", "1,8 ms en moyenne", "script:12"}};
+    check(tree.setSimRows(SL::Hmi, {shown, scripts}) && ready == 2 && tree.childCount(hmiNode) == 2 && tree.hasChildren(hmiNode),
+          "IHM : Affich\xC3\xA9, Scripts");
+    const auto shownNode = tree.childAt(hmiNode, 0);
+    const auto pop = tree.childAt(shownNode, 1);
+    check(tree.childCount(shownNode) == 2 && tree.kindOf(pop) == NK::SimRow && tree.text(pop) == "Pop_Reglage"
+              && tree.style(pop).hint == "popup, ouverte \xC3\xA0 14:05:12" && tree.childCount(pop) == 0 && tree.simRowOf(pop)->key == "ihm"
+              && app::ProjectTreeModel::simListOf(pop) == SL::Hmi,
+          "Affich\xC3\xA9 > la vue, la popup (ouverte \xC3\xA0 14:05:12)");
+    // Les memes cles, d'autres valeurs : le dessin suffit ; une popup de plus : childrenReady.
+    shown.children[0].hint = "depuis 14:03:11";
+    check(tree.setSimRows(SL::Hmi, {shown, scripts}) && ready == 2 && tree.style(tree.childAt(shownNode, 0)).hint == "depuis 14:03:11",
+          "une valeur change : la ligne suit, sans refaire l'arbre");
+    shown.children.push_back(SR{"Pop_Aide", "popup", "ihm:aide"});
+    check(tree.setSimRows(SL::Hmi, {shown, scripts}) && ready == 3 && tree.childCount(shownNode) == 3, "une popup de plus : la liste est refaite");
+    check(tree.childAt(hmiNode, 0) == shownNode && tree.childAt(hmiNode, 1) == app::ProjectTreeModel::simRowNode(SL::Hmi, 1),
+          "les rangs du haut ne bougent pas : ce qui est d\xC3\xA9pli\xC3\xA9 le reste");
+    // Arretee : grise.
+    for (auto* r : {&shown, &scripts}) {
+        r->off = true;
+        for (auto& c : r->children) c.off = true;
+    }
+    (void)tree.setSimRows(SL::Hmi, {shown, scripts});
+    check(tree.style(shownNode).fgTone == ui::Tone::Muted && tree.style(tree.childAt(shownNode, 0)).fgTone == ui::Tone::Muted,
+          "arr\xC3\xAAt\xC3\xA9" "e : la derni\xC3\xA8re marche, en gris");
+    // Les equipements : chacun, ses Lues et Ecrites.
+    SR eq{"Automate_1", "simul\xC3\xA9 \xC2\xB7 12 \xC3\xA9" "changes/s \xC2\xB7 3,0 ms", "equipement:Automate_1"};
+    eq.icon = ui::Icon::Network;
+    SR in{"Lues", "variables", "equipement-lues:Automate_1"};
+    in.badge = "37";
+    SR out{"\xC3\x89" "crites", "\xC3\xA9" "critures", "equipement-ecrites:Automate_1"};
+    out.badge = "4";
+    eq.children = {in, out};
+    check(tree.setSimRows(SL::Equipments, {eq}) && tree.childCount(equip) == 1 && tree.childCount(tree.childAt(equip, 0)) == 2
+              && tree.style(tree.childAt(tree.childAt(equip, 0), 0)).badge == "37",
+          "\xC3\x89quipements > Automate_1 > Lues (37), \xC3\x89" "crites");
+    // Le journal : une ligne par source.
+    check(tree.setSimRows(SL::Journal, {SR{"IHM", "", "journal:ihm"}, SR{"Lenteurs", "", "journal:lenteurs"}}) && tree.childCount(journal) == 2
+              && tree.simRowOf(tree.childAt(journal, 1))->key == "journal:lenteurs",
+          "Journal > IHM, Lenteurs (le filtre du Journal)");
+    // Les points d'arret restent ou ils sont.
+    const auto debug = app::ProjectTreeModel::simListNode(SL::Breakpoints);
+    check(tree.setSimRows(SL::Breakpoints, {SR{"SFC_A \xC2\xB7 ligne 12", "", "bp:1"}}) && tree.text(tree.childAt(debug, 0)) == "SFC_A \xC2\xB7 ligne 12"
+              && tree.style(tree.childAt(debug, 0)).icon == ui::Icon::Halt,
+          "D\xC3\xA9" "bogage : ses points d'arr\xC3\xAAt, comme avant");
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les natives rangees, Choisir une fonction... (Mes fonctions, Rend), seuls.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
         natives1217();
         choisir11216();
         choisir1217();
+        simDepliee1217();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -32788,6 +32876,7 @@ int main(int argc, char** argv) {
     deballage11215();                       // 1.12.15 : le deballage, ses proprietes, first et second
     choisir11216();                         // 1.12.16 : Choisir une fonction... (le selecteur, la derniere ligne, Ctrl+I)
     choisir1217();                          // 1.12.17 : Choisir une fonction... - Mes fonctions, les instances, Rend
+    simDepliee1217();                       // 1.12.17 : la Simulation depliee dans l'arbre
     valeurInitiale11216();                  // 1.12.16 (T4) : la valeur initiale, en brut ou en code
     vueOnglets11216();                      // 1.12.16 (T2) : les sous-onglets Constantes et Fonctions d'une vue
     courbes11216();                         // 1.12.16 : Pilotable, Visible si par plume

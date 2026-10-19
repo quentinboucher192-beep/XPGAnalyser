@@ -757,6 +757,7 @@ bool SimJournalPane::setSource(std::string_view source) {
     else if (s.rfind("equip", 0) == 0 || s.rfind("\xC3\xA9quip", 0) == 0) want = static_cast<int>(SimSource::Equipements);
     else if (s.rfind("deb", 0) == 0 || s.rfind("d\xC3\xA9" "b", 0) == 0) want = static_cast<int>(SimSource::Debogage);
     else if (s.rfind("simu", 0) == 0) want = static_cast<int>(SimSource::Simulation);
+    else if (s.rfind("lent", 0) == 0) want = static_cast<int>(SimSource::Lenteurs);    // 1.12.17
     if (want == -2) return false;
     source_ = want;
     rebuild();
@@ -847,9 +848,11 @@ void SimJournalPane::onPaint(const ui::PaintContext& ctx) {
     struct Chip { std::string label, key; int source; std::size_t n; };
     std::vector<Chip> chips;
     chips.push_back({"Tout", "source:tout", -1, j ? j->size() : 0});
-    for (const auto s : {SimSource::Automate, SimSource::Ihm, SimSource::Equipements, SimSource::Debogage, SimSource::Simulation}) {
+    for (const auto s : {SimSource::Automate, SimSource::Ihm, SimSource::Equipements, SimSource::Debogage, SimSource::Lenteurs,
+                         SimSource::Simulation}) {
         const std::size_t n = j ? j->count(s) : 0;
         if (n == 0 && s == SimSource::Simulation) continue;
+        if (s == SimSource::Lenteurs && !core::hasIhm()) continue;   // 1.12.17 : celles de l'IHM
         if (!core::hasApi() && (s == SimSource::Automate || (s == SimSource::Debogage && n == 0))) continue;   // 1.12.14
         chips.push_back({SimJournal::sourceName(s), "source:" + lowerAscii(SimJournal::sourceName(s)), static_cast<int>(s), n});
     }

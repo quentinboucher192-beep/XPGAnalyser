@@ -44,7 +44,8 @@
 namespace app {
 
 // D'ou vient un evenement. L'ordre est celui des filtres de l'onglet Journal.
-enum class SimSource : std::uint8_t { Automate, Ihm, Equipements, Debogage, Simulation };
+// 1.12.17 : Lenteurs - chaque lenteur de l'IHM en marche (Vue d'ensemble > Lenteurs) y passe aussi.
+enum class SimSource : std::uint8_t { Automate, Ihm, Equipements, Debogage, Simulation, Lenteurs };
 // Sa gravite : Info (bleu), Ok (vert : ce qui repart), Warning (orange : a
 // surveiller), Error (rouge : ce qui arrete ou coupe).
 enum class SimSeverity : std::uint8_t { Info, Ok, Warning, Error };

@@ -25596,16 +25596,19 @@ void lotG11211_etat() {
         const Id m5 = lotg::poser(q, Kind::Pump, "Pompe_5", 600);
         q.views[0].object(m5)->setExpr("value", "P1");
         const auto issues = generate(q, [](std::string_view) { return false; });
-        bool enumTold = false, structTold = false, blocked = false;
+        bool enumTold = false, structTold = false, blocked = false, structBlocked = false;
         for (const auto& i : issues) {
             if (i.object == m4 && i.property == "value" && i.message.find("mode \xC3\x89tat") != std::string::npos) enumTold = i.severity == Issue::Severity::Warning;
             if (i.object == m5 && i.property == "value" && i.message.find("\xC3\x89quipement") != std::string::npos) structTold = i.severity == Issue::Severity::Warning;
             if (i.object == m3 && i.property == "value" && i.message.find("mode \xC3\x89tat") != std::string::npos) enumTold = false;   // il l'a
-            if (i.severity == Issue::Severity::Error && (i.object == m4 || i.object == m5 || i.object == m3)) blocked = true;
+            if (i.severity == Issue::Severity::Error && (i.object == m4 || i.object == m3)) blocked = true;
+            // 1.12.17 : une structure ENTIERE sur la Valeur ne se lit pas - une erreur (la liaison Equipement reste proposee).
+            if (i.severity == Issue::Severity::Error && i.object == m5 && i.message.find("P1 est une structure enti\xC3\xA8re") != std::string::npos) structBlocked = true;
         }
         check(enumTold, "G : G\xC3\xA9n\xC3\xA9rer - une \xC3\xA9num\xC3\xA9ration sur la Valeur lue vrai / faux : le mode \xC3\x89tat propos\xC3\xA9 (un avertissement)");
         check(structTold, "G : G\xC3\xA9n\xC3\xA9rer - une structure enti\xC3\xA8re sur la Valeur : la liaison \xC3\x89quipement propos\xC3\xA9" "e");
-        check(!blocked, "G : ... rien de bloquant (ce qui d\xC3\xA9marrait d\xC3\xA9marre)");
+        check(!blocked, "G : ... l'\xC3\xA9num\xC3\xA9ration ne bloque rien (ce qui d\xC3\xA9marrait d\xC3\xA9marre)");
+        check(structBlocked, "G : 1.12.17 - la structure enti\xC3\xA8re sur la Valeur est une erreur (elle ne se lit pas)");
     }
 }
 
@@ -27674,7 +27677,313 @@ void tableauxDynamiques11213() {
           "une variable Stock du projet, m\xC3\xAAme du m\xC3\xAAme type : le mod\xC3\xA8le ne la prend pas (ses boutons \xC3\xA9" "criraient dans les donn\xC3\xA9" "es du projet) - Stock_Ex");
 }
 
+// ---- 1.12.17 : LES PERFORMANCES DANS LE TEMPS, LES LENTEURS (HmiPerfHistory.hpp) ----
+void lenteurs1217() {
+    std::printf("1.12.17 : les performances dans le temps, le journal des lenteurs\n");
+    // ---- les regles ----
+    SlowRules rules;
+    check(rules.slow(51, 0) && !rules.slow(49, 0) && rules.slow(30, 5) && !rules.slow(9, 1) && !rules.slow(24, 5),
+          "une lenteur : plus de 50 ms, ou plus de 5 fois l'habituel et au moins 10 ms");
+    // ---- des secondes sans cycle entre deux (un tour qui saute trois secondes) ----
+    {
+        PerfHistory h;
+        h.reset(0);
+        h.cycle(0.2, 5, 100);
+        h.cycle(4.5, 5, 100);
+        h.advance(5.0);
+        h.advance(std::numeric_limits<double>::infinity());
+        check(h.seconds().size() == 5 && h.seconds()[0].cycles == 1 && h.seconds()[1].cycles == 0 && h.seconds()[3].cycles == 0
+                  && h.seconds()[3].t == 3 && h.seconds()[4].cycles == 1 && h.seconds()[4].t == 4,
+              "trois secondes sautees : trois mesures vides, la suivante a sa place (et une heure infinie ne fait rien)");
+    }
+    // ---- le temps habituel : la mediane des 100 dernieres ----
+    UsualTimes usual;
+    usual.add("k", 2, false);
+    usual.add("k", 3, false);
+    check(usual.usual("k") == 0.0, "moins de 3 fois : pas encore d'habituel");
+    usual.add("k", 100, true);
+    usual.add("k", 4, false);
+    usual.add("k", 2, false);
+    check(usual.usual("k") == 3.0 && usual.runs("k") == 5 && usual.slowRuns("k") == 1, "la m\xC3\xA9" "diane (3), 5 fois, 1 lente");
+    for (int i = 0; i < 300; ++i) usual.add("k", 7, false);
+    check(usual.usual("k") == 7.0 && usual.runs("k") == 305, "les 100 derni\xC3\xA8res seulement");
+    // ---- le journal : 500 au plus, Vider ----
+    SlowLog log;
+    for (int i = 0; i < 520; ++i) {
+        SlowEntry e;
+        e.ms = i;
+        e.what = "essai " + std::to_string(i);
+        log.add(e);
+    }
+    check(log.entries().size() == SlowLog::kKeep && log.entries().front().what == "essai 20" && log.lastSerial() == 520,
+          "les 500 derni\xC3\xA8res, num\xC3\xA9rot\xC3\xA9" "es");
+    check(log.csv().rfind("Heure;Dur\xC3\xA9" "e (ms)", 0) == 0, "l'export CSV");
+    const auto rev = log.revision();
+    log.clear();
+    check(log.entries().empty() && log.revision() > rev, "Vider");
+    // ---- l'historique : une mesure par seconde, au-dela d'une heure par 10 s ----
+    PerfHistory h;
+    h.reset(0.0);
+    for (int s = 0; s < 3700; ++s)
+        for (int k = 0; k < 10; ++k) h.cycle(s + k * 0.1, s == 1234 && k == 3 ? 150.0 : 2.0 + k * 0.1, 100.0);
+    h.advance(3700.0);
+    std::size_t fine = 0, coarse = 0;
+    for (const auto& sec : h.seconds()) (sec.span > 1.5f ? coarse : fine) += 1;
+    check(fine >= 3590 && fine <= 3601 && coarse >= 9 && coarse <= 11, "une heure a la seconde, le reste par 10 s (" + std::to_string(fine) + " + "
+          + std::to_string(coarse) + ")");
+    const auto all = h.summary(3700.0, -1);
+    check(all.cycles == 37000 && all.overruns == 1 && all.max == 150.0 && std::abs(all.maxAt - 1234.3) < 0.01,
+          "depuis le lancement : les cycles, le d\xC3\xA9passement, le maximum et son heure");
+    const auto last = h.summary(3700.0, 60);
+    check(last.cycles == 600 && last.overruns == 0 && last.max < 3.0 && last.p95 > 2.0 && last.p95 < 3.0,
+          "la derni\xC3\xA8re minute : 600 cycles, p95 entre 2 et 3 ms (" + std::to_string(last.p95) + ")");
+    // ---- le moteur : un script lent, un geste qui ouvre une popup, le cycle et ses postes ----
+    Project p;
+    View a = makeView(p, "Vue_Four");
+    View pop = makeView(p, "Pop_Reglage");
+    pop.role = "popup";
+    Script open;
+    open.id = p.allocate();
+    open.name = "Ouverture";
+    open.event = "OnOpen";
+    open.body = "x := 1;";
+    pop.scripts.push_back(open);
+    auto& btn = addButton(p, a, "Btn_Regler", 10, 10);
+    btn.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Reglage"));
+    const Id btnId = btn.id;
+    Script calc;
+    calc.id = p.allocate();
+    calc.name = "Calcul";
+    calc.event = "Appel";
+    calc.body = "x := 2;";
+    p.programs.scripts.push_back(calc);
+    Script cyc;
+    cyc.id = p.allocate();
+    cyc.name = "Tourne";
+    cyc.event = "Cyclique";
+    cyc.periodMs = 100;
+    cyc.body = "y := y + 1;";
+    p.programs.scripts.push_back(cyc);
+    for (const char* n : {"x", "y"}) {
+        Variable v;
+        v.id = p.allocate();
+        v.name = n;
+        v.type = "INT";
+        v.initial = "0";
+        p.programs.variables.push_back(v);
+    }
+    p.views = {a, pop};
+    p.config.startView = a.id;
+    p.config.cycleMs = 100;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.0);
+    rt.clearSlowLog();
+    (void)rt.callScript("Calcul", 0.05);
+    check(rt.slowLog().entries().empty(), "un script rapide n'est pas une lenteur");
+    SlowRules all0;
+    all0.absoluteMs = 0.0;                     // tout est lent : on voit ce qui est note
+    rt.setSlowRules(all0);
+    (void)rt.callScript("Calcul", 0.06);
+    const auto* e1 = rt.slowLog().entries().empty() ? nullptr : &rt.slowLog().entries().back();
+    check(e1 && e1->kind == SlowKind::Script && e1->what == "Script Calcul" && e1->where == "IHM" && e1->scriptId == calc.id
+              && e1->clock.size() == 12 && e1->runs == 2,
+          "un script seul : sa lenteur, son heure a la milliseconde, ses 2 fois (" + (e1 ? e1->what + " / " + e1->clock : std::string("aucune")) + ")");
+    rt.clearSlowLog();
+    rt.press(btnId, 0.10);
+    rt.release(btnId, 0.20, true);
+    const SlowEntry* clickEntry = nullptr;
+    for (const auto& e : rt.slowLog().entries())
+        if (e.kind == SlowKind::Action && e.what.rfind("Clic sur Btn_Regler", 0) == 0) clickEntry = &e;
+    check(clickEntry && clickEntry->what == "Clic sur Btn_Regler \xE2\x86\x92 ouvrir Pop_Reglage" && clickEntry->where == "Vue_Four"
+              && clickEntry->objectId == btnId,
+          "le clic : Clic sur Btn_Regler \xE2\x86\x92 ouvrir Pop_Reglage, \xC3\xA0 Vue_Four (" + (clickEntry ? clickEntry->what : std::string("aucun")) + ")");
+    bool popupLine = false, scriptLine = false;
+    if (clickEntry)
+        for (const auto& part : clickEntry->inside) {
+            popupLine = popupLine || (part.depth == 0 && part.what == "Ouvrir Pop_Reglage");
+            scriptLine = scriptLine || (part.depth == 1 && part.what == "Script Ouverture");
+        }
+    check(popupLine && scriptLine, "dedans : Ouvrir Pop_Reglage, puis son script d'ouverture en retrait");
+    bool nested = false;
+    for (const auto& e : rt.slowLog().entries()) nested = nested || e.kind == SlowKind::Popup || e.what == "Script Ouverture";
+    check(!nested, "la popup et son script ne sont pas notes a part : ils sont dans le clic");
+    // Le cycle : ses postes, dans le temps.
+    rt.setSlowRules(SlowRules{});
+    for (int k = 1; k <= 30; ++k) rt.tick(0.2 + k * 0.1);
+    const auto sm = rt.perfHistory().summary(3.2, 60);
+    check(sm.cycles >= 25 && rt.perfHistory().seconds().size() >= 2, "le cycle, une mesure par seconde (" + std::to_string(sm.cycles) + " cycles)");
+    std::set<std::string> keys;
+    for (const auto& row : rt.perfHistory().posts(3.2, 60)) keys.insert(row.key);
+    check(keys.count("alarmes") && keys.count("courbes") && keys.count("reste") && keys.count("script:" + std::to_string(cyc.id)),
+          "o\xC3\xB9 passe le temps : le script Tourne, les alarmes, les courbes, le reste");
+    const auto rows = rt.perfHistory().posts(3.2, 60);
+    check(!rows.empty() && rows.back().key == "reste", "le reste, toujours en bas");
+    // Les lenteurs restent d'une marche a l'autre ; l'historique repart.
+    rt.setSlowRules(all0);
+    (void)rt.callScript("Calcul", 3.3);
+    const auto kept = rt.slowLog().entries().size();
+    rt.stop(3.4);
+    rt.start(10.0);
+    check(rt.slowLog().entries().size() == kept && kept > 0 && rt.perfHistory().seconds().empty(),
+          "une nouvelle marche : les lenteurs restent, l'historique repart");
+    rt.clearSlowLog();
+    check(rt.slowLog().entries().empty(), "Vider");
+}
+
+// 1.12.17 : UN TABLEAU ENTIER LA OU UNE VALEUR SEULE EST ATTENDUE - une plume TABLEAU (ARRAY OF REAL) au lieu de
+// TABLEAU[0] passait sans rien dire (le bug), comme une liste, une MAP, une structure entieres : la valeur d'une
+// jauge, une condition d'alarme, Visible si, une variable archivee, les mesures d'un graphique, la cible de
+// " Mettre a 1 ", la valeur affectee a une variable simple, un calcul, une fonction. Tout est une erreur, avec
+// ce qu'on ecrit a la place ; un element, une propriete (TABLEAU[2], L.Count), un tableau copie dans un autre
+// du meme type, un texte qui montre le tableau entier passent.
+void tableauEntier1217() {
+    std::printf("1.12.17 : un tableau entier la ou une valeur seule est attendue (TABLEAU, pas TABLEAU[0])\n");
+    Project p;
+    const auto addVar = [&](const char* name, const char* type) {
+        Variable x;
+        x.id = p.allocate();
+        x.name = name;
+        x.type = type;
+        p.programs.variables.push_back(x);
+    };
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    cuve.members = {TypeMember{"Niveau", "REAL"}, TypeMember{"Actif", "BOOL"}};
+    p.programs.types.push_back(cuve);
+    addVar("TABLEAU", "ARRAY[0..9] OF REAL");
+    addVar("COPIE", "ARRAY[0..9] OF REAL");
+    addVar("BOOLS", "ARRAY[1..4] OF BOOL");
+    addVar("L", "LIST OF REAL");
+    addVar("M", "MAP[STRING] OF REAL");
+    addVar("CUVE", "T_Cuve");
+    addVar("X", "REAL");
+    addVar("B", "BOOL");
+    View v = makeView(p, "Vue_T");
+    const auto add = [&](Kind k) { return edit::add(p, v, k, 0, 0); };
+    const Id pens = add(Kind::Trend);
+    v.object(pens)->set("variables", "TABLEAU;TABLEAU[2];L;M;CUVE;CUVE.Niveau;L.Count;TABLEAU[*]");
+    v.object(pens)->set("penVisible", ";;;;;;;BOOLS");
+    const Id gauge = add(Kind::Gauge);
+    v.object(gauge)->set("variable", "TABLEAU");
+    const Id fx = add(Kind::Gauge);
+    v.object(fx)->setExpr("value", "TABLEAU * 2");
+    const Id lamp = add(Kind::Indicator);
+    v.object(lamp)->setExpr("visible", "BOOLS");
+    const Id text = add(Kind::Text);
+    v.object(text)->set("text", "Valeurs : {TABLEAU}");
+    const Id bars = add(Kind::BarChart);
+    v.object(bars)->set("variables", "TABLEAU;TABLEAU[1]");
+    const Id xy = add(Kind::XYChart);
+    v.object(xy)->set("variables", "TABLEAU[0]");
+    v.object(xy)->set("xVariable", "L");
+    const Id btn = add(Kind::PushButton);
+    v.object(btn)->set("variable", "B");
+    // les objets qui ECRIVENT leur variable : un champ de saisie, un programmateur, un curseur
+    const Id input = add(Kind::InputField);
+    v.object(input)->set("variable", "TABLEAU");
+    const Id inputOk = add(Kind::InputField);
+    v.object(inputOk)->set("variable", "TABLEAU[3]");
+    const Id weekly = add(Kind::WeeklySchedule);
+    v.object(weekly)->set("variable", "L");
+    const Id slider = add(Kind::Slider);
+    v.object(slider)->set("variable", "CUVE");
+    const Id combo = add(Kind::ComboBox);       // ses elements viennent d'une liste entiere : il le faut
+    v.object(combo)->set("itemsFrom", "L");
+    v.object(combo)->set("variable", "X");
+    const auto action = [&](Operation op, const char* target, const char* value) {
+        Action a;
+        a.trigger = Trigger::Click;
+        a.operation = op;
+        a.target = target;
+        a.value = value;
+        v.object(btn)->actions.push_back(a);
+    };
+    action(Operation::Set, "BOOLS", "");
+    action(Operation::Increment, "TABLEAU", "1");
+    action(Operation::Assign, "TABLEAU", "5");
+    action(Operation::Assign, "X", "TABLEAU");
+    action(Operation::Assign, "COPIE", "TABLEAU");     // un tableau copie dans un autre du meme type : il passe
+    action(Operation::Assign, "X", "ABS(TABLEAU)");
+    action(Operation::Set, "BOOLS[2]", "");
+    p.views.push_back(v);
+    AlarmDef al;
+    al.id = p.allocate();
+    al.name = "A_Tableau";
+    al.condition = "TABLEAU > 5";
+    p.alarms.push_back(al);
+    p.history.archived = {"TABLEAU", "TABLEAU[0]"};
+    const auto issues = generate(p, [](std::string_view) { return false; });
+    const auto said = [&](Id object, std::string_view key, std::string_view what, Issue::Severity sev = Issue::Severity::Error) {
+        return std::any_of(issues.begin(), issues.end(), [&](const Issue& i) {
+            return i.severity == sev && (object == kNoId || i.object == object) && (key.empty() || i.property == key)
+                && i.message.find(what) != std::string::npos;
+        });
+    };
+    const auto none = [&](Id object, std::string_view what) {
+        return std::none_of(issues.begin(), issues.end(), [&](const Issue& i) {
+            return (object == kNoId || i.object == object) && i.message.find(what) != std::string::npos;
+        });
+    };
+    std::string all;
+    for (const auto& i : issues) all += "\n    " + i.property + " : " + i.message;
+    // ---- le bug : la plume TABLEAU ----
+    check(said(pens, "variables", "plume TABLEAU : un nombre est attendu, et TABLEAU est un tableau entier (ARRAY[0..9] OF REAL) - choisis un \xC3\xA9l\xC3\xA9ment : TABLEAU[0]"),
+          "la plume TABLEAU : une erreur, et TABLEAU[0] propose" + all);
+    check(said(pens, "variables", "plume L : un nombre est attendu, et L est une liste enti\xC3\xA8re") && said(pens, "variables", "L[0] ou L.Count"),
+          "une liste enti\xC3\xA8re : L[0] ou L.Count");
+    check(said(pens, "variables", "M est une MAP enti\xC3\xA8re") && said(pens, "variables", "M['cl\xC3\xA9'] ou M.Count"), "une MAP enti\xC3\xA8re : M['cl\xC3\xA9'] ou M.Count");
+    check(said(pens, "variables", "CUVE est une structure enti\xC3\xA8re (T_Cuve)") && said(pens, "variables", "un membre : CUVE.Niveau, CUVE.Actif"),
+          "une structure enti\xC3\xA8re : ses membres propos\xC3\xA9s");
+    check(none(pens, "TABLEAU[2] :") && none(pens, "CUVE.Niveau :") && none(pens, "L.Count :") && none(pens, "TABLEAU[0] :"),
+          "un \xC3\xA9l\xC3\xA9ment, un membre, une propri\xC3\xA9t\xC3\xA9, le joker TABLEAU[*] : rien \xC3\xA0 dire");
+    check(said(pens, "penVisible", "un bool\xC3\xA9" "en (vrai ou faux) est attendu, et BOOLS est un tableau entier"), "Visible si BOOLS : un tableau entier");
+    // ---- les autres cas de figure ----
+    check(said(gauge, "variable", "TABLEAU est un tableau entier (ARRAY[0..9] OF REAL) : l'objet attend une valeur seule - choisis un \xC3\xA9l\xC3\xA9ment : TABLEAU[0]"),
+          "la variable d'une jauge : une erreur (avant : un avertissement)");
+    check(said(fx, "value", "TABLEAU est un tableau entier (ARRAY[0..9] OF REAL) : il ne se calcule pas (*)"), "un calcul : TABLEAU * 2");
+    check(said(lamp, "visible", "BOOLS est un tableau entier"), "visible = BOOLS : un tableau entier");
+    check(none(text, "TABLEAU"), "un texte montre le tableau entier ({TABLEAU}) : rien \xC3\xA0 dire");
+    check(said(bars, "variables", "mesure TABLEAU : un nombre est attendu, et TABLEAU est un tableau entier") && none(bars, "TABLEAU[1] :"),
+          "les mesures d'un graphique en barres");
+    check(said(xy, "xVariable", "L est une liste enti\xC3\xA8re"), "la variable X d'un graphique XY");
+    check(said(btn, {}, "cible BOOLS : BOOLS est un tableau entier (ARRAY[1..4] OF BOOL) : on n'y \xC3\xA9" "crit pas un bool\xC3\xA9" "en - vise un \xC3\xA9l\xC3\xA9ment : BOOLS[1]"),
+          "Mettre \xC3\xA0 1 un tableau entier");
+    check(said(btn, {}, "cible TABLEAU : TABLEAU est un tableau entier (ARRAY[0..9] OF REAL) : on n'y \xC3\xA9" "crit pas un nombre"), "incr\xC3\xA9menter un tableau entier");
+    check(said(btn, {}, "on n'y \xC3\xA9" "crit pas une valeur seule"), "TABLEAU := 5 : une valeur seule dans un tableau entier");
+    check(said(btn, {}, "valeur TABLEAU : une valeur seule est attendue, et TABLEAU est un tableau entier"), "X := TABLEAU : un tableau entier dans un REAL");
+    check(none(btn, "cible COPIE") && none(btn, "valeur TABLEAU : une valeur seule est attendue, et TABLEAU est un tableau entier (ARRAY[0..9] OF REAL) - choisis un \xC3\xA9l\xC3\xA9ment : TABLEAU[0]\n"),
+          "COPIE := TABLEAU (le m\xC3\xAAme type) : rien \xC3\xA0 dire");
+    check(said(btn, {}, "ABS attend une valeur seule, et TABLEAU est un tableau entier"), "ABS(TABLEAU) : une fonction de nombres");
+    check(none(btn, "cible BOOLS[2]"), "Mettre \xC3\xA0 1 BOOLS[2] : rien \xC3\xA0 dire");
+    check(said(kNoId, {}, "TABLEAU est un tableau entier (ARRAY[0..9] OF REAL) : il ne se compare pas (>) \xC3\xA0 une valeur"), "l'alarme TABLEAU > 5");
+    check(said(kNoId, "TABLEAU", "variable archiv\xC3\xA9" "e TABLEAU : un nombre est attendu, et TABLEAU est un tableau entier") && none(kNoId, "variable archiv\xC3\xA9" "e TABLEAU[0]"),
+          "les variables archiv\xC3\xA9" "es : TABLEAU, pas TABLEAU[0]");
+    check(said(input, "variable", "TABLEAU est un tableau entier (ARRAY[0..9] OF REAL) : l'objet y \xC3\xA9" "crit une valeur seule - vise un \xC3\xA9l\xC3\xA9ment : TABLEAU[0]"),
+          "un champ de saisie sur un tableau entier : une erreur (en marche : \xC3\xA9" "criture refus\xC3\xA9" "e)" + all);
+    check(none(inputOk, "TABLEAU"), "un champ de saisie sur TABLEAU[3] : rien \xC3\xA0 dire");
+    check(said(weekly, "variable", "L est une liste enti\xC3\xA8re (LIST OF REAL) : l'objet y \xC3\xA9" "crit une valeur seule"),
+          "un programmateur sur une liste enti\xC3\xA8re : une erreur (avant : rien)");
+    check(said(slider, "variable", "CUVE est une structure enti\xC3\xA8re (T_Cuve) : l'objet y \xC3\xA9" "crit une valeur seule - vise un membre : CUVE.Niveau"),
+          "un curseur sur une structure enti\xC3\xA8re");
+    check(none(combo, "L est"), "les \xC3\xA9l\xC3\xA9ments d'une liste d\xC3\xA9roulante depuis une liste enti\xC3\xA8re : rien \xC3\xA0 dire");
+    const auto count = [&](Id object, std::string_view what) {
+        return std::count_if(issues.begin(), issues.end(), [&](const Issue& i) { return i.object == object && i.message.find(what) != std::string::npos; });
+    };
+    check(count(gauge, "TABLEAU est un tableau entier") == 1 && count(input, "TABLEAU est un tableau entier") == 1,
+          "dit une fois (pas deux : le r\xC3\xB4le et l'expression)");
+}
+
 int main(int argc, char** argv) {
+    // 1.12.17 : HMI_TEST_1217=1 - les performances dans le temps, les lenteurs, seules.
+    if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
+        lenteurs1217();
+        tableauEntier1217();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.16 : HMI_TEST_11216=1 - les courbes pilotables, Dupliquer (X et Y), seuls.
     if (const char* only = std::getenv("HMI_TEST_11216"); only && *only == '1') {
         courbesPilotables11216();
@@ -27775,6 +28084,8 @@ int main(int argc, char** argv) {
     actionsMathsClavier1119();         // 1.11.9 : operations rangees, Maths, clavier virtuel
     fonctionsSymbole11110();           // 1.11.10 : les fonctions d'un symbole ; fonctions et operateurs entre eux
     actions();
+    lenteurs1217();                         // 1.12.17 : les performances dans le temps, les lenteurs
+    tableauEntier1217();                    // 1.12.17 : un tableau entier la ou une valeur seule est attendue
     scripts();
     transitions();
     formats();

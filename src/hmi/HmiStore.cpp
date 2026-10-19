@@ -848,6 +848,9 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
            + field("modifie", cfg.modified) + fieldInt("largeur", cfg.width) + fieldInt("hauteur", cfg.height)
            + field("orientation", cfg.orientation) + fieldInt("demarrage", cfg.startView)
            + fieldInt("cycle", cfg.cycleMs) + (cfg.swipeNavigation ? fieldBool("glisser", true) : std::string{})
+           // 1.12.17 : les seuils des lenteurs - ecrits seulement s'ils changent.
+           + (cfg.slowMs != 50 ? fieldInt("lenteur_ms", cfg.slowMs) : std::string{})
+           + (cfg.slowFactor != 5 ? fieldInt("lenteur_fois", cfg.slowFactor) : std::string{})
            // Lot 13 : Generer plus exigeant - ecrit seulement s'il change.
            + (!cfg.quality ? fieldBool("qualite", false) : std::string{})
            + (cfg.touchMin != 32 ? fieldInt("cible", cfg.touchMin) : std::string{})
@@ -1348,6 +1351,8 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             p.config.startView = static_cast<Id>(toInt(r.get("demarrage"), 0));
             p.config.cycleMs = static_cast<int>(std::clamp<long long>(toInt(r.get("cycle"), 100), 10, 60000));
             p.config.swipeNavigation = toBool(r.get("glisser"), false);      // lot 12
+            p.config.slowMs = static_cast<int>(std::clamp<long long>(toInt(r.get("lenteur_ms"), 50), 5, 10000));      // 1.12.17
+            p.config.slowFactor = static_cast<int>(std::clamp<long long>(toInt(r.get("lenteur_fois"), 5), 2, 100));
             p.config.quality = toBool(r.get("qualite"), true);               // lot 13
             p.config.touchMin = static_cast<int>(std::clamp<long long>(toInt(r.get("cible"), 32), 0, 400));
             {

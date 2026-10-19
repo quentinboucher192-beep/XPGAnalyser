@@ -1080,6 +1080,10 @@ struct Config {
     std::string orientation{"Paysage"};   // Paysage, Portrait
     Id          startView{kNoId};
     int         cycleMs{100};             // le cycle IHM : OnCycle, fronts, timers
+    // 1.12.17 : quand une action est une lenteur (Simulation > Vue d'ensemble > Lenteurs) : plus de
+    // slowMs, ou plus de slowFactor fois son temps habituel (et au moins 10 ms).
+    int         slowMs{50};
+    int         slowFactor{5};
     // Lot 12 : en marche, un glisser horizontal rapide sur le fond de la vue
     // (ecran tactile) passe a la vue suivante ou precedente.
     bool        swipeNavigation{false};

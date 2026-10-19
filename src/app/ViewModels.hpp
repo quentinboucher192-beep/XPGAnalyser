@@ -325,7 +325,8 @@ namespace app {
             HmiCodeGroup, HmiCodeEntry, HmiCodeInner, HmiOverloads, HmiSymbolOverloads,
             // 1.11.22 : le dossier Simulation deballe - une ligne poussee par l'ecran (setSimRows) :
             //   SimRow  index = son rang, sub = sa liste (SimList : points d'arret sous Debogage,
-            //           forcages, courbes).
+            //           forcages, courbes) ; 1.12.17 : sub = sa liste | (rang de la ligne
+            //           dessous + 1) << 4 - Vue d'ensemble, IHM, Equipements, Journal deplies.
             SimRow,
             // 1.12.0 : les NATIVES (IHM > Programmation generale > Natives) - verrouillees,
             // tout ce que le langage de l'IHM connait sans rien declarer (app::natives) :
@@ -551,15 +552,32 @@ namespace app {
         // L'ecran pousse les lignes (quelques fois par seconde, comme les pastilles) : rien n'est
         // calcule au dessin. `key` dit ce qu'un clic ouvre ("bp:12", la cle d'un forcage, le chemin
         // d'une courbe). Vrai : les lignes ont change (leur liste : childrenReady est emis).
-        enum class SimList : std::uint8_t { Breakpoints = 0, Forcings = 1, Trends = 2 };
+        // 1.12.17 : LA SIMULATION DEPLIEE - sous Vue d'ensemble (Performances, Lenteurs, A
+        // surveiller), sous IHM (Affiche, Scripts, Alarmes, Utilisateur), sous Equipements (chacun,
+        // et ses Lues, Ecrites), sous Journal (une ligne par source). Une ligne peut porter des
+        // lignes dessous (un niveau) ; les rangs des lignes du haut ne bougent pas d'une seconde a
+        // l'autre : ce qui est deplie le reste.
+        enum class SimList : std::uint8_t { Breakpoints = 0, Forcings = 1, Trends = 2, Overview = 3, Hmi = 4, Equipments = 5, Journal = 6 };
+        static constexpr std::size_t kSimLists = 7;
         struct SimRow {
             std::string text, hint, key;
-            bool        off{false};       // un point d'arret desactive : grise
+            bool        off{false};       // un point d'arret desactive, la derniere marche (arretee) : grise
+            // 1.12.17 : son icone et sa couleur (None : celles de sa liste), sa pastille a droite
+            // ("7"), ses lignes dessous ("Affiche" > la vue, les popups).
+            ui::Icon            icon{ui::Icon::None};
+            ui::Tone            tone{ui::Tone::None};
+            std::string         badge{};
+            ui::Tone            badgeTone{ui::Tone::None};
+            std::vector<SimRow> children{};
             bool operator==(const SimRow&) const = default;
         };
         bool setSimRows(SimList list, std::vector<SimRow> rows);
         [[nodiscard]] const SimRow* simRowOf(ui::NodeId) const;
-        [[nodiscard]] static SimList simListOf(ui::NodeId n) noexcept { return static_cast<SimList>(subOf(n) & 0x3); }
+        [[nodiscard]] static SimList simListOf(ui::NodeId n) noexcept { return static_cast<SimList>(subOf(n) & 0xF); }
+        // 1.12.17 : le noeud de la liste (Vue d'ensemble, IHM...) et d'une ligne : la `top`-ieme de
+        // sa liste ; child >= 0 : sa ligne dessous de ce rang.
+        [[nodiscard]] static ui::NodeId simListNode(SimList list) noexcept;
+        [[nodiscard]] static ui::NodeId simRowNode(SimList list, std::size_t top, int child = -1) noexcept;
         // ---- fin Lot API 8 ----
 
         // ---- Lot API 8 : l'arbre du projet ----
@@ -766,7 +784,7 @@ namespace app {
         // ---- Lot API 8 : les pastilles du dossier Simulation (genre, texte, ton) ----
         struct SimBadge { NodeKind kind; std::string text; ui::Tone tone; };
         std::vector<SimBadge> simBadges_;
-        std::array<std::vector<SimRow>, 3> simRows_{};      // 1.11.22 : le deballage du dossier Simulation
+        std::array<std::vector<SimRow>, kSimLists> simRows_{};   // 1.11.22 : le deballage du dossier Simulation (1.12.17 : sept listes)
 
         // Les instantanes. Ils pointent dans project_->variables et
         // project_->pous ; `refresh()` les refait.

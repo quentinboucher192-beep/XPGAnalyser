@@ -3677,10 +3677,11 @@ struct ExprWalker {
     void text(const Where& w, const std::string& value, const std::string& prefix = {}) {
         for (const auto& piece : exprcheck::templateExpressions(value)) expr(w, piece, exprcheck::Want::Any, prefix + "{" + piece + "} : ");
     }
-    void target(const Where& w, const std::string& target, const std::string& prefix) {
+    // 1.12.17 : `writes` - ce qu'on y ecrit (un booleen, un nombre, une valeur seule) ; un tableau entier ne le recoit pas.
+    void target(const Where& w, const std::string& target, const std::string& prefix, exprcheck::Want writes = exprcheck::Want::Any) {
         const std::string s = trimmedCopy(target);
         if (s.empty()) return;
-        for (auto& pb : exprcheck::checkTarget(context(w.view), s))
+        for (auto& pb : exprcheck::checkTarget(context(w.view), s, writes))
             push(w, prefix + s + " : " + pb.message + dup::markerHint(s, pb.unknownName), pb.unknownName, pb.suggestion);
     }
 
@@ -3698,9 +3699,19 @@ struct ExprWalker {
             expr(w, a.guard, W::Bool, "condition ");
             const bool writes = a.operation == Operation::Toggle || a.operation == Operation::Set || a.operation == Operation::Reset
                              || a.operation == Operation::Increment || a.operation == Operation::Decrement || a.operation == Operation::Assign;
-            if (a.operation == Operation::Assign) expr(w, a.value, W::Any, "valeur ");
+            const std::string aimed = received.empty() ? a.target : table::withoutCaret(a.target);
+            // 1.12.17 : un tableau entier ne se met pas a 1, ne s'incremente pas ; une valeur seule ne va ni dans un tableau
+            // entier, ni n'en vient (Tableau := Autre_Tableau, du meme type, passe).
+            W writesWhat = a.operation == Operation::Toggle || a.operation == Operation::Set || a.operation == Operation::Reset ? W::Bool
+                         : a.operation == Operation::Increment || a.operation == Operation::Decrement                       ? W::Number
+                                                                                                                              : W::Any;
+            if (a.operation == Operation::Assign) {
+                const auto ctx = context(w.view);
+                expr(w, a.value, exprcheck::shapeOf(ctx, aimed).single ? W::Value : W::Any, "valeur ");
+                if (exprcheck::shapeOf(ctx, a.value).single) writesWhat = W::Value;
+            }
             if (a.operation == Operation::Increment || a.operation == Operation::Decrement) expr(w, a.value, W::Number, "pas ");
-            if (writes) target(w, received.empty() ? a.target : table::withoutCaret(a.target), "cible ");
+            if (writes) target(w, aimed, "cible ", writesWhat);
             if (a.operation == Operation::Log) text(w, a.value, "message ");
             if (operationTakesArguments(a.operation)) {
                 const View* opened = p.viewByName(trimmedCopy(a.target));
@@ -3768,7 +3779,8 @@ struct ExprWalker {
                 for (const char* key : valueExpressionKeys(o.kind))
                     if (const auto* prop = o.find(key); prop && prop->expr.empty()) {
                         const auto sample = sources::sampleOf(p, &v, prop->value, nullptr);   // 1.12.7 (lot E) : Profil[*].X
-                        expr(Where{&v, o.id, "Expression", key}, sample && !sample->empty() ? *sample : prop->value, W::Any);
+                        expr(Where{&v, o.id, "Expression", key}, sample && !sample->empty() ? *sample : prop->value, exprcheck::wantOf(o.kind, key), {},
+                             false);   // 1.12.17 : son role (la variable X d'un XY : un nombre)
                     }
                 // Ce que l'objet ecrit (un champ de saisie, une commande) : une variable qu'on peut ecrire.
                 if (kindWritesVariable(o.kind)) target(Where{&v, o.id, "Expression", "variable"}, o.text("variable"), "variable \xC3\xA9" "crite ");
@@ -3812,7 +3824,7 @@ struct ExprWalker {
         // courbes (sauf une courbe historique lue dans un fichier externe).
         if (!focus || focus->rest)
             for (const auto& archived : p.history.archived)
-                expr(Where{nullptr, kNoId, "Historique", archived}, archived, W::Any, "variable archiv\xC3\xA9" "e ");
+                expr(Where{nullptr, kNoId, "Historique", archived}, archived, W::Number, "variable archiv\xC3\xA9" "e ", false);   // 1.12.17 : un nombre
         for (const auto& v : p.views)
             for (const auto& o : v.objects) {
                 if (o.kind != Kind::Trend || !animOn(v.id)) continue;
@@ -3822,7 +3834,29 @@ struct ExprWalker {
                     if (!conds[i].empty() && !sources::hasJoker(conds[i]))
                         expr(Where{&v, o.id, "Courbe", "penVisible"}, conds[i], W::Bool, "plume " + std::to_string(i + 1) + ", visible si ");
                 if (o.text("mode").rfind("historique", 0) == 0 && !o.text("source").empty()) continue;
-                for (const auto& pen : checkedPens(p, &v, o.text("variables"))) expr(Where{&v, o.id, "Courbe", "variables"}, pen, W::Any, "plume ");
+                // 1.12.17 : une plume se trace - un nombre (TABLEAU entier : une erreur ; un texte : un avertissement).
+                for (const auto& pen : checkedPens(p, &v, o.text("variables"))) expr(Where{&v, o.id, "Courbe", "variables"}, pen, W::Number, "plume ", false);
+            }
+        // 1.12.17 : les mesures des graphiques (barres, secteurs, radar, XY), les lignes d'un chronogramme, les
+        // consignes d'un radar - chacune une valeur seule : un element, pas un tableau entier (un joker [*] se lit
+        // sur son premier element ; une source inconnue est dite par Generer).
+        for (const auto& v : p.views)
+            for (const auto& o : v.objects) {
+                const bool chart = o.kind == Kind::BarChart || o.kind == Kind::PieChart || o.kind == Kind::RadarChart || o.kind == Kind::XYChart
+                                || o.kind == Kind::StateChart;
+                if (!chart || !animOn(v.id)) continue;
+                const std::string label(kindLabel(o.kind));
+                const auto items = [&](const char* key, W want, const std::string& prefix) {
+                    for (const auto& it : chartItems(o, key)) {
+                        std::string why;
+                        const auto sample = sources::sampleOf(p, &v, it.expression, &why);
+                        if (sample && (!why.empty() || sample->empty())) continue;
+                        expr(Where{&v, o.id, label, key}, sample ? *sample : it.expression, want, prefix, false);
+                    }
+                };
+                items("variables", o.kind == Kind::StateChart ? W::Value : W::Number,
+                      o.kind == Kind::StateChart ? "ligne " : o.kind == Kind::XYChart ? "courbe (Y) " : "mesure ");
+                if (o.kind == Kind::RadarChart) items("references", W::Number, "consigne ");
             }
         finitions();     // ---- Lot API 8 : finitions (les formats d'unites, les symboles hors des vues) ----
     }
@@ -3873,21 +3907,42 @@ struct ExprWalker {
         // ---- Lot API 8 : corrections des captures ---- le texte-expression du lot 11.
         for (const char* key : valueExpressionKeys(o.kind))
             if (const auto* prop = o.find(key); prop && prop->expr.empty())
-                s.push_back(Site{"Expression", key, sampled(prop->value), W::Any, false, false, {}});
+                s.push_back(Site{"Expression", key, sampled(prop->value), exprcheck::wantOf(o.kind, key), false, false, {}, false});   // 1.12.17 : son role
         if (kindWritesVariable(o.kind)) s.push_back(Site{"Expression", "variable", o.text("variable"), W::Any, false, true, "variable \xC3\xA9" "crite "});
         if (o.kind == Kind::Trend)
             for (const auto& pen : splitPens(o.text("variables")))
                 if (!sources::memberBase(pen) && !sources::folderOf(pen))   // Pompe.*, Ligne/* : verifies avec le projet (checkedPens)
-                    s.push_back(Site{"Courbe", "variables", sampled(pen), W::Any, false, false, "plume "});   // 1.12.7 : le joker
+                    s.push_back(Site{"Courbe", "variables", sampled(pen), W::Number, false, false, "plume ", false});   // 1.12.7 : le joker ; 1.12.17 : un nombre
+        // 1.12.17 : les mesures d'un graphique, les lignes d'un chronogramme, les consignes d'un radar - des valeurs seules.
+        if (o.kind == Kind::BarChart || o.kind == Kind::PieChart || o.kind == Kind::RadarChart || o.kind == Kind::XYChart || o.kind == Kind::StateChart) {
+            const std::string label(kindLabel(o.kind));
+            for (const char* key : {"variables", "references"}) {
+                if (std::string_view(key) == "references" && o.kind != Kind::RadarChart) continue;
+                for (const auto& it : chartItems(o, key))
+                    if (!sources::memberBase(it.expression) && !sources::folderOf(it.expression))
+                        s.push_back(Site{label, key, sampled(it.expression), o.kind == Kind::StateChart ? W::Value : W::Number, false, false,
+                                         std::string_view(key) == "references" ? "consigne " : "mesure ", false});
+            }
+        }
         for (std::size_t i = 0; i < o.actions.size(); ++i) {
             const auto& a = o.actions[i];
             const std::string label = actionLabel(i, a);
             const auto names = receivedBy(p, &o, a);   // 1.12.13 : un geste sur un tableau
             s.push_back(Site{"Action", label, a.guard, W::Bool, false, false, "condition ", true, names});
-            if (a.operation == Operation::Assign) s.push_back(Site{"Action", label, a.value, W::Any, false, false, "valeur ", true, names});
             const bool writes = a.operation == Operation::Toggle || a.operation == Operation::Set || a.operation == Operation::Reset
                              || a.operation == Operation::Increment || a.operation == Operation::Decrement || a.operation == Operation::Assign;
-            if (writes) s.push_back(Site{"Action", label, names.empty() ? a.target : table::withoutCaret(a.target), W::Any, false, true, "cible ", true, names});
+            const std::string aimed = names.empty() ? a.target : table::withoutCaret(a.target);
+            // 1.12.17 : ce qu'on ecrit dans la cible (un booleen, un nombre, une valeur seule) - un tableau entier ne le recoit
+            // pas ; une valeur seule n'en vient pas (comme le parcours de Generer, plus haut).
+            W writesWhat = a.operation == Operation::Toggle || a.operation == Operation::Set || a.operation == Operation::Reset ? W::Bool
+                         : a.operation == Operation::Increment || a.operation == Operation::Decrement                       ? W::Number
+                                                                                                                              : W::Any;
+            if (a.operation == Operation::Assign) {
+                const auto ctx = context(view);
+                s.push_back(Site{"Action", label, a.value, exprcheck::shapeOf(ctx, aimed).single ? W::Value : W::Any, false, false, "valeur ", true, names});
+                if (exprcheck::shapeOf(ctx, a.value).single) writesWhat = W::Value;
+            }
+            if (writes) s.push_back(Site{"Action", label, aimed, writesWhat, false, true, "cible ", true, names});
         }
         return s;
     }
@@ -3903,7 +3958,7 @@ struct ExprWalker {
             auto ctx = context(&in);
             if (!s.received.empty())   // 1.12.13 : les parametres d'un geste sur un tableau
                 ctx.known = [names = s.received, base = ctx.known](std::string_view root) { return names.count(upperText(root)) != 0 || !base || base(root); };
-            for (auto& pb : s.write ? exprcheck::checkTarget(ctx, t) : exprcheck::check(ctx, t, want, s.strict))
+            for (auto& pb : s.write ? exprcheck::checkTarget(ctx, t, want) : exprcheck::check(ctx, t, want, s.strict))
                 found.emplace_back(shown.empty() ? t : shown, std::move(pb));
         };
         if (s.templ) {
@@ -4186,14 +4241,10 @@ namespace {
 //  valeur tapee sans = qui ressemble a une variable.
 //  TOUT EST AVERTISSEMENT : ces constats sont nouveaux, et un projet qui demarrait en
 //  1.12.5 demarre toujours. En marche, la valeur qui ne se lit pas montre ### et dit
-//  pourquoi (roles::adapt) ; Generer l'a dit avant.
+//  pourquoi (roles::adapt) ; Generer l'a dit avant. 1.12.17 : sauf un tableau, une liste,
+//  une MAP, une structure ENTIERS la ou une valeur seule est attendue - une erreur (rien
+//  ne s'y lirait jamais).
 // =============================================================================
-std::string upperOfName(std::string_view s) {
-    std::string u(s);
-    for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    return u;
-}
-
 void roleChecks(const Project& p, std::vector<Issue>& out) {
     using S = Issue::Severity;
     using R = roles::Role;
@@ -4204,29 +4255,20 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
             const auto checkVariable = [&](const std::string& key, const std::string& var, R role) {
                 const std::string type = params::expressionType(p, &v, var);
                 if (type.empty()) return;                     // un calcul, un nom inconnu (deja dit ailleurs)
-                const std::string up = upperOfName(type);
                 const sim::Type st = typereg::simTypeOf(type);
                 const HmiType* en = findEnumeration(p, type);
-                const auto members = types::membersOf(p, type);
-                types::Spec spec;
-                std::string aggregate, choose;
-                if (up.rfind("LIST", 0) == 0 || up.rfind("VECTOR", 0) == 0 || up.rfind("SET ", 0) == 0 || up.rfind("RING[", 0) == 0 || up.rfind("RING [", 0) == 0) {   // 1.12.7
-                    aggregate = "une liste";
-                    choose = var + "[0] ou " + var + ".Count";
-                }
-                else if (up.rfind("MAP", 0) == 0) { aggregate = "une MAP"; choose = var + "['cl\xC3\xA9'] ou " + var + ".Count"; }
-                else if (up.rfind("TUPLE", 0) == 0) { aggregate = "un tuple"; choose = var + ".Item1"; }
-                else if (!members.empty()) {
-                    aggregate = "une structure";
-                    for (std::size_t k = 0; k < members.size() && k < 3; ++k) choose += (k ? ", " : "") + var + "." + members[k].name;
-                } else if (types::parseSpec(type, spec) && spec.array()) {
-                    aggregate = "un tableau";
-                    choose = var + "[" + std::to_string(spec.low[0]) + "]";
-                }
-                if (!aggregate.empty()) {
-                    if (role != R::Text)
-                        add(out, S::Warning, "Objet", v.id, o.id, key,
-                            var + " (" + type + ") est " + aggregate + " : l'objet attend une valeur seule - choisis " + choose);
+                // 1.12.17 : un tableau, une liste, une MAP, une structure ENTIERS (TABLEAU, pas TABLEAU[0]) - l'objet n'y lirait
+                // rien : une erreur (avant : un avertissement).
+                // Un objet qui ECRIT sa variable (un champ de saisie, un programmateur, une commande) : jamais dans un
+                // tableau entier (en marche : ecriture refusee).
+                if (const auto whole = types::wholeOf(&p, type, var); !whole.empty()) {
+                    const bool writes = key == "variable" && (kindWritesVariable(o.kind) || o.kind == Kind::InputField);
+                    if (writes)
+                        add(out, S::Error, "Objet", v.id, o.id, key,
+                            var + " est " + whole.entire + " (" + type + ") : l'objet y \xC3\xA9" "crit une valeur seule - vise " + whole.pick);
+                    else if (role != R::Text)
+                        add(out, S::Error, "Objet", v.id, o.id, key,
+                            var + " est " + whole.entire + " (" + type + ") : l'objet attend une valeur seule - choisis " + whole.pick);
                     return;
                 }
                 switch (role) {
@@ -4272,8 +4314,10 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
                 const std::string var = trimmedCopy(markers::strip(pr->value));
                 if (var.empty()) continue;
                 // la variable d'un objet qui ne montre rien (un texte, un rectangle) : quelconque
-                if (std::string_view(key) == "variable" && roles::valueRole(o.kind) == R::Text && o.kind != Kind::WeeklySchedule) continue;
-                if (o.kind == Kind::InputField && std::string_view(key) == "variable") continue;     // il convertit ce qui est tape
+                if (std::string_view(key) == "variable" && roles::valueRole(o.kind) == R::Text && o.kind != Kind::WeeklySchedule
+                    && o.kind != Kind::InputField)
+                    continue;
+                // un champ de saisie convertit ce qui est tape (role Text : seul un tableau entier y est dit, 1.12.17)
                 checkVariable(key, var, roles::valueRoleOf(o.kind, key));
             }
             // ---- 2. les listes paralleles : un nom, une couleur, une unite, un format par element

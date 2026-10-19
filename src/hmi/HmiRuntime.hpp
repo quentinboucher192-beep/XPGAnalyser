@@ -48,6 +48,7 @@
 #include "HmiScript.hpp"
 #include "HmiSignature.hpp"
 #include "HmiPerf.hpp"                 // lot 13 : les performances
+#include "HmiPerfHistory.hpp"          // 1.12.17 : les performances dans le temps, les lenteurs
 #include "HmiDisplay.hpp"              // lot 13 : l'affichage
 #include "HmiTypes.hpp"                // lot 16 : structures et tableaux
 #include "HmiMedia.hpp"                // lot 16 : les GIF animes
@@ -1321,6 +1322,17 @@ public:
     [[nodiscard]] const PerfStats& perf() const noexcept { return perf_; }
     void resetPerf();
     void notePerf(double evaluateMs, double paintMs, std::size_t expressions, std::size_t objects);
+    // ---- 1.12.17 : les performances dans le temps, les lenteurs (HmiPerfHistory.hpp) ----------
+    //  Une mesure par seconde (repart a chaque lancement ; Remettre a zero aussi) ; les
+    //  lenteurs, les 500 dernieres, gardees d'une marche a l'autre jusqu'a Vider (ou la fin du
+    //  moteur : la fermeture du projet). Les seuils : SlowRules (le journal les regle).
+    [[nodiscard]] const PerfHistory& perfHistory() const noexcept { return perfHistory_; }
+    [[nodiscard]] double             runNow() const noexcept { return now_; }   // l'heure de marche (s)
+    [[nodiscard]] const SlowLog&     slowLog() const noexcept { return slowLog_; }
+    [[nodiscard]] const SlowRules&   slowRules() const noexcept { return slowRules_; }
+    void setSlowRules(const SlowRules& rules) { slowRules_ = rules; }
+    void clearSlowLog() { slowLog_.clear(); }
+    void resetPerfHistory();
 
     // ---- lot 13 : la langue (HmiLanguages.hpp) ------------------------------------------
     //  SYS.Language : la langue que lit l'operateur - celle du demarrage
@@ -1844,6 +1856,41 @@ private:
     bool                                            signKeyboard_{false};
     std::string                                     lastSignature_;
     PerfStats                                       perf_;              // lot 13 : les performances
+    // ---- 1.12.17 : les performances dans le temps, les lenteurs ----
+    PerfHistory                                     perfHistory_;
+    SlowLog                                         slowLog_;
+    SlowRules                                       slowRules_;
+    UsualTimes                                      usual_;             // le temps habituel de chaque poste
+    struct SlowFrame {
+        SlowKind                              kind{SlowKind::Action};
+        std::string                           key, what, where;
+        Id                                    view{kNoId}, object{kNoId}, script{kNoId};
+        std::int64_t                          t0{0};      // steady_clock, en nanosecondes
+        std::vector<SlowPart>                 parts;
+    };
+    std::vector<SlowFrame>                          slowStack_;         // ce qui tourne, l'un dans l'autre
+    std::vector<SlowPart>                           cycleParts_;        // les postes du cycle en cours
+    bool                                            inCycle_{false};
+    double                                          exchangeSampled_{-1};
+    std::map<std::string, std::uint64_t>            exchangeRequests_;  // par equipement : ses requetes deja vues
+    std::string                                     gestureVerb_;       // "Clic sur", "Saisie de"...
+    void slowBegin(SlowKind kind, std::string key, std::string what, std::string where, Id view = kNoId, Id object = kNoId,
+                   Id script = kNoId);
+    void slowEnd();
+    void slowNote(SlowEntry e);
+    void cyclePost(const std::string& key, const std::string& label, double ms);
+    void sampleExchanges(double now);
+    struct SlowGuard {
+        Runtime& rt;
+        SlowGuard(Runtime& r, SlowKind kind, std::string key, std::string what, std::string where, Id view = kNoId, Id object = kNoId,
+                  Id script = kNoId)
+            : rt(r) {
+            rt.slowBegin(kind, std::move(key), std::move(what), std::move(where), view, object, script);
+        }
+        ~SlowGuard() { rt.slowEnd(); }
+        SlowGuard(const SlowGuard&) = delete;
+        SlowGuard& operator=(const SlowGuard&) = delete;
+    };
     std::string                                     language_;          // lot 13 : SYS.Language
     std::size_t                                     languageChanges_{0};
     void resetDisplay();                                                // lot 13 : la langue, l'affichage du projet
@@ -1856,7 +1903,8 @@ private:
     double                                          badgeLast_{-1};
     struct GestureGuard {
         Runtime& rt;
-        GestureGuard(Runtime& r, std::string where) : rt(r) { rt.beginGesture(std::move(where)); }
+        // 1.12.17 : `verb` dit le geste pour le journal des lenteurs ("Clic sur", "Saisie de") ; nul : "Action sur".
+        GestureGuard(Runtime& r, std::string where, const char* verb = nullptr) : rt(r) { rt.beginGesture(std::move(where), verb); }
         ~GestureGuard() { rt.endGesture(); }
         GestureGuard(const GestureGuard&) = delete;
         GestureGuard& operator=(const GestureGuard&) = delete;
@@ -1864,7 +1912,7 @@ private:
     std::vector<AuditEntry>&         auditList();
     std::vector<AccountState>&       accountList();
     const std::vector<AccountState>& accountList() const;
-    void beginGesture(std::string where);
+    void beginGesture(std::string where, const char* verb = nullptr);
     void endGesture();
     [[nodiscard]] bool auditingWrites() const noexcept;
     [[nodiscard]] bool auditingScriptWrites() const noexcept;   // 1.12.3

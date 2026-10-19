@@ -147,6 +147,10 @@ struct HmiSimulationHost {
     //  cochees « Remanente » y sont ecrites a chaque changement (regroupe : au plus une
     //  ecriture par seconde) et rendues au lancement suivant du poste.
     std::function<std::string()>                          retainFile;
+    // ---- 1.12.17 : LES PERFORMANCES DANS LE TEMPS ----
+    //  Le lien « Dans le temps > » de l'onglet Performances : l'hote montre la Vue
+    //  d'ensemble de Simulation a ce bloc ("performances"). Nul : pas de lien.
+    std::function<void(const std::string& where)>         goSimCenter;
 };
 
 // Une vue a dessiner : evaluee, avec l'etat de sa transition.

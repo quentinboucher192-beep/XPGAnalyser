@@ -34,7 +34,11 @@ namespace hmi::apivars { class Model; }   // 1.11.1 (API-M) : HmiApiVars.hpp
 namespace hmi::exprcheck {
 
 // Ce que la propriete attend de son expression.
-enum class Want : std::uint8_t { Any, Bool, Number, Text, Color };
+// 1.12.17 : Value - une valeur seule, de n'importe quel type (une variable archivee, la ligne d'un
+// chronogramme, la valeur affectee a une variable simple) : ni un tableau, ni une liste, ni une MAP, ni une
+// structure entiers. Bool, Number et Color en exigent une aussi ; Text et Any non (un texte montre un
+// tableau entier : [1, 2, 3]).
+enum class Want : std::uint8_t { Any, Bool, Number, Text, Color, Value };
 
 // Les chemins de l'AUTOMATE (tranche 2) : un membre qui n'existe pas, un indice
 // constant hors des bornes d'un tableau. Fournis par qui a le projet automate ;
@@ -78,8 +82,19 @@ struct Problem {
 // signalee par Expression::compile). `strict` faux (1.12.6) : un type qui ne convient pas a
 // `want` est un avertissement, pas une erreur (voir strictType).
 [[nodiscard]] std::vector<Problem> check(const Context&, std::string_view source, Want want = Want::Any, bool strict = true);
-// La cible d'une ecriture : une variable qu'on peut ecrire.
-[[nodiscard]] std::vector<Problem> checkTarget(const Context&, std::string_view target);
+// La cible d'une ecriture : une variable qu'on peut ecrire. 1.12.17 : `writes` - ce qu'on y ecrit (Bool :
+// mettre a 1, basculer ; Number : incrementer ; Value : une valeur seule) ; un tableau, une liste, une
+// structure entiers ne le recoivent pas. Any : pas de controle.
+[[nodiscard]] std::vector<Problem> checkTarget(const Context&, std::string_view target, Want writes = Want::Any);
+// 1.12.17 : CE QUE DONNE UNE EXPRESSION - une valeur seule d'un type connu (`single`), ou un conteneur, une
+// structure entiers (`whole`, et leur type) ; rien de connu : ni l'un ni l'autre.
+struct Shape {
+    bool        single{false};
+    std::string type;          // le type ecrit d'un conteneur ou d'une structure entiers
+    std::string what, entire, pick;   // types::Whole
+    [[nodiscard]] bool whole() const noexcept { return !what.empty(); }
+};
+[[nodiscard]] Shape shapeOf(const Context&, std::string_view source);
 // Les expressions d'un texte a trous ("Vitesse : {Vitesse:0.0} km/h" -> Vitesse).
 [[nodiscard]] std::vector<std::string> templateExpressions(std::string_view text);
 // Ce que la propriete `key` attend (visible : Bool, fill : Color, x : Number).

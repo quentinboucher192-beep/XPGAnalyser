@@ -3733,6 +3733,25 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // hmi.zoomIn, hmi.zoomOut, hmi.zoomFit, hmi.zoom100) : simulation-barre <commande> ;
     // le zoom de la vue en cours : simulation-zoom <pourcent>|ajuster ; le deplacement
     // d'une vue qui depasse : simulation-deplacer <dx> <dy> (en pixels de l'ecran).
+    // 1.12.17 : un onglet du panneau de droite de Simulation . IHM, par son titre
+    // (simulation-onglet "Performances") ; simulation-dans-le-temps : un clic sur le lien
+    // « Dans le temps > » de l'onglet Performances (la Vue d'ensemble, a ce bloc).
+    if (cmd == "simulation-onglet" || cmd == "simulation-dans-le-temps") {
+        auto* pane = dynamic_cast<HmiSimulationPane*>(currentPage());
+        if (!pane) { fail(cmd + " : ouvre d'abord Simulation \xC2\xB7 IHM"); return Step::Next; }
+        auto& tabs = pane->tabs();
+        const std::string want = cmd == "simulation-onglet" ? lower(arg(1)) : std::string("performances");
+        for (std::size_t i = 0; i < tabs.tabCount(); ++i)
+            if (const auto* t = tabs.tab(i); t && lower(t->title) == want && !tabs.tabHidden(i)) {
+                tabs.setCurrentIndex(i);
+                if (cmd == "simulation-dans-le-temps")
+                    if (auto* link = dynamic_cast<ui::Button*>(pane->findById(tabs.page(i)->id() + ".temps")); link) link->clicked->emit();
+                pane->refreshNow();
+                return Step::Yield;
+            }
+        fail(cmd + " : pas d'onglet " + arg(1));
+        return Step::Next;
+    }
     if (cmd == "simulation-barre" || cmd == "simulation-zoom" || cmd == "simulation-deplacer") {
         auto* pane = dynamic_cast<HmiSimulationPane*>(currentPage());
         if (!pane) { fail(cmd + " : ouvre d'abord Simulation \xC2\xB7 IHM"); return Step::Next; }

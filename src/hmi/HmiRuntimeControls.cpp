@@ -330,7 +330,7 @@ void Runtime::holdTick(double now) {
     st.holdFired = true;
     longFired_ = true;           // le relachement ne sera pas un clic
     const View snapshot = *v;
-    GestureGuard gesture(*this, where(snapshot, snapshot.object(pressed_)));      // lot 13 : l'audit
+    GestureGuard gesture(*this, where(snapshot, snapshot.object(pressed_)), "Appui maintenu sur");      // lot 13 : l'audit
     // Lot 13 : l'appui maintenu a confirme ; la signature vient ensuite.
     if (signatureNeeded(snapshot, *snapshot.object(pressed_))) {
         requestSignature(snapshot, *snapshot.object(pressed_), SignatureRequest::Gesture::Click, now);
@@ -543,7 +543,7 @@ void Runtime::dragValue(Id object, double fraction, bool commit, double now) {
     if (!o || (o->kind != Kind::Slider && o->kind != Kind::Knob)) return;
     const View snapshot = *v;
     const Object& obj = *snapshot.object(object);
-    GestureGuard gesture(*this, where(snapshot, &obj));         // lot 13 : l'audit
+    GestureGuard gesture(*this, where(snapshot, &obj), "R\xC3\xA9glage de");         // lot 13 : l'audit
     auto& st = controls_[object];
     double mn = 0, mx = 100, step = 1;
     {

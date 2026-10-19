@@ -109,14 +109,33 @@ void Runtime::recordAudit(std::string kind, std::string source, std::string targ
     audit(std::move(kind), std::move(source), std::move(target), std::move(before), std::move(after), std::move(reason));
 }
 
-void Runtime::beginGesture(std::string where) {
-    if (gesture_++ == 0) gestureWhere_ = std::move(where);
+void Runtime::beginGesture(std::string where, const char* verb) {
+    if (gesture_++ != 0) return;
+    gestureWhere_ = std::move(where);
+    // 1.12.17 : le geste se mesure (le journal des lenteurs). "Vue_Four/Btn_Regler" : Clic sur
+    // Btn_Regler, a Vue_Four ; "Operateur" (un geste sans objet) : Action : Operateur.
+    const auto slash = gestureWhere_.find('/');
+    std::string view = slash == std::string::npos ? gestureWhere_ : gestureWhere_.substr(0, slash);
+    std::string object = slash == std::string::npos ? std::string{} : gestureWhere_.substr(slash + 1);
+    if (const auto paren = view.find(" ("); paren != std::string::npos) view.resize(paren);
+    if (const auto paren = object.find(" ("); paren != std::string::npos) object.resize(paren);
+    gestureVerb_ = verb ? verb : (object.empty() ? "Action :" : "Action sur");
+    Id viewId = kNoId, objectId = kNoId;
+    if (project_)
+        if (const auto* v = project_->viewByName(view)) {
+            viewId = v->id;
+            for (const auto& o : v->objects)
+                if (!object.empty() && o.name == object) objectId = o.id;
+        }
+    const std::string what = gestureVerb_ + " " + (object.empty() ? view : object);
+    slowBegin(SlowKind::Action, "geste:" + gestureVerb_ + "|" + gestureWhere_, what, viewId != kNoId ? view : std::string("IHM"), viewId, objectId);
 }
 
 void Runtime::endGesture() {
-    if (--gesture_ <= 0) {
-        gesture_ = 0;
+    if (gesture_ <= 0) return;                 // sans geste ouvert : rien a fermer
+    if (--gesture_ == 0) {
         gestureWhere_.clear();
+        slowEnd();                             // 1.12.17 : le cadre du geste
     }
 }
 
@@ -761,6 +780,7 @@ void Runtime::resetPerf() {
 }
 
 void Runtime::notePerf(double evaluateMs, double paintMs, std::size_t expressions, std::size_t objects) {
+    perfHistory_.screen(paintMs, evaluateMs, expressions);   // 1.12.17 : dans le temps
     if (evaluateMs >= 0) perf_.evaluate.add(evaluateMs);
     if (paintMs >= 0) perf_.paint.add(paintMs);
     perf_.expressions = expressions;

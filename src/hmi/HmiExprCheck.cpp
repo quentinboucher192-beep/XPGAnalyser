@@ -195,6 +195,9 @@ struct Val {
     std::string str;
     std::string show;               // ce qu'on montre dans un message
     std::vector<std::string> choices;   // les textes constants qu'elle peut valoir (un litteral, un SEL)
+    // 1.12.17 : un tableau, une liste, une MAP, une structure lus entiers (TABLEAU, pas TABLEAU[0]) : ce que
+    // c'est (types::Whole) et leur type ecrit ; vide : une valeur seule, ou rien de connu.
+    std::string whole, entire, pick, wholeType;
 };
 
 // Les fonctions standard : nombre d'arguments (min, max ; -1 : sans limite).
@@ -297,7 +300,35 @@ private:
 
     static bool textish(const Val& v) { return v.type == T::Text; }
 
+    // 1.12.17 : le type d'un nom lu - une valeur seule (T), ou un conteneur, une structure entiers.
+    void typed(Val& v, const std::string& type) {
+        v.type = typeOfName(type);
+        if (v.type != T::Unknown) return;
+        const auto w = types::wholeOf(ctx_.project, type, v.show);
+        v.whole = w.what;
+        v.entire = w.entire;
+        v.pick = w.pick;
+        v.wholeType = trimmed(type);
+    }
+    // ... une structure de l'automate (un DDT) : ses membres seuls se lisent.
+    void typedPlc(Val& v, const std::string& type) {
+        typed(v, type);
+        if (v.whole.empty() && v.type == T::Unknown && ctx_.plc.isStruct && ctx_.plc.isStruct(type)) {
+            v.whole = "une structure";
+            v.entire = "une structure enti\xC3\xA8re";
+            v.pick = "un membre : " + v.show + ".<membre>";
+            v.wholeType = trimmed(type);
+        }
+    }
+    // Un conteneur, une structure entiers ne se calculent, ne se comparent, ni ne se combinent.
+    void wholeIn(const Val& a, const std::string& how) {
+        if (a.whole.empty()) return;
+        problem(a.show + " est " + a.entire + " (" + a.wholeType + ") : " + how + " - choisis " + a.pick);
+    }
+
     Val combine(const Val& a, const Val& b, const std::string& op) {
+        wholeIn(a, "il ne se combine pas avec " + op);       // 1.12.17
+        wholeIn(b, "il ne se combine pas avec " + op);
         if (textish(a) || textish(b)) {
             const Val& t = textish(a) ? a : b;
             problem("un texte ne se combine pas avec " + op + " (" + t.show + ") : compare-le d'abord (" + t.show
@@ -331,6 +362,11 @@ private:
         while (isOp("=") || isOp("<>") || isOp("<") || isOp(">") || isOp("<=") || isOp(">=")) {
             const std::string op = next().text;
             const Val b = addExpr();
+            // 1.12.17 : un tableau, une liste, une structure entiers ne se comparent qu'a un autre (=, <>).
+            if (a.whole.empty() != b.whole.empty() || (!a.whole.empty() && op != "=" && op != "<>")) {
+                wholeIn(a, "il ne se compare pas (" + op + ") \xC3\xA0 une valeur");
+                wholeIn(b, "il ne se compare pas (" + op + ") \xC3\xA0 une valeur");
+            }
             // Le simulateur compare tout, mais un texte et un nombre ne sont jamais
             // egaux : la condition serait toujours fausse (ou toujours vraie).
             const bool clash = (a.type == T::Text && (b.type == T::Num || b.type == T::Bool))
@@ -352,6 +388,8 @@ private:
     Val arith(const Val& a, const Val& b, const std::string& op) {
         Val r;
         r.show = a.show + " " + op + " " + b.show;
+        wholeIn(a, "il ne se calcule pas (" + op + ")");    // 1.12.17
+        wholeIn(b, "il ne se calcule pas (" + op + ")");
         // '+' met des textes bout a bout (le simulateur le fait) ; le reste non.
         if (op == "+" && (textish(a) || textish(b))) {
             r.type = T::Text;
@@ -406,6 +444,8 @@ private:
             next();
             Val a = unary();
             if (textish(a)) problem("NOT ne s'applique pas \xC3\xA0 un texte (" + a.show + ") : compare-le d'abord (" + a.show + " = 'Marche')");
+            wholeIn(a, "NOT ne s'y applique pas");             // 1.12.17
+            a.whole.clear();
             a.show = "NOT " + a.show;
             a.numKnown = false;
             if (a.type != T::Bool && a.type != T::Num) a.type = T::Unknown;
@@ -415,6 +455,8 @@ private:
             const std::string op = next().text;
             Val a = unary();
             if (textish(a)) problem("un texte n'a pas de signe (" + op + a.show + ") : convertis-le (STRING_TO_REAL)");
+            wholeIn(a, "il n'a pas de signe");                 // 1.12.17
+            a.whole.clear();
             if (a.numKnown && op == "-") a.num = -a.num;
             a.show = op + a.show;
             return a;
@@ -595,8 +637,8 @@ private:
         v.show = text;
         const Project* p = ctx_.project;
         if (const Variable* var = p ? p->variable(root) : nullptr) {
-            if (text == root) v.type = typeOfName(var->type);
-            else if (const auto ty = types::typeOfPath(*p, text); !ty.empty()) v.type = typeOfName(ty);
+            if (text == root) typed(v, var->type);
+            else if (const auto ty = types::typeOfPath(*p, text); !ty.empty()) typed(v, ty);
             return v;
         }
         // 1.9 : un parametre type de la vue - Moteur.Vitesse est REAL d'apres T_Moteur.
@@ -610,7 +652,7 @@ private:
                     where = owner;
                 }
             if (prm && !prm->type.empty()) {
-                if (const auto ty = params::expressionType(*p, where, text); !ty.empty()) v.type = typeOfName(ty);
+                if (const auto ty = params::expressionType(*p, where, text); !ty.empty()) typed(v, ty);
                 return v;
             }
         }
@@ -635,7 +677,7 @@ private:
                 }
             }
             if (c) {
-                if (const std::string t = viewmembers::typeAlong(*p, c->type, rest); !t.empty()) v.type = typeOfName(t);
+                if (const std::string t = viewmembers::typeAlong(*p, c->type, rest); !t.empty()) typed(v, t);
                 return v;
             }
         }
@@ -665,7 +707,7 @@ private:
                 problems.push_back(std::move(pb));
                 return v;
             }
-            v.type = typeOfName(r.type);
+            typedPlc(v, r.type);
             return v;
         }
         // 1.11.1 (remarque d'API-V) : API seul, API[...], ou API. en cours de frappe,
@@ -682,7 +724,7 @@ private:
         if (p && p->generalScript(root) && !segs.empty() && !segs.front().index) {
             std::string why;
             if (const Declaration* q = calc::qualified(*p, root + "." + segs.front().member, nullptr, &why)) {
-                if (segs.size() == 1) v.type = typeOfName(q->type);
+                if (segs.size() == 1) typed(v, q->type);
                 return v;
             }
             Problem pb;
@@ -715,7 +757,7 @@ private:
                                 && popupOwner(*ctx_.project, *ctx_.view)->param(root);
         if (ctx_.plc.rootType && !(ctx_.view && ctx_.view->param(root)) && !ownerParam) {
             const std::string end = plcPath(root, segs);
-            if (!end.empty()) v.type = typeOfName(end);
+            if (!end.empty()) typedPlc(v, end);
         }
         return v;
     }
@@ -818,6 +860,15 @@ private:
         const int n = static_cast<int>(args.size());
         Val r;
         r.show = name + "(...)";
+        // 1.12.17 : les arguments [from, to) qui doivent etre des valeurs seules - pas un tableau entier.
+        const auto singleArgs = [&](std::size_t from, std::size_t to) {
+            for (std::size_t k = from; k < args.size() && k < to; ++k)
+                if (!args[k].whole.empty()) {
+                    problem(u + " attend une valeur seule, et " + args[k].show + " est " + args[k].entire + " (" + args[k].wholeType + ") - choisis "
+                            + args[k].pick);
+                    return;
+                }
+        };
         if (symFn) {
             userCall(name, siblingsOf(symFn), n, r);
             return r;
@@ -832,6 +883,7 @@ private:
                         + ", pas " + std::to_string(n));
             const auto* f = natives::function(u);
             r.type = f && f->returns == "STRING" ? T::Text : f && f->returns == "BOOL" ? T::Bool : T::Num;
+            singleArgs(0, args.size());                    // 1.12.17 : des nombres, des couleurs
             return r;
         }
         // 1.12.7 : les natives des conteneurs, de std::numeric et de <bit> : le dialecte les sert dans une
@@ -881,6 +933,7 @@ private:
             return r;
         }
         if (isStandardFunction(u)) {
+            singleArgs(0, u == "SEL" || u == "MUX" ? 1 : args.size());   // 1.12.17 : SEL et MUX choisissent parmi le reste
             const auto to = u.find("_TO_");
             if (to != std::string::npos && to > 0) {
                 if (n != 1) problem(u + " prend 1 argument, pas " + std::to_string(n) + " : " + u + "(valeur)");
@@ -944,6 +997,7 @@ private:
         // du dialecte et celles des types du projet, que le moteur sert (HmiExpr.cpp).
         if (ctx_.project && isConversion(*ctx_.project, u)) {
             if (n != 1) problem(u + " prend 1 argument, pas " + std::to_string(n) + " : " + u + "(valeur)");
+            singleArgs(0, args.size());                    // 1.12.17 : TO_STRING(Liste) ne se convertit pas
             r.type = typeOfName(u.substr(3));
             return r;
         }
@@ -1142,6 +1196,15 @@ std::vector<Problem> check(const Context& ctx, std::string_view written, Want wa
         for (const auto& p : out) if (p.message == m) return;
         out.push_back(Problem{std::move(m), {}, {}, !strict});
     };
+    // 1.12.17 : un tableau, une liste, une MAP, une structure ENTIERS la ou une valeur seule est attendue (une
+    // plume, la valeur d'une jauge, une condition, une couleur) : une erreur, toujours - rien ne s'y lirait.
+    if (!v.whole.empty() && want != Want::Any && want != Want::Text) {
+        const std::string expected = want == Want::Bool     ? "un bool\xC3\xA9" "en (vrai ou faux) est attendu"
+                                   : want == Want::Number   ? "un nombre est attendu"
+                                   : want == Want::Color    ? "une couleur est attendue"
+                                                            : "une valeur seule est attendue";
+        add(expected + ", et " + v.show + " est " + v.entire + " (" + v.wholeType + ") - choisis " + v.pick);
+    }
     switch (want) {
         case Want::Bool:
             if (v.type == T::Text)
@@ -1167,6 +1230,7 @@ std::vector<Problem> check(const Context& ctx, std::string_view written, Want wa
             break;
         case Want::Text:
         case Want::Any:
+        case Want::Value:
             break;
     }
     // Les membres et les indices constants des variables IHM composees.
@@ -1175,7 +1239,26 @@ std::vector<Problem> check(const Context& ctx, std::string_view written, Want wa
     return out;
 }
 
-std::vector<Problem> checkTarget(const Context& ctx, std::string_view target) {
+Shape shapeOf(const Context& ctx, std::string_view written) {
+    Shape s;
+    const std::string plain = templatesAsValues(ctx, markers::strip(written, markers::Mode::Expression));
+    if (trimmed(plain).empty()) return s;
+    Context quiet = ctx;
+    quiet.calls = false;                       // la forme seulement : les appels sont juges ailleurs
+    Checker c(quiet, lex(plain));
+    c.callsChecked = true;
+    const Val v = c.run();
+    s.single = v.type != T::Unknown;
+    if (!v.whole.empty()) {
+        s.type = v.wholeType;
+        s.what = v.whole;
+        s.entire = v.entire;
+        s.pick = v.pick;
+    }
+    return s;
+}
+
+std::vector<Problem> checkTarget(const Context& ctx, std::string_view target, Want writes) {
     std::vector<Problem> out;
     const std::string t = trimmed(markers::strip(target, markers::Mode::Expression));   // 1.11 (REP)
     if (t.empty()) return out;
@@ -1202,6 +1285,12 @@ std::vector<Problem> checkTarget(const Context& ctx, std::string_view target) {
         else if (r.ok && r.access == apivars::Access::ReadOnly)
             out.push_back(Problem{r.path + " est en lecture seule (" + r.accessWhy + ") : l'IHM ne peut pas l'\xC3\xA9" "crire", {}, {}});
     }
+    // 1.12.17 : mettre a 1, basculer, incrementer, ecrire une valeur seule - dans un element, pas dans un tableau entier.
+    if (writes != Want::Any)
+        if (const auto sh = shapeOf(ctx, t); sh.whole()) {
+            const char* what = writes == Want::Bool ? "un bool\xC3\xA9" "en" : writes == Want::Number ? "un nombre" : "une valeur seule";
+            out.push_back(Problem{t + " est " + sh.entire + " (" + sh.type + ") : on n'y \xC3\xA9" "crit pas " + what + " - vise " + sh.pick, {}, {}});
+        }
     for (auto& p : check(ctx, t, Want::Any)) out.push_back(std::move(p));
     return out;
 }
