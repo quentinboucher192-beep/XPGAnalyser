@@ -2319,7 +2319,81 @@ Example plcDiagnostic() {
     return m.done(6);
 }
 
+// ---- 1.12.16 : un sujet du guide, pas un objet -----------------------------------------------
+// Les constantes et les fonctions d'une vue (le sujet constantes-fonctions-vue). Seuil_Haut et Tiede s'ecrivent,
+// Rampe se calcule au demarrage (son code rend la valeur) ; Pourcent() et Couleur() (privee) s'appellent dans les fx
+// des objets ; « +15 °C » ecrit Consigne := Borne(Consigne + 15.0) - une fonction de la vue dans une action.
+Declaration memberConstant(Project& p, const char* name, const char* type, const char* value, const char* about) {
+    Declaration d;
+    d.id = p.allocate();
+    d.kind = DeclKind::Constant;
+    d.name = name;
+    d.type = type;
+    d.value = value;
+    d.description = about;
+    return d;
+}
+HmiFunction memberFunction(Project& p, const char* name, const char* returns, const char* body, const char* param, bool pub = true) {
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = name;
+    f.returnType = returns;
+    f.body = body;
+    f.visibility = pub ? Visibility::Public : Visibility::Private;
+    Declaration x;
+    x.id = p.allocate();
+    x.kind = DeclKind::Parameter;
+    x.name = param;
+    x.type = "REAL";
+    f.decls.push_back(std::move(x));
+    return f;
+}
+
+Example viewMembers() {
+    Maker m;
+    m.var("Temperature", "REAL", "20.0");
+    m.var("Consigne", "REAL", "45.0");
+    m.cyclic("Temperature := Temperature + (Consigne - Temperature) * 0.035;");
+    auto& p = m.project();
+    {
+        auto& v = m.view();
+        v.constants.push_back(memberConstant(p, "Seuil_Haut", "REAL", "80.0", "au-dela : rouge"));
+        v.constants.push_back(memberConstant(p, "Tiede", "REAL", "50.0", "au-dela : orange"));
+        Declaration rampe = memberConstant(p, "Rampe", "REAL", "", "calculee au demarrage");
+        rampe.computed = true;
+        rampe.calc = "RETURN Seuil_Haut / 20.0;\n";
+        v.constants.push_back(std::move(rampe));
+        v.functions.push_back(memberFunction(p, "Pourcent", "REAL", "RETURN LIMIT(0.0, t / Seuil_Haut * 100.0, 100.0);\n", "t"));
+        v.functions.push_back(memberFunction(p, "Couleur", "STRING",
+                                             "IF t >= Seuil_Haut THEN\n    RETURN '#E5534B';\nELSIF t >= Tiede THEN\n    RETURN '#F2994A';\nEND_IF;\n"
+                                             "RETURN '#4FA3FF';\n",
+                                             "t", false));
+        v.functions.push_back(memberFunction(p, "Borne", "REAL", "RETURN LIMIT(20.0, t, Seuil_Haut + 10.0);\n", "t"));
+    }
+    m.title("Titre", 20, 10, 560, "Four 1 : {Temperature:0.0} \xC2\xB0" "C (consigne {Consigne:0})", 18);
+    auto& bar = m.add(Kind::ProgressBar, "Charge", 20, 60, 360, 34);
+    bar.setExpr("value", "Pourcent(Temperature)");
+    bar.setExpr("fill", "Couleur(Temperature)");
+    m.title("Lecture", 20, 104, 360, "{Pourcent(Temperature):0} % du seuil haut ({Seuil_Haut:0} \xC2\xB0" "C) - rampe {Rampe:0.0}", 14);
+    auto& plus = m.add(Kind::Button, "Btn_Plus", 400, 56, 180, 44);
+    plus.set("text", "+15 \xC2\xB0" "C");
+    plus.actions.push_back(click(Operation::Assign, "Consigne", "Borne(Consigne + 15.0)"));
+    m.note("Explication", 20, 150, 560, 140,
+           "Seuil_Haut, Tiede : des constantes de la vue (sous-onglet Constantes) ; Rampe se calcule au d\xC3\xA9marrage, son "
+           "code rend la valeur. Pourcent(), Couleur() (priv\xC3\xA9" "e), Borne() : ses fonctions (sous-onglet Fonctions), "
+           "appel\xC3\xA9" "es par leur nom dans la vue - les fx de la barre, l'action du bouton -, par Vue.Nom ailleurs "
+           "(les publiques).");
+    m.step(2.0, "clic", "Btn_Plus");
+    m.step(6.0, "clic", "Btn_Plus");
+    return m.done(14);
+}
+
 } // namespace
+
+std::optional<Example> exampleForTopic(std::string_view key) {
+    if (key == "constantes-fonctions-vue") return viewMembers();
+    return std::nullopt;
+}
 
 std::optional<Example> exampleFor(Kind kind) {
     switch (kind) {

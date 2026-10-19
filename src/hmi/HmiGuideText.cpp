@@ -1546,6 +1546,7 @@ const std::vector<Topic>& topics() {
                          "demande sa permission : Piloter pour \xC3\xA9" "crire, Naviguer pour changer de "
                          "vue, Scripts pour un script, Acquitter (aussi pour mettre de c\xC3\xB4t\xC3\xA9 et "
                          "remettre en service), Recettes, Administrer pour ajouter une ressource.", {}},
+             {K::Paragraph, "1.12.16 : **Dupliquer\xE2\x80\xA6** fait N copies de l'action choisie (ou du raccourci), comme un symbole : la cible, la valeur, la condition suivent leurs indices (`V[0].CMD` \xE2\x86\x92 `V[1].CMD`\xE2\x80\xA6), la touche d'un raccourci suit son num\xC3\xA9ro (F2 \xE2\x86\x92 F3) ; le reste de l'action est recopi\xC3\xA9. Les copies s'ins\xC3\xA8rent apr\xC3\xA8s elle, en une commande (Ctrl+Z les retire).", {}, "1.12.16"},
          },
          {"objets", "popups", "scripts", "actions-ressources", "securite", "alarmes-objets", "production", "parametres-popups", "appliquer-copie"},
          {},
@@ -1958,6 +1959,50 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.9"},
+        // ---- Concevoir les vues / constantes-fonctions-vue (1.12.16)
+        {"constantes-fonctions-vue", "Les constantes et fonctions d'une vue", "Concevoir les vues",
+         "Une vue, une popup portent leurs propres constantes et leurs propres fonctions : par leur nom dans la vue (les fx "
+         "de ses objets, ses textes, ses scripts, ses actions), par Vue.Nom ailleurs quand elles sont publiques.",
+         {
+             {K::Heading, "O\xC3\xB9 les trouver", {}},
+             {K::Paragraph, "Ouvre la vue ou la popup : au-dessus du dessin, les sous-onglets **Dessin**, **Constantes** et "
+                         "**Fonctions**. Dans l'arbre, la vue les montre sous son nom, avec leur nombre.", {}},
+             {K::Heading, "Les constantes", {}},
+             {K::Bullet, "**Ajouter** : un nom, un type, une valeur. La case Valeur ouvre \xC2\xAB Valeur initiale\xE2\x80\xA6 \xC2\xBB : en **brut** "
+                         "(un \xC3\xA9" "diteur fait pour le type : une ligne par entr\xC3\xA9" "e d'une MAP, par \xC3\xA9l\xC3\xA9ment d'une liste, une fiche par "
+                         "structure) ou en **code** - `FUNCTION Init_<Nom> : <type>` est fixe, le code rend la valeur par "
+                         "`RETURN` ; des exemples faits du type, et le type expliqu\xC3\xA9 \xC3\xA0 droite.", {}},
+             {K::Bullet, "**Calcul\xC3\xA9" "e au d\xC3\xA9marrage** (d'office) ou **\xC3\xA0 chaque ouverture** de la vue (la case). Une constante "
+                         "d'une popup qui lit un de ses param\xC3\xA8tres se calcule d'office \xC3\xA0 chaque ouverture.", {}},
+             {K::Bullet, "Une constante ne s'\xC3\xA9" "crit pas : `Seuil_Haut := 2.0` est refus\xC3\xA9 par G\xC3\xA9n\xC3\xA9rer, \xC3\xA0 sa ligne.", {}},
+             {K::Heading, "Les fonctions", {}},
+             {K::Bullet, "**Nouvelle fonction** : son nom, son type de retour, ses param\xC3\xA8tres (la grille), son code ; elle "
+                         "rend sa valeur par `RETURN`. Elle lit les constantes de la vue par leur nom.", {}},
+             {K::Bullet, "**Port\xC3\xA9" "e** : publique (d'office), elle s'appelle d'ailleurs par `Vue_Four.Pourcent(T)` ; priv\xC3\xA9" "e, "
+                         "seulement dans la vue. Les constantes ont la m\xC3\xAAme case.", {}},
+             {K::Heading, "Les employer", {}},
+             {K::Paragraph, "Dans la vue, par leur nom : une fx `=Pourcent(Temperature)`, un texte `{Seuil_Haut:0} \xC2\xB0" "C`, un "
+                         "script, une action `Consigne := Borne(Consigne + 15.0)`, une autre fonction. Ailleurs : "
+                         "`Vue_Four.Seuil_Haut`, `Vue_Four.Pourcent(...)` - les publiques seulement.", {}},
+             {K::Bullet, "L'**aide \xC3\xA0 la saisie** les propose : par leur nom dans la vue (les priv\xC3\xA9" "es aussi), apr\xC3\xA8s `Vue_Four.` "
+                         "ailleurs ; la bulle de signature de `Pourcent(` et l'infobulle disent leur type et d'o\xC3\xB9 elles "
+                         "viennent.", {}},
+             {K::Bullet, "**G\xC3\xA9n\xC3\xA9rer** refuse une priv\xC3\xA9" "e lue d'ailleurs, une constante \xC3\xA9" "crite, un nom d\xC3\xA9j\xC3\xA0 pris dans la vue (un "
+                         "objet, un param\xC3\xA8tre), une constante du d\xC3\xA9marrage qui lit une de l'ouverture - chacun \xC3\xA0 sa ligne.", {}},
+             {K::Heading, "Un exemple", {}},
+             {K::Paragraph, "L'exemple anim\xC3\xA9, en haut : Seuil_Haut et Tiede s'\xC3\xA9" "crivent, Rampe se calcule au d\xC3\xA9marrage ; "
+                         "Pourcent() et Couleur() (priv\xC3\xA9" "e) remplissent et colorent la barre ; \xC2\xAB +15 \xC2\xB0" "C \xC2\xBB appelle Borne(). Le "
+                         "mod\xC3\xA8le de vue **Constantes et fonctions** (Nouvelle vue \xE2\x80\xBA Mod\xC3\xA8le) en pose un complet : la vue du four "
+                         "et sa popup de r\xC3\xA9glage, qui lit la constante publique de la vue.", {}},
+         },
+         {"popups", "parametres-popups", "scripts", "fonctions", "aide-saisie", "modeles-de-vues", "variables-locales"},
+         {"Constantes de la vue", "Fonctions de la vue", "Valeur initiale", "\xC3\xA0 chaque ouverture", "Port\xC3\xA9" "e", "publique", "priv\xC3\xA9" "e", "Init_"},
+         {"membres-vue", "vues"},
+         {},
+         "",
+         {},
+         "Seuil_Haut, Tiede, Rampe : des constantes de la vue ; Pourcent(), Couleur(), Borne() : ses fonctions.",
+         {}, "1.12.16"},
         // ---- Concevoir les vues / appliquer-copie
         {"appliquer-copie", "Appliquer copie sur r\xC3\xA9" "f\xC3\xA9rence", "Concevoir les vues",
          "L'action \xC2\xAB Appliquer copie sur r\xC3\xA9" "f\xC3\xA9rence \xC2\xBB (cat\xC3\xA9gorie Popup) "
@@ -2321,6 +2366,7 @@ const std::vector<Topic>& topics() {
                          "devient une commande du projet (Ctrl+Z la reprend).", {}},
              {K::Paragraph, "1.12.11 : une pompe, un moteur, une vanne\xE2\x80\xA6 - Contenu r\xC3\xA8gle leur mode \xC3\x89tat, une ligne par valeur.", {}, "1.12.11"},
              {K::Paragraph, "1.12.12 : la ligne et le polygone ont leur onglet Contenu (un sommet par ligne) ; la courbe XY y montre ses courbes ou sa courbe de r\xC3\xA9" "f\xC3\xA9rence. Le sommet choisi est le m\xC3\xAAme dans Contenu et sur le dessin.", {}, "1.12.12"},
+             {K::Paragraph, "1.12.16 : **Dupliquer\xE2\x80\xA6** (la barre de Contenu) fait N copies de l'\xC3\xA9l\xC3\xA9ment choisi - une plume (aussi une barre, une part, une ligne d'un tableau de variables), une ligne d'un tableau \xC3\xA0 cases fixes, un choix, un \xC3\xA9tat -, comme un symbole : les indices suivis (`Cuves[0].Niveau` \xE2\x86\x92 `Cuves[1].Niveau`\xE2\x80\xA6, la case Suivre de chaque indice, d\xC3\xA9" "coch\xC3\xA9" "e quand les copies sortiraient de ses bornes), le nom num\xC3\xA9rot\xC3\xA9 (Plume 1 \xE2\x86\x92 Plume 2), la couleur prise dans la palette ; le tableau des copies montre l'original en gris et chaque case se corrige (une case corrig\xC3\xA9" "e le reste quand le nombre change). Les copies s'ins\xC3\xA8rent apr\xC3\xA8s l'original, en une commande. Une courbe : chaque plume a aussi sa case **Visible si** (une condition ; fausse, la plume se cache).", {}, "1.12.16"},
          },
          {"objets", "proprietes", "recettes", "fichiers"},
          {},
@@ -2932,6 +2978,7 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9l\xC3\xA9ment, `=$Vannes[1]$.OUV` d\xC3\xA9" "cal\xC3\xA9 d'indice en "
                          "indice.", {}},
              {K::Paragraph, "1.12.9 : $Cuves$[*].Niveau - Dupliquer remplace le rep\xC3\xA8re ($Ballons$), le joker parcourt la variable (3 barres pour les cuves, 2 pour les ballons).", {}, "1.12.9"},
+             {K::Paragraph, "1.12.16 : **l'espacement en X et en Y**, chacun le sien - Sur X lit l'espacement X, Sur Y l'espacement Y, la grille les deux (entre deux colonnes, entre deux lignes) ; **Ajuster l'espacement** r\xC3\xA8gle chacun au plus grand qui fait tout tenir. Le m\xC3\xAAme principe duplique aussi une plume, une ligne du Contenu ou une action : \xC2\xAB Dupliquer\xE2\x80\xA6 \xC2\xBB de l'onglet Contenu et de l'onglet Actions.", {}, "1.12.16"},
          },
          {"editeur", "rechercher-remplacer", "symboles", "verifier", "alarmes-dans-arbre", "proprietes", "simulation"},
          {"dupliquer", "Dupliquer\xE2\x80\xA6", "Ctrl+D", "Ctrl+Maj+D", "rep\xC3\xA8re", "rep\xC3\xA8res", "$\xE2\x80\xA6$", "$V[1].Ouv$", "$V[0]$", "$Vanne$", "$$", "placeholder", "morceau", "ce qui varie", "transparent", "calcul", "mod\xC3\xA8le d'objet", "Mod\xC3\xA8les d'objets", "s\xC3\xA9rie", "V1{n}", "V[{n}]", "Tableau\xE2\x80\xA6", "pr\xC3\xA9rempli", "d\xC3\xA9" "cal\xC3\xA9", "hors des bornes", "garde le rep\xC3\xA8re", "Remplacer\xE2\x80\xA6", "Excel", "coller", "indices", "suivre", "Suivre V[0]", "garder", "grille", "espacement", "Ajuster l'espacement", "chevauchement", "rep\xC3\xA8re non remplac\xC3\xA9", "veux-tu dire", "membre", "DDT", "Ctrl+Y", "r\xC3\xA9tablir", "s\xC3\xA9lection"},
@@ -3547,6 +3594,7 @@ const std::vector<Topic>& topics() {
              {K::Tip, "Les variables li\xC3\xA9" "es sont des variables IHM. Celles de l'automate du "
                          "projet ont leur place par le plan d'adressage ou la table des adresses (voir "
                          "\xC2\xAB La communication \xC2\xBB).", {}},
+             {K::Paragraph, "1.12.16 : **revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e** - un membre dont l'adresse est corrig\xC3\xA9" "e \xC3\xA0 la main (%MW510 au milieu d'une suite %MW501, %MW502\xE2\x80\xA6) porte dans sa case Adresse un bouton de retour, qui dit l'adresse de la suite logique ; le clic droit propose \xC2\xAB Revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e \xC2\xBB pour les membres choisis, ou \xC2\xAB Retirer les adresses corrig\xC3\xA9" "es \xC2\xBB pour tous. Une commande : Ctrl+Z rend la correction.", {}, "1.12.16"},
          },
          {"equipements", "outil-modbus", "variables-ihm", "qualite-valeurs", "communication", "types-acces", "principe-communication", "lexique-communication"},
          {"variable li\xC3\xA9" "e", "variables li\xC3\xA9" "es", "Lier une variable", "D\xC3\xA9lier", "adresse Modbus", "40001", "40101", "30001", "00001", "10001", "%MW", "%MF", "%MD", "HR", "IR", "CO", "DI", "registre", "bobine", "mise \xC3\xA0 l'\xC3\xA9" "chelle", "brut min", "brut max", "\xC3\xA9" "chelle min", "\xC3\xA9" "chelle max", "type du registre", "lecture seule", "structure li\xC3\xA9" "e", "BOOL rang\xC3\xA9s par 16", "adresse corrig\xC3\xA9" "e"},
@@ -12982,6 +13030,7 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**une erreur de calcul arr\xC3\xAAte le d\xC3\xA9marrage** : la Console dit le calcul et sa ligne (\xC2\xAB calcul Reglages.Total : ligne 1 : cl\xC3\xA9 absente de la MAP \xC2\xBB), la barre de la simulation aussi ; chaque valeur calcul\xC3\xA9" "e est \xC3\xA9" "crite dans la Console.", {}, "1.12.7"},
              {K::Paragraph, "Les constantes d'un script g\xC3\xA9n\xC3\xA9ral se lisent ailleurs **toujours par leur nom qualifi\xC3\xA9** : `Reglages.Seuils`, `Reglages.Seuils['bas']`, `MAP_SIZE(Reglages.Seuils)`, dans les scripts, les fonctions, les calculs et les expressions des vues. Seules les **publiques** se lisent (\xC2\xAB Reglages.Secret est priv\xC3\xA9" "e : seul Reglages la lit \xC2\xBB) et **aucune ne s'\xC3\xA9" "crit** (`Reglages.Total := 1` est refus\xC3\xA9 par Compiler et par le moteur). Apr\xC3\xA8s `Reglages.`, l'aide \xC3\xA0 la saisie propose ses constantes publiques ; renommer une constante renomme `Reglages.X` partout.", {}, "1.12.7"},
              {K::Paragraph, "**Le d\xC3\xA9" "ballage** : sous la grille, la valeur \xC3\xA0 taille de la ligne choisie (LIST, VECTOR, MAP, ARRAY \xC3\xA0 une ou deux dimensions avec ses vrais indices, TUPLE, structure), \xC3\xA9" "crite ou calcul\xC3\xA9" "e, se lit \xC3\xA9l\xC3\xA9ment par \xC3\xA9l\xC3\xA9ment, en arbre (\xC3\xA9l\xC3\xA9ment, type, valeur) ; un \xC3\xA9l\xC3\xA9ment \xC3\xA0 taille se d\xC3\xA9plie \xC3\xA0 son tour. **\xC3\x89l\xC3\xA9ments\xE2\x80\xA6** ouvre un tableau, une ligne par \xC3\xA9l\xC3\xA9ment : un indice et une valeur (une liste, un tableau, une ligne par premi\xC3\xA8re dimension pour deux dimensions), une cl\xC3\xA9 et une valeur (une MAP), un \xC3\xA9l\xC3\xA9ment par type (un tuple).", {}, "1.12.7"},
+             {K::Bullet, "1.12.16 : **Valeur initiale\xE2\x80\xA6** remplace \xC2\xAB \xC3\x89l\xC3\xA9ments\xE2\x80\xA6 \xC2\xBB et \xC2\xAB \xC6\x92x Calcul\xE2\x80\xA6 \xC2\xBB : une seule fen\xC3\xAAtre, en **brut** (l'\xC3\xA9" "diteur fait pour le type, celui d'\xC3\x89l\xC3\xA9ments\xE2\x80\xA6 en mieux : une fiche par structure, une dur\xC3\xA9" "e en heures, minutes, secondes, une faute grise Appliquer) ou en **code** (`FUNCTION Init_<Nom> : <type>` fixe, le code rend la valeur par `RETURN` ; le style 1.12.7, `Nom := \xE2\x80\xA6`, tourne tel quel) ; les Locales, l'aper\xC3\xA7u et \xC2\xAB calcul\xC3\xA9" "e au d\xC3\xA9marrage / \xC3\xA0 chaque ouverture \xC2\xBB y sont, le type expliqu\xC3\xA9 \xC3\xA0 droite.", {}, "1.12.16"},
              {K::Bullet, "1.12.15 : \xC3\xA0 chaque niveau, ses **propri\xC3\xA9t\xC3\xA9s publiques** d'abord, avec leur valeur : `.Count`, `.Empty`, `.First`, `.Last`, `.Low`, `.High` d'une liste ; `.Length`, `.Low`, `.High` d'un tableau ; `.Capacity` (aussi `.MaxSize`) et `.Full` d'un tampon ; `.Count` d'une MAP. Une entr\xC3\xA9" "e de MAP se d\xC3\xA9plie en **first** (sa cl\xC3\xA9) et **second** (sa valeur).", {}, "1.12.15"},
              {K::Tip, "Une constante neuve pass\xC3\xA9" "e en MAP, LIST ou VECTOR prend `[]` (avant : elle gardait 0.0) ; une valeur simple n'y va pas.", {}, "1.12.7"},
              {K::Heading, "D\xC3\xA9" "clarer dans le code (l'ancien format, toujours lu)", {}},
@@ -13768,6 +13817,9 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "L\xC3\xA0 o\xC3\xB9 un type est attendu (`n := ` pour un INT, l'argument d'une fonction, `IF m = `, une case fx), la liste propose d'abord ce qui est de ce type, puis **ce qui y m\xC3\xA8ne**, \xC3\xA0 toute profondeur : `BATEAU[0]` (\xE2\x86\x92 `.Taille : INT`), `Capitaine.` (\xE2\x86\x92 `.Age : INT`), `Flotte['\xE2\x80\xA6'][0].Taille`. Le d\xC3\xA9tail dit le chemin et le type au bout ; choisir `BATEAU[0].` rouvre la liste sur ses membres, le bon en t\xC3\xAAte. Les variables, les membres, les variables syst\xC3\xA8me, les fonctions (par ce qu'elles rendent) et les \xC3\xA9num\xC3\xA9rations le suivent.", {}, "1.12.14"},
              {K::Bullet, "Les acc\xC3\xA8s imbriqu\xC3\xA9s se suivent : apr\xC3\xA8s `Parc['a'][1].`, les membres de T_Cuve ; **G\xC3\xA9n\xC3\xA9rer** lit `Parc['a'][1].Niveau` et dit au fond un membre inconnu ou un mauvais type.", {}, "1.12.14"},
              {K::Bullet, "Le **s\xC3\xA9lecteur de valeur** s'ouvre \xC3\xA0 toute profondeur (`BATEAU[0].Taille`, `Flotte['cle'][0].Taille`) ; filtr\xC3\xA9 par type, il garde les structures et les listes qui m\xC3\xA8nent \xC3\xA0 une valeur de ce type.", {}, "1.12.14"},
+             {K::Heading, "1.12.16 : Choisir une fonction\xE2\x80\xA6", {}, "1.12.16"},
+             {K::Paragraph, "**Choisir une fonction\xE2\x80\xA6** est la derni\xC3\xA8re ligne de chaque liste de l'aide \xC3\xA0 la saisie (les \xC3\xA9" "diteurs de code et les cases fx) ; **Ctrl+I** l'ouvre directement, Ctrl+Espace montre la liste. Le s\xC3\xA9lecteur part du **type attendu** au curseur (une affectation, un op\xC3\xA9rande, l'argument d'une fonction du projet ou d'une native) et range par famille les natives, les fonctions de la vue \xC3\xA9" "dit\xC3\xA9" "e et celles du projet, chacune avec sa fiche ; l'appel s'ins\xC3\xA8re \xC3\xA0 la place du mot commenc\xC3\xA9, le premier argument choisi.", {}, "1.12.16"},
+             {K::Bullet, "1.12.16 : les **constantes et fonctions d'une vue** : par leur nom dans la vue (les priv\xC3\xA9" "es aussi), apr\xC3\xA8s `Vue_Four.` ailleurs (les publiques) ; `Pourcent(` ouvre sa bulle de signature, l'infobulle dit le type et d'o\xC3\xB9 elles viennent (voir \xC2\xAB Les constantes et fonctions d'une vue \xC2\xBB).", {}, "1.12.16"},
          },
          {"scripts", "variables-locales", "fonctions", "proprietes", "parametres-popups", "variables-esclaves", "champs-expressions", "fonctions-internes", "enum-scripts", "operateurs", "variables-api"},
          {},

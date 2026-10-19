@@ -540,6 +540,12 @@ const std::vector<ViewTemplate>& viewTemplates() {
          "Un tableau par genre de source : ARRAY de structures, LIST, MAP et plusieurs MAP par la cl\xC3\xA9, structure, \xC3\xA9" "num\xC3\xA9ration, "
          "une liste par colonne, cases fixes R/W ; ses types et ses variables sont cr\xC3\xA9\xC3\xA9s s'ils manquent, ses scripts les font vivre.",
          "", {"vue"}},
+        // 1.12.16 : les constantes et les fonctions d'une vue et de sa popup (ses variables et sa popup creees s'ils manquent).
+        {"constantes_fonctions", "Constantes et fonctions",
+         "Les constantes d'une vue (\xC3\xA9" "crites, une calcul\xC3\xA9" "e au d\xC3\xA9marrage) et ses fonctions (publiques, une priv\xC3\xA9" "e), "
+         "appel\xC3\xA9" "es par ses objets et ses actions ; sa popup de r\xC3\xA9glage lit une constante de la vue et calcule les siennes "
+         "\xC3\xA0 chaque ouverture.",
+         "", {"vue"}},
         // ... des popups (a parametres, aucune variable du projet en dur)...
         {"confirmation", "Confirmation", "Une popup \xC3\xA0 param\xC3\xA8tres (Question, Reponse) : la question, Oui et Non.", "popup",
          {"popup"}, 420, 200},
@@ -945,6 +951,170 @@ void fillTablesDemo(Project& p, View& v) {
 
 } // namespace
 
+// ===================================================== 1.12.16 : le modele Constantes et fonctions ===
+//  LES CONSTANTES ET LES FONCTIONS D'UNE VUE, ET CELLES DE SA POPUP, en marche des la simulation :
+//    la vue (celle qu'on cree) : Seuil_Haut et Tiede (ecrites ; Seuil_Haut publique), Rampe (calculee au demarrage : son
+//    code rend la valeur) ; Pourcent() (publique), Couleur() (privee), Borne() ; une barre remplie par Pourcent() et
+//    coloree par Couleur(), un texte a trous qui les lit, -10 / +10 (Consigne := Borne(...)) et Regler... qui ouvre la
+//    popup ; un script cyclique fait suivre la consigne a la temperature ;
+//    la popup Pop_Reglage (creee, un nom libre) : son parametre Consigne (Reference), Pas (ecrite), Maxi (calculee au
+//    demarrage, elle lit <Vue>.Seuil_Haut - une constante publique, par son nom qualifie), Depart (lit le parametre :
+//    calculee a chaque ouverture), Monter() et Descendre() ; Annuler remet la consigne d'a l'ouverture.
+//  Les variables Four_Temperature et Four_Consigne sont creees si elles manquent (dossier "Constantes et fonctions").
+namespace {
+
+Declaration demoConstant(Project& p, const std::string& name, const std::string& type, const std::string& value,
+                         const std::string& about, bool pub = true) {
+    Declaration d;
+    d.id = p.allocate();
+    d.kind = DeclKind::Constant;
+    d.name = name;
+    d.type = type;
+    d.value = value;
+    d.description = about;
+    d.visibility = pub ? Visibility::Public : Visibility::Private;
+    return d;
+}
+
+Declaration demoComputed(Project& p, const std::string& name, const std::string& type, const std::string& calc, const std::string& about) {
+    Declaration d = demoConstant(p, name, type, {}, about);
+    d.computed = true;
+    d.calc = calc;
+    return d;
+}
+
+HmiFunction demoFunction(Project& p, const std::string& name, const std::string& returns, const std::string& body,
+                         const std::string& param, const std::string& about, bool pub = true) {
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = name;
+    f.returnType = returns;
+    f.body = body;
+    f.description = about;
+    f.visibility = pub ? Visibility::Public : Visibility::Private;
+    Declaration x;
+    x.id = p.allocate();
+    x.kind = DeclKind::Parameter;
+    x.name = param;
+    x.type = "REAL";
+    f.decls.push_back(std::move(x));
+    return f;
+}
+
+void fillMembersDemo(Project& p, View& v) {
+    const std::string folder = "Constantes et fonctions";
+    const std::string temp = demoVariable(p, "Four_Temperature", "REAL", "20.0",
+                                          "La temp\xC3\xA9rature du four (le mod\xC3\xA8le Constantes et fonctions)", folder);
+    const std::string cons = demoVariable(p, "Four_Consigne", "REAL", "60.0", "La consigne du four", folder);
+    // ---- la vue : ses constantes, ses fonctions
+    v.constants.push_back(demoConstant(p, "Seuil_Haut", "REAL", "85.0", "Au-del\xC3\xA0 : rouge (lue par la popup de r\xC3\xA9glage)"));
+    v.constants.push_back(demoConstant(p, "Tiede", "REAL", "50.0", "Au-del\xC3\xA0 : orange", false));
+    v.constants.push_back(demoComputed(p, "Rampe", "REAL", "RETURN (Seuil_Haut - 20.0) / 30.0;\n",
+                                       "La mont\xC3\xA9" "e vis\xC3\xA9" "e en \xC2\xB0" "C par minute : calcul\xC3\xA9" "e au d\xC3\xA9marrage"));
+    v.functions.push_back(demoFunction(p, "Pourcent", "REAL", "RETURN LIMIT(0.0, t / Seuil_Haut * 100.0, 100.0);\n", "t",
+                                       "Une temp\xC3\xA9rature en % du seuil haut"));
+    v.functions.push_back(demoFunction(p, "Couleur", "STRING",
+                                       "IF t >= Seuil_Haut THEN\n    RETURN '#E5534B';\nELSIF t >= Tiede THEN\n    RETURN '#F2994A';\nEND_IF;\n"
+                                       "RETURN '#4FA3FF';\n",
+                                       "t", "La couleur d'une temp\xC3\xA9rature (priv\xC3\xA9" "e : la vue seule l'appelle)", false));
+    v.functions.push_back(demoFunction(p, "Borne", "REAL", "RETURN LIMIT(20.0, t, Seuil_Haut + 15.0);\n", "t",
+                                       "Une consigne ramen\xC3\xA9" "e entre 20 \xC2\xB0" "C et le seuil haut + 15"));
+    Script cycle;
+    cycle.id = p.allocate();
+    cycle.name = "Chauffer";
+    cycle.event = "OnCycle";
+    cycle.description = "La temp\xC3\xA9rature suit la consigne";
+    cycle.body = temp + " := " + temp + " + (" + cons + " - " + temp + ") * 0.02;\n";
+    v.scripts.push_back(std::move(cycle));
+    // ---- la popup de reglage (son nom : libre)
+    View pop = makeView(p, uniqueViewName(p, "Pop_Reglage"));
+    pop.role = "popup";
+    pop.width = std::min(440, p.config.width);
+    pop.height = std::min(270, p.config.height);
+    pop.popup.title = "R\xC3\xA9glage du four";
+    pop.description = "La popup du mod\xC3\xA8le Constantes et fonctions : ses constantes, ses fonctions, son param\xC3\xA8tre";
+    ViewParam prm;
+    prm.name = "Consigne";
+    prm.type = "REAL";
+    prm.mode = ParamMode::Reference;
+    prm.description = "La consigne r\xC3\xA9gl\xC3\xA9" "e (Consigne := " + cons + ")";
+    pop.params.push_back(prm);
+    pop.constants.push_back(demoConstant(p, "Pas", "REAL", "5.0", "Le pas de + et -"));
+    pop.constants.push_back(demoComputed(p, "Maxi", "REAL", "RETURN " + v.name + ".Seuil_Haut + 15.0;\n",
+                                         "Lit la constante publique de la vue, par son nom qualifi\xC3\xA9 : calcul\xC3\xA9" "e au d\xC3\xA9marrage"));
+    pop.constants.push_back(demoComputed(p, "Depart", "REAL", "RETURN Consigne;\n",
+                                         "Lit le param\xC3\xA8tre : calcul\xC3\xA9" "e \xC3\xA0 chaque ouverture (Annuler y revient)"));
+    pop.functions.push_back(demoFunction(p, "Monter", "REAL", "RETURN LIMIT(20.0, t + Pas, Maxi);\n", "t", "Un pas de plus, jusqu'\xC3\xA0 Maxi"));
+    pop.functions.push_back(demoFunction(p, "Descendre", "REAL", "RETURN LIMIT(20.0, t - Pas, Maxi);\n", "t", "Un pas de moins, jusqu'\xC3\xA0 20 \xC2\xB0" "C"));
+    {
+        const double w = pop.width;
+        (void)title(p, pop, "R\xC3\xA9glage du four", 20, 12, w - 40, 20);
+        auto& lu = addAt(p, pop, Kind::Text, "Lecture_Consigne", 20, 56, w - 40, 30);
+        lu.set("text", "Consigne : {Consigne:0} \xC2\xB0" "C   (\xC3\xA0 l'ouverture : {Depart:0}, maxi {Maxi:0})");
+        lu.setNumber("fontSize", 15);
+        lu.set("align", "gauche");
+        const auto button = [&](const char* stem, const char* text, double x, double y, double bw, Operation op, std::string value) {
+            auto& b = addAt(p, pop, Kind::Button, stem, x, y, bw, 44);
+            b.set("text", text);
+            Action a;
+            a.trigger = Trigger::Click;
+            a.operation = op;
+            if (op != Operation::ClosePopup) a.target = "Consigne";
+            a.value = std::move(value);
+            b.actions.push_back(std::move(a));
+        };
+        const double bw = (w - 60) / 2;
+        button("Btn_Descendre", "- Pas", 20, 104, bw, Operation::Assign, "Descendre(Consigne)");
+        button("Btn_Monter", "+ Pas", 40 + bw, 104, bw, Operation::Assign, "Monter(Consigne)");
+        button("Btn_Annuler", "Annuler", 20, 164, bw, Operation::Assign, "Depart");
+        button("Btn_Fermer", "Fermer", 40 + bw, 164, bw, Operation::ClosePopup, {});
+    }
+    const std::string popName = pop.name;
+    p.views.push_back(std::move(pop));
+    // ---- la vue : la mise en page
+    const double W = v.width, H = v.height;
+    const double m = std::max(16.0, W * 0.015);
+    (void)title(p, v, v.name + " : les constantes et les fonctions de la vue", m, 12, W - 2 * m, 22);
+    auto& bar = addAt(p, v, Kind::ProgressBar, "Charge", m, 70, W * 0.55, 40);
+    bar.setExpr("value", "Pourcent(" + temp + ")");
+    bar.setExpr("fill", "Couleur(" + temp + ")");
+    auto& lecture = addAt(p, v, Kind::Text, "Lecture", m, 120, W * 0.55, 30);
+    lecture.set("text", "{" + temp + ":0.0} \xC2\xB0" "C : {Pourcent(" + temp + "):0} % du seuil haut ({Seuil_Haut:0} \xC2\xB0" "C)");
+    lecture.setNumber("fontSize", 16);
+    lecture.set("align", "gauche");
+    auto& consigne = addAt(p, v, Kind::Text, "Lecture_Consigne", m, 156, W * 0.55, 30);
+    consigne.set("text", "Consigne {" + cons + ":0} \xC2\xB0" "C   \xC2\xB7   mont\xC3\xA9" "e vis\xC3\xA9" "e {Rampe:0.0} \xC2\xB0" "C/min");
+    consigne.setNumber("fontSize", 15);
+    consigne.set("align", "gauche");
+    const auto button = [&](const char* stem, const char* text, double x, double y, double bw, Operation op, std::string target,
+                            std::string value) {
+        auto& b = addAt(p, v, Kind::Button, stem, x, y, bw, 44);
+        b.set("text", text);
+        Action a;
+        a.trigger = Trigger::Click;
+        a.operation = op;
+        a.target = std::move(target);
+        a.value = std::move(value);
+        b.actions.push_back(std::move(a));
+    };
+    const double bx = m * 2 + W * 0.55, bw = std::max(120.0, W - bx - m);
+    button("Btn_Moins", "-10 \xC2\xB0" "C", bx, 70, bw / 2 - 6, Operation::Assign, cons, "Borne(" + cons + " - 10.0)");
+    button("Btn_Plus", "+10 \xC2\xB0" "C", bx + bw / 2 + 6, 70, bw / 2 - 6, Operation::Assign, cons, "Borne(" + cons + " + 10.0)");
+    button("Btn_Regler", "R\xC3\xA9gler\xE2\x80\xA6", bx, 126, bw, Operation::Popup, popName, "Consigne := " + cons);
+    auto& note = addAt(p, v, Kind::Text, "Explication", m, std::max(210.0, H * 0.45), W - 2 * m, std::max(120.0, H * 0.4));
+    note.set("text", "Sous-onglet Constantes : Seuil_Haut et Tiede s'\xC3\xA9" "crivent, Rampe se calcule au d\xC3\xA9marrage (son code rend la valeur). "
+                     "Sous-onglet Fonctions : Pourcent() et Borne() (publiques), Couleur() (priv\xC3\xA9" "e). La barre et les textes les "
+                     "appellent par leur nom ; -10 et +10 \xC3\xA9" "crivent Consigne := Borne(...). R\xC3\xA9gler\xE2\x80\xA6 ouvre " + popName + " : Maxi lit "
+                     + v.name + ".Seuil_Haut (une constante publique, par son nom qualifi\xC3\xA9), Depart lit le param\xC3\xA8tre - calcul\xC3\xA9" "e \xC3\xA0 "
+                     "chaque ouverture, Annuler y revient.");
+    note.setNumber("fontSize", 14);
+    note.set("textColor", "#9AA6B8");
+    note.setFlag("wrap", true);
+    note.set("align", "gauche");
+}
+
+} // namespace
+
 void fillFromTemplate(Project& p, View& v, std::string_view key) {
     const double W = v.width, H = v.height;
     const double m = std::max(16.0, W * 0.015);
@@ -1136,6 +1306,11 @@ void fillFromTemplate(Project& p, View& v, std::string_view key) {
     // 1.12.13 : un tableau par genre de source (ses types, ses variables, ses scripts de vue).
     if (key == "tableaux_dynamiques") {
         fillTablesDemo(p, v);
+        return;
+    }
+    // 1.12.16 : les constantes et les fonctions d'une vue et de sa popup (ses variables et sa popup).
+    if (key == "constantes_fonctions") {
+        fillMembersDemo(p, v);
         return;
     }
     // -- des popups

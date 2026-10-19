@@ -2393,6 +2393,106 @@ void dupliquerElement11216() {
     check(itemCopies(kept, {}, {}, 2)[1][0] == "0.0", "un format : recopi\xC3\xA9");
 }
 
+// 1.12.16 (T6) : l'exemple anime du sujet « Les constantes et fonctions d'une vue » et le modele de vue « Constantes et
+// fonctions » (la vue du four, sa popup de reglage, leurs variables) - ils tournent sans faute, Generer ne dit rien.
+void modeleConstantes11216() {
+    std::printf("== 1.12.16 : l'exemple anim\xC3\xA9 et le mod\xC3\xA8le Constantes et fonctions ==\n");
+    const NameExists none = [](std::string_view) { return false; };
+    const auto said = [](const std::vector<Issue>& list) {
+        std::string out;
+        for (const auto& i : list)
+            if (i.severity == Issue::Severity::Error) out += "\n  " + i.category + " " + i.property + " : " + i.message;
+        return out;
+    };
+    // ---- l'exemple anime du sujet
+    {
+        auto ex = examples::exampleForTopic("constantes-fonctions-vue");
+        check(ex.has_value() && !examples::exampleForTopic("vues").has_value(), "le sujet constantes-fonctions-vue a son exemple anim\xC3\xA9 (un autre sujet, non)");
+        if (ex) {
+            const auto c = compileWith(ex->project, none);
+            check(count(c).errors == 0, "Compiler l'exemple : aucune erreur" + said(c));
+            Runtime rt;
+            rt.bind(&ex->project, nullptr);
+            rt.start(0.0);
+            double played = 0, at3 = -1, at7 = -1;
+            std::size_t errors = 0;
+            for (double t = 0.05; t <= ex->period + 1e-9; t += 0.05) {
+                rt.tick(t);
+                (void)examples::play(*ex, rt, played, t, t);
+                played = t;
+                LiveView lv;
+                lv.bind(*rt.composedView(rt.currentView()));
+                std::vector<LiveValue> vals;
+                (void)lv.evaluate(rt.environment(), &vals, rt.viewScope(rt.currentView()), t);
+                for (const auto& v : vals) errors += v.error;
+                if (std::fabs(t - 3.0) < 0.025 && rt.variable("Consigne")) at3 = rt.variable("Consigne")->asReal();
+                if (std::fabs(t - 7.0) < 0.025 && rt.variable("Consigne")) at7 = rt.variable("Consigne")->asReal();
+            }
+            check(errors == 0, "l'exemple tourne sans faute dans ses objets (" + std::to_string(errors) + ")");
+            near(at3, 60.0, "+15 \xC2\xB0" "C : Consigne := Borne(45 + 15) = 60");
+            near(at7, 75.0, "encore : Borne(60 + 15) = 75 (sous le seuil haut + 10)");
+        }
+    }
+    // ---- le modele de vue
+    Project p;
+    View v = makeView(p, "Vue_Four");
+    design::fillFromTemplate(p, v, "constantes_fonctions");
+    const Id vid = v.id;
+    p.views.push_back(v);
+    const View* pop = nullptr;
+    for (const auto& x : p.views)
+        if (x.role == "popup") pop = &x;
+    check(pop && pop->name == "Pop_Reglage" && pop->params.size() == 1, "la popup de r\xC3\xA9glage, cr\xC3\xA9\xC3\xA9" "e avec son param\xC3\xA8tre");
+    check(p.variable("Four_Temperature") && p.variable("Four_Consigne"), "ses deux variables, cr\xC3\xA9\xC3\xA9" "es");
+    check(p.view(vid)->constants.size() == 3 && p.view(vid)->functions.size() == 3 && pop && pop->constants.size() == 3 && pop->functions.size() == 2,
+          "la vue : 3 constantes, 3 fonctions ; la popup : 3 constantes, 2 fonctions");
+    const auto g = generate(p, none);
+    check(count(g).errors == 0, "G\xC3\xA9n\xC3\xA9rer le mod\xC3\xA8le : aucune erreur" + said(g));
+    const auto c = compileWith(p, none);
+    check(count(c).errors == 0, "Compiler le mod\xC3\xA8le : aucune erreur" + said(c));
+    // Un second modele dans le meme projet : ses variables reprises, sa popup a un autre nom.
+    {
+        Project q = p;
+        View w = makeView(q, "Vue_Four_2");
+        design::fillFromTemplate(q, w, "constantes_fonctions");
+        q.views.push_back(w);
+        check(q.programs.variables.size() == p.programs.variables.size() && q.views.size() == 4 && q.views[2].name != "Pop_Reglage",
+              "un second : les variables reprises, une popup " + q.views[2].name);
+    }
+    // En marche : la vue, ses boutons, la popup.
+    {
+        const auto objectNamed = [&](Id view, const char* name) {
+            for (const auto& o : p.view(view)->objects)
+                if (o.name == name) return o.id;
+            return kNoId;
+        };
+        const auto click = [](Runtime& rt, Id id, double t) {
+            rt.press(id, t);
+            rt.release(id, t + 0.01, true);
+        };
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        check(rt.navigate(vid, Transition{}, 0.05), "Vue_Four s'ouvre");
+        rt.tick(0.1);
+        click(rt, objectNamed(vid, "Btn_Plus"), 0.2);
+        rt.tick(0.3);
+        near(rt.variable("Four_Consigne") ? rt.variable("Four_Consigne")->asReal() : -1, 70.0, "+10 : Four_Consigne := Borne(60 + 10) = 70");
+        check(pop && rt.openPopup(pop->id, Transition{}, 0.4, "Consigne := Four_Consigne", {}, kNoId), "R\xC3\xA9gler\xE2\x80\xA6 : la popup s'ouvre");
+        rt.tick(0.5);
+        click(rt, objectNamed(pop->id, "Btn_Monter"), 0.6);
+        rt.tick(0.7);
+        near(rt.variable("Four_Consigne") ? rt.variable("Four_Consigne")->asReal() : -1, 75.0, "+ Pas : Monter(70) = 75 (Pas = 5)");
+        for (int k = 0; k < 6; ++k) click(rt, objectNamed(pop->id, "Btn_Monter"), 0.8 + 0.1 * k);
+        rt.tick(1.5);
+        near(rt.variable("Four_Consigne") ? rt.variable("Four_Consigne")->asReal() : -1, 100.0,
+             "Maxi = Vue_Four.Seuil_Haut + 15 = 100 : la consigne s'y arr\xC3\xAAte");
+        click(rt, objectNamed(pop->id, "Btn_Annuler"), 1.6);
+        rt.tick(1.7);
+        near(rt.variable("Four_Consigne") ? rt.variable("Four_Consigne")->asReal() : -1, 70.0, "Annuler : Depart, la consigne \xC3\xA0 l'ouverture (70)");
+    }
+}
+
 void persistanceLot4() {
     std::printf("persistance : alarmes, recettes, securite, historiques\n");
     Supervision s;
@@ -9040,10 +9140,10 @@ void conceptionLot12() {
         if ((tpl.key == "vide") != mv.objects.empty()) empty += std::string(tpl.key) + " ";
         if (tpl.key == "equipement" && (mv.role != "popup" || !mv.param("Equipement"))) empty += "equipement(role) ";
     }
-    // 1.10.2 : treize de plus (accueil... pied), dix-neuf en tout ; 1.12.13 : Tableaux dynamiques, vingt.
-    check(viewTemplates().size() == 20 && empty.empty() && viewTemplate("Tableau de bord") && viewTemplate("alarmes")
+    // 1.10.2 : treize de plus (accueil... pied), dix-neuf en tout ; 1.12.13 : Tableaux dynamiques, vingt ; 1.12.16 : Constantes et fonctions.
+    check(viewTemplates().size() == 21 && empty.empty() && viewTemplate("Tableau de bord") && viewTemplate("alarmes")
               && viewTemplate("Popup moteur") && viewTemplate("pied"),
-          "vingt mod\xC3\xA8les : vide ne pose rien, les autres leurs objets ; la popup d'\xC3\xA9quipement a son param\xC3\xA8tre " + empty);
+          "vingt et un mod\xC3\xA8les : vide ne pose rien, les autres leurs objets ; la popup d'\xC3\xA9quipement a son param\xC3\xA8tre " + empty);
 
     // ---- l'espacement egal
     {
@@ -27579,6 +27679,7 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_11216"); only && *only == '1') {
         courbesPilotables11216();
         dupliquerElement11216();
+        modeleConstantes11216();
         dupliquerReperes1102();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
@@ -27686,6 +27787,7 @@ int main(int argc, char** argv) {
     courbes();
     courbesPilotables11216();         // 1.12.16 : pause / continuer, Visible si par plume
     dupliquerElement11216();          // 1.12.16 : Dupliquer une plume, une action, une ligne
+    modeleConstantes11216();          // 1.12.16 (T6) : l'exemple anime et le modele Constantes et fonctions
     persistanceLot4();
     archive();
     verificationsLot4();

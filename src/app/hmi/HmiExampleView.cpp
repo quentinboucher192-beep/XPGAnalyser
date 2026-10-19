@@ -62,9 +62,24 @@ HmiExampleView::HmiExampleView(std::string id) : ui::Widget(std::move(id)) {
 
 HmiExampleView::~HmiExampleView() = default;
 
+std::optional<hmi::examples::Example> HmiExampleView::build() const {
+    if (kind_) return hmi::examples::exampleFor(*kind_);
+    if (!topic_.empty()) return hmi::examples::exampleForTopic(topic_);
+    return std::nullopt;
+}
+
+void HmiExampleView::setTopic(std::string_view key) {
+    if (!kind_ && topic_ == key && (example_.has_value() || key.empty())) return;
+    setKind(std::nullopt);
+    topic_ = std::string(key);
+    if (!topic_.empty()) example_ = hmi::examples::exampleForTopic(topic_);
+    invalidate();
+}
+
 void HmiExampleView::setKind(std::optional<hmi::Kind> kind) {
-    if (kind == kind_ && (example_.has_value() || !kind)) return;
+    if (kind == kind_ && topic_.empty() && (example_.has_value() || !kind)) return;
     kind_ = kind;
+    topic_.clear();
     example_.reset();
     runtime_.reset();
     canvas_->setLive(nullptr, nullptr);
@@ -164,7 +179,7 @@ void HmiExampleView::restart() {
 }
 
 void HmiExampleView::start(double now) {
-    example_ = kind_ ? hmi::examples::exampleFor(*kind_) : std::nullopt;
+    example_ = build();   // 1.12.16 : un objet, ou un sujet du guide
     runtime_.reset();
     if (!example_) return;
     runtime_ = std::make_unique<hmi::Runtime>();
@@ -226,7 +241,7 @@ void HmiExampleView::start(double now) {
 }
 
 void HmiExampleView::step(double now) {
-    if (!kind_) return;
+    if (!active()) return;
     if (origin_ < 0 || !runtime_) start(now);
     if (!example_ || !runtime_) return;
     double t = now - origin_;
@@ -244,7 +259,7 @@ void HmiExampleView::step(double now) {
 }
 
 void HmiExampleView::advanceTo(double seconds) {
-    if (!kind_) return;
+    if (!active()) return;
     if (origin_ < 0 || !runtime_) start(clock_ > 0 ? clock_ : 1000.0);
     if (!example_) return;
     // Le repere du tour : jamais en arriere.

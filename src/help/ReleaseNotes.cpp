@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.16", "19/10/2026", "livr\xC3\xA9" "e le 19/10"},
     {"1.12.15", "16/10/2026", "livr\xC3\xA9" "e le 16/10 en d\xC3\xA9" "but d'apr\xC3\xA8s-midi"},
     {"1.12.14", "16/10/2026", "livr\xC3\xA9" "e le 16/10 en fin de matin\xC3\xA9" "e"},
     {"1.12.13", "16/10/2026", "livr\xC3\xA9" "e le 16/10 au matin"},
@@ -121,6 +122,28 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.16 (19/10/2026) : voir docs/LIVRAISON-1.12.16.md.
+        note("1.12.16", "Vues", Kind::New,
+         "LES CONSTANTES ET LES FONCTIONS D'UNE VUE (et d'une popup) : deux sous-onglets au-dessus du dessin, Constantes et Fonctions. Une constante s'\xC3\xA9" "crit, ou se calcule au d\xC3\xA9marrage, ou \xC3\xA0 chaque ouverture (d'office quand elle lit un param\xC3\xA8tre de la popup) ; une fonction rend sa valeur par RETURN. Par leur nom dans la vue (les fx des objets, les textes \xC3\xA0 trous, les scripts, les actions), par Vue.Nom ailleurs (les publiques) ; l'aide \xC3\xA0 la saisie les propose, G\xC3\xA9n\xC3\xA9rer refuse une priv\xC3\xA9" "e lue d'ailleurs, une constante \xC3\xA9" "crite, un nom d\xC3\xA9j\xC3\xA0 pris. Le mod\xC3\xA8le de vue \xC2\xAB Constantes et fonctions \xC2\xBB en pose un exemple complet, la page d'aide un exemple anim\xC3\xA9.",
+         "constantes-fonctions-vue", ""),
+        note("1.12.16", "Scripts", Kind::New,
+         "CHOISIR UNE FONCTION\xE2\x80\xA6 : la derni\xC3\xA8re ligne des listes de l'aide \xC3\xA0 la saisie (les \xC3\xA9" "diteurs de code et les cases fx) ; Ctrl+I l'ouvre directement. Le s\xC3\xA9lecteur part du type attendu au curseur (une affectation, un op\xC3\xA9rande, l'argument d'une fonction) et range par famille les natives et les fonctions de la vue et du projet ; l'appel s'ins\xC3\xA8re \xC3\xA0 la place du mot commenc\xC3\xA9, le premier argument choisi.",
+         "aide-saisie", ""),
+        note("1.12.16", "Types", Kind::New,
+         "LA VALEUR INITIALE, EN BRUT OU EN CODE : une seule fen\xC3\xAAtre \xC2\xAB Valeur initiale\xE2\x80\xA6 \xC2\xBB. Le brut : un \xC3\xA9" "diteur fait pour le type - une ligne par entr\xC3\xA9" "e d'une MAP, par \xC3\xA9l\xC3\xA9ment d'une liste, une fiche par structure, une dur\xC3\xA9" "e en heures, minutes, secondes ; la case vide montre la valeur du type en gris, une faute grise Appliquer. Le code : FUNCTION Init_<Nom> : <type> est fixe, le code rend la valeur par RETURN, des exemples faits du type ; calcul\xC3\xA9" "e au d\xC3\xA9marrage ou \xC3\xA0 chaque ouverture. \xC3\x80 droite, le type expliqu\xC3\xA9 (son arbre, en C++, les natives qui vont avec).",
+         "types-ihm", ""),
+        note("1.12.16", "Natives", Kind::New,
+         "39 STD:: RECOMMAND\xC3\x89" "ES : CEIL, FLOOR, FMOD, HYPOT, ATAN2, LERP, ISNAN, ISFINITE ; STARTS_WITH, ENDS_WITH, CONTAINS, TRIM, TRIM_LEFT, TRIM_RIGHT, FORMAT ; YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, WEEKDAY, ADD_DAYS, DAYS_BETWEEN, FORMAT_DT ; LIST_LOWER_BOUND, LIST_BINARY_SEARCH, LIST_TRANSFORM, LIST_MEDIAN, LIST_VARIANCE, LIST_STDDEV, INTERPOLER_TABLE ; SET_SYMMETRIC_DIFFERENCE, SET_INCLUDES ; RANDOM_NORMAL ; BYTESWAP, WORDSWAP ; SWAP, EXCHANGE. Chacune a sa fiche, ses \xC3\xA9quivalents C et C++ et un exemple jou\xC3\xA9 par le moteur.",
+         "reference", ""),
+        note("1.12.16", "Vues", Kind::New,
+         "DUPLIQUER\xE2\x80\xA6 UNE PLUME, UNE LIGNE, UNE ACTION : dans Contenu (une plume, une ligne d'un tableau, un choix, un \xC3\xA9tat) et dans Actions (une action, un raccourci), N copies comme pour un symbole - les indices suivis (Cuves[0] \xE2\x86\x92 Cuves[1]\xE2\x80\xA6), le nom num\xC3\xA9rot\xC3\xA9 (Plume 1 \xE2\x86\x92 Plume 2, F2 \xE2\x86\x92 F3), la couleur prise dans la palette ; chaque case de chaque copie se corrige, et une commande les ins\xC3\xA8re (Ctrl+Z retire tout). Dupliquer un objet : l'espacement en X et en Y, chacun le sien ; \xC2\xAB Ajuster l'espacement \xC2\xBB r\xC3\xA8gle les deux.",
+         "contenu", ""),
+        note("1.12.16", "Courbes", Kind::New,
+         "PILOTABLE ET VISIBLE SI : Pilotable (Propri\xC3\xA9t\xC3\xA9s) - en marche, un bouton en haut \xC3\xA0 droite de la courbe, Pause fige l'affichage (les mesures continuent), Continuer reprend le temps r\xC3\xA9" "el. Visible si (Contenu, par plume) : une condition ; fausse, la plume et sa l\xC3\xA9gende se cachent. Une plume \xC3\xA0 joker (Cuves[*].Niveau) prend Cuves[*].Actif, une condition par cuve ; G\xC3\xA9n\xC3\xA9rer la v\xC3\xA9rifie.",
+         "objet-courbe", ""),
+        note("1.12.16", "Variables", Kind::New,
+         "REVENIR \xC3\x80 L'ADRESSE CALCUL\xC3\x89" "E : un membre dont l'adresse est corrig\xC3\xA9" "e \xC3\xA0 la main (%MW510 au milieu d'une suite %MW501, 502, 503\xE2\x80\xA6) porte un bouton de retour dans sa case Adresse, qui dit l'adresse calcul\xC3\xA9" "e ; le clic droit propose \xC2\xAB Revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e \xC2\xBB (les membres choisis, ou tous). Une commande : Ctrl+Z rend la correction.",
+         "variables-liees", ""),
         // 1.12.15 (16/10/2026) : voir docs/LIVRAISON-1.12.15.md.
         note("1.12.15", "Types", Kind::New,
          "LE R\xC3\x89SULTAT FINAL \xC3\x80 CHAQUE NIVEAU : un s\xC3\xA9lecteur ouvert par \xC2\xAB Composer l'\xC3\xA9l\xC3\xA9ment\xE2\x80\xA6 \xC2\xBB montre, sous son R\xC3\xA9sultat, le type complet qui sortira du premier s\xC3\xA9lecteur, ce qu'on y choisit en \xC3\xA9vidence (MAP[STRING] OF VECTOR OF \xE2\x80\xA6), mis \xC3\xA0 jour \xC3\xA0 chaque choix ; son titre dit le niveau (niveau 2, niveau 3\xE2\x80\xA6). On ne se perd plus dans les types imbriqu\xC3\xA9s.",

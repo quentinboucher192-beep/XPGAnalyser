@@ -19,6 +19,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace hmi {
@@ -60,6 +61,8 @@ struct Example {
 
 // L'exemple d'un genre d'objet (nullopt : pas d'exemple, un groupe).
 [[nodiscard]] std::optional<Example> exampleFor(Kind kind);
+// 1.12.16 : l'exemple d'un sujet du guide qui n'est pas un objet (sa cle : "constantes-fonctions-vue") ; nullopt : aucun.
+[[nodiscard]] std::optional<Example> exampleForTopic(std::string_view key);
 
 // ---- lot 16 : le tutoriel de chaque objet -----------------------------------------------
 //  JOUE PAR LE VRAI MOTEUR : c'est l'exemple de l'objet (sa vue, son scenario), en

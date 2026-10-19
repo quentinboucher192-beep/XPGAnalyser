@@ -34,7 +34,9 @@ public:
     int                  mode{0};                 // 0 : la page ; 1 : le tutoriel
     std::function<void(int)> modeRequested;
     gfx::Rect            tabs[2]{};
-    [[nodiscard]] bool tabbed() const { return example && example->hasExample(); }
+    // Les onglets Page / Tutoriel : un objet. 1.12.16 : un sujet a exemple (constantes-fonctions-vue) le montre, sans onglets.
+    [[nodiscard]] bool tabbed() const { return example && example->hasExample() && example->kind().has_value(); }
+    [[nodiscard]] bool showsExample() const { return example && example->hasExample(); }
 protected:
     void onLayout() override {
         const auto b = bounds();
@@ -47,7 +49,7 @@ protected:
             tutorial->setVisibility(tuto ? ui::Visibility::Visible : ui::Visibility::Collapsed);
             tutorial->setBounds(tuto ? body : gfx::Rect{});
         }
-        float h = !tuto && tabbed() ? std::clamp(body.h * 0.46f, 180.f, 380.f) : 0.f;
+        float h = !tuto && showsExample() ? std::clamp(body.h * 0.46f, 180.f, 380.f) : 0.f;
         if (example) {
             example->setVisibility(h > 0.f ? ui::Visibility::Visible : ui::Visibility::Collapsed);
             example->setBounds({body.x, body.y, body.w, h});
@@ -167,7 +169,15 @@ HmiGlyph topicGlyph(const guide::Topic& t) {
 // L'objet a-t-il un exemple anime (et donc son tutoriel joue par le moteur) ?
 // Construire un exemple coute : une fois par genre.
 bool hasExample(const guide::Topic& t) {
-    if (t.kind.empty() || t.kind == "*") return false;
+    // 1.12.16 : un sujet qui n'est pas un objet peut avoir le sien (constantes-fonctions-vue).
+    if (t.kind.empty() || t.kind == "*") {
+        static std::map<std::string, bool> topics;
+        const auto it = topics.find(t.key);
+        if (it != topics.end()) return it->second;
+        const bool has = hmi::examples::exampleForTopic(t.key).has_value();
+        topics.emplace(t.key, has);
+        return has;
+    }
     const auto kind = hmi::kindFromKey(t.kind);
     if (!kind) return false;
     static std::map<hmi::Kind, bool> known;
@@ -465,7 +475,7 @@ HmiHelpPane::HmiHelpPane(std::string id) : ui::Widget(std::move(id)) {
     tools_->setEnabledWhen(TBack, [this] { return !history_.empty(); });
     tools_->setEnabledWhen(TTutorial, [this] { return static_cast<bool>(hosts_.replayTutorial) || static_cast<bool>(hosts_.startTrail); });
     tools_->setEnabledWhen(TReplay, [this] { return example_ && example_->hasExample(); });
-    tools_->setEnabledWhen(TObjectTutorial, [this] { return example_ && example_->hasExample(); });
+    tools_->setEnabledWhen(TObjectTutorial, [this] { return example_ && example_->hasExample() && example_->kind().has_value(); });
     tools_->setCheckedWhen(TOnlyNew, [this] { return onlyNew_; });
     tools_->setEnabledWhen(TOnlyNew, [this] { return onlyNew_ || newTopicCount() > 0; });
     tools_->setEnabledWhen(TMarkRead, [] { return newTopicCount() > 0; });
@@ -717,13 +727,14 @@ bool HmiHelpPane::trailsShown() const noexcept {
 void HmiHelpPane::showExampleOf(const guide::Topic& t) {
     if (!example_) return;
     const auto kind = t.kind.empty() || t.kind == "*" ? std::nullopt : hmi::kindFromKey(t.kind);
-    example_->setKind(kind);
+    if (kind) example_->setKind(kind);
+    else example_->setTopic(t.key);   // 1.12.16 : l'exemple d'un sujet (s'il en a un)
     example_->setCaption(guide::plain(t.example));
     example_->restart();
     // Lot 16 : le tutoriel suit le sujet s'il est montre ; un sujet qui n'est pas
     // un objet revient a la page.
     if (auto* right = static_cast<HelpRight*>(right_)) {
-        if (!example_->hasExample()) right->mode = 0;
+        if (!example_->hasExample() || !kind) right->mode = 0;
         if (right->mode == 1 && tutorial_) tutorial_->setKind(kind);
     }
     if (right_) right_->invalidateLayout();
@@ -733,7 +744,7 @@ void HmiHelpPane::showExampleOf(const guide::Topic& t) {
 bool HmiHelpPane::showTutorial(bool on) {
     auto* right = static_cast<HelpRight*>(right_);
     if (!right || !example_) return false;
-    if (on && !example_->hasExample()) return false;
+    if (on && (!example_->hasExample() || !example_->kind())) return false;
     right->mode = on ? 1 : 0;
     if (on && tutorial_) tutorial_->setKind(example_->kind());
     right->invalidateLayout();

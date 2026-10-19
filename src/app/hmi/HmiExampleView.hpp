@@ -33,6 +33,10 @@ public:
     // L'exemple de ce genre d'objet ; nullopt : aucun (le volet se replie).
     void setKind(std::optional<hmi::Kind> kind);
     [[nodiscard]] std::optional<hmi::Kind> kind() const noexcept { return kind_; }
+    // 1.12.16 : l'exemple d'un sujet qui n'est pas un objet (hmi::examples::exampleForTopic) ; "" : aucun.
+    // Il tourne comme celui d'un objet ; le tutoriel reste aux objets.
+    void setTopic(std::string_view key);
+    [[nodiscard]] const std::string& topic() const noexcept { return topic_; }
     [[nodiscard]] bool hasExample() const noexcept { return example_.has_value(); }
     // Ce que montre l'exemple, ecrit au-dessus (le @exemple du guide).
     void setCaption(std::string caption) { caption_ = std::move(caption); invalidate(); }
@@ -80,6 +84,9 @@ private:
     [[nodiscard]] bool targetOf(const hmi::examples::Step&, gfx::Point& out) const;
 
     std::optional<hmi::Kind>                 kind_;
+    std::string                              topic_;   // 1.12.16 : un sujet du guide (sans genre d'objet)
+    [[nodiscard]] bool active() const noexcept { return kind_.has_value() || !topic_.empty(); }
+    [[nodiscard]] std::optional<hmi::examples::Example> build() const;
     std::optional<hmi::examples::Example>    example_;
     std::unique_ptr<hmi::Runtime>            runtime_;
     HmiLayerBuilder                          layers_;

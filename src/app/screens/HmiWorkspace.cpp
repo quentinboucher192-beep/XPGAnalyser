@@ -3538,7 +3538,11 @@ bool MainAnalysisScreen::openHmiHelpNow() {
             // L'editeur de vues : l'onglet de l'inspecteur dit ce qu'on regle.
             if (auto* editor = dynamic_cast<HmiEditor*>(hmiTab(key))) {
                 const auto tab = editor->inspector().currentIndex();
-                if (tab == 1) place = "actions";
+                // 1.12.16 : les sous-onglets Constantes et Fonctions d'une vue : leur page.
+                const auto* members = editor->viewTabs();
+                if (members && (members->current() == HmiSymbolTabs::Constants || members->current() == HmiSymbolTabs::Functions))
+                    place = "membres-vue";
+                else if (tab == 1) place = "actions";
                 else if (editor->shortcuts() && static_cast<int>(tab) == editor->inspector().indexOf(editor->shortcuts())) place = "raccourcis";   // 1.11.23
                 else if (tab == 2) place = "contenu";
             }
