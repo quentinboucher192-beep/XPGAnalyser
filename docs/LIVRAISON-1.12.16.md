@@ -133,7 +133,14 @@ Fichiers livrés :
 1. Lancez `XPGAnalyser-Setup-1.12.16.exe`. Il met à jour la version installée, la 1.12.15 ou une plus ancienne : même identité d'installation, données reprises sans être déplacées. Il pose les deux applications et leurs deux raccourcis. Vos projets s'ouvrent tels quels.
 2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisissez « Informations complémentaires », puis « Exécuter quand même ».
 
-Les empreintes SHA-256 de l'installateur et des deux zips sont données avec les fichiers.
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.12.16.exe` (30,3 Mo, 31 742 366 octets) :
+`D1177194C24D02BE7099EB71707A669DCDD4BFF452E525ED4AD44E75E5FAD32D`
+
+**Les zips portables.** Chacun contient une application et ce qu'il lui faut, dans un dossier `XPGAnalyser-API-1.12.16` ou `XPGAnalyser-IHM-1.12.16`. Décompressez, puis lancez l'exe.
+- `XPGAnalyser-API-1.12.16-portable.zip` (22,6 Mo) :
+  `75398245DAE44C8A9C24736D5A816BE027AAA55BC7BE9DE3E605F5C7B5485DC8`
+- `XPGAnalyser-IHM-1.12.16-portable.zip` (22,6 Mo) :
+  `B97C13C0DA7DFA9562BA3CD27DC734FB4622806E06D319336BF5B970A2B46F3A`
 
 ## Vérifications
 
@@ -167,7 +174,18 @@ Les nouveaux essais couvrent :
   - Générer dit, à sa plume, une condition qui lit une variable inconnue ;
 - **l'exemple et le modèle** : l'exemple animé se compile et tourne sans faute (+15 °C : `Borne(45 + 15)` = 60, puis 75) ; le modèle « Constantes et fonctions » se génère et se compile sans erreur ; en marche, +10 donne 70, « + Pas » 75, la consigne s'arrête à Maxi = 100, Annuler revient à 70 ; un second modèle dans le même projet reprend les variables et nomme autrement sa popup.
 
-**Les deux exe Windows et l'installateur** : compilés et vérifiés sous Wine avec la livraison des fichiers ; cette partie est complétée à ce moment-là.
+**Les deux exe Windows**, compilés sous Linux avec MinGW-w64 et lancés sous Wine :
+- `--version` répond `XPGAnalyser API 1.12.16` et `XPGAnalyser IHM 1.12.16` ;
+- ils importent exactement les mêmes DLL que ceux de la 1.12.15 (ADVAPI32, IPHLPAPI, KERNEL32, SDL3, SHELL32, USER32, WS2_32, msvcrt, ole32).
+
+**L'installateur**, compilé par Inno Setup 6.4.1 sous Wine, puis installé en silencieux pour tous les comptes, par-dessus la 1.12.15 :
+- avant, la 1.12.15 livrée le 16/10 était installée (`XPGAnalyser IHM 1.12.15`) ;
+- « Installation process succeeded ». Il a repris l'installation en place : même dossier, les deux raccourcis et le dossier Maintenance du menu Démarrer gardés, et son journal de désinstallation complété ;
+- les deux exe installés sont identiques à ceux qui ont été testés. Installés, ils répondent `XPGAnalyser API 1.12.16` et `XPGAnalyser IHM 1.12.16`, et l'API installée analyse `MAST.XPG` comme avant (891 variables, 29 POU).
+
+**Les zips portables** ont chacun 151 fichiers, dont l'exe testé et le manifeste de la 1.12.16.
+
+**Pas encore fait :** ni les exe ni l'installateur n'ont été lancés sur un vrai Windows, et le projet Visual Studio n'a pas été compilé (pas de MSVC ici). Pas de session Wine avec captures pour cette version : la section « Tester vous-même » donne le parcours.
 
 ## Limites connues
 
