@@ -45,6 +45,7 @@
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
 #include "../src/app/hmi/HmiValuePicker.hpp"
 #include "../src/app/hmi/HmiActionDialogs.hpp"     // 1.11.9 : l'operation en arbre, le script, Maths
+#include "../src/app/hmi/HmiItemDuplicateDialog.hpp"   // 1.12.16 : Dupliquer... d'un element
 #include "../src/hmi/HmiTable.hpp"   // 1.12.13 : le Tableau, un mode a la fois
 #include "../src/hmi/HmiActionKinds.hpp"
 #include "../src/hmi/HmiViewPaths.hpp"
@@ -19340,6 +19341,13 @@ void dupliquer_fenetre_1102() {
     l.spacing = 16;
     d.setLayout(l);
     check(d.overflow().empty() && d.layout().columns == 4, "en grille de 4 colonnes : tout tient");
+    // 1.12.16 (« dans dupliquer ajouter decalage X et Y ») : l'espacement en Y, a part de celui en X.
+    l.spacingY = 30;
+    d.setLayout(l);
+    check(d.layout().gapX() == 16 && d.layout().gapY() == 30 && d.overflow().empty(), "1.12.16 : la grille - 16 px en X, 30 en Y");
+    l.spacingY = -1;
+    d.setLayout(l);
+    check(d.layout().gapY() == 16, "1.12.16 : sans espacement Y, celui de X");
     // Dupliquer : le plan joue en une commande (ce que fait l'hote).
     auto res = std::make_shared<hmi::dup::Result>();
     const auto plan = d.plan();
@@ -23974,6 +23982,45 @@ void variablesInternes1118() {
           "V[2].POSITION %MW500, V[2].OUV %MW501.0 ; V[2] porte le crayon");
     check(!vars.setMemberAddress(vid, "[2]", "%M100", &why), "un bit pour le d\xC3\xA9part d'une structure de mots : refus\xC3\xA9 (" + why + ")");
     check(!vars.setMemberAddress(vid, "[0].OUV", "%MW900.1", &why), "un membre interne n'a pas d'adresse : refus\xC3\xA9 (" + why + ")");
+    // 1.12.16 (« quand on modifie une adresse liee, %MW510 par exemple, pour surcharger la suite logique, il faut pouvoir
+    // retirer la surcharge et revenir a la valeur normale ») : V[2] corrige en %MW500 reprend sa place dans la suite -
+    // le bouton de retour de la case Adresse, le clic droit, Ctrl+Z, tout retirer.
+    {
+        const auto fixedCount = [&]() -> long {
+            const auto* x = doc->project.variableById(vid);
+            return x ? static_cast<long>(std::count_if(x->places.begin(), x->places.end(), [](const hmi::MemberAddress& m) { return !m.address.empty(); }))
+                     : -1;
+        };
+        const std::string computed = vars.computedMemberAddress(vid, "[2]");
+        check(!computed.empty() && computed != "%MW500" && fixedCount() == 1,
+              "1.12.16 : l'adresse calcul\xC3\xA9" "e de V[2] (la suite logique, sans la correction) : " + computed);
+        vars.refresh();
+        vars.selectPath("V[2]");
+        vars.layout();
+        const auto cats = vars.properties().categories();
+        const ui::PropertyGrid::Property* pa = nullptr;
+        for (const auto& c : cats)
+            for (const auto& pr : c.properties)
+                if (pr.name == "Adresse" && !pa) pa = &pr;
+        check(pa && pa->overridden && pa->revert && pa->overrideDefault == computed,
+              "1.12.16 : la case Adresse de V[2] le dit corrig\xC3\xA9" "e et propose le retour \xC3\xA0 " + computed);
+        if (pa && pa->revert) pa->revert();
+        check(fixedCount() == 0, "1.12.16 : le bouton de retour - plus de correction");
+        vars.refresh();
+        check(cellOf("V[2].POSITION", 5) == computed, "1.12.16 : V[2].POSITION reprend " + computed + " (" + cellOf("V[2].POSITION", 5) + ")");
+        (void)stack.undo();
+        check(fixedCount() == 1, "1.12.16 : Ctrl+Z - la correction revient");
+        vars.refresh();
+        vars.selectPath("V[2]");
+        vars.openContextMenu({400, 300});
+        const auto* back = entry("Revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e");
+        check(back && back->shortcut == computed, "1.12.16 : le clic droit propose de revenir \xC3\xA0 " + computed);
+        if (back) menu->itemChosen->emit(back->id);
+        check(fixedCount() == 0, "1.12.16 : le clic droit rend la place calcul\xC3\xA9" "e");
+        (void)stack.undo();
+        check(vars.clearMemberAddresses(vid, {}, &why) && fixedCount() == 0, "1.12.16 : retirer toutes les corrections (une commande)");
+        check(!vars.clearMemberAddresses(vid, {}, &why), "1.12.16 : plus rien \xC3\xA0 retirer : refus\xC3\xA9 (" + why + ")");
+    }
 }
 
 // =============================================================================
@@ -31584,11 +31631,388 @@ void valeurInitiale11216() {
     }
 }
 
+// ---- 1.12.16 (T2) : les sous-onglets Dessin | Constantes | Fonctions d'une vue, d'une popup ----
+// 1.12.16 (« sur les courbes ... une option 'Pilotable' dans Proprietes / pouvoir ajouter une condition dynamique pour
+// afficher/cacher une plume ») : la case Pilotable de l'inspecteur, la case « Visible si » d'une plume dans Contenu.
+void courbes11216() {
+    std::printf("== 1.12.16 : une courbe - Pilotable (Propri\xC3\xA9t\xC3\xA9s), Visible si (Contenu) ==\n");
+    Bench b;
+    auto& content = b.editor->content();
+    const Id trend = b.place(Kind::Trend, 100, 100);
+    b.editor->layout();
+    b.v().object(trend)->set("variables", "Pression;Debit;Niveau");
+    b.v().object(trend)->set("names", "Pression;D\xC3\xA9" "bit;Niveau");
+    b.editor->layout();
+    check(hasProperty(b.editor->properties(), "Pilotable (pause / continuer)"), "1.12.16 : la case Pilotable dans les propri\xC3\xA9t\xC3\xA9s d'une courbe");
+    check(commitIn(b.editor->properties(), "Pilotable (pause / continuer)", "TRUE") && b.v().object(trend)->flag("pilotable", false),
+          "1.12.16 : Pilotable coch\xC3\xA9" "e");
+    check(content.mode() == app::HmiContentPanel::Mode::Trend && content.count() == 3, "trois plumes dans Contenu");
+    content.selectIndex(1);
+    check(hasProperty(content.grid(), "Visible si"), "1.12.16 : la plume choisie a sa case Visible si");
+    check(content.setField(1, "visible", "Debit > 5"), "1.12.16 : D\xC3\xA9" "bit visible si Debit > 5");
+    same_text(b.v().object(trend)->text("penVisible"), ";Debit > 5", "1.12.16 : la condition \xC3\xA0 son rang (la 1re plume : aucune)");
+    check(!content.setField(1, "visible", "Debit > 5"), "la m\xC3\xAAme condition : rien ne change");
+    check(!content.setField(1, "visible", "A;B"), "un ; nu couperait la liste : refus\xC3\xA9");
+    check(content.moveItem(1, 1), "descendre D\xC3\xA9" "bit");
+    same_text(b.v().object(trend)->text("penVisible"), ";;Debit > 5", "1.12.16 : sa condition le suit");
+    check(content.removeItem(1), "retirer Niveau (la 2e)");
+    same_text(b.v().object(trend)->text("penVisible"), ";Debit > 5", "1.12.16 : la condition reste \xC3\xA0 sa plume");
+    check(content.setField(1, "visible", ""), "vider la condition");
+    check(!b.v().object(trend)->find("penVisible"), "1.12.16 : plus aucune condition : la propri\xC3\xA9t\xC3\xA9 part (le fichier ne change pas)");
+    (void)b.stack.undo();
+    same_text(b.v().object(trend)->text("penVisible"), ";Debit > 5", "Ctrl+Z : la condition revient");
+    // Un graphique a barres : pas de Visible si (le moteur ne le lit que sur une courbe).
+    {
+        Bench c;
+        const Id bars = c.place(Kind::BarChart, 100, 100);
+        c.editor->layout();
+        c.v().object(bars)->set("variables", "A;B");
+        c.editor->layout();
+        c.editor->content().selectIndex(0);
+        check(!hasProperty(c.editor->content().grid(), "Visible si") && !c.editor->content().setField(0, "visible", "X > 1"),
+              "1.12.16 : un graphique \xC3\xA0 barres n'a pas de Visible si");
+    }
+}
+
+// 1.12.16 (T1, « ajoute les constantes et fonctions sur les VUES/POPUP ») : l'aide a la saisie les connait - par leur nom
+// dans la vue (les privees aussi), par Vue. ailleurs (les publiques), la bulle de signature et l'infobulle.
+void assistVue11216() {
+    std::printf("== 1.12.16 : l'aide \xC3\xA0 la saisie - les constantes et fonctions d'une vue ==\n");
+    namespace hp = app::hmiparams;
+    namespace as = app::assist;
+    Project p;
+    View four = makeView(p, "Vue_Four");
+    {
+        Declaration c;
+        c.id = p.allocate();
+        c.kind = DeclKind::Constant;
+        c.name = "Seuil_Haut";
+        c.type = "REAL";
+        c.value = "85.0";
+        c.description = "au-dela : alarme";
+        four.constants.push_back(c);
+        c.id = p.allocate();
+        c.name = "Secret";
+        c.type = "INT";
+        c.value = "7";
+        c.visibility = Visibility::Private;
+        four.constants.push_back(c);
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Pourcent";
+        f.returnType = "REAL";
+        f.body = "VAR_INPUT\n    x : REAL;\nEND_VAR\nRETURN x / Seuil_Haut * 100.0;";
+        four.functions.push_back(f);
+        f.id = p.allocate();
+        f.name = "Cachee";
+        f.returnType = "INT";
+        f.body = "RETURN Secret;";
+        f.visibility = Visibility::Private;
+        four.functions.push_back(f);
+    }
+    const Id fourId = four.id;
+    p.views.push_back(four);
+    View autre = makeView(p, "Vue_Autre");
+    const Id autreId = autre.id;
+    p.views.push_back(autre);
+    const auto names = [](const std::vector<as::Item>& items) {
+        std::string o;
+        for (const auto& it : items) o += it.text + ",";
+        return o.substr(0, 160);
+    };
+    const auto has = [](const std::vector<as::Item>& items, const std::string& text, const std::string& detail) {
+        return std::any_of(items.begin(), items.end(), [&](const as::Item& it) { return it.text == text && it.detail.find(detail) != std::string::npos; });
+    };
+    // Dans la vue : par leur nom, les privees aussi.
+    hp::setAssistView(fourId);
+    const auto in1 = as::suggest(p, nullptr, "", "Seu", false);
+    check(has(in1, "Seuil_Haut", "constante de Vue_Four"), "dans la vue : Seuil_Haut (constante de Vue_Four) (" + names(in1) + ")");
+    const auto in2 = as::suggest(p, nullptr, "", "Pour", false);
+    check(has(in2, "Pourcent", "fonction de Vue_Four"), "dans la vue : Pourcent (fonction de Vue_Four)");
+    const auto in3 = as::suggest(p, nullptr, "", "Sec", false);
+    check(has(in3, "Secret", "priv\xC3\xA9" "e"), "dans la vue : la constante priv\xC3\xA9" "e aussi");
+    ui::MultiLineText::Signature sig;
+    check(as::signature(&p, nullptr, "Pourcent", sig) && sig.returns == "REAL" && sig.parameters.size() == 1 && sig.parameters[0].find("x : REAL") == 0,
+          "la bulle de Pourcent( dans la vue : x : REAL, rend REAL");
+    const auto d1 = as::describe(p, nullptr, "Seuil_Haut");
+    check(d1.found && d1.type == "REAL" && d1.line.find("constante de Vue_Four") != std::string::npos, "l'infobulle de Seuil_Haut : " + d1.line);
+    // Ailleurs : Vue_Four. - les publiques seulement.
+    hp::setAssistView(autreId);
+    const auto out1 = as::suggest(p, nullptr, "Vue_Four.", "", false);
+    check(has(out1, "Seuil_Haut", "constante de Vue_Four") && has(out1, "Pourcent", "fonction de Vue_Four"),
+          "ailleurs, Vue_Four. : Seuil_Haut et Pourcent (" + names(out1) + ")");
+    check(!has(out1, "Secret", "") && !has(out1, "Cachee", ""), "... pas les priv\xC3\xA9" "es");
+    const auto out2 = as::suggest(p, nullptr, "", "Seu", false);
+    check(!has(out2, "Seuil_Haut", ""), "ailleurs, le nom nu n'est pas propos\xC3\xA9");
+    check(as::signature(&p, nullptr, "Vue_Four.Pourcent", sig) && sig.returns == "REAL", "la bulle de Vue_Four.Pourcent(");
+    const auto d2 = as::describe(p, nullptr, "Vue_Four.Seuil_Haut");
+    check(d2.found && d2.type == "REAL", "l'infobulle de Vue_Four.Seuil_Haut : " + d2.line);
+    const auto d3 = as::describe(p, nullptr, "Vue_Four.Secret");
+    check(d3.found && d3.line.find("priv") != std::string::npos, "Vue_Four.Secret : dit priv\xC3\xA9" "e (" + d3.line + ")");
+    hp::setAssistView(kNoId);
+}
+
+// 1.12.16 (« dans Courbe (contenu en general, actions aussi) pouvoir dupliquer une plume, une action - en gardant le
+// meme principe que dupliquer un symbole ») : Dupliquer... dans Contenu et dans Actions.
+void dupliquerElements11216() {
+    std::printf("== 1.12.16 : Dupliquer\xE2\x80\xA6 une plume, une ligne, un choix, un \xC3\xA9tat, une action ==\n");
+    using Mode = app::HmiContentPanel::Mode;
+    // ---- une plume, par la fenetre (l'hote, comme l'ecran)
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        Variable cuves;
+        cuves.id = b.doc->project.allocate();
+        cuves.name = "Cuves";
+        cuves.type = "ARRAY[0..7] OF REAL";
+        b.doc->project.programs.variables.push_back(cuves);
+        const Id trend = b.place(Kind::Trend, 100, 100);
+        b.editor->layout();
+        b.v().object(trend)->set("variables", "Cuves[0];Debit");
+        b.v().object(trend)->set("names", "Cuve 1;D\xC3\xA9" "bit");
+        b.v().object(trend)->set("colors", "#4FA3FF;#F2994A");
+        b.v().object(trend)->set("penVisible", "Actifs[0];");
+        b.editor->layout();
+        menu::MenuManager mm{menu::MenuFactory{}};
+        content.setDialogHost([&](menu::MenuPtr d, std::function<void(const menu::DialogResult&)> done) { mm.ShowDialog(std::move(d), std::move(done)); });
+        content.selectIndex(0);
+        const auto fields = content.duplicateFields(0);
+        check(fields.size() == 4 && fields[0].label == "Nom" && fields[1].label == "Expression" && fields[2].label == "Couleur" && fields[3].label == "Visible si",
+              "1.12.16 : une plume - Nom, Expression, Couleur, Visible si");
+        check(content.openDuplicate(), "1.12.16 : Dupliquer\xE2\x80\xA6 ouvre la fen\xC3\xAAtre");
+        mm.applyPending();
+        auto* d = dynamic_cast<app::HmiItemDuplicateDialog*>(mm.top());
+        check(d != nullptr, "1.12.16 : la fen\xC3\xAAtre Dupliquer d'un \xC3\xA9l\xC3\xA9ment");
+        if (!d) return;
+        check(d->indices().size() == 2 && d->following(0) && d->following(1), "Cuves[0] (0..7) et Actifs[0] (bornes inconnues) : suivis d'office");
+        d->setCopies(3);
+        check(d->rows().size() == 3 && d->cell(1, 0) == "Cuve 2" && d->cell(3, 1) == "Cuves[3]" && d->cell(2, 3) == "Actifs[2]",
+              "3 copies : Cuve 2.., Cuves[1]..Cuves[3], Actifs[1]..Actifs[3]");
+        same_text(d->confirmLabel(), "Dupliquer (3 copies)", "le bouton dit le nombre de copies");
+        check(d->setCell(2, 0, "Cuve sp\xC3\xA9" "ciale") && d->cell(2, 0) == "Cuve sp\xC3\xA9" "ciale", "une case corrig\xC3\xA9" "e \xC3\xA0 la main");
+        d->setCopies(4);
+        check(d->cell(2, 0) == "Cuve sp\xC3\xA9" "ciale" && d->cell(4, 1) == "Cuves[4]", "4 copies : la case corrig\xC3\xA9" "e reste, la nouvelle suit");
+        d->setFollow(1, false);
+        check(d->cell(4, 3) == "Actifs[0]" && d->cell(4, 1) == "Cuves[4]", "Actifs[0] gard\xC3\xA9 (d\xC3\xA9" "coch\xC3\xA9)");
+        d->setCopies(9);
+        check(!d->warnings().empty() && d->warnings().front().find("Cuves[9]") != std::string::npos, "9 copies : Cuves[9] sort des bornes (0..7), dit");
+        d->setCopies(2);
+        check(d->confirm(), "Dupliquer");
+        mm.applyPending();
+        same_text(b.v().object(trend)->text("variables"), "Cuves[0];Cuves[1];Cuves[2];Debit", "1.12.16 : les copies apr\xC3\xA8s l'original, dans l'ordre");
+        same_text(b.v().object(trend)->text("names"), "Cuve 1;Cuve 2;Cuve sp\xC3\xA9" "ciale;D\xC3\xA9" "bit", "les noms (la case corrig\xC3\xA9" "e comprise)");
+        same_text(b.v().object(trend)->text("penVisible"), "Actifs[0];Actifs[0];Actifs[0]", "Visible si : Actifs[0] gard\xC3\xA9, la 4e plume sans condition");
+        const auto colors = hmi::splitSemicolons(b.v().object(trend)->text("colors"));
+        check(colors.size() >= 4 && colors[0] == "#4FA3FF" && colors[3] == "#F2994A" && colors[1] != colors[0] && colors[2] != colors[1],
+              "les couleurs : la palette pour les copies, D\xC3\xA9" "bit garde la sienne");
+        check(content.selectedIndex() == 1, "la premi\xC3\xA8re copie choisie");
+        (void)b.stack.undo();
+        same_text(b.v().object(trend)->text("variables"), "Cuves[0];Debit", "Ctrl+Z retire toutes les copies (une commande)");
+        // Annuler : rien.
+        content.selectIndex(0);
+        check(content.openDuplicate(), "rouvrir");
+        mm.applyPending();
+        if (auto* again = dynamic_cast<app::HmiItemDuplicateDialog*>(mm.top())) again->cancel();
+        mm.applyPending();
+        same_text(b.v().object(trend)->text("variables"), "Cuves[0];Debit", "Annuler : rien ne change");
+    }
+    // ---- sans hote : une copie (les essais, les scripts)
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id tab = b.place(Kind::Table, 100, 100);
+        b.editor->layout();
+        b.v().object(tab)->set("columns", "Cuve;Niveau");
+        b.v().object(tab)->set("cells", hmi::formatCells({{"Cuve 1", "=Cuves[0].Niveau"}, {"Total", "=Somme"}}));
+        b.editor->layout();
+        check(content.mode() == Mode::Table && content.count() == 2, "un tableau \xC3\xA0 cases fixes, deux lignes");
+        content.selectIndex(0);
+        check(content.openDuplicate() && content.count() == 3, "1.12.16 : sans h\xC3\xB4te, une copie de la ligne");
+        const auto rows = hmi::parseCells(b.v().object(tab)->text("cells"));
+        check(rows.size() == 3 && rows[1].size() == 2 && rows[1][0] == "Cuve 2" && rows[1][1] == "=Cuves[1].Niveau" && rows[2][0] == "Total",
+              "la ligne 2 : Cuve 2, =Cuves[1].Niveau ; Total reste la derni\xC3\xA8re");
+    }
+    // ---- un choix, un etat (insertCopies, ce que rend la fenetre)
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id combo = b.place(Kind::ComboBox, 100, 100);
+        b.editor->layout();
+        b.v().object(combo)->set("items", "Mode 1;Arr\xC3\xAAt");
+        b.v().object(combo)->set("values", "1;0");
+        b.editor->layout();
+        check(content.mode() == Mode::Choices, "une liste d\xC3\xA9roulante : ses choix");
+        const auto f = content.duplicateFields(0);
+        const auto rows = hmi::dup::itemCopies(f, hmi::dup::itemIndices(f), {}, 2);
+        check(content.insertCopies(0, rows), "deux copies du choix Mode 1");
+        same_text(b.v().object(combo)->text("items"), "Mode 1;Mode 2;Mode 3;Arr\xC3\xAAt", "les libell\xC3\xA9s suivent leur num\xC3\xA9ro");
+        same_text(b.v().object(combo)->text("values"), "1;2;3;0", "les valeurs \xC3\xA9" "crites aussi");
+        check(!content.insertCopies(0, {{"A;B", "4"}}), "un ; nu couperait la liste : refus\xC3\xA9");
+    }
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id lamp = b.place(Kind::MultiStateIndicator, 100, 100);
+        b.editor->layout();
+        b.v().object(lamp)->set("stateList", "0 = Arr\xC3\xAAt | #4A5261; 1 = Marche 1 | #2ECC71; * = Inconnu | #888888");
+        b.editor->layout();
+        check(content.mode() == Mode::States && content.count() == 3, "un voyant multi-\xC3\xA9tats : trois \xC3\xA9tats");
+        check(content.duplicateFields(2).empty(), "le \xC2\xAB sinon \xC2\xBB (*) ne se duplique pas");
+        const auto f = content.duplicateFields(1);
+        check(content.insertCopies(1, hmi::dup::itemCopies(f, {}, {}, 1)), "une copie de l'\xC3\xA9tat Marche 1");
+        const auto states = hmi::parseStateList(b.v().object(lamp)->text("stateList"));
+        check(states.size() == 4 && states[2].match == "2" && states[2].text == "Marche 2" && states[3].match == "*", "l'\xC3\xA9tat 2 = Marche 2, le sinon reste le dernier");
+    }
+    // ---- une action, un raccourci
+    {
+        Bench b;
+        const Id btn = b.place(Kind::Button, 100, 100);
+        b.editor->layout();
+        auto& acts = b.editor->actions();
+        Action a;
+        a.trigger = Trigger::Click;
+        a.operation = Operation::Set;
+        a.target = "V[0].CMD";
+        a.value = "1";
+        acts.selectIndex(acts.add(a));
+        check(acts.openDuplicate() && b.v().object(btn)->actions.size() == 2 && b.v().object(btn)->actions[1].target == "V[0].CMD",
+              "sans h\xC3\xB4te : une copie, comme avant");
+        (void)b.stack.undo();
+        menu::MenuManager mm{menu::MenuFactory{}};
+        acts.setDialogHost([&](menu::MenuPtr d, std::function<void(const menu::DialogResult&)> done) { mm.ShowDialog(std::move(d), std::move(done)); }, {});
+        acts.selectIndex(0);
+        const auto f = acts.duplicateFields(0);
+        check(f.size() == 2 && f[0].label == "Cible" && f[1].label == "Valeur", "1.12.16 : une action - Cible, Valeur");
+        check(acts.openDuplicate(), "Dupliquer\xE2\x80\xA6 ouvre la fen\xC3\xAAtre");
+        mm.applyPending();
+        auto* d = dynamic_cast<app::HmiItemDuplicateDialog*>(mm.top());
+        if (!d) { check(false, "la fen\xC3\xAAtre"); return; }
+        d->setCopies(3);
+        check(d->confirm(), "Dupliquer (3 copies)");
+        mm.applyPending();
+        const auto& list = b.v().object(btn)->actions;
+        check(list.size() == 4 && list[1].target == "V[1].CMD" && list[3].target == "V[3].CMD" && list[3].value == "1" && list[3].operation == Operation::Set,
+              "V[1].CMD, V[2].CMD, V[3].CMD - le reste de l'action recopi\xC3\xA9");
+        (void)b.stack.undo();
+        check(b.v().object(btn)->actions.size() == 1, "Ctrl+Z : une commande");
+    }
+    {
+        Bench b;
+        auto* keys = b.editor->shortcuts();
+        check(keys != nullptr, "le volet Raccourcis de la vue");
+        if (!keys) return;
+        keys->setOwner(kNoId);
+        Action k;
+        k.trigger = Trigger::KeyPress;
+        k.key = "F5";
+        k.operation = Operation::Log;
+        k.value = "Four 1";
+        keys->selectIndex(keys->add(k));
+        const auto f = keys->duplicateFields(keys->selectedIndex());
+        check(!f.empty() && f[0].label == "Touche", "un raccourci : sa Touche en premier");
+        check(keys->insertCopies(keys->selectedIndex(), hmi::dup::itemCopies(f, {}, {}, 2)), "deux copies du raccourci");
+        std::vector<std::string> made;
+        for (const auto& x : b.v().actions)
+            if (hmi::triggerIsKey(x.trigger)) made.push_back(x.key + "=" + x.value);
+        check(made.size() == 3 && made[1] == "F6=Four 1" && made[2] == "F7=Four 1", "F5 -> F6, F7 (la valeur sans indice reste)");
+    }
+}
+
+void vueOnglets11216() {
+    std::printf("1.12.16 (T2) : les sous-onglets d'une vue - Dessin, Constantes, Fonctions ; le renommage suit partout\n");
+    namespace de = hmi::decledit;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    auto& p = doc->project;
+    View four = makeView(p, "Vue_Four");
+    Declaration seuil;
+    seuil.kind = DeclKind::Constant;
+    seuil.name = "Seuil_Haut";
+    seuil.type = "REAL";
+    seuil.value = "85.0";
+    Declaration pas = seuil;
+    pas.name = "Pas";
+    pas.value = "5.0";
+    four.constants = {seuil, pas};
+    hmi::HmiFunction pct = makeFunction(p, "Pourcent", "REAL", "RETURN Valeur * 100.0 / Seuil_Haut;\n");
+    Declaration valeur;
+    valeur.kind = DeclKind::Parameter;
+    valeur.name = "Valeur";
+    valeur.type = "REAL";
+    pct.decls = {valeur};
+    four.functions = {pct};
+    Script open;
+    open.id = p.allocate();
+    open.event = "OnOpen";
+    open.lang = ScriptLang::ST;
+    open.body = "x := Seuil_Haut + Pas;\ny := Pourcent(42.5);\n";
+    four.scripts.push_back(open);
+    p.views.push_back(four);
+    Script bilan;
+    bilan.id = p.allocate();
+    bilan.name = "Bilan";
+    bilan.event = "Appel";
+    bilan.lang = ScriptLang::ST;
+    bilan.body = "a := Vue_Four.Seuil_Haut;\nb := Vue_Four.Pourcent(10.0);\n";
+    p.programs.scripts.push_back(bilan);
+    uniqueDeclarationIds(p);
+    const Id viewId = p.views.back().id;
+    app::HmiEditor ed("ed11216", doc, viewId, apply);
+    ed.setBounds({0, 0, 1600, 900});
+    ed.layout();
+    auto* tabs = ed.viewTabs();
+    check(tabs && !ed.symbolTabs() && tabs->order() == std::vector<int>{app::HmiSymbolTabs::Drawing, app::HmiSymbolTabs::Constants, app::HmiSymbolTabs::Functions},
+          "une vue : les sous-onglets Dessin, Constantes, Fonctions");
+    check(tabs && tabs->label(app::HmiSymbolTabs::Constants) == "Constantes (2)" && tabs->label(app::HmiSymbolTabs::Functions) == "Fonctions (1)",
+          "... Constantes (2), Fonctions (1)");
+    if (!tabs || !ed.viewConstants() || !ed.viewFunctions()) return;
+    tabs->setCurrent(app::HmiSymbolTabs::Constants);
+    ed.layout();
+    auto& grid = *ed.viewConstants();
+    check(grid.visibility() == ui::Visibility::Visible && grid.count() == 2, "Constantes : la grille de la vue, ses deux constantes");
+    // Renommer : la vue (par son nom) et le projet (Vue_Four.Nom) suivent, en une commande.
+    check(grid.setCell(0, de::Column::Name, "Seuil_Max"), "renommer Seuil_Haut en Seuil_Max");
+    const auto& v = *p.view(viewId);
+    check(v.constants[0].name == "Seuil_Max" && v.scripts[0].body.find("x := Seuil_Max + Pas;") != std::string::npos
+              && p.programs.scripts[0].body.find("a := Vue_Four.Seuil_Max;") != std::string::npos
+              && v.functions[0].body.find("/ Seuil_Max;") != std::string::npos,
+          "... la vue la lit par son nouveau nom (script, fonction), le script g\xC3\xA9n\xC3\xA9ral par Vue_Four.Seuil_Max");
+    check(stack.undo() && p.view(viewId)->constants[0].name == "Seuil_Haut" && p.programs.scripts[0].body.find("Vue_Four.Seuil_Haut") != std::string::npos,
+          "... Ctrl+Z : tout revient");
+    check(!grid.setCell(1, de::Column::Name, "Pourcent"), "un nom d\xC3\xA9j\xC3\xA0 pris dans la vue (la fonction Pourcent) : refus\xC3\xA9");
+    // Ajouter une constante, la calculer a chaque ouverture (la fenetre Valeur initiale).
+    const std::size_t before = grid.count();
+    check(grid.add() && grid.count() == before + 1, "+ une constante");
+    tabs->setCurrent(app::HmiSymbolTabs::Functions);
+    ed.layout();
+    auto& fns = *ed.viewFunctions();
+    check(fns.visibility() == ui::Visibility::Visible && fns.symbol() == viewId, "Fonctions : le volet des fonctions de la vue");
+    const Id fid = p.view(viewId)->functions[0].id;
+    check(fns.renameFunction(fid, "Ratio"), "renommer Pourcent en Ratio");
+    check(p.view(viewId)->functions[0].name == "Ratio" && p.view(viewId)->scripts[0].body.find("y := Ratio(42.5);") != std::string::npos
+              && p.programs.scripts[0].body.find("b := Vue_Four.Ratio(10.0);") != std::string::npos,
+          "... ses appels suivent : Ratio(42.5) dans la vue, Vue_Four.Ratio(10.0) ailleurs");
+    check(fns.setFunctionVisibility(fid, false) && p.view(viewId)->functions[0].visibility == hmi::Visibility::Private, "Port\xC3\xA9" "e : priv\xC3\xA9" "e");
+    std::string why;
+    check(!fns.renameFunction(fid, "Pas", &why), "une fonction ne prend pas le nom d'une constante de la vue - " + why);
+    // Un symbole garde ses sous-onglets (Dessin, Alarmes, Instances, Operateurs, Fonctions, Popups).
+    View sym = makeView(p, "S_Bloc");
+    sym.role = "symbole";
+    p.views.push_back(sym);
+    app::HmiEditor eds("eds11216", doc, p.views.back().id, apply);
+    check(eds.symbolTabs() && !eds.viewTabs() && eds.symbolTabs()->order().size() == 6, "un symbole : ses six sous-onglets, pas Constantes");
+}
+
 int main(int argc, char** argv) {
     // 1.12.16 : HMI_TEST_11216=1 - Choisir une fonction..., la valeur initiale, seuls.
     if (const char* only = std::getenv("HMI_TEST_11216"); only && *only == '1') {
         choisir11216();
         valeurInitiale11216();
+        vueOnglets11216();
+        courbes11216();
+        dupliquerElements11216();
+        assistVue11216();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -32028,6 +32452,10 @@ int main(int argc, char** argv) {
     deballage11215();                       // 1.12.15 : le deballage, ses proprietes, first et second
     choisir11216();                         // 1.12.16 : Choisir une fonction... (le selecteur, la derniere ligne, Ctrl+I)
     valeurInitiale11216();                  // 1.12.16 (T4) : la valeur initiale, en brut ou en code
+    vueOnglets11216();                      // 1.12.16 (T2) : les sous-onglets Constantes et Fonctions d'une vue
+    courbes11216();                         // 1.12.16 : Pilotable, Visible si par plume
+    dupliquerElements11216();               // 1.12.16 : Dupliquer... une plume, une ligne, une action
+    assistVue11216();                       // 1.12.16 (T1) : l'aide a la saisie des constantes et fonctions d'une vue
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges
     direct1121();                           // 1.11.21 : les diagnostics en direct au panneau du bas
     explorateurs1121();                     // 1.11.21 : les explorateurs deplient les codes

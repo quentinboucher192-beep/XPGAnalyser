@@ -398,7 +398,9 @@ bool expandObject(Object& o, const SourceFn& source, const TextFn& text) {
             const auto colors = main ? roles::splitList(o.text("colors"), ';') : std::vector<std::string>{};
             const auto units = main ? roles::splitList(o.text("units"), ';') : std::vector<std::string>{};
             const auto formats = main ? roles::splitList(o.text("formats"), ';') : std::vector<std::string>{};
-            std::vector<std::string> outE, outN, outC, outU, outF;
+            // 1.12.16 : la condition de chaque plume d'une courbe - un joker suit l'element (Cuves[*].Actif), sinon elle se repete.
+            const auto visible = main ? roles::splitList(o.text("penVisible"), ';') : std::vector<std::string>{};
+            std::vector<std::string> outE, outN, outC, outU, outF, outV;
             for (std::size_t i = 0; i < items.size(); ++i) {
                 // 1.12.7 (lot E) : Pompe.* - un element par membre de la structure ; Ligne/Convoyeur/* - un element
                 // par variable du dossier (leur source : le projet).
@@ -414,6 +416,7 @@ bool expandObject(Object& o, const SourceFn& source, const TextFn& text) {
                         outC.emplace_back();
                         outU.push_back(at(units, i));
                         outF.push_back(at(formats, i));
+                        outV.push_back(at(visible, i));
                     }
                     continue;
                 }
@@ -424,12 +427,15 @@ bool expandObject(Object& o, const SourceFn& source, const TextFn& text) {
                     outC.push_back(at(colors, i));
                     outU.push_back(at(units, i));
                     outF.push_back(at(formats, i));
+                    outV.push_back(at(visible, i));
                     continue;
                 }
                 const auto src = source ? source(sourceName(*j)) : std::nullopt;
                 if (!src) continue;   // une source inconnue : aucun element (Generer le dit)
                 const std::string name = at(names, i);
                 const auto nameJoker = jokerOf(name);
+                const std::string cond = at(visible, i);
+                const auto condJoker = jokerOf(cond);
                 for (std::size_t k = 0; k < src->indices.size(); ++k) {
                     const std::string& index = src->indices[k];
                     const std::string label = k < src->labels.size() ? src->labels[k] : index;
@@ -449,6 +455,7 @@ bool expandObject(Object& o, const SourceFn& source, const TextFn& text) {
                     outC.emplace_back();          // la palette tourne
                     outU.push_back(at(units, i));  // l'unite et le format se repetent
                     outF.push_back(at(formats, i));
+                    outV.push_back(condJoker ? itemAt(*condJoker, index, src->enumeration) : cond);
                 }
             }
             p->value = joinSemicolons(outE);
@@ -460,6 +467,7 @@ bool expandObject(Object& o, const SourceFn& source, const TextFn& text) {
                 if (!colors.empty()) o.set("colors", anyOf(outC) ? joinSemicolons(outC) : std::string{});
                 if (!units.empty()) o.set("units", anyOf(outU) ? joinSemicolons(outU) : std::string{});
                 if (!formats.empty()) o.set("formats", anyOf(outF) ? joinSemicolons(outF) : std::string{});
+                if (!visible.empty()) o.set("penVisible", anyOf(outV) ? joinSemicolons(outV) : std::string{});
             }
             any = true;
         }

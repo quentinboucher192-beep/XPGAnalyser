@@ -698,7 +698,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   dupliquer-garder "Colonne" oui|non        une case vide garde le repere
     //   dupliquer-suivre N oui|non               l'indice N (1 : le premier) suivi ou garde
     //   dupliquer-original oui|non               "Remplacer aussi dans l'original"
-    //   dupliquer-pose x|y|grille [colonnes] [espacement]
+    //   dupliquer-pose x|y|grille [colonnes] [espacement] [espacementY]   (1.12.16 : Y a part)
     //   dupliquer-ajuster                        "Ajuster l'espacement"
     //   dupliquer-onglet 1|2                     les copies / la disposition
     //   dupliquer-ligne L                        l'avant / apres de la ligne L
@@ -729,6 +729,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             l.axis = a == "y" ? hmi::dup::Axis::Y : a == "grille" ? hmi::dup::Axis::Grid : hmi::dup::Axis::X;
             if (!arg(2).empty()) l.columns = std::atoi(arg(2).c_str());
             if (!arg(3).empty()) l.spacing = std::atof(arg(3).c_str());
+            if (!arg(4).empty()) l.spacingY = std::atof(arg(4).c_str());   // 1.12.16
             d->setLayout(l);
         }
         else if (cmd == "dupliquer-ajuster") { if (!d->fitSpacing()) fail(cmd + " : aucun espacement ne fait tout tenir"); }

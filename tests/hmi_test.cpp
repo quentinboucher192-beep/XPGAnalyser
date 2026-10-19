@@ -2269,6 +2269,130 @@ void courbes() {
           "mesure horodat\xC3\xA9" "e (secondes depuis 1970)");
 }
 
+// 1.12.16 (« sur les courbes faire en sorte de pouvoir faire pause/continuer et avoir une option 'Pilotable' dans
+// Proprietes / pouvoir ajouter une condition dynamique pour afficher/cacher une plume ») : la courbe pilotable,
+// la condition « Visible si » de chaque plume.
+void courbesPilotables11216() {
+    std::printf("== 1.12.16 : une courbe pilotable (pause / continuer), une plume visible selon une condition ==\n");
+    Supervision s;
+    const Id libre = edit::add(s.p, s.v(), Kind::Trend, 0, 0);
+    const Id pilotee = edit::add(s.p, s.v(), Kind::Trend, 0, 300);
+    check(!s.v().object(libre)->flag("pilotable", true), "une courbe neuve : la case Pilotable decochee");
+    for (const Id id : {libre, pilotee}) {
+        s.v().object(id)->set("variables", "Pression; Debit");
+        s.v().object(id)->set("penVisible", ";Debit > 5");
+        s.v().object(id)->setNumber("duration", 10);
+    }
+    s.v().object(pilotee)->setFlag("pilotable", true);
+    s.plc.values["Debit"] = sim::Value::integer(sim::Type::Int, 2);
+    s.start();
+    s.run(1.0);
+    const auto* series = s.rt.trend(s.view, pilotee);
+    check(series && series->size() == 2 && (*series)[0].visible && !(*series)[1].visible,
+          "Debit > 5 faux : la plume Debit cachee, Pression (sans condition) visible");
+    check(series && (*series)[1].points.size() >= 9, "cachee, elle se mesure quand meme");
+    s.plc.values["Debit"] = sim::Value::integer(sim::Type::Int, 7);
+    s.run(0.2);
+    check(series && (*series)[1].visible, "Debit = 7 : la plume se montre");
+    // Pas pilotable : ni bouton ni pause.
+    check(hmi::trendHit(*s.v().object(libre), 400, 200, 385, 10).empty(), "pas pilotable : pas de bouton");
+    check(!s.rt.setTrendPaused(s.view, libre, true) && !s.rt.trendPausedAt(s.view, libre), "pas pilotable : pas de pause");
+    // Pilotable : le bouton en haut a droite, Pause puis Continuer.
+    const auto box = hmi::trendPauseBox(400, 200);
+    check(hmi::trendHit(*s.v().object(pilotee), 400, 200, box[0] + 5, box[1] + 5) == "pause"
+              && hmi::trendHit(*s.v().object(pilotee), 400, 200, 100, 100).empty(),
+          "pilotable : le bouton en haut a droite, rien ailleurs");
+    const double t0 = s.t;
+    s.rt.objectPart(pilotee, "pause", s.t);
+    const auto at = s.rt.trendPausedAt(s.view, pilotee);
+    check(at && std::fabs(*at - t0) < 1e-9 && eventHas(s.rt, "Courbe en pause", "Vue_Gaz."), "le bouton : la courbe figee a l'instant de la pause (dit)");
+    const auto before = series ? (*series)[0].points.size() : 0;
+    s.run(1.0);
+    check(series && (*series)[0].points.size() > before && s.rt.trendPausedAt(s.view, pilotee) == at,
+          "en pause, les mesures continuent ; l'instant fige ne bouge pas");
+    s.rt.objectPart(pilotee, "pause", s.t);
+    check(!s.rt.trendPausedAt(s.view, pilotee) && eventHas(s.rt, "Courbe reprise", "Vue_Gaz."), "Continuer : le temps reel");
+    check(s.rt.setTrendPaused(s.view, pilotee, true) && s.rt.trendPausedAt(s.view, pilotee), "setTrendPaused (le meme chemin)");
+    s.rt.start(s.t);
+    check(!s.rt.trendPausedAt(s.view, pilotee), "un nouveau lancement : plus de pause");
+    // Une plume a joker : sa condition suit chaque element (Cuves[*].Actif), ou se repete.
+    {
+        Object o = makeObject(Kind::Trend, 1, "T", 0, 0, kNoId);
+        o.set("variables", "Cuves[*].Niveau;Debit");
+        o.set("penVisible", "Cuves[*].Actif;Debit > 0");
+        const auto source = [](std::string_view name) -> std::optional<hmi::sources::Source> {
+            if (name != "Cuves") return std::nullopt;
+            hmi::sources::Source src;
+            src.indices = {"1", "2"};
+            return src;
+        };
+        check(hmi::sources::expandObject(o, source, nullptr) && o.text("variables") == "Cuves[1].Niveau;Cuves[2].Niveau;Debit"
+                  && o.text("penVisible") == "Cuves[1].Actif;Cuves[2].Actif;Debit > 0",
+              "un joker : une condition par cuve (Cuves[1].Actif, Cuves[2].Actif), la suivante a sa place (" + o.text("penVisible") + ")");
+    }
+    // Generer : une condition qui n'est pas une condition, une variable inconnue.
+    {
+        s.v().object(libre)->set("penVisible", "Pression;Inconnue > 2");
+        const auto issues = hmi::compileWith(s.p, [](std::string_view n) { return n == "Pression" || n == "Debit"; });
+        const auto said = [&](std::string_view what) {
+            return std::any_of(issues.begin(), issues.end(), [&](const hmi::Issue& i) {
+                return i.object == libre && i.property == "penVisible" && i.message.find(what) != std::string::npos;
+            });
+        };
+        check(said("plume 2, visible si"), "Generer : la condition de la plume 2 (Inconnue) est dite, a sa plume");
+    }
+}
+
+// 1.12.16 (« dans Courbe (contenu en general, actions aussi) pouvoir dupliquer une plume, une action - le meme principe
+// que dupliquer un symbole ») : le moteur de Dupliquer d'un element - ses indices suivis, son nom numerote, la palette.
+void dupliquerElement11216() {
+    std::printf("== 1.12.16 : Dupliquer un \xC3\xA9l\xC3\xA9ment (une plume, une action, une ligne) ==\n");
+    using namespace hmi::dup;
+    check(numberedName("Plume 1", 1) == "Plume 2" && numberedName("F2", 3) == "F5" && numberedName("Cuve 07", 1) == "Cuve 08"
+              && numberedName("V_101", 2) == "V_103" && numberedName("Pompe 1 (bar)", 1) == "Pompe 2 (bar)",
+          "le dernier nombre suit (Plume 1 -> Plume 2, F2 -> F5, 07 -> 08, V_101 -> V_103)");
+    check(numberedName("Pression", 1) == "Pression 2" && numberedName("Pression", 1, true) == "Pression" && numberedName("", 2) == "3",
+          "sans nombre : \" 2\" au bout (un nom) ; tel quel (un libelle)");
+    std::vector<ItemField> pen(4);
+    pen[0] = {"Nom", "Cuve 1", ItemField::Kind::Name, {}};
+    pen[1] = {"Expression", "Cuves[0].Niveau * Coef[2]", ItemField::Kind::Expression, {}};
+    pen[2] = {"Couleur", "#4FA3FF", ItemField::Kind::Rotate, {"#F2994A", "#2ECC71"}};
+    pen[3] = {"Visible si", "$V[1].Ouv$ AND Marche", ItemField::Kind::Expression, {}};
+    Project q;
+    {
+        Variable cuves;
+        cuves.id = q.allocate();
+        cuves.name = "Cuves";
+        cuves.type = "ARRAY[0..3] OF REAL";
+        q.programs.variables.push_back(cuves);
+    }
+    const auto ix = itemIndices(pen, projectBounds(q));
+    check(ix.size() == 2 && ix[0].label() == "Cuves[0]" && ix[0].bounds && ix[0].bounds->second == 3 && ix[1].label() == "Coef[2]" && !ix[1].bounds,
+          "les indices des champs : Cuves[0] (0..3), Coef[2] (bornes inconnues) ; ceux d'un rep\xC3\xA8re n'en sont pas");
+    const auto rows = itemCopies(pen, ix, {true, false}, 3);
+    check(rows.size() == 3 && rows[0].size() == 4, "3 copies, 4 cases chacune");
+    check(rows[0][1] == "Cuves[1].Niveau * Coef[2]" && rows[2][1] == "Cuves[3].Niveau * Coef[2]", "Cuves[0] suivi, Coef[2] gard\xC3\xA9 (d\xC3\xA9" "coch\xC3\xA9)");
+    check(rows[0][0] == "Cuve 2" && rows[2][0] == "Cuve 4", "le nom suit son num\xC3\xA9ro (Cuve 1 -> Cuve 2...)");
+    check(rows[0][2] == "#F2994A" && rows[1][2] == "#2ECC71" && rows[2][2] == "#F2994A", "la couleur : la palette tour \xC3\xA0 tour");
+    check(rows[0][3] == "$V[2].Ouv$ AND Marche" && rows[2][3] == "$V[4].Ouv$ AND Marche", "le morceau \xC3\xA0 indices d'un rep\xC3\xA8re : d\xC3\xA9" "cal\xC3\xA9 (ses $ gard\xC3\xA9s)");
+    check(followFits(ix[0], 3) && !followFits(ix[0], 4), "Cuves (0..3) : 3 copies tiennent, 4 non");
+    // Un nom qui porte l'indice suit l'indice (pas de numero en plus).
+    std::vector<ItemField> named(1);
+    named[0] = {"Nom", "Cuves[0].Nom", ItemField::Kind::Name, {}};
+    const auto nx = itemIndices(named);
+    check(itemCopies(named, nx, {}, 1)[0][0] == "Cuves[1].Nom", "un nom \xC3\xA0 indice : l'indice suit");
+    // Une action : la touche d'un raccourci suit son numero, Entree reste Entree.
+    std::vector<ItemField> key(1);
+    key[0] = {"Touche", "Ctrl+F5", ItemField::Kind::Label, {}};
+    check(itemCopies(key, {}, {}, 2)[1][0] == "Ctrl+F7", "Ctrl+F5 -> Ctrl+F6, Ctrl+F7");
+    key[0].text = "Enter";
+    check(itemCopies(key, {}, {}, 1)[0][0] == "Enter", "Entr\xC3\xA9" "e reste Entr\xC3\xA9" "e (un libell\xC3\xA9 sans nombre)");
+    // Une case Keep : recopiee.
+    std::vector<ItemField> kept(1);
+    kept[0] = {"Format", "0.0", ItemField::Kind::Keep, {}};
+    check(itemCopies(kept, {}, {}, 2)[1][0] == "0.0", "un format : recopi\xC3\xA9");
+}
+
 void persistanceLot4() {
     std::printf("persistance : alarmes, recettes, securite, historiques\n");
     Supervision s;
@@ -19395,6 +19519,41 @@ void dupliquerReperes1102() {
     lg.columns = 2;
     const auto ov = overlapping(v, {vid}, 7, lg);
     check(!ov.empty(), "en grille de 2, une copie chevauche le rectangle");
+    // 1.12.16 (« dans dupliquer ajouter decalage X et Y pas seulement XY ») : l'espacement en Y, a part de celui en X.
+    {
+        Layout g = plan.layout;   // la grille de 4, 16 px
+        check(g.gapX() == 16 && g.gapY() == 16, "1.12.16 : sans espacement Y, celui de X (les anciens plans)");
+        g.spacingY = 40;
+        const auto o2 = offsets(s.box, 7, g);
+        check(o2.size() == 7 && o2[2].dx == 216 && o2[2].dy == 0 && o2[3].dx == 0 && o2[3].dy == 96,
+              "1.12.16 : la grille - 16 px entre deux colonnes, 40 entre deux lignes (56 + 40)");
+        Layout yOnly;
+        yOnly.axis = Axis::Y;
+        yOnly.spacing = 99;
+        yOnly.spacingY = 10;
+        Layout xOnly;
+        xOnly.spacing = 5;
+        xOnly.spacingY = 300;
+        check(stepOf(s.box, yOnly) == 66 && stepOf(s.box, xOnly) == 61, "1.12.16 : Sur Y, l'espacement Y (56 + 10) ; Sur X, celui de X (56 + 5)");
+        const auto fy = fittingLayout(v, s.box, 7, ly);
+        check(fy && fy->gapY() == *fit && fy->gapX() == 16 && overflowing(v, s.box, 7, *fy).empty(),
+              "1.12.16 : Ajuster sur Y - l'espacement Y seul (" + std::to_string(fy ? fy->gapY() : -1) + ")");
+        Layout wide = plan.layout;
+        wide.spacing = 300;
+        wide.spacingY = 300;
+        check(!overflowing(v, s.box, 7, wide).empty(), "1.12.16 : la grille a 300 px : des copies sortent");
+        const auto fg = fittingLayout(v, s.box, 7, wide);
+        bool widest = false;
+        if (fg) {
+            Layout moreX = *fg, moreY = *fg;
+            moreX.spacing += 1;
+            moreY.spacingY += 1;
+            widest = !overflowing(v, s.box, 7, moreX).empty() && !overflowing(v, s.box, 7, moreY).empty();
+        }
+        check(fg && overflowing(v, s.box, 7, *fg).empty() && widest,
+              "1.12.16 : Ajuster en grille - chacun le plus grand qui tient (" + std::to_string(fg ? fg->gapX() : -1) + " en X, "
+                  + std::to_string(fg ? fg->gapY() : -1) + " en Y)");
+    }
 
     // Les cases : une vide bloque (sauf "garder le repere"), une valeur qui ne
     // mene a rien est rouge ("veux-tu dire"), un nom pris, un indice hors bornes.
@@ -27416,6 +27575,14 @@ void tableauxDynamiques11213() {
 }
 
 int main(int argc, char** argv) {
+    // 1.12.16 : HMI_TEST_11216=1 - les courbes pilotables, Dupliquer (X et Y), seuls.
+    if (const char* only = std::getenv("HMI_TEST_11216"); only && *only == '1') {
+        courbesPilotables11216();
+        dupliquerElement11216();
+        dupliquerReperes1102();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.13 : HMI_TEST_11213=1 - le Tableau, un mode a la fois, seul.
     if (const char* only = std::getenv("HMI_TEST_11213"); only && *only == '1') {
         tableauModes11213();
@@ -27517,6 +27684,8 @@ int main(int argc, char** argv) {
     recettes();
     securite();
     courbes();
+    courbesPilotables11216();         // 1.12.16 : pause / continuer, Visible si par plume
+    dupliquerElement11216();          // 1.12.16 : Dupliquer une plume, une action, une ligne
     persistanceLot4();
     archive();
     verificationsLot4();

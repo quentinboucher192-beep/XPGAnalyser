@@ -53,6 +53,7 @@ struct Code {
     const std::vector<Declaration>* inherited{nullptr};   // une redefinition : les declarations de sa fonction
     std::vector<std::string>        reserved;             // les noms du code que nul ne prend (la fonction, a, b...)
     bool                            declares{true};       // faux : un script C ou C++ (le langage veut ses declarations dans le code)
+    bool                            constantsOnly{false}; // 1.12.16 : les constantes d'une vue (un seul onglet, pas de corps)
     [[nodiscard]] bool valid() const noexcept { return body && decls; }
 };
 [[nodiscard]] Code locate(Project&, const Place&);

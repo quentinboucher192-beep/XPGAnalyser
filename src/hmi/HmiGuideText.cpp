@@ -5595,6 +5595,14 @@ const std::vector<Topic>& topics() {
                          "trac\xC3\xA9.\nContour\t#3A4556\tLe cadre et la grille.", {}},
              {K::Paragraph, "1.12.9 : le joker [*] - Cuves[*].Niveau donne une plume (une barre, une part, une ligne) par cuve ; Cuves[*].Nom en Noms les nomme. La source : un tableau de l'IHM, une LIST (le nombre suit la liste en marche), une MAP (ses cl\xC3\xA9s) ou une \xC3\xA9num\xC3\xA9ration. Pompe.* : un \xC3\xA9l\xC3\xA9ment par membre de la structure ; Ligne/Convoyeur/* : un par variable du dossier. Contenu \xE2\x80\xBA Ajouter depuis une source les propose, et chaque ligne dit ce qu'elle deviendra. Une source inconnue ne donne rien (G\xC3\xA9n\xC3\xA9rer le dit).", {}, "1.12.9"},
              {K::Paragraph, "1.12.10 : Axe Y min et max vides : l'union des plages des plumes (Unit\xC3\xA9s et formats).", {}, "1.12.10"},
+             {K::Paragraph, "1.12.16 : **Pilotable** (Propri\xC3\xA9t\xC3\xA9s) - en marche, un bouton en haut \xC3\xA0 droite de la "
+                         "courbe : **Pause** fige l'affichage pour lire un instant pr\xC3\xA9" "cis (les mesures continuent d'\xC3\xAAtre "
+                         "prises), **Continuer** reprend le temps r\xC3\xA9" "el. Chaque plume peut aussi n'appara\xC3\xAEtre que sous une "
+                         "condition : Contenu \xE2\x80\xBA la plume \xE2\x80\xBA **Visible si** (Four.Chauffe AND Niveau > 10) - "
+                         "fausse, la plume et sa l\xC3\xA9gende se cachent ; une plume \xC3\xA0 joker (Cuves[*].Niveau) prend "
+                         "Cuves[*].Actif, une condition par cuve. **Dupliquer\xE2\x80\xA6** (Contenu) fait N copies d'une plume, "
+                         "ses indices suivis (Cuves[0] \xE2\x86\x92 Cuves[1]\xE2\x80\xA6), son nom num\xC3\xA9rot\xC3\xA9, sa couleur "
+                         "prise dans la palette.", {}, "1.12.16"},
          },
          {"objet-communs", "historiques", "contenu"},
          {},
@@ -5627,6 +5635,12 @@ const std::vector<Topic>& topics() {
             "suivante ; points : seuls."},
            {"legend", "L\xC3\xA9gende", "TRUE",
             "Le nom et la derni\xC3\xA8re valeur de chaque plume."},
+           {"pilotable", "Pilotable (pause / continuer)", "FALSE",
+            "En marche, un bouton en haut \xC3\xA0 droite : Pause fige l'affichage (les mesures continuent), Continuer "
+            "reprend le temps r\xC3\xA9" "el."},
+           {"penVisible", "Plumes : visibles si (a;b)", "(vide)",
+            "Une condition par plume (vide : toujours visible) ; fausse, la plume et sa l\xC3\xA9gende se cachent. Plus "
+            "simple : Contenu \xE2\x80\xBA la plume \xE2\x80\xBA Visible si."},
            {"fill", "Remplissage", "#1B2028",
             "Le fond du trac\xC3\xA9."},
            {"stroke", "Contour", "#3A4556",

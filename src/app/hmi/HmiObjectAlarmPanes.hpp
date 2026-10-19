@@ -321,11 +321,15 @@ private:
 // Les sous-onglets du document d'un symbole : Dessin | Alarmes (n) | Instances (n)
 // | Operateurs (n) (1.10, chantier S2 : HmiOperatorPanes.hpp).
 // Instances montre le volet Alarmes sur son apercu (les instances et leurs alarmes).
+// 1.12.16 : une vue ou une popup (pas un symbole) - Dessin | Constantes (n) | Fonctions (n).
 class HmiSymbolTabs final : public ui::Widget {
 public:
     // 1.11.10 : + Fonctions et Popups (les fonctions et les popups propres au symbole).
-    enum Tab : int { Drawing = 0, Alarms = 1, Instances = 2, Operators = 3, Functions = 4, Popups = 5 };
+    // 1.12.16 : + Constantes (une vue, une popup).
+    enum Tab : int { Drawing = 0, Alarms = 1, Instances = 2, Operators = 3, Functions = 4, Popups = 5, Constants = 6 };
     HmiSymbolTabs(std::string id, hmi::DocumentPtr doc, hmi::Id symbol);
+    // Les sous-onglets montres, dans l'ordre (un symbole, ou une vue).
+    [[nodiscard]] std::vector<int> order() const;
     [[nodiscard]] int  current() const noexcept { return current_; }
     void               setCurrent(int tab);
     [[nodiscard]] std::string label(int tab) const;
@@ -340,6 +344,7 @@ private:
     hmi::DocumentPtr doc_;
     hmi::Id          symbol_;
     int              current_{Drawing};
+    bool             symbolMode_{true};   // 1.12.16 : faux - une vue ou une popup
 };
 
 } // namespace app

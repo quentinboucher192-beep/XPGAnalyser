@@ -292,6 +292,20 @@ Code locate(Project& p, const Place& at) {
                 for (auto& o : v->operators)
                     if (o.id == at.id) bindOperator(c, o);
             break;
+        case K::ViewConstants:
+            // 1.12.16 : les constantes d'une vue ou d'une popup - comme celles d'un script (calculees au
+            // demarrage, ou a chaque ouverture), sans corps : le renommage suit dans tout le projet
+            // (viewmembers::renameMember, par l'appelant).
+            if (auto* v = p.view(at.view)) {
+                static thread_local std::string none;
+                none.clear();
+                c.body = &none;
+                c.decls = &v->constants;
+                c.role = decl::Role::Script;
+                c.constantsOnly = true;
+                for (const auto& f : v->functions) c.reserved.push_back(f.name);
+            }
+            break;
     }
     return c;
 }
@@ -313,6 +327,7 @@ DeclKind kindOf(Tab t) noexcept {
 
 std::vector<Tab> tabsOf(const Code& c) {
     if (!c.valid() || !c.declares) return {};
+    if (c.constantsOnly) return {Tab::Constants};   // 1.12.16 : les constantes d'une vue
     switch (c.role) {
         case decl::Role::Script:   return {Tab::Constants, Tab::Variables};
         case decl::Role::Operator: return {Tab::Variables, Tab::Constants};

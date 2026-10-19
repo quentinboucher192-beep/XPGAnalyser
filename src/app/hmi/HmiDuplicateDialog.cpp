@@ -392,8 +392,10 @@ protected:
             x += 140.f;
         }
         if (d_.columnsField_) d_.columnsField_->setBounds({x + 70.f, b.y + 8.f, 56.f, 28.f});
-        if (d_.spacingField_) d_.spacingField_->setBounds({b.x + 130.f, b.y + 44.f, 70.f, 28.f});
-        if (d_.fit_) d_.fit_->setBounds({b.x + 214.f, b.y + 44.f, 190.f, 28.f});
+        // 1.12.16 : l'espacement en X et en Y, chacun le sien.
+        if (d_.spacingField_) d_.spacingField_->setBounds({b.x + 148.f, b.y + 44.f, 64.f, 28.f});
+        if (d_.spacingYField_) d_.spacingYField_->setBounds({b.x + 364.f, b.y + 44.f, 64.f, 28.f});
+        if (d_.fit_) d_.fit_->setBounds({b.x + 444.f, b.y + 44.f, 190.f, 28.f});
         if (preview) preview->setBounds({b.x + 4.f, b.y + 84.f + 3.f * 20.f, b.w - 8.f, std::max(60.f, b.h - 84.f - 3.f * 20.f - 4.f)});
     }
     void onPaint(const ui::PaintContext& ctx) override {
@@ -403,13 +405,19 @@ protected:
             const auto r = d_.columnsField_->bounds();
             ctx.r.drawText({r.x - 66.f, r.y + 6.f}, "Colonnes", kSmall, d_.plan_.layout.axis == dup::Axis::Grid ? c.text : c.textMuted);
         }
-        ctx.r.drawText({b.x + 8.f, b.y + 50.f}, "Espacement (px)", ctx.theme.font.uiBold, c.text);
+        const auto& lay = d_.plan_.layout;
+        const bool useX = lay.axis != dup::Axis::Y, useY = lay.axis != dup::Axis::X;
+        ctx.r.drawText({b.x + 8.f, b.y + 50.f}, "Espacement X (px)", ctx.theme.font.uiBold, useX ? c.text : c.textMuted);
+        ctx.r.drawText({b.x + 224.f, b.y + 50.f}, "Espacement Y (px)", ctx.theme.font.uiBold, useY ? c.text : c.textMuted);
         float y = b.y + 84.f;
-        const double step = dup::stepOf(d_.scan_.box, d_.plan_.layout);
-        const bool vertical = d_.plan_.layout.axis == dup::Axis::Y;
-        ctx.r.drawText({b.x + 8.f, y}, "Pas mesur\xC3\xA9 : " + std::to_string(static_cast<long>(std::lround(step))) + " px ("
-                       + (vertical ? "hauteur " + std::to_string(static_cast<long>(d_.scan_.box.h)) : "largeur " + std::to_string(static_cast<long>(d_.scan_.box.w)))
-                       + " + espacement " + std::to_string(static_cast<long>(d_.plan_.layout.spacing)) + ")", kSmall, c.textMuted);
+        const auto px = [](double v) { return std::to_string(static_cast<long>(std::lround(v))); };
+        const auto& box = d_.scan_.box;
+        std::string stepText;
+        if (lay.axis == dup::Axis::X) stepText = px(box.w + lay.gapX()) + " px (largeur " + px(box.w) + " + espacement X " + px(lay.gapX()) + ")";
+        else if (lay.axis == dup::Axis::Y) stepText = px(box.h + lay.gapY()) + " px (hauteur " + px(box.h) + " + espacement Y " + px(lay.gapY()) + ")";
+        else stepText = px(box.w + lay.gapX()) + " px en X (largeur " + px(box.w) + " + " + px(lay.gapX()) + "), " + px(box.h + lay.gapY())
+                      + " px en Y (hauteur " + px(box.h) + " + " + px(lay.gapY()) + ")";
+        ctx.r.drawText({b.x + 8.f, y}, "Pas mesur\xC3\xA9 : " + stepText, kSmall, c.textMuted);
         y += 20.f;
         const auto out = d_.overflow();
         if (out.empty()) ctx.r.drawText({b.x + 8.f, y}, "Toutes les copies tiennent dans la vue.", kSmall, c.textMuted);
@@ -931,10 +939,18 @@ void HmiDuplicateDialog::setLayout(const hmi::dup::Layout& layout) {
     plan_.layout = layout;
     plan_.layout.columns = std::max(1, plan_.layout.columns);
     plan_.layout.spacing = std::max(0.0, plan_.layout.spacing);
+    if (plan_.layout.spacingY >= 0) plan_.layout.spacingY = std::max(0.0, plan_.layout.spacingY);
     syncing_ = true;
     if (axis_) axis_->setValue(static_cast<int>(plan_.layout.axis));
     if (columnsField_) columnsField_->setText(std::to_string(plan_.layout.columns));
-    if (spacingField_) spacingField_->setText(std::to_string(static_cast<long>(std::lround(plan_.layout.spacing))));
+    if (spacingField_) {
+        spacingField_->setText(std::to_string(static_cast<long>(std::lround(plan_.layout.spacing))));
+        spacingField_->setEnabled(plan_.layout.axis != dup::Axis::Y);
+    }
+    if (spacingYField_) {   // 1.12.16 : l'espacement en Y (le meme qu'en X tant qu'il n'est pas tape)
+        spacingYField_->setText(std::to_string(static_cast<long>(std::lround(plan_.layout.gapY()))));
+        spacingYField_->setEnabled(plan_.layout.axis != dup::Axis::X);
+    }
     syncing_ = false;
     refresh();
 }
@@ -942,11 +958,10 @@ void HmiDuplicateDialog::setLayout(const hmi::dup::Layout& layout) {
 bool HmiDuplicateDialog::fitSpacing() {
     const auto* v = view();
     if (!v) return false;
-    const auto s = dup::fittingSpacing(*v, scan_.box, plan_.copies(), plan_.layout);
-    if (!s) return false;
-    auto l = plan_.layout;
-    l.spacing = *s;
-    setLayout(l);
+    // 1.12.16 : en X, en Y, ou chacun (la grille).
+    const auto l = dup::fittingLayout(*v, scan_.box, plan_.copies(), plan_.layout);
+    if (!l) return false;
+    setLayout(*l);
     return true;
 }
 
@@ -1222,7 +1237,17 @@ core::Status HmiDuplicateDialog::buildUi() {
         links_ += spacingField_->textChanged->connect([this](const std::string& t) {
             if (syncing_ || t.empty()) return;
             auto l = plan_.layout;
+            if (l.spacingY < 0) l.spacingY = l.gapY();   // 1.12.16 : Y garde le sien
             l.spacing = std::atof(t.c_str());
+            setLayout(l);
+        });
+        auto sy = std::make_unique<ui::InputText>(base + ".spacingY");
+        sy->setText(std::to_string(static_cast<long>(std::lround(plan_.layout.gapY()))));
+        spacingYField_ = &static_cast<ui::InputText&>(lay->addChild(std::move(sy)));
+        links_ += spacingYField_->textChanged->connect([this](const std::string& t) {
+            if (syncing_ || t.empty()) return;
+            auto l = plan_.layout;
+            l.spacingY = std::atof(t.c_str());
             setLayout(l);
         });
         fit_ = &static_cast<ui::Button&>(lay->addChild(std::make_unique<ui::Button>("Ajuster l'espacement", base + ".fit")));

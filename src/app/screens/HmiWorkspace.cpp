@@ -705,6 +705,10 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
                 && static_cast<std::size_t>(k) < sym->functions.size()) {
                 editor->symbolTabs()->setCurrent(HmiSymbolTabs::Functions);
                 editor->symbolFunctions()->selectFunction(sym->functions[static_cast<std::size_t>(k)].id);
+            } else if (editor && editor->viewTabs() && editor->viewFunctions() && sym && k >= 0
+                       && static_cast<std::size_t>(k) < sym->functions.size()) {   // 1.12.16 : une fonction d'une vue
+                editor->viewTabs()->setCurrent(HmiSymbolTabs::Functions);
+                editor->viewFunctions()->selectFunction(sym->functions[static_cast<std::size_t>(k)].id);
             }
             break;
         }
@@ -1904,6 +1908,10 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
                 app_.menus().ShowDialog(std::move(dialog), std::move(onClose));
             },
             [this] { return app_.project(); });
+        // 1.12.16 : Dupliquer... d'une plume, d'une ligne, d'un choix, d'un etat (l'onglet Contenu).
+        made->content().setDialogHost([this](menu::MenuPtr dialog, std::function<void(const menu::DialogResult&)> onClose) {
+            app_.menus().ShowDialog(std::move(dialog), std::move(onClose));
+        });
         if (auto* keys = made->shortcuts())                                // 1.11.23 : les raccourcis aussi
             keys->setDialogHost(
                 [this](menu::MenuPtr dialog, std::function<void(const menu::DialogResult&)> onClose) {
@@ -1915,6 +1923,11 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
         made->setTemplateAsker([this, viewId] { askHmiSaveTemplate(viewId); });   // lot 20
         // 1.11.22 : Nouvelle fonction d'un symbole demande son nom (un nom pris : une surcharge).
         if (auto* fns = made->symbolFunctions()) {
+            auto h = fns->hosts();
+            h.newFunction = [this, viewId] { askHmiNewFunction(viewId); };
+            fns->setHosts(std::move(h));
+        }
+        if (auto* fns = made->viewFunctions()) {   // 1.12.16 : les fonctions d'une vue, d'une popup
             auto h = fns->hosts();
             h.newFunction = [this, viewId] { askHmiNewFunction(viewId); };
             fns->setHosts(std::move(h));
@@ -2765,6 +2778,27 @@ void MainAnalysisScreen::openHmiIssue(const hmi::Issue& issue) {
                 pane->goTo(issue.script, issue.line, issue.column, issue.length);
         return;
     }
+    // 1.12.16 : une constante, une fonction d'une vue (ou d'une popup) - son sous-onglet dans l'editeur de la vue.
+    if ((issue.category == "Constante" || issue.category == "Fonction") && issue.view != hmi::kNoId) {
+        if (const auto* v = doc->project.view(issue.view); v && !hmi::isSymbolView(*v)) {
+            openHmiView(issue.view);
+            auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(issue.view)));
+            if (editor && editor->viewTabs()) {
+                if (issue.category == "Constante" && editor->viewConstants()) {
+                    editor->viewTabs()->setCurrent(HmiSymbolTabs::Constants);
+                    (void)editor->viewConstants()->selectName(issue.declaration.empty() ? issue.property : issue.declaration);
+                    if (issue.line > 0 && issue.message.find("calcul de ") != std::string::npos)
+                        for (std::size_t r = 0; r < editor->viewConstants()->count(); ++r)
+                            if (editor->viewConstants()->selectedRows() == std::vector<std::size_t>{r}) (void)editor->viewConstants()->editCalculation(r, issue.line);
+                } else if (editor->viewFunctions()) {
+                    editor->viewTabs()->setCurrent(HmiSymbolTabs::Functions);
+                    if (issue.line > 0) editor->viewFunctions()->goTo(asId(issue.item), issue.line, issue.column, issue.length);
+                    else editor->viewFunctions()->selectFunction(asId(issue.item));
+                }
+            }
+            return;
+        }
+    }
     if (issue.category == "Fonction") {
         openHmiFunctions(issue.item, issue.line);
         if (issue.column > 0)       // 1.10 (chantier N) : la colonne de la faute
@@ -3007,6 +3041,11 @@ void MainAnalysisScreen::openHmiCodeTarget(const ProjectTreeModel::CodeTarget& t
             pane = editor->symbolFunctions();
             if (inner && t.line > 0) pane->goTo(asId(t.id), t.line);
             else pane->selectFunction(asId(t.id));
+        } else if (editor && editor->viewTabs() && editor->viewFunctions()) {   // 1.12.16 : une fonction d'une vue
+            editor->viewTabs()->setCurrent(HmiSymbolTabs::Functions);
+            pane = editor->viewFunctions();
+            if (inner && t.line > 0) pane->goTo(asId(t.id), t.line);
+            else pane->selectFunction(asId(t.id));
         }
     }
     if (!pane) return;
@@ -3077,7 +3116,7 @@ void MainAnalysisScreen::askHmiNewFunction(std::uint64_t symbolView) {
             }(),
             [this, symbolView, returnOf](const menu::DialogResult& r) {
                 auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(symbolView)));
-                auto* pane = editor ? editor->symbolFunctions() : nullptr;
+                auto* pane = editor ? (editor->symbolFunctions() ? editor->symbolFunctions() : editor->viewFunctions()) : nullptr;   // 1.12.16
                 if (!r.accepted() || !pane) return;
                 const auto v = FormDialog::split(r.payload);
                 if (v.empty()) return;

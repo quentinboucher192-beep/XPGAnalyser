@@ -898,7 +898,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             // 1.11.10 : un symbole a en plus ses Fonctions et ses Popups.
             const auto* v = hmiViewById(hmi_.get(), i);
             if (!v) return 0;
-            return v->role == "symbole" ? static_cast<std::size_t>(HmiPart::Count) : static_cast<std::size_t>(HmiPart::Functions);
+            // 1.12.16 : une vue (une popup) qui a des fonctions : Fonctions aussi (Popups reste au symbole).
+            if (v->role == "symbole") return static_cast<std::size_t>(HmiPart::Count);
+            return static_cast<std::size_t>(v->functions.empty() ? HmiPart::Functions : HmiPart::Popups);
         }
 
         // ---- lot 5 : ce qui se deballe ----------------------------------------

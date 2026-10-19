@@ -92,7 +92,7 @@ public:
     void setReplaceOriginal(bool on);
     void setLayout(const hmi::dup::Layout& layout);
     [[nodiscard]] const hmi::dup::Layout& layout() const noexcept { return plan_.layout; }
-    bool fitSpacing();                                   // "Ajuster l'espacement"
+    bool fitSpacing();                                   // "Ajuster l'espacement" (1.12.16 : en X, en Y, ou chacun)
     [[nodiscard]] std::vector<int> overflow() const;     // les copies hors de la vue
     [[nodiscard]] std::vector<int> overlap() const;      // celles qui chevauchent un objet
     void showTab(std::size_t index);
@@ -161,7 +161,8 @@ private:
     ui::Checkbox*                        replaceOriginal_{nullptr};
     std::shared_ptr<ui::RadioGroup>      axis_;
     ui::InputText*                       columnsField_{nullptr};
-    ui::InputText*                       spacingField_{nullptr};
+    ui::InputText*                       spacingField_{nullptr};    // l'espacement en X
+    ui::InputText*                       spacingYField_{nullptr};   // 1.12.16 : l'espacement en Y
     ui::Button*                          fit_{nullptr};
     ui::Button*                          ok_{nullptr};
     core::ConnectionScope                links_;

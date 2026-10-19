@@ -3128,6 +3128,7 @@ void Runtime::start(double now) {
     events_.clear();
     closed_.clear();
     trends_.clear();
+    trendPaused_.clear();   // 1.12.16
     resetLot11();            // lot 11 : graphiques, mises de cote, production, editeurs, export
     resetLot13();            // lot 13 : signature, renouvellement, badge (l'audit et les verrous restent)
     resetLot12();            // lot 12 : l'historique de navigation, le zoom
@@ -4396,6 +4397,25 @@ void Runtime::addTrendMarker(std::string variable, std::string text, bool forced
     while (!markers_.empty() && (markers_.size() > 200 || markers_.front().at < now_ - 3600)) markers_.erase(markers_.begin());
 }
 
+bool Runtime::setTrendPaused(Id view, Id object, bool paused) {
+    const View* v = viewOf(view);
+    const Object* o = v ? v->object(object) : nullptr;
+    if (!o || o->kind != Kind::Trend || !o->flag("pilotable", false)) return false;
+    const std::string key = std::to_string(view) + ":" + std::to_string(object) + argumentsKey(view);
+    if (paused) {
+        if (!trendPaused_.count(key)) trendPaused_[key] = now_;
+    } else {
+        trendPaused_.erase(key);
+    }
+    event(paused ? "Courbe en pause" : "Courbe reprise", v->name + "." + o->name, paused ? "affichage fig\xC3\xA9 (les mesures continuent)" : "temps r\xC3\xA9" "el");
+    return true;
+}
+
+std::optional<double> Runtime::trendPausedAt(Id view, Id object) const {
+    const auto it = trendPaused_.find(std::to_string(view) + ":" + std::to_string(object) + argumentsKey(view));
+    return it == trendPaused_.end() ? std::nullopt : std::optional<double>(it->second);
+}
+
 const std::vector<TrendSeries>* Runtime::trend(Id view, Id object) const {
     const auto it = trends_.find(std::to_string(view) + ":" + std::to_string(object) + argumentsKey(view));
     return it == trends_.end() ? nullptr : &it->second;
@@ -4467,6 +4487,15 @@ void Runtime::sampleTrends(double now) {
             if (!same) {
                 series.clear();
                 for (const auto& p : pens) series.push_back(TrendSeries{p, {}});
+            }
+            // 1.12.16 : la condition de chaque plume (penVisible) - fausse, elle se cache (et se mesure quand meme).
+            //  (Les parametres de la vue sont deja en place : `aliases`.)
+            {
+                const auto conds = roles::splitList(o.text("penVisible"));
+                for (std::size_t i = 0; i < series.size(); ++i) {
+                    const std::string c = i < conds.size() ? trimText(conds[i]) : std::string{};
+                    series[i].visible = c.empty() || evalBool(c, true);
+                }
             }
             const double keep = std::max(1.0, o.number("duration", 60)) * 1.2 + 1.0;
             for (auto& s : series) {
@@ -5008,6 +5037,12 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
     if (found->kind == Kind::RecipeManager) {
         GestureGuard gesture(*this, where(*v, found));   // lot 13 : l'audit
         recipeManagerClick(object, part, now);
+        return;
+    }
+    // 1.12.16 : le bouton Pause / Continuer d'une courbe pilotable.
+    if (found->kind == Kind::Trend && part == "pause") {
+        GestureGuard gesture(*this, where(*v, found));
+        (void)setTrendPaused(v->id, object, !trendPausedAt(v->id, object).has_value());
         return;
     }
     // 1.12.6 (lot B, § 2.7) : l'objet tel que l'ecran le montre (ses positions, ses valeurs, ses

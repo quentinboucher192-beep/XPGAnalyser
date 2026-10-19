@@ -43,6 +43,7 @@ class HmiSymbolAlarmsPane;
 class HmiOperatorsPane;       // 1.10 (S2) : HmiOperatorPanes.hpp
 class HmiFunctionsPane;       // 1.11.10 : HmiFunctionPanes.hpp (les fonctions du symbole)
 class HmiSymbolPopupsPane;    // 1.11.10 : HmiSymbolPopupsPane.hpp
+class HmiDeclGrid;            // 1.12.16 : les constantes d'une vue (HmiDeclGrid.hpp)
 namespace hmitree { struct Line; }   // 1.10.3 (Q1103) : HmiTreeData.hpp
 class HmiPropsFilterBar;      // 1.10.3 : les filtres de l'onglet Proprietes (HmiEditor.cpp)
 class HmiEditor final : public ui::Widget {
@@ -80,6 +81,11 @@ public:
     [[nodiscard]] HmiOperatorsPane*    symbolOperators() noexcept { return symbolOperators_; }   // 1.10 (S2)
     [[nodiscard]] HmiFunctionsPane*    symbolFunctions() noexcept { return symbolFunctions_; }   // 1.11.10
     [[nodiscard]] HmiSymbolPopupsPane* symbolPopups() noexcept { return symbolPopups_; }         // 1.11.10
+    // 1.12.16 : une vue ou une popup (pas un symbole) - les sous-onglets Dessin | Constantes | Fonctions
+    // (nuls : un symbole).
+    [[nodiscard]] HmiSymbolTabs*       viewTabs() noexcept { return viewTabs_; }
+    [[nodiscard]] HmiDeclGrid*         viewConstants() noexcept { return viewConstants_; }
+    [[nodiscard]] HmiFunctionsPane*    viewFunctions() noexcept { return viewFunctions_; }
     [[nodiscard]] HmiActionsPanel&  actions() noexcept { return *actions_; }
     // 1.11.23 : la section Raccourcis de la vue (l'onglet de l'inspecteur, rien de choisi ;
     // pas pour un symbole).
@@ -220,6 +226,9 @@ private:
     HmiSymbolAlarmsPane* symbolAlarms_{nullptr};
     HmiOperatorsPane*    symbolOperators_{nullptr};   // 1.10 (S2) : le sous-onglet Operateurs
     HmiFunctionsPane*    symbolFunctions_{nullptr};   // 1.11.10 : le sous-onglet Fonctions
+    HmiSymbolTabs*       viewTabs_{nullptr};          // 1.12.16 : une vue - Dessin | Constantes | Fonctions
+    HmiDeclGrid*         viewConstants_{nullptr};
+    HmiFunctionsPane*    viewFunctions_{nullptr};
     std::shared_ptr<bool> alive_{std::make_shared<bool>(true)};   // 1.11.10 : une fenetre qui se ferme apres l'editeur
     bool confirmedRemoval_{false};   // 1.11.22 : la suppression d'un parametre employe, confirmee
     HmiSymbolPopupsPane* symbolPopups_{nullptr};      // 1.11.10 : le sous-onglet Popups

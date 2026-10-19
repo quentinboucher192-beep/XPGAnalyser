@@ -1141,6 +1141,9 @@
     <ClCompile Include="src\app\hmi\HmiInitModel.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiItemDuplicateDialog.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiNativesCards.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -2378,6 +2381,9 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiInitModel.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiItemDuplicateDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiLive.hpp">

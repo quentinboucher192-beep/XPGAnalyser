@@ -1841,6 +1841,13 @@ const std::vector<KeyInfo>& keyInfos() {
         {"interpolation", "Interpolation", PG::ValueType::Enum, {"lin\xC3\xA9" "aire", "escalier", "points"},
          "lin\xC3\xA9" "aire : les points reli\xC3\xA9s ; escalier : la valeur tenue jusqu'\xC3\xA0 la suivante ; points : seuls."},
         {"legend", "L\xC3\xA9gende", PG::ValueType::Boolean, {}, "Le nom et la derni\xC3\xA8re valeur de chaque plume."},
+        // 1.12.16 : une courbe pilotable - l'operateur la fige et la reprend.
+        {"pilotable", "Pilotable (pause / continuer)", PG::ValueType::Boolean, {},
+         "En marche (simulation, poste d'exploitation), un bouton en haut \xC3\xA0 droite de la courbe : Pause fige l'affichage "
+         "(les mesures continuent d'\xC3\xAAtre prises), Continuer reprend le temps r\xC3\xA9" "el."},
+        {"penVisible", "Plumes : visibles si (a;b)", PG::ValueType::Text, {},
+         "Une condition par plume, dans l'ordre (vide : toujours visible) : fausse, la plume et sa l\xC3\xA9gende se cachent ; "
+         "ses mesures continuent. Plus simple : Contenu > la plume > Visible si."},
         {"points", "Points (x,y x,y ...)", PG::ValueType::Text, {}, "Dans le rep\xC3\xA8re de l'objet."},
         // 1.12.12 (lot H) : « Points depuis » d'une ligne, d'un polygone, et son echelle.
         {"pointsFrom", "Points depuis", PG::ValueType::Text, {},

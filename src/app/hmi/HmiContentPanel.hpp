@@ -61,6 +61,8 @@
 #include "HmiPanels.hpp"
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
+#include "../../hmi/HmiDuplicate.hpp"   // 1.12.16 : Dupliquer... (N copies)
+#include "../../menu/IMenu.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
 #include <functional>
@@ -130,6 +132,15 @@ public:
     // 1.12.12 (lot H) : « Ajouter » d'un plan a zones trace la zone sur le dessin (l'editeur relaie au
     // canevas : traceRequested) ; sans editeur (les essais), une zone rectangulaire comme avant.
     void setZoneTracer(bool on) noexcept { zoneTracer_ = on; }
+    // 1.12.16 : « DUPLIQUER... » - N copies de l'element choisi (une plume, une ligne d'un tableau, un choix, un etat),
+    // comme un symbole : ses indices suivis (Cuves[0].Niveau -> Cuves[1].Niveau...), son nom numerote, sa couleur prise
+    // dans la palette, chaque case corrigeable (HmiItemDuplicateDialog, ouvert par l'hote). Sans hote : une copie.
+    // Les champs que la fenetre montre, et les copies inserees apres l'element en UNE commande (faux : rien).
+    using DialogHost = std::function<void(menu::MenuPtr, std::function<void(const menu::DialogResult&)>)>;
+    void setDialogHost(DialogHost host) { host_ = std::move(host); }
+    bool openDuplicate();
+    [[nodiscard]] std::vector<hmi::dup::ItemField> duplicateFields(int index) const;
+    bool insertCopies(int index, const std::vector<std::vector<std::string>>& rows);
 
     [[nodiscard]] HmiToolStrip&     tools() noexcept { return *tools_; }
     [[nodiscard]] ui::TableView&    table() noexcept { return *table_; }
@@ -165,6 +176,8 @@ private:
     bool             xyReference_{false};  // 1.12.12 (lot H) : une courbe XY montre sa reference (sinon ses courbes)
     bool             refreshing_{false};   // 1.12.12 (lot H) : refait par le document - rowChosen se tait
     std::size_t      lastCount_{static_cast<std::size_t>(-1)};
+    DialogHost       host_;                                          // 1.12.16 : Dupliquer...
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);   // une reponse apres la fermeture : ignoree
     core::ConnectionScope links_;
 };
 

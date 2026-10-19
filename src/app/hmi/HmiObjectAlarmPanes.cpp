@@ -1490,10 +1490,19 @@ ui::EventResult HmiGeneratedAlarmsTable::onEvent(const ui::InputEvent& ev) {
 
 // ---------------------------------------------------------- les sous-onglets ----
 HmiSymbolTabs::HmiSymbolTabs(std::string id, hmi::DocumentPtr doc, hmi::Id symbol)
-    : ui::Widget(std::move(id)), doc_(std::move(doc)), symbol_(symbol) {}
+    : ui::Widget(std::move(id)), doc_(std::move(doc)), symbol_(symbol) {
+    const hmi::View* v = doc_->project.view(symbol_);
+    symbolMode_ = v && hmi::isSymbolView(*v);
+}
+
+std::vector<int> HmiSymbolTabs::order() const {
+    if (symbolMode_) return {Drawing, Alarms, Instances, Operators, Functions, Popups};
+    return {Drawing, Constants, Functions};   // 1.12.16 : une vue, une popup
+}
 
 void HmiSymbolTabs::setCurrent(int tab) {
-    if (tab < Drawing || tab > Popups || tab == current_) return;
+    const auto o = order();
+    if (std::find(o.begin(), o.end(), tab) == o.end() || tab == current_) return;
     current_ = tab;
     invalidate();
     changed->emit(tab);
@@ -1502,6 +1511,7 @@ void HmiSymbolTabs::setCurrent(int tab) {
 std::string HmiSymbolTabs::label(int tab) const {
     const hmi::View* sym = doc_->project.view(symbol_);
     if (tab == Drawing) return "Dessin";
+    if (tab == Constants) return "Constantes (" + std::to_string(sym ? sym->constants.size() : 0) + ")";   // 1.12.16
     if (tab == Alarms) return "Alarmes (" + std::to_string(sym ? sym->alarms.size() : 0) + ")";
     if (tab == Operators) return "Op\xC3\xA9rateurs (" + std::to_string(sym ? sym->operators.size() : 0) + ")";   // 1.10 (S2)
     if (tab == Functions) return "Fonctions (" + std::to_string(sym ? sym->functions.size() : 0) + ")";            // 1.11.10
@@ -1514,16 +1524,18 @@ std::string HmiSymbolTabs::label(int tab) const {
 }
 
 bool HmiSymbolTabs::tabRect(int tab, gfx::Rect& out) const {
-    if (tab < Drawing || tab > Popups) return false;
+    const auto o = order();
+    const auto at = std::find(o.begin(), o.end(), tab);
+    if (at == o.end()) return false;
     const auto b = bounds();
-    out = {b.x + 8 + 130.f * static_cast<float>(tab), b.y + 2, 124, b.h - 4};
+    out = {b.x + 8 + 130.f * static_cast<float>(at - o.begin()), b.y + 2, 124, b.h - 4};
     return true;
 }
 
 void HmiSymbolTabs::onPaint(const ui::PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     ctx.r.fillRect(bounds(), c.panelBg);
-    for (int t = Drawing; t <= Popups; ++t) {
+    for (const int t : order()) {
         gfx::Rect r;
         (void)tabRect(t, r);
         const bool cur = t == current_;
@@ -1533,8 +1545,9 @@ void HmiSymbolTabs::onPaint(const ui::PaintContext& ctx) {
         }
         // 1.11.10 : Fonctions en violet (comme leurs icones dans l'arbre).
         const gfx::Color glyph = t == Functions ? ctx.theme.brand.scopeInOut : cur ? c.accent : c.textMuted;
-        drawHmiGlyph(ctx.r, t == Drawing ? HmiGlyph::Symbol : t == Alarms ? HmiGlyph::Bell : t == Operators ? HmiGlyph::Compare
-                          : t == Functions ? HmiGlyph::Code : t == Popups ? HmiGlyph::Popup : HmiGlyph::Duplicate,
+        drawHmiGlyph(ctx.r, t == Drawing ? (symbolMode_ ? HmiGlyph::Symbol : HmiGlyph::View) : t == Alarms ? HmiGlyph::Bell
+                          : t == Operators ? HmiGlyph::Compare : t == Functions ? HmiGlyph::Code : t == Popups ? HmiGlyph::Popup
+                          : t == Constants ? HmiGlyph::List : HmiGlyph::Duplicate,
                      {r.x + 6, r.y + (r.h - 14) / 2, 14, 14}, glyph);
         ctx.r.drawText({r.x + 26, r.y + (r.h - 16) / 2}, label(t), ctx.theme.font.smallUi, cur ? c.accent : c.text);
     }
@@ -1542,7 +1555,7 @@ void HmiSymbolTabs::onPaint(const ui::PaintContext& ctx) {
 
 ui::EventResult HmiSymbolTabs::onEvent(const ui::InputEvent& ev) {
     if (const auto* m = std::get_if<ui::MouseDown>(&ev))
-        for (int t = Drawing; t <= Popups; ++t) {
+        for (const int t : order()) {
             gfx::Rect r;
             if (tabRect(t, r) && r.contains(m->pos)) {
                 setCurrent(t);

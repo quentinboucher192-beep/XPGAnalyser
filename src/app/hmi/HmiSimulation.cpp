@@ -1738,6 +1738,13 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
                 swipeLayer_ = layer;
             }
         }
+        // 1.12.16 : une courbe pilotable - son bouton Pause / Continuer.
+        if (o->kind == hmi::Kind::Trend && runtime_) {
+            if (const std::string part = hmi::trendHit(*o, box.w, box.h, lx, ly); !part.empty()) {
+                partClicked->emit(id, part);
+                return;
+            }
+        }
         // 1.12.2 : la barre d'un tableau dynamique (rowsFrom) - une page plus haut, plus bas ; ailleurs,
         // le tableau garde ses actions. 1.12.13 : la case (ou l'en-tete) touchee - retenue par le moteur pour le geste
         // qui suit (Clic sur une case, la saisie R/W, la ligne choisie...) ; le clic de l'objet suit, comme avant.

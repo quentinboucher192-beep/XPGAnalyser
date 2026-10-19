@@ -4,6 +4,7 @@
 #include "HmiAssetPanes.hpp"
 #include "HmiAssist.hpp"
 #include "HmiIcons.hpp"
+#include "HmiItemDuplicateDialog.hpp"   // 1.12.16 : Dupliquer... (N copies)
 #include "HmiObjectAlarmPanes.hpp"    // 1.12.7 (lot D) : les groupes des alarmes des objets
 #include "HmiPainter.hpp"
 #include "../../hmi/HmiChoiceLists.hpp"   // 1.12.7 (lot D) : les colonnes choisies d'une source
@@ -39,7 +40,7 @@ using PG = ui::PropertyGrid;
 
 namespace {
 
-enum Act : int { AAdd = 1, ARemove, AUp, ADown, AAddColumn, ARemoveColumn };
+enum Act : int { AAdd = 1, ARemove, AUp, ADown, AAddColumn, ARemoveColumn, ADuplicate };
 
 class Rows final : public ui::ITableModel {
 public:
@@ -115,6 +116,8 @@ struct Pens {
     // 1.12.5 (lot A, D11) : les listes paralleles du tableau de variables - elles suivent leurs
     // lignes (avant : retirer ou deplacer une ligne laissait son unite et son format a la place).
     std::vector<std::string> units, formats;
+    // 1.12.16 : la condition « Visible si » de chaque plume d'une courbe (penVisible ; vide : toujours visible).
+    std::vector<std::string> visible;
 };
 
 void eraseAt(std::vector<std::string>& v, std::size_t i) {
@@ -133,6 +136,7 @@ Pens readPens(const hmi::Object& o) {
     p.colors = hmi::splitSemicolons(o.text("colors"));
     p.units = hmi::splitSemicolons(o.text("units"));
     p.formats = hmi::splitSemicolons(o.text("formats"));
+    p.visible = hmi::splitSemicolons(o.text("penVisible"));
     p.names.resize(p.exprs.size());
     const auto& palette = hmiTrendPalette();
     while (p.colors.size() < p.exprs.size()) p.colors.push_back(palette[p.colors.size() % palette.size()]);
@@ -156,6 +160,11 @@ void writePens(hmi::Object& o, Pens p) {
         if (p.formats.size() > p.exprs.size()) p.formats.resize(p.exprs.size());
         o.set("formats", hmi::joinSemicolons(p.formats));
     }
+    // 1.12.16 : les conditions des plumes - absentes tant qu'aucune plume n'en a (rien ne change dans le fichier).
+    if (p.visible.size() > p.exprs.size()) p.visible.resize(p.exprs.size());
+    while (!p.visible.empty() && p.visible.back().find_first_not_of(" \t") == std::string::npos) p.visible.pop_back();
+    if (!p.visible.empty()) o.set("penVisible", hmi::joinSemicolons(p.visible));
+    else std::erase_if(o.props, [](const hmi::Prop& q) { return q.key == "penVisible"; });
 }
 
 std::string imagesText(const std::vector<std::string>& images) {
@@ -650,6 +659,9 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
     tools->add(AAdd, HmiGlyph::Plus, "Ajouter (une ligne, une plume, un \xC3\xA9tat)", "Ajouter");
+    tools->add(ADuplicate, HmiGlyph::Duplicate,
+               "Dupliquer l'\xC3\xA9l\xC3\xA9ment choisi\xE2\x80\xA6 - N copies, ses indices suivis (Cuves[0] \xE2\x86\x92 Cuves[1]), "
+               "son nom num\xC3\xA9rot\xC3\xA9, comme un symbole");   // 1.12.16
     tools->add(ARemove, HmiGlyph::Delete, "Retirer l'\xC3\xA9l\xC3\xA9ment choisi");
     tools->add(AUp, HmiGlyph::Up, "Monter l'\xC3\xA9l\xC3\xA9ment (l'ordre compte : le premier \xC3\xA9tat vrai l'emporte)");
     tools->add(ADown, HmiGlyph::Down, "Descendre l'\xC3\xA9l\xC3\xA9ment");
@@ -667,6 +679,10 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     };
     tools_->setEnabledWhen(AAdd, editable);
     tools_->setEnabledWhen(ARemove, [this, editable] { return editable() && selectedIndex() >= 0; });
+    tools_->setEnabledWhen(ADuplicate, [this] {   // 1.12.16 : les plumes, les lignes d'un tableau, les choix, les etats
+        const auto m = mode();
+        return selectedIndex() >= 0 && !xyReference_ && (m == Mode::Trend || m == Mode::Table || m == Mode::Choices || m == Mode::States);
+    });
     tools_->setEnabledWhen(AUp, [this, editable] { return editable() && !xyReference_ && selectedIndex() > 0; });
     tools_->setEnabledWhen(ADown, [this, editable] {
         return editable() && !xyReference_ && selectedIndex() >= 0 && selectedIndex() + 1 < static_cast<int>(count());
@@ -710,6 +726,7 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
                 if (addItem()) selectIndex(static_cast<int>(count()) - 1);
                 break;
             case ARemove: (void)removeItem(sel); break;
+            case ADuplicate: (void)openDuplicate(); break;   // 1.12.16
             case AUp: if (moveItem(sel, -1)) selectIndex(sel - 1); break;
             case ADown: if (moveItem(sel, +1)) selectIndex(sel + 1); break;
             case AAddColumn: (void)addColumn(); break;
@@ -881,6 +898,8 @@ void HmiContentPanel::refresh() {
                         if (i < p.units.size() && !p.units[i].empty()) detail += "  \xC2\xB7  " + p.units[i];
                         if (i < p.formats.size() && !p.formats[i].empty()) detail += "  \xC2\xB7  " + p.formats[i];
                     }
+                    // 1.12.16 : la condition d'une plume.
+                    if (i < p.visible.size() && !p.visible[i].empty()) detail += "  \xC2\xB7  visible si " + p.visible[i];
                     rows.push_back({p.names[i].empty() ? p.exprs[i] : p.names[i], std::move(detail)});
                 }
                 break;
@@ -1083,6 +1102,253 @@ bool HmiContentPanel::changeInView(const std::string& label, const std::function
     if (!cmd || !done) return false;
     apply_(std::move(cmd));
     refresh();
+    return true;
+}
+
+// ============================================== 1.12.16 : Dupliquer... ===
+namespace {
+// Le mot d'un element du contenu : "Plume 2", "Ligne 3", "Choix 1", "Etat 2".
+std::string itemWord(const hmi::Object* o, HmiContentPanel::Mode m, int index) {
+    using M = HmiContentPanel::Mode;
+    const std::string n = " " + std::to_string(index + 1);
+    switch (m) {
+        case M::Trend: return penWord(o) + n;
+        case M::Table: return "Ligne" + n;
+        case M::Choices: return "Choix" + n;
+        case M::States: return "\xC3\x89tat" + n;
+        default: return "\xC3\x89l\xC3\xA9ment" + n;
+    }
+}
+// La palette a partir du rang `from` (les couleurs des copies, tour a tour).
+std::vector<std::string> paletteFrom(std::size_t from) {
+    const auto& palette = hmiTrendPalette();
+    std::vector<std::string> out;
+    for (std::size_t k = 0; k < palette.size(); ++k) out.push_back(palette[(from + k) % palette.size()]);
+    return out;
+}
+// La case d'une copie par son en-tete (les champs de duplicateFields, dans leur ordre) ; nullptr : pas de colonne.
+const std::string* cellOf(const std::vector<hmi::dup::ItemField>& fields, const std::vector<std::string>& row, std::string_view label) {
+    for (std::size_t k = 0; k < fields.size() && k < row.size(); ++k)
+        if (fields[k].label == label) return &row[k];
+    return nullptr;
+}
+} // namespace
+
+std::vector<hmi::dup::ItemField> HmiContentPanel::duplicateFields(int index) const {
+    using F = hmi::dup::ItemField;
+    std::vector<F> out;
+    const auto* o = current();
+    if (!o || index < 0 || static_cast<std::size_t>(index) >= count()) return out;
+    const auto i = static_cast<std::size_t>(index);
+    const auto add = [&out](std::string label, std::string text, F::Kind kind, std::vector<std::string> rotate = {}) {
+        F f;
+        f.label = std::move(label);
+        f.text = std::move(text);
+        f.kind = kind;
+        f.rotate = std::move(rotate);
+        out.push_back(std::move(f));
+    };
+    switch (mode()) {
+        case Mode::Trend: {
+            if (xyReference_) break;
+            const auto p = readPens(*o);
+            if (i >= p.exprs.size()) break;
+            if (!p.names[i].empty()) add("Nom", p.names[i], F::Kind::Name);             // Plume 1 -> Plume 2
+            add("Expression", p.exprs[i], F::Kind::Expression);                         // Cuves[0].Niveau -> Cuves[1].Niveau
+            if (o->kind != hmi::Kind::StateChart && o->kind != hmi::Kind::VariableTable)
+                add("Couleur", i < p.colors.size() ? p.colors[i] : std::string{}, F::Kind::Rotate, paletteFrom(p.exprs.size()));
+            if (o->kind == hmi::Kind::VariableTable) {
+                if (i < p.units.size() && !p.units[i].empty()) add("Unit\xC3\xA9", p.units[i], F::Kind::Keep);
+                if (i < p.formats.size() && !p.formats[i].empty()) add("Format", p.formats[i], F::Kind::Keep);
+            }
+            if (o->kind == hmi::Kind::Trend && i < p.visible.size() && !p.visible[i].empty()) add("Visible si", p.visible[i], F::Kind::Expression);
+            break;
+        }
+        case Mode::Table: {
+            const auto t = readTable(*o);
+            if (i >= t.rows.size()) break;
+            for (std::size_t c = 0; c < t.columns(); ++c) {
+                const std::string& cell = t.rows[i][c];
+                // Une case calculee ou a trous suit ses indices ; un libelle (Cuve 1), son numero.
+                const bool computed = !cell.empty() && (cell.front() == '=' || cell.find('{') != std::string::npos || hmi::dup::hasIndices(cell));
+                add(t.headers[c], cell, computed ? F::Kind::Expression : F::Kind::Label);
+            }
+            break;
+        }
+        case Mode::Choices: {
+            const auto c = readChoices(*o);
+            if (i >= c.labels.size()) break;
+            add("Libell\xC3\xA9", c.labels[i], F::Kind::Name);                          // Azote -> Azote 2
+            add("Valeur \xC3\xA9" "crite", c.values[i], c.values[i].empty() ? F::Kind::Keep : F::Kind::Label);   // 1 -> 2 ; vide : le rang
+            break;
+        }
+        case Mode::States: {
+            const auto t = readStates(*o);
+            if (i >= t.states.size() || t.states[i].match == "*") break;   // le « sinon » reste seul
+            const auto& st = t.states[i];
+            if (t.conditions) {
+                const int k = conditionIndexOf(t, i);
+                add("Condition", k >= 0 && static_cast<std::size_t>(k) < t.conds.size() ? t.conds[static_cast<std::size_t>(k)] : std::string{},
+                    F::Kind::Expression);
+            } else {
+                add("Valeur", st.match, F::Kind::Label);                                 // 1 -> 2
+            }
+            add("Texte", st.text, F::Kind::Name);
+            add("Couleur", st.color, F::Kind::Rotate, paletteFrom(t.states.size()));
+            break;
+        }
+        default: break;
+    }
+    return out;
+}
+
+bool HmiContentPanel::insertCopies(int index, const std::vector<std::vector<std::string>>& rows) {
+    const auto fields = duplicateFields(index);
+    if (fields.empty() || rows.empty()) return false;
+    const auto i = static_cast<std::size_t>(index);
+    const auto at = static_cast<std::ptrdiff_t>(i + 1);
+    const std::size_t n = rows.size();
+    const std::string label = "Dupliquer : " + itemWord(current(), mode(), index) + (n > 1 ? " (" + std::to_string(n) + " copies)" : std::string{});
+    // Une case, ou celle de l'original (une colonne absente : vide chez lui aussi).
+    const auto take = [&fields](const std::vector<std::string>& row, std::string_view what, const std::string& original) {
+        const std::string* c = cellOf(fields, row, what);
+        return c ? *c : original;
+    };
+    switch (mode()) {
+        case Mode::Trend:
+            return change(label, [&](hmi::Object& o) {
+                auto p = readPens(o);
+                if (i >= p.exprs.size()) return false;
+                const std::size_t total = p.exprs.size();
+                if (p.colors.size() < total) p.colors.resize(total);
+                const auto grow = [total](std::vector<std::string>& v) { if (!v.empty() && v.size() < total) v.resize(total); };
+                grow(p.units);
+                grow(p.formats);
+                grow(p.visible);
+                std::vector<std::string> ex, nm, co, un, fo, vi;
+                for (const auto& row : rows) {
+                    ex.push_back(take(row, "Expression", p.exprs[i]));
+                    nm.push_back(take(row, "Nom", p.names[i]));
+                    co.push_back(take(row, "Couleur", p.colors[i]));
+                    un.push_back(take(row, "Unit\xC3\xA9", i < p.units.size() ? p.units[i] : std::string{}));
+                    fo.push_back(take(row, "Format", i < p.formats.size() ? p.formats[i] : std::string{}));
+                    vi.push_back(take(row, "Visible si", i < p.visible.size() ? p.visible[i] : std::string{}));
+                    // Un ';' nu couperait les listes ; une plume sans expression ne trace rien.
+                    for (const auto* v : {&ex.back(), &nm.back(), &co.back(), &un.back(), &fo.back(), &vi.back()})
+                        if (!fitsInList(*v)) return false;
+                    if (trimmed(ex.back()).empty()) return false;
+                }
+                p.exprs.insert(p.exprs.begin() + at, ex.begin(), ex.end());
+                p.names.insert(p.names.begin() + at, nm.begin(), nm.end());
+                p.colors.insert(p.colors.begin() + at, co.begin(), co.end());
+                const auto put = [&](std::vector<std::string>& v, const std::vector<std::string>& add) {
+                    const bool any = std::any_of(add.begin(), add.end(), [](const std::string& x) { return !x.empty(); });
+                    if (v.empty() && !any) return;   // une liste absente le reste
+                    if (v.size() < i + 1) v.resize(i + 1);
+                    v.insert(v.begin() + at, add.begin(), add.end());
+                };
+                put(p.units, un);
+                put(p.formats, fo);
+                put(p.visible, vi);
+                writePens(o, std::move(p));
+                return true;
+            });
+        case Mode::Table:
+            return change(label, [&](hmi::Object& o) {
+                auto t = readTable(o);
+                if (i >= t.rows.size()) return false;
+                std::vector<std::vector<std::string>> made;
+                for (const auto& row : rows) {
+                    std::vector<std::string> cells = t.rows[i];
+                    for (std::size_t c = 0; c < cells.size() && c < row.size(); ++c) cells[c] = row[c];
+                    made.push_back(std::move(cells));
+                }
+                t.rows.insert(t.rows.begin() + at, made.begin(), made.end());
+                writeTable(o, t);
+                return true;
+            });
+        case Mode::Choices:
+            return change(label, [&](hmi::Object& o) {
+                auto c = readChoices(o);
+                if (i >= c.labels.size()) return false;
+                std::vector<std::string> la, va;
+                for (const auto& row : rows) {
+                    la.push_back(take(row, "Libell\xC3\xA9", c.labels[i]));
+                    va.push_back(take(row, "Valeur \xC3\xA9" "crite", c.values[i]));
+                    if (!fitsInList(la.back()) || !fitsInList(va.back()) || trimmed(la.back()).empty()) return false;
+                }
+                c.labels.insert(c.labels.begin() + at, la.begin(), la.end());
+                c.values.insert(c.values.begin() + at, va.begin(), va.end());
+                writeChoices(o, std::move(c));
+                return true;
+            });
+        case Mode::States:
+            return change(label, [&](hmi::Object& o) {
+                auto t = readStates(o);
+                if (i >= t.states.size() || t.states[i].match == "*") return false;
+                const int k = t.conditions ? conditionIndexOf(t, i) : -1;
+                std::vector<hmi::StateEntry> made;
+                std::vector<std::string> conds;
+                for (const auto& row : rows) {
+                    hmi::StateEntry st = t.states[i];
+                    st.text = take(row, "Texte", st.text);
+                    st.color = take(row, "Couleur", st.color);
+                    if (t.conditions) conds.push_back(take(row, "Condition", k >= 0 && static_cast<std::size_t>(k) < t.conds.size() ? t.conds[static_cast<std::size_t>(k)] : std::string("FALSE")));
+                    else st.match = take(row, "Valeur", st.match);
+                    // La liste d'etats ne se relirait pas avec un ';' ou un '|' dans une case.
+                    for (const auto* v : {&st.text, &st.color, &st.match})
+                        if (v->find_first_of(";|") != std::string::npos) return false;
+                    made.push_back(std::move(st));
+                }
+                t.states.insert(t.states.begin() + at, made.begin(), made.end());
+                if (t.conditions && k >= 0) {
+                    if (t.conds.size() < static_cast<std::size_t>(k) + 1) t.conds.resize(static_cast<std::size_t>(k) + 1, "FALSE");
+                    t.conds.insert(t.conds.begin() + k + 1, conds.begin(), conds.end());
+                }
+                writeStates(o, std::move(t));
+                return true;
+            });
+        default:
+            return false;
+    }
+}
+
+bool HmiContentPanel::openDuplicate() {
+    const int index = selectedIndex();
+    auto fields = duplicateFields(index);
+    if (fields.empty()) return false;
+    const auto bounds = hmi::dup::projectBounds(doc_->project);
+    if (!host_) {   // sans hote : une copie (les indices suivis, le nom numerote)
+        const auto indices = hmi::dup::itemIndices(fields, bounds);
+        const bool ok = insertCopies(index, hmi::dup::itemCopies(fields, indices, {}, 1));
+        if (ok) selectIndex(index + 1);
+        return ok;
+    }
+    const auto* o = current();
+    HmiItemDuplicateDialog::Spec spec;
+    spec.title = "Dupliquer : " + itemWord(o, mode(), index);
+    spec.what = (o ? o->name + " \xC2\xB7 " : std::string{}) + itemWord(o, mode(), index);
+    for (const auto& f : fields)
+        if (f.kind == hmi::dup::ItemField::Kind::Expression && !f.text.empty()) {
+            spec.what += " : " + f.text;
+            break;
+        }
+    spec.fields = fields;
+    spec.bounds = bounds;
+    spec.assist = assist::fieldAssist(assist::sourcesFor(doc_), false);
+    const std::weak_ptr<bool> alive = alive_;
+    const Id object = object_;
+    host_(std::make_unique<HmiItemDuplicateDialog>(std::move(spec)), [this, alive, object, index, before = std::move(fields)](const menu::DialogResult& r) {
+        if (alive.expired() || object_ != object || !r.accepted()) return;
+        // L'element a change entre-temps (un autre a sa place) : rien.
+        const auto now = duplicateFields(index);
+        const bool same = now.size() == before.size()
+                       && std::equal(now.begin(), now.end(), before.begin(), [](const hmi::dup::ItemField& a, const hmi::dup::ItemField& b) {
+                              return a.label == b.label && a.text == b.text;
+                          });
+        if (!same) return;
+        if (insertCopies(index, HmiItemDuplicateDialog::parse(r.payload))) selectIndex(index + 1);
+    });
     return true;
 }
 
@@ -1309,6 +1575,7 @@ bool HmiContentPanel::removeItem(int index) {
                 if (i < p.colors.size()) p.colors.erase(p.colors.begin() + static_cast<std::ptrdiff_t>(i));
                 eraseAt(p.units, i);      // 1.12.5 (D11)
                 eraseAt(p.formats, i);
+                eraseAt(p.visible, i);    // 1.12.16
                 writePens(o, std::move(p));
                 return true;
             });
@@ -1459,6 +1726,7 @@ bool HmiContentPanel::moveItem(int index, int delta) {
                 if (b < p.colors.size() && a < p.colors.size()) std::swap(p.colors[a], p.colors[b]);
                 swapAt(p.units, a, b);    // 1.12.5 (D11)
                 swapAt(p.formats, a, b);
+                swapAt(p.visible, a, b);  // 1.12.16
                 writePens(o, std::move(p));
                 return true;
             });
@@ -1941,6 +2209,12 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
                     if (list[i] == value) return false;
                     list[i] = value;
                     while (!list.empty() && list.back().empty()) list.pop_back();
+                } else if (field == "visible" && o.kind == hmi::Kind::Trend) {
+                    // 1.12.16 : la condition de la plume, a son rang (penVisible) ; vide : toujours visible.
+                    if (!fitsInList(value)) return false;
+                    if (p.visible.size() < p.exprs.size()) p.visible.resize(p.exprs.size());
+                    if (p.visible[i] == value) return false;
+                    p.visible[i] = value;
                 } else return false;
                 writePens(o, std::move(p));
                 return true;
@@ -2343,6 +2617,15 @@ void HmiContentPanel::rebuildGrid() {
                 if (o->kind != hmi::Kind::StateChart && o->kind != hmi::Kind::VariableTable)
                     pen.properties.push_back(editable("Couleur", i < p.colors.size() ? p.colors[i] : std::string{}, PG::ValueType::Color, index,
                                                       "color"));
+                // 1.12.16 : une plume qui se montre selon une condition (fausse : cachee, sa legende aussi ; mesuree quand meme).
+                if (o->kind == hmi::Kind::Trend) {
+                    auto cond = editable("Visible si", i < p.visible.size() ? p.visible[i] : std::string{}, PG::ValueType::Text, index,
+                                         "visible",
+                                         "Une condition lue en marche : fausse, la plume et sa l\xC3\xA9gende se cachent (ses mesures "
+                                         "continuent). Vide : toujours visible. Par exemple : Four.Chauffe AND Niveau > 10");
+                    ui::exprfield::markWhole(cond, ui::exprfield::Expect::Bool, true);
+                    pen.properties.push_back(std::move(cond));
+                }
                 // 1.12.7 (lot D) : l'unite et le format de la ligne d'un tableau de variables (avant :
                 // les listes units et formats de l'inspecteur, a aligner a la main).
                 if (o->kind == hmi::Kind::VariableTable) {

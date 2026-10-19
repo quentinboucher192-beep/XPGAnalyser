@@ -161,6 +161,10 @@ struct TableLayout {
 };
 [[nodiscard]] TableLayout tableLayout(const Object&, double w, double h, std::size_t count, std::size_t first);
 [[nodiscard]] std::string tableHit(const Object&, double w, double h, double x, double y, std::size_t count, std::size_t first);
+// 1.12.16 : une courbe pilotable - son bouton Pause / Continuer (en haut a droite) : "pause" ; "" : ailleurs.
+[[nodiscard]] std::string trendHit(const Object&, double w, double h, double x, double y);
+// ... et ou il est, dans le repere de l'objet (x, y, largeur, hauteur).
+[[nodiscard]] std::array<double, 4> trendPauseBox(double w, double h);
 // 1.12.13 : LA CASE TOUCHEE d'un tableau (lignes dynamiques, cases fixes : la meme mise en page) - "entete:C" (l'en-tete
 // de la colonne C, 0...), "case:R:C" (la ligne R du modele, la premiere montree comprise, et sa colonne), "case:-1:-1"
 // ailleurs dans l'objet (sous les lignes) ; "" sur la barre de defilement (tableHit) ou dehors. `widths` : les largeurs

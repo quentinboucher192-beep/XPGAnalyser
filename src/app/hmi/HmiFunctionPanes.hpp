@@ -57,8 +57,10 @@ public:
     // meme liste, le meme editeur, sur View::functions du symbole `symbol` ; en plus, la
     // case Virtuelle (une instance peut la redefinir) et les instances qui la redefinissent.
     // Le corps lit les parametres du symbole (les diagnostics les connaissent).
+    // 1.12.16 : aussi une vue ou une popup (ses fonctions, View::functions) - pas de virtuelle, une portee.
     void setSymbol(hmi::Id symbol);
     [[nodiscard]] hmi::Id symbol() const noexcept { return symbol_; }
+    bool setFunctionVisibility(hmi::Id function, bool pub);   // 1.12.16 : une fonction de vue, publique ou privee
     bool setVirtual(hmi::Id, bool on);
 
     void refresh();

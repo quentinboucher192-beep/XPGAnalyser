@@ -126,6 +126,7 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"units", Role::List, Role::Text}, {"formats", Role::List, Role::Format},
     {"mode", Role::Choice}, {"duration", Role::Duration, Role::Text, Unit::Seconds, "REAL"},
     {"scale", Role::Choice}, {"interpolation", Role::Choice}, {"legend", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"penVisible", Role::List, Role::Formula}, {"pilotable", Role::Boolean, Role::Text, Unit::None, "BOOL"},   // 1.12.16 : les courbes
     {"items", Role::List, Role::Text}, {"values", Role::List, Role::Formula}, {"itemsFrom", Role::Formula, Role::List},
     {"positions", Role::List, Role::Text},
     {"state", Role::Formula, Role::Boolean}, {"lamp", Role::Formula, Role::Boolean},

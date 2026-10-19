@@ -389,9 +389,25 @@ const hmi::View* HmiFunctionsPane::symbolView() const { return symbol_ != kNoId 
 void HmiFunctionsPane::setSymbol(Id symbol) {
     symbol_ = symbol;
     if (auto* panel = dynamic_cast<HmiTitledPanel*>(findById(id() + ".functionsPanel")))
-        panel->setTitle(symbolView() ? "FONCTIONS DE " + symbolView()->name : std::string("FONCTIONS IHM"));
+        panel->setTitle(symbolView() ? "FONCTIONS DE " + symbolView()->name : std::string("FONCTIONS IHM"));   // 1.12.16 : une vue aussi
     selectedRow_ = -1;
     refresh();
+}
+
+// 1.12.16 : la portee d'une fonction de vue (publique : Vue.Nom() d'ailleurs ; privee : la vue seule).
+bool HmiFunctionsPane::setFunctionVisibility(Id id, bool pub) {
+    const auto* f = fnOf(doc_->project, id);
+    if (!f || symbol_ == kNoId) return false;
+    const auto want = pub ? hmi::Visibility::Public : hmi::Visibility::Private;
+    if (f->visibility == want) return true;
+    const std::string fname = f->name;
+    auto cmd = hmi::changeProject(doc_, std::string(pub ? "Rendre publique " : "Rendre priv\xC3\xA9" "e ") + fname, [&](hmi::Project& p) {
+        if (auto* g = fnOf(p, id)) g->visibility = want;
+    });
+    if (cmd) apply_(std::move(cmd));
+    say(fname + (pub ? std::string(" : publique (appel\xC3\xA9" "e d'ailleurs par Vue.") + fname + "())"
+                     : std::string(" : priv\xC3\xA9" "e (seulement dans sa vue)")));
+    return true;
 }
 
 bool HmiFunctionsPane::setVirtual(Id id, bool on) {
@@ -479,7 +495,10 @@ void HmiFunctionsPane::refresh() {
     }
     showSelected();
     const auto n = list ? list->size() : 0u;
-    if (const auto* sv = symbolView())                                    // 1.11.10
+    if (const auto* vv = symbolView(); vv && !hmi::isSymbolView(*vv))   // 1.12.16 : une vue, une popup
+        countsText_ = std::to_string(n) + " fonction(s) de " + vv->name + "  \xC2\xB7  appel : Nom() dans la vue, "
+                      + vv->name + ".Nom() ailleurs (les publiques)";
+    else if (const auto* sv = symbolView())                               // 1.11.10
         countsText_ = std::to_string(n) + " fonction(s) de " + sv->name + "  \xC2\xB7  appel : Nom() dans le symbole, "
                       "Instance.Nom() dans sa vue, Vue.Instance.Nom() partout (scripts g\xC3\xA9n\xC3\xA9raux, fonctions)";
     else
@@ -588,7 +607,18 @@ void HmiFunctionsPane::rebuildProperties() {
                                         nullptr, "Les param\xC3\xA8tres de la fonction : l'onglet Param\xC3\xA8tres (l'ordre est la signature)."));
     c.properties.push_back(hmikit::prop("Locales", std::to_string(kept + temps), PG::ValueType::ReadOnly, nullptr,
                                         "Ses variables locales (onglet Locales) : elles repartent \xC3\xA0 chaque appel."));
-    if (const auto* sv = symbolView()) {
+    if (const auto* vv = symbolView(); vv && !hmi::isSymbolView(*vv)) {
+        // 1.12.16 : une fonction d'une vue (ou d'une popup) - sa portee, et comment l'appeler.
+        const bool pub = f->visibility == hmi::Visibility::Public;
+        c.properties.push_back(hmikit::prop("Port\xC3\xA9" "e", pub ? "Publique" : "Priv\xC3\xA9" "e", PG::ValueType::Enum,
+            [this, id](std::string_view v) { return setFunctionVisibility(id, v == "Publique"); },
+            "Publique : appel\xC3\xA9" "e d'ailleurs par " + vv->name + "." + f->name + "(...) (un script g\xC3\xA9n\xC3\xA9ral, une autre vue) ; "
+            "priv\xC3\xA9" "e : seulement dans " + vv->name + " (G\xC3\xA9n\xC3\xA9rer refuse un appel d'ailleurs et dit pourquoi).",
+            {"Publique", "Priv\xC3\xA9" "e"}));
+        c.properties.push_back(hmikit::prop("Appel",
+            f->name + "() dans " + vv->name + (pub ? " ; " + vv->name + "." + f->name + "() partout" : std::string(" seulement")),
+            PG::ValueType::ReadOnly));
+    } else if (const auto* sv = symbolView()) {
         // 1.11.10 : virtuelle, et qui la redefinit.
         c.properties.push_back(hmikit::prop("Virtuelle", f->isVirtual ? "TRUE" : "FALSE", PG::ValueType::Boolean,
             [this, id](std::string_view v) { return setVirtual(id, v == "TRUE" || v == "true" || v == "1"); },
@@ -807,6 +837,13 @@ bool HmiFunctionsPane::nameAllowed(const std::string& name, Id self, std::string
                                       "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ASSERT"};   // 1.12.1
     for (const char* k : kReserved) if (u == k) return refuse("'" + name + "' est un mot du langage ST");
     if (hmi::localTypeSupported(u) || hmi::isStandardFunction(u)) return refuse("'" + name + "' est un type ou une fonction standard");
+    // 1.12.16 : une fonction de vue - pas le nom d'une constante, d'un objet ou d'un parametre de la vue.
+    if (const auto* vv = symbolView(); vv && !hmi::isSymbolView(*vv)) {
+        std::string what;
+        const auto* me = fnOf(doc_->project, self);
+        if (hmi::viewmembers::nameTaken(*vv, name, &what, me) && what.find("fonction") == std::string::npos)
+            return refuse("'" + name + "' est d\xC3\xA9j\xC3\xA0 pris dans " + vv->name + " (" + what + ")");
+    }
     // 1.11.20 : plusieurs fonctions du meme nom (des surcharges) - a la creation (sa forme differera,
     // sinon Compiler le dit) ; pas en renommant (ses appels pourraient changer de cible) ; jamais une
     // fonction virtuelle (ses redefinitions la designent par son nom).
@@ -954,7 +991,8 @@ bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::strin
     auto cmd = hmi::changeProject(doc_, "Renommer la fonction " + old + " en " + name, [&](hmi::Project& p) {
         // 1.11.10 : une fonction de symbole - ses appels (dans le symbole, Instance.Nom, Vue.Instance.Nom)
         // et les redefinitions des instances suivent.
-        if (const auto* sv = symbolView()) changed = hmi::renameSymbolFunction(p, sv->name, old, name);
+        if (const auto* sv = symbolView(); sv && !hmi::isSymbolView(*sv)) changed = hmi::viewmembers::renameMember(p, sv->name, old, name);   // 1.12.16
+        else if (sv) changed = hmi::renameSymbolFunction(p, sv->name, old, name);
         else changed = hmi::renameFunctionEverywhere(p, old, name);
         for (const Id g : group)
             if (auto* fn = fnOf(p, g)) fn->name = name;

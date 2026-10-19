@@ -171,6 +171,8 @@ private:
     std::string            message_;
     paste::Binding         paste_;
     std::shared_ptr<int>   alive_{std::make_shared<int>(0)};   // le selecteur repond apres coup : la grille vit-elle encore ?
+    // 1.12.16 : les constantes d'une vue - le script qui les porte pour le moteur (viewmembers::constantsScript).
+    mutable hmi::Script    viewHolder_;
     core::ConnectionScope  links_;
 };
 

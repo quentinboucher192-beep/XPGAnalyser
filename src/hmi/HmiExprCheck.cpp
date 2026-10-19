@@ -1021,7 +1021,7 @@ Want wantIn1125(std::string_view key) {
         "visible", "blink", "flipH", "flipV", "wrap", "showValue", "continuous", "seconds", "showText", "showDate",
         "leadingZeros", "legend", "clip", "inverted", "userList", "showUser", "confirm", "icon", "requireDigit",
         "validateOnExit", "autoplay", "muted", "bold", "italic", "collapsed", "pushBelow", "backForward", "showScrollbar",
-        "showNames", "showCounts", "home"};
+        "showNames", "showCounts", "home", "pilotable"};
     for (const auto k : kNumber) if (k == key) return Want::Number;
     for (const auto k : kBool) if (k == key) return Want::Bool;
     if (key == "fill" || key == "stroke" || key == "color"

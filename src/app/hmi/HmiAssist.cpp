@@ -408,6 +408,27 @@ Item userFunctionItem(const hmi::HmiFunction& f, int rank) {
     return it;
 }
 
+// ---- 1.12.16 : une constante, une fonction d'une vue (ou d'une popup) ----
+// Le detail d'une constante de la vue : "REAL  .  constante de Vue_Four  .  fx a chaque ouverture".
+std::string viewConstantDetail(const hmi::Project& hp, const hmi::View& v, const hmi::Declaration& d) {
+    std::string out = d.type + "  \xC2\xB7  constante de " + v.name;
+    if (d.visibility == hmi::Visibility::Private) out += "  \xC2\xB7  priv\xC3\xA9" "e";
+    if (d.computed)
+        out += hmi::viewmembers::computedAtOpen(hp, v, d) ? std::string("  \xC2\xB7  \xC6\x92x \xC3\xA0 chaque ouverture")
+                                                          : std::string("  \xC2\xB7  \xC6\x92x calcul\xC3\xA9" "e au d\xC3\xA9marrage");
+    else if (!d.value.empty())
+        out += "  \xC2\xB7  " + d.value;
+    if (!d.description.empty()) out += "  \xC2\xB7  " + d.description;
+    return out;
+}
+// Une fonction de la vue, prete pour la liste (son appel, le curseur dans les parentheses).
+Item viewFunctionItem(const hmi::View& v, const hmi::HmiFunction& f, int rank) {
+    Item it = userFunctionItem(f, rank);
+    it.detail = "fonction de " + v.name + "  \xC2\xB7  " + (f.returnType.empty() ? std::string("sans retour") : f.returnType)
+              + (f.visibility == hmi::Visibility::Private ? "  \xC2\xB7  priv\xC3\xA9" "e" : "");
+    return it;
+}
+
 // ---- 1.10 (chantier K) : le dialecte des scripts de l'IHM (decisions 13 et 13 bis) ----
 // Le texte apres le curseur, pose par attach() le temps d'un appel : une
 // fonction interne se declare avant ou apres son emploi.
@@ -1594,6 +1615,18 @@ bool publicMembers(const hmi::Project& hp, const std::string& path, const std::s
     if (dot == std::string::npos) {
         for (const auto& m : hmi::pub::viewMembers(*v))
             add(m.name, m.type + "  \xC2\xB7  " + std::string(hmi::pub::accessLabel(m.access)) + "  \xC2\xB7  " + m.text, Kind::InstanceVariable);
+        // 1.12.16 : ses constantes et ses fonctions publiques (dans la vue elle-meme, les privees aussi), en tete.
+        if (!hmi::isSymbolView(*v)) {
+            const auto* here = hmiparams::editedView(hp);
+            const bool inside = here && here->id == v->id;
+            for (const auto& c : v->constants)
+                if (inside || c.visibility == hmi::Visibility::Public) add(c.name, viewConstantDetail(hp, *v, c), Kind::Member, false, -8);
+            for (const auto& f : v->functions) {
+                if (!inside && f.visibility != hmi::Visibility::Public) continue;
+                const int r = matchRank(f.name, needle);
+                if (r >= 0) push(viewFunctionItem(*v, f, r - 8));
+            }
+        }
         for (const auto& o : shown.objects)
             if (!o.name.empty()) {
                 // 1.10.2 (chantier A) : une instance de symbole annonce ses parametres.
@@ -2277,6 +2310,24 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                 if (r < 0) continue;
                 push(userFunctionItem(f, r * 2));
             }
+            // 1.12.16 : dans une vue ou une popup, ses constantes et ses fonctions par leur nom (les privees aussi).
+            if (const auto* av = hmiparams::editedView(hp); av && !hmi::isSymbolView(*av)) {
+                for (const auto& c : av->constants) {
+                    const int r = matchRank(c.name, needle);
+                    if (r < 0) continue;
+                    Item it;
+                    it.text = c.name;
+                    it.detail = viewConstantDetail(hp, *av, c);
+                    it.kind = Kind::Member;
+                    it.rank = r * 2 - 4;
+                    push(std::move(it));
+                }
+                for (const auto& f : av->functions) {
+                    if (!full && f.returnType.empty()) continue;
+                    const int r = matchRank(f.name, needle);
+                    if (r >= 0) push(viewFunctionItem(*av, f, r * 2 - 4));
+                }
+            }
             // 1.11.10 : dans un symbole (ou une de ses popups), ses fonctions par leur nom.
             if (const auto* av = hmiparams::editedView(hp)) {   // meme sans parametre
                 const hmi::View* sym = hmi::isSymbolView(*av) ? av : hmi::popupOwner(hp, *av);
@@ -2834,6 +2885,22 @@ ui::MultiLineText::Signature bubbleOf(const hmi::HmiFunction& f) {
 
 bool signature(const hmi::Project* hp, const domain::Project* plc, std::string_view name,
                ui::MultiLineText::Signature& out) {
+    // 1.12.16 : une fonction d'une vue - Fonction( dans la vue (avant celles du projet), Vue.Fonction( ailleurs.
+    if (hp) {
+        const auto* here = hmiparams::editedView(*hp);
+        std::vector<const hmi::HmiFunction*> fs;
+        if (name.find('.') == std::string_view::npos) {
+            if (here && !hmi::isSymbolView(*here)) fs = hmi::viewmembers::functions(*here, name);
+        } else {
+            hmi::viewmembers::Member m;
+            if (hmi::viewmembers::resolve(*hp, name, m, nullptr, here)) fs = m.functions;
+        }
+        if (!fs.empty()) {
+            out = bubbleOf(*fs.front());
+            for (std::size_t k = 1; k < fs.size(); ++k) out.overloads.push_back(bubbleOf(*fs[k]));
+            return true;
+        }
+    }
     if (hp)
         if (const auto fs = hp->functionsNamed(name); !fs.empty()) {
             out = bubbleOf(*fs.front());
@@ -2965,6 +3032,58 @@ Description describe(const hmi::Project& hp, const domain::Project* plc, std::st
     if (symbol.empty()) return d;
     if (isKeyword(symbol)) { d.keyword = true; return d; }
     const std::string name(symbol);
+
+    // 1.12.16 : une constante ou une fonction d'une vue - par son nom dans la vue, par Vue.Nom ailleurs.
+    if (op == hmi::kNoId) {
+        const auto* here = hmiparams::editedView(hp);
+        const hmi::View* owner = nullptr;
+        const hmi::Declaration* constant = nullptr;
+        std::vector<const hmi::HmiFunction*> fs;
+        std::string rest;   // ce qui suit la constante (.Membre, [2])
+        const auto cut = symbol.find_first_of(".[");
+        if (here && !hmi::isSymbolView(*here)) {
+            if ((constant = hmi::viewmembers::constant(*here, symbol.substr(0, cut)))) {
+                owner = here;
+                if (cut != std::string_view::npos) rest = std::string(symbol.substr(cut));
+            } else if (cut == std::string_view::npos && !(fs = hmi::viewmembers::functions(*here, symbol)).empty()) {
+                owner = here;
+            }
+        }
+        if (!owner && cut != std::string_view::npos && symbol[cut] == '.') {
+            hmi::viewmembers::Member m;
+            std::string why;
+            if (hmi::viewmembers::resolve(hp, symbol, m, &why, here)) {
+                owner = m.view;
+                constant = m.constant;
+                fs = m.functions;
+                const std::size_t head = cut + 1 + (constant ? constant->name.size() : fs.empty() ? 0 : fs.front()->name.size());
+                if (constant && head < symbol.size()) rest = std::string(symbol.substr(head));
+            } else if (!why.empty()) {
+                d.found = true;
+                d.line = name + "  -  " + why;
+                return d;
+            }
+        }
+        if (owner && constant) {
+            d.found = true;
+            d.type = rest.empty() ? constant->type : hmi::viewmembers::typeAlong(hp, constant->type, rest);
+            d.line = name + " : " + (d.type.empty() ? std::string("?") : d.type) + "   " + viewConstantDetail(hp, *owner, *constant).substr(constant->type.size() + 6);
+            return d;
+        }
+        if (owner && !fs.empty()) {
+            const auto& f = *fs.front();
+            const auto b = bubbleOf(f);
+            std::string params;
+            for (std::size_t k = 0; k < b.parameters.size(); ++k) params += (k ? ", " : "") + b.parameters[k];
+            d.found = true;
+            d.type = f.returnType;
+            d.line = name + "(" + params + ")" + (f.returnType.empty() ? std::string{} : " : " + f.returnType) + "   fonction de " + owner->name
+                   + (f.visibility == hmi::Visibility::Private ? "  (priv\xC3\xA9" "e)" : "")
+                   + (fs.size() > 1 ? "   " + std::to_string(fs.size()) + " surcharges" : std::string{})
+                   + (f.description.empty() ? std::string{} : "   // " + f.description);
+            return d;
+        }
+    }
 
     // 1.10.1 (U2) : le script d'un operateur - a, b, Resultat, TO_X (et a.x : son membre).
     if (op != hmi::kNoId) {

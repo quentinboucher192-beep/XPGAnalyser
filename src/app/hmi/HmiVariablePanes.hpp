@@ -96,6 +96,12 @@ public:
     [[nodiscard]] const hmi::retain::Store* retainStore() const;
     // L'adresse corrigee d'un membre ("Heures", "Vannes[2].Position") ; vide : la place calculee.
     bool setMemberAddress(hmi::Id, const std::string& relPath, const std::string& address, std::string* why = nullptr);
+    // 1.12.16 : L'ADRESSE CALCULEE d'un membre (sa place dans la suite logique, sans sa correction) - %MW503
+    // pour Vannes[3] parti de %MW500, meme corrige en %MW510 ; un membre compose : son depart. Vide : aucune.
+    [[nodiscard]] std::string computedMemberAddress(hmi::Id, const std::string& relPath) const;
+    // 1.12.16 : retirer les corrections (revenir aux adresses calculees) de ces membres ; vide : de tous les
+    // membres de la variable. Une commande (un Ctrl+Z). Faux : rien a retirer (`why`).
+    bool clearMemberAddresses(hmi::Id, const std::vector<std::string>& relPaths, std::string* why = nullptr);
     // 1.11.8 : des membres INTERNES (gardes dans l'IHM : l'equipement ne les lit ni ne les ecrit) ou
     // ATTRIBUES a l'equipement de la structure ; `allElements` : le meme membre dans toutes les cases
     // du tableau ([0].NOM -> [*].NOM). Une seule commande (un Ctrl+Z).

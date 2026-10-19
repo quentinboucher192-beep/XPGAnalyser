@@ -3816,6 +3816,11 @@ struct ExprWalker {
         for (const auto& v : p.views)
             for (const auto& o : v.objects) {
                 if (o.kind != Kind::Trend || !animOn(v.id)) continue;
+                // 1.12.16 : la condition « Visible si » de chaque plume (vide : toujours visible).
+                const auto conds = roles::splitList(o.text("penVisible"));
+                for (std::size_t i = 0; i < conds.size(); ++i)
+                    if (!conds[i].empty() && !sources::hasJoker(conds[i]))
+                        expr(Where{&v, o.id, "Courbe", "penVisible"}, conds[i], W::Bool, "plume " + std::to_string(i + 1) + ", visible si ");
                 if (o.text("mode").rfind("historique", 0) == 0 && !o.text("source").empty()) continue;
                 for (const auto& pen : checkedPens(p, &v, o.text("variables"))) expr(Where{&v, o.id, "Courbe", "variables"}, pen, W::Any, "plume ");
             }

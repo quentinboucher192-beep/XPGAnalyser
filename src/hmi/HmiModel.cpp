@@ -654,6 +654,7 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.set("colors", "#4FA3FF;#F2994A;#2ECC71;#E5534B");
             o.set("interpolation", "lin\xC3\xA9" "aire");
             o.setFlag("legend", true);
+            o.setFlag("pilotable", false);   // 1.12.16 : en marche, le bouton Pause / Continuer
             o.set("fill", "#1B2028");
             o.set("stroke", "#3A4556");
             break;

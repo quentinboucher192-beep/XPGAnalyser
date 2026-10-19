@@ -40,7 +40,8 @@ namespace hmi::migrate {
 
 // Ou est un code a migrer.
 struct Place {
-    enum class Kind : std::uint8_t { Script, ViewScript, Function, SymbolFunction, Override, TypeOperator, SymbolOperator };
+    // 1.12.16 : ViewConstants - les constantes d'une vue ou d'une popup (View::constants ; `view`).
+    enum class Kind : std::uint8_t { Script, ViewScript, Function, SymbolFunction, Override, TypeOperator, SymbolOperator, ViewConstants };
     Kind        kind{Kind::Script};
     Id          view{kNoId};       // un script de vue, une fonction ou un operateur de symbole, une redefinition
     Id          object{kNoId};     // une redefinition : l'instance

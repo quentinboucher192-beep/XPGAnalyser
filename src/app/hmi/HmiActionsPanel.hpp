@@ -23,6 +23,7 @@
 #include "HmiPanels.hpp"
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
+#include "../../hmi/HmiDuplicate.hpp"   // 1.12.16 : Dupliquer... (N copies)
 #include "../../menu/IMenu.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
@@ -79,6 +80,13 @@ public:
     // Ouvre la fenetre d'une ligne de l'action choisie : "Op\xC3\xA9ration", "Code ST",
     // "Formule" (Maths) ; faux : pas de fenetre (pas d'hote, rien de choisi, pas cette ligne).
     bool openEditor(const std::string& name);
+    // 1.12.16 : « DUPLIQUER... » - N copies de l'action (du raccourci) choisie, comme un symbole : ses indices suivis
+    // (V[0].CMD -> V[1].CMD...), la touche d'un raccourci qui suit son numero (F2 -> F3), chaque case corrigeable
+    // (HmiItemDuplicateDialog). Sans hote : une copie, comme avant. Les champs que la fenetre montre (et dans cet
+    // ordre, les cases d'une copie), et les copies inserees apres l'action en UNE commande.
+    bool openDuplicate();
+    [[nodiscard]] std::vector<hmi::dup::ItemField> duplicateFields(int index) const;
+    bool insertCopies(int index, const std::vector<std::vector<std::string>>& rows);
 
     [[nodiscard]] HmiToolStrip&     tools() noexcept { return *tools_; }
     [[nodiscard]] ui::TableView&    table() noexcept { return *table_; }

@@ -614,6 +614,7 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
     const std::string mode = c.src.text(c.o, "mode", "temps r\xC3\xA9" "el");
     const bool historyMode = mode.rfind("historique", 0) == 0;
     const bool legend = c.src.flag(c.o, "legend", true);
+    const bool pilotable = c.src.flag(c.o, "pilotable", false);   // 1.12.16 : le bouton Pause / Continuer
     const auto penColor = [&](std::size_t i) {
         const auto& pal = hmiTrendPalette();
         const bool own = i < colorList.size() && !trimmedPen(colorList[i]).empty();
@@ -623,16 +624,25 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
 
     // Les donnees : une serie (temps, valeur) par plume, et la fin de la fenetre.
     std::vector<std::vector<std::pair<double, double>>> series(pens.size());
+    std::vector<bool> shown(pens.size(), true);   // 1.12.16 : la condition de chaque plume (penVisible)
     double end = 0;
     bool preview = false;
+    bool paused = false;
     std::string endLabel;
     const auto* rt = c.opt.runtime;
     if (!c.opt.editor && rt && !historyMode) {
         end = rt->now();
+        // 1.12.16 : une courbe pilotable en pause - figee a l'instant de la pause (les mesures continuent).
+        if (const auto at = rt->trendPausedAt(view.id, c.o.id)) {
+            end = *at;
+            paused = true;
+        }
         if (const auto* list = rt->trend(view.id, c.o.id))
-            for (std::size_t i = 0; i < pens.size() && i < list->size(); ++i)
+            for (std::size_t i = 0; i < pens.size() && i < list->size(); ++i) {
                 for (const auto& pt : (*list)[i].points) series[i].push_back(pt);
-        endLabel = "0 s";
+                shown[i] = (*list)[i].visible;
+            }
+        endLabel = paused ? "pause" : "0 s";
     } else if (!c.opt.editor && historyMode) {
         const std::string source = c.src.text(c.o, "source");
         if (!source.empty() && c.opt.assets) {
@@ -766,6 +776,7 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
         }
     }
     for (std::size_t i = 0; i < series.size(); ++i) {
+        if (!shown[i]) continue;   // 1.12.16 : sa condition est fausse
         const auto col = penColor(i);
         std::vector<gfx::Point> pts;
         for (const auto& [t, v] : series[i]) {
@@ -792,13 +803,15 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
         double x = left;
         // Lot 6 : le nom de la plume ("names"), sinon son expression.
         const auto names = hmi::splitSemicolons(c.src.text(c.o, "names"));
+        const double legendRight = w - (pilotable ? 34.0 : 0.0);   // 1.12.16 : la place du bouton Pause
         for (std::size_t i = 0; i < pens.size(); ++i) {
+            if (!shown[i]) continue;   // 1.12.16 : cachee, sa legende aussi
             std::string name = i < names.size() && !names[i].empty() ? names[i] : pens[i];
             if (!series[i].empty() && !preview) name += " = " + hmi::formatNumber(std::round(series[i].back().second * 100) / 100);
             // La largeur du libelle, mesuree a la taille ou il sera ecrit.
             const auto px = static_cast<std::uint16_t>(std::clamp(11.0 * c.vp.zoom, 6.0, 200.0));
             const double textW = c.r.measure(name, gfx::FontId{px}).width / std::max(0.01f, c.vp.zoom);
-            const double tw = std::min(w - x - 8, 26.0 + textW);
+            const double tw = std::min(legendRight - x - 8, 26.0 + textW);
             if (tw < 40) break;
             const auto sw = c.map({{static_cast<float>(x), 8.f}, {static_cast<float>(x + 10), 8.f},
                                    {static_cast<float>(x + 10), 16.f}, {static_cast<float>(x), 16.f}});
@@ -806,6 +819,22 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
             text(c, fitted(c, name, tw - 16, 11), x + 12, 3, tw - 14, 18, label, 11, "gauche");
             x += tw + 8;
         }
+    }
+    // 1.12.16 : une courbe pilotable - le bouton Pause (deux barres) / Continuer (un triangle), en haut a droite ;
+    // en pause, un bandeau le dit sur la zone de trace.
+    if (pilotable) {
+        const auto b = hmi::trendPauseBox(w, h);
+        const float bx = static_cast<float>(b[0]), by = static_cast<float>(b[1]), bw = static_cast<float>(b[2]), bh = static_cast<float>(b[3]);
+        const gfx::Color face = paused ? c.fixed(0xF2C94C) : c.fixed(0x2F6FD6);
+        shapes::fillPolygon(c.r, c.map({{bx, by}, {bx + bw, by}, {bx + bw, by + bh}, {bx, by + bh}}), fade(face, c.alpha * (c.opt.editor ? 0.5f : 1.f)));
+        const gfx::Color ink = fade(c.fixed(0x101318), c.alpha);
+        if (paused) {
+            shapes::fillPolygon(c.r, c.map({{bx + 9.f, by + 4.f}, {bx + 17.f, by + bh / 2.f}, {bx + 9.f, by + bh - 4.f}}), ink);
+        } else {
+            shapes::fillPolygon(c.r, c.map({{bx + 8.f, by + 4.f}, {bx + 11.f, by + 4.f}, {bx + 11.f, by + bh - 4.f}, {bx + 8.f, by + bh - 4.f}}), ink);
+            shapes::fillPolygon(c.r, c.map({{bx + 14.f, by + 4.f}, {bx + 17.f, by + 4.f}, {bx + 17.f, by + bh - 4.f}, {bx + 14.f, by + bh - 4.f}}), ink);
+        }
+        if (paused) text(c, "en pause - Continuer pour reprendre", left, top + 2, pw, 16, c.fixed(0xF2C94C), 11, "centre");
     }
     if (pens.empty()) text(c, "Courbe : aucune plume (Variables trac\xC3\xA9" "es)", 0, 0, w, h, label, 12, "centre");
     else if (historyMode && !c.opt.editor && std::all_of(series.begin(), series.end(), [](const auto& s) { return s.empty(); }))

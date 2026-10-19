@@ -299,6 +299,7 @@ struct RecipeEditorState {
 struct TrendSeries {
     std::string expression;
     std::deque<std::pair<double, double>> points;   // (instant IHM en s, valeur)
+    bool        visible{true};                      // 1.12.16 : sa condition (penVisible) ; fausse : cachee, mesuree quand meme
 };
 
 // ---- lot 6 : ce que le moteur demande a l'ecran -------------------------------
@@ -537,6 +538,11 @@ public:
     void press(Id object, double now);
     void release(Id object, double now, bool inside);
     void doubleClick(Id object, double now);
+    // 1.12.16 : UNE COURBE PILOTABLE (sa case Pilotable) - figee a l'instant de la pause, les mesures continuent ;
+    // continuer : le temps reel. Le bouton de la courbe (objectPart "pause") le fait aussi. Faux : pas une courbe
+    // pilotable de la vue.
+    bool setTrendPaused(Id view, Id object, bool paused);
+    [[nodiscard]] std::optional<double> trendPausedAt(Id view, Id object) const;
     [[nodiscard]] Id pressed() const noexcept { return pressed_; }
 
     // ---- 1.11.23 : LA SOURIS ET LE CLAVIER (SYS.Mouse*, SYS.Key*, SYS.Key.<touche>) ET LES
@@ -1703,6 +1709,7 @@ private:
     [[nodiscard]] bool clickSubmits(Id object) const;   // ... cet objet la porte (au clic)
     void runKeyActions(const View&, Trigger, const keys::Chord&, double now, const std::function<bool(std::size_t)>& pick = {});
     std::map<std::string, std::vector<TrendSeries>> trends_;   // "vue:objet"
+    std::map<std::string, double> trendPaused_;                // 1.12.16 : "vue:objet" -> l'instant fige
     std::vector<TrendMarker>                        markers_;  // lot 18
     double                           nextSample_{-1};
     // lot 6 : les vues composees (modeles, en-tete, pied), refaites a chaque

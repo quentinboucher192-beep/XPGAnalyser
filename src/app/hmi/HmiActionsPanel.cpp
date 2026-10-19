@@ -1,6 +1,7 @@
 #include "HmiActionsPanel.hpp"
 #include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "HmiActionDialogs.hpp"   // 1.11.9 : l'operation en arbre, le script, la formule de Maths
+#include "HmiItemDuplicateDialog.hpp"   // 1.12.16 : Dupliquer... (N copies)
 #include "HmiParamPanes.hpp"   // 1.9 : les arguments types d'Ouvrir une popup
 #include "../../hmi/HmiActionKinds.hpp"
 #include "../../hmi/HmiKeys.hpp"          // 1.11.23 : les raccourcis
@@ -139,7 +140,10 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
     tools->add(AAdd, HmiGlyph::Plus, keys ? "Ajouter un raccourci : une touche et son action (Ctrl+Z le retire)"
                                           : "Ajouter une action (Ctrl+Z la retire)", "Ajouter");
-    tools->add(ADuplicate, HmiGlyph::Duplicate, keys ? "Dupliquer le raccourci choisi" : "Dupliquer l'action choisie");
+    // 1.12.16 : N copies, comme un symbole (les indices suivis, la touche qui suit son numero).
+    tools->add(ADuplicate, HmiGlyph::Duplicate,
+               keys ? "Dupliquer le raccourci choisi\xE2\x80\xA6 - N copies, sa touche suit son num\xC3\xA9ro (F2 \xE2\x86\x92 F3)"
+                    : "Dupliquer l'action choisie\xE2\x80\xA6 - N copies, ses indices suivis (V[0] \xE2\x86\x92 V[1]), comme un symbole");
     tools->add(ARemove, HmiGlyph::Delete, keys ? "Retirer le raccourci choisi" : "Retirer l'action choisie");
     tools->add(AUp, HmiGlyph::Up, "Monter l'action (elles s'ex\xC3\xA9" "cutent dans l'ordre)");
     tools->add(ADown, HmiGlyph::Down, "Descendre l'action");
@@ -205,9 +209,7 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
                 selectIndex(add(fresh));
                 break;
             }
-            case ADuplicate:
-                if (const auto* list = actions(); list && sel >= 0) selectIndex(add((*list)[static_cast<std::size_t>(sel)]));
-                break;
+            case ADuplicate: (void)openDuplicate(); break;   // 1.12.16 : N copies (une sans hote)
             case ARemove: (void)remove(sel); break;
             case AUp: if (move(sel, -1)) selectIndex(selected_); break;
             case ADown: if (move(sel, +1)) selectIndex(selected_); break;
@@ -332,6 +334,107 @@ bool HmiActionsPanel::openEditor(const std::string& name) {
         return true;
     }
     return false;
+}
+
+// ---- 1.12.16 : Dupliquer... ----
+namespace {
+// Les champs d'une action qui varient d'une copie a l'autre, dans l'ordre des colonnes de la fenetre.
+struct DupSlot {
+    const char*         label;
+    std::string Action::*member;
+    bool                always;   // montre meme vide (la cible : une colonne au moins)
+};
+const DupSlot kDupSlots[] = {
+    {"Touche", &Action::key, false},
+    {"Cible", &Action::target, true},
+    {"Valeur", &Action::value, false},
+    {"Condition", &Action::guard, false},
+    {"Surveill\xC3\xA9" "e", &Action::watch, false},
+    {"Param\xC3\xA8tres", &Action::params, false},
+};
+std::vector<const DupSlot*> dupSlotsOf(const Action& a) {
+    std::vector<const DupSlot*> out;
+    for (const auto& s : kDupSlots) {
+        if (s.member == &Action::key && !hmi::triggerIsKey(a.trigger)) continue;
+        if ((a.*(s.member)).empty() && !s.always) continue;
+        out.push_back(&s);
+    }
+    return out;
+}
+} // namespace
+
+std::vector<hmi::dup::ItemField> HmiActionsPanel::duplicateFields(int index) const {
+    std::vector<hmi::dup::ItemField> out;
+    const auto* list = actions();
+    if (!list || index < 0 || index >= static_cast<int>(list->size())) return out;
+    const Action& a = (*list)[static_cast<std::size_t>(index)];
+    for (const auto* s : dupSlotsOf(a)) {
+        hmi::dup::ItemField f;
+        f.label = s->label;
+        f.text = a.*(s->member);
+        // La touche suit son numero (F2 -> F3 ; Entree reste Entree) ; le reste suit ses indices.
+        f.kind = s->member == &Action::key ? hmi::dup::ItemField::Kind::Label : hmi::dup::ItemField::Kind::Expression;
+        f.shown = f.text.find('\n') == std::string::npos;   // un script : ses indices suivis, pas montre
+        out.push_back(std::move(f));
+    }
+    return out;
+}
+
+bool HmiActionsPanel::insertCopies(int index, const std::vector<std::vector<std::string>>& rows) {
+    const auto* list = actions();
+    if (!list || index < 0 || index >= static_cast<int>(list->size()) || rows.empty()) return false;
+    const Action original = (*list)[static_cast<std::size_t>(index)];
+    const auto slots = dupSlotsOf(original);
+    std::vector<Action> made;
+    for (const auto& row : rows) {
+        Action a = original;
+        for (std::size_t k = 0; k < slots.size() && k < row.size(); ++k) a.*(slots[k]->member) = row[k];
+        made.push_back(std::move(a));
+    }
+    const Id owner = owner_;
+    const std::size_t n = made.size();
+    const std::string what = scope_ == Scope::Shortcuts ? "un raccourci" : "une action";
+    bool done = false;
+    auto cmd = hmi::changeView(doc_, view_, "Dupliquer " + what + (n > 1 ? " (" + std::to_string(n) + " copies)" : std::string{}),
+                               [&](hmi::Project&, hmi::View& v) {
+        auto* l = owner == kNoId ? &v.actions : (v.object(owner) ? &v.object(owner)->actions : nullptr);
+        if (!l || index >= static_cast<int>(l->size())) return;
+        l->insert(l->begin() + index + 1, made.begin(), made.end());
+        done = true;
+    });
+    if (!cmd) return false;
+    apply_(std::move(cmd));
+    selected_ = index + 1;
+    refresh();
+    return done;
+}
+
+bool HmiActionsPanel::openDuplicate() {
+    const auto* list = actions();
+    const int index = selectedIndex();
+    if (!list || index < 0 || index >= static_cast<int>(list->size())) return false;
+    const Action original = (*list)[static_cast<std::size_t>(index)];
+    if (!host_) {   // sans hote : une copie, comme avant
+        const int made = add(original);
+        if (made >= 0) selectIndex(made);
+        return made >= 0;
+    }
+    HmiItemDuplicateDialog::Spec spec;
+    spec.title = scope_ == Scope::Shortcuts ? "Dupliquer le raccourci" : "Dupliquer l'action";
+    spec.what = ownerName() + " \xC2\xB7 n\xC2\xB0 " + std::to_string(index + 1) + " : " + hmi::describeAction(original);
+    spec.fields = duplicateFields(index);
+    spec.bounds = hmi::dup::projectBounds(doc_->project);
+    spec.assist = assist::fieldAssist(assist::sourcesFor(doc_), false);
+    const std::weak_ptr<bool> alive = alive_;
+    const Id view = view_, owner = owner_;
+    host_(std::make_unique<HmiItemDuplicateDialog>(std::move(spec)), [this, alive, view, owner, index, original](const menu::DialogResult& r) {
+        if (alive.expired() || view_ != view || owner_ != owner || !r.accepted()) return;
+        const auto* l = actions();
+        // La liste a change entre-temps (une autre action a cette place) : rien.
+        if (!l || index >= static_cast<int>(l->size()) || (*l)[static_cast<std::size_t>(index)] != original) return;
+        if (insertCopies(index, HmiItemDuplicateDialog::parse(r.payload))) selectIndex(index + 1);
+    });
+    return true;
 }
 
 std::string HmiActionsPanel::ownerName() const {

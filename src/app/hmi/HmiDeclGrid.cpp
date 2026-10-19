@@ -12,6 +12,7 @@
 #include "../../hmi/HmiRuntime.hpp"    // 1.12.7 : leur apercu et leur deballage (Runtime::computedObjects)
 #include "../../hmi/HmiTypes.hpp"      // 1.12.7 : une structure se deballe aussi
 #include "../../hmi/HmiOperators.hpp"
+#include "../../hmi/HmiSymbols.hpp"    // 1.12.16 : les constantes d'une vue (viewmembers)
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/SearchField.hpp"
 
@@ -526,6 +527,9 @@ std::string HmiDeclGrid::ownerLabel() const {
                 for (const auto& o : v->operators)
                     if (o.id == place_->id) return v->name + " " + hmi::operatorSignature(o);
             break;
+        case K::ViewConstants:   // 1.12.16
+            if (const auto* v = p.view(place_->view)) return v->name;
+            break;
     }
     return {};
 }
@@ -648,8 +652,13 @@ bool HmiDeclGrid::setCell(std::size_t row, de::Column column, const std::string&
     const std::string what = column == de::Column::Name ? "Renommer " + name + " en " + text
                                                         : de::columnTitle(column, tab_) + " de " + name;
     std::string note;                     // 1.11.21 : la valeur retiree par un changement de type
-    if (!change(what + " (" + ownerLabel() + ")",
-                [&](hmi::Project& p, std::string* why) { return de::set(p, at, tab, row, column, text, why, &note); }))
+    if (!change(what + " (" + ownerLabel() + ")", [&](hmi::Project& p, std::string* why) {
+            if (!de::set(p, at, tab, row, column, text, why, &note)) return false;
+            // 1.12.16 : une constante de vue renommee - la vue la lit par son nom, le projet par Vue.Nom.
+            if (column == de::Column::Name && at.kind == de::Place::Kind::ViewConstants && name != text)
+                if (const auto* v = p.view(at.view)) (void)hmi::viewmembers::renameMember(p, v->name, name, text);
+            return true;
+        }))
         return false;
     refresh();
     if (!note.empty()) say(name + " : " + note + " (Ctrl+Z la rend)", false);
@@ -699,6 +708,13 @@ void HmiDeclGrid::refreshUnfold() {
 // 1.12.7 : le script (et sa vue) qui porte les declarations montrees ; nul : pas un script.
 const hmi::Script* HmiDeclGrid::ownerScript(const de::Code& code, const hmi::View** view) const {
     if (!doc_ || !code.valid()) return nullptr;
+    // 1.12.16 : les constantes d'une vue - le script qui les porte pour le moteur (son identifiant : la vue).
+    for (const auto& v : doc_->project.views)
+        if (&v.constants == code.decls) {
+            if (view) *view = &v;
+            viewHolder_ = hmi::viewmembers::constantsScript(v);
+            return &viewHolder_;
+        }
     for (const auto& sc : doc_->project.programs.scripts)
         if (&sc.decls == code.decls) return &sc;
     for (const auto& v : doc_->project.views)
@@ -712,7 +728,8 @@ const hmi::Script* HmiDeclGrid::ownerScript(const de::Code& code, const hmi::Vie
 
 void HmiDeclGrid::fillPreviews(const de::Code& code) {
     if (std::none_of(rows_->rows.begin(), rows_->rows.end(), [](const Rows::Row& r) { return r.d.computed; })) return;
-    const hmi::Script* sc = ownerScript(code);
+    const hmi::View* owner = nullptr;
+    const hmi::Script* sc = ownerScript(code, &owner);
     if (!sc) return;
     // L'apercu se recalcule quand une declaration calculee, une constante ou une valeur de depart change.
     std::string key;
@@ -723,8 +740,10 @@ void HmiDeclGrid::fillPreviews(const de::Code& code) {
         }
     };
     for (const auto& s : doc_->project.programs.scripts) addScript(s);
-    for (const auto& v : doc_->project.views)
+    for (const auto& v : doc_->project.views) {
         for (const auto& s : v.scripts) addScript(s);
+        if (!v.constants.empty()) addScript(hmi::viewmembers::constantsScript(v));   // 1.12.16
+    }
     for (const auto& v : doc_->project.programs.variables) key += v.name + "=" + v.initial + "\n";
     if (key != previewKey_) {
         previewKey_ = key;
@@ -735,6 +754,13 @@ void HmiDeclGrid::fillPreviews(const de::Code& code) {
         if (!row.d.computed) continue;
         std::string u = row.d.name;
         for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+        // 1.12.16 : une constante de vue calculee a chaque ouverture - pas de valeur avant que la vue s'ouvre.
+        if (owner && place_ && place_->kind == de::Place::Kind::ViewConstants && hmi::viewmembers::computedAtOpen(doc_->project, *owner, row.d)) {
+            row.object.reset();
+            row.preview = "\xC3\xA0 chaque ouverture";
+            row.previewError = false;
+            continue;
+        }
         if (const auto it = preview_.find(std::to_string(sc->id) + ":" + u); it != preview_.end() && it->second) {
             row.object = it->second;
             row.preview = sim::display(*it->second);
@@ -780,6 +806,13 @@ bool HmiDeclGrid::editInitial(std::size_t row, int mode, int line) {
     spec.code = mode == 1 || (mode < 0 && d.computed);
     spec.codeRefused = refused;
     if (sc && place_ && place_->kind == de::Place::Kind::Script) spec.owner = sc->name;
+    // 1.12.16 : une constante de vue - lue d'ailleurs par Vue.Nom ; calculee au demarrage ou a chaque ouverture
+    // (d'office quand son code lit un parametre de la popup).
+    if (view && place_ && place_->kind == de::Place::Kind::ViewConstants) {
+        spec.owner = view->name;
+        spec.reopen = d.reopen ? 1 : 0;
+        spec.reopenForced = !d.reopen && d.computed && hmi::viewmembers::computedAtOpen(doc_->project, *view, d);
+    }
     // Ce que le code peut lire : les declarations du script (ses constantes d'abord), les variables IHM.
     if (sc) {
         for (const auto& x : sc->decls)
@@ -822,11 +855,16 @@ bool HmiDeclGrid::editInitial(std::size_t row, int mode, int line) {
             if (!de::setCalculation(copy, at, t, row, calc, locals, &why)) return "Faute : " + why;
             const hmi::Script* sc = nullptr;
             const hmi::View* view = nullptr;
+            hmi::Script holder;   // 1.12.16 : les constantes d'une vue (viewmembers::constantsScript)
             if (at.kind == de::Place::Kind::Script) {
                 for (const auto& g : copy.programs.scripts)
                     if (g.id == at.id) sc = &g;
             } else if (const hmi::View* v = copy.view(at.view)) {
                 view = v;
+                if (at.kind == de::Place::Kind::ViewConstants) {
+                    holder = hmi::viewmembers::constantsScript(*v);
+                    sc = &holder;
+                }
                 for (const auto& g : v->scripts)
                     if (g.id == at.id) sc = &g;
             }
@@ -840,7 +878,10 @@ bool HmiDeclGrid::editInitial(std::size_t row, int mode, int line) {
             const auto values = hmi::Runtime::computedObjects(copy, &error);
             std::string u = decl->name;
             for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-            if (const auto it = values.find(std::to_string(sc->id) + ":" + u); it != values.end() && it->second)
+            if (view && at.kind == de::Place::Kind::ViewConstants && hmi::viewmembers::computedAtOpen(copy, *view, *decl))
+                out = std::string("Calcul\xC3\xA9" "e \xC3\xA0 chaque ouverture de ") + view->name
+                    + " : sa valeur se voit quand la vue s'ouvre (en simulation, avec ses param\xC3\xA8tres).\n";
+            else if (const auto it = values.find(std::to_string(sc->id) + ":" + u); it != values.end() && it->second)
                 out = "Valeur au d\xC3\xA9marrage : " + sim::display(*it->second) + "\n";
             else if (!error.empty())
                 out = "Erreur : " + error + " (le d\xC3\xA9marrage s'arr\xC3\xAAterait)\n";

@@ -688,17 +688,87 @@ std::vector<std::string> didYouMean(std::string_view value, const std::vector<st
     return out;
 }
 
+// ===================================== 1.12.16 : un element d'une liste ===
+std::vector<IndexInfo> itemIndices(const std::vector<ItemField>& fields, const BoundsFn& bounds) {
+    std::vector<IndexInfo> out;
+    for (const auto& f : fields) {
+        if (f.kind == ItemField::Kind::Rotate || f.kind == ItemField::Kind::Keep) continue;
+        for (const auto& u : indicesIn(f.text)) {
+            const std::string key = indexKey(u.path, u.value, u.dim, u.dims);
+            auto it = std::find_if(out.begin(), out.end(), [&](const IndexInfo& i) { return i.key() == key; });
+            if (it == out.end()) {
+                IndexInfo info;
+                info.path = u.path;
+                info.value = u.value;
+                info.dim = u.dim;
+                info.dims = u.dims;
+                if (bounds && u.dims == 1) info.bounds = bounds(u.path);
+                out.push_back(std::move(info));
+                it = out.end() - 1;
+            }
+            ++it->uses;
+        }
+    }
+    return out;
+}
+
+std::string numberedName(std::string_view name, long long k, bool keepWithout) {
+    const auto last = name.find_last_of("0123456789");
+    if (last == std::string_view::npos) {
+        if (keepWithout) return std::string(name);
+        const bool blank = name.find_first_not_of(" \t") == std::string_view::npos;
+        return blank ? std::to_string(k + 1) : std::string(name) + " " + std::to_string(k + 1);
+    }
+    std::size_t first = last;
+    while (first > 0 && name[first - 1] >= '0' && name[first - 1] <= '9') --first;
+    const std::string digits(name.substr(first, last + 1 - first));
+    if (digits.size() > 15) return keepWithout ? std::string(name) : std::string(name) + " " + std::to_string(k + 1);
+    std::string next = std::to_string(std::stoll(digits) + k);
+    if (digits.size() > 1 && digits[0] == '0' && next.size() < digits.size()) next.insert(0, digits.size() - next.size(), '0');   // 07 -> 08
+    return std::string(name.substr(0, first)) + next + std::string(name.substr(last + 1));
+}
+
+std::vector<std::vector<std::string>> itemCopies(const std::vector<ItemField>& fields, const std::vector<IndexInfo>& indices,
+                                                 const std::vector<bool>& follow, int copies, long long step) {
+    std::vector<std::vector<std::string>> out;
+    for (int k = 1; k <= copies; ++k) {
+        std::map<std::string, long long> values;
+        for (std::size_t i = 0; i < indices.size(); ++i)
+            if (follow.empty() || (i < follow.size() && follow[i])) values[indices[i].key()] = indices[i].value + k * step;
+        std::vector<std::string> row;
+        row.reserve(fields.size());
+        for (const auto& f : fields) {
+            using K = ItemField::Kind;
+            if (f.kind == K::Keep) { row.push_back(f.text); continue; }
+            if (f.kind == K::Rotate) {
+                row.push_back(f.rotate.empty() ? f.text : f.rotate[static_cast<std::size_t>(k - 1) % f.rotate.size()]);
+                continue;
+            }
+            std::string t = followIndices(f.text, values);
+            // Les morceaux a indices des reperes ($V[1].Ouv$) : decales comme Dupliquer d'un objet les preremplit.
+            std::map<std::string, std::string> shifted;
+            for (const auto& m : markersIn(t))
+                if (hasIndices(m.name)) shifted[markerKey(m.name)] = shiftIndices(m.name, k * step);
+            if (!shifted.empty()) t = replaceMarkers(t, shifted);
+            if (t == f.text && (f.kind == K::Name || f.kind == K::Label)) t = numberedName(f.text, k, f.kind == K::Label);
+            row.push_back(std::move(t));
+        }
+        out.push_back(std::move(row));
+    }
+    return out;
+}
+
 // ================================================================== pose ===
-double stepOf(const Box& sel, const Layout& l) { return (l.axis == Axis::Y ? sel.h : sel.w) + l.spacing; }
+double stepOf(const Box& sel, const Layout& l) { return l.axis == Axis::Y ? sel.h + l.gapY() : sel.w + l.gapX(); }
 
 std::vector<Offset> offsets(const Box& sel, int copies, const Layout& l) {
     std::vector<Offset> out;
     const int cols = std::max(1, l.columns);
     for (int k = 1; k <= copies; ++k) {
         switch (l.axis) {
-        case Axis::X: out.push_back({k * (sel.w + l.spacing), 0}); break;
-        case Axis::Y: out.push_back({0, k * (sel.h + l.spacing)}); break;
-        case Axis::Grid: out.push_back({(k % cols) * (sel.w + l.spacing), (k / cols) * (sel.h + l.spacing)}); break;
+        case Axis::X: out.push_back({k * (sel.w + l.gapX()), 0}); break;
+        case Axis::Y: out.push_back({0, k * (sel.h + l.gapY())}); break;
+        case Axis::Grid: out.push_back({(k % cols) * (sel.w + l.gapX()), (k / cols) * (sel.h + l.gapY())}); break;
         }
     }
     return out;
@@ -720,6 +790,7 @@ std::optional<double> fittingSpacing(const View& v, const Box& sel, int copies, 
     auto fits = [&](double s) {
         Layout t = l;
         t.spacing = s;
+        t.spacingY = -1;   // 1.12.16 : un seul espacement, en X et en Y
         return overflowing(v, sel, copies, t).empty();
     };
     if (!fits(0)) return std::nullopt;
@@ -731,6 +802,45 @@ std::optional<double> fittingSpacing(const View& v, const Box& sel, int copies, 
         else hi = mid;
     }
     return lo;
+}
+
+std::optional<Layout> fittingLayout(const View& v, const Box& sel, int copies, const Layout& l) {
+    Layout out = l;
+    out.spacingY = l.gapY();
+    if (copies <= 0) return out;
+    // Le plus grand espacement entier >= 0 sur un axe ou chaque copie tient (sur cet axe).
+    const auto fitOne = [&](bool vertical) -> std::optional<double> {
+        const auto fits = [&](double s) {
+            Layout t = out;
+            (vertical ? t.spacingY : t.spacing) = s;
+            for (const auto& o : offsets(sel, copies, t)) {
+                const double x = sel.x + o.dx, y = sel.y + o.dy;
+                if (!vertical && (x < 0 || x + sel.w > v.width + 1e-6)) return false;
+                if (vertical && (y < 0 || y + sel.h > v.height + 1e-6)) return false;
+            }
+            return true;
+        };
+        if (!fits(0)) return std::nullopt;
+        double lo = 0, hi = vertical ? v.height : v.width;
+        if (fits(hi)) return hi;
+        while (hi - lo > 1) {
+            const double mid = std::floor((lo + hi) / 2);
+            if (fits(mid)) lo = mid;
+            else hi = mid;
+        }
+        return lo;
+    };
+    if (l.axis != Axis::Y) {
+        const auto x = fitOne(false);
+        if (!x) return std::nullopt;
+        out.spacing = *x;
+    }
+    if (l.axis != Axis::X) {
+        const auto y = fitOne(true);
+        if (!y) return std::nullopt;
+        out.spacingY = *y;
+    }
+    return out;
 }
 
 std::vector<int> overlapping(const View& v, const std::vector<Id>& selection, int copies, const Layout& l) {

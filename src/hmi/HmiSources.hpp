@@ -18,7 +18,8 @@
 //     consigne d'un radar) : une formule par indice ; les listes paralleles
 //     suivent - un nom a joker se calcule pour chaque element (Cuves[*].Nom), un
 //     nom simple prend le libelle de l'element (Cuve 1, Cuve 2...), la couleur
-//     tourne dans la palette, l'unite et le format se repetent ;
+//     tourne dans la palette, l'unite et le format se repetent, la condition
+//     Visible si d'une plume (1.12.16) suit l'element (Cuves[*].Actif) ou se repete ;
 //   - les listes de NOMS ET DE TEXTES (les vues d'une barre de navigation, les
 //     zones d'un resume, les onglets d'un conteneur) : le texte de chaque element
 //     (Vues[*] : les noms des vues ; une enumeration : ses textes).

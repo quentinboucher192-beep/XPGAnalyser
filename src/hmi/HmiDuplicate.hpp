@@ -229,12 +229,47 @@ inline constexpr std::string_view kMarkerHint = "un rep\xC3\xA8re se remplit par
 [[nodiscard]] std::vector<std::string> didYouMean(std::string_view value, const std::vector<std::string>& candidates,
                                                   std::size_t max = 3);
 
+// ---------------------------------------------- 1.12.16 : un element d'une liste ---
+// « dans Courbe (contenu en general, actions aussi) pouvoir dupliquer une plume, une action - le meme principe que
+// dupliquer un symbole » : N copies d'UN ELEMENT (une plume, une ligne du contenu, une action, un raccourci), ses
+// indices litteraux suivis (Cuves[0].Niveau -> Cuves[1].Niveau...), les morceaux a indices de ses reperes decales
+// ($V[1].Ouv$ -> $V[2].Ouv$), le numero au bout d'un nom suivi (Plume 1 -> Plume 2 ; F2 -> F3), une couleur prise
+// dans la palette. La fenetre (app/hmi/HmiItemDuplicateDialog) montre les copies, chaque case se corrige ; l'appelant
+// les insere apres l'original en UNE commande.
+struct ItemField {
+    enum class Kind : std::uint8_t {
+        Expression,   // ses indices suivis (et les morceaux a indices de ses reperes)
+        Name,         // un nom : ses indices suivis, sinon son dernier nombre (sans nombre : " 2", " 3"... au bout)
+        Label,        // un libelle, une valeur : ses indices suivis, sinon son nombre final s'il en a un (sinon tel quel)
+        Rotate,       // tour a tour une valeur de `rotate` (la palette des couleurs) ; `rotate` vide : recopiee
+        Keep          // recopiee telle quelle
+    };
+    std::string              label;    // "Expression", "Nom", "Couleur" (l'en-tete de sa colonne)
+    std::string              text;     // la valeur de l'original
+    Kind                     kind{Kind::Expression};
+    std::vector<std::string> rotate;   // Rotate : copie 1 la premiere, copie 2 la deuxieme...
+    bool                     shown{true};   // faux : calcule mais pas montre (un code de plusieurs lignes)
+};
+// Les indices des champs (sauf Rotate et Keep), dans l'ordre de la premiere rencontre, et leurs bornes (`bounds`).
+[[nodiscard]] std::vector<IndexInfo> itemIndices(const std::vector<ItemField>&, const BoundsFn& bounds = {});
+// Le nom de la copie `k` (1, 2...) : son dernier nombre + k ("Plume 1" -> "Plume 2", "F2" -> "F3", "Cuve 07" -> "Cuve 08",
+// "V_101" -> "V_102") ; sans nombre : " " + (k + 1) au bout ("Pression" -> "Pression 2") ; `keepWithout` : tel quel.
+[[nodiscard]] std::string numberedName(std::string_view name, long long k, bool keepWithout = false);
+// Les copies 1..copies : une ligne par copie, une case par champ. `follow` : un par indice (vide : tous suivis) ; un
+// indice suivi prend sa valeur + k * step dans la copie k.
+[[nodiscard]] std::vector<std::vector<std::string>> itemCopies(const std::vector<ItemField>&, const std::vector<IndexInfo>& indices,
+                                                              const std::vector<bool>& follow, int copies, long long step = 1);
+
 // ------------------------------------------------------------------- pose ---
 enum class Axis : std::uint8_t { X, Y, Grid };
 struct Layout {
     Axis   axis{Axis::X};
     int    columns{4};         // la grille : l'original compte pour une case
-    double spacing{16};        // en px, entre deux boites
+    double spacing{16};        // en px, entre deux boites : en X (Sur X ; la grille, entre deux colonnes)
+    // 1.12.16 : l'espacement en Y (Sur Y ; la grille, entre deux lignes), a part de celui en X ; < 0 : le meme.
+    double spacingY{-1};
+    [[nodiscard]] double gapX() const noexcept { return spacing; }
+    [[nodiscard]] double gapY() const noexcept { return spacingY < 0 ? spacing : spacingY; }
 };
 struct Offset { double dx{0}, dy{0}; };
 // Le decalage de chaque copie (1..copies) par rapport a l'original.
@@ -245,6 +280,9 @@ struct Offset { double dx{0}, dy{0}; };
 [[nodiscard]] std::vector<int> overflowing(const View&, const Box& selection, int copies, const Layout&);
 // Le plus grand espacement >= 0 (entier) ou tout tient ; nullopt : rien ne tient.
 [[nodiscard]] std::optional<double> fittingSpacing(const View&, const Box& selection, int copies, const Layout&);
+// 1.12.16 : « Ajuster l'espacement » - le plus grand espacement en X (Sur X), en Y (Sur Y), ou chacun (la grille :
+// les colonnes tiennent en largeur, les lignes en hauteur), entiers ; nullopt : rien ne tient.
+[[nodiscard]] std::optional<Layout> fittingLayout(const View&, const Box& selection, int copies, const Layout&);
 // Les copies qui chevauchent un autre objet de la vue (hors selection).
 [[nodiscard]] std::vector<int> overlapping(const View&, const std::vector<Id>& selection, int copies, const Layout&);
 

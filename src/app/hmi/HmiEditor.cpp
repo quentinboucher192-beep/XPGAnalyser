@@ -15,6 +15,7 @@
 #include "HmiOperatorPanes.hpp"       // 1.10 (S2) : les operateurs du symbole
 #include "HmiFunctionPanes.hpp"       // 1.11.10 : les fonctions du symbole
 #include "HmiSymbolPopupsPane.hpp"    // 1.11.10 : les popups du symbole
+#include "HmiDeclGrid.hpp"            // 1.12.16 : les constantes d'une vue
 #include "HmiActionDialogs.hpp"       // 1.11.10 : la fenetre du script (une redefinition)
 #include "HmiActionsPanel.hpp"
 #include "HmiPaneKit.hpp"
@@ -678,6 +679,27 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         symbolPopups_->openView = [this](Id v) { openView->emit(v); };
         symbolPopups_->setVisibility(ui::Visibility::Collapsed);
         links_ += symbolTabs_->changed->connect([this](int) { invalidateLayout(); invalidate(); });
+    } else if (sv) {
+        // 1.12.16 : une vue, une popup - Dessin | Constantes | Fonctions (comme un symbole a ses fonctions).
+        viewTabs_ = &static_cast<HmiSymbolTabs&>(addChild(std::make_unique<HmiSymbolTabs>(this->id() + ".viewtabs", doc_, viewId_)));
+        viewConstants_ = &static_cast<HmiDeclGrid&>(
+            addChild(std::make_unique<HmiDeclGrid>(this->id() + ".viewconsts", doc_, apply_, hmi::decledit::Tab::Constants)));
+        hmi::decledit::Place at;
+        at.kind = hmi::decledit::Place::Kind::ViewConstants;
+        at.view = viewId_;
+        at.label = "constantes de " + sv->name;
+        viewConstants_->setPlace(at);
+        viewConstants_->setVisibility(ui::Visibility::Collapsed);
+        links_ += viewConstants_->message->connect([this](const std::string& m, bool) { statusBar_->setMessage(m); });
+        viewFunctions_ = &static_cast<HmiFunctionsPane&>(addChild(std::make_unique<HmiFunctionsPane>(this->id() + ".viewfns", doc_, apply_)));
+        viewFunctions_->setSymbol(viewId_);
+        viewFunctions_->setAssist([this] { return plc_; });
+        viewFunctions_->setVisibility(ui::Visibility::Collapsed);
+        links_ += viewTabs_->changed->connect([this](int) {
+            if (viewConstants_) viewConstants_->refresh();
+            invalidateLayout();
+            invalidate();
+        });
     }
 }
 
@@ -796,6 +818,7 @@ void HmiEditor::refresh() {
     if (actions_) actions_->refresh();
     if (shortcuts_) shortcuts_->refresh();          // 1.11.23
     if (content_) content_->refresh();
+    if (viewConstants_ && viewTabs_ && viewTabs_->current() == HmiSymbolTabs::Constants) viewConstants_->refresh();   // 1.12.16
     invalidateLayout();
     invalidate();
 }
@@ -1843,6 +1866,20 @@ void HmiEditor::onLayout() {
         symbolOperators_->setBounds(rest);
         symbolFunctions_->setBounds(rest);
         symbolPopups_->setBounds(rest);
+    }
+    if (viewTabs_) {
+        // 1.12.16 : une vue - Constantes et Fonctions a la place du dessin.
+        const float tabH = 30.f;
+        const gfx::Rect rest{b.x, b.y + toolH + tabH, b.w, std::max(0.f, b.h - toolH - tabH - statusH)};
+        viewTabs_->setBounds({b.x, b.y + toolH, b.w, tabH});
+        const int cur = viewTabs_->current();
+        const auto shown = [](bool on) { return on ? ui::Visibility::Visible : ui::Visibility::Collapsed; };
+        split_->setVisibility(shown(cur == HmiSymbolTabs::Drawing));
+        viewConstants_->setVisibility(shown(cur == HmiSymbolTabs::Constants));
+        viewFunctions_->setVisibility(shown(cur == HmiSymbolTabs::Functions));
+        split_->setBounds(rest);
+        viewConstants_->setBounds(rest);
+        viewFunctions_->setBounds(rest);
     }
     rebuildProperties();
     // Les actions suivent la selection : un seul objet, les siennes ; rien, celles

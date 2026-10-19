@@ -802,8 +802,11 @@ CodeForm actionForm(const Action& a) {
 // constante, par defaut) - des expressions, lues dans le meme lieu que lui.
 template <class Decls, class Visit>
 void visitDeclarations(Decls& decls, const CodeSite& site, Visit& visit) {
-    for (auto& d : decls)
+    for (auto& d : decls) {
         if (!d.value.empty()) visit(d.value, CodeForm::Expression, site);
+        // 1.12.16 : le code d'une valeur calculee (un renommage, une recherche le suivent).
+        if (d.computed && !d.calc.empty()) visit(d.calc, CodeForm::Code, site);
+    }
 }
 
 // Les morceaux qu'en lit rewriteNames (une expression, une accolade d'un texte a trous,
@@ -919,6 +922,11 @@ void visitProject(P& p, Visit& visit) {
             const CodeSite site{.scope = scope, .view = &v, .where = "fonction " + v.name + "." + fn.name};
             visit(fn.body, CodeForm::Code, site);
             visitDeclarations(fn.decls, site, visit);
+        }
+        // 1.12.16 : les constantes de la vue - leurs valeurs, leurs calculs.
+        if (!v.constants.empty()) {
+            const CodeSite site{.scope = scope, .view = &v, .where = v.name + " (constantes)"};
+            visitDeclarations(v.constants, site, visit);
         }
         ops(v.operators, v.name);
         for (auto& a : v.alarms) alarm(a, "alarme " + v.name + "." + a.name);

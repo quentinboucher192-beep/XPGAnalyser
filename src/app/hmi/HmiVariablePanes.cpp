@@ -50,7 +50,8 @@ enum TypeAction : int { TAdd = 1, TMember, TUp, TDown, TRemoveMember, TDuplicate
 // kMenuBase - action (des id negatifs, -1 etant un trait).
 enum VarMenu : int { MTrend = 1, MCopyName, MRename, MDuplicate, MDelete,
                      MInternal, MInternalAll, MAttach, MAttachAll, MRecalc, MRestore,     // 1.11.8
-                     MRetainReset, MRetainResetAll, MRetainExport, MRetainImport, MRetainWhere, MRetainCheck };   // 1.11.16
+                     MRetainReset, MRetainResetAll, MRetainExport, MRetainImport, MRetainWhere, MRetainCheck,     // 1.11.16
+                     MAddrRevert };   // 1.12.16 : revenir aux adresses calculees
 
 // 1.11.8 : le meme membre dans toutes les cases : chaque indice devient [*] ("[0].NOM" -> "[*].NOM").
 std::string allElementsOf(std::string_view rel) {
@@ -2205,6 +2206,43 @@ bool HmiVariablesPane::setMemberAddress(Id id, const std::string& rel, const std
     });
 }
 
+std::string HmiVariablesPane::computedMemberAddress(Id id, const std::string& rel) const {
+    const auto* v = doc_->project.variableById(id);
+    if (!v || !v->bound()) return {};
+    hmi::Variable plain = *v;   // sans sa correction : la place dans la suite logique
+    std::erase_if(plain.places, [&](const hmi::MemberAddress& m) { return sameText(m.path, rel); });
+    const std::string path = upper(v->name + (rel.empty() || rel.front() == '[' ? "" : ".") + rel);
+    std::string best;
+    long long bestKey = -1;
+    for (const auto& lf : ty::leafVariables(doc_->project, plain)) {
+        const std::string n = upper(lf.name);
+        if (n == path) return lf.address;                      // la case elle-meme
+        // Un membre compose : son depart, la case de plus petite adresse.
+        if (n.size() <= path.size() || n.compare(0, path.size(), path) != 0 || (n[path.size()] != '.' && n[path.size()] != '[')) continue;
+        hmi::comm::Point pt;
+        if (lf.address.empty() || !eq::placeEquipmentAddress(lf.address, eq::registerType(lf), pt)) continue;
+        const long long key = static_cast<long long>(pt.offset) * 32 + (pt.encoding == hmi::comm::Encoding::BitOfWord ? pt.bit : 0);
+        if (bestKey < 0 || key < bestKey) {
+            bestKey = key;
+            best = lf.address;
+        }
+    }
+    return best;
+}
+
+bool HmiVariablesPane::clearMemberAddresses(Id id, const std::vector<std::string>& rels, std::string* why) {
+    const auto* v = doc_->project.variableById(id);
+    if (!v) return fail(why, "variable introuvable");
+    const auto wanted = [&](const hmi::MemberAddress& m) {
+        return rels.empty() || std::any_of(rels.begin(), rels.end(), [&](const std::string& r) { return sameText(r, m.path); });
+    };
+    std::size_t n = 0;
+    for (const auto& pl : v->places) n += !pl.address.empty() && wanted(pl) ? 1 : 0;
+    if (n == 0) return fail(why, "aucune adresse corrig\xC3\xA9" "e \xC3\xA0 la main");
+    return change(id, std::string(n == 1 ? "Adresse calcul\xC3\xA9" "e : " : "Adresses calcul\xC3\xA9" "es : ") + v->name,
+                  [&](hmi::Variable& x) { std::erase_if(x.places, wanted); });
+}
+
 bool HmiVariablesPane::setMembersInternal(Id id, const std::vector<std::string>& relPaths, bool internal, bool allElements, std::string* why) {
     const auto* v = doc_->project.variableById(id);
     if (!v) return fail(why, "variable introuvable");
@@ -2545,14 +2583,29 @@ void HmiVariablesPane::rebuildProperties() {
             const std::string rel = row.rel;
             std::string address = row.cells.size() > CAddress ? row.cells[CAddress] : std::string{};
             if (const auto pen = address.find(" \xE2\x9C\x8E"); pen != std::string::npos) address.erase(pen);
-            c.properties.push_back(prop("Adresse", address, PG::ValueType::Text, [this, id, rel](std::string_view text) {
+            auto pa = prop("Adresse", address, PG::ValueType::Text, [this, id, rel](std::string_view text) {
                 std::string why;
                 const bool ok = setMemberAddress(id, rel, std::string(text), &why);
                 if (!ok) say("Refus\xC3\xA9 : " + why, true);
                 return ok;
             }, {}, ty::isComposite(row.type)
                        ? "Le d\xC3\xA9part de ce membre : ses cases le suivent (1.11.8). Vide : la place calcul\xC3\xA9" "e. Un d\xC3\xA9part donn\xC3\xA9 porte un crayon."
-                       : "Vide : la place calcul\xC3\xA9" "e (le d\xC3\xA9part + la place du membre). Une adresse corrig\xC3\xA9" "e porte un crayon dans le tableau."));
+                       : "Vide : la place calcul\xC3\xA9" "e (le d\xC3\xA9part + la place du membre). Une adresse corrig\xC3\xA9" "e porte un crayon dans le tableau.");
+            // 1.12.16 : une adresse corrigee a la main (%MW510 au lieu de la suite) - le bouton de retour rend la place calculee.
+            bool fixedHere = false;
+            for (const auto& pl : v->places) fixedHere = fixedHere || (!pl.address.empty() && sameText(pl.path, rel));
+            if (fixedHere) {
+                const std::string computed = computedMemberAddress(id, rel);
+                pa.overridden = true;
+                pa.overrideDefault = computed.empty() ? std::string("la place calcul\xC3\xA9" "e") : computed;
+                pa.overrideFrom = "Adresse calcul\xC3\xA9" "e (la suite logique)";
+                pa.revert = [this, id, rel] {
+                    std::string why;
+                    if (!setMemberAddress(id, rel, {}, &why)) say("Refus\xC3\xA9 : " + why, true);
+                };
+                pa.revertTip = "Revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e" + (computed.empty() ? std::string{} : " (" + computed + ")");
+            }
+            c.properties.push_back(std::move(pa));
             c.properties.push_back(prop("Place Modbus", row.cells.size() > CPlace ? row.cells[CPlace] : std::string{}));
             c.properties.push_back(prop("En marche", row.cells.size() > CQuality ? row.cells[CQuality] : std::string{}));
         }
@@ -2724,14 +2777,26 @@ void HmiVariablesPane::rebuildProperties() {
                 c.properties.push_back(prop(rel, "interne (IHM)", PG::ValueType::ReadOnly, {}, {}, l.type + " \xC2\xB7 gard\xC3\xA9 dans l'IHM"));
                 continue;
             }
-            c.properties.push_back(prop(rel + (fixed ? " \xE2\x9C\x8E" : ""), l.address.empty() ? "(" + why + ")" : l.address, PG::ValueType::Text,
-                                        [this, id, rel](std::string_view text) {
-                                            std::string w;
-                                            const bool ok = setMemberAddress(id, rel, std::string(text), &w);
-                                            if (!ok) say("Refus\xC3\xA9 : " + w, true);
-                                            return ok;
-                                        },
-                                        {}, l.type + (fixed ? " \xC2\xB7 adresse corrig\xC3\xA9" "e (vide : la place calcul\xC3\xA9" "e)" : " \xC2\xB7 place calcul\xC3\xA9" "e")));
+            auto pm = prop(rel + (fixed ? " \xE2\x9C\x8E" : ""), l.address.empty() ? "(" + why + ")" : l.address, PG::ValueType::Text,
+                           [this, id, rel](std::string_view text) {
+                               std::string w;
+                               const bool ok = setMemberAddress(id, rel, std::string(text), &w);
+                               if (!ok) say("Refus\xC3\xA9 : " + w, true);
+                               return ok;
+                           },
+                           {}, l.type + (fixed ? " \xC2\xB7 adresse corrig\xC3\xA9" "e (vide : la place calcul\xC3\xA9" "e)" : " \xC2\xB7 place calcul\xC3\xA9" "e"));
+            if (fixed) {   // 1.12.16 : revenir a la suite logique d'un clic
+                const std::string computed = computedMemberAddress(id, rel);
+                pm.overridden = true;
+                pm.overrideDefault = computed.empty() ? std::string("la place calcul\xC3\xA9" "e") : computed;
+                pm.overrideFrom = "Adresse calcul\xC3\xA9" "e (la suite logique)";
+                pm.revert = [this, id, rel] {
+                    std::string w;
+                    if (!setMemberAddress(id, rel, {}, &w)) say("Refus\xC3\xA9 : " + w, true);
+                };
+                pm.revertTip = "Revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e" + (computed.empty() ? std::string{} : " (" + computed + ")");
+            }
+            c.properties.push_back(std::move(pm));
         }
         if (leaves.size() > shown) c.properties.push_back(prop("\xE2\x80\xA6", std::to_string(leaves.size() - shown) + " autres cases"));
         cats.push_back(std::move(c));
@@ -2894,6 +2959,22 @@ void HmiVariablesPane::openContextMenu(gfx::Point at) {
         if (indexed && !v->internal.empty())
             items.push_back({"Attribuer dans toutes les cases", every, members.empty() ? none : std::string{}, ui::Icon::None, !members.empty(), false,
                              kMenuBase - MAttachAll});
+        // 1.12.16 : une adresse corrigee a la main (%MW510 au lieu de la suite logique) - revenir a la place calculee.
+        {
+            std::vector<std::string> fixedSel;
+            for (const auto& m : members)
+                for (const auto& pl : v->places)
+                    if (!pl.address.empty() && sameText(pl.path, m)) fixedSel.push_back(m);
+            std::size_t fixedAll = 0;
+            for (const auto& pl : v->places) fixedAll += pl.address.empty() ? 0 : 1;
+            if (!fixedSel.empty())
+                items.push_back({fixedSel.size() == 1 ? "Revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e" : "Revenir aux adresses calcul\xC3\xA9" "es",
+                                 fixedSel.size() == 1 ? computedMemberAddress(v->id, fixedSel.front()) : std::to_string(fixedSel.size()) + " membres", "",
+                                 ui::Icon::None, true, false, kMenuBase - MAddrRevert});
+            else if (members.empty() && fixedAll > 0)
+                items.push_back({"Retirer les adresses corrig\xC3\xA9" "es", std::to_string(fixedAll) + (fixedAll > 1 ? " membres" : " membre"), "",
+                                 ui::Icon::None, true, false, kMenuBase - MAddrRevert});
+        }
         items.push_back({v->compact ? "Place d'origine (membres internes compris)" : "Recalculer la place m\xC3\xA9moire",
                          ty::spanText(doc_->project, *v), v->internal.empty() && !v->compact ? std::string("aucun membre interne : rien \xC3\xA0 rendre") : std::string{},
                          ui::Icon::None, !v->internal.empty() || v->compact, false, kMenuBase - (v->compact ? MRestore : MRecalc)});
@@ -2951,6 +3032,18 @@ void HmiVariablesPane::runMenu(int action) {
         case MRecalc: case MRestore: {
             std::string why;
             if (!recalculatePlace(selectedVariable(), action == MRecalc, &why)) say("Refus\xC3\xA9 : " + why, true);
+            break;
+        }
+        case MAddrRevert: {   // 1.12.16 : les membres choisis (sinon tous) reviennent a la suite logique
+            std::string why;
+            std::vector<std::string> rels;
+            if (const auto* v = doc_->project.variableById(selectedVariable()))
+                for (const auto& m : selectedMemberPaths())
+                    for (const auto& pl : v->places)
+                        if (!pl.address.empty() && sameText(pl.path, m)) rels.push_back(m);
+            if (!clearMemberAddresses(selectedVariable(), rels, &why)) say("Refus\xC3\xA9 : " + why, true);
+            else say(rels.size() == 1 ? "Adresse calcul\xC3\xA9" "e : " + rels.front() + " reprend sa place dans la suite (Ctrl+Z la rend)"
+                                      : std::string("Adresses calcul\xC3\xA9" "es : les membres reprennent leur place dans la suite (Ctrl+Z les rend)"));
             break;
         }
         // ---- 1.11.16 : la remanence d'exploitation ----

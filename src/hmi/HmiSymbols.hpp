@@ -273,6 +273,10 @@ struct Member {
 [[nodiscard]] bool nameTaken(const View&, std::string_view name, std::string* what = nullptr, const void* self = nullptr);
 // Le type au bout d'un chemin qui part de `type` (".Nom", "[2].X", ".Count") ; vide : on ne sait pas.
 [[nodiscard]] std::string typeAlong(const Project&, std::string type, std::string_view rest);
+// Renommer la constante ou la fonction `from` de la vue `view` en `to` : dans la vue (ses scripts, ses
+// objets, ses actions, ses fonctions, ses constantes), par son nom ; partout, Vue.from devient Vue.to.
+// Rend le nombre de textes changes (la declaration elle-meme : a l'appelant).
+std::size_t renameMember(Project&, std::string_view view, std::string_view from, std::string_view to);
 } // namespace viewmembers
 
 // ---- 1.11.10 : les popups d'un symbole ----------------------------------------------

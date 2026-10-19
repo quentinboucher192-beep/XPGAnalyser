@@ -1710,6 +1710,41 @@ std::string typeAlong(const Project& p, std::string type, std::string_view rest)
     return type;
 }
 
+std::size_t renameMember(Project& p, std::string_view viewName, std::string_view from, std::string_view to) {
+    View* v = p.viewByName(viewName);
+    if (!v || from.empty() || to.empty() || sameName(from, to)) return 0;
+    std::size_t changed = 0;
+    const std::string toName(to), owner(v->name);
+    const SymbolArguments direct{{std::string(from), toName}};
+    // Partout : Vue.from -> Vue.to (une tete `Vue` suivie de .from).
+    const auto qualified = [&](std::string_view t, bool code) {
+        return rewriteRoots(t, code, [&](std::string_view s, std::size_t b, std::size_t e) -> Replacement {
+            if (!sameName(s.substr(b, e - b), owner) || e >= s.size() || s[e] != '.') return std::nullopt;
+            std::size_t m = e + 1;
+            while (m < s.size() && (std::isalnum(static_cast<unsigned char>(s[m])) || s[m] == '_')) ++m;
+            if (m == e + 1 || !sameName(s.substr(e + 1, m - e - 1), from)) return std::nullopt;
+            return std::make_pair(m, std::string(s.substr(b, e - b)) + "." + toName);
+        });
+    };
+    const View* self = v;
+    forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite& s) {
+        if (text.empty()) return;
+        const bool inView = s.view == self;
+        const auto one = [&](std::string_view e, bool code) {
+            std::string out = qualified(e, code);
+            if (inView) out = substituteParams(out, direct, code);
+            return out;
+        };
+        const std::string next = form == CodeForm::Template ? rewriteInText(text, [&](std::string_view e) { return one(e, false); })
+                                                            : one(text, form == CodeForm::Code);
+        if (next != text) {
+            text = next;
+            ++changed;
+        }
+    });
+    return changed;
+}
+
 } // namespace viewmembers
 
 namespace {

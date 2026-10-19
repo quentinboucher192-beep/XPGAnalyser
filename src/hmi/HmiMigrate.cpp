@@ -339,6 +339,7 @@ std::size_t apply(Project& p, const Plan& plan) {
                         for (auto& o : t.operators)
                             if (o.id == at.id) put(o.decls, o.body, it);
                 break;
+            case Place::Kind::ViewConstants: break;   // 1.12.16 : pas de bloc VAR a migrer
             case Place::Kind::ViewScript:
             case Place::Kind::SymbolFunction:
             case Place::Kind::SymbolOperator:

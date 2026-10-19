@@ -542,6 +542,18 @@ TableLayout tableLayout(const Object& o, double w, double h, std::size_t count, 
     return l;
 }
 
+// 1.12.16 : le bouton Pause / Continuer d'une courbe pilotable - en haut a droite, 24 x 18.
+std::array<double, 4> trendPauseBox(double w, double h) {
+    (void)h;
+    return {std::max(0.0, w - 30.0), 4.0, 24.0, 18.0};
+}
+
+std::string trendHit(const Object& o, double w, double h, double x, double y) {
+    if (o.kind != Kind::Trend || !o.flag("pilotable", false)) return {};
+    const auto b = trendPauseBox(w, h);
+    return x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + b[3] ? std::string("pause") : std::string{};
+}
+
 std::string tableHit(const Object& o, double w, double h, double x, double y, std::size_t count, std::size_t first) {
     const auto l = tableLayout(o, w, h, count, first);
     if (l.bar.w <= 0 || !l.bar.contains(x, y)) return {};

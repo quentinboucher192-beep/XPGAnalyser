@@ -215,7 +215,7 @@ void MainAnalysisScreen::tickHmiBuild() {
         if (auto* sp = dynamic_cast<HmiScriptsPane*>(page)) sp->refreshBuildState();
         else if (auto* fp = dynamic_cast<HmiFunctionsPane*>(page)) fp->refreshBuildState();
         else if (auto* ed = dynamic_cast<HmiEditor*>(page)) {
-            if (auto* sf = ed->symbolFunctions()) {
+            if (auto* sf = ed->symbolFunctions() ? ed->symbolFunctions() : ed->viewFunctions()) {   // 1.12.16 : d'une vue aussi
                 if (!sf->hosts().build) {   // les fonctions d'un symbole : la barre de build aussi
                     HmiFunctionsPane::Hosts h = sf->hosts();
                     wireHmiBuildHosts(h);
