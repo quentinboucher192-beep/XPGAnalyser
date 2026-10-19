@@ -66,6 +66,9 @@ struct Context {
     // hmi::callcheck). Faux : l'appelant les juge lui-meme (le controle d'un script, qui
     // verifie aussi les types de ses expressions) - un seul message par faute.
     bool calls{true};
+    // 1.12.17 : une expression d'un script (le simulateur ST) : ASCII_TO_STRING et STRING_TO_ASCII y
+    // prennent un tableau entier (les cases d'une chaine) ; dans une fx, non.
+    bool script{false};
 };
 
 struct Problem {

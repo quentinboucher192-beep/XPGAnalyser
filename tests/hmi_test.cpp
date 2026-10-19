@@ -27861,6 +27861,38 @@ void tableauEntier1217() {
     addVar("CUVE", "T_Cuve");
     addVar("X", "REAL");
     addVar("B", "BOOL");
+    addVar("S", "STRING");
+    // les operateurs d'un type du projet : T_VEC + T_VEC, T_VEC < T_VEC, sa conversion TO_REAL (legitimes)
+    HmiType vec;
+    vec.id = p.allocate();
+    vec.name = "T_VEC";
+    vec.members = {TypeMember{"X", "REAL"}, TypeMember{"Y", "REAL"}};
+    const auto op = [&](const char* o, const char* right, const char* result, const char* body) {
+        HmiOperator x;
+        x.id = p.allocate();
+        x.op = o;
+        x.left = "T_VEC";
+        x.right = right;
+        x.result = result;
+        x.body = body;
+        vec.operators.push_back(x);
+    };
+    op("+", "T_VEC", "T_VEC", "Resultat.X := a.X + b.X;");
+    op("<", "T_VEC", "BOOL", "Resultat := a.X < b.X;");
+    op("TO", "", "REAL", "TO_REAL := a.X;");
+    p.programs.types.push_back(vec);
+    addVar("V0", "T_VEC");
+    addVar("NOM", "ARRAY[0..15] OF WORD");
+    // un script : ASCII_TO_STRING d'un tableau y marche (le simulateur ST), les operateurs aussi ; TABLEAU * 2 non
+    {
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "Script_T";
+        sc.lang = ScriptLang::ST;
+        sc.event = "Cyclique";
+        sc.body = "S := ASCII_TO_STRING(NOM);\nV0 := V0 + V0;\nIF V0 < V0 THEN X := TO_REAL(V0); END_IF;\nX := TABLEAU * 2;";
+        p.programs.scripts.push_back(sc);
+    }
     View v = makeView(p, "Vue_T");
     const auto add = [&](Kind k) { return edit::add(p, v, k, 0, 0); };
     const Id pens = add(Kind::Trend);
@@ -27890,6 +27922,9 @@ void tableauEntier1217() {
     v.object(weekly)->set("variable", "L");
     const Id slider = add(Kind::Slider);
     v.object(slider)->set("variable", "CUVE");
+    const Id vecLamp = add(Kind::Indicator);    // V0 < V0 (son operateur) et TO_REAL(V0) (sa conversion) : legitimes
+    v.object(vecLamp)->setExpr("visible", "V0 < V0");
+    v.object(vecLamp)->setExpr("x", "TO_REAL(V0)");
     const Id combo = add(Kind::ComboBox);       // ses elements viennent d'une liste entiere : il le faut
     v.object(combo)->set("itemsFrom", "L");
     v.object(combo)->set("variable", "X");
@@ -27984,6 +28019,13 @@ void tableauEntier1217() {
               && blocking(kNoId, "TABLEAU est un tableau entier (ARRAY[0..9] OF REAL) : il ne se compare pas") && blocking(gauge, "TABLEAU est un tableau entier")
               && blocking(input, "l'objet y \xC3\xA9" "crit une valeur seule"),
           "bloquant partout : la plume, l'action, l'alarme, la jauge, le champ de saisie");
+    check(none(vecLamp, "T_VEC"), "V0 < V0 et TO_REAL(V0) : l'op\xC3\xA9rateur et la conversion du type T_VEC - rien \xC3\xA0 dire");
+    const auto inScript = [&](std::string_view what) {
+        return std::any_of(issues.begin(), issues.end(), [&](const Issue& i) { return i.script != kNoId && i.message.find(what) != std::string::npos; });
+    };
+    check(!inScript("NOM est un tableau entier") && !inScript("V0 est une structure enti\xC3\xA8re"),
+          "un script : ASCII_TO_STRING(NOM), V0 + V0, V0 < V0, TO_REAL(V0) - rien \xC3\xA0 dire" + all);
+    check(inScript("TABLEAU est un tableau entier (ARRAY[0..9] OF REAL) : il ne se calcule pas (*)"), "un script : X := TABLEAU * 2 est dit");
     check(std::none_of(issues.begin(), issues.end(), [](const Issue& i) { return i.blocking && i.message.find("tableau entier") == std::string::npos
                                                                                 && i.message.find("enti\xC3\xA8re") == std::string::npos; }),
           "rien d'autre n'est marqu\xC3\xA9 bloquant");

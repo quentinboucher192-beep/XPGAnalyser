@@ -322,15 +322,24 @@ private:
             v.wholeType = trimmed(type);
         }
     }
-    // Un conteneur, une structure entiers ne se calculent, ne se comparent, ni ne se combinent.
-    void wholeIn(const Val& a, const std::string& how) {
-        if (a.whole.empty()) return;
+    // Un operateur du projet pour ce geste et ce type (T_VEC + T_VEC, T_VEC * REAL, T_VEC < T_VEC ; "TO" : sa
+    // conversion, TO_REAL(V0)) : ce type entier se calcule, se compare, se convertit (le moteur l'appelle).
+    bool ownOperator(const std::string& type, std::string_view op) const {
+        if (!ctx_.project || type.empty()) return false;
+        for (const auto& x : allOperators(*ctx_.project))
+            if (x.op && x.op->op == op && (sameTypeName(x.op->left, type) || (op != "TO" && sameTypeName(x.op->right, type)))) return true;
+        return false;
+    }
+    // Un conteneur, une structure entiers ne se calculent, ne se comparent, ni ne se combinent - sauf par un
+    // operateur du projet (`op`).
+    void wholeIn(const Val& a, const std::string& how, std::string_view op = {}) {
+        if (a.whole.empty() || (!op.empty() && ownOperator(a.wholeType, op))) return;
         problem(a.show + " est " + a.entire + " (" + a.wholeType + ") : " + how + " - choisis " + a.pick, true);
     }
 
     Val combine(const Val& a, const Val& b, const std::string& op) {
-        wholeIn(a, "il ne se combine pas avec " + op);       // 1.12.17
-        wholeIn(b, "il ne se combine pas avec " + op);
+        wholeIn(a, "il ne se combine pas avec " + op, op);   // 1.12.17
+        wholeIn(b, "il ne se combine pas avec " + op, op);
         if (textish(a) || textish(b)) {
             const Val& t = textish(a) ? a : b;
             problem("un texte ne se combine pas avec " + op + " (" + t.show + ") : compare-le d'abord (" + t.show
@@ -366,8 +375,8 @@ private:
             const Val b = addExpr();
             // 1.12.17 : un tableau, une liste, une structure entiers ne se comparent qu'a un autre (=, <>).
             if (a.whole.empty() != b.whole.empty() || (!a.whole.empty() && op != "=" && op != "<>")) {
-                wholeIn(a, "il ne se compare pas (" + op + ") \xC3\xA0 une valeur");
-                wholeIn(b, "il ne se compare pas (" + op + ") \xC3\xA0 une valeur");
+                wholeIn(a, "il ne se compare pas (" + op + ") \xC3\xA0 une valeur", op);
+                wholeIn(b, "il ne se compare pas (" + op + ") \xC3\xA0 une valeur", op);
             }
             // Le simulateur compare tout, mais un texte et un nombre ne sont jamais
             // egaux : la condition serait toujours fausse (ou toujours vraie).
@@ -390,8 +399,8 @@ private:
     Val arith(const Val& a, const Val& b, const std::string& op) {
         Val r;
         r.show = a.show + " " + op + " " + b.show;
-        wholeIn(a, "il ne se calcule pas (" + op + ")");    // 1.12.17
-        wholeIn(b, "il ne se calcule pas (" + op + ")");
+        wholeIn(a, "il ne se calcule pas (" + op + ")", op);   // 1.12.17
+        wholeIn(b, "il ne se calcule pas (" + op + ")", op);
         // '+' met des textes bout a bout (le simulateur le fait) ; le reste non.
         if (op == "+" && (textish(a) || textish(b))) {
             r.type = T::Text;
@@ -457,7 +466,7 @@ private:
             const std::string op = next().text;
             Val a = unary();
             if (textish(a)) problem("un texte n'a pas de signe (" + op + a.show + ") : convertis-le (STRING_TO_REAL)");
-            wholeIn(a, "il n'a pas de signe");                 // 1.12.17
+            wholeIn(a, "il n'a pas de signe", op);             // 1.12.17
             a.whole.clear();
             if (a.numKnown && op == "-") a.num = -a.num;
             a.show = op + a.show;
@@ -864,8 +873,9 @@ private:
         r.show = name + "(...)";
         // 1.12.17 : les arguments [from, to) qui doivent etre des valeurs seules - pas un tableau entier.
         const auto singleArgs = [&](std::size_t from, std::size_t to) {
+            if (ctx_.script && (u == "ASCII_TO_STRING" || u == "STRING_TO_ASCII")) return;   // les cases d'une chaine
             for (std::size_t k = from; k < args.size() && k < to; ++k)
-                if (!args[k].whole.empty()) {
+                if (!args[k].whole.empty() && !(u.rfind("TO_", 0) == 0 && ownOperator(args[k].wholeType, "TO"))) {
                     problem(u + " attend une valeur seule, et " + args[k].show + " est " + args[k].entire + " (" + args[k].wholeType + ") - choisis "
                                 + args[k].pick,
                             true);

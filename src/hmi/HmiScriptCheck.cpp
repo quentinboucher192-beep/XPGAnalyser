@@ -1729,6 +1729,7 @@ private:
         c.view = sc_.view;
         c.known = [](std::string_view) { return true; };    // les noms : dits ici, a leur place
         c.calls = false;                                     // 1.11.20 : les appels aussi (callcheck, une fois)
+        c.script = true;                                     // 1.12.17 : ASCII_TO_STRING(tableau) y marche
         return c;
     }
     // Les problemes de type d'une expression [a, b) (pas les noms, membres ou
