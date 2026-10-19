@@ -27974,6 +27974,19 @@ void tableauEntier1217() {
     };
     check(count(gauge, "TABLEAU est un tableau entier") == 1 && count(input, "TABLEAU est un tableau entier") == 1,
           "dit une fois (pas deux : le r\xC3\xB4le et l'expression)");
+    // bloquant quelle que soit la case (le build le dit en erreur) : la plume, l'action, l'alarme, la jauge
+    const auto blocking = [&](Id object, std::string_view what) {
+        return std::any_of(issues.begin(), issues.end(), [&](const Issue& i) {
+            return i.blocking && (object == kNoId || i.object == object) && i.message.find(what) != std::string::npos;
+        });
+    };
+    check(blocking(pens, "plume TABLEAU : un nombre est attendu") && blocking(btn, "cible BOOLS : BOOLS est un tableau entier")
+              && blocking(kNoId, "TABLEAU est un tableau entier (ARRAY[0..9] OF REAL) : il ne se compare pas") && blocking(gauge, "TABLEAU est un tableau entier")
+              && blocking(input, "l'objet y \xC3\xA9" "crit une valeur seule"),
+          "bloquant partout : la plume, l'action, l'alarme, la jauge, le champ de saisie");
+    check(std::none_of(issues.begin(), issues.end(), [](const Issue& i) { return i.blocking && i.message.find("tableau entier") == std::string::npos
+                                                                                && i.message.find("enti\xC3\xA8re") == std::string::npos; }),
+          "rien d'autre n'est marqu\xC3\xA9 bloquant");
 }
 
 int main(int argc, char** argv) {

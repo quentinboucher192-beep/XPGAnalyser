@@ -76,6 +76,10 @@ struct Problem {
     // type inconnu, un argument que la simulation convertit sans rien dire). Compiler le dit en
     // avertissement ; l'inspecteur ne la marque pas fautive.
     bool        warning{false};
+    // 1.12.17 : un tableau, une liste, une MAP, une structure ENTIERS la ou une valeur seule est
+    // attendue - une erreur qui bloque toujours (Generer, Compiler, la simulation), quelle que soit
+    // la case (une plume, une action, une alarme comme une fx).
+    bool        whole{false};
 };
 
 // Les problemes d'une expression qui se lit (sinon : rien, la syntaxe est

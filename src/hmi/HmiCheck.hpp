@@ -45,6 +45,9 @@ struct Issue {
     // 1.12.7 : la valeur calculee au demarrage de `script` en cause (son nom) : `line` est celle de
     // son calcul - y aller ouvre la fenetre du calcul a cette ligne.
     std::string declaration{};
+    // 1.12.17 : bloquant pour la simulation quelle que soit `category` (un tableau entier la ou une
+    // valeur seule est attendue : une plume, une action, une alarme...). Faux : la categorie decide.
+    bool        blocking{false};
 };
 
 struct IssueCounts {

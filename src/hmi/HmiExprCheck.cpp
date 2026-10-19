@@ -293,9 +293,11 @@ private:
     bool isOp(const char* op) const { return peek().k == Tok::K::Op && peek().text == op; }
     bool isWord(const char* w) const { return peek().k == Tok::K::Ident && up(peek().text) == w; }
 
-    void problem(std::string msg) {
+    void problem(std::string msg, bool whole = false) {
         for (const auto& p : problems) if (p.message == msg) return;
-        problems.push_back(Problem{std::move(msg), {}, {}});
+        Problem pb{std::move(msg), {}, {}};
+        pb.whole = whole;                                   // 1.12.17 : un tableau entier (bloquant)
+        problems.push_back(std::move(pb));
     }
 
     static bool textish(const Val& v) { return v.type == T::Text; }
@@ -323,7 +325,7 @@ private:
     // Un conteneur, une structure entiers ne se calculent, ne se comparent, ni ne se combinent.
     void wholeIn(const Val& a, const std::string& how) {
         if (a.whole.empty()) return;
-        problem(a.show + " est " + a.entire + " (" + a.wholeType + ") : " + how + " - choisis " + a.pick);
+        problem(a.show + " est " + a.entire + " (" + a.wholeType + ") : " + how + " - choisis " + a.pick, true);
     }
 
     Val combine(const Val& a, const Val& b, const std::string& op) {
@@ -865,7 +867,8 @@ private:
             for (std::size_t k = from; k < args.size() && k < to; ++k)
                 if (!args[k].whole.empty()) {
                     problem(u + " attend une valeur seule, et " + args[k].show + " est " + args[k].entire + " (" + args[k].wholeType + ") - choisis "
-                            + args[k].pick);
+                                + args[k].pick,
+                            true);
                     return;
                 }
         };
@@ -1203,7 +1206,9 @@ std::vector<Problem> check(const Context& ctx, std::string_view written, Want wa
                                    : want == Want::Number   ? "un nombre est attendu"
                                    : want == Want::Color    ? "une couleur est attendue"
                                                             : "une valeur seule est attendue";
-        add(expected + ", et " + v.show + " est " + v.entire + " (" + v.wholeType + ") - choisis " + v.pick);
+        Problem pb{expected + ", et " + v.show + " est " + v.entire + " (" + v.wholeType + ") - choisis " + v.pick, {}, {}};
+        pb.whole = true;
+        out.push_back(std::move(pb));
     }
     switch (want) {
         case Want::Bool:
@@ -1289,7 +1294,9 @@ std::vector<Problem> checkTarget(const Context& ctx, std::string_view target, Wa
     if (writes != Want::Any)
         if (const auto sh = shapeOf(ctx, t); sh.whole()) {
             const char* what = writes == Want::Bool ? "un bool\xC3\xA9" "en" : writes == Want::Number ? "un nombre" : "une valeur seule";
-            out.push_back(Problem{t + " est " + sh.entire + " (" + sh.type + ") : on n'y \xC3\xA9" "crit pas " + what + " - vise " + sh.pick, {}, {}});
+            Problem pb{t + " est " + sh.entire + " (" + sh.type + ") : on n'y \xC3\xA9" "crit pas " + what + " - vise " + sh.pick, {}, {}};
+            pb.whole = true;
+            out.push_back(std::move(pb));
         }
     for (auto& p : check(ctx, t, Want::Any)) out.push_back(std::move(p));
     return out;

@@ -863,6 +863,33 @@ void faussesAlertes() {
                                                       + std::to_string(r2.errors) + " erreur(s))");
 }
 
+// 1.12.17 : une plume sur un tableau entier (TABLEAU au lieu de TABLEAU[0]) - une erreur qui bloque le
+// build, comme la variable d'un objet (avant : rien ; une plume a la variable inexistante reste dite en
+// avertissement, non bloquante, comme avant).
+void tableauEntier1217() {
+    std::printf("-- 1.12.17 : un tableau entier dans une plume bloque le build\n");
+    Bench b;
+    fill(b);
+    b.p.programs.variables.push_back(Variable{b.p.allocate(), "TABLEAU", "ARRAY[0..9] OF REAL", "", {}});
+    View* syn = b.p.view(b.vueSyn);
+    const Id courbe = edit::add(b.p, *syn, Kind::Trend, 400, 300);
+    syn->object(courbe)->set("variables", "TABLEAU");
+    const auto said = [](const pl::Report& r, std::string_view word, bool blocking) {
+        int n = 0;
+        for (const auto& d : r.diagnostics) n += d.blocking() == blocking && d.message.find(word) != std::string::npos ? 1 : 0;
+        return n;
+    };
+    const auto r = b.build(pl::Mode::Start);
+    check(!r.ok && said(r, "TABLEAU est un tableau entier", true) == 1,
+          "la plume TABLEAU : une erreur bloquante, dite une fois (" + std::to_string(r.errors) + " erreur(s))");
+    syn->object(courbe)->set("variables", "TABLEAU[0]");
+    const auto r2 = b.build(pl::Mode::Start);
+    check(r2.ok && said(r2, "TABLEAU", true) == 0, "TABLEAU[0] : le build passe (" + std::to_string(r2.errors) + " erreur(s))");
+    syn->object(courbe)->set("variables", "Inconnue_P");
+    const auto r3 = b.build(pl::Mode::Start);
+    check(r3.ok && said(r3, "Inconnue_P", false) >= 1, "une plume a la variable inexistante : un avertissement, non bloquant (comme avant)");
+}
+
 // Le gestionnaire de l'application (app/hmi/HmiBuild) : un vrai fil, poll a chaque
 // "image", l'analyse apres une modification, un build a la fois, l'annulation.
 void gestionnaire(const std::string& tmp) {
@@ -1033,6 +1060,7 @@ int main(int argc, char** argv) {
     formatDuCache();
     faussesAlertes();
     compilerLeDocumentActif();     // 1.11.17 (refonte, lot 1)
+    tableauEntier1217();            // 1.12.17 : un tableau entier dans une plume bloque le build
     gestionnaire(tmp + "_gestionnaire");
     std::printf("\n%d verification(s), %d echec(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;

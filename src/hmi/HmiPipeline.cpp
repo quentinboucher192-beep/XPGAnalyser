@@ -1376,7 +1376,9 @@ std::string generatedText(const Project& p, const Element& e, const Item& it) {
 bool blockingValidation(const Issue& i) {
     static const std::set<std::string, std::less<>> kBlocking = {
         "Projet", "Vue", "Objet", "Ressource", "Variable", "Type", "Script", "Fonction", "Expression", "Symbole", "Popup"};
-    return i.severity == Issue::Severity::Error && kBlocking.count(i.category) != 0;
+    // 1.12.17 : un tableau entier la ou une valeur seule est attendue (Issue::blocking) - bloquant, quelle que
+    // soit la case (une plume, une action, une alarme comme la variable d'un objet).
+    return i.severity == Issue::Severity::Error && (i.blocking || kBlocking.count(i.category) != 0);
 }
 
 // Ou va un constat de Compiler ou de Generer : la cle de son element.

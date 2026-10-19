@@ -3617,9 +3617,10 @@ struct ExprWalker {
     }
 
     void push(const Where& w, std::string msg, const std::string& unknownName = {}, const std::string& suggestion = {},
-              const std::string& source = {}, Issue::Severity severity = Issue::Severity::Error) {
+              const std::string& source = {}, Issue::Severity severity = Issue::Severity::Error, bool blocking = false) {
         Issue i;
         i.severity = severity;                          // 1.11.21 : un avertissement d'appel (exprcheck::Problem::warning)
+        i.blocking = blocking;                          // 1.12.17 : un tableau entier (exprcheck::Problem::whole)
         i.category = w.category;
         i.view = w.view ? w.view->id : kNoId;
         i.object = w.object;
@@ -3633,7 +3634,10 @@ struct ExprWalker {
                 if (!suggestion.empty() && o.message.find(suggestion) == std::string::npos) o.message += " : veux-tu dire " + suggestion + " ?";
                 return;
             }
-            if (o.property == i.property && (o.message == i.message || (!source.empty() && o.message.find(source) != std::string::npos))) return;
+            if (o.property == i.property && (o.message == i.message || (!source.empty() && o.message.find(source) != std::string::npos))) {
+                o.blocking = o.blocking || i.blocking;
+                return;
+            }
         }
         out.push_back(std::move(i));
     }
@@ -3672,7 +3676,7 @@ struct ExprWalker {
         }
         for (auto& pb : exprcheck::check(context(w.view), s, want, strict))
             push(w, prefix + s + " : " + pb.message + dup::markerHint(s, pb.unknownName), pb.unknownName, pb.suggestion, {},
-                 pb.warning ? Issue::Severity::Warning : Issue::Severity::Error);
+                 pb.warning ? Issue::Severity::Warning : Issue::Severity::Error, pb.whole);
     }
     void text(const Where& w, const std::string& value, const std::string& prefix = {}) {
         for (const auto& piece : exprcheck::templateExpressions(value)) expr(w, piece, exprcheck::Want::Any, prefix + "{" + piece + "} : ");
@@ -3682,7 +3686,8 @@ struct ExprWalker {
         const std::string s = trimmedCopy(target);
         if (s.empty()) return;
         for (auto& pb : exprcheck::checkTarget(context(w.view), s, writes))
-            push(w, prefix + s + " : " + pb.message + dup::markerHint(s, pb.unknownName), pb.unknownName, pb.suggestion);
+            push(w, prefix + s + " : " + pb.message + dup::markerHint(s, pb.unknownName), pb.unknownName, pb.suggestion, {}, Issue::Severity::Error,
+                 pb.whole);   // 1.12.17
     }
 
     void actions(const View& v, const Object* o, const std::vector<Action>& list) {
@@ -4054,7 +4059,7 @@ struct ExprWalker {
                             withDefaults.insert(pb.message);
                             if (plain.count(pb.message) || !pb.unknownName.empty()) continue;
                             push(Where{&sv, c.id, site.category, site.key}, site.prefix + t + " : " + pb.message + " (avec " + shownDefaults + ")",
-                                 {}, {}, {}, pb.warning ? Issue::Severity::Warning : Issue::Severity::Error);
+                                 {}, {}, {}, pb.warning ? Issue::Severity::Warning : Issue::Severity::Error, pb.whole);
                         }
                     for (std::size_t k = 0; k < instances.size(); ++k) {
                         const auto& [iv, inst] = instances[k];
@@ -4072,7 +4077,7 @@ struct ExprWalker {
                             push(Where{iv, inst->id, "Symbole", "params"},
                                  "symbole " + sv.name + ", " + (c.name.empty() ? std::string("objet") : c.name) + " (" + site.key + ") : "
                                      + site.prefix + t + " : " + pb.message,
-                                 {}, {}, {}, pb.warning ? Issue::Severity::Warning : Issue::Severity::Error);
+                                 {}, {}, {}, pb.warning ? Issue::Severity::Warning : Issue::Severity::Error, pb.whole);
                         }
                     }
                 }
@@ -4269,6 +4274,7 @@ void roleChecks(const Project& p, std::vector<Issue>& out) {
                     else if (role != R::Text)
                         add(out, S::Error, "Objet", v.id, o.id, key,
                             var + " est " + whole.entire + " (" + type + ") : l'objet attend une valeur seule - choisis " + whole.pick);
+                    if (writes || role != R::Text) out.back().blocking = true;
                     return;
                 }
                 switch (role) {
