@@ -13777,6 +13777,173 @@ void v110_couleurs() {
     check(ui::ColorPalette::pickingCount() == 0, "... ne laisse pas de pipette active");
 }
 // ---- 1.12.18 (planche 8) : LE MENU DE CHAQUE LIGNE DE L'INSPECTEUR ----
+// 1.12.18 (planches 14 et 15, bugs 6 et 9) : le menu de l'editeur de code, d'un champ, d'une fiche des natives.
+// Choisir une entree comme la souris : le menu se ferme, puis l'entree part.
+void choisirDans(ui::PopupMenu* menu, int id) {
+    menu->close();
+    menu->itemChosen->emit(id);
+}
+
+void menuCodeChamps11218() {
+    std::printf("== 1.12.18 : le menu du code, des champs et des fiches (bugs 6 et 9) ==\n");
+    installerPressePapiers();
+    const auto theme = ui::Theme::dark();
+    // ---- l'editeur de code ----
+    ui::MultiLineText ed("code11218");
+    ed.setBounds({0, 0, 900, 400});
+    ed.setLanguage(ui::Language::StructuredText);
+    ed.setReadOnly(false);
+    ed.setCommandKeys(true);
+    ed.setText("IF Niveau > Seuil THEN\n\tX := TABLEAU * 2;\n\tY := LIMIT(0, X, 100);\nEND_IF;\n");
+    ed.setCompletionProvider([](std::string_view, std::vector<ui::MultiLineText::Completion>&) {});
+    ui::MultiLineText::Squiggle fault;
+    fault.line = 1;
+    fault.column = 6;
+    fault.length = 7;
+    fault.tone = ui::Tone::Error;
+    fault.message = "un ARRAY[0..9] OF REAL employ\xC3\xA9 l\xC3\xA0 o\xC3\xB9 une valeur seule est attendue";
+    fault.fix = "TABLEAU[0]";
+    ed.setSquiggles({fault});
+    ui::MultiLineText::setSymbolDescriber([](std::string_view s, std::string& detail, bool& native) {
+        native = s == "LIMIT";
+        detail = s == "Niveau" ? std::string("REAL \xC2\xB7 variable IHM") : native ? std::string("native") : std::string{};
+        return true;
+    });
+    std::string asked;
+    ed.setCommandHandler([&asked](ui::MultiLineText&, std::string_view command) {
+        asked = std::string(command);
+        return true;
+    });
+    {
+        Recorder rec;
+        ed.render(ui::PaintContext{rec, theme, {0, 0, 900, 400}, 0.0, nullptr});
+    }
+    const auto pointAt = [&](std::size_t line, std::uint32_t column) {
+        gfx::Rect r{};
+        (void)ed.positionRect(line, column, r);
+        return gfx::Point{r.x + 1.f, r.y + r.h * 0.5f};
+    };
+    // Bug 6 : un clic droit dans la selection la garde.
+    ed.selectRange(0, 3, 6);
+    ed.dispatch(ui::MouseDown{pointAt(0, 5), ui::MouseButton::Right, 1, {}});
+    ed.dispatch(ui::MouseUp{pointAt(0, 5), ui::MouseButton::Right, {}});
+    check(ed.hasSelection() && ed.selectedText() == "Niveau", "bug 6 : un clic droit dans la s\xC3\xA9lection la garde (" + ed.selectedText() + ")");
+    auto* menu = ed.contextMenu();
+    check(menu && menu->isOpen(), "planche 14 : le menu du code s'ouvre");
+    if (!menu) return;
+    check(!menu->items().empty() && menu->items().front().heading && menu->items().front().label == "Niveau"
+              && menu->items().front().shortcut == "REAL \xC2\xB7 variable IHM",
+          "la t\xC3\xAAte : Niveau, REAL \xC2\xB7 variable IHM");
+    for (const char* label : {"Couper", "Copier", "Coller", "Aller \xC3\xA0 la d\xC3\xA9" "finition", "Voir les usages", "Renommer partout\xE2\x80\xA6",
+                              "Choisir une fonction\xE2\x80\xA6", "Entourer de", "Commenter les lignes", "Mettre en forme le document"})
+        check(findItem(menu->items(), label) != nullptr, std::string("le menu du code : ") + label);
+    const auto* wrap = findItem(menu->items(), "Entourer de");
+    check(wrap && wrap->children.size() >= 5 && wrap->children.front().label.rfind("IF", 0) == 0, "Entourer de \xE2\x80\xBA IF, FOR, WHILE...");
+    check(ui::cmd::badShortcuts(menu->items()).empty(), "menu du code : des touches seulement \xC3\xA0 droite");
+    const auto* def = findItem(menu->items(), "Aller \xC3\xA0 la d\xC3\xA9" "finition");
+    check(def && def->shortcut == "F12", "Aller \xC3\xA0 la d\xC3\xA9" "finition : F12 (profil Visual Studio)");
+    if (const auto* copy = findItem(menu->items(), "Copier")) choisirDans(menu, copy->id);
+    same_text(ui::clipboardText(), "Niveau", "Copier : le nom choisi");
+    // Aller a la definition : demandee a l'hote, sur le nom.
+    ed.dispatch(ui::MouseDown{pointAt(0, 5), ui::MouseButton::Right, 1, {}});
+    if ((def = findItem(menu->items(), "Aller \xC3\xA0 la d\xC3\xA9" "finition")) != nullptr) choisirDans(menu, def->id);
+    same_text(asked, "allerDefinition", "Aller \xC3\xA0 la d\xC3\xA9" "finition : l'h\xC3\xB4te la fait");
+    // Bug 9 : le profil classique n'a pas F12 - l'entree reste, sans touche a droite.
+    ui::keymap::setCurrent(ui::keymap::Profile::Classic);
+    ed.dispatch(ui::MouseDown{pointAt(0, 5), ui::MouseButton::Right, 1, {}});
+    def = findItem(menu->items(), "Aller \xC3\xA0 la d\xC3\xA9" "finition");
+    const auto* uses = findItem(menu->items(), "Voir les usages");
+    check(def && def->enabled && uses && uses->enabled, "bug 9 : profil classique - Aller \xC3\xA0 la d\xC3\xA9" "finition et Voir les usages restent");
+    ui::keymap::setCurrent(ui::keymap::Profile::VisualStudio);
+    menu->close();
+    // Hors de la selection : le curseur y va, la selection tombe.
+    ed.dispatch(ui::MouseDown{pointAt(2, 9), ui::MouseButton::Right, 1, {}});
+    check(!ed.hasSelection() && ed.caretLine() == 2, "ailleurs : le curseur y va, la s\xC3\xA9lection tombe");
+    // Une native : Aide sur LIMIT (F1) au lieu de la definition.
+    const auto* help = findItem(menu->items(), "Aide sur LIMIT");
+    check(help && help->shortcut == "F1" && !findItem(menu->items(), "Aller \xC3\xA0 la d\xC3\xA9" "finition"), "une native : Aide sur LIMIT (F1)");
+    if (help) choisirDans(menu, help->id);
+    same_text(asked, "aide", "Aide sur LIMIT : l'h\xC3\xB4te ouvre sa fiche");
+    // Une faute : son message en tete, Corriger la remplace.
+    ed.dispatch(ui::MouseDown{pointAt(1, 8), ui::MouseButton::Right, 1, {}});
+    check(!menu->items().empty() && menu->items().front().heading && menu->items().front().label == "Erreur ligne 2"
+              && menu->items().size() > 1 && menu->items()[1].label.find("ARRAY[0..9] OF REAL") != std::string::npos,
+          "une faute : Erreur ligne 2, puis son message");
+    const auto* fix = findItem(menu->items(), "Corriger : TABLEAU[0]");
+    check(fix && fix->shortcut == "Ctrl+.", "Corriger : TABLEAU[0] (Ctrl+.)");
+    if (fix) choisirDans(menu, fix->id);
+    check(ed.text().find("X := TABLEAU[0] * 2;") != std::string::npos, "Corriger : TABLEAU devient TABLEAU[0]");
+    // Entourer de : la selection dans un IF.
+    ed.selectRange(2, 1, 21);
+    ed.dispatch(ui::MouseDown{pointAt(2, 5), ui::MouseButton::Right, 1, {}});
+    wrap = findItem(menu->items(), "Entourer de");
+    if (wrap && !wrap->children.empty()) choisirDans(menu, wrap->children.front().id);
+    check(ed.text().find("IF condition THEN") != std::string::npos, "Entourer de \xE2\x80\xBA IF : la ligne dans un IF");
+    // Maj+F10 : le menu, au curseur.
+    menu->close();
+    ed.takeFocus();
+    ed.dispatch(ui::KeyDown{ui::Key::F10, ui::KeyMods{false, true, false, false}, false});
+    check(menu->isOpen() && menu->showsKeyboardCues(), "Maj+F10 : le menu du code, au clavier");
+    menu->close();
+    ui::MultiLineText::setSymbolDescriber({});
+
+    // ---- un champ d'une ligne (planche 15, bug 6) ----
+    ui::InputText field("champ11218");
+    field.setBounds({0, 0, 300, 28});
+    field.setText("= Niveau * 2");
+    int done = 0;
+    core::ConnectionScope links;
+    links += field.editingDone->connect([&done](const std::string&) { ++done; });
+    field.dispatch(ui::MouseDown{{20.f, 14.f}, ui::MouseButton::Left, 1, {}});
+    field.dispatch(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
+    field.dispatch(ui::MouseDown{{40.f, 14.f}, ui::MouseButton::Right, 1, {}});
+    check(field.selectionStart() == 0 && field.selectionEnd() == field.text().size(), "bug 6 : le clic droit dans la s\xC3\xA9lection d'un champ la garde");
+    auto* fm = field.contextMenu();
+    check(fm && fm->isOpen() && findItem(fm->items(), "Couper") && findItem(fm->items(), "Copier") && findItem(fm->items(), "Coller")
+              && findItem(fm->items(), "Tout choisir"),
+          "le menu du champ : Couper, Copier, Coller, Tout choisir");
+    check(done == 0, "bug 5 : ouvrir le menu ne termine pas la saisie");
+    if (fm)
+        if (const auto* c = findItem(fm->items(), "Copier")) choisirDans(fm, c->id);
+    same_text(ui::clipboardText(), "= Niveau * 2", "Copier : le texte choisi");
+    check(done == 0 && field.focused(), "... la saisie continue, le champ a le clavier");
+    ui::setClipboardText("Seuil");
+    field.dispatch(ui::MouseDown{{40.f, 14.f}, ui::MouseButton::Right, 1, {}});
+    if (fm)
+        if (const auto* c = findItem(fm->items(), "Coller")) choisirDans(fm, c->id);
+    same_text(field.text(), "Seuil", "Coller remplace la s\xC3\xA9lection");
+
+    // ---- une fiche des natives : Copier le nom, Copier l'exemple ----
+    app::HmiNativesPane natives("nat11218");
+    natives.setBounds({0, 0, 900, 700});
+    natives.layout();
+    check(natives.show("fonction:LIMIT"), "la fiche de LIMIT");
+    {
+        Recorder rec;
+        natives.render(ui::PaintContext{rec, theme, {0, 0, 900, 700}, 0.0, nullptr});
+    }
+    natives.openContextMenu({100.f, 100.f}, -1);
+    auto* nm = natives.contextMenu();
+    const auto* example = nm ? findItem(nm->items(), "Copier l'exemple") : nullptr;
+    check(nm && nm->isOpen() && findItem(nm->items(), "Ins\xC3\xA9rer dans le script") && findItem(nm->items(), "Copier le nom") && example
+              && !example->enabled,
+          "le menu de la fiche : Ins\xC3\xA9rer, Copier le nom, Copier l'exemple (gris\xC3\xA9 hors d'un exemple)");
+    if (nm)
+        if (const auto* c = findItem(nm->items(), "Copier le nom")) choisirDans(nm, c->id);
+    same_text(ui::clipboardText(), "LIMIT", "Copier le nom : LIMIT");
+    const auto& blocks = natives.view().layoutForTest().codeBlocks;
+    check(!blocks.empty(), "la fiche a un exemple de code");
+    if (!blocks.empty()) {
+        natives.openContextMenu({100.f, 100.f}, static_cast<int>(blocks.front().second));
+        example = findItem(nm->items(), "Copier l'exemple");
+        check(example && example->enabled, "sur un exemple : Copier l'exemple");
+        if (example) choisirDans(nm, example->id);
+        check(!ui::clipboardText().empty() && ui::clipboardText() == natives.view().blockText(static_cast<int>(blocks.front().second)),
+              "Copier l'exemple : le texte de l'exemple");
+    }
+}
+
+
 void inspecteur_menu_11218() {
     std::printf("1.12.18 : le menu du clic droit de chaque ligne de l'inspecteur\n");
     installerPressePapiers();   // Copier, Coller : le presse-papiers des essais
@@ -28816,6 +28983,25 @@ void onglets1118() {
     check(uses > 0 && pane.currentCodeTab() == app::HmiScriptsPane::CodeTabCode && pane.editor().caretLine() == 0
               && pane.lastMessage().find("Utilisation 1 sur 1") != std::string::npos,
           "Utilisations : le code, la premi\xC3\xA8re (" + pane.lastMessage() + ")");
+    // 1.12.18 (planche 15) : le menu de la grille - Ajouter, Dupliquer, Monter, Descendre, Voir les usages >,
+    // Valeur initiale..., Copier, Coller, Supprimer.
+    pane.showCodeTab(app::HmiScriptsPane::CodeTabConstants);
+    consts.selectRows({0});
+    {
+        const auto items = consts.contextItems();
+        const auto* head = items.empty() ? nullptr : &items.front();
+        const auto* usesItem = findItemStarting(items, "Voir les usages (");
+        check(head && head->heading && head->label == "Increment" && findItem(items, "Ajouter") && findItem(items, "Dupliquer") && findItem(items, "Monter")
+                  && findItem(items, "Descendre") && usesItem && findItem(items, "Valeur initiale\xE2\x80\xA6") && findItem(items, "Copier")
+                  && findItem(items, "Coller") && findItem(items, "Supprimer"),
+              "1.12.18 : le menu de la grille (Increment : Ajouter, Dupliquer, Monter, Descendre, Voir les usages, Valeur initiale, Copier, Coller, Supprimer)");
+        check(usesItem && usesItem->children.size() == 1 && usesItem->children.front().label.find("ligne 1 : Total := Total + Increment;") == 0,
+              "Voir les usages \xE2\x80\xBA ligne 1 : Total := Total + Increment; (" + (usesItem && !usesItem->children.empty() ? usesItem->children.front().label : std::string("rien")) + ")");
+        check(ui::cmd::badShortcuts(items).empty(), "menu de la grille : des touches seulement \xC3\xA0 droite");
+        if (usesItem && !usesItem->children.empty()) consts.table().contextAction->emit(usesItem->children.front().id);
+        check(pane.currentCodeTab() == app::HmiScriptsPane::CodeTabCode && pane.editor().selectedText() == "Increment",
+              "Voir les usages \xE2\x80\xBA une utilisation : le code, le nom choisi");
+    }
     // EXCEL : coller (titres reconnus, un nom nouveau cree, un existant mis a jour) ; un seul Ctrl+Z.
     core::CommandGroupScope::registerStack(&stack);      // le collage : un groupe dans cette pile
     const std::size_t depth = stack.done().size();
@@ -31793,6 +31979,27 @@ void choisir11216() {
         check(answers.size() == 2 && answers[1].name == "LEFT" && answers[1].text == native("LEFT")->example && answers[1].holes.empty(),
               "Ins\xC3\xA9rer l'exemple : celui de la fiche, sans trou");
     }
+    // 1.12.18 (planche 15) : le clic droit sur une ligne - Choisir, Copier le nom, Aide sur LIMIT (une native).
+    installerPressePapiers();
+    picker = open(spec);
+    if (picker) {
+        picker->setTyped(false);
+        check(picker->select("LIMIT"), "LIMIT choisie");
+        picker->openRowMenu({200.f, 200.f});
+        const auto* rm = picker->rowMenu();
+        const auto* choose = rm ? findItem(rm->items(), "Choisir") : nullptr;
+        const auto* copyName = rm ? findItem(rm->items(), "Copier le nom") : nullptr;
+        const auto* helpOn = rm ? findItem(rm->items(), "Aide sur LIMIT") : nullptr;
+        check(rm && rm->isOpen() && choose && copyName && helpOn && helpOn->shortcut == "F1" && !findItem(rm->items(), "Aller \xC3\xA0 la d\xC3\xA9" "finition"),
+              "1.12.18 : le menu d'une native - Choisir, Copier le nom, Aide sur LIMIT (F1), pas de d\xC3\xA9" "finition");
+        if (rm && copyName) rm->itemChosen->emit(copyName->id);
+        same_text(ui::clipboardText(), "LIMIT", "Copier le nom");
+        const std::size_t before = answers.size();
+        if (rm && helpOn) rm->itemChosen->emit(helpOn->id);
+        mm.applyPending();
+        check(answers.size() == before + 1 && answers.back().help && answers.back().name == "LIMIT" && answers.back().text.empty(),
+              "Aide sur LIMIT : la fen\xC3\xAAtre se ferme, l'h\xC3\xB4te ouvre la fiche (rien d'ins\xC3\xA9r\xC3\xA9)");
+    }
 
     // ---- la derniere ligne des listes : l'hote repond LIMIT(MN, IN, MX) ----
     std::vector<HmiFunctionPicker::Spec> asked;
@@ -33278,6 +33485,7 @@ int main(int argc, char** argv) {
     raccourcis_canevas_11218();             // 1.12.18 : Ctrl+D, Ctrl+Maj+D, Ctrl+G, Ctrl+Maj+G, Ctrl+Alt+C/V
     canevas_menu_11218();                   // 1.12.18 : le menu du clic droit sur la vue (planches 5 et 6)
     inspecteur_menu_11218();                // 1.12.18 : le menu de chaque ligne de l'inspecteur (planche 8)
+    menuCodeChamps11218();                  // 1.12.18 : le menu du code, des champs, des fiches (planches 14 et 15)
     dupliquer_fenetre_1102();               // 1.10.2 (chantier D) : Dupliquer... (Ctrl+Maj+D depuis la 1.12.18, la fenetre, une commande)
     groupesAlarmes1102Editeur();            // 1.10.2 (AL) : Groupe de l'IHM, IHM > Alarmes > Groupes
     tailleTexteListes111();                 // 1.11 (R111) : la taille du texte des listes d'alarmes et de l'historique

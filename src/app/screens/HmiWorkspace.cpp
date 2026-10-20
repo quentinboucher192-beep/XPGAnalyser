@@ -467,6 +467,10 @@ void MainAnalysisScreen::bindHmi() {
                 openHmiFunctionDefinition(a.view, a.function);
                 return;
             }
+            if (a.help) {                       // 1.12.18 : Aide sur LIMIT (le menu de la ligne, F1) - sa fiche
+                (void)openNative(natives::keyOfWord(a.name));
+                return;
+            }
             if (done && !a.text.empty()) done(a);
         });
     });
@@ -3342,6 +3346,10 @@ void MainAnalysisScreen::askHmiType(HmiTypePicker::Spec spec, typepicker::Done d
 }
 
 void MainAnalysisScreen::openHmiTypeDefinition(const std::string& key) {
+    if (key.rfind("aide:", 0) == 0) {                    // 1.12.18 : Aide sur MAP (le selecteur de types, F1)
+        (void)openNative(natives::keyOfWord(key.substr(5)));
+        return;
+    }
     if (key.rfind("ihm:", 0) == 0) {                     // un type IHM : l'onglet Types IHM, sur lui
         const auto id = static_cast<hmi::Id>(std::strtoull(key.c_str() + 4, nullptr, 10));
         openHmiPane("scripts");

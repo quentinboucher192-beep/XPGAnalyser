@@ -18,6 +18,8 @@
 
 namespace ui {
 
+    class PopupMenu;   // 1.12.18 : le menu du clic droit des champs et de l'editeur de code
+
     // ---------------------------------------------------------------- Button ---
     class Button : public Widget {
     public:
@@ -122,6 +124,16 @@ namespace ui {
         const core::SignalPtr<const std::string&> textChanged = core::Signal<const std::string&>::create();
         const core::SignalPtr<const std::string&> editingDone = core::Signal<const std::string&>::create();
 
+        // ---- 1.12.18 (planche 15, bug 6) : LE MENU DU CLIC DROIT ----
+        //  Un clic droit dans la selection la garde ; ailleurs, il pose le curseur. Puis :
+        //  Couper, Copier, Coller, Tout choisir, et Choisir une fonction... (Ctrl+I) quand le
+        //  champ en propose une (une case fx). Le meme menu dans tous les champs d'une ligne :
+        //  l'inspecteur, les fenetres, la recherche, les filtres. Le texte tape reste (bug 5).
+        void openContextMenu(gfx::Point at, bool fromKeyboard = false);
+        [[nodiscard]] PopupMenu* contextMenu() const noexcept { return menu_; }
+        [[nodiscard]] std::size_t selectionStart() const noexcept { return std::min(caret_, selAnchor_); }
+        [[nodiscard]] std::size_t selectionEnd() const noexcept { return std::max(caret_, selAnchor_); }
+
         // ---- Lot API 8 : finitions (Ctrl+F) ----
         //  Le curseur dans le champ, tout son texte choisi (Widget::grabFocus
         //  est protege) : Ctrl+F dans un volet. Faux : le champ ne le prend pas
@@ -170,6 +182,11 @@ namespace ui {
         mutable gfx::Rect       suggestionBox_{};
         mutable float           suggestionLegendH_{ 0.f };  // 1.11.2 : le pied de la liste (la legende)
         std::shared_ptr<char>   alive_{ std::make_shared<char>(0) };   // 1.12.16 : le choix rendu apres coup
+        // 1.12.18 : le menu du clic droit (cree au premier clic droit) ; ouvert, la perte du
+        // clavier (le menu le prend) n'est pas la fin de la saisie.
+        PopupMenu*              menu_{ nullptr };
+        bool                    menuOpen_{ false };
+        void                    runMenuEntry(int id);
     };
 
     // -------------------------------------------------------- MultiLineText ---
@@ -424,6 +441,22 @@ namespace ui {
         using CommandHandler = std::function<bool(MultiLineText&, std::string_view command)>;
         void setCommandHandler(CommandHandler h) { commandHandler_ = std::move(h); }
         static void setHostCommandHandler(CommandHandler h);
+        // ---- 1.12.18 (planche 14) : LE MENU DU CLIC DROIT ----
+        //  Un clic droit dans la selection la garde (bug 6) ; ailleurs, il pose le curseur (un
+        //  glisser au bouton droit ne choisit plus rien). Puis le menu : la faute sous la souris
+        //  d'abord (son message, Corriger, la suivante, la precedente), puis le nom (sa tete : ce
+        //  que l'hote en sait), Couper, Copier, Coller, Aller a la definition (Aide sur LIMIT pour
+        //  une native), Voir les usages, Renommer partout, Choisir une fonction, Entourer de,
+        //  Commenter, Mettre en forme. La colonne de droite : la touche du profil actif, ou rien -
+        //  le profil classique n'a pas F12, l'entree reste (bug 9). Un editeur de texte (sans
+        //  setCommandKeys) : Couper, Copier, Coller, Tout choisir. Maj+F10, la touche Menu : au curseur.
+        void openContextMenu(gfx::Point at, bool fromKeyboard = false);
+        [[nodiscard]] PopupMenu* contextMenu() const noexcept { return menu_; }
+        // Ce que l'hote sait d'un nom : `detail` (la tete du menu : "REAL \xC2\xB7 variable IHM") et
+        // `native` (une fonction native : le menu propose son aide, F1, au lieu de la definition).
+        using SymbolDescriber = std::function<bool(std::string_view symbol, std::string& detail, bool& native)>;
+        static void setSymbolDescriber(SymbolDescriber d);
+
         // Ce que la barre d'etat doit dire (l'attente d'un accord, "Ligne copiee") ; l'appli
         // le route vers la barre de l'ecran. Vide : rien a dire.
         using NoticeSink = std::function<void(const std::string& text, Tone tone)>;
@@ -665,6 +698,10 @@ namespace ui {
         int                        pickKind_{ 0 };          // la liste ouverte : 0 la completion, 1 Entourer de, 2 un extrait
         std::shared_ptr<char>      alive_{ std::make_shared<char>(0) };   // 1.12.16 : le choix rendu apres coup
         std::string                lineClip_;               // ce que Ctrl+C sans selection a copie (la ligne entiere)
+        // 1.12.18 : le menu du clic droit et la commande de chaque entree.
+        PopupMenu*                 menu_{ nullptr };
+        std::vector<std::string>   menuCommands_;
+        void                       runMenuEntry(int id);
         gfx::Point                 barMouse_{};             // la souris, pour les boutons de la barre
         // ---- fin 1.12.2 ----
         std::vector<BreakMark>     breaks_;

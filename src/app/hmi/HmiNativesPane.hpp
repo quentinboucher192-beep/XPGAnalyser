@@ -19,6 +19,7 @@
 
 namespace ui {
 class HelpArticleView;
+class PopupMenu;
 class StatusBar;
 } // namespace ui
 
@@ -51,6 +52,10 @@ public:
     // La notation des exemples (ST, C, C++ : celle de l'aide, gardee).
     [[nodiscard]] static std::string notation();
     [[nodiscard]] ui::HelpArticleView& view() noexcept { return *view_; }
+    // 1.12.18 (planche 15) : le clic droit sur la fiche - Inserer dans le script, Copier le nom,
+    // Copier l'exemple (sur un exemple), la fiche d'avant. `block` : l'exemple vise (-1 : aucun).
+    void openContextMenu(gfx::Point at, int block);
+    [[nodiscard]] ui::PopupMenu* contextMenu() const noexcept { return menu_; }
     [[nodiscard]] const std::string& lastMessage() const noexcept { return message_; }
     [[nodiscard]] std::size_t historySize() const noexcept { return history_.size(); }
 
@@ -64,6 +69,8 @@ private:
 
     HmiToolStrip*            tools_{nullptr};
     ui::HelpArticleView*     view_{nullptr};
+    ui::PopupMenu*           menu_{nullptr};       // 1.12.18
+    int                      menuBlock_{-1};
     ui::StatusBar*           status_{nullptr};
     Hosts                    hosts_;
     std::string              key_;

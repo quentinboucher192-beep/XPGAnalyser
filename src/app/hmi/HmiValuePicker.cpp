@@ -619,6 +619,17 @@ protected:
             return ui::EventResult::Consumed;
         }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+            // 1.12.18 (planche 15) : le clic droit sur une valeur - Choisir, Inserer dans le resultat, Copier le nom.
+            if (d->button == ui::MouseButton::Right)
+                for (const auto& [rect, node] : rowRects_) {
+                    if (!rect.contains(d->pos)) continue;
+                    const Node& nd = nodes_[static_cast<std::size_t>(node)];
+                    if (nd.group) break;
+                    sel_ = node;
+                    invalidate();
+                    openRowMenu(d->pos, nd);
+                    return ui::EventResult::Consumed;
+                }
             if (d->button != ui::MouseButton::Left) return panel_.contains(d->pos) ? ui::EventResult::Consumed : ui::EventResult::Ignored;
             if (close_.contains(d->pos)) { owner_.finish(false); return ui::EventResult::Consumed; }
             for (const auto& [rect, s] : chips_)
@@ -763,6 +774,48 @@ private:
     void classify() {
         res_ = valuekind::classify(env_, result_->text(), fx_, spec_.expected);
         invalidate();
+    }
+
+    // 1.12.18 : le menu d'une valeur de l'arbre.
+    ui::PopupMenu* rowMenu_{nullptr};
+    void openRowMenu(gfx::Point at, const Node& nd) {
+        enum : int { MChoose = 1, MInsert, MCopy };
+        if (!rowMenu_) {
+            rowMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".rowmenu")));
+            links_ += rowMenu_->itemChosen->connect([this](int action) {
+                if (sel_ < 0 || static_cast<std::size_t>(sel_) >= nodes_.size()) return;
+                switch (action) {
+                    case MChoose:
+                        use(Use::Replace);
+                        owner_.validate(false);
+                        break;
+                    case MInsert: use(Use::Insert); break;
+                    case MCopy: ui::setClipboardText(nodes_[static_cast<std::size_t>(sel_)].path); break;
+                    default: break;
+                }
+            });
+        }
+        const auto entry = [](std::string label, int id, std::string key) {
+            ui::PopupMenu::Item it;
+            it.label = std::move(label);
+            it.id = id;
+            it.shortcut = std::move(key);
+            return it;
+        };
+        std::vector<ui::PopupMenu::Item> items;
+        ui::PopupMenu::Item head;
+        head.heading = true;
+        head.label = nd.path;
+        head.shortcut = nd.type;
+        items.push_back(std::move(head));
+        items.push_back(entry("Choisir", MChoose, "Entr\xC3\xA9" "e"));
+        items.push_back(entry("Ins\xC3\xA9rer dans le r\xC3\xA9sultat", MInsert, {}));
+        items.push_back(entry("Copier le nom", MCopy, {}));
+        rowMenu_->setItems(std::move(items));
+        rowMenu_->setBounds(bounds());
+        gfx::Size surface = ui::surfaceSize();
+        if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
+        rowMenu_->openAt(at, surface);
     }
 
     void use(Use how) {

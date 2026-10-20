@@ -195,6 +195,9 @@ struct HelpLayout {
     // --- ajoutes ---
     std::vector<HelpHotspot> hotspots{};
     std::vector<HelpSection> sections{};
+    // 1.12.18 : le cadre de chaque exemple de code (en coordonnees de page) et son bloc :
+    // le clic droit sur un exemple propose « Copier l'exemple ».
+    std::vector<std::pair<gfx::Rect, std::size_t>> codeBlocks{};
 };
 
 // Mesure d'une chaine dans une police donnee. Le booleen dit si c'est la police
@@ -245,6 +248,14 @@ public:
     // 1.10 : defile jusqu'a la premiere de ces zones ("Me montrer" d'une
     // nouveaute de l'aide). Faux : pas encore mise en page, ou aucune.
     bool revealHotspots(std::string_view prefix);
+
+    // 1.12.18 : un clic droit dans l'article (le point, et l'exemple de code sous lui : son
+    // bloc, -1 aucun). L'ecran ouvre son menu (Inserer, Copier le nom, Copier l'exemple).
+    const core::SignalPtr<gfx::Point, int> contextRequested = core::Signal<gfx::Point, int>::create();
+    // Le bloc de l'exemple de code sous un point de l'ecran ; -1 : aucun.
+    [[nodiscard]] int codeBlockAt(gfx::Point p) const noexcept;
+    // Le texte d'un bloc (un exemple) ; vide : pas de tel bloc.
+    [[nodiscard]] std::string blockText(int index) const;
 
     // Seams de test : la cible sous un point, et le clic, sans evenement.
     [[nodiscard]] const HelpLayout& layoutForTest() const noexcept { return layout_; }

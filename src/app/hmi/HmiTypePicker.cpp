@@ -8,6 +8,7 @@
 #include "../../ui/TextSearch.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
+#include "HmiNativesCards.hpp"   // 1.12.18 : Aide sur MAP (la fiche du type)
 
 #include <algorithm>
 #include <array>
@@ -492,6 +493,15 @@ protected:
             return ui::EventResult::Consumed;
         }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+            // 1.12.18 : le clic droit sur une ligne la choisit et ouvre son menu.
+            if (d->button == ui::MouseButton::Right)
+                for (const auto& [rect, k] : rowRects_)
+                    if (rect.contains(d->pos) && rowsArea_.contains(d->pos)) {
+                        sel_ = k;
+                        invalidate();
+                        owner_.openRowMenu(d->pos);
+                        return ui::EventResult::Consumed;
+                    }
             if (d->button != ui::MouseButton::Left) return panel_.contains(d->pos) ? ui::EventResult::Consumed : ui::EventResult::Ignored;
             if (close_.contains(d->pos)) {
                 owner_.finish(false);
@@ -836,6 +846,17 @@ ui::EventResult HmiTypePicker::HandleEvent(const ui::InputEvent& ev) {
             choose();
             return ui::EventResult::Consumed;
         }
+        // 1.12.18 : les touches du menu de la ligne (F1 la fiche, F12 la definition, Ctrl+C le nom).
+        if (k->key == ui::Key::F1 && k->mods.none()) {
+            openHelp();
+            return ui::EventResult::Consumed;
+        }
+        if (k->key == ui::Key::F12 && k->mods.none()) {
+            openDefinition();
+            return ui::EventResult::Consumed;
+        }
+        if (k->key == ui::Key::C && k->mods.ctrl && !k->mods.shift && !k->mods.alt && !body_->searchFocused() && copyName())
+            return ui::EventResult::Consumed;
         if (body_->searchFocused() && (k->key == ui::Key::Down || k->key == ui::Key::Up)) {
             body_->move(k->key == ui::Key::Down ? 1 : -1);
             return ui::EventResult::Consumed;
@@ -878,6 +899,66 @@ void HmiTypePicker::openDefinition() {
     answer_.open = body_->openKey();
     if (answer_.open.empty()) return;
     finish(true);
+}
+
+void HmiTypePicker::openHelp() {
+    if (!body_ || done_) return;
+    const auto* e = body_->selected();
+    if (!e || natives::keyOfWord(e->name).empty()) return;
+    answer_ = Answer{};
+    answer_.open = "aide:" + e->name;   // l'hote ouvre la fiche (openHmiTypeDefinition)
+    finish(true);
+}
+
+bool HmiTypePicker::copyName() {
+    const auto* e = body_ ? body_->selected() : nullptr;
+    if (!e) return false;
+    ui::setClipboardText(e->name);
+    return true;
+}
+
+void HmiTypePicker::openRowMenu(gfx::Point at) {
+    enum : int { MChoose = 1, MHelp, MDefinition, MCopy };
+    const auto* e = body_ ? body_->selected() : nullptr;
+    if (!e) return;
+    if (!rowMenu_) {
+        rowMenu_ = &static_cast<ui::PopupMenu&>(body_->addChild(std::make_unique<ui::PopupMenu>(id() + ".rowmenu")));
+        links_ += rowMenu_->itemChosen->connect([this](int action) {
+            switch (action) {
+                case MChoose: choose(); break;
+                case MHelp: openHelp(); break;
+                case MDefinition: openDefinition(); break;
+                case MCopy: (void)copyName(); break;
+                default: break;
+            }
+        });
+    }
+    const auto entry = [](std::string label, int id, std::string key, bool enabled = true, std::string why = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.id = id;
+        it.shortcut = std::move(key);
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        return it;
+    };
+    std::vector<ui::PopupMenu::Item> items;
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    head.label = e->name;
+    head.shortcut = std::string(tr::categoryLabel(e->category));
+    items.push_back(std::move(head));
+    const std::string problem = body_->problem();
+    items.push_back(entry("Choisir", MChoose, "Entr\xC3\xA9" "e", problem.empty(), problem));
+    if (!natives::keyOfWord(e->name).empty()) items.push_back(entry("Aide sur " + e->name, MHelp, "F1"));
+    else items.push_back(entry("Aller \xC3\xA0 la d\xC3\xA9" "finition", MDefinition, "F12", !body_->openKey().empty(),
+                               "un type \xC3\xA9l\xC3\xA9mentaire : pas de d\xC3\xA9" "finition \xC3\xA0 ouvrir"));
+    items.push_back(entry("Copier le nom", MCopy, "Ctrl+C"));
+    rowMenu_->setItems(std::move(items));
+    rowMenu_->setBounds(body_->bounds());
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {body_->bounds().right() + 400.f, body_->bounds().bottom() + 400.f};
+    rowMenu_->openAt(at, surface);
 }
 
 void HmiTypePicker::finish(bool ok) {

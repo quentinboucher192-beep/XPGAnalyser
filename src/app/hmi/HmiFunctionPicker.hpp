@@ -23,6 +23,7 @@
 // =============================================================================
 #pragma once
 
+#include "../../core/Signal.hpp"
 #include "../../menu/IMenu.hpp"
 
 #include <cstdint>
@@ -31,6 +32,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+namespace ui { class PopupMenu; }
 
 namespace app {
 
@@ -76,6 +79,7 @@ public:
         std::vector<std::pair<int, int>> holes;  // les arguments a remplir : (debut, longueur) dans text
         bool          open{false};               // 1.12.17 : Ouvrir sa definition (rien a inserer)
         std::uint64_t view{0}, function{0};
+        bool          help{false};               // 1.12.18 : Aide sur LIMIT (la fiche de la native ; rien a inserer)
     };
 
     explicit HmiFunctionPicker(Spec spec);
@@ -112,6 +116,12 @@ public:
     [[nodiscard]] std::string selectedCall() const;           // ce qu'Inserer poserait
     void insert(bool example);                        // Inserer (l'exemple : true)
     void openDefinition();                            // une de mes fonctions : sa definition
+    void openHelp();                                  // 1.12.18 : une native, sa fiche (F1)
+    bool copyName();                                  // 1.12.18 : Copier le nom (Ctrl+C) ; faux : rien de choisi
+    // 1.12.18 (planche 15) : le clic droit sur une ligne - Choisir, Copier le nom, Aller a la
+    // definition (une de mes fonctions) ou Aide sur LIMIT (une native).
+    void openRowMenu(gfx::Point at);
+    [[nodiscard]] ui::PopupMenu* rowMenu() const noexcept { return rowMenu_; }
     void finish(bool ok);
 
 protected:
@@ -122,8 +132,10 @@ private:
     class Body;
     Spec   spec_;
     Body*  body_{nullptr};
+    ui::PopupMenu* rowMenu_{nullptr};   // 1.12.18 : le menu du clic droit
     bool   done_{false};
     Answer answer_;
+    core::ConnectionScope links_;       // 1.12.18 : le menu de la ligne
 };
 
 // ---- l'hote : qui ouvre le selecteur ----------------------------------------------------

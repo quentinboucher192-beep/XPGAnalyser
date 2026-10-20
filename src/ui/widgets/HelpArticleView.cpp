@@ -418,6 +418,7 @@ HelpLayout layoutArticle(const HelpArticle& a, float width, const HelpMetrics& m
                 const float h = static_cast<float>(lines.size()) * m.monoLineHeight
                               + 2 * kCodePad + head;
                 c.decor(HelpDecorKind::CodePanel, {kPadX, c.y, content, h});
+                out.codeBlocks.push_back({{kPadX, c.y, content, h}, bi});   // 1.12.18 : Copier l'exemple
                 c.decor(HelpDecorKind::Gutter, {kPadX, c.y + head, gutter, h - head});
                 if (head > 0.f) {
                     float sx = kPadX + 8.f;
@@ -1494,6 +1495,21 @@ bool HelpArticleView::revealHotspots(std::string_view prefix) {
     return false;
 }
 
+int HelpArticleView::codeBlockAt(gfx::Point p) const noexcept {
+    const auto r = contentRect();
+    const float top = r.y - scrollY_;
+    for (const auto& [rect, block] : layout_.codeBlocks) {
+        const gfx::Rect rc{r.x + rect.x, top + rect.y, rect.w, rect.h};
+        if (rc.contains(p) && r.contains(p)) return static_cast<int>(block);
+    }
+    return -1;
+}
+
+std::string HelpArticleView::blockText(int index) const {
+    return index >= 0 && static_cast<std::size_t>(index) < article_.blocks.size() ? article_.blocks[static_cast<std::size_t>(index)].text
+                                                                                   : std::string{};
+}
+
 int HelpArticleView::hotspotAt(gfx::Point p) const noexcept {
     const auto r = contentRect();
     const float top = r.y - scrollY_;
@@ -1547,6 +1563,12 @@ EventResult HelpArticleView::onEvent(const InputEvent& ev) {
         return EventResult::Ignored;
     }
     if (const auto* d = std::get_if<MouseDown>(&ev)) {
+        // 1.12.18 : le clic droit - l'ecran ouvre son menu (sans lui, rien).
+        if (d->button == MouseButton::Right && bounds().contains(d->pos) && contextRequested->slotCount() > 0) {
+            rebuild(nullptr);
+            contextRequested->emit(d->pos, codeBlockAt(d->pos));
+            return EventResult::Consumed;
+        }
         if (!bounds().contains(d->pos) || d->button != MouseButton::Left)
             return EventResult::Ignored;
         grabFocus();

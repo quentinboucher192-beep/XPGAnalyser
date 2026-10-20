@@ -344,6 +344,7 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     // 1.11.18 (lot 5) : les grilles parlent dans la barre du volet ; leurs utilisations menent au code.
     links_ += codeTabs_->message->connect([this](const std::string& t, bool warning) { say(t, warning); });
     links_ += codeTabs_->usesRequested->connect([this](const std::string& name) { (void)goToNextUse(name); });
+    links_ += codeTabs_->useRequested->connect([this](const std::string& name, int k) { (void)goToNextUse(name, k); });   // 1.12.18
     links_ += codeTabs_->migrateRequested->connect([this] { (void)migrateCurrent(); });
     links_ += doc_->changed->connect([this](Id) { refresh(); });
     refresh();
@@ -558,10 +559,10 @@ bool HmiFunctionsPane::migrateCurrent() {
     return ok;
 }
 
-bool HmiFunctionsPane::goToNextUse(const std::string& name) {
+bool HmiFunctionsPane::goToNextUse(const std::string& name, int which) {
     showCodeTab(CodeTabCode);
     std::string said;
-    const bool ok = selectNextUse(*editor_, name, &said);
+    const bool ok = selectNextUse(*editor_, name, &said, which);
     say(said, !ok);
     if (ok) updateSymbolLine();
     return ok;

@@ -211,7 +211,7 @@ public:
     bool migrateCurrent();
     // Les utilisations d'un nom : l'onglet Code, la suivante apres le curseur (puis la
     // premiere). Faux : le code ne l'emploie pas.
-    bool goToNextUse(const std::string& name);
+    bool goToNextUse(const std::string& name, int which = -1);   // 1.12.18 : which >= 0 - celle de ce rang
     // Une declaration du script montre : son onglet, sa ligne choisie. Faux : inconnue.
     bool showDeclaration(const std::string& name);
     // 1.12.7 : la valeur calculee au demarrage `name` du script montre - son onglet, sa ligne, et la

@@ -623,6 +623,14 @@ protected:
             return ui::EventResult::Ignored;
         }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+            // 1.12.18 : le clic droit sur une ligne la choisit et ouvre son menu.
+            if (d->button == ui::MouseButton::Right)
+                for (const auto& [rect, k] : rowRects_)
+                    if (rect.contains(d->pos) && list_.contains(d->pos)) {
+                        selectRow(k);
+                        owner_.openRowMenu(d->pos);
+                        return ui::EventResult::Consumed;
+                    }
             if (d->button != ui::MouseButton::Left) return panel_.contains(d->pos) ? ui::EventResult::Consumed : ui::EventResult::Ignored;
             if (close_.contains(d->pos)) {
                 owner_.finish(false);
@@ -987,6 +995,17 @@ ui::EventResult HmiFunctionPicker::HandleEvent(const ui::InputEvent& ev) {
             else insert(false);
             return ui::EventResult::Consumed;
         }
+        // 1.12.18 : les touches du menu de la ligne (F12 la definition, F1 la fiche, Ctrl+C le nom).
+        if (k->key == ui::Key::F12 && k->mods.none()) {
+            openDefinition();
+            return ui::EventResult::Consumed;
+        }
+        if (k->key == ui::Key::F1 && k->mods.none()) {
+            openHelp();
+            return ui::EventResult::Consumed;
+        }
+        if (k->key == ui::Key::C && k->mods.ctrl && !k->mods.shift && !k->mods.alt && !body_->searchFocused() && copyName())
+            return ui::EventResult::Consumed;
         if (k->key == ui::Key::Down || k->key == ui::Key::Up) {
             body_->move(k->key == ui::Key::Down ? 1 : -1);
             return ui::EventResult::Consumed;
@@ -1142,12 +1161,72 @@ void HmiFunctionPicker::openDefinition() {
     finish(true);
 }
 
+void HmiFunctionPicker::openHelp() {
+    if (!body_ || done_) return;
+    const auto* e = body_->selectedEntry();
+    if (!e || e->group != kNatives) return;
+    answer_ = Answer{};
+    answer_.name = e->name;
+    answer_.help = true;
+    finish(true);
+}
+
+bool HmiFunctionPicker::copyName() {
+    const auto* e = body_ ? body_->selectedEntry() : nullptr;
+    if (!e) return false;
+    ui::setClipboardText(e->prefix + e->name);
+    return true;
+}
+
+void HmiFunctionPicker::openRowMenu(gfx::Point at) {
+    enum : int { MChoose = 1, MCopy, MDefinition, MHelp };
+    const auto* e = body_ ? body_->selectedEntry() : nullptr;
+    if (!e || !body_) return;
+    if (!rowMenu_) {
+        rowMenu_ = &static_cast<ui::PopupMenu&>(body_->addChild(std::make_unique<ui::PopupMenu>(id() + ".rowmenu")));
+        links_ += rowMenu_->itemChosen->connect([this](int action) {
+            switch (action) {
+                case MChoose: insert(false); break;
+                case MCopy: (void)copyName(); break;
+                case MDefinition: openDefinition(); break;
+                case MHelp: openHelp(); break;
+                default: break;
+            }
+        });
+    }
+    const bool native = e->group == kNatives;
+    std::vector<ui::PopupMenu::Item> items;
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    head.label = e->prefix + e->name;
+    head.shortcut = native ? std::string("native") : e->group;
+    items.push_back(std::move(head));
+    const auto entry = [](std::string label, int id, std::string key, bool enabled = true, std::string why = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.id = id;
+        it.shortcut = std::move(key);
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        return it;
+    };
+    items.push_back(entry("Choisir", MChoose, "Entr\xC3\xA9" "e"));
+    items.push_back(entry("Copier le nom", MCopy, "Ctrl+C"));
+    if (native) items.push_back(entry("Aide sur " + e->name, MHelp, "F1"));
+    else items.push_back(entry("Aller \xC3\xA0 la d\xC3\xA9" "finition", MDefinition, "F12", e->function != 0, "pas de d\xC3\xA9" "finition \xC3\xA0 ouvrir"));
+    rowMenu_->setItems(std::move(items));
+    rowMenu_->setBounds(body_->bounds());
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {body_->bounds().right() + 400.f, body_->bounds().bottom() + 400.f};
+    rowMenu_->openAt(at, surface);
+}
+
 void HmiFunctionPicker::finish(bool ok) {
     if (done_) return;
     done_ = true;
     std::string holes;
     for (const auto& [at, len] : answer_.holes) holes += (holes.empty() ? "" : ",") + std::to_string(at) + ":" + std::to_string(len);
-    const std::string payload = answer_.name + kSep + answer_.text + kSep + holes + kSep + (answer_.open ? "1" : "0") + kSep
+    const std::string payload = answer_.name + kSep + answer_.text + kSep + holes + kSep + (answer_.help ? "2" : answer_.open ? "1" : "0") + kSep
                                 + std::to_string(answer_.view) + kSep + std::to_string(answer_.function);
     manager().CloseDialog(menu::DialogResult{ok ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel, payload});
 }
@@ -1175,6 +1254,7 @@ HmiFunctionPicker::Answer HmiFunctionPicker::parse(const std::string& payload) {
         }
     }
     a.open = parts.size() > 3 && parts[3] == "1";
+    a.help = parts.size() > 3 && parts[3] == "2";   // 1.12.18 : Aide sur LIMIT
     a.view = parts.size() > 4 ? std::strtoull(parts[4].c_str(), nullptr, 10) : 0;
     a.function = parts.size() > 5 ? std::strtoull(parts[5].c_str(), nullptr, 10) : 0;
     return a;

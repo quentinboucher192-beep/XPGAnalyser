@@ -202,7 +202,7 @@ public:
     [[nodiscard]] HmiDeclBanner& declBanner() noexcept { return *banner_; }
     [[nodiscard]] std::optional<hmi::decledit::Place> currentPlace() const;
     bool migrateCurrent();
-    bool goToNextUse(const std::string& name);
+    bool goToNextUse(const std::string& name, int which = -1);   // 1.12.18 : which >= 0 - celle de ce rang
     bool showDeclaration(const std::string& name);
 
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }

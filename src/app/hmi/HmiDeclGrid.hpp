@@ -122,6 +122,10 @@ public:
 
     // Aller aux utilisations du nom choisi (le volet montre l'onglet Code et la suivante).
     const core::SignalPtr<const std::string&> usesRequested = core::Signal<const std::string&>::create();
+    // 1.12.18 : Voir les usages > une utilisation (son rang dans le code, a partir de 0).
+    const core::SignalPtr<const std::string&, int> useRequested = core::Signal<const std::string&, int>::create();
+    // 1.12.18 (planche 15) : le menu du clic droit de la ligne choisie (les essais le lisent).
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> contextItems() const;
     // Un message pour la barre d'etat du volet (texte, avertissement).
     const core::SignalPtr<const std::string&, bool> message = core::Signal<const std::string&, bool>::create();
 
@@ -221,6 +225,7 @@ public:
     // bandeau : "Migrer ce code".
     const core::SignalPtr<const std::string&, bool> message = core::Signal<const std::string&, bool>::create();
     const core::SignalPtr<const std::string&>       usesRequested = core::Signal<const std::string&>::create();
+    const core::SignalPtr<const std::string&, int>  useRequested = core::Signal<const std::string&, int>::create();   // 1.12.18
     const core::SignalPtr<>                         migrateRequested = core::Signal<>::create();
 
 private:
@@ -233,7 +238,8 @@ private:
 // LES UTILISATIONS DANS L'EDITEUR : la suivante apres le curseur (la premiere apres la
 // derniere), selectionnee ; `said` : "Utilisation 2 sur 5 de Compteur (ligne 12)" ou
 // pourquoi il n'y en a pas. Les volets des scripts, des fonctions et des operateurs.
-bool selectNextUse(ui::MultiLineText& editor, const std::string& name, std::string* said);
+// 1.12.18 : `which` >= 0 - celle de ce rang (Voir les usages > une utilisation).
+bool selectNextUse(ui::MultiLineText& editor, const std::string& name, std::string* said, int which = -1);
 // Le nom d'une declaration dans le message d'une faute ("declaration << Max >> : ...") ;
 // vide : la faute n'est pas celle d'une declaration.
 [[nodiscard]] std::string declarationNamed(std::string_view message);

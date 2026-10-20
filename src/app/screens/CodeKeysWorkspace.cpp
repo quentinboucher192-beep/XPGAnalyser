@@ -21,6 +21,8 @@
 #include "../App.hpp"
 #include "../GoToSearch.hpp"
 #include "../hmi/HmiDesignPanes.hpp"
+#include "../hmi/HmiAssist.hpp"         // 1.12.18 : la tete du menu du code (ce qu'est le nom)
+#include "../hmi/HmiNativesCards.hpp"   // 1.12.18 : Aide sur LIMIT (une native)
 #include "../../core/Edition.hpp"
 #include "../../ui/KeyMap.hpp"
 
@@ -108,6 +110,41 @@ void MainAnalysisScreen::installCodeEditorHooks() {
     });
     ui::MultiLineText::setHostCommandHandler(
         [this](ui::MultiLineText& editor, std::string_view command) { return codeEditorCommand(editor, command); });
+    // 1.12.18 (planche 14) : la tete du menu du code - ce qu'est le nom (REAL · variable IHM) ; une
+    // native (LIMIT) : le menu propose son aide (F1) au lieu de la definition.
+    ui::MultiLineText::setSymbolDescriber([this](std::string_view symbol, std::string& detail, bool& native) {
+        native = false;
+        detail.clear();
+        const auto doc = app_.hmi();
+        if (!doc) return false;
+        const std::string name(symbol);
+        if (!doc->project.functionByName(name) && !natives::keyOfWord(name).empty()) {
+            native = true;
+            detail = "native";
+            return true;
+        }
+        const auto sources = assist::sourcesFor(doc);
+        const auto plc = sources.plc ? sources.plc() : nullptr;
+        const auto d = assist::describe(doc->project, plc.get(), name);
+        if (!d.found || d.keyword) return false;
+        // "Niveau : REAL   variable IHM   initiale 0   // ..." -> "REAL · variable IHM · initiale 0"
+        std::string line = d.line;
+        if (const auto at = line.find(" : "); at != std::string::npos) line = line.substr(at + 3);
+        if (const auto at = line.find("//"); at != std::string::npos) line.resize(at);
+        std::string out;
+        for (std::size_t i = 0; i < line.size();) {
+            if (line.compare(i, 2, "  ") == 0) {
+                while (i < line.size() && line[i] == ' ') ++i;
+                if (i < line.size() && !out.empty()) out += " \xC2\xB7 ";
+                continue;
+            }
+            out += line[i++];
+        }
+        while (!out.empty() && out.back() == ' ') out.pop_back();
+        if (out.size() > 48) out = out.substr(0, 45) + "\xE2\x80\xA6";
+        detail = out.empty() ? d.type : out;
+        return true;
+    });
     ui::MultiLineText::setNoticeSink([this](const std::string& text, ui::Tone tone) {
         if (!status_) return;
         if (text.empty()) { status_->dismissTransient(); return; }
@@ -118,6 +155,7 @@ void MainAnalysisScreen::installCodeEditorHooks() {
 void MainAnalysisScreen::removeCodeEditorHooks() {
     ui::propertygrid::setNameHook({});
     ui::MultiLineText::setHostCommandHandler({});
+    ui::MultiLineText::setSymbolDescriber({});
     ui::MultiLineText::setNoticeSink({});
 }
 
@@ -130,6 +168,10 @@ bool MainAnalysisScreen::codeEditorCommand(ui::MultiLineText& editor, std::strin
     };
     const std::string word = editor.symbolAtCaret();
     if (command == "allerA") { openGoTo(); return true; }
+    if (command == "aide") {   // 1.12.18 : « Aide sur LIMIT » (le menu du clic droit) - comme F1
+        if (!openHmiHelpNow()) openHelpFor(helpTargetNow());
+        return true;
+    }
     if (command == "fermer") { (void)closeCurrentTab(); return true; }
     if (command == "generer") {
         if (!core::hasIhm()) return false;

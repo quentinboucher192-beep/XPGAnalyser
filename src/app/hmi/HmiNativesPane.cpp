@@ -1,11 +1,14 @@
 #include "HmiNativesPane.hpp"
 
+#include <algorithm>
+
 #include "HmiIcons.hpp"
 #include "HmiNativesCards.hpp"
 #include "HmiPanels.hpp"
 #include "../../help/Novelties.hpp"     // la notation des exemples (aide.notation)
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/HelpArticleView.hpp"
+#include "../../ui/widgets/Controls.hpp"   // 1.12.18 : le menu du clic droit
 
 namespace app {
 
@@ -42,11 +45,70 @@ HmiNativesPane::HmiNativesPane(std::string id) : ui::Widget(std::move(id)) {
         }
     });
     links_ += view_->linkActivated->connect([this](const std::string& target) { (void)follow(target); });
+    links_ += view_->contextRequested->connect([this](gfx::Point at, int block) { openContextMenu(at, block); });
     show("natives");
     history_.clear();
 }
 
 void HmiNativesPane::setHosts(Hosts h) { hosts_ = std::move(h); }
+
+void HmiNativesPane::openContextMenu(gfx::Point at, int block) {
+    enum : int { MInsert = 1, MCopyName, MCopyExample, MBack };
+    if (!menu_) {
+        menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".menu")));
+        links_ += menu_->itemChosen->connect([this](int action) {
+            switch (action) {
+                case MInsert: (void)insertCurrent(); break;
+                case MCopyName: {
+                    std::string name = natives::title(key_);
+                    if (const auto dot = name.rfind("\xC2\xB7 "); dot != std::string::npos) name = name.substr(dot + 3);
+                    ui::setClipboardText(name);
+                    say("Copi\xC3\xA9 : " + name);
+                    break;
+                }
+                case MCopyExample: {
+                    const std::string text = view_->blockText(menuBlock_);
+                    if (text.empty()) break;
+                    ui::setClipboardText(text);
+                    say("L'exemple est copi\xC3\xA9 (" + std::to_string(std::count(text.begin(), text.end(), '\n') + 1) + " lignes)");
+                    break;
+                }
+                case MBack: (void)back(); break;
+                default: break;
+            }
+        });
+    }
+    menuBlock_ = block;
+    const auto entry = [](std::string label, int id, std::string key = {}, bool enabled = true, std::string why = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.id = id;
+        it.shortcut = std::move(key);
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        return it;
+    };
+    std::vector<ui::PopupMenu::Item> items;
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    head.label = natives::title(key_);
+    head.shortcut = "natif";
+    items.push_back(std::move(head));
+    const bool insertable = !natives::insertText(key_).empty();
+    items.push_back(entry("Ins\xC3\xA9rer dans le script", MInsert, {}, insertable && static_cast<bool>(hosts_.insert),
+                          insertable ? std::string("aucun script en cours d'\xC3\xA9" "dition") : std::string("rien \xC3\xA0 ins\xC3\xA9rer pour cette fiche")));
+    items.push_back(entry("Copier le nom", MCopyName, "Ctrl+C"));
+    items.push_back(entry("Copier l'exemple", MCopyExample, {}, block >= 0, "clic droit sur un exemple de code"));
+    ui::PopupMenu::Item rule;
+    rule.separator = true;
+    items.push_back(rule);
+    items.push_back(entry("Fiche pr\xC3\xA9" "c\xC3\xA9" "dente", MBack, {}, !history_.empty(), "aucune fiche avant celle-ci"));
+    menu_->setItems(std::move(items));
+    menu_->setBounds(bounds());
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
+    menu_->openAt(at, surface);
+}
 
 std::string HmiNativesPane::notation() {
     const auto& n = help::news::session().helpNotation;

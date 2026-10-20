@@ -305,10 +305,97 @@ namespace ui {
     }
 
     void InputText::onFocusChanged(bool gained) {
+        // 1.12.18 : le menu du champ prend le clavier le temps d'un choix, puis le rend : la
+        // saisie continue (ni fin de saisie, ni nouveau point de retour de Ctrl+Z).
+        if (menuOpen_) {
+            if (gained) menuOpen_ = false;
+            invalidate();
+            return;
+        }
         if (gained) undoText_ = text_;
         if (!gained) {
             suggestions_.clear();
             editingDone->emit(text_);
+        }
+        invalidate();
+    }
+
+    void InputText::openContextMenu(gfx::Point at, bool fromKeyboard) {
+        closeSuggestions();
+        if (!menu_) {
+            menu_ = &static_cast<PopupMenu&>(addChild(std::make_unique<PopupMenu>(id() + ".menu")));
+            menu_->itemChosen->connect([this](int action) { runMenuEntry(action); }).release();
+            // Ferme sans choix (Echap, un clic ailleurs) : le clavier revient au champ, ou pas.
+            menu_->dismissed->connect([this] {
+                if (menuOpen_ && !focused()) {
+                    menuOpen_ = false;
+                    suggestions_.clear();
+                    editingDone->emit(text_);
+                }
+            }).release();
+        }
+        const bool selected = caret_ != selAnchor_;
+        const bool clip = !clipboardText().empty();
+        const std::string ro = "lecture seule";
+        const auto entry = [](std::string label, int id, std::string key, bool enabled, std::string why) {
+            PopupMenu::Item it;
+            it.label = std::move(label);
+            it.id = id;
+            it.shortcut = std::move(key);
+            it.enabled = enabled;
+            it.disabledReason = enabled ? std::string{} : std::move(why);
+            return it;
+        };
+        std::vector<PopupMenu::Item> items;
+        items.push_back(entry("Couper", 1, "Ctrl+X", selected && !readOnly_ && !masked_, readOnly_ ? ro : masked_ ? std::string("un mot de passe") : std::string("rien de choisi")));
+        items.push_back(entry("Copier", 2, "Ctrl+C", selected && !masked_, masked_ ? std::string("un mot de passe") : std::string("rien de choisi")));
+        items.push_back(entry("Coller", 3, "Ctrl+V", clip && !readOnly_, readOnly_ ? ro : std::string("le presse-papiers est vide")));
+        items.push_back(entry("Tout choisir", 4, "Ctrl+A", !text_.empty(), "le champ est vide"));
+        // Choisir une fonction... : dans un champ qui en propose une (une case fx).
+        if (assist_ && !readOnly_ && !masked_) {
+            std::vector<Suggestion> found;
+            std::size_t from = caret_;
+            assist_(std::string_view(text_).substr(0, caret_), from, found);
+            if (std::any_of(found.begin(), found.end(), [](const Suggestion& x) { return static_cast<bool>(x.action); })) {
+                PopupMenu::Item rule;
+                rule.separator = true;
+                items.push_back(rule);
+                items.push_back(entry("Choisir une fonction\xE2\x80\xA6", 5, "Ctrl+I", true, {}));
+            }
+        }
+        menu_->setItems(std::move(items));
+        menu_->setBounds(bounds());
+        gfx::Size surface = surfaceSize();
+        if (surface.w <= 0.f || surface.h <= 0.f) surface = { bounds().right() + 400.f, bounds().bottom() + 400.f };
+        menuOpen_ = focused();
+        if (fromKeyboard) menu_->openFromKeyboard(at, surface);
+        else menu_->openAt(at, surface);
+    }
+
+    void InputText::runMenuEntry(int id) {
+        menuOpen_ = false;
+        if (!focused()) grabFocus();
+        switch (id) {
+        case 1:
+            if (readOnly_ || masked_ || caret_ == selAnchor_) break;
+            copySelection();
+            eraseSelection();
+            textChanged->emit(text_);
+            break;
+        case 2: copySelection(); break;
+        case 3: {
+            if (readOnly_) break;
+            auto paste = clipboardText();
+            std::erase_if(paste, [](char c) { return c == '\n' || c == '\r'; });
+            if (!paste.empty()) insert(paste);
+            break;
+        }
+        case 4:
+            selAnchor_ = 0;
+            caret_ = text_.size();
+            break;
+        case 5: (void)runAction(); break;
+        default: break;
         }
         invalidate();
     }
@@ -696,6 +783,16 @@ namespace ui {
         if (const auto* d = std::get_if<MouseDown>(&ev)) {
             if (!bounds().contains(d->pos)) return EventResult::Ignored;
             grabFocus();
+            // 1.12.18 (bug 6) : le clic droit garde la selection quand il tombe dedans ; ailleurs, il
+            // pose le curseur ; puis le menu du champ (planche 15).
+            if (d->button == MouseButton::Right) {
+                const std::size_t at = caretFromLocalX(toLocal(d->pos).x);
+                if (caret_ == selAnchor_ || at < selectionStart() || at > selectionEnd()) caret_ = selAnchor_ = at;
+                closeSuggestions();
+                invalidate();
+                openContextMenu(d->pos);
+                return EventResult::Consumed;
+            }
             // Put the caret where the user clicked instead of always at the end.
             caret_ = caretFromLocalX(toLocal(d->pos).x);
             if (!d->mods.shift) selAnchor_ = caret_;
@@ -703,6 +800,13 @@ namespace ui {
             return EventResult::Consumed;
         }
         if (!focused()) return EventResult::Ignored;
+        // 1.12.18 : Maj+F10, la touche Menu - le menu du champ, au curseur.
+        if (const auto* k = std::get_if<KeyDown>(&ev); k && isContextMenuKey(*k)) {
+            const auto inner = contentRect();
+            const float x = inner.x + measureWidth(shown(caret_), kFontUi) - scrollX_;
+            openContextMenu({ std::clamp(x, inner.x, inner.right()), inner.bottom() }, true);
+            return EventResult::Consumed;
+        }
 
         if (const auto* t = std::get_if<TextInput>(&ev)) {
             insert(t->utf8);
@@ -2414,6 +2518,19 @@ namespace ui {
                 return EventResult::Consumed;
             }
 
+            // 1.12.18 (bug 6) : le clic droit garde la selection quand il tombe dedans ; ailleurs, il
+            // pose le curseur - sans choisir en glissant ; puis le menu (planche 14).
+            if (d->button == MouseButton::Right) {
+                const Caret at = caretAt(d->pos);
+                const auto [from, to] = orderedSelection();
+                const std::size_t o = offsetOf(at);
+                if (!hasSelection() || o < offsetOf(from) || o > offsetOf(to)) caret_ = anchor_ = at;
+                selecting_ = false;
+                updateSignature();
+                invalidate();
+                openContextMenu(d->pos);
+                return EventResult::Consumed;
+            }
             caret_ = caretAt(d->pos);
             if (!d->mods.shift) anchor_ = caret_;
             selecting_ = true;
@@ -2512,6 +2629,14 @@ namespace ui {
             // d'un appui pris ne s'ecrit pas (son TextInput suit le KeyDown).
             swallowText_ = false;
             const auto printable = [](const KeyDown& kd) { return !kd.mods.ctrl && !kd.mods.alt && keyWritesText(kd.key); };
+            // 1.12.18 : Maj+F10, la touche Menu - le menu du clic droit, au curseur.
+            if (isContextMenuKey(*k) && !barHasKeyboard()) {
+                gfx::Rect r{};
+                const auto inner = contentRect();
+                const gfx::Point at = positionRect(caret_.line, caret_.column, r) ? gfx::Point{ r.x, r.bottom() } : gfx::Point{ inner.x + 20.f, inner.y + 20.f };
+                openContextMenu(at, true);
+                return EventResult::Consumed;
+            }
             if (barHasKeyboard() && !completionOpen() && handleBarKey(*k)) {
                 swallowText_ = printable(*k);
                 return EventResult::Consumed;

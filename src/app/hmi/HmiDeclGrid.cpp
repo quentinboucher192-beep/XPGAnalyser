@@ -29,6 +29,9 @@ namespace de = hmi::decledit;
 namespace {
 
 enum GridAction : int { GAdd = 1, GRemove, GDuplicate, GUp, GDown, GUses, GItems /* 1.12.2 */, GCalc /* 1.12.7 */ };
+// 1.12.18 : les entrees du menu du clic droit (les ids rendus par TableView::contextAction).
+constexpr int kActionBase = 1000;   // + une GridAction
+constexpr int kUseBase = 1100;      // + le rang d'une utilisation (Voir les usages)
 constexpr int kUses = -1;                                   // la colonne calculee Utilisations
 
 // 1.12.7 : le script d'un endroit (et sa vue) ; nul : parti.
@@ -301,6 +304,18 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
             default: break;
         }
     });
+    // 1.12.18 (planche 15) : le menu du clic droit - la ligne visee, ses gestes (ceux de la barre),
+    // Voir les usages (une entree par utilisation dans le code), Copier, Coller, Supprimer.
+    table_->setExtraContextOnly(true);
+    table_->setExtraContextItems([this] { return contextItems(); });
+    links_ += table_->contextAction->connect([this](int id) {
+        if (id >= kUseBase) {
+            const auto sel = selectedRows();
+            if (sel.size() == 1 && sel.front() < rows_->rows.size()) useRequested->emit(rows_->rows[sel.front()].d.name, id - kUseBase);
+            return;
+        }
+        tools_->triggered->emit(id - kActionBase);
+    });
     links_ += search_->changed->connect([this] { applySearch(); });
     // 1.12.7 : le deballage suit la ligne choisie ; la fleche deplie un element.
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { refreshUnfold(); });
@@ -320,6 +335,103 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
 }
 
 HmiDeclGrid::~HmiDeclGrid() = default;
+
+std::vector<ui::PopupMenu::Item> HmiDeclGrid::contextItems() const {
+    using Item = ui::PopupMenu::Item;
+    std::vector<Item> items;
+    const auto sel = selectedRows();
+    const bool one = sel.size() == 1 && sel.front() < rows_->rows.size();
+    const auto tool = [this](int action, std::string label, std::string key, std::string why) {
+        Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.id = kActionBase + action;
+        it.enabled = tools_->isEnabled(action);
+        if (!it.enabled) it.disabledReason = std::move(why);
+        return it;
+    };
+    const auto rule = [] {
+        Item it;
+        it.separator = true;
+        return it;
+    };
+    if (one) {
+        const auto& d = rows_->rows[sel.front()].d;
+        Item head;
+        head.heading = true;
+        head.label = d.name;
+        head.shortcut = d.type + " \xC2\xB7 " + de::tabLabel(tab_, role_);
+        items.push_back(std::move(head));
+    } else if (sel.size() > 1) {
+        Item head;
+        head.heading = true;
+        head.label = std::to_string(sel.size()) + " d\xC3\xA9" "clarations";
+        items.push_back(std::move(head));
+    }
+    const std::string noRow = "choisis une ligne";
+    auto addItem = tool(GAdd, "Ajouter", "Inser", "pas de code ici");
+    addItem.icon = ui::Icon::Plus;
+    items.push_back(std::move(addItem));
+    items.push_back(tool(GDuplicate, "Dupliquer", "Ctrl+D", noRow));
+    items.push_back(tool(GUp, "Monter", "Alt+Haut", one ? std::string("d\xC3\xA9j\xC3\xA0 en t\xC3\xAAte") : noRow));
+    items.push_back(tool(GDown, "Descendre", "Alt+Bas", one ? std::string("d\xC3\xA9j\xC3\xA0 en bas") : noRow));
+    // Voir les usages : une entree par utilisation dans le code (la ligne et son texte).
+    {
+        std::vector<de::Use> uses;
+        std::string body;
+        if (one && place_ && doc_) {
+            const auto code = de::locate(doc_->project, *place_);
+            if (code.valid()) {
+                body = *code.body;
+                uses = de::usesIn(body, rows_->rows[sel.front()].d.name);
+            }
+        }
+        Item u;
+        u.label = "Voir les usages (" + std::to_string(uses.size()) + ")";
+        u.icon = ui::Icon::Search;
+        u.id = -1;
+        for (std::size_t k = 0; k < uses.size() && k < 20; ++k) {
+            // Le texte de la ligne, sans ses blancs de tete.
+            std::size_t from = 0;
+            for (int l = 1; l < uses[k].line && from != std::string::npos; ++l) {
+                from = body.find('\n', from);
+                if (from != std::string::npos) ++from;
+            }
+            std::string text = from == std::string::npos ? std::string{} : body.substr(from, body.find('\n', from) - from);
+            text.erase(0, std::min(text.find_first_not_of(" \t"), text.size()));
+            if (text.size() > 48) text = text.substr(0, 46) + "\xE2\x80\xA6";
+            Item c;
+            c.label = "ligne " + std::to_string(uses[k].line) + " : " + text;
+            c.id = kUseBase + static_cast<int>(k);
+            u.children.push_back(std::move(c));
+        }
+        if (u.children.empty()) {
+            u.enabled = false;
+            u.disabledReason = one ? std::string("aucune utilisation dans le code") : noRow;
+        }
+        items.push_back(std::move(u));
+    }
+    items.push_back(tool(GCalc, "Valeur initiale\xE2\x80\xA6", {}, one ? std::string("pas pour ce type") : noRow));
+    items.push_back(rule());
+    // Copier, Coller : ceux du tableau (ids 1 et 3, l'Excel des grilles).
+    Item copy;
+    copy.label = "Copier";
+    copy.shortcut = "Ctrl+C";
+    copy.id = 1;
+    copy.enabled = !sel.empty();
+    if (!copy.enabled) copy.disabledReason = noRow;
+    items.push_back(std::move(copy));
+    Item paste;
+    paste.label = "Coller";
+    paste.shortcut = "Ctrl+V";
+    paste.id = 3;
+    paste.enabled = usable() && !ui::clipboardText().empty();
+    if (!paste.enabled) paste.disabledReason = usable() ? std::string("le presse-papiers est vide") : std::string("pas de code ici");
+    items.push_back(std::move(paste));
+    items.push_back(rule());
+    items.push_back(tool(GRemove, "Supprimer", "Suppr", noRow));
+    return items;
+}
 
 std::string HmiDeclGrid::title() const { return de::tabLabel(tab_, role_); }
 std::size_t HmiDeclGrid::count() const noexcept { return rows_ ? rows_->rows.size() : 0; }
@@ -1184,6 +1296,7 @@ HmiCodeTabs::HmiCodeTabs(std::string id, hmi::DocumentPtr doc, HmiDeclGrid::Appl
         HmiDeclGrid* raw = g.get();
         links_ += raw->message->connect([this](const std::string& text, bool warning) { message->emit(text, warning); });
         links_ += raw->usesRequested->connect([this](const std::string& name) { usesRequested->emit(name); });
+        links_ += raw->useRequested->connect([this](const std::string& name, int k) { useRequested->emit(name, k); });
         addTab({raw->title(), t == de::Tab::Constants ? ui::Icon::Constant : ui::Icon::Variable}, std::move(g));
         grids_.emplace_back(t, raw);
     }
@@ -1224,7 +1337,7 @@ bool HmiCodeTabs::showDeclaration(const std::string& name) {
     return false;
 }
 
-bool selectNextUse(ui::MultiLineText& editor, const std::string& name, std::string* said) {
+bool selectNextUse(ui::MultiLineText& editor, const std::string& name, std::string* said, int which) {
     const std::string text = editor.text();
     const auto uses = de::usesIn(text, name);
     if (uses.empty()) {
@@ -1240,6 +1353,7 @@ bool selectNextUse(ui::MultiLineText& editor, const std::string& name, std::stri
     std::size_t k = 0;
     while (k < uses.size() && (uses[k].line < line || (uses[k].line == line && uses[k].column < column))) ++k;
     if (k == uses.size()) k = 0;                                    // apres la derniere : la premiere
+    if (which >= 0) k = std::min(uses.size() - 1, static_cast<std::size_t>(which));   // 1.12.18 : celle du menu
     editor.selectRange(static_cast<std::size_t>(uses[k].line - 1), static_cast<std::uint32_t>(uses[k].column - 1),
                        static_cast<std::uint32_t>(uses[k].length));
     if (said)

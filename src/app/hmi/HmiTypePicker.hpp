@@ -49,7 +49,7 @@
 #include <vector>
 #include <utility>
 
-namespace ui { class MultiLineText; }
+namespace ui { class MultiLineText; class PopupMenu; }
 
 namespace app {
 
@@ -101,6 +101,12 @@ public:
     [[nodiscard]] bool selectionVisible() const;       // la ligne choisie se voit dans la liste (une fois placee)
     void choose();                                     // Choisir (rien si le resultat est mauvais)
     void openDefinition();                             // Ouvrir la definition
+    void openHelp();                                   // 1.12.18 : Aide sur MAP (la fiche du type ; F1)
+    bool copyName();                                   // 1.12.18 : Copier le nom (Ctrl+C) ; faux : rien de choisi
+    // 1.12.18 (planche 15) : le clic droit sur une ligne - Choisir, Aide sur MAP (ou Aller a la
+    // definition d'une structure), Copier le nom.
+    void openRowMenu(gfx::Point at);
+    [[nodiscard]] ui::PopupMenu* rowMenu() const noexcept { return rowMenu_; }
     void finish(bool ok);
 
 protected:
@@ -113,6 +119,8 @@ private:
     Body*  body_{nullptr};
     bool   done_{false};
     Answer answer_;
+    ui::PopupMenu*        rowMenu_{nullptr};   // 1.12.18 : le menu du clic droit
+    core::ConnectionScope links_;
 };
 
 // ---- l'hote : qui ouvre le selecteur ----------------------------------------------------

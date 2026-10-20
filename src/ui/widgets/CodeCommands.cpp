@@ -1478,4 +1478,141 @@ void MultiLineText::reloadText(std::string t) {
     invalidate();
 }
 
+
+// ================================================== 1.12.18 : le menu du clic droit ===
+// (planche 14 de la maquette du clic droit ; bugs 6 et 9)
+namespace {
+MultiLineText::SymbolDescriber gDescriber;
+}   // namespace
+
+void MultiLineText::setSymbolDescriber(SymbolDescriber d) { gDescriber = std::move(d); }
+
+void MultiLineText::openContextMenu(gfx::Point at, bool fromKeyboard) {
+    dismissCompletion();
+    signatureActive_ = false;   // la bulle d'un appel passerait devant le menu (elle prend les clics)
+    if (!menu_) {
+        menu_ = &static_cast<PopupMenu&>(addChild(std::make_unique<PopupMenu>(id() + ".menu")));
+        menu_->itemChosen->connect([this](int action) { runMenuEntry(action); }).release();
+    }
+    menuCommands_.clear();
+    std::vector<PopupMenu::Item> items;
+    // La touche d'une commande dans le profil actif ; rien quand le profil n'en a pas (bug 9 : l'entree reste).
+    const auto keyOf = [](std::string_view command) -> std::string {
+        const auto chords = keymap::chordsOf(keymap::current(), command);
+        return chords.empty() ? std::string{} : keymap::label(chords.front());
+    };
+    const auto add = [this](std::string label, std::string command, std::string key, bool enabled = true, std::string why = {}) {
+        PopupMenu::Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        it.id = static_cast<int>(menuCommands_.size());
+        menuCommands_.push_back(std::move(command));
+        return it;
+    };
+    const auto heading = [](std::string label, std::string right = {}) {
+        PopupMenu::Item it;
+        it.heading = true;
+        it.label = std::move(label);
+        it.shortcut = std::move(right);
+        return it;
+    };
+    const auto rule = [] {
+        PopupMenu::Item it;
+        it.separator = true;
+        return it;
+    };
+    const std::string ro = "lecture seule";
+    const bool clip = !clipboardText().empty();
+    if (!commandKeys_) {
+        // Un texte : les gestes d'un champ.
+        items.push_back(add("Couper", "couperTexte", "Ctrl+X", !readOnly_ && hasSelection(), readOnly_ ? ro : std::string("rien de choisi")));
+        items.push_back(add("Copier", "copierTexte", "Ctrl+C", !buffer_.empty(), "rien \xC3\xA0 copier"));
+        items.push_back(add("Coller", "coller", "Ctrl+V", !readOnly_ && clip, readOnly_ ? ro : std::string("le presse-papiers est vide")));
+        items.push_back(rule());
+        items.push_back(add("Tout choisir", "toutChoisir", "Ctrl+A", !buffer_.empty(), "rien \xC3\xA0 choisir"));
+    } else {
+        // La faute sous la souris (au clavier : sous le curseur) passe devant : son message, sa correction.
+        const Squiggle* sq = fromKeyboard ? nullptr : squiggleAt(at);
+        if (!sq)
+            for (const auto& q : squiggles_)
+                if (q.line == caret_.line && caret_.column >= q.column && caret_.column <= q.column + q.length) { sq = &q; break; }
+        if (sq) {
+            items.push_back(heading((sq->tone == Tone::Error ? std::string("Erreur ligne ") : sq->tone == Tone::Warning ? std::string("Avertissement ligne ")
+                                                                                                                   : std::string("Note ligne "))
+                                    + std::to_string(sq->line + 1)));
+            items.push_back(add(sq->message, {}, {}, false, {}));
+            if (!sq->fix.empty()) items.push_back(add("Corriger : " + sq->fix, "corriger", keyOf("corriger"), !readOnly_, ro));
+            items.push_back(add("Faute suivante", "diagSuivant", keyOf("diagSuivant"), squiggles_.size() > 1, "une seule faute"));
+            items.push_back(add("Faute pr\xC3\xA9" "c\xC3\xA9" "dente", "diagPrecedent", keyOf("diagPrecedent"), squiggles_.size() > 1, "une seule faute"));
+            items.push_back(rule());
+        }
+        // Le nom vise : sa tete dit ce que l'hote en sait (REAL · variable IHM).
+        const std::string word = symbolAtCaret();
+        std::string detail;
+        bool native = false;
+        if (!word.empty() && gDescriber) (void)gDescriber(word, detail, native);
+        if (!word.empty()) items.push_back(heading(word, detail));
+        items.push_back(add("Couper", "couper", keyOf("couper"), !readOnly_, ro));
+        items.push_back(add("Copier", "copier", keyOf("copier"), !buffer_.empty(), "rien \xC3\xA0 copier"));
+        items.push_back(add("Coller", "coller", "Ctrl+V", !readOnly_ && clip, readOnly_ ? ro : std::string("le presse-papiers est vide")));
+        items.push_back(rule());
+        const std::string noName = "le curseur n'est pas sur un nom";
+        if (native) items.push_back(add("Aide sur " + word, "aide", "F1"));
+        else items.push_back(add("Aller \xC3\xA0 la d\xC3\xA9" "finition", "allerDefinition", keyOf("allerDefinition"), !word.empty(), noName));
+        items.push_back(add("Voir les usages", "references", keyOf("references"), !word.empty(), noName));
+        items.push_back(add("Renommer partout\xE2\x80\xA6", "renommer", keyOf("renommer"), !word.empty() && !readOnly_, readOnly_ ? ro : noName));
+        items.push_back(add("Choisir une fonction\xE2\x80\xA6", "choisirFonction", keyOf("choisirFonction"), !readOnly_ && static_cast<bool>(completionProvider_),
+                            readOnly_ ? ro : std::string("pas ici")));
+        {
+            PopupMenu::Item wrap = add("Entourer de", {}, {}, !readOnly_, ro);
+            if (!readOnly_)
+                for (std::size_t k = 0; k < std::size(kWraps); ++k)
+                    wrap.children.push_back(add(std::string(kWraps[k].label), "entourer:" + std::to_string(k), {}));
+            items.push_back(std::move(wrap));
+        }
+        items.push_back(add("Commenter les lignes", "commenter", keyOf("commenter"), !readOnly_, ro));
+        items.push_back(add("Mettre en forme le document", "formaterDocument", keyOf("formaterDocument"), !readOnly_, ro));
+    }
+    menu_->setItems(std::move(items));
+    menu_->setBounds(bounds());
+    gfx::Size surface = surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = { bounds().right() + 400.f, bounds().bottom() + 400.f };
+    if (fromKeyboard) menu_->openFromKeyboard(at, surface);
+    else menu_->openAt(at, surface);
+}
+
+void MultiLineText::runMenuEntry(int id) {
+    if (id < 0 || static_cast<std::size_t>(id) >= menuCommands_.size()) return;
+    const std::string command = menuCommands_[static_cast<std::size_t>(id)];
+    if (command.empty()) return;
+    grabFocus();
+    if (command == "coller") {
+        if (commandKeys_) (void)pasteText();
+        else if (!readOnly_) {
+            auto paste = clipboardText();
+            std::erase(paste, '\r');
+            if (!paste.empty()) insertText(paste);
+        }
+    } else if (command == "copierTexte") {
+        copySelection();
+    } else if (command == "couperTexte") {
+        if (!readOnly_ && hasSelection()) {
+            copySelection();
+            deleteSelection();
+        }
+    } else if (command == "aide") {
+        (void)requestHost("aide");
+    } else if (command.rfind("entourer:", 0) == 0) {
+        if (!readOnly_) {
+            pickKind_ = 1;
+            applyPicked(static_cast<std::size_t>(std::stoul(command.substr(9))));
+        }
+    } else {
+        (void)runCommand(command);
+    }
+    invalidate();
+}
+
 }   // namespace ui
