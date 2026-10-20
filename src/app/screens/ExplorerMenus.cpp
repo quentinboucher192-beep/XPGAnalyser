@@ -104,6 +104,14 @@ std::string clipped(std::string text, std::size_t max) {
     return text.substr(0, cut) + kDots;
 }
 
+// 1.12.18 (planche 19) : l'en-tete nomme le noeud - son nom seul, sans la signature d'une fonction,
+// la taille d'une vue ni un commentaire ("Moyenne_Pression(A : REAL...) : REAL // ..." : Moyenne_Pression).
+std::string headName(std::string text) {
+    for (const char* cut : {"(", " [", " //"})
+        if (const auto at = text.find(cut); at != std::string::npos && at > 0) text.erase(at);
+    return text;
+}
+
 // 1.12.18 (planche 19) : ce qu'est un noeud, au singulier et au pluriel - l'en-tete du menu
 // ("Moyenne    fonction IHM", "3 variables IHM").
 struct KindWords {
@@ -817,13 +825,13 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
     // =====================================================================================
     const auto picked = selectionNodes();
     if (treeModel_) {
-        std::string label = treeModel_->text(node), right;
+        std::string label = headName(treeModel_->text(node)), right;
         if (picked.size() > 1) {
             bool same = true;
             for (const auto n : picked) same = same && ProjectTreeModel::kindOf(n) == kind;
             const auto words = kindWords(kind);
             label = std::to_string(picked.size()) + " " + (same && *words.many ? std::string(words.many) : std::string("\xC3\xA9l\xC3\xA9ments"));
-            for (const auto n : picked) right += (right.empty() ? std::string{} : std::string(", ")) + treeModel_->text(n);
+            for (const auto n : picked) right += (right.empty() ? std::string{} : std::string(", ")) + headName(treeModel_->text(n));
         } else if (shortcutTo != ui::kInvalidNode) {
             right = ProjectTreeModel::kindOf(clicked) == NK::PinItem ? "dans \xC3\x89pingl\xC3\xA9s" : "dans R\xC3\xA9" "cents";
         } else if (kind == NK::Root) {
