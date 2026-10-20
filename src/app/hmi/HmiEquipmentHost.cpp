@@ -1,6 +1,7 @@
 // app/hmi/HmiEquipmentHost.cpp - les equipements du reseau : liaisons, simules,
 // pings, ports du PC (lot 15).
 #include "HmiEquipmentHost.hpp"
+#include "../../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet
 
 #include "../../hmi/HmiEquipment.hpp"
@@ -1192,10 +1193,7 @@ bool EquipmentHost::simSlaveCommand(const hmi::Project& p, const hmi::SimSlaveCo
         if (why) *why = std::move(m);
         return false;
     };
-    const auto truth = [](const std::string& v) {
-        std::string l = upperOf(v);
-        return l == "1" || l == "TRUE" || l == "OUI" || l == "VRAI" || l == "ON";
-    };
+    const auto truth = [](const std::string& v) { return sim::trueWord(v); };   // 1.12.19 : les memes mots partout
     namespace tw = hmi::twin;
     // Tous les esclaves : animer, arreter, deforcer.
     if (c.equipment.empty() && (c.what == "tout_animer" || c.what == "tout_arreter" || c.what == "deforcer_tout")) {

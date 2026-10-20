@@ -508,6 +508,9 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(simperf_test tests/simperf_test.cpp src/app/SimCenterOverview.cpp src/app/SimCenterPerf.cpp
                    src/app/SimStatus.cpp src/app/SimJournal.cpp)
     xpg_target_link_libraries(simperf_test PRIVATE xpg_hmi xpg_ui)
+    # ---- 1.12.19 : la regle des cases (une lecture des valeurs tapees, les cases, les tableaux, les fenetres) ----
+    xpg_add_test_executable(cellrule_test tests/cellrule_test.cpp)
+    xpg_target_link_libraries(cellrule_test PRIVATE xpg_hmi xpg_ui)
     # ---- Lot API 8 : glisser n'importe quel fichier (le plan : le genre, la case par
     # defaut, un classeur lu par son contenu, les macros de libs/ qui le lisent) - sans ecran ----
     xpg_add_test_executable(dropfiles_test tests/dropfiles_test.cpp src/app/DropFilesPlan.cpp)
@@ -700,6 +703,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME themefile    COMMAND themefile_test)                   # ---- Lot API 8 : themes ----
     xpg_add_test(NAME simstatus    COMMAND simstatus_test)                   # ---- Lot API 8 : Centre de simulation ----
     xpg_add_test(NAME simperf      COMMAND simperf_test)                     # 1.12.17 : performances dans le temps, lenteurs
+    xpg_add_test(NAME cellrule     COMMAND cellrule_test)                    # 1.12.19 : la regle des cases
     xpg_add_test(NAME statusstrip  COMMAND statusstrip_test)                 # ---- Lot API 8 : le bandeau bas ----
     xpg_add_test(NAME simdebug     COMMAND simdebug_test ${XPG_FIXTURE})     # ---- Lot API 8 : le moteur de simulation ----
     xpg_add_test(NAME dropfiles    COMMAND dropfiles_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # ---- Lot API 8 : glisser n'importe quel fichier ----

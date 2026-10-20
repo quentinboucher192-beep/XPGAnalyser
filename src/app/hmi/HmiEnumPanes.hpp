@@ -59,7 +59,7 @@ struct EnumUse {
 // enum + to_string / from_string), 2 C++ (enum class + to_string / from_string).
 [[nodiscard]] std::string enumDeclaration(std::string_view name, const std::vector<hmi::HmiEnumValue>&, int lang);
 
-// Les premieres valeurs tapees, une par ligne : Nom [= valeur] ['texte affiche']
+// Les premieres valeurs tapees, une par ligne : Nom [= ou := valeur] [texte affiche]
 // (texte entre ' ou " ; sans valeur : la suivante de la plus grande).
 [[nodiscard]] std::vector<hmi::HmiEnumValue> parseEnumLines(std::string_view text);
 

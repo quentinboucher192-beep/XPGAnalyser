@@ -1,6 +1,7 @@
 // app/hmi/HmiVariablePanes.cpp - les variables IHM (dossiers, structures, tableaux,
 // liaison) et les types IHM (lot 16).
 #include "HmiVariablePanes.hpp"
+#include "../../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "../../hmi/HmiDesign.hpp"   // 1.12.18 : Voir les usages (la recherche du projet)
 #include "../../hmi/HmiAddressPlan.hpp"   // 1.12.18 : l'adresse dans toutes les cases (une formule de i)
 #include "../../ui/Commands.hpp"   // 1.12.18 : le menu des variables
@@ -10,6 +11,7 @@
 #include "../RenameDialog.hpp"            // lot 7 : requestRename (en ligne : rien de plus a lier)
 #include "../../hmi/HmiEquipment.hpp"
 #include "../../hmi/HmiExpr.hpp"
+#include "../../hmi/HmiSymbols.hpp"     // 1.12.19 : hmi::cellValue (la regle des cases)
 #include "../../hmi/HmiEnums.hpp"       // 1.10 (chantier E)
 #include "../../hmi/HmiOperators.hpp"   // 1.10 (chantier S2)
 #include "HmiOperatorPanes.hpp"           // 1.10 (chantier S2)
@@ -176,11 +178,12 @@ bool yesNo(std::string_view text, bool& out) {
     for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     while (!u.empty() && std::isspace(static_cast<unsigned char>(u.back()))) u.pop_back();
     while (!u.empty() && std::isspace(static_cast<unsigned char>(u.front()))) u.erase(u.begin());
-    if (u == "OUI" || u == "VRAI" || u == "TRUE" || u == "1" || u == "X" || u == "O" || u == "YES" || u.rfind("OUI (", 0) == 0) {
+    // 1.12.19 : les mots d'un booleen, les memes partout ; et ce qu'un tableur montre (X, O, N, -, OUI (...)).
+    if (sim::trueWord(u) || u == "X" || u == "O" || u.rfind("OUI (", 0) == 0) {
         out = true;
         return true;
     }
-    if (u == "NON" || u == "FAUX" || u == "FALSE" || u == "0" || u == "N" || u == "NO" || u.empty() || u == "-" || u == "\xE2\x80\x94") {
+    if (sim::falseWord(u) || u == "N" || u.empty() || u == "-" || u == "\xE2\x80\x94") {
         out = false;
         return true;
     }
@@ -223,6 +226,11 @@ bool askTypeIn(const hmi::DocumentPtr& doc, std::string field, std::string curre
     });
     return true;
 }
+
+// 1.12.19 (la regle des cases) : la valeur initiale tapee se lit comme toute case (hmi::typedInitial) :
+// 2,5 -> 2.5, VRAI -> TRUE, 5s -> T#5s, Azote -> 'Azote' pour un STRING, =formule. Avant : VRAI passait
+// pour un nom (le moteur l'ecrivait illisible au demarrage), 2,5 et 5s etaient refuses.
+using hmi::typedInitial;
 
 bool validInitial(const hmi::Project& p, const std::string& type, const std::string& initial, std::string* why) {
     if (trimmed(initial).empty()) return true;
@@ -1828,8 +1836,8 @@ bool HmiVariablesPane::setType(Id id, const std::string& raw, std::string* why) 
 bool HmiVariablesPane::setInitial(Id id, const std::string& raw, std::string* why) {
     const auto* v = doc_->project.variableById(id);
     if (!v) return fail(why, "variable introuvable");
-    std::string initial = trimmed(raw);
-    if (!validInitial(doc_->project, v->type, initial, why)) return false;
+    std::string initial = raw;
+    if (!typedInitial(doc_->project, v->type, initial, why) || !validInitial(doc_->project, v->type, initial, why)) return false;
     // 1.10 (chantier U) : une enumeration garde le nom de la valeur (<< Auto (1) >>, T_MODE#Auto, 1 -> Auto).
     if (const auto* e = hmi::findEnumeration(doc_->project, v->type); e && !initial.empty()) {
         std::int64_t n = 0;
@@ -3807,8 +3815,10 @@ bool HmiTypesPane::addMember(Id id, const std::string& raw, const std::string& t
     }, why);
 }
 
-bool HmiTypesPane::setMember(Id id, std::size_t index, const hmi::TypeMember& m, std::string* why) {
-    if (!hmi::isIdentifier(m.name)) return fail(why, "nom de membre invalide : lettres, chiffres et _");
+bool HmiTypesPane::setMember(Id id, std::size_t index, const hmi::TypeMember& typed, std::string* why) {
+    if (!hmi::isIdentifier(typed.name)) return fail(why, "nom de membre invalide : lettres, chiffres et _");
+    hmi::TypeMember m = typed;
+    if (!typedInitial(doc_->project, m.type, m.initial, why)) return false;    // 1.12.19 : la regle des cases
     if (!m.initial.empty()) {
         if (ty::isRich(m.type)) {
             // 1.12.4 : un membre objet - un litteral que le moteur range dans son type ([1, 2], ['a' := 1]).
@@ -4139,7 +4149,7 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
         if (hasInitial) m.initial = initial;
         if (hasDescription) m.description = description;
         std::string why;
-        if (hasInitial && !validInitial(trial, m.type, m.initial, &why)) {
+        if (hasInitial && (!typedInitial(trial, m.type, m.initial, &why) || !validInitial(trial, m.type, m.initial, &why))) {
             plan.refused.push_back({line, name, why});
             continue;
         }

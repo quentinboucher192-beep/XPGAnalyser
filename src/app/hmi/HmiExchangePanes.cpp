@@ -1,5 +1,6 @@
 // IHM > Configuration > Historiques, et IHM > Exporter / Importer.
 #include "HmiSupervisionPanes.hpp"
+#include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture commune d'un entier
 #include "../ExportTarget.hpp"
 #include "HmiAssist.hpp"
 #include "HmiImages.hpp"                   // lot 13 : hmiTextMeasure
@@ -362,7 +363,9 @@ bool HmiHistoryPane::setSetting(const std::string& field, const std::string& raw
         }
         s.archived = list;
     } else if (field == "max" || field == "conservation" || field == "echantillonnage") {
-        if (!hmi::parseNumber(value, n)) return fail(field + " : un nombre");
+        long long whole = 0;     // 1.12.19 : un entier, lu comme partout (12.7 refuse, plus tronque)
+        if (!sim::readInteger(value, whole)) return fail(field + " : un nombre entier");
+        n = static_cast<double>(whole);
         if (field == "max") {
             if (n < 10 || n > 1000000) return fail("entr\xC3\xA9" "es par liste : de 10 \xC3\xA0 1 000 000");
             s.maxEntries = static_cast<int>(n);

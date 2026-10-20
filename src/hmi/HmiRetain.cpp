@@ -2,6 +2,7 @@
 //  hmi/HmiRetain.cpp - 1.11.16 : la remanence d'exploitation (voir le .hpp)
 // =============================================================================
 #include "HmiRetain.hpp"
+#include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 
 #include "HmiEnums.hpp"
 #include "HmiHistory.hpp"
@@ -453,8 +454,9 @@ bool fromCsv(std::string_view text, Store& out, std::string* why) {
             if (!value.empty() && value.front() == '+') value.erase(value.begin());
         } else if (type == sim::Type::Bool) {
             const std::string b = lowerAscii(value);
-            if (b == "true" || b == "vrai" || b == "oui" || b == "1" || b == "x") value = "TRUE";
-            else if (b == "false" || b == "faux" || b == "non" || b == "0" || b.empty()) value = "FALSE";
+            // 1.12.19 : les memes mots partout, et la croix d'un tableur.
+            if (sim::trueWord(b) || b == "x") value = "TRUE";
+            else if (sim::falseWord(b) || b.empty()) value = "FALSE";
         } else if (type == sim::Type::String) {
             if (value.size() >= 2 && value[0] == '\'' && (value[1] == '=' || value[1] == '+' || value[1] == '-' || value[1] == '@')) value.erase(value.begin());
         }

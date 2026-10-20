@@ -20,6 +20,7 @@
 #include "../../hmi/HmiTypes.hpp"
 #include "../../ui/widgets/ExprField.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6)
+#include "../../sim/ValueText.hpp"         // 1.12.19 : les bornes d'un entier
 
 #include <algorithm>
 #include <cctype>
@@ -550,12 +551,11 @@ Result classify(const Env& env, std::string_view text, bool fx, std::string_view
                     d.fixes.push_back({hmi::enumLiteral(*en, v), v.name, false, {}});
                 }
             } else if (isIntegerType(e)) {
-                const auto bound = why.rfind(".."), open = why.rfind('(');
+                // 1.12.19 : la borne la plus proche (le message dit « 0 à 65 535 », avec des espaces fines).
+                long long lo = 0, hi = 0;
                 double n = 0;
-                if (hmi::parseNumber(clean, n) && bound != std::string::npos && open != std::string::npos && open < bound) {
-                    const std::string lo = why.substr(open + 1, bound - open - 1);
-                    const std::string hi = why.substr(bound + 2, why.find(')', bound) - bound - 2);
-                    const std::string b = n < 0 && !lo.empty() ? lo : hi;
+                if (sim::readDecimal(clean, n) && sim::integerBounds(sim::typeFromName(e), lo, hi) && (n < lo || n > hi)) {
+                    const std::string b = std::to_string(n < 0 ? lo : hi);
                     d.fixes.push_back({"Ramener \xC3\xA0 " + b, b, false, {}});
                 }
             } else if (hmi::isAggregateType(env.project, expected)) {

@@ -17,6 +17,7 @@
 //     qui la couvre - l'entree de MAST qui l'ecrit en premier dans le cycle.
 // =============================================================================
 #include "SimulationPane.hpp"
+#include "../sim/ValueText.hpp"   // 1.12.19 : la lecture d'une valeur tapee, partout la meme
 
 #include "ApiListKit.hpp"
 #include "ApiPanes.hpp"
@@ -270,192 +271,14 @@ std::uint32_t lineInMessage(std::string_view m) {
 }
 
 // ---------------------------------------------------------------- forcer ----
-// Les bornes d'un entier : on dit « hors des bornes » plutot que de laisser la
-// valeur se replier sans rien dire (40000 dans un INT deviendrait -25536).
-bool integerBounds(sim::Type t, long long& lo, long long& hi) {
-    switch (t) {
-        case sim::Type::Byte:  lo = 0; hi = 255; return true;
-        case sim::Type::Word:
-        case sim::Type::UInt:  lo = 0; hi = 65535; return true;
-        case sim::Type::Int:   lo = -32768; hi = 32767; return true;
-        case sim::Type::DInt:  lo = -2147483648LL; hi = 2147483647LL; return true;
-        case sim::Type::DWord:
-        case sim::Type::UDInt: lo = 0; hi = 4294967295LL; return true;
-        // 1.12.5 (D16) : 64 bits.
-        case sim::Type::LInt:  lo = std::numeric_limits<long long>::min(); hi = std::numeric_limits<long long>::max(); return true;
-        case sim::Type::ULInt:
-        case sim::Type::LWord: lo = 0; hi = std::numeric_limits<long long>::max(); return true;
-        default: return false;
-    }
-}
-
-// Sans les separateurs qu'on tape ou qu'on copie : _, espaces, espaces fines.
-std::string compact(std::string_view s) {
-    std::string out;
-    for (std::size_t i = 0; i < s.size(); ++i) {
-        const auto c = uc(s[i]);
-        if (c == '_' || std::isspace(c)) continue;
-        if (c == 0xE2 && i + 2 < s.size() && uc(s[i + 1]) == 0x80 && uc(s[i + 2]) == 0xAF) { i += 2; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && uc(s[i + 1]) == 0xA0) { ++i; continue; }
-        out += s[i];
-    }
-    return out;
-}
-
-// "T#1H2M3S4MS", "TIME#1.5S", "500" (des millisecondes) - en majuscules.
-bool parseDuration(const std::string& up, std::int64_t& ms) {
-    std::string t = up;
-    if (const auto hash = t.find('#'); hash != std::string::npos) t = t.substr(hash + 1);
-    bool negative = false;
-    if (!t.empty() && t.front() == '-') {
-        negative = true;
-        t.erase(0, 1);
-    }
-    if (t.empty()) return false;
-    double total = 0.0;
-    bool any = false;
-    std::size_t i = 0;
-    while (i < t.size()) {
-        std::size_t j = i;
-        while (j < t.size() && (std::isdigit(uc(t[j])) || t[j] == '.' || t[j] == ',')) ++j;
-        if (j == i) return false;
-        std::string number = t.substr(i, j - i);
-        std::replace(number.begin(), number.end(), ',', '.');
-        char* end = nullptr;
-        const double n = std::strtod(number.c_str(), &end);
-        if (!end || *end != '\0') return false;
-        std::size_t k = j;
-        while (k < t.size() && std::isalpha(uc(t[k]))) ++k;
-        const auto unit = t.substr(j, k - j);
-        double factor = 0.0;
-        if (unit.empty()) {
-            if (any || k != t.size()) return false;
-            factor = 1.0;                              // un nombre seul : des millisecondes
-        } else if (unit == "D") factor = 86400000.0;
-        else if (unit == "H") factor = 3600000.0;
-        else if (unit == "M") factor = 60000.0;
-        else if (unit == "S") factor = 1000.0;
-        else if (unit == "MS") factor = 1.0;
-        else return false;
-        total += n * factor;
-        any = true;
-        i = k;
-    }
-    ms = static_cast<std::int64_t>(std::llround(negative ? -total : total));
-    return any;
-}
-
+// 1.12.19 : les bornes d'un entier, la duree, les separateurs : sim/ValueText.
 // Le texte tape pour forcer, lu DANS LE TYPE DE LA CASE : TRUE / FALSE pour un
 // BOOL, 12,5 ou 12.5 pour un REAL, 16#FF, T#1s500ms... Faux : `why` dit pourquoi.
+// 1.12.19 (la regle des cases) : la lecture commune (sim/ValueText), la meme que les
+// tables d'animation, l'IHM et la constante d'une case - OUI, NON, YES, NO aussi ;
+// 12.7 dans un INT est refuse (avant : arrondi a 13 sans le dire).
 bool parseForce(const std::string& typed, sim::Type type, sim::Value& out, std::string& why) {
-    const std::string raw = trim(typed);
-    if (raw.empty()) {
-        why = "rien n'est tap\xC3\xA9";
-        return false;
-    }
-    if (type == sim::Type::String || (type == sim::Type::Unknown && raw.front() == '\'')) {
-        std::string s = raw;
-        if (s.size() >= 2 && s.front() == '\'' && s.back() == '\'') s = s.substr(1, s.size() - 2);
-        out = sim::Value::text(s);
-        return true;
-    }
-    std::string t = compact(raw);
-    std::string up = upper(t);
-    // Un prefixe de type (INT#5, REAL#1.5) n'apprend rien ; une base (16#FF) ou
-    // une duree (T#5S), si.
-    if (const auto hash = up.find('#'); hash != std::string::npos) {
-        const auto head = up.substr(0, hash);
-        if (head != "16" && head != "8" && head != "2" && head != "T" && head != "TIME") {
-            t = t.substr(hash + 1);
-            up = up.substr(hash + 1);
-        }
-    }
-    const bool yes = up == "TRUE" || up == "VRAI" || up == "ON";
-    const bool no = up == "FALSE" || up == "FAUX" || up == "OFF";
-    if (type == sim::Type::Bool) {
-        if (yes || up == "1") { out = sim::Value::boolean(true); return true; }
-        if (no || up == "0") { out = sim::Value::boolean(false); return true; }
-        why = "un BOOL se force \xC3\xA0 TRUE ou FALSE";
-        return false;
-    }
-    if (type == sim::Type::Unknown) {
-        if (yes) { out = sim::Value::boolean(true); return true; }
-        if (no) { out = sim::Value::boolean(false); return true; }
-    }
-    if (type == sim::Type::Time || startsWith(up, "T#") || startsWith(up, "TIME#")) {
-        std::int64_t ms = 0;
-        if (!parseDuration(up, ms)) {
-            why = "une dur\xC3\xA9" "e s'\xC3\xA9" "crit T#500ms, T#1s500ms, T#2m (ou un nombre de millisecondes)";
-            return false;
-        }
-        if (ms < 0 || ms > 4294967295LL) {
-            why = "hors des bornes d'un TIME";
-            return false;
-        }
-        if (type == sim::Type::Time || type == sim::Type::Unknown) out = sim::Value::time(ms);
-        else if (type == sim::Type::Real) out = sim::Value::real(static_cast<double>(ms));
-        else out = sim::Value::integer(type, ms);
-        return true;
-    }
-    // Une base : 16#FF, 2#1010, 8#17 - le motif de bits, replie a la largeur du type.
-    {
-        std::string digits = up;
-        bool negative = false;
-        if (!digits.empty() && (digits.front() == '-' || digits.front() == '+')) {
-            negative = digits.front() == '-';
-            digits.erase(0, 1);
-        }
-        if (const auto hash = digits.find('#'); hash != std::string::npos) {
-            const int base = std::atoi(digits.substr(0, hash).c_str());
-            digits = digits.substr(hash + 1);
-            char* end = nullptr;
-            const unsigned long long n = std::strtoull(digits.c_str(), &end, base);
-            if ((base != 2 && base != 8 && base != 16) || digits.empty() || !end || *end != '\0') {
-                why = "\xC2\xAB " + raw + " \xC2\xBB ne se lit pas (16#FF, 2#1010, 8#17)";
-                return false;
-            }
-            if (type == sim::Type::Real) {
-                out = sim::Value::real(negative ? -static_cast<double>(n) : static_cast<double>(n));
-                return true;
-            }
-            const auto target = type == sim::Type::Unknown ? sim::Type::DInt : type;
-            const int bits = sim::bitWidth(target);
-            const unsigned long long max = bits >= 64 ? ~0ULL : (1ULL << bits) - 1ULL;
-            if (!sim::isInteger(target) || n > max) {
-                why = "trop grand pour un " + std::string(sim::toString(target));
-                return false;
-            }
-            const auto value = static_cast<long long>(n);
-            out = sim::Value::integer(target, negative ? -value : value);
-            return true;
-        }
-    }
-    // Un nombre : la virgule francaise comme le point.
-    std::string number = t;
-    std::replace(number.begin(), number.end(), ',', '.');
-    char* end = nullptr;
-    const double d = std::strtod(number.c_str(), &end);
-    if (number.empty() || !end || *end != '\0' || !std::isfinite(d)) {
-        why = "\xC2\xAB " + raw + " \xC2\xBB ne se lit pas comme un nombre";
-        return false;
-    }
-    if (type == sim::Type::Real || (type == sim::Type::Unknown && number.find_first_of(".eE") != std::string::npos)) {
-        out = sim::Value::real(d);
-        return true;
-    }
-    const auto target = type == sim::Type::Unknown ? sim::Type::DInt : type;
-    if (!sim::isInteger(target)) {
-        why = "ce type ne se force pas ici";
-        return false;
-    }
-    const double r = std::round(d);
-    long long lo = 0, hi = 0;
-    if (integerBounds(target, lo, hi) && (r < static_cast<double>(lo) || r > static_cast<double>(hi))) {
-        why = "hors des bornes d'un " + std::string(sim::toString(target)) + " (" + thousands(lo) + " \xC3\xA0 " + thousands(hi) + ")";
-        return false;
-    }
-    out = sim::Value::integer(target, static_cast<std::int64_t>(r));
-    return true;
+    return sim::readTyped(typed, type, out, why);
 }
 
 // ------------------------------------------------------------- « ecrite par » ----
@@ -3006,7 +2829,7 @@ std::string forceHint(sim::Type t) {
         case sim::Type::String: return "un texte, entre apostrophes ou non";
         default: {
             long long lo = 0, hi = 0;
-            if (integerBounds(t, lo, hi)) return "un entier de " + thousands(lo) + " \xC3\xA0 " + thousands(hi) + " (16#FF, 2#1010 aussi)";
+            if (sim::integerBounds(t, lo, hi)) return "un entier de " + thousands(lo) + " \xC3\xA0 " + thousands(hi) + " (16#FF, 2#1010 aussi)";
             return "TRUE, FALSE, un nombre, une dur\xC3\xA9" "e (T#500ms)";
         }
     }

@@ -1,4 +1,5 @@
 #include "HmiActionKinds.hpp"
+#include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 
 #include "HmiExpr.hpp"
 #include "HmiRuntime.hpp"     // parseArguments, isVariablePath
@@ -308,8 +309,8 @@ MathsTest testMaths(const Params& refs, const std::vector<std::string>& values, 
         std::string dotted = v;
         std::replace(dotted.begin(), dotted.end(), ',', '.');
         if (parseNumber(dotted, d)) v = dotted;
-        else if (const std::string u = upper(v); u == "VRAI") v = "TRUE";
-        else if (u == "FAUX") v = "FALSE";
+        else if (sim::trueWord(v)) v = "TRUE";               // 1.12.19 : les memes mots partout (OUI, ON...)
+        else if (sim::falseWord(v)) v = "FALSE";
         literal.push_back("(" + v + ")");
     }
     t.expression = substitute(trimmed(formula), names, literal);

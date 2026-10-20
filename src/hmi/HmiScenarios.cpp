@@ -1,4 +1,5 @@
 #include "HmiScenarios.hpp"
+#include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "HmiCheck.hpp"
@@ -146,8 +147,8 @@ bool matches(const sim::Value& v, std::string_view expectedRaw) {
     const std::string e = folded(expected);
     if (v.type() == sim::Type::Bool) {
         const bool truthy = v.isTruthy();
-        if (e == "true" || e == "vrai" || e == "1") return truthy;
-        if (e == "false" || e == "faux" || e == "0") return !truthy;
+        if (sim::trueWord(e)) return truthy;                 // 1.12.19 : les memes mots partout
+        if (sim::falseWord(e)) return !truthy;
     }
     double a = 0, b = 0;
     if (parseNumber(actual, a) && parseNumber(expected, b)) return std::fabs(a - b) <= 1e-6 * std::max(1.0, std::fabs(b));

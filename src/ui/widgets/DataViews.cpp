@@ -12,6 +12,7 @@
 #include "ExprMarkers.hpp"       // 1.10.3 : les reperes ($Vanne$) d'une case se voient
 #include "TableFilters.hpp"     // lot recherche : la fenetre du filtre d'une colonne
 #include "TrailSymbols.hpp"     // 1.11 (chantier T3, C4) : les symboles traces au trait
+#include "../../sim/ValueText.hpp"  // 1.12.19 : les mots d'un booleen, partout les memes
 
 #include <algorithm>
 #include <cctype>
@@ -2609,10 +2610,8 @@ protected:
     }
 };
 
-bool isTrueText(std::string_view v) {
-    return v == "TRUE" || v == "true" || v == "True" || v == "1" || v == "VRAI" || v == "Vrai" || v == "vrai"
-        || v == "OUI" || v == "Oui" || v == "oui";
-}
+// 1.12.19 : les mots d'un booleen, les memes partout (sim/ValueText).
+bool isTrueText(std::string_view v) { return sim::trueWord(v); }
 
 // "#RRGGBB" ou "#RRGGBBAA" -> couleur, pour la pastille des cases Color.
 bool hexColor(std::string_view v, gfx::Color& out) {

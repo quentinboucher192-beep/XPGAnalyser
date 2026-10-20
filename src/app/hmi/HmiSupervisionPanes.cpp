@@ -7,6 +7,8 @@
 
 #include "../../hmi/HmiCrypto.hpp"
 #include "../../hmi/HmiExpr.hpp"
+#include "../../hmi/HmiSymbols.hpp"      // 1.12.19 : hmi::cellValue (la regle des cases)
+#include "../../hmi/HmiTypes.hpp"        // 1.12.19 : le type de la variable ecrite
 #include "../../hmi/HmiHistory.hpp"
 #include "../../hmi/HmiRecipes.hpp"
 #include "../../hmi/HmiRenameRefs.hpp"    // lot API 8 : finitions (renommer une alarme)
@@ -1484,6 +1486,13 @@ bool HmiRecipesPane::setRecordValue(Id id, Id record, int field, const std::stri
     const auto& f = r->fields[static_cast<std::size_t>(field)];
     std::string value = trimmed(raw);
     if (!value.empty()) {
+        // 1.12.19 (la regle des cases) : lue comme toute case de valeur, dans le type de la variable
+        // ecrite (2,5 -> 2.5, VRAI -> TRUE, Azote -> 'Azote' pour un STRING, =formule). Avant : du ST
+        // seulement (2,5 illisible, Azote un nom inconnu, VRAI un nom).
+        const std::string type = f.variable.empty() ? std::string{} : hmi::types::typeOfPath(doc_->project, f.variable);
+        const auto cell = hmi::cellValue(&doc_->project, type, value);
+        if (!cell.ok()) return fail(f.name + " : " + cell.why);
+        value = cell.text;
         const auto e = hmi::Expression::compile(value);
         if (!e.valid()) return fail(f.name + " : \xC2\xAB " + value + " \xC2\xBB illisible (" + e.error() + ")");
         double n = 0, lo = 0, hi = 0;

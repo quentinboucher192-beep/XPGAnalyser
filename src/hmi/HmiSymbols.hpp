@@ -102,6 +102,31 @@ using SymbolArguments = std::vector<std::pair<std::string, std::string>>;
 // Ce que l'inspecteur montre d'une constante : 'Voiture' -> Voiture, 'L$'eau' -> L'eau ;
 // le reste tel quel.
 [[nodiscard]] std::string shownLiteral(std::string_view text);
+// 1.12.19 (la regle des cases) : une valeur d'une ENUMERATION IHM tapee par son nom (Auto,
+// T_MODE#Auto) -> son nombre ("1"), pour un forcage ; un autre type, ou un nom inconnu : tel quel.
+[[nodiscard]] std::string enumConstantNumber(const Project& project, std::string_view type, std::string_view text);
+
+// 1.12.19 (LA REGLE DES CASES) : CE QUE DEVIENT LE TEXTE TAPE DANS UNE CASE DE VALEUR de type
+// `type` - la meme lecture partout (une grille de declarations, une valeur initiale, une valeur
+// par defaut, un membre, une recette, Essayer) :
+//   =expression        la formule, sans le = (formula) ;
+//   un nom connu, seul  le nom : Niveau vaut =Niveau (formula) ; un calcul sur des noms connus aussi ;
+//   ( ou [              une structure, un tableau ecrits (tels quels, la case les verifie) ;
+//   le reste            une valeur fixe lue dans le type (argumentLiteral) : 2,5 -> 2.5, VRAI -> TRUE,
+//                       5s -> T#5s, Voiture -> 'Voiture', Auto -> T_MODE#Auto ; illisible : `why`.
+// `known` : des noms connus en plus de ceux du projet (les declarations voisines d'une grille).
+struct CellText {
+    std::string text;       // la forme gardee (du ST) ; vide : rien de tape
+    bool formula = false;   // une formule (ou un nom) : pas une valeur fixe
+    std::string why;        // vide : lu ; sinon pourquoi, en une phrase
+    [[nodiscard]] bool ok() const noexcept { return why.empty(); }
+};
+[[nodiscard]] CellText cellValue(const Project*, std::string_view type, std::string_view typed,
+                                 const std::function<bool(std::string_view)>& known = {});
+// La valeur initiale tapee d'une variable IHM ou d'un membre de type `type`, remise dans `text` : une
+// valeur simple lue comme toute case (cellValue) ; une structure, un tableau, un objet : leur litteral
+// tel quel, le = de tete retire (leur editeur le verifie). Faux : illisible, `why` dit pourquoi.
+bool typedInitial(const Project& project, std::string_view type, std::string& text, std::string* why = nullptr);
 // Le type est-il un texte (STRING, STRING[20], WSTRING) ? un tableau ou une structure
 // (ce qui se donne par une variable, jamais en constante) ?
 [[nodiscard]] bool isTextType(std::string_view type) noexcept;

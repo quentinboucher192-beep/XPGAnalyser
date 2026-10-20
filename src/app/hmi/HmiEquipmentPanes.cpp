@@ -2,6 +2,7 @@
 // equipements, les variables liees, le reseau du PC, le scanner IP ; la mise
 // en page du volet.
 #include "HmiCommPanes.hpp"
+#include "../../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, partout les memes
 #include "../../core/Edition.hpp"          // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet
 #include "../../hmi/HmiTypes.hpp"
 
@@ -626,9 +627,8 @@ bool HmiCommPane::setEquipmentField(const std::string& name, const std::string& 
     std::string key = field;
     if (key.rfind("esclave_", 0) == 0 && key != "esclave_simule") key = "jumeau_" + key.substr(8);
     const auto number = [&](long long lo, long long hi, int& out, const char* label) {
-        char* end = nullptr;
-        const long long n = std::strtoll(v.c_str(), &end, 10);
-        if (v.empty() || (end && *end) || n < lo || n > hi) return fail(std::string(label) + " : un nombre de " + std::to_string(lo) + " \xC3\xA0 " + std::to_string(hi));
+        long long n = 0;     // 1.12.19 : la lecture commune (1 000 ; 12.7 refuse)
+        if (!sim::readInteger(v, n) || n < lo || n > hi) return fail(std::string(label) + " : un nombre de " + std::to_string(lo) + " \xC3\xA0 " + std::to_string(hi));
         out = static_cast<int>(n);
         return true;
     };
@@ -708,8 +708,8 @@ bool HmiCommPane::setEquipmentField(const std::string& name, const std::string& 
         label = name + " : basculer apr\xC3\xA8s " + std::to_string(next.fallbackAfterS) + " s";
     } else if (key == "bascule_retour") {
         const std::string l = lower(v);
-        if (l.rfind("non", 0) == 0 || l == "false" || l == "0" || l == "faux" || l.find("jusqu") != std::string::npos) next.fallbackReturn = false;
-        else if (l.find("d\xC3\xA8s") != std::string::npos || l.rfind("des", 0) == 0 || l == "oui" || l == "true" || l == "1" || l == "vrai"
+        if (l.rfind("non", 0) == 0 || sim::falseWord(l) || l.find("jusqu") != std::string::npos) next.fallbackReturn = false;
+        else if (l.find("d\xC3\xA8s") != std::string::npos || l.rfind("des", 0) == 0 || sim::trueWord(l)
                  || l.find("r\xC3\xA9pond") != std::string::npos)
             next.fallbackReturn = true;
         else return fail("Revenir au vrai \xC2\xAB " + v + " \xC2\xBB : d\xC3\xA8s qu'il r\xC3\xA9pond, ou non (l'esclave jusqu'au red\xC3\xA9marrage)");
@@ -1180,9 +1180,8 @@ bool HmiCommPane::setBoundField(const std::string& variable, const std::string& 
     hmi::Variable next = *cur;
     const std::string v = trimmed(raw);
     const auto real = [&](double& out, const char* label) {
-        char* end = nullptr;
-        const double d = std::strtod(v.c_str(), &end);
-        if (v.empty() || (end && *end) || !std::isfinite(d)) return fail(std::string(label) + " : un nombre");
+        double d = 0;        // 1.12.19 : la lecture commune (12,5 ; 1 000)
+        if (!sim::readDecimal(v, d) || !std::isfinite(d)) return fail(std::string(label) + " : un nombre");
         out = d;
         return true;
     };
@@ -1939,9 +1938,9 @@ bool HmiCommPane::setScanField(const std::string& key, const std::string& raw, s
         if (!hmi::ipscan::parsePorts(v, ports, &reason)) return fail("ports : " + reason);
         scanOptions_.ports = ports;
     } else if (key == "delai") {
-        const int n = std::atoi(v.c_str());
-        if (n < 50 || n > 5000) return fail("d\xC3\xA9lai : de 50 \xC3\xA0 5000 ms");
-        scanOptions_.timeoutMs = n;
+        long long n = 0;
+        if (!sim::readInteger(v, n) || n < 50 || n > 5000) return fail("d\xC3\xA9lai : de 50 \xC3\xA0 5000 ms");
+        scanOptions_.timeoutMs = static_cast<int>(n);
     } else if (key == "noms") {
         scanOptions_.names = yes(v);
     } else if (key == "modbus") {

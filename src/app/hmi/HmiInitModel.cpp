@@ -4,6 +4,8 @@
 #include "HmiInitModel.hpp"
 
 #include "../../hmi/HmiEnums.hpp"
+#include "../../hmi/HmiRuntime.hpp"     // 1.12.19 : isVariablePath
+#include "../../hmi/HmiSymbols.hpp"     // 1.12.19 : hmi::cellValue (la regle des cases)
 #include "../../hmi/HmiNatives.hpp"
 #include "../../hmi/HmiTypeForms.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"
@@ -108,16 +110,24 @@ std::string quoted(const std::string& t) {
     return out + "'";
 }
 
-// La valeur d'une case telle que le litteral l'ecrit : un texte entre apostrophes (l'editeur le
-// montre sans), le reste tel quel ; vide : rien.
+// La valeur d'une case telle que le litteral l'ecrit. 1.12.19 (la regle des cases) : lue comme toute
+// case de valeur (hmi::cellValue) - un texte sans apostrophes (Azote -> 'Azote' ; 'Azote' tape reste
+// 'Azote', avant '$'Azote$''), 2,5 -> 2.5, VRAI -> TRUE, 5s -> T#5s, =formule ; illisible : telle quelle
+// (problems() dit pourquoi) ; vide : rien.
 std::string written(std::string_view type, const std::string& cell) {
     const std::string t = trim(cell);
     if (t.empty()) return {};
-    return textType(type) ? quoted(t) : t;
+    const auto c = hmi::cellValue(nullptr, type, t);
+    return c.ok() ? c.text : t;
 }
-// Et l'inverse : ce que la case montre d'une valeur ecrite.
+// Et l'inverse : ce que la case montre d'une valeur ecrite - une valeur fixe telle qu'on la tape (un
+// texte sans apostrophes), une formule avec son = (un nom dans une case de texte aussi : sans le =, il
+// se relirait comme un texte).
 std::string shown(std::string_view type, const std::string& value) {
-    return textType(type) ? unquoted(value) : trim(value);
+    const std::string t = trim(value);
+    if (t.empty() || hmi::isLiteralArgument(t)) return textType(type) ? unquoted(t) : t;
+    if (!textType(type) && hmi::isVariablePath(t)) return t;
+    return "=" + t;
 }
 
 std::string memberList(const std::vector<Field>& fields, const std::vector<std::string>& cells, bool all) {
@@ -683,7 +693,13 @@ std::string placeholder(const Raw& r, std::size_t row, std::size_t cell) {
             else zero = s.zero;
     }
     if (zero.empty()) return {};
-    return zero + " (du type)";
+    // 1.12.19 (la regle des cases) : l'invite d'une case vide, partout la meme - « 12 · valeur par defaut ».
+    const std::string field = s.kind == Kind::Struct || s.kind == Kind::Tuple ? (row < s.fields.size() ? s.fields[row].type : std::string{})
+                            : s.structElements ? (cell < s.fields.size() ? s.fields[cell].type : std::string{})
+                            : s.element;
+    std::string z = shown(field, zero);
+    if (z.empty()) z = "vide";
+    return z + " \xC2\xB7 valeur par d\xC3\xA9" "faut";
 }
 
 bool resizable(const Raw& r) noexcept {

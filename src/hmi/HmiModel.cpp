@@ -1,5 +1,6 @@
 #include "HmiModel.hpp"
 #include "HmiKeys.hpp"            // 1.11.23 : les raccourcis
+#include "../sim/ValueText.hpp"  // 1.12.19 : les lecteurs d'une valeur tapee
 
 #include <algorithm>
 #include <cctype>
@@ -140,22 +141,13 @@ std::string formatNumber(double v) {
     return s;
 }
 
-bool parseNumber(std::string_view s, double& out) noexcept {
-    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
-    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);
-    if (s.empty()) return false;
-    std::string tmp(s);
-    for (auto& c : tmp) if (c == ',') c = '.';      // "12,5" tape a la francaise
-    char* end = nullptr;
-    const double v = std::strtod(tmp.c_str(), &end);
-    if (end == tmp.c_str() || *end != '\0') return false;
-    out = v;
-    return true;
-}
+// 1.12.19 (la regle des cases) : la lecture d'un nombre et d'un booleen tapes, partout la meme
+// (sim/ValueText) - "12,5" a la francaise, "1 000" ou "1_000", TRUE VRAI OUI ON YES 1.
+bool parseNumber(std::string_view s, double& out) noexcept { return sim::readDecimal(s, out); }
 
 bool parseBool(std::string_view s, bool fallback) noexcept {
-    if (iequals(s, "TRUE") || iequals(s, "VRAI") || s == "1" || iequals(s, "OUI")) return true;
-    if (iequals(s, "FALSE") || iequals(s, "FAUX") || s == "0" || iequals(s, "NON")) return false;
+    if (sim::trueWord(s)) return true;
+    if (sim::falseWord(s)) return false;
     return fallback;
 }
 

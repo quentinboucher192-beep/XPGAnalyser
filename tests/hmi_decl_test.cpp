@@ -1424,8 +1424,9 @@ void edition() {
         check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "BOOL", &why) && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Vrai", &why)
                   && sd[3].value == "TRUE" && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "faux", &why) && sd[3].value == "FALSE",
               "BOOL : Vrai -> TRUE, faux -> FALSE");
-        check(!de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "1 +* 2", &why) && sd[3].value == "FALSE" && why.find("illisible") != std::string::npos,
-              "une valeur illisible : refusee, la case ne bouge pas (" + why + ")");
+        check(!de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "1 +* 2", &why) && sd[3].value == "FALSE"
+                  && why.find("n'est pas un bool\xC3\xA9" "en") != std::string::npos,
+              "une valeur illisible : refusee, la case ne bouge pas, la raison dit ce qu'attend la case (" + why + ")");
         // Un tableau : une seule valeur remplit toutes ses cases ; 1.12.2 : une liste [..] se lit (le
         // moteur la range case par case) ; une liste illisible est refusee (elle rendrait tout le code
         // illisible a l'execution).
@@ -1490,10 +1491,34 @@ void edition() {
             check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "T_MODE", &why, &note) && sd[3].value.empty()
                       && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "T_MODE#Manu", &why)
                       && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Auto", &why)
+                      && sd[3].value == "T_MODE#Auto"
                       && !de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Arret", &why)
-                      && why.find("Arret n'est pas une valeur de T_MODE (Auto, Manu...)") != std::string::npos,
-                  "une enumeration : T_MODE#Manu, Auto pris ; Arret refuse (" + why + ")");
+                      && why.find("Arret \xC2\xBB n'est pas une valeur de T_MODE (Auto, Manu)") != std::string::npos
+                      && why.find("nom connu") == std::string::npos,
+                  "une enumeration : T_MODE#Manu, Auto pris (T_MODE#Auto, comme dans l'inspecteur) ; Arret refuse (" + why + ")");
             de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "REAL", &why);   // la suite ne connait pas T_MODE
+            // 1.12.19 (LA REGLE DES CASES) : la case Valeur se lit comme toute case de valeur - =formule
+            // (avant : =3 illisible), une valeur fixe tapee telle qu'on la lit, un nom voisin.
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "=3", &why) && sd[3].value == "3"
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "= Max * 2", &why) && sd[3].value == "Max * 2",
+                  "=3 et = Max * 2 : le = de la formule part (" + why + ")");
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "STRING", &why)
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Voiture", &why) && sd[3].value == "'Voiture'"
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "'L$'eau'", &why) && sd[3].value == "'L$'eau'"
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Max", &why) && sd[3].value == "Max",
+                  "STRING : Voiture -> 'Voiture' (avant : un nom, sans controle) ; 'L$'eau' garde ; Max (la constante voisine) reste le nom");
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "TIME", &why)
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "5 s", &why) && sd[3].value == "T#5s"
+                      && de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "250 ms", &why) && sd[3].value == "T#250ms",
+                  "TIME : 5 s -> T#5s, 250 ms -> T#250ms (avant : illisibles)");
+            check(de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "INT", &why)
+                      && !de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "12,7", &why)
+                      && why.find("n'est pas un nombre entier (INT)") != std::string::npos,
+                  "INT : 12,7 refuse, pas arrondi (" + why + ")");
+            check(!de::set(p, script, de::Tab::Variables, 2, de::Column::Value, "Bidule", &why)
+                      && why.find("Bidule n'est pas un nom connu") != std::string::npos,
+                  "INT : Bidule refuse - ni un nombre, ni un nom connu (" + why + ")");
+            de::set(p, script, de::Tab::Variables, 2, de::Column::Type, "REAL", &why);
             p.programs.types.pop_back();
             check(de::valueMisfit(p, "BOOL", "TRUE").empty() && de::valueMisfit(p, "TIME", "T#5s").empty() && !de::valueMisfit(p, "TIME", "5").empty()
                       && de::valueMisfit(p, "LREAL", "2.5").empty() && !de::valueMisfit(p, "INT", "2.5").empty()

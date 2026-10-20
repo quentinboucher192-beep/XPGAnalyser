@@ -3,6 +3,7 @@
 // detection), la carte memoire et son scanner, les jumeaux (esclaves Modbus
 // virtuels) et le reseau simule.
 #include "HmiCommPanes.hpp"
+#include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture d'une valeur tapee, partout la meme
 #include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de « suit l'automate »
 
 #include "HmiCommHost.hpp"
@@ -1437,13 +1438,17 @@ bool HmiCommPane::writeTwin(const std::string& equipment, MemTable table, std::u
     const std::string v = trimmed(raw);
     if (v.empty()) return true;
     std::vector<std::uint16_t> words;
+    // 1.12.19 (la regle des cases) : les memes ecritures partout - les mots d'un booleen, la virgule
+    // ou le point, 16#1F comme 0x1F (avant : 12,5 refuse, 017 lu en octal, OUI ecrit 0 sans rien dire).
+    const std::string lowered = lower(v);
+    const bool hex = lowered.rfind("0x", 0) == 0 || lowered.rfind("16#", 0) == 0;
     if (zn::isBits(table)) {
-        const std::string l = lower(v);
-        words.push_back(l == "1" || l == "true" || l == "vrai" || l == "on" ? 1 : 0);
-    } else if (v.find('.') != std::string::npos || v.find('e') != std::string::npos || v.find('E') != std::string::npos) {
-        char* end = nullptr;
-        const double d = std::strtod(v.c_str(), &end);
-        if (end && *end) return fail("\xC2\xAB " + v + " \xC2\xBB : un nombre (1234, -5, 0x1F, 12.5)");
+        if (sim::trueWord(v)) words.push_back(1);
+        else if (sim::falseWord(v)) words.push_back(0);
+        else return fail("\xC2\xAB " + v + " \xC2\xBB : 0 ou 1 (TRUE, FALSE, VRAI, OUI, ON aussi)");
+    } else if (!hex && v.find_first_of(".,eE") != std::string::npos) {
+        double d = 0;
+        if (!sim::readDecimal(v, d)) return fail("\xC2\xAB " + v + " \xC2\xBB : un nombre (1234, -5, 16#1F, 12,5)");
         const float f = static_cast<float>(d);
         std::uint32_t bitsOf = 0;
         std::memcpy(&bitsOf, &f, sizeof bitsOf);
@@ -1451,9 +1456,17 @@ bool HmiCommPane::writeTwin(const std::string& equipment, MemTable table, std::u
         if (e->wordOrder != "fort") words = {lo, hi};
         else words = {hi, lo};
     } else {
-        char* end = nullptr;
-        const long long n = std::strtoll(v.c_str(), &end, 0);
-        if (end && *end) return fail("\xC2\xAB " + v + " \xC2\xBB : un nombre (1234, -5, 0x1F, 12.5)");
+        long long n = 0;
+        if (hex) {
+            const std::string digits = lowered.substr(lowered.front() == '1' ? 3 : 2);
+            char* end = nullptr;
+            n = std::strtoll(digits.c_str(), &end, 16);
+            if (digits.empty() || (end && *end)) return fail("\xC2\xAB " + v + " \xC2\xBB : un nombre (1234, -5, 16#1F, 12,5)");
+        } else {
+            double whole = 0;
+            if (!sim::readDecimal(v, whole)) return fail("\xC2\xAB " + v + " \xC2\xBB : un nombre (1234, -5, 16#1F, 12,5)");
+            n = static_cast<long long>(whole);
+        }
         if (n < -32768 || n > 65535) return fail(v + " ne tient pas dans un mot (-32768 \xC3\xA0 65535)");
         words.push_back(static_cast<std::uint16_t>(n));
     }
@@ -1461,7 +1474,7 @@ bool HmiCommPane::writeTwin(const std::string& equipment, MemTable table, std::u
         // Lot 18 : une case forcee ne s'ecrit pas (comme pour l'IHM et l'outil Modbus : exception 04).
         refreshMap(false);
         rebuildProperties();
-        return fail(e->twinLabel() + " \xC2\xB7 " + zn::modicon(table, offset) + " est forc\xC3\xA9" "e : \xC3\xA9" "criture refus\xC3\xA9" "e (exception 04, compt\xC3\xA9" "e). D\xC3\xA9" "forcez-la d'abord.");
+        return fail(e->twinLabel() + " \xC2\xB7 " + zn::modicon(table, offset) + " est forc\xC3\xA9" "e : \xC3\xA9" "criture refus\xC3\xA9" "e (exception 04, compt\xC3\xA9" "e). D\xC3\xA9" "force-la d'abord.");
     }
     say(e->twinLabel() + " \xC2\xB7 " + zn::modicon(table, offset) + " = " + v + (words.size() > 1 ? " (REAL, deux mots)" : std::string{}) + ".");
     refreshMap(false);
@@ -1505,9 +1518,8 @@ bool HmiCommPane::setBehavior(const std::string& equipment, const std::string& r
         }
         auto& b = *it;
         const auto number = [&](double& out, const char* label) {
-            char* end = nullptr;
-            const double d = std::strtod(v.c_str(), &end);
-            if (v.empty() || (end && *end) || !std::isfinite(d)) return fail(std::string(label) + " : un nombre");
+            double d = 0;    // 1.12.19 : la lecture commune (12,5 ; 1 000)
+            if (!sim::readDecimal(v, d) || !std::isfinite(d)) return fail(std::string(label) + " : un nombre");
             out = d;
             return true;
         };

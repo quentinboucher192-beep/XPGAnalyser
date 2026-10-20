@@ -1,5 +1,6 @@
 // app/AnimationTablesPane.cpp - les tables d'animation, avec l'IHM (lot API 3).
 #include "AnimationTablesPane.hpp"
+#include "../sim/ValueText.hpp"   // 1.12.19 : la lecture d'une valeur tapee, partout la meme
 #include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API - pas de variable IHM
 
 #include "ApiPanes.hpp"
@@ -129,36 +130,17 @@ ApiInfo apiInfoOf(const domain::Project& p, std::string_view path) {
     return out;
 }
 
-// Un texte tape en valeur, selon le type de la variable quand on le connait.
-std::optional<sim::Value> parseValue(std::string text, const sim::Value* current) {
-    text = trim(std::move(text));
-    if (text.empty()) return std::nullopt;
-    const auto u = upper(text);
-    const auto type = current ? current->type() : sim::Type::Unknown;
-    const bool yes = u == "TRUE" || u == "VRAI" || u == "ON";
-    const bool no = u == "FALSE" || u == "FAUX" || u == "OFF";
-    if (type == sim::Type::Bool) {
-        if (yes || u == "1") return sim::Value::boolean(true);
-        if (no || u == "0") return sim::Value::boolean(false);
+// Un texte tape en valeur, selon le type de la variable quand on le connait. 1.12.19 (la regle
+// des cases) : la lecture commune (sim/ValueText) - avant, T#5s valait 5 ms, OUI etait refuse,
+// 12.7 s'arrondissait et 40000 se repliait en silence dans un INT.
+std::optional<sim::Value> parseValue(const std::string& text, const sim::Value* current, std::string* why = nullptr) {
+    sim::Value v;
+    std::string bad;
+    if (!sim::readTyped(text, current ? current->type() : sim::Type::Unknown, v, bad)) {
+        if (why) *why = bad;
         return std::nullopt;
     }
-    if (yes) return sim::Value::boolean(true);
-    if (no) return sim::Value::boolean(false);
-    if (u.rfind("T#", 0) == 0) return sim::Value::time(std::atoll(text.c_str() + 2));
-    if (type == sim::Type::String || (!text.empty() && text.front() == '\'')) {
-        std::string s = text;
-        if (s.size() >= 2 && s.front() == '\'' && s.back() == '\'') s = s.substr(1, s.size() - 2);
-        return sim::Value::text(s);
-    }
-    std::string num = text;
-    std::replace(num.begin(), num.end(), ',', '.');
-    char* end = nullptr;
-    const double d = std::strtod(num.c_str(), &end);
-    if (!end || *end != '\0') return std::nullopt;
-    if (type == sim::Type::Real || (type == sim::Type::Unknown && num.find('.') != std::string::npos)) return sim::Value::real(d);
-    if (sim::isInteger(type)) return sim::Value::integer(type, static_cast<std::int64_t>(std::llround(d)));
-    if (type == sim::Type::Time) return sim::Value::time(static_cast<std::int64_t>(std::llround(d)));
-    return sim::Value::integer(sim::Type::DInt, static_cast<std::int64_t>(std::llround(d)));
+    return v;
 }
 
 const hmi::Variable* hmiVariable(const hmi::Document* doc, std::string_view name) {
@@ -1035,8 +1017,9 @@ void AnimationTablesPane::writeSelected(bool force) {
                 else if (!force) refused = "tape d'abord la nouvelle valeur (colonne Nouvelle valeur)";
                 continue;
             }
-            const auto v = parseValue(text, has ? &cur : nullptr);
-            if (!v) { refused = "\xC2\xAB " + text + " \xC2\xBB ne se lit pas comme une valeur de " + r.name; continue; }
+            std::string bad;
+            const auto v = parseValue(text, has ? &cur : nullptr, &bad);
+            if (!v) { refused = r.name + " : " + bad; continue; }
             if (force ? rt->force(target, *v) : rt->set(target, *v)) ++done;
             else refused = r.name + " : inconnue de la simulation";
         } else {
@@ -1048,8 +1031,9 @@ void AnimationTablesPane::writeSelected(bool force) {
                 continue;
             }
             if (text.empty()) { refused = "tape d'abord la nouvelle valeur (colonne Nouvelle valeur)"; continue; }
-            const auto v = parseValue(text, hr->variable(r.name));
-            if (!v) { refused = "\xC2\xAB " + text + " \xC2\xBB ne se lit pas comme une valeur de " + r.name; continue; }
+            std::string bad;
+            const auto v = parseValue(text, hr->variable(r.name), &bad);
+            if (!v) { refused = r.name + " : " + bad; continue; }
             if (force) {
                 std::string why;
                 if (hr->forceVariable(r.name, *v, &why)) ++done;

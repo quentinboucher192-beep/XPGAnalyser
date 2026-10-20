@@ -1,5 +1,6 @@
 // hmi/HmiTwin.cpp - le jumeau simule d'un equipement (lot 17).
 #include "HmiTwin.hpp"
+#include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 
 #include "HmiEquipment.hpp"
 #include "HmiTypes.hpp"
@@ -901,10 +902,11 @@ bool parseRaw(const ValueRow& r, const std::string& text, double& out, std::stri
     std::string l = v;
     for (auto& c : l) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     if (r.boolean) {
-        if (l == "1" || l == "true" || l == "vrai" || l == "on") out = 1;
-        else if (l == "0" || l == "false" || l == "faux" || l == "off") out = 0;
+        // 1.12.19 : les mots d'un booleen, les memes partout (OUI, NON, YES, NO aussi).
+        if (sim::trueWord(l)) out = 1;
+        else if (sim::falseWord(l)) out = 0;
         else {
-            if (why) *why = "\xC2\xAB " + text + " \xC2\xBB : 0 ou 1";
+            if (why) *why = "\xC2\xAB " + text + " \xC2\xBB : 0 ou 1 (TRUE, FALSE, VRAI, OUI, ON aussi)";
             return false;
         }
         return true;
@@ -917,6 +919,8 @@ bool parseRaw(const ValueRow& r, const std::string& text, double& out, std::stri
     char* end = nullptr;
     if (l.size() > 2 && l[0] == '0' && l[1] == 'x') {
         d = static_cast<double>(std::strtoll(l.c_str(), &end, 16));
+    } else if (l.size() > 3 && l.rfind("16#", 0) == 0) {          // 1.12.19 : l'ecriture ST aussi (16#1F)
+        d = static_cast<double>(std::strtoll(l.c_str() + 3, &end, 16));
     } else {
         std::replace(v.begin(), v.end(), ',', '.');
         d = std::strtod(v.c_str(), &end);

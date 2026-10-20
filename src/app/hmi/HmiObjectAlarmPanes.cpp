@@ -6,6 +6,7 @@
 //  hmi::changeProject (Ctrl+Z la defait).
 // =============================================================================
 #include "HmiObjectAlarmPanes.hpp"
+#include "../../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "HmiAssist.hpp"                    // 1.10.2 (chantier A) : l'aide a la saisie des conditions
 #include "HmiParamPanes.hpp"                // 1.10.2 (chantier A) : les parametres du symbole dans ses conditions
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
@@ -41,10 +42,8 @@ std::string trimmed(std::string_view s) {
     return std::string(s.substr(b, e - b));
 }
 
-bool yes(std::string_view v) {
-    const std::string t = trimmed(v);
-    return t == "1" || t == "oui" || t == "true" || t == "TRUE" || t == "vrai" || t == "Oui";
-}
+// 1.12.19 : les mots d'un booleen, les memes partout (sim/ValueText).
+bool yes(std::string_view v) { return sim::trueWord(v); }
 
 std::string priorityText(int p) { return std::to_string(p) + " - " + std::string(hmi::alarmPriorityLabel(p)); }
 
@@ -1157,7 +1156,7 @@ void HmiSymbolAlarmsPane::rebuildProperties() {
             if (field == "priorite")
                 for (int p = 1; p <= hmi::kAlarmPriorities; ++p) pr.enumValues.push_back(std::to_string(p) + " - " + std::string(hmi::alarmPriorityLabel(p)));
             if (field == "categorie") pr.enumValues = hmi::alarmCategories();
-            if (field == "acquittement") pr.value = it->ackRequired ? "true" : "false";
+            if (field == "acquittement") pr.value = it->ackRequired ? "TRUE" : "FALSE";
             pr.description = "Les param\xC3\xA8tres du symbole s'emploient comme dans ses objets : Moteur.Defaut, {Nom}. Une instance remplace chaque param\xC3\xA8tre par son argument.";
             // Decision 7 : la condition porte la pastille fx (rouge si impossible),
             // jugee avec les parametres du symbole connus.
@@ -1167,7 +1166,8 @@ void HmiSymbolAlarmsPane::rebuildProperties() {
             }
             pr.commit = [this, cur, field](std::string_view v) {
                 std::string text(v);
-                if (field == "acquittement") text = (text == "true" || text == "1") ? "oui" : "non";
+                // 1.12.19 : la case a cocher envoie TRUE (avant : compare a "true", elle ne se cochait jamais).
+                if (field == "acquittement") text = sim::trueWord(text) ? "oui" : "non";
                 return objalarms::setSymbolAlarmField(doc_, apply_, symbol_, cur, field, text);
             };
             if (field == "condition") ui::exprfield::markWhole(pr, ui::exprfield::Expect::Bool, false);   // 1.10 (chantier K)

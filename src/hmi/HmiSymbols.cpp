@@ -20,6 +20,7 @@
 #include "HmiWidgets.hpp"
 #include "HmiObjectAlarms.hpp"   // 1.12.11 (lot G) : une liaison du synoptique tapee sans =
 #include "HmiPopupParams.hpp"    // 1.12.11 (lot G) : le type d'un chemin (Creer un symbole)
+#include "../sim/ValueText.hpp"     // 1.12.19 : les lecteurs d'une valeur tapee, partout les memes
 
 #include <algorithm>
 #include <cctype>
@@ -582,23 +583,6 @@ bool integerBounds(const std::string& u, long long& lo, unsigned long long& hi) 
         if (u == t.name) { lo = t.lo; hi = t.hi; return true; }
     return false;
 }
-// "5s", "1m30s", "250ms", "2h" : une duree sans T#.
-bool durationText(std::string_view t) {
-    if (t.empty()) return false;
-    std::size_t i = 0;
-    bool any = false;
-    while (i < t.size()) {
-        const std::size_t d = i;
-        while (i < t.size() && (std::isdigit(uc(t[i])) || t[i] == '.' || t[i] == '_')) ++i;
-        if (i == d) return false;
-        const std::size_t u = i;
-        while (i < t.size() && std::isalpha(uc(t[i]))) ++i;
-        const std::string unit = upperCopy(t.substr(u, i - u));
-        if (unit != "MS" && unit != "S" && unit != "M" && unit != "MIN" && unit != "H" && unit != "D") return false;
-        any = true;
-    }
-    return any;
-}
 std::string quoted(std::string_view text) {
     std::string out = "'";
     const auto kept = markerDollars(text);   // 1.11.4 : les `$` d'un repere restent seuls
@@ -635,7 +619,8 @@ bool isTextType(std::string_view type) noexcept {
     std::string u;
     for (const char c : type)
         if (!std::isspace(uc(c))) u += static_cast<char>(std::toupper(uc(c)));
-    return u == "STRING" || u == "WSTRING" || u.rfind("STRING[", 0) == 0 || u.rfind("WSTRING[", 0) == 0 || u == "TEXTE";
+    return u == "STRING" || u == "WSTRING" || u.rfind("STRING[", 0) == 0 || u.rfind("WSTRING[", 0) == 0 || u.rfind("STRING(", 0) == 0
+        || u == "CHAR" || u == "WCHAR" || u == "TEXTE";   // 1.12.19 : un caractere s'ecrit comme un texte ('A')
 }
 
 bool isAggregateType(const Project* project, std::string_view type) {
@@ -672,6 +657,15 @@ bool isLiteralArgument(std::string_view text) {
         return digits;
     }
     return standsAlone(t);
+}
+
+std::string enumConstantNumber(const Project& project, std::string_view type, std::string_view text) {
+    const HmiType* en = findEnumeration(project, trimmedCopy(type));
+    if (!en) return std::string(text);
+    std::string v = trimmedCopy(text);
+    if (const auto hash = v.find('#'); hash != std::string::npos && sameName(v.substr(0, hash), en->name)) v = v.substr(hash + 1);
+    if (const HmiEnumValue* ev = enumValueByName(*en, v)) return std::to_string(ev->value);
+    return std::string(text);
 }
 
 std::string shownLiteral(std::string_view text) {
@@ -735,8 +729,8 @@ std::string argumentLiteral(const Project* project, std::string_view type, std::
             std::replace(n.begin(), n.end(), ',', '.');
             return n;
         }
-        if (ut == "VRAI" || ut == "OUI") return "TRUE";
-        if (ut == "FAUX" || ut == "NON") return "FALSE";
+        if (sim::trueWord(t) && t != "1") return "TRUE";
+        if (sim::falseWord(t) && t != "0") return "FALSE";
         return quoted(t);
     }
     if (isTextType(type)) {
@@ -746,11 +740,14 @@ std::string argumentLiteral(const Project* project, std::string_view type, std::
         return quoted(t);
     }
     if (u.rfind("ARRAY", 0) == 0)
-        return fail("Un tableau (" + std::string(trimmedCopy(type)) + ") se donne par une variable du m\xC3\xAAme type : utilisez fx.");
+        return fail("Un tableau (" + std::string(trimmedCopy(type)) + ") se donne par une variable du m\xC3\xAAme type : \xC3\xA9" "cris =Variable.");
+    // 1.12.19 (la regle des cases) : les memes ecritures que partout ailleurs - les lecteurs de
+    // sim/ValueText (le forcage, les valeurs initiales) : les mots d'un booleen, la virgule, les
+    // espaces entre les milliers, 12.7 refuse dans un entier, T#5s, 5 s, 250 ms, une date verifiee.
     if (u == "BOOL") {
-        if (ut == "TRUE" || ut == "VRAI" || ut == "OUI" || ut == "ON" || ut == "1" || ut == "YES") return "TRUE";
-        if (ut == "FALSE" || ut == "FAUX" || ut == "NON" || ut == "OFF" || ut == "0" || ut == "NO") return "FALSE";
-        return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas un bool\xC3\xA9" "en : TRUE ou FALSE.");
+        if (sim::trueWord(t)) return "TRUE";
+        if (sim::falseWord(t)) return "FALSE";
+        return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas un bool\xC3\xA9" "en : TRUE ou FALSE (VRAI, OUI, ON, 1 aussi).");
     }
     long long lo = 0;
     unsigned long long hi = 0;
@@ -758,41 +755,43 @@ std::string argumentLiteral(const Project* project, std::string_view type, std::
         std::string body = t;
         if (const auto hash = body.find('#'); hash != std::string::npos && identStart(body[0])) body = body.substr(hash + 1);   // INT#12
         if (body.size() > 2 && std::isdigit(uc(body[0])) && body.find('#') != std::string::npos) return body;              // 16#FF
-        std::string digits;
-        for (const char c : body)
-            if (c != '_' && c != ' ') digits += c;
         double v = 0;
-        if (!parseNumber(digits, v) || std::floor(v) != v)
+        if (!sim::readDecimal(body, v) || std::floor(v) != v)
             return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas un nombre entier (" + u + ").");
+        const std::string bounds = sim::thousands(lo) + " \xC3\xA0 "
+                                 + (hi > static_cast<unsigned long long>(LLONG_MAX) ? std::to_string(hi) : sim::thousands(static_cast<long long>(hi)));
         if (v < static_cast<double>(lo) || v > static_cast<double>(hi))
-            return fail(digits + " est hors des bornes de " + u + " (" + std::to_string(lo) + ".." + std::to_string(hi) + ").");
+            return fail(t + " est hors des bornes d'un " + u + " (" + bounds + ").");
         const long long n = static_cast<long long>(v);
         return std::to_string(n);
     }
     if (u == "REAL" || u == "LREAL") {
         std::string body = t;
         if (const auto hash = body.find('#'); hash != std::string::npos && identStart(body[0])) body = body.substr(hash + 1);
+        if (!sim::readDecimal(body, num)) return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas un nombre (" + u + ").");
         std::string n;
         for (const char c : body)
-            if (c != '_' && c != ' ') n += c == ',' ? '.' : c;
-        if (!parseNumber(n, num)) return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas un nombre (" + u + ").");
+            if (c != '_' && !std::isspace(uc(c)) && uc(c) < 0x80) n += c == ',' ? '.' : c;
         if (n.find_first_of(".eE") == std::string::npos) n += ".0";
         if (n.front() == '.') n.insert(n.begin(), '0');
+        if (n.size() > 1 && (n.front() == '-' || n.front() == '+') && n[1] == '.') n.insert(n.begin() + 1, '0');
         return n;
     }
     if (u == "TIME") {
+        std::int64_t ms = 0;
+        if (!sim::readDuration(t, ms) || ms < 0)
+            return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas une dur\xC3\xA9" "e : T#5s, 1m30s, 250 ms.");
         if (ut.rfind("T#", 0) == 0 || ut.rfind("TIME#", 0) == 0) return t;
-        std::string compact;
-        for (const char c : t)
-            if (c != ' ') compact += c;
-        if (durationText(compact)) return "T#" + compact;
-        if (parseNumber(compact, num) && num >= 0) return "T#" + compact + "ms";
-        return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas une dur\xC3\xA9" "e : T#5s, 1m30s, 250ms.");
+        return sim::fixedText(sim::Value::time(ms));
     }
     if (u == "DATE" || u == "TOD" || u == "TIME_OF_DAY" || u == "DT" || u == "DATE_AND_TIME") {
+        const sim::Type dt = u == "DATE" ? sim::Type::Date : (u == "TOD" || u == "TIME_OF_DAY") ? sim::Type::Tod : sim::Type::Dt;
+        sim::Value v;
+        std::string bad;
+        if (!sim::readTyped(t, dt, v, bad)) return fail(bad + ".");
         if (t.find('#') != std::string::npos) return t;
-        const char* prefix = u == "DATE" ? "D#" : (u == "TOD" || u == "TIME_OF_DAY") ? "TOD#" : "DT#";
-        return prefix + t;
+        const char* prefix = dt == sim::Type::Date ? "D#" : dt == sim::Type::Tod ? "TOD#" : "DT#";
+        return prefix + sim::dateText(dt, v.asInteger());
     }
     if (project)
         if (const HmiType* en = findEnumeration(*project, trimmedCopy(type))) {
@@ -807,10 +806,136 @@ std::string argumentLiteral(const Project* project, std::string_view type, std::
             return fail("\xC2\xAB " + t + " \xC2\xBB n'est pas une valeur de " + en->name + " (" + list + ").");
         }
     if (isAggregateType(project, type))
-        return fail("Une structure (" + trimmedCopy(type) + ") se donne par une variable du m\xC3\xAAme type : utilisez fx.");
+        return fail("Une structure (" + trimmedCopy(type) + ") se donne par une variable du m\xC3\xAAme type : \xC3\xA9" "cris =Variable.");
     // Un DDT de l'automate, un type inconnu : une constante deja ecrite passe, le reste non.
     if (isLiteralArgument(t)) return t;
-    return fail("Une valeur de " + trimmedCopy(type) + " se donne par une variable : utilisez fx.");
+    return fail("Une valeur de " + trimmedCopy(type) + " se donne par une variable : \xC3\xA9" "cris =Variable.");
+}
+
+namespace {
+// L'element d'un ARRAY[..] OF T : T (vide : pas un tableau).
+std::string arrayElement(std::string_view type) {
+    const std::string t = trimmedCopy(type);
+    if (upperCopy(t).rfind("ARRAY", 0) != 0) return {};
+    const auto close = t.find(']');
+    if (close == std::string::npos) return {};
+    const std::string rest = trimmedCopy(std::string_view(t).substr(close + 1));
+    if (rest.size() < 4 || upperCopy(rest.substr(0, 2)) != "OF" || !std::isspace(uc(rest[2]))) return {};
+    return trimmedCopy(std::string_view(rest).substr(3));
+}
+} // namespace
+
+CellText cellValue(const Project* project, std::string_view type, std::string_view typed,
+                   const std::function<bool(std::string_view)>& known) {
+    CellText r;
+    const std::string t = trimmedCopy(typed);
+    if (t.empty()) return r;
+    const auto knownRoot = [&](std::string_view root) { return isKnownName(project, root) || (known && known(root)); };
+    const auto formula = [&](std::string text) {
+        r.text = std::move(text);
+        r.formula = true;
+        return r;
+    };
+    const auto refuse = [&](std::string why) {
+        r.text.clear();
+        r.why = why.empty() ? "\xC2\xAB " + t + " \xC2\xBB ne se lit pas" : std::move(why);
+        if (r.why.back() == '.') r.why.pop_back();
+        return r;
+    };
+    // =expression : la formule telle quelle.
+    if (t.front() == '=') {
+        const std::string e = trimmedCopy(std::string_view(t).substr(1));
+        return e.empty() ? refuse("rien apr\xC3\xA8s le = : \xC3\xA9" "cris la formule (=Niveau * 2)") : formula(e);
+    }
+    const std::string u = squeezedUpper(type);
+    const bool any = u.empty() || u.rfind("ANY", 0) == 0;    // ANY, ANY_NUM... : rien vers quoi convertir
+    const bool word = isVariablePath(t);
+    // La valeur fixe du type. Un reel tape sans decimale (5, 1 000) reste entier : la case est typee
+    // (argumentLiteral ajoute .0 pour coller un argument dans un calcul, ou 5 / 2 vaudrait 2).
+    const auto literal = [&](std::string_view as, std::string* why) {
+        std::string lit = argumentLiteral(project, as, t, why);
+        if ((u == "REAL" || u == "LREAL") && lit.size() > 2 && lit.compare(lit.size() - 2, 2, ".0") == 0
+            && t.find_first_of(".,eE") == std::string::npos)
+            lit.resize(lit.size() - 2);
+        return lit;
+    };
+    // Une valeur d'une enumeration IHM tapee par son nom (Auto) : la valeur, meme si un objet porte ce nom.
+    if (project && word && findEnumeration(*project, trimmedCopy(type)))
+        if (std::string lit = argumentLiteral(project, type, t); !lit.empty()) {
+            r.text = std::move(lit);
+            return r;
+        }
+    // Un nom connu (une variable, une constante voisine) : la variable, pas un texte.
+    if (word && knownRoot(rootOf(t))) return formula(t);
+    // Sans type connu (une variable de l'automate, aucune) : un nombre ou un booleen remis en forme
+    // (2,5 -> 2.5, VRAI -> TRUE) ; le reste tel quel, la case le verifie (pas de texte devine).
+    if (trimmedCopy(type).empty()) {
+        if (isLiteralArgument(t)) {
+            r.text = t;
+            return r;
+        }
+        double n = 0;
+        if (sim::readDecimal(t, n)) {
+            std::string out;
+            for (const char c : t)
+                if (c != '_' && !std::isspace(uc(c)) && uc(c) < 0x80) out += c == ',' ? '.' : c;
+            r.text = out;
+            return r;
+        }
+        if (sim::trueWord(t) || sim::falseWord(t)) {
+            r.text = sim::trueWord(t) ? "TRUE" : "FALSE";
+            return r;
+        }
+        return formula(t);
+    }
+    // Un tableau : une valeur seule remplit toutes ses cases, lue dans le type de l'element ; [1, 2]
+    // ecrit : tel quel. Une structure, un objet (LIST, MAP...) : leur litteral tel quel. La case les
+    // verifie dans leur type (valueMisfit, validInitial).
+    if (const std::string element = arrayElement(type); !element.empty() && t.front() != '[' && t.front() != '(')
+        return cellValue(project, element, t, known);
+    if (u.rfind("ARRAY", 0) == 0 || isAggregateType(project, type) || types::isRich(type)) {
+        r.text = t;
+        return r;
+    }
+    // Une valeur deja ecrite dans la forme gardee ('texte', 12, TRUE, T#5s, T_MODE#Auto) : lue dans le type.
+    if (isLiteralArgument(t)) {
+        std::string why;
+        r.text = any ? t : literal(type, &why);
+        return r.text.empty() ? refuse(why) : r;
+    }
+    // Un calcul sur des noms connus (Seuil * 2), un appel (TO_INT(x)) : une formule. Dans une case de
+    // texte, non : ce qui n'est pas un nom connu est un texte.
+    if (!isTextType(type) && !word)
+        if (const Expression e = Expression::compile(t); e.valid()) {
+            const auto& roots = e.roots();
+            if (t.find('(') != std::string::npos
+                || (!roots.empty() && std::all_of(roots.begin(), roots.end(), [&](const std::string& n) { return knownRoot(n); })))
+                return formula(t);
+        }
+    std::string why;
+    r.text = literal(any ? std::string_view("ANY") : type, &why);
+    if (!r.text.empty()) return r;
+    refuse(why);
+    // Un nom inconnu : le dire (une faute de frappe, une variable a creer) - sauf pour une enumeration
+    // (la raison donne deja ses valeurs).
+    if (word && !(project && findEnumeration(*project, trimmedCopy(type)))) r.why += " ; " + rootOf(t) + " n'est pas un nom connu";
+    return r;
+}
+
+bool typedInitial(const Project& project, std::string_view type, std::string& text, std::string* why) {
+    text = trimmedCopy(text);
+    if (text.empty()) return true;
+    if (types::isRich(type) || types::isComposite(type)) {
+        if (text.front() == '=') text = trimmedCopy(std::string_view(text).substr(1));
+        return true;
+    }
+    const CellText cell = cellValue(&project, type, text);
+    if (!cell.ok()) {
+        if (why) *why = "valeur initiale : " + cell.why;
+        return false;
+    }
+    text = cell.text;
+    return true;
 }
 
 // ========================================================= remplacements ====

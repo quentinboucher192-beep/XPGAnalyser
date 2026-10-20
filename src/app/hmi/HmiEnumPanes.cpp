@@ -179,10 +179,12 @@ std::vector<hmi::HmiEnumValue> parseEnumLines(std::string_view text) {
         if (line.empty()) continue;
         hmi::HmiEnumValue v;
         std::size_t i = 0;
-        while (i < line.size() && !std::isspace(static_cast<unsigned char>(line[i])) && line[i] != '=' && line[i] != '\'' && line[i] != '"') ++i;
+        while (i < line.size() && !std::isspace(static_cast<unsigned char>(line[i])) && line[i] != '=' && line[i] != ':' && line[i] != '\'' && line[i] != '"') ++i;
         v.name = line.substr(0, i);
         std::string rest = trim(std::string_view(line).substr(i));
         bool numbered = false;
+        // 1.12.19 (la regle des cases) : Auto = 1 ou Auto := 1 (le := du ST, comme une structure ecrite).
+        if (rest.rfind(":=", 0) == 0) rest.erase(0, 1);
         if (!rest.empty() && rest.front() == '=') {
             rest = trim(std::string_view(rest).substr(1));
             std::size_t j = 0;
@@ -1176,7 +1178,7 @@ void HmiEnumCreatePanel::onPaint(const ui::PaintContext& ctx) {
     ctx.r.drawText({r.x + 14.f, r.y + 48.f}, "NOM DU TYPE", f.smallUi, c.textMuted);
     const std::string ni = nameIssue();
     ctx.r.drawText({r.x + 14.f, r.y + 102.f}, ni.empty() ? kOk + "nom libre" : kNo + ni, f.smallUi, ni.empty() ? c.ok : c.error);
-    ctx.r.drawText({r.x + 14.f, r.y + 126.f}, "PREMI\xC3\x88RES VALEURS (une par ligne : Nom [= valeur] ['texte affich\xC3\xA9'])", f.smallUi, c.textMuted);
+    ctx.r.drawText({r.x + 14.f, r.y + 126.f}, "PREMI\xC3\x88RES VALEURS (une par ligne : Nom [:= valeur] [texte affich\xC3\xA9])", f.smallUi, c.textMuted);
     const std::string vi = valuesIssue();
     const auto vals = values();
     ctx.r.drawText({r.x + 14.f, r.bottom() - 74.f},

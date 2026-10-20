@@ -14,6 +14,7 @@
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiScriptCheck.hpp"   // 1.10 : les erreurs des scripts, a leur place
 #include "../../hmi/HmiTypes.hpp"
+#include "../../hmi/HmiSymbols.hpp"       // 1.12.19 : hmi::typedInitial (la regle des cases)
 #include "../../ui/Theme.hpp"
 
 #include <algorithm>
@@ -1522,9 +1523,12 @@ void HmiScriptsPane::selectVariable(Id id) {
 }
 
 namespace {
-bool validVariable(const hmi::Project& p, Id self, const std::string& name, const std::string& type, const std::string& initial,
+// 1.12.19 (la regle des cases) : `initial` est lue comme toute case de valeur et remise dans sa forme
+// gardee (2,5 -> 2.5, VRAI -> TRUE, Azote -> 'Azote' pour un STRING), comme dans le volet Variables IHM.
+bool validVariable(const hmi::Project& p, Id self, const std::string& name, const std::string& type, std::string& initial,
                    std::string* why) {
     if (!hmi::isIdentifier(name)) { if (why) *why = "nom invalide : lettres, chiffres et _"; return false; }
+    if (!hmi::typedInitial(p, type, initial, why)) return false;
     if (const auto* other = p.variable(name); other && other->id != self) { if (why) *why = "'" + name + "' existe d\xC3\xA9j\xC3\xA0"; return false; }
     // Lot 16 : un type IHM ou un tableau aussi.
     if (!hmi::types::validType(p, type, why)) return false;
@@ -1546,9 +1550,10 @@ bool validVariable(const hmi::Project& p, Id self, const std::string& name, cons
 }
 } // namespace
 
-Id HmiScriptsPane::addVariable(const std::string& name, const std::string& type, const std::string& initial,
+Id HmiScriptsPane::addVariable(const std::string& name, const std::string& type, const std::string& typedValue,
                                const std::string& description, std::string* why) {
     std::string reason;
+    std::string initial = typedValue;
     if (!validVariable(doc_->project, kNoId, name, type, initial, &reason)) {
         if (why) *why = reason;
         say("Variable refus\xC3\xA9" "e : " + reason, true);
@@ -1572,9 +1577,10 @@ Id HmiScriptsPane::addVariable(const std::string& name, const std::string& type,
     return made;
 }
 
-bool HmiScriptsPane::updateVariable(Id id, const std::string& name, const std::string& type, const std::string& initial,
+bool HmiScriptsPane::updateVariable(Id id, const std::string& name, const std::string& type, const std::string& typedValue,
                                     const std::string& description, std::string* why) {
     std::string reason;
+    std::string initial = typedValue;
     if (!validVariable(doc_->project, id, name, type, initial, &reason)) {
         if (why) *why = reason;
         say("Modification refus\xC3\xA9" "e : " + reason, true);

@@ -1,4 +1,5 @@
 #include "HmiControls.hpp"
+#include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "HmiRoles.hpp"   // 1.12.6 (lot C) : le decoupeur unique des listes
 #include "HmiMarkers.hpp"   // 1.12.5 : la source sans ses reperes
 
@@ -45,9 +46,9 @@ std::vector<std::string> splitKeep(std::string_view text, char sep) {
 bool numeric(std::string_view s, double& out) {
     const std::string t = unquoted(s);
     if (parseNumber(t, out)) return true;
-    const std::string l = lower(t);
-    if (l == "true" || l == "vrai") { out = 1; return true; }
-    if (l == "false" || l == "faux") { out = 0; return true; }
+    // 1.12.19 : les mots d'un booleen, les memes partout (sim/ValueText).
+    if (sim::trueWord(t)) { out = 1; return true; }
+    if (sim::falseWord(t)) { out = 0; return true; }
     return false;
 }
 double fontSizeOf(const Object& o, double fallback) { return std::clamp(o.number("fontSize", fallback), 6.0, 96.0); }

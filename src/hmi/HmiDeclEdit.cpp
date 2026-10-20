@@ -57,38 +57,6 @@ bool oneOf(const std::string& s, std::initializer_list<std::string_view> words) 
     return std::any_of(words.begin(), words.end(), [&](std::string_view w) { return s == w; });
 }
 
-// UNE VALEUR VENUE D'UN TABLEUR : "2,5" (la virgule decimale), "1 234,5" (des espaces de
-// milliers), VRAI / FAUX - ce qu'Excel donne en francais, lu comme du ST (2.5, 1234.5, TRUE).
-std::string fromSpreadsheet(std::string_view type, const std::string& value) {
-    const std::string t = [&] {
-        std::string u;
-        for (const char ch : type) u += static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-        return trimmed(u);
-    }();
-    if (t == "BOOL") {
-        const std::string f = squeezed(value);
-        if (f == "vrai" || f == "oui" || f == "true" || f == "1") return "TRUE";
-        if (f == "faux" || f == "non" || f == "false" || f == "0") return "FALSE";
-        return value;
-    }
-    static const char* const numeric[] = {"INT", "DINT", "UINT", "UDINT", "SINT", "USINT", "REAL", "LREAL", "WORD", "DWORD", "BYTE", "LINT", "ULINT"};
-    if (std::none_of(std::begin(numeric), std::end(numeric), [&](const char* n) { return t == n; })) return value;
-    // Un nombre ecrit a la francaise : des chiffres, des espaces (ou l'espace insecable) entre
-    // eux, une seule virgule decimale. Rien d'autre ne change (une expression reste telle quelle).
-    std::string digits;
-    int commas = 0;
-    for (std::size_t i = 0; i < value.size(); ++i) {
-        const auto ch = static_cast<unsigned char>(value[i]);
-        if (std::isdigit(ch) || ((ch == '-' || ch == '+') && digits.empty())) digits += static_cast<char>(ch);
-        else if (ch == ',') { ++commas; digits += '.'; }
-        else if (ch == ' ') continue;
-        else if (ch == 0xC2 && i + 1 < value.size() && static_cast<unsigned char>(value[i + 1]) == 0xA0) { ++i; continue; }
-        else return value;
-    }
-    if (commas == 0 || commas > 1 || digits.empty() || digits.back() == '.') return value;
-    return digits;
-}
-
 void bindFunction(Code& c, HmiFunction& f) {
     c.body = &f.body;
     c.decls = &f.decls;
@@ -866,8 +834,22 @@ bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::s
             return true;
         }
         case Column::Value: {
-            if (d.kind == DeclKind::Constant && v.empty()) return fail(why, "une constante a une valeur (100.0, 3, T#5s, 'texte'...)");
-            const std::string value = fromSpreadsheet(d.type, v);     // 2,5 -> 2.5 ; VRAI -> TRUE
+            if (d.kind == DeclKind::Constant && v.empty()) return fail(why, "une constante a une valeur (100.0, 3, T#5s, un texte...)");
+            // 1.12.19 (la regle des cases) : lue comme toute case de valeur (hmi::cellValue) - =formule ;
+            // un nom connu (une declaration voisine, une variable IHM) ; sinon une valeur fixe du type :
+            // 2,5 -> 2.5, VRAI -> TRUE, 5s -> T#5s, Voiture -> 'Voiture', Auto -> T_MODE#Auto. Avant : la
+            // virgule et VRAI seuls (ce qu'un tableur donne) ; =3 illisible ; Voiture un nom sans controle.
+            const auto neighbour = [&](std::string_view n) {
+                for (std::size_t k = 0; k < c.decls->size(); ++k)
+                    if (k != i && same((*c.decls)[k].name, n)) return true;
+                if (c.inherited)
+                    for (const auto& o : *c.inherited)
+                        if (same(o.name, n)) return true;
+                return false;
+            };
+            const CellText cell = cellValue(&p, d.type, v, neighbour);
+            if (!cell.ok()) return fail(why, cell.why.find(v) != std::string::npos ? cell.why : "valeur " + quoted(v) + " : " + cell.why);
+            const std::string& value = cell.text;
             std::string bad;
             if (!value.empty() && !declarationValueReadable(d.type, value, &bad))
                 return fail(why, "valeur " + quoted(v) + " illisible pour un " + d.type + (bad.empty() ? std::string{} : " : " + bad));

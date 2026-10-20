@@ -1,5 +1,6 @@
 // app/hmi/HmiDuplicateDialog.cpp - "Dupliquer..." (1.10.2, chantier D).
 #include "HmiDuplicateDialog.hpp"
+#include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture commune d'un nombre
 #include "HmiAssist.hpp"           // 1.11.2 (API-V, D13) : le programme installe, ce qu'est API.V
 #include "HmiPanels.hpp"           // 1.11 (T2-22) : les libelles de l'inspecteur
 #include "HmiParamPanes.hpp"       // 1.11.2 (SYM) : les DDT du programme (les membres d'un parametre structure)
@@ -1148,8 +1149,8 @@ core::Status HmiDuplicateDialog::buildUi() {
         copies->toolbar.push_back(copiesField_);
         links_ += copiesField_->textChanged->connect([this](const std::string& t) {
             if (syncing_) return;
-            const int n = std::atoi(t.c_str());
-            if (n >= 1 || t == "0") setCopies(n);      // 1.10.4 : 0 - l'original seulement
+            long long n = 0;                       // 1.12.19 : la lecture commune (1 000 ; pas 12abc)
+            if (sim::readInteger(t, n) && n >= 0 && n <= 100000) setCopies(static_cast<int>(n));      // 1.10.4 : 0 - l'original seulement
         });
         auto dd = std::make_unique<ui::DropDown>(base + ".fillColumn");
         std::vector<ui::DropDown::Item> items;
@@ -1225,29 +1226,31 @@ core::Status HmiDuplicateDialog::buildUi() {
         columnsField_ = &static_cast<ui::InputText&>(lay->addChild(std::move(f)));
         links_ += columnsField_->textChanged->connect([this](const std::string& t) {
             if (syncing_) return;
-            const int n = std::atoi(t.c_str());
-            if (n < 1) return;
+            long long n = 0;
+            if (!sim::readInteger(t, n) || n < 1 || n > 100000) return;
             auto l = plan_.layout;
-            l.columns = n;
+            l.columns = static_cast<int>(n);
             setLayout(l);
         });
         auto s = std::make_unique<ui::InputText>(base + ".spacing");
         s->setText(std::to_string(static_cast<long>(std::lround(plan_.layout.spacing))));
         spacingField_ = &static_cast<ui::InputText&>(lay->addChild(std::move(s)));
         links_ += spacingField_->textChanged->connect([this](const std::string& t) {
-            if (syncing_ || t.empty()) return;
+            double d = 0;
+            if (syncing_ || !sim::readDecimal(t, d)) return;    // 1.12.19 : 12,5 (avant : 12)
             auto l = plan_.layout;
             if (l.spacingY < 0) l.spacingY = l.gapY();   // 1.12.16 : Y garde le sien
-            l.spacing = std::atof(t.c_str());
+            l.spacing = d;
             setLayout(l);
         });
         auto sy = std::make_unique<ui::InputText>(base + ".spacingY");
         sy->setText(std::to_string(static_cast<long>(std::lround(plan_.layout.gapY()))));
         spacingYField_ = &static_cast<ui::InputText&>(lay->addChild(std::move(sy)));
         links_ += spacingYField_->textChanged->connect([this](const std::string& t) {
-            if (syncing_ || t.empty()) return;
+            double d = 0;
+            if (syncing_ || !sim::readDecimal(t, d)) return;
             auto l = plan_.layout;
-            l.spacingY = std::atof(t.c_str());
+            l.spacingY = d;
             setLayout(l);
         });
         fit_ = &static_cast<ui::Button&>(lay->addChild(std::make_unique<ui::Button>("Ajuster l'espacement", base + ".fit")));

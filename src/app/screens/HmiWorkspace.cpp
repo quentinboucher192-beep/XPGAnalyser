@@ -3455,15 +3455,16 @@ void MainAnalysisScreen::askHmiTryFunction(std::uint64_t functionId) {
         const std::string mode = in->section == S::InOut ? " (E/S : sa valeur de d\xC3\xA9part)"
                                : in->section == S::Output ? " (sortie : rendue apr\xC3\xA8s l'essai)" : std::string{};
         fields.push_back({in->name + " : " + in->type + mode, "",
-                          in->section == S::Output ? std::string("laissez vide : la fonction la calcule")
+                          in->section == S::Output ? std::string("laisse vide : la fonction la calcule")
                                                    : "vide : " + (in->initial.empty() ? std::string("la valeur par d\xC3\xA9" "faut du type") : in->initial),
                           false, {}});
     }
     auto dialog = std::make_unique<FormDialog>("dialog.hmiTryFunction", "Essayer " + hmi::functionSignature(*f),
-        core::hasApi() ? "Les arguments en ST : 2.5, TRUE, 'texte', T#5s, ou une expression (variables IHM \xC3\xA0 leur valeur initiale ; "
-                         "celles de l'automate lues dans la simulation si elle tourne). L'essai ne modifie ni le projet ni la simulation."
-                       : "Les arguments en ST : 2.5, TRUE, 'texte', T#5s, ou une expression (variables IHM \xC3\xA0 leur valeur initiale). "
-                         "L'essai ne modifie ni le projet ni la simulation.",   // 1.12.2
+        // 1.12.19 (la regle des cases) : une valeur telle qu'on la lit, =formule pour un calcul.
+        core::hasApi() ? "Une valeur telle qu'on la lit (2,5 \xC2\xB7 VRAI \xC2\xB7 Azote \xC2\xB7 5 s) ou =formule (variables IHM \xC3\xA0 leur "
+                         "valeur initiale ; celles de l'automate lues dans la simulation si elle tourne). L'essai ne modifie ni le projet ni la simulation."
+                       : "Une valeur telle qu'on la lit (2,5 \xC2\xB7 VRAI \xC2\xB7 Azote \xC2\xB7 5 s) ou =formule (variables IHM \xC3\xA0 leur "
+                         "valeur initiale). L'essai ne modifie ni le projet ni la simulation.",   // 1.12.2
         std::move(fields), "Essayer");
     for (std::size_t i = 0; i < inputs.size(); ++i) dialog->setFieldAssist(i, assist::fieldAssist(assist::sourcesFor(doc)));
     app_.menus().ShowDialog(std::move(dialog), [this, functionId](const menu::DialogResult& r) {

@@ -1,5 +1,6 @@
 // IHM > Configuration > Utilisateurs : utilisateurs, groupes, roles, securite.
 #include "HmiSupervisionPanes.hpp"
+#include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture commune d'un entier
 #include "HmiAssist.hpp"
 
 #include "HmiPaneKit.hpp"
@@ -729,7 +730,10 @@ bool HmiUsersPane::setSecurity(const std::string& field, const std::string& raw,
             sec.startUser = value.empty() ? std::string{} : p.userByLogin(value)->login;
             return true;
         }
-        if (!hmi::parseNumber(value, n)) { err = field + " : un nombre"; return false; }
+        // 1.12.19 : un nombre entier, lu comme partout (1 000 ; 12.7 refuse, plus tronque en 12).
+        long long whole = 0;
+        if (!sim::readInteger(value, whole)) { err = field + " : un nombre entier"; return false; }
+        n = static_cast<double>(whole);
         if (field == "periode") {
             if (n < 10 || n > 300) { err = "p\xC3\xA9riode : de 10 \xC3\xA0 300 s"; return false; }
             sec.dynamicPeriodS = static_cast<int>(n);
@@ -1061,8 +1065,8 @@ bool HmiUsersPane::setGroupField(Id id, const std::string& field, const std::str
             return true;
         }
         if (field == "niveau") {
-            double n = 0;
-            if (!hmi::parseNumber(value, n) || n < 1 || n > 9) { err = "niveau : de 1 \xC3\xA0 9"; return false; }
+            long long n = 0;
+            if (!sim::readInteger(value, n) || n < 1 || n > 9) { err = "niveau : de 1 \xC3\xA0 9"; return false; }
             g->level = static_cast<int>(n);
             return true;
         }

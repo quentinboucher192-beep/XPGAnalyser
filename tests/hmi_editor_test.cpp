@@ -5249,8 +5249,12 @@ void lot7_volet_fonctions() {
     check(pane.tryFunction(moy, {"2.0", ""}) && pane.lastTrial().result == "6.0", "b vide : sa valeur initiale (10) -> 6.0");
     check(pane.tryFunction(moy, {"Resultat + 1.0", "3.0"}) && pane.lastTrial().result == "2.0", "un argument calcul\xC3\xA9 (Resultat vaut 0 au banc) -> 2.0");
     {
-        const bool ok_ = !pane.tryFunction(moy, {"2.0 +", "1.0"}) && pane.lastTrial().error.find("illisible") != std::string::npos;
+        // 1.12.19 (la regle des cases) : sans =, 2.0 + n'est pas un nombre ; =2.0 + est une formule illisible.
+        const bool ok_ = !pane.tryFunction(moy, {"2.0 +", "1.0"}) && pane.lastTrial().error.find("n'est pas un nombre (REAL)") != std::string::npos;
         check(ok_, "un argument illisible : " + pane.lastTrial().error);
+        const bool ok2 = !pane.tryFunction(moy, {"=2.0 +", "1.0"}) && pane.lastTrial().error.find("illisible") != std::string::npos;
+        check(ok2, "une formule illisible : " + pane.lastTrial().error);
+        check(pane.tryFunction(moy, {"2,0", "4"}) && pane.lastTrial().result == "3.0", "2,0 et 4 : la virgule, un entier pour un REAL -> 3.0 " + pane.lastTrial().error);
     }
     {
         const bool ok_ = !pane.tryFunction(moy, {"1", "2", "3"}) && pane.lastTrial().error.find("trop d'arguments") != std::string::npos;
@@ -12730,7 +12734,9 @@ void v19_parametres_popups() {
         seuilDef = deepProp(ed.properties().categories(), "Seuil", "Valeur par d\xC3\xA9" "faut");
         check(seuilDef && seuilDef->expression == "M1" && seuilDef->exprError.find("ne convient pas au type") != std::string::npos,
               "fx : rouge, le type ne convient pas (la raison)");
-        check(deepCommit(ed.properties(), "Seuil", "Valeur par d\xC3\xA9" "faut", "Lu +"), "Seuil : une expression incompl\xC3\xA8te");
+        // 1.12.19 (la regle des cases) : une formule commence par = ; sans =, Lu + n'est pas un nombre (refuse).
+        check(!deepCommit(ed.properties(), "Seuil", "Valeur par d\xC3\xA9" "faut", "Lu +"), "Seuil : Lu + sans = refuse (pas un nombre)");
+        check(deepCommit(ed.properties(), "Seuil", "Valeur par d\xC3\xA9" "faut", "=Lu +"), "Seuil : =Lu +, une expression incompl\xC3\xA8te");
         ed.layout();
         seuilDef = deepProp(ed.properties().categories(), "Seuil", "Valeur par d\xC3\xA9" "faut");
         check(seuilDef && seuilDef->expression == "Lu +" && !seuilDef->exprError.empty(), "fx : rouge, elle ne peut pas marcher");
@@ -16824,6 +16830,13 @@ void v110_enumerations() {
           "les premi\xC3\xA8res valeurs : num\xC3\xA9rot\xC3\xA9" "es d'office (0, 1, 2), Defaut = 9, le texte entre apostrophes");
     check(create->preview().find("TYPE T_VANNE : (") != std::string::npos && create->preview().find("Defaut := 9") != std::string::npos,
           "l'aper\xC3\xA7u ST : TYPE T_VANNE : ( ... Defaut := 9");
+    {
+        // 1.12.19 (la regle des cases) : := comme dans l'apercu ST (avant : := lu comme un texte affiche).
+        const auto lines = app::parseEnumLines("Arret := 0\nAuto:=5 Automatique\nManu = 7 'Manuel'");
+        check(lines.size() == 3 && lines[0].name == "Arret" && lines[0].value == 0 && lines[0].text.empty() && lines[1].name == "Auto"
+                  && lines[1].value == 5 && lines[1].text == "Automatique" && lines[2].value == 7 && lines[2].text == "Manuel",
+              "les premi\xC3\xA8res valeurs : Arret := 0, Auto:=5 Automatique (sans apostrophes), Manu = 7 'Manuel'");
+    }
     create->setLanguage(2);
     check(create->preview().find("enum class T_VANNE : int32_t {") != std::string::npos
               && create->preview().find("std::string to_string(T_VANNE a);") != std::string::npos,
@@ -25680,7 +25693,7 @@ void symParametres1113() {
         std::string why;
         same_text(hmi::argumentLiteral(&p, "STRING", "L'eau"), "'L$'eau'", "STRING : l'apostrophe echappee");
         same_text(hmi::argumentLiteral(&p, "UINT", "70000", &why), "", "UINT : 70000 hors des bornes");
-        check(why.find("0..65535") != std::string::npos, "... et la raison dit les bornes (" + why + ")");
+        check(why.find("hors des bornes d'un UINT (0 \xC3\xA0 65\xE2\x80\xAF" "535)") != std::string::npos, "... et la raison dit les bornes (" + why + ")");
         same_text(hmi::argumentLiteral(&p, "TIME", "5s"), "T#5s", "TIME : 5s -> T#5s");
         same_text(hmi::argumentLiteral(&p, "ARRAY[0..9] OF UINT", "3", &why), "", "un tableau ne se donne pas en constante");
         same_text(hmi::shownLiteral("'L$'eau'"), "L'eau", "la constante montree sans apostrophes");
@@ -32581,7 +32594,7 @@ void valeurInitiale11216() {
         check(iv::literal(r) == "['bas' := 10.0, 'haut' := 30.0]", "MAP : le litt\xC3\xA9ral range les cl\xC3\xA9s - " + iv::literal(r));
         check(iv::addRow(r) && iv::setKey(r, 2, "moyen") && iv::literal(r) == "['bas' := 10.0, 'haut' := 30.0, 'moyen' := 0.0]",
               "MAP : + Entr\xC3\xA9" "e, sa valeur vide vaut celle du type (0.0) - " + iv::literal(r));
-        check(iv::placeholder(r, 2, 0) == "0.0 (du type)", "MAP : la case vide montre la valeur du type, en gris - " + iv::placeholder(r, 2, 0));
+        check(iv::placeholder(r, 2, 0) == "0.0 \xC2\xB7 valeur par d\xC3\xA9" "faut", "MAP : la case vide montre la valeur du type, en gris (1.12.19 : l'invite de partout) - " + iv::placeholder(r, 2, 0));
         check(iv::setKey(r, 2, "bas") && errorWith(iv::problems(p, r), "deux fois") && iv::problems(p, r)[0].row == 2,
               "MAP : une cl\xC3\xA9 \xC3\xA9" "crite deux fois - une faute, \xC3\xA0 sa ligne");
         check(iv::literal(r) == "['bas' := 0.0, 'haut' := 30.0]", "MAP : ... la derni\xC3\xA8re gagne - " + iv::literal(r));
@@ -32597,7 +32610,7 @@ void valeurInitiale11216() {
                   && r.rows[0].cells[2].empty(),
               "LIST OF T_Cuve : une ligne par \xC3\xA9l\xC3\xA9ment, une case par membre");
         check(iv::cellLabels(r).size() == 3 && iv::cellLabels(r)[0] == "Nom (STRING)", "... ses colonnes : Nom (STRING), Niveau, Capacite");
-        check(iv::placeholder(r, 0, 2) == "100.0 (du type)", "... Capacite vide : la valeur initiale du membre (100.0) - " + iv::placeholder(r, 0, 2));
+        check(iv::placeholder(r, 0, 2) == "100.0 \xC2\xB7 valeur par d\xC3\xA9" "faut", "... Capacite vide : la valeur initiale du membre (100.0) - " + iv::placeholder(r, 0, 2));
         check(iv::addRow(r) && iv::setCell(r, 1, 0, "B") && iv::literal(r) == "[(Nom := 'A', Niveau := 2.5), (Nom := 'B')]",
               "+ \xC3\x89l\xC3\xA9ment : (Nom := 'B') - " + iv::literal(r));
         check(iv::moveRow(r, 1, -1) && r.rows[0].cells[0] == "B", "Monter un \xC3\xA9l\xC3\xA9ment");
@@ -32608,7 +32621,7 @@ void valeurInitiale11216() {
         auto r = iv::load(p, "T_Cuve", "(Niveau := 5.0)");
         check(r.rows.size() == 3 && r.rows[1].cells[0] == "5.0" && r.rows[0].cells[0].empty() && iv::rowLabel(r, 0) == ".Nom", "une structure : un membre par ligne");
         check(iv::literal(r) == "(Niveau := 5.0)", "... son litt\xC3\xA9ral : (Niveau := 5.0)");
-        check(iv::placeholder(r, 0, 0) == "'' (du type)", "... Nom vide : '' (du type)");
+        check(iv::placeholder(r, 0, 0) == "vide \xC2\xB7 valeur par d\xC3\xA9" "faut", "... Nom vide : vide (1.12.19 : un texte se montre sans apostrophes) - " + iv::placeholder(r, 0, 0));
         check(iv::setCell(r, 0, 0, "Cuve 1") && iv::literal(r) == "(Nom := 'Cuve 1', Niveau := 5.0)", "... un texte s'\xC3\xA9" "crit sans apostrophes - " + iv::literal(r));
         check(!iv::addRow(r) && !iv::resizable(r), "... ni + ni Retirer");
     }

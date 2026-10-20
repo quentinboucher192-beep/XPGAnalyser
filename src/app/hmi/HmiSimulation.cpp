@@ -2665,9 +2665,16 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
                 if (why) *why = path + " : l'IHM ne tourne pas (le bouton D\xC3\xA9marrer l'IHM)";
                 return false;
             }
-            const auto v = text.empty() ? std::optional<sim::Value>(*cur) : parseTypedValue(text, cur);
+            // 1.12.19 (la regle des cases) : une valeur d'enumeration se tape par son nom (Auto) ou
+            // T_MODE#Auto, comme partout ; le reste par la lecture commune (sim::readTyped).
+            std::string bad;
+            std::string typed = text;
+            if (doc_)
+                if (const auto* declared = doc_->project.variable(path); declared && !text.empty())
+                    typed = hmi::enumConstantNumber(doc_->project, declared->type, text);
+            const auto v = text.empty() ? std::optional<sim::Value>(*cur) : parseTypedValue(typed, cur, &bad);
             if (!v) {
-                if (why) *why = "\xC2\xAB " + text + " \xC2\xBB ne se lit pas comme une valeur de " + path;
+                if (why) *why = path + " : " + bad;
                 return false;
             }
             updateTwinPlaces();
@@ -2757,9 +2764,10 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
                 if (why) *why = path + " : la simulation de l'automate n'est pas pr\xC3\xAAte (F9 la lance)";
                 return false;
             }
-            const auto v = text.empty() ? std::optional<sim::Value>(cur) : parseTypedValue(text, &cur);
+            std::string bad;
+            const auto v = text.empty() ? std::optional<sim::Value>(cur) : parseTypedValue(text, &cur, &bad);
             if (!v) {
-                if (why) *why = "\xC2\xAB " + text + " \xC2\xBB ne se lit pas comme une valeur de " + path;
+                if (why) *why = path + " : " + bad;
                 return false;
             }
             return rt->force(path, *v);

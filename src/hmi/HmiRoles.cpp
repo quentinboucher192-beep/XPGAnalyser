@@ -10,6 +10,7 @@
 #include "HmiExpr.hpp"
 #include "HmiMarkers.hpp"
 #include "HmiTypeRegistry.hpp"
+#include "../sim/ValueText.hpp"   // 1.12.19 : les lecteurs d'une valeur tapee
 
 #include <algorithm>
 #include <cctype>
@@ -48,10 +49,8 @@ std::string_view bare(std::string_view s) noexcept {
     return s;
 }
 
-bool falseWord(std::string_view t) noexcept {
-    t = bare(t);
-    return iequal(t, "FALSE") || iequal(t, "FAUX") || t == "0" || iequal(t, "NON") || iequal(t, "OFF");
-}
+// 1.12.19 : les mots d'un booleen, les memes partout (sim/ValueText).
+bool falseWord(std::string_view t) noexcept { return sim::falseWord(bare(t)); }
 
 // Un nombre au plus court, qui se relit a l'identique (2 ; 1.5 ; 1234567.8).
 std::string numberText(double x) { return exactValue(sim::Value::real(x)); }
@@ -95,10 +94,7 @@ bool isDate(sim::Type t) noexcept { return t == sim::Type::Date || t == sim::Typ
 } // namespace
 
 // ================================================================ lire ======
-bool trueWord(std::string_view t) noexcept {
-    t = bare(t);
-    return iequal(t, "TRUE") || iequal(t, "VRAI") || t == "1" || iequal(t, "OUI") || iequal(t, "ON");
-}
+bool trueWord(std::string_view t) noexcept { return sim::trueWord(bare(t)); }
 
 bool readBool(std::string_view text, bool fallback) noexcept {
     const std::string_view t = bare(text);
@@ -113,8 +109,8 @@ bool readBool(std::string_view text, bool fallback) noexcept {
 bool readNumber(std::string_view text, double& out) noexcept {
     const std::string_view t = bare(text);
     if (parseNumber(t, out)) return true;
-    if (iequal(t, "TRUE") || iequal(t, "VRAI")) { out = 1; return true; }
-    if (iequal(t, "FALSE") || iequal(t, "FAUX")) { out = 0; return true; }
+    if (sim::trueWord(t)) { out = 1; return true; }
+    if (sim::falseWord(t)) { out = 0; return true; }
     return false;
 }
 
@@ -360,68 +356,8 @@ bool integerBounds(std::string_view typeName, sim::Type t, long double& low, lon
 }
 
 bool parseDuration(std::string_view text, std::int64_t& ms, Unit bare) {
-    std::string t = upperCopy(trimView(text));
-    if (t.empty()) return false;
-    for (const char* prefix : {"TIME#", "T#"})
-        if (t.rfind(prefix, 0) == 0) {
-            t.erase(0, std::string_view(prefix).size());
-            bare = Unit::Milliseconds;   // T#500 : des millisecondes, comme le ST
-            break;
-        }
-    std::string s;
-    for (const char c : t)
-        if (c != ' ' && c != '_') s += c == ',' ? '.' : c;
-    if (s.empty()) return false;
-    const bool negative = s.front() == '-';
-    if (negative) s.erase(0, 1);
-    // 00:05 (mm:ss), 01:30:00 (hh:mm:ss)
-    if (s.find(':') != std::string::npos) {
-        std::vector<double> parts;
-        std::size_t from = 0;
-        while (true) {
-            const auto colon = s.find(':', from);
-            const std::string piece = s.substr(from, colon == std::string::npos ? std::string::npos : colon - from);
-            double x = 0;
-            if (piece.empty() || !parseNumber(piece, x) || x < 0) return false;
-            parts.push_back(x);
-            if (colon == std::string::npos) break;
-            from = colon + 1;
-        }
-        if (parts.size() < 2 || parts.size() > 3) return false;
-        const double seconds = parts.size() == 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
-        ms = static_cast<std::int64_t>(std::llround(seconds * 1000.0)) * (negative ? -1 : 1);
-        return true;
-    }
-    // Des nombres suivis d'une unite : 1H30, 90MIN, 1.5S, 250MS, 2D4H ; un nombre seul apres H : des minutes.
-    double total = 0;
-    std::size_t i = 0;
-    std::string last;
-    bool any = false;
-    while (i < s.size()) {
-        std::size_t j = i;
-        while (j < s.size() && (std::isdigit(static_cast<unsigned char>(s[j])) || s[j] == '.')) ++j;
-        if (j == i) return false;
-        double x = 0;
-        if (!parseNumber(s.substr(i, j - i), x)) return false;
-        std::size_t k = j;
-        while (k < s.size() && std::isalpha(static_cast<unsigned char>(s[k]))) ++k;
-        std::string unit = s.substr(j, k - j);
-        if (unit.empty()) unit = last == "H" ? "MIN" : last == "MIN" || last == "M" ? "S" : bare == Unit::Milliseconds ? "MS" : "S";
-        double factor = 0;
-        if (unit == "MS") factor = 1;
-        else if (unit == "S" || unit == "SEC") factor = 1000;
-        else if (unit == "M" || unit == "MIN" || unit == "MN") factor = 60'000;
-        else if (unit == "H") factor = 3'600'000;
-        else if (unit == "D" || unit == "J") factor = kDayMs;
-        else return false;
-        total += x * factor;
-        last = unit;
-        any = true;
-        i = k;
-    }
-    if (!any) return false;
-    ms = static_cast<std::int64_t>(std::llround(total)) * (negative ? -1 : 1);
-    return true;
+    // 1.12.19 : la seule lecture d'une duree (sim/ValueText) ; un nombre nu dans l'unite `bare`.
+    return sim::readDuration(text, ms, bare == Unit::Milliseconds ? 1.0 : 1000.0);
 }
 
 namespace {

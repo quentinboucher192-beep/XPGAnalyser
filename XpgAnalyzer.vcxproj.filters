@@ -1447,6 +1447,9 @@
     <ClCompile Include="src\sim\Rich.cpp">
       <Filter>sim</Filter>
     </ClCompile>
+    <ClCompile Include="src\sim\ValueText.cpp">
+      <Filter>sim</Filter>
+    </ClCompile>
     <ClCompile Include="src\ui\NoveltyBoard.cpp">
       <Filter>ui</Filter>
     </ClCompile>
@@ -2702,6 +2705,9 @@
       <Filter>project</Filter>
     </ClInclude>
     <ClInclude Include="src\sim\Rich.hpp">
+      <Filter>sim</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sim\ValueText.hpp">
       <Filter>sim</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\NoveltyBoard.hpp">

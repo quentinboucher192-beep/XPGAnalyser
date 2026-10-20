@@ -188,6 +188,7 @@ private:
 };
 
 // Un texte tape en valeur, selon le type de la valeur du moment (TRUE, 12, 1,5, 'texte', T#5s).
-[[nodiscard]] std::optional<sim::Value> parseTypedValue(std::string text, const sim::Value* current);
+// 1.12.19 : la lecture commune d'une valeur tapee (sim::readTyped) ; nullopt : `why` dit pourquoi.
+[[nodiscard]] std::optional<sim::Value> parseTypedValue(const std::string& text, const sim::Value* current, std::string* why = nullptr);
 
 } // namespace app

@@ -1,4 +1,5 @@
 #include "HmiRuntime.hpp"
+#include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "HmiNatives.hpp"   // 1.12.0 : couleurs, aleatoire, enumerations natives
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
@@ -4957,9 +4958,8 @@ void Runtime::promptSubmit(double now) {
     sim::Value next;
     switch (p.type) {
         case sim::Type::Bool: {
-            const std::string u = upper(text);
-            if (u == "TRUE" || u == "VRAI" || u == "1" || u == "OUI" || u == "ON") next = sim::Value::boolean(true);
-            else if (u == "FALSE" || u == "FAUX" || u == "0" || u == "NON" || u == "OFF") next = sim::Value::boolean(false);
+            if (sim::trueWord(text)) next = sim::Value::boolean(true);          // 1.12.19 : les memes mots partout
+            else if (sim::falseWord(text)) next = sim::Value::boolean(false);
             else { fail("TRUE ou FALSE (1 ou 0)"); return; }
             break;
         }

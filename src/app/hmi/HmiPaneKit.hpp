@@ -9,6 +9,7 @@
 
 #include "../../hmi/HmiCheck.hpp"
 #include "../../hmi/HmiModel.hpp"
+#include "../../hmi/HmiRoles.hpp"     // 1.12.19 : le decoupeur unique des listes
 #include "../../ui/widgets/DataViews.hpp"
 
 #include <algorithm>
@@ -56,19 +57,13 @@ inline std::string trimmed(std::string s) {
     return s.substr(i);
 }
 
-// "a; b ;c" ou "a,b" -> {a, b, c}
+// "a; b ;c" ou "a,b" -> {a, b, c}. 1.12.19 (la regle des cases) : le decoupeur unique (hmi::roles::splitList) -
+// un ; ou une , de premier niveau seulement : 'a, b', F(1, 2), M['x;y'] restent entiers ; les vides partent.
 inline std::vector<std::string> splitList(const std::string& s) {
     std::vector<std::string> out;
-    std::string cur;
-    for (char c : s) {
-        if (c == ';' || c == ',') {
-            if (!trimmed(cur).empty()) out.push_back(trimmed(cur));
-            cur.clear();
-        } else {
-            cur += c;
-        }
-    }
-    if (!trimmed(cur).empty()) out.push_back(trimmed(cur));
+    for (const auto& part : hmi::roles::splitList(s, ';'))
+        for (auto& item : hmi::roles::splitList(part, ','))
+            if (!item.empty()) out.push_back(std::move(item));
     return out;
 }
 

@@ -604,6 +604,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\project\GrafcetDiagram.cpp" />
     <ClCompile Include="src\project\GrafcetRewrite2.cpp" />
     <ClCompile Include="src\sim\Rich.cpp" />
+    <ClCompile Include="src\sim\ValueText.cpp" />
     <ClCompile Include="src\ui\NoveltyBoard.cpp" />
     <ClCompile Include="src\ui\NoveltyMarks.cpp" />
   </ItemGroup>
@@ -1029,6 +1030,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\project\GrafcetDiagram.hpp" />
     <ClInclude Include="src\project\GrafcetRewrite2.hpp" />
     <ClInclude Include="src\sim\Rich.hpp" />
+    <ClInclude Include="src\sim\ValueText.hpp" />
     <ClInclude Include="src\ui\NoveltyBoard.hpp" />
     <ClInclude Include="src\ui\NoveltyMarks.hpp" />
     <ClInclude Include="src\ui\widgets\ExprField.hpp" />

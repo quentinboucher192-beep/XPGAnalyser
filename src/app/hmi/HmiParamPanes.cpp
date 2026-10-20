@@ -107,39 +107,6 @@ ui::exprfield::Expect expectOfType(const std::string& declared) {
     return ui::exprfield::Expect::Value;
 }
 
-// 1.9 (decision 7) : la pastille fx. Un litteral (12, -3.5, 16#FF, TRUE,
-// 'Pompe', T#5s) n'est pas une expression : pas de pastille.
-bool literalText(std::string_view s) {
-    const std::string t = trim(s);
-    if (t.empty()) return true;
-    const std::string u = upper(t);
-    if (u == "TRUE" || u == "FALSE") return true;
-    if ((t.front() == '\'' || t.front() == '"') && t.size() >= 2 && t.back() == t.front()
-        && std::count(t.begin(), t.end(), t.front()) == 2)
-        return true;
-    if (u.rfind("T#", 0) == 0 || u.rfind("TIME#", 0) == 0)
-        return std::none_of(t.begin(), t.end(), [](char c) { return c == ' ' || c == '+' || c == '*' || c == '/' || c == '('; });
-    std::size_t i = (t[0] == '-' || t[0] == '+') ? 1 : 0;
-    if (i >= t.size()) return false;
-    if (const auto hash = u.find('#'); hash != std::string::npos)   // 16#FF, 2#1010
-        return hash > i
-               && std::all_of(u.begin() + static_cast<std::ptrdiff_t>(i), u.begin() + static_cast<std::ptrdiff_t>(hash),
-                              [](char c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; })
-               && hash + 1 < u.size()
-               && std::all_of(u.begin() + static_cast<std::ptrdiff_t>(hash) + 1, u.end(), [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) || c == '_'; });
-    bool digit = false, dot = false, exp = false;
-    for (; i < t.size(); ++i) {
-        const char c = t[i];
-        if (std::isdigit(static_cast<unsigned char>(c)) || c == '_') digit = true;
-        else if (c == '.' && !dot && !exp) dot = true;
-        else if ((c == 'e' || c == 'E') && digit && !exp) {
-            exp = true;
-            if (i + 1 < t.size() && (t[i + 1] == '-' || t[i + 1] == '+')) ++i;
-        } else return false;
-    }
-    return digit;
-}
-
 // Le controle de l'inspecteur (hmiExpressionError) : "" si l'expression peut
 // marcher dans `in` (ses parametres connus), sinon le premier probleme. Les
 // chemins de l'automate ne se calculent qu'une fois par fiche.
@@ -301,17 +268,17 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
                         error = "la valeur par d\xC3\xA9" "faut (" + def + ", " + hmi::params::normalizedType(given)
                                 + ") ne convient pas au type " + hmi::params::normalizedType(prm.type);
                 }
-                const bool expression = !def.empty() && !literalText(def);
+                // 1.12.19 (la regle des cases) : une valeur fixe se montre telle qu'on la tape (Pompe, sans
+                // apostrophes) ; une formule avec son = et sa pastille. Avant : 'Pompe' a taper, le = retire.
+                const bool expression = !def.empty() && !hmi::isLiteralArgument(def);
                 if (expression) {
                     if (const auto e = fx(v, def); !e.empty()) error = e;
                 }
-                auto d = prop("Valeur par d\xC3\xA9" "faut", prm.defaultValue, PG::ValueType::Text,
+                auto d = prop("Valeur par d\xC3\xA9" "faut", expression ? def : hmi::shownLiteral(def), PG::ValueType::Text,
                               error.empty() ? help : error + ". " + help, {}, field(key + "defaut"));
-                if (expression) {
-                    d.expression = def;
-                    d.exprError = error;
-                }
-                ui::exprfield::markWhole(d, expectOfType(prm.type), false);   // 1.10 (chantier K) : un litteral n'est pas une expression
+                if (expression) d.expression = def;
+                d.exprError = error;
+                ui::exprfield::mark(d, expectOfType(prm.type));
                 row.properties.push_back(std::move(d));
             }
             row.properties.push_back(prop("Description", prm.description, PG::ValueType::Text, {}, {}, field(key + "description")));
@@ -491,7 +458,19 @@ FieldResult applyParamField(hmi::Project& p, hmi::Id viewId, std::string_view fi
         prm.mode = hmi::params::paramModeFrom(value);
         return r;
     }
-    if (what == "defaut") { prm.defaultValue = value; return r; }
+    if (what == "defaut") {
+        // 1.12.19 (la regle des cases) : lue comme toute case de valeur (hmi::cellValue) - =formule ; un
+        // nom connu (un autre parametre, une variable) ; sinon une valeur fixe du type du parametre :
+        // Pompe -> 'Pompe', 2,5 -> 2.5, VRAI -> TRUE, 5s -> T#5s. Une saisie inchangee (la valeur montree
+        // sans apostrophes) garde ce qui etait ecrit.
+        const std::string typed = trim(value);
+        if (typed.empty()) { prm.defaultValue.clear(); return r; }
+        if (hmi::isLiteralArgument(prm.defaultValue) && hmi::shownLiteral(prm.defaultValue) == typed) return r;
+        const auto cell = hmi::cellValue(&p, prm.type, typed, [v](std::string_view n) { return v->param(n) != nullptr; });
+        if (!cell.ok()) { r.ok = false; r.why = cell.why; return r; }
+        prm.defaultValue = cell.text;
+        return r;
+    }
     if (what == "description") { prm.description = value; return r; }
     if (what == "ordre") {
         // 1.11.10 : les instances d'un symbole et les appelants suivent (hmi::params).

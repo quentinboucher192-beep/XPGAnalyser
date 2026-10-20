@@ -1145,7 +1145,15 @@ bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& argume
             bad = true;
             break;
         }
-        const auto e = hmi::Expression::compile(text);
+        // 1.12.19 (la regle des cases) : l'argument se lit comme toute case de valeur, dans le type du
+        // parametre (2,5 -> 2.5, VRAI -> TRUE, Azote -> 'Azote', 5 s -> T#5s, =formule). Avant : du ST seul.
+        const auto cell = hmi::cellValue(&doc_->project, inputs[k]->type, text);
+        if (!cell.ok()) {
+            trial_.error = inputs[k]->name + " : " + cell.why;
+            bad = true;
+            break;
+        }
+        const auto e = hmi::Expression::compile(cell.text);
         if (!e.valid()) {
             std::string rest;
             (void)hmi::splitLine(e.error(), &rest);
@@ -1160,7 +1168,7 @@ bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& argume
             break;
         }
         args.emplace_back(inputs[k]->name, *v);
-        shown += (shown.empty() ? "" : ", ") + inputs[k]->name + " := " + text;
+        shown += (shown.empty() ? "" : ", ") + inputs[k]->name + " := " + cell.text;
     }
     trial_.call = f->name + "(" + shown + ")";
     if (!bad) {
