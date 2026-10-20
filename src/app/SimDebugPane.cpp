@@ -215,7 +215,7 @@ public:
         if (c == BCondition) {
             s.monospace = !b.condition.empty();
             if (b.condition.empty()) s.fgTone = ui::Tone::Muted;
-            if (!b.note.empty()) s.fgTone = ui::Tone::Warning;
+            if (!b.note.empty()) s.fgTone = ui::Tone::Error;      // 1.12.19 : une faute en rouge, comme partout
         }
         if (c == BRemove) s.fgTone = ui::Tone::Muted;
         return s;
@@ -224,8 +224,13 @@ public:
     [[nodiscard]] bool editable(RowIndex, std::size_t c) const override { return c == BCondition; }
     bool setCellText(RowIndex row, std::size_t c, std::string_view value) override {
         if (c != BCondition || row >= pane_.bps_.size()) return false;
-        std::string v = trim(value);
+        std::string v = sd::conditionText(value);          // 1.12.19 : =x > 3 se lit x > 3
         if (lower(v) == "toujours" || lower(v) == "sans condition") v.clear();
+        // 1.12.19 (la regle des cases) : une condition illisible est refusee, sa raison sous la ligne (Reprendre).
+        if (!sd::conditionReadable(v)) {
+            ui::PropertyGrid::refuse(sd::conditionPreview(nullptr, {}, v));
+            return false;
+        }
         return pane_.setBreakpointCondition(static_cast<std::size_t>(row) + 1, v);
     }
     [[nodiscard]] std::string rowTooltip(RowIndex row) const override {
@@ -1742,7 +1747,7 @@ bool SimDebugPane::setBreakpointCondition(std::size_t number, const std::string&
     auto* h = host();
     if (!h || number == 0 || number > bps_.size()) return false;
     const auto& b = bps_[number - 1];
-    const auto c = trim(condition);
+    const auto c = sd::conditionText(condition);            // 1.12.19 : le "=" de tete accepte
     if (!h->setBreakpointCondition(b.id, c)) return false;
     journal("condition", c.empty() ? "Point d'arr\xC3\xAAt " + std::to_string(number) + " : sans condition"
                                    : "Point d'arr\xC3\xAAt " + std::to_string(number) + " : seulement si " + c,

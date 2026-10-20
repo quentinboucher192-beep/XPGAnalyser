@@ -151,7 +151,8 @@ public:
         if (row.value >= values_->size()) return {};
         const auto& v = (*values_)[row.value];
         if (c == 0) return v.key;
-        if (c == 1) return v.expression;
+        // 1.12.19 (la regle des cases) : une expression se montre avec son « = » (un texte a trous, tel quel).
+        if (c == 1) return v.text || v.expression.empty() || v.expression.front() == '=' ? v.expression : "=" + v.expression;
         // Un texte multiligne tient sur une ligne du tableau.
         std::string out = v.value;
         for (std::size_t at = out.find('\n'); at != std::string::npos; at = out.find('\n', at + 3)) out.replace(at, 1, " / ");
@@ -178,13 +179,15 @@ public:
             if (c == 2) s.fgTone = row.errors ? ui::Tone::Error : ui::Tone::None;
             return s;
         }
+        if (c == 1 && row.value < values_->size()) s.monospace = !(*values_)[row.value].text;   // 1.12.19 : une formule en chasse fixe
         if (c == 2 && row.value < values_->size()) {
             const auto& v = (*values_)[row.value];
             s.bold = true;
             // 1.11 (REP) : une expression a repere se calcule comme les autres (1.10.3 : ambre).
-            if (v.error) { s.fg = gfx::Color::rgb(0xE5534B); s.icon = ui::Icon::Error; }
-            else if (v.quality >= 2) { s.fg = gfx::Color::rgb(0xE5534B); s.icon = ui::Icon::Warning; }
-            else if (v.quality == 1) { s.fg = gfx::Color::rgb(0xF2994A); s.icon = ui::Icon::Warning; }
+            // 1.12.19 : les couleurs du theme (une faute en rouge, une valeur ancienne en ambre).
+            if (v.error) { s.fgTone = ui::Tone::Error; s.icon = ui::Icon::Error; }
+            else if (v.quality >= 2) { s.fgTone = ui::Tone::Error; s.icon = ui::Icon::Warning; }
+            else if (v.quality == 1) { s.fgTone = ui::Tone::Warning; s.icon = ui::Icon::Warning; }
         }
         return s;
     }
@@ -2656,6 +2659,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             const auto* tp = twinPlace(path);
             return tp && (twinForced(*tp) || twinBehavior(*tp) != nullptr);
         };
+        h.rich = [this](const std::string& path) { return static_cast<bool>(runtime_.richVariable(path)); };
         h.force = [this](const std::string& path, const std::string& text, std::string* why) {
             // 1.12.2 : une variable objet recoit un litteral ([1, 2, 3], ['a' := 1]) : une ecriture,
             // les scripts la changent ensuite (elle n'est pas tenue).

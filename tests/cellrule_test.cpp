@@ -9,6 +9,7 @@
 //  point, les espaces entre les milliers, les durees (T#5s, 5 s, 250 ms), les dates ; un
 //  entier sans decimale et dans ses bornes (refuse, pas arrondi ni replie) ; ce qu'une case
 //  montre d'une valeur se retape tel quel.
+#include "../src/ui/widgets/ExprField.hpp"
 #include "../src/sim/ValueText.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiRoles.hpp"
@@ -261,6 +262,16 @@ void cells() {
           "INT : 12.7 refuse (" + why + ")");
 }
 
+// 1.12.19 (U5) : la simulation et l'API sous la meme regle - une case qui n'attend qu'une expression accepte
+// le "=" de tete (une condition de point d'arret aussi).
+void expressions() {
+    std::printf("== une case d'expression : le = de tete accepte ==\n");
+    namespace ef = ui::exprfield;
+    check(ef::withoutEquals("=x > 3") == "x > 3" && ef::withoutEquals("  = Niveau ") == "Niveau" && ef::withoutEquals("x = 3") == "x = 3",
+          "=x > 3 -> x > 3 ; un = au milieu reste (une comparaison)");
+    check(ef::withoutEquals("==3") == "==3", "== reste (la faute se dira)");
+}
+
 } // namespace
 
 int main() {
@@ -271,6 +282,7 @@ int main() {
     shown();
     constants();
     cells();
+    expressions();
     std::printf("%d controles, %d echec(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

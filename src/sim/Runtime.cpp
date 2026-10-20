@@ -1000,7 +1000,7 @@ std::size_t Runtime::importForcing(std::string_view text, std::vector<std::strin
 
         const auto eq = line.find('=');
         if (eq == std::string_view::npos) continue;
-        auto name = line.substr(0, eq);
+        auto name = line.substr(0, eq > 0 && line[eq - 1] == ':' ? eq - 1 : eq);   // 1.12.19 : nom := valeur aussi
         auto text2 = line.substr(eq + 1);
         while (!name.empty() && name.back() == ' ') name.remove_suffix(1);
         while (!text2.empty() && text2.front() == ' ') text2.remove_prefix(1);

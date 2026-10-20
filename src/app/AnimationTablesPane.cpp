@@ -259,7 +259,7 @@ public:
         switch (c) {
             case CSource:
                 s.bold = true;
-                s.fgTone = row.hmi ? ui::Tone::Family1 : ui::Tone::Info;
+                s.fgTone = row.hmi ? ui::Tone::Family2 : ui::Tone::Info;   // 1.12.19 : les couleurs de la légende (I sarcelle, A bleu)
                 // Lot API 6 : la fleche d'une structure ; une fille, en retrait.
                 s.indent = 12.f * static_cast<float>(row.depth);
                 if (row.structure && !row.hmi) s.expander = pane_.expanded_.count(lower(row.node.key)) ? 1 : 0;

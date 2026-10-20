@@ -136,6 +136,8 @@ public:
     std::vector<std::string>   radioDetails;
     std::vector<ui::InputText*> fields;         // un par choix (nul : aucun)
     std::vector<ui::Widget*>    browses;        // le bouton ... d'un champ de chemin (nul : aucun)
+    std::vector<bool>           checked;        // 1.12.19 : le champ a une verification (une ligne sous lui)
+    std::vector<std::string>    errors;         // ... et ce qu'elle refuse (vide : rien)
     TextBlock*                 note{nullptr};
     std::vector<ui::Button*>   buttons;         // de gauche a droite (le principal en dernier)
 
@@ -148,6 +150,7 @@ public:
             h += 30.f;
             if (!radioDetails[i].empty()) h += static_cast<float>(wrapText(radioDetails[i], kSmall, w - 40).size()) * 18.f;
             if (i < fields.size() && fields[i]) h += 34.f;
+            if (i < checked.size() && checked[i]) h += 18.f;
             h += 6;
         }
         if (note) h += note->heightFor(w) + 8;
@@ -200,6 +203,11 @@ protected:
                 fields[i]->setBounds({x + 28, y + 2, fw, 28});
                 if (browse) browse->setBounds({x + 28 + fw + 6, y + 2, 34, 28});
                 y += 34;
+                if (i < checked.size() && checked[i]) {
+                    errorAt_.resize(radios.size(), -1.f);
+                    errorAt_[i] = y;
+                    y += 18;
+                }
             }
             y += 6;
         }
@@ -228,12 +236,19 @@ protected:
                 y += 18;
             }
         }
+        // 1.12.19 (la regle des cases) : le refus d'un champ, en rouge sous lui (comme sous une case de l'inspecteur).
+        for (std::size_t i = 0; i < errors.size() && i < errorAt_.size(); ++i)
+            if (!errors[i].empty() && errorAt_[i] >= 0.f) {
+                const auto lines = wrapText(errors[i], kSmall, panel_.w - 72);
+                if (!lines.empty()) ctx.r.drawText({panel_.x + 44, errorAt_[i]}, lines.front(), kSmall, c.error);
+            }
     }
 private:
     std::string        title_;
     gfx::Rect          panel_{};
     float              listTitleAt_{0};
     std::vector<float> radioAt_;
+    std::vector<float> errorAt_;
     bool               revealed_{false};
 };
 
@@ -319,6 +334,7 @@ core::Status HmiAskDialog::buildUi() {
                 auto f = std::make_unique<ui::InputText>(base + ".field" + std::to_string(i));
                 f->setText(o.field);
                 f->setPlaceholder(o.placeholder);
+                f->setMonospace(o.monospace);
                 field = &static_cast<ui::InputText&>(body->addChild(std::move(f)));
                 links_ += field->textChanged->connect([this](const std::string&) { sync(); });
                 // Un champ de chemin : le bouton ... (l'explorateur de fichiers).
@@ -337,6 +353,8 @@ core::Status HmiAskDialog::buildUi() {
             browses_.push_back(browse);
             body->fields.push_back(field);
             body->browses.push_back(browse);
+            body->checked.push_back(field && static_cast<bool>(o.check));
+            body->errors.emplace_back();
         }
         group_->setValue(std::clamp(spec_.option, 0, static_cast<int>(spec_.options.size()) - 1));
         links_ += group_->valueChanged->connect([this](int) { sync(); });
@@ -357,6 +375,7 @@ core::Status HmiAskDialog::buildUi() {
     ok_->setStyle(spec_.danger ? ui::Button::Style::Danger : ui::Button::Style::Primary);
     body->buttons.push_back(ok_);
     links_ += ok_->clicked->connect([this] { finish(true); });
+    body_ = body.get();
     setRoot(std::move(body));
     sync();
     return core::ok();
@@ -380,14 +399,31 @@ void HmiAskDialog::sync() {
         if (fields_[i]) fields_[i]->setEnabled(on);
         if (i < browses_.size() && browses_[i]) browses_[i]->setEnabled(on);
     }
-    if (spec_.ready) ok_->setEnabled(spec_.ready());
+    // 1.12.19 (la regle des cases) : le champ du choix actif verifie a la frappe ; son refus sous lui.
+    refused_ = false;
+    if (auto* body = static_cast<AskBody*>(body_)) {
+        for (std::size_t i = 0; i < fields_.size() && i < body->errors.size(); ++i) {
+            const bool on = !group_ || group_->value() == static_cast<int>(i);
+            std::string why;
+            if (on && fields_[i] && i < spec_.options.size() && spec_.options[i].check) why = spec_.options[i].check(fields_[i]->text());
+            refused_ = refused_ || !why.empty();
+            if (why != body->errors[i]) {
+                body->errors[i] = std::move(why);
+                body->invalidate();
+            }
+            if (fields_[i]) fields_[i]->setTooltip(body->errors[i]);
+        }
+    }
+    ok_->setEnabled((!spec_.ready || spec_.ready()) && !refused_);
+    if (refused_) ok_->setTooltip("Corrige d'abord le champ (en rouge dessous).");
+    else ok_->setTooltip({});
 }
 
 void HmiAskDialog::Update(const menu::FrameContext& f) {
     menu::WidgetMenu::Update(f);
     if (spec_.live && text_) static_cast<TextBlock*>(text_)->poll();
     if (spec_.ready && ok_) {
-        const bool ready = spec_.ready();
+        const bool ready = spec_.ready() && !refused_;
         if (ready != ok_->enabled()) ok_->setEnabled(ready);
         if (stop_) stop_->setEnabled(!ready);
     }

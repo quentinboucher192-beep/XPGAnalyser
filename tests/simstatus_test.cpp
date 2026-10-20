@@ -326,6 +326,9 @@ void journal() {
     check(j.filtered(0, SimSeverity::Error).size() == 1, "les erreurs seules : une");
     check(j.filtered(0, SimSeverity::Info, "repond").size() == 1, "chercher sans accents : \"repond\" trouve \"r\xC3\xA9pond\"");
     check(j.filtered(0, SimSeverity::Info, "equipements").size() == 1, "... et la source (\"equipements\")");
+    // 1.12.19 : la recherche de toutes les listes - des mots ET, -exclu.
+    check(j.filtered(0, SimSeverity::Info, "balance repond").size() == 1 && j.filtered(0, SimSeverity::Info, "balance -repond").empty(),
+          "chercher : \"balance repond\" (les deux mots), \"balance -repond\" (rien)");
     check(j.count(SimSource::Automate) == 1 && j.countAtLeast(SimSeverity::Warning) == 2, "compter");
     const auto rev = j.revision();
     j.setCapacity(16);

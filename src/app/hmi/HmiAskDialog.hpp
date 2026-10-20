@@ -36,6 +36,11 @@ public:
         // fichiers (ui::openFile, ui::saveFile, ui::chooseFolder) ; le champ
         // prend alors toute la largeur.
         ui::PathBrowse browse{};
+        // 1.12.19 (la regle des cases) : CE QUI NE VA PAS dans le champ, a la frappe - dit en rouge sous
+        // lui, et le bouton principal grise tant qu'il y en a (vide : rien a redire). `monospace` : le
+        // champ attend une expression (chasse fixe).
+        std::function<std::string(const std::string&)> check;
+        bool           monospace{false};
     };
     struct Spec {
         std::string         id{"dialog.hmiAsk"};
@@ -91,6 +96,8 @@ private:
     ui::Button*                                   ok_{nullptr};
     ui::Button*                                   stop_{nullptr};
     ui::Widget*                                   text_{nullptr};
+    ui::Widget*                                   body_{nullptr};      // 1.12.19 : les refus sous les champs
+    bool                                          refused_{false};     // un champ a un refus : OK grise
     bool                                          done_{false};
     core::ConnectionScope                         links_;
 };

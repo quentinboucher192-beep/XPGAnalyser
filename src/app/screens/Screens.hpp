@@ -1165,8 +1165,10 @@ private:
     [[nodiscard]] ApiPaneHosts apiHosts();                 // ce que les volets demandent a l'ecran
     void pickAnimationVariables(bool hmi);                 // + Variable API / + Variable IHM
     // `browse` : un champ de chemin (exporter, importer) - le bouton ... a sa droite.
+    // 1.12.19 : `check` - ce qui ne va pas dans le texte, dit en rouge sous le champ a la frappe (OK grise).
     void askApiText(const std::string& title, const std::string& text, const std::string& initial,
-                    std::function<void(const std::string&)> done, ui::PathBrowse browse = {});
+                    std::function<void(const std::string&)> done, ui::PathBrowse browse = {},
+                    std::function<std::string(const std::string&)> check = {});
     void importHardwareIntoProject();                      // Configuration > Importer le .XHW...
     void wireAnimationTreeDrag();                          // une variable glissee sur une table
     bool dropTreeDragOnTables(const ui::InputEvent& ev);   // ... ou sur l'onglet des tables

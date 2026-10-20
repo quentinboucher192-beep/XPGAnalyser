@@ -32,6 +32,10 @@ public:
         std::vector<std::string> ideas;          // les pastilles
         // Ce que le dialogue dit en direct du texte du champ.
         std::function<std::string(const std::string&)> preview;
+        // 1.12.19 (la regle des cases) : faux - la condition ne se lit pas : la phrase en rouge, Valider grise.
+        std::function<bool(const std::string&)> readable;
+        // L'aide a la saisie du champ (Ctrl+Espace) : les noms de la ligne et de l'automate.
+        ui::InputText::Assist assist;
     };
 
     explicit SimConditionDialog(Spec spec);
@@ -53,11 +57,14 @@ protected:
 
 private:
     void finish(menu::DialogResult::Button button);
+    void readable(const std::string& text);              // 1.12.19 : Valider grise si la condition ne se lit pas
 
     Spec                     spec_;
     ui::InputText*           field_{nullptr};
+    ui::Button*              ok_{nullptr};
     ui::Widget*              body_{nullptr};
     std::string              live_;
+    bool                     unreadable_{false};   // 1.12.19 : la condition ne se lit pas
     double                   nextLive_{0.0};
     bool                     done_{false};
     core::ConnectionScope    links_;

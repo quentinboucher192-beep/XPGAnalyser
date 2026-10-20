@@ -4,6 +4,7 @@
 // =============================================================================
 #include "HmiSimVarTree.hpp"
 #include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture d'une valeur tapee, partout la meme
+#include "../../hmi/HmiSymbols.hpp"  // 1.12.19 : shownLiteral (la valeur forcee, telle qu'elle a ete lue)
 
 #include "../../ui/Commands.hpp"
 
@@ -533,10 +534,20 @@ bool HmiSimVarTree::forcePath(const std::string& path, const std::string& text) 
         return false;
     }
     // 1.11.7 : la valeur tapee (forcee dans un esclave simule, la variable ne la relit qu'au cycle suivant).
+    // 1.12.19 (la regle des cases) : telle qu'elle a ete LUE (2,5 -> 2.5, 5 s -> T#5s), pas le texte tape.
     std::string now = text;
-    if (now.empty() && hooks_.read)
-        if (const auto v = hooks_.read(path)) now = hmi::formatValue(*v);
-    say(path + " forc\xC3\xA9" "e" + (now.empty() ? std::string{} : " \xC3\xA0 " + now) + " (d\xC3\xA9" "cocher Forcer la rend libre).", false);
+    // Une variable objet (LIST, MAP...) est ecrite, pas tenue : la case Forcer reste decochee.
+    const bool held = !(hooks_.rich && hooks_.rich(path));
+    std::optional<sim::Value> cur;
+    if (held && hooks_.read) cur = hooks_.read(path);
+    if (held && !now.empty()) {
+        if (const auto v = parseTypedValue(now, cur ? &*cur : nullptr, nullptr)) now = hmi::shownLiteral(sim::fixedText(*v));
+    } else if (held && cur) {
+        now = hmi::shownLiteral(sim::fixedText(*cur));
+    }
+    say(path + (held ? " forc\xC3\xA9" "e" : " \xC3\xA9" "crite") + (now.empty() ? std::string{} : " \xC3\xA0 " + now)
+            + (held ? " (d\xC3\xA9" "cocher Forcer la rend libre)." : " (une variable objet n'est pas tenue : le programme peut la changer)."),
+        false);
     invalidate();
     return true;
 }

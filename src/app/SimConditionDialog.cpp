@@ -65,6 +65,7 @@ public:
     ui::Button*              cancel{nullptr};
     ui::Button*              ok{nullptr};
     const std::string*       live{nullptr};
+    const bool*              unreadable{nullptr};   // 1.12.19 : la phrase en rouge
     float                    width{600.f};
 
 protected:
@@ -135,7 +136,7 @@ protected:
         if (live) {
             float y = liveAt_;
             for (const auto& l : wrapWords(*live, kSmall, panel_.w - 32.f)) {
-                r.drawText({panel_.x + 16.f, y}, l, kSmall, c.text);
+                r.drawText({panel_.x + 16.f, y}, l, kSmall, unreadable && *unreadable ? c.error : c.text);   // 1.12.19 : une faute en rouge
                 y += 18.f;
             }
         }
@@ -177,11 +178,14 @@ core::Status SimConditionDialog::buildUi() {
         nextText().clear();
     }
     f->setText(initial);
-    f->setPlaceholder("vide = \xC3\xA0 chaque passage");
+    f->setPlaceholder("vide \xC2\xB7 \xC3\xA0 chaque passage");
+    f->setMonospace(true);                               // 1.12.19 : une expression, en chasse fixe
+    if (spec_.assist) f->setAssist(spec_.assist);       // 1.12.19 : Ctrl+Espace, les noms
     field_ = &static_cast<ui::InputText&>(body->addChild(std::move(f)));
     body->field = field_;
-    links_ += field_->textChanged->connect([this](const std::string&) {
+    links_ += field_->textChanged->connect([this](const std::string& t) {
         nextLive_ = 0.0;                 // la phrase suit tout de suite
+        readable(t);
         if (body_) body_->invalidate();
     });
     for (std::size_t i = 0; i < spec_.ideas.size(); ++i) {
@@ -200,6 +204,9 @@ core::Status SimConditionDialog::buildUi() {
     links_ += body->ok->clicked->connect([this] { finish(menu::DialogResult::Button::Ok); });
     live_ = spec_.preview ? spec_.preview(initial) : std::string{};
     body->live = &live_;
+    body->unreadable = &unreadable_;
+    ok_ = body->ok;
+    readable(initial);
     body_ = body.get();
     setRoot(std::move(body));
     // Le champ a le focus : on tape tout de suite (Entree valide).
@@ -209,6 +216,15 @@ core::Status SimConditionDialog::buildUi() {
 }
 
 std::string SimConditionDialog::fieldText() const { return field_ ? field_->text() : std::string{}; }
+
+// 1.12.19 (la regle des cases) : une condition illisible ne se valide pas ; elle le dit en rouge.
+void SimConditionDialog::readable(const std::string& text) {
+    unreadable_ = spec_.readable && !spec_.readable(text);
+    if (ok_) {
+        ok_->setEnabled(!unreadable_);
+        ok_->setTooltip(unreadable_ ? std::string("La condition ne se lit pas : corrige-la (la phrase en rouge dit pourquoi).") : std::string{});
+    }
+}
 
 std::string SimConditionDialog::liveText() const { return live_; }
 
@@ -243,7 +259,7 @@ ui::EventResult SimConditionDialog::HandleEvent(const ui::InputEvent& ev) {
             return ui::EventResult::Consumed;
         }
         if (k->key == ui::Key::Return && !(field_ && field_->suggestionsOpen())) {
-            finish(menu::DialogResult::Button::Ok);
+            if (!unreadable_) finish(menu::DialogResult::Button::Ok);
             return ui::EventResult::Consumed;
         }
     }

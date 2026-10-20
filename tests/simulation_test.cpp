@@ -453,6 +453,10 @@ int main() {
         assert(partial == 1);
         assert(unknown.size() == 1 && unknown.front() == "vanished");
         assert(intOf(other, "gLevel") == 7);
+        // 1.12.19 : « nom := valeur », comme en ST, se relit aussi.
+        std::vector<std::string> unknown2;
+        assert(other.importForcing("gLevel := 9\n", &unknown2) == 1 && unknown2.empty());
+        assert(intOf(other, "gLevel") == 9 && "gLevel := 9 : le nom sans ses deux-points");
     }
 
     std::printf("\nsimulation_test: all assertions passed\n");

@@ -2856,6 +2856,24 @@ void SimulationPane::askForce(std::vector<std::string> paths) {
     std::string text = "Valeur (" + forceHint(current.type()) + ") : le programme ne peut plus ";
     text += paths.size() == 1 ? "la changer, Rel\xC3\xA2" "cher la lui rend." : "les changer, Rel\xC3\xA2" "cher les lui rend.";
     if (paths.size() > 1) text += " " + someNames(paths) + ".";
+    // 1.12.19 (la regle des cases) : la valeur lue a la frappe, dans le type de chaque case ; un refus se dit sous
+    // le champ, la fenetre reste ouverte (avant : la barre d'etat, apres la fermeture - la saisie etait perdue).
+    if (hosts_.askChecked) {
+        auto check = [this, targets = paths](const std::string& typed) -> std::string {
+            auto* r = runtime();
+            if (!r) return {};
+            if (trim(typed).empty()) return "Une valeur : vide, rien ne serait forcÃ©.";
+            for (const auto& path : targets) {
+                sim::Value cur, v;
+                std::string why;
+                if (r->get(path, cur) && !parseForce(typed, cur.type(), v, why)) return targets.size() > 1 ? path + " : " + why : why;
+            }
+            return {};
+        };
+        hosts_.askChecked(title, text, literalOf(current), std::move(check),
+                          [this, targets = std::move(paths)](const std::string& typed) { (void)forcePaths(targets, typed); });
+        return;
+    }
     hosts_.ask(title, text, literalOf(current),
                [this, targets = std::move(paths)](const std::string& typed) { (void)forcePaths(targets, typed); });
 }
@@ -3028,14 +3046,14 @@ std::string fileLiteral(const sim::Value& v) {
 // Les forcages en texte : une ligne « nom = valeur » par variable - un scenario
 // qui se garde avec le projet, se relit et se corrige dans un editeur de texte.
 std::string forcingText(const sim::Runtime& rt, const std::vector<std::string>& names, std::size_t& written) {
-    std::string out = "# Forcages de la simulation (XpgAnalyzer) : une variable par ligne, nom = valeur.\n"
+    std::string out = "# Forcages de la simulation (XpgAnalyzer) : une variable par ligne, nom := valeur.\n"
                       "# TRUE / FALSE, 42, 1.5, T#500ms, 'texte'. API > Simulation > Importer... les rappelle ;\n"
                       "# un nom qui n'existe plus est dit, pas ignore.\n";
     written = 0;
     for (const auto& name : names) {
         sim::Value v;
         if (!rt.get(name, v)) continue;
-        out += name + " = " + fileLiteral(v) + "\n";
+        out += name + " := " + fileLiteral(v) + "\n";   // 1.12.19 : := comme en ST (= se relit aussi)
         ++written;
     }
     return out;
@@ -3055,13 +3073,19 @@ std::size_t applyForcing(sim::Runtime& rt, std::string_view text, std::vector<st
         const auto line = trim(text.substr(from, end - from));
         from = end + 1;
         if (line.empty() || line.front() == '#') continue;
-        const auto eq = line.find('=');
+        // 1.12.19 : « nom := valeur » comme en ST ; « nom = valeur » (les fichiers d'avant) se relit aussi.
+        auto eq = line.find(":=");
+        std::size_t skip = 2;
+        if (eq == std::string::npos) {
+            eq = line.find('=');
+            skip = 1;
+        }
         if (eq == std::string::npos) {
             unreadable.push_back(line);
             continue;
         }
         const auto name = trim(std::string_view(line).substr(0, eq));
-        const auto typed = trim(std::string_view(line).substr(eq + 1));
+        const auto typed = trim(std::string_view(line).substr(eq + skip));
         sim::Value current;
         if (name.empty() || !rt.get(name, current)) {
             unknown.push_back(name.empty() ? line : name);
@@ -3107,7 +3131,7 @@ void SimulationPane::exportForcing() {
     // defaut, ailleurs avec le bouton ... (l'explorateur, "Enregistrer sous").
     const std::string title = "Exporter les for\xC3\xA7" "ages";
     const std::string initial = utf8Of(folder / "forcages.txt");
-    const std::string question = "Une ligne \xC2\xAB nom = valeur \xC2\xBB par variable forc\xC3\xA9" "e. Le chemin se tape, ou se choisit avec "
+    const std::string question = "Une ligne \xC2\xAB nom := valeur \xC2\xBB par variable forc\xC3\xA9" "e. Le chemin se tape, ou se choisit avec "
                              + std::string(kEllipsis) + " (l'explorateur) ; un nom seul va dans " + utf8Of(folder) + ".";
     auto write = [this, folder](const std::string& answer) {
                    auto* r = runtime();
@@ -3146,7 +3170,7 @@ void SimulationPane::importForcing() {
     // bouton ... (l'explorateur).
     const std::string title = "Importer des for\xC3\xA7" "ages";
     const std::string initial = utf8Of(folder / "forcages.txt");
-    const std::string question = "Une ligne \xC2\xAB nom = valeur \xC2\xBB par variable. Le chemin se tape, ou se choisit avec "
+    const std::string question = "Une ligne \xC2\xAB nom := valeur \xC2\xBB par variable. Le chemin se tape, ou se choisit avec "
                              + std::string(kEllipsis) + " (l'explorateur) ; un nom seul se lit dans " + utf8Of(folder) + ".";
     auto read = [this, folder](const std::string& answer) {
                    auto* r = runtime();

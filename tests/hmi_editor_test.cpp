@@ -24362,8 +24362,8 @@ void menusSimulation11218() {
     auto& ex = pane.expressions();
     int row = -1;
     for (std::size_t r = 0; ex.model() && r < ex.model()->rowCount(); ++r)
-        if (ex.model()->cellText(static_cast<ui::RowIndex>(r), 1) == "Niveau") row = static_cast<int>(r);
-    check(row >= 0, "les Expressions : une ligne Niveau");
+        if (ex.model()->cellText(static_cast<ui::RowIndex>(r), 1) == "=Niveau") row = static_cast<int>(r);   // 1.12.19 : avec son =
+    check(row >= 0, "les Expressions : une ligne =Niveau");
     if (row >= 0) {
         ex.selectModelRows({static_cast<ui::RowIndex>(row)});
         ex.openContextMenu({100.f, 100.f});
@@ -24496,7 +24496,7 @@ void surLaVueClicDroit1116() {
         bool symbolExpr = false;
         std::size_t exprRow = std::string::npos;
         for (std::size_t r = 0; m && r < m->rowCount(); ++r)
-            if (m->cellText(r, 1) == "Four1.Vannes[2].Position + Compteur") { symbolExpr = true; exprRow = r; }
+            if (m->cellText(r, 1) == "=Four1.Vannes[2].Position + Compteur") { symbolExpr = true; exprRow = r; }   // 1.12.19 : avec son =
         check(aff != std::string::npos && m->cellStyle(aff, 0).expander == 1, "Aff_1 : un n\xC5\x93ud ouvert");
         check(symbolExpr && exprRow > aff && m->cellStyle(exprRow, 0).indent >= 32.f,
               "sous Aff_1 > son objet : l'expression du symbole, d\xC3\xA9velopp\xC3\xA9" "e (X -> Four1.Vannes[2].Position)");

@@ -113,6 +113,29 @@ void openConditionDialog(App& app, const std::string& section, int line, const D
     spec.preview = [at, prefixes = ask.prefixes](const std::string& text) {
         return SimDebugPane::previewCondition(at->simulationRuntime(), prefixes, text);
     };
+    spec.readable = [](const std::string& text) { return simdebug::conditionReadable(text); };   // 1.12.19
+    // 1.12.19 : Ctrl+Espace - les globales et les variables des unites (Unite.nom), comme « + Espion ».
+    spec.assist = [p](std::string_view before, std::size_t& from, std::vector<ui::InputText::Suggestion>& out) {
+        std::size_t s = before.size();
+        while (s > 0 && (std::isalnum(static_cast<unsigned char>(before[s - 1])) || before[s - 1] == '_' || before[s - 1] == '.')) --s;
+        from = s;
+        const std::string word(before.substr(s));
+        std::vector<std::string> names;
+        for (const auto& v : p->variables)
+            if (v.scope == domain::VariableScope::Global || v.scope == domain::VariableScope::Constant) names.emplace_back(p->strings.text(v.name));
+        for (const auto& pou : p->pous) {
+            if (pou.kind != domain::PouKind::ProgramUnit) continue;
+            const std::string unit(p->strings.text(pou.name));
+            for (const auto vi : pou.parameters) if (vi < p->variables.size()) names.push_back(unit + "." + std::string(p->strings.text(p->variables[vi].name)));
+            for (const auto vi : pou.locals) if (vi < p->variables.size()) names.push_back(unit + "." + std::string(p->strings.text(p->variables[vi].name)));
+        }
+        for (auto& n : word.empty() ? std::vector<std::string>{} : sd::namesStartingWith(names, word, 40)) {
+            ui::InputText::Suggestion sug;
+            sug.text = std::move(n);
+            sug.detail = "variable de l'automate";
+            out.push_back(std::move(sug));
+        }
+    };
     app.menus().ShowDialog(std::make_unique<SimConditionDialog>(std::move(spec)),
                            [at, id = ask.id, number = ask.number, key = ask.section, line, journal, status](const menu::DialogResult& r) {
                                auto& h = at->simulation();

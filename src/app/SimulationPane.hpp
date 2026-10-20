@@ -78,6 +78,11 @@ public:
         // champ avec le bouton ... de l'explorateur de fichiers. Absent : `ask`.
         std::function<void(const std::string& title, const std::string& text, const std::string& initial,
                            ui::PathBrowse browse, std::function<void(const std::string&)> done)> askPath;
+        // 1.12.19 (la regle des cases) : la meme question, le texte verifie A LA FRAPPE par `check` (ce qui
+        // ne va pas, dit en rouge sous le champ ; OK grise). Absent : `ask`.
+        std::function<void(const std::string& title, const std::string& text, const std::string& initial,
+                           std::function<std::string(const std::string&)> check,
+                           std::function<void(const std::string&)> done)> askChecked;
         std::function<std::string()>                              folder;    // le dossier du projet
         // La version d'un bloc en bibliotheque, si elle est plus recente que
         // celle du projet ("0.24") ; vide sinon.

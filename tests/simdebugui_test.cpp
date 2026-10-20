@@ -463,6 +463,11 @@ int main(int argc, char** argv) {
         check(contains(sd::conditionPreview(nullptr, {""}, "x >"), "Elle ne se lit pas"), "illisible : " + sd::conditionPreview(nullptr, {""}, "x >"));
         check(contains(sd::conditionPreview(nullptr, {""}, "ABS(x) > 3"), "appelle une fonction"), "un appel : pas essay\xC3\xA9 ici");
         check(contains(sd::conditionPreview(nullptr, {""}, "x > 3"), "pas pr\xC3\xAAte"), "sans simulation : lue au premier passage");
+        // 1.12.19 (la regle des cases) : le "=" de tete accepte, comme une condition d'alarme ; une illisible refusee.
+        check(sd::conditionText(" =x > 3 ") == "x > 3" && sd::conditionText("==3") == "==3", "conditionText : =x > 3 -> x > 3");
+        check(contains(sd::conditionPreview(nullptr, {""}, "=x > 3"), "pas pr\xC3\xAAte"), "=x > 3 se lit (avant : refusee)");
+        check(sd::conditionReadable("=x > 3") && sd::conditionReadable("") && !sd::conditionReadable("x >"),
+              "conditionReadable : =x > 3 oui, vide oui, x > non");
     }
 
     // 1.11.2 (API-M, D25, decision 143) : « Qui a ecrit ? » dit, a cote d'une ligne

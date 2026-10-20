@@ -1,4 +1,6 @@
 #include "App.hpp"
+#include "../sim/Value.hpp"        // 1.12.19 : la valeur initiale d'une variable de l'automate, lue dans son type
+#include "../sim/ValueText.hpp"
 #include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API, XPGAnalyser IHM
 #include "Dossiers.hpp"
 #include "EditionMigration.hpp"   // 1.12.0 : les projets de la 1.11, recopies dans projets\api et projets\ihm
@@ -1103,13 +1105,13 @@ void App::registerActions() {
                                           {"Global", "Input", "Output", "InOut",
                                            "Public", "Private", "Member"}};
                             f[Type]    = {"Type", typeNames.front(), "", false, typeNames};
-                            f[Array]   = {"Tableau", "No", "", false, {"No", "Yes"}};
+                            f[Array]   = {"Tableau", "Non", "", false, {"Non", "Oui"}};   // 1.12.19 : en francais
                             f[Dims]    = {"Dimensions", "0..9",
                                           "0..9  ou  0..9, 0..3 pour deux dimensions", false, {}};
                             f[Address] = {"Adresse", "",
                                           "%MW10, %I0.3, %Q0.1 - vide : non situ\xC3\xA9" "e",
                                           false, {}};
-                            f[Init]    = {"Valeur initiale", "", "", false, {}};
+                            f[Init]    = {"Valeur initiale", "", "vide \xC2\xB7 celle du type (0, FALSE, '')", false, {}};
                             f[Comment] = {"Commentaire", "", "", false, {}};
 
                             auto dialog = std::make_unique<FormDialog>(
@@ -1134,7 +1136,7 @@ void App::registerActions() {
                                     st.scope       = v[Scope];
                                     st.container   = v[In];
                                     st.type        = v[Type];
-                                    st.arrayWanted = v[Array] == "Yes";
+                                    st.arrayWanted = v[Array] == "Oui";
                                     project::applyVariableFormRules(*document_, st);
 
                                     fs[In].choices  = st.containerChoices;
@@ -1147,12 +1149,24 @@ void App::registerActions() {
 
                                     fs[Array].enabled = st.arrayAllowed;
                                     fs[Array].hint    = st.arrayHint;
-                                    fs[Array].value   = st.arrayWanted ? "Yes" : "No";
+                                    fs[Array].value   = st.arrayWanted ? "Oui" : "Non";
 
                                     fs[Dims].enabled = st.arrayWanted;
                                     fs[Dims].hint    = st.arrayWanted ? std::string{}
-                                                                     : "mettre Tableau \xC3\xA0 Yes";
+                                                                     : "mettre Tableau \xC3\xA0 Oui";
                                 });
+                            // 1.12.19 (la regle des cases) : la valeur initiale lue dans son type, comme partout (2,5 -> 2.5,
+                            // VRAI -> TRUE, 5 s -> T#5s) ; illisible : dit sous le champ, la fenetre reste ouverte.
+                            dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
+                                if (v.size() < 9 || v[Init].empty() || v[Array] == "Oui") return {};
+                                const auto t = sim::typeFromName(v[Type]);
+                                if (t == sim::Type::Unknown) return {};
+                                sim::Value val;
+                                std::string why;
+                                if (sim::readTyped(v[Init], t, val, why)) return {};
+                                field = Init;
+                                return "Valeur initiale : " + why;
+                            });
 
                             menus_->ShowDialog(
                                 std::move(dialog),
@@ -1165,10 +1179,16 @@ void App::registerActions() {
                                     spec.name      = v[Name];
                                     spec.address   = v[Address];
                                     spec.initValue = v[Init];
+                                    // 1.12.19 : ecrite comme le ST l'attend (2,5 -> 2.5, VRAI -> TRUE, Azote -> 'Azote').
+                                    if (const auto t = sim::typeFromName(v[Type]); !v[Init].empty() && v[Array] != "Oui" && t != sim::Type::Unknown) {
+                                        sim::Value val;
+                                        std::string why;
+                                        if (sim::readTyped(v[Init], t, val, why)) spec.initValue = sim::fixedText(val);
+                                    }
                                     spec.comment   = v[Comment];
 
                                     spec.type = project::composeTypeName(
-                                        v[Type], v[Array] == "Yes", v[Dims]);
+                                        v[Type], v[Array] == "Oui", v[Dims]);
 
                                     spec.scope =
                                         v[Scope] == "Input"   ? domain::VariableScope::Input

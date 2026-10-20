@@ -31,6 +31,7 @@ struct LiveValue {
     std::string objectName;
     std::string key;           // la propriete ("visible", "value", "text"...)
     std::string expression;    // la source : "Armoires[i].prete" ou le texte a trous
+    bool        text{false};   // 1.12.19 : `expression` est un texte a trous (montre tel quel, sans « = »)
     std::string value;         // le resultat, en texte ; le message si erreur
     bool        error{false};
     // Lot 14 : relie a un automate reel, la pire qualite des variables lues

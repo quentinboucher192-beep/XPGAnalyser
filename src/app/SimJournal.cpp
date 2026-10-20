@@ -3,6 +3,7 @@
 // =============================================================================
 #include "SimJournal.hpp"
 #include "../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - sans automate
+#include "../ui/TextSearch.hpp"     // 1.12.19 : la recherche commune
 
 #include <algorithm>
 #include <cctype>
@@ -14,32 +15,6 @@ namespace app {
 
 namespace {
 
-// Sans la casse ni les accents (les lettres du francais, en UTF-8) : << Equipements >>
-// trouve << Equipements >>.
-std::string fold(std::string_view s) {
-    std::string out;
-    out.reserve(s.size());
-    for (std::size_t i = 0; i < s.size(); ++i) {
-        const auto c = static_cast<unsigned char>(s[i]);
-        if (c == 0xC3 && i + 1 < s.size()) {
-            const auto d = static_cast<unsigned char>(s[i + 1]);
-            char base = 0;
-            if ((d >= 0x80 && d <= 0x86) || (d >= 0xA0 && d <= 0xA6)) base = 'a';
-            else if (d == 0x87 || d == 0xA7) base = 'c';
-            else if ((d >= 0x88 && d <= 0x8B) || (d >= 0xA8 && d <= 0xAB)) base = 'e';
-            else if ((d >= 0x8C && d <= 0x8F) || (d >= 0xAC && d <= 0xAF)) base = 'i';
-            else if ((d >= 0x92 && d <= 0x96) || (d >= 0xB2 && d <= 0xB6)) base = 'o';
-            else if ((d >= 0x99 && d <= 0x9C) || (d >= 0xB9 && d <= 0xBC)) base = 'u';
-            if (base) {
-                out += base;
-                ++i;
-                continue;
-            }
-        }
-        out += c < 0x80 ? static_cast<char>(std::tolower(c)) : static_cast<char>(c);
-    }
-    return out;
-}
 
 double steadySeconds() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -166,7 +141,8 @@ std::vector<const SimEvent*> SimJournal::since(double seconds) const {
 
 std::vector<const SimEvent*> SimJournal::filtered(unsigned sources, SimSeverity atLeast, std::string_view search) const {
     std::vector<const SimEvent*> out;
-    const std::string want = fold(search);
+    // 1.12.19 : la recherche de toutes les listes (des mots ET, "une phrase", -exclu), plus une sous-chaine.
+    const ui::SearchQuery query(search);
     const auto rank = [](SimSeverity s) {
         // Ok compte comme Info : << a surveiller >> ne montre pas ce qui repart.
         return s == SimSeverity::Error ? 2 : s == SimSeverity::Warning ? 1 : 0;
@@ -175,9 +151,11 @@ std::vector<const SimEvent*> SimJournal::filtered(unsigned sources, SimSeverity 
         const auto& e = *it;
         if (sources && !(sources & bit(e.source))) continue;
         if (rank(e.severity) < rank(atLeast)) continue;
-        if (!want.empty() && fold(e.text).find(want) == std::string::npos && fold(e.kind).find(want) == std::string::npos
-            && fold(explanationOf(e)).find(want) == std::string::npos && fold(sourceName(e.source)).find(want) == std::string::npos)
-            continue;
+        if (!query.empty()) {
+            const std::string explanation = explanationOf(e);
+            const std::string source(sourceName(e.source));
+            if (!query.matches({e.text, e.kind, explanation, source})) continue;
+        }
         out.push_back(&e);
     }
     return out;

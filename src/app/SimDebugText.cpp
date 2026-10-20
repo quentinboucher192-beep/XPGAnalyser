@@ -904,8 +904,19 @@ std::string conditionTrouble(const core::Error& e) {
 
 } // namespace
 
+std::string conditionText(std::string_view typed) {
+    std::string c = trim(typed);
+    if (!c.empty() && c.front() == '=' && (c.size() < 2 || c[1] != '=')) c = trim(std::string_view(c).substr(1));
+    return c;
+}
+
+bool conditionReadable(std::string_view typed) {
+    const std::string c = conditionText(typed);
+    return c.empty() || static_cast<bool>(sim::parseExpression(c));
+}
+
 std::string conditionPreview(sim::Runtime* rt, const std::vector<std::string>& prefixes, std::string_view condition) {
-    const std::string c = trim(condition);
+    const std::string c = conditionText(condition);   // 1.12.19 : =x > 3 se lit x > 3
     if (c.empty()) return "Sans condition : la simulation s'arr\xC3\xAAtera \xC3\xA0 chaque cycle.";
     const auto parsed = sim::parseExpression(c);
     if (!parsed) return "Elle ne se lit pas : " + conditionTrouble(parsed.error()) + ".";

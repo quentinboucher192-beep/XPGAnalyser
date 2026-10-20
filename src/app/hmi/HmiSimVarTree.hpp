@@ -44,6 +44,8 @@ public:
     };
     struct Hooks {
         std::function<std::optional<sim::Value>(const std::string& path)> read;
+        // 1.12.19 : une variable objet (LIST, MAP...) - forcer l'ECRIT sans la tenir (le message le dit).
+        std::function<bool(const std::string& path)> rich;
         std::function<bool(const std::string& path)>                      forced;
         // Forcer : `text` vide - a la valeur du moment ; sinon la valeur tapee.
         std::function<bool(const std::string& path, const std::string& text, std::string* why)> force;

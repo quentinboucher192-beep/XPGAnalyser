@@ -503,7 +503,7 @@ if(XPG_BUILD_TESTS)
     # ---- Lot API 8 : Centre de simulation (le bandeau, les cartes, la chaine,
     # l'attention, la frise ; le journal : ses filtres, ses cles "aller a") - sans ecran ----
     xpg_add_test_executable(simstatus_test tests/simstatus_test.cpp src/app/SimStatus.cpp src/app/SimJournal.cpp)
-    xpg_target_link_libraries(simstatus_test PRIVATE xpg_core)
+    xpg_target_link_libraries(simstatus_test PRIVATE xpg_core xpg_ui)   # 1.12.19 : ui::SearchQuery (le journal)
     # ---- 1.12.17 : la Vue d'ensemble dans le temps (les performances, le journal des lenteurs) ----
     xpg_add_test_executable(simperf_test tests/simperf_test.cpp src/app/SimCenterOverview.cpp src/app/SimCenterPerf.cpp
                    src/app/SimStatus.cpp src/app/SimJournal.cpp)

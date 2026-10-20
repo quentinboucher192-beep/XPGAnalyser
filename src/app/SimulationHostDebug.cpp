@@ -267,9 +267,16 @@ bool SimulationHost::setBreakpointEnabled(std::uint32_t id, bool enabled) {
 
 bool SimulationHost::setBreakpointCondition(std::uint32_t id, const std::string& condition) {
     pullHits();
+    // 1.12.19 (la regle des cases) : une case qui n'attend qu'une expression accepte le "=" de tete
+    // (=x > 3 comme x > 3), comme une condition d'alarme de l'IHM ; un "==" reste (l'erreur se dira).
+    std::string_view c = condition;
+    while (!c.empty() && (c.front() == ' ' || c.front() == '\t')) c.remove_prefix(1);
+    if (!c.empty() && c.front() == '=' && (c.size() < 2 || c[1] != '=')) c.remove_prefix(1);
+    while (!c.empty() && (c.front() == ' ' || c.front() == '\t')) c.remove_prefix(1);
+    while (!c.empty() && (c.back() == ' ' || c.back() == '\t')) c.remove_suffix(1);
     for (auto& b : breakpoints_)
         if (b.id == id) {
-            b.condition = condition;
+            b.condition = std::string(c);
             pushBreakpoints();
             changed->emit();
             return true;

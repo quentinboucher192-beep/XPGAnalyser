@@ -449,6 +449,11 @@ void MainAnalysisScreen::openApiPane(const std::string& key) {
         };
         h.ask = [this](const std::string& askTitle, const std::string& text, const std::string& initial,
                        std::function<void(const std::string&)> done) { askApiText(askTitle, text, initial, std::move(done)); };
+        // 1.12.19 : Forcer - la valeur verifiee a la frappe (lue dans le type de la case), le refus sous le champ.
+        h.askChecked = [this](const std::string& askTitle, const std::string& text, const std::string& initial,
+                              std::function<std::string(const std::string&)> check, std::function<void(const std::string&)> done) {
+            askApiText(askTitle, text, initial, std::move(done), {}, std::move(check));
+        };
         // Exporter / importer les forcages : un chemin, avec le bouton ... (l'explorateur).
         h.askPath = [this](const std::string& askTitle, const std::string& text, const std::string& initial, ui::PathBrowse browse,
                            std::function<void(const std::string&)> done) {
@@ -796,7 +801,8 @@ void MainAnalysisScreen::tickApiPanes(double now) {
 }
 
 void MainAnalysisScreen::askApiText(const std::string& title, const std::string& text, const std::string& initial,
-                                    std::function<void(const std::string&)> done, ui::PathBrowse browse) {
+                                    std::function<void(const std::string&)> done, ui::PathBrowse browse,
+                                    std::function<std::string(const std::string&)> check) {
     HmiAskDialog::Spec spec;
     spec.id = "dialog.apiAsk";
     spec.title = title;
@@ -817,6 +823,7 @@ void MainAnalysisScreen::askApiText(const std::string& title, const std::string&
                  : "Valeur";
     option.field = initial;
     option.hasField = true;
+    option.check = std::move(check);
     // Un chemin (exporter, importer les forcages) : le bouton ... de l'explorateur,
     // et la place de lire un chemin complet.
     const bool path = browse.active();

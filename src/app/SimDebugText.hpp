@@ -194,6 +194,10 @@ struct ConditionName {
 // « Sans condition : la simulation s'arretera a chaque cycle. », « Maintenant,
 // c'est vrai (x = 3). », « Elle ne se lit pas : ... », rt nul : pas prete.
 [[nodiscard]] std::string conditionPreview(sim::Runtime* rt, const std::vector<std::string>& prefixes, std::string_view condition);
+// 1.12.19 (la regle des cases) : la condition tapee sans ses blancs ni son "=" de tete (=x > 3 -> x > 3) ;
+// lisible : vide (sans condition) ou du ST qui se lit - sinon Valider est grise et la phrase est rouge.
+[[nodiscard]] std::string conditionText(std::string_view typed);
+[[nodiscard]] bool conditionReadable(std::string_view typed);
 // ---- fin Lot API 8 (2e partie) ----
 
 } // namespace app::simdebug

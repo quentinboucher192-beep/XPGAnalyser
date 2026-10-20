@@ -309,6 +309,7 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
             lv.key = "cells[" + std::to_string(b.row + 1) + "," + std::to_string(b.col + 1) + "]";
             if (b.isText) {
                 lv.expression = b.text.source();
+                lv.text = true;
                 lv.value = b.text.render(plc, scope);
                 lv.error = !b.text.errors().empty() || lv.value.find("###") != std::string::npos;
             } else {
@@ -338,6 +339,7 @@ View LiveView::evaluate(sim::Environment& plc, std::vector<LiveValue>* values, c
         }
         if (b.isText) {
             lv.expression = b.text.source();
+            lv.text = true;
             lv.value = b.text.render(plc, scope);
             const auto errs = b.text.errors();
             lv.error = !errs.empty() || lv.value.find("###") != std::string::npos;
