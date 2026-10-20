@@ -1006,7 +1006,7 @@ void HmiContentPanel::refresh() {
                 headers = {"#", "Libell\xC3\xA9", "Valeur \xC3\xA9" "crite"};
                 icon = ui::Icon::Info;
                 for (std::size_t k = 0; k < c.labels.size(); ++k)
-                    rows.push_back({c.labels[k], c.values[k].empty() ? "(rang " + std::to_string(k) + ")" : c.values[k]});
+                    rows.push_back({c.labels[k], c.values[k].empty() ? hmi::roles::defaultInvite(std::to_string(k), "son rang") : c.values[k]});
                 break;
             }
             case Mode::Bands: {
@@ -3111,7 +3111,7 @@ void HmiContentPanel::rebuildGrid() {
                                       "Ce que le choix \xC3\xA9" "crit dans la variable : 2, 'Azote', TRUE, T_MODE#Auto, Auto (le nom "
                                       "d'une valeur d'\xC3\xA9num\xC3\xA9ration). Vide : le rang (" + std::to_string(i) + "), ou le "
                                       "libell\xC3\xA9 pour une STRING.");
-                value.placeholder = "(rang " + std::to_string(i) + ")";
+                value.placeholder = hmi::roles::defaultInvite(std::to_string(i), "son rang");   // 1.12.19 : l'invite de partout
                 ch.properties.push_back(std::move(value));
                 cats.push_back(std::move(ch));
             } else {

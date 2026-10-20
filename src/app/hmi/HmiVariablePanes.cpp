@@ -895,6 +895,7 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
 }
 
 void HmiVariablesPane::say(std::string text, bool warning) {
+    if (warning) ui::PropertyGrid::refuse(text);   // 1.12.19 (la regle des cases) : un refus se dit sous la case
     message_ = std::move(text);
     status_->setMessage(message_, warning ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Info);
 }
@@ -3488,6 +3489,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
 }
 
 void HmiTypesPane::say(std::string text, bool warning) {
+    if (warning) ui::PropertyGrid::refuse(text);   // 1.12.19 (la regle des cases) : un refus se dit sous la case
     message_ = std::move(text);
     status_->setMessage(message_, warning ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Info);
 }

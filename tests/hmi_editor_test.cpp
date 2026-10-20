@@ -14098,6 +14098,137 @@ void inspecteur_menu_11218() {
 // expression : le "=" garde a l'edition ; la retirer par le X, le clic droit,
 // le texte efface ; retour a la valeur fixe ; Ctrl+Z ; les champs qu'on ne
 // pouvait pas vider ; l'aide a la saisie triee par type.
+// 1.12.19 (LA REGLE DES CASES) : l'inspecteur - un nombre et une duree se decident par le role de la cle,
+// la raison dit le libelle de la case ; une cle lue comme formule se montre « =Marche ».
+void v1219_inspecteur() {
+    std::printf("1.12.19 : l'inspecteur - nombres et durees par le role, formules avec leur =\n");
+    Bench b;
+    Variable marche;
+    marche.id = b.doc->project.allocate();
+    marche.name = "Marche";
+    marche.type = "BOOL";
+    b.doc->project.programs.variables.push_back(marche);
+    const Id btn = b.place(Kind::Button, 100, 100);
+    b.editor->canvas().setSelection({btn});
+    b.editor->layout();
+    const auto& grid = b.editor->properties();
+    const auto text = [&](const char* key) { return b.v().object(btn)->text(key); };
+    check(deepCommit(grid, "", "Dur\xC3\xA9" "e du maintien (ms)", "1,5 s") && text("holdMs") == "1500",
+          "Duree du maintien (ms) : 1,5 s -> 1500 (" + text("holdMs") + ")");
+    b.editor->layout();
+    check(deepCommit(grid, "", "Dur\xC3\xA9" "e du maintien (ms)", "T#2s") && text("holdMs") == "2000", "... T#2s -> 2000");
+    b.editor->layout();
+    check(!deepCommit(grid, "", "Dur\xC3\xA9" "e du maintien (ms)", "longtemps") && text("holdMs") == "2000"
+              && b.editor->statusBar().message().find("n'est pas une dur\xC3\xA9" "e (Dur\xC3\xA9" "e du maintien (ms))") != std::string::npos,
+          "... longtemps : refuse, la raison dit le libelle (" + b.editor->statusBar().message() + ")");
+    b.editor->layout();
+    check(!deepCommit(grid, "", "Taille du texte", "grand")
+              && b.editor->statusBar().message().find("(Taille du texte)") != std::string::npos
+              && b.editor->statusBar().message().find("fontSize") == std::string::npos,
+          "Taille du texte : grand refuse, la raison cite le libelle, pas la cle (" + b.editor->statusBar().message() + ")");
+    b.editor->layout();
+    check(deepCommit(grid, "", "Taille du texte", "12,5") && text("fontSize") == "12.5", "Taille du texte : 12,5 -> 12.5 (" + text("fontSize") + ")");
+    b.editor->layout();
+    if (const auto* hold = deepProp(grid.categories(), "", "Dur\xC3\xA9" "e du maintien (ms)"))
+        check(ui::exprfield::expectOf(*hold) == ui::exprfield::Expect::Time, "la case Duree du maintien attend une duree (son type : duree)");
+    // Une cle lue comme formule (la variable ecrite d'un champ de saisie) : « =Marche », comme toute formule.
+    const Id lamp = b.place(Kind::InputField, 400, 100);
+    b.editor->canvas().setSelection({lamp});
+    b.editor->layout();
+    const auto* var = deepProp(grid.categories(), "", "Variable*");
+    check(var && var->commit && var->commit("=Marche") && b.v().object(lamp)->text("variable") == "Marche" && b.v().object(lamp)->find("variable")->expr.empty(),
+          "la variable tapee =Marche : la valeur EST la formule (pas une fx en plus)");
+    b.editor->layout();
+    var = deepProp(grid.categories(), "", "Variable*");
+    check(var && var->expression == "Marche" && var->exprWhole && ui::exprfield::accepts(*var),
+          "... et elle se montre =Marche (fx pleine, chasse fixe), comme toute formule");
+    check(var && var->legend && var->legend->text != "!", "... son carre n'est plus « ! » (Marche n'etait pas un booleen) : " + (var && var->legend ? var->legend->text : std::string("?")));
+}
+
+// 1.12.19 (LA REGLE DES CASES) : un refus se dit SOUS LA CASE, en rouge, et ce qu'on avait tape se reprend.
+void v1219_refus_sous_la_case() {
+    std::printf("1.12.19 : un refus se dit sous la case, rien de tape ne se perd\n");
+    using PG = ui::PropertyGrid;
+    namespace xf = ui::exprfield;
+    const auto click = [](ui::Widget& w, gfx::Point at) {
+        w.dispatch(ui::MouseDown{at, ui::MouseButton::Left, 1, {}});
+        w.dispatch(ui::MouseUp{at, ui::MouseButton::Left, {}});
+    };
+    std::string stored = "12";
+    PG grid("refus");
+    grid.setBounds({0, 0, 640, 400});
+    PG::Category cat;
+    cat.name = "Apparence";
+    PG::Property n;
+    n.name = "Taille du texte";
+    n.type = PG::ValueType::Real;
+    n.value = stored;
+    n.commit = [&](std::string_view s) {
+        double d = 0;
+        if (!hmi::parseNumber(s, d)) {
+            PG::refuse("\xC2\xAB " + std::string(s) + " \xC2\xBB n'est pas un nombre");
+            return false;
+        }
+        stored = std::string(s);
+        return true;
+    };
+    xf::mark(n, xf::Expect::Number);
+    cat.properties = {n};
+    grid.setCategories({cat});
+    grid.layout();
+    const auto type = [&](const std::string& text) {
+        gfx::Rect cell;
+        if (!grid.valueRect("Taille du texte", cell)) return false;
+        click(grid, {cell.x + 30, cell.y + cell.h / 2});
+        auto* f = grid.activeField();
+        if (!f) return false;
+        (void)f->dispatch(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
+        (void)f->dispatch(ui::TextInput{text});
+        (void)f->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        return true;
+    };
+    check(type("12abc") && stored == "12", "12abc tape : refuse, la valeur d'avant reste");
+    check(grid.rejectionOf("Taille du texte") == "\xC2\xAB 12abc \xC2\xBB n'est pas un nombre" && grid.rejectedText("Taille du texte") == "12abc",
+          "la raison du refus est gardee pour la case (" + grid.rejectionOf("Taille du texte") + "), et ce qui avait ete tape");
+    // La grille refaite (l'hote rafraichit) : la raison reste sous la case.
+    grid.setCategories({cat});
+    check(grid.rejectionOf("Taille du texte").find("n'est pas un nombre") != std::string::npos, "la grille refaite : la raison reste");
+    // « Reprendre » : le texte tape revient dans la case.
+    check(grid.resumeRejected("Taille du texte") && grid.activeField() && grid.activeField()->text() == "12abc",
+          "Reprendre : la case se rouvre avec 12abc (rien de tape ne se perd)");
+    if (auto* f = grid.activeField()) {
+        (void)f->dispatch(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
+        (void)f->dispatch(ui::TextInput{"14"});
+        (void)f->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+    }
+    check(stored == "14" && grid.rejectionOf("Taille du texte").empty(), "corrige (14) : accepte, la raison part");
+    // Un refus sans raison donnee : il se dit quand meme.
+    PG::Property m = n;
+    m.name = "Muet";
+    m.commit = [](std::string_view) { return false; };
+    cat.properties = {n, m};
+    grid.setCategories({cat});
+    grid.layout();
+    gfx::Rect cell;
+    if (grid.valueRect("Muet", cell)) {
+        click(grid, {cell.x + 30, cell.y + cell.h / 2});
+        if (auto* f = grid.activeField()) {
+            (void)f->dispatch(ui::TextInput{"x"});
+            (void)f->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        }
+    }
+    check(grid.rejectionOf("Muet").find("refus") != std::string::npos, "un refus sans raison : « refuse » sous la case (" + grid.rejectionOf("Muet") + ")");
+    // Echap en reprenant : on renonce, la raison part.
+    check(grid.resumeRejected("Muet") && grid.activeField(), "Reprendre la case muette");
+    if (auto* f = grid.activeField()) (void)f->dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+    check(grid.rejectionOf("Muet").empty(), "Echap : on renonce, la raison part");
+    // Une case marquee puis dont l'invite est reecrite (selection multiple) accepte toujours une expression.
+    PG::Property mixed = n;
+    mixed.placeholder = "(plusieurs valeurs)";
+    check(xf::accepts(mixed) && xf::expectOf(mixed) == xf::Expect::Number && xf::shownInvite(mixed, true) == "(plusieurs valeurs)",
+          "selection multiple : l'invite reecrite, la case accepte toujours une expression (nombre)");
+}
+
 void v110_champs_expressions() {
     std::printf("1.10 : les champs a expression, partout pareils\n");
     using PG = ui::PropertyGrid;
@@ -23703,9 +23834,10 @@ void symParametres1112() {
         const auto cats = app::hmiPropertyCategories(view, {inst}, nullptr, commits, nullptr, &p);
         const auto* n = find(cats, nameRow);
         const auto* val = find(cats, valueRow);
-        check(n && n->value.empty() && n->placeholder.find("(d\xC3\xA9" "faut : 'Sans nom')") == 0 && val && val->value == "Mesures"
-                  && val->placeholder.find("(d\xC3\xA9" "faut") == std::string::npos,
-              "Name vide : (d\xC3\xA9" "faut : 'Sans nom') en gris ; Value : Mesures (" + (n ? n->placeholder : std::string("?")) + ")");
+        check(n && n->value.empty() && n->placeholder.find("Sans nom \xC2\xB7 valeur par d\xC3\xA9" "faut") == 0 && val && val->value == "Mesures"
+                  && val->placeholder.find("valeur par d\xC3\xA9" "faut") == std::string::npos,
+              "Name vide : Sans nom \xC2\xB7 valeur par d\xC3\xA9" "faut en gris (1.12.19 : l'invite de partout) ; Value : Mesures ("
+                  + (n ? n->placeholder : std::string("?")) + ")");
         calls.clear();
         check(n && n->commit && n->commit("'B'") && calls.size() == 1 && std::get<1>(calls[0]) == "Name := 'B'; Value := Mesures; Ancien := 3",
               "un argument nomme qui n'est pas un param\xC3\xA8tre est gard\xC3\xA9 (" + (calls.empty() ? std::string("rien") : std::get<1>(calls[0])) + ")");
@@ -31781,7 +31913,7 @@ void lotF11210_editeur() {
               "F : six colonnes de plus - Min, Max, Seuil bas, Seuil haut, Alarme basse, Alarme haute");
         check(pane.addDisplay("Debit_Lie", "m3/h", "", &why), "F : une variable li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement, mise \xC3\xA0 l'\xC3\xA9" "chelle 0..10");
         m = pane.table().model().get();
-        check(m && m->cellText(1, 3) == "0 (mise \xC3\xA0 l'\xC3\xA9" "chelle)" && m->cellText(1, 4) == "10 (mise \xC3\xA0 l'\xC3\xA9" "chelle)",
+        check(m && m->cellText(1, 3) == "0 \xC2\xB7 mise \xC3\xA0 l'\xC3\xA9" "chelle" && m->cellText(1, 4) == "10 \xC2\xB7 mise \xC3\xA0 l'\xC3\xA9" "chelle",
               "F : ... son Min et son Max viennent de la mise \xC3\xA0 l'\xC3\xA9" "chelle, en gris, tant qu'on n'a rien tap\xC3\xA9");
         check(pane.setField("Debit_Lie", "max", "8") && pane.table().model()->cellText(1, 4) == "8", "F : ... une valeur tap\xC3\xA9" "e l'emporte");
         (void)stack.undo();
@@ -31822,8 +31954,8 @@ void lotF11210_editeur() {
         b.editor->refresh();
         b.editor->layout();
         const auto* mx = findProp("max");
-        check(mx && mx->value.empty() && mx->placeholder.rfind("10 (de Pression_Ligne)", 0) == 0,
-              "F : l'inspecteur montre Max en gris : \xC2\xAB 10 (de Pression_Ligne) \xC2\xBB (" + (mx ? mx->placeholder : std::string("?")) + ")");
+        check(mx && mx->value.empty() && mx->placeholder.rfind("10 \xC2\xB7 de Pression_Ligne", 0) == 0,
+              "F : l'inspecteur montre Max en gris : \xC2\xAB 10 \xC2\xB7 de Pression_Ligne \xC2\xBB (" + (mx ? mx->placeholder : std::string("?")) + ")");
         const auto* vf = findProp("varFormat");
         check(vf && vf->name.find("Unit\xC3\xA9, format et plage de la variable") != std::string::npos,
               "F : la case \xC2\xAB Format de la variable \xC2\xBB devient \xC2\xAB Unit\xC3\xA9, format et plage de la variable \xC2\xBB");
@@ -33865,6 +33997,8 @@ int main(int argc, char** argv) {
     v19_finale_cadenas_et_cases();          // 1.9 finale (chantier I) : cadenas des objets caches, case etroite sans texte
     v110_couleurs();                        // 1.10 (chantier Q) : l'outil des couleurs, la pipette
     v110_champs_expressions();              // 1.10 (chantier K) : les champs a expression, partout pareils
+    v1219_refus_sous_la_case();             // 1.12.19 : un refus se dit sous la case
+    v1219_inspecteur();                     // 1.12.19 : nombres, durees, formules de l'inspecteur
     v110_aide_saisie();                     // 1.10 (chantier K2) : l'aide a la saisie des scripts (S1, S2, enumerations)
     v110_simulation(argc > 1 ? argv[1] : "");   // 1.10 (chantier L) : l'API et l'IHM independantes, le zoom
     v110_editeur();                         // 1.10 (chantier O) : variables -> graphique, types <-> Excel

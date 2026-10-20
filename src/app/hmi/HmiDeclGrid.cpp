@@ -647,6 +647,7 @@ std::string HmiDeclGrid::ownerLabel() const {
 }
 
 void HmiDeclGrid::say(std::string text, bool warning) {
+    if (warning) ui::PropertyGrid::refuse(text);   // 1.12.19 (la regle des cases) : un refus se dit sous la case
     message_ = std::move(text);
     message->emit(message_, warning);
 }

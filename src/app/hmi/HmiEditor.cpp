@@ -1,4 +1,5 @@
 #include "HmiEditor.hpp"
+#include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture commune d'un nombre
 #include "../../hmi/HmiGuide.hpp"     // 1.12.18 : « Aide sur Voyant » (le sujet du genre)
 #include "../../ui/Commands.hpp"      // 1.12.18 : la table des commandes du clic droit
 #include "../../hmi/HmiTable.hpp"   // 1.12.13 : le Tableau, un mode a la fois
@@ -1243,21 +1244,58 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
                     return false;
                 }
             }
-    if (!expr && numeric.count(key) && !rangeKey) {
+    // 1.12.19 (la regle des cases) : un nombre, une duree attendus - decides par le role de la cle (avant :
+    // une liste figee de 19 cles, les autres prenaient n'importe quoi sans rien dire) ; la raison dit le
+    // libelle de la case (avant : la cle interne, « (fontSize) »). Un nom connu tape seul est la variable
+    // (=Niveau) ; une duree se tape 5 s, 250 ms, T#5s, et s'ecrit dans l'unite de la case.
+    const hmi::Object* first = canvas_->view() ? canvas_->view()->object(sel.front()) : nullptr;
+    const auto keyRole = first ? hmi::roles::roleOf(first->kind, key) : hmi::roles::KeyRole{};
+    const bool number = numeric.count(key) || (key != "value" && keyRole.role == hmi::roles::Role::Number);
+    const bool duration = key != "value" && keyRole.role == hmi::roles::Role::Duration;
+    // Un nom connu tape seul dans une case qui attend une valeur (un nombre, un booleen, un etat, une duree) :
+    // la variable (=Marche), comme partout - pas un texte « Marche » que le carre disait faux.
+    if (!expr && !rangeKey && first
+        && (keyRole.role == hmi::roles::Role::Number || keyRole.role == hmi::roles::Role::Duration || keyRole.role == hmi::roles::Role::Boolean
+            || keyRole.role == hmi::roles::Role::State)) {
+        std::string typed = value;
+        while (!typed.empty() && std::isspace(static_cast<unsigned char>(typed.back()))) typed.pop_back();
+        while (!typed.empty() && std::isspace(static_cast<unsigned char>(typed.front()))) typed.erase(typed.begin());
+        if (hmi::isVariablePath(typed) && hmi::isKnownName(&doc_->project, typed.substr(0, typed.find_first_of(".["))))
+            return commitProp(key, typed, true);
+    }
+    if (!expr && (number || duration) && !rangeKey) {
         double n = 0;
+        std::string typed = value;
+        while (!typed.empty() && std::isspace(static_cast<unsigned char>(typed.back()))) typed.pop_back();
+        while (!typed.empty() && std::isspace(static_cast<unsigned char>(typed.front()))) typed.erase(typed.begin());
         // 1.10 (chantier K) : vider un nombre le ramene a sa valeur par defaut
         // (celle d'un objet neuf de ce genre) - on pouvait ne plus le vider.
-        if (value.find_first_not_of(" \t") == std::string::npos) {
-            const auto* v0 = canvas_->view();
-            const auto* o0 = v0 ? v0->object(sel.front()) : nullptr;
-            const auto fresh = o0 ? hmi::makeObject(o0->kind, hmi::kNoId, {}, 0, 0, hmi::kNoId) : hmi::Object{};
+        if (typed.empty()) {
+            const auto fresh = first ? hmi::makeObject(first->kind, hmi::kNoId, {}, 0, 0, hmi::kNoId) : hmi::Object{};
             if (const auto* d = fresh.find(key); d && hmi::parseNumber(d->value, n)) return commitProp(key, d->value, false);
             if (key == "rot" || key == "access") return commitProp(key, "0", false);
+            if (const auto* d = fresh.find(key); d && d->value.empty()) return commitProp(key, "", false);
         }
-        if (!hmi::parseNumber(value, n)) {
-            warn("\xC2\xAB " + value + " \xC2\xBB n'est pas un nombre (" + key
-                 + ") : rien n'a chang\xC3\xA9. Pour une expression, commencer par =.");
+        std::string label, help;
+        if (!hmiPropertyInfo(key, label, help) || label.empty()) label = key;
+        if (duration) {
+            std::int64_t ms = 0;
+            if (!hmi::roles::parseDuration(typed, ms, keyRole.unit)) {
+                warn("\xC2\xAB " + typed + " \xC2\xBB n'est pas une dur\xC3\xA9" "e (" + label + ") : 5 s, 250 ms, T#5s ; un nombre seul en "
+                     + (keyRole.unit == hmi::roles::Unit::Milliseconds ? "millisecondes" : "secondes") + ". Pour une formule, commencer par =.");
+                return false;
+            }
+            const std::string fixed = keyRole.unit == hmi::roles::Unit::Milliseconds ? std::to_string(ms) : hmi::formatNumber(static_cast<double>(ms) / 1000.0);
+            if (fixed != value) return commitProp(key, fixed, false);
+        } else if (!hmi::parseNumber(typed, n)) {
+            warn("\xC2\xAB " + typed + " \xC2\xBB n'est pas un nombre (" + label + ") : rien n'a chang\xC3\xA9. Pour une formule, commencer par =.");
             return false;
+        } else if (typed.find_first_of(", _") != std::string::npos || typed != value) {
+            // 12,5 ou 1 000 : ecrit comme partout (12.5, 1000).
+            std::string fixed;
+            for (const char c : typed)
+                if (c != ' ' && c != '_' && static_cast<unsigned char>(c) < 0x80) fixed += c == ',' ? '.' : c;
+            if (fixed != value) return commitProp(key, fixed, false);
         }
     }
     // Lot 10 : le symbole d'une instance - un symbole du projet, qui ne contient
@@ -1513,13 +1551,22 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
         return ok;
     }
     canvas_->edit("Vue", [&](hmi::Project& p, hmi::View& vv) {
-        double n = 0;
         if (field == "description") vv.description = value;
-        else if (field == "largeur" && hmi::parseNumber(value, n) && n >= 16) vv.width = static_cast<int>(n);
-        else if (field == "hauteur" && hmi::parseNumber(value, n) && n >= 16) vv.height = static_cast<int>(n);
+        // 1.12.19 (la regle des cases) : un entier lu comme partout ; refuse, la raison sous la case
+        // (avant : rien n'etait dit).
+        else if (field == "largeur" || field == "hauteur" || field == "pas") {
+            long long whole = 0;
+            const long long least = field == "pas" ? 1 : 16;
+            if (!sim::readInteger(value, whole) || whole < least || whole > 100000) {
+                ok = false;
+                why = std::string(field == "largeur" ? "Largeur" : field == "hauteur" ? "Hauteur" : "Pas de la grille")
+                    + " : un nombre entier, " + std::to_string(least) + " au moins";
+                return;
+            }
+            (field == "largeur" ? vv.width : field == "hauteur" ? vv.height : vv.grid.step) = static_cast<int>(whole);
+        }
         else if (field == "fond") vv.background = value;
         else if (field == "grille") vv.grid.visible = hmi::parseBool(value, true);
-        else if (field == "pas" && hmi::parseNumber(value, n) && n >= 1) vv.grid.step = static_cast<int>(n);
         else if (field == "mag_grille") vv.grid.snapGrid = hmi::parseBool(value, true);
         else if (field == "mag_objets") vv.grid.snapObjects = hmi::parseBool(value, true);
         else if (field == "mag_guides") vv.grid.snapGuides = hmi::parseBool(value, true);
@@ -1617,6 +1664,7 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
 // Un refus se lit : il reste huit secondes, par-dessus ce que la vue dit du
 // survol de la souris, qui l'effacait a la premiere image.
 void HmiEditor::warn(const std::string& why) {
+    ui::PropertyGrid::refuse(why);      // 1.12.19 (la regle des cases) : sous la case refusee aussi
     statusBar_->setTransientMessage(why, 8.0, ui::StatusBar::Severity::Warning);
 }
 

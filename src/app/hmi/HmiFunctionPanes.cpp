@@ -814,6 +814,7 @@ void HmiFunctionsPane::updateSymbolLine() {
 }
 
 void HmiFunctionsPane::say(std::string text, bool warning) {
+    if (warning) ui::PropertyGrid::refuse(text);   // 1.12.19 (la regle des cases) : un refus se dit sous la case
     message_ = text;
     status_->setTransientMessage(std::move(text), 8.0, warning ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
 }

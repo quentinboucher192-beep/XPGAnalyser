@@ -430,6 +430,7 @@ void HmiModbusToolPane::setHosts(Hosts h) {
 }
 
 void HmiModbusToolPane::say(std::string text, bool error) {
+    if (error) ui::PropertyGrid::refuse(text);   // 1.12.19 (la regle des cases) : un refus se dit sous la case
     message_ = std::move(text);
     status_->setTransientMessage(message_, 8.0, error ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
 }

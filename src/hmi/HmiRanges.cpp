@@ -599,7 +599,7 @@ std::string hint(const Project& p, const View& v, const Object& o, std::string_v
         if (!zones || !zones->expr.empty() || !trim(zones->value).empty()) return {};
         const std::string var = variableOf(o);
         if (followsVariableFormat(o) && !thresholdZones(p, o, &v).empty()) return "les seuils de " + var;
-        return percentZones(o.kind) + " (par d\xC3\xA9" "faut)";
+        return roles::defaultInvite(percentZones(o.kind));
     }
     bool ours = false;
     for (const auto kk : inheritedKeys(o.kind)) ours = ours || kk == key;
@@ -610,11 +610,11 @@ std::string hint(const Project& p, const View& v, const Object& o, std::string_v
     if (followsVariableFormat(o)) {
         const Inherited inh = inheritedFor(p, o, key, &v);
         if (!inh.value.empty())
-            return inh.value + (inh.scaling ? " (" + inh.origin + ")" : " (de " + inh.origin + ")");
+            return roles::defaultInvite(inh.value, inh.scaling ? inh.origin : "de " + inh.origin);
     }
     const std::string def = defaultOf(o.kind, key);
-    if (!def.empty()) return def + " (par d\xC3\xA9" "faut)";
-    if (o.kind == Kind::Valve) return key == kOpeningMin ? "0 (par d\xC3\xA9" "faut)" : "100 (par d\xC3\xA9" "faut)";
+    if (!def.empty()) return roles::defaultInvite(def);
+    if (o.kind == Kind::Valve) return roles::defaultInvite(key == kOpeningMin ? "0" : "100");
     if (o.kind == Kind::InputField) return "sans borne";
     return thresholdKey(key) ? std::string("aucun") : std::string{};
 }

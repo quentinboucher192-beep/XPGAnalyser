@@ -3885,7 +3885,8 @@ ui::PropertyGrid::FieldAssistFor gridAssist(Sources src) {
                 "Condition", "Condition (facultative)", "Expression surveill\xC3\xA9" "e", "Variable", "Variable API",
                 "Valeur (expression)", "Expression d'autorisation", "Expression"};
             const std::string_view tag = "(expression)";
-            const bool whole = (!p.expression.empty() && p.expression == p.value)
+            // 1.12.19 (la regle des cases) : decide par la case (markWhole), plus par son libelle seulement.
+            const bool whole = p.exprWhole || (!p.expression.empty() && p.expression == p.value)
                             || std::any_of(std::begin(kWhole), std::end(kWhole), [&](const char* n) { return name == n; })
                             || (name.size() > tag.size() && name.compare(name.size() - tag.size(), tag.size(), tag) == 0);
             auto base = whole ? fieldAssist(src, false) : restricted(fieldAssist(src, false), true, false);

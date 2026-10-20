@@ -1,5 +1,6 @@
 // Configuration > Langues, Configuration > Unites et formats (lot 13).
 #include "HmiDisplayPanes.hpp"
+#include "../../hmi/HmiRoles.hpp"   // 1.12.19 : l'invite d'une case vide (defaultInvite)
 #include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "../ExportTarget.hpp"
 #include "HmiPaneKit.hpp"
@@ -163,6 +164,7 @@ HmiLanguagesPane::HmiLanguagesPane(std::string id, hmi::DocumentPtr doc, Apply a
 }
 
 void HmiLanguagesPane::say(std::string text, bool error) {
+    if (error) ui::PropertyGrid::refuse(text);   // 1.12.19 (la regle des cases) : un refus se dit sous la case
     message_ = std::move(text);
     status_->setTransientMessage(message_, 8.0, error ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
 }
@@ -711,6 +713,7 @@ HmiUnitsPane::HmiUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
 }
 
 void HmiUnitsPane::say(std::string text, bool error) {
+    if (error) ui::PropertyGrid::refuse(text);   // 1.12.19 (la regle des cases) : un refus se dit sous la case
     message_ = std::move(text);
     status_->setTransientMessage(message_, 8.0, error ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
 }
@@ -745,7 +748,7 @@ void HmiUnitsPane::refresh() {
                 // Une variable liee a un equipement : sa mise a l'echelle, en gris, tant qu'on n'a rien tape.
                 double lo = 0, hi = 0;
                 if (hmi::ranges::scalingOf(p, d.path, lo, hi)) {
-                    row.push_back(hmi::formatNumber(k == 0 ? lo : hi) + " (mise \xC3\xA0 l'\xC3\xA9" "chelle)");
+                    row.push_back(hmi::roles::defaultInvite(hmi::formatNumber(k == 0 ? lo : hi), "mise \xC3\xA0 l'\xC3\xA9" "chelle"));
                     grey[3 + k] = true;
                     continue;
                 }
@@ -835,7 +838,7 @@ void HmiUnitsPane::rebuildProperties() {
             const std::string rangeKey(hmi::ranges::kKeys[k]);
             auto pr = prop(hmi::ranges::label(rangeKey), hmi::ranges::field(*d, rangeKey), PG::ValueType::Text,
                            commit(hmi::ranges::kKeys[k].data()), helps[k]);
-            if (scaled && k < 2) pr.placeholder = hmi::formatNumber(k == 0 ? lo : hi) + " (mise \xC3\xA0 l'\xC3\xA9" "chelle)";
+            if (scaled && k < 2) pr.placeholder = hmi::roles::defaultInvite(hmi::formatNumber(k == 0 ? lo : hi), "mise \xC3\xA0 l'\xC3\xA9" "chelle");
             r.properties.push_back(std::move(pr));
         }
         cats.push_back(std::move(r));

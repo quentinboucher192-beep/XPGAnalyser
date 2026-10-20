@@ -964,6 +964,13 @@ public:
         // d'une autre version), les choix proposes en aide a la saisie. Une valeur a repere se
         // voit en ambre, comme partout.
         bool                      typeIn{false};
+        // 1.12.19 (la regle des cases) : CE QUE exprfield::mark POSE - la case accepte une expression,
+        // ce qu'elle attend (un ui::exprfield::Expect), une case « tout expression » (markWhole).
+        // Avant : relus dans le texte de l'invite, qu'un hote pouvait ecraser (« (plusieurs valeurs) »
+        // d'une selection multiple : plus de fx, plus de type, plus de carre).
+        bool                      exprCell{false};
+        std::uint8_t              exprExpect{0};
+        bool                      exprWhole{false};
     };
     // Le dernier choix d'une liste typeIn.
     static constexpr std::string_view kTypeInLabel = "Taper un nom ou un rep\xC3\xA8re $\xE2\x80\xA6$\xE2\x80\xA6";
@@ -1046,6 +1053,17 @@ public:
     void setLegendClickable(bool on) { legendClickable_ = on; }
     [[nodiscard]] bool legendClickable() const noexcept { return legendClickable_; }
     [[nodiscard]] bool editing() const noexcept { return editor_ != nullptr; }
+    // ---- 1.12.19 (la regle des cases) : UN REFUS SE DIT SOUS LA CASE ----
+    // Un commit qui rend faux donne d'abord sa raison (refuse, ou le say(..., true) d'un volet) ; la
+    // grille la montre sous la ligne, en rouge, avec « Reprendre » : ce qu'on avait tape revient dans
+    // la case (rien de tape ne se perd). Sans raison : « refusé ». La raison part quand la case est
+    // acceptee, quand on renonce a la reprendre (Echap), ou quand la ligne disparait.
+    static void refuse(std::string why);
+    // La raison du dernier refus de cette case, et ce qui avait ete tape ; vide : aucun.
+    [[nodiscard]] std::string rejectionOf(std::string_view name) const;
+    [[nodiscard]] std::string rejectedText(std::string_view name) const;
+    // Reprendre ce qui avait ete tape (le lien « Reprendre » sous la case) : faux s'il n'y a rien.
+    bool resumeRejected(std::string_view name);
     // ---- Lot API 8 : les expressions impossibles ----
     // L'infobulle d'une propriete pilotee : l'expression, sa valeur en
     // simulation, son erreur. Ailleurs : celle de la grille.
@@ -1105,6 +1123,12 @@ private:
     bool                   editIsPalette_{false};
     std::function<std::string(const Property&)> exprValueFor_;   // ---- Lot API 8 : les expressions impossibles ----
     bool                   legendClickable_{false};               // 1.11.3 : le carre de legende repond au clic
+    // 1.12.19 (la regle des cases) : le dernier refus, et ce qui avait ete tape.
+    struct Rejection { std::string category, name, typed, why; };
+    std::optional<Rejection> rejection_;
+    std::optional<std::string> resumeText_;    // le texte a remettre dans le prochain champ ouvert
+    void noteCommit(const std::string& category, const std::string& name, const std::string& sent, bool ok);
+    [[nodiscard]] bool rejectedRow(const Category& c, const Property& p) const noexcept;
 };
 
 // 1.11.3 : la couleur d'un carre de legende (le meme partout : la grille, la liste

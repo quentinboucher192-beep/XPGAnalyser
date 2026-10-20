@@ -26666,9 +26666,9 @@ void lotF11210() {
             if (oa.def.name.find("Niveau_Tres_Haut") != std::string::npos && oa.def.condition.find(">= 9") != std::string::npos) high = true;
         check(high, "F : l'alarme \xC2\xAB niveau tr\xC3\xA8s haut \xC2\xBB d'une cuve prend l'alarme haute de sa variable (9) - avant : \xC2\xAB seuil vide \xC2\xBB");
     }
-    check(ranges::hint(p, p.views[0], *p.views[0].object(jaugeNeuve), "max") == "10 (de Pression_Ligne)"
-              && ranges::hint(p, p.views[0], *p.views[0].object(jaugeLiee), "max") == "10 (mise \xC3\xA0 l'\xC3\xA9" "chelle de Debit_Lie)"
-              && ranges::hint(p, p.views[0], *p.views[0].object(jaugeLibre), "max") == "100 (par d\xC3\xA9" "faut)"
+    check(ranges::hint(p, p.views[0], *p.views[0].object(jaugeNeuve), "max") == "10 \xC2\xB7 de Pression_Ligne"
+              && ranges::hint(p, p.views[0], *p.views[0].object(jaugeLiee), "max") == "10 \xC2\xB7 mise \xC3\xA0 l'\xC3\xA9" "chelle de Debit_Lie"
+              && ranges::hint(p, p.views[0], *p.views[0].object(jaugeLibre), "max") == "100 \xC2\xB7 valeur par d\xC3\xA9" "faut"
               && ranges::hint(p, p.views[0], *p.views[0].object(jaugeAncienne), "max").empty(),
           "F : l'inspecteur montre la valeur h\xC3\xA9rit\xC3\xA9" "e en gris, et d'o\xC3\xB9 elle vient");
     {

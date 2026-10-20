@@ -29,6 +29,7 @@
 #include "HmiModel.hpp"
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace hmi::roles {
@@ -291,6 +292,14 @@ inline constexpr KeyRole kKeyRoles[] = {
         case Kind::Valve: return key == "openingMin" || key == "openingMax";
         default: return false;
     }
+}
+
+// 1.12.19 (la regle des cases) : L'INVITE D'UNE CASE VIDE qui prend une valeur sans qu'on la tape, partout
+// la meme - « 12 · valeur par défaut » ; `origin` dit d'ou elle vient (« 10 · de Pression_Ligne »). Avant :
+// « (défaut : 12) », « 100 (par défaut) », « 10 (de Pression_Ligne) », « 0 (mise à l'échelle) », « (rang 2) ».
+[[nodiscard]] inline std::string defaultInvite(std::string_view value, std::string_view origin = {}) {
+    if (value.empty()) return {};
+    return std::string(value) + " \xC2\xB7 " + (origin.empty() ? std::string("valeur par d\xC3\xA9" "faut") : std::string(origin));
 }
 
 // LE ROLE D'UNE PROPRIETE D'UN OBJET DE CE GENRE : la table, et ce qui depend du genre.

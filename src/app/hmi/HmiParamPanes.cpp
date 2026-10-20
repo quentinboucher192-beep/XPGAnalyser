@@ -7,6 +7,7 @@
 //  "modifie, pas encore applique".
 // =============================================================================
 #include "HmiParamPanes.hpp"
+#include "../../hmi/HmiRoles.hpp"   // 1.12.19 : l'invite d'une case vide (defaultInvite)
 
 #include "../../domain/ProjectModel.hpp"
 #include "../../hmi/HmiRuntime.hpp"
@@ -578,7 +579,7 @@ PG::Category argumentsCategory(const hmi::Project& p, const hmi::View* caller, c
         row.pill = modePill(prm.mode);   // 1.9 (chantier U) : la pastille de couleur (P3)
         // 1.9 (chantier U) : pas donne - la valeur par defaut, en gris dans la case (P3).
         if (arg.empty() && error.empty() && !trim(prm.defaultValue).empty())
-            row.placeholder = trim(prm.defaultValue) + " \xC2\xB7 valeur par d\xC3\xA9" "faut";
+            row.placeholder = hmi::roles::defaultInvite(hmi::shownLiteral(trim(prm.defaultValue)));   // 1.12.19 : sans apostrophes
         // 1.10 (chantier K) : un argument est une expression - X, clic droit, effacer le
         // retirent (la popup recoit alors sa valeur par defaut). Pas donne et en
         // erreur ("?") : rien a retirer.

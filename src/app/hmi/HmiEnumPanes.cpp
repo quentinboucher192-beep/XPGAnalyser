@@ -581,6 +581,7 @@ void HmiEnumValuesPane::setType(Id id) {
 }
 
 void HmiEnumValuesPane::say(std::string text, bool warning) {
+    if (warning) ui::PropertyGrid::refuse(text);   // 1.12.19 (la regle des cases) : un refus se dit sous la case
     message_ = std::move(text);
     (void)warning;
     message->emit(message_);

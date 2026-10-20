@@ -2666,11 +2666,13 @@ std::string_view word(Expect e) noexcept {
 std::string invite(Expect e) { return std::string(word(e)) + " ou " + std::string(kTail); }
 
 bool accepts(const Property& p) noexcept {
+    if (p.exprCell) return true;     // 1.12.19 : pose par mark (l'invite peut avoir ete reecrite)
     const std::string_view s = p.placeholder;
     return s.size() >= kTail.size() && s.substr(s.size() - kTail.size()) == kTail;
 }
 
 Expect expectOf(const Property& p) noexcept {
+    if (p.exprCell) return static_cast<Expect>(p.exprExpect);
     if (!accepts(p)) return Expect::Value;
     std::string_view s = p.placeholder;
     s.remove_suffix(kTail.size());
@@ -2683,8 +2685,13 @@ Expect expectOf(const Property& p) noexcept {
 }
 
 void mark(Property& p, Expect e, bool ownDefault) {
-    if (accepts(p)) return;
+    // Deja marquee (son invite le dit) : rien de plus. Une case copiee dont l'hote a vide l'invite se
+    // marque de nouveau, avec ce qu'elle attend maintenant.
+    const std::string_view s = p.placeholder;
+    if (s.size() >= kTail.size() && s.substr(s.size() - kTail.size()) == kTail) return;
     p.placeholder = p.placeholder.empty() ? invite(e) : p.placeholder + std::string(kSep) + invite(e);
+    p.exprCell = true;
+    p.exprExpect = static_cast<std::uint8_t>(e);
     // "Revenir a la valeur par defaut" : une case videe (sauf si l'hote sait faire).
     if (ownDefault || !p.commit) return;
     p.commit = [inner = std::move(p.commit)](std::string_view s) { return inner(s == kToDefault ? std::string_view{} : s); };
@@ -2692,6 +2699,7 @@ void mark(Property& p, Expect e, bool ownDefault) {
 
 void markWhole(Property& p, Expect e, bool asExpression) {
     mark(p, e);
+    p.exprWhole = true;
     if (asExpression && p.expression.empty() && !trimmedView(p.value).empty()) p.expression = p.value;
     if (!p.commit) return;
     p.commit = [inner = std::move(p.commit)](std::string_view s) {
@@ -2712,6 +2720,8 @@ std::string_view shownLabel(const Property& p) noexcept {
 std::string shownInvite(const Property& p, bool typeShown) {
     if (!accepts(p)) return p.placeholder;
     std::string_view s = p.placeholder;
+    // 1.12.19 : une invite reecrite par l'hote (« (plusieurs valeurs) ») se montre telle quelle.
+    if (s.size() < kTail.size() || s.substr(s.size() - kTail.size()) != kTail) return std::string(s);
     s.remove_suffix(kTail.size());
     if (s.size() >= 4 && s.substr(s.size() - 4) == " ou ") s.remove_suffix(4);
     std::string_view head, type = s;
@@ -2835,14 +2845,15 @@ gfx::Rect fieldCell(const PropertyGrid::Property& p, gfx::Rect cell) {
 // Le type ecrit en petit au bout du nom (maquette : BOOL, nombre, couleur, vue...).
 std::string_view tagOf(exprfield::Expect e) noexcept {
     using E = exprfield::Expect;
+    // 1.12.19 (la regle des cases) : des mots partout, comme l'invite (avant : BOOL et TIME en ST, le reste en mots).
     switch (e) {
-        case E::Bool: return "BOOL";
+        case E::Bool: return "bool\xC3\xA9" "en";
         case E::Number: return "nombre";
         case E::Text: case E::Template: return "texte";
         case E::Color: return "couleur";
         case E::View: return "vue";
         case E::List: return "choix";
-        case E::Time: return "TIME";
+        case E::Time: return "dur\xC3\xA9" "e";
         case E::Value: break;
     }
     return {};
@@ -2944,6 +2955,16 @@ void keepExpanded(const std::vector<PropertyGrid::Category>& from, std::vector<P
 //  Elle suit sa propriete : les recherches par nom trouvent la propriete d'abord.
 namespace {
 constexpr std::uint16_t kNoteRow = 0x8000;
+// 1.12.19 : au plus `n` caracteres (UTF-8 entiers), « … » au bout s'il en manque.
+std::string clipText(std::string_view s, std::size_t n) {
+    std::size_t i = 0, count = 0;
+    while (i < s.size() && count < n) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        i += c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : 4;
+        ++count;
+    }
+    return i >= s.size() ? std::string(s) : std::string(s.substr(0, i)) + "\xE2\x80\xA6";
+}
 // "Debit_Entre n'existe pas : veux-tu dire Debit_Entree ?" -> Debit_Entre, Debit_Entree.
 bool noteFix(std::string_view why, std::string& from, std::string& to) {
     const auto plain = [](const std::string& w, bool brackets) {
@@ -3003,6 +3024,59 @@ std::string replaceRoot(std::string_view expr, std::string_view from, std::strin
 } // namespace exprfield
 // ---- fin 1.10 (chantier K2) ----
 
+// ---- 1.12.19 (la regle des cases) : un refus se dit sous la case ----
+namespace {
+std::string& pendingRefusal() {
+    static std::string why;
+    return why;
+}
+bool hasProperty(const std::vector<PropertyGrid::Category>& cats, std::string_view category, std::string_view name) {
+    for (const auto& c : cats) {
+        if (c.name == category)
+            for (const auto& p : c.properties)
+                if (p.name == name) return true;
+        if (hasProperty(c.children, category, name)) return true;
+    }
+    return false;
+}
+} // namespace
+
+void PropertyGrid::refuse(std::string why) { pendingRefusal() = std::move(why); }
+
+std::string PropertyGrid::rejectionOf(std::string_view name) const {
+    return rejection_ && rejection_->name == name ? rejection_->why : std::string{};
+}
+std::string PropertyGrid::rejectedText(std::string_view name) const {
+    return rejection_ && rejection_->name == name ? rejection_->typed : std::string{};
+}
+
+bool PropertyGrid::rejectedRow(const Category& c, const Property& p) const noexcept {
+    return rejection_ && rejection_->category == c.name && rejection_->name == p.name;
+}
+
+void PropertyGrid::noteCommit(const std::string& category, const std::string& name, const std::string& sent, bool ok) {
+    if (ok) {
+        if (rejection_ && rejection_->name == name) rejection_.reset();
+    } else {
+        std::string why = pendingRefusal();
+        if (why.empty()) why = "refus\xC3\xA9 : la valeur d'avant reste";
+        rejection_ = Rejection{category, name, sent, std::move(why)};
+    }
+    pendingRefusal().clear();
+    rebuildRows();
+}
+
+bool PropertyGrid::resumeRejected(std::string_view name) {
+    if (!rejection_ || rejection_->name != name) return false;
+    const int at = rowOf(rejection_->category, rejection_->name);
+    if (at < 0) return false;
+    resumeText_ = rejection_->typed;
+    beginEdit(static_cast<std::size_t>(at));
+    const bool opened = editor_ != nullptr;
+    resumeText_.reset();
+    return opened;
+}
+
 void PropertyGrid::setCategories(std::vector<Category> cats) {
     // LES MEMES CATEGORIES, D'AUTRES VALEURS (on vient de modifier une
     // propriete) : on garde le defilement et ce qui etait replie. Revenir en
@@ -3011,6 +3085,7 @@ void PropertyGrid::setCategories(std::vector<Category> cats) {
     if (same) keepExpanded(categories_, cats);
     categories_ = std::move(cats);
     if (!same) scrollY_ = 0.f;   // onLayout ramene le defilement dans les bornes
+    if (rejection_ && !hasProperty(categories_, rejection_->category, rejection_->name)) rejection_.reset();   // 1.12.19
     rebuildRows();
     // Le champ ouvert suit sa propriete ; si elle n'existe plus, il se ferme
     // sans rien valider - il editait quelque chose qui a disparu.
@@ -3079,10 +3154,13 @@ void PropertyGrid::beginEdit(std::size_t row) {
 
     // Une bascule n'a pas besoin de champ : le clic EST la modification.
     if (p.type == ValueType::Boolean && !exprText) {
-        const std::string name = p.name;
+        const std::string name = p.name, category = rows_[row].cat->name;
         const std::string next = isTrueText(p.value) ? "FALSE" : "TRUE";
         auto commit = p.commit;           // la grille peut etre refaite pendant commit
-        if (commit(next)) propertyChanged->emit(name, next);
+        pendingRefusal().clear();
+        const bool ok = commit(next);
+        noteCommit(category, name, next, ok);
+        if (ok) propertyChanged->emit(name, next);
         else propertyRejected->emit(name, next);
         return;
     }
@@ -3155,7 +3233,8 @@ void PropertyGrid::beginEdit(std::size_t row) {
         auto field = std::make_unique<CellField>(id() + ".edit");
         // 1.10 (chantier K) : le "=" reste devant l'expression ; vide, l'invite.
         const bool accepts = exprfield::accepts(p);
-        field->setText(accepts ? (gForceExprText && p.expression.empty() ? std::string("=") : exprfield::editText(p)) : p.value);
+        field->setText(resumeText_ ? *resumeText_      // 1.12.19 : « Reprendre » - ce qui avait ete tape et refuse
+                                   : accepts ? (gForceExprText && p.expression.empty() ? std::string("=") : exprfield::editText(p)) : p.value);
         if (accepts) field->setPlaceholder(exprfield::shownInvite(p, true));   // 1.10.1 (U2) : sans "ou = expression"
         if (fieldAssist_)
             if (auto assist = fieldAssist_(rows_[row].cat->name, p)) field->setAssist(std::move(assist));
@@ -3184,7 +3263,10 @@ void PropertyGrid::beginEdit(std::size_t row) {
                 const auto commit = at >= 0 ? rows_[static_cast<std::size_t>(at)].prop->commit : nullptr;
                 finishEdit(false, {});
                 if (!commit) return;
-                if (commit("=")) propertyChanged->emit(name, "=");
+                pendingRefusal().clear();
+                const bool ok = commit("=");
+                noteCommit(cat, name, "=", ok);
+                if (ok) propertyChanged->emit(name, "=");
                 else propertyRejected->emit(name, "=");
                 invalidate();
             };
@@ -3326,7 +3408,7 @@ void PropertyGrid::finishEdit(bool commit, const std::string& text) {
         if (const int at = rowOf(editCategory_, editName_); at >= 0 && exprfield::accepts(*rows_[static_cast<std::size_t>(at)].prop))
             sent = exprfield::normalized(*rows_[static_cast<std::size_t>(at)].prop, text);
     auto apply = std::move(editCommit_);
-    const std::string name = editName_;
+    const std::string name = editName_, category = editCategory_;
     // Pas detruit tout de suite : c'est peut-etre lui qui emet en ce moment.
     activeEditor_ = removeChild(*editor_);
     editor_ = nullptr;
@@ -3336,8 +3418,18 @@ void PropertyGrid::finishEdit(bool commit, const std::string& text) {
     editName_.clear();
     editCommit_ = nullptr;
     invalidate();
-    if (!commit || !apply) return;
-    if (apply(sent)) propertyChanged->emit(name, sent);
+    if (!commit || !apply) {
+        // 1.12.19 : on renonce a reprendre ce qui avait ete refuse (Echap) - la raison part.
+        if (!commit && rejection_ && rejection_->name == name && rejection_->category == category) {
+            rejection_.reset();
+            rebuildRows();
+        }
+        return;
+    }
+    pendingRefusal().clear();
+    const bool ok = apply(sent);
+    noteCommit(category, name, sent, ok);
+    if (ok) propertyChanged->emit(name, sent);
     else propertyRejected->emit(name, sent);
 }
 
@@ -3658,19 +3750,21 @@ void PropertyGrid::rebuildRows() {
     // null category, so one row type serves both.
     struct Walker {
         std::vector<VisualRow>& out;
+        const PropertyGrid& grid;
         void operator()(const Category& c, std::uint16_t depth) {
             out.push_back(VisualRow{&c, nullptr, depth});
             if (!c.expanded) return;
             for (const auto& p : c.properties) {
                 out.push_back(VisualRow{&c, &p, static_cast<std::uint16_t>(depth + 1)});
-                // 1.10 (chantier K2) : la raison sous la ligne rouge.
-                if (exprfield::accepts(p) && !p.expression.empty() && !p.exprError.empty())
+                // 1.10 (chantier K2) : la raison sous la ligne rouge. 1.12.19 (la regle des cases) : sous
+                // toute case en faute (une valeur fixe aussi) et sous une case refusee.
+                if ((!p.exprError.empty() && (exprfield::accepts(p) || p.commit)) || grid.rejectedRow(c, p))
                     out.push_back(VisualRow{&c, &p, static_cast<std::uint16_t>((depth + 1) | kNoteRow)});
             }
             for (const auto& child : c.children)
                 (*this)(child, static_cast<std::uint16_t>(depth + 1));
         }
-    } walk{rows_};
+    } walk{rows_, *this};
     for (const auto& c : categories_) walk(c, 0);
     invalidate();
 }
@@ -3979,15 +4073,18 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
             const float ty = r.y + (rowH - lh) * 0.5f;
             float right = r.right() - 8.f;
             std::string from, to;
-            if (vr.prop->commit && noteFix(vr.prop->exprError, from, to)) {
-                const std::string link = "Remplacer par " + to;
+            const bool refused = rejectedRow(*vr.cat, *vr.prop);
+            std::string link;
+            if (refused) link = "Reprendre \xC2\xAB " + clipText(rejection_->typed, 28) + " \xC2\xBB";
+            else if (vr.prop->commit && noteFix(vr.prop->exprError, from, to)) link = "Remplacer par " + to;
+            if (!link.empty()) {
                 const float lw = ctx.r.measure(link, font).width;
                 const float lx = std::max(r.x + 18.f, right - lw);
                 ctx.r.drawText({lx, ty}, link, font, c.accent);
                 ctx.r.line({lx, ty + lh - 1.f}, {lx + lw, ty + lh - 1.f}, c.accent, 1.f);
                 right = lx - 10.f;
             }
-            drawClipped(ctx, {r.x + 18.f, ty}, vr.prop->exprError, font, c.error, right - r.x - 18.f);
+            drawClipped(ctx, {r.x + 18.f, ty}, refused ? rejection_->why : vr.prop->exprError, font, c.error, right - r.x - 18.f);
             continue;
         }
         const float indent = r.x + 4.f + static_cast<float>(vr.depth) * 12.f;
@@ -4274,6 +4371,12 @@ EventResult PropertyGrid::onEvent(const InputEvent& ev) {
         // celui que la verification propose (une commande de l'hote : Ctrl+Z).
         if ((vr.depth & kNoteRow) != 0) {
             std::string from, to;
+            // 1.12.19 : « Reprendre » - ce qui avait ete tape revient dans la case.
+            if (d->button == MouseButton::Left && vr.prop && rejectedRow(*vr.cat, *vr.prop)) {
+                const std::string name = vr.prop->name;
+                (void)resumeRejected(name);
+                return EventResult::Consumed;
+            }
             if (d->button == MouseButton::Left && vr.prop && vr.prop->commit && noteFix(vr.prop->exprError, from, to)) {
                 const std::string fixed = replaceRoot(vr.prop->expression, from, to);
                 if (fixed != vr.prop->expression) {

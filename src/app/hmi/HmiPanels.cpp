@@ -2434,7 +2434,8 @@ static ui::exprfield::Expect expectedOf(hmi::Kind kind, std::string_view key, ui
     if (hmi::roles::keyRole(key)) {
         const auto r = hmi::roles::roleOf(kind, key);
         switch (r.role) {
-            case R::Number: case R::Duration: return E::Number;
+            case R::Number: return E::Number;
+            case R::Duration: return E::Time;     // 1.12.19 : une duree (5 s, 250 ms, T#5s), plus un « nombre »
             case R::Boolean: return E::Bool;
             case R::Color: return E::Color;
             case R::Text: return E::Template;
@@ -2443,7 +2444,7 @@ static ui::exprfield::Expect expectedOf(hmi::Kind kind, std::string_view key, ui
                 if (key == "afterLogin") return E::View;
                 return type == VT::Enum ? E::List : E::Text;
             case R::Formula:
-                return r.item == R::Boolean ? E::Bool : r.item == R::Number || r.item == R::Duration ? E::Number : E::Value;
+                return r.item == R::Boolean ? E::Bool : r.item == R::Number ? E::Number : r.item == R::Duration ? E::Time : E::Value;
             case R::State: case R::Date: return E::Value;
             case R::List: case R::Mini: case R::Format: return type == VT::Enum ? E::List : E::Text;
         }
@@ -3532,7 +3533,19 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             auto expect = expectedOf(o->kind, prop.key, p.type);
             if (prop.key == "value" && hmi::eqlink::hasAspects(*o)) expect = ui::exprfield::Expect::Value;
             if (prop.key == "value" && hmi::eqlink::cylinderOnOff(*o)) expect = ui::exprfield::Expect::Bool;
-            ui::exprfield::mark(p, expect, true);
+            // 1.12.19 (la regle des cases) : une cle LUE COMME FORMULE (la variable, le retour d'etat, une
+            // condition, une borne donnee par un nom) se montre comme toute formule - « =Marche », fx pleine,
+            // chasse fixe, son carre fx - et le = tape part (la valeur EST la formule). Avant : « Marche » nu,
+            // fx en creux, et un carre « ! » (« Marche n'est pas un booleen »). Une valeur fixe (12, TRUE) y
+            // reste une valeur fixe.
+            const auto role = hmi::roles::roleOf(o->kind, prop.key);
+            std::string shown = p.value;
+            while (!shown.empty() && std::isspace(static_cast<unsigned char>(shown.back()))) shown.pop_back();
+            while (!shown.empty() && std::isspace(static_cast<unsigned char>(shown.front()))) shown.erase(shown.begin());
+            const bool formula = prop.expr.empty() && role.role == hmi::roles::Role::Formula && p.type == PG::ValueType::Text
+                              && (shown.empty() || (!hmi::isLiteralArgument(shown) && (!hmi::ranges::takesName(o->kind, prop.key) || hmi::ranges::isName(shown))));
+            if (formula) ui::exprfield::markWhole(p, expect, true);
+            else ui::exprfield::mark(p, expect, true);
         }
         if (differs) {
             p.value.clear();
@@ -3650,13 +3663,14 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 }
                 const std::string def = prm.defaultValue.empty() ? std::string("aucune") : prm.defaultValue;
                 // Vide : la valeur par defaut du symbole, montree en gris (le texte d'attente de la case).
-                if (a.value.empty()) a.placeholder = "(d\xC3\xA9" "faut : " + def + ")";
+                // 1.12.19 (la regle des cases) : l'invite de partout, « Voiture · valeur par defaut » (sans apostrophes).
+                if (a.value.empty() && !prm.defaultValue.empty()) a.placeholder = hmi::roles::defaultInvite(hmi::shownLiteral(prm.defaultValue));
                 std::string tip = prm.description.empty()
                                        ? (prm.type.empty() ? std::string("Le param\xC3\xA8tre accepte tout (ANY) : une variable, un chemin, une valeur.")
                                                            : "Attend : " + prm.type + " - une variable, un chemin (Armoires[1]), une expression ou une valeur.")
                                        : prm.description;
-                tip += "\nVide : la valeur par d\xC3\xA9" "faut du symbole (" + def + "). Sans fx : une constante, convertie en " + type
-                     + " (Voiture devient 'Voiture') ; un nom de variable reste la variable. Le bouton fx : une variable ou une expression.";
+                tip += "\nVide : la valeur par d\xC3\xA9" "faut du symbole (" + def + "). Une valeur fixe se tape telle qu'on la lit, convertie en "
+                     + type + " (Voiture, 2,5, VRAI) ; un nom de variable reste la variable ; tape = puis la formule pour un calcul.";   // 1.12.19
                 a.description = std::move(tip);
                 const auto res = valuekind::classify(env, formula ? effective : a.value, formula, type);
                 if (formula && res.error()) a.exprError = valuekind::firstProblem(res);
@@ -3794,7 +3808,10 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             for (auto& p : c.properties) {
                 if (p.legend || !p.commit || p.type == PG::ValueType::ReadOnly || !ui::exprfield::accepts(p)) continue;
                 const bool fx = !p.expression.empty();
-                const std::string expected = valuekind::expectedOfProperty(p);
+                std::string expected = valuekind::expectedOfProperty(p);
+                // 1.12.19 : une duree de l'inspecteur se garde en nombre, dans l'unite de la case (60 : 60 s) ;
+                // sa valeur fixe se lit en nombre, sa formule en duree.
+                if (expected == "TIME" && !fx) expected = "NOMBRE";
                 const auto res = valuekind::classify(env, fx ? p.expression : p.value, fx, expected);
                 p.legend = valuekind::legendOf(res);
                 p.legend->expected = expected;
