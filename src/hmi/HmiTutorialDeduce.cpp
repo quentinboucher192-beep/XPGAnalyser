@@ -295,7 +295,7 @@ bool hasStateColors(const TopicInfo& i) {
     return true;
 }
 
-// Tranche 18 (relecture comme le client : « Valeurs (expressions a;b) : Une expression par part. », « Minimum : La
+// Tranche 18 (relecture comme le client : « Valeurs (formules a;b;...) : Une expression par part. », « Minimum : La
 // valeur a gauche », une majuscule apres « : » dans 100 objets) : la description d'une propriete, apres son nom et
 // « : », commence par une minuscule. Un sigle (CSV, IHM), un nom propre (Excel, Modbus) ou un endroit
 // (Configuration › Recettes) garde sa majuscule.
@@ -1625,7 +1625,7 @@ help::TopicInfo fromGuide(const hmi::guide::Topic& topic) {
     i.places = topic.places;
     if (!i.name.empty() && kind) {
         i.kind = help::TopicKind::Object;
-        // Tranche 9 (le lot de T1 : objet-courbe, « Noms des plumes (a;b) » introuvable) : l'inspecteur
+        // Tranche 9 (le lot de T1 : objet-courbe, « Noms des plumes (a;b;...) » introuvable) : l'inspecteur
         // montre les proprietes de l'objet et celles d'un objet NEUF de son genre (HmiPanels.cpp,
         // makeObject) ; une Courbe neuve n'a pas « names ». Un tutoriel ne vise donc que celles-la.
         const Object fresh = makeObject(*kind, kNoId, {}, 0, 0, kNoId);

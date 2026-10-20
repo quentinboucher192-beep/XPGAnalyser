@@ -62,6 +62,9 @@ public:
     ~ColorPalette() override;
 
     void setValue(std::string value);                        // "#RRGGBB", "#RRGGBBAA", "" (transparent), "=expr"
+    // 1.12.19 (la regle des cases) : la case accepte-t-elle une expression ? Non : « = » n'est pas un code (avant :
+    // « =SEL(...) » tape dans le code devenait la couleur d'un fond de vue, qui n'en lit pas).
+    void setExpressionsAllowed(bool on) { expressions_ = on; }
     // 1.10 : le titre de la fenetre (la propriete : "Remplissage") et, en
     // gris a cote, ce qu'elle colore (l'objet). Vide : "Couleur".
     void setTitle(std::string title, std::string subject = {});
@@ -171,6 +174,7 @@ private:
     // Le code est "tout selectionne" a l'ouverture (et apres Ctrl+A) : la
     // premiere frappe le remplace, comme dans un champ qu'on vient d'ouvrir.
     bool                     replaceOnType_{true};
+    bool expressions_{true};   // 1.12.19 : « = » permis (la case accepte une expression)
     // La pipette : l'image relue, la souris.
     bool                     picking_{false};
     bool                     shotFixed_{false};

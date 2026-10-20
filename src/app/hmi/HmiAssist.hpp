@@ -223,7 +223,7 @@ void installProgram(std::function<std::shared_ptr<const domain::Project>()> plc,
 //   une expression        Condition, Expression surveillee, Variable, Variable API,
 //                         Expression d'autorisation, et tout "... (expression)"
 //                         (l'animation : Visibilite, Couleur dynamique...)
-//   une liste (a; b)      Variables archivees, Plumes : variables tracees
+//   une liste (a;b;...)      Variables archivees, Plumes : variables tracees
 //   toute autre case      apres "=" (la piloter par une expression)
 [[nodiscard]] ui::PropertyGrid::FieldAssistFor gridAssist(Sources);
 // Une case de tableau, un libelle : un texte a trous ({ ouvre la liste des

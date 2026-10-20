@@ -258,7 +258,7 @@ public:
 
     hmi::Id addGroup(std::string name = {}, int level = 1, std::string* why = nullptr);
     bool    deleteGroup(hmi::Id, std::string* why = nullptr);
-    // nom, niveau, roles (a;b), description
+    // nom, niveau, roles (a;b;...), description
     bool    setGroupField(hmi::Id, const std::string& field, const std::string& value, std::string* why = nullptr);
 
     bool    addRole(std::string name = {}, std::string* why = nullptr);
@@ -328,7 +328,7 @@ public:
     void refresh();
     void showTab(int tab);
     [[nodiscard]] int currentTab() const;
-    // alarmes, evenements, systeme (TRUE/FALSE), max, conservation, echantillonnage, archivees (a;b)
+    // alarmes, evenements, systeme (TRUE/FALSE), max, conservation, echantillonnage, archivees (a;b;...)
     bool setSetting(const std::string& field, const std::string& value, std::string* why = nullptr);
     bool exportCsv(int tab, const std::string& path, std::string* why = nullptr);
     std::size_t clearHistory();

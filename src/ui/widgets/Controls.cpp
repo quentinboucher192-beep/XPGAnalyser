@@ -655,7 +655,7 @@ namespace ui {
         std::size_t best = 0;
         float bestDelta = std::abs(target);
         for (std::size_t i = 0; i <= text_.size(); i = nextCodepoint(text_, i)) {
-            const float w = measureWidth(shown(i), kFontUi);
+            const float w = measureWidth(shown(i), fieldFont_);
             const float d = std::abs(target - w);
             if (d < bestDelta) { bestDelta = d; best = i; }
             if (i == text_.size()) break;
@@ -674,7 +674,8 @@ namespace ui {
     void InputText::onPaint(const PaintContext& ctx) {
         const auto& c = ctx.theme.color;
         const auto  r = bounds();
-        const auto  f = ctx.theme.font.ui;
+        const auto  f = mono_ ? ctx.theme.font.mono : ctx.theme.font.ui;
+        fieldFont_ = f;
 
         ctx.r.fillRect(r, enabled() ? c.inputBg : c.panelBg);
         ctx.r.strokeRect(r, focused() ? c.accent : c.border, 1.f);
@@ -803,7 +804,7 @@ namespace ui {
         // 1.12.18 : Maj+F10, la touche Menu - le menu du champ, au curseur.
         if (const auto* k = std::get_if<KeyDown>(&ev); k && isContextMenuKey(*k)) {
             const auto inner = contentRect();
-            const float x = inner.x + measureWidth(shown(caret_), kFontUi) - scrollX_;
+            const float x = inner.x + measureWidth(shown(caret_), fieldFont_) - scrollX_;
             openContextMenu({ std::clamp(x, inner.x, inner.right()), inner.bottom() }, true);
             return EventResult::Consumed;
         }

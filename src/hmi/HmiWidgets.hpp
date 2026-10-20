@@ -13,8 +13,8 @@
 //    Tableau         cells   une ligne par ligne du tableau, les cases separees
 //                            par des tabulations. Une case : du texte, un texte a
 //                            trous ({Niveau:0.0} bar) ou =expression.
-//                    widths  la largeur relative des colonnes (a;b;c), facultative.
-//    Courbe          names   le nom de chaque plume (a;b), pour la legende.
+//                    widths  la largeur relative des colonnes (a;b;...), facultative.
+//    Courbe          names   le nom de chaque plume (a;b;...), pour la legende.
 //
 //  LE GESTIONNAIRE DE RECETTES se dessine et se clique avec la meme geometrie
 //  (recipeManagerLayout) : la barre de boutons en haut, puis le tableau des jeux.

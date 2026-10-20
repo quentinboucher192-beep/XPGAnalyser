@@ -5518,10 +5518,10 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "1.12.5 : \xC2\xAB Lignes depuis \xC2\xBB accepte un TUPLE (G\xC3\xA9n\xC3\xA9rer ne le refuse plus) et un tableau \xC3\xA0 deux dimensions (une colonne par second indice) ; un rep\xC3\xA8re ($Lignes$) est v\xC3\xA9rifi\xC3\xA9.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nColonnes "
-                         "(a;b;c)\tNom;Valeur;Unit\xC3\xA9\tLes titres des colonnes, s\xC3\xA9par\xC3\xA9s "
+                         "(a;b;\xE2\x80\xA6)\tNom;Valeur;Unit\xC3\xA9\tLes titres des colonnes, s\xC3\xA9par\xC3\xA9s "
                          "par des points-virgules.\nLignes\t4\tLe nombre de lignes (sans contenu : lignes "
                          "vides).\nCases\t(onglet Contenu)\tLe contenu des cases, r\xC3\xA9gl\xC3\xA9 dans "
-                         "l'onglet Contenu.\nLargeurs des colonnes (a;b)\t\xC3\xA9gales\tRelatives : 2;1;1 "
+                         "l'onglet Contenu.\nLargeurs des colonnes (a;b;\xE2\x80\xA6)\t\xC3\xA9gales\tRelatives : 2;1;1 "
                          "fait la premi\xC3\xA8re colonne deux fois plus large.\nSource\t(vide)\tUn fichier "
                          "externe du projet (Excel, CSV, JSON, SQLite...) : le tableau montre ses lignes "
                          "\xC3\xA0 la place des cases.\nLignes depuis\t(vide)\tUne variable LIST, VECTOR, MAP, TUPLE ou un tableau de l'IHM (\xC3\xA0 deux dimensions : une ligne par premier indice, une colonne par second) : une ligne par \xC3\xA9l\xC3\xA9ment, autant qu'elle en a ; le tableau d\xC3\xA9file (la molette, sa barre). Les colonnes : les membres d'une structure, Item1, Item2... d'un tuple, Cl\xC3\xA9" " et Valeur d'une MAP, sinon Valeur.\nTaille du texte\t14\tLa taille du texte des cases "
@@ -5550,13 +5550,13 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_Table.png", "L'exemple anim\xC3\xA9 du tableau : une ligne par cuve, la consigne R/W, \xC2\xAB ... \xC2\xBB o\xC3\xB9 une liste s'arr\xC3\xAAte."}},
          "Table",
-         {{"columns", "Colonnes (a;b;c)", "Nom;Valeur;Unit\xC3\xA9",
+         {{"columns", "Colonnes (a;b;\xE2\x80\xA6)", "Nom;Valeur;Unit\xC3\xA9",
             "Les titres des colonnes, s\xC3\xA9par\xC3\xA9s par des points-virgules."},
            {"rows", "Lignes", "4",
             "Le nombre de lignes (sans contenu : lignes vides)."},
            {"cells", "Cases", "(onglet Contenu)",
             "Le contenu des cases, r\xC3\xA9gl\xC3\xA9 dans l'onglet Contenu."},
-           {"widths", "Largeurs des colonnes (a;b)", "\xC3\xA9gales",
+           {"widths", "Largeurs des colonnes (a;b;\xE2\x80\xA6)", "\xC3\xA9gales",
             "Relatives : 2;1;1 fait la premi\xC3\xA8re colonne deux fois plus large."},
            {"source", "Source", "(vide)",
             "Un fichier externe du projet (Excel, CSV, JSON, SQLite...) : le tableau montre ses lignes "
@@ -5602,7 +5602,7 @@ const std::vector<Topic>& topics() {
                          "par qui, pourquoi, et le temps qui leur reste.\nGroupe d'alarmes "
                          "(filtre)\t(vide)\tUn groupe d'alarmes (Armoire A) : seulement les siennes. Vide : "
                          "toutes. Aussi le groupe d'un objet (Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), "
-                         "plusieurs (a; b), symbole:Sym_Pompe.\nRemplissage\t#262C36\tLe fond de la "
+                         "plusieurs (a;b;\xE2\x80\xA6), symbole:Sym_Pompe.\nRemplissage\t#262C36\tLe fond de la "
                          "liste.\nContour\t#3A4556\tLe cadre et les traits.\nTaille du texte\t12\tLa taille "
                          "du texte des lignes, de 7 \xC3\xA0 40 ; l'en-t\xC3\xAAte et la hauteur des lignes "
                          "suivent (\xC3\xA0 12 : 26 et 22 px). Dans l'inspecteur, elle est dans Apparence, "
@@ -5630,7 +5630,7 @@ const std::vector<Topic>& topics() {
             "qui, pourquoi, et le temps qui leur reste."},
            {"group", "Groupe d'alarmes (filtre)", "(vide)",
             "Un groupe d'alarmes (Armoire A) : seulement les siennes. Vide : toutes. Aussi le groupe d'un "
-            "objet (Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), plusieurs (a; b), symbole:Sym_Pompe."},
+            "objet (Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), plusieurs (a;b;\xE2\x80\xA6), symbole:Sym_Pompe."},
            {"fill", "Remplissage", "#262C36",
             "Le fond de la liste."},
            {"stroke", "Contour", "#3A4556",
@@ -5649,9 +5649,9 @@ const std::vector<Topic>& topics() {
          {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nPlumes : variables "
-                         "trac\xC3\xA9" "es (a;b)\t(vide)\tUne expression par plume, "
+                         "trac\xC3\xA9" "es (a;b;\xE2\x80\xA6)\t(vide)\tUne expression par plume, "
                          "s\xC3\xA9par\xC3\xA9" "es par ; : `Armoires[0].ana.PT1.mes; "
-                         "Armoires[1].ana.PT1.mes`.\nNoms des plumes (a;b)\tles expressions\tPour la "
+                         "Armoires[1].ana.PT1.mes`.\nNoms des plumes (a;b;\xE2\x80\xA6)\tles expressions\tPour la "
                          "l\xC3\xA9gende.\nMode\ttemps r\xC3\xA9" "el\ttemps r\xC3\xA9" "el : mesur\xC3\xA9 "
                          "\xC3\xA0 chaque cycle IHM ; historique : relu dans les mesures archiv\xC3\xA9" "es "
                          "(Configuration \xE2\x80\xBA Historiques) ou dans un fichier externe.\nSource "
@@ -5661,7 +5661,7 @@ const std::vector<Topic>& topics() {
                          "fen\xC3\xAAtre de temps montr\xC3\xA9" "e.\n\xC3\x89" "chelle\tfixe\tfixe : Axe Y "
                          "min et max ; auto : l'axe suit les valeurs affich\xC3\xA9" "es.\nAxe Y min\t0\tLe "
                          "bas de l'axe (\xC3\xA9" "chelle fixe).\nAxe Y max\t100\tLe haut de "
-                         "l'axe.\nCouleurs des plumes (a;b)\t#4FA3FF;#F2994A;#2ECC71;#E5534B\tUne couleur "
+                         "l'axe.\nCouleurs des plumes (a;b;\xE2\x80\xA6)\t#4FA3FF;#F2994A;#2ECC71;#E5534B\tUne couleur "
                          "par plume, dans l'ordre.\nInterpolation\tlin\xC3\xA9" "aire\tlin\xC3\xA9" "aire : "
                          "les points reli\xC3\xA9s ; escalier : la valeur tenue jusqu'\xC3\xA0 la suivante ; "
                          "points : seuls.\nL\xC3\xA9gende\tTRUE\tLe nom et la derni\xC3\xA8re valeur de "
@@ -5683,10 +5683,10 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_Trend.png", "L'exemple anim\xC3\xA9 de la courbe : deux plumes en temps r\xC3\xA9" "el."}},
          "Trend",
-         {{"variables", "Plumes : variables trac\xC3\xA9" "es (a;b)", "(vide)",
+         {{"variables", "Plumes : variables trac\xC3\xA9" "es (a;b;\xE2\x80\xA6)", "(vide)",
             "Une expression par plume, s\xC3\xA9par\xC3\xA9" "es par ; : `Armoires[0].ana.PT1.mes; "
             "Armoires[1].ana.PT1.mes`."},
-           {"names", "Noms des plumes (a;b)", "les expressions",
+           {"names", "Noms des plumes (a;b;\xE2\x80\xA6)", "les expressions",
             "Pour la l\xC3\xA9gende."},
            {"mode", "Mode", "temps r\xC3\xA9" "el",
             "temps r\xC3\xA9" "el : mesur\xC3\xA9 \xC3\xA0 chaque cycle IHM ; historique : relu dans les "
@@ -5702,7 +5702,7 @@ const std::vector<Topic>& topics() {
             "Le bas de l'axe (\xC3\xA9" "chelle fixe)."},
            {"ymax", "Axe Y max", "100",
             "Le haut de l'axe."},
-           {"colors", "Couleurs des plumes (a;b)", "#4FA3FF;#F2994A;#2ECC71;#E5534B",
+           {"colors", "Couleurs des plumes (a;b;\xE2\x80\xA6)", "#4FA3FF;#F2994A;#2ECC71;#E5534B",
             "Une couleur par plume, dans l'ordre."},
            {"interpolation", "Interpolation", "lin\xC3\xA9" "aire",
             "lin\xC3\xA9" "aire : les points reli\xC3\xA9s ; escalier : la valeur tenue jusqu'\xC3\xA0 la "
@@ -5712,7 +5712,7 @@ const std::vector<Topic>& topics() {
            {"pilotable", "Pilotable (pause / continuer)", "FALSE",
             "En marche, un bouton en haut \xC3\xA0 droite : Pause fige l'affichage (les mesures continuent), Continuer "
             "reprend le temps r\xC3\xA9" "el."},
-           {"penVisible", "Plumes : visibles si (a;b)", "(vide)",
+           {"penVisible", "Plumes : visibles si (a;b;\xE2\x80\xA6)", "(vide)",
             "Une condition par plume (vide : toujours visible) ; fausse, la plume et sa l\xC3\xA9gende se cachent. Plus "
             "simple : Contenu \xE2\x80\xBA la plume \xE2\x80\xBA Visible si."},
            {"fill", "Remplissage", "#1B2028",
@@ -5738,9 +5738,9 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable \xC3\xA9" "crite\t(vide)\tLa "
                          "variable qui re\xC3\xA7oit la ligne choisie : son libell\xC3\xA9 si c'est une STRING, sinon son rang "
-                         "(ou sa valeur) ; vide : la liste se lit seulement.\n\xC3\x89l\xC3\xA9ments (a;b;c)\t\xC3\x89l\xC3\xA9ment "
+                         "(ou sa valeur) ; vide : la liste se lit seulement.\n\xC3\x89l\xC3\xA9ments (a;b;\xE2\x80\xA6)\t\xC3\x89l\xC3\xA9ment "
                          "1;\xC3\x89l\xC3\xA9ment 2;\xC3\x89l\xC3\xA9ment 3\tLes lignes, s\xC3\xA9par\xC3\xA9" "es par des "
-                         "points-virgules.\nValeurs \xC3\xA9" "crites (a;b;c)\t(vide)\tUne valeur par ligne ; vide : le rang (ou le "
+                         "points-virgules.\nValeurs \xC3\xA9" "crites (a;b;\xE2\x80\xA6)\t(vide)\tUne valeur par ligne ; vide : le rang (ou le "
                          "libell\xC3\xA9 pour une STRING).\n\xC3\x89l\xC3\xA9ments depuis\t(vide)\tRemplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une expression qui rend un texte a;b;c.\nRetour d'\xC3\xA9tat (expression)\t(vide)\tLa ligne "
                          "surlign\xC3\xA9" "e ; vide : la variable.\nPolice\tSans\tLa police.\nTaille du texte\t14\tEn pixels (et la "
                          "hauteur des lignes).\nCouleur du texte\t#DDE3EA\tLes lignes.\nRemplissage\t#262C36\tLe fond de la "
@@ -5758,9 +5758,9 @@ const std::vector<Topic>& topics() {
          {{"variable", "Variable \xC3\xA9" "crite", "(vide)",
             "La variable qui re\xC3\xA7oit la ligne choisie : son libell\xC3\xA9 si c'est une STRING, sinon son rang (ou sa "
             "valeur) ; vide : la liste se lit seulement."},
-           {"items", "\xC3\x89l\xC3\xA9ments (a;b;c)", "\xC3\x89l\xC3\xA9ment 1;\xC3\x89l\xC3\xA9ment 2;\xC3\x89l\xC3\xA9ment 3",
+           {"items", "\xC3\x89l\xC3\xA9ments (a;b;\xE2\x80\xA6)", "\xC3\x89l\xC3\xA9ment 1;\xC3\x89l\xC3\xA9ment 2;\xC3\x89l\xC3\xA9ment 3",
             "Les lignes, s\xC3\xA9par\xC3\xA9" "es par des points-virgules."},
-           {"values", "Valeurs \xC3\xA9" "crites (a;b;c)", "(vide)",
+           {"values", "Valeurs \xC3\xA9" "crites (a;b;\xE2\x80\xA6)", "(vide)",
             "Une valeur par ligne ; vide : le rang (ou le libell\xC3\xA9 pour une STRING)."},
            {"itemsFrom", "\xC3\x89l\xC3\xA9ments depuis", "(vide)",
             "Remplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son "
@@ -5850,7 +5850,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nRecette\t(vide)\tLa "
                          "recette dont l'objet montre les jeux (Configuration \xE2\x80\xBA "
-                         "Recettes).\nBoutons (a;b)\tAjouter;Modifier;Supprimer;Appliquer;Lire\tCeux "
+                         "Recettes).\nBoutons (a;b;\xE2\x80\xA6)\tAjouter;Modifier;Supprimer;Appliquer;Lire\tCeux "
                          "\xC3\xA0 montrer, dans l'ordre. Ajouter enregistre les valeurs de l'installation "
                          "sous un nouveau nom, Lire les range dans le jeu choisi, Appliquer "
                          "l'\xC3\xA9" "crit dans l'installation.\nTaille du texte\t13\tLa taille du texte du "
@@ -5870,7 +5870,7 @@ const std::vector<Topic>& topics() {
          "RecipeManager",
          {{"recipe", "Recette", "(vide)",
             "La recette dont l'objet montre les jeux (Configuration \xE2\x80\xBA Recettes)."},
-           {"buttons", "Boutons (a;b)", "Ajouter;Modifier;Supprimer;Appliquer;Lire",
+           {"buttons", "Boutons (a;b;\xE2\x80\xA6)", "Ajouter;Modifier;Supprimer;Appliquer;Lire",
             "Ceux \xC3\xA0 montrer, dans l'ordre. Ajouter enregistre les valeurs de l'installation sous un "
             "nouveau nom, Lire les range dans le jeu choisi, Appliquer l'\xC3\xA9" "crit dans l'installation."},
            {"fontSize", "Taille du texte", "13",
@@ -6397,7 +6397,7 @@ const std::vector<Topic>& topics() {
          {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nBoutons "
-                         "(a;b)\tAjouter;Modifier;Supprimer;Activer;Mot de passe\tCeux \xC3\xA0 montrer, "
+                         "(a;b;\xE2\x80\xA6)\tAjouter;Modifier;Supprimer;Activer;Mot de passe\tCeux \xC3\xA0 montrer, "
                          "dans l'ordre.\nTaille du texte\t13\tLa taille du texte du tableau et des "
                          "boutons.\nRemplissage\t#262C36\tLe fond.\nContour\t#3A4556\tLe cadre et les "
                          "traits.\nCouleur du texte\t#DDE3EA\tLe texte du tableau.", {}},
@@ -6418,7 +6418,7 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_UserManager.png", "L'exemple anim\xC3\xA9 de la gestion des utilisateurs."}, {"PNG_212_sim_comptes_modifies.png", "En simulation : un compte ajout\xC3\xA9, un autre d\xC3\xA9sactiv\xC3\xA9."}},
          "UserManager",
-         {{"buttons", "Boutons (a;b)", "Ajouter;Modifier;Supprimer;Activer;Mot de passe",
+         {{"buttons", "Boutons (a;b;\xE2\x80\xA6)", "Ajouter;Modifier;Supprimer;Activer;Mot de passe",
             "Ceux \xC3\xA0 montrer, dans l'ordre."},
            {"fontSize", "Taille du texte", "13",
             "La taille du texte du tableau et des boutons."},
@@ -6636,8 +6636,8 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tLa variable qui re\xC3\xA7oit la valeur de la "
-                         "position.\nPositions (a;b;c)\tManu;Arr\xC3\xAAt;Auto\tLes libell\xC3\xA9s, "
-                         "s\xC3\xA9par\xC3\xA9s par ;.\nValeurs \xC3\xA9" "crites (a;b;c)\t(vide)\tUne "
+                         "position.\nPositions (a;b;\xE2\x80\xA6)\tManu;Arr\xC3\xAAt;Auto\tLes libell\xC3\xA9s, "
+                         "s\xC3\xA9par\xC3\xA9s par ;.\nValeurs \xC3\xA9" "crites (a;b;\xE2\x80\xA6)\t(vide)\tUne "
                          "valeur par position (une expression : 2, 'Auto', TRUE) ; vide : le "
                          "rang.\n\xC3\x89l\xC3\xA9ments depuis\t(vide)\tRemplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une expression qui rend un texte a;b;c.\nStyle\trotatif\trotatif : un bouton et ses rep\xC3\xA8res (un clic sur le "
                          "bouton passe \xC3\xA0 la position suivante) ; boutons : les positions "
@@ -6659,9 +6659,9 @@ const std::vector<Topic>& topics() {
          "Selector",
          {{"variable", "Variable \xC3\xA9" "crite", "(vide)",
             "La variable qui re\xC3\xA7oit la valeur de la position."},
-           {"positions", "Positions (a;b;c)", "Manu;Arr\xC3\xAAt;Auto",
+           {"positions", "Positions (a;b;\xE2\x80\xA6)", "Manu;Arr\xC3\xAAt;Auto",
             "Les libell\xC3\xA9s, s\xC3\xA9par\xC3\xA9s par ;."},
-           {"values", "Valeurs \xC3\xA9" "crites (a;b;c)", "(vide)",
+           {"values", "Valeurs \xC3\xA9" "crites (a;b;\xE2\x80\xA6)", "(vide)",
             "Une valeur par position (une expression : 2, 'Auto', TRUE) ; vide : le rang."},
            {"itemsFrom", "\xC3\x89l\xC3\xA9ments depuis", "(vide)",
             "Remplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son "
@@ -6844,8 +6844,8 @@ const std::vector<Topic>& topics() {
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tLa variable qui re\xC3\xA7oit le choix : son "
                          "libell\xC3\xA9 si c'est une STRING, sinon son rang (ou sa "
-                         "valeur).\n\xC3\x89l\xC3\xA9ments (a;b;c)\tAzote;Argon;H\xC3\xA9lium\tLes "
-                         "libell\xC3\xA9s.\nValeurs \xC3\xA9" "crites (a;b;c)\t(vide)\tUne valeur par "
+                         "valeur).\n\xC3\x89l\xC3\xA9ments (a;b;\xE2\x80\xA6)\tAzote;Argon;H\xC3\xA9lium\tLes "
+                         "libell\xC3\xA9s.\nValeurs \xC3\xA9" "crites (a;b;\xE2\x80\xA6)\t(vide)\tUne valeur par "
                          "\xC3\xA9l\xC3\xA9ment ; vide : le rang (ou le libell\xC3\xA9 pour une "
                          "STRING).\n\xC3\x89l\xC3\xA9ments depuis\t(vide)\tRemplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une expression qui rend un texte a;b;c.\nTexte d'invite\t(choisir)\tMontr\xC3\xA9 quand la variable ne correspond "
                          "\xC3\xA0 aucun \xC3\xA9l\xC3\xA9ment.\nLignes visibles\t6\tAu-del\xC3\xA0, deux "
@@ -6868,9 +6868,9 @@ const std::vector<Topic>& topics() {
          {{"variable", "Variable \xC3\xA9" "crite", "(vide)",
             "La variable qui re\xC3\xA7oit le choix : son libell\xC3\xA9 si c'est une STRING, sinon son rang "
             "(ou sa valeur)."},
-           {"items", "\xC3\x89l\xC3\xA9ments (a;b;c)", "Azote;Argon;H\xC3\xA9lium",
+           {"items", "\xC3\x89l\xC3\xA9ments (a;b;\xE2\x80\xA6)", "Azote;Argon;H\xC3\xA9lium",
             "Les libell\xC3\xA9s."},
-           {"values", "Valeurs \xC3\xA9" "crites (a;b;c)", "(vide)",
+           {"values", "Valeurs \xC3\xA9" "crites (a;b;\xE2\x80\xA6)", "(vide)",
             "Une valeur par \xC3\xA9l\xC3\xA9ment ; vide : le rang (ou le libell\xC3\xA9 pour une STRING)."},
            {"itemsFrom", "\xC3\x89l\xC3\xA9ments depuis", "(vide)",
             "Remplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son "
@@ -6953,8 +6953,8 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable "
                          "\xC3\xA9" "crite\t(vide)\tLa variable qui re\xC3\xA7oit la valeur de "
-                         "l'option.\n\xC3\x89l\xC3\xA9ments (a;b;c)\tPetite vitesse;Grande "
-                         "vitesse;Arr\xC3\xAAt\tLes options.\nValeurs \xC3\xA9" "crites (a;b;c)\t(vide)\tUne "
+                         "l'option.\n\xC3\x89l\xC3\xA9ments (a;b;\xE2\x80\xA6)\tPetite vitesse;Grande "
+                         "vitesse;Arr\xC3\xAAt\tLes options.\nValeurs \xC3\xA9" "crites (a;b;\xE2\x80\xA6)\t(vide)\tUne "
                          "valeur par option ; vide : le rang.\n\xC3\x89l\xC3\xA9ments depuis\t(vide)\tRemplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son nombre), une variable LIST, VECTOR ou un tableau (ses \xC3\xA9l\xC3\xA9ments), une MAP (ses cl\xC3\xA9s), ou une expression qui rend un texte a;b;c.\nOrientation\tverticale\tLes options l'une "
                          "sous l'autre, ou c\xC3\xB4te \xC3\xA0 c\xC3\xB4te.\nRetour d'\xC3\xA9tat "
                          "(expression)\t(vide)\tCe que le groupe montre ; vide : la "
@@ -6971,9 +6971,9 @@ const std::vector<Topic>& topics() {
          "RadioGroup",
          {{"variable", "Variable \xC3\xA9" "crite", "(vide)",
             "La variable qui re\xC3\xA7oit la valeur de l'option."},
-           {"items", "\xC3\x89l\xC3\xA9ments (a;b;c)", "Petite vitesse;Grande vitesse;Arr\xC3\xAAt",
+           {"items", "\xC3\x89l\xC3\xA9ments (a;b;\xE2\x80\xA6)", "Petite vitesse;Grande vitesse;Arr\xC3\xAAt",
             "Les options."},
-           {"values", "Valeurs \xC3\xA9" "crites (a;b;c)", "(vide)",
+           {"values", "Valeurs \xC3\xA9" "crites (a;b;\xE2\x80\xA6)", "(vide)",
             "Une valeur par option ; vide : le rang."},
            {"itemsFrom", "\xC3\x89l\xC3\xA9ments depuis", "(vide)",
             "Remplace la liste \xC3\xA9" "crite : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur \xC3\xA9" "crite : son "
@@ -9978,10 +9978,10 @@ const std::vector<Topic>& topics() {
                          "la couleur d'alarme.", {}},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nValeurs "
-                         "(expressions a;b)\t(vide)\tUne expression par barre, s\xC3\xA9par\xC3\xA9" "es par "
-                         "; : `Cuve_1; Cuve_2; Armoires[0].ana.PT1.mes`.\nNoms (a;b)\tles expressions\tLe "
+                         "(formules a;b;\xE2\x80\xA6)\t(vide)\tUne expression par barre, s\xC3\xA9par\xC3\xA9" "es par "
+                         "; : `Cuve_1; Cuve_2; Armoires[0].ana.PT1.mes`.\nNoms (a;b;\xE2\x80\xA6)\tles expressions\tLe "
                          "nom de chaque barre, \xC3\xA9" "crit dessous.\nCouleurs "
-                         "(a;b)\t#4FA3FF;#F2994A;...\tLa couleur de chaque barre, dans "
+                         "(a;b;\xE2\x80\xA6)\t#4FA3FF;#F2994A;...\tLa couleur de chaque barre, dans "
                          "l'ordre.\nOrientation\tverticale\tverticale : les barres montent ; horizontale : "
                          "elles vont vers la droite, les noms \xC3\xA0 "
                          "gauche.\n\xC3\x89" "chelle\tfixe\tfixe : de Minimum \xC3\xA0 Maximum ; auto : "
@@ -10010,12 +10010,12 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_BarChart.png", "L'exemple anim\xC3\xA9 : les niveaux de cinq cuves, le seuil haut en pointill\xC3\xA9s."}},
          "BarChart",
-         {{"variables", "Valeurs (expressions a;b)", "(vide)",
+         {{"variables", "Valeurs (formules a;b;\xE2\x80\xA6)", "(vide)",
             "Une expression par barre, s\xC3\xA9par\xC3\xA9" "es par ; : `Cuve_1; Cuve_2; "
             "Armoires[0].ana.PT1.mes`."},
-           {"names", "Noms (a;b)", "les expressions",
+           {"names", "Noms (a;b;\xE2\x80\xA6)", "les expressions",
             "Le nom de chaque barre, \xC3\xA9" "crit dessous."},
-           {"colors", "Couleurs (a;b)", "#4FA3FF;#F2994A;...",
+           {"colors", "Couleurs (a;b;\xE2\x80\xA6)", "#4FA3FF;#F2994A;...",
             "La couleur de chaque barre, dans l'ordre."},
            {"orientation", "Orientation", "verticale",
             "verticale : les barres montent ; horizontale : elles vont vers la droite, les noms \xC3\xA0 "
@@ -10067,9 +10067,9 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariable X "
                          "(expression)\t(vide)\tL'abscisse : `Debit_m3h`. Sans elle, aucun point.\nCourbes : "
-                         "Y (expressions a;b)\t(vide)\tUne expression par courbe : "
-                         "`Pression_Refoulement`.\nNoms (a;b)\tles expressions\tPour la "
-                         "l\xC3\xA9gende.\nCouleurs (a;b)\t#4FA3FF;#F2994A;...\tLa couleur de chaque "
+                         "Y (formules a;b;\xE2\x80\xA6)\t(vide)\tUne expression par courbe : "
+                         "`Pression_Refoulement`.\nNoms (a;b;\xE2\x80\xA6)\tles expressions\tPour la "
+                         "l\xC3\xA9gende.\nCouleurs (a;b;\xE2\x80\xA6)\t#4FA3FF;#F2994A;...\tLa couleur de chaque "
                          "courbe.\nAxe X min\t0\tLe d\xC3\xA9" "but de l'axe X (\xC3\xA9" "chelle "
                          "fixe).\nAxe X max\t100\tLa fin de l'axe X.\nAxe Y min\t0\tLe bas de l'axe Y.\nAxe "
                          "Y max\t100\tLe haut de l'axe Y.\n\xC3\x89" "chelle\tfixe\tfixe : les bornes "
@@ -10107,11 +10107,11 @@ const std::vector<Topic>& topics() {
          "XYChart",
          {{"xVariable", "Variable X (expression)", "(vide)",
             "L'abscisse : `Debit_m3h`. Sans elle, aucun point."},
-           {"variables", "Courbes : Y (expressions a;b)", "(vide)",
+           {"variables", "Courbes : Y (formules a;b;\xE2\x80\xA6)", "(vide)",
             "Une expression par courbe : `Pression_Refoulement`."},
-           {"names", "Noms (a;b)", "les expressions",
+           {"names", "Noms (a;b;\xE2\x80\xA6)", "les expressions",
             "Pour la l\xC3\xA9gende."},
-           {"colors", "Couleurs (a;b)", "#4FA3FF;#F2994A;...",
+           {"colors", "Couleurs (a;b;\xE2\x80\xA6)", "#4FA3FF;#F2994A;...",
             "La couleur de chaque courbe."},
            {"xmin", "Axe X min", "0",
             "Le d\xC3\xA9" "but de l'axe X (\xC3\xA9" "chelle fixe)."},
@@ -10168,7 +10168,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nLignes (expressions "
                          "a;b)\t(vide)\tUne expression par ligne : `Pompe_1_Etat; Pompe_2_Etat` (un "
-                         "bool\xC3\xA9" "en ou un entier).\nNoms (a;b)\tles expressions\tLe nom de chaque "
+                         "bool\xC3\xA9" "en ou un entier).\nNoms (a;b;\xE2\x80\xA6)\tles expressions\tLe nom de chaque "
                          "ligne, \xC3\xA0 gauche.\nDur\xC3\xA9" "e affich\xC3\xA9" "e (s)\t60\tLa "
                          "fen\xC3\xAAtre de temps : \xC3\xA0 droite maintenant, \xC3\xA0 gauche il y a N "
                          "secondes.\n\xC3\x89tats (valeur = texte, couleur)\t0 = Arr\xC3\xAAt|#4A5261; 1 = "
@@ -10193,9 +10193,9 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_StateChart.png", "L'exemple anim\xC3\xA9 : trois lignes, leurs \xC3\xA9tats sur 20 secondes."}},
          "StateChart",
-         {{"variables", "Lignes (expressions a;b)", "(vide)",
+         {{"variables", "Lignes (formules a;b;\xE2\x80\xA6)", "(vide)",
             "Une expression par ligne : `Pompe_1_Etat; Pompe_2_Etat` (un bool\xC3\xA9" "en ou un entier)."},
-           {"names", "Noms (a;b)", "les expressions",
+           {"names", "Noms (a;b;\xE2\x80\xA6)", "les expressions",
             "Le nom de chaque ligne, \xC3\xA0 gauche."},
            {"duration", "Dur\xC3\xA9" "e affich\xC3\xA9" "e (s)", "60",
             "La fen\xC3\xAAtre de temps : \xC3\xA0 droite maintenant, \xC3\xA0 gauche il y a N secondes."},
@@ -10230,8 +10230,8 @@ const std::vector<Topic>& topics() {
                          "lisent en pourcentage, en valeur, ou les deux.", {}},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nValeurs "
-                         "(expressions a;b)\t(vide)\tUne expression par part.\nNoms (a;b)\tles "
-                         "expressions\tPour la l\xC3\xA9gende.\nCouleurs (a;b)\t#4FA3FF;#F2994A;...\tLa "
+                         "(formules a;b;\xE2\x80\xA6)\t(vide)\tUne expression par part.\nNoms (a;b;\xE2\x80\xA6)\tles "
+                         "expressions\tPour la l\xC3\xA9gende.\nCouleurs (a;b;\xE2\x80\xA6)\t#4FA3FF;#F2994A;...\tLa "
                          "couleur de chaque part.\nTrou central (%)\t0\t0 : un camembert ; 50 : un anneau, "
                          "le total \xC3\xA9" "crit au centre.\n\xC3\x89tiquettes des "
                          "parts\tpourcentage\tpourcentage, valeur, les deux, ou aucune (une part de moins de "
@@ -10252,11 +10252,11 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_PieChart.png", "L'exemple anim\xC3\xA9 : un camembert et le m\xC3\xAAme en anneau."}},
          "PieChart",
-         {{"variables", "Valeurs (expressions a;b)", "(vide)",
+         {{"variables", "Valeurs (formules a;b;\xE2\x80\xA6)", "(vide)",
             "Une expression par part."},
-           {"names", "Noms (a;b)", "les expressions",
+           {"names", "Noms (a;b;\xE2\x80\xA6)", "les expressions",
             "Pour la l\xC3\xA9gende."},
-           {"colors", "Couleurs (a;b)", "#4FA3FF;#F2994A;...",
+           {"colors", "Couleurs (a;b;\xE2\x80\xA6)", "#4FA3FF;#F2994A;...",
             "La couleur de chaque part."},
            {"hole", "Trou central (%)", "0",
             "0 : un camembert ; 50 : un anneau, le total \xC3\xA9" "crit au centre."},
@@ -10292,8 +10292,8 @@ const std::vector<Topic>& topics() {
                          "Trois axes au moins ; six \xC3\xA0 huit se lisent le mieux.", {}},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nAxes (expressions "
-                         "a;b)\t(vide)\tUne expression par axe.\nNoms (a;b)\tles expressions\tLe nom de "
-                         "chaque axe, \xC3\xA0 son extr\xC3\xA9mit\xC3\xA9.\nCouleurs (a;b)\t#4FA3FF\tLa "
+                         "a;b)\t(vide)\tUne expression par axe.\nNoms (a;b;\xE2\x80\xA6)\tles expressions\tLe nom de "
+                         "chaque axe, \xC3\xA0 son extr\xC3\xA9mit\xC3\xA9.\nCouleurs (a;b;\xE2\x80\xA6)\t#4FA3FF\tLa "
                          "couleur du polygone mesur\xC3\xA9 (la premi\xC3\xA8re).\nMinimum\t0\tLe centre de "
                          "la toile.\nMaximum\t100\tLe bord de la toile.\nConsigne (valeurs "
                          "a;b;c)\t(vide)\tUn second polygone en pointill\xC3\xA9s : une valeur (ou une "
@@ -10314,11 +10314,11 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_RadarChart.png", "L'exemple anim\xC3\xA9 : la sant\xC3\xA9 d'une pompe face \xC3\xA0 sa consigne."}},
          "RadarChart",
-         {{"variables", "Axes (expressions a;b)", "(vide)",
+         {{"variables", "Axes (formules a;b;\xE2\x80\xA6)", "(vide)",
             "Une expression par axe."},
-           {"names", "Noms (a;b)", "les expressions",
+           {"names", "Noms (a;b;\xE2\x80\xA6)", "les expressions",
             "Le nom de chaque axe, \xC3\xA0 son extr\xC3\xA9mit\xC3\xA9."},
-           {"colors", "Couleurs (a;b)", "#4FA3FF",
+           {"colors", "Couleurs (a;b;\xE2\x80\xA6)", "#4FA3FF",
             "La couleur du polygone mesur\xC3\xA9 (la premi\xC3\xA8re)."},
            {"min", "Minimum", "0",
             "Le centre de la toile."},
@@ -10585,7 +10585,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nZone (groupe "
                          "d'alarmes)\t(vide)\tSeulement les alarmes de ce groupe ; vide : toutes. Aussi le "
-                         "groupe d'un objet (Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), plusieurs (a; b), "
+                         "groupe d'un objet (Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), plusieurs (a;b;\xE2\x80\xA6), "
                          "symbole:Sym_Pompe.\nAlarme montr\xC3\xA9" "e\tla plus grave\tla plus grave "
                          "(\xC3\xA0 acquitter d'abord), la plus r\xC3\xA9" "cente, ou d\xC3\xA9" "filement "
                          "(chacune \xC3\xA0 son tour).\nD\xC3\xA9" "filement (ms)\t4000\tEn "
@@ -10611,7 +10611,7 @@ const std::vector<Topic>& topics() {
          "AlarmBanner",
          {{"group", "Zone (groupe d'alarmes)", "(vide)",
             "Seulement les alarmes de ce groupe ; vide : toutes. Aussi le groupe d'un objet "
-            "(Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), plusieurs (a; b), symbole:Sym_Pompe."},
+            "(Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), plusieurs (a;b;\xE2\x80\xA6), symbole:Sym_Pompe."},
            {"show", "Alarme montr\xC3\xA9" "e", "la plus grave",
             "la plus grave (\xC3\xA0 acquitter d'abord), la plus r\xC3\xA9" "cente, ou d\xC3\xA9" "filement "
             "(chacune \xC3\xA0 son tour)."},
@@ -10647,7 +10647,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nZone (groupe "
                          "d'alarmes)\t(vide)\tSeulement les alarmes de ce groupe ; vide : toutes. Aussi le "
-                         "groupe d'un objet (Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), plusieurs (a; b), "
+                         "groupe d'un objet (Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), plusieurs (a;b;\xE2\x80\xA6), "
                          "symbole:Sym_Pompe.\nCompter\t\xC3\xA0 acquitter\t\xC3\xA0 acquitter, actives "
                          "(condition vraie), en cours (actives ou \xC3\xA0 acquitter), mises de "
                          "c\xC3\xB4t\xC3\xA9.\nLibell\xC3\xA9\tAlarmes\t\xC3\x89" "crit sous le "
@@ -10664,7 +10664,7 @@ const std::vector<Topic>& topics() {
          "AlarmCounter",
          {{"group", "Zone (groupe d'alarmes)", "(vide)",
             "Seulement les alarmes de ce groupe ; vide : toutes. Aussi le groupe d'un objet "
-            "(Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), plusieurs (a; b), symbole:Sym_Pompe."},
+            "(Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), plusieurs (a;b;\xE2\x80\xA6), symbole:Sym_Pompe."},
            {"count", "Compter", "\xC3\xA0 acquitter",
             "\xC3\xA0 acquitter, actives (condition vraie), en cours (actives ou \xC3\xA0 acquitter), mises "
             "de c\xC3\xB4t\xC3\xA9."},
@@ -10797,7 +10797,7 @@ const std::vector<Topic>& topics() {
                          "par\tnombre\tnombre (d'apparitions) ou dur\xC3\xA9" "e (active, "
                          "cumul\xC3\xA9" "e).\nZone (groupe d'alarmes)\t(vide)\tSeulement ce groupe ; vide : "
                          "tous. Aussi le groupe d'un objet (Vue_Pompes.Pompe_3), un motif (Vue_Pompes.*), "
-                         "plusieurs (a; b), symbole:Sym_Pompe.\nCouleur des barres\t#F2994A\tLa couleur des "
+                         "plusieurs (a;b;\xE2\x80\xA6), symbole:Sym_Pompe.\nCouleur des barres\t#F2994A\tLa couleur des "
                          "barres.\nTaille du texte\t13\tLa taille des lignes.\nCouleur du texte\t#DDE3EA\tLa "
                          "couleur des textes.\nRemplissage\t#1B2028\tLe fond.\nContour\t#3A4556\tLe cadre.", {}},
          },
@@ -10815,7 +10815,7 @@ const std::vector<Topic>& topics() {
             "nombre (d'apparitions) ou dur\xC3\xA9" "e (active, cumul\xC3\xA9" "e)."},
            {"group", "Zone (groupe d'alarmes)", "(vide)",
             "Seulement ce groupe ; vide : tous. Aussi le groupe d'un objet (Vue_Pompes.Pompe_3), un motif "
-            "(Vue_Pompes.*), plusieurs (a; b), symbole:Sym_Pompe."},
+            "(Vue_Pompes.*), plusieurs (a;b;\xE2\x80\xA6), symbole:Sym_Pompe."},
            {"colors", "Couleur des barres", "#F2994A",
             "La couleur des barres."},
            {"fontSize", "Taille du texte", "13",
@@ -10983,9 +10983,9 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "1.12.5 : une ligne rep\xC3\xA9r\xC3\xA9" "e ($Cuve$.Consigne) reste \xC3\xA9" "crivable et garde son unit\xC3\xA9 et son format ; retirer ou d\xC3\xA9placer une ligne dans Contenu emm\xC3\xA8ne son unit\xC3\xA9 et son format.", {}, "1.12.5"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVariables "
-                         "(a;b)\t(vide)\tUne expression par ligne : `Consigne_Temp; Vitesse; Mode`.\nNoms "
-                         "(a;b)\tles expressions\tLe nom de chaque ligne.\nUnit\xC3\xA9s "
-                         "(a;b;c)\t(vide)\tL'unit\xC3\xA9 de chaque ligne.\nValeurs modifiables\tTRUE\tUn "
+                         "(a;b;\xE2\x80\xA6)\t(vide)\tUne expression par ligne : `Consigne_Temp; Vitesse; Mode`.\nNoms "
+                         "(a;b;\xE2\x80\xA6)\tles expressions\tLe nom de chaque ligne.\nUnit\xC3\xA9s "
+                         "(a;b;\xE2\x80\xA6)\t(vide)\tL'unit\xC3\xA9 de chaque ligne.\nValeurs modifiables\tTRUE\tUn "
                          "clic sur la valeur d'une variable la modifie (permission "
                          "Piloter).\nFormat\t0.00\tLe format des nombres r\xC3\xA9" "els.\nClavier "
                          "virtuel\taucun\tUn clavier \xC3\xA0 l'\xC3\xA9" "cran pendant la saisie "
@@ -11008,11 +11008,11 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_VariableTable.png", "L'exemple anim\xC3\xA9 : quatre variables, une consigne modifi\xC3\xA9" "e au clavier."}},
          "VariableTable",
-         {{"variables", "Variables (a;b)", "(vide)",
+         {{"variables", "Variables (a;b;\xE2\x80\xA6)", "(vide)",
             "Une expression par ligne : `Consigne_Temp; Vitesse; Mode`."},
-           {"names", "Noms (a;b)", "les expressions",
+           {"names", "Noms (a;b;\xE2\x80\xA6)", "les expressions",
             "Le nom de chaque ligne."},
-           {"units", "Unit\xC3\xA9s (a;b;c)", "(vide)",
+           {"units", "Unit\xC3\xA9s (a;b;\xE2\x80\xA6)", "(vide)",
             "L'unit\xC3\xA9 de chaque ligne."},
            {"writable", "Valeurs modifiables", "TRUE",
             "Un clic sur la valeur d'une variable la modifie (permission Piloter)."},
@@ -11052,7 +11052,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nRecette\t(vide)\tLa "
                          "recette \xC3\xA9" "dit\xC3\xA9" "e (Configuration \xE2\x80\xBA Recettes).\nBoutons "
-                         "(a;b)\tEnregistrer;Appliquer;Lire;Annuler;Nouveau\tCeux \xC3\xA0 montrer, dans "
+                         "(a;b;\xE2\x80\xA6)\tEnregistrer;Appliquer;Lire;Annuler;Nouveau\tCeux \xC3\xA0 montrer, dans "
                          "l'ordre.\nComparer avec l'installation\tTRUE\tLes colonnes Installation et "
                          "\xC3\x89" "cart.\nClavier virtuel\taucun\tUn clavier \xC3\xA0 l'\xC3\xA9" "cran "
                          "pendant la saisie.\nTaille du texte\t13\tLa taille des lignes.\nCouleur du "
@@ -11066,7 +11066,7 @@ const std::vector<Topic>& topics() {
          "RecipeEditor",
          {{"recipe", "Recette", "(vide)",
             "La recette \xC3\xA9" "dit\xC3\xA9" "e (Configuration \xE2\x80\xBA Recettes)."},
-           {"buttons", "Boutons (a;b)", "Enregistrer;Appliquer;Lire;Annuler;Nouveau",
+           {"buttons", "Boutons (a;b;\xE2\x80\xA6)", "Enregistrer;Appliquer;Lire;Annuler;Nouveau",
             "Ceux \xC3\xA0 montrer, dans l'ordre."},
            {"compare", "Comparer avec l'installation", "TRUE",
             "Les colonnes Installation et \xC3\x89" "cart."},
@@ -11275,8 +11275,8 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "1.12.6 : le clic suit ce que la barre montre : des Vues en formule, calcul\xC3\xA9" "es en marche, m\xC3\xA8nent \xC3\xA0 la vue calcul\xC3\xA9" "e (avant : la valeur fixe) ; une vue rep\xC3\xA9r\xC3\xA9" "e ($Vue_Pompe$) s'y lit sans ses $.", {}, "1.12.6"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nVues "
-                         "(a;b;c)\t(vide)\tLes vues de la barre, dans l'ordre ; vide : toutes les vues "
-                         "ordinaires du projet.\nLibell\xC3\xA9s (a;b;c)\t(vide)\tUn libell\xC3\xA9 par vue "
+                         "(a;b;\xE2\x80\xA6)\t(vide)\tLes vues de la barre, dans l'ordre ; vide : toutes les vues "
+                         "ordinaires du projet.\nLibell\xC3\xA9s (a;b;\xE2\x80\xA6)\t(vide)\tUn libell\xC3\xA9 par vue "
                          "; vide : le nom de la vue (sans Vue_, _ en "
                          "espaces).\nOrientation\thorizontale\thorizontale (en haut d'une vue) ou verticale "
                          "(un menu \xC3\xA0 gauche).\nStyle\tonglets\tonglets (pos\xC3\xA9s sur un filet), "
@@ -11301,9 +11301,9 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_NavBar.png", "L'exemple anim\xC3\xA9 : la vue courante en surbrillance, les fl\xC3\xA8" "ches de l'historique."}},
          "NavBar",
-         {{"views", "Vues (a;b;c)", "(vide)",
+         {{"views", "Vues (a;b;\xE2\x80\xA6)", "(vide)",
             "Les vues de la barre, dans l'ordre ; vide : toutes les vues ordinaires du projet."},
-           {"labels", "Libell\xC3\xA9s (a;b;c)", "(vide)",
+           {"labels", "Libell\xC3\xA9s (a;b;\xE2\x80\xA6)", "(vide)",
             "Un libell\xC3\xA9 par vue ; vide : le nom de la vue (sans Vue_, _ en espaces)."},
            {"orientation", "Orientation", "horizontale",
             "horizontale (en haut d'une vue) ou verticale (un menu \xC3\xA0 gauche)."},
@@ -11399,7 +11399,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "1.12.6 : un onglet pilot\xC3\xA9 par une formule (Onglet montr\xC3\xA9 `=Page_Voulue`) reste cliquable : le clic montre la page choisie \xC3\xA0 c\xC3\xB4t\xC3\xA9 de la formule, sans l'effacer ; d\xC3\xA8s que la valeur de la formule change, elle reprend la main. Le repli d'un panneau repliable et le d\xC3\xA9" "filement d'un panneau d\xC3\xA9" "filant font de m\xC3\xAAme.", {}, "1.12.6"},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nOnglets "
-                         "(a;b;c)\tPage 1;Page 2;Page 3\tUne page par onglet.\nOnglet montr\xC3\xA9\t1\tLa "
+                         "(a;b;\xE2\x80\xA6)\tPage 1;Page 2;Page 3\tUne page par onglet.\nOnglet montr\xC3\xA9\t1\tLa "
                          "page montr\xC3\xA9" "e au d\xC3\xA9part (et celle qu'on \xC3\xA9" "dite). En "
                          "marche : `Vue.Objet.Page`.\nVariable de l'onglet (INT)\t(vide)\tUne variable qui "
                          "dit la page (1, 2...) : l'objet la suit, un clic l'\xC3\xA9" "crit.\nPlace des "
@@ -11416,7 +11416,7 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_TabContainer.png", "L'exemple anim\xC3\xA9 : la page Mesures, ses afficheurs."}},
          "TabContainer",
-         {{"tabs", "Onglets (a;b;c)", "Page 1;Page 2;Page 3",
+         {{"tabs", "Onglets (a;b;\xE2\x80\xA6)", "Page 1;Page 2;Page 3",
             "Une page par onglet."},
            {"page", "Onglet montr\xC3\xA9", "1",
             "La page montr\xC3\xA9" "e au d\xC3\xA9part (et celle qu'on \xC3\xA9" "dite). En marche : "
@@ -11674,7 +11674,7 @@ const std::vector<Topic>& topics() {
                          "demand\xC3\xA9" "e : changer de langue ne commande rien.", {}},
              {K::Heading, "Ses param\xC3\xA8tres", {}},
              {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nLangues "
-                         "(a;b;c)\t(vide)\tLes langues propos\xC3\xA9" "es, par leur code, dans l'ordre : "
+                         "(a;b;\xE2\x80\xA6)\t(vide)\tLes langues propos\xC3\xA9" "es, par leur code, dans l'ordre : "
                          "fr;en;de. Vide : toutes celles du projet.\nStyle\tboutons\tBoutons : un par "
                          "langue. Bascule : un seul bouton, la langue en cours (et un globe) ; un clic passe "
                          "\xC3\xA0 la suivante.\nLibell\xC3\xA9\tcode et nom\tCe qu'on lit : EN  English, "
@@ -11701,7 +11701,7 @@ const std::vector<Topic>& topics() {
          {},
          {{"EX_LanguageSelector.png", "L'exemple anim\xC3\xA9 : la vue pass\xC3\xA9" "e en allemand par le s\xC3\xA9lecteur."}},
          "LanguageSelector",
-         {{"languages", "Langues (a;b;c)", "(vide)",
+         {{"languages", "Langues (a;b;\xE2\x80\xA6)", "(vide)",
             "Les langues propos\xC3\xA9" "es, par leur code, dans l'ordre : fr;en;de. Vide : toutes celles "
             "du projet."},
            {"languageStyle", "Style", "boutons",
@@ -14929,7 +14929,7 @@ const std::vector<Topic>& topics() {
              {K::Table, "Propri\xC3\xA9t\xC3\xA9\tCe qu'elle fait\nSignature \xC3\xA9lectronique\taucune ; "
                          "**simple** : le signataire retape son mot de passe (ou son code) et donne un motif "
                          "; **double** : un second compte appose en plus son visa\nMotifs propos\xC3\xA9s "
-                         "(a;b)\tles motifs \xC3\xA0 choisir aux fl\xC3\xA8" "ches (Essai;Purge avant "
+                         "(a;b;\xE2\x80\xA6)\tles motifs \xC3\xA0 choisir aux fl\xC3\xA8" "ches (Essai;Purge avant "
                          "intervention) ; vide : le motif se tape\nNiveau du visa\tdouble : le niveau "
                          "minimal du second compte", {}},
              {K::Paragraph, "Tous les gestes qui \xC3\xA9" "crivent attendent la signature : un clic, un choix "

@@ -559,7 +559,12 @@ PG::Category argumentsCategory(const hmi::Project& p, const hmi::View* caller, c
         // 1.9 (decision 7) : chaque argument est une expression (pastille fx), lue chez
         // l'appelant (ses parametres connus) : rouge si elle ne peut pas marcher.
         if (!arg.empty() && error.empty()) error = fx(caller ? *caller : popup, arg);
-        std::string shown = arg;
+        // 1.12.19 (la regle des cases) : comme l'argument d'un symbole - une valeur fixe se montre telle qu'on la
+        // tape (P3, sans apostrophes, sans fx) ; une formule avec son = ; sans =, ce qu'on tape est converti dans
+        // le type du parametre (P3 -> 'P3', 2,5 -> 2.5), un nom de variable reste la variable. Avant : tout
+        // argument etait une formule, et un texte exigeait ses apostrophes.
+        const bool literal = !arg.empty() && hmi::isLiteralArgument(arg);
+        std::string shown = literal ? hmi::shownLiteral(arg) : arg;
         if (arg.empty())
             help = (trim(prm.defaultValue).empty() ? std::string("Pas donn\xC3\xA9 et sans valeur par d\xC3\xA9" "faut : donne-le. ")
                                                    : "Pas donn\xC3\xA9 : la popup re\xC3\xA7oit sa valeur par d\xC3\xA9" "faut " + prm.defaultValue + ". ")
@@ -571,11 +576,19 @@ PG::Category argumentsCategory(const hmi::Project& p, const hmi::View* caller, c
         if (!warning.empty()) help = warning + ". " + help;
         auto row = prop(prm.name + "  \xC2\xB7  " + shownType(prm.type) + "  \xC2\xB7  " + std::string(hmi::params::paramModeBadge(prm.mode)),
                         shown, PG::ValueType::Text, error.empty() ? help : error + ". " + help, {},
-                        [setArgument, name = prm.name](std::string_view s) { return setArgument && setArgument(name, std::string(s)); });
-        if (!arg.empty() || !error.empty()) {
-            row.expression = arg.empty() ? std::string("?") : arg;
-            row.exprError = error;
-        }
+                        [setArgument, name = prm.name, type = prm.type, was = arg, project = &p](std::string_view s) {
+                            std::string v = trim(std::string(s));
+                            if (!v.empty() && v.front() == '=') {
+                                v = trim(v.substr(1));                       // une formule, telle quelle
+                            } else if (!v.empty()) {
+                                // Une saisie inchangee garde ce qui etait ecrit ; sinon la constante du type.
+                                if (!was.empty() && hmi::isLiteralArgument(was) && hmi::shownLiteral(was) == v) v = was;
+                                else v = hmi::effectiveArgument(project, type.empty() ? std::string("ANY") : type, v);
+                            }
+                            return setArgument && setArgument(name, v);
+                        });
+        if (!literal && (!arg.empty() || !error.empty())) row.expression = arg.empty() ? std::string("?") : arg;
+        row.exprError = error;
         row.pill = modePill(prm.mode);   // 1.9 (chantier U) : la pastille de couleur (P3)
         // 1.9 (chantier U) : pas donne - la valeur par defaut, en gris dans la case (P3).
         if (arg.empty() && error.empty() && !trim(prm.defaultValue).empty())
@@ -583,7 +596,7 @@ PG::Category argumentsCategory(const hmi::Project& p, const hmi::View* caller, c
         // 1.10 (chantier K) : un argument est une expression - X, clic droit, effacer le
         // retirent (la popup recoit alors sa valeur par defaut). Pas donne et en
         // erreur ("?") : rien a retirer.
-        if (!arg.empty() || error.empty()) ui::exprfield::markWhole(row, expectOfType(prm.type), false);
+        if (!arg.empty() || error.empty()) ui::exprfield::mark(row, expectOfType(prm.type));   // 1.12.19 : valeur ou =formule
         cat.properties.push_back(std::move(row));
     }
     // Les arguments donnes que la popup ne declare pas.

@@ -3174,6 +3174,8 @@ void PropertyGrid::beginEdit(std::size_t row) {
         // LA PALETTE : une pastille choisie est appliquee, et la case se ferme.
         auto palette = std::make_unique<ColorPalette>(id() + ".palette");
         palette->setValue(p.value);
+        // 1.12.19 : « = » seulement si la case accepte une expression (ou en a deja une, ecrite avant).
+        palette->setExpressionsAllowed(exprfield::accepts(p) || (!p.value.empty() && p.value.front() == '='));
         palette->setTitle(p.name);    // 1.10 (chantier Q) : la propriete en titre de la palette
         if (paletteColors_) palette->setProjectColors(paletteColors_());
         auto* raw = palette.get();
@@ -3236,6 +3238,13 @@ void PropertyGrid::beginEdit(std::size_t row) {
         field->setText(resumeText_ ? *resumeText_      // 1.12.19 : « Reprendre » - ce qui avait ete tape et refuse
                                    : accepts ? (gForceExprText && p.expression.empty() ? std::string("=") : exprfield::editText(p)) : p.value);
         if (accepts) field->setPlaceholder(exprfield::shownInvite(p, true));   // 1.10.1 (U2) : sans "ou = expression"
+        // 1.12.19 (la regle des cases) : une formule en chasse fixe, pendant qu'on la tape aussi (le = tape la
+        // fait passer en chasse fixe ; l'enlever la rend a la police du texte).
+        if (accepts) {
+            auto* typed = field.get();
+            typed->setMonospace(!typed->text().empty() && typed->text().front() == '=');
+            typed->textChanged->connect([typed](const std::string& t) { typed->setMonospace(!t.empty() && t.front() == '='); }).release();
+        }
         if (fieldAssist_)
             if (auto assist = fieldAssist_(rows_[row].cat->name, p)) field->setAssist(std::move(assist));
         // 1.12.7 (lot D) : le nom tape d'une liste typeIn - ses choix en aide, filtres par le debut tape.
@@ -3803,6 +3812,9 @@ std::string_view withoutPillTail(std::string_view name, const std::optional<Colo
 }
 std::string_view shownName(const PropertyGrid::Property& p) {
     std::string_view s = withoutPillTail(p.name, p.pill);
+    // 1.12.19 : le « ƒ » qu'un hote ajoute a une case pilotee part d'abord (sinon « (expression) » restait).
+    constexpr std::string_view kDriven = "  \xC6\x92";
+    if (s.size() > kDriven.size() && s.substr(s.size() - kDriven.size()) == kDriven) s.remove_suffix(kDriven.size());
     // 1.10.1 (U2) : une case a expression sans son "(expression)" : la pastille fx et
     // le type au bout du nom le disent deja (Visibilite (expression) -> Visibilite).
     constexpr std::string_view kTag = " (expression)";

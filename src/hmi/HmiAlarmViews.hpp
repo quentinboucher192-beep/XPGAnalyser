@@ -74,7 +74,7 @@ struct ZoneSummary {
     std::size_t active{0}, unacked{0}, current{0}, shelved{0};
     int         highest{0};          // la priorite la plus forte des alarmes en cours (0 : aucune)
 };
-// Les zones : `groups` (a;b;c), sinon les groupes des alarmes du projet, dans leur ordre.
+// Les zones : `groups` (a;b;...), sinon les groupes des alarmes du projet, dans leur ordre.
 [[nodiscard]] std::vector<std::string> zonesOf(const Project&, std::string_view groups);
 [[nodiscard]] std::vector<ZoneSummary> zoneSummaries(const Project&, const std::vector<LiveAlarm>&,
                                                      const std::vector<ShelvedAlarm>&, std::string_view groups);

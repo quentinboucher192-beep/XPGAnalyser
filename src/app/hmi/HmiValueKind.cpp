@@ -113,6 +113,9 @@ bool knownRoot(const Env& env, std::string_view root) {
     if (sameName(root, "THIS") || (core::hasApi() && sameName(root, "API")) || hmi::pub::isSysRoot(root)) return true;   // 1.12.0
     if (hmi::isHmiFunction(root) || hmi::isStandardFunction(root)) return true;
     if (env.view && env.view->param(root)) return true;
+    if (env.extraNames)
+        for (const auto& n : *env.extraNames)
+            if (sameName(n, root)) return true;
     if (env.project) {
         if (env.project->variable(root) || env.project->functionByName(root) || env.project->hmiTypeByName(root)) return true;
         if (hmi::pub::viewNamed(*env.project, root)) return true;
@@ -452,6 +455,30 @@ std::string expectedOfProperty(const ui::PropertyGrid::Property& p) {
     if (p.type == ui::PropertyGrid::ValueType::Integer || p.type == ui::PropertyGrid::ValueType::Real) return "NOMBRE";
     if (p.type == ui::PropertyGrid::ValueType::Color) return "COULEUR";
     return {};
+}
+
+void decorateCells(std::vector<ui::PropertyGrid::Category>& cats, const Env& env) {
+    using VT = ui::PropertyGrid::ValueType;
+    for (auto& c : cats) {
+        for (auto& p : c.properties) {
+            if (!p.commit || p.type == VT::ReadOnly || !ui::exprfield::accepts(p) || p.mixed) continue;
+            const bool fx = !p.expression.empty();
+            std::string expected = expectedOfProperty(p);
+            // Une duree se garde en nombre, dans l'unite de la case (60 : 60 s) : sa valeur fixe se lit en
+            // nombre, sa formule en duree.
+            if (expected == "TIME" && !fx) expected = "NOMBRE";
+            const auto res = classify(env, fx ? p.expression : p.value, fx, expected);
+            if (!p.legend) {
+                p.legend = legendOf(res);
+                p.legend->expected = expected;
+            }
+            // La raison sous la case : une formule, ou une valeur tapee (une liste, une bascule, une
+            // couleur montrent un libelle, pas ce qui est garde).
+            const bool typed = fx || p.type == VT::Text || p.type == VT::Integer || p.type == VT::Real;
+            if (p.exprError.empty() && typed && res.error()) p.exprError = firstProblem(res);
+        }
+        decorateCells(c.children, env);
+    }
 }
 
 std::string expectedLabel(std::string_view expected) {

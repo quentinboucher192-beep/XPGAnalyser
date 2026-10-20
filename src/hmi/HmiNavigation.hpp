@@ -43,7 +43,7 @@ struct NavItem {
     std::string view;      // le nom de la vue
     std::string label;     // ce qui est ecrit (vide dans "labels" : le nom, _ en espaces)
 };
-// Les boutons : "views" (a;b;c), sinon les vues ordinaires du projet (ni modeles,
+// Les boutons : "views" (a;b;...), sinon les vues ordinaires du projet (ni modeles,
 // ni popups, ni symboles), dans l'ordre du projet.
 [[nodiscard]] std::vector<NavItem> navItems(const Project* project, const Object& bar);
 [[nodiscard]] std::string viewCaption(std::string_view viewName);   // "Vue_Ligne_1" -> "Ligne 1"

@@ -1,4 +1,5 @@
 #include "HmiContentPanel.hpp"
+#include "HmiValueKind.hpp"   // 1.12.19 : le carre et la raison sous chaque case
 #include "../../ui/Commands.hpp"   // 1.12.18 : le menu de la liste
 #include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
@@ -2293,7 +2294,10 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
                 });
             }
             std::string why;
-            if ((field == "match" || field == "text" || field == "color") && !hmi::stateFieldFits(value, &why)) return false;
+            if ((field == "match" || field == "text" || field == "color") && !hmi::stateFieldFits(value, &why)) {
+                ui::PropertyGrid::refuse(why);   // 1.12.19 : la raison sous la case (avant : calculee puis jetee)
+                return false;
+            }
             return change("R\xC3\xA9gler un \xC3\xA9tat", [i, field, value](hmi::Object& o) {
                 auto t = readStates(o);
                 if (i >= t.states.size()) return false;
@@ -2628,10 +2632,19 @@ bool HmiContentPanel::setField(int index, const std::string& field, const std::s
         }
         case Mode::Aspects: {        // 1.12.11 (lot G) : une ligne du mode Etat
             std::string why;
-            if ((field == "match" || field == "color") && !hmi::stateFieldFits(value, &why)) return false;
+            if ((field == "match" || field == "color") && !hmi::stateFieldFits(value, &why)) {
+                ui::PropertyGrid::refuse(why);   // 1.12.19 : la raison sous la case (avant : calculee puis jetee)
+                return false;
+            }
             const std::string v = trimmed(value);
-            if (field == "match" && v.empty()) return false;
-            if (field == "look" && !hmi::eqlink::lookFrom(v)) return false;
+            if (field == "match" && v.empty()) {
+                ui::PropertyGrid::refuse("la valeur qui choisit cet \xC3\xA9tat est obligatoire (2, Marche, T_MODE#Auto)");
+                return false;
+            }
+            if (field == "look" && !hmi::eqlink::lookFrom(v)) {
+                ui::PropertyGrid::refuse("\xC2\xAB " + v + " \xC2\xBB n'est pas un aspect : choisis-le dans la liste");
+                return false;
+            }
             return change("R\xC3\xA9gler un \xC3\xA9tat", [i, field, v](hmi::Object& o) {
                 auto list = readAspects(o);
                 if (i >= list.size()) return false;
@@ -3509,6 +3522,9 @@ void HmiContentPanel::rebuildGrid() {
         }
         case Mode::None: break;
     }
+    // 1.12.19 (la regle des cases) : le carre et la raison sous chaque case, comme l'inspecteur (avant : une faute
+    // dans une case de tableau, l'expression d'une plume, la condition d'un etat ne se voyait qu'a Generer).
+    valuekind::decorateCells(cats, valuekind::Env{&doc_->project, doc_->project.view(view_), nullptr});
     grid_->setCategories(std::move(cats));
 }
 

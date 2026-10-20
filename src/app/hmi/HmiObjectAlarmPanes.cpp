@@ -6,6 +6,7 @@
 //  hmi::changeProject (Ctrl+Z la defait).
 // =============================================================================
 #include "HmiObjectAlarmPanes.hpp"
+#include "HmiValueKind.hpp"   // 1.12.19 : le carre et la raison sous chaque case
 #include "../../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "HmiAssist.hpp"                    // 1.10.2 (chantier A) : l'aide a la saisie des conditions
 #include "HmiParamPanes.hpp"                // 1.10.2 (chantier A) : les parametres du symbole dans ses conditions
@@ -633,7 +634,8 @@ std::vector<PG::Category> inspectorCategories(const hmi::DocumentPtr& doc, const
                 return setOverride(doc, apply, view, object, path, name, field, text);
             };
             if (field == "condition") ui::exprfield::markWhole(pr, ui::exprfield::Expect::Bool, false);   // 1.10 (chantier K)
-            if (field == "delai") ui::exprfield::mark(pr, ui::exprfield::Expect::Number);
+            // 1.12.19 (la regle des cases) : le delai est un nombre de millisecondes, pas une formule - la case ne
+            // promet plus une expression qu'elle refusait (et se lit comme dans la fiche du symbole).
             // 1.9 (chantier U) : le repere dans la ligne - lisere et etiquette
             // SURCHARGE sur la valeur, la valeur du symbole dans l'infobulle, le
             // bouton de retour au bout de la ligne (une commande : Ctrl+Z).
@@ -1285,6 +1287,9 @@ void HmiSymbolAlarmsPane::rebuildProperties() {
                                                     + (pi.overriddenFields ? " \xC2\xB7 " + std::to_string(pi.overriddenFields) + " champ(s) surcharg\xC3\xA9(s)" : std::string{})));
     }
     cats.push_back(std::move(prev));
+    // 1.12.19 (la regle des cases) : le carre et la raison sous chaque case (la condition, le message...), comme
+    // l'inspecteur. Les noms sont ceux du symbole (ses parametres, ses objets).
+    valuekind::decorateCells(cats, valuekind::Env{&doc_->project, doc_->project.view(symbol_), plc ? plc() : nullptr});
     grid_->setCategories(std::move(cats));
 }
 

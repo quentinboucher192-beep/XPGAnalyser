@@ -1,4 +1,5 @@
 #include "HmiActionsPanel.hpp"
+#include "HmiValueKind.hpp"   // 1.12.19 : le carre et la raison sous chaque case (valuekind::decorateCells)
 #include <optional>
 #include "../../ui/Commands.hpp"   // 1.12.18 : le menu de la liste
 #include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
@@ -7,6 +8,7 @@
 #include "HmiParamPanes.hpp"   // 1.9 : les arguments types d'Ouvrir une popup
 #include "../../hmi/HmiActionKinds.hpp"
 #include "../../hmi/HmiKeys.hpp"          // 1.11.23 : les raccourcis
+#include "../../hmi/HmiRoles.hpp"         // 1.12.19 : la lecture commune d'une duree
 #include "../../hmi/HmiExport.hpp"
 #include "HmiAssist.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
@@ -824,8 +826,12 @@ void HmiActionsPanel::rebuildGrid() {
         else if (const auto r = hmi::keys::reserved(*chord); !r.empty()) help = "Attention : " + r + " - le raccourci ne partira pas partout. " + help;
         key.properties.push_back(prop("Touche", chord ? hmi::keys::label(*chord) : a.key, PG::ValueType::Text, {},
                                       commitWith([](Action& n, std::string_view v) {
-                                          const auto c = hmi::keys::parseChord(v);
-                                          if (!c) return false;
+                                          std::string bad;
+                                          const auto c = hmi::keys::parseChord(v, &bad);
+                                          if (!c) {
+                                              ui::PropertyGrid::refuse("touche illisible : " + bad);   // 1.12.19 : la raison sous la case
+                                              return false;
+                                          }
                                           n.key = hmi::keys::canonical(*c);
                                           if (n.operation == Operation::Log && n.value.rfind("Raccourci ", 0) == 0)
                                               n.value = "Raccourci " + hmi::keys::label(*c);   // le message d'exemple suit
@@ -854,8 +860,13 @@ void HmiActionsPanel::rebuildGrid() {
                                           std::to_string(a.delayMs > 0 ? a.delayMs : (hold ? hmi::keys::kHoldDefaultMs : hmi::keys::kRepeatDefaultMs)),
                                           PG::ValueType::Integer, {},
                                           commitWith([hold](Action& n, std::string_view v) {
-                                              double ms = 0;
-                                              if (!hmi::parseNumber(v, ms) || ms < (hold ? 10 : 50)) return false;
+                                              // 1.12.19 : une duree tapee comme partout (800, 1,5 s, 250 ms) ; refusee avec sa raison.
+                                              std::int64_t ms = 0;
+                                              if (!hmi::roles::parseDuration(v, ms, hmi::roles::Unit::Milliseconds) || ms < (hold ? 10 : 50) || ms > 3600000) {
+                                                  ui::PropertyGrid::refuse(std::string("une dur\xC3\xA9" "e de ") + (hold ? "10" : "50")
+                                                                           + " ms au moins : 800, 1,5 s, 250 ms");
+                                                  return false;
+                                              }
                                               n.delayMs = static_cast<int>(ms);
                                               return true;
                                           }),
@@ -948,14 +959,19 @@ void HmiActionsPanel::rebuildGrid() {
         trig.properties.push_back(prop("Expression surveill\xC3\xA9" "e", a.watch, PG::ValueType::Text, {},
                                        commitWith([](Action& n, std::string_view v) { n.watch = std::string(v); return true; }),
                                        "Ex. : Armoires[0].bouteille_vide ; Niveau > 90.0 ; Etat = 5"));
-    if (hmi::triggerWatches(a.trigger)) ui::exprfield::markWhole(trig.properties.back(), ui::exprfield::Expect::Bool);   // 1.10 (chantier K)
+    // 1.10 (chantier K) ; 1.12.19 : « Changement de valeur » surveille n'importe quelle valeur (pas un booleen).
+    if (hmi::triggerWatches(a.trigger))
+        ui::exprfield::markWhole(trig.properties.back(), a.trigger == Trigger::ValueChange ? ui::exprfield::Expect::Value : ui::exprfield::Expect::Bool);
     if (a.trigger == Trigger::LongPress || a.trigger == Trigger::Timer || a.trigger == Trigger::CellLongPress)
         trig.properties.push_back(prop(a.trigger == Trigger::Timer ? "P\xC3\xA9riode (ms)" : "Dur\xC3\xA9" "e de l'appui (ms)",
                                        std::to_string(a.delayMs > 0 ? a.delayMs : (a.trigger == Trigger::Timer ? 1000 : 800)),
                                        PG::ValueType::Integer, {},
                                        commitWith([](Action& n, std::string_view v) {
-                                           double ms = 0;
-                                           if (!hmi::parseNumber(v, ms) || ms < 10) return false;
+                                           std::int64_t ms = 0;     // 1.12.19 : 1000, 1 s, 2,5 s, 250 ms
+                                           if (!hmi::roles::parseDuration(v, ms, hmi::roles::Unit::Milliseconds) || ms < 10 || ms > 86400000) {
+                                               ui::PropertyGrid::refuse("une dur\xC3\xA9" "e de 10 ms au moins : 1000, 1 s, 250 ms");
+                                               return false;
+                                           }
                                            n.delayMs = static_cast<int>(ms);
                                            return true;
                                        })));
@@ -1421,8 +1437,11 @@ void HmiActionsPanel::rebuildGrid() {
         if (a.transition.kind != TransitionKind::Instant) {
             tr.properties.push_back(prop("Dur\xC3\xA9" "e (ms)", std::to_string(a.transition.durationMs), PG::ValueType::Integer, {},
                                          commitWith([](Action& n, std::string_view v) {
-                                             double ms = 0;
-                                             if (!hmi::parseNumber(v, ms) || ms < 0 || ms > 10000) return false;
+                                             std::int64_t ms = 0;   // 1.12.19 : 300, 0,5 s, 250 ms
+                                             if (!hmi::roles::parseDuration(v, ms, hmi::roles::Unit::Milliseconds) || ms < 0 || ms > 10000) {
+                                                 ui::PropertyGrid::refuse("une dur\xC3\xA9" "e de 0 \xC3\xA0 10 s : 300, 0,5 s, 250 ms");
+                                                 return false;
+                                             }
                                              n.transition.durationMs = static_cast<int>(ms);
                                              return true;
                                          })));
@@ -1463,6 +1482,19 @@ void HmiActionsPanel::rebuildGrid() {
             }
         }
         cats.push_back(std::move(tr));
+    }
+    // 1.12.19 (la regle des cases) : le carre et la raison sous chaque case, comme l'inspecteur (avant : aucune
+    // expression du volet n'etait controlee, les fautes n'apparaissaient qu'a Generer). Les parametres recus
+    // d'un Tableau (Ligne, Valeur...) y sont des noms connus.
+    {
+        std::vector<std::string> received;
+        if (const auto* v = doc_->project.view(view_))
+            if (const auto* ob = v->object(owner_); ob && ob->kind == hmi::Kind::Table)
+                for (const auto& prm : hmi::table::receivedParams(doc_->project, *ob, a.trigger)) received.push_back(prm.name);
+        const auto plc = plc_ ? plc_() : nullptr;
+        valuekind::Env env{&doc_->project, doc_->project.view(view_), plc.get()};
+        env.extraNames = &received;
+        valuekind::decorateCells(cats, env);
     }
     grid_->setCategories(std::move(cats));
 }

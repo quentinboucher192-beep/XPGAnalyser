@@ -3894,11 +3894,11 @@ ui::PropertyGrid::FieldAssistFor gridAssist(Sources src) {
         }
         std::string name = p.name;
         if (const auto at = name.find("  \xC6\x92"); at != std::string::npos) name.erase(at);   // " f" : pilotee
-        static const char* kTemplates[] = {"Texte", "Message"};
+        static const char* kTemplates[] = {"Texte", "Message", "Titre de la popup"};   // 1.12.19 : le titre aussi
         static const char* kExpressions[] = {
             "Condition", "Condition (facultative)", "Expression surveill\xC3\xA9" "e", "Variable", "Variable API",
             "Valeur (expression)", "Expression d'autorisation", "Expression"};
-        static const char* kLists[] = {"Variables archiv\xC3\xA9" "es (a; b)", "Plumes : variables trac\xC3\xA9" "es (a;b)"};
+        static const char* kLists[] = {"Variables archiv\xC3\xA9" "es (a;b;\xE2\x80\xA6)", "Plumes : variables trac\xC3\xA9" "es (a;b;\xE2\x80\xA6)"};
         auto is = [&](const auto& names) {
             return std::any_of(std::begin(names), std::end(names), [&](const char* n) { return name == n; });
         };

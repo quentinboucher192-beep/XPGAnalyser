@@ -222,7 +222,7 @@ void HmiHistoryPane::rebuildProperties() {
                                    "(au d\xC3\xA9marrage, en cycle, sur changement, \xC3\xA0 l'ouverture d'une vue) y est aussi "
                                    "gard\xC3\xA9" "e, avec le script pour source. Sans elle, seuls les gestes de l'op\xC3\xA9rateur "
                                    "comptent. Un script cyclique qui change une valeur \xC3\xA0 chaque cycle remplit vite le journal."));
-    keep.properties.push_back(prop("Variables archiv\xC3\xA9" "es (a; b)", joinList(s.archived), PG::ValueType::Text, c("archivees"),
+    keep.properties.push_back(prop("Variables archiv\xC3\xA9" "es (a;b;\xE2\x80\xA6)", joinList(s.archived), PG::ValueType::Text, c("archivees"),
                                    "Mesur\xC3\xA9" "es \xC3\xA0 chaque p\xC3\xA9riode d'\xC3\xA9" "chantillonnage ; les courbes en mode "
                                    "historique les relisent. Ex. : Armoires[0].ana.PT1.mes; Armoires[1].ana.PT1.mes"));
     PG::Category lim;

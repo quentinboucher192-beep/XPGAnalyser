@@ -1048,6 +1048,9 @@ void HmiEditor::rebuildProperties() {
                                     "selon la valeur ou selon des conditions)";
                     }
     applyPropertyFilters(*v, cats);
+    // 1.12.19 : les sections ajoutees ici (alarmes de l'objet, fonctions d'une instance, liaison) ont aussi
+    // leur carre et leur raison.
+    valuekind::decorateCells(cats, valuekind::Env{&doc_->project, v, plc_.get()});
     props_->setCategories(std::move(cats));
 }
 

@@ -76,6 +76,7 @@ struct Env {
     const hmi::Project*    project{nullptr};
     const hmi::View*       view{nullptr};    // la vue de la case : ses parametres, ses objets
     const domain::Project* plc{nullptr};
+    const std::vector<std::string>* extraNames{nullptr};   // 1.12.19 : d'autres noms connus (les parametres recus d'un Tableau)
 };
 
 // La zone (Api, Hmi, System, Local) et le type d'un chemin : UINTS, Armoires[1].Pression,
@@ -96,6 +97,12 @@ bool pathInfo(const Env&, std::string_view path, Style& zone, std::string& type,
 // Le type attendu d'une case de l'inspecteur, d'apres ce qu'elle accepte : BOOL,
 // NOMBRE, STRING, TEXTE (texte a trous), COULEUR, TIME ; "" : tout.
 [[nodiscard]] std::string expectedOfProperty(const ui::PropertyGrid::Property&);
+// 1.12.19 (la regle des cases) : LE CARRE ET LA RAISON de chaque case modifiable qui accepte une
+// expression, dans toutes les grilles (l'inspecteur, les actions, les parametres d'une popup, les
+// alarmes d'un objet, le contenu) : le carre (classify), et la raison sous la case quand elle est en
+// faute - une formule, ou une valeur fixe tapee (pas un libelle de liste). Une case qui a deja son
+// carre ou sa raison garde les siens. Les sous-categories aussi.
+void decorateCells(std::vector<ui::PropertyGrid::Category>& cats, const Env& env);
 // Le libelle d'un type attendu pour l'utilisateur : "texte", "nombre", "couleur" ou le type.
 [[nodiscard]] std::string expectedLabel(std::string_view expected);
 // Une phrase sans balise : le premier diagnostic (la note rouge sous la case).

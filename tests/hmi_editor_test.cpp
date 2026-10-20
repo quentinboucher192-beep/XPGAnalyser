@@ -2519,7 +2519,7 @@ void aide_saisie_champs(const std::string& xpg) {
     same_text(run(make("Message", PG::ValueType::Text), "Pression {Mo"), "Mode_Maintenance@10", "Message : un texte \xC3\xA0 trous");
     same_text(run(make("Message", PG::ValueType::Text), "Mo"), "", "Message : rien hors des accolades");
     same_text(run(make("Texte  \xC6\x92", PG::ValueType::Text), "=Mo"), "Mode_Maintenance@1", "Texte pilot\xC3\xA9 : =expression");
-    same_text(run(make("Variables archiv\xC3\xA9" "es (a; b)", PG::ValueType::Text), "Mode_Maintenance; Armoires[0].an"),
+    same_text(run(make("Variables archiv\xC3\xA9" "es (a;b;\xE2\x80\xA6)", PG::ValueType::Text), "Mode_Maintenance; Armoires[0].an"),
               "ana@30", "une liste a; b : le dernier \xC3\xA9l\xC3\xA9ment");
     same_text(run(make("Visibilit\xC3\xA9 (expression)", PG::ValueType::Text), "NOT Mo"), "Mode_Maintenance@4",
               "l'animation : Visibilit\xC3\xA9 (expression)");
@@ -7062,7 +7062,7 @@ void lot11_bibliotheque() {
     b.editor->canvas().setSelection({placed[Kind::BarChart]});
     b.editor->layout();
     auto& grid = b.editor->properties();
-    check(hasProperty(grid, "Valeurs (expressions a;b)") && hasProperty(grid, "Seuil haut") && hasProperty(grid, "Titre"),
+    check(hasProperty(grid, "Valeurs (formules a;b;\xE2\x80\xA6)") && hasProperty(grid, "Seuil haut") && hasProperty(grid, "Titre"),
           "le graphique en barres : Valeurs, Seuil haut, Titre");
     check(choicesOf(grid, "Orientation") == std::vector<std::string>{"horizontale", "verticale"}
               && choicesOf(grid, "\xC3\x89" "chelle") == std::vector<std::string>{"fixe", "auto"},
@@ -7072,7 +7072,7 @@ void lot11_bibliotheque() {
         for (const auto& prop : c.properties)
             help = help || (prop.name == "Seuil haut" && prop.description.find("trait tiret\xC3\xA9") != std::string::npos);
     check(help, "... la bulle d'aide du Seuil haut vient de sa page du guide");
-    check(commitIn(grid, "Valeurs (expressions a;b)", "Niveau_1; Niveau_2") && b.v().object(placed[Kind::BarChart])->text("variables") == "Niveau_1; Niveau_2",
+    check(commitIn(grid, "Valeurs (formules a;b;\xE2\x80\xA6)", "Niveau_1; Niveau_2") && b.v().object(placed[Kind::BarChart])->text("variables") == "Niveau_1; Niveau_2",
           "Valeurs se r\xC3\xA8gle dans l'inspecteur");
     b.doc->project.alarms.push_back([&] {
         AlarmDef a;
@@ -7442,13 +7442,13 @@ void lot12_editeur() {
     bool structure = false, navigation = false;
     for (const auto& cat : b.editor->properties().categories()) {
         for (const auto& pr : cat.properties) {
-            structure = structure || (cat.name == "Conteneur \xC3\xA0 onglets" && pr.name == "Onglets (a;b;c)");
+            structure = structure || (cat.name == "Conteneur \xC3\xA0 onglets" && pr.name == "Onglets (a;b;\xE2\x80\xA6)");
         }
     }
     b.editor->canvas().setSelection({bar});
     b.editor->layout();
     for (const auto& cat : b.editor->properties().categories())
-        for (const auto& pr : cat.properties) navigation = navigation || (cat.name == "Barre de navigation" && pr.name == "Vues (a;b;c)");
+        for (const auto& pr : cat.properties) navigation = navigation || (cat.name == "Barre de navigation" && pr.name == "Vues (a;b;\xE2\x80\xA6)");
     check(structure && navigation, "l'inspecteur : les sections Conteneur \xC3\xA0 onglets et Barre de navigation (1.10.4)");
     // Les proprietes de la vue : la vue parente, le zoom.
     b.editor->canvas().setSelection({});
@@ -8288,7 +8288,7 @@ void lot13_securite_editeur() {
     const Id pb = edit::add(p, v, Kind::PushButton, 10, 100);
     p.views = {v};
     const auto swCats = app::hmiPropertyCategories(p.views[0], {sw}, nullptr, {}, &p.assets, &p);
-    check(categoryHas(swCats, "S\xC3\xA9" "curit\xC3\xA9", "Signature \xC3\xA9lectronique") && categoryHas(swCats, "S\xC3\xA9" "curit\xC3\xA9", "Motifs propos\xC3\xA9s (a;b)")
+    check(categoryHas(swCats, "S\xC3\xA9" "curit\xC3\xA9", "Signature \xC3\xA9lectronique") && categoryHas(swCats, "S\xC3\xA9" "curit\xC3\xA9", "Motifs propos\xC3\xA9s (a;b;\xE2\x80\xA6)")
               && categoryHas(swCats, "S\xC3\xA9" "curit\xC3\xA9", "Niveau du visa") && gridValue(swCats, "Signature \xC3\xA9lectronique") == "aucune",
           "un interrupteur : la signature \xC3\xA9lectronique (aucune, ses motifs, le niveau du visa), cat\xC3\xA9gorie S\xC3\xA9" "curit\xC3\xA9");
     const auto pbCats = app::hmiPropertyCategories(p.views[0], {pb}, nullptr, {}, &p.assets, &p);
@@ -13232,6 +13232,25 @@ void v19_finitions_interface() {
               "Ouvrir une popup : un argument pas donn\xC3\xA9 montre la valeur par d\xC3\xA9" "faut en gris");
         const auto* titled = deepCat(cats, "Moteur");
         check(titled && titled->pill && titled->pill->text == "LES DEUX", "la liste : le titre du param\xC3\xA8tre porte sa pastille");
+        // 1.12.19 (la regle des cases) : un argument de popup comme celui d'un symbole - Pompe 3 tape sans = pour un
+        // STRING devient 'Pompe 3' (montre sans apostrophes, sans fx) ; =M1 est une formule ; 2,5 pour un REAL : 2.5.
+        std::map<std::string, std::string> sent;
+        const auto setter = [&](const std::string& n, const std::string& v) { sent[n] = v; return true; };
+        const auto args2 = hp::argumentsCategory(p, nullptr, pv, "Nom := 'Pompe 3'; Moteur := M1", nullptr, setter);
+        const auto rowOf = [&](const char* name) -> const ui::PropertyGrid::Property* {
+            for (const auto& pr : args2.properties)
+                if (pr.name.rfind(name, 0) == 0) return &pr;
+            return nullptr;
+        };
+        const auto* nom = rowOf("Nom");
+        const auto* mot = rowOf("Moteur");
+        check(nom && nom->value == "Pompe 3" && nom->expression.empty() && mot && mot->expression == "M1",
+              "un texte se montre sans apostrophes ni fx ; une variable est une formule (=M1)");
+        check(nom && nom->commit && nom->commit("Pompe 4") && sent["Nom"] == "'Pompe 4'", "Pompe 4 tape : 'Pompe 4' (" + sent["Nom"] + ")");
+        check(nom && nom->commit("Pompe 3") && sent["Nom"] == "'Pompe 3'", "une saisie inchangee garde ce qui etait ecrit");
+        if (const auto* seuil = rowOf("Seuil"))
+            check(seuil->commit && seuil->commit("2,5") && sent["Seuil"] == "2.5", "Seuil (REAL) : 2,5 -> 2.5 (" + sent["Seuil"] + ")");
+        check(mot && mot->commit && mot->commit("=M1") && sent["Moteur"] == "M1", "=M1 : la formule, sans le =");
     }
 }
 
@@ -22360,7 +22379,7 @@ void tutoDeduits111() {
         }
         check(table, "un intertitre suivi d'un tableau : ses premieres lignes (Les operations : Basculer...)");
     }
-    {   // Le lot : objet-courbe visait « Noms des plumes (a;b) », que l'inspecteur ne montre pas (une
+    {   // Le lot : objet-courbe visait « Noms des plumes (a;b;...) », que l'inspecteur ne montre pas (une
         // Courbe neuve n'a pas « names »). Un objet ne vise que les proprietes d'un objet neuf de son genre.
         int bad = 0;
         std::string first;
@@ -22383,7 +22402,7 @@ void tutoDeduits111() {
         bool noms = false, plumes = false;
         if (courbe)
             for (const auto& [label, text] : tt::fromGuide(*courbe).properties) {
-                noms = noms || label == "Noms des plumes (a;b)";
+                noms = noms || label == "Noms des plumes (a;b;\xE2\x80\xA6)";
                 plumes = plumes || label.rfind("Plumes", 0) == 0;
             }
         check(courbe && !noms && plumes, "la Courbe : Plumes oui, Noms des plumes non");
@@ -22561,7 +22580,7 @@ void valeurDeduits111() {
             else check(false, "le nom de l'instance de " + i.key + " : " + nom);
         }
         if (v == i.properties.end()) {
-            // (« Valeurs (expressions a;b) » du camembert n'est pas « Valeur » : le guillemet ferme la cible.)
+            // (« Valeurs (formules a;b;...) » du camembert n'est pas « Valeur » : le guillemet ferme la cible.)
             if (text.find("\"propriete:Valeur\"") != std::string::npos || text.find("== 3 | Lie sa valeur") != std::string::npos)
                 check(false, "sans Valeur, pas de liaison : " + i.key);
             continue;

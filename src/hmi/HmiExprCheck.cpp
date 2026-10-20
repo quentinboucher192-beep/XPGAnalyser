@@ -1070,7 +1070,7 @@ Want wantOf(std::string_view key) {
 Want wantOf(Kind kind, std::string_view key) {
     if (!roles::keyRole(key)) return wantOf(key);
     const auto r = roles::roleOf(kind, key);
-    if (r.role == roles::Role::List) return Want::Any;      // une formule qui rend la liste (a;b;c) : un texte
+    if (r.role == roles::Role::List) return Want::Any;      // une formule qui rend la liste (a;b;...) : un texte
     return wantOfRole(r.role == roles::Role::Formula ? r.item : r.role);
 }
 

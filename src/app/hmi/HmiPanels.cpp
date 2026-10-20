@@ -1871,9 +1871,9 @@ const std::vector<KeyInfo>& keyInfos() {
         {"shape", "Forme", PG::ValueType::Enum, {"rond", "carr\xC3\xA9"}, ""},
         {"orientation", "Orientation", PG::ValueType::Enum, {"horizontale", "verticale"}, ""},
         {"background", "Fond", PG::ValueType::Color, {}, ""},
-        {"columns", "Colonnes (a;b;c)", PG::ValueType::Text, {}, ""},
+        {"columns", "Colonnes (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {}, ""},
         {"rows", "Lignes", PG::ValueType::Integer, {}, ""},
-        {"items", "\xC3\x89l\xC3\xA9ments (a;b;c)", PG::ValueType::Text, {}, ""},
+        {"items", "\xC3\x89l\xC3\xA9ments (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {}, ""},
         // 1.12.2 : les elements et les lignes venus d'ailleurs.
         {"itemsFrom", "\xC3\x89l\xC3\xA9ments depuis", PG::ValueType::Text, {},
          "Remplace la liste \xC3\xA9" "crite (\xC3\x89l\xC3\xA9ments, Positions) : une \xC3\xA9num\xC3\xA9ration du projet (ses textes ; la valeur "
@@ -1892,7 +1892,7 @@ const std::vector<KeyInfo>& keyInfos() {
          "alarmes : les actives ; acquitt\xC3\xA9" "es ; historique : les alarmes termin\xC3\xA9" "es ; \xC3\xA9v\xC3\xA9nements ; "
          "syst\xC3\xA8me : le journal de l'IHM ; audit : le journal d'audit (qui a chang\xC3\xA9 quoi, avant et apr\xC3\xA8s, sign\xC3\xA9 ou non)."},
         {"group", "Groupe d'alarmes (filtre)", PG::ValueType::Text, {}, "Vide : tous les groupes."},
-        {"variables", "Plumes : variables trac\xC3\xA9" "es (a;b)", PG::ValueType::Text, {},
+        {"variables", "Plumes : variables trac\xC3\xA9" "es (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {},
          "Une expression par plume, s\xC3\xA9par\xC3\xA9" "es par ; : Armoires[0].ana.PT1.mes; Armoires[1].ana.PT1.mes"},
         {"mode", "Mode", PG::ValueType::Enum, {"temps r\xC3\xA9" "el", "historique"},
          "Temps r\xC3\xA9" "el : mesur\xC3\xA9" "es \xC3\xA0 chaque cycle IHM. Historique : relues dans les mesures archiv\xC3\xA9" "es "
@@ -1901,7 +1901,7 @@ const std::vector<KeyInfo>& keyInfos() {
         {"scale", "\xC3\x89" "chelle", PG::ValueType::Enum, {"fixe", "auto"}, "fixe : Axe Y min / max ; auto : suit les valeurs affich\xC3\xA9" "es."},
         {"ymin", "Axe Y min", PG::ValueType::Real, {}, ""},
         {"ymax", "Axe Y max", PG::ValueType::Real, {}, ""},
-        {"colors", "Couleurs des plumes (a;b)", PG::ValueType::Text, {}, "Une couleur par plume, dans l'ordre : #4FA3FF;#F2994A"},
+        {"colors", "Couleurs des plumes (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {}, "Une couleur par plume, dans l'ordre : #4FA3FF;#F2994A"},
         {"interpolation", "Interpolation", PG::ValueType::Enum, {"lin\xC3\xA9" "aire", "escalier", "points"},
          "lin\xC3\xA9" "aire : les points reli\xC3\xA9s ; escalier : la valeur tenue jusqu'\xC3\xA0 la suivante ; points : seuls."},
         {"legend", "L\xC3\xA9gende", PG::ValueType::Boolean, {}, "Le nom et la derni\xC3\xA8re valeur de chaque plume."},
@@ -1909,7 +1909,7 @@ const std::vector<KeyInfo>& keyInfos() {
         {"pilotable", "Pilotable (pause / continuer)", PG::ValueType::Boolean, {},
          "En marche (simulation, poste d'exploitation), un bouton en haut \xC3\xA0 droite de la courbe : Pause fige l'affichage "
          "(les mesures continuent d'\xC3\xAAtre prises), Continuer reprend le temps r\xC3\xA9" "el."},
-        {"penVisible", "Plumes : visibles si (a;b)", PG::ValueType::Text, {},
+        {"penVisible", "Plumes : visibles si (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {},
          "Une condition par plume, dans l'ordre (vide : toujours visible) : fausse, la plume et sa l\xC3\xA9gende se cachent ; "
          "ses mesures continuent. Plus simple : Contenu > la plume > Visible si."},
         {"points", "Points (x,y x,y ...)", PG::ValueType::Text, {}, "Dans le rep\xC3\xA8re de l'objet."},
@@ -1935,7 +1935,7 @@ const std::vector<KeyInfo>& keyInfos() {
         {"blinkColor", "Couleur de clignotement", PG::ValueType::Color, {}, ""},
         // ---- lot 6
         {"recipe", "Recette", PG::ValueType::Enum, {}, "La recette dont l'objet montre les jeux (Configuration > Recettes)."},
-        {"buttons", "Boutons (a;b)", PG::ValueType::Text, {},
+        {"buttons", "Boutons (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {},
          "Ceux \xC3\xA0 montrer, dans l'ordre : Ajouter;Modifier;Supprimer;Appliquer;Lire. Ajouter enregistre les valeurs "
          "de l'installation sous un nouveau nom, Lire les range dans le jeu choisi, Appliquer l'\xC3\xA9" "crit. Tout change le projet."},
         {"states", "\xC3\x89tats", PG::ValueType::ReadOnly, {},
@@ -1945,8 +1945,8 @@ const std::vector<KeyInfo>& keyInfos() {
          "Le temps de chaque image d'un \xC3\xA9tat qui en a plusieurs (sans p\xC3\xA9riode propre)."},
         {"cells", "Cases", PG::ValueType::ReadOnly, {},
          "Texte, texte \xC3\xA0 trous ({Niveau:0.0} bar) ou =expression. \xC3\x80 r\xC3\xA9gler dans l'onglet Contenu."},
-        {"widths", "Largeurs des colonnes (a;b)", PG::ValueType::Text, {}, "Relatives : 2;1;1 = la premi\xC3\xA8re deux fois plus large."},
-        {"names", "Noms des plumes (a;b)", PG::ValueType::Text, {}, "Pour la l\xC3\xA9gende ; vide : l'expression."},
+        {"widths", "Largeurs des colonnes (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {}, "Relatives : 2;1;1 = la premi\xC3\xA8re deux fois plus large."},
+        {"names", "Noms des plumes (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {}, "Pour la l\xC3\xA9gende ; vide : l'expression."},
         // ---- lot 8 : le champ de saisie ("mode" : voir plus bas, selon l'objet)
         {"format", "Format", PG::ValueType::Text, {},
          "Champ de saisie : 0 (entier), 0.0 (1 d\xC3\xA9" "cimale), 0.00... La valeur montr\xC3\xA9" "e et celle propos\xC3\xA9" "e en saisie."},
@@ -1983,8 +1983,8 @@ const std::vector<KeyInfo>& keyInfos() {
         {"knobColor", "Couleur de la poign\xC3\xA9" "e", PG::ValueType::Color, {}, ""},
         {"operation", "Op\xC3\xA9ration", PG::ValueType::Enum, {"basculer", "impulsion", "mettre \xC3\xA0 1", "mettre \xC3\xA0 0", "aucune"}, ""},
         {"lamp", "Voyant (expression)", PG::ValueType::Text, {}, "Ce qui allume le bouton ; vide : la variable \xC3\xA9" "crite."},
-        {"positions", "Positions (a;b;c)", PG::ValueType::Text, {}, ""},
-        {"values", "Valeurs \xC3\xA9" "crites (a;b;c)", PG::ValueType::Text, {}, "Vide : le rang (0, 1, 2...)."},
+        {"positions", "Positions (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {}, ""},
+        {"values", "Valeurs \xC3\xA9" "crites (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {}, "Vide : le rang (0, 1, 2...)."},
         {"style", "Style", PG::ValueType::Enum, {"rotatif", "boutons"}, ""},
         {"step", "Pas", PG::ValueType::Real, {}, ""},
         {"showValue", "Afficher la valeur", PG::ValueType::Boolean, {}, ""},
@@ -2156,7 +2156,7 @@ const std::vector<KeyInfo>& keyInfos() {
          "Les compteurs repartent de z\xC3\xA9ro \xC3\xA0 chaque d\xC3\xA9" "but de poste : 06:00;14:00;22:00. Vide : jamais (seulement RAZ)."},
         {"rateWindow", "Fen\xC3\xAAtre de cadence (s)", PG::ValueType::Real, {}, "La cadence : les pi\xC3\xA8" "ces des N derni\xC3\xA8res secondes, par heure."},
         {"showReset", "Bouton RAZ", PG::ValueType::Boolean, {}, "Remet les compteurs du poste \xC3\xA0 z\xC3\xA9ro (permission Piloter)."},
-        {"units", "Unit\xC3\xA9s (a;b;c)", PG::ValueType::Text, {}, ""},
+        {"units", "Unit\xC3\xA9s (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {}, ""},
         {"writable", "Valeurs modifiables", PG::ValueType::Boolean, {},
          "Un clic sur la valeur d'une variable la modifie (Entr\xC3\xA9" "e \xC3\xA9" "crit ; permission Piloter). Un calcul reste en lecture."},
         {"compare", "Comparer avec l'installation", PG::ValueType::Boolean, {}, "Les colonnes Installation et \xC3\x89" "cart."},
@@ -2213,9 +2213,9 @@ const std::vector<KeyInfo>& keyInfos() {
         {"showPorts", "Num\xC3\xA9ros des voies", PG::ValueType::Boolean, {}, "Coch\xC3\xA9 : 1, 2 et 3 \xC3\xA9" "crits pr\xC3\xA8s des voies."},
         {"colorMoving", "Couleur de mouvement", PG::ValueType::Color, {}, "Celle du passage en mouvement (elle clignote)."},
         // ---- lot 12 : la navigation et la structure
-        {"views", "Vues (a;b;c)", PG::ValueType::Text, {},
+        {"views", "Vues (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {},
          "Les vues de la barre, dans l'ordre : Vue_Accueil;Vue_Ligne;Vue_Alarmes. Vide : toutes les vues ordinaires du projet."},
-        {"labels", "Libell\xC3\xA9s (a;b;c)", PG::ValueType::Text, {}, "Un libell\xC3\xA9 par vue ; vide : le nom de la vue (sans Vue_)."},
+        {"labels", "Libell\xC3\xA9s (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {}, "Un libell\xC3\xA9 par vue ; vide : le nom de la vue (sans Vue_)."},
         {"tabStyle", "Style", PG::ValueType::Enum, {"onglets", "boutons", "liens"},
          "Onglets pos\xC3\xA9s sur un filet, boutons s\xC3\xA9par\xC3\xA9s, ou liens soulign\xC3\xA9s : la vue courante en surbrillance."},
         {"backForward", "Boutons Pr\xC3\xA9" "c\xC3\xA9" "dent / Suivant", PG::ValueType::Boolean, {},
@@ -2235,9 +2235,9 @@ const std::vector<KeyInfo>& keyInfos() {
         {"home", "Commencer par l'accueil", PG::ValueType::Boolean, {},
          "Hi\xC3\xA9rarchie : la vue d'accueil en t\xC3\xAAte quand la cha\xC3\xAEne n'y remonte pas."},
         {"linkColor", "Couleur des liens", PG::ValueType::Color, {}, ""},
-        {"tabs", "Onglets (a;b;c)", PG::ValueType::Text, {}, "Une page par onglet. Les pages se r\xC3\xA8glent aussi dans l'onglet Contenu."},
+        {"tabs", "Onglets (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {}, "Une page par onglet. Les pages se r\xC3\xA8glent aussi dans l'onglet Contenu."},
         // ---- lot 13 : le selecteur de langue
-        {"languages", "Langues (a;b;c)", PG::ValueType::Text, {},
+        {"languages", "Langues (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {},
          "Les langues propos\xC3\xA9" "es, par leur code, dans l'ordre : fr;en;de. Vide : toutes celles du projet (Configuration > Langues)."},
         {"languageStyle", "Style", PG::ValueType::Enum, {"boutons", "bascule"},
          "Boutons : un par langue, la langue en cours en surbrillance. Bascule : un seul bouton, la langue en cours ; "
@@ -2266,7 +2266,7 @@ const std::vector<KeyInfo>& keyInfos() {
          "son Min, son Max et ses seuils (ou sa mise \xC3\xA0 l'\xC3\xA9" "chelle) remplissent ceux que l'objet laisse vides - ce qui est "
          "r\xC3\xA9gl\xC3\xA9 sur l'objet l'emporte. "
          "D\xC3\xA9" "coch\xC3\xA9 : l'objet garde les siens."},
-        {"formats", "Formats (a;b;c)", PG::ValueType::Text, {},
+        {"formats", "Formats (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {},
          "Un format par ligne (0.0;0;0.00) ; vide : celui de la variable (Configuration > Unit\xC3\xA9s et formats), sinon Format."},
         {"page", "Onglet montr\xC3\xA9", PG::ValueType::Integer, {},
          "De 1 au nombre d'onglets : la page montr\xC3\xA9" "e au d\xC3\xA9marrage (et celle qu'on \xC3\xA9" "dite). En marche : Vue.Objet.Page."},
@@ -2307,7 +2307,7 @@ const std::vector<KeyInfo>& keyInfos() {
         {"signature", "Signature \xC3\xA9lectronique", PG::ValueType::Enum, {"aucune", "simple", "double"},
          "simple : avant que la commande agisse, le signataire retape son mot de passe et donne un motif ; double : un second "
          "compte, d'un niveau suffisant, appose son visa. Le journal d'audit garde qui a sign\xC3\xA9, pourquoi, et ce qui a chang\xC3\xA9."},
-        {"signatureReasons", "Motifs propos\xC3\xA9s (a;b)", PG::ValueType::Text, {},
+        {"signatureReasons", "Motifs propos\xC3\xA9s (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {},
          "Les motifs \xC3\xA0 choisir aux fl\xC3\xA8" "ches dans le panneau : R\xC3\xA9glage;Essai;Maintenance. Vide : le motif se tape."},
         {"signatureLevel", "Niveau du visa", PG::ValueType::Integer, {},
          "Signature double : le niveau minimal du second signataire (3 : superviseur)."},
@@ -2347,18 +2347,18 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
     using K = hmi::Kind;
     if (key == "variables") {
         switch (kind) {
-            case K::BarChart: case K::PieChart: return "Valeurs (expressions a;b)";
-            case K::RadarChart: return "Axes (expressions a;b)";
-            case K::XYChart: return "Courbes : Y (expressions a;b)";
-            case K::StateChart: return "Lignes (expressions a;b)";
-            case K::VariableTable: return "Variables (a;b)";
+            case K::BarChart: case K::PieChart: return "Valeurs (formules a;b;\xE2\x80\xA6)";
+            case K::RadarChart: return "Axes (formules a;b;\xE2\x80\xA6)";
+            case K::XYChart: return "Courbes : Y (formules a;b;\xE2\x80\xA6)";
+            case K::StateChart: return "Lignes (formules a;b;\xE2\x80\xA6)";
+            case K::VariableTable: return "Variables (a;b;\xE2\x80\xA6)";
             default: return {};
         }
     }
     const bool chart = hmi::kindIsChart(kind);
     if (key == "accent" && kind == K::Clock) return "Couleur de la trotteuse";   // 1.12.5 (lot A) : avant, « Couleur du bouton »
-    if (key == "names" && (chart || kind == K::VariableTable)) return "Noms (a;b)";
-    if (key == "colors" && chart && kind != K::Histogram) return "Couleurs (a;b)";
+    if (key == "names" && (chart || kind == K::VariableTable)) return "Noms (a;b;\xE2\x80\xA6)";
+    if (key == "colors" && chart && kind != K::Histogram) return "Couleurs (a;b;\xE2\x80\xA6)";
     if (key == "colors" && (kind == K::Histogram || kind == K::AlarmStats)) return "Couleur des barres";
     if (key == "text" && (chart || kind == K::ProductionCounter)) return "Titre";
     if (key == "variable" && kind == K::Histogram) return "Variable mesur\xC3\xA9" "e";
@@ -2804,7 +2804,10 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 const auto& pp = view.popup;
                 addM("Barre de titre", pp.titleBar ? "TRUE" : "FALSE", PG::ValueType::Boolean, "popup_titre",
                      "Une barre en haut de la popup, avec son titre : on la tire pour d\xC3\xA9placer la popup.");
-                addM("Titre de la popup", pp.title, PG::ValueType::Text, "popup_libelle", "Vide : le nom de la vue.");
+                addM("Titre de la popup", pp.title, PG::ValueType::Text, "popup_libelle",
+                     "Un texte \xC3\xA0 trous : Pompe {Nom} (une variable, un param\xC3\xA8tre entre accolades). Vide : le nom de la vue.");
+                // 1.12.19 (la regle des cases) : un texte a trous se presente comme tel - l'invite et l'aide dans les {}.
+                m.properties.back().placeholder = "texte, {variable}";
                 addM("Modale", pp.modal ? "TRUE" : "FALSE", PG::ValueType::Boolean, "popup_modale",
                      "La vue dessous s'assombrit et ne r\xC3\xA9pond plus tant que la popup est ouverte.");
                 addM("D\xC3\xA9pla\xC3\xA7" "able", pp.movable ? "TRUE" : "FALSE", PG::ValueType::Boolean, "popup_deplacable",
@@ -3802,21 +3805,9 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
     // 1.11.3 : LE CARRE DE LEGENDE de chaque case modifiable qui accepte une formule - d'ou
     // vient la valeur (C, fx, $, A, I, S, V, !). Calcule ici, quand l'inspecteur est refait
     // (une valeur a change), jamais a chaque image. Les parametres d'un symbole ont deja le leur.
-    {
-        const valuekind::Env env{project, &view, plc};
-        for (auto& c : out)
-            for (auto& p : c.properties) {
-                if (p.legend || !p.commit || p.type == PG::ValueType::ReadOnly || !ui::exprfield::accepts(p)) continue;
-                const bool fx = !p.expression.empty();
-                std::string expected = valuekind::expectedOfProperty(p);
-                // 1.12.19 : une duree de l'inspecteur se garde en nombre, dans l'unite de la case (60 : 60 s) ;
-                // sa valeur fixe se lit en nombre, sa formule en duree.
-                if (expected == "TIME" && !fx) expected = "NOMBRE";
-                const auto res = valuekind::classify(env, fx ? p.expression : p.value, fx, expected);
-                p.legend = valuekind::legendOf(res);
-                p.legend->expected = expected;
-            }
-    }
+    // 1.12.19 (la regle des cases) : la meme passe que toutes les grilles (valuekind::decorateCells), qui pose
+    // aussi la raison sous une case en faute.
+    valuekind::decorateCells(out, valuekind::Env{project, &view, plc});
     return out;
 }
 

@@ -84,6 +84,10 @@ namespace ui {
         // texte ne part pas dans le presse-papiers (Ctrl+C, Ctrl+X).
         void setMasked(bool m) { masked_ = m; invalidate(); }
         [[nodiscard]] bool masked() const noexcept { return masked_; }
+        // 1.12.19 (la regle des cases) : une formule s'ecrit en chasse fixe, pendant qu'on la tape aussi
+        // (avant : en chasse fixe au repos, en police proportionnelle a l'edition).
+        void setMonospace(bool on) { if (mono_ != on) { mono_ = on; invalidate(); } }
+        [[nodiscard]] bool monospace() const noexcept { return mono_; }
         [[nodiscard]] const std::string& text() const noexcept { return text_; }
         [[nodiscard]] SizeHint sizeHint() const override;
 
@@ -172,6 +176,8 @@ namespace ui {
         std::size_t  maxLength_{ 4096 };
         bool         readOnly_{ false };
         bool         masked_{ false };
+        bool         mono_{ false };                 // 1.12.19 : la chasse fixe (une formule)
+        mutable gfx::FontId fieldFont_{ 16 };        // 1.12.19 : la police du dernier dessin (le curseur se place avec)
         bool         escapeClears_{ false };     // lot API 8 : finitions (Echap efface une recherche)
         std::function<bool(std::string_view)> validator_;
         Assist                  assist_;

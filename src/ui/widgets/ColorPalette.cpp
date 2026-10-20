@@ -474,11 +474,11 @@ void ColorPalette::syncFromHsv() {
 
 bool ColorPalette::draftValid() const {
     gfx::Color c;
-    return draft_.empty() || draft_.front() == '=' || parseHexColor(draft_, c);
+    return draft_.empty() || (draft_.front() == '=' && expressions_) || parseHexColor(draft_, c);
 }
 
 bool ColorPalette::editingExpression() const {
-    return field_ == Field::Hex && !replaceOnType_ && !draft_.empty() && draft_.front() == '=';
+    return expressions_ && field_ == Field::Hex && !replaceOnType_ && !draft_.empty() && draft_.front() == '=';
 }
 
 void ColorPalette::pickSquare(gfx::Point p) {
@@ -826,7 +826,8 @@ std::string ColorPalette::hint() const {
         case Field::Hex:
             if (!fieldShown(draft_, Field::H))
                 return "Expression : Appliquer la garde telle quelle.\nUn clic dans le carr\xC3\xA9 revient \xC3\xA0 une couleur.";
-            return "Code : #RRGGBB ou #RRGGBBAA ;\nvide = transparent, = pour une expression.";
+            return expressions_ ? "Code : #RRGGBB ou #RRGGBBAA ;\nvide = transparent, = pour une expression."
+                                : "Code : #RRGGBB ou #RRGGBBAA ;\nvide = transparent.";
         case Field::R: case Field::G: case Field::B: return "R G B : rouge, vert, bleu (0 \xC3\xA0 255).\nHaut, Bas : un de plus, de moins (Maj : 10).";
         case Field::A: return "Opacit\xC3\xA9 : 100 % opaque, 0 % transparent\n(le code passe alors en #RRGGBBAA).";
         case Field::H: case Field::S: case Field::V: return "T S V : teinte (0 \xC3\xA0 359\xC2\xB0),\nsaturation et valeur (0 \xC3\xA0 100 %).";

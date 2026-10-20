@@ -662,7 +662,7 @@ void HmiUsersPane::rebuildProperties() {
                                         "qu'\xC3\xA0 partir du niveau N."));
             std::vector<std::string> names;
             for (const auto& r : p.security.roles) names.push_back(r.name);
-            c.properties.push_back(prop("R\xC3\xB4les (a; b)", joinList(g->roles), PG::ValueType::Text, gc("roles"),
+            c.properties.push_back(prop("R\xC3\xB4les (a;b;\xE2\x80\xA6)", joinList(g->roles), PG::ValueType::Text, gc("roles"),
                                         "Parmi : " + joinList(names, ", ")));
             c.properties.push_back(prop("Description", g->description, PG::ValueType::Text, gc("description")));
             // Lot 12 : la vue ouverte a la connexion d'un utilisateur du groupe.
