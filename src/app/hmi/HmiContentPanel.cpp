@@ -1,4 +1,5 @@
 #include "HmiContentPanel.hpp"
+#include "../../ui/Commands.hpp"   // 1.12.18 : le menu de la liste
 #include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "HmiAssetPanes.hpp"
@@ -41,6 +42,9 @@ using PG = ui::PropertyGrid;
 namespace {
 
 enum Act : int { AAdd = 1, ARemove, AUp, ADown, AAddColumn, ARemoveColumn, ADuplicate };
+constexpr int kMenuTool = 1000;          // 1.12.18 : + une commande de la barre (le menu de la liste)
+constexpr int kMenuCopyItem = 1101, kMenuPasteItem = 1102;
+constexpr std::string_view kItemClip = "XPG-ELEMENT";   // la premiere ligne d'un element copie
 
 class Rows final : public ui::ITableModel {
 public:
@@ -696,6 +700,30 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     table->setColumns({{"#", 40.f, 32.f, false, false, true, ui::Align::End}, {"\xC3\x89l\xC3\xA9ment", 300.f}, {"D\xC3\xA9tail", 260.f}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
+    // 1.12.18 (planche 9) : le menu de la liste - les commandes de la barre, la plume entiere
+    // copiee et collee ; et leurs touches (Inser, Suppr, Alt+Haut / Alt+Bas, Ctrl+Maj+D, Ctrl+C, Ctrl+V).
+    table_->setExtraContextOnly(true);
+    table_->setExtraContextItems([this] { return contextItems(); });
+    links_ += table_->contextAction->connect([this](int a) {
+        if (a == kMenuCopyItem) (void)copyItem(selectedIndex());
+        else if (a == kMenuPasteItem) (void)pasteItem();
+        else if (a > kMenuTool && a < kMenuTool + 100) tools_->triggered->emit(a - kMenuTool);
+    });
+    table_->setKeyHandler([this](const ui::KeyDown& k) {
+        const auto m = mode();
+        if (m == Mode::None || m == Mode::Members) return false;
+        const bool alt = k.mods.alt && !k.mods.ctrl && !k.mods.shift;
+        const bool ctrl = k.mods.ctrl && !k.mods.alt && !k.mods.shift;
+        const int sel = selectedIndex();
+        if (k.key == ui::Key::Insert && k.mods.none()) { tools_->triggered->emit(AAdd); return true; }
+        if (k.key == ui::Key::Delete && k.mods.none() && sel >= 0) { tools_->triggered->emit(ARemove); return true; }
+        if (alt && k.key == ui::Key::Up) { tools_->triggered->emit(AUp); return true; }
+        if (alt && k.key == ui::Key::Down) { tools_->triggered->emit(ADown); return true; }
+        if (k.key == ui::Key::D && k.mods.ctrl && k.mods.shift && !k.mods.alt) { tools_->triggered->emit(ADuplicate); return true; }
+        if (ctrl && k.key == ui::Key::C && sel >= 0 && !duplicateFields(sel).empty()) return copyItem(sel);
+        if (ctrl && k.key == ui::Key::V) return pasteItem();
+        return false;
+    });
     auto grid = std::make_unique<ui::PropertyGrid>(base + ".grid");
     grid->setShowDescriptionPane(true);
     grid->setNameColumnRatio(0.42f);
@@ -1311,6 +1339,159 @@ bool HmiContentPanel::insertCopies(int index, const std::vector<std::vector<std:
         default:
             return false;
     }
+}
+
+// ---- 1.12.18 (planche 9) : copier, coller un element entier ; le menu de la liste ----------
+namespace {
+std::string escapeCell(std::string_view t) {
+    std::string out;
+    for (const char ch : t) {
+        if (ch == '\\') out += "\\\\";
+        else if (ch == '\n') out += "\\n";
+        else if (ch == '\t') out += "\\t";
+        else out += ch;
+    }
+    return out;
+}
+std::string unescapeCell(std::string_view t) {
+    std::string out;
+    for (std::size_t i = 0; i < t.size(); ++i) {
+        if (t[i] == '\\' && i + 1 < t.size()) {
+            const char n = t[++i];
+            out += n == 'n' ? '\n' : n == 't' ? '\t' : n;
+        } else {
+            out += t[i];
+        }
+    }
+    return out;
+}
+// Les champs d'un element copie (en-tete -> valeur) ; vide : le presse-papiers n'en a pas.
+std::vector<std::pair<std::string, std::string>> clippedItem(int* mode) {
+    std::vector<std::pair<std::string, std::string>> out;
+    const std::string text = ui::clipboardText();
+    if (text.rfind(kItemClip, 0) != 0) return out;
+    std::size_t at = text.find('\n');
+    if (at == std::string::npos) return out;
+    std::size_t next = text.find('\n', at + 1);
+    if (mode) *mode = std::atoi(text.substr(at + 1, next - at - 1).c_str());
+    while (next != std::string::npos) {
+        const std::size_t end = text.find('\n', next + 1);
+        const std::string line = text.substr(next + 1, end == std::string::npos ? std::string::npos : end - next - 1);
+        if (const auto tab = line.find('\t'); tab != std::string::npos)
+            out.emplace_back(unescapeCell(line.substr(0, tab)), unescapeCell(line.substr(tab + 1)));
+        next = end;
+    }
+    return out;
+}
+// « la plume », « une plume » : le mot de l'element, sans son numero.
+std::string itemNoun(const hmi::Object* o, HmiContentPanel::Mode m, bool definite) {
+    using M = HmiContentPanel::Mode;
+    switch (m) {
+        case M::Trend: {
+            std::string w = penWord(o);
+            for (auto& ch : w) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            const bool fem = w == "plume" || w == "courbe" || w == "s\xC3\xA9rie" || w == "barre" || w == "ligne";
+            return (definite ? (fem ? "la " : "le ") : (fem ? "une " : "un ")) + w;
+        }
+        case M::Table: return definite ? "la ligne" : "une ligne";
+        case M::Choices: return definite ? "le choix" : "un choix";
+        case M::States: return definite ? "l'\xC3\xA9tat" : "un \xC3\xA9tat";
+        default: return definite ? "l'\xC3\xA9l\xC3\xA9ment" : "un \xC3\xA9l\xC3\xA9ment";
+    }
+}
+} // namespace
+
+bool HmiContentPanel::copyItem(int index) {
+    const auto fields = duplicateFields(index);
+    if (fields.empty()) return false;
+    std::string text = std::string(kItemClip) + "\n" + std::to_string(static_cast<int>(mode()));
+    for (const auto& f : fields) text += "\n" + escapeCell(f.label) + "\t" + escapeCell(f.text);
+    ui::setClipboardText(text);
+    return true;
+}
+
+bool HmiContentPanel::pasteItem() {
+    int clipMode = -1;
+    const auto clip = clippedItem(&clipMode);
+    if (clip.empty()) return false;
+    const int count = static_cast<int>(this->count());
+    const int index = selectedIndex() >= 0 ? selectedIndex() : count - 1;
+    const auto fields = duplicateFields(index);
+    if (fields.empty()) return false;   // il faut un element a cote duquel coller
+    std::vector<std::string> row;
+    for (const auto& f : fields) {
+        std::string v = f.text;
+        for (const auto& [label, value] : clip)
+            if (label == f.label) { v = value; break; }
+        row.push_back(std::move(v));
+    }
+    if (!insertCopies(index, {row})) return false;
+    selectIndex(index + 1);
+    return true;
+}
+
+std::vector<ui::PopupMenu::Item> HmiContentPanel::contextItems() const {
+    namespace cmd = ui::cmd;
+    std::vector<ui::PopupMenu::Item> items;
+    const auto m = mode();
+    const auto* o = current();
+    if (!o || m == Mode::None || m == Mode::Members) return items;   // la table : son menu commun
+    const int sel = selectedIndex();
+    const auto tool = [this](int a, std::string label, std::string key, std::string why) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.id = kMenuTool + a;
+        it.enabled = tools_->isEnabled(a);
+        if (!it.enabled) it.disabledReason = std::move(why);
+        return it;
+    };
+    std::string right;
+    if (sel >= 0)
+        for (const auto& f : duplicateFields(sel))
+            if (f.kind == hmi::dup::ItemField::Kind::Expression && !f.text.empty()) { right = f.text; break; }
+    items.push_back(cmd::heading(sel >= 0 ? itemWord(o, m, sel) : o->name, right));
+    const std::string the = itemNoun(o, m, true), one = itemNoun(o, m, false);
+    const std::string none = "choisis d'abord une ligne";
+    auto add = tool(AAdd, "Ajouter " + one, "Inser", "pas ici");
+    add.icon = ui::Icon::Plus;
+    items.push_back(std::move(add));
+    items.push_back(tool(ADuplicate, "Dupliquer\xE2\x80\xA6", "Ctrl+Maj+D", sel < 0 ? none : std::string("pas pour cet \xC3\xA9l\xC3\xA9ment")));
+    items.back().icon = ui::Icon::Duplicate;
+    const bool copyable = sel >= 0 && !duplicateFields(sel).empty();
+    ui::PopupMenu::Item copy;
+    copy.label = "Copier " + the;
+    copy.shortcut = "Ctrl+C";
+    copy.icon = ui::Icon::Copy;
+    copy.id = kMenuCopyItem;
+    copy.enabled = copyable;
+    if (!copyable) copy.disabledReason = sel < 0 ? none : std::string("cet \xC3\xA9l\xC3\xA9ment ne se copie pas");
+    items.push_back(std::move(copy));
+    int clipMode = -1;
+    const bool pastable = !clippedItem(&clipMode).empty() && (sel >= 0 || count() > 0);
+    ui::PopupMenu::Item paste;
+    paste.label = "Coller " + one;
+    paste.shortcut = "Ctrl+V";
+    paste.icon = ui::Icon::Paste;
+    paste.id = kMenuPasteItem;
+    paste.enabled = pastable;
+    if (!pastable) paste.disabledReason = "rien de copi\xC3\xA9 (Copier " + the + ")";
+    items.push_back(std::move(paste));
+    ui::PopupMenu::Item text;
+    text.label = "Copier le texte (Excel)";
+    text.shortcut = "Ctrl+Maj+C";
+    text.id = 2;   // la table : copier sans les titres
+    text.enabled = sel >= 0;
+    if (!text.enabled) text.disabledReason = none;
+    items.push_back(std::move(text));
+    items.push_back(cmd::separator());
+    items.push_back(tool(AUp, "Monter", "Alt+\xE2\x86\x91", sel <= 0 ? std::string("d\xC3\xA9j\xC3\xA0 en haut") : std::string("pas ici")));
+    items.push_back(tool(ADown, "Descendre", "Alt+\xE2\x86\x93", "d\xC3\xA9j\xC3\xA0 en bas"));
+    items.push_back(cmd::separator());
+    auto rem = tool(ARemove, "Retirer", "Suppr", none);
+    rem.icon = ui::Icon::Delete;
+    items.push_back(std::move(rem));
+    return items;
 }
 
 bool HmiContentPanel::openDuplicate() {

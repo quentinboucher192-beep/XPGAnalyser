@@ -284,7 +284,7 @@ void MainAnalysisScreen::openApiPane(const std::string& key) {
         paneLinks_ += dash->openRequested->connect([this](const std::string& k) { onApiRequest(k); });
         auto frame = std::make_unique<ApiFrame>("analysis.api", std::move(dash));
         auto& tools = frame->tools();
-        tools.add(1, HmiGlyph::Refresh, "R\xC3\xA9importer et r\xC3\xA9" "analyser les fichiers du projet (F5)", "R\xC3\xA9" "analyser");
+        tools.add(1, HmiGlyph::Refresh, "R\xC3\xA9" "analyser les fichiers du projet : les relire depuis le disque", "R\xC3\xA9" "analyser");
         tools.add(2, HmiGlyph::Import, "Importer le .XHW : les racks, les modules, leurs voies", "Importer le .XHW\xE2\x80\xA6");
         tools.separator();
         tools.add(3, HmiGlyph::Export, "\xC3\x89" "crit src/MAST.XPG et src/CONFIG.XHW, pr\xC3\xAAts \xC3\xA0 r\xC3\xA9importer", "Vers Control Expert\xE2\x80\xA6");

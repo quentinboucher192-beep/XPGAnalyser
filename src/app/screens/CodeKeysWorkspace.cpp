@@ -16,6 +16,7 @@
 //  reglages de l'edition (editeur.raccourcis) et se change par Aller a.
 // =============================================================================
 #include "Screens.hpp"
+#include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.12.18 : la definition et les usages (inspecteur)
 
 #include "../App.hpp"
 #include "../GoToSearch.hpp"
@@ -54,7 +55,57 @@ ui::StatusBar::Severity severityOf(ui::Tone t) {
 
 }   // namespace
 
+bool MainAnalysisScreen::showUsagesOf(const std::string& text, bool whole) {
+    if (core::hasIhm() && app_.hmi()) {
+        openHmiPane("rechercher");
+        if (auto* find = dynamic_cast<HmiFindPane*>(hmiTab("rechercher"))) {
+            find->setFind(text);
+            find->setWholeWord(whole);
+            find->setScopeView(hmi::kNoId);
+            find->search();
+        }
+        if (status_)
+            status_->setTransientMessage(whole ? "Les usages de \xC2\xAB " + text + " \xC2\xBB (Maj+F12) : IHM \xE2\x80\xBA Rechercher"
+                                               : "Rechercher \xC2\xAB " + text + " \xC2\xBB dans tout le projet (Ctrl+Maj+F)", 6.0);
+        return true;
+    }
+    setTreeFilter(text);
+    focusTreeFilter();
+    return true;
+}
+
+bool MainAnalysisScreen::goToDefinitionOf(const std::string& word) {
+    // Le nom exact dans l'index d'Aller a (variables, types, scripts, vues...) ;
+    // un nom pointe (Moteur.Vitesse) : sa racine.
+    std::string name = word;
+    const auto bracket = name.find('[');
+    if (bracket != std::string::npos) name.erase(bracket);
+    std::vector<std::string> tries{ name };
+    if (const auto dot = name.find('.'); dot != std::string::npos) tries.push_back(name.substr(0, dot));
+    for (const auto& t : tries) {
+        const auto found = goToSearchAll(t, -1);
+        for (const auto& r : found.results) {
+            if (r.group == gotosearch::GPane || r.group == gotosearch::GAction || r.group == gotosearch::GHelp
+                || r.group == gotosearch::GCode)
+                continue;
+            if (!sameNoCase(r.title, t) && !sameNoCase(r.title, "SYS." + t)) continue;
+            goToResult(r);
+            if (status_)
+                status_->setTransientMessage("D\xC3\xA9" "finition de " + t + " : " + r.groupTitle + " (Ctrl+- : revenir)", 6.0);
+            return true;
+        }
+    }
+    return false;
+}
+
 void MainAnalysisScreen::installCodeEditorHooks() {
+    // 1.12.18 : le clic droit d'une case a expression (l'inspecteur) - la definition, les usages.
+    ui::propertygrid::setNameHook([this](std::string_view name, bool usages) {
+        if (usages) return showUsagesOf(std::string(name), true);
+        if (goToDefinitionOf(std::string(name))) return true;
+        if (status_) status_->setTransientMessage("\xC2\xAB " + std::string(name) + " \xC2\xBB n'a pas de d\xC3\xA9" "finition \xC3\xA0 ouvrir", 6.0);
+        return false;
+    });
     ui::MultiLineText::setHostCommandHandler(
         [this](ui::MultiLineText& editor, std::string_view command) { return codeEditorCommand(editor, command); });
     ui::MultiLineText::setNoticeSink([this](const std::string& text, ui::Tone tone) {
@@ -65,6 +116,7 @@ void MainAnalysisScreen::installCodeEditorHooks() {
 }
 
 void MainAnalysisScreen::removeCodeEditorHooks() {
+    ui::propertygrid::setNameHook({});
     ui::MultiLineText::setHostCommandHandler({});
     ui::MultiLineText::setNoticeSink({});
 }
@@ -94,44 +146,11 @@ bool MainAnalysisScreen::codeEditorCommand(ui::MultiLineText& editor, std::strin
             const auto sel = editor.selectedText();
             if (!sel.empty() && sel.find('\n') == std::string::npos) text = sel;
         }
-        const bool whole = command == "references";
-        if (core::hasIhm() && app_.hmi()) {
-            openHmiPane("rechercher");
-            if (auto* find = dynamic_cast<HmiFindPane*>(hmiTab("rechercher"))) {
-                find->setFind(text);
-                find->setWholeWord(whole);
-                find->setScopeView(hmi::kNoId);
-                find->search();
-            }
-            say(whole ? "Toutes les r\xC3\xA9" "f\xC3\xA9rences de \xC2\xAB " + text + " \xC2\xBB (Maj+F12) : IHM \xE2\x80\xBA Rechercher"
-                      : "Rechercher \xC2\xAB " + text + " \xC2\xBB dans tout le projet (Ctrl+Maj+F)");
-            return true;
-        }
-        setTreeFilter(text);
-        focusTreeFilter();
-        return true;
+        return showUsagesOf(text, command == "references");
     }
     if (command == "allerDefinition") {
         if (word.empty()) { say("F12 : le curseur n'est pas sur un nom"); return true; }
-        // Le nom exact dans l'index d'Aller a (variables, types, scripts, vues...) ;
-        // un nom pointe (Moteur.Vitesse) : sa racine.
-        std::string name = word;
-        const auto bracket = name.find('[');
-        if (bracket != std::string::npos) name.erase(bracket);
-        std::vector<std::string> tries{ name };
-        if (const auto dot = name.find('.'); dot != std::string::npos) tries.push_back(name.substr(0, dot));
-        for (const auto& t : tries) {
-            const auto found = goToSearchAll(t, -1);
-            for (const auto& r : found.results) {
-                if (r.group == gotosearch::GPane || r.group == gotosearch::GAction || r.group == gotosearch::GHelp
-                    || r.group == gotosearch::GCode)
-                    continue;
-                if (!sameNoCase(r.title, t) && !sameNoCase(r.title, "SYS." + t)) continue;
-                goToResult(r);
-                say("D\xC3\xA9" "finition de " + t + " : " + r.groupTitle + " (Ctrl+- : revenir dans le code)");
-                return true;
-            }
-        }
+        if (goToDefinitionOf(word)) return true;
         // L'API : le double clic sur le nom (ce qu'il ouvre, une instance de grafcet...).
         if (core::hasApi()) { editor.symbolActivated->emit(word); return true; }
         say("F12 : \xC2\xAB " + word + " \xC2\xBB n'a pas de d\xC3\xA9" "finition \xC3\xA0 ouvrir (une locale se d\xC3\xA9" "clare dans l'onglet Variables du document ; F1 : la fiche d'une native)");

@@ -920,6 +920,10 @@ private:
     void installCodeEditorHooks();
     void removeCodeEditorHooks();
     bool codeEditorCommand(ui::MultiLineText& editor, std::string_view command);
+    // 1.12.18 : la definition et les usages d'un nom, pour le code (F12, Maj+F12) et le clic droit
+    // d'une case a expression de l'inspecteur (ui::propertygrid::setNameHook).
+    bool goToDefinitionOf(const std::string& word);
+    bool showUsagesOf(const std::string& text, bool wholeWord);
     void setEditorKeyProfile(std::string_view key);
     void askRestoreVersion(int number);
     void askDeleteVersion(int number);

@@ -519,6 +519,217 @@ void drawIcon(gfx::IRenderer& r, Icon icon, const gfx::Rect& box, gfx::Color col
             g.line(5.f, 10.5f, 11.f, 10.5f);
             break;
 
+        // ---- 1.12.18 : les verbes du clic droit ----
+        case Icon::Cut:                        // des ciseaux : deux anneaux, deux lames
+            g.frame(2.5f, 10.f, 3.5f, 3.5f);
+            g.frame(10.f, 10.f, 3.5f, 3.5f);
+            g.line(5.2f, 10.2f, 11.f, 2.5f);
+            g.line(10.8f, 10.2f, 5.f, 2.5f);
+            break;
+        case Icon::Copy:                       // deux feuilles decalees
+            g.frame(5.5f, 5.5f, 8.f, 8.f);
+            g.line(3.f, 10.5f, 3.f, 2.5f);
+            g.line(3.f, 2.5f, 10.5f, 2.5f);
+            break;
+        case Icon::Paste:                      // un porte-bloc et sa pince
+            g.frame(3.f, 3.5f, 10.f, 11.f);
+            g.fill(6.f, 2.f, 4.f, 2.5f);
+            g.line(5.5f, 8.f, 10.5f, 8.f);
+            g.line(5.5f, 10.5f, 9.f, 10.5f);
+            break;
+        case Icon::Rename:                     // un crayon
+            g.line(3.f, 13.f, 3.8f, 9.8f);
+            g.line(3.8f, 9.8f, 10.8f, 2.8f);
+            g.line(10.8f, 2.8f, 13.2f, 5.2f);
+            g.line(13.2f, 5.2f, 6.2f, 12.2f);
+            g.line(6.2f, 12.2f, 3.f, 13.f);
+            g.line(9.4f, 4.2f, 11.8f, 6.6f);
+            break;
+        case Icon::Delete:                     // une corbeille
+            g.line(2.5f, 4.f, 13.5f, 4.f);
+            g.line(6.f, 4.f, 6.f, 2.3f);
+            g.line(6.f, 2.3f, 10.f, 2.3f);
+            g.line(10.f, 2.3f, 10.f, 4.f);
+            g.line(4.f, 4.f, 4.8f, 13.8f);
+            g.line(4.8f, 13.8f, 11.2f, 13.8f);
+            g.line(11.2f, 13.8f, 12.f, 4.f);
+            g.line(6.6f, 6.5f, 6.6f, 11.5f);
+            g.line(9.4f, 6.5f, 9.4f, 11.5f);
+            break;
+        case Icon::Duplicate:                  // deux carres et un plus
+            g.frame(2.f, 5.f, 8.5f, 8.5f);
+            g.line(5.5f, 2.5f, 13.5f, 2.5f);
+            g.line(13.5f, 2.5f, 13.5f, 10.5f);
+            g.line(6.25f, 7.f, 6.25f, 11.5f);
+            g.line(4.f, 9.25f, 8.5f, 9.25f);
+            break;
+        case Icon::Group:                      // deux objets dans un cadre
+            g.frame(1.5f, 1.5f, 13.f, 13.f);
+            g.frame(4.f, 4.f, 4.f, 4.f);
+            g.frame(8.5f, 8.5f, 3.5f, 3.5f);
+            break;
+        case Icon::BringFront:                 // un carre devant un autre
+            g.frame(2.f, 2.f, 8.f, 8.f);
+            g.line(6.f, 13.5f, 13.5f, 13.5f);
+            g.line(13.5f, 13.5f, 13.5f, 6.f);
+            break;
+        case Icon::Align:                      // un trait et deux barres alignees dessus
+            g.line(2.f, 1.5f, 2.f, 14.5f);
+            g.frame(4.5f, 4.f, 8.f, 3.f);
+            g.frame(4.5f, 9.5f, 5.f, 3.f);
+            break;
+        case Icon::Rotate: {                   // une fleche qui tourne
+            const float cx = 8.f, cy = 8.5f, rr = 5.f;
+            float px = cx + rr * std::cos(-0.6f), py = cy + rr * std::sin(-0.6f);
+            for (int i = 1; i <= 10; ++i) {
+                const float a = -0.6f + static_cast<float>(i) * 0.5f;
+                const float nx = cx + rr * std::cos(a), ny = cy + rr * std::sin(a);
+                g.line(px, py, nx, ny);
+                px = nx; py = ny;
+            }
+            g.line(12.f, 2.5f, 12.f, 5.8f);
+            g.line(12.f, 5.8f, 8.8f, 5.8f);
+            break;
+        }
+        case Icon::Pin:                        // une punaise
+            g.line(5.5f, 2.f, 10.5f, 2.f);
+            g.line(10.5f, 2.f, 9.7f, 6.f);
+            g.line(9.7f, 6.f, 12.5f, 8.2f);
+            g.line(12.5f, 8.2f, 3.5f, 8.2f);
+            g.line(3.5f, 8.2f, 6.3f, 6.f);
+            g.line(6.3f, 6.f, 5.5f, 2.f);
+            g.line(8.f, 8.2f, 8.f, 14.2f);
+            break;
+        case Icon::Window:                     // une fenetre et sa barre de titre
+            g.frame(2.f, 3.f, 12.f, 10.f);
+            g.line(2.f, 6.f, 14.f, 6.f);
+            break;
+        case Icon::GoTo:                       // une fleche vers un trait : aller a
+            g.line(2.f, 8.f, 11.f, 8.f);
+            g.line(8.f, 4.5f, 11.5f, 8.f);
+            g.line(11.5f, 8.f, 8.f, 11.5f);
+            g.line(13.5f, 3.f, 13.5f, 13.f);
+            break;
+        case Icon::Function:                   // fx
+            g.line(5.f, 13.5f, 6.8f, 4.f);
+            g.line(6.8f, 4.f, 9.5f, 2.8f);
+            g.line(4.f, 7.f, 8.5f, 7.f);
+            g.line(9.5f, 9.f, 13.5f, 13.5f);
+            g.line(13.5f, 9.f, 9.5f, 13.5f);
+            break;
+        case Icon::Eye:
+        case Icon::EyeOff: {                   // un oeil (et barre : cache)
+            const float kx[] = {1.5f, 4.f, 8.f, 12.f, 14.5f, 12.f, 8.f, 4.f};
+            const float ky[] = {8.f, 5.f, 3.8f, 5.f, 8.f, 11.f, 12.2f, 11.f};
+            for (int i = 0; i < 8; ++i) g.line(kx[i], ky[i], kx[(i + 1) % 8], ky[(i + 1) % 8]);
+            g.fill(6.6f, 6.6f, 2.8f, 2.8f);
+            if (icon == Icon::EyeOff) g.line(3.f, 13.5f, 13.f, 2.5f);
+            break;
+        }
+        case Icon::Unlock:                     // un cadenas ouvert
+            g.frame(3.5f, 7.f, 9.f, 7.f);
+            g.line(5.5f, 7.f, 5.5f, 4.8f);
+            g.line(5.5f, 4.8f, 7.f, 3.2f);
+            g.line(7.f, 3.2f, 9.f, 3.2f);
+            g.line(9.f, 3.2f, 10.4f, 4.4f);
+            break;
+        case Icon::Plus:
+            g.line(8.f, 3.f, 8.f, 13.f);
+            g.line(3.f, 8.f, 13.f, 8.f);
+            break;
+        case Icon::ArrowUp:
+            g.line(8.f, 13.f, 8.f, 3.f);
+            g.line(4.f, 7.f, 8.f, 3.f);
+            g.line(8.f, 3.f, 12.f, 7.f);
+            break;
+        case Icon::ArrowDown:
+            g.line(8.f, 3.f, 8.f, 13.f);
+            g.line(4.f, 9.f, 8.f, 13.f);
+            g.line(8.f, 13.f, 12.f, 9.f);
+            break;
+        case Icon::Link:                       // deux maillons
+            g.line(6.5f, 9.5f, 9.5f, 6.5f);
+            g.line(7.f, 4.5f, 8.5f, 3.f);
+            g.line(8.5f, 3.f, 11.f, 3.f);
+            g.line(11.f, 3.f, 13.f, 5.f);
+            g.line(13.f, 5.f, 13.f, 7.f);
+            g.line(13.f, 7.f, 11.f, 8.5f);
+            g.line(9.f, 11.5f, 7.5f, 13.f);
+            g.line(7.5f, 13.f, 5.f, 13.f);
+            g.line(5.f, 13.f, 3.f, 11.f);
+            g.line(3.f, 11.f, 3.f, 9.f);
+            g.line(3.f, 9.f, 5.f, 7.5f);
+            break;
+        case Icon::Help:                       // un point d'interrogation dans un cadre
+            g.frame(2.f, 2.f, 12.f, 12.f);
+            g.line(5.8f, 6.f, 6.6f, 4.4f);
+            g.line(6.6f, 4.4f, 9.4f, 4.4f);
+            g.line(9.4f, 4.4f, 10.2f, 5.8f);
+            g.line(10.2f, 5.8f, 8.f, 8.f);
+            g.line(8.f, 8.f, 8.f, 9.6f);
+            g.dot(8.f, 11.6f);
+            break;
+        case Icon::Comment:                    // deux barres obliques : //
+            g.line(6.5f, 3.f, 4.f, 13.f);
+            g.line(11.5f, 3.f, 9.f, 13.f);
+            break;
+        case Icon::Sort:                       // une fleche et des lignes qui raccourcissent
+            g.line(4.f, 3.f, 4.f, 13.f);
+            g.line(2.f, 11.f, 4.f, 13.f);
+            g.line(4.f, 13.f, 6.f, 11.f);
+            g.line(8.5f, 4.f, 14.f, 4.f);
+            g.line(8.5f, 8.f, 12.5f, 8.f);
+            g.line(8.5f, 12.f, 11.f, 12.f);
+            break;
+        case Icon::Columns:
+            g.frame(2.f, 3.f, 12.f, 10.f);
+            g.line(6.f, 3.f, 6.f, 13.f);
+            g.line(10.f, 3.f, 10.f, 13.f);
+            break;
+        case Icon::Wrench:                     // une cle : corriger
+            g.line(2.5f, 13.5f, 8.f, 8.f);
+            g.line(8.f, 8.f, 7.4f, 5.f);
+            g.line(7.4f, 5.f, 10.f, 2.4f);
+            g.line(10.f, 2.4f, 12.f, 2.6f);
+            g.line(12.f, 2.6f, 10.4f, 4.6f);
+            g.line(10.4f, 4.6f, 11.4f, 5.6f);
+            g.line(11.4f, 5.6f, 13.4f, 4.f);
+            g.line(13.4f, 4.f, 13.6f, 6.f);
+            g.line(13.6f, 6.f, 11.f, 8.6f);
+            g.line(11.f, 8.6f, 8.f, 8.f);
+            break;
+        case Icon::Breakpoint:                 // un point plein
+            g.r.fillRoundedRect(g.rect(3.5f, 3.5f, 9.f, 9.f), g.c, 4.5f * g.u);
+            break;
+        case Icon::RunTo:                      // lecture jusqu'a un trait
+            g.line(3.f, 3.f, 9.5f, 8.f);
+            g.line(9.5f, 8.f, 3.f, 13.f);
+            g.line(3.f, 13.f, 3.f, 3.f);
+            g.line(12.f, 3.f, 12.f, 13.f);
+            break;
+        case Icon::Release:                    // un eclair barre : relacher un forcage
+            g.line(9.5f, 1.5f, 4.f, 9.f);
+            g.line(4.f, 9.f, 8.f, 9.f);
+            g.line(8.f, 9.f, 6.5f, 14.5f);
+            g.line(2.5f, 13.5f, 13.5f, 2.5f);
+            break;
+        case Icon::Import:                     // une fleche qui entre
+            g.line(8.f, 2.f, 8.f, 10.f);
+            g.line(5.f, 7.f, 8.f, 10.f);
+            g.line(8.f, 10.f, 11.f, 7.f);
+            g.line(2.5f, 9.5f, 2.5f, 14.f);
+            g.line(2.5f, 14.f, 13.5f, 14.f);
+            g.line(13.5f, 14.f, 13.5f, 9.5f);
+            break;
+        case Icon::Clear:                      // une gomme
+            g.line(3.f, 13.f, 13.f, 13.f);
+            g.line(5.f, 10.5f, 11.5f, 4.f);
+            g.line(11.5f, 4.f, 13.5f, 6.f);
+            g.line(13.5f, 6.f, 7.f, 12.5f);
+            g.line(7.f, 12.5f, 5.f, 12.5f);
+            g.line(5.f, 12.5f, 5.f, 10.5f);
+            break;
+
         case Icon::None: break;
         // 1.8.0 : les icones au choix sont tracees plus haut (codeGlyph).
         case Icon::CodeInit: case Icon::CodeTor: case Icon::CodeAna: case Icon::CodeOutputs: case Icon::CodeGrafcet:

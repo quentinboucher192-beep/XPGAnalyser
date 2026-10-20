@@ -3161,7 +3161,7 @@ void checkEquipments(const Project& p, std::vector<Issue>& out) {
             if (forcedCount)
                 add(out, S::Warning, tcat, kNoId, kNoId, e.name,
                     e.twinLabel() + " : " + std::to_string(forcedCount) + " case" + (forcedCount > 1 ? "s" : "") + " forc\xC3\xA9" "e" + (forcedCount > 1 ? "s" : "") + " (" + forcedList
-                        + (forcedCount > 4 ? ", ..." : "") + ") : ses \xC3\xA9" "critures sont refus\xC3\xA9" "es (exception 04) \xE2\x80\x94 \xC2\xAB D\xC3\xA9" "forcer tout \xC2\xBB (Valeurs simul\xC3\xA9" "es) avant de livrer");
+                        + (forcedCount > 4 ? ", ..." : "") + ") : ses \xC3\xA9" "critures sont refus\xC3\xA9" "es (exception 04) \xE2\x80\x94 \xC2\xAB Tout rel\xC3\xA2" "cher \xC2\xBB (Valeurs simul\xC3\xA9" "es) avant de livrer");
         } else if (!e.forcings.empty()) {
             add(out, S::Info, "Esclave simul\xC3\xA9", kNoId, kNoId, e.name, e.name + " : " + std::to_string(e.forcings.size()) + " for\xC3\xA7" "age(s) gard\xC3\xA9(s) sans esclave simul\xC3\xA9 (sans effet)");
         }

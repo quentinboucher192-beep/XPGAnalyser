@@ -1176,11 +1176,14 @@ EventResult TreeView::onEvent(const InputEvent& ev) {
             // Lot 7 : le clic droit choisit aussi le noeud (sans l'ouvrir, comme
             // l'explorateur de Windows) : on voit de quoi parle le menu, et F2 /
             // Suppr ensuite visent le meme. Dans une selection de plusieurs, elle reste.
-            if (std::find(selection_.begin(), selection_.end(), vr.node) == selection_.end()) {
-                current_ = vr.node;
-                if (selectionMode_ != SelectionMode::None) selection_.assign(1, vr.node);
-                invalidate();
-            }
+            if (std::find(selection_.begin(), selection_.end(), vr.node) == selection_.end()
+                && selectionMode_ != SelectionMode::None)
+                selection_.assign(1, vr.node);
+            // 1.12.18 (bug du volet Macros) : le noeud du clic devient le courant,
+            // meme dans une selection de plusieurs - sinon le menu montre pour A
+            // agit sur B, le courant d'avant.
+            current_ = vr.node;
+            invalidate();
             contextMenuRequested->emit(vr.node, d->pos);
             return EventResult::Consumed;
         }
@@ -1294,6 +1297,16 @@ EventResult TreeView::onEvent(const InputEvent& ev) {
         auto it = std::find_if(rows_.begin(), rows_.end(),
                                [this](const VisualRow& r) { return r.node == current_; });
         auto index = static_cast<std::size_t>(it == rows_.end() ? 0 : it - rows_.begin());
+        // 1.12.18 : Maj+F10 ou la touche Menu - le menu du noeud courant, sous sa ligne.
+        if (isContextMenuKey(*k)) {
+            if (current_ == kInvalidNode) current_ = rows_[index].node;
+            ensureVisible(current_);
+            gfx::Rect r;
+            if (!rowRect(current_, r)) return EventResult::Consumed;
+            KeyboardMenuScope scope;
+            contextMenuRequested->emit(current_, gfx::Point{r.x + 32.f, r.bottom()});
+            return EventResult::Consumed;
+        }
 
         switch (k->key) {
             case Key::Down:  index = std::min(rows_.size() - 1, index + 1); break;
@@ -1536,6 +1549,13 @@ void TableView::openContextMenu(gfx::Point at) {
     // 1.11.14 : les entrees du proprietaire d'abord (la Console : aller a la source...).
     if (extraContext_) {
         items = extraContext_();
+        if (!items.empty() && extraOnly_) {   // 1.12.18 : le menu du proprietaire, seul
+            context_->setItems(std::move(items));
+            gfx::Size surface{bounds().right() + 400.f, bounds().bottom() + 400.f};
+            if (surface_.w > 0.f) surface = surface_;
+            context_->openAt(at, surface);
+            return;
+        }
         if (!items.empty()) items.push_back({{}, {}, {}, Icon::None, true, true, -1});
     }
     items.push_back({"Copier", "Ctrl+C", any ? std::string{} : std::string("aucune ligne choisie"), Icon::None, any, false, 1});
@@ -2334,6 +2354,8 @@ EventResult TableView::onEvent(const InputEvent& ev) {
     }
 
     // Lot 20 : copier, coller (meme dans une table vide : on y colle).
+    if (const auto* k = std::get_if<KeyDown>(&ev); k && focused() && !cellEditor_ && keyHandler_ && keyHandler_(*k))
+        return EventResult::Consumed;   // 1.12.18 : le proprietaire d'abord
     if (const auto* k = std::get_if<KeyDown>(&ev); k && focused() && k->mods.ctrl && !k->mods.alt && !cellEditor_) {
         if (k->key == Key::C) {
             (void)copySelection(!k->mods.shift);
@@ -2349,7 +2371,24 @@ EventResult TableView::onEvent(const InputEvent& ev) {
         clearPasteResult();
         return EventResult::Consumed;
     }
+    if (const auto* k = std::get_if<KeyDown>(&ev); k && focused() && !cellEditor_ && isContextMenuKey(*k)) {
+        // 1.12.18 : Maj+F10 ou la touche Menu - le menu de la ligne choisie, comme
+        // un clic droit sur elle (le proprietaire y ajoute ses entrees).
+        std::size_t index = 0;
+        if (!selection_.empty()) {
+            const auto it = std::find(view_.begin(), view_.end(), selection_.back());
+            if (it != view_.end()) index = static_cast<std::size_t>(it - view_.begin());
+        }
+        gfx::Rect r;
+        if (!view_.empty() && rowRect(index, r)) openContextMenuAt(*this, {std::min(r.x + 40.f, r.right() - 2.f), r.y + r.h * 0.5f});
+        else openContextMenuAt(*this, {area.x + 40.f, area.y + headerH + 4.f});
+        return EventResult::Consumed;
+    }
     if (const auto* k = std::get_if<KeyDown>(&ev); k && focused() && !view_.empty()) {
+        if (enterActivates_ && k->key == Key::Return && k->mods.none() && !selection_.empty() && !cellEditor_) {
+            activated->emit(selection_.back());
+            return EventResult::Consumed;
+        }
         // Lot 16 : F2 edite la premiere case editable de la ligne choisie ; les
         // fleches gauche et droite replient et deplient une ligne d'arbre.
         if (!selection_.empty() && (k->key == Key::F2 || k->key == Key::Left || k->key == Key::Right) && k->mods.none()) {
@@ -2607,11 +2646,11 @@ std::string markerTip(const Property& p) {
     // 1.11 (REP) : un repere ne change pas le calcul ; il dit ce qui varie quand on duplique.
     if (names.empty()) return {};
     if (names.size() == 1)
-        return "Rep\xC3\xA8re " + names.front() + " : ce morceau varie quand on duplique (Dupliquer\xE2\x80\xA6, Ctrl+D). "
+        return "Rep\xC3\xA8re " + names.front() + " : ce morceau varie quand on duplique (Dupliquer\xE2\x80\xA6, Ctrl+Maj+D). "
                "Ses $ ne changent pas le calcul.";
     std::string list;
     for (const auto& n : names) list += (list.empty() ? "" : ", ") + n;
-    return "Rep\xC3\xA8res " + list + " : ces morceaux varient quand on duplique (Dupliquer\xE2\x80\xA6, Ctrl+D). "
+    return "Rep\xC3\xA8res " + list + " : ces morceaux varient quand on duplique (Dupliquer\xE2\x80\xA6, Ctrl+Maj+D). "
            "Leurs $ ne changent pas le calcul.";
 }
 
@@ -2678,6 +2717,14 @@ ExpressionPageHook& hookSlot() {
 } // namespace
 void setExpressionPageHook(ExpressionPageHook hook) { hookSlot() = std::move(hook); }
 const ExpressionPageHook& expressionPageHook() { return hookSlot(); }
+namespace {
+NameHook& nameSlot() {
+    static NameHook hook;
+    return hook;
+}
+} // namespace
+void setNameHook(NameHook hook) { nameSlot() = std::move(hook); }
+const NameHook& nameHook() { return nameSlot(); }
 } // namespace propertygrid
 
 PropertyGrid::PropertyGrid(std::string id) : Widget(std::move(id)) {
@@ -2757,18 +2804,29 @@ namespace {
 constexpr std::uint16_t kNoteRow = 0x8000;
 // "Debit_Entre n'existe pas : veux-tu dire Debit_Entree ?" -> Debit_Entre, Debit_Entree.
 bool noteFix(std::string_view why, std::string& from, std::string& to) {
+    const auto plain = [](const std::string& w, bool brackets) {
+        return !w.empty() && std::all_of(w.begin(), w.end(), [brackets](char ch) {
+            return std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '_' || ch == '.'
+                || (brackets && (ch == '[' || ch == ']' || ch == ','));
+        });
+    };
     static constexpr std::string_view kMissing = " n'existe pas : veux-tu dire ";
     const auto miss = why.find(kMissing);
     const auto end = why.rfind(" ?");
-    if (miss == std::string_view::npos || end == std::string_view::npos || end < miss + kMissing.size()) return false;
-    from = std::string(why.substr(0, miss));
-    to = std::string(why.substr(miss + kMissing.size(), end - miss - kMissing.size()));
-    const auto plain = [](const std::string& w) {
-        return !w.empty() && std::all_of(w.begin(), w.end(), [](char ch) {
-            return std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '_' || ch == '.';
-        });
-    };
-    return plain(from) && plain(to);
+    if (miss != std::string_view::npos && end != std::string_view::npos && end >= miss + kMissing.size()) {
+        from = std::string(why.substr(0, miss));
+        to = std::string(why.substr(miss + kMissing.size(), end - miss - kMissing.size()));
+        return plain(from, false) && plain(to, false);
+    }
+    // 1.12.18 : « Consignes est un tableau entier (...) : ... - choisis Consignes[0] » (1.12.17).
+    static constexpr std::string_view kPick = " - choisis ";
+    const auto is = why.find(" est ");
+    const auto pick = why.rfind(kPick);
+    if (is == std::string_view::npos || pick == std::string_view::npos || pick < is) return false;
+    from = std::string(why.substr(0, is));
+    to = std::string(why.substr(pick + kPick.size()));
+    while (!to.empty() && (to.back() == '.' || to.back() == ' ')) to.pop_back();
+    return plain(from, false) && plain(to, true) && to.rfind(from, 0) == 0;
 }
 // `from` remplace par `to` quand il commence un chemin (pas apres un point), hors des chaines.
 std::string replaceRoot(std::string_view expr, std::string_view from, std::string_view to) {
@@ -2797,6 +2855,10 @@ std::string replaceRoot(std::string_view expr, std::string_view from, std::strin
     return out;
 }
 } // namespace
+namespace exprfield {
+bool fixOf(std::string_view why, std::string& from, std::string& to) { return noteFix(why, from, to); }
+std::string replaceRoot(std::string_view expr, std::string_view from, std::string_view to) { return ui::replaceRoot(expr, from, to); }
+} // namespace exprfield
 // ---- fin 1.10 (chantier K2) ----
 
 void PropertyGrid::setCategories(std::vector<Category> cats) {
@@ -3090,8 +3152,31 @@ ColorPalette* PropertyGrid::activePalette() const noexcept {
     return editIsPalette_ ? dynamic_cast<ColorPalette*>(editor_) : nullptr;
 }
 
+namespace {
+// 1.12.18 : les dernieres couleurs posees dans l'inspecteur (« Couleurs recentes »), la plus recente d'abord.
+std::vector<std::string>& recentColors() {
+    static std::vector<std::string> colors;
+    return colors;
+}
+void rememberColor(const std::string& color) {
+    if (color.empty() || color.front() != '#') return;
+    auto& r = recentColors();
+    r.erase(std::remove(r.begin(), r.end(), color), r.end());
+    r.insert(r.begin(), color);
+    if (r.size() > 8) r.resize(8);
+}
+bool looksLikeColor(std::string_view t) {
+    if (t.size() != 7 && t.size() != 9) return false;
+    if (t.front() != '#') return false;
+    for (std::size_t i = 1; i < t.size(); ++i)
+        if (!std::isxdigit(static_cast<unsigned char>(t[i]))) return false;
+    return true;
+}
+} // namespace
+
 void PropertyGrid::finishEdit(bool commit, const std::string& text) {
     if (!editor_) return;
+    if (commit && editIsPalette_) rememberColor(text);
     // 1.10 (chantier K) : une case a expression videe, ou laissee a "=", retire
     // l'expression (commit("=")) : la propriete revient a sa valeur fixe.
     std::string sent = text;
@@ -3112,6 +3197,295 @@ void PropertyGrid::finishEdit(bool commit, const std::string& text) {
     if (!commit || !apply) return;
     if (apply(sent)) propertyChanged->emit(name, sent);
     else propertyRejected->emit(name, sent);
+}
+
+// ---- 1.12.18 (planche 8) : le menu du clic droit de chaque ligne ----------------------
+namespace {
+enum RowMenu : int {
+    kRowRemoveExpr = 1, kRowEditExpr = 2, kRowCopy = 3, kRowDefault = 4, kRowExprPage = 5, kRowChooseFn = 6,
+    kRowPaste = 7, kRowDefinition = 8, kRowUsages = 9, kRowEdit = 10, kRowToggle = 11, kRowRevert = 12,
+    kRowExpandAll = 20, kRowCollapseAll = 21, kRowChoice = 100, kRowCategoryAction = 500,
+};
+void removeExpression(PropertyGrid& grid, const PropertyGrid::Property& p);   // plus bas (le X de la ligne)
+bool identStart(char ch) { return std::isalpha(static_cast<unsigned char>(ch)) || ch == '_'; }
+bool identChar(char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_' || ch == '.'; }
+// Le nom (une variable, Vue.Objet, SYS.X) qui couvre [at] dans `text` ; vide : aucun.
+std::string identAt(std::string_view text, std::size_t at) {
+    if (at >= text.size() || !identChar(text[at])) return {};
+    std::size_t a = at, b = at;
+    while (a > 0 && identChar(text[a - 1])) --a;
+    while (b < text.size() && identChar(text[b])) ++b;
+    while (a < b && !identStart(text[a])) ++a;   // un nombre (12.5) n'est pas un nom
+    std::string name(text.substr(a, b - a));
+    while (!name.empty() && name.back() == '.') name.pop_back();
+    if (name.empty() || !identStart(name.front())) return {};
+    return name;
+}
+std::string firstIdent(std::string_view text) {
+    bool inString = false;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '\'') inString = !inString;
+        if (inString) continue;
+        if (identStart(text[i]) && (i == 0 || !identChar(text[i - 1]))) return identAt(text, i);
+    }
+    return {};
+}
+void setAllExpanded(std::vector<PropertyGrid::Category>& cats, bool on) {
+    for (auto& c : cats) {
+        c.expanded = on;
+        setAllExpanded(c.children, on);
+    }
+}
+} // namespace
+
+std::string PropertyGrid::nameUnder(std::size_t row, float x) const {
+    if (row >= rows_.size() || !rows_[row].prop) return {};
+    const Property& p = *rows_[row].prop;
+    if (p.expression.empty()) return {};
+    const std::string shown = exprfield::accepts(p) ? "=" + p.expression : p.expression;
+    if (row < exprX_.size() && exprX_[row] >= 0.f && x >= exprX_[row]) {
+        // Le caractere sous x, mesure dans la police de l'expression (celle du dessin).
+        for (std::size_t k = 0; k < shown.size(); ++k)
+            if (exprX_[row] + measureWidth(std::string_view(shown).substr(0, k + 1), exprFont_) >= x) {
+                if (auto name = identAt(shown, k); !name.empty()) return name;
+                break;
+            }
+    }
+    return firstIdent(p.expression);
+}
+
+void PropertyGrid::openRowMenu(std::size_t row, gfx::Point at) {
+    if (row >= rows_.size()) return;
+    finishEdit(false, {});   // un champ ouvert a deja ete valide par la perte du focus (bug 5)
+    auto* menu = dynamic_cast<PopupMenu*>(findById(exprfield::menuId(*this)));
+    if (!menu) {
+        menu = &static_cast<PopupMenu&>(addChild(std::make_unique<PopupMenu>(exprfield::menuId(*this))));
+        menu->itemChosen->connect([this, menu](int action) {
+            menu->close();   // choisi d'ailleurs (un script, un essai) : ferme aussi
+            rowMenuChosen(action);
+        }).release();
+        menu->dismissed->connect([this] { grabFocus(); }).release();
+    }
+    const VisualRow& vr = rows_[row];
+    menuCategory_ = vr.cat ? vr.cat->name : std::string{};
+    menuProperty_.clear();
+    menuName_.clear();
+    menuChoices_.clear();
+    const auto entry = [](std::string label, int id, std::string key = {}, bool enabled = true, std::string why = {}) {
+        PopupMenu::Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.id = id;
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        return it;
+    };
+    const auto rule = [] {
+        PopupMenu::Item it;
+        it.separator = true;
+        return it;
+    };
+    std::vector<PopupMenu::Item> items;
+    PopupMenu::Item head;
+    head.heading = true;
+    menuActions_.clear();
+    if (!vr.prop) {
+        head.label = menuCategory_;
+        head.shortcut = vr.cat && !vr.cat->menuRight.empty() ? vr.cat->menuRight : std::string("cat\xC3\xA9gorie");
+        items.push_back(std::move(head));
+        // 1.12.18 : les entrees propres a cette categorie (un parametre : Renommer partout, Monter...).
+        if (vr.cat && !vr.cat->actions.empty()) {
+            menuActions_ = vr.cat->actions;
+            for (std::size_t k = 0; k < menuActions_.size(); ++k) {
+                const auto& a = menuActions_[k];
+                auto it = entry(a.label, kRowCategoryAction + static_cast<int>(k), a.shortcut, a.enabled, a.why);
+                it.icon = a.icon;
+                items.push_back(std::move(it));
+            }
+            items.push_back(rule());
+        }
+        items.push_back(entry("Tout d\xC3\xA9plier", kRowExpandAll));
+        items.push_back(entry("Tout replier", kRowCollapseAll));
+    } else {
+        const Property& p = *vr.prop;
+        menuProperty_ = p.name;
+        head.label = p.name;
+        head.shortcut = menuCategory_;
+        items.push_back(std::move(head));
+        const bool editable = p.commit && p.type != ValueType::ReadOnly && !p.locked;
+        const std::string clip = clipboardText();
+        const std::string readOnly = "lecture seule";
+        if (exprfield::accepts(p)) {
+            // Une couleur sans expression : ses entrees (Copier la couleur...) ; avec une expression,
+            // le menu d'une ligne a expression (la planche 8).
+            const bool color = p.type == ValueType::Color && p.expression.empty();
+            const bool has = !p.expression.empty() && editable;
+            if (color) {
+                items.push_back(entry("Copier la couleur", kRowCopy, "Ctrl+C"));
+                items.push_back(entry("Coller la couleur", kRowPaste, "Ctrl+V", editable && looksLikeColor(clip),
+                                      editable ? std::string("le presse-papiers n'a pas de couleur (#RRGGBB)") : readOnly));
+                PopupMenu::Item recent = entry("Couleurs r\xC3\xA9" "centes", -1);
+                menuChoices_ = recentColors();
+                if (menuChoices_.empty() && paletteColors_) {
+                    for (auto& col : paletteColors_()) if (looksLikeColor(col) && menuChoices_.size() < 8) menuChoices_.push_back(col);
+                }
+                for (std::size_t k = 0; k < menuChoices_.size(); ++k) {
+                    PopupMenu::Item it = entry(menuChoices_[k], kRowChoice + static_cast<int>(k));
+                    const std::string col = menuChoices_[k];
+                    it.paintIcon = [col](const PaintContext& ctx, gfx::Rect box) {
+                        gfx::Color fill{128, 128, 128, 255};
+                        (void)parseHexColor(col, fill);
+                        ctx.r.fillRoundedRect(box, fill, 3.f);
+                        ctx.r.strokeRect(box, ctx.theme.color.border, 1.f);
+                    };
+                    recent.children.push_back(std::move(it));
+                }
+                if (recent.children.empty() || !editable) {
+                    recent.children.clear();
+                    recent.enabled = false;
+                    recent.disabledReason = editable ? std::string("aucune couleur pos\xC3\xA9" "e encore") : readOnly;
+                }
+                items.push_back(std::move(recent));
+                items.push_back(rule());
+            }
+            items.push_back(entry(!p.expression.empty() ? std::string(exprfield::kModify)
+                                                        : std::string("\xC3\x89" "crire une expression\xE2\x80\xA6"),
+                                  kRowEditExpr, "=", editable, readOnly));
+            if (!color) items.push_back(entry("Choisir une fonction\xE2\x80\xA6", kRowChooseFn, "Ctrl+I", editable, readOnly));
+            menuName_ = nameUnder(row, at.x);
+            if (!menuName_.empty() && propertygrid::nameHook()) {
+                items.push_back(entry("Aller \xC3\xA0 la d\xC3\xA9" "finition de " + menuName_, kRowDefinition, "F12"));
+                items.push_back(entry("Voir les usages de " + menuName_, kRowUsages, "Maj+F12"));
+            }
+            if (!color) {
+                items.push_back(entry(std::string(exprfield::kCopy), kRowCopy, "Ctrl+C"));
+                items.push_back(entry("Coller", kRowPaste, "Ctrl+V", editable && !clip.empty(),
+                                      editable ? std::string("le presse-papiers est vide") : readOnly));
+            }
+            items.push_back(rule());
+            if (!color || has)
+                items.push_back(entry(std::string(exprfield::kRemove), kRowRemoveExpr, "Ctrl+Suppr", has, "pas d'expression"));
+            items.push_back(entry(std::string(exprfield::kDefault), kRowDefault, {}, editable, readOnly));
+            if (propertygrid::expressionPageHook())   // 1.11 (integration I111, lien 5)
+                items.push_back(entry(std::string(propertygrid::kExpressionPageItem), kRowExprPage));
+        } else if (p.type == ValueType::Enum && !p.enumValues.empty() && p.enumValues.size() <= 24) {
+            // Une liste (le Calque, un alignement) : ses choix, le pris marque d'un point.
+            menuChoices_ = p.enumValues;
+            for (std::size_t k = 0; k < p.enumValues.size(); ++k) {
+                PopupMenu::Item it = entry(p.enumValues[k], kRowChoice + static_cast<int>(k), {}, editable, readOnly);
+                it.radio = true;
+                it.checked = p.enumValues[k] == p.value;
+                items.push_back(std::move(it));
+            }
+            items.push_back(rule());
+            items.push_back(entry("Copier", kRowCopy, "Ctrl+C"));
+        } else if (p.type == ValueType::Boolean) {
+            PopupMenu::Item it = entry(p.name, kRowToggle, {}, editable, readOnly);
+            it.checkable = true;
+            it.checked = isTrueText(p.value);
+            items.push_back(std::move(it));
+            items.push_back(rule());
+            items.push_back(entry("Copier", kRowCopy, "Ctrl+C"));
+        } else {
+            const bool isName = p.name == "Nom" || p.key == "name";
+            if (editable) items.push_back(entry(isName ? "Renommer\xE2\x80\xA6" : "Modifier\xE2\x80\xA6", kRowEdit, "F2"));
+            items.push_back(entry(isName ? "Copier le nom" : "Copier", kRowCopy, "Ctrl+C"));
+            if (editable && !isName)
+                items.push_back(entry("Coller", kRowPaste, "Ctrl+V", !clip.empty(), "le presse-papiers est vide"));
+        }
+        if (p.revert) {
+            items.push_back(rule());
+            items.push_back(entry(p.revertTip.empty() ? std::string("Revenir \xC3\xA0 la valeur d'origine") : p.revertTip, kRowRevert));
+        }
+    }
+    menu->setItems(std::move(items));
+    menu->setBounds(bounds());
+    // 1.10 finale : la fenetre (et non la grille + 400 px) - l'inspecteur est au bord droit :
+    // le menu se retourne au lieu de sortir de l'ecran.
+    gfx::Size surface = surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
+    menu->openAt(at, surface);
+}
+
+void PropertyGrid::rowMenuChosen(int action) {
+    if (action == kRowExpandAll || action == kRowCollapseAll) {
+        setAllExpanded(categories_, action == kRowExpandAll);
+        rebuildRows();
+        invalidate();
+        return;
+    }
+    if (action >= kRowCategoryAction && action - kRowCategoryAction < static_cast<int>(menuActions_.size())) {
+        const auto a = menuActions_[static_cast<std::size_t>(action - kRowCategoryAction)];   // une copie
+        if (!a.edit.empty()) {
+            if (const int at = rowOf(menuCategory_, a.edit); at >= 0) beginEdit(static_cast<std::size_t>(at));
+        } else if (a.run) {
+            a.run();
+        }
+        invalidate();
+        return;
+    }
+    const int at = menuProperty_.empty() ? -1 : rowOf(menuCategory_, menuProperty_);
+    if (at < 0) return;
+    const Property& target = *rows_[static_cast<std::size_t>(at)].prop;
+    // Ecrire un texte comme la case le ferait (la grille peut etre refaite pendant commit).
+    const auto write = [this](const Property& p, const std::string& text) {
+        const auto commit = p.commit;
+        const std::string name = p.name;
+        const bool color = p.type == ValueType::Color;
+        if (!commit) return;
+        const std::string sent = exprfield::accepts(p) ? exprfield::normalized(p, text) : text;
+        if (commit(sent)) {
+            if (color) rememberColor(sent);
+            propertyChanged->emit(name, sent);
+        } else {
+            propertyRejected->emit(name, sent);
+        }
+    };
+    switch (action) {
+        case kRowRemoveExpr: removeExpression(*this, target); break;
+        case kRowEditExpr:
+            gForceExprText = true;
+            beginEdit(static_cast<std::size_t>(at));
+            gForceExprText = false;
+            break;
+        case kRowChooseFn:
+            gForceExprText = true;
+            beginEdit(static_cast<std::size_t>(at));
+            gForceExprText = false;
+            if (auto* f = dynamic_cast<CellField*>(editor_)) {
+                (void)f->dispatch(KeyDown{Key::End, {}, false});
+                (void)f->runAction();
+            }
+            break;
+        case kRowCopy:
+            setClipboardText(target.expression.empty() ? target.value : "=" + target.expression);
+            break;
+        case kRowPaste: write(target, clipboardText()); break;
+        case kRowDefault:
+            // Revenir a la valeur par defaut : le retour de la 1.9 s'il y en a un (la valeur du
+            // symbole), sinon l'hote (ExprField.hpp, kToDefault). Copies : l'hote refait la grille.
+            if (const auto revert = target.revert) revert();
+            else if (const auto commit = target.commit) (void)commit(exprfield::kToDefault);
+            break;
+        case kRowExprPage:
+            // 1.11 (integration I111, lien 5) : une copie - l'hote ouvre un ecran, la grille peut etre refaite.
+            if (const auto hook = propertygrid::expressionPageHook()) hook(Property(target));
+            break;
+        case kRowDefinition:
+        case kRowUsages:
+            if (const auto hook = propertygrid::nameHook(); hook && !menuName_.empty()) (void)hook(menuName_, action == kRowUsages);
+            break;
+        case kRowEdit: beginEdit(static_cast<std::size_t>(at)); break;
+        case kRowToggle: beginEdit(static_cast<std::size_t>(at)); break;   // une bascule : le clic EST la modification
+        case kRowRevert:
+            if (const auto revert = target.revert) revert();
+            break;
+        default:
+            if (action >= kRowChoice && action - kRowChoice < static_cast<int>(menuChoices_.size()))
+                write(target, menuChoices_[static_cast<std::size_t>(action - kRowChoice)]);
+            break;
+    }
+    invalidate();
 }
 
 void PropertyGrid::clearProperties() { categories_.clear(); rebuildRows(); }
@@ -3553,6 +3927,9 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
                     exprX += w + 6.f;
             const float exprW = std::max(0.f, exprRight - exprX);
             const auto mono = ctx.theme.font.mono;
+            if (exprX_.size() != rows_.size()) exprX_.assign(rows_.size(), -1.f);
+            exprX_[i] = exprX;                   // 1.12.18 : le nom sous le clic droit
+            exprFont_ = mono;
             const float monoY = r.y + (rowH - ctx.r.lineHeight(mono)) * 0.5f;
             // 1.10 (chantier K) : le "=" reste devant l'expression.
             const std::string shownExpr = exprfield::accepts(*vr.prop) ? "=" + vr.prop->expression : vr.prop->expression;
@@ -3741,6 +4118,12 @@ EventResult PropertyGrid::onEvent(const InputEvent& ev) {
     if (const auto* d = std::get_if<MouseDown>(&ev)) {
         if (!bounds().contains(d->pos)) return EventResult::Ignored;
         grabFocus();
+        // 1.12.18 (bug 5) : le clic droit garde ce qui est tape, comme les tables
+        // (la case est validee avant le menu ; la grille peut etre refaite).
+        if (d->button == MouseButton::Right && editor_) {
+            if (auto* f = dynamic_cast<CellField*>(editor_); f && !editIsList_ && !editIsPalette_) finishEdit(!f->cancelled, f->text());
+            else finishEdit(false, {});
+        }
         const int ri = rowAt(d->pos.y);
         if (ri < 0) return EventResult::Consumed;
 
@@ -3758,6 +4141,12 @@ EventResult PropertyGrid::onEvent(const InputEvent& ev) {
                     (void)commit(sent);
                 }
             }
+            return EventResult::Consumed;
+        }
+        // 1.12.18 (planche 8) : le clic droit - le menu de la ligne, quelle qu'elle soit (avant :
+        // les seules lignes a expression ; sur un titre de categorie, il la repliait).
+        if (d->button == MouseButton::Right) {
+            openRowMenu(static_cast<std::size_t>(ri), d->pos);
             return EventResult::Consumed;
         }
         if (vr.prop) {
@@ -3801,74 +4190,6 @@ EventResult PropertyGrid::onEvent(const InputEvent& ev) {
                     invalidate();
                     return EventResult::Consumed;
                 }
-            }
-            if (d->button == MouseButton::Right && exprfield::accepts(*vr.prop)) {
-                finishEdit(false, {});
-                auto* menu = dynamic_cast<PopupMenu*>(findById(exprfield::menuId(*this)));
-                if (!menu) {
-                    menu = &static_cast<PopupMenu&>(addChild(std::make_unique<PopupMenu>(exprfield::menuId(*this))));
-                    menu->itemChosen->connect([this, menu](int action) {
-                        menu->close();   // choisi d'ailleurs (un script, un essai) : ferme aussi
-                        if (menu->items().empty()) return;
-                        // La tete du menu dit la propriete (son nom) et sa categorie (a droite).
-                        const auto& head = menu->items().front();
-                        const int at = rowOf(head.shortcut, head.label);
-                        if (at < 0) return;
-                        const Property& target = *rows_[static_cast<std::size_t>(at)].prop;
-                        if (action == 1) {
-                            removeExpression(*this, target);
-                        } else if (action == 2) {
-                            gForceExprText = true;
-                            beginEdit(static_cast<std::size_t>(at));
-                            gForceExprText = false;
-                        } else if (action == 3) {
-                            setClipboardText(target.expression.empty() ? target.value : "=" + target.expression);
-                        } else if (action == 5) {
-                            // 1.11 (integration I111, lien 5) : la page des expressions, sur ce type.
-                            // Une copie : l'hote ouvre un ecran, la grille peut etre refaite.
-                            if (const auto hook = propertygrid::expressionPageHook()) hook(Property(target));
-                        } else if (action == 4) {
-                            // Revenir a la valeur par defaut : le retour de la 1.9 s'il y en a un
-                            // (la valeur du symbole), sinon l'hote (ExprField.hpp, kToDefault).
-                            // Copies : l'hote refait souvent la grille.
-                            if (const auto revert = target.revert) revert();
-                            else if (const auto commit = target.commit) (void)commit(exprfield::kToDefault);
-                        }
-                        invalidate();
-                    }).release();
-                    menu->dismissed->connect([this] { grabFocus(); }).release();
-                }
-                const Property& p = *vr.prop;
-                const bool has = !p.expression.empty() && p.commit && p.type != ValueType::ReadOnly;
-                const bool editable = p.commit && p.type != ValueType::ReadOnly;
-                std::vector<PopupMenu::Item> items;
-                PopupMenu::Item head;
-                head.label = p.name;
-                head.shortcut = vr.cat->name;
-                head.heading = true;
-                items.push_back(std::move(head));
-                // L'ordre et les raccourcis de la maquette 1.10 (scene 1).
-                items.push_back({!p.expression.empty() ? std::string(exprfield::kModify)
-                                                       : std::string("\xC3\x89" "crire une expression\xE2\x80\xA6"),
-                                 "=", editable ? std::string{} : std::string("lecture seule"), Icon::None, editable, false, 2});
-                items.push_back({std::string(exprfield::kRemove), "Ctrl+Suppr", has ? std::string{} : std::string("pas d'expression"),
-                                 Icon::Close, has, false, 1});
-                items.push_back({std::string(exprfield::kCopy), "Ctrl+C", {}, Icon::None, true, false, 3});
-                PopupMenu::Item rule;
-                rule.separator = true;
-                items.push_back(std::move(rule));
-                items.push_back({std::string(exprfield::kDefault), {}, editable ? std::string{} : std::string("lecture seule"),
-                                 Icon::None, editable, false, 4});
-                if (propertygrid::expressionPageHook())   // 1.11 (integration I111, lien 5)
-                    items.push_back({std::string(propertygrid::kExpressionPageItem), {}, {}, Icon::None, true, false, 5});
-                menu->setItems(std::move(items));
-                menu->setBounds(bounds());
-                // 1.10 finale : la fenetre (et non la grille + 400 px) - l'inspecteur est
-                // au bord droit : le menu se retourne au lieu de sortir de l'ecran.
-                gfx::Size surface = surfaceSize();
-                if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
-                menu->openAt(d->pos, surface);
-                return EventResult::Consumed;
             }
             // ---- fin 1.10 (chantier K) ----
             // 1.9 : le bouton de retour a la valeur d'origine. L'hote refait

@@ -142,6 +142,12 @@ public:
     [[nodiscard]] std::vector<hmi::dup::ItemField> duplicateFields(int index) const;
     bool insertCopies(int index, const std::vector<std::vector<std::string>>& rows);
 
+    // 1.12.18 (planche 9) : COPIER / COLLER UN ELEMENT ENTIER (la plume : sa variable, sa couleur, sa
+    // condition...), d'un objet a l'autre ; le texte (Excel) reste Ctrl+Maj+C. Coller l'insere apres
+    // l'element choisi. Faux : rien a copier / le presse-papiers n'a pas d'element.
+    bool copyItem(int index);
+    bool pasteItem();
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> contextItems() const;   // le menu de la liste
     [[nodiscard]] HmiToolStrip&     tools() noexcept { return *tools_; }
     [[nodiscard]] ui::TableView&    table() noexcept { return *table_; }
     [[nodiscard]] ui::PropertyGrid& grid() noexcept { return *grid_; }

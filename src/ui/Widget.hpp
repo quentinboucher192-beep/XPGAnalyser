@@ -153,6 +153,13 @@ namespace ui {
         [[nodiscard]] bool focused() const noexcept { return focused_; }
         void setFocusPolicy(bool acceptsFocus) noexcept { acceptsFocus_ = acceptsFocus; }
         [[nodiscard]] bool acceptsFocus() const noexcept { return acceptsFocus_ && enabled() && visible(); }
+        // 1.12.18 : donner le clavier a ce widget depuis l'exterieur (un menu qui se
+        // ferme le rend a celui qui l'avait : l'arbre, la barre d'onglets) ; le
+        // widget qui l'a sous `root` ; vrai si `w` est encore sous `root`.
+        void takeFocus() { grabFocus(); }
+        [[nodiscard]] Widget& topWidget() noexcept { return *rootWidget(); }
+        [[nodiscard]] static Widget* focusedIn(Widget& root) noexcept;
+        [[nodiscard]] static bool    inTree(Widget& root, const Widget* w) noexcept;
 
         void setTooltip(std::string t) { tooltip_ = std::move(t); }
         [[nodiscard]] const std::string& tooltip() const noexcept { return tooltip_; }

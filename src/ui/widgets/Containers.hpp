@@ -138,6 +138,10 @@ public:
         core::Signal<std::size_t, gfx::Point>::create();
     // Le meme menu sans la souris (un script, un en-tete hors de la bande).
     void requestContextMenu(std::size_t index);
+    // 1.12.18 (bug 7) : une bande de sous-onglets (inspecteur, panneau du bas,
+    // symbole) choisit l'onglet au clic droit, avant son menu. Sans menu
+    // branche, le clic droit choisit toujours l'onglet.
+    void setRightClickSelects(bool on) noexcept { rightClickSelects_ = on; }
     // L'onglet que vise un menu ouvert : entoure de tirets tant que `menu` est
     // ouvert, pour qu'on voie de quel onglet il parle ; la marque s'efface
     // d'elle-meme a sa fermeture. `menu` vit autant que la bande (un overlay
@@ -208,6 +212,7 @@ private:
     void tileButtons(const gfx::Rect& header, bool closable, gfx::Rect& close, gfx::Rect& maximize) const noexcept;
     void paintTile(const PaintContext& ctx);
     bool               tile_{false};
+    bool               rightClickSelects_{false};
     bool               tileMaximized_{false};
     bool               groupFocus_{true};
     std::vector<Entry> tabs_;

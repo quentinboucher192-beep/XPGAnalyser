@@ -187,7 +187,7 @@ std::vector<ApiDashboard::Todo> ApiDashboard::todos() const {
     if (!s_.hasHardware)
         out.push_back({ui::Tone::Info, "i", "Pas de configuration mat\xC3\xA9rielle dans ce projet",
                        "L'export .XPG porte le processeur, pas le rack : importe le .XHW pour les racks, les modules et leurs voies.",
-                       "Importer le .XHW\xE2\x80\xA6", "import-xhw"});
+                       "Importer la configuration (.XHW)\xE2\x80\xA6", "import-xhw"});
     out.push_back({ui::Tone::Ok, "\xE2\x9C\x93", std::to_string(s_.animationTables) + " tables d'animation (" + std::to_string(s_.animationEntries)
                                                 + " lignes), " + std::to_string(macros_) + " macros",
                    "Les tables d'animation se modifient ; les macros ont leurs ic\xC3\xB4nes et leur l\xC3\xA9gende.",

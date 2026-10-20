@@ -35,7 +35,7 @@ capture 1126_ihm_01_vue_lotbc_editeur.png
 # un clic sur l'afficheur dans le canevas (40..240 x 590..640) : choisi, le canevas a la main
 vue-clic 140 615
 attendre 2
-touche ctrl+d
+touche ctrl+maj+d
 attendre 4
 capture 1126_ihm_02_dupliquer_deux_dimensions.png
 touche escape

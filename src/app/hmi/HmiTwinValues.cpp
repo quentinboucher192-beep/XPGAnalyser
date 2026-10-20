@@ -375,7 +375,7 @@ bool HmiTwinValues::openContextMenu(std::size_t line, gfx::Point at) {
     sep();
     item(MForce, row ? "Forcer (\xC3\xA0 sa valeur)" : "Forcer les " + std::to_string(free) + " libres (\xC3\xA0 leur valeur)", free > 0,
          "rien de libre \xC3\xA0 forcer");
-    item(MUnforce, row ? "D\xC3\xA9" "forcer" : "D\xC3\xA9" "forcer les " + std::to_string(forced), forced > 0, "rien de forc\xC3\xA9");
+    item(MUnforce, row ? "Rel\xC3\xA2" "cher" : "Rel\xC3\xA2" "cher les " + std::to_string(forced), forced > 0, "rien de forc\xC3\xA9");
     ctxLine_ = line;
     ctxMenu_->setItems(std::move(items));
     auto* root = rootWidget();
@@ -859,7 +859,7 @@ void HmiTwinValues::openKindMenu(std::size_t i, gfx::Point at) {
     menuKey_ = l.key;
     std::vector<ui::PopupMenu::Item> items;
     ui::PopupMenu::Item none;
-    none.label = "aucun (ne bouge pas)";
+    none.label = "Aucun (libre)";
     none.id = 0;
     items.push_back(none);
     int id = 1;
@@ -2170,7 +2170,7 @@ bool TwinValuesController::setForced(const std::string& name, const std::string&
     const std::string what = r->variable.empty() ? r->address : r->variable;
     const auto* e = equipment(name);
     if (v.empty() || lowered(v) == "libre" || lowered(v) == "non") {
-        const bool ok = changeForcings(name, "D\xC3\xA9" "forcer " + what, [&](std::vector<hmi::Forcing>& list, std::string&) {
+        const bool ok = changeForcings(name, "Rel\xC3\xA2" "cher " + what, [&](std::vector<hmi::Forcing>& list, std::string&) {
             list.erase(std::remove_if(list.begin(), list.end(), [&](const hmi::Forcing& f) { return tw::sameCell(f.address, r->address); }), list.end());
             return true;
         }, why);
@@ -2217,7 +2217,7 @@ bool TwinValuesController::forceRows(const std::string& name, const std::vector<
     const auto bank = host() ? host()->twinBank(name) : nullptr;
     const bool low = e->wordOrder != "fort";
     const std::string n = std::to_string(rows.size()) + (rows.size() > 1 ? " valeurs" : " valeur");
-    const bool ok = changeForcings(name, (on ? "Forcer " : "D\xC3\xA9" "forcer ") + n + " de " + name,
+    const bool ok = changeForcings(name, (on ? "Forcer " : "Rel\xC3\xA2" "cher ") + n + " de " + name,
                                    [&](std::vector<hmi::Forcing>& list, std::string& reason) {
         for (const auto& r : rows) {
             list.erase(std::remove_if(list.begin(), list.end(), [&](const hmi::Forcing& f) { return tw::sameCell(f.address, r.address); }),
@@ -2274,7 +2274,7 @@ bool TwinValuesController::unforceAll(std::string* why) {
         if (say) say("Aucune case forc\xC3\xA9" "e.", false);
         return true;
     }
-    auto cmd = hmi::changeProject(doc_, "D\xC3\xA9" "forcer tout", [&](hmi::Project& x) {
+    auto cmd = hmi::changeProject(doc_, "Tout rel\xC3\xA2" "cher", [&](hmi::Project& x) {
         for (auto& q : x.equipments) q.forcings.clear();
     });
     (void)why;

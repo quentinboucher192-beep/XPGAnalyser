@@ -32,6 +32,7 @@
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiComm.hpp"
 #include "../../hmi/HmiCommands.hpp"
+#include "../../hmi/HmiDesign.hpp"   // 1.12.18 : FindHit (Voir les usages)
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -102,6 +103,10 @@ public:
     // 1.12.16 : retirer les corrections (revenir aux adresses calculees) de ces membres ; vide : de tous les
     // membres de la variable. Une commande (un Ctrl+Z). Faux : rien a retirer (`why`).
     bool clearMemberAddresses(hmi::Id, const std::vector<std::string>& relPaths, std::string* why = nullptr);
+    // 1.12.18 (planches 11 et 12) : « Modifier l'adresse dans toutes les cases... » - la formule d'un motif
+    // ("[*].Retour" = "%MW(1000 + 10 * i)", "[*]" = le depart de chaque case) ; les adresses par case qu'il
+    // couvre sont retirees. Une commande (un Ctrl+Z). Faux : l'apercu (hmi::addr::preview) refuse (`why`).
+    bool applyAddressFormula(hmi::Id, const std::string& pattern, const std::string& formula, std::string* why = nullptr);
     // 1.11.8 : des membres INTERNES (gardes dans l'IHM : l'equipement ne les lit ni ne les ecrit) ou
     // ATTRIBUES a l'equipement de la structure ; `allElements` : le meme membre dans toutes les cases
     // du tableau ([0].NOM -> [*].NOM). Une seule commande (un Ctrl+Z).
@@ -168,6 +173,10 @@ public:
         std::function<void(const std::string&, const std::string&, const std::string&, ui::PathBrowse,
                            std::function<void(const std::string&)>)>   askPath;
         std::function<void(const std::string&, const std::string&, bool)> report;
+        // 1.12.18 : « Voir les usages » - aller a un emploi (la vue, l'objet ; kNoId : la vue elle-meme).
+        std::function<void(hmi::Id view, hmi::Id object)>               openUse;
+        // 1.12.18 (planche 11) : « Modifier l'adresse dans toutes les cases... » - la fenetre (l'hote).
+        std::function<void(hmi::Id variable, const std::string& member)> editAddresses;
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
 
@@ -222,6 +231,7 @@ protected:
     void onPaint(const ui::PaintContext&) override;
 
 private:
+    std::vector<hmi::design::FindHit> usesOfMenu_;   // 1.12.18 : les emplois que montre le menu (Voir les usages)
     void rebuildProperties();
     void say(std::string text, bool warning = false);
     void apply(core::CommandPtr cmd);
@@ -310,6 +320,7 @@ public:
     bool setMember(hmi::Id, std::size_t index, const hmi::TypeMember&, std::string* why = nullptr);
     bool removeMember(hmi::Id, std::size_t index);
     bool moveMember(hmi::Id, std::size_t index, int delta);
+    bool duplicateMember(hmi::Id, std::size_t index);   // 1.12.18 : la copie juste apres (Niveau_copie)
 
     [[nodiscard]] hmi::Id selectedType() const;
     [[nodiscard]] int     selectedMember() const;

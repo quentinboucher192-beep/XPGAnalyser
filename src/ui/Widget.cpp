@@ -190,6 +190,21 @@ namespace ui {
 
     void Widget::releaseFocus() { setFocusedInternal(false); }
 
+    Widget* Widget::focusedIn(Widget& root) noexcept {
+        if (root.focused_) return &root;
+        for (auto& c : root.children_)
+            if (Widget* f = focusedIn(*c)) return f;
+        return nullptr;
+    }
+
+    bool Widget::inTree(Widget& root, const Widget* w) noexcept {
+        if (!w) return false;
+        if (&root == w) return true;
+        for (auto& c : root.children_)
+            if (inTree(*c, w)) return true;
+        return false;
+    }
+
     // ------------------------------------------------------------------- tree ---
     Widget& Widget::addChild(WidgetPtr child) {
         child->parent_ = this;

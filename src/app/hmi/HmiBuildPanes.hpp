@@ -135,6 +135,10 @@ public:
     // Double-clic : un diagnostic (aller a sa source) ; une ligne du journal qui nomme un element.
     const core::SignalPtr<hmi::pipeline::Diagnostic> diagnosticActivated = core::Signal<hmi::pipeline::Diagnostic>::create();
     const core::SignalPtr<std::string> elementActivated = core::Signal<std::string>::create();
+    // 1.12.18 (planche 13) : « Appliquer la correction » d'un diagnostic (le nom proche, l'element
+    // d'un tableau) - l'ecran ecrit l'expression corrigee (une commande, Ctrl+Z).
+    const core::SignalPtr<hmi::pipeline::Diagnostic> fixRequested = core::Signal<hmi::pipeline::Diagnostic>::create();
+    [[nodiscard]] const hmi::pipeline::Diagnostic* selectedDiagnostic() const;
 
     // ---- 1.11.14 : LA CONSOLE (HmiConsole.hpp) ----
     [[nodiscard]] HmiConsole&       console() noexcept { return console_; }
@@ -177,6 +181,7 @@ private:
     void rebuildConsole();
     void refreshStatus();
     void consoleMenu(int action);
+    void rowMenu(int action);   // 1.12.18 : Sorties et Diagnostics
     [[nodiscard]] bool shown(const Line&) const;
     [[nodiscard]] const ConsoleEntry* selectedConsoleEntry() const;
 

@@ -38,7 +38,7 @@ const std::vector<Shortcut> kTable = {
      "", "file.open"},
     // 1.11 : l'import du .XHW avait Ctrl+H, deja a l'Historique (1.10.1) ; il passe ici.
     {Context::General, "Ctrl+Maj+O",
-     "Importer la configuration mat\xC3\xA9rielle (.XHW) dans le projet ouvert",
+     "Importer la configuration (.XHW) dans le projet ouvert",
      "1.11", "file.importHardware"},
     {Context::General, "Ctrl+N",
      "Nouveau projet",
@@ -103,6 +103,14 @@ const std::vector<Shortcut> kTable = {
     {Context::General, "Alt+\xE2\x86\x90",
      "Retour",
      "", "nav.back"},
+    // 1.12.18 : le menu du clic droit, au clavier.
+    {Context::General, "Maj+F10 / Menu",
+     "Ouvrir le menu du clic droit sous l'\xC3\xA9l\xC3\xA9ment choisi (arbre, tableau, liste)",
+     "1.12.18", ""},
+    {Context::General, "Lettre / D\xC3\xA9" "but / Fin",
+     "Dans un menu : aller \xC3\xA0 l'entr\xC3\xA9" "e soulign\xC3\xA9" "e, \xC3\xA0 la premi\xC3\xA8re, \xC3\xA0 la derni\xC3\xA8re "
+     "(\xE2\x86\x92 ouvre un sous-menu, \xE2\x86\x90 le ferme)",
+     "1.12.18", ""},
     // ---- HmiEditor
     {Context::HmiEditor, "Ctrl+C / Ctrl+V",
      "Copier, coller (animations et actions comprises) ; un tableau : vers Excel, depuis Excel",
@@ -116,6 +124,16 @@ const std::vector<Shortcut> kTable = {
     {Context::HmiEditor, "Alt+glisser",
      "Poser une copie",
      "", ""},
+    // 1.12.18 : un mot, un raccourci (jusqu'a la 1.12.17, Ctrl+D ouvrait la fenetre).
+    {Context::HmiEditor, "Ctrl+D / Ctrl+Maj+D",
+     "Dupliquer tout de suite (\xC3\xA0 c\xC3\xB4t\xC3\xA9) ; ouvrir Dupliquer\xE2\x80\xA6 (rep\xC3\xA8res, indices, pose)",
+     "1.12.18", ""},
+    {Context::HmiEditor, "Ctrl+G / Ctrl+Maj+G",
+     "Grouper, d\xC3\xA9grouper",
+     "1.12.18", ""},
+    {Context::HmiEditor, "Ctrl+Alt+C / Ctrl+Alt+V",
+     "Copier le style, coller le style",
+     "1.12.18", ""},
     {Context::HmiEditor, "\xC3\x89" "chap",
      "Sortir d'un groupe, fermer une liste, annuler une saisie",
      "", ""},

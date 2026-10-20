@@ -18,7 +18,7 @@ objet V_101
 attendre 3
 vue-clic 240 170
 attendre 1
-touche ctrl+d
+touche ctrl+maj+d
 attendre 4
 # Le cas du client : la colonne preremplie, la note bleue, Dupliquer permis.
 dupliquer-verifier

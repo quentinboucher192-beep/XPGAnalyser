@@ -50,6 +50,7 @@
 #include "../hmi/HmiValuePicker.hpp"              // 1.11.3 : le selecteur de valeur
 #include "../../project/EditCommands.hpp"             // 1.11.3 : creer une variable de l'automate
 #include "../hmi/HmiDuplicateDialog.hpp"            // 1.10.2 (chantier D) : "Dupliquer..."
+#include "../hmi/HmiAddressDialog.hpp"              // 1.12.18 : l'adresse dans toutes les cases
 #include "../hmi/HmiFunctionPanes.hpp"
 #include "../hmi/HmiHelpPane.hpp"
 #include "../hmi/HmiTutorial.hpp"
@@ -1292,6 +1293,25 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         if (auto* vars = pane->variablesPane()) {
             HmiVariablesPane::Hosts vh;
             vh.removeVariable = [this](hmi::Id v) { askHmiDeleteVariable(v); };
+            vh.openUse = [this](hmi::Id v, hmi::Id o) { openHmiView(v, -1, o); };   // 1.12.18 : Voir les usages
+            // 1.12.18 (planches 11 et 12) : « Modifier l'adresse dans toutes les cases... » - la fenetre, puis
+            // la formule posee en une commande (un Ctrl+Z).
+            vh.editAddresses = [this, doc](hmi::Id v, const std::string& member) {
+                HmiAddressDialog::Spec s;
+                s.doc = doc;
+                s.variable = v;
+                s.member = member;
+                app_.menus().ShowDialog(std::make_unique<HmiAddressDialog>(std::move(s)), [this, v](const menu::DialogResult& r) {
+                    std::string pattern, formula;
+                    if (!r.accepted() || !HmiAddressDialog::parse(r.payload, pattern, formula)) return;
+                    auto* scripts = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"));
+                    auto* vars = scripts ? scripts->variablesPane() : nullptr;
+                    std::string why;
+                    if ((!vars || !vars->applyAddressFormula(v, pattern, formula, &why)) && status_)
+                        status_->setTransientMessage("Refus\xC3\xA9 : " + (why.empty() ? std::string("le volet des variables est ferm\xC3\xA9") : why), 6.0,
+                                                     ui::StatusBar::Severity::Warning);
+                });
+            };
             vh.showEquipment = [this](const std::string& name) {
                 openHmiPane("communication");
                 if (auto* comm = dynamic_cast<HmiCommPane*>(hmiTab("communication"))) {
@@ -1927,6 +1947,7 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
                 [this] { return app_.project(); });
         made->setStyleAsker([this, viewId] { askHmiStyle(viewId); });     // lot 12
         made->setDuplicateAsker([this, viewId] { askHmiDuplicate(viewId); });   // 1.10.2 (chantier D)
+        made->setHelpOpener([this](const std::string& topic) { openHmiHelp(topic); });   // 1.12.18 : Aide sur ...
         made->setTemplateAsker([this, viewId] { askHmiSaveTemplate(viewId); });   // lot 20
         // 1.11.22 : Nouvelle fonction d'un symbole demande son nom (un nom pris : une surcharge).
         if (auto* fns = made->symbolFunctions()) {
@@ -3595,7 +3616,7 @@ bool MainAnalysisScreen::openHmiHelpNow() {
 // ("Decouvrir l'IHM", TutorialWorkspace.cpp), a jour des lots 10 a 21.
 void MainAnalysisScreen::startHmiTutorial() { startTrail("decouvrir", false); }
 
-// 1.10.2 (chantier D) : "DUPLIQUER..." - Ctrl+D, la barre d'outils. La fenetre
+// 1.10.2 (chantier D) : "DUPLIQUER..." - Ctrl+Maj+D, la barre d'outils. La fenetre
 // rend un plan (hmi::dup) ; il se joue en UNE commande : Ctrl+Z retire tout.
 void MainAnalysisScreen::askHmiDuplicate(std::uint64_t viewId) {
     // 1.10.4 : le nombre de copies de depart (0 : "Remplacer..." de Compiler), une fois.

@@ -23,7 +23,7 @@ propriete "Libellé" "$Repere$"
 attendre 2
 vue-clic 240 170
 attendre 1
-touche ctrl+d
+touche ctrl+maj+d
 attendre 3
 dupliquer-copies 3
 dupliquer-serie "$Repere$" "V-1{n}" "01"

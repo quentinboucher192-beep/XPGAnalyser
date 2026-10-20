@@ -29,7 +29,7 @@ objet Text_2
 attendre 3
 vue-clic 120 72
 attendre 1
-touche ctrl+d
+touche ctrl+maj+d
 attendre 4
 dupliquer-copies 3
 attendre 2

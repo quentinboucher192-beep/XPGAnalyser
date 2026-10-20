@@ -6,7 +6,7 @@
 //  repere se voit :
 //    - sa pastille (fx pleine, ou fx en creux d'un texte) passe en AMBRE et dit "$" ;
 //    - chaque repere est SURLIGNE en ambre dans la valeur ;
-//    - l'infobulle : "Repere $Vanne$ : Dupliquer... (Ctrl+D) le remplace. Tant
+//    - l'infobulle : "Repere $Vanne$ : Dupliquer... (Ctrl+Maj+D) le remplace. Tant
 //      qu'il reste, Compiler le signale et la simulation ne calcule pas cette case."
 //  ui/ ne connait pas le modele : l'application donne le lecteur de reperes
 //  (hmi::dup::markersIn, HmiEditor) ; sans lui, aucune case n'a de repere.

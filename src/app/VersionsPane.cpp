@@ -386,7 +386,7 @@ VersionsPane::VersionsPane(std::string id, std::string folder) : ui::Widget(std:
     tools->add(ARestore, HmiGlyph::Refresh,
                "Restaurer la version choisie : le projet revient \xC3\xA0 cet \xC3\xA9tat ; une version \xC2\xAB Avant restauration \xC2\xBB est cr\xC3\xA9\xC3\xA9" "e d'abord",
                "Restaurer");
-    tools->add(AExport, HmiGlyph::Export, "Exporter la version choisie en .zip (dans exports/)", "Exporter (.zip)");
+    tools->add(AExport, HmiGlyph::Export, "Exporter la version choisie en .zip (dans exports/)", "Exporter (.zip)\xE2\x80\xA6");
     tools->add(AExtract, HmiGlyph::Import, "Extraire la version choisie dans un dossier : un projet complet, \xC3\xA0 ouvrir \xC3\xA0 c\xC3\xB4t\xC3\xA9",
                "Extraire dans un dossier");
     tools->add(ADelete, HmiGlyph::Delete, "Supprimer la version choisie (son contenu partag\xC3\xA9 reste pour les autres)", "Supprimer");

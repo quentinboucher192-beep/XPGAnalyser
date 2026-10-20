@@ -314,7 +314,7 @@ public:
         help_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Aide", base + ".aide")));
         help_->setIcon(ui::Icon::Info);
         help_->setTooltip("L'aide de la macro : ce qu'elle demande, ce qu'elle fait (F1)");
-        fav_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Favorite", base + ".favori")));
+        fav_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("\xC3\x89pingler", base + ".favori")));
         fav_->setIcon(ui::Icon::Star);
         links_ += launch_->clicked->connect([this] { pane_.launch(pane_.current_); });
         links_ += edit_->clicked->connect([this] { pane_.runAction(MacrosPane::AEdit); });
@@ -335,9 +335,9 @@ public:
             launch_->setTooltip(project ? "Le formulaire de la macro, puis l'aper\xC3\xA7u : rien n'est modifi\xC3\xA9 avant Appliquer (Entr\xC3\xA9" "e)"
                                         : "Ouvre d'abord un projet : une macro travaille sur le projet ouvert");
             const bool fav = pane_.memory_ && pane_.memory_->favourite(pane_.current_);
-            fav_->setText(fav ? "Favorite" : "Favorite");
+            fav_->setText(fav ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler");
             fav_->setIcon(fav ? ui::Icon::StarFilled : ui::Icon::Star);
-            fav_->setTooltip(fav ? "Retirer des favorites" : "Garder dans les favorites (\xE2\x98\x85 dans la liste)");
+            fav_->setTooltip(fav ? "D\xC3\xA9s\xC3\xA9pingler : elle quitte le filtre \xC3\x89pingl\xC3\xA9" "es" : "\xC3\x89pingler : \xE2\x98\x85 dans la liste, et le filtre \xC3\x89pingl\xC3\xA9" "es");
             if (pane_.memory_)
                 for (const auto& p : pane_.memory_->profiles(pane_.current_)) {
                     auto b = std::make_unique<ui::Button>(p, id() + ".profil." + std::to_string(profiles_.size()));
@@ -947,7 +947,7 @@ MacrosPane::MacrosPane(std::string id, std::string libsRoot, mm::MacroMemory* me
     tools->add(ADelete, HmiGlyph::Delete, "Supprimer (Suppr) : la macro va dans la corbeille, Restaurer la remet", "Supprimer");
     tools->add(ARestore, HmiGlyph::Undo, "Restaurer la macro de la corbeille, dans son dossier", "Restaurer");
     tools->separator();
-    tools->add(AFavourite, HmiGlyph::Star, "Favorite : \xE2\x98\x85 dans la liste, et le filtre Favorites", "");
+    tools->add(AFavourite, HmiGlyph::Star, "\xC3\x89pingler : \xE2\x98\x85 dans la liste, et le filtre \xC3\x89pingl\xC3\xA9" "es", "");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(ADuplicate, [this] { return !selectedMacro().empty(); });
     tools_->setEnabledWhen(ARename, [this] { return !selectedMacro().empty() || !selectedFolder().empty(); });
@@ -961,7 +961,7 @@ MacrosPane::MacrosPane(std::string id, std::string libsRoot, mm::MacroMemory* me
     search->setPlaceholder("Rechercher une macro\xE2\x80\xA6");
     search_ = &static_cast<ui::InputText&>(addChild(std::move(search)));
     links_ += search_->textChanged->connect([this](const std::string&) { applyFilter(); });
-    for (const char* label : {"Toutes", "\xE2\x98\x85 Favorites", "R\xC3\xA9" "centes"}) {
+    for (const char* label : {"Toutes", "\xE2\x98\x85 \xC3\x89pingl\xC3\xA9" "es", "R\xC3\xA9" "centes"}) {
         auto t = std::make_unique<ui::ToggleButton>(label, base + ".filtre." + std::to_string(chips_.size()));
         auto* raw = &static_cast<ui::ToggleButton&>(addChild(std::move(t)));
         const int index = static_cast<int>(chips_.size());
@@ -1821,7 +1821,7 @@ void MacrosPane::showContextMenu(ui::NodeId n, gfx::Point at) {
         items.push_back({"Supprimer (dans la corbeille)", "Suppr", "", ui::Icon::Close, true, false, ADelete});
         sep();
         const bool fav = memory_ && memory_->favourite(treeModel_->text(n));
-        items.push_back({fav ? "Retirer des favorites" : "Favorite", "", "", fav ? ui::Icon::StarFilled : ui::Icon::Star, true, false, AFavourite});
+        items.push_back({fav ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler", "", "", ui::Icon::Pin, true, false, AFavourite});
     } else if (kind == MacroTreeModel::KFolder) {
         items.push_back({"Nouvelle macro ici\xE2\x80\xA6", "", "", ui::Icon::Document, true, false, ANewMacro});
         items.push_back({"Nouveau dossier ici\xE2\x80\xA6", "", "", ui::Icon::Folder, true, false, ANewFolder});

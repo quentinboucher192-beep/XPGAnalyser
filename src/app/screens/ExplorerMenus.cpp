@@ -267,12 +267,12 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     const auto addRename = [&](std::string label, std::function<void()> fn, std::string why = {}) {
         if (why.empty()) keys.rename = fn;
         else keys.renameWhy = why;
-        m.add(std::move(label), Icon::Document, std::move(fn), "F2", std::move(why));
+        m.add(std::move(label), Icon::Rename, std::move(fn), "F2", std::move(why));
     };
     const auto addRemove = [&](std::string label, std::function<void()> fn, std::string why = {}) {
         if (why.empty()) keys.remove = fn;
         else keys.removeWhy = why;
-        m.add(std::move(label), Icon::Close, std::move(fn), "Suppr", std::move(why));
+        m.add(std::move(label), Icon::Delete, std::move(fn), "Suppr", std::move(why));
     };
     const auto rename = [this](std::string what, std::string name) {
         return [this, what, name] { askRename(what, name); };
@@ -660,7 +660,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         const auto pinned = target != ui::kInvalidNode ? target : node;
         if (treePinnable(pinned)) {
             const bool on = isTreePinned(pinned);
-            m.add(on ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler en haut", Icon::Star, [this, pinned, on] { (void)pinTreeNode(pinned, !on); });
+            m.add(on ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler", Icon::Pin, [this, pinned, on] { (void)pinTreeNode(pinned, !on); });
             m.separator();
         }
     }
@@ -680,7 +680,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         m.separator();
         // 1.8.0 : importer (suivi par sa fenetre, en tache de fond), exporter lisible.
         m.add("Importer un .XPG (nouveau MAST)" + kDots, Icon::Program, trigger("file.importMast"), {}, noDoc);
-        m.add("Importer la configuration mat\xC3\xA9rielle (.XHW)" + kDots, Icon::Rack, [this] { importHardwareIntoProject(); }, {}, noDoc);
+        m.add("Importer la configuration (.XHW)" + kDots, Icon::Import, [this] { importHardwareIntoProject(); }, "Ctrl+Maj+O", noDoc);
         m.separator();
         m.add("Exporter le programme lisible" + kDots, Icon::Document, [this] { askProgramExport(0); }, "Ctrl+Maj+E",
               project ? std::string{} : "aucun projet");
@@ -699,7 +699,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         m.separator();
         m.add("+ Rack" + kDots, Icon::Rack, trigger("create.rack"), {}, noDoc);
         m.add("+ Module" + kDots, Icon::Module, trigger("create.module"), {}, noDoc);
-        m.add("Importer le .XHW" + kDots, Icon::Open, [this] { importHardwareIntoProject(); });
+        m.add("Importer la configuration (.XHW)" + kDots, Icon::Import, [this] { importHardwareIntoProject(); }, "Ctrl+Maj+O");
         break;
 
     case NK::TaskFolder: {
@@ -723,7 +723,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         const std::string name = project && index < project->tasks.size() ? text(project->tasks[index].name) : std::string{};
         m.add("Ouvrir", Icon::Open, [this, node] { onTreeSelection(node); });
         m.add("Voir l'ordre d'ex\xC3\xA9" "cution", Icon::Section, apiPane("ordre"));
-        m.add("Simuler", Icon::Play, [this] { runSimulationTransport("sim.run"); }, {},
+        m.add("Simuler", Icon::Play, [this] { runSimulationTransport("sim.run"); }, "F5",
               app_.simulation().state() == SimulationHost::State::Running ? "d\xC3\xA9j\xC3\xA0 en marche" : "");
         m.separator();
         addRemove("Supprimer la t\xC3\xA2" "che" + kDots,
@@ -796,7 +796,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     case NK::DerivedField: {
         if (!project || index >= project->variables.size()) break;
         m.add("Ouvrir", Icon::Open, [this, node] { (void)routeApiNode(node); });
-        m.add("Copier le nom", Icon::Document, copy(text(project->variables[index].name)));
+        m.add("Copier le nom", Icon::Copy, copy(text(project->variables[index].name)));
         if (treeModel_ && ProjectTreeModel::holdsMembers(node) && explorer_)
             m.add(explorer_->isExpanded(node) ? "Replier ses membres" : "D\xC3\xA9plier ses membres", Icon::Expand,
                   [this, node] { explorer_->toggle(node); });
@@ -876,7 +876,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
             tableMenu(selectedLines());
             simulationItems(owner + "." + name);
         }
-        m.add("Copier le nom", Icon::Document, copy(unit ? owner + "." + name : name));
+        m.add("Copier le nom", Icon::Copy, copy(unit ? owner + "." + name : name));
         m.separator();
         if (unit) addRename("Renommer" + kDots, rename("variable", owner + "." + name), noDoc);
         else keys.renameWhy = "une variable d'un bloc DFB ne se renomme pas d'ici";
@@ -962,7 +962,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         m.separator();
         tableMenu(selectedLines());
         simulationItems(name);
-        m.add("Copier le nom", Icon::Document, copy(name));
+        m.add("Copier le nom", Icon::Copy, copy(name));
         m.separator();
         addRename("Renommer" + kDots, rename("variable", name), noDoc);
         addRemove("Supprimer" + kDots, [this, at] { confirmAndDelete(domain::EntityKind::Variable, at); }, noDoc);
@@ -985,7 +985,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
             }
         }
         m.add("Ouvrir", Icon::Open, [this, node] { (void)routeApiNode(node); });
-        m.add("Copier le chemin", Icon::Document, copy(full));
+        m.add("Copier le chemin", Icon::Copy, copy(full));
         if (usable && !group) {
             m.separator();
             tableMenu(selectedLines());
@@ -1025,7 +1025,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         m.separator();
         m.add("+ Variable de l'automate" + kDots, Icon::Variable, tablesDo(table, AnimationTablesPane::AAddApi), {}, noDoc);
         if (hmiDoc) m.add("+ Variable IHM" + kDots, Icon::Variable, tablesDo(table, AnimationTablesPane::AAddHmi), {}, noDoc);
-        m.add("Dupliquer", Icon::Document, tablesDo(table, AnimationTablesPane::ADuplicate), {}, noDoc);
+        m.add("Dupliquer", Icon::Duplicate, tablesDo(table, AnimationTablesPane::ADuplicate), {}, noDoc);
         m.separator();
         addRename("Renommer" + kDots, rename("table", name), noDoc);
         addRemove("Supprimer" + kDots,
@@ -1054,9 +1054,9 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         m.add("Ouvrir la vue d'ensemble", Icon::Info, [this] { (void)openSimCenter("ensemble"); }, "F9");
         m.separator();
         m.add(running ? "Pause" : "Simuler", running ? Icon::Pause : Icon::Play,
-              [this, running] { runSimulationTransport(running ? "sim.pause" : "sim.run"); }, {}, haltedWhy);
+              [this, running] { runSimulationTransport(running ? "sim.pause" : "sim.run"); }, running ? std::string{} : std::string("F5"), haltedWhy);
         m.add("Un cycle", Icon::StepOnce, [this] { runSimulationTransport("sim.step"); }, {}, haltedWhy);
-        m.add("Arr\xC3\xAAter", Icon::Stop, [this] { runSimulationTransport("sim.stop"); }, {},
+        m.add("Arr\xC3\xAAter", Icon::Stop, [this] { runSimulationTransport("sim.stop"); }, "Maj+F5",
               attached && state != State::Stopped ? std::string{} : "d\xC3\xA9j\xC3\xA0 arr\xC3\xAAt\xC3\xA9" "e");
         m.separator();
         m.add("Exporter les for\xC3\xA7" "ages" + kDots, Icon::Export, [this] {
@@ -1131,9 +1131,9 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
             break;
         }
         m.add(running ? "Pause" : "Simuler", running ? Icon::Pause : Icon::Play,
-              [this, running] { simCenterGo(running ? "sim.pause" : "sim.run"); }, {}, haltedWhy);
+              [this, running] { simCenterGo(running ? "sim.pause" : "sim.run"); }, running ? std::string{} : std::string("F5"), haltedWhy);
         m.add("Un cycle", Icon::StepOnce, [this] { simCenterGo("sim.step"); }, {}, haltedWhy);
-        m.add("Arr\xC3\xAAter", Icon::Stop, [this] { simCenterGo("sim.stop"); }, {},
+        m.add("Arr\xC3\xAAter", Icon::Stop, [this] { simCenterGo("sim.stop"); }, "Maj+F5",
               attached && state != State::Stopped ? std::string{} : "d\xC3\xA9j\xC3\xA0 arr\xC3\xAAt\xC3\xA9" "e");
         break;
     }
@@ -1232,7 +1232,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         });
         m.add("Ses scripts", Icon::Code, [this, viewId] { openHmiScripts(viewId); });
         m.separator();
-        m.add("Dupliquer", Icon::Document, [this, viewId] {
+        m.add("Dupliquer", Icon::Duplicate, [this, viewId] {
             auto doc = app_.hmi();
             if (!doc) return;
             hmi::Id made = hmi::kNoId;
@@ -1250,7 +1250,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
                                              StatusBar::Severity::Success);
             }
         });
-        m.add("Dupliquer en rempla\xC3\xA7" "ant" + kDots, Icon::Document, [this, viewId] { askHmiDuplicateReplace(viewId); });
+        m.add("Dupliquer en rempla\xC3\xA7" "ant" + kDots, Icon::Duplicate, [this, viewId] { askHmiDuplicateReplace(viewId); });
         if (view->role == "vue")
             m.add("Vue de d\xC3\xA9marrage", Icon::Play,
                   [this, viewId] {
@@ -1293,7 +1293,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         const auto viewId = treeModel_ ? treeModel_->hmiViewOf(node) : 0;
         const auto* view = hmiDoc ? hmiDoc->project.view(static_cast<hmi::Id>(viewId)) : nullptr;
         const auto* object = view && treeModel_ ? view->object(static_cast<hmi::Id>(treeModel_->hmiObjectOf(node))) : nullptr;
-        if (object) m.add("Copier le nom", Icon::Document, copy(view->name + "." + object->name));
+        if (object) m.add("Copier le nom", Icon::Copy, copy(view->name + "." + object->name));
         break;
     }
 
@@ -1372,7 +1372,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         }, {}, name.empty() ? "variable introuvable" : "");
         m.separator();
         tableMenu(selectedLines());
-        if (!name.empty()) m.add("Copier le nom", Icon::Document, copy(name));
+        if (!name.empty()) m.add("Copier le nom", Icon::Copy, copy(name));
         m.separator();
         addRename("Renommer" + kDots, rename("ihm-variable", name), name.empty() ? "variable introuvable" : "");
         addRemove("Supprimer" + kDots, [this, id] { askHmiDeleteVariable(id); });
@@ -1380,7 +1380,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     }
     case NK::HmiUsedVariable: {
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
-        if (treeModel_) m.add("Copier le chemin", Icon::Document, copy(treeModel_->hmiUsedPathOf(node)));
+        if (treeModel_) m.add("Copier le chemin", Icon::Copy, copy(treeModel_->hmiUsedPathOf(node)));
         break;
     }
     case NK::HmiTypesFolder:
@@ -1420,7 +1420,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
                     status_->setTransientMessage("Aucun script en cours d'\xC3\xA9" "dition : \xC2\xAB " + what + " \xC2\xBB est copi\xC3\xA9", 6.0,
                                                  StatusBar::Severity::Info);
             });
-            m.add("Copier \xC2\xAB " + what + " \xC2\xBB", Icon::Document, copy(what));
+            m.add("Copier \xC2\xAB " + what + " \xC2\xBB", Icon::Copy, copy(what));
         }
         addRename("Renommer" + kDots, {}, "natif : verrouill\xC3\xA9");
         addRemove("Supprimer", {}, "natif : verrouill\xC3\xA9");
@@ -1428,7 +1428,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     }
     case NK::HmiSysVar: {
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
-        if (index < hmi::pub::kSysVarCount) m.add("Copier le chemin", Icon::Document, copy("SYS." + std::string(hmi::pub::kSysVars[index].name)));
+        if (index < hmi::pub::kSysVarCount) m.add("Copier le chemin", Icon::Copy, copy("SYS." + std::string(hmi::pub::kSysVars[index].name)));
         break;
     }
     case NK::HmiInstViewVar:
@@ -1451,7 +1451,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
                 break;
             }
         }
-        if (!path.empty()) m.add("Copier le chemin", Icon::Document, copy(path));
+        if (!path.empty()) m.add("Copier le chemin", Icon::Copy, copy(path));
         break;
     }
     // 1.11.1 (decision 108) : un parametre d'instance, une variable du groupe d'alarmes,
@@ -1461,7 +1461,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     case NK::HmiInstAlarmVar: {
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
         if (const auto path = treeModel_ ? treeModel_->hmiInstPathOf(node) : std::string{}; !path.empty())
-            m.add("Copier le chemin", Icon::Document, copy(path));
+            m.add("Copier le chemin", Icon::Copy, copy(path));
         break;
     }
 
@@ -1527,7 +1527,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     // =====================================================================================
     case NK::VersionsFolder:
         m.add("Ouvrir", Icon::Open, [this] { openVersions(); });
-        m.add("Cr\xC3\xA9" "er une version" + kDots, Icon::Save, [this] { askCreateVersion(); }, {},
+        m.add("Cr\xC3\xA9" "er une version" + kDots, Icon::History, [this] { askCreateVersion(); }, "Ctrl+Alt+S",
               app_.projectFolder().empty() ? "enregistre d'abord le projet en dossier" : "");
         break;
     case NK::VersionItem: {
@@ -1540,7 +1540,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
             if (treeModel_)
                 for (const auto& row : treeModel_->versions())
                     if (row.number > last) last = row.number;
-            m.add("Cr\xC3\xA9" "er une version" + kDots, Icon::Save, [this] { askCreateVersion(); }, {},
+            m.add("Cr\xC3\xA9" "er une version" + kDots, Icon::History, [this] { askCreateVersion(); }, "Ctrl+Alt+S",
                   app_.projectFolder().empty() ? "enregistre d'abord le projet en dossier" : "");
             m.add("Comparer \xC3\xA0 la derni\xC3\xA8re version", Icon::Search, [this, last] { openVersionCompare(last, 0); }, {},
                   last > 0 ? std::string{} : "aucune version encore");
@@ -1548,7 +1548,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         }
         m.add("Comparer avec le travail en cours", Icon::Search, [this, number] { openVersionCompare(number, 0); });
         m.add("Restaurer" + kDots, Icon::History, [this, number] { askRestoreVersion(number); });
-        m.add("Exporter (zip)", Icon::Export, [this, number] { exportVersion(number); });
+        m.add("Exporter (.zip)" + kDots, Icon::Export, [this, number] { exportVersion(number); });
         m.add("Extraire dans un dossier" + kDots, Icon::Folder, [this, number] { askExtractVersion(number); });
         m.separator();
         addRemove("Supprimer" + kDots, [this, number] { askDeleteVersion(number); });
@@ -1584,7 +1584,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
             };
             m.add("G\xC3\xA9n\xC3\xA9rer", Icon::Analyze, run(pl::Mode::Generate), {}, busyWhy);
             m.add("R\xC3\xA9g\xC3\xA9n\xC3\xA9rer", Icon::Refresh, run(pl::Mode::Regenerate), {}, busyWhy);
-            m.add("Compiler", Icon::Code, run(pl::Mode::Compile), {},
+            m.add("Compiler", Icon::Code, run(pl::Mode::Compile), "F7",
                   busy ? busyWhy : !target.code ? std::string("rien \xC3\xA0 compiler ici (pas de code)") : std::string{});
             m.add("G\xC3\xA9n\xC3\xA9rer et compiler", Icon::Play, run(pl::Mode::GenerateCompile), {},
                   busy ? busyWhy : !target.code ? std::string("rien \xC3\xA0 compiler ici : G\xC3\xA9n\xC3\xA9rer suffit") : std::string{});
@@ -1604,7 +1604,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
             for (const auto& d : info.diagnostics)
                 if (d.blocking())
                     errors += (d.code.empty() ? std::string{} : d.code + " ") + d.path + (d.line ? ", ligne " + std::to_string(d.line) : std::string{}) + " : " + d.message + "\n";
-            more.push_back(m.make("Copier les erreurs", Icon::Document, errors.empty() ? std::function<void()>{} : copy(errors), {},
+            more.push_back(m.make("Copier les erreurs", Icon::Copy, errors.empty() ? std::function<void()>{} : copy(errors), {},
                                   errors.empty() ? std::string("aucune erreur") : std::string{}));
             const std::string artifact = info.artifact;
             more.push_back(m.make("Ouvrir l'artefact g\xC3\xA9n\xC3\xA9r\xC3\xA9", Icon::Document,

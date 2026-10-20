@@ -1059,7 +1059,7 @@ void TabArea::paintDrag(const PaintContext& ctx) const {
     ctx.r.drawText({x, chip.y + (chip.h - ctx.r.lineHeight(font)) * 0.5f}, t->title, font, c.text);
     ctx.r.popClip();
     if (drop_.kind == DropKind::Outside)
-        label({chip.x, chip.bottom() + 6.f, chip.w, 26.f}, "Rel\xC3\xA2" "che : d\xC3\xA9tacher dans une fen\xC3\xAAtre");
+        label({chip.x, chip.bottom() + 6.f, chip.w, 26.f}, "Rel\xC3\xA2" "che : ouvrir dans une fen\xC3\xAAtre");
 }
 
 } // namespace ui

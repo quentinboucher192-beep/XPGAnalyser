@@ -836,6 +836,25 @@ namespace ui {
     //     nothing. disabledReason is shown next to the entry, so "Delete - still
     //     used by Gaz_1.Step" answers the question instead of raising it.
     // ---------------------------------------------------------------------------
+    // 1.12.18 : LE MENU DEMANDE AU CLAVIER. Le widget qui recoit Maj+F10 ou la
+    // touche Menu (l'arbre, un tableau, une barre d'onglets, le canevas) emet sa
+    // demande habituelle dans cette portee : le menu que l'ecran ouvre alors
+    // s'ouvre comme au clavier (la premiere entree prete, les lettres
+    // soulignees), sans que chaque ecran ait a le savoir.
+    class KeyboardMenuScope {
+    public:
+        KeyboardMenuScope() noexcept;
+        ~KeyboardMenuScope();
+        KeyboardMenuScope(const KeyboardMenuScope&) = delete;
+        KeyboardMenuScope& operator=(const KeyboardMenuScope&) = delete;
+        [[nodiscard]] static bool active() noexcept;
+    };
+
+    // 1.12.18 : le menu du clic droit, au clavier - un clic droit a `at` (dans
+    // `target`), envoye depuis le haut de l'arbre des widgets dans une portee
+    // KeyboardMenuScope : chaque ecran ouvre le menu qu'il ouvre deja a la souris.
+    void openContextMenuAt(Widget& target, gfx::Point at);
+
     class PopupMenu : public Widget {
     public:
         struct Item {
@@ -852,12 +871,20 @@ namespace ui {
             // Lot 7 : UN SOUS-MENU. Non vide : l'entree porte une fleche a droite,
             // et la survoler (ou la cliquer, ou fleche droite, ou Entree) ouvre
             // ces entrees a cote d'elle. Elle-meme ne se choisit pas : itemChosen
-            // rend l'id de l'entree choisie dans le sous-menu. Un seul niveau (les
-            // enfants d'un enfant sont ignores).
+            // rend l'id de l'entree choisie dans le sous-menu. 1.12.18 : a plusieurs
+            // niveaux (Inserer > Signalisation > Voyant) - un enfant peut avoir ses
+            // enfants.
             std::vector<Item> children{};
             // 1.11.3 : une icone dessinee par l'appelant (le carre de legende d'une
             // case) a la place de `icon`, dans la meme gouttiere.
             std::function<void(const PaintContext&, gfx::Rect)> paintIcon{};
+            // 1.12.18 : UNE CASE A COCHER (checkable : une case dans la gouttiere,
+            // cochee si checked - Verrouille, Grille) ou UN CHOIX parmi d'autres
+            // (radio : un point devant celui qui est pris - 100 %, le calque). Le
+            // menu ne coche rien lui-meme : il rend l'id, l'appelant bascule.
+            bool        checkable{ false };
+            bool        checked{ false };
+            bool        radio{ false };
         };
 
         explicit PopupMenu(std::string id = {});
@@ -865,17 +892,38 @@ namespace ui {
         void setItems(std::vector<Item> items);
         // `surface` is the window size, used to keep the menu on screen.
         void openAt(gfx::Point where, gfx::Size surface);
+        // 1.12.18 : ouvert au clavier (Maj+F10, la touche Menu) - la premiere
+        // entree en surbrillance et les lettres soulignees d'emblee.
+        void openFromKeyboard(gfx::Point where, gfx::Size surface);
         void close();
         [[nodiscard]] bool isOpen() const noexcept { return open_; }
 
-        // Lot 7 : le sous-menu ouvert - le rang de son entree (-1 : aucun). Pour
-        // les scripts et les tests : l'ouvrir par programme (faux : pas une entree
-        // a sous-menu, ou grisee), son cadre, et ou est dessinee chacune de ses
-        // entrees (comme itemRect).
-        [[nodiscard]] int openedSubmenu() const noexcept { return submenu_; }
+        // Lot 7 : le sous-menu ouvert (le premier niveau) - le rang de son entree
+        // (-1 : aucun). Pour les scripts et les tests : l'ouvrir par programme
+        // (faux : pas une entree a sous-menu, ou grisee), son cadre, et ou est
+        // dessinee chacune de ses entrees (comme itemRect).
+        [[nodiscard]] int openedSubmenu() const noexcept { return path_.empty() ? -1 : path_.front(); }
         bool openSubmenu(std::size_t index);
         [[nodiscard]] gfx::Rect submenuRect() const;
         [[nodiscard]] gfx::Rect subItemRect(std::size_t index) const;
+
+        // 1.12.18 : LES NIVEAUX. La colonne 0 est le menu ; la colonne k, le
+        // sous-menu ouvert depuis la colonne k-1. Pour les scripts et les essais.
+        [[nodiscard]] std::size_t columnCount() const noexcept { return open_ ? path_.size() + 1 : 0; }
+        [[nodiscard]] const std::vector<Item>& columnItems(std::size_t column) const;
+        [[nodiscard]] gfx::Rect columnRect(std::size_t column) const;
+        [[nodiscard]] gfx::Rect columnItemRect(std::size_t column, std::size_t index) const;
+        [[nodiscard]] int highlightedIn(std::size_t column) const noexcept;
+        // Ouvre le sous-menu de l'entree `index` de la colonne `column` (les
+        // niveaux plus profonds se referment) ; faux : pas de sous-menu, grisee.
+        bool openSubmenuAt(std::size_t column, std::size_t index);
+        // Un menu plus haut que l'ecran defile : fait venir l'entree en vue.
+        void revealItem(std::size_t column, std::size_t index);
+        [[nodiscard]] bool scrollable(std::size_t column) const;
+        [[nodiscard]] float scrollOffset(std::size_t column) const noexcept;
+        // La lettre de l'entree au clavier (minuscule ou chiffre ; 0 : aucune).
+        [[nodiscard]] char mnemonic(std::size_t column, std::size_t index) const;
+        [[nodiscard]] bool showsKeyboardCues() const noexcept { return cues_; }
 
         [[nodiscard]] bool      requestsOverlayPass() const override { return open_; }
         [[nodiscard]] gfx::Rect eventBounds() const override;
@@ -884,11 +932,11 @@ namespace ui {
         // Geometry, exposed for tests: a menu that runs off the screen is a defect
         // that only shows up on one screen size, so it is asserted rather than
         // eyeballed.
-        [[nodiscard]] gfx::Rect popupRect() const;
+        [[nodiscard]] gfx::Rect popupRect() const { return columnRect(0); }
         // The entries and where each one is drawn: the scripts click an entry by
         // its label, like a pointer would (lot 18).
         [[nodiscard]] const std::vector<Item>& items() const noexcept { return items_; }
-        [[nodiscard]] gfx::Rect itemRect(std::size_t index) const;
+        [[nodiscard]] gfx::Rect itemRect(std::size_t index) const { return columnItemRect(0, index); }
 
         // Carries the Item::id, not the row: inserting a separator must not
         // renumber the actions the caller connected.
@@ -900,24 +948,31 @@ namespace ui {
         EventResult onEvent(const InputEvent&) override;
 
     private:
-        [[nodiscard]] int  itemAt(gfx::Point global) const;
-        void               moveHighlight(int delta);
-        [[nodiscard]] float itemHeight(std::size_t i) const;
-        // Lot 7 : le sous-menu.
-        [[nodiscard]] int  subItemAt(gfx::Point global) const;
-        void               moveSubHighlight(int delta);
-        void               closeSubmenu();
-        [[nodiscard]] bool hasSubmenu(int index) const noexcept;
+        static constexpr int kStripUp = -2;     // la bande du haut d'une colonne qui defile
+        static constexpr int kStripDown = -3;   // celle du bas
+        [[nodiscard]] int   columnAt(gfx::Point global) const;
+        [[nodiscard]] int   rowAt(std::size_t column, gfx::Point global) const;
+        [[nodiscard]] float rowsHeight(std::size_t column) const;
+        [[nodiscard]] float maxScroll(std::size_t column) const;
+        void scrollBy(std::size_t column, float dy);
+        void moveHot(std::size_t column, int delta);
+        void setHot(std::size_t column, int index);
+        void jumpToLetter(std::size_t column, char letter);
+        void closeFrom(std::size_t column);     // referme les colonnes >= column (>= 1)
+        void choose(int id);
+        void resetLevels();
 
-        std::vector<Item> items_;
-        gfx::Point        anchor_{};
-        gfx::Size         surface_{};
-        int               highlighted_{ -1 };
-        bool              open_{ false };
-        mutable float     rowHeight_{ 24.f };   // cached from the theme at paint time
-        int               submenu_{ -1 };        // lot 7 : l'entree dont le sous-menu est ouvert
-        int               subHighlighted_{ -1 }; // l'entree survolee du sous-menu
-        bool              subKeyboard_{ false }; // les fleches haut / bas vont au sous-menu
+        std::vector<Item>   items_;
+        gfx::Point          anchor_{};
+        gfx::Size           surface_{};
+        bool                open_{ false };
+        mutable float       rowHeight_{ 24.f };   // cached from the theme at paint time
+        std::vector<int>    path_;                // path_[k] : l'entree de la colonne k dont le sous-menu est ouvert
+        std::vector<int>    hot_;                 // l'entree en surbrillance de chaque colonne ouverte
+        std::vector<float>  scroll_;              // le defilement de chaque colonne ouverte
+        std::size_t         keyCol_{ 0 };         // la colonne ou vont les fleches
+        bool                cues_{ false };       // les lettres soulignees se voient
+        Widget*             restoreFocus_{ nullptr };   // le clavier y revient a la fermeture
     };
 
 } // namespace ui

@@ -221,12 +221,12 @@ Box selectionBounds(const View& v, const std::vector<Id>& ids) {
     return out;
 }
 
-Id hitTest(const View& v, double x, double y, Id insideGroup, double tolerance) {
+Id hitTest(const View& v, double x, double y, Id insideGroup, double tolerance, bool includeLocked) {
     const auto order = v.paintOrder();
     for (auto it = order.rbegin(); it != order.rend(); ++it) {
         const Object& o = **it;
         if (o.kind == Kind::Group) continue;              // un groupe se prend par ses enfants
-        if (v.effectivelyHidden(o) || v.effectivelyLocked(o)) continue;
+        if (v.effectivelyHidden(o) || (!includeLocked && v.effectivelyLocked(o))) continue;
         // "visible" a FAUX ne compte pas ici : un objet invisible en marche se
         // prend quand meme dans l'editeur, sinon on ne le rattraperait plus.
         if (!hit(o, x, y, tolerance)) continue;
@@ -735,6 +735,43 @@ Id addLayer(Project& p, View& v, std::string name) {
     v.layers.insert(at, l);
     v.activeLayer = l.id;
     return l.id;
+}
+
+Id duplicateLayer(Project& p, View& v, Id layer) {
+    const int rank = v.layerRank(layer);
+    if (rank < 0) return kNoId;
+    const Layer src = v.layers[static_cast<std::size_t>(rank)];
+    Layer copy;
+    copy.id = p.allocate();
+    const auto taken = [&](const std::string& n) {
+        return std::any_of(v.layers.begin(), v.layers.end(), [&](const Layer& l) { return l.name == n; });
+    };
+    copy.name = src.name + " (copie)";
+    for (int i = 2; taken(copy.name) && i < 10000; ++i) copy.name = src.name + " (copie " + std::to_string(i) + ")";
+    copy.visible = src.visible;
+    v.layers.insert(v.layers.begin() + rank + 1, copy);
+    v.activeLayer = copy.id;
+    std::map<Id, Id> ids;
+    for (const auto& o : v.objects) if (o.layer == layer) ids[o.id] = p.allocate();
+    std::vector<Object> made;
+    for (const auto& o : v.objects) {
+        if (o.layer != layer) continue;
+        Object c = o;
+        c.id = ids[o.id];
+        c.layer = copy.id;
+        c.locked = false;
+        if (const auto it = ids.find(o.parent); it != ids.end()) c.parent = it->second;
+        made.push_back(std::move(c));
+    }
+    for (auto& c : made) {
+        std::string base = c.name;
+        while (!base.empty() && std::isdigit(static_cast<unsigned char>(base.back()))) base.pop_back();
+        if (!base.empty() && base.back() == '_') base.pop_back();
+        c.name = uniqueObjectName(v, base.empty() ? "Objet" : base);
+        v.objects.push_back(std::move(c));
+    }
+    refreshGroupBounds(v);
+    return copy.id;
 }
 
 bool removeLayer(View& v, Id layer, std::string* error) {

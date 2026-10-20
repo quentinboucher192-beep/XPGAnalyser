@@ -445,7 +445,7 @@ void ConfigurationPane::attach(ApiFrame& frame) {
     t.add(AReplace, HmiGlyph::Refresh, "Remplacer le module choisi par une autre r\xC3\xA9" "f\xC3\xA9rence", "Remplacer\xE2\x80\xA6");
     t.add(ARemove, HmiGlyph::Delete, "Retirer le module choisi (Ctrl+Z le remet)", "Supprimer");
     t.separator();
-    t.add(AImportXhw, HmiGlyph::Import, "Importer le .XHW dans le projet ouvert : les racks, les modules, leurs voies", "Importer le .XHW\xE2\x80\xA6");
+    t.add(AImportXhw, HmiGlyph::Import, "Importer la configuration (.XHW) dans le projet ouvert : les racks, les modules, leurs voies", "Importer la configuration (.XHW)\xE2\x80\xA6");
     t.add(ACheck, HmiGlyph::Check, "V\xC3\xA9rifier les adresses du code face aux modules", "V\xC3\xA9rifier les adresses");
     t.add(AFaultyOnly, HmiGlyph::EyeOff, "Seulement les adresses fautives", "Seulement les fautives");
     t.add(AShowModule, HmiGlyph::System, "Voir le module de l'adresse choisie", "Voir le module");
@@ -622,7 +622,7 @@ void ConfigurationPane::runAction(int action) {
             showTab(TChannels);
             status(report_.hardware ? std::to_string(report_.addresses.size()) + " adresses dans le code \xC2\xB7 " + std::to_string(report_.faulty)
                                           + " sans module ou dans le mauvais sens."
-                                    : std::string("Pas de .XHW dans le projet : rien \xC3\xA0 comparer (Importer le .XHW\xE2\x80\xA6)."));
+                                    : std::string("Pas de .XHW dans le projet : rien \xC3\xA0 comparer (Importer la configuration (.XHW)\xE2\x80\xA6)."));
             return;
         case AFaultyOnly:
             faultyOnly_ = !faultyOnly_;
@@ -773,7 +773,7 @@ void ConfigurationPane::refreshProperties() {
                 c.properties.push_back({"Fautives", std::to_string(report_.faulty), PG::ValueType::ReadOnly,
                                         "Sans module \xC3\xA0 leur emplacement, dans le mauvais sens, ou une voie au-del\xC3\xA0 de celles du module.", {}, nullptr});
                 if (!report_.hardware)
-                    c.properties.push_back({"Pas de .XHW", "rien \xC3\xA0 comparer : Importer le .XHW\xE2\x80\xA6", PG::ValueType::ReadOnly, {}, {}, nullptr});
+                    c.properties.push_back({"Pas de .XHW", "rien \xC3\xA0 comparer : Importer la configuration (.XHW)\xE2\x80\xA6", PG::ValueType::ReadOnly, {}, {}, nullptr});
                 cats.push_back(std::move(c));
                 break;
             }
@@ -797,7 +797,7 @@ void ConfigurationPane::refreshProperties() {
             switch (a.status) {
                 case io::Address::Status::NoModule:
                     steps = {{"Le constat", "rien \xC3\xA0 l'emplacement " + std::to_string(a.rack) + "." + std::to_string(a.slot)},
-                             {"Soit", "le .XHW n'est pas le bon : Importer le .XHW\xE2\x80\xA6"},
+                             {"Soit", "le .XHW n'est pas le bon : Importer la configuration (.XHW)\xE2\x80\xA6"},
                              {"Soit", "le module manque : Module (Racks et modules)"},
                              {"Soit", "l'adresse du code est fausse : Utilis\xC3\xA9" "e par"}};
                     break;
@@ -810,7 +810,7 @@ void ConfigurationPane::refreshProperties() {
                     steps = {{"Le constat", a.detail}, {"\xC3\x80 faire", "v\xC3\xA9rifier la voie dans le code"}};
                     break;
                 case io::Address::Status::NoHardware:
-                    steps = {{"\xC3\x80 faire", "Importer le .XHW\xE2\x80\xA6 pour comparer"}};
+                    steps = {{"\xC3\x80 faire", "Importer la configuration (.XHW)\xE2\x80\xA6 pour comparer"}};
                     break;
                 default:
                     steps = {{"Rien", "le module est l\xC3\xA0, dans le bon sens"}, {"", "et la voie existe"}};
@@ -965,7 +965,7 @@ void ConfigurationPane::updateHint() {
         case TProcessor: text = "Le processeur et sa m\xC3\xA9moire, tels que l'export les d\xC3\xA9" "crit."; break;
         case TRacks:
         case TChannels:
-            if (!report_.hardware) text = "Pas de .XHW : les racks sont d\xC3\xA9" "duits du processeur ; Importer le .XHW\xE2\x80\xA6 pour v\xC3\xA9rifier les adresses.";
+            if (!report_.hardware) text = "Pas de .XHW : les racks sont d\xC3\xA9" "duits du processeur ; Importer la configuration (.XHW)\xE2\x80\xA6 pour v\xC3\xA9rifier les adresses.";
             else if (report_.faulty) {
                 text = std::to_string(report_.addresses.size()) + " adresses topologiques dans le code \xC2\xB7 " + std::to_string(report_.faulty)
                      + " sans module ou dans le mauvais sens (Voies et adresses).";

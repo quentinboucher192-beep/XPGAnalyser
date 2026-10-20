@@ -26,11 +26,11 @@ propriete "Libellé" "$Repere$"
 attendre 2
 capture D1102_01_inspecteur_reperes.png
 
-# ---- Ctrl+D : la fenetre, les copies et leurs reperes ---------------------------
+# ---- Ctrl+Maj+D : la fenetre, les copies et leurs reperes ---------------------------
 # un clic sur V_101 dans la vue : le focus quitte le champ de l'inspecteur
 vue-clic 240 170
 attendre 1
-touche ctrl+d
+touche ctrl+maj+d
 attendre 3
 capture D1102_02_fenetre_cases_vides.png
 # En liste : une colonne collee d'Excel (7 lignes = les 7 copies) ; l'original a part

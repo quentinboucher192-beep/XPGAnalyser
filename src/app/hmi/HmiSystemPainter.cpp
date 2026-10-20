@@ -521,7 +521,7 @@ void paintSimulation(const Painter& p, const hmi::Runtime& rt, const hmi::System
     boldText(p, p.at(s.allHead), "TOUS", caps, kMuted);
     simButton(p, s.allAnimate, "Tout animer", f, !slaves.empty());
     simButton(p, s.allStop, "Tout arr\xC3\xAAter", f, !slaves.empty());
-    simButton(p, s.allUnforce, "D\xC3\xA9" "forcer tout", f, !slaves.empty());
+    simButton(p, s.allUnforce, "Tout rel\xC3\xA2" "cher", f, !slaves.empty());
 
     // ---- a droite : l'esclave choisi
     if (slaves.empty() || chosen >= slaves.size()) return;
@@ -661,7 +661,7 @@ void paintSimulation(const Painter& p, const hmi::Runtime& rt, const hmi::System
         for (const auto& v : sl.values) forced += v.forced ? 1 : 0;
         simButton(p, s.animateSlave, n > 0 ? "Animer les " + std::to_string(n) : std::string("Animer"), f, n > 0);
         simButton(p, s.stopSlave, "Arr\xC3\xAAter", f, n > 0);
-        simButton(p, s.unforceSlave, forced > 0 ? "D\xC3\xA9" "forcer les " + std::to_string(forced) : std::string("D\xC3\xA9" "forcer"), f, forced > 0);
+        simButton(p, s.unforceSlave, forced > 0 ? "Rel\xC3\xA2" "cher les " + std::to_string(forced) : std::string("Rel\xC3\xA2" "cher"), f, forced > 0);
         if (visible(s.back))
             simButton(p, s.back, s.back.w >= 200 ? "Revenir au vrai maintenant" : "Revenir au vrai", f, true, true);
     }

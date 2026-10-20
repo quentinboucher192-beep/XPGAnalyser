@@ -25,6 +25,7 @@
 //  needs a window.
 // =============================================================================
 #include "../src/menu/IMenu.hpp"
+#include "../src/ui/Commands.hpp"
 #include "../src/ui/Layout.hpp"
 #include "../src/ui/widgets/Controls.hpp"
 #include "../src/ui/widgets/DataViews.hpp"
@@ -335,6 +336,176 @@ int main() {
         for (const auto& d : r.draws)
             assert(d.at.x >= 0.f && d.at.y >= 0.f && d.at.x < 800.f && d.at.y < 600.f
                 && "nothing may be drawn off the surface");
+    }
+
+    // ===================== 1.12.18 : le menu lui-meme ======================
+    // --- deux niveaux de sous-menus : Inserer > Signalisation > Voyant -------
+    {
+        Rig rig;
+        PopupMenu::Item voyant{ "Voyant", "", "", Icon::None, true, false, 31 };
+        PopupMenu::Item bouton{ "Bouton", "", "", Icon::None, true, false, 32 };
+        PopupMenu::Item signal{ "Signalisation", "", "", Icon::None, true, false, -1 };
+        signal.children = { voyant, bouton };
+        PopupMenu::Item texte{ "Texte", "", "", Icon::None, true, false, 33 };
+        PopupMenu::Item inserer{ "Ins\xC3\xA9rer", "", "", Icon::None, true, false, -1 };
+        inserer.children = { texte, signal };
+        rig.menu->setItems({ {"Coller ici", "Ctrl+V", "", Icon::None, true, false, 30}, inserer });
+        rig.menu->openAt({ 20.f, 100.f }, { 800.f, 600.f });
+        assert(rig.menu->columnCount() == 1);
+        assert(rig.menu->openSubmenuAt(0, 1) && rig.menu->columnCount() == 2);
+        assert(rig.menu->openSubmenuAt(1, 1) && rig.menu->columnCount() == 3 && "un sous-menu dans un sous-menu");
+        assert(rig.menu->columnItems(2).size() == 2 && rig.menu->columnItems(2)[0].label == "Voyant");
+        const auto r = rig.menu->columnItemRect(2, 1);
+        assert(r.x >= rig.menu->columnRect(1).right() - 4.f && "a droite de son parent");
+        rig.send(MouseDown{ {r.x + 20.f, r.y + r.h * 0.5f}, MouseButton::Left, 1, {} });
+        assert(rig.chosen == 32 && !rig.menu->isOpen() && "l'entree du deuxieme niveau se choisit");
+
+        // Au clavier : droite descend d'un niveau, gauche remonte, Echap ferme le plus profond.
+        rig.chosen = -99;
+        rig.menu->openAt({ 100.f, 100.f }, { 800.f, 600.f });
+        rig.send(KeyDown{ Key::Down, {}, false });            // Coller ici
+        rig.send(KeyDown{ Key::Down, {}, false });            // Inserer
+        rig.send(KeyDown{ Key::Right, {}, false });           // -> Texte
+        assert(rig.menu->columnCount() == 2 && rig.menu->highlightedIn(1) == 0);
+        rig.send(KeyDown{ Key::Down, {}, false });            // -> Signalisation
+        rig.send(KeyDown{ Key::Right, {}, false });           // -> Voyant
+        assert(rig.menu->columnCount() == 3 && rig.menu->highlightedIn(2) == 0);
+        rig.send(KeyDown{ Key::Escape, {}, false });
+        assert(rig.menu->isOpen() && rig.menu->columnCount() == 2 && "Echap ferme le niveau le plus profond");
+        rig.send(KeyDown{ Key::Right, {}, false });
+        rig.send(KeyDown{ Key::Return, {}, false });
+        assert(rig.chosen == 31 && "Entree choisit dans le deuxieme niveau");
+    }
+
+    // --- les lettres : soulignees, une touche va a son entree ----------------
+    {
+        Rig rig;
+        rig.menu->setItems({ {"Ouvrir", "Entr\xC3\xA9" "e", "", Icon::None, true, false, 1},
+                             {"Ouvrir dans une fen\xC3\xAAtre", "", "", Icon::None, true, false, 2},
+                             {"Dupliquer", "Ctrl+D", "", Icon::None, true, false, 3},
+                             {"", "", "", Icon::None, true, true, -1},
+                             {"Renommer\xE2\x80\xA6", "F2", "", Icon::None, true, false, 4},
+                             {"\xC3\x89pingler", "", "", Icon::None, true, false, 5},
+                             {"Supprimer\xE2\x80\xA6", "Suppr", "", Icon::None, true, false, 6},
+                             {"Retirer", "", "", Icon::None, true, false, 7} });
+        assert(rig.menu->mnemonic(0, 0) == 'o');
+        assert(rig.menu->mnemonic(0, 1) == 'f' && "le O est pris : le premier mot qui compte ensuite");
+        assert(rig.menu->mnemonic(0, 2) == 'd');
+        assert(rig.menu->mnemonic(0, 3) == 0 && "une regle n'a pas de lettre");
+        assert(rig.menu->mnemonic(0, 5) == 'e' && "sans accent : E pour Epingler");
+        assert(rig.menu->mnemonic(0, 7) == 0 && "R deja pris par Renommer, un seul mot : pas de lettre");
+        rig.menu->openAt({ 100.f, 100.f }, { 800.f, 600.f });
+        assert(!rig.menu->showsKeyboardCues() && "a la souris, les lettres ne se soulignent pas d'emblee");
+        rig.send(KeyDown{ Key::R, {}, false });
+        assert(rig.menu->highlightedIn(0) == 4 && rig.menu->showsKeyboardCues());
+        rig.send(KeyDown{ Key::R, {}, false });
+        assert(rig.menu->highlightedIn(0) == 7 && "une seconde fois : l'entree suivante en R");
+        rig.send(KeyDown{ Key::E, {}, false });
+        assert(rig.menu->highlightedIn(0) == 5);
+        rig.send(KeyDown{ Key::End, {}, false });
+        assert(rig.menu->highlightedIn(0) == 7 && "Fin : la derniere entree");
+        rig.send(KeyDown{ Key::Home, {}, false });
+        assert(rig.menu->highlightedIn(0) == 0 && "Debut : la premiere");
+        rig.send(KeyDown{ Key::F, {}, false });
+        rig.send(KeyDown{ Key::Return, {}, false });
+        assert(rig.chosen == 2 && "F puis Entree : Ouvrir dans une fenetre");
+    }
+
+    // --- plus haut que l'ecran : il defile ----------------------------------
+    {
+        Rig rig;
+        std::vector<PopupMenu::Item> many;
+        for (int i = 0; i < 40; ++i) many.push_back({ "Entree " + std::to_string(i), "", "", Icon::None, true, false, 100 + i });
+        rig.menu->setItems(many);
+        rig.menu->openAt({ 100.f, 50.f }, { 800.f, 300.f });
+        const auto box = rig.menu->popupRect();
+        assert(rig.menu->scrollable(0) && "40 entrees dans 300 px : il defile");
+        assert(box.y >= 0.f && box.bottom() <= 300.f + 0.5f && "il tient dans la fenetre");
+        assert(rig.menu->scrollOffset(0) == 0.f);
+        rig.send(KeyDown{ Key::End, {}, false });
+        assert(rig.menu->highlightedIn(0) == 39 && rig.menu->scrollOffset(0) > 0.f && "Fin fait venir la derniere");
+        const auto last = rig.menu->itemRect(39);
+        assert(last.y >= box.y && last.bottom() <= box.bottom() + 0.5f && "la derniere se voit");
+        rig.send(MouseWheel{ {box.x + 10.f, box.y + 40.f}, 0.f, 20.f, {} });
+        assert(rig.menu->scrollOffset(0) == 0.f && "la molette remonte jusqu'en haut");
+        rig.menu->revealItem(0, 20);
+        const auto mid = rig.menu->itemRect(20);
+        rig.send(MouseDown{ {mid.x + 20.f, mid.y + mid.h * 0.5f}, MouseButton::Left, 1, {} });
+        assert(rig.chosen == 120 && "un clic sur une entree venue par defilement la choisit");
+    }
+
+    // --- cases a cocher et choix : le menu rend l'id, l'appelant coche -------
+    {
+        RecordingRenderer r;
+        const Theme theme = Theme::dark();
+        Rig rig;
+        PopupMenu::Item grille{ "Grille", "", "", Icon::None, true, false, 41 };
+        grille.checkable = true;
+        grille.checked = true;
+        PopupMenu::Item cent{ "100 %", "", "", Icon::None, true, false, 42 };
+        cent.radio = true;
+        cent.checked = true;
+        rig.menu->setItems({ grille, cent });
+        rig.menu->openAt({ 100.f, 100.f }, { 800.f, 600.f });
+        const PaintContext ctx{ r, theme, {0.f, 0.f, 800.f, 600.f}, 0.0, nullptr };
+        rig.menu->paintTopMost(ctx);
+        assert(r.countVisible("Grille") == 1 && r.countVisible("100 %") == 1);
+        const auto row = rig.menu->itemRect(0);
+        rig.send(MouseDown{ {row.x + 20.f, row.y + row.h * 0.5f}, MouseButton::Left, 1, {} });
+        assert(rig.chosen == 41);
+    }
+
+    // --- au clavier : Maj+F10 ou Menu, la premiere entree prete -------------
+    {
+        assert(isContextMenuKey(KeyDown{ Key::Menu, {}, false }));
+        assert(isContextMenuKey(KeyDown{ Key::F10, KeyMods{false, true, false, false}, false }));
+        assert(!isContextMenuKey(KeyDown{ Key::F10, {}, false }) && "F10 seul reste la section suivante");
+        Rig rig;
+        rig.menu->setItems(sampleItems());
+        rig.menu->openFromKeyboard({ 100.f, 100.f }, { 800.f, 600.f });
+        assert(rig.menu->highlightedIn(0) == 0 && rig.menu->showsKeyboardCues());
+        rig.send(KeyDown{ Key::Menu, {}, false });
+        assert(!rig.menu->isOpen() && rig.dismissals == 1 && "la touche Menu referme le menu");
+    }
+
+    // --- le menu ferme, le clavier revient a qui l'avait (bug 10) ------------
+    {
+        Rig rig;
+        rig.tree->setFocusPolicy(true);
+        rig.tree->takeFocus();
+        assert(rig.tree->focused());
+        rig.menu->setItems(sampleItems());
+        rig.menu->openAt({ 100.f, 100.f }, { 800.f, 600.f });
+        assert(rig.menu->focused() && !rig.tree->focused());
+        rig.send(KeyDown{ Key::Escape, {}, false });
+        assert(rig.tree->focused() && "Echap : les fleches reviennent a l'arbre");
+        rig.menu->openAt({ 100.f, 100.f }, { 800.f, 600.f });
+        const auto box = rig.menu->popupRect();
+        rig.send(MouseDown{ {box.x + 20.f, box.y + 4.f + 12.f}, MouseButton::Left, 1, {} });
+        assert(rig.chosen == 10 && rig.tree->focused() && "une entree choisie : de meme");
+    }
+
+    // --- la table des commandes : un mot, une icone, une touche --------------
+    {
+        const auto& t = cmd::all();
+        assert(t.size() == static_cast<std::size_t>(cmd::Id::Count) && "une entree par commande");
+        for (std::size_t i = 0; i < t.size(); ++i) {
+            assert(t[i].id == static_cast<cmd::Id>(i) && "dans l'ordre de l'enum");
+            assert(!t[i].label.empty());
+            assert(cmd::looksLikeShortcut(t[i].shortcut) && "la colonne de droite : une touche");
+        }
+        assert(cmd::looksLikeShortcut("Ctrl+K, Ctrl+C"));
+        assert(cmd::looksLikeShortcut("Alt+\xE2\x86\x91") && cmd::looksLikeShortcut("Entr\xC3\xA9" "e") && cmd::looksLikeShortcut("Ctrl+Maj+D"));
+        assert(!cmd::looksLikeShortcut("5 onglets") && !cmd::looksLikeShortcut("Double-clic") && !cmd::looksLikeShortcut("14:03 \xC2\xB7 Aller \xC3\xA0"));
+        assert(!cmd::looksLikeShortcut("aussi : la barre du haut") && !cmd::looksLikeShortcut("EXTRACTEURS[0].Retour"));
+        const auto copier = cmd::item(cmd::Id::Copier, 7);
+        assert(copier.label == "Copier" && copier.shortcut == "Ctrl+C" && copier.icon == Icon::Copy && copier.id == 7);
+        const auto grise = cmd::item(cmd::Id::Renommer, 8, false, "une variable \xC3\xA0 la fois");
+        assert(!grise.enabled && grise.disabledReason == "une variable \xC3\xA0 la fois" && grise.shortcut == "F2");
+        std::vector<PopupMenu::Item> menu{ cmd::heading("Pompe_1", "instance"), copier, cmd::separator(),
+                                           {"Fermer tout", "5 onglets", "", Icon::None, true, false, 9} };
+        const auto bad = cmd::badShortcuts(menu);
+        assert(bad.size() == 1 && bad[0] == "Fermer tout : 5 onglets" && "un compte dans la colonne des touches se voit");
     }
 
     std::printf("popup_test: ok\n");

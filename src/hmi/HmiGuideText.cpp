@@ -1158,6 +1158,9 @@ const std::vector<Topic>& topics() {
                          "en choisit un ;", {}, "1.12.3"},
              {K::Bullet, "**Grouper** fait un groupe (double-clic pour l'\xC3\xA9" "diter de "
                          "l'int\xC3\xA9rieur, \xC3\x89" "chap pour en sortir) ;", {}},
+             {K::Bullet, "au clavier : **Ctrl+G** groupe, **Ctrl+Maj+G** d\xC3\xA9groupe ; **Ctrl+D** duplique "
+                         "tout de suite, **Ctrl+Maj+D** ouvre **Dupliquer\xE2\x80\xA6** ; **Ctrl+Alt+C** / "
+                         "**Ctrl+Alt+V** copient et collent le style ;", {}, "1.12.18"},
              {K::Bullet, "**Aligner** (gauche, centre, droite, haut, milieu, bas), **Distribuer**, ordre de "
                          "superposition ;", {}},
              {K::Bullet, "**Rotation** \xE2\x88\x92" "90\xC2\xB0, +90\xC2\xB0, +45\xC2\xB0, 180\xC2\xB0 et "
@@ -2089,7 +2092,7 @@ const std::vector<Topic>& topics() {
                          "`Armoire.ana.PT1.mes`, `{Nom}`, `NOT Armoire.actif`. Un symbole n'a que le mode "
                          "R\xC3\xA9" "f\xC3\xA9rence : sa colonne Mode est fig\xC3\xA9" "e sur **REF**.", {}},
              {K::Heading, "Dupliquer dans un symbole (1.11.2)", {}, "1.11.2"},
-             {K::Paragraph, "Dans l'\xC3\xA9" "diteur d'un symbole, **Dupliquer\xE2\x80\xA6** (Ctrl+D) "
+             {K::Paragraph, "Dans l'\xC3\xA9" "diteur d'un symbole, **Dupliquer\xE2\x80\xA6** (Ctrl+Maj+D) "
                          "conna\xC3\xAEt ses param\xC3\xA8tres : un rep\xC3\xA8re qui en vise un "
                          "(`=$Value[0]$` pour `Value : ARRAY[0..9] OF UINT`, `{$Name$}`) est un chemin qui "
                          "existe, pr\xC3\xA9remplit ses copies (`Value[1]`, `Value[2]`\xE2\x80\xA6) dans les "
@@ -2777,7 +2780,7 @@ const std::vector<Topic>& topics() {
          {}},
         // ---- Concevoir les vues / dupliquer-reperes
         {"dupliquer-reperes", "Dupliquer avec des rep\xC3\xA8res", "Concevoir les vues",
-         "Entourer de $ ce qui varie d'une copie \xC3\xA0 l'autre (=$V[1].Ouv$), puis Ctrl+D : N copies "
+         "Entourer de $ ce qui varie d'une copie \xC3\xA0 l'autre (=$V[1].Ouv$), puis Ctrl+Maj+D : N copies "
          "o\xC3\xB9 chaque rep\xC3\xA8re re\xC3\xA7oit sa valeur, pr\xC3\xA9remplie d'indice en indice "
          "(V[2].Ouv, V[3].Ouv\xE2\x80\xA6), pos\xC3\xA9" "es sur X, sur Y ou en grille. Les $ ne changent "
          "pas le calcul. Une seule commande.",
@@ -2816,10 +2819,11 @@ const std::vector<Topic>& topics() {
                          "groupe. Dans un texte (un libell\xC3\xA9, un message), le morceau s'affiche sans "
                          "ses `$` : `D\xC3\xA9" "faut $V101$` se lit \xC2\xAB D\xC3\xA9" "faut V101 \xC2\xBB.", {}},
              {K::Heading, "Ouvrir \xC2\xAB Dupliquer\xE2\x80\xA6 \xC2\xBB", {}},
-             {K::Bullet, "**Ctrl+D**, le **clic droit** sur la vue, ou le bouton **Dupliquer** de la barre "
+             {K::Bullet, "**Ctrl+Maj+D**, le **clic droit** sur la vue, ou le bouton **Dupliquer** de la barre "
                          "d'outils. M\xC3\xAAme sans rep\xC3\xA8re : la pose et les indices servent toujours.", {}},
-             {K::Bullet, "**Ctrl+Maj+D** (ou Alt + glisser) garde l'ancienne copie, telle quelle, "
-                         "d\xC3\xA9" "cal\xC3\xA9" "e de 20 px.", {}},
+             {K::Bullet, "**Ctrl+D** (ou Alt + glisser) duplique tout de suite : la copie, telle quelle, "
+                         "d\xC3\xA9" "cal\xC3\xA9" "e de 20 px. Jusqu'\xC3\xA0 la 1.12.17, Ctrl+D ouvrait la fen\xC3\xAAtre et "
+                         "Ctrl+Maj+D dupliquait : un mot, un raccourci, comme dans les d\xC3\xA9" "clarations et le code.", {}, "1.12.18"},
              {K::Heading, "Les copies et leurs rep\xC3\xA8res", {}},
              {K::Bullet, "En t\xC3\xAAte : la s\xC3\xA9lection (plusieurs objets sont pos\xC3\xA9s **en "
                          "bloc**), les rep\xC3\xA8res trouv\xC3\xA9s, leurs endroits et leur nombre.", {}},
@@ -2883,9 +2887,9 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Un rep\xC3\xA8re fait d'un seul nom (`$Vanne$`, l'\xC3\xA9" "criture de la 1.10) "
                          "se lit lui aussi sans ses `$`. Si `Vanne` n'est pas une variable, Compiler le dit "
                          "comme pour toute expression (\xC2\xAB Vanne n'existe pas \xC2\xBB), suivi de "
-                         "\xC2\xAB un rep\xC3\xA8re se remplit par Dupliquer\xE2\x80\xA6 (Ctrl+D) \xC2\xBB : "
+                         "\xC2\xAB un rep\xC3\xA8re se remplit par Dupliquer\xE2\x80\xA6 (Ctrl+Maj+D) \xC2\xBB : "
                          "il n'y a pas d'erreur propre aux rep\xC3\xA8res. **Il se remplit par "
-                         "Dupliquer\xE2\x80\xA6 (Ctrl+D)**, ou depuis Compiler : choisis la ligne, puis "
+                         "Dupliquer\xE2\x80\xA6 (Ctrl+Maj+D)**, ou depuis Compiler : choisis la ligne, puis "
                          "**Remplacer\xE2\x80\xA6** dans la barre de Compiler ; Dupliquer s'ouvre avec **0 "
                          "copie** pour remplir le rep\xC3\xA8re dans l'original (Ctrl+Z le rend).", {}, "1.10.4"},
              {K::Bullet, "Il peut recevoir **un \xC3\xA9l\xC3\xA9ment de tableau** : `$Vanne$` devient "
@@ -2940,14 +2944,14 @@ const std::vector<Topic>& topics() {
                          "d'\xC3\xA9tat dit ce qui a \xC3\xA9t\xC3\xA9 fait : les objets "
                          "cr\xC3\xA9\xC3\xA9s, les rep\xC3\xA8res remplac\xC3\xA9s. Apr\xC3\xA8s Dupliquer, "
                          "la s\xC3\xA9lection est sur les copies ; depuis la 1.11, **Ctrl+Y** "
-                         "(r\xC3\xA9tablir apr\xC3\xA8s Ctrl+Z) la remet sur elles aussi, et Ctrl+Maj+D de "
+                         "(r\xC3\xA9tablir apr\xC3\xA8s Ctrl+Z) la remet sur elles aussi, et Ctrl+D de "
                          "m\xC3\xAAme.", {}},
              {K::Heading, "Voir les rep\xC3\xA8res", {}},
              {K::Paragraph, "Un rep\xC3\xA8re se voit partout o\xC3\xB9 il est :", {}},
              {K::Bullet, "**dans l'inspecteur**, la case qui le contient a sa pastille fx (ou celle d'un "
                          "texte) **en ambre**, avec un `$`, et le rep\xC3\xA8re est **surlign\xC3\xA9 en "
                          "ambre** dans la valeur ; l'infobulle dit : \xC2\xAB Rep\xC3\xA8re $V[1].Ouv$ : ce "
-                         "morceau varie quand on duplique (Dupliquer\xE2\x80\xA6, Ctrl+D). Ses $ ne changent "
+                         "morceau varie quand on duplique (Dupliquer\xE2\x80\xA6, Ctrl+Maj+D). Ses $ ne changent "
                          "pas le calcul. \xC2\xBB Depuis la 1.11, **la case est calcul\xC3\xA9" "e comme les "
                          "autres** : sa valeur s'affiche, sans erreur. Le filtre **Rep\xC3\xA8res** de "
                          "l'inspecteur ne montre que ces cases (voir \xC2\xAB Propri\xC3\xA9t\xC3\xA9s, "
@@ -10509,7 +10513,7 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Rep\xC3\xA8res** : une ligne par rep\xC3\xA8re `$\xE2\x80\xA6$` que porte "
                          "l'objet (le morceau qui varie quand on duplique), avec le nombre d'endroits et "
                          "lesquels : `$Vanne$ \xC3\x97 3 \xE2\x80\x94 Valeur, Ouverture, Libell\xC3\xA9` ; "
-                         "puis l'aide \xC2\xAB Ctrl+D : Dupliquer\xE2\x80\xA6 les remplace \xC2\xBB. `$$` "
+                         "puis l'aide \xC2\xAB Ctrl+Maj+D : Dupliquer\xE2\x80\xA6 les remplace \xC2\xBB. `$$` "
                          "(un vrai `$`) et les `$` d'une cha\xC3\xAEne (`'$N'`) n'en sont pas ;", {}, "1.10"},
              {K::Bullet, "**\xC3\x89l\xC3\xA9ments** : les objets d'un groupe, d\xC3\xA9pliables \xC3\xA0 "
                          "leur tour ;", {}, "1.10"},
@@ -13007,7 +13011,7 @@ const std::vector<Topic>& topics() {
                          "visibilit\xC3\xA9 se choisissent dans une liste ; Inser ajoute, Suppr supprime, Ctrl+D "
                          "duplique ; chaque geste s'annule (Ctrl+Z) ;", {}, "1.11.18"},
              {K::Bullet, "renommer une d\xC3\xA9" "claration renomme ses utilisations dans le code ; le bouton "
-                         "**Utilisations** y m\xC3\xA8ne, l'une apr\xC3\xA8s l'autre ; une d\xC3\xA9" "claration "
+                         "**Voir les usages** (Maj+F12) y m\xC3\xA8ne, l'un apr\xC3\xA8s l'autre ; une d\xC3\xA9" "claration "
                          "fautive a son nom en rouge, la raison en infobulle ;", {}, "1.11.18"},
              {K::Bullet, "**Excel** : Ctrl+C copie les lignes choisies avec leurs titres ; Ctrl+V colle un "
                          "tableau d'Excel (les colonnes reconnues par leur titre, en fran\xC3\xA7" "ais ou en "

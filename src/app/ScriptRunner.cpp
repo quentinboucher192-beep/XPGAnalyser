@@ -693,7 +693,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   theme-exporter "chemin"          Exporter... de l'editeur : le theme tel qu'il est (nom, famille, auteur, couleurs)
     //   theme-verifier ["Nom"] [N]       echec si un contraste ne tient pas ; N : au moins N themes en tout
     //   Les messages de la galerie (ou de la commande) s'ecrivent en "[script] theme : ...".
-    // 1.10.2 (chantier D) : LA FENETRE "DUPLIQUER..." (touche ctrl+d l'ouvre sur la selection).
+    // 1.10.2 (chantier D) : LA FENETRE "DUPLIQUER..." (touche ctrl+maj+d l'ouvre sur la selection).
     //   dupliquer-copies N                       le nombre de copies
     //   dupliquer-case L "Colonne" "valeur"      une case (ligne 1 : l'original ; colonne Nom, $Vanne$...)
     //   dupliquer-serie "Colonne" "V1{n}" "01"   une serie, depuis l'original
@@ -711,7 +711,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   dupliquer-vider COL                      1.10.4 : Vider (la colonne preremplie aussi)
     if (cmd.rfind("dupliquer-", 0) == 0) {
         auto* d = dynamic_cast<HmiDuplicateDialog*>(app_.menus().top());
-        if (!d) { fail(cmd + " : la fen\xC3\xAAtre \xC2\xAB Dupliquer\xE2\x80\xA6 \xC2\xBB n'est pas ouverte (touche ctrl+d)"); return Step::Yield; }
+        if (!d) { fail(cmd + " : la fen\xC3\xAAtre \xC2\xAB Dupliquer\xE2\x80\xA6 \xC2\xBB n'est pas ouverte (touche ctrl+maj+d)"); return Step::Yield; }
         const auto yes = [](const std::string& word) { const auto l = lower(word); return l.empty() || l == "oui" || l == "1" || l == "vrai"; };
         if (cmd == "dupliquer-copies") d->setCopies(std::atoi(arg(1).c_str()));
         else if (cmd == "dupliquer-case") { if (!d->setCell(std::atoi(arg(1).c_str()) - 1, arg(2), arg(3))) fail(cmd + " : pas de case " + arg(1) + " / " + arg(2)); }

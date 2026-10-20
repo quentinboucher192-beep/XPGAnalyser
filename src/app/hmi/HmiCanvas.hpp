@@ -80,7 +80,7 @@ public:
     // Une modification de la vue, en commande. Rend faux si rien n'a change.
     bool edit(const std::string& label, const hmi::ViewChange& fn, std::string mergeKey = {});
     void deleteSelection();
-    void duplicateSelection(double offset = 20.0);   // Ctrl+Maj+D (1.10.2) : a cote ; Alt+glisser : dessus
+    void duplicateSelection(double offset = 20.0);   // Ctrl+D (1.12.18) : a cote ; Alt+glisser : dessus
     // 1.11 (R111) : apres "Dupliquer", la selection va aux copies, qui sont
     // retenues : Ctrl+Z les retire, Ctrl+Y les remet - et la selection y revient.
     void selectCopies(std::vector<hmi::Id> ids);
@@ -141,12 +141,32 @@ public:
     // Ctrl+Z (false) / Ctrl+Y ou Ctrl+Maj+Z (true) : la pile est celle de
     // l'application, c'est l'hote qui annule.
     const core::SignalPtr<bool>               historyRequested = core::Signal<bool>::create();
-    // 1.10.2 (chantier D) : Ctrl+D - la fenetre "Dupliquer..." (reperes, indices,
-    // pose), ouverte par l'hote ; Ctrl+Maj+D garde la copie decalee de 20 px.
+    // 1.10.2 (chantier D) : la fenetre "Dupliquer..." (reperes, indices, pose), ouverte
+    // par l'hote - Ctrl+Maj+D depuis la 1.12.18 ; Ctrl+D fait la copie decalee de 20 px.
     const core::SignalPtr<>                   duplicateRequested = core::Signal<>::create();
     // 1.10.2 (chantier D) : le clic droit (l'objet sous le pointeur, hors de la
     // selection, la remplace) - l'editeur ouvre son menu a ce point.
     const core::SignalPtr<gfx::Point>         contextRequested = core::Signal<gfx::Point>::create();
+    // 1.12.18 : F2 sur la vue - l'editeur renomme l'objet choisi (dans l'explorateur).
+    const core::SignalPtr<>                   renameRequested = core::Signal<>::create();
+
+    // ---- 1.12.18 : CE QUE VISE LE CLIC DROIT ---------------------------------
+    //  Un objet libre : il rejoint la selection (gardee s'il y est deja) - le menu
+    //  vise la selection. Un objet verrouille : le menu le vise lui seul, et la
+    //  selection est videe (bug 4 : avant, le clic le traversait et Supprimer
+    //  supprimait l'ancienne selection). Le vide : la selection est videe, le
+    //  menu est celui de la vue. Pendant une pose ou le trace d'une zone, le clic
+    //  droit l'annule, comme Echap, sans menu. Maj+F10 / Menu : le menu de la
+    //  selection, sous elle (ou celui de la vue).
+    enum class ContextTarget : std::uint8_t { View, Selection, Locked };
+    [[nodiscard]] ContextTarget contextTarget() const noexcept { return contextTarget_; }
+    [[nodiscard]] hmi::Id       contextLocked() const noexcept { return contextLocked_; }
+    [[nodiscard]] gfx::Point    contextScreen() const noexcept { return contextScreen_; }   // le point du clic
+    [[nodiscard]] hmi::edit::Pt contextPoint() const;                                       // ... dans la vue
+    void cancelPlacement();                       // la pose (ou le trace) abandonnee, comme Echap
+    void pasteAt(gfx::Point screen);              // « Coller ici » : le coin de la copie au point
+    void insertAt(hmi::Kind kind, gfx::Point screen);   // « Inserer » : un objet neuf au point
+    void addGuideAt(bool vertical, gfx::Point screen);  // « Ajouter un guide » : par le point
 
     // ---- la souris pendant un glisser ---------------------------------------
     // Un cadre de selection, un deplacement ou un guide tire peuvent sortir de
@@ -185,6 +205,9 @@ private:
     Apply                  apply_;
     std::vector<hmi::Id>   selection_;
     hmi::Id                insideGroup_{hmi::kNoId};
+    ContextTarget          contextTarget_{ContextTarget::View};   // 1.12.18
+    hmi::Id                contextLocked_{hmi::kNoId};
+    gfx::Point             contextScreen_{};
     std::vector<hmi::Id>   copies_;            // 1.11 (R111) : les dernieres copies de Dupliquer
     bool                   copiesHere_{false}; // etaient-elles dans la vue au dernier changement ?
     std::optional<hmi::Kind> placeKind_;

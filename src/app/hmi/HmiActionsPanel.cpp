@@ -1,4 +1,6 @@
 #include "HmiActionsPanel.hpp"
+#include <optional>
+#include "../../ui/Commands.hpp"   // 1.12.18 : le menu de la liste
 #include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "HmiActionDialogs.hpp"   // 1.11.9 : l'operation en arbre, le script, la formule de Maths
 #include "HmiItemDuplicateDialog.hpp"   // 1.12.16 : Dupliquer... (N copies)
@@ -33,6 +35,15 @@ using hmi::TransitionKind;
 namespace {
 
 enum Act : int { AAdd = 1, ADuplicate, ARemove, AUp, ADown };
+constexpr int kMenuTool = 1000;          // 1.12.18 : + une commande de la barre (le menu de la liste)
+constexpr int kMenuCopyAction = 1101, kMenuPasteAction = 1102;
+// 1.12.18 : l'action copiee (Copier l'action), et le texte mis au presse-papiers avec elle : si le
+// presse-papiers a change depuis (un texte copie ailleurs), il n'y a plus d'action a coller.
+struct ActionClip { std::optional<hmi::Action> action; std::string text; };
+ActionClip& actionClip() {
+    static ActionClip clip;
+    return clip;
+}
 
 // Les lignes du volet : "#", puis les colonnes (l'action ; 1.11.23, un raccourci : la touche,
 // le declencheur, l'action).
@@ -178,6 +189,28 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
             expression, [doc = doc_]() -> const hmi::Project* { return doc ? &doc->project : nullptr; }, view_, arg.popup, arg.param);
     });
     grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::move(grid)));
+    // 1.12.18 (planche 9) : le menu de la liste et ses touches.
+    table_->setExtraContextOnly(true);
+    table_->setExtraContextItems([this] { return contextItems(); });
+    links_ += table_->contextAction->connect([this](int a) {
+        if (a == kMenuCopyAction) (void)copyAction(selectedIndex());
+        else if (a == kMenuPasteAction) (void)pasteAction();
+        else if (a > kMenuTool && a < kMenuTool + 100) tools_->triggered->emit(a - kMenuTool);
+    });
+    table_->setKeyHandler([this](const ui::KeyDown& k) {
+        if (!several_.empty()) return false;
+        const bool alt = k.mods.alt && !k.mods.ctrl && !k.mods.shift;
+        const bool ctrl = k.mods.ctrl && !k.mods.alt && !k.mods.shift;
+        const int sel = selectedIndex();
+        if (k.key == ui::Key::Insert && k.mods.none()) { tools_->triggered->emit(AAdd); return true; }
+        if (k.key == ui::Key::Delete && k.mods.none() && sel >= 0) { tools_->triggered->emit(ARemove); return true; }
+        if (alt && k.key == ui::Key::Up) { tools_->triggered->emit(AUp); return true; }
+        if (alt && k.key == ui::Key::Down) { tools_->triggered->emit(ADown); return true; }
+        if (k.key == ui::Key::D && k.mods.ctrl && k.mods.shift && !k.mods.alt) { tools_->triggered->emit(ADuplicate); return true; }
+        if (ctrl && k.key == ui::Key::C && sel >= 0) return copyAction(sel);
+        if (ctrl && k.key == ui::Key::V) return pasteAction();
+        return false;
+    });
 
     links_ += tools_->triggered->connect([this](int a) {
         const int sel = selectedIndex();
@@ -407,6 +440,101 @@ bool HmiActionsPanel::insertCopies(int index, const std::vector<std::vector<std:
     selected_ = index + 1;
     refresh();
     return done;
+}
+
+// ---- 1.12.18 (planche 9) : copier, coller une action entiere ; le menu de la liste ----------
+bool HmiActionsPanel::copyAction(int index) {
+    const auto* list = actions();
+    if (!list || index < 0 || index >= static_cast<int>(list->size())) return false;
+    auto& clip = actionClip();
+    clip.action = (*list)[static_cast<std::size_t>(index)];
+    clip.text = hmi::describeAction(*clip.action);
+    ui::setClipboardText(clip.text);
+    return true;
+}
+
+bool HmiActionsPanel::pasteAction() {
+    auto& clip = actionClip();
+    if (!clip.action || ui::clipboardText() != clip.text || !several_.empty()) return false;
+    hmi::Action a = *clip.action;
+    // Un raccourci se colle dans les raccourcis, une action ailleurs (la liste ne le montrerait pas).
+    if ((scope_ == Scope::Shortcuts) != hmi::triggerIsKey(a.trigger)) return false;
+    const auto* list = actions();
+    const int sel = selectedIndex();
+    const int at = list && sel >= 0 && sel < static_cast<int>(list->size()) ? sel + 1 : (list ? static_cast<int>(list->size()) : 0);
+    const Id owner = owner_;
+    bool done = false;
+    auto cmd = hmi::changeView(doc_, view_, scope_ == Scope::Shortcuts ? "Coller un raccourci" : "Coller une action",
+                               [&](hmi::Project&, hmi::View& v) {
+        auto* l = owner == kNoId ? &v.actions : (v.object(owner) ? &v.object(owner)->actions : nullptr);
+        if (!l || at > static_cast<int>(l->size())) return;
+        l->insert(l->begin() + at, a);
+        done = true;
+    });
+    if (!cmd) return false;
+    apply_(std::move(cmd));
+    if (done) selected_ = at;
+    refresh();
+    return done;
+}
+
+std::vector<ui::PopupMenu::Item> HmiActionsPanel::contextItems() const {
+    namespace cmd = ui::cmd;
+    std::vector<ui::PopupMenu::Item> items;
+    if (!several_.empty()) return items;   // plusieurs objets : la liste des objets (le menu commun)
+    const bool keys = scope_ == Scope::Shortcuts;
+    const int sel = selectedIndex();
+    const auto* list = actions();
+    const auto tool = [this](int a, std::string label, std::string key, std::string why) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.id = kMenuTool + a;
+        it.enabled = tools_->isEnabled(a);
+        if (!it.enabled) it.disabledReason = std::move(why);
+        return it;
+    };
+    std::string head = ownerName();
+    std::string right;
+    if (list && sel >= 0 && sel < static_cast<int>(list->size())) {
+        head = (keys ? "Raccourci " : "Action ") + std::to_string(rowOf(sel) + 1);
+        right = hmi::describeAction((*list)[static_cast<std::size_t>(sel)]);
+        if (right.size() > 48) right = right.substr(0, 45) + "\xE2\x80\xA6";
+    }
+    items.push_back(cmd::heading(head, right));
+    const std::string none = keys ? "choisis d'abord un raccourci" : "choisis d'abord une action";
+    auto add = tool(AAdd, keys ? "Ajouter un raccourci" : "Ajouter une action", "Inser", "une action est \xC3\xA0 un objet");
+    add.icon = ui::Icon::Plus;
+    items.push_back(std::move(add));
+    auto dup = tool(ADuplicate, "Dupliquer\xE2\x80\xA6", "Ctrl+Maj+D", none);
+    dup.icon = ui::Icon::Duplicate;
+    items.push_back(std::move(dup));
+    ui::PopupMenu::Item copy;
+    copy.label = keys ? "Copier le raccourci" : "Copier l'action";
+    copy.shortcut = "Ctrl+C";
+    copy.icon = ui::Icon::Copy;
+    copy.id = kMenuCopyAction;
+    copy.enabled = sel >= 0;
+    if (!copy.enabled) copy.disabledReason = none;
+    items.push_back(std::move(copy));
+    const auto& clip = actionClip();
+    const bool pastable = clip.action && ui::clipboardText() == clip.text && keys == hmi::triggerIsKey(clip.action->trigger);
+    ui::PopupMenu::Item paste;
+    paste.label = keys ? "Coller un raccourci" : "Coller une action";
+    paste.shortcut = "Ctrl+V";
+    paste.icon = ui::Icon::Paste;
+    paste.id = kMenuPasteAction;
+    paste.enabled = pastable;
+    if (!pastable) paste.disabledReason = keys ? "aucun raccourci copi\xC3\xA9" : "aucune action copi\xC3\xA9" "e";
+    items.push_back(std::move(paste));
+    items.push_back(cmd::separator());
+    items.push_back(tool(AUp, "Monter", "Alt+\xE2\x86\x91", sel < 0 ? none : std::string("d\xC3\xA9j\xC3\xA0 en haut")));
+    items.push_back(tool(ADown, "Descendre", "Alt+\xE2\x86\x93", sel < 0 ? none : std::string("d\xC3\xA9j\xC3\xA0 en bas")));
+    items.push_back(cmd::separator());
+    auto rem = tool(ARemove, "Retirer", "Suppr", none);
+    rem.icon = ui::Icon::Delete;
+    items.push_back(std::move(rem));
+    return items;
 }
 
 bool HmiActionsPanel::openDuplicate() {

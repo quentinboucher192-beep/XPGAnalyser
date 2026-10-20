@@ -324,6 +324,32 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
                                           "employ\xC3\xA9, une question liste ses emplois d'abord. Ses emplois et les arguments qui lui sont "
                                           "donn\xC3\xA9s restent et deviennent des fautes de compilation, \xC3\xA0 corriger.",
                                           moves, field(key + "ordre")));
+            // 1.12.18 (planche 9) : le menu du titre du parametre - Renommer partout, Monter, Descendre,
+            // Retirer (les memes que la liste Ordre), avec leurs touches.
+            {
+                const auto ordre = row.properties.back().commit;
+                row.menuRight = shown + (symbol ? std::string(" \xC2\xB7 ") + v.name : std::string{});
+                PG::Category::Action rename;
+                rename.label = "Renommer partout\xE2\x80\xA6";
+                rename.shortcut = "F2";
+                rename.edit = "Nom";
+                rename.icon = ui::Icon::Rename;
+                row.actions.push_back(std::move(rename));
+                const auto move = [&](std::string label, std::string keyName, std::string value, bool ok, std::string why) {
+                    PG::Category::Action a;
+                    a.label = std::move(label);
+                    a.shortcut = std::move(keyName);
+                    a.enabled = ok && static_cast<bool>(ordre);
+                    a.why = std::move(why);
+                    a.run = [ordre, value] { if (ordre) (void)ordre(value); };
+                    return a;
+                };
+                row.actions.push_back(move("Monter", "Alt+\xE2\x86\x91", "Monter", i > 0, "d\xC3\xA9j\xC3\xA0 le premier"));
+                row.actions.push_back(move("Descendre", "Alt+\xE2\x86\x93", "Descendre", i + 1 < v.params.size(), "d\xC3\xA9j\xC3\xA0 le dernier"));
+                auto remove = move("Retirer\xE2\x80\xA6", "Suppr", "Supprimer", true, {});
+                remove.icon = ui::Icon::Delete;
+                row.actions.push_back(std::move(remove));
+            }
             row.expanded = v.params.size() <= 4;
             sec.children.push_back(std::move(row));
         }

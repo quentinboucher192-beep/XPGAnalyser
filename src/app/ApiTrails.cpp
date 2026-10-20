@@ -1088,7 +1088,7 @@ std::vector<Step> MainAnalysisScreen::ApiTrails::Kit::variable(Screen& s) {
     {
         Step x{"Force-la",
                "Choisis sa ligne, tape une nouvelle valeur (100), puis Forcer : la variable garde cette valeur, quoi que le "
-               "programme \xC3\xA9" "crive. D\xC3\xA9" "forcer la rend au programme. Ensuite : garder ce que le parcours a cr\xC3\xA9\xC3\xA9, ou tout d\xC3\xA9" "faire.",
+               "programme \xC3\xA9" "crive. Rel\xC3\xA2" "cher la rend au programme. Ensuite : garder ce que le parcours a cr\xC3\xA9\xC3\xA9, ou tout d\xC3\xA9" "faire.",
                [&s](Rect& r) {
                    if (tool(s, "tables", AnimationTablesPane::AForce, r)) return true;
                    if (toolByTip(s, "simulation", "Forcer", r)) return true;

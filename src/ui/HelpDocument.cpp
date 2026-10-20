@@ -380,7 +380,7 @@ HelpDocument buildHelp() {
     d.indexTerm("F9");
     d.indexTerm("F8");   // 1.10 (chantier L) : l'IHM simulee
     d.indexTerm("F2");
-    d.paragraph("Depuis la 1.8.0, F5 ne relance plus l'analyse : Projet \xE2\x80\xBA R\xC3\xA9importer et r\xC3\xA9" "analyser le fait.");
+    d.paragraph("Depuis la 1.8.0, F5 ne relance plus l'analyse : Projet \xE2\x80\xBA R\xC3\xA9" "analyser les fichiers le fait.");
     d.tableRow({"Touche", "Ce qu'elle fait"}, true);
     d.tableRow({"F1", "L'aide de ce qui est sous le curseur ou de l'onglet ouvert (un onglet du dossier Simulation : sa page)"});
     d.tableRow({"F2", "Renommer ce qui est choisi : le dialogue Renommer (aussi la case Nom et le double-clic)"});
@@ -404,7 +404,7 @@ HelpDocument buildHelp() {
     d.tableRow({"Ctrl+Z / Ctrl+Y", "Annuler / R\xC3\xA9tablir, partout"});
     d.tableRow({"Ctrl+H", "L'Historique"});
     d.tableRow({"Ctrl+S / Ctrl+O", "Enregistrer / Ouvrir"});
-    d.tableRow({"Ctrl+Maj+O", "Importer la configuration mat\xC3\xA9rielle (.XHW) dans le projet ouvert (1.11 : Ctrl+H reste \xC3\xA0 l'Historique)"});
+    d.tableRow({"Ctrl+Maj+O", "Importer la configuration (.XHW) dans le projet ouvert (1.11 : Ctrl+H reste \xC3\xA0 l'Historique)"});
     d.tableRow({"Ctrl+Alt+S", "Une version du projet (sur le poste d'exploitation : la page Simulation de Param\xC3\xA8tres syst\xC3\xA8me, 1.9)"});
     d.tableRow({"Ctrl+W", "Fermer l'onglet ouvert"});
     d.tableRow({"Ctrl+1 / Ctrl+5", "API \xE2\x80\xBA Variables / API \xE2\x80\xBA Statistiques"});

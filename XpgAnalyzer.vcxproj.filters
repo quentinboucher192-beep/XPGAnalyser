@@ -250,6 +250,9 @@
     <ClCompile Include="src\hmi\HmiActionKinds.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiAddressPlan.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiAlarmViews.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -470,6 +473,9 @@
       <Filter>app\hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\app\hmi\HmiActionsPanel.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiAddressDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\app\hmi\HmiAskDialog.cpp">
@@ -998,6 +1004,9 @@
       <Filter>ui</Filter>
     </ClCompile>
     <ClCompile Include="src\ui\FileKinds.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Commands.cpp">
       <Filter>ui</Filter>
     </ClCompile>
     <ClCompile Include="src\ui\KeyMap.cpp">
@@ -1654,6 +1663,9 @@
     <ClInclude Include="src\hmi\HmiActionKinds.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiAddressPlan.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiAlarmViews.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
@@ -1844,6 +1856,9 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiActionsPanel.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiAddressDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiAskDialog.hpp">
@@ -2273,6 +2288,9 @@
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\FileKinds.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Commands.hpp">
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\KeyMap.hpp">

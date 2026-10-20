@@ -495,7 +495,7 @@ void AnimationTablesPane::attach(ApiFrame& frame) {
     t.separator();
     t.add(AWrite, HmiGlyph::InputField, "\xC3\x89" "crire la nouvelle valeur dans la simulation", "\xC3\x89" "crire\xE2\x80\xA6");
     t.add(AForce, HmiGlyph::Lock, "Forcer : la variable garde la nouvelle valeur (ou celle du moment)", "Forcer");
-    t.add(AUnforce, HmiGlyph::Unlock, "D\xC3\xA9" "forcer les lignes choisies", "D\xC3\xA9" "forcer");
+    t.add(AUnforce, HmiGlyph::Unlock, "Rel\xC3\xA2" "cher les lignes choisies", "Rel\xC3\xA2" "cher");
     t.add(AUnforceAll, HmiGlyph::Refresh, "Tout d\xC3\xA9" "forcer, dans toute la simulation", "Tout d\xC3\xA9" "forcer");
     const auto haveTable = [this] { return project() != nullptr && current() != nullptr; };
     t.setEnabledWhen(ARename, haveTable);

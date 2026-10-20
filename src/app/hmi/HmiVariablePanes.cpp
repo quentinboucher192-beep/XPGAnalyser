@@ -1,6 +1,9 @@
 // app/hmi/HmiVariablePanes.cpp - les variables IHM (dossiers, structures, tableaux,
 // liaison) et les types IHM (lot 16).
 #include "HmiVariablePanes.hpp"
+#include "../../hmi/HmiDesign.hpp"   // 1.12.18 : Voir les usages (la recherche du projet)
+#include "../../hmi/HmiAddressPlan.hpp"   // 1.12.18 : l'adresse dans toutes les cases (une formule de i)
+#include "../../ui/Commands.hpp"   // 1.12.18 : le menu des variables
 #include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 
 #include "HmiAssetPanes.hpp"
@@ -51,7 +54,12 @@ enum TypeAction : int { TAdd = 1, TMember, TUp, TDown, TRemoveMember, TDuplicate
 enum VarMenu : int { MTrend = 1, MCopyName, MRename, MDuplicate, MDelete,
                      MInternal, MInternalAll, MAttach, MAttachAll, MRecalc, MRestore,     // 1.11.8
                      MRetainReset, MRetainResetAll, MRetainExport, MRetainImport, MRetainWhere, MRetainCheck,     // 1.11.16
-                     MAddrRevert };   // 1.12.16 : revenir aux adresses calculees
+                     MAddrRevert,     // 1.12.16 : revenir aux adresses calculees
+                     MAddrAll };      // 1.12.18 : l'adresse d'un membre dans toutes les cases (la fenetre)
+// 1.12.18 : le menu porte aussi les commandes de la barre (kMenuBase - kMenuToolBase - commande)
+// et les emplois de Voir les usages (kMenuBase - kMenuUseBase - rang).
+constexpr int kMenuToolBase = 100, kMenuUseBase = 200;
+constexpr int kMemberDuplicate = 50, kMemberRename = 51;   // 1.12.18 : le menu des membres d'un type
 
 // 1.11.8 : le meme membre dans toutes les cases : chaque indice devient [*] ("[0].NOM" -> "[*].NOM").
 std::string allElementsOf(std::string_view rel) {
@@ -71,6 +79,45 @@ std::string allElementsOf(std::string_view rel) {
     }
     return out;
 }
+// 1.12.18 : les places (Variable::places) qui donnent l'adresse de ces membres - une adresse tapee sur le
+// membre, ou la formule [*] qui le couvre ("[*].Retour" = "%MW(1000 + 10 * i)") ; leurs chemins.
+std::vector<std::string> placesOver(const hmi::Variable& v, const std::vector<std::string>& members) {
+    std::vector<std::string> out;
+    const auto same = [](const std::string& a, const std::string& b) {
+        return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) {
+                   return std::toupper(static_cast<unsigned char>(x)) == std::toupper(static_cast<unsigned char>(y));
+               });
+    };
+    for (const auto& m : members)
+        for (const auto& pl : v.places) {
+            if (pl.address.empty()) continue;
+            const bool exact = same(pl.path, m);
+            const bool formula = !exact && pl.path.find("[*]") != std::string::npos && ty::isFormula(pl.address) && ty::memberCovers(pl.path, m);
+            if ((exact || formula) && std::none_of(out.begin(), out.end(), [&](const std::string& o) { return same(o, pl.path); }))
+                out.push_back(pl.path);
+        }
+    return out;
+}
+// 1.12.18 : la formule qui donne l'adresse de ce membre, ou le depart de cette case (le motif, la formule) ;
+// vide : aucune. Une adresse tapee sur le membre passe avant.
+std::pair<std::string, std::string> formulaOver(const hmi::Variable& v, const std::string& rel) {
+    std::pair<std::string, std::string> best;
+    for (const auto& pl : v.places) {
+        if (pl.path.find("[*]") == std::string::npos || !ty::isFormula(pl.address)) continue;
+        std::vector<long long> idx;
+        std::string cell;
+        if (!ty::patternIndices(pl.path, rel, idx, &cell) || cell.size() != rel.size()) continue;
+        if (pl.path.size() > best.first.size()) best = {pl.path, pl.address};
+    }
+    return best;
+}
+// "  f 1000 + 10 * i" (un f crochet, U+0192) : la marque d'une adresse par formule dans la colonne Adresse.
+const std::string kFormulaMark = "  \xC6\x92 ";
+std::string formulaHint(const std::string& formula) {
+    std::string prefix, expression, bit;
+    return kFormulaMark + (hmi::addr::split(formula, prefix, expression, bit) ? expression : formula);
+}
+
 constexpr int kMenuBase = -1000;
 enum Col : std::size_t { CName, CType, CInitial, CRetain, CEquipment, CAddress, CAccess, CPlace, CQuality, CCount };   // 1.11.16 : CRetain, apres Initiale
 
@@ -662,7 +709,12 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     menu_ = table_->contextMenu();
     if (menu_)
         links_ += menu_->itemChosen->connect([this](int a) {
-            if (a < kMenuBase && a > kMenuBase - 100) runMenu(kMenuBase - a);
+            if (a < kMenuBase && a > kMenuBase - kMenuToolBase) runMenu(kMenuBase - a);
+            else if (a <= kMenuBase - kMenuToolBase && a > kMenuBase - kMenuUseBase) tools_->triggered->emit(kMenuBase - kMenuToolBase - a);
+            else if (a <= kMenuBase - kMenuUseBase && a > kMenuBase - kMenuUseBase - 100) {
+                const auto k = static_cast<std::size_t>(kMenuBase - kMenuUseBase - a);
+                if (k < usesOfMenu_.size() && hosts_.openUse) hosts_.openUse(usesOfMenu_[k].view, usesOfMenu_[k].object);
+            }
         });
 
     links_ += tools_->triggered->connect([this](int a) {
@@ -1066,9 +1118,12 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
             initial = leaf->initial;
             address = leaf->address;
             if (v.bound()) place = internal ? std::string("dans l'IHM") : placeOf(leaf->address, leaf->type);
-            // Une adresse corrigee a la main : le crayon.
+            // Une adresse corrigee a la main : le crayon ; 1.12.18 : donnee par une formule de i, la formule.
+            bool pen = false;
             for (const auto& pl : v.places)
-                if (sameText(pl.path, k.rel) && !pl.address.empty()) address += " \xE2\x9C\x8E";
+                if (sameText(pl.path, k.rel) && !pl.address.empty()) pen = true;
+            if (pen) address += " \xE2\x9C\x8E";
+            else if (const auto f = formulaOver(v, k.rel); !f.first.empty() && !address.empty()) address += formulaHint(f.second);
         } else if (composite && v.bound()) {
             // Un membre compose : de sa premiere case a sa derniere (dans l'ordre du type).
             std::vector<hmi::Variable> part;
@@ -1087,9 +1142,12 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
                     address = lf.address;
                 }
             }
-            // 1.11.8 : le depart donne a la main (Vannes[2] -> %MW500) : le crayon.
+            // 1.11.8 : le depart donne a la main (Vannes[2] -> %MW500) : le crayon ; 1.12.18 : par une formule.
+            bool pen = false;
             for (const auto& pl : v.places)
-                if (sameText(pl.path, k.rel) && !pl.address.empty() && !address.empty()) address += " \xE2\x9C\x8E";
+                if (sameText(pl.path, k.rel) && !pl.address.empty()) pen = true;
+            if (pen && !address.empty()) address += " \xE2\x9C\x8E";
+            else if (const auto f = formulaOver(v, k.rel); !f.first.empty() && !address.empty()) address += formulaHint(f.second);
         }
         if (composite && !v.bound()) {
             ty::Spec ks;
@@ -1485,6 +1543,7 @@ bool HmiVariablesPane::commitCell(std::size_t row, std::size_t col, const std::s
             if (col == CAddress) {
                 std::string address = text;
                 if (const auto pen = address.find(" \xE2\x9C\x8E"); pen != std::string::npos) address.erase(pen);
+            if (const auto fx = address.find(kFormulaMark); fx != std::string::npos) address.erase(fx);   // 1.12.18
                 ok = setMemberAddress(r.var, r.rel, trimmed(address), &why);
             }
             break;
@@ -2210,7 +2269,10 @@ std::string HmiVariablesPane::computedMemberAddress(Id id, const std::string& re
     const auto* v = doc_->project.variableById(id);
     if (!v || !v->bound()) return {};
     hmi::Variable plain = *v;   // sans sa correction : la place dans la suite logique
-    std::erase_if(plain.places, [&](const hmi::MemberAddress& m) { return sameText(m.path, rel); });
+    const auto over = placesOver(*v, {rel});   // 1.12.18 : la formule [*] qui le couvre aussi
+    std::erase_if(plain.places, [&](const hmi::MemberAddress& m) {
+        return sameText(m.path, rel) || std::any_of(over.begin(), over.end(), [&](const std::string& o) { return sameText(o, m.path); });
+    });
     const std::string path = upper(v->name + (rel.empty() || rel.front() == '[' ? "" : ".") + rel);
     std::string best;
     long long bestKey = -1;
@@ -2241,6 +2303,21 @@ bool HmiVariablesPane::clearMemberAddresses(Id id, const std::vector<std::string
     if (n == 0) return fail(why, "aucune adresse corrig\xC3\xA9" "e \xC3\xA0 la main");
     return change(id, std::string(n == 1 ? "Adresse calcul\xC3\xA9" "e : " : "Adresses calcul\xC3\xA9" "es : ") + v->name,
                   [&](hmi::Variable& x) { std::erase_if(x.places, wanted); });
+}
+
+bool HmiVariablesPane::applyAddressFormula(Id id, const std::string& pattern, const std::string& formula, std::string* why) {
+    const auto* v = doc_->project.variableById(id);
+    if (!v) return fail(why, "variable introuvable");
+    const auto plan = hmi::addr::preview(doc_->project, *v, pattern, formula);
+    if (!plan.ok()) return fail(why, plan.errors.empty() ? std::string("aucune case") : plan.errors.front());
+    const std::string name = v->name + (pattern.empty() || pattern.front() == '[' ? "" : ".") + pattern;
+    const std::size_t n = plan.rows.size(), shared = plan.shared;
+    if (!change(id, "Adresses de " + name + " : " + formula, [&](hmi::Variable& x) { x = hmi::addr::withFormula(x, pattern, formula); }))
+        return fail(why, "rien n'a chang\xC3\xA9");
+    say(name + " suit la formule " + formula + " : " + std::to_string(n) + (n > 1 ? " cases" : " case")
+        + (shared ? " (" + std::to_string(shared) + (shared > 1 ? " adresses d\xC3\xA9j\xC3\xA0 prises ailleurs, gard\xC3\xA9" "es des deux c\xC3\xB4t\xC3\xA9s)" : " adresse d\xC3\xA9j\xC3\xA0 prise ailleurs, gard\xC3\xA9" "e des deux c\xC3\xB4t\xC3\xA9s)") : std::string{})
+        + " - Ctrl+Z d\xC3\xA9" "fait tout");
+    return true;
 }
 
 bool HmiVariablesPane::setMembersInternal(Id id, const std::vector<std::string>& relPaths, bool internal, bool allElements, std::string* why) {
@@ -2594,6 +2671,18 @@ void HmiVariablesPane::rebuildProperties() {
             // 1.12.16 : une adresse corrigee a la main (%MW510 au lieu de la suite) - le bouton de retour rend la place calculee.
             bool fixedHere = false;
             for (const auto& pl : v->places) fixedHere = fixedHere || (!pl.address.empty() && sameText(pl.path, rel));
+            // 1.12.18 : donnee par une formule de i - le retour retire la formule (toutes les cases).
+            if (const auto f = formulaOver(*v, rel); !fixedHere && !f.first.empty()) {
+                const std::string pattern = f.first;
+                pa.overridden = true;
+                pa.overrideDefault = "la place calcul\xC3\xA9" "e";
+                pa.overrideFrom = "Formule " + v->name + (pattern.front() == '[' ? "" : ".") + pattern + " = " + f.second;
+                pa.revert = [this, id, pattern] {
+                    std::string why;
+                    if (!clearMemberAddresses(id, {pattern}, &why)) say("Refus\xC3\xA9 : " + why, true);
+                };
+                pa.revertTip = "Revenir aux adresses calcul\xC3\xA9" "es (retire la formule de toutes les cases)";
+            }
             if (fixedHere) {
                 const std::string computed = computedMemberAddress(id, rel);
                 pa.overridden = true;
@@ -2896,9 +2985,12 @@ HmiQuickTrend* HmiVariablesPane::openTrend() {
 
 void HmiVariablesPane::openContextMenu(gfx::Point at) {
     if (!menu_) return;
-    // Le menu de la table (Copier, Coller, Tout choisir, les filtres), puis les
-    // entrees du volet en tete.
+    namespace cmd = ui::cmd;
+    // Le menu de la table (Copier, Coller, Tout choisir, les filtres) : il devient le sous-menu
+    // « Copier, coller, filtres ». 1.12.18 (planche 10) : l'ordre de la maquette - l'en-tete, creer,
+    // voir, nommer, lier, la structure, la remanence, puis Supprimer.
     table_->openContextMenu(at);
+    const auto tableItems = menu_->items();
     const auto paths = trendPaths();
     const auto sel = table_->selectedModelRows();
     const bool any = !sel.empty();
@@ -2906,36 +2998,90 @@ void HmiVariablesPane::openContextMenu(gfx::Point at) {
                   && (rows_[sel.front()].kind == Row::Kind::Variable || rows_[sel.front()].kind == Row::Kind::Folder);
     const bool oneVar = one && rows_[sel.front()].kind == Row::Kind::Variable;
     const std::string none = "choisis une variable (ou un dossier)";
+    const auto entry = [](std::string label, int id, std::string key = {}, bool enabled = true, std::string why = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.id = id;
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        return it;
+    };
+    const auto tool = [this, &entry](int t, std::string label, std::string key, std::string why) {
+        return entry(std::move(label), kMenuBase - kMenuToolBase - t, std::move(key), tools_->isEnabled(t), std::move(why));
+    };
     std::vector<ui::PopupMenu::Item> items;
-    items.push_back({"Ouvrir une visualisation graphique", std::to_string(paths.size()) + (paths.size() > 1 ? " courbes" : " courbe"),
-                     paths.empty() ? std::string("rien \xC3\xA0 tracer : une variable num\xC3\xA9rique ou BOOL") : std::string{},
-                     ui::Icon::Chart, !paths.empty(), false, kMenuBase - MTrend});
+    // ---- l'en-tete : ce qui est vise ----
+    const auto* v = doc_->project.variableById(selectedVariable());
+    if (sel.size() == 1 && sel.front() < rows_.size()) {
+        const Row& r = rows_[sel.front()];
+        std::string right = r.type;
+        if (r.kind == Row::Kind::Folder) right = "dossier";
+        if (v && r.kind == Row::Kind::Variable && v->bound()) right += " \xC2\xB7 " + v->equipment;
+        if (r.cells.size() > 5 && !r.cells[5].empty() && r.cells[5].front() == '%') right += " \xC2\xB7 " + r.cells[5];
+        items.push_back(cmd::heading(r.key, right));
+    } else if (any) {
+        items.push_back(cmd::heading(std::to_string(sel.size()) + " lignes"));
+    }
+    auto addVar = tool(VAdd, "Nouvelle variable", "Inser", "pas ici");
+    addVar.icon = ui::Icon::Plus;
+    items.push_back(std::move(addVar));
+    items.push_back(tool(VFolder, "Nouveau dossier", {}, "pas ici"));
+    items.push_back(cmd::separator());
+    {
+        auto trend = entry("Ouvrir une visualisation (" + std::to_string(paths.size()) + (paths.size() > 1 ? " courbes)" : " courbe)"),
+                           kMenuBase - MTrend, {}, !paths.empty(), "rien \xC3\xA0 tracer : une variable num\xC3\xA9rique ou BOOL");
+        trend.icon = ui::Icon::Chart;
+        items.push_back(std::move(trend));
+    }
     // Comme la maquette : ce qui ne se trace pas (un texte, une couleur) est dit.
     std::size_t noTrace = 0;
     for (const auto r : sel) {
         if (r >= rows_.size() || rows_[r].kind != Row::Kind::Variable) continue;
-        const auto* v = doc_->project.variableById(rows_[r].var);       // le chemin trace : son nom (trendPaths)
-        if (!v) continue;
-        const std::string& key = v->name;
+        const auto* var = doc_->project.variableById(rows_[r].var);       // le chemin trace : son nom (trendPaths)
+        if (!var) continue;
+        const std::string& key = var->name;
         const bool traced = std::any_of(paths.begin(), paths.end(), [&](const std::string& p) {
             return p == key || (p.size() > key.size() && p.compare(0, key.size(), key) == 0 && (p[key.size()] == '.' || p[key.size()] == '['));
         });
         if (!traced) ++noTrace;
     }
     if (noTrace)
-        items.push_back({std::to_string(noTrace) + (noTrace > 1 ? " variables sans courbe" : " variable sans courbe") + " (texte, couleur\xE2\x80\xA6)",
-                         "", "", ui::Icon::None, false, false, -1});
-    items.push_back({"", "", "", ui::Icon::None, true, true, -1});
-    items.push_back({"Copier le nom", "", any ? std::string{} : none, ui::Icon::None, any, false, kMenuBase - MCopyName});
-    items.push_back({"Renommer\xE2\x80\xA6", "F2", one ? std::string{} : none, ui::Icon::None, one, false, kMenuBase - MRename});
-    items.push_back({"Dupliquer", "", oneVar ? std::string{} : std::string("une variable \xC3\xA0 la fois"), ui::Icon::None, oneVar, false,
-                     kMenuBase - MDuplicate});
-    items.push_back({"Supprimer", "Suppr", one ? std::string{} : std::string("une ligne \xC3\xA0 la fois"), ui::Icon::Close, one, false, kMenuBase - MDelete});
+        items.push_back(entry(std::to_string(noTrace) + (noTrace > 1 ? " variables sans courbe" : " variable sans courbe") + " (texte, couleur\xE2\x80\xA6)",
+                              -1, {}, false, {}));
+    // Voir les usages : chaque emploi (la vue, l'objet, la case), un clic y va.
+    usesOfMenu_.clear();
+    if (v) {
+        hmi::design::FindOptions o;
+        o.wholeWord = true;
+        usesOfMenu_ = hmi::design::find(doc_->project, v->name, {}, o);
+        ui::PopupMenu::Item uses = entry("Voir les usages (" + std::to_string(usesOfMenu_.size()) + ")", -1);
+        uses.icon = ui::Icon::Search;
+        for (std::size_t k = 0; k < usesOfMenu_.size() && k < 20; ++k)
+            uses.children.push_back(entry(usesOfMenu_[k].where, kMenuBase - kMenuUseBase - static_cast<int>(k), {}, static_cast<bool>(hosts_.openUse),
+                                          "pas d'\xC3\xA9" "cran pour l'ouvrir"));
+        if (uses.children.empty()) {
+            uses.enabled = false;
+            uses.disabledReason = "employ\xC3\xA9" "e nulle part";
+        }
+        items.push_back(std::move(uses));
+    }
+    items.push_back(cmd::separator());
+    items.push_back(entry("Copier le nom", kMenuBase - MCopyName, {}, any, none));
+    items.push_back(cmd::item(cmd::Id::Renommer, kMenuBase - MRename, one, none));
+    items.push_back(cmd::item(cmd::Id::Dupliquer, kMenuBase - MDuplicate, oneVar, "une variable \xC3\xA0 la fois"));
+    items.push_back(tool(VItems, "Valeur initiale\xE2\x80\xA6", {}, "une variable \xC3\xA0 la fois"));
+    if (v) {
+        items.push_back(cmd::separator());
+        if (v->bound()) items.push_back(tool(VUnlink, "D\xC3\xA9lier (elle reste dans l'IHM)", {}, "pas li\xC3\xA9" "e"));
+        else items.push_back(tool(VLink, "Lier \xC3\xA0 un \xC3\xA9quipement\xE2\x80\xA6", {}, "un objet de l'IHM ne se lie pas"));
+        items.push_back(tool(VShow, "Voir dans \xC3\x89quipements", {}, "pas li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement"));
+    }
     // 1.11.8 : un membre d'une structure liee - interne (garde dans l'IHM) ou attribue a son equipement.
-    if (const auto* v = doc_->project.variableById(selectedVariable()); v && v->bound() && ty::isComposite(v->type)) {
-        items.push_back({"", "", "", ui::Icon::None, true, true, -1});
+    if (v && v->bound() && ty::isComposite(v->type)) {
+        items.push_back(cmd::separator());
         const auto members = selectedMemberPaths();
-        const std::string none = "clic droit sur un membre (une ligne sous " + v->name + ")";
+        const std::string noMember = "clic droit sur un membre (une ligne sous " + v->name + ")";
         std::size_t internals = 0;
         bool indexed = false;
         for (const auto& m : members) {
@@ -2945,65 +3091,80 @@ void HmiVariablesPane::openContextMenu(gfx::Point at) {
         const std::string what = members.size() == 1 ? v->name + (members.front().front() == '[' ? "" : ".") + members.front()
                                                      : std::to_string(members.size()) + " membres";
         const std::string every = members.size() == 1 ? v->name + (members.front().front() == '[' ? "" : ".") + allElementsOf(members.front()) : "toutes les cases";
-        const bool canInternal = !members.empty() && internals < members.size();
-        const bool canAttach = internals > 0;
-        items.push_back({"Rendre interne (gard\xC3\xA9 dans l'IHM)", members.empty() ? std::string{} : what,
-                         members.empty() ? none : !canInternal ? std::string("d\xC3\xA9j\xC3\xA0 interne") : std::string{}, ui::Icon::None, canInternal, false,
-                         kMenuBase - MInternal});
-        if (indexed)
-            items.push_back({"Rendre interne dans toutes les cases", every, members.empty() ? none : std::string{}, ui::Icon::None, !members.empty(), false,
-                             kMenuBase - MInternalAll});
-        items.push_back({"Attribuer \xC3\xA0 " + v->equipment, members.empty() ? std::string{} : what,
-                         members.empty() ? none : !canAttach ? std::string("d\xC3\xA9j\xC3\xA0 attribu\xC3\xA9 \xC3\xA0 l'\xC3\xA9quipement") : std::string{},
-                         ui::Icon::None, canAttach, false, kMenuBase - MAttach});
-        if (indexed && !v->internal.empty())
-            items.push_back({"Attribuer dans toutes les cases", every, members.empty() ? none : std::string{}, ui::Icon::None, !members.empty(), false,
-                             kMenuBase - MAttachAll});
-        // 1.12.16 : une adresse corrigee a la main (%MW510 au lieu de la suite logique) - revenir a la place calculee.
+        // 1.12.18 (planche 11) : l'adresse d'un membre dans toutes les cases - une formule de i, ou a la suite.
         {
-            std::vector<std::string> fixedSel;
-            for (const auto& m : members)
-                for (const auto& pl : v->places)
-                    if (!pl.address.empty() && sameText(pl.path, m)) fixedSel.push_back(m);
+            ty::Spec spec;
+            // Un tableau (sa ligne : les cases entieres), ou un membre sous un indice (Vannes[2].Position).
+            const bool arrayOf = (ty::parseSpec(v->type, spec) && spec.array())
+                                 || (members.size() == 1 && members.front().find('[') != std::string::npos);
+            auto all = entry("Modifier l'adresse dans toutes les cases\xE2\x80\xA6", kMenuBase - MAddrAll, {}, arrayOf && static_cast<bool>(hosts_.editAddresses),
+                             !arrayOf ? std::string("pas un tableau : une case \xC3\xA0 la fois") : std::string("pas d'\xC3\xA9" "cran pour l'ouvrir"));
+            items.push_back(std::move(all));
+        }
+        {
+            // Une adresse tapee sur le membre, ou (1.12.18) la formule [*] qui le couvre.
+            const auto fixedSel = placesOver(*v, members);
+            const bool viaFormula = std::any_of(fixedSel.begin(), fixedSel.end(), [](const std::string& f) { return f.find("[*]") != std::string::npos; });
             std::size_t fixedAll = 0;
             for (const auto& pl : v->places) fixedAll += pl.address.empty() ? 0 : 1;
-            if (!fixedSel.empty())
-                items.push_back({fixedSel.size() == 1 ? "Revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e" : "Revenir aux adresses calcul\xC3\xA9" "es",
-                                 fixedSel.size() == 1 ? computedMemberAddress(v->id, fixedSel.front()) : std::to_string(fixedSel.size()) + " membres", "",
-                                 ui::Icon::None, true, false, kMenuBase - MAddrRevert});
+            if (viaFormula)
+                items.push_back(entry("Revenir aux adresses calcul\xC3\xA9" "es (la formule de " + v->name
+                                          + (fixedSel.front().front() == '[' ? "" : ".") + fixedSel.front() + ")",
+                                      kMenuBase - MAddrRevert));
+            else if (!fixedSel.empty())
+                items.push_back(entry(fixedSel.size() == 1 ? "Revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e (" + computedMemberAddress(v->id, fixedSel.front()) + ")"
+                                                           : "Revenir aux adresses calcul\xC3\xA9" "es (" + std::to_string(fixedSel.size()) + " membres)",
+                                      kMenuBase - MAddrRevert));
             else if (members.empty() && fixedAll > 0)
-                items.push_back({"Retirer les adresses corrig\xC3\xA9" "es", std::to_string(fixedAll) + (fixedAll > 1 ? " membres" : " membre"), "",
-                                 ui::Icon::None, true, false, kMenuBase - MAddrRevert});
+                items.push_back(entry("Retirer les adresses corrig\xC3\xA9" "es (" + std::to_string(fixedAll) + (fixedAll > 1 ? " membres)" : " membre)"),
+                                      kMenuBase - MAddrRevert));
+            else
+                items.push_back(entry("Revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e", kMenuBase - MAddrRevert, {}, false,
+                                      "d\xC3\xA9j\xC3\xA0 \xC3\xA0 l'adresse calcul\xC3\xA9" "e"));
         }
-        items.push_back({v->compact ? "Place d'origine (membres internes compris)" : "Recalculer la place m\xC3\xA9moire",
-                         ty::spanText(doc_->project, *v), v->internal.empty() && !v->compact ? std::string("aucun membre interne : rien \xC3\xA0 rendre") : std::string{},
-                         ui::Icon::None, !v->internal.empty() || v->compact, false, kMenuBase - (v->compact ? MRestore : MRecalc)});
+        items.push_back(entry((v->compact ? "Place d'origine (membres internes compris) \xE2\x80\x94 " : "Recalculer la place m\xC3\xA9moire \xE2\x80\x94 ")
+                                  + ty::spanText(doc_->project, *v),
+                              kMenuBase - (v->compact ? MRestore : MRecalc), {}, !v->internal.empty() || v->compact,
+                              "aucun membre interne : rien \xC3\xA0 rendre"));
+        const bool canInternal = !members.empty() && internals < members.size();
+        const bool canAttach = internals > 0;
+        ui::PopupMenu::Item inner = entry("Interne ou attribu\xC3\xA9", -1);
+        inner.children.push_back(entry("Rendre interne (gard\xC3\xA9 dans l'IHM) : " + what, kMenuBase - MInternal, {}, canInternal,
+                                       members.empty() ? noMember : std::string("d\xC3\xA9j\xC3\xA0 interne")));
+        if (indexed)
+            inner.children.push_back(entry("Rendre interne dans toutes les cases : " + every, kMenuBase - MInternalAll, {}, !members.empty(), noMember));
+        inner.children.push_back(entry("Attribuer \xC3\xA0 " + v->equipment + " : " + what, kMenuBase - MAttach, {}, canAttach,
+                                       members.empty() ? noMember : std::string("d\xC3\xA9j\xC3\xA0 attribu\xC3\xA9 \xC3\xA0 l'\xC3\xA9quipement")));
+        if (indexed && !v->internal.empty())
+            inner.children.push_back(entry("Attribuer dans toutes les cases : " + every, kMenuBase - MAttachAll, {}, !members.empty(), noMember));
+        items.push_back(std::move(inner));
     }
-    // ---- 1.11.16 : la remanence d'exploitation ----
+    // ---- 1.11.16 : la remanence d'exploitation (un sous-menu, 1.12.18) ----
     {
-        items.push_back({"", "", "", ui::Icon::None, true, true, -1});
-        const auto* v = doc_->project.variableById(selectedVariable());
         const bool hasFile = !retainFile().empty();
         const std::string noFile = "projet jamais enregistr\xC3\xA9 : pas de stockage";
         const auto* store = hasFile ? retainStore() : nullptr;
         const bool saved = v && store && std::any_of(store->entries.begin(), store->entries.end(), [v](const hmi::retain::Entry& e) { return e.cell.variable == v->id; });
-        items.push_back({"R\xC3\xA9initialiser cette variable r\xC3\xA9manente", v ? v->name : std::string{},
-                         !hasFile ? noFile : !v ? std::string("choisis une variable") : !saved ? std::string("aucune valeur gard\xC3\xA9" "e pour elle") : std::string{},
-                         ui::Icon::None, hasFile && saved, false, kMenuBase - MRetainReset});
         const std::size_t kept = store ? store->entries.size() : 0;
-        items.push_back({"R\xC3\xA9initialiser toutes les variables r\xC3\xA9manentes", std::to_string(kept) + " valeur(s)",
-                         !hasFile ? noFile : kept == 0 && retainNote_.empty() ? std::string("aucune valeur gard\xC3\xA9" "e") : std::string{}, ui::Icon::None,
-                         hasFile && (kept > 0 || !retainNote_.empty()), false, kMenuBase - MRetainResetAll});
-        items.push_back({"Exporter les valeurs r\xC3\xA9manentes\xE2\x80\xA6", "", !hasFile ? noFile : !store ? std::string("aucune valeur gard\xC3\xA9" "e") : std::string{},
-                         ui::Icon::None, hasFile && store, false, kMenuBase - MRetainExport});
-        items.push_back({"Importer les valeurs r\xC3\xA9manentes\xE2\x80\xA6", "", hasFile ? std::string{} : noFile, ui::Icon::None, hasFile, false,
-                         kMenuBase - MRetainImport});
-        items.push_back({"Afficher l'emplacement du stockage", "", hasFile ? std::string{} : noFile, ui::Icon::None, hasFile, false, kMenuBase - MRetainWhere});
-        items.push_back({"V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9 des donn\xC3\xA9" "es r\xC3\xA9manentes", "", hasFile ? std::string{} : noFile, ui::Icon::None, hasFile, false,
-                         kMenuBase - MRetainCheck});
+        ui::PopupMenu::Item retain = entry("R\xC3\xA9manence", -1);
+        retain.children.push_back(entry("R\xC3\xA9initialiser cette variable", kMenuBase - MRetainReset, {}, hasFile && saved,
+                                        !hasFile ? noFile : !v ? std::string("choisis une variable") : std::string("aucune valeur gard\xC3\xA9" "e pour elle")));
+        retain.children.push_back(entry("R\xC3\xA9initialiser toutes (" + std::to_string(kept) + ")", kMenuBase - MRetainResetAll, {},
+                                        hasFile && (kept > 0 || !retainNote_.empty()), !hasFile ? noFile : std::string("aucune valeur gard\xC3\xA9" "e")));
+        retain.children.push_back(entry("Exporter les valeurs\xE2\x80\xA6", kMenuBase - MRetainExport, {}, hasFile && store,
+                                        !hasFile ? noFile : std::string("aucune valeur gard\xC3\xA9" "e")));
+        retain.children.push_back(entry("Importer les valeurs\xE2\x80\xA6", kMenuBase - MRetainImport, {}, hasFile, noFile));
+        retain.children.push_back(entry("Afficher l'emplacement", kMenuBase - MRetainWhere, {}, hasFile, noFile));
+        retain.children.push_back(entry("V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9", kMenuBase - MRetainCheck, {}, hasFile, noFile));
+        items.push_back(std::move(retain));
     }
-    items.push_back({"", "", "", ui::Icon::None, true, true, -1});
-    for (const auto& it : menu_->items()) items.push_back(it);
+    {
+        ui::PopupMenu::Item table = entry("Copier, coller, filtres", -1);
+        table.children = tableItems;
+        items.push_back(std::move(table));
+    }
+    items.push_back(cmd::separator());
+    items.push_back(cmd::item(cmd::Id::Supprimer, kMenuBase - MDelete, one, "une ligne \xC3\xA0 la fois"));
     menu_->setItems(std::move(items));
 }
 
@@ -3019,6 +3180,11 @@ void HmiVariablesPane::runMenu(int action) {
             break;
         }
         case MRename:    tools_->triggered->emit(VRename); break;
+        case MAddrAll: {   // 1.12.18 (planche 11) : la fenetre de l'hote
+            const auto members = selectedMemberPaths();
+            if (hosts_.editAddresses) hosts_.editAddresses(selectedVariable(), members.empty() ? std::string{} : members.front());
+            break;
+        }
         case MDuplicate: tools_->triggered->emit(VDuplicate); break;
         case MDelete:    tools_->triggered->emit(VDelete); break;
         // 1.11.8 : les membres internes, la place memoire.
@@ -3037,10 +3203,7 @@ void HmiVariablesPane::runMenu(int action) {
         case MAddrRevert: {   // 1.12.16 : les membres choisis (sinon tous) reviennent a la suite logique
             std::string why;
             std::vector<std::string> rels;
-            if (const auto* v = doc_->project.variableById(selectedVariable()))
-                for (const auto& m : selectedMemberPaths())
-                    for (const auto& pl : v->places)
-                        if (!pl.address.empty() && sameText(pl.path, m)) rels.push_back(m);
+            if (const auto* v = doc_->project.variableById(selectedVariable())) rels = placesOver(*v, selectedMemberPaths());
             if (!clearMemberAddresses(selectedVariable(), rels, &why)) say("Refus\xC3\xA9 : " + why, true);
             else say(rels.size() == 1 ? "Adresse calcul\xC3\xA9" "e : " + rels.front() + " reprend sa place dans la suite (Ctrl+Z la rend)"
                                       : std::string("Adresses calcul\xC3\xA9" "es : les membres reprennent leur place dans la suite (Ctrl+Z les rend)"));
@@ -3197,8 +3360,27 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         menu_ = members_->contextMenu();
         if (menu_)
             links_ += menu_->itemChosen->connect([this](int a) {
-                if (a < kMenuBase && a > kMenuBase - 100) tools_->triggered->emit(kMenuBase - a);
+                if (a == kMenuBase - kMemberDuplicate) {
+                    if (selectedMember() >= 0) (void)duplicateMember(selectedType(), static_cast<std::size_t>(selectedMember()));
+                } else if (a == kMenuBase - kMemberRename) {
+                    members_->takeFocus();
+                    (void)members_->dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+                } else if (a < kMenuBase && a > kMenuBase - 100) {
+                    tools_->triggered->emit(kMenuBase - a);
+                }
             });
+        // 1.12.18 (planche 10) : les touches des membres - Inser, Suppr, Alt+Haut / Alt+Bas, Ctrl+D.
+        members_->setKeyHandler([this](const ui::KeyDown& k) {
+            const bool alt = k.mods.alt && !k.mods.ctrl && !k.mods.shift;
+            const int m = selectedMember();
+            if (k.key == ui::Key::Insert && k.mods.none()) { tools_->triggered->emit(TMember); return true; }
+            if (k.key == ui::Key::Delete && k.mods.none() && m >= 0) { tools_->triggered->emit(TRemoveMember); return true; }
+            if (alt && k.key == ui::Key::Up && m >= 0) { tools_->triggered->emit(TUp); return true; }
+            if (alt && k.key == ui::Key::Down && m >= 0) { tools_->triggered->emit(TDown); return true; }
+            if (k.key == ui::Key::D && k.mods.ctrl && !k.mods.shift && !k.mods.alt && m >= 0)
+                return duplicateMember(selectedType(), static_cast<std::size_t>(m));
+            return false;
+        });
     }
 
     // 1.10 (chantier U) : les valeurs d'une enumeration (a la place des membres), la
@@ -3727,7 +3909,7 @@ void HmiTypesPane::rebuildProperties() {
         cats.push_back(std::move(vars));
         // Les emplois des valeurs dans les scripts.
         PG::Category uses;
-        uses.name = "Emplois de " + t->name;
+        uses.name = "Usages de " + t->name;
         std::size_t total = 0;
         for (const auto& x : t->values) {
             const auto u = enumValueUses(p, t->name, x.name);
@@ -4109,28 +4291,74 @@ void HmiTypesPane::cancelPaste() {
 
 void HmiTypesPane::openMemberMenu(gfx::Point at) {
     if (!menu_) return;
+    namespace cmd = ui::cmd;
     members_->openContextMenu(at);
-    // Copier et Coller : ceux des membres (les titres du collage, l'apercu) ; de
-    // la table, on garde Tout choisir et les filtres.
+    // 1.12.18 (planche 10) : l'en-tete, puis creer, dupliquer, renommer, l'ordre, Excel, Supprimer.
     const bool type = selectedType() != kNoId;
-    const bool member = type && selectedMember() >= 0;
+    const int index = selectedMember();
+    const bool member = type && index >= 0;
+    const auto* t = type ? doc_->project.hmiType(selectedType()) : nullptr;
+    const auto entry = [](std::string label, int id, std::string key = {}, bool enabled = true, std::string why = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.id = id;
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        return it;
+    };
+    const std::string noType = "choisis un type", noMember = "choisis un membre";
     std::vector<ui::PopupMenu::Item> items;
-    items.push_back({"Copier (pour Excel)", "Ctrl+C", member ? std::string{} : std::string("choisis des membres"), ui::Icon::None, member, false,
-                     kMenuBase - TCopy});
-    items.push_back({"Coller depuis Excel\xE2\x80\xA6", "Ctrl+V", type ? std::string{} : std::string("choisis un type"), ui::Icon::None, type, false,
-                     kMenuBase - TPaste});
-    items.push_back({"", "", "", ui::Icon::None, true, true, -1});
-    items.push_back({"Nouveau membre", "", type ? std::string{} : std::string("choisis un type"), ui::Icon::None, type, false, kMenuBase - TMember});
-    items.push_back({"Supprimer le membre", "", member ? std::string{} : std::string("choisis un membre"), ui::Icon::Close, member, false,
-                     kMenuBase - TRemoveMember});
+    if (t && member && static_cast<std::size_t>(index) < t->members.size())
+        items.push_back(cmd::heading(t->members[static_cast<std::size_t>(index)].name, t->members[static_cast<std::size_t>(index)].type + " \xC2\xB7 " + t->name));
+    else if (t)
+        items.push_back(cmd::heading(t->name, "type"));
+    auto add = entry("Nouveau membre", kMenuBase - TMember, "Inser", type, noType);
+    add.icon = ui::Icon::Plus;
+    items.push_back(std::move(add));
+    items.push_back(cmd::item(cmd::Id::Dupliquer, kMenuBase - kMemberDuplicate, member, noMember));
+    items.push_back(cmd::item(cmd::Id::Renommer, kMenuBase - kMemberRename, member, noMember));
+    items.push_back(cmd::separator());
+    const std::size_t count = t ? t->members.size() : 0;
+    items.push_back(cmd::item(cmd::Id::Monter, kMenuBase - TUp, member && index > 0, member ? std::string("d\xC3\xA9j\xC3\xA0 le premier") : noMember));
+    items.push_back(cmd::item(cmd::Id::Descendre, kMenuBase - TDown, member && static_cast<std::size_t>(index) + 1 < count,
+                              member ? std::string("d\xC3\xA9j\xC3\xA0 le dernier") : noMember));
+    items.push_back(cmd::separator());
+    items.push_back(entry("Copier (pour Excel)", kMenuBase - TCopy, "Ctrl+C", member, "choisis des membres"));
+    items.push_back(entry("Coller depuis Excel\xE2\x80\xA6", kMenuBase - TPaste, "Ctrl+V", type, noType));
+    // De la table : Tout choisir et les filtres.
     bool keep = false;
     for (const auto& it : menu_->items()) {
-        if (!it.separator && it.id == 5) keep = true;                  // Tout choisir, et ce qui suit
+        if (!it.separator && it.id == 5) keep = true;
         if (!keep) continue;
-        if (items.back().separator == false && it.id == 5) items.push_back({"", "", "", ui::Icon::None, true, true, -1});
+        if (!items.back().separator && it.id == 5) items.push_back(cmd::separator());
         items.push_back(it);
     }
+    items.push_back(cmd::separator());
+    auto del = entry("Supprimer le membre", kMenuBase - TRemoveMember, "Suppr", member, noMember);
+    del.icon = ui::Icon::Delete;
+    items.push_back(std::move(del));
     menu_->setItems(std::move(items));
+}
+
+bool HmiTypesPane::duplicateMember(Id id, std::size_t index) {
+    std::string name;
+    const bool ok = change(id, "Dupliquer le membre", [&](hmi::HmiType& t, std::string* w) {
+        if (index >= t.members.size()) return fail(w, "membre introuvable");
+        hmi::TypeMember copy = t.members[index];
+        std::string base = copy.name + "_copie";
+        name = base;
+        for (int k = 2; std::any_of(t.members.begin(), t.members.end(), [&](const hmi::TypeMember& m) { return sameText(m.name, name); }) && k < 1000; ++k)
+            name = base + std::to_string(k);
+        copy.name = name;
+        t.members.insert(t.members.begin() + static_cast<std::ptrdiff_t>(index) + 1, std::move(copy));
+        return true;
+    }, nullptr);
+    if (ok) {
+        selectMember(static_cast<int>(index) + 1);
+        say("Membre dupliqu\xC3\xA9 : " + name + " (Ctrl+Z le retire)");
+    }
+    return ok;
 }
 // ---- fin 1.10 ----
 

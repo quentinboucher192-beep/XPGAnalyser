@@ -11,6 +11,7 @@
 #include "../src/hmi/HmiArchive.hpp"
 #include "../src/hmi/HmiAssets.hpp"
 #include "../src/hmi/HmiCheck.hpp"
+#include "../src/hmi/HmiAddressPlan.hpp"   // 1.12.18 : l'adresse dans toutes les cases
 #include "../src/hmi/HmiCommands.hpp"
 #include "../src/hmi/HmiControls.hpp"
 #include "../src/hmi/HmiTypeForms.hpp"   // 1.12.2 : les colonnes d'un tableau dynamique
@@ -4050,6 +4051,177 @@ void reperesArgumentsPopup1117() {
 //  les adresses %MW meme dans une structure ») : V : ARRAY[0..63] OF Vanne a %MW17, sur
 //  l'Esclave virtuel 1 (la capture du client).
 // =============================================================================
+// 1.12.18 (planches 11 et 12 du clic droit) : l'adresse dans toutes les cases - une formule de i, ou a la suite.
+void adressesFormule11218() {
+    std::printf("1.12.18 : l'adresse d'un membre dans toutes les cases (une formule de i, \xC3\xA0 la suite, l'aper\xC3\xA7u)\n");
+    namespace ty = hmi::types;
+    namespace ad = hmi::addr;
+    // ---- le calcul ----
+    std::string why;
+    same(ty::formulaAddress("%MW(1000 + 10 * i)", {2}), "%MW1020", "%MW(1000 + 10 * i), i = 2 : %MW1020");
+    same(ty::formulaAddress("%MW(551 + i / 16).(i MOD 16)", {17}), "%MW552.1", "un BOOL dans un mot : %MW552.1 pour i = 17");
+    same(ty::formulaAddress("%MW (1000 + 100 * i + 10 * j)", {3, 9}), "%MW1390", "deux dimensions : [3, 9] -> %MW1390");
+    same(ty::formulaAddress("4x(101 + i)", {1}), "4x102", "4x(101 + i) : 4x102");
+    check(ty::formulaAddress("%MW(1000 + k)", {1}, &why).empty() && why.find("k inconnu") != std::string::npos, "k inconnu : i et j seulement (" + why + ")");
+    check(ty::formulaAddress("%MW(10 / (i - 2))", {2}, &why).empty() && why.find("z\xC3\xA9ro") != std::string::npos, "division par z\xC3\xA9ro");
+    check(ty::formulaAddress("%MW(5 - 10)", {}, &why).empty() && why.find("n\xC3\xA9gative") != std::string::npos, "une adresse n\xC3\xA9gative");
+    check(ty::formulaAddress("%MW(1000 + 10 * i", {1}, &why).empty() && why.find("parenth\xC3\xA8se") != std::string::npos, "une parenth\xC3\xA8se manque");
+    check(ty::formulaAddress("%MW(i)", {}, &why).empty() && why.find("i : pas d'indice") != std::string::npos, "i sans [*]");
+    // ---- les motifs ----
+    std::vector<long long> idx;
+    std::string cell;
+    check(ty::patternIndices("[*].Retour", "[3].Retour", idx, &cell) && idx == std::vector<long long>{3} && cell == "[3].Retour", "[*].Retour : [3].Retour, i = 3");
+    check(ty::patternIndices("[*]", "[1,2].X", idx, &cell) && idx == std::vector<long long>{1, 2} && cell == "[1,2]", "[*] : [1,2].X, i = 1, j = 2, la case [1,2]");
+    check(ty::patternIndices("[*].V[*].P", "[1].V[5].P", idx, &cell) && idx == std::vector<long long>{1, 5}, "[*].V[*].P : i = 1, j = 5");
+    check(!ty::patternIndices("[*].Retour", "[3].Marche", idx, &cell), "[*].Retour ne couvre pas [3].Marche");
+    same(ad::patternOf("[0].Retour", false), "[*].Retour", "le motif d'un membre");
+    same(ad::patternOf("[0].Retour", true), "[*]", "... ses cases enti\xC3\xA8res");
+    same(ad::patternOf("[1].V[2].P", true), "[*].V[*]", "... la case la plus proche");
+    check(ad::patternOf("Heures", false).empty(), "pas d'indice : pas de motif");
+    // ---- la planche : EXTRACTEURS, 10 cases de 6 mots a partir de %MW550 ----
+    Project p;
+    HmiType ex;
+    ex.id = p.allocate();
+    ex.name = "EXTRACTEUR";
+    ex.members = {{"Retour", "INT"}, {"Marche", "BOOL"}, {"Def", "BOOL"}, {"Consigne", "REAL"}, {"Mesure", "REAL"}};
+    HmiType po;
+    po.id = p.allocate();
+    po.name = "T_POMPE";
+    po.members = {{"Etat", "INT"}};
+    p.programs.types = {ex, po};
+    Equipment e;
+    e.id = p.allocate();
+    e.name = "Automate_1";
+    e.host = "127.0.0.1";
+    e.port = 502;
+    p.equipments.push_back(e);
+    Variable v = hmiVar(p, "EXTRACTEURS", "ARRAY[0..9] OF EXTRACTEUR");
+    v.equipment = "Automate_1";
+    v.address = "%MW550";
+    Variable pompes = hmiVar(p, "POMPES", "ARRAY[0..1] OF T_POMPE");
+    pompes.equipment = "Automate_1";
+    pompes.address = "%MW1020";
+    Variable defauts = hmiVar(p, "DEFAUTS", "ARRAY[3..4] OF BOOL");
+    defauts.equipment = "Automate_1";
+    defauts.address = "%M203";
+    p.programs.variables = {v, pompes, defauts};
+    const auto var = [&]() -> Variable& { return p.programs.variables[0]; };
+    const auto addressOf = [&](std::string_view name) {
+        for (const auto& l : ty::leafVariables(p, var()))
+            if (l.name == name) return l.address;
+        return std::string("?");
+    };
+    same(addressOf("EXTRACTEURS[1].Retour"), "%MW556", "avant : EXTRACTEURS[1].Retour en %MW556 (6 mots par case)");
+    same(addressOf("EXTRACTEURS[0].Def"), "%MW551.1", "avant : EXTRACTEURS[0].Def en %MW551.1");
+    same(ad::current(p, var(), "[*].Retour"), "%MW(550 + 6 * i)", "la formule d'aujourd'hui : %MW(550 + 6 * i)");
+    const auto sh = ad::shape(p, var(), "[*].Retour");
+    check(sh.path == "EXTRACTEURS[i].Retour" && sh.text == "INT, 1 mot" && sh.cases == 10 && sh.leaf && sh.indices == "i de 0 \xC3\xA0 9",
+          "la forme : EXTRACTEURS[i].Retour, INT, 1 mot, 10 cases, i de 0 \xC3\xA0 9 (" + sh.path + " ; " + sh.text + ")");
+    const auto whole = ad::shape(p, var(), "[*]");
+    check(whole.path == "EXTRACTEURS[i]" && whole.text == "5 membres, 6 mots" && !whole.leaf, "les cases enti\xC3\xA8res : 5 membres, 6 mots (" + whole.text + ")");
+    // 1. Par une formule de i : Retour de 10 en 10 a partir de %MW1000 ; POMPES[0].Etat a deja %MW1020.
+    auto plan = ad::preview(p, var(), "[*].Retour", "%MW(1000 + 10 * i)");
+    check(plan.ok() && plan.rows.size() == 10, "l'aper\xC3\xA7u : 10 cases, Appliquer actif");
+    if (plan.rows.size() == 10) {
+        same(plan.rows[2].after, "%MW1020", "[2] : %MW1020");
+        same(plan.rows[2].before, "%MW562", "... avant %MW562");
+        check(plan.rows[2].sharedWith == std::vector<std::string>{"POMPES[0].Etat"} && plan.rows[3].sharedWith.empty() && plan.shared == 1,
+              "[2] : POMPES[0].Etat l'a aussi (et elle seule)");
+        same(plan.rows[9].cell, "[9]", "la case [9]");
+    }
+    var() = ad::withFormula(var(), "[*].Retour", "%MW(1000 + 10 * i)");
+    check(var().places.size() == 1 && var().places[0].path == "[*].Retour", "appliqu\xC3\xA9" "e : une seule ligne, [*].Retour = %MW(1000 + 10 * i)");
+    same(addressOf("EXTRACTEURS[0].Retour"), "%MW1000", "EXTRACTEURS[0].Retour : %MW1000");
+    same(addressOf("EXTRACTEURS[9].Retour"), "%MW1090", "EXTRACTEURS[9].Retour : %MW1090");
+    same(addressOf("EXTRACTEURS[0].Marche"), "%MW551.0", "les autres membres ne bougent pas");
+    same(ty::formulaAddress("%MW(1000 + 10 * i)", {9}), "%MW1090", "... ");
+    // Une case a part : l'adresse tapee sur EXTRACTEURS[4].Retour l'emporte ; la formule reprise la retire.
+    var().places.push_back({"[4].Retour", "%MW5000"});
+    same(addressOf("EXTRACTEURS[4].Retour"), "%MW5000", "une adresse tap\xC3\xA9" "e sur [4].Retour l'emporte sur la formule");
+    same(addressOf("EXTRACTEURS[5].Retour"), "%MW1050", "... [5] suit la formule");
+    check(ad::coveredPlaces(var(), "[*].Retour") == 2, "le motif couvre la formule et la case \xC3\xA0 part");
+    var() = ad::withFormula(var(), "[*].Retour", "%MW(1000 + 10 * i)");
+    same(addressOf("EXTRACTEURS[4].Retour"), "%MW1040", "la formule reprise : [4] la suit de nouveau");
+    // Le plan de l'equipement lit les adresses calculees.
+    {
+        bool found = false;
+        std::string seen;
+        const auto plan = hmi::equip::buildPlan(p, p.equipments[0]);
+        for (const auto& pt : plan.points())
+            if (pt.name == "EXTRACTEURS[3].Retour") {
+                found = pt.offset == 1030;
+                seen = pt.address + " " + std::to_string(pt.offset);
+            }
+        for (const auto& r : plan.refused())
+            if (r.first.find("EXTRACTEURS[3]") != std::string::npos) seen += " refus\xC3\xA9 : " + r.second;
+        check(found, "le plan d'Automate_1 : EXTRACTEURS[3].Retour au mot 1030 (" + seen + ")");
+    }
+    // Generer : rien a redire (la formule designe des membres).
+    {
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        check(std::none_of(issues.begin(), issues.end(), [](const Issue& i) { return i.message.find("EXTRACTEURS") != std::string::npos; }),
+              "G\xC3\xA9n\xC3\xA9rer : rien sur EXTRACTEURS");
+    }
+    // 2. Ce que l'apercu refuse.
+    plan = ad::preview(p, var(), "[*].Retour", "%MW(1000 + k)");
+    check(!plan.ok() && !plan.errors.empty() && plan.errors.front().find("k inconnu") != std::string::npos, "k inconnu : refus\xC3\xA9 (" + (plan.errors.empty() ? std::string{} : plan.errors.front()) + ")");
+    plan = ad::preview(p, var(), "[*].Retour", "%MW(1000)");
+    check(!plan.ok() && !plan.errors.empty() && plan.errors.front().find("m\xC3\xAAme place") != std::string::npos, "[0] et [1] sur %MW1000 : refus\xC3\xA9");
+    plan = ad::preview(p, var(), "[*].Retour", "%MW(70000 + i)");
+    check(!plan.ok() && !plan.rows.empty() && !plan.rows.front().error.empty(), "%MW70000 : hors des zones (" + (plan.rows.empty() ? std::string{} : plan.rows.front().error) + ")");
+    plan = ad::preview(p, var(), "[*]", "%M(200 + 8 * i)");
+    check(!plan.ok() && std::any_of(plan.errors.begin(), plan.errors.end(), [](const std::string& m) { return m.find("dans des mots") != std::string::npos; }),
+          "des cases en mots ne partent pas d'un bit");
+    // 3. A la suite d'une adresse : Marche en %M a partir de %M200 ; DEFAUTS[3] et [4] y sont deja.
+    std::string f = ad::following(p, var(), "[*].Marche", "%M200", &why);
+    same(f, "%M(200 + i)", "\xC3\xA0 la suite de %M200 : %M(200 + i)");
+    plan = ad::preview(p, var(), "[*].Marche", f);
+    check(plan.ok() && plan.shared == 2 && plan.rows.size() == 10 && plan.rows[3].after == "%M203" && plan.rows[3].sharedWith == std::vector<std::string>{"DEFAUTS[3]"},
+          "[3] : %M203, DEFAUTS[3] l'a aussi ; 2 adresses d\xC3\xA9j\xC3\xA0 prises");
+    same(ad::following(p, var(), "[*].Marche", "%MW3000.0", &why), "%MW(3000 + i / 16).(i MOD 16)", "un BOOL dans un mot : les bits qui suivent, puis le mot suivant");
+    plan = ad::preview(p, var(), "[*].Marche", "%MW(3000 + i / 16).(i MOD 16)");
+    check(plan.ok() && plan.rows.size() == 10 && plan.rows[9].after == "%MW3000.9", "[9].Marche : %MW3000.9");
+    check(ad::following(p, var(), "[*].Retour", "%M200", &why).empty() && why.find("ne tient pas dans un bit") != std::string::npos, "un INT ne tient pas dans un bit");
+    same(ad::following(p, var(), "[*].Retour", "%MW1000", &why), "%MW(1000 + i)", "un INT : les mots qui suivent");
+    same(ad::following(p, var(), "[*].Consigne", "%MF100", &why), "%MF(100 + 2 * i)", "un REAL : 2 mots chacun");
+    // 4. Les cases entieres : chacune part de son mot, ses membres suivent.
+    same(ad::following(p, var(), "[*]", "%MW2000", &why), "%MW(2000 + 6 * i)", "les cases enti\xC3\xA8res \xC3\xA0 la suite : 6 mots chacune");
+    plan = ad::preview(p, var(), "[*]", "%MW(2000 + 8 * i)");
+    check(plan.ok() && plan.rows.size() == 10 && plan.rows[1].after == "%MW2008", "avec un trou : [1] part de %MW2008");
+    var() = ad::withFormula(var(), "[*]", "%MW(2000 + 8 * i)");
+    check(var().places.size() == 1, "les cases enti\xC3\xA8res : la formule de Retour retir\xC3\xA9" "e, une ligne");
+    same(addressOf("EXTRACTEURS[2].Retour"), "%MW2016", "[2] part de %MW2016");
+    same(addressOf("EXTRACTEURS[2].Def"), "%MW2017.1", "... [2].Def en %MW2017.1");
+    same(addressOf("EXTRACTEURS[2].Mesure"), "%MF2020", "... [2].Mesure en %MF2020");
+    // 5. Revenir aux adresses calculees : la formule retiree.
+    var() = ad::withFormula(var(), "[*]", "");
+    check(var().places.empty(), "revenir : la formule retir\xC3\xA9" "e");
+    same(addressOf("EXTRACTEURS[2].Retour"), "%MW562", "... [2].Retour revient \xC3\xA0 %MW562");
+    // 6. Deux dimensions.
+    p.programs.variables.push_back(hmiVar(p, "MAT", "ARRAY[0..3, 0..9] OF INT"));
+    p.programs.variables.back().equipment = "Automate_1";
+    p.programs.variables.back().address = "%MW4000";
+    same(ad::following(p, p.programs.variables.back(), "[*]", "%MW6000", &why), "%MW(6000 + (i * 10 + j))", "2 dimensions \xC3\xA0 la suite : ligne par ligne");
+    plan = ad::preview(p, p.programs.variables.back(), "[*]", "%MW(1000 + 100 * i + 10 * j)");
+    check(plan.ok() && plan.rows.size() == 40 && plan.rows[12].cell == "[1,2]" && plan.rows[12].after == "%MW1120", "[1,2] : %MW1120");
+    // 7. Enregistrer, relire : la formule reste.
+    var() = ad::withFormula(var(), "[*].Retour", "%MW(1000 + 10 * i)");
+    {
+        const fs::path dir = fs::temp_directory_path() / "hmi_test_11218_adresses";
+        fs::remove_all(dir);
+        check(static_cast<bool>(save(p, dir.string())), "enregistrer");
+        const auto back = load(dir.string());
+        check(back && back->variable("EXTRACTEURS") && back->variable("EXTRACTEURS")->places.size() == 1
+                  && back->variable("EXTRACTEURS")->places[0].address == "%MW(1000 + 10 * i)",
+              "relu : [*].Retour = %MW(1000 + 10 * i)");
+        fs::remove_all(dir);
+    }
+    // 8. La fenetre recolle sa formule.
+    std::string pre, ex2, bit;
+    check(ad::split("%MW(551 + i / 16).(i MOD 16)", pre, ex2, bit) && pre == "%MW" && ex2 == "551 + i / 16" && bit == "i MOD 16", "d\xC3\xA9" "couper une formule");
+    same(ad::join("%MW", "551 + 6 * i", "0"), "%MW(551 + 6 * i).0", "la recoller");
+}
+
 void membresInternes1118() {
     std::printf("1.11.8 : les membres internes d'une structure li\xC3\xA9" "e, la place recalcul\xC3\xA9" "e, le d\xC3\xA9part d'un membre\n");
     namespace ty = hmi::types;
@@ -20391,7 +20563,7 @@ void repereCompiler1104() {
     check(onA >= 1 && onB == 0, "Compiler : $V[1]$ et $V[0] > 10.0$ ne disent rien ; l'ancien $Vanne$, l'erreur et la phrase");
     check(said.find("Vanne") != std::string::npos && said.find(kMarkerHint) != std::string::npos
               && said.find("inattendu") == std::string::npos,
-          "le texte : l'erreur de l'analyse, puis \"un repere se remplit par Dupliquer... (Ctrl+D)\" : " + said);
+          "le texte : l'erreur de l'analyse, puis \"un repere se remplit par Dupliquer... (Ctrl+Maj+D)\" : " + said);
     std::size_t genA = 0, genB = 0;
     for (const auto& i : generate(q, none)) {
         if (i.object == a && i.severity == Issue::Severity::Error) ++genA;
@@ -20906,7 +21078,7 @@ void compilerScriptAction1111() {
     check(!aboutMarkers1, "$V[1]$ := NOT $V[1]$ (V existe), la chaine '$N' et le commentaire : Compiler n'en dit rien (" + on1 + ")");
     check(on2.find("Vanne") != std::string::npos && on2.find(kMarkerHint) != std::string::npos && on2.find("inattendu") == std::string::npos
               && on2.find("veux-tu dire") == std::string::npos,
-          "l'ancien $Vanne$ (pas une variable) : l'erreur, puis \"un repere se remplit par Dupliquer... (Ctrl+D)\" (" + on2 + ")");
+          "l'ancien $Vanne$ (pas une variable) : l'erreur, puis \"un repere se remplit par Dupliquer... (Ctrl+Maj+D)\" (" + on2 + ")");
     bool hooked = false;
     for (const auto& i : compileWith(q, none))
         if (i.object == id2 && isUnreplacedIssueMessage(i.message)) hooked = true;
@@ -28136,6 +28308,7 @@ int main(int argc, char** argv) {
     lignesDeCode1117();                // 1.11.7 : les lignes de code de l'application
     reperesArgumentsPopup1117();       // 1.11.7 : IN_V := $V[2]$, une reference
     membresInternes1118();             // 1.11.8 : membres internes, place recalculee, depart d'un membre
+    adressesFormule11218();            // 1.12.18 : l'adresse dans toutes les cases (une formule de i)
     actionsMathsClavier1119();         // 1.11.9 : operations rangees, Maths, clavier virtuel
     fonctionsSymbole11110();           // 1.11.10 : les fonctions d'un symbole ; fonctions et operateurs entre eux
     actions();

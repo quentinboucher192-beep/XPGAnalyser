@@ -174,6 +174,23 @@ bool structLiteral(std::string_view text, std::vector<std::pair<std::string, std
 // L'entree de Variable::internal qui rend `rel` interne (vide : aucune).
 [[nodiscard]] std::string internalEntryOf(const Variable& v, std::string_view rel);
 
+// 1.12.18 (planches 11 et 12) : UNE ADRESSE PAR FORMULE. Une place de Variable::places dont le chemin a
+// un indice [*] ("[*].Retour" : le membre Retour de chaque case ; "[*]" : les cases entieres) et dont
+// l'adresse a ses calculs entre parentheses - "%MW(1000 + 10 * i)", "%MW(551 + 6 * i).0",
+// "%MW(551 + i / 16).(i MOD 16)" : chaque case calcule la sienne avec ses indices (i : le premier
+// indice des [*], j : le deuxieme - [1,2] donne i = 1, j = 2) ; + - * / MOD, parentheses, entiers.
+// Sur un membre simple, la formule donne son adresse ; sur un membre compose (une case entiere), son
+// depart : ses membres suivent. Le plus precis gagne : une adresse tapee sur EXTRACTEURS[4].Retour passe
+// avant la formule ; une case ajoutee au tableau la suit.
+[[nodiscard]] bool isFormula(std::string_view address) noexcept;
+// Les indices des [*] de `pattern` dans `rel`, dans l'ordre ("[*].Retour" et "[3].Retour" : {3} ;
+// "[*]" et "[1,2].X" : {1, 2}) ; `cell` : la partie de `rel` que le motif designe ("[1,2]") ;
+// faux : `pattern` ne couvre pas `rel`.
+bool patternIndices(std::string_view pattern, std::string_view rel, std::vector<long long>& out, std::string* cell = nullptr);
+// L'adresse que donne la formule pour ces indices ("%MW(1000 + 10 * i)", {2} -> "%MW1020") ; vide et
+// `why` : un nom inconnu (k : i et j seulement), une division par zero, un resultat negatif.
+[[nodiscard]] std::string formulaAddress(std::string_view formula, const std::vector<long long>& indices, std::string* why = nullptr);
+
 // L'adresse d'une case a `word` mots (et `bit`) du depart, ecrite comme le depart.
 // Une zone de bits (%M, 00017) : `word` est le rang du BOOL.
 [[nodiscard]] std::string memberAddress(std::string_view start, long long word, int bit, std::string_view type,

@@ -582,6 +582,9 @@ public:
     [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
 
     const core::SignalPtr<RowIndex>              activated        = core::Signal<RowIndex>::create();
+    // 1.12.18 : Entree ouvre la ligne choisie comme le double-clic (activated) - au
+    // choix de l'hote : certains volets ont leur propre Entree (forcer plusieurs lignes).
+    void setEnterActivates(bool on) noexcept { enterActivates_ = on; }
     const core::SignalPtr<const std::vector<RowIndex>&> selectionChanged =
         core::Signal<const std::vector<RowIndex>&>::create();
     // 1.9 : un clic sur la case a cocher d'une ligne (CellStyle::check) : la
@@ -680,6 +683,12 @@ public:
     // 1.11.14 : DES ENTREES EN PLUS, en tete de ce menu (la Console : aller a la source,
     // filtrer sur cette source...). Leurs id (1000 et plus) reviennent par contextAction.
     void setExtraContextItems(std::function<std::vector<PopupMenu::Item>()> provider) { extraContext_ = std::move(provider); }
+    // 1.12.18 : le menu du proprietaire SEUL (ses entrees disent deja Copier, Coller...) - sans le
+    // bloc commun des tableaux (Copier, Copier sans les titres, Coller, Tout choisir).
+    void setExtraContextOnly(bool on) noexcept { extraOnly_ = on; }
+    // 1.12.18 : les touches du proprietaire d'abord (Inser, Suppr, Alt+Haut, Ctrl+C d'une plume...) ;
+    // vrai : la touche est prise. Pas pendant l'edition d'une case.
+    void setKeyHandler(std::function<bool(const KeyDown&)> handler) { keyHandler_ = std::move(handler); }
     const core::SignalPtr<int> contextAction = core::Signal<int>::create();
     // (lignes copiees, avec les titres)
     const core::SignalPtr<std::size_t, bool> copied = core::Signal<std::size_t, bool>::create();
@@ -804,6 +813,8 @@ private:
     std::function<void(const PasteRequest&)> pasteHandler_;
     PopupMenu*                   context_{nullptr};
     std::function<std::vector<PopupMenu::Item>()> extraContext_;   // 1.11.14
+    bool                         extraOnly_{false};                 // 1.12.18
+    std::function<bool(const KeyDown&)> keyHandler_;                // 1.12.18
     int                          lastClickColumn_{-1};
     std::string                  banner_;
     std::vector<Mark>            marks_;
@@ -829,6 +840,7 @@ private:
     void columnFiltersEdited();                                // la vue refaite, le signal emis
     SearchQuery                  highlight_;
     bool                         filtersEnabled_{false};
+    bool                         enterActivates_{false};
     ColumnFilterMode             filterMode_{ColumnFilterMode::Table};
     std::vector<ColumnFilter>    columnFilters_;
     ColumnValues                 valuesProvider_;
@@ -946,6 +958,20 @@ public:
         // 1.9 (chantier U) : une pastille de couleur apres le titre (le mode d'un
         // parametre) ; le titre montre perd la fin "  .  <pastille>".
         std::optional<ColorPill>  pill{};
+        // 1.12.18 : LES ENTREES DU MENU DE SON TITRE (un parametre : Renommer partout, Monter,
+        // Descendre, Retirer), avant Tout deplier / Tout replier. `run` est copiee avant l'appel
+        // (la grille est souvent refaite) ; `edit` non vide : la case de ce nom s'ouvre.
+        struct Action {
+            std::string           label;
+            std::string           shortcut;
+            std::function<void()> run{};
+            std::string           edit{};
+            bool                  enabled{true};
+            std::string           why{};
+            Icon                  icon{Icon::None};
+        };
+        std::vector<Action>       actions{};
+        std::string               menuRight{};   // a droite du titre du menu (« REAL · Sym_Pompe ») ; vide : « categorie »
     };
 
     explicit PropertyGrid(std::string id = {});
@@ -1025,6 +1051,18 @@ private:
     // la grille est souvent refaite (setCategories) pendant qu'on tape.
     void beginEdit(std::size_t row);
     void finishEdit(bool commit, const std::string& text);
+    // 1.12.18 (planche 8) : LE MENU DE CHAQUE LIGNE - une expression (Choisir une fonction,
+    // la definition et les usages du nom sous le clic, Coller), une couleur (Copier, Coller la
+    // couleur, Couleurs recentes), une liste (ses choix), une bascule, le Nom (Renommer) ; un
+    // titre de categorie : Tout deplier, Tout replier (le clic droit ne la replie plus).
+    void openRowMenu(std::size_t row, gfx::Point at);
+    void rowMenuChosen(int action);
+    [[nodiscard]] std::string nameUnder(std::size_t row, float x) const;   // le nom de l'expression sous x
+    std::string              menuCategory_, menuProperty_, menuName_;
+    std::vector<std::string> menuChoices_;                    // les couleurs recentes, ou les choix d'une liste
+    std::vector<Category::Action> menuActions_;              // celles du titre de categorie vise
+    mutable std::vector<float> exprX_;                       // ou commence l'expression de chaque ligne (dessin)
+    mutable gfx::FontId        exprFont_{};
     [[nodiscard]] int       rowOf(std::string_view category, std::string_view name) const;
     [[nodiscard]] gfx::Rect valueCell(std::size_t row) const;
 

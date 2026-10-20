@@ -340,7 +340,7 @@ bool HmiSimVarTree::openContextMenu(const std::string& path, gfx::Point at) {
     item(MForce, node->leaf ? "Forcer (\xC3\xA0 sa valeur)" : "Forcer les " + std::to_string(free) + " libres (\xC3\xA0 leur valeur)",
          free > 0 && !tooMany && static_cast<bool>(hooks_.force),
          tooMany ? "trop de valeurs d'un coup : un n\xC5\x93ud plus petit" : "rien de libre \xC3\xA0 forcer");
-    item(MUnforce, node->leaf ? "D\xC3\xA9" "forcer" : "D\xC3\xA9" "forcer les " + std::to_string(forced), forced > 0 && static_cast<bool>(hooks_.unforce),
+    item(MUnforce, node->leaf ? "Rel\xC3\xA2" "cher" : "Rel\xC3\xA2" "cher les " + std::to_string(forced), forced > 0 && static_cast<bool>(hooks_.unforce),
          "rien de forc\xC3\xA9");
     ctxPath_ = path;
     ctxMenu_->setItems(std::move(items));
@@ -614,16 +614,19 @@ bool HmiSimVarTree::openMotionMenu(const std::string& path, gfx::Point at) {
     head.shortcut = mo ? hmi::motion::text(*mo) : std::string("libre");
     items.push_back(head);
     ui::PopupMenu::Item none;
-    none.label = "Aucun (la variable redevient libre)";
+    none.label = "Aucun (libre)";
     none.id = 0;
     none.enabled = mo.has_value();
     none.disabledReason = "elle n'a pas de mouvement";
+    none.radio = true;               // 1.12.18 : le mouvement en cours se coche (plus de « actuel » a droite)
+    none.checked = !mo.has_value();
     items.push_back(none);
     motionKinds_ = hmi::motion::kindsFor(node->type == "BOOL");
     for (std::size_t k = 0; k < motionKinds_.size(); ++k) {
         ui::PopupMenu::Item it;
         it.label = std::string(hmi::behaviorKindLabel(motionKinds_[k]));
-        if (mo && mo->kind == motionKinds_[k]) it.shortcut = "actuel";
+        it.radio = true;
+        it.checked = mo && mo->kind == motionKinds_[k];
         it.id = static_cast<int>(k) + 1;
         items.push_back(it);
     }
@@ -632,7 +635,6 @@ bool HmiSimVarTree::openMotionMenu(const std::string& path, gfx::Point at) {
     items.push_back(sep);
     ui::PopupMenu::Item limits;
     limits.label = "Les bornes\xE2\x80\xA6";
-    limits.shortcut = "double-clic";
     limits.id = 100;
     limits.enabled = mo.has_value();
     limits.disabledReason = "choisir d'abord un mouvement";

@@ -1,4 +1,6 @@
 #include "HmiEditor.hpp"
+#include "../../hmi/HmiGuide.hpp"     // 1.12.18 : « Aide sur Voyant » (le sujet du genre)
+#include "../../ui/Commands.hpp"      // 1.12.18 : la table des commandes du clic droit
 #include "../../hmi/HmiTable.hpp"   // 1.12.13 : le Tableau, un mode a la fois
 #include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de zone API
@@ -120,7 +122,7 @@ public:
     [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override {
         static const char* const what[3] = {
             "fx : les cases pilot\xC3\xA9" "es par une expression",
-            "Rep\xC3\xA8res : les cases qui contiennent un rep\xC3\xA8re $Nom$ (Dupliquer\xE2\x80\xA6, Ctrl+D, les remplace)",
+            "Rep\xC3\xA8res : les cases qui contiennent un rep\xC3\xA8re $Nom$ (Dupliquer\xE2\x80\xA6, Ctrl+Maj+D, les remplace)",
             "Non vides : les cases renseign\xC3\xA9" "es - un texte ou une expression non vide, ou une valeur diff\xC3\xA9rente de "
             "celle d'un objet neuf"};
         for (std::size_t i = 0; i < 3; ++i)
@@ -224,11 +226,11 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     tools->add(ActCopy, HmiGlyph::Copy, "Copier (Ctrl+C)");
     tools->add(ActPaste, HmiGlyph::Paste, core::hasApi() ? "Coller (Ctrl+V) : les animations et les liaisons API suivent"
                                                          : "Coller (Ctrl+V) : les animations et les liaisons suivent");   // 1.12.2
-    tools->add(ActDuplicate, HmiGlyph::Duplicate, "Dupliquer\xE2\x80\xA6 (Ctrl+D : rep\xC3\xA8res, indices, pose) ; tel quel : Ctrl+Maj+D ou Alt + glisser");
+    tools->add(ActDuplicate, HmiGlyph::Duplicate, "Dupliquer\xE2\x80\xA6 (Ctrl+Maj+D : rep\xC3\xA8res, indices, pose) ; tout de suite, tel quel : Ctrl+D ou Alt + glisser");
     tools->add(ActDelete, HmiGlyph::Delete, "Supprimer (Suppr)");
     tools->separator();
-    tools->add(ActGroup, HmiGlyph::Group, "Grouper");
-    tools->add(ActUngroup, HmiGlyph::Ungroup, "D\xC3\xA9grouper");
+    tools->add(ActGroup, HmiGlyph::Group, "Grouper (Ctrl+G)");
+    tools->add(ActUngroup, HmiGlyph::Ungroup, "D\xC3\xA9grouper (Ctrl+Maj+G)");
     tools->add(ActMakeSymbol, HmiGlyph::Symbol,
                "Cr\xC3\xA9" "er un symbole : la s\xC3\xA9lection devient un symbole r\xC3\xA9utilisable et param\xC3\xA9tr\xC3\xA9 "
                "(IHM > Symboles) ; une instance la remplace");
@@ -256,8 +258,8 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     tools->separator();
     tools->add(ActLock, HmiGlyph::Lock, "Verrouiller");
     tools->add(ActUnlock, HmiGlyph::Unlock, "D\xC3\xA9verrouiller");
-    tools->add(ActStyleCopy, HmiGlyph::StyleCopy, "Copier le style (Ctrl+Maj+C)");
-    tools->add(ActStylePaste, HmiGlyph::StylePaste, "Coller le style (Ctrl+Maj+V)");
+    tools->add(ActStyleCopy, HmiGlyph::StyleCopy, "Copier le style (Ctrl+Alt+C)");
+    tools->add(ActStylePaste, HmiGlyph::StylePaste, "Coller le style (Ctrl+Alt+V)");
     tools->add(ActMakeStyle, HmiGlyph::Style,
                "Cr\xC3\xA9" "er un style nomm\xC3\xA9 : l'apparence de l'objet choisi (couleurs, police, taille, rayon) sous un nom "
                "(IHM > Styles) ; la s\xC3\xA9lection le cite, et suit ses changements");
@@ -396,44 +398,15 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     tools_->setEnabledWhen(ActUndo, [this] { return history_ && (!historyPossible_ || historyPossible_(false)); });
     tools_->setEnabledWhen(ActRedo, [this] { return history_ && (!historyPossible_ || historyPossible_(true)); });
     links_ += canvas_->historyRequested->connect([this](bool redo) { run(redo ? ActRedo : ActUndo); });
-    // 1.10.2 (chantier D) : Ctrl+D ouvre "Dupliquer..." (Ctrl+Maj+D : la copie decalee, dans le canevas).
+    // 1.12.18 : Ctrl+Maj+D ouvre "Dupliquer..." (Ctrl+D : la copie decalee, dans le canevas).
     links_ += canvas_->duplicateRequested->connect([this] { run(ActDuplicate); });
-    // 1.10.2 (chantier D) : le clic droit sur la vue - Dupliquer..., tel quel, Copier, Supprimer.
+    // 1.10.2 (chantier D) : le clic droit sur la vue. 1.12.18 : le menu de ce qui est vise
+    // (la selection, un objet verrouille, le vide) - tout ce que fait la barre d'outils.
     context_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".context")));
-    links_ += context_->itemChosen->connect([this](int a) {
-        if (a == 1) run(ActDuplicate);
-        else if (a == 2) canvas_->duplicateSelection();
-        else if (a == 3) run(ActCopy);
-        else if (a == 4) run(ActDelete);
-        else if (a == 5) (void)canvas_->removeSelectedVertex();   // 1.12.12 (lot H)
-        else if (a == 6 && canvas_->selection().size() == 1) canvas_->startZoneTrace(canvas_->selection().front());
-    });
-    links_ += canvas_->contextRequested->connect([this](gfx::Point at) {
-        const bool any = !canvas_->selection().empty();
-        const std::string none = any ? std::string{} : std::string("choisis d'abord un objet");
-        std::vector<ui::PopupMenu::Item> items;
-        // 1.12.12 (lot H) : un sommet choisi (clic droit sur sa poignee) se retire - Suppr est alors pour lui.
-        const bool vertexChosen = canvas_->selectedVertex() >= 0 && canvas_->vertexTarget().valid();
-        if (vertexChosen) {
-            const bool point = canvas_->vertexTarget().what == hmi::vertices::Target::What::Reference;
-            items.push_back({point ? "Retirer le point" : "Retirer le sommet", "Suppr", {}, ui::Icon::None, true, false, 5});
-            items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
-        }
-        // 1.12.12 (lot H) : un plan a zones choisi seul - une zone de plus, tracee a la souris.
-        if (const auto* cv = doc_->project.view(viewId_); cv && canvas_->selection().size() == 1)
-            if (const auto* map = cv->object(canvas_->selection().front()); map && map->kind == hmi::Kind::ZoneMap) {
-                items.push_back({"Tracer une zone", {}, {}, ui::Icon::None, true, false, 6});
-                items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
-            }
-        items.push_back({"Dupliquer\xE2\x80\xA6", "Ctrl+D", none, ui::Icon::None, any, false, 1});
-        items.push_back({"Dupliquer tel quel", "Ctrl+Maj+D", none, ui::Icon::None, any, false, 2});
-        items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
-        items.push_back({"Copier", "Ctrl+C", none, ui::Icon::None, any, false, 3});
-        items.push_back({"Supprimer", vertexChosen ? "" : "Suppr", none, ui::Icon::None, any, false, 4});
-        context_->setItems(std::move(items));
-        gfx::Size surface = ui::surfaceSize();
-        if (surface.w <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
-        context_->openAt(at, surface);
+    links_ += context_->itemChosen->connect([this](int a) { canvasMenuChosen(a); });
+    links_ += canvas_->contextRequested->connect([this](gfx::Point at) { openCanvasMenu(at); });
+    links_ += canvas_->renameRequested->connect([this] {
+        if (canvas_->selection().size() == 1) objects_->beginRename(canvas_->selection().front());
     });
     links_ += tools_->triggered->connect([this](int a) { run(a); });
     links_ += layerTools_->triggered->connect([this](int a) { run(a); });
@@ -523,6 +496,20 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
                       [&](hmi::Project&, hmi::View& vv) { hmi::edit::setLocked(vv, {id}, on); });
     });
     links_ += objects_->activated->connect([this](Id id) { objects_->beginRename(id); });
+    // 1.12.18 (bugs 2 et 3) : les menus de l'explorateur, des calques, de la bibliotheque.
+    links_ += objects_->contextRequested->connect([this](Id, gfx::Point at) { openCanvasMenu(at, true); });
+    links_ += layers_->contextRequested->connect([this](Id layer, gfx::Point at) { openLayerMenu(layer, at); });
+    links_ += layers_->keyPressed->connect([this](const ui::KeyDown& k) {
+        const auto* v = canvas_->view();
+        if (!v) return;
+        const Id active = v->activeLayer;
+        if (k.key == ui::Key::F2) layerMenuChosen(active, kLayerRename);
+        else if (k.key == ui::Key::Delete) layerMenuChosen(active, kLayerRemove);
+        else if (k.key == ui::Key::D) layerMenuChosen(active, kLayerDuplicate);
+        else if (k.key == ui::Key::Up) layerMenuChosen(active, kLayerUp);
+        else if (k.key == ui::Key::Down) layerMenuChosen(active, kLayerDown);
+    });
+    links_ += palette_->contextRequested->connect([this](hmi::Kind kind, gfx::Point at) { openPaletteMenu(kind, at); });
     // 1.12.3 : l'onglet Actions avec plusieurs objets - une ligne choisit cet objet, seul.
     links_ += actions_->chooseObject->connect([this](Id id) {
         canvas_->setSelection({id});
@@ -992,7 +979,7 @@ void HmiEditor::rebuildProperties() {
             cats.insert(cats.begin() + static_cast<long>(at), extra.begin(), extra.end());
         }
     // 1.10.2 (chantier D) : les REPERES de l'objet ($Vanne$ x 3), en tete de
-    // l'inspecteur - "Dupliquer..." (Ctrl+D, le clic droit) les remplace.
+    // l'inspecteur - "Dupliquer..." (Ctrl+Maj+D, le clic droit) les remplace.
     if (const auto sel = canvas_->selection(); sel.size() == 1 && !cats.empty()) {
         const auto marks = hmi::dup::markersOf(*v, sel.front());
         if (!marks.empty()) {
@@ -1002,7 +989,7 @@ void HmiEditor::rebuildProperties() {
             p.name = "Rep\xC3\xA8res";
             p.value = list;
             p.type = ui::PropertyGrid::ValueType::ReadOnly;
-            p.description = "Les rep\xC3\xA8res de l'objet et de ses \xC3\xA9l\xC3\xA9ments. Ctrl+D (ou le clic droit) : "
+            p.description = "Les rep\xC3\xA8res de l'objet et de ses \xC3\xA9l\xC3\xA9ments. Ctrl+Maj+D (ou le clic droit) : "
                             "\xC2\xAB Dupliquer\xE2\x80\xA6 \xC2\xBB fait les copies en rempla\xC3\xA7" "ant chaque rep\xC3\xA8re. "
                             "Compiler signale un rep\xC3\xA8re rest\xC3\xA9 dans un objet pos\xC3\xA9 (sauf dans \xC2\xAB Mod\xC3\xA8les d'objets \xC2\xBB).";
             cats.front().properties.insert(cats.front().properties.begin(), std::move(p));
@@ -1666,6 +1653,507 @@ bool HmiEditor::makeSymbol(const std::string& name, const std::string& params, s
                                     "remplace la s\xC3\xA9lection. Double-clic dessus : ouvrir le symbole.", 10.0,
                                     ui::StatusBar::Severity::Success);
     return true;
+}
+
+// ---- 1.12.18 : LE MENU DU CLIC DROIT SUR LA VUE --------------------------------------
+//  Planches 5 et 6 de la maquette : l'en-tete dit ce qui est vise ; une instance, un groupe
+//  ont d'abord leurs entrees (Ouvrir le symbole, Entrer dans le groupe) ; puis le menu des
+//  objets - tout ce que fait la barre d'outils (Ordre, Aligner, Transformer, Style, Calque en
+//  sous-menus, Verrouille et Cache en cases). Un objet verrouille : Deverrouiller, Copier,
+//  l'aide ; le vide : Coller ici, Inserer, la grille, le zoom.
+namespace {
+constexpr int kMenuAct = 1000;    // + une action de la barre (run)
+constexpr int kMenuLayer = 2000;  // + le rang du calque
+constexpr int kMenuPopup = 3000;  // + le rang de la popup du symbole
+constexpr int kMenuInsert = 4000; // + le rang du genre a inserer
+enum CanvasMenu : int {
+    MDupWindow = 1, MDuplicate = 2, MCopy = 3, MDelete = 4, MVertex = 5, MTraceZone = 6, MCut = 7, MPaste = 8,
+    MPasteHere = 9, MSelectAll = 10, MRename = 11, MHelp = 12, MLocked = 13, MHidden = 14, MOpenSymbol = 15,
+    MSymbolParams = 16, MEnterGroup = 17, MLeaveGroup = 18, MUnlockTarget = 19, MCopyTarget = 20, MViewProps = 21,
+    MLibrary = 22, MZoom50 = 23, MZoom100 = 24, MZoom200 = 25, MGuideV = 26, MGuideH = 27, MHelpTarget = 28,
+    MShow = 29,
+};
+constexpr int kMenuCanvas = 0, kMenuLayers = 1, kMenuPalette = 2;   // le menu ouvert (context_ sert aux trois)
+enum PaletteMenu : int { kPalettePlace = 1, kPaletteFavorite = 2, kPaletteHelp = 3 };
+constexpr hmi::Kind kInsertKinds[] = {hmi::Kind::Text, hmi::Kind::Button, hmi::Kind::Indicator, hmi::Kind::Trend, hmi::Kind::Table};
+}   // namespace
+
+void HmiEditor::setHelpOpener(std::function<void(const std::string&)> open) { openHelp_ = std::move(open); }
+
+void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
+    namespace cmd = ui::cmd;
+    using Target = HmiCanvas::ContextTarget;
+    auto& c = *canvas_;
+    const auto* v = doc_->project.view(viewId_);
+    if (!v || !context_) return;
+    const auto act = [](int a) { return kMenuAct + a; };
+    const auto plain = [](std::string label, int id, bool enabled = true, std::string why = {}, std::string key = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.id = id;
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        return it;
+    };
+    const auto check = [](std::string label, int id, bool on) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.id = id;
+        it.checkable = true;
+        it.checked = on;
+        return it;
+    };
+    const auto kindName = [](hmi::Kind k) { return std::string(hmi::kindLabel(k)); };
+    std::vector<ui::PopupMenu::Item> items;
+    menuLayers_.clear();
+    menuPopups_.clear();
+
+    menuKind_ = kMenuCanvas;
+    if (explorer && c.selection().empty()) return;
+    // ---- un objet verrouille (le clic ne l'avait jamais pris) ----
+    if (!explorer && c.contextTarget() == Target::Locked) {
+        const auto* o = v->object(c.contextLocked());
+        if (!o) return;
+        items.push_back(cmd::heading(o->name, "verrouill\xC3\xA9"));
+        items.push_back(cmd::item(cmd::Id::Deverrouiller, MUnlockTarget));
+        items.push_back(cmd::item(cmd::Id::Copier, MCopyTarget));
+        items.push_back(cmd::item(cmd::Id::Aide, MHelpTarget, static_cast<bool>(openHelp_), "l'aide n'est pas joignable ici",
+                                  "Aide sur " + kindName(o->kind)));
+        items.push_back(cmd::separator());
+        items.push_back(cmd::item(cmd::Id::Supprimer, MDelete, false, "verrouill\xC3\xA9 : d\xC3\xA9verrouille-le d'abord"));
+        context_->setItems(std::move(items));
+        openMenuAt(*context_, at);
+        return;
+    }
+
+    // ---- le vide de la vue ----
+    if (!explorer && (c.contextTarget() == Target::View || c.selection().empty())) {
+        char size[48];
+        std::snprintf(size, sizeof size, "%d \xC3\x97 %d", static_cast<int>(v->width), static_cast<int>(v->height));
+        items.push_back(cmd::heading(v->name, size));
+        if (c.insideGroup() != kNoId) {
+            items.push_back(plain("Sortir du groupe", MLeaveGroup, true, {}, "\xC3\x89" "chap"));
+            items.push_back(cmd::separator());
+        }
+        items.push_back(cmd::item(cmd::Id::CollerIci, MPasteHere));
+        items.push_back(cmd::item(cmd::Id::ToutChoisir, MSelectAll, !v->objects.empty(), "la vue est vide"));
+        ui::PopupMenu::Item insert = plain("Ins\xC3\xA9rer", -1);
+        insert.icon = ui::Icon::Plus;
+        for (std::size_t i = 0; i < std::size(kInsertKinds); ++i)
+            insert.children.push_back(plain(kindName(kInsertKinds[i]), kMenuInsert + static_cast<int>(i)));
+        insert.children.push_back(cmd::separator());
+        insert.children.push_back(plain("Autre objet\xE2\x80\xA6 (la biblioth\xC3\xA8que)", MLibrary));
+        items.push_back(std::move(insert));
+        items.push_back(cmd::separator());
+        items.push_back(check("Grille", act(ActGrid), v->grid.visible));
+        items.push_back(check("Magn\xC3\xA9tisme", act(ActSnap), v->grid.snapGrid || v->grid.snapObjects || v->grid.snapGuides));
+        items.push_back(check("Objets cach\xC3\xA9s (estomp\xC3\xA9s)", act(ActShowHidden), c.showHidden()));
+        ui::PopupMenu::Item guide = plain("Ajouter un guide", -1);
+        guide.children = {plain("Vertical, ici", MGuideV), plain("Horizontal, ici", MGuideH)};
+        items.push_back(std::move(guide));
+        ui::PopupMenu::Item zoom = plain("Zoom", -1);
+        zoom.children.push_back(plain("Toute la vue", act(ActZoomFit)));
+        zoom.children.push_back(plain("Zoom avant", act(ActZoomIn), true, {}, "Ctrl+molette"));
+        zoom.children.push_back(plain("Zoom arri\xC3\xA8re", act(ActZoomOut)));
+        zoom.children.push_back(cmd::separator());
+        for (const auto& [label, z, id] : {std::tuple{"50 %", 0.5f, int(MZoom50)}, std::tuple{"100 %", 1.f, int(MZoom100)},
+                                          std::tuple{"200 %", 2.f, int(MZoom200)}}) {
+            auto it = plain(label, id);
+            it.radio = true;
+            it.checked = std::abs(c.zoom() - z) < 0.01f;
+            zoom.children.push_back(std::move(it));
+        }
+        items.push_back(std::move(zoom));
+        items.push_back(cmd::separator());
+        items.push_back(plain("Propri\xC3\xA9t\xC3\xA9s de la vue", MViewProps));
+        context_->setItems(std::move(items));
+        openMenuAt(*context_, at);
+        return;
+    }
+
+    // ---- la selection ----
+    const auto sel = c.selection();
+    const auto* one = sel.size() == 1 ? v->object(sel.front()) : nullptr;
+    if (one) {
+        std::string right = kindName(one->kind);
+        if (one->kind == hmi::Kind::SymbolInstance) right = "instance de " + one->text("symbol");
+        else if (one->kind == hmi::Kind::Group) {
+            std::size_t n = 0;
+            for (const auto& o : v->objects) if (o.parent == one->id) ++n;
+            right = std::to_string(n) + (n > 1 ? " objets" : " objet");
+        }
+        if (one->hidden) right += " \xC2\xB7 cach\xC3\xA9";
+        items.push_back(cmd::heading(one->name, right));
+    } else {
+        std::string names;
+        std::size_t shown = 0;
+        for (const Id id : sel)
+            if (const auto* o = v->object(id); o && shown < 3) { names += (shown ? ", " : "") + o->name; ++shown; }
+        if (sel.size() > shown) names += ", \xE2\x80\xA6";
+        items.push_back(cmd::heading(std::to_string(sel.size()) + " objets", names));
+    }
+    // 1.12.12 (lot H) : un sommet choisi (clic droit sur sa poignee) se retire - Suppr est alors pour lui.
+    const bool vertexChosen = c.selectedVertex() >= 0 && c.vertexTarget().valid();
+    if (vertexChosen) {
+        const bool point = c.vertexTarget().what == hmi::vertices::Target::What::Reference;
+        items.push_back({point ? "Retirer le point" : "Retirer le sommet", "Suppr", {}, ui::Icon::Delete, true, false, MVertex});
+        items.push_back(cmd::separator());
+    }
+    if (c.insideGroup() != kNoId && !explorer) {
+        items.push_back(plain("Sortir du groupe", MLeaveGroup, true, {}, "\xC3\x89" "chap"));
+        items.push_back(cmd::separator());
+    }
+    // L'explorateur vise aussi un objet cache (le canevas ne le peut pas) : Afficher d'abord.
+    if (explorer) {
+        bool anyHidden = false;
+        for (const Id id : sel) if (const auto* o = v->object(id)) anyHidden = anyHidden || o->hidden;
+        if (anyHidden) {
+            auto show = plain("Afficher", MShow);
+            show.icon = ui::Icon::Eye;
+            items.push_back(std::move(show));
+            items.push_back(cmd::separator());
+        }
+    }
+    // Les entrees propres a ce qui est vise.
+    if (one && one->kind == hmi::Kind::SymbolInstance) {
+        const auto* sym = hmi::symbolOf(doc_->project, *one);
+        items.push_back(plain("Ouvrir le symbole", MOpenSymbol, sym != nullptr, "symbole introuvable : " + one->text("symbol"),
+                              "Entr\xC3\xA9" "e"));
+        items.push_back(plain("Ses param\xC3\xA8tres\xE2\x80\xA6", MSymbolParams));
+        ui::PopupMenu::Item pops = plain("Ses popups", -1);
+        if (sym)
+            for (const auto& pv : doc_->project.views)
+                if (pv.ownerSymbol == sym->id) {
+                    pops.children.push_back(plain(pv.name, kMenuPopup + static_cast<int>(menuPopups_.size())));
+                    menuPopups_.push_back(pv.id);
+                }
+        if (pops.children.empty()) {
+            pops.enabled = false;
+            pops.disabledReason = "le symbole n'a pas de popup";
+        }
+        items.push_back(std::move(pops));
+        items.push_back(cmd::separator());
+    } else if (one && one->kind == hmi::Kind::Group) {
+        items.push_back(plain("Entrer dans le groupe", MEnterGroup, true, {}, "Entr\xC3\xA9" "e"));
+        items.push_back(cmd::item(cmd::Id::Degrouper, act(ActUngroup)));
+        items.push_back(cmd::separator());
+    } else if (one && one->kind == hmi::Kind::ZoneMap) {
+        // 1.12.12 (lot H) : un plan a zones choisi seul - une zone de plus, tracee a la souris.
+        items.push_back(plain("Tracer une zone", MTraceZone));
+        items.push_back(cmd::separator());
+    }
+    items.push_back(cmd::item(cmd::Id::Couper, MCut));
+    items.push_back(cmd::item(cmd::Id::Copier, MCopy));
+    items.push_back(cmd::item(cmd::Id::Coller, MPaste));
+    items.push_back(cmd::item(cmd::Id::Dupliquer, MDuplicate));
+    items.push_back(cmd::item(cmd::Id::DupliquerFenetre, MDupWindow));
+    if (!(one && one->kind == hmi::Kind::Group))
+        items.push_back(cmd::item(cmd::Id::Grouper, act(ActGroup), sel.size() >= 2, "deux objets ou plus"));
+    items.push_back(cmd::separator());
+    // Les sous-menus de la barre d'outils.
+    ui::PopupMenu::Item order = plain("Ordre", -1);
+    order.children = {plain("Premier plan", act(ActFront)), plain("Avancer d'un rang", act(ActForward)),
+                      plain("Reculer d'un rang", act(ActBackward)), plain("Arri\xC3\xA8re-plan", act(ActBack))};
+    items.push_back(std::move(order));
+    ui::PopupMenu::Item align = plain("Aligner", -1);
+    const bool three = sel.size() >= 3;
+    align.children = {plain("Aligner \xC3\xA0 gauche", act(ActAlignLeft)), plain("Centrer horizontalement", act(ActAlignCenterH)),
+                      plain("Aligner \xC3\xA0 droite", act(ActAlignRight)), plain("Aligner en haut", act(ActAlignTop)),
+                      plain("Centrer verticalement", act(ActAlignCenterV)), plain("Aligner en bas", act(ActAlignBottom)),
+                      cmd::separator(),
+                      plain("Distribuer horizontalement", act(ActDistributeH), three, "3 objets ou plus"),
+                      plain("Distribuer verticalement", act(ActDistributeV), three, "3 objets ou plus")};
+    items.push_back(std::move(align));
+    ui::PopupMenu::Item turn = plain("Transformer", -1);
+    turn.children = {plain("Tourner de -90\xC2\xB0", act(ActRotateLeft)), plain("Tourner de +90\xC2\xB0", act(ActRotateRight)),
+                     plain("Tourner de +45\xC2\xB0", act(ActRotate45)), plain("Tourner de 180\xC2\xB0", act(ActRotate180)),
+                     cmd::separator(),
+                     plain("Miroir horizontal", act(ActMirrorH)), plain("Miroir vertical", act(ActMirrorV))};
+    items.push_back(std::move(turn));
+    ui::PopupMenu::Item style = plain("Style", -1);
+    style.children = {cmd::item(cmd::Id::CopierStyle, act(ActStyleCopy)), cmd::item(cmd::Id::CollerStyle, act(ActStylePaste)),
+                      plain("Cr\xC3\xA9" "er un style nomm\xC3\xA9\xE2\x80\xA6", act(ActMakeStyle))};
+    items.push_back(std::move(style));
+    ui::PopupMenu::Item layer = plain("Calque", -1);
+    layer.children.push_back(plain("Mettre dans le calque actif", act(ActLayerMoveHere)));
+    layer.children.push_back(cmd::separator());
+    Id shared = kNoId;
+    bool same = true;
+    for (const Id id : sel)
+        if (const auto* o = v->object(id)) {
+            if (shared == kNoId) shared = o->layer;
+            else if (o->layer != shared) same = false;
+        }
+    for (const auto& l : v->layers) {
+        auto it = plain(l.name, kMenuLayer + static_cast<int>(menuLayers_.size()));
+        it.radio = true;
+        it.checked = same && l.id == shared;
+        layer.children.push_back(std::move(it));
+        menuLayers_.push_back(l.id);
+    }
+    items.push_back(std::move(layer));
+    items.push_back(cmd::separator());
+    bool allLocked = true, allHidden = true;
+    for (const Id id : sel)
+        if (const auto* o = v->object(id)) {
+            allLocked = allLocked && o->locked;
+            allHidden = allHidden && o->hidden;
+        }
+    items.push_back(check("Verrouill\xC3\xA9", MLocked, allLocked));
+    items.push_back(check("Cach\xC3\xA9", MHidden, allHidden));
+    items.push_back(cmd::separator());
+    items.push_back(cmd::item(cmd::Id::Renommer, MRename, one != nullptr, "un objet \xC3\xA0 la fois"));
+    items.push_back(plain("Cr\xC3\xA9" "er un symbole\xE2\x80\xA6", act(ActMakeSymbol)));
+    items.push_back(cmd::separator());
+    {
+        auto del = cmd::item(cmd::Id::Supprimer, MDelete);
+        if (vertexChosen) del.shortcut.clear();   // Suppr retire alors le sommet
+        items.push_back(std::move(del));
+    }
+    if (one) {
+        items.push_back(cmd::separator());
+        items.push_back(cmd::item(cmd::Id::Aide, MHelp, static_cast<bool>(openHelp_), "l'aide n'est pas joignable ici",
+                                  "Aide sur " + kindName(one->kind)));
+    }
+    context_->setItems(std::move(items));
+    openMenuAt(*context_, at);
+}
+
+// ---- 1.12.18 (planche 7) : le menu d'un calque - le clic droit ne le rend plus actif ----
+void HmiEditor::openLayerMenu(Id layer, gfx::Point at) {
+    namespace cmd = ui::cmd;
+    const auto* v = doc_->project.view(viewId_);
+    const auto* l = v ? v->layer(layer) : nullptr;
+    if (!l || !context_) return;
+    menuKind_ = kMenuLayers;
+    menuLayer_ = layer;
+    const auto n = hmi::edit::objectsInLayer(*v, layer).size();
+    const bool active = v->activeLayer == layer;
+    const auto entry = [](std::string label, int id, bool enabled = true, std::string why = {}, std::string key = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.id = id;
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        it.shortcut = std::move(key);
+        return it;
+    };
+    std::vector<ui::PopupMenu::Item> items;
+    items.push_back(cmd::heading(l->name, active ? std::to_string(n) + (n > 1 ? " objets \xC2\xB7 actif" : " objet \xC2\xB7 actif")
+                                                : std::to_string(n) + (n > 1 ? " objets" : " objet")));
+    items.push_back(entry("Rendre actif", kLayerActivate, !active, "c'est d\xC3\xA9j\xC3\xA0 le calque actif"));
+    items.push_back(entry("Choisir ses objets", kLayerSelect, n > 0, "le calque est vide"));
+    items.push_back(entry("Y mettre la s\xC3\xA9lection", kLayerMoveHere, !canvas_->selection().empty(), "rien de choisi"));
+    items.push_back(cmd::separator());
+    items.push_back(entry("Nouveau calque", kLayerNew));
+    items.push_back(cmd::item(cmd::Id::Renommer, kLayerRename));
+    items.push_back(cmd::item(cmd::Id::Dupliquer, kLayerDuplicate));
+    const int rank = v->layerRank(layer);
+    items.push_back(cmd::item(cmd::Id::Monter, kLayerUp, rank + 1 < static_cast<int>(v->layers.size()), "d\xC3\xA9j\xC3\xA0 tout en haut"));
+    items.push_back(cmd::item(cmd::Id::Descendre, kLayerDown, rank > 0, "d\xC3\xA9j\xC3\xA0 tout en bas"));
+    items.push_back(cmd::separator());
+    ui::PopupMenu::Item visible = entry("Visible", kLayerVisible);
+    visible.checkable = true;
+    visible.checked = l->visible;
+    items.push_back(std::move(visible));
+    ui::PopupMenu::Item locked = entry("Verrouill\xC3\xA9", kLayerLocked);
+    locked.checkable = true;
+    locked.checked = l->locked;
+    items.push_back(std::move(locked));
+    items.push_back(cmd::separator());
+    items.push_back(cmd::item(cmd::Id::Supprimer, kLayerRemove, v->layers.size() > 1, "une vue garde au moins un calque",
+                              n > 0 ? "Supprimer (ses objets passent au calque du dessous)" : std::string{}));
+    context_->setItems(std::move(items));
+    openMenuAt(*context_, at);
+}
+
+void HmiEditor::layerMenuChosen(Id layer, int a) {
+    auto& c = *canvas_;
+    const auto* v = doc_->project.view(viewId_);
+    if (!v || !v->layer(layer)) return;
+    switch (a) {
+        case kLayerActivate:
+            c.edit("Calque actif", [&](hmi::Project&, hmi::View& vv) { vv.activeLayer = layer; });
+            break;
+        case kLayerSelect: c.setSelection(hmi::edit::objectsInLayer(*v, layer)); break;
+        case kLayerMoveHere: {
+            const auto sel = c.selection();
+            c.edit("Changer de calque", [&](hmi::Project&, hmi::View& vv) { hmi::edit::moveToLayer(vv, sel, layer); });
+            break;
+        }
+        case kLayerNew: run(ActLayerAdd); break;
+        case kLayerRename: layers_->beginRename(layer); break;
+        case kLayerDuplicate:
+            c.edit("Dupliquer le calque", [&](hmi::Project& p, hmi::View& vv) { (void)hmi::edit::duplicateLayer(p, vv, layer); });
+            break;
+        case kLayerUp:
+            c.edit("Monter le calque", [&](hmi::Project&, hmi::View& vv) { hmi::edit::moveLayer(vv, layer, +1); });
+            break;
+        case kLayerDown:
+            c.edit("Descendre le calque", [&](hmi::Project&, hmi::View& vv) { hmi::edit::moveLayer(vv, layer, -1); });
+            break;
+        case kLayerVisible:
+            c.edit("Calque visible", [&](hmi::Project&, hmi::View& vv) { if (auto* l = vv.layer(layer)) l->visible = !l->visible; });
+            break;
+        case kLayerLocked:
+            c.edit("Calque verrouill\xC3\xA9", [&](hmi::Project&, hmi::View& vv) { if (auto* l = vv.layer(layer)) l->locked = !l->locked; });
+            break;
+        case kLayerRemove: {
+            std::string why;
+            bool ok = true;
+            c.edit("Supprimer le calque", [&](hmi::Project&, hmi::View& vv) { ok = hmi::edit::removeLayer(vv, layer, &why); });
+            if (!ok) warn(why);
+            break;
+        }
+        default: break;
+    }
+    invalidate();
+}
+
+// ---- 1.12.18 (planche 7) : le menu d'une tuile de la bibliotheque ----
+void HmiEditor::openPaletteMenu(hmi::Kind kind, gfx::Point at) {
+    namespace cmd = ui::cmd;
+    if (!context_) return;
+    menuKind_ = kMenuPalette;
+    menuPaletteKind_ = kind;
+    const std::string name(hmi::kindLabel(kind));
+    std::vector<ui::PopupMenu::Item> items;
+    items.push_back(cmd::heading(name, hmiPaletteFamily(kind)));
+    ui::PopupMenu::Item place;
+    place.label = "Placer sur la vue";
+    place.shortcut = "Entr\xC3\xA9" "e";
+    place.id = kPalettePlace;
+    items.push_back(std::move(place));
+    ui::PopupMenu::Item fav;
+    fav.label = "Favori";
+    fav.id = kPaletteFavorite;
+    fav.checkable = true;
+    fav.checked = palette_->favorites().count(kind) > 0;
+    items.push_back(std::move(fav));
+    items.push_back(cmd::separator());
+    items.push_back(cmd::item(cmd::Id::Aide, kPaletteHelp, static_cast<bool>(openHelp_), "l'aide n'est pas joignable ici",
+                              "Aide sur " + name));
+    context_->setItems(std::move(items));
+    openMenuAt(*context_, at);
+}
+
+void HmiEditor::openMenuAt(ui::PopupMenu& menu, gfx::Point at) {
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
+    menu.openAt(at, surface);
+}
+
+void HmiEditor::canvasMenuChosen(int a) {
+    auto& c = *canvas_;
+    const auto* v = doc_->project.view(viewId_);
+    if (!v) return;
+    if (menuKind_ == kMenuLayers) { layerMenuChosen(menuLayer_, a); return; }
+    if (menuKind_ == kMenuPalette) {
+        if (a == kPalettePlace) palette_->chosen->emit(menuPaletteKind_);
+        else if (a == kPaletteFavorite) palette_->toggleFavorite(menuPaletteKind_);
+        else if (a == kPaletteHelp && openHelp_) {
+            const auto* t = hmi::guide::topicForKind(hmi::kindKey(menuPaletteKind_));
+            openHelp_(t ? t->key : std::string("ihm"));
+        }
+        return;
+    }
+    const auto helpOn = [this](hmi::Kind k) {
+        if (!openHelp_) return;
+        const auto* t = hmi::guide::topicForKind(hmi::kindKey(k));
+        openHelp_(t ? t->key : std::string("ihm"));
+    };
+    if (a >= kMenuInsert && a < kMenuInsert + static_cast<int>(std::size(kInsertKinds))) {
+        c.insertAt(kInsertKinds[a - kMenuInsert], c.contextScreen());
+        return;
+    }
+    if (a >= kMenuPopup && a < kMenuPopup + static_cast<int>(menuPopups_.size())) {
+        openView->emit(menuPopups_[static_cast<std::size_t>(a - kMenuPopup)]);
+        return;
+    }
+    if (a >= kMenuLayer && a < kMenuLayer + static_cast<int>(menuLayers_.size())) {
+        const Id layer = menuLayers_[static_cast<std::size_t>(a - kMenuLayer)];
+        const auto sel = c.selection();
+        c.edit("Changer de calque", [&](hmi::Project&, hmi::View& vv) { hmi::edit::moveToLayer(vv, sel, layer); });
+        return;
+    }
+    if (a >= kMenuAct && a < kMenuLayer) { run(a - kMenuAct); return; }
+    switch (a) {
+        case MDupWindow: run(ActDuplicate); break;
+        case MDuplicate: c.duplicateSelection(); break;
+        case MCopy:      run(ActCopy); break;
+        case MDelete:    run(ActDelete); break;
+        case MVertex:    (void)c.removeSelectedVertex(); break;   // 1.12.12 (lot H)
+        case MTraceZone: if (c.selection().size() == 1) c.startZoneTrace(c.selection().front()); break;
+        case MCut:       c.cutSelection(); break;
+        case MPaste:     run(ActPaste); break;
+        case MPasteHere: c.pasteAt(c.contextScreen()); break;
+        case MSelectAll: c.selectAll(); break;
+        case MRename:    if (c.selection().size() == 1) objects_->beginRename(c.selection().front()); break;
+        case MHelp:
+            if (c.selection().size() == 1)
+                if (const auto* o = v->object(c.selection().front())) helpOn(o->kind);
+            break;
+        case MLocked: {
+            bool all = true;
+            for (const Id id : c.selection()) if (const auto* o = v->object(id)) all = all && o->locked;
+            c.lockSelection(!all);
+            break;
+        }
+        case MHidden: {
+            bool all = true;
+            for (const Id id : c.selection()) if (const auto* o = v->object(id)) all = all && o->hidden;
+            c.hideSelection(!all);
+            break;
+        }
+        case MOpenSymbol:
+            if (c.selection().size() == 1)
+                if (const auto* o = v->object(c.selection().front())) c.symbolOpened->emit(o->text("symbol"));
+            break;
+        case MSymbolParams:
+            if (c.selection().size() == 1) {
+                inspector_->setCurrentIndex(0);
+                (void)revealProperty(c.selection().front(), "params");
+            }
+            break;
+        case MEnterGroup: if (c.selection().size() == 1) c.enterGroup(c.selection().front()); break;
+        case MLeaveGroup: c.leaveGroup(); break;
+        case MUnlockTarget: {
+            const Id id = c.contextLocked();
+            if (!v->object(id)) break;
+            c.edit("D\xC3\xA9verrouiller", [&](hmi::Project&, hmi::View& vv) { hmi::edit::setLocked(vv, {id}, false); });
+            c.setSelection({id});
+            break;
+        }
+        case MCopyTarget: {
+            const Id id = c.contextLocked();
+            if (!v->object(id)) break;
+            const auto before = c.selection();
+            c.setSelection({id}, false);
+            c.copySelection();
+            c.setSelection(before, false);
+            break;
+        }
+        case MHelpTarget:
+            if (const auto* o = v->object(c.contextLocked())) helpOn(o->kind);
+            break;
+        case MShow: c.hideSelection(false); break;
+        case MViewProps:
+            c.setSelection({});
+            inspector_->setCurrentIndex(0);
+            break;
+        case MLibrary:
+            if (paletteSearch_) paletteSearch_->takeFocus();
+            statusBar_->setMessage("Choisis un objet dans la biblioth\xC3\xA8que, puis clique dans la vue pour le poser.");
+            break;
+        case MZoom50:  c.setZoom(0.5f); break;
+        case MZoom100: c.setZoom(1.f); break;
+        case MZoom200: c.setZoom(2.f); break;
+        case MGuideV:  c.addGuideAt(true, c.contextScreen()); break;
+        case MGuideH:  c.addGuideAt(false, c.contextScreen()); break;
+        default: break;
+    }
+    invalidate();
 }
 
 void HmiEditor::run(int action) {

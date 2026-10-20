@@ -13,7 +13,7 @@ constexpr std::string_view kInsert = "inserer:";
 constexpr std::string_view kTopic  = "expr-";
 // Tranche 25 (avec REP) : une phrase, un exemple que le banc calcule (V[1].Pos vaut 85 : VRAI).
 constexpr std::string_view kMarkersLine =
-    "Un rep\xC3\xA8re $\xE2\x80\xA6$ marque ce qui varie quand on duplique (Dupliquer\xE2\x80\xA6, Ctrl+D) ; il ne change pas le "
+    "Un rep\xC3\xA8re $\xE2\x80\xA6$ marque ce qui varie quand on duplique (Dupliquer\xE2\x80\xA6, Ctrl+Maj+D) ; il ne change pas le "
     "calcul : =$V[1].Pos$ > 10 se calcule comme =V[1].Pos > 10.";
 
 ui::HelpBlock block(ui::HelpBlockKind kind, std::string text) {

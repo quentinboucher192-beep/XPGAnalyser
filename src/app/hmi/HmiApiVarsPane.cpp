@@ -195,7 +195,7 @@ public:
             if (n->uses.size() > 8) tip += "\n  ... et " + std::to_string(n->uses.size() - 8) + " autres";
             // R1111-10 : le geste dit (decision 125).
             tip += "\nUn clic sur \xC2\xAB Utilis\xC3\xA9" "e par l'IHM \xC2\xBB : la liste des endroits ; en choisir un y m\xC3\xA8ne "
-                   "(aussi : clic droit \xE2\x80\xBA Emplois).";
+                   "(aussi : clic droit \xE2\x80\xBA Voir les usages).";
         }
         return tip + "\nDouble-clic : ins\xC3\xA9rer " + n->path + ".";
     }
@@ -702,13 +702,13 @@ std::vector<ui::PopupMenu::Item> HmiApiVarsView::menuItems(std::size_t line) {
                      ui::Icon::None, script, false, kMenuInsert});
     if (!n->uses.empty()) {
         ui::PopupMenu::Item uses;
-        uses.label = "Emplois (" + std::to_string(n->uses.size()) + ")";
+        uses.label = "Voir les usages (" + std::to_string(n->uses.size()) + ")";
         uses.id = kMenuUse + 1;      // une entree a sous-menu ne se choisit pas elle-meme
         for (std::size_t i = 0; i < n->uses.size() && i < kMaxUsesListed; ++i)
             uses.children.push_back({n->uses[i], {}, {}, ui::Icon::None, true, false, kMenuUse - static_cast<int>(i)});
         items.push_back(std::move(uses));
     } else {
-        items.push_back({"Emplois", {}, "l'IHM ne l'emploie pas", ui::Icon::None, false, false, kMenuUse + 1});
+        items.push_back({"Voir les usages", {}, "l'IHM ne l'emploie pas", ui::Icon::None, false, false, kMenuUse + 1});
     }
     return items;
 }

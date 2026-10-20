@@ -1021,8 +1021,8 @@ core::Status MainAnalysisScreen::buildUi() {
             tools.add(2, HmiGlyph::Plus, "Ajouter un rack", "Rack");
             tools.add(3, HmiGlyph::Plus, "Poser un module dans un emplacement libre", "Module");
             tools.separator();
-            tools.add(4, HmiGlyph::Import, "Importer le .XHW (ou le .XEF) de Control Expert : les racks, les modules, leurs voies", "Importer le .XHW\xE2\x80\xA6");
-            tools.add(5, HmiGlyph::Refresh, "R\xC3\xA9importer et r\xC3\xA9" "analyser les fichiers (F5)", "R\xC3\xA9" "analyser");
+            tools.add(4, HmiGlyph::Import, "Importer la configuration (.XHW, ou le .XEF) de Control Expert : les racks, les modules, leurs voies", "Importer la configuration (.XHW)\xE2\x80\xA6");
+            tools.add(5, HmiGlyph::Refresh, "R\xC3\xA9" "analyser les fichiers : les relire depuis le disque", "R\xC3\xA9" "analyser");
             paneLinks_ += tools.triggered->connect([this](int a) {
                 if (a == 1) {
                     if (auto p = app_.project()) configuration_->setCategories(buildConfigurationProperties(*p));
@@ -1684,7 +1684,7 @@ void MainAnalysisScreen::showTabMenu(std::size_t index, gfx::Point at) {
         layoutEntry(mosaic ? "Revenir aux onglets" : "Mosa\xC3\xAFque automatique", mosaic ? "" : std::to_string(centre_->tabCount()) + " tuiles",
                     "", true, Icon::Chart, kTabMenuMosaic);
         const bool canDetach = tabClosable(index);
-        layoutEntry("D\xC3\xA9tacher dans une fen\xC3\xAAtre", "", canDetach ? "" : "cet onglet reste dans la fen\xC3\xAAtre principale",
+        layoutEntry("Ouvrir dans une fen\xC3\xAAtre", "", canDetach ? "" : "cet onglet reste dans la fen\xC3\xAAtre principale",
                     canDetach, Icon::Screen, kTabMenuDetach);
     }
     tabMenu_->setItems(std::move(items));

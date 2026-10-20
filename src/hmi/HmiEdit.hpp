@@ -48,7 +48,10 @@ void                          setPoints(Object&, const std::vector<Pt>&);
 // en cours d'edition interne (kNoId sinon) ; on rend alors ses enfants
 // directs, sinon les groupes de premier niveau. Les objets caches et
 // verrouilles ne se prennent pas a la souris (l'explorateur, lui, les prend).
-[[nodiscard]] Id hitTest(const View&, double x, double y, Id insideGroup = kNoId, double tolerance = 4.0);
+// 1.12.18 : `includeLocked` - le clic droit vise aussi un objet verrouille (son menu :
+// Deverrouiller), que le clic gauche traverse.
+[[nodiscard]] Id hitTest(const View&, double x, double y, Id insideGroup = kNoId, double tolerance = 4.0,
+                         bool includeLocked = false);
 [[nodiscard]] std::vector<Id> inRect(const View&, const Box&, Id insideGroup = kNoId);
 
 // ------------------------------------------------------------ creation -----
@@ -89,6 +92,9 @@ void setHidden(View&, const std::vector<Id>& ids, bool);
 // ------------------------------------------------------------ calques ------
 Id   addLayer(Project&, View&, std::string name = {});
 [[nodiscard]] bool removeLayer(View&, Id layer, std::string* error = nullptr);
+// 1.12.18 : un calque et ses objets en double, juste au-dessus (« Fond (copie) ») ; il devient
+// le calque actif. Les objets copies gardent leur place ; leurs noms sont neufs.
+Id   duplicateLayer(Project&, View&, Id layer);
 [[nodiscard]] bool renameLayer(View&, Id layer, const std::string& name, std::string* error = nullptr);
 void moveLayer(View&, Id layer, int delta);        // +1 : monte d'un rang
 void setLayerVisible(View&, Id layer, bool);

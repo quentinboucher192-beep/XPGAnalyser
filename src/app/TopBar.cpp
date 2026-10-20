@@ -209,10 +209,10 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(project_, "Enregistrer sous\xE2\x80\xA6", "", ui::Icon::Document, "project.saveAs");
     sep(project_);
     if (core::hasApi()) {      // 1.12.0 : l'automate (XPGAnalyser API)
-    e(project_, "Importer la configuration mat\xC3\xA9rielle (.XHW)\xE2\x80\xA6", "Ctrl+Maj+O", ui::Icon::Rack, "file.importHardware");   // 1.11 (T2) : la table help::keys
+    e(project_, "Importer la configuration (.XHW)\xE2\x80\xA6", "Ctrl+Maj+O", ui::Icon::Rack, "file.importHardware");   // 1.11 (T2) : la table help::keys
     // Lot 7 : un nouveau MAST dans le projet ouvert (le recapitulatif d'abord).
     e(project_, "Importer un .XPG (nouveau MAST)\xE2\x80\xA6", "", ui::Icon::Program, "file.importMast");
-    e(project_, "R\xC3\xA9importer et r\xC3\xA9" "analyser", "", ui::Icon::Refresh, "analyze.run");   // Lot API 8 : F5 est Simuler (la maquette ; il n'a jamais relance l'analyse)
+    e(project_, "R\xC3\xA9" "analyser les fichiers", "", ui::Icon::Refresh, "analyze.run");   // Lot API 8 : F5 est Simuler (la maquette ; il n'a jamais relance l'analyse)
     sep(project_);
     }
     e(project_, "Ic\xC3\xB4ne du projet\xE2\x80\xA6", "", ui::Icon::Image, "project.icon");
@@ -269,7 +269,7 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(view_, "Disposition : onglets", "", ui::Icon::Document, "layout.tabs");
     e(view_, "Disposition : c\xC3\xB4te \xC3\xA0 c\xC3\xB4te", "", ui::Icon::Layers, "layout.groups");
     e(view_, "Disposition : mosa\xC3\xAFque automatique", "", ui::Icon::Chart, "layout.mosaic");
-    e(view_, "D\xC3\xA9tacher l'onglet dans une fen\xC3\xAAtre", "", ui::Icon::Screen, "layout.detach");
+    e(view_, "Ouvrir l'onglet dans une fen\xC3\xAAtre", "", ui::Icon::Screen, "layout.detach");
     sep(view_);
     e(view_, "Panneaux \xC3\xA0 afficher\xE2\x80\xA6", "", ui::Icon::Settings, "view.layout");
     sep(view_);

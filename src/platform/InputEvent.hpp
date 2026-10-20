@@ -33,7 +33,7 @@ enum class Key : std::uint16_t {
     // ---- 1.10 (chantier N) : F7, Compiler l'IHM ----
     F7,
     F8,                         // 1.10 (integration) : F8 l'IHM demarrer / arreter, Maj+F8 (branchee par L)
-    D,                          // 1.10.2 (chantier D) : Ctrl+D Dupliquer..., Ctrl+Maj+D Dupliquer tel quel
+    D,                          // 1.10.2 (chantier D) : Ctrl+D Dupliquer (1.12.18), Ctrl+Maj+D Dupliquer...
     J,                          // 1.11.14 : Ctrl+J le panneau du bas (Sorties, Console, Diagnostics)
     // 1.11.23 : les raccourcis des vues (toutes les lettres, tous les chiffres, F4 et F6) -
     // ajoutes a la fin : les valeurs d'avant ne bougent pas.
@@ -41,6 +41,9 @@ enum class Key : std::uint16_t {
     // 1.12.2 : les signes des raccourcis de Visual Studio dans les editeurs de code -
     // Ctrl+/ (Ctrl+: sur un clavier AZERTY), Ctrl+] (Ctrl+$), Ctrl+. , Ctrl+, , Ctrl+-.
     Slash, Period, Comma, Minus, RightBracket, Colon, Dollar, Semicolon,
+    // 1.12.18 : la touche Menu (a cote de la barre d'espace) - ouvre le menu du clic
+    // droit au clavier, comme Maj+F10.
+    Menu,
 };
 
 struct KeyMods {
@@ -57,6 +60,11 @@ struct MouseWheel  { gfx::Point pos; float dx, dy; KeyMods mods; };
 struct KeyDown     { Key key; KeyMods mods; bool repeat; };
 struct KeyUp       { Key key; KeyMods mods; };
 struct TextInput   { std::string utf8; };
+
+// 1.12.18 : la touche du menu contextuel - Menu, ou Maj+F10.
+[[nodiscard]] inline bool isContextMenuKey(const KeyDown& k) noexcept {
+    return k.key == Key::Menu || (k.key == Key::F10 && k.mods.shift && !k.mods.ctrl && !k.mods.alt);
+}
 struct FocusChange { bool gained; };
 struct WindowResize{ gfx::Size size; float dpiScale; };
 struct FileDropped { std::string path; gfx::Point pos; };

@@ -871,6 +871,16 @@ ui::EventResult HmiObjectList::onEvent(const ui::InputEvent& ev) {
     }
     if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
         if (!focused() || editor_) return ui::EventResult::Ignored;
+        // 1.12.18 : Maj+F10 / Menu - le menu de la selection, sous sa ligne.
+        if (ui::isContextMenuKey(*k)) {
+            if (selection_.empty()) return ui::EventResult::Consumed;
+            gfx::Rect r;
+            const gfx::Point at = rowRect(selection_.front(), r) ? gfx::Point{r.x + 12.f, r.y + r.h}
+                                                                 : gfx::Point{bounds().x + 12.f, bounds().y + 12.f};
+            ui::KeyboardMenuScope keyboard;
+            contextRequested->emit(selection_.front(), at);
+            return ui::EventResult::Consumed;
+        }
         // 1.11 (T1, tranche 6) : les touches de l'ecran passent (F7 Compiler, F8 l'IHM, F9, F5...) ;
         // l'explorateur les mangeait toutes : apres un clic sur une alarme, F8 ne demarrait pas l'IHM.
         switch (k->key) {
@@ -895,6 +905,23 @@ ui::EventResult HmiObjectList::onEvent(const ui::InputEvent& ev) {
     }
     if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
         grabFocus();
+        // 1.12.18 (bug 2) : le clic droit n'est pas un clic gauche - il garde la selection
+        // multiple, ne touche ni l'oeil ni le cadenas, ne renomme pas ; il ouvre le menu.
+        if (m->button == ui::MouseButton::Right) {
+            const int i = rowAt(m->pos.y);
+            if (i < 0) return ui::EventResult::Consumed;   // le vide : rien (avant : tout deselectionne)
+            const Id id = rows_[static_cast<std::size_t>(i)].id;
+            if (std::find(selection_.begin(), selection_.end(), id) == selection_.end()) {
+                selection_ = {id};
+                anchor_ = i;
+                anchorId_ = id;
+                invalidate();
+                selectionChanged->emit(selection_);
+            }
+            contextRequested->emit(id, m->pos);
+            return ui::EventResult::Consumed;
+        }
+        if (m->button != ui::MouseButton::Left) return ui::EventResult::Consumed;
         const int i = rowAt(m->pos.y);
         if (i < 0) {
             selection_.clear();
@@ -994,7 +1021,7 @@ ui::EventResult HmiObjectList::onEvent(const ui::InputEvent& ev) {
 }
 
 // ================================================================ calques ===
-HmiLayerList::HmiLayerList(std::string id) : ui::Widget(std::move(id)) {}
+HmiLayerList::HmiLayerList(std::string id) : ui::Widget(std::move(id)) { setFocusPolicy(true); }   // 1.12.18 : ses touches
 
 ui::SizeHint HmiLayerList::sizeHint() const {
     ui::SizeHint h;
@@ -1107,10 +1134,31 @@ ui::EventResult HmiLayerList::onEvent(const ui::InputEvent& ev) {
         if (h != hover_) { hover_ = h; invalidate(); }
         return ui::EventResult::Ignored;
     }
+    // 1.12.18 : Maj+F10 / Menu - le menu du calque actif, sous sa ligne.
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused() && !editor_ && ui::isContextMenuKey(*k)) {
+        gfx::Rect r;
+        const Id active = view_->activeLayer;
+        const gfx::Point at = rowRect(active, r) ? gfx::Point{r.x + 12.f, r.y + r.h} : gfx::Point{b.x + 12.f, b.y + 12.f};
+        ui::KeyboardMenuScope keyboard;
+        contextRequested->emit(active, at);
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused() && !editor_) {
+        const bool alt = k->mods.alt && !k->mods.ctrl && !k->mods.shift;
+        if ((k->key == ui::Key::F2 && k->mods.none()) || (k->key == ui::Key::Delete && k->mods.none())
+            || (k->key == ui::Key::D && k->mods.ctrl && !k->mods.alt) || (alt && (k->key == ui::Key::Up || k->key == ui::Key::Down))) {
+            keyPressed->emit(*k);
+            return ui::EventResult::Consumed;
+        }
+    }
     if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
         const int k = rowAt(m->pos.y);
         if (k < 0) return ui::EventResult::Ignored;
         const Id id = view_->layers[static_cast<std::size_t>(n - 1 - k)].id;
+        grabFocus();
+        // 1.12.18 (bug 3) : le clic droit ouvre le menu de ce calque, sans le rendre actif.
+        if (m->button == ui::MouseButton::Right) { contextRequested->emit(id, m->pos); return ui::EventResult::Consumed; }
+        if (m->button != ui::MouseButton::Left) return ui::EventResult::Consumed;
         if (m->pos.x < b.x + 26) toggleVisible->emit(id);
         else if (m->pos.x < b.x + 50) toggleLocked->emit(id);
         else if (m->clickCount >= 2) rename->emit(id);
@@ -1730,6 +1778,12 @@ ui::EventResult HmiPalette::onEvent(const ui::InputEvent& ev) {
     if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
         const auto* t = tileAt(m->pos);
         if (!t) return ui::EventResult::Ignored;
+        // 1.12.18 (bug 3) : le clic droit n'arme plus la pose, ne bascule plus l'etoile : le menu.
+        if (m->button == ui::MouseButton::Right) {
+            if (t->symbol.empty()) contextRequested->emit(t->kind, m->pos);
+            return ui::EventResult::Consumed;
+        }
+        if (m->button != ui::MouseButton::Left) return ui::EventResult::Consumed;
         if (!t->symbol.empty()) {
             const std::string name = t->symbol;
             current_ = hmi::Kind::SymbolInstance;
@@ -1739,9 +1793,7 @@ ui::EventResult HmiPalette::onEvent(const ui::InputEvent& ev) {
             return ui::EventResult::Consumed;
         }
         if (m->pos.x >= t->star.x && m->pos.y <= t->star.y + t->star.h) {
-            if (favorites_.count(t->kind)) favorites_.erase(t->kind); else favorites_.insert(t->kind);
-            favoritesChanged->emit();
-            invalidate();
+            toggleFavorite(t->kind);
             return ui::EventResult::Consumed;
         }
         current_ = t->kind;
@@ -1750,6 +1802,18 @@ ui::EventResult HmiPalette::onEvent(const ui::InputEvent& ev) {
         return ui::EventResult::Consumed;
     }
     return ui::EventResult::Ignored;
+}
+
+void HmiPalette::toggleFavorite(hmi::Kind k) {
+    if (favorites_.count(k)) favorites_.erase(k); else favorites_.insert(k);
+    favoritesChanged->emit();
+    invalidate();
+}
+
+std::string hmiPaletteFamily(hmi::Kind kind) {
+    for (const auto& c : categories())
+        if (std::find(c.kinds.begin(), c.kinds.end(), kind) != c.kinds.end()) return c.name;
+    return {};
 }
 
 // ============================================================= proprietes ===

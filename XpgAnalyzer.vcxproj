@@ -146,6 +146,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\HistoryPanel.cpp" />
     <ClCompile Include="src\app\hmi\HmiActionDialogs.cpp" />
     <ClCompile Include="src\app\hmi\HmiActionsPanel.cpp" />
+    <ClCompile Include="src\app\hmi\HmiAddressDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiAskDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiAssetPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiAssist.cpp" />
@@ -243,6 +244,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\help\HelpTryIt.cpp" />
     <ClCompile Include="src\help\TryBench.cpp" />
     <ClCompile Include="src\hmi\HmiActionKinds.cpp" />
+    <ClCompile Include="src\hmi\HmiAddressPlan.cpp" />
     <ClCompile Include="src\hmi\HmiAlarmViews.cpp" />
     <ClCompile Include="src\hmi\HmiArchive.cpp" />
     <ClCompile Include="src\hmi\HmiAssets.cpp" />
@@ -455,6 +457,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\sim\RuntimeDebug.cpp" />
     <ClCompile Include="src\ui\FileExplorerModel.cpp" />
     <ClCompile Include="src\ui\FileKinds.cpp" />
+    <ClCompile Include="src\ui\Commands.cpp" />
     <ClCompile Include="src\ui\KeyMap.cpp" />
     <ClCompile Include="src\ui\ThemeFile.cpp" />
     <ClCompile Include="src\ui\widgets\FileExplorer.cpp" />
@@ -623,6 +626,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\HistoryPanel.hpp" />
     <ClInclude Include="src\app\hmi\HmiActionDialogs.hpp" />
     <ClInclude Include="src\app\hmi\HmiActionsPanel.hpp" />
+    <ClInclude Include="src\app\hmi\HmiAddressDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiAskDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiAssetPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiResourceFilter.hpp" />
@@ -709,6 +713,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\help\HelpTryIt.hpp" />
     <ClInclude Include="src\help\TryBench.hpp" />
     <ClInclude Include="src\hmi\HmiActionKinds.hpp" />
+    <ClInclude Include="src\hmi\HmiAddressPlan.hpp" />
     <ClInclude Include="src\hmi\HmiAlarmViews.hpp" />
     <ClInclude Include="src\hmi\HmiArchive.hpp" />
     <ClInclude Include="src\hmi\HmiAssets.hpp" />
@@ -886,6 +891,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiRenameRefs.hpp" />
     <ClInclude Include="src\ui\FileExplorerModel.hpp" />
     <ClInclude Include="src\ui\FileKinds.hpp" />
+    <ClInclude Include="src\ui\Commands.hpp" />
     <ClInclude Include="src\ui\KeyMap.hpp" />
     <ClInclude Include="src\ui\ThemeFile.hpp" />
     <ClInclude Include="src\ui\widgets\FileExplorer.hpp" />

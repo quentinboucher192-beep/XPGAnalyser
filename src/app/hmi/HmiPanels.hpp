@@ -138,6 +138,10 @@ public:
     const core::SignalPtr<hmi::Id> toggleHidden = core::Signal<hmi::Id>::create();
     const core::SignalPtr<hmi::Id> toggleLocked = core::Signal<hmi::Id>::create();
     const core::SignalPtr<hmi::Id> activated    = core::Signal<hmi::Id>::create();   // double-clic : renommer
+    // 1.12.18 (bug 2) : le clic droit sur un objet (gardee si deja choisi, sinon il devient la
+    // selection), ou Maj+F10 / Menu : l'editeur ouvre le menu des objets a `at`. Avant, le clic
+    // droit faisait un clic gauche : il defaisait la selection, basculait l'oeil ou le cadenas.
+    const core::SignalPtr<hmi::Id, gfx::Point> contextRequested = core::Signal<hmi::Id, gfx::Point>::create();
     // Une touche, quand l'explorateur a le focus : Suppr, F2, Ctrl+Z... ce que
     // l'editeur fait de la selection (la liste, elle, ne modifie rien).
     const core::SignalPtr<const ui::KeyDown&> keyPressed = core::Signal<const ui::KeyDown&>::create();
@@ -227,6 +231,11 @@ public:
     const core::SignalPtr<hmi::Id> toggleVisible = core::Signal<hmi::Id>::create();
     const core::SignalPtr<hmi::Id> toggleLocked  = core::Signal<hmi::Id>::create();
     const core::SignalPtr<hmi::Id> rename        = core::Signal<hmi::Id>::create();
+    // 1.12.18 (bug 3) : le clic droit ne rend plus le calque actif (ce qui entrait dans
+    // l'historique) : l'editeur ouvre le menu de CE calque. Maj+F10 / Menu : celui du calque actif.
+    const core::SignalPtr<hmi::Id, gfx::Point> contextRequested = core::Signal<hmi::Id, gfx::Point>::create();
+    // 1.12.18 : une touche quand la liste a le focus (F2, Suppr, Ctrl+D, Alt+Haut/Bas) - pour le calque actif.
+    const core::SignalPtr<const ui::KeyDown&> keyPressed = core::Signal<const ui::KeyDown&>::create();
     void beginRename(hmi::Id layer);
     const core::SignalPtr<hmi::Id, const std::string&> renamed =
         core::Signal<hmi::Id, const std::string&>::create();
@@ -246,6 +255,8 @@ private:
 };
 
 // ------------------------------------------------------------- palette ------
+// 1.12.18 : la famille d'un genre dans la bibliotheque (« Affichage », « Synoptique ») ; vide : aucune.
+[[nodiscard]] std::string hmiPaletteFamily(hmi::Kind kind);
 class HmiPalette final : public ui::Widget {
 public:
     explicit HmiPalette(std::string id = {});
@@ -256,6 +267,10 @@ public:
     [[nodiscard]] const std::set<hmi::Kind>& favorites() const noexcept { return favorites_; }
     const core::SignalPtr<hmi::Kind> chosen           = core::Signal<hmi::Kind>::create();
     const core::SignalPtr<>          favoritesChanged = core::Signal<>::create();
+    // 1.12.18 (bug 3) : le clic droit sur une tuile n'arme plus la pose et ne bascule plus
+    // l'etoile : l'editeur ouvre son menu (Placer sur la vue, Favori, Aide).
+    const core::SignalPtr<hmi::Kind, gfx::Point> contextRequested = core::Signal<hmi::Kind, gfx::Point>::create();
+    void toggleFavorite(hmi::Kind k);
     void setHoverForTest(std::optional<hmi::Kind> k) { hoverKind_ = k; }
     // La tuile survolee : celle dont l'apercu est dessine en bas.
     [[nodiscard]] std::optional<hmi::Kind> hoveredKind() const noexcept { return hoverKind_; }

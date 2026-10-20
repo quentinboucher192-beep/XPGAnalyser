@@ -2,6 +2,7 @@
 // onglets et sa barre (lot 15). Les equipements, les variables liees, le
 // reseau du PC et le scanner : HmiEquipmentPanes.cpp.
 #include "HmiCommPanes.hpp"
+#include "../../ui/Commands.hpp"   // 1.12.18 : le menu d'un equipement
 #include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - ses equipements, pas d'automate du projet
 #include "../ExportTarget.hpp"
@@ -299,7 +300,7 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     // Lot 18 : les valeurs simulees.
     tools->add(CValAnimateAll, HmiGlyph::Play, "Tout animer : chaque mouvement arr\xC3\xAAt\xC3\xA9 reprend (ses r\xC3\xA9glages sont gard\xC3\xA9s)", "Tout animer");
     tools->add(CValStopAll, HmiGlyph::Stop, "Tout arr\xC3\xAAter : plus rien ne bouge tout seul (les r\xC3\xA9glages restent)", "Tout arr\xC3\xAAter");
-    tools->add(CValUnforce, HmiGlyph::Undo, "D\xC3\xA9" "forcer tout : chaque case forc\xC3\xA9" "e redevient libre (les \xC3\xA9" "critures y passent de nouveau)", "D\xC3\xA9" "forcer tout");
+    tools->add(CValUnforce, HmiGlyph::Undo, "Tout rel\xC3\xA2" "cher : chaque case forc\xC3\xA9" "e redevient libre (les \xC3\xA9" "critures y passent de nouveau)", "Tout rel\xC3\xA2" "cher");
     tools->add(CValAdd, HmiGlyph::Plus, "Ajouter un registre anim\xC3\xA9, sans variable IHM : la premi\xC3\xA8re case libre des zones de l'esclave simul\xC3\xA9 choisi", "Ajouter un registre");
     tools->add(CSimPortAdd, HmiGlyph::Plus, "Ajouter un port au PC simul\xC3\xA9 (rien ne change sur le vrai PC)", "Port simul\xC3\xA9");
     tools->add(CSimCopy, HmiGlyph::Refresh, "Copier le r\xC3\xA9seau du PC : un port simul\xC3\xA9 par r\xC3\xA9seau du vrai PC (les esclaves simul\xC3\xA9s gardent l'adresse de leur appareil)",
@@ -739,6 +740,48 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     });
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) {
         if (!refreshing_) rebuildProperties();
+    });
+    // 1.12.18 (planche 10) : le menu d'un equipement - ce que fait la barre pour lui (Tester, Ping,
+    // l'outil Modbus, la carte memoire...), puis Copier et Supprimer ; Suppr au clavier.
+    equipTable_->setExtraContextOnly(true);
+    equipTable_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto* e = equipmentOf(equipment_);
+        if (!e) return items;   // (le Plan, une ligne vide) : le menu commun des tableaux
+        const auto tool = [this](int a, std::string label, std::string key = {}) {
+            ui::PopupMenu::Item it;
+            it.label = std::move(label);
+            it.shortcut = std::move(key);
+            it.id = 1000 + a;
+            it.enabled = tools_->isEnabled(a);
+            if (!it.enabled) it.disabledReason = "pas pour cet \xC3\xA9quipement";
+            return it;
+        };
+        items.push_back(ui::cmd::heading(e->name, std::string(hmi::equipmentTypeLabel(e->type)) + " \xC2\xB7 " + e->host));
+        items.push_back(tool(CTestEquip, "Tester"));
+        items.push_back(tool(CPing, "Ping\xE2\x80\xA6"));
+        items.push_back(tool(CTool, "Outil Modbus"));
+        items.push_back(tool(COpenMap, "Carte m\xC3\xA9moire"));
+        items.push_back(tool(CDetect, "D\xC3\xA9tecter les zones"));
+        items.push_back(tool(CBind, "Lier une variable"));
+        items.push_back(tool(CCreateTwin, "Cloner en esclave simul\xC3\xA9"));
+        items.push_back(ui::cmd::separator());
+        items.push_back(ui::cmd::item(ui::cmd::Id::Copier, 1));   // la table : copier la ligne
+        items.push_back(ui::cmd::separator());
+        auto del = tool(CRemoveEquip, "Supprimer", "Suppr");
+        del.icon = ui::Icon::Delete;
+        items.push_back(std::move(del));
+        return items;
+    });
+    links_ += equipTable_->contextAction->connect([this](int a) {
+        if (a > 1000 && a < 1200) tools_->triggered->emit(a - 1000);
+    });
+    equipTable_->setKeyHandler([this](const ui::KeyDown& k) {
+        if (k.key == ui::Key::Delete && k.mods.none() && equipmentOf(equipment_) && tools_->isEnabled(CRemoveEquip)) {
+            tools_->triggered->emit(CRemoveEquip);
+            return true;
+        }
+        return false;
     });
     links_ += equipTable_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
         if (refreshing_ || rows.empty() || rows.front() >= equipRows_.size()) return;

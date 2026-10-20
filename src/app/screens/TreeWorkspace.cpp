@@ -412,8 +412,8 @@ ui::WidgetPtr MainAnalysisScreen::wrapExplorer(std::unique_ptr<ui::TreeView> tre
     treeFollow_ = app_.settings().getBool("arbre.suivre", true);
     // Pas pendant un script : ses clics visent la droite des lignes (ScriptRunner, arbre "...").
     if (!app_.scripted())
-        explorer_->setHoverActions({{ui::Icon::Star, "\xC3\x89pingler en haut / D\xC3\xA9s\xC3\xA9pingler"},
-                                {ui::Icon::Export, "Ouvrir dans une fen\xC3\xAAtre d\xC3\xA9tach\xC3\xA9" "e"},
+        explorer_->setHoverActions({{ui::Icon::Star, "\xC3\x89pingler / D\xC3\xA9s\xC3\xA9pingler"},
+                                {ui::Icon::Export, "Ouvrir dans une fen\xC3\xAAtre"},
                                 {ui::Icon::Settings, "Plus\xE2\x80\xA6 (le menu du clic droit)"}});
     refreshTreeChrome();
     return column;

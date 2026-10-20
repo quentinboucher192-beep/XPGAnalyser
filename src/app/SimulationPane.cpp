@@ -3112,7 +3112,7 @@ void SimulationPane::openMenu(gfx::Point at) {
     if (!anyValue) allWatched = false;
     const std::string noValue = "choisis une variable \xC3\xA0 valeur (pas une structure)";
     std::vector<ui::PopupMenu::Item> items;
-    items.push_back({std::string("Forcer") + kEllipsis, "Double-clic", anyValue ? std::string{} : noValue, ui::Icon::Lock, anyValue, false, AForce});
+    items.push_back({std::string("Forcer") + kEllipsis, "Entr\xC3\xA9" "e", anyValue ? std::string{} : noValue, ui::Icon::Lock, anyValue, false, AForce});
     items.push_back({"Rel\xC3\xA2" "cher", "Suppr", anyForced ? std::string{} : std::string("rien de forc\xC3\xA9 ici"), ui::Icon::Close, anyForced, false, ARelease});
     items.push_back({allWatched ? "Ne plus suivre sur la courbe" : "Suivre sur la courbe", "", anyValue ? std::string{} : noValue,
                      ui::Icon::Chart, anyValue, false, AWatch});
@@ -3121,7 +3121,8 @@ void SimulationPane::openMenu(gfx::Point at) {
     if (rows.size() == 1 && !rows_[rows.front()].section.empty()) {
         const auto& row = rows_[rows.front()];
         items.push_back({"", "", "", ui::Icon::None, true, true, -1});
-        items.push_back({"Aller \xC3\xA0 l'\xC3\xA9" "criture", frenchPlace(row.section, row.line), "", ui::Icon::Section,
+        // 1.12.18 : la colonne de droite dit une touche ; le lieu va dans le libelle.
+        items.push_back({"Aller \xC3\xA0 l'\xC3\xA9" "criture (" + frenchPlace(row.section, row.line) + ")", "", "", ui::Icon::Section,
                          static_cast<bool>(hosts_.goToLine), false, kMenuWriter});
     }
     items.push_back({"", "", "", ui::Icon::None, true, true, -1});

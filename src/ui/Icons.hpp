@@ -61,6 +61,12 @@ enum class Icon : std::uint8_t {
     CodeSafety, CodeHmi, CodeComm, CodeCalc, CodeTimer, CodeMatrix, CodeReports, CodeData, CodeDebug,
     // 1.11.23 : un clavier (les raccourcis des vues). A la FIN, toujours.
     Keyboard,
+    // 1.12.18 : LES VERBES DU CLIC DROIT (la table ui::cmd) - avant, Copier,
+    // Renommer et Dupliquer prenaient la feuille, Supprimer la croix. A la FIN.
+    Cut, Copy, Paste, Rename, Delete, Duplicate,
+    Group, BringFront, Align, Rotate, Pin, Window, GoTo, Function, Eye, EyeOff, Unlock,
+    Plus, ArrowUp, ArrowDown, Link, Help, Comment, Sort, Columns, Wrench, Breakpoint,
+    RunTo, Release, Import, Clear,
 };
 
 // 1.8.0 : l'icone du catalogue `index` (core::codeicons::info(index)) ; hors

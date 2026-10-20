@@ -88,6 +88,11 @@ public:
     [[nodiscard]] std::vector<hmi::dup::ItemField> duplicateFields(int index) const;
     bool insertCopies(int index, const std::vector<std::vector<std::string>>& rows);
 
+    // 1.12.18 (planche 9) : COPIER / COLLER UNE ACTION ENTIERE (son declencheur, son operation, sa
+    // cible...), d'un objet a l'autre ; Coller l'insere apres l'action choisie. Le menu de la liste.
+    bool copyAction(int index);
+    bool pasteAction();
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> contextItems() const;
     [[nodiscard]] HmiToolStrip&     tools() noexcept { return *tools_; }
     [[nodiscard]] ui::TableView&    table() noexcept { return *table_; }
     [[nodiscard]] ui::PropertyGrid& grid() noexcept { return *grid_; }

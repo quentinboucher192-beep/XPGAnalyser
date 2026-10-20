@@ -1006,8 +1006,11 @@ EventResult TabControl::onEvent(const InputEvent& ev) {
                 // Lot 7 : le clic droit demande le menu de CET onglet sans le
                 // rendre courant (on ferme les autres depuis celui qu'on lit) ;
                 // le clic du milieu le ferme, comme sa croix.
+                // 1.12.18 (bug 7) : sans menu (un sous-onglet), il choisit l'onglet.
                 if (d->button == MouseButton::Right) {
-                    contextMenuRequested->emit(i, contextAnchor(i));
+                    const bool menu = contextMenuRequested->slotCount() > 0;
+                    if (!menu || rightClickSelects_) setCurrentIndex(i);
+                    if (menu) contextMenuRequested->emit(i, contextAnchor(i));
                     return EventResult::Consumed;
                 }
                 if (d->button == MouseButton::Middle) {

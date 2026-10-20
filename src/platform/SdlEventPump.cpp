@@ -55,7 +55,7 @@ ui::Key keyFrom(SDL_Keycode k) {
         case SDLK_Q:         return ui::Key::Q;
         case SDLK_H:         return ui::Key::H;
         case SDLK_K:         return ui::Key::K;
-        case SDLK_D:         return ui::Key::D;          // 1.10.2 (chantier D) : Ctrl+D Dupliquer...
+        case SDLK_D:         return ui::Key::D;          // Ctrl+D Dupliquer, Ctrl+Maj+D Dupliquer... (1.12.18)
         case SDLK_J:         return ui::Key::J;          // 1.11.14 : Ctrl+J le panneau du bas
         case SDLK_W:         return ui::Key::W;          // lot API 7
         case SDLK_F9:        return ui::Key::F9;
@@ -102,6 +102,7 @@ ui::Key keyFrom(SDL_Keycode k) {
         case SDLK_COLON:     return ui::Key::Colon;
         case SDLK_DOLLAR:    return ui::Key::Dollar;
         case SDLK_SEMICOLON: return ui::Key::Semicolon;
+        case SDLK_APPLICATION: case SDLK_MENU: return ui::Key::Menu;   // 1.12.18
         default:             return ui::Key::Unknown;
     }
 }

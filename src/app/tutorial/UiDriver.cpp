@@ -149,7 +149,7 @@ bool UiDriver::parseKey(const std::string& combo, Key& key, KeyMods& mods) {
         {"f10", Key::F10},                                                     // Lot API 8 : Centre de simulation (F10 : la section suivante)
         {"f7", Key::F7},                                                       // 1.10 (chantier N) : Compiler l'IHM
         {"f8", Key::F8},                                                       // 1.10 : l'IHM demarrer / arreter (chantier L)
-        {"d", Key::D},                                                         // 1.10.2 (chantier D) : Ctrl+D Dupliquer...
+        {"d", Key::D},                                                         // Ctrl+D Dupliquer, Ctrl+Maj+D Dupliquer... (1.12.18)
         {"j", Key::J},                                                         // 1.11.14 : Ctrl+J le panneau du bas
         // 1.11.23 : les raccourcis des vues - les autres lettres, chiffres, F4, F6
         {"b", Key::B}, {"e", Key::E}, {"g", Key::G}, {"i", Key::I}, {"m", Key::M}, {"r", Key::R}, {"t", Key::T},
@@ -157,7 +157,8 @@ bool UiDriver::parseKey(const std::string& combo, Key& key, KeyMods& mods) {
         {"7", Key::Num7}, {"8", Key::Num8}, {"9", Key::Num9}, {"f4", Key::F4}, {"f6", Key::F6},
         // 1.12.2 : les raccourcis des editeurs de code (Ctrl+L, Ctrl+/, Ctrl+], Ctrl+., Ctrl+,, Ctrl+-)
         {"l", Key::L}, {"/", Key::Slash}, {".", Key::Period}, {",", Key::Comma}, {"-", Key::Minus},
-        {"]", Key::RightBracket}, {":", Key::Colon}, {"$", Key::Dollar}, {";", Key::Semicolon}};
+        {"]", Key::RightBracket}, {":", Key::Colon}, {"$", Key::Dollar}, {";", Key::Semicolon},
+        {"menu", Key::Menu}};                                                  // 1.12.18 : la touche Menu
     mods = {};
     std::string rest = lower(combo);
     for (;;) {

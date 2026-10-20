@@ -140,7 +140,7 @@ public:
     void setStyleAsker(std::function<void()> ask) { askStyle_ = std::move(ask); }
     // Lot 20 : "Enregistrer comme modele" - le dialogue est a l'ecran.
     void setTemplateAsker(std::function<void()> ask) { askTemplate_ = std::move(ask); }
-    // 1.10.2 (chantier D) : "Dupliquer..." (Ctrl+D, la barre d'outils) ; vide : la copie decalee.
+    // 1.10.2 (chantier D) : "Dupliquer..." (Ctrl+Maj+D, la barre d'outils) ; vide : la copie decalee.
     void setDuplicateAsker(std::function<void()> ask) { askDuplicate_ = std::move(ask); }
     // 1.11.3 : LE CARRE DE LEGENDE d'une case de l'inspecteur. Un clic ouvre la liste
     // des carres et leur sens (et « Creer X... » pour un nom inconnu) ; un choix
@@ -172,6 +172,18 @@ public:
     // "lier un tableau" ; les essais) suit, en une commande (un seul Ctrl+Z).
     // La barre d'etat dit combien d'endroits ont suivi.
     bool renameObject(hmi::Id id, const std::string& name, std::string* why = nullptr);
+
+    // ---- 1.12.18 : le menu du clic droit sur la vue ----
+    // « Aide sur Voyant » : l'hote ouvre le sujet de l'aide (le genre de l'objet).
+    void setHelpOpener(std::function<void(const std::string& topic)> open);
+    void openCanvasMenu(gfx::Point at, bool explorer = false);   // ce que vise le canevas ; explorer : la selection
+    void canvasMenuChosen(int id);
+    void openLayerMenu(hmi::Id layer, gfx::Point at);           // planche 7 : un calque (sans le rendre actif)
+    enum LayerMenu : int { kLayerActivate = 1, kLayerSelect, kLayerMoveHere, kLayerNew, kLayerRename, kLayerDuplicate,
+                           kLayerUp, kLayerDown, kLayerVisible, kLayerLocked, kLayerRemove };
+    void layerMenuChosen(hmi::Id layer, int id);
+    void openPaletteMenu(hmi::Kind kind, gfx::Point at);        // planche 7 : une tuile de la bibliotheque
+    [[nodiscard]] ui::PopupMenu* canvasMenu() const noexcept { return context_; }
 
 protected:
     void onLayout() override;
@@ -241,6 +253,13 @@ private:
     std::function<void()>     askTemplate_;      // lot 20
     std::function<void()>     askDuplicate_;     // 1.10.2 (chantier D)
     std::function<void(const ValueRequest&)> askValue_;   // 1.11.3 : le selecteur de valeur
+    std::function<void(const std::string&)> openHelp_;   // 1.12.18 : « Aide sur ... »
+    std::vector<hmi::Id>      menuLayers_;                // 1.12.18 : le sous-menu Calque, dans l'ordre
+    std::vector<hmi::Id>      menuPopups_;                // ... et Ses popups (une instance)
+    int                       menuKind_{0};               // le menu ouvert : la vue, un calque, la bibliotheque
+    hmi::Id                   menuLayer_{hmi::kNoId};     // ... le calque vise
+    hmi::Kind                 menuPaletteKind_{hmi::Kind::Text};
+    void openMenuAt(ui::PopupMenu& menu, gfx::Point at);
     ui::PopupMenu*            legendMenu_{nullptr};       // 1.11.3 : la liste des carres
     ValueRequest              legendRequest_;             // ... la case pour laquelle elle est ouverte
     std::vector<std::string>  legendUnknown_;             // ... les noms a creer qu'elle propose

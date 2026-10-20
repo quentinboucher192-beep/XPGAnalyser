@@ -413,7 +413,7 @@ inline Line markerTarget(const hmi::dup::MarkerInfo& m) {
     return l;
 }
 // La ligne d'aide, sous les reperes.
-inline constexpr std::string_view kMarkersHelp = "Ctrl+D : Dupliquer\xE2\x80\xA6 les remplace";
+inline constexpr std::string_view kMarkersHelp = "Ctrl+Maj+D : Dupliquer\xE2\x80\xA6 les remplace";
 
 // Les lignes d'une famille (pas Elements : ce sont des objets), dans l'ordre de
 // l'arbre ; Reperes : un par repere, puis la ligne d'aide (sans cible).

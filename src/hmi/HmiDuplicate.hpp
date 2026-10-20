@@ -194,8 +194,8 @@ inline constexpr std::string_view kTemplatesFolder = "Mod\xC3\xA8les d'objets";
 // (ses `$` sont transparents), Compiler n'avertit plus, Generer ne bloque plus.
 // Seul l'ancien `$Vanne$` dont le nom n'est pas une variable garde une erreur :
 // celle de l'analyse ("variable inexistante : Vanne"), suivie de cette phrase.
-inline constexpr std::string_view kMarkerHint = "un rep\xC3\xA8re se remplit par Dupliquer\xE2\x80\xA6 (Ctrl+D)";
-// " - un repere se remplit par Dupliquer... (Ctrl+D)" si `unknown` (le nom que
+inline constexpr std::string_view kMarkerHint = "un rep\xC3\xA8re se remplit par Dupliquer\xE2\x80\xA6 (Ctrl+Maj+D)";
+// " - un repere se remplit par Dupliquer... (Ctrl+Maj+D)" si `unknown` (le nom que
 // l'analyse ne connait pas) est la racine d'un repere de `text` ; vide sinon.
 [[nodiscard]] std::string markerHint(std::string_view text, std::string_view unknown, bool expression = true);
 // Un constat qui porte cette phrase : "Remplacer..." de Compiler l'ouvre.

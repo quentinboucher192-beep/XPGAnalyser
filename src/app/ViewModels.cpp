@@ -2024,7 +2024,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         if (s.domainHead) {
             s.subtitle = domainStatus(n);
             switch (k) {
-            case NodeKind::ApiFolder: s.headActions.push_back({ui::Icon::Refresh, "R\xC3\xA9importer et r\xC3\xA9" "analyser le programme"}); break;
+            case NodeKind::ApiFolder: s.headActions.push_back({ui::Icon::Refresh, "R\xC3\xA9" "analyser les fichiers"}); break;
             case NodeKind::HmiFolder: s.headActions.push_back({ui::Icon::Analyze, "G\xC3\xA9n\xC3\xA9rer l'IHM (ce qui a chang\xC3\xA9)"}); break;
             case NodeKind::SimFolder:
                 s.headActions.push_back(simRunning_ ? ui::CellStyle::Chip{ui::Icon::Stop, "Arr\xC3\xAAter la simulation"}

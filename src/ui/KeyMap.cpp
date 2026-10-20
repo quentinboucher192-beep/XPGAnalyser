@@ -45,6 +45,7 @@ const Name kNames[] = {
     { Key::F7, "F7" }, { Key::F8, "F8" }, { Key::F9, "F9" }, { Key::F10, "F10" }, { Key::F11, "F11" }, { Key::F12, "F12" },
     { Key::Slash, "/" }, { Key::Period, "." }, { Key::Comma, "," }, { Key::Minus, "-" }, { Key::RightBracket, "]" },
     { Key::Colon, ":" }, { Key::Dollar, "$" }, { Key::Semicolon, ";" },
+    { Key::Menu, "Menu" },                                    // 1.12.18
 };
 // Les autres facons de l'ecrire (deja repliees : minuscules, sans accents).
 struct Alias { std::string_view text; Key key; };
@@ -100,7 +101,7 @@ const std::vector<Command>& catalog() {
         // ---- Naviguer
         { "allerLigne", "Aller \xC3\xA0 la ligne", "Naviguer" },
         { "allerDefinition", "Aller \xC3\xA0 la d\xC3\xA9" "finition", "Naviguer", true },
-        { "references", "Toutes les r\xC3\xA9" "f\xC3\xA9rences", "Naviguer", true },
+        { "references", "Voir les usages", "Naviguer", true },
         { "revenir", "Revenir o\xC3\xB9 l'on \xC3\xA9tait", "Naviguer" },
         { "renommer", "Renommer partout", "Naviguer", true },
         { "diagSuivant", "Faute suivante", "Naviguer" },

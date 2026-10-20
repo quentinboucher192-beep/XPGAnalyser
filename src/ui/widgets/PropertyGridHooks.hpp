@@ -20,6 +20,13 @@ using ExpressionPageHook = std::function<void(const PropertyGrid::Property&)>;
 void setExpressionPageHook(ExpressionPageHook hook);
 [[nodiscard]] const ExpressionPageHook& expressionPageHook();
 
+// 1.12.18 : « Aller a la definition » (F12) et « Voir les usages » (Maj+F12) du nom sous le clic
+// dans une expression - l'ecran d'analyse le branche (comme dans le code). Sans crochet : pas
+// d'entree. Vrai : le nom a ete trouve.
+using NameHook = std::function<bool(std::string_view name, bool usages)>;
+void setNameHook(NameHook hook);
+[[nodiscard]] const NameHook& nameHook();
+
 // Le libelle de l'entree, que le tutoriel de l'expression (T1, etape 7) vise : "menu:<libelle>".
 inline constexpr std::string_view kExpressionPageItem = "La page des expressions\xE2\x80\xA6";
 

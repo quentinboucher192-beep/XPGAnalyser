@@ -16,7 +16,7 @@ objet V_101
 attendre 3
 vue-clic 240 170
 attendre 1
-touche ctrl+d
+touche ctrl+maj+d
 attendre 4
 dupliquer-serie "$Vanne$" "V[{n}]" "0"
 attendre 2

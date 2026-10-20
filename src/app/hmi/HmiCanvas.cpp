@@ -8,6 +8,7 @@
 #include "../../hmi/HmiRanges.hpp"   // 1.12.10 (lot F) : un objet pose suit la plage de sa variable
 
 #include "../../ui/Shapes.hpp"
+#include "../../ui/widgets/Controls.hpp"   // 1.12.18 : KeyboardMenuScope (Maj+F10 sur la vue)
 #include "../../ui/Theme.hpp"
 
 #include <algorithm>
@@ -652,6 +653,79 @@ void HmiCanvas::addGuide(bool vertical) {
         v.guides.push_back({vertical, vertical ? v.width / 2.0 : v.height / 2.0});
     });
 }
+// ---- 1.12.18 : ce que fait le menu du clic droit, au point du clic ----------------------
+hmi::edit::Pt HmiCanvas::contextPoint() const { return toView(contextScreen_); }
+
+void HmiCanvas::cancelPlacement() {
+    const bool was = placeKind_.has_value() || traceMap_ != kNoId;
+    if (traceMap_ != kNoId) { traceMap_ = kNoId; trace_.clear(); }
+    placeKind_.reset();
+    placeSymbol_.clear();
+    placeVariable_.reset();
+    invalidate();
+    if (was) {
+        placed->emit();   // la bibliotheque ne montre plus l'outil
+        status->emit("Pose annul\xC3\xA9" "e");
+    }
+}
+
+void HmiCanvas::pasteAt(gfx::Point screen) {
+    auto& c = clipboard();
+    if (c.objects.empty()) { paste(); return; }   // des noms de variables (Excel) : la colonne habituelle
+    // Le coin haut-gauche de ce qui est colle (les objets du haut) vient au point du clic.
+    double minX = 0, minY = 0;
+    bool first = true;
+    std::set<Id> ids;
+    for (const auto& o : c.objects) ids.insert(o.id);
+    for (const auto& o : c.objects) {
+        if (ids.count(o.parent)) continue;
+        const double x = o.number("x"), y = o.number("y");
+        if (first || x < minX) minX = x;
+        if (first || y < minY) minY = y;
+        first = false;
+    }
+    const auto* v = view();
+    Pt at = toView(screen);
+    if (v && v->grid.snapGrid) { at.x = hmi::edit::snapToGrid(at.x, v->grid.step); at.y = hmi::edit::snapToGrid(at.y, v->grid.step); }
+    std::vector<Id> top;
+    const bool done = edit("Coller ici", [&](hmi::Project& p, hmi::View& vv) {
+        std::map<Id, Id> made;
+        for (const auto& o : c.objects) made[o.id] = p.allocate();
+        for (auto o : c.objects) {
+            const bool isTop = !made.count(o.parent);
+            o.id = made[o.id];
+            o.parent = isTop ? insideGroup_ : made[o.parent];
+            if (!vv.layer(o.layer)) o.layer = vv.activeLayer;
+            o.locked = false;
+            std::string base = o.name;
+            while (!base.empty() && std::isdigit(static_cast<unsigned char>(base.back()))) base.pop_back();
+            if (!base.empty() && base.back() == '_') base.pop_back();
+            o.name = hmi::uniqueObjectName(vv, base.empty() ? "Objet" : base);
+            o.setNumber("x", o.number("x") - minX + at.x);
+            o.setNumber("y", o.number("y") - minY + at.y);
+            if (isTop) top.push_back(o.id);
+            vv.objects.push_back(std::move(o));
+        }
+        hmi::edit::refreshGroupBounds(vv);
+    });
+    if (done) setSelection(top);
+}
+
+void HmiCanvas::insertAt(hmi::Kind kind, gfx::Point screen) {
+    placeKind_ = kind;
+    placeSymbol_.clear();
+    placeVariable_.reset();
+    placeAt(screen, false);
+}
+
+void HmiCanvas::addGuideAt(bool vertical, gfx::Point screen) {
+    const Pt at = toView(screen);
+    edit(vertical ? "Guide vertical" : "Guide horizontal", [&](hmi::Project&, hmi::View& v) {
+        const double pos = vertical ? std::clamp(at.x, 0.0, static_cast<double>(v.width)) : std::clamp(at.y, 0.0, static_cast<double>(v.height));
+        v.guides.push_back({vertical, std::round(pos)});
+    });
+}
+
 void HmiCanvas::toggleGrid() {
     edit("Grille", [&](hmi::Project&, hmi::View& v) { v.grid.visible = !v.grid.visible; });
 }
@@ -1180,11 +1254,29 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
             drag_ = Drag::Pan;
             return ui::EventResult::Consumed;
         }
-        // 1.10.2 (chantier D) : le clic droit - le menu de l'editeur (Dupliquer...).
+        // 1.10.2 (chantier D) : le clic droit - le menu de l'editeur. 1.12.18 : il vise ce qui
+        // est sous le pointeur (HmiCanvas.hpp, « ce que vise le clic droit »).
         if (m->button == ui::MouseButton::Right) {
-            if (const hmi::Id hit = hmi::edit::hitTest(*v, pressView_.x, pressView_.y, insideGroup_, 4.0 / zoom_);
-                hit != hmi::kNoId && std::find(selection_.begin(), selection_.end(), hit) == selection_.end())
-                setSelection({hit});
+            // Une pose ou un trace en cours : le clic droit l'annule, comme Echap, sans menu.
+            if (placeKind_ || traceMap_ != kNoId) {
+                cancelPlacement();
+                return ui::EventResult::Consumed;
+            }
+            contextScreen_ = m->pos;
+            contextLocked_ = kNoId;
+            if (const hmi::Id hit = hmi::edit::hitTest(*v, pressView_.x, pressView_.y, insideGroup_, 4.0 / zoom_); hit != kNoId) {
+                if (std::find(selection_.begin(), selection_.end(), hit) == selection_.end()) setSelection({hit});
+                contextTarget_ = ContextTarget::Selection;
+            } else if (const hmi::Id locked = hmi::edit::hitTest(*v, pressView_.x, pressView_.y, insideGroup_, 4.0 / zoom_, true);
+                       locked != kNoId) {
+                // Bug 4 : l'ancienne selection n'est plus visee (Supprimer la supprimait).
+                if (!selection_.empty()) setSelection({});
+                contextTarget_ = ContextTarget::Locked;
+                contextLocked_ = locked;
+            } else {
+                if (!selection_.empty()) setSelection({});
+                contextTarget_ = ContextTarget::View;
+            }
             // 1.12.12 (lot H) : sur un sommet, le menu peut le retirer.
             if (const auto t = vertexTarget(); t.valid())
                 if (const int k = hmi::vertices::vertexAt(*v, t, pressView_, (kVertex + 3.0) / zoom_); k >= 0) selectVertex(k);
@@ -1558,6 +1650,25 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
         // jamais au champ de renommage d'un calque, et Espace passait en
         // mode "main" au milieu d'un texte.
         if (!focused()) return ui::EventResult::Ignored;
+        // 1.12.18 : Maj+F10 / Menu - le menu de la selection, sous elle (rien de choisi : la vue).
+        if (ui::isContextMenuKey(*k)) {
+            if (placeKind_ || traceMap_ != kNoId) cancelPlacement();
+            contextLocked_ = kNoId;
+            const auto vp = viewport();
+            if (!selection_.empty()) {
+                const Box b = hmi::edit::selectionBounds(*v, hmi::edit::units(*v, selection_));
+                contextScreen_ = vp.toScreen(b.x + 8.0 / zoom_, b.bottom());
+                contextTarget_ = ContextTarget::Selection;
+            } else {
+                contextScreen_ = {bounds().x + bounds().w / 2.f, bounds().y + bounds().h / 2.f};
+                contextTarget_ = ContextTarget::View;
+            }
+            contextScreen_.x = std::clamp(contextScreen_.x, bounds().x + 4.f, std::max(bounds().x + 4.f, bounds().right() - 4.f));
+            contextScreen_.y = std::clamp(contextScreen_.y, bounds().y + 4.f, std::max(bounds().y + 4.f, bounds().bottom() - 4.f));
+            ui::KeyboardMenuScope keyboard;
+            contextRequested->emit(contextScreen_);
+            return ui::EventResult::Consumed;
+        }
         const double step = k->mods.shift ? std::max(1, v->grid.step) : 1.0;
         switch (k->key) {
             case ui::Key::Space:  spaceDown_ = true; return ui::EventResult::Consumed;
@@ -1576,30 +1687,55 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
             case ui::Key::Down:  nudge(0, step);  return ui::EventResult::Consumed;
             case ui::Key::Escape:
                 // 1.12.12 (lot H) : la zone qui se trace s'abandonne ; un sommet choisi se laisse.
-                if (traceMap_ != kNoId) { traceMap_ = kNoId; trace_.clear(); invalidate(); }
+                if (traceMap_ != kNoId) cancelPlacement();
                 else if (vertex_ >= 0) selectVertex(-1);
-                else if (placeKind_) { placeKind_.reset(); placeSymbol_.clear(); placeVariable_.reset(); invalidate(); }
+                else if (placeKind_) cancelPlacement();
                 else if (insideGroup_ != kNoId) leaveGroup();
                 else setSelection({});
                 return ui::EventResult::Consumed;
             case ui::Key::Return:
-                if (selection_.size() == 1) enterGroup(selection_.front());
+                // 1.12.18 : Entree ouvre le symbole d'une instance (comme le double-clic), entre
+                // dans un groupe ou un conteneur.
+                if (selection_.size() == 1) {
+                    if (const auto* o = v->object(selection_.front()); o && o->kind == hmi::Kind::SymbolInstance)
+                        symbolOpened->emit(o->text("symbol"));
+                    else
+                        enterGroup(selection_.front());
+                }
                 return ui::EventResult::Consumed;
+            case ui::Key::F2:
+                if (k->mods.none() && !selection_.empty()) { renameRequested->emit(); return ui::EventResult::Consumed; }
+                break;
             case ui::Key::A: if (k->mods.ctrl) { selectAll(); return ui::EventResult::Consumed; } break;
             case ui::Key::Z: if (k->mods.ctrl) { historyRequested->emit(k->mods.shift); return ui::EventResult::Consumed; } break;
             case ui::Key::Y: if (k->mods.ctrl) { historyRequested->emit(true); return ui::EventResult::Consumed; } break;
-            case ui::Key::C: if (k->mods.ctrl) { k->mods.shift ? copyStyle() : copySelection(); return ui::EventResult::Consumed; } break;
+            // 1.12.18 : un mot, un raccourci - le style passe sur Ctrl+Alt+C / Ctrl+Alt+V
+            // (Ctrl+Maj+C reste « Copier sans les titres », dans les tableaux).
+            case ui::Key::C:
+                if (k->mods.ctrl && k->mods.alt) { copyStyle(); return ui::EventResult::Consumed; }
+                if (k->mods.ctrl && !k->mods.shift) { copySelection(); return ui::EventResult::Consumed; }
+                break;
             case ui::Key::X: if (k->mods.ctrl) { cutSelection(); return ui::EventResult::Consumed; } break;
-            // 1.10.2 (chantier D) : Ctrl+D "Dupliquer..." (la fenetre), Ctrl+Maj+D tel quel.
+            // 1.12.18 : Ctrl+D duplique tout de suite, partout ; la fenetre « Dupliquer... »
+            // passe sur Ctrl+Maj+D (1.10.2 : c'etait l'inverse).
             case ui::Key::D:
-                if (k->mods.ctrl && !selection_.empty()) {
-                    if (k->mods.shift) duplicateSelection();
-                    else duplicateRequested->emit();
+                if (k->mods.ctrl && !k->mods.alt && !selection_.empty()) {
+                    if (k->mods.shift) duplicateRequested->emit();
+                    else duplicateSelection();
+                    return ui::EventResult::Consumed;
+                }
+                break;
+            // 1.12.18 : Ctrl+G groupe, Ctrl+Maj+G degroupe (le code garde Aller a la ligne).
+            case ui::Key::G:
+                if (k->mods.ctrl && !k->mods.alt) {
+                    if (k->mods.shift) ungroupSelection();
+                    else if (selection_.size() >= 2) groupSelection();
                     return ui::EventResult::Consumed;
                 }
                 break;
             case ui::Key::V:
-                if (k->mods.ctrl) { k->mods.shift ? pasteStyle() : paste(); return ui::EventResult::Consumed; }
+                if (k->mods.ctrl && k->mods.alt) { pasteStyle(); return ui::EventResult::Consumed; }
+                if (k->mods.ctrl && !k->mods.shift) { paste(); return ui::EventResult::Consumed; }
                 break;
             default: break;
         }

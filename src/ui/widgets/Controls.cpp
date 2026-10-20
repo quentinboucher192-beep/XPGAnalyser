@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 
 namespace ui {
     namespace {
@@ -3259,6 +3260,8 @@ namespace ui {
         // so labels line up down the column
         constexpr float kSeparatorHeight = 7.f;
         constexpr float kSubmenuArrow = 16.f;     // lot 7 : la fleche d'une entree a sous-menu
+        constexpr float kScrollStrip = 14.f;      // 1.12.18 : les bandes d'une colonne qui defile
+        constexpr float kScreenMargin = 4.f;      // 1.12.18 : un menu trop haut garde ce jour en haut et en bas
 
         float menuRowHeight(const PopupMenu::Item& it, float rowHeight) {
             return it.separator ? kSeparatorHeight : rowHeight;
@@ -3287,18 +3290,152 @@ namespace ui {
 
         // Une entree qui se choisit : ni regle, ni titre, ni grisee.
         bool choosable(const PopupMenu::Item& it) { return !it.separator && !it.heading && it.enabled; }
+
+        // ---- 1.12.18 : LES LETTRES. Chaque entree recoit la premiere lettre d'un de
+        //  ses mots qu'aucune entree du dessus n'a prise (les petits mots - de, la,
+        //  dans... - sautes, sauf en tete) ; sans accent (E pour Epingler), en
+        //  minuscule ; un chiffre compte (100 %). Rien de libre : pas de lettre, la
+        //  touche cherche alors la premiere lettre du libelle.
+        struct Mnemonic { char letter{ 0 }; std::size_t pos{ 0 }, len{ 0 }; };
+
+        // Le point de code a `pos` (et sa longueur en octets).
+        char32_t codePointAt(std::string_view s, std::size_t pos, std::size_t& len) {
+            const auto b0 = static_cast<unsigned char>(s[pos]);
+            if (b0 < 0x80) { len = 1; return b0; }
+            const std::size_t n = (b0 >= 0xF0) ? 4 : (b0 >= 0xE0) ? 3 : (b0 >= 0xC0) ? 2 : 1;
+            if (pos + n > s.size() || n == 1) { len = 1; return b0; }
+            char32_t cp = b0 & (n == 2 ? 0x1F : n == 3 ? 0x0F : 0x07);
+            for (std::size_t i = 1; i < n; ++i) cp = (cp << 6) | (static_cast<unsigned char>(s[pos + i]) & 0x3F);
+            len = n;
+            return cp;
+        }
+
+        char baseLetter(char32_t cp) {
+            if (cp >= 'a' && cp <= 'z') return static_cast<char>(cp);
+            if (cp >= 'A' && cp <= 'Z') return static_cast<char>(cp - 'A' + 'a');
+            if (cp >= '0' && cp <= '9') return static_cast<char>(cp);
+            if ((cp >= 0xC0 && cp <= 0xC5) || (cp >= 0xE0 && cp <= 0xE5)) return 'a';
+            if (cp == 0xC7 || cp == 0xE7) return 'c';
+            if ((cp >= 0xC8 && cp <= 0xCB) || (cp >= 0xE8 && cp <= 0xEB)) return 'e';
+            if ((cp >= 0xCC && cp <= 0xCF) || (cp >= 0xEC && cp <= 0xEF)) return 'i';
+            if ((cp >= 0xD2 && cp <= 0xD6) || (cp >= 0xF2 && cp <= 0xF6) || cp == 0x152 || cp == 0x153) return 'o';
+            if ((cp >= 0xD9 && cp <= 0xDC) || (cp >= 0xF9 && cp <= 0xFC)) return 'u';
+            if (cp == 0x178 || cp == 0xFF) return 'y';
+            return 0;
+        }
+
+        bool smallWord(std::string_view w) {
+            static const char* kSmall[] = { "de", "du", "des", "la", "le", "les", "l", "d", "a", "au", "aux", "en", "un",
+                                            "une", "et", "ou", "dans", "sur", "par", "pour", "sans", "avec", "sa", "son",
+                                            "ses", "ce", "ces", "qui", "y" };
+            std::string low;
+            for (char c : w) low += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            for (const char* k : kSmall) if (low == k) return true;
+            return false;
+        }
+
+        // Les debuts de mot d'un libelle : (position, lettre, longueur, petit mot).
+        struct WordStart { std::size_t pos, len; char letter; bool small; };
+        std::vector<WordStart> wordStarts(std::string_view label) {
+            std::vector<WordStart> out;
+            bool atStart = true;
+            for (std::size_t i = 0; i < label.size();) {
+                std::size_t len = 1;
+                const char32_t cp = codePointAt(label, i, len);
+                const char letter = baseLetter(cp);
+                if (letter && atStart) {
+                    std::size_t j = i, l2 = 1;
+                    std::string word;
+                    while (j < label.size()) {
+                        const char32_t c2 = codePointAt(label, j, l2);
+                        const char b = baseLetter(c2);
+                        if (!b) break;
+                        word += b;
+                        j += l2;
+                    }
+                    out.push_back({ i, len, letter, smallWord(word) });
+                }
+                atStart = !letter;
+                i += len;
+            }
+            return out;
+        }
+
+        std::vector<Mnemonic> mnemonicsOf(const std::vector<PopupMenu::Item>& items) {
+            std::vector<Mnemonic> out(items.size());
+            bool used[128] = {};
+            for (std::size_t i = 0; i < items.size(); ++i) {
+                const auto& it = items[i];
+                if (it.separator || it.heading || !it.enabled) continue;
+                const auto starts = wordStarts(it.label);
+                for (int pass = 0; pass < 2 && !out[i].letter; ++pass)
+                    for (std::size_t w = 0; w < starts.size(); ++w) {
+                        const auto& s = starts[w];
+                        if (pass == 0 && w > 0 && s.small) continue;   // d'abord les mots qui comptent
+                        if (used[static_cast<unsigned char>(s.letter)]) continue;
+                        used[static_cast<unsigned char>(s.letter)] = true;
+                        out[i] = { s.letter, s.pos, s.len };
+                        break;
+                    }
+            }
+            return out;
+        }
+
+        char firstLetter(std::string_view label) {
+            for (std::size_t i = 0; i < label.size();) {
+                std::size_t len = 1;
+                const char b = baseLetter(codePointAt(label, i, len));
+                if (b) return b;
+                i += len;
+            }
+            return 0;
+        }
+
+        // La lettre d'une touche (A..Z, 0..9) ; 0 : une autre touche.
+        char keyLetter(Key k) {
+            switch (k) {
+            case Key::A: return 'a'; case Key::B: return 'b'; case Key::C: return 'c'; case Key::D: return 'd';
+            case Key::E: return 'e'; case Key::F: return 'f'; case Key::G: return 'g'; case Key::H: return 'h';
+            case Key::I: return 'i'; case Key::J: return 'j'; case Key::K: return 'k'; case Key::L: return 'l';
+            case Key::M: return 'm'; case Key::N: return 'n'; case Key::O: return 'o'; case Key::P: return 'p';
+            case Key::Q: return 'q'; case Key::R: return 'r'; case Key::S: return 's'; case Key::T: return 't';
+            case Key::U: return 'u'; case Key::V: return 'v'; case Key::W: return 'w'; case Key::X: return 'x';
+            case Key::Y: return 'y'; case Key::Z: return 'z';
+            case Key::Num0: return '0'; case Key::Num1: return '1'; case Key::Num2: return '2'; case Key::Num3: return '3';
+            case Key::Num4: return '4'; case Key::Num5: return '5'; case Key::Num6: return '6'; case Key::Num7: return '7';
+            case Key::Num8: return '8'; case Key::Num9: return '9';
+            default: return 0;
+            }
+        }
     } // namespace
+
+    namespace {
+        int g_keyboardMenu = 0;   // les portees KeyboardMenuScope ouvertes
+    }
+    KeyboardMenuScope::KeyboardMenuScope() noexcept { ++g_keyboardMenu; }
+    KeyboardMenuScope::~KeyboardMenuScope() { --g_keyboardMenu; }
+    bool KeyboardMenuScope::active() noexcept { return g_keyboardMenu > 0; }
+
+    void openContextMenuAt(Widget& target, gfx::Point at) {
+        KeyboardMenuScope scope;
+        (void)target.topWidget().dispatch(MouseDown{ at, MouseButton::Right, 1, {} });
+    }
 
     PopupMenu::PopupMenu(std::string id) : Widget(std::move(id)) {
         setFocusPolicy(true);
         setVisibility(Visibility::Collapsed);   // it occupies no space in a layout
     }
 
+    void PopupMenu::resetLevels() {
+        path_.clear();
+        hot_.assign(1, -1);
+        scroll_.assign(1, 0.f);
+        keyCol_ = 0;
+    }
+
     void PopupMenu::setItems(std::vector<Item> items) {
         items_ = std::move(items);
-        highlighted_ = -1;
-        submenu_ = subHighlighted_ = -1;
-        subKeyboard_ = false;
+        resetLevels();
         invalidate();
     }
 
@@ -3309,104 +3446,239 @@ namespace ui {
         return SizeHint{};
     }
 
-    float PopupMenu::itemHeight(std::size_t i) const {
-        return (i < items_.size() && items_[i].separator) ? kSeparatorHeight : rowHeight_;
+    const std::vector<PopupMenu::Item>& PopupMenu::columnItems(std::size_t column) const {
+        static const std::vector<Item> kNone;
+        const std::vector<Item>* items = &items_;
+        for (std::size_t k = 0; k < column; ++k) {
+            if (k >= path_.size()) return kNone;
+            const auto i = static_cast<std::size_t>(path_[k]);
+            if (i >= items->size()) return kNone;
+            items = &(*items)[i].children;
+        }
+        return *items;
     }
 
-    gfx::Rect PopupMenu::popupRect() const {
-        if (items_.empty()) return {};
+    float PopupMenu::rowsHeight(std::size_t column) const {
+        float h = 0.f;
+        for (const auto& it : columnItems(column)) h += menuRowHeight(it, rowHeight_);
+        return h;
+    }
 
-        const float width = menuWidth(items_);
-        const float height = menuHeight(items_, rowHeight_);
+    bool PopupMenu::scrollable(std::size_t column) const {
+        if (surface_.h <= 0.f) return false;
+        return menuHeight(columnItems(column), rowHeight_) > columnRect(column).h + 0.5f;
+    }
 
-        // Keep it on screen. Flipping about the cursor is what every desktop does,
-        // and it beats clamping: a clamped menu ends up under the pointer with the
-        // wrong entry highlighted.
+    float PopupMenu::scrollOffset(std::size_t column) const noexcept {
+        return column < scroll_.size() ? scroll_[column] : 0.f;
+    }
+
+    float PopupMenu::maxScroll(std::size_t column) const {
+        if (!scrollable(column)) return 0.f;
+        return std::max(0.f, rowsHeight(column) - (columnRect(column).h - 2.f * kScrollStrip));
+    }
+
+    gfx::Rect PopupMenu::columnRect(std::size_t column) const {
+        const auto& items = columnItems(column);
+        if (items.empty()) return {};
+        const float width = menuWidth(items);
+        const float full = menuHeight(items, rowHeight_);
+        // 1.12.18 : PLUS HAUT QUE L'ECRAN, il defile au lieu d'etre coupe.
+        const float avail = surface_.h > 0.f ? std::max(3.f * rowHeight_, surface_.h - 2.f * kScreenMargin) : full;
+        const float height = std::min(full, avail);
         float x = anchor_.x;
         float y = anchor_.y;
-        if (surface_.w > 0.f && x + width > surface_.w) x = std::max(0.f, anchor_.x - width);
-        if (surface_.h > 0.f && y + height > surface_.h) y = std::max(0.f, anchor_.y - height);
+        if (column == 0) {
+            // Keep it on screen. Flipping about the cursor is what every desktop does,
+            // and it beats clamping: a clamped menu ends up under the pointer with the
+            // wrong entry highlighted.
+            if (surface_.w > 0.f && x + width > surface_.w) x = std::max(0.f, anchor_.x - width);
+            if (surface_.h > 0.f && y + height > surface_.h) y = std::max(0.f, anchor_.y - height);
+            if (height < full) y = kScreenMargin;
+        } else {
+            // Lot 7 : a droite de sa colonne, sa premiere entree en face de celle qui
+            // l'ouvre ; a gauche quand il ne tient pas a droite, remonte quand il
+            // deborde en bas.
+            if (column > path_.size()) return {};
+            const gfx::Rect parent = columnRect(column - 1);
+            const gfx::Rect row = columnItemRect(column - 1, static_cast<std::size_t>(path_[column - 1]));
+            x = parent.right() - 3.f;
+            y = row.y - kMenuPadding;
+            if (surface_.w > 0.f && x + width > surface_.w) x = std::max(0.f, parent.x - width + 3.f);
+            if (surface_.h > 0.f && y + height > surface_.h) y = std::max(0.f, surface_.h - height);
+        }
         return { x, y, width, height };
     }
 
-    // ---- lot 7 : le sous-menu ---------------------------------------------------
-    //  A droite du menu, sa premiere entree en face de celle qui l'ouvre ; a
-    //  gauche quand il ne tient pas a droite, remonte quand il deborde en bas.
-    bool PopupMenu::hasSubmenu(int index) const noexcept {
-        return index >= 0 && static_cast<std::size_t>(index) < items_.size()
-            && !items_[static_cast<std::size_t>(index)].children.empty();
-    }
-
-    gfx::Rect PopupMenu::submenuRect() const {
-        if (!open_ || !hasSubmenu(submenu_)) return {};
-        const auto& kids = items_[static_cast<std::size_t>(submenu_)].children;
-        const gfx::Rect box = popupRect();
-        const gfx::Rect parent = itemRect(static_cast<std::size_t>(submenu_));
-        const float width = menuWidth(kids);
-        const float height = menuHeight(kids, rowHeight_);
-        float x = box.right() - 3.f;
-        float y = parent.y - kMenuPadding;
-        if (surface_.w > 0.f && x + width > surface_.w) x = std::max(0.f, box.x - width + 3.f);
-        if (surface_.h > 0.f && y + height > surface_.h) y = std::max(0.f, surface_.h - height);
-        return { x, y, width, height };
-    }
-
-    gfx::Rect PopupMenu::subItemRect(std::size_t index) const {
-        const gfx::Rect box = submenuRect();
+    gfx::Rect PopupMenu::columnItemRect(std::size_t column, std::size_t index) const {
+        const gfx::Rect box = columnRect(column);
         if (box.empty()) return {};
-        const auto& kids = items_[static_cast<std::size_t>(submenu_)].children;
-        float y = box.y + kMenuPadding;
-        for (std::size_t i = 0; i < kids.size(); ++i) {
-            const float h = menuRowHeight(kids[i], rowHeight_);
+        const auto& items = columnItems(column);
+        const bool sc = scrollable(column);
+        float y = box.y + (sc ? kScrollStrip - scrollOffset(column) : kMenuPadding);
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            const float h = menuRowHeight(items[i], rowHeight_);
             if (i == index) return { box.x, y, box.w, h };
             y += h;
         }
         return {};
     }
 
-    int PopupMenu::subItemAt(gfx::Point global) const {
-        const gfx::Rect box = submenuRect();
+    gfx::Rect PopupMenu::submenuRect() const {
+        if (!open_ || path_.empty()) return {};
+        return columnRect(1);
+    }
+
+    gfx::Rect PopupMenu::subItemRect(std::size_t index) const {
+        if (!open_ || path_.empty()) return {};
+        return columnItemRect(1, index);
+    }
+
+    int PopupMenu::highlightedIn(std::size_t column) const noexcept {
+        return column < hot_.size() ? hot_[column] : -1;
+    }
+
+    int PopupMenu::columnAt(gfx::Point global) const {
+        if (!open_) return -1;
+        for (std::size_t k = path_.size() + 1; k-- > 0;)
+            if (columnRect(k).contains(global)) return static_cast<int>(k);
+        return -1;
+    }
+
+    int PopupMenu::rowAt(std::size_t column, gfx::Point global) const {
+        const gfx::Rect box = columnRect(column);
         if (box.empty() || !box.contains(global)) return -1;
-        const auto& kids = items_[static_cast<std::size_t>(submenu_)].children;
-        float y = box.y + kMenuPadding;
-        for (std::size_t i = 0; i < kids.size(); ++i) {
-            const float h = menuRowHeight(kids[i], rowHeight_);
-            if (global.y >= y && global.y < y + h) return kids[i].separator ? -1 : static_cast<int>(i);
-            y += h;
+        if (scrollable(column)) {
+            if (global.y < box.y + kScrollStrip) return kStripUp;
+            if (global.y >= box.bottom() - kScrollStrip) return kStripDown;
+        }
+        const auto& items = columnItems(column);
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            const gfx::Rect r = columnItemRect(column, i);
+            if (global.y >= r.y && global.y < r.y + r.h) return items[i].separator ? -1 : static_cast<int>(i);
         }
         return -1;
     }
 
-    bool PopupMenu::openSubmenu(std::size_t index) {
-        const int i = static_cast<int>(index);
-        if (!open_ || !hasSubmenu(i) || !items_[index].enabled || items_[index].heading) return false;
-        if (submenu_ != i) {
-            submenu_ = i;
-            subHighlighted_ = -1;
-            subKeyboard_ = false;
+    void PopupMenu::scrollBy(std::size_t column, float dy) {
+        if (column >= scroll_.size() || !scrollable(column)) return;
+        const float before = scroll_[column];
+        scroll_[column] = std::clamp(before + dy, 0.f, maxScroll(column));
+        if (scroll_[column] != before) {
+            closeFrom(column + 1);          // un sous-menu ne suit pas son entree qui defile
+            invalidate();
         }
-        highlighted_ = i;
+    }
+
+    void PopupMenu::revealItem(std::size_t column, std::size_t index) {
+        if (column >= scroll_.size() || !scrollable(column)) return;
+        const auto& items = columnItems(column);
+        if (index >= items.size()) return;
+        float top = 0.f;
+        for (std::size_t i = 0; i < index; ++i) top += menuRowHeight(items[i], rowHeight_);
+        const float bottom = top + menuRowHeight(items[index], rowHeight_);
+        const float view = columnRect(column).h - 2.f * kScrollStrip;
+        float s = scroll_[column];
+        if (top < s) s = top;
+        if (bottom > s + view) s = bottom - view;
+        s = std::clamp(s, 0.f, maxScroll(column));
+        if (s != scroll_[column]) {
+            scroll_[column] = s;
+            invalidate();
+        }
+    }
+
+    char PopupMenu::mnemonic(std::size_t column, std::size_t index) const {
+        const auto m = mnemonicsOf(columnItems(column));
+        return index < m.size() ? m[index].letter : 0;
+    }
+
+    void PopupMenu::closeFrom(std::size_t column) {
+        if (column == 0) return;
+        if (path_.size() >= column) {
+            path_.resize(column - 1);
+            hot_.resize(column);
+            scroll_.resize(column);
+            invalidate();
+        }
+        keyCol_ = std::min(keyCol_, path_.size());
+    }
+
+    bool PopupMenu::openSubmenuAt(std::size_t column, std::size_t index) {
+        if (!open_ || column > path_.size()) return false;
+        const auto& items = columnItems(column);
+        if (index >= items.size()) return false;
+        const auto& it = items[index];
+        if (it.children.empty() || !it.enabled || it.heading || it.separator) return false;
+        const int i = static_cast<int>(index);
+        if (column < path_.size() && path_[column] == i) {
+            hot_[column] = i;                // deja ouvert : rien ne change dessous
+            return true;
+        }
+        closeFrom(column + 1);
+        path_.push_back(i);
+        hot_.resize(path_.size());
+        hot_[column] = i;
+        hot_.push_back(-1);
+        scroll_.push_back(0.f);
+        keyCol_ = std::min(keyCol_, column);
+        revealItem(column, index);
         invalidate();
         return true;
     }
 
-    void PopupMenu::closeSubmenu() {
-        if (submenu_ < 0) return;
-        submenu_ = subHighlighted_ = -1;
-        subKeyboard_ = false;
-        invalidate();
+    bool PopupMenu::openSubmenu(std::size_t index) { return openSubmenuAt(0, index); }
+
+    void PopupMenu::setHot(std::size_t column, int index) {
+        if (column >= hot_.size()) return;
+        if (hot_[column] != index) {
+            if (column < path_.size() && path_[column] != index) closeFrom(column + 1);
+            hot_[column] = index;
+            invalidate();
+        }
+        if (index >= 0) revealItem(column, static_cast<std::size_t>(index));
     }
 
-    void PopupMenu::moveSubHighlight(int delta) {
-        if (!hasSubmenu(submenu_)) return;
-        const auto& kids = items_[static_cast<std::size_t>(submenu_)].children;
-        const int n = static_cast<int>(kids.size());
-        int i = subHighlighted_;
+    void PopupMenu::moveHot(std::size_t column, int delta) {
+        const auto& items = columnItems(column);
+        if (items.empty() || column >= hot_.size()) return;
+        const int n = static_cast<int>(items.size());
+        int i = hot_[column];
+        // Skip separators and disabled entries: arrowing onto something that cannot
+        // be chosen is a dead keypress.
         for (int step = 0; step < n; ++step) {
             i = (i < 0) ? (delta > 0 ? 0 : n - 1) : (i + delta + n) % n;
-            if (choosable(kids[static_cast<std::size_t>(i)])) {
-                subHighlighted_ = i;
-                invalidate();
+            if (choosable(items[static_cast<std::size_t>(i)])) {
+                setHot(column, i);
+                return;
+            }
+        }
+    }
+
+    void PopupMenu::jumpToLetter(std::size_t column, char letter) {
+        const auto& items = columnItems(column);
+        if (items.empty() || column >= hot_.size()) return;
+        const auto m = mnemonicsOf(items);
+        const int n = static_cast<int>(items.size());
+        // Les entrees de cette lettre : celle qui la porte (soulignee), et celles
+        // dont le libelle commence par elle. La premiere pression va a celle qui
+        // la porte ; la suivante, a l'entree suivante de la meme lettre.
+        const auto candidate = [&](int i) {
+            const auto& it = items[static_cast<std::size_t>(i)];
+            return choosable(it) && (m[static_cast<std::size_t>(i)].letter == letter || firstLetter(it.label) == letter);
+        };
+        const int hot = hot_[column];
+        if (hot < 0 || !candidate(hot)) {
+            for (int i = 0; i < n; ++i)
+                if (choosable(items[static_cast<std::size_t>(i)]) && m[static_cast<std::size_t>(i)].letter == letter) {
+                    setHot(column, i);
+                    return;
+                }
+        }
+        for (int step = 1; step <= n; ++step) {
+            const int i = ((hot < 0 ? -1 : hot) + step + n) % n;
+            if (candidate(i)) {
+                setHot(column, i);
                 return;
             }
         }
@@ -3415,95 +3687,82 @@ namespace ui {
     gfx::Rect PopupMenu::eventBounds() const {
         if (!open_) return {};                       // closed: invisible to the pointer
         if (surface_.w > 0.f && surface_.h > 0.f) return { 0.f, 0.f, surface_.w, surface_.h };
-        // Sans surface (les tests) : le menu et son sous-menu ouvert.
-        const gfx::Rect box = popupRect();
-        const gfx::Rect sub = submenuRect();
-        if (sub.empty()) return box;
-        const float l = std::min(box.x, sub.x), t = std::min(box.y, sub.y);
-        return { l, t, std::max(box.right(), sub.right()) - l, std::max(box.bottom(), sub.bottom()) - t };
+        // Sans surface (les tests) : le menu et ses sous-menus ouverts.
+        gfx::Rect all = columnRect(0);
+        for (std::size_t k = 1; k <= path_.size(); ++k) {
+            const gfx::Rect r = columnRect(k);
+            if (r.empty()) continue;
+            const float l = std::min(all.x, r.x), t = std::min(all.y, r.y);
+            all = { l, t, std::max(all.right(), r.right()) - l, std::max(all.bottom(), r.bottom()) - t };
+        }
+        return all;
     }
 
     void PopupMenu::openAt(gfx::Point where, gfx::Size surface) {
+        // 1.12.18 : le clavier reviendra a qui l'avait (l'arbre, la barre d'onglets).
+        Widget* had = Widget::focusedIn(*rootWidget());
+        restoreFocus_ = had == this ? restoreFocus_ : had;
         anchor_ = where;
         surface_ = surface;
-        highlighted_ = -1;
-        submenu_ = subHighlighted_ = -1;
-        subKeyboard_ = false;
+        resetLevels();
+        cues_ = false;
         open_ = true;
         setVisibility(Visibility::Visible);
         grabFocus();
         invalidate();
+        if (KeyboardMenuScope::active()) {
+            cues_ = true;
+            moveHot(0, 1);
+        }
+    }
+
+    void PopupMenu::openFromKeyboard(gfx::Point where, gfx::Size surface) {
+        openAt(where, surface);
+        cues_ = true;
+        if (highlightedIn(0) < 0) moveHot(0, 1);
     }
 
     void PopupMenu::close() {
         if (!open_) return;
         open_ = false;
-        highlighted_ = -1;
-        submenu_ = subHighlighted_ = -1;
-        subKeyboard_ = false;
+        resetLevels();
         setVisibility(Visibility::Collapsed);
         releaseFocus();
+        Widget* back = restoreFocus_;
+        restoreFocus_ = nullptr;
+        if (back && back != this && Widget::inTree(*rootWidget(), back) && back->acceptsFocus()) back->takeFocus();
         invalidate();
     }
 
-    gfx::Rect PopupMenu::itemRect(std::size_t index) const {
-        const auto box = popupRect();
-        float y = box.y + kMenuPadding;
-        for (std::size_t i = 0; i < items_.size(); ++i) {
-            const float h = itemHeight(i);
-            if (i == index) return {box.x, y, box.w, h};
-            y += h;
-        }
-        return {};
-    }
-
-    int PopupMenu::itemAt(gfx::Point global) const {
-        const auto box = popupRect();
-        if (!box.contains(global)) return -1;
-        float y = box.y + kMenuPadding;
-        for (std::size_t i = 0; i < items_.size(); ++i) {
-            const float h = itemHeight(i);
-            if (global.y >= y && global.y < y + h)
-                return items_[i].separator ? -1 : static_cast<int>(i);
-            y += h;
-        }
-        return -1;
-    }
-
-    void PopupMenu::moveHighlight(int delta) {
-        if (items_.empty()) return;
-        const int n = static_cast<int>(items_.size());
-        int i = highlighted_;
-        // Skip separators and disabled entries: arrowing onto something that cannot
-        // be chosen is a dead keypress.
-        for (int step = 0; step < n; ++step) {
-            i = (i < 0) ? (delta > 0 ? 0 : n - 1) : (i + delta + n) % n;
-            if (choosable(items_[static_cast<std::size_t>(i)])) {
-                highlighted_ = i;
-                closeSubmenu();          // lot 7 : quitter l'entree referme son sous-menu
-                invalidate();
-                return;
-            }
-        }
+    void PopupMenu::choose(int id) {
+        close();
+        itemChosen->emit(id);
     }
 
     namespace {
         // Une colonne d'entrees : le menu, ou (lot 7) un sous-menu. `hotIndex` :
         // l'entree survolee ; `openIndex` : celle dont le sous-menu est ouvert
-        // (surlignee aussi, pour qu'on voie d'ou il sort).
+        // (surlignee aussi, pour qu'on voie d'ou il sort). 1.12.18 : `scroll` et
+        // `scrolls` - une colonne plus haute que l'ecran ; `cues` - les lettres
+        // soulignees.
         void paintMenuColumn(const PaintContext& ctx, const gfx::Rect& box, const std::vector<PopupMenu::Item>& items,
-                             float rowHeight, int hotIndex, int openIndex) {
+                             float rowHeight, int hotIndex, int openIndex, bool scrolls, float scroll, float maxScroll,
+                             bool cues) {
             const auto& c = ctx.theme.color;
             ctx.r.fillRect({ box.x + 2.f, box.y + 2.f, box.w, box.h }, gfx::Color{ 0, 0, 0, 90 });   // shadow
             ctx.r.fillRect(box, c.panelBg);
             ctx.r.strokeRect(box, c.borderStrong, 1.f);
 
             const float lh = ctx.r.lineHeight(ctx.theme.font.ui);
-            float y = box.y + kMenuPadding;
+            const auto mn = cues ? mnemonicsOf(items) : std::vector<Mnemonic>{};
+            float y = box.y + (scrolls ? kScrollStrip - scroll : kMenuPadding);
+            const gfx::Rect inner{ box.x + 1.f, box.y + kScrollStrip, box.w - 2.f, box.h - 2.f * kScrollStrip };
+            if (scrolls) ctx.r.pushClip(inner);
 
             for (std::size_t i = 0; i < items.size(); ++i) {
                 const auto& item = items[i];
                 const float h = menuRowHeight(item, rowHeight);
+                if (scrolls && (y + h < inner.y || y > inner.bottom())) { y += h; continue; }
 
                 if (item.separator) {
                     const float my = y + h * 0.5f;
@@ -3534,7 +3793,20 @@ namespace ui {
                 const gfx::Color fg = !item.enabled ? c.textDisabled
                     : (hot ? c.selectionText : c.text);
 
-                if (item.paintIcon) {
+                if (item.checkable || item.radio) {
+                    // 1.12.18 : la case (cochee ou non) ; le choix, son point.
+                    const float side = std::min(h - 10.f, 12.f);
+                    const gfx::Rect cb{ row.x + kMenuPadding + 2.f, row.y + (h - side) * 0.5f, side, side };
+                    if (item.radio) {
+                        if (item.checked) ctx.r.fillRoundedRect({ cb.x + side * 0.2f, cb.y + side * 0.2f, side * 0.6f, side * 0.6f }, fg, side * 0.3f);
+                    } else {
+                        ctx.r.strokeRect(cb, fg, 1.f);
+                        if (item.checked) {
+                            ctx.r.line({ cb.x + side * 0.2f, cb.y + side * 0.55f }, { cb.x + side * 0.42f, cb.y + side * 0.78f }, fg, 1.6f);
+                            ctx.r.line({ cb.x + side * 0.42f, cb.y + side * 0.78f }, { cb.x + side * 0.82f, cb.y + side * 0.25f }, fg, 1.6f);
+                        }
+                    }
+                } else if (item.paintIcon) {
                     const float side = std::min(h - 4.f, 18.f);
                     item.paintIcon(ctx, { row.x + kMenuPadding - 1.f, row.y + (h - side) * 0.5f, side, side });
                 } else if (item.icon != Icon::None) {
@@ -3542,8 +3814,15 @@ namespace ui {
                     drawIcon(ctx.r, item.icon,
                         { row.x + kMenuPadding, row.y + (h - side) * 0.5f, side, side }, fg);
                 }
-                ctx.r.drawText({ row.x + kMenuPadding + kMenuIconGutter, row.y + (h - lh) * 0.5f },
-                    item.label, ctx.theme.font.ui, fg);
+                const gfx::Point text{ row.x + kMenuPadding + kMenuIconGutter, row.y + (h - lh) * 0.5f };
+                ctx.r.drawText(text, item.label, ctx.theme.font.ui, fg);
+                // 1.12.18 : la lettre au clavier, soulignee.
+                if (cues && i < mn.size() && mn[i].letter && mn[i].pos + mn[i].len <= item.label.size()) {
+                    const std::string_view lab = item.label;
+                    const float x0 = text.x + measureWidth(lab.substr(0, mn[i].pos), kFontUi);
+                    const float w = measureWidth(lab.substr(mn[i].pos, mn[i].len), kFontUi);
+                    ctx.r.line({ x0, text.y + lh - 1.f }, { x0 + w, text.y + lh - 1.f }, fg, 1.f);
+                }
 
                 float rightEdge = row.right() - kMenuPadding;
                 // Lot 7 : une entree a sous-menu - sa fleche, au bord droit.
@@ -3569,73 +3848,78 @@ namespace ui {
                 }
                 y += h;
             }
+            if (scrolls) {
+                ctx.r.popClip();
+                // 1.12.18 : les bandes du haut et du bas, une fleche quand il reste a voir.
+                const auto strip = [&](float sy, bool up, bool more) {
+                    const gfx::Color col = more ? c.textMuted : c.textDisabled;
+                    const float cx = box.x + box.w * 0.5f, cy = sy + kScrollStrip * 0.5f;
+                    const float d = up ? -1.f : 1.f;
+                    ctx.r.line({ cx - 5.f, cy - 2.f * d }, { cx, cy + 2.f * d }, col, 1.5f);
+                    ctx.r.line({ cx, cy + 2.f * d }, { cx + 5.f, cy - 2.f * d }, col, 1.5f);
+                };
+                ctx.r.line({ box.x + 4.f, inner.y }, { box.right() - 4.f, inner.y }, c.border, 1.f);
+                ctx.r.line({ box.x + 4.f, inner.bottom() }, { box.right() - 4.f, inner.bottom() }, c.border, 1.f);
+                strip(box.y, true, scroll > 0.5f);
+                strip(inner.bottom(), false, scroll < maxScroll - 0.5f);
+            }
         }
     } // namespace
 
     void PopupMenu::onPaintOverlay(const PaintContext& ctx) {
         if (!open_ || items_.empty()) return;
         rowHeight_ = ctx.theme.metric.rowHeight;
-        paintMenuColumn(ctx, popupRect(), items_, rowHeight_, highlighted_, submenu_);
-        // Lot 7 : le sous-menu ouvert, par-dessus.
-        if (hasSubmenu(submenu_))
-            paintMenuColumn(ctx, submenuRect(), items_[static_cast<std::size_t>(submenu_)].children, rowHeight_,
-                            subHighlighted_, -1);
+        for (std::size_t k = 0; k <= path_.size(); ++k) {
+            const auto& items = columnItems(k);
+            if (items.empty()) break;
+            paintMenuColumn(ctx, columnRect(k), items, rowHeight_, highlightedIn(k),
+                            k < path_.size() ? path_[k] : -1, scrollable(k), scrollOffset(k), maxScroll(k), cues_);
+        }
     }
 
     EventResult PopupMenu::onEvent(const InputEvent& ev) {
         if (!open_) return EventResult::Ignored;
 
         if (const auto* m = std::get_if<MouseMove>(&ev)) {
-            // Lot 7 : dans le sous-menu ouvert, son entree ; il reste ouvert.
-            if (submenu_ >= 0 && submenuRect().contains(m->pos)) {
-                const int j = subItemAt(m->pos);
-                const auto& kids = items_[static_cast<std::size_t>(submenu_)].children;
-                const int hot = (j >= 0 && choosable(kids[static_cast<std::size_t>(j)])) ? j : -1;
-                if (hot != subHighlighted_ || highlighted_ != submenu_) {
-                    subHighlighted_ = hot;
-                    highlighted_ = submenu_;
-                    invalidate();
+            const int ci = columnAt(m->pos);
+            if (ci < 0) {
+                // Hors des colonnes : les sous-menus restent (on passe peut-etre de
+                // l'entree a son sous-menu en biais) ; chaque colonne garde en
+                // surbrillance l'entree dont le sous-menu est ouvert, la derniere rien.
+                bool changed = false;
+                for (std::size_t k = 0; k < hot_.size(); ++k) {
+                    const int want = k < path_.size() ? path_[k] : -1;
+                    if (hot_[k] != want) { hot_[k] = want; changed = true; }
                 }
-                subKeyboard_ = true;       // les fleches suivent la souris
+                if (changed) invalidate();
                 return EventResult::Consumed;
             }
-            const int i = itemAt(m->pos);
-            if (i >= 0 && hasSubmenu(i) && choosable(items_[static_cast<std::size_t>(i)])) {
-                // Une entree a sous-menu : il s'ouvre au survol.
-                (void)openSubmenu(static_cast<std::size_t>(i));
-                return EventResult::Consumed;
+            const auto c = static_cast<std::size_t>(ci);
+            const int r = rowAt(c, m->pos);
+            if (r == kStripUp || r == kStripDown) return EventResult::Consumed;
+            keyCol_ = c;                                   // les fleches suivent la souris
+            for (std::size_t k = 0; k < c && k < hot_.size(); ++k) hot_[k] = path_[k];
+            const auto& items = columnItems(c);
+            if (r >= 0 && choosable(items[static_cast<std::size_t>(r)])) {
+                // Une entree a sous-menu : il s'ouvre au survol ; une autre entree
+                // referme les sous-menus de cette colonne.
+                if (!items[static_cast<std::size_t>(r)].children.empty()) (void)openSubmenuAt(c, static_cast<std::size_t>(r));
+                else setHot(c, r);
+            } else if (r >= 0) {
+                closeFrom(c + 1);                         // une entree grisee : rien en surbrillance
+                setHot(c, -1);
+            } else if (c < hot_.size()) {
+                // Une regle, la marge : le sous-menu reste ouvert.
+                const int want = c < path_.size() ? path_[c] : -1;
+                if (hot_[c] != want) { hot_[c] = want; invalidate(); }
             }
-            if (i >= 0) {
-                // Une autre entree : le sous-menu se referme. Ailleurs (hors du
-                // menu, sur une regle), il reste : on passe peut-etre de l'entree
-                // a son sous-menu en biais.
-                closeSubmenu();
-                const int hot = choosable(items_[static_cast<std::size_t>(i)]) ? i : -1;
-                if (hot != highlighted_) {
-                    highlighted_ = hot;
-                    invalidate();
-                }
-            } else if (highlighted_ != submenu_) {
-                highlighted_ = submenu_;
-                invalidate();
-            }
+            invalidate();
             return EventResult::Consumed;
         }
 
         if (const auto* d = std::get_if<MouseDown>(&ev)) {
-            // Lot 7 : un clic dans le sous-menu ouvert choisit son entree.
-            if (submenu_ >= 0 && submenuRect().contains(d->pos)) {
-                const int j = subItemAt(d->pos);
-                if (j < 0) return EventResult::Consumed;
-                const auto& item = items_[static_cast<std::size_t>(submenu_)].children[static_cast<std::size_t>(j)];
-                if (!choosable(item)) return EventResult::Consumed;   // a dead entry eats the click
-                const int chosen = item.id;
-                close();
-                itemChosen->emit(chosen);
-                return EventResult::Consumed;
-            }
-            const int i = itemAt(d->pos);
-            if (i < 0) {
+            const int ci = columnAt(d->pos);
+            if (ci < 0) {
                 // Anywhere outside dismisses. The click is consumed rather than
                 // passed through: the first click closes the menu, the second one
                 // does whatever it was aimed at. Passing it through would make a
@@ -3644,60 +3928,96 @@ namespace ui {
                 dismissed->emit();
                 return EventResult::Consumed;
             }
-            const auto& item = items_[static_cast<std::size_t>(i)];
-            if (!item.enabled || item.heading) return EventResult::Consumed;   // a dead entry eats the click
+            const auto c = static_cast<std::size_t>(ci);
+            const int r = rowAt(c, d->pos);
+            if (r == kStripUp) { scrollBy(c, -3.f * rowHeight_); return EventResult::Consumed; }
+            if (r == kStripDown) { scrollBy(c, 3.f * rowHeight_); return EventResult::Consumed; }
+            if (r < 0) return EventResult::Consumed;    // une regle, la marge
+            const auto& item = columnItems(c)[static_cast<std::size_t>(r)];
+            if (!choosable(item)) return EventResult::Consumed;   // a dead entry eats the click
             // Lot 7 : une entree a sous-menu l'ouvre (sans le refermer : le
             // survol l'a peut-etre deja ouvert).
-            if (hasSubmenu(i)) {
-                (void)openSubmenu(static_cast<std::size_t>(i));
+            if (!item.children.empty()) {
+                (void)openSubmenuAt(c, static_cast<std::size_t>(r));
                 return EventResult::Consumed;
             }
-            const int chosen = item.id;
-            close();
-            itemChosen->emit(chosen);
+            choose(item.id);
+            return EventResult::Consumed;
+        }
+
+        if (const auto* w = std::get_if<MouseWheel>(&ev)) {
+            // 1.12.18 : la molette fait defiler la colonne sous la souris.
+            const int ci = columnAt(w->pos);
+            if (ci >= 0) scrollBy(static_cast<std::size_t>(ci), -w->dy * rowHeight_ * 3.f);
             return EventResult::Consumed;
         }
 
         if (const auto* k = std::get_if<KeyDown>(&ev)) {
             // Lot 7 : le clavier dans un sous-menu ouvert - haut / bas s'y
             // promenent, Entree choisit, gauche ou Echap le referment seul.
-            const bool inSub = submenu_ >= 0 && subKeyboard_;
+            const std::size_t col = std::min(keyCol_, path_.size());
+            const auto& items = columnItems(col);
+            const int hot = highlightedIn(col);
+            const auto enter = [&]() {
+                // Entree, fleche droite : une entree a sous-menu l'ouvre, la premiere
+                // de ses entrees en surbrillance.
+                if (hot < 0 || static_cast<std::size_t>(hot) >= items.size()) return false;
+                if (!openSubmenuAt(col, static_cast<std::size_t>(hot))) return false;
+                keyCol_ = col + 1;
+                if (highlightedIn(keyCol_) < 0) moveHot(keyCol_, 1);
+                return true;
+            };
+            if (isContextMenuKey(*k)) { close(); dismissed->emit(); return EventResult::Consumed; }
             switch (k->key) {
             case Key::Escape:
-                if (submenu_ >= 0) { closeSubmenu(); return EventResult::Consumed; }
+                if (!path_.empty()) {
+                    closeFrom(path_.size());
+                    keyCol_ = std::min(keyCol_, path_.size());
+                    return EventResult::Consumed;
+                }
                 close(); dismissed->emit(); return EventResult::Consumed;
             case Key::Left:
-                closeSubmenu();
+                cues_ = true;
+                if (col > 0) { closeFrom(col); keyCol_ = col - 1; }
+                else closeFrom(1);
                 return EventResult::Consumed;
             case Key::Right:
-                if (hasSubmenu(highlighted_) && openSubmenu(static_cast<std::size_t>(highlighted_))) {
-                    subKeyboard_ = true;
-                    if (subHighlighted_ < 0) moveSubHighlight(1);
+                cues_ = true;
+                (void)enter();
+                return EventResult::Consumed;
+            case Key::Down:     cues_ = true; moveHot(col, 1);  return EventResult::Consumed;
+            case Key::Up:       cues_ = true; moveHot(col, -1); return EventResult::Consumed;
+            case Key::Home:     cues_ = true; setHot(col, -1); moveHot(col, 1); return EventResult::Consumed;
+            case Key::End:      cues_ = true; setHot(col, -1); moveHot(col, -1); return EventResult::Consumed;
+            case Key::PageDown:
+            case Key::PageUp: {
+                cues_ = true;
+                const int page = std::max(1, static_cast<int>((columnRect(col).h - 2.f * kScrollStrip) / std::max(1.f, rowHeight_)) - 1);
+                for (int s = 0; s < page; ++s) {
+                    const int before = highlightedIn(col);
+                    moveHot(col, k->key == Key::PageDown ? 1 : -1);
+                    const int after = highlightedIn(col);
+                    // Pas de tour complet : au bout, on s'arrete.
+                    if (before >= 0 && ((k->key == Key::PageDown && after < before) || (k->key == Key::PageUp && after > before))) {
+                        setHot(col, before);
+                        break;
+                    }
                 }
                 return EventResult::Consumed;
-            case Key::Down:   if (inSub) moveSubHighlight(1);  else moveHighlight(1);  return EventResult::Consumed;
-            case Key::Up:     if (inSub) moveSubHighlight(-1); else moveHighlight(-1); return EventResult::Consumed;
+            }
             case Key::Return:
-                if (submenu_ >= 0 && subHighlighted_ >= 0) {
-                    const int chosen = items_[static_cast<std::size_t>(submenu_)].children[static_cast<std::size_t>(subHighlighted_)].id;
-                    close();
-                    itemChosen->emit(chosen);
-                    return EventResult::Consumed;
-                }
-                if (hasSubmenu(highlighted_)) {
-                    if (openSubmenu(static_cast<std::size_t>(highlighted_))) {
-                        subKeyboard_ = true;
-                        moveSubHighlight(1);
-                    }
-                    return EventResult::Consumed;
-                }
-                if (highlighted_ >= 0) {
-                    const int chosen = items_[static_cast<std::size_t>(highlighted_)].id;
-                    close();
-                    itemChosen->emit(chosen);
+                if (hot >= 0 && static_cast<std::size_t>(hot) < items.size() && choosable(items[static_cast<std::size_t>(hot)])) {
+                    if (!items[static_cast<std::size_t>(hot)].children.empty()) { (void)enter(); return EventResult::Consumed; }
+                    choose(items[static_cast<std::size_t>(hot)].id);
                 }
                 return EventResult::Consumed;
             default:
+                // 1.12.18 : une lettre va a l'entree qui la porte (soulignee).
+                if (const char l = keyLetter(k->key); l && !k->mods.ctrl && !k->mods.alt && !k->mods.super) {
+                    cues_ = true;
+                    jumpToLetter(col, l);
+                    invalidate();
+                }
                 // Everything else is swallowed too. A menu that lets Ctrl+S
                 // through while it is open is a menu you can save from by
                 // accident.
@@ -3706,6 +4026,5 @@ namespace ui {
         }
         return EventResult::Ignored;
     }
-
 
 } // namespace ui

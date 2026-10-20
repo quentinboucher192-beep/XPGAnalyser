@@ -479,19 +479,20 @@ constexpr int kExprCollapseAll = -2102;
 
 // 1.10.3 (demande du client) : les 5 boutons de droite et la liste deroulante de
 // droite sont retires de la barre ; leurs commandes passent dans le MENU DU CLIC
-// DROIT SUR LA BARRE (une ligne vide : un trait). `where` : ou elles sont aussi.
+// DROIT SUR LA BARRE (une ligne vide : un trait). `where` : leur touche (1.12.18 : rien
+// d'autre dans la colonne de droite ; avant, « aussi : la barre du haut »...).
 struct BarMenuItem { const char* label; const char* action; const char* where; };
 constexpr BarMenuItem kBarMenu[] = {
-    {"D\xC3\xA9marrer l'API et l'IHM", "both.start", "aussi : la barre du haut"},
-    {"Tout arr\xC3\xAAter (IHM et API)", "all.stop", "aussi : la barre du haut"},
+    {"D\xC3\xA9marrer l'API et l'IHM", "both.start", ""},
+    {"Tout arr\xC3\xAAter (IHM et API)", "all.stop", ""},
     {"", "", ""},
-    {"Vue de d\xC3\xA9marrage", "hmi.home", "aussi : la liste des vues"},
-    {"D\xC3\xA9" "connecter", "hmi.logout", "aussi : Utilisateur\xE2\x80\xA6"},
+    {"Vue de d\xC3\xA9marrage", "hmi.home", ""},
+    {"D\xC3\xA9" "connecter", "hmi.logout", ""},
     {"Param\xC3\xA8tres syst\xC3\xA8me", "hmi.system", ""},
     {"Page Simulation", "hmi.simpage", "Ctrl+Alt+S"},
     {"", "", ""},
-    {"Forcer\xE2\x80\xA6", "hmi.force", "aussi : Simulation \xC2\xB7 Automate"},
-    {"Tout rel\xC3\xA2" "cher", "hmi.unforce", "aussi : Simulation \xC2\xB7 Automate"},
+    {"Forcer\xE2\x80\xA6", "hmi.force", ""},
+    {"Tout rel\xC3\xA2" "cher", "hmi.unforce", ""},
     {"Tout acquitter", "hmi.ackall", ""},
     {"", "", ""},
     {"Mesures \xC3\xA0 z\xC3\xA9ro", "hmi.perfreset", ""},

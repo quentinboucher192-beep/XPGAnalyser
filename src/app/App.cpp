@@ -736,7 +736,7 @@ void App::registerActions() {
                         }});
     // Importing the hardware export needed its own entry point: the Open button
     // starts a new project, which is the opposite of what a .XHW is for.
-    actions_.add(Action{"file.importHardware", "Importer la configuration mat\xC3\xA9rielle (.XHW)\xE2\x80\xA6", help::keys::bindingOf("file.importHardware"),
+    actions_.add(Action{"file.importHardware", "Importer la configuration (.XHW)\xE2\x80\xA6", help::keys::bindingOf("file.importHardware"),
                         [this] { return project_ != nullptr; }, {}, nullptr,
                         [this] {
                             menus_->ShowDialog(
@@ -1387,7 +1387,7 @@ void App::registerActions() {
     // Lot API 6 : la galerie des themes, a droite, sans assombrir l'ecran.
     actions_.add(Action{"view.theme", "Th\xC3\xA8me\xE2\x80\xA6", "", {}, {}, nullptr,
                         [this] { showThemeGallery(); }});
-    actions_.add(Action{"analyze.run", "R\xC3\xA9importer et r\xC3\xA9" "analyser", "",       // Lot API 8 : F5 est Simuler (Centre de simulation)
+    actions_.add(Action{"analyze.run", "R\xC3\xA9" "analyser les fichiers", "",       // Lot API 8 : F5 est Simuler (Centre de simulation)
                         [this] { return project_ != nullptr && !importer_->busy(); }, {}, nullptr,
                         [this] { if (project_) importer_->importAsync(project_->header.sourceFile); }});
     actions_.add(Action{"nav.back", "Retour", help::keys::bindingOf("nav.back"),

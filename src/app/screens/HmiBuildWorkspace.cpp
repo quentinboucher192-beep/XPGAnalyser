@@ -14,6 +14,7 @@
 //    - double-clic sur un diagnostic : sa source (openHmiIssue, comme Compiler).
 // =============================================================================
 #include "Screens.hpp"
+#include "../../ui/widgets/ExprField.hpp"   // 1.12.18 : Appliquer la correction
 
 #include "../App.hpp"
 #include "../Disposition.hpp"
@@ -303,6 +304,30 @@ void MainAnalysisScreen::wireBottomPanel() {
         else openHmiDiagnostic(d);
     });
     links_ += bottomPanel_->elementActivated->connect([this](const std::string& k) { openHmiElement(k); });
+    // 1.12.18 (planche 13) : « Appliquer la correction » - l'expression de la case, le nom corrige
+    // (une commande : Ctrl+Z), puis la case montree comme un clic sur le diagnostic.
+    links_ += bottomPanel_->fixRequested->connect([this](const pl::Diagnostic& d) {
+        auto doc = app_.hmi();
+        std::string from, to;
+        if (!doc || !ui::exprfield::fixOf(d.message, from, to)) return;
+        const auto* v = doc->project.view(d.view);
+        const auto* o = v ? v->object(d.object) : nullptr;
+        if (!o) return;
+        const std::string before = o->expr(d.property);
+        const std::string after = ui::exprfield::replaceRoot(before, from, to);
+        if (before.empty() || after == before) {
+            if (status_) status_->setTransientMessage("Rien \xC3\xA0 corriger : " + from + " n'est plus dans la case.", 6.0);
+            return;
+        }
+        const hmi::Id object = d.object;
+        const std::string key = d.property;
+        auto cmd = hmi::changeView(doc, d.view, "Corriger : " + from + " \xE2\x86\x92 " + to, [&](hmi::Project&, hmi::View& vv) {
+            if (auto* oo = vv.object(object)) oo->setExpr(key, after);
+        });
+        if (cmd) app_.apply(std::move(cmd), /*refreshViews=*/false);
+        openHmiDiagnostic(d);
+        if (status_) status_->setTransientMessage("Corrig\xC3\xA9 : " + from + " \xE2\x86\x92 " + to + " (Ctrl+Z pour revenir)", 8.0);
+    });
     links_ += bottomPanel_->consoleActivated->connect([this](const ConsoleEntry& e) { openConsoleSource(e); });
     bottomPanel_->setOnClose([this] { showBottomPanel(false); });
     bottomPanel_->setExportFolder([this] {

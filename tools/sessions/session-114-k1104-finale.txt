@@ -58,7 +58,7 @@ objet V_101
 attendre 3
 vue-clic 240 170
 attendre 1
-touche ctrl+d
+touche ctrl+maj+d
 attendre 4
 dupliquer-verifier
 capture 114_05_dupliquer_prerempli_v0_v3.png

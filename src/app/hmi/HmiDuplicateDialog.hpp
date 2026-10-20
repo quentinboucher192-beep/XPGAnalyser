@@ -1,7 +1,7 @@
 // =============================================================================
 //  app/hmi/HmiDuplicateDialog.hpp - "Dupliquer..." (1.10.2, chantier D)
 // -----------------------------------------------------------------------------
-//  Ctrl+D, le clic droit, la barre d'outils : N copies de la selection, chaque
+//  Ctrl+Maj+D, le clic droit, la barre d'outils : N copies de la selection, chaque
 //  repere ($Vanne$) remplace par la valeur de sa colonne, les indices des
 //  tableaux suivis (V[0] -> V[1]...), posees sur X, sur Y ou en grille. Deux
 //  onglets, comme la maquette :

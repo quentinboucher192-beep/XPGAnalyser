@@ -45,6 +45,7 @@
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
 #include "../src/app/hmi/HmiValuePicker.hpp"
 #include "../src/app/hmi/HmiActionDialogs.hpp"     // 1.11.9 : l'operation en arbre, le script, Maths
+#include "../src/app/hmi/HmiAddressDialog.hpp"   // 1.12.18 : l'adresse dans toutes les cases
 #include "../src/app/hmi/HmiItemDuplicateDialog.hpp"   // 1.12.16 : Dupliquer... d'un element
 #include "../src/hmi/HmiTable.hpp"   // 1.12.13 : le Tableau, un mode a la fois
 #include "../src/hmi/HmiActionKinds.hpp"
@@ -55,6 +56,8 @@
 #include "../src/ui/widgets/ExprField.hpp"          // 1.10 (chantier K)
 #include "../src/app/hmi/HmiDesignPanes.hpp"
 #include "../src/app/hmi/HmiEditor.hpp"
+#include "../src/ui/Commands.hpp"
+#include "../src/ui/widgets/PropertyGridHooks.hpp"
 #include "../src/app/hmi/HmiDuplicateDialog.hpp"   // 1.10.2 (chantier D)
 #include <set>
 #include "../src/app/hmi/HmiFunctionPanes.hpp"
@@ -208,6 +211,25 @@ void near(double got, double want, const std::string& what, double tol = 0.51) {
     if (std::fabs(got - want) > tol) { std::printf("  ECHEC  %s : attendu %.2f, obtenu %.2f\n", what.c_str(), want, got); ++failures; }
     else if (detail) std::printf("  ok     %s (%.2f)\n", what.c_str(), got);
 }
+
+// 1.12.18 : une entree de menu par son libelle (sous-menus compris).
+namespace {
+const ui::PopupMenu::Item* findItem(const std::vector<ui::PopupMenu::Item>& items, std::string_view label) {
+    for (const auto& it : items) {
+        if (it.label == label && !it.heading && !it.separator) return &it;   // pas la tete du menu (le nom vise)
+        if (const auto* sub = findItem(it.children, label)) return sub;
+    }
+    return nullptr;
+}
+// Une entree dont le libelle commence par `prefix` (sous-menus compris).
+const ui::PopupMenu::Item* findItemStarting(const std::vector<ui::PopupMenu::Item>& items, std::string_view prefix) {
+    for (const auto& it : items) {
+        if (it.label.rfind(prefix, 0) == 0 && !it.heading && !it.separator) return &it;
+        if (const auto* sub = findItemStarting(it.children, prefix)) return sub;
+    }
+    return nullptr;
+}
+}   // namespace
 
 struct Bench {
     std::shared_ptr<Document> doc = std::make_shared<Document>();
@@ -4600,13 +4622,14 @@ void remanence1116() {
     // Le menu du clic droit : les six commandes.
     vars.openContextMenu({200.f, 200.f});
     std::size_t found = 0;
+    // 1.12.18 (planche 10) : le sous-menu Remanence.
     if (auto* menu = vars.contextMenu())
-        for (const auto& it : menu->items())
-            for (const char* label : {"R\xC3\xA9initialiser cette variable r\xC3\xA9manente", "R\xC3\xA9initialiser toutes les variables r\xC3\xA9manentes",
-                                      "Exporter les valeurs r\xC3\xA9manentes\xE2\x80\xA6", "Importer les valeurs r\xC3\xA9manentes\xE2\x80\xA6",
-                                      "Afficher l'emplacement du stockage", "V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9 des donn\xC3\xA9" "es r\xC3\xA9manentes"})
-                found += it.label == label ? 1u : 0u;
-    check(found == 6, "le clic droit : les six commandes de la r\xC3\xA9manence (" + std::to_string(found) + ")");
+        if (const auto* retain = findItem(menu->items(), "R\xC3\xA9manence"))
+            for (const char* label : {"R\xC3\xA9initialiser cette variable", "R\xC3\xA9initialiser toutes (",
+                                      "Exporter les valeurs\xE2\x80\xA6", "Importer les valeurs\xE2\x80\xA6",
+                                      "Afficher l'emplacement", "V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9"})
+                found += findItemStarting(retain->children, label) ? 1u : 0u;
+    check(found == 6, "le clic droit : les six commandes de la r\xC3\xA9manence, en sous-menu (" + std::to_string(found) + ")");
     // Un poste d'un autre processus ecrit le stockage (son verrou frais) : Importer refuse.
     {
         std::ofstream f(lock, std::ios::binary | std::ios::trunc);
@@ -10711,14 +10734,15 @@ void lot20_copier_coller_excel() {
     table.dispatch(ui::MouseDown{{r2.x + 50.f, r2.y + r2.h / 2.f}, ui::MouseButton::Right, 1, {}});
     const auto* menu = table.contextMenu();
     std::vector<std::string> labels;
-    if (menu)
-        for (const auto& it : menu->items()) if (!it.separator) labels.push_back(it.label);
-    // 1.10 (chantier O) : le volet Variables IHM met ses entrees en tete (Ouvrir
-    // une visualisation graphique, Copier le nom, Renommer, Dupliquer, Supprimer) ;
-    // celles de la table suivent.
-    if (const auto at = std::find(labels.begin(), labels.end(), std::string("Copier")); at != labels.end() && at != labels.begin()) {
-        check(labels.front() == "Ouvrir une visualisation graphique", "1.10 : le menu des variables commence par Ouvrir une visualisation graphique");
-        labels.erase(labels.begin(), at);
+    // 1.12.18 : le volet Variables IHM met ses entrees en tete (Nouvelle variable, Ouvrir une
+    // visualisation, Voir les usages, Copier le nom, Renommer...) ; celles de la table sont
+    // dans le sous-menu « Copier, coller, filtres ».
+    if (menu) {
+        const ui::PopupMenu::Item* sub = nullptr;
+        for (const auto& it : menu->items())
+            if (it.label == "Copier, coller, filtres") sub = &it;
+        check(sub != nullptr, "1.12.18 : les entr\xC3\xA9" "es de la table dans le sous-menu Copier, coller, filtres");
+        for (const auto& it : sub ? sub->children : menu->items()) if (!it.separator) labels.push_back(it.label);
     }
     // Lot 7 : les filtres par colonne ajoutent, sous un trait, Filtrer la colonne
     // (celle du clic) et Effacer les filtres des colonnes.
@@ -12126,7 +12150,7 @@ void v19_page_simulation() {
     check(con && con->forced && con->forcedNumber > 0 && bank && bank->word(hmi::MemTable::Holding, 8502) == static_cast<std::uint16_t>(con->forcedNumber),
           "Forcer puis + : la consigne forc\xC3\xA9" "e \xC3\xA0 " + (con ? con->forcedText : std::string("?")) + ", la m\xC3\xA9moire de l'esclave la tient");
     paintAt(0.9);
-    check(rec.wrote("D\xC3\xA9" "forcer les 1"), "le bouton du bas : D\xC3\xA9" "forcer les 1");
+    check(rec.wrote("Rel\xC3\xA2" "cher les 1"), "le bouton du bas : Rel\xC3\xA2" "cher les 1");
     // Revenir au vrai maintenant.
     check(pane.canvas().systemPartRect("revenir", r), "Revenir au vrai maintenant se trouve");
     clickAt(r);
@@ -13752,6 +13776,150 @@ void v110_couleurs() {
     }
     check(ui::ColorPalette::pickingCount() == 0, "... ne laisse pas de pipette active");
 }
+// ---- 1.12.18 (planche 8) : LE MENU DE CHAQUE LIGNE DE L'INSPECTEUR ----
+void inspecteur_menu_11218() {
+    std::printf("1.12.18 : le menu du clic droit de chaque ligne de l'inspecteur\n");
+    installerPressePapiers();   // Copier, Coller : le presse-papiers des essais
+    using PG = ui::PropertyGrid;
+    namespace xf = ui::exprfield;
+    std::vector<std::string> sent;
+    PG grid("gm");
+    grid.setBounds({0, 0, 640, 500});
+    PG::Category cat;
+    cat.name = "Apparence";
+    PG::Property name;
+    name.name = "Nom";
+    name.type = PG::ValueType::Text;
+    name.value = "Voyant_1";
+    name.commit = [&](std::string_view v) { sent.push_back("nom:" + std::string(v)); return true; };
+    PG::Property fill;
+    fill.name = "Couleur de fond";
+    fill.type = PG::ValueType::Color;
+    fill.value = "#2A313C";
+    fill.commit = [&](std::string_view v) { sent.push_back("fond:" + std::string(v)); return true; };
+    xf::mark(fill, xf::Expect::Color);
+    PG::Property layer;
+    layer.name = "Calque";
+    layer.type = PG::ValueType::Enum;
+    layer.value = "Principal";
+    layer.enumValues = {"Principal", "Fond", "Textes"};
+    layer.commit = [&](std::string_view v) { sent.push_back("calque:" + std::string(v)); return true; };
+    PG::Property shown;
+    shown.name = "Visible";
+    shown.type = PG::ValueType::Boolean;
+    shown.value = "TRUE";
+    shown.commit = [&](std::string_view v) { sent.push_back("visible:" + std::string(v)); return true; };
+    PG::Property op;
+    op.name = "Opacit\xC3\xA9";
+    op.type = PG::ValueType::Real;
+    op.commit = [&](std::string_view v) { sent.push_back("op:" + std::string(v)); return true; };
+    xf::mark(op, xf::Expect::Number);
+    op.expression = "Niveau / 5";
+    cat.properties = {name, fill, layer, shown, op};
+    grid.setCategories({cat});
+    grid.layout();
+    // Un dessin, pour que la grille sache ou commence chaque expression (le nom sous le clic).
+    const auto rightClick = [&](gfx::Point at) {
+        grid.dispatch(ui::MouseDown{at, ui::MouseButton::Right, 1, {}});
+        grid.dispatch(ui::MouseUp{at, ui::MouseButton::Right, {}});
+        return dynamic_cast<ui::PopupMenu*>(grid.findById(xf::menuId(grid)));
+    };
+    const auto mid = [](const gfx::Rect& r) { return gfx::Point{r.x + r.w * 0.5f, r.y + r.h * 0.5f}; };
+    gfx::Rect nameCell;
+    check(grid.valueRect("Nom", nameCell), "la case Nom");
+    // ---- le titre d'une categorie : Tout deplier, Tout replier ; le clic droit ne la replie plus ----
+    {
+        const gfx::Point head{20.f, nameCell.y - 1.f - (nameCell.h + 2.f) * 0.5f};
+        auto* menu = rightClick(head);
+        check(menu && menu->isOpen() && findItem(menu->items(), "Tout d\xC3\xA9plier") && findItem(menu->items(), "Tout replier"),
+              "titre de categorie : Tout deplier, Tout replier");
+        check(grid.categories().front().expanded, "le clic droit ne replie plus la categorie (avant : comme un clic gauche)");
+        if (menu) { menu->itemChosen->emit(21); }
+        check(!grid.categories().front().expanded, "Tout replier");
+        if (menu) { (void)rightClick(head); menu->itemChosen->emit(20); }
+        check(grid.categories().front().expanded, "Tout deplier");
+        grid.layout();
+    }
+    // ---- le Nom : Renommer... (F2), Copier le nom ----
+    {
+        auto* menu = rightClick(mid(nameCell));
+        const auto* ren = menu ? findItem(menu->items(), "Renommer\xE2\x80\xA6") : nullptr;
+        const auto* copy = menu ? findItem(menu->items(), "Copier le nom") : nullptr;
+        check(ren && ren->shortcut == "F2" && copy && copy->shortcut == "Ctrl+C", "Nom : Renommer... (F2), Copier le nom (Ctrl+C)");
+        if (menu && copy) menu->itemChosen->emit(copy->id);
+        same_text(ui::clipboardText(), "Voyant_1", "Copier le nom");
+        if (menu && ren) menu->itemChosen->emit(ren->id);
+        check(grid.activeField() != nullptr, "Renommer... ouvre la case");
+        if (auto* f = grid.activeField()) (void)f->dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+    }
+    // ---- une couleur : Copier, Coller la couleur, Couleurs recentes ----
+    {
+        gfx::Rect cell;
+        check(grid.valueRect("Couleur de fond", cell), "la case Couleur de fond");
+        ui::setClipboardText("pas une couleur");
+        auto* menu = rightClick(mid(cell));
+        const auto* paste = menu ? findItem(menu->items(), "Coller la couleur") : nullptr;
+        check(menu && findItem(menu->items(), "Copier la couleur") && paste && !paste->enabled,
+              "une couleur : Copier la couleur ; Coller la couleur grise sans couleur au presse-papiers");
+        if (menu) menu->close();
+        ui::setClipboardText("#112233");
+        menu = rightClick(mid(cell));
+        paste = menu ? findItem(menu->items(), "Coller la couleur") : nullptr;
+        check(paste && paste->enabled, "... active avec #112233");
+        sent.clear();
+        if (menu && paste) menu->itemChosen->emit(paste->id);
+        same_text(sent.empty() ? std::string{} : sent.back(), "fond:#112233", "Coller la couleur l'ecrit");
+        grid.setCategories({cat});
+        grid.layout();
+        menu = rightClick(mid(cell));
+        const auto* recent = menu ? findItem(menu->items(), "Couleurs r\xC3\xA9" "centes") : nullptr;
+        check(recent && recent->enabled && !recent->children.empty() && recent->children.front().label == "#112233",
+              "Couleurs recentes : la derniere posee en tete");
+        check(menu && ui::cmd::badShortcuts(menu->items()).empty(), "menu de la couleur : des touches seulement a droite");
+        if (menu) menu->close();
+    }
+    // ---- une liste : ses choix, le pris marque ----
+    {
+        gfx::Rect cell;
+        check(grid.valueRect("Calque", cell), "la case Calque");
+        auto* menu = rightClick(mid(cell));
+        const auto* now = menu ? findItem(menu->items(), "Principal") : nullptr;
+        const auto* other = menu ? findItem(menu->items(), "Fond") : nullptr;
+        check(now && now->radio && now->checked && other && other->radio && !other->checked, "Calque : ses choix, le pris marque");
+        sent.clear();
+        if (menu && other) menu->itemChosen->emit(other->id);
+        same_text(sent.empty() ? std::string{} : sent.back(), "calque:Fond", "choisir Fond l'ecrit");
+    }
+    // ---- une bascule : une case ----
+    {
+        gfx::Rect cell;
+        check(grid.valueRect("Visible", cell), "la case Visible");
+        auto* menu = rightClick(mid(cell));
+        const auto* box = menu ? findItem(menu->items(), "Visible") : nullptr;
+        check(box && box->checkable && box->checked, "Visible : une case cochee");
+        sent.clear();
+        if (menu && box) menu->itemChosen->emit(box->id);
+        same_text(sent.empty() ? std::string{} : sent.back(), "visible:FALSE", "la case la bascule");
+    }
+    // ---- une expression : la definition et les usages du nom, Choisir une fonction ----
+    {
+        std::vector<std::pair<std::string, bool>> asked;
+        ui::propertygrid::setNameHook([&](std::string_view n, bool usages) { asked.emplace_back(std::string(n), usages); return true; });
+        gfx::Rect cell;
+        check(grid.valueRect("Opacit\xC3\xA9", cell), "la case Opacite");
+        auto* menu = rightClick(mid(cell));
+        const auto* def = menu ? findItem(menu->items(), "Aller \xC3\xA0 la d\xC3\xA9" "finition de Niveau") : nullptr;
+        const auto* uses = menu ? findItem(menu->items(), "Voir les usages de Niveau") : nullptr;
+        check(def && def->shortcut == "F12" && uses && uses->shortcut == "Maj+F12", "le nom de l'expression : sa definition (F12), ses usages (Maj+F12)");
+        if (menu && uses) menu->itemChosen->emit(uses->id);
+        check(asked.size() == 1 && asked[0].first == "Niveau" && asked[0].second, "Voir les usages : le crochet de l'ecran, sur Niveau");
+        ui::propertygrid::setNameHook({});
+        menu = rightClick(mid(cell));
+        check(menu && !findItem(menu->items(), "Voir les usages de Niveau"), "sans ecran (pas de crochet) : pas d'entree");
+        if (menu) menu->close();
+    }
+}
+
 // ---- 1.10 (chantier K) : les champs a expression, partout pareils ----
 // Vide : l'invite adaptee au type (et la pastille fx en creux) ; avec une
 // expression : le "=" garde a l'edition ; la retirer par le X, le clic droit,
@@ -13852,10 +14020,16 @@ void v110_champs_expressions() {
         auto* menu = dynamic_cast<ui::PopupMenu*>(grid.findById(xf::menuId(grid)));
         check(menu && menu->isOpen(), "clic droit : le menu de la case");
         if (menu && menu->items().size() >= 4) {
+            // 1.12.18 (planche 8) : Modifier, Choisir une fonction, Copier, Coller, puis Retirer et Revenir.
             same_text(menu->items()[1].label, std::string(xf::kModify), "menu : Modifier l'expression... (en premier, la maquette)");
-            same_text(menu->items()[2].label, std::string(xf::kRemove), "menu : Retirer l'expression");
-            same_text(menu->items()[3].label, std::string(xf::kCopy), "menu : Copier");
-            same_text(menu->items()[2].shortcut, "Ctrl+Suppr", "menu : Retirer l'expression dit son raccourci");
+            const auto* remove = findItem(menu->items(), xf::kRemove);
+            const auto* copy = findItem(menu->items(), xf::kCopy);
+            const auto* choose = findItem(menu->items(), "Choisir une fonction\xE2\x80\xA6");
+            const auto* paste = findItem(menu->items(), "Coller");
+            check(remove && copy && choose && paste, "menu : Retirer l'expression, Copier, Choisir une fonction..., Coller");
+            same_text(remove ? remove->shortcut : std::string{}, "Ctrl+Suppr", "menu : Retirer l'expression dit son raccourci");
+            same_text(choose ? choose->shortcut : std::string{}, "Ctrl+I", "menu : Choisir une fonction... dit Ctrl+I");
+            check(ui::cmd::badShortcuts(menu->items()).empty(), "menu de la case : des touches seulement a droite");
             sent.clear();
             menu->itemChosen->emit(1);
             same_text(sent.empty() ? std::string{} : sent.back(), "=", "menu : Retirer l'expression la retire");
@@ -13863,8 +14037,8 @@ void v110_champs_expressions() {
         // La 4e entree de la maquette : Revenir a la valeur par defaut (une case videe ici).
         click(grid, {cell.x + 30, cell.y + cell.h / 2}, ui::MouseButton::Right);
         if (menu && menu->items().size() >= 6) {
-            check(menu->items()[4].separator, "menu : un trait avant Revenir \xC3\xA0 la valeur par d\xC3\xA9" "faut");
-            same_text(menu->items()[5].label, std::string(xf::kDefault), "menu : Revenir \xC3\xA0 la valeur par d\xC3\xA9" "faut");
+            const auto* def = findItem(menu->items(), xf::kDefault);
+            check(def != nullptr && def->id == 4, "menu : Revenir \xC3\xA0 la valeur par d\xC3\xA9" "faut");
             sent.clear();
             menu->itemChosen->emit(4);
             check(sent.size() == 1 && sent.back().empty(), "Revenir \xC3\xA0 la valeur par d\xC3\xA9" "faut : une case vid\xC3\xA9" "e (l'h\xC3\xB4te ne le traite pas)");
@@ -13876,7 +14050,8 @@ void v110_champs_expressions() {
         check(grid.valueRect("Opacit\xC3\xA9", ncell), "la case Opacit\xC3\xA9");
         click(grid, mid(ncell), ui::MouseButton::Right);
         if (menu && menu->items().size() >= 3) {
-            check(!menu->items()[2].enabled, "sans expression : Retirer l'expression est gris\xC3\xA9");
+            const auto* rm = findItem(menu->items(), xf::kRemove);
+            check(rm && !rm->enabled, "sans expression : Retirer l'expression est gris\xC3\xA9");
             same_text(menu->items()[1].label, "\xC3\x89" "crire une expression\xE2\x80\xA6", "sans expression : \xC3\x89" "crire une expression...");
             menu->itemChosen->emit(2);
         }
@@ -15018,9 +15193,9 @@ void v110_editeur() {
         check(vr >= 0 && vt.rowRect(static_cast<std::size_t>(vr), rr), "la ligne de Niveau se voit");
         vt.dispatch(ui::MouseDown{{rr.x + 40.f, rr.y + rr.h / 2.f}, ui::MouseButton::Right, 1, {}});
         const auto* menu = vars.contextMenu();
-        check(menu && menu->isOpen() && !menu->items().empty() && menu->items().front().label == "Ouvrir une visualisation graphique"
-                  && menu->items().front().enabled,
-              "le clic droit sur une variable choisie : le menu, \xC2\xAB Ouvrir une visualisation graphique \xC2\xBB en t\xC3\xAAte");
+        const auto* trend = menu ? findItemStarting(menu->items(), "Ouvrir une visualisation (") : nullptr;
+        check(menu && menu->isOpen() && trend && trend->enabled,
+              "le clic droit sur une variable choisie : le menu, \xC2\xAB Ouvrir une visualisation (n courbes) \xC2\xBB");
         check(vt.selectedModelRows().size() == 3, "la s\xC3\xA9lection reste (le clic droit sur une ligne d\xC3\xA9j\xC3\xA0 choisie)");
         bool rename = false, remove = false;
         if (menu)
@@ -15029,8 +15204,9 @@ void v110_editeur() {
                 remove = remove || it.label == "Supprimer";
             }
         check(rename && remove, "et les gestes d\xC3\xA9j\xC3\xA0 connus : Copier le nom, Renommer, Supprimer");
-        check(menu && menu->items().size() > 1 && menu->items()[1].label.rfind("1 variable sans courbe", 0) == 0 && !menu->items()[1].enabled,
-              "le menu dit ce qui ne se trace pas : \xC2\xAB 1 variable sans courbe \xC2\xBB (Message, un texte)");
+        const auto* noTrace = menu ? findItemStarting(menu->items(), "1 variable sans courbe") : nullptr;
+        check(noTrace && !noTrace->enabled, "le menu dit ce qui ne se trace pas : \xC2\xAB 1 variable sans courbe \xC2\xBB (Message, un texte)");
+        check(menu && ui::cmd::badShortcuts(menu->items()).empty(), "Variables IHM : la colonne de droite, des touches seulement");
         if (menu && menu->isOpen()) const_cast<ui::PopupMenu*>(menu)->close();
     }
     vars.runMenu(1);
@@ -17178,11 +17354,13 @@ void centreAide111() {
     // ---- la table des raccourcis ----
     // 1.12.2 : les editeurs de code au profil Visual Studio - 31 lignes de plus (36 en tout).
     // 1.12.3 : + Ctrl+Maj+K (Projet > Disposition...). 1.12.16 : + Ctrl+I (Choisir une fonction...).
-    check(hk::all().size() == 96 && hk::ofContext(hk::Context::Scripts).size() == 37,
+    // 1.12.18 : + Maj+F10 et les lettres d'un menu (General), Ctrl+D / Ctrl+Maj+D, Ctrl+G / Ctrl+Maj+G,
+    // Ctrl+Alt+C / Ctrl+Alt+V (l'editeur de vues).
+    check(hk::all().size() == 101 && hk::ofContext(hk::Context::Scripts).size() == 37,
           "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17), "
-          "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3) et Ctrl+I (1.12.16)");
-    check(hk::ofContext(hk::Context::General).size() == 26 && hk::ofContext(hk::Context::Help).size() == 7,
-          "raccourcis : General 26 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K), Aide 7");
+          "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3), Ctrl+I (1.12.16) et les 5 du clic droit (1.12.18)");
+    check(hk::ofContext(hk::Context::General).size() == 28 && hk::ofContext(hk::Context::Help).size() == 7,
+          "raccourcis : General 28 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,
     // dans l'ecriture du registre (Alt+Left, Shift+F5). Le registre lui-meme est lu juste apres.
     const std::pair<const char*, const char*> attendu[] = {
@@ -18980,7 +19158,7 @@ void arbreObjets1102() {
               // 1.10.3 (Q1103, decision 2a) : chaque repere dit aussi ou il sert ; puis la ligne d'aide.
               && tree.text(find(marks, "$Vanne$")) == "$Vanne$ \xC3\x97 3 \xE2\x80\x94 Rotation, Couleur dynamique, Action 1"
               && tree.text(find(marks, "$Repere$")) == "$Repere$ \xC3\x97 1 \xE2\x80\x94 Texte"
-              && tree.childCount(marks) == 3 && tree.text(tree.childAt(marks, 2)) == "Ctrl+D : Dupliquer\xE2\x80\xA6 les remplace"
+              && tree.childCount(marks) == 3 && tree.text(tree.childAt(marks, 2)) == "Ctrl+Maj+D : Dupliquer\xE2\x80\xA6 les remplace"
               && tree.kindOf(find(marks, "$Vanne$")) == NK::HmiObjectMarker && tree.hmiObjectOf(find(marks, "$Vanne$")) == modele,
           "V_Modele : Rep\xC3\xA8res [2], $Vanne$ \xC3\x97 3 (la casse ignor\xC3\xA9" "e), $Repere$ \xC3\x97 1 ; $$ et $N ne comptent pas (" + labels(marks) + ")");
     // Une famille vide n'apparait pas ; le classement des lignes.
@@ -19058,7 +19236,7 @@ void explorateurFamilles1103() {
     const auto marks = ht::familyLines(hp, o, ht::Family::Markers);
     check(marks.size() == 2 && marks[0].text == "$Vanne$ \xC3\x97 4 \xE2\x80\x94 Valeur, Libell\xC3\xA9, Ouverture, Action 2"
               && marks[0].property == "value" && marks[0].action < 0 && marks[0].icon == ui::Icon::Star
-              && marks[1].text == "Ctrl+D : Dupliquer\xE2\x80\xA6 les remplace" && marks[1].icon == ui::Icon::Info
+              && marks[1].text == "Ctrl+Maj+D : Dupliquer\xE2\x80\xA6 les remplace" && marks[1].icon == ui::Icon::Info
               && marks[1].property.empty() && marks[1].action < 0,
           "Rep\xC3\xA8res : \"$Vanne$ \xC3\x97 4 \xE2\x80\x94 Valeur, Libell\xC3\xA9, Ouverture, Action 2\" (sa 1re case : value), puis l'aide Ctrl+D ("
               + (marks.empty() ? std::string("rien") : marks[0].text) + ")");
@@ -19179,6 +19357,190 @@ void explorateurFamilles1103() {
     list.setFilter("", std::nullopt);
 }
 
+// 1.12.18 : un mot, un raccourci sur le canevas - Ctrl+D duplique tout de suite,
+// Ctrl+Maj+D ouvre la fenetre, Ctrl+G groupe, Ctrl+Maj+G degroupe, le style passe
+// sur Ctrl+Alt+C / Ctrl+Alt+V (Ctrl+Maj+C ne copie plus le style).
+void raccourcis_canevas_11218() {
+    std::printf("== 1.12.18 : les raccourcis du canevas (Ctrl+D, Ctrl+G, Ctrl+Alt+C/V) ==\n");
+    Bench b;
+    const Id a = edit::add(b.doc->project, b.v(), Kind::Rectangle, 100, 100);
+    const Id c = edit::add(b.doc->project, b.v(), Kind::Rectangle, 300, 100);
+    b.v().object(a)->set("fill", "#FF0000");
+    b.v().object(c)->set("fill", "#00FF00");
+    b.editor->refresh();
+    b.down(b.screen(800, 500));
+    b.up(b.screen(800, 500));
+    check(b.editor->canvas().focused(), "le canevas a le focus");
+    ui::KeyMods ctrl;
+    ctrl.ctrl = true;
+    ui::KeyMods cs = ctrl;
+    cs.shift = true;
+    ui::KeyMods ca = ctrl;
+    ca.alt = true;
+    int asked = 0;
+    b.editor->setDuplicateAsker([&] { ++asked; });
+    const std::size_t n0 = b.v().objects.size();
+    b.editor->canvas().setSelection({a, c});
+    b.key(ui::Key::G, ctrl);
+    check(b.v().objects.size() == n0 + 1 && b.editor->canvas().selection().size() == 1
+              && b.v().object(b.editor->canvas().selection().front())->kind == Kind::Group,
+          "Ctrl+G : les deux objets groupes, le groupe choisi");
+    b.key(ui::Key::G, cs);
+    check(b.v().objects.size() == n0 && b.editor->canvas().selection().size() == 2, "Ctrl+Maj+G : degroupe, les deux objets choisis");
+    b.editor->canvas().setSelection({a});
+    b.key(ui::Key::G, ctrl);
+    check(b.v().objects.size() == n0, "Ctrl+G sur un seul objet : rien (il faut deux objets)");
+    b.key(ui::Key::D, ctrl);
+    check(asked == 0 && b.v().objects.size() == n0 + 1, "Ctrl+D : la copie tout de suite, sans la fenetre");
+    (void)b.stack.undo();
+    b.editor->refresh();
+    b.editor->canvas().setSelection({a});
+    b.key(ui::Key::D, cs);
+    check(asked == 1 && b.v().objects.size() == n0, "Ctrl+Maj+D : la fenetre Dupliquer... (l'hote), rien de copie");
+    // Le style : Ctrl+Maj+C ne le copie plus ; Ctrl+Alt+C / Ctrl+Alt+V le reportent.
+    b.editor->canvas().setSelection({a});
+    b.key(ui::Key::C, cs);
+    b.editor->canvas().setSelection({c});
+    b.key(ui::Key::V, ca);
+    check(b.v().object(c)->text("fill") == "#00FF00", "Ctrl+Maj+C ne copie plus le style (rien a coller)");
+    b.editor->canvas().setSelection({a});
+    b.key(ui::Key::C, ca);
+    b.editor->canvas().setSelection({c});
+    b.key(ui::Key::V, ca);
+    check(b.v().object(c)->text("fill") == "#FF0000", "Ctrl+Alt+C puis Ctrl+Alt+V : le style passe d'un objet a l'autre");
+}
+
+// 1.12.18 (lot 2, planches 5 et 6) : LE MENU DU CLIC DROIT SUR LA VUE - il vise ce qui est
+// sous le pointeur ; le menu des objets porte tout ce que fait la barre d'outils.
+void canevas_menu_11218() {
+    std::printf("== 1.12.18 : le menu du clic droit sur la vue (selection, verrouille, vide, pose) ==\n");
+    Bench b;
+    b.v().grid.snapGrid = false;
+    const Id a = edit::add(b.doc->project, b.v(), Kind::Rectangle, 100, 100);
+    const Id c = edit::add(b.doc->project, b.v(), Kind::Rectangle, 300, 100);
+    b.v().object(a)->name = "Rect_A";
+    b.v().object(c)->name = "Rect_C";
+    b.editor->refresh();
+    auto& cv = b.editor->canvas();
+    auto* menu = b.editor->canvasMenu();
+    check(menu != nullptr, "l'editeur a son menu");
+    if (!menu) return;
+    const auto rightClick = [&](double x, double y) {
+        cv.dispatch(ui::MouseDown{b.screen(x, y), ui::MouseButton::Right, 1, {}});
+        cv.dispatch(ui::MouseUp{b.screen(x, y), ui::MouseButton::Right, {}});
+    };
+    // ---- deux objets choisis, clic droit sur l'un : la selection reste, le menu vise les deux ----
+    cv.setSelection({a, c});
+    rightClick(110, 110);
+    check(cv.selection().size() == 2 && cv.contextTarget() == app::HmiCanvas::ContextTarget::Selection,
+          "clic droit sur un objet deja choisi : la selection (deux objets) reste");
+    check(menu->isOpen() && !menu->items().empty() && menu->items().front().heading && menu->items().front().label == "2 objets"
+              && menu->items().front().shortcut == "Rect_A, Rect_C",
+          "l'en-tete : 2 objets, leurs noms");
+    const auto& items = menu->items();
+    const auto* cut = findItem(items, "Couper");
+    const auto* dup = findItem(items, "Dupliquer");
+    const auto* dupw = findItem(items, "Dupliquer\xE2\x80\xA6");
+    const auto* grp = findItem(items, "Grouper");
+    check(cut && cut->shortcut == "Ctrl+X" && cut->icon == ui::Icon::Cut, "Couper (Ctrl+X, son icone) : avant, au clavier seulement");
+    check(dup && dup->shortcut == "Ctrl+D" && dupw && dupw->shortcut == "Ctrl+Maj+D", "Dupliquer Ctrl+D, Dupliquer... Ctrl+Maj+D");
+    check(grp && grp->enabled && grp->shortcut == "Ctrl+G", "Grouper (Ctrl+G) : deux objets");
+    for (const char* sub : {"Ordre", "Aligner", "Transformer", "Style", "Calque"}) {
+        const auto* it = findItem(items, sub);
+        check(it && !it->children.empty(), std::string("le sous-menu ") + sub);
+    }
+    const auto* dist = findItem(items, "Distribuer horizontalement");
+    check(dist && !dist->enabled && dist->disabledReason == "3 objets ou plus", "Distribuer : grise, la raison dite (3 objets ou plus)");
+    const auto* locked = findItem(items, "Verrouill\xC3\xA9");
+    const auto* hidden = findItem(items, "Cach\xC3\xA9");
+    check(locked && locked->checkable && !locked->checked && hidden && hidden->checkable, "Verrouille et Cache : des cases");
+    const auto* ren = findItem(items, "Renommer\xE2\x80\xA6");
+    check(ren && !ren->enabled && ren->disabledReason == "un objet \xC3\xA0 la fois" && ren->shortcut == "F2", "Renommer... : un objet a la fois (F2)");
+    check(ui::cmd::badShortcuts(items).empty(), "la colonne de droite : des touches seulement");
+    // Aligner en haut, depuis le sous-menu : les deux objets bougent ensemble.
+    b.v().object(c)->setNumber("y", 180);
+    menu->itemChosen->emit(1000 + app::HmiEditor::ActAlignTop);
+    menu->close();
+    near(b.v().object(c)->box().y, 100, "Aligner > Aligner en haut : comme la barre d'outils");
+    // Verrouille : la case coche les deux.
+    rightClick(110, 110);
+    menu->itemChosen->emit(13);
+    menu->close();
+    check(b.v().object(a)->locked && b.v().object(c)->locked, "la case Verrouille verrouille la selection");
+    // ---- un objet verrouille : le menu le vise lui seul, l'ancienne selection n'est plus visee (bug 4) ----
+    cv.setSelection({});
+    b.v().object(c)->locked = false;
+    cv.setSelection({c});
+    rightClick(110, 110);   // Rect_A, verrouille
+    check(cv.selection().empty() && cv.contextTarget() == app::HmiCanvas::ContextTarget::Locked && cv.contextLocked() == a,
+          "clic droit sur un objet verrouille : il est vise, l'ancienne selection est videe (bug 4)");
+    const auto* del = findItem(menu->items(), "Supprimer");
+    check(menu->items().front().label == "Rect_A" && menu->items().front().shortcut == "verrouill\xC3\xA9"
+              && del && !del->enabled && del->disabledReason == "verrouill\xC3\xA9 : d\xC3\xA9verrouille-le d'abord",
+          "son menu : l'en-tete verrouille, Supprimer grise et dit pourquoi");
+    menu->itemChosen->emit(19);   // Deverrouiller
+    menu->close();
+    check(!b.v().object(a)->locked && cv.selection() == std::vector<Id>{a}, "Deverrouiller : l'objet est libre, et choisi");
+    // ---- le vide : la selection est videe, le menu est celui de la vue ----
+    cv.setSelection({a});
+    rightClick(700, 450);
+    check(cv.selection().empty() && cv.contextTarget() == app::HmiCanvas::ContextTarget::View,
+          "clic droit sur le vide : rien de choisi (le menu ne vise plus l'ancienne selection)");
+    check(menu->items().front().label == "Vue_Test" && menu->items().front().shortcut == "1000 \xC3\x97 600", "l'en-tete : la vue, sa taille");
+    const auto* grid = findItem(menu->items(), "Grille");
+    const auto* z100 = findItem(menu->items(), "100 %");
+    check(grid && grid->checkable && z100 && z100->radio && z100->checked, "la grille en case, le zoom en cours marque");
+    const std::size_t n0 = b.v().objects.size();
+    menu->itemChosen->emit(4000);   // Inserer > Texte
+    menu->close();
+    check(b.v().objects.size() == n0 + 1 && cv.selection().size() == 1 && b.v().object(cv.selection().front())->kind == Kind::Text,
+          "Inserer > Texte : un texte neuf, choisi");
+    if (!cv.selection().empty()) near(b.v().object(cv.selection().front())->box().x, 700, "... pose au point du clic");
+    // Coller ici : la copie de Rect_A, son coin au point du clic.
+    cv.setSelection({a});
+    cv.copySelection();
+    rightClick(600, 380);
+    menu->itemChosen->emit(9);
+    menu->close();
+    check(b.v().objects.size() == n0 + 2 && cv.selection().size() == 1, "Coller ici : une copie, choisie");
+    if (!cv.selection().empty()) {
+        near(b.v().object(cv.selection().front())->box().x, 600, "Coller ici : x au point du clic (avant : +20 px de l'original)");
+        near(b.v().object(cv.selection().front())->box().y, 380, "Coller ici : y au point du clic");
+    }
+    // ---- une pose en cours : le clic droit l'annule, sans menu ----
+    int asked = 0;
+    auto link = cv.contextRequested->connect([&](gfx::Point) { ++asked; });
+    cv.setPlaceKind(Kind::Indicator);
+    rightClick(800, 500);
+    check(!cv.placeKind() && asked == 0, "pendant une pose, le clic droit l'annule (comme Echap), sans menu");
+    rightClick(800, 500);
+    check(asked == 1, "... un second clic droit ouvre le menu");
+    menu->close();
+    // ---- un groupe : Entrer dans le groupe, Degrouper ----
+    cv.setSelection({a, c});
+    b.editor->run(app::HmiEditor::ActGroup);
+    const Id g = cv.selection().empty() ? kNoId : cv.selection().front();
+    rightClick(110, 110);
+    check(menu->items().front().shortcut == "2 objets" && findItem(menu->items(), "Entrer dans le groupe")
+              && findItem(menu->items(), "D\xC3\xA9grouper"),
+          "un groupe : l'en-tete compte ses objets ; Entrer dans le groupe, Degrouper");
+    menu->itemChosen->emit(17);
+    menu->close();
+    check(cv.insideGroup() == g, "Entrer dans le groupe");
+    rightClick(110, 110);
+    check(findItem(menu->items(), "Sortir du groupe") != nullptr, "dans le groupe : Sortir du groupe (Echap)");
+    menu->close();
+    cv.leaveGroup();
+    // ---- au clavier : Maj+F10 ouvre le menu de la selection ----
+    cv.setSelection({g});
+    cv.takeFocus();
+    ui::KeyMods shift;
+    shift.shift = true;
+    b.key(ui::Key::F10, shift);
+    check(menu->isOpen() && menu->items().front().label == b.v().object(g)->name, "Maj+F10 : le menu de la selection, au clavier");
+    menu->close();
+}
+
 // 1.10.2 (chantier D) : "DUPLIQUER..." - Ctrl+D (l'hote ouvre la fenetre),
 // Ctrl+Maj+D (la copie decalee), le clic droit ; la fenetre sans ecran (son
 // plan, ses cases, la pose) ; le plan joue en UNE commande, Ctrl+Z retire tout.
@@ -19218,13 +19580,14 @@ void dupliquer_fenetre_1102() {
     b.editor->canvas().setSelection({vid});
     ui::KeyMods ctrl;
     ctrl.ctrl = true;
-    b.key(ui::Key::D, ctrl);
-    check(asked == 1, "Ctrl+D ouvre \"Dupliquer...\" (l'hote)");
-    const std::size_t n0 = b.v().objects.size();
+    // 1.12.18 : un mot, un raccourci - Ctrl+Maj+D ouvre la fenetre, Ctrl+D duplique tout de suite.
     ui::KeyMods cs = ctrl;
     cs.shift = true;
     b.key(ui::Key::D, cs);
-    check(asked == 1 && b.v().objects.size() == n0 + 1, "Ctrl+Maj+D : la copie decalee de 20 px, sans la fenetre");
+    check(asked == 1, "Ctrl+Maj+D ouvre \"Dupliquer...\" (l'hote)");
+    const std::size_t n0 = b.v().objects.size();
+    b.key(ui::Key::D, ctrl);
+    check(asked == 1 && b.v().objects.size() == n0 + 1, "Ctrl+D : la copie decalee de 20 px, sans la fenetre");
     (void)b.stack.undo();
     check(b.v().objects.size() == n0, "Ctrl+Z retire la copie decalee");
     b.editor->canvas().setSelection({});
@@ -22175,7 +22538,7 @@ void inspecteur_reperes_filtres_1103() {
     check(fill->exprError.empty(), "1.11 : la case \xC3\xA0 rep\xC3\xA8re se calcule, sans erreur (" + fill->exprError + ")");
     check(ui::exprfield::hasMarker(*text) && !ui::exprfield::hasMarker(*vis), "le texte $Repere$ a un rep\xC3\xA8re ; V[0] > 0 n'en a pas");
     same_text(ui::exprfield::markerTip(*fill),
-              "Rep\xC3\xA8re $V[1]$ : ce morceau varie quand on duplique (Dupliquer\xE2\x80\xA6, Ctrl+D). Ses $ ne changent pas le calcul.",
+              "Rep\xC3\xA8re $V[1]$ : ce morceau varie quand on duplique (Dupliquer\xE2\x80\xA6, Ctrl+Maj+D). Ses $ ne changent pas le calcul.",
               "l'infobulle de la case \xC3\xA0 rep\xC3\xA8re (1.11)");
     check(ui::exprfield::markerTip(*vis).empty(), "une case sans rep\xC3\xA8re : pas d'infobulle de rep\xC3\xA8re");
     const std::string fillName = fill->name, textName = text->name;
@@ -22471,17 +22834,17 @@ void dupliquerCtrlY111() {
     cv.edit("Deplacer", [vid](Project&, View& v) { v.object(vid)->setNumber("x", 400); });
     b.editor->refresh();
     check(cv.selection() == std::vector<Id>{vid}, "un autre changement ne reprend pas la selection");
-    // Ctrl+Maj+D (dupliquer a cote) : pareil.
+    // Ctrl+D (dupliquer a cote, 1.12.18) : pareil.
     cv.setSelection({vid});
     cv.duplicateSelection();
     const auto made = cv.selection();
-    check(made.size() == 1 && made[0] != vid, "Ctrl+Maj+D : la copie est choisie");
+    check(made.size() == 1 && made[0] != vid, "Ctrl+D : la copie est choisie");
     (void)b.stack.undo();
     b.editor->refresh();
     cv.setSelection({vid});
     (void)b.stack.redo();
     b.editor->refresh();
-    check(cv.selection() == made, "Ctrl+Maj+D, Ctrl+Z, Ctrl+Y : la selection revient a la copie");
+    check(cv.selection() == made, "Ctrl+D, Ctrl+Z, Ctrl+Y : la selection revient a la copie");
 }
 
 // 1.11 (R111), apres la fusion de la 1.10.4 : "veux-tu dire" sur un membre et la
@@ -23444,7 +23807,7 @@ void surLaVueClicDroit1116() {
         std::vector<std::string> labels;
         for (const auto& it : m->items()) if (!it.separator && !it.heading) labels.push_back(it.label);
         check(labels.size() == 6 && labels[0] == "Tout d\xC3\xA9plier" && labels[1] == "D\xC3\xA9plier" && labels[2] == "Replier"
-                  && labels[3] == "Tout replier" && labels[4].rfind("Forcer", 0) == 0 && labels[5].rfind("D\xC3\xA9" "forcer", 0) == 0,
+                  && labels[3] == "Tout replier" && labels[4].rfind("Forcer", 0) == 0 && labels[5].rfind("Rel\xC3\xA2" "cher", 0) == 0,
               "les six entr\xC3\xA9" "es, dans l'ordre demand\xC3\xA9");
         m->close();
     }
@@ -23880,6 +24243,134 @@ void objetsVariables1122() {
           "des \xC3\xA9l\xC3\xA9ments : un tableau, un vecteur ; pas un REAL");
 }
 
+// 1.12.18 (planches 11 et 12 du clic droit) : « Modifier l'adresse dans toutes les cases... » - le clic droit,
+// la fenetre (une formule de i, a la suite, l'apercu), une commande, la colonne Adresse, revenir.
+void adressesToutesCases11218() {
+    std::printf("== 1.12.18 : Modifier l'adresse dans toutes les cases (le clic droit, la fen\xC3\xAAtre, Ctrl+Z) ==\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    auto& p = doc->project;
+    {
+        HmiType ex;
+        ex.id = p.allocate();
+        ex.name = "EXTRACTEUR";
+        ex.members = {{"Retour", "INT", "", ""}, {"Marche", "BOOL", "", ""}, {"Def", "BOOL", "", ""}, {"Consigne", "REAL", "", ""}, {"Mesure", "REAL", "", ""}};
+        HmiType po;
+        po.id = p.allocate();
+        po.name = "T_POMPE";
+        po.members = {{"Etat", "INT", "", ""}};
+        p.programs.types = {ex, po};
+        hmi::Equipment e;
+        e.id = p.allocate();
+        e.name = "Automate_1";
+        e.host = "127.0.0.1";
+        p.equipments.push_back(e);
+        Variable v;
+        v.id = p.allocate();
+        v.name = "EXTRACTEURS";
+        v.type = "ARRAY[0..9] OF EXTRACTEUR";
+        v.equipment = "Automate_1";
+        v.address = "%MW550";
+        p.programs.variables.push_back(v);
+        Variable w;
+        w.id = p.allocate();
+        w.name = "POMPES";
+        w.type = "ARRAY[0..1] OF T_POMPE";
+        w.equipment = "Automate_1";
+        w.address = "%MW1020";
+        p.programs.variables.push_back(w);
+    }
+    const Id vid = p.programs.variables[0].id;
+    app::HmiVariablesPane vars("vars11218", doc, apply);
+    menu::MenuManager mm{menu::MenuFactory{}};
+    app::HmiVariablesPane::Hosts hosts;
+    hosts.editAddresses = [&](hmi::Id v, const std::string& member) {
+        app::HmiAddressDialog::Spec spec;
+        spec.doc = doc;
+        spec.variable = v;
+        spec.member = member;
+        mm.ShowDialog(std::make_unique<app::HmiAddressDialog>(std::move(spec)), [&vars, v](const menu::DialogResult& r) {
+            std::string pattern, formula, why;
+            if (r.accepted() && app::HmiAddressDialog::parse(r.payload, pattern, formula)) (void)vars.applyAddressFormula(v, pattern, formula, &why);
+        });
+    };
+    vars.setHosts(std::move(hosts));
+    vars.setBounds({0, 0, 1600, 900});
+    vars.layout();
+    vars.setExpanded("EXTRACTEURS", true);
+    vars.setExpanded("EXTRACTEURS[0]", true);
+    vars.setExpanded("EXTRACTEURS[2]", true);
+    const auto cellOf = [&](const std::string& key, std::size_t col) {
+        const int r = vars.rowOf(key);
+        return r >= 0 && static_cast<std::size_t>(r) < vars.rows().size() && vars.rows()[r].cells.size() > col ? vars.rows()[r].cells[col] : std::string("?");
+    };
+    check(cellOf("EXTRACTEURS[0].Retour", 5) == "%MW550", "avant : EXTRACTEURS[0].Retour en %MW550");
+    // Le clic droit sur EXTRACTEURS[0].Retour : l'entree, active.
+    auto* menu = vars.table().contextMenu();
+    vars.selectPath("EXTRACTEURS[0].Retour");
+    vars.openContextMenu({400, 300});
+    const auto* all = menu ? findItem(menu->items(), "Modifier l'adresse dans toutes les cases\xE2\x80\xA6") : nullptr;
+    check(all && all->enabled, "le clic droit : Modifier l'adresse dans toutes les cases\xE2\x80\xA6 (active)");
+    if (menu && all) menu->itemChosen->emit(all->id);
+    mm.applyPending();
+    auto* d = dynamic_cast<app::HmiAddressDialog*>(mm.top());
+    check(d != nullptr, "la fen\xC3\xAAtre s'ouvre");
+    if (!d) return;
+    check(d->canChooseMember() && !d->whole() && d->pattern() == "[*].Retour", "elle vise le membre Retour de chaque case ([*].Retour)");
+    check(d->prefix() == "%MW" && d->expression() == "550 + 6 * i", "pr\xC3\xA9remplie avec la place d'aujourd'hui : %MW, 550 + 6 * i (" + d->prefix() + " " + d->expression() + ")");
+    d->setExpression("1000 + 10 * i");
+    check(d->plan().ok() && d->plan().rows.size() == 10 && d->plan().rows[2].after == "%MW1020" && d->plan().shared == 1,
+          "1000 + 10 * i : 10 cases, [2] en %MW1020, POMPES[0].Etat l'a aussi");
+    same_text(d->confirmLabel(), "Appliquer aux 10 cases", "le bouton dit le nombre de cases");
+    check(d->message().find("POMPES[0].Etat garde la sienne") != std::string::npos, "le bas le dit : " + d->message());
+    d->setExpression("1000 + k");
+    check(!d->canConfirm() && d->message().find("k inconnu") != std::string::npos, "k inconnu : Appliquer gris, et pourquoi (" + d->message() + ")");
+    d->setFollowing(true);
+    d->setStart("%MW3000");
+    check(d->formula() == "%MW(3000 + i)" && d->canConfirm(), "\xC3\xA0 la suite de %MW3000 : %MW(3000 + i)");
+    d->setFollowing(false);
+    d->setExpression("1000 + 10 * i");
+    const std::size_t steps = stack.done().size();
+    check(d->confirm(), "Appliquer");
+    mm.applyPending();
+    const auto* v = doc->project.variableById(vid);
+    check(v && v->places.size() == 1 && v->places[0].path == "[*].Retour" && v->places[0].address == "%MW(1000 + 10 * i)" && stack.done().size() == steps + 1,
+          "une ligne [*].Retour = %MW(1000 + 10 * i), une commande");
+    vars.refresh();
+    check(cellOf("EXTRACTEURS[2].Retour", 5).rfind("%MW1020", 0) == 0 && cellOf("EXTRACTEURS[2].Retour", 5).find("1000 + 10 * i") != std::string::npos,
+          "la colonne Adresse : %MW1020 et sa formule (" + cellOf("EXTRACTEURS[2].Retour", 5) + ")");
+    check(cellOf("EXTRACTEURS[2].Marche", 5) == "%MW563.0", "les autres membres ne bougent pas");
+    // Revenir aux adresses calculees : le clic droit sur une case qui suit la formule la retire (toutes les cases).
+    vars.selectPath("EXTRACTEURS[2].Retour");
+    vars.openContextMenu({400, 300});
+    const auto* back = menu ? findItemStarting(menu->items(), "Revenir aux adresses calcul\xC3\xA9" "es (la formule") : nullptr;
+    check(back && back->enabled, "Revenir aux adresses calcul\xC3\xA9" "es (la formule de EXTRACTEURS[*].Retour)");
+    if (menu && back) menu->itemChosen->emit(back->id);
+    v = doc->project.variableById(vid);
+    check(v && v->places.empty(), "la formule retir\xC3\xA9" "e");
+    vars.refresh();
+    check(cellOf("EXTRACTEURS[2].Retour", 5) == "%MW562", "[2].Retour revient \xC3\xA0 %MW562");
+    (void)stack.undo();
+    v = doc->project.variableById(vid);
+    check(v && v->places.size() == 1, "Ctrl+Z : la formule revient");
+    (void)stack.undo();
+    v = doc->project.variableById(vid);
+    check(v && v->places.empty(), "Ctrl+Z encore : les 10 cases d'un coup");
+    // La ligne d'une case : les cases entieres seulement.
+    vars.refresh();
+    vars.selectPath("EXTRACTEURS[1]");
+    vars.openContextMenu({400, 300});
+    all = menu ? findItem(menu->items(), "Modifier l'adresse dans toutes les cases\xE2\x80\xA6") : nullptr;
+    if (menu && all) menu->itemChosen->emit(all->id);
+    mm.applyPending();
+    d = dynamic_cast<app::HmiAddressDialog*>(mm.top());
+    check(d && !d->canChooseMember() && d->whole() && d->pattern() == "[*]" && d->expression() == "550 + 6 * i",
+          "la ligne EXTRACTEURS[1] : les cases enti\xC3\xA8res, 550 + 6 * i");
+    if (d) d->cancel();
+    mm.applyPending();
+}
+
 void variablesInternes1118() {
     std::printf("== 1.11.8 : Variables IHM - un membre interne ou attribu\xC3\xA9 \xC3\xA0 l'\xC3\xA9quipement, Recalculer la place m\xC3\xA9moire ==\n");
     auto doc = std::make_shared<Document>();
@@ -23918,16 +24409,14 @@ void variablesInternes1118() {
     check(cellOf("V[0].NOM", 4) == "\xE2\x86\xB3 V" && cellOf("V[0].NOM", 5) == "%MW19", "V[0].NOM : attribu\xC3\xA9" "e \xC3\xA0 V, %MW19 (la capture)");
     // Le clic droit sur la ligne choisie : Rendre interne.
     auto* menu = vars.table().contextMenu();
-    const auto entry = [&](const std::string& label) -> const ui::PopupMenu::Item* {
-        for (const auto& it : menu->items())
-            if (it.label == label) return &it;
-        return nullptr;
-    };
+    // 1.12.18 (planche 11) : le membre vise est dans le libelle (la colonne de droite : des touches).
+    const auto entry = [&](const std::string& label) -> const ui::PopupMenu::Item* { return findItemStarting(menu->items(), label); };
     vars.selectPath("V[0].NOM");
     vars.openContextMenu({400, 300});
     const auto* internalItem = entry("Rendre interne (gard\xC3\xA9 dans l'IHM)");
     const auto* allItem = entry("Rendre interne dans toutes les cases");
-    check(internalItem && internalItem->enabled && internalItem->shortcut == "V[0].NOM" && allItem && allItem->shortcut == "V[*].NOM",
+    check(internalItem && internalItem->enabled && internalItem->label.find(": V[0].NOM") != std::string::npos && allItem
+              && allItem->label.find(": V[*].NOM") != std::string::npos,
           "le clic droit sur V[0].NOM : Rendre interne (V[0].NOM), Rendre interne dans toutes les cases (V[*].NOM)");
     check(entry("Recalculer la place m\xC3\xA9moire") && !entry("Recalculer la place m\xC3\xA9moire")->enabled,
           "Recalculer la place m\xC3\xA9moire : gris\xC3\xA9 (aucun membre interne)");
@@ -24014,7 +24503,7 @@ void variablesInternes1118() {
         vars.selectPath("V[2]");
         vars.openContextMenu({400, 300});
         const auto* back = entry("Revenir \xC3\xA0 l'adresse calcul\xC3\xA9" "e");
-        check(back && back->shortcut == computed, "1.12.16 : le clic droit propose de revenir \xC3\xA0 " + computed);
+        check(back && back->label.find("(" + computed + ")") != std::string::npos, "1.12.16 : le clic droit propose de revenir \xC3\xA0 " + computed);
         if (back) menu->itemChosen->emit(back->id);
         check(fixedCount() == 0, "1.12.16 : le clic droit rend la place calcul\xC3\xA9" "e");
         (void)stack.undo();
@@ -26252,14 +26741,14 @@ void apiVue1111_gestes() {
                 insertOn = it.enabled;
                 insertId = it.id;
             }
-            if (it.label == "Emplois (3)" && it.children.size() == 3) {
+            if (it.label == "Voir les usages (3)" && it.children.size() == 3) {
                 usesSub = true;
                 firstUseId = it.children[0].id;
             }
             tableCopy = tableCopy || it.label == "Copier";
         }
     check(insertOn, "\xC2\xAB Ins\xC3\xA9rer dans le script montr\xC3\xA9 \xC2\xBB : possible, un script est \xC3\xA0 l'\xC3\xA9" "cran");
-    check(usesSub, "\xC2\xAB Emplois (3) \xC2\xBB : un sous-menu");
+    check(usesSub, "\xC2\xAB Voir les usages (3) \xC2\xBB : un sous-menu");
     check(tableCopy, "les entr\xC3\xA9" "es de la table restent dessous (Copier...)");
     if (menu && firstUseId != 0) {
         menu->itemChosen->emit(firstUseId);
@@ -28322,7 +28811,7 @@ void onglets1118() {
     // Les utilisations : l'onglet Code, la premiere.
     pane.showCodeTab(app::HmiScriptsPane::CodeTabConstants);
     consts.selectRows({0});
-    const int uses = consts.tools().actionByTip("Aller \xC3\xA0 ses utilisations");
+    const int uses = consts.tools().actionByTip("Voir les usages");
     if (uses > 0) consts.tools().triggered->emit(uses);
     check(uses > 0 && pane.currentCodeTab() == app::HmiScriptsPane::CodeTabCode && pane.editor().caretLine() == 0
               && pane.lastMessage().find("Utilisation 1 sur 1") != std::string::npos,
@@ -32786,7 +33275,10 @@ int main(int argc, char** argv) {
     aideSaisie1102();                       // 1.10.2 (chantier A) : les objets des vues, les parametres des instances
     arbreObjets1102();                      // 1.10.2 (chantier A) : l'objet deplie par familles
     explorateurFamilles1103();              // 1.10.3 (Q-A) : l'explorateur d'objets de la vue deplie par familles, comme l'arbre
-    dupliquer_fenetre_1102();               // 1.10.2 (chantier D) : Dupliquer... (Ctrl+D, la fenetre, une commande)
+    raccourcis_canevas_11218();             // 1.12.18 : Ctrl+D, Ctrl+Maj+D, Ctrl+G, Ctrl+Maj+G, Ctrl+Alt+C/V
+    canevas_menu_11218();                   // 1.12.18 : le menu du clic droit sur la vue (planches 5 et 6)
+    inspecteur_menu_11218();                // 1.12.18 : le menu de chaque ligne de l'inspecteur (planche 8)
+    dupliquer_fenetre_1102();               // 1.10.2 (chantier D) : Dupliquer... (Ctrl+Maj+D depuis la 1.12.18, la fenetre, une commande)
     groupesAlarmes1102Editeur();            // 1.10.2 (AL) : Groupe de l'IHM, IHM > Alarmes > Groupes
     tailleTexteListes111();                 // 1.11 (R111) : la taille du texte des listes d'alarmes et de l'historique
     depliageParNom111();                    // 1.11 (R111) : le depliage suit chaque categorie par son nom (keepExpanded)
@@ -32813,6 +33305,7 @@ int main(int argc, char** argv) {
     variableFx1117();                       // 1.11.7 : la case Variable d'une action, la pastille fx
     blocageDelier1117();                    // 1.11.7 : Delier pendant la simulation ne bloque plus
     variablesInternes1118();
+    adressesToutesCases11218();            // 1.12.18 : l'adresse dans toutes les cases (planches 11 et 12)
     objetsVariables1122();             // 1.12.2 : LIST, VECTOR, MAP, TUPLE en variables IHM                // 1.11.8 : membres internes, Recalculer la place memoire
     actionsFenetres1119();                  // 1.11.9 : l'operation en arbre, le script, Maths, le clavier
     ecrituresContinues11110();              // 1.11.10 : un script qui ecrit sans cesse n'empeche plus les lectures

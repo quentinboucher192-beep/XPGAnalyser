@@ -89,4 +89,11 @@ inline constexpr std::string_view kModify    = "Modifier l'expression\xE2\x80\xA
 inline constexpr std::string_view kCopy      = "Copier";
 inline constexpr std::string_view kDefault   = "Revenir \xC3\xA0 la valeur par d\xC3\xA9" "faut";
 
+// 1.12.18 : LA CORRECTION QU'UNE ERREUR PROPOSE (la rangee sous la ligne rouge de l'inspecteur,
+// « Appliquer la correction » des Diagnostics) : « X n'existe pas : veux-tu dire Y ? » et
+// « T est un tableau entier (...) : ... - choisis T[0] » donnent X -> Y, T -> T[0]. Faux : rien a proposer.
+[[nodiscard]] bool fixOf(std::string_view why, std::string& from, std::string& to);
+// `from` remplace par `to` la ou il commence un chemin (pas apres un point), hors des chaines.
+[[nodiscard]] std::string replaceRoot(std::string_view expr, std::string_view from, std::string_view to);
+
 } // namespace ui::exprfield

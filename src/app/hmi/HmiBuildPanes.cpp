@@ -2,6 +2,8 @@
 //  app/hmi/HmiBuildPanes.cpp - 1.11.13 : voir HmiBuildPanes.hpp
 // =============================================================================
 #include "HmiBuildPanes.hpp"
+#include "../../ui/widgets/ExprField.hpp"
+#include "../../ui/Commands.hpp"
 #include "../Disposition.hpp"
 
 #include "../../core/AtomicFile.hpp"
@@ -714,22 +716,31 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
         if (row.live) liveActivated->emit(pl::Diagnostic(live_[row.index]));     // 1.11.21 : une copie (le volet peut le refaire)
         else diagnosticActivated->emit(diags_[row.index]);
     });
+    consoleTable_->setEnterActivates(true);   // 1.12.18 : Entree va a la source, comme le double-clic
     links_ += consoleTable_->activated->connect([this](ui::RowIndex r) {
         // une copie : la ligne peut tomber (conservation) pendant que l'ecran ouvre sa source
         if (const auto* e = consoleRow(r); e && e->hasSource()) consoleActivated->emit(ConsoleEntry(*e));
     });
     // Le clic droit de la Console : aller a la source, filtrer, copier la ligne, exporter, effacer.
+    // 1.12.18 (planche 13) : son menu seul (plus le menu commun des tableaux dessous), l'en-tete,
+    // Ctrl+C copie la ligne ; Sorties et Diagnostics ont le meme menu.
+    consoleTable_->setExtraContextOnly(true);
+    consoleTable_->setKeyHandler([this](const ui::KeyDown& k) {
+        if (k.key == ui::Key::C && k.mods.ctrl && !k.mods.shift && !k.mods.alt && selectedConsoleEntry()) { consoleMenu(1003); return true; }
+        return false;
+    });
     consoleTable_->setExtraContextItems([this] {
         const ConsoleEntry* e = selectedConsoleEntry();
         const bool any = e != nullptr;
         const bool src = any && e->hasSource();
         std::vector<ui::PopupMenu::Item> items;
-        items.push_back({"Aller \xC3\xA0 la source", "Double-clic", src ? std::string{} : any ? std::string("cette ligne n'a pas de source") : std::string("aucune ligne choisie"),
-                         ui::Icon::None, src, false, 1001});
+        items.push_back(ui::cmd::heading("Console", any ? e->source : std::string{}));
+        items.push_back({"Aller \xC3\xA0 la source", "Entr\xC3\xA9" "e", src ? std::string{} : any ? std::string("cette ligne n'a pas de source") : std::string("aucune ligne choisie"),
+                         ui::Icon::GoTo, src, false, 1001});
         const std::string who = any ? (!e->code.empty() ? e->code : e->source) : std::string{};
         items.push_back({who.empty() ? std::string("Filtrer sur cette source") : "Filtrer sur \xC2\xAB " + who + " \xC2\xBB", {},
                          who.empty() ? std::string("aucune source") : std::string{}, ui::Icon::Filter, !who.empty(), false, 1002});
-        items.push_back({"Copier la ligne (texte)", {}, any ? std::string{} : std::string("aucune ligne choisie"), ui::Icon::None, any, false, 1003});
+        items.push_back({"Copier la ligne (texte)", "Ctrl+C", any ? std::string{} : std::string("aucune ligne choisie"), ui::Icon::Copy, any, false, 1003});
         items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
         items.push_back({"Exporter en texte", {}, {}, ui::Icon::None, true, false, 1004});
         items.push_back({"Exporter en CSV (Excel)", {}, {}, ui::Icon::None, true, false, 1005});
@@ -738,6 +749,55 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
         return items;
     });
     links_ += consoleTable_->contextAction->connect([this](int a) { consoleMenu(a); });
+    // ---- 1.12.18 (planche 13) : Sorties et Diagnostics - Entree, le menu de la ligne, Ctrl+C ----
+    out_->setEnterActivates(true);
+    diagTable_->setEnterActivates(true);
+    for (auto* t : {out_, diagTable_}) {
+        t->setExtraContextOnly(true);
+        links_ += t->contextAction->connect([this](int a) { rowMenu(a); });
+        t->setKeyHandler([this, t](const ui::KeyDown& k) {
+            if (t->selectedModelRows().empty()) return false;
+            if (k.key == ui::Key::C && k.mods.ctrl && !k.mods.shift && !k.mods.alt) { rowMenu(2003); return true; }
+            if (t == diagTable_ && k.key == ui::Key::Period && k.mods.ctrl && !k.mods.shift && !k.mods.alt) { rowMenu(2007); return true; }
+            return false;
+        });
+    }
+    out_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto sel = out_->selectedModelRows();
+        const Line* l = !sel.empty() && sel.front() < outRows_.size() ? &lines_[outRows_[sel.front()]] : nullptr;
+        if (!l) return items;
+        items.push_back(ui::cmd::heading(l->category.empty() ? std::string("Sorties") : l->category, l->element));
+        items.push_back({"Aller \xC3\xA0 l'\xC3\xA9l\xC3\xA9ment", "Entr\xC3\xA9" "e", "cette ligne ne vise rien", ui::Icon::GoTo, !l->element.empty(), false, 2001});
+        items.push_back({l->element.empty() ? std::string("Filtrer sur cet \xC3\xA9l\xC3\xA9ment") : "Filtrer sur \xC2\xAB " + l->element + " \xC2\xBB", {},
+                         "cette ligne ne vise rien", ui::Icon::Filter, !l->element.empty(), false, 2002});
+        items.push_back({"Copier la ligne (texte)", "Ctrl+C", {}, ui::Icon::Copy, true, false, 2003});
+        items.push_back(ui::cmd::separator());
+        items.push_back({"Exporter en texte", {}, {}, ui::Icon::None, true, false, 2004});
+        items.push_back({"Exporter en CSV (Excel)", {}, {}, ui::Icon::None, true, false, 2005});
+        items.push_back({"Effacer les sorties", {}, {}, ui::Icon::None, true, false, 2006});
+        return items;
+    });
+    diagTable_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto* d = selectedDiagnostic();
+        if (!d) return items;
+        const char* level = d->severity == hmi::pipeline::Severity::Warning ? "Avertissement"
+                          : d->blocking() ? "Erreur" : "Information";
+        items.push_back(ui::cmd::heading(level, d->path.empty() ? d->element : d->path));
+        items.push_back({"Aller \xC3\xA0 l'\xC3\xA9l\xC3\xA9ment", "Entr\xC3\xA9" "e", {}, ui::Icon::GoTo, true, false, 2001});
+        std::string from, to;
+        const bool fix = ui::exprfield::fixOf(d->message, from, to) && d->object != hmi::kNoId && !d->property.empty();
+        items.push_back({fix ? "Appliquer la correction : " + from + " \xE2\x86\x92 " + to : std::string("Appliquer la correction"), "Ctrl+.",
+                         "ce message ne propose pas de remplacement", ui::Icon::Wrench, fix, false, 2007});
+        const std::string who = !d->element.empty() ? d->element : d->path;
+        items.push_back({who.empty() ? std::string("Filtrer sur cet \xC3\xA9l\xC3\xA9ment") : "Filtrer sur \xC2\xAB " + who + " \xC2\xBB", {},
+                         "aucun \xC3\xA9l\xC3\xA9ment", ui::Icon::Filter, !who.empty(), false, 2002});
+        items.push_back({"Copier la ligne (texte)", "Ctrl+C", {}, ui::Icon::Copy, true, false, 2003});
+        items.push_back(ui::cmd::separator());
+        items.push_back({"Exporter en CSV (Excel)", {}, {}, ui::Icon::None, true, false, 2005});
+        return items;
+    });
     summary_ = "Aucun build depuis l'ouverture : D\xC3\xA9marrer (ou G\xC3\xA9n\xC3\xA9rer dans l'arbre) en lance un.";
     rebuild();
     tick();
@@ -910,6 +970,60 @@ void HmiBuildOutputPane::scrollToEnd() {
     out_->setScrollOffset(1e9f);
     consoleTable_->setScrollOffset(1e9f);
     refreshStatus();
+}
+
+const hmi::pipeline::Diagnostic* HmiBuildOutputPane::selectedDiagnostic() const {
+    const auto sel = diagTable_->selectedModelRows();
+    if (sel.empty() || sel.front() >= diagRows_.size()) return nullptr;
+    const auto row = diagRows_[sel.front()];
+    if (row.live) return row.index < live_.size() ? &live_[row.index] : nullptr;
+    return row.index < diags_.size() ? &diags_[row.index] : nullptr;
+}
+
+void HmiBuildOutputPane::rowMenu(int action) {
+    const bool diag = currentTab() == kDiagnostics;
+    auto* table = diag ? diagTable_ : out_;
+    const auto sel = table->selectedModelRows();
+    switch (action) {
+        case 2001:
+            if (!sel.empty()) table->activated->emit(sel.front());
+            break;
+        case 2002: {
+            std::string who;
+            if (diag) {
+                if (const auto* d = selectedDiagnostic()) who = !d->element.empty() ? d->element : d->path;
+            } else if (!sel.empty() && sel.front() < outRows_.size()) {
+                who = lines_[outRows_[sel.front()]].element;
+            }
+            if (!who.empty()) setSearch(who);
+            break;
+        }
+        case 2003: {
+            if (sel.empty()) break;
+            std::string text;
+            for (std::size_t c = 0; c < table->model()->columnCount(); ++c)
+                text += (c ? "\t" : "") + table->model()->cellText(sel.front(), c);
+            ui::setClipboardText(text);
+            status_->setTransientMessage("Ligne copi\xC3\xA9" "e.", 3.0, ui::StatusBar::Severity::Success);
+            break;
+        }
+        case 2004:
+        case 2005: {
+            std::string why;
+            const std::string where = exportCurrent(action == 2005, &why);
+            if (where.empty()) status_->setTransientMessage("Export impossible : " + why, 8.0, ui::StatusBar::Severity::Warning);
+            else status_->setTransientMessage("Export\xC3\xA9 : " + where, 10.0, ui::StatusBar::Severity::Success);
+            break;
+        }
+        case 2006: clear(); break;
+        case 2007:
+            if (const auto* d = selectedDiagnostic()) {
+                std::string from, to;
+                if (ui::exprfield::fixOf(d->message, from, to)) fixRequested->emit(hmi::pipeline::Diagnostic(*d));   // une copie
+            }
+            break;
+        default: break;
+    }
 }
 
 void HmiBuildOutputPane::consoleMenu(int action) {

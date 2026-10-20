@@ -746,6 +746,188 @@ bool memberCovers(std::string_view pattern, std::string_view rel) {
     return j == r.size() || r[j] == '.' || r[j] == '[';
 }
 
+// ------------------------------------------- 1.12.18 : l'adresse par formule ---
+namespace {
+
+// Un calcul entier : + - * / MOD, parentheses, i et j, des nombres.
+struct IntFormula {
+    std::string_view              s;
+    const std::vector<long long>& idx;
+    std::size_t                   p{0};
+    std::string                   err{};
+    static constexpr long long    kLimit = 1000000000000LL;
+
+    bool fault(std::string m) {
+        if (err.empty()) err = std::move(m);
+        return false;
+    }
+    void blank() {
+        while (p < s.size() && std::isspace(static_cast<unsigned char>(s[p]))) ++p;
+    }
+    bool bounded(long long v) { return v > -kLimit && v < kLimit ? true : fault("nombre trop grand"); }
+    bool mod() {
+        blank();
+        if (p + 3 > s.size() || upperOf(s.substr(p, 3)) != "MOD") return false;
+        if (p + 3 < s.size() && (std::isalnum(static_cast<unsigned char>(s[p + 3])) || s[p + 3] == '_')) return false;
+        p += 3;
+        return true;
+    }
+    bool primary(long long& v) {
+        blank();
+        if (p >= s.size()) return fault("formule incompl\xC3\xA8te");
+        const char c = s[p];
+        if (c == '(') {
+            ++p;
+            if (!sum(v)) return false;
+            blank();
+            if (p >= s.size() || s[p] != ')') return fault("il manque une parenth\xC3\xA8se fermante");
+            ++p;
+            return true;
+        }
+        if (c == '-' || c == '+') {
+            ++p;
+            if (!primary(v)) return false;
+            if (c == '-') v = -v;
+            return true;
+        }
+        if (std::isdigit(static_cast<unsigned char>(c))) {
+            long long n = 0;
+            while (p < s.size() && std::isdigit(static_cast<unsigned char>(s[p]))) {
+                n = n * 10 + (s[p++] - '0');
+                if (!bounded(n)) return false;
+            }
+            v = n;
+            return true;
+        }
+        if (std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
+            const std::size_t from = p;
+            while (p < s.size() && (std::isalnum(static_cast<unsigned char>(s[p])) || s[p] == '_')) ++p;
+            const std::string name = upperOf(s.substr(from, p - from));
+            if (name == "I" || name == "J") {
+                const std::size_t k = name == "I" ? 0 : 1;
+                if (k >= idx.size())
+                    return fault(name == "I" ? std::string("i : pas d'indice [*] ici") : std::string("j : une seule dimension (i seulement)"));
+                v = idx[k];
+                return true;
+            }
+            return fault(std::string(s.substr(from, p - from)) + " inconnu : i et j seulement");
+        }
+        return fault(std::string("\xC2\xAB ") + c + " \xC2\xBB : + - * / MOD ( ) seulement");
+    }
+    bool product(long long& v) {
+        if (!primary(v)) return false;
+        while (true) {
+            blank();
+            const bool isMod = mod();
+            if (!isMod && (p >= s.size() || (s[p] != '*' && s[p] != '/'))) return true;
+            const char op = isMod ? '%' : s[p++];
+            long long r = 0;
+            if (!primary(r)) return false;
+            if (op == '*') v *= r;
+            else if (r == 0) return fault("division par z\xC3\xA9ro");
+            else if (op == '/') v /= r;
+            else v %= r;
+            if (!bounded(v)) return false;
+        }
+    }
+    bool sum(long long& v) {
+        if (!product(v)) return false;
+        while (true) {
+            blank();
+            if (p >= s.size() || (s[p] != '+' && s[p] != '-')) return true;
+            const char op = s[p++];
+            long long r = 0;
+            if (!product(r)) return false;
+            v = op == '+' ? v + r : v - r;
+            if (!bounded(v)) return false;
+        }
+    }
+};
+
+} // namespace
+
+bool isFormula(std::string_view address) noexcept { return address.find('(') != std::string_view::npos; }
+
+bool patternIndices(std::string_view pattern, std::string_view rel, std::vector<long long>& out, std::string* cell) {
+    out.clear();
+    const std::string pt = pathKey(pattern);
+    if (pt.empty()) return false;
+    std::string r;                    // `rel` sans blancs, en majuscules ; at[k] : la place de r[k] dans `rel`
+    std::vector<std::size_t> at;
+    for (std::size_t k = 0; k < rel.size(); ++k)
+        if (!std::isspace(static_cast<unsigned char>(rel[k]))) {
+            r += static_cast<char>(std::toupper(static_cast<unsigned char>(rel[k])));
+            at.push_back(k);
+        }
+    std::size_t i = 0, j = 0;
+    while (i < pt.size()) {
+        if (pt.compare(i, 3, "[*]") == 0) {
+            if (j >= r.size() || r[j] != '[') return false;
+            const auto close = r.find(']', j);
+            if (close == std::string::npos) return false;
+            for (const auto& part : splitList(r.substr(j + 1, close - j - 1))) {
+                long long n = 0;
+                if (!integerOf(trimmed(part), n)) return false;
+                out.push_back(n);
+            }
+            i += 3;
+            j = close + 1;
+            continue;
+        }
+        if (j >= r.size() || pt[i] != r[j]) return false;
+        ++i;
+        ++j;
+    }
+    if (j != r.size() && r[j] != '.' && r[j] != '[') return false;
+    if (cell) *cell = std::string(rel.substr(0, j < at.size() ? at[j] : rel.size()));
+    return true;
+}
+
+std::string formulaAddress(std::string_view formula, const std::vector<long long>& indices, std::string* why) {
+    std::string out;
+    for (std::size_t k = 0; k < formula.size();) {
+        const char c = formula[k];
+        if (c == ')') {
+            fail(why, "parenth\xC3\xA8se fermante sans ouvrante");
+            return {};
+        }
+        if (c != '(') {
+            if (!std::isspace(static_cast<unsigned char>(c))) out += c;
+            ++k;
+            continue;
+        }
+        // Un calcul entre parentheses (les siennes comprises), remplace par sa valeur.
+        int depth = 0;
+        std::size_t end = k;
+        for (; end < formula.size(); ++end) {
+            if (formula[end] == '(') ++depth;
+            else if (formula[end] == ')' && --depth == 0) break;
+        }
+        if (end >= formula.size()) {
+            fail(why, "il manque une parenth\xC3\xA8se fermante");
+            return {};
+        }
+        IntFormula e{formula.substr(k + 1, end - k - 1), indices};
+        long long v = 0;
+        bool good = e.sum(v);
+        if (good) {
+            e.blank();
+            if (e.p < e.s.size()) good = e.fault("\xC2\xAB " + std::string(e.s.substr(e.p)) + " \xC2\xBB en trop");
+        }
+        if (!good) {
+            fail(why, e.err);
+            return {};
+        }
+        if (v < 0) {
+            fail(why, "adresse n\xC3\xA9gative (" + std::to_string(v) + ")");
+            return {};
+        }
+        out += std::to_string(v);
+        k = end + 1;
+    }
+    return out;
+}
+
 std::string internalEntryOf(const Variable& v, std::string_view rel) {
     if (!v.bound()) return {};
     for (const auto& e : v.internal)
@@ -805,28 +987,49 @@ std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::ve
         }
     }
     // 1.11.8 : le depart d'un membre compose ("Vannes[2]" -> "%MW3050") - ses cases le suivent,
-    // a la meme place l'une par rapport a l'autre. Le plus precis gagne (Vannes[2].Sous avant Vannes[2]).
+    // a la meme place l'une par rapport a l'autre. 1.12.18 : une formule de i ("[*].Retour" ->
+    // "%MW(1000 + 10 * i)" ; "[*]" -> "%MW(2000 + 8 * i)", le depart de chaque case). Le plus precis
+    // gagne (Vannes[2].Sous avant Vannes[2], [2] avant [*]) ; l'adresse tapee sur la case elle-meme d'abord.
     struct Start {
         std::string pattern, address;
         long long   base{0};
+        bool        formula{false};
+        std::map<std::string, long long> bases{};   // une formule : le depart de chaque case designee (sa cle)
     };
     std::vector<Start> starts;
     if (v.bound())
         for (const auto& pl : v.places) {
-            if (trimmed(pl.address).empty()) continue;
+            const std::string address = trimmed(pl.address);
+            if (address.empty()) continue;
+            Start s{pl.path, address, 0, isFormula(address)};
             bool leaf = false, any = false;
-            long long base = 0;
+            std::vector<long long> idx;
+            std::string cell;
             for (std::size_t i = 0; i < n; ++i) {
                 if (pathKey(pl.path) == pathKey(f.leaves[i].rel)) leaf = true;
-                if (!memberCovers(pl.path, f.leaves[i].rel)) continue;
+                if (s.formula ? !patternIndices(pl.path, f.leaves[i].rel, idx, &cell) : !memberCovers(pl.path, f.leaves[i].rel)) continue;
                 if (v.compact && internal[i]) continue;
                 const long long at = bits ? rank[i] : word[i];
-                if (!any || at < base) base = at;
+                if (s.formula) {
+                    const auto [it, inserted] = s.bases.emplace(pathKey(cell), at);
+                    if (!inserted) it->second = std::min(it->second, at);
+                } else if (!any || at < s.base) {
+                    s.base = at;
+                }
                 any = true;
             }
-            if (!leaf && any) starts.push_back({pl.path, trimmed(pl.address), base});
+            if (!leaf && any) starts.push_back(std::move(s));
         }
-    std::sort(starts.begin(), starts.end(), [](const Start& a, const Start& b) { return pathKey(a.pattern).size() > pathKey(b.pattern).size(); });
+    const auto wildcards = [](const std::string& key) {
+        std::size_t c = 0;
+        for (auto at = key.find("[*]"); at != std::string::npos; at = key.find("[*]", at + 3)) ++c;
+        return c;
+    };
+    std::stable_sort(starts.begin(), starts.end(), [&](const Start& a, const Start& b) {
+        const std::string ka = pathKey(a.pattern), kb = pathKey(b.pattern);
+        if (ka.size() != kb.size()) return ka.size() > kb.size();
+        return wildcards(ka) < wildcards(kb);
+    });
     out.reserve(n);
     for (std::size_t i = 0; i < n; ++i) {
         const auto& l = f.leaves[i];
@@ -846,13 +1049,29 @@ std::vector<Variable> leafVariables(const Project& p, const Variable& v, std::ve
             for (const auto& pl : v.places)
                 if (pathKey(pl.path) == pathKey(l.rel)) fixed = &pl;
             const Start* from = nullptr;
+            std::vector<long long> idx;
+            std::string cell;
             for (const auto& s : starts)
-                if (memberCovers(s.pattern, l.rel)) {
+                if (s.formula ? patternIndices(s.pattern, l.rel, idx, &cell) : memberCovers(s.pattern, l.rel)) {
                     from = &s;
                     break;
                 }
             if (fixed && !trimmed(fixed->address).empty()) {
-                x.address = trimmed(fixed->address);
+                if (!isFormula(fixed->address)) x.address = trimmed(fixed->address);
+                else if (std::string why2; (x.address = formulaAddress(fixed->address, {}, &why2)).empty()) reason = "formule " + trimmed(fixed->address) + " : " + why2;
+            } else if (from && from->formula) {
+                std::string why2;
+                const std::string start = formulaAddress(from->address, idx, &why2);
+                if (start.empty()) {
+                    reason = "formule " + from->pattern + " = " + from->address + " : " + why2;
+                } else if (pathKey(cell) == pathKey(l.rel)) {
+                    x.address = start;                         // un membre simple : son adresse
+                } else {                                       // une case entiere : son depart, ses membres suivent
+                    const auto it = from->bases.find(pathKey(cell));
+                    const long long base = it == from->bases.end() ? 0 : it->second;
+                    x.address = bits ? memberAddress(start, rank[i] - base, -1, l.type, &reason)
+                                     : memberAddress(start, word[i] - base, l.bit, l.type, &reason);
+                }
             } else if (from) {
                 // (le depart d'un membre est de la meme sorte que celui de la variable : mots, ou bits)
                 x.address = bits ? memberAddress(from->address, rank[i] - from->base, -1, l.type, &reason)

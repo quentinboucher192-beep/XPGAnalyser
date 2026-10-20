@@ -238,8 +238,8 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     tools->add(GUp, HmiGlyph::Up, "Monter la ligne choisie (Alt+Haut)", {});
     tools->add(GDown, HmiGlyph::Down, "Descendre la ligne choisie (Alt+Bas)", {});
     tools->separator();
-    tools->add(GUses, HmiGlyph::Search, "Aller \xC3\xA0 ses utilisations dans le code (l'onglet Code, la suivante \xC3\xA0 chaque clic)",
-               "Utilisations");
+    tools->add(GUses, HmiGlyph::Search, "Voir les usages dans le code (Maj+F12 ; l'onglet Code, le suivant \xC3\xA0 chaque clic)",
+               "Voir les usages");
     // 1.12.16 (T4) : la valeur initiale - en brut (un editeur fait pour le type) ou en code (une fonction qui
     // rend le type), une seule fenetre (a la place d'« Elements... » 1.12.2 et de « fx Calcul... » 1.12.7).
     tools->add(GCalc, HmiGlyph::Code, "Valeur initiale : en brut (un \xC3\xA9" "diteur fait pour le type : une ligne par entr\xC3\xA9" "e, par \xC3\xA9l\xC3\xA9ment, "
