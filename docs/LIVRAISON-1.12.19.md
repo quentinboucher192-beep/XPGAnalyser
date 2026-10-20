@@ -181,4 +181,56 @@ Ces points de la maquette ne sont pas dans cette version :
   - l'action Appeler : une fonction inconnue et une cible vide sont refusées, `Sur_Oui` passe.
 - `hmi`, les rappels dans les fx : `Filtre(250.0)`, une LAMBDA dans `LIST_COUNT_IF`, `LIST_ANY(Mesures, Tres_Grand)`, un script `f := Tres_Grand` ; Compiler ne dit rien, la simulation les montre, la Console reste vide.
 - `hmitypes` (157 contrôles) : l'ordre du registre, avec les formes de rappel.
-- `hmieditor` (7978 contrôles) : les notes (52 versions, 370 notes), le guide (211 sujets dans L'IHM).
+- `hmieditor` (7979 contrôles) : aucun tableau du guide n'a de ligne `---|---` ; les notes (52 versions, 370 notes), le guide (211 sujets dans L'IHM).
+
+## 9. Les captures
+
+Prises avec l'exe Windows livré, lancé sous Wine, sur le projet de démonstration Armoire_Gaz :
+- `1219_01_inspecteur.png` : l'inspecteur de la jauge `Pression_PT1` (`Vue_Armoire_A`). Minimum a reçu `Consigne_Pression` : un nom connu tapé seul devient une expression (`=Consigne_Pression`, le fx bleu). Maximum a reçu `12,7,5` : refusé. La ligne rouge sous la case dit pourquoi, la barre du bas le redit en entier (« n'est ni un nombre ni un nom de variable ; rien n'a changé »), « Reprendre « 12,7,5 » » rend ce qui avait été tapé, et la valeur d'avant (10) reste ;
+- `1219_02_guide_regle.png` : le guide (F1), Les champs à expression : la règle des cases (1.12.19) en tête, puis le tableau de ce qu'on écrit et de ce que la case garde ;
+- `1219_03_guide_rappels.png` : le guide, Rappels et génériques : CALLBACK, LAMBDA, TEMPLATE (Programmer) : le rappel, l'action Appeler, Retrouver, et l'exemple en ST (les onglets C et C++ donnent l'équivalent).
+
+Cette session a trouvé un défaut, corrigé avant la livraison : **les trois tableaux de la 1.12.19 montraient une ligne « ---|--- » en tête** (une ligne de séparation à la Markdown, que le guide ne connaît pas). Elle est retirée, et l'essai du guide vérifie maintenant qu'aucun tableau n'en a.
+
+## 10. Installer
+
+Fichiers livrés :
+- `XPGAnalyser-Setup-1.12.19.exe` : l'installateur, qui pose les deux applications ;
+- `XPGAnalyser-API-1.12.19-portable.zip` et `XPGAnalyser-IHM-1.12.19-portable.zip` : chaque application, sans installation ;
+- ce document.
+
+1. Lance `XPGAnalyser-Setup-1.12.19.exe`. Il met à jour la version installée, la 1.12.18 ou une plus ancienne : même identité d'installation, données reprises sans être déplacées. Il pose les deux applications et leurs deux raccourcis. Les projets s'ouvrent tels quels.
+2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisis « Informations complémentaires », puis « Exécuter quand même ».
+
+Empreinte SHA-256 de `XPGAnalyser-Setup-1.12.19.exe` (31,3 Mo, 32 825 874 octets) :
+`18259EF4E35684D2A46E380FCF47D25C8C2024590279635200D6A5C037CAEB98`
+
+**Les zips portables.** Chacun contient une application et ce qu'il lui faut, dans un dossier `XPGAnalyser-API-1.12.19` ou `XPGAnalyser-IHM-1.12.19`. Décompresse, puis lance l'exe.
+- `XPGAnalyser-API-1.12.19-portable.zip` (23,4 Mo) :
+  `B68A80973D4744E9542ACB26DA514735C766CF73817C4AC4C3F809985B92E629`
+- `XPGAnalyser-IHM-1.12.19-portable.zip` (23,4 Mo) :
+  `E4853757C7F620BFED194E1504DDD05617CCA32CF6F43229FC83B77BE0CABB54`
+
+## 11. Les vérifications sous Windows
+
+**Les deux exe Windows**, compilés sous Linux avec MinGW-w64 et lancés sous Wine :
+- `--version` répond `XPGAnalyser API 1.12.19` et `XPGAnalyser IHM 1.12.19` ;
+- ils importent exactement les mêmes DLL que ceux de la 1.12.18 (ADVAPI32, IPHLPAPI, KERNEL32, SDL3, SHELL32, USER32, WS2_32, msvcrt, ole32) ;
+- `XpgAnalyzer-API.exe --cli MAST.XPG` analyse le projet d'essai comme avant (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB) ;
+- une session scriptée sur le projet de démonstration : les trois captures ci-dessus.
+
+**L'installateur**, compilé par Inno Setup 6.4.1 sous Wine, puis installé en silencieux pour tous les comptes, par-dessus la 1.12.18 :
+- avant, la 1.12.18 était installée (`XPGAnalyser IHM 1.12.18`) ;
+- « Installation process succeeded ». Il a repris l'installation en place : même dossier, les deux raccourcis et le dossier Maintenance du menu Démarrer gardés, et son journal de désinstallation complété ;
+- les deux exe installés sont identiques à ceux qui ont été testés. Installés, ils répondent `XPGAnalyser API 1.12.19` et `XPGAnalyser IHM 1.12.19`, et l'API installée analyse `MAST.XPG` comme avant.
+
+**Les zips portables** ont chacun 151 fichiers, dont l'exe testé.
+
+**Le projet Visual Studio** a les mêmes 467 fichiers .cpp et 422 en-têtes que CMake (`outils/verifier_vcxproj.py`).
+
+**Pas encore fait :** ni les exe ni l'installateur n'ont été lancés sur un vrai Windows, et le projet Visual Studio n'a pas été compilé (pas de MSVC ici).
+
+## 12. La suite
+
+- Essayer sur un vrai Windows.
+- Les points de la partie 7, dans l'ordre que tu choisiras.
