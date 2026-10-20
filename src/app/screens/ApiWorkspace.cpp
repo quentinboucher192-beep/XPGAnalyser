@@ -436,6 +436,11 @@ void MainAnalysisScreen::openApiPane(const std::string& key) {
                                                                                                  : static_cast<std::size_t>(-1);
             addVariablesToTable(std::move(names), table);
         };
+        // 1.12.18 (planche 17) : la table choisie dans le menu ; suivre = Simulation > Courbes.
+        h.addToTableAt = [this](std::vector<std::string> names, std::size_t table) { addVariablesToTable(std::move(names), table); };
+        h.addTrend = [this](const std::string& path, std::string* why) { return addSimTrend(path, why); };
+        h.removeTrend = [this](const std::string& path) { return removeSimTrend(path); };
+        h.trends = [this] { return simTrendPaths(false); };
         h.request = [this](const std::string& k) { onApiRequest(k); };
         h.status = [this](const std::string& m) {
             if (!status_) return;
@@ -709,8 +714,13 @@ void MainAnalysisScreen::addVariablesToTable(std::vector<std::string> names, std
     std::vector<project::AnimationLine> lines;
     for (auto& n : names) lines.push_back({std::move(n), false});
     if (table == static_cast<std::size_t>(-1)) {
+        // 1.12.18 : la table creee va a la fin ; l'onglet ne la choisit qu'a son prochain
+        // rafraichissement - les lignes y vont par son rang (comme l'arbre).
+        auto doc = app_.document();
+        const auto before = doc ? doc->animationTables.size() : 0;
         pane->runAction(AnimationTablesPane::ATable);
-        pane->addLines(std::move(lines));
+        if (doc && doc->animationTables.size() > before) pane->addLines(std::move(lines), doc->animationTables.size() - 1);
+        else pane->addLines(std::move(lines));
     } else {
         pane->addLines(std::move(lines), table);
     }

@@ -4,6 +4,8 @@
 // =============================================================================
 #include "HmiSimVarTree.hpp"
 
+#include "../../ui/Commands.hpp"
+
 #include "../../hmi/HmiExpr.hpp"
 #include "../../ui/TextSearch.hpp"
 #include "../../ui/Theme.hpp"
@@ -123,6 +125,7 @@ std::optional<sim::Value> parseTypedValue(std::string text, const sim::Value* cu
 }
 
 HmiSimVarTree::HmiSimVarTree(std::string id, std::string what) : ui::Widget(std::move(id)), what_(std::move(what)) {
+    setFocusPolicy(true);   // 1.12.18 : Entree, Suppr, Ctrl+C sur la ligne courante
     const std::string base = this->id();
     search_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + ".search")));
     search_->setPlaceholder("Chercher une variable " + what_ + " (nom, membre, type)");
@@ -137,14 +140,7 @@ HmiSimVarTree::HmiSimVarTree(std::string id, std::string what) : ui::Widget(std:
     links_ += ctxMenu_->itemChosen->connect([this](int item) { (void)contextAction(ctxPath_, item); });
     // 1.11.6 : le choix du mouvement (la cellule Mouvement).
     motionMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(base + ".motion")));
-    links_ += motionMenu_->itemChosen->connect([this](int item) {
-        const std::string path = motionPath_;
-        if (item == 0) (void)applyMotion(path, std::nullopt);
-        else if (item == 100) (void)openMotionEditor(path);
-        else if (item >= 1 && static_cast<std::size_t>(item) <= motionKinds_.size()) {
-            if (setMotionKind(path, hmi::behaviorKindKey(motionKinds_[static_cast<std::size_t>(item - 1)]))) (void)openMotionEditor(path);
-        }
-    });
+    links_ += motionMenu_->itemChosen->connect([this](int item) { motionChosen(motionPath_, item); });
     auto field = std::make_unique<ValueField>(base + ".value");
     field->setVisibility(ui::Visibility::Collapsed);
     auto* raw = field.get();
@@ -241,12 +237,41 @@ void HmiSimVarTree::setAllOpen(bool open) {
     rebuildRows();
 }
 
+void HmiSimVarTree::motionChosen(const std::string& path, int item) {
+    if (item == 0) (void)applyMotion(path, std::nullopt);
+    else if (item == 100) (void)openMotionEditor(path);
+    else if (item >= 1 && static_cast<std::size_t>(item) <= motionKinds_.size()) {
+        if (setMotionKind(path, hmi::behaviorKindKey(motionKinds_[static_cast<std::size_t>(item - 1)]))) (void)openMotionEditor(path);
+    }
+}
+
 bool HmiSimVarTree::contextAction(const std::string& path, int item) {
     const Node* node = nullptr;
     for (const auto& n : nodes_)
         if (n.path == path) node = &n;
     if (!node) return false;
+    if (item >= kMotionBase && item < kMotionBase + 200) {   // 1.12.18 : Mouvement > ...
+        motionKinds_ = hmi::motion::kindsFor(node->type == "BOOL");
+        motionChosen(path, item - kMotionBase);
+        return true;
+    }
     switch (item) {
+        case MForceTo: return openValueEditor(path);
+        case MFollow: {
+            std::string why;
+            if (hooks_.follow && hooks_.follow(path, &why)) {
+                say(path + " suivie dans Simulation \xE2\x80\xBA Courbes.", false);
+                return true;
+            }
+            if (!why.empty()) say(why, true);
+            return false;
+        }
+        case MCopyValue: {
+            const std::string v = valueText(path);
+            ui::setClipboardText(v);
+            say("Valeur copi\xC3\xA9" "e : " + v, false);
+            return true;
+        }
         case MExpandAll: setAllOpen(true); return true;
         case MCollapseAll: setAllOpen(false); return true;
         case MExpand:
@@ -313,10 +338,67 @@ bool HmiSimVarTree::openContextMenu(const std::string& path, gfx::Point at) {
     const std::size_t free = leaves.size() - forced;
     const bool open = !node->leaf && std::any_of(rows_.begin(), rows_.end(), [&](const Row& r) { return r.path == path && r.open; });
     std::vector<ui::PopupMenu::Item> items;
+    current_ = path;
+    if (node->leaf) {
+        // 1.12.18 (planche 16) : une variable - sa valeur en tete, forcer, relacher, le mouvement,
+        // la courbe, copier.
+        const bool forcedHere = forced > 0;
+        items.push_back(ui::cmd::heading(path, valueText(path)));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Forcer, MForceTo, static_cast<bool>(hooks_.force), "pas de for\xC3\xA7" "age ici", "Forcer \xC3\xA0\xE2\x80\xA6"));
+        ui::PopupMenu::Item here;
+        here.label = "Forcer \xC3\xA0 sa valeur";
+        here.id = MForce;
+        here.enabled = !forcedHere && static_cast<bool>(hooks_.force);
+        if (!here.enabled) here.disabledReason = forcedHere ? std::string("d\xC3\xA9j\xC3\xA0 forc\xC3\xA9" "e") : std::string("pas de for\xC3\xA7" "age ici");
+        items.push_back(std::move(here));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Relacher, MUnforce, forcedHere && static_cast<bool>(hooks_.unforce), "pas forc\xC3\xA9" "e"));
+        if (hooks_.setMotion) {
+            const auto mo = hooks_.motion ? hooks_.motion(path) : std::nullopt;
+            ui::PopupMenu::Item motion;
+            motion.label = "Mouvement";
+            ui::PopupMenu::Item none;
+            none.label = "Aucun (libre)";
+            none.id = kMotionBase;
+            none.radio = true;
+            none.checked = !mo.has_value();
+            motion.children.push_back(std::move(none));
+            const auto kinds = hmi::motion::kindsFor(node->type == "BOOL");
+            for (std::size_t k = 0; k < kinds.size(); ++k) {
+                ui::PopupMenu::Item it;
+                it.label = std::string(hmi::behaviorKindLabel(kinds[k]));
+                it.id = kMotionBase + static_cast<int>(k) + 1;
+                it.radio = true;
+                it.checked = mo && mo->kind == kinds[k];
+                motion.children.push_back(std::move(it));
+            }
+            motion.children.push_back(ui::cmd::separator());
+            ui::PopupMenu::Item limits;
+            limits.label = "Les bornes\xE2\x80\xA6";
+            limits.id = kMotionBase + 100;
+            limits.enabled = mo.has_value();
+            if (!limits.enabled) limits.disabledReason = "choisir d'abord un mouvement";
+            motion.children.push_back(std::move(limits));
+            items.push_back(std::move(motion));
+        }
+        if (hooks_.follow) {
+            auto follow = ui::cmd::item(ui::cmd::Id::SuivreCourbe, MFollow);
+            follow.note = "dans Simulation \xE2\x80\xBA Courbes";
+            items.push_back(std::move(follow));
+        }
+        items.push_back(ui::cmd::item(ui::cmd::Id::CopierValeur, MCopyValue));
+        items.push_back(ui::cmd::separator());
+        items.push_back(ui::cmd::item(ui::cmd::Id::ToutDeplier, MExpandAll));
+        ctxPath_ = path;
+        ctxMenu_->setItems(std::move(items));
+        auto* root = rootWidget();
+        const auto sb = root ? root->bounds() : bounds();
+        ctxMenu_->openAt(at, {sb.w, sb.h});
+        return true;
+    }
     ui::PopupMenu::Item head;
     head.heading = true;
     head.label = path;
-    head.shortcut = node->leaf ? node->type : std::to_string(leaves.size()) + (leaves.size() > 1 ? " valeurs" : " valeur");
+    head.shortcut = std::to_string(leaves.size()) + (leaves.size() > 1 ? " valeurs" : " valeur");
     items.push_back(head);
     const auto item = [&](int id, std::string label, bool enabled, std::string why = {}) {
         ui::PopupMenu::Item it;
@@ -737,6 +819,8 @@ void HmiSimVarTree::onPaint(const ui::PaintContext& ctx) {
         const auto& row = rows_[i];
         if (static_cast<int>(i) == hover_) g.fillRect(r, th.brand.hover);
         else if (!row.leaf) g.fillRect(r, th.color.headerBg.withAlpha(90));
+        // 1.12.18 : la ligne courante (Entree, Suppr, Ctrl+C la visent), quand l'arbre a le clavier.
+        if (focused() && !current_.empty() && row.path == current_) g.strokeRect(r, th.color.accent, 1.f);
         g.line({r.x, r.bottom() - 0.5f}, {r.right(), r.bottom() - 0.5f}, th.color.border.withAlpha(90), 1.f);
         const float indent = std::min(static_cast<float>(row.depth) * kIndent, w * 0.25f);
         const float ax = r.x + 8.f + indent;
@@ -791,6 +875,18 @@ void HmiSimVarTree::onPaint(const ui::PaintContext& ctx) {
 
 ui::EventResult HmiSimVarTree::onEvent(const ui::InputEvent& ev) {
     const auto a = listArea();
+    // 1.12.18 (planche 16) : les touches du menu, sur la ligne courante.
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused() && !current_.empty() && !k->repeat) {
+        if (k->key == ui::Key::Return && k->mods.none()) return contextAction(current_, MForceTo) ? ui::EventResult::Consumed : ui::EventResult::Ignored;
+        if (k->key == ui::Key::Delete && k->mods.none()) {
+            (void)unforcePath(current_);
+            return ui::EventResult::Consumed;
+        }
+        if (k->key == ui::Key::C && k->mods.ctrl && !k->mods.shift && !k->mods.alt) {
+            (void)contextAction(current_, MCopyValue);
+            return ui::EventResult::Consumed;
+        }
+    }
     {
         float off = scroll_;
         if (bar_.handle(*this, ev, a, static_cast<float>(rows_.size()) * kRowH, a.h, off)) {
@@ -823,6 +919,8 @@ ui::EventResult HmiSimVarTree::onEvent(const ui::InputEvent& ev) {
         const int i = rowAt(d->pos);
         if (i < 0) return ui::EventResult::Ignored;
         const Row row = rows_[static_cast<std::size_t>(i)];
+        current_ = row.path;   // 1.12.18 : le clavier vise cette ligne
+        grabFocus();
         if (!row.leaf) {
             setOpen(row.path, !row.open);
             return ui::EventResult::Consumed;

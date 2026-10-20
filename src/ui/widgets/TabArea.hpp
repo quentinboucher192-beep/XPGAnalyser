@@ -87,6 +87,8 @@ public:
     const core::SignalPtr<std::size_t> tabCloseRequested = core::Signal<std::size_t>::create();
     const core::SignalPtr<std::size_t, gfx::Point> contextMenuRequested =
         core::Signal<std::size_t, gfx::Point>::create();
+    // 1.12.18 : le clic droit sur le vide d'une bande d'onglets (planche 20).
+    const core::SignalPtr<gfx::Point> barContextRequested = core::Signal<gfx::Point>::create();
 
     // ---- les indices qui glissent -------------------------------------------
     //  Un onglet est entre a `index` (ceux a partir de la ont avance d'un cran) ;

@@ -1033,6 +1033,14 @@ EventResult TabControl::onEvent(const InputEvent& ev) {
                     setCurrentIndex(i);
                 return EventResult::Consumed;
             }
+        // 1.12.18 (planche 20) : le clic droit sur le vide de la bande (a droite des onglets).
+        if (d->button == MouseButton::Right && viewport_.h > 0.f && barContextRequested->slotCount() > 0) {
+            const gfx::Rect band{contentRect().x, viewport_.y, contentRect().w, viewport_.h};
+            if (band.contains(d->pos)) {
+                barContextRequested->emit(d->pos);
+                return EventResult::Consumed;
+            }
+        }
     }
     return EventResult::Ignored;
 }

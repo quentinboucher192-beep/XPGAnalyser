@@ -19,6 +19,7 @@
 #include "../../hmi/HmiAlarmViews.hpp"
 #include "../../hmi/HmiProduction.hpp"
 #include "../../hmi/HmiDisplay.hpp"
+#include "../../hmi/HmiDesign.hpp"   // 1.12.18 : le projet lit-il SYS.MouseRight ?
 #include "../../hmi/HmiLanguages.hpp"
 #include "../../hmi/HmiNavigation.hpp"
 
@@ -31,6 +32,7 @@
 #include "../../hmi/HmiExpr.hpp"
 #include "../../sim/Runtime.hpp"
 #include "../../hmi/HmiComm.hpp"
+#include "../../ui/Commands.hpp"
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 
@@ -474,8 +476,6 @@ private:
     std::string text_, tone_;
 };
 
-constexpr int kExprExpandAll = -2101;         // 1.11.6 : le clic droit de l'onglet Expressions
-constexpr int kExprCollapseAll = -2102;
 
 // 1.10.3 (demande du client) : les 5 boutons de droite et la liste deroulante de
 // droite sont retires de la barre ; leurs commandes passent dans le MENU DU CLIC
@@ -1877,7 +1877,31 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
     }
 }
 
+bool HmiLiveCanvas::hitAt(gfx::Point p, Id& view, Id& object, std::size_t* layer) const {
+    view = object = kNoId;
+    const int li = layerUnder(p);
+    if (li < 0 || static_cast<std::size_t>(li) >= layers_.size()) return false;
+    view = layers_[static_cast<std::size_t>(li)].view.id;
+    object = objectAtLayer(static_cast<std::size_t>(li), p);
+    if (layer) *layer = static_cast<std::size_t>(li);
+    return object != kNoId;
+}
+
 ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
+    // 1.12.18 (planche 16) : LE CLIC DROIT DU MENU - l'hote dit s'il ouvre son menu (sinon il va
+    // au projet : SYS.MouseRight). Le menu ne presse pas le bouton du projet, ni son relacher.
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right) {
+        if (bounds().contains(d->pos) && stoppedNote_.empty() && contextWanted_ && contextWanted_(d->pos, d->mods.shift)) {
+            rightForMenu_ = true;
+            contextRequested->emit(d->pos);
+            return ui::EventResult::Consumed;
+        }
+        rightForMenu_ = false;
+    }
+    if (const auto* u = std::get_if<ui::MouseUp>(&ev); u && u->button == ui::MouseButton::Right && rightForMenu_) {
+        rightForMenu_ = false;
+        return ui::EventResult::Consumed;
+    }
     // 1.11.23 : la souris (SYS.Mouse*) d'abord, puis le clavier - une touche qu'un raccourci
     // de la vue prend ne va nulle part ailleurs (ni Echap qui ferme la popup, ni le badge).
     notePointer(ev);
@@ -2553,20 +2577,31 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         table->setSelectionMode(ui::SelectionMode::Single);
         table_ = table.get();
         auto* raw = table.get();
-        table->onContextMenu = [this, raw](gfx::Point) {
-            auto* menu = raw->contextMenu();
-            if (!menu) return;
-            std::vector<ui::PopupMenu::Item> items;
-            items.push_back({"Tout d\xC3\xA9plier", {}, {}, ui::Icon::None, true, false, kExprExpandAll});
-            items.push_back({"Tout replier", {}, {}, ui::Icon::None, true, false, kExprCollapseAll});
-            items.push_back({{}, {}, {}, ui::Icon::None, true, true, -1});
-            for (const auto& it : menu->items()) items.push_back(it);
-            menu->setItems(std::move(items));
-        };
-        if (auto* menu = table->contextMenu())
-            links_ += menu->itemChosen->connect([this](int a) {
-                if (a == kExprExpandAll || a == kExprCollapseAll) expandExpressions(a == kExprExpandAll);
-            });
+        // 1.12.18 (planche 16) : le menu de la ligne - Forcer... (Entree), Relacher (Suppr), Suivre sur
+        // la courbe, Copier la valeur (Ctrl+C), Aller a l'objet, Deplier, Tout deplier, Tout replier.
+        (void)raw;
+        table->setExtraContextOnly(true);
+        table->setExtraContextItems([this] { return exprMenuItems(); });
+        links_ += table->contextAction->connect([this](int id) {
+            if (id >= 1000 && static_cast<std::size_t>(id - 1000) < viewMenuGo_.size()) runMenuKey(viewMenuGo_[static_cast<std::size_t>(id - 1000)]);
+        });
+        table->setKeyHandler([this](const ui::KeyDown& k) {
+            auto* tree = static_cast<ExprTree*>(model_.get());
+            const auto sel = table_ ? table_->selectedModelRows() : std::vector<ui::RowIndex>{};
+            if (!tree || sel.size() != 1) return false;
+            const std::size_t vi = tree->valueAt(sel.front());
+            if (vi >= values_.size()) return false;
+            const auto& lv = values_[vi];
+            if (k.key == ui::Key::Delete && k.mods.none() && plainPath(lv.expression)) {
+                runMenuKey("relacher:" + lv.expression);
+                return true;
+            }
+            if (k.key == ui::Key::C && k.mods.ctrl && !k.mods.shift && !k.mods.alt) {
+                ui::setClipboardText(lv.value);
+                return true;
+            }
+            return false;
+        });
         auto page = std::make_unique<ExprPage>(base + ".valuesPage", std::move(table));
         exprSearch_ = &page->search();
         links_ += exprSearch_->textChanged->connect([this](const std::string& t) {
@@ -2690,6 +2725,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             applyMotions();
             return true;
         };
+        // 1.12.18 (planche 16) : Suivre sur la courbe - Simulation > Courbes (ihm: : une variable de l'IHM).
+        if (host_.follow) h.follow = [this](const std::string& path, std::string* why) { return host_.follow("ihm:" + path, why); };
         tree->setHooks(std::move(h));
         tree->setEmptyText("Aucune variable IHM (Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Variables IHM).");
         links_ += tree->said->connect([this](const std::string& t, bool error) {
@@ -2753,6 +2790,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             applyMotions();
             return true;
         };
+        if (host_.follow) h.follow = [this](const std::string& path, std::string* why) { return host_.follow(path, why); };
         tree->setHooks(std::move(h));
         tree->setEmptyText("La simulation de l'automate n'est pas pr\xC3\xAAte : F9 la lance (l'IHM peut lire un vrai automate, qui ne se force pas ici).");
         links_ += tree->said->connect([this](const std::string& t, bool error) {
@@ -3029,6 +3067,19 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         refreshNow();
     });
     links_ += canvas_->doubleClicked->connect([this](Id object) { runtime_.doubleClick(object, now_); });
+    // 1.12.18 (planche 16) : le clic droit sur la vue en marche - le menu de l'objet, sauf quand le
+    // projet lit le bouton droit (Maj+clic droit alors) ; sur le poste, Acquitter seulement.
+    canvas_->setContextWanted([this](gfx::Point at, bool shift) {
+        if (station_) {
+            Id view = kNoId, obj = kNoId;
+            if (!canvas_->hitAt(at, view, obj)) return false;
+            return openViewMenu(at);   // le poste : le menu ne s'ouvre que sur une alarme a acquitter
+        }
+        return !projectReadsRightButton() || shift;
+    });
+    links_ += canvas_->contextRequested->connect([this](gfx::Point at) {
+        if (!station_) (void)openViewMenu(at);
+    });
     links_ += table_->activated->connect([this](ui::RowIndex r) {
         auto* tree = static_cast<ExprTree*>(model_.get());
         const std::size_t i = tree->valueAt(r);
@@ -4328,6 +4379,24 @@ void HmiSimulationPane::refreshPane() {
     const std::size_t before = values_.size();
     const auto evalStart = std::chrono::steady_clock::now();
     auto layers = layers_.build(runtime_, doc_->project, now_, &values_);
+    // 1.12.18 : Ajouter aux expressions - les chemins ajoutes, sous « Ajoutees ».
+    for (const auto& path : addedExprs_) {
+        hmi::LiveValue lv;
+        lv.objectName = "Ajout\xC3\xA9" "es";
+        lv.key = path;
+        lv.expression = path;
+        if (const auto e = hmi::Expression::compile(path); e.valid()) {
+            if (auto v = e.evaluate(runtime_.environment())) lv.value = hmi::formatValue(*v);
+            else {
+                lv.value = v.error().message();
+                lv.error = true;
+            }
+        } else {
+            lv.value = "illisible";
+            lv.error = true;
+        }
+        values_.push_back(std::move(lv));
+    }
     // Lot 13 : l'evaluation des expressions, et le dessin d'avant (mesure par le canevas).
     const bool painted = canvas_->paintCount() != paintSeen_;
     paintSeen_ = canvas_->paintCount();
@@ -4568,6 +4637,247 @@ void HmiSimulationPane::applyMotions() {
 void HmiSimulationPane::expandExpressions(bool open) {
     if (auto* tree = static_cast<ExprTree*>(model_.get())) tree->setAllOpen(open);
     if (table_) table_->setModel(model_);
+}
+
+// ======================================================= 1.12.18 : les menus du clic droit ====
+bool HmiSimulationPane::projectReadsRightButton() const {
+    if (!doc_) return false;
+    hmi::design::FindOptions o;
+    o.wholeWord = true;
+    return !hmi::design::find(doc_->project, "SYS.MouseRight", {}, o).empty()
+        || !hmi::design::find(doc_->project, "SYS.MouseButtons", {}, o).empty();
+}
+
+void HmiSimulationPane::addExpression(const std::string& path) {
+    if (path.empty() || std::find(addedExprs_.begin(), addedExprs_.end(), path) != addedExprs_.end()) return;
+    addedExprs_.push_back(path);
+    if (tabs_) tabs_->setCurrentIndex(TabValues);
+    refreshNow();
+    if (status_) status_->setTransientMessage(path + " ajout\xC3\xA9" "e aux Expressions (sous \xC2\xAB Ajout\xC3\xA9" "es \xC2\xBB).", 6.0,
+                                              ui::StatusBar::Severity::Success);
+}
+
+void HmiSimulationPane::viewMenuChosen(int id) {
+    if (id >= 0 && static_cast<std::size_t>(id) < viewMenuGo_.size()) runMenuKey(viewMenuGo_[static_cast<std::size_t>(id)]);
+}
+
+// Une entree d'un menu : "forcer:<chemin>", "relacher:<chemin>", "suivre:<chemin>", "expr:<chemin>",
+// "copier:<texte>", "objet:<vue>:<objet>", "pause:<vue>:<objet>", "csv:<objet>", "acquitter:<alarme>",
+// "@basculer:<ligne>", "@deplier-tout", "@replier-tout".
+void HmiSimulationPane::runMenuKey(const std::string& key) {
+    const auto arg = [&key](std::string_view prefix) { return key.rfind(prefix, 0) == 0 ? key.substr(prefix.size()) : std::string{}; };
+    const auto say = [this](const std::string& t, bool error) {
+        if (status_) status_->setTransientMessage(t, 6.0, error ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
+    };
+    // L'arbre qui connait ce chemin : les variables IHM, sinon celles de l'automate.
+    const auto treeOf = [this](const std::string& path) -> std::pair<HmiSimVarTree*, std::size_t> {
+        if (ihmVars_ && ihmVars_->valueText(path) != "-") return {ihmVars_, TabVariables};
+        if (apiVars_ && apiVars_->valueText(path) != "-") return {apiVars_, TabApiVariables};
+        return {ihmVars_, TabVariables};
+    };
+    const auto twoIds = [](const std::string& rest, Id& a, Id& b) {
+        const auto colon = rest.find(':');
+        if (colon == std::string::npos) return false;
+        a = static_cast<Id>(std::strtoull(rest.c_str(), nullptr, 10));
+        b = static_cast<Id>(std::strtoull(rest.c_str() + colon + 1, nullptr, 10));
+        return true;
+    };
+    if (const auto p = arg("forcer:"); !p.empty()) {
+        const auto [tree, tab] = treeOf(p);
+        if (!tree) return;
+        if (tabs_) tabs_->setCurrentIndex(tab);
+        if (!tree->openValueEditor(p)) say(p + " : pas dans la liste des variables (la recherche, Sur la vue actuelle ?).", true);
+    } else if (const auto p = arg("relacher:"); !p.empty()) {
+        const auto [tree, tab] = treeOf(p);
+        (void)tab;
+        if (tree && tree->unforcePath(p)) say(p + " : libre (plus forc\xC3\xA9" "e).", false);
+    } else if (const auto p = arg("suivre:"); !p.empty()) {
+        std::string why;
+        const bool hmiVar = ihmVars_ && ihmVars_->valueText(p) != "-";
+        if (host_.follow && host_.follow(hmiVar ? "ihm:" + p : p, &why)) say(p + " suivie dans Simulation \xE2\x80\xBA Courbes.", false);
+        else say(why.empty() ? p + " : pas de courbe ici." : why, true);
+    } else if (const auto p = arg("expr:"); !p.empty()) {
+        addExpression(p);
+    } else if (key.rfind("copier:", 0) == 0) {
+        ui::setClipboardText(key.substr(7));
+        say("Copi\xC3\xA9 : " + key.substr(7), false);
+    } else if (const auto rest = arg("objet:"); !rest.empty()) {
+        Id view = kNoId, obj = kNoId;
+        if (twoIds(rest, view, obj) && host_.goToObject) host_.goToObject(view, obj);
+    } else if (const auto rest = arg("pause:"); !rest.empty()) {
+        Id view = kNoId, obj = kNoId;
+        if (!twoIds(rest, view, obj)) return;
+        const bool paused = runtime_.trendPausedAt(view, obj).has_value();
+        if (runtime_.setTrendPaused(view, obj, !paused)) say(paused ? "La courbe reprend." : "La courbe est en pause (la simulation continue).", false);
+        refreshNow();
+    } else if (const auto name = arg("csv:"); !name.empty()) {
+        std::string why;
+        if (runtime_.exportAsOperator("objet:" + name, name, "CSV", now_, true, &why)) say("Export de " + name + " demand\xC3\xA9.", false);
+        else say("Export refus\xC3\xA9 : " + why, true);
+    } else if (const auto name = arg("acquitter:"); !name.empty()) {
+        std::string why;
+        const auto n = runtime_.acknowledge(name, now_, &why);
+        say(n ? name + " acquitt\xC3\xA9" "e." : "Acquittement refus\xC3\xA9 : " + why, n == 0);
+        refreshNow();
+    } else if (const auto r = arg("@basculer:"); !r.empty()) {
+        if (auto* tree = static_cast<ExprTree*>(model_.get())) tree->toggle(static_cast<std::size_t>(std::strtoull(r.c_str(), nullptr, 10)));
+        if (table_) table_->setModel(model_);
+    } else if (key == "@deplier-tout" || key == "@replier-tout") {
+        expandExpressions(key == "@deplier-tout");
+    }
+}
+
+bool HmiSimulationPane::openViewMenu(gfx::Point at) {
+    Id view = kNoId, obj = kNoId;
+    std::size_t layer = 0;
+    if (!canvas_ || !canvas_->hitAt(at, view, obj, &layer) || layer >= canvas_->layers().size()) return false;
+    const auto& lv = canvas_->layers()[layer].view;
+    const hmi::Object* o = nullptr;
+    for (const auto& x : lv.objects)
+        if (x.id == obj) o = &x;
+    if (!o) return false;
+    // L'objet du projet : un enfant de symbole remonte a son instance.
+    Id source = obj;
+    for (int guard = 0; guard < 16 && (source & 0x80000000u) != 0; ++guard) {
+        const hmi::Object* p = nullptr;
+        for (const auto& x : lv.objects)
+            if (x.id == source) p = &x;
+        if (!p || p->parent == kNoId) break;
+        source = p->parent;
+    }
+    const auto* projectView = doc_ ? doc_->project.view(view) : nullptr;
+    const std::string viewName = projectView ? projectView->name : std::string{};
+    viewMenuGo_.clear();
+    std::vector<ui::PopupMenu::Item> items;
+    const auto add = [&](ui::PopupMenu::Item it, std::string go) {
+        it.id = static_cast<int>(viewMenuGo_.size());
+        it.shortcut.clear();   // dans la vue en marche, les touches sont au projet
+        viewMenuGo_.push_back(std::move(go));
+        items.push_back(std::move(it));
+    };
+    const auto entry = [](std::string label, bool enabled = true, std::string why = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.enabled = enabled;
+        if (!enabled) it.disabledReason = std::move(why);
+        return it;
+    };
+    const std::string goObject = "objet:" + std::to_string(view) + ":" + std::to_string(source);
+    // Une alarme de l'objet (son bandeau, ses alarmes d'objet), active ou a acquitter.
+    const hmi::LiveAlarm* alarm = nullptr;
+    {
+        const auto& list = runtime_.alarms();
+        if (const int i = runtime_.bannerAlarm(view, *o); i >= 0 && static_cast<std::size_t>(i) < list.size()) alarm = &list[static_cast<std::size_t>(i)];
+        const std::string group = viewName + "." + o->name;
+        for (const auto& a : list)
+            if (!alarm && a.objectGroup == group && (a.active || !a.acked)) alarm = &a;
+    }
+    if (station_) {
+        // Le poste : Acquitter seulement, si l'utilisateur en a le droit.
+        const bool allowed = !doc_ || !doc_->project.security.enabled || runtime_.permitted("Acquitter");
+        if (!alarm || alarm->acked || !alarm->ackRequired || !allowed) return false;
+        items.push_back(ui::cmd::heading(alarm->name, alarm->state()));
+        add(entry("Acquitter"), "acquitter:" + alarm->name);
+    } else if (alarm) {
+        items.push_back(ui::cmd::heading(alarm->name, alarm->state()));
+        add(entry("Acquitter", !alarm->acked && alarm->ackRequired, alarm->acked ? "d\xC3\xA9j\xC3\xA0 acquitt\xC3\xA9" "e" : "sans acquittement"),
+            "acquitter:" + alarm->name);
+        add(entry("Copier le message", !alarm->message.empty(), "pas de message"), "copier:" + alarm->message);
+        items.push_back(ui::cmd::separator());
+        add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);
+    } else if (o->kind == hmi::Kind::Trend) {
+        const auto pens = hmi::roles::splitList(o->text("variables"));
+        items.push_back(ui::cmd::heading(o->name, std::to_string(pens.size()) + (pens.size() > 1 ? " plumes" : " plume")));
+        const bool paused = runtime_.trendPausedAt(view, obj).has_value();
+        add(entry(paused ? "Continuer" : "Pause", o->flag("pilotable", false), "pas pilotable (Propri\xC3\xA9t\xC3\xA9s : Pilotable)"),
+            "pause:" + std::to_string(view) + ":" + std::to_string(obj));
+        add(entry("Exporter (CSV)\xE2\x80\xA6"), "csv:" + o->name);
+        items.push_back(ui::cmd::separator());
+        add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);
+    } else {
+        const std::string var = hmi::displayVariableOf(*o);
+        if (!var.empty()) {
+            const auto pick = [&]() -> HmiSimVarTree* {
+                if (ihmVars_ && ihmVars_->valueText(var) != "-") return ihmVars_;
+                if (apiVars_ && apiVars_->valueText(var) != "-") return apiVars_;
+                return nullptr;
+            };
+            auto* tree = pick();
+            const std::string value = tree ? tree->valueText(var) : std::string{};
+            items.push_back(ui::cmd::heading(o->name, var + (value.empty() ? std::string{} : " = " + value)));
+            const std::string unknown = "pas une variable de la simulation";
+            add(ui::cmd::item(ui::cmd::Id::Forcer, 0, tree != nullptr, unknown, "Forcer " + var + "\xE2\x80\xA6"), "forcer:" + var);
+            add(ui::cmd::item(ui::cmd::Id::Relacher, 0, tree && tree->isForced(var), "pas forc\xC3\xA9" "e"), "relacher:" + var);
+            {
+                auto follow = ui::cmd::item(ui::cmd::Id::SuivreCourbe, 0, static_cast<bool>(host_.follow), "pas de courbe ici");
+                follow.note = "dans Simulation \xE2\x80\xBA Courbes";
+                add(std::move(follow), "suivre:" + var);
+            }
+            add(entry("Ajouter aux expressions"), "expr:" + var);
+            add(ui::cmd::item(ui::cmd::Id::CopierValeur, 0, !value.empty(), "pas de valeur"), "copier:" + value);
+            items.push_back(ui::cmd::separator());
+        } else {
+            items.push_back(ui::cmd::heading(o->name, std::string(hmi::kindLabel(o->kind))));
+        }
+        add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);
+    }
+    if (!viewMenu_) {
+        viewMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".vueMenu")));
+        links_ += viewMenu_->itemChosen->connect([this](int a) { viewMenuChosen(a); });
+    }
+    viewMenu_->setItems(std::move(items));
+    viewMenu_->setBounds(bounds());
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
+    viewMenu_->openAt(at, surface);
+    return true;
+}
+
+std::vector<ui::PopupMenu::Item> HmiSimulationPane::exprMenuItems() {
+    viewMenuGo_.clear();
+    std::vector<ui::PopupMenu::Item> items;
+    const auto add = [&](ui::PopupMenu::Item it, std::string go) {
+        it.id = 1000 + static_cast<int>(viewMenuGo_.size());
+        viewMenuGo_.push_back(std::move(go));
+        items.push_back(std::move(it));
+    };
+    auto* tree = static_cast<ExprTree*>(model_.get());
+    const auto sel = table_ ? table_->selectedModelRows() : std::vector<ui::RowIndex>{};
+    if (tree && sel.size() == 1 && sel.front() < tree->rows().size()) {
+        const auto r = static_cast<std::size_t>(sel.front());
+        const auto& row = tree->rows()[r];
+        const std::size_t vi = tree->valueAt(r);
+        if (vi < values_.size()) {
+            const auto& lv = values_[vi];
+            const bool path = plainPath(lv.expression);
+            HmiSimVarTree* vars = nullptr;
+            if (path && ihmVars_ && ihmVars_->valueText(lv.expression) != "-") vars = ihmVars_;
+            else if (path && apiVars_ && apiVars_->valueText(lv.expression) != "-") vars = apiVars_;
+            items.push_back(ui::cmd::heading(lv.expression.size() > 48 ? lv.expression.substr(0, 46) + "\xE2\x80\xA6" : lv.expression, lv.value));
+            const std::string noPath = path ? std::string("pas une variable de la simulation") : std::string("un calcul ne se force pas");
+            add(ui::cmd::item(ui::cmd::Id::Forcer, 0, vars != nullptr, noPath), "forcer:" + lv.expression);
+            add(ui::cmd::item(ui::cmd::Id::Relacher, 0, vars && vars->isForced(lv.expression), "pas forc\xC3\xA9" "e"), "relacher:" + lv.expression);
+            {
+                auto follow = ui::cmd::item(ui::cmd::Id::SuivreCourbe, 0, path && static_cast<bool>(host_.follow),
+                                            path ? std::string("pas de courbe ici") : std::string("un calcul ne se suit pas"));
+                follow.note = "dans Simulation \xE2\x80\xBA Courbes";
+                add(std::move(follow), "suivre:" + lv.expression);
+            }
+            add(ui::cmd::item(ui::cmd::Id::CopierValeur, 0), "copier:" + lv.value);
+            ui::PopupMenu::Item go;
+            go.label = "Aller \xC3\xA0 l'objet";
+            go.enabled = lv.object != kNoId && static_cast<bool>(host_.goToObject);
+            if (!go.enabled) go.disabledReason = "pas d'objet";
+            add(std::move(go), "objet:" + std::to_string(runtime_.currentView()) + ":" + std::to_string(lv.object));
+        } else {
+            items.push_back(ui::cmd::heading(row.label, std::to_string(row.count)));
+            add(ui::cmd::item(row.open ? ui::cmd::Id::Replier : ui::cmd::Id::Deplier, 0), "@basculer:" + std::to_string(r));
+        }
+        items.push_back(ui::cmd::separator());
+    }
+    add(ui::cmd::item(ui::cmd::Id::ToutDeplier, 0), "@deplier-tout");
+    add(ui::cmd::item(ui::cmd::Id::ToutReplier, 0), "@replier-tout");
+    return items;
 }
 
 void HmiSimulationPane::updateViewFilter() {

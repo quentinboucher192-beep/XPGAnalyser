@@ -26,6 +26,7 @@
 #include "../TutorialsLot8.hpp"          // Lot API 8 : didacticiels et aide (Aide : la page de l'onglet)
 #include "../hmi/HmiAskDialog.hpp"
 #include "../../sim/Runtime.hpp"
+#include "../../ui/Commands.hpp"
 #include "../../ui/widgets/Controls.hpp"
 
 #include <algorithm>
@@ -188,6 +189,7 @@ void MainAnalysisScreen::openSimDebug() {
     h.journal = [this](const std::string& kind, const std::string& text, const std::string& section, int line) {
         journalDebugEvent(kind, text, section, line);
     };
+    h.goToDefinition = [this](const std::string& word) { (void)goToDefinitionOf(word); };   // 1.12.18
     // Lot API 8 (2e partie) : le clic droit dans la marge du code de l'onglet.
     h.askCondition = [this](const std::string& section, int line) {
         openConditionDialog(app_, section, line,
@@ -250,6 +252,71 @@ void MainAnalysisScreen::wireSectionBreakpoints(ui::MultiLineText& editor, domai
     };
     paneLinks_ += editor.breakpointToggled->connect([toggle](std::size_t line) { toggle(line, false); });
     paneLinks_ += editor.breakpointEnableToggled->connect([toggle](std::size_t line) { toggle(line, true); });
+    // 1.12.18 (planche 18) : le clic droit dans la marge - le menu de la ligne (la condition
+    // ne s'ouvre plus d'office : c'est « Condition... »).
+    auto* margin = &static_cast<ui::PopupMenu&>(editor.addChild(std::make_unique<ui::PopupMenu>(editor.id() + ".marge")));
+    auto marginLine = std::make_shared<std::size_t>(0);
+    paneLinks_ += margin->itemChosen->connect([this, section, toggle, marginLine, &editor](int a) {
+        const std::size_t zeroBased = *marginLine;
+        if (a == 1) toggle(zeroBased, false);
+        else if (a == 3) toggle(zeroBased, true);
+        else if (a == 2) editor.breakpointConditionRequested->emit(zeroBased);
+        else if (a == 5) {
+            auto& host = app_.simulation();
+            std::vector<std::uint32_t> ids;
+            for (const auto& b : host.breakpoints())
+                if (!SimDebugPane::isTransient(b.id)) ids.push_back(b.id);
+            for (const auto id : ids) (void)host.removeBreakpoint(id);
+            if (status_) status_->setTransientMessage("Points d'arr\xC3\xAAt retir\xC3\xA9s (" + std::to_string(ids.size()) + ").", 6.0);
+            if (simDebug_) simDebug_->signature.clear();
+        }
+    });
+    paneLinks_ += editor.breakpointMenuRequested->connect([this, section, margin, marginLine, &editor](std::size_t zeroBased, gfx::Point at) {
+        const auto p = app_.project();
+        if (!p || section >= p->sections.size()) return;
+        *marginLine = zeroBased;
+        const auto key = sd::sectionKey(*p, section);
+        const int line = static_cast<int>(zeroBased) + 1;
+        const SimBreakpoint* here = nullptr;
+        std::size_t total = 0;
+        for (const auto& b : app_.simulation().breakpoints()) {
+            if (SimDebugPane::isTransient(b.id)) continue;
+            ++total;
+            if (sd::sameSection(b.section, key) && b.line == line) here = &b;
+        }
+        std::vector<ui::PopupMenu::Item> items;
+        items.push_back(ui::cmd::heading("Ligne " + std::to_string(line), "marge \xC2\xB7 " + key));
+        ui::PopupMenu::Item bp;
+        bp.label = "Point d'arr\xC3\xAAt";
+        bp.shortcut = "F9";
+        bp.checkable = true;
+        bp.checked = here != nullptr;
+        bp.id = 1;
+        items.push_back(std::move(bp));
+        ui::PopupMenu::Item cond;
+        cond.label = "Condition\xE2\x80\xA6";
+        cond.id = 2;
+        items.push_back(std::move(cond));
+        ui::PopupMenu::Item onoff;
+        onoff.label = here && !here->enabled ? "Activer" : "D\xC3\xA9sactiver";
+        onoff.shortcut = "Ctrl+F9";
+        onoff.id = 3;
+        onoff.enabled = here != nullptr;
+        if (!onoff.enabled) onoff.disabledReason = "pas de point ici";
+        items.push_back(std::move(onoff));
+        items.push_back(ui::cmd::separator());
+        ui::PopupMenu::Item all;
+        all.label = "Retirer tous les points d'arr\xC3\xAAt";
+        all.id = 5;
+        all.enabled = total > 0;
+        if (!all.enabled) all.disabledReason = "aucun point";
+        items.push_back(std::move(all));
+        margin->setItems(std::move(items));
+        margin->setBounds(editor.bounds());
+        gfx::Size surface = ui::surfaceSize();
+        if (surface.w <= 0.f || surface.h <= 0.f) surface = {at.x + 400.f, at.y + 400.f};
+        margin->openAt(at, surface);
+    });
     // Lot API 8 (2e partie) : un clic droit dans la marge (sur le point, ou sur une
     // ligne sans point : il est pose d'abord) - le dialogue de sa condition.
     paneLinks_ += editor.breakpointConditionRequested->connect([this, section](std::size_t zeroBased) {

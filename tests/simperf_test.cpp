@@ -10,6 +10,8 @@
 //  avait dedans, en retrait), Aller a, Vider (et sa confirmation), les seuils (pour le projet),
 //  au-dela de 14 le lien vers le Journal. Arretee : la derniere marche.
 #include "../src/app/SimCenter.hpp"
+#include "../src/ui/Commands.hpp"
+#include "../src/ui/widgets/Controls.hpp"
 #include "../src/core/Edition.hpp"
 #include "../src/ui/Theme.hpp"
 
@@ -179,6 +181,51 @@ void vueEnsemble() {
     check(pane.activate("perf:zero") && resets == 1, "Remettre \xC3\xA0 z\xC3\xA9ro : l'h\xC3\xB4te repart d'une page blanche");
     check(pane.activate("perf:csv") && pane.activate("lenteurs:csv") && csvs == std::vector<std::string>{"performances", "lenteurs"},
           "Exporter en CSV : les performances, les lenteurs");
+
+    // 1.12.18 (planche 17) : le clic droit sur la courbe - Periode > (4 choix), Exporter, Remettre a zero.
+    {
+        const auto g = pane.partRect("perf:graphe");
+        pane.dispatch(ui::MouseDown{{g.x + g.w * 0.5f, g.y + g.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+        auto* menu = pane.contextMenu();
+        check(menu && menu->isOpen(), "1.12.18 : le clic droit sur la courbe ouvre son menu");
+        const ui::PopupMenu::Item* period = nullptr;
+        const ui::PopupMenu::Item* csv = nullptr;
+        bool zero = false;
+        if (menu)
+            for (const auto& it : menu->items()) {
+                if (it.label == "P\xC3\xA9riode") period = &it;
+                if (it.label == "Exporter (CSV)\xE2\x80\xA6") csv = &it;
+                if (it.label == "Remettre \xC3\xA0 z\xC3\xA9ro") zero = true;
+            }
+        check(period && period->children.size() == 4 && period->children[1].checked && csv && zero,
+              "Periode > (1 min, 10 min coch\xC3\xA9, 1 h, depuis le lancement), Exporter (CSV)..., Remettre \xC3\xA0 z\xC3\xA9ro");
+        check(menu && ui::cmd::badShortcuts(menu->items()).empty(), "le menu de la courbe : des touches seulement \xC3\xA0 droite");
+        if (menu && csv) {
+            const int id = csv->id;
+            menu->close();
+            menu->itemChosen->emit(id);
+        }
+        check(csvs.size() == 3 && csvs.back() == "performances", "Exporter (CSV)... : celui des performances");
+    }
+    // ... et sur une lenteur : Aller a (Entree), Copier la ligne (Ctrl+C), Vider les lenteurs...
+    {
+        pane.reveal("lenteurs");
+        paint();
+        const auto r = pane.partRect("lenteur:" + std::to_string(clicSerial));
+        pane.dispatch(ui::MouseDown{{r.x + 30.f, r.y + r.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+        auto* menu = pane.contextMenu();
+        bool go = false, copy = false, clear = false;
+        if (menu)
+            for (const auto& it : menu->items()) {
+                go = go || (it.label == "Aller \xC3\xA0" && it.shortcut == "Entr\xC3\xA9" "e");
+                copy = copy || (it.label == "Copier la ligne" && it.shortcut == "Ctrl+C");
+                clear = clear || it.label == "Vider les lenteurs\xE2\x80\xA6";
+            }
+        check(menu && menu->isOpen() && go && copy && clear, "une lenteur : Aller \xC3\xA0, Copier la ligne, Vider les lenteurs...");
+        if (menu) menu->close();
+    }
+    pane.scrollTo(0);
+    paint();
 
     // Les lenteurs : la plus recente d'abord, les filtres.
     check(rec.wrote("3 gard\xC3\xA9" "es") && rec.wrote("Tout \xC2\xB7 3") && rec.wrote("Actions \xC2\xB7 1") && rec.wrote("Cycles \xC2\xB7 1")

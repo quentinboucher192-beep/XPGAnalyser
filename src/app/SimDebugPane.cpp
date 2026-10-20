@@ -25,6 +25,7 @@
 #include "../domain/ExecutionOrder.hpp"
 #include "../project/CrossReference.hpp"
 #include "../sim/Runtime.hpp"
+#include "../ui/Commands.hpp"
 #include "../ui/Icons.hpp"
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/DataViews.hpp"
@@ -487,6 +488,41 @@ SimDebugPane::SimDebugPane(std::string id) : ui::Widget(std::move(id)) {
         if (r >= bps_.size()) return;
         (void)showSection(bps_[r].section, bps_[r].line);
     });
+    // 1.12.18 (planche 18) : un point de la liste - Aller au code (Entree), Desactiver, Condition...,
+    // Retirer (Suppr).
+    bpTable_->setEnterActivates(true);
+    bpTable_->setExtraContextOnly(true);
+    bpTable_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto sel = bpTable_->selectedModelRows();
+        if (sel.empty() || sel.front() >= bps_.size()) return items;
+        const auto& b = bps_[sel.front()];
+        items.push_back(ui::cmd::heading("Point d'arr\xC3\xAAt", b.section + " \xC2\xB7 " + std::to_string(b.line)));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Ouvrir, 1001, true, {}, "Aller au code"));
+        ui::PopupMenu::Item onoff;
+        onoff.label = b.enabled ? "D\xC3\xA9sactiver" : "Activer";
+        onoff.id = 1002;
+        items.push_back(std::move(onoff));
+        ui::PopupMenu::Item cond;
+        cond.label = "Condition\xE2\x80\xA6";
+        cond.id = 1003;
+        items.push_back(std::move(cond));
+        items.push_back(ui::cmd::separator());
+        items.push_back(ui::cmd::item(ui::cmd::Id::Retirer, 1004, true, {}, sel.size() > 1 ? "Retirer les " + std::to_string(sel.size()) : std::string{}));
+        return items;
+    });
+    links_ += bpTable_->contextAction->connect([this](int id) {
+        auto sel = bpTable_->selectedModelRows();
+        if (sel.empty() || sel.front() >= bps_.size()) return;
+        const auto first = bps_[sel.front()];
+        if (id == 1001) (void)showSection(first.section, first.line);
+        else if (id == 1002) (void)setBreakpointEnabled(sel.front() + 1, !first.enabled);
+        else if (id == 1003) (void)editCondition(first.section, first.line);
+        else if (id == 1004) {
+            std::sort(sel.rbegin(), sel.rend());
+            for (const auto r : sel) (void)removeBreakpoint(static_cast<std::size_t>(r) + 1);
+        }
+    });
 
     watchTable_ = &static_cast<ui::TableView&>(addChild(std::make_unique<WatchTable>(*this, this->id() + ".espions")));
     watchModel_ = std::make_shared<WatchModel>(*this);
@@ -524,6 +560,64 @@ SimDebugPane::SimDebugPane(std::string id) : ui::Widget(std::move(id)) {
     // Lot API 8 (2e partie) : le clic droit dans la marge : la condition de la ligne.
     links_ += code_->breakpointConditionRequested->connect([this](std::size_t line) {
         if (!codeSection_.empty()) (void)editCondition(codeSection_, static_cast<int>(line) + 1);
+    });
+    // 1.12.18 (planche 18) : le clic droit dans la marge - le menu de la ligne.
+    links_ += code_->breakpointMenuRequested->connect([this](std::size_t line, gfx::Point at) { openMarginMenu(line, at); });
+    // 1.12.18 : le menu du code arrete, sur un nom - sa valeur en tete, Executer jusqu'a la ligne,
+    // Ajouter un espion, Qui a ecrit ?, Copier, Aller a la definition.
+    code_->setMenuHook([this](ui::PopupMenu& menu, const std::string& word, std::size_t line) {
+        menuWord_ = word;
+        menuLine_ = line;
+        const auto base = menu.items();
+        std::vector<ui::PopupMenu::Item> items;
+        if (!word.empty()) {
+            sim::Value v;
+            std::string right;
+            if (readValue(word, v)) right = std::string(sim::toString(v.type())) + " = " + valueText(word);
+            items.push_back(ui::cmd::heading(word, right));
+        }
+        auto run = ui::cmd::item(ui::cmd::Id::Simuler, 1001, !codeSection_.empty(), "pas de code ici", "Ex\xC3\xA9" "cuter jusqu'\xC3\xA0 la ligne");
+        run.shortcut = "Ctrl+F10";
+        items.push_back(std::move(run));
+        const std::string noName = "le curseur n'est pas sur un nom";
+        ui::PopupMenu::Item watch;
+        watch.label = "Ajouter un espion";
+        watch.id = 1002;
+        watch.enabled = !word.empty();
+        if (!watch.enabled) watch.disabledReason = noName;
+        items.push_back(std::move(watch));
+        ui::PopupMenu::Item who;
+        who.label = "Qui a \xC3\xA9" "crit ?";
+        who.id = 1003;
+        who.enabled = !word.empty();
+        if (!who.enabled) who.disabledReason = noName;
+        items.push_back(std::move(who));
+        items.push_back(ui::cmd::separator());
+        for (const auto& it : base)
+            if (it.label == "Copier") items.push_back(it);
+        items.push_back(ui::cmd::item(ui::cmd::Id::AllerDefinition, 1004, !word.empty() && static_cast<bool>(hosts_.goToDefinition),
+                                      word.empty() ? noName : std::string("pas ici")));
+        menu.setItems(std::move(items));
+    });
+    links_ += code_->contextAction->connect([this](int id) {
+        std::string resolved = menuWord_;
+        if (auto* rt = runtime())
+            for (const auto& prefix : prefixes()) {
+                sim::Value v;
+                if (!prefix.empty() && rt->get(prefix + menuWord_, v)) { resolved = prefix + menuWord_; break; }
+            }
+        switch (id) {
+            case 1001: (void)runToLine(static_cast<int>(menuLine_) + 1); break;
+            case 1002: {
+                std::string why;
+                if (addWatch(resolved, &why)) status("Espion ajout\xC3\xA9 : " + resolved + ".");
+                else if (!why.empty()) status(why);
+                break;
+            }
+            case 1003: chooseVariable(resolved); break;
+            case 1004: if (hosts_.goToDefinition) hosts_.goToDefinition(menuWord_); break;
+            default: break;
+        }
     });
     links_ += code_->breakpointEnableToggled->connect([this](std::size_t line) {
         for (std::size_t i = 0; i < bps_.size(); ++i)
@@ -563,6 +657,50 @@ SimDebugPane::SimDebugPane(std::string id) : ui::Widget(std::move(id)) {
     links_ += traceTable_->activated->connect([this](RowIndex r) {
         const auto& rows = traceModel_->rows();
         if (r < rows.size()) (void)showSection(rows[r].section);
+    });
+    // 1.12.18 : la trace - Aller au code (Entree), Copier.
+    traceTable_->setEnterActivates(true);
+    traceTable_->setExtraContextOnly(true);
+    traceTable_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto sel = traceTable_->selectedModelRows();
+        const auto& rows = traceModel_->rows();
+        if (sel.empty() || sel.front() >= rows.size()) return items;
+        items.push_back(ui::cmd::heading(rows[sel.front()].section));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Ouvrir, 1001, true, {}, "Aller au code"));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Copier, 1));
+        return items;
+    });
+    links_ += traceTable_->contextAction->connect([this](int id) {
+        const auto sel = traceTable_->selectedModelRows();
+        const auto& rows = traceModel_->rows();
+        if (id == 1001 && !sel.empty() && sel.front() < rows.size()) (void)showSection(rows[sel.front()].section);
+    });
+    // 1.12.18 : un espion - sa valeur en tete, Copier la valeur (Ctrl+C), Qui a ecrit ?, Retirer (Suppr).
+    watchTable_->setExtraContextOnly(true);
+    watchTable_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto sel = watchTable_->selectedModelRows();
+        if (sel.empty() || sel.front() >= watchRows_.size()) return items;
+        const auto& r = watchRows_[sel.front()];
+        const std::string value = valueText(r.node.path);
+        items.push_back(ui::cmd::heading(r.node.path, value.empty() ? std::string{} : "= " + value));
+        items.push_back(ui::cmd::item(ui::cmd::Id::CopierValeur, 1101, !value.empty(), "pas de valeur"));
+        ui::PopupMenu::Item who;
+        who.label = "Qui a \xC3\xA9" "crit ?";
+        who.id = 1102;
+        items.push_back(std::move(who));
+        items.push_back(ui::cmd::separator());
+        items.push_back(ui::cmd::item(ui::cmd::Id::Retirer, 1103, r.depth == 0, "un membre : retirer l'espion de sa variable"));
+        return items;
+    });
+    links_ += watchTable_->contextAction->connect([this](int id) {
+        const auto sel = watchTable_->selectedModelRows();
+        if (sel.empty() || sel.front() >= watchRows_.size()) return;
+        const auto r = watchRows_[sel.front()];
+        if (id == 1101) ui::setClipboardText(valueText(r.node.path));
+        else if (id == 1102) chooseVariable(r.node.path);
+        else if (id == 1103 && r.depth == 0) (void)removeWatch(watches_[static_cast<std::size_t>(r.watch)].path);
     });
 }
 
@@ -2698,5 +2836,68 @@ bool SimDebugPane::applyProposedCondition() {
     return true;
 }
 // ==== fin Lot API 8 (2e partie) ====
+
+// 1.12.18 (planche 18) : le menu de la marge.
+void SimDebugPane::openMarginMenu(std::size_t line0, gfx::Point at) {
+    if (codeSection_.empty() || !code_) return;
+    const int line = static_cast<int>(line0) + 1;
+    std::size_t number = 0;
+    for (std::size_t i = 0; i < bps_.size(); ++i)
+        if (sd::sameSection(bps_[i].section, codeSection_) && bps_[i].line == line) number = i + 1;
+    if (!marginMenu_) {
+        marginMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".marge")));
+        links_ += marginMenu_->itemChosen->connect([this](int a) {
+            const int ln = marginLine_;
+            std::size_t n = 0;
+            for (std::size_t i = 0; i < bps_.size(); ++i)
+                if (sd::sameSection(bps_[i].section, codeSection_) && bps_[i].line == ln) n = i + 1;
+            switch (a) {
+                case 1: (void)toggleBreakpoint(codeSection_, ln); break;
+                case 2: (void)editCondition(codeSection_, ln); break;
+                case 3: if (n) (void)setBreakpointEnabled(n, !bps_[n - 1].enabled); break;
+                case 4: (void)runToLine(ln); break;
+                case 5: clearBreakpoints(); break;
+                default: break;
+            }
+        });
+    }
+    marginLine_ = line;
+    std::vector<ui::PopupMenu::Item> items;
+    items.push_back(ui::cmd::heading("Ligne " + std::to_string(line), "marge \xC2\xB7 " + codeSection_));
+    ui::PopupMenu::Item bp;
+    bp.label = "Point d'arr\xC3\xAAt";
+    bp.shortcut = "F9";
+    bp.checkable = true;
+    bp.checked = number > 0;
+    bp.id = 1;
+    items.push_back(std::move(bp));
+    ui::PopupMenu::Item cond;
+    cond.label = "Condition\xE2\x80\xA6";
+    cond.id = 2;
+    items.push_back(std::move(cond));
+    ui::PopupMenu::Item onoff;
+    onoff.label = number && !bps_[number - 1].enabled ? "Activer" : "D\xC3\xA9sactiver";
+    onoff.id = 3;
+    onoff.enabled = number > 0;
+    if (!onoff.enabled) onoff.disabledReason = "pas de point ici";
+    items.push_back(std::move(onoff));
+    ui::PopupMenu::Item run;
+    run.label = "Ex\xC3\xA9" "cuter jusqu'\xC3\xA0 la ligne";
+    run.shortcut = "Ctrl+F10";
+    run.id = 4;
+    items.push_back(std::move(run));
+    items.push_back(ui::cmd::separator());
+    ui::PopupMenu::Item all;
+    all.label = "Retirer tous les points d'arr\xC3\xAAt";
+    all.id = 5;
+    all.enabled = !bps_.empty();
+    if (!all.enabled) all.disabledReason = "aucun point";
+    items.push_back(std::move(all));
+    marginMenu_->setItems(std::move(items));
+    marginMenu_->setBounds(bounds());
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
+    marginMenu_->openAt(at, surface);
+}
 
 } // namespace app

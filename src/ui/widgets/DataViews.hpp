@@ -277,6 +277,9 @@ public:
     const core::SignalPtr<NodeId> selectionChanged = core::Signal<NodeId>::create();
     const core::SignalPtr<NodeId> activated        = core::Signal<NodeId>::create();  // double-click / Enter
     const core::SignalPtr<NodeId, gfx::Point> contextMenuRequested = core::Signal<NodeId, gfx::Point>::create();
+    // 1.12.18 (planche 19) : le clic droit SOUS LES LIGNES (le vide de l'arbre) - Nouveau,
+    // Tout deplier, Tout replier ; rien de branche : rien, comme avant.
+    const core::SignalPtr<gfx::Point> emptyContextRequested = core::Signal<gfx::Point>::create();
     // Lot 7 : F2 et Suppr sur le noeud courant, l'arbre ayant le focus - l'ecran
     // renomme ou supprime ce que le noeud designe (son menu du clic droit montre
     // ces touches). Rien de branche : la touche passe, comme avant.
@@ -288,6 +291,9 @@ public:
     // sous la souris ; "" : celle de l'arbre (tooltip()).
     using NodeTooltip = std::function<std::string(NodeId)>;
     void setNodeTooltip(NodeTooltip provider) { nodeTooltip_ = std::move(provider); }
+    // 1.12.18 : les touches du proprietaire d'abord (Ctrl+D Dupliquer, Ctrl+C Copier les noms,
+    // Maj+F12 Voir les usages - celles que son menu montre) ; vrai : la touche est prise.
+    void setKeyHandler(std::function<bool(const KeyDown&)> handler) { keyHandler_ = std::move(handler); }
     [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
     [[nodiscard]] bool hasTooltip() const override { return Widget::hasTooltip() || static_cast<bool>(nodeTooltip_); }
 
@@ -381,6 +387,7 @@ private:
 
     IconPainter                  iconPainter_;       // lot API 2
     NodeTooltip                  nodeTooltip_;       // lot 7 : l'infobulle d'un noeud
+    std::function<bool(const KeyDown&)> keyHandler_;   // 1.12.18
     std::shared_ptr<ITreeModel>  model_;
     std::vector<VisualRow>       rows_;
     std::vector<NodeId>          expanded_;      // sorted; binary-searched
@@ -690,6 +697,18 @@ public:
     // vrai : la touche est prise. Pas pendant l'edition d'une case.
     void setKeyHandler(std::function<bool(const KeyDown&)> handler) { keyHandler_ = std::move(handler); }
     const core::SignalPtr<int> contextAction = core::Signal<int>::create();
+    // ---- 1.12.18 (planche 20) : LE MENU D'UN TITRE DE COLONNE - Trier de A a Z, de Z a A,
+    //  Ajuster la largeur, Masquer la colonne, Colonnes > (les cocher), Filtrer la colonne...,
+    //  Effacer les filtres, Exporter en CSV... (le menu des lignes reste aux lignes).
+    void openHeaderMenu(gfx::Point at, std::size_t column);
+    void setColumnVisible(std::size_t column, bool visible);
+    // Les lignes montrees, les colonnes montrees, en CSV (point-virgule, guillemets au besoin ;
+    // la premiere ligne : les titres) ; et qui l'enregistre (l'appli : une fenetre « Enregistrer
+    // sous » ; nul : pas d'Exporter en CSV...). `name` : le nom propose ("variables").
+    [[nodiscard]] std::string csvText() const;
+    using CsvExporter = std::function<void(const std::string& name, const std::string& csv)>;
+    static void setCsvExporter(CsvExporter exporter);
+    void setExportName(std::string name) { exportName_ = std::move(name); }
     // (lignes copiees, avec les titres)
     const core::SignalPtr<std::size_t, bool> copied = core::Signal<std::size_t, bool>::create();
 
@@ -814,6 +833,8 @@ private:
     PopupMenu*                   context_{nullptr};
     std::function<std::vector<PopupMenu::Item>()> extraContext_;   // 1.11.14
     bool                         extraOnly_{false};                 // 1.12.18
+    std::string                  exportName_;                       // 1.12.18 : le nom du CSV
+    void                         exportCsvNow();
     std::function<bool(const KeyDown&)> keyHandler_;                // 1.12.18
     int                          lastClickColumn_{-1};
     std::string                  banner_;

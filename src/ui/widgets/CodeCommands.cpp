@@ -1525,6 +1525,7 @@ void MultiLineText::openContextMenu(gfx::Point at, bool fromKeyboard) {
     };
     const std::string ro = "lecture seule";
     const bool clip = !clipboardText().empty();
+    const std::string word = symbolAtCaret();   // le nom vise (le curseur est deja pose)
     if (!commandKeys_) {
         // Un texte : les gestes d'un champ.
         items.push_back(add("Couper", "couperTexte", "Ctrl+X", !readOnly_ && hasSelection(), readOnly_ ? ro : std::string("rien de choisi")));
@@ -1549,7 +1550,6 @@ void MultiLineText::openContextMenu(gfx::Point at, bool fromKeyboard) {
             items.push_back(rule());
         }
         // Le nom vise : sa tete dit ce que l'hote en sait (REAL · variable IHM).
-        const std::string word = symbolAtCaret();
         std::string detail;
         bool native = false;
         if (!word.empty() && gDescriber) (void)gDescriber(word, detail, native);
@@ -1576,6 +1576,8 @@ void MultiLineText::openContextMenu(gfx::Point at, bool fromKeyboard) {
         items.push_back(add("Mettre en forme le document", "formaterDocument", keyOf("formaterDocument"), !readOnly_, ro));
     }
     menu_->setItems(std::move(items));
+    // 1.12.18 : l'hote complete (le debogueur) ; ses entrees (id >= 1000) reviennent par contextAction.
+    if (menuHook_) menuHook_(*menu_, word, caret_.line);
     menu_->setBounds(bounds());
     gfx::Size surface = surfaceSize();
     if (surface.w <= 0.f || surface.h <= 0.f) surface = { bounds().right() + 400.f, bounds().bottom() + 400.f };
@@ -1584,6 +1586,10 @@ void MultiLineText::openContextMenu(gfx::Point at, bool fromKeyboard) {
 }
 
 void MultiLineText::runMenuEntry(int id) {
+    if (id >= 1000) {   // 1.12.18 : une entree de l'hote
+        contextAction->emit(id);
+        return;
+    }
     if (id < 0 || static_cast<std::size_t>(id) >= menuCommands_.size()) return;
     const std::string command = menuCommands_[static_cast<std::size_t>(id)];
     if (command.empty()) return;

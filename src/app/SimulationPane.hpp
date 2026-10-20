@@ -62,6 +62,14 @@ public:
         // (le corps d'un DFB).
         std::function<void(const std::string& section, std::uint32_t line)> goToLine;
         std::function<void(std::vector<std::string> names)>       addToTable;
+        // 1.12.18 : la table choisie dans le menu (son rang dans le projet ; npos : une nouvelle).
+        std::function<void(std::vector<std::string> names, std::size_t table)> addToTableAt;
+        // 1.12.18 : UNE SEULE SORTE DE COURBE - suivre une variable, c'est l'ajouter a
+        // Simulation > Courbes (faux : `why`) ; la retirer ; les chemins suivis. Nuls (les
+        // essais) : la liste du volet seule.
+        std::function<bool(const std::string& path, std::string* why)> addTrend;
+        std::function<bool(const std::string& path)>              removeTrend;
+        std::function<std::vector<std::string>()>                 trends;
         std::function<void(const std::string& key)>               request;   // "bibliotheque", "variables:<nom>"
         std::function<void(const std::string& text)>              status;
         std::function<void(const std::string& title, const std::string& text, const std::string& initial,
@@ -118,6 +126,10 @@ public:
     [[nodiscard]] std::string bandColor() const;
     [[nodiscard]] std::vector<std::string> diagnosticLines() const;
     [[nodiscard]] std::vector<std::string> watched() const { return watched_; }
+    // 1.12.18 : le menu du clic droit (planche 17), pour les essais.
+    [[nodiscard]] ui::PopupMenu* contextMenu() const noexcept { return menu_; }
+    void openMenuAt(gfx::Point at) { openMenu(at); }
+    void chooseMenu(int id) { menuChosen(id); }
 
     // Un message du moteur, dit en francais ("'X' is not declared" ->
     // "X n'est pas declaree") ; et son endroit ("Gestion_reports, ligne 42").
@@ -134,12 +146,10 @@ private:
     class ForcedModel;
     class DiagModel;
     class Band;
-    class Trend;
     friend class Model;
     friend class ForcedModel;
     friend class DiagModel;
     friend class Band;
-    friend class Trend;
 
     struct Root {                     // une variable du projet, une racine
         std::string name;             // le chemin de la simulation (Unite.nom pour une locale)
@@ -244,6 +254,8 @@ private:
     void rebuildDiag();
     void releasePaths(const std::vector<std::string>& paths);
     void toggleWatch(const std::vector<std::string>& paths);
+    void syncWatched();                                   // 1.12.18 : les suivies = Simulation > Courbes
+    void copyValues(bool names);                          // 1.12.18 : Copier la valeur (Ctrl+C), Copier le nom
     void openMenu(gfx::Point at);
     void toggleRow(std::size_t row);
     void onStateChanged(int previous, int next);
@@ -261,7 +273,7 @@ private:
     void buildProbes();
     void sweepStep(std::uint64_t scan);                   // un morceau du tour des cases, a chaque image
     void layoutMain(const gfx::Rect& left);               // la table et ses filtres
-    void layoutSide(float sideW, float top);               // a droite : forcages, courbe, simulateur
+    void layoutSide(float sideW, float top);               // a droite : forcages, simulateur
     void layoutStacked();                                  // etroit : les memes, sous la table
     [[nodiscard]] std::string biggestRoots(std::size_t total) const;   // ", dont 32 000 dans armoires"
     [[nodiscard]] std::string simulationFolder() const;                // <projet>/simulation
@@ -277,11 +289,10 @@ private:
     std::shared_ptr<Model>                  model_;
     ui::TableView*                          forced_{nullptr};
     std::shared_ptr<ForcedModel>            forcedModel_;
-    Trend*                                  trend_{nullptr};
     ui::TableView*                          diag_{nullptr};
     std::shared_ptr<DiagModel>              diagModel_;
     macroui::Segmented*                     policy_{nullptr};
-    gfx::Rect                               forcedTitle_{}, trendTitle_{}, diagTitle_{}, side_{};
+    gfx::Rect                               forcedTitle_{}, diagTitle_{}, side_{};
 
     std::vector<std::string>                folders_;      // les libelles des dossiers
     std::vector<Root>                       roots_;
@@ -302,7 +313,7 @@ private:
     ui::Widget*                             diagBox_{nullptr};
     ui::Widget*                             catcher_{nullptr};     // le clic droit sur la table
     ui::PopupMenu*                          menu_{nullptr};
-    mutable gfx::Rect                       releaseAllLink_{}, freezeLink_{};
+    mutable gfx::Rect                       releaseAllLink_{};
     std::map<std::string, std::vector<WriteSite>> writers_;       // par racine en minuscules ("unite.nom" : une locale)
     std::vector<Live>                       rootLive_;             // les racines, pour « Qui changent »
     std::vector<std::size_t>                changingShown_;

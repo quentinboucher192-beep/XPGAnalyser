@@ -55,6 +55,8 @@ public:
         // colonne Mouvement.
         std::function<std::optional<hmi::motion::Motion>(const std::string& path)> motion;
         std::function<bool(const std::string& path, const std::optional<hmi::motion::Motion>&, std::string* why)> setMotion;
+        // 1.12.18 (planche 16) : Suivre sur la courbe (Simulation > Courbes) ; faux : `why`. Nul : pas d'entree.
+        std::function<bool(const std::string& path, std::string* why)> follow;
     };
     struct Row {
         int         node{-1};
@@ -110,7 +112,13 @@ public:
     const core::SignalPtr<const std::string&, bool> said = core::Signal<const std::string&, bool>::create();
     // 1.11.6 : LE CLIC DROIT sur une ligne - Tout deplier, Deplier, Replier, Tout replier,
     // Forcer, Deforcer (la variable, ou toutes celles montrees sous un noeud).
-    enum MenuItem : int { MExpandAll = 1, MExpand, MCollapse, MCollapseAll, MForce, MUnforce };
+    // 1.12.18 (planche 16) : sur une variable - Forcer a... (Entree), Forcer a sa valeur, Relacher
+    // (Suppr), Mouvement > (Aucun, les genres, Les bornes...), Suivre sur la courbe, Copier la valeur
+    // (Ctrl+C), Tout deplier. Les ids du sous-menu Mouvement : kMotionBase + celui du menu Mouvement.
+    enum MenuItem : int { MExpandAll = 1, MExpand, MCollapse, MCollapseAll, MForce, MUnforce, MForceTo, MFollow, MCopyValue };
+    static constexpr int kMotionBase = 200;
+    // La ligne courante (le dernier clic) : Entree, Suppr, Ctrl+C la visent.
+    [[nodiscard]] const std::string& currentPath() const noexcept { return current_; }
     bool openContextMenu(const std::string& path, gfx::Point at);
     [[nodiscard]] ui::PopupMenu* contextMenu() noexcept { return ctxMenu_; }
     bool contextAction(const std::string& path, int item);
@@ -173,6 +181,8 @@ private:
     [[nodiscard]] gfx::Rect editRect(const gfx::Rect& row) const;
     bool applyMotion(const std::string& path, const std::optional<hmi::motion::Motion>& m);
     std::string                  ctxPath_;
+    std::string                  current_;                // 1.12.18 : la ligne du dernier clic (le clavier la vise)
+    void motionChosen(const std::string& path, int item);
     [[nodiscard]] bool shownLeaf(const Node& n) const;   // la recherche et la vue la gardent-elles ?
     core::ConnectionScope        links_;
 };

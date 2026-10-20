@@ -141,7 +141,10 @@ public:
     [[nodiscard]] std::size_t shownLines() const;
     // 1.11.6 : LE CLIC DROIT sur une ligne - Tout deplier, Deplier, Replier, Tout replier,
     // Forcer, Deforcer (la ligne, ou toutes les valeurs sous un esclave ou un noeud).
-    enum MenuItem : int { MExpandAll = 1, MExpand, MCollapse, MCollapseAll, MForce, MUnforce };
+    // 1.12.18 (planche 16) : une valeur a aussi Mouvement > (ids kKindBase + le rang du genre ;
+    // kKindBase : aucun) et Copier la valeur.
+    enum MenuItem : int { MExpandAll = 1, MExpand, MCollapse, MCollapseAll, MForce, MUnforce, MCopyValue };
+    static constexpr int kKindBase = 200;
     bool openContextMenu(std::size_t line, gfx::Point at);
     [[nodiscard]] ui::PopupMenu* contextMenu() noexcept { return ctxMenu_; }
     bool contextAction(std::size_t line, int item);        // ce que fait l'entree (les tests, les scripts)

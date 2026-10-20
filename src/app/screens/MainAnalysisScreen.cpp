@@ -18,6 +18,7 @@
 //    entry. A workspace the user arranged should survive closing the program.
 // =============================================================================
 #include "Screens.hpp"
+#include "../../ui/Commands.hpp"
 #include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : l'ecran de chaque application
 #include "../../project/CodeIconKeys.hpp"   // 1.8.0 : l'icone des onglets de section
@@ -1512,7 +1513,9 @@ namespace {
 // Les entrees du menu d'un onglet (Item::id, rendu par itemChosen).
 enum TabMenuEntry : int { kTabMenuClose = 1, kTabMenuCloseAll, kTabMenuCloseOthers,
                           // Lot 7 : l'affichage multi-fenetre.
-                          kTabMenuSplitRight, kTabMenuSplitDown, kTabMenuNeighbour, kTabMenuMosaic, kTabMenuDetach };
+                          kTabMenuSplitRight, kTabMenuSplitDown, kTabMenuNeighbour, kTabMenuMosaic, kTabMenuDetach,
+                          // 1.12.18 (planche 20).
+                          kTabMenuCloseRight, kTabMenuReopen, kTabMenuReveal, kTabMenuCopyTitle };
 // Ce que Fermer annonce : le raccourci de l'onglet ouvert (handleShortcut).
 constexpr const char* kCloseTabShortcut = "Ctrl+W";
 } // namespace
@@ -1617,6 +1620,12 @@ std::size_t MainAnalysisScreen::closePages(const std::vector<Widget*>& pages, Wi
         const int at = centre_->indexOf(page);
         if (at < 0) continue;
         const auto before = centre_->tabCount();
+        // 1.12.18 : son endroit, pour Rouvrir le dernier ferme (Ctrl+Maj+T).
+        if (const auto key = placeKeyOf(static_cast<std::size_t>(at)); !key.empty()) {
+            closedTabs_.erase(std::remove(closedTabs_.begin(), closedTabs_.end(), key), closedTabs_.end());
+            closedTabs_.push_back(key);
+            if (closedTabs_.size() > 20) closedTabs_.erase(closedTabs_.begin());
+        }
         closeDocument(static_cast<std::size_t>(at));
         if (centre_->tabCount() < before) ++closed;
     }
@@ -1628,64 +1637,82 @@ std::size_t MainAnalysisScreen::closePages(const std::vector<Widget*>& pages, Wi
     return closed;
 }
 
+// 1.12.18 (planche 20) : l'endroit d'un onglet (une vue, un volet de l'IHM, une section, un volet
+// de l'API) ; goToPlace le rouvre.
+std::string MainAnalysisScreen::placeKeyOf(std::size_t index) const {
+    if (!centre_ || index >= centre_->tabCount()) return {};
+    const Widget* page = centre_->page(index);
+    for (const auto& [key, widget] : hmiTabs_)
+        if (widget == page) return "hmi:" + key;
+    for (const auto& d : documents_)
+        if (d.tab == index) return "doc:" + std::to_string(d.section);
+    for (const auto& [key, widget] : apiTabs_)
+        if (widget == page) return "api:" + key;
+    const auto* t = centre_->tab(index);
+    return t ? "tab:" + t->title : std::string{};
+}
+
+bool MainAnalysisScreen::reopenClosedTab() {
+    while (!closedTabs_.empty()) {
+        const std::string key = closedTabs_.back();
+        closedTabs_.pop_back();
+        if (key.rfind("tab:", 0) == 0) continue;        // un onglet sans endroit (une page d'aide...) : le suivant
+        const auto before = centre_ ? centre_->tabCount() : 0;
+        goToPlace(key);
+        if (centre_ && centre_->tabCount() > before) return true;
+    }
+    if (status_) status_->setTransientMessage("Aucun onglet ferm\xC3\xA9 \xC3\xA0 rouvrir.", 4.0);
+    return false;
+}
+
 void MainAnalysisScreen::showTabMenu(std::size_t index, gfx::Point at) {
     if (!tabMenu_ || !centre_ || index >= centre_->tabCount()) return;
     tabMenuPage_ = centre_->page(index);
-    std::size_t closable = 0;
+    std::size_t closable = 0, right = 0;
     for (std::size_t i = 0; i < centre_->tabCount(); ++i)
-        if (tabClosable(i)) ++closable;
+        if (tabClosable(i)) {
+            ++closable;
+            if (i > index) ++right;
+        }
     const bool        self   = tabClosable(index);
     const std::size_t others = closable - (self ? 1u : 0u);
-    const auto count = [](std::size_t n, const char* one, const char* many) {
-        return std::to_string(n) + " " + (n > 1 ? many : one);
-    };
+    const auto n = [](std::size_t k) { return " (" + std::to_string(k) + ")"; };
 
     std::vector<PopupMenu::Item> items;
-    PopupMenu::Item head;
-    head.label   = centre_->tab(index)->title;      // l'onglet vise, pas forcement l'ouvert
-    head.heading = true;
-    items.push_back(std::move(head));
-    const auto entry = [&items](std::string label, std::string hint, std::string why, bool enabled, int id) {
+    // 1.12.18 : l'onglet vise et combien il y en a - en tete ; la colonne de droite garde les touches.
+    items.push_back(ui::cmd::heading(centre_->tab(index)->title, std::to_string(centre_->tabCount()) + (centre_->tabCount() > 1 ? " onglets" : " onglet")));
+    const auto entry = [&items](std::string label, std::string key, std::string why, bool enabled, int id, Icon icon = Icon::Close) {
         PopupMenu::Item it;
         it.label          = std::move(label);
-        it.shortcut       = std::move(hint);         // a droite, en gris : combien
-        it.disabledReason = std::move(why);          // grise : pourquoi
-        it.icon           = Icon::Close;
+        it.shortcut       = std::move(key);
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        it.icon           = icon;
         it.enabled        = enabled;
         it.id             = id;
         items.push_back(std::move(it));
     };
-    entry("Fermer", kCloseTabShortcut, self ? "" : "cet onglet ne se ferme pas", self, kTabMenuClose);
-    entry("Fermer tout", count(closable, "onglet", "onglets"), "", closable > 0, kTabMenuCloseAll);
-    entry("Fermer tout sauf celui-ci", others > 0 ? count(others, "autre", "autres") : std::string(),
-          others > 0 ? "" : centre_->tabCount() > 1 ? "les autres ne se ferment pas" : "c'est le seul onglet",
-          others > 0, kTabMenuCloseOthers);
+    entry("Fermer", kCloseTabShortcut, "cet onglet ne se ferme pas", self, kTabMenuClose);
+    entry("Fermer les autres" + (others ? n(others) : std::string{}), {},
+          centre_->tabCount() > 1 ? "les autres ne se ferment pas" : "c'est le seul onglet", others > 0, kTabMenuCloseOthers);
+    entry("Fermer ceux de droite" + (right ? n(right) : std::string{}), {}, "aucun onglet \xC3\xA0 droite", right > 0, kTabMenuCloseRight);
+    entry("Fermer tout" + n(closable), {}, "aucun ne se ferme", closable > 0, kTabMenuCloseAll);
+    entry("Rouvrir le dernier ferm\xC3\xA9", "Ctrl+Maj+T", "aucun onglet ferm\xC3\xA9", !closedTabs_.empty(), kTabMenuReopen, Icon::Open);
+    items.push_back(ui::cmd::separator());
+    entry("Afficher dans l'arbre", {}, {}, true, kTabMenuReveal, Icon::GoTo);
+    entry("Copier le titre", {}, {}, true, kTabMenuCopyTitle, Icon::Copy);
     // Lot 7 : l'affichage multi-fenetre - cote a cote, la mosaique, une fenetre a lui.
     {
-        PopupMenu::Item rule;
-        rule.separator = true;
-        items.push_back(rule);
+        items.push_back(ui::cmd::separator());
         const bool mosaic = centre_->mode() == TabArea::Mode::Mosaic;
         const bool alone  = centre_->tabCount() < 2;
-        const auto layoutEntry = [&items](std::string label, std::string hint, std::string why, bool enabled, Icon icon, int id) {
-            PopupMenu::Item it;
-            it.label = std::move(label);
-            it.shortcut = std::move(hint);
-            it.disabledReason = std::move(why);
-            it.icon = icon;
-            it.enabled = enabled;
-            it.id = id;
-            items.push_back(std::move(it));
-        };
-        layoutEntry("Diviser \xC3\xA0 droite", "", alone ? "il faut au moins deux onglets" : "", !alone, Icon::Layers, kTabMenuSplitRight);
-        layoutEntry("Diviser en bas", "", alone ? "il faut au moins deux onglets" : "", !alone, Icon::Layers, kTabMenuSplitDown);
+        entry("Diviser \xC3\xA0 droite", {}, "il faut au moins deux onglets", !alone, kTabMenuSplitRight, Icon::Layers);
+        entry("Diviser en bas", {}, "il faut au moins deux onglets", !alone, kTabMenuSplitDown, Icon::Layers);
         const bool neighbour = centre_->neighbourGroup(index) != TabArea::npos;
-        layoutEntry("D\xC3\xA9placer dans le groupe voisin", "", neighbour ? "" : "un seul groupe d'onglets", neighbour, Icon::Expand, kTabMenuNeighbour);
-        layoutEntry(mosaic ? "Revenir aux onglets" : "Mosa\xC3\xAFque automatique", mosaic ? "" : std::to_string(centre_->tabCount()) + " tuiles",
-                    "", true, Icon::Chart, kTabMenuMosaic);
+        entry("D\xC3\xA9placer dans le groupe voisin", {}, "un seul groupe d'onglets", neighbour, kTabMenuNeighbour, Icon::Expand);
+        entry(mosaic ? std::string("Revenir aux onglets") : "Mosa\xC3\xAFque automatique (" + std::to_string(centre_->tabCount()) + " tuiles)", {}, {}, true,
+              kTabMenuMosaic, Icon::Chart);
         const bool canDetach = tabClosable(index);
-        layoutEntry("Ouvrir dans une fen\xC3\xAAtre", "", canDetach ? "" : "cet onglet reste dans la fen\xC3\xAAtre principale",
-                    canDetach, Icon::Screen, kTabMenuDetach);
+        entry("Ouvrir dans une fen\xC3\xAAtre", {}, "cet onglet reste dans la fen\xC3\xAAtre principale", canDetach, kTabMenuDetach, Icon::Screen);
     }
     tabMenu_->setItems(std::move(items));
     const auto surface = root().bounds();
@@ -1693,8 +1720,45 @@ void MainAnalysisScreen::showTabMenu(std::size_t index, gfx::Point at) {
     centre_->markTab(index, tabMenu_);      // entoure de tirets tant que le menu est ouvert
 }
 
+// 1.12.18 (planche 20) : le vide de la barre d'onglets.
+void MainAnalysisScreen::showTabBarMenu(gfx::Point at) {
+    if (!tabMenu_ || !centre_) return;
+    tabMenuPage_ = nullptr;
+    std::size_t closable = 0;
+    for (std::size_t i = 0; i < centre_->tabCount(); ++i)
+        if (tabClosable(i)) ++closable;
+    std::vector<PopupMenu::Item> items;
+    const auto entry = [&items](std::string label, std::string key, std::string why, bool enabled, int id, Icon icon) {
+        PopupMenu::Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        it.icon = icon;
+        it.enabled = enabled;
+        it.id = id;
+        items.push_back(std::move(it));
+    };
+    entry("Rouvrir le dernier ferm\xC3\xA9", "Ctrl+Maj+T", "aucun onglet ferm\xC3\xA9", !closedTabs_.empty(), kTabMenuReopen, Icon::Open);
+    entry("Fermer tout (" + std::to_string(closable) + ")", {}, "aucun ne se ferme", closable > 0, kTabMenuCloseAll, Icon::Close);
+    const bool mosaic = centre_->mode() == TabArea::Mode::Mosaic;
+    entry(mosaic ? "Revenir aux onglets" : "Mosa\xC3\xAFque automatique", {}, {}, true, kTabMenuMosaic, Icon::Chart);
+    tabMenu_->setItems(std::move(items));
+    const auto surface = root().bounds();
+    tabMenu_->openAt(at, {surface.w, surface.h});
+}
+
 void MainAnalysisScreen::runTabMenuAction(int action) {
     if (!centre_) return;
+    // Sans onglet vise (le vide de la barre) : ce qui ne demande pas d'onglet.
+    if (!tabMenuPage_) {
+        switch (action) {
+            case kTabMenuReopen:   (void)reopenClosedTab(); break;
+            case kTabMenuCloseAll: (void)closeAllTabs(); break;
+            case kTabMenuMosaic:   (void)setLayoutMode(centre_->mode() == TabArea::Mode::Mosaic ? "onglets" : "mosaique"); break;
+            default: break;
+        }
+        return;
+    }
     const int at = centre_->indexOf(tabMenuPage_);
     tabMenuPage_ = nullptr;
     if (at < 0) return;                     // ferme entre-temps : rien a faire
@@ -1703,6 +1767,20 @@ void MainAnalysisScreen::runTabMenuAction(int action) {
         case kTabMenuClose:       (void)closeTab(index); break;
         case kTabMenuCloseAll:    (void)closeAllTabs(); break;
         case kTabMenuCloseOthers: (void)closeOtherTabs(index); break;
+        case kTabMenuCloseRight: {
+            std::vector<std::size_t> right;
+            for (std::size_t i = index + 1; i < centre_->tabCount(); ++i) right.push_back(i);
+            (void)closeTabs(right, true, centre_->page(index));
+            break;
+        }
+        case kTabMenuReopen:      (void)reopenClosedTab(); break;
+        case kTabMenuReveal:
+            centre_->setCurrentIndex(index);
+            followActiveTab();
+            break;
+        case kTabMenuCopyTitle:
+            if (const auto* t = centre_->tab(index)) ui::setClipboardText(t->title);
+            break;
         case kTabMenuSplitRight:  (void)splitTab(index, false); break;
         case kTabMenuSplitDown:   (void)splitTab(index, true); break;
         case kTabMenuNeighbour:
@@ -3419,6 +3497,9 @@ void MainAnalysisScreen::onEnter() {
     links_ += centre_->detachRequested->connect([this](std::size_t i) { (void)detachTab(i); });
     links_ += centre_->modeChanged->connect([this](TabArea::Mode) { saveLayoutMode(); });
     links_ += centre_->contextMenuRequested->connect([this](std::size_t i, gfx::Point at) { showTabMenu(i, at); });
+    links_ += centre_->barContextRequested->connect([this](gfx::Point at) { showTabBarMenu(at); });   // 1.12.18
+    // 1.12.18 (planche 20) : Exporter en CSV... d'un titre de colonne - ou l'ecrire se demande.
+    ui::TableView::setCsvExporter([this](const std::string& name, const std::string& csv) { saveApiCsv(name, csv); });
     links_ += tabMenu_->itemChosen->connect([this](int a) { runTabMenuAction(a); });
 
     // Lot API 7 : plus de ligne "Simulation: RUNNING  scan N" dans la barre

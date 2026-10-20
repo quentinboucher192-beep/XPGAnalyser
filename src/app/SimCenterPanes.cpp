@@ -5,6 +5,7 @@
 #include "../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - sans automate
 #include "SimCenterKit.hpp"
 
+#include "../ui/Commands.hpp"
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/DataViews.hpp"
 
@@ -152,6 +153,31 @@ SimForcingPane::SimForcingPane(std::string id, std::shared_ptr<SimCenterModel> m
     links_ += table_->activated->connect([this](RowIndex row) {
         const auto& rows = tableModel_->rows();
         if (row < rows.size() && hosts_.release) hosts_.release({rows[row].key});
+    });
+    // 1.12.18 (planche 17) : les forcages choisis en tete, Relacher (Suppr), Tout relacher, Copier.
+    table_->setExtraContextOnly(true);
+    table_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto sel = table_->selectedModelRows();
+        const auto& rows = tableModel_->rows();
+        const std::size_t n = sel.size();
+        if (n == 1 && sel.front() < rows.size()) items.push_back(ui::cmd::heading(rows[sel.front()].what));
+        else items.push_back(ui::cmd::heading(std::to_string(rows.size()) + (rows.size() > 1 ? " for\xC3\xA7" "ages" : " for\xC3\xA7" "age")));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Relacher, 1001, n > 0, "choisis une ligne",
+                                      n > 1 ? "Rel\xC3\xA2" "cher les " + std::to_string(n) : std::string{}));
+        items.push_back(ui::cmd::item(ui::cmd::Id::ToutRelacher, 1002, !rows.empty(), "aucun for\xC3\xA7" "age"));
+        items.push_back(ui::cmd::separator());
+        items.push_back(ui::cmd::item(ui::cmd::Id::Copier, 1, n > 0, "choisis une ligne"));
+        return items;
+    });
+    links_ += table_->contextAction->connect([this](int id) {
+        if (id == 1001) releaseSelected();
+        else if (id == 1002) releaseAll();
+    });
+    table_->setKeyHandler([this](const ui::KeyDown& k) {
+        if (k.key != ui::Key::Delete || !k.mods.none()) return false;
+        releaseSelected();
+        return true;
     });
     refresh();
 }
@@ -362,6 +388,53 @@ std::string SimTrendsPane::liveTooltip(gfx::Point mouse) const {
         return out + (cursorPinned_ ? "\nUn clic enl\xC3\xA8ve le curseur." : "\nUn clic pose le curseur.");
     }
     return {};
+}
+
+void SimTrendsPane::openMenu(gfx::Point at, const std::string& path) {
+    if (!model_) return;
+    if (!menu_) {
+        menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".menu")));
+        links_ += menu_->itemChosen->connect([this](int a) {
+            if (!model_) return;
+            switch (a) {
+                case 1: if (!menuPath_.empty()) (void)model_->removeTrend(menuPath_); break;
+                case 2: model_->setFrozen(!model_->frozen(), model_->now); break;
+                case 3:
+                    if (hosts_.saveCsv) hosts_.saveCsv("courbes-simulation", model_->trendsCsv());
+                    break;
+                case 4: model_->clearTrends(); break;
+                default: break;
+            }
+            invalidate();
+        });
+    }
+    menuPath_ = path;
+    const bool any = !model_->trends().empty();
+    std::vector<ui::PopupMenu::Item> items;
+    if (!path.empty()) items.push_back(ui::cmd::heading("Plume " + path));
+    else items.push_back(ui::cmd::heading("Courbes", std::to_string(model_->trends().size()) + (model_->trends().size() > 1 ? " plumes" : " plume")));
+    if (!path.empty()) items.push_back(ui::cmd::item(ui::cmd::Id::Retirer, 1, true, {}, "Retirer la plume"));
+    auto freeze = ui::cmd::item(ui::cmd::Id::Arreter, 2, any, "aucune plume", model_->frozen() ? "Reprendre" : "Figer");
+    freeze.icon = ui::Icon::None;
+    items.push_back(std::move(freeze));
+    ui::PopupMenu::Item csv;
+    csv.label = "Exporter (CSV)\xE2\x80\xA6";
+    csv.id = 3;
+    csv.enabled = any && static_cast<bool>(hosts_.saveCsv);
+    if (!csv.enabled) csv.disabledReason = any ? std::string("pas d'export ici") : std::string("aucune plume");
+    items.push_back(std::move(csv));
+    items.push_back(ui::cmd::separator());
+    ui::PopupMenu::Item all;
+    all.label = "Tout retirer";
+    all.id = 4;
+    all.enabled = any;
+    if (!any) all.disabledReason = "aucune plume";
+    items.push_back(std::move(all));
+    menu_->setItems(std::move(items));
+    menu_->setBounds(bounds());
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
+    menu_->openAt(at, surface);
 }
 
 void SimTrendsPane::act(const std::string& key) {
@@ -604,6 +677,18 @@ ui::EventResult SimTrendsPane::onEvent(const ui::InputEvent& ev) {
         }
         return ui::EventResult::Ignored;
     }
+    // 1.12.18 (planche 17) : le clic droit - une plume (sa piste, sa croix) ou le trace.
+    if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && m->button == ui::MouseButton::Right) {
+        std::string path;
+        if (const int h = hitAt(m->pos); h >= 0) {
+            const auto& key = hits_[static_cast<std::size_t>(h)].key;
+            if (key.rfind("piste:", 0) == 0) path = key.substr(6);
+            else if (key.rfind("retirer:", 0) == 0) path = key.substr(8);
+        }
+        if (path.empty() && !plot_.contains(m->pos)) return ui::EventResult::Ignored;
+        openMenu(m->pos, path);
+        return ui::EventResult::Consumed;
+    }
     if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && m->button == ui::MouseButton::Left) {
         if (const int h = hitAt(m->pos); h >= 0) {
             const auto key = hits_[static_cast<std::size_t>(h)].key;
@@ -716,6 +801,59 @@ SimJournalPane::SimJournalPane(std::string id, std::shared_ptr<SimCenterModel> m
             const auto go = tableModel_->rows_[row].go;
             if (!go.empty() && hosts_.go) hosts_.go(go);
         }
+    });
+    // 1.12.18 (planche 17) : le menu de la Console - Aller a la source (Entree), Filtrer sur la
+    // source, Copier la ligne (texte) Ctrl+C, Exporter en CSV (Excel), Effacer le journal.
+    table_->setEnterActivates(true);
+    table_->setExtraContextOnly(true);
+    table_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto* e = selected();
+        if (e) items.push_back(ui::cmd::heading(e->clock + " " + e->text.substr(0, std::min<std::size_t>(e->text.size(), 48))));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Ouvrir, 1001, e && !e->go.empty(), e ? std::string("rien \xC3\xA0 ouvrir") : std::string("choisis une ligne"),
+                                      "Aller \xC3\xA0 la source"));
+        ui::PopupMenu::Item filter;
+        filter.label = e ? "Filtrer sur \xC2\xAB " + SimJournal::sourceName(e->source) + " \xC2\xBB" : std::string("Filtrer sur la source");
+        filter.icon = ui::Icon::Filter;
+        filter.id = 1002;
+        filter.enabled = e != nullptr;
+        if (!e) filter.disabledReason = "choisis une ligne";
+        items.push_back(std::move(filter));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Copier, 1003, e != nullptr, "choisis une ligne", "Copier la ligne (texte)"));
+        items.push_back(ui::cmd::separator());
+        ui::PopupMenu::Item csv;
+        csv.label = "Exporter en CSV (Excel)";
+        csv.id = 1004;
+        csv.enabled = static_cast<bool>(hosts_.saveCsv) && model_ && model_->journal;
+        if (!csv.enabled) csv.disabledReason = "pas d'export ici";
+        items.push_back(std::move(csv));
+        ui::PopupMenu::Item clear;
+        clear.label = "Effacer le journal";
+        clear.icon = ui::Icon::Delete;
+        clear.id = 1005;
+        clear.enabled = static_cast<bool>(hosts_.clearJournal);
+        if (!clear.enabled) clear.disabledReason = "pas ici";
+        items.push_back(std::move(clear));
+        return items;
+    });
+    links_ += table_->contextAction->connect([this](int id) {
+        const auto* e = selected();
+        switch (id) {
+            case 1001: (void)goSelected(); break;
+            case 1002: if (e) (void)setSource(SimJournal::sourceName(e->source)); break;
+            case 1003: if (e) ui::setClipboardText(SimJournal::line(*e)); break;
+            case 1004: if (hosts_.saveCsv && model_ && model_->journal) hosts_.saveCsv("journal-simulation", model_->journal->csv()); break;
+            case 1005:
+                if (hosts_.clearJournal) hosts_.clearJournal();
+                refresh();
+                break;
+            default: break;
+        }
+    });
+    table_->setKeyHandler([this](const ui::KeyDown& k) {
+        if (k.key != ui::Key::C || !k.mods.ctrl || k.mods.shift || k.mods.alt) return false;
+        if (const auto* e = selected()) ui::setClipboardText(SimJournal::line(*e));
+        return true;
     });
     refresh();
 }

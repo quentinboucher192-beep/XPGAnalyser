@@ -131,6 +131,10 @@ void MainAnalysisScreen::goToPlace(const std::string& key) {
         if (auto p = app_.project(); p && section < p->sections.size()) openDocument(section);
         return;
     }
+    if (key.rfind("api:", 0) == 0) {   // 1.12.18 : un volet de l'API (Rouvrir le dernier ferme)
+        openApiPane(key.substr(4));
+        return;
+    }
     if (key.rfind("tab:", 0) == 0) {
         const std::string title = key.substr(4);
         for (std::size_t i = 0; i < centre_->tabCount(); ++i)
@@ -402,6 +406,11 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
         case Key::W:
             if (k.mods.shift) return false;
             (void)closeCurrentTab();
+            return true;
+        // 1.12.18 (planche 20) : Ctrl+Maj+T rouvre le dernier onglet ferme.
+        case Key::T:
+            if (!k.mods.shift) return false;
+            (void)reopenClosedTab();
             return true;
         // 1.12.2 : Ctrl+F4 aussi, comme Visual Studio (dans un editeur de code, Ctrl+W y
         // choisit le mot).

@@ -410,6 +410,10 @@ namespace ui {
         // Lot API 8 (2e partie) : un clic droit dans la colonne (sur un point ou
         // sur une ligne sans point) DEMANDE la condition de cette ligne.
         const core::SignalPtr<std::size_t> breakpointConditionRequested = core::Signal<std::size_t>::create();
+        // 1.12.18 : le clic droit dans la colonne demande LE MENU DE LA LIGNE (Point d'arret,
+        // Condition..., Desactiver, Executer jusqu'a la ligne...) a ce point de l'ecran ; sans
+        // personne a l'ecoute, la condition, comme avant.
+        const core::SignalPtr<std::size_t, gfx::Point> breakpointMenuRequested = core::Signal<std::size_t, gfx::Point>::create();
         // ---- fin Lot API 8 ----
         // The completion list is drawn above everything and must receive the click.
         [[nodiscard]] bool      requestsOverlayPass() const override {
@@ -456,6 +460,13 @@ namespace ui {
         // `native` (une fonction native : le menu propose son aide, F1, au lieu de la definition).
         using SymbolDescriber = std::function<bool(std::string_view symbol, std::string& detail, bool& native)>;
         static void setSymbolDescriber(SymbolDescriber d);
+        // 1.12.18 : LE MENU COMPLETE PAR L'HOTE (le debogueur : Executer jusqu'a la ligne, Ajouter
+        // un espion, Qui a ecrit ?). L'hote recoit le menu deja rempli (menu.items()), le nom vise
+        // et la ligne (0 = la premiere) ; il ajoute, retire, reordonne (menu.setItems). Ses
+        // entrees ont un id >= 1000 : contextAction les rend.
+        using MenuHook = std::function<void(PopupMenu& menu, const std::string& word, std::size_t line)>;
+        void setMenuHook(MenuHook hook) { menuHook_ = std::move(hook); }
+        const core::SignalPtr<int> contextAction = core::Signal<int>::create();
 
         // Ce que la barre d'etat doit dire (l'attente d'un accord, "Ligne copiee") ; l'appli
         // le route vers la barre de l'ecran. Vide : rien a dire.
@@ -701,6 +712,7 @@ namespace ui {
         // 1.12.18 : le menu du clic droit et la commande de chaque entree.
         PopupMenu*                 menu_{ nullptr };
         std::vector<std::string>   menuCommands_;
+        MenuHook                   menuHook_;
         void                       runMenuEntry(int id);
         gfx::Point                 barMouse_{};             // la souris, pour les boutons de la barre
         // ---- fin 1.12.2 ----
@@ -922,6 +934,10 @@ namespace ui {
             bool        checkable{ false };
             bool        checked{ false };
             bool        radio{ false };
+            // 1.12.18 : UNE LIGNE SOUS LE LIBELLE, en petit et en gris - ou va le geste
+            // ("dans Simulation > Courbes", "MAIN, ligne 42") : la colonne de
+            // droite reste aux touches.
+            std::string note{};
         };
 
         explicit PopupMenu(std::string id = {});

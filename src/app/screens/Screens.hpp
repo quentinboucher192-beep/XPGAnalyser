@@ -326,6 +326,9 @@ public:
     //  Une courbe de plus : une variable de l'automate ou de l'IHM ("ihm:" devant :
     //  de l'IHM). Faux : `why` dit pourquoi (inconnue, deja la, deja huit).
     bool addSimTrend(const std::string& path, std::string* why = nullptr);
+    // 1.12.18 : retirer une courbe de Simulation > Courbes ; les chemins suivis (de l'IHM ou non).
+    bool removeSimTrend(const std::string& path);
+    [[nodiscard]] std::vector<std::string> simTrendPaths(bool hmi);
     //  Relacher des forcages par leur cle ("plc:<chemin>", "twin:<equipement>:<adresse>|<type>").
     void releaseSimForcings(const std::vector<std::string>& keys);
 private:
@@ -370,6 +373,14 @@ private:
     // Le menu d'un onglet (clic droit sur son en-tete) : il vise sa PAGE.
     void showTabMenu(std::size_t index, gfx::Point at);
     void runTabMenuAction(int action);
+    // 1.12.18 (planche 20) : le vide de la barre d'onglets (Rouvrir le dernier ferme, Fermer tout,
+    // Mosaique) ; l'endroit d'un onglet (pour le rouvrir) ; Rouvrir le dernier ferme (Ctrl+Maj+T).
+    void showTabBarMenu(gfx::Point at);
+    [[nodiscard]] std::string placeKeyOf(std::size_t index) const;
+public:
+    bool reopenClosedTab();
+    [[nodiscard]] std::size_t closedTabCount() const noexcept { return closedTabs_.size(); }
+private:
     // Lot 7 : L'AFFICHAGE MULTI-FENETRE. Le centre se partage (onglets, groupes
     // cote a cote, mosaique automatique) et un onglet part dans une fenetre a
     // lui (App::detachedWindows). Les onglets retenus par leur INDICE (sections,
@@ -511,6 +522,7 @@ private:
     void saveLayoutMode();
     ui::PopupMenu*        tabMenu_{nullptr};
     ui::Widget*           tabMenuPage_{nullptr};
+    std::vector<std::string> closedTabs_;   // 1.12.18 : les endroits des onglets fermes (le dernier a la fin)
 
     // The View tab and its persistence.
     ui::WidgetPtr buildViewPanel();

@@ -38,6 +38,8 @@
 #include <functional>
 #include <limits>
 #include <memory>
+
+namespace ui { class PopupMenu; class InputText; }
 #include <optional>
 #include <string>
 #include <string_view>
@@ -148,6 +150,9 @@ struct SimCenterHosts {
     std::function<void(const hmi::SlowRules&)> setSlowRules;     // les seuils (pour le projet)
     std::function<void(const std::string&)>    exportCsv;        // "performances" | "lenteurs"
     std::function<void(std::uint64_t serial)>  goSlow;           // Aller a : l'objet, le script, la popup, l'equipement
+    // ---- 1.12.18 : les menus du clic droit (planche 17) ----
+    std::function<void(const std::string& name, const std::string& content)> saveCsv;   // Exporter (CSV)... : ou l'ecrire
+    std::function<void()>                      clearJournal;     // Effacer le journal
 };
 
 // ----------------------------------------------------- la vue d'ensemble ----
@@ -178,6 +183,12 @@ public:
     [[nodiscard]] bool clearAsked() const noexcept { return confirmClear_; }
     // Le bloc a l'ecran : "performances", "lenteurs" (l'arbre y mene).
     void reveal(std::string_view block);
+    // 1.12.18 (planche 17) : LE CLIC DROIT - sur la courbe des performances (Periode >,
+    // Exporter, Remettre a zero), une lenteur (Aller a, Copier la ligne, Vider...), une ligne
+    // « A surveiller » (ses boutons, Tester, Aller a l'equipement), ailleurs : Ouvrir. Les
+    // boutons restent : le menu les rassemble la ou l'on regarde.
+    void openMenuAt(gfx::Point at);
+    [[nodiscard]] ui::PopupMenu* contextMenu() const noexcept { return menu_; }
 
 protected:
     void            onPaint(const ui::PaintContext&) override;
@@ -232,6 +243,11 @@ private:
     std::string                     revealPending_;
     mutable gfx::Rect               chartRect_{};
     mutable double                  chartFrom_{0}, chartTo_{0};
+    // 1.12.18 : le menu du clic droit ; ce que fait chaque entree (une cle "aller a", ou une
+    // cle @ du volet ; "copier:<texte>" : le presse-papiers).
+    ui::PopupMenu*                  menu_{nullptr};
+    std::vector<std::string>        menuGo_;
+    void menuChosen(int id);
 };
 
 // ------------------------------------------------------------- les forcages ----
@@ -272,6 +288,7 @@ public:
     void setCursor(double secondsAgo);
     [[nodiscard]] std::vector<std::string> cursorReadout() const;
     [[nodiscard]] gfx::Rect partRect(std::string_view key) const;   // "fenetre:30", "retirer:<chemin>", "piste:<chemin>"
+    [[nodiscard]] ui::PopupMenu* contextMenu() const noexcept { return menu_; }   // 1.12.18
     [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
 
 protected:
@@ -287,6 +304,9 @@ private:
     [[nodiscard]] std::vector<std::string> readoutAt(double t) const;
     void act(const std::string& key);
     void addTyped();
+    void openMenu(gfx::Point at, const std::string& path);   // 1.12.18 : une plume (ou le trace)
+    ui::PopupMenu*                  menu_{nullptr};
+    std::string                     menuPath_;
     std::shared_ptr<SimCenterModel> model_;
     SimCenterHosts                  hosts_;
     ui::InputText*                  field_{nullptr};

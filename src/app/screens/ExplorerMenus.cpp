@@ -44,6 +44,7 @@
 #include "../TypePanes.hpp"
 #include "../VariablesPane.hpp"
 #include "../hmi/HmiDesignPanes.hpp"
+#include "../hmi/HmiSimulation.hpp"   // 1.12.18 : les lignes de la Simulation depliee
 #include "../../help/HelpIndex.hpp"
 #include "../../help/HelpSession.hpp"     // help::labelOf
 #include "../../hmi/HmiCommands.hpp"
@@ -1138,6 +1139,114 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         break;
     }
     // ---- fin Lot API 8 : Centre de simulation ----
+
+    // 1.12.18 (planche 18) : UNE LIGNE DE LA SIMULATION DEPLIEE - ses entrees en tete (Ouvrir,
+    // Vider, Exporter, Relacher, Retirer, Tester...), puis Epingler, l'aide et le pied de l'arbre.
+    case NK::SimRow: {
+        const auto* row = treeModel_ ? treeModel_->simRowOf(node) : nullptr;
+        if (!row) break;
+        using SL = ProjectTreeModel::SimList;
+        const auto list = ProjectTreeModel::simListOf(node);
+        const std::string key = row->key;
+        const auto arg = [&key](std::string_view prefix) { return key.rfind(prefix, 0) == 0 ? key.substr(prefix.size()) : std::string{}; };
+        const auto openRow = [this, node] { onTreeSelection(node); };
+        auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+        switch (list) {
+            case SL::Breakpoints: {
+                const auto id = static_cast<std::uint32_t>(std::strtoul(arg("bp:").c_str(), nullptr, 10));
+                const SimBreakpoint* bp = nullptr;
+                for (const auto& b : app_.simulation().breakpoints())
+                    if (b.id == id) bp = &b;
+                m.add("Aller au code", Icon::Code, openRow, "Entr\xC3\xA9" "e");
+                if (bp) {
+                    const bool on = bp->enabled;
+                    m.add(on ? "D\xC3\xA9sactiver" : "Activer", Icon::None, [this, id, on] { (void)app_.simulation().setBreakpointEnabled(id, !on); });
+                    m.add("Retirer", Icon::Delete, [this, id] { (void)app_.simulation().removeBreakpoint(id); }, "Suppr");
+                    keys.remove = [this, id] { (void)app_.simulation().removeBreakpoint(id); };
+                }
+                break;
+            }
+            case SL::Forcings:
+                m.add("Ouvrir", Icon::Open, openRow, "Entr\xC3\xA9" "e");
+                m.add("Rel\xC3\xA2" "cher", Icon::Release, [this, key] { releaseSimForcings({key}); }, "Suppr");
+                keys.remove = [this, key] { releaseSimForcings({key}); };
+                break;
+            case SL::Trends:
+                m.add("Ouvrir", Icon::Open, openRow, "Entr\xC3\xA9" "e");
+                m.add("Retirer la courbe", Icon::Delete, [this, key] { (void)removeSimTrend(key); }, "Suppr");
+                keys.remove = [this, key] { (void)removeSimTrend(key); };
+                break;
+            case SL::Overview:
+                m.add("Ouvrir", Icon::Open, openRow, "Entr\xC3\xA9" "e");
+                if (key == "performances") {
+                    m.add("Exporter (CSV)\xE2\x80\xA6", Icon::Export, [this] {
+                        if (auto* p = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) saveApiCsv("performances_ihm", p->runtime().perfHistory().csv());
+                    }, {}, sim ? std::string{} : std::string("l'IHM n'a pas tourn\xC3\xA9"));
+                    m.add("Remettre \xC3\xA0 z\xC3\xA9ro", Icon::None, [this] {
+                        if (auto* p = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) p->runtime().resetPerfHistory();
+                    }, {}, sim ? std::string{} : std::string("l'IHM n'a pas tourn\xC3\xA9"));
+                } else if (key == "lenteurs") {
+                    const bool any = sim && !sim->runtime().slowLog().entries().empty();
+                    // Vider demande d'abord (dans la Vue d'ensemble : sa confirmation).
+                    m.add("Vider les lenteurs\xE2\x80\xA6", Icon::Delete, [this] {
+                        (void)openSimCenter("ensemble");
+                        if (auto* ov = dynamic_cast<SimOverviewPane*>(simCenterPane("ensemble"))) {
+                            ov->reveal("lenteurs");
+                            (void)ov->activate("lenteurs:vider");
+                        }
+                    }, {}, any ? std::string{} : std::string("aucune lenteur"));
+                    m.add("Exporter (CSV)\xE2\x80\xA6", Icon::Export, [this] {
+                        if (auto* p = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) saveApiCsv("lenteurs_ihm", p->runtime().slowLog().csv());
+                    }, {}, any ? std::string{} : std::string("aucune lenteur"));
+                } else if (key == "ensemble") {
+                    // A surveiller : Retablir la liaison du premier equipement coupe.
+                    std::string lost;
+                    for (const auto& a : simCenterReport().attention)
+                        if (lost.empty() && a.id.rfind("equipement:", 0) == 0) lost = a.id.substr(11);
+                    m.add("R\xC3\xA9tablir la liaison", Icon::Globe, [this, lost] { simCenterGo("reconnecter:" + lost); }, {},
+                          lost.empty() ? std::string("aucune liaison perdue") : std::string{});
+                }
+                break;
+            case SL::Hmi:
+                if (const auto view = arg("vue:"); !view.empty()) {
+                    m.add("Aller \xC3\xA0 la vue", Icon::GoTo, openRow, "Entr\xC3\xA9" "e");
+                    m.add("Ouvrir dans l'\xC3\xA9" "diteur", Icon::Open, [this, view] {
+                        if (auto doc = app_.hmi())
+                            for (const auto& v : doc->project.views)
+                                if (v.name == view) {
+                                    openHmiView(v.id);
+                                    return;
+                                }
+                    });
+                } else if (key == "alarmes") {
+                    m.add("Ouvrir", Icon::Open, openRow, "Entr\xC3\xA9" "e");
+                    m.add("Tout acquitter", Icon::None, [this] {
+                        if (auto* p = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) {
+                            std::string why;
+                            const auto n = p->runtime().acknowledge("*", p->runtime().now(), &why);
+                            if (status_) status_->setTransientMessage(n ? std::to_string(n) + " alarme(s) acquitt\xC3\xA9" "e(s)." : "Rien \xC3\xA0 acquitter" + (why.empty() ? std::string(".") : " : " + why), 5.0);
+                        }
+                    }, {}, sim ? std::string{} : std::string("l'IHM n'a pas tourn\xC3\xA9"));
+                } else {
+                    m.add("Ouvrir", Icon::Open, openRow, "Entr\xC3\xA9" "e");
+                }
+                break;
+            case SL::Equipments:
+                if (const auto name = arg("equipement:"); !name.empty()) {
+                    m.add("Tester", Icon::None, [this, name] { simCenterGo("tester:" + name); });
+                    m.add("R\xC3\xA9tablir la liaison", Icon::Globe, [this, name] { simCenterGo("reconnecter:" + name); });
+                    m.add("Voir dans \xC3\x89quipements", Icon::Open, openRow, "Entr\xC3\xA9" "e");
+                } else {
+                    m.add("Ouvrir", Icon::Open, openRow, "Entr\xC3\xA9" "e");
+                }
+                break;
+            case SL::Journal:
+                m.add("Ouvrir", Icon::Open, openRow, "Entr\xC3\xA9" "e");
+                break;
+        }
+        m.separator();
+        break;
+    }
 
     case NK::Macro: {
         const bool doc = document != nullptr;

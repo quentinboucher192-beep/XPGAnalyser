@@ -151,6 +151,11 @@ struct HmiSimulationHost {
     //  Le lien « Dans le temps > » de l'onglet Performances : l'hote montre la Vue
     //  d'ensemble de Simulation a ce bloc ("performances"). Nul : pas de lien.
     std::function<void(const std::string& where)>         goSimCenter;
+    // ---- 1.12.18 : LES MENUS DU CLIC DROIT (planche 16) ----
+    //  follow : suivre une variable dans Simulation > Courbes (faux : why) ; goToObject : la
+    //  vue et l'objet du projet dans l'editeur. Nuls : pas d'entree.
+    std::function<bool(const std::string& path, std::string* why)> follow;
+    std::function<void(hmi::Id view, hmi::Id object)>               goToObject;
 };
 
 // Une vue a dessiner : evaluee, avec l'etat de sa transition.
@@ -235,6 +240,13 @@ public:
     const core::SignalPtr<hmi::Id> pressed = core::Signal<hmi::Id>::create();
     const core::SignalPtr<hmi::Id, bool> released = core::Signal<hmi::Id, bool>::create();
     const core::SignalPtr<hmi::Id> doubleClicked = core::Signal<hmi::Id>::create();
+    // ---- 1.12.18 (planche 16) : LE CLIC DROIT SUR LA VUE EN MARCHE ----
+    //  contextWanted(point, maj) : l'hote dit si ce clic droit ouvre son menu ; sinon il va a
+    //  l'IHM (SYS.MouseRight). Alors contextRequested(point) - le bouton n'est pas presse pour le
+    //  projet. hitAt : la vue (son id) et l'objet sous ce point (la popup du dessus d'abord).
+    void setContextWanted(std::function<bool(gfx::Point, bool shift)> f) { contextWanted_ = std::move(f); }
+    const core::SignalPtr<gfx::Point> contextRequested = core::Signal<gfx::Point>::create();
+    [[nodiscard]] bool hitAt(gfx::Point p, hmi::Id& view, hmi::Id& object, std::size_t* layer = nullptr) const;
     // Lot 6 : un clic sur une partie d'un objet a parties (le gestionnaire de
     // recettes : "bouton:Ajouter", "ligne:2").
     const core::SignalPtr<hmi::Id, std::string> partClicked = core::Signal<hmi::Id, std::string>::create();
@@ -366,6 +378,8 @@ private:
     void                  notePointer(const ui::InputEvent&);
     [[nodiscard]] bool    routeKey(const ui::InputEvent&);
     KeyHandler            keyHandler_;
+    std::function<bool(gfx::Point, bool)> contextWanted_;   // 1.12.18
+    bool rightForMenu_{false};                           // 1.12.18 : le relacher du menu
     bool                  pointerInside_{false};
     void pressObject(std::size_t layer, gfx::Point p, int clickCount);
     void paintKeyboard(const ui::PaintContext&);
@@ -521,6 +535,16 @@ public:
     [[nodiscard]] ui::TableView& expressions() noexcept { return *table_; }
     [[nodiscard]] ui::InputText* expressionsSearch() noexcept { return exprSearch_; }
     void expandExpressions(bool open);
+    // ---- 1.12.18 (planche 16) : les menus du clic droit ----
+    // Le menu d'un objet de la vue en marche (une jauge, une courbe, une alarme) ; faux : rien dessous.
+    bool openViewMenu(gfx::Point at);
+    [[nodiscard]] ui::PopupMenu* viewMenu() const noexcept { return viewMenu_; }
+    // Un script, une action, une expression du projet lit-il le bouton droit (SYS.MouseRight,
+    // SYS.MouseButtons) ? Alors le clic droit va a l'IHM ; Maj+clic droit ouvre le menu.
+    [[nodiscard]] bool projectReadsRightButton() const;
+    // Ajouter aux expressions : un chemin de plus dans l'onglet Expressions (sous « Ajoutees »).
+    void addExpression(const std::string& path);
+    [[nodiscard]] const std::vector<std::string>& addedExpressions() const noexcept { return addedExprs_; }
     // 1.11.6 : les mouvements appliques maintenant (la mise a jour le fait ; les tests aussi).
     void applyMotions();
     [[nodiscard]] TwinValuesController& twinsController() noexcept { return *twinsCtl_; }
@@ -810,6 +834,13 @@ private:
     // Lot API 8 : un jeton de vie - la reponse a la question "ou enregistrer"
     // arrive plus tard ; le volet parti entretemps, elle ne va nulle part.
     std::shared_ptr<char> exportAlive_{std::make_shared<char>('\0')};
+    // 1.12.18 (planche 16) : les menus du clic droit.
+    ui::PopupMenu*           viewMenu_{nullptr};
+    std::vector<std::string> viewMenuGo_;     // ce que fait chaque entree ("forcer:<chemin>"...)
+    std::vector<std::string> addedExprs_;     // Ajouter aux expressions
+    void viewMenuChosen(int id);
+    void runMenuKey(const std::string& key);  // une entree d'un menu (la vue, les Expressions)
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> exprMenuItems();
     core::ConnectionScope links_;
 };
 

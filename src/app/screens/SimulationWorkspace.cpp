@@ -1221,6 +1221,9 @@ bool MainAnalysisScreen::openSimCenter(const std::string& key) {
         else saveApiCsv("performances_ihm", sim->runtime().perfHistory().csv());
     };
     hosts.goSlow = [this](std::uint64_t serial) { goToSlow(serial); };
+    // 1.12.18 : les menus du clic droit (Exporter, Effacer le journal).
+    hosts.saveCsv = [this](const std::string& name, const std::string& content) { saveApiCsv(name, content); };
+    hosts.clearJournal = [this] { app_.simJournal().clear(); };
     std::unique_ptr<ApiFrame> frame;
     std::string title;
     ui::Icon icon = ui::Icon::Play;
@@ -1587,11 +1590,36 @@ void MainAnalysisScreen::simCenterGo(const std::string& key) {
         st.reportDirty = true;
         return;
     }
+    // 1.12.18 (planches 17 et 18) : Tester un equipement (sans reconnecter).
+    if (key.rfind("tester:", 0) == 0) {
+        const auto name = key.substr(7);
+        app_.equipments().test(name);
+        app_.simJournal().add(SimSource::Equipements, SimSeverity::Info, "liaison", "Tester la liaison : " + name, {}, "equipements");
+        if (status_) status_->setTransientMessage(name + " : un essai de la liaison est parti.", 6.0);
+        st.nextPoll = 0;
+        st.reportDirty = true;
+        return;
+    }
     if (openSimCenter(key)) return;
     if (status_) status_->setTransientMessage("Simulation : je ne sais pas aller \xC3\xA0 \xC2\xAB " + key + " \xC2\xBB.", 6.0);
 }
 
 // ------------------------------------------------------------- courbes, forcages ----
+bool MainAnalysisScreen::removeSimTrend(const std::string& path) {
+    ensureSimCenter();
+    const bool ok = simCenter_->model->removeTrend(path);
+    if (ok) simCenter_->reportDirty = true;
+    return ok;
+}
+
+std::vector<std::string> MainAnalysisScreen::simTrendPaths(bool hmi) {
+    std::vector<std::string> out;
+    if (!simCenter_) return out;
+    for (const auto& t : simCenter_->model->trends())
+        if (t.hmi == hmi) out.push_back(t.path);
+    return out;
+}
+
 bool MainAnalysisScreen::addSimTrend(const std::string& raw, std::string* why) {
     ensureSimCenter();
     std::string path = trimmed(raw);
@@ -1621,6 +1649,13 @@ bool MainAnalysisScreen::addSimTrend(const std::string& raw, std::string* why) {
     if (const auto doc = app_.hmi()) {
         if (const auto* var = doc->project.variable(path)) {
             if (!model.addTrend(var->name, true, lowerOf(var->type) == "bool", why)) return false;
+            simCenter_->reportDirty = true;
+            return true;
+        }
+        // 1.12.18 : un membre, une case (Four1.Temp, Mesures[2]) - sa racine est une variable de l'IHM.
+        const auto cut = path.find_first_of(".[");
+        if (cut != std::string::npos && cut > 0 && doc->project.variable(path.substr(0, cut))) {
+            if (!model.addTrend(path, true, false, why)) return false;
             simCenter_->reportDirty = true;
             return true;
         }

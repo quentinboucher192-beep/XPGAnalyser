@@ -305,6 +305,18 @@ void HmiTwinValues::setAllOpen(bool open) {
 bool HmiTwinValues::contextAction(std::size_t line, int item) {
     if (line >= lines_.size()) return false;
     const Line l = lines_[line];
+    // 1.12.18 : Mouvement > un genre ; Copier la valeur.
+    if (item >= kKindBase && item <= kKindBase + static_cast<int>(std::size(hmi::kBehaviorKinds)) && l.kind == Line::Kind::Row) {
+        std::string kind = "aucun";
+        if (item > kKindBase) kind = std::string(hmi::behaviorKindKey(hmi::kBehaviorKinds[static_cast<std::size_t>(item - kKindBase - 1)]));
+        kindChosen->emit(l.equipment, l.key, kind);
+        return true;
+    }
+    if (item == MCopyValue && l.kind == Line::Kind::Row) {
+        const auto it = live_.find(l.equipment + "|" + l.key);
+        ui::setClipboardText(l.forced && !l.forcedText.empty() ? l.forcedText : it != live_.end() ? it->second.text : std::string{});
+        return true;
+    }
     // La cle de repli de la ligne : un esclave (son nom), un noeud (sa cle), une valeur (son noeud).
     const std::string key = l.kind == Line::Kind::Group ? l.equipment
                           : l.kind == Line::Kind::Node  ? l.node
@@ -373,9 +385,41 @@ bool HmiTwinValues::openContextMenu(std::size_t line, gfx::Point at) {
     item(MCollapse, row ? "Replier (son n\xC5\x93ud)" : "Replier", row || open, "d\xC3\xA9j\xC3\xA0 repli\xC3\xA9");
     item(MCollapseAll, "Tout replier", true);
     sep();
-    item(MForce, row ? "Forcer (\xC3\xA0 sa valeur)" : "Forcer les " + std::to_string(free) + " libres (\xC3\xA0 leur valeur)", free > 0,
-         "rien de libre \xC3\xA0 forcer");
-    item(MUnforce, row ? "Rel\xC3\xA2" "cher" : "Rel\xC3\xA2" "cher les " + std::to_string(forced), forced > 0, "rien de forc\xC3\xA9");
+    item(MForce, row ? "Forcer \xC3\xA0 sa valeur" : "Forcer les " + std::to_string(free) + " libres (\xC3\xA0 leur valeur)", free > 0,
+         row ? "d\xC3\xA9j\xC3\xA0 forc\xC3\xA9" "e" : "rien de libre \xC3\xA0 forcer");
+    item(MUnforce, row ? "Rel\xC3\xA2" "cher" : "Rel\xC3\xA2" "cher les " + std::to_string(forced), forced > 0, row ? "pas forc\xC3\xA9" "e" : "rien de forc\xC3\xA9");
+    if (row) {
+        // 1.12.18 (planche 16) : le mouvement de la valeur (le genre de l'esclave), copier la valeur.
+        ui::PopupMenu::Item motion;
+        motion.label = "Mouvement";
+        ui::PopupMenu::Item none;
+        none.label = "Aucun (libre)";
+        none.id = kKindBase;
+        none.radio = true;
+        none.checked = !l.hasBehavior;
+        motion.children.push_back(std::move(none));
+        int k = kKindBase + 1;
+        for (const auto kind : hmi::kBehaviorKinds) {
+            ui::PopupMenu::Item it;
+            it.label = std::string(hmi::behaviorKindLabel(kind));
+            it.id = k++;
+            it.radio = true;
+            it.checked = l.hasBehavior && l.kindLabel == it.label;
+            if (kind == hmi::BehaviorKind::FollowPlc && !core::hasApi()) continue;
+            if (l.boolean && kind != hmi::BehaviorKind::Blink && kind != hmi::BehaviorKind::Constant && kind != hmi::BehaviorKind::Copy
+                && kind != hmi::BehaviorKind::FollowPlc && kind != hmi::BehaviorKind::Steps) {
+                it.enabled = false;
+                it.disabledReason = "pas pour un bit";
+            }
+            motion.children.push_back(std::move(it));
+        }
+        items.push_back(std::move(motion));
+        ui::PopupMenu::Item copy;
+        copy.label = "Copier la valeur";
+        copy.shortcut = "Ctrl+C";
+        copy.id = MCopyValue;
+        items.push_back(std::move(copy));
+    }
     ctxLine_ = line;
     ctxMenu_->setItems(std::move(items));
     auto* root = rootWidget();

@@ -2506,7 +2506,10 @@ namespace ui {
                     if (d->mods.shift) breakpointEnableToggled->emit(line);
                     else breakpointToggled->emit(line);
                 } else if (d->button == MouseButton::Right && !lines_.empty()) {
-                    breakpointConditionRequested->emit(lineAt(d->pos.y));   // Lot API 8 (2e partie) : sa condition
+                    // 1.12.18 (planche 18) : le menu de la ligne ; sans lui, sa condition (Lot API 8).
+                    const auto line = lineAt(d->pos.y);
+                    if (breakpointMenuRequested->slotCount() > 0) breakpointMenuRequested->emit(line, d->pos);
+                    else breakpointConditionRequested->emit(line);
                 }
                 return EventResult::Consumed;
             }
@@ -3388,8 +3391,9 @@ namespace ui {
         constexpr float kScrollStrip = 14.f;      // 1.12.18 : les bandes d'une colonne qui defile
         constexpr float kScreenMargin = 4.f;      // 1.12.18 : un menu trop haut garde ce jour en haut et en bas
 
+        constexpr float kNoteHeight = 14.f;       // 1.12.18 : la note sous le libelle
         float menuRowHeight(const PopupMenu::Item& it, float rowHeight) {
-            return it.separator ? kSeparatorHeight : rowHeight;
+            return it.separator ? kSeparatorHeight : it.note.empty() || it.heading ? rowHeight : rowHeight + kNoteHeight;
         }
 
         // Lot 7 : la largeur d'une colonne d'entrees - le menu, ou un sous-menu.
@@ -3402,6 +3406,9 @@ namespace ui {
                 if (!it.enabled && !it.disabledReason.empty())
                     w += 12.f + measureWidth(it.disabledReason, kFontUi);
                 if (!it.children.empty())       w += kSubmenuArrow;
+                // 1.12.18 : la note sous le libelle (petite : 13 contre 16).
+                if (!it.note.empty())
+                    w = std::max(w, kMenuIconGutter + measureWidth(it.note, kFontUi) * 13.f / 16.f + 8.f);
                 widest = std::max(widest, w);
             }
             return widest + 2.f * kMenuPadding + 12.f;
@@ -3912,6 +3919,7 @@ namespace ui {
                     y += h;
                     continue;
                 }
+                const float ch = item.note.empty() ? h : rowHeight;   // 1.12.18 : la ligne du libelle (la note dessous)
                 const bool hot = (static_cast<int>(i) == hotIndex || static_cast<int>(i) == openIndex) && item.enabled;
                 if (hot) ctx.r.fillRect(row, c.selectionBg);
 
@@ -3920,8 +3928,8 @@ namespace ui {
 
                 if (item.checkable || item.radio) {
                     // 1.12.18 : la case (cochee ou non) ; le choix, son point.
-                    const float side = std::min(h - 10.f, 12.f);
-                    const gfx::Rect cb{ row.x + kMenuPadding + 2.f, row.y + (h - side) * 0.5f, side, side };
+                    const float side = std::min(ch - 10.f, 12.f);
+                    const gfx::Rect cb{ row.x + kMenuPadding + 2.f, row.y + (ch - side) * 0.5f, side, side };
                     if (item.radio) {
                         if (item.checked) ctx.r.fillRoundedRect({ cb.x + side * 0.2f, cb.y + side * 0.2f, side * 0.6f, side * 0.6f }, fg, side * 0.3f);
                     } else {
@@ -3932,14 +3940,14 @@ namespace ui {
                         }
                     }
                 } else if (item.paintIcon) {
-                    const float side = std::min(h - 4.f, 18.f);
-                    item.paintIcon(ctx, { row.x + kMenuPadding - 1.f, row.y + (h - side) * 0.5f, side, side });
+                    const float side = std::min(ch - 4.f, 18.f);
+                    item.paintIcon(ctx, { row.x + kMenuPadding - 1.f, row.y + (ch - side) * 0.5f, side, side });
                 } else if (item.icon != Icon::None) {
-                    const float side = std::min(h - 6.f, 16.f);
+                    const float side = std::min(ch - 6.f, 16.f);
                     drawIcon(ctx.r, item.icon,
-                        { row.x + kMenuPadding, row.y + (h - side) * 0.5f, side, side }, fg);
+                        { row.x + kMenuPadding, row.y + (ch - side) * 0.5f, side, side }, fg);
                 }
-                const gfx::Point text{ row.x + kMenuPadding + kMenuIconGutter, row.y + (h - lh) * 0.5f };
+                const gfx::Point text{ row.x + kMenuPadding + kMenuIconGutter, row.y + (ch - lh) * 0.5f };
                 ctx.r.drawText(text, item.label, ctx.theme.font.ui, fg);
                 // 1.12.18 : la lettre au clavier, soulignee.
                 if (cues && i < mn.size() && mn[i].letter && mn[i].pos + mn[i].len <= item.label.size()) {
@@ -3960,7 +3968,7 @@ namespace ui {
                 }
                 if (!item.shortcut.empty()) {
                     const float w = measureWidth(item.shortcut, kFontUi);
-                    ctx.r.drawText({ rightEdge - w, row.y + (h - lh) * 0.5f }, item.shortcut,
+                    ctx.r.drawText({ rightEdge - w, row.y + (ch - lh) * 0.5f }, item.shortcut,
                         ctx.theme.font.ui, hot ? c.selectionText : c.textMuted);
                     rightEdge -= w + 12.f;
                 }
@@ -3968,9 +3976,13 @@ namespace ui {
                 // hovers long enough to see.
                 if (!item.enabled && !item.disabledReason.empty()) {
                     const float w = measureWidth(item.disabledReason, kFontUi);
-                    ctx.r.drawText({ rightEdge - w, row.y + (h - lh) * 0.5f }, item.disabledReason,
+                    ctx.r.drawText({ rightEdge - w, row.y + (ch - lh) * 0.5f }, item.disabledReason,
                         ctx.theme.font.ui, c.textDisabled);
                 }
+                // 1.12.18 : la note, sous le libelle, en petit.
+                if (!item.note.empty())
+                    ctx.r.drawText({ text.x, row.y + ch - 3.f }, item.note, ctx.theme.font.smallUi,
+                        hot ? c.selectionText : c.textMuted);
                 y += h;
             }
             if (scrolls) {

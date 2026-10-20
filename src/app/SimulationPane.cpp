@@ -28,6 +28,7 @@
 #include "../project/ApiChecks.hpp"
 #include "../project/TypeUsage.hpp"
 #include "../sim/Runtime.hpp"
+#include "../ui/Commands.hpp"
 #include "../ui/Icons.hpp"
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/DataViews.hpp"
@@ -63,12 +64,14 @@ constexpr double       kReadEvery = 0.25;       // s : les valeurs, quatre fois 
 constexpr double       kFlash = 1.0;            // s : une valeur qui vient de changer s'eclaire
 constexpr double       kChanging = 10.0;        // s : « Qui changent » - changee depuis moins que cela
 constexpr double       kNever = -1.0e9;
-constexpr std::size_t  kMaxWatched = 6;         // six courbes, c'est deja beaucoup a lire
 constexpr std::int64_t kTrendMs = 30000;        // la courbe : les 30 dernieres secondes simulees
 constexpr int          kSearchBudget = 6000;    // les noeuds qu'une recherche de membre visite
 constexpr std::size_t  kSearchHits = 300;
-constexpr int          kMenuCopy = 100;
+constexpr int          kMenuCopy = 100;        // 1.12.18 : Copier la valeur (Ctrl+C)
 constexpr int          kMenuWriter = 101;
+constexpr int          kMenuCopyName = 102;    // 1.12.18 : Copier le nom
+constexpr int          kMenuNewTable = 9999;   // 1.12.18 : Ajouter a une table d'animation > Nouvelle table...
+constexpr int          kMenuTableBase = 10000; // 1.12.18 : ... > une table (son rang)
 
 // Les dossiers fixes (les genres de project::usage), puis un par unite.
 enum FolderId : int { FDfb = 0, FStd, FDdt, FLocated, FOther };
@@ -1201,228 +1204,6 @@ void SimulationPane::Band::onPaint(const ui::PaintContext& ctx) {
     if (tip != tooltip()) setTooltip(std::move(tip));
 }
 
-// ============================================================== la courbe ====
-//  Les variables suivies (six au plus), sur les 30 dernieres secondes simulees,
-//  lues dans l'historique du moteur (Runtime::history) : la courbe et la table
-//  ne peuvent pas se contredire. Les BOOL ont leur bande en bas ; une variable
-//  forcee est en pointilles. « Figer » garde l'image (une copie des points).
-class SimulationPane::Trend final : public ui::Widget {
-public:
-    explicit Trend(SimulationPane& pane) : ui::Widget(pane.id() + ".courbe"), pane_(pane) {}
-    [[nodiscard]] bool frozen() const noexcept { return frozen_; }
-    void setFrozen(bool on) {
-        if (on == frozen_) return;
-        snapshot_.clear();
-        if (on) {
-            snapshot_ = collect();
-            auto* rt = pane_.runtime();
-            frozenEnd_ = rt ? rt->clockMs() : 0;
-        }
-        frozen_ = on;
-        invalidate();
-    }
-protected:
-    void onPaint(const ui::PaintContext& ctx) override;
-    ui::EventResult onEvent(const ui::InputEvent& ev) override {
-        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left)
-            for (const auto& [rect, path] : legend_)
-                if (rect.contains(d->pos)) {
-                    const std::string keep = path;
-                    (void)pane_.selectVariable(keep);
-                    return ui::EventResult::Consumed;
-                }
-        return ui::EventResult::Ignored;
-    }
-private:
-    struct Series {
-        std::string path, name;
-        bool        forced{false}, isBool{false};
-        std::vector<sim::Sample> points;
-    };
-    [[nodiscard]] std::vector<Series> collect() const {
-        std::vector<Series> out;
-        auto* rt = pane_.runtime();
-        const std::int64_t end = rt ? rt->clockMs() : 0;
-        for (const auto& path : pane_.watched_) {
-            Series s;
-            s.path = path;
-            s.name = shortName(path);
-            if (rt) {
-                s.forced = rt->isForced(path);
-                sim::Value v;
-                s.isBool = rt->get(path, v) && v.type() == sim::Type::Bool;
-                if (const auto* h = rt->history(path)) {
-                    // Les 30 dernieres secondes seulement, prises par la fin.
-                    auto it = h->end();
-                    while (it != h->begin() && std::prev(it)->clockMs >= end - kTrendMs - 1000) --it;
-                    s.points.assign(it, h->end());
-                }
-            }
-            out.push_back(std::move(s));
-        }
-        return out;
-    }
-
-    SimulationPane&     pane_;
-    bool                frozen_{false};
-    std::int64_t        frozenEnd_{0};
-    std::vector<Series> snapshot_;
-    mutable std::vector<std::pair<gfx::Rect, std::string>> legend_;
-};
-
-void SimulationPane::Trend::onPaint(const ui::PaintContext& ctx) {
-    auto& r = ctx.r;
-    const auto& th = ctx.theme;
-    const auto& c = th.color;
-    const auto b = bounds();
-    legend_.clear();
-    r.fillRect(b, c.panelBg);
-    const auto series = frozen_ ? snapshot_ : collect();
-    auto* rt = pane_.runtime();
-    const std::int64_t end = frozen_ ? frozenEnd_ : (rt ? rt->clockMs() : 0);
-    const std::int64_t start = end - kTrendMs;
-    if (series.empty()) {
-        const std::string msg = "Choisis une variable, puis \xC2\xAB Suivre sur la courbe \xC2\xBB : elle se trace ici (six au plus).";
-        const auto n = r.fitCharacters(msg, kSmall, b.w - 16.f);
-        const std::string shown = n >= msg.size() ? msg : msg.substr(0, n);
-        r.drawText({b.x + std::max(8.f, (b.w - r.measure(shown, kSmall).width) * 0.5f), b.y + b.h * 0.5f - 8.f}, shown, kSmall, c.textMuted);
-        return;
-    }
-    const float legendH = 22.f;
-    const gfx::Rect plot{b.x + 36.f, b.y + 8.f, std::max(10.f, b.w - 44.f), std::max(10.f, b.h - 8.f - 18.f - legendH)};
-    r.pushClip(b);
-
-    // L'echelle commune des valeurs (les BOOL ont leur bande, a part).
-    bool anyNumber = false, anyBool = false, first = true;
-    double lo = 0.0, hi = 1.0;
-    for (const auto& s : series) {
-        if (s.isBool) {
-            anyBool = true;
-            continue;
-        }
-        anyNumber = true;
-        for (const auto& p : s.points) {
-            if (p.clockMs < start) continue;
-            if (first) {
-                lo = hi = p.value;
-                first = false;
-            }
-            lo = std::min(lo, p.value);
-            hi = std::max(hi, p.value);
-        }
-    }
-    if (first) { lo = 0.0; hi = 1.0; }
-    if (hi - lo < 1e-9) {
-        const double pad = std::max(1.0, std::fabs(lo) * 0.1);
-        lo -= pad;
-        hi += pad;
-    }
-    const double step = niceStep(hi - lo, 4);
-    lo = std::floor(lo / step) * step;
-    hi = std::ceil(hi / step) * step;
-    const gfx::Rect numArea = anyBool && anyNumber ? gfx::Rect{plot.x, plot.y, plot.w, plot.h * 0.72f} : plot;
-    const gfx::Rect boolArea = anyBool ? (anyNumber ? gfx::Rect{plot.x, plot.y + plot.h * 0.80f, plot.w, plot.h * 0.20f} : plot) : gfx::Rect{};
-
-    // La grille et ses valeurs.
-    if (anyNumber) {
-        int guard = 0;
-        for (double v = lo; v <= hi + step * 0.5 && guard < 24; v += step, ++guard) {
-            const float y = numArea.bottom() - static_cast<float>((v - lo) / (hi - lo)) * numArea.h;
-            r.line({plot.x, y}, {plot.right(), y}, c.gridLine, 1.f);
-            const auto label = tickLabel(v, step);
-            r.drawText({plot.x - 6.f - r.measure(label, kSmall).width, y - r.lineHeight(kSmall) * 0.5f}, label, kSmall, c.textMuted);
-        }
-    }
-    if (anyBool) {
-        r.fillRect(boolArea, c.rowAltBg);
-        r.drawText({plot.x - 6.f - r.measure("0/1", kSmall).width, boolArea.y + boolArea.h * 0.5f - r.lineHeight(kSmall) * 0.5f},
-                   "0/1", kSmall, c.textMuted);
-    }
-    r.line({plot.x, plot.bottom()}, {plot.right(), plot.bottom()}, c.border, 1.f);
-    {
-        const float ly = plot.bottom() + 3.f;
-        const std::string a = "\xE2\x88\x92" "30 s", m = "\xE2\x88\x92" "15 s", z = "maintenant";
-        r.drawText({plot.x, ly}, a, kSmall, c.textMuted);
-        r.drawText({plot.x + (plot.w - r.measure(m, kSmall).width) * 0.5f, ly}, m, kSmall, c.textMuted);
-        r.drawText({plot.right() - r.measure(z, kSmall).width, ly}, z, kSmall, c.textMuted);
-    }
-
-    // Les traces : un point par colonne de pixels au plus (le min et le max de
-    // la colonne), sinon 1 500 points par variable a chaque image.
-    std::size_t index = 0;
-    for (const auto& s : series) {
-        const auto colour = th.onSurface(kTraces[index % (sizeof kTraces / sizeof kTraces[0])]);
-        ++index;
-        const gfx::Rect area = s.isBool ? boolArea : numArea;
-        const auto yOf = [&](double v) {
-            if (s.isBool) return v != 0.0 ? area.y + 2.f : area.bottom() - 2.f;
-            return area.bottom() - static_cast<float>((v - lo) / (hi - lo)) * area.h;
-        };
-        const float width = s.forced ? 2.f : 1.6f;
-        // Une forcee : en pointilles (6 pixels dessines, 4 sautes).
-        const auto seg = [&](gfx::Point a, gfx::Point z) {
-            if (s.forced && std::fmod(std::max(0.f, a.x - plot.x), 10.f) >= 6.f) return;
-            r.line(a, z, colour, width);
-        };
-        gfx::Point prev{};
-        bool have = false;
-        int bucket = INT_MIN;
-        float bMin = 0.f, bMax = 0.f;
-        for (const auto& p : s.points) {
-            if (p.clockMs < start || p.clockMs > end) continue;
-            const float px = plot.x + static_cast<float>(static_cast<double>(p.clockMs - start) / static_cast<double>(kTrendMs)) * plot.w;
-            const float py = yOf(p.value);
-            const int col = static_cast<int>(std::floor(px));
-            if (have && col == bucket) {
-                bMin = std::min(bMin, py);
-                bMax = std::max(bMax, py);
-                if (s.isBool && std::fabs(py - prev.y) > 0.5f) seg({px, prev.y}, {px, py});
-                prev = {px, py};
-                continue;
-            }
-            if (have && bMax - bMin > 0.5f && !s.isBool)
-                seg({static_cast<float>(bucket) + 0.5f, bMin}, {static_cast<float>(bucket) + 0.5f, bMax});
-            if (have) {
-                if (s.isBool) {
-                    seg(prev, {px, prev.y});
-                    if (std::fabs(py - prev.y) > 0.5f) seg({px, prev.y}, {px, py});
-                } else {
-                    seg(prev, {px, py});
-                }
-            }
-            bucket = col;
-            bMin = bMax = py;
-            prev = {px, py};
-            have = true;
-        }
-        if (have && bMax - bMin > 0.5f && !s.isBool)
-            seg({static_cast<float>(bucket) + 0.5f, bMin}, {static_cast<float>(bucket) + 0.5f, bMax});
-    }
-
-    // La legende : cliquer un nom montre la variable dans la table.
-    float lx = plot.x;
-    const float ly = b.bottom() - legendH + 3.f;
-    index = 0;
-    for (const auto& s : series) {
-        const auto colour = th.onSurface(kTraces[index % (sizeof kTraces / sizeof kTraces[0])]);
-        ++index;
-        const std::string name = s.forced ? s.name + " (forc\xC3\xA9" "e)" : s.name;
-        const float w = 18.f + r.measure(name, kSmall).width;
-        if (lx + w > b.right() - 4.f && lx > plot.x) break;
-        const float my = ly + r.lineHeight(kSmall) * 0.5f;
-        if (s.forced) {
-            r.line({lx, my}, {lx + 5.f, my}, colour, 2.f);
-            r.line({lx + 8.f, my}, {lx + 13.f, my}, colour, 2.f);
-        } else {
-            r.line({lx, my}, {lx + 13.f, my}, colour, 2.f);
-        }
-        r.drawText({lx + 18.f, ly}, name, kSmall, c.text);
-        legend_.emplace_back(gfx::Rect{lx, ly - 2.f, w, r.lineHeight(kSmall) + 4.f}, s.path);
-        lx += w + 16.f;
-    }
-    r.popClip();
-}
-
 // ================================================================ le volet ====
 SimulationPane::SimulationPane(std::string id) : ui::Widget(std::move(id)) {
     band_ = &static_cast<Band&>(addChild(std::make_unique<Band>(*this)));
@@ -1441,6 +1222,12 @@ SimulationPane::SimulationPane(std::string id) : ui::Widget(std::move(id)) {
     model_ = std::make_shared<Model>(*this);
     table_->setModel(model_);
     table_->setSelectionMode(ui::SelectionMode::Extended);
+    // 1.12.18 (planche 17) : Ctrl+C copie la valeur (la touche que dit le menu) ; Ctrl+Maj+C, la ligne.
+    table_->setKeyHandler([this](const ui::KeyDown& k) {
+        if (k.key != ui::Key::C || !k.mods.ctrl || k.mods.shift || k.mods.alt) return false;
+        copyValues(false);
+        return true;
+    });
     table_->setAlternatingRowColors(true);
     // Lot recherche : les filtres des colonnes (Variable, Type, Ecrite par) choisissent
     // des racines ; le volet les applique (la table ne trie ni ne filtre : sa vue
@@ -1510,8 +1297,6 @@ SimulationPane::SimulationPane(std::string id) : ui::Widget(std::move(id)) {
         return false;
     }));
 
-    trend_ = &static_cast<Trend&>(addChild(std::make_unique<Trend>(*this)));
-
     policy_ = &static_cast<macroui::Segmented&>(addChild(std::make_unique<macroui::Segmented>(this->id() + ".politique")));
     policy_->setOptions({"s'arr\xC3\xAAter", "continuer (0)"});
     policy_->setSelected(1);
@@ -1526,6 +1311,59 @@ SimulationPane::SimulationPane(std::string id) : ui::Widget(std::move(id)) {
     diag_->setSelectionMode(ui::SelectionMode::Single);
     diag_->setAlternatingRowColors(false);
     links_ += diag_->activated->connect([this](RowIndex r) { goToItem(static_cast<std::size_t>(r) / 2); });
+    // 1.12.18 : les menus des deux listes - un forcage (Modifier la valeur..., Relacher, la montrer),
+    // ce que dit le simulateur (Aller a, Copier).
+    forced_->setExtraContextOnly(true);
+    forced_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto sel = forced_->selectedModelRows();
+        if (sel.empty() || sel.front() >= forcedNames_.size()) return items;
+        const std::string& path = forcedNames_[sel.front()];
+        items.push_back(ui::cmd::heading(path, sel.front() < forcedValues_.size() ? "= " + forcedValues_[sel.front()] : std::string{}));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Forcer, 1001, true, {}, std::string("Modifier la valeur") + kEllipsis));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Relacher, 1002));
+        items.push_back(ui::cmd::item(ui::cmd::Id::AfficherArbre, 1003, true, {}, "Montrer dans la table"));
+        items.push_back(ui::cmd::separator());
+        items.push_back(ui::cmd::item(ui::cmd::Id::ToutRelacher, 1004, !forcedNames_.empty(), "rien de forc\xC3\xA9"));
+        return items;
+    });
+    links_ += forced_->contextAction->connect([this](int id) {
+        const auto sel = forced_->selectedModelRows();
+        if (sel.empty() || sel.front() >= forcedNames_.size()) return;
+        const std::string path = forcedNames_[sel.front()];
+        if (id == 1001) askForce({path});
+        else if (id == 1002) releasePaths({path});
+        else if (id == 1003) (void)selectVariable(path);
+        else if (id == 1004) runAction(AReleaseAll);
+    });
+    forced_->setKeyHandler([this](const ui::KeyDown& k) {
+        const auto sel = forced_->selectedModelRows();
+        if (!k.mods.none() || sel.empty() || sel.front() >= forcedNames_.size()) return false;
+        if (k.key == ui::Key::Delete) releasePaths({forcedNames_[sel.front()]});
+        else if (k.key == ui::Key::Return) askForce({forcedNames_[sel.front()]});
+        else return false;
+        return true;
+    });
+    diag_->setExtraContextOnly(true);
+    diag_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto sel = diag_->selectedModelRows();
+        if (sel.empty() || sel.front() / 2 >= diagItems_.size()) return items;
+        const auto& it = diagItems_[sel.front() / 2];
+        items.push_back(ui::cmd::heading(it.title));
+        auto go = ui::cmd::item(ui::cmd::Id::Ouvrir, 1101, it.link, "rien \xC3\xA0 ouvrir", "Aller \xC3\xA0");
+        if (!it.section.empty()) go.note = frenchPlace(it.section, it.line);
+        items.push_back(std::move(go));
+        items.push_back(ui::cmd::item(ui::cmd::Id::Copier, 1102, true, {}, "Copier le message"));
+        return items;
+    });
+    links_ += diag_->contextAction->connect([this](int id) {
+        const auto sel = diag_->selectedModelRows();
+        if (sel.empty() || sel.front() / 2 >= diagItems_.size()) return;
+        const auto& it = diagItems_[sel.front() / 2];
+        if (id == 1101) goToItem(sel.front() / 2);
+        else if (id == 1102) ui::setClipboardText(it.detail.empty() ? it.title : it.title + "\n" + it.detail);
+    });
     diagBox_->addChild(std::make_unique<ClickCatcher>(this->id() + ".simulateur.clic", [this](const ui::MouseDown& d) {
         if (d.button != ui::MouseButton::Left) return false;
         for (std::size_t i = 0; i < diag_->visibleRowCount(); ++i) {
@@ -1567,7 +1405,7 @@ void SimulationPane::attach(ApiFrame& frame) {
     t.add(ARelease, HmiGlyph::Unlock, "Rel\xC3\xA2" "cher les variables choisies : le programme les reprend", "Rel\xC3\xA2" "cher");
     t.add(AReleaseAll, HmiGlyph::Unlock, "Rendre toutes les variables forc\xC3\xA9" "es au programme", "Rel\xC3\xA2" "cher tout (0)");
     t.separator();
-    t.add(AWatch, HmiGlyph::Trend, "Suivre les variables choisies sur la courbe (six au plus) ; d\xC3\xA9j\xC3\xA0 suivies : ne plus les suivre",
+    t.add(AWatch, HmiGlyph::Trend, "Suivre les variables choisies dans Simulation \xE2\x80\xBA Courbes (huit au plus) ; d\xC3\xA9j\xC3\xA0 suivies : ne plus les suivre",
           "Suivre sur la courbe");
     t.add(AAddToTable, HmiGlyph::VariableTable, "Ajouter les variables choisies \xC3\xA0 une table d'animation", "Ajouter \xC3\xA0 une table d'animation");
     t.separator();
@@ -2505,10 +2343,7 @@ void SimulationPane::tick(double now) {
         if (auto* rt = runtime())
             for (const auto& w : watched_)
                 if (!rt->history(w)) rt->watch(w);
-        if (advanced) {
-            band_->invalidate();
-            if (trend_ && !trend_->frozen()) trend_->invalidate();
-        }
+        if (advanced) band_->invalidate();
     }
     // « Qui changent » : un morceau du tour de toutes les cases, a chaque image.
     sweepStep(scan);
@@ -2630,7 +2465,6 @@ void SimulationPane::refreshSide() {
     pollForcing();
     rebuildDiag();
     updateChips();
-    if (trend_) trend_->invalidate();
     invalidate();
 }
 
@@ -2977,7 +2811,6 @@ void SimulationPane::transport(int action) {
     if (action == AStep) {
         readValues();
         lastScan_ = h->scanCount();
-        if (trend_) trend_->invalidate();
     }
     band_->invalidate();
     updateTools();
@@ -3047,7 +2880,6 @@ void SimulationPane::runAction(int action) {
             rt->unforceAll();
             pollForcing();
             readValues();
-            if (trend_) trend_->invalidate();          // les pointilles des forcees s'en vont
             status(n == 0 ? std::string("Rien n'\xC3\xA9tait forc\xC3\xA9.")
                           : plural(n, "variable rel\xC3\xA2" "ch\xC3\xA9" "e", "variables rel\xC3\xA2" "ch\xC3\xA9" "es") + " : le programme d\xC3\xA9" "cide de tout.");
             return;
@@ -3080,8 +2912,8 @@ void SimulationPane::runAction(int action) {
 }
 
 void SimulationPane::menuChosen(int id) {
-    if (id == kMenuCopy) {
-        (void)table_->copySelection(true);
+    if (id == kMenuCopy || id == kMenuCopyName) {
+        copyValues(id == kMenuCopyName);
         return;
     }
     if (id == kMenuWriter) {
@@ -3093,10 +2925,25 @@ void SimulationPane::menuChosen(int id) {
         }
         return;
     }
+    // 1.12.18 : Ajouter a une table d'animation > la table choisie, ou une nouvelle.
+    if (id == kMenuNewTable || id >= kMenuTableBase) {
+        std::vector<std::string> names;
+        for (const auto r : selectedRows())
+            if (!rows_[r].folder && rows_[r].node.real) names.push_back(tablePath(rows_[r]));
+        if (names.empty()) return;
+        const std::size_t table = id == kMenuNewTable ? static_cast<std::size_t>(-1) : static_cast<std::size_t>(id - kMenuTableBase);
+        if (hosts_.addToTableAt) hosts_.addToTableAt(std::move(names), table);
+        else if (hosts_.addToTable) hosts_.addToTable(std::move(names));
+        return;
+    }
     runAction(id);
 }
 
+// 1.12.18 (planche 17) : la variable visee en tete (son type, sa valeur), Forcer..., Relacher,
+// Suivre sur la courbe (dans Simulation > Courbes), Ajouter a une table d'animation > (la table
+// se choisit), Aller a l'ecriture (le lieu sous le libelle), Copier la valeur, Copier le nom.
 void SimulationPane::openMenu(gfx::Point at) {
+    syncWatched();
     const auto rows = selectedRows();
     bool anyForced = false, anyReal = false, allWatched = true, anyValue = false;
     for (const auto r : rows) {
@@ -3112,21 +2959,60 @@ void SimulationPane::openMenu(gfx::Point at) {
     if (!anyValue) allWatched = false;
     const std::string noValue = "choisis une variable \xC3\xA0 valeur (pas une structure)";
     std::vector<ui::PopupMenu::Item> items;
-    items.push_back({std::string("Forcer") + kEllipsis, "Entr\xC3\xA9" "e", anyValue ? std::string{} : noValue, ui::Icon::Lock, anyValue, false, AForce});
-    items.push_back({"Rel\xC3\xA2" "cher", "Suppr", anyForced ? std::string{} : std::string("rien de forc\xC3\xA9 ici"), ui::Icon::Close, anyForced, false, ARelease});
-    items.push_back({allWatched ? "Ne plus suivre sur la courbe" : "Suivre sur la courbe", "", anyValue ? std::string{} : noValue,
-                     ui::Icon::Chart, anyValue, false, AWatch});
-    items.push_back({"Ajouter \xC3\xA0 une table d'animation", "", anyReal ? std::string{} : std::string("choisis une variable"),
-                     ui::Icon::AnimationTable, anyReal && static_cast<bool>(hosts_.addToTable), false, AAddToTable});
+    if (rows.size() == 1 && !rows_[rows.front()].folder) {
+        const auto& row = rows_[rows.front()];
+        const std::size_t r = rows.front();
+        const std::string value = r < live_.size() && live_[r].ok ? live_[r].text : liveText(row.node.path);
+        items.push_back(ui::cmd::heading(row.node.path, row.node.type + (value.empty() || row.agg ? std::string{} : " = " + value)));
+    } else if (rows.size() > 1) {
+        items.push_back(ui::cmd::heading(plural(rows.size(), "variable", "variables")));
+    }
+    items.push_back(ui::cmd::item(ui::cmd::Id::Forcer, AForce, anyValue, noValue));
+    items.push_back(ui::cmd::item(ui::cmd::Id::Relacher, ARelease, anyForced, "pas forc\xC3\xA9" "e"));
+    {
+        auto watch = ui::cmd::item(ui::cmd::Id::SuivreCourbe, AWatch, anyValue, noValue, allWatched ? "Ne plus suivre sur la courbe" : std::string{});
+        watch.note = "dans Simulation \xE2\x80\xBA Courbes";
+        items.push_back(std::move(watch));
+    }
+    {
+        ui::PopupMenu::Item tables;
+        tables.label = "Ajouter \xC3\xA0 une table d'animation";
+        tables.icon = ui::Icon::AnimationTable;
+        tables.enabled = anyReal && (static_cast<bool>(hosts_.addToTableAt) || static_cast<bool>(hosts_.addToTable));
+        if (!tables.enabled) tables.disabledReason = anyReal ? std::string("pas de table ici") : std::string("choisis une variable");
+        if (tables.enabled) {
+            if (const auto p = project())
+                for (std::size_t t = 0; t < p->animationTables.size() && t < 40; ++t) {
+                    ui::PopupMenu::Item it;
+                    it.label = p->animationTables[t].name;
+                    it.id = kMenuTableBase + static_cast<int>(t);
+                    tables.children.push_back(std::move(it));
+                }
+            if (!tables.children.empty()) tables.children.push_back(ui::cmd::separator());
+            ui::PopupMenu::Item fresh;
+            fresh.label = std::string("Nouvelle table") + kEllipsis;
+            fresh.icon = ui::Icon::Plus;
+            fresh.id = kMenuNewTable;
+            tables.children.push_back(std::move(fresh));
+        }
+        items.push_back(std::move(tables));
+    }
     if (rows.size() == 1 && !rows_[rows.front()].section.empty()) {
         const auto& row = rows_[rows.front()];
-        items.push_back({"", "", "", ui::Icon::None, true, true, -1});
-        // 1.12.18 : la colonne de droite dit une touche ; le lieu va dans le libelle.
-        items.push_back({"Aller \xC3\xA0 l'\xC3\xA9" "criture (" + frenchPlace(row.section, row.line) + ")", "", "", ui::Icon::Section,
-                         static_cast<bool>(hosts_.goToLine), false, kMenuWriter});
+        items.push_back(ui::cmd::separator());
+        ui::PopupMenu::Item writer;
+        writer.label = "Aller \xC3\xA0 l'\xC3\xA9" "criture";
+        writer.note = frenchPlace(row.section, row.line);   // 1.12.18 : le lieu sous le libelle
+        writer.icon = ui::Icon::Section;
+        writer.enabled = static_cast<bool>(hosts_.goToLine);
+        if (!writer.enabled) writer.disabledReason = "pas de code ici";
+        writer.id = kMenuWriter;
+        items.push_back(std::move(writer));
     }
-    items.push_back({"", "", "", ui::Icon::None, true, true, -1});
-    items.push_back({"Copier", "Ctrl+C", "", ui::Icon::None, !rows.empty(), false, kMenuCopy});
+    items.push_back(ui::cmd::separator());
+    const bool anyRow = std::any_of(rows.begin(), rows.end(), [&](std::size_t r) { return !rows_[r].folder; });
+    items.push_back(ui::cmd::item(ui::cmd::Id::CopierValeur, kMenuCopy, anyRow && anyValue, noValue));
+    items.push_back(ui::cmd::item(ui::cmd::Id::CopierNom, kMenuCopyName, anyRow, "choisis une variable"));
     menu_->setItems(std::move(items));
     // La fenetre qui peint ce volet (retenue au dessin) : ce peut etre une
     // fenetre detachee, plus petite que la principale. Pas encore peint : la
@@ -3213,7 +3099,6 @@ std::size_t SimulationPane::forcePaths(const std::vector<std::string>& paths, co
     if (done > 0) {
         pollForcing();
         readValues();
-        if (trend_) trend_->invalidate();
     }
     if (done == 1 && paths.size() == 1)
         status(lastPath + " forc\xC3\xA9" "e \xC3\xA0 " + lastValue + " : le programme ne peut plus la changer (Rel\xC3\xA2" "cher la lui rend).");
@@ -3241,54 +3126,71 @@ void SimulationPane::releasePaths(const std::vector<std::string>& paths) {
         if (rt->isForced(path) && rt->unforce(path)) ++n;
     pollForcing();
     readValues();
-    if (trend_) trend_->invalidate();
     status(n == 0 ? std::string("Rien de forc\xC3\xA9 dans ce que tu as choisi.")
            : n == 1 ? paths.front() + std::string(" rel\xC3\xA2" "ch\xC3\xA9" "e : le programme la reprend.")
                     : plural(n, "variable rel\xC3\xA2" "ch\xC3\xA9" "e", "variables rel\xC3\xA2" "ch\xC3\xA9" "es") + " : le programme les reprend.");
 }
 
+void SimulationPane::syncWatched() {
+    if (hosts_.trends) watched_ = hosts_.trends();
+}
+
+// 1.12.18 : UNE SEULE SORTE DE COURBE - suivre, c'est ajouter a Simulation > Courbes (huit au plus).
 void SimulationPane::toggleWatch(const std::vector<std::string>& paths) {
     if (paths.empty()) {
-        status("Choisis une variable \xC3\xA0 valeur (pas une structure) : elle se trace sur la courbe.");
+        status("Choisis une variable \xC3\xA0 valeur (pas une structure) : elle se trace dans Simulation \xE2\x80\xBA Courbes.");
         return;
     }
-    auto* rt = runtime();
+    syncWatched();
     const auto isWatched = [&](const std::string& p) { return std::find(watched_.begin(), watched_.end(), p) != watched_.end(); };
     if (std::all_of(paths.begin(), paths.end(), isWatched)) {
-        // Rien n'est rendu au moteur (Runtime::unwatch) : une table d'animation
-        // peut suivre la meme variable, et son historique partirait avec. Un
-        // historique garde coute une lecture par cycle.
-        for (const auto& p : paths) watched_.erase(std::remove(watched_.begin(), watched_.end(), p), watched_.end());
-        status(paths.size() == 1 ? paths.front() + " n'est plus suivie sur la courbe."
-                                 : plural(paths.size(), "variable", "variables") + " ne sont plus suivies sur la courbe.");
+        for (const auto& p : paths) {
+            if (hosts_.removeTrend) (void)hosts_.removeTrend(p);
+            watched_.erase(std::remove(watched_.begin(), watched_.end(), p), watched_.end());
+        }
+        status(paths.size() == 1 ? paths.front() + " n'est plus suivie dans Simulation \xE2\x80\xBA Courbes."
+                                 : plural(paths.size(), "variable", "variables") + " ne sont plus suivies dans Simulation \xE2\x80\xBA Courbes.");
     } else {
         std::vector<std::string> added;
-        std::size_t refused = 0;
+        std::string why;
         for (const auto& p : paths) {
             if (isWatched(p)) continue;
-            if (watched_.size() >= kMaxWatched) {
-                ++refused;
+            std::string w;
+            if (hosts_.addTrend && !hosts_.addTrend(p, &w)) {
+                if (why.empty()) why = w;
                 continue;
             }
             watched_.push_back(p);
-            if (rt) rt->watch(p);
             added.push_back(p);
         }
         std::string msg;
-        if (added.empty())
-            msg = "Six courbes au plus : ne plus en suivre une d'abord (clic droit sur elle, Ne plus suivre sur la courbe).";
-        else if (added.size() == 1)
-            msg = added.front() + " suivie sur la courbe (elle se trace au prochain cycle).";
-        else
-            msg = plural(added.size(), "variable suivie", "variables suivies") + " sur la courbe.";
-        if (!added.empty() && refused > 0)
-            msg += " " + plural(refused, "autre refus\xC3\xA9" "e", "autres refus\xC3\xA9" "es") + " : six courbes au plus.";
+        if (added.empty()) msg = why.empty() ? std::string("D\xC3\xA9j\xC3\xA0 suivies.") : why;
+        else if (added.size() == 1) msg = added.front() + " suivie dans Simulation \xE2\x80\xBA Courbes.";
+        else msg = plural(added.size(), "variable suivie", "variables suivies") + " dans Simulation \xE2\x80\xBA Courbes.";
+        if (!added.empty() && !why.empty()) msg += " " + why;
         status(msg);
     }
+    syncWatched();
     updateChips();
-    if (trend_) trend_->invalidate();
     if (filter_ && filter_->current() == ChWatched) rebuildRows();
     invalidate();
+}
+
+// 1.12.18 : Copier la valeur (Ctrl+C) - une par ligne choisie ; Copier le nom.
+void SimulationPane::copyValues(bool names) {
+    std::string text;
+    std::size_t n = 0;
+    for (const auto r : selectedRows()) {
+        const auto& row = rows_[r];
+        if (row.folder) continue;
+        const std::string piece = names ? row.node.path : (r < live_.size() && live_[r].ok ? live_[r].text : liveText(row.node.path));
+        text += (n ? "\n" : "") + piece;
+        ++n;
+    }
+    if (n == 0) return;
+    ui::setClipboardText(text);
+    status(n == 1 ? (names ? "Nom copi\xC3\xA9 : " : "Valeur copi\xC3\xA9" "e : ") + text
+                  : plural(n, names ? "nom copi\xC3\xA9" : "valeur copi\xC3\xA9" "e", names ? "noms copi\xC3\xA9s" : "valeurs copi\xC3\xA9" "es") + ".");
 }
 
 // ---------------------------------------------------------- exporter, importer ----
@@ -3466,7 +3368,6 @@ void SimulationPane::importForcing() {
                    const auto applied = applyForcing(*r, content.str(), unknown, unreadable);
                    pollForcing();
                    readValues();
-                   if (trend_) trend_->invalidate();
                    std::string msg = plural(applied, "for\xC3\xA7" "age appliqu\xC3\xA9", "for\xC3\xA7" "ages appliqu\xC3\xA9s") + " ("
                                    + utf8Of(source.filename()) + ")";
                    if (!unknown.empty())
@@ -3749,7 +3650,7 @@ void SimulationPane::layoutSide(float sideW, float top) {
     float y = top;
     forcedTitle_ = {side_.x, y, sideW, 32.f};
     y += 32.f;
-    const std::size_t shownRows = std::clamp<std::size_t>(forcedNames_.size(), 1, 6);
+    const std::size_t shownRows = std::clamp<std::size_t>(forcedNames_.size(), 1, 10);
     const float forcedH = static_cast<float>(shownRows) * rowH_ + 2.f;
     forcedBox_->setBounds({side_.x + 6.f, y, inner, forcedH});
     // Les titres de la table sont au-dessus du cadre, donc caches : le titre est peint.
@@ -3757,11 +3658,7 @@ void SimulationPane::layoutSide(float sideW, float top) {
     if (auto* catcher = forcedBox_->children().size() > 1 ? forcedBox_->children().back().get() : nullptr)
         catcher->setBounds({side_.x + 6.f, y, inner, forcedH});
     y += forcedH + 6.f;
-    trendTitle_ = {side_.x, y, sideW, 32.f};
-    y += 32.f;
-    const float trendH = std::clamp((side_.bottom() - y) * 0.5f, 120.f, 230.f);
-    trend_->setBounds({side_.x + 6.f, y, inner, trendH});
-    y += trendH + 6.f;
+    // 1.12.18 : plus de courbe ici (une seule sorte : Simulation > Courbes).
     diagTitle_ = {side_.x, y, sideW, 36.f};
     const float pw = std::min(policy_->preferredWidth(), std::max(120.f, sideW * 0.5f));
     policy_->setBounds({side_.right() - 8.f - pw, y + 5.f, pw, 26.f});
@@ -3795,11 +3692,12 @@ void SimulationPane::layoutSide(float sideW, float top) {
     }
 }
 
-// Etroit : sous la table, trois colonnes - les forcages, la courbe, le simulateur.
+// Etroit : sous la table, deux colonnes - les forcages, le simulateur (1.12.18 : la courbe
+// est dans Simulation > Courbes).
 void SimulationPane::layoutStacked() {
     const float gap = 1.f;
-    const float w3 = std::max(0.f, (side_.w - 2.f * gap) / 3.f);
-    const float x0 = side_.x, x1 = side_.x + w3 + gap, x2 = side_.x + 2.f * (w3 + gap);
+    const float w3 = std::max(0.f, (side_.w - gap) / 2.f);
+    const float x0 = side_.x, x2 = side_.x + w3 + gap;
     const float inner = std::max(0.f, w3 - 12.f);
     const float y = side_.y;
     const float body = std::max(0.f, side_.h - 36.f - 4.f);
@@ -3808,8 +3706,6 @@ void SimulationPane::layoutStacked() {
     forced_->setBounds({x0 + 6.f, y + 32.f - headerH_, inner, body + headerH_});
     if (auto* catcher = forcedBox_->children().size() > 1 ? forcedBox_->children().back().get() : nullptr)
         catcher->setBounds({x0 + 6.f, y + 32.f, inner, body});
-    trendTitle_ = {x1, y, w3, 32.f};
-    trend_->setBounds({x1 + 6.f, y + 32.f, inner, std::max(0.f, side_.h - 32.f - 6.f)});
     diagTitle_ = {x2, y, w3, 36.f};
     const float pw = std::min(policy_->preferredWidth(), std::max(110.f, w3 * 0.55f));
     policy_->setBounds({x2 + w3 - 8.f - pw, y + 5.f, pw, 26.f});
@@ -3856,13 +3752,12 @@ void SimulationPane::onPaint(const ui::PaintContext& ctx) {
     // menu du clic droit y reste.
     surface_ = r.surfaceSize();
     r.fillRect(bounds(), c.windowBg);
-    releaseAllLink_ = freezeLink_ = gfx::Rect{};
+    releaseAllLink_ = gfx::Rect{};
     if (side_.w <= 0.f) return;
     r.fillRect(side_, c.panelBg);
     if (stacked_) {
-        // Etroit : un trait au-dessus, et entre les trois colonnes.
+        // Etroit : un trait au-dessus, et entre les deux colonnes.
         r.fillRect({side_.x, side_.y - 1.f, side_.w, 1.f}, c.border);
-        r.fillRect({trendTitle_.x - 1.f, side_.y, 1.f, side_.h}, c.border);
         r.fillRect({diagTitle_.x - 1.f, side_.y, 1.f, side_.h}, c.border);
     } else {
         r.fillRect({side_.x - 1.f, side_.y, 1.f, side_.h}, c.border);
@@ -3889,10 +3784,6 @@ void SimulationPane::onPaint(const ui::PaintContext& ctx) {
     title(forcedTitle_, ui::Icon::Force, ui::Tone::Warning, "For\xC3\xA7" "ages", count(forcedNames_.size()));
     if (!forcedNames_.empty()) releaseAllLink_ = rightLink(forcedTitle_, "Rel\xC3\xA2" "cher tout");
 
-    const bool frozen = trend_ && trend_->frozen();
-    title(trendTitle_, ui::Icon::Chart, ui::Tone::Info, "La courbe",
-          plural(watched_.size(), "suivie", "suivies") + kDot + "30 s" + (frozen ? std::string(kDot) + "fig\xC3\xA9" "e" : std::string{}));
-    freezeLink_ = rightLink(trendTitle_, frozen ? "Reprendre" : "Figer");
 
     // Le titre compte ce que la liste dit (la maquette : « Le simulateur 3 ») ;
     // son icone dit s'il y a quelque chose a regarder.
@@ -3914,13 +3805,6 @@ ui::EventResult SimulationPane::onEvent(const ui::InputEvent& ev) {
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
         if (releaseAllLink_.contains(d->pos) && !forcedNames_.empty()) {
             runAction(AReleaseAll);
-            return ui::EventResult::Consumed;
-        }
-        if (freezeLink_.contains(d->pos) && trend_) {
-            trend_->setFrozen(!trend_->frozen());
-            status(trend_->frozen() ? "La courbe est fig\xC3\xA9" "e : la simulation continue, l'image reste. Reprendre la relance."
-                                    : "La courbe suit de nouveau la simulation.");
-            invalidate();
             return ui::EventResult::Consumed;
         }
     }

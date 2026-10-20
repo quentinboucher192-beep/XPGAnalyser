@@ -23889,6 +23889,165 @@ void simulationVariables1115(const std::string& xpg) {
 //  actuelle' » ; « dans ces 3 onglets, ajouter clic droit avec tout deplier, deplier,
 //  replier, tout replier, deforcer, forcer ») : la case, le menu, ce qu'ils font.
 // =============================================================================
+// 1.12.18 (planche 16) : les menus de la simulation de l'IHM - la vue en marche (une jauge, une
+// courbe ; Maj+clic droit quand le projet lit le bouton droit), les Variables IHM, les Expressions.
+void menusSimulation11218() {
+    std::printf("== 1.12.18 : les menus de la simulation (la vue en marche, les variables, les expressions) ==\n");
+    installerPressePapiers();
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    for (const auto& [name, type] : {std::pair{"Niveau", "REAL"}, {"Seuil", "INT"}}) {
+        Variable var;
+        var.id = p.allocate();
+        var.name = name;
+        var.type = type;
+        p.programs.variables.push_back(var);
+    }
+    View v = makeView(p, "Supervision");
+    const Id gauge = edit::add(p, v, Kind::Gauge, 100, 100);
+    v.object(gauge)->name = "Jauge";
+    v.object(gauge)->setExpr("value", "Niveau");
+    const Id trend = edit::add(p, v, Kind::Trend, 500, 100);
+    v.object(trend)->name = "Courbe_1";
+    v.object(trend)->set("variables", "Niveau; Seuil");
+    p.config.startView = v.id;
+    p.views.push_back(v);
+    app::HmiSimulationHost host;
+    std::vector<std::string> followed;
+    host.follow = [&followed](const std::string& path, std::string*) {
+        followed.push_back(path);
+        return true;
+    };
+    std::pair<Id, Id> went{kNoId, kNoId};
+    host.goToObject = [&went](Id view, Id object) { went = {view, object}; };
+    app::HmiSimulationPane pane("sim11218", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    auto paintAt = [&](double t) {
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    paintAt(0.0);
+    paintAt(0.1);
+    const auto findIn = [](const std::vector<ui::PopupMenu::Item>& items, std::string_view label) -> const ui::PopupMenu::Item* {
+        for (const auto& it : items)
+            if (!it.separator && !it.heading && it.label == label) return &it;
+        return nullptr;
+    };
+    // ---- la vue en marche : la jauge ----
+    gfx::Rect jr{};
+    check(pane.canvas().objectRect("Jauge", jr), "la jauge \xC3\xA0 l'\xC3\xA9" "cran");
+    const gfx::Point jp{jr.x + jr.w * 0.5f, jr.y + jr.h * 0.5f};
+    check(!pane.projectReadsRightButton(), "personne ne lit le bouton droit : le clic droit ouvre le menu");
+    pane.canvas().dispatch(ui::MouseDown{jp, ui::MouseButton::Right, 1, {}});
+    check((pane.runtime().pointer().buttons & 2) == 0, "le clic droit du menu ne presse pas le bouton du projet (SYS.MouseRight)");
+    pane.canvas().dispatch(ui::MouseUp{jp, ui::MouseButton::Right, {}});
+    auto* vm = pane.viewMenu();
+    check(vm && vm->isOpen(), "planche 16 : le clic droit sur la jauge ouvre son menu");
+    if (!vm) return;
+    check(!vm->items().empty() && vm->items().front().heading && vm->items().front().label == "Jauge"
+              && vm->items().front().shortcut.rfind("Niveau = ", 0) == 0,
+          "la t\xC3\xAAte : Jauge, Niveau = sa valeur (" + (vm->items().empty() ? std::string{} : vm->items().front().shortcut) + ")");
+    const auto* force = findIn(vm->items(), "Forcer Niveau\xE2\x80\xA6");
+    const auto* release = findIn(vm->items(), "Rel\xC3\xA2" "cher");
+    const auto* follow = findIn(vm->items(), "Suivre sur la courbe");
+    const auto* expr = findIn(vm->items(), "Ajouter aux expressions");
+    const auto* copy = findIn(vm->items(), "Copier la valeur");
+    const auto* goTo = findIn(vm->items(), "Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur");
+    check(force && force->enabled && release && !release->enabled && release->disabledReason == "pas forc\xC3\xA9" "e" && follow
+              && follow->note == "dans Simulation \xE2\x80\xBA Courbes" && expr && copy && goTo,
+          "Forcer Niveau..., Rel\xC3\xA2" "cher (pas forc\xC3\xA9" "e), Suivre sur la courbe (dans Simulation > Courbes), Ajouter aux expressions, Copier la valeur, Aller \xC3\xA0 l'objet");
+    check(ui::cmd::badShortcuts(vm->items()).empty(), "le menu de la vue : des touches seulement \xC3\xA0 droite");
+    const int followId = follow ? follow->id : -1, exprId = expr ? expr->id : -1, goId = goTo ? goTo->id : -1;
+    vm->close();
+    vm->itemChosen->emit(followId);
+    check(followed == std::vector<std::string>{"ihm:Niveau"}, "Suivre sur la courbe : Simulation > Courbes (ihm:Niveau)");
+    vm->itemChosen->emit(exprId);
+    paintAt(0.2);
+    const bool added = std::any_of(pane.values().begin(), pane.values().end(),
+                                   [](const hmi::LiveValue& lv) { return lv.expression == "Niveau" && lv.objectName == "Ajout\xC3\xA9" "es"; });
+    check(pane.addedExpressions() == std::vector<std::string>{"Niveau"} && added, "Ajouter aux expressions : Niveau, sous \xC2\xAB Ajout\xC3\xA9" "es \xC2\xBB");
+    vm->itemChosen->emit(goId);
+    check(went.first == v.id && went.second == gauge, "Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur : la vue et la jauge du projet");
+    // ---- la courbe ----
+    gfx::Rect cr{};
+    check(pane.canvas().objectRect("Courbe_1", cr), "la courbe \xC3\xA0 l'\xC3\xA9" "cran");
+    pane.canvas().dispatch(ui::MouseDown{{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f}, ui::MouseButton::Right, {}});
+    const auto* pause = findIn(vm->items(), "Pause");
+    check(vm->isOpen() && vm->items().front().label == "Courbe_1" && vm->items().front().shortcut == "2 plumes" && pause && !pause->enabled
+              && findIn(vm->items(), "Exporter (CSV)\xE2\x80\xA6"),
+          "la courbe : Courbe_1 (2 plumes), Pause (gris\xC3\xA9 : pas pilotable), Exporter (CSV)...");
+    vm->close();
+    // ---- le projet lit le bouton droit : Maj+clic droit ----
+    doc->project.views.back().object(gauge)->setExpr("visible", "NOT SYS.MouseRight");
+    check(pane.projectReadsRightButton(), "une expression lit SYS.MouseRight");
+    pane.canvas().dispatch(ui::MouseDown{jp, ui::MouseButton::Right, 1, {}});
+    check(!vm->isOpen() && (pane.runtime().pointer().buttons & 2) != 0, "le clic droit va au projet (SYS.MouseRight), pas de menu");
+    pane.canvas().dispatch(ui::MouseUp{jp, ui::MouseButton::Right, {}});
+    pane.canvas().dispatch(ui::MouseDown{jp, ui::MouseButton::Right, 1, ui::KeyMods{false, true, false, false}});
+    check(vm->isOpen(), "Maj+clic droit : le menu");
+    pane.canvas().dispatch(ui::MouseUp{jp, ui::MouseButton::Right, {}});
+    vm->close();
+    doc->project.views.back().object(gauge)->setExpr("visible", "");
+    // ---- les Variables IHM : une variable ----
+    pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabVariables);
+    paintAt(0.3);
+    auto& ihm = pane.ihmVariables();
+    check(ihm.openContextMenu("Niveau", {200.f, 200.f}) && ihm.contextMenu() && ihm.contextMenu()->isOpen(), "Variables IHM : le menu de Niveau");
+    if (auto* m = ihm.contextMenu()) {
+        const auto* to = findIn(m->items(), "Forcer \xC3\xA0\xE2\x80\xA6");
+        const auto* here = findIn(m->items(), "Forcer \xC3\xA0 sa valeur");
+        const auto* rel = findIn(m->items(), "Rel\xC3\xA2" "cher");
+        const auto* motion = findIn(m->items(), "Mouvement");
+        check(to && to->shortcut == "Entr\xC3\xA9" "e" && here && rel && !rel->enabled && motion && motion->children.size() >= 4
+                  && motion->children.front().label == "Aucun (libre)" && motion->children.front().checked
+                  && motion->children.back().label == "Les bornes\xE2\x80\xA6" && !motion->children.back().enabled
+                  && findIn(m->items(), "Suivre sur la courbe") && findIn(m->items(), "Copier la valeur") && findIn(m->items(), "Tout d\xC3\xA9plier"),
+              "Forcer \xC3\xA0... (Entr\xC3\xA9" "e), Forcer \xC3\xA0 sa valeur, Rel\xC3\xA2" "cher (gris\xC3\xA9), Mouvement > (Aucun coch\xC3\xA9, ..., Les bornes...), Suivre, Copier la valeur, Tout d\xC3\xA9plier");
+        check(ui::cmd::badShortcuts(m->items()).empty(), "Variables IHM : des touches seulement \xC3\xA0 droite");
+        int sine = -1;
+        if (motion)
+            for (const auto& c : motion->children)
+                if (c.label == "sinus") sine = c.id;
+        m->close();
+        check(ihm.contextAction("Niveau", app::HmiSimVarTree::MForce) && pane.runtime().variableForced("Niveau"), "Forcer \xC3\xA0 sa valeur : forc\xC3\xA9" "e");
+        (void)ihm.openContextMenu("Niveau", {200.f, 200.f});
+        rel = findIn(m->items(), "Rel\xC3\xA2" "cher");
+        check(rel && rel->enabled, "forc\xC3\xA9" "e : Rel\xC3\xA2" "cher s'allume");
+        m->close();
+        (void)ihm.contextAction("Niveau", app::HmiSimVarTree::MUnforce);
+        check(sine > 0 && ihm.contextAction("Niveau", sine) && ihm.motionText("Niveau").find("sinus") != std::string::npos,
+              "Mouvement > sinus (" + ihm.motionText("Niveau") + ")");
+        (void)ihm.contextAction("Niveau", app::HmiSimVarTree::kMotionBase);   // Aucun (libre)
+        check(ihm.motionText("Niveau").empty() || ihm.motionText("Niveau") == "-" || ihm.motionText("Niveau").find("sinus") == std::string::npos,
+              "Mouvement > Aucun : libre");
+        check(ihm.contextAction("Niveau", app::HmiSimVarTree::MCopyValue) && ui::clipboardText() == ihm.valueText("Niveau"),
+              "Copier la valeur : " + ui::clipboardText());
+    }
+    // ---- les Expressions ----
+    pane.tabs().setCurrentIndex(app::HmiSimulationPane::TabValues);
+    pane.expandExpressions(true);
+    paintAt(0.4);
+    auto& ex = pane.expressions();
+    int row = -1;
+    for (std::size_t r = 0; ex.model() && r < ex.model()->rowCount(); ++r)
+        if (ex.model()->cellText(static_cast<ui::RowIndex>(r), 1) == "Niveau") row = static_cast<int>(r);
+    check(row >= 0, "les Expressions : une ligne Niveau");
+    if (row >= 0) {
+        ex.selectModelRows({static_cast<ui::RowIndex>(row)});
+        ex.openContextMenu({100.f, 100.f});
+        auto* em = ex.contextMenu();
+        check(em && em->isOpen() && findIn(em->items(), "Forcer\xE2\x80\xA6") && findIn(em->items(), "Rel\xC3\xA2" "cher")
+                  && findIn(em->items(), "Suivre sur la courbe") && findIn(em->items(), "Copier la valeur") && findIn(em->items(), "Aller \xC3\xA0 l'objet")
+                  && findIn(em->items(), "Tout d\xC3\xA9plier") && findIn(em->items(), "Tout replier") && !findIn(em->items(), "Copier sans les titres"),
+              "planche 16 : le menu d'une expression (Forcer..., Rel\xC3\xA2" "cher, Suivre, Copier la valeur, Aller \xC3\xA0 l'objet, Tout d\xC3\xA9plier, Tout replier)");
+        if (em) em->close();
+    }
+}
+
 void surLaVueClicDroit1116() {
     std::printf("== 1.11.6 : sur la vue actuelle, le clic droit (Variables IHM, Esclaves simul\xC3\xA9s) ==\n");
     auto doc = std::make_shared<Document>();
@@ -33509,6 +33668,7 @@ int main(int argc, char** argv) {
     barresDefilement1114();                 // 1.11.4 : les barres de defilement qu'on tire
     esclavesArbre1115();                    // 1.11.5 : les esclaves simules en arbre, la recherche, les bornes au clavier
     surLaVueClicDroit1116();                // 1.11.6 : sur la vue actuelle, le clic droit
+    menusSimulation11218();                 // 1.12.18 : les menus de la simulation (planche 16)
     forcageCommun1117();                    // 1.11.7 : le forcage commun, prioritaire sur les scripts
     variableFx1117();                       // 1.11.7 : la case Variable d'une action, la pastille fx
     blocageDelier1117();                    // 1.11.7 : Delier pendant la simulation ne bloque plus

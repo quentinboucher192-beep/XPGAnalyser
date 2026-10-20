@@ -138,6 +138,9 @@ public:
         core::Signal<std::size_t, gfx::Point>::create();
     // Le meme menu sans la souris (un script, un en-tete hors de la bande).
     void requestContextMenu(std::size_t index);
+    // 1.12.18 (planche 20) : le clic droit SUR LE VIDE DE LA BANDE (a droite des onglets) -
+    // Rouvrir le dernier ferme, Fermer tout, Mosaique ; rien de branche : rien.
+    const core::SignalPtr<gfx::Point> barContextRequested = core::Signal<gfx::Point>::create();
     // 1.12.18 (bug 7) : une bande de sous-onglets (inspecteur, panneau du bas,
     // symbole) choisit l'onglet au clic droit, avant son menu. Sans menu
     // branche, le clic droit choisit toujours l'onglet.

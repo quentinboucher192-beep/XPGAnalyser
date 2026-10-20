@@ -1136,7 +1136,11 @@ EventResult TreeView::onEvent(const InputEvent& ev) {
         if (!bounds().contains(d->pos)) return EventResult::Ignored;
         grabFocus();
         const int ri = rowAt(d->pos.y);
-        if (ri < 0) return EventResult::Consumed;
+        if (ri < 0) {
+            // 1.12.18 (planche 19) : le clic droit sous les lignes - le menu du vide.
+            if (d->button == MouseButton::Right) emptyContextRequested->emit(d->pos);
+            return EventResult::Consumed;
+        }
 
         // Lot API 8 : l'arbre du projet - une COPIE : selectionChanged peut refaire
         // les lignes (un clic sur "Voir les N versions...") et rows_ se realloue.
@@ -1294,6 +1298,7 @@ EventResult TreeView::onEvent(const InputEvent& ev) {
         return EventResult::Consumed;
     }
     if (const auto* k = std::get_if<KeyDown>(&ev); k && focused() && !rows_.empty()) {
+        if (keyHandler_ && keyHandler_(*k)) return EventResult::Consumed;   // 1.12.18
         auto it = std::find_if(rows_.begin(), rows_.end(),
                                [this](const VisualRow& r) { return r.node == current_; });
         auto index = static_cast<std::size_t>(it == rows_.end() ? 0 : it - rows_.begin());
@@ -1406,11 +1411,21 @@ TableView::TableView(std::string id) : Widget(std::move(id)) {
                     invalidate();
                 }
                 break;
+            // 1.12.18 (planche 20) : le menu d'un titre de colonne.
+            case 6: case 7:
+                if (lastClickColumn_ >= 0)
+                    sortBy(static_cast<std::size_t>(lastClickColumn_), action == 6 ? SortOrder::Ascending : SortOrder::Descending);
+                break;
+            case 8: if (lastClickColumn_ >= 0) autoSizeColumn(static_cast<std::size_t>(lastClickColumn_)); break;
+            case 9: if (lastClickColumn_ >= 0) setColumnVisible(static_cast<std::size_t>(lastClickColumn_), false); break;
+            case 10: exportCsvNow(); break;
             // Lot recherche : "Effacer les filtres des colonnes", "Filtrer la colonne X".
             case 99: clearColumnFilters(); break;
             default:
                 if (action >= 1000) contextAction->emit(action);          // 1.11.14 : une entree du proprietaire
                 else if (action >= 100) (void)openColumnFilter(static_cast<std::size_t>(action - 100));
+                else if (action >= 11 && static_cast<std::size_t>(action - 11) < columns_.size())   // Colonnes > une colonne
+                    setColumnVisible(static_cast<std::size_t>(action - 11), !columns_[static_cast<std::size_t>(action - 11)].visible);
                 break;
         }
     });
@@ -1578,6 +1593,126 @@ void TableView::openContextMenu(gfx::Point at) {
         items.push_back({"Effacer les filtres des colonnes", {}, filtered ? std::string{} : std::string("aucun filtre"), Icon::None, filtered,
                          false, 99});
     }
+    context_->setItems(std::move(items));
+    gfx::Size surface{bounds().right() + 400.f, bounds().bottom() + 400.f};
+    if (surface_.w > 0.f) surface = surface_;
+    context_->openAt(at, surface);
+}
+
+namespace {
+TableView::CsvExporter gCsvExporter;   // 1.12.18 : l'appli enregistre (Enregistrer sous)
+}
+
+void TableView::setCsvExporter(CsvExporter exporter) { gCsvExporter = std::move(exporter); }
+
+std::string TableView::csvText() const {
+    // Une case : entre guillemets si elle porte ; " ou un retour (les guillemets doubles).
+    const auto cell = [](std::string t) {
+        if (t.find_first_of(";\"\n\r") == std::string::npos) return t;
+        std::string out = "\"";
+        for (const char ch : t) {
+            if (ch == '"') out += '"';
+            out += ch;
+        }
+        return out + "\"";
+    };
+    std::string out;
+    bool first = true;
+    for (const auto& c : columns_) {
+        if (!c.visible) continue;
+        out += (first ? "" : ";") + cell(c.title);
+        first = false;
+    }
+    out += "\r\n";
+    if (!model_) return out;
+    for (const RowIndex r : view_) {
+        first = true;
+        for (std::size_t i = 0; i < columns_.size(); ++i) {
+            if (!columns_[i].visible) continue;
+            out += (first ? "" : ";") + cell(model_->cellText(r, i));
+            first = false;
+        }
+        out += "\r\n";
+    }
+    return out;
+}
+
+void TableView::exportCsvNow() {
+    if (!gCsvExporter) return;
+    std::string name = exportName_;
+    if (name.empty()) {
+        name = id();
+        if (const auto dot = name.rfind('.'); dot != std::string::npos && dot + 1 < name.size()) name = name.substr(dot + 1);
+    }
+    gCsvExporter(name.empty() ? std::string("tableau") : name, csvText());
+}
+
+void TableView::setColumnVisible(std::size_t column, bool visible) {
+    if (column >= columns_.size() || columns_[column].visible == visible) return;
+    if (!visible) {
+        std::size_t shown = 0;
+        for (const auto& c : columns_) shown += c.visible ? 1 : 0;
+        if (shown <= 1) return;   // une colonne reste
+    }
+    columns_[column].visible = visible;
+    invalidateLayout();
+    invalidate();
+}
+
+void TableView::openHeaderMenu(gfx::Point at, std::size_t column) {
+    if (!context_ || column >= columns_.size()) return;
+    lastClickColumn_ = static_cast<int>(column);
+    const auto& c = columns_[column];
+    const auto entry = [](std::string label, int id, bool enabled, std::string why, Icon icon = Icon::None) {
+        PopupMenu::Item it;
+        it.label = std::move(label);
+        it.id = id;
+        it.enabled = enabled;
+        it.icon = icon;
+        if (!enabled) it.disabledReason = std::move(why);
+        return it;
+    };
+    const auto rule = [] {
+        PopupMenu::Item it;
+        it.separator = true;
+        return it;
+    };
+    const auto titleOf = [](const Column& col, std::size_t i) { return col.title.empty() ? "Colonne " + std::to_string(i + 1) : col.title; };
+    std::vector<PopupMenu::Item> items;
+    PopupMenu::Item head;
+    head.heading = true;
+    head.label = "Colonne " + (c.title.empty() ? std::to_string(column + 1) : c.title);
+    items.push_back(std::move(head));
+    const bool sortable = c.sortable && model_ != nullptr;
+    auto asc = entry("Trier de A \xC3\xA0 Z", 6, sortable, "cette colonne ne se trie pas");
+    auto desc = entry("Trier de Z \xC3\xA0 A", 7, sortable, "cette colonne ne se trie pas");
+    asc.radio = desc.radio = true;
+    asc.checked = sortColumn_ == column && sortOrder_ == SortOrder::Ascending;
+    desc.checked = sortColumn_ == column && sortOrder_ == SortOrder::Descending;
+    items.push_back(std::move(asc));
+    items.push_back(std::move(desc));
+    items.push_back(rule());
+    items.push_back(entry("Ajuster la largeur", 8, c.resizable && model_ != nullptr, "sa largeur est fix\xC3\xA9" "e"));
+    std::size_t shown = 0;
+    for (const auto& col : columns_) shown += col.visible ? 1 : 0;
+    items.push_back(entry("Masquer la colonne", 9, shown > 1, "la seule colonne montr\xC3\xA9" "e"));
+    PopupMenu::Item cols = entry("Colonnes", -1, columns_.size() > 1, "une seule colonne");
+    for (std::size_t i = 0; i < columns_.size() && i < 88; ++i) {
+        const bool last = columns_[i].visible && shown <= 1;
+        auto it = entry(titleOf(columns_[i], i), 11 + static_cast<int>(i), !last, "la seule colonne montr\xC3\xA9" "e");
+        it.checkable = true;
+        it.checked = columns_[i].visible;
+        cols.children.push_back(std::move(it));
+    }
+    if (columns_.size() > 1) items.push_back(std::move(cols));
+    items.push_back(rule());
+    const bool filterable = filtersEnabled_ && c.filterable && c.headerIcon == 0;
+    items.push_back(entry("Filtrer la colonne\xE2\x80\xA6", 100 + static_cast<int>(column), filterable, "pas de filtre dans ce tableau", Icon::Filter));
+    const bool filtered = !columnFilters_.empty();
+    items.push_back(entry("Effacer les filtres", 99, filtered, "aucun filtre"));
+    items.push_back(rule());
+    items.push_back(entry("Exporter en CSV\xE2\x80\xA6", 10, gCsvExporter && model_ && !view_.empty(),
+                          gCsvExporter ? std::string("le tableau est vide") : std::string("pas d'export ici")));
     context_->setItems(std::move(items));
     gfx::Size surface{bounds().right() + 400.f, bounds().bottom() + 400.f};
     if (surface_.w > 0.f) surface = surface_;
@@ -2116,8 +2251,16 @@ EventResult TableView::onEvent(const InputEvent& ev) {
                 if (auto* f = activeCellField()) finishCellEdit(true, f->text());
                 else finishCellEdit(false, {});
             }
-            // Lot recherche : sur les titres aussi, la colonne cliquee (Filtrer la colonne).
-            if (d->pos.y < area.y + headerH) lastClickColumn_ = columnAtX(d->pos.x);
+            // Lot recherche : sur les titres aussi, la colonne cliquee. 1.12.18 (planche 20) : un
+            // titre a son menu (trier, la largeur, masquer, les colonnes, filtrer, exporter).
+            if (d->pos.y < area.y + headerH) {
+                lastClickColumn_ = columnAtX(d->pos.x);
+                if (lastClickColumn_ >= 0) {
+                    openHeaderMenu(d->pos, static_cast<std::size_t>(lastClickColumn_));
+                    invalidate();
+                    return EventResult::Consumed;
+                }
+            }
             if (d->pos.y >= area.y + headerH) {
                 const int vi = static_cast<int>((d->pos.y - area.y - headerH + scrollY_) / rowH);
                 lastClickColumn_ = columnAtX(d->pos.x);

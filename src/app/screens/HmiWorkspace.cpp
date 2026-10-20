@@ -1185,6 +1185,26 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         host.rebuild = [this](const std::string& mode) { rebuildHmiFor(mode); };
         // 1.12.17 : « Dans le temps > » de l'onglet Performances - la Vue d'ensemble de Simulation.
         host.goSimCenter = [this](const std::string& where) { simCenterGo(where); };
+        // 1.12.18 (planche 16) : les menus du clic droit - suivre dans Simulation > Courbes, l'objet
+        // dans l'editeur (la vue qui le porte : la vue, son modele, un en-tete).
+        host.follow = [this](const std::string& path, std::string* why) { return addSimTrend(path, why); };
+        host.goToObject = [this](hmi::Id view, hmi::Id object) {
+            auto doc = app_.hmi();
+            if (!doc) return;
+            hmi::Id owner = hmi::kNoId;
+            if (const auto* v = doc->project.view(view))
+                for (const auto& o : v->objects)
+                    if (o.id == object) owner = view;
+            for (const auto& v : doc->project.views) {
+                if (owner != hmi::kNoId) break;
+                for (const auto& o : v.objects)
+                    if (o.id == object) {
+                        owner = v.id;
+                        break;
+                    }
+            }
+            openHmiView(owner != hmi::kNoId ? owner : view, -1, object);
+        };
         // 1.10 (decision 12) : le plein ecran de l'IHM - la fenetre en plein ecran, puis
         // rendue comme avant (deja en plein ecran par F11 : elle le reste).
         host.fullScreenWindow = [this, before = std::make_shared<bool>(false)](bool on) {

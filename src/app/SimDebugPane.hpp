@@ -50,6 +50,8 @@
 namespace ui { class TableView; class MultiLineText; class InputText; }
 namespace sim { class Runtime; class Value; }
 
+namespace ui { class PopupMenu; }
+
 namespace app {
 
 class ApiFrame;
@@ -87,6 +89,8 @@ public:
         // (le clic droit dans la marge) - la section (nom de simulateur), la ligne
         // (1 = la premiere). L'ecran pose le point au besoin et ouvre le dialogue.
         std::function<void(const std::string& section, int line)> askCondition;
+        // 1.12.18 : Aller a la definition d'un nom du code (F12, le menu du code).
+        std::function<void(const std::string& word)>              goToDefinition;
     };
 
     // ---- Lot API 8 (2e partie) : la condition par clic droit ----
@@ -176,6 +180,11 @@ public:
     [[nodiscard]] ui::TableView& breakpointTable() noexcept { return *bpTable_; }
     [[nodiscard]] ui::TableView& watchTable() noexcept { return *watchTable_; }
     [[nodiscard]] ui::TableView& traceTable() noexcept { return *traceTable_; }
+    // 1.12.18 (planche 18) : le menu de la marge (Point d'arret F9, Condition..., Desactiver,
+    // Executer jusqu'a la ligne, Retirer tous les points) - la fenetre de la condition ne
+    // s'ouvre plus d'office ; ligne : 0 = la premiere.
+    void openMarginMenu(std::size_t line, gfx::Point at);
+    [[nodiscard]] ui::PopupMenu* marginMenu() const noexcept { return marginMenu_; }
 
     // ---- Lot API 8 (2e partie) : pour les scripts et les tests ----
     // LE CLIC DROIT dans la marge du code (1 = la premiere ligne) : le point (pose
@@ -312,6 +321,10 @@ private:
 
     // Ce qui est montre.
     std::vector<SimBreakpoint>              bps_;
+    ui::PopupMenu*                          marginMenu_{nullptr};   // 1.12.18
+    int                                     marginLine_{0};         // 1 = la premiere
+    std::string                             menuWord_;              // 1.12.18 : le nom du menu du code
+    std::size_t                             menuLine_{0};
     // Lot API 8 : corrections des captures - "Section : ligne" abregee au milieu
     // pour la largeur de sa colonne (refait a chaque dessin ; vide : en entier).
     std::vector<std::string>                bpWhereShown_;

@@ -9,6 +9,8 @@
 #include "SimCenter.hpp"
 #include "../core/Edition.hpp"   // 1.12.0 : la vue d'ensemble de chaque application
 #include "SimCenterKit.hpp"
+#include "../ui/Commands.hpp"
+#include "../ui/widgets/Controls.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -127,7 +129,116 @@ std::string SimCenterModel::trendsCsv() const {
 
 // ======================================================= la vue d'ensemble ====
 SimOverviewPane::SimOverviewPane(std::string id, std::shared_ptr<SimCenterModel> model, SimCenterHosts hosts)
-    : ui::Widget(std::move(id)), model_(std::move(model)), hosts_(std::move(hosts)) {}
+    : ui::Widget(std::move(id)), model_(std::move(model)), hosts_(std::move(hosts)) {
+    // 1.12.18 : le menu du clic droit (planche 17).
+    menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(this->id() + ".menu")));
+    menu_->itemChosen->connect([this](int id) { menuChosen(id); }).release();
+}
+
+void SimOverviewPane::menuChosen(int id) {
+    if (id < 0 || static_cast<std::size_t>(id) >= menuGo_.size()) return;
+    const std::string go = menuGo_[static_cast<std::size_t>(id)];
+    if (go.rfind("copier:", 0) == 0) {
+        ui::setClipboardText(go.substr(7));
+        if (hosts_.status) hosts_.status("Ligne copi\xC3\xA9" "e.");
+        return;
+    }
+    click(go);
+}
+
+void SimOverviewPane::openMenuAt(gfx::Point at) {
+    if (!menu_ || !model_) return;
+    const int h = hitAt(at);
+    std::vector<ui::PopupMenu::Item> items;
+    menuGo_.clear();
+    const auto entry = [this](std::string label, std::string go, std::string key = {}, bool enabled = true, std::string why = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.shortcut = std::move(key);
+        it.enabled = enabled;
+        if (!enabled) it.disabledReason = std::move(why);
+        it.id = static_cast<int>(menuGo_.size());
+        menuGo_.push_back(std::move(go));
+        return it;
+    };
+    const std::string key = h >= 0 ? hits_[static_cast<std::size_t>(h)].key : std::string{};
+    const auto starts = [&key](std::string_view p) { return key.rfind(p, 0) == 0; };
+    if (starts("perf:")) {
+        // La courbe des performances : la periode, l'export, le zero.
+        items.push_back(ui::cmd::heading("Performances", "cycle"));
+        ui::PopupMenu::Item period;
+        period.label = "P\xC3\xA9riode";
+        const std::pair<double, const char*> periods[] = {{60, "1 min"}, {600, "10 min"}, {3600, "1 h"}, {-1, "Depuis le lancement"}};
+        for (const auto& [sec, name] : periods) {
+            auto it = entry(name, "@periode:" + std::to_string(static_cast<long long>(sec)));
+            it.radio = true;
+            it.checked = sec < 0 ? perfPeriod_ <= 0.0 : std::fabs(perfPeriod_ - sec) < 0.5;
+            period.children.push_back(std::move(it));
+        }
+        items.push_back(std::move(period));
+        items.push_back(entry("Exporter (CSV)\xE2\x80\xA6", "@csv:performances"));
+        items.push_back(entry("Remettre \xC3\xA0 z\xC3\xA9ro", "@zero"));
+        items.push_back(ui::cmd::separator());
+        items.push_back(entry("Voir les lenteurs", "@voir-lenteurs"));
+    } else if (starts("lenteur:") || starts("lenteurs:")) {
+        // Une lenteur (sa ligne, ou son Aller a) ; ailleurs dans le bloc : les gestes du bloc.
+        const auto view = hosts_.perfView ? hosts_.perfView() : SimPerfView{};
+        const hmi::SlowEntry* e = nullptr;
+        if (starts("lenteur:") && view.slow) {
+            const auto serial = std::strtoull(key.c_str() + 8, nullptr, 10);
+            for (const auto& x : view.slow->entries())
+                if (x.serial == serial) e = &x;
+        }
+        if (e) {
+            char ms[32];
+            std::snprintf(ms, sizeof ms, "%.0f ms", e->ms);
+            items.push_back(ui::cmd::heading(e->where.empty() ? e->what : e->where, ms));
+            items.push_back(entry("Aller \xC3\xA0", "@aller:" + std::to_string(e->serial), "Entr\xC3\xA9" "e"));
+            items.push_back(entry("Copier la ligne", "copier:" + e->clock + "\t" + std::string(ms) + "\t" + e->where + "\t" + e->what, "Ctrl+C"));
+            items.push_back(ui::cmd::separator());
+        } else {
+            items.push_back(ui::cmd::heading("Lenteurs"));
+        }
+        const bool any = view.slow && !view.slow->entries().empty();
+        items.push_back(entry("Exporter (CSV)\xE2\x80\xA6", "@csv:lenteurs", {}, any, "aucune lenteur"));
+        items.push_back(entry("Vider les lenteurs\xE2\x80\xA6", "@vider", {}, any, "aucune lenteur"));
+    } else if (starts("attention")) {
+        // Une ligne « A surveiller » : ses boutons, et pour un equipement Tester, Aller a l'equipement.
+        std::string id = key.substr(key.find(':') + 1);
+        if (const auto two = id.rfind(":2"); two != std::string::npos && two + 2 == id.size()) id.erase(two);
+        const simstatus::Attention* a = nullptr;
+        for (const auto& x : model_->report.attention)
+            if (x.id == id) a = &x;
+        if (!a) return;
+        items.push_back(ui::cmd::heading(a->text));
+        std::vector<std::string> gos;
+        if (!a->action.empty()) {
+            items.push_back(entry(a->action.label, a->action.key));
+            gos.push_back(a->action.key);
+        }
+        if (!a->second.empty()) {
+            items.push_back(entry(a->second.label, a->second.key));
+            gos.push_back(a->second.key);
+        }
+        if (id.rfind("equipement:", 0) == 0) {
+            const std::string name = id.substr(11);
+            items.push_back(entry("Tester", "tester:" + name));
+            if (std::find(gos.begin(), gos.end(), "equipement:" + name) == gos.end())
+                items.push_back(entry("Aller \xC3\xA0 l'\xC3\xA9quipement", "equipement:" + name));
+        }
+    } else if (h >= 0 && !hits_[static_cast<std::size_t>(h)].go.empty()) {
+        const auto& hit = hits_[static_cast<std::size_t>(h)];
+        items.push_back(ui::cmd::heading(hit.tip.empty() ? hit.key : hit.tip.substr(0, std::min<std::size_t>(hit.tip.size(), 60))));
+        items.push_back(entry("Ouvrir", hit.go, "Entr\xC3\xA9" "e"));
+    } else {
+        return;
+    }
+    menu_->setItems(std::move(items));
+    menu_->setBounds(bounds());
+    gfx::Size surface = ui::surfaceSize();
+    if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
+    menu_->openAt(at, surface);
+}
 
 // 1.12.0 : les cartes de l'application - l'automate (XPGAnalyser API), l'IHM et ses
 // equipements (XPGAnalyser IHM), les trois (les essais).
@@ -509,6 +620,8 @@ void SimOverviewPane::paintAttention(const ui::PaintContext& ctx, const gfx::Rec
     for (std::size_t i = 0; i < list.size(); ++i) {
         const auto& a = list[i];
         if (y + 46.f > r.bottom()) break;
+        // 1.12.18 : la ligne entiere (son menu au clic droit) ; les boutons passent devant.
+        hits_.push_back({{r.x + 8.f, y, r.w - 16.f, 46.f}, "attention-ligne:" + a.id, {}, {}, false});
         const auto tone = toneColor(ctx, a.tone);
         const gfx::Rect mark{r.x + 14.f, y + 5.f, 22.f, 22.f};
         ctx.r.fillRoundedRect(mark, tone.withAlpha(ctx.theme.isDark() ? 70 : 45), 11.f);
@@ -649,6 +762,11 @@ ui::EventResult SimOverviewPane::onEvent(const ui::InputEvent& ev) {
     if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && m->button == ui::MouseButton::Left) {
         pressed_ = hitAt(m->pos);
         if (pressed_ >= 0) return ui::EventResult::Consumed;
+    }
+    // 1.12.18 (planche 17) : le clic droit - le menu de ce qu'on vise.
+    if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && m->button == ui::MouseButton::Right && bounds().contains(m->pos)) {
+        openMenuAt(m->pos);
+        return ui::EventResult::Consumed;
     }
     // Un clic : l'appui ET le relacher sur la meme zone.
     if (const auto* m = std::get_if<ui::MouseUp>(&ev); m && m->button == ui::MouseButton::Left) {

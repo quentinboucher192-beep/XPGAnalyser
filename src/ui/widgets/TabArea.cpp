@@ -176,6 +176,12 @@ void TabArea::wire(TabControl* s) {
     scope += s->contextMenuRequested->connect([this, s](std::size_t local, gfx::Point at) {
         if (const auto g = globalOf(s, local); g != npos) contextMenuRequested->emit(g, at);
     });
+    // 1.12.18 : le vide de la bande - son groupe devient celui ou l'on travaille, puis le menu.
+    scope += s->barContextRequested->connect([this, s](gfx::Point at) {
+        active_ = s;
+        refreshFocus();
+        barContextRequested->emit(at);
+    });
     scope += s->maximizeRequested->connect([this, s](std::size_t local) {
         if (const auto g = globalOf(s, local); g != npos) (void)toggleMaximized(g);
     });
