@@ -1189,13 +1189,13 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         // dans l'editeur (la vue qui le porte : la vue, son modele, un en-tete).
         host.follow = [this](const std::string& path, std::string* why) { return addSimTrend(path, why); };
         host.goToObject = [this](hmi::Id view, hmi::Id object) {
-            auto doc = app_.hmi();
-            if (!doc) return;
+            auto hmiDoc = app_.hmi();
+            if (!hmiDoc) return;
             hmi::Id owner = hmi::kNoId;
-            if (const auto* v = doc->project.view(view))
+            if (const auto* v = hmiDoc->project.view(view))
                 for (const auto& o : v->objects)
                     if (o.id == object) owner = view;
-            for (const auto& v : doc->project.views) {
+            for (const auto& v : hmiDoc->project.views) {
                 if (owner != hmi::kNoId) break;
                 for (const auto& o : v.objects)
                     if (o.id == object) {
@@ -1329,9 +1329,9 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
                     std::string pattern, formula;
                     if (!r.accepted() || !HmiAddressDialog::parse(r.payload, pattern, formula)) return;
                     auto* scripts = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"));
-                    auto* vars = scripts ? scripts->variablesPane() : nullptr;
+                    auto* varsPane = scripts ? scripts->variablesPane() : nullptr;
                     std::string why;
-                    if ((!vars || !vars->applyAddressFormula(v, pattern, formula, &why)) && status_)
+                    if ((!varsPane || !varsPane->applyAddressFormula(v, pattern, formula, &why)) && status_)
                         status_->setTransientMessage("Refus\xC3\xA9 : " + (why.empty() ? std::string("le volet des variables est ferm\xC3\xA9") : why), 6.0,
                                                      ui::StatusBar::Severity::Warning);
                 });

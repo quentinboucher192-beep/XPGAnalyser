@@ -170,9 +170,9 @@ SimForcingPane::SimForcingPane(std::string id, std::shared_ptr<SimCenterModel> m
         items.push_back(ui::cmd::item(ui::cmd::Id::Copier, 1, n > 0, "choisis une ligne"));
         return items;
     });
-    links_ += table_->contextAction->connect([this](int id) {
-        if (id == 1001) releaseSelected();
-        else if (id == 1002) releaseAll();
+    links_ += table_->contextAction->connect([this](int choice) {
+        if (choice == 1001) releaseSelected();
+        else if (choice == 1002) releaseAll();
     });
     table_->setKeyHandler([this](const ui::KeyDown& k) {
         if (k.key != ui::Key::Delete || !k.mods.none()) return false;
@@ -836,9 +836,9 @@ SimJournalPane::SimJournalPane(std::string id, std::shared_ptr<SimCenterModel> m
         items.push_back(std::move(clear));
         return items;
     });
-    links_ += table_->contextAction->connect([this](int id) {
+    links_ += table_->contextAction->connect([this](int choice) {
         const auto* e = selected();
-        switch (id) {
+        switch (choice) {
             case 1001: (void)goSelected(); break;
             case 1002: if (e) (void)setSource(SimJournal::sourceName(e->source)); break;
             case 1003: if (e) ui::setClipboardText(SimJournal::line(*e)); break;

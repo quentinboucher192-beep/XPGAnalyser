@@ -308,13 +308,13 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     // Voir les usages (une entree par utilisation dans le code), Copier, Coller, Supprimer.
     table_->setExtraContextOnly(true);
     table_->setExtraContextItems([this] { return contextItems(); });
-    links_ += table_->contextAction->connect([this](int id) {
-        if (id >= kUseBase) {
+    links_ += table_->contextAction->connect([this](int choice) {
+        if (choice >= kUseBase) {
             const auto sel = selectedRows();
-            if (sel.size() == 1 && sel.front() < rows_->rows.size()) useRequested->emit(rows_->rows[sel.front()].d.name, id - kUseBase);
+            if (sel.size() == 1 && sel.front() < rows_->rows.size()) useRequested->emit(rows_->rows[sel.front()].d.name, choice - kUseBase);
             return;
         }
-        tools_->triggered->emit(id - kActionBase);
+        tools_->triggered->emit(choice - kActionBase);
     });
     links_ += search_->changed->connect([this] { applySearch(); });
     // 1.12.7 : le deballage suit la ligne choisie ; la fleche deplie un element.

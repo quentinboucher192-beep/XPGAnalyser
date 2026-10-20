@@ -654,9 +654,9 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
     // Effacer, Copier les lignes, Exporter en texte (la barre, pour lui) ; Disposition...
     ui::cmd::wireSubTabMenu(*tabs_, *this, links_, [](std::size_t tab) {
         std::vector<ui::PopupMenu::Item> items;
-        const auto add = [&items](int id, std::string label, ui::Icon icon) {
+        const auto add = [&items](int itemId, std::string label, ui::Icon icon) {
             ui::PopupMenu::Item it;
-            it.id = id;
+            it.id = itemId;
             it.label = std::move(label);
             it.icon = icon;
             items.push_back(std::move(it));
@@ -665,8 +665,8 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
         add(2, "Copier les lignes", ui::Icon::Copy);
         add(3, "Exporter en texte", ui::Icon::Export);
         return items;
-    }, [this](std::size_t, int id) {
-        if (id >= 1 && id <= 3) tools_->triggered->emit(id);
+    }, [this](std::size_t, int choice) {
+        if (choice >= 1 && choice <= 3) tools_->triggered->emit(choice);
     });
     disposition::applyTabs(*tabs_, "bas", true);       // 1.12.3 : Projet > Disposition
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(this->id() + ".status")));

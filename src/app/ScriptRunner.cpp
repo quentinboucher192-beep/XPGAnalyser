@@ -6053,7 +6053,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (cmd == "sim-appui") { moveTo(p, {}); send(ui::MouseDown{p, MouseButton::Left, 1, {}}); }
         else if (cmd == "sim-relache") { moveTo(p, {}); send(ui::MouseUp{p, MouseButton::Left, {}}); }
         else if (has("droit")) {
-            click(p, MouseButton::Right, 1, {});           // 1.12.18 (planche 16) : son menu du clic droit
+            click(p, MouseButton::Right, 1, mods());       // 1.12.18 (planche 16) : son menu du clic droit (maj : Maj+clic droit)
         } else {
             click(p, MouseButton::Left, 1, {});
             if (has("double")) click(p, MouseButton::Left, 2, {});

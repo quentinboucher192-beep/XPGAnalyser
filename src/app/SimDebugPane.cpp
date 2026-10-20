@@ -511,14 +511,14 @@ SimDebugPane::SimDebugPane(std::string id) : ui::Widget(std::move(id)) {
         items.push_back(ui::cmd::item(ui::cmd::Id::Retirer, 1004, true, {}, sel.size() > 1 ? "Retirer les " + std::to_string(sel.size()) : std::string{}));
         return items;
     });
-    links_ += bpTable_->contextAction->connect([this](int id) {
+    links_ += bpTable_->contextAction->connect([this](int choice) {
         auto sel = bpTable_->selectedModelRows();
         if (sel.empty() || sel.front() >= bps_.size()) return;
         const auto first = bps_[sel.front()];
-        if (id == 1001) (void)showSection(first.section, first.line);
-        else if (id == 1002) (void)setBreakpointEnabled(sel.front() + 1, !first.enabled);
-        else if (id == 1003) (void)editCondition(first.section, first.line);
-        else if (id == 1004) {
+        if (choice == 1001) (void)showSection(first.section, first.line);
+        else if (choice == 1002) (void)setBreakpointEnabled(sel.front() + 1, !first.enabled);
+        else if (choice == 1003) (void)editCondition(first.section, first.line);
+        else if (choice == 1004) {
             std::sort(sel.rbegin(), sel.rend());
             for (const auto r : sel) (void)removeBreakpoint(static_cast<std::size_t>(r) + 1);
         }
@@ -599,14 +599,14 @@ SimDebugPane::SimDebugPane(std::string id) : ui::Widget(std::move(id)) {
                                       word.empty() ? noName : std::string("pas ici")));
         menu.setItems(std::move(items));
     });
-    links_ += code_->contextAction->connect([this](int id) {
+    links_ += code_->contextAction->connect([this](int choice) {
         std::string resolved = menuWord_;
         if (auto* rt = runtime())
             for (const auto& prefix : prefixes()) {
                 sim::Value v;
                 if (!prefix.empty() && rt->get(prefix + menuWord_, v)) { resolved = prefix + menuWord_; break; }
             }
-        switch (id) {
+        switch (choice) {
             case 1001: (void)runToLine(static_cast<int>(menuLine_) + 1); break;
             case 1002: {
                 std::string why;
@@ -671,10 +671,10 @@ SimDebugPane::SimDebugPane(std::string id) : ui::Widget(std::move(id)) {
         items.push_back(ui::cmd::item(ui::cmd::Id::Copier, 1));
         return items;
     });
-    links_ += traceTable_->contextAction->connect([this](int id) {
+    links_ += traceTable_->contextAction->connect([this](int choice) {
         const auto sel = traceTable_->selectedModelRows();
         const auto& rows = traceModel_->rows();
-        if (id == 1001 && !sel.empty() && sel.front() < rows.size()) (void)showSection(rows[sel.front()].section);
+        if (choice == 1001 && !sel.empty() && sel.front() < rows.size()) (void)showSection(rows[sel.front()].section);
     });
     // 1.12.18 : un espion - sa valeur en tete, Copier la valeur (Ctrl+C), Qui a ecrit ?, Retirer (Suppr).
     watchTable_->setExtraContextOnly(true);
@@ -694,13 +694,13 @@ SimDebugPane::SimDebugPane(std::string id) : ui::Widget(std::move(id)) {
         items.push_back(ui::cmd::item(ui::cmd::Id::Retirer, 1103, r.depth == 0, "un membre : retirer l'espion de sa variable"));
         return items;
     });
-    links_ += watchTable_->contextAction->connect([this](int id) {
+    links_ += watchTable_->contextAction->connect([this](int choice) {
         const auto sel = watchTable_->selectedModelRows();
         if (sel.empty() || sel.front() >= watchRows_.size()) return;
         const auto r = watchRows_[sel.front()];
-        if (id == 1101) ui::setClipboardText(valueText(r.node.path));
-        else if (id == 1102) chooseVariable(r.node.path);
-        else if (id == 1103 && r.depth == 0) (void)removeWatch(watches_[static_cast<std::size_t>(r.watch)].path);
+        if (choice == 1101) ui::setClipboardText(valueText(r.node.path));
+        else if (choice == 1102) chooseVariable(r.node.path);
+        else if (choice == 1103 && r.depth == 0) (void)removeWatch(watches_[static_cast<std::size_t>(r.watch)].path);
     });
 }
 

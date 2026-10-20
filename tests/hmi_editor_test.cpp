@@ -23910,6 +23910,19 @@ void menusSimulation11218() {
     const Id trend = edit::add(p, v, Kind::Trend, 500, 100);
     v.object(trend)->name = "Courbe_1";
     v.object(trend)->set("variables", "Niveau; Seuil");
+    // Une alarme active ailleurs, et un bandeau d'alarmes : seul le bandeau la montre dans son menu
+    // (avant la correction, chaque objet prenait la plus grave du projet - la courbe perdait Pause).
+    const Id banner = edit::add(p, v, Kind::AlarmBanner, 100, 520);
+    v.object(banner)->name = "Bandeau";
+    {
+        AlarmDef al;
+        al.id = p.allocate();
+        al.name = "Toujours";
+        al.condition = "Niveau >= 0";
+        al.message = "Toujours active";
+        al.priority = 1;
+        p.alarms.push_back(al);
+    }
     p.config.startView = v.id;
     p.views.push_back(v);
     app::HmiSimulationHost host;
@@ -23936,6 +23949,9 @@ void menusSimulation11218() {
             if (!it.separator && !it.heading && it.label == label) return &it;
         return nullptr;
     };
+    check(std::any_of(pane.runtime().alarms().begin(), pane.runtime().alarms().end(),
+                      [](const hmi::LiveAlarm& a) { return a.name == "Toujours" && a.active; }),
+          "une alarme active dans le projet (Toujours)");
     // ---- la vue en marche : la jauge ----
     gfx::Rect jr{};
     check(pane.canvas().objectRect("Jauge", jr), "la jauge \xC3\xA0 l'\xC3\xA9" "cran");
@@ -23978,14 +23994,30 @@ void menusSimulation11218() {
     pane.canvas().dispatch(ui::MouseUp{{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f}, ui::MouseButton::Right, {}});
     const auto* pause = findIn(vm->items(), "Pause");
     check(vm->isOpen() && vm->items().front().label == "Courbe_1" && vm->items().front().shortcut == "2 plumes" && pause && !pause->enabled
-              && findIn(vm->items(), "Exporter (CSV)\xE2\x80\xA6"),
-          "la courbe : Courbe_1 (2 plumes), Pause (gris\xC3\xA9 : pas pilotable), Exporter (CSV)...");
+              && findIn(vm->items(), "Exporter (CSV)\xE2\x80\xA6") && !findIn(vm->items(), "Acquitter"),
+          "la courbe : Courbe_1 (2 plumes), Pause (gris\xC3\xA9 : pas pilotable), Exporter (CSV)... - pas l'alarme d'ailleurs");
+    vm->close();
+    // ---- le bandeau d'alarmes : son alarme d'abord, puis l'objet ----
+    gfx::Rect br{};
+    check(pane.canvas().objectRect("Bandeau", br), "le bandeau \xC3\xA0 l'\xC3\xA9" "cran");
+    pane.canvas().dispatch(ui::MouseDown{{br.x + br.w * 0.5f, br.y + br.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{{br.x + br.w * 0.5f, br.y + br.h * 0.5f}, ui::MouseButton::Right, {}});
+    {
+        const auto& its = vm->items();
+        const auto* ack = findIn(its, "Acquitter");
+        const bool bannerHeading = std::any_of(its.begin(), its.end(), [](const ui::PopupMenu::Item& it) { return it.heading && it.label == "Bandeau"; });
+        check(vm->isOpen() && !its.empty() && its.front().heading && its.front().label == "Toujours" && ack && ack->enabled && bannerHeading
+                  && findIn(its, "Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur"),
+              "le bandeau : Toujours (Acquitter), puis Bandeau et Aller \xC3\xA0 l'objet");
+    }
     vm->close();
     // ---- le projet lit le bouton droit : Maj+clic droit ----
     doc->project.views.back().object(gauge)->setExpr("visible", "NOT SYS.MouseRight");
     check(pane.projectReadsRightButton(), "une expression lit SYS.MouseRight");
     pane.canvas().dispatch(ui::MouseDown{jp, ui::MouseButton::Right, 1, {}});
     check(!vm->isOpen() && (pane.runtime().pointer().buttons & 2) != 0, "le clic droit va au projet (SYS.MouseRight), pas de menu");
+    check(pane.statusBar().message().find("Maj+clic droit ouvre le menu") != std::string::npos,
+          "... et la barre d'etat dit que Maj+clic droit ouvre le menu");
     pane.canvas().dispatch(ui::MouseUp{jp, ui::MouseButton::Right, {}});
     pane.canvas().dispatch(ui::MouseDown{jp, ui::MouseButton::Right, 1, ui::KeyMods{false, true, false, false}});
     check(vm->isOpen(), "Maj+clic droit : le menu");

@@ -2635,8 +2635,8 @@ namespace ui {
             // 1.12.18 : Maj+F10, la touche Menu - le menu du clic droit, au curseur.
             if (isContextMenuKey(*k) && !barHasKeyboard()) {
                 gfx::Rect r{};
-                const auto inner = contentRect();
-                const gfx::Point at = positionRect(caret_.line, caret_.column, r) ? gfx::Point{ r.x, r.bottom() } : gfx::Point{ inner.x + 20.f, inner.y + 20.f };
+                const auto area = contentRect();
+                const gfx::Point at = positionRect(caret_.line, caret_.column, r) ? gfx::Point{ r.x, r.bottom() } : gfx::Point{ area.x + 20.f, area.y + 20.f };
                 openContextMenu(at, true);
                 return EventResult::Consumed;
             }

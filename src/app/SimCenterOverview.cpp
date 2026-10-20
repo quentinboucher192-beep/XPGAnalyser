@@ -132,7 +132,7 @@ SimOverviewPane::SimOverviewPane(std::string id, std::shared_ptr<SimCenterModel>
     : ui::Widget(std::move(id)), model_(std::move(model)), hosts_(std::move(hosts)) {
     // 1.12.18 : le menu du clic droit (planche 17).
     menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(this->id() + ".menu")));
-    menu_->itemChosen->connect([this](int id) { menuChosen(id); }).release();
+    menu_->itemChosen->connect([this](int choice) { menuChosen(choice); }).release();
 }
 
 void SimOverviewPane::menuChosen(int id) {

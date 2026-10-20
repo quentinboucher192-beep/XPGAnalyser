@@ -696,18 +696,6 @@ void searchMembers(const domain::Project& p, const mt::Node& n, const std::strin
     }
 }
 
-// Le nom court d'une courbe : le dernier segment, avec celui d'avant quand il
-// est court (PT1.mes, V3.cmd, tempon[3]).
-std::string shortName(const std::string& path) {
-    const auto cut = path.find_last_of(".[");
-    if (cut == std::string::npos || cut == 0) return path;
-    const auto last = path.substr(path[cut] == '.' ? cut + 1 : cut);
-    if (last.size() > 6) return last;
-    const auto before = path.find_last_of(".[", cut - 1);
-    const auto from = before == std::string::npos ? std::size_t{0} : (path[before] == '.' ? before + 1 : before);
-    return path.substr(from);
-}
-
 // Le temps simule : 26,2 s ; 12 min 05 s ; 1 h 02 min.
 std::string simulatedTime(std::int64_t ms) {
     char buf[64];
@@ -726,22 +714,6 @@ std::string scanTime(std::int64_t micros) {
     char buf[64];
     const double ms = static_cast<double>(micros) / 1000.0;
     std::snprintf(buf, sizeof buf, ms < 1.0 ? "%.2f ms" : "%.1f ms", ms);
-    return frenchDecimal(buf);
-}
-
-// Un pas « rond » pour l'axe des valeurs : 1, 2 ou 5 fois une puissance de dix.
-double niceStep(double range, int target) {
-    if (!(range > 0.0)) return 1.0;
-    const double raw = range / static_cast<double>(target);
-    const double magnitude = std::pow(10.0, std::floor(std::log10(raw)));
-    const double f = raw / magnitude;
-    return (f <= 1.0 ? 1.0 : f <= 2.0 ? 2.0 : f <= 5.0 ? 5.0 : 10.0) * magnitude;
-}
-
-std::string tickLabel(double v, double step) {
-    char buf[48];
-    const int decimals = step >= 1.0 ? 0 : std::min(6, static_cast<int>(std::ceil(-std::log10(step))));
-    std::snprintf(buf, sizeof buf, "%.*f", decimals, std::fabs(v) < step * 1e-6 ? 0.0 : v);
     return frenchDecimal(buf);
 }
 
@@ -1327,14 +1299,14 @@ SimulationPane::SimulationPane(std::string id) : ui::Widget(std::move(id)) {
         items.push_back(ui::cmd::item(ui::cmd::Id::ToutRelacher, 1004, !forcedNames_.empty(), "rien de forc\xC3\xA9"));
         return items;
     });
-    links_ += forced_->contextAction->connect([this](int id) {
+    links_ += forced_->contextAction->connect([this](int choice) {
         const auto sel = forced_->selectedModelRows();
         if (sel.empty() || sel.front() >= forcedNames_.size()) return;
         const std::string path = forcedNames_[sel.front()];
-        if (id == 1001) askForce({path});
-        else if (id == 1002) releasePaths({path});
-        else if (id == 1003) (void)selectVariable(path);
-        else if (id == 1004) runAction(AReleaseAll);
+        if (choice == 1001) askForce({path});
+        else if (choice == 1002) releasePaths({path});
+        else if (choice == 1003) (void)selectVariable(path);
+        else if (choice == 1004) runAction(AReleaseAll);
     });
     forced_->setKeyHandler([this](const ui::KeyDown& k) {
         const auto sel = forced_->selectedModelRows();
@@ -1357,12 +1329,12 @@ SimulationPane::SimulationPane(std::string id) : ui::Widget(std::move(id)) {
         items.push_back(ui::cmd::item(ui::cmd::Id::Copier, 1102, true, {}, "Copier le message"));
         return items;
     });
-    links_ += diag_->contextAction->connect([this](int id) {
+    links_ += diag_->contextAction->connect([this](int choice) {
         const auto sel = diag_->selectedModelRows();
         if (sel.empty() || sel.front() / 2 >= diagItems_.size()) return;
         const auto& it = diagItems_[sel.front() / 2];
-        if (id == 1101) goToItem(sel.front() / 2);
-        else if (id == 1102) ui::setClipboardText(it.detail.empty() ? it.title : it.title + "\n" + it.detail);
+        if (choice == 1101) goToItem(sel.front() / 2);
+        else if (choice == 1102) ui::setClipboardText(it.detail.empty() ? it.title : it.title + "\n" + it.detail);
     });
     diagBox_->addChild(std::make_unique<ClickCatcher>(this->id() + ".simulateur.clic", [this](const ui::MouseDown& d) {
         if (d.button != ui::MouseButton::Left) return false;

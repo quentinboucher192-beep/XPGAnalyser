@@ -608,6 +608,7 @@ std::string HmiLiveCanvas::keyToken(ui::Key k) {
         // 1.12.2 : les signes (les raccourcis des editeurs) ne sont pas des touches de vue.
         case K::Slash: case K::Period: case K::Comma: case K::Minus: case K::RightBracket:
         case K::Colon: case K::Dollar: case K::Semicolon:
+        case K::Menu:      // 1.12.18 : la touche Menu ouvre le menu du clic droit, pas une touche de vue
         case K::Unknown: break;
     }
     return {};
@@ -2582,8 +2583,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         (void)raw;
         table->setExtraContextOnly(true);
         table->setExtraContextItems([this] { return exprMenuItems(); });
-        links_ += table->contextAction->connect([this](int id) {
-            if (id >= 1000 && static_cast<std::size_t>(id - 1000) < viewMenuGo_.size()) runMenuKey(viewMenuGo_[static_cast<std::size_t>(id - 1000)]);
+        links_ += table->contextAction->connect([this](int choice) {
+            if (choice >= 1000 && static_cast<std::size_t>(choice - 1000) < viewMenuGo_.size()) runMenuKey(viewMenuGo_[static_cast<std::size_t>(choice - 1000)]);
         });
         table->setKeyHandler([this](const ui::KeyDown& k) {
             auto* tree = static_cast<ExprTree*>(model_.get());
@@ -3076,7 +3077,12 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             if (!canvas_->hitAt(at, view, obj)) return false;
             return openViewMenu(at);   // le poste : le menu ne s'ouvre que sur une alarme a acquitter
         }
-        return !projectReadsRightButton() || shift;
+        if (shift || !projectReadsRightButton()) return true;
+        // Le clic droit va au projet : la barre d'etat dit comment avoir le menu.
+        if (status_)
+            status_->setTransientMessage("Le projet lit le bouton droit de la souris : le clic droit lui revient. "
+                                         "Maj+clic droit ouvre le menu.", 5.0);
+        return false;
     });
     links_ += canvas_->contextRequested->connect([this](gfx::Point at) {
         if (!station_) (void)openViewMenu(at);
@@ -4688,26 +4694,26 @@ void HmiSimulationPane::runMenuKey(const std::string& key) {
         if (!tree) return;
         if (tabs_) tabs_->setCurrentIndex(tab);
         if (!tree->openValueEditor(p)) say(p + " : pas dans la liste des variables (la recherche, Sur la vue actuelle ?).", true);
-    } else if (const auto p = arg("relacher:"); !p.empty()) {
-        const auto [tree, tab] = treeOf(p);
+    } else if (const auto released = arg("relacher:"); !released.empty()) {
+        const auto [tree, tab] = treeOf(released);
         (void)tab;
-        if (tree && tree->unforcePath(p)) say(p + " : libre (plus forc\xC3\xA9" "e).", false);
-    } else if (const auto p = arg("suivre:"); !p.empty()) {
+        if (tree && tree->unforcePath(released)) say(released + " : libre (plus forc\xC3\xA9" "e).", false);
+    } else if (const auto followed = arg("suivre:"); !followed.empty()) {
         std::string why;
-        const bool hmiVar = ihmVars_ && ihmVars_->valueText(p) != "-";
-        if (host_.follow && host_.follow(hmiVar ? "ihm:" + p : p, &why)) say(p + " suivie dans Simulation \xE2\x80\xBA Courbes.", false);
-        else say(why.empty() ? p + " : pas de courbe ici." : why, true);
-    } else if (const auto p = arg("expr:"); !p.empty()) {
-        addExpression(p);
+        const bool hmiVar = ihmVars_ && ihmVars_->valueText(followed) != "-";
+        if (host_.follow && host_.follow(hmiVar ? "ihm:" + followed : followed, &why)) say(followed + " suivie dans Simulation \xE2\x80\xBA Courbes.", false);
+        else say(why.empty() ? followed + " : pas de courbe ici." : why, true);
+    } else if (const auto expr = arg("expr:"); !expr.empty()) {
+        addExpression(expr);
     } else if (key.rfind("copier:", 0) == 0) {
         ui::setClipboardText(key.substr(7));
         say("Copi\xC3\xA9 : " + key.substr(7), false);
     } else if (const auto rest = arg("objet:"); !rest.empty()) {
         Id view = kNoId, obj = kNoId;
         if (twoIds(rest, view, obj) && host_.goToObject) host_.goToObject(view, obj);
-    } else if (const auto rest = arg("pause:"); !rest.empty()) {
+    } else if (const auto pauseArg = arg("pause:"); !pauseArg.empty()) {
         Id view = kNoId, obj = kNoId;
-        if (!twoIds(rest, view, obj)) return;
+        if (!twoIds(pauseArg, view, obj)) return;
         const bool paused = runtime_.trendPausedAt(view, obj).has_value();
         if (runtime_.setTrendPaused(view, obj, !paused)) say(paused ? "La courbe reprend." : "La courbe est en pause (la simulation continue).", false);
         refreshNow();
@@ -4715,10 +4721,10 @@ void HmiSimulationPane::runMenuKey(const std::string& key) {
         std::string why;
         if (runtime_.exportAsOperator("objet:" + name, name, "CSV", now_, true, &why)) say("Export de " + name + " demand\xC3\xA9.", false);
         else say("Export refus\xC3\xA9 : " + why, true);
-    } else if (const auto name = arg("acquitter:"); !name.empty()) {
+    } else if (const auto alarm = arg("acquitter:"); !alarm.empty()) {
         std::string why;
-        const auto n = runtime_.acknowledge(name, now_, &why);
-        say(n ? name + " acquitt\xC3\xA9" "e." : "Acquittement refus\xC3\xA9 : " + why, n == 0);
+        const auto n = runtime_.acknowledge(alarm, now_, &why);
+        say(n ? alarm + " acquitt\xC3\xA9" "e." : "Acquittement refus\xC3\xA9 : " + why, n == 0);
         refreshNow();
     } else if (const auto r = arg("@basculer:"); !r.empty()) {
         if (auto* tree = static_cast<ExprTree*>(model_.get())) tree->toggle(static_cast<std::size_t>(std::strtoull(r.c_str(), nullptr, 10)));
@@ -4764,11 +4770,13 @@ bool HmiSimulationPane::openViewMenu(gfx::Point at) {
         return it;
     };
     const std::string goObject = "objet:" + std::to_string(view) + ":" + std::to_string(source);
-    // Une alarme de l'objet (son bandeau, ses alarmes d'objet), active ou a acquitter.
+    // Une alarme de l'objet (celle d'un bandeau d'alarmes, ses alarmes d'objet), active ou a acquitter.
+    // bannerAlarm ne vaut que pour un bandeau : sur un autre objet (sans groupe) il rendrait la plus grave du projet.
     const hmi::LiveAlarm* alarm = nullptr;
     {
         const auto& list = runtime_.alarms();
-        if (const int i = runtime_.bannerAlarm(view, *o); i >= 0 && static_cast<std::size_t>(i) < list.size()) alarm = &list[static_cast<std::size_t>(i)];
+        if (o->kind == hmi::Kind::AlarmBanner)
+            if (const int i = runtime_.bannerAlarm(view, *o); i >= 0 && static_cast<std::size_t>(i) < list.size()) alarm = &list[static_cast<std::size_t>(i)];
         const std::string group = viewName + "." + o->name;
         for (const auto& a : list)
             if (!alarm && a.objectGroup == group && (a.active || !a.acked)) alarm = &a;
@@ -4779,48 +4787,51 @@ bool HmiSimulationPane::openViewMenu(gfx::Point at) {
         if (!alarm || alarm->acked || !alarm->ackRequired || !allowed) return false;
         items.push_back(ui::cmd::heading(alarm->name, alarm->state()));
         add(entry("Acquitter"), "acquitter:" + alarm->name);
-    } else if (alarm) {
-        items.push_back(ui::cmd::heading(alarm->name, alarm->state()));
-        add(entry("Acquitter", !alarm->acked && alarm->ackRequired, alarm->acked ? "d\xC3\xA9j\xC3\xA0 acquitt\xC3\xA9" "e" : "sans acquittement"),
-            "acquitter:" + alarm->name);
-        add(entry("Copier le message", !alarm->message.empty(), "pas de message"), "copier:" + alarm->message);
-        items.push_back(ui::cmd::separator());
-        add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);
-    } else if (o->kind == hmi::Kind::Trend) {
-        const auto pens = hmi::roles::splitList(o->text("variables"));
-        items.push_back(ui::cmd::heading(o->name, std::to_string(pens.size()) + (pens.size() > 1 ? " plumes" : " plume")));
-        const bool paused = runtime_.trendPausedAt(view, obj).has_value();
-        add(entry(paused ? "Continuer" : "Pause", o->flag("pilotable", false), "pas pilotable (Propri\xC3\xA9t\xC3\xA9s : Pilotable)"),
-            "pause:" + std::to_string(view) + ":" + std::to_string(obj));
-        add(entry("Exporter (CSV)\xE2\x80\xA6"), "csv:" + o->name);
-        items.push_back(ui::cmd::separator());
-        add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);
     } else {
-        const std::string var = hmi::displayVariableOf(*o);
-        if (!var.empty()) {
-            const auto pick = [&]() -> HmiSimVarTree* {
-                if (ihmVars_ && ihmVars_->valueText(var) != "-") return ihmVars_;
-                if (apiVars_ && apiVars_->valueText(var) != "-") return apiVars_;
-                return nullptr;
-            };
-            auto* tree = pick();
-            const std::string value = tree ? tree->valueText(var) : std::string{};
-            items.push_back(ui::cmd::heading(o->name, var + (value.empty() ? std::string{} : " = " + value)));
-            const std::string unknown = "pas une variable de la simulation";
-            add(ui::cmd::item(ui::cmd::Id::Forcer, 0, tree != nullptr, unknown, "Forcer " + var + "\xE2\x80\xA6"), "forcer:" + var);
-            add(ui::cmd::item(ui::cmd::Id::Relacher, 0, tree && tree->isForced(var), "pas forc\xC3\xA9" "e"), "relacher:" + var);
-            {
-                auto follow = ui::cmd::item(ui::cmd::Id::SuivreCourbe, 0, static_cast<bool>(host_.follow), "pas de courbe ici");
-                follow.note = "dans Simulation \xE2\x80\xBA Courbes";
-                add(std::move(follow), "suivre:" + var);
-            }
-            add(entry("Ajouter aux expressions"), "expr:" + var);
-            add(ui::cmd::item(ui::cmd::Id::CopierValeur, 0, !value.empty(), "pas de valeur"), "copier:" + value);
+        // L'alarme d'abord, puis ce que l'objet propose (une courbe garde Pause et Exporter).
+        if (alarm) {
+            items.push_back(ui::cmd::heading(alarm->name, alarm->state()));
+            add(entry("Acquitter", !alarm->acked && alarm->ackRequired, alarm->acked ? "d\xC3\xA9j\xC3\xA0 acquitt\xC3\xA9" "e" : "sans acquittement"),
+                "acquitter:" + alarm->name);
+            add(entry("Copier le message", !alarm->message.empty(), "pas de message"), "copier:" + alarm->message);
             items.push_back(ui::cmd::separator());
-        } else {
-            items.push_back(ui::cmd::heading(o->name, std::string(hmi::kindLabel(o->kind))));
         }
-        add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);
+        if (o->kind == hmi::Kind::Trend) {
+            const auto pens = hmi::roles::splitList(o->text("variables"));
+            items.push_back(ui::cmd::heading(o->name, std::to_string(pens.size()) + (pens.size() > 1 ? " plumes" : " plume")));
+            const bool paused = runtime_.trendPausedAt(view, obj).has_value();
+            add(entry(paused ? "Continuer" : "Pause", o->flag("pilotable", false), "pas pilotable (Propri\xC3\xA9t\xC3\xA9s : Pilotable)"),
+                "pause:" + std::to_string(view) + ":" + std::to_string(obj));
+            add(entry("Exporter (CSV)\xE2\x80\xA6"), "csv:" + o->name);
+            items.push_back(ui::cmd::separator());
+            add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);
+        } else {
+            const std::string var = hmi::displayVariableOf(*o);
+            if (!var.empty()) {
+                const auto pick = [&]() -> HmiSimVarTree* {
+                    if (ihmVars_ && ihmVars_->valueText(var) != "-") return ihmVars_;
+                    if (apiVars_ && apiVars_->valueText(var) != "-") return apiVars_;
+                    return nullptr;
+                };
+                auto* tree = pick();
+                const std::string value = tree ? tree->valueText(var) : std::string{};
+                items.push_back(ui::cmd::heading(o->name, var + (value.empty() ? std::string{} : " = " + value)));
+                const std::string unknown = "pas une variable de la simulation";
+                add(ui::cmd::item(ui::cmd::Id::Forcer, 0, tree != nullptr, unknown, "Forcer " + var + "\xE2\x80\xA6"), "forcer:" + var);
+                add(ui::cmd::item(ui::cmd::Id::Relacher, 0, tree && tree->isForced(var), "pas forc\xC3\xA9" "e"), "relacher:" + var);
+                {
+                    auto follow = ui::cmd::item(ui::cmd::Id::SuivreCourbe, 0, static_cast<bool>(host_.follow), "pas de courbe ici");
+                    follow.note = "dans Simulation \xE2\x80\xBA Courbes";
+                    add(std::move(follow), "suivre:" + var);
+                }
+                add(entry("Ajouter aux expressions"), "expr:" + var);
+                add(ui::cmd::item(ui::cmd::Id::CopierValeur, 0, !value.empty(), "pas de valeur"), "copier:" + value);
+                items.push_back(ui::cmd::separator());
+            } else {
+                items.push_back(ui::cmd::heading(o->name, std::string(hmi::kindLabel(o->kind))));
+            }
+            add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);
+        }
     }
     if (!viewMenu_) {
         viewMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".vueMenu")));
