@@ -16304,8 +16304,8 @@ void v110_nouveautes() {
             };
             hm.measure = [glyphs](std::string_view t, bool bold, bool) { return (bold ? 9.f : 8.f) * glyphs(t); };
             constexpr float kGapT = 20.f, kInT = 14.f;     // HelpArticleView.cpp : kGap, kIn
-            std::size_t tables = 0, strict = 0, bad = 0;
-            std::string firstBad;
+            std::size_t tables = 0, strict = 0, bad = 0, separators = 0;
+            std::string firstBad, firstSeparator;
             for (const auto& t : hmi::guide::topics()) {
                 const auto art = app::HmiHelpPane::compose(t);
                 for (const auto& b : art.blocks) {
@@ -16316,6 +16316,9 @@ void v110_nouveautes() {
                         if (e == std::string::npos) e = b.text.size();
                         if (e > s0) sizes.push_back(1 + static_cast<std::size_t>(std::count(b.text.begin() + static_cast<std::ptrdiff_t>(s0),
                                                                                             b.text.begin() + static_cast<std::ptrdiff_t>(e), '\t')));
+                        // 1.12.19 : une ligne "---|---" (Markdown) n'est pas une ligne du guide : elle se montrerait telle quelle.
+                        const std::string row = b.text.substr(s0, e - s0);
+                        if (!row.empty() && row.find_first_not_of("-|: \t") == std::string::npos && ++separators == 1) firstSeparator = t.key;
                         s0 = e + 1;
                     }
                     if (sizes.empty()) continue;
@@ -16350,6 +16353,8 @@ void v110_nouveautes() {
                     }
                 }
             }
+            check(separators == 0, "aide 1.12.19 : aucun tableau n'a de ligne ---|--- (Markdown), elle se montrerait telle quelle ("
+                                       + std::to_string(separators) + (firstSeparator.empty() ? std::string() : " ; la premiere : " + firstSeparator) + ")");
             check(tables >= 100 && strict >= 100 && bad == 0,
                   "aide 1.10.2 : aucune cellule de tableau ne depasse sa colonne ni la page, a 900, 640, 480 et 360 px ("
                       + std::to_string(tables) + " tableaux, " + std::to_string(strict) + " controles colonne par colonne, "
