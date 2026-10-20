@@ -14165,6 +14165,90 @@ void v1219_inspecteur() {
 }
 
 // 1.12.19 (LA REGLE DES CASES) : un refus se dit SOUS LA CASE, en rouge, et ce qu'on avait tape se reprend.
+// ---- 1.12.19 (U3, la regle des cases) : une cellule de tableau comme une case de l'inspecteur ----
+//  Un refus se dit sous la ligne (la raison et « Reprendre ») ; une formule s'edite en chasse fixe ;
+//  la valeur montree comme partout (=Formule, un texte sans apostrophes).
+void v1219_cellules() {
+    std::printf("1.12.19 (U3) : les cellules de tableau sous la meme regle\n");
+    struct Model final : ui::ITableModel {
+        std::vector<std::string> values{"12", "=Niveau * 2"};
+        [[nodiscard]] std::size_t rowCount() const override { return values.size(); }
+        [[nodiscard]] std::size_t columnCount() const override { return 1; }
+        [[nodiscard]] std::string headerText(std::size_t) const override { return "Valeur"; }
+        [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t) const override { return values[r]; }
+        [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return values[a] < values[b]; }
+        [[nodiscard]] bool editable(ui::RowIndex, std::size_t) const override { return true; }
+        bool setCellText(ui::RowIndex r, std::size_t, std::string_view t) override {
+            double d = 0;
+            if (!t.empty() && t.front() != '=' && !hmi::parseNumber(t, d)) {
+                ui::PropertyGrid::refuse("\xC2\xAB " + std::string(t) + " \xC2\xBB n'est pas un nombre");
+                return false;
+            }
+            values[r] = std::string(t);
+            return true;
+        }
+    };
+    auto model = std::make_shared<Model>();
+    ui::TableView table("cellules");
+    table.setBounds({0, 0, 500, 300});
+    table.setModel(model);
+    table.setColumns({{"Valeur", 200.f}});
+    table.layout();
+    const auto type = [&](ui::RowIndex row, const std::string& text) {
+        if (!table.beginCellEdit(row, 0) || !table.activeCellField()) return false;
+        auto* f = table.activeCellField();
+        (void)f->dispatch(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
+        (void)f->dispatch(ui::TextInput{text});
+        (void)f->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        return true;
+    };
+    check(type(0, "12abc") && model->values[0] == "12", "12abc tape dans une cellule : refuse, la valeur d'avant reste");
+    check(table.hasCellRejection() && table.cellRejectionWhy() == "\xC2\xAB 12abc \xC2\xBB n'est pas un nombre" && table.cellRejectionText() == "12abc",
+          "la raison sous la ligne, et ce qui avait ete tape (" + table.cellRejectionWhy() + ")");
+    gfx::Rect strip;
+    check(table.cellRejectionRect(strip) && strip.h > 0.f, "la bande de la raison est a l'ecran, sous la ligne");
+    check(table.resumeCellRejection() && table.activeCellField() && table.activeCellField()->text() == "12abc",
+          "Reprendre : la cellule se rouvre sur 12abc");
+    if (auto* f = table.activeCellField()) {
+        (void)f->dispatch(ui::KeyDown{ui::Key::A, ui::KeyMods{true, false, false, false}, false});
+        (void)f->dispatch(ui::TextInput{"14"});
+        (void)f->dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+    }
+    check(model->values[0] == "14" && !table.hasCellRejection(), "corrige (14) : accepte, la raison part");
+    // Echap retire la raison.
+    (void)type(0, "abc");
+    check(table.hasCellRejection(), "abc : refuse");
+    (void)table.dispatch(ui::MouseDown{{250.f, 280.f}, ui::MouseButton::Left, 1, {}});   // le focus, sous les lignes
+    (void)table.dispatch(ui::MouseUp{{250.f, 280.f}, ui::MouseButton::Left, {}});
+    (void)table.dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+    check(!table.hasCellRejection(), "Echap retire la raison");
+    // Une formule s'edite en chasse fixe.
+    check(table.beginCellEdit(1, 0) && table.activeCellField() && table.activeCellField()->monospace(),
+          "une formule (=Niveau * 2) s'edite en chasse fixe");
+    table.finishCellEdit(false, {});
+    check(table.beginCellEdit(0, 0) && table.activeCellField() && !table.activeCellField()->monospace(), "un nombre : la police du texte");
+    table.finishCellEdit(false, {});
+    // Un refus sans raison (un choix qui ouvre une fenetre) : rien sous la ligne.
+    struct Silent final : ui::ITableModel {
+        [[nodiscard]] std::size_t rowCount() const override { return 1; }
+        [[nodiscard]] std::size_t columnCount() const override { return 1; }
+        [[nodiscard]] std::string headerText(std::size_t) const override { return "Type"; }
+        [[nodiscard]] std::string cellText(ui::RowIndex, std::size_t) const override { return "INT"; }
+        [[nodiscard]] bool less(ui::RowIndex, ui::RowIndex, std::size_t) const override { return false; }
+        [[nodiscard]] bool editable(ui::RowIndex, std::size_t) const override { return true; }
+        bool setCellText(ui::RowIndex, std::size_t, std::string_view) override { return false; }
+    };
+    table.setModel(std::make_shared<Silent>());
+    table.layout();
+    (void)type(0, "Autre");
+    check(!table.hasCellRejection(), "un refus sans raison (un choix qui ouvre une fenetre) : rien sous la ligne");
+    // La valeur montree comme partout.
+    check(hmi::shownCell("'Azote'") == "Azote" && hmi::shownCell("Niveau * 2") == "=Niveau * 2" && hmi::shownCell("=Niveau") == "=Niveau"
+              && hmi::shownCell("2.5") == "2.5" && hmi::shownCell("T#5s") == "T#5s" && hmi::shownCell("[1, 2]") == "[1, 2]"
+              && hmi::shownCell("(Ouv := 1.5)") == "(Ouv := 1.5)" && hmi::shownCell("TRUE") == "TRUE" && hmi::shownCell("").empty(),
+          "shownCell : Azote, =Niveau * 2, 2.5, T#5s, [1, 2], (Ouv := 1.5), TRUE");
+}
+
 void v1219_refus_sous_la_case() {
     std::printf("1.12.19 : un refus se dit sous la case, rien de tape ne se perd\n");
     using PG = ui::PropertyGrid;
@@ -34018,6 +34102,7 @@ int main(int argc, char** argv) {
     v110_champs_expressions();              // 1.10 (chantier K) : les champs a expression, partout pareils
     v1219_refus_sous_la_case();             // 1.12.19 : un refus se dit sous la case
     v1219_inspecteur();                     // 1.12.19 : nombres, durees, formules de l'inspecteur
+    v1219_cellules();                       // 1.12.19 (U3) : les cellules de tableau sous la meme regle
     v110_aide_saisie();                     // 1.10 (chantier K2) : l'aide a la saisie des scripts (S1, S2, enumerations)
     v110_simulation(argc > 1 ? argv[1] : "");   // 1.10 (chantier L) : l'API et l'IHM independantes, le zoom
     v110_editeur();                         // 1.10 (chantier O) : variables -> graphique, types <-> Excel

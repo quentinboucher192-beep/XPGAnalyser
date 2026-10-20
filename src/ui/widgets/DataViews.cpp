@@ -24,6 +24,8 @@
 namespace ui {
 namespace {
 
+std::string clipText(std::string_view s, std::size_t n);   // 1.12.19 (plus bas)
+
 // Draws text truncated with an ellipsis when it does not fit the cell.
 void drawClipped(const PaintContext& ctx, gfx::Point at, std::string_view text,
                  gfx::FontId font, gfx::Color color, float maxWidth) {
@@ -1721,6 +1723,7 @@ void TableView::openHeaderMenu(gfx::Point at, std::size_t column) {
 }
 
 void TableView::setModel(std::shared_ptr<ITableModel> m) {
+    cellRejection_.reset();   // 1.12.19 (U3)
     modelConnections_.clear();
     model_ = std::move(m);
     if (model_)
@@ -2173,6 +2176,22 @@ void TableView::onPaint(const PaintContext& ctx) {
             ctx.r.drawText({ghost.x + 8.f, ghost.y + 4.f}, label, f, dropValid_ ? gfx::Color::rgb(0xFFFFFF) : c.textMuted);
         }
     }
+    // 1.12.19 (U3, la regle des cases) : la raison d'un refus, sous la ligne - comme dans l'inspecteur.
+    if (gfx::Rect strip; cellRejection_ && cellRejectionRect(strip)) {
+        ctx.r.fillRect(strip, c.panelBg);
+        ctx.r.fillRect(strip, c.error.withAlpha(28));
+        ctx.r.fillRect({strip.x, strip.y, 3.f, strip.h}, c.error);
+        const auto& f = ctx.theme.font.ui;
+        const float lh = ctx.r.lineHeight(f);
+        const float ty = strip.y + (strip.h - lh) * 0.5f;
+        const std::string link = "Reprendre \xC2\xAB " + clipText(cellRejection_->typed, 28) + " \xC2\xBB";
+        const float lw = ctx.r.measure(link, f).width;
+        rejectionLink_ = {strip.right() - lw - 14.f, strip.y, lw + 8.f, strip.h};
+        drawClipped(ctx, {strip.x + 10.f, ty}, cellRejection_->why, f, c.error, rejectionLink_.x - strip.x - 20.f);
+        ctx.r.drawText({rejectionLink_.x + 4.f, ty}, link, f, c.accent);
+    } else {
+        rejectionLink_ = {};
+    }
     ctx.r.popClip();
     // 1.11.4 : les barres de defilement (qu'on tire), sur le bord droit et le bas du corps.
     {
@@ -2231,6 +2250,13 @@ EventResult TableView::onEvent(const InputEvent& ev) {
         grabFocus();
         dragArmed_ = dragActive_ = dropValid_ = false;     // un glisser lache hors de la table
 
+        // 1.12.19 (U3) : la bande du refus - « Reprendre » rouvre la case sur ce qui avait ete tape ;
+        // ailleurs dans la bande, elle part.
+        if (gfx::Rect strip; d->button == MouseButton::Left && cellRejection_ && cellRejectionRect(strip) && strip.contains(d->pos)) {
+            if (rejectionLink_.w > 0.f && rejectionLink_.contains(d->pos)) (void)resumeCellRejection();
+            else clearCellRejection();
+            return EventResult::Consumed;
+        }
         // Lot 20 : le bandeau du collage - sa croix efface les marques.
         if (const float bh = bannerHeight(); bh > 0.f && d->pos.y < area.y + bh) {
             if (d->pos.x > area.right() - 30.f) clearPasteResult();
@@ -2509,6 +2535,11 @@ EventResult TableView::onEvent(const InputEvent& ev) {
             (void)pasteFromClipboard(k->mods.shift);
             return EventResult::Consumed;
         }
+    }
+    if (const auto* k = std::get_if<KeyDown>(&ev); k && focused() && k->key == Key::Escape && k->mods.none()
+        && !cellEditor_ && cellRejection_) {   // 1.12.19 (U3) : Echap retire la raison du refus
+        clearCellRejection();
+        return EventResult::Consumed;
     }
     if (const auto* k = std::get_if<KeyDown>(&ev); k && focused() && k->key == Key::Escape && k->mods.none()
         && !cellEditor_ && (!banner_.empty() || !marks_.empty())) {
@@ -3064,6 +3095,19 @@ void PropertyGrid::noteCommit(const std::string& category, const std::string& na
     }
     pendingRefusal().clear();
     rebuildRows();
+    // 1.12.19 : la raison doit se voir - en bas d'un inspecteur court, sa ligne tombait hors de la vue
+    // (et seul le bandeau du bas parlait).
+    if (!ok)
+        for (std::size_t i = 0; i < rows_.size(); ++i)
+            if (rows_[i].prop && rows_[i].prop->name == name && rows_[i].cat && rows_[i].cat->name == category
+                && (rows_[i].depth & kNoteRow) != 0) {
+                const float h = contentRect().h;
+                const float y = static_cast<float>(i) * rowHeight_;
+                if (h > 0.f && y + rowHeight_ > scrollY_ + h) scrollY_ = y + rowHeight_ - h;
+                if (y - rowHeight_ < scrollY_) scrollY_ = std::max(0.f, y - rowHeight_);
+                invalidateLayout();
+                break;
+            }
 }
 
 bool PropertyGrid::resumeRejected(std::string_view name) {
@@ -3299,6 +3343,8 @@ void PropertyGrid::beginEdit(std::size_t row) {
 // ---- lot 16 : l'edition dans une case de TableView -----------------------------
 bool TableView::beginCellEdit(RowIndex modelRow, std::size_t col) {
     if (cellEditor_) finishCellEdit(false, {});
+    // 1.12.19 (U3) : editer une autre case retire la raison d'avant ; la meme case la garde (Reprendre).
+    if (cellRejection_ && (cellRejection_->row != modelRow || cellRejection_->col != col)) cellRejection_.reset();
     if (!model_ || col >= columns_.size() || !columns_[col].visible || !model_->editable(modelRow, col)) return false;
     if (model_->editInDialog(modelRow, col)) return true;     // 1.12.14 : le selecteur de types
     const auto it = std::find(view_.begin(), view_.end(), modelRow);
@@ -3339,7 +3385,15 @@ bool TableView::beginCellEdit(RowIndex modelRow, std::size_t col) {
         raw->dispatch(MouseUp{at, MouseButton::Left, {}});
     } else {
         auto field = std::make_unique<CellField>(id() + ".celledit");
-        field->setText(current);
+        field->setText(cellResumeText_ ? *cellResumeText_ : current);   // 1.12.19 (U3) : « Reprendre »
+        // 1.12.19 (U3) : une formule en chasse fixe, pendant qu'on la tape aussi.
+        {
+            auto* typed = field.get();
+            typed->setMonospace(!typed->text().empty() && typed->text().front() == '=');
+            typed->textChanged->connect([typed](const std::string& t) { typed->setMonospace(!t.empty() && t.front() == '='); }).release();
+        }
+        if (cellAssist_)
+            if (auto assist = cellAssist_(modelRow, col)) field->setAssist(std::move(assist));
         auto* raw = field.get();
         cellEditor_ = &addChild(std::move(field));
         cellIsList_ = false;
@@ -3365,8 +3419,45 @@ void TableView::finishCellEdit(bool commit, const std::string& text) {
     grabFocus();
     if (!commit || !model_) return;
     if (text == model_->cellText(row, col)) return;          // rien de change
+    pendingRefusal().clear();
     const bool ok = model_->setCellText(row, col, text);
+    // 1.12.19 (U3) : la raison d'un refus, sous la ligne (le volet l'a donnee par PropertyGrid::refuse).
+    // Sans raison (un choix qui ouvre une fenetre, « Autre type... »), rien ne s'affiche.
+    if (ok) {
+        if (cellRejection_ && cellRejection_->row == row && cellRejection_->col == col) cellRejection_.reset();
+    } else if (!pendingRefusal().empty()) {
+        cellRejection_ = CellRejection{row, col, text, pendingRefusal()};
+    }
+    pendingRefusal().clear();
     cellEdited->emit(row, col, text, ok);
+}
+
+bool TableView::resumeCellRejection() {
+    if (!cellRejection_) return false;
+    const auto r = *cellRejection_;
+    cellResumeText_ = r.typed;
+    const bool opened = beginCellEdit(r.row, r.col) && cellEditor_ != nullptr;
+    cellResumeText_.reset();
+    return opened;
+}
+
+void TableView::clearCellRejection() {
+    if (!cellRejection_) return;
+    cellRejection_.reset();
+    invalidate();
+}
+
+bool TableView::cellRejectionRect(gfx::Rect& strip) const {
+    if (!cellRejection_) return false;
+    for (std::size_t i = 0; i < view_.size(); ++i) {
+        if (view_[i] != cellRejection_->row) continue;
+        gfx::Rect r;
+        if (!rowRect(i, r)) return false;
+        strip = {r.x, r.bottom(), r.w, rowHeight_};
+        if (strip.bottom() > contentRect().bottom()) strip.y = r.y - rowHeight_;   // la derniere ligne : au-dessus
+        return true;
+    }
+    return false;
 }
 
 InputText* TableView::activeCellField() const noexcept {

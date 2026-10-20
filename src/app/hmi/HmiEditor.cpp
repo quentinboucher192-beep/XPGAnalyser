@@ -1242,7 +1242,9 @@ bool HmiEditor::commitProp(const std::string& key, const std::string& value, boo
                 const bool inherited = hmi::ranges::inheritedKey(o0->kind, key);
                 rangeKey = inherited || value.find_first_not_of(" \t") != std::string::npos;
                 if (!hmi::ranges::validValue(value)) {
-                    warn("\xC2\xAB " + value + " \xC2\xBB n'est ni un nombre ni un nom de variable (" + key + ") : rien n'a chang\xC3\xA9. "
+                    std::string label, help;   // 1.12.19 : le libelle de la case (avant : la cle, « (max) »)
+                    if (!hmiPropertyInfo(key, label, help) || label.empty()) label = key;
+                    warn(label + " : \xC2\xAB " + value + " \xC2\xBB n'est ni un nombre ni un nom de variable ; rien n'a chang\xC3\xA9. "
                          + (inherited ? "Vide : celui de la variable. " : "") + "Pour un calcul, commencer par =.");
                     return false;
                 }

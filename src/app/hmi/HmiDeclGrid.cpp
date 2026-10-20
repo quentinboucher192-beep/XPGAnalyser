@@ -6,7 +6,9 @@
 
 #include "HmiAssist.hpp"       // 1.12.7 : l'aide a la saisie du code d'un calcul
 #include "HmiIcons.hpp"
+#include "HmiInitModel.hpp"    // 1.12.19 (U3) : iv::zeroOf, l'invite d'une case vide
 #include "HmiTypePicker.hpp"
+#include "../../hmi/HmiRoles.hpp"      // 1.12.19 (U3) : defaultInvite
 #include "../../hmi/HmiCalc.hpp"       // 1.12.7 : les valeurs calculees au demarrage
 #include "../../hmi/HmiMigrate.hpp"
 #include "../../hmi/HmiRuntime.hpp"    // 1.12.7 : leur apercu et leur deballage (Runtime::computedObjects)
@@ -68,6 +70,14 @@ std::string plural(std::size_t n, std::string_view one, std::string_view many) {
     return std::to_string(n) + " " + std::string(n > 1 ? many : one);
 }
 
+// 1.12.19 (U3, la regle des cases) : la valeur d'une declaration comme toute case - une formule avec
+// son = (=Niveau * 2), un texte sans ses apostrophes (Azote), un nombre, un litteral type, une liste
+// [..] ou une structure (A := ..) tels quels. Ce qui est montre se retape tel quel (hmi::cellValue).
+std::string shownValue(const hmi::Declaration& d) {
+    if (d.computed || d.value.empty()) return de::cellText(d, de::Column::Value);
+    return hmi::shownCell(d.value);
+}
+
 } // namespace
 
 // ------------------------------------------------------------------ le modele ----
@@ -92,6 +102,7 @@ public:
     std::vector<std::string> types;
     mutable int              freeTypeRow{-1};   // "Autre type..." : la prochaine case Type de cette ligne est un champ
     std::function<bool(std::size_t, de::Column, const std::string&)> commit;
+    const hmi::Project*      project{nullptr};    // 1.12.19 (U3) : la valeur nulle d'un type (l'invite)
     std::function<void(std::size_t)>                                askFreeType;
     std::function<void(std::size_t)>                                askPickType;
 
@@ -107,6 +118,7 @@ public:
         // 1.12.7 : une valeur calculee au demarrage - ce qu'elle vaut (l'apercu), sinon qu'elle l'est.
         if (static_cast<de::Column>(columns[c]) == de::Column::Value && rows[r].d.computed && !rows[r].preview.empty())
             return "\xC6\x92x " + (rows[r].previewError ? "erreur : " : std::string("= ")) + rows[r].preview;
+        if (static_cast<de::Column>(columns[c]) == de::Column::Value) return shownValue(rows[r].d);   // 1.12.19 (U3)
         return de::cellText(rows[r].d, static_cast<de::Column>(columns[c]));
     }
     [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
@@ -132,6 +144,11 @@ public:
             case de::Column::Value:
                 s.monospace = true;
                 if (row.d.computed) s.fgTone = row.previewError ? ui::Tone::Error : ui::Tone::Accent;   // 1.12.7
+                // 1.12.19 (U3) : vide, l'invite de partout - « 0.0 · valeur par defaut » (une constante n'en a pas :
+                // elle se tape).
+                else if (row.d.value.empty() && row.d.kind != hmi::DeclKind::Constant && project)
+                    if (std::string z = hmi::shownLiteral(app::initvalue::zeroOf(*project, row.d.type)); !z.empty() || hmi::isTextType(row.d.type))
+                        s.placeholder = hmi::roles::defaultInvite(z.empty() ? std::string("vide") : z);
                 break;
             case de::Column::Storage:
                 if (row.d.storage == hmi::Storage::Persistent) s.fgTone = ui::Tone::Accent;
@@ -286,6 +303,20 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     };
     rows_->askPickType = [this](std::size_t row) { pickType(row); };
     table_->setModel(rows_);
+    // 1.12.19 (U3, la regle des cases) : Ctrl+Espace dans une case Valeur - les variables, les fonctions, les
+    // declarations voisines (comme une case fx de l'inspecteur).
+    table_->setCellAssist([this](ui::RowIndex, std::size_t col) -> ui::InputText::Assist {
+        if (col >= rows_->columns.size() || rows_->columns[col] == kUses
+            || static_cast<de::Column>(rows_->columns[col]) != de::Column::Value || !doc_)
+            return {};
+        auto src = assist::sourcesFor(doc_);
+        src.declarations = [this] {
+            std::vector<hmi::Declaration> ds;
+            for (const auto& r : rows_->rows) ds.push_back(r.d);
+            return assist::declarationsPrefix(ds, rows_->role);
+        };
+        return assist::fieldAssist(std::move(src));
+    });
 
     links_ += tools_->triggered->connect([this](int a) {
         switch (a) {
@@ -489,6 +520,7 @@ void HmiDeclGrid::rebuildColumns() {
     table_->setColumns(std::move(view));
     rows_->columns = columns_;
     rows_->role = role_;
+    rows_->project = doc_ ? &doc_->project : nullptr;   // 1.12.19 (U3)
     haveColumns_ = true;
 }
 

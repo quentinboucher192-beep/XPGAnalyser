@@ -1027,7 +1027,8 @@ void HmiVariablesPane::emitVariable(const hmi::Variable& v, int depth) {
     r.expander = composite ? (isOpen ? 1 : 0) : -1;
     ty::Spec spec;
     const bool parsed = ty::parseSpec(v.type, spec);
-    std::string initial = enumType ? enumInitialText(*enumType, v.initial) : v.initial;
+    // 1.12.19 (U3, la regle des cases) : la valeur montree comme partout (Azote, pas 'Azote' ; =Nom).
+    std::string initial = enumType ? enumInitialText(*enumType, v.initial) : hmi::shownCell(v.initial);
     if (composite && parsed && !spec.array() && initial.empty()) initial = "(celles du type)";
     std::string place = kDash;
     if (v.bound()) place = composite ? ty::spanText(p, v) : placeOf(v.address, v.scaled() ? (v.rawType.empty() ? std::string("INT") : v.rawType) : v.type);
@@ -2748,12 +2749,12 @@ void HmiVariablesPane::rebuildProperties() {
                 return ok;
             }, values, "Une valeur de " + e->name + " (\xC3\xA9num\xC3\xA9ration : la variable vaut un DINT, le nombre de la valeur)."));
         } else if (!composite || (parsed && spec.array() && ty::isElementary(spec.element)))
-            c.properties.push_back(prop("Initiale", v->initial, PG::ValueType::Text, [this, id](std::string_view text) {
+            c.properties.push_back(prop("Initiale", hmi::shownCell(v->initial), PG::ValueType::Text, [this, id](std::string_view text) {   // 1.12.19 (U3)
                 std::string why;
                 const bool ok = setInitial(id, std::string(text), &why);
                 if (!ok) say("Refus\xC3\xA9 : " + why, true);
                 return ok;
-            }, {}, composite ? "Une valeur pour toutes les cases (0), ou une liste case par case (1.5, 2, 3)." : "0, TRUE, 2.5, 'texte', T#5s"));
+            }, {}, composite ? "Une valeur pour toutes les cases (0), ou une liste case par case (1.5, 2, 3)." : "0, TRUE, 2,5, Azote, 5 s : lue selon le type"));
         else   // 1.12.10 (lot F) : une structure, un tableau de structures - un litteral (avant : « celles du type », fixe)
             c.properties.push_back(prop("Initiale", v->initial, PG::ValueType::Text, [this, id](std::string_view text) {
                 std::string why;
@@ -3584,7 +3585,7 @@ void HmiTypesPane::refreshMembers() {
                     size = "objet (IHM)";
                 }
             }
-            rows.push_back({m.name, m.type, m.initial, offset, size, m.description});
+            rows.push_back({m.name, m.type, hmi::shownCell(m.initial), offset, size, m.description});   // 1.12.19 (U3)
         }
     }
     const Id tid = current_;
@@ -3979,7 +3980,7 @@ void HmiTypesPane::rebuildProperties() {
             const std::string s = ty::normalized(text);
             return edit([s](hmi::TypeMember& x) { x.type = s; })(text);
         }, {}, "INT, REAL, BOOL, STRING... ; un autre type IHM (T_Vanne) ; un tableau : ARRAY[1..3] OF T_Vanne."));
-        c.properties.push_back(prop("Initiale", m.initial, PG::ValueType::Text, [edit](std::string_view text) {
+        c.properties.push_back(prop("Initiale", hmi::shownCell(m.initial), PG::ValueType::Text, [edit](std::string_view text) {   // 1.12.19 (U3)
             const std::string s(text);
             return edit([s](hmi::TypeMember& x) { x.initial = s; })(text);
         }, {}, "La valeur de d\xC3\xA9part de ce membre dans chaque variable du type (vide : 0, FALSE, '')."));

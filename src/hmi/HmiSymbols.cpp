@@ -675,6 +675,15 @@ std::string shownLiteral(std::string_view text) {
     return t;
 }
 
+std::string shownCell(std::string_view stored) {
+    const std::string t = trimmedCopy(stored);
+    if (t.empty()) return t;
+    if (isLiteralArgument(t)) return shownLiteral(t);
+    if (t.front() == '[' || (t.front() == '(' && t.find(":=") != std::string::npos)) return t;   // une liste, une structure
+    if (t.front() == '=') return t;
+    return "=" + t;
+}
+
 void setPlcNames(std::shared_ptr<const std::set<std::string, std::less<>>> upperRoots) {
     const std::lock_guard<std::mutex> lock(gPlcNamesLock);
     gPlcNames = std::move(upperRoots);

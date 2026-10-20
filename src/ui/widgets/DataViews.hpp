@@ -620,6 +620,21 @@ public:
     const core::SignalPtr<RowIndex, std::size_t, const std::string&, bool> cellEdited =
         core::Signal<RowIndex, std::size_t, const std::string&, bool>::create();
     const core::SignalPtr<RowIndex> expanderClicked = core::Signal<RowIndex>::create();
+    // ---- 1.12.19 (U3, la regle des cases) : LA CELLULE COMME LA CASE DE L'INSPECTEUR ----
+    //  Un refus se dit SOUS LA LIGNE : une bande, la raison en rouge et « Reprendre
+    //  « ce qui avait ete tape » » - le volet donne la raison par PropertyGrid::refuse(why)
+    //  pendant setCellText, comme dans l'inspecteur ; rien de tape n'est perdu. Echap, ou un
+    //  clic ailleurs dans la bande, la retire. Une formule (=...) s'edite en chasse fixe.
+    //  L'AIDE A LA SAISIE d'une cellule (Ctrl+Espace) : demandee a l'hote a chaque edition
+    //  (une fonction vide : aucune).
+    using CellAssistFor = std::function<InputText::Assist(RowIndex modelRow, std::size_t col)>;
+    void setCellAssist(CellAssistFor f) { cellAssist_ = std::move(f); }
+    [[nodiscard]] bool hasCellRejection() const noexcept { return cellRejection_.has_value(); }
+    [[nodiscard]] std::string cellRejectionWhy() const { return cellRejection_ ? cellRejection_->why : std::string{}; }
+    [[nodiscard]] std::string cellRejectionText() const { return cellRejection_ ? cellRejection_->typed : std::string{}; }
+    bool resumeCellRejection();          // rouvre la case refusee sur ce qui avait ete tape
+    void clearCellRejection();
+    [[nodiscard]] bool cellRejectionRect(gfx::Rect& strip) const;   // la bande (essais, scripts)
     // Lot 16 : glisser une ligne sur une autre (ranger une variable dans un
     // dossier) : quand le modele le permet (canDrop), rowDropped(tiree, visee) ;
     // visee = kNoRow : lachee sous les lignes.
@@ -806,6 +821,11 @@ private:
     WidgetPtr    activeCellEditor_;     // un champ ferme, detruit au dessin suivant
     Widget*      cellEditor_{nullptr};
     bool         cellIsList_{false};
+    struct CellRejection { RowIndex row{0}; std::size_t col{0}; std::string typed, why; };   // 1.12.19 (U3)
+    std::optional<CellRejection> cellRejection_;
+    std::optional<std::string>   cellResumeText_;
+    CellAssistFor                cellAssist_;
+    mutable gfx::Rect            rejectionLink_{};          // « Reprendre », tel que dessine
     RowIndex     editRow_{0};
     std::size_t  editCol_{0};
 

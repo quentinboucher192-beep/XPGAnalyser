@@ -1008,7 +1008,7 @@ void HmiRecipesPane::refreshDetail() {
         for (const auto& rec : r->records) {
             recordOrder_.push_back(rec.id);
             std::vector<std::string> row{rec.name};
-            for (std::size_t i = 0; i < r->fields.size(); ++i) row.push_back(i < rec.values.size() ? rec.values[i] : "");
+            for (std::size_t i = 0; i < r->fields.size(); ++i) row.push_back(i < rec.values.size() ? hmi::shownCell(rec.values[i]) : "");   // 1.12.19 (U3)
             row.push_back(rec.modified);
             srows.push_back(std::move(row));
         }
@@ -1150,7 +1150,7 @@ void HmiRecipesPane::rebuildProperties() {
                 help += " ; bornes [" + (f.min.empty() ? std::string("-") : f.min) + " ; " + (f.max.empty() ? std::string("-") : f.max) + "]";
             const int fi = static_cast<int>(i);
             sc.properties.push_back(prop(f.unit.empty() ? f.name : f.name + " (" + f.unit + ")",
-                                         i < rec->values.size() ? rec->values[i] : std::string{}, PG::ValueType::Text,
+                                         i < rec->values.size() ? hmi::shownCell(rec->values[i]) : std::string{}, PG::ValueType::Text,   // 1.12.19 (U3)
                                          [this, rid, sid, fi](std::string_view v) { return setRecordValue(rid, sid, fi, std::string(v)); },
                                          help));
         }

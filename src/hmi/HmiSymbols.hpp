@@ -102,6 +102,10 @@ using SymbolArguments = std::vector<std::pair<std::string, std::string>>;
 // Ce que l'inspecteur montre d'une constante : 'Voiture' -> Voiture, 'L$'eau' -> L'eau ;
 // le reste tel quel.
 [[nodiscard]] std::string shownLiteral(std::string_view text);
+// 1.12.19 (U3, la regle des cases) : CE QU'UNE CASE MONTRE d'une valeur gardee - une formule avec son
+// = (=Niveau * 2), un texte sans ses apostrophes (Azote), un nombre, un litteral type, une liste [..]
+// ou une structure (A := ..) tels quels ; vide : vide. Ce qui est montre se retape tel quel (cellValue).
+[[nodiscard]] std::string shownCell(std::string_view stored);
 // 1.12.19 (la regle des cases) : une valeur d'une ENUMERATION IHM tapee par son nom (Auto,
 // T_MODE#Auto) -> son nombre ("1"), pour un forcage ; un autre type, ou un nom inconnu : tel quel.
 [[nodiscard]] std::string enumConstantNumber(const Project& project, std::string_view type, std::string_view text);
