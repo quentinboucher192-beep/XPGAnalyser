@@ -87,6 +87,8 @@ public:
     bool exists(std::string_view) override { return false; }
     bool call(std::string_view, std::string_view, const std::vector<std::pair<std::string, sim::Value>>&, sim::Value&) override { return false; }
     void report(sim::Diagnostic) override {}
+    // 1.12.19 : une valeur de rappel nomme une fonction du projet (sa forme se verifie a l'appel).
+    int overloads(std::string_view name) override { return static_cast<int>(p_.functionsNamed(name).size()); }
     bool structMembers(std::string_view typeName, std::vector<std::pair<std::string, std::string>>& out) override {
         if (const auto* e = findEnumeration(p_, typeName)) {
             for (const auto& v : e->values) out.emplace_back(v.name, "#" + std::to_string(v.value));
@@ -381,9 +383,24 @@ bool valueFits(const Project& p, std::string_view type, std::string_view value, 
     if (trimmed(value).empty()) return true;
     TypingEnv env(p);
     std::string w;
-    if (sim::makeRichValue(type, value, env, &w)) return true;
+    if (sim::makeRichValue(type, callbackInitial(type, value), env, &w)) return true;
     if (why) *why = frenchOf(w);
     return false;
+}
+
+std::string callbackInitial(std::string_view type, std::string_view value) {
+    std::string t = trimmed(type);
+    for (auto& c : t) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    std::string v = trimmed(value);
+    if (t.rfind("CALLBACK", 0) == 0 && v.size() > 1 && v.front() == '=' && v[1] != '=') v = trimmed(std::string_view(v).substr(1));
+    return v;
+}
+
+bool callbackFitsText(const Project& p, std::string_view want, std::string_view got, std::string* why) {
+    TypingEnv env(p);
+    const sim::TypeRef a = sim::typeOfText(want, env), b = sim::typeOfText(got, env);
+    if (!a || !b) return true;
+    return sim::callbackFits(*a, *b, why);
 }
 
 bool literalItems(std::string_view text, std::vector<std::string>& out) {

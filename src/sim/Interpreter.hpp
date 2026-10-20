@@ -194,6 +194,30 @@ public:
     // Le nom canonique d'une variable de l'environnement (un parametre de vue
     // -> son chemin) : une reference le garde, pour viser la meme chose ailleurs.
     virtual std::string canonicalName(std::string_view name) { return std::string(name); }
+    // 1.12.19 : UN TYPE NOMME QUI EN NOMME UN AUTRE - un type rappel de l'IHM (T_Filtre) : sa forme ecrite
+    // ("CALLBACK (x : REAL) : BOOL") ; vide : pas un tel type.
+    virtual std::string typeAlias(std::string_view name) {
+        (void)name;
+        return {};
+    }
+    // 1.12.19 : un rappel vide (NULL) appele - rien n'est fait ; l'environnement le dit (une fois par endroit,
+    // dans la Console). `where` : « Script_Tri, ligne 16 ».
+    virtual void nullCallback(std::string_view name, std::string_view where) {
+        (void)name; (void)where;
+    }
+    // 1.12.19 : IHM_APRES(delai, f), IHM_CHAQUE(periode, f) - appeler un rappel plus tard (une fois : `periodMs` 0),
+    // par le minuteur de l'environnement (la simulation de l'IHM) : vrai et son numero ; faux et `why`. Par defaut :
+    // pas de minuteur.
+    virtual bool scheduleCallback(std::int64_t delayMs, std::int64_t periodMs, ObjRef callback, std::int64_t& id, std::string* why) {
+        (void)delayMs; (void)periodMs; (void)callback; (void)id;
+        if (why) *why = "pas de minuteur ici (IHM_APRES et IHM_CHAQUE tournent dans la simulation de l'IHM)";
+        return false;
+    }
+    // IHM_ANNULER(numero) : vrai s'il n'etait pas encore parti (ou, periodique, s'il tournait).
+    virtual bool cancelCallback(std::int64_t id) {
+        (void)id;
+        return false;
+    }
 };
 
 // Lot API 8 : les variables d'une ligne, lues au passage (point d'arret) : le nom
@@ -230,6 +254,8 @@ struct ParseOptions {
 // celle du type) - une variable de l'IHM d'un type objet, la valeur d'une constante a verifier. Nul,
 // et `why`, si le type ou la valeur ne se lisent pas, ou si la valeur ne va pas dans le type.
 [[nodiscard]] ObjRef makeRichValue(std::string_view type, std::string_view initial, Environment& env, std::string* why = nullptr);
+// 1.12.19 : un texte de type lu par le moteur (CALLBACK (x : REAL) : BOOL, LIST OF T_Lot...) ; nul et `why` : illisible.
+[[nodiscard]] TypeRef typeOfText(std::string_view type, Environment& env, std::string* why = nullptr);
 
 // 1.10 : UNE FONCTION DU DIALECTE, lue seule (une fonction IHM du projet, un
 // operateur) : "FUNCTION Nom(A : T; VAR_IN_OUT B : U) : R  ...  END_FUNCTION".
@@ -251,6 +277,11 @@ struct ParamInfo {
 [[nodiscard]] std::vector<ParamInfo> functionParams(const Function&);
 [[nodiscard]] std::string            functionResult(const Function&);
 [[nodiscard]] std::uint32_t          functionLine(const Function&) noexcept;
+// 1.12.19 : ses types generiques (TEMPLATE <T : ANY_NUM, U>) : (nom, contrainte ; "" : aucune) ; vide : une
+// fonction ordinaire.
+[[nodiscard]] std::vector<std::pair<std::string, std::string>> functionTypeParams(const Function&);
+// 1.12.19 : le texte `type` nomme-t-il un de ces types generiques (T, LIST OF T, CALLBACK (x : T) : T) ?
+[[nodiscard]] bool mentionsTypeParam(std::string_view type, const std::vector<std::pair<std::string, std::string>>& params);
 
 // 1.11.20 : LES APPELS D'UNE SECTION, dans l'ordre du texte - pour le controle des
 // surcharges, "Appelee par" et renommer une surcharge. `rank` : le rang de cet appel
@@ -365,5 +396,11 @@ struct RunResult {
 
 // Exposed for the tests and for the editor's own use later.
 [[nodiscard]] core::Result<Value> evaluateExpression(std::string_view source, Environment&);
+
+// 1.12.19 : APPELER UN RAPPEL depuis l'exterieur (un minuteur IHM_APRES, l'operation Appeler d'une action) :
+// sa fonction ou sa LAMBDA, avec ces valeurs ; ce qu'il rend (BOOL TRUE s'il ne rend rien). `where` : le nom de
+// ce qui l'appelle, pour les messages (« minuteur 3 »). Un rappel vide (NULL) : rien (nullCallback).
+[[nodiscard]] core::Result<Value> callCallback(const Obj& callback, Environment& env, const std::vector<Value>& args,
+                                               std::string where, const RunLimits& limits = {});
 
 } // namespace sim

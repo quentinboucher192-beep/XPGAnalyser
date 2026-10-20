@@ -186,7 +186,8 @@ void usages() {
     // l'ordre : celui de la norme, le meme partout
     const auto all = r.names(tr::UseAll, false);
     check(joined(all) == "BOOL SINT INT DINT LINT USINT UINT UDINT ULINT BYTE WORD DWORD LWORD REAL LREAL STRING TIME CHAR WSTRING DATE TIME_OF_DAY "
-                         "DATE_AND_TIME ANY Aucun",
+                         "DATE_AND_TIME ANY Aucun CALLBACK () CALLBACK () : BOOL CALLBACK (x : REAL) : BOOL CALLBACK (x : REAL) : REAL "
+                         "CALLBACK (a : REAL; b : REAL) : BOOL CALLBACK (texte : STRING)",     // 1.12.19 : les formes de rappel toutes faites
           "l'ordre du registre : " + joined(all));
     // chaque type de base : sa cle, sa categorie, sa provenance, sa phrase
     bool good = true;

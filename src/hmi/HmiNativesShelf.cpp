@@ -101,7 +101,7 @@ const std::vector<Rule>& rules() {
         {"couleur", "couleurs", {}},
         {"tab", "conteneurs/tableaux", {}},
         {"map", "conteneurs/map/ecrire", {"MAP_SET", "MAP_INSERT", "MAP_INCREMENT", "MAP_MERGE", "MAP_REMOVE", "MAP_REMOVE_IF", "MAP_CLEAR"}},
-        {"map", "conteneurs/map/parcourir", {"MAP_BEGIN", "MAP_NEXT", "MAP_END"}},
+        {"map", "conteneurs/map/parcourir", {"MAP_BEGIN", "MAP_NEXT", "MAP_END", "MAP_FOR_EACH"}},
         {"map", "conteneurs/map/lire", {}},
         {"liste", "conteneurs/listes/ajouter", {"LIST_ADD", "LIST_INSERT", "LIST_INSERT_SORTED", "LIST_APPEND", "LIST_SET", "LIST_REMOVE_AT",
                                                 "LIST_REMOVE", "LIST_REMOVE_ALL", "LIST_REMOVE_IF", "LIST_POP_FIRST", "LIST_DISTINCT", "LIST_FILL",
@@ -109,7 +109,7 @@ const std::vector<Rule>& rules() {
         {"liste", "conteneurs/listes/trier", {"LIST_SORT", "LIST_SORT_BY", "LIST_IS_SORTED", "LIST_REVERSE", "LIST_SWAP", "LIST_MOVE", "LIST_ROTATE"}},
         {"liste", "conteneurs/listes/calculer", {"LIST_SUM", "LIST_MIN", "LIST_MAX", "LIST_AVG", "LIST_MEDIAN", "LIST_VARIANCE", "LIST_STDDEV",
                                                  "LIST_TRANSFORM"}},
-        {"liste", "conteneurs/listes/copier", {"LIST_SLICE", "LIST_CONCAT", "LIST_COPY", "TO_LIST", "JOIN", "SPLIT"}},
+        {"liste", "conteneurs/listes/copier", {"LIST_SLICE", "LIST_CONCAT", "LIST_COPY", "TO_LIST", "JOIN", "SPLIT", "LIST_FILTER", "LIST_MAP"}},
         {"liste", "conteneurs/vecteurs", {"VECTOR_"}},     // un prefixe (voir matches)
         {"liste", "conteneurs/tuples", {"TUPLE_"}},
         {"liste", "conteneurs/listes/lire", {}},

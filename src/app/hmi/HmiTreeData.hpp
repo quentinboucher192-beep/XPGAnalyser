@@ -683,7 +683,8 @@ inline bool stKeyword(std::string_view w) {
                               "END_WHILE", "REPEAT", "UNTIL", "END_REPEAT", "CASE", "OF", "END_CASE", "EXIT", "RETURN",
                               "VAR", "VAR_TEMP", "END_VAR", "BOOL", "INT", "DINT", "UINT", "UDINT", "REAL", "LREAL",
                               "WORD", "DWORD", "BYTE", "TIME", "STRING", "EBOOL",
-                              "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ET"};   // 1.12.1
+                              "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ET",   // 1.12.1
+                              "CALLBACK", "LAMBDA", "END_LAMBDA", "TEMPLATE", "NULL"};   // 1.12.19
     std::string u(w);
     for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     for (const char* x : k) if (u == x) return true;

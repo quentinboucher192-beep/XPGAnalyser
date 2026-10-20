@@ -85,7 +85,8 @@ const std::set<std::string>& stKeywords() {
         "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE", "IF", "THEN", "ELSIF", "ELSE", "END_IF", "CASE", "OF",
         "END_CASE", "FOR", "TO", "BY", "DO", "END_FOR", "WHILE", "END_WHILE", "REPEAT", "UNTIL", "END_REPEAT",
         "EXIT", "RETURN",
-        "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE"};   // 1.12.1 : le dialecte de l'IHM
+        "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE",    // 1.12.1 : le dialecte de l'IHM
+        "CALLBACK", "LAMBDA", "END_LAMBDA", "TEMPLATE", "NULL"};   // 1.12.19 : les rappels et les generiques
     return k;
 }
 // 1.12.1 : x ENTRE a ET b - ET n'est un mot du langage qu'apres ENTRE (une variable peut
@@ -482,8 +483,8 @@ bool richLocalType(std::string_view type, const std::function<bool(std::string_v
     std::string u = upper(type);
     while (!u.empty() && std::isspace(static_cast<unsigned char>(u.back()))) u.pop_back();
     if (u.empty()) return false;
-    // 1.12.2 : LIST OF T, VECTOR OF T, TUPLE(T1, T2...).
-    for (std::string_view p : {"ARRAY", "MAP", "REF_TO", "REFERENCE", "POINTER", "STRING", "LIST", "VECTOR", "TUPLE"})
+    // 1.12.2 : LIST OF T, VECTOR OF T, TUPLE(T1, T2...) ; 1.12.19 : CALLBACK (x : REAL) : BOOL.
+    for (std::string_view p : {"ARRAY", "MAP", "REF_TO", "REFERENCE", "POINTER", "STRING", "LIST", "VECTOR", "TUPLE", "CALLBACK"})
         if (u.rfind(p, 0) == 0 && (u.size() == p.size() || !identChar(u[p.size()]))) return true;
     // 1.12.7 : SET OF T, RING[N] OF T (un type IHM nomme SET ou RING reste un nom).
     for (std::string_view p : {"SET", "RING"})
@@ -634,10 +635,24 @@ ScriptParts splitDeclarations(std::string_view code, bool function, const TypeKn
             out.errors.push_back({E::Error, blockLine, word + " sans END_VAR"});
             break;
         }
-        // Les declarations : "a, b : INT := 0;".
+        // Les declarations : "a, b : INT := 0;". 1.12.19 : un ';' entre parentheses ou crochets ne les coupe
+        // pas (f : CALLBACK (x : REAL; y : REAL) : BOOL;), ni dans une chaine.
+        const auto nextSemi = [&decl](std::size_t from) {
+            int depth = 0;
+            bool quoted = false;
+            for (std::size_t k = from; k < decl.size(); ++k) {
+                const char c = decl[k];
+                if (c == '\'') quoted = !quoted;
+                if (quoted) continue;
+                if (c == '(' || c == '[') ++depth;
+                else if ((c == ')' || c == ']') && depth > 0) --depth;
+                else if (c == ';' && depth == 0) return k;
+            }
+            return std::string::npos;
+        };
         std::size_t start = 0;
         while (start < decl.size()) {
-            auto semi = decl.find(';', start);
+            auto semi = nextSemi(start);
             if (semi == std::string::npos) semi = decl.size();
             const std::string one = trimmed(std::string_view(decl).substr(start, semi - start));
             std::size_t lead = start;
@@ -719,7 +734,7 @@ std::vector<NameUse> scriptCallees(std::string_view code) {
     return out;
 }
 
-std::string renameCalls(std::string_view s, std::string_view from, std::string_view to, bool bare) {
+std::string renameCalls(std::string_view s, std::string_view from, std::string_view to, bool bare, bool values) {
     std::string out;
     out.reserve(s.size() + 16);
     const std::string key = upper(from);
@@ -759,7 +774,29 @@ std::string renameCalls(std::string_view s, std::string_view from, std::string_v
         if (rename && !bare) {
             std::size_t k = i;
             while (k < s.size() && (s[k] == ' ' || s[k] == '\t')) ++k;
-            rename = k < s.size() && s[k] == '(';
+            const bool call = k < s.size() && s[k] == '(';
+            // 1.12.19 (R5) : une fonction passee en rappel - le nom seul, la ou va une valeur.
+            bool value = false;
+            if (!call && values) {
+                std::size_t b = start;
+                const auto blanks = [&] {
+                    while (b > 0 && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\n' || s[b - 1] == '\r')) --b;
+                };
+                blanks();
+                // Le = d'une formule (la regle des cases) : Sur_Non := =Valider, la valeur initiale =Valider.
+                bool formula = false;
+                if (b > 0 && s[b - 1] == '=' && !(b > 1 && (s[b - 2] == ':' || s[b - 2] == '<' || s[b - 2] == '>' || s[b - 2] == '='))) {
+                    --b;
+                    blanks();
+                    formula = true;
+                }
+                const bool after = (formula && b == 0) || (b > 0 && (s[b - 1] == '(' || s[b - 1] == ',' || (s[b - 1] == '=' && b > 1 && s[b - 2] == ':')));
+                std::size_t e = k;
+                while (e < s.size() && (s[e] == '\n' || s[e] == '\r' || s[e] == ' ' || s[e] == '\t')) ++e;
+                const bool before = e >= s.size() || s[e] == ';' || s[e] == ')' || s[e] == ',';
+                value = after && before;
+            }
+            rename = call || value;
         }
         out.append(rename ? to : word);
     }
@@ -946,8 +983,33 @@ bool shadowed(const CodeSite& s, std::string_view name) { return s.scope && symb
 
 bool callsIn(const std::string& text, CodeForm form, std::string_view name) {
     if (text.empty()) return false;
-    const auto next = form == CodeForm::Template ? renameCallsInText(text, name, "\x01") : renameCalls(text, name, "\x01");
+    const auto next = form == CodeForm::Template ? renameCallsInText(text, name, "\x01") : renameCalls(text, name, "\x01", false, true);
     return next != text;
+}
+
+// 1.12.19 (R5) : une fonction passee en rappel hors du code - la valeur initiale d'une variable rappel (=Valider),
+// l'argument d'une popup (Sur_Oui := Valider). `name` : le texte (sans = ni apostrophes) qui la nomme.
+bool namesFunction(std::string_view value, std::string_view name) {
+    std::string t = trimmed(value);
+    if (t.size() > 1 && t.front() == '=' && t[1] != '=') t = trimmed(std::string_view(t).substr(1));
+    return !t.empty() && upper(t) == upper(name);
+}
+template <class P, class Visit>
+void forEachCallbackValue(P& p, std::string_view name, Visit&& visit) {
+    // La valeur initiale d'une variable rappel (=Valider) : le code ne la lit pas.
+    for (auto& v : p.programs.variables)
+        if (upper(trimmed(v.type)).rfind("CALLBACK", 0) == 0 && namesFunction(v.initial, name))
+            visit(v.initial, "variable " + v.name + " (valeur initiale)");
+    // La cible d'une action Appeler (sa valeur, les arguments, est lue comme une expression avec le reste).
+    const auto call = [&](auto& view, auto* object, auto& a) {
+        if (a.operation == Operation::Call && namesFunction(a.target, name))
+            visit(a.target, view.name + (object ? "/" + object->name : std::string{}) + " (action)");
+    };
+    for (auto& view : p.views) {
+        for (auto& a : view.actions) call(view, static_cast<decltype(&view.objects.front())>(nullptr), a);
+        for (auto& o : view.objects)
+            for (auto& a : o.actions) call(view, &o, a);
+    }
 }
 
 } // namespace
@@ -961,8 +1023,15 @@ std::size_t renameFunctionEverywhere(Project& p, std::string_view from, std::str
     forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite& s) {
         if (text.empty() || shadowed(s, from)) return;
         const bool bare = s.own && (upper(s.own->name) == key || upper(s.own->name) == next);
-        auto out = form == CodeForm::Template ? renameCallsInText(text, from, to) : renameCalls(text, from, to, bare);
+        auto out = form == CodeForm::Template ? renameCallsInText(text, from, to) : renameCalls(text, from, to, bare, true);   // 1.12.19 : passee en rappel aussi
         if (out != text) { text = std::move(out); ++changed; }
+    });
+    // 1.12.19 (R5) : la valeur initiale d'une variable rappel (=Valider), la cible d'une action Appeler - le texte
+    // entier la nomme : il prend le nouveau nom (et garde son =).
+    forEachCallbackValue(p, from, [&](std::string& text, const std::string&) {
+        const std::string t = trimmed(text);
+        text = (t.size() > 1 && t.front() == '=' ? "=" : "") + std::string(to);
+        ++changed;
     });
     return changed;
 }
@@ -977,6 +1046,10 @@ std::vector<std::string> functionCallers(const Project& p, std::string_view name
         if (said.count(group) || !callsIn(text, form, name)) return;
         said.insert(group);
         out.push_back(s.where);
+    });
+    // 1.12.19 (R5) : passee en rappel hors du code (la valeur initiale d'une variable rappel, une action Appeler).
+    forEachCallbackValue(p, name, [&](const std::string&, const std::string& where) {
+        if (said.insert(where).second) out.push_back(where);
     });
     return out;
 }
@@ -1171,7 +1244,9 @@ bool isHmiFunction(std::string_view name) noexcept {
                                    // 1.9 : l'IHM lit-elle cet equipement sur son esclave simule ?
                                    "IHM_ESCLAVE_SIMULE",
                                    // 1.11.14 : une ligne de la Console, d'un niveau
-                                   "IHM_LOG"};
+                                   "IHM_LOG",
+                                   // 1.12.19 : un rappel plus tard (les minuteurs)
+                                   "IHM_APRES", "IHM_CHAQUE", "IHM_ANNULER"};
     const std::string u = upper(name);
     for (const char* n : kNames) if (u == n) return true;
     return false;

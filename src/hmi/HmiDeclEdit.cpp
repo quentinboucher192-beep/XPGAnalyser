@@ -787,6 +787,7 @@ std::string valueMisfit(const Project& p, std::string_view type, std::string_vie
         }
         case typereg::Category::Collection:
         case typereg::Category::Reference:
+        case typereg::Category::Callback:          // 1.12.19
         case typereg::Category::Generic:
         case typereg::Category::Void:
             break;

@@ -78,6 +78,13 @@ struct Shape {
 // valeur initiale, la valeur d'une constante. Faux et `why` (en francais) : illisible, ou qui
 // ne va pas dans le type (trop de valeurs, une cle du mauvais type...). Vide : vrai.
 bool valueFits(const Project&, std::string_view type, std::string_view value, std::string* why = nullptr);
+// 1.12.19 : la valeur initiale d'un rappel s'ecrit =Fonction (la regle des cases : une formule qui la vise),
+// Fonction, 'Fonction' ou NULL ; le moteur la lit sans le '=' de tete. Un autre type : telle quelle.
+[[nodiscard]] std::string callbackInitial(std::string_view type, std::string_view value);
+// 1.12.19 : un rappel de la forme `got` va-t-il ou `want` est attendu (la regle du moteur : le meme nombre de
+// parametres, des types qui vont - les nombres entre eux -, le meme retour) ? Faux et `why` : non (un texte de type
+// illisible : vrai, Generer le dit ailleurs).
+bool callbackFitsText(const Project&, std::string_view want, std::string_view got, std::string* why = nullptr);
 // Les elements d'un litteral de liste ("[1, 2, 'a,b']" -> {"1", "2", "'a,b'"}) ; faux : pas un
 // litteral [..] ou (..). Une MAP : les entrees "cle := valeur". Pour l'editeur de liste.
 bool literalItems(std::string_view text, std::vector<std::string>& out);

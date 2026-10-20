@@ -712,6 +712,13 @@ const std::vector<Builtin>& snippets() {
         // 1.12.1
         {"TRY", "TRY\n    \nCATCH Erreur\n    \nEND_TRY", "Essayer : une erreur du bloc va au CATCH (son message dans Erreur) au lieu d'arr\xC3\xAAter le script."},
         {"CONTINUE", "CONTINUE;", "Le tour suivant de la boucle."},
+        // 1.12.19 : les rappels et les generiques
+        {"CALLBACK", "CALLBACK (x : REAL) : BOOL", "Un rappel : une fonction ou une LAMBDA de cette forme, appel\xC3\xA9" "e plus tard (f(x)) ; NULL : aucune."},
+        {"LAMBDA", "LAMBDA (x : REAL) : BOOL => x > 0.0", "Une fonction sans nom, \xC3\xA9" "crite sur place ; elle copie les locales qu'elle voit \xC3\xA0 sa cr\xC3\xA9" "ation."},
+        {"LAMBDA \xE2\x80\xA6 END_LAMBDA", "LAMBDA (x : REAL) : REAL\n    VAR y : REAL; END_VAR\n    y := x * 2.0;\n    RETURN y;\nEND_LAMBDA",
+         "Une LAMBDA de plusieurs lignes : ses locales, RETURN."},
+        {"TEMPLATE", "TEMPLATE <T : ANY_NUM> FUNCTION Nom(x : T) : T\n    RETURN x;\nEND_FUNCTION",
+         "Une fonction g\xC3\xA9n\xC3\xA9rique : T d\xC3\xA9" "duit des arguments (Nom(3)) ou donn\xC3\xA9 (Nom<REAL>(3))."},
     };
     return s;
 }

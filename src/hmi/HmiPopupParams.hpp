@@ -110,6 +110,11 @@ struct ArgumentProblem {
     std::string param;           // le parametre en cause
     std::string message;         // en francais, tutoie, dit quoi faire
 };
+// 1.12.19 (R3) : l'argument d'un parametre rappel (Sur_Oui := Valider) - une fonction de la vue qui ouvre ou du
+// projet, de la bonne forme ; une variable rappel de la meme forme ; une LAMBDA, NULL ; un nom en texte ('Valider') :
+// un avertissement (il se lit encore). Ce qui n'est rien de cela : une erreur.
+std::vector<ArgumentProblem> callbackArgument(const Project&, const View* caller, const ViewParam&, std::string_view argument,
+                                              const PlcTypes&);
 // Les arguments `arguments` ("Moteur := Pompes[3]; Nom := 'P3'") donnes a la
 // popup `popup` par une action de la vue `caller` : un parametre inconnu de la
 // popup (erreur) ; un parametre manquant (sa valeur par defaut : rien ; sans

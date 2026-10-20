@@ -30,7 +30,8 @@ bool keyword(std::string_view w) {
         "IF", "THEN", "ELSE", "ELSIF", "END_IF", "FOR", "TO", "BY", "DO", "END_FOR", "WHILE", "END_WHILE", "REPEAT",
         "UNTIL", "END_REPEAT", "CASE", "OF", "END_CASE", "RETURN", "EXIT", "VAR", "END_VAR", "AND", "OR", "XOR", "NOT",
         "MOD", "TRUE", "FALSE",
-        "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ET"};   // 1.12.1 : le dialecte de l'IHM
+        "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ET",   // 1.12.1 : le dialecte de l'IHM
+        "CALLBACK", "LAMBDA", "END_LAMBDA", "TEMPLATE", "NULL"};   // 1.12.19
     return k.count(upper(w)) > 0;
 }
 

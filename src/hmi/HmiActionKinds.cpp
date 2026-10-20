@@ -141,7 +141,7 @@ const std::vector<Group>& groups() {
         {"Popups", "Ouvrir, changer, fermer une popup",
          {Operation::Popup, Operation::ChangePopup, Operation::ClosePopup, Operation::CloseAllPopups, Operation::PreviousPopup,
           Operation::CenterPopup, Operation::ApplyCopy}},
-        {"Scripts", "Ex\xC3\xA9" "cuter du code ST", {Operation::RunScript, Operation::CallScript}},
+        {"Scripts", "Ex\xC3\xA9" "cuter du code ST, appeler une fonction", {Operation::RunScript, Operation::CallScript, Operation::Call}},
         {"Alarmes", "Acquitter, mettre de c\xC3\xB4t\xC3\xA9, faire taire",
          {Operation::AckAlarm, Operation::ShelveAlarm, Operation::UnshelveAlarm, Operation::SilenceAlarms}},
         {"Donn\xC3\xA9" "es", "Journal, recettes, exports, fichiers",
@@ -192,6 +192,7 @@ std::string_view help(Operation o) noexcept {
         case Operation::ApplyCopy: return "\xC3\x89" "crit la copie d'un param\xC3\xA8tre (mode Les deux) dans la variable de l'appelant.";
         case Operation::RunScript: return "Ex\xC3\xA9" "cute du ST \xC3\xA9" "crit ici (une petite fen\xC3\xAAtre l'\xC3\xA9" "dite comme les autres scripts).";
         case Operation::CallScript: return "Appelle un script g\xC3\xA9n\xC3\xA9ral du projet.";
+        case Operation::Call: return "Appelle une fonction ou un rappel re\xC3\xA7u (Sur_Oui), avec ses arguments.";   // 1.12.19
         case Operation::AckAlarm: return "Acquitte toutes les alarmes, un groupe ou une alarme.";
         case Operation::ShelveAlarm: return "Met une alarme de c\xC3\xB4t\xC3\xA9 pour un temps, avec une raison.";
         case Operation::UnshelveAlarm: return "Remet en service une alarme mise de c\xC3\xB4t\xC3\xA9.";

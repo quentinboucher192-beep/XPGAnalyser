@@ -18,6 +18,10 @@
 //      taille variable, indicee a partir de 0 (L[0]), L.Count, LIST_ADD, VECTOR_PUSH... ;
 //    - 1.12.2 : un TUPLE (TUPLE(INT, REAL, STRING)) : des valeurs de types fixes,
 //      t.Item1, t.Item2... (taille fixe, comme std::tuple).
+//    - 1.12.19 : un RAPPEL (CALLBACK (x : REAL) : BOOL) : une fonction donnee comme une valeur - une
+//      fonction du projet, d'un script, d'une instance de symbole, par son nom, ou une LAMBDA (son code
+//      et les locales copiees a sa creation) ; NULL : vide (l'appeler ne fait rien et le dit une fois).
+//      En memoire de l'IHM seulement (dynamic()) : jamais dans un equipement.
 //    - 1.12.7 : un ENSEMBLE (SET OF T, std::set) : une liste rangee, chaque valeur une
 //      seule fois ; un TAMPON CIRCULAIRE (RING[N] OF T) : une liste des N dernieres
 //      valeurs (pleine, la plus ancienne part quand on en ajoute une). Ce sont des
@@ -54,7 +58,8 @@ struct TypeDesc;
 using TypeRef = std::shared_ptr<const TypeDesc>;
 
 struct TypeDesc {
-    enum class Kind : std::uint8_t { Scalar, Array, Struct, Map, Ref, Pointer, Iterator, List, Tuple };
+    enum class Kind : std::uint8_t { Scalar, Array, Struct, Map, Ref, Pointer, Iterator, List, Tuple,
+                                     Callback /* 1.12.19 : members = parametres, element = retour (nul : aucun) */ };
     Kind        kind{Kind::Scalar};
     Type        scalar{Type::Unknown};                              // Scalar
     std::vector<std::pair<std::int64_t, std::int64_t>> bounds;      // Array : [bas, haut] par dimension
@@ -71,6 +76,13 @@ struct TypeDesc {
     // 1.12.2 : une MAP, une liste, un vecteur, ou un type qui en contient (un tableau de listes...).
     [[nodiscard]] bool         dynamic() const noexcept;
 };
+
+// 1.12.19 : CALLBACK (x : REAL; y : INT) : BOOL - ses parametres (nom, type ; un nom vide : par position)
+// et son retour (nul : aucun).
+[[nodiscard]] TypeRef callbackType(std::vector<std::pair<std::string, TypeRef>> params, TypeRef result);
+// 1.12.19 : un rappel de cette forme accepte-t-il une fonction de celle-ci ? Le meme nombre de
+// parametres, des types identiques (ou deux nombres), un retour des deux cotes ou d'aucun. Faux : `why`.
+[[nodiscard]] bool callbackFits(const TypeDesc& want, const TypeDesc& got, std::string* why = nullptr);
 
 // 1.12.2 : LIST OF T, VECTOR OF T (`vector` : VECTOR) ; TUPLE(T1, T2...) (Item1, Item2...).
 [[nodiscard]] TypeRef listType(TypeRef element, bool vector = false);
@@ -105,6 +117,12 @@ struct Obj {
     std::string         textKey;
     std::int64_t        intKey{0};
     bool                atEnd{true};
+    // 1.12.19 : un rappel (Callback) - la fonction visee par son nom ("Est_Valide", "Vue_A.Pompe1.Dans_Plage"),
+    // ou une LAMBDA (`lambda` : son code et ses locales copiees, gardes par l'interpreteur ; `callee` vide).
+    // `bound` faux : NULL.
+    std::string                 callee;
+    std::shared_ptr<const void> lambda;
+    std::string                 lambdaWhere;          // « Script_Tri, ligne 12 » (l'affichage, la Console)
 };
 
 // Un objet neuf de ce type, a sa valeur par defaut (une structure doit etre resolue).

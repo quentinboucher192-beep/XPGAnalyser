@@ -647,6 +647,12 @@ public:
     [[nodiscard]] const std::deque<JournalEntry>& journal() const noexcept { return journal_; }
     void clearJournal() { journal_.clear(); }
     void log(std::string kind, std::string source, std::string message);
+    // 1.12.19 : LES MINUTEURS D'IHM_APRES ET IHM_CHAQUE - un rappel appele apres un delai (une fois), ou a chaque
+    // periode jusqu'a IHM_ANNULER. Ils tournent tant que l'IHM tourne ; l'arret les oublie. `pendingTimers` : ceux
+    // qui attendent encore.
+    bool scheduleCallback(std::int64_t delayMs, std::int64_t periodMs, sim::ObjRef callback, std::int64_t& id, std::string* why);
+    bool cancelCallback(std::int64_t id);
+    [[nodiscard]] std::size_t pendingTimers() const noexcept { return timers_.size(); }
     // 1.11.14 : une ligne d'un niveau donne (IHM_LOG) ; `line` : la ligne du code (0 : celle
     // de l'instruction en cours, s'il y en a une).
     void logAt(LogLevel level, std::string kind, std::string source, std::string message, int line = 0);
@@ -1650,6 +1656,18 @@ private:
     void restorePersistent(Id script, sim::Locals& locals);            // 1.11.18 (lot 5)
     // Les cases de declaration de `cells` gardees pour leur script (les autres : rendues par l'appelant).
     std::vector<simdata::Cell> takePersistent(const std::vector<simdata::Cell>& cells);
+    // 1.12.19 : les minuteurs (IHM_APRES, IHM_CHAQUE) ; un rappel vide dit une fois par endroit.
+    struct CallbackTimer {
+        std::int64_t id{0};
+        double       due{0}, period{0};          // en s ; period 0 : une seule fois
+        sim::ObjRef  callback;
+        std::string  source;                     // qui l'a lance (la Console le dit)
+    };
+    std::vector<CallbackTimer> timers_;
+    std::int64_t               timerSeq_{0};
+    std::set<std::string>      nullSaid_;
+    void timersTick(double now);
+    void nullCallback(std::string_view name, std::string_view where);
     bool callFunction(const HmiFunction&, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result,
                       std::vector<std::pair<std::string, sim::Value>>* outputs = nullptr);
     std::map<std::string, Prepared, std::less<>> programs_;   // par source

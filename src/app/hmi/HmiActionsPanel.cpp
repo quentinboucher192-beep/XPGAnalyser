@@ -1080,6 +1080,31 @@ void HmiActionsPanel::rebuildGrid() {
         if (std::find(scripts.begin(), scripts.end(), a.target) == scripts.end()) scripts.insert(scripts.begin(), a.target);
         op.properties.push_back(prop("Script g\xC3\xA9n\xC3\xA9ral", a.target, PG::ValueType::Enum, scripts,
                                      commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; })));
+    } else if (a.operation == Operation::Call) {
+        // 1.12.19 : Appeler - un rappel recu par la vue (ses parametres CALLBACK), une variable rappel, une fonction de
+        // la vue ou du projet ; ses arguments, comme dans un appel ecrit.
+        std::vector<std::string> callees;
+        const auto addName = [&callees](const std::string& n) {
+            if (!n.empty() && std::find(callees.begin(), callees.end(), n) == callees.end()) callees.push_back(n);
+        };
+        const auto callbackType = [](const std::string& t) {
+            std::string u = t;
+            for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            return u.find("CALLBACK") != std::string::npos;
+        };
+        if (const auto* vv = doc_->project.view(view_)) {
+            for (const auto& prm : vv->params) if (callbackType(prm.type)) addName(prm.name);
+            for (const auto& f : vv->functions) addName(f.name);
+        }
+        for (const auto& var : doc_->project.programs.variables) if (callbackType(var.type)) addName(var.name);
+        for (const auto& f : doc_->project.programs.functions) addName(f.name);
+        if (std::find(callees.begin(), callees.end(), a.target) == callees.end()) callees.insert(callees.begin(), a.target);
+        op.properties.push_back(prop("Appelle", a.target, PG::ValueType::Enum, callees,
+                                     commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; }),
+                                     "Un rappel re\xC3\xA7u par la vue (Sur_Oui), une variable rappel, une fonction de la vue ou du projet."));
+        op.properties.push_back(prop("Arguments", a.value, PG::ValueType::Text, {},
+                                     commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
+                                     "Comme dans un appel \xC3\xA9" "crit, s\xC3\xA9par\xC3\xA9s par des virgules : Niveau, 2 ; vide : sans argument."));
     } else if (a.operation == Operation::AckAlarm) {
         // Toutes, un groupe, ou une alarme : les choix du projet.
         std::vector<std::string> targets{"*"};

@@ -2,6 +2,7 @@
 #include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
 #include "HmiNatives.hpp"   // 1.12.0 : couleurs, aleatoire, enumerations natives
+#include "HmiTypeForms.hpp"   // 1.12.19 : la valeur initiale d'un rappel (=Fonction)
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include "../core/CallTrail.hpp"   // 1.10.2 (CR) : les scripts de l'IHM, dans le journal interne
 #include "HmiObjectAlarms.hpp"
@@ -690,6 +691,12 @@ public:
         return !out.empty();
     }
     std::string canonicalName(std::string_view n) override { return resolved(n); }
+    // 1.12.19 : les rappels - un minuteur (IHM_APRES, IHM_CHAQUE), un rappel vide.
+    bool scheduleCallback(std::int64_t delayMs, std::int64_t periodMs, sim::ObjRef callback, std::int64_t& id, std::string* why) override {
+        return rt_.scheduleCallback(delayMs, periodMs, std::move(callback), id, why);
+    }
+    bool cancelCallback(std::int64_t id) override { return rt_.cancelCallback(id); }
+    void nullCallback(std::string_view name, std::string_view where) override { rt_.nullCallback(name, where); }
     // 1.10 (integration, S1 <-> S2) : un operateur d'un type IHM ou d'un symbole
     // (`a + b`, `a += b`, `TO_xxx(a)`...) : S2 le trouve, S1 l'appelle.
     bool findOperator(std::string_view op, std::string_view l, std::string_view r, sim::OperatorSource& out) override {
@@ -1106,7 +1113,8 @@ bool Runtime::setRichVariable(std::string_view name, std::string_view literal, s
         return false;
     }
     std::string w;
-    auto fresh = sim::makeRichValue(it->second->type->text(), literal, *env_, &w);
+    const std::string type = it->second->type->text();
+    auto fresh = sim::makeRichValue(type, typeform::callbackInitial(type, literal), *env_, &w);   // 1.12.19 : un rappel, =Valider
     if (!fresh) {
         if (why) *why = frenchSimMessage(w);
         return false;
@@ -1164,6 +1172,14 @@ std::vector<simdata::Cell> Runtime::captureData(const std::function<bool(const V
         const auto it = env_->vars.find(upper(path));
         return it == env_->vars.end() ? nullptr : &it->second;
     }, keep);
+    // 1.12.19 : une variable rappel garde le nom de sa fonction (NULL : vide) ; une LAMBDA ne se garde pas - elle
+    // repart de sa valeur initiale (la maquette, decision 9).
+    for (const auto& var : project_->programs.variables) {
+        if (!var.equipment.empty() || (keep && !keep(var)) || upper(trimmedView(var.type)).rfind("CALLBACK", 0) != 0) continue;
+        const auto o = richVariable(var.name);
+        std::string text;
+        if (o && sim::literalText(*o, text)) cells.push_back(simdata::Cell{var.id, var.name, var.type, {}, sim::Value::text(text)});
+    }
     // 1.11.18 (lot 5) : les declarations Persistantes des scripts - leur valeur du moment ; un
     // script qui n'a pas tourne depuis le demarrage garde celle qui lui avait ete rendue.
     const auto take = [&](const Script& sc, const std::string& owner) {
@@ -1697,6 +1713,91 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     }
     if (scriptId) errors_.erase(scriptId);
     return true;
+}
+
+// 1.12.19 : LES MINUTEURS D'IHM_APRES ET IHM_CHAQUE. Un rappel garde (sa fonction, ou sa LAMBDA et ce qu'elle a
+// copie), appele au premier tick apres son heure ; periodique : il repart de son heure (sans rattraper les
+// periodes manquees). Au plus 256 en attente : au-dela, une boucle qui en lance a chaque cycle.
+bool Runtime::scheduleCallback(std::int64_t delayMs, std::int64_t periodMs, sim::ObjRef callback, std::int64_t& id, std::string* why) {
+    if (!running_) {
+        if (why) *why = "l'IHM ne tourne pas : rien ne partirait";
+        return false;
+    }
+    if (timers_.size() >= 256) {
+        if (why) *why = "256 minuteurs attendent d\xC3\xA9j\xC3\xA0 (une boucle en lance un \xC3\xA0 chaque cycle ?) ; IHM_ANNULER les arr\xC3\xAAte";
+        return false;
+    }
+    CallbackTimer t;
+    t.id = id = ++timerSeq_;
+    t.due = now_ + static_cast<double>(delayMs) / 1000.0;
+    t.period = static_cast<double>(periodMs) / 1000.0;
+    t.callback = std::move(callback);
+    t.source = source_;
+    timers_.push_back(std::move(t));
+    return true;
+}
+
+bool Runtime::cancelCallback(std::int64_t id) {
+    const auto it = std::find_if(timers_.begin(), timers_.end(), [&](const CallbackTimer& t) { return t.id == id; });
+    if (it == timers_.end()) return false;
+    timers_.erase(it);
+    return true;
+}
+
+void Runtime::timersTick(double now) {
+    // Ceux dont l'heure est venue, dans l'ordre de leur heure ; un rappel peut en lancer d'autres (pour plus tard)
+    // ou en annuler (un annule avant son tour ne part pas).
+    std::vector<std::int64_t> due;
+    for (const auto& t : timers_)
+        if (t.due <= now + 1e-9) due.push_back(t.id);
+    std::stable_sort(due.begin(), due.end(), [&](std::int64_t a, std::int64_t b) {
+        const auto at = [&](std::int64_t k) {
+            for (const auto& t : timers_) if (t.id == k) return t.due;
+            return now;
+        };
+        return at(a) < at(b);
+    });
+    for (const std::int64_t k : due) {
+        const auto it = std::find_if(timers_.begin(), timers_.end(), [&](const CallbackTimer& t) { return t.id == k; });
+        if (it == timers_.end() || !running_) continue;
+        const sim::ObjRef callback = it->callback;
+        const std::string source = "minuteur " + std::to_string(k) + (it->source.empty() ? std::string{} : " (" + it->source + ")");
+        if (it->period > 0) it->due = std::max(it->due + it->period, now);
+        else timers_.erase(it);
+        if (!callback) continue;
+        const std::string previous = source_;
+        source_ = source;
+        Env::Frame frame;
+        env_->frames.push_back(&frame);
+        env_->diagnostics.clear();
+        sim::RunLimits limits;
+        limits.maxIterationsPerLoop = 100000;
+        limits.maxStatementsPerScan = 200000;
+        const sim::ExecTrace callerTrace = trace_;
+        trace_ = {};
+        limits.trace = &trace_;
+        ++depth_;
+        const auto r = sim::callCallback(*callback, *env_, {}, source, limits);
+        --depth_;
+        trace_ = callerTrace;
+        env_->frames.pop_back();
+        source_ = previous;
+        std::string why = !r ? frenchSimMessage(r.error().message()) : std::string{};
+        if (!abort_.empty()) {
+            why = abort_;
+            abort_.clear();
+        }
+        if (!why.empty()) logAt(LogLevel::Error, "Erreur", source, why);
+    }
+}
+
+// 1.12.19 : un rappel vide (NULL) appele : rien n'est fait, la valeur par defaut est rendue ; la Console le dit une
+// fois par endroit (le code et sa ligne), pas a chaque cycle.
+void Runtime::nullCallback(std::string_view name, std::string_view where) {
+    const std::string key = std::string(name) + "@" + std::string(where);
+    if (!nullSaid_.insert(key).second) return;
+    logAt(LogLevel::Warning, "Script", source_,
+          std::string(name) + " est vide (NULL) : rien n'est appel\xC3\xA9, sa valeur par d\xC3\xA9" "faut est rendue (" + std::string(where) + ")");
 }
 
 // 1.11.10 : la fonction d'une instance de symbole, prete a tourner (HmiSymbols.hpp).
@@ -2255,7 +2356,7 @@ std::string_view permissionFor(Operation op) {
         case Operation::Navigate: case Operation::Popup: case Operation::ChangePopup:
         case Operation::NavigateBack: case Operation::NavigateForward: case Operation::NavigateHome:   // lot 12
             return "Naviguer";
-        case Operation::RunScript: case Operation::CallScript:
+        case Operation::RunScript: case Operation::CallScript: case Operation::Call:   // 1.12.19 : Appeler
             return "Scripts";
         case Operation::AckAlarm:
         case Operation::ShelveAlarm:            // lot 11
@@ -2444,6 +2545,21 @@ void Runtime::fire(const View& v, const Object* o, const Action& a, double now, 
             source_ = source;
             (void)callScript(a.target, now, nullptr);
             source_ = previous;
+            break;
+        }
+        case Operation::Call: {                              // 1.12.19 : Appeler - Cible(arguments);
+            const std::string code = callCode(a);
+            if (code.empty()) { log("Erreur", source, "Appeler : rien \xC3\xA0 appeler (la cible est vide)"); break; }
+            if (depth_ >= kMaxDepth) { log("Erreur", source, "appel circulaire"); break; }
+            ++depth_;
+            const CodeOrigin callerOrigin = origin_;
+            origin_ = CodeOrigin{};
+            origin_.name = source + " (Appeler " + trimmedView(a.target) + ")";
+            origin_.view = v.id;
+            origin_.object = o ? o->id : kNoId;
+            (void)runStatements(code, origin_.name, now, nullptr);
+            origin_ = callerOrigin;
+            --depth_;
             break;
         }
         case Operation::Log:
@@ -3231,8 +3347,20 @@ void Runtime::start(double now) {
     persistPending_.clear();
     if (startData_) {
         // 1.11.18 (lot 5) : les declarations Persistantes attendent la premiere execution de leur script.
-        const auto variables = takePersistent(*startData_);
+        auto variables = takePersistent(*startData_);
+        // 1.12.19 : une variable rappel - le nom de sa fonction, ecrit tel quel (une fonction disparue : dit).
+        std::size_t callbacks = 0;
+        std::vector<std::string> lost;
+        variables.erase(std::remove_if(variables.begin(), variables.end(), [&](const simdata::Cell& c) {
+            if (upper(trimmedView(c.declared)).rfind("CALLBACK", 0) != 0 || c.value.type() != sim::Type::String) return false;
+            std::string why;
+            if (setRichVariable(c.name, c.value.asString(), &why)) ++callbacks;
+            else lost.push_back(c.name + " : " + why);
+            return true;
+        }), variables.end());
         lastRestore_ = simdata::restoreVariables(*project_, variables, [this](const std::string& path) { return ihmSlot(path); });
+        if (callbacks) lastRestore_->notes.push_back(std::to_string(callbacks) + " variable(s) rappel rendue(s) (le nom de leur fonction)");
+        for (auto& w : lost) lastRestore_->warnings.push_back(std::move(w));
         if (!persistPending_.empty())
             lastRestore_->notes.push_back(std::to_string(persistPending_.size()) + " d\xC3\xA9" "claration(s) Persistante(s) rendue(s) \xC3\xA0 la premi\xC3\xA8re ex\xC3\xA9" "cution de leur script");
         startData_.reset();
@@ -3305,7 +3433,7 @@ void Runtime::initVariables() {
         // (un litteral : [1, 2, 3], ['a' := 1], (1, 'x')) ; illisible : vide, et le journal le dit.
         if (types::isRich(var.type)) {
             std::string why;
-            auto o = sim::makeRichValue(var.type, var.initial, *env_, &why);
+            auto o = sim::makeRichValue(var.type, typeform::callbackInitial(var.type, var.initial), *env_, &why);   // 1.12.19 : =Fonction
             if (!o && !var.initial.empty()) {
                 log("Erreur", "variable " + var.name, "valeur initiale illisible : " + var.initial + " (" + frenchSimMessage(why) + ")");
                 o = sim::makeRichValue(var.type, {}, *env_, &why);
@@ -3543,6 +3671,8 @@ void Runtime::stop(double now, const std::string& why) {
     keysDown_.clear();                  // 1.11.23 : l'arret ne relache rien (aucune action ne part)
     animation_.reset();
     unfollowAll();                      // 1.9 : les liaisons ne suivent plus rien pour l'IHM
+    timers_.clear();                    // 1.12.19 : les minuteurs d'IHM_APRES et IHM_CHAQUE s'arretent avec l'IHM
+    nullSaid_.clear();
 }
 
 void Runtime::press(Id object, double now) {
@@ -3809,6 +3939,7 @@ void Runtime::tick(double now) {
             }
         }
     }
+    if (!timers_.empty()) timersTick(now);   // 1.12.19 : IHM_APRES, IHM_CHAQUE
     // Les timers, a chaque appel ; le reste au rythme du cycle IHM.
     std::vector<Id> shown{current_};
     shown.insert(shown.end(), popups_.begin(), popups_.end());
@@ -4731,6 +4862,15 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
         if (t.empty()) {
             if (rich)
                 if (auto o = sim::makeRichValue(type, {}, *env_)) scope->setObject(name, std::move(o));
+            return;
+        }
+        // 1.12.19 (R3) : un parametre rappel - Sur_Oui := Valider (une fonction), := LAMBDA () => ..., := Sur_Fin (une
+        // variable rappel de l'appelant), := NULL : le rappel lui-meme, vise des maintenant (une fonction n'est pas une
+        // variable : pas d'alias). Reference ou copie, la meme chose : la popup appelle Sur_Oui().
+        if (rich && upper(trimmed(type)).rfind("CALLBACK", 0) == 0) {
+            std::string why;
+            if (auto o = sim::makeRichValue(type, typeform::callbackInitial(type, t), *env_, &why)) scope->setObject(name, std::move(o));
+            else log("Erreur", source_, "param\xC3\xA8tre " + name + " := " + t + " : " + frenchSimMessage(why));
             return;
         }
         if (isVariablePath(t)) {

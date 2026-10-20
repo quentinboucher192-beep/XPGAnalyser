@@ -434,7 +434,8 @@ std::string pathKey(std::string_view s) {
 // types (typereg::UseVariable : ceux qui ont une place Modbus), sous leur nom exact.
 bool isElementary(std::string_view name) noexcept {
     const auto* e = typereg::baseRegistry().byName(name);
-    return e && e->usable(typereg::UseVariable) && e->category != typereg::Category::Generic && sameText(e->name, name);
+    return e && e->usable(typereg::UseVariable) && e->category != typereg::Category::Generic
+        && e->category != typereg::Category::Callback && sameText(e->name, name);   // 1.12.19 : un rappel est un objet de l'IHM
 }
 
 bool isComposite(std::string_view type) noexcept {
@@ -524,7 +525,8 @@ bool isRich(std::string_view type) {
     const std::string u = upperOf(t);
     // Les mots qui ouvrent un type objet (ailleurs que dans les bornes d'un ARRAY).
     if (u.find("LIST") == std::string::npos && u.find("VECTOR") == std::string::npos && u.find("MAP") == std::string::npos
-        && u.find("TUPLE") == std::string::npos && u.find("SET") == std::string::npos && u.find("RING") == std::string::npos)   // 1.12.7 : SET, RING
+        && u.find("TUPLE") == std::string::npos && u.find("SET") == std::string::npos && u.find("RING") == std::string::npos   // 1.12.7 : SET, RING
+        && u.find("CALLBACK") == std::string::npos)                                                                            // 1.12.19
         return false;
     return typereg::baseRegistry().resolve(t, typereg::UseAll).rich;
 }
@@ -536,6 +538,8 @@ bool isDynamic(std::string_view type) {
 std::string unbindableReason(std::string_view type) {
     if (!isRich(type)) return {};
     const std::string t = normalized(type);
+    if (upperOf(t).rfind("CALLBACK", 0) == 0)                 // 1.12.19 : un rappel
+        return "un rappel (" + t + ") vise une fonction : il vit dans la m\xC3\xA9moire de l'IHM (ni \xC3\xA9quipement, ni adresse)";
     if (isDynamic(type))
         return "un " + t + " a une taille variable : il vit dans la m\xC3\xA9moire de l'IHM, il ne tient pas dans la m\xC3\xA9moire fixe "
                "d'un \xC3\xA9quipement (ni \xC3\xA9quipement, ni adresse)";

@@ -39,7 +39,7 @@ public:
         // 1.12.19 (la regle des cases) : CE QUI NE VA PAS dans le champ, a la frappe - dit en rouge sous
         // lui, et le bouton principal grise tant qu'il y en a (vide : rien a redire). `monospace` : le
         // champ attend une expression (chasse fixe).
-        std::function<std::string(const std::string&)> check;
+        std::function<std::string(const std::string&)> check{};
         bool           monospace{false};
     };
     struct Spec {

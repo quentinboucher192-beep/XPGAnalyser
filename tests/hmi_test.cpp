@@ -28207,6 +28207,230 @@ void tableauEntier1217() {
           "rien d'autre n'est marqu\xC3\xA9 bloquant");
 }
 
+// 1.12.19 (R3) : UN RAPPEL EN PARAMETRE DE POPUP - Sur_Oui : CALLBACK (). L'ouverture le donne : une fonction du
+// projet (Valider), une LAMBDA, une variable IHM rappel de l'appelant (Sur_Fin), ou rien (NULL : l'appel ne fait rien,
+// la Console le dit une fois). La popup l'appelle comme une fonction : Sur_Oui();
+void rappelsPopup1219() {
+    std::printf("1.12.19 : un rappel en param\xC3\xA8tre de popup\n");
+    Project p;
+    p.programs.variables.push_back(hmiVar(p, "N1", "DINT"));
+    p.programs.variables.push_back(hmiVar(p, "Sur_Fin", "CALLBACK ()", "=Doubler"));
+    HmiFunction valider;
+    valider.id = p.allocate();
+    valider.name = "Valider";
+    valider.body = "N1 := N1 + 10;\n";
+    p.programs.functions.push_back(valider);
+    HmiFunction doubler = valider;
+    doubler.id = p.allocate();
+    doubler.name = "Doubler";
+    doubler.body = "N1 := N1 * 2;\n";
+    p.programs.functions.push_back(doubler);
+    View base = makeView(p, "Base");
+    View pop = makeView(p, "Pop_Confirmer");
+    pop.role = "popup";
+    pop.width = 300;
+    pop.height = 200;
+    pop.params = {{"Sur_Oui", "", "", "CALLBACK ()", ParamMode::Copy}, {"Sur_Non", "", "", "CALLBACK ()", ParamMode::Reference}};
+    auto& b1 = addButton(p, base, "Btn_Fonction", 10, 10);
+    b1.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Confirmer", "Sur_Oui := Valider"));
+    const Id btnFonction = b1.id;
+    auto& b2 = addButton(p, base, "Btn_Variable", 10, 60);
+    b2.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Confirmer", "Sur_Oui := Sur_Fin; Sur_Non := =Valider"));
+    const Id btnVariable = b2.id;
+    auto& b3 = addButton(p, base, "Btn_Lambda", 10, 110);
+    b3.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Confirmer", "Sur_Oui := LAMBDA () => IHM_LOG(NIVEAU_LOG#INFO, 'oui de la LAMBDA')"));
+    const Id btnLambda = b3.id;
+    auto& oui = addButton(p, pop, "Btn_Oui", 10, 10);
+    oui.actions.push_back(act(Trigger::Click, Operation::RunScript, {}, {}));
+    oui.actions.back().value = "Sur_Oui();\nSur_Non();";
+    const Id btnOui = oui.id;
+    // L'operation Appeler : le rappel recu, sans script.
+    auto& appel = addButton(p, pop, "Btn_Appeler", 10, 60);
+    appel.actions.push_back(act(Trigger::Click, Operation::Call, "Sur_Oui", {}));
+    const Id btnAppeler = appel.id;
+    p.views = {base, pop};
+    p.config.startView = base.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    double t = 0.1;
+    const auto click = [&](Id id) {
+        rt.press(id, t);
+        rt.release(id, t + 0.05, true);
+        t += 0.1;
+    };
+    const auto n1 = [&]() { return rt.variable("N1") ? rt.variable("N1")->asInteger() : -999; };
+    const auto said = [&](const char* what) {
+        int k = 0;
+        for (const auto& e : rt.journal()) k += e.message.find(what) != std::string::npos;
+        return k;
+    };
+    click(btnFonction);
+    click(btnOui);
+    check(n1() == 10 && said("vide (NULL)") == 1, "Sur_Oui := Valider : la popup l'appelle (N1 = " + std::to_string(n1()) + ") ; Sur_Non vide, dit une fois");
+    click(btnOui);
+    check(n1() == 20 && said("vide (NULL)") == 1, "encore : N1 = 20, le rappel vide n'est pas redit (" + std::to_string(said("vide (NULL)")) + ")");
+    (void)rt.closePopup(Transition{}, t);
+    click(btnVariable);
+    click(btnOui);
+    check(n1() == 50, "Sur_Oui := Sur_Fin (=Doubler), Sur_Non := =Valider : 20 * 2 + 10 = " + std::to_string(n1()));
+    click(btnAppeler);
+    check(n1() == 100, "l'action Appeler Sur_Oui (=Doubler) : 50 * 2 = " + std::to_string(n1()));
+    (void)rt.closePopup(Transition{}, t);
+    click(btnLambda);
+    click(btnOui);
+    int logged = 0;
+    for (const auto& e : rt.journal()) logged += e.kind == "IHM_LOG" && e.message == "oui de la LAMBDA";
+    check(logged == 1 && n1() == 100, "Sur_Oui := LAMBDA () => IHM_LOG(...) : la LAMBDA est appel\xC3\xA9" "e (" + std::to_string(logged) + ")");
+    int errors = 0;
+    for (const auto& e : rt.journal()) errors += e.kind == "Erreur";
+    check(errors == 0, "aucune erreur dans la Console (" + std::to_string(errors) + ")");
+    for (const auto& e : rt.journal())
+        if (e.kind == "Erreur") std::printf("    [Console] %s\n", e.message.c_str());
+    // Generer : la forme d'un argument rappel.
+    {
+        HmiFunction grand;
+        grand.id = p.allocate();
+        grand.name = "Grand";
+        grand.returnType = "BOOL";
+        grand.body = "VAR_INPUT x : REAL; END_VAR\nGrand := x > 100.0;\n";
+        p.programs.functions.push_back(grand);
+        const View* popup = nullptr;
+        for (const auto& v : p.views) if (v.name == "Pop_Confirmer") popup = &v;
+        const auto said = [&](const char* args) {
+            std::string all;
+            for (const auto& pb : params::checkArguments(p, nullptr, *popup, args)) all += (pb.error ? " E:" : " A:") + pb.message;
+            return all;
+        };
+        check(popup && said("Sur_Oui := Valider; Sur_Non := NULL").empty(), "Generer : Sur_Oui := Valider, Sur_Non := NULL acceptes" + (popup ? said("Sur_Oui := Valider; Sur_Non := NULL") : std::string{}));
+        check(popup && said("Sur_Oui := Sur_Fin; Sur_Non := LAMBDA () => IHM_LOG(NIVEAU_LOG#INFO, 'x')").empty(), "... une variable rappel, une LAMBDA");
+        const std::string wrong = popup ? said("Sur_Oui := Grand; Sur_Non := Valider") : std::string{};
+        check(wrong.find(" E:") != std::string::npos && wrong.find("Grand ne convient pas") != std::string::npos,
+              "Generer : Grand(x : REAL) : BOOL pour un CALLBACK () est refusee (" + wrong + ")");
+        const std::string text = popup ? said("Sur_Oui := 'Valider'; Sur_Non := NULL") : std::string{};
+        check(text.find(" A:") != std::string::npos && text.find(" E:") == std::string::npos, "'Valider' en texte : un avertissement (" + text + ")");
+        const std::string unknown = popup ? said("Sur_Oui := Inconnue") : std::string{};
+        check(unknown.find("ni une fonction du projet") != std::string::npos, "un nom inconnu : refuse (" + unknown + ")");
+        // Generer : l'action Appeler - une cible vide, une fonction inconnue ; Sur_Oui (le rappel recu) passe.
+        Project q = p;
+        for (auto& v : q.views)
+            if (v.name == "Pop_Confirmer")
+                for (auto& o : v.objects)
+                    if (o.name == "Btn_Appeler") {
+                        o.actions.push_back(act(Trigger::DoubleClick, Operation::Call, "Inconnue_Fonction", "1"));
+                        o.actions.push_back(act(Trigger::LongPress, Operation::Call, {}, {}));
+                    }
+        const NameExists none = [](std::string_view) { return false; };
+        std::string appels, autres;      // autres : sans "rien a appeler" (qui cite Sur_Oui en exemple)
+        const auto lire = [&](const std::vector<Issue>& issues) {
+            for (const auto& i : issues) {
+                if (i.severity != Issue::Severity::Error || i.object == kNoId) continue;
+                appels += " | " + i.message;
+                if (i.message.find("rien \xC3\xA0 appeler") == std::string::npos) autres += " | " + i.message;
+            }
+        };
+        lire(generate(q, none));
+        lire(compileWith(q, none));
+        check(appels.find("Inconnue_Fonction") != std::string::npos && appels.find("rien \xC3\xA0 appeler") != std::string::npos
+                  && autres.find("Sur_Oui") == std::string::npos,
+              "Generer : Appeler une fonction inconnue, ou rien, est refuse ; Sur_Oui passe (" + appels + ")");
+    }
+    // R5 : Appelee par et Renommer suivent une fonction passee en rappel (le code, une valeur initiale, une popup).
+    {
+        Project q = p;
+        Script sc;
+        sc.id = q.allocate();
+        sc.name = "Rappels";
+        sc.event = "Appel";
+        sc.body = "VAR f : CALLBACK (); END_VAR\nf := Valider;\nIHM_APRES(T#1s, Valider);\nValider();\nN1 := Valider_Total;";
+        q.programs.scripts.push_back(sc);
+        q.programs.variables.push_back(hmiVar(q, "Valider_Total", "DINT"));
+        const auto callers = hmi::functionCallers(q, "Valider");
+        std::string all;
+        for (const auto& c : callers) all += " | " + c;
+        check(callers.size() == 3 && all.find("Rappels") != std::string::npos && all.find("Btn_Fonction") != std::string::npos
+                  && all.find("Btn_Variable") != std::string::npos,
+              "Appel\xC3\xA9" "e par : le script, et les deux ouvertures de la popup qui la passent en rappel (" + all + ")");
+        for (auto& f : q.programs.functions)
+            if (f.name == "Valider") f.name = "Confirmer";
+            else if (f.name == "Doubler") f.name = "Doubler_Tout";
+        (void)hmi::renameFunctionEverywhere(q, "Valider", "Confirmer");
+        (void)hmi::renameFunctionEverywhere(q, "Doubler", "Doubler_Tout");
+        std::string body, fin, b1, b2;
+        for (const auto& s2 : q.programs.scripts) if (s2.name == "Rappels") body = s2.body;
+        for (const auto& v : q.programs.variables) if (v.name == "Sur_Fin") fin = v.initial;
+        for (const auto& v : q.views)
+            for (const auto& o : v.objects) {
+                if (o.name == "Btn_Fonction" && !o.actions.empty()) b1 = o.actions.front().value;
+                if (o.name == "Btn_Variable" && !o.actions.empty()) b2 = o.actions.front().value;
+            }
+        check(body == "VAR f : CALLBACK (); END_VAR\nf := Confirmer;\nIHM_APRES(T#1s, Confirmer);\nConfirmer();\nN1 := Valider_Total;",
+              "Renommer suit les rappels du code (f := Confirmer, IHM_APRES(T#1s, Confirmer)) sans toucher Valider_Total : " + body);
+        check(fin == "=Doubler_Tout" && b1 == "Sur_Oui := Confirmer" && b2 == "Sur_Oui := Sur_Fin; Sur_Non := =Confirmer",
+              "... la valeur initiale (" + fin + ") et les arguments des popups (" + b1 + " ; " + b2 + ")");
+    }
+}
+
+// 1.12.19 : UN RAPPEL DANS UNE EXPRESSION FX ET DANS UN SCRIPT - Compiler n'y voit pas de faute (une variable rappel
+// appelee, une LAMBDA, une fonction du projet passee en rappel), la simulation les calcule.
+void rappelsExpressions1219() {
+    std::printf("1.12.19 : un rappel dans une expression fx et dans un script (Compiler, la simulation)\n");
+    Project p;
+    HmiFunction grand;
+    grand.id = p.allocate();
+    grand.name = "Tres_Grand";
+    grand.returnType = "BOOL";
+    grand.body = "VAR_INPUT x : REAL; END_VAR\nTres_Grand := x > 100.0;\n";
+    p.programs.functions.push_back(grand);
+    p.programs.variables.push_back(hmiVar(p, "Filtre", "CALLBACK (x : REAL) : BOOL", "=Tres_Grand"));
+    p.programs.variables.push_back(hmiVar(p, "Mesures", "LIST OF REAL", "[12.5, 8.0, 150.0]"));
+    p.programs.variables.push_back(hmiVar(p, "Marche", "BOOL"));
+    p.programs.variables.push_back(hmiVar(p, "N1", "DINT"));
+    View v = makeView(p, "V");
+    const Id a = edit::add(p, v, Kind::Indicator, 10, 10);
+    const Id b = edit::add(p, v, Kind::Indicator, 60, 10);
+    const Id c = edit::add(p, v, Kind::Indicator, 110, 10);
+    v.object(a)->setExpr("visible", "Filtre(250.0)");
+    v.object(b)->setExpr("visible", "LIST_COUNT_IF(Mesures, LAMBDA (x : REAL) : BOOL => x > 10.0) = 2");
+    v.object(c)->setExpr("visible", "LIST_ANY(Mesures, Tres_Grand)");
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = "Rappels";
+    sc.event = "Appel";
+    sc.body = "VAR f : CALLBACK (x : REAL) : BOOL; END_VAR\nf := Tres_Grand;\nMarche := f(150.0) AND Filtre(150.0);\n"
+              "N1 := LIST_COUNT(LIST_FILTER(Mesures, f));";
+    p.programs.scripts.push_back(sc);
+    const Id vid = v.id;
+    p.views.push_back(v);
+    p.config.startView = vid;
+    const NameExists none = [](std::string_view) { return false; };
+    std::string errs;
+    for (const auto& i : compileWith(p, none))
+        if (i.severity == Issue::Severity::Error) errs += "\n  " + i.category + " " + i.property + " : " + i.message;
+    check(errs.empty(), "Compiler : aucune erreur (une variable rappel, une LAMBDA, une fonction passee en rappel, fx et script)" + errs);
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    std::string why;
+    const bool ran = rt.callScript("Rappels", 0.2, &why);
+    rt.tick(0.5);
+    const auto* marche = rt.variable("Marche");
+    const auto* n1 = rt.variable("N1");
+    check(ran && marche && marche->isTruthy() && n1 && n1->asInteger() == 1,
+          "le script : f := Tres_Grand, f(150.0) AND Filtre(150.0), LIST_FILTER(Mesures, f) (" + why + ")");
+    const View* shown = rt.composedView(vid);
+    check(shown && shown->object(a)->flag("visible") && shown->object(b)->flag("visible") && shown->object(c)->flag("visible"),
+          "les trois fx : Filtre(250.0), LIST_COUNT_IF avec une LAMBDA, LIST_ANY(Mesures, Tres_Grand)");
+    int errors = 0;
+    for (const auto& e : rt.journal())
+        if (e.kind == "Erreur") {
+            ++errors;
+            std::printf("    [Console] %s\n", e.message.c_str());
+        }
+    check(errors == 0, "aucune erreur dans la Console");
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les performances dans le temps, les lenteurs, seules.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -28429,6 +28653,8 @@ int main(int argc, char** argv) {
     courbesParArguments1123();        // 1.12.3 : une serie par jeu d'arguments d'une popup
     membresObjets1124();              // 1.12.4 : les membres objets des types IHM
     parametresObjets1124();           // 1.12.4 : les parametres objets des popups
+    rappelsPopup1219();               // 1.12.19 (R3) : un rappel en parametre de popup
+    rappelsExpressions1219();         // 1.12.19 : un rappel dans une fx et un script (Compiler, la simulation)
     lotA1125();                       // 1.12.5 (lot A) : les defauts de l'audit des objets
     lotBC1126();                      // 1.12.6 (lots B et C) : le role de chaque propriete, les reperes partout
     lotD1127();                       // 1.12.7 (lot D) : les listes en tableau et les choix

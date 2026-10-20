@@ -63,6 +63,11 @@ struct Param {
     bool        optional{false};    // une entree qui a une valeur par defaut ; une sortie
 };
 
+struct Signature;
+// 1.12.19 : la forme rappel d'une fonction - "CALLBACK (x : REAL; n : INT) : BOOL" ; vide : elle a des VAR_IN_OUT
+// ou des VAR_OUTPUT (elle ne se passe pas en rappel).
+[[nodiscard]] std::string callbackText(const Signature&);
+
 struct Signature {
     std::string        name;        // tel qu'ecrit
     std::vector<Param> params;

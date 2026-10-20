@@ -284,7 +284,77 @@ private:
     std::vector<Tok> toks_;
     std::size_t      at_{0};
 
+    std::vector<std::set<std::string>> lambdaNames_;      // 1.12.19 : les parametres des LAMBDA ouvertes (en majuscules)
     const Tok& peek() const { return toks_[std::min(at_, toks_.size() - 1)]; }
+    const Tok& peekAt(std::size_t k) const { return toks_[std::min(at_ + k, toks_.size() - 1)]; }
+    [[nodiscard]] bool inLambda(const std::string& name) const {
+        const std::string u = up(name);
+        for (const auto& scope : lambdaNames_)
+            if (scope.count(u)) return true;
+        return false;
+    }
+    // 1.12.19 : le type d'un rappel de ce nom - une variable IHM, un parametre de la vue (ou du symbole qui porte la
+    // popup) de type CALLBACK ; vide : pas un rappel.
+    [[nodiscard]] std::string callbackTypeOf(const std::string& name) const {
+        const auto isCallback = [](const std::string& t) {
+            std::string u = t;
+            for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            std::size_t k = 0;
+            while (k < u.size() && std::isspace(static_cast<unsigned char>(u[k]))) ++k;
+            return u.compare(k, 8, "CALLBACK") == 0;
+        };
+        if (const Project* p = ctx_.project) {
+            if (const Variable* var = p->variable(name); var && isCallback(var->type)) return var->type;
+            if (ctx_.view) {
+                if (const ViewParam* prm = ctx_.view->param(name); prm && isCallback(prm->type)) return prm->type;
+                if (const View* owner = popupOwner(*p, *ctx_.view))
+                    if (const ViewParam* prm = owner->param(name); prm && isCallback(prm->type)) return prm->type;
+            }
+        }
+        return {};
+    }
+    // 1.12.19 : LAMBDA (x : REAL, y : INT) : BOOL => x > Seuil - ses parametres sont connus dans son corps ; elle vaut
+    // un rappel (rien a montrer). Sa forme se verifie a l'appel (le moteur). Dans une fx, ses parametres se separent
+    // par des virgules (le ; n'y est pas permis).
+    Val lambda() {
+        Val v;
+        v.show = "LAMBDA";
+        std::set<std::string> names;
+        if (isOp("(")) {
+            next();
+            int depth = 0;
+            bool expectName = true;
+            while (peek().k != Tok::K::End) {
+                if (isOp("(")) { ++depth; next(); continue; }
+                if (isOp(")")) {
+                    next();
+                    if (depth == 0) break;
+                    --depth;
+                    continue;
+                }
+                if (depth == 0 && (isOp(",") || isOp(";"))) { expectName = true; next(); continue; }
+                if (depth == 0 && isOp(":")) { expectName = false; next(); continue; }
+                if (expectName && peek().k == Tok::K::Ident) {
+                    names.insert(up(peek().text));
+                    expectName = false;
+                }
+                next();
+            }
+        }
+        const auto arrow = [&] { return isOp("=") && peekAt(1).k == Tok::K::Op && peekAt(1).text == ">"; };
+        if (isOp(":")) {                                     // son type de retour, jusqu'a =>
+            next();
+            while (peek().k != Tok::K::End && !arrow()) next();
+        }
+        if (arrow()) {
+            next();
+            next();
+            lambdaNames_.push_back(std::move(names));
+            (void)orExpr();
+            lambdaNames_.pop_back();
+        }
+        return v;
+    }
     const Tok& next() {
         const Tok& t = peek();
         if (at_ < toks_.size() - 1) ++at_;
@@ -516,6 +586,7 @@ private:
                     v.show = t.text;
                     return v;
                 }
+                if (u == "LAMBDA") return lambda();                  // 1.12.19
                 if (isOp("(")) return call(t.text);
                 // 1.11.10 : Vanne_3.Etat(), Vue_Vannes.Vanne_3.Etat() - la fonction d'une instance.
                 if (isOp(".")) {
@@ -647,6 +718,14 @@ private:
         Val v;
         v.show = text;
         const Project* p = ctx_.project;
+        if (inLambda(root)) return v;                         // 1.12.19 : un parametre d'une LAMBDA
+        // 1.12.19 : une fonction passee en rappel (LIST_ANY(Mesures, Tres_Grand)) - son nom seul est une valeur.
+        if (segs.empty() && p && !p->variable(root)) {
+            bool fn = !p->functionsNamed(root).empty();
+            if (!fn && ctx_.view)
+                for (const auto& f : ctx_.view->functions) fn = fn || up(f.name) == up(root);
+            if (fn) return v;
+        }
         if (const Variable* var = p ? p->variable(root) : nullptr) {
             if (text == root) typed(v, var->type);
             else if (const auto ty = types::typeOfPath(*p, text); !ty.empty()) typed(v, ty);
@@ -1012,6 +1091,17 @@ private:
             if (n != 1) problem(u + " prend 1 argument, pas " + std::to_string(n) + " : " + u + "(valeur)");
             singleArgs(0, args.size());                    // 1.12.17 : TO_STRING(Liste) ne se convertit pas
             r.type = typeOfName(u.substr(3));
+            return r;
+        }
+        // 1.12.19 : un rappel s'appelle comme une fonction - une variable IHM, un parametre de la vue de type CALLBACK ;
+        // ce qu'il rend : le type ecrit apres sa parenthese.
+        if (const std::string ct = callbackTypeOf(name); !ct.empty()) {
+            const auto close = ct.rfind(')');
+            const auto colon = close == std::string::npos ? std::string::npos : ct.find(':', close);
+            std::string ret = colon == std::string::npos ? std::string{} : ct.substr(colon + 1);
+            while (!ret.empty() && std::isspace(static_cast<unsigned char>(ret.front()))) ret.erase(0, 1);
+            while (!ret.empty() && std::isspace(static_cast<unsigned char>(ret.back()))) ret.pop_back();
+            r.type = ret.empty() ? T::Unknown : typeOfName(ret);
             return r;
         }
         std::vector<std::string> names;

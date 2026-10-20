@@ -18190,7 +18190,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 363,   // 1.12.19 : + 6 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 370,   // 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18332,7 +18332,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 210, "centre : L'IHM a les 210 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue)");
+    check(ix.count(hc::Chapter::Hmi) == 211, "centre : L'IHM a les 211 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 52, "centre : 11 expressions, 52 notes (1.12.19)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -30033,8 +30033,9 @@ void selecteurTypes1119() {
     if (!picker) return;
     auto shown = picker->shownNames();
     check(has(shown, "BOOL") && has(shown, "LINT") && has(shown, "T_Four") && has(shown, "E_Mode") && !has(shown, "ANY")
-              && !has(shown, "Aucun") && !has(shown, "T_ANA") && shown.size() == 23,
-          "une d\xC3\xA9" "claration : 21 types de base (LINT, ULINT compris ; 1.12.1 : les dates, CHAR, WSTRING), T_Four, E_Mode ; ni ANY, ni Aucun, ni DDT ("
+              && !has(shown, "Aucun") && !has(shown, "T_ANA") && has(shown, "CALLBACK (x : REAL) : BOOL") && shown.size() == 29,
+          "une d\xC3\xA9" "claration : 21 types de base (LINT, ULINT compris ; 1.12.1 : les dates, CHAR, WSTRING), T_Four, E_Mode, les 6 formes "
+          "de rappel (1.12.19) ; ni ANY, ni Aucun, ni DDT ("
               + std::to_string(shown.size()) + ")");
     check(picker->result() == "REAL" && picker->resultProblem().empty(), "le type actuel, choisi d'office : REAL");
     // 1.11.19 (Wine) : choisi avant la mise en page, il doit se voir une fois la liste placee
@@ -30134,8 +30135,9 @@ void selecteurTypes1119() {
     picker = open(spec);
     if (picker) {
         shown = picker->shownNames();
-        check(!has(shown, "SINT") && !has(shown, "LINT") && has(shown, "T_Four") && shown.size() == 14,
-              "une variable IHM : les 11 types d'une place Modbus et les 3 types du projet (" + std::to_string(shown.size()) + ")");
+        check(!has(shown, "SINT") && !has(shown, "LINT") && has(shown, "T_Four") && has(shown, "CALLBACK ()") && shown.size() == 20,
+              "une variable IHM : les 11 types d'une place Modbus, les 3 types du projet et les 6 formes de rappel (1.12.19) ("
+                  + std::to_string(shown.size()) + ")");
         (void)picker->select("REAL");
         picker->setReference(true);
         check(picker->result() == "REAL", "une variable IHM : pas de REF_TO");

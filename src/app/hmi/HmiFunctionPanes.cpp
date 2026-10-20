@@ -836,7 +836,8 @@ bool HmiFunctionsPane::nameAllowed(const std::string& name, Id self, std::string
                                       "END_WHILE", "REPEAT", "UNTIL", "END_REPEAT", "CASE", "OF", "END_CASE", "EXIT",
                                       "RETURN", "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE", "VAR", "VAR_TEMP",
                                       "VAR_INPUT", "END_VAR", "FUNCTION", "END_FUNCTION",
-                                      "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ASSERT"};   // 1.12.1
+                                      "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ASSERT",   // 1.12.1
+                                      "CALLBACK", "LAMBDA", "END_LAMBDA", "TEMPLATE", "NULL"};   // 1.12.19
     for (const char* k : kReserved) if (u == k) return refuse("'" + name + "' est un mot du langage ST");
     if (hmi::localTypeSupported(u) || hmi::isStandardFunction(u)) return refuse("'" + name + "' est un type ou une fonction standard");
     // 1.12.16 : une fonction de vue - pas le nom d'une constante, d'un objet ou d'un parametre de la vue.

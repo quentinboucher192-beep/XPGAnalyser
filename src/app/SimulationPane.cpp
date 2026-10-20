@@ -92,12 +92,6 @@ std::string lower(std::string_view s) {
     return out;
 }
 
-std::string upper(std::string_view s) {
-    std::string out(s);
-    for (auto& c : out) c = static_cast<char>(std::toupper(uc(c)));
-    return out;
-}
-
 std::string trim(std::string_view s) {
     std::size_t a = 0, b = s.size();
     while (a < b && std::isspace(uc(s[a]))) ++a;

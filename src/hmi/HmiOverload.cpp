@@ -101,6 +101,17 @@ std::string_view modeWord(Mode m) noexcept {
     return "";
 }
 
+std::string callbackText(const Signature& s) {
+    std::string out = "CALLBACK (";
+    for (std::size_t k = 0; k < s.params.size(); ++k) {
+        if (s.params[k].mode != Mode::In) return {};
+        out += (k ? "; " : "") + s.params[k].name + " : " + (s.params[k].type.empty() ? std::string("ANY") : s.params[k].type);
+    }
+    out += ")";
+    if (!s.result.empty()) out += " : " + s.result;
+    return out;
+}
+
 std::string Signature::text() const {
     std::string s = name + "(";
     for (std::size_t k = 0; k < params.size(); ++k) {
@@ -326,10 +337,14 @@ Signature signatureOf(const sim::Function& f) {
     Signature s;
     s.name = sim::functionName(f);
     s.result = sim::functionResult(f);
+    // 1.12.19 : une fonction generique (TEMPLATE <T>) - un parametre de type T se voit a l'appel (la
+    // simulation deduit T, et le refuse s'il ne va pas) : pas de type ecrit a comparer ici.
+    const auto generic = sim::functionTypeParams(f);
+    if (sim::mentionsTypeParam(s.result, generic)) s.result.clear();
     for (const auto& p : sim::functionParams(f)) {
         Param prm;
         prm.name = p.name;
-        prm.type = p.type;
+        prm.type = sim::mentionsTypeParam(p.type, generic) ? std::string{} : p.type;
         prm.mode = p.mode == sim::ParamInfo::Mode::InOut ? Mode::InOut : p.mode == sim::ParamInfo::Mode::Output ? Mode::Out : Mode::In;
         prm.optional = prm.mode != Mode::InOut;
         s.params.push_back(std::move(prm));

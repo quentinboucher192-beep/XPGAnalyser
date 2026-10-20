@@ -9,6 +9,8 @@
 #include "HmiScript.hpp"    // 1.11.22 : forEachCode (renommer partout)
 #include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types et la regle, un seul catalogue
 #include "HmiTypes.hpp"
+#include "HmiTypeForms.hpp"   // 1.12.19 : un argument rappel (sa forme)
+#include "HmiOverload.hpp"    // 1.12.19 : la forme rappel d'une fonction
 #include "HmiObjectAlarms.hpp"   // 1.12.11 (lot G) : une liaison du synoptique tapee sans = (renommer suit)
 
 #include <algorithm>
@@ -650,6 +652,55 @@ bool popupWritesParam(const View& popup, std::string_view param) {
     return false;
 }
 
+std::vector<ArgumentProblem> callbackArgument(const Project& p, const View* caller, const ViewParam& prm, std::string_view text,
+                                              const PlcTypes& plc) {
+    std::vector<ArgumentProblem> out;
+    const auto problem = [&](bool error, std::string message) {
+        out.push_back({ArgumentProblem::Kind::TypeMismatch, error, prm.name, std::move(message)});
+    };
+    std::string arg = trim(text);
+    if (arg.size() > 1 && arg.front() == '=' && arg[1] != '=') arg = trim(arg.substr(1));
+    const std::string u = up(arg);
+    if (arg.empty() || u == "NULL" || u.rfind("LAMBDA", 0) == 0) return out;     // une LAMBDA : sa forme se verifie a l'appel
+    const bool quoted = arg.size() >= 2 && arg.front() == '\'' && arg.back() == '\'';
+    const std::string name = quoted ? arg.substr(1, arg.size() - 2) : arg;
+    const std::string want = normalizedType(prm.type);
+    const auto fits = [&](const std::string& what, const std::string& got) {
+        std::string why;
+        if (got.empty())
+            problem(true, what + " a des VAR_IN_OUT ou des VAR_OUTPUT : elle ne se passe pas en rappel (le param\xC3\xA8tre " + prm.name
+                              + " attend " + want + ")");
+        else if (!typeform::callbackFitsText(p, prm.type, got, &why))
+            problem(true, "le param\xC3\xA8tre " + prm.name + " : " + what + " ne convient pas \xE2\x80\x94 " + why);
+    };
+    // Une fonction : de la vue qui ouvre (1.12.16), puis du projet. Vue.Instance.Fonction : vue a l'appel.
+    std::vector<const HmiFunction*> fs;
+    if (caller)
+        for (const auto& f : caller->functions)
+            if (same(f.name, name)) fs.push_back(&f);
+    if (fs.empty()) fs = p.functionsNamed(name);
+    if (!fs.empty()) {
+        if (quoted)
+            problem(false, "'" + name + "' : un nom de fonction en texte se lit encore ; \xC3\xA9" "cris " + name
+                               + " (sans apostrophes) \xE2\x80\x94 Renommer et Voir les usages la suivront");
+        if (fs.size() == 1) fits(name, overload::callbackText(overload::signatureOf(*fs.front())));
+        return out;
+    }
+    if (name.find('.') != std::string::npos && !quoted) return out;              // Vue.Vanne_3.Ouvrir : a l'appel
+    const std::string given = quoted ? std::string{} : expressionType(p, caller, arg, plc);
+    if (!given.empty() && up(trim(given)).rfind("CALLBACK", 0) == 0) {
+        fits(arg, given);
+        return out;
+    }
+    if (!given.empty())
+        problem(true, "le param\xC3\xA8tre " + prm.name + " attend un rappel (" + want + ") : " + arg + " est " + normalizedType(given)
+                          + " \xE2\x80\x94 donne une fonction, une variable rappel ou une LAMBDA");
+    else
+        problem(true, "le param\xC3\xA8tre " + prm.name + " attend un rappel (" + want + ") : " + name
+                          + " n'est ni une fonction du projet, ni une variable rappel");
+    return out;
+}
+
 std::vector<ArgumentProblem> checkArguments(const Project& p, const View* caller, const View& popup,
                                             std::string_view arguments, const PlcTypes& plc) {
     std::vector<ArgumentProblem> out;
@@ -669,6 +720,11 @@ std::vector<ArgumentProblem> checkArguments(const Project& p, const View* caller
             continue;
         }
         const std::string arg = trim(markers::strip(it->second));   // 1.11.7 : IN_V := $V[0]$ passe V[0] (une reference)
+        // 1.12.19 (R3) : un parametre rappel - une fonction du projet ou de la vue, une variable rappel, une LAMBDA, NULL.
+        if (up(trim(prm.type)).rfind("CALLBACK", 0) == 0) {
+            for (auto& pb : callbackArgument(p, caller, prm, arg, plc)) out.push_back(std::move(pb));
+            continue;
+        }
         const std::string given_t = expressionType(p, caller, arg, plc);
         const bool variable = isVariablePath(arg);
         if (!typeAcceptsFor(prm.mode, prm.type, given_t, variable)) {

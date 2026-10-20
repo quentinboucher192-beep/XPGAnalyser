@@ -261,6 +261,14 @@ private:
             if (i_ < s_.size() && s_[i_] == '[') return map(use, depth);
             i_ = save;                                  // MAP_ITERATOR : un nom
         }
+        // 1.12.19 : CALLBACK (x : REAL; y : REAL) : BOOL - un rappel : une fonction ou une LAMBDA de cette forme.
+        if (atWord("CALLBACK")) {
+            std::size_t save = i_;
+            (void)word();
+            skip();
+            if (i_ < s_.size() && s_[i_] == '(') return callback(use, depth);
+            i_ = save;                                  // un type IHM nomme CALLBACK : un nom
+        }
         if (atWord("REF_TO")) {
             (void)word();
             return reference(use, depth, "REF_TO ", "ref:");
@@ -488,6 +496,61 @@ private:
         return r;
     }
 
+    // 1.12.19 : la signature d'un rappel. Ses parametres se nomment (x : REAL), se separent par ';' (ou ',') ;
+    // son retour suit les parentheses (: BOOL), rien : une procedure. Cle : cb:(base:REAL)base:BOOL. Un objet de
+    // l'IHM (rich) : il vit dans sa memoire, sans adresse ni equipement.
+    Resolved callback(unsigned use, int depth) {
+        if (!accept('(')) return fail("CALLBACK : ( attendu \xE2\x80\x94 CALLBACK (x : REAL) : BOOL");
+        Resolved r;
+        r.category = Category::Callback;
+        r.rich = true;
+        r.dynamic = true;
+        r.ok = true;
+        std::string text, key;
+        const auto missingFrom = [&](const Resolved& e) {
+            if (e.missing && !r.missing) {
+                r.missing = true;
+                r.unknown = e.unknown;
+                r.why = e.why;
+                r.ok = false;
+            }
+        };
+        skip();
+        if (!accept(')')) {
+            for (int count = 0;; ++count) {
+                if (count >= 16) return fail("CALLBACK : 16 param\xC3\xA8tres au plus");
+                const std::string name = word();
+                if (name.empty()) return fail("CALLBACK : un param\xC3\xA8tre se nomme \xE2\x80\x94 CALLBACK (x : REAL) : BOOL");
+                if (!accept(':')) return fail("CALLBACK : \xC2\xAB : \xC2\xBB attendu apr\xC3\xA8s " + name + " (" + name + " : REAL)");
+                Resolved e = type(UseDeclaration, depth + 1);
+                if (!e.ok && !e.missing) return fail("CALLBACK : " + name + " \xE2\x80\x94 " + e.why);
+                missingFrom(e);
+                text += (text.empty() ? "" : "; ") + name + " : " + e.text;
+                key += (key.empty() ? "" : ",") + e.key;
+                if (accept(';') || accept(',')) continue;
+                if (accept(')')) break;
+                return fail("CALLBACK : ; ou ) attendu apr\xC3\xA8s le type de " + name);
+            }
+        }
+        std::string result, resultKey;
+        if (accept(':')) {
+            Resolved e = type(UseDeclaration | UseReturn, depth + 1);
+            if (!e.ok && !e.missing) return fail("CALLBACK : son retour \xE2\x80\x94 " + e.why);
+            missingFrom(e);
+            if (e.key != "void") {
+                result = e.text;
+                resultKey = e.key;
+            }
+        }
+        r.text = "CALLBACK (" + text + ")" + (result.empty() ? std::string{} : " : " + result);
+        r.key = "cb:(" + key + ")" + resultKey;
+        if (r.ok && (use & (UseVariable | UseDeclaration | UseParameter | UseReturn)) == 0) {
+            r.ok = false;
+            r.why = "un rappel ne convient pas \xC3\xA0 " + useText(use);
+        }
+        return r;
+    }
+
     Resolved reference(unsigned use, int depth, const char* word, const char* keyPrefix) {
         Resolved e = type(UseDeclaration, depth + 1);
         Resolved r;
@@ -526,6 +589,7 @@ std::string_view categoryLabel(Category c) noexcept {
         case Category::Enumeration: return "\xC3\x89num\xC3\xA9rations";
         case Category::PlcType: return "DDT de l'API";
         case Category::Reference: return "R\xC3\xA9" "f\xC3\xA9rences";
+        case Category::Callback: return "Rappels";                 // 1.12.19
         case Category::Generic: return "G\xC3\xA9n\xC3\xA9riques";
         case Category::Void: return "Sans valeur";
     }
@@ -564,6 +628,29 @@ Registry::Registry() {
     none.uses = UseReturn;
     none.proposed = UseReturn;
     entries_.push_back(std::move(none));
+    // 1.12.19 : des formes de rappel toutes faites (la puce Rappels du selecteur) ; une autre forme s'ecrit
+    // CALLBACK (x : T; ...) : R et se lit par resolve.
+    struct Form { const char* text; const char* doc; };
+    static const Form kCallbacks[] = {
+        {"CALLBACK ()", "Un rappel sans param\xC3\xA8tre : Sur_Oui, Sur_Clic, un minuteur (IHM_APRES, IHM_CHAQUE)."},
+        {"CALLBACK () : BOOL", "Un rappel qui r\xC3\xA9pond oui ou non : une condition donn\xC3\xA9" "e \xC3\xA0 une popup, \xC3\xA0 un symbole."},
+        {"CALLBACK (x : REAL) : BOOL", "Un filtre : LIST_FILTER, LIST_COUNT_IF, LIST_ANY\xE2\x80\xA6 (f : une fonction, une LAMBDA)."},
+        {"CALLBACK (x : REAL) : REAL", "Une transformation : LIST_MAP, LIST_TRANSFORM."},
+        {"CALLBACK (a : REAL; b : REAL) : BOOL", "Un ordre : LIST_SORT(L, f) - TRUE si a passe avant b."},
+        {"CALLBACK (texte : STRING)", "Un rappel qui re\xC3\xA7oit un texte : un message, une saisie."},
+    };
+    for (const auto& f : kCallbacks) {
+        const Resolved r = resolve(f.text, UseDeclaration);
+        Entry e;
+        e.key = r.key;
+        e.name = r.text;
+        e.category = Category::Callback;
+        e.provenance = "XPGAnalyser";
+        e.doc = f.doc;
+        e.uses = UseVariable | UseDeclaration | UseParameter | UseReturn;
+        e.proposed = 0;
+        entries_.push_back(std::move(e));
+    }
 }
 
 std::shared_ptr<const Registry> Registry::build(const Project& p, const params::PlcTypes* plc) {

@@ -1686,6 +1686,16 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         m.add("Ouvrir", Icon::Code, [this, id] { openHmiFunctions(id); });
         inWindow();                                                      // 1.12.18 (planche 19)
         m.add("Essayer" + kDots, Icon::Play, [this, id] { askHmiTryFunction(id); });
+        // 1.12.19 (la maquette, decision 12) : ses appels, et ou elle est passee en rappel (f := Valider, Sur_Oui := Valider).
+        m.add("Voir les usages", Icon::Search, [this, fname] {
+            openHmiPane("rechercher");
+            if (auto* pane = dynamic_cast<HmiFindPane*>(hmiTab("rechercher"))) {
+                pane->setScopeView(hmi::kNoId);
+                pane->setWholeWord(true);
+                pane->setFind(fname);
+                pane->search();
+            }
+        }, {}, fname.empty() ? "fonction introuvable" : "");
         const auto functionsPane = [this]() -> HmiFunctionsPane* {
             openHmiPane("fonctions");
             return dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));

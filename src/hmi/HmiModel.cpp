@@ -1790,6 +1790,7 @@ constexpr OperationName kOperationNames[] = {
     {Operation::Popup, "Ouvrir une popup"},
     {Operation::ClosePopup, "Fermer la popup"},
     {Operation::RunScript, "Ex\xC3\xA9" "cuter un script"},
+    {Operation::Call, "Appeler"},                     // 1.12.19
     {Operation::CallScript, "Script g\xC3\xA9n\xC3\xA9ral"},
     {Operation::Log, "Journaliser"},
     {Operation::AckAlarm, "Acquitter une alarme"},
@@ -1911,6 +1912,18 @@ std::string targetVariable(std::string_view target) {
     }
     return std::string(target);
 }
+std::string callCode(const Action& a) {
+    if (a.operation != Operation::Call) return {};
+    std::string t = a.target;
+    while (!t.empty() && std::isspace(static_cast<unsigned char>(t.back()))) t.pop_back();
+    std::size_t k = 0;
+    while (k < t.size() && std::isspace(static_cast<unsigned char>(t[k]))) ++k;
+    t.erase(0, k);
+    if (!t.empty() && t.front() == '=') t.erase(0, 1);              // la regle des cases : =Valider se lit Valider
+    if (t.empty()) return {};
+    return t + "(" + a.value + ");";
+}
+
 bool operationOpensView(Operation o) noexcept {
     return o == Operation::Navigate || o == Operation::Popup || o == Operation::ChangePopup;
 }
@@ -1918,6 +1931,7 @@ bool operationHasValue(Operation o) noexcept {
     return o == Operation::Increment || o == Operation::Decrement || o == Operation::Assign
         || o == Operation::Maths                                        // 1.11.6 : la formule
         || o == Operation::RunScript || o == Operation::Log
+        || o == Operation::Call                                         // 1.12.19 : ses arguments
         || o == Operation::ShelveAlarm || o == Operation::Export      // lot 11 : "30; raison", le fichier
         || o == Operation::GifReplay;                                  // lot 16 : N fois
 }
@@ -1989,6 +2003,9 @@ std::string describeAction(const Action& a) {
         }
         case Operation::CallScript:
             s += " " + a.target;
+            break;
+        case Operation::Call:                             // 1.12.19
+            s += " " + a.target + "(" + a.value + ")";
             break;
         case Operation::Log:
             s += " \xC2\xAB " + a.value + " \xC2\xBB";

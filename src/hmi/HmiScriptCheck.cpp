@@ -354,6 +354,7 @@ constexpr Arity kHmi[] = {
     {"IHM_LANGUE", 1, 1},          {"IHM_THEME", 0, 1},          {"IHM_GIF_JOUER", 1, 2},       {"IHM_GIF_PAUSE", 1, 1},
     {"IHM_GIF_ARRETER", 1, 1},     {"IHM_GIF_REJOUER", 1, 2},    {"IHM_EQUIPEMENT_OK", 1, 1},   {"IHM_EQUIPEMENT_PING", 1, 1},
     {"IHM_ESCLAVE_SIMULE", 1, 1},  {"IHM_LOG", 2, 2},
+    {"IHM_APRES", 2, 2},           {"IHM_CHAQUE", 2, 2},         {"IHM_ANNULER", 1, 1},    // 1.12.19
 };
 
 std::string plural(int n, const char* one) { return std::to_string(n) + " " + one + (n > 1 ? "s" : ""); }
@@ -1071,6 +1072,14 @@ private:
                           "(l'aide \xC3\xA0 la saisie les propose apr\xC3\xA8s API.)");
             return {};
         }
+        // 1.12.19 : une fonction passee en rappel (f := Valider ; LIST_FILTER(L, Est_Valide)) - son nom seul est une valeur.
+        if (segs.empty()) {
+            bool fn = sc_.project && !sc_.project->functionsNamed(root.text).empty();
+            if (!fn && sc_.view)
+                for (const auto& f : sc_.view->functions) fn = fn || up(f.name) == R;
+            for (const auto& f : internal_) fn = fn || up(f.name) == R;
+            if (fn) return {};
+        }
         // L'automate : ses membres et ses indices constants.
         if (sc_.plcKnown && sc_.plcKnown(root.text)) return plcPath(i, j, segs);
         if (!sc_.plcKnown) return {};           // l'automate n'est pas connu : rien a dire
@@ -1320,6 +1329,9 @@ private:
         } else if (local(name.text) || (sc_.project && sc_.project->variable(name.text)) || (sc_.plcKnown && sc_.plcKnown(name.text))
                    || !sc_.plcKnown) {
             found = true;      // une instance de bloc (TON, un bloc de l'automate) ; l'automate inconnu : rien a dire
+        } else if (sc_.view && (sc_.view->param(name.text)
+                                || (sc_.project && popupOwner(*sc_.project, *sc_.view) && popupOwner(*sc_.project, *sc_.view)->param(name.text)))) {
+            found = true;      // 1.12.19 : un parametre rappel de la popup, du symbole (Sur_Oui();)
         }
         if (!found) {
             std::vector<std::string> names;
@@ -2171,16 +2183,19 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
         const auto actions = [&](const Object* o, const std::vector<Action>& list) {
             for (std::size_t k = 0; k < list.size(); ++k) {
                 const auto& a = list[k];
-                if (a.operation != Operation::RunScript) continue;
+                if (a.operation != Operation::RunScript && a.operation != Operation::Call) continue;
+                // 1.12.19 : Appeler - l'appel qu'elle fait (Valider(1);), une fonction ou un rappel recu.
+                const bool call = a.operation == Operation::Call;
+                if (call && callCode(a).empty()) continue;                 // "rien a appeler" : Generer le dit
                 // 1.12.13 : un geste sur un tableau - les parametres qu'il passe (Ligne, Element, Titre...) sont connus, sans
                 // type (ils dependent de la ligne) ; Element^ se lit Element, comme le moteur.
                 Scope scope = scopeFor(&v, nullptr);
-                std::string code = a.value;
+                std::string code = call ? callCode(a) : a.value;
                 if (o && o->kind == hmi::Kind::Table && triggerIsTable(a.trigger)) {
                     std::set<std::string> names;
                     for (const auto& prm : table::receivedParams(p, *o, a.trigger)) names.insert(up(prm.name));
                     scope.plcKnown = [names, prev = scope.plcKnown](std::string_view root) { return names.count(up(root)) != 0 || !prev || prev(root); };
-                    code = table::withoutCaret(a.value);
+                    code = table::withoutCaret(code);
                 }
                 for (const auto& f : check(scope, code)) {
                     Issue i;
@@ -2189,7 +2204,8 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
                     i.object = o ? o->id : kNoId;
                     i.property = actionWhere(k, a);
                     Finding g = f;
-                    g.message = "ligne " + std::to_string(f.line) + ", colonne " + std::to_string(f.column) + " : " + f.message;
+                    g.message = call ? f.message
+                                     : "ligne " + std::to_string(f.line) + ", colonne " + std::to_string(f.column) + " : " + f.message;
                     // 1.11.1 (REP) : l'ancien $Vanne$ (pas une variable) du script d'une action - la phrase
                     // de Dupliquer, a laquelle "Remplacer..." de Compiler s'accroche (le script d'une action
                     // se duplique avec son objet ; ceux du projet et des vues, non : pas de phrase).

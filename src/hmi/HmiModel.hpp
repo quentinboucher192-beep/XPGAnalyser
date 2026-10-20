@@ -394,6 +394,10 @@ enum class Operation : std::uint8_t {
     // ne partent pas (un Fermer la popup apres elle attend une saisie juste). Un clic sur un
     // bouton qui la porte ne fait pas perdre la saisie au champ.
     SubmitInputs,
+    // 1.12.19 : Appeler - une fonction (du projet, de la vue) ou un rappel recu (un parametre de popup Sur_Oui,
+    // une variable rappel) : la cible le nomme, la valeur porte ses arguments ("Niveau, 2"). Comme un script
+    // d'une ligne : Cible(arguments);
+    Call,
 };
 inline constexpr Trigger kTriggers[] = {
     Trigger::Click, Trigger::DoubleClick, Trigger::RisingEdge, Trigger::FallingEdge, Trigger::LongPress,
@@ -426,6 +430,7 @@ inline constexpr Operation kOperations[] = {
     Operation::ApplyCopy,                                                                // 1.9
     Operation::Maths, Operation::Keyboard,                                               // 1.11.6
     Operation::SubmitInputs,                                                             // 1.11.23
+    Operation::Call,                                                                     // 1.12.19
 };
 // Lot 16 : les operations qui visent un GIF anime de la vue.
 [[nodiscard]] constexpr bool operationTargetsGif(Operation o) noexcept {
@@ -448,6 +453,9 @@ inline constexpr Operation kOperations[] = {
 // Lot 8 : ce qui passe des parametres a la vue ouverte (Naviguer, Ouvrir une
 // popup, Changer de popup) : `value` porte "Moteur := Pompes[3]; Titre := 'P3'".
 [[nodiscard]] bool operationTakesArguments(Operation) noexcept;
+// 1.12.19 : le code d'une action Appeler - "Valider(Niveau, 2);" (la cible et ses arguments) ; vide : pas un appel.
+struct Action;
+[[nodiscard]] std::string callCode(const Action&);
 // Lot 8 : ou se pose une popup. "centre" (defaut), "objet" (sous l'objet
 // clique), "haut-gauche", "haut-droite", "bas-gauche", "bas-droite",
 // "derniere" (la ou elle etait), ou "x,y" (dans la vue du dessous).

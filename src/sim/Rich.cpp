@@ -39,14 +39,69 @@ std::string TypeDesc::text() const {
                 s += (i ? ", " : "") + (members[i].second ? members[i].second->text() : std::string("?"));
             return s + ")";
         }
+        case Kind::Callback: {
+            if (!name.empty()) return name;                       // un type rappel nomme (T_Filtre)
+            std::string s = "CALLBACK (";
+            for (std::size_t i = 0; i < members.size(); ++i) {
+                const std::string t = members[i].second ? members[i].second->text() : std::string("?");
+                s += (i ? "; " : "") + (members[i].first.empty() ? t : members[i].first + " : " + t);
+            }
+            s += ")";
+            if (element) s += " : " + element->text();
+            return s;
+        }
     }
     return "?";
+}
+
+TypeRef callbackType(std::vector<std::pair<std::string, TypeRef>> params, TypeRef result) {
+    auto d = std::make_shared<TypeDesc>();
+    d->kind = TypeDesc::Kind::Callback;
+    d->members = std::move(params);
+    d->element = std::move(result);
+    return d;
+}
+
+namespace {
+bool numericScalar(const TypeDesc& t) noexcept {
+    return t.kind == TypeDesc::Kind::Scalar && (t.scalar == Type::Real || isInteger(t.scalar));
+}
+bool fitsParam(const TypeRef& a, const TypeRef& b) {
+    if (!a || !b) return true;                                   // inconnu d'un cote : on ne refuse pas
+    if (numericScalar(*a) && numericScalar(*b)) return true;
+    if (a->kind == TypeDesc::Kind::Struct && b->kind == TypeDesc::Kind::Scalar) return true;   // une enumeration (un DINT)
+    if (a->kind == TypeDesc::Kind::Scalar && b->kind == TypeDesc::Kind::Struct) return true;
+    return sameType(*a, *b);
+}
+} // namespace
+
+bool callbackFits(const TypeDesc& want, const TypeDesc& got, std::string* why) {
+    const auto signature = [](const TypeDesc& t) {
+        TypeDesc copy = t;
+        copy.name.clear();
+        return copy.text();
+    };
+    const auto refuse = [&](const std::string& what) {
+        if (why) *why = what + " : " + signature(want) + " attendu, " + signature(got) + " donn\xC3\xA9";
+        return false;
+    };
+    if (want.kind != TypeDesc::Kind::Callback || got.kind != TypeDesc::Kind::Callback) return refuse("pas un rappel");
+    if (want.members.size() != got.members.size())
+        return refuse(std::to_string(got.members.size()) + " param\xC3\xA8tre" + (got.members.size() > 1 ? "s" : "") + " au lieu de "
+                      + std::to_string(want.members.size()));
+    for (std::size_t i = 0; i < want.members.size(); ++i)
+        if (!fitsParam(want.members[i].second, got.members[i].second)) return refuse("le param\xC3\xA8tre " + std::to_string(i + 1) + " n'a pas le bon type");
+    if (static_cast<bool>(want.element) != static_cast<bool>(got.element))
+        return refuse(want.element ? "elle ne rend rien" : "elle rend une valeur que personne n'attend");
+    if (want.element && !fitsParam(want.element, got.element)) return refuse("le retour n'a pas le bon type");
+    return true;
 }
 
 bool TypeDesc::dynamic() const noexcept {
     switch (kind) {
         case Kind::Map:
-        case Kind::List: return true;
+        case Kind::List:
+        case Kind::Callback: return true;      // 1.12.19 : un rappel vit dans la memoire de l'IHM
         case Kind::Array: return element && element->dynamic();
         case Kind::Struct:
         case Kind::Tuple:
@@ -157,6 +212,7 @@ bool sameType(const TypeDesc& a, const TypeDesc& b) noexcept {
             for (std::size_t i = 0; i < a.members.size(); ++i)
                 if (!a.members[i].second || !b.members[i].second || !sameType(*a.members[i].second, *b.members[i].second)) return false;
             return true;
+        case TypeDesc::Kind::Callback: return callbackFits(a, b);      // 1.12.19 : la meme signature
     }
     return false;
 }
@@ -198,6 +254,9 @@ ObjRef deepCopy(const Obj& from) {
     o->textKey = from.textKey;
     o->intKey = from.intKey;
     o->atEnd = from.atEnd;
+    o->callee = from.callee;              // 1.12.19 : un rappel vise la meme fonction (une LAMBDA : le meme code)
+    o->lambda = from.lambda;
+    o->lambdaWhere = from.lambdaWhere;
     return o;
 }
 
@@ -249,6 +308,9 @@ bool assignObj(Obj& into, const Obj& from, std::string* why) {
             into.textKey = from.textKey;
             into.intKey = from.intKey;
             into.atEnd = from.atEnd;
+            into.callee = from.callee;
+            into.lambda = from.lambda;
+            into.lambdaWhere = from.lambdaWhere;
             return true;
     }
 }
@@ -280,6 +342,10 @@ bool deepEquals(const Obj& a, const Obj& b) {
             if (!a.bound) return true;
             if (!a.targetName.empty() || !b.targetName.empty()) return upperOf(a.targetName) == upperOf(b.targetName);
             return !a.target.owner_before(b.target) && !b.target.owner_before(a.target) && a.target.lock() == b.target.lock();
+        case TypeDesc::Kind::Callback:                       // 1.12.19 : la meme fonction (une LAMBDA : la meme)
+            if (a.bound != b.bound) return false;
+            if (!a.bound) return true;
+            return a.lambda ? a.lambda == b.lambda : !b.lambda && upperOf(a.callee) == upperOf(b.callee);
         default: return false;
     }
 }
@@ -334,6 +400,10 @@ std::string display(const Obj& o) {
             for (std::size_t i = 0; i < o.items.size(); ++i) s += (i ? ", " : "") + (o.items[i] ? display(*o.items[i]) : std::string("?"));
             return s + ")";
         }
+        case TypeDesc::Kind::Callback:                       // 1.12.19 : la fonction visee, ou la LAMBDA et son lieu
+            if (!o.bound) return "NULL";
+            if (o.lambda) return "\xCE\xBB " + (o.lambdaWhere.empty() ? std::string("LAMBDA") : o.lambdaWhere);
+            return "\xE2\x86\x92 " + o.callee;
     }
     return "?";
 }
@@ -370,6 +440,11 @@ bool literalText(const Obj& o, std::string& out) {
     if (!o.type) return false;
     switch (o.type->kind) {
         case TypeDesc::Kind::Scalar: out = scalarLiteral(o.value); return true;
+        case TypeDesc::Kind::Callback:                       // 1.12.19 : un rappel s'ecrit par le nom de sa fonction
+            if (!o.bound) { out = "NULL"; return true; }
+            if (o.lambda || o.callee.empty()) return false;   // une LAMBDA ne se garde pas (la maquette, decision 9)
+            out = o.callee;
+            return true;
         case TypeDesc::Kind::Array:
         case TypeDesc::Kind::List:
         case TypeDesc::Kind::Tuple: {

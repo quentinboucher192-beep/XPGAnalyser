@@ -234,6 +234,12 @@ std::vector<Function> makeFunctions() {
          "{Variable} ou {Variable:0.0} y met sa valeur", "IHM_LOG(|", true},
         {"IHM_APPELER", {"script : STRING"}, "BOOL", "ex\xC3\xA9" "cute tout de suite un script g\xC3\xA9n\xC3\xA9ral",
          "IHM_APPELER('|')", true},
+        // 1.12.19 : un rappel plus tard
+        {"IHM_APRES", {"d\xC3\xA9lai : TIME", "f : CALLBACK ()"}, "DINT", "appelle f une fois, apr\xC3\xA8s le d\xC3\xA9lai ; rend son num\xC3\xA9ro",
+         "IHM_APRES(T#|s, )", true},
+        {"IHM_CHAQUE", {"p\xC3\xA9riode : TIME", "f : CALLBACK ()"}, "DINT", "appelle f \xC3\xA0 chaque p\xC3\xA9riode, jusqu'\xC3\xA0 IHM_ANNULER",
+         "IHM_CHAQUE(T#|ms, )", true},
+        {"IHM_ANNULER", {"num\xC3\xA9ro : DINT"}, "BOOL", "arr\xC3\xAAte un minuteur (IHM_APRES, IHM_CHAQUE)", "IHM_ANNULER(|)", true},
         {"IHM_SON", {"son : STRING"}, "BOOL", "joue un son des ressources (WAV, MP3, OGG)", "IHM_SON('|')", true},
         {"IHM_VUE", {}, "STRING", "le nom de la vue affich\xC3\xA9" "e", "IHM_VUE()|", false},
         {"IHM_TEMPS", {}, "TIME", "le temps \xC3\xA9" "coul\xC3\xA9 depuis le lancement de l'IHM", "IHM_TEMPS()|", false},
@@ -315,7 +321,9 @@ bool isKeyword(std::string_view w) {
         "FUNCTION", "END_FUNCTION", "MAP", "ARRAY", "REF_TO", "REFERENCE", "POINTER", "NULL", "VAR_INPUT",
         "EACH", "IN", "VAR_IN_OUT", "VAR_OUTPUT", "MAP_ITERATOR",
         // 1.12.1
-        "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ET"};
+        "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ET",
+        // 1.12.19 : les rappels et les generiques
+        "CALLBACK", "LAMBDA", "END_LAMBDA", "TEMPLATE"};
     const auto u = upper(w);
     for (const char* k : kWords) if (u == k) return true;
     return false;

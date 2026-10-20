@@ -35,11 +35,6 @@ std::string trimmed(std::string s) {
     return s.substr(a, b - a);
 }
 
-std::string upperOf(std::string s) {
-    for (auto& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    return s;
-}
-
 // Les morceaux d'un chemin : Four1.Vannes[1].Position -> Four1, Vannes, [1], Position.
 std::vector<std::string> pieces(const std::string& path) {
     std::vector<std::string> out;

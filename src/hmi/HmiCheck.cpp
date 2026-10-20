@@ -119,8 +119,18 @@ std::string actionLabel(std::size_t index, const Action& a) {
 // 1.12.4 : un litteral d'un type objet ([1, 2], ['a' := 1], (1, 'x')) donne a un parametre objet (une
 // valeur par defaut, un argument) : il ne se compile pas en expression (une MAP a des :=) - il se
 // verifie dans son type (typeform::valueFits).
+// 1.12.19 : un type rappel (CALLBACK (x : REAL) : BOOL).
+bool callbackType(std::string_view type) {
+    std::string u(type);
+    for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return u.find("CALLBACK") != std::string::npos;
+}
+
 bool richLiteral(std::string_view type, std::string_view text) {
     if (type.empty() || !types::isRich(type)) return false;
+    // 1.12.19 : un parametre rappel - une fonction, une LAMBDA, une variable rappel, NULL : params::callbackArgument le
+    // verifie (sa forme), pas une expression.
+    if (callbackType(type)) return true;
     std::string t(markers::strip(text));
     const auto a = t.find_first_not_of(" \t\r\n");
     return a != std::string::npos && (t[a] == '[' || t[a] == '(');
@@ -326,6 +336,8 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
         }
         if ((a.operation == Operation::Assign || a.operation == Operation::Log || a.operation == Operation::RunScript) && a.value.empty())
             add(out, S::Error, "Action", v.id, obj, where, "valeur vide");
+        if (a.operation == Operation::Call && callCode(a).empty())          // 1.12.19 : Appeler
+            add(out, S::Error, "Action", v.id, obj, where, "rien \xC3\xA0 appeler : une fonction, ou un rappel re\xC3\xA7u (Sur_Oui)");
         // Les noms lus par les expressions de l'action.
         std::vector<std::string> roots;
         for (const auto* e : {&a.watch, &a.guard}) if (!e->empty()) for (auto& r : scanRoots(*e)) roots.push_back(r);
@@ -335,6 +347,8 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
         if (a.operation == Operation::Log) for (auto& r : TextTemplate::compile(a.value).roots()) roots.push_back(r);
         if (a.operation == Operation::RunScript)
             for (const auto& u : scriptNames(received.empty() ? a.value : table::withoutCaret(a.value))) roots.push_back(u.name);
+        if (a.operation == Operation::Call)                                  // 1.12.19 : les noms des arguments
+            for (const auto& u : scriptNames(callCode(a))) roots.push_back(u.name);
         std::set<std::string> said;
         const std::string fieldsText = a.watch + "\n" + a.guard + "\n" + a.value;
         for (const auto& r : roots)
@@ -1383,6 +1397,8 @@ void checkLot8(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                         else if (!target->param(name))
                             add(out, S::Error, "Action", v.id, obj, where,
                                 "param\xC3\xA8tre inconnu de " + target->name + " : " + name + " (retir\xC3\xA9 ou renomm\xC3\xA9 ? corrigez l'appel)");
+                        // 1.12.19 (R3) : un parametre rappel - params::callbackArgument (checkArguments) le verifie.
+                        if (const ViewParam* cb = target->param(name); cb && callbackType(cb->type)) continue;
                         // Ce que l'appelant relie doit exister (chez lui : ses propres parametres comptent).
                         for (const auto& r : scanRoots(markers::strip(value)))   // 1.11.7 : $V[0]$ -> V
                             if (!known(p, plc, r, &v))
@@ -1922,6 +1938,7 @@ void checkPublicVars(const Project& p, std::vector<Issue>& out) {
                     expr(a.value, false, rep);
                 if (a.operation == Operation::Log) tpl(a.value, rep);
                 if (a.operation == Operation::RunScript) code(a.value, [&](std::string m, int line) { rep((line ? "ligne " + std::to_string(line) + " : " : std::string{}) + m); });
+                if (a.operation == Operation::Call && !callCode(a).empty()) code(callCode(a), [&](std::string m, int) { rep(std::move(m)); });   // 1.12.19
             }
         }
         for (std::size_t i = 0; i < v.actions.size(); ++i) {
@@ -1934,6 +1951,7 @@ void checkPublicVars(const Project& p, std::vector<Issue>& out) {
             if (a.operation == Operation::Assign) expr(a.value, false, rep);
             if (a.operation == Operation::Log) tpl(a.value, rep);
             if (a.operation == Operation::RunScript) code(a.value, [&](std::string m, int line) { rep((line ? "ligne " + std::to_string(line) + " : " : std::string{}) + m); });
+            if (a.operation == Operation::Call && !callCode(a).empty()) code(callCode(a), [&](std::string m, int) { rep(std::move(m)); });   // 1.12.19
         }
         for (const auto& sc : v.scripts)
             if (sc.lang == ScriptLang::ST)
@@ -4800,10 +4818,10 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
                     expr(a.value, "valeur");
                 if (a.operation == Operation::Log)
                     for (const auto& err : TextTemplate::compile(a.value).errors()) add(out, S::Error, "Action", v.id, obj, where, err);
-                if (a.operation == Operation::RunScript)
-                    for (const auto& d : checkScript(ScriptLang::ST, a.value, where, knownType))
+                if (a.operation == Operation::RunScript || (a.operation == Operation::Call && !callCode(a).empty()))   // 1.12.19 : Appeler
+                    for (const auto& d : checkScript(ScriptLang::ST, a.operation == Operation::Call ? callCode(a) : a.value, where, knownType))
                         add(out, severityOf(d.severity), "Action", v.id, obj, where,
-                            (d.line ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + d.message);
+                            (d.line && a.operation == Operation::RunScript ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + d.message);
                 // Lot 8 : les parametres passes a la vue ouverte (un chemin, ou un calcul).
                 if (operationTakesArguments(a.operation)) {
                     const View* opened = p.viewByName(trimmedCopy(a.target));

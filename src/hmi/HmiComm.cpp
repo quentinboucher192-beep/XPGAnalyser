@@ -1424,7 +1424,8 @@ bool keyword(std::string_view w) {
     static const char* const kWords[] = {"TRUE", "FALSE", "AND", "OR", "XOR", "NOT", "MOD", "IF", "THEN", "ELSE", "ELSIF", "END_IF",
                                          "VAR", "END_VAR", "FOR", "TO", "BY", "DO", "END_FOR", "WHILE", "END_WHILE", "REPEAT",
                                          "UNTIL", "END_REPEAT", "CASE", "OF", "END_CASE", "RETURN", "EXIT",
-                                         "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ET"};   // 1.12.1
+                                         "CONTINUE", "TRY", "CATCH", "END_TRY", "ENTRE", "ET",   // 1.12.1
+                                         "CALLBACK", "LAMBDA", "END_LAMBDA", "TEMPLATE", "NULL"};   // 1.12.19
     const std::string u = upper(w);
     for (const char* k : kWords)
         if (u == k) return true;

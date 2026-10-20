@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <functional>
 #include <map>
+#include <set>
 #include <optional>
 #include <unordered_map>
 
@@ -414,6 +415,9 @@ struct Expr {
         // (a, b) (op "TUPLE") ; 1.12.14 : (Nom := 'A', Niveau := 2.5) (op "STRUCT" : les membres
         // dans arguments, nom et valeur ; leurs valeurs aussi dans more, pour qui parcourt l'arbre).
         Collection,
+        // 1.12.19 (dialecte IHM) : LAMBDA (x : REAL) : BOOL => x > 5 ; LAMBDA (...) ... END_LAMBDA (fn : ses
+        // parametres, son retour, son corps - la forme courte est un RETURN expr).
+        Lambda,
     };
     Kind          kind{Kind::Literal};
     Value         literal;
@@ -434,6 +438,10 @@ struct Expr {
     // 1.11.20 : un litteral type (INT#5 : "INT") ; vide : un nombre ecrit seul (5, 16#FF), dont
     // le type se choisit a l'appel d'une surcharge.
     std::string   literalType;
+    // 1.12.19 : une LAMBDA (Kind::Lambda) ; les types donnes a un appel generique, Limiter<INT>(...) (sur le
+    // nom appele : la Reference en tete de l'appel).
+    std::shared_ptr<Function> fn;
+    std::vector<std::string>  typeArgs;
 };
 
 struct Stmt;
@@ -491,6 +499,9 @@ public:
     TypeRef              result;      // nul : pas de valeur rendue
     std::vector<StmtPtr> body;
     std::uint32_t        line{0}, endLine{0};
+    // 1.12.19 : TEMPLATE <T : ANY_NUM, U> FUNCTION ... - ses types generiques et leur contrainte ("" : aucune) ;
+    // T est deduit des arguments a l'appel (ou donne : Limiter<INT>(...)).
+    std::vector<std::pair<std::string, std::string>> typeParams;
 };
 
 class Program {
@@ -528,8 +539,8 @@ public:
         while (!at(Tok::End)) {
             // 1.10 (dialecte IHM) : les fonctions internes et les VAR du script,
             // au premier niveau seulement.
-            if (dialect_ && atWord("FUNCTION")) {
-                auto f = functionDeclaration();
+            if (dialect_ && (atWord("FUNCTION") || atWord("TEMPLATE"))) {
+                auto f = templatedFunction();
                 if (!f) return core::Err<core::Error>(f.error());
                 // 1.11.20 : deux fonctions internes du meme nom (des surcharges) si leurs
                 // parametres different (nombre, modes, types ecrits) ; le controle (hmi::overload)
@@ -580,8 +591,8 @@ public:
     // 1.10 : une FUNCTION seule (une fonction IHM du projet, un operateur).
     core::Result<std::shared_ptr<Function>> soleFunction() {
         while (accept(";")) {}
-        if (!atWord("FUNCTION")) return error("expected FUNCTION");
-        auto f = functionDeclaration();
+        if (!atWord("FUNCTION") && !atWord("TEMPLATE")) return error("expected FUNCTION");
+        auto f = templatedFunction();
         if (!f) return f;
         while (accept(";")) {}
         if (!at(Tok::End)) return error("expected the end of the text after END_FUNCTION");
@@ -1217,6 +1228,31 @@ private:
             advance();
             return node;
         }
+        // 1.12.19 : LAMBDA (x : REAL) : BOOL => x > 5, ou LAMBDA (...) ... END_LAMBDA.
+        if (dialect_ && t.kind == Tok::Identifier && upperOf(t.text) == "LAMBDA") return lambdaExpr();
+        // 1.12.19 : l'appel d'une fonction generique, ses types donnes - Limiter<INT>(x, 0, 100) ;
+        // seulement NOM < TYPE [, TYPE] > ( : a < b reste une comparaison.
+        if (dialect_ && t.kind == Tok::Identifier && !lib::templateInfo(t.text) && peek(1).kind == Tok::Punct && peek(1).text == "<") {
+            std::size_t k = 2;
+            std::vector<std::string> types;
+            bool closed = false;
+            while (peek(k).kind == Tok::Identifier) {
+                types.push_back(upperOf(peek(k).text));
+                ++k;
+                if (peek(k).kind == Tok::Punct && peek(k).text == ",") { ++k; continue; }
+                if (peek(k).kind == Tok::Punct && peek(k).text == ">") { ++k; closed = true; }
+                break;
+            }
+            if (closed && !types.empty() && peek(k).kind == Tok::Punct && peek(k).text == "(") {
+                auto node = std::make_shared<Expr>();
+                node->kind = Expr::Kind::Reference;
+                node->name = t.raw;
+                node->line = t.line;
+                node->typeArgs = std::move(types);
+                for (std::size_t i = 0; i < k; ++i) advance();
+                return node;
+            }
+        }
         if (dialect_ && t.kind == Tok::Identifier && upperOf(t.text) == "NULL") {
             auto node = std::make_shared<Expr>();
             node->kind = Expr::Kind::Null;
@@ -1363,7 +1399,7 @@ private:
     // La fin d'un bloc (RETURN seul en fin de branche : "RETURN END_IF").
     [[nodiscard]] bool atBlockEnd() const {
         for (std::string_view w : {"END_IF", "ELSIF", "ELSE", "END_CASE", "END_FOR", "END_WHILE", "UNTIL", "END_REPEAT", "END_FUNCTION",
-                                   "CATCH", "END_TRY"})
+                                   "CATCH", "END_TRY", "END_LAMBDA"})
             if (atWord(w)) return true;
         return false;
     }
@@ -1417,6 +1453,34 @@ private:
     // Un type : REAL, T_FOUR, STRING[20], ARRAY[0..3, 0..9] OF REAL,
     // MAP[STRING] OF T, REF_TO T, REFERENCE TO T, POINTER TO T, MAP_ITERATOR.
     core::Result<TypeRef> typeSpec() {
+        // 1.12.19 (dialecte IHM) : CALLBACK (x : REAL; y : INT) : BOOL - une fonction donnee comme une valeur ;
+        // les parametres nommes ou non ((REAL, INT)), le retour facultatif (CALLBACK () : rien a rendre).
+        if (dialect_ && atWord("CALLBACK")) {
+            advance();
+            std::vector<std::pair<std::string, TypeRef>> params;
+            if (accept("(")) {
+                while (!atPunct(")")) {
+                    std::string pname;
+                    if (peek().kind == Tok::Identifier && peek(1).kind == Tok::Punct && peek(1).text == ":") {
+                        pname = advance().raw;
+                        advance();
+                    }
+                    auto pt = typeSpec();
+                    if (!pt) return pt;
+                    params.emplace_back(pname, *pt);
+                    if (accept(";") || accept(",")) continue;
+                    if (!atPunct(")")) return errorHere("CALLBACK (...) : ';' ou ')' attendu apr\xC3\xA8s un param\xC3\xA8tre \xE2\x80\x94 CALLBACK (x : REAL) : BOOL");
+                }
+                advance();
+            }
+            TypeRef result;
+            if (accept(":")) {
+                auto rt = typeSpec();
+                if (!rt) return rt;
+                result = *rt;
+            }
+            return callbackType(std::move(params), result);
+        }
         if (acceptWord("ARRAY")) {
             if (!accept("[")) return error("expected '[' after ARRAY");
             auto t = std::make_shared<TypeDesc>();
@@ -1620,6 +1684,99 @@ private:
         advance();                                      // END_VAR
         accept(";");
         return out;
+    }
+
+    // 1.12.19 : [TEMPLATE <T [: ANY_NUM], U>] FUNCTION ... - les types generiques d'une fonction.
+    core::Result<std::shared_ptr<Function>> templatedFunction() {
+        std::vector<std::pair<std::string, std::string>> params;
+        if (atWord("TEMPLATE")) {
+            advance();
+            if (!accept("<")) return errorHere("TEMPLATE : '<' attendu \xE2\x80\x94 TEMPLATE <T : ANY_NUM> FUNCTION ...");
+            for (;;) {
+                if (peek().kind != Tok::Identifier) return errorHere("TEMPLATE : le nom d'un type attendu (T)");
+                std::string name = advance().raw;
+                std::string constraint;
+                if (accept(":")) {
+                    if (peek().kind != Tok::Identifier) return errorHere("TEMPLATE <" + name + " : ...> : un g\xC3\xA9n\xC3\xA9rique ANY_* attendu (ANY_NUM, ANY_INT...)");
+                    constraint = upperOf(advance().text);
+                    if (constraint.rfind("ANY", 0) != 0)
+                        return errorHere("TEMPLATE <" + name + " : " + constraint + "> : la contrainte est un g\xC3\xA9n\xC3\xA9rique ANY_* (ANY_NUM, ANY_INT, ANY_REAL, ANY_STRING...)");
+                }
+                for (const auto& p : params)
+                    if (upperOf(p.first) == upperOf(name)) return errorHere("TEMPLATE : " + name + " est d\xC3\xA9j\xC3\xA0 un type de la fonction");
+                params.emplace_back(std::move(name), std::move(constraint));
+                if (accept(",")) continue;
+                break;
+            }
+            if (!accept(">")) return errorHere("TEMPLATE <...> : '>' attendu");
+            if (!atWord("FUNCTION")) return errorHere("TEMPLATE <...> : FUNCTION attendue ensuite");
+        }
+        auto f = functionDeclaration();
+        if (!f) return f;
+        (*f)->typeParams = std::move(params);
+        return f;
+    }
+
+    // 1.12.19 : LAMBDA (x : REAL; y : INT) : BOOL => expression
+    //           LAMBDA (x : REAL) : BOOL VAR ... END_VAR instructions (RETURN valeur;) END_LAMBDA
+    core::Result<ExprPtr> lambdaExpr() {
+        auto f = std::make_shared<Function>();
+        f->line = advance().line;                       // LAMBDA
+        f->name = "LAMBDA";
+        if (!accept("(")) return errorHere("LAMBDA : '(' attendu \xE2\x80\x94 LAMBDA (x : REAL) : BOOL => x > 5");
+        while (!atPunct(")")) {
+            auto group = declarationGroup(VarDecl::Mode::Input, false);
+            if (!group) return core::Err<core::Error>(group.error());
+            for (auto& d : *group) {
+                for (const auto& p : f->params)
+                    if (upperOf(p.name) == upperOf(d.name)) return errorHere("LAMBDA : le param\xC3\xA8tre " + d.name + " est d\xC3\xA9" "clar\xC3\xA9 deux fois");
+                f->params.push_back(std::move(d));
+            }
+            if (accept(";") || accept(",")) continue;
+            if (!atPunct(")")) return errorHere("LAMBDA : ';' ou ')' attendu apr\xC3\xA8s un param\xC3\xA8tre");
+        }
+        advance();                                      // )
+        if (accept(":")) {
+            auto t = typeSpec();
+            if (!t) return core::Err<core::Error>(t.error());
+            f->result = *t;
+        }
+        if (accept("=>")) {
+            auto e = expression();
+            if (!e) return e;
+            auto ret = std::make_shared<Stmt>();
+            ret->line = f->line;
+            if (f->result) {
+                ret->kind = Stmt::Kind::Return;
+                ret->value = *e;
+            } else {
+                // Sans type de retour : l'expression est une instruction (un appel) - LAMBDA () => Arreter().
+                if ((*e)->kind != Expr::Kind::Call) return errorHere("LAMBDA sans type de retour : apr\xC3\xA8s =>, un appel (LAMBDA () => Arreter())");
+                ret->kind = Stmt::Kind::Call;
+                ret->value = *e;
+            }
+            f->body.push_back(ret);
+            f->endLine = f->line;
+        } else {
+            while (atVarBlock()) {
+                auto decls = varBlock(/*inFunction*/ true);
+                if (!decls) return core::Err<core::Error>(decls.error());
+                for (auto& d : *decls) {
+                    if (d.mode != VarDecl::Mode::Local && d.mode != VarDecl::Mode::Temp) return errorHere("LAMBDA : ses param\xC3\xA8tres s'\xC3\xA9" "crivent entre ses parenth\xC3\xA8ses");
+                    f->locals.push_back(std::move(d));
+                }
+            }
+            auto body = block({"END_LAMBDA"});
+            if (!body) return core::Err<core::Error>(body.error());
+            f->body = *body;
+            if (!atWord("END_LAMBDA")) return errorHere("LAMBDA : END_LAMBDA attendu (ou => et une expression)");
+            f->endLine = advance().line;
+        }
+        auto node = std::make_shared<Expr>();
+        node->kind = Expr::Kind::Lambda;
+        node->line = f->line;
+        node->fn = f;
+        return ExprPtr(node);
     }
 
     // FUNCTION Nom [(a : T; VAR_IN_OUT b : U, c : V)] [: R] {VAR ...} instructions END_FUNCTION
@@ -2207,6 +2364,20 @@ public:
     Runner(Environment& env, const RunLimits& limits, std::string section)
         : env_(env), limits_(limits), section_(std::move(section)) {}
 
+    // 1.12.19 : un texte de type, lu (typeOfText).
+    TypeRef typeOnly(std::string_view type, std::string* why) {
+        dialect_ = true;
+        frames_.clear();
+        frames_.emplace_back();
+        frames_.back().scopes.emplace_back();
+        auto t = typeFromText(type);
+        if (!t) {
+            if (why) *why = t.error().message();
+            return nullptr;
+        }
+        return *t;
+    }
+
     // 1.12.2 : un objet neuf de ce type, a la valeur de ce litteral (makeRichValue).
     ObjRef richValue(std::string_view type, std::string_view initial, std::string* why) {
         dialect_ = true;
@@ -2746,6 +2917,11 @@ private:
                 return {};
             }
             case Stmt::Kind::Call: {
+                if (dialect_) {                      // 1.12.19 : un appel seul rend ce qu'il veut (une liste...) : c'est ignore
+                    auto r = rich(*s.value);
+                    if (!r && !aborted_) fail(s.line, r.error().message());
+                    return aborted_ ? Flow{Flow::Kind::Aborted} : Flow{};
+                }
                 auto v = evaluate(*s.value);
                 if (!v && !aborted_) fail(s.line, v.error().message());
                 return aborted_ ? Flow{Flow::Kind::Aborted} : Flow{};
@@ -2933,6 +3109,21 @@ public:
         bool        setItem{false};       // 1.12.7 : un element d'un SET (S[0], FOR EACH x IN S) : il se lit, ne s'ecrit pas
     };
 
+    // 1.12.19 : un rappel appele depuis l'exterieur (callCallback) : ses valeurs, ce qu'il rend.
+    core::Result<Value> callFromOutside(const Obj& cb, const std::vector<Value>& args) {
+        dialect_ = true;
+        if (frames_.empty()) {
+            frames_.emplace_back();
+            frames_.back().scopes.emplace_back();
+        }
+        std::vector<RV> values;
+        for (const auto& v : args) values.push_back(RV{v, nullptr});
+        auto r = invokeCallback(cb, values, 0, section_);
+        if (!r) return core::Err<core::Error>(r.error());
+        if (r->o) return Value::boolean(true);
+        return r->v;
+    }
+
     // Appeler une fonction du dialecte (une fonction IHM du projet, un operateur)
     // depuis l'exterieur : les arguments sont des valeurs.
     core::Result<RV> invoke(const Function& f, const std::vector<RV>& args, bool isolated) {
@@ -2988,6 +3179,24 @@ private:
             case TypeDesc::Kind::Struct: {
                 if (!t->members.empty()) return t;
                 const std::string key = upperOf(t->name);
+                // 1.12.19 : T d'une fonction generique en cours d'appel (TEMPLATE <T>) : le type deduit.
+                for (auto it = typeBindings_.rbegin(); it != typeBindings_.rend(); ++it)
+                    if (const auto b = it->find(key); b != it->end()) return b->second;
+                // 1.12.19 : un type rappel nomme (T_Filtre) : sa forme ecrite (CALLBACK (x : REAL) : BOOL).
+                if (const std::string alias = env_.typeAlias(t->name); !alias.empty()) {
+                    auto a = typeFromText(alias);
+                    if (!a) return core::Err<core::Error>(a.error());
+                    auto r = resolve(*a, depth + 1);
+                    if (!r) return r;
+                    if ((*r)->kind == TypeDesc::Kind::Callback) {
+                        auto named = std::make_shared<TypeDesc>(**r);
+                        named->name = t->name;
+                        structs_[key] = named;
+                        return TypeRef(named);
+                    }
+                    structs_[key] = *r;
+                    return r;
+                }
                 if (const auto it = structs_.find(key); it != structs_.end()) return it->second;
                 std::vector<std::pair<std::string, std::string>> members;
                 if (!env_.structMembers(t->name, members) || members.empty())
@@ -3038,6 +3247,24 @@ private:
             case TypeDesc::Kind::Ref:
             case TypeDesc::Kind::Pointer:
                 return t;            // la cible n'est pas instanciee : resolue a l'emploi
+            case TypeDesc::Kind::Callback: {        // 1.12.19 : ses parametres et son retour
+                bool same = true;
+                auto d = std::make_shared<TypeDesc>(*t);
+                for (auto& m : d->members) {
+                    if (!m.second) continue;
+                    auto r = resolve(m.second, depth + 1);
+                    if (!r) return r;
+                    same = same && *r == m.second;
+                    m.second = *r;
+                }
+                if (d->element) {
+                    auto r = resolve(d->element, depth + 1);
+                    if (!r) return r;
+                    same = same && *r == d->element;
+                    d->element = *r;
+                }
+                return same ? t : TypeRef(d);
+            }
         }
         return t;
     }
@@ -3310,6 +3537,8 @@ private:
             if (why) *why = "variable sans type";
             return false;
         }
+        // 1.12.19 : un rappel recoit aussi le nom d'une fonction en texte ('Carre') - la maquette (decision 6).
+        if (!v.o && into.type->kind == TypeDesc::Kind::Callback) return storeCallback(into, v, why);
         if (!v.o) {
             if (into.type->kind == TypeDesc::Kind::Scalar) {
                 into.value.assignFrom(v.v);
@@ -3319,6 +3548,8 @@ private:
             return false;
         }
         if (&into == v.o.get()) return true;
+        // 1.12.19 : un rappel recoit une fonction (son nom, une LAMBDA, un autre rappel) ou NULL.
+        if (into.type->kind == TypeDesc::Kind::Callback) return storeCallback(into, v, why);
         // NULL dans une reference ou un pointeur.
         if (v.o->type && v.o->type->kind == TypeDesc::Kind::Pointer && !v.o->type->element
             && (into.type->kind == TypeDesc::Kind::Ref || into.type->kind == TypeDesc::Kind::Pointer)) {
@@ -4040,6 +4271,7 @@ private:
                 return between(e, *x);
             }
             case Expr::Kind::Collection: return collection(e);       // 1.12.2
+            case Expr::Kind::Lambda: return makeLambda(e);           // 1.12.19
             case Expr::Kind::Reference:
             case Expr::Kind::Member:
             case Expr::Kind::Index:
@@ -4067,6 +4299,9 @@ private:
                     auto obj = materialize(*name);
                     if (obj) return RV{{}, *obj};
                 }
+                // 1.12.19 : le nom d'une fonction, sans parentheses : un rappel vers elle (f := Est_Valide).
+                if (e.kind == Expr::Kind::Reference || e.kind == Expr::Kind::Member)
+                    if (auto cb = functionValue(*name)) return RV{{}, cb};
                 return dialectError("'" + *name + "' is not declared");
             }
         }
@@ -4184,6 +4419,12 @@ private:
                 equal = store(*tmp, lit, &why) && deepEquals(*tmp, *typed.o);
                 return RV{Value::boolean(op == "=" ? equal : !equal), nullptr};
             }
+            // 1.12.19 : un rappel compare a NULL (vide ?) ; deux rappels : la meme fonction.
+            if (a.o && b.o && (isCallbackObj(a.o) || isCallbackObj(b.o))) {
+                if (isNullObj(a.o) || isNullObj(b.o)) equal = !(isCallbackObj(a.o) ? a.o->bound : b.o->bound);
+                else equal = isCallbackObj(a.o) && isCallbackObj(b.o) && deepEquals(*a.o, *b.o);
+                return RV{Value::boolean(op == "=" ? equal : !equal), nullptr};
+            }
             if (a.o && b.o) {
                 const bool aNull = isIndirect(a.o) && !a.o->bound;
                 const bool bNull = isIndirect(b.o) && !b.o->bound;
@@ -4201,12 +4442,337 @@ private:
         return a.target.lock() == b.target.lock();
     }
 
+    // ==== 1.12.19 : LES RAPPELS (CALLBACK, LAMBDA) ET LES GENERIQUES (TEMPLATE) ====================
+    // Le code d'une LAMBDA et ce qu'elle a vu a sa creation : les locales copiees (comme [=] en C++ ; les
+    // variables IHM et les parametres de vue se lisent par leur nom, tels quels a l'appel) et les types
+    // generiques de la fonction qui l'a creee.
+    struct LambdaCode {
+        std::shared_ptr<const Function>  fn;
+        std::shared_ptr<Locals>          captured;
+        std::map<std::string, TypeRef>   bindings;
+    };
+    static bool isCallbackObj(const ObjRef& o) { return o && o->type && o->type->kind == TypeDesc::Kind::Callback; }
+    static bool isNullObj(const ObjRef& o) {
+        return o && o->type && o->type->kind == TypeDesc::Kind::Pointer && !o->type->element && !o->bound;
+    }
+
+    // La forme d'un rappel vers cette fonction : ses parametres (types resolus si possible) et son retour.
+    TypeRef callbackTypeOf(const Function& f) {
+        std::vector<std::pair<std::string, TypeRef>> params;
+        const bool generic = !f.typeParams.empty();
+        for (const auto& p : f.params) {
+            TypeRef t;
+            if (p.type && !generic) {
+                ++quiet_;
+                auto r = resolve(p.type);
+                --quiet_;
+                if (r) t = *r;
+            }
+            params.emplace_back(p.name, t);
+        }
+        TypeRef result;
+        if (f.result && !generic) {
+            ++quiet_;
+            auto r = resolve(f.result);
+            --quiet_;
+            if (r) result = *r;
+        }
+        auto d = std::make_shared<TypeDesc>(*callbackType(std::move(params), result));
+        if (generic) d->literal = true;                      // une fonction generique : sa forme se voit a l'appel
+        if (f.result && generic && !d->element) d->element = scalarType(Type::Unknown);
+        return TypeRef(d);
+    }
+
+    // UN NOM DE FONCTION EMPLOYE COMME UNE VALEUR (f := Est_Valide ; LIST_FILTER(L, Est_Valide)) : un rappel
+    // vers elle ; nul : pas une fonction (une fonction interne du script, du projet, d'une instance de symbole).
+    ObjRef functionValue(const std::string& name) {
+        if (name.empty()) return nullptr;
+        TypeRef type;
+        std::string shown = name;
+        if (const auto inner = findFunctions(name); !inner.empty()) {
+            type = callbackTypeOf(*inner.front());
+            shown = inner.front()->name;
+            if (inner.size() > 1) {                          // des surcharges : la forme se voit a l'appel
+                auto d = std::make_shared<TypeDesc>(*type);
+                d->literal = true;
+                type = d;
+            }
+        } else {
+            const int count = env_.overloads(name);
+            if (count < 2)
+                if (auto f = env_.dialectFunction(name)) type = callbackTypeOf(*f);
+            if (!type) {
+                if (count < 1) return nullptr;
+                auto d = std::make_shared<TypeDesc>(*callbackType({}, nullptr));
+                d->literal = true;                           // la forme d'une fonction simple du projet : a l'appel
+                type = d;
+            }
+        }
+        auto obj = makeObj(type);
+        obj->bound = true;
+        obj->callee = shown;
+        return obj;
+    }
+
+    // Ecrire dans un rappel : une fonction (un rappel, son nom en texte), une LAMBDA, NULL.
+    bool storeCallback(Obj& into, const RV& v, std::string* why) {
+        const auto clear = [&] {
+            into.bound = false;
+            into.callee.clear();
+            into.lambda.reset();
+            into.lambdaWhere.clear();
+            return true;
+        };
+        const std::string what = "une fonction, une LAMBDA ou NULL";
+        if (!v.o) {
+            if (v.v.type() == Type::String) {
+                std::string name = v.v.asString();
+                while (!name.empty() && std::isspace(static_cast<unsigned char>(name.back()))) name.pop_back();
+                while (!name.empty() && std::isspace(static_cast<unsigned char>(name.front()))) name.erase(0, 1);
+                if (name.empty()) return clear();
+                auto cb = functionValue(name);
+                if (!cb) {
+                    if (why) *why = "'" + name + "' n'est pas une fonction du projet (" + into.type->text() + " attend " + what + ")";
+                    return false;
+                }
+                return storeCallback(into, RV{{}, cb}, why);
+            }
+            if (why) *why = "une valeur simple ne va pas dans un " + into.type->text() + " (" + what + ")";
+            return false;
+        }
+        if (isNullObj(v.o)) return clear();
+        if (!isCallbackObj(v.o)) {
+            if (why) *why = "un " + typeNameOf(v) + " ne va pas dans un " + into.type->text() + " (" + what + ")";
+            return false;
+        }
+        if (!v.o->type->literal && !callbackFits(*into.type, *v.o->type, why)) {
+            if (why && v.o->bound) *why = (v.o->lambda ? std::string("la LAMBDA") : v.o->callee) + " ne convient pas : " + *why;
+            return false;
+        }
+        into.bound = v.o->bound;
+        into.callee = v.o->callee;
+        into.lambda = v.o->lambda;
+        into.lambdaWhere = v.o->lambdaWhere;
+        return true;
+    }
+
+    // Une LAMBDA evaluee : un rappel neuf, ses locales copiees maintenant.
+    core::Result<RV> makeLambda(const Expr& e) {
+        if (!e.fn) return dialectError("LAMBDA sans corps");
+        auto code = std::make_shared<LambdaCode>();
+        code->fn = e.fn;
+        code->captured = std::make_shared<Locals>();
+        if (!typeBindings_.empty()) code->bindings = typeBindings_.back();
+        if (!frames_.empty()) {
+            const auto take = [&](const Frame& f) {
+                for (auto it = f.scopes.rbegin(); it != f.scopes.rend(); ++it)
+                    for (const auto& [n, place] : it->names)
+                        if (place.obj && !code->captured->find(n)) code->captured->set(n, deepCopy(*place.obj));
+            };
+            take(frames_.back());
+            if (frames_.size() > 1 && frames_.back().seesScript) take(frames_.front());
+        }
+        std::vector<std::pair<std::string, TypeRef>> params;
+        for (const auto& p : e.fn->params) {
+            auto r = resolve(p.type);
+            if (!r) return core::Err<core::Error>(r.error());
+            params.emplace_back(p.name, *r);
+        }
+        TypeRef result;
+        if (e.fn->result) {
+            auto r = resolve(e.fn->result);
+            if (!r) return core::Err<core::Error>(r.error());
+            result = *r;
+        }
+        auto obj = makeObj(callbackType(std::move(params), result));
+        obj->bound = true;
+        obj->lambda = code;
+        obj->lambdaWhere = section_ + ", ligne " + std::to_string(e.line);
+        return RV{{}, obj};
+    }
+
+    // Un rappel vide appele : rien ; la valeur par defaut de son retour ; l'environnement le dit (une fois).
+    core::Result<RV> nullCall(const Obj& cb, const std::string& name, std::uint32_t line) {
+        env_.nullCallback(name, section_ + ", ligne " + std::to_string(line));
+        if (cb.type && cb.type->kind == TypeDesc::Kind::Callback && cb.type->element) {
+            auto r = instantiate(cb.type->element);
+            if (!r) return core::Err<core::Error>(r.error());
+            if ((*r)->type && (*r)->type->kind == TypeDesc::Kind::Scalar) return RV{(*r)->value, nullptr};
+            return RV{{}, *r};
+        }
+        return RV{Value::boolean(true), nullptr};
+    }
+
+    // Le rappel que designe la tete d'un appel (une variable, un parametre, une locale, un membre) ; nul : aucun.
+    ObjRef callbackAt(const Expr& x) {
+        if (x.kind == Expr::Kind::Reference) {
+            if (!x.typeArgs.empty()) return nullptr;
+            if (Place* p = findLocal(x.name)) return isCallbackObj(p->obj) ? p->obj : nullptr;
+            // R2, R3 : une variable IHM rappel, un parametre de popup ou de symbole rappel - l'environnement les
+            // tient. Une fonction interne du meme nom passe avant.
+            if (dialect_ && findFunctions(x.name).empty())
+                if (ObjRef o = env_.richVariable(x.name); isCallbackObj(o)) return o;
+            return nullptr;
+        }
+        if ((x.kind == Expr::Kind::Member || x.kind == Expr::Kind::Index) && needsLocate(x)) {
+            ++quiet_;
+            auto p = locate(x, false);
+            --quiet_;
+            if (p && isCallbackObj(p->obj)) return p->obj;
+        }
+        return nullptr;
+    }
+
+    // f(x) : l'appel d'un rappel - sa fonction (par son nom, comme un appel ecrit) ou sa LAMBDA.
+    core::Result<RV> callCallback(const Obj& cb, const Expr& e) {
+        const std::string name = e.lhs ? dottedName(*e.lhs) : std::string("rappel");
+        if (!cb.bound) return nullCall(cb, name, e.line);
+        if (cb.lambda) {
+            auto code = std::static_pointer_cast<const LambdaCode>(cb.lambda);
+            return callDeclared(*code->fn, e, true, code->captured.get(), &code->bindings);
+        }
+        Expr call = e;
+        auto head = std::make_shared<Expr>();
+        head->kind = Expr::Kind::Reference;
+        head->name = cb.callee;
+        head->line = e.line;
+        call.lhs = head;
+        return callResolved(call);
+    }
+
+    // Appeler un rappel avec des valeurs (les natives LIST_FILTER, LIST_SORT, IHM_APRES...).
+    core::Result<RV> invokeCallback(const Obj& cb, const std::vector<RV>& args, std::uint32_t line, const std::string& name) {
+        if (!cb.bound) return nullCall(cb, name, line);
+        std::vector<Bound> bound;
+        for (const auto& a : args) bound.push_back(Bound{a, {}, false});
+        if (cb.lambda) {
+            auto code = std::static_pointer_cast<const LambdaCode>(cb.lambda);
+            return runFunction(*code->fn, bound, line, true, nullptr, code->captured.get(), nullptr, &code->bindings);
+        }
+        std::vector<ArgShape> shapes;
+        for (const auto& a : args) {
+            ArgShape sh;
+            sh.type = a.o ? typeNameOf(a) : valueTypeText(a.v.type());
+            sh.text = a.o ? typeNameOf(a) : a.v.display();
+            shapes.push_back(std::move(sh));
+        }
+        if (const auto inner = findFunctions(cb.callee); !inner.empty()) {
+            std::size_t k = 0;
+            if (inner.size() > 1) {
+                std::string why;
+                const int chosen = env_.chooseInner(inner, shapes, why);
+                if (chosen < 0) return dialectError(why);
+                k = static_cast<std::size_t>(chosen);
+            }
+            return runFunction(*inner[k], bound, line, false);
+        }
+        std::string key = cb.callee;
+        if (env_.overloads(cb.callee) > 1) {
+            std::string why;
+            if (!env_.chooseOverload(cb.callee, shapes, key, why)) return dialectError(why);
+        }
+        if (auto f = env_.dialectFunction(key)) return runFunction(*f, bound, line, true);
+        std::vector<std::pair<std::string, Value>> values;
+        for (const auto& a : args) {
+            if (a.o) return dialectError(cb.callee + " prend des valeurs simples, pas un " + typeNameOf(a));
+            values.emplace_back(std::string{}, a.v);
+        }
+        Value result;
+        if (!env_.call(key, key, values, result)) return dialectError("l'appel de " + cb.callee + " a \xC3\xA9" "chou\xC3\xA9");
+        return RV{result, nullptr};
+    }
+
+    // ---- les generiques : T deduit des arguments (ou donne), verifie contre sa contrainte ----
+    static bool genericAccepts(const std::string& c, const TypeDesc& t) {
+        if (c.empty() || c == "ANY") return true;
+        if (t.kind != TypeDesc::Kind::Scalar) return c == "ANY_DERIVED" || c == "ANY_STRUCT";
+        const Type s = t.scalar;
+        const bool time = s == Type::Time, date = s == Type::Date || s == Type::Tod || s == Type::Dt;
+        const bool bits = s == Type::Bool || s == Type::Byte || s == Type::Word || s == Type::DWord || s == Type::LWord;
+        const bool integer = isInteger(s) && !time && s != Type::Byte && s != Type::Word && s != Type::DWord && s != Type::LWord;
+        const bool real = s == Type::Real;
+        if (c == "ANY_NUM") return integer || real;
+        if (c == "ANY_INT") return integer;
+        if (c == "ANY_REAL") return real;
+        if (c == "ANY_BIT") return bits;
+        if (c == "ANY_STRING" || c == "ANY_CHARS") return s == Type::String;
+        if (c == "ANY_DATE") return date;
+        if (c == "ANY_DURATION") return time;
+        if (c == "ANY_MAGNITUDE") return integer || real || time;
+        if (c == "ANY_ELEMENTARY") return true;
+        return true;                                         // une contrainte inconnue : Generer la dira
+    }
+    static void unify(const TypeRef& p, const TypeRef& a, const std::set<std::string>& names, std::map<std::string, TypeRef>& out) {
+        if (!p || !a) return;
+        if (p->kind == TypeDesc::Kind::Struct && p->members.empty() && names.count(upperOf(p->name))) {
+            const std::string key = upperOf(p->name);
+            const auto it = out.find(key);
+            if (it == out.end()) out[key] = a;
+            else if (it->second->kind == TypeDesc::Kind::Scalar && a->kind == TypeDesc::Kind::Scalar && isInteger(it->second->scalar)
+                     && it->second->scalar != Type::Time && a->scalar == Type::Real)
+                it->second = a;                              // 2 et 2.5 : REAL l'emporte
+            return;
+        }
+        if (p->kind != a->kind) return;
+        if (p->element && a->element) unify(p->element, a->element, names, out);
+        for (std::size_t i = 0; i < p->members.size() && i < a->members.size(); ++i) unify(p->members[i].second, a->members[i].second, names, out);
+    }
+    core::Result<std::map<std::string, TypeRef>> bindTemplate(const Function& f, const std::vector<Bound>& args,
+                                                             const std::vector<std::string>* typeArgs) {
+        std::map<std::string, TypeRef> out;
+        std::set<std::string> names;
+        for (const auto& tp : f.typeParams) names.insert(upperOf(tp.first));
+        if (typeArgs && !typeArgs->empty()) {
+            if (typeArgs->size() > f.typeParams.size())
+                return dialectError(f.name + " : " + std::to_string(typeArgs->size()) + " types donn\xC3\xA9s pour "
+                                    + std::to_string(f.typeParams.size()) + " (TEMPLATE <" + f.typeParams.front().first + "...>)");
+            for (std::size_t i = 0; i < typeArgs->size(); ++i) {
+                auto t = typeFromText((*typeArgs)[i]);
+                if (!t) return core::Err<core::Error>(t.error());
+                auto r = resolve(*t);
+                if (!r) return core::Err<core::Error>(r.error());
+                out[upperOf(f.typeParams[i].first)] = *r;
+            }
+        }
+        for (std::size_t k = 0; k < f.params.size() && k < args.size(); ++k) {
+            const Bound& b = args[k];
+            TypeRef argType;
+            if (b.isPlace) {
+                if (b.place.obj) argType = b.place.obj->type;
+                else if (Value v; env_.read(b.place.name, v) && v.type() != Type::Unknown) argType = scalarType(v.type());
+            } else if (b.value.o) {
+                argType = b.value.o->type;
+            } else if (b.value.v.type() != Type::Unknown) {
+                argType = scalarType(b.value.v.type());
+            }
+            unify(f.params[k].type, argType, names, out);
+        }
+        for (const auto& [n, c] : f.typeParams) {
+            const auto it = out.find(upperOf(n));
+            if (it == out.end())
+                return dialectError(f.name + " : le type " + n + " ne se d\xC3\xA9" "duit pas des arguments \xE2\x80\x94 donne-le : "
+                                    + f.name + "<INT>(...)");
+            if (!genericAccepts(c, *it->second))
+                return dialectError(f.name + " : " + n + " = " + it->second->text() + " n'est pas un " + c);
+        }
+        return out;
+    }
+    // ==== fin 1.12.19 ====
+
     // ---- les appels --------------------------------------------------------
     // Un argument : par valeur (sa valeur), ou par reference (son emplacement).
     core::Result<RV> callRich(const Expr& e) {
         // 1.12.7 : NUMERIC_LIMITS<UINT>.MAX() - une fonction d'un template de classe.
         if (e.lhs && e.lhs->kind == Expr::Kind::Member && e.arguments.empty() && e.outputs.empty())
             if (auto c = templateMemberValue(*e.lhs, true)) return std::move(*c);
+        // 1.12.19 : un rappel (une variable, un parametre, une locale) s'appelle comme une fonction.
+        if (e.lhs)
+            if (ObjRef cb = callbackAt(*e.lhs)) return callCallback(*cb, e);
+        return callResolved(e);
+    }
+
+    // L'appel d'une fonction par son nom (sans chercher de rappel de ce nom).
+    core::Result<RV> callResolved(const Expr& e) {
         std::string callee;
         if (e.lhs && e.lhs->kind == Expr::Kind::Reference) callee = e.lhs->name;
         const std::string u = upperOf(callee);
@@ -4238,6 +4804,7 @@ private:
                 return callDeclared(*inner[static_cast<std::size_t>(k)], e, false);
             }
             if (inner.size() == 1) return callDeclared(*inner.front(), e, false);
+            if (auto mine = natives1219(callee, e)) return std::move(*mine);          // 1.12.19 : les natives a rappel
             if (auto mine = natives1127(callee, e)) return std::move(*mine);          // 1.12.7
             if (auto builtin = dialectBuiltin(u, e)) return std::move(*builtin);
             if (auto r = chosen(callee)) return std::move(*r);
@@ -4286,6 +4853,9 @@ private:
                 }
             }
         }
+        // 1.12.19 : une variable IHM rappel (T_Filtre) : sa fonction.
+        if (!callee.empty())
+            if (auto o = env_.richVariable(callee); isCallbackObj(o)) return callCallback(*o, e);
         // Le reste : comme avant (fonctions standard, IHM_..., blocs de l'automate).
         auto v = call(e);
         if (!v) return core::Err<core::Error>(v.error());
@@ -4302,7 +4872,8 @@ private:
     }
 
     // Les arguments d'un appel, rapproches des parametres.
-    core::Result<RV> callDeclared(const Function& f, const Expr& e, bool isolated) {
+    core::Result<RV> callDeclared(const Function& f, const Expr& e, bool isolated, const Locals* captured = nullptr,
+                                  const std::map<std::string, TypeRef>* bindings = nullptr) {
         std::vector<int> slot(f.params.size(), -1);
         std::vector<Bound> bound(f.params.size());
         std::size_t next = 0;
@@ -4375,7 +4946,8 @@ private:
             args.push_back(bound[k]);
             given.push_back(slot[k] >= 0);
         }
-        return runFunction(f, args, e.line, isolated, &given);
+        const std::vector<std::string>* typeArgs = e.lhs && !e.lhs->typeArgs.empty() ? &e.lhs->typeArgs : nullptr;
+        return runFunction(f, args, e.line, isolated, &given, captured, typeArgs, bindings);
     }
 
     static bool isDesignator(const Expr& e) {
@@ -4393,7 +4965,28 @@ private:
     // Executer une fonction du dialecte : un cadre neuf (parametres, locales,
     // la valeur rendue), son corps, puis les sorties rendues.
     core::Result<RV> runFunction(const Function& f, const std::vector<Bound>& args, std::uint32_t line, bool isolated,
-                                 const std::vector<bool>* given = nullptr) {
+                                 const std::vector<bool>* given = nullptr, const Locals* captured = nullptr,
+                                 const std::vector<std::string>* typeArgs = nullptr,
+                                 const std::map<std::string, TypeRef>* lambdaBindings = nullptr) {
+        // 1.12.19 : les types generiques de cet appel (T deduit, ou donne ; ceux d'une LAMBDA : de sa creation) ;
+        // une fonction ordinaire a les siens vides (un type T du projet n'est pas cache par un appelant generique).
+        struct BindingsScope {
+            std::vector<std::map<std::string, TypeRef>>& stack;
+            explicit BindingsScope(std::vector<std::map<std::string, TypeRef>>& s, std::map<std::string, TypeRef> b) : stack(s) { stack.push_back(std::move(b)); }
+            ~BindingsScope() { stack.pop_back(); }
+            BindingsScope(const BindingsScope&) = delete;
+            BindingsScope& operator=(const BindingsScope&) = delete;
+        };
+        std::map<std::string, TypeRef> bindings;
+        if (lambdaBindings) bindings = *lambdaBindings;
+        if (!f.typeParams.empty()) {
+            auto b = bindTemplate(f, args, typeArgs);
+            if (!b) return core::Err<core::Error>(b.error());
+            bindings = std::move(*b);
+        } else if (typeArgs && !typeArgs->empty()) {
+            return dialectError(f.name + " n'est pas gÃ©nÃ©rique (TEMPLATE <T>) : sans <" + typeArgs->front() + ">");
+        }
+        BindingsScope typed(typeBindings_, std::move(bindings));
         if (depth_ >= limits_.maxCallDepth) {
             const std::string why = "appels imbriqu\xC3\xA9s trop profonds : plus de " + std::to_string(limits_.maxCallDepth)
                                   + " (r\xC3\xA9" "cursion sans fin dans " + f.name + " ?)";
@@ -4405,6 +4998,9 @@ private:
         frame.seesScript = !isolated;
         frame.scopes.emplace_back();
         auto& names = frame.scopes.back().names;
+        // 1.12.19 : une LAMBDA voit les locales copiees a sa creation (ses parametres passent devant).
+        if (captured)
+            for (const auto& [n, obj] : captured->all()) names[n] = Place{obj, {}, false, false};
         std::vector<std::pair<Place, ObjRef>> outputs;     // VAR_OUTPUT : rendu apres l'appel
         for (std::size_t k = 0; k < f.params.size(); ++k) {
             const auto& param = f.params[k];
@@ -4527,22 +5123,25 @@ private:
             fail(s.line, "RETURN avec une valeur : seulement dans une fonction");
             return {Flow::Kind::Aborted};
         }
-        auto& top = frames_.back();
-        if (!top.result) {
-            fail(s.line, top.fn->name + " ne rend pas de valeur (pas de type de retour) : RETURN seul");
+        // 1.12.19 : des copies - evaluer la valeur appelle peut-etre une fonction (RETURN g(v)), qui ajoute un
+        // cadre : la pile des cadres peut se deplacer en memoire (une reference vers frames_.back() pendrait).
+        const ObjRef result = frames_.back().result;
+        const Function* fn = frames_.back().fn;
+        if (!result) {
+            fail(s.line, fn->name + " ne rend pas de valeur (pas de type de retour) : RETURN seul");
             return {Flow::Kind::Aborted};
         }
         // 1.10 (decision 15) : RETURN Auto (le nom seul, du type rendu).
         Value lit;
-        core::Result<RV> v = bareName(*s.value) && bareEnum(enumNameOf(top.fn->result), *s.value, lit)
+        core::Result<RV> v = bareName(*s.value) && bareEnum(enumNameOf(fn->result), *s.value, lit)
                                  ? core::Result<RV>(RV{lit, nullptr}) : rich(*s.value);
         if (!v) {
             if (!aborted_) fail(s.line, v.error().message());
             return {Flow::Kind::Aborted};
         }
         std::string why;
-        if (!store(*top.result, *v, &why)) {
-            fail(s.line, top.fn->name + " : retour du mauvais type : " + why);
+        if (!store(*result, *v, &why)) {
+            fail(s.line, fn->name + " : retour du mauvais type : " + why);
             return {Flow::Kind::Aborted};
         }
         return {Flow::Kind::Return};
@@ -5568,6 +6167,180 @@ private:
     }
 
     // ---- l'aiguillage : nul, pas une native de la 1.12.7 ---------------------------------
+    // ==== 1.12.19 : LES NATIVES A RAPPEL - LIST_FILTER, LIST_MAP, LIST_FOR_EACH, MAP_FOR_EACH ; les formes
+    // rappel de LIST_COUNT_IF, LIST_FIND_IF, LIST_ANY, LIST_ALL, LIST_NONE, LIST_REMOVE_IF (L, f), LIST_SORT (L, f),
+    // LIST_TRANSFORM (S, D, f) ; IHM_APRES, IHM_CHAQUE, IHM_ANNULER (le minuteur de l'environnement). ====
+    std::optional<core::Result<RV>> natives1219(const std::string& callee, const Expr& e) {
+        const std::string u = upperOf(callee);
+        const bool ifForm = u == "LIST_COUNT_IF" || u == "LIST_FIND_IF" || u == "LIST_ANY" || u == "LIST_ALL" || u == "LIST_NONE"
+                         || u == "LIST_REMOVE_IF";
+        const bool fresh = u == "LIST_FILTER" || u == "LIST_MAP" || u == "LIST_FOR_EACH" || u == "MAP_FOR_EACH";
+        const bool timer = u == "IHM_APRES" || u == "IHM_CHAQUE" || u == "IHM_ANNULER";
+        if (!ifForm && !fresh && !timer && u != "LIST_SORT" && u != "LIST_TRANSFORM") return std::nullopt;
+        if (env_.overloads(callee) > 0 || env_.dialectFunction(callee)) return std::nullopt;     // une fonction du projet passe avant
+        for (const auto& a : e.arguments)
+            if (!a.first.empty()) return std::nullopt;
+        const std::size_t argc = e.arguments.size();
+        if (ifForm && argc != 2) return std::nullopt;
+        if (u == "LIST_SORT" && argc != 2) return std::nullopt;
+        if (u == "LIST_TRANSFORM" && argc != 3) return std::nullopt;
+        using R = std::optional<core::Result<RV>>;
+        const auto fail = [&](std::string why) -> R { return R(core::Result<RV>(dialectError(u + " : " + std::move(why)))); };
+        if (u == "IHM_ANNULER") {
+            if (argc != 1) return fail("son num\xC3\xA9ro (celui que rend IHM_APRES ou IHM_CHAQUE)");
+            auto id = intArg(u, *e.arguments[0].second, "le num\xC3\xA9ro");
+            if (!id) return R(core::Result<RV>(core::Err<core::Error>(id.error())));
+            return R(core::Result<RV>(RV{Value::boolean(env_.cancelCallback(*id)), nullptr}));
+        }
+        if (argc != 2 && !(u == "LIST_TRANSFORM" && argc == 3)) return fail("deux arguments : " + u + (timer ? "(T#5s, Arreter)" : "(L, f)"));
+        const std::size_t fnAt = u == "LIST_TRANSFORM" ? 2 : 1;
+        auto fnv = rich(*e.arguments[fnAt].second);
+        if (!fnv) return R(core::Result<RV>(core::Err<core::Error>(fnv.error())));
+        if (!isCallbackObj(fnv->o)) {
+            if (u == "LIST_SORT" || u == "LIST_TRANSFORM") return std::nullopt;   // DECROISSANT, TRANSFORMATION# : la forme d'avant
+            if (ifForm)
+                return fail("une COMPARAISON demande sa valeur (" + u + "(L, COMPARAISON#Superieur, 5)) ; sinon un rappel ("
+                            + u + "(L, Est_Valide), " + u + "(L, LAMBDA (x : REAL) : BOOL => x > 5))");
+            return fail("un rappel est attendu (une fonction, une LAMBDA), pas " + (fnv->o ? "un " + typeNameOf(*fnv) : fnv->v.display()));
+        }
+        const ObjRef f = fnv->o;
+        const auto call = [&](std::vector<RV> args) { return invokeCallback(*f, args, e.line, u); };
+        const auto truth = [&](const core::Result<RV>& r, bool& out) -> std::optional<std::string> {
+            if (!r) return r.error().message();
+            if (r->o || r->v.type() != Type::Bool) return std::string("le rappel doit rendre un BOOL, pas ") + (r->o ? "un " + typeNameOf(*r) : r->v.display());
+            out = r->v.isTruthy();
+            return std::nullopt;
+        };
+        if (timer) {
+            auto d = rich(*e.arguments[0].second);
+            if (!d) return R(core::Result<RV>(core::Err<core::Error>(d.error())));
+            if (d->o || !isInteger(d->v.type())) return fail("le d\xC3\xA9lai est une dur\xC3\xA9" "e (T#5s) ou des millisecondes");
+            const std::int64_t ms = d->v.asInteger();
+            if (ms < 0 || (u == "IHM_CHAQUE" && ms < 10)) return fail(u == "IHM_CHAQUE" ? "une p\xC3\xA9riode de 10 ms au moins" : "un d\xC3\xA9lai positif");
+            std::int64_t id = 0;
+            std::string why;
+            if (!env_.scheduleCallback(ms, u == "IHM_CHAQUE" ? ms : 0, deepCopy(*f), id, &why)) return fail(why);
+            return R(core::Result<RV>(RV{Value::integer(Type::DInt, id), nullptr}));
+        }
+        if (u == "MAP_FOR_EACH") {
+            auto m = mapArg(u, *e.arguments[0].second);
+            if (!m) return R(core::Result<RV>(core::Err<core::Error>(m.error())));
+            const ObjRef M = m->obj;                         // une copie des cles : le rappel peut changer la MAP
+            std::vector<std::pair<RV, ObjRef>> items;
+            for (const auto& [k, v] : M->textKeys) items.emplace_back(RV{Value::text(k), nullptr}, v);
+            for (const auto& [k, v] : M->intKeys) items.emplace_back(RV{Value::integer(Type::DInt, k), nullptr}, v);
+            for (const auto& [k, v] : items) {
+                auto r = call({k, valueOfItem(v)});
+                if (!r) return R(core::Result<RV>(core::Err<core::Error>(r.error())));
+            }
+            return R(core::Result<RV>(RV{Value::integer(Type::DInt, static_cast<std::int64_t>(items.size())), nullptr}));
+        }
+        if (u == "LIST_TRANSFORM") {
+            auto src = seqArg(u, *e.arguments[0].second, true);
+            if (!src) return R(core::Result<RV>(core::Err<core::Error>(src.error())));
+            auto dst = seqArg(u, *e.arguments[1].second, false);
+            if (!dst) return R(core::Result<RV>(core::Err<core::Error>(dst.error())));
+            if (dst->constant) return R(core::Result<RV>(constantRefused(u)));
+            Obj& D = *dst->obj;
+            if (isSetType(*D.type)) return R(core::Result<RV>(setRefused(u)));
+            const std::vector<ObjRef> from = src->obj->items;
+            std::vector<ObjRef> made;
+            for (const auto& x : from) {
+                auto r = call({valueOfItem(x)});
+                if (!r) return R(core::Result<RV>(core::Err<core::Error>(r.error())));
+                auto m = fitTo(u, D.type->element, *r);
+                if (!m) return R(core::Result<RV>(core::Err<core::Error>(m.error())));
+                made.push_back(*m);
+            }
+            D.items = std::move(made);
+            normalizeList(D);
+            auto c = commitArg(u, *dst);
+            if (!c) return R(core::Result<RV>(core::Err<core::Error>(c.error())));
+            return R(core::Result<RV>(RV{Value::integer(Type::DInt, static_cast<std::int64_t>(from.size())), nullptr}));
+        }
+        const bool writes = u == "LIST_REMOVE_IF" || u == "LIST_SORT";
+        auto list = seqArg(u, *e.arguments[0].second, !writes || u == "LIST_SORT");
+        if (!list) return R(core::Result<RV>(core::Err<core::Error>(list.error())));
+        Obj& L = *list->obj;
+        if (writes && list->constant) return R(core::Result<RV>(constantRefused(u)));
+        if (u == "LIST_SORT" && isSetType(*L.type)) return R(core::Result<RV>(setRefused(u)));
+        if (u == "LIST_REMOVE_IF" && L.type->kind == TypeDesc::Kind::Array) return fail("un ARRAY a une taille fixe : une LIST ou un VECTOR");
+        const std::vector<ObjRef> items = L.items;           // le rappel peut changer la liste : on parcourt une copie
+        auto low = lowOf(u, L);
+        if (!low) return R(core::Result<RV>(core::Err<core::Error>(low.error())));
+        if (u == "LIST_SORT") {
+            std::optional<std::string> trouble;
+            std::vector<ObjRef> sorted = items;
+            std::stable_sort(sorted.begin(), sorted.end(), [&](const ObjRef& a, const ObjRef& b) {
+                if (trouble) return false;
+                bool before = false;
+                trouble = truth(call({valueOfItem(a), valueOfItem(b)}), before);
+                return !trouble && before;
+            });
+            if (trouble) return fail(*trouble);
+            L.items = std::move(sorted);
+            auto c = commitArg(u, *list);
+            if (!c) return R(core::Result<RV>(core::Err<core::Error>(c.error())));
+            return R(core::Result<RV>(RV{Value::boolean(true), nullptr}));
+        }
+        if (u == "LIST_FOR_EACH") {
+            for (const auto& x : items) {
+                auto r = call({valueOfItem(x)});
+                if (!r) return R(core::Result<RV>(core::Err<core::Error>(r.error())));
+            }
+            return R(core::Result<RV>(RV{Value::integer(Type::DInt, static_cast<std::int64_t>(items.size())), nullptr}));
+        }
+        if (u == "LIST_MAP") {
+            TypeRef element = f->type->element;
+            if (!element || (element->kind == TypeDesc::Kind::Scalar && element->scalar == Type::Unknown)) element = L.type->element;
+            auto out = makeObj(listType(element));
+            for (const auto& x : items) {
+                auto r = call({valueOfItem(x)});
+                if (!r) return R(core::Result<RV>(core::Err<core::Error>(r.error())));
+                auto m = fitTo(u, element, *r);
+                if (!m) return R(core::Result<RV>(core::Err<core::Error>(m.error())));
+                out->items.push_back(*m);
+            }
+            return R(core::Result<RV>(RV{{}, out}));
+        }
+        // Un predicat par element : LIST_FILTER et les formes _IF.
+        std::vector<bool> keep;
+        keep.reserve(items.size());
+        std::int64_t count = 0, first = -1;
+        for (std::size_t k = 0; k < items.size(); ++k) {
+            bool yes = false;
+            if (auto why = truth(call({valueOfItem(items[k])}), yes)) return fail(*why);
+            keep.push_back(yes);
+            if (yes) {
+                ++count;
+                if (first < 0) first = static_cast<std::int64_t>(k);
+                if (u == "LIST_FIND_IF" || u == "LIST_ANY" || u == "LIST_NONE") break;
+            }
+        }
+        if (u == "LIST_FILTER") {
+            auto out = makeObj(L.type->kind == TypeDesc::Kind::List ? L.type : listType(L.type->element));
+            for (std::size_t k = 0; k < keep.size(); ++k)
+                if (keep[k] && items[k]) out->items.push_back(deepCopy(*items[k]));
+            normalizeList(*out);
+            return R(core::Result<RV>(RV{{}, out}));
+        }
+        if (u == "LIST_REMOVE_IF") {
+            std::vector<ObjRef> kept;
+            for (std::size_t k = 0; k < items.size(); ++k)
+                if (!keep[k]) kept.push_back(items[k]);
+            L.items = std::move(kept);
+            auto c = commitArg(u, *list);
+            if (!c) return R(core::Result<RV>(core::Err<core::Error>(c.error())));
+            return R(core::Result<RV>(RV{Value::integer(Type::DInt, count), nullptr}));
+        }
+        if (u == "LIST_FIND_IF") return R(core::Result<RV>(RV{Value::integer(Type::DInt, first < 0 ? -1 : first + *low), nullptr}));
+        if (u == "LIST_COUNT_IF") return R(core::Result<RV>(RV{Value::integer(Type::DInt, count), nullptr}));
+        if (u == "LIST_ANY") return R(core::Result<RV>(RV{Value::boolean(count > 0), nullptr}));
+        if (u == "LIST_NONE") return R(core::Result<RV>(RV{Value::boolean(count == 0), nullptr}));
+        return R(core::Result<RV>(RV{Value::boolean(count == static_cast<std::int64_t>(items.size())), nullptr}));   // LIST_ALL
+    }
+    // ==== fin 1.12.19 : les natives a rappel ====
+
     std::optional<core::Result<RV>> natives1127(const std::string& callee, const Expr& e) {
         std::string u = upperOf(callee), tmpl;
         if (const auto lt = u.find('<'); lt != std::string::npos && u.back() == '>') {
@@ -7363,6 +8136,7 @@ private:
     Flow                                    lastFlow_{};
     std::map<std::string, TypeRef>          structs_;
     std::map<std::string, TypeRef>          typeTexts_;
+    std::vector<std::map<std::string, TypeRef>> typeBindings_;  // 1.12.19 : les types generiques des appels en cours
     std::string                             calleeLabel_;      // la fonction du projet en cours (ses fautes)
     std::uint32_t                           calleeLine_{0};
 
@@ -7454,6 +8228,23 @@ int Environment::chooseInner(const std::vector<const Function*>& candidates, con
     return -1;
 }
 
+std::vector<std::pair<std::string, std::string>> functionTypeParams(const Function& f) { return f.typeParams; }
+
+bool mentionsTypeParam(std::string_view type, const std::vector<std::pair<std::string, std::string>>& params) {
+    if (params.empty()) return false;
+    std::size_t i = 0;
+    while (i < type.size()) {
+        if (!(std::isalpha(static_cast<unsigned char>(type[i])) || type[i] == '_')) { ++i; continue; }
+        std::size_t j = i;
+        while (j < type.size() && (std::isalnum(static_cast<unsigned char>(type[j])) || type[j] == '_')) ++j;
+        const std::string word = upperOf(type.substr(i, j - i));
+        for (const auto& p : params)
+            if (upperOf(p.first) == word) return true;
+        i = j;
+    }
+    return false;
+}
+
 std::vector<CallSite> callSites(const Program& program, Environment& typing) {
     CallWalker w(typing, &program);
     w.walkProgram(program);
@@ -7506,6 +8297,11 @@ ObjRef makeRichValue(std::string_view type, std::string_view initial, Environmen
     return runner.richValue(type, initial, why);
 }
 
+TypeRef typeOfText(std::string_view type, Environment& env, std::string* why) {
+    Runner runner(env, RunLimits{}, "type");
+    return runner.typeOnly(type, why);
+}
+
 // ---- Lot API 8 : ce que le runtime demande a une section preparee ----
 void setProgramTag(Program& program, std::uint32_t tag) noexcept { program.tag = tag; }
 std::uint32_t programTag(const Program& program) noexcept { return program.tag; }
@@ -7545,6 +8341,13 @@ core::Result<Value> evaluate(const Expression& expression, Environment& env) {
     if (!expression.root) return core::fail(core::ErrorCode::InvalidArgument, "empty expression");
     Runner runner(env, RunLimits{}, "condition");
     return runner.evaluateQuietly(*expression.root);
+}
+
+// 1.12.19 : appeler un rappel depuis l'exterieur (un minuteur, l'operation Appeler).
+core::Result<Value> callCallback(const Obj& callback, Environment& env, const std::vector<Value>& args, std::string where,
+                                 const RunLimits& limits) {
+    Runner runner(env, limits, std::move(where));
+    return runner.callFromOutside(callback, args);
 }
 
 core::Result<Value> evaluateExpression(std::string_view source, Environment& env) {

@@ -19,6 +19,9 @@
 #include "../src/hmi/HmiScript.hpp"
 #include "../src/hmi/HmiScriptCheck.hpp"
 #include "../src/hmi/HmiTypeRegistry.hpp"
+#include "../src/hmi/HmiTypeForms.hpp"     // 1.12.19 : callbackInitial
+#include "../src/hmi/HmiTypes.hpp"
+#include "../src/hmi/HmiSimData.hpp"
 #include "../src/sim/Interpreter.hpp"     // 1.12.1 : le ST de l'automate (sans le dialecte)
 
 #include <algorithm>
@@ -26,6 +29,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -82,7 +86,7 @@ std::string shown(const sim::Value& v) { return v.type() == sim::Type::String ? 
 struct Bench {
     Project p;
     Runtime rt;
-    explicit Bench(const std::string& resultType, const std::string& body) {
+    explicit Bench(const std::string& resultType, const std::string& body, const std::function<void(Project&)>& extra = {}) {
         const auto var = [this](const char* n, const std::string& t, const char* init) {
             Variable v;
             v.id = p.allocate();
@@ -107,6 +111,7 @@ struct Bench {
         s.event = "Appel";
         s.body = body;
         p.programs.scripts.push_back(s);
+        if (extra) extra(p);                       // 1.12.19 : des fonctions, des variables de plus
         rt.bind(&p, nullptr);
         rt.start(0.0);
         rt.tick(0.1);
@@ -204,7 +209,8 @@ void catalogueComplet() {
                           "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME",
                           "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE",
                           "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_GIF_JOUER", "IHM_GIF_PAUSE",
-                          "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_ESCLAVE_SIMULE", "IHM_LOG"}) {
+                          "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_ESCLAVE_SIMULE", "IHM_LOG",
+                          "IHM_APRES", "IHM_CHAQUE", "IHM_ANNULER"}) {
         check(has(n), std::string("dans le catalogue : ") + n);
         check(isHmiFunction(n), std::string("connue de Compiler : ") + n);
     }
@@ -215,7 +221,7 @@ void catalogueComplet() {
             ++ihm;
             check(isHmiFunction(f.name), "la fonction du catalogue est connue de Compiler : " + std::string(f.name));
         }
-    check(ihm == 37, "37 fonctions IHM_ (" + std::to_string(ihm) + ")");
+    check(ihm == 40, "40 fonctions IHM_ (" + std::to_string(ihm) + ")");
     // Chaque fonction : sa categorie existe, sa syntaxe en C et C++ est dite.
     for (const auto& f : nt::functions()) {
         check(nt::category(f.category) != nullptr, std::string(f.name) + " : categorie " + std::string(f.category));
@@ -627,6 +633,199 @@ void rangement1217() {
           "TRANSITION : pour les fonctions IHM_");
 }
 
+
+// 1.12.19 (R1) : LES RAPPELS ET LES GENERIQUES DU DIALECTE - CALLBACK, LAMBDA, un nom de fonction comme valeur,
+// NULL (rien n'est appele), TEMPLATE <T : ANY_NUM> (T deduit ou donne), une LAMBDA qui copie ses locales.
+void rappels1219() {
+    std::printf("-- 1.12.19 : CALLBACK, LAMBDA, NULL, TEMPLATE\n");
+    const auto run = [](const std::string& type, const std::string& body, std::string* err = nullptr) {
+        Bench b(type, body);
+        return b.runScript(err);
+    };
+    std::string err;
+    const std::string grand = "FUNCTION Grand(x : REAL) : BOOL\n    RETURN x > 100;\nEND_FUNCTION\n";
+    check(run("BOOL", "VAR f : CALLBACK (x : REAL) : BOOL; END_VAR\nf := LAMBDA (x : REAL) : BOOL => x > 40;\nR := f(Niveau);", &err) == "TRUE" && err.empty(),
+          "LAMBDA dans un rappel, appelee : TRUE (42,5 > 40)" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("BOOL", grand + "VAR f : CALLBACK (x : REAL) : BOOL; END_VAR\nf := Grand;\nR := f(Niveau);", &err) == "FALSE" && err.empty(),
+          "un nom de fonction comme valeur : f := Grand ; f(42,5) = FALSE" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("BOOL", grand + "VAR f : CALLBACK (x : REAL) : BOOL; END_VAR\nf := 'Grand';\nR := f(250.0);", &err) == "TRUE" && err.empty(),
+          "son nom en texte aussi ('Grand')" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("BOOL", "VAR f : CALLBACK (x : REAL) : BOOL; END_VAR\nR := TRUE;\nR := f(1.0);", &err) == "FALSE" && err.empty(),
+          "un rappel vide (NULL) : rien n'est appele, la valeur par defaut (FALSE), pas d'erreur" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("BOOL", "VAR f : CALLBACK () ; END_VAR\nR := f = NULL;\nf := LAMBDA () => IHM_LOG('x');\nR := R AND f <> NULL;", &err) == "TRUE" && err.empty(),
+          "f = NULL, puis f <> NULL" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("INT", "FUNCTION Appliquer(g : CALLBACK (x : INT) : INT; v : INT) : INT\n    RETURN g(v);\nEND_FUNCTION\n"
+                     "R := Appliquer(LAMBDA (x : INT) : INT => x * 2, Compteur);", &err) == "14" && err.empty(),
+          "un rappel en parametre : Appliquer(LAMBDA ..., 7) = 14" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("INT", "VAR k : INT; f : CALLBACK () : INT; END_VAR\nk := 3;\nf := LAMBDA () : INT => k * 10;\nk := 5;\nR := f();", &err) == "30" && err.empty(),
+          "une LAMBDA copie ses locales a sa creation (k = 3 : 30, pas 50)" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("INT", "VAR f : CALLBACK (x : INT) : INT; END_VAR\nf := LAMBDA (x : INT) : INT\n    VAR y : INT; END_VAR\n    y := x + 1;\n    RETURN y * 2;\nEND_LAMBDA;\nR := f(3);", &err) == "8"
+              && err.empty(),
+          "LAMBDA ... END_LAMBDA (ses locales, RETURN) : 8" + (err.empty() ? std::string{} : " [" + err + "]"));
+    (void)run("BOOL", grand + "VAR f : CALLBACK (x : REAL; y : REAL) : BOOL; END_VAR\nf := Grand;", &err);
+    check(err.find("Grand ne convient pas") != std::string::npos, "une fonction de la mauvaise forme est refusee (" + err + ")");
+    const std::string limiter = "TEMPLATE <T : ANY_NUM> FUNCTION Limiter(x : T; bas : T; haut : T) : T\n"
+                                "    IF x < bas THEN RETURN bas; END_IF\n    IF x > haut THEN RETURN haut; END_IF\n    RETURN x;\nEND_FUNCTION\n";
+    check(run("INT", limiter + "R := Limiter(Compteur, 0, 5);", &err) == "5" && err.empty(),
+          "TEMPLATE : T deduit (INT) - Limiter(7, 0, 5) = 5" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("REAL", limiter + "R := Limiter<REAL>(Niveau, 0, 10);", &err) == "10" && err.empty(),
+          "TEMPLATE : T donne - Limiter<REAL>(42,5, 0, 10) = 10" + (err.empty() ? std::string{} : " [" + err + "]"));
+    check(run("REAL", limiter + "R := Limiter(2, 0.5, 1.5);", &err) == "1.5" && err.empty(),
+          "TEMPLATE : 2 et 0,5 - REAL l'emporte (1.5)" + (err.empty() ? std::string{} : " [" + err + "]"));
+    (void)run("STRING", limiter + "R := Limiter('a', 'b', 'c');", &err);
+    check(err.find("ANY_NUM") != std::string::npos, "TEMPLATE : un STRING n'est pas un ANY_NUM (" + err + ")");
+    // R4 : les natives a rappel.
+    const std::string L3 = "VAR L : LIST OF INT := [1, 5, 8]; G : LIST OF INT; END_VAR\n";
+    const auto expect = [&](const std::string& type, const std::string& body, const std::string& want, const std::string& what) {
+        const std::string got = run(type, body, &err);
+        check(got == want && err.empty(), what + " = " + got + (err.empty() ? std::string{} : " [" + err + "]") + ", attendu " + want);
+    };
+    expect("INT", L3 + "G := LIST_FILTER(L, LAMBDA (x : INT) : BOOL => x > 4);\nR := LIST_COUNT(G) * 100 + G[0];", "205", "LIST_FILTER(L, x > 4)");
+    expect("INT", L3 + "G := LIST_MAP(L, LAMBDA (x : INT) : INT => x * 10);\nR := G[2];", "80", "LIST_MAP(L, x * 10)[2]");
+    expect("INT", L3 + "R := LIST_COUNT_IF(L, LAMBDA (x : INT) : BOOL => x > 2);", "2", "LIST_COUNT_IF(L, f)");
+    expect("INT", L3 + "R := LIST_FIND_IF(L, LAMBDA (x : INT) : BOOL => x > 2);", "1", "LIST_FIND_IF(L, f)");
+    expect("BOOL", L3 + "R := LIST_ANY(L, LAMBDA (x : INT) : BOOL => x = 5) AND LIST_ALL(L, LAMBDA (x : INT) : BOOL => x > 0) AND LIST_NONE(L, LAMBDA (x : INT) : BOOL => x > 9);",
+           "TRUE", "LIST_ANY, LIST_ALL, LIST_NONE (L, f)");
+    expect("INT", L3 + "R := LIST_REMOVE_IF(L, LAMBDA (x : INT) : BOOL => x < 6) * 10 + LIST_COUNT(L);", "21", "LIST_REMOVE_IF(L, f) : 2 retires, 1 reste");
+    expect("INT", L3 + "LIST_SORT(L, LAMBDA (a : INT; b : INT) : BOOL => a > b);\nR := L[0];", "8", "LIST_SORT(L, a > b) : decroissant");
+    expect("INT", L3 + "LIST_TRANSFORM(L, G, LAMBDA (x : INT) : INT => x + 1);\nR := G[1];", "6", "LIST_TRANSFORM(S, D, f)");
+    expect("INT", L3 + "VAR s : INT; END_VAR\nLIST_FOR_EACH(L, LAMBDA (x : INT) => IHM_LOG(NIVEAU_LOG#INFO, TO_STRING(x)));\nR := LIST_FOR_EACH(L, LAMBDA (x : INT) => IHM_LOG(NIVEAU_LOG#INFO, '-'));", "3",
+           "LIST_FOR_EACH : le nombre d'elements");
+    expect("INT", "VAR M : MAP[STRING] OF INT; END_VAR\nMAP_SET(M, 'a', 1);\nMAP_SET(M, 'b', 2);\nR := MAP_FOR_EACH(M, LAMBDA (k : STRING; v : INT) => IHM_LOG(NIVEAU_LOG#INFO, k));", "2",
+           "MAP_FOR_EACH(M, f)");
+    expect("BOOL", grand + "VAR P : LIST OF REAL := [50.0, 150.0]; END_VAR\nR := LIST_ANY(P, Grand);", "TRUE", "LIST_ANY(P, Grand) : une fonction du projet");
+    expect("INT", L3 + "R := LIST_COUNT_IF(L, COMPARAISON#Superieur, 4);", "2", "la forme d'avant (COMPARAISON#) reste");
+    (void)run("INT", L3 + "R := LIST_COUNT_IF(L, LAMBDA (x : INT) : INT => x);", &err);
+    check(err.find("BOOL") != std::string::npos, "un predicat qui rend un INT est refuse (" + err + ")");
+    // Les minuteurs de la simulation : IHM_APRES (une fois), IHM_CHAQUE (jusqu'a IHM_ANNULER).
+    {
+        Bench b("INT", "R := 1;\nIF IHM_APRES(T#100ms, LAMBDA () R := R * 10; END_LAMBDA) > 0 THEN R := 2; END_IF");
+        const std::string first = b.runScript(&err);
+        const auto at = [&](double now) {
+            b.rt.tick(now);
+            sim::Value v;
+            return b.rt.environment().read("R", v) ? shown(v) : std::string("#");
+        };
+        const std::string before = at(0.25), after = at(0.35);
+        check(first == "2" && before == "2" && after == "20" && b.rt.pendingTimers() == 0,
+              "IHM_APRES(T#100ms, f) : rien avant l'heure, f une fois apres (" + first + ", " + before + ", " + after + ")"
+                  + (err.empty() ? std::string{} : " [" + err + "]"));
+    }
+    {
+        Bench b("INT", "R := 0;\nCompteur := IHM_CHAQUE(T#100ms, LAMBDA () R := R + 1; END_LAMBDA);");
+        (void)b.runScript(&err);
+        b.rt.tick(0.31);
+        b.rt.tick(0.41);
+        sim::Value id, v1, v2;
+        b.rt.environment().read("R", v1);
+        b.rt.environment().read("Compteur", id);
+        const bool cancelled = b.rt.cancelCallback(id.asInteger());
+        b.rt.tick(0.61);
+        b.rt.environment().read("R", v2);
+        check(shown(v1) == "2" && cancelled && shown(v2) == "2" && b.rt.pendingTimers() == 0,
+              "IHM_CHAQUE(T#100ms, f) : deux fois en 0,2 s, plus rien une fois annule (" + shown(v1) + ", " + shown(v2) + ")");
+        b.rt.stop(0.7, {});
+        check(!b.rt.cancelCallback(id.asInteger()), "IHM_ANNULER d'un minuteur parti : FALSE");
+    }
+    {
+        Bench b("BOOL", "VAR f : CALLBACK () : BOOL; END_VAR\nR := f();");
+        (void)b.runScript(&err);
+        (void)b.runScript(&err);
+        int said = 0;
+        for (const auto& j : b.rt.journal()) said += j.message.find("vide (NULL)") != std::string::npos;
+        check(said == 1 && err.empty(), "un rappel vide appele deux fois : la Console le dit une fois (" + std::to_string(said) + ")");
+    }
+    // R2 : le type CALLBACK dans le registre des types, une variable IHM rappel.
+    {
+        namespace tr = hmi::typereg;
+        const auto r = tr::baseRegistry().resolve("callback (x : real; n : int) : bool", tr::UseVariable);
+        check(r.ok && r.rich && r.category == tr::Category::Callback && r.text == "CALLBACK (x : REAL; n : INT) : BOOL"
+                  && r.key == "cb:(base:REAL,base:INT)base:BOOL",
+              "le registre lit CALLBACK (x : REAL; n : INT) : BOOL (" + r.text + ", " + r.key + ")" + (r.why.empty() ? std::string{} : " [" + r.why + "]"));
+        const auto none = tr::baseRegistry().resolve("CALLBACK ()", tr::UseParameter);
+        check(none.ok && none.text == "CALLBACK ()" && none.key == "cb:()", "CALLBACK () : une procedure (" + none.text + ")");
+        const auto bad = tr::baseRegistry().resolve("CALLBACK (REAL) : BOOL", tr::UseVariable);
+        check(!bad.ok && bad.why.find(":") != std::string::npos, "un parametre sans nom est refuse (" + bad.why + ")");
+        check(!tr::baseRegistry().resolve("CALLBACK () : BOOL", tr::UseOperand).ok, "pas un operande");
+        Project q;
+        std::string why;
+        check(hmi::types::validType(q, "CALLBACK (x : REAL) : BOOL", &why) && hmi::types::isRich("CALLBACK (x : REAL) : BOOL")
+                  && hmi::types::unbindableReason("CALLBACK (x : REAL) : BOOL").find("rappel") != std::string::npos,
+              "une variable IHM rappel : permise, dans la memoire de l'IHM" + (why.empty() ? std::string{} : " [" + why + "]"));
+        check(hmi::typeform::callbackInitial("CALLBACK () : BOOL", " =Grand ") == "Grand" && hmi::typeform::callbackInitial("INT", "=x") == "=x",
+              "=Fonction : la valeur initiale d'un rappel");
+    }
+    {
+        const auto extra = [](Project& p) {
+            HmiFunction f;
+            f.id = p.allocate();
+            f.name = "Tres_Grand";
+            f.returnType = "BOOL";
+            f.body = "VAR_INPUT x : REAL; END_VAR\nTres_Grand := x > 100.0;\n";
+            p.programs.functions.push_back(f);
+            Variable v;
+            v.id = p.allocate();
+            v.name = "Filtre";
+            v.type = "CALLBACK (x : REAL) : BOOL";
+            v.initial = "=Tres_Grand";
+            p.programs.variables.push_back(v);
+        };
+        Bench b("BOOL", "R := Filtre(250.0) AND NOT Filtre(Niveau);", extra);
+        const std::string got = b.runScript(&err);
+        check(got == "TRUE" && err.empty(), "une variable IHM rappel (=Tres_Grand) s'appelle dans un script : " + got + (err.empty() ? std::string{} : " [" + err + "]"));
+        Bench c("BOOL", "Filtre := LAMBDA (x : REAL) : BOOL => x < 50.0;\nR := Filtre(Niveau);", extra);
+        const auto kept = c.rt.captureData();
+        const std::string lam = c.runScript(&err);
+        check(lam == "TRUE" && err.empty(), "une LAMBDA dans la variable IHM rappel : " + lam + (err.empty() ? std::string{} : " [" + err + "]"));
+        // La remanence : le nom de sa fonction se garde ; une LAMBDA ne se garde pas.
+        const auto named = [](const std::vector<hmi::simdata::Cell>& cells) {
+            for (const auto& cell : cells)
+                if (cell.name == "Filtre") return cell.value.type() == sim::Type::String ? cell.value.asString() : std::string("?");
+            return std::string("(rien)");
+        };
+        check(named(kept) == "Tres_Grand" && named(c.rt.captureData()) == "(rien)",
+              "la remanence garde le nom de la fonction (" + named(kept) + "), pas une LAMBDA");
+        c.rt.stop(1.0, {});
+        c.rt.setStartData(kept);
+        c.rt.start(2.0);
+        check(c.rt.richText("Filtre") == "Tres_Grand", "... et la rend au demarrage (" + c.rt.richText("Filtre") + ")");
+        std::string why;
+        check(c.rt.setRichVariable("Filtre", "=Tres_Grand", &why) && c.rt.richText("Filtre") == "Tres_Grand"
+                  && !c.rt.setRichVariable("Filtre", "Inconnue", &why),
+              "forcer une variable rappel : =Tres_Grand ecrit, un nom inconnu refuse (" + why + ")");
+    }
+    // Le ST de l'automate ne connait rien de cela.
+    for (const char* plc : {"f := LAMBDA (x : INT) : INT => x;"}) {
+        const auto parsed = sim::parse(plc, "automate", sim::ParseOptions{false});
+        check(!parsed, std::string("le ST de l'automate refuse : ") + plc);
+    }
+}
+
+
+// 1.12.19 : Compiler (le controle d'un script, avec son projet) accepte les rappels et les generiques.
+void sondeControle1219() {
+    std::printf("-- 1.12.19 : Compiler accepte CALLBACK, LAMBDA, TEMPLATE\n");
+    const char* bodies[] = {
+        "VAR f : CALLBACK (x : REAL) : BOOL; END_VAR\nf := LAMBDA (x : REAL) : BOOL => x > 40;\nMarche := f(Niveau);",
+        "FUNCTION Grand(x : REAL) : BOOL\n    RETURN x > 100;\nEND_FUNCTION\nVAR f : CALLBACK (x : REAL) : BOOL; END_VAR\nf := Grand;\nMarche := f(Niveau);",
+        "VAR f : CALLBACK (x : INT) : INT; END_VAR\nf := LAMBDA (x : INT) : INT\n    VAR y : INT; END_VAR\n    y := x + 1;\n    RETURN y * 2;\nEND_LAMBDA;\nCompteur := f(3);",
+        "TEMPLATE <T : ANY_NUM> FUNCTION Limiter(x : T; bas : T; haut : T) : T\n    IF x < bas THEN RETURN bas; END_IF\n    RETURN x;\nEND_FUNCTION\nCompteur := Limiter(Compteur, 0, 5);\nNiveau := Limiter<REAL>(Niveau, 0, 10);",
+        "FUNCTION Appliquer(g : CALLBACK (x : INT) : INT; v : INT) : INT\n    RETURN g(v);\nEND_FUNCTION\nCompteur := Appliquer(LAMBDA (x : INT) : INT => x * 2, Compteur);",
+        "VAR f : CALLBACK (); END_VAR\nIF f <> NULL THEN f(); END_IF",
+    };
+    Bench bench("INT", "R := 0;");
+    hmi::scriptcheck::Scope sc;
+    sc.project = &bench.p;
+    for (const char* b : bodies) {
+        std::string said;
+        for (const auto& d : checkScript(ScriptLang::ST, b, "Essai"))
+            if (d.severity == ScriptDiagnostic::Severity::Error) said += " | " + d.message;
+        for (const auto& f : hmi::scriptcheck::check(sc, b)) said += " | " + f.message;
+        const std::string head(b);
+        check(said.empty(), "Compiler accepte : " + head.substr(0, head.find('\n')) + said);
+    }
+}
+
 int main() {
     std::printf("1.12.0 : les natives de l'IHM (catalogue, exemples, conversions, types, enumerations, couleurs, aleatoire)\n");
     catalogueComplet();
@@ -640,6 +839,8 @@ int main() {
     types1121();
     rangement1217();
     lecturesExpression1217();
+    rappels1219();
+    sondeControle1219();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

@@ -143,7 +143,10 @@ struct ScriptParts {
 // RENOMMER UNE FONCTION : ses appels (Nom(...)) dans un code ST ou une
 // expression, hors chaines et commentaires. `bare` : aussi le nom seul - le
 // corps de la fonction elle-meme, ou "Nom := ..." rend la valeur.
-[[nodiscard]] std::string renameCalls(std::string_view code, std::string_view from, std::string_view to, bool bare = false);
+// 1.12.19 (R5) : `values` - aussi le nom pose seul la ou va une valeur (une fonction passee en rappel) : apres := ( ou ,
+// et avant ; ) , ou la fin (f := Valider; LIST_FILTER(L, Est_Valide)).
+[[nodiscard]] std::string renameCalls(std::string_view code, std::string_view from, std::string_view to, bool bare = false,
+                                      bool values = false);
 // Un texte a trous ("Moyenne : {Moyenne(a, b):0.0}") ou "=expression" : les
 // appels dans les accolades, ou dans toute l'expression.
 [[nodiscard]] std::string renameCallsInText(std::string_view text, std::string_view from, std::string_view to);
