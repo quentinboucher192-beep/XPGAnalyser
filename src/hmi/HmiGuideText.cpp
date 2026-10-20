@@ -13864,6 +13864,16 @@ const std::vector<Topic>& topics() {
          "; pilot\xC3\xA9" "e, elle montre son \xC2\xAB = \xC2\xBB ; et une expression se retire toujours de "
          "la m\xC3\xAAme fa\xC3\xA7on.",
          {
+             {K::Heading, "La r\xC3\xA8gle des cases (1.12.19)", {}, "1.12.19"},
+             {K::Paragraph, "**Une seule r\xC3\xA8gle pour toutes les cases** : l'inspecteur, les volets (Actions, Contenu, alarmes, param\xC3\xA8tres, arguments d'une popup), les variables et leurs membres, les d\xC3\xA9" "clarations, la valeur initiale, les recettes, l'essai d'une fonction. Une case se lit toujours de la m\xC3\xAAme fa\xC3\xA7on :", {}, "1.12.19"},
+             {K::Bullet, "**Une expression commence par =** : `=Niveau * 2`, `=SEL(Marche, 'Oui', 'Non')`. Elle s'\xC3\xA9" "crit en chasse fixe et garde son = \xC3\xA0 l'affichage ; une case qui n'attend qu'une formule (Variable \xC3\xA9" "crite, Condition) montre aussi le sien (`=Marche`).", {}, "1.12.19"},
+             {K::Bullet, "**Une valeur fixe s'\xC3\xA9" "crit comme elle se lit**, sans pr\xC3\xA9" "fixe : la case la lit selon son type (le tableau ci-dessous). Un texte s'\xC3\xA9" "crit tel quel (`Bonjour`) ; entre apostrophes seulement s'il est le nom d'une variable (`'Niveau'`).", {}, "1.12.19"},
+             {K::Bullet, "**Un nom connu tap\xC3\xA9 seul devient une expression** : `Niveau` dans une case nombre devient `=Niveau`. Une valeur d'\xC3\xA9num\xC3\xA9ration tap\xC3\xA9" "e seule (`Auto`) reste une valeur fixe (`T_MODE#Auto`).", {}, "1.12.19"},
+             {K::Bullet, "**Vide, la case dit sa valeur par d\xC3\xA9" "faut**, en gris : \xC2\xAB 12 \xC2\xB7 valeur par d\xC3\xA9" "faut \xC2\xBB. L'invite ne se tape pas.", {}, "1.12.19"},
+             {K::Bullet, "**Le type attendu est \xC3\xA9" "crit au bout du nom** (nombre, bool\xC3\xA9" "en, dur\xC3\xA9" "e, texte, couleur\xE2\x80\xA6).", {}, "1.12.19"},
+             {K::Bullet, "**Une saisie refus\xC3\xA9" "e ne se perd pas** : une ligne rouge sous la case dit pourquoi (\xC2\xAB n'est pas un nombre entier (INT) \xC2\xBB, \xC2\xAB hors des bornes d'un INT \xC2\xBB) avec **Reprendre \xC2\xAB ce que tu avais tap\xC3\xA9 \xC2\xBB** pour la corriger, et quand c'est possible **Ramener \xC3\xA0 32767** ou **Remplacer par Debit_Entree**. La valeur d'avant reste ; \xC3\x89" "chap efface la ligne.", {}, "1.12.19"},
+             {K::Bullet, "**Les listes** s'\xC3\xA9" "crivent entre parenth\xC3\xA8ses, s\xC3\xA9par\xC3\xA9" "es par des points-virgules : `(a;b;\xE2\x80\xA6)` ; les **intervalles** `a..b` (`0..100`).", {}, "1.12.19"},
+             {K::Table, "Le type de la case\tTu \xC3\xA9" "cris\tLa case garde\n---|---|---\nnombre entier (INT, DINT\xE2\x80\xA6)\t`1 500`, `-12`\t`1500`, `-12` (`12.7` est refus\xC3\xA9)\nnombre r\xC3\xA9" "el (REAL)\t`2,5`, `1 000,5`, `5`\t`2.5`, `1000.5`, `5`\nbool\xC3\xA9" "en (BOOL)\t`TRUE`, `vrai`, `oui`, `on`, `1` ; `FALSE`, `faux`, `non`, `off`, `0`\t`TRUE` ; `FALSE`\ndur\xC3\xA9" "e (TIME)\t`5 s`, `250 ms`, `1 h 30`, `2 min 30`, `01:30` (mm:ss), `01:30:00` (h:mm:ss), `T#5s` ; un nombre seul : des millisecondes\t`T#5s`, `T#250ms`, `T#1m30s`\xE2\x80\xA6\ntexte (STRING)\t`Azote`\t`'Azote'`, montr\xC3\xA9 sans apostrophes\n\xC3\xA9num\xC3\xA9ration\t`Auto`\t`T_MODE#Auto`\nexpression\t`=Niveau * 2`, ou `Niveau` seul\t`=Niveau * 2`, `=Niveau`", {}, "1.12.19"},
              {K::Heading, "Elle dit qu'elle accepte une expression", {}},
              {K::Paragraph, "Une case qui accepte une expression porte la **pastille fx** devant sa valeur et "
                          "le **type attendu** en petit au bout de son nom : c'est ce qui le dit. Son nom n'a "
@@ -13959,7 +13969,7 @@ const std::vector<Topic>& topics() {
                          "champs ni dans le programme de l'automate.", {}},
          },
          {"aide-saisie", "proprietes", "actions", "parametres-popups", "alarmes-objets"},
-         {"expression", "expressions", "champ \xC3\xA0 expression", "= expression", "pastille fx", "fx", "Retirer l'expression", "Modifier l'expression", "valeur fixe", "invite", "vider", "effacer", "\xE2\x9C\x95", "aide \xC3\xA0 la saisie", "compl\xC3\xA9tion", "type attendu"},
+         {"expression", "expressions", "champ \xC3\xA0 expression", "= expression", "pastille fx", "fx", "Retirer l'expression", "Modifier l'expression", "valeur fixe", "invite", "vider", "effacer", "\xE2\x9C\x95", "aide \xC3\xA0 la saisie", "compl\xC3\xA9tion", "type attendu", "r\xC3\xA8gle des cases", "valeur par d\xC3\xA9" "faut", "Reprendre", "refus\xC3\xA9", "dur\xC3\xA9" "e", "1 h 30", "liste", "intervalle"},
          {"inspecteur", "proprietes", "actions", "parametres"},
          {},
          "",

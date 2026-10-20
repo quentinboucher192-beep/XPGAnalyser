@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.19", "20/10/2026", "livr\xC3\xA9" "e le 20/10 au soir"},
     {"1.12.18", "20/10/2026", "livr\xC3\xA9" "e le 20/10"},
     {"1.12.17", "19/10/2026", "livr\xC3\xA9" "e le 19/10 au soir"},
     {"1.12.16", "19/10/2026", "livr\xC3\xA9" "e le 19/10"},
@@ -124,6 +125,25 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.19 (20/10/2026) : voir docs/LIVRAISON-1.12.19.md (la regle des cases ; les chevauchements d'adresses ne bloquent plus).
+        note("1.12.19", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
+         "LA R\xC3\x88GLE DES CASES : une case se lit partout de la m\xC3\xAAme fa\xC3\xA7on - l'inspecteur, les volets (Actions, Contenu, alarmes, param\xC3\xA8tres, arguments d'une popup), les variables et leurs membres, les d\xC3\xA9" "clarations, la valeur initiale, les recettes, l'essai d'une fonction. Une expression commence par = (=Niveau * 2, \xC3\xA9" "crite en chasse fixe, le = reste affich\xC3\xA9) ; une valeur fixe s'\xC3\xA9" "crit comme elle se lit et la case la lit selon son type (2,5 ; 1 000 ; vrai, non ; 5 s, 1 h 30, 2 min 30, 01:30 ; Auto pour T_MODE#Auto ; un texte sans apostrophes) ; un nom connu tap\xC3\xA9 seul devient =Nom ; vide, la case dit sa valeur par d\xC3\xA9" "faut (\xC2\xAB 12 \xC2\xB7 valeur par d\xC3\xA9" "faut \xC2\xBB) ; le type attendu est \xC3\xA9" "crit au bout du nom ; les listes s'\xC3\xA9" "crivent (a;b;\xE2\x80\xA6), les intervalles a..b.",
+         "champs-expressions", ""),
+        note("1.12.19", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
+         "UNE SAISIE REFUS\xC3\x89" "E NE SE PERD PLUS : une ligne rouge sous la case dit pourquoi (\xC2\xAB n'est pas un nombre entier (INT) \xC2\xBB, \xC2\xAB hors des bornes d'un INT \xC2\xBB, \xC2\xAB rien apr\xC3\xA8s le = : \xC3\xA9" "cris la formule \xC2\xBB) avec Reprendre \xC2\xAB ce que tu avais tap\xC3\xA9 \xC2\xBB pour la corriger ; la valeur d'avant reste, \xC3\x89" "chap efface la ligne. Les refus des volets (s\xC3\xA9" "curit\xC3\xA9, \xC3\xA9quipements, \xC3\xA9" "changes, actions, contenu\xE2\x80\xA6) s'affichent au m\xC3\xAAme endroit.",
+         "champs-expressions", ""),
+        note("1.12.19", "Vues", Kind::Changed,
+         "L'INSPECTEUR ET LES VOLETS SOUS LA M\xC3\x8AME R\xC3\x88GLE : une case qui n'attend qu'une formule (Variable \xC3\xA9" "crite, Condition) montre son = (=Marche) ; une dur\xC3\xA9" "e tap\xC3\xA9" "e 1 h 30 ou 2 min 30 est r\xC3\xA9\xC3\xA9" "crite dans l'unit\xC3\xA9 de la case ; un nom connu tap\xC3\xA9 seul dans un nombre, une dur\xC3\xA9" "e, un bool\xC3\xA9" "en ou un \xC3\xA9tat devient une expression ; le type attendu et la raison d'une expression fausse dans toutes les grilles (actions, contenu, alarmes des objets et des symboles) ; les arguments d'Ouvrir une popup et les valeurs par d\xC3\xA9" "faut des param\xC3\xA8tres : une constante sans fx, l'invite \xC2\xAB \xC2\xB7 valeur par d\xC3\xA9" "faut \xC2\xBB ; la palette de couleurs ouvre l'expression d'une case qui en a une.",
+         "proprietes", ""),
+        note("1.12.19", "Variables", Kind::Changed,
+         "UNE SEULE LECTURE DE LA VALEUR TAP\xC3\x89" "E : la valeur initiale, les membres, le coller depuis Excel, les variables de script, les recettes, l'essai d'une fonction et les grilles de d\xC3\xA9" "clarations lisent selon le type (2,5 devient 2.5, Vrai TRUE, Azote 'Azote', 1m30s T#1m30s, 12.7 dans un INT est refus\xC3\xA9 avec sa raison) ; un nom de la grille tap\xC3\xA9 seul devient une formule (MAX_N + 1). Les nombres entiers du volet S\xC3\xA9" "curit\xC3\xA9 ne sont plus tronqu\xC3\xA9s (2,7 est refus\xC3\xA9). Une valeur d'\xC3\xA9num\xC3\xA9ration s'\xC3\xA9" "crit aussi Nom := valeur.",
+         "variables-ihm", ""),
+        note("1.12.19", "Variables", Kind::Changed,
+         "MODIFIER L'ADRESSE DANS TOUTES LES CASES\xE2\x80\xA6 : les chevauchements ne bloquent plus. Deux cases \xC3\xA0 la m\xC3\xAAme place (une formule %MW(1000) pour les dix cases) : Appliquer reste actif, l'aper\xC3\xA7u les montre en ambre (\xC2\xAB EXTRACTEURS[1].Retour l'a aussi \xC2\xBB) et le message dit que rien n'est effac\xC3\xA9. Bloquent encore : une formule illisible (un nom inconnu, une division par z\xC3\xA9ro), une adresse hors des zones, des cases en mots qui partiraient d'un bit.",
+         "variables-ihm", ""),
+        note("1.12.19", "Simulation", Kind::Fixed,
+         "LES DUR\xC3\x89" "ES SE LISENT PARTOUT PAREIL : T#5s valait 5 ms dans deux for\xC3\xA7" "ages et T#1s500ms 1 ms, TIME#5s \xC3\xA9tait refus\xC3\xA9. Maintenant T#, TIME#, 5 s, 1,5 s, 1 h 30, 2 min 30, 00:05 (mm:ss) et 01:30:00 (h:mm:ss) donnent la m\xC3\xAAme dur\xC3\xA9" "e partout ; un nombre seul dans une dur\xC3\xA9" "e compte des millisecondes.",
+         "simulation", ""),
         // 1.12.18 (20/10/2026) : voir docs/LIVRAISON-1.12.18.md (le clic droit, partout ; l'adressage des tableaux de structures).
         note("1.12.18", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
          "LE CLIC DROIT, PARTOUT. Chaque endroit a son menu, et le menu dit ce qu'il vise (\xC2\xAB Moyenne \xC2\xB7 fonction IHM \xC2\xBB, \xC2\xAB 3 variables IHM \xC2\xBB) ; la colonne de droite ne montre que des touches, une entr\xC3\xA9" "e gris\xC3\xA9" "e dit pourquoi. Maj+F10 et la touche Menu l'ouvrent au clavier, la lettre soulign\xC3\xA9" "e choisit, D\xC3\xA9" "but et Fin, le d\xC3\xA9" "filement, les cases \xC3\xA0 cocher, les sous-menus \xC3\xA0 plusieurs niveaux, une ic\xC3\xB4ne par geste. Un mot, un raccourci : Ctrl+D duplique tout de suite, Ctrl+Maj+D ouvre Dupliquer\xE2\x80\xA6 ; Ctrl+G groupe, Ctrl+Maj+G d\xC3\xA9groupe ; Ctrl+Alt+C et Ctrl+Alt+V copient et collent le style. Les dix d\xC3\xA9" "fauts de l'inventaire sont corrig\xC3\xA9s : le menu et son action visent la m\xC3\xAAme chose, le clic droit ne fait plus de clic gauche ni n'agit sans menu, Supprimer ne vise plus un autre objet, le texte tap\xC3\xA9 n'est plus jet\xC3\xA9, les sous-onglets r\xC3\xA9pondent.",
