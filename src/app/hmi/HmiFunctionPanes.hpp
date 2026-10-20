@@ -78,6 +78,8 @@ public:
     // pour une fonction virtuelle.
     hmi::Id addOverload(hmi::Id of, std::string* why = nullptr);
     bool    renameFunction(hmi::Id, const std::string& name, std::string* why = nullptr);
+    // 1.12.18 (planche 19) : la copie juste apres elle (Moyenne_copie) ; son corps suit (Moyenne := ... -> Moyenne_copie := ...).
+    hmi::Id duplicateFunction(hmi::Id, std::string* why = nullptr);
     bool    setReturnType(hmi::Id, const std::string& type, std::string* why = nullptr);
     bool    setDescription(hmi::Id, const std::string& description);
     bool    setBody(hmi::Id, const std::string& body);

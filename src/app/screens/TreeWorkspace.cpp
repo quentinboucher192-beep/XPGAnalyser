@@ -116,6 +116,7 @@ public:
     };
     explicit TreeRail(std::string id) : Widget(std::move(id)) {}
     std::function<void(const std::string&)> onPick;
+    std::function<void(gfx::Point)>         onContext;   // 1.12.18 : le clic droit (Nouveau, Tout deplier...)
     void setItems(std::vector<Item> top, std::vector<Item> bottom) {
         if (top == top_ && bottom == bottom_) return;
         top_ = std::move(top);
@@ -178,6 +179,10 @@ protected:
         }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
             if (!bounds().contains(d->pos)) return ui::EventResult::Ignored;
+            if (d->button == ui::MouseButton::Right && onContext) {   // 1.12.18 (planche 19) : le menu du vide de l'arbre
+                onContext(d->pos);
+                return ui::EventResult::Consumed;
+            }
             if (d->button != ui::MouseButton::Left) return ui::EventResult::Consumed;
             for (const auto& [r, k] : hits_)
                 if (r.contains(d->pos)) {
@@ -278,6 +283,7 @@ protected:
         }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
             if (!bounds().contains(d->pos)) return ui::EventResult::Ignored;
+            if (d->button != ui::MouseButton::Left) return ui::EventResult::Consumed;   // 1.12.18 (bug 8) : le droit n'agit pas
             for (const auto& [r, k] : hits_)
                 if (r.contains(d->pos) && k < chips_.size()) {
                     const std::string key = chips_[k].key;
@@ -354,6 +360,7 @@ protected:
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
         if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
             if (!bounds().contains(d->pos)) return ui::EventResult::Ignored;
+            if (d->button != ui::MouseButton::Left) return ui::EventResult::Consumed;   // 1.12.18 (bug 8) : le droit n'agit pas
             for (const auto& [r, k] : hits_)
                 if (r.contains(d->pos) && k < parts_.size()) {
                     const std::string key = parts_[k].key;
@@ -387,6 +394,7 @@ ui::WidgetPtr MainAnalysisScreen::wrapExplorer(std::unique_ptr<ui::TreeView> tre
             (void)setTreeDensity(h == 22.f ? "large" : h == 26.f ? "normal" : "serre");
         } else (void)setTreeScope(key);
     };
+    rail->onContext = [this](gfx::Point at) { showTreeEmptyMenu(at); };   // 1.12.18 (planche 19)
     treeRail_ = &column->dock(std::move(rail), Side::Left, 40.f);
     auto foot = std::make_unique<TreeFoot>("analysis.treeFoot");
     foot->onPick = [this](const std::string& key) { openTreeHealth(key); };

@@ -15,9 +15,11 @@
 // =============================================================================
 #pragma once
 
+#include "widgets/Containers.hpp"   // 1.12.18 : wireSubTabMenu
 #include "widgets/Controls.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -73,5 +75,18 @@ struct Def {
 // Les entrees d'un menu (et de ses sous-menus) dont la colonne de droite n'est
 // pas une touche - vide : le menu est propre. Pour les essais des ecrans.
 [[nodiscard]] std::vector<std::string> badShortcuts(const std::vector<PopupMenu::Item>& items);
+
+// 1.12.18 (bug 7, planche 20) : LE MENU D'UNE BANDE DE SOUS-ONGLETS (inspecteur, panneau du bas,
+// simulation...). Le clic droit choisit l'onglet, puis ouvre ses entrees (`entries`, peut-etre
+// aucune), et toujours Disposition... (Ctrl+Maj+K). `run` recoit l'onglet et l'id choisi. Le menu
+// est un enfant de `owner` ; ses liaisons vivent dans `links`.
+using TabEntries = std::function<std::vector<PopupMenu::Item>(std::size_t tab)>;
+using TabRun = std::function<void(std::size_t tab, int id)>;
+inline constexpr int kDispositionItem = 9090;
+void wireSubTabMenu(TabControl& tabs, Widget& owner, core::ConnectionScope& links, TabEntries entries = {}, TabRun run = {});
+// Ce que fait Disposition... (l'ecran le branche une fois : la fenetre Disposition) ; vide : grise.
+void setDispositionHook(std::function<void()> hook);
+[[nodiscard]] PopupMenu::Item dispositionItem();   // l'entree (id kDispositionItem), grisee sans crochet
+void openDisposition();
 
 }   // namespace ui::cmd

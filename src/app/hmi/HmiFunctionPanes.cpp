@@ -960,6 +960,42 @@ Id HmiFunctionsPane::addOverload(Id of, std::string* why) {
     return made;
 }
 
+// 1.12.18 (planche 19) : DUPLIQUER - une copie juste apres elle, un nom libre (Moyenne_copie, puis
+// _copie2...) ; son corps suit son nom (Moyenne := Resultat rend la valeur). Une commande (Ctrl+Z).
+Id HmiFunctionsPane::duplicateFunction(Id id, std::string* why) {
+    const auto* f = fnOf(doc_->project, id);
+    if (!f) {
+        if (why) *why = "fonction introuvable";
+        return kNoId;
+    }
+    const hmi::HmiFunction copy = *f;
+    std::string name = copy.name + "_copie";
+    for (int i = 2; (!named(name).empty() || !nameAllowed(name, kNoId, nullptr)) && i < 1000; ++i) name = copy.name + "_copie" + std::to_string(i);
+    Id made = kNoId;
+    auto cmd = hmi::changeProject(doc_, "Dupliquer la fonction " + copy.name, [&](hmi::Project& p) {
+        auto* l = listOf(p);
+        if (!l) return;
+        hmi::HmiFunction x = copy;
+        x.id = p.allocate();
+        x.name = name;
+        x.body = hmi::renameCalls(x.body, copy.name, name, /*bare*/ true);
+        for (auto& d : x.decls) d.id = p.allocate();
+        made = x.id;
+        auto at = l->end();
+        for (auto it = l->begin(); it != l->end(); ++it)
+            if (it->id == id) at = std::next(it);
+        l->insert(at, std::move(x));
+    });
+    if (cmd) apply_(std::move(cmd));
+    if (made) {
+        selectFunction(made);
+        say(copy.name + " dupliqu\xC3\xA9" "e : " + name + " (Ctrl+Z la retire).");
+    } else if (why) {
+        *why = "rien n'a \xC3\xA9t\xC3\xA9 dupliqu\xC3\xA9";
+    }
+    return made;
+}
+
 bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::string* why) {
     const auto* f = fnOf(doc_->project, id);
     if (!f) return false;

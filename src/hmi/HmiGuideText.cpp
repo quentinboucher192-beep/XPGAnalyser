@@ -649,13 +649,34 @@ const std::vector<Topic>& topics() {
                          "par-dessus) et celle de devant avec ses sous-onglets. **En \xC3\xA9" "dition** / **En "
                          "simulation** : ce qui n'est montr\xC3\xA9 qu'en simulation est liser\xC3\xA9 de vert, "
                          "qu'en \xC3\xA9" "dition de bleu ; le sous-onglet choisi au d\xC3\xA9part est en couleur.", {}, "1.12.4"},
+             {K::Heading, "Le clic droit, partout (1.12.18)", {}, "1.12.18"},
+             {K::Paragraph, "**Chaque endroit a son menu** : une ligne de l'arbre ou d'un tableau, un onglet, un sous-onglet, le titre d'une "
+                         "colonne, un objet du dessin ou de la vue en marche, le code, une carte de l'accueil, une action de l'historique. "
+                         "En t\xC3\xAAte, **ce que vise le menu** (\xC2\xAB Moyenne \xC2\xB7 fonction IHM \xC2\xBB, \xC2\xAB 3 variables IHM \xC2\xBB) ; la colonne de "
+                         "droite ne montre que des **touches** ; une entr\xC3\xA9" "e gris\xC3\xA9" "e dit pourquoi. **Maj+F10** ou la touche Menu l'ouvrent "
+                         "au clavier, la lettre soulign\xC3\xA9" "e choisit. Le clic droit **n'agit jamais tout seul** : il choisit, puis il montre.", {}, "1.12.18"},
+             {K::Bullet, "**Un onglet** : Fermer, Fermer les autres, Fermer ceux de droite, Fermer tout (chacun son nombre), **Rouvrir le "
+                         "dernier ferm\xC3\xA9** (Ctrl+Maj+T, les vingt derniers), Afficher dans l'arbre, Copier le titre ; le vide de la bande : "
+                         "Rouvrir, Fermer tout, Mosa\xC3\xAFque.", {}, "1.12.18"},
+             {K::Bullet, "**Un sous-onglet** (l'inspecteur, le panneau du bas, la simulation, un symbole) : le clic droit le choisit, puis "
+                         "ses entr\xC3\xA9" "es (la Console : Effacer, Copier les lignes, Exporter en texte) et **Disposition\xE2\x80\xA6**.", {}, "1.12.18"},
+             {K::Bullet, "**Le titre d'une colonne** : Trier de A \xC3\xA0 Z, de Z \xC3\xA0 A, Ajuster la largeur, Masquer la colonne, Colonnes \xE2\x80\xBA "
+                         "(les remontrer), Filtrer la colonne\xE2\x80\xA6, Effacer les filtres, **Exporter en CSV\xE2\x80\xA6** (Excel).", {}, "1.12.18"},
+             {K::Bullet, "**L'arbre du projet** : chaque n\xC5\x93ud a ses gestes - Ouvrir (Entr\xC3\xA9" "e), Ouvrir dans une fen\xC3\xAAtre, Dupliquer "
+                         "(Ctrl+D), Renommer (F2), Copier le nom (Ctrl+C), Voir les usages (Maj+F12), \xC3\x89pingler, Supprimer (Suppr) ; un dossier "
+                         "cr\xC3\xA9" "e ce qu'il range (Nouvelle alarme\xE2\x80\xA6) ; plusieurs lignes choisies : Copier les N noms, Supprimer les N\xE2\x80\xA6 ; "
+                         "la racine : Nouveau \xE2\x80\xBA, Enregistrer, Cr\xC3\xA9" "er une version, Ouvrir le dossier du projet, Rechercher ; le vide "
+                         "et le rail : Nouveau \xE2\x80\xBA, Tout d\xC3\xA9plier, Tout replier ; une ligne d'\xC3\x89pingl\xC3\xA9s ou de R\xC3\xA9" "cents a tout le "
+                         "menu de ce qu'elle vise.", {}, "1.12.18"},
+             {K::Bullet, "**L'historique** : Aller \xC3\xA0 (Entr\xC3\xA9" "e), Ouvrir dans une fen\xC3\xAAtre, Revenir \xC3\xA0 cet \xC3\xA9tat\xE2\x80\xA6 (le double "
+                         "clic), Retirer de l'historique (Suppr), Vider l'historique - la liste seulement, Ctrl+Z annule toujours.", {}, "1.12.18"},
              {K::Heading, "Les raccourcis", {}},
              {K::Table, "Touche\tCe qu'elle fait\nCtrl+Z\tAnnuler (dans un champ en cours de saisie : sa "
                          "saisie d'abord)\nCtrl+Y, "
                          "Ctrl+Maj+Z\tR\xC3\xA9tablir\nCtrl+H\tL'historique\nCtrl+K\tAller "
                          "\xC3\xA0\xE2\x80\xA6 : une variable, une vue, une alarme, un volet, une "
                          "action\nCtrl+C, Ctrl+V (un tableau)\tCopier vers Excel, coller depuis Excel "
-                         "(Ctrl+Maj+V : en nouvelles lignes)\nCtrl+S\tEnregistrer le projet\nCtrl+Maj+K\tProjet "
+                         "(Ctrl+Maj+V : en nouvelles lignes)\nCtrl+S\tEnregistrer le projet\nCtrl+W, Ctrl+Maj+T\tFermer l'onglet, rouvrir le dernier ferm\xC3\xA9 (1.12.18)\nMaj+F10\tLe menu du clic droit, au clavier (1.12.18)\nCtrl+Maj+K\tProjet "
                          "\xE2\x80\xBA Disposition\xE2\x80\xA6 (les panneaux, les sous-onglets, les pages)\nCtrl+Tab, "
                          "Ctrl+Maj+Tab\tLe sous-onglet suivant, pr\xC3\xA9" "c\xC3\xA9" "dent du "
                          "volet\nCtrl+PgSuiv, Ctrl+PgPr\xC3\xA9" "c\tL'onglet suivant, "
@@ -671,7 +692,8 @@ const std::vector<Topic>& topics() {
                          "capture de la fen\xC3\xAAtre (dossier captures/)", {}},
          },
          {"historique", "ihm", "equipements", "aller-a", "excel"},
-         {"sous-onglets", "sous-onglet", "onglets", "Ctrl+Tab", "Ctrl+PgSuiv", "liste des onglets", "Tous les onglets", "raccourcis", "raccourci", "disposition", "Disposition", "panneaux", "Ctrl+Maj+K"},
+         {"sous-onglets", "sous-onglet", "onglets", "Ctrl+Tab", "Ctrl+PgSuiv", "liste des onglets", "Tous les onglets", "raccourcis", "raccourci", "disposition", "Disposition", "panneaux", "Ctrl+Maj+K",
+          "clic droit", "menu contextuel", "Maj+F10", "Ctrl+Maj+T", "Rouvrir"},
          {},
          {{"PNG_503_onglets_reduits.png", "Les dix sous-onglets des \xC3\x89quipements dans un volet \xC3\xA9troit : les inactifs r\xC3\xA9" "duits \xC3\xA0 leur ic\xC3\xB4ne et leur nombre, l'onglet ouvert en entier ; au survol, le nom et la pastille enti\xC3\xA8re."}, {"PNG_504_onglets_liste.png", "Le bouton \xC3\xA0 droite de la bande : la liste de tous les onglets, leurs pastilles enti\xC3\xA8res, l'onglet ouvert marqu\xC3\xA9 d'un point."}},
          "",

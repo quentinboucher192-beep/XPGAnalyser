@@ -1023,7 +1023,12 @@ MacrosPane::MacrosPane(std::string id, std::string libsRoot, mm::MacroMemory* me
     auto menu = std::make_unique<ui::PopupMenu>(base + ".menu");
     auto* popup = &static_cast<ui::PopupMenu&>(addChild(std::move(menu)));
     contextMenu_ = popup;
-    links_ += popup->itemChosen->connect([this](int a) { runAction(a); });
+    // 1.12.18 (bug 1) : l'action vise la ligne du clic droit - plus la ligne courante, quand
+    // plusieurs macros sont choisies et que le clic droit en vise une autre.
+    links_ += popup->itemChosen->connect([this](int a) {
+        if (contextNode_ != ui::kInvalidNode && contextNode_ != tree_->currentNode()) tree_->setCurrentNode(contextNode_);
+        runAction(a);
+    });
 
     wireDrag();
     reload();
@@ -1810,18 +1815,25 @@ void MacrosPane::showContextMenu(ui::NodeId n, gfx::Point at) {
     const auto kind = MacroTreeModel::kindOf(n);
     const auto sep = [&] { items.push_back({"", "", "", ui::Icon::None, true, true, -1}); };
     if (kind == MacroTreeModel::KMacro) {
+        // 1.12.18 (planche 21) : LE MEME MENU que dans l'arbre du projet (ExplorerMenus.cpp), dans le
+        // meme ordre ; "Favorite" y est devenue Epingler.
+        ui::PopupMenu::Item head;
+        head.heading = true;
+        head.label = treeModel_->text(n);
+        head.shortcut = "macro";
+        items.push_back(std::move(head));
         const bool project = hosts_.project && hosts_.project();
         items.push_back({"Lancer", "Entr\xC3\xA9" "e", project ? "" : "ouvre un projet d'abord", ui::Icon::Play, project, false, ALaunch});
         items.push_back({"Modifier le code", "", "", ui::Icon::Code, true, false, AEdit});
-        items.push_back({"Aide", "F1", "", ui::Icon::Info, true, false, AHelp});
-        sep();
         items.push_back({"Nouvelle macro ici\xE2\x80\xA6", "", "", ui::Icon::Document, true, false, ANewMacro});
-        items.push_back({"Dupliquer\xE2\x80\xA6", "", "", ui::Icon::Export, true, false, ADuplicate});
-        items.push_back({"Renommer\xE2\x80\xA6", "F2", "", ui::Icon::Document, true, false, ARename});
-        items.push_back({"Supprimer (dans la corbeille)", "Suppr", "", ui::Icon::Close, true, false, ADelete});
-        sep();
+        items.push_back({"Dupliquer\xE2\x80\xA6", "Ctrl+Maj+D", "", ui::Icon::Duplicate, true, false, ADuplicate});
+        items.push_back({"Renommer\xE2\x80\xA6", "F2", "", ui::Icon::Rename, true, false, ARename});
         const bool fav = memory_ && memory_->favourite(treeModel_->text(n));
         items.push_back({fav ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler", "", "", ui::Icon::Pin, true, false, AFavourite});
+        sep();
+        items.push_back({"Supprimer (corbeille)", "Suppr", "", ui::Icon::Delete, true, false, ADelete});
+        sep();
+        items.push_back({"Aide", "F1", "", ui::Icon::Info, true, false, AHelp});
     } else if (kind == MacroTreeModel::KFolder) {
         items.push_back({"Nouvelle macro ici\xE2\x80\xA6", "", "", ui::Icon::Document, true, false, ANewMacro});
         items.push_back({"Nouveau dossier ici\xE2\x80\xA6", "", "", ui::Icon::Folder, true, false, ANewFolder});
@@ -2013,6 +2025,10 @@ ui::EventResult MacrosPane::onEvent(const ui::InputEvent& ev) {
             }
             if (k->key == ui::Key::Delete) {
                 runAction(ADelete);
+                return ui::EventResult::Consumed;
+            }
+            if (k->key == ui::Key::D && k->mods.ctrl && k->mods.shift && !k->mods.alt) {   // 1.12.18 : Dupliquer...
+                runAction(ADuplicate);
                 return ui::EventResult::Consumed;
             }
         }

@@ -385,7 +385,7 @@ core::Status StartupScreen::buildUi() {
     rail.setCodeStats(codeStatsText());              // 1.11.7 : les lignes de code (.h, .hpp, .c, .cpp)
     std::string program = leafName(station::currentExecutable());
     if (program.empty()) program = "xpg_analyzer";
-    page_->setStatusRight("Entr\xC3\xA9" "e : ouvrir \xC2\xB7 F2 : renommer \xC2\xB7 Suppr : supprimer \xC2\xB7 Ctrl+F : chercher",
+    page_->setStatusRight("Entr\xC3\xA9" "e : ouvrir \xC2\xB7 F2 : renommer \xC2\xB7 Suppr : retirer de la liste \xC2\xB7 Ctrl+F : chercher",
                           (core::editionLabel().empty() ? std::string("PLC Project Analyzer") : core::productName()) + " \xC2\xB7 " + program);
     page_->setDetailsLoader([this](start::ProjectEntry& e) { loadDetails(e); });
     page_->status().setMessage("Pr\xC3\xAAt");
@@ -438,6 +438,33 @@ core::Status StartupScreen::buildUi() {
     uiLinks_ += detail.duplicateButton().clicked->connect([this] { duplicateSelected(); });
     uiLinks_ += detail.renameButton().clicked->connect([this] { renameSelected(); });
     uiLinks_ += detail.removeButton().clicked->connect([this] { supprimerProjet(); });
+    // 1.12.18 (planche 21) : le menu d'une carte - Ouvrir, Ouvrir le dossier, Renommer..., Retirer
+    // de la liste ; Supprimer du disque... a part, en bas.
+    {
+        auto popup = std::make_unique<ui::PopupMenu>("startup.cardMenu");
+        cardMenu_ = popup.get();
+        page_->addChild(std::move(popup));
+        uiLinks_ += grid.contextRequested->connect([this](int, gfx::Point at) { showCardMenu(at); });
+        uiLinks_ += cardMenu_->itemChosen->connect([this](int id) {
+            switch (id) {
+                case 1: openSelected(); break;
+                case 2: {
+                    const auto* e = page_->selected();
+                    if (!e) break;
+                    std::string folder = e->path;
+                    if (!e->isFolder)
+                        if (const auto slash = folder.find_last_of("/\\"); slash != std::string::npos) folder.resize(slash);
+                    if (const auto why = dossiers::ouvrirDansLeSysteme(folder); !why.empty())
+                        page_->status().setTransientMessage("Ouvrir le dossier : " + why, 6.0, StatusBar::Severity::Warning);
+                    break;
+                }
+                case 3: renameSelected(); break;
+                case 4: forgetSelected(); break;
+                case 5: supprimerProjet(); break;
+                default: break;
+            }
+        });
+    }
 
     setRoot(std::move(page));
     return core::ok();
@@ -566,6 +593,14 @@ bool StartupScreen::handleKey(const ui::KeyDown& k, bool beforeWidgets) {
         if (!k.repeat) openFileDialog();
         return true;
     }
+    if (ui::isContextMenuKey(k)) {                     // 1.12.18 : Maj+F10, la touche Menu - le menu de la carte choisie
+        if (const int at = grid.selected(); at >= 0) {
+            const auto r = grid.cardRect(at);
+            ui::KeyboardMenuScope scope;
+            showCardMenu({r.x + 24.f, r.y + 28.f});
+        }
+        return true;
+    }
     if (!k.mods.none()) return false;
     switch (k.key) {
         case Key::F1:
@@ -575,7 +610,7 @@ bool StartupScreen::handleKey(const ui::KeyDown& k, bool beforeWidgets) {
             if (!k.repeat) renameSelected();
             return true;
         case Key::Delete:
-            if (!k.repeat) supprimerProjet();
+            if (!k.repeat) forgetSelected();           // 1.12.18 (planche 21) : retirer de la liste ; supprimer du disque : le menu
             return true;
         case Key::Return:
             if (!k.repeat) openSelected();
@@ -1118,6 +1153,62 @@ void StartupScreen::renameSelected() {
 
 // La suppression, qui est la seule action de cet ecran a effacer des fichiers.
 // Elle est donc la plus prudente de toutes.
+// 1.12.18 (planche 21) : RETIRER DE LA LISTE (Suppr) - la carte part, le projet reste sur le disque
+// (Ouvrir... le remet).
+void StartupScreen::forgetSelected() {
+    const auto* sel = page_->selected();
+    if (!sel) {
+        page_->status().setTransientMessage("Choisis d'abord un projet dans la liste.", 6.0, StatusBar::Severity::Warning);
+        return;
+    }
+    const std::string path = sel->path, name = sel->name.empty() ? sel->path : sel->name;
+    app_.forgetPath(path);
+    reload();
+    page_->status().setMessage(name + " retir\xC3\xA9 de la liste. Rien n'a \xC3\xA9t\xC3\xA9 touch\xC3\xA9 sur le disque (Ouvrir... le remet).",
+                               StatusBar::Severity::Success);
+}
+
+// 1.12.18 (planche 21) : le menu de la carte choisie. En tete : son nom, et son dossier a droite.
+void StartupScreen::showCardMenu(gfx::Point at) {
+    const auto* e = page_ ? page_->selected() : nullptr;
+    if (!cardMenu_ || !e) return;
+    using Item = ui::PopupMenu::Item;
+    std::vector<Item> items;
+    const auto add = [&items](int id, std::string label, ui::Icon icon, std::string key, std::string why, std::string note = {}) {
+        Item it;
+        it.id = id;
+        it.label = std::move(label);
+        it.icon = icon;
+        it.shortcut = std::move(key);
+        it.enabled = why.empty();
+        it.disabledReason = std::move(why);
+        it.note = std::move(note);
+        items.push_back(std::move(it));
+    };
+    Item head;
+    head.heading = true;
+    head.label = e->name.empty() ? e->path : e->name;
+    std::string where = e->path;
+    if (const auto slash = where.find_last_of("/\\"); slash != std::string::npos) where.resize(slash);
+    head.shortcut = where.size() > 40 ? "\xE2\x80\xA6" + where.substr(where.size() - 38) : where;
+    items.push_back(std::move(head));
+    const std::string gone = e->missing ? std::string("introuvable sur le disque") : std::string{};
+    add(1, "Ouvrir", ui::Icon::Open, "Entr\xC3\xA9" "e", gone);
+    add(2, "Ouvrir le dossier", ui::Icon::FolderOpen, {}, gone);
+    add(3, "Renommer\xE2\x80\xA6", ui::Icon::Rename, "F2",
+        !e->isFolder ? std::string("un export garde le nom de son fichier") : !gone.empty() ? gone
+        : e->state == project::State::Lock ? std::string("LOCK : personne ne le modifie") : std::string{});
+    add(4, "Retirer de la liste", ui::Icon::Close, "Suppr", {}, "le projet reste sur le disque");
+    Item rule;
+    rule.separator = true;
+    items.push_back(std::move(rule));
+    add(5, "Supprimer du disque\xE2\x80\xA6", ui::Icon::Delete, {},
+        !e->isFolder ? std::string("un export n'est pas un projet : Retirer de la liste suffit") : gone);
+    cardMenu_->setItems(std::move(items));
+    const auto surface = page_->bounds();
+    cardMenu_->openAt(at, {surface.w, surface.h});
+}
+
 void StartupScreen::supprimerProjet() {
     const auto* sel = page_->selected();
     if (!sel) {

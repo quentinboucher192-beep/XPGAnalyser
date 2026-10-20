@@ -3471,6 +3471,9 @@ void MainAnalysisScreen::onEnter() {
     // (ou Supprimer) de son menu du clic droit (ExplorerMenus.cpp).
     links_ += explorer_->renameRequested->connect([this](NodeId n) { treeKey(n, true); });
     links_ += explorer_->deleteRequested->connect([this](NodeId n) { treeKey(n, false); });
+    // 1.12.18 (planche 19) : Ctrl+D, Ctrl+C, Maj+F12 (les touches du menu) ; le vide sous les lignes a son menu.
+    explorer_->setKeyHandler([this](const ui::KeyDown& k) { return treeCommandKey(k); });
+    links_ += explorer_->emptyContextRequested->connect([this](gfx::Point at) { showTreeEmptyMenu(at); });
 
     // UN DIAGNOSTIC TIENT SUR UNE LIGNE ET NE S'EXPLIQUE PAS EN UNE LIGNE.
     //
@@ -3499,7 +3502,16 @@ void MainAnalysisScreen::onEnter() {
     links_ += centre_->contextMenuRequested->connect([this](std::size_t i, gfx::Point at) { showTabMenu(i, at); });
     links_ += centre_->barContextRequested->connect([this](gfx::Point at) { showTabBarMenu(at); });   // 1.12.18
     // 1.12.18 (planche 20) : Exporter en CSV... d'un titre de colonne - ou l'ecrire se demande.
-    ui::TableView::setCsvExporter([this](const std::string& name, const std::string& csv) { saveApiCsv(name, csv); });
+    {
+        const std::weak_ptr<bool> alive = hookGuard_;
+        ui::TableView::setCsvExporter([this, alive](const std::string& name, const std::string& csv) {
+            if (!alive.expired()) saveApiCsv(name, csv);
+        });
+        // 1.12.18 (bug 7) : Disposition... dans le menu d'un sous-onglet.
+        ui::cmd::setDispositionHook([this, alive] {
+            if (!alive.expired()) (void)app_.actions().trigger("project.disposition", app_.commands());
+        });
+    }
     links_ += tabMenu_->itemChosen->connect([this](int a) { runTabMenuAction(a); });
 
     // Lot API 7 : plus de ligne "Simulation: RUNNING  scan N" dans la barre

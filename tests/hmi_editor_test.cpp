@@ -17523,11 +17523,11 @@ void centreAide111() {
     // 1.12.3 : + Ctrl+Maj+K (Projet > Disposition...). 1.12.16 : + Ctrl+I (Choisir une fonction...).
     // 1.12.18 : + Maj+F10 et les lettres d'un menu (General), Ctrl+D / Ctrl+Maj+D, Ctrl+G / Ctrl+Maj+G,
     // Ctrl+Alt+C / Ctrl+Alt+V (l'editeur de vues).
-    check(hk::all().size() == 101 && hk::ofContext(hk::Context::Scripts).size() == 37,
+    check(hk::all().size() == 102 && hk::ofContext(hk::Context::Scripts).size() == 37,
           "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17), "
-          "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3), Ctrl+I (1.12.16) et les 5 du clic droit (1.12.18)");
-    check(hk::ofContext(hk::Context::General).size() == 28 && hk::ofContext(hk::Context::Help).size() == 7,
-          "raccourcis : General 28 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu), Aide 7");
+          "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3), Ctrl+I (1.12.16), les 5 du clic droit et Ctrl+Maj+T (1.12.18)");
+    check(hk::ofContext(hk::Context::General).size() == 29 && hk::ofContext(hk::Context::Help).size() == 7,
+          "raccourcis : General 29 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu, Ctrl+Maj+T), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,
     // dans l'ecriture du registre (Alt+Left, Shift+F5). Le registre lui-meme est lu juste apres.
     const std::pair<const char*, const char*> attendu[] = {
@@ -17611,20 +17611,20 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51.
     const auto& rel = hn::releases();
-    check(rel.size() == 50 && rel.front().version == "1.12.17" && rel[1].version == "1.12.16" && rel[2].version == "1.12.15" && rel[3].version == "1.12.14" && rel[4].version == "1.12.13" && rel[5].version == "1.12.12" && rel[6].version == "1.12.11" && rel[7].version == "1.12.10" && rel[8].version == "1.12.9" && rel[9].version == "1.12.8" && rel[10].version == "1.12.7" && rel[11].version == "1.12.6" && rel[12].version == "1.12.5" && rel[13].version == "1.12.4" && rel[14].version == "1.12.3" && rel[15].version == "1.12.2" && rel[16].version == "1.12.1"
-              && rel[17].version == "1.12.0" && rel[18].version == "1.11.24" && rel[19].version == "1.11.23"
-              && rel[20].version == "1.11.22" && rel[21].version == "1.11.21" && rel[22].version == "1.11.20" && rel[23].version == "1.11.19"
-              && rel[24].version == "1.11.18" && rel[25].version == "1.11.17"
-              && rel[26].version == "1.11.16" && rel[27].version == "1.11.15"
-              && rel[28].version == "1.11.14" && rel[29].version == "1.11.13" && rel[30].version == "1.11.12"
-              && rel[31].version == "1.11.11" && rel[32].version == "1.11.10"
-              && rel[33].version == "1.11.9" && rel[34].version == "1.11.8"
-              && rel[35].version == "1.11.7" && rel[36].version == "1.11.6" && rel[37].version == "1.11.5"
-              && rel[38].version == "1.11.4" && rel[39].version == "1.11.3" && rel[40].version == "1.11.2"
-              && rel[41].version == "1.11.1" && rel[42].version == "1.11" && rel[43].version == "1.10.4",
-          "notes : 50 versions, la 1.12.17 en tete, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 51 && rel.front().version == "1.12.18" && rel[1].version == "1.12.17" && rel[2].version == "1.12.16" && rel[3].version == "1.12.15" && rel[4].version == "1.12.14" && rel[5].version == "1.12.13" && rel[6].version == "1.12.12" && rel[7].version == "1.12.11" && rel[8].version == "1.12.10" && rel[9].version == "1.12.9" && rel[10].version == "1.12.8" && rel[11].version == "1.12.7" && rel[12].version == "1.12.6" && rel[13].version == "1.12.5" && rel[14].version == "1.12.4" && rel[15].version == "1.12.3" && rel[16].version == "1.12.2" && rel[17].version == "1.12.1"
+              && rel[18].version == "1.12.0" && rel[19].version == "1.11.24" && rel[20].version == "1.11.23"
+              && rel[21].version == "1.11.22" && rel[22].version == "1.11.21" && rel[23].version == "1.11.20" && rel[24].version == "1.11.19"
+              && rel[25].version == "1.11.18" && rel[26].version == "1.11.17"
+              && rel[27].version == "1.11.16" && rel[28].version == "1.11.15"
+              && rel[29].version == "1.11.14" && rel[30].version == "1.11.13" && rel[31].version == "1.11.12"
+              && rel[32].version == "1.11.11" && rel[33].version == "1.11.10"
+              && rel[34].version == "1.11.9" && rel[35].version == "1.11.8"
+              && rel[36].version == "1.11.7" && rel[37].version == "1.11.6" && rel[38].version == "1.11.5"
+              && rel[39].version == "1.11.4" && rel[40].version == "1.11.3" && rel[41].version == "1.11.2"
+              && rel[42].version == "1.11.1" && rel[43].version == "1.11" && rel[44].version == "1.10.4",
+          "notes : 51 versions, la 1.12.18 en tete, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -17895,7 +17895,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 350,   // 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 357,   // 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18038,7 +18038,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 210, "centre : L'IHM a les 210 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 50, "centre : 11 expressions, 50 notes (1.12.17)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 51, "centre : 11 expressions, 51 notes (1.12.18)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -18100,10 +18100,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 50
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 51
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.12.17" && hc::notesPage("9.9").version == "1.12.17",
+        check(hc::notesPage("").version == "1.12.18" && hc::notesPage("9.9").version == "1.12.18",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -18447,7 +18447,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 50;   // 1.11.3 a 1.12.17 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 51;   // 1.11.3 a 1.12.18 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -33273,6 +33273,201 @@ void simDepliee1217() {
           "D\xC3\xA9" "bogage : ses points d'arr\xC3\xAAt, comme avant");
 }
 
+// ---- 1.12.18 (clic droit, lot 5 : planches 19 a 21) : l'historique, Aller a, les titres de colonne, les
+// sous-onglets (bug 7), Dupliquer une fonction ou un script (l'arbre du projet) ----
+void clicDroitLot5() {
+    std::printf("== 1.12.18 : clic droit, lot 5 (historique, Aller \xC3\xA0, colonnes, sous-onglets, dupliquer) ==\n");
+    installerPressePapiers();
+    const auto theme = ui::Theme::dark();
+    // ---- l'historique (planche 21) : le clic droit demande le menu ; Entree va a l'endroit ; Suppr retire ----
+    {
+        core::CommandStack st;
+        st.setDescriber([](const core::ICommand& c, core::CommandInfo& i) {
+            i.area = 2;
+            i.place = "IHM \xE2\x80\xBA Vues \xE2\x80\xBA " + c.label();
+            i.placeKey = "hmi:vue:" + c.label();
+        });
+        int n = 0;
+        (void)st.push(std::make_unique<Frappe>(n, 0, "Pompe_1"));
+        (void)st.push(std::make_unique<Frappe>(n, 0, "Vanne_2"));
+        app::HistoryPanel panel("h11218");
+        panel.setStack(&st);
+        panel.setBounds({0, 0, 1600, 900});
+        panel.open();
+        Recorder rec;
+        panel.layout();
+        panel.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, 0.0, nullptr});
+        const int row = panel.rowByLabel("Pompe_1");
+        const auto rr = panel.rowRect(row);
+        int menuRow = -1;
+        std::string place;
+        auto c1 = panel.menuRequested->connect([&](int r, gfx::Point) { menuRow = r; });
+        auto c2 = panel.placeRequested->connect([&](const std::string& k) { place = k; });
+        (void)panel.dispatch(ui::MouseDown{{rr.x + 60.f, rr.y + rr.h / 2.f}, ui::MouseButton::Right, 1, {}});
+        check(row >= 0 && menuRow == row && place.empty() && panel.selectedRow() == row,
+              "historique : le clic droit choisit l'action et demande son menu (il ne va plus \xC3\xA0 l'endroit tout seul, bug 8)");
+        const auto sb = panel.partRect(app::HistoryPanel::Part::Search);
+        (void)panel.dispatch(ui::MouseDown{{sb.x + 5.f, sb.y + 5.f}, ui::MouseButton::Left, 1, {}});
+        (void)panel.dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        check(place == "hmi:vue:Pompe_1", "Entr\xC3\xA9" "e : aller \xC3\xA0 l'endroit de l'action choisie (" + place + ")");
+        (void)panel.dispatch(ui::KeyDown{ui::Key::Delete, {}, false});
+        check(panel.rowByLabel("Pompe_1") < 0 && panel.hiddenCount() == 1 && st.done().size() == 2,
+              "Suppr : l'action quitte la liste ; la pile ne change pas (Ctrl+Z l'annule toujours)");
+        panel.hideAllEntries();
+        check(panel.rowByLabel("Vanne_2") < 0 && st.canUndo(), "Vider l'historique : la liste seulement");
+    }
+    // ---- Aller a : le clic droit choisit la ligne, sans y aller (bug 8) ----
+    {
+        app::GoToPanel go("go11218");
+        go.setBounds({0, 0, 1600, 900});
+        go.setSearch([](const std::string& text) {
+            std::vector<app::GoToPanel::Result> out;
+            for (const char* n : {"Pression_Entree", "Pression_Sortie"})
+                if (!text.empty() && app::GoToPanel::matchAt(n, text) >= 0)
+                    out.push_back({0, "VARIABLES IHM", n, "REAL", {}, std::string("hmivar:") + n, ui::Icon::Variable, 0});
+            return out;
+        });
+        std::string chosen;
+        auto conn = go.chosen->connect([&](const app::GoToPanel::Result& r) { chosen = r.key; });
+        go.open({600, 0, 240, 32});
+        go.setText("pres");
+        Recorder rec;
+        go.layout();
+        go.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, 0.0, nullptr});
+        const auto r1 = go.resultRect(1);
+        (void)go.dispatch(ui::MouseDown{{r1.x + 20.f, r1.y + r1.h / 2.f}, ui::MouseButton::Right, 1, {}});
+        check(!r1.empty() && chosen.empty() && go.isOpen() && go.current() == 1, "Aller \xC3\xA0 : le clic droit choisit la ligne, sans y aller");
+        (void)go.dispatch(ui::MouseDown{{r1.x + 20.f, r1.y + r1.h / 2.f}, ui::MouseButton::Left, 1, {}});
+        check(chosen == "hmivar:Pression_Sortie", "le clic gauche y va");
+    }
+    // ---- le titre d'une colonne (planche 20) ----
+    {
+        struct M final : ui::ITableModel {
+            std::size_t rowCount() const override { return 2; }
+            std::size_t columnCount() const override { return 3; }
+            std::string headerText(std::size_t c) const override { return c == 0 ? "Nom" : c == 1 ? "Type" : "Commentaire"; }
+            std::string cellText(ui::RowIndex r, std::size_t c) const override {
+                return c == 0 ? "V" + std::to_string(r) : c == 1 ? std::string("REAL") : r ? std::string("a;b") : std::string("simple");
+            }
+            bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
+        };
+        ui::TableView t("cols11218");
+        t.setModel(std::make_shared<M>());
+        std::vector<ui::TableView::Column> cols(3);
+        const char* titles[] = {"Nom", "Type", "Commentaire"};
+        for (std::size_t i = 0; i < 3; ++i) {
+            cols[i].title = titles[i];
+            cols[i].width = 120.f;
+        }
+        t.setColumns(cols);
+        t.setBounds({0, 0, 600, 300});
+        t.layout();
+        t.openHeaderMenu({150.f, 10.f}, 1);
+        auto* menu = t.contextMenu();
+        const bool ok = menu && menu->isOpen() && findItem(menu->items(), "Trier de A \xC3\xA0 Z") && findItem(menu->items(), "Trier de Z \xC3\xA0 A")
+                        && findItem(menu->items(), "Ajuster la largeur") && findItem(menu->items(), "Masquer la colonne")
+                        && findItem(menu->items(), "Colonnes") && findItem(menu->items(), "Filtrer la colonne\xE2\x80\xA6")
+                        && findItem(menu->items(), "Effacer les filtres") && findItem(menu->items(), "Exporter en CSV\xE2\x80\xA6");
+        check(ok, "le titre d'une colonne : Trier, Ajuster la largeur, Masquer, Colonnes >, Filtrer, Effacer les filtres, Exporter en CSV");
+        if (menu) choisirDans(menu, 9);
+        check(!t.columns()[1].visible && t.columns()[0].visible, "Masquer la colonne : Type part");
+        const std::string csv = t.csvText();
+        check(csv.find("Nom;Commentaire") == 0 && csv.find("\"a;b\"") != std::string::npos && csv.find("REAL") == std::string::npos,
+              "le CSV : les colonnes montr\xC3\xA9" "es, un ; dans une case entre guillemets");
+    }
+    // ---- une bande de sous-onglets (bug 7) : choisi au clic droit, puis son menu et Disposition... ----
+    {
+        ui::Widget owner("own11218");
+        auto& tabs = static_cast<ui::TabControl&>(owner.addChild(std::make_unique<ui::TabControl>("onglets11218")));
+        (void)tabs.addTab({"Console", ui::Icon::Document}, std::make_unique<ui::Widget>());
+        (void)tabs.addTab({"Sorties", ui::Icon::Document}, std::make_unique<ui::Widget>());
+        core::ConnectionScope links;
+        int ran = -1;
+        ui::cmd::wireSubTabMenu(tabs, owner, links,
+                                [](std::size_t tab) {
+                                    ui::PopupMenu::Item it;
+                                    it.id = 1;
+                                    it.label = tab ? "Effacer les sorties" : "Effacer la console";
+                                    return std::vector<ui::PopupMenu::Item>{it};
+                                },
+                                [&ran](std::size_t tab, int id) { ran = static_cast<int>(tab) * 10 + id; });
+        owner.setBounds({0, 0, 800, 400});
+        tabs.setBounds({0, 0, 800, 400});
+        Recorder rec;
+        tabs.layout();
+        tabs.render(ui::PaintContext{rec, theme, {0, 0, 800, 400}, 0.0, nullptr});
+        gfx::Rect hr;
+        check(tabs.headerRect(1, hr), "l'en-t\xC3\xAAte du sous-onglet Sorties");
+        (void)tabs.dispatch(ui::MouseDown{{hr.x + 10.f, hr.y + hr.h / 2.f}, ui::MouseButton::Right, 1, {}});
+        auto* menu = dynamic_cast<ui::PopupMenu*>(owner.findById("own11218.ongletMenu"));
+        const auto* layout = menu ? findItem(menu->items(), "Disposition\xE2\x80\xA6") : nullptr;
+        check(tabs.currentIndex() == 1 && menu && menu->isOpen() && findItem(menu->items(), "Effacer les sorties") && layout && !layout->enabled,
+              "clic droit sur Sorties : l'onglet est choisi, son menu s'ouvre (Effacer les sorties ; Disposition... gris\xC3\xA9" "e sans \xC3\xA9" "cran)");
+        if (menu) choisirDans(menu, 1);
+        check(ran == 11, "l'entr\xC3\xA9" "e du sous-onglet part (onglet 1, entr\xC3\xA9" "e 1)");
+        int opened = 0;
+        ui::cmd::setDispositionHook([&opened] { ++opened; });
+        (void)tabs.dispatch(ui::MouseDown{{hr.x + 10.f, hr.y + hr.h / 2.f}, ui::MouseButton::Right, 1, {}});
+        layout = menu ? findItem(menu->items(), "Disposition\xE2\x80\xA6") : nullptr;
+        if (menu && layout && layout->enabled) choisirDans(menu, layout->id);
+        check(opened == 1, "Disposition... ouvre la fen\xC3\xAAtre Disposition");
+        ui::cmd::setDispositionHook({});
+    }
+    // ---- le panneau du bas : Effacer la console, Exporter en texte (planche 20) ----
+    {
+        app::HmiBuildOutputPane out("out11218");
+        out.setBounds({0, 0, 1200, 320});
+        Recorder rec;
+        out.layout();
+        out.render(ui::PaintContext{rec, theme, {0, 0, 1200, 320}, 0.0, nullptr});
+        gfx::Rect hr;
+        auto* tabs = out.tabs();
+        check(tabs && tabs->headerRect(app::HmiBuildOutputPane::kConsole, hr), "l'en-t\xC3\xAAte de la Console");
+        if (tabs) (void)tabs->dispatch(ui::MouseDown{{hr.x + 10.f, hr.y + hr.h / 2.f}, ui::MouseButton::Right, 1, {}});
+        auto* menu = dynamic_cast<ui::PopupMenu*>(out.findById("out11218.ongletMenu"));
+        check(tabs && tabs->currentIndex() == app::HmiBuildOutputPane::kConsole && menu && menu->isOpen()
+                  && findItem(menu->items(), "Effacer la console") && findItem(menu->items(), "Exporter en texte")
+                  && findItem(menu->items(), "Disposition\xE2\x80\xA6"),
+              "Console (panneau du bas) : Effacer la console, Exporter en texte, Disposition...");
+    }
+    // ---- l'arbre du projet (planche 19) : Dupliquer une fonction IHM, un script ----
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        app::HmiFunctionsPane fp("fn11218", doc, apply);
+        fp.setBounds({0, 0, 1200, 700});
+        fp.layout();
+        const Id moy = fp.addFunction("Moyenne", "REAL", "la moyenne");
+        const Id copie = fp.duplicateFunction(moy);
+        const auto byId = [&](Id id) -> const hmi::HmiFunction* {
+            for (const auto& f : doc->project.programs.functions)
+                if (f.id == id) return &f;
+            return nullptr;
+        };
+        const auto* c = byId(copie);
+        check(copie != kNoId && c && c->name == "Moyenne_copie" && c->returnType == "REAL" && c->body.find("Moyenne_copie := Resultat;") != std::string::npos
+                  && c->body.find("Moyenne := ") == std::string::npos,
+              "Dupliquer Moyenne : Moyenne_copie, son corps suit son nom (Moyenne_copie := Resultat)");
+        const Id copie2 = fp.duplicateFunction(moy);
+        check(byId(copie2) && byId(copie2)->name == "Moyenne_copie2", "une deuxi\xC3\xA8me copie : Moyenne_copie2");
+        (void)stack.undo();
+        check(!byId(copie2) && byId(copie), "Ctrl+Z retire la copie");
+        Script sc;
+        sc.id = doc->project.allocate();
+        sc.name = "Calcul";
+        sc.event = "Appel";
+        sc.body = "X := 1;";
+        doc->project.programs.scripts.push_back(sc);
+        app::HmiScriptsPane sp("prog11218", doc, apply);
+        sp.setBounds({0, 0, 1200, 700});
+        sp.layout();
+        const Id dup = sp.duplicateScript(sc.id);
+        const auto* d = doc->project.generalScript("Calcul_copie");
+        check(dup != kNoId && d && d->id == dup && d->body == "X := 1;" && d->event == "Appel", "Dupliquer le script Calcul : Calcul_copie, son corps et son d\xC3\xA9" "clencheur");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les natives rangees, Choisir une fonction... (Mes fonctions, Rend), seuls.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -33669,6 +33864,7 @@ int main(int argc, char** argv) {
     esclavesArbre1115();                    // 1.11.5 : les esclaves simules en arbre, la recherche, les bornes au clavier
     surLaVueClicDroit1116();                // 1.11.6 : sur la vue actuelle, le clic droit
     menusSimulation11218();                 // 1.12.18 : les menus de la simulation (planche 16)
+    clicDroitLot5();                        // 1.12.18 : l'historique, Aller a, les colonnes, les sous-onglets, dupliquer (planches 19 a 21)
     forcageCommun1117();                    // 1.11.7 : le forcage commun, prioritaire sur les scripts
     variableFx1117();                       // 1.11.7 : la case Variable d'une action, la pastille fx
     blocageDelier1117();                    // 1.11.7 : Delier pendant la simulation ne bloque plus

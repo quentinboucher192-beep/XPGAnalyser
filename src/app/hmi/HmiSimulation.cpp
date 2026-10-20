@@ -2834,6 +2834,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     tabs->addTab(ui::TabControl::Tab{"Popups", ui::Icon::Document, false, false}, hmiparams::makePopupsTab(base + ".popups"));
     tabs->setCurrentIndex(0);
     tabs_ = &static_cast<ui::TabControl&>(split->addPane(std::move(tabs), 0.44f, 220.f));
+    ui::cmd::wireSubTabMenu(*tabs_, *this, links_);   // 1.12.18 (bug 7) : choisi, puis Disposition...
     disposition::applyTabs(*tabs_, "sim", true);       // 1.12.3 : Projet > Disposition
     split_ = &static_cast<ui::Splitter&>(addChild(std::move(split)));
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));

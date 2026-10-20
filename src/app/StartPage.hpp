@@ -217,6 +217,8 @@ public:
     const core::SignalPtr<int> selectionChanged = core::Signal<int>::create();
     const core::SignalPtr<int> activated        = core::Signal<int>::create();
     const core::SignalPtr<>    newRequested     = core::Signal<>::create();
+    // 1.12.18 (planche 21) : le clic droit sur une carte la choisit, puis demande son menu.
+    const core::SignalPtr<int, gfx::Point> contextRequested = core::Signal<int, gfx::Point>::create();
 
 protected:
     void            onLayout() override;

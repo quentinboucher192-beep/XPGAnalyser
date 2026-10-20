@@ -335,6 +335,8 @@ public:
     [[nodiscard]] std::string label(int tab) const;
     [[nodiscard]] bool tabRect(int tab, gfx::Rect& out) const;   // pour les scripts
     const core::SignalPtr<int> changed = core::Signal<int>::create();
+    // 1.12.18 (bug 7, planche 20) : le clic droit choisit l'onglet, puis demande son menu (Disposition...).
+    const core::SignalPtr<int, gfx::Point> menuRequested = core::Signal<int, gfx::Point>::create();
 
 protected:
     void onPaint(const ui::PaintContext&) override;

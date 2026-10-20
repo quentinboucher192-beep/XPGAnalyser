@@ -7,6 +7,7 @@
 #include "hmi/HmiPaneKit.hpp"
 #include "hmi/HmiPanels.hpp"
 
+#include "../ui/Commands.hpp"            // 1.12.18 : le menu d'une version (cmd::heading)
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/DataViews.hpp"
 
@@ -452,6 +453,61 @@ VersionsPane::VersionsPane(std::string id, std::string folder) : ui::Widget(std:
     links_ += changes_->activated->connect([this](ui::RowIndex r) {
         if (!hosts_.compare || r >= shown_.elements.size()) return;
         hosts_.compare(shown_.a, shown_.b, shown_.elements[r].key);
+    });
+    // 1.12.18 (planche 20) : LE MENU D'UNE VERSION - Ouvrir (ce qu'elle a change : la comparaison avec
+    // la precedente ; Entree, le double clic), Comparer au travail, Restaurer..., Exporter, Extraire,
+    // Supprimer... (Suppr). Le travail en cours : Ouvrir le compare a la derniere version.
+    constexpr int kOpen = 2001, kCompareWork = 2002;
+    const auto openVersion = [this] {
+        const int sel = selectedVersion();
+        if (!hosts_.compare || sel < 0) return;
+        if (sel == 0) {
+            if (store_.last()) hosts_.compare(store_.last()->number, 0, {});
+        } else if (const auto* v = store_.find(sel)) {
+            hosts_.compare(v->base, v->number, {});
+        }
+    };
+    table_->setExtraContextOnly(true);
+    table_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const int sel = selectedVersion();
+        if (sel < 0) return items;
+        const auto* v = sel > 0 ? store_.find(sel) : nullptr;
+        if (sel > 0 && !v) return items;
+        const auto entry = [](int itemId, std::string label, ui::Icon icon, std::string key, std::string why) {
+            ui::PopupMenu::Item it;
+            it.id = itemId;
+            it.label = std::move(label);
+            it.icon = icon;
+            it.shortcut = std::move(key);
+            it.enabled = why.empty();
+            it.disabledReason = std::move(why);
+            return it;
+        };
+        const std::string working = sel == 0 ? std::string("le travail en cours") : std::string{};
+        items.push_back(ui::cmd::heading(v ? "V" + std::to_string(v->number) + (v->name.empty() ? std::string{} : " \xC2\xB7 " + v->name) : std::string("Travail en cours"),
+                                         v ? v->date.substr(0, 10) : std::string{}));
+        items.push_back(entry(kOpen, "Ouvrir", ui::Icon::Open, "Entr\xC3\xA9" "e", sel == 0 && !store_.last() ? std::string("aucune version encore") : std::string{}));
+        items.push_back(entry(kCompareWork, "Comparer au travail", ui::Icon::Search, {}, working));
+        items.push_back(entry(1000 + ARestore, "Restaurer\xE2\x80\xA6", ui::Icon::History, {}, working));
+        items.push_back(ui::cmd::separator());
+        items.push_back(entry(1000 + AExport, "Exporter (.zip)\xE2\x80\xA6", ui::Icon::Export, {}, working));
+        items.push_back(entry(1000 + AExtract, "Extraire dans un dossier\xE2\x80\xA6", ui::Icon::Folder, {}, working));
+        items.push_back(ui::cmd::separator());
+        items.push_back(entry(1000 + ADelete, "Supprimer\xE2\x80\xA6", ui::Icon::Delete, "Suppr", working));
+        return items;
+    });
+    links_ += table_->contextAction->connect([this, openVersion](int a) {
+        if (a == kOpen) openVersion();
+        else if (a == kCompareWork) {
+            if (const int sel = selectedVersion(); hosts_.compare && sel > 0) hosts_.compare(sel, 0, {});
+        } else if (a > 1000 && a < 1100) tools_->triggered->emit(a - 1000);
+    });
+    links_ += table_->activated->connect([openVersion](ui::RowIndex) { openVersion(); });
+    table_->setKeyHandler([this](const ui::KeyDown& k) {
+        if (k.key != ui::Key::Delete || !k.mods.none() || selectedVersion() <= 0) return false;
+        tools_->triggered->emit(ADelete);
+        return true;
     });
     refresh();
 }

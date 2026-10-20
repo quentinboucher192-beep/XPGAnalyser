@@ -297,11 +297,8 @@ namespace ui {
                 for (std::size_t i = 0; i < rects_.size() && i < rows_.size(); ++i) {
                     if (rows_[i].header || !rects_[i].contains(d->pos)) continue;
                     const auto p = d_.places_[rows_[i].place];   // une copie : naviguer refait la liste
-                    if (d->button == MouseButton::Right) {
-                        if (p.group == f::Place::Group::Pinned && d_.context_.memory && d_.context_.memory->unpin(p.path)) {
-                            if (d_.context_.memoryChanged) d_.context_.memoryChanged();
-                            d_.load(true);
-                        }
+                    if (d->button == MouseButton::Right) {   // 1.12.18 (bug 8) : un menu, plus un desepinglage tout de suite
+                        d_.openPlaceMenu(p, d->pos);
                         return EventResult::Consumed;
                     }
                     (void)d_.navigate(p.path);
@@ -1707,34 +1704,115 @@ namespace ui {
                 if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a');
             return s;
         }
-        int menuId(const std::string& label) { return label.rfind("Copier", 0) == 0 ? 3 : label.rfind("Ouvrir", 0) == 0 ? 2 : 1; }
+        // 1.12.18 (planche 21) : les entrees du menu d'une ligne, et leur numero.
+        constexpr const char* kRowOpen = "Ouvrir";
+        constexpr const char* kRowSystem = "Ouvrir avec le programme du syst\xC3\xA8me";
+        constexpr const char* kRowShow = "Afficher dans l'Explorateur Windows";
+        constexpr const char* kRowCopy = "Copier le chemin";
+        constexpr const char* kRowRefresh = "Actualiser";
+        constexpr const char* kRowUp = "Dossier parent";
+        constexpr const char* kRowNewFolder = "Nouveau dossier";
+        int menuId(const std::string& label) {
+            if (label == kRowCopy) return 3;
+            if (label == kRowSystem) return 2;
+            if (label == kRowOpen) return 4;
+            if (label == kRowShow) return 5;
+            if (label == kRowRefresh) return 6;
+            if (label == kRowUp) return 7;
+            if (label == kRowNewFolder) return 8;
+            return 1;                                     // Epingler / Desepingler
+        }
     } // namespace
 
     std::vector<std::string> FileExplorerDialog::rowMenuLabels() const {
         std::vector<std::string> out;
         const f::Entry* e = selectedEntry();
         if (!e) return out;
-        if (e->folder || e->family == f::Family::Drive)
-            out.emplace_back(context_.memory && context_.memory->pinned(e->path) ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler");
-        else
-            out.emplace_back("Ouvrir avec le programme du syst\xC3\xA8me");
-        out.emplace_back("Copier le chemin");
+        const bool folder = e->folder || e->family == f::Family::Drive;
+        out.emplace_back(kRowOpen);
+        if (!folder) out.emplace_back(kRowSystem);
+        out.emplace_back(kRowShow);
+        out.emplace_back(kRowCopy);
+        if (folder) out.emplace_back(context_.memory && context_.memory->pinned(e->path) ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler");
+        out.emplace_back(kRowRefresh);
+        out.emplace_back(kRowUp);
+        out.emplace_back(kRowNewFolder);
         return out;
     }
 
     void FileExplorerDialog::openRowMenu(gfx::Point at) {
-        if (!rowMenu_ || !selectedEntry()) return;
+        const f::Entry* e = selectedEntry();
+        if (!rowMenu_ || !e) return;
+        placeMenuPath_.clear();
+        const bool folder = e->folder || e->family == f::Family::Drive;
         std::vector<PopupMenu::Item> items;
+        PopupMenu::Item head;
+        head.heading = true;
+        head.label = e->name;
+        head.shortcut = e->family == f::Family::Drive ? "lecteur" : folder ? "dossier" : "fichier";
+        items.push_back(std::move(head));
         for (const auto& label : rowMenuLabels()) {
             PopupMenu::Item it;
             it.label = label;
             it.id = menuId(label);
-            if (it.id == 2 && !context_.openExternally) {
+            switch (it.id) {
+                case 1: it.icon = Icon::Pin; break;
+                case 2: it.icon = Icon::Open; break;
+                case 3: it.icon = Icon::Copy; break;
+                case 4: it.icon = Icon::Open; it.shortcut = "Entr\xC3\xA9" "e"; break;
+                case 5: it.icon = Icon::FolderOpen; break;
+                case 6: it.icon = Icon::Refresh; it.shortcut = "F5"; break;
+                case 7: it.icon = Icon::ArrowUp; it.shortcut = "Retour arr."; break;
+                case 8: it.icon = Icon::Folder; break;
+                default: break;
+            }
+            if ((it.id == 2 || it.id == 5) && !context_.openExternally) {
                 it.enabled = false;
                 it.disabledReason = "pas de programme du syst\xC3\xA8me ici";
+            } else if (it.id == 7 && folder_.empty()) {
+                it.enabled = false;
+                it.disabledReason = "d\xC3\xA9j\xC3\xA0 tout en haut";
+            } else if (it.id == 8 && (folder_.empty() || listing_.error != f::ListError::None)) {
+                it.enabled = false;
+                it.disabledReason = "pas de dossier ici";
+            }
+            if (it.id == 6) {                      // les gestes du dossier, a part
+                PopupMenu::Item rule;
+                rule.separator = true;
+                items.push_back(std::move(rule));
             }
             items.push_back(std::move(it));
         }
+        rowMenu_->setItems(std::move(items));
+        const gfx::Rect r = body_ ? body_->bounds() : gfx::Rect{};
+        rowMenu_->openAt(at, {r.right(), r.bottom()});
+    }
+
+    void FileExplorerDialog::openPlaceMenu(const f::Place& place, gfx::Point at) {
+        if (!rowMenu_) return;
+        placeMenuPath_ = place.path;
+        const bool pinned = context_.memory && context_.memory->pinned(place.path);
+        std::vector<PopupMenu::Item> items;
+        PopupMenu::Item head;
+        head.heading = true;
+        head.label = place.label;
+        head.shortcut = "lieu";
+        items.push_back(std::move(head));
+        PopupMenu::Item open;
+        open.label = kRowOpen;
+        open.icon = Icon::Open;
+        open.shortcut = "Entr\xC3\xA9" "e";
+        open.id = 101;
+        items.push_back(std::move(open));
+        PopupMenu::Item pin;
+        pin.label = pinned ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler";
+        pin.icon = Icon::Pin;
+        pin.id = 102;
+        if (!context_.memory) {
+            pin.enabled = false;
+            pin.disabledReason = "pas de lieux retenus ici";
+        }
+        items.push_back(std::move(pin));
         rowMenu_->setItems(std::move(items));
         const gfx::Rect r = body_ ? body_->bounds() : gfx::Rect{};
         rowMenu_->openAt(at, {r.right(), r.bottom()});
@@ -1759,9 +1837,38 @@ namespace ui {
     }
 
     void FileExplorerDialog::rowMenuAction(int id) {
+        if (id > 100) {                                   // 1.12.18 (bug 8) : le menu d'un lieu
+            const std::string place = placeMenuPath_;
+            placeMenuPath_.clear();
+            if (place.empty()) return;
+            if (id == 101) {
+                (void)navigate(place);
+            } else if (id == 102 && context_.memory) {
+                if (!context_.memory->unpin(place)) (void)context_.memory->pin(place);
+                if (context_.memoryChanged) context_.memoryChanged();
+                load(true);
+            }
+            return;
+        }
+        if (id == 6) { refresh(); return; }
+        if (id == 7) { (void)up(); return; }
+        if (id == 8) { createFolder(); return; }
         const f::Entry* e = selectedEntry();
         if (!e) return;
         const std::string path = e->path;
+        if (id == 4) {
+            for (std::size_t i = 0; i < rows_.size(); ++i)
+                if (rows_[i].path == path) {
+                    activateRow(i);
+                    break;
+                }
+            return;
+        }
+        if (id == 5) {
+            notice_ = context_.openExternally ? context_.openExternally(folder_.empty() ? path : folder_) : std::string("pas de programme du syst\xC3\xA8me ici");
+            sync();
+            return;
+        }
         if (id == 1) {
             if (!context_.memory) return;
             if (!context_.memory->unpin(path)) (void)context_.memory->pin(path);

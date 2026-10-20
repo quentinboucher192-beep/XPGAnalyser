@@ -23,6 +23,7 @@
 #include "../ui/widgets/ScrollBar.hpp"   // 1.11.4 : la barre de defilement qu'on tire
 
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,17 @@ public:
     const core::SignalPtr<std::string>   placeRequested = core::Signal<std::string>::create();
     // Le bouton "Etat enregistre".
     const core::SignalPtr<>              savedStateRequested = core::Signal<>::create();
+    // 1.12.18 (planche 21) : le clic droit sur une action choisit sa ligne et demande son menu
+    // (Aller a, Ouvrir dans une fenetre, Revenir a cet etat..., Retirer, Vider) ; rien de branche :
+    // il va a l'endroit, comme avant.
+    const core::SignalPtr<int, gfx::Point> menuRequested = core::Signal<int, gfx::Point>::create();
+
+    // Retirer une action de la liste (Suppr) ou toutes (Vider l'historique) : la liste seulement -
+    // la pile ne change pas, Ctrl+Z les annule toujours.
+    void hideEntry(std::uint64_t serial);
+    void hideAllEntries();
+    [[nodiscard]] std::size_t hiddenCount() const noexcept { return hidden_.size(); }
+    [[nodiscard]] int selectedRow() const noexcept { return selected_; }
 
     // ---- pour les tests et les sessions -------------------------------------
     enum class Filter : std::uint8_t { All, Api, Hmi, Here };
@@ -109,6 +121,7 @@ private:
     float                     contentH_{0.f};
     ui::EdgeScrollBar         sbar_;                 // 1.11.4 : elle se tire
     int                       hover_{-1}, selected_{-1};
+    std::set<std::uint64_t>   hidden_;                     // 1.12.18 : retirees de la liste
     int                       hoverPart_{-1};
 };
 

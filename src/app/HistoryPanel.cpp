@@ -118,6 +118,22 @@ void HistoryPanel::setSearch(std::string text) {
     invalidate();
 }
 
+void HistoryPanel::hideEntry(std::uint64_t serial) {
+    if (serial == 0 || !hidden_.insert(serial).second) return;
+    dirtyRows_ = true;
+    selected_ = -1;
+    invalidate();
+}
+
+void HistoryPanel::hideAllEntries() {
+    if (!stack_) return;
+    for (const auto& e : stack_->done()) hidden_.insert(e.info.serial);
+    for (const auto& e : stack_->undone()) hidden_.insert(e.info.serial);
+    dirtyRows_ = true;
+    selected_ = -1;
+    invalidate();
+}
+
 bool HistoryPanel::keep(const core::CommandInfo& info) const {
     switch (filter_) {
         case Filter::All: break;
@@ -192,7 +208,7 @@ void HistoryPanel::rebuildIfNeeded() const {
             break;
         }
         const auto& e = entryAt(p - 1);
-        if (!keep(e.info)) continue;
+        if (!keep(e.info) || hidden_.count(e.info.serial)) continue;
         Row r;
         r.kind = Row::Kind::Entry;
         r.serial = e.info.serial;
@@ -503,7 +519,9 @@ ui::EventResult HistoryPanel::onEvent(const ui::InputEvent& ev) {
             if (i >= 0 && rows_[static_cast<std::size_t>(i)].kind == Row::Kind::Entry) {
                 selected_ = i;
                 invalidate();
-                placeRequested->emit(rows_[static_cast<std::size_t>(i)].placeKey);
+                // 1.12.18 (bug 8) : un menu ; sans lui, l'endroit (comme avant).
+                if (menuRequested->slotCount() > 0) menuRequested->emit(i, md->pos);
+                else placeRequested->emit(rows_[static_cast<std::size_t>(i)].placeKey);
             }
         }
         return ui::EventResult::Consumed;
@@ -546,9 +564,15 @@ ui::EventResult HistoryPanel::onEvent(const ui::InputEvent& ev) {
                 return ui::EventResult::Consumed;
             }
             case ui::Key::Return:
+                // 1.12.18 (planche 21) : Entree va a l'endroit (Aller a) ; revenir a l'etat : le double clic.
                 if (selected_ >= 0 && static_cast<std::size_t>(selected_) < rows_.size()
                     && rows_[static_cast<std::size_t>(selected_)].kind == Row::Kind::Entry)
-                    goToRequested->emit(rows_[static_cast<std::size_t>(selected_)].serial);
+                    placeRequested->emit(rows_[static_cast<std::size_t>(selected_)].placeKey);
+                return ui::EventResult::Consumed;
+            case ui::Key::Delete:
+                if (selected_ >= 0 && static_cast<std::size_t>(selected_) < rows_.size()
+                    && rows_[static_cast<std::size_t>(selected_)].kind == Row::Kind::Entry)
+                    hideEntry(rows_[static_cast<std::size_t>(selected_)].serial);
                 return ui::EventResult::Consumed;
             default:
                 break;

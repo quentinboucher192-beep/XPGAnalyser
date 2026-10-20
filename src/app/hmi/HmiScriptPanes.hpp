@@ -121,6 +121,7 @@ public:
     // description ; corps vide : un commentaire d'en-tete) : une seule commande.
     hmi::Id addScript(hmi::Script spec, std::string* why = nullptr);
     bool    renameScript(hmi::Id, const std::string& name, std::string* why = nullptr);
+    hmi::Id duplicateScript(hmi::Id, std::string* why = nullptr);   // 1.12.18 : la copie juste apres lui (Calcul_copie)
     bool    deleteScript(hmi::Id);
     bool    setBody(hmi::Id, const std::string& body);
     bool    setTrigger(hmi::Id, const std::string& event, int periodMs, const std::string& watch);

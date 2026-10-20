@@ -132,4 +132,56 @@ std::vector<std::string> badShortcuts(const std::vector<PopupMenu::Item>& items)
     return out;
 }
 
+namespace {
+std::function<void()>& dispositionHook() {
+    static std::function<void()> hook;
+    return hook;
+}
+}   // namespace
+
+void setDispositionHook(std::function<void()> hook) { dispositionHook() = std::move(hook); }
+
+PopupMenu::Item dispositionItem() {
+    PopupMenu::Item layout;
+    layout.label = "Disposition\xE2\x80\xA6";
+    layout.icon = Icon::Layers;
+    layout.shortcut = "Ctrl+Maj+K";
+    layout.id = kDispositionItem;
+    layout.enabled = static_cast<bool>(dispositionHook());
+    if (!layout.enabled) layout.disabledReason = "pas de fen\xC3\xAAtre Disposition ici";
+    return layout;
+}
+
+void openDisposition() {
+    if (const auto hook = dispositionHook()) hook();
+}
+
+void wireSubTabMenu(TabControl& tabs, Widget& owner, core::ConnectionScope& links, TabEntries entries, TabRun run) {
+    auto* menu = &static_cast<PopupMenu&>(owner.addChild(std::make_unique<PopupMenu>(owner.id() + ".ongletMenu")));
+    tabs.setRightClickSelects(true);
+    auto chosen = std::make_shared<std::size_t>(0);
+    TabControl* bar = &tabs;
+    links += tabs.contextMenuRequested->connect([bar, menu, entries, chosen, &owner](std::size_t i, gfx::Point at) {
+        *chosen = i;
+        std::vector<PopupMenu::Item> items;
+        if (const auto* t = bar->tab(i)) items.push_back(heading(t->title, "sous-onglet"));
+        if (entries)
+            for (auto& it : entries(i)) items.push_back(std::move(it));
+        if (!items.empty() && !items.back().separator && !items.back().heading) items.push_back(separator());
+        items.push_back(dispositionItem());
+        menu->setItems(std::move(items));
+        const auto surface = surfaceSize();
+        const auto b = owner.bounds();
+        menu->openAt(at, surface.w > 0 ? surface : gfx::Size{b.x + b.w, b.y + b.h});
+        bar->markTab(i, menu);
+    });
+    links += menu->itemChosen->connect([run, chosen](int id) {
+        if (id == kDispositionItem) {
+            openDisposition();
+            return;
+        }
+        if (run) run(*chosen, id);
+    });
+}
+
 }   // namespace ui::cmd

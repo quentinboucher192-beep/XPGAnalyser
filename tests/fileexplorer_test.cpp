@@ -675,15 +675,23 @@ int main(int argc, char** argv) {   // Lot API 8, 2e partie : [MAST.XPG] [tests/
             // (le renderer factice mesure large : les libelles sont coupes, les valeurs commencent)
             check(run.drew("APER\xC3\x87U") && run.drew("BMX P34") && run.drew("petit.XPG"), "l'apercu est peint");
             // Le menu du clic droit (explorateur-menu) : un dossier, un fichier.
-            check(run.dialog->select("sous") && run.dialog->rowMenuLabels().size() == 2
-                      && run.dialog->rowMenuLabels().front() == "\xC3\x89pingler" && run.dialog->rowMenuLabels().back() == "Copier le chemin",
-                  "clic droit sur un dossier : Epingler, Copier le chemin");
-            check(run.dialog->rowMenuChoose("Epingler") && !run.dialog->rowMenuLabels().empty()
-                      && run.dialog->rowMenuLabels().front() == "D\xC3\xA9s\xC3\xA9pingler",
+            // 1.12.18 (planche 21) : Ouvrir, Afficher dans l'Explorateur Windows, Copier le chemin, Epingler,
+            // Actualiser, Dossier parent, Nouveau dossier ; un fichier : Ouvrir avec le programme du systeme.
+            const auto labelAt = [&](std::size_t i) {
+                const auto l = run.dialog->rowMenuLabels();
+                return i < l.size() ? l[i] : std::string{};
+            };
+            check(run.dialog->select("sous") && run.dialog->rowMenuLabels().size() == 7 && labelAt(0) == "Ouvrir"
+                      && labelAt(1) == "Afficher dans l'Explorateur Windows" && labelAt(2) == "Copier le chemin" && labelAt(3) == "\xC3\x89pingler"
+                      && labelAt(4) == "Actualiser" && labelAt(5) == "Dossier parent" && labelAt(6) == "Nouveau dossier",
+                  "clic droit sur un dossier : Ouvrir, Afficher dans l'Explorateur, Copier le chemin, Epingler, Actualiser, Dossier parent, Nouveau dossier");
+            check(run.dialog->rowMenuChoose("Epingler") && labelAt(3) == "D\xC3\xA9s\xC3\xA9pingler",
                   "Epingler (sans accent, par script) : l'entree devient Desepingler");
-            check(run.dialog->rowMenuChoose("desep") && run.dialog->rowMenuLabels().front() == "\xC3\x89pingler", "Desepingler");
-            check(run.dialog->select("notice.pdf") && run.dialog->rowMenuLabels().front().rfind("Ouvrir avec le programme", 0) == 0,
-                  "clic droit sur un fichier : Ouvrir avec le programme du systeme");
+            check(run.dialog->rowMenuChoose("desep") && labelAt(3) == "\xC3\x89pingler", "Desepingler");
+            check(run.dialog->select("notice.pdf") && labelAt(0) == "Ouvrir" && labelAt(1).rfind("Ouvrir avec le programme", 0) == 0
+                      && run.dialog->rowMenuLabels().size() == 7,
+                  "clic droit sur un fichier : Ouvrir, Ouvrir avec le programme du systeme (pas d'Epingler)");
+            check(run.dialog->rowMenuChoose("Actualiser") && run.dialog->select("notice.pdf"), "Actualiser : la liste relue, le fichier toujours la");
             std::string why;
             check(!run.dialog->rowMenuChoose("Renommer", &why) && why.find("Copier le chemin") != std::string::npos,
                   "une entree absente du menu : dite");

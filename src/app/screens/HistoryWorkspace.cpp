@@ -149,6 +149,7 @@ void MainAnalysisScreen::wireHistory() {
         historyPanel_->setStack(&app_.commands());
         links_ += historyPanel_->goToRequested->connect([this](std::uint64_t serial) { askGoToHistory(serial); });
         links_ += historyPanel_->placeRequested->connect([this](const std::string& key) { goToPlace(key); });
+        links_ += historyPanel_->menuRequested->connect([this](int row, gfx::Point at) { showHistoryMenu(row, at); });   // 1.12.18
         links_ += historyPanel_->savedStateRequested->connect([this] {
             // L'etat enregistre : sa position dans la frise.
             const auto& stack = app_.commands();

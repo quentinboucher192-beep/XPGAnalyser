@@ -2176,7 +2176,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //                           (une capture le montre ; "choisir" y prend une entree)
     //   onglets-fermer "Titre" celui-ci|tout|autres|milieu
     //                           en une ligne : le menu, puis son entree (Fermer, Fermer
-    //                           tout, Fermer tout sauf celui-ci) ; milieu : un clic du
+    //                           tout, Fermer les autres) ; milieu : un clic du
     //                           milieu sur l'en-tete. Du pas enregistre : la question
     //                           reste ouverte, "bouton" y repond.
     if (cmd == "onglet-menu" || cmd == "onglets-fermer") {
@@ -2188,14 +2188,16 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (cmd == "onglets-fermer") {
             if (scope.empty() || scope == "celui-ci") entry = "Fermer";
             else if (scope == "tout") entry = "Fermer tout";
-            else if (scope == "autres") entry = "Fermer tout sauf celui-ci";
+            else if (scope == "autres") entry = "Fermer les autres";   // 1.12.18 : avant, Fermer tout sauf celui-ci
             else if (scope != "milieu") { fail("onglets-fermer : celui-ci, tout, autres ou milieu"); return Step::Next; }
         }
         // La ligne rejouee, le menu ouvert : son entree, cliquee comme a la souris.
         if (!entry.empty() && tabMenu->isOpen()) {
             for (std::size_t i = 0; i < tabMenu->items().size(); ++i) {
                 const auto& item = tabMenu->items()[i];
-                if (item.separator || item.heading || item.label != entry) continue;
+                // 1.12.18 : Fermer tout (5), Fermer les autres (4) - le nombre suit le libelle ; Fermer : tel quel.
+                const bool same = entry == "Fermer" ? item.label == entry : item.label.rfind(entry, 0) == 0;
+                if (item.separator || item.heading || !same) continue;
                 if (item.enabled) {
                     click(centre(tabMenu->itemRect(i)), MouseButton::Left, 1, {});
                     return Step::Yield;
@@ -6050,7 +6052,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         const auto p = centre(r);
         if (cmd == "sim-appui") { moveTo(p, {}); send(ui::MouseDown{p, MouseButton::Left, 1, {}}); }
         else if (cmd == "sim-relache") { moveTo(p, {}); send(ui::MouseUp{p, MouseButton::Left, {}}); }
-        else {
+        else if (has("droit")) {
+            click(p, MouseButton::Right, 1, {});           // 1.12.18 (planche 16) : son menu du clic droit
+        } else {
             click(p, MouseButton::Left, 1, {});
             if (has("double")) click(p, MouseButton::Left, 2, {});
         }

@@ -650,6 +650,24 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
     tabs->addTab({"Console", ui::Icon::Code, false, false}, std::move(console));
     tabs->addTab({"Diagnostics", ui::Icon::Warning, false, false}, std::move(diag));
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
+    // 1.12.18 (bug 7, planche 20) : le clic droit sur un sous-onglet le choisit, puis son menu -
+    // Effacer, Copier les lignes, Exporter en texte (la barre, pour lui) ; Disposition...
+    ui::cmd::wireSubTabMenu(*tabs_, *this, links_, [](std::size_t tab) {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto add = [&items](int id, std::string label, ui::Icon icon) {
+            ui::PopupMenu::Item it;
+            it.id = id;
+            it.label = std::move(label);
+            it.icon = icon;
+            items.push_back(std::move(it));
+        };
+        if (tab != kDiagnostics) add(1, tab == kConsole ? "Effacer la console" : "Effacer les sorties", ui::Icon::Clear);
+        add(2, "Copier les lignes", ui::Icon::Copy);
+        add(3, "Exporter en texte", ui::Icon::Export);
+        return items;
+    }, [this](std::size_t, int id) {
+        if (id >= 1 && id <= 3) tools_->triggered->emit(id);
+    });
     disposition::applyTabs(*tabs_, "bas", true);       // 1.12.3 : Projet > Disposition
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(this->id() + ".status")));
     auto rows = std::make_shared<ConsoleRows>(console_);

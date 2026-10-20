@@ -108,7 +108,13 @@ public:
     void openSelected();                                   // Entree, double clic
     void renameSelected();                                 // F2
     void duplicateSelected();
-    void deleteSelected() { supprimerProjet(); }           // Suppr
+    void deleteSelected() { supprimerProjet(); }           // Supprimer du disque... (le bouton du panneau)
+    // 1.12.18 (planche 21) : Retirer de la liste (Suppr) - le projet reste sur le disque.
+    void forgetSelected();
+    // 1.12.18 : le menu d'une carte (clic droit, Maj+F10) : Ouvrir, Ouvrir le dossier, Renommer...,
+    // Retirer de la liste, Supprimer du disque... ; `at` : ou l'ouvrir.
+    void showCardMenu(gfx::Point at);
+    [[nodiscard]] ui::PopupMenu* cardMenu() const noexcept { return cardMenu_; }
     [[nodiscard]] start::StartPage* page() const noexcept { return page_; }
 
 protected:
@@ -143,6 +149,7 @@ private:
 
     App&                     app_;
     start::StartPage*        page_{nullptr};
+    ui::PopupMenu*           cardMenu_{nullptr};           // 1.12.18 : le menu d'une carte
     std::vector<std::string> pendingDrops_;                // glisses dans la fenetre, ouverts dans Update
     std::uint64_t            frame_{0};
     std::uint64_t            dialogFrame_{~std::uint64_t{0}};
@@ -523,6 +530,9 @@ private:
     ui::PopupMenu*        tabMenu_{nullptr};
     ui::Widget*           tabMenuPage_{nullptr};
     std::vector<std::string> closedTabs_;   // 1.12.18 : les endroits des onglets fermes (le dernier a la fin)
+    // 1.12.18 : les crochets globaux (l'export CSV des tableaux, Disposition... des sous-onglets) se
+    // taisent quand l'ecran n'est plus : ils gardent ce temoin en faible.
+    std::shared_ptr<bool> hookGuard_ = std::make_shared<bool>(true);
 
     // The View tab and its persistence.
     ui::WidgetPtr buildViewPanel();
@@ -661,9 +671,15 @@ private:
     struct TreeKeys {
         std::function<void()> rename, remove;
         std::string           renameWhy, removeWhy;   // grisee : pourquoi
+        // 1.12.18 (planche 19) : Ctrl+D Dupliquer, Ctrl+C Copier le nom (les noms), Maj+F12 Voir les usages.
+        std::function<void()> duplicate, copy, usages;
     };
+    // `node` kInvalidNode : le vide sous les lignes (Nouveau, Tout deplier, Tout replier).
     void buildExplorerMenu(ui::NodeId node, std::vector<ui::PopupMenu::Item>& items, TreeKeys& keys);
     void treeKey(ui::NodeId node, bool rename);        // F2 (rename) ou Suppr sur l'arbre
+    bool treeCommandKey(const ui::KeyDown& k);         // 1.12.18 : Ctrl+D, Ctrl+C, Maj+F12 sur le noeud courant
+    void showTreeEmptyMenu(gfx::Point at);             // 1.12.18 : le clic droit sous les lignes, sur le rail
+    void showHistoryMenu(int row, gfx::Point at);      // 1.12.18 (planche 21) : une action du tiroir Historique
     std::vector<std::function<void()>> contextCalls_;  // les actions des entrees (ActionCall + rang)
     // Lot 7 : l'infobulle d'un noeud, relue tant qu'elle est ouverte - la valeur
     // d'une variable en simulation, l'etat et le cycle de API > Simulation ;
@@ -851,6 +867,7 @@ private:
     void openHmiCodeTarget(const ProjectTreeModel::CodeTarget& t);
     void askHmiNewFunction(std::uint64_t symbolView = 0);   // 1.11.22 : aussi pour les fonctions d'un symbole
     void askHmiDeleteFunction(std::uint64_t functionId);
+    void askHmiDeleteVariables(std::vector<std::uint64_t> ids);   // 1.12.18 : plusieurs, un seul Ctrl+Z
     void askHmiTryFunction(std::uint64_t functionId);
     // F1 dans l'IHM : le volet d'aide sur le sujet de l'endroit (faux : pas
     // dans l'IHM, l'aide de la bibliotheque prend la main) ; le didacticiel.
@@ -917,6 +934,7 @@ private:
     void openVersions(int select = -1);
     void refreshVersions();
     void askCreateVersion();
+    void askRenameVersion(int number);                     // 1.12.18 : F2 sur une version de l'arbre
     // Lot API 6 : l'etat du projet suit les versions - le bloc "V5 en cours"
     // de la barre du haut, son menu, Terminer (FINISH), Livrer et verrouiller
     // (LOCK), la version intermediaire (VersionsWorkspace.cpp).

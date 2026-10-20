@@ -88,6 +88,22 @@ std::vector<ui::exprfield::MarkerSpan> gridMarkers(std::string_view text, bool e
 constexpr const char* kFilterKey = "hmi.inspecteur.filtres";
 constexpr std::array<const char*, 3> kFilterWords{"fx", "reperes", "nonvides"};
 
+// 1.12.18 (bug 7, planche 20) : le menu d'un sous-onglet du symbole ou de la vue (Dessin, Alarmes,
+// Fonctions...) - le clic droit l'a choisi ; son nom, puis Disposition...
+void wireSymbolTabsMenu(ui::Widget& owner, HmiSymbolTabs& tabs, core::ConnectionScope& links) {
+    auto* menu = &static_cast<ui::PopupMenu&>(owner.addChild(std::make_unique<ui::PopupMenu>(tabs.id() + ".menu")));
+    HmiSymbolTabs* bar = &tabs;
+    links += tabs.menuRequested->connect([&owner, bar, menu](int t, gfx::Point at) {
+        menu->setItems({ui::cmd::heading(bar->label(t), "sous-onglet"), ui::cmd::dispositionItem()});
+        const auto surface = ui::surfaceSize();
+        const auto b = owner.bounds();
+        menu->openAt(at, surface.w > 0 ? surface : gfx::Size{b.right(), b.bottom()});
+    });
+    links += menu->itemChosen->connect([](int id) {
+        if (id == ui::cmd::kDispositionItem) ui::cmd::openDisposition();
+    });
+}
+
 } // namespace
 
 // ============================================ 1.10.3 : les filtres de l'inspecteur ===
@@ -355,6 +371,7 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         shortcutsPage_ = std::move(keys);
         tabs->setCurrentIndex(0);
         inspector_ = &static_cast<ui::TabControl&>(right->addPane(std::move(tabs), 0.58f, 140.f));
+        ui::cmd::wireSubTabMenu(*inspector_, *this, links_);   // 1.12.18 (bug 7) : choisi, puis Disposition...
         disposition::applyTabs(*inspector_, "insp", true);   // 1.12.3 : Projet > Disposition
     }
     {
@@ -666,6 +683,7 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         symbolPopups_->openView = [this](Id v) { openView->emit(v); };
         symbolPopups_->setVisibility(ui::Visibility::Collapsed);
         links_ += symbolTabs_->changed->connect([this](int) { invalidateLayout(); invalidate(); });
+        wireSymbolTabsMenu(*this, *symbolTabs_, links_);   // 1.12.18 (bug 7)
     } else if (sv) {
         // 1.12.16 : une vue, une popup - Dessin | Constantes | Fonctions (comme un symbole a ses fonctions).
         viewTabs_ = &static_cast<HmiSymbolTabs&>(addChild(std::make_unique<HmiSymbolTabs>(this->id() + ".viewtabs", doc_, viewId_)));
@@ -687,6 +705,7 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
             invalidateLayout();
             invalidate();
         });
+        wireSymbolTabsMenu(*this, *viewTabs_, links_);     // 1.12.18 (bug 7)
     }
 }
 

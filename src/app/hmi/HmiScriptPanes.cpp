@@ -1,4 +1,5 @@
 #include "HmiScriptPanes.hpp"
+#include "../../ui/Commands.hpp"   // 1.12.18 : le menu d'un sous-onglet
 #include "../Disposition.hpp"
 #include "HmiAssist.hpp"
 
@@ -480,6 +481,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         typesPane_ = types.get();
         tabs->addTab({"Types IHM", ui::Icon::DerivedType}, std::move(types));
         tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
+        ui::cmd::wireSubTabMenu(*tabs_, *this, links_);   // 1.12.18 (bug 7) : choisi, puis Disposition...
         disposition::applyTabs(*tabs_, "prog", true);  // 1.12.3 : Projet > Disposition
     }
 
@@ -1379,6 +1381,39 @@ Id HmiScriptsPane::addScript(Script spec, std::string* why) {
     refresh();
     selectScript(made);
     say("Script cr\xC3\xA9\xC3\xA9 : " + name + " (" + std::string(hmi::scriptLangKey(lang)) + ", " + std::string(hmi::eventLabel(event)) + ")");
+    return made;
+}
+
+// 1.12.18 (planche 19) : DUPLIQUER un script general - la copie juste apres lui, un nom libre
+// (Calcul_copie, puis _copie2...), son declencheur garde. Une commande (Ctrl+Z).
+Id HmiScriptsPane::duplicateScript(Id id, std::string* why) {
+    const auto* sc = doc_->project.script(id);
+    if (!sc || !general()) {
+        if (why) *why = "script introuvable";
+        return kNoId;
+    }
+    const hmi::Script copy = *sc;
+    std::string name = copy.name + "_copie";
+    for (int i = 2; doc_->project.generalScript(name) && i < 1000; ++i) name = copy.name + "_copie" + std::to_string(i);
+    Id made = kNoId;
+    auto cmd = hmi::changeProject(doc_, "Dupliquer le script " + copy.name, [&](hmi::Project& p) {
+        hmi::Script x = copy;
+        x.id = p.allocate();
+        x.name = name;
+        for (auto& d : x.decls) d.id = p.allocate();
+        made = x.id;
+        auto& v = p.programs.scripts;
+        auto at = v.end();
+        for (auto it = v.begin(); it != v.end(); ++it)
+            if (it->id == id) at = std::next(it);
+        v.insert(at, std::move(x));
+    });
+    if (cmd) apply_(std::move(cmd));
+    refresh();
+    if (made) {
+        selectScript(made);
+        say(copy.name + " dupliqu\xC3\xA9 : " + name + " (Ctrl+Z le retire).");
+    }
     return made;
 }
 

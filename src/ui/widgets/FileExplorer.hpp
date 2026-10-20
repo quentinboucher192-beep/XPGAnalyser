@@ -157,12 +157,17 @@ namespace ui {
         std::string openSelectedExternally();
         //  Les vignettes deja decodees (vue Vignettes) : combien, pour les tests.
         [[nodiscard]] std::size_t thumbnailCount() const noexcept { return thumbs_.size(); }
-        //  Le menu du clic droit sur l'element choisi : Epingler / Desepingler (un
-        //  dossier), Ouvrir avec le programme du systeme (un fichier), Copier le
-        //  chemin. rowMenuChoose : une entree par le debut de son libelle (scripts).
+        //  Le menu du clic droit sur l'element choisi (1.12.18, planche 21) : Ouvrir,
+        //  Ouvrir avec le programme du systeme (un fichier), Afficher dans l'Explorateur
+        //  Windows, Copier le chemin, Epingler / Desepingler (un dossier), Actualiser,
+        //  Dossier parent, Nouveau dossier. rowMenuChoose : une entree par le debut de
+        //  son libelle (scripts).
         [[nodiscard]] std::vector<std::string> rowMenuLabels() const;
         bool rowMenuChoose(const std::string& labelPrefix, std::string* why = nullptr);
         void openRowMenu(gfx::Point at);
+        //  1.12.18 (bug 8) : un lieu de la colonne de gauche - Ouvrir, Desepingler ; le
+        //  clic droit ne desepingle plus tout de suite.
+        void openPlaceMenu(const files::Place& place, gfx::Point at);
         //  Le lien du bas "Utiliser l'explorateur du systeme" : le reglage change
         //  (les prochaines demandes) ; faux (why) : l'appli ne le permet pas ici.
         bool chooseSystemExplorer(std::string* why = nullptr);
@@ -265,6 +270,7 @@ namespace ui {
         std::vector<std::string>               thumbWanted_;     // les images visibles sans vignette
         void rowMenuAction(int id);
         PopupMenu*                             rowMenu_{nullptr};
+        std::string                            placeMenuPath_;   // 1.12.18 : le lieu du menu ouvert (vide : une ligne)
         bool                                   systemChosen_{false};
         [[nodiscard]] std::vector<files::Entry> deepEntries() const;   // le dossier et ses sous-dossiers
         Checkbox*                              deepBox_{nullptr};

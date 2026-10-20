@@ -1559,6 +1559,7 @@ ui::EventResult HmiSymbolTabs::onEvent(const ui::InputEvent& ev) {
             gfx::Rect r;
             if (tabRect(t, r) && r.contains(m->pos)) {
                 setCurrent(t);
+                if (m->button == ui::MouseButton::Right) menuRequested->emit(t, m->pos);   // 1.12.18 (bug 7)
                 return ui::EventResult::Consumed;
             }
         }

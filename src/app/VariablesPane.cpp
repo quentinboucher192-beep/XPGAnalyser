@@ -10,6 +10,7 @@
 #include "../project/MacroSpec.hpp"
 #include "../project/ApiCommands.hpp"
 #include "RenameDialog.hpp"               // lot 7 : requestRename (le dialogue qui montre tout)
+#include "../ui/Commands.hpp"                   // 1.12.18 : le menu d'une variable (cmd::heading)
 #include "../ui/Icons.hpp"
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/DataViews.hpp"
@@ -389,6 +390,72 @@ VariablesPane::VariablesPane(std::string id) : ui::Widget(std::move(id)) {
         if (names.empty() || !hosts_.addToTable) return;
         if (choice == kNewTable) hosts_.addToTable(std::move(names), kNpos);
         else if (choice >= kTableBase) hosts_.addToTable(std::move(names), static_cast<std::size_t>(choice - kTableBase));
+    });
+    // 1.12.18 (planche 20) : LE MENU D'UNE VARIABLE - ce que fait la barre pour elle (Voir les usages,
+    // Ajouter a une table >, Renommer..., Supprimer), et Copier le nom ; au clavier : Maj+F12, F2, Suppr.
+    table_->setExtraContextOnly(true);
+    table_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto* info = usageInfo();
+        if (!info || !frame_) return items;   // un titre de genre, rien : le menu commun des tableaux
+        const auto tool = [this](int a, std::string label, ui::Icon icon, std::string key, std::string why) {
+            ui::PopupMenu::Item it;
+            it.label = std::move(label);
+            it.icon = icon;
+            it.shortcut = std::move(key);
+            it.id = 1000 + a;
+            it.enabled = frame_->tools().isEnabled(a);
+            if (!it.enabled) it.disabledReason = std::move(why);
+            return it;
+        };
+        const bool one = selectedRows().size() == 1;
+        const std::string locked = hosts_.project && hosts_.project() ? std::string{} : std::string("le programme est un export lu tel quel");
+        items.push_back(ui::cmd::heading(info->name, info->type + (info->address.empty() ? std::string{} : " \xC2\xB7 " + info->address)));
+        items.push_back(tool(AUsages, "Voir les usages", ui::Icon::Search, "Maj+F12", "pas d'usages \xC3\xA0 chercher"));
+        // Ajouter a une table > : les tables, puis Nouvelle table... (les memes numeros que le bouton).
+        {
+            ui::PopupMenu::Item sub;
+            sub.label = "Ajouter \xC3\xA0 une table";
+            sub.icon = ui::Icon::AnimationTable;
+            sub.enabled = frame_->tools().isEnabled(AAddToTable);
+            if (!sub.enabled) sub.disabledReason = locked.empty() ? std::string("rien de choisi") : locked;
+            if (const auto p = hosts_.view ? hosts_.view() : nullptr; p && sub.enabled) {
+                for (std::size_t t = 0; t < p->animationTables.size(); ++t)
+                    sub.children.push_back({text(*p, p->animationTables[t].name), std::to_string(p->animationTables[t].entries.size()), "",
+                                            ui::Icon::AnimationTable, true, false, kTableBase + static_cast<int>(t)});
+                if (!sub.children.empty()) sub.children.push_back(ui::cmd::separator());
+                sub.children.push_back({"Nouvelle table\xE2\x80\xA6", "", "", ui::Icon::AnimationTable, true, false, kNewTable});
+            }
+            items.push_back(std::move(sub));
+        }
+        ui::PopupMenu::Item copyName;
+        copyName.label = "Copier le nom";
+        copyName.icon = ui::Icon::Copy;
+        copyName.id = 1000 + 90;
+        items.push_back(std::move(copyName));
+        items.push_back(ui::cmd::separator());
+        items.push_back(tool(ARename, "Renommer\xE2\x80\xA6", ui::Icon::Rename, "F2", !locked.empty() ? locked : one ? "pas ici" : "une variable \xC3\xA0 la fois"));
+        items.push_back(tool(ADelete, "Supprimer", ui::Icon::Delete, "Suppr", !locked.empty() ? locked : one ? "pas ici" : "une variable \xC3\xA0 la fois"));
+        return items;
+    });
+    links_ += table_->contextAction->connect([this](int a) {
+        if (a == 1000 + 90) {
+            if (const auto* info = usageInfo()) ui::setClipboardText(info->name);
+        } else if (a == kNewTable || a >= kTableBase) {
+            auto names = selectedPaths();
+            if (names.empty() || !hosts_.addToTable) return;
+            hosts_.addToTable(std::move(names), a == kNewTable ? kNpos : static_cast<std::size_t>(a - kTableBase));
+        } else if (a > 1000 && a < 1000 + 90) {
+            runAction(a - 1000);
+        }
+    });
+    table_->setKeyHandler([this](const ui::KeyDown& k) {
+        if (!frame_) return false;
+        const int action = k.mods.none() && k.key == ui::Key::Delete ? ADelete : k.mods.none() && k.key == ui::Key::F2 ? ARename
+                         : k.mods.shift && !k.mods.ctrl && !k.mods.alt && k.key == ui::Key::F12 ? AUsages : 0;
+        if (action == 0 || !frame_->tools().isEnabled(action)) return false;
+        runAction(action);
+        return true;
     });
     // Lot API 8 : la recherche et la pastille retenues, des maintenant - une
     // variable demandee aussitot (Aller a...) les voit, et les efface si elles la cachent.

@@ -44,6 +44,16 @@
 #include "../TypePanes.hpp"
 #include "../VariablesPane.hpp"
 #include "../hmi/HmiDesignPanes.hpp"
+#include "../hmi/HmiFunctionPanes.hpp"     // 1.12.18 (planche 19) : Renommer, Dupliquer une fonction IHM
+#include "../hmi/HmiNotifyPanes.hpp"       // 1.12.18 : Nouveau destinataire...
+#include "../hmi/HmiReportPanes.hpp"       // 1.12.18 : Nouveau rapport...
+#include "../hmi/HmiScriptPanes.hpp"       // 1.12.18 : Dupliquer un script, une variable, un type
+#include "../hmi/HmiSupervisionPanes.hpp"  // 1.12.18 : alarmes, recettes, utilisateurs
+#include "../hmi/HmiVariablePanes.hpp"
+#include "../Dossiers.hpp"                 // 1.12.18 : Ouvrir le dossier du projet
+#include "../HistoryPanel.hpp"             // 1.12.18 (planche 21) : le menu d'une action de l'historique
+#include "../MacrosPane.hpp"               // 1.12.18 (planche 21) : le meme menu de macro que le volet
+#include "../../core/Command.hpp"          // 1.12.18 : CommandGroupScope (Supprimer les N...)
 #include "../hmi/HmiSimulation.hpp"   // 1.12.18 : les lignes de la Simulation depliee
 #include "../../help/HelpIndex.hpp"
 #include "../../help/HelpSession.hpp"     // help::labelOf
@@ -92,6 +102,46 @@ std::string clipped(std::string text, std::size_t max) {
     std::size_t cut = max;
     while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;   // pas au milieu d'un caractere
     return text.substr(0, cut) + kDots;
+}
+
+// 1.12.18 (planche 19) : ce qu'est un noeud, au singulier et au pluriel - l'en-tete du menu
+// ("Moyenne    fonction IHM", "3 variables IHM").
+struct KindWords {
+    const char* one;
+    const char* many;
+};
+KindWords kindWords(NK k) {
+    switch (k) {
+    case NK::HmiVariable:      return {"variable IHM", "variables IHM"};
+    case NK::HmiFunction:      return {"fonction IHM", "fonctions IHM"};
+    case NK::HmiTypeNode:      return {"type IHM", "types IHM"};
+    case NK::HmiGeneralScript: return {"script", "scripts"};
+    case NK::HmiView:          return {"vue", "vues"};
+    case NK::HmiObject:        return {"objet", "objets"};
+    case NK::HmiAlarm:         return {"alarme", "alarmes"};
+    case NK::HmiRecipe:        return {"recette", "recettes"};
+    case NK::HmiUser:          return {"utilisateur", "utilisateurs"};
+    case NK::HmiUserGroup:     return {"groupe", "groupes"};
+    case NK::ListVariable:     return {"variable", "variables"};
+    case NK::Section:
+    case NK::DfbSection:       return {"section", "sections"};
+    case NK::ProgramUnit:      return {"unit\xC3\xA9", "unit\xC3\xA9s"};
+    case NK::DfbType:          return {"bloc DFB", "blocs DFB"};
+    case NK::DerivedType:      return {"type d\xC3\xA9riv\xC3\xA9", "types d\xC3\xA9riv\xC3\xA9s"};
+    case NK::AnimationTable:   return {"table d'animation", "tables d'animation"};
+    case NK::Task:             return {"t\xC3\xA2" "che", "t\xC3\xA2" "ches"};
+    case NK::Macro:            return {"macro", "macros"};
+    case NK::VersionItem:      return {"version", "versions"};
+    default:                   return {"", ""};
+    }
+}
+std::string roleWord(const std::string& role) {
+    if (role == "popup") return "popup";
+    if (role == "symbole") return "symbole";
+    if (role == "modele") return "mod\xC3\xA8le";
+    if (role == "entete") return "en-t\xC3\xAAte";
+    if (role == "pied") return "pied de page";
+    return "vue";
 }
 
 // La fabrique des entrees : une entree porte son action (un rappel range dans
@@ -237,11 +287,96 @@ void MainAnalysisScreen::treeKey(NodeId node, bool rename) {
                                      5.0);
 }
 
-void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::Item>& items, TreeKeys& keys) {
+// 1.12.18 (planche 19) : Ctrl+D, Ctrl+C, Maj+F12 sur le noeud courant - l'entree de son menu qui
+// porte la touche (Dupliquer, Copier le nom ou les N noms, Voir les usages). Vrai : la touche est prise.
+bool MainAnalysisScreen::treeCommandKey(const ui::KeyDown& k) {
+    if (!explorer_ || (contextMenu_ && contextMenu_->isOpen())) return false;
+    const bool ctrl = k.mods.ctrl && !k.mods.alt && !k.mods.shift;
+    const bool shift = k.mods.shift && !k.mods.ctrl && !k.mods.alt;
+    const bool ctrlShift = k.mods.ctrl && k.mods.shift && !k.mods.alt;
+    const int which = ctrl && k.key == ui::Key::D ? 0 : ctrl && k.key == ui::Key::C ? 1 : shift && k.key == ui::Key::F12 ? 2
+                    : ctrlShift && k.key == ui::Key::D ? 3 : -1;
+    if (which < 0) return false;
+    const NodeId node = explorer_->currentNode();
+    if (node == kInvalidNode) return false;
+    contextNode_ = node;
+    std::vector<PopupMenu::Item> items;
+    TreeKeys keys;
+    buildExplorerMenu(node, items, keys);
+    // Ctrl+Maj+D : l'entree Dupliquer... (une fenetre d'abord) qui porte cette touche.
+    std::function<void()> ask;
+    for (const auto& it : items)
+        if (which == 3 && it.enabled && it.shortcut == "Ctrl+Maj+D" && it.id >= ActionCall
+            && static_cast<std::size_t>(it.id - ActionCall) < contextCalls_.size())
+            ask = contextCalls_[static_cast<std::size_t>(it.id - ActionCall)];
+    const auto& fn = which == 0 ? keys.duplicate : which == 1 ? keys.copy : which == 2 ? keys.usages : ask;
+    if (fn) {
+        const auto call = fn;    // une copie : l'action peut refaire le menu
+        call();
+    } else if (status_) {
+        static const char* const kSaid[] = {"Ctrl+D : rien \xC3\xA0 dupliquer ici", "Ctrl+C : rien \xC3\xA0 copier ici",
+                                            "Maj+F12 : pas d'usages \xC3\xA0 chercher ici", "Ctrl+Maj+D : rien \xC3\xA0 dupliquer ici"};
+        status_->setTransientMessage(kSaid[which], 5.0);
+    }
+    return true;
+}
+
+// 1.12.18 (planche 19) : le clic droit sous les lignes de l'arbre (et sur le rail) - Nouveau >,
+// Tout deplier, Tout replier.
+void MainAnalysisScreen::showTreeEmptyMenu(gfx::Point at) {
+    if (!contextMenu_) return;
+    contextNode_ = kInvalidNode;
+    std::vector<PopupMenu::Item> items;
+    TreeKeys keys;
+    buildExplorerMenu(kInvalidNode, items, keys);
+    contextMenu_->setItems(std::move(items));
+    const auto surface = root().bounds();
+    contextMenu_->openAt(at, {surface.w, surface.h});
+}
+
+// 1.12.18 (planche 21) : une action du tiroir Historique - Aller a (Entree), Ouvrir dans une
+// fenetre, Revenir a cet etat... (le double clic), Retirer de l'historique (Suppr), Vider
+// l'historique. Retirer et Vider ne touchent que la liste : Ctrl+Z les annule toujours.
+void MainAnalysisScreen::showHistoryMenu(int row, gfx::Point at) {
+    if (!contextMenu_ || !historyPanel_) return;
+    const auto& rows = historyPanel_->rows();
+    if (row < 0 || static_cast<std::size_t>(row) >= rows.size()) return;
+    const auto entry = rows[static_cast<std::size_t>(row)];
+    contextCalls_.clear();
+    std::vector<PopupMenu::Item> items;
+    MenuKit m(items, contextCalls_, ActionCall);
+    m.heading(clipped(entry.time.empty() ? entry.label : entry.time + "  " + entry.label, 48), clipped(entry.place, 40));
+    const std::string key = entry.placeKey;
+    const std::string noPlace = key.empty() ? std::string("cette action n'a pas d'endroit") : std::string{};
+    m.add("Aller \xC3\xA0", Icon::GoTo, [this, key] { goToPlace(key); }, "Entr\xC3\xA9" "e", noPlace);
+    m.add("Ouvrir dans une fen\xC3\xAAtre", Icon::Window, [this, key] {
+        goToPlace(key);
+        if (centre_ && centre_->currentIndex() < centre_->tabCount()) (void)detachTab(centre_->currentIndex());
+    }, {}, noPlace);
+    const auto serial = entry.serial;
+    m.add(entry.undone ? std::string("R\xC3\xA9tablir jusqu'ici") + kDots : std::string("Revenir \xC3\xA0 cet \xC3\xA9tat") + kDots, Icon::History,
+          [this, serial] { askGoToHistory(serial); }, "double clic");
+    m.separator();
+    m.add("Retirer de l'historique", Icon::Delete, [this, serial] { if (historyPanel_) historyPanel_->hideEntry(serial); }, "Suppr");
+    items.back().note = "la liste seulement : Ctrl+Z l'annule toujours";
+    m.add("Vider l'historique", Icon::Clear, [this] { if (historyPanel_) historyPanel_->hideAllEntries(); });
+    items.back().note = "la liste seulement : Ctrl+Z les annule toujours";
+    contextMenu_->setItems(std::move(items));
+    const auto surface = root().bounds();
+    contextMenu_->openAt(at, {surface.w, surface.h});
+}
+
+void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu::Item>& items, TreeKeys& keys) {
     contextCalls_.clear();
     items.clear();
     keys = TreeKeys{};
     MenuKit m(items, contextCalls_, ActionCall);
+
+    // 1.12.18 (planche 19) : une ligne d'Epingles ou de Recents a TOUT le menu de ce qu'elle vise
+    // (et Afficher dans l'arbre) ; les actions d'avant (runExplorerAction) visent la cible.
+    const NodeId shortcutTo = treeModel_ && clicked != ui::kInvalidNode ? treeModel_->shortcutTarget(clicked) : ui::kInvalidNode;
+    const NodeId node = shortcutTo != ui::kInvalidNode ? shortcutTo : clicked;
+    contextNode_ = node;
 
     const auto kind = ProjectTreeModel::kindOf(node);
     const auto index = ProjectTreeModel::indexOf(node);
@@ -638,12 +773,68 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         return {};
     };
 
+    // ---- 1.12.18 (planche 19) : Nouveau > - ce que le projet sait creer (la racine, le vide) ----
+    const auto newChildren = [&] {
+        std::vector<Item> kids;
+        if (core::hasApi() && project) {
+            kids.push_back(m.make("Unit\xC3\xA9 de programme" + kDots, Icon::Program, trigger("create.unit"), {}, noDoc));
+            kids.push_back(m.make("Section" + kDots, Icon::Section, trigger("create.section"), {}, noDoc));
+            kids.push_back(m.make("Bloc DFB" + kDots, Icon::FunctionBlock, trigger("create.dfb"), {}, noDoc));
+            kids.push_back(m.make("Type d\xC3\xA9riv\xC3\xA9" + kDots, Icon::DerivedType, trigger("create.ddt"), {}, noDoc));
+            kids.push_back(m.make("Variable" + kDots, Icon::Variable, trigger("create.variable"), {}, noDoc));
+            kids.push_back(m.make("Table d'animation", Icon::AnimationTable, newTable, {}, noDoc));
+        }
+        if (hmiDoc) {
+            if (!kids.empty()) {
+                Item rule;
+                rule.separator = true;
+                kids.push_back(std::move(rule));
+            }
+            kids.push_back(m.make("Vue" + kDots, Icon::Screen, [this] { askNewHmiView("vue"); }));
+            kids.push_back(m.make("Popup" + kDots, Icon::Screen, [this] { askNewHmiView("popup"); }));
+            kids.push_back(m.make("Script ST" + kDots, Icon::Code, [this] { askHmiNewScript(hmi::ScriptLang::ST); }));
+            kids.push_back(m.make("Fonction" + kDots, Icon::Function, [this] { askHmiNewFunction(); }));
+            kids.push_back(m.make("Variable IHM" + kDots, Icon::Variable, [this] { askHmiVariable(0); }));
+        }
+        return kids;
+    };
+    if (clicked == ui::kInvalidNode) {      // le vide sous les lignes, le rail : rien n'est vise
+        m.sub("Nouveau", Icon::Plus, newChildren(), project || hmiDoc ? std::string{} : std::string("aucun projet ouvert"));
+        m.separator();
+        m.add("Tout d\xC3\xA9plier", Icon::Expand, legacy(ActionExpandAll));
+        m.add("Tout replier", Icon::Collapse, legacy(ActionCollapseAll));
+        return;
+    }
+    // Un message dans la barre d'etat quand un geste est refuse (son pourquoi).
+    const auto refused = [this](std::string what, const std::string& why) {
+        if (status_ && !why.empty()) status_->setTransientMessage(what + " : " + why, 6.0, StatusBar::Severity::Warning);
+    };
+
     // =====================================================================================
-    //  L'EN-TETE : ce sur quoi on a clique (le texte du noeud, coupe).
+    //  L'EN-TETE : ce sur quoi on a clique (le texte du noeud, coupe) ; 1.12.18 (planche 19) : a
+    //  droite, ce que c'est (fonction IHM, son nombre, dans Epingles...) ; plusieurs lignes
+    //  choisies : leur nombre et leurs noms - l'en-tete dit sur quoi on agit.
     // =====================================================================================
+    const auto picked = selectionNodes();
     if (treeModel_) {
-        const std::string label = treeModel_->text(node);
-        if (!label.empty()) m.heading(clipped(label, 64));
+        std::string label = treeModel_->text(node), right;
+        if (picked.size() > 1) {
+            bool same = true;
+            for (const auto n : picked) same = same && ProjectTreeModel::kindOf(n) == kind;
+            const auto words = kindWords(kind);
+            label = std::to_string(picked.size()) + " " + (same && *words.many ? std::string(words.many) : std::string("\xC3\xA9l\xC3\xA9ments"));
+            for (const auto n : picked) right += (right.empty() ? std::string{} : std::string(", ")) + treeModel_->text(n);
+        } else if (shortcutTo != ui::kInvalidNode) {
+            right = ProjectTreeModel::kindOf(clicked) == NK::PinItem ? "dans \xC3\x89pingl\xC3\xA9s" : "dans R\xC3\xA9" "cents";
+        } else if (kind == NK::Root) {
+            right = core::hasApi() ? "projet API" : "projet IHM";
+        } else {
+            right = treeModel_->counterOf(node);
+            if (right.empty()) right = kindWords(kind).one;
+            if (kind == NK::HmiView && hmiDoc)
+                if (const auto* v = hmiDoc->project.view(static_cast<hmi::Id>(treeModel_->hmiViewOf(node)))) right = roleWord(v->role);
+        }
+        if (!label.empty()) m.heading(clipped(label, 64), clipped(right, 40));
     }
 
     // ---- Lot API 8 : l'arbre du projet (la rangee des outils : un outil par entree, au clavier aussi) ----
@@ -654,19 +845,29 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         for (std::size_t k = 0; k < chips.size(); ++k)
             m.add(chips[k].label, chips[k].icon, [this, hmiRow, k] { (void)openTreeTool(hmiRow, k); });
     }
-    // Epingler / Desepingler (en haut de l'arbre) ; un raccourci s'ouvre aussi d'ici.
-    {
-        const auto target = treeModel_ ? treeModel_->shortcutTarget(node) : ui::kInvalidNode;
-        if (target != ui::kInvalidNode) m.add("Ouvrir", Icon::Open, [this, target] { onTreeSelection(target); });
-        const auto pinned = target != ui::kInvalidNode ? target : node;
-        if (treePinnable(pinned)) {
-            const bool on = isTreePinned(pinned);
-            m.add(on ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler", Icon::Pin, [this, pinned, on] { (void)pinTreeNode(pinned, !on); });
-            m.separator();
-        }
-    }
     // ---- fin Lot API 8 : l'arbre du projet ----
 
+    // 1.12.18 (planche 19) : Epingler vient APRES les entrees du noeud (avant Supprimer), plus avant Ouvrir.
+    const std::size_t start = items.size();
+    const bool several = picked.size() > 1;
+    const std::string oneAtATime = several ? std::string("une \xC3\xA0 la fois") : std::string{};
+    // Ouvrir dans une fenetre : l'onglet de la ligne, detache (comme le bouton au survol).
+    const auto inWindow = [&] { m.add("Ouvrir dans une fen\xC3\xAAtre", Icon::Window, [this, node] { treeHoverAction(node, 1); }); };
+    // Une saisie de nom, puis le geste ; refuse : pourquoi, dans la barre d'etat.
+    const auto askName = [this](std::string title, std::string help, std::string initial, std::function<std::string(const std::string&)> act) {
+        return [this, title, help, initial, act] {
+            askApiText(title, help, initial, [this, title, act](const std::string& name) {
+                if (name.empty()) return;
+                const std::string why = act(name);
+                if (!why.empty() && status_) status_->setTransientMessage(title + " : " + why, 6.0, StatusBar::Severity::Warning);
+            });
+        };
+    };
+    // Les volets de la Programmation generale (scripts, variables, types) : ouverts au besoin.
+    const auto scriptsPane = [this]() -> HmiScriptsPane* {
+        openHmiPane("scripts");
+        return dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"));
+    };
     const bool isHmi = isHmiNode(node) || kind == NK::HmiListFolder;
     switch (kind) {
     // =====================================================================================
@@ -727,6 +928,8 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         m.add("Simuler", Icon::Play, [this] { runSimulationTransport("sim.run"); }, "F5",
               app_.simulation().state() == SimulationHost::State::Running ? "d\xC3\xA9j\xC3\xA0 en marche" : "");
         m.separator();
+        // 1.12.18 (planche 19) : F2 dit pourquoi (Control Expert nomme ses taches).
+        addRename("Renommer" + kDots, {}, "MAST, FAST, AUX : des noms fix\xC3\xA9s par Control Expert");
         addRemove("Supprimer la t\xC3\xA2" "che" + kDots,
                   [this, name] {
                       app_.menus().ShowDialog(
@@ -1249,13 +1452,24 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     }
 
     case NK::Macro: {
+        // 1.12.18 (planche 21) : LE MEME MENU que le volet Macros (MacrosPane::showContextMenu), dans le
+        // meme ordre ; en plus, Voir dans l'onglet Macros. Epingler : celui de l'arbre (avant Supprimer).
         const bool doc = document != nullptr;
+        const std::string macro = treeModel_ ? treeModel_->text(node) : std::string{};
+        const auto inPane = [this, macro](int action) {
+            return [this, macro, action] {
+                openMacros(macro);
+                if (auto* pane = macrosPane()) pane->runAction(action);
+            };
+        };
         m.add("Lancer", Icon::Play, legacy(ActionMacroLaunch), {}, doc ? std::string{} : "ouvre un projet d'abord");
         m.add("Modifier le code", Icon::Code, legacy(ActionMacroEdit));
+        m.add("Nouvelle macro ici" + kDots, Icon::Document, inPane(MacrosPane::ANewMacro));
+        m.add("Dupliquer" + kDots, Icon::Duplicate, inPane(MacrosPane::ADuplicate), "Ctrl+Maj+D");
+        addRename("Renommer" + kDots, legacy(ActionMacroRename));
         m.add("Voir dans l'onglet Macros", Icon::Folder, legacy(ActionMacroShow));
         m.separator();
-        addRename("Renommer" + kDots, legacy(ActionMacroRename));
-        addRemove("Supprimer (dans la corbeille)", legacy(ActionMacroDelete));
+        addRemove("Supprimer (corbeille)", legacy(ActionMacroDelete));
         break;
     }
     case NK::MacroFolder:
@@ -1430,6 +1644,12 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     case NK::HmiGeneralScript: {
         const auto id = treeModel_ ? treeModel_->hmiIdOf(node) : 0;
         m.add("Ouvrir", Icon::Code, [this, node] { openHmiNode(node); });
+        inWindow();                                                      // 1.12.18 (planche 19)
+        m.add("Dupliquer", Icon::Duplicate, [this, id, scriptsPane, refused] {
+            std::string why;
+            auto* pane = scriptsPane();
+            if (!pane || !pane->duplicateScript(static_cast<hmi::Id>(id), &why)) refused("Dupliquer", why.empty() ? "script introuvable" : why);
+        });
         int list = -1;
         std::string folder;
         hmiPlace(list, folder);
@@ -1451,8 +1671,31 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         break;
     case NK::HmiFunction: {
         const auto id = treeModel_ ? treeModel_->hmiIdOf(node) : 0;
+        std::string fname;
+        if (hmiDoc)
+            for (const auto& f : hmiDoc->project.programs.functions)
+                if (f.id == static_cast<hmi::Id>(id)) fname = f.name;
         m.add("Ouvrir", Icon::Code, [this, id] { openHmiFunctions(id); });
+        inWindow();                                                      // 1.12.18 (planche 19)
         m.add("Essayer" + kDots, Icon::Play, [this, id] { askHmiTryFunction(id); });
+        const auto functionsPane = [this]() -> HmiFunctionsPane* {
+            openHmiPane("fonctions");
+            return dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
+        };
+        m.add("Dupliquer", Icon::Duplicate, [id, functionsPane, refused] {
+            std::string why;
+            auto* pane = functionsPane();
+            if (!pane || !pane->duplicateFunction(static_cast<hmi::Id>(id), &why)) refused("Dupliquer", why.empty() ? "fonction introuvable" : why);
+        }, {}, fname.empty() ? "fonction introuvable" : "");
+        addRename("Renommer" + kDots,
+                  askName("Renommer la fonction " + fname, "Ses appels suivent, ses surcharges aussi (Ctrl+Z).", fname,
+                          [id, functionsPane](const std::string& name) {
+                              std::string why;
+                              auto* pane = functionsPane();
+                              if (!pane) return std::string("l'onglet Fonctions ne s'ouvre pas");
+                              return pane->renameFunction(static_cast<hmi::Id>(id), name, &why) ? std::string{} : why;
+                          }),
+                  fname.empty() ? "fonction introuvable" : "");
         iconItem();   // 1.8.0
         m.add("Exporter la fonction" + kDots, Icon::Export, [this, id] { askHmiExportPrograms(1, id); });   // 1.11.2 (decision 174)
         m.add("Importer" + kDots, Icon::Open, [this] { askHmiImport(); });
@@ -1468,8 +1711,20 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     case NK::HmiVariable: {
         const auto id = treeModel_ ? treeModel_->hmiIdOf(node) : 0;
         const std::string name = hmiDoc ? hmiName(hmiDoc->project.programs.variables, id) : std::string{};
+        // 1.12.18 (planche 19) : les variables IHM choisies avec elle (Ctrl+clic) - Copier les N noms,
+        // Supprimer les N... ; ce qui ne vaut que pour une ligne est grise ("une a la fois").
+        std::vector<std::uint64_t> ids;
+        std::string names;
+        for (const auto n : picked) {
+            if (ProjectTreeModel::kindOf(n) != NK::HmiVariable || !treeModel_ || !hmiDoc) continue;
+            const auto vid = treeModel_->hmiIdOf(n);
+            const std::string vname = hmiName(hmiDoc->project.programs.variables, vid);
+            if (vname.empty()) continue;
+            ids.push_back(vid);
+            names += (names.empty() ? std::string{} : std::string("\n")) + vname;
+        }
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
-        m.add("Modifier" + kDots, Icon::Settings, [this, id] { askHmiVariable(id); });
+        m.add("Modifier" + kDots, Icon::Settings, [this, id] { askHmiVariable(id); }, {}, oneAtATime);
         m.add("Voir les usages", Icon::Search, [this, name] {
             openHmiPane("rechercher");
             if (auto* pane = dynamic_cast<HmiFindPane*>(hmiTab("rechercher"))) {
@@ -1478,13 +1733,23 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
                 pane->setFind(name);
                 pane->search();
             }
-        }, {}, name.empty() ? "variable introuvable" : "");
+        }, {}, several ? oneAtATime : name.empty() ? "variable introuvable" : "");
         m.separator();
         tableMenu(selectedLines());
-        if (!name.empty()) m.add("Copier le nom", Icon::Copy, copy(name));
+        if (ids.size() > 1) m.add("Copier les " + std::to_string(ids.size()) + " noms", Icon::Copy, copy(names));
+        else if (!name.empty()) m.add("Copier le nom", Icon::Copy, copy(name));
+        m.add("Dupliquer", Icon::Duplicate, [id, scriptsPane, refused] {
+            auto* pane = scriptsPane();
+            if (pane) pane->showTab(HmiScriptsPane::TabVariables);
+            auto* vars = pane ? pane->variablesPane() : nullptr;
+            if (!vars || vars->duplicateVariable(static_cast<hmi::Id>(id)) == hmi::kNoId) refused("Dupliquer", "variable introuvable");
+        }, {}, several ? oneAtATime : name.empty() ? "variable introuvable" : "");
         m.separator();
-        addRename("Renommer" + kDots, rename("ihm-variable", name), name.empty() ? "variable introuvable" : "");
-        addRemove("Supprimer" + kDots, [this, id] { askHmiDeleteVariable(id); });
+        addRename("Renommer" + kDots, rename("ihm-variable", name), several ? oneAtATime : name.empty() ? "variable introuvable" : "");
+        if (ids.size() > 1)
+            addRemove("Supprimer les " + std::to_string(ids.size()) + kDots, [this, ids] { askHmiDeleteVariables(ids); });
+        else
+            addRemove("Supprimer" + kDots, [this, id] { askHmiDeleteVariable(id); });
         break;
     }
     case NK::HmiUsedVariable: {
@@ -1495,6 +1760,30 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
     case NK::HmiTypesFolder:
     case NK::HmiTypeNode: {
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        if (kind == NK::HmiTypeNode) {                                   // 1.12.18 (planche 19)
+            const auto tid = treeModel_ ? treeModel_->hmiIdOf(node) : 0;
+            const auto* type = hmiDoc ? hmiDoc->project.hmiType(static_cast<hmi::Id>(tid)) : nullptr;
+            const std::string tname = type ? type->name : std::string{};
+            const auto typesPane = [scriptsPane]() -> HmiTypesPane* {
+                auto* pane = scriptsPane();
+                if (pane) pane->showTab(HmiScriptsPane::TabTypes);
+                return pane ? pane->typesPane() : nullptr;
+            };
+            inWindow();
+            m.add("Dupliquer", Icon::Duplicate, [tid, typesPane, refused] {
+                auto* types = typesPane();
+                if (!types || types->duplicateType(static_cast<hmi::Id>(tid)) == hmi::kNoId) refused("Dupliquer", "type introuvable");
+            }, {}, tname.empty() ? "type introuvable" : "");
+            addRename("Renommer" + kDots,
+                      askName("Renommer le type " + tname, "Ses variables, membres et conversions suivent (Ctrl+Z).", tname,
+                              [tid, typesPane](const std::string& to) {
+                                  std::string why;
+                                  auto* types = typesPane();
+                                  if (!types) return std::string("l'onglet Types ne s'ouvre pas");
+                                  return types->renameType(static_cast<hmi::Id>(tid), to, &why) ? std::string{} : why;
+                              }),
+                      tname.empty() ? "type introuvable" : "");
+        }
         int list = -1;
         std::string folder;
         if (kind == NK::HmiTypesFolder) {
@@ -1576,14 +1865,56 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
 
     case NK::HmiAlarm: {
         const auto id = treeModel_ ? treeModel_->hmiIdOf(node) : 0;
+        const auto* alarm = hmiDoc ? hmiDoc->project.alarm(static_cast<hmi::Id>(id)) : nullptr;
+        const std::string aname = alarm ? alarm->name : std::string{};
+        const auto alarmsPane = [this]() -> HmiAlarmsPane* {
+            openHmiPane("alarmes");
+            return dynamic_cast<HmiAlarmsPane*>(hmiTab("alarmes"));
+        };
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        m.add("Dupliquer", Icon::Duplicate, [id, alarmsPane, refused] {   // 1.12.18 (planche 19)
+            std::string why;
+            auto* pane = alarmsPane();
+            if (!pane || pane->duplicateAlarm(static_cast<hmi::Id>(id), &why) == hmi::kNoId) refused("Dupliquer", why.empty() ? "alarme introuvable" : why);
+        }, {}, aname.empty() ? "alarme introuvable" : "");
         m.separator();
+        addRename("Renommer" + kDots,
+                  askName("Renommer l'alarme " + aname, "Les actions Acquitter qui la visent suivent (Ctrl+Z).", aname,
+                          [id, alarmsPane](const std::string& to) {
+                              std::string why;
+                              auto* pane = alarmsPane();
+                              if (!pane) return std::string("l'onglet Alarmes ne s'ouvre pas");
+                              return pane->setField(static_cast<hmi::Id>(id), "nom", to, &why) ? std::string{} : why;
+                          }),
+                  aname.empty() ? "alarme introuvable" : "");
         addRemove("Supprimer" + kDots, [this, id] { askHmiDeleteAlarm(id); });
         break;
     }
     case NK::HmiRecipe: {
         const auto id = treeModel_ ? treeModel_->hmiIdOf(node) : 0;
+        std::string rname;
+        if (hmiDoc)
+            for (const auto& r : hmiDoc->project.recipes)
+                if (r.id == static_cast<hmi::Id>(id)) rname = r.name;
+        const auto recipesPane = [this]() -> HmiRecipesPane* {
+            openHmiPane("recettes");
+            return dynamic_cast<HmiRecipesPane*>(hmiTab("recettes"));
+        };
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        m.add("Dupliquer", Icon::Duplicate, [id, recipesPane, refused] {   // 1.12.18 (planche 19)
+            std::string why;
+            auto* pane = recipesPane();
+            if (!pane || pane->duplicateRecipe(static_cast<hmi::Id>(id), &why) == hmi::kNoId) refused("Dupliquer", why.empty() ? "recette introuvable" : why);
+        }, {}, rname.empty() ? "recette introuvable" : "");
+        addRename("Renommer" + kDots,
+                  askName("Renommer la recette " + rname, "Ses jeux la suivent (Ctrl+Z).", rname,
+                          [id, recipesPane](const std::string& to) {
+                              std::string why;
+                              auto* pane = recipesPane();
+                              if (!pane) return std::string("l'onglet Recettes ne s'ouvre pas");
+                              return pane->setRecipeField(static_cast<hmi::Id>(id), "nom", to, &why) ? std::string{} : why;
+                          }),
+                  rname.empty() ? "recette introuvable" : "");
         m.separator();
         m.add("Exporter CSV" + kDots, Icon::Export, [this, id] { askHmiRecipeCsv(id, false); });
         m.add("Importer CSV" + kDots, Icon::Open, [this, id] { askHmiRecipeCsv(id, true); });
@@ -1660,7 +1991,77 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         m.add("Exporter (.zip)" + kDots, Icon::Export, [this, number] { exportVersion(number); });
         m.add("Extraire dans un dossier" + kDots, Icon::Folder, [this, number] { askExtractVersion(number); });
         m.separator();
+        addRename("Renommer" + kDots, [this, number] { askRenameVersion(number); });   // 1.12.18 (planche 19)
         addRemove("Supprimer" + kDots, [this, number] { askDeleteVersion(number); });
+        break;
+    }
+
+    // 1.12.18 (planche 19) : la racine du projet - Nouveau >, Enregistrer, une version, son dossier, Rechercher.
+    case NK::Root: {
+        const std::string none = project || hmiDoc ? std::string{} : std::string("aucun projet ouvert");
+        m.sub("Nouveau", Icon::Plus, newChildren(), none);
+        m.separator();
+        m.add("Enregistrer", Icon::Save, [this] { app_.saveFromKeyboard(); }, "Ctrl+S", none);
+        m.add("Cr\xC3\xA9" "er une version" + kDots, Icon::History, [this] { askCreateVersion(); }, "Ctrl+Alt+S",
+              app_.projectFolder().empty() ? "enregistre d'abord le projet en dossier" : "");
+        const std::string folder = app_.projectFolder();
+        m.add("Ouvrir le dossier du projet", Icon::FolderOpen, [refused, folder] { refused("Ouvrir le dossier", dossiers::ouvrirDansLeSysteme(folder)); }, {},
+              folder.empty() ? "le projet n'a pas encore de dossier" : "");
+        m.add("Rechercher dans le projet", Icon::Search, [this] { focusTreeFilter(); }, "Ctrl+Maj+F");
+        break;
+    }
+    // 1.12.18 (planche 19) : les dossiers qui n'avaient qu'Ouvrir - et ce qu'ils creent.
+    case NK::HmiAlarms:
+    case NK::HmiRecipes:
+    case NK::HmiUsers:
+    case NK::HmiStyles:
+    case NK::HmiReports:
+    case NK::HmiNotify: {
+        m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        const auto made = [this](std::string key) { openHmiPane(key); return hmiTab(key); };
+        const std::string help = "Son nom ; le reste dans son onglet (Ctrl+Z le retire).";
+        if (kind == NK::HmiAlarms)
+            m.add("Nouvelle alarme" + kDots, Icon::Plus, askName("Nouvelle alarme", help, "Alarme", [made](const std::string& name) {
+                std::string why;
+                auto* pane = dynamic_cast<HmiAlarmsPane*>(made("alarmes"));
+                return pane && pane->addAlarm(name, &why) != hmi::kNoId ? std::string{} : why.empty() ? std::string("refus\xC3\xA9" "e") : why;
+            }));
+        else if (kind == NK::HmiRecipes)
+            m.add("Nouvelle recette" + kDots, Icon::Plus, askName("Nouvelle recette", help, "Recette", [made](const std::string& name) {
+                std::string why;
+                auto* pane = dynamic_cast<HmiRecipesPane*>(made("recettes"));
+                return pane && pane->addRecipe(name, &why) != hmi::kNoId ? std::string{} : why.empty() ? std::string("refus\xC3\xA9" "e") : why;
+            }));
+        else if (kind == NK::HmiUsers) {
+            m.add("Nouvel utilisateur" + kDots, Icon::User, askName("Nouvel utilisateur", "Son identifiant ; son mot de passe dans l'onglet (Ctrl+Z le retire).",
+                                                                      "operateur", [made](const std::string& name) {
+                std::string why;
+                auto* pane = dynamic_cast<HmiUsersPane*>(made("utilisateurs"));
+                return pane && pane->addUser(name, {}, &why) != hmi::kNoId ? std::string{} : why.empty() ? std::string("refus\xC3\xA9") : why;
+            }));
+            m.add("Nouveau groupe" + kDots, Icon::User, askName("Nouveau groupe", help, "Groupe", [made](const std::string& name) {
+                std::string why;
+                auto* pane = dynamic_cast<HmiUsersPane*>(made("utilisateurs"));
+                return pane && pane->addGroup(name, 1, &why) != hmi::kNoId ? std::string{} : why.empty() ? std::string("refus\xC3\xA9") : why;
+            }));
+        } else if (kind == NK::HmiStyles)
+            m.add("Nouveau style" + kDots, Icon::Plus, askName("Nouveau style", help, "Style", [made](const std::string& name) {
+                auto* pane = dynamic_cast<HmiStylesPane*>(made("styles"));
+                return pane && pane->addStyle(name) != hmi::kNoId ? std::string{} : std::string("nom d\xC3\xA9j\xC3\xA0 pris ou invalide");
+            }));
+        else if (kind == NK::HmiReports)
+            m.add("Nouveau rapport" + kDots, Icon::Plus, askName("Nouveau rapport", help, "Rapport_journalier", [made](const std::string& name) {
+                std::string why;
+                auto* pane = dynamic_cast<HmiReportsPane*>(made("rapports"));
+                return pane && pane->addReport(name, &why) ? std::string{} : why.empty() ? std::string("refus\xC3\xA9") : why;
+            }));
+        else
+            m.add("Nouveau destinataire" + kDots, Icon::Mail, askName("Nouveau destinataire", "Son nom ; son courriel et son t\xC3\xA9l\xC3\xA9phone dans l'onglet.",
+                                                                      "Astreinte", [made](const std::string& name) {
+                std::string why;
+                auto* pane = dynamic_cast<HmiNotifyPane*>(made("notifications"));
+                return pane && pane->addRecipient(name, {}, {}, &why) ? std::string{} : why.empty() ? std::string("refus\xC3\xA9") : why;
+            }));
         break;
     }
 
@@ -1669,6 +2070,57 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId node, std::vector<PopupMenu::I
         // Compiler, Styles, Essais...) : un onglet chacune.
         if (isHmi) m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
         break;
+    }
+
+    // =====================================================================================
+    //  1.12.18 (planche 19) : CE QUE TOUT NOEUD PARTAGE - la touche de chaque geste dans la
+    //  colonne de droite (Entree ouvre, Ctrl+D, Ctrl+C, Maj+F12), un raccourci (Epingles,
+    //  Recents) qui s'affiche dans l'arbre, Epingler avant Supprimer.
+    // =====================================================================================
+    {
+        const auto firstFrom = [&](std::size_t from) {
+            while (from < items.size() && (items[from].separator || items[from].heading)) ++from;
+            return from;
+        };
+        const auto opens = [&](std::size_t i) { return i < items.size() && items[i].label.rfind("Ouvrir", 0) == 0; };
+        if (shortcutTo != ui::kInvalidNode) {
+            std::size_t at = firstFrom(start);
+            if (!opens(at)) {
+                items.insert(items.begin() + static_cast<std::ptrdiff_t>(at), m.make("Ouvrir", Icon::Open, [this, node] { onTreeSelection(node); }));
+            }
+            items.insert(items.begin() + static_cast<std::ptrdiff_t>(at + 1), m.make("Afficher dans l'arbre", Icon::GoTo, [this, node] {
+                if (explorer_ && revealTreeNode(node)) explorer_->setCurrentNode(node);
+            }));
+        }
+        // Entree : ce que fait le double clic (une ligne de l'IHM l'ouvre ; une macro se lance).
+        if (const auto at = firstFrom(start); at < items.size() && items[at].enabled && items[at].shortcut.empty()
+                                                && ((isHmi && opens(at)) || (kind == NK::Macro && items[at].label == "Lancer")))
+            items[at].shortcut = "Entr\xC3\xA9" "e";
+        // Une touche par geste : la premiere entree qui le porte (grisee : la touche dit pourquoi).
+        const auto bindKey = [&](std::function<void()>& slot, const std::string& prefix, bool exact, const char* key) {
+            for (std::size_t i = start; i < items.size(); ++i) {
+                auto& it = items[i];
+                if (it.heading || it.separator || !it.children.empty()) continue;
+                if (exact ? it.label != prefix : it.label.rfind(prefix, 0) != 0) continue;
+                if (it.enabled && it.id >= ActionCall && static_cast<std::size_t>(it.id - ActionCall) < contextCalls_.size())
+                    slot = contextCalls_[static_cast<std::size_t>(it.id - ActionCall)];
+                if (it.shortcut.empty()) it.shortcut = key;
+                return;
+            }
+        };
+        bindKey(keys.duplicate, "Dupliquer", true, "Ctrl+D");
+        bindKey(keys.copy, "Copier", false, "Ctrl+C");
+        bindKey(keys.usages, "Voir les usages", false, "Maj+F12");
+        // Epingler / Desepingler : apres les entrees du noeud, juste avant Supprimer s'il y en a un.
+        if (treePinnable(node)) {
+            const bool on = isTreePinned(node);
+            auto pin = m.make(on ? "D\xC3\xA9s\xC3\xA9pingler" : "\xC3\x89pingler", Icon::Pin, [this, node, on] { (void)pinTreeNode(node, !on); });
+            std::size_t at = items.size();
+            for (std::size_t i = items.size(); i-- > start;)
+                if (!items[i].separator && !items[i].heading && items[i].shortcut == "Suppr") { at = i; break; }
+            if (at == items.size()) m.trim();
+            items.insert(items.begin() + static_cast<std::ptrdiff_t>(std::min(at, items.size())), std::move(pin));
+        }
     }
 
     // =====================================================================================

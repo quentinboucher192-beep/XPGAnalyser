@@ -564,6 +564,7 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tabs->addTab({"Essai", ui::Icon::Ok}, std::move(report));
     tabs->addTab({"\xC3\x89tat des liaisons", ui::Icon::Info}, std::move(state));
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
+    ui::cmd::wireSubTabMenu(*tabs_, *this, links_);   // 1.12.18 (bug 7) : choisi, puis Disposition...
     disposition::applyTabs(*tabs_, "eq", true);        // 1.12.3 : Projet > Disposition
     grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::make_unique<ui::PropertyGrid>(base + ".grid")));
     checks_ = &static_cast<HmiCheckList&>(addChild(std::make_unique<HmiCheckList>(base + ".checks")));

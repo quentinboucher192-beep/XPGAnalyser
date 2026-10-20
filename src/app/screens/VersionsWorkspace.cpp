@@ -483,6 +483,28 @@ void MainAnalysisScreen::askRestoreVersion(int number) {
     });
 }
 
+// 1.12.18 (planche 19) : RENOMMER une version (F2 dans l'arbre) - son nom seulement ; son etat, son
+// commentaire et ses fichiers restent.
+void MainAnalysisScreen::askRenameVersion(int number) {
+    const std::string folder = app_.projectFolder();
+    if (folder.empty() || number <= 0) return;
+    auto store = ver::open(folder);
+    const auto* v = store ? store->find(number) : nullptr;
+    if (!v) return;
+    askApiText("Renommer la version V" + std::to_string(number), "Son nom ; son \xC3\xA9tat, son commentaire et ses fichiers restent.", v->name,
+               [this, number](const std::string& name) {
+                   auto st = ver::open(app_.projectFolder());
+                   const auto* x = st ? st->find(number) : nullptr;
+                   if (!x || name.empty()) return;
+                   if (auto r = ver::update(*st, number, name, x->state, x->comment); !r) {
+                       if (status_) status_->setTransientMessage("Renommer la version : " + r.error().context, 6.0, StatusBar::Severity::Warning);
+                       return;
+                   }
+                   refreshVersions();
+                   if (status_) status_->setTransientMessage("V" + std::to_string(number) + " : " + name, 5.0, StatusBar::Severity::Success);
+               });
+}
+
 void MainAnalysisScreen::askDeleteVersion(int number) {
     const std::string folder = app_.projectFolder();
     auto store = ver::open(folder);

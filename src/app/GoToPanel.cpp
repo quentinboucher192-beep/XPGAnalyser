@@ -407,12 +407,14 @@ ui::EventResult GoToPanel::onEvent(const ui::InputEvent& ev) {
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && box_.contains(d->pos)) {
         for (const auto& [g, r] : chipRects_)
             if (r.contains(d->pos)) {
-                setCategory(g);
+                if (d->button == ui::MouseButton::Left) setCategory(g);
                 return ui::EventResult::Consumed;
             }
         for (const auto& [i, r] : rowRects_)
             if (r.contains(d->pos)) {
-                activate(i);
+                // 1.12.18 (bug 8) : seul le clic gauche y va ; le droit choisit la ligne, sans agir.
+                if (d->button == ui::MouseButton::Left) activate(i);
+                else if (current_ != i) { current_ = i; invalidate(); }
                 return ui::EventResult::Consumed;
             }
         return ui::EventResult::Consumed;

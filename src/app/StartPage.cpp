@@ -1024,6 +1024,20 @@ ui::EventResult ProjectGrid::onEvent(const ui::InputEvent& ev) {
         }
         return ui::EventResult::Ignored;
     }
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right) {
+        // 1.12.18 (planche 21) : la carte choisie, puis son menu (Ouvrir, Renommer, Retirer...).
+        const int hit = cardAt(d->pos);
+        if (hit < 0 || hit >= count()) return ui::EventResult::Ignored;
+        grabFocus();
+        lastDown_ = -1;
+        if (selected_ != hit) {
+            setSelected(hit, false);
+            selectionChanged->emit(hit);
+        }
+        invalidate();
+        contextRequested->emit(hit, d->pos);
+        return ui::EventResult::Consumed;
+    }
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
         dragging_ = false;
         if (const auto thumb = thumbRect(); thumb.h > 0.f && trackRect().contains(d->pos)) {

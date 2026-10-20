@@ -3055,8 +3055,37 @@ void MainAnalysisScreen::askHmiDeleteVariable(std::uint64_t variableId) {
     app_.menus().ShowDialog(
         std::make_unique<MessageDialog>("Supprimer la variable ?", message, MessageDialog::Icon::Question, "Supprimer"),
         [this, variableId](const menu::DialogResult& r) {
+            if (!r.accepted()) return;
+            openHmiPane("scripts");     // 1.12.18 : depuis l'arbre, l'onglet n'etait peut-etre pas ouvert
+            if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) (void)pane->deleteVariable(asId(variableId));
+        });
+}
+
+// 1.12.18 (planche 19) : SUPPRIMER LES N variables IHM choisies dans l'arbre - une question, un seul Ctrl+Z.
+void MainAnalysisScreen::askHmiDeleteVariables(std::vector<std::uint64_t> ids) {
+    if (ids.size() == 1) {
+        askHmiDeleteVariable(ids.front());
+        return;
+    }
+    auto doc = app_.hmi();
+    if (!doc || ids.empty()) return;
+    std::vector<std::string> names;
+    for (const auto id : ids)
+        for (const auto& v : doc->project.programs.variables)
+            if (v.id == asId(id)) names.push_back(v.name);
+    if (names.empty()) return;
+    const std::string count = std::to_string(names.size());
+    const std::string message = "Les " + count + " variables IHM " + joinFew(names) + " sont retir\xC3\xA9" "es. Compiler et G\xC3\xA9n\xC3\xA9rer "
+                                "signaleront celles qui servaient encore. Un seul Ctrl+Z les rend toutes.";
+    app_.menus().ShowDialog(
+        std::make_unique<MessageDialog>("Supprimer les " + count + " variables ?", message, MessageDialog::Icon::Question, "Supprimer"),
+        [this, ids, count](const menu::DialogResult& r) {
+            if (!r.accepted()) return;
+            openHmiPane("scripts");
             auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"));
-            if (r.accepted() && pane) (void)pane->deleteVariable(asId(variableId));
+            if (!pane) return;
+            core::CommandGroupScope group("Supprimer " + count + " variables IHM");
+            for (const auto id : ids) (void)pane->deleteVariable(asId(id));
         });
 }
 
