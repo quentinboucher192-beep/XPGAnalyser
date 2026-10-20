@@ -2315,7 +2315,7 @@ bool HmiVariablesPane::applyAddressFormula(Id id, const std::string& pattern, co
     if (!change(id, "Adresses de " + name + " : " + formula, [&](hmi::Variable& x) { x = hmi::addr::withFormula(x, pattern, formula); }))
         return fail(why, "rien n'a chang\xC3\xA9");
     say(name + " suit la formule " + formula + " : " + std::to_string(n) + (n > 1 ? " cases" : " case")
-        + (shared ? " (" + std::to_string(shared) + (shared > 1 ? " adresses d\xC3\xA9j\xC3\xA0 prises ailleurs, gard\xC3\xA9" "es des deux c\xC3\xB4t\xC3\xA9s)" : " adresse d\xC3\xA9j\xC3\xA0 prise ailleurs, gard\xC3\xA9" "e des deux c\xC3\xB4t\xC3\xA9s)") : std::string{})
+        + (shared ? " (" + std::to_string(shared) + (shared > 1 ? " adresses d\xC3\xA9j\xC3\xA0 prises : chevauchements gard\xC3\xA9s)" : " adresse d\xC3\xA9j\xC3\xA0 prise : chevauchement gard\xC3\xA9)") : std::string{})
         + " - Ctrl+Z d\xC3\xA9" "fait tout");
     return true;
 }

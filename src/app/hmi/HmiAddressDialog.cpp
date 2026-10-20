@@ -324,14 +324,20 @@ std::string HmiAddressDialog::confirmLabel() const {
 std::string HmiAddressDialog::message() const {
     if (!plan_.errors.empty()) return plan_.errors.front();
     if (plan_.shared == 0) return {};
+    // 1.12.19 : un chevauchement ne bloque pas - une autre variable garde la sienne, deux cases de la
+    // meme variable partagent la place.
     std::string first;
     for (const auto& r : plan_.rows)
         if (!r.sharedWith.empty()) {
-            first = var_.name + r.target + " prend " + r.after + " quand m\xC3\xAAme ; " + r.sharedWith.front() + " garde la sienne";
+            const std::string& who = r.sharedWith.front();
+            const bool sameVariable = who.rfind(var_.name, 0) == 0 && who.size() > var_.name.size()
+                                   && (who[var_.name.size()] == '[' || who[var_.name.size()] == '.');
+            first = sameVariable ? var_.name + r.target + " et " + who + " partagent " + r.after
+                                 : var_.name + r.target + " prend " + r.after + " quand m\xC3\xAAme ; " + who + " garde la sienne";
             break;
         }
     return (plan_.shared == 1 ? std::string("1 adresse d\xC3\xA9j\xC3\xA0 prise. ") : std::to_string(plan_.shared) + " adresses d\xC3\xA9j\xC3\xA0 prises. ")
-           + first + ", rien n'est effac\xC3\xA9 de son c\xC3\xB4t\xC3\xA9.";
+           + first + " : les chevauchements ne bloquent pas, rien n'est effac\xC3\xA9.";
 }
 
 bool HmiAddressDialog::confirm() {

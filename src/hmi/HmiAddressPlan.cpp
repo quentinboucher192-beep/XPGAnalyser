@@ -381,7 +381,9 @@ Plan preview(const Project& p, const Variable& v, std::string_view pattern, std:
             if (leaf.bound() && spotOf(leaf, s)) others.add(s, leaf.name);
         }
     }
-    // Les cases de la variable elle-meme, apres : deux a la meme place (dont une qui change) est une faute.
+    // Les cases de la variable elle-meme, apres. 1.12.19 : deux a la meme place (dont une qui change) ne
+    // bloque plus - modifier pour toutes les cases, c'est accepter les chevauchements ; l'apercu les montre
+    // comme ceux des autres variables (« ... l'a aussi », en ambre).
     std::set<std::size_t> changed;
     for (const auto& c : cells) changed.insert(c.leaves.begin(), c.leaves.end());
     Occupancy self;
@@ -389,19 +391,19 @@ Plan preview(const Project& p, const Variable& v, std::string_view pattern, std:
     std::vector<char> placed(after.size(), 0);
     std::set<std::string> changedNames;
     for (const auto i : changed) if (i < after.size()) changedNames.insert(after[i].name);
-    std::size_t clashes = 0;
-    std::string firstClash;
+    std::vector<std::vector<std::string>> selfShared(after.size());
+    std::map<std::string, std::size_t> indexOf;
     for (std::size_t i = 0; i < after.size(); ++i) {
         if (!after[i].bound() || !spotOf(after[i], spots[i])) continue;
         placed[i] = 1;
         for (const auto& n : self.who(spots[i]))
             if (changedNames.count(n) || changedNames.count(after[i].name)) {
-                if (++clashes == 1) firstClash = n + " et " + after[i].name + " sur " + after[i].address;
-                break;
+                selfShared[i].push_back(n);
+                if (const auto it = indexOf.find(n); it != indexOf.end()) selfShared[it->second].push_back(after[i].name);
             }
         self.add(spots[i], after[i].name);
+        indexOf.emplace(after[i].name, i);
     }
-    if (clashes) plan.errors.push_back("deux cases de " + v.name + " \xC3\xA0 la m\xC3\xAAme place : " + firstClash + (clashes > 1 ? " (et " + std::to_string(clashes - 1) + " autres)" : std::string{}));
     for (const auto& c : cells) {
         Row r;
         r.cell = c.cell;
@@ -416,9 +418,12 @@ Plan preview(const Project& p, const Variable& v, std::string_view pattern, std:
                 Spot s;
                 if (!spotOf(after[i], s, &bad)) r.error = after[i].address.empty() ? bad : after[i].address + " : " + bad;
             }
-            if (placed[i])
+            if (placed[i]) {
                 for (auto& n : others.who(spots[i]))
                     if (std::find(r.sharedWith.begin(), r.sharedWith.end(), n) == r.sharedWith.end()) r.sharedWith.push_back(std::move(n));
+                for (const auto& n : selfShared[i])
+                    if (std::find(r.sharedWith.begin(), r.sharedWith.end(), n) == r.sharedWith.end()) r.sharedWith.push_back(n);
+            }
         }
         if (!r.error.empty()) r.after.clear();
         if (!r.sharedWith.empty()) ++plan.shared;

@@ -4165,8 +4165,12 @@ void adressesFormule11218() {
     // 2. Ce que l'apercu refuse.
     plan = ad::preview(p, var(), "[*].Retour", "%MW(1000 + k)");
     check(!plan.ok() && !plan.errors.empty() && plan.errors.front().find("k inconnu") != std::string::npos, "k inconnu : refus\xC3\xA9 (" + (plan.errors.empty() ? std::string{} : plan.errors.front()) + ")");
+    // 1.12.19 : les chevauchements ne bloquent pas - les dix cases sur %MW1000, chacune voit les neuf autres.
     plan = ad::preview(p, var(), "[*].Retour", "%MW(1000)");
-    check(!plan.ok() && !plan.errors.empty() && plan.errors.front().find("m\xC3\xAAme place") != std::string::npos, "[0] et [1] sur %MW1000 : refus\xC3\xA9");
+    check(plan.ok() && plan.errors.empty() && plan.rows.size() == 10 && plan.shared == 10 && plan.rows[0].after == "%MW1000"
+              && plan.rows[0].sharedWith.size() == 9 && plan.rows[0].sharedWith.front() == "EXTRACTEURS[1].Retour"
+              && plan.rows[9].sharedWith.size() == 9 && plan.rows[9].sharedWith.front() == "EXTRACTEURS[0].Retour",
+          "[0] a [9] sur %MW1000 : permis, chaque case voit les neuf autres (" + std::to_string(plan.shared) + " partag\xC3\xA9" "es)");
     plan = ad::preview(p, var(), "[*].Retour", "%MW(70000 + i)");
     check(!plan.ok() && !plan.rows.empty() && !plan.rows.front().error.empty(), "%MW70000 : hors des zones (" + (plan.rows.empty() ? std::string{} : plan.rows.front().error) + ")");
     plan = ad::preview(p, var(), "[*]", "%M(200 + 8 * i)");

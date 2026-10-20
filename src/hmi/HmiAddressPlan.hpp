@@ -13,9 +13,11 @@
 //  suivant ; deux dimensions : ligne par ligne).
 //  L'APERCU montre chaque case avant et apres, et celles qu'une autre variable a
 //  deja : la case la prend quand meme, l'autre garde la sienne (rien n'est efface
-//  de son cote). CE QUI BLOQUE : la formule (un nom inconnu, une division par
-//  zero), une adresse hors des zones, deux cases de la meme variable a la meme
-//  place. Le calcul des formules est hmi::types (isFormula, formulaAddress).
+//  de son cote). 1.12.19 : deux cases de la meme variable a la meme place non plus
+//  ne bloquent pas - modifier pour toutes les cases accepte les chevauchements,
+//  l'apercu les montre. CE QUI BLOQUE : la formule (un nom inconnu, une division
+//  par zero), une adresse hors des zones. Le calcul des formules est hmi::types
+//  (isFormula, formulaAddress).
 // =============================================================================
 #pragma once
 
@@ -37,7 +39,8 @@ struct Row {
     std::string              before;       // son adresse aujourd'hui (une case entiere : son depart)
     std::string              after;        // avec la formule ; vide : `error`
     std::string              error;
-    std::vector<std::string> sharedWith;   // les autres variables a la meme place ("POMPES[0].Etat")
+    std::vector<std::string> sharedWith;   // ce qui est a la meme place : une autre variable ("POMPES[0].Etat"),
+                                           // ou une autre case de la meme ("EXTRACTEURS[1].Retour")
 };
 struct Plan {
     std::string              pattern;      // "[*].Retour"
