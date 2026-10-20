@@ -51,6 +51,37 @@ namespace app {
             bool        bold_;
         };
 
+        // 1.12.19 (U4, la regle des cases) : la ligne SOUS un champ - ce qui ne va pas (rouge) ou
+        // pourquoi il est grise (gris). Sa hauteur est gardee meme vide : le formulaire ne saute
+        // pas quand une raison apparait.
+        class NoteLine final : public Widget {
+        public:
+            explicit NoteLine(std::string id) : Widget(std::move(id)) {}
+            void set(std::string text, bool error) {
+                if (text == text_ && error == error_) return;
+                text_ = std::move(text);
+                error_ = error;
+                invalidate();
+            }
+            [[nodiscard]] const std::string& text() const noexcept { return text_; }
+            [[nodiscard]] SizeHint sizeHint() const override {
+                const float line = lineHeight(gfx::FontId{ 16 });
+                return SizeHint{ {40.f, line}, {40.f, line}, 1.f, 0.f };
+            }
+        protected:
+            void onPaint(const PaintContext& ctx) override {
+                if (text_.empty()) return;
+                const auto r = contentRect();
+                const auto f = ctx.theme.font.ui;
+                const auto color = error_ ? ctx.theme.color.error : ctx.theme.color.textMuted;
+                if (error_) ctx.r.fillRect({ r.x, r.y + 2.f, 3.f, r.h - 4.f }, color);
+                ctx.r.drawText({ r.x + 10.f, r.y + (r.h - ctx.r.lineHeight(f)) * 0.5f }, text_, f, color);
+            }
+        private:
+            std::string text_;
+            bool        error_{false};
+        };
+
         // An invisible elastic gap. Putting one before the button row right-aligns it,
         // which is where a confirm button belongs.
         class Spacer final : public Widget {
@@ -214,6 +245,55 @@ namespace app {
         }
         state_ = std::move(proposed);
         applying_ = false;
+        showNotes();
+    }
+
+    // 1.12.19 (U4) : la raison sous chaque champ, et OK grise tant qu'un champ en a une.
+    void FormDialog::showNotes() {
+        bool anyError = false;
+        std::string firstError;
+        for (std::size_t i = 0; i < notes_.size() && i < state_.size(); ++i) {
+            auto* note = dynamic_cast<NoteLine*>(notes_[i]);
+            if (!note) continue;
+            const auto& st = state_[i];
+            if (!st.error.empty()) {
+                note->set(st.error, true);
+                if (!anyError) firstError = st.error;
+                anyError = true;
+            } else {
+                note->set(st.enabled ? std::string{} : st.hint, false);
+            }
+        }
+        if (ok_) {
+            ok_->setEnabled(!anyError);
+            ok_->setTooltip(anyError ? firstError : std::string{});
+        }
+    }
+
+    bool FormDialog::confirmEnabled() const noexcept {
+        for (const auto& st : state_)
+            if (!st.error.empty()) return false;
+        return true;
+    }
+
+    bool FormDialog::confirm() {
+        if (!confirmEnabled()) return false;
+        const auto values = currentValues();
+        if (validate_) {
+            std::size_t field = 0;
+            const std::string why = validate_(values, field);
+            if (!why.empty()) {
+                if (field < state_.size()) state_[field].error = why;
+                showNotes();
+                if (field < inputs_.size()) {
+                    focus().clear();
+                    focus().focus(inputs_[field]);
+                }
+                return false;
+            }
+        }
+        manager().CloseDialog(menu::DialogResult{ menu::DialogResult::Button::Ok, core::joinFields(values) });
+        return true;
     }
 
     void FormDialog::setCodeFields(std::vector<std::size_t> indices) {
@@ -298,7 +378,7 @@ namespace app {
 
         float height = 130.f + static_cast<float>(explanationLines) * 20.f;
         for (std::size_t i = 0; i < fields_.size(); ++i)
-            height += isCode(i) ? kCodeHeight + 34.f : 56.f;
+            height += (isCode(i) ? kCodeHeight + 34.f : 56.f) + 20.f;   // 1.12.19 (U4) : la ligne de la raison
         height = std::min(height, 760.f);   // the label is its own line now
         auto frame = std::make_unique<DialogFrame>(title_, width, height);
 
@@ -342,7 +422,8 @@ namespace app {
         // The declared fields seed the mutable state the rules then work on.
         state_.clear();
         for (const auto& d : fields_)
-            state_.push_back(FieldState{ d.value, d.choices, d.placeholder, true, {} });
+            state_.push_back(FieldState{ d.value, d.choices, d.placeholder, true, {}, {} });
+        notes_.clear();
 
         for (const auto& f : fields_) {
             auto row = std::make_unique<BoxLayout>(Orientation::Horizontal, id() + ".row");
@@ -382,6 +463,7 @@ namespace app {
                 inputs_.push_back(&ref);
                 if (rules_)
                     links_ += ref.textChanged->connect([this](const std::string&) { applyRules(); });
+                notes_.push_back(&body->addChild(std::make_unique<NoteLine>(id() + ".note")));   // 1.12.19 (U4)
                 continue;                       // the row is already in
             }
             else {
@@ -395,6 +477,20 @@ namespace app {
                 inputs_.push_back(&ref);
                 if (rules_)
                     links_ += ref.textChanged->connect([this](const std::string&) { applyRules(); });
+                // 1.12.19 (U4) : taper efface la raison donnee a OK (les Rules la redonnent si elle tient) ;
+                // une formule (=...) en chasse fixe, comme dans l'inspecteur.
+                {
+                    const std::size_t at = inputs_.size() - 1;
+                    auto* typed = &ref;
+                    typed->setMonospace(!typed->text().empty() && typed->text().front() == '=');
+                    links_ += ref.textChanged->connect([this, at, typed](const std::string& t) {
+                        typed->setMonospace(!t.empty() && t.front() == '=');
+                        if (at < state_.size() && !state_[at].error.empty() && !rules_) {
+                            state_[at].error.clear();
+                            showNotes();
+                        }
+                    });
+                }
                 // Un champ de chemin : le bouton ... a sa droite (l'explorateur).
                 // Un voisin du champ, pas un enfant : les scripts comptent
                 // toujours les memes champs (champ N).
@@ -413,6 +509,7 @@ namespace app {
                 }
             }
             body->addChild(std::move(row));
+            notes_.push_back(&body->addChild(std::make_unique<NoteLine>(id() + ".note")));   // 1.12.19 (U4)
         }
 
         auto buttons = std::make_unique<BoxLayout>(Orientation::Horizontal, id() + ".buttons");
@@ -432,15 +529,11 @@ namespace app {
         auto ok = std::make_unique<Button>(confirmLabel_, id() + ".ok");
         ok->setStyle(Button::Style::Primary);
         auto& okRef = static_cast<Button&>(buttons->addChild(std::move(ok)));
+        ok_ = &okRef;
 
-        auto collect = [this] {
-            // currentValues() already knows about every kind of input, including the
-            // code editor. Reading the widgets a second time here is how the code
-            // fields came back empty: this loop knew about InputText and DropDown
-            // and silently contributed nothing for a MultiLineText.
-            manager().CloseDialog(menu::DialogResult{ menu::DialogResult::Button::Ok,
-                                                     core::joinFields(currentValues()) });
-            };
+        // 1.12.19 (U4) : OK passe par la validation - refusee, la fenetre reste, la raison sous le
+        // champ fautif (avant : elle se fermait, et l'erreur allait dans la barre d'etat).
+        auto collect = [this] { (void)confirm(); };
         links_ += okRef.clicked->connect(collect);
         applyRules();
 
@@ -457,16 +550,19 @@ namespace app {
         // de "Nouvelle vue", la casse de "Dupliquer en remplacant") : sinon
         // Entree dans la description ne validait plus rien.
         // Un champ de code apres lui : pas d'Entree qui valide (comme avant).
+        // 1.12.19 (U4, la regle des cases) : Entree valide depuis TOUT champ d'une ligne (avant : le
+        // dernier seulement) - la validation garde la fenetre si quelque chose ne va pas. Un champ de
+        // code (plusieurs lignes) garde son Entree.
         InputText* enterLast = nullptr;
-        for (auto it = inputs_.rbegin(); it != inputs_.rend(); ++it) {
-            if (dynamic_cast<DropDown*>(*it)) continue;
-            if (auto* last = dynamic_cast<InputText*>(*it)) {
-                enterLast = last;
-                links_ += last->editingDone->connect([collect, last](const std::string&) {
-                    if (last->focused()) collect();
-                });
-            }
-            break;
+        std::vector<InputText*> enterAll;
+        for (auto* w : inputs_) {
+            auto* field = dynamic_cast<InputText*>(w);
+            if (!field) continue;
+            enterAll.push_back(field);
+            enterLast = field;
+            links_ += field->editingDone->connect([collect, field](const std::string&) {
+                if (field->focused()) collect();
+            });
         }
         // Lot API 6 : les champs que l'ecran designe en plus (jamais deux fois le
         // meme : deux validations fermeraient aussi l'ecran du dessous).
@@ -474,7 +570,8 @@ namespace app {
         for (const std::size_t index : enterFields_) {
             if (index >= inputs_.size()) continue;
             auto* field = dynamic_cast<InputText*>(inputs_[index]);
-            if (!field || field == enterLast || std::find(enterMore.begin(), enterMore.end(), field) != enterMore.end()) continue;
+            if (!field || field == enterLast || std::find(enterAll.begin(), enterAll.end(), field) != enterAll.end()
+                || std::find(enterMore.begin(), enterMore.end(), field) != enterMore.end()) continue;
             enterMore.push_back(field);
             links_ += field->editingDone->connect([collect, field](const std::string&) {
                 if (field->focused()) collect();

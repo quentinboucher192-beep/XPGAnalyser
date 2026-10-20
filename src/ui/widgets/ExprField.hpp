@@ -95,5 +95,9 @@ inline constexpr std::string_view kDefault   = "Revenir \xC3\xA0 la valeur par d
 [[nodiscard]] bool fixOf(std::string_view why, std::string& from, std::string& to);
 // `from` remplace par `to` la ou il commence un chemin (pas apres un point), hors des chaines.
 [[nodiscard]] std::string replaceRoot(std::string_view expr, std::string_view from, std::string_view to);
+// 1.12.19 (la regle des cases) : une case de fenetre qui n'attend QU'UNE expression (formule,
+// condition, receptivite, expression surveillee) accepte le "=" de tete, comme markWhole() :
+// " =Niveau > 3 " -> "Niveau > 3" (un "==" reste, l'erreur se dira).
+[[nodiscard]] std::string withoutEquals(std::string_view typed);
 
 } // namespace ui::exprfield

@@ -9147,9 +9147,9 @@ void lot14_poste() {
     // Sans dossier : ni lanceur ni demarrage.
     hosts.projectFolder = [] { return std::string{}; };
     pane.setHosts(hosts);
-    check(!pane.writeLauncher(&where) && where.find("enregistrez") != std::string::npos, "un projet sans dossier : pas de lanceur");
-    check(!pane.setAutostart(true, &why) && why.find("enregistrez") != std::string::npos, "... ni de d\xC3\xA9marrage avec la session");
-    check(pane.launchLines().front().find("enregistrez d'abord") != std::string::npos, "Lancement le dit");
+    check(!pane.writeLauncher(&where) && where.find("enregistre-le") != std::string::npos, "un projet sans dossier : pas de lanceur");
+    check(!pane.setAutostart(true, &why) && why.find("enregistre-le") != std::string::npos, "... ni de d\xC3\xA9marrage avec la session");
+    check(pane.launchLines().front().find("enregistre d'abord") != std::string::npos, "Lancement le dit");
     fs::remove_all(work, ec);
 }
 
@@ -14247,6 +14247,54 @@ void v1219_cellules() {
               && hmi::shownCell("2.5") == "2.5" && hmi::shownCell("T#5s") == "T#5s" && hmi::shownCell("[1, 2]") == "[1, 2]"
               && hmi::shownCell("(Ouv := 1.5)") == "(Ouv := 1.5)" && hmi::shownCell("TRUE") == "TRUE" && hmi::shownCell("").empty(),
           "shownCell : Azote, =Niveau * 2, 2.5, T#5s, [1, 2], (Ouv := 1.5), TRUE");
+}
+
+// 1.12.19 (U4) : les fenetres sous la meme regle - le "=" de tete accepte dans une case qui n'attend qu'une
+// expression, une seule regle de nom, la variable verifiee avant de fermer, la taille de la galerie lue comme un nombre.
+void v1219_modales() {
+    std::printf("1.12.19 (U4) : les fenetres sous la meme regle\n");
+    namespace ef = ui::exprfield;
+    check(ef::withoutEquals(" =Niveau > 3 ") == "Niveau > 3" && ef::withoutEquals("Niveau > 3") == "Niveau > 3"
+              && ef::withoutEquals("==3") == "==3" && ef::withoutEquals("") == "" && ef::withoutEquals("=") == "",
+          "withoutEquals : le = de tete part, un == reste, le vide reste vide");
+    check(app::nameProblem("Debit_Max").empty() && !app::nameProblem("").empty() && !app::nameProblem("2x").empty()
+              && !app::nameProblem("Debit Max").empty() && !app::nameProblem("IF").empty() && !app::nameProblem("SYS").empty(),
+          "une seule regle de nom : Debit_Max oui ; vide, 2x, une espace, IF, SYS non");
+    hmi::Project p;
+    int field = -1;
+    check(app::variableProblem(p, hmi::kNoId, "Gaz", "STRING", "Azote", &field).empty(),
+          "Nouvelle variable : Azote pour un STRING se lit comme 'Azote' (la regle des cases)");
+    check(app::variableProblem(p, hmi::kNoId, "Debit", "REAL", "2,5", &field).empty(), "2,5 pour un REAL : accepte");
+    field = -1;
+    const auto bad = app::variableProblem(p, hmi::kNoId, "Debit", "REAL", "deux", &field);
+    check(!bad.empty() && field == 2, "deux pour un REAL : refuse, sous la valeur initiale (champ 2) - " + bad);
+    field = -1;
+    const auto badName = app::variableProblem(p, hmi::kNoId, "IF", "REAL", "0", &field);
+    check(!badName.empty() && field == 0, "IF : refuse, sous le nom (champ 0) - " + badName);
+    // La galerie : une taille illisible n'est plus ignoree en silence.
+    {
+        app::HmiTemplateGallery::Spec spec;
+        spec.name = "Vue_Taille";
+        app::HmiTemplateGallery::Entry e;
+        e.key = "app:vide";
+        e.name = "Vide";
+        e.width = 1280;
+        e.height = 800;
+        spec.entries.push_back(e);
+        app::HmiTemplateGallery g(spec);
+        (void)g.Initialize();
+        check(g.canCreate(), "la galerie : Creer permis au depart");
+        g.typeField("largeur", "12,5");
+        check(!g.canCreate(), "Largeur 12,5 : pas un nombre de pixels, Creer grise");
+        g.typeField("largeur", "1280,0");
+        check(g.canCreate(), "Largeur 1280,0 : lue comme 1280");
+        g.typeField("hauteur", "abc");
+        check(!g.canCreate(), "Hauteur abc : refusee");
+        g.typeField("hauteur", "");
+        check(g.canCreate(), "Hauteur vide : celle du modele");
+        const auto a = app::HmiTemplateGallery::parse("key=app:vide\nname=V\nrole=vue\nwidth=1280,0\nheight=x\ndescription=\nrequest=");
+        check(a.width == 1280 && a.height == 0, "parse : 1280,0 -> 1280 ; x -> 0 (celle du projet)");
+    }
 }
 
 void v1219_refus_sous_la_case() {
@@ -25202,6 +25250,13 @@ void actionsFenetres1119() {
     md->setTarget("Sortie");
     (void)md->addReference("Mesure", "M", "12.5");
     (void)md->addReference("Consigne", "C", "10");
+    // 1.12.19 (U4) : la formule seule est une expression - un "=" tape en tete est accepte.
+    md->setFormula("=(Mesure - Consigne) * 2");
+    {
+        const auto t0 = md->test();
+        check(t0.ok && t0.result == "5" && md->issues().empty() && md->answer().formula == "(Mesure - Consigne) * 2",
+              "1.12.19 : =(Mesure - Consigne) * 2 accepte, le = retire - " + t0.result);
+    }
     md->setFormula("(Mesure - Consigne) * 2");
     const auto t = md->test();
     check(t.ok && t.result == "5", "le mode test : " + t.result + " (" + t.expression + ")");
@@ -30484,7 +30539,7 @@ void natives1217() {
     check(users, "la fiche de ANY_NUM : les natives qui le prennent");
     // Les enumerations par usage.
     same_text(names(tree.nativeNodeOf("enumerations")),
-              "Pour les fonctions IHM_ | Pour les listes et les cumuls | Dates | Pour vos variables | Pour les propri\xC3\xA9t\xC3\xA9s des objets",
+              "Pour les fonctions IHM_ | Pour les listes et les cumuls | Dates | Pour tes variables | Pour les propri\xC3\xA9t\xC3\xA9s des objets",
               "les \xC3\xA9num\xC3\xA9rations : rang\xC3\xA9" "es par usage");
     check(tree.nativeNodeOf("enum:TRANSITION") != 0 && tree.nativeNodeOf("enum-valeur:TRANSITION#Fondu") != 0, "TRANSITION et TRANSITION#Fondu : leurs noeuds");
 }
@@ -34103,6 +34158,7 @@ int main(int argc, char** argv) {
     v1219_refus_sous_la_case();             // 1.12.19 : un refus se dit sous la case
     v1219_inspecteur();                     // 1.12.19 : nombres, durees, formules de l'inspecteur
     v1219_cellules();                       // 1.12.19 (U3) : les cellules de tableau sous la meme regle
+    v1219_modales();                        // 1.12.19 (U4) : les fenetres sous la meme regle
     v110_aide_saisie();                     // 1.10 (chantier K2) : l'aide a la saisie des scripts (S1, S2, enumerations)
     v110_simulation(argc > 1 ? argv[1] : "");   // 1.10 (chantier L) : l'API et l'IHM independantes, le zoom
     v110_editeur();                         // 1.10 (chantier O) : variables -> graphique, types <-> Excel

@@ -145,7 +145,7 @@ bool writeLauncher(const std::string& exe, const std::string& projectFolder, con
         if (why) *why = std::move(m);
         return false;
     };
-    if (projectFolder.empty()) return fail("le projet n'a pas de dossier : enregistrez-le d'abord");
+    if (projectFolder.empty()) return fail("le projet n'a pas de dossier : enregistre-le d'abord");
     if (exe.empty()) return fail("le chemin du programme est inconnu");
     std::string text;
 #ifdef _WIN32
@@ -273,7 +273,7 @@ bool setAutostart(const std::string& projectName, const std::string& exe, const 
         if (why) *why = std::move(m);
         return false;
     };
-    if (on && projectFolder.empty()) return fail("le projet n'a pas de dossier : enregistrez-le d'abord");
+    if (on && projectFolder.empty()) return fail("le projet n'a pas de dossier : enregistre-le d'abord");
     if (on && exe.empty()) return fail("le chemin du programme est inconnu");
     // Retirer : seulement l'entree de CE projet (celle d'un autre reste).
     if (!on) {

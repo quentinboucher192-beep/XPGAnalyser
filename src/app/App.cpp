@@ -779,7 +779,7 @@ void App::registerActions() {
                                 return;
                             }
                             std::vector<FormDialog::Field> f;
-                            f.push_back({"Name", "New machine", "", false, {}});
+                            f.push_back({"Nom", "Nouvelle machine", "", false, {}});
                             // SOUS ./projets/, ET PAS A COTE DE L'EXECUTABLE.
                             //
                             // Le defaut etait le dossier courant, c'est-a-dire
@@ -787,16 +787,16 @@ void App::registerActions() {
                             // Program Files, chaque affaire y deposait un
                             // dossier. Au bout de vingt, on ne distingue plus
                             // les projets du logiciel.
-                            f.push_back({"Folder", (projectsRoot() / "New machine").string(),
-                                         "sous ./projets/ par defaut", false, {}});
+                            f.push_back({"Dossier", (projectsRoot() / "Nouvelle machine").string(),
+                                         "sous ./projets/ par d\xC3\xA9" "faut", false, {}});
                             f.push_back({"CPU", "BMXP342020", "", false,
                                          {"BMXP342020", "BMXP342030", "BMXP342010", "BMXP342000"}});
                             menus_->ShowDialog(
                                 // Le dossier : le bouton ... choisit OU le creer (le nom reste).
-                                FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.newProject", "New project",
-                                    "Creates a project folder with one MAST task. Sections, "
-                                    "types and blocks are added afterwards.",
-                                    std::move(f), "Create"), 1, ui::newFolder(projectsRoot().string(), "Dossier du nouveau projet")),
+                                FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.newProject", "Nouveau projet",
+                                    "Cr\xC3\xA9" "e un dossier de projet avec une t\xC3\xA2" "che MAST. Les sections, "
+                                    "les types et les blocs s'ajoutent ensuite.",
+                                    std::move(f), "Cr\xC3\xA9" "er"), 1, ui::newFolder(projectsRoot().string(), "Dossier du nouveau projet")),
                                 [this](const menu::DialogResult& r) {
                                     if (!r.accepted()) return;
                                     const auto v = FormDialog::split(r.payload);
@@ -836,16 +836,16 @@ void App::registerActions() {
                         [this] {
                             namespace fs = std::filesystem;
                             std::vector<FormDialog::Field> f;
-                            f.push_back({"Name", project_ ? project_->header.projectName : "",
+                            f.push_back({"Nom", project_ ? project_->header.projectName : "",
                                          "", false, {}});
-                            f.push_back({"Folder",
-                                         (projectsRoot() / "project").string(), "", false, {}});
+                            f.push_back({"Dossier",
+                                         (projectsRoot() / "projet").string(), "", false, {}});
                             menus_->ShowDialog(
                                 FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.saveAs",
-                                    "Save as project folder",
-                                    "Writes the imported project as an editable folder: one .st "
-                                    "file per section, declarations as readable tables.",
-                                    std::move(f), "Save"), 1, ui::newFolder(projectsRoot().string(), "Enregistrer sous : le dossier du projet")),
+                                    "Enregistrer en dossier de projet",
+                                    "\xC3\x89" "crit le projet import\xC3\xA9 en dossier modifiable : un fichier .st "
+                                    "par section, les d\xC3\xA9" "clarations en tableaux lisibles.",
+                                    std::move(f), "Enregistrer"), 1, ui::newFolder(projectsRoot().string(), "Enregistrer sous : le dossier du projet")),
                                 [this](const menu::DialogResult& r) {
                                     if (!r.accepted() || !project_) return;
                                     const auto v = FormDialog::split(r.payload);
@@ -870,15 +870,15 @@ void App::registerActions() {
                         [this] { return !projectFolder_.empty(); }, {}, nullptr,
                         [this] {
                             std::vector<FormDialog::Field> f;
-                            f.push_back({"New name", manifest_.name + " - variant", "", false, {}});
-                            f.push_back({"Destination folder", projectFolder_ + " - copy", "",
+                            f.push_back({"Nouveau nom", manifest_.name + " - variante", "", false, {}});
+                            f.push_back({"Dossier de la copie", projectFolder_ + " - copie", "",
                                          false, {}});
                             menus_->ShowDialog(
                                 FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.duplicate",
-                                    "Duplicate project",
-                                    "The copy is always editable: it comes back as DEV, without "
-                                    "the lock and without the generated src/ folder.",
-                                    std::move(f), "Duplicate"), 1, ui::newFolder(projectFolder_, "Dossier de la copie")),
+                                    "Dupliquer le projet",
+                                    "La copie est toujours modifiable : elle revient en DEV, sans "
+                                    "le verrou et sans le dossier src/ g\xC3\xA9n\xC3\xA9r\xC3\xA9.",
+                                    std::move(f), "Dupliquer"), 1, ui::newFolder(projectFolder_, "Dossier de la copie")),
                                 [this](const menu::DialogResult& r) {
                                     if (!r.accepted()) return;
                                     const auto v = FormDialog::split(r.payload);
@@ -897,11 +897,11 @@ void App::registerActions() {
                         [this] { return !projectFolder_.empty(); }, {}, nullptr,
                         [this] {
                             std::vector<FormDialog::Field> f;
-                            f.push_back({"Name", manifest_.name, "", false, {}});
+                            f.push_back({"Nom", manifest_.name, "", false, {}});
                             menus_->ShowDialog(
-                                std::make_unique<FormDialog>("dialog.rename", "Rename project",
-                                    "Renames the project, not the folder on disk.",
-                                    std::move(f), "Rename"),
+                                std::make_unique<FormDialog>("dialog.rename", "Renommer le projet",
+                                    "Renomme le projet, pas son dossier sur le disque.",
+                                    std::move(f), "Renommer"),
                                 [this](const menu::DialogResult& r) {
                                     if (!r.accepted()) return;
                                     const auto v = FormDialog::split(r.payload);
@@ -919,9 +919,9 @@ void App::registerActions() {
                             // version livree) ; DEV la rouvre (la suivante commence). Les deux
                             // premiers champs sont ceux d'avant : les sessions rejouees s'y fient.
                             std::vector<FormDialog::Field> f;
-                            f.push_back({"State", std::string(project::toString(manifest_.state)),
+                            f.push_back({"\xC3\x89tat", std::string(project::toString(manifest_.state)),
                                          "", false, {"NEW", "DEV", "FINISH", "LOCK"}});
-                            f.push_back({"Password (LOCK only)", "", "", true, {}});
+                            f.push_back({"Mot de passe (LOCK seulement)", "", "", true, {}});
                             f.push_back({"Nom de la version (FINISH, LOCK)", "", "vide : \xC2\xAB Termin\xC3\xA9" "e le \xE2\x80\xA6 \xC2\xBB, \xC2\xAB Livr\xC3\xA9" "e le \xE2\x80\xA6 \xC2\xBB", false, {}});
                             menus_->ShowDialog(
                                 std::make_unique<FormDialog>("dialog.state", "\xC3\x89tat du projet",
@@ -929,7 +929,7 @@ void App::registerActions() {
                                     "est termin\xC3\xA9" "e - une version valid\xC3\xA9" "e la fige. LOCK : livr\xC3\xA9" "e et verrouill\xC3\xA9" "e - une "
                                     "version livr\xC3\xA9" "e, et le mot de passe (les fichiers restent lisibles : c'est une "
                                     "barri\xC3\xA8re, pas un chiffrement). Le menu de la version, en haut, fait la m\xC3\xAAme chose.",
-                                    std::move(f), "Apply"),
+                                    std::move(f), "Appliquer"),
                                 [this](const menu::DialogResult& r) {
                                     if (!r.accepted() || !project_) return;
                                     const auto v = FormDialog::split(r.payload);
@@ -943,8 +943,8 @@ void App::registerActions() {
                                     };
                                     if (state == manifest_.state) return;
                                     if (state == project::State::Lock && password.empty()) {
-                                        refuse("Password required", "Locking a project without a password would lock it "
-                                                                    "for everyone including you.");
+                                        refuse("Mot de passe requis", "Verrouiller un projet sans mot de passe le fermerait "
+                                                                    "\xC3\xA0 tout le monde, toi compris.");
                                         return;
                                     }
                                     if (manifest_.state == project::State::Lock) {
@@ -1902,13 +1902,13 @@ void App::openProjectFolder(std::string folder) {
 
     // Locked: ask, and accept either the password or this machine's master key.
     std::vector<FormDialog::Field> fields;
-    fields.push_back(FormDialog::Field{"Password", "", "", true, {}});
+    fields.push_back(FormDialog::Field{"Mot de passe", "", "", true, {}});
     menus_->ShowDialog(
-        std::make_unique<FormDialog>("dialog.unlock", "Project is locked",
-                                     "'" + opened->manifest.name + "' is locked. Enter its "
-                                     "password, or leave it empty to try this machine's "
-                                     "administrator key.",
-                                     std::move(fields), "Unlock"),
+        std::make_unique<FormDialog>("dialog.unlock", "Projet verrouill\xC3\xA9",
+                                     "\xC2\xAB " + opened->manifest.name + " \xC2\xBB est verrouill\xC3\xA9. Tape son "
+                                     "mot de passe, ou laisse vide pour essayer la cl\xC3\xA9 "
+                                     "administrateur de ce PC.",
+                                     std::move(fields), "D\xC3\xA9verrouiller"),
         [this, folder](const menu::DialogResult& r) {
             if (!r.accepted()) return;
             const auto values = FormDialog::split(r.payload);
@@ -1924,9 +1924,9 @@ void App::openProjectFolder(std::string folder) {
                 }
             if (!opened2) {
                 menus_->ShowDialog(std::make_unique<MessageDialog>(
-                                       "Wrong password",
-                                       "The password does not match, and the administrator key "
-                                       "for this machine does not either.",
+                                       "Mot de passe incorrect",
+                                       "Le mot de passe ne correspond pas, la cl\xC3\xA9 administrateur "
+                                       "de ce PC non plus.",
                                        MessageDialog::Icon::Error),
                                    [](const menu::DialogResult&) {});
                 return;

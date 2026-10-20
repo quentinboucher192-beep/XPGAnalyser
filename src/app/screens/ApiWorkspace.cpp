@@ -803,15 +803,18 @@ void MainAnalysisScreen::askApiText(const std::string& title, const std::string&
     spec.text = text;
     HmiAskDialog::Option option;
     // Le libelle du champ suit la question (lot API 5 : les noms ; lot API 7 :
-    // l'onglet Simulation - la valeur forcee, le fichier des forcages).
+    // l'onglet Simulation - la valeur forcee, le fichier des forcages ; 1.12.19 :
+    // Nouvelle alarme, recette, Nouvel utilisateur... demandent un nom, pas un rang).
     option.label = title.rfind("Remplacer", 0) == 0 ? "R\xC3\xA9" "f\xC3\xA9rence"
                  : title.rfind("Renommer", 0) == 0  ? "Nouveau nom"
                  : title.rfind("Ajouter un champ", 0) == 0 ? "Champ"
                  : title.rfind("Borner", 0) == 0    ? "D\xC3\xA9" "but-fin"
                  : title.rfind("Forcer", 0) == 0    ? "Valeur"
                  : title.rfind("Exporter", 0) == 0 || title.rfind("Importer", 0) == 0 ? "Fichier"
-                 : title.rfind("Cr\xC3\xA9" "er", 0) == 0 || title.rfind("Ajouter", 0) == 0 ? "Nom"
-                 : "Rang";
+                 : title.rfind("Nouvel utilisateur", 0) == 0 ? "Identifiant"
+                 : title.rfind("Cr\xC3\xA9" "er", 0) == 0 || title.rfind("Ajouter", 0) == 0 || title.rfind("Nouve", 0) == 0 ? "Nom"
+                 : title.rfind("D\xC3\xA9" "placer", 0) == 0 ? "Rang"
+                 : "Valeur";
     option.field = initial;
     option.hasField = true;
     // Un chemin (exporter, importer les forcages) : le bouton ... de l'explorateur,

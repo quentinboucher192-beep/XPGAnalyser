@@ -884,7 +884,7 @@ bool HmiFunctionsPane::nameAllowed(const std::string& name, Id self, std::string
             if (texts > 0)
                 return refuse(selfName + " est appel\xC3\xA9" "e (" + std::to_string(texts) + " texte(s)) : renomm\xC3\xA9" "s, ses appels seraient choisis "
                               "parmi les surcharges de " + name + " et pourraient changer de cible (cr\xC3\xA9" "ez plut\xC3\xB4t la surcharge : "
-                              "choisissez " + name + ", puis Nouvelle surcharge)");
+                              "choisis " + name + ", puis Nouvelle surcharge)");
         }
     }
     if (const auto* sv = symbolView()) {

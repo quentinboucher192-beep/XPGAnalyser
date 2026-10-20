@@ -900,7 +900,7 @@ void HmiCommPane::rebuildEquipmentProperties(std::vector<PG::Category>& cats) {
     const auto* e = doc_->project.equipmentByName(equipment_);
     if (!e) {
         // 1.12.2 : XPGAnalyser IHM, rien de choisi - plus de fiche de l'automate du projet.
-        if (!core::hasApi() && equipment_.empty()) sheetNote_ = "Choisissez un \xC3\xA9quipement (onglet \xC3\x89quipements) : sa fiche s'affiche ici.";
+        if (!core::hasApi() && equipment_.empty()) sheetNote_ = "Choisis un \xC3\xA9quipement (onglet \xC3\x89quipements) : sa fiche s'affiche ici.";
         return;
     }
     // 1.9 : la ligne de l'esclave simule lie - sa fiche a lui.
@@ -1629,7 +1629,7 @@ bool HmiCommPane::setPortField(const std::string& key, const std::string& raw, s
         if (why) *why = std::move(m);
         return false;
     };
-    if (port_.empty() || !adapter(port_)) return fail("choisissez d'abord un port (un clic sur le sch\xC3\xA9ma)");
+    if (port_.empty() || !adapter(port_)) return fail("choisis d'abord un port (un clic sur le sch\xC3\xA9ma)");
     if (draft_.adapter != port_) loadPortDraft();
     const std::string v = trimmed(raw);
     std::uint32_t ip = 0;
@@ -1832,7 +1832,7 @@ bool HmiCommPane::applyPort(std::string* why) {
     };
     auto* h = host();
     const auto a = adapter(port_);
-    if (!h || !a) return fail("choisissez d'abord un port (un clic sur le sch\xC3\xA9ma)");
+    if (!h || !a) return fail("choisis d'abord un port (un clic sur le sch\xC3\xA9ma)");
     if (!draft_.edited) return fail("rien \xC3\xA0 appliquer : changez d'abord l'adresse");
     for (const auto& [tone, text] : portChecks())
         if (tone == 3) return fail("Appliquer : " + text);
@@ -1963,7 +1963,7 @@ bool HmiCommPane::startScan(std::string* why) {
     std::string text = scanRange_;
     const auto a = adapter(scanPort_);
     if (text.empty()) {
-        if (!a || !a->ip()) return fail("choisissez un port avec une adresse (ou tapez une plage)");
+        if (!a || !a->ip()) return fail("choisis un port avec une adresse (ou tape une plage)");
         text = eq::ipv4Text(eq::networkOf(a->ip(), a->prefix())) + "/" + std::to_string(a->prefix());
     }
     hmi::ipscan::Options o = scanOptions_;
@@ -1998,7 +1998,7 @@ void HmiCommPane::refreshScan() {
         for (const auto& a : h->adapters())
             if (scanPort_.empty() && a.up && a.ip() && !a.automaticAddress() && a.kind != hmi::netinfo::Adapter::Kind::WiFi) scanPort_ = a.name;
     const auto a = adapter(scanPort_);
-    std::string title = scanRange_.empty() ? (a && a->ip() ? "R\xC3\xA9seau " + eq::networkText(a->ip(), a->prefix()) + " sur " + a->name : std::string("Choisissez un port \xC3\xA0 droite"))
+    std::string title = scanRange_.empty() ? (a && a->ip() ? "R\xC3\xA9seau " + eq::networkText(a->ip(), a->prefix()) + " sur " + a->name : std::string("Choisis un port \xC3\xA0 droite"))
                                            : "Plage " + scanRange_;
     std::string detail = "ports " + hmi::ipscan::portsText(scanOptions_.ports) + " \xC2\xB7 d\xC3\xA9lai " + std::to_string(scanOptions_.timeoutMs) + " ms";
     float fraction = -1;

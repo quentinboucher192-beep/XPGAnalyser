@@ -828,7 +828,7 @@ bool HmiCommPane::startMapScan(std::string* why) {
         label = "l'automate du projet";
     } else {
         const auto* e = equipmentOf(mapEquip_);
-        if (!e) return fail("choisissez un \xC3\xA9quipement (Carte de)");
+        if (!e) return fail("choisis un \xC3\xA9quipement (Carte de)");
         if (mapTwin_) {
             const int port = host() ? host()->simulatedPort(e->name) : 0;
             if (!port) return fail("L'esclave simul\xC3\xA9 de " + e->name + " n'est pas en marche.");
@@ -987,10 +987,10 @@ bool HmiCommPane::createVariableHere(std::string* why) {
         return false;
     };
     const auto sel = map_->selected();
-    if (!sel) return fail("choisissez d'abord une case de la carte (un clic)");
+    if (!sel) return fail("choisis d'abord une case de la carte (un clic)");
     if (mapEquip_ == kPlcKey) return fail("Les variables de l'automate du projet se d\xC3\xA9" "clarent dans son programme (ou la table des adresses).");
     const auto* e = equipmentOf(mapEquip_);
-    if (!e) return fail("choisissez un \xC3\xA9quipement (Carte de)");
+    if (!e) return fail("choisis un \xC3\xA9quipement (Carte de)");
     const bool bits = zn::isBits(sel->table);
     std::string type = bits ? "BOOL" : "INT";
     // Le type vu : un REAL vraisemblable sur deux mots.
@@ -1018,7 +1018,7 @@ bool HmiCommPane::proposeFreeAddress(const std::string& variable, std::string* w
         return false;
     };
     const auto* v = doc_->project.variable(variable);
-    if (!v || !v->bound()) return fail("choisissez une variable IHM li\xC3\xA9" "e (sur la carte, ou dans le Plan d'adressage)");
+    if (!v || !v->bound()) return fail("choisis une variable IHM li\xC3\xA9" "e (sur la carte, ou dans le Plan d'adressage)");
     const auto* e = doc_->project.equipmentByName(v->equipment);
     if (!e) return fail("\xC3\xA9quipement inconnu : " + v->equipment);
     const auto m = zn::buildMap(doc_->project, *e);

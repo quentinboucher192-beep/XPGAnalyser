@@ -675,7 +675,7 @@ bool HmiModbusToolPane::write(std::string* why) {
             cur += c;
         }
     }
-    if (items.empty()) return fail("\xC3\x89" "crire : tapez une valeur (\xC3\xA0 droite, Valeur \xC3\xA0 \xC3\xA9" "crire)");
+    if (items.empty()) return fail("\xC3\x89" "crire : tape une valeur (\xC3\xA0 droite, Valeur \xC3\xA0 \xC3\xA9" "crire)");
     if (bitFunction(q.function) || q.function == 1 || q.function == 2) {
         q.bits.clear();
         for (const auto& it : items) q.bits.push_back(yes(it) || it == "1");
@@ -1165,7 +1165,7 @@ void HmiModbusToolPane::rebuildProperties() {
         rq.properties.push_back(prop("Fonction", functionLabel(query_.function), PG::ValueType::Enum, field("fonction"), "Lire ou \xC3\xA9" "crire : bits ou mots.",
                                      functionLabels()));
         rq.properties.push_back(prop("Adresse", std::to_string(query_.address), PG::ValueType::Text, field("adresse"),
-                                     "\xC3\x80 partir de 0 (le registre 40001 est l'adresse 0) ; ou tapez 40101, 30001, %MW100 : l'adresse et la fonction suivent."));
+                                     "\xC3\x80 partir de 0 (le registre 40001 est l'adresse 0) ; ou tape 40101, 30001, %MW100 : l'adresse et la fonction suivent."));
         rq.properties.push_back(prop("En Modicon", modicon(query_.function, query_.address), PG::ValueType::ReadOnly));
         rq.properties.push_back(prop("Nombre", std::to_string(query_.count), PG::ValueType::Integer, field("nombre"), "125 mots, 2000 bits au plus."));
         rq.properties.push_back(prop("Format", formatLabel_, PG::ValueType::Enum, field("format"),

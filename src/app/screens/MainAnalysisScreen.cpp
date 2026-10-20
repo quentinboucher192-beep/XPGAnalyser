@@ -19,6 +19,7 @@
 // =============================================================================
 #include "Screens.hpp"
 #include "../../ui/Commands.hpp"
+#include "../../ui/widgets/ExprField.hpp"
 #include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : l'ecran de chaque application
 #include "../../project/CodeIconKeys.hpp"   // 1.8.0 : l'icone des onglets de section
@@ -2544,7 +2545,7 @@ void MainAnalysisScreen::editGrafcetPart(ui::Widget* widget, domain::Index secti
         std::vector<FormDialog::Field> fields;
         fields.push_back({"Nom", target->name, "8 caract\xC3\xA8res au plus", false, {}});
         fields.push_back({"Genre", kinds.empty() ? std::string{} : kinds[static_cast<std::size_t>(current)], "", false, kinds});
-        fields.push_back({"Dur\xC3\xA9" "e", target->delay, "t#5s - pour les genres retard\xC3\xA9s, limit\xC3\xA9s, impulsions", false, {}});
+        fields.push_back({"Dur\xC3\xA9" "e", target->delay, "T#5s - pour les genres retard\xC3\xA9s, limit\xC3\xA9s, impulsions", false, {}});
         fields.push_back({"\xC3\x89tape", "X" + std::to_string(target->boundStep), "", false, stepIds});
         auto dialog = std::make_unique<FormDialog>("dialog.gcAction",
             "Action A" + std::to_string(id) + (target->name.empty() ? "" : " (" + target->name + ")"),
@@ -2602,8 +2603,8 @@ void MainAnalysisScreen::editGrafcetPart(ui::Widget* widget, domain::Index secti
     if (!step) return;
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Nom", step->name, "4 caract\xC3\xA8res au plus", false, {}});
-    fields.push_back({"Initiale", step->initial ? "oui" : "non", "", false, {"non", "oui"}});
-    fields.push_back({"Finale", step->isFinal ? "oui" : "non", "", false, {"non", "oui"}});
+    fields.push_back({"Initiale", step->initial ? "Oui" : "Non", "", false, {"Non", "Oui"}});
+    fields.push_back({"Finale", step->isFinal ? "Oui" : "Non", "", false, {"Non", "Oui"}});
     app_.menus().ShowDialog(
         std::make_unique<FormDialog>("dialog.gcStepEdit", "\xC3\x89tape X" + std::to_string(id),
             "Le moteur garde le nom d'une \xC3\xA9tape dans un string[4] et JETTE un nom plus long "
@@ -2617,7 +2618,7 @@ void MainAnalysisScreen::editGrafcetPart(ui::Widget* widget, domain::Index secti
             auto document2 = app_.document();
             if (!document2) return;
             app_.apply(std::make_unique<project::RenameStepCommand>(
-                           document2, section, id, values[0], values[1] == "oui", values[2] == "oui"),
+                           document2, section, id, values[0], values[1] == "Oui", values[2] == "Oui"),
                        /*refreshViews=*/false);
             refreshGrafcetPane(paneId, section);
         });
@@ -2725,8 +2726,8 @@ void MainAnalysisScreen::insertGrafcetPart(ui::Widget* widget, domain::Index sec
         const int where = at >= 0 ? at : static_cast<int>(chart.steps.size());
         std::vector<FormDialog::Field> fields;
         fields.push_back({"Nom", "", "4 caract\xC3\xA8res au plus", false, {}});
-        fields.push_back({"Initiale", "non", "", false, {"non", "oui"}});
-        fields.push_back({"Finale", "non", "", false, {"non", "oui"}});
+        fields.push_back({"Initiale", "Non", "", false, {"Non", "Oui"}});
+        fields.push_back({"Finale", "Non", "", false, {"Non", "Oui"}});
         app_.menus().ShowDialog(
             std::make_unique<FormDialog>("dialog.gcStep", "Nouvelle \xC3\xA9tape X" + std::to_string(where),
                 "Le moteur garde le nom d'une \xC3\xA9tape dans un string[4] et JETTE un nom plus long.\n"
@@ -2740,7 +2741,7 @@ void MainAnalysisScreen::insertGrafcetPart(ui::Widget* widget, domain::Index sec
                 auto document2 = app_.document();
                 if (!document2) return;
                 app_.apply(std::make_unique<project::InsertStepCommand>(
-                               document2, section, where, values[0], values[1] == "oui", values[2] == "oui"),
+                               document2, section, where, values[0], values[1] == "Oui", values[2] == "Oui"),
                            /*refreshViews=*/false);
                 refreshGrafcetPane(paneId, section);
             });
@@ -2777,7 +2778,7 @@ void MainAnalysisScreen::insertGrafcetPart(ui::Widget* widget, domain::Index sec
                                document2, section, static_cast<int>(chart.transitions.size()),
                                std::vector<int>{std::atoi(values[0].c_str() + 1)},
                                std::vector<int>{std::atoi(values[1].c_str() + 1)},
-                               values[2], grafcet::expandShortcuts(chart, values[3], &all)),
+                               values[2], grafcet::expandShortcuts(chart, ui::exprfield::withoutEquals(values[3]), &all)),
                            /*refreshViews=*/false);
                 refreshGrafcetPane(paneId, section);
             });
@@ -2797,7 +2798,7 @@ void MainAnalysisScreen::insertGrafcetPart(ui::Widget* widget, domain::Index sec
         fields.push_back({"Nom", "", "8 caract\xC3\xA8res au plus", false, {}});
         fields.push_back({"\xC3\x89tape", "X" + std::to_string(boundDefault), "", false, stepNames});
         fields.push_back({"Genre", kinds.front(), "", false, kinds});
-        fields.push_back({"Dur\xC3\xA9" "e", "t#0s", "pour les genres retard\xC3\xA9s, limit\xC3\xA9s, impulsions", false, {}});
+        fields.push_back({"Dur\xC3\xA9" "e", "T#0s", "pour les genres retard\xC3\xA9s, limit\xC3\xA9s, impulsions", false, {}});
         fields.push_back({"Corps", "", "les instructions dans IF \xE2\x80\xA6 .Out THEN", false, {}});
         auto dialog = std::make_unique<FormDialog>("dialog.gcAction2", "Nouvelle action",
             "Le corps va dans SFC_<grafcet>_Actions, avec deux lignes de commentaire au-dessus : "

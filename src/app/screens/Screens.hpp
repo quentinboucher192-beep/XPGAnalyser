@@ -1513,6 +1513,10 @@ public:
         std::string              placeholder;
         bool                     enabled{true};
         std::string              hint;      // why it is greyed, shown beside it
+        // 1.12.19 (U4, la regle des cases) : CE QUI NE VA PAS dans ce champ, en rouge SOUS LUI ;
+        // tant qu'un champ en a une, OK est grise (sa raison en infobulle). Pose par les Rules
+        // (a chaque frappe) ou par le validateur (a OK).
+        std::string              error;
     };
 
     // Fields that depend on each other.
@@ -1537,6 +1541,15 @@ public:
 
     // Applied once before the first paint and after every change.
     void setRules(Rules rules);
+    // 1.12.19 (U4) : LA VALIDATION A OK (et a Entree) - une raison non vide garde la fenetre
+    // ouverte, la dit sous le champ `field` et y remet le curseur : rien de tape ne se perd.
+    using Validate = std::function<std::string(const std::vector<std::string>& values, std::size_t& field)>;
+    void setValidator(Validate v) { validate_ = std::move(v); }
+    // Essais et scripts : la raison montree sous un champ (vide : aucune), et OK actif.
+    [[nodiscard]] std::string fieldError(std::size_t index) const { return index < state_.size() ? state_[index].error : std::string{}; }
+    [[nodiscard]] bool confirmEnabled() const noexcept;
+    // Essais : valider comme un clic sur OK (faux : refuse, la fenetre reste).
+    bool confirm();
 
     // Fields that hold CODE rather than a value.
     //
@@ -1603,9 +1616,13 @@ private:
     std::vector<std::pair<std::size_t, ui::Widget*>>    browseButtons_;    // leur bouton ... (suit l'etat du champ)
     bool                     applying_{false};   // rules must not re-enter
     core::ConnectionScope    links_;
+    Validate                 validate_;                      // 1.12.19 (U4)
+    std::vector<ui::Widget*> notes_;                         // 1.12.19 (U4) : la ligne sous chaque champ
+    ui::Widget*              ok_{nullptr};
 
     [[nodiscard]] std::vector<std::string> currentValues() const;
     void applyRules();
+    void showNotes();                                        // 1.12.19 (U4)
 };
 
 // ---------------------------------------------------------------------------

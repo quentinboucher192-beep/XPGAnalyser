@@ -320,7 +320,7 @@ const std::vector<EnumDef>& enumDefs() {
         {"calculs", "Pour les listes et les cumuls", "Les comparaisons, les op\xC3\xA9rations et les transformations des fonctions de listes.",
          {"COMPARAISON", "OPERATION", "TRANSFORMATION"}},
         {"dates", "Dates", "Les jours de la semaine, les mois.", {"JOUR", "MOIS"}},
-        {"variables", "Pour vos variables", "Des \xC3\xA9num\xC3\xA9rations toutes faites : priorit\xC3\xA9, qualit\xC3\xA9 d'une mesure, \xC3\xA9tat d'un moteur, mode de marche.",
+        {"variables", "Pour tes variables", "Des \xC3\xA9num\xC3\xA9rations toutes faites : priorit\xC3\xA9, qualit\xC3\xA9 d'une mesure, \xC3\xA9tat d'un moteur, mode de marche.",
          {"PRIORITE_ALARME", "QUALITE", "ETAT_MOTEUR", "MODE_MARCHE"}},
         {"objets", "Pour les propri\xC3\xA9t\xC3\xA9s des objets", "Les choix d'une propri\xC3\xA9t\xC3\xA9 d'objet, \xC3\xA9" "crits dans une expression \xC6\x92x.", {}},
         {"objets/textes", "Textes et mise en forme", "", {"POLICE", "ALIGNEMENT", "ORIENTATION", "PLACE_LIBELLE", "STYLE_TITRE", "DEFILEMENT",

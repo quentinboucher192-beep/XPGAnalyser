@@ -233,7 +233,8 @@ protected:
         for (int i = 0; i < 5; ++i)
             ctx.r.drawText({x, fy + 6.f + 34.f * static_cast<float>(i)}, labels[i], ctx.theme.font.ui, c.textMuted);
         ctx.r.drawText({x + 80.f + (right.w - 32.f - 80.f) * 0.5f - 6.f, fy + 6.f + 34.f * 3.f}, "\xC3\x97", ctx.theme.font.ui, c.textMuted);
-        if (!hint.empty()) ctx.r.drawText({x, fy + 34.f * 5.f + 2.f}, hint, kSmall, c.warning);
+        // 1.12.19 : une faute (nom, taille) en rouge, ce qui reste a faire (choisir un modele) en ambre.
+        if (!hint.empty()) ctx.r.drawText({x, fy + 34.f * 5.f + 2.f}, hint, kSmall, hintIsError ? c.error : c.warning);
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
@@ -265,6 +266,7 @@ protected:
 public:
     std::vector<ui::Button*> buttons;
     std::string              hint;
+    bool                     hintIsError{false};
 
 private:
     HmiTemplateGallery& g_;
@@ -331,6 +333,9 @@ core::Status HmiTemplateGallery::buildUi() {
     widthBox_ = &static_cast<ui::InputText&>(b->addChild(std::move(width)));
     auto height = std::make_unique<ui::InputText>("gallery.height");
     heightBox_ = &static_cast<ui::InputText&>(b->addChild(std::move(height)));
+    // 1.12.19 : la taille se verifie a la frappe, comme le nom (une saisie illisible n'est plus ignoree en silence).
+    links_ += widthBox_->textChanged->connect([this](const std::string&) { sync(); });
+    links_ += heightBox_->textChanged->connect([this](const std::string&) { sync(); });
     auto desc = std::make_unique<ui::InputText>("gallery.description");
     desc->setPlaceholder("ce que montre la vue");
     descBox_ = &static_cast<ui::InputText&>(b->addChild(std::move(desc)));
@@ -588,13 +593,29 @@ void HmiTemplateGallery::sync() {
     if (!ok_ || !nameBox_) return;
     const std::string name = nameBox_->text();
     std::string hint;
-    if (name.empty()) hint = "Un nom : lettres, chiffres, _";
+    bool error = true;
+    // 1.12.19 : une taille se lit comme toute case de nombre (1 280 refuse, 1280,0 accepte) ; vide : celle du modele.
+    const auto badSize = [](const ui::InputText* box, const char* what) -> std::string {
+        if (!box || box->text().empty()) return {};
+        double v = 0;
+        if (!hmi::parseNumber(box->text(), v) || v < 1 || v > 20000 || std::floor(v) != v)
+            return std::string(what) + " : \xC2\xAB " + box->text() + " \xC2\xBB n'est pas un nombre de pixels (1 \xC3\xA0 20000).";
+        return {};
+    };
+    if (name.empty()) hint = "Un nom : lettres, chiffres, _", error = false;
     else if (!hmi::isIdentifier(name)) hint = "Nom invalide : lettres, chiffres et _ (pas d'espace)";
     else if (spec_.nameTaken && spec_.nameTaken(name)) hint = name + " existe d\xC3\xA9j\xC3\xA0 dans le projet";
-    else if (!find(spec_.selected)) hint = "Choisis un mod\xC3\xA8le";
+    else if (auto w = badSize(widthBox_, "Largeur"); !w.empty()) hint = w;
+    else if (auto h = badSize(heightBox_, "Hauteur"); !h.empty()) hint = h;
+    else if (!find(spec_.selected)) hint = "Choisis un mod\xC3\xA8le", error = false;
     ok_->setEnabled(hint.empty());
-    if (auto* b = dynamic_cast<GalleryBody*>(body_)) b->hint = hint;
+    if (auto* b = dynamic_cast<GalleryBody*>(body_)) {
+        b->hint = hint;
+        b->hintIsError = error;
+    }
 }
+
+bool HmiTemplateGallery::canCreate() const { return ok_ && ok_->enabled(); }
 
 void HmiTemplateGallery::confirm() {
     if (ok_ && ok_->enabled()) finish(true);
@@ -631,8 +652,10 @@ HmiTemplateGallery::Answer HmiTemplateGallery::parse(const std::string& payload)
         if (key == "key") a.key = value;
         else if (key == "name") a.name = value;
         else if (key == "role") a.role = value;
-        else if (key == "width") a.width = std::atoi(value.c_str());
-        else if (key == "height") a.height = std::atoi(value.c_str());
+        else if (key == "width" || key == "height") {
+            double v = 0;   // 1.12.19 : lue comme toute case de nombre (sync() a deja refuse l'illisible)
+            (key == "width" ? a.width : a.height) = hmi::parseNumber(value, v) ? static_cast<int>(std::lround(v)) : 0;
+        }
         else if (key == "description") a.description = value;
         else if (key == "request") a.request = value;
     }

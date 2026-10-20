@@ -165,7 +165,7 @@ public:
         if (!typed_.empty()) return {};
         if (!typedWhy_.empty()) return typedWhy_;
         const auto* e = selected();
-        if (!e) return "choisissez un type dans la liste";
+        if (!e) return "choisis un type dans la liste";
         const auto r = reg_->resolve(result(), spec_.use);
         return r.ok ? std::string{} : r.why;
     }
@@ -447,7 +447,7 @@ protected:
             r.drawText({rows.x + 12.f, rows.y + 10.f},
                        fit(r,
                            !typed_.empty() ? std::string("Le type \xC3\xA9" "crit est bon : Choisir (ou Entr\xC3\xA9" "e) le prend tel quel.")
-                           : chip_ == kRecents ? std::string("Aucun type r\xC3\xA9" "cent : ceux que vous choisirez s'ajouteront ici.")
+                           : chip_ == kRecents ? std::string("Aucun type r\xC3\xA9" "cent : ceux que tu choisiras s'ajouteront ici.")
                                              : "Aucun type ne correspond. Un type cr\xC3\xA9\xC3\xA9 dans Types IHM appara\xC3\xAEt ici aussit\xC3\xB4t.",
                            kSmall, rows.w - 24.f),
                        kSmall, c.textMuted);
@@ -576,7 +576,7 @@ private:
         const auto r = reg_->resolve(cur, tr::UseAll);
         if (r.missing || (!r.ok && !r.entry)) {
             notice_ = "Type actuel \xC2\xAB " + cur + " \xC2\xBB : " + (r.why.empty() ? std::string("introuvable") : r.why)
-                      + ". Choisissez son rempla\xC3\xA7" "ant.";
+                      + ". Choisis son rempla\xC3\xA7" "ant.";
             sel_ = shown_.empty() ? -1 : 0;
             return;
         }

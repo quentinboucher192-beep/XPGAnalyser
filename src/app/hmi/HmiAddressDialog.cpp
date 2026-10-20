@@ -4,6 +4,7 @@
 #include "../../hmi/HmiTypes.hpp"
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/widgets/Containers.hpp"
+#include "../../ui/widgets/ExprField.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -16,9 +17,6 @@ namespace addr = hmi::addr;
 namespace {
 
 const gfx::FontId kSmall{13};
-const gfx::Color  kAmber{226, 160, 40, 255};
-const gfx::Color  kRed{224, 83, 61, 255};
-const gfx::Color  kGreen{79, 179, 122, 255};
 constexpr char    kSeparator = '\x1f';
 constexpr float   kRowH = 24.f;
 
@@ -60,14 +58,14 @@ protected:
             if (i % 2 == 1) ctx.r.fillRect({b.x, y, b.w, kRowH}, gfx::Color{128, 128, 128, 18});
             ctx.r.drawText({x0, y + 4.f}, r.cell, ctx.theme.font.ui, col.text);
             ctx.r.drawText({x1, y + 4.f}, r.after.empty() ? std::string("\xE2\x80\x94") : r.after, ctx.theme.font.uiBold,
-                           r.after.empty() ? kRed : (r.after == r.before ? col.text : kGreen));
+                           r.after.empty() ? ctx.theme.color.error : (r.after == r.before ? col.text : ctx.theme.color.ok));
             ctx.r.drawText({x2, y + 4.f}, r.before, ctx.theme.font.ui, col.textMuted);
             ctx.r.pushClip({x3, y, b.right() - x3 - 4.f, kRowH});
-            if (!r.error.empty()) ctx.r.drawText({x3, y + 5.f}, r.error, kSmall, kRed);
+            if (!r.error.empty()) ctx.r.drawText({x3, y + 5.f}, r.error, kSmall, ctx.theme.color.error);
             else if (!r.sharedWith.empty()) {
                 std::string who = r.sharedWith.front();
                 if (r.sharedWith.size() > 1) who += " (+" + std::to_string(r.sharedWith.size() - 1) + ")";
-                ctx.r.drawText({x3, y + 5.f}, who + " l'a aussi", kSmall, kAmber);
+                ctx.r.drawText({x3, y + 5.f}, who + " l'a aussi", kSmall, ctx.theme.color.warning);
             } else {
                 ctx.r.drawText({x3, y + 5.f}, "libre", kSmall, col.textMuted);
             }
@@ -169,11 +167,11 @@ protected:
             if (d_.shape_.dims < 2) help += "  \xC2\xB7  deux dimensions : i et j";
             help += "  \xC2\xB7  la formule : " + d_.formula_;
         }
-        ctx.r.drawText({left, helpY_}, help, kSmall, d_.following_ && !d_.followWhy_.empty() ? kRed : c.textMuted);
+        ctx.r.drawText({left, helpY_}, help, kSmall, d_.following_ && !d_.followWhy_.empty() ? ctx.theme.color.error : c.textMuted);
         ctx.r.drawText({left, previewY_}, "Aper\xC3\xA7u  \xC2\xB7  " + std::to_string(d_.plan_.rows.size()) + (d_.plan_.rows.size() > 1 ? " cases" : " case"),
                        ctx.theme.font.uiBold, c.textMuted);
         const std::string msg = d_.message();
-        if (!msg.empty()) ctx.r.drawText({left, messageY_}, msg, kSmall, d_.plan_.ok() ? kAmber : kRed);
+        if (!msg.empty()) ctx.r.drawText({left, messageY_}, msg, kSmall, d_.plan_.ok() ? ctx.theme.color.warning : ctx.theme.color.error);
         ctx.r.drawText({left, panel.y + panel.h - 36.f}, "Ctrl+Z d\xC3\xA9" "fait les " + std::to_string(d_.plan_.rows.size()) + " cases d'un coup",
                        kSmall, c.textMuted);
         ctx.r.popClip();
@@ -236,7 +234,7 @@ void HmiAddressDialog::prefill() {
 void HmiAddressDialog::recompute() {
     followWhy_.clear();
     if (following_) formula_ = spec_.doc ? addr::following(spec_.doc->project, var_, pattern(), start_, &followWhy_) : std::string{};
-    else formula_ = addr::join(prefix_, expression_, shape_.boolInWord ? bit_ : std::string{});
+    else formula_ = addr::join(prefix_, ui::exprfield::withoutEquals(expression_), shape_.boolInWord ? bit_ : std::string{});   // 1.12.19 : "=1000 + i" accepte
     plan_ = spec_.doc ? addr::preview(spec_.doc->project, var_, pattern(), formula_) : addr::Plan{};
     if (following_ && !followWhy_.empty()) plan_.errors.insert(plan_.errors.begin(), followWhy_);
     refresh();

@@ -589,7 +589,7 @@ bool HmiNotifyPane::test(bool sms, std::string* why) {
     const auto& n = doc_->project.notify;
     const std::string name = selectedRecipient().empty() && !n.recipients.empty() ? n.recipients.front().name : selectedRecipient();
     const auto it = std::find_if(n.recipients.begin(), n.recipients.end(), [&](const hmi::NotifyRecipient& r) { return same(r.name, name); });
-    if (it == n.recipients.end()) return fail("choisissez un destinataire");
+    if (it == n.recipients.end()) return fail("choisis un destinataire");
     if (sms && it->phone.empty()) return fail(it->name + " n'a pas de t\xC3\xA9l\xC3\xA9phone");
     if (!sms && it->email.empty()) return fail(it->name + " n'a pas de courriel");
     if (sms && trimmed(n.smsUrl).empty()) return fail("aucune passerelle SMS (URL) : r\xC3\xA9glage \xC2\xAB Passerelle (URL) \xC2\xBB");

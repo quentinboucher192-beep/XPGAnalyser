@@ -86,8 +86,6 @@ dup::BoundsFn boundsOf(const hmi::DocumentPtr& doc, const hmi::View* view) {
 const gfx::FontId kSmall{13};
 const gfx::FontId kText{15};
 const gfx::Color  kOrange{230, 140, 30, 255};
-const gfx::Color  kRed{220, 60, 50, 255};
-const gfx::Color  kAmber{215, 170, 40, 255};
 const gfx::Color  kBlue{60, 130, 220, 255};
 
 std::string plural(std::size_t n, const char* one, const char* many) {
@@ -214,7 +212,7 @@ protected:
             if (cc.row < 0 || static_cast<std::size_t>(cc.row) >= cells.size() || c < 0 || static_cast<std::size_t>(c) >= cells[cc.row].size()) continue;
             auto rr = cells[static_cast<std::size_t>(cc.row)][static_cast<std::size_t>(c)]->bounds();
             rr = {rr.x - 2.f, rr.y - 2.f, rr.w + 4.f, rr.h + 4.f};
-            const gfx::Color k = cc.state == dup::CellState::Empty ? kAmber : kRed;
+            const gfx::Color k = cc.state == dup::CellState::Empty ? ctx.theme.color.warning : ctx.theme.color.error;
             ctx.r.strokeRect(rr, cc.blocks ? k : gfx::Color{k.r, k.g, k.b, 110}, 2.f);
         }
     }
@@ -369,8 +367,8 @@ protected:
             const bool isOut = std::find(out.begin(), out.end(), i + 1) != out.end();
             const bool isOver = std::find(over.begin(), over.end(), i + 1) != over.end();
             const auto r = map(x);
-            dashed(ctx, r, isOut ? kRed : isOver ? kAmber : kOrange);
-            if (r.w > 14.f && r.h > 12.f) ctx.r.drawText({r.x + 3.f, r.y + 2.f}, std::to_string(i + 2), kSmall, isOut ? kRed : kOrange);
+            dashed(ctx, r, isOut ? ctx.theme.color.error : isOver ? ctx.theme.color.warning : kOrange);
+            if (r.w > 14.f && r.h > 12.f) ctx.r.drawText({r.x + 3.f, r.y + 2.f}, std::to_string(i + 2), kSmall, isOut ? ctx.theme.color.error : kOrange);
         }
         ctx.r.popClip();
     }
@@ -422,10 +420,10 @@ protected:
         y += 20.f;
         const auto out = d_.overflow();
         if (out.empty()) ctx.r.drawText({b.x + 8.f, y}, "Toutes les copies tiennent dans la vue.", kSmall, c.textMuted);
-        else ctx.r.drawText({b.x + 8.f, y}, plural(out.size(), "copie sort", "copies sortent") + " de la vue (en rouge) : \xC2\xAB Ajuster l'espacement \xC2\xBB ou une grille.", kSmall, kRed);
+        else ctx.r.drawText({b.x + 8.f, y}, plural(out.size(), "copie sort", "copies sortent") + " de la vue (en rouge) : \xC2\xAB Ajuster l'espacement \xC2\xBB ou une grille.", kSmall, ctx.theme.color.error);
         y += 20.f;
         const auto over = d_.overlap();
-        if (!over.empty()) ctx.r.drawText({b.x + 8.f, y}, plural(over.size(), "copie chevauche", "copies chevauchent") + " un autre objet de la vue (en ambre).", kSmall, kAmber);
+        if (!over.empty()) ctx.r.drawText({b.x + 8.f, y}, plural(over.size(), "copie chevauche", "copies chevauchent") + " un autre objet de la vue (en ambre).", kSmall, ctx.theme.color.warning);
     }
 private:
     HmiDuplicateDialog& d_;
@@ -463,7 +461,7 @@ protected:
         const std::string note = d_.blockingText();
         if (!note.empty()) {
             ctx.r.pushClip({panel.x + 12.f, panel.y + panel.h - 50.f, noteW_, 44.f});
-            ctx.r.drawText({panel.x + 16.f, panel.y + panel.h - 38.f}, note, kSmall, d_.check_.blocked() ? kRed : c.textMuted);
+            ctx.r.drawText({panel.x + 16.f, panel.y + panel.h - 38.f}, note, kSmall, d_.check_.blocked() ? ctx.theme.color.error : c.textMuted);
             ctx.r.popClip();
         }
     }

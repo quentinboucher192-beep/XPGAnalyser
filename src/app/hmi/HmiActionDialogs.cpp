@@ -18,6 +18,7 @@
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
+#include "../../ui/widgets/ExprField.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -173,6 +174,10 @@ public:
         return true;
     }
     void focusEditor() { owner_.focus().focus(editor_); }
+    // 1.12.19 : Echap ferme d'abord la liste d'aide ouverte, pas la fenetre.
+    [[nodiscard]] bool listOpen() const {
+        return (editor_ && (editor_->completionOpen() || editor_->signatureOpen())) || (search_ && search_->suggestionsOpen());
+    }
     [[nodiscard]] bool editorFocused() const { return editor_->focused(); }
 
 protected:
@@ -320,7 +325,7 @@ ui::EventResult HmiActionScriptDialog::HandleEvent(const ui::InputEvent& ev) {
             finish(true);
             return ui::EventResult::Consumed;
         }
-        if (k->key == ui::Key::Escape && k->mods.none()) {
+        if (k->key == ui::Key::Escape && k->mods.none() && !body_->listOpen()) {
             finish(false);
             return ui::EventResult::Consumed;
         }
@@ -442,6 +447,7 @@ public:
              + std::string(hmi::actionkinds::help(chosen_));
     }
     void focusSearch() { owner_.focus().focus(search_); }
+    [[nodiscard]] bool listOpen() const { return search_ && search_->suggestionsOpen(); }
     // Entree : la ligne choisie ; les fleches : la suivante, la precedente (dans l'ordre montre).
     bool step(int delta) {
         const auto all = operations();
@@ -555,7 +561,7 @@ ui::EventResult HmiOperationDialog::HandleEvent(const ui::InputEvent& ev) {
             finish(true);
             return ui::EventResult::Consumed;
         }
-        if (k->key == ui::Key::Escape && k->mods.none()) {
+        if (k->key == ui::Key::Escape && k->mods.none() && !body_->listOpen()) {
             finish(false);
             return ui::EventResult::Consumed;
         }
@@ -666,7 +672,7 @@ public:
     [[nodiscard]] bool kept(const RefRow& r) const {
         if (r.name->text().empty() && r.path->text().empty()) return false;
         return !r.path->text().empty()
-            || hmi::actionkinds::mathsExpression(formula_->text(), {{r.name->text(), "\x01"}}).find('\x01') != std::string::npos;
+            || hmi::actionkinds::mathsExpression(formulaText(), {{r.name->text(), "\x01"}}).find('\x01') != std::string::npos;
     }
     [[nodiscard]] hmi::actionkinds::Params refs() const {
         hmi::actionkinds::Params out;
@@ -674,7 +680,7 @@ public:
             if (kept(r)) out.emplace_back(r.name->text(), r.path->text());
         return out;
     }
-    [[nodiscard]] Answer answer() const { return {target_->text(), formula_->text(), refs()}; }
+    [[nodiscard]] Answer answer() const { return {target_->text(), formulaText(), refs()}; }
     [[nodiscard]] const std::vector<hmi::actionkinds::MathsIssue>& issues() const { return issues_; }
     [[nodiscard]] bool blocking() const {
         return std::any_of(issues_.begin(), issues_.end(), [](const auto& i) { return !i.warning; }) || target_->text().empty();
@@ -683,7 +689,7 @@ public:
         std::vector<std::string> values;
         for (const auto& r : rows_)
             if (kept(r)) values.push_back(r.test->text());     // une valeur par reference gardee, dans l'ordre
-        last_ = hmi::actionkinds::testMaths(refs(), values, formula_->text());
+        last_ = hmi::actionkinds::testMaths(refs(), values, formulaText());
         tested_ = true;
         invalidate();
         return last_;
@@ -695,6 +701,16 @@ public:
     }
     void setRefused(bool on) { refused_ = on; invalidate(); }
     void focusFormula() { owner_.focus().focus(formula_); }
+    // 1.12.19 : la formule seule est une expression - un "=" tape en tete est accepte.
+    [[nodiscard]] std::string formulaText() const { return ui::exprfield::withoutEquals(formula_->text()); }
+    // 1.12.19 : Echap ferme d'abord la liste d'aide ouverte, pas la fenetre.
+    [[nodiscard]] bool listOpen() const {
+        const auto open = [](const ui::InputText* f) { return f && f->suggestionsOpen(); };
+        if (open(target_) || open(formula_)) return true;
+        for (const auto& r : rows_)
+            if (open(r.name) || open(r.path) || open(r.test)) return true;
+        return false;
+    }
 
 protected:
     void onLayout() override {
@@ -801,7 +817,7 @@ protected:
 private:
     static constexpr const char* kFunctions[] = {"ABS", "SQRT", "MIN", "MAX", "LIMIT", "SIN", "COS", "TAN", "EXP", "LN", "LOG", "TRUNC", "SEL", "MUX"};
     void changed() {
-        issues_ = hmi::actionkinds::checkMaths(refs(), formula_->text());
+        issues_ = hmi::actionkinds::checkMaths(refs(), formulaText());
         refused_ = false;
         tested_ = false;
         invalidate();
@@ -848,7 +864,7 @@ ui::EventResult HmiMathsDialog::HandleEvent(const ui::InputEvent& ev) {
             validate();
             return ui::EventResult::Consumed;
         }
-        if (k->key == ui::Key::Escape && k->mods.none()) {
+        if (k->key == ui::Key::Escape && k->mods.none() && !body_->listOpen()) {
             finish(false);
             return ui::EventResult::Consumed;
         }

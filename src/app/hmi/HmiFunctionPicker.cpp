@@ -909,8 +909,8 @@ private:
         return s;
     }
     [[nodiscard]] std::string emptyText() const {
-        if (returns_ == Returns::Fits) return "Aucune ne convient : choisissez \xC2\xAB Tout \xC2\xBB dans Rend.";
-        if (returns_ != Returns::All) return "Aucune ne rend cela ici : choisissez \xC2\xAB Tout \xC2\xBB dans Rend.";
+        if (returns_ == Returns::Fits) return "Aucune ne convient : choisis \xC2\xAB Tout \xC2\xBB dans Rend.";
+        if (returns_ != Returns::All) return "Aucune ne rend cela ici : choisis \xC2\xAB Tout \xC2\xBB dans Rend.";
         return "Aucune fonction ne correspond \xC3\xA0 la recherche.";
     }
     [[nodiscard]] float maxScroll() const { return std::max(0.f, contentH_ - list_.h); }
@@ -1102,7 +1102,7 @@ std::string HmiFunctionPicker::returnsLabel(Returns r, std::string_view expected
         case Returns::Container: return "Conteneurs (LIST, SET\xE2\x80\xA6)";
         case Returns::Reference: return "R\xC3\xA9" "f\xC3\xA9rences (REF_TO\xE2\x80\xA6)";
         case Returns::Generic:   return "Comme son argument (ANY\xE2\x80\xA6)";
-        case Returns::Other:     return "Vos types (structures, \xC3\xA9num\xC3\xA9rations)";
+        case Returns::Other:     return "Tes types (structures, \xC3\xA9num\xC3\xA9rations)";
     }
     return {};
 }

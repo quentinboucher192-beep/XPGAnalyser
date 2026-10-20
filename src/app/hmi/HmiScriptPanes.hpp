@@ -72,6 +72,14 @@ inline constexpr const char* kDiagnosticUnavailable =
 // ... et le titre du tableau des diagnostics qui les compte (`where` : "ce script").
 [[nodiscard]] std::string diagnosticsTitle(const std::vector<hmi::ScriptDiagnostic>&, std::string_view where);
 
+// 1.12.19 (U4, la regle des cases) : CE QUI NE VA PAS dans une variable IHM a creer ou a modifier - vide :
+// rien. `field` : 0 le nom, 1 le type, 2 la valeur initiale (lue comme toute case : hmi::typedInitial). Les
+// fenetres (Nouvelle variable, Modifier, Creer la variable) le disent SOUS LE CHAMP, avant de se fermer ; la
+// meme regle de nom partout (un mot reserve du ST, SYS ou une variable deja la sont refuses aussi a la creation).
+[[nodiscard]] std::string variableProblem(const hmi::Project&, hmi::Id self, const std::string& name, const std::string& type,
+                                          const std::string& initial, int* field = nullptr);
+[[nodiscard]] std::string nameProblem(std::string_view name);   // la regle d'un nom, une seule phrase
+
 class HmiScriptsPane final : public ui::Widget, public HmiLiveSource {
 public:
     using Apply = std::function<void(core::CommandPtr)>;

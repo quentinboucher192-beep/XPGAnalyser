@@ -19,7 +19,6 @@ namespace dup = hmi::dup;
 namespace {
 
 const gfx::FontId kSmall{13};
-const gfx::Color  kAmber{226, 160, 40, 255};
 
 constexpr char kRowSeparator = '\x1e';   // entre deux copies (RS) ; entre deux champs : core::kFieldSeparator (US)
 
@@ -115,7 +114,7 @@ protected:
             for (std::size_t c = 0; c < cells[r].size() && c < ws.size(); ++c)
                 if (cells[r][c]->text().empty() && !field(c).text.empty()) {
                     auto rr = cells[r][c]->bounds();
-                    ctx.r.strokeRect({rr.x - 2.f, rr.y - 2.f, rr.w + 4.f, rr.h + 4.f}, kAmber, 2.f);
+                    ctx.r.strokeRect({rr.x - 2.f, rr.y - 2.f, rr.w + 4.f, rr.h + 4.f}, ctx.theme.color.warning, 2.f);
                 }
         }
     }
@@ -193,7 +192,7 @@ protected:
             ctx.r.pushClip({panel.x + 12.f, warnY_ - 2.f, panel.w - 24.f, 22.f});
             std::string all;
             for (std::size_t i = 0; i < warns.size(); ++i) all += (i ? "  \xC2\xB7  " : "") + warns[i];
-            ctx.r.drawText({panel.x + 16.f, warnY_}, all, kSmall, kAmber);
+            ctx.r.drawText({panel.x + 16.f, warnY_}, all, kSmall, ctx.theme.color.warning);
             ctx.r.popClip();
         }
     }

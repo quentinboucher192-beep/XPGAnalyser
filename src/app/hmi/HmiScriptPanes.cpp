@@ -1528,7 +1528,7 @@ namespace {
 // gardee (2,5 -> 2.5, VRAI -> TRUE, Azote -> 'Azote' pour un STRING), comme dans le volet Variables IHM.
 bool validVariable(const hmi::Project& p, Id self, const std::string& name, const std::string& type, std::string& initial,
                    std::string* why) {
-    if (!hmi::isIdentifier(name)) { if (why) *why = "nom invalide : lettres, chiffres et _"; return false; }
+    if (const std::string bad = nameProblem(name); !bad.empty()) { if (why) *why = bad; return false; }   // 1.12.19 (U4)
     if (!hmi::typedInitial(p, type, initial, why)) return false;
     if (const auto* other = p.variable(name); other && other->id != self) { if (why) *why = "'" + name + "' existe d\xC3\xA9j\xC3\xA0"; return false; }
     // Lot 16 : un type IHM ou un tableau aussi.
@@ -1550,6 +1550,30 @@ bool validVariable(const hmi::Project& p, Id self, const std::string& name, cons
     return true;
 }
 } // namespace
+
+std::string nameProblem(std::string_view name) {
+    const std::string n(name);
+    if (n.empty()) return "un nom : des lettres sans accent, des chiffres et _";
+    if (!hmi::isIdentifier(n))
+        return "\xC2\xAB " + n + " \xC2\xBB n'est pas un nom : des lettres sans accent, des chiffres et _, sans chiffre en t\xC3\xAA" "te";
+    if (hmi::isReservedWord(n)) return "\xC2\xAB " + n + " \xC2\xBB est un mot r\xC3\xA9serv\xC3\xA9 du ST : choisis un autre nom";
+    std::string u;
+    for (const char c : n) u += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (u == "SYS" || u == "THIS" || u == "SUPER") return "\xC2\xAB " + n + " \xC2\xBB est r\xC3\xA9serv\xC3\xA9 (SYS., THIS., SUPER.) : choisis un autre nom";
+    return {};
+}
+
+std::string variableProblem(const hmi::Project& p, Id self, const std::string& name, const std::string& type, const std::string& initial,
+                            int* field) {
+    const auto at = [field](int f) { if (field) *field = f; };
+    if (std::string bad = nameProblem(name); !bad.empty()) { at(0); return bad; }
+    if (const auto* other = p.variable(name); other && other->id != self) { at(0); return "une variable IHM s'appelle d\xC3\xA9j\xC3\xA0 " + name; }
+    std::string why;
+    if (!hmi::types::validType(p, type, &why)) { at(1); return why.empty() ? std::string("type illisible") : why; }
+    std::string typed = initial;
+    if (!validVariable(p, self, name, type, typed, &why)) { at(2); return why.empty() ? std::string("valeur initiale illisible") : why; }
+    return {};
+}
 
 Id HmiScriptsPane::addVariable(const std::string& name, const std::string& type, const std::string& typedValue,
                                const std::string& description, std::string* why) {

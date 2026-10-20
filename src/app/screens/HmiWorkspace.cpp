@@ -55,6 +55,8 @@
 #include "../hmi/HmiHelpPane.hpp"
 #include "../hmi/HmiTutorial.hpp"
 #include "../../hmi/HmiSymbols.hpp"
+#include "../../hmi/HmiRoles.hpp"              // 1.12.19 : defaultInvite
+#include "../hmi/HmiInitModel.hpp"              // 1.12.19 : zeroOf (l'invite de la valeur initiale)
 #include "../../hmi/HmiTemplates.hpp"
 #include "../../hmi/HmiGuide.hpp"
 #include "../../help/F1Table.hpp"   // 1.11 (T2, tranche 16) : F1 ouvre le centre, au sujet de l'endroit
@@ -78,6 +80,8 @@
 #include "../hmi/HmiEnumPanes.hpp"                   // 1.10 (chantier U) : choisir une valeur depuis l'arbre
 #include "../ExportTarget.hpp"                       // 1.10 (chantier O) : exporter les valeurs du graphique
 #include "../../hmi/HmiTypes.hpp"
+#include "../../sim/ValueText.hpp"     // 1.12.19 (U4) : sim::fixedText, une valeur relisible
+#include <optional>
 #include "../../hmi/HmiTypeForms.hpp"                // 1.12.2 : la forme d'un type (Liste, Vecteur, MAP, Tuple...)
 #include "../hmi/HmiStationPanes.hpp"               // lot 14 : le poste d'exploitation
 #include "../hmi/HmiNotifyPanes.hpp"                // lot 14 : les notifications
@@ -86,6 +90,7 @@
 #include "../hmi/HmiBuildPanes.hpp"                 // 1.11.13 : ses sorties
 #include "../hmi/HmiWebPanes.hpp"                   // lot 14 : l'acces web
 #include "../hmi/HmiScriptPanes.hpp"
+#include "../../ui/widgets/ExprField.hpp"           // 1.12.19 (U4) : replaceRoot
 #include "../hmi/HmiSimulation.hpp"
 #include "../hmi/HmiParamPanes.hpp"   // 1.9 : les parametres des popups (un clic dans les infos)
 #include "../hmi/HmiSupervisionPanes.hpp"
@@ -134,7 +139,12 @@ namespace {
 //  a une, la valeur initiale (son exemple suit la forme). npos : pas ce champ.
 struct ShapeFields {
     std::size_t form{std::string::npos}, parameter{std::string::npos}, written{std::string::npos}, initial{std::string::npos};
+    // 1.12.19 (la regle des cases) : le champ du type des elements et le projet - l'invite de la valeur initiale
+    // dit alors la valeur par defaut DU TYPE CHOISI (« 0.0 · valeur par défaut »), et la suit quand il change.
+    std::size_t         element{std::string::npos};
+    const hmi::Project* project{nullptr};
 };
+std::string shapedTypeOf(const std::vector<std::string>& v, struct ShapeFields at, const std::string& element);
 std::string trimmedText(std::string_view s) {
     std::size_t a = 0, b = s.size();
     while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
@@ -163,7 +173,14 @@ FormDialog::Rules shapeRules(ShapeFields at, FormDialog::Rules more = {}) {
         st[at.form].hint = written ? std::string("le type \xC3\xA9" "crit le remplace")
                          : tf::memoryOnly(f) ? std::string("dans la m\xC3\xA9moire de l'IHM : sans \xC3\xA9quipement ni adresse")
                                              : std::string{};
-        if (has(at.initial)) st[at.initial].placeholder = std::string(tf::valueHint(f));
+        if (has(at.initial)) {
+            std::string invite;
+            if (at.project && has(at.element)) {
+                const std::string zero = app::initvalue::zeroOf(*at.project, shapedTypeOf(v, at, v[at.element]));
+                if (!zero.empty()) invite = hmi::roles::defaultInvite(hmi::shownLiteral(zero));
+            }
+            st[at.initial].placeholder = invite.empty() ? std::string(tf::valueHint(f)) : invite;
+        }
         if (more) more(v, st);
     };
 }
@@ -2032,14 +2049,17 @@ void MainAnalysisScreen::askHmiForce(std::string variable) {
     if (!app_.simulation().attached()) runSimulationTransport("sim.prepare");
     auto* rt = app_.simulationRuntime();
     if (!rt) return;
+    // 1.12.19 (U4, la regle des cases) : la valeur d'avant, RELISIBLE (avant : formatValue - un STRING
+    // devenait un nom de variable, un REAL perdait ses chiffres, une date son prefixe) ; un texte sans
+    // apostrophes, comme toute case.
     std::string current;
     if (!variable.empty()) {
         sim::Value v;
-        if (rt->get(variable, v)) current = hmi::formatValue(v);
+        if (rt->get(variable, v)) current = hmi::shownLiteral(sim::fixedText(v));
     }
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Variable", variable, "Armoires[0].ana.PT1.mes", false, {}});
-    fields.push_back({"Valeur", current, "TRUE, 42, 7.5, T#2s, 'texte' ou une expression", false, {}});
+    fields.push_back({"Valeur", current, "TRUE, 42, 7,5, 5 s, Azote Â· =expression", false, {}});
     auto dialog = std::make_unique<FormDialog>("dialog.hmiForce", "Forcer une variable",
             core::hasApi() ? "Tant qu'elle est forc\xC3\xA9" "e, le programme n'\xC3\xA9" "crit plus dans la variable : elle relit "
                              "toujours cette valeur, comme dans la table de for\xC3\xA7" "age de l'automate. \"Tout rel\xC3\xA2" "cher\" "
@@ -2051,21 +2071,51 @@ void MainAnalysisScreen::askHmiForce(std::string variable) {
         dialog->setFieldAssist(0, assist::fieldAssist(assist::sourcesFor(doc)));
         dialog->setFieldAssist(1, assist::fieldAssist(assist::sourcesFor(doc)));
     }
+    // 1.12.19 (U4) : UN SEUL LECTEUR, celui des cases - sans =, une valeur fixe lue selon le type de la
+    // variable (2,5 ; vrai ; 5 s ; Azote) ; avec =, une expression. Ce qui ne se lit pas est dit SOUS LE
+    // CHAMP, la fenetre reste ouverte (avant : elle se fermait, et la raison allait dans la barre d'etat).
+    struct Read { std::optional<sim::Value> value; std::string why; };
+    const auto readValue = [this](const std::string& path, const std::string& typed) -> Read {
+        auto* runtime = app_.simulationRuntime();
+        if (!runtime) return {std::nullopt, "la simulation n'est pas pr\xC3\xAA" "te"};
+        const auto doc = app_.hmi();
+        const std::string type = doc ? hmi::types::typeOfPath(doc->project, path) : std::string{};
+        const hmi::CellText cell = hmi::cellValue(doc ? &doc->project : nullptr, type, typed);
+        if (!cell.ok()) return {std::nullopt, cell.why};
+        if (cell.text.empty()) return {std::nullopt, "une valeur, ou =expression"};
+        auto value = hmi::Expression::compile(cell.text).evaluate(*runtime);
+        if (!value) return {std::nullopt, value.error().message()};
+        return {*value, {}};
+    };
+    dialog->setValidator([this, readValue](const std::vector<std::string>& v, std::size_t& field) -> std::string {
+        auto* runtime = app_.simulationRuntime();
+        if (v.size() < 2) return {};
+        sim::Value probe;
+        if (v[0].empty() || !runtime || !runtime->get(v[0], probe)) {
+            field = 0;
+            return v[0].empty() ? std::string("la variable \xC3\xA0 forcer") : v[0] + " : variable inconnue du simulateur";
+        }
+        if (const Read r = readValue(v[0], v[1]); !r.value) {
+            field = 1;
+            return r.why;
+        }
+        return {};
+    });
     app_.menus().ShowDialog(std::move(dialog),
-        [this](const menu::DialogResult& r) {
+        [this, readValue](const menu::DialogResult& r) {
             auto* runtime = app_.simulationRuntime();
             if (!r.accepted() || !runtime) return;
             const auto v = FormDialog::split(r.payload);
             if (v.size() < 2 || v[0].empty()) return;
-            auto value = hmi::Expression::compile(v[1]).evaluate(*runtime);
-            if (!value) {
-                status_->setTransientMessage("Valeur illisible : " + value.error().message(), 8.0);
+            const Read value = readValue(v[0], v[1]);
+            if (!value.value) {
+                status_->setTransientMessage("Valeur illisible : " + value.why, 8.0);
                 return;
             }
-            if (!runtime->force(v[0], *value))
+            if (!runtime->force(v[0], *value.value))
                 status_->setTransientMessage(v[0] + " : variable inconnue du simulateur", 8.0);
             else
-                status_->setTransientMessage(v[0] + " forc\xC3\xA9" "e \xC3\xA0 " + hmi::formatValue(*value), 6.0);
+                status_->setTransientMessage(v[0] + " forc\xC3\xA9" "e \xC3\xA0 " + hmi::shownLiteral(sim::fixedText(*value.value)), 6.0);
         });
 }
 
@@ -2160,13 +2210,13 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
     const std::size_t iType = fields.size();
     fields.push_back({withApi ? "Type" : "Type des \xC3\xA9l\xC3\xA9ments", wanted, {}, false, hmiTypes()});
     const std::size_t iInitial = fields.size();
-    fields.push_back({withApi ? "Valeur initiale (IHM)" : "Valeur initiale", {}, "vide : 0, FALSE ou ''", false, {}});
+    fields.push_back({withApi ? "Valeur initiale (IHM)" : "Valeur initiale", {}, {}, false, {}});
     const std::size_t iAddress = withApi ? fields.size() : std::string::npos;
     if (withApi) fields.push_back({"Adresse (API, facultative)", {}, "%MW100 ; vide : non situ\xC3\xA9" "e", false, {}});
     const std::size_t iComment = fields.size();
     fields.push_back({"Commentaire", "Cr\xC3\xA9\xC3\xA9" "e depuis le s\xC3\xA9lecteur de " + req.field, {}, false, {}});
     // 1.12.2 : la forme (une variable IHM) : Simple, Tableau... Liste, Dictionnaire, Tuple.
-    const ShapeFields at{fields.size(), fields.size() + 1, fields.size() + 2, iInitial};
+    const ShapeFields at{fields.size(), fields.size() + 1, fields.size() + 2, iInitial, iType, &doc->project};
     fields.push_back({"Forme", "Simple", "", false, hmi::typeform::labels(hmi::typereg::UseVariable)});
     fields.push_back({"Bornes, cl\xC3\xA9, types suivants ou capacit\xC3\xA9", {}, "", false, {}});
     fields.push_back({"Type \xC3\xA9" "crit (facultatif)", {}, "il remplace les choix", false, {}});
@@ -2200,6 +2250,19 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
             st[iAddress].enabled = false;
         }
     }));
+    // 1.12.19 (U4) : le nom, le type et la valeur initiale verifies AVANT de fermer, sous leur champ (une variable de
+    // l'automate : son nom seulement - le reste, Control Expert le dira).
+    dialog->setValidator([doc, withApi, zoneApi, iType, iInitial, at](const std::vector<std::string>& v, std::size_t& field) -> std::string {
+        if (v.size() < at.written + 1) return {};
+        if (withApi && v.size() > 1 && v[1] == zoneApi) {
+            field = 0;
+            return nameProblem(v[0]);
+        }
+        int bad = 0;
+        const std::string why = variableProblem(doc->project, hmi::kNoId, v[0], shapedTypeOf(v, at, v[iType]), v[iInitial], &bad);
+        field = bad == 0 ? 0 : bad == 1 ? (!v[at.written].empty() ? at.written : iType) : iInitial;
+        return why;
+    });
     app_.menus().ShowDialog(std::move(dialog), [this, viewId, req, text, fx, name, zoneApi, withApi, iType, iInitial, iAddress, iComment,
                                                 at](const menu::DialogResult& r) {
         if (!r.accepted()) return;
@@ -2215,17 +2278,10 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
             status_->setTransientMessage(why, 8.0);
             return;
         }
-        // Le nom change ? Il change aussi dans la valeur.
+        // Le nom change ? Il change aussi dans la valeur - le nom entier, hors des textes (1.12.19 : avant, un simple
+        // chercher-remplacer changeait aussi Debit dans Debit_Max et dans 'Debit').
         std::string value = text;
-        if (newName != name && !value.empty()) {
-            std::string out;
-            std::size_t at = 0, hit = 0;
-            while ((hit = value.find(name, at)) != std::string::npos) {
-                out += value.substr(at, hit - at) + newName;
-                at = hit + name.size();
-            }
-            value = out + value.substr(at);
-        }
+        if (newName != name && !value.empty()) value = ui::exprfield::replaceRoot(value, name, newName);
         if (value.empty()) value = newName;
         // UN SEUL CTRL+Z : la variable et la saisie.
         core::CommandGroupScope group("Cr\xC3\xA9" "er " + newName + " et l'utiliser");
@@ -2245,11 +2301,16 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
         } else {
             std::string initial = v[iInitial];
             const std::string type = hmi::types::normalized(shapedTypeOf(v, at, v[iType]));
-            if (initial.empty()) initial = type == "BOOL" ? "FALSE" : type == "STRING" ? "''" : hmi::types::isComposite(type) ? "" : "0";
             if (!hmi::types::validType(hdoc->project, type, &why)) {
                 status_->setTransientMessage("Type refus\xC3\xA9 : " + why, 8.0);
                 return;
             }
+            // 1.12.19 (U4, la regle des cases) : lue selon le type, comme toute case (Azote -> 'Azote', 2,5 -> 2.5).
+            if (!hmi::typedInitial(hdoc->project, type, initial, &why)) {
+                status_->setTransientMessage("Valeur initiale refus\xC3\xA9" "e : " + why, 8.0);
+                return;
+            }
+            if (initial.empty()) initial = type == "BOOL" ? "FALSE" : type == "STRING" ? "''" : hmi::types::isComposite(type) ? "" : "0";
             // 1.12.2 : une valeur initiale verifiee (un litteral pour un type objet).
             if (hmi::types::isRich(type) && !hmi::typeform::valueFits(hdoc->project, type, initial, &why)) {
                 status_->setTransientMessage("Valeur initiale refus\xC3\xA9" "e : " + why, 8.0);
@@ -2373,12 +2434,20 @@ void MainAnalysisScreen::askHmiViewFromType() {
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Instance", choices.front(), "celle que montre l'\xC3\xA9" "diteur", false, choices});
     fields.push_back({"Faire", "Une popup", "", false, {"Une popup", "Une vue"}});
-    fields.push_back({"Nom", "", "vide : Popup_<Type>", false, {}});
+    fields.push_back({"Nom", "", {}, false, {}});
     auto dialog = std::make_unique<FormDialog>("dialog.hmiViewFromType", "G\xC3\xA9n\xC3\xA9rer depuis un type",
         "Une ligne par membre du type (son commentaire, sinon son nom) et l'objet de sa valeur : un voyant pour un BOOL, un "
         "afficheur pour un nombre, un texte pour une cha\xC3\xAEne. Tout se lit \xC3\xA0 travers le param\xC3\xA8tre Equipement : "
         "la m\xC3\xAAme popup sert \xC3\xA0 toutes les instances (Ouvrir une popup, Equipement := Pompe_2). Ctrl+Z la retire.",
         std::move(fields), "G\xC3\xA9n\xC3\xA9rer");
+    // 1.12.19 (la regle des cases) : l'invite du nom dit le nom qu'elle prendra (« Popup_Pompe · valeur par défaut »).
+    dialog->setRules([structures](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
+        if (v.size() < 3 || st.size() < 3) return;
+        for (const auto& s : structures)
+            if (v[0].rfind(s.name + "  (", 0) == 0)
+                st[2].placeholder = hmi::roles::defaultInvite(v[1] != "Une vue" ? hmi::design::equipmentPopupName(s.type)
+                                                                                : "Vue_" + hmi::design::nameStem(s.type));
+    });
     app_.menus().ShowDialog(std::move(dialog), [this, structures](const menu::DialogResult& r) {
         auto current = app_.hmi();
         if (!r.accepted() || !current) return;
@@ -2914,6 +2983,34 @@ void MainAnalysisScreen::askHmiNewScript(hmi::ScriptLang lang) {
         state[3].enabled = change;
         state[3].hint = change ? std::string{} : std::string("d\xC3\xA9" "clencheur Sur changement seulement");
     });
+    // 1.12.19 (la regle des cases) : le refus sous son champ, la fenetre reste ouverte ; l'expression
+    // surveillee accepte le "=" de tete, comme toute case qui n'attend qu'une expression.
+    dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
+        if (v.size() < 4) return {};
+        if (auto why = nameProblem(v[0]); !why.empty()) {
+            field = 0;
+            return why;
+        }
+        if (v[1] == "Cyclique") {
+            double ms = 0;
+            if (!hmi::parseNumber(v[2], ms) || ms < 10) {
+                field = 2;
+                return "Â« " + v[2] + " Â» : une pÃ©riode en ms, 10 au moins.";
+            }
+        }
+        if (v[1] == "Sur changement") {
+            const std::string watch = ui::exprfield::withoutEquals(v[3]);
+            field = 3;
+            if (watch.empty()) return "Sur changement : l'expression Ã  surveiller manque.";
+            const auto e = hmi::Expression::compile(watch);
+            if (!e.valid()) {
+                std::string rest;
+                (void)hmi::splitLine(e.error(), &rest);
+                return "Expression illisible : " + rest;
+            }
+        }
+        return {};
+    });
     app_.menus().ShowDialog(std::move(dialog), [this, lang](const menu::DialogResult& r) {
         auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"));
         if (!r.accepted() || !pane) return;
@@ -2926,7 +3023,7 @@ void MainAnalysisScreen::askHmiNewScript(hmi::ScriptLang lang) {
         double ms = 1000;
         if (v.size() > 2 && !v[2].empty()) (void)hmi::parseNumber(v[2], ms);
         spec.periodMs = static_cast<int>(ms);
-        if (v.size() > 3) spec.watch = v[3];
+        if (v.size() > 3) spec.watch = ui::exprfield::withoutEquals(v[3]);
         if (v.size() > 4) spec.description = v[4];
         std::string why;
         if (pane->addScript(std::move(spec), &why) == hmi::kNoId)
@@ -2996,7 +3093,7 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
     // les scripts d'avant remplissent les memes champs ; les suivants s'ajoutent a la fin.
     fields.push_back({"Nom", var ? var->name : hmi::uniqueVariableName(doc->project, "Variable"), "lettres, chiffres, _", false, {}});
     fields.push_back({"Type des \xC3\xA9l\xC3\xA9ments", element, "", false, elementChoices(doc->project, hmi::typereg::UseVariable, element)});
-    fields.push_back({"Valeur initiale", var ? var->initial : std::string("0"), std::string(tf::valueHint(shape.form)), false, {}});
+    fields.push_back({"Valeur initiale", var ? hmi::shownCell(var->initial) : std::string("0"), std::string(tf::valueHint(shape.form)), false, {}});   // 1.12.19 (U4)
     fields.push_back({"Description", var ? var->description : std::string{}, "\xC3\xA0 quoi elle sert", false, {}});
     fields.push_back({"Forme", std::string(tf::label(shape.form)), "", false, tf::labels(hmi::typereg::UseVariable)});
     fields.push_back({"Bornes, cl\xC3\xA9, types suivants ou capacit\xC3\xA9", shape.form == tf::Form::Simple ? std::string{} : shape.parameter,
@@ -3011,8 +3108,17 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
         "par son nom. Sa forme : une valeur, un tableau (fixe, il peut \xC3\xAAtre li\xC3\xA9 \xC3\xA0 un \xC3\xA9quipement), ou une liste, un vecteur, "
         "un dictionnaire, un tuple (dans la m\xC3\xA9moire de l'IHM : sans \xC3\xA9quipement ni adresse). Ctrl+Z reprend.",
         std::move(fields), var ? "Enregistrer" : "Cr\xC3\xA9" "er");
-    const ShapeFields at{4, 5, 6, 2};
+    const ShapeFields at{4, 5, 6, 2, 1, &doc->project};
     dialog->setRules(shapeRules(at));
+    // 1.12.19 (U4, la regle des cases) : ce qui ne va pas se dit sous le champ, la fenetre reste (avant : elle se
+    // fermait, et « Variable refusee » allait dans la barre d'etat - la saisie etait perdue).
+    dialog->setValidator([doc, variableId, at](const std::vector<std::string>& v, std::size_t& field) -> std::string {
+        if (v.size() < 3) return {};
+        int bad = 0;
+        const std::string why = variableProblem(doc->project, asId(variableId), v[0], shapedTypeOf(v, at, v[1]), v[2], &bad);
+        field = bad == 1 ? (v.size() > at.written && !v[at.written].empty() ? at.written : 1) : static_cast<std::size_t>(bad);
+        return why;
+    });
     app_.menus().ShowDialog(std::move(dialog), [this, variableId, at](const menu::DialogResult& r) {
         auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"));
         if (!r.accepted() || !pane) return;
@@ -3454,9 +3560,11 @@ void MainAnalysisScreen::askHmiTryFunction(std::uint64_t functionId) {
         using S = hmi::LocalVar::Section;
         const std::string mode = in->section == S::InOut ? " (E/S : sa valeur de d\xC3\xA9part)"
                                : in->section == S::Output ? " (sortie : rendue apr\xC3\xA8s l'essai)" : std::string{};
+        // 1.12.19 (la regle des cases) : l'invite de toute case vide, « 12 · valeur par défaut ».
+        const std::string fallback = in->initial.empty() ? hmi::shownLiteral(app::initvalue::zeroOf(doc->project, in->type)) : hmi::shownCell(in->initial);
         fields.push_back({in->name + " : " + in->type + mode, "",
-                          in->section == S::Output ? std::string("laisse vide : la fonction la calcule")
-                                                   : "vide : " + (in->initial.empty() ? std::string("la valeur par d\xC3\xA9" "faut du type") : in->initial),
+                          in->section == S::Output ? std::string("rendue par la fonction")
+                                                   : hmi::roles::defaultInvite(fallback.empty() ? std::string("vide") : fallback),
                           false, {}});
     }
     auto dialog = std::make_unique<FormDialog>("dialog.hmiTryFunction", "Essayer " + hmi::functionSignature(*f),

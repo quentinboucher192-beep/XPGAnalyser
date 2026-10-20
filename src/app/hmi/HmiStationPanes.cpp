@@ -235,7 +235,7 @@ void HmiStationPane::refreshLaunch() {
         rows.push_back({std::move(a), std::move(b)});
         tones.push_back(tone);
     };
-    add("Ligne de commande", f.empty() ? std::string("enregistrez d'abord le projet dans un dossier") : station::commandLine(program, f),
+    add("Ligne de commande", f.empty() ? std::string("enregistre d'abord le projet dans un dossier") : station::commandLine(program, f),
         f.empty() ? 2 : 4);
     {
         std::error_code ec;

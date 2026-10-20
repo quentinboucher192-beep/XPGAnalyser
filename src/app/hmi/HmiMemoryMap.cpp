@@ -564,7 +564,7 @@ void HmiMemoryMap::onPaint(const ui::PaintContext& ctx) {
     const gfx::Color writeC = gfx::Color::rgb(0x2E7D4F);
     r.pushClip(area);
     if (rows_.empty()) {
-        const std::string msg = map_.equipment.empty() ? std::string("Choisissez un \xC3\xA9quipement (Carte de, en haut)") : std::string("Rien \xC3\xA0 montrer");
+        const std::string msg = map_.equipment.empty() ? std::string("Choisis un \xC3\xA9quipement (Carte de, en haut)") : std::string("Rien \xC3\xA0 montrer");
         r.drawText({area.x + (area.w - textW(r, msg, kBody)) / 2, area.y + 60}, msg, kBody, th.color.textMuted);
     }
     for (const auto& row : rows_) {

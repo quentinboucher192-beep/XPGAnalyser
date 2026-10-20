@@ -105,6 +105,7 @@ public:
     [[nodiscard]] gfx::Rect cardRect(const std::string& nameOrKey) const;
     [[nodiscard]] gfx::Rect sourceRect(int source) const;
     void confirm();                                      // Creer la vue
+    [[nodiscard]] bool canCreate() const;                // 1.12.19 : Creer est permis (nom, taille, modele)
 
 protected:
     core::Status buildUi() override;

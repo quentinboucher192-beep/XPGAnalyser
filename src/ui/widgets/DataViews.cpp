@@ -3052,6 +3052,16 @@ std::string replaceRoot(std::string_view expr, std::string_view from, std::strin
 namespace exprfield {
 bool fixOf(std::string_view why, std::string& from, std::string& to) { return noteFix(why, from, to); }
 std::string replaceRoot(std::string_view expr, std::string_view from, std::string_view to) { return ui::replaceRoot(expr, from, to); }
+std::string withoutEquals(std::string_view typed) {
+    const auto trim = [](std::string_view t) {
+        while (!t.empty() && (t.front() == ' ' || t.front() == '\t')) t.remove_prefix(1);
+        while (!t.empty() && (t.back() == ' ' || t.back() == '\t')) t.remove_suffix(1);
+        return t;
+    };
+    std::string_view t = trim(typed);
+    if (!t.empty() && t.front() == '=' && (t.size() < 2 || t[1] != '=')) t = trim(t.substr(1));
+    return std::string(t);
+}
 } // namespace exprfield
 // ---- fin 1.10 (chantier K2) ----
 
