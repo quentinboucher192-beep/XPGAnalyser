@@ -1472,7 +1472,9 @@ void checkLot8(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                 add(out, S::Warning, "Param\xC3\xA8tre", v.id, kNoId, "parametres",
                     "le param\xC3\xA8tre " + prm.name + " masque la variable du m\xC3\xAAme nom dans cette vue");
             const std::string def = trimmedCopy(prm.defaultValue);
-            if (!def.empty() && isVariablePath(def) && plc)
+            // 1.12.20 : un rappel a pour defaut une fonction, une LAMBDA ou NULL - pas une variable (sa forme : checkParams19).
+            const bool callback = !types::callbackForm(&p, params::boundType(v, prm.type)).empty();
+            if (!def.empty() && isVariablePath(def) && plc && !callback)
                 if (const auto roots = scanRoots(def); !roots.empty() && !known(p, plc, roots.front()))
                     add(out, S::Error, "Param\xC3\xA8tre", v.id, kNoId, "parametres",
                         prm.name + " := " + def + " : " + std::string(unknownVariablePrefix()) + roots.front());
@@ -1525,6 +1527,7 @@ void checkLot8(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                     if (given.empty())
                         add(out, S::Error, "Action", v.id, obj, where, "param\xC3\xA8tres illisibles : " + a.value + " (Nom := valeur; ...)");
                     for (const auto& [name, value] : given) {
+                        if (params::isGenericName(*target, name)) continue;   // 1.12.20 (lot G) : T := REAL (checkArguments)
                         // 1.11.22 : une faute (un parametre retire ou renomme casse ceux qui l'ouvrent avec lui).
                         if (target->params.empty())
                             add(out, S::Error, "Action", v.id, obj, where,
@@ -1717,7 +1720,9 @@ void checkParams19(const Project& p, const exprcheck::PlcPaths& paths, std::vect
     plcTypes.isType = paths.isStruct;
     const bool programKnown = static_cast<bool>(paths.isStruct);
     for (const auto& v : p.views) {
-        for (const auto& prm : v.params) {
+        for (const auto& declared : v.params) {
+            ViewParam prm = declared;
+            prm.type = params::boundType(v, declared.type);             // 1.12.20 (lot G) : T seul vaut ANY dans la vue
             if (!prm.type.empty() && !params::typeKnown(p, prm.type, plcTypes) && programKnown)
                 add(out, S::Error, "Param\xC3\xA8tre", v.id, kNoId, "parametres",
                     "le param\xC3\xA8tre " + prm.name + " a un type inconnu : " + prm.type + " (ni de base, ni IHM, ni DDT de l'API)");
@@ -2183,6 +2188,7 @@ void checkSymbols(const Project& p, const NameExists& plc, std::vector<Issue>& o
             }
             const auto given = parseArguments(o.text("params"));
             for (const auto& [argName, value] : given) {
+                if (params::isGenericName(*sv, argName)) continue;      // 1.12.20 (lot G) : T := REAL (symargs)
                 if (!sv->param(argName)) {
                     add(out, S::Error, "Symbole", v.id, o.id, "params",        // 1.11.22 : une faute (le parametre a pu etre retire)
                         unknownSymbolArgument(*sv, argName));
@@ -3960,7 +3966,7 @@ struct ExprWalker {
             if (v.role == "popup" && !v.popup.title.empty()) text(Where{&v, kNoId, "Popup", "popup_libelle"}, v.popup.title, "titre ");
             for (const auto& prm : v.params) {
                 const std::string def = trimmedCopy(prm.defaultValue);
-                if (!def.empty() && !richLiteral(prm.type, def, &p))      // 1.12.4 : un litteral objet, verifie dans son type
+                if (!def.empty() && !richLiteral(params::boundType(v, prm.type), def, &p))      // 1.12.4 ; 1.12.20 (lot G) : T
                     expr(Where{&v, kNoId, "Param\xC3\xA8tre", "parametres"}, def, W::Any, prm.name + " := ");
             }
         }
@@ -4181,8 +4187,9 @@ struct ExprWalker {
                              "argument " + name + " := " + value + " : un " + types::normalized(declared->type)
                                  + " se donne par une variable (un symbole re\xC3\xA7oit ses param\xC3\xA8tres par r\xC3\xA9" "f\xC3\xA9rence)");
                     else if (declared) expr(Where{&v, o.id, "Symbole", "params"}, value, W::Any, "argument " + name + " := ");
-                    else push(Where{&v, o.id, "Symbole", "params"},     // 1.11.22 : un parametre retire du symbole casse l'instance
-                              unknownSymbolArgument(*sv, name));
+                    else if (!params::isGenericName(*sv, name))           // 1.12.20 (lot G) : T := REAL n'est pas un parametre
+                        push(Where{&v, o.id, "Symbole", "params"},     // 1.11.22 : un parametre retire du symbole casse l'instance
+                             unknownSymbolArgument(*sv, name));
                 }
             }
         for (const auto& sv : p.views) {
@@ -4928,7 +4935,7 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
         }
         for (const auto& prm : v.params) {
             const std::string def = trimmedCopy(prm.defaultValue);
-            if (!anim || def.empty() || isVariablePath(def) || richLiteral(prm.type, def, &p)) continue;   // 1.12.4
+            if (!anim || def.empty() || isVariablePath(def) || richLiteral(params::boundType(v, prm.type), def, &p)) continue;   // 1.12.4
             ++expressions;
             const auto e = Expression::compile(def);
             if (!e.valid()) add(out, S::Error, "Param\xC3\xA8tre", v.id, kNoId, "parametres", prm.name + " := " + def + " : " + e.error());

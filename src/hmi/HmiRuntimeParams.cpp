@@ -77,7 +77,7 @@ void Runtime::captureCopies(PopupSlot& slot, const View& v, std::string_view /*a
             c.capturedObjects[std::string{}] = sim::deepCopy(*whole);
         } else if (alias) {
             c.source = *alias;
-            std::string type = trimText(prm.type);
+            std::string type = trimText(params::boundType(v, prm.type));   // 1.12.20 (lot G) : T seul vaut ANY
             if (type.empty() || upperText(type) == "ANY")
                 type = project_ ? params::expressionType(*project_, nullptr, c.source, plcTypes_) : std::string{};
             std::size_t leaves = 0;

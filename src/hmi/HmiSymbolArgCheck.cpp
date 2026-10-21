@@ -106,6 +106,19 @@ void check(const Project& p, const exprcheck::PlcPaths& paths, std::vector<Issue
                                        + prm.name + " est d\xC3\xA9j\xC3\xA0 donn\xC3\xA9 par son nom");
                 }
             }
+            // ---- 1.12.20 (lot G) : ses generiques, donnes (T := REAL) ou deduits de ses arguments - hors contrainte, ou deux
+            // T differents : une erreur (la raison, et ce qui la leve).
+            const params::GenericBinding generics = params::bindGenerics(p, &v, *sv, text, plc);
+            for (const auto& pb : generics.problems) {
+                Issue i;
+                i.severity = Issue::Severity::Error;
+                i.category = "Symbole";
+                i.view = v.id;
+                i.object = o.id;
+                i.property = "params";
+                i.message = sv->name + " : " + pb;
+                out.push_back(std::move(i));
+            }
             // ---- chaque parametre : le type de son argument, l'ecriture, la conversion
             const auto given = givenArguments(*sv, text);
             const auto byName = parseArguments(text);
@@ -113,7 +126,7 @@ void check(const Project& p, const exprcheck::PlcPaths& paths, std::vector<Issue
                 const auto& prm = sv->params[k];
                 const std::string a = trimmed(markers::strip(given[k]));
                 if (a.empty() || sources::hasJoker(a)) continue;   // manquant (checkSymbols) ; une repetition (Cuves[*])
-                const std::string type = trimmed(prm.type);
+                const std::string type = trimmed(params::boundType(*sv, prm.type, &generics));   // 1.12.20 (lot G) : T devenu REAL
                 const bool named = std::any_of(byName.begin(), byName.end(), [&](const auto& n) { return trimmed(n.first) == prm.name; });
                 std::string why;
                 if (unconverted(p, type, a, named, why)) {

@@ -256,6 +256,14 @@ std::string cppTypeOf(const Project& p, std::string_view text) {
         for (std::size_t k = 0; k < parts.params.size(); ++k) out += (k ? ", " : "") + cppTypeOf(p, parts.params[k].second);
         return out + ")>";
     }
+    // 1.12.20 (lot G) : l'instance d'une structure generique - T_Mesure<REAL>, ses types en C++.
+    std::string base;
+    std::vector<std::string> args;
+    if (splitGenericName(t, base, args)) {
+        std::string out = base + "<";
+        for (std::size_t k = 0; k < args.size(); ++k) out += (k ? ", " : "") + cppTypeOf(p, args[k]);
+        return out + ">";
+    }
     const auto s = typeform::decompose(t);
     switch (s.form) {
         case typeform::Form::Simple:
@@ -300,6 +308,18 @@ std::string cDeclOf(const Project& p, std::string_view text, const std::string& 
             out += (k ? ", " : "") + d;
         }
         return out + ")";
+    }
+    // 1.12.20 (lot G) : l'instance d'une structure generique - sa macro, T_Mesure(float).
+    std::string base;
+    std::vector<std::string> args;
+    if (splitGenericName(t, base, args)) {
+        std::string out = base + "(";
+        for (std::size_t k = 0; k < args.size(); ++k) {
+            const std::string a = cDeclOf(p, args[k], {}, false);
+            if (a.empty()) return {};
+            out += (k ? ", " : "") + a;
+        }
+        return join(out + ")");
     }
     const auto s = typeform::decompose(t);
     if (s.form == typeform::Form::Simple) {
@@ -616,7 +636,17 @@ std::string projectHeader(const Project& p, ScriptLang lang, const View* view) {
             else if (const std::string d = cDeclOf(p, ty.signature, ty.name, true); !d.empty()) line("typedef " + d + ";");
             continue;
         }
-        line(cpp ? "struct " + ty.name + " {" : "typedef struct {");
+        // 1.12.20 (lot G) : une structure generique - un template en C++, une macro en C (une structure par type).
+        std::string names, tpl, constraints;
+        for (const auto& g : ty.generics) {
+            names += (names.empty() ? "" : ", ") + g.name;
+            tpl += (tpl.empty() ? "" : ", ") + std::string("typename ") + g.name;
+            if (!g.constraint.empty()) constraints += (constraints.empty() ? "" : ", ") + g.name + " : " + g.constraint;
+        }
+        const bool macro = !cpp && !ty.generics.empty();
+        const std::string tail = macro ? " \\" : "";
+        if (cpp && !ty.generics.empty()) line("template <" + tpl + ">" + (constraints.empty() ? std::string{} : "   // " + constraints));
+        line(cpp ? "struct " + ty.name + " {" : macro ? "#define " + ty.name + "(" + names + ") struct {" + tail : "typedef struct {");
         for (const auto& m : ty.members) {
             if (cpp) {
                 std::string init;
@@ -625,12 +655,12 @@ std::string projectHeader(const Project& p, ScriptLang lang, const View* view) {
                 else if (!iu.empty() && (std::isdigit(static_cast<unsigned char>(iu[0])) || iu[0] == '-')) init = " = " + trimmedCopy(m.initial);
                 line("    " + cppTypeOf(p, m.type) + " " + m.name + init + ";");
             } else if (const std::string d = cDeclOf(p, m.type, m.name, false); !d.empty()) {
-                line("    " + d + ";");
+                line("    " + d + ";" + tail);
             } else {
-                line("    /* " + m.name + " : " + m.type + " - pas de C pour ce type */");
+                line("    /* " + m.name + " : " + m.type + " - pas de C pour ce type */" + tail);
             }
         }
-        line(cpp ? "};" : "} " + ty.name + ";");
+        line(cpp ? std::string("};") : macro ? "}" + (constraints.empty() ? std::string{} : "   /* " + constraints + " */") : "} " + ty.name + ";");
     }
     // Les fonctions IHM (et celles de la vue du script) : leurs prototypes.
     std::vector<const HmiFunction*> fns;
@@ -958,6 +988,11 @@ bool richLocalType(std::string_view type, const std::function<bool(std::string_v
     if (const auto* e = typereg::baseRegistry().byName(u); e && e->usable(typereg::UseDeclaration) && u == e->name) return true;
     // Un type IHM (structure) : un nom que le projet connait.
     if (!identStart(u[0])) return false;
+    // 1.12.20 (lot G) : T_Mesure<REAL> - l'instance d'une structure generique du projet.
+    if (std::string base; u.find('<') != std::string::npos) {
+        std::vector<std::string> args;
+        if (splitGenericName(type, base, args)) return knownType && knownType(type);
+    }
     for (const char c : u) if (!identChar(c)) return false;
     return knownType && knownType(type);
 }

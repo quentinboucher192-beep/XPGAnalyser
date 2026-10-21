@@ -28747,6 +28747,176 @@ void typesRappel1220() {
     fs::remove_all(dir);
 }
 
+// 1.12.20 (lot G) : LES GENERIQUES - une structure generique (T_Mesure<T>) employee avec ses types partout ou va un type (une
+// variable IHM, une liste, une MAP, un tableau, une locale et un parametre du ST, une fonction TEMPLATE), ses contraintes,
+// l'enregistrement (format 28), l'en-tete C et C++ ; un symbole et une popup generiques, T deduit de ce qu'on leur lie ou donne.
+void generiques1220() {
+    std::printf("1.12.20 (G) : les structures, les symboles et les popups generiques\n");
+    std::vector<GenericParam> g;
+    std::string why;
+    check(parseGenerics("T : any_num, U", g, &why) && g.size() == 2 && g[0].name == "T" && g[0].constraint == "ANY_NUM" && g[1].constraint.empty()
+              && genericsText(g) == "T : ANY_NUM, U",
+          "parseGenerics : T : ANY_NUM, U (la contrainte en majuscules), et son texte");
+    check(!parseGenerics("T, T", g, &why) && !parseGenerics("REAL", g, &why) && !parseGenerics("T : FOO", g, &why) && !why.empty(),
+          "parseGenerics refuse deux fois T, un type (REAL), une contrainte inconnue (" + why + ")");
+    std::string base;
+    std::vector<std::string> args;
+    check(splitGenericName("T_Paire<string, T_Mesure<BOOL>>", base, args) && base == "T_Paire" && args.size() == 2 && args[0] == "STRING"
+              && args[1] == "T_Mesure<BOOL>" && !splitGenericName("T_Four", base, args),
+          "splitGenericName : T_Paire<STRING, T_Mesure<BOOL>> ; T_Four n'en est pas un");
+    // ---- le projet : T_Mesure<T>, T_Num<T : ANY_NUM>, T_Four (ordinaire)
+    Project p;
+    HmiType mesure;
+    mesure.id = p.allocate();
+    mesure.name = "T_Mesure";
+    mesure.generics = {{"T", ""}};
+    mesure.members = {{"Valeur", "T", "", ""}, {"Seuil", "T", "", ""}, {"Bonne", "BOOL", "TRUE", ""}};
+    p.programs.types.push_back(mesure);
+    HmiType num;
+    num.id = p.allocate();
+    num.name = "T_Num";
+    num.generics = {{"T", "ANY_NUM"}};
+    num.members = {{"X", "T", "", ""}, {"Historique", "LIST OF T", "", ""}};
+    p.programs.types.push_back(num);
+    HmiType four;
+    four.id = p.allocate();
+    four.name = "T_Four";
+    four.members = {{"Temperature", "REAL", "", ""}};
+    p.programs.types.push_back(four);
+    const HmiType* inst = p.hmiTypeByName("T_Mesure<real>");
+    check(inst && inst->name == "T_Mesure<REAL>" && inst->members.size() == 3 && inst->members[1].type == "REAL" && inst->generics.empty()
+              && p.hmiTypeByName("T_MESURE<REAL>") == inst,
+          "hmiTypeByName : T_Mesure<REAL>, ses membres de type T en REAL, faite une fois");
+    const auto nm = types::membersOf(p, "T_Num<INT>");
+    check(nm.size() == 2 && nm[1].type == "LIST OF INT", "membersOf : T_Num<INT> - X : INT, Historique : LIST OF INT");
+    for (const char* ok : {"T_Mesure<REAL>", "LIST OF T_Mesure<REAL>", "MAP[STRING] OF T_Mesure<BOOL>", "ARRAY[0..3] OF T_Num<INT>", "T_Num<LREAL>"})
+        check(types::validType(p, ok, &why), std::string("validType : ") + ok + " (" + why + ")");
+    check(!types::validType(p, "T_Mesure", &why) && why.find("g\xC3\xA9n\xC3\xA9rique") != std::string::npos && why.find("T_Mesure<REAL>") != std::string::npos,
+          "validType : T_Mesure seul est refus\xC3\xA9, avec l'exemple (" + why + ")");
+    check(!types::validType(p, "T_Num<STRING>", &why) && why.find("T doit \xC3\xAAtre un ANY_NUM ; STRING n'en est pas un") != std::string::npos,
+          "validType : T_Num<STRING>, hors contrainte (" + why + ")");
+    check(!types::validType(p, "T_Mesure<REAL, INT>", &why) && why.find("attend 1 type") != std::string::npos, "validType : deux types pour un T (" + why + ")");
+    check(!types::validType(p, "T_Four<REAL>", &why) && why.find("n'est pas g\xC3\xA9n\xC3\xA9rique") != std::string::npos, "validType : T_Four<REAL> (" + why + ")");
+    check(types::validMemberType(p, "LIST OF T", &why, "T_Num") && !types::validMemberType(p, "T", &why, "T_Four"),
+          "un membre de type T : dans une structure g\xC3\xA9n\xC3\xA9rique seulement");
+    // ---- le registre des types
+    const auto reg = typereg::Registry::build(p);
+    const auto r = reg->resolve("list of t_mesure<real>", typereg::UseVariable);
+    check(r.ok && r.text == "LIST OF T_Mesure<REAL>" && r.key.find("ihm:") != std::string::npos && r.key.find("<base:REAL>") != std::string::npos,
+          "registre : LIST OF T_Mesure<REAL> (" + r.text + ", " + r.key + ")");
+    const auto r2 = reg->resolve("T_Num<STRING>", typereg::UseVariable);
+    const auto r3 = reg->resolve("T_Mesure", typereg::UseVariable);
+    check(!r2.ok && r2.why.find("ANY_NUM") != std::string::npos && !r3.ok && r3.why.find("g\xC3\xA9n\xC3\xA9rique") != std::string::npos,
+          "registre : hors contrainte, et sans ses types : refus\xC3\xA9s (" + r2.why + " / " + r3.why + ")");
+    // ---- un symbole generique : Afficheur_Mesure<T : ANY_NUM> - Valeur : T, Format : CALLBACK (v : T) : STRING
+    p.programs.variables.push_back(hmiVar(p, "Debit", "T_Mesure<REAL>"));
+    p.programs.variables.push_back(hmiVar(p, "Niveau", "REAL", "8.5"));
+    p.programs.variables.push_back(hmiVar(p, "Nom", "STRING", "'P1'"));
+    p.programs.variables.push_back(hmiVar(p, "R1", "REAL"));
+    p.programs.variables.push_back(hmiVar(p, "N1", "DINT"));
+    View sym = makeView(p, "Afficheur_Mesure");
+    sym.role = "symbole";
+    sym.width = 100;
+    sym.height = 40;
+    sym.generics = {{"T", "ANY_NUM"}};
+    sym.params = {{"Valeur", "0", "", "T", ParamMode::Reference}, {"Format", "NULL", "", "CALLBACK (v : T) : STRING", ParamMode::Reference}};
+    const Id txt = edit::add(p, sym, Kind::Text, 0, 0);
+    sym.object(txt)->name = "Texte";
+    p.views.push_back(sym);
+    View host = makeView(p, "Vue_Armoire");
+    const Id i1 = placeSymbol(p, host, "Afficheur_Mesure", 10, 10);
+    host.object(i1)->name = "PT1";
+    host.object(i1)->set("params", "Valeur := Niveau");
+    const Id i2 = placeSymbol(p, host, "Afficheur_Mesure", 10, 60);
+    host.object(i2)->name = "PT2";
+    host.object(i2)->set("params", "Valeur := Nom");
+    const Id i3 = placeSymbol(p, host, "Afficheur_Mesure", 10, 110);
+    host.object(i3)->name = "PT3";
+    host.object(i3)->set("params", "T := INT; Valeur := Niveau");
+    const Id hostId = host.id;
+    p.views.push_back(host);
+    const View* sv = p.viewByName("Afficheur_Mesure");
+    const View* hv = p.view(hostId);
+    const auto b1 = params::bindGenerics(p, hv, *sv, hv->object(i1)->text("params"));
+    const auto b2 = params::bindGenerics(p, hv, *sv, hv->object(i2)->text("params"));
+    const auto b3 = params::bindGenerics(p, hv, *sv, hv->object(i3)->text("params"));
+    check(b1.types[0] == "REAL" && b1.from[0] == "d\xC3\xA9" "duit de Valeur" && b1.problems.empty(), "PT1 : T d\xC3\xA9" "duit de Valeur := Niveau, un REAL (" + b1.from[0] + ")");
+    check(b2.problems.size() == 1 && b2.problems[0].find("T doit \xC3\xAAtre un ANY_NUM ; STRING n'en est pas un") != std::string::npos,
+          "PT2 : Valeur := Nom, un STRING - hors contrainte");
+    check(b3.types[0] == "INT" && b3.from[0] == "donn\xC3\xA9" && b3.problems.empty(), "PT3 : T := INT, donn\xC3\xA9");
+    check(params::boundType(*sv, "CALLBACK (v : T) : STRING", &b1) == "CALLBACK (v : REAL) : STRING" && params::boundType(*sv, "T").empty()
+              && params::boundType(*sv, "LIST OF T") == "LIST OF REAL",
+          "boundType : le rappel de PT1 (v : REAL) ; dans le symbole, T seul vaut ANY, LIST OF T un type de sa contrainte");
+    // Une popup generique : T := REAL n'est pas un parametre inconnu ; hors contrainte, la raison.
+    View pop = makeView(p, "Pop_Mesure");
+    pop.role = "popup";
+    pop.generics = {{"T", "ANY_NUM"}};
+    pop.params = {{"Valeur", "", "", "T", ParamMode::Reference}};
+    const auto ok = params::checkArguments(p, hv, pop, "T := REAL; Valeur := Niveau");
+    const auto ko = params::checkArguments(p, hv, pop, "Valeur := Nom");
+    check(ok.empty() && ko.size() == 1 && ko[0].message.find("ANY_NUM") != std::string::npos,
+          "une popup g\xC3\xA9n\xC3\xA9rique : T := REAL passe ; Valeur := Nom (un STRING) est refus\xC3\xA9, avec la raison");
+    // ---- Generer et Compiler : PT2 refuse ; rien d'autre (T_Mesure<REAL>, T := INT, le script)
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = "Script_Mesures";
+    sc.event = "Appel";
+    sc.body = "TEMPLATE <T> FUNCTION Valeur_De(m : T_Mesure<T>) : T\n    RETURN m.Valeur;\nEND_FUNCTION\n"
+              "VAR m : T_Mesure<REAL>; n : T_Num<INT>; END_VAR\n"
+              "m.Valeur := Niveau * 2.0;\nDebit.Valeur := m.Valeur + 1.0;\nn.X := 7;\nLIST_ADD(n.Historique, 3);\n"
+              "R1 := Debit.Valeur + Valeur_De(m);\nN1 := n.X + LIST_COUNT(n.Historique);\n";
+    p.programs.scripts.push_back(sc);
+    p.config.startView = hostId;
+    const NameExists none = [](std::string_view) { return false; };
+    std::vector<Issue> all = generate(p, none);
+    for (auto& i : compileWith(p, none)) all.push_back(i);
+    bool pt2 = false;
+    std::string errs;
+    for (const auto& i : all) {
+        if (i.severity != Issue::Severity::Error) continue;
+        if (i.object == i2 && i.message.find("ANY_NUM") != std::string::npos) pt2 = true;
+        else errs += "\n    " + i.category + " " + i.property + " : " + i.message;
+    }
+    check(pt2, "Generer : PT2 (Valeur := Nom, un STRING) est refus\xC3\xA9 - T hors contrainte");
+    check(errs.empty(), "Generer et Compiler : rien d'autre (T_Mesure<REAL>, T := INT, le script)" + errs);
+    // ---- le moteur : une variable IHM T_Mesure<REAL>, des locales, une fonction TEMPLATE qui deduit T de T_Mesure<T>
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    const bool ran = rt.callScript("Script_Mesures", 0.2, &why);
+    rt.tick(0.3);
+    const auto* r1 = rt.variable("R1");
+    const auto* n1 = rt.variable("N1");
+    check(ran && r1 && std::abs(r1->asReal() - 35.0) < 1e-6 && n1 && n1->asInteger() == 8,
+          "le moteur : Debit.Valeur (18) + Valeur_De(m) (17, T deduit de T_Mesure<REAL>) = 35 ; T_Num<INT> et sa LIST OF INT (8) (" + why + ")");
+    // ---- l'en-tete C et C++
+    const std::string cpp = projectHeader(p, ScriptLang::Cpp), c = projectHeader(p, ScriptLang::C);
+    check(cpp.find("template <typename T>\nstruct T_Mesure {\n    T Valeur;") != std::string::npos
+              && cpp.find("template <typename T>   // T : ANY_NUM\nstruct T_Num {") != std::string::npos
+              && cpp.find("extern T_Mesure<REAL> Debit;") != std::string::npos,
+          "en-t\xC3\xAAte C++ : template <typename T> struct T_Mesure, T_Num (T : ANY_NUM), extern T_Mesure<REAL> Debit");
+    check(c.find("#define T_Mesure(T) struct { \\\n    T Valeur; \\") != std::string::npos && c.find("extern T_Mesure(float) Debit;") != std::string::npos,
+          "en-t\xC3\xAAte C : #define T_Mesure(T) struct {...}, extern T_Mesure(float) Debit");
+    // ---- le fichier du projet : les generiques reviennent (format 28)
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "hmi_test_generiques";
+    fs::remove_all(dir);
+    const auto st = save(p, dir.string());
+    const auto back = load(dir.string());
+    std::string index;
+    {
+        std::ifstream in(dir / "ihm" / "ihm.txt");
+        index.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    const HmiType* again = back ? back->hmiTypeByName("T_Num") : nullptr;
+    const View* sback = back ? back->viewByName("Afficheur_Mesure") : nullptr;
+    check(static_cast<bool>(st) && back && again && again->generics.size() == 1 && again->generics[0].constraint == "ANY_NUM" && sback
+              && sback->generics.size() == 1 && sback->generics[0].name == "T" && index.find("format=28") != std::string::npos,
+          "enregistrer puis rouvrir : les g\xC3\xA9n\xC3\xA9riques des types et du symbole reviennent (format 28)");
+    fs::remove_all(dir);
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les performances dans le temps, les lenteurs, seules.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -28974,6 +29144,7 @@ int main(int argc, char** argv) {
     finitions1220();                  // 1.12.20 (F) : les finitions des rappels
     typesRappel1220();                // 1.12.20 (T) : les types rappel nommes
     scriptsC1220();                   // 1.12.20 (C) : les scripts C et C++, l'en-tete du projet
+    generiques1220();                 // 1.12.20 (G) : les structures, les symboles et les popups generiques
     lotA1125();                       // 1.12.5 (lot A) : les defauts de l'audit des objets
     lotBC1126();                      // 1.12.6 (lots B et C) : le role de chaque propriete, les reperes partout
     lotD1127();                       // 1.12.7 (lot D) : les listes en tableau et les choix

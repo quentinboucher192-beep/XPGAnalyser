@@ -390,6 +390,8 @@ public:
     //  entrees, son retour, et les fonctions du projet qui conviennent (ou pourquoi pas).
     hmi::Id addCallbackType(const std::string& name, const std::string& signature, std::string* why = nullptr);
     bool setCallbackSignature(hmi::Id, const std::string& text, std::string* why = nullptr);
+    // 1.12.20 (lot G) : les generiques d'une structure ("T", "T : ANY_NUM, U") ; vide : une structure ordinaire.
+    bool setTypeGenerics(hmi::Id, const std::string& text, std::string* why = nullptr);
     [[nodiscard]] bool showsCallback() const noexcept { return callbackPage_; }
 
     [[nodiscard]] HmiToolStrip&     tools() noexcept { return *tools_; }

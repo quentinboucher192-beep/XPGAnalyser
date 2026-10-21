@@ -50,6 +50,14 @@ bool identifier(std::string_view s) {
     return std::all_of(s.begin(), s.end(), [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; });
 }
 
+// 1.12.20 (lot G) : un nom de type - un identifiant, ou l'instance d'une structure generique (T_Mesure<REAL>).
+bool typeWord(std::string_view s) {
+    if (identifier(s)) return true;
+    std::string base;
+    std::vector<std::string> args;
+    return splitGenericName(s, base, args);
+}
+
 // 1.12.4 : les types IHM que nomme un texte de type (T_Four dans LIST OF T_Four, TUPLE(INT, T_Four),
 // MAP[STRING] OF T_Four, ARRAY[0..2] OF T_Four), chacun une fois, dans l'ordre.
 std::vector<const HmiType*> namedTypesOf(const Project& p, std::string_view type) {
@@ -448,14 +456,62 @@ bool isComposite(std::string_view type) noexcept {
     return !t.empty() && !isElementary(t);
 }
 
+namespace {
+// 1.12.20 (lot G) : T_Mesure< real > -> T_Mesure<REAL> (ses types remis en forme) ; un autre nom tel quel.
+std::string genericText(const std::string& name) {
+    std::string base;
+    std::vector<std::string> args;
+    if (!splitGenericName(name, base, args)) return name;
+    std::string out = base + "<";
+    for (std::size_t k = 0; k < args.size(); ++k) out += (k ? ", " : "") + normalized(args[k]);
+    return out + ">";
+}
+
+// 1.12.20 (lot G) : un type nomme et ses generiques - T_Mesure seul (generique) : ses types manquent ; T_Mesure<REAL> :
+// autant de types que de generiques, chacun valide et dans sa contrainte (T doit etre un ANY_NUM ; STRING n'en est pas un).
+bool genericUse(const Project& p, std::string_view name, std::string* why) {
+    std::string base;
+    std::vector<std::string> args;
+    const auto example = [](const HmiType& g) {
+        std::string out = g.name + "<";
+        for (std::size_t k = 0; k < g.generics.size(); ++k) out += (k ? ", " : "") + genericSample(g.generics[k].constraint);
+        return out + ">";
+    };
+    if (!splitGenericName(name, base, args)) {
+        const HmiType* g = p.hmiTypeByName(trimmed(name));
+        if (g && !g->generics.empty()) return fail(why, g->name + " est g\xC3\xA9n\xC3\xA9rique : \xC3\xA9" "cris ses types entre chevrons, " + example(*g));
+        return true;
+    }
+    const HmiType* g = nullptr;
+    for (const auto& ty : p.programs.types)
+        if (sameText(ty.name, base)) g = &ty;
+    if (!g) return fail(why, "type inconnu \xC2\xAB " + base + " \xC2\xBB");
+    if (g->generics.empty()) return fail(why, g->name + " n'est pas g\xC3\xA9n\xC3\xA9rique : \xC3\xA9" "cris " + g->name + " sans <\xE2\x80\xA6>");
+    if (g->kind != HmiTypeKind::Structure) return fail(why, g->name + " : seule une structure est g\xC3\xA9n\xC3\xA9rique");
+    if (args.size() != g->generics.size())
+        return fail(why, g->name + " attend " + std::to_string(g->generics.size()) + " type" + (g->generics.size() > 1 ? "s" : "") + " : " + example(*g));
+    std::shared_ptr<const typereg::Registry> reg;
+    for (std::size_t k = 0; k < args.size(); ++k) {
+        std::string w;
+        if (!validType(p, args[k], &w)) return fail(why, g->name + "<\xE2\x80\xA6> : " + w);
+        const std::string& c = g->generics[k].constraint;
+        if (c.empty()) continue;
+        if (!reg) reg = typereg::Registry::build(p);
+        if (!typereg::genericAccepts(c, reg->resolve(args[k], typereg::UseAll)))
+            return fail(why, g->generics[k].name + " doit \xC3\xAAtre un " + c + " ; " + normalized(args[k]) + " n'en est pas un");
+    }
+    return true;
+}
+} // namespace
+
 bool parseSpec(std::string_view text, Spec& out, std::string* why) {
     out = Spec{};
     const std::string t = trimmed(text);
     if (t.empty()) return fail(why, "type vide");
     const std::string up = upperOf(t);
     if (up.rfind("ARRAY", 0) != 0 || (up.size() > 5 && (std::isalnum(static_cast<unsigned char>(up[5])) || up[5] == '_'))) {
-        if (!identifier(t)) return fail(why, "type illisible \xC2\xAB " + t + " \xC2\xBB");
-        out.element = isElementary(t) ? up : t;
+        if (!typeWord(t)) return fail(why, "type illisible \xC2\xAB " + t + " \xC2\xBB");
+        out.element = isElementary(t) ? up : genericText(t);
         return true;
     }
     const auto open = t.find('[');
@@ -469,13 +525,13 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why) {
     const std::string element = trimmed(std::string_view(rest).substr(2));
     if (upperOf(element).rfind("ARRAY", 0) == 0)
         return fail(why, "un tableau de tableaux : \xC3\xA9" "crire ARRAY[0..3, 0..9] OF ... (deux dimensions)");
-    if (!identifier(element)) return fail(why, "tableau \xC2\xAB " + t + " \xC2\xBB : type des cases illisible");
+    if (!typeWord(element)) return fail(why, "tableau \xC2\xAB " + t + " \xC2\xBB : type des cases illisible");
     const auto parts = splitList(inside);
     if (parts.size() > 2) return fail(why, "un tableau a une ou deux dimensions (ARRAY[0..3, 0..9] OF INT)");
     for (std::size_t d = 0; d < parts.size(); ++d)
         if (!rangeOf(parts[d], out.low[d], out.high[d], why)) return false;
     out.dims = static_cast<int>(parts.size());
-    out.element = isElementary(element) ? upperOf(element) : element;
+    out.element = isElementary(element) ? upperOf(element) : genericText(element);
     if (out.length() > kMaxElements)
         return fail(why, "tableau de " + std::to_string(out.length()) + " cases : " + std::to_string(kMaxElements) + " au plus");
     return true;
@@ -507,11 +563,21 @@ bool validType(const Project& p, std::string_view type, std::string* why) {
     Spec s;
     if (!parseSpec(type, s, why)) return false;
     if (isElementary(s.element)) return true;
+    if (!genericUse(p, s.element, why)) return false;          // 1.12.20 (lot G)
     if (!p.hmiTypeByName(s.element)) return fail(why, "type inconnu \xC2\xAB " + s.element + " \xC2\xBB");
     return true;
 }
 
 bool validMemberType(const Project& p, std::string_view type, std::string* why, std::string_view owner) {
+    // 1.12.20 (lot G) : un membre d'une structure generique peut etre de type T (LIST OF T, T_Paire<STRING, T>) : verifie
+    // avec un type qui tient dans la contrainte de T.
+    if (!owner.empty())
+        if (const HmiType* o = p.hmiTypeByName(owner); o && !o->generics.empty()) {
+            std::vector<std::string> samples;
+            for (const auto& g : o->generics) samples.push_back(genericSample(g.constraint));
+            if (const std::string concrete = substituteGenerics(type, o->generics, samples); concrete != std::string(type))
+                return validMemberType(p, concrete, why, owner);
+        }
     if (!validType(p, type, why)) return false;
     // 1.12.4 : un membre objet peut tout contenir, sauf le type qui le porte (T_Noeud.Enfants :
     // LIST OF T_Noeud) - ni directement, ni par un autre type.
@@ -526,7 +592,7 @@ bool validMemberType(const Project& p, std::string_view type, std::string* why, 
 
 bool isRich(std::string_view type) {
     const std::string t = trimmed(type);
-    if (t.empty() || identifier(t)) return false;              // un nom : elementaire ou type IHM
+    if (t.empty() || typeWord(t)) return false;                // un nom : elementaire ou type IHM (1.12.20 : T_Mesure<REAL>)
     const std::string u = upperOf(t);
     // Les mots qui ouvrent un type objet (ailleurs que dans les bornes d'un ARRAY).
     if (u.find("LIST") == std::string::npos && u.find("VECTOR") == std::string::npos && u.find("MAP") == std::string::npos
@@ -600,7 +666,8 @@ std::vector<std::string> usersOf(const Project& p, std::string_view typeName) {
     std::vector<std::string> out;
     const auto uses = [&](std::string_view type) {
         Spec s;
-        if (parseSpec(type, s)) return sameText(s.element, typeName);
+        // 1.12.20 (lot G) : T_Mesure<REAL> - le nom parmi ses mots (la structure generique, ses types).
+        if (parseSpec(type, s) && s.element.find('<') == std::string::npos) return sameText(s.element, typeName);
         // 1.12.2 : un type objet (LIST OF T_Four, TUPLE(T_Four, INT)) : le nom parmi ses mots.
         const std::string t(type);
         for (std::size_t i = 0; i < t.size();) {

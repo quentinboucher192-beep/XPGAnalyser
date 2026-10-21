@@ -5017,9 +5017,12 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
         if (value) scope->setValue(name, *value);
         else log("Erreur", source_, "param\xC3\xA8tre " + name + " := " + t + " : " + value.error().message());
     };
+    // 1.12.20 (lot G) : une popup, un symbole generique - ses T donnes ou deduits ; un rappel (v : T) recoit le sien.
+    const params::GenericBinding generics = project_ && !v.generics.empty() ? params::bindGenerics(*project_, nullptr, v, arguments, plcTypes_)
+                                                                           : params::GenericBinding{};
     for (const auto& prm : v.params) {
         const auto it = std::find_if(given.begin(), given.end(), [&](const auto& g) { return upper(g.first) == upper(prm.name); });
-        bind(prm.name, it != given.end() ? it->second : prm.defaultValue, prm.type);
+        bind(prm.name, it != given.end() ? it->second : prm.defaultValue, params::boundType(v, prm.type, &generics));
     }
     // 1.11.10 : une popup d'un symbole - les parametres du symbole que l'ouverture ne donne pas
     // (ouverte hors d'une instance) prennent la valeur par defaut du symbole.
@@ -5032,7 +5035,7 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
     // parametre du symbole qui porte la popup prend son type (un objet).
     const View* owner = project_ ? popupOwner(*project_, v) : nullptr;
     for (const auto& [name, text] : given)
-        if (!v.param(name)) {
+        if (!v.param(name) && !params::isGenericName(v, name)) {      // 1.12.20 (lot G) : T := REAL n'est pas un parametre
             const ViewParam* own = owner ? owner->param(name) : nullptr;
             bind(name, text, own ? own->type : std::string{});
         }

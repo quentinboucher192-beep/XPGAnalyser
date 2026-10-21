@@ -315,7 +315,52 @@ private:
             r.text = text;
             return r;
         }
+        // 1.12.20 (lot G) : T_Mesure<REAL> - l'instance d'une structure generique du projet.
+        skip();
+        if (i_ < s_.size() && s_[i_] == '<') return instance(name, use, depth);
         return named(name, use);
+    }
+
+    // 1.12.20 (lot G) : un exemple des types d'une structure generique (T_Mesure<REAL>) - un type par contrainte.
+    static std::string sampleOf(const Entry& e) {
+        std::string out = e.name + "<";
+        for (std::size_t k = 0; k < e.generics.size(); ++k) out += (k ? ", " : "") + genericSample(e.generics[k].second);
+        return out + ">";
+    }
+    // 1.12.20 (lot G) : T_Mesure<REAL>, T_Paire<STRING, T_Mesure<BOOL>> - autant de types que de generiques, chacun dans
+    // sa contrainte ; le texte et la cle de l'instance (ihm:615<base:REAL>).
+    Resolved instance(const std::string& name, unsigned use, int depth) {
+        (void)accept('<');
+        std::vector<Resolved> args;
+        for (;;) {
+            Resolved a = type(UseDeclaration, depth + 1);
+            if (!a.ok) return a;
+            args.push_back(std::move(a));
+            if (!accept(',')) break;
+        }
+        if (!accept('>')) return fail(name + "<\xE2\x80\xA6> : il manque le > qui ferme ses types");
+        const Entry* e = reg_.byName(name);
+        if (!e) return named(name, use);
+        if (e->generics.empty()) return fail(e->name + " n'est pas g\xC3\xA9n\xC3\xA9rique : \xC3\xA9" "cris " + e->name + " sans <\xE2\x80\xA6>");
+        if (args.size() != e->generics.size())
+            return fail(e->name + " attend " + std::to_string(e->generics.size()) + " type" + (e->generics.size() > 1 ? "s" : "") + " : " + sampleOf(*e));
+        Resolved r;
+        r.text = e->name + "<";
+        r.key = e->key + "<";
+        for (std::size_t k = 0; k < args.size(); ++k) {
+            const auto& [gname, constraint] = e->generics[k];
+            if (!genericAccepts(constraint, args[k])) return fail(gname + " doit \xC3\xAAtre un " + constraint + " ; " + args[k].text + " n'en est pas un");
+            r.text += (k ? ", " : "") + args[k].text;
+            r.key += (k ? "," : "") + args[k].key;
+            r.dynamic = r.dynamic || args[k].dynamic;
+        }
+        r.text += ">";
+        r.key += ">";
+        r.category = e->category;
+        r.entry = e;
+        r.ok = e->usable(use);
+        if (!r.ok) r.why = r.text + " ne convient pas \xC3\xA0 " + useText(use);
+        return r;
     }
 
     Resolved named(const std::string& name, unsigned use) {
@@ -336,6 +381,11 @@ private:
         r.rich = r.rich || e->category == Category::Callback;       // 1.12.20 : un type rappel nomme : un objet de l'IHM
         r.ok = e->usable(use);
         if (!r.ok) r.why = e->name + " ne convient pas \xC3\xA0 " + useText(use);
+        // 1.12.20 (lot G) : une structure generique s'emploie avec ses types (T_Mesure<REAL>).
+        if (!e->generics.empty()) {
+            r.ok = false;
+            r.why = e->name + " est g\xC3\xA9n\xC3\xA9rique : \xC3\xA9" "cris ses types entre chevrons, " + sampleOf(*e);
+        }
         return r;
     }
 
@@ -674,6 +724,7 @@ std::shared_ptr<const Registry> Registry::build(const Project& p, const params::
         e.proposed = e.uses;
         for (const auto& m : t.members) e.members.emplace_back(m.name, m.type);
         for (const auto& v : t.values) e.values.push_back(v.name);
+        for (const auto& g : t.generics) e.generics.emplace_back(g.name, g.constraint);   // 1.12.20 (lot G)
         r->entries_.push_back(std::move(e));
     }
     if (plc && plc->names)
@@ -911,6 +962,29 @@ std::vector<std::string> followTypeKeys(Project& p) {
         }
     });
     return said;
+}
+
+bool genericAccepts(std::string_view constraint, const Resolved& t) noexcept {
+    const std::string c = upperOf(std::string(constraint));
+    if (c.empty() || c == "ANY") return true;
+    if (!t.ok) return false;
+    const bool structure = t.category == Category::Structure || t.category == Category::PlcType;
+    if (c == "ANY_STRUCT") return structure;
+    if (c == "ANY_DERIVED") return structure || t.category == Category::Enumeration;
+    const bool elementary = t.category == Category::Elementary || t.category == Category::TextTime;
+    if (!elementary || !t.entry) return false;
+    const Numeric& n = t.entry->numeric;
+    const bool integer = n.family == Family::Integer && !n.bitString;
+    const bool real = n.family == Family::Real;
+    if (c == "ANY_NUM") return integer || real;
+    if (c == "ANY_INT") return integer;
+    if (c == "ANY_REAL") return real;
+    if (c == "ANY_BIT") return n.family == Family::Bool || n.bitString;
+    if (c == "ANY_STRING" || c == "ANY_CHARS") return n.family == Family::String;
+    if (c == "ANY_DATE") return n.family == Family::Date;
+    if (c == "ANY_DURATION") return n.family == Family::Time;
+    if (c == "ANY_MAGNITUDE") return integer || real || n.family == Family::Time;
+    return true;                                                   // ANY_ELEMENTARY
 }
 
 bool valueFits(long long value, std::string_view to) noexcept {

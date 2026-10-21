@@ -1999,6 +1999,13 @@ private:
             i = isOp(e, ";") ? e : after(e);
             return;
         }
+        // 1.12.20 : TEMPLATE <T : ANY_NUM> devant une fonction interne - ses generiques ne sont pas des noms a lire.
+        if (U == "TEMPLATE" && isOp(i + 1, "<")) {
+            std::size_t k = i + 2;
+            while (!atEnd(k) && !isOp(k, ">")) ++k;
+            i = after(k);
+            return;
+        }
         // 1.10 (decision 13) : l'en-tete d'une fonction interne - FUNCTION Nom
         // (params) : Type ; son corps est lu ensuite comme le reste du script.
         if (U == "FUNCTION") {

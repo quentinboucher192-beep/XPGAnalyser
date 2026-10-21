@@ -3643,10 +3643,51 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             hmi::View shape;
             shape.role = paramsOf->role;
             shape.params = paramsOf->params;
+            shape.generics = paramsOf->generics;
             const auto given = hmi::givenArguments(shape, prop.value);
+            // 1.12.20 (lot G) : un symbole generique - ses T, donnes (T := REAL) ou deduits de ce que l'instance lie ; les types
+            // des parametres en suivent (Valeur \xC2\xB7 REAL). Une ligne par T, en tete.
+            const auto generics = hmi::params::bindGenerics(*project, &view, shape, prop.value);
+            for (std::size_t k = 0; k < shape.generics.size(); ++k) {
+                const auto& g = shape.generics[k];
+                PG::Property a;
+                a.name = g.name + " \xC2\xB7 g\xC3\xA9n\xC3\xA9rique" + (g.constraint.empty() ? std::string{} : " " + g.constraint);
+                a.type = PG::ValueType::Text;
+                const bool fixed = generics.from[k] == "donn\xC3\xA9";
+                a.value = fixed ? generics.types[k] : std::string{};
+                if (!fixed) a.placeholder = generics.types[k].empty() ? std::string("pas d\xC3\xA9" "duit \xC2\xB7 ANY") : generics.types[k] + " \xC2\xB7 " + generics.from[k];
+                for (const auto& pb : generics.problems)
+                    if (pb.rfind(g.name + " ", 0) == 0) a.exprError = pb;
+                a.description = "Le type de " + g.name + " pour cette instance : vide, d\xC3\xA9" "duit de ce qu'elle lie (Valeur := PT1, un REAL) ; "
+                                "un type (REAL) le fixe.";
+                const std::string current = prop.value;
+                a.commit = [commit, current, name = g.name](std::string_view s) {
+                    if (!commit.prop) return false;
+                    std::string out;
+                    for (const auto& piece : hmi::roles::splitList(current)) {           // le T d'avant retire
+                        const auto at = piece.find(":=");
+                        std::string head = at == std::string::npos ? std::string{} : piece.substr(0, at);
+                        head.erase(0, head.find_first_not_of(" \t"));
+                        head.erase(head.find_last_not_of(" \t") + 1);
+                        for (auto& c : head) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                        std::string upName = name;
+                        for (auto& c : upName) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                        if (!head.empty() && head == upName) continue;
+                        if (piece.find_first_not_of(" \t") != std::string::npos) out += (out.empty() ? "" : "; ") + piece;
+                    }
+                    std::string v(s);
+                    v.erase(0, v.find_first_not_of(" \t"));
+                    v.erase(v.find_last_not_of(" \t") + 1);
+                    if (!v.empty()) out += (out.empty() ? "" : "; ") + name + " := " + v;
+                    return commit.prop("params", out, false);
+                };
+                rows[SecParams].push_back({-100.0 + static_cast<double>(k), std::move(a)});
+            }
             const valuekind::Env env{project, &view, plc};
             for (std::size_t i = 0; i < shape.params.size(); ++i) {
-                const auto& prm = shape.params[i];
+                const auto& prm0 = shape.params[i];
+                hmi::ViewParam prm = prm0;
+                prm.type = hmi::params::boundType(shape, prm0.type, &generics);   // 1.12.20 (lot G) : T devenu REAL
                 PG::Property a;
                 a.name = prm.name + " \xC2\xB7 " + (prm.type.empty() ? std::string("ANY") : prm.type);
                 a.type = PG::ValueType::Text;

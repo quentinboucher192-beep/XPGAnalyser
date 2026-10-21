@@ -1622,6 +1622,20 @@ private:
         auto t = std::make_shared<TypeDesc>();
         t->kind = TypeDesc::Kind::Struct;           // resolue a l'execution (Environment::structMembers)
         t->name = name;
+        // 1.12.20 (lot G) : T_Mesure<REAL> - l'instance d'une structure generique de l'IHM ; ses types se lisent ici,
+        // l'environnement donne ses membres (T devenu REAL).
+        if (dialect_ && atPunct("<")) {
+            advance();
+            std::string args;
+            for (;;) {
+                auto a = typeSpec();
+                if (!a) return a;
+                args += (args.empty() ? "" : ", ") + (*a)->text();
+                if (!accept(",")) break;
+            }
+            if (!accept(">")) return errorHere(name + "<\xE2\x80\xA6> : '>' attendu apr\xC3\xA8s ses types (T_Mesure<REAL>)");
+            t->name = name + "<" + args + ">";
+        }
         return TypeRef(t);
     }
 
@@ -3181,6 +3195,13 @@ private:
                 return t;
             case TypeDesc::Kind::Struct: {
                 if (!t->members.empty()) return t;
+                // 1.12.20 (lot G) : T_Mesure<T> dans une fonction generique : son T deduit (T_Mesure<REAL>).
+                if (!typeBindings_.empty() && t->name.find('<') != std::string::npos)
+                    if (std::string bound = boundGenericName(t->name); bound != t->name) {
+                        auto d = std::make_shared<TypeDesc>(*t);
+                        d->name = std::move(bound);
+                        return resolve(d, depth + 1);
+                    }
                 const std::string key = upperOf(t->name);
                 // 1.12.19 : T d'une fonction generique en cours d'appel (TEMPLATE <T>) : le type deduit.
                 for (auto it = typeBindings_.rbegin(); it != typeBindings_.rend(); ++it)
@@ -4705,6 +4726,70 @@ private:
         if (c == "ANY_ELEMENTARY") return true;
         return true;                                         // une contrainte inconnue : Generer la dira
     }
+    // 1.12.20 (lot G) : "T_Paire<STRING, T>" -> "T_Paire" et {"STRING", "T"} ; faux : pas un nom generique.
+    static bool splitTypeArgs(const std::string& text, std::string& base, std::vector<std::string>& args) {
+        const auto lt = text.find('<');
+        if (lt == std::string::npos || text.back() != '>') return false;
+        const auto trim = [](std::string s) {
+            while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
+            while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
+            return s;
+        };
+        base = trim(text.substr(0, lt));
+        args.clear();
+        int depth = 0;
+        std::string cur;
+        for (std::size_t k = lt + 1; k + 1 < text.size(); ++k) {
+            const char c = text[k];
+            if (c == '<' || c == '(' || c == '[') ++depth;
+            if (c == '>' || c == ')' || c == ']') --depth;
+            if (c == ',' && depth == 0) {
+                args.push_back(trim(cur));
+                cur.clear();
+                continue;
+            }
+            cur += c;
+        }
+        args.push_back(trim(cur));
+        return true;
+    }
+    // 1.12.20 (lot G) : les types d'une instance generique, ses T remplaces par ceux de la fonction generique en cours
+    // (T_Mesure<T> -> T_Mesure<REAL>).
+    std::string boundGenericName(const std::string& text) const {
+        const auto lt = text.find('<');
+        std::string out = text.substr(0, lt);
+        for (std::size_t i = lt; i < text.size();) {
+            if (!identStart(text[i]) || identChar(text[i - 1])) {
+                out += text[i++];
+                continue;
+            }
+            std::size_t j = i;
+            while (j < text.size() && identChar(text[j])) ++j;
+            const std::string w = text.substr(i, j - i);
+            std::string with = w;
+            for (auto it = typeBindings_.rbegin(); it != typeBindings_.rend(); ++it)
+                if (const auto b = it->find(upperOf(w)); b != it->end()) {
+                    with = b->second->text();
+                    break;
+                }
+            out += with;
+            i = j;
+        }
+        return out;
+    }
+    // 1.12.20 (lot G) : un parametre T_Mesure<T> et un argument T_Mesure<REAL> : T = REAL.
+    void unifyGeneric(const TypeRef& p, const TypeRef& a, const std::set<std::string>& names, std::map<std::string, TypeRef>& out) {
+        if (!p || !a || p->kind != TypeDesc::Kind::Struct || a->kind != TypeDesc::Kind::Struct) return;
+        std::string pb, ab;
+        std::vector<std::string> pa, aa;
+        if (!splitTypeArgs(p->name, pb, pa) || !splitTypeArgs(a->name, ab, aa) || upperOf(pb) != upperOf(ab) || pa.size() != aa.size()) return;
+        for (std::size_t k = 0; k < pa.size(); ++k) {
+            const std::string key = upperOf(pa[k]);
+            if (!names.count(key) || out.count(key)) continue;
+            if (auto t = typeFromText(aa[k]))
+                if (auto r = resolve(*t)) out[key] = *r;
+        }
+    }
     static void unify(const TypeRef& p, const TypeRef& a, const std::set<std::string>& names, std::map<std::string, TypeRef>& out) {
         if (!p || !a) return;
         if (p->kind == TypeDesc::Kind::Struct && p->members.empty() && names.count(upperOf(p->name))) {
@@ -4749,6 +4834,7 @@ private:
                 argType = scalarType(b.value.v.type());
             }
             unify(f.params[k].type, argType, names, out);
+            unifyGeneric(f.params[k].type, argType, names, out);    // 1.12.20 (lot G)
         }
         for (const auto& [n, c] : f.typeParams) {
             const auto it = out.find(upperOf(n));

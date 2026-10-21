@@ -112,6 +112,7 @@ struct Entry {
     Numeric     numeric{};          // un type elementaire
     std::vector<std::pair<std::string, std::string>> members{};   // une structure, un DDT : (nom, type)
     std::vector<std::string> values{};                            // une enumeration : ses valeurs
+    std::vector<std::pair<std::string, std::string>> generics{};  // 1.12.20 (lot G) : une structure generique : (T, ANY_NUM)
     [[nodiscard]] bool usable(unsigned use) const noexcept { return (uses & use) != 0; }
 };
 
@@ -189,6 +190,9 @@ struct Verdict {
 // Une VALEUR entiere gardee (la remanence) tient-elle dans le type `to` ? (un entier
 // vers un entier plus petit passe s'il tient : rien n'est tronque en cachette).
 [[nodiscard]] bool valueFits(long long value, std::string_view to) noexcept;
+// 1.12.20 (lot G) : un type tient-il dans la contrainte d'un generique (ANY_NUM, ANY_INT, ANY_REAL, ANY_BIT, ANY_STRING,
+// ANY_DATE, ANY_DURATION, ANY_MAGNITUDE, ANY_ELEMENTARY, ANY_STRUCT, ANY_DERIVED ; vide ou ANY : tout) ?
+[[nodiscard]] bool genericAccepts(std::string_view constraint, const Resolved& type) noexcept;
 
 // ---- la cle d'un type, au chargement ---------------------------------------------------
 // Chaque declaration qui porte une cle de type lue du fichier (Declaration::typeKey, type_cle) :

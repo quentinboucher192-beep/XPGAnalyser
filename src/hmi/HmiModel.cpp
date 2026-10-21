@@ -2129,8 +2129,177 @@ HmiType* Project::hmiType(Id id) noexcept {
 const HmiType* Project::hmiType(Id id) const noexcept { return const_cast<Project*>(this)->hmiType(id); }
 const HmiType* Project::hmiTypeByName(std::string_view name) const noexcept {
     for (const auto& ty : programs.types) if (iequals(ty.name, name)) return &ty;
+    // 1.12.20 (lot G) : T_Mesure<REAL> - l'instance de la structure generique T_Mesure<T>, ses membres de type T en REAL.
+    std::string base;
+    std::vector<std::string> args;
+    if (!splitGenericName(name, base, args)) return nullptr;
+    const HmiType* g = nullptr;
+    for (const auto& ty : programs.types)
+        if (iequals(ty.name, base)) g = &ty;
+    if (!g || g->kind != HmiTypeKind::Structure || g->generics.empty() || g->generics.size() != args.size()) return nullptr;
+    std::string shown = g->name + "<";
+    for (std::size_t k = 0; k < args.size(); ++k) shown += (k ? ", " : "") + args[k];
+    shown += ">";
+    std::string key = shown;
+    for (auto& c : key) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    const std::lock_guard<std::mutex> hold(genericInstances.lock);
+    auto& slot = genericInstances.made[key];
+    if (slot.second.name.empty() || !(slot.first == *g)) {
+        slot.first = *g;
+        HmiType inst = *g;
+        inst.name = shown;
+        inst.generics.clear();
+        for (auto& m : inst.members) m.type = substituteGenerics(m.type, g->generics, args);
+        slot.second = std::move(inst);
+    }
+    return &slot.second;
+}
+
+// ---- 1.12.20 (lot G) : les generiques -----------------------------------------------------------
+namespace {
+bool genericIdentifier(std::string_view s) {
+    if (s.empty() || !(std::isalpha(static_cast<unsigned char>(s[0])) || s[0] == '_')) return false;
+    return std::all_of(s.begin(), s.end(), [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; });
+}
+std::string trimmedText(std::string_view s) {
+    const auto a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string_view::npos) return {};
+    const auto b = s.find_last_not_of(" \t\r\n");
+    return std::string(s.substr(a, b - a + 1));
+}
+const std::vector<std::string_view>& genericConstraints() {
+    static const std::vector<std::string_view> k = {"ANY", "ANY_NUM", "ANY_INT", "ANY_REAL", "ANY_BIT", "ANY_STRING", "ANY_CHARS", "ANY_DATE",
+                                                    "ANY_DURATION", "ANY_MAGNITUDE", "ANY_ELEMENTARY", "ANY_STRUCT", "ANY_DERIVED"};
+    return k;
+}
+// Un type elementaire (sans casse) : son nom en majuscules ; nul : pas un tel type.
+const char* elementaryName(std::string_view s) {
+    static const char* const k[] = {"BOOL", "SINT", "INT", "DINT", "LINT", "USINT", "UINT", "UDINT", "ULINT", "BYTE", "WORD", "DWORD",
+                                    "LWORD", "REAL", "LREAL", "STRING", "TIME", "CHAR", "WSTRING", "DATE", "TIME_OF_DAY", "DATE_AND_TIME",
+                                    "TOD", "DT"};
+    for (const char* e : k)
+        if (iequals(s, e)) return e;
     return nullptr;
 }
+// real -> REAL, comme ailleurs ; un autre nom tel quel.
+std::string elementaryUpper(std::string s) {
+    const char* e = elementaryName(s);
+    return e ? std::string(e) : s;
+}
+} // namespace
+
+std::string genericSample(std::string_view constraint) {
+    std::string c(constraint);
+    for (auto& ch : c) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    if (c == "ANY_INT") return "INT";
+    if (c == "ANY_BIT") return "BOOL";
+    if (c == "ANY_STRING" || c == "ANY_CHARS") return "STRING";
+    if (c == "ANY_DATE") return "DATE";
+    if (c == "ANY_DURATION") return "TIME";
+    return "REAL";
+}
+
+std::string genericsText(const std::vector<GenericParam>& g) {
+    std::string out;
+    for (const auto& p : g) {
+        if (!out.empty()) out += ", ";
+        out += p.name;
+        if (!p.constraint.empty() && p.constraint != "ANY") out += " : " + p.constraint;
+    }
+    return out;
+}
+
+bool parseGenerics(std::string_view text, std::vector<GenericParam>& out, std::string* why) {
+    out.clear();
+    std::string t = trimmedText(text);
+    if (t.size() >= 2 && t.front() == '<' && t.back() == '>') t = trimmedText(std::string_view(t).substr(1, t.size() - 2));
+    if (t.empty()) return true;
+    std::size_t at = 0;
+    while (at <= t.size()) {
+        const auto comma = t.find(',', at);
+        const std::string one = trimmedText(std::string_view(t).substr(at, comma == std::string::npos ? std::string::npos : comma - at));
+        GenericParam g;
+        const auto colon = one.find(':');
+        g.name = trimmedText(std::string_view(one).substr(0, colon));
+        if (colon != std::string::npos) {
+            std::string c = trimmedText(std::string_view(one).substr(colon + 1));
+            for (auto& ch : c) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            g.constraint = c;
+        }
+        if (!genericIdentifier(g.name)) {
+            if (why) *why = "\xC2\xAB " + g.name + " \xC2\xBB n'est pas un nom de g\xC3\xA9n\xC3\xA9rique (T, U, K, V\xE2\x80\xA6)";
+            return false;
+        }
+        if (elementaryName(g.name)) {
+            if (why) *why = g.name + " est un type : un g\xC3\xA9n\xC3\xA9rique se nomme T, U, K, V\xE2\x80\xA6";
+            return false;
+        }
+        for (const auto& o : out)
+            if (iequals(o.name, g.name)) {
+                if (why) *why = g.name + " est d\xC3\xA9j\xC3\xA0 un g\xC3\xA9n\xC3\xA9rique";
+                return false;
+            }
+        if (!g.constraint.empty()
+            && std::find(genericConstraints().begin(), genericConstraints().end(), g.constraint) == genericConstraints().end()) {
+            if (why) *why = g.constraint + " n'est pas une contrainte : ANY, ANY_NUM, ANY_INT, ANY_REAL, ANY_BIT, ANY_STRING, ANY_DATE, ANY_DURATION, ANY_ELEMENTARY ou ANY_STRUCT";
+            return false;
+        }
+        if (g.constraint == "ANY") g.constraint.clear();
+        out.push_back(std::move(g));
+        if (comma == std::string::npos) break;
+        at = comma + 1;
+    }
+    return true;
+}
+
+bool splitGenericName(std::string_view name, std::string& base, std::vector<std::string>& args) {
+    base.clear();
+    args.clear();
+    const std::string t = trimmedText(name);
+    const auto lt = t.find('<');
+    if (lt == std::string::npos || t.back() != '>') return false;
+    base = trimmedText(std::string_view(t).substr(0, lt));
+    if (!genericIdentifier(base)) return false;
+    int depth = 0;
+    std::string cur;
+    for (std::size_t k = lt + 1; k + 1 < t.size(); ++k) {
+        const char c = t[k];
+        if (c == '<' || c == '(' || c == '[') ++depth;
+        if (c == '>' || c == ')' || c == ']') --depth;
+        if (depth < 0) return false;
+        if (c == ',' && depth == 0) {
+            args.push_back(trimmedText(cur));
+            cur.clear();
+            continue;
+        }
+        cur += c;
+    }
+    if (depth != 0) return false;
+    args.push_back(trimmedText(cur));
+    for (auto& a : args) a = elementaryUpper(a);
+    return std::none_of(args.begin(), args.end(), [](const std::string& a) { return a.empty(); });
+}
+
+std::string substituteGenerics(std::string_view type, const std::vector<GenericParam>& params, const std::vector<std::string>& args) {
+    std::string out;
+    const auto word = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (std::size_t i = 0; i < type.size();) {
+        if (!word(type[i]) || (i > 0 && word(type[i - 1]))) {
+            out += type[i++];
+            continue;
+        }
+        std::size_t j = i;
+        while (j < type.size() && word(type[j])) ++j;
+        const std::string_view w = type.substr(i, j - i);
+        std::string with(w);
+        for (std::size_t k = 0; k < params.size() && k < args.size(); ++k)
+            if (iequals(params[k].name, w)) with = args[k];
+        out += with;
+        i = j;
+    }
+    return out;
+}
+
 HmiFunction* Project::function(Id id) noexcept {
     for (auto& f : programs.functions) if (f.id == id) return &f;
     return nullptr;

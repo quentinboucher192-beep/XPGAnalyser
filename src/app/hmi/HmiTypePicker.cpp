@@ -143,14 +143,21 @@ public:
     }
     // Le type qu'on choisirait : l'entree, une reference (REF_TO), puis la forme (1.12.2 : Tableau,
     // Tableau 2D, Liste, Vecteur, Dictionnaire, Tuple).
+    // 1.12.20 (lot G) : une structure generique se choisit avec un type par generique (T_Mesure<REAL>), a changer ensuite.
+    static std::string nameOf(const tr::Entry* e) {
+        if (e->generics.empty()) return e->name;
+        std::string out = e->name + "<";
+        for (std::size_t k = 0; k < e->generics.size(); ++k) out += (k ? ", " : "") + hmi::genericSample(e->generics[k].second);
+        return out + ">";
+    }
     [[nodiscard]] std::string result() const {
         if (!typed_.empty()) return typed_;          // 1.12.14 : un type entier ecrit dans la recherche
         const auto* e = selected();
         if (!e) return {};
-        if (!constructible(e)) return e->name;
+        if (!constructible(e)) return nameOf(e);
         tf::Shape sh;
         sh.form = formAllowed(form_) ? form_ : tf::Form::Simple;
-        sh.element = e->name;
+        sh.element = nameOf(e);
         sh.parameter = trimmed(bounds_->text());
         sh.reference = ref_ && canReference(spec_.use);
         return tf::compose(sh);

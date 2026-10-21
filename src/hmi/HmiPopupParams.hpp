@@ -124,6 +124,22 @@ std::vector<ArgumentProblem> callbackArgument(const Project&, const View* caller
 // popup ecrit (avertissement : on ne pourra pas l'ecrire).
 [[nodiscard]] std::vector<ArgumentProblem> checkArguments(const Project&, const View* caller, const View& popup,
                                                           std::string_view arguments, const PlcTypes& = {});
+
+// ---- 1.12.20 (lot G) : LES GENERIQUES D'UNE POPUP, D'UN SYMBOLE (Afficheur_Mesure<T : ANY_NUM>) ----
+//  T se donne comme un argument (T := REAL), ou se deduit de l'argument d'un parametre de type T (Valeur := PT1, un
+//  REAL) ou LIST OF T... ; sinon de sa valeur par defaut. Un entier et un reel : le reel (comme une fonction generique).
+//  Hors contrainte, ou deux T differents : un probleme (la raison, et ce qui le leve).
+struct GenericBinding {
+    std::vector<std::string> types;      // un par generique ; vide : pas deduit
+    std::vector<std::string> from;       // "donne", "deduit de Valeur", "valeur par defaut de Valeur"
+    std::vector<std::string> problems;
+};
+[[nodiscard]] bool isGenericName(const View&, std::string_view name);
+[[nodiscard]] GenericBinding bindGenerics(const Project&, const View* caller, const View& popup, std::string_view arguments,
+                                          const PlcTypes& = {});
+// Le type d'un parametre, ses generiques remplaces : ceux de `b` (deduits) ; sinon - T seul : vide (ANY), LIST OF T : un
+// type de sa contrainte (REAL). Sans `b` : dans la vue elle-meme (ses expressions, ses valeurs par defaut).
+[[nodiscard]] std::string boundType(const View&, std::string_view type, const GenericBinding* b = nullptr);
 // La popup ecrit-elle ce parametre (une action qui l'ecrit, un champ de saisie
 // relie a lui, une affectation dans un script) ?
 [[nodiscard]] bool popupWritesParam(const View& popup, std::string_view param);

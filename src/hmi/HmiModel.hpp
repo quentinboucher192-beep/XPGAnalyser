@@ -37,6 +37,8 @@
 #include <array>
 #include <cstdint>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <functional>
 #include <optional>
 #include <string>
@@ -681,6 +683,30 @@ struct Object {
 // une capture faite a l'ouverture, que la popup lit et modifie sans jamais
 // toucher l'original ; LES DEUX : la capture, puis "Appliquer copie sur
 // reference" ecrit la copie dans la variable de l'appelant.
+// ---- 1.12.20 (lot G) : LES GENERIQUES d'une structure IHM, d'un symbole, d'une popup ----
+//  TEMPLATE <T : ANY_NUM> : un nom (T, U, K, V...) et une contrainte - un generique des natives (ANY_NUM, ANY_INT,
+//  ANY_REAL, ANY_BIT, ANY_STRING, ANY_DATE, ANY_DURATION, ANY_MAGNITUDE, ANY_ELEMENTARY, ANY_STRUCT, ANY_DERIVED ;
+//  vide : ANY). Une structure generique s'emploie avec ses types, T_Mesure<REAL> : Project::hmiTypeByName en fait
+//  l'instance (ses membres de type T deviennent REAL). Un symbole, une popup generique : T se deduit des arguments
+//  (ce que l'instance lie a un parametre de type T), ou se donne comme un argument (T := REAL).
+struct GenericParam {
+    std::string name{"T"};
+    std::string constraint{};
+    bool operator==(const GenericParam&) const = default;
+};
+// "T : ANY_NUM, U" : le texte des generiques (une case) ; et l'inverse - faux et `why` : un nom illisible, deux fois le
+// meme, une contrainte qui n'est pas un generique des natives.
+[[nodiscard]] std::string genericsText(const std::vector<GenericParam>&);
+bool parseGenerics(std::string_view text, std::vector<GenericParam>& out, std::string* why = nullptr);
+// "T_Mesure<REAL>" -> "T_Mesure" et {"REAL"} ; "T_Paire<STRING, T_Mesure<BOOL>>" -> deux arguments. Faux : pas un nom
+// generique.
+bool splitGenericName(std::string_view name, std::string& base, std::vector<std::string>& args);
+// Le texte d'un type, ses generiques remplaces mot pour mot : "LIST OF T" (T -> REAL) -> "LIST OF REAL".
+[[nodiscard]] std::string substituteGenerics(std::string_view type, const std::vector<GenericParam>& params,
+                                             const std::vector<std::string>& args);
+// Un type qui tient dans une contrainte, pour essayer ce qui l'emploie (ANY_NUM : REAL, ANY_STRING : STRING...).
+[[nodiscard]] std::string genericSample(std::string_view constraint);
+
 enum class ParamMode : std::uint8_t { Reference, Copy, Both };
 struct ViewParam {
     std::string name;
@@ -855,6 +881,9 @@ struct View {
     //  1.12.16 : celles d'une vue ou d'une popup (HmiSymbols.hpp : viewmembers) - appelees par leur
     //  nom dans la vue, par Vue.Fonction(...) ailleurs (les publiques).
     std::vector<HmiFunction> functions{};
+    // 1.12.20 (lot G) : les generiques d'un symbole ou d'une popup (Afficheur_Mesure<T : ANY_NUM>) : ses parametres
+    //  peuvent etre de type T ; une instance le deduit de ses arguments, ou le donne (T := REAL).
+    std::vector<GenericParam> generics{};
     // ---- 1.12.16 : LES CONSTANTES D'UNE VUE (ou d'une popup) : des Declaration de genre Constante,
     //  lues par leur nom dans la vue (ses objets fx, ses scripts, ses actions, ses fonctions) et
     //  par Vue.Nom ailleurs (les publiques). Une valeur ecrite, ou calculee par un code (au
@@ -1064,6 +1093,8 @@ struct HmiType {
     std::vector<HmiEnumValue> values{};         // 1.10 : ses valeurs, dans l'ordre de declaration
     // 1.12.20 : un type rappel (kind Callback) : sa forme, "CALLBACK (x : REAL) : BOOL" ; vide ailleurs.
     std::string signature{};
+    // 1.12.20 (lot G) : une structure generique (T_Mesure<T>) : ses generiques ; ses membres peuvent etre de type T.
+    std::vector<GenericParam> generics{};
     bool operator==(const HmiType&) const = default;
 };
 
@@ -1940,6 +1971,19 @@ struct Project {
     [[nodiscard]] const Equipment*    equipment(Id) const noexcept;
     [[nodiscard]] const Equipment*    equipmentByName(std::string_view) const noexcept;   // sans casse
     [[nodiscard]] Stats        statistics() const;
+
+    // 1.12.20 (lot G) : les instances des structures generiques (T_Mesure<REAL>), faites a la demande par hmiTypeByName -
+    // (le generique d'ou elle vient, l'instance), refaite si le generique change. Une copie du projet repart sans elles ;
+    // jamais comparees.
+    struct GenericInstances {
+        std::map<std::string, std::pair<HmiType, HmiType>> made;
+        std::mutex lock;
+        GenericInstances() = default;
+        GenericInstances(const GenericInstances&) {}
+        GenericInstances& operator=(const GenericInstances&) { return *this; }
+        bool operator==(const GenericInstances&) const noexcept { return true; }
+    };
+    mutable GenericInstances genericInstances{};
 
     bool operator==(const Project&) const = default;
 };

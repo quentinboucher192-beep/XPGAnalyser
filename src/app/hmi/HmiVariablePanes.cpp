@@ -3533,7 +3533,10 @@ void HmiTypesPane::refresh() {
         }
         const bool cycle = !ty::cycleOf(p, t.name).empty();
         broken[t.id] = cycle;
-        cells[t.id] = {t.name, std::to_string(t.members.size()), cycle ? std::string("?") : std::to_string(ty::weightOf(p, t.name).words),
+        // 1.12.20 (lot G) : une structure generique - T_Mesure<T>, sa place selon ses types.
+        const bool generic = !t.generics.empty();
+        cells[t.id] = {generic ? t.name + "<" + hmi::genericsText(t.generics) + ">" : t.name, std::to_string(t.members.size()),
+                       cycle ? std::string("?") : generic ? std::string("selon T") : std::to_string(ty::weightOf(p, t.name).words),
                        used.empty() ? std::string("(aucune variable)") : used};
     }
     syncing_ = true;
@@ -3853,7 +3856,8 @@ bool HmiTypesPane::renameType(Id id, const std::string& raw, std::string* why) {
     // Les variables et les membres qui l'emploient suivent.
     const auto rename = [&](std::string& type) {
         ty::Spec s;
-        if (ty::parseSpec(type, s)) {
+        const bool generic = type.find('<') != std::string::npos;      // 1.12.20 (lot G) : T_Mesure<REAL>, T_Paire<T_Four, INT>
+        if (ty::parseSpec(type, s) && !generic) {
             if (!sameText(s.element, before)) return;
             s.element = name;
             type = ty::specText(s);
@@ -3861,7 +3865,7 @@ bool HmiTypesPane::renameType(Id id, const std::string& raw, std::string* why) {
         }
         // 1.12.4 : un type objet (LIST OF T_Four, MAP[STRING] OF T_Four, TUPLE(INT, T_Four)) : le nom
         // parmi ses mots (un membre objet, une variable objet, une declaration).
-        if (!ty::isRich(type)) return;
+        if (!ty::isRich(type) && !generic) return;
         std::string out;
         for (std::size_t i = 0; i < type.size();) {
             if (std::isalpha(static_cast<unsigned char>(type[i])) || type[i] == '_') {
@@ -3894,6 +3898,20 @@ bool HmiTypesPane::renameType(Id id, const std::string& raw, std::string* why) {
     }));
     say("Type renomm\xC3\xA9 : " + before + " \xE2\x86\x92 " + name + " (les variables et les membres qui l'emploient suivent)");
     return true;
+}
+
+bool HmiTypesPane::setTypeGenerics(Id id, const std::string& text, std::string* why) {
+    std::vector<hmi::GenericParam> g;
+    if (!hmi::parseGenerics(text, g, why)) return false;
+    const auto* t = doc_->project.hmiType(id);
+    if (t)
+        for (const auto& x : g)
+            for (const auto& m : t->members)
+                if (sameText(m.name, x.name)) return fail(why, x.name + " est d\xC3\xA9j\xC3\xA0 un membre : un g\xC3\xA9n\xC3\xA9rique se nomme autrement (T, U)");
+    return change(id, "G\xC3\xA9n\xC3\xA9riques du type", [&](hmi::HmiType& ty, std::string*) {
+        ty.generics = g;
+        return true;
+    }, why);
 }
 
 bool HmiTypesPane::setTypeDescription(Id id, const std::string& text) {
@@ -4113,8 +4131,24 @@ void HmiTypesPane::rebuildProperties() {
         }, {}, "Renommer un type : les variables et les membres qui l'emploient suivent."));
         c.properties.push_back(prop("Description", t->description, PG::ValueType::Text,
                                     [this, id](std::string_view text) { return setTypeDescription(id, std::string(text)); }));
-        const auto w = ty::weightOf(p, t->name);
-        c.properties.push_back(prop("Poids", std::to_string(w.words) + " mots, " + std::to_string(w.bytes) + " octets", PG::ValueType::ReadOnly, {}, {},
+        // 1.12.20 (lot G) : une structure generique - ses generiques ; ses membres peuvent etre de type T, une variable
+        // s'ecrit T_Mesure<REAL>.
+        c.properties.push_back(prop("G\xC3\xA9n\xC3\xA9riques", hmi::genericsText(t->generics), PG::ValueType::Text, [this, id](std::string_view text) {
+            std::string why;
+            const bool ok = setTypeGenerics(id, std::string(text), &why);
+            if (!ok) say("Refus\xC3\xA9 : " + why, true);
+            return ok;
+        }, {}, "TEMPLATE <T> : vide, une structure ordinaire ; T (ou T : ANY_NUM, ou K, V) : une structure g\xC3\xA9n\xC3\xA9rique - ses membres "
+               "peuvent \xC3\xAAtre de type T (LIST OF T aussi), une variable s'\xC3\xA9" "crit " + t->name + "<REAL>."));
+        std::string sample = t->name;
+        if (!t->generics.empty()) {
+            sample += "<";
+            for (std::size_t k = 0; k < t->generics.size(); ++k) sample += (k ? ", " : "") + hmi::genericSample(t->generics[k].constraint);
+            sample += ">";
+        }
+        const auto w = ty::weightOf(p, sample);
+        c.properties.push_back(prop("Poids", (t->generics.empty() ? std::string{} : sample + " : ") + std::to_string(w.words) + " mots, "
+                                                 + std::to_string(w.bytes) + " octets", PG::ValueType::ReadOnly, {}, {},
                                     "La place Modbus d'une variable de ce type (.Words, .Bytes dans les scripts)."));
         const auto users = ty::usersOf(p, t->name);
         std::string used;

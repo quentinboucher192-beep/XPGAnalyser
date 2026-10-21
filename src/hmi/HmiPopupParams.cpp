@@ -218,8 +218,9 @@ std::string expressionType(const Project& p, const View* caller, std::string_vie
     };
     if (caller)
         if (const auto* prm = caller->param(root)) {
-            if (trim(prm->type).empty()) return {};
-            return memberWalk(prm->type, rest);
+            const std::string type = boundType(*caller, prm->type);   // 1.12.20 (lot G) : T seul, dans la vue : ANY
+            if (trim(type).empty()) return {};
+            return memberWalk(type, rest);
         }
     // une variable IHM (ses membres, ses cases)
     if (const std::string ihm = types::typeOfPath(p, t); !ihm.empty()) return ihm;
@@ -706,16 +707,116 @@ std::vector<ArgumentProblem> callbackArgument(const Project& p, const View* call
     return out;
 }
 
+bool isGenericName(const View& v, std::string_view name) {
+    const std::string n = trim(name);
+    return std::any_of(v.generics.begin(), v.generics.end(), [&](const GenericParam& g) { return same(g.name, n); });
+}
+
+namespace {
+// "LIST OF T" contre "LIST OF REAL" : REAL ; "T" contre tout : tout ; vide : rien a en tirer.
+std::string genericFrom(std::string_view pattern, std::string_view name, std::string_view concrete) {
+    const std::string pt = trim(pattern), c = normalizedType(concrete);
+    if (c.empty() || up(c) == "ANY") return {};
+    if (same(pt, name)) return c;
+    const std::string tail = " OF " + up(name);
+    const std::string upt = up(pt);
+    if (upt.size() > tail.size() && upt.compare(upt.size() - tail.size(), tail.size(), tail) == 0) {
+        const std::string head = upt.substr(0, upt.size() - std::string(name).size());     // "LIST OF "
+        if (up(c).rfind(head, 0) == 0) return trim(c.substr(head.size()));
+    }
+    return {};
+}
+bool mentions(std::string_view type, std::string_view name) {
+    const std::string t = up(type), n = up(name);
+    for (std::size_t at = t.find(n); at != std::string::npos; at = t.find(n, at + 1)) {
+        const bool before = at == 0 || !identChar(t[at - 1]);
+        const bool after = at + n.size() >= t.size() || !identChar(t[at + n.size()]);
+        if (before && after) return true;
+    }
+    return false;
+}
+} // namespace
+
+GenericBinding bindGenerics(const Project& p, const View* caller, const View& popup, std::string_view arguments, const PlcTypes& plc) {
+    GenericBinding b;
+    const std::size_t n = popup.generics.size();
+    b.types.assign(n, {});
+    b.from.assign(n, {});
+    if (n == 0) return b;
+    const auto given = parseArguments(arguments);
+    const auto ranked = givenArguments(popup, arguments);
+    for (std::size_t k = 0; k < n; ++k) {
+        const GenericParam& g = popup.generics[k];
+        for (const auto& [name, value] : given)                       // donne : T := REAL
+            if (same(name, g.name) && !trim(value).empty()) {
+                b.types[k] = normalizedType(trim(value));
+                b.from[k] = "donn\xC3\xA9";
+            }
+        if (!b.types[k].empty()) continue;
+        // Deduit : des arguments d'abord, puis des valeurs par defaut.
+        for (const bool defaults : {false, true}) {
+            std::string by;
+            for (std::size_t i = 0; i < popup.params.size(); ++i) {
+                const ViewParam& prm = popup.params[i];
+                if (!mentions(prm.type, g.name)) continue;
+                std::string arg = trim(markers::strip(defaults ? prm.defaultValue : (i < ranked.size() ? ranked[i] : std::string{})));
+                if (arg.size() > 1 && arg.front() == '=' && arg[1] != '=') arg = trim(arg.substr(1));
+                if (arg.empty()) continue;
+                const std::string t = genericFrom(prm.type, g.name, expressionType(p, caller, arg, plc));
+                if (t.empty()) continue;
+                const bool first = b.types[k].empty();
+                if (!first && (same(b.types[k], t) || typereg::conversion(t, b.types[k]).safe())) continue;   // le meme, ou INT dans REAL
+                if (!first && !typereg::conversion(b.types[k], t).safe()) {
+                    b.problems.push_back(g.name + " vaut " + b.types[k] + " par " + by + " et " + t + " par " + prm.name + " \xE2\x80\x94 donne-le : "
+                                         + g.name + " := " + b.types[k]);
+                    break;
+                }
+                b.types[k] = t;                                           // le premier, ou REAL qui l'emporte sur INT
+                b.from[k] = (defaults ? "valeur par d\xC3\xA9" "faut de " : "d\xC3\xA9" "duit de ") + prm.name;
+                by = prm.name;
+            }
+            if (!b.types[k].empty()) break;
+        }
+    }
+    std::shared_ptr<const typereg::Registry> reg;
+    for (std::size_t k = 0; k < n; ++k) {
+        const std::string& c = popup.generics[k].constraint;
+        if (b.types[k].empty() || c.empty()) continue;
+        if (!reg) reg = typereg::Registry::build(p);
+        if (!typereg::genericAccepts(c, reg->resolve(b.types[k], typereg::UseAll)))
+            b.problems.push_back(popup.generics[k].name + " doit \xC3\xAAtre un " + c + " ; " + b.types[k] + " n'en est pas un (" + b.from[k] + ")");
+    }
+    return b;
+}
+
+std::string boundType(const View& v, std::string_view type, const GenericBinding* b) {
+    if (v.generics.empty()) return std::string(type);
+    const std::string t = trim(type);
+    std::vector<std::string> with;
+    for (std::size_t k = 0; k < v.generics.size(); ++k) {
+        const std::string got = b && k < b->types.size() ? b->types[k] : std::string{};
+        if (got.empty() && same(t, v.generics[k].name)) return {};      // T seul, pas deduit : ANY
+        with.push_back(got.empty() ? genericSample(v.generics[k].constraint) : got);
+    }
+    return substituteGenerics(t, v.generics, with);
+}
+
 std::vector<ArgumentProblem> checkArguments(const Project& p, const View* caller, const View& popup,
                                             std::string_view arguments, const PlcTypes& plc) {
     std::vector<ArgumentProblem> out;
     const auto given = parseArguments(arguments);
+    // 1.12.20 (lot G) : ses generiques - donnes (T := REAL) ou deduits ; les types des parametres en suivent.
+    const GenericBinding generics = bindGenerics(p, caller, popup, arguments, plc);
+    for (const auto& pb : generics.problems)
+        out.push_back({ArgumentProblem::Kind::TypeMismatch, true, popup.generics.empty() ? std::string{} : popup.generics.front().name, pb});
     for (const auto& [name, text] : given)
-        if (!popup.param(name))
+        if (!popup.param(name) && !isGenericName(popup, name))
             out.push_back({ArgumentProblem::Kind::UnknownParam, true, name,
                            "la popup " + popup.name + " n'a pas de param\xC3\xA8tre " + name
                                + " : retire-le ou d\xC3\xA9" "clare-le dans ses param\xC3\xA8tres"});
-    for (const auto& prm : popup.params) {
+    for (const auto& declared : popup.params) {
+        ViewParam prm = declared;
+        prm.type = boundType(popup, declared.type, &generics);       // 1.12.20 (lot G) : T devenu REAL
         const auto it = std::find_if(given.begin(), given.end(), [&](const auto& g) { return same(g.first, prm.name); });
         if (it == given.end() || trim(it->second).empty()) {
             // 1.12.20 : un rappel non donne vaut NULL - l'appeler ne fait rien (la Console le dit une fois) : un
@@ -781,7 +882,7 @@ std::vector<Suggestion> paramSuggestions(const Project& p, const View& v, std::s
     const auto* prm = v.param(head.substr(0, r));
     if (!prm) return out;
     std::string type;
-    if (r == head.size()) type = prm->type;
+    if (r == head.size()) type = boundType(v, prm->type);           // 1.12.20 (lot G)
     else {
         // un membre de membre : le meme calcul que pour un argument, depuis le parametre
         type = expressionType(p, &v, head, plc);

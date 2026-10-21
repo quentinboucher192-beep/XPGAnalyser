@@ -507,6 +507,9 @@ SymbolArguments symbolArguments(const View& symbol, const Object& instance, cons
     const std::string params = instance.text("params");
     const auto given = parseArguments(params);
     const auto positional = positionalArguments(params);
+    // 1.12.20 (lot G) : un symbole generique - T donne ou deduit des arguments ; une constante se convertit dans son type.
+    const params::GenericBinding generics = project && !symbol.generics.empty() ? params::bindGenerics(*project, nullptr, symbol, params)
+                                                                                : params::GenericBinding{};
     SymbolArguments out;
     for (std::size_t i = 0; i < symbol.params.size(); ++i) {
         const auto& prm = symbol.params[i];
@@ -515,7 +518,7 @@ SymbolArguments symbolArguments(const View& symbol, const Object& instance, cons
         for (const auto& [name, value] : given)
             if (sameName(name, prm.name)) { text = value; named = true; break; }
         if (!named && i < positional.size() && !positional[i].empty()) text = positional[i];
-        text = withoutMarkers(constantArgument(project, prm.type, trimmedCopy(text)));
+        text = withoutMarkers(constantArgument(project, params::boundType(symbol, prm.type, &generics), trimmedCopy(text)));
         if (!text.empty()) out.emplace_back(prm.name, std::move(text));
     }
     return out;

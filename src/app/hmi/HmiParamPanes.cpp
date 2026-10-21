@@ -215,6 +215,12 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
                                       "Tape le nom du nouveau param\xC3\xA8tre (Moteur, Consigne) : il s'ajoute en fin de liste, "
                                       "en R\xC3\xA9" "f\xC3\xA9rence, type ANY.",
                                       {}, field("param19:ajouter")));
+        // 1.12.20 (lot G) : ses generiques - un parametre peut etre de type T (Valeur : T) ; chaque instance le deduit.
+        sec.properties.push_back(prop("G\xC3\xA9n\xC3\xA9riques", hmi::genericsText(v.generics), PG::ValueType::Text,
+                                      "TEMPLATE <T> : vide, rien de g\xC3\xA9n\xC3\xA9rique ; T (ou T : ANY_NUM, ou K, V) : un param\xC3\xA8tre peut "
+                                      "\xC3\xAAtre de type T (Valeur : T, Format : CALLBACK (v : T) : STRING). Chaque instance le d\xC3\xA9" "duit de ce "
+                                      "qu'elle lie (Valeur := PT1, un REAL), ou le donne (T := REAL).",
+                                      {}, field("param19:generiques")));
         // Les types proposes : base, types IHM, DDT de l'API (dans cet ordre) - sans hote (un essai) ;
         // 1.12.14 : avec lui, la case Type ouvre le selecteur de types (les formes, les types imbriques).
         std::vector<std::string> typeChoices;
@@ -382,6 +388,7 @@ std::vector<PG::Category> paramCategories(const hmi::Project& p, const hmi::View
 std::string fieldLabel(std::string_view field, const std::string& value) {
     const std::string f(field);
     if (f == "param19:ajouter") return "Ajouter le param\xC3\xA8tre " + trim(value);
+    if (f == "param19:generiques") return "G\xC3\xA9n\xC3\xA9riques de la vue";      // 1.12.20 (lot G)
     if (f.size() > 4 && f.compare(f.size() - 4, 4, ":nom") == 0) return "Renommer le param\xC3\xA8tre en " + trim(value);
     if (f.size() > 6 && f.compare(f.size() - 6, 6, ":ordre") == 0)
         return value == "Supprimer" ? std::string("Supprimer le param\xC3\xA8tre") : "D\xC3\xA9placer le param\xC3\xA8tre";
@@ -398,10 +405,18 @@ FieldResult applyParamField(hmi::Project& p, hmi::Id viewId, std::string_view fi
         const std::string name = trim(value);
         if (name.empty()) { r.ok = false; r.why = "tape un nom"; return r; }
         if (!hmi::isIdentifier(name)) { r.ok = false; r.why = "param\xC3\xA8tre : nom invalide '" + name + "'"; return r; }
-        if (v->param(name)) { r.ok = false; r.why = "'" + name + "' existe d\xC3\xA9j\xC3\xA0"; return r; }
+        if (v->param(name) || hmi::params::isGenericName(*v, name)) { r.ok = false; r.why = "'" + name + "' existe d\xC3\xA9j\xC3\xA0"; return r; }
         ViewParam prm;
         prm.name = name;
         v->params.push_back(std::move(prm));
+        return r;
+    }
+    if (rest == "generiques") {                                         // 1.12.20 (lot G) : T, T : ANY_NUM, K, V
+        std::vector<hmi::GenericParam> g;
+        if (!hmi::parseGenerics(value, g, &r.why)) { r.ok = false; return r; }
+        for (const auto& x : g)
+            if (v->param(x.name)) { r.ok = false; r.why = x.name + " est d\xC3\xA9j\xC3\xA0 un param\xC3\xA8tre : un g\xC3\xA9n\xC3\xA9rique se nomme autrement (T, U)"; return r; }
+        v->generics = std::move(g);
         return r;
     }
     const auto colon = rest.find(':');
@@ -598,6 +613,20 @@ PG::Category argumentsCategory(const hmi::Project& p, const hmi::View* caller, c
         // erreur ("?") : rien a retirer.
         if (!arg.empty() || error.empty()) ui::exprfield::mark(row, expectOfType(prm.type));   // 1.12.19 : valeur ou =formule
         cat.properties.push_back(std::move(row));
+    }
+    // 1.12.20 (lot G) : une popup generique - une ligne par T : donne (T := REAL), sinon ce qui est deduit, en gris.
+    const auto generics = hmi::params::bindGenerics(p, caller, popup, arguments, plc);
+    for (std::size_t k = 0; k < popup.generics.size(); ++k) {
+        const auto& g = popup.generics[k];
+        const bool given = generics.from[k] == "donn\xC3\xA9";
+        auto row = prop(g.name + "  \xC2\xB7  g\xC3\xA9n\xC3\xA9rique" + (g.constraint.empty() ? std::string{} : " " + g.constraint), given ? generics.types[k] : std::string{},
+                        PG::ValueType::Text,
+                        "Le type de " + g.name + " pour cette ouverture : vide, d\xC3\xA9" "duit des arguments ; un type (REAL) le fixe.", {},
+                        [setArgument, name = g.name](std::string_view s) { return setArgument && setArgument(name, trim(std::string(s))); });
+        if (!given) row.placeholder = generics.types[k].empty() ? std::string("pas d\xC3\xA9" "duit \xC2\xB7 ANY") : generics.types[k] + " \xC2\xB7 " + generics.from[k];
+        for (const auto& pb : generics.problems)
+            if (pb.rfind(g.name + " ", 0) == 0) row.exprError = pb;
+        cat.properties.insert(cat.properties.begin() + static_cast<std::ptrdiff_t>(k), std::move(row));
     }
     // Les arguments donnes que la popup ne declare pas.
     for (const auto& pb : problems)

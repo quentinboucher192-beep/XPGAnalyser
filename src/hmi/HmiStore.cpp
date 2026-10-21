@@ -413,6 +413,9 @@ std::string serializeView(const View& v) {
            + (prm.type.empty() ? std::string{} : field("type", prm.type))
            + (prm.mode == ParamMode::Reference ? std::string{} : field("mode", std::string(params::paramModeKey(prm.mode))))
            + "\n";
+    // 1.12.20 (lot G, format 28) : les generiques d'un symbole ou d'une popup.
+    for (const auto& g : v.generics)
+        s += "generique" + field("nom", g.name) + (g.constraint.empty() ? std::string{} : field("contrainte", g.constraint)) + "\n";
     // 1.9 : les alarmes d'un symbole (leurs textes citent les parametres).
     for (const auto& a : v.alarms)
         s += "alarme_symbole" + fieldInt("id", a.id) + field("nom", a.name) + field("condition", a.condition)
@@ -597,6 +600,11 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             if (const auto* m = r.get("mode"); m && !m->empty()) prm.mode = params::paramModeFrom(*m);
             if (prm.name.empty()) { warn("ligne " + std::to_string(lineNo) + " : param\xC3\xA8tre sans nom"); continue; }
             v.params.push_back(std::move(prm));
+        } else if (r.word == "generique") {                           // 1.12.20 (lot G)
+            GenericParam g;
+            g.name = toStr(r.get("nom"));
+            g.constraint = toStr(r.get("contrainte"));
+            if (!g.name.empty()) v.generics.push_back(std::move(g));
         } else if (r.word == "alarme_symbole") {                      // 1.9
             AlarmDef a;
             a.id = static_cast<Id>(toInt(r.get("id"), 0));
@@ -842,7 +850,10 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     // format 26 (ou 25...) : la 1.12.19 l'ouvre.
     const bool callbackTypes = std::any_of(p.programs.types.begin(), p.programs.types.end(),
                                            [](const HmiType& t) { return t.kind == HmiTypeKind::Callback; });
-    const int format = callbackTypes ? kFormatVersion : viewMembers ? 26 : tableGestures ? 25 : shortcuts ? 24 : declared ? 23
+    // 1.12.20 (lot G) : le format 28 n'ajoute que les generiques (une structure, un symbole, une popup) ; sans eux, 27...
+    const bool generics = std::any_of(p.programs.types.begin(), p.programs.types.end(), [](const HmiType& t) { return !t.generics.empty(); })
+                       || std::any_of(p.views.begin(), p.views.end(), [](const View& v) { return !v.generics.empty(); });
+    const int format = generics ? kFormatVersion : callbackTypes ? 27 : viewMembers ? 26 : tableGestures ? 25 : shortcuts ? 24 : declared ? 23
                      : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# IHM Studio - projet IHM (format " + std::to_string(format) + ")\n";
@@ -914,6 +925,8 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         if (ty.kind != HmiTypeKind::Structure)
             index += "type_genre" + fieldBare("genre", typeKindKey(ty.kind))
                    + (ty.kind == HmiTypeKind::Callback ? field("signature", ty.signature) : std::string{}) + "\n";   // 1.12.20
+        for (const auto& g : ty.generics)                                  // 1.12.20 (lot G, format 28) : T_Mesure<T>
+            index += "generique" + field("nom", g.name) + (g.constraint.empty() ? std::string{} : field("contrainte", g.constraint)) + "\n";
         for (const auto& m : ty.members)
             index += "membre" + field("nom", m.name) + field("type", m.type) + field("initiale", m.initial)
                    + field("description", m.description) + "\n";
@@ -1498,6 +1511,11 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             }
             p.programs.types.back().kind = typeKindFromKey(toStr(r.get("genre")));
             p.programs.types.back().signature = toStr(r.get("signature"));      // 1.12.20 : un type rappel
+        } else if (r.word == "generique") {                           // 1.12.20 (lot G) : un generique du dernier type
+            GenericParam g;
+            g.name = toStr(r.get("nom"));
+            g.constraint = toStr(r.get("contrainte"));
+            if (!p.programs.types.empty() && !g.name.empty()) p.programs.types.back().generics.push_back(std::move(g));
         } else if (r.word == "valeur_enum") {                         // 1.10 (E) : une valeur d'enumeration
             if (p.programs.types.empty()) {
                 if (report) report->warnings.push_back("valeur d'\xC3\xA9num\xC3\xA9ration sans type IHM : ignor\xC3\xA9" "e");
