@@ -574,6 +574,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiOperators.cpp" />
     <ClCompile Include="src\hmi\HmiOverload.cpp" />
     <ClCompile Include="src\hmi\HmiPerfHistory.cpp" />
+    <ClCompile Include="src\hmi\HmiPid.cpp" />
+    <ClCompile Include="src\hmi\HmiPidLearn.cpp" />
     <ClCompile Include="src\hmi\HmiPipeline.cpp" />
     <ClCompile Include="src\hmi\HmiPopupParams.cpp" />
     <ClCompile Include="src\hmi\HmiPrompt.cpp" />
@@ -1007,6 +1009,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiOperators.hpp" />
     <ClInclude Include="src\hmi\HmiOverload.hpp" />
     <ClInclude Include="src\hmi\HmiPerfHistory.hpp" />
+    <ClInclude Include="src\hmi\HmiPid.hpp" />
     <ClInclude Include="src\hmi\HmiPipeline.hpp" />
     <ClInclude Include="src\hmi\HmiPopupParams.hpp" />
     <ClInclude Include="src\hmi\HmiPrompt.hpp" />

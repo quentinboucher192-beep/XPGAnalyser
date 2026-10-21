@@ -594,6 +594,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_qr_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_video_test tests/hmi_video_test.cpp)          # 1.12.12 (lot H) : le Motion-JPEG en AVI, la lecture
     xpg_target_link_libraries(hmi_video_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(hmi_pid_test tests/hmi_pid_test.cpp)              # 1.12.24 : le Reglage PID (apprendre, statistiques, regler)
+    xpg_target_link_libraries(hmi_pid_test PRIVATE xpg_hmi)
     # 1.12.0 : deux applications, deux rangements (la recopie des projets de la 1.11,
     # ProjectStore et les versions dans chaque application).
     xpg_add_test_executable(edition_test tests/edition_test.cpp src/app/EditionMigration.cpp)
@@ -729,6 +731,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hminatives1216 COMMAND hmi_natives1216_test)           # ---- 1.12.16 : les 39 natives std:: ----
     xpg_add_test(NAME hmiqr        COMMAND hmi_qr_test)                      # ---- 1.12.12 (lot H) : le code QR, versions 1 a 40 ----
     xpg_add_test(NAME hmivideo     COMMAND hmi_video_test)                   # ---- 1.12.12 (lot H) : le Motion-JPEG en AVI, la lecture ----
+    xpg_add_test(NAME hmipid       COMMAND hmi_pid_test)                     # ---- 1.12.24 : le Reglage PID, sept jours d'un four simule ----
     xpg_add_test(NAME edition      COMMAND edition_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # ---- 1.12.0 : deux applications ----
     xpg_add_test(NAME hmioverload  COMMAND hmi_overload_test)                # ---- 1.11.20 : les signatures et les surcharges ----
     xpg_add_test(NAME hmidecl      COMMAND hmi_decl_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/decl/corpus.txt   # ---- 1.11.18 : les declarations (lot 2) ----
