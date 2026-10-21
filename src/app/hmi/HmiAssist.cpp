@@ -1721,7 +1721,8 @@ bool publicMembers(const hmi::Project& hp, const std::string& path, const std::s
 // leur valeur pour ce type (= 65535), ce qu'ils disent ; une fonction se pose avec ses ().
 // Dans un script C++ (la meme aide) : std::numeric_limits< (les types, le choix pose UINT>::), puis
 // std::numeric_limits<UINT>:: et std::numbers:: (les membres sous leur nom C++ : max(), pi).
-bool templateItems(std::string_view before, const std::string& needle, const std::function<void(Item)>& push) {
+bool templateItems(std::string_view before, const std::string& needle, const std::function<void(Item)>& push,
+                   const hmi::Project* project = nullptr) {
     const auto blankBack = [&](std::size_t k) {
         while (k > 0 && (before[k - 1] == ' ' || before[k - 1] == '\t')) --k;
         return k;
@@ -1789,6 +1790,21 @@ bool templateItems(std::string_view before, const std::string& needle, const std
             it.chain = info->isClass;
             push(std::move(it));
         }
+        // 1.12.20 : STATIC_CAST<, DYNAMIC_CAST< - aussi les enumerations du projet (STATIC_CAST<T_MODE>(Code)).
+        if (project && sim::lib::castTemplate(info->name))
+            for (const auto& ty : project->programs.types) {
+                if (ty.kind != hmi::HmiTypeKind::Enumeration) continue;
+                const int r = matchRank(ty.name, needle);
+                if (r < 0) continue;
+                Item it;
+                it.text = ty.name;
+                it.detail = "\xC3\xA9num\xC3\xA9ration du projet" + std::string(kDot) + std::to_string(ty.values.size()) + " valeur"
+                          + (ty.values.size() > 1 ? "s" : "") + kDot + std::string(info->library);
+                it.kind = Kind::Type;
+                it.rank = r * 100 + k++;
+                it.insert = ty.name + ">(";
+                push(std::move(it));
+            }
         return true;
     }
     if (before[e - 1] != '.') return false;
@@ -1840,7 +1856,7 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
 
     // 1.12.7 : NUMERIC_LIMITS< (les types), NUMERIC_LIMITS<UINT>. et NUMBERS. (les membres et leur valeur).
     if ((where.context == Context::Code || where.context == Context::Member || where.context == Context::Placeholder)
-        && templateItems(before, needle, push))
+        && templateItems(before, needle, push, &hp))
         return out;
 
     // Les noms dans une chaine : filtres sur tout ce qui est tape depuis le

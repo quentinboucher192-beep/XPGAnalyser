@@ -69,6 +69,13 @@ struct Bench {
         var("Mot", "WORD", "16#0012");
         var("TabIhm", "ARRAY[1..5] OF INT", "[4, 9, 1, 9, 6]");
         var("ListeIhm", "LIST OF REAL", "[3.0, 1.0, 2.0]");
+        // 1.12.20 : une enumeration du projet (STATIC_CAST<T_MODE>, DYNAMIC_CAST<T_MODE>).
+        HmiType mode;
+        mode.id = p.allocate();
+        mode.name = "T_MODE";
+        mode.kind = HmiTypeKind::Enumeration;
+        mode.values = {{"Arret", 0}, {"Auto", 1}, {"Manu", 2}};
+        p.programs.types.push_back(mode);
         View v = makeView(p, "Vue_Essai");
         p.views.push_back(v);
         p.config.startView = p.views.back().id;
@@ -417,6 +424,48 @@ void templates() {
     same("BOOL", "R := Compteur<10;", "TRUE", "Compteur<10 : une comparaison");
 }
 
+// ------------------------------------------------- 1.12.20 : STATIC_CAST et DYNAMIC_CAST ---
+void casts() {
+    std::printf("-- 1.12.20 : STATIC_CAST<T>(x) et DYNAMIC_CAST<T>(x)\n");
+    // STATIC_CAST : comme static_cast - le reel tronque vers zero, l'entier replie modulo, le BOOL, l'enumeration.
+    same("INT", "R := STATIC_CAST<INT>(2.7);", "2", "STATIC_CAST<INT>(2.7) : tronque");
+    same("INT", "R := STATIC_CAST<INT>(-2.7);", "-2", "STATIC_CAST<INT>(-2.7) : vers zero");
+    same("INT", "R := STATIC_CAST<INT>(40000);", "-25536", "STATIC_CAST<INT>(40000) : replie modulo 2^16");
+    same("INT", "R := STATIC_CAST<SINT>(300);", "44", "STATIC_CAST<SINT>(300) : replie modulo 2^8");
+    same("UINT", "R := STATIC_CAST<UINT>(-1);", "65535", "STATIC_CAST<UINT>(-1)");
+    same("DINT", "R := STATIC_CAST<DINT>(TRUE);", "1", "STATIC_CAST<DINT>(TRUE)");
+    same("BOOL", "R := STATIC_CAST<BOOL>(5);", "TRUE", "STATIC_CAST<BOOL>(5) : non nul");
+    same("BOOL", "R := STATIC_CAST<BOOL>(0.0);", "FALSE", "STATIC_CAST<BOOL>(0.0)");
+    same("REAL", "R := STATIC_CAST<REAL>(Compteur) / 2.0;", "3.5", "STATIC_CAST<REAL>(Compteur) : la division reelle");
+    same("BOOL", "R := STATIC_CAST<REAL>(0.1) <> 0.1;", "TRUE", "STATIC_CAST<REAL> arrondit au float");
+    same("DINT", "VAR m : T_MODE; END_VAR\nm := STATIC_CAST<T_MODE>(2);\nR := STATIC_CAST<DINT>(m);", "2", "STATIC_CAST<T_MODE>(2) puis son numero");
+    same("BOOL", "VAR m : T_MODE; END_VAR\nm := STATIC_CAST<T_MODE>(1);\nR := m = T_MODE#Auto;", "TRUE", "STATIC_CAST<T_MODE>(1) = T_MODE#Auto");
+    // DYNAMIC_CAST : verifie en marche ; ce qui tient passe tel quel.
+    same("INT", "R := DYNAMIC_CAST<INT>(1234);", "1234", "DYNAMIC_CAST<INT>(1234)");
+    same("DINT", "R := DYNAMIC_CAST<DINT>(12.0);", "12", "DYNAMIC_CAST<DINT>(12.0) : sans decimales");
+    same("BOOL", "R := DYNAMIC_CAST<BOOL>(1);", "TRUE", "DYNAMIC_CAST<BOOL>(1)");
+    same("DINT", "R := STATIC_CAST<DINT>(DYNAMIC_CAST<T_MODE>(2));", "2", "DYNAMIC_CAST<T_MODE>(2) : une valeur de T_MODE");
+    fails("i := DYNAMIC_CAST<INT>(40000);", "DYNAMIC_CAST<INT> : 40000 ne tient pas dans un INT (-32768 \xE2\x80\xA6 32767)", "DYNAMIC_CAST<INT>(40000)");
+    fails("i := DYNAMIC_CAST<DINT>(2.5);", "DYNAMIC_CAST<DINT> : 2.5 n'est pas un entier", "DYNAMIC_CAST<DINT>(2.5)");
+    fails("i := DYNAMIC_CAST<UINT>(-1);", "DYNAMIC_CAST<UINT> : -1 ne tient pas dans un UINT (0 \xE2\x80\xA6 65535)", "DYNAMIC_CAST<UINT>(-1)");
+    fails("b := DYNAMIC_CAST<BOOL>(2);", "DYNAMIC_CAST<BOOL> : 2 n'est ni 0 ni 1", "DYNAMIC_CAST<BOOL>(2)");
+    fails("VAR m : T_MODE; END_VAR\nm := DYNAMIC_CAST<T_MODE>(7);", "DYNAMIC_CAST<T_MODE> : 7 n'est pas une valeur de T_MODE (Arret = 0, Auto = 1, Manu = 2)",
+          "DYNAMIC_CAST<T_MODE>(7)");
+    // L'erreur se rattrape : TRY ... CATCH (comme std::bad_cast).
+    same("STRING", "TRY\n    i := DYNAMIC_CAST<INT>(40000);\n    R := 'passe';\nCATCH\n    R := 'rattrape';\nEND_TRY", "rattrape",
+         "DYNAMIC_CAST rate : TRY...CATCH le rattrape");
+    // T d'une fonction generique : le type deduit a l'appel.
+    same("INT", "TEMPLATE <T : ANY_NUM> FUNCTION Arrondir(x : REAL; modele : T) : T\n    RETURN STATIC_CAST<T>(x);\nEND_FUNCTION\n"
+                "R := Arrondir(7.6, Compteur);", "7", "STATIC_CAST<T> dans un TEMPLATE (T deduit : INT)");
+    fails("TEMPLATE <T : ANY_NUM> FUNCTION Verifier(x : DINT; modele : T) : T\n    RETURN DYNAMIC_CAST<T>(x);\nEND_FUNCTION\n"
+          "i := Verifier(70000, Compteur);", "DYNAMIC_CAST<T> : 70000 ne tient pas dans un INT", "DYNAMIC_CAST<T> dans un TEMPLATE (T = INT)");
+    // Les fautes : dites a la lecture du script (le type) ou en marche (le nom).
+    fails("i := STATIC_CAST(2.5);", "STATIC_CAST attend son type : STATIC_CAST<INT>(x)", "STATIC_CAST sans son type");
+    fails("i := DYNAMIC_CAST<STRING>(2);", "DYNAMIC_CAST<STRING> : un type num\xC3\xA9rique, BOOL ou une \xC3\xA9num\xC3\xA9ration est attendu", "DYNAMIC_CAST<STRING>");
+    fails("i := STATIC_CAST<INT>('12');", "un texte ne se convertit pas ainsi", "STATIC_CAST<INT>('12')");
+    fails("i := STATIC_CAST<UINTT>(2);", "UINTT n'est pas un type \xE2\x80\x94 veux-tu dire UINT ?", "STATIC_CAST<UINTT>");
+}
+
 // -------------------------------------------------------------------------- <bit> ---
 void bits() {
     std::printf("-- <bit> : BIT_COUNT, BIT_FIRST, BIT_TEST, BIT_SET, BIT_RESET\n");
@@ -712,6 +761,7 @@ int main() {
     extraire();
     numeric();
     templates();
+    casts();          // 1.12.20 : STATIC_CAST, DYNAMIC_CAST
     bits();
     enumerations();
     avant();

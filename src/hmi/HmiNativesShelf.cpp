@@ -90,7 +90,7 @@ const std::vector<Rule>& rules() {
         {"math", "nombres/calcul", {}},
         {"select", "nombres/choisir", {}},
         {"numeric", "nombres/interpoler", {"INTERPOLER_TABLE"}},
-        {"numeric", "nombres/entiers", {"GCD", "LCM", "MIDPOINT", "ADD_SAT", "SUB_SAT", "MUL_SAT", "DIV_SAT", "SATURATE_CAST"}},
+        {"numeric", "nombres/entiers", {"GCD", "LCM", "MIDPOINT", "ADD_SAT", "SUB_SAT", "MUL_SAT", "DIV_SAT", "SATURATE_CAST", "STATIC_CAST", "DYNAMIC_CAST"}},
         {"numeric", "conteneurs/cumuls", {}},
         {"limits", "nombres/constantes", {}},
         {"numbers", "nombres/constantes", {}},

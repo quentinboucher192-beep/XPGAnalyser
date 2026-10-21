@@ -18219,7 +18219,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 373,   // 1.12.20 : + 3 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 374,   // 1.12.20 : + 4 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -30310,6 +30310,25 @@ void saisieNatives1127() {
     const auto ints = as::suggest(hp, nullptr, "x := SATURATE_CAST<", "");
     const auto* i16 = find(ints, "INT");
     check(ints.size() == 12 && i16 && i16->insert == "INT>(" && !find(ints, "REAL"), "SATURATE_CAST< : les 12 entiers, INT pose INT>(");
+    {
+        // 1.12.20 : STATIC_CAST< et DYNAMIC_CAST< - les 15 types (BOOL compris) et les enumerations du projet.
+        hmi::Project pe;
+        hmi::HmiType mode;
+        mode.id = pe.allocate();
+        mode.name = "T_MODE";
+        mode.kind = hmi::HmiTypeKind::Enumeration;
+        mode.values = {{"Arret", 0}, {"Auto", 1}};
+        pe.programs.types.push_back(mode);
+        const auto casts = as::suggest(pe, nullptr, "x := STATIC_CAST<", "");
+        const auto* en = find(casts, "T_MODE");
+        check(casts.size() == 16 && find(casts, "BOOL") && find(casts, "REAL") && en && en->insert == "T_MODE>(",
+              "STATIC_CAST< : les 15 types et T_MODE (une \xC3\xA9num\xC3\xA9ration du projet), T_MODE pose T_MODE>( (" + std::to_string(casts.size()) + ")");
+        const auto dyn = as::suggest(pe, nullptr, "x := DYNAMIC_CAST<", "T_");
+        check(dyn.size() == 1 && dyn.front().text == "T_MODE", "DYNAMIC_CAST<T_ : T_MODE");
+        const auto st = as::suggest(pe, nullptr, "i := ", "STATIC_C");
+        const auto* sc = find(st, "STATIC_CAST");
+        check(sc && sc->insert == "STATIC_CAST<" && sc->chain, "STATIC_C : STATIC_CAST pose STATIC_CAST< (puis les types)");
+    }
     const auto fns = as::suggest(hp, nullptr, "i := ", "LIST_FIN");
     check(find(fns, "LIST_FIND_IF") != nullptr, "LIST_FIN : LIST_FIND_IF propos\xC3\xA9" "e");
     const auto lim = as::suggest(hp, nullptr, "i := ", "NUMERIC_LIM");

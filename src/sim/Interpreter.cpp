@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <limits>
 #include <map>
 #include <set>
 #include <optional>
@@ -1273,7 +1274,9 @@ private:
                 return a == std::string::npos || b == std::string::npos ? x : x.substr(0, a + 1) + type + x.substr(b);
             };
             advance();
-            if (!lib::templateAccepts(*info, type)) {
+            // 1.12.20 : STATIC_CAST<T_MODE>, DYNAMIC_CAST<T> (le T d'une fonction generique) - un nom qui
+            // n'est pas un type du langage se resout en marche (castNative).
+            if (!lib::templateAccepts(*info, type) && !(lib::castTemplate(info->name) && !lib::elementaryTypeName(type))) {
                 // Un nom qui n'est pas un type, proche d'un type accepte (UNIT) : « UNIT n'est pas un type -
                 // veux-tu dire UINT ? » (la maquette) ; un type du langage ou du projet : le type attendu.
                 if (!lib::elementaryTypeName(type)) {
@@ -6359,6 +6362,7 @@ private:
         const auto* t = lib::templateInfo(u);
         if (t && t->required && tmpl.empty()) return core::Result<RV>(dialectError(std::string(t->hint)));
         if (info->group == "numeric") return std::optional<core::Result<RV>>(numericNative(u, tmpl, e));
+        if (info->group == "cast") return std::optional<core::Result<RV>>(castNative(u, tmpl, e));            // 1.12.20
         if (info->group == "bits") return std::optional<core::Result<RV>>(bitNative(u, e));
         if (info->group == "map") return std::optional<core::Result<RV>>(mapNative(u, e));
         if (info->group == "tuple") return std::optional<core::Result<RV>>(tupleNative(u, e));
@@ -7493,6 +7497,116 @@ private:
             r = lib::wideDiv(wa, wb);
         }
         return RV{lib::saturate(r, it), nullptr};
+    }
+
+    // ---- 1.12.20 : STATIC_CAST<T>(x) et DYNAMIC_CAST<T>(x) ------------------------------------------
+    //  STATIC_CAST : la conversion explicite, comme static_cast - un reel tronque vers zero, un entier
+    //  replie modulo 2^n (40000 -> -25536 en INT), un nombre devenu BOOL (non nul : TRUE), un numero devenu
+    //  une valeur d'enumeration (sans controle, comme en C++). DYNAMIC_CAST : la conversion verifiee en
+    //  marche - x doit tenir exactement dans T (un entier dans ses bornes, un reel sans decimales, 0 ou 1
+    //  pour un BOOL, un numero qui est une valeur de l'enumeration) ; sinon une erreur, que TRY...CATCH
+    //  rattrape (comme std::bad_cast). T : un type numerique, BOOL, une enumeration, ou le T d'une fonction
+    //  generique (TEMPLATE <T>, le type deduit a l'appel).
+    core::Result<RV> castNative(const std::string& u, const std::string& tmpl, const Expr& e) {
+        const bool checked = u == "DYNAMIC_CAST";
+        const std::string head = u + "<" + tmpl + ">";
+        const auto notAType = [&](const std::string& why) -> core::Result<RV> {
+            const std::vector<std::string> pool(lib::limitsTypes().begin(), lib::limitsTypes().end());
+            const std::string near = lib::closest(tmpl, pool);
+            return dialectError(head + " : " + tmpl + " n'est pas un type" + (near.empty() ? " (" + why + ")" : near));
+        };
+        auto tt = typeFromText(tmpl);
+        if (!tt) return notAType(tt.error().message());
+        auto rt = resolve(*tt);
+        if (!rt) return notAType(rt.error().message());
+        const TypeDesc& target = **rt;
+        std::string tname = upperOf(target.name);
+        if (target.kind != TypeDesc::Kind::Scalar || target.scalar == Type::String || target.scalar == Type::Time || isDateType(target.scalar))
+            return dialectError(head + " : " + std::string(lib::templateInfo(u)->want));
+        std::vector<std::pair<std::string, std::int64_t>> values;
+        const bool toEnum = !target.name.empty() && enumValues(target.name, values);
+        if (tname.empty() || toEnum) tname = toEnum ? tname : valueTypeText(target.scalar);
+        auto w = rich(*e.arguments[0].second);
+        if (!w) return w;
+        if (w->o) return dialectError(head + " : " + typeNameOf(*w) + " ne se convertit pas ainsi (un nombre, un BOOL ou une \xC3\xA9num\xC3\xA9ration)");
+        const Value x = w->v;
+        const Type xt = x.type();
+        if (xt == Type::String || xt == Type::Time || isDateType(xt) || !(xt == Type::Real || xt == Type::Bool || isInteger(xt)))
+            return dialectError(head + " : " + (xt == Type::String ? std::string("un texte") : xt == Type::Time ? std::string("une dur\xC3\xA9" "e") : std::string(toString(xt)))
+                                + " ne se convertit pas ainsi - " + u + " convertit des nombres, des BOOL et des \xC3\xA9num\xC3\xA9rations (un texte : STRING_TO_INT, STRING_TO_REAL)");
+        const bool real = xt == Type::Real;
+        const double r = real ? x.asReal() : 0.0;
+        const std::string shownX = x.display();
+        if (real && !std::isfinite(r)) return dialectError(head + " : " + shownX + " n'est pas un nombre fini");
+        // ---- vers un reel : REAL (arrondi au float) ou LREAL ----
+        if (target.scalar == Type::Real) {
+            const double d = real ? r : xt == Type::Bool ? ((x.asInteger() != 0) ? 1.0 : 0.0)
+                           : (xt == Type::ULInt || xt == Type::LWord) ? static_cast<double>(static_cast<std::uint64_t>(x.asInteger()))
+                                                                      : static_cast<double>(x.asInteger());
+            if (tname == "REAL") {
+                if (checked && std::fabs(d) > static_cast<double>(std::numeric_limits<float>::max()))
+                    return dialectError(head + " : " + shownX + " ne tient pas dans un REAL (au plus 3.4E38)");
+                return RV{Value::real(static_cast<double>(static_cast<float>(d))), nullptr};
+            }
+            return RV{Value::real(d), nullptr};
+        }
+        // ---- vers un BOOL ----
+        if (target.scalar == Type::Bool) {
+            const bool zero = real ? r == 0.0 : x.asInteger() == 0;
+            if (checked && !(xt == Type::Bool || zero || (real ? r == 1.0 : x.asInteger() == 1)))
+                return dialectError(head + " : " + shownX + " n'est ni 0 ni 1");
+            return RV{Value::boolean(!zero), nullptr};
+        }
+        // ---- vers un entier (ou une enumeration : un DINT qui garde le nom de son type) ----
+        lib::IntType it;
+        if (!lib::intType(toEnum ? "DINT" : tname, it) && !lib::intType(valueTypeText(target.scalar), it))
+            return dialectError(head + " : " + std::string(lib::templateInfo(u)->want));
+        // Les bits de x, en complement a deux sur 64 bits (un reel : tronque vers zero), et sa valeur exacte.
+        std::uint64_t bits = 0;
+        lib::Wide exact;
+        if (real) {
+            const double t = std::trunc(r);
+            if (checked && t != r) return dialectError(head + " : " + shownX + " n'est pas un entier (il a des d\xC3\xA9" "cimales)");
+            if (t >= 18446744073709551616.0 || t < -9223372036854775808.0)
+                return dialectError(head + " : " + shownX + " est trop grand pour un entier (64 bits)");
+            if (t < 0.0) {
+                const auto n = static_cast<std::int64_t>(t);
+                bits = static_cast<std::uint64_t>(n);
+                exact.neg = true;
+                exact.mag = static_cast<std::uint64_t>(-(n + 1)) + 1;
+            } else {
+                bits = static_cast<std::uint64_t>(t);
+                exact.mag = bits;
+            }
+        } else if (xt == Type::Bool) {
+            bits = (x.asInteger() != 0) ? 1 : 0;
+            exact.mag = bits;
+        } else {
+            bits = static_cast<std::uint64_t>(x.asInteger());
+            exact = lib::wideOf(x);
+        }
+        if (toEnum) {
+            if (checked) {
+                const bool found = !exact.huge && std::any_of(values.begin(), values.end(), [&](const auto& v) {
+                    return v.second < 0 ? exact.neg && exact.mag == static_cast<std::uint64_t>(-(v.second + 1)) + 1
+                                        : !exact.neg && exact.mag == static_cast<std::uint64_t>(v.second);
+                });
+                if (!found) {
+                    std::string list;
+                    for (std::size_t k = 0; k < values.size() && k < 6; ++k) list += (k ? ", " : "") + values[k].first + " = " + std::to_string(values[k].second);
+                    if (values.size() > 6) list += ", \xE2\x80\xA6";
+                    return dialectError(head + " : " + shownX + " n'est pas une valeur de " + target.name + " (" + list + ")");
+                }
+            }
+        } else if (checked && !lib::fits(exact, it)) {
+            const std::string hi = it.isSigned ? std::to_string(static_cast<std::int64_t>(it.hiBits)) : std::to_string(it.hiBits);
+            return dialectError(head + " : " + shownX + " ne tient pas dans un " + tname + " (" + std::to_string(it.lo) + " \xE2\x80\xA6 " + hi + ")");
+        }
+        // Le repli modulo 2^n (static_cast d'un entier trop grand) : les n bits du bas, signe etendu.
+        const std::uint64_t mask = it.bits >= 64 ? ~std::uint64_t{0} : (std::uint64_t{1} << it.bits) - 1;
+        std::uint64_t low = bits & mask;
+        if (it.isSigned && it.bits < 64 && ((low >> (it.bits - 1)) & 1u)) low |= ~mask;
+        return RV{Value::integer(it.type, static_cast<std::int64_t>(low)), nullptr};
     }
 
     // ---- <bit> : BIT_COUNT, BIT_FIRST, BIT_TEST, BIT_SET, BIT_RESET ----------------------

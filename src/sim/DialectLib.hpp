@@ -52,6 +52,9 @@ struct TemplateInfo {
 [[nodiscard]] const std::vector<TemplateInfo>& templates();
 [[nodiscard]] const TemplateInfo* templateInfo(std::string_view name) noexcept;     // sans casse
 [[nodiscard]] bool templateAccepts(const TemplateInfo& t, std::string_view type) noexcept;
+// 1.12.20 : STATIC_CAST et DYNAMIC_CAST - leur T peut aussi etre une enumeration du projet ou le T d'une
+// fonction generique (TEMPLATE <T>) : un nom qui n'est pas un type du langage se resout en marche.
+[[nodiscard]] bool castTemplate(std::string_view name) noexcept;
 // Les 15 types de NUMERIC_LIMITS, dans l'ordre de l'aide a la saisie.
 [[nodiscard]] const std::vector<std::string_view>& limitsTypes();
 // Ce qu'un type est : "entier non signe, 16 bits", et son nom en C ("uint16_t").

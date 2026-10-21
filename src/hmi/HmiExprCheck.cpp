@@ -1080,6 +1080,9 @@ private:
             const std::string_view ret = colon == std::string_view::npos ? std::string_view{} : sig.substr(colon + 3);
             r.type = ret == "BOOL" ? T::Bool : ret == "STRING" ? T::Text : ret == "DINT" || nat->group == "numeric" ? T::Num : T::Unknown;
             if (u == "MIDPOINT" || u.find("_SAT") != std::string::npos || u == "SATURATE_CAST" || u == "BIT_SET" || u == "BIT_RESET") r.type = T::Num;
+            // 1.12.20 : STATIC_CAST<T>(x), DYNAMIC_CAST<T>(x) - le type de T (un nombre, un BOOL, une enumeration) : la
+            // lecture des fx a deja ote le <T> (templatesAsValues), le resultat reste ouvert.
+            if (sim::lib::castTemplate(u)) r.type = T::Unknown;
             if (ret == "INT" || ret == "REAL" || (ret == "comme IN" && nat->group != "utility")) r.type = T::Num;    // 1.12.16 : YEAR, FMOD, CEIL, BYTESWAP...
             return r;
         }

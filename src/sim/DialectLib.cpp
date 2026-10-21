@@ -126,6 +126,17 @@ const std::vector<TemplateInfo>& templates() {
                      "Convertit x vers T en bloquant aux bornes de T."});
         v.push_back({"MIDPOINT", false, false, "", nums, "un type num\xC3\xA9rique est attendu (SINT \xE2\x80\xA6 LWORD, REAL, LREAL)", "MIDPOINT<INT>(a, b)", "",
                      "std::midpoint", "Le milieu de a et b, sans d\xC3\xA9" "bordement."});
+        // 1.12.20 : STATIC_CAST<T>(x), DYNAMIC_CAST<T>(x) - static_cast et dynamic_cast du C++.
+        const std::string_view castWant =
+            "un type num\xC3\xA9rique, BOOL ou une \xC3\xA9num\xC3\xA9ration est attendu (SINT \xE2\x80\xA6 ULINT, BYTE \xE2\x80\xA6 LWORD, REAL, LREAL, "
+            "BOOL, T_MODE\xE2\x80\xA6)";
+        v.push_back({"STATIC_CAST", false, true, "", limitsTypes(), castWant, "STATIC_CAST<INT>(x)",
+                     "STATIC_CAST attend son type : STATIC_CAST<INT>(x)", "static_cast",
+                     "Convertit x vers T, comme static_cast : un r\xC3\xA9" "el tronqu\xC3\xA9 vers z\xC3\xA9ro, un entier repli\xC3\xA9 (modulo), un num\xC3\xA9ro "
+                     "devenu une valeur d'\xC3\xA9num\xC3\xA9ration."});
+        v.push_back({"DYNAMIC_CAST", false, true, "", limitsTypes(), castWant, "DYNAMIC_CAST<INT>(x)",
+                     "DYNAMIC_CAST attend son type : DYNAMIC_CAST<INT>(x)", "dynamic_cast",
+                     "Convertit x vers T en le v\xC3\xA9rifiant en marche : x doit y tenir exactement, sinon une erreur, que TRY\xE2\x80\xA6" "CATCH rattrape."});
         for (std::string_view n : {"ADD_SAT", "SUB_SAT", "MUL_SAT", "DIV_SAT"})
             v.push_back({n, false, false, "", ints, intWant,
                          n == "ADD_SAT" ? "ADD_SAT<INT>(a, b)" : n == "SUB_SAT" ? "SUB_SAT<INT>(a, b)" : n == "MUL_SAT" ? "MUL_SAT<INT>(a, b)" : "DIV_SAT<INT>(a, b)",
@@ -141,6 +152,11 @@ const TemplateInfo* templateInfo(std::string_view name) noexcept {
     for (const auto& t : templates())
         if (t.name == u) return &t;
     return nullptr;
+}
+
+bool castTemplate(std::string_view name) noexcept {
+    const std::string u = upper(trimmed(name));
+    return u == "STATIC_CAST" || u == "DYNAMIC_CAST";
 }
 
 bool templateAccepts(const TemplateInfo& t, std::string_view type) noexcept {
@@ -626,6 +642,13 @@ const std::vector<NativeInfo>& natives() {
         {"MUL_SAT", 2, 2, false, false, false, false, "numeric", "MUL_SAT[<T>](a, b) : T", "a \xC3\x97 b, bloqu\xC3\xA9 aux bornes de T."},
         {"DIV_SAT", 2, 2, false, false, false, false, "numeric", "DIV_SAT[<T>](a, b) : T", "a / b, bloqu\xC3\xA9 aux bornes de T (b = 0 reste une erreur)."},
         {"SATURATE_CAST", 1, 1, false, false, false, false, "numeric", "SATURATE_CAST<T>(x) : T", "x converti vers T en bloquant aux bornes (un r\xC3\xA9" "el est d'abord arrondi)."},
+        // 1.12.20 : static_cast et dynamic_cast
+        {"STATIC_CAST", 1, 1, false, false, false, false, "cast", "STATIC_CAST<T>(x) : T",
+         "x converti vers T comme static_cast : un r\xC3\xA9" "el tronqu\xC3\xA9 vers z\xC3\xA9ro (2.7 donne 2), un entier repli\xC3\xA9 modulo (40000 donne -25536 en INT), "
+         "un num\xC3\xA9ro devenu une valeur d'\xC3\xA9num\xC3\xA9ration, un nombre devenu BOOL (non nul : TRUE)."},
+        {"DYNAMIC_CAST", 1, 1, false, false, false, false, "cast", "DYNAMIC_CAST<T>(x) : T",
+         "x converti vers T s'il y tient exactement - un entier dans ses bornes, un r\xC3\xA9" "el sans d\xC3\xA9" "cimales, un num\xC3\xA9ro qui est une valeur de "
+         "l'\xC3\xA9num\xC3\xA9ration, 0 ou 1 pour un BOOL ; sinon une erreur, que TRY\xE2\x80\xA6" "CATCH rattrape (comme std::bad_cast)."},
         // ---- <bit>
         {"BIT_COUNT", 1, 1, false, false, false, false, "bits", "BIT_COUNT(w) : DINT", "Le nombre de bits \xC3\xA0 1 (std::popcount)."},
         {"BIT_FIRST", 1, 1, false, false, false, false, "bits", "BIT_FIRST(w) : DINT", "Le num\xC3\xA9ro du plus bas bit \xC3\xA0 1 ; \xE2\x88\x92" "1 si aucun (std::countr_zero)."},
