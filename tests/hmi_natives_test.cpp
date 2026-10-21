@@ -210,7 +210,7 @@ void catalogueComplet() {
                           "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE",
                           "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_GIF_JOUER", "IHM_GIF_PAUSE",
                           "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_ESCLAVE_SIMULE", "IHM_LOG",
-                          "IHM_APRES", "IHM_CHAQUE", "IHM_ANNULER"}) {
+                          "IHM_APRES", "IHM_CHAQUE", "IHM_ANNULER", "IHM_SUR_CHANGEMENT"}) {
         check(has(n), std::string("dans le catalogue : ") + n);
         check(isHmiFunction(n), std::string("connue de Compiler : ") + n);
     }
@@ -221,7 +221,7 @@ void catalogueComplet() {
             ++ihm;
             check(isHmiFunction(f.name), "la fonction du catalogue est connue de Compiler : " + std::string(f.name));
         }
-    check(ihm == 40, "40 fonctions IHM_ (" + std::to_string(ihm) + ")");
+    check(ihm == 41, "41 fonctions IHM_ (" + std::to_string(ihm) + ")");
     // Chaque fonction : sa categorie existe, sa syntaxe en C et C++ est dite.
     for (const auto& f : nt::functions()) {
         check(nt::category(f.category) != nullptr, std::string(f.name) + " : categorie " + std::string(f.category));
@@ -803,6 +803,123 @@ void rappels1219() {
 
 
 // 1.12.19 : Compiler (le controle d'un script, avec son projet) accepte les rappels et les generiques.
+// 1.12.20 (lot N) : les dernieres natives a rappel - MAP_REMOVE_IF (m, f), le pli et les scans par un rappel (des
+// structures aussi), la cle d'un tri, IHM_SUR_CHANGEMENT ; les formes d'avant restent.
+void rappels1220() {
+    std::printf("-- 1.12.20 : les dernieres natives a rappel\n");
+    std::string err;
+    const auto lots = [](Project& p) {
+        HmiType lot;
+        lot.id = p.allocate();
+        lot.name = "T_Lot";
+        lot.members = {TypeMember{"Nom", "STRING"}, TypeMember{"Poids", "REAL"}};
+        p.programs.types.push_back(lot);
+        Variable v;
+        v.id = p.allocate();
+        v.name = "Lots";
+        v.type = "LIST OF T_Lot";
+        v.initial = "[(Nom := 'B12', Poids := 2.5), (Nom := 'A07', Poids := 4.0), (Nom := 'C03', Poids := 1.25)]";
+        p.programs.variables.push_back(v);
+    };
+    const auto expect = [&](const std::string& type, const std::string& body, const std::string& want, const std::string& what,
+                            const std::function<void(Project&)>& extra = {}) {
+        Bench b(type, body, extra);
+        const std::string got = b.runScript(&err);
+        check(got == want && err.empty(), what + " = " + got + (err.empty() ? std::string{} : " [" + err + "]") + ", attendu " + want);
+    };
+    const auto refused = [&](const std::string& type, const std::string& body, const std::string& word, const std::string& what) {
+        Bench b(type, body);
+        (void)b.runScript(&err);
+        check(err.find(word) != std::string::npos, what + " (" + err + ")");
+    };
+    const std::string L = "VAR L : LIST OF INT := [3, -7, 5, 1]; END_VAR\n";
+    const std::string M = "VAR M : MAP[STRING] OF REAL; END_VAR\nMAP_SET(M, 'ecrou', 0.0);\nMAP_SET(M, 'vis', 120.0);\nMAP_SET(M, 'obsolete', 5.0);\n";
+    // MAP_REMOVE_IF(m, f) : f(cle, valeur).
+    expect("INT", M + "R := MAP_REMOVE_IF(M, LAMBDA (k : STRING; v : REAL) : BOOL => v <= 0.0 OR k = 'obsolete') * 10 + MAP_SIZE(M);", "21",
+           "MAP_REMOVE_IF(M, f(k, v)) : 2 retirees, 1 reste");
+    expect("INT", M + "R := MAP_REMOVE_IF(M, COMPARAISON#Inferieur, 100.0);", "2", "MAP_REMOVE_IF : la forme d'avant (COMPARAISON#, valeur) reste");
+    refused("INT", M + "R := MAP_REMOVE_IF(M, COMPARAISON#Inferieur);", "demande sa valeur", "MAP_REMOVE_IF(M, COMPARAISON#) sans valeur : la raison");
+    // Le pli : ACCUMULATE, REDUCE, TRANSFORM_REDUCE - des structures aussi.
+    expect("REAL", "R := ACCUMULATE(Lots, 0.0, LAMBDA (s : REAL; l : T_Lot) : REAL => s + l.Poids);", "7.75",
+           "ACCUMULATE(Lots, 0.0, s + l.Poids) : une liste de structures", lots);
+    expect("INT", L + "R := REDUCE(L, -100, LAMBDA (a : INT; b : INT) : INT => MAX(a, b));", "5", "REDUCE(L, init, MAX)");
+    expect("REAL", "R := TRANSFORM_REDUCE(Lots, 0.0, LAMBDA (a : REAL; b : REAL) : REAL => MAX(a, b), LAMBDA (l : T_Lot) : REAL => l.Poids);", "4",
+           "TRANSFORM_REDUCE(Lots, 0.0, MAX, l.Poids) : deux rappels", lots);
+    expect("INT", L + "R := ACCUMULATE(L, 1, OPERATION#Produit);", "-105", "ACCUMULATE : la forme d'avant (OPERATION#) reste");
+    refused("INT", L + "R := REDUCE(L, LAMBDA (a : INT; b : INT) : INT => a + b);", "avant le rappel", "REDUCE(L, f) : la valeur de depart vient avant le rappel");
+    refused("INT", L + "R := ACCUMULATE(L, 0, LAMBDA (a : INT; b : INT) : STRING => 'x');", "doit rendre", "un rappel qui rend un STRING pour un accumulateur entier : refuse");
+    // Les scans.
+    expect("STRING", L + "R := JOIN(PARTIAL_SUM(L, LAMBDA (a : INT; b : INT) : INT => a * b), ',');", "3,-21,-105,-105", "PARTIAL_SUM(L, a * b)");
+    expect("STRING", L + "R := JOIN(INCLUSIVE_SCAN(L, LAMBDA (a : INT; b : INT) : INT => MAX(a, b)), ',');", "3,3,5,5", "INCLUSIVE_SCAN(L, MAX) : le maximum atteint");
+    expect("STRING", L + "R := JOIN(EXCLUSIVE_SCAN(L, 0, LAMBDA (a : INT; b : INT) : INT => a + ABS(b)), ',');", "0,3,10,15", "EXCLUSIVE_SCAN(L, 0, a + |b|)");
+    expect("STRING", L + "R := JOIN(TRANSFORM_EXCLUSIVE_SCAN(L, 0, OPERATION#Somme, LAMBDA (x : INT) : INT => x * x), ',');", "0,9,58,83",
+           "TRANSFORM_EXCLUSIVE_SCAN(L, 0, Somme, x * x)");
+    expect("STRING", "R := JOIN(TRANSFORM_INCLUSIVE_SCAN(Lots, OPERATION#Somme, LAMBDA (l : T_Lot) : REAL => l.Poids), ';');", "2.5;6.5;7.75",
+           "TRANSFORM_INCLUSIVE_SCAN(Lots, Somme, l.Poids) : une LIST de ce qu'il rend", lots);
+    // La cle d'un tri, du plus petit, du plus grand.
+    expect("STRING", L + "LIST_SORT_BY(L, LAMBDA (x : INT) : INT => ABS(x));\nR := JOIN(L, ',');", "1,3,5,-7", "LIST_SORT_BY(L, ABS) : par la cle");
+    expect("STRING", L + "LIST_SORT_BY(L, LAMBDA (x : INT) : INT => ABS(x), TRUE);\nR := JOIN(L, ',');", "-7,5,3,1", "LIST_SORT_BY(L, ABS, TRUE) : decroissant");
+    expect("STRING", "LIST_SORT_BY(Lots, LAMBDA (l : T_Lot) : REAL => l.Poids);\nR := Lots[0].Nom + Lots[2].Nom;", "C03A07",
+           "LIST_SORT_BY(Lots, l.Poids) : des structures", lots);
+    expect("INT", L + "R := LIST_MIN_INDEX(L, LAMBDA (x : INT) : INT => ABS(x - 5)) * 10 + LIST_MAX_INDEX(L, LAMBDA (x : INT) : INT => ABS(x));", "21",
+           "LIST_MIN_INDEX (le plus proche de 5 : en 2), LIST_MAX_INDEX (|-7|, en 1)");
+    expect("INT", L + "R := LIST_MIN_INDEX(L, LAMBDA (x : INT) : INT => ABS(x - 4));", "0", "LIST_MIN_INDEX : a egalite (3 et 5), le premier");
+    expect("STRING", "LIST_SORT_BY(Lots, 'Poids', TRUE);\nR := Lots[0].Nom;", "A07", "LIST_SORT_BY : la forme d'avant ('Poids') reste", lots);
+    // IHM_SUR_CHANGEMENT : rien a l'inscription, une fois par changement vu, plus rien une fois annulee.
+    {
+        Bench b("INT", "R := 0;\nCompteur := IHM_SUR_CHANGEMENT(Niveau, LAMBDA (v : REAL) IF v > 45.0 THEN R := R + 1; END_IF; END_LAMBDA);");
+        (void)b.runScript(&err);
+        const auto r = [&] {
+            sim::Value v;
+            return b.rt.environment().read("R", v) ? shown(v) : std::string("#");
+        };
+        const auto set = [&](double x, double now) {
+            (void)b.rt.environment().write("Niveau", sim::Value::real(x));
+            b.rt.tick(now);
+        };
+        b.rt.tick(0.3);
+        const std::string calm = r();
+        set(50.0, 0.4);
+        const std::string once = r();
+        b.rt.tick(0.5);
+        const std::string still = r();
+        set(30.0, 0.6);                                     // change, mais v <= 45 : R ne bouge pas
+        set(60.0, 0.7);
+        const std::string twice = r();
+        sim::Value id;
+        (void)b.rt.environment().read("Compteur", id);
+        const bool cancelled = b.rt.cancelCallback(id.asInteger());
+        set(70.0, 0.8);
+        check(err.empty() && calm == "0" && once == "1" && still == "1" && twice == "2" && cancelled && r() == "2" && b.rt.watches() == 0,
+              "IHM_SUR_CHANGEMENT(Niveau, f(v)) : rien a l'inscription, une fois par changement, plus rien une fois annulee (" + calm + ", " + once
+                  + ", " + still + ", " + twice + ", " + r() + ")" + (err.empty() ? std::string{} : " [" + err + "]"));
+    }
+    {
+        Bench b("INT", "VAR i : INT := 2; END_VAR\nR := 0;\nIHM_SUR_CHANGEMENT(Tab[i], LAMBDA () R := R + 10; END_LAMBDA);");
+        (void)b.runScript(&err);
+        (void)b.rt.environment().write("Tab[3]", sim::Value::integer(sim::Type::Int, 4));
+        b.rt.tick(0.3);
+        (void)b.rt.environment().write("Tab[2]", sim::Value::integer(sim::Type::Int, 9));
+        b.rt.tick(0.4);
+        sim::Value v;
+        (void)b.rt.environment().read("R", v);
+        const std::size_t before = b.rt.watches();
+        b.rt.stop(0.5, {});
+        check(err.empty() && shown(v) == "10" && before == 1 && b.rt.watches() == 0,
+              "IHM_SUR_CHANGEMENT(Tab[i], f()) : la case 2, figee a l'inscription (" + shown(v) + ") ; l'arret oublie les surveillances"
+                  + (err.empty() ? std::string{} : " [" + err + "]"));
+    }
+    refused("INT", "VAR m : INT; END_VAR\nR := IHM_SUR_CHANGEMENT(m, LAMBDA () R := 1; END_LAMBDA);", "variable de ce code",
+            "IHM_SUR_CHANGEMENT d'une variable du script : refusee");
+    refused("INT", "R := IHM_SUR_CHANGEMENT(Tab, LAMBDA () R := 1; END_LAMBDA);", "valeur simple", "IHM_SUR_CHANGEMENT d'un tableau entier : refusee");
+    refused("INT", "R := IHM_SUR_CHANGEMENT(Niveau, LAMBDA (a : REAL; b : REAL) R := 1; END_LAMBDA);", "nouvelle valeur",
+            "un rappel a deux parametres : refuse");
+    // Compiler lit les nouvelles formes sans fautes.
+    compiles("formes a rappel 1.12.20",
+             "R := MAP_REMOVE_IF(M, Epuise);\nR := ACCUMULATE(Lots, 0.0, Ajouter_Poids);\nLIST_SORT_BY(Lots, Poids_De);\n"
+             "R := LIST_MIN_INDEX(L, Ecart);\nSuivi := IHM_SUR_CHANGEMENT(Mode_Pompe, Sur_Mode);", true);
+}
+
 void sondeControle1219() {
     std::printf("-- 1.12.19 : Compiler accepte CALLBACK, LAMBDA, TEMPLATE\n");
     const char* bodies[] = {
@@ -841,6 +958,7 @@ int main() {
     lecturesExpression1217();
     rappels1219();
     sondeControle1219();
+    rappels1220();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

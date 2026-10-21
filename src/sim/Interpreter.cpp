@@ -4807,6 +4807,7 @@ private:
                 return callDeclared(*inner[static_cast<std::size_t>(k)], e, false);
             }
             if (inner.size() == 1) return callDeclared(*inner.front(), e, false);
+            if (auto mine = natives1220(callee, e)) return std::move(*mine);          // 1.12.20 : les dernieres natives a rappel
             if (auto mine = natives1219(callee, e)) return std::move(*mine);          // 1.12.19 : les natives a rappel
             if (auto mine = natives1127(callee, e)) return std::move(*mine);          // 1.12.7
             if (auto builtin = dialectBuiltin(u, e)) return std::move(*builtin);
@@ -6343,6 +6344,324 @@ private:
         return R(core::Result<RV>(RV{Value::boolean(count == static_cast<std::int64_t>(items.size())), nullptr}));   // LIST_ALL
     }
     // ==== fin 1.12.19 : les natives a rappel ====
+
+    // ==== 1.12.20 : LES DERNIERES NATIVES A RAPPEL. MAP_REMOVE_IF (m, f) : f(cle, valeur) ; ACCUMULATE, REDUCE (T, init, f),
+    // PARTIAL_SUM, INCLUSIVE_SCAN (T, f), EXCLUSIVE_SCAN (T, init, f) : f(a, b) a la place de l'OPERATION ;
+    // TRANSFORM_REDUCE, TRANSFORM_INCLUSIVE_SCAN, TRANSFORM_EXCLUSIVE_SCAN : l'operation, la transformation (f(x)) ou
+    // les deux en rappels ; LIST_SORT_BY (L, f [, decroissant]), LIST_MIN_INDEX, LIST_MAX_INDEX (L, f) : f(element)
+    // donne la cle, a la place d'un membre ; IHM_SUR_CHANGEMENT (x, f) : f chaque fois que x change. Sans rappel : la
+    // forme d'avant (natives1127). Avec un rappel, les elements peuvent etre autre chose que des nombres (des
+    // structures) : l'accumulateur garde le type de init, comme le C++. ====
+    // Le chemin d'une variable, ses indices evalues (Niveaux[i] -> "Niveaux[2]") ; vide : pas une variable.
+    core::Result<std::string> watchedPath(const Expr& x, int depth = 0) {
+        if (depth > 16) return std::string{};
+        if (x.kind == Expr::Kind::Reference) return x.name.find('#') == std::string::npos ? x.name : std::string{};
+        if (x.kind == Expr::Kind::Member && x.lhs) {
+            auto base = watchedPath(*x.lhs, depth + 1);
+            if (!base || base->empty()) return base;
+            return *base + "." + x.name;
+        }
+        if (x.kind == Expr::Kind::Index && x.lhs && x.rhs) {
+            auto base = watchedPath(*x.lhs, depth + 1);
+            if (!base || base->empty()) return base;
+            std::vector<const Expr*> at{x.rhs.get()};
+            if (x.rhs2) at.push_back(x.rhs2.get());
+            for (const auto& m : x.more)
+                if (m) at.push_back(m.get());
+            std::string out = *base + "[";
+            for (std::size_t k = 0; k < at.size(); ++k) {
+                auto v = rich(*at[k]);
+                if (!v) return core::Err<core::Error>(v.error());
+                if (v->o) return std::string{};
+                out += (k ? "," : "") + v->v.display();
+            }
+            return out + "]";
+        }
+        return std::string{};
+    }
+    std::optional<core::Result<RV>> natives1220(const std::string& callee, const Expr& e) {
+        const std::string u = upperOf(callee);
+        const bool fold = u == "ACCUMULATE" || u == "REDUCE" || u == "TRANSFORM_REDUCE";
+        const bool scan = u == "PARTIAL_SUM" || u == "INCLUSIVE_SCAN" || u == "EXCLUSIVE_SCAN" || u == "TRANSFORM_INCLUSIVE_SCAN"
+                       || u == "TRANSFORM_EXCLUSIVE_SCAN";
+        const bool keyed = u == "LIST_SORT_BY" || u == "LIST_MIN_INDEX" || u == "LIST_MAX_INDEX";
+        if (!fold && !scan && !keyed && u != "MAP_REMOVE_IF" && u != "IHM_SUR_CHANGEMENT") return std::nullopt;
+        if (env_.overloads(callee) > 0 || env_.dialectFunction(callee)) return std::nullopt;     // une fonction du projet passe avant
+        for (const auto& a : e.arguments)
+            if (!a.first.empty()) return std::nullopt;
+        const std::size_t argc = e.arguments.size();
+        using R = std::optional<core::Result<RV>>;
+        const auto err = [](const core::Error& x) -> R { return R(core::Result<RV>(core::Err<core::Error>(x))); };
+        const auto fail = [&](std::string why) -> R { return R(core::Result<RV>(dialectError(u + " : " + std::move(why)))); };
+        const auto done = [](RV v) -> R { return R(core::Result<RV>(std::move(v))); };
+        const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
+        // L'argument k s'il est un rappel ; nul sinon (la forme d'avant le lira).
+        const auto callbackAt = [&](std::size_t k) -> core::Result<ObjRef> {
+            auto v = rich(arg(k));
+            if (!v) return core::Err<core::Error>(v.error());
+            return isCallbackObj(v->o) ? v->o : ObjRef{};
+        };
+        const auto call = [&](const ObjRef& f, std::vector<RV> args) { return invokeCallback(*f, args, e.line, u); };
+        const auto truth = [&](const core::Result<RV>& r, bool& out) -> std::optional<std::string> {
+            if (!r) return r.error().message();
+            if (r->o || r->v.type() != Type::Bool) return std::string("le rappel doit rendre un BOOL, pas ") + (r->o ? "un " + typeNameOf(*r) : r->v.display());
+            out = r->v.isTruthy();
+            return std::nullopt;
+        };
+
+        // ---- MAP_REMOVE_IF(m, f) : retire les paires pour lesquelles f(cle, valeur) rend TRUE ----
+        if (u == "MAP_REMOVE_IF") {
+            if (argc != 2) return std::nullopt;                       // (m, COMPARAISON, valeur) : la forme d'avant
+            auto f = callbackAt(1);
+            if (!f) return err(f.error());
+            if (!*f)
+                return fail("une COMPARAISON demande sa valeur (MAP_REMOVE_IF(m, COMPARAISON#Inferieur, 0.0)) ; sinon un rappel qui re\xC3\xA7oit "
+                            "la cl\xC3\xA9 et la valeur (MAP_REMOVE_IF(m, LAMBDA (k : STRING; v : REAL) : BOOL => v <= 0.0))");
+            auto m = mapArg(u, arg(0));
+            if (!m) return err(m.error());
+            if (m->constant) return R(core::Result<RV>(constantRefused(u)));
+            Obj& M = *m->obj;
+            std::vector<std::pair<RV, ObjRef>> items;               // une copie : le rappel peut changer la MAP
+            for (const auto& [k, v] : M.textKeys) items.emplace_back(RV{Value::text(k), nullptr}, v);
+            for (const auto& [k, v] : M.intKeys) items.emplace_back(RV{Value::integer(M.type->key, k), nullptr}, v);
+            std::int64_t removed = 0;
+            for (const auto& [k, v] : items) {
+                bool yes = false;
+                if (auto why = truth(call(*f, {k, valueOfItem(v)}), yes)) return fail(*why);
+                if (!yes) continue;
+                removed += static_cast<std::int64_t>(k.v.type() == Type::String ? M.textKeys.erase(k.v.asString()) : M.intKeys.erase(k.v.asInteger()));
+            }
+            auto c = commitArg(u, *m);
+            if (!c) return err(c.error());
+            return done(RV{Value::integer(Type::DInt, removed), nullptr});
+        }
+
+        // ---- IHM_SUR_CHANGEMENT(x, f) : f() ou f(nouvelle valeur), chaque fois que x change (vu a chaque tour de l'IHM) ----
+        if (u == "IHM_SUR_CHANGEMENT") {
+            if (argc != 2) return fail("deux arguments : IHM_SUR_CHANGEMENT(Mode_Pompe, Sur_Mode)");
+            auto f = callbackAt(1);
+            if (!f) return err(f.error());
+            if (!*f) return fail("un rappel est attendu (une fonction, une LAMBDA) : IHM_SUR_CHANGEMENT(Mode_Pompe, Sur_Mode)");
+            const std::size_t params = (*f)->type ? (*f)->type->members.size() : 0;
+            if (params > 1) return fail("le rappel re\xC3\xA7oit la nouvelle valeur, ou rien : CALLBACK (v : INT) ou CALLBACK ()");
+            auto path = watchedPath(arg(0));
+            if (!path) return err(path.error());
+            if (path->empty()) return fail("une variable est attendue (Mode_Pompe, Pompe.Mode, Niveaux[2]), pas " + exprText(arg(0)));
+            const std::string root = path->substr(0, path->find_first_of(".["));
+            if (findLocal(root)) return fail(root + " est une variable de ce code : elle dispara\xC3\xAEt avec lui \xE2\x80\x94 surveille une variable de l'IHM");
+            auto now = rich(arg(0));
+            if (!now) return err(now.error());
+            if (now->o)
+                return fail("une valeur simple se surveille (un nombre, un texte, un BOOL\xE2\x80\xA6), pas un " + typeNameOf(*now) + " \xE2\x80\x94 un de ses membres (Pompe.Mode)");
+            std::int64_t id = 0;
+            std::string why;
+            if (!env_.watchCallback(*path, now->v, deepCopy(**f), params == 1, id, &why)) return fail(why);
+            return done(RV{Value::integer(Type::DInt, id), nullptr});
+        }
+
+        // ---- LIST_SORT_BY(L, f [, decroissant]), LIST_MIN_INDEX(L, f), LIST_MAX_INDEX(L, f) : f(element) donne la cle ----
+        if (keyed) {
+            if (argc < 2 || argc > (u == "LIST_SORT_BY" ? 3u : 2u)) return std::nullopt;
+            auto f = callbackAt(1);
+            if (!f) return err(f.error());
+            if (!*f) return std::nullopt;                              // 'Poids' : un membre, la forme d'avant
+            const bool sorts = u == "LIST_SORT_BY";
+            auto list = seqArg(u, arg(0), true);
+            if (!list) return err(list.error());
+            Obj& L = *list->obj;
+            if (sorts && list->constant) return R(core::Result<RV>(constantRefused(u)));
+            if (sorts && isSetType(*L.type)) return R(core::Result<RV>(setRefused(u)));
+            bool descending = false;
+            if (argc > 2) {
+                auto d = boolArg(u, arg(2));
+                if (!d) return err(d.error());
+                descending = *d;
+            }
+            const std::vector<ObjRef> items = L.items;               // le rappel peut changer la liste : on parcourt une copie
+            std::vector<Value> keys;
+            keys.reserve(items.size());
+            for (const auto& x : items) {
+                auto r = call(*f, {valueOfItem(x)});
+                if (!r) return err(r.error());
+                if (r->o) return fail("la cl\xC3\xA9 est une valeur simple (un nombre, un texte, une dur\xC3\xA9" "e), pas un " + typeNameOf(*r));
+                keys.push_back(r->v);
+            }
+            if (!sorts) {
+                auto low = lowOf(u, L);
+                if (!low) return err(low.error());
+                std::int64_t best = -1;
+                for (std::size_t k = 0; k < keys.size(); ++k) {
+                    if (best < 0) {
+                        best = static_cast<std::int64_t>(k);
+                        continue;
+                    }
+                    const int c = keys[k].compare(keys[static_cast<std::size_t>(best)]);
+                    if (u == "LIST_MIN_INDEX" ? c < 0 : c > 0) best = static_cast<std::int64_t>(k);
+                }
+                return done(RV{Value::integer(Type::DInt, best < 0 ? -1 : best + *low), nullptr});
+            }
+            std::vector<std::size_t> order(items.size());
+            for (std::size_t k = 0; k < order.size(); ++k) order[k] = k;
+            std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+                const int c = keys[a].compare(keys[b]);
+                return descending ? c > 0 : c < 0;
+            });
+            std::vector<ObjRef> sorted;
+            sorted.reserve(order.size());
+            for (const std::size_t k : order) sorted.push_back(items[k]);
+            L.items = std::move(sorted);
+            auto c = commitArg(u, *list);
+            if (!c) return err(c.error());
+            return done(RV{Value::boolean(true), nullptr});
+        }
+
+        // ---- std::numeric : un rappel a la place de l'OPERATION (f(a, b)) ou de la TRANSFORMATION (f(x)) ----
+        const bool transforms = u.rfind("TRANSFORM_", 0) == 0;
+        const bool withInit = u == "ACCUMULATE" || u == "REDUCE" || u == "TRANSFORM_REDUCE" || u == "EXCLUSIVE_SCAN" || u == "TRANSFORM_EXCLUSIVE_SCAN";
+        const std::size_t opAt = withInit ? 2 : 1, trAt = opAt + 1;   // T, [init], op, [transformation]
+        if (argc != (transforms ? trAt + 1 : opAt + 1)) {
+            // ACCUMULATE(L, f), REDUCE(L, f), EXCLUSIVE_SCAN(L, f) : la valeur de depart manque.
+            if (!transforms && withInit && argc == 2) {
+                auto f = callbackAt(1);
+                if (!f) return err(f.error());
+                if (*f) return fail("la valeur de d\xC3\xA9part vient avant le rappel : " + u + "(L, 0.0, f)");
+            }
+            return std::nullopt;
+        }
+        auto opF = callbackAt(opAt);
+        if (!opF) return err(opF.error());
+        const ObjRef op = *opF;
+        ObjRef tr;
+        if (transforms) {
+            auto t = callbackAt(trAt);
+            if (!t) return err(t.error());
+            tr = *t;
+        }
+        if (!op && !tr) return std::nullopt;                         // OPERATION#, TRANSFORMATION# : la forme d'avant
+        int opRank = 0, trRank = 0;
+        if (!op) {
+            auto r = enumArg(u, arg(opAt), "OPERATION");
+            if (!r) return err(r.error());
+            opRank = *r;
+        }
+        if (transforms && !tr) {
+            auto r = enumArg(u, arg(trAt), "TRANSFORMATION");
+            if (!r) return err(r.error());
+            trRank = *r;
+        }
+        auto seq = seqArg(u, arg(0), true);
+        if (!seq) return err(seq.error());
+        const std::vector<ObjRef> items = seq->obj->items;
+        // Un element, transforme (par le rappel, ou par la TRANSFORMATION : un nombre).
+        const auto transformed = [&](const ObjRef& item) -> core::Result<RV> {
+            RV x = valueOfItem(item);
+            if (!transforms) return x;
+            if (tr) return call(tr, {x});
+            if (x.o || !isNumeric(x.v.type()) || x.v.type() == Type::Time)
+                return dialectError(u + " : une TRANSFORMATION prend des nombres, pas " + (x.o ? "un " + typeNameOf(x) : x.v.display())
+                                    + " \xE2\x80\x94 un rappel (x) pour d'autres valeurs");
+            return RV{transform(trRank, x.v), nullptr};
+        };
+        // Deux valeurs combinees (par le rappel, ou par l'OPERATION : des nombres).
+        const auto combined = [&](const RV& a, const RV& b) -> core::Result<RV> {
+            if (op) return call(op, {a, b});
+            if (a.o || b.o)
+                return dialectError(u + " : une OPERATION combine des nombres, pas un " + typeNameOf(a.o ? a : b) + " \xE2\x80\x94 un rappel (a, b) pour d'autres valeurs");
+            auto r = applyOp(opRank, a.v, b.v, e.line);
+            if (!r) return core::Err<core::Error>(r.error());
+            return RV{*r, nullptr};
+        };
+        const auto number = [](Type t) { return isNumeric(t) && t != Type::Time && t != Type::Bool; };
+        // Un resultat garde dans le type d'un autre (l'accumulateur garde le type de init, comme le C++).
+        const auto kept = [&](const RV& like, const RV& got) -> core::Result<RV> {
+            if (like.o) {
+                auto m = fitTo(u, like.o->type, got);
+                if (!m) return core::Err<core::Error>(m.error());
+                return RV{{}, *m};
+            }
+            const Type lt = like.v.type(), gt = got.v.type();
+            if (!got.o && number(lt) && number(gt)) return RV{asTypeOf(like.v, got.v), nullptr};
+            if (!got.o && (gt == lt || lt == Type::Unknown)) return got;
+            return dialectError(u + " : le rappel doit rendre un " + valueTypeText(lt) + ", pas " + (got.o ? "un " + typeNameOf(got) : got.v.display()));
+        };
+        const auto start = [&]() -> core::Result<RV> {
+            auto init = rich(arg(1));
+            if (!init) return init;
+            return init->o ? RV{{}, deepCopy(*init->o)} : *init;
+        };
+        if (fold) {
+            auto init = start();
+            if (!init) return err(init.error());
+            RV acc = *init;
+            for (const auto& item : items) {
+                auto y = transformed(item);
+                if (!y) return err(y.error());
+                auto r = combined(acc, *y);
+                if (!r) return err(r.error());
+                auto k = kept(*init, *r);
+                if (!k) return err(k.error());
+                acc = *k;
+            }
+            return done(acc);
+        }
+        // Les scans : un resultat par element.
+        std::vector<RV> out;
+        out.reserve(items.size());
+        if (u == "EXCLUSIVE_SCAN" || u == "TRANSFORM_EXCLUSIVE_SCAN") {
+            auto init = start();
+            if (!init) return err(init.error());
+            RV acc = *init;
+            for (const auto& item : items) {
+                out.push_back(acc);
+                auto y = transformed(item);
+                if (!y) return err(y.error());
+                auto r = combined(acc, *y);
+                if (!r) return err(r.error());
+                auto k = kept(*init, *r);
+                if (!k) return err(k.error());
+                acc = *k;
+            }
+        } else {
+            for (const auto& item : items) {
+                auto y = transformed(item);
+                if (!y) return err(y.error());
+                if (out.empty()) {
+                    out.push_back(*y);
+                    continue;
+                }
+                auto r = combined(out.back(), *y);
+                if (!r) return err(r.error());
+                auto k = kept(out.front(), *r);
+                if (!k) return err(k.error());
+                out.push_back(*k);
+            }
+        }
+        // "Comme T" si les resultats sont de son type (ou des nombres, convertis comme avec une OPERATION) ;
+        // sinon une LIST de ce qu'ils sont (les poids cumules d'une liste de structures : une LIST OF REAL).
+        const TypeRef te = seq->obj->type->element;
+        TypeRef got = te;
+        if (!out.empty()) got = out.front().o ? out.front().o->type : scalarType(out.front().v.type());
+        const bool numbers = te && got && te->kind == TypeDesc::Kind::Scalar && got->kind == TypeDesc::Kind::Scalar && number(te->scalar) && number(got->scalar);
+        const bool same = te && got && (numbers || sameType(*te, *got));
+        const TypeRef outType = same ? (isSetType(*seq->obj->type) ? listType(te) : seq->obj->type) : listType(got);
+        auto result = makeObj(outType);
+        if (outType->kind == TypeDesc::Kind::List) result->items.clear();
+        for (std::size_t k = 0; k < out.size(); ++k) {
+            ObjRef item;
+            if (numbers && !out[k].o) {
+                item = makeObj(outType->element);
+                item->value.assignFrom(out[k].v);
+            } else {
+                auto m = fitTo(u, outType->element, out[k]);
+                if (!m) return err(m.error());
+                item = *m;
+            }
+            if (outType->kind == TypeDesc::Kind::List) result->items.push_back(item);
+            else if (k < result->items.size()) result->items[k] = item;
+        }
+        return done(RV{{}, result});
+    }
+    // ==== fin 1.12.20 : les dernieres natives a rappel ====
 
     std::optional<core::Result<RV>> natives1127(const std::string& callee, const Expr& e) {
         std::string u = upperOf(callee), tmpl;

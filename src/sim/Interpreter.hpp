@@ -213,9 +213,19 @@ public:
         if (why) *why = "pas de minuteur ici (IHM_APRES et IHM_CHAQUE tournent dans la simulation de l'IHM)";
         return false;
     }
-    // IHM_ANNULER(numero) : vrai s'il n'etait pas encore parti (ou, periodique, s'il tournait).
+    // IHM_ANNULER(numero) : vrai s'il n'etait pas encore parti (ou, periodique, s'il tournait) ; 1.12.20 : ou une
+    // surveillance (IHM_SUR_CHANGEMENT) qui tournait.
     virtual bool cancelCallback(std::int64_t id) {
         (void)id;
+        return false;
+    }
+    // 1.12.20 : IHM_SUR_CHANGEMENT(x, f) - appeler un rappel chaque fois que la valeur de `path` change (une variable,
+    // ses indices figes : "Mode_Pompe", "Pompe.Mode", "Niveaux[2]") ; `now` : sa valeur a l'inscription ; `passValue` :
+    // f recoit la nouvelle valeur. Vrai et son numero (IHM_ANNULER l'arrete) ; faux et `why`. Par defaut : rien.
+    virtual bool watchCallback(const std::string& path, const Value& now, ObjRef callback, bool passValue, std::int64_t& id,
+                               std::string* why) {
+        (void)path; (void)now; (void)callback; (void)passValue; (void)id;
+        if (why) *why = "pas de surveillance ici (IHM_SUR_CHANGEMENT tourne dans la simulation de l'IHM)";
         return false;
     }
 };

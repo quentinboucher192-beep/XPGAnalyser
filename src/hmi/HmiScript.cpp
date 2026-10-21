@@ -1417,7 +1417,9 @@ bool isHmiFunction(std::string_view name) noexcept {
                                    // 1.11.14 : une ligne de la Console, d'un niveau
                                    "IHM_LOG",
                                    // 1.12.19 : un rappel plus tard (les minuteurs)
-                                   "IHM_APRES", "IHM_CHAQUE", "IHM_ANNULER"};
+                                   "IHM_APRES", "IHM_CHAQUE", "IHM_ANNULER",
+                                   // 1.12.20 : surveiller une variable
+                                   "IHM_SUR_CHANGEMENT"};
     const std::string u = upper(name);
     for (const char* n : kNames) if (u == n) return true;
     return false;

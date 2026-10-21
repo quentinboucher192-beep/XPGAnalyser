@@ -701,6 +701,10 @@ public:
         return rt_.scheduleCallback(delayMs, periodMs, std::move(callback), id, why);
     }
     bool cancelCallback(std::int64_t id) override { return rt_.cancelCallback(id); }
+    bool watchCallback(const std::string& path, const sim::Value& now, sim::ObjRef callback, bool passValue, std::int64_t& id,
+                       std::string* why) override {                                       // 1.12.20 : IHM_SUR_CHANGEMENT
+        return rt_.watchCallback(path, now, std::move(callback), passValue, id, why);
+    }
     void nullCallback(std::string_view name, std::string_view where) override { rt_.nullCallback(name, where); }
     // 1.10 (integration, S1 <-> S2) : un operateur d'un type IHM ou d'un symbole
     // (`a + b`, `a += b`, `TO_xxx(a)`...) : S2 le trouve, S1 l'appelle.
@@ -1747,7 +1751,7 @@ bool Runtime::scheduleCallback(std::int64_t delayMs, std::int64_t periodMs, sim:
         if (why) *why = "l'IHM ne tourne pas : rien ne partirait";
         return false;
     }
-    if (timers_.size() >= 256) {
+    if (timers_.size() + watches_.size() >= 256) {
         if (why) *why = "256 minuteurs attendent d\xC3\xA9j\xC3\xA0 (une boucle en lance un \xC3\xA0 chaque cycle ?) ; IHM_ANNULER les arr\xC3\xAAte";
         return false;
     }
@@ -1763,9 +1767,70 @@ bool Runtime::scheduleCallback(std::int64_t delayMs, std::int64_t periodMs, sim:
 
 bool Runtime::cancelCallback(std::int64_t id) {
     const auto it = std::find_if(timers_.begin(), timers_.end(), [&](const CallbackTimer& t) { return t.id == id; });
-    if (it == timers_.end()) return false;
-    timers_.erase(it);
+    if (it != timers_.end()) {
+        timers_.erase(it);
+        return true;
+    }
+    const auto w = std::find_if(watches_.begin(), watches_.end(), [&](const CallbackWatch& x) { return x.id == id; });   // 1.12.20
+    if (w == watches_.end()) return false;
+    watches_.erase(w);
     return true;
+}
+
+// 1.12.20 : IHM_SUR_CHANGEMENT. Le chemin (ses indices figes a l'inscription) est relu a chaque tour, apres les
+// minuteurs ; une valeur differente de la derniere appelle le rappel (une fois par changement vu, pas a l'inscription).
+// Un chemin qui ne se lit plus (une variable retiree) : la Console le dit et la surveillance s'arrete.
+bool Runtime::watchCallback(const std::string& path, const sim::Value& now, sim::ObjRef callback, bool passValue, std::int64_t& id,
+                            std::string* why) {
+    if (!running_) {
+        if (why) *why = "l'IHM ne tourne pas : rien ne serait surveill\xC3\xA9";
+        return false;
+    }
+    if (timers_.size() + watches_.size() >= 256) {
+        if (why) *why = "256 minuteurs et surveillances tournent d\xC3\xA9j\xC3\xA0 (une boucle en lance une \xC3\xA0 chaque cycle ?) ; IHM_ANNULER les arr\xC3\xAAte";
+        return false;
+    }
+    auto parsed = sim::parseExpression(path);
+    if (!parsed) {
+        if (why) *why = path + " ne se relit pas (" + frenchSimMessage(parsed.error().message()) + ")";
+        return false;
+    }
+    CallbackWatch w;
+    w.id = id = ++timerSeq_;
+    w.path = path;
+    w.expr = *parsed;
+    w.last = now;
+    w.callback = std::move(callback);
+    w.passValue = passValue;
+    w.source = source_;
+    watches_.push_back(std::move(w));
+    return true;
+}
+
+void Runtime::watchesTick() {
+    std::vector<std::int64_t> ids;
+    for (const auto& w : watches_) ids.push_back(w.id);
+    for (const std::int64_t k : ids) {
+        const auto it = std::find_if(watches_.begin(), watches_.end(), [&](const CallbackWatch& w) { return w.id == k; });
+        if (it == watches_.end() || !running_) continue;      // annulee par un rappel d'avant
+        Env::Frame frame;
+        env_->frames.push_back(&frame);
+        const auto v = sim::evaluate(*it->expr, *env_);
+        env_->frames.pop_back();
+        const std::string source = "surveillance " + std::to_string(k) + " de " + it->path + (it->source.empty() ? std::string{} : " (" + it->source + ")");
+        if (!v) {
+            logAt(LogLevel::Error, "Erreur", source,
+                  "IHM_SUR_CHANGEMENT : " + it->path + " ne se lit plus (" + frenchSimMessage(v.error().message()) + ") : la surveillance s'arr\xC3\xAAte");
+            watches_.erase(it);
+            continue;
+        }
+        if (v->compare(it->last) == 0 && (v->type() == sim::Type::String) == (it->last.type() == sim::Type::String)) continue;
+        it->last = *v;
+        const sim::ObjRef callback = it->callback;            // le rappel peut en lancer ou en annuler d'autres
+        std::vector<sim::Value> args;
+        if (it->passValue) args.push_back(*v);
+        if (callback) fireCallback(callback, args, source);
+    }
 }
 
 void Runtime::timersTick(double now) {
@@ -1788,31 +1853,34 @@ void Runtime::timersTick(double now) {
         const std::string source = "minuteur " + std::to_string(k) + (it->source.empty() ? std::string{} : " (" + it->source + ")");
         if (it->period > 0) it->due = std::max(it->due + it->period, now);
         else timers_.erase(it);
-        if (!callback) continue;
-        const std::string previous = source_;
-        source_ = source;
-        Env::Frame frame;
-        env_->frames.push_back(&frame);
-        env_->diagnostics.clear();
-        sim::RunLimits limits;
-        limits.maxIterationsPerLoop = 100000;
-        limits.maxStatementsPerScan = 200000;
-        const sim::ExecTrace callerTrace = trace_;
-        trace_ = {};
-        limits.trace = &trace_;
-        ++depth_;
-        const auto r = sim::callCallback(*callback, *env_, {}, source, limits);
-        --depth_;
-        trace_ = callerTrace;
-        env_->frames.pop_back();
-        source_ = previous;
-        std::string why = !r ? frenchSimMessage(r.error().message()) : std::string{};
-        if (!abort_.empty()) {
-            why = abort_;
-            abort_.clear();
-        }
-        if (!why.empty()) logAt(LogLevel::Error, "Erreur", source, why);
+        if (callback) fireCallback(callback, {}, source);
     }
+}
+
+void Runtime::fireCallback(const sim::ObjRef& callback, const std::vector<sim::Value>& args, const std::string& source) {
+    const std::string previous = source_;
+    source_ = source;
+    Env::Frame frame;
+    env_->frames.push_back(&frame);
+    env_->diagnostics.clear();
+    sim::RunLimits limits;
+    limits.maxIterationsPerLoop = 100000;
+    limits.maxStatementsPerScan = 200000;
+    const sim::ExecTrace callerTrace = trace_;
+    trace_ = {};
+    limits.trace = &trace_;
+    ++depth_;
+    const auto r = sim::callCallback(*callback, *env_, args, source, limits);
+    --depth_;
+    trace_ = callerTrace;
+    env_->frames.pop_back();
+    source_ = previous;
+    std::string why = !r ? frenchSimMessage(r.error().message()) : std::string{};
+    if (!abort_.empty()) {
+        why = abort_;
+        abort_.clear();
+    }
+    if (!why.empty()) logAt(LogLevel::Error, "Erreur", source, why);
 }
 
 // 1.12.19 : un rappel vide (NULL) appele : rien n'est fait, la valeur par defaut est rendue ; la Console le dit une
@@ -3696,6 +3764,7 @@ void Runtime::stop(double now, const std::string& why) {
     animation_.reset();
     unfollowAll();                      // 1.9 : les liaisons ne suivent plus rien pour l'IHM
     timers_.clear();                    // 1.12.19 : les minuteurs d'IHM_APRES et IHM_CHAQUE s'arretent avec l'IHM
+    watches_.clear();                   // 1.12.20 : les surveillances d'IHM_SUR_CHANGEMENT aussi
     nullSaid_.clear();
 }
 
@@ -3964,6 +4033,7 @@ void Runtime::tick(double now) {
         }
     }
     if (!timers_.empty()) timersTick(now);   // 1.12.19 : IHM_APRES, IHM_CHAQUE
+    if (!watches_.empty()) watchesTick();    // 1.12.20 : IHM_SUR_CHANGEMENT
     // Les timers, a chaque appel ; le reste au rythme du cycle IHM.
     std::vector<Id> shown{current_};
     shown.insert(shown.end(), popups_.begin(), popups_.end());

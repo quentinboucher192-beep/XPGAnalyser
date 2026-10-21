@@ -239,7 +239,9 @@ std::vector<Function> makeFunctions() {
          "IHM_APRES(T#|s, )", true},
         {"IHM_CHAQUE", {"p\xC3\xA9riode : TIME", "f : CALLBACK ()"}, "DINT", "appelle f \xC3\xA0 chaque p\xC3\xA9riode, jusqu'\xC3\xA0 IHM_ANNULER",
          "IHM_CHAQUE(T#|ms, )", true},
-        {"IHM_ANNULER", {"num\xC3\xA9ro : DINT"}, "BOOL", "arr\xC3\xAAte un minuteur (IHM_APRES, IHM_CHAQUE)", "IHM_ANNULER(|)", true},
+        {"IHM_SUR_CHANGEMENT", {"x : une variable", "f : CALLBACK (v : T) ou CALLBACK ()"}, "DINT",
+         "appelle f chaque fois que x change (v : la nouvelle valeur) ; rend son num\xC3\xA9ro", "IHM_SUR_CHANGEMENT(|, )", true},   // 1.12.20
+        {"IHM_ANNULER", {"num\xC3\xA9ro : DINT"}, "BOOL", "arr\xC3\xAAte un minuteur ou une surveillance (IHM_APRES, IHM_CHAQUE, IHM_SUR_CHANGEMENT)", "IHM_ANNULER(|)", true},
         {"IHM_SON", {"son : STRING"}, "BOOL", "joue un son des ressources (WAV, MP3, OGG)", "IHM_SON('|')", true},
         {"IHM_VUE", {}, "STRING", "le nom de la vue affich\xC3\xA9" "e", "IHM_VUE()|", false},
         {"IHM_TEMPS", {}, "TIME", "le temps \xC3\xA9" "coul\xC3\xA9 depuis le lancement de l'IHM", "IHM_TEMPS()|", false},

@@ -653,6 +653,11 @@ public:
     bool scheduleCallback(std::int64_t delayMs, std::int64_t periodMs, sim::ObjRef callback, std::int64_t& id, std::string* why);
     bool cancelCallback(std::int64_t id);
     [[nodiscard]] std::size_t pendingTimers() const noexcept { return timers_.size(); }
+    // 1.12.20 : IHM_SUR_CHANGEMENT - un rappel appele chaque fois que la valeur d'une variable change (relue a chaque
+    // tour) ; IHM_ANNULER l'arrete, l'arret de l'IHM aussi. `watches` : celles qui tournent.
+    bool watchCallback(const std::string& path, const sim::Value& now, sim::ObjRef callback, bool passValue, std::int64_t& id,
+                       std::string* why);
+    [[nodiscard]] std::size_t watches() const noexcept { return watches_.size(); }
     // 1.11.14 : une ligne d'un niveau donne (IHM_LOG) ; `line` : la ligne du code (0 : celle
     // de l'instruction en cours, s'il y en a une).
     void logAt(LogLevel level, std::string kind, std::string source, std::string message, int line = 0);
@@ -1666,7 +1671,21 @@ private:
     std::vector<CallbackTimer> timers_;
     std::int64_t               timerSeq_{0};
     std::set<std::string>      nullSaid_;
+    // 1.12.20 : les surveillances (IHM_SUR_CHANGEMENT) - le chemin relu, sa derniere valeur.
+    struct CallbackWatch {
+        std::int64_t id{0};
+        std::string  path;                       // "Mode_Pompe", "Pompe.Mode", "Niveaux[2]"
+        std::shared_ptr<const sim::Expression> expr;
+        sim::Value   last;
+        sim::ObjRef  callback;
+        bool         passValue{false};           // f(v) : la nouvelle valeur ; sinon f()
+        std::string  source;
+    };
+    std::vector<CallbackWatch> watches_;
     void timersTick(double now);
+    void watchesTick();
+    // Un rappel appele par l'IHM (un minuteur, une surveillance), comme un script ; une erreur dans la Console.
+    void fireCallback(const sim::ObjRef& callback, const std::vector<sim::Value>& args, const std::string& source);
     void nullCallback(std::string_view name, std::string_view where);
     bool callFunction(const HmiFunction&, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result,
                       std::vector<std::pair<std::string, sim::Value>>* outputs = nullptr);
