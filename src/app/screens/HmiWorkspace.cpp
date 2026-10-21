@@ -51,6 +51,7 @@
 #include "../../project/EditCommands.hpp"             // 1.11.3 : creer une variable de l'automate
 #include "../hmi/HmiDuplicateDialog.hpp"            // 1.10.2 (chantier D) : "Dupliquer..."
 #include "../hmi/HmiAddressDialog.hpp"              // 1.12.18 : l'adresse dans toutes les cases
+#include "../hmi/HmiFunctionDialog.hpp"   // 1.12.24 : Nouvelle fonction
 #include "../hmi/HmiFunctionPanes.hpp"
 #include "../hmi/HmiHelpPane.hpp"
 #include "../hmi/HmiTutorial.hpp"
@@ -3275,86 +3276,41 @@ void MainAnalysisScreen::openHmiFunctionDefinition(std::uint64_t viewId, std::ui
 void MainAnalysisScreen::askHmiNewFunction(std::uint64_t symbolView) {
     auto doc = app_.hmi();
     if (!doc) return;
-    // 1.11.22 : la fonction d'un symbole - un nom libre dans le symbole, sans retour par defaut ;
-    // un nom deja pris est une surcharge (comme pour les fonctions IHM).
-    const auto* sym = symbolView ? doc->project.view(asId(symbolView)) : nullptr;
-    if (symbolView && !sym) return;
-    std::vector<std::string> types{"Aucun"};          // 1.11.18 (lot 5) : une procedure (avant : "(aucun)")
-    // 1.11.19 (lot 6) : le registre des types - la base, puis les structures et les enumerations
-    // du projet (comme le retour dans les proprietes de la fonction ; avant : la base seule).
-    for (const auto& t : hmi::typereg::Registry::build(doc->project)->names(hmi::typereg::UseDeclaration)) types.push_back(t);
-    std::vector<FormDialog::Field> fields;
-    std::string freeName = "Fonction";
-    if (sym)
-        for (int k = 2; hmi::symbolFunction(*sym, freeName); ++k) freeName = "Fonction" + std::to_string(k);
-    fields.push_back({"Nom", sym ? freeName : hmi::uniqueFunctionName(doc->project, "Fonction"), "lettres, chiffres, _ ; un nom d\xC3\xA9j\xC3\xA0 pris : une surcharge", false, {}});
-    fields.push_back({"Type de retour", sym ? "Aucun" : "REAL", "", false, types});
-    fields.push_back({"Description", "", "ce qu'elle calcule ou fait", false, {}});
-    // 1.12.2 : le retour a une forme (un tableau, une liste, un vecteur, un dictionnaire, un tuple),
-    // ou un type ecrit (LIST OF TUPLE(STRING, REAL), REF_TO T_Four...) qui remplace les choix.
-    fields.push_back({"Forme du retour", "Simple", "", false, hmi::typeform::labels(hmi::typereg::UseReturn)});
-    fields.push_back({"Bornes, cl\xC3\xA9, types suivants ou capacit\xC3\xA9", {}, "", false, {}});
-    fields.push_back({"Type \xC3\xA9" "crit (facultatif)", {}, "MAP[STRING] OF LIST OF REAL ; il remplace les choix", false, {}});
-    const ShapeFields at{3, 4, 5, std::string::npos};
-    // Le type de retour de la fonction : Aucun reste Aucun (une procedure), sinon sa forme.
-    const auto returnOf = [at](const std::vector<std::string>& v) -> std::string {
-        if (v.size() < 2) return {};
-        const bool written = v.size() > at.written && !trimmedText(v[at.written]).empty();
-        if (!written && (v[1].empty() || v[1] == "Aucun")) return v[1];
-        return shapedTypeOf(v, at, v[1]);
-    };
-    // Aucun : ni forme, ni parametre.
-    const auto noForm = [](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
-        if (v.size() < 6 || st.size() < 6) return;
-        const bool none = (v[1].empty() || v[1] == "Aucun") && trimmedText(v[5]).empty();
-        if (!none) return;
-        st[3].enabled = false;
-        st[3].hint = "Aucun : une proc\xC3\xA9" "dure, sans valeur rendue";
-        st[4].enabled = false;
-    };
-    if (sym) {
-        app_.menus().ShowDialog(
-            [&] {
-                auto d = std::make_unique<FormDialog>("dialog.hmiNewFunction", "Nouvelle fonction de " + sym->name,
-                "Une fonction du symbole s'appelle dans le symbole par son nom, et ailleurs par Vue.Instance.Nom(...). "
-                "Ses param\xC3\xA8tres, ses locales et ses constantes se d\xC3\xA9" "clarent dans ses onglets. Un nom d\xC3\xA9j\xC3\xA0 pris "
-                "est une surcharge : changez ses param\xC3\xA8tres pour la distinguer. Ctrl+Z la retire.",
-                std::move(fields), "Cr\xC3\xA9" "er");
-                d->setRules(shapeRules(at, noForm));
-                return d;
-            }(),
-            [this, symbolView, returnOf](const menu::DialogResult& r) {
-                auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(symbolView)));
-                auto* pane = editor ? (editor->symbolFunctions() ? editor->symbolFunctions() : editor->viewFunctions()) : nullptr;   // 1.12.16
-                if (!r.accepted() || !pane) return;
-                const auto v = FormDialog::split(r.payload);
-                if (v.empty()) return;
-                std::string why;
-                if (pane->addFunction(v[0], returnOf(v), v.size() > 2 ? v[2] : std::string{}, &why) == hmi::kNoId)
-                    status_->setTransientMessage("Fonction refus\xC3\xA9" "e : " + why, 8.0);
-            });
-        return;
-    }
-    auto dialog = std::make_unique<FormDialog>("dialog.hmiNewFunction", "Nouvelle fonction IHM",
-            std::string(core::hasApi() ? "Une fonction IHM s'appelle par son nom, comme une fonction de l'automate : "
-                                       : "Une fonction IHM s'appelle par son nom : ")   // 1.12.2
-                + "Moyenne(a, b) dans un script, "
-            "une action ou - si elle rend une valeur - une expression de vue. Ses param\xC3\xA8tres, ses locales et ses constantes "
-            "se d\xC3\xA9" "clarent dans ses onglets ; Aucun en retour : une proc\xC3\xA9" "dure, appel\xC3\xA9" "e seule sur sa ligne. "
-            "Le corps part d'un mod\xC3\xA8le \xC3\xA0 compl\xC3\xA9ter. Le retour peut \xC3\xAAtre un tableau, une liste, un vecteur, un "
-            "dictionnaire, un tuple (Forme du retour) ou tout type \xC3\xA9" "crit. Ctrl+Z la retire.",
-            std::move(fields), "Cr\xC3\xA9" "er");
-    dialog->setRules(shapeRules(at, noForm));
-    app_.menus().ShowDialog(std::move(dialog),
-        [this, returnOf](const menu::DialogResult& r) {
-            auto* pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
-            if (!r.accepted() || !pane) return;
-            const auto v = FormDialog::split(r.payload);
-            if (v.empty()) return;
-            std::string why;
-            if (pane->addFunction(v[0], returnOf(v), v.size() > 2 ? v[2] : std::string{}, &why) == hmi::kNoId)
-                status_->setTransientMessage("Fonction refus\xC3\xA9" "e : " + why, 8.0);
-        });
+    // 1.12.24 : LE MODAL A JOUR, comme le createur de variable - la case Retour ouvre le selecteur de
+    // types (plus de liste a rallonge, ni Forme du retour / Bornes / Type ecrit) ; le texte dit ce
+    // qu'est une fonction de LA VUE, de la popup, du symbole ou du projet (avant : celui du symbole
+    // pour une vue) ; la portee d'une fonction de vue, la virtuelle d'un symbole ; un apercu de la
+    // signature. 1.11.22 : la fonction d'un symbole, sans retour par defaut ; un nom deja pris est
+    // une surcharge (comme pour les fonctions IHM).
+    const auto* owner = symbolView ? doc->project.view(asId(symbolView)) : nullptr;
+    if (symbolView && !owner) return;
+    HmiNewFunctionDialog::Spec spec;
+    spec.doc = doc;
+    spec.owner = owner ? owner->id : hmi::kNoId;
+    spec.returnType = owner ? std::string{} : std::string("REAL");
+    app_.menus().ShowDialog(std::make_unique<HmiNewFunctionDialog>(std::move(spec)), [this, symbolView](const menu::DialogResult& r) {
+        if (!r.accepted()) return;
+        HmiNewFunctionDialog::Answer a;
+        if (!HmiNewFunctionDialog::parse(r.payload, a)) return;
+        HmiFunctionsPane* pane = nullptr;
+        if (symbolView) {
+            auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(symbolView)));
+            pane = editor ? (editor->symbolFunctions() ? editor->symbolFunctions() : editor->viewFunctions()) : nullptr;   // 1.12.16
+        } else {
+            pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
+        }
+        if (!pane) return;
+        // UN SEUL CTRL+Z : la fonction, sa portee, sa virtuelle.
+        core::CommandGroupScope group("Nouvelle fonction " + a.name);
+        std::string why;
+        const hmi::Id made = pane->addFunction(a.name, a.returnType, a.description, &why);
+        if (made == hmi::kNoId) {
+            status_->setTransientMessage("Fonction refus\xC3\xA9" "e : " + why, 8.0);
+            return;
+        }
+        if (symbolView && !a.pub) (void)pane->setFunctionVisibility(made, false);
+        if (symbolView && a.isVirtual) (void)pane->setVirtual(made, true);
+    });
 }
 
 // ---- 1.11.18 (refonte des scripts, lot 5) : MIGRER LES DECLARATIONS DU PROJET ----

@@ -13145,6 +13145,12 @@ const std::vector<Topic>& topics() {
                          "**Nouvelle fonction** : son nom, son **type de retour** (ou \xC2\xAB Aucun "
                          "\xC2\xBB pour une proc\xC3\xA9" "dure) et une description. Le corps part d'un "
                          "mod\xC3\xA8le \xC3\xA0 compl\xC3\xA9ter.", {}},
+             {K::Paragraph, "**La fen\xC3\xAAtre Nouvelle fonction** (1.12.24) : comme le cr\xC3\xA9" "ateur de variable, la case "
+                         "**Retour** ouvre le **s\xC3\xA9lecteur de types** - il cherche, filtre et compose (un tableau, une liste, "
+                         "un dictionnaire, un tuple, les g\xC3\xA9n\xC3\xA9riques T et K d'un symbole ou d'une popup) ; \xC2\xAB Aucun \xC2\xBB : "
+                         "une proc\xC3\xA9" "dure. D'une vue ou d'une popup, sa **port\xC3\xA9" "e** (publique : Vue.Nom(\xE2\x80\xA6) "
+                         "ailleurs) ; d'un symbole, **virtuelle**. Un aper\xC3\xA7u montre ce qui s'\xC3\xA9" "crira et comment elle "
+                         "s'appellera ; un nom d\xC3\xA9j\xC3\xA0 pris est une surcharge, dite sous le nom.", {}, "1.12.24"},
              {K::Heading, "Les onglets de la fonction (1.11.18)", {}, "1.11.18"},
              {K::Paragraph, "\xC3\x80 c\xC3\xB4t\xC3\xA9 du Code : **Param\xC3\xA8tres** (Nom, Type, Mode, "
                          "D\xC3\xA9" "faut, Documentation - l'ordre est la signature : Alt+Haut et Alt+Bas le "

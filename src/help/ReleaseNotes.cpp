@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.24", "21/10/2026", "en cours"},
     {"1.12.23", "21/10/2026", "livr\xC3\xA9" "e le 21/10 tard le soir"},
     {"1.12.22", "21/10/2026", "livr\xC3\xA9" "e le 21/10 dans la soir\xC3\xA9" "e"},
     {"1.12.21", "21/10/2026", "livr\xC3\xA9" "e le 21/10 au soir"},
@@ -129,6 +130,10 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.24 (21/10/2026) : la fenetre Nouvelle fonction (comme le createur de variable).
+        note("1.12.24", "Scripts", Kind::Changed,
+         "LA FEN\xC3\x8ATRE NOUVELLE FONCTION, REFAITE COMME LE CR\xC3\x89" "ATEUR DE VARIABLE : la case Retour ouvre le s\xC3\xA9lecteur de types (il cherche, filtre et compose : MAP[STRING] OF VECTOR OF T_Cuve, les g\xC3\xA9n\xC3\xA9riques T et K d'un symbole ou d'une popup ; Aucun : une proc\xC3\xA9" "dure) - plus de Forme du retour, de Bornes ni de Type \xC3\xA9" "crit, plus de liste \xC3\xA0 rallonge. Une vue ou une popup : la port\xC3\xA9" "e (publique : Vue.Nom(\xE2\x80\xA6) ailleurs, priv\xC3\xA9" "e) ; un symbole : virtuelle (une instance peut la red\xC3\xA9" "finir). Un aper\xC3\xA7u dit ce qui s'\xC3\xA9" "crira (FUNCTION Nom : REAL) et comment elle s'appellera, dans la vue et ailleurs ; un nom d\xC3\xA9j\xC3\xA0 pris est une surcharge, dite sous le nom. Un seul Ctrl+Z reprend la cr\xC3\xA9" "ation.",
+         "fonctions", ""),
         // 1.12.23 (21/10/2026) : voir docs/LIVRAISON-1.12.23.md (la plume lit sa formule, les carres du Contenu s'ouvrent, selon K).
         note("1.12.23", "Vues", Kind::Fixed,
          "LA PLUME LIT SA FORMULE, LES CARR\xC3\x89S DU CONTENU S'OUVRENT : la case Expression d'une plume (l'onglet Contenu d'une courbe) se lisait comme une valeur fixe - toute variable y \xC3\xA9tait \xC2\xAB n'est pas un nombre \xC2\xBB (SPPV_TELUNA[0].SP, le membre INT d'une structure g\xC3\xA9n\xC3\xA9rique SPPV<INT>, comme Niveau). Elle se lit maintenant en formule, comme \xC3\xA0 G\xC3\xA9n\xC3\xA9rer et en marche : une variable, un calcul ; une constante (12.5) reste une constante. M\xC3\xAAme correction pour les conditions des alarmes d'un symbole (Pression > 10 \xC3\xA9tait refus\xC3\xA9" "e). Le carr\xC3\xA9 au bout d'une case (C, fx, I, S\xE2\x80\xA6) des onglets Contenu, Actions et Raccourcis r\xC3\xA9pond au clic, comme dans l'inspecteur : la liste de ce qu'il dit, puis le s\xC3\xA9lecteur des constantes, des variables IHM et des variables syst\xC3\xA8me ; le choix s'\xC3\xA9" "crit dans la case (Ctrl+Z). Types IHM : une structure g\xC3\xA9n\xC3\xA9rique SPPV<K> compte ses mots \xC2\xAB selon K \xC2\xBB (c'\xC3\xA9tait \xC2\xAB selon T \xC2\xBB pour toutes).",

@@ -150,7 +150,7 @@ struct Limits {
     double noise{0.3};          // % de l'etendue de la sortie (ecart type)
 };
 [[nodiscard]] Limits      limitsOf(Goal) noexcept;
-[[nodiscard]] std::string_view goalName(Goal) noexcept;   // "Robuste", "Équilibré", "Rapide"
+[[nodiscard]] std::string_view goalName(Goal) noexcept;   // "Robuste", "Equilibre", "Rapide"
 struct TuneRequest {
     Model       model;
     LoopContext ctx;

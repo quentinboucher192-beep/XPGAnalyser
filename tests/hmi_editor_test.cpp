@@ -46,6 +46,7 @@
 #include "../src/app/hmi/HmiValuePicker.hpp"
 #include "../src/app/hmi/HmiActionDialogs.hpp"     // 1.11.9 : l'operation en arbre, le script, Maths
 #include "../src/app/hmi/HmiAddressDialog.hpp"   // 1.12.18 : l'adresse dans toutes les cases
+#include "../src/app/hmi/HmiFunctionDialog.hpp"  // 1.12.24 : Nouvelle fonction
 #include "../src/app/hmi/HmiItemDuplicateDialog.hpp"   // 1.12.16 : Dupliquer... d'un element
 #include "../src/hmi/HmiTable.hpp"   // 1.12.13 : le Tableau, un mode a la fois
 #include "../src/hmi/HmiActionKinds.hpp"
@@ -34178,6 +34179,115 @@ void plumeCarres11223() {
     }
 }
 
+// ---- 1.12.24 : le modal « Nouvelle fonction » a jour ---------------------------------------------
+//  Comme le createur de variable : la case Retour ouvre le selecteur de types (plus de Forme du retour,
+//  de Bornes, de Type ecrit) ; le texte dit ce qu'est une fonction de la vue, de la popup, du symbole ou
+//  du projet ; la portee (vue, popup), la virtuelle (symbole) ; l'apercu ; une surcharge dite.
+void nouvelleFonction11224() {
+    std::printf("-- 1.12.24 : Nouvelle fonction - la case Retour ouvre le selecteur de types\n");
+    Bench b;
+    auto& p = b.doc->project;
+    View pop = makeView(p, "Pop_Reglage");
+    pop.role = "popup";
+    p.views.push_back(pop);
+    View sym = makeView(p, "Sym_Mesure");
+    sym.role = "symbole";
+    sym.generics = {{"T", ""}};
+    p.views.push_back(sym);
+    hmi::HmiFunction moy;
+    moy.id = p.allocate();
+    moy.name = "Moyenne";
+    moy.returnType = "REAL";
+    p.programs.functions.push_back(moy);
+    std::vector<app::HmiTypePicker::Spec> asked;
+    std::string answer = "ARRAY[0..9] OF REAL";
+    app::typepicker::setHost([&](app::HmiTypePicker::Spec s, app::typepicker::Done done) {
+        asked.push_back(s);
+        app::HmiTypePicker::Answer a;
+        a.type = answer;
+        done(a);
+    });
+    menu::MenuManager mm{menu::MenuFactory{}};
+    app::HmiNewFunctionDialog::Answer got;
+    bool accepted = false;
+    auto open = [&](Id owner, std::string ret) {
+        app::HmiNewFunctionDialog::Spec spec;
+        spec.doc = b.doc;
+        spec.owner = owner;
+        spec.returnType = std::move(ret);
+        accepted = false;
+        mm.ShowDialog(std::make_unique<app::HmiNewFunctionDialog>(std::move(spec)), [&](const menu::DialogResult& r) {
+            accepted = r.accepted() && app::HmiNewFunctionDialog::parse(r.payload, got);
+        });
+        mm.applyPending();
+        return dynamic_cast<app::HmiNewFunctionDialog*>(mm.top());
+    };
+    // une vue
+    auto* d = open(b.view, "");
+    check(d && d->title() == "Nouvelle fonction de Vue_Test", "le titre : Nouvelle fonction de Vue_Test");
+    if (!d) { app::typepicker::setHost({}); return; }
+    check(d->explanation().rfind("Une fonction de la vue", 0) == 0 && d->explanation().find("symbole") == std::string::npos,
+          "le texte parle de la vue (avant : celui du symbole)");
+    check(d->answer().name == "Fonction" && d->answer().returnType.empty() && d->declaration().rfind("FUNCTION Fonction", 0) == 0
+              && d->declaration().find("proc\xC3\xA9" "dure") != std::string::npos,
+          "d'office : Fonction, Aucun (une proc\xC3\xA9" "dure) : " + d->declaration());
+    d->setName("2Debits");
+    check(!d->canConfirm() && !d->nameProblem().empty() && !d->confirm(),
+          "un nom qui commence par un chiffre : Cr\xC3\xA9" "er gris\xC3\xA9, la raison sous le nom");
+    d->setName("Moyenne_Debits");
+    d->chooseReturn();
+    check(asked.size() == 1 && asked[0].use == hmi::typereg::UseReturn && asked[0].current == "Aucun" && asked[0].field == "Retour de Moyenne_Debits",
+          "la case Retour ouvre le s\xC3\xA9lecteur de types (les types d'un retour, sur Aucun)");
+    check(d->answer().returnType == "ARRAY[0..9] OF REAL" && d->declaration() == "FUNCTION Moyenne_Debits : ARRAY[0..9] OF REAL",
+          "le type choisi : " + d->declaration());
+    check(d->calls().find("ailleurs : Vue_Test.Moyenne_Debits") != std::string::npos, "publique : Vue_Test.Moyenne_Debits(...) ailleurs");
+    d->setPublic(false);
+    check(d->calls().find("seulement") != std::string::npos, "priv\xC3\xA9" "e : dans la vue seulement");
+    d->setDescription("la moyenne des d\xC3\xA9" "bits");
+    check(d->confirm(), "Cr\xC3\xA9" "er");
+    mm.applyPending();
+    check(accepted && got.name == "Moyenne_Debits" && got.returnType == "ARRAY[0..9] OF REAL" && !got.pub && got.description == "la moyenne des d\xC3\xA9" "bits",
+          "la r\xC3\xA9ponse : nom, retour, description, priv\xC3\xA9" "e");
+    // une popup
+    d = open(pop.id, "");
+    check(d && d->title() == "Nouvelle fonction de la popup Pop_Reglage" && d->explanation().find("de la popup") != std::string::npos,
+          "une popup : son titre, son texte");
+    if (d) d->cancel();
+    mm.applyPending();
+    // un symbole generique : ses T
+    d = open(sym.id, "");
+    check(d && d->title() == "Nouvelle fonction du symbole Sym_Mesure" && d->owner() == app::HmiNewFunctionDialog::Owner::Symbol, "un symbole");
+    if (d) {
+        answer = "LIST OF T";
+        d->chooseReturn();
+        check(asked.size() == 2 && asked[1].generics.size() == 1 && asked[1].generics[0].name == "T" && asked[1].genericsOf == "Sym_Mesure<T>",
+              "le s\xC3\xA9lecteur propose ses g\xC3\xA9n\xC3\xA9riques : Sym_Mesure<T>");
+        d->setVirtual(true);
+        check(d->answer().returnType == "LIST OF T" && d->calls().find("virtuelle") != std::string::npos, "LIST OF T, virtuelle");
+        (void)d->confirm();
+        mm.applyPending();
+        check(accepted && got.isVirtual && got.returnType == "LIST OF T", "la r\xC3\xA9ponse : virtuelle");
+    }
+    // le projet : une surcharge dite, pas bloquee
+    d = open(kNoId, "REAL");
+    check(d && d->title() == "Nouvelle fonction IHM" && d->answer().returnType == "REAL", "une fonction IHM : REAL d'office");
+    if (d) {
+        d->setName("Moyenne");
+        check(d->canConfirm() && d->nameNote().find("surcharge (2 fonctions Moyenne)") != std::string::npos,
+              "un nom pris : une surcharge, dite (" + d->nameNote() + ")");
+        d->setReturnType("Aucun");
+        check(d->answer().returnType.empty(), "Aucun : sans retour");
+        d->cancel();
+        mm.applyPending();
+        check(!accepted, "Annuler : rien");
+    }
+    app::HmiNewFunctionDialog::Answer a{"F", "MAP[STRING] OF REAL", "d\xC3\xA9" "crit ; avec un point-virgule", false, true}, back;
+    check(app::HmiNewFunctionDialog::parse(app::HmiNewFunctionDialog::encode(a), back) && back.name == a.name && back.returnType == a.returnType
+              && back.description == a.description && back.pub == a.pub && back.isVirtual == a.isVirtual,
+          "la r\xC3\xA9ponse, aller et retour");
+    app::typepicker::setHost({});
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les natives rangees, Choisir une fonction... (Mes fonctions, Rend), seuls.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -34549,6 +34659,7 @@ int main(int argc, char** argv) {
     generiquesFenetres11221();              // 1.12.21 : T, K au selecteur de types ; les fenetres se deplacent et s'agrandissent
     generiquesSuiventEcran11221();          // 1.12.21 : retirer un generique, les variables suivent
     plumeCarres11223();                     // 1.12.23 : la plume lit sa formule, les carres du Contenu, selon K
+    nouvelleFonction11224();                // 1.12.24 : Nouvelle fonction, la case Retour ouvre le selecteur de types
     v1101_tableaux_onglet_cache();          // 1.10.1 (chantier B1) : la vue suit les tableaux, onglet cache ou non
     v1101_journal_vider();                  // 1.10.1 (integration I1101) : le Journal se vide ; les nouveautes 1.10.0 -> 1.10.1
     aideSaisie1102();                       // 1.10.2 (chantier A) : les objets des vues, les parametres des instances
