@@ -838,7 +838,11 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     bool viewMembers = false;
     for (const auto& v : p.views)
         viewMembers = viewMembers || !v.constants.empty() || (v.role != "symbole" && !v.functions.empty());
-    const int format = viewMembers ? kFormatVersion : tableGestures ? 25 : shortcuts ? 24 : declared ? 23
+    // 1.12.20 : le format 27 n'ajoute que les types rappel nommes (T_Filtre) ; un projet qui n'en a pas s'ecrit au
+    // format 26 (ou 25...) : la 1.12.19 l'ouvre.
+    const bool callbackTypes = std::any_of(p.programs.types.begin(), p.programs.types.end(),
+                                           [](const HmiType& t) { return t.kind == HmiTypeKind::Callback; });
+    const int format = callbackTypes ? kFormatVersion : viewMembers ? 26 : tableGestures ? 25 : shortcuts ? 24 : declared ? 23
                      : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# XpgAnalyzer - projet IHM (format " + std::to_string(format) + ")\n";
@@ -907,7 +911,9 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         index += "type_ihm" + fieldInt("id", ty.id) + field("nom", ty.name) + field("description", ty.description)
                + (ty.folder.empty() ? std::string{} : field("dossier", ty.folder)) + "\n";   // lot 21
         // 1.10 (decision 15, chantier E) : une enumeration le dit (type_genre), puis ses valeurs.
-        if (ty.kind != HmiTypeKind::Structure) index += "type_genre" + fieldBare("genre", typeKindKey(ty.kind)) + "\n";
+        if (ty.kind != HmiTypeKind::Structure)
+            index += "type_genre" + fieldBare("genre", typeKindKey(ty.kind))
+                   + (ty.kind == HmiTypeKind::Callback ? field("signature", ty.signature) : std::string{}) + "\n";   // 1.12.20
         for (const auto& m : ty.members)
             index += "membre" + field("nom", m.name) + field("type", m.type) + field("initiale", m.initial)
                    + field("description", m.description) + "\n";
@@ -1491,6 +1497,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
                 continue;
             }
             p.programs.types.back().kind = typeKindFromKey(toStr(r.get("genre")));
+            p.programs.types.back().signature = toStr(r.get("signature"));      // 1.12.20 : un type rappel
         } else if (r.word == "valeur_enum") {                         // 1.10 (E) : une valeur d'enumeration
             if (p.programs.types.empty()) {
                 if (report) report->warnings.push_back("valeur d'\xC3\xA9num\xC3\xA9ration sans type IHM : ignor\xC3\xA9" "e");

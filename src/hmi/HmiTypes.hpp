@@ -72,10 +72,18 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why = nullptr);
 // se deplie pas en cases (flatten : aucune case, sans erreur), ne se lie a aucun equipement et
 // n'a pas d'adresse ; sa valeur initiale est un litteral ([1, 2, 3], ['a' := 1], (1, 'x')).
 [[nodiscard]] bool isRich(std::string_view type);
+// 1.12.20 : un rappel, ecrit (CALLBACK (x : REAL) : BOOL) ou nomme (T_Filtre, un type IHM de genre Rappel) : sa forme
+// ecrite ; vide : pas un rappel. Le projet nul : seulement la forme ecrite.
+[[nodiscard]] std::string callbackForm(const Project*, std::string_view type);
+// 1.12.20 : un nom de type du projet permis a une locale, un retour, un parametre de fonction : une structure (avec
+// des membres), une enumeration, un rappel nomme (T_Filtre). Une seule regle (le moteur, Compiler, l'editeur).
+[[nodiscard]] bool knownTypeName(const Project&, std::string_view type);
 // ... dont la TAILLE VARIE (MAP, LIST, VECTOR, ou un type qui en contient).
 [[nodiscard]] bool isDynamic(std::string_view type);
 // Pourquoi une variable de ce type ne se lie pas a un equipement, en une phrase ; vide : elle peut.
 [[nodiscard]] std::string unbindableReason(std::string_view type);
+// 1.12.20 : ... un rappel nomme du projet (T_Filtre) aussi.
+[[nodiscard]] std::string unbindableReason(const Project&, std::string_view type);
 // Un type IHM qui se contient lui-meme : le chemin du cycle ("T_A -> T_B -> T_A") ; vide : aucun.
 [[nodiscard]] std::string cycleOf(const Project&, std::string_view typeName);
 // Les variables et les types qui emploient ce type IHM (ses noms).

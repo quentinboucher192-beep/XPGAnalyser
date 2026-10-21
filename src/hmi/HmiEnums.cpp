@@ -156,13 +156,15 @@ std::size_t rewriteEverywhere(Project& p, const std::function<std::string(std::s
 bool isEnumeration(const HmiType& t) noexcept { return t.kind == HmiTypeKind::Enumeration; }
 
 std::string_view typeKindKey(HmiTypeKind k) noexcept {
-    return k == HmiTypeKind::Enumeration ? "enumeration" : "structure";
+    return k == HmiTypeKind::Enumeration ? "enumeration" : k == HmiTypeKind::Callback ? "rappel" : "structure";
 }
 HmiTypeKind typeKindFromKey(std::string_view key) noexcept {
-    return sameName(key, "enumeration") ? HmiTypeKind::Enumeration : HmiTypeKind::Structure;
+    return sameName(key, "enumeration") ? HmiTypeKind::Enumeration
+         : sameName(key, "rappel")      ? HmiTypeKind::Callback       // 1.12.20
+                                        : HmiTypeKind::Structure;
 }
 std::string_view typeKindLabel(HmiTypeKind k) noexcept {
-    return k == HmiTypeKind::Enumeration ? "\xC3\xA9num\xC3\xA9ration" : "structure";
+    return k == HmiTypeKind::Enumeration ? "\xC3\xA9num\xC3\xA9ration" : k == HmiTypeKind::Callback ? "rappel" : "structure";
 }
 
 // ---------------------------------------------------------------- trouver ---

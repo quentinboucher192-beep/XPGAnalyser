@@ -19,6 +19,7 @@
 #include "../../hmi/HmiTypes.hpp"
 #include "../../hmi/HmiSources.hpp"   // 1.12.7 (lot E) : Ligne/Convoyeur/* suit le dossier renomme
 #include "../../hmi/HmiTypeForms.hpp"     // 1.12.2 : Liste..., Vecteur..., Dictionnaire..., Tuple...
+#include "../../hmi/HmiOverload.hpp"      // 1.12.20 (lot T) : les fonctions qui conviennent a un rappel
 #include "../../core/AtomicFile.hpp"   // 1.11.16 : exporter les valeurs remanentes
 #include "../../ui/Theme.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
@@ -1898,7 +1899,7 @@ bool HmiVariablesPane::setEquipment(Id id, const std::string& raw, std::string* 
         return true;
     }
     // 1.12.2 : un type objet (taille variable, ou sans plan memoire) ne tient pas dans un equipement.
-    if (const std::string reason = ty::unbindableReason(v->type); !reason.empty()) return fail(why, v->name + " : " + reason);
+    if (const std::string reason = ty::unbindableReason(doc_->project, v->type); !reason.empty()) return fail(why, v->name + " : " + reason);
     const auto* e = doc_->project.equipmentByName(name);
     if (!e) return fail(why, "\xC3\xA9quipement inconnu : " + name);
     if (!e->modbus()) return fail(why, e->name + " est un \xC3\xA9quipement Ethernet TCP/IP : il n'a pas de variables");
@@ -1926,7 +1927,7 @@ bool HmiVariablesPane::setEquipment(Id id, const std::string& raw, std::string* 
 bool HmiVariablesPane::setAddress(Id id, const std::string& raw, std::string* why) {
     const auto* v = doc_->project.variableById(id);
     if (!v) return fail(why, "variable introuvable");
-    if (const std::string reason = ty::unbindableReason(v->type); !reason.empty()) return fail(why, v->name + " : " + reason);   // 1.12.2
+    if (const std::string reason = ty::unbindableReason(doc_->project, v->type); !reason.empty()) return fail(why, v->name + " : " + reason);   // 1.12.2
     if (!v->bound()) return fail(why, v->name + " n'est li\xC3\xA9" "e \xC3\xA0 aucun \xC3\xA9quipement (colonne \xC3\x89quipement)");
     const std::string address = trimmed(raw);
     if (address.empty()) return fail(why, "adresse vide (D\xC3\xA9lier pour la retirer de l'\xC3\xA9quipement)");
@@ -3269,8 +3270,10 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
-    tools->add(TAdd, HmiGlyph::Plus, core::hasApi() ? "Nouveau type IHM : une structure (comme un DDT de l'automate) ou une \xC3\xA9num\xC3\xA9ration (T_MODE : Arret, Auto, Manu...)"
-                                                    : "Nouveau type IHM : une structure ou une \xC3\xA9num\xC3\xA9ration (T_MODE : Arret, Auto, Manu...)",   // 1.12.2
+    tools->add(TAdd, HmiGlyph::Plus, core::hasApi() ? "Nouveau type IHM : une structure (comme un DDT de l'automate), une \xC3\xA9num\xC3\xA9ration (T_MODE : Arret, Auto, Manu...) "
+                                                      "ou un rappel (T_Filtre : CALLBACK (x : REAL) : BOOL)"
+                                                    : "Nouveau type IHM : une structure, une \xC3\xA9num\xC3\xA9ration (T_MODE : Arret, Auto, Manu...) ou un rappel "
+                                                      "(T_Filtre : CALLBACK (x : REAL) : BOOL)",   // 1.12.2 ; 1.12.20 : le rappel
                "Nouveau type \xE2\x96\xBE");   // 1.10 (chantier U) : le menu Structure / Enumeration
     tools->add(TMember, HmiGlyph::Plus, "Nouveau membre du type choisi", "Membre");
     tools->add(TUp, HmiGlyph::Up, "Monter le membre (sa place Modbus change)", "Monter");
@@ -3296,7 +3299,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setVisibleWhen(TExport, [this] { return static_cast<bool>(hosts_.exportItems); });
     tools_->setVisibleWhen(TImport, [this] { return static_cast<bool>(hosts_.importAny); });
-    tools_->setEnabledWhen(TMember, [this] { return selectedType() != kNoId; });
+    tools_->setEnabledWhen(TMember, [this] { return selectedType() != kNoId && !callbackPage_; });   // 1.12.20 : pas pour un rappel
     tools_->setEnabledWhen(TUp, [this] { return selectedType() != kNoId && selectedMember() > 0; });
     tools_->setEnabledWhen(TDown, [this] {
         const auto* t = doc_->project.hmiType(selectedType());
@@ -3305,7 +3308,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools_->setEnabledWhen(TRemoveMember, [this] { return selectedType() != kNoId && selectedMember() >= 0; });
     tools_->setEnabledWhen(TDuplicate, [this] { return selectedType() != kNoId; });
     tools_->setEnabledWhen(TCopy, [this] { return selectedType() != kNoId && selectedMember() >= 0; });
-    tools_->setEnabledWhen(TPaste, [this] { return selectedType() != kNoId; });
+    tools_->setEnabledWhen(TPaste, [this] { return selectedType() != kNoId && !callbackPage_; });
     tools_->setEnabledWhen(TDelete, [this] { return selectedType() != kNoId || (folders_ && !folders_->selectedFolder().empty()); });
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
@@ -3410,6 +3413,16 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         links_ += newMenu_->itemChosen->connect([this](int a) {
             if (a == 1) tools_->triggered->emit(kMenuBase);           // Structure... : comme l'ancien + Type
             else if (a == 2) openEnumCreation();
+            else if (a == 3) {                                        // 1.12.20 (lot T) : Rappel...
+                std::string name = "T_Rappel", why;
+                for (int i = 2; doc_->project.hmiTypeByName(name) && i < 1000; ++i) name = "T_Rappel" + std::to_string(i);
+                const Id made = addCallbackType(name, "CALLBACK (x : REAL) : BOOL", &why);
+                if (made == kNoId) {
+                    say("Refus\xC3\xA9 : " + why, true);
+                } else if (const int row = folders_->rowOfItem(made); row >= 0) {
+                    (void)types_->beginCellEdit(static_cast<ui::RowIndex>(row), 0);
+                }
+            }
         });
     }
 
@@ -3512,6 +3525,12 @@ void HmiTypesPane::refresh() {
             cells[t.id] = {t.name, std::to_string(t.values.size()) + " val.", "2", used.empty() ? std::string("(aucune variable)") : used};
             continue;
         }
+        if (t.kind == hmi::HmiTypeKind::Callback) {   // 1.12.20 (lot T) : un rappel, sa signature (ni membres, ni mots)
+            hmi::typeform::CallbackParts parts;
+            broken[t.id] = !hmi::typeform::callbackParts(p, t.signature, parts);
+            cells[t.id] = {t.name, "rappel", "\xE2\x80\x94", used.empty() ? std::string("(aucune variable)") : used};
+            continue;
+        }
         const bool cycle = !ty::cycleOf(p, t.name).empty();
         broken[t.id] = cycle;
         cells[t.id] = {t.name, std::to_string(t.members.size()), cycle ? std::string("?") : std::to_string(ty::weightOf(p, t.name).words),
@@ -3556,6 +3575,22 @@ void HmiTypesPane::refreshMembers() {
         if (membersPanel_) membersPanel_->setVisibility(en ? ui::Visibility::Hidden : ui::Visibility::Visible);
         invalidateLayout();
         if (en) t = nullptr;   // pas de membres
+    }
+    // 1.12.20 (lot T) : un type rappel montre sa page a la place des membres.
+    const bool cb = t && t->kind == hmi::HmiTypeKind::Callback;
+    if (cb != callbackPage_) {
+        callbackPage_ = cb;
+        if (cb)
+            members_->setColumns({{"Rappel", 150.f, 60.f, true, false}, {"Forme", 280.f, 60.f, true, false}, {"Note", 340.f, 60.f, true, false}});
+        else
+            members_->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Initiale", 90.f, 40.f, true, false},
+                                  {"D\xC3\xA9" "calage", 90.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false},
+                                  {"Description", 240.f, 60.f, true, false}});
+        if (membersPanel_) static_cast<HmiTitledPanel*>(membersPanel_)->setTitle(cb ? "RAPPEL" : "MEMBRES");
+    }
+    if (cb) {
+        refreshCallbackPage(*t);
+        return;
     }
     std::vector<std::vector<std::string>> rows;
     if (t) {
@@ -3627,6 +3662,62 @@ void HmiTypesPane::refreshMembers() {
     syncing_ = false;
 }
 
+// 1.12.20 (lot T) : la page d'un type rappel - la signature (sa case s'edite), ses entrees, son retour,
+// puis les fonctions du projet : celles qui conviennent, les autres et pourquoi.
+void HmiTypesPane::refreshCallbackPage(const hmi::HmiType& t) {
+    const auto& p = doc_->project;
+    enum Tone : int { Plain, Muted, Good, Bad };
+    std::vector<std::vector<std::string>> rows;
+    std::vector<int> tones;
+    const auto row = [&](std::string a, std::string b, std::string c, Tone tone) {
+        rows.push_back({std::move(a), std::move(b), std::move(c)});
+        tones.push_back(tone);
+    };
+    row("Signature", t.signature, "la forme des fonctions qu'une variable " + t.name + " re\xC3\xA7oit (double-clic pour la changer)", Plain);
+    hmi::typeform::CallbackParts parts;
+    std::string why;
+    if (!hmi::typeform::callbackParts(p, t.signature, parts, &why)) {
+        row("", "", "illisible : " + why, Bad);
+    } else {
+        for (std::size_t i = 0; i < parts.params.size(); ++i)
+            row("Entr\xC3\xA9" "e " + std::to_string(i + 1), (parts.params[i].first.empty() ? std::string{} : parts.params[i].first + " : ") + parts.params[i].second,
+                "", Muted);
+        row("Retour", parts.result.empty() ? std::string("(aucun)") : parts.result, parts.result.empty() ? "la fonction ne rend rien" : "", Muted);
+        for (const auto& f : p.programs.functions) {
+            const auto sig = hmi::overload::signatureOf(f);
+            const std::string form = hmi::overload::callbackText(sig);
+            std::string w;
+            if (form.empty()) row("Fonction " + f.name, sig.text(), "ne se passe pas en rappel : elle a des VAR_IN_OUT ou des VAR_OUTPUT", Bad);
+            else if (!hmi::typeform::callbackFitsText(p, t.signature, form, &w)) row("Fonction " + f.name, form, "ne convient pas : " + w, Bad);
+            else row("Fonction " + f.name, form, "convient : " + t.name + " := " + f.name, Good);
+        }
+    }
+    const Id tid = t.id;
+    memberModel_ = std::make_shared<Rows>(
+        std::vector<std::string>{"Rappel", "Forme", "Note"}, std::move(rows),
+        [tones](ui::RowIndex r, std::size_t c) {
+            ui::CellStyle st;
+            const int tone = r < tones.size() ? tones[r] : Plain;
+            if (c == 0) st.bold = r == 0;
+            if (c == 2) st.fgTone = tone == Good ? ui::Tone::Ok : tone == Bad ? ui::Tone::Error : ui::Tone::Muted;
+            if (c != 2 && tone == Muted) st.fgTone = ui::Tone::Muted;
+            return st;
+        },
+        [](std::size_t r, std::size_t c) { return r == 0 && c == 1; },
+        Rows::Choices{},
+        [this, tid](std::size_t r, std::size_t c, const std::string& text) {
+            if (r != 0 || c != 1) return false;
+            std::string reason;
+            const bool ok = setCallbackSignature(tid, text, &reason);
+            if (!ok) say("Refus\xC3\xA9 : " + reason, true);
+            return ok;
+        });
+    syncing_ = true;
+    members_->setModel(memberModel_);
+    member_ = -1;
+    syncing_ = false;
+}
+
 bool HmiTypesPane::commitMemberCell(std::size_t row, std::size_t col, const std::string& text) {
     const auto* t = doc_->project.hmiType(current_);
     if (!t || row >= t->members.size()) return false;
@@ -3644,7 +3735,7 @@ bool HmiTypesPane::commitMemberCell(std::size_t row, std::size_t col, const std:
 }
 
 Id HmiTypesPane::selectedType() const { return doc_->project.hmiType(current_) ? current_ : kNoId; }
-int HmiTypesPane::selectedMember() const { return member_; }
+int HmiTypesPane::selectedMember() const { return callbackPage_ ? -1 : member_; }   // 1.12.20 : un rappel n'a pas de membres
 
 void HmiTypesPane::selectType(Id id) {
     current_ = id;
@@ -3703,6 +3794,51 @@ Id HmiTypesPane::addType(const std::string& raw, std::string* why) {
     refresh();
     say("Type IHM cr\xC3\xA9\xC3\xA9 : " + name + " (deux membres pour commencer : Valeur, Marche)");
     return made;
+}
+
+// 1.12.20 (lot T) : un type rappel nomme (T_Filtre) - sa signature se lit avant d'entrer.
+Id HmiTypesPane::addCallbackType(const std::string& raw, const std::string& signature, std::string* why) {
+    const std::string name = trimmed(raw);
+    std::string reason;
+    hmi::typeform::CallbackParts parts;
+    if (!hmi::isIdentifier(name)) reason = "nom invalide : lettres, chiffres et _";
+    else if (ty::isElementary(name)) reason = name + " est un type \xC3\xA9l\xC3\xA9mentaire";
+    else if (doc_->project.hmiTypeByName(name)) reason = "le type " + name + " existe d\xC3\xA9j\xC3\xA0";
+    else (void)hmi::typeform::callbackParts(doc_->project, signature, parts, &reason);
+    if (!reason.empty()) {
+        if (why) *why = reason;
+        return kNoId;
+    }
+    Id made = kNoId;
+    apply_(hmi::changeProject(doc_, "Nouveau type rappel " + name, [&](hmi::Project& p) {
+        hmi::HmiType t;
+        t.id = p.allocate();
+        t.name = name;
+        t.kind = hmi::HmiTypeKind::Callback;
+        t.signature = trimmed(signature);
+        made = t.id;
+        p.programs.types.push_back(std::move(t));
+    }));
+    current_ = made;
+    member_ = -1;
+    refresh();
+    say("Type rappel cr\xC3\xA9\xC3\xA9 : " + name + " (" + trimmed(signature) + ") \xC2\xB7 sa signature se change dans sa page \xC2\xB7 Ctrl+Z annule");
+    return made;
+}
+
+bool HmiTypesPane::setCallbackSignature(Id id, const std::string& text, std::string* why) {
+    const auto* t = doc_->project.hmiType(id);
+    if (!t || t->kind != hmi::HmiTypeKind::Callback) return fail(why, "pas un type rappel");
+    std::string sig = trimmed(text);
+    if (sig.rfind("(", 0) == 0) sig = "CALLBACK " + sig;   // (x : REAL) : BOOL suffit
+    hmi::typeform::CallbackParts parts;
+    std::string reason;
+    if (!hmi::typeform::callbackParts(doc_->project, sig, parts, &reason)) return fail(why, reason);
+    if (sig == t->signature) return true;
+    return change(id, "Signature de " + t->name, [sig](hmi::HmiType& x, std::string*) {
+        x.signature = sig;
+        return true;
+    }, why);
 }
 
 bool HmiTypesPane::renameType(Id id, const std::string& raw, std::string* why) {
@@ -3811,6 +3947,8 @@ bool HmiTypesPane::addMember(Id id, const std::string& raw, const std::string& t
     const std::string name = trimmed(raw);
     if (!hmi::isIdentifier(name)) return fail(why, "nom de membre invalide : lettres, chiffres et _");
     return change(id, "Nouveau membre " + name, [&](hmi::HmiType& t, std::string* w) {
+        if (t.kind == hmi::HmiTypeKind::Callback)   // 1.12.20 (lot T)
+            return fail(w, "un type rappel n'a pas de membres : sa signature dit ses entr\xC3\xA9" "es et son retour");
         if (std::any_of(t.members.begin(), t.members.end(), [&](const hmi::TypeMember& m) { return sameText(m.name, name); }))
             return fail(w, "le membre " + name + " existe d\xC3\xA9j\xC3\xA0");
         t.members.push_back({name, ty::normalized(type)});
@@ -3877,6 +4015,36 @@ void HmiTypesPane::rebuildProperties() {
         return;
     }
     const Id id = t->id;
+    if (t->kind == hmi::HmiTypeKind::Callback) {   // 1.12.20 (lot T) : la fiche d'un type rappel
+        PG::Category c;
+        c.name = "Rappel";
+        c.properties.push_back(prop("Nom", t->name, PG::ValueType::Text, [this, id](std::string_view text) {
+            std::string why;
+            const bool ok = renameType(id, std::string(text), &why);
+            if (!ok) say("Refus\xC3\xA9 : " + why, true);
+            return ok;
+        }, {}, "Renommer : les variables, les param\xC3\xA8tres et les locales de ce type suivent."));
+        c.properties.push_back(prop("Description", t->description, PG::ValueType::Text,
+                                    [this, id](std::string_view text) { return setTypeDescription(id, std::string(text)); }));
+        c.properties.push_back(prop("Signature", t->signature, PG::ValueType::Text, [this, id](std::string_view text) {
+            std::string why;
+            const bool ok = setCallbackSignature(id, std::string(text), &why);
+            if (!ok) say("Refus\xC3\xA9 : " + why, true);
+            return ok;
+        }, {}, "CALLBACK (x : REAL) : BOOL : les entr\xC3\xA9" "es et le retour des fonctions qu'une variable " + t->name
+                   + " re\xC3\xA7oit. Une variable, un param\xC3\xA8tre, une locale de ce type valent une fonction (" + t->name
+                   + " := Est_Valide), une LAMBDA ou NULL."));
+        c.properties.push_back(prop("Genre", "rappel \xC2\xB7 dans la m\xC3\xA9moire de l'IHM (ni li\xC3\xA9, ni Modbus)"));
+        cats.push_back(std::move(c));
+        PG::Category vars;
+        vars.name = "Variables IHM de type " + t->name;
+        for (const auto& v : p.programs.variables)
+            if (sameText(v.type, t->name)) vars.properties.push_back(prop(v.name, v.initial.empty() ? std::string("NULL") : v.initial));
+        if (vars.properties.empty()) vars.properties.push_back(prop("Aucune", "aucune variable de ce type"));
+        cats.push_back(std::move(vars));
+        props_->setCategories(std::move(cats));
+        return;
+    }
     if (hmi::isEnumeration(*t)) {   // 1.10 (chantier U) : la fiche d'une enumeration
         PG::Category c;
         c.name = "\xC3\x89num\xC3\xA9ration";
@@ -4057,6 +4225,10 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
     const auto* t = p.hmiType(typeId);
     if (!t) {
         plan.error = "Choisis d'abord un type.";
+        return plan;
+    }
+    if (t->kind == hmi::HmiTypeKind::Callback) {   // 1.12.20 (lot T)
+        plan.error = t->name + " est un type rappel : il n'a pas de membres (sa signature dit ses entr\xC3\xA9" "es et son retour).";
         return plan;
     }
     plan.result = t->members;
@@ -4399,6 +4571,7 @@ void HmiTypesPane::openNewTypeMenu() {
     std::vector<ui::PopupMenu::Item> items;
     items.push_back({"Structure\xE2\x80\xA6", "", "", ui::Icon::None, true, false, 1});
     items.push_back({"\xC3\x89num\xC3\xA9ration\xE2\x80\xA6", "", "", ui::Icon::None, true, false, 2});
+    items.push_back({"Rappel\xE2\x80\xA6", "", "", ui::Icon::None, true, false, 3});   // 1.12.20 (lot T) : T_Filtre
     newMenu_->setItems(std::move(items));
     const auto r = tools_->rectOf(TAdd);
     auto* root = rootWidget();

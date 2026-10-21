@@ -134,7 +134,9 @@ bool callbackType(std::string_view type) {
     return u.find("CALLBACK") != std::string::npos;
 }
 
-bool richLiteral(std::string_view type, std::string_view text) {
+bool richLiteral(std::string_view type, std::string_view text, const Project* project = nullptr) {
+    // 1.12.20 : un rappel nomme du projet (T_Filtre) aussi.
+    if (project && !types::callbackForm(project, type).empty()) return true;
     if (type.empty() || !types::isRich(type)) return false;
     // 1.12.19 : un parametre rappel - une fonction, une LAMBDA, une variable rappel, NULL : params::callbackArgument le
     // verifie (sa forme), pas une expression.
@@ -455,7 +457,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
     {
         std::vector<std::string> retained;
         for (const auto& var : p.programs.variables)
-            if (var.retain && callbackType(var.type)) retained.push_back(var.name);
+            if (var.retain && !types::callbackForm(&p, var.type).empty()) retained.push_back(var.name);
         if (!retained.empty())
             forEachCode(p, [&](const std::string& text, CodeForm form, const CodeSite&) {
                 if (form != CodeForm::Code) return;
@@ -474,13 +476,14 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         std::string why;
         if (!types::validType(p, var.type, &why)) {
             add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, var.name + " : " + why);
-        } else if (types::isRich(var.type)) {
+        } else if (const std::string cbForm = types::callbackForm(&p, var.type); types::isRich(var.type) || !cbForm.empty()) {
             // 1.12.2 : un type objet (LIST, VECTOR, MAP, TUPLE) - sa valeur initiale, un litteral.
-            if (!typeform::valueFits(p, var.type, var.initial, &why))
+            // 1.12.20 : un rappel nomme (T_Filtre) : sa forme.
+            if (!typeform::valueFits(p, cbForm.empty() ? var.type : cbForm, var.initial, &why))
                 add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, var.name + " : valeur initiale illisible (" + why + ")");
             // 1.12.20 : une variable rappel - un nom de fonction en texte ('Valider') : il se lit encore, mais n'est ni
             // verifie ni renomme (la correction d'un clic : =Valider) ; remanente, une LAMBDA ne se garde pas.
-            if (callbackType(var.type)) {
+            if (!cbForm.empty()) {
                 std::string t = trimmedCopy(var.initial);
                 const bool formula = t.size() > 1 && t.front() == '=' && t[1] != '=';
                 if (formula) t = trimmedCopy(t.substr(1));
@@ -523,7 +526,15 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         else if (types::isElementary(ty.name)) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : le nom d'un type \xC3\xA9l\xC3\xA9mentaire");
         else if (!typeNames.insert(upperText(ty.name)).second) add(out, S::Error, cat, kNoId, kNoId, ty.name, "type IHM en double : " + ty.name);
         // 1.12.13 : une enumeration n'a pas de membres (ses valeurs) - pas d'avertissement.
-        if (ty.members.empty() && ty.kind != HmiTypeKind::Enumeration) add(out, S::Warning, cat, kNoId, kNoId, ty.name, ty.name + " : aucun membre");
+        if (ty.members.empty() && ty.kind == HmiTypeKind::Structure) add(out, S::Warning, cat, kNoId, kNoId, ty.name, ty.name + " : aucun membre");
+        // 1.12.20 : un type rappel - sa signature (CALLBACK (x : REAL) : BOOL) se lit.
+        if (ty.kind == HmiTypeKind::Callback) {
+            const std::string sig = trimmedCopy(ty.signature);
+            const auto r = typereg::Registry::build(p)->resolve(sig, typereg::UseVariable);
+            if (sig.empty() || upperText(sig).rfind("CALLBACK", 0) != 0 || !r.ok)
+                add(out, S::Error, cat, kNoId, kNoId, ty.name,
+                    ty.name + " : sa signature se lit CALLBACK (x : REAL) : BOOL" + (sig.empty() ? std::string(" (vide)") : " (" + sig + (r.why.empty() ? std::string{} : " : " + r.why) + ")"));
+        }
         std::set<std::string> members;
         for (const auto& m : ty.members) {
             std::string why;
@@ -656,7 +667,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
     // objet ni parametre), leur valeur ecrite (dans son type) ou leur calcul (ses noms, ses chemins, au
     // demarrage ou a l'ouverture), le corps des fonctions (ses noms, ses chemins).
     const TypeKnown knownType = [&p](std::string_view t) {
-        return !types::membersOf(p, t).empty() || findEnumeration(p, t) != nullptr;
+        return types::knownTypeName(p, t);              // 1.12.20 : un rappel nomme aussi
     };
     const auto viewMembers = [&](const View& v) {
         if (!viewmembers::any(v)) return;
@@ -1522,13 +1533,13 @@ void checkLot8(const Project& p, const NameExists& plc, std::vector<Issue>& out)
                             add(out, S::Error, "Action", v.id, obj, where,
                                 "param\xC3\xA8tre inconnu de " + target->name + " : " + name + " (retir\xC3\xA9 ou renomm\xC3\xA9 ? corrigez l'appel)");
                         // 1.12.19 (R3) : un parametre rappel - params::callbackArgument (checkArguments) le verifie.
-                        if (const ViewParam* cb = target->param(name); cb && callbackType(cb->type)) continue;
+                        if (const ViewParam* cb = target->param(name); cb && !types::callbackForm(&p, cb->type).empty()) continue;
                         // Ce que l'appelant relie doit exister (chez lui : ses propres parametres comptent).
                         for (const auto& r : scanRoots(markers::strip(value)))   // 1.11.7 : $V[0]$ -> V
                             if (!known(p, plc, r, &v))
                                 add(out, S::Error, "Variable", v.id, obj, where, name + " := " + value + " : variable inexistante : " + r);
                         // 1.12.4 : un litteral pour un parametre objet ([1, 2], ['a' := 1], (1, 'x')) : dans son type.
-                        if (const ViewParam* prm = target->param(name); prm && richLiteral(prm->type, value)) {
+                        if (const ViewParam* prm = target->param(name); prm && richLiteral(prm->type, value, &p)) {
                             std::string why;
                             if (!typeform::valueFits(p, prm->type, trimmedCopy(markers::strip(value)), &why))
                                 add(out, S::Error, "Action", v.id, obj, where,
@@ -1718,7 +1729,7 @@ void checkParams19(const Project& p, const exprcheck::PlcPaths& paths, std::vect
                         "la valeur par d\xC3\xA9" "faut de " + prm.name + " (" + def + ", " + params::normalizedType(given)
                             + ") ne convient pas au type " + params::normalizedType(prm.type));
                 std::string why;
-                if (richLiteral(prm.type, def) && !typeform::valueFits(p, prm.type, trimmedCopy(markers::strip(def)), &why))
+                if (richLiteral(prm.type, def, &p) && !typeform::valueFits(p, prm.type, trimmedCopy(markers::strip(def)), &why))
                     add(out, S::Error, "Param\xC3\xA8tre", v.id, kNoId, "parametres",
                         "la valeur par d\xC3\xA9" "faut de " + prm.name + " (" + def + ") ne va pas dans un " + types::normalized(prm.type) + " : " + why);
             }
@@ -3314,7 +3325,7 @@ void checkEquipments(const Project& p, std::vector<Issue>& out) {
         if (!v.bound()) continue;
         const std::string vcat = "Variable IHM";
         // 1.12.2 : un type objet (taille variable, ou sans plan memoire) ne se lie pas.
-        if (const std::string reason = types::unbindableReason(v.type); !reason.empty()) {
+        if (const std::string reason = types::unbindableReason(p, v.type); !reason.empty()) {   // 1.12.20 : un rappel nomme aussi
             add(out, S::Error, vcat, kNoId, kNoId, v.name, v.name + " est li\xC3\xA9" "e \xC3\xA0 " + v.equipment + " : " + reason + " (D\xC3\xA9lier dans Variables IHM)");
             continue;
         }
@@ -3869,7 +3880,7 @@ struct ExprWalker {
                 const View* opened = p.viewByName(trimmedCopy(a.target));
                 for (const auto& [name, value] : parseArguments(a.value)) {
                     const ViewParam* declared = opened ? opened->param(name) : nullptr;
-                    if (!(declared && richLiteral(declared->type, value)))     // 1.12.4 : un litteral objet, verifie dans son type
+                    if (!(declared && richLiteral(declared->type, value, &p)))     // 1.12.4 : un litteral objet, verifie dans son type
                         expr(w, value, W::Any, "param\xC3\xA8tre " + name + " : ");
                     if (opened && !opened->param(name))           // 1.11.22 : un parametre retire du popup casse l'appel
                         push(w, "param\xC3\xA8tre " + name + " : " + opened->name + " n'a pas (ou plus) ce param\xC3\xA8tre - corrigez l'appel, "
@@ -3949,7 +3960,7 @@ struct ExprWalker {
             if (v.role == "popup" && !v.popup.title.empty()) text(Where{&v, kNoId, "Popup", "popup_libelle"}, v.popup.title, "titre ");
             for (const auto& prm : v.params) {
                 const std::string def = trimmedCopy(prm.defaultValue);
-                if (!def.empty() && !richLiteral(prm.type, def))      // 1.12.4 : un litteral objet, verifie dans son type
+                if (!def.empty() && !richLiteral(prm.type, def, &p))      // 1.12.4 : un litteral objet, verifie dans son type
                     expr(Where{&v, kNoId, "Param\xC3\xA8tre", "parametres"}, def, W::Any, prm.name + " := ");
             }
         }
@@ -4847,7 +4858,7 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
     // 1.10 (integration, S1 -> N) : un type IHM du projet (structure) est un type
     // permis pour une locale ou un retour (sans lui : le refus de la 1.9).
     const TypeKnown knownType = [&p](std::string_view t) {
-        return !types::membersOf(p, t).empty() || findEnumeration(p, t) != nullptr;   // 1.10 (S1) : une enumeration aussi
+        return types::knownTypeName(p, t);   // 1.10 (S1) : une enumeration aussi ; 1.12.20 : un rappel nomme
     };
     for (const auto& v : p.views) {
         const bool anim = !f || f->anim(v.id), act = !f || f->act(v.id);   // 1.11.13 : le filtre
@@ -4914,7 +4925,7 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
         }
         for (const auto& prm : v.params) {
             const std::string def = trimmedCopy(prm.defaultValue);
-            if (!anim || def.empty() || isVariablePath(def) || richLiteral(prm.type, def)) continue;   // 1.12.4
+            if (!anim || def.empty() || isVariablePath(def) || richLiteral(prm.type, def, &p)) continue;   // 1.12.4
             ++expressions;
             const auto e = Expression::compile(def);
             if (!e.valid()) add(out, S::Error, "Param\xC3\xA8tre", v.id, kNoId, "parametres", prm.name + " := " + def + " : " + e.error());
@@ -4956,7 +4967,7 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
                     const View* opened = p.viewByName(trimmedCopy(a.target));
                     for (const auto& [name, value] : parseArguments(a.value)) {
                         const ViewParam* declared = opened ? opened->param(name) : nullptr;
-                        if (declared && richLiteral(declared->type, value)) continue;    // 1.12.4 : verifie dans son type
+                        if (declared && richLiteral(declared->type, value, &p)) continue;    // 1.12.4 : verifie dans son type
                         if (!isVariablePath(markers::strip(value))) expr(value, ("param\xC3\xA8tre " + name + " :").c_str());
                     }
                 }

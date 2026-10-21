@@ -28554,6 +28554,118 @@ void finitions1220() {
           "functionEffects : Compter ecrit Compteur_Clics, Tres_Grand ne modifie rien");
 }
 
+// 1.12.20 (T) : les types rappel nommes du projet - TYPE T_Filtre : CALLBACK (x : REAL) : BOOL.
+void typesRappel1220() {
+    std::printf("1.12.20 : les types rappel nommes (T_Filtre)\n");
+    Project p;
+    HmiType filtre;
+    filtre.id = p.allocate();
+    filtre.name = "T_Filtre";
+    filtre.kind = HmiTypeKind::Callback;
+    filtre.signature = "CALLBACK (x : REAL) : BOOL";
+    p.programs.types.push_back(filtre);
+    HmiType action = filtre;
+    action.id = p.allocate();
+    action.name = "T_Action";
+    action.signature = "CALLBACK ()";
+    p.programs.types.push_back(action);
+    HmiType mauvais = filtre;
+    mauvais.id = p.allocate();
+    mauvais.name = "T_Mauvais";
+    mauvais.signature = "CALLBACK (x : REAL";
+    p.programs.types.push_back(mauvais);
+    p.programs.functions.push_back(hmiFunction(p, "Est_Valide", "BOOL", "VAR_INPUT x : REAL; END_VAR\nEst_Valide := x > 100.0;\n"));
+    p.programs.functions.push_back(hmiFunction(p, "Moyenne_Pression", "REAL", "VAR_INPUT a : REAL; b : REAL; END_VAR\nMoyenne_Pression := (a + b) / 2.0;\n"));
+    p.programs.functions.push_back(hmiFunction(p, "Arreter_Pompe", "", "N1 := N1 + 1;\n"));
+    p.programs.variables.push_back(hmiVar(p, "Filtre_Courant", "T_Filtre", "=Est_Valide"));
+    p.programs.variables.push_back(hmiVar(p, "Sur_Fin_Cycle", "T_Action"));
+    p.programs.variables.push_back(hmiVar(p, "Mesures", "LIST OF REAL", "[12.5, 150.0, 300.0]"));
+    p.programs.variables.push_back(hmiVar(p, "Marche", "BOOL"));
+    p.programs.variables.push_back(hmiVar(p, "N1", "DINT"));
+    p.programs.variables.push_back(hmiVar(p, "N2", "DINT"));
+    View v = makeView(p, "V");
+    const Id ind = edit::add(p, v, Kind::Indicator, 10, 10);
+    v.object(ind)->setExpr("visible", "Filtre_Courant(250.0)");
+    View pop = makeView(p, "Pop_Fin");
+    pop.role = "popup";
+    pop.params = {{"Sur_Oui", "", "", "T_Action", ParamMode::Copy}};
+    auto& ok = addButton(p, v, "Btn_Bon", 10, 100);
+    ok.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Fin", "Sur_Oui := Arreter_Pompe"));
+    auto& ko = addButton(p, v, "Btn_Mauvais", 10, 150);
+    ko.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Fin", "Sur_Oui := Moyenne_Pression"));
+    const Id bad = ko.id;
+    auto& appel = addButton(p, pop, "Btn_Oui", 10, 10);
+    appel.actions.push_back(act(Trigger::Click, Operation::Call, "Sur_Oui", {}));
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = "Script_Filtre";
+    sc.event = "Appel";
+    sc.body = "VAR f : T_Filtre; END_VAR\nf := Est_Valide;\nMarche := f(150.0) AND Filtre_Courant(200.0);\n"
+              "N1 := LIST_COUNT(LIST_FILTER(Mesures, Filtre_Courant));\nN2 := LIST_COUNT_IF(Mesures, f);\n";
+    p.programs.scripts.push_back(sc);
+    const Id vid = v.id;
+    p.views = {v, pop};
+    p.config.startView = vid;
+    // Le registre : un rappel du projet, un objet de l'IHM.
+    const auto reg = typereg::Registry::build(p);
+    const auto r = reg->resolve("T_Filtre", typereg::UseVariable);
+    check(r.ok && r.category == typereg::Category::Callback && r.rich, "registre : T_Filtre est un rappel du projet (Rappels), un objet de l'IHM");
+    check(types::callbackForm(&p, "T_Filtre") == "CALLBACK (x : REAL) : BOOL" && types::callbackForm(&p, "T_MODE").empty()
+              && types::callbackForm(nullptr, "CALLBACK ()") == "CALLBACK ()",
+          "callbackForm : T_Filtre -> sa forme ; un autre nom : rien");
+    check(!types::unbindableReason(p, "T_Filtre").empty(), "un rappel nomme ne se lie pas a un equipement");
+    // Generer et Compiler : la bonne forme passe, la mauvaise est refusee, la signature illisible aussi.
+    const NameExists none = [](std::string_view) { return false; };
+    std::vector<Issue> all = generate(p, none);
+    for (auto& i : compileWith(p, none)) all.push_back(i);
+    std::string errs;
+    bool wrong = false, unreadable = false;
+    for (const auto& i : all) {
+        if (i.severity != Issue::Severity::Error) continue;
+        if (i.object == bad && i.message.find("Moyenne_Pression ne convient pas") != std::string::npos) wrong = true;
+        else if (i.property == "T_Mauvais" && i.message.find("sa signature se lit") != std::string::npos) unreadable = true;
+        else errs += "\n    " + i.category + " " + i.property + " : " + i.message;
+    }
+    check(wrong, "Generer : Sur_Oui := Moyenne_Pression pour un T_Action est refuse (la forme)");
+    check(unreadable, "Generer : T_Mauvais, sa signature illisible, est refuse");
+    check(errs.empty(), "Generer et Compiler : rien d'autre (variables, script, fx, Appeler)" + errs);
+    // La simulation : la variable, le script, la fx.
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    std::string why;
+    const bool ran = rt.callScript("Script_Filtre", 0.2, &why);
+    rt.tick(0.3);
+    const auto* marche = rt.variable("Marche");
+    const auto* n1 = rt.variable("N1");
+    const auto* n2 = rt.variable("N2");
+    check(ran && marche && marche->isTruthy() && n1 && n1->asInteger() == 2 && n2 && n2->asInteger() == 2,
+          "le script : f : T_Filtre, Filtre_Courant(200.0), LIST_FILTER et LIST_COUNT_IF (" + why + ")");
+    const View* shown = rt.composedView(vid);
+    check(shown && shown->object(ind)->flag("visible"), "la fx : Filtre_Courant(250.0)");
+    std::string w1, w2;
+    const bool wrongForced = rt.setRichVariable("Filtre_Courant", "=Arreter_Pompe", &w1);
+    const bool rightForced = rt.setRichVariable("Filtre_Courant", "=Est_Valide", &w2);
+    check(!wrongForced && rightForced, "forcer : une fonction de la mauvaise forme est refusee (" + w1 + "), la bonne passe (" + w2 + ")");
+    // Le fichier du projet : le genre et la signature reviennent (format 27).
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "hmi_test_types_rappel";
+    fs::remove_all(dir);
+    const auto st = save(p, dir.string());
+    const auto back = load(dir.string());
+    std::string index;
+    {
+        std::ifstream in(dir / "ihm" / "ihm.txt");
+        index.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    const HmiType* again = back ? back->hmiTypeByName("T_Filtre") : nullptr;
+    check(static_cast<bool>(st) && back && again && again->kind == HmiTypeKind::Callback && again->signature == "CALLBACK (x : REAL) : BOOL"
+              && index.find("format=27") != std::string::npos && index.find("genre=rappel") != std::string::npos,
+          "enregistrer puis rouvrir : T_Filtre reste un rappel, sa signature aussi (format 27)");
+    fs::remove_all(dir);
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les performances dans le temps, les lenteurs, seules.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -28779,6 +28891,7 @@ int main(int argc, char** argv) {
     rappelsPopup1219();               // 1.12.19 (R3) : un rappel en parametre de popup
     rappelsExpressions1219();         // 1.12.19 : un rappel dans une fx et un script (Compiler, la simulation)
     finitions1220();                  // 1.12.20 (F) : les finitions des rappels
+    typesRappel1220();                // 1.12.20 (T) : les types rappel nommes
     lotA1125();                       // 1.12.5 (lot A) : les defauts de l'audit des objets
     lotBC1126();                      // 1.12.6 (lots B et C) : le role de chaque propriete, les reperes partout
     lotD1127();                       // 1.12.7 (lot D) : les listes en tableau et les choix

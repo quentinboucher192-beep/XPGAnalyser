@@ -97,6 +97,12 @@ public:
         for (const auto& m : types::membersOf(p_, typeName)) out.emplace_back(m.name, m.type);
         return !out.empty();
     }
+    // 1.12.20 : un type rappel nomme du projet (T_Filtre) : sa forme, comme dans le moteur.
+    std::string typeAlias(std::string_view name) override {
+        std::string u = trimmed(name);
+        for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        return u.rfind("CALLBACK", 0) == 0 ? std::string{} : types::callbackForm(&p_, name);
+    }
 private:
     const Project& p_;
 };
@@ -401,6 +407,20 @@ bool callbackFitsText(const Project& p, std::string_view want, std::string_view 
     const sim::TypeRef a = sim::typeOfText(want, env), b = sim::typeOfText(got, env);
     if (!a || !b) return true;
     return sim::callbackFits(*a, *b, why);
+}
+
+bool callbackParts(const Project& p, std::string_view text, CallbackParts& out, std::string* why) {
+    out = {};
+    TypingEnv env(p);
+    std::string w;
+    const sim::TypeRef t = sim::typeOfText(text, env, &w);
+    if (!t || t->kind != sim::TypeDesc::Kind::Callback) {
+        if (why) *why = !t && !w.empty() ? frenchOf(w) : std::string("pas une signature de rappel : CALLBACK (x : REAL) : BOOL");
+        return false;
+    }
+    for (const auto& [name, type] : t->members) out.params.emplace_back(name, type ? type->text() : std::string{});
+    if (t->element) out.result = t->element->text();
+    return true;
 }
 
 bool literalItems(std::string_view text, std::vector<std::string>& out) {

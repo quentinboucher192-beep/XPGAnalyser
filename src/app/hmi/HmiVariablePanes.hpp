@@ -384,6 +384,14 @@ public:
     [[nodiscard]] bool showsEnumeration() const;
     // ---- fin 1.10 (chantier U) ----
 
+    // ---- 1.12.20 (lot T) : le type rappel nomme (T_Filtre : CALLBACK (x : REAL) : BOOL) ----
+    //  << Nouveau type v >> › Rappel... : un type T_Rappel, a renommer, sa signature a changer. Un
+    //  rappel choisi montre sa page a la place des membres : la signature (sa case s'edite), ses
+    //  entrees, son retour, et les fonctions du projet qui conviennent (ou pourquoi pas).
+    hmi::Id addCallbackType(const std::string& name, const std::string& signature, std::string* why = nullptr);
+    bool setCallbackSignature(hmi::Id, const std::string& text, std::string* why = nullptr);
+    [[nodiscard]] bool showsCallback() const noexcept { return callbackPage_; }
+
     [[nodiscard]] HmiToolStrip&     tools() noexcept { return *tools_; }
     [[nodiscard]] ui::TableView&    typeTable() noexcept { return *types_; }
     [[nodiscard]] HmiFolderTable&   folders() noexcept { return *folders_; }     // lot 21
@@ -397,6 +405,7 @@ protected:
 
 private:
     void refreshMembers();
+    void refreshCallbackPage(const hmi::HmiType&);   // 1.12.20 (lot T)
     void rebuildProperties();
     void say(std::string text, bool warning = false);
     bool change(hmi::Id, std::string label, const std::function<bool(hmi::HmiType&, std::string*)>& edit, std::string* why);
@@ -426,6 +435,7 @@ private:
     HmiEnumDialog*      enumDialog_{nullptr};
     ui::PopupMenu*      newMenu_{nullptr};
     ui::Widget*         membersPanel_{nullptr};
+    bool                callbackPage_{false};   // 1.12.20 (lot T) : la page d'un rappel a la place des membres
     hmi::Id           current_{hmi::kNoId};
     int               member_{-1};
     std::string       message_;

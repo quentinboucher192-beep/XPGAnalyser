@@ -8,6 +8,7 @@
 #include "HmiOperators.hpp"        // 1.11.17 : la signature d'un operateur (le lieu d'un appel)
 #include "HmiSymbols.hpp"          // 1.11.17 : la portee d'un symbole, rewriteNames (les textes d'un objet)
 #include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : les types d'une locale
+#include "HmiTypes.hpp"            // 1.12.20 : un rappel nomme (T_Filtre)
 #include "HmiRoles.hpp"
 #include "HmiNatives.hpp"           // 1.12.20 : une fonction IHM_ qui agit (pas une qui lit)            // 1.12.10 (lot F) : les bornes et les seuils tapes en nom de variable
 
@@ -1168,7 +1169,7 @@ template <class P, class Visit>
 void forEachCallbackValue(P& p, std::string_view name, Visit&& visit) {
     // La valeur initiale d'une variable rappel (=Valider) : le code ne la lit pas.
     for (auto& v : p.programs.variables)
-        if (upper(trimmed(v.type)).rfind("CALLBACK", 0) == 0 && namesFunction(v.initial, name))
+        if (!types::callbackForm(&p, v.type).empty() && namesFunction(v.initial, name))     // 1.12.20 : T_Filtre aussi
             visit(v.initial, "variable " + v.name + " (valeur initiale)");
     // La cible d'une action Appeler (sa valeur, les arguments, est lue comme une expression avec le reste).
     const auto call = [&](auto& view, auto* object, auto& a) {

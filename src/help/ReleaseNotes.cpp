@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.20", "21/10/2026", "livr\xC3\xA9" "e le 21/10"},
     {"1.12.19", "20/10/2026", "livr\xC3\xA9" "e le 20/10 au soir"},
     {"1.12.18", "20/10/2026", "livr\xC3\xA9" "e le 20/10"},
     {"1.12.17", "19/10/2026", "livr\xC3\xA9" "e le 19/10 au soir"},
@@ -125,6 +126,13 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.20 (21/10/2026) : voir docs/LIVRAISON-1.12.20.md (les rappels, suite : finitions, types rappel nommes).
+        note("1.12.20", "Scripts", Kind::Changed,
+         "LES RAPPELS, FINITIONS : une expression de propri\xC3\xA9t\xC3\xA9 ne modifie rien - une LAMBDA d'une fx qui \xC3\xA9" "crit une variable, appelle une fonction qui en \xC3\xA9" "crit une ou une fonction IHM_ qui agit est refus\xC3\xA9" "e, avec la raison (dans un script ou une action, elle reste permise). Un nom de fonction en texte l\xC3\xA0 o\xC3\xB9 va un rappel ('Valider') : un avertissement et sa correction d'un clic (Diagnostics, Ctrl+.). Une variable rappel r\xC3\xA9manente qui re\xC3\xA7oit une LAMBDA : averti (elle ne se garde pas). Corrig\xC3\xA9 : G\xC3\xA9n\xC3\xA9rer prenait les param\xC3\xA8tres d'une LAMBDA pour des variables inexistantes, et \xC2\xAB fonction inconnue : LAMBDA \xC2\xBB dans un script qui en passe une.",
+         "rappels", ""),
+        note("1.12.20", "Variables", Kind::New,
+         "LES TYPES RAPPEL NOMM\xC3\x89S : Types IHM \xE2\x80\xBA Nouveau type \xE2\x96\xBE \xE2\x80\xBA Rappel\xE2\x80\xA6 cr\xC3\xA9" "e T_Rappel (CALLBACK (x : REAL) : BOOL), \xC3\xA0 renommer (T_Filtre). Sa page montre sa signature (double-clic pour la changer), ses entr\xC3\xA9" "es, son retour, et les fonctions du projet qui conviennent - ou pourquoi elles ne conviennent pas. Il s'emploie comme sa forme : une variable IHM, un param\xC3\xA8tre de popup ou de symbole, une locale, un param\xC3\xA8tre de fonction ; G\xC3\xA9n\xC3\xA9rer et le for\xC3\xA7" "age en simulation v\xC3\xA9rifient ce qu'on y range.",
+         "rappels", ""),
         // 1.12.19 (20/10/2026) : voir docs/LIVRAISON-1.12.19.md (la regle des cases ; les chevauchements d'adresses ne bloquent plus).
         note("1.12.19", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
          "LA R\xC3\x88GLE DES CASES : une case se lit partout de la m\xC3\xAAme fa\xC3\xA7on - l'inspecteur, les volets (Actions, Contenu, alarmes, param\xC3\xA8tres, arguments d'une popup), les variables et leurs membres, les d\xC3\xA9" "clarations, la valeur initiale, les recettes, l'essai d'une fonction. Une expression commence par = (=Niveau * 2, \xC3\xA9" "crite en chasse fixe, le = reste affich\xC3\xA9) ; une valeur fixe s'\xC3\xA9" "crit comme elle se lit et la case la lit selon son type (2,5 ; 1 000 ; vrai, non ; 5 s, 1 h 30, 2 min 30, 01:30 ; Auto pour T_MODE#Auto ; un texte sans apostrophes) ; un nom connu tap\xC3\xA9 seul devient =Nom ; vide, la case dit sa valeur par d\xC3\xA9" "faut (\xC2\xAB 12 \xC2\xB7 valeur par d\xC3\xA9" "faut \xC2\xBB) ; le type attendu est \xC3\xA9" "crit au bout du nom ; les listes s'\xC3\xA9" "crivent (a;b;\xE2\x80\xA6), les intervalles a..b.",

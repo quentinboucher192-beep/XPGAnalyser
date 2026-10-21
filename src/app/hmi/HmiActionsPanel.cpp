@@ -9,6 +9,7 @@
 #include "../../hmi/HmiActionKinds.hpp"
 #include "../../hmi/HmiKeys.hpp"          // 1.11.23 : les raccourcis
 #include "../../hmi/HmiRoles.hpp"         // 1.12.19 : la lecture commune d'une duree
+#include "../../hmi/HmiTypes.hpp"         // 1.12.20 : un rappel nomme (T_Filtre)
 #include "../../hmi/HmiExport.hpp"
 #include "HmiAssist.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
@@ -1087,10 +1088,8 @@ void HmiActionsPanel::rebuildGrid() {
         const auto addName = [&callees](const std::string& n) {
             if (!n.empty() && std::find(callees.begin(), callees.end(), n) == callees.end()) callees.push_back(n);
         };
-        const auto callbackType = [](const std::string& t) {
-            std::string u = t;
-            for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-            return u.find("CALLBACK") != std::string::npos;
+        const auto callbackType = [this](const std::string& t) {       // 1.12.20 : ecrit, ou nomme (T_Filtre)
+            return !hmi::types::callbackForm(&doc_->project, t).empty();
         };
         if (const auto* vv = doc_->project.view(view_)) {
             for (const auto& prm : vv->params) if (callbackType(prm.type)) addName(prm.name);

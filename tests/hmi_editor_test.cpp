@@ -17102,9 +17102,9 @@ void v110_enumerations() {
     // ---- Nouveau type v : Structure / Enumeration ----
     types.tools().triggered->emit(1);
     auto* menu = types.newTypeMenu();
-    check(menu && menu->isOpen() && menu->items().size() == 2 && menu->items()[0].label.rfind("Structure", 0) == 0
-              && menu->items()[1].label.rfind("\xC3\x89num\xC3\xA9ration", 0) == 0,
-          "Nouveau type \xE2\x96\xBE : un menu Structure\xE2\x80\xA6 / \xC3\x89num\xC3\xA9ration\xE2\x80\xA6");
+    check(menu && menu->isOpen() && menu->items().size() == 3 && menu->items()[0].label.rfind("Structure", 0) == 0
+              && menu->items()[1].label.rfind("\xC3\x89num\xC3\xA9ration", 0) == 0 && menu->items()[2].label.rfind("Rappel", 0) == 0,
+          "Nouveau type \xE2\x96\xBE : un menu Structure\xE2\x80\xA6 / \xC3\x89num\xC3\xA9ration\xE2\x80\xA6 / Rappel\xE2\x80\xA6 (1.12.20)");
     check(menu && menu->bounds().w > 0.f && menu->popupRect().w > 0.f, "le menu a ses bornes (il se dessine)");
     if (menu) menu->close();
     menu->itemChosen->emit(2);
@@ -17911,20 +17911,20 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53.
     const auto& rel = hn::releases();
-    check(rel.size() == 52 && rel.front().version == "1.12.19" && rel[1].version == "1.12.18" && rel[2].version == "1.12.17" && rel[3].version == "1.12.16" && rel[4].version == "1.12.15" && rel[5].version == "1.12.14" && rel[6].version == "1.12.13" && rel[7].version == "1.12.12" && rel[8].version == "1.12.11" && rel[9].version == "1.12.10" && rel[10].version == "1.12.9" && rel[11].version == "1.12.8" && rel[12].version == "1.12.7" && rel[13].version == "1.12.6" && rel[14].version == "1.12.5" && rel[15].version == "1.12.4" && rel[16].version == "1.12.3" && rel[17].version == "1.12.2" && rel[18].version == "1.12.1"
-              && rel[19].version == "1.12.0" && rel[20].version == "1.11.24" && rel[21].version == "1.11.23"
-              && rel[22].version == "1.11.22" && rel[23].version == "1.11.21" && rel[24].version == "1.11.20" && rel[25].version == "1.11.19"
-              && rel[26].version == "1.11.18" && rel[27].version == "1.11.17"
-              && rel[28].version == "1.11.16" && rel[29].version == "1.11.15"
-              && rel[30].version == "1.11.14" && rel[31].version == "1.11.13" && rel[32].version == "1.11.12"
-              && rel[33].version == "1.11.11" && rel[34].version == "1.11.10"
-              && rel[35].version == "1.11.9" && rel[36].version == "1.11.8"
-              && rel[37].version == "1.11.7" && rel[38].version == "1.11.6" && rel[39].version == "1.11.5"
-              && rel[40].version == "1.11.4" && rel[41].version == "1.11.3" && rel[42].version == "1.11.2"
-              && rel[43].version == "1.11.1" && rel[44].version == "1.11" && rel[45].version == "1.10.4",
-          "notes : 52 versions, la 1.12.19 en tete, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 53 && rel.front().version == "1.12.20" && rel[1].version == "1.12.19" && rel[2].version == "1.12.18" && rel[3].version == "1.12.17" && rel[4].version == "1.12.16" && rel[5].version == "1.12.15" && rel[6].version == "1.12.14" && rel[7].version == "1.12.13" && rel[8].version == "1.12.12" && rel[9].version == "1.12.11" && rel[10].version == "1.12.10" && rel[11].version == "1.12.9" && rel[12].version == "1.12.8" && rel[13].version == "1.12.7" && rel[14].version == "1.12.6" && rel[15].version == "1.12.5" && rel[16].version == "1.12.4" && rel[17].version == "1.12.3" && rel[18].version == "1.12.2" && rel[19].version == "1.12.1"
+              && rel[20].version == "1.12.0" && rel[21].version == "1.11.24" && rel[22].version == "1.11.23"
+              && rel[23].version == "1.11.22" && rel[24].version == "1.11.21" && rel[25].version == "1.11.20" && rel[26].version == "1.11.19"
+              && rel[27].version == "1.11.18" && rel[28].version == "1.11.17"
+              && rel[29].version == "1.11.16" && rel[30].version == "1.11.15"
+              && rel[31].version == "1.11.14" && rel[32].version == "1.11.13" && rel[33].version == "1.11.12"
+              && rel[34].version == "1.11.11" && rel[35].version == "1.11.10"
+              && rel[36].version == "1.11.9" && rel[37].version == "1.11.8"
+              && rel[38].version == "1.11.7" && rel[39].version == "1.11.6" && rel[40].version == "1.11.5"
+              && rel[41].version == "1.11.4" && rel[42].version == "1.11.3" && rel[43].version == "1.11.2"
+              && rel[44].version == "1.11.1" && rel[45].version == "1.11" && rel[46].version == "1.10.4",
+          "notes : 53 versions, la 1.12.20 en tete, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18195,7 +18195,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 370,   // 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 372,   // 1.12.20 : + 2 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18338,7 +18338,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 211, "centre : L'IHM a les 211 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 52, "centre : 11 expressions, 52 notes (1.12.19)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 53, "centre : 11 expressions, 53 notes (1.12.20)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -18400,10 +18400,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 52
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 53
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.12.19" && hc::notesPage("9.9").version == "1.12.19",
+        check(hc::notesPage("").version == "1.12.20" && hc::notesPage("9.9").version == "1.12.20",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -18747,7 +18747,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 52;   // 1.11.3 a 1.12.19 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 53;   // 1.11.3 a 1.12.20 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -33810,6 +33810,71 @@ void clicDroitLot5() {
     }
 }
 
+// ---- 1.12.20 (lot T) : Types IHM > Nouveau type v > Rappel... (la page du rappel) ----
+void typesRappelEcran1220() {
+    std::printf("-- 1.12.20 (lot T) : Types IHM - Nouveau type, Rappel\xE2\x80\xA6 (la page du rappel)\n");
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    core::CommandStack stack;
+    core::CommandGroupScope::registerStack(&stack);
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    p.programs.functions.push_back(makeFunction(p, "Est_Valide", "BOOL", "VAR_INPUT x : REAL; END_VAR\nEst_Valide := x > 100.0;\n"));
+    p.programs.functions.push_back(makeFunction(p, "Moyenne", "REAL", "VAR_INPUT a : REAL; b : REAL; END_VAR\nMoyenne := (a + b) / 2.0;\n"));
+    app::HmiTypesPane types("tyRappel", doc, apply);
+    types.setBounds({0, 0, 1700, 900});
+    types.layout();
+    types.tools().triggered->emit(1);
+    auto* menu = types.newTypeMenu();
+    check(menu && menu->items().size() == 3 && menu->items()[2].label.rfind("Rappel", 0) == 0, "Nouveau type \xE2\x96\xBE : Rappel\xE2\x80\xA6");
+    if (!menu) return;
+    menu->close();
+    menu->itemChosen->emit(3);
+    const auto* t = p.hmiTypeByName("T_Rappel");
+    check(t && t->kind == hmi::HmiTypeKind::Callback && t->signature == "CALLBACK (x : REAL) : BOOL" && types.selectedType() == t->id,
+          "Rappel\xE2\x80\xA6 : T_Rappel, CALLBACK (x : REAL) : BOOL, choisi (une commande)");
+    if (!t) return;
+    const hmi::Id tid = t->id;
+    const auto cell = [&](std::size_t r, std::size_t c) {
+        const auto& m = types.memberTable().model();
+        return m && r < m->rowCount() ? m->cellText(static_cast<ui::RowIndex>(r), c) : std::string("?");
+    };
+    const auto rows = [&] { return types.memberTable().model() ? types.memberTable().model()->rowCount() : 0; };
+    check(types.showsCallback() && types.memberTable().model() && types.memberTable().model()->headerText(0) == "Rappel" && cell(0, 0) == "Signature"
+              && cell(0, 1) == "CALLBACK (x : REAL) : BOOL" && cell(1, 1) == "x : REAL" && cell(2, 0) == "Retour" && cell(2, 1) == "BOOL",
+          "sa page a la place des membres : la signature, l'entr\xC3\xA9" "e x : REAL, le retour BOOL");
+    check(rows() == 5 && cell(3, 0) == "Fonction Est_Valide" && cell(3, 2).rfind("convient", 0) == 0 && cell(4, 0) == "Fonction Moyenne"
+              && cell(4, 2).rfind("ne convient pas", 0) == 0,
+          "les fonctions du projet : Est_Valide convient, Moyenne ne convient pas (et pourquoi)");
+    check(!types.tools().isEnabled(2) && types.selectedMember() < 0, "un rappel n'a pas de membres : l'outil Membre est \xC3\xA9teint");
+    std::string why;
+    check(!types.addMember(tid, "Valeur", "REAL", &why) && why.find("rappel") != std::string::npos, "ajouter un membre : refus\xC3\xA9 (" + why + ")");
+    // La signature se change dans sa case : (x : REAL; n : INT) : BOOL suffit, CALLBACK s'ajoute.
+    check(types.memberTable().model()->editable(0, 1) && !types.memberTable().model()->editable(1, 1), "seule la case de la signature s'\xC3\xA9" "dite");
+    {
+        const auto model = types.memberTable().model();   // garde le modele : la commande en refait un autre
+        check(model->setCellText(0, 1, "(a : REAL; b : REAL) : REAL"), "la signature : (a : REAL; b : REAL) : REAL");
+    }
+    t = p.hmiType(tid);
+    check(t && t->signature == "CALLBACK (a : REAL; b : REAL) : REAL" && cell(4, 2).rfind("ne convient pas", 0) == 0 && cell(5, 2).rfind("convient", 0) == 0,
+          "CALLBACK s'ajoute ; Moyenne convient maintenant, Est_Valide non");
+    const auto model = types.memberTable().model();
+    check(!model->setCellText(0, 1, "CALLBACK (x : REAL") && p.hmiType(tid)->signature == "CALLBACK (a : REAL; b : REAL) : REAL",
+          "une signature illisible : refus\xC3\xA9" "e, l'ancienne reste");
+    check(!types.setCallbackSignature(tid, "LIST OF REAL", &why), "pas un rappel : refus\xC3\xA9 (" + why + ")");
+    // Ctrl+Z : la signature d'avant, puis plus de type.
+    (void)stack.undo();
+    check(p.hmiType(tid) && p.hmiType(tid)->signature == "CALLBACK (x : REAL) : BOOL", "Ctrl+Z : la signature d'avant");
+    // Le nom se change comme celui d'une structure (la case Nom de la liste, la fiche).
+    check(types.renameType(tid, "T_Filtre", &why) && p.hmiTypeByName("T_Filtre"), "renomm\xC3\xA9 T_Filtre");
+    // Un autre type choisi : les membres reviennent.
+    check(types.addType("T_Four", &why) != hmi::kNoId && !types.showsCallback() && types.memberTable().model()->headerText(0) == "Membre"
+              && types.tools().isEnabled(2),
+          "une structure choisie : les membres reviennent (et l'outil Membre)");
+    types.selectType(tid);
+    check(types.showsCallback() && cell(0, 0) == "Signature", "le rappel rechoisi : sa page");
+    core::CommandGroupScope::registerStack(nullptr);
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les natives rangees, Choisir une fonction... (Mes fonctions, Rend), seuls.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -34177,6 +34242,7 @@ int main(int argc, char** argv) {
     v1101_invites();                        // 1.10.1 (chantier U2) : les cases a expression sans (expression)
     v110_integration_compiler();            // 1.10 (integration I2) : Ajouter les valeurs manquantes d'un CASE
     v110_enumerations();                    // 1.10 (chantier U) : l'interface du type enumeration
+    typesRappelEcran1220();                 // 1.12.20 (lot T) : Types IHM - Nouveau type, Rappel...
     v1101_tableaux_onglet_cache();          // 1.10.1 (chantier B1) : la vue suit les tableaux, onglet cache ou non
     v1101_journal_vider();                  // 1.10.1 (integration I1101) : le Journal se vide ; les nouveautes 1.10.0 -> 1.10.1
     aideSaisie1102();                       // 1.10.2 (chantier A) : les objets des vues, les parametres des instances

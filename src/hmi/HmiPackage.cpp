@@ -221,7 +221,7 @@ bool sameOperators(const std::vector<HmiOperator>& a, const std::vector<HmiOpera
     return true;
 }
 bool sameType(const HmiType& a, const HmiType& b) {
-    return a.kind == b.kind && a.members == b.members && a.values == b.values && sameOperators(a.operators, b.operators);
+    return a.kind == b.kind && a.signature == b.signature && a.members == b.members && a.values == b.values && sameOperators(a.operators, b.operators);
 }
 bool sameScript(const Script& a, const Script& b) {
     return a.lang == b.lang && a.event == b.event && a.body == b.body && a.periodMs == b.periodMs && a.watch == b.watch

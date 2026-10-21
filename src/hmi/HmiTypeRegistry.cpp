@@ -333,6 +333,7 @@ private:
         r.key = e->key;
         r.category = e->category;
         r.entry = e;
+        r.rich = r.rich || e->category == Category::Callback;       // 1.12.20 : un type rappel nomme : un objet de l'IHM
         r.ok = e->usable(use);
         if (!r.ok) r.why = e->name + " ne convient pas \xC3\xA0 " + useText(use);
         return r;
@@ -662,12 +663,15 @@ std::shared_ptr<const Registry> Registry::build(const Project& p, const params::
         e.name = t.name;
         e.id = t.id;
         const bool en = t.kind == HmiTypeKind::Enumeration;
-        e.category = en ? Category::Enumeration : Category::Structure;
-        e.provenance = en ? "Projet \xC2\xB7 \xC3\x89num\xC3\xA9rations" : "Projet \xC2\xB7 Types IHM";
+        const bool cb = t.kind == HmiTypeKind::Callback;             // 1.12.20 : un type rappel nomme (T_Filtre)
+        e.category = en ? Category::Enumeration : cb ? Category::Callback : Category::Structure;
+        e.provenance = en ? "Projet \xC2\xB7 \xC3\x89num\xC3\xA9rations" : cb ? "Projet \xC2\xB7 Rappels" : "Projet \xC2\xB7 Types IHM";
         e.doc = !t.description.empty() ? t.description
-                                      : (en ? "Une \xC3\xA9num\xC3\xA9ration du projet." : "Une structure du projet.");
-        e.uses = V | D | P | R | O;
-        e.proposed = V | D | P | R | O;
+                                      : (en ? "Une \xC3\xA9num\xC3\xA9ration du projet."
+                                         : cb ? "Un rappel du projet : " + t.signature + "."
+                                              : "Une structure du projet.");
+        e.uses = cb ? V | D | P | R : V | D | P | R | O;
+        e.proposed = e.uses;
         for (const auto& m : t.members) e.members.emplace_back(m.name, m.type);
         for (const auto& v : t.values) e.values.push_back(v.name);
         r->entries_.push_back(std::move(e));

@@ -691,6 +691,11 @@ public:
         return !out.empty();
     }
     std::string canonicalName(std::string_view n) override { return resolved(n); }
+    // 1.12.20 : un type rappel nomme du projet (T_Filtre) : sa forme (CALLBACK (x : REAL) : BOOL).
+    std::string typeAlias(std::string_view name) override {
+        const std::string form = rt_.project_ ? types::callbackForm(rt_.project_, name) : std::string{};
+        return upper(trimmedView(name)).rfind("CALLBACK", 0) == 0 ? std::string{} : form;
+    }
     // 1.12.19 : les rappels - un minuteur (IHM_APRES, IHM_CHAQUE), un rappel vide.
     bool scheduleCallback(std::int64_t delayMs, std::int64_t periodMs, sim::ObjRef callback, std::int64_t& id, std::string* why) override {
         return rt_.scheduleCallback(delayMs, periodMs, std::move(callback), id, why);
@@ -1114,7 +1119,26 @@ bool Runtime::setRichVariable(std::string_view name, std::string_view literal, s
     }
     std::string w;
     const std::string type = it->second->type->text();
-    auto fresh = sim::makeRichValue(type, typeform::callbackInitial(type, literal), *env_, &w);   // 1.12.19 : un rappel, =Valider
+    const std::string form = types::callbackForm(project_, type);       // 1.12.20 : un rappel nomme (T_Filtre)
+    // 1.12.20 : une fonction du projet donnee a un rappel : sa forme d'abord (le moteur ne la voit qu'a l'appel) - la
+    // meme regle que Generer (params::callbackArgument).
+    if (!form.empty() && project_) {
+        std::string name = trimmedView(literal);
+        if (name.size() > 1 && name.front() == '=' && name[1] != '=') name = trimmedView(std::string_view(name).substr(1));
+        if (name.size() >= 2 && name.front() == '\'' && name.back() == '\'') name = name.substr(1, name.size() - 2);
+        const std::string u = upper(name);
+        if (!name.empty() && u != "NULL" && u.rfind("LAMBDA", 0) != 0)
+            if (const auto fs = project_->functionsNamed(name); fs.size() == 1) {
+                const std::string got = overload::callbackText(overload::signatureOf(*fs.front()));
+                std::string why2;
+                if (got.empty() || !typeform::callbackFitsText(*project_, form, got, &why2)) {
+                    if (why) *why = name + " ne convient pas \xC3\xA0 " + form
+                                    + (why2.empty() ? std::string(" (ses VAR_IN_OUT ou VAR_OUTPUT)") : " \xE2\x80\x94 " + why2);
+                    return false;
+                }
+            }
+    }
+    auto fresh = sim::makeRichValue(type, typeform::callbackInitial(form.empty() ? type : form, literal), *env_, &w);   // 1.12.19 : un rappel, =Valider
     if (!fresh) {
         if (why) *why = frenchSimMessage(w);
         return false;
@@ -1175,7 +1199,7 @@ std::vector<simdata::Cell> Runtime::captureData(const std::function<bool(const V
     // 1.12.19 : une variable rappel garde le nom de sa fonction (NULL : vide) ; une LAMBDA ne se garde pas - elle
     // repart de sa valeur initiale (la maquette, decision 9).
     for (const auto& var : project_->programs.variables) {
-        if (!var.equipment.empty() || (keep && !keep(var)) || upper(trimmedView(var.type)).rfind("CALLBACK", 0) != 0) continue;
+        if (!var.equipment.empty() || (keep && !keep(var)) || types::callbackForm(project_, var.type).empty()) continue;   // 1.12.20 : T_Filtre aussi
         const auto o = richVariable(var.name);
         std::string text;
         if (o && sim::literalText(*o, text)) cells.push_back(simdata::Cell{var.id, var.name, var.type, {}, sim::Value::text(text)});
@@ -1629,7 +1653,7 @@ const Runtime::Prepared& Runtime::prepare(const std::string& code, const std::st
     const std::string st = markers::strip(code);
     // 1.10 : une locale peut etre d'un type IHM du projet (structure).
     auto parts = splitDeclarations(st, function, [this](std::string_view type) {
-        return project_ && (!types::membersOf(*project_, type).empty() || findEnumeration(*project_, type) != nullptr);
+        return project_ && types::knownTypeName(*project_, type);   // 1.12.20 : un rappel nomme aussi
     });
     prep.locals = std::move(parts.locals);
     if (!parts.errors.empty()) {
@@ -3352,7 +3376,7 @@ void Runtime::start(double now) {
         std::size_t callbacks = 0;
         std::vector<std::string> lost;
         variables.erase(std::remove_if(variables.begin(), variables.end(), [&](const simdata::Cell& c) {
-            if (upper(trimmedView(c.declared)).rfind("CALLBACK", 0) != 0 || c.value.type() != sim::Type::String) return false;
+            if (types::callbackForm(project_, c.declared).empty() || c.value.type() != sim::Type::String) return false;   // 1.12.20 : T_Filtre aussi
             std::string why;
             if (setRichVariable(c.name, c.value.asString(), &why)) ++callbacks;
             else lost.push_back(c.name + " : " + why);
@@ -3431,9 +3455,9 @@ void Runtime::initVariables() {
         }
         // 1.12.2 : un type objet (LIST, VECTOR, MAP, TUPLE) : un objet entier, a sa valeur initiale
         // (un litteral : [1, 2, 3], ['a' := 1], (1, 'x')) ; illisible : vide, et le journal le dit.
-        if (types::isRich(var.type)) {
+        if (const std::string form = types::callbackForm(project_, var.type); types::isRich(var.type) || !form.empty()) {   // 1.12.20 : T_Filtre
             std::string why;
-            auto o = sim::makeRichValue(var.type, typeform::callbackInitial(var.type, var.initial), *env_, &why);   // 1.12.19 : =Fonction
+            auto o = sim::makeRichValue(var.type, typeform::callbackInitial(form.empty() ? var.type : form, var.initial), *env_, &why);   // 1.12.19 : =Fonction
             if (!o && !var.initial.empty()) {
                 log("Erreur", "variable " + var.name, "valeur initiale illisible : " + var.initial + " (" + frenchSimMessage(why) + ")");
                 o = sim::makeRichValue(var.type, {}, *env_, &why);
@@ -4858,7 +4882,9 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
         // transparents - V[0] est une variable, la popup la recoit en reference (avant : evaluee, rien ne passait).
         const std::string t = trimmed(markers::strip(text));
         // 1.12.4 : un parametre d'un type objet (LIST, VECTOR, MAP, TUPLE) - sans argument, un objet vide.
-        const bool rich = !type.empty() && types::isRich(type);
+        // 1.12.20 : un rappel nomme (T_Filtre) aussi : sans argument, NULL.
+        const std::string form = type.empty() ? std::string{} : types::callbackForm(project_, type);
+        const bool rich = !type.empty() && (types::isRich(type) || !form.empty());
         if (t.empty()) {
             if (rich)
                 if (auto o = sim::makeRichValue(type, {}, *env_)) scope->setObject(name, std::move(o));
@@ -4867,9 +4893,9 @@ std::shared_ptr<const Scope> Runtime::buildScope(const View& v, std::string_view
         // 1.12.19 (R3) : un parametre rappel - Sur_Oui := Valider (une fonction), := LAMBDA () => ..., := Sur_Fin (une
         // variable rappel de l'appelant), := NULL : le rappel lui-meme, vise des maintenant (une fonction n'est pas une
         // variable : pas d'alias). Reference ou copie, la meme chose : la popup appelle Sur_Oui().
-        if (rich && upper(trimmed(type)).rfind("CALLBACK", 0) == 0) {
+        if (rich && !form.empty()) {
             std::string why;
-            if (auto o = sim::makeRichValue(type, typeform::callbackInitial(type, t), *env_, &why)) scope->setObject(name, std::move(o));
+            if (auto o = sim::makeRichValue(type, typeform::callbackInitial(form, t), *env_, &why)) scope->setObject(name, std::move(o));
             else log("Erreur", source_, "param\xC3\xA8tre " + name + " := " + t + " : " + frenchSimMessage(why));
             return;
         }

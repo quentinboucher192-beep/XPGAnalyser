@@ -340,19 +340,16 @@ private:
     // 1.12.19 : le type d'un rappel de ce nom - une variable IHM, un parametre de la vue (ou du symbole qui porte la
     // popup) de type CALLBACK ; vide : pas un rappel.
     [[nodiscard]] std::string callbackTypeOf(const std::string& name) const {
-        const auto isCallback = [](const std::string& t) {
-            std::string u = t;
-            for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-            std::size_t k = 0;
-            while (k < u.size() && std::isspace(static_cast<unsigned char>(u[k]))) ++k;
-            return u.compare(k, 8, "CALLBACK") == 0;
-        };
+        // 1.12.20 : la forme ecrite d'un rappel, ou celle d'un rappel nomme du projet (T_Filtre).
         if (const Project* p = ctx_.project) {
-            if (const Variable* var = p->variable(name); var && isCallback(var->type)) return var->type;
+            if (const Variable* var = p->variable(name))
+                if (std::string f = types::callbackForm(p, var->type); !f.empty()) return f;
             if (ctx_.view) {
-                if (const ViewParam* prm = ctx_.view->param(name); prm && isCallback(prm->type)) return prm->type;
+                if (const ViewParam* prm = ctx_.view->param(name))
+                    if (std::string f = types::callbackForm(p, prm->type); !f.empty()) return f;
                 if (const View* owner = popupOwner(*p, *ctx_.view))
-                    if (const ViewParam* prm = owner->param(name); prm && isCallback(prm->type)) return prm->type;
+                    if (const ViewParam* prm = owner->param(name))
+                        if (std::string f = types::callbackForm(p, prm->type); !f.empty()) return f;
             }
         }
         return {};

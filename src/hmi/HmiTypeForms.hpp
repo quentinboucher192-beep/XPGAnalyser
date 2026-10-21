@@ -85,6 +85,13 @@ bool valueFits(const Project&, std::string_view type, std::string_view value, st
 // parametres, des types qui vont - les nombres entre eux -, le meme retour) ? Faux et `why` : non (un texte de type
 // illisible : vrai, Generer le dit ailleurs).
 bool callbackFitsText(const Project&, std::string_view want, std::string_view got, std::string* why = nullptr);
+// 1.12.20 : les parties d'une signature de rappel (CALLBACK (x : REAL; n : INT) : BOOL) - ses parametres (nom, type ;
+// un nom vide : par position) et son retour (vide : aucun). Faux et `why` : illisible, ou pas un rappel.
+struct CallbackParts {
+    std::vector<std::pair<std::string, std::string>> params;
+    std::string                                      result;
+};
+bool callbackParts(const Project&, std::string_view text, CallbackParts& out, std::string* why = nullptr);
 // Les elements d'un litteral de liste ("[1, 2, 'a,b']" -> {"1", "2", "'a,b'"}) ; faux : pas un
 // litteral [..] ou (..). Une MAP : les entrees "cle := valeur". Pour l'editeur de liste.
 bool literalItems(std::string_view text, std::vector<std::string>& out);

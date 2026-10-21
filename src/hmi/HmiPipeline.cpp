@@ -1466,7 +1466,7 @@ std::map<std::string, std::vector<Diagnostic>> compileElements(const Project& p,
     }
     // Les fonctions des symboles : leur corps (declarations, retour) et leurs noms,
     // dans la portee du symbole (ses parametres, ses autres fonctions).
-    const TypeKnown knownType = [&p](std::string_view t) { return !types::membersOf(p, t).empty() || findEnumeration(p, t) != nullptr; };
+    const TypeKnown knownType = [&p](std::string_view t) { return types::knownTypeName(p, t); };   // 1.12.20
     for (const Element* e : symbolFns) {
         const View* sym = p.view(e->owner);
         const HmiFunction* fn = nullptr;

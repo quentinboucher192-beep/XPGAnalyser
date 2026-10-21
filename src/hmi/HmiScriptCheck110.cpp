@@ -287,7 +287,7 @@ const InnerFunction* Analysis::function(std::string_view name) const noexcept {
 }
 
 bool knownHmiType(const Project* project, std::string_view type) {
-    return project != nullptr && (!types::membersOf(*project, type).empty() || findEnumeration(*project, type) != nullptr);
+    return project != nullptr && types::knownTypeName(*project, type);   // 1.12.20 : un rappel nomme aussi
 }
 
 EnumValuesFn enumValuesOf(const Project* project) {

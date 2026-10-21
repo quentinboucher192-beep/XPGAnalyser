@@ -490,7 +490,7 @@ std::size_t usageCount(const Code& c, std::size_t index) {
 std::vector<std::string> faults(const Project& p, const Code& c) {
     std::vector<std::string> out;
     if (!c.valid()) return out;
-    const TypeKnown known = [&p](std::string_view n) { return !types::membersOf(p, n).empty() || findEnumeration(p, n) != nullptr; };
+    const TypeKnown known = [&p](std::string_view n) { return types::knownTypeName(p, n); };   // 1.12.20
     const auto found = decl::declarationFaults(*c.decls, c.role, *c.body, known, c.inherited);
     out.resize(c.decls->size());
     for (std::size_t i = 0; i < c.decls->size(); ++i) {

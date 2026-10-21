@@ -1051,7 +1051,8 @@ struct HmiEnumValue {
     std::string  description{};
     bool operator==(const HmiEnumValue&) const = default;
 };
-enum class HmiTypeKind : std::uint8_t { Structure, Enumeration };
+// 1.12.20 : Callback - un type rappel nomme (T_Filtre) : sa signature, pas de membres.
+enum class HmiTypeKind : std::uint8_t { Structure, Enumeration, Callback };
 struct HmiType {
     Id          id{kNoId};
     std::string name;
@@ -1061,6 +1062,8 @@ struct HmiType {
     std::vector<HmiOperator> operators{};   // 1.10 : ses operateurs (voir HmiOperator)
     HmiTypeKind kind{HmiTypeKind::Structure};   // 1.10 : une enumeration a des values, pas de members
     std::vector<HmiEnumValue> values{};         // 1.10 : ses valeurs, dans l'ordre de declaration
+    // 1.12.20 : un type rappel (kind Callback) : sa forme, "CALLBACK (x : REAL) : BOOL" ; vide ailleurs.
+    std::string signature{};
     bool operator==(const HmiType&) const = default;
 };
 

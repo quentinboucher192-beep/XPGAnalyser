@@ -665,12 +665,14 @@ std::vector<ArgumentProblem> callbackArgument(const Project& p, const View* call
     const bool quoted = arg.size() >= 2 && arg.front() == '\'' && arg.back() == '\'';
     const std::string name = quoted ? arg.substr(1, arg.size() - 2) : arg;
     const std::string want = normalizedType(prm.type);
+    // 1.12.20 : un rappel nomme du projet (T_Filtre) : sa forme.
+    const std::string form = types::callbackForm(&p, prm.type).empty() ? std::string(prm.type) : types::callbackForm(&p, prm.type);
     const auto fits = [&](const std::string& what, const std::string& got) {
         std::string why;
         if (got.empty())
             problem(true, what + " a des VAR_IN_OUT ou des VAR_OUTPUT : elle ne se passe pas en rappel (le param\xC3\xA8tre " + prm.name
                               + " attend " + want + ")");
-        else if (!typeform::callbackFitsText(p, prm.type, got, &why))
+        else if (!typeform::callbackFitsText(p, form, got, &why))
             problem(true, "le param\xC3\xA8tre " + prm.name + " : " + what + " ne convient pas \xE2\x80\x94 " + why);
     };
     // Une fonction : de la vue qui ouvre (1.12.16), puis du projet. Vue.Instance.Fonction : vue a l'appel.
@@ -691,8 +693,8 @@ std::vector<ArgumentProblem> callbackArgument(const Project& p, const View* call
     }
     if (name.find('.') != std::string::npos && !quoted) return out;              // Vue.Vanne_3.Ouvrir : a l'appel
     const std::string given = quoted ? std::string{} : expressionType(p, caller, arg, plc);
-    if (!given.empty() && up(trim(given)).rfind("CALLBACK", 0) == 0) {
-        fits(arg, given);
+    if (const std::string gotForm = given.empty() ? std::string{} : types::callbackForm(&p, given); !gotForm.empty()) {   // 1.12.20 : T_Filtre
+        fits(arg, gotForm);
         return out;
     }
     if (!given.empty())
@@ -718,7 +720,7 @@ std::vector<ArgumentProblem> checkArguments(const Project& p, const View* caller
         if (it == given.end() || trim(it->second).empty()) {
             // 1.12.20 : un rappel non donne vaut NULL - l'appeler ne fait rien (la Console le dit une fois) : un
             // avertissement, plus une erreur (la maquette, planche 11 : « Sur_Oui n'a pas de defaut »).
-            if (trim(prm.defaultValue).empty() && up(trim(prm.type)).rfind("CALLBACK", 0) == 0)
+            if (trim(prm.defaultValue).empty() && !types::callbackForm(&p, prm.type).empty())      // 1.12.20 : T_Filtre aussi
                 out.push_back({ArgumentProblem::Kind::Missing, false, prm.name,
                                "le rappel " + prm.name + " de " + popup.name + " n'est pas donn\xC3\xA9 et n'a pas de valeur par d\xC3\xA9" "faut : "
                                    "il vaut NULL, et l'appeler ne fera rien \xE2\x80\x94 donne-le (une fonction, une LAMBDA), ou donne-lui un d\xC3\xA9" "faut"});
@@ -730,7 +732,7 @@ std::vector<ArgumentProblem> checkArguments(const Project& p, const View* caller
         }
         const std::string arg = trim(markers::strip(it->second));   // 1.11.7 : IN_V := $V[0]$ passe V[0] (une reference)
         // 1.12.19 (R3) : un parametre rappel - une fonction du projet ou de la vue, une variable rappel, une LAMBDA, NULL.
-        if (up(trim(prm.type)).rfind("CALLBACK", 0) == 0) {
+        if (!types::callbackForm(&p, prm.type).empty()) {                   // 1.12.20 : T_Filtre aussi
             for (auto& pb : callbackArgument(p, caller, prm, arg, plc)) out.push_back(std::move(pb));
             continue;
         }

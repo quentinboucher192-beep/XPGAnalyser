@@ -179,7 +179,7 @@ bool literalFits(const Project& p, std::string_view type, std::string_view lit, 
     if (s.array()) return true;                                 // [1, 2, 3], une valeur pour toutes
     if (!isElementary(s.element)) {
         const HmiType* ty = p.hmiTypeByName(s.element);
-        if (!ty) return true;
+        if (!ty || ty->kind == HmiTypeKind::Callback) return true;      // 1.12.20 : un rappel se verifie a part
         if (ty->kind == HmiTypeKind::Enumeration) {
             std::int64_t n = 0;
             if (enumNumberOf(*ty, t, n)) return true;
@@ -310,6 +310,11 @@ struct Walker {
         const HmiType* ty = p.hmiTypeByName(s.element);
         if (!ty) {
             out.error = path + " : type inconnu \xC2\xAB " + s.element + " \xC2\xBB";
+            return;
+        }
+        // 1.12.20 : un rappel vise une fonction : il vit dans la memoire de l'IHM, il n'a pas de case.
+        if (ty->kind == HmiTypeKind::Callback) {
+            out.error = path + " : " + ty->name + " est un rappel (il vise une fonction) : il vit dans la m\xC3\xA9moire de l'IHM, ni \xC3\xA9quipement ni adresse";
             return;
         }
         // 1.10 (decision 15, S1) : une enumeration est une case DINT (le nombre de sa valeur) ;
@@ -531,6 +536,20 @@ bool isRich(std::string_view type) {
     return typereg::baseRegistry().resolve(t, typereg::UseAll).rich;
 }
 
+bool knownTypeName(const Project& p, std::string_view type) {
+    if (!membersOf(p, type).empty()) return true;
+    const HmiType* ty = p.hmiTypeByName(trimmed(type));
+    return ty && (ty->kind == HmiTypeKind::Enumeration || ty->kind == HmiTypeKind::Callback);
+}
+
+std::string callbackForm(const Project* p, std::string_view type) {
+    const std::string t = trimmed(type);
+    if (upperOf(t).rfind("CALLBACK", 0) == 0) return t;
+    if (p && identifier(t))
+        if (const HmiType* ty = p->hmiTypeByName(t); ty && ty->kind == HmiTypeKind::Callback) return trimmed(ty->signature);
+    return {};
+}
+
 bool isDynamic(std::string_view type) {
     return isRich(type) && typereg::baseRegistry().resolve(trimmed(type), typereg::UseAll).dynamic;
 }
@@ -545,6 +564,12 @@ std::string unbindableReason(std::string_view type) {
                "d'un \xC3\xA9quipement (ni \xC3\xA9quipement, ni adresse)";
     return "un " + t + " n'a pas de plan m\xC3\xA9moire : il vit dans la m\xC3\xA9moire de l'IHM (pour le lier \xC3\xA0 un \xC3\xA9quipement, "
            "d\xC3\xA9" "clare un type IHM, une structure)";
+}
+
+std::string unbindableReason(const Project& p, std::string_view type) {
+    if (const std::string form = callbackForm(&p, type); !form.empty() && upperOf(trimmed(type)).rfind("CALLBACK", 0) != 0)
+        return "un rappel (" + trimmed(type) + " : " + form + ") vise une fonction : il vit dans la m\xC3\xA9moire de l'IHM (ni \xC3\xA9quipement, ni adresse)";
+    return unbindableReason(type);
 }
 
 std::string cycleOf(const Project& p, std::string_view typeName) {

@@ -101,7 +101,7 @@ State ofDfb(const domain::Project& p, const domain::Pou& dfb) {
 TypeKnown knownTypesOf(const Project& p) {
     // Comme Compiler (HmiCheck.cpp) et l'editeur (HmiScriptPanes.cpp) : une
     // structure ou une enumeration du projet est un type permis.
-    return [&p](std::string_view t) { return !types::membersOf(p, t).empty() || findEnumeration(p, t) != nullptr; };
+    return [&p](std::string_view t) { return types::knownTypeName(p, t); };   // 1.12.20 : un rappel nomme aussi
 }
 
 State ofScript(const Script& sc, const TypeKnown& knownType) {
