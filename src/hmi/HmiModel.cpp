@@ -2295,8 +2295,13 @@ std::string substituteGenerics(std::string_view type, const std::vector<GenericP
         while (j < type.size() && word(type[j])) ++j;
         const std::string_view w = type.substr(i, j - i);
         std::string with(w);
-        for (std::size_t k = 0; k < params.size() && k < args.size(); ++k)
-            if (iequals(params[k].name, w)) with = args[k];
+        // 1.12.21 : un mot suivi de « : » nomme le parametre d'un rappel (CALLBACK (t : T) : BOOL) - ce n'est pas T.
+        std::size_t c = j;
+        while (c < type.size() && type[c] == ' ') ++c;
+        const bool named = c < type.size() && type[c] == ':' && (c + 1 >= type.size() || type[c + 1] != '=');
+        if (!named)
+            for (std::size_t k = 0; k < params.size() && k < args.size(); ++k)
+                if (iequals(params[k].name, w)) with = args[k];
         out += with;
         i = j;
     }

@@ -1,6 +1,7 @@
 // app/hmi/HmiVariablePanes.cpp - les variables IHM (dossiers, structures, tableaux,
 // liaison) et les types IHM (lot 16).
 #include "HmiVariablePanes.hpp"
+#include "../../hmi/HmiGenericEdit.hpp"   // 1.12.21 : les generiques changent, leurs emplois suivent
 #include "../../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "../../hmi/HmiDesign.hpp"   // 1.12.18 : Voir les usages (la recherche du projet)
 #include "../../hmi/HmiAddressPlan.hpp"   // 1.12.18 : l'adresse dans toutes les cases (une formule de i)
@@ -3913,14 +3914,34 @@ bool HmiTypesPane::setTypeGenerics(Id id, const std::string& text, std::string* 
     std::vector<hmi::GenericParam> g;
     if (!hmi::parseGenerics(text, g, why)) return false;
     const auto* t = doc_->project.hmiType(id);
-    if (t)
-        for (const auto& x : g)
-            for (const auto& m : t->members)
-                if (sameText(m.name, x.name)) return fail(why, x.name + " est d\xC3\xA9j\xC3\xA0 un membre : un g\xC3\xA9n\xC3\xA9rique se nomme autrement (T, U)");
-    return change(id, "G\xC3\xA9n\xC3\xA9riques du type", [&](hmi::HmiType& ty, std::string*) {
-        ty.generics = g;
-        return true;
-    }, why);
+    if (!t) return fail(why, "type introuvable");
+    for (const auto& x : g)
+        for (const auto& m : t->members)
+            if (sameText(m.name, x.name)) return fail(why, x.name + " est d\xC3\xA9j\xC3\xA0 un membre : un g\xC3\xA9n\xC3\xA9rique se nomme autrement (T, U)");
+    if (t->generics == g) return true;
+    // 1.12.21 : SES EMPLOIS SUIVENT (« si je supprime T, K et que j'avais fait des variables, il faut modifier les
+    // types tout seul ») - T_Extractor<REAL, STRING> devient T_Extractor<REAL> dans les variables, les membres, les
+    // declarations, les parametres ; un generique retire prend dans les membres le type que lui donnaient ses emplois.
+    // Essaye d'abord sur une copie : un membre qui ne passerait plus est refuse, avec la raison.
+    hmi::Project trial = doc_->project;
+    (void)hmi::generics::applyToType(trial, id, g);
+    if (const auto* tt = trial.hmiType(id))
+        for (const auto& m : tt->members)
+            if (!ty::validMemberType(trial, m.type, why, tt->name)) return false;
+    const std::string name = t->name;
+    hmi::generics::Report report;
+    apply_(hmi::changeProject(doc_, "G\xC3\xA9n\xC3\xA9riques de " + name, [&](hmi::Project& p) {
+        report = hmi::generics::applyToType(p, id, g);
+    }));
+    std::string msg = "G\xC3\xA9n\xC3\xA9riques de " + name + " : " + (g.empty() ? std::string("aucun") : hmi::genericsText(g));
+    if (!report.where.empty()) {
+        msg += " - " + std::to_string(report.where.size()) + (report.where.size() > 1 ? " emplois suivent (" : " emploi suit (");
+        for (std::size_t i = 0; i < report.where.size() && i < 3; ++i) msg += (i ? ", " : "") + report.where[i];
+        msg += report.where.size() > 3 ? "\xE2\x80\xA6)" : ")";
+    }
+    for (const auto& f : report.fixed) msg += " ; " + f;
+    say(msg + ". Ctrl+Z reprend tout.");
+    return true;
 }
 
 bool HmiTypesPane::setTypeDescription(Id id, const std::string& text) {

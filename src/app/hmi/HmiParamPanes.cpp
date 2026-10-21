@@ -7,6 +7,7 @@
 //  "modifie, pas encore applique".
 // =============================================================================
 #include "HmiParamPanes.hpp"
+#include "../../hmi/HmiGenericEdit.hpp"   // 1.12.21 : les generiques changent, leurs emplois suivent
 #include "../../hmi/HmiRoles.hpp"   // 1.12.19 : l'invite d'une case vide (defaultInvite)
 
 #include "../../domain/ProjectModel.hpp"
@@ -416,7 +417,17 @@ FieldResult applyParamField(hmi::Project& p, hmi::Id viewId, std::string_view fi
         if (!hmi::parseGenerics(value, g, &r.why)) { r.ok = false; return r; }
         for (const auto& x : g)
             if (v->param(x.name)) { r.ok = false; r.why = x.name + " est d\xC3\xA9j\xC3\xA0 un param\xC3\xA8tre : un g\xC3\xA9n\xC3\xA9rique se nomme autrement (T, U)"; return r; }
-        v->generics = std::move(g);
+        // 1.12.21 : ses parametres, ses instances (T := REAL) et ceux qui l'ouvrent suivent.
+        const std::string name = v->name;
+        const auto report = hmi::generics::applyToView(p, viewId, g);
+        r.note = "G\xC3\xA9n\xC3\xA9riques de " + name + " : " + (g.empty() ? std::string("aucun") : hmi::genericsText(g));
+        if (!report.where.empty()) {
+            r.note += " - " + std::to_string(report.where.size()) + (report.where.size() > 1 ? " endroits suivent (" : " endroit suit (");
+            for (std::size_t i = 0; i < report.where.size() && i < 3; ++i) r.note += (i ? ", " : "") + report.where[i];
+            r.note += report.where.size() > 3 ? "\xE2\x80\xA6)" : ")";
+        }
+        for (const auto& f : report.fixed) r.note += " ; " + f;
+        r.note += ". Ctrl+Z reprend tout.";
         return r;
     }
     const auto colon = rest.find(':');

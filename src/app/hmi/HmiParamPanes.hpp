@@ -69,6 +69,7 @@ struct FieldResult {
     bool        ok{true};
     std::string why;
     std::string label;
+    std::string note{};    // 1.12.21 : ce qui a suivi (les generiques : les instances, les parametres)
 };
 FieldResult applyParamField(hmi::Project&, hmi::Id view, std::string_view field, const std::string& value);
 // Le nom de la commande d'un champ (avant de l'appliquer).

@@ -266,6 +266,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiExternal.cpp" />
     <ClCompile Include="src\hmi\HmiFolders.cpp" />
     <ClCompile Include="src\hmi\HmiForms.cpp" />
+    <ClCompile Include="src\hmi\HmiGenericEdit.cpp" />
     <ClCompile Include="src\hmi\HmiGuide.cpp" />
     <ClCompile Include="src\hmi\HmiGuideText.cpp" />
     <ClCompile Include="src\hmi\HmiHistory.cpp" />
@@ -737,6 +738,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiExternal.hpp" />
     <ClInclude Include="src\hmi\HmiFolders.hpp" />
     <ClInclude Include="src\hmi\HmiForms.hpp" />
+    <ClInclude Include="src\hmi\HmiGenericEdit.hpp" />
     <ClInclude Include="src\hmi\HmiGuide.hpp" />
     <ClInclude Include="src\hmi\HmiHistory.hpp" />
     <ClInclude Include="src\hmi\HmiIpScan.hpp" />

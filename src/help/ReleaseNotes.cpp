@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.22", "21/10/2026", "livr\xC3\xA9" "e le 21/10 dans la soir\xC3\xA9" "e"},
     {"1.12.21", "21/10/2026", "livr\xC3\xA9" "e le 21/10 au soir"},
     {"1.12.20", "21/10/2026", "livr\xC3\xA9" "e le 21/10"},
     {"1.12.19", "20/10/2026", "livr\xC3\xA9" "e le 20/10 au soir"},
@@ -127,6 +128,10 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.22 (21/10/2026) : voir docs/LIVRAISON-1.12.22.md (les generiques changent, leurs emplois suivent).
+        note("1.12.22", "Variables", Kind::New,
+         "LES G\xC3\x89N\xC3\x89RIQUES CHANGENT, LEURS EMPLOIS SUIVENT TOUT SEULS : retirer K de T_Extractor<T, K> (Types IHM \xE2\x80\xBA la structure \xE2\x80\xBA G\xC3\xA9n\xC3\xA9riques) r\xC3\xA9\xC3\xA9" "crit chaque emploi - les variables IHM (T_Extractor<REAL, STRING> devient T_Extractor<REAL>, LIST OF T_Extractor<INT, STRING> devient LIST OF T_Extractor<INT>), les membres des autres types, les d\xC3\xA9" "clarations des scripts et des fonctions, les param\xC3\xA8tres de popup et de symbole, les retours, les rappels, le code. Dans les membres de la structure, K prend le type que lui donnaient ses emplois (MAP[K] OF T devient MAP[STRING] OF T ; s'ils ne s'accordaient pas, le plus fr\xC3\xA9quent, et le message le dit ; sans emploi, un type de sa contrainte). Renommer T en U fait suivre les membres ; d\xC3\xA9placer T et K fait suivre les arguments ; ajouter un g\xC3\xA9n\xC3\xA9rique donne \xC3\xA0 chaque emploi un type de sa contrainte (INT), \xC3\xA0 changer. Un symbole ou une popup : ses param\xC3\xA8tres suivent, et les arguments T := REAL de ses instances et de ceux qui l'ouvrent sont retir\xC3\xA9s ou renomm\xC3\xA9s. Le message dit ce qui a suivi ; Ctrl+Z reprend tout d'un coup. Corrig\xC3\xA9 en passant : le nom du param\xC3\xA8tre d'un rappel (CALLBACK (t : T) : BOOL) n'est plus pris pour le g\xC3\xA9n\xC3\xA9rique T.",
+         "rappels", ""),
         // 1.12.21 (21/10/2026) : voir docs/LIVRAISON-1.12.21.md (les fenetres se deplacent et s'agrandissent ; T, K au selecteur de types).
         note("1.12.21", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
          "LES FEN\xC3\x8ATRES SE D\xC3\x89PLACENT ET S'AGRANDISSENT : toutes les fen\xC3\xAAtres (Choisir un type, Choisir une fonction, Valeur initiale, les questions, Renommer, Disposition, l'explorateur de fichiers, les nouveaut\xC3\xA9s\xE2\x80\xA6) se d\xC3\xA9placent par leur barre de titre et s'agrandissent par un bord ou par le coin en bas \xC3\xA0 droite (sa poign\xC3\xA9" "e) ; un double clic sur le titre les met en grand, un autre les rend \xC3\xA0 leur place. Le curseur dit ce que la souris prend, le bord pris se colore. Une fen\xC3\xAAtre ne devient pas plus petite que sa taille d'origine (son contenu y est plac\xC3\xA9) et garde sa barre de titre \xC3\xA0 l'\xC3\xA9" "cran ; rouverte pendant la s\xC3\xA9" "ance, elle revient l\xC3\xA0 o\xC3\xB9 tu l'as laiss\xC3\xA9" "e.",

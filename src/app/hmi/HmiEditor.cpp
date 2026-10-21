@@ -1535,6 +1535,7 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
                                       [&](hmi::Project& p) { res = hmiparams::applyParamField(p, viewId_, field, value); });
         if (res.ok && cmd) apply_(std::move(cmd));
         if (!res.ok) warn(res.why);
+        else if (!res.note.empty()) statusBar_->setTransientMessage(res.note, 8.0, ui::StatusBar::Severity::Info);   // 1.12.21
         return res.ok;
     }
     if (field == "nom") {

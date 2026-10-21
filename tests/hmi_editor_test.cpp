@@ -17936,20 +17936,20 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55.
     const auto& rel = hn::releases();
-    check(rel.size() == 54 && rel.front().version == "1.12.21" && rel[1].version == "1.12.20" && rel[2].version == "1.12.19" && rel[3].version == "1.12.18" && rel[4].version == "1.12.17" && rel[5].version == "1.12.16" && rel[6].version == "1.12.15" && rel[7].version == "1.12.14" && rel[8].version == "1.12.13" && rel[9].version == "1.12.12" && rel[10].version == "1.12.11" && rel[11].version == "1.12.10" && rel[12].version == "1.12.9" && rel[13].version == "1.12.8" && rel[14].version == "1.12.7" && rel[15].version == "1.12.6" && rel[16].version == "1.12.5" && rel[17].version == "1.12.4" && rel[18].version == "1.12.3" && rel[19].version == "1.12.2" && rel[20].version == "1.12.1"
-              && rel[21].version == "1.12.0" && rel[22].version == "1.11.24" && rel[23].version == "1.11.23"
-              && rel[24].version == "1.11.22" && rel[25].version == "1.11.21" && rel[26].version == "1.11.20" && rel[27].version == "1.11.19"
-              && rel[28].version == "1.11.18" && rel[29].version == "1.11.17"
-              && rel[30].version == "1.11.16" && rel[31].version == "1.11.15"
-              && rel[32].version == "1.11.14" && rel[33].version == "1.11.13" && rel[34].version == "1.11.12"
-              && rel[35].version == "1.11.11" && rel[36].version == "1.11.10"
-              && rel[37].version == "1.11.9" && rel[38].version == "1.11.8"
-              && rel[39].version == "1.11.7" && rel[40].version == "1.11.6" && rel[41].version == "1.11.5"
-              && rel[42].version == "1.11.4" && rel[43].version == "1.11.3" && rel[44].version == "1.11.2"
-              && rel[45].version == "1.11.1" && rel[46].version == "1.11" && rel[47].version == "1.10.4",
-          "notes : 54 versions, la 1.12.21 en tete, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 55 && rel.front().version == "1.12.22" && rel[1].version == "1.12.21" && rel[2].version == "1.12.20" && rel[3].version == "1.12.19" && rel[4].version == "1.12.18" && rel[5].version == "1.12.17" && rel[6].version == "1.12.16" && rel[7].version == "1.12.15" && rel[8].version == "1.12.14" && rel[9].version == "1.12.13" && rel[10].version == "1.12.12" && rel[11].version == "1.12.11" && rel[12].version == "1.12.10" && rel[13].version == "1.12.9" && rel[14].version == "1.12.8" && rel[15].version == "1.12.7" && rel[16].version == "1.12.6" && rel[17].version == "1.12.5" && rel[18].version == "1.12.4" && rel[19].version == "1.12.3" && rel[20].version == "1.12.2" && rel[21].version == "1.12.1"
+              && rel[22].version == "1.12.0" && rel[23].version == "1.11.24" && rel[24].version == "1.11.23"
+              && rel[25].version == "1.11.22" && rel[26].version == "1.11.21" && rel[27].version == "1.11.20" && rel[28].version == "1.11.19"
+              && rel[29].version == "1.11.18" && rel[30].version == "1.11.17"
+              && rel[31].version == "1.11.16" && rel[32].version == "1.11.15"
+              && rel[33].version == "1.11.14" && rel[34].version == "1.11.13" && rel[35].version == "1.11.12"
+              && rel[36].version == "1.11.11" && rel[37].version == "1.11.10"
+              && rel[38].version == "1.11.9" && rel[39].version == "1.11.8"
+              && rel[40].version == "1.11.7" && rel[41].version == "1.11.6" && rel[42].version == "1.11.5"
+              && rel[43].version == "1.11.4" && rel[44].version == "1.11.3" && rel[45].version == "1.11.2"
+              && rel[46].version == "1.11.1" && rel[47].version == "1.11" && rel[48].version == "1.10.4",
+          "notes : 55 versions, la 1.12.22 en tete, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18220,7 +18220,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 379,   // 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 380,   // 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18363,7 +18363,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 211, "centre : L'IHM a les 211 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 54, "centre : 11 expressions, 54 notes (1.12.21)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 55, "centre : 11 expressions, 55 notes (1.12.22)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -18425,10 +18425,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 54
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 55
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.12.21" && hc::notesPage("9.9").version == "1.12.21",
+        check(hc::notesPage("").version == "1.12.22" && hc::notesPage("9.9").version == "1.12.22",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -18772,7 +18772,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 54;   // 1.11.3 a 1.12.21 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 55;   // 1.11.3 a 1.12.22 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -34042,6 +34042,50 @@ void generiquesFenetres11221() {
     df::reset();
 }
 
+// ---- 1.12.21 : Types IHM > la structure > Generiques - retirer K : les variables suivent toutes seules, Ctrl+Z rend tout ----
+void generiquesSuiventEcran11221() {
+    std::printf("-- 1.12.21 : Types IHM - retirer un g\xC3\xA9n\xC3\xA9rique, les variables suivent\n");
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    core::CommandStack stack;
+    core::CommandGroupScope::registerStack(&stack);
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    HmiType ex;
+    ex.id = p.allocate();
+    ex.name = "T_Extractor";
+    ex.generics = {{"T", ""}, {"K", ""}};
+    ex.members = {{"Name", "STRING", "", ""}, {"Valeurs", "MAP[K] OF T", "", ""}};
+    const hmi::Id exId = ex.id;
+    p.programs.types.push_back(ex);
+    hmi::Variable v1;
+    v1.id = p.allocate();
+    v1.name = "Extr1";
+    v1.type = "T_Extractor<REAL, STRING>";
+    p.programs.variables.push_back(v1);
+    hmi::Variable v2 = v1;
+    v2.id = p.allocate();
+    v2.name = "Extr2";
+    v2.type = "LIST OF T_Extractor<INT, STRING>";
+    p.programs.variables.push_back(v2);
+    app::HmiTypesPane types("tyGen", doc, apply);
+    types.setBounds({0, 0, 1700, 900});
+    types.layout();
+    std::string why;
+    check(types.setTypeGenerics(exId, "T", &why), "G\xC3\xA9n\xC3\xA9riques : T (K retir\xC3\xA9) (" + why + ")");
+    const auto type = [&](const char* n) { const auto* v = p.variable(n); return v ? v->type : std::string("?"); };
+    check(type("Extr1") == "T_Extractor<REAL>" && type("Extr2") == "LIST OF T_Extractor<INT>" && p.hmiType(exId)->members[1].type == "MAP[STRING] OF T",
+          "les variables suivent toutes seules : T_Extractor<REAL>, LIST OF T_Extractor<INT> ; Valeurs : MAP[STRING] OF T");
+    check(types.lastMessage().find("2 emplois suivent") != std::string::npos && types.lastMessage().find("K devient STRING") != std::string::npos,
+          "le message dit ce qui a suivi (" + types.lastMessage() + ")");
+    check(stack.canUndo() && stack.undo() && type("Extr1") == "T_Extractor<REAL, STRING>" && type("Extr2") == "LIST OF T_Extractor<INT, STRING>"
+              && p.hmiType(exId)->generics.size() == 2 && p.hmiType(exId)->members[1].type == "MAP[K] OF T",
+          "Ctrl+Z rend tout : T, K, les deux variables, le membre");
+    check(types.setTypeGenerics(exId, "", &why) && type("Extr1") == "T_Extractor" && type("Extr2") == "LIST OF T_Extractor"
+              && p.hmiType(exId)->members[1].type == "MAP[STRING] OF REAL",
+          "aucun g\xC3\xA9n\xC3\xA9rique : T_Extractor tout court partout, Valeurs : MAP[STRING] OF REAL (" + p.hmiType(exId)->members[1].type + ")");
+    core::CommandGroupScope::registerStack(nullptr);
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les natives rangees, Choisir une fonction... (Mes fonctions, Rend), seuls.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -34411,6 +34455,7 @@ int main(int argc, char** argv) {
     v110_enumerations();                    // 1.10 (chantier U) : l'interface du type enumeration
     typesRappelEcran1220();                 // 1.12.20 (lot T) : Types IHM - Nouveau type, Rappel...
     generiquesFenetres11221();              // 1.12.21 : T, K au selecteur de types ; les fenetres se deplacent et s'agrandissent
+    generiquesSuiventEcran11221();          // 1.12.21 : retirer un generique, les variables suivent
     v1101_tableaux_onglet_cache();          // 1.10.1 (chantier B1) : la vue suit les tableaux, onglet cache ou non
     v1101_journal_vider();                  // 1.10.1 (integration I1101) : le Journal se vide ; les nouveautes 1.10.0 -> 1.10.1
     aideSaisie1102();                       // 1.10.2 (chantier A) : les objets des vues, les parametres des instances

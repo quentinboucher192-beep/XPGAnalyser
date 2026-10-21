@@ -35,6 +35,7 @@
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/core/CallTrail.hpp"
 #include "../src/hmi/HmiScript.hpp"
+#include "../src/hmi/HmiGenericEdit.hpp"   // 1.12.21 : les generiques changent, leurs emplois suivent
 #include "../src/hmi/HmiEnums.hpp"        // 1.10 (decision 15)
 #include "../src/hmi/HmiScriptCheck110.hpp"   // 1.10 (S1)
 #include "../src/hmi/HmiScriptCheck.hpp"   // 1.10 : les erreurs des scripts, a leur place
@@ -28917,6 +28918,127 @@ void generiques1220() {
     fs::remove_all(dir);
 }
 
+// ---- 1.12.21 : LES GENERIQUES CHANGENT, LEURS EMPLOIS SUIVENT (« si je supprime T, K et que j'avais fait des variables,
+//  il faut modifier les types tout seul cote variables ») ----
+void generiquesSuivent11221() {
+    std::printf("1.12.21 : les generiques changent, leurs emplois suivent\n");
+    namespace gx = hmi::generics;
+    using G = std::vector<GenericParam>;
+    const G tk{{"T", ""}, {"K", ""}}, t1{{"T", ""}};
+    const auto m = gx::compare(tk, t1);
+    check(m.from == std::vector<int>{0} && m.removed == std::vector<int>{1} && m.added.empty() && !m.keepsUses(), "compare : T, K -> T, K retire");
+    const auto rn = gx::compare(tk, G{{"U", ""}, {"K", ""}});
+    check(rn.renamed.size() == 1 && rn.renamed[0].first == "T" && rn.renamed[0].second == "U" && rn.keepsUses(), "compare : T, K -> U, K, un renommage");
+    const auto sw = gx::compare(tk, G{{"K", ""}, {"T", ""}});
+    check(sw.from == std::vector<int>{1, 0} && !sw.keepsUses(), "compare : T, K -> K, T, deplaces");
+    check(gx::retype("LIST OF T_Extractor<REAL, STRING>", "T_Extractor", tk, t1) == "LIST OF T_Extractor<REAL>"
+              && gx::retype("MAP[STRING] OF t_extractor< T_Four , INT>", "T_Extractor", tk, G{{"K", ""}, {"T", ""}}) == "MAP[STRING] OF t_extractor<INT, T_Four>"
+              && gx::retype("T_Extractor<REAL>", "T_Extractor", tk, t1) == "T_Extractor<REAL>"
+              && gx::retype("T_Extractor", "T_Extractor", G{}, t1) == "T_Extractor<INT>"
+              && gx::retype("T_ExtractorBis<REAL, STRING>", "T_Extractor", tk, t1) == "T_ExtractorBis<REAL, STRING>",
+          "retype : K retire, deplaces, un emploi deja faux tel quel, ajoute (INT), un autre nom tel quel");
+    // ---- le projet : T_Extractor<T, K> et ses emplois
+    Project p;
+    HmiType ex;
+    ex.id = p.allocate();
+    ex.name = "T_Extractor";
+    ex.generics = tk;
+    ex.members = {{"Name", "STRING", "", ""}, {"Valeurs", "MAP[K] OF T", "", ""}, {"Filtre", "CALLBACK (t : T) : BOOL", "", ""}};
+    const Id exId = ex.id;
+    p.programs.types.push_back(ex);
+    HmiType lot;
+    lot.id = p.allocate();
+    lot.name = "T_Lot";
+    lot.members = {{"Ex", "T_Extractor<INT, STRING>", "", ""}};
+    p.programs.types.push_back(lot);
+    p.programs.variables.push_back(hmiVar(p, "Extr1", "T_Extractor<REAL, STRING>"));
+    p.programs.variables.push_back(hmiVar(p, "Extr2", "LIST OF T_Extractor<REAL, STRING>"));
+    p.programs.variables.push_back(hmiVar(p, "Extr3", "T_Extractor<BOOL, INT>"));
+    HmiFunction fn;
+    fn.id = p.allocate();
+    fn.name = "Lire";
+    fn.returnType = "T_Extractor<REAL, STRING>";
+    Declaration x;
+    x.id = p.allocate();
+    x.kind = DeclKind::Parameter;
+    x.name = "e";
+    x.type = "T_Extractor<REAL, STRING>";
+    fn.decls.push_back(x);
+    p.programs.functions.push_back(fn);
+    std::string why;
+    check(types::validType(p, "T_Extractor<REAL, STRING>", &why) && types::validMemberType(p, "CALLBACK (t : T) : BOOL", &why, "T_Extractor"),
+          "avant : T_Extractor<REAL, STRING> et le membre Filtre (" + why + ")");
+    // ---- K retire : ses arguments partent ; dans les membres, K prend le type le plus frequent de ses emplois (STRING)
+    auto r = gx::applyToType(p, exId, t1);
+    const auto* t = p.hmiType(exId);
+    const auto var = [&](const char* n) { const auto* v = p.variable(n); return v ? v->type : std::string("?"); };
+    check(t && t->generics.size() == 1 && t->members[1].type == "MAP[STRING] OF T" && t->members[2].type == "CALLBACK (t : T) : BOOL",
+          "K retire : Valeurs : MAP[STRING] OF T, Filtre tel quel (" + (t ? t->members[1].type : std::string("?")) + ")");
+    check(var("Extr1") == "T_Extractor<REAL>" && var("Extr2") == "LIST OF T_Extractor<REAL>" && var("Extr3") == "T_Extractor<BOOL>"
+              && p.hmiTypeByName("T_Lot")->members[0].type == "T_Extractor<INT>" && p.programs.functions[0].returnType == "T_Extractor<REAL>"
+              && p.programs.functions[0].decls[0].type == "T_Extractor<REAL>",
+          "K retire : les variables, le membre de T_Lot, le retour et le parametre de Lire suivent (" + var("Extr2") + ")");
+    check(r.where.size() == 6 && !r.fixed.empty() && r.fixed[0].find("K devient STRING") != std::string::npos
+              && r.fixed[0].find("le plus fr\xC3\xA9quent") != std::string::npos,
+          "K retire : 6 emplois reecrits, et ce que devient K, dit (" + (r.fixed.empty() ? std::string("?") : r.fixed[0]) + ")");
+    check(types::validType(p, "T_Extractor<REAL>", &why) && types::validType(p, var("Extr2"), &why) && !types::validType(p, "T_Extractor<REAL, STRING>", &why),
+          "K retire : T_Extractor<REAL> est bon, T_Extractor<REAL, STRING> ne l'est plus");
+    const auto* inst = p.hmiTypeByName("T_Extractor<REAL>");
+    check(inst && inst->members[1].type == "MAP[STRING] OF REAL" && inst->members[2].type == "CALLBACK (t : REAL) : BOOL",
+          "l'instance T_Extractor<REAL> : MAP[STRING] OF REAL, et le nom t du rappel reste t (" + (inst ? inst->members[2].type : std::string("?")) + ")");
+    // ---- T retire aussi : la structure n'est plus generique ; T prend REAL (le plus frequent)
+    r = gx::applyToType(p, exId, G{});
+    t = p.hmiType(exId);
+    check(t && t->generics.empty() && t->members[1].type == "MAP[STRING] OF REAL" && t->members[2].type == "CALLBACK (t : REAL) : BOOL"
+              && var("Extr1") == "T_Extractor" && var("Extr2") == "LIST OF T_Extractor" && var("Extr3") == "T_Extractor"
+              && types::validType(p, "T_Extractor", &why),
+          "T retire aussi : MAP[STRING] OF REAL, CALLBACK (t : REAL) : BOOL ; les variables : T_Extractor (" + var("Extr2") + ")");
+    // ---- T rajoute : chaque emploi recoit un type de sa contrainte (INT), a changer
+    r = gx::applyToType(p, exId, G{{"T", "ANY_NUM"}});
+    check(var("Extr1") == "T_Extractor<INT>" && var("Extr2") == "LIST OF T_Extractor<INT>" && types::validType(p, var("Extr1"), &why),
+          "T rajoute : T_Extractor<INT> (" + var("Extr1") + ")");
+    // ---- renommer, deplacer : T_Paire<A, B>
+    HmiType pa;
+    pa.id = p.allocate();
+    pa.name = "T_Paire";
+    pa.generics = {{"A", ""}, {"B", ""}};
+    pa.members = {{"Premier", "A", "", ""}, {"Second", "LIST OF B", "", ""}};
+    const Id paId = pa.id;
+    p.programs.types.push_back(pa);
+    p.programs.variables.push_back(hmiVar(p, "P1", "T_Paire<INT, STRING>"));
+    r = gx::applyToType(p, paId, G{{"X", ""}, {"B", ""}});
+    check(p.hmiType(paId)->members[0].type == "X" && var("P1") == "T_Paire<INT, STRING>" && r.where.empty(),
+          "A renomme X : le membre suit, les emplois ne bougent pas");
+    r = gx::applyToType(p, paId, G{{"B", ""}, {"X", ""}});
+    check(p.hmiType(paId)->members[0].type == "X" && var("P1") == "T_Paire<STRING, INT>" && r.where.size() == 1,
+          "X et B deplaces : T_Paire<STRING, INT> (" + var("P1") + ")");
+    // ---- un symbole generique : Afficheur<T> - T retire, ses instances perdent T := REAL, Valeur prend REAL
+    p.programs.variables.push_back(hmiVar(p, "Niveau", "REAL", "8.5"));
+    View sym = makeView(p, "Afficheur");
+    sym.role = "symbole";
+    sym.width = 100;
+    sym.height = 40;
+    sym.generics = {{"T", "ANY_NUM"}};
+    sym.params = {{"Valeur", "0", "", "T", ParamMode::Reference}, {"Format", "NULL", "", "CALLBACK (v : T) : STRING", ParamMode::Reference}};
+    const Id symId = sym.id;
+    p.views.push_back(sym);
+    View host = makeView(p, "Vue_Hote");
+    const Id i1 = placeSymbol(p, host, "Afficheur", 10, 10);
+    host.object(i1)->name = "A1";
+    host.object(i1)->set("params", "T := REAL; Valeur := Niveau");
+    const Id hostId = host.id;
+    p.views.push_back(host);
+    r = gx::applyToView(p, symId, G{{"U", "ANY_NUM"}});
+    const auto* sv = p.view(symId);
+    check(sv && sv->params[0].type == "U" && sv->params[1].type == "CALLBACK (v : U) : STRING" && p.view(hostId)->object(i1)->text("params") == "U := REAL; Valeur := Niveau",
+          "symbole : T renomme U - ses parametres et l'argument de l'instance suivent (" + p.view(hostId)->object(i1)->text("params") + ")");
+    r = gx::applyToView(p, symId, G{});
+    sv = p.view(symId);
+    check(sv && sv->generics.empty() && sv->params[0].type == "REAL" && sv->params[1].type == "CALLBACK (v : REAL) : STRING"
+              && p.view(hostId)->object(i1)->text("params") == "Valeur := Niveau" && !r.fixed.empty(),
+          "symbole : U retire - Valeur : REAL (ce que donnait l'instance), U := REAL part de l'instance (" + p.view(hostId)->object(i1)->text("params") + ")");
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les performances dans le temps, les lenteurs, seules.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -29145,6 +29267,7 @@ int main(int argc, char** argv) {
     typesRappel1220();                // 1.12.20 (T) : les types rappel nommes
     scriptsC1220();                   // 1.12.20 (C) : les scripts C et C++, l'en-tete du projet
     generiques1220();                 // 1.12.20 (G) : les structures, les symboles et les popups generiques
+    generiquesSuivent11221();         // 1.12.21 : les generiques changent, leurs emplois suivent
     lotA1125();                       // 1.12.5 (lot A) : les defauts de l'audit des objets
     lotBC1126();                      // 1.12.6 (lots B et C) : le role de chaque propriete, les reperes partout
     lotD1127();                       // 1.12.7 (lot D) : les listes en tableau et les choix
