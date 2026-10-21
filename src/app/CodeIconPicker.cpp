@@ -2,6 +2,7 @@
 //  app/CodeIconPicker.cpp - 1.8.0 : voir CodeIconPicker.hpp
 // =============================================================================
 #include "CodeIconPicker.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../core/CodeIcons.hpp"
 #include "../menu/MenuManager.hpp"
@@ -74,7 +75,7 @@ protected:
         const auto r = bounds();
         const int rows = (static_cast<int>(ci::kCount) + kCols - 1) / kCols;
         const float h = kTitleH + 16.f + static_cast<float>(rows) * kCellH + kFootH;
-        panel_ = {std::floor((r.w - kPanelW) * 0.5f), std::floor(std::max(20.f, (r.h - h) * 0.5f)), kPanelW, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor((r.w - kPanelW) * 0.5f), std::floor(std::max(20.f, (r.h - h) * 0.5f)), kPanelW, h});
         const float by = panel_.y + panel_.h - kFootH + 10.f;
         float bx = panel_.x + panel_.w - 14.f;
         for (auto* b : {close, none}) {

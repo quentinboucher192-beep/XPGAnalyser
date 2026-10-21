@@ -1,5 +1,7 @@
 #include "Widget.hpp"
 
+#include "DialogFrame.hpp"   // 1.12.21 : un dialogue qui s'en va oublie sa place
+
 #include <algorithm>
 
 namespace ui {
@@ -95,6 +97,7 @@ namespace ui {
 
     Widget::~Widget() {
         if (gMouseHolder == this) gMouseHolder = nullptr;
+        dialogframe::forget(this);
     }
 
     void Widget::captureMouse() noexcept { gMouseHolder = this; }

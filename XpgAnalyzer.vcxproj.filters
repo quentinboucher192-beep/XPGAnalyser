@@ -1009,6 +1009,9 @@
     <ClCompile Include="src\ui\Commands.cpp">
       <Filter>ui</Filter>
     </ClCompile>
+    <ClCompile Include="src\ui\DialogFrame.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
     <ClCompile Include="src\ui\KeyMap.cpp">
       <Filter>ui</Filter>
     </ClCompile>
@@ -2294,6 +2297,9 @@
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\Commands.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\DialogFrame.hpp">
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\KeyMap.hpp">

@@ -2,6 +2,7 @@
 //  app/hmi/HmiValuePicker.cpp - voir HmiValuePicker.hpp
 // =============================================================================
 #include "HmiValuePicker.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 #include "../../hmi/HmiRoles.hpp"       // 1.12.14 : le decoupeur (les bornes, les items d'un tuple)
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.14 : le catalogue a toute profondeur
 #include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas de source API
@@ -385,7 +386,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(1080.f, r.w - 40.f), h = std::min(760.f, r.h - 40.f);
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float sw = std::min(280.f, w * 0.3f);
         search_->setBounds({panel_.right() - 16.f - sw, panel_.y + 88.f, sw, 28.f});
         bottom_ = panel_.bottom() - 52.f;

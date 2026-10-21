@@ -2,6 +2,7 @@
 //  app/hmi/HmiActionDialogs.cpp - voir HmiActionDialogs.hpp
 // =============================================================================
 #include "HmiActionDialogs.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 #include "../../core/Edition.hpp"   // 1.12.0
 
 #include "HmiAssist.hpp"
@@ -184,7 +185,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(1100.f, r.w - 40.f), h = std::min(700.f, r.h - 40.f);
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float side = std::min(360.f, w * 0.34f);
         const float top = panel_.y + 52.f, bottom = panel_.bottom() - 52.f;
         diagH_ = 66.f;
@@ -462,7 +463,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(640.f, r.w - 40.f), h = std::min(640.f, r.h - 40.f);
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         search_->setBounds({panel_.x + 16.f, panel_.y + 54.f, w - 32.f, 30.f});
         const float bottom = panel_.bottom() - 52.f;
         helpBox_ = {panel_.x + 16.f, bottom - 58.f, w - 32.f, 54.f};
@@ -718,7 +719,7 @@ protected:
         const float w = std::min(860.f, r.w - 40.f);
         const float rowsH = static_cast<float>(rows_.size()) * 34.f;
         const float h = std::min(r.h - 40.f, 380.f + rowsH);
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float lx = panel_.x + 16.f, fx = panel_.x + 150.f, fw = panel_.right() - 16.f - fx;
         float y = panel_.y + 56.f;
         target_->setBounds({fx, y, fw, 28.f});

@@ -1,6 +1,7 @@
 // app/RenameDialog.cpp - renommer, en montrant d'abord tout ce qui change
 // (voir RenameDialog.hpp) ; et la moitie IHM du plan.
 #include "RenameDialog.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 #include "TutorialsLot8.hpp"                // Lot API 8 : didacticiels et aide (F1)
 #include "../menu/MenuManager.hpp"          // Lot API 8 : didacticiels et aide (F1 : l'aide par-dessus)
 
@@ -1592,7 +1593,7 @@ protected:
         const auto r = bounds();
         const float w = std::clamp(width_, 640.f, std::max(640.f, r.w - 24.f));
         const float h = std::clamp(height_, 440.f, std::max(440.f, r.h - 24.f));
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float x = panel_.x + 16.f, inner = panel_.w - 32.f;
         float y = panel_.y + 42.f;
         nameAt_ = y;

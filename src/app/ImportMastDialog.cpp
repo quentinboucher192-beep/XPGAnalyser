@@ -3,6 +3,7 @@
 //  (voir l'en-tete).
 // =============================================================================
 #include "ImportMastDialog.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../menu/MenuManager.hpp"
 #include "../ui/widgets/Containers.hpp"
@@ -226,7 +227,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(960.f, r.w - 40.f), h = std::min(640.f, r.h - 40.f);
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float x = panel_.x + 16.f, inner = panel_.w - 32.f;
         float y = panel_.y + kTitle + 10.f;
         bannerY_ = y;

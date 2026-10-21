@@ -1,5 +1,6 @@
 // app/hmi/HmiItemDuplicateDialog.cpp - « Dupliquer... » d'un element (1.12.16).
 #include "HmiItemDuplicateDialog.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../../core/FieldCodec.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -132,7 +133,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(980.f, r.w - 40.f), h = std::min(620.f, r.h - 40.f);
-        panel = {std::floor((r.w - w) * 0.5f), std::floor((r.h - h) * 0.5f), w, h};
+        panel = ui::dialogframe::place(*this, {std::floor((r.w - w) * 0.5f), std::floor((r.h - h) * 0.5f), w, h});
         float y = panel.y + 44.f + 2.f * 20.f;   // ce qui est duplique, les indices
         float x = panel.x + 16.f;
         for (auto* box : d_.followBoxes_) {

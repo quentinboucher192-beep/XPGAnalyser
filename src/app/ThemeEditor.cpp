@@ -5,6 +5,7 @@
 // avec les couleurs du theme d'avant (chrome_) : on peut rendre le texte
 // illisible sans perdre l'editeur.
 #include "ThemeEditor.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../menu/MenuManager.hpp"
 #include "../ui/ThemeFile.hpp"
@@ -104,7 +105,7 @@ protected:
     void onLayout() override {
         const auto b = bounds();
         const float w = std::min(920.f, b.w - 20.f);
-        panel_ = {b.x + b.w - w, b.y + 48.f, w, std::max(360.f, b.h - 72.f)};
+        panel_ = ui::dialogframe::place(*this, {b.x + b.w - w, b.y + 48.f, w, std::max(360.f, b.h - 72.f)});
         const float x0 = panel_.x + 16.f;
         float bx = panel_.x + panel_.w - 16.f;
         for (auto it = head.rbegin(); it != head.rend(); ++it) {

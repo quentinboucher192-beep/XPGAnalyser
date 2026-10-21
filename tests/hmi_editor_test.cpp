@@ -82,6 +82,7 @@
 #include "../src/app/hmi/HmiDisplayPanes.hpp"
 #include "../src/app/hmi/HmiScriptPanes.hpp"
 #include "../src/app/hmi/HmiTypePicker.hpp"          // 1.11.19 (refonte, lot 6) : le selecteur de types
+#include "../src/ui/DialogFrame.hpp"                 // 1.12.21 : les fenetres se deplacent et s'agrandissent
 #include "../src/app/hmi/HmiSimulation.hpp"
 #include "../src/app/hmi/HmiBuildPanes.hpp"         // 1.11.16 : le double-clic vers la source
 #include "../src/app/hmi/HmiSimVarTree.hpp"   // 1.11.5
@@ -17935,20 +17936,20 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54.
     const auto& rel = hn::releases();
-    check(rel.size() == 53 && rel.front().version == "1.12.20" && rel[1].version == "1.12.19" && rel[2].version == "1.12.18" && rel[3].version == "1.12.17" && rel[4].version == "1.12.16" && rel[5].version == "1.12.15" && rel[6].version == "1.12.14" && rel[7].version == "1.12.13" && rel[8].version == "1.12.12" && rel[9].version == "1.12.11" && rel[10].version == "1.12.10" && rel[11].version == "1.12.9" && rel[12].version == "1.12.8" && rel[13].version == "1.12.7" && rel[14].version == "1.12.6" && rel[15].version == "1.12.5" && rel[16].version == "1.12.4" && rel[17].version == "1.12.3" && rel[18].version == "1.12.2" && rel[19].version == "1.12.1"
-              && rel[20].version == "1.12.0" && rel[21].version == "1.11.24" && rel[22].version == "1.11.23"
-              && rel[23].version == "1.11.22" && rel[24].version == "1.11.21" && rel[25].version == "1.11.20" && rel[26].version == "1.11.19"
-              && rel[27].version == "1.11.18" && rel[28].version == "1.11.17"
-              && rel[29].version == "1.11.16" && rel[30].version == "1.11.15"
-              && rel[31].version == "1.11.14" && rel[32].version == "1.11.13" && rel[33].version == "1.11.12"
-              && rel[34].version == "1.11.11" && rel[35].version == "1.11.10"
-              && rel[36].version == "1.11.9" && rel[37].version == "1.11.8"
-              && rel[38].version == "1.11.7" && rel[39].version == "1.11.6" && rel[40].version == "1.11.5"
-              && rel[41].version == "1.11.4" && rel[42].version == "1.11.3" && rel[43].version == "1.11.2"
-              && rel[44].version == "1.11.1" && rel[45].version == "1.11" && rel[46].version == "1.10.4",
-          "notes : 53 versions, la 1.12.20 en tete, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 54 && rel.front().version == "1.12.21" && rel[1].version == "1.12.20" && rel[2].version == "1.12.19" && rel[3].version == "1.12.18" && rel[4].version == "1.12.17" && rel[5].version == "1.12.16" && rel[6].version == "1.12.15" && rel[7].version == "1.12.14" && rel[8].version == "1.12.13" && rel[9].version == "1.12.12" && rel[10].version == "1.12.11" && rel[11].version == "1.12.10" && rel[12].version == "1.12.9" && rel[13].version == "1.12.8" && rel[14].version == "1.12.7" && rel[15].version == "1.12.6" && rel[16].version == "1.12.5" && rel[17].version == "1.12.4" && rel[18].version == "1.12.3" && rel[19].version == "1.12.2" && rel[20].version == "1.12.1"
+              && rel[21].version == "1.12.0" && rel[22].version == "1.11.24" && rel[23].version == "1.11.23"
+              && rel[24].version == "1.11.22" && rel[25].version == "1.11.21" && rel[26].version == "1.11.20" && rel[27].version == "1.11.19"
+              && rel[28].version == "1.11.18" && rel[29].version == "1.11.17"
+              && rel[30].version == "1.11.16" && rel[31].version == "1.11.15"
+              && rel[32].version == "1.11.14" && rel[33].version == "1.11.13" && rel[34].version == "1.11.12"
+              && rel[35].version == "1.11.11" && rel[36].version == "1.11.10"
+              && rel[37].version == "1.11.9" && rel[38].version == "1.11.8"
+              && rel[39].version == "1.11.7" && rel[40].version == "1.11.6" && rel[41].version == "1.11.5"
+              && rel[42].version == "1.11.4" && rel[43].version == "1.11.3" && rel[44].version == "1.11.2"
+              && rel[45].version == "1.11.1" && rel[46].version == "1.11" && rel[47].version == "1.10.4",
+          "notes : 54 versions, la 1.12.21 en tete, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18219,7 +18220,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 377,   // 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 379,   // 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18362,7 +18363,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 211, "centre : L'IHM a les 211 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 53, "centre : 11 expressions, 53 notes (1.12.20)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 54, "centre : 11 expressions, 54 notes (1.12.21)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -18424,10 +18425,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 53
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 54
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.12.20" && hc::notesPage("9.9").version == "1.12.20",
+        check(hc::notesPage("").version == "1.12.21" && hc::notesPage("9.9").version == "1.12.21",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -18771,7 +18772,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 53;   // 1.11.3 a 1.12.20 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 54;   // 1.11.3 a 1.12.21 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -33918,6 +33919,129 @@ void typesRappelEcran1220() {
     core::CommandGroupScope::registerStack(nullptr);
 }
 
+// ---- 1.12.21 : le selecteur de types propose T, K de la structure (composables) ; une fenetre se deplace par son
+// titre, s'agrandit par un bord ou un coin, se met en grand d'un double clic, et retrouve sa place a la reouverture ----
+void generiquesFenetres11221() {
+    std::printf("-- 1.12.21 : T, K au s\xC3\xA9lecteur de types ; les fen\xC3\xAAtres se d\xC3\xA9placent et s'agrandissent\n");
+    namespace tr = hmi::typereg;
+    namespace df = ui::dialogframe;
+    df::reset();
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    HmiType ex;
+    ex.id = p.allocate();
+    ex.name = "T_Extractor";
+    ex.generics = {{"T", ""}, {"K", ""}};
+    ex.members.push_back({"Name", "STRING", "", ""});
+    p.programs.types.push_back(ex);
+    std::string why;
+    // Un membre de type T, K se verifie avec un type de leur contrainte (INT : il va aussi en cle d'une MAP).
+    for (const char* ok : {"T", "VECTOR OF T", "ARRAY[0..9] OF T", "MAP[K] OF T", "MAP[K] OF VECTOR OF T", "CALLBACK (x : T) : BOOL",
+                           "CALLBACK (k : K; v : T) : BOOL"})
+        check(hmi::types::validMemberType(p, ok, &why, "T_Extractor"), std::string("membre de T_Extractor<T, K> : ") + ok + " (" + why + ")");
+    menu::MenuManager mm{menu::MenuFactory{}};
+    std::vector<app::HmiTypePicker::Answer> answers;
+    const auto open = [&](app::HmiTypePicker::Spec spec) -> app::HmiTypePicker* {
+        mm.ShowDialog(std::make_unique<app::HmiTypePicker>(std::move(spec)), [&](const menu::DialogResult& r) {
+            if (r.accepted()) answers.push_back(app::HmiTypePicker::parse(r.payload));
+        });
+        mm.applyPending();
+        return dynamic_cast<app::HmiTypePicker*>(mm.top());
+    };
+    app::HmiTypePicker::Spec spec;
+    spec.field = "Type de T_Extractor.Name";
+    spec.current = "STRING";
+    spec.use = tr::UseVariable;
+    spec.doc = doc;
+    spec.generics = ex.generics;
+    spec.genericsOf = "T_Extractor<T, K>";
+    auto* picker = open(spec);
+    check(picker != nullptr, "le s\xC3\xA9lecteur s'ouvre");
+    if (!picker) return;
+    check(picker->setCategory("Tous"), "Tous");
+    const auto shown = picker->shownNames();
+    check(shown.size() > 2 && shown[0] == "T" && shown[1] == "K", "T, K en t\xC3\xAAte de la liste");
+    check(picker->setCategory("G\xC3\xA9n\xC3\xA9riques") && picker->shownNames() == std::vector<std::string>{"T", "K"},
+          "la puce G\xC3\xA9n\xC3\xA9riques : T, K (ANY n'est pas pour un membre)");
+    check(picker->setCategory("Tous") && picker->select("T") && picker->setForm("Vecteur") && picker->result() == "VECTOR OF T"
+              && picker->resultProblem().empty(),
+          "T puis Vecteur : VECTOR OF T (" + picker->result() + " " + picker->resultProblem() + ")");
+    check(picker->setForm("Tableau") && picker->result() == "ARRAY[0..9] OF T" && picker->resultProblem().empty(),
+          "Tableau : ARRAY[0..9] OF T (" + picker->result() + ")");
+    check(picker->setForm("Simple") && picker->select("CALLBACK (x : T) : BOOL") && picker->result() == "CALLBACK (x : T) : BOOL"
+              && picker->resultProblem().empty(),
+          "un rappel de T tout fait : CALLBACK (x : T) : BOOL (" + picker->result() + " " + picker->resultProblem() + ")");
+    check(picker->select("CALLBACK (k : K; v : T) : BOOL") && picker->select("CALLBACK (x : K) : K"),
+          "les rappels d'une MAP[K] OF T et de K");
+    picker->setSearch("map[k] of vector of t");
+    check(picker->result() == "MAP[K] OF VECTOR OF T" && picker->resultProblem().empty(),
+          "\xC3\xA9" "crit : map[k] of vector of t -> " + picker->result() + " " + picker->resultProblem());
+    picker->setSearch("MAP[K] OF U");
+    check(!picker->resultProblem().empty(), "U n'est pas un g\xC3\xA9n\xC3\xA9rique d'ici (" + picker->resultProblem() + ")");
+    picker->setSearch("MAP[K] OF T");
+    picker->choose();
+    mm.applyPending();
+    check(answers.size() == 1 && answers[0].type == "MAP[K] OF T", "Choisir : MAP[K] OF T");
+    // Rouvert sur MAP[K] OF T : la forme, sa cle K et T, sans avis.
+    spec.current = "MAP[K] OF T";
+    picker = open(spec);
+    check(picker && picker->result() == "MAP[K] OF T" && picker->resultProblem().empty() && picker->notice().empty(),
+          "rouvert sur MAP[K] OF T (" + (picker ? picker->result() + " / " + picker->notice() : std::string("?")) + ")");
+    if (!picker) return;
+
+    // ---- la fenetre ----
+    menu::FrameContext fc{};
+    fc.surface = {1600.f, 1000.f};
+    mm.Update(fc);
+    ui::Widget* root = picker->widgetRoot();
+    const gfx::Rect f0 = df::frameOf(*root);
+    check(f0.x == 350.f && f0.y == 180.f && f0.w == 900.f && f0.h == 640.f, "le cadre, centr\xC3\xA9 : 900 x 640");
+    const auto press = [&](gfx::Point a, gfx::Point b, int clicks = 1) {
+        (void)mm.HandleEvent(ui::MouseMove{a, {}, {}});
+        (void)mm.HandleEvent(ui::MouseDown{a, ui::MouseButton::Left, clicks, {}});
+        (void)mm.HandleEvent(ui::MouseMove{b, {}, {}});
+        (void)mm.HandleEvent(ui::MouseUp{b, ui::MouseButton::Left, {}});
+        mm.Update(fc);
+        return df::frameOf(*root);
+    };
+    (void)mm.HandleEvent(ui::MouseMove{{f0.x + 200.f, f0.y + 15.f}, {}, {}});
+    check(df::cursor() == df::Grip::Move, "la barre de titre d\xC3\xA9place");
+    (void)mm.HandleEvent(ui::MouseMove{{f0.right() - 24.f, f0.y + 20.f}, {}, {}});
+    check(df::cursor() == df::Grip::None, "la croix qui ferme ne d\xC3\xA9place pas");
+    (void)mm.HandleEvent(ui::MouseMove{{f0.x + 200.f, f0.y + 66.f}, {}, {}});
+    check(df::cursor() == df::Grip::None, "la recherche ne d\xC3\xA9place pas");
+    const gfx::Rect f1 = press({f0.x + 200.f, f0.y + 15.f}, {f0.x + 50.f, f0.y + 75.f});
+    const auto* search = root->findById("dialog.typePicker.chercher");
+    check(f1.x == f0.x - 150.f && f1.y == f0.y + 60.f && f1.w == f0.w && f1.h == f0.h && search && search->bounds().x == f1.x + 16.f,
+          "d\xC3\xA9plac\xC3\xA9 par le titre : 150 \xC3\xA0 gauche, 60 plus bas, le contenu avec");
+    (void)mm.HandleEvent(ui::MouseMove{{f1.right() - 5.f, f1.bottom() - 5.f}, {}, {}});
+    check(df::cursor() == df::Grip::SE, "le coin en bas \xC3\xA0 droite agrandit");
+    const gfx::Rect f2 = press({f1.right() - 5.f, f1.bottom() - 5.f}, {f1.right() + 195.f, f1.bottom() + 95.f});
+    const auto* ok = root->findById("dialog.typePicker.choisir");
+    check(f2.x == f1.x && f2.y == f1.y && f2.w == 1100.f && f2.h == 740.f && ok && ok->bounds().bottom() == f2.bottom() - 10.f,
+          "agrandi par le coin : 1100 x 740, Choisir en bas");
+    const gfx::Rect f3 = press({f2.x + 1.f, f2.y + 300.f}, {f2.x - 99.f, f2.y + 300.f});
+    check(f3.x == f2.x - 100.f && f3.w == 1200.f && f3.right() == f2.right(), "le bord gauche : 100 de plus \xC3\xA0 gauche");
+    const gfx::Rect f4 = press({f3.right() - 5.f, f3.bottom() - 5.f}, {f3.right() - 905.f, f3.bottom() - 805.f});
+    check(f4.w == 900.f && f4.h == 640.f, "jamais plus petit que son cadre \xC3\xA0 lui (900 x 640)");
+    const gfx::Point title{f4.x + 200.f, f4.y + 15.f};
+    (void)press(title, title, 1);
+    const gfx::Rect big = press(title, title, 2);
+    check(big.x == 8.f && big.y == 8.f && big.w == 1584.f && big.h == 984.f, "double clic sur le titre : en grand");
+    const gfx::Rect back = press({big.x + 200.f, big.y + 15.f}, {big.x + 200.f, big.y + 15.f}, 2);
+    check(back.x == f4.x && back.y == f4.y && back.w == f4.w && back.h == f4.h, "un autre double clic : rendu \xC3\xA0 sa place");
+    // Ferme puis rouvert : a la meme place (la meme taille demandee).
+    picker->finish(false);
+    mm.applyPending();
+    picker = open(spec);
+    mm.Update(fc);
+    check(picker && df::frameOf(*picker->widgetRoot()).x == f4.x && df::frameOf(*picker->widgetRoot()).y == f4.y,
+          "rouvert : il retrouve sa place");
+    if (picker) picker->finish(false);
+    mm.applyPending();
+    df::reset();
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les natives rangees, Choisir une fonction... (Mes fonctions, Rend), seuls.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -34286,6 +34410,7 @@ int main(int argc, char** argv) {
     v110_integration_compiler();            // 1.10 (integration I2) : Ajouter les valeurs manquantes d'un CASE
     v110_enumerations();                    // 1.10 (chantier U) : l'interface du type enumeration
     typesRappelEcran1220();                 // 1.12.20 (lot T) : Types IHM - Nouveau type, Rappel...
+    generiquesFenetres11221();              // 1.12.21 : T, K au selecteur de types ; les fenetres se deplacent et s'agrandissent
     v1101_tableaux_onglet_cache();          // 1.10.1 (chantier B1) : la vue suit les tableaux, onglet cache ou non
     v1101_journal_vider();                  // 1.10.1 (integration I1101) : le Journal se vide ; les nouveautes 1.10.0 -> 1.10.1
     aideSaisie1102();                       // 1.10.2 (chantier A) : les objets des vues, les parametres des instances

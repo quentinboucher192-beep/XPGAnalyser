@@ -2,6 +2,7 @@
 //  app/screens/Dialogs.cpp — modal and dialog layers
 // =============================================================================
 #include "Screens.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../../core/FieldCodec.hpp"
 
@@ -111,7 +112,7 @@ namespace app {
                 // detache), le cadre s'y tient, avec une marge ; sinon sa taille.
                 const float w = std::min(width_, std::max(240.f, r.w - 24.f));
                 const float h = std::min(height_, std::max(120.f, r.h - 24.f));
-                panel_ = { std::floor((r.w - w) * 0.5f), std::floor((r.h - h) * 0.5f), w, h };
+                panel_ = ui::dialogframe::place(*this, {std::floor((r.w - w) * 0.5f), std::floor((r.h - h) * 0.5f), w, h});
                 if (body_) body_->setBounds({ panel_.x + 14.f, panel_.y + 40.f,
                                              panel_.w - 28.f, panel_.h - 54.f });
             }

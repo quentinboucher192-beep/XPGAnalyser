@@ -2,6 +2,7 @@
 //  app/DispositionDialog.cpp - 1.12.3 : voir DispositionDialog.hpp
 // =============================================================================
 #include "DispositionDialog.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "DispositionPreview.hpp"
 #include "../menu/MenuManager.hpp"
@@ -53,7 +54,7 @@ protected:
         const auto r = bounds();
         const float h = std::min(760.f, std::max(320.f, r.h - 40.f));
         const float w = std::min(kW, std::max(420.f, r.w - 40.f));
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float x = panel_.x + 16.f, right = panel_.right() - 16.f;
         float y = panel_.y + 56.f;
         if (d_.presets_) d_.presets_->setBounds({x + 110.f, y, 240.f, 28.f});

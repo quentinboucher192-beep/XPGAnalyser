@@ -2,6 +2,7 @@
 // quarante-trois themes par famille, les tiens, chercher, creer, modifier,
 // exporter, importer, corriger les contrastes).
 #include "ThemeGallery.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 #include "TutorialsLot8.hpp"                // Lot API 8 : didacticiels et aide (F1)
 
 #include "../menu/MenuManager.hpp"
@@ -241,7 +242,7 @@ protected:
     void onLayout() override {
         const auto b = bounds();
         const float w = std::min(900.f, b.w - 20.f);
-        panel_ = {b.x + b.w - w, b.y + 48.f, w, std::max(260.f, b.h - 48.f - 24.f)};
+        panel_ = ui::dialogframe::place(*this, {b.x + b.w - w, b.y + 48.f, w, std::max(260.f, b.h - 48.f - 24.f)});
         const float x0 = panel_.x + 16.f;
         if (searchField) searchField->setBounds({x0, panel_.y + 66.f, 240.f, 28.f});
         // Les pastilles des familles, a droite de la recherche, sur une ou deux lignes.

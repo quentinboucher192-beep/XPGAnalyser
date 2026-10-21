@@ -215,13 +215,21 @@ std::vector<std::string> typeChoices(const hmi::Project& p, std::string_view exc
 // ceux du projet, puis Tableau..., Liste..., Vecteur..., Dictionnaire (MAP)..., Tuple..., Choisir un
 // type...) : un seul endroit, qui cherche, filtre, et compose les types imbriques (MAP[STRING] OF
 // VECTOR OF T_Cuve). Faux : pas d'hote (un essai) - la case garde la liste courte.
-bool askTypeIn(const hmi::DocumentPtr& doc, std::string field, std::string current, std::function<void(const std::string&)> apply) {
+// 1.12.21 : `owner` - la structure du membre : ses generiques (T, K) sont proposes et composables.
+bool askTypeIn(const hmi::DocumentPtr& doc, std::string field, std::string current, std::function<void(const std::string&)> apply,
+               const hmi::HmiType* owner = nullptr) {
     if (!app::typepicker::available()) return false;
     app::HmiTypePicker::Spec spec;
     spec.field = std::move(field);
     spec.current = std::move(current);
     spec.use = hmi::typereg::UseVariable;         // 1.12.4 : toutes les formes (un membre objet : sans place Modbus)
     spec.doc = doc;
+    if (owner && !owner->generics.empty()) {
+        spec.generics = owner->generics;
+        std::string names;
+        for (const auto& g : owner->generics) names += (names.empty() ? "" : ", ") + g.name;
+        spec.genericsOf = owner->name + "<" + names + ">";
+    }
     app::typepicker::ask(std::move(spec), [apply = std::move(apply)](const app::HmiTypePicker::Answer& a) {
         if (!a.type.empty()) apply(a.type);
     });
@@ -3656,7 +3664,8 @@ void HmiTypesPane::refreshMembers() {
                              m2.type = type;
                              std::string why;
                              if (!setMember(tid, r, m2, &why)) say("Refus\xC3\xA9 : " + why, true);
-                         });
+                         },
+                         t2);   // 1.12.21 : T, K de la structure
     });
     syncing_ = true;
     members_->setModel(memberModel_);

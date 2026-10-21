@@ -2,6 +2,7 @@
 //  ui/widgets/FileExplorer.cpp - lot API 8 : l'explorateur de fichiers de l'appli
 // =============================================================================
 #include "FileExplorer.hpp"
+#include "../DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "DataViews.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -707,7 +708,7 @@ namespace ui {
             const float w = std::floor(std::clamp(r.w - 40.f, 640.f, 980.f + previewW));
             // ---- fin Lot API 8 : l'explorateur, 2e partie ----
             const float h = std::floor(std::clamp(r.h - 40.f, 420.f, 620.f));
-            panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+            panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
             close_ = {panel_.right() - 36.f, panel_.y + 6.f, 28.f, 28.f};
             // La barre de navigation.
             const float ny = panel_.y + kTitleBar + 7.f;

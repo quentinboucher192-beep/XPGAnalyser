@@ -2,6 +2,7 @@
 //  app/ImportJobDialog.cpp - 1.8.0 : voir ImportJobDialog.hpp
 // =============================================================================
 #include "ImportJobDialog.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../menu/MenuManager.hpp"
 #include "../ui/Icons.hpp"
@@ -36,7 +37,7 @@ protected:
         const auto r = bounds();
         const bool mast = d_.job_->kind() == ImportJob::Kind::Mast;
         const float h = 44.f + 22.f + 40.f + 18.f + static_cast<float>(d_.job_->steps().size()) * 26.f + 20.f + (mast ? 56.f : 56.f) + 40.f + 52.f;
-        panel_ = {std::floor((r.w - kW) * 0.5f), std::floor(std::max(10.f, (r.h - h) * 0.5f)), kW, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor((r.w - kW) * 0.5f), std::floor(std::max(10.f, (r.h - h) * 0.5f)), kW, h});
         float bx = panel_.x + panel_.w - 16.f;
         for (auto* b : {d_.cancel_, d_.bg_}) {
             if (!b || !b->visible()) continue;

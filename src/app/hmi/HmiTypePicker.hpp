@@ -67,6 +67,12 @@ public:
         // selecteur, {} a la place de ce qu'on choisit ici (MAP[STRING] OF VECTOR OF {}), et son niveau.
         std::string              outer{};
         int                      level{1};
+        // 1.12.21 : LES GENERIQUES de ce qui porte le type (la structure T_Extractor<T, K>, le symbole, la popup) :
+        // T et K en tete de la liste (puce Generiques), composables comme un type (LIST OF T, VECTOR OF T,
+        // ARRAY[0..9] OF T, MAP[K] OF T) ; des rappels tout faits avec eux (CALLBACK (x : T) : BOOL). Le
+        // resultat se verifie avec un type de chaque contrainte a leur place.
+        std::vector<hmi::GenericParam> generics{};
+        std::string                    genericsOf{};              // « T_Extractor<T, K> » (la provenance)
     };
     struct Answer {
         std::string type;                                                  // le type choisi (ecrit : "ARRAY[0..9] OF REAL")

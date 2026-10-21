@@ -2,6 +2,7 @@
 //  app/ProgramExportDialog.cpp - 1.8.0 : voir ProgramExportDialog.hpp
 // =============================================================================
 #include "ProgramExportDialog.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../menu/MenuManager.hpp"
 #include "../ui/Icons.hpp"
@@ -121,7 +122,7 @@ protected:
         const gfx::Rect openRect{x, y, 300.f, 26.f};
         y += 34.f;
         const float h = y + 50.f;
-        panel_ = {std::floor((r.w - kW) * 0.5f), std::floor(std::max(10.f, (r.h - h) * 0.5f)), kW, std::min(h, r.h - 20.f)};
+        panel_ = ui::dialogframe::place(*this, {std::floor((r.w - kW) * 0.5f), std::floor(std::max(10.f, (r.h - h) * 0.5f)), kW, std::min(h, r.h - 20.f)});
         const float ox = panel_.x + 16.f, oy = panel_.y;
         const auto at = [&](gfx::Rect q) { return gfx::Rect{q.x + ox, q.y + oy, q.w, q.h}; };
         for (std::size_t i = 0; i < d_.radios_.size(); ++i) d_.radios_[i]->setBounds(at(radioRects[i]));

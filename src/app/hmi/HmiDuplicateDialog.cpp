@@ -1,5 +1,6 @@
 // app/hmi/HmiDuplicateDialog.cpp - "Dupliquer..." (1.10.2, chantier D).
 #include "HmiDuplicateDialog.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 #include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture commune d'un nombre
 #include "HmiAssist.hpp"           // 1.11.2 (API-V, D13) : le programme installe, ce qu'est API.V
 #include "HmiPanels.hpp"           // 1.11 (T2-22) : les libelles de l'inspecteur
@@ -439,7 +440,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(1000.f, r.w - 40.f), h = std::min(700.f, r.h - 40.f);
-        panel = {std::floor((r.w - w) * 0.5f), std::floor((r.h - h) * 0.5f), w, h};
+        panel = ui::dialogframe::place(*this, {std::floor((r.w - w) * 0.5f), std::floor((r.h - h) * 0.5f), w, h});
         if (d_.tabs_) d_.tabs_->setBounds({panel.x + 8.f, panel.y + 40.f, panel.w - 16.f, panel.h - 40.f - 56.f});
         float bx = panel.x + panel.w - 16.f;
         for (auto it = buttons.rbegin(); it != buttons.rend(); ++it) {

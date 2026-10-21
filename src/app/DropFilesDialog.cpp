@@ -3,6 +3,7 @@
 //  (voir l'en-tete).
 // =============================================================================
 #include "DropFilesDialog.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 #include "TutorialsLot8.hpp"                // Lot API 8 : didacticiels et aide (F1)
 
 #include "hmi/HmiImages.hpp"
@@ -517,7 +518,7 @@ protected:
         const float contentH = d_.content_ ? d_.content_->heightFor(listW) : 0.f;
         const float maxH = std::max(260.f, r.h - 40.f);
         const float h = std::floor(std::min(maxH, kTitleBar + 10.f + introH + contentH + 8.f + kFooter));
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float listY = panel_.y + kTitleBar + 10.f + introH;
         const float listH = std::max(60.f, panel_.bottom() - kFooter - 8.f - listY);
         if (d_.scroll_) d_.scroll_->setBounds({panel_.x + kPad, listY, innerW, listH});

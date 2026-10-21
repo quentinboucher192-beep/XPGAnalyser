@@ -3,6 +3,7 @@
 //  d'arret (voir l'en-tete)
 // =============================================================================
 #include "SimConditionDialog.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../menu/MenuManager.hpp"
 
@@ -88,7 +89,7 @@ protected:
         const float liveH = static_cast<float>(std::max<std::size_t>(1, live ? wrapWords(*live, kSmall, inner).size() : 1)) * 18.f;
         const float titleH = 34.f;
         const float h = titleH + 12.f + 32.f + 12.f + 20.f + 30.f + 12.f + std::max(26.f, rows * 32.f) + 10.f + liveH + 16.f + 44.f;
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float x = panel_.x + 16.f;
         float y = panel_.y + titleH + 12.f;
         codeBox_ = {x, y, inner, 32.f};

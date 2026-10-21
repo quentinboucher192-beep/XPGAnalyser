@@ -2196,7 +2196,10 @@ std::string genericSample(std::string_view constraint) {
     if (c == "ANY_STRING" || c == "ANY_CHARS") return "STRING";
     if (c == "ANY_DATE") return "DATE";
     if (c == "ANY_DURATION") return "TIME";
-    return "REAL";
+    if (c == "ANY_REAL") return "REAL";
+    // 1.12.21 : INT, et plus REAL - il va partout ou va T, la cle d'une MAP comprise (MAP[K] OF T : MAP[INT] OF INT ; une
+    // cle REAL est refusee, et un membre MAP[K] OF T l'etait avec elle).
+    return "INT";
 }
 
 std::string genericsText(const std::vector<GenericParam>& g) {

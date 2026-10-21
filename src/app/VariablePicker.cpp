@@ -1,5 +1,6 @@
 // app/VariablePicker.cpp - le choix des variables d'une table d'animation (lot API 3).
 #include "VariablePicker.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../menu/MenuManager.hpp"
 #include "../ui/Icons.hpp"
@@ -157,7 +158,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(920.f, r.w - 40.f), h = std::min(700.f, r.h - 40.f);
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         search_->setBounds({panel_.x + 16.f, panel_.y + 52.f, std::min(300.f, w * 0.34f), 30.f});
         list_ = {panel_.x + 1.f, panel_.y + 94.f, panel_.w - 2.f, panel_.h - 94.f - 60.f};
         const float bw = std::max(150.f, ui::measureWidth(ok_->text(), gfx::FontId{16}) + 36.f);

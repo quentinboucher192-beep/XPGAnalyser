@@ -1,5 +1,6 @@
 // app/PixelIconEditor.cpp - l'icone du projet et son editeur en pixel art (lot API 6).
 #include "PixelIconEditor.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../menu/MenuManager.hpp"
 #include "../project/ProjectIcon.hpp"
@@ -122,12 +123,15 @@ protected:
     void onLayout() override {
         const auto b = bounds();
         const float w = std::min(1180.f, b.w - 40.f), h = std::min(820.f, b.h - 40.f);
-        panel = {std::floor(b.x + (b.w - w) * 0.5f), std::floor(b.y + (b.h - h) * 0.5f), w, h};
+        panel = ui::dialogframe::place(*this, {std::floor(b.x + (b.w - w) * 0.5f), std::floor(b.y + (b.h - h) * 0.5f), w, h});
         bodyY = panel.y + 54.f;
         const float bodyH = h - 54.f - 60.f;
         const float titleW = ui::measureWidth(title(), gfx::FontId{17}) + 30.f;
         tabs[0] = {panel.x + 18.f + titleW, panel.y + 12.f, 110.f, 30.f};
         tabs[1] = {tabs[0].x + tabs[0].w, panel.y + 12.f, 120.f, 30.f};
+        // 1.12.21 : les onglets sont dans la barre de titre : un clic dessus ne deplace pas.
+        ui::dialogframe::keep(*this, tabs[0]);
+        ui::dialogframe::keep(*this, tabs[1]);
         closeBox = {panel.x + w - 40.f, panel.y + 14.f, 26.f, 26.f};
         float ty = bodyY + 10.f;
         for (std::size_t i = 0; i < tools.size(); ++i) {

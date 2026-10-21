@@ -1473,6 +1473,13 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
             spec.use = hmi::typereg::UseParameter;
             spec.doc = doc_;
             spec.plc = hmiparams::plcTypesOf(hmiparams::program().get());
+            // 1.12.21 : les generiques du symbole ou de la popup (T) - proposes et composables (LIST OF T, CALLBACK (v : T) : STRING).
+            if (!cur->generics.empty()) {
+                spec.generics = cur->generics;
+                std::string names;
+                for (const auto& g : cur->generics) names += (names.empty() ? "" : ", ") + g.name;
+                spec.genericsOf = cur->name + "<" + names + ">";
+            }
             const std::string whole = field.substr(0, field.size() - 5) + ":type_complet";
             const std::weak_ptr<bool> alive = alive_;
             typepicker::ask(std::move(spec), [this, alive, whole](const HmiTypePicker::Answer& a) {

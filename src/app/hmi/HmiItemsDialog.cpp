@@ -3,6 +3,7 @@
 //  (voir l'en-tete)
 // =============================================================================
 #include "HmiItemsDialog.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../../hmi/HmiTypeForms.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -103,7 +104,7 @@ protected:
         const auto r = bounds();
         const float w = std::min(720.f, std::max(360.f, r.w - 40.f));
         const float h = std::min(560.f, std::max(320.f, r.h - 40.f));
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float x = panel_.x + 16.f, inner = w - 32.f;
         const float top = panel_.y + 34.f + 10.f + 40.f;
         const float by = panel_.bottom() - 44.f;

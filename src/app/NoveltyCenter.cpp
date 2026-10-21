@@ -1,4 +1,5 @@
 #include "NoveltyCenter.hpp"
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "App.hpp"
 #include "screens/Screens.hpp"
@@ -108,7 +109,7 @@ protected:
         // 1.10 : quatre colonnes sur un grand ecran (la maquette), trois sinon.
         const float w = std::min(1320.f, std::max(300.f, r.w - 48.f));
         const float h = std::min(880.f, std::max(260.f, r.h - 48.f));
-        if (board) board->setBounds({std::floor(r.x + (r.w - w) / 2.f), std::floor(r.y + (r.h - h) / 2.f), w, h});
+        if (board) board->setBounds(ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) / 2.f), std::floor(r.y + (r.h - h) / 2.f), w, h}));
     }
 };
 

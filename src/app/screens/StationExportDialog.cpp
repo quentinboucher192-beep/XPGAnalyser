@@ -2,6 +2,7 @@
 //  app/screens/StationExportDialog.cpp - Lot API 8 : ou enregistrer, au poste
 // =============================================================================
 #include "StationExportDialog.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/Theme.hpp"
@@ -138,7 +139,7 @@ protected:
         const float wanted = kTitleH + 22.f + ui::lineHeight(kTextFont) + 12.f + kFieldH + 16.f + texts + 26.f + kButtonH + 14.f
                              + ui::lineHeight(kHintFont) + 20.f;
         const float h = std::min(std::max(200.f, r.h - 24.f), wanted);
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float x = panel_.x + kPad;
         float y = panel_.y + kTitleH + 22.f;
         questionAt_ = y;

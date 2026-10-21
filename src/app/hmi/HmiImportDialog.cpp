@@ -3,6 +3,7 @@
 //  maquette de MQ5, tout paquet) : voir l'en-tete.
 // =============================================================================
 #include "HmiImportDialog.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../../menu/MenuManager.hpp"
 
@@ -125,7 +126,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(900.f, r.w - 60.f), h = std::min(680.f, r.h - 60.f);
-        panel = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         list = {panel.x + 14.f, panel.y + 36.f + 84.f, panel.w - 28.f, panel.h - 36.f - 84.f - 56.f};
         float y = list.y - scroll;
         for (auto& l : lines) {

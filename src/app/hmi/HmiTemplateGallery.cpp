@@ -2,6 +2,7 @@
 //  app/hmi/HmiTemplateGallery.cpp - Nouvelle vue : choisir un modele (lot 20).
 // =============================================================================
 #include "HmiTemplateGallery.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "HmiPainter.hpp"
 #include "../../hmi/HmiTemplates.hpp"
@@ -72,7 +73,7 @@ public:
     void place() {
         const auto r = bounds();
         const float w = std::min(1180.f, r.w - 60.f), h = std::min(640.f, r.h - 60.f);
-        panel = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float top = panel.y + 36.f;
         left = {panel.x, top, kLeftW, panel.h - 36.f};
         right = {panel.right() - kRightW, top, kRightW, panel.h - 36.f};

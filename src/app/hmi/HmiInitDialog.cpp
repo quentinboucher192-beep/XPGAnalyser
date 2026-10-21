@@ -3,6 +3,7 @@
 //  ou en code - la fenetre HmiCalcDialog a deux modes (voir HmiCalcDialog.hpp)
 // =============================================================================
 #include "HmiCalcDialog.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../../core/FieldCodec.hpp"
 #include "../../hmi/HmiDecl.hpp"
@@ -299,7 +300,7 @@ protected:
         const auto r = bounds();
         const float w = std::min(1240.f, std::max(700.f, r.w - 40.f));
         const float h = std::min(800.f, std::max(500.f, r.h - 40.f));
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         const float x = panel_.x + 16.f;
         side_ = std::clamp(w * 0.32f, 280.f, 400.f);
         leftW_ = w - 32.f - side_ - 14.f;

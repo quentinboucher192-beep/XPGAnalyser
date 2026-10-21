@@ -2,6 +2,7 @@
 //  app/hmi/HmiFunctionPicker.cpp - voir HmiFunctionPicker.hpp
 // =============================================================================
 #include "HmiFunctionPicker.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../../hmi/HmiNatives.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -262,7 +263,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(1080.f, r.w - 40.f), h = std::min(680.f, r.h - 40.f);
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         bottom_ = panel_.bottom() - 52.f;
         const float tools = 250.f + 190.f;     // la liste Rend, la puce Dans une expression
         search_->setBounds({panel_.x + 16.f, panel_.y + 54.f, std::max(120.f, panel_.w - 32.f - tools), 28.f});

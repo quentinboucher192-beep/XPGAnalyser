@@ -2,6 +2,7 @@
 
 #include "MenuManager.hpp"
 
+#include "../ui/DialogFrame.hpp"   // 1.12.21 : les dialogues se deplacent et s'agrandissent
 #include "../ui/Widget.hpp"
 #include "../ui/WidgetHost.hpp"     // lot 7 : le dessin de l'infobulle, partage
 
@@ -47,7 +48,11 @@ void WidgetMenu::Update(const FrameContext& fc) {
     // Layout runs here rather than in Render so that a widget that resizes in
     // response to new data is laid out before anything is painted.
     root_->setBounds({0.f, 0.f, fc.surface.w, fc.surface.h});
-    root_->layout();
+    {
+        // 1.12.21 : un dialogue retient sa place (deplace, agrandi) sous le nom du menu.
+        const ui::dialogframe::KeyScope key(id_);
+        root_->layout();
+    }
 
     // Lot 21 : un ecran qui vit sous un dialogue (pendant un parcours du
     // didacticiel) ne montre pas d'infobulle - la souris est au dialogue, et
@@ -122,6 +127,7 @@ void WidgetMenu::Render(gfx::IRenderer& r, const FrameContext& fc) {
     // taille, il se dessinait vide derriere le voile du dialogue.
     if (root_->bounds().empty()) {
         root_->setBounds({0.f, 0.f, fc.surface.w, fc.surface.h});
+        const ui::dialogframe::KeyScope key(id_);
         root_->layout();
     }
 
@@ -129,6 +135,8 @@ void WidgetMenu::Render(gfx::IRenderer& r, const FrameContext& fc) {
     const ui::PaintContext ctx{r, *fc.theme, {0.f, 0.f, fc.surface.w, fc.surface.h},
                                fc.totalSeconds, &overlays};
     root_->render(ctx);
+    // 1.12.21 : la poignee du coin d'un dialogue (et son cadre quand un bord est pris).
+    ui::dialogframe::paint(*root_, r, *fc.theme);
 
     // Second pass: dropdown popups and anything else that must escape its
     // parent's clip rectangle, painted in the order they were requested.
@@ -144,6 +152,9 @@ ui::EventResult WidgetMenu::HandleEvent(const ui::InputEvent& ev) {
     // 1.11.4 : un glisser en cours (le pouce d'une barre de defilement) suit la souris
     // meme hors du widget qui l'a commence.
     if (ui::Widget::routeCapturedMouse(*root_, ev)) return ui::EventResult::Consumed;
+    // 1.12.21 : un dialogue se deplace par sa barre de titre, s'agrandit par un bord
+    // ou un coin, se met en grand d'un double clic sur le titre (ui/DialogFrame).
+    if (ui::dialogframe::handle(*root_, ev)) return ui::EventResult::Consumed;
 
     // A widget painting on top of everything - an open dropdown list - also
     // gets the event first. Without this the popup is drawn over the table

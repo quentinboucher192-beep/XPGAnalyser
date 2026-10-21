@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.21", "21/10/2026", "livr\xC3\xA9" "e le 21/10 au soir"},
     {"1.12.20", "21/10/2026", "livr\xC3\xA9" "e le 21/10"},
     {"1.12.19", "20/10/2026", "livr\xC3\xA9" "e le 20/10 au soir"},
     {"1.12.18", "20/10/2026", "livr\xC3\xA9" "e le 20/10"},
@@ -126,6 +127,13 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.21 (21/10/2026) : voir docs/LIVRAISON-1.12.21.md (les fenetres se deplacent et s'agrandissent ; T, K au selecteur de types).
+        note("1.12.21", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
+         "LES FEN\xC3\x8ATRES SE D\xC3\x89PLACENT ET S'AGRANDISSENT : toutes les fen\xC3\xAAtres (Choisir un type, Choisir une fonction, Valeur initiale, les questions, Renommer, Disposition, l'explorateur de fichiers, les nouveaut\xC3\xA9s\xE2\x80\xA6) se d\xC3\xA9placent par leur barre de titre et s'agrandissent par un bord ou par le coin en bas \xC3\xA0 droite (sa poign\xC3\xA9" "e) ; un double clic sur le titre les met en grand, un autre les rend \xC3\xA0 leur place. Le curseur dit ce que la souris prend, le bord pris se colore. Une fen\xC3\xAAtre ne devient pas plus petite que sa taille d'origine (son contenu y est plac\xC3\xA9) et garde sa barre de titre \xC3\xA0 l'\xC3\xA9" "cran ; rouverte pendant la s\xC3\xA9" "ance, elle revient l\xC3\xA0 o\xC3\xB9 tu l'as laiss\xC3\xA9" "e.",
+         "onglets", ""),
+        note("1.12.21", "Variables", Kind::New,
+         "LE S\xC3\x89LECTEUR DE TYPES PROPOSE LES G\xC3\x89N\xC3\x89RIQUES : pour un membre d'une structure g\xC3\xA9n\xC3\xA9rique (T_Extractor<T, K>) ou un param\xC3\xA8tre d'un symbole ou d'une popup g\xC3\xA9n\xC3\xA9rique, Choisir un type\xE2\x80\xA6 met T et K en t\xC3\xAAte de la liste (puce G\xC3\xA9n\xC3\xA9riques) et ils se composent comme un type - Vecteur donne VECTOR OF T, Tableau ARRAY[0..9] OF T, Dictionnaire MAP[K] OF T (K dans la case Cl\xC3\xA9), Composer l'\xC3\xA9l\xC3\xA9ment\xE2\x80\xA6 va plus loin (MAP[K] OF VECTOR OF T). La puce Rappels a les rappels de T tout faits : CALLBACK (x : T) : BOOL (un filtre), (x : T) : T, (a : T; b : T) : BOOL (un ordre), (x : T), () : T, et avec deux g\xC3\xA9n\xC3\xA9riques (k : K; v : T) : BOOL. Un type \xC3\xA9" "crit dans la recherche (map[k] of vector of t) se v\xC3\xA9rifie avec un type de la contrainte de T \xC3\xA0 sa place. Corrig\xC3\xA9 : un membre MAP[K] OF T \xC3\xA9tait refus\xC3\xA9 (T se v\xC3\xA9rifiait avec REAL, qui n'est pas une cl\xC3\xA9) ; l'exemple d'un g\xC3\xA9n\xC3\xA9rique sans contrainte est maintenant INT.",
+         "rappels", ""),
         // 1.12.20 (21/10/2026) : voir docs/LIVRAISON-1.12.20.md (les rappels, suite : finitions, types rappel nommes).
         note("1.12.20", "G\xC3\xA9n\xC3\xA9ral", Kind::Changed,
          "DEUX NOMS, DEUX LOGOS : XPGAnalyser API devient API Studio (API-Studio.exe), XPGAnalyser IHM devient IHM Studio (IHM-Studio.exe), chacun avec son logo, de la m\xC3\xAAme famille - API Studio : un barreau de sch\xC3\xA9ma \xC3\xA0 contacts (un contact et sa bobine) ; IHM Studio : un \xC3\xA9" "cran de supervision (un cadran et son aiguille). Le titre de la fen\xC3\xAAtre, \xC3\x80 propos, l'accueil, les rapports et les documents produits disent le nom de l'application lanc\xC3\xA9" "e. Le menu D\xC3\xA9marrer s'appelle API IHM Studio ; l'installateur (API-IHM-Studio-Setup) met \xC3\xA0 jour l'installation en place et retire les anciens raccourcis. Rien ne bouge de tes donn\xC3\xA9" "es ni de tes r\xC3\xA9glages : les dossiers techniques gardent leur nom (Documents\\XPGAnalyser, %APPDATA%\\XpgAnalyzer, XPGAnalyser.ini), et les fichiers .XPG de Control Expert s'ouvrent comme avant.",

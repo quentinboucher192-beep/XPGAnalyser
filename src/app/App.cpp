@@ -24,6 +24,7 @@
 #include "DropFilesDialog.hpp"              // ---- Lot API 8 : glisser de fichiers, 2e partie (le dialogue ouvert prend ce qu'on lache) ----
 #include "../ui/widgets/FilterMemory.hpp"   // Lot API 8 : les filtres retenus d'une seance a l'autre
 #include "../ui/widgets/ColorPalette.hpp"   // 1.10 (chantier Q) : la pipette (le curseur en croix)
+#include "../ui/DialogFrame.hpp"              // 1.12.21 : les curseurs du titre et des bords d'un dialogue
 #include "../ui/ThemeFile.hpp"              // Lot API 8 : themes (ceux de l'utilisateur, relus au demarrage)
 #include "FileExplorerHost.hpp"             // ---- Lot API 8 : l'explorateur de fichiers de l'appli ----
 #include "screens/LibraryHelpScreen.hpp"
@@ -2853,14 +2854,28 @@ void App::frame(double dt) {
     menus_->Update(fc);      // 3. tick logic and animations
 #if XPG_HAVE_SDL3
     // 1.10 (chantier Q) : la pipette d'une palette de couleurs montre une croix.
+    // 1.12.21 : la barre de titre d'un dialogue, ses bords et ses coins (ui/DialogFrame).
     {
-        static SDL_Cursor* cross = nullptr;
-        static bool        crossShown = false;
-        const bool         want = ui::ColorPalette::pickingCount() > 0;
-        if (want != crossShown) {
-            if (want && !cross) cross = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR);
-            (void)SDL_SetCursor(want && cross ? cross : SDL_GetDefaultCursor());
-            crossShown = want;
+        static SDL_Cursor* cursors[7] = {};
+        static int         shown = 0;
+        int                want = 0;
+        if (ui::ColorPalette::pickingCount() > 0) want = 1;
+        else switch (ui::dialogframe::cursor()) {
+            case ui::dialogframe::Grip::Move: want = 2; break;
+            case ui::dialogframe::Grip::W: case ui::dialogframe::Grip::E: want = 3; break;
+            case ui::dialogframe::Grip::N: case ui::dialogframe::Grip::S: want = 4; break;
+            case ui::dialogframe::Grip::NW: case ui::dialogframe::Grip::SE: want = 5; break;
+            case ui::dialogframe::Grip::NE: case ui::dialogframe::Grip::SW: want = 6; break;
+            case ui::dialogframe::Grip::None: break;
+        }
+        if (want != shown) {
+            static const SDL_SystemCursor kinds[7] = {SDL_SYSTEM_CURSOR_DEFAULT, SDL_SYSTEM_CURSOR_CROSSHAIR,
+                                                      SDL_SYSTEM_CURSOR_MOVE, SDL_SYSTEM_CURSOR_EW_RESIZE,
+                                                      SDL_SYSTEM_CURSOR_NS_RESIZE, SDL_SYSTEM_CURSOR_NWSE_RESIZE,
+                                                      SDL_SYSTEM_CURSOR_NESW_RESIZE};
+            if (want && !cursors[want]) cursors[want] = SDL_CreateSystemCursor(kinds[want]);
+            (void)SDL_SetCursor(want && cursors[want] ? cursors[want] : SDL_GetDefaultCursor());
+            shown = want;
         }
     }
 #endif

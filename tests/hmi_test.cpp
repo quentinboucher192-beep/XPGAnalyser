@@ -28791,7 +28791,7 @@ void generiques1220() {
     check(nm.size() == 2 && nm[1].type == "LIST OF INT", "membersOf : T_Num<INT> - X : INT, Historique : LIST OF INT");
     for (const char* ok : {"T_Mesure<REAL>", "LIST OF T_Mesure<REAL>", "MAP[STRING] OF T_Mesure<BOOL>", "ARRAY[0..3] OF T_Num<INT>", "T_Num<LREAL>"})
         check(types::validType(p, ok, &why), std::string("validType : ") + ok + " (" + why + ")");
-    check(!types::validType(p, "T_Mesure", &why) && why.find("g\xC3\xA9n\xC3\xA9rique") != std::string::npos && why.find("T_Mesure<REAL>") != std::string::npos,
+    check(!types::validType(p, "T_Mesure", &why) && why.find("g\xC3\xA9n\xC3\xA9rique") != std::string::npos && why.find("T_Mesure<INT>") != std::string::npos,
           "validType : T_Mesure seul est refus\xC3\xA9, avec l'exemple (" + why + ")");
     check(!types::validType(p, "T_Num<STRING>", &why) && why.find("T doit \xC3\xAAtre un ANY_NUM ; STRING n'en est pas un") != std::string::npos,
           "validType : T_Num<STRING>, hors contrainte (" + why + ")");
@@ -28845,7 +28845,7 @@ void generiques1220() {
           "PT2 : Valeur := Nom, un STRING - hors contrainte");
     check(b3.types[0] == "INT" && b3.from[0] == "donn\xC3\xA9" && b3.problems.empty(), "PT3 : T := INT, donn\xC3\xA9");
     check(params::boundType(*sv, "CALLBACK (v : T) : STRING", &b1) == "CALLBACK (v : REAL) : STRING" && params::boundType(*sv, "T").empty()
-              && params::boundType(*sv, "LIST OF T") == "LIST OF REAL",
+              && params::boundType(*sv, "LIST OF T") == "LIST OF INT",
           "boundType : le rappel de PT1 (v : REAL) ; dans le symbole, T seul vaut ANY, LIST OF T un type de sa contrainte");
     // Une popup generique : T := REAL n'est pas un parametre inconnu ; hors contrainte, la raison.
     View pop = makeView(p, "Pop_Mesure");

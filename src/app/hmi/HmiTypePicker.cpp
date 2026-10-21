@@ -2,6 +2,7 @@
 //  app/hmi/HmiTypePicker.cpp - voir HmiTypePicker.hpp
 // =============================================================================
 #include "HmiTypePicker.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 #include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 
 #include "../../menu/MenuManager.hpp"
@@ -75,6 +76,33 @@ bool looksLikeType(std::string_view t) {
         || u.rfind("REF_TO ", 0) == 0;
 }
 
+// 1.12.21 : LES GENERIQUES DU PORTEUR (T, K d'une structure T_Extractor<T, K>, d'un symbole, d'une popup) - leurs lignes
+// ont une cle gen:T ; leurs rappels tout faits, gencb:.
+constexpr std::string_view kGenericKey = "gen:";
+bool genericEntry(const tr::Entry* e) { return e && std::string_view(e->key).substr(0, kGenericKey.size()) == kGenericKey; }
+bool identChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
+std::string upperText(std::string_view t) {
+    std::string u(t);
+    for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    return u;
+}
+// Le texte nomme-t-il un des generiques (un mot entier : T dans LIST OF T, pas dans T_Cuve) ?
+bool mentionsGeneric(std::string_view t, const std::vector<hmi::GenericParam>& generics) {
+    for (std::size_t i = 0; i < t.size();) {
+        if (!identChar(t[i])) {
+            ++i;
+            continue;
+        }
+        std::size_t j = i;
+        while (j < t.size() && identChar(t[j])) ++j;
+        const std::string w = upperText(t.substr(i, j - i));
+        for (const auto& g : generics)
+            if (upperText(g.name) == w) return true;
+        i = j;
+    }
+    return false;
+}
+
 void paintCheck(const ui::PaintContext& ctx, const gfx::Rect& box, bool on, bool enabled) {
     auto& r = ctx.r;
     const auto& c = ctx.theme.color;
@@ -128,6 +156,7 @@ public:
         links_ += ok_->clicked->connect([this] { owner_.choose(); });
         // Le projet relu a chaque changement : un type cree ailleurs apparait aussitot.
         if (spec_.doc) links_ += spec_.doc->changed->connect([this](hmi::Id) { reload(true); });
+        buildGenerics();   // 1.12.21 : T, K du porteur, et leurs rappels
         reload(false);
         preselect();
     }
@@ -173,7 +202,7 @@ public:
         if (!typedWhy_.empty()) return typedWhy_;
         const auto* e = selected();
         if (!e) return "choisis un type dans la liste";
-        const auto r = reg_->resolve(result(), spec_.use);
+        const auto r = reg_->resolve(probe(result()), spec_.use);   // 1.12.21 : T, K remplaces par un type de leur contrainte
         return r.ok ? std::string{} : r.why;
     }
     [[nodiscard]] std::string notice() const { return notice_; }
@@ -308,6 +337,8 @@ public:
         s.doc = spec_.doc;
         s.plc = spec_.plc;
         s.recents = spec_.recents;
+        s.generics = spec_.generics;       // 1.12.21 : T, K aussi au niveau suivant (MAP[K] OF VECTOR OF T)
+        s.genericsOf = spec_.genericsOf;
         typepicker::ask(std::move(s), [this](const HmiTypePicker::Answer& a) {
             if (!a.type.empty()) setComposed(a.type);
         });
@@ -318,7 +349,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float w = std::min(900.f, r.w - 40.f), h = std::min(640.f, r.h - 40.f);
-        panel_ = {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
         search_->setBounds({panel_.x + 16.f, panel_.y + 54.f, panel_.w - 32.f, 28.f});
         bottom_ = panel_.bottom() - 52.f;
         // 1.12.2 : trois lignes - Forme : [Simple] [Tableau] ... [Tuple] ; le parametre et [x] REF_TO ;
@@ -551,9 +582,96 @@ private:
         while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
         return std::string(s.substr(a, b - a));
     }
-    // ANY et Aucun ne se construisent pas (ni tableau, ni reference).
+    // ANY et Aucun ne se construisent pas (ni tableau, ni reference) ; 1.12.21 : un generique du porteur, si (LIST OF T).
     static bool constructible(const tr::Entry* e) {
-        return e && e->category != tr::Category::Generic && e->category != tr::Category::Void;
+        return e && (genericEntry(e) || (e->category != tr::Category::Generic && e->category != tr::Category::Void));
+    }
+
+    // 1.12.21 : un texte qui nomme T, K - verifie avec un type de leur contrainte a leur place (MAP[K] OF T : MAP[INT] OF INT).
+    [[nodiscard]] std::string probe(const std::string& t) const {
+        if (spec_.generics.empty() || t.empty()) return t;
+        std::vector<std::string> samples;
+        for (const auto& g : spec_.generics) samples.push_back(hmi::genericSample(g.constraint));
+        return hmi::substituteGenerics(t, spec_.generics, samples);
+    }
+    // Le texte ecrit, remis en forme sans perdre T : list of t -> LIST OF T (les generiques, les mots des formes, les
+    // types elementaires).
+    [[nodiscard]] std::string spelled(std::string_view t) const {
+        static const char* const kWords[] = {"ARRAY", "OF", "LIST", "VECTOR", "MAP", "SET", "RING", "TUPLE", "CALLBACK", "REF_TO"};
+        std::string out;
+        for (std::size_t i = 0; i < t.size();) {
+            if (!identChar(t[i])) {
+                out += t[i++];
+                continue;
+            }
+            std::size_t j = i;
+            while (j < t.size() && identChar(t[j])) ++j;
+            std::string w(t.substr(i, j - i));
+            const std::string u = upperText(w);
+            bool done = false;
+            for (const auto& g : spec_.generics)
+                if (upperText(g.name) == u) {
+                    w = g.name;
+                    done = true;
+                }
+            for (const char* k : kWords)
+                if (!done && u == k) {
+                    w = u;
+                    done = true;
+                }
+            if (!done && reg_)
+                if (const auto* e = reg_->byName(w); e && (e->category == tr::Category::Elementary || e->category == tr::Category::TextTime)) w = e->name;
+            out += w;
+            i = j;
+        }
+        return trimmed(out);
+    }
+
+    // Les lignes de T, K (en tete de la liste, puce Generiques) et leurs rappels tout faits (puce Rappels) : faites une
+    // fois, elles ne bougent plus (la liste garde leurs adresses).
+    void buildGenerics() {
+        genericEntries_.clear();
+        genericCallbacks_.clear();
+        if (spec_.generics.empty()) return;
+        const std::string of = spec_.genericsOf.empty() ? std::string("ce type") : spec_.genericsOf;
+        const std::string from = "G\xC3\xA9n\xC3\xA9rique de " + of;
+        for (const auto& g : spec_.generics) {
+            tr::Entry e;
+            e.key = std::string(kGenericKey) + g.name;
+            e.name = g.name;
+            e.category = tr::Category::Generic;
+            e.provenance = from;
+            e.doc = "Un g\xC3\xA9n\xC3\xA9rique de " + of + " : le type que lui donne chaque emploi"
+                    + (g.constraint.empty() ? std::string(", quel qu'il soit") : " (un " + g.constraint + ")") + ".";
+            e.uses = tr::UseAll;
+            genericEntries_.push_back(std::move(e));
+        }
+        if (spec_.fixedOnly) return;   // un membre a place fixe : pas de rappel
+        const auto add = [&](std::string text, std::string doc) {
+            tr::Entry e;
+            e.key = "gencb:" + text;
+            e.name = std::move(text);
+            e.category = tr::Category::Callback;
+            e.provenance = from;
+            e.doc = std::move(doc);
+            e.uses = tr::UseVariable | tr::UseDeclaration | tr::UseParameter | tr::UseReturn;
+            if (e.usable(spec_.use)) genericCallbacks_.push_back(std::move(e));
+        };
+        for (const auto& g : spec_.generics) {
+            const std::string& n = g.name;
+            add("CALLBACK (x : " + n + ") : BOOL", "Un filtre sur " + n + " : LIST_FILTER, LIST_COUNT_IF, LIST_ANY\xE2\x80\xA6 (f : une fonction, une LAMBDA).");
+            add("CALLBACK (x : " + n + ") : " + n, "Une transformation de " + n + " : LIST_MAP, LIST_TRANSFORM.");
+            add("CALLBACK (a : " + n + "; b : " + n + ") : BOOL", "Un ordre sur " + n + " : LIST_SORT(L, f) - TRUE si a passe avant b.");
+            add("CALLBACK (x : " + n + ")", "Un rappel qui re\xC3\xA7oit un " + n + ".");
+            add("CALLBACK () : " + n, "Un rappel qui rend un " + n + " (une valeur calcul\xC3\xA9" "e \xC3\xA0 la demande).");
+        }
+        if (spec_.generics.size() >= 2) {
+            // Deux generiques : la valeur (le premier) et la cle (le second) d'une MAP[K] OF T.
+            const std::string& v = spec_.generics[0].name;
+            const std::string& k = spec_.generics[1].name;
+            add("CALLBACK (k : " + k + "; v : " + v + ") : BOOL", "Un filtre sur une MAP[" + k + "] OF " + v + " : MAP_REMOVE_IF (la cl\xC3\xA9 et la valeur).");
+            add("CALLBACK (x : " + v + ") : " + k, "Une conversion de " + v + " en " + k + " : la cl\xC3\xA9 tir\xC3\xA9" "e d'une valeur.");
+        }
     }
 
     // Le registre du projet d'aujourd'hui ; `keep` : garder la ligne choisie (par sa cle).
@@ -566,6 +684,22 @@ private:
             reg_ = std::make_shared<tr::Registry>();
         }
         usable_ = reg_->usable(spec_.use);
+        // 1.12.21 : T, K en tete ; leurs rappels apres ceux du registre.
+        if (!genericEntries_.empty()) {
+            std::vector<const tr::Entry*> mixed;
+            for (const auto& e : genericEntries_) mixed.push_back(&e);
+            std::size_t lastCallback = usable_.size();
+            for (std::size_t i = 0; i < usable_.size(); ++i)
+                if (usable_[i]->category == tr::Category::Callback) lastCallback = i;
+            for (std::size_t i = 0; i < usable_.size(); ++i) {
+                mixed.push_back(usable_[i]);
+                if (i == lastCallback)
+                    for (const auto& c : genericCallbacks_) mixed.push_back(&c);
+            }
+            if (lastCallback == usable_.size())
+                for (const auto& c : genericCallbacks_) mixed.push_back(&c);
+            usable_ = std::move(mixed);
+        }
         filter();
         if (!was.empty())
             for (std::size_t i = 0; i < shown_.size(); ++i)
@@ -580,7 +714,8 @@ private:
             sel_ = shown_.empty() ? -1 : 0;
             return;
         }
-        const auto r = reg_->resolve(cur, tr::UseAll);
+        const bool generic = mentionsGeneric(cur, spec_.generics);   // 1.12.21 : LIST OF T, MAP[K] OF T
+        const auto r = reg_->resolve(probe(cur), tr::UseAll);
         if (r.missing || (!r.ok && !r.entry)) {
             notice_ = "Type actuel \xC2\xAB " + cur + " \xC2\xBB : " + (r.why.empty() ? std::string("introuvable") : r.why)
                       + ". Choisis son rempla\xC3\xA7" "ant.";
@@ -589,7 +724,7 @@ private:
         }
         // 1.12.2 : sa forme (un tableau : ses bornes ; un dictionnaire : sa cle ; un tuple : les types
         // suivants) et sa reference.
-        const auto sh = tf::decompose(r.text);
+        const auto sh = tf::decompose(generic ? spelled(cur) : r.text);
         if (sh.form != tf::Form::Simple && formAllowed(sh.form)) {
             params_[static_cast<std::size_t>(sh.form)] = sh.parameter.empty() ? tf::defaultParameter(sh.form) : sh.parameter;
             (void)setForm(sh.form);
@@ -599,6 +734,16 @@ private:
         // se choisissait par son type le plus profond, et le type rouvert perdait un niveau sans le dire.
         if (sh.form != tf::Form::Simple && formAllowed(sh.form) && composedText(sh.element)) {
             setComposed(sh.element);
+            return;
+        }
+        if (generic) {
+            // T, ou un rappel de T : sa ligne a lui (le nom ecrit comme dans la liste).
+            const std::string want = spelled(sh.element);
+            if (!select(want)) {
+                chip_ = kAll;
+                filter();
+                (void)select(want);
+            }
             return;
         }
         if (r.entry && !select(r.entry->name)) {
@@ -623,8 +768,8 @@ private:
         typed_.clear();
         typedWhy_.clear();
         if (reg_ && looksLikeType(raw)) {
-            const auto r = reg_->resolve(raw, spec_.use);
-            if (r.ok) typed_ = r.text;
+            const auto r = reg_->resolve(probe(raw), spec_.use);   // 1.12.21 : VECTOR OF T se verifie avec un type de T
+            if (r.ok) typed_ = mentionsGeneric(raw, spec_.generics) ? spelled(raw) : r.text;
             else typedWhy_ = "le type \xC3\xA9" "crit : " + (r.why.empty() ? std::string("illisible") : r.why);
         }
         if (!composed_.empty() && (chip_ == kAll || chip_ == static_cast<int>(tr::Category::Collection))
@@ -632,10 +777,12 @@ private:
             shown_.push_back(&composedEntry_);
         std::vector<const tr::Entry*> pool;
         if (chip_ == kRecents) {
-            for (const auto& n : spec_.recents)
-                if (const auto* e = reg_->byName(n); e && e->usable(spec_.use)
-                                                    && std::find(pool.begin(), pool.end(), e) == pool.end())
-                    pool.push_back(e);
+            for (const auto& n : spec_.recents) {
+                const tr::Entry* e = reg_->byName(n);
+                for (const auto& g : genericEntries_)          // 1.12.21 : T, s'il est un generique d'ici
+                    if (!e && upperText(g.name) == upperText(n)) e = &g;
+                if (e && e->usable(spec_.use) && std::find(pool.begin(), pool.end(), e) == pool.end()) pool.push_back(e);
+            }
         } else {
             for (const auto* e : usable_)
                 if (chip_ == kAll || static_cast<int>(e->category) == chip_) pool.push_back(e);
@@ -691,6 +838,17 @@ private:
         } else if (!e->values.empty()) {
             more = "Valeurs : ";
             for (std::size_t i = 0; i < e->values.size(); ++i) more += (i ? ", " : "") + e->values[i];
+        } else if (genericEntry(e)) {
+            // 1.12.21 : ce qu'on en fait - une forme dessous, un rappel de la puce Rappels.
+            const std::string& g = e->name;
+            std::string key = "STRING";
+            for (const auto& o : spec_.generics)
+                if (o.name != g) {
+                    key = o.name;
+                    break;
+                }
+            more = "Se compose avec une forme dessous : LIST OF " + g + ", VECTOR OF " + g + ", ARRAY[0..9] OF " + g + ", MAP[" + key + "] OF " + g
+                   + " (" + key + " dans la case Cl\xC3\xA9) ; ses rappels (CALLBACK (x : " + g + ") : BOOL\xE2\x80\xA6) : puce Rappels.";
         } else if (e->numeric.family == tr::Family::Integer || e->numeric.family == tr::Family::Real) {
             more = "Se convertit sans perte vers : ";
             std::string list;
@@ -787,6 +945,7 @@ private:
     const Spec&                            spec_;
     std::shared_ptr<const tr::Registry>    reg_;
     std::vector<const tr::Entry*>          usable_, shown_;
+    std::vector<tr::Entry>                 genericEntries_, genericCallbacks_;   // 1.12.21 : T, K et leurs rappels
     int                                    chip_{kAll};
     int                                    sel_{-1};
     int                                    hover_{-1};

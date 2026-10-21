@@ -458,6 +458,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\ui\FileExplorerModel.cpp" />
     <ClCompile Include="src\ui\FileKinds.cpp" />
     <ClCompile Include="src\ui\Commands.cpp" />
+    <ClCompile Include="src\ui\DialogFrame.cpp" />
     <ClCompile Include="src\ui\KeyMap.cpp" />
     <ClCompile Include="src\ui\ThemeFile.cpp" />
     <ClCompile Include="src\ui\widgets\FileExplorer.cpp" />
@@ -893,6 +894,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\ui\FileExplorerModel.hpp" />
     <ClInclude Include="src\ui\FileKinds.hpp" />
     <ClInclude Include="src\ui\Commands.hpp" />
+    <ClInclude Include="src\ui\DialogFrame.hpp" />
     <ClInclude Include="src\ui\KeyMap.hpp" />
     <ClInclude Include="src\ui\ThemeFile.hpp" />
     <ClInclude Include="src\ui\widgets\FileExplorer.hpp" />

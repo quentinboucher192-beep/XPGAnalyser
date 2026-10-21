@@ -1,5 +1,6 @@
 // app/hmi/HmiAskDialog.cpp - un dialogue qui demande avant d'agir (lot 17).
 #include "HmiAskDialog.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/widgets/Containers.hpp"
@@ -160,7 +161,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float h = height > 0 ? height : std::min(r.h - 40.f, contentHeight(width - 28.f) + 44.f);
-        panel_ = {std::floor((r.w - width) * 0.5f), std::floor((r.h - h) * 0.5f), width, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor((r.w - width) * 0.5f), std::floor((r.h - h) * 0.5f), width, h});
         const float x = panel_.x + 16, w = panel_.w - 32;
         float y = panel_.y + 44;
         if (text) {

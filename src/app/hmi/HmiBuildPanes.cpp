@@ -2,6 +2,7 @@
 //  app/hmi/HmiBuildPanes.cpp - 1.11.13 : voir HmiBuildPanes.hpp
 // =============================================================================
 #include "HmiBuildPanes.hpp"
+#include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 #include "../../ui/widgets/ExprField.hpp"
 #include "../../ui/Commands.hpp"
 #include "../Disposition.hpp"
@@ -111,7 +112,7 @@ protected:
     void onLayout() override {
         const auto r = bounds();
         const float h = height();
-        panel_ = {std::floor((r.w - kW) * 0.5f), std::floor(std::max(10.f, (r.h - h) * 0.5f)), kW, h};
+        panel_ = ui::dialogframe::place(*this, {std::floor((r.w - kW) * 0.5f), std::floor(std::max(10.f, (r.h - h) * 0.5f)), kW, h});
         float bx = panel_.x + panel_.w - 16.f;
         for (auto* b : {d_.cancel_, d_.bg_, d_.outputs_}) {
             if (!b || !b->visible()) continue;
@@ -369,7 +370,7 @@ public:
 protected:
     void onLayout() override {
         const auto r = bounds();
-        panel_ = {std::floor((r.w - kAskW) * 0.5f), std::floor(std::max(10.f, (r.h - kAskH) * 0.5f)), kAskW, kAskH};
+        panel_ = ui::dialogframe::place(*this, {std::floor((r.w - kAskW) * 0.5f), std::floor(std::max(10.f, (r.h - kAskH) * 0.5f)), kAskW, kAskH});
         if (d_.noMore_) d_.noMore_->setBounds({panel_.x + 16.f, panel_.y + panel_.h - 84.f, panel_.w - 32.f, 26.f});
         float bx = panel_.x + panel_.w - 16.f;
         for (auto* b : {d_.yes_, d_.no_}) {
