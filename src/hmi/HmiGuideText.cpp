@@ -690,7 +690,7 @@ const std::vector<Topic>& topics() {
                          "champ de recherche du volet (la recherche et les filtres sont retenus d'une "
                          "s\xC3\xA9" "ance \xC3\xA0 l'autre)\nF11\tLe plein \xC3\xA9" "cran\nF12\tUne "
                          "capture de la fen\xC3\xAAtre (dossier captures/)", {}},
-             {K::Heading, "Les fen\xC3\xAAtres : d\xC3\xA9placer, agrandir", {}, "1.12.21"},
+             {K::Heading, "Les fen\xC3\xAAtres : d\xC3\xA9placer, agrandir (1.12.21)", {}, "1.12.21"},
              {K::Bullet, "**D\xC3\xA9placer** : prends une fen\xC3\xAAtre par sa barre de titre (le curseur devient une croix fl\xC3\xA9" "ch\xC3\xA9" "e) et l\xC3\xA2" "che-la o\xC3\xB9 tu veux. Sa barre de titre reste toujours \xC3\xA0 l'\xC3\xA9" "cran.", {}, "1.12.21"},
              {K::Bullet, "**Agrandir** : tire un bord ou un coin - la **poign\xC3\xA9" "e** en bas \xC3\xA0 droite (trois petits traits) est la plus commode ; le bord pris se colore. Une fen\xC3\xAAtre ne devient pas plus petite que sa taille d'origine : son contenu y est plac\xC3\xA9.", {}, "1.12.21"},
              {K::Bullet, "**En grand** : un double clic sur la barre de titre la met en grand ; un autre la rend \xC3\xA0 sa place. Tir\xC3\xA9" "e par son titre, une fen\xC3\xAAtre en grand reprend sa taille sous la souris.", {}, "1.12.21"},
