@@ -6,7 +6,7 @@
 //  les deux champs (chercher, coller un chemin) et la liste du tri.
 // =============================================================================
 #include "StartPage.hpp"
-#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API, XPGAnalyser IHM
+#include "../core/Edition.hpp"   // 1.12.0 : API Studio, IHM Studio
 
 #include "Brand.hpp"
 #include "../project/ProjectIcon.hpp"
@@ -808,7 +808,7 @@ void FilterChips::setCurrent(Filter f) {
 
 std::string FilterChips::text(std::size_t i) const { return filterLabel(static_cast<Filter>(i)); }
 
-// 1.12.0 : XPGAnalyser IHM n'ouvre pas d'export de Control Expert - pas de puce Exports.
+// 1.12.0 : IHM Studio n'ouvre pas d'export de Control Expert - pas de puce Exports.
 static bool chipShown(std::size_t i) { return i != static_cast<std::size_t>(Filter::Exports) || core::hasApi(); }
 
 float FilterChips::naturalWidth() const {
@@ -1369,7 +1369,7 @@ void ProjectDetail::onPaint(const ui::PaintContext& ctx) {
             {StartButton::Glyph::None, "Glisser-d\xC3\xA9poser", "un dossier ou un export, n'importe o\xC3\xB9 dans cette fen\xC3\xAAtre"},
             {StartButton::Glyph::Tutorial, "D\xC3\xA9" "couvrir l'application", "le didacticiel, sur un projet ouvert ; F1 ouvre l'aide depuis n'importe quel \xC3\xA9" "cran"},
         };
-        // 1.12.0 : XPGAnalyser IHM - ses projets, pas d'export de l'automate.
+        // 1.12.0 : IHM Studio - ses projets, pas d'export de l'automate.
         static const Tip kHmiTips[] = {
             {StartButton::Glyph::Plus, "Nouveau projet IHM  (Ctrl+N)", "un dossier et une vue de d\xC3\xA9marrage, pr\xC3\xAAts \xC3\xA0 dessiner"},
             {StartButton::Glyph::Open, "Ouvrir\xE2\x80\xA6  (Ctrl+O)", "un dossier de projet IHM (Projets\\ihm)"},
@@ -1478,7 +1478,7 @@ StartRail::StartRail(std::string id) : ui::Widget(std::move(id)) {
     const auto make = [this](std::string text, std::string wid, L look, G glyph) {
         return &static_cast<StartButton&>(addChild(std::make_unique<StartButton>(std::move(text), std::move(wid), look, glyph)));
     };
-    const bool api = core::hasApi();     // 1.12.0 : XPGAnalyser API ou XPGAnalyser IHM
+    const bool api = core::hasApi();     // 1.12.0 : API Studio ou IHM Studio
     new_ = make(api ? "Nouveau projet" : "Nouveau projet IHM", "startup.new", L::CardPrimary, G::Plus);
     new_->setSubtitle(api ? "un dossier, la t\xC3\xA2" "che MAST, pr\xC3\xAAt \xC3\xA0 remplir" : "un dossier, une vue de d\xC3\xA9marrage, pr\xC3\xAAt \xC3\xA0 dessiner");
     new_->setHint("Ctrl+N");
@@ -1642,7 +1642,7 @@ void StartRail::onLayout() {
     const float bw = std::min(autostart_->naturalWidth(), w - 24.f);
     stationStacked_ = w - 12.f - 22.f - 10.f - bw - 10.f < 180.f;
     const float lines = autostartName_.empty() ? 2.f : 3.f;
-    // 1.12.0 : le poste d'exploitation est celui de XPGAnalyser IHM - XPGAnalyser API n'en a pas.
+    // 1.12.0 : le poste d'exploitation est celui de IHM Studio - API Studio n'en a pas.
     const bool station = core::hasIhm();
     autostart_->setVisibility(station ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     const float stationH = !station ? 0.f : stationStacked_ ? std::round(10.f + lines * lh + 8.f + 26.f + 10.f) : 52.f;
@@ -1721,7 +1721,7 @@ void StartRail::onPaint(const ui::PaintContext& ctx) {
     ctx.r.drawText({themeLabel_.x, themeLabel_.y}, "TH\xC3\x88ME \xC2\xB7 " + ui::Theme::labelOf(th.name), kTiny, c.textMuted);
 
     // ---- le poste au demarrage du PC ----------------------------------------------
-    if (!core::hasIhm()) return;      // 1.12.0 : XPGAnalyser API n'a pas de poste d'exploitation
+    if (!core::hasIhm()) return;      // 1.12.0 : API Studio n'a pas de poste d'exploitation
     const auto green = th.onSurface(c.ok);
     const bool none = autostartName_.empty();
     ctx.r.fillRoundedRect(station_, c.border, 8.f);

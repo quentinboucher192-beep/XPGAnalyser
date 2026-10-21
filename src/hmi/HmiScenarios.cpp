@@ -1,6 +1,6 @@
 #include "HmiScenarios.hpp"
 #include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
-#include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 
 #include "HmiCheck.hpp"
 #include "HmiExpr.hpp"

@@ -247,7 +247,7 @@ std::string defaultBody() {
            "{consigne}\n"
            "\n"
            "-- \n"
-           "{projet} (IHM XpgAnalyzer). Ce message part tout seul : ne pas y r\xC3\xA9pondre.";
+           "{projet} (IHM Studio). Ce message part tout seul : ne pas y r\xC3\xA9pondre.";
 }
 
 bool onDuty(const NotifyRecipient& r, int weekday, int minutes) {
@@ -329,7 +329,7 @@ std::string composeMail(const SmtpSettings& s, const Mail& m, std::string_view d
     out += "Date: " + std::string(date) + kCrlf;
     out += "Message-ID: <" + std::string(boundary) + "@" + s.helo + ">" + kCrlf;
     out += "MIME-Version: 1.0\r\n";
-    out += "X-Mailer: XpgAnalyzer IHM\r\n";
+    out += "X-Mailer: IHM Studio\r\n";
     if (!m.attachment) {
         out += "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n";
         out += base64Lines(crlf(m.body));
@@ -473,7 +473,7 @@ HttpResult httpRequest(const std::string& method, const std::string& url, const 
         r.why = "passerelle " + hostPort + " injoignable : " + err;
         return r;
     }
-    std::string rq = method + " " + path + " HTTP/1.1\r\nHost: " + hostPort + "\r\nUser-Agent: XpgAnalyzer-IHM\r\nConnection: close\r\n";
+    std::string rq = method + " " + path + " HTTP/1.1\r\nHost: " + hostPort + "\r\nUser-Agent: IHM-Studio\r\nConnection: close\r\n";
     if (!body.empty() || method == "POST")
         rq += "Content-Type: " + contentType + "\r\nContent-Length: " + std::to_string(body.size()) + "\r\n";
     rq += "\r\n" + body;

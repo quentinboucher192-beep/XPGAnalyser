@@ -1,5 +1,5 @@
 #include "HmiDesign.hpp"
-#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'automate dans les modeles de pages
+#include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'automate dans les modeles de pages
 
 #include "HmiEdit.hpp"
 #include "HmiOperators.hpp"   // 1.10
@@ -1283,7 +1283,7 @@ void fillFromTemplate(Project& p, View& v, std::string_view key) {
     }
     if (key == "communication") {
         (void)title(p, v, v.name, m, 12, W * 0.6, 24);
-        // 1.12.0 : XPGAnalyser IHM - pas d'automate du projet : l'historique seul.
+        // 1.12.0 : IHM Studio - pas d'automate du projet : l'historique seul.
         if (!core::hasApi()) {
             (void)addAt(p, v, Kind::History, "Historique", m, 72, W - 2 * m, H - 72 - m);
             return;

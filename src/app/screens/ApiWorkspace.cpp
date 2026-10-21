@@ -13,7 +13,7 @@
 //  blocs, l'ordre, les variables et les tables d'animation suivent (lots 3 a 5).
 // =============================================================================
 #include "Screens.hpp"
-#include "../../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM ne prepare pas d'automate
+#include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio ne prepare pas d'automate
 #include "../SectionComparePane.hpp"   // 1.8.0 : le comparateur de sections
 #include "../../project/ProjectIcon.hpp"
 
@@ -145,7 +145,7 @@ void MainAnalysisScreen::onBarAction(std::string_view id) {
         return;
     }
     if (id == "api.dashboard") { openApiPane("api"); return; }
-    // 1.12.2 : Projet > Nouveau dans XPGAnalyser IHM - les creations de l'IHM.
+    // 1.12.2 : Projet > Nouveau dans IHM Studio - les creations de l'IHM.
     if (id == "hmi.new.view") { askNewHmiView("vue"); return; }
     if (id == "hmi.new.popup") { askNewHmiView("popup"); return; }
     if (id == "hmi.new.symbol") { askNewHmiView("symbole"); return; }
@@ -1185,10 +1185,10 @@ void MainAnalysisScreen::openApiTabFromAction(const std::string& key) {
 // (Lancer, Un cycle). `why` : la raison seule - l'onglet en fait sa phrase
 // (« La simulation ne demarre pas : ... ») et traduit celle du moteur.
 bool MainAnalysisScreen::attachSimulation(std::string* why) {
-    // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - rien ne prepare son programme (la Vue d'ensemble
+    // 1.12.14 : IHM Studio n'a pas d'automate - rien ne prepare son programme (la Vue d'ensemble
     // disait "La simulation ne se prepare pas - aucune section en ST de la tache MAST").
     if (!core::hasApi()) {
-        if (why) *why = "XPGAnalyser IHM n'a pas d'automate";
+        if (why) *why = "IHM Studio n'a pas d'automate";
         return false;
     }
     const auto project = app_.project();

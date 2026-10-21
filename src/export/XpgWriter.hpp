@@ -32,7 +32,7 @@
 namespace exporter {
 
 struct XpgWriteOptions {
-    std::string exportedBy{"XpgAnalyzer 1.0"};
+    std::string exportedBy{"API Studio"};
     std::string dateTime;              // empty: generated from the clock
     bool        includeAnimationTables{true};
     bool        zeroChecksums{true};   // see the header comment

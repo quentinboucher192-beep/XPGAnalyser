@@ -523,7 +523,7 @@ Bytes renderPdf(const Content& c) {
         s.clear();
         const std::string page = "Page " + std::to_string(p + 1) + " / " + std::to_string(count);
         textAt(W - M - pdfTextWidth(page, 8, false), M - 18, page, 8, false, 0.45);
-        textAt(M, M - 18, fit("XpgAnalyzer - " + foot, 8, false, avail - 80), 8, false, 0.45);
+        textAt(M, M - 18, fit("IHM Studio - " + foot, 8, false, avail - 80), 8, false, 0.45);
         pages[p] += s;
     }
     std::vector<std::string> objects;

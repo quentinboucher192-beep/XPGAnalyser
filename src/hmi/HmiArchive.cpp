@@ -162,7 +162,7 @@ core::Status exportArchive(const Project& p, const History* history, const std::
             items.push_back({"ihm/historique/" + std::string(which) + ".csv", bytesOf(historyCsv(*history, which))});
 
     const std::string created = nowStamp();
-    std::string manifest = "# XpgAnalyzer - archive du projet IHM\n";
+    std::string manifest = "# IHM Studio - archive du projet IHM\n";
     manifest += "archive format=1 outil=XpgAnalyzer format_ihm=" + std::to_string(kFormatVersion) + " cree=" + quote(created)
               + " projet=" + quote(p.config.name) + "\n";
     const auto counts = projectCounts(p, history);

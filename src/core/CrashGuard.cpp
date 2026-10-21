@@ -11,6 +11,7 @@
 
 #include "CallTrail.hpp"
 #include "Version.hpp"
+#include "Edition.hpp"   // 1.12.20 : le nom de l'application lancee (API Studio, IHM Studio)
 
 #include <algorithm>
 #include <atomic>
@@ -61,6 +62,7 @@ constexpr int kReportsKept = 20;
 
 // ---- pose a l'installation, lu par les gestionnaires ------------------------------
 char g_folder[1024];          // UTF-8
+char g_product[64] = XPG_ANALYZER_NAME;   // 1.12.20 : pose a l'installation (core::productName())
 char g_system[256];
 std::atomic<bool> g_installed{false};
 bool g_dialogs = true;
@@ -210,6 +212,7 @@ CRITICAL_SECTION g_dbgLock;     // dbghelp n'est pas sur entre les fils
 using MessageBoxW_t = int(WINAPI*)(HWND, LPCWSTR, LPCWSTR, UINT);
 MessageBoxW_t g_messageBox = nullptr;
 wchar_t g_folderW[1024];
+wchar_t g_productW[64] = L"API IHM Studio";   // 1.12.20 : g_product en UTF-16
 HANDLE g_mainThreadHandle = nullptr;
 ULONG_PTR g_mainStackLow = 0, g_mainStackHigh = 0;
 
@@ -417,11 +420,14 @@ void writeDocuments(Writer& w) noexcept {
 // Le rapport entier dans g_writer, deja ouvert.
 void writeBody(Writer& w, ReportKind kind, const char* reason, std::uint16_t thread, std::uint64_t whenMs,
                void* const* frames, int count, const char* stackNote) noexcept {
-    w.str(XPG_ANALYZER_NAME " " XPG_ANALYZER_VERSION " - rapport de ");
+    w.str(g_product);
+    w.str(" " XPG_ANALYZER_VERSION " - rapport de ");
     w.line(kindWord(kind));
     w.line("=================================================");
     w.str("Genre       : "); w.line(kindWord(kind));
-    w.line("Version     : " XPG_ANALYZER_NAME " " XPG_ANALYZER_VERSION);
+    w.str("Version     : ");
+    w.str(g_product);
+    w.line(" " XPG_ANALYZER_VERSION);
     w.str("Syst\xC3\xA8me     : "); w.line(g_system);
     char when[24];
     trail::formatDateTime(whenMs, when);
@@ -508,12 +514,11 @@ void showCrashBox(const char* reportUtf8) noexcept {
     if (auto box = g_crashBox.load()) { box(reportUtf8); return; }
     if (!g_dialogs || !g_messageBox) return;
     static wchar_t text[2048];
-    const wchar_t* head = L"XPGAnalyser a rencontré un problème et doit se fermer.\n\n"
-                          L"Un rapport a été enregistré :\n";
-    std::wcscpy(text, head);
+    std::wcscpy(text, g_productW);
+    std::wcscat(text, L" a rencontré un problème et doit se fermer.\n\nUn rapport a été enregistré :\n");
     const std::size_t k = std::wcslen(text);
     if (!MultiByteToWideChar(CP_UTF8, 0, reportUtf8, -1, text + k, static_cast<int>(2040 - k))) text[k] = L'\0';
-    g_messageBox(nullptr, text, L"XPGAnalyser", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL);
+    g_messageBox(nullptr, text, g_productW, MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST | MB_TASKMODAL);
 }
 
 // ---- le rapporteur (cree a l'installation) ----
@@ -648,9 +653,11 @@ void reportHere(const char* reason) noexcept {
     if (openReport(g_writer, ReportKind::Crash, now, path, sizeof path)) {
         writeBody(g_writer, ReportKind::Crash, reason, trail::currentThread(), now, frames, count, nullptr);
         g_writer.close();
-        stderrLine("XPGAnalyser a rencontr\xC3\xA9 un probl\xC3\xA8me et doit se fermer. Un rapport a \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9 : ", path);
+        (void)!::write(2, g_product, std::strlen(g_product));
+        stderrLine(" a rencontr\xC3\xA9 un probl\xC3\xA8me et doit se fermer. Un rapport a \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9 : ", path);
     } else {
-        stderrLine("XPGAnalyser a rencontr\xC3\xA9 un probl\xC3\xA8me ; le rapport n'a pas pu \xC3\xAAtre \xC3\xA9" "crit dans ", g_folder);
+        (void)!::write(2, g_product, std::strlen(g_product));
+        stderrLine(" a rencontr\xC3\xA9 un probl\xC3\xA8me ; le rapport n'a pas pu \xC3\xAAtre \xC3\xA9" "crit dans ", g_folder);
         path[0] = '\0';
     }
     if (auto box = g_crashBox.load()) {   // pas de boite native ici ; celle d'un essai
@@ -761,17 +768,20 @@ std::string writeHangReport(double seconds) {
 bool showHangDialog(const std::string& path, unsigned seconds) {
     char message[1600];
     std::snprintf(message, sizeof message,
-                  "XPGAnalyser ne r\xC3\xA9pond plus depuis %u s.\n\nUn rapport a \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9 :\n%s",
-                  seconds, path.c_str());
+                  "%s ne r\xC3\xA9pond plus depuis %u s.\n\nUn rapport a \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9 :\n%s",
+                  g_product, seconds, path.c_str());
     BoxOpen open;
-    if (auto dialog = g_hangDialog.load()) return dialog("XPGAnalyser ne r\xC3\xA9pond plus", message);
+    const std::string title = std::string(g_product) + " ne r\xC3\xA9pond plus";
+    if (auto dialog = g_hangDialog.load()) return dialog(title.c_str(), message);
 #if defined(_WIN32)
     if (!g_messageBox) return false;
     std::string full = message;
-    full += "\n\nOui : attendre.   Non : fermer XPGAnalyser.";
+    full += "\n\nOui : attendre.   Non : fermer " + std::string(g_product) + ".";
     wchar_t text[2400];
     if (!MultiByteToWideChar(CP_UTF8, 0, full.c_str(), -1, text, 2400)) return false;
-    return g_messageBox(nullptr, text, L"XPGAnalyser ne répond plus",
+    wchar_t titleW[128];
+    if (!MultiByteToWideChar(CP_UTF8, 0, title.c_str(), -1, titleW, 128)) titleW[0] = L'\0';
+    return g_messageBox(nullptr, text, titleW,
                         MB_YESNO | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST) == IDNO;
 #else
     std::fprintf(stderr, "%s\n", message);
@@ -817,7 +827,7 @@ void watchdogLoop(unsigned seconds, bool dialog) {
                 g_lastHang = path;
             }
             if (dialog && g_dialogs && showHangDialog(path, seconds)) {
-                trail::note(trail::Kind::Watchdog, "Fermer XPGAnalyser (fen\xC3\xAAtre de blocage)");
+                trail::note(trail::Kind::Watchdog, "Fermer (fen\xC3\xAAtre de blocage)");
 #if defined(_WIN32)
                 TerminateProcess(GetCurrentProcess(), 4);
 #else
@@ -874,10 +884,12 @@ void install(const Options& options) {
     const fs::path folder = pathFromUtf8(options.folder);
     fs::create_directories(folder, ec);
     std::snprintf(g_folder, sizeof g_folder, "%s", options.folder.c_str());
+    std::snprintf(g_product, sizeof g_product, "%s", core::productName().c_str());   // 1.12.20 : l'edition est deja posee (main)
     removeOldReports(folder);
 
 #if defined(_WIN32)
     MultiByteToWideChar(CP_UTF8, 0, g_folder, -1, g_folderW, 1024);
+    MultiByteToWideChar(CP_UTF8, 0, g_product, -1, g_productW, 64);
     if (HMODULE user32 = LoadLibraryW(L"user32.dll")) load(g_messageBox, user32, "MessageBoxW");
     loadDbgHelp();
     // Le systeme : RtlGetVersion (GetVersionEx ment depuis Windows 8.1), et wine s'il est la.

@@ -3,7 +3,7 @@
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.14 : ce qui mene au type attendu
 #include "../../sim/DialectLib.hpp"   // 1.12.7 : les templates (NUMERIC_LIMITS<T>, NUMBERS), les natives
 #include "../../hmi/HmiNatives.hpp"   // 1.12.0 : les natives de l'IHM (completion, signature, survol)
-#include "../../core/Edition.hpp"     // 1.12.0 : XPGAnalyser IHM - ni API, ni bibliotheque de l'automate
+#include "../../core/Edition.hpp"     // 1.12.0 : IHM Studio - ni API, ni bibliotheque de l'automate
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : l'aide a la saisie selon le type du champ
 #include "HmiParamPanes.hpp"   // 1.9 : les parametres de la popup (type, mode)
 #include "../../hmi/HmiTypes.hpp"
@@ -1573,7 +1573,7 @@ bool publicMembers(const hmi::Project& hp, const std::string& path, const std::s
     };
     if (hmi::pub::isSysRoot(path)) {
         for (const auto& v : hmi::pub::kSysVars)
-            if (hmi::pub::sysDomainShown(v.domain))     // 1.12.0 : XPGAnalyser IHM - ni Automate, ni Communication
+            if (hmi::pub::sysDomainShown(v.domain))     // 1.12.0 : IHM Studio - ni Automate, ni Communication
             add(std::string(v.name), std::string(v.type) + "  \xC2\xB7  R  \xC2\xB7  " + std::string(hmi::pub::kSysDomains[v.domain]) + "  \xC2\xB7  " + std::string(v.text),
                 Kind::SysVariable);
         // 1.9 : les structures des esclaves simules (le point pose, leurs noms ensuite).
@@ -2226,7 +2226,7 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
             // (API.<globale>, API.<Unite>.<variable>, les instances DDT et DFB).
             // Des A ou AP, en tete - avant IHM_APPELER, MAP... ; le point pose,
             // la liste se rouvre sur les unites et les globales.
-            if (const int r = matchRank("API", needle); r >= 0 && !needle.empty() && core::hasApi()) {   // 1.12.0 : pas dans XPGAnalyser IHM
+            if (const int r = matchRank("API", needle); r >= 0 && !needle.empty() && core::hasApi()) {   // 1.12.0 : pas dans IHM Studio
                 Item it;
                 it.text = "API";
                 it.detail = "variables de l'automate : API.<globale>, API.<Unit\xC3\xA9>.<variable>, instances DDT et DFB";
@@ -2364,7 +2364,7 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                             break;
                     }
                     const bool variable = kind == Kind::PlcVariable || kind == Kind::PlcLocated;
-                    // 1.12.0 : XPGAnalyser IHM - le langage (mots, modeles, types), pas l'automate :
+                    // 1.12.0 : IHM Studio - le langage (mots, modeles, types), pas l'automate :
                     // ni ses variables, ni ses DDT, ni les blocs et fonctions de sa bibliotheque
                     // (les fonctions de l'IHM sont ses natives, proposees plus haut).
                     if (!core::hasApi() && (variable || kind == Kind::Function || kind == Kind::Block || kind == Kind::DerivedType)) continue;
@@ -2927,7 +2927,7 @@ bool signature(const domain::Project* plc, std::string_view name, ui::MultiLineT
         return true;
     }
     // 1.12.0 : une native de l'IHM (LIMIT, CONCAT, RGB...) : son catalogue - avant la
-    // bibliotheque de l'automate (XPGAnalyser IHM n'a qu'elle).
+    // bibliotheque de l'automate (IHM Studio n'a qu'elle).
     if (const auto* n = hmi::natives::function(name); n && std::string_view(n->name).rfind("IHM_", 0) != 0) {
         out.name = std::string(n->name);
         out.parameters.clear();

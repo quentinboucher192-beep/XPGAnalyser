@@ -92,7 +92,7 @@ struct Topic {
 // IHM, avec ses mots (ihmWorded) - l'IHM n'y a pas d'automate, ses equipements en tiennent lieu.
 [[nodiscard]] const std::vector<Topic>& topics();
 
-// 1.12.2 : LES MOTS DE XPGAnalyser IHM - une phrase du guide sans l'automate : « (IHM ou
+// 1.12.2 : LES MOTS DE IHM Studio - une phrase du guide sans l'automate : « (IHM ou
 // automate) », « ou de l'automate » s'effacent ; « la relie a l'automate » : a une variable ;
 // ailleurs l'automate devient l'equipement (le meme genre : l'accord tient). Le reste tel quel.
 [[nodiscard]] std::string ihmWords(std::string_view text);

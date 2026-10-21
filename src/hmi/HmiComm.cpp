@@ -1393,7 +1393,7 @@ std::uint64_t SimBank::clientWrites() const {
 
 std::shared_ptr<SimBank> makeSimBank(const domain::Project* plc, const Communication& comm, const TypeOracle& types) {
     std::size_t bits = 65536, words = 65536;
-    modbus::Identification id{{0, "XpgAnalyzer"}, {1, "SIMULATEUR"}, {2, XPG_ANALYZER_VERSION}, {4, "Automate simul\xC3\xA9"}};
+    modbus::Identification id{{0, "IHM Studio"}, {1, "SIMULATEUR"}, {2, XPG_ANALYZER_VERSION}, {4, "Automate simul\xC3\xA9"}};
     if (plc) {
         const auto& hw = plc->hardware;
         if (hw.memory.declared) {

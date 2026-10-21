@@ -1,7 +1,7 @@
 // Configuration > Langues, Configuration > Unites et formats (lot 13).
 #include "HmiDisplayPanes.hpp"
 #include "../../hmi/HmiRoles.hpp"   // 1.12.19 : l'invite d'une case vide (defaultInvite)
-#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 #include "../ExportTarget.hpp"
 #include "HmiPaneKit.hpp"
 

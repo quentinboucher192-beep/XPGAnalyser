@@ -1,7 +1,7 @@
 #include "TutorialApp.hpp"
 #include "../../hmi/HmiStore.hpp"   // 1.12.0
 #include "../../hmi/HmiStandalone.hpp"   // 1.12.0 : son IHM rendue autonome
-#include "../../core/Edition.hpp"   // 1.12.0 : le bac de XPGAnalyser IHM
+#include "../../core/Edition.hpp"   // 1.12.0 : le bac de IHM Studio
 
 #include "TutorialOverlay.hpp"
 #include "TutorialStageApp.hpp"
@@ -219,7 +219,7 @@ bool openSandbox(Session& s, const help::CompiledTutorial& t) {
             }
             return true;    // on n'attend pas pour rien : les cibles manqueront, le verificateur le dira
         }
-        // 1.12.0 : XPGAnalyser IHM - le bac (un projet de la 1.11 : l'automate et son IHM) n'a ici que
+        // 1.12.0 : IHM Studio - le bac (un projet de la 1.11 : l'automate et son IHM) n'a ici que
         // son IHM ; elle est rendue autonome comme a la migration (les noms de l'automate qu'elle lit
         // deviennent ses variables, depuis le programme du modele).
         if (!core::hasApi()) {

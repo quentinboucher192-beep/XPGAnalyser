@@ -3,7 +3,7 @@
 // en page du volet.
 #include "HmiCommPanes.hpp"
 #include "../../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, partout les memes
-#include "../../core/Edition.hpp"          // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet
+#include "../../core/Edition.hpp"          // 1.12.2 : IHM Studio n'a pas d'automate du projet
 #include "../../hmi/HmiTypes.hpp"
 
 #include "HmiCommHost.hpp"
@@ -105,7 +105,7 @@ std::optional<hmi::netinfo::Adapter> HmiCommPane::adapter(const std::string& nam
 }
 
 HmiCommPane::Side HmiCommPane::side() const {
-    // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet - jamais sa fiche ; rien de choisi :
+    // 1.12.2 : IHM Studio n'a pas d'automate du projet - jamais sa fiche ; rien de choisi :
     // la fiche d'un equipement, vide.
     const Side plc = core::hasApi() ? Side::Plc : Side::Equipment;
     switch (static_cast<int>(tabs_->currentIndex())) {
@@ -309,7 +309,7 @@ void HmiCommPane::refreshEquipments() {
     std::vector<EquipLine> lines;
     std::size_t reals = 0, reachable = 0, linked = 0, only = 0, readSim = 0;
     const std::string dash = "\xE2\x80\x94";
-    // L'automate du projet, en tete (1.12.2 : XPGAnalyser API seulement - XPGAnalyser IHM n'a que
+    // L'automate du projet, en tete (1.12.2 : API Studio seulement - IHM Studio n'a que
     // ses equipements).
     if (core::hasApi() && (equipFilter_ == "tous" || equipFilter_ == "vrais")) {
         const auto& c = p.comm;
@@ -899,7 +899,7 @@ void HmiCommPane::testAll() {
 void HmiCommPane::rebuildEquipmentProperties(std::vector<PG::Category>& cats) {
     const auto* e = doc_->project.equipmentByName(equipment_);
     if (!e) {
-        // 1.12.2 : XPGAnalyser IHM, rien de choisi - plus de fiche de l'automate du projet.
+        // 1.12.2 : IHM Studio, rien de choisi - plus de fiche de l'automate du projet.
         if (!core::hasApi() && equipment_.empty()) sheetNote_ = "Choisis un \xC3\xA9quipement (onglet \xC3\x89quipements) : sa fiche s'affiche ici.";
         return;
     }
@@ -1044,7 +1044,7 @@ void HmiCommPane::rebuildZoneProperties(std::vector<PG::Category>& cats, const h
                                         if (pr.label == v) return applyZonePreset(name, pr.key);
                                     return false;
                                 },
-                                // 1.12.2 : la configuration de l'automate du projet, XPGAnalyser API seulement.
+                                // 1.12.2 : la configuration de l'automate du projet, API Studio seulement.
                                 std::string("Pour aller vite : les plages de ses variables (\xC3\xA0 la centaine), ")
                                     + (core::hasApi() ? "la configuration de l'automate du projet, " : "") + "celles d'un autre "
                                     "\xC3\xA9quipement, tout (0-65535), les registres seulement... Ou D\xC3\xA9tecter les zones (barre du haut).",
@@ -1450,7 +1450,7 @@ void HmiCommPane::refreshDiagram() {
     std::vector<Placed> placed;
     {
         const auto& c = p.comm;
-        if (core::hasApi() && c.modbus()) {     // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet
+        if (core::hasApi() && c.modbus()) {     // 1.12.2 : IHM Studio n'a pas d'automate du projet
             Placed pl;
             auto* ch = hosts_.comm ? hosts_.comm() : nullptr;
             const hmi::comm::Link* lk = ch ? ch->link() : nullptr;

@@ -182,7 +182,7 @@ File fromOperators(const std::vector<HmiOperator>& ops, std::string_view owner, 
 std::string write(const File& f) {
     std::string out;
     const bool ops = f.genre == Genre::Operators;
-    out += "(* XPGAnalyser " + std::string(XPG_ANALYZER_VERSION) + " - " + (ops ? "op\xC3\xA9rateurs de " : "scripts de ")
+    out += "(* IHM Studio " + std::string(XPG_ANALYZER_VERSION) + " - " + (ops ? "op\xC3\xA9rateurs de " : "scripts de ")
          + f.source + (f.role.empty() ? std::string{} : " (" + f.role + ")") + "\n";
     out += "   Un bloc (*# ... *) avant chaque " + std::string(ops ? "op\xC3\xA9rateur" : "script")
          + ", puis son code jusqu'au bloc suivant. Le code se modifie ici ;\n"
@@ -260,7 +260,7 @@ bool read(std::string_view text, File& out, std::string* why) {
             const std::string& fmt = at(kv, "format");
             out.format = fmt.empty() ? 1 : std::atoi(fmt.c_str());
             if (out.format > kFormat)
-                return fail("Ce fichier vient d'une version plus r\xC3\xA9" "cente de XpgAnalyzer (" + at(kv, "version")
+                return fail("Ce fichier vient d'une version plus r\xC3\xA9" "cente d'IHM Studio (" + at(kv, "version")
                             + ") : cette version (" + std::string(XPG_ANALYZER_VERSION) + ") ne sait pas le lire.");
             const std::string& g = at(kv, "genre");
             if (g == "operateurs") out.genre = Genre::Operators;

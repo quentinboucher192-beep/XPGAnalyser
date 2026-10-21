@@ -60,12 +60,12 @@
          dossier) ne le detourne pas. Une autre SDL3 : msbuild /p:SDL3_DIR=dossier. -->
     <SDL3_DIR>$(ProjectDir)third_party\SDL3</SDL3_DIR>
     <!-- 1.12.0 : deux applications, un seul projet. XpgEdition = API (par defaut) ou IHM
-         (msbuild /p:XpgEdition=IHM ; build.bat compile les deux) : XpgAnalyzer-API.exe et
-         XpgAnalyzer-IHM.exe, cote a cote dans build\<Configuration>, chacun ses .obj. -->
+         (msbuild /p:XpgEdition=IHM ; build.bat compile les deux) : API-Studio.exe et
+         IHM-Studio.exe, cote a cote dans build\<Configuration>, chacun ses .obj. -->
     <XpgEdition Condition="'$(XpgEdition)'==''">API</XpgEdition>
     <OutDir>$(ProjectDir)build\$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)build\obj\$(Configuration)-$(XpgEdition)\</IntDir>
-    <TargetName>XpgAnalyzer-$(XpgEdition)</TargetName>
+    <TargetName>$(XpgEdition)-Studio</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>

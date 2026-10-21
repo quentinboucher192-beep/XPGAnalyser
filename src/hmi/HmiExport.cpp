@@ -566,7 +566,7 @@ Bytes exportPdf(const ExportTable& t) {
         // Le pied : la page.
         const std::string foot = "Page " + std::to_string(p + 1) + " / " + std::to_string(pages);
         textAt(W - M - textWidth(foot, 8, false), M - 4, foot, 8, false, 0.45);
-        textAt(M, M - 4, toWinAnsi("XpgAnalyzer - IHM"), 8, false, 0.45);
+        textAt(M, M - 4, toWinAnsi("IHM Studio"), 8, false, 0.45);
         streams.push_back(std::move(s));
     }
 

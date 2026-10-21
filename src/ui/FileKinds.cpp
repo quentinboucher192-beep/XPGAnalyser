@@ -131,10 +131,10 @@ namespace ui::files {
         if (ext == "7z") return "Archive 7-Zip";
         if (familyOfExtension(ext) == Family::Archive) return "Archive " + upper(ext);
         // l'appli
-        if (ext == "xpgproj") return "Projet XpgAnalyzer";
-        if (ext == "xpgtheme") return "Th\xC3\xA8me XpgAnalyzer";
-        if (ext == "xpgvues") return "Vues XpgAnalyzer";
-        if (ext == "xpglayout") return "Disposition XpgAnalyzer";
+        if (ext == "xpgproj") return "Projet API Studio";
+        if (ext == "xpgtheme") return "Th\xC3\xA8me";
+        if (ext == "xpgvues") return "Vues IHM Studio";
+        if (ext == "xpglayout") return "Disposition";
         // les autres courants
         if (ext == "docx" || ext == "doc") return "Document Word";
         if (ext == "exe") return "Application";

@@ -18,7 +18,7 @@
 //  (simCenterGo) : un onglet, une ligne, une variable, Simuler...
 // =============================================================================
 #include "Screens.hpp"
-#include "../../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - la simulation de l'IHM seule
+#include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio - la simulation de l'IHM seule
 
 #include "../ApiPanes.hpp"
 #include "../App.hpp"
@@ -565,7 +565,7 @@ void MainAnalysisScreen::pollSimCenter(double t) {
         st.slowSeen = slow.lastSerial();
     }
     // Les variables de l'automate que l'IHM lit : un parcours de toute l'IHM, toutes les dix secondes.
-    if (core::hasApi() && t - st.plcReadsAt > 10.0) {      // 1.12.14 : XPGAnalyser IHM - pas d'automate
+    if (core::hasApi() && t - st.plcReadsAt > 10.0) {      // 1.12.14 : IHM Studio - pas d'automate
         st.plcReadsAt = t;
         st.plcReads = hmiReadsOfPlc().size();
     }
@@ -740,7 +740,7 @@ ss::Snapshot MainAnalysisScreen::simSnapshot(double t) {
         s.equip.list.push_back(std::move(one));
     }
     s.equip.exchangesPerSecond = st.exchangeRate;
-    // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - rien de lui dans la Vue d'ensemble (ni preparation,
+    // 1.12.14 : IHM Studio n'a pas d'automate - rien de lui dans la Vue d'ensemble (ni preparation,
     // ni cycle, ni section) ; les forcages restent : les cases des esclaves simules.
     if (!core::hasApi()) {
         ss::PlcFacts none;
@@ -1231,7 +1231,7 @@ bool MainAnalysisScreen::openSimCenter(const std::string& key) {
         auto pane = std::make_unique<SimOverviewPane>("analysis.sim.ensemble.volet", model, hosts);
         frame = std::make_unique<ApiFrame>("analysis.sim.ensemble", std::move(pane));
         auto& t = frame->tools();
-        // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - Demarrer et Arreter l'IHM (Simuler, Pause, Un cycle,
+        // 1.12.14 : IHM Studio n'a pas d'automate - Demarrer et Arreter l'IHM (Simuler, Pause, Un cycle,
         // Relancer du cycle 0 preparaient le programme de MAST, qu'il n'a pas).
         const bool plc = core::hasApi();
         if (plc) {
@@ -1288,7 +1288,7 @@ bool MainAnalysisScreen::openSimCenter(const std::string& key) {
         t.add(1, HmiGlyph::Unlock, "Rend les lignes choisies au programme (double-clic : une ligne)", "Rel\xC3\xA2" "cher");
         t.add(2, HmiGlyph::Unlock, "Rend toutes les variables et toutes les cases forc\xC3\xA9" "es", "Tout rel\xC3\xA2" "cher");
         t.separator();
-        if (core::hasApi()) {            // 1.12.14 : XPGAnalyser IHM - pas d'onglet Automate
+        if (core::hasApi()) {            // 1.12.14 : IHM Studio - pas d'onglet Automate
             t.add(3, HmiGlyph::Lock, "Forcer une variable de l'automate (l'onglet Automate, la variable choisie)", "Forcer\xE2\x80\xA6");
             t.add(4, HmiGlyph::Export, "Exporter les for\xC3\xA7" "ages de l'automate dans un fichier (les rejouer plus tard)", "Exporter\xE2\x80\xA6");
             t.separator();
@@ -1510,7 +1510,7 @@ void MainAnalysisScreen::simCenterGo(const std::string& key) {
         return;
     }
     if (key == "sim.run" || key == "sim.pause" || key == "sim.stop" || key == "sim.step" || key == "relancer") {
-        // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - Simuler demarre l'IHM, Arreter l'arrete ; rien ne
+        // 1.12.14 : IHM Studio n'a pas d'automate - Simuler demarre l'IHM, Arreter l'arrete ; rien ne
         // prepare plus le programme de MAST ("La simulation ne se prepare pas - aucune section en ST").
         if (!core::hasApi()) {
             if (key != "sim.pause" && key != "sim.step") (void)topBarLot8Action(key == "sim.stop" ? "hmi.stop" : "hmi.start");
@@ -1633,7 +1633,7 @@ bool MainAnalysisScreen::addSimTrend(const std::string& raw, std::string* why) {
         return false;
     }
     auto& model = *simCenter_->model;
-    if (!core::hasApi()) hmiOnly = true;      // 1.12.14 : XPGAnalyser IHM - pas d'automate a preparer
+    if (!core::hasApi()) hmiOnly = true;      // 1.12.14 : IHM Studio - pas d'automate a preparer
     if (!hmiOnly) {
         // L'automate : prepare au besoin (sans lancer), pour savoir si le chemin existe.
         if (!app_.simulation().attached() && app_.project()) (void)attachSimulation(nullptr);

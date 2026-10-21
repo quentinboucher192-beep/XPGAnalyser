@@ -282,7 +282,7 @@ private:
 HmiImportDialog::HmiImportDialog(Spec spec, Loader loader)
     : menu::WidgetMenu("dialog.hmiImportViews"), spec_(std::make_shared<Spec>(std::move(spec))), loader_(std::move(loader)) {
     if (!spec_->browse.active())
-        spec_->browse = ui::openFile("Paquets XpgAnalyzer|*.xpgvues;*.xpgsymboles;*.xpgtypes;*.xpgfonctions;*.xpgscripts", {}, "Importer");
+        spec_->browse = ui::openFile("Paquets IHM Studio|*.xpgvues;*.xpgsymboles;*.xpgtypes;*.xpgfonctions;*.xpgscripts", {}, "Importer");
 }
 
 menu::MenuTraits HmiImportDialog::traits() const {

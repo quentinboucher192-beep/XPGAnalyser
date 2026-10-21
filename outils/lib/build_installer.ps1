@@ -56,11 +56,13 @@ try {
     $guid = (Get-XpgConfig -Section 'Produit' -Cle 'app_id' -Obligatoire).Trim('{', '}')
     $defs = [ordered]@{
         Nom = Get-XpgConfig -Section 'Produit' -Cle 'nom' -Obligatoire
+        Cle = Get-XpgConfig -Section 'Produit' -Cle 'cle' -Defaut 'XPGAnalyser'            # 1.12.20 : le nom d'origine (registre)
+        Fichier = Get-XpgConfig -Section 'Produit' -Cle 'fichier' -Defaut 'API-IHM-Studio' # 1.12.20 : le nom de l'installateur
         Editeur = Get-XpgConfig -Section 'Produit' -Cle 'editeur' -Obligatoire
         Version = $version
         AppGuid = $guid
-        Exe = Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'XpgAnalyzer-API.exe'
-        ExeIhm = Get-XpgConfig -Section 'Produit' -Cle 'exe_ihm' -Defaut 'XpgAnalyzer-IHM.exe'   # 1.12.0
+        Exe = Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'API-Studio.exe'
+        ExeIhm = Get-XpgConfig -Section 'Produit' -Cle 'exe_ihm' -Defaut 'IHM-Studio.exe'   # 1.12.0
         Description = Get-XpgConfig -Section 'Produit' -Cle 'description' -Defaut ''
         UrlSupport = Get-XpgConfig -Section 'Produit' -Cle 'url_support' -Defaut ''
         Staging = (Get-Item -LiteralPath $st).FullName
@@ -71,8 +73,9 @@ try {
         Racine = $racine
     }
     # Un installateur d'une autre version, a la racine : range dans dist\anciens\ (un seul .exe a la racine).
-    $nomSetup = "{0}-Setup-{1}.exe" -f $defs.Nom, $version
-    foreach ($ancien in @(Get-ChildItem -LiteralPath $racine -Filter ("{0}-Setup-*.exe" -f $defs.Nom) -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne $nomSetup })) {
+    $nomSetup = "{0}-Setup-{1}.exe" -f $defs.Fichier, $version
+    $anciens = @(Get-ChildItem -LiteralPath $racine -Filter ("{0}-Setup-*.exe" -f $defs.Fichier) -File -ErrorAction SilentlyContinue) + @(Get-ChildItem -LiteralPath $racine -Filter ("{0}-Setup-*.exe" -f $defs.Cle) -File -ErrorAction SilentlyContinue)
+    foreach ($ancien in @($anciens | Where-Object { $_.Name -ne $nomSetup })) {
         $rangement = Join-Path $dist 'anciens'
         New-Item -ItemType Directory -Path $rangement -Force | Out-Null
         Move-Item -LiteralPath $ancien.FullName -Destination (Join-Path $rangement $ancien.Name) -Force

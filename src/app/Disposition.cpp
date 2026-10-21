@@ -48,7 +48,7 @@ Catalog build(bool api, bool ihm) {
         {{"dessous", "Sous l'\xC3\xA9" "diteur"}, {"droite", "\xC3\x80 droite de l'\xC3\xA9" "diteur"}},
         {{"ouvert", "Ouvert"}, {"replie", "Repli\xC3\xA9 (Ctrl+J)"}});
     if (api) {
-        // Les panneaux de XPGAnalyser API (Affichage > Panneaux a afficher, d'avant).
+        // Les panneaux de API Studio (Affichage > Panneaux a afficher, d'avant).
         add("configuration", "Configuration de l'automate", "fenetre", Kind::Panel);
         add("rangee", "Rang\xC3\xA9" "e du bas", "fenetre", Kind::Panel);
         add("diagnostics", "Diagnostics", "fenetre", Kind::Panel);
@@ -431,7 +431,7 @@ std::vector<SketchBox> sketch(const Layout& l, bool simulating) {
         box("etat", "Bande d'\xC3\xA9tat", 0.f, 1.f - kStatus, 1.f, kStatus).modeOnly = modeOnly("etat");
         bottom -= kStatus;
     }
-    // XPGAnalyser API : la rangee du bas (Diagnostics, Resume de l'analyse, Etat du projet).
+    // API Studio : la rangee du bas (Diagnostics, Resume de l'analyse, Etat du projet).
     if (on("rangee")) {
         struct Part { const char* id; const char* label; float weight; };
         std::vector<Part> parts;

@@ -38,7 +38,7 @@ public:
     struct Spec {
         disposition::Layout applied;           // la disposition en vigueur
         disposition::Layout mine;              // « Ma disposition » (gardee)
-        std::string         edition;           // "XPGAnalyser IHM"
+        std::string         edition;           // "IHM Studio"
         std::function<void(const disposition::Layout&)> apply;      // Appliquer, OK
         std::function<void(const disposition::Layout&)> keepMine;   // Garder comme « Ma disposition »
         std::function<void()>                           reset;      // Retablir : efface les cles disposition.*

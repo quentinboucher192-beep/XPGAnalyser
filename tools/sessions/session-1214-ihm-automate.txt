@@ -1,5 +1,5 @@
 # =============================================================================
-#  Session 1214 IHM : XPGAnalyser IHM 1.12.14 - plus rien de l'automate.
+#  Session 1214 IHM : IHM Studio 1.12.14 - plus rien de l'automate.
 #  Armoire_Gaz (projet IHM) : chaque ecran de la Simulation (Vue d'ensemble,
 #  IHM, Equipements, Forcages, Courbes, Journal), arretee puis en marche ; F5 et
 #  le clic droit du dossier Simulation (qui preparaient le programme de MAST et

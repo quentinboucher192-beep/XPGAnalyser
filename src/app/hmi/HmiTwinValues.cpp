@@ -1,6 +1,6 @@
 // app/hmi/HmiTwinValues.cpp - les valeurs simulees des jumeaux (lot 18).
 #include "HmiTwinValues.hpp"
-#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de « suit l'automate »
+#include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas de « suit l'automate »
 
 #include "HmiEquipmentHost.hpp"
 #include "HmiPaneKit.hpp"
@@ -2473,7 +2473,7 @@ void TwinValuesController::properties(std::vector<PG::Category>& cats) {
             if (k != hmi::BehaviorKind::FollowPlc || core::hasApi()) kinds.emplace_back(hmi::behaviorKindLabel(k));   // 1.12.0
         a.properties.push_back(prop("Mouvement", b ? std::string(hmi::behaviorKindLabel(b->kind)) : std::string("aucun"), PG::ValueType::Enum,
                                     [this, name, address](std::string_view v) { return setKind(name, address, std::string(v)); },
-                                    // 1.12.2 : « suit l'automate », XPGAnalyser API seulement (comme la valeur).
+                                    // 1.12.2 : « suit l'automate », API Studio seulement (comme la valeur).
                                     std::string("sinus, rampe, al\xC3\xA9" "atoire : entre le minimum et le maximum ; clignote : \xC3\xA0 1 une partie de la p\xC3\xA9riode ; "
                                                 "\xC3\xA9tapes : une liste de valeurs ; recopie : une autre case")
                                         + (core::hasApi() ? " ; suit l'automate : une variable du simulateur." : "."),

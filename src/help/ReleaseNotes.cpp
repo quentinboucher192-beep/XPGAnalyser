@@ -127,6 +127,9 @@ const std::vector<Note>& table() {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
         // 1.12.20 (21/10/2026) : voir docs/LIVRAISON-1.12.20.md (les rappels, suite : finitions, types rappel nommes).
+        note("1.12.20", "G\xC3\xA9n\xC3\xA9ral", Kind::Changed,
+         "DEUX NOMS, DEUX LOGOS : XPGAnalyser API devient API Studio (API-Studio.exe), XPGAnalyser IHM devient IHM Studio (IHM-Studio.exe), chacun avec son logo, de la m\xC3\xAAme famille - API Studio : un barreau de sch\xC3\xA9ma \xC3\xA0 contacts (un contact et sa bobine) ; IHM Studio : un \xC3\xA9" "cran de supervision (un cadran et son aiguille). Le titre de la fen\xC3\xAAtre, \xC3\x80 propos, l'accueil, les rapports et les documents produits disent le nom de l'application lanc\xC3\xA9" "e. Le menu D\xC3\xA9marrer s'appelle API IHM Studio ; l'installateur (API-IHM-Studio-Setup) met \xC3\xA0 jour l'installation en place et retire les anciens raccourcis. Rien ne bouge de tes donn\xC3\xA9" "es ni de tes r\xC3\xA9glages : les dossiers techniques gardent leur nom (Documents\\XPGAnalyser, %APPDATA%\\XpgAnalyzer, XPGAnalyser.ini), et les fichiers .XPG de Control Expert s'ouvrent comme avant.",
+         "menu-aide", ""),
         note("1.12.20", "Scripts", Kind::Changed,
          "LES RAPPELS, FINITIONS : une expression de propri\xC3\xA9t\xC3\xA9 ne modifie rien - une LAMBDA d'une fx qui \xC3\xA9" "crit une variable, appelle une fonction qui en \xC3\xA9" "crit une ou une fonction IHM_ qui agit est refus\xC3\xA9" "e, avec la raison (dans un script ou une action, elle reste permise). Un nom de fonction en texte l\xC3\xA0 o\xC3\xB9 va un rappel ('Valider') : un avertissement et sa correction d'un clic (Diagnostics, Ctrl+.). Une variable rappel r\xC3\xA9manente qui re\xC3\xA7oit une LAMBDA : averti (elle ne se garde pas). Corrig\xC3\xA9 : G\xC3\xA9n\xC3\xA9rer prenait les param\xC3\xA8tres d'une LAMBDA pour des variables inexistantes, et \xC2\xAB fonction inconnue : LAMBDA \xC2\xBB dans un script qui en passe une.",
          "rappels", ""),
@@ -257,7 +260,7 @@ const std::vector<Note>& table() {
          "CE QUI M\xC3\x88NE AU TYPE ATTENDU : l\xC3\xA0 o\xC3\xB9 un INT est attendu, l'aide propose les INT, puis ce qui y m\xC3\xA8ne - BATEAU[0] (\xE2\x86\x92 .Taille : INT), Capitaine. (\xE2\x86\x92 .Age : INT), Flotte['\xE2\x80\xA6'][0].Taille -, \xC3\xA0 toute profondeur : variables, membres, variables syst\xC3\xA8me, fonctions (par ce qu'elles rendent), \xC3\xA9num\xC3\xA9rations. Le s\xC3\xA9lecteur de valeur s'ouvre aussi \xC3\xA0 toute profondeur ; filtr\xC3\xA9 par type, il garde le chemin qui m\xC3\xA8ne \xC3\xA0 chaque valeur du type.",
          "aide-saisie", ""),
         note("1.12.14", "Simulation", Kind::Fixed,
-         "XPGANALYSER IHM NE PR\xC3\x89PARE PLUS L'AUTOMATE : fini \xC2\xAB aucune section en ST de la t\xC3\xA2" "che MAST \xC2\xBB. Simuler (F5), le clic droit du dossier Simulation et les courbes d\xC3\xA9marrent l'IHM ; la Vue d'ensemble, le journal, les for\xC3\xA7" "ages, les courbes et la barre du haut ne parlent que de l'IHM. XPGAnalyser (avec l'automate) ne change pas.",
+         "IHM STUDIO NE PR\xC3\x89PARE PLUS L'AUTOMATE : fini \xC2\xAB aucune section en ST de la t\xC3\xA2" "che MAST \xC2\xBB. Simuler (F5), le clic droit du dossier Simulation et les courbes d\xC3\xA9marrent l'IHM ; la Vue d'ensemble, le journal, les for\xC3\xA7" "ages, les courbes et la barre du haut ne parlent que de l'IHM. API Studio (avec l'automate) ne change pas.",
          "simulation", ""),
         // 1.12.13 (16/10/2026) : voir docs/LIVRAISON-1.12.13.md.
         note("1.12.13", "Tableau", Kind::New,
@@ -499,7 +502,7 @@ const std::vector<Note>& table() {
          "LA LISTE, LA LISTE D\xC3\x89ROULANTE ET LE TABLEAU suivent une variable : \xC2\xAB \xC3\x89l\xC3\xA9ments depuis \xC2\xBB (une \xC3\xA9num\xC3\xA9ration, une variable LIST, VECTOR, MAP, un tableau, une expression a;b;c) remplace la liste \xC3\xA9" "crite \xC3\xA0 la main, aussi pour les boutons radio et le s\xC3\xA9lecteur. La Liste devient une commande : un clic \xC3\xA9" "crit sa ligne, la ligne choisie se surligne, elle d\xC3\xA9" "file. Le Tableau a des \xC2\xAB Lignes depuis \xC2\xBB une variable : une ligne par \xC3\xA9l\xC3\xA9ment, autant qu'elle en a, les colonnes de son type (membres, Item1..., Cl\xC3\xA9 et Valeur), il d\xC3\xA9" "file et s'exporte entier.",
          "objet-liste", ""),
         note("1.12.2", "Application", Kind::Changed,
-         "Programmation g\xC3\xA9n\xC3\xA9rale n'a plus la branche Variables employ\xC3\xA9" "es : o\xC3\xB9 une variable sert se trouve par IHM > Rechercher ou Maj+F12 dans un \xC3\xA9" "diteur. XPGAnalyser IHM ne parle plus d'automate : l'inspecteur, les bulles, la Communication (ses \xC3\xA9quipements seulement), le diagnostic syst\xC3\xA8me et le guide disent les mots de l'IHM.",
+         "Programmation g\xC3\xA9n\xC3\xA9rale n'a plus la branche Variables employ\xC3\xA9" "es : o\xC3\xB9 une variable sert se trouve par IHM > Rechercher ou Maj+F12 dans un \xC3\xA9" "diteur. IHM Studio ne parle plus d'automate : l'inspecteur, les bulles, la Communication (ses \xC3\xA9quipements seulement), le diagnostic syst\xC3\xA8me et le guide disent les mots de l'IHM.",
          "variables-ihm", ""),
         // 1.12.1 (10/10/2026 en fin de nuit) : les enumerations natives des objets, les operateurs,
         // les instructions et les types de la liste du 10/10.
@@ -515,19 +518,19 @@ const std::vector<Note>& table() {
         note("1.12.1", "Natives", Kind::New,
          "LES TYPES : CHAR et WSTRING (des textes), DATE, TIME_OF_DAY (TOD) et DATE_AND_TIME (DT), leurs litt\xC3\xA9raux (D#2026-10-09, TOD#14:30:00, DT#2026-10-09-14:30:00) et leur calcul (DT + TIME, DT - DT, TOD + TIME sur 24 h, DATE - DATE) ; MAINTENANT(), DT_TO_DATE, DT_TO_TOD, CONCAT_DATE_TOD. Des locales, des param\xC3\xA8tres, des op\xC3\xA9randes (pas encore des variables IHM). Les g\xC3\xA9n\xC3\xA9riques ANY_NUM, ANY_INT, ANY_REAL, ANY_BIT, ANY_STRING, ANY_DATE expliqu\xC3\xA9s dans la fiche des types (F1 sur leur nom).",
          "reference", ""),
-        // 1.12.0 (10/10/2026 dans la nuit) : deux applications (XPGAnalyser API, XPGAnalyser IHM), les
+        // 1.12.0 (10/10/2026 dans la nuit) : deux applications (API Studio, IHM Studio), les
         // projets separes, l'IHM sans automate, les natives (la branche, les fiches), les couleurs,
         // l'aleatoire et les enumerations natives.
         note("1.12.0", "Deux applications", Kind::New,
-         "DEUX APPLICATIONS : XPGAnalyser API (le programme de l'automate : l'analyse, les variables, les tables, sa simulation) et XPGAnalyser IHM (les vues, les scripts, les \xC3\xA9quipements, la simulation de l'IHM seule). Chacune son programme (XpgAnalyzer-API.exe, XpgAnalyzer-IHM.exe), son raccourci, ses r\xC3\xA9glages, son rangement des projets (projets\\api, projets\\ihm), ses menus, son aide et ses tutoriels ; un seul installateur pose les deux.",
+         "DEUX APPLICATIONS : API Studio (le programme de l'automate : l'analyse, les variables, les tables, sa simulation) et IHM Studio (les vues, les scripts, les \xC3\xA9quipements, la simulation de l'IHM seule). Chacune son programme (API-Studio.exe, IHM-Studio.exe), son raccourci, ses r\xC3\xA9glages, son rangement des projets (projets\\api, projets\\ihm), ses menus, son aide et ses tutoriels ; un seul installateur pose les deux.",
          "ihm", ""),
         note("1.12.0", "Projets", Kind::Changed,
-         "LES PROJETS DE LA 1.11 : au premier lancement, chaque application recopie sa moiti\xC3\xA9 de chaque projet dans son rangement (XPGAnalyser API : tout sauf l'IHM ; XPGAnalyser IHM : l'IHM, ses donn\xC3\xA9" "es, ses versions) ; les originaux ne bougent pas, les projets r\xC3\xA9" "cents suivent. Un projet de l'autre application est refus\xC3\xA9 avec la raison.",
+         "LES PROJETS DE LA 1.11 : au premier lancement, chaque application recopie sa moiti\xC3\xA9 de chaque projet dans son rangement (API Studio : tout sauf l'IHM ; IHM Studio : l'IHM, ses donn\xC3\xA9" "es, ses versions) ; les originaux ne bougent pas, les projets r\xC3\xA9" "cents suivent. Un projet de l'autre application est refus\xC3\xA9 avec la raison.",
          "versions", ""),
-        note("1.12.0", "XPGAnalyser IHM", Kind::New,
+        note("1.12.0", "IHM Studio", Kind::New,
          "UNE IHM SANS AUTOMATE : les noms de l'automate qu'une IHM de la 1.11 lisait deviennent ses variables (m\xC3\xAAme nom, m\xC3\xAAme type, m\xC3\xAAme valeur initiale ; un DDT un type IHM, un tableau, un bloc ses entr\xC3\xA9" "es et sorties ; dossier Automate) ; l'automate reli\xC3\xA9 par Modbus TCP devient l'\xC3\xA9quipement \xC2\xAB Automate \xC2\xBB, ses variables situ\xC3\xA9" "es y sont li\xC3\xA9" "es. API. et les noms de l'automate n'existent plus : la v\xC3\xA9rification les dit inconnus.",
          "variables-ihm", ""),
-        note("1.12.0", "XPGAnalyser IHM", Kind::Changed,
+        note("1.12.0", "IHM Studio", Kind::Changed,
          "LA SIMULATION DE L'IHM SEULE : ni simulateur de l'automate, ni D\xC3\xA9marrer l'API, ni Les deux ; ni SYS.Plc, ni SYS.Comm, ni objets de diagnostic de l'automate. Les \xC3\xA9quipements simul\xC3\xA9s r\xC3\xA9pondent toujours.",
          "simulation", ""),
         note("1.12.0", "Natives", Kind::New,
@@ -536,8 +539,8 @@ const std::vector<Note>& table() {
         note("1.12.0", "Natives", Kind::New,
          "COULEURS ET AL\xC3\x89" "ATOIRE : RGB, RGBA, HSL, COULEUR_MELANGER, COULEUR_DEGRADE, COULEUR_ECLAIRCIR, COULEUR_ASSOMBRIR, COULEUR_OPACITE, COULEUR_CONTRASTE et leurs composantes ; RANDOM, RANDOM_INT, RANDOM_REAL, RANDOM_SEED. Les \xC3\xA9num\xC3\xA9rations natives (TRANSITION#Fondu...) dans les fonctions IHM_, que la v\xC3\xA9rification conna\xC3\xAEt. Une fonction du projet de m\xC3\xAAme nom passe avant la native.",
          "reference", ""),
-        note("1.12.0", "XPGAnalyser API", Kind::Changed,
-         "XPGAnalyser API SANS IHM : ni colonne ni filtre IHM des variables, ni + Variable IHM des tables d'animation, ni cartes de l'IHM dans la vue d'ensemble de la simulation ; l'accueil, l'arbre, la barre du haut, les raccourcis et Aller \xC3\xA0 de l'automate seul.",
+        note("1.12.0", "API Studio", Kind::Changed,
+         "API Studio SANS IHM : ni colonne ni filtre IHM des variables, ni + Variable IHM des tables d'animation, ni cartes de l'IHM dans la vue d'ensemble de la simulation ; l'accueil, l'arbre, la barre du haut, les raccourcis et Aller \xC3\xA0 de l'automate seul.",
          "simulation", ""),
         // 1.11.24 (09/10/2026 en fin de soiree) : les reperes dans les symboles (la campagne d'essais
         // demandee par le client, sa capture : saisie : variable inconnue (V[0]).IN_Percent), et les
@@ -725,7 +728,7 @@ const std::vector<Note>& table() {
         // 1.11.12 (08/10/2026, les deux rapports de plantage du 05/10 a 22:59 et 23:00) : un clic
         // dans l'arbre sur Fonctions ou Popups d'un symbole fermait le logiciel.
         note("1.11.12", "\xC3\x89" "diteur IHM", Kind::Fixed,
-         "Un clic dans l'arbre sur Fonctions ou Popups d'un symbole fermait XPGAnalyser (rapports de plantage du 05/10 \xC3\xA0 22 h 59 et 23 h 00) : la barre d'\xC3\xA9tat lisait la phrase de la partie hors de sa liste, qui n'avait pas suivi les deux parties de la 1.11.10. Le clic ouvre maintenant le sous-onglet Fonctions ou Popups du symbole, et chaque partie a sa phrase.",
+         "Un clic dans l'arbre sur Fonctions ou Popups d'un symbole fermait l'application (rapports de plantage du 05/10 \xC3\xA0 22 h 59 et 23 h 00) : la barre d'\xC3\xA9tat lisait la phrase de la partie hors de sa liste, qui n'avait pas suivi les deux parties de la 1.11.10. Le clic ouvre maintenant le sous-onglet Fonctions ou Popups du symbole, et chaque partie a sa phrase.",
          "symboles", ""),
         // 1.11.11 (05/10/2026 au soir, la capture du client : =GetActiveCount(30) dans un symbole,
         // refusee) : les fonctions des symboles dans les expressions, et l'aide a la saisie.
@@ -899,7 +902,7 @@ const std::vector<Note>& table() {
          "Chaque proposition de l'aide \xC3\xA0 la saisie a son pictogramme : la nature par la forme, la provenance par la couleur du trait - automate en bleu, IHM en turquoise, objet en violet, syst\xC3\xA8me en ambre, standard en gris. Au pied de la liste, la l\xC3\xA9gende des couleurs, puis l'ic\xC3\xB4ne et les mots de la ligne choisie.",
          "", "aide:aide-saisie", "", "aide-saisie"}),
         note("1.11.2", "Application", Kind::New,
-         "XPGAnalyser ne s'ouvre qu'une fois par session Windows : relanc\xC3\xA9 (raccourci, menu D\xC3\xA9marrer, un projet ou un export \xC3\xA0 ouvrir), il ram\xC3\xA8ne sa fen\xC3\xAAtre au premier plan, et le projet demand\xC3\xA9 s'y ouvre, apr\xC3\xA8s \xC2\xAB Les enregistrer d'abord \xC2\xBB ou \xC2\xAB Les abandonner \xC2\xBB si celui qui est ouvert est modifi\xC3\xA9.",
+         "L'application ne s'ouvre qu'une fois par session Windows : relanc\xC3\xA9 (raccourci, menu D\xC3\xA9marrer, un projet ou un export \xC3\xA0 ouvrir), il ram\xC3\xA8ne sa fen\xC3\xAAtre au premier plan, et le projet demand\xC3\xA9 s'y ouvre, apr\xC3\xA8s \xC2\xAB Les enregistrer d'abord \xC2\xBB ou \xC2\xAB Les abandonner \xC2\xBB si celui qui est ouvert est modifi\xC3\xA9.",
          "api-bandeaux", ""),
         note("1.11.2", "Application", Kind::Fixed,
          "Projets r\xC3\xA9" "cents, \xC2\xAB Ouvrir\xE2\x80\xA6 \xC2\xBB et \xC2\xAB Fermer le projet \xC2\xBB (le menu de la puce du projet, la palette) demandent d'abord d'enregistrer le projet ouvert s'il est modifi\xC3\xA9, comme l'accueil : ses modifications ne se perdent plus. Ctrl+O ouvre un projet depuis l'\xC3\xA9" "cran du projet.",
@@ -987,7 +990,7 @@ const std::vector<Note>& table() {
          "\xC2\xAB Remise en place\xE2\x80\xA6 \xC2\xBB est plus courte, avant chaque \xC2\xAB \xC3\x80 toi \xC2\xBB et quand tu sautes \xC3\xA0 une \xC3\xA9tape.",
          "objet-vanne", ""),
         note("1.11.1", "Aide", Kind::Fixed,
-         "La fiche A4 des raccourcis porte le nom de l'appli, XPGAnalyser, comme \xC3\x80 propos et Signaler un probl\xC3\xA8me.",
+         "La fiche A4 des raccourcis porte le nom de l'appli, comme \xC3\x80 propos et Signaler un probl\xC3\xA8me.",
          "page-raccourcis", ""),
         note("1.11.1", "Aide", Kind::Fixed,
          "Le \xC2\xAB Voir aussi \xC2\xBB de la page du menu Aide m\xC3\xA8ne aux nouveaut\xC3\xA9s et \xC3\xA0 leurs rep\xC3\xA8res orange, plus aux nouveaut\xC3\xA9s de la 1.10.",
@@ -1198,7 +1201,7 @@ const std::vector<Note>& table() {
          "Les exemples de SEL lus \xC3\xA0 l'envers sont corrig\xC3\xA9s : SEL(G, si FAUX, si VRAI), comme la norme CEI.",
          "champs-expressions", ""),
         note("1.10.2", "Application", Kind::New,
-         "Si XPGAnalyser plante ou ne r\xC3\xA9pond plus : un rapport dans crashs, la fen\xC3\xAAtre au lancement suivant et Aide \xE2\x80\xBA Journal interne.",
+         "Si l'application plante ou ne r\xC3\xA9pond plus : un rapport dans crashs, la fen\xC3\xAAtre au lancement suivant et Aide \xE2\x80\xBA Journal interne.",
          "plantages", ""),
         note("1.10.1", "Simulation", Kind::Fixed,
          "Simulation \xC2\xB7 IHM : la vue suit en direct, m\xC3\xAAme apr\xC3\xA8s un passage sur un autre onglet (la vanne restait \xC3\xA0 12 %). Une seule horloge, onglet visible ou cach\xC3\xA9 ; la vue relit aussit\xC3\xB4t 14 fa\xC3\xA7ons d'\xC3\xA9" "crire.",
@@ -1296,7 +1299,7 @@ const std::vector<Note>& table() {
         // Le menu Aide range (chantier R2, les six rapides).
         card("Aide", "", {"1.10.menu-aide", "1.10.0", "Le menu Aide rang\xC3\xA9",
          "Quatre blocs (chercher et lire, les guides, apprendre, nouveaut\xC3\xA9s et support), une seule entr\xC3\xA9" "e "
-         "Nouveaut\xC3\xA9s\xE2\x80\xA6, les rep\xC3\xA8res en case \xC3\xA0 cocher, \xC3\x80 propos d'XPGAnalyser ; une pastille sur Aide dit ce qui reste \xC3\xA0 voir.",
+         "Nouveaut\xC3\xA9s\xE2\x80\xA6, les rep\xC3\xA8res en case \xC3\xA0 cocher, \xC3\x80 propos ; une pastille sur Aide dit ce qui reste \xC3\xA0 voir.",
          "", "projet:", "analysis.topbar#aide", "menu-aide"}),
         card("Aide", "", {"1.10.nouveautes", "1.10.0", "Les nouveaut\xC3\xA9s se voient",
          "Cette fen\xC3\xAAtre \xC3\xA0 chaque nouvelle version, les rep\xC3\xA8res orange NOUVEAU dans l'application, "

@@ -6,7 +6,7 @@
 //      python3 tools/guide-ihm/generer_guide.py --cpp src/hmi/HmiGuideText.cpp
 // =============================================================================
 #include "HmiGuide.hpp"
-#include "../core/Edition.hpp"   // 1.12.2 : les mots de XPGAnalyser IHM
+#include "../core/Edition.hpp"   // 1.12.2 : les mots de IHM Studio
 
 namespace hmi::guide {
 
@@ -247,7 +247,7 @@ const std::vector<Topic>& topics() {
                          "aussit\xC3\xB4t.\tLe code du grafcet : r\xC3\xA9" "ceptivit\xC3\xA9s et actions, "
                          "en direct avec les sections\nLe menu Aide rang\xC3\xA9\tQuatre blocs, une seule "
                          "entr\xC3\xA9" "e Nouveaut\xC3\xA9s..., les rep\xC3\xA8res en case \xC3\xA0 cocher, "
-                         "\xC3\x80 propos d'XPGAnalyser.\tLe menu Aide : chercher, les guides, apprendre, "
+                         "\xC3\x80 propos d'IHM Studio.\tLe menu Aide : chercher, les guides, apprendre, "
                          "les nouveaut\xC3\xA9s\nLes nouveaut\xC3\xA9s se voient\tLa fen\xC3\xAAtre des "
                          "nouveaut\xC3\xA9s \xC3\xA0 la premi\xC3\xA8re ouverture, les rep\xC3\xA8res orange "
                          "NOUVEAU, l'aide F1 en orange.\tLes nouveaut\xC3\xA9s et leurs rep\xC3\xA8res orange", {}},
@@ -367,8 +367,8 @@ const std::vector<Topic>& topics() {
                          "(\xC3\xA0 droite : combien il en reste \xC3\xA0 voir), la case **Rep\xC3\xA8res "
                          "des nouveaut\xC3\xA9s** (coch\xC3\xA9" "e : les \xC3\xA9l\xC3\xA9ments nouveaux "
                          "sont encadr\xC3\xA9s en orange), le **Journal interne**, **\xC3\x80 propos "
-                         "d'XPGAnalyser\xE2\x80\xA6**.", {}},
-             {K::Heading, "\xC3\x80 propos d'XPGAnalyser", {}},
+                         "d'IHM Studio\xE2\x80\xA6**.", {}},
+             {K::Heading, "\xC3\x80 propos d'IHM Studio", {}},
              {K::Paragraph, "La version, la date de construction, les dossiers de l'application "
                          "(donn\xC3\xA9" "es, projets, biblioth\xC3\xA8que, captures, r\xC3\xA9glages, "
                          "programme), le projet ouvert (son nom, ses sections, ses vues) et les composants "
@@ -382,7 +382,7 @@ const std::vector<Topic>& topics() {
                          "menu principal\xE2\x80\xA6), avec leur raccourci \xC3\xA0 droite.", {}},
          },
          {"reperes-nouveautes"},
-         {"menu Aide", "Aide", "centre d'aide", "F1", "Raccourcis clavier", "guides", "didacticiel", "Nouveaut\xC3\xA9s", "Rep\xC3\xA8res des nouveaut\xC3\xA9s", "\xC3\x80 propos d'XPGAnalyser", "support", "Copier les informations pour le support", "pastille", "Aller \xC3\xA0 / Faire", "Signaler un probl\xC3\xA8me", "notes de version", "favoris", "r\xC3\xA9" "cents"},
+         {"menu Aide", "Aide", "centre d'aide", "F1", "Raccourcis clavier", "guides", "didacticiel", "Nouveaut\xC3\xA9s", "Rep\xC3\xA8res des nouveaut\xC3\xA9s", "\xC3\x80 propos d'IHM Studio", "support", "Copier les informations pour le support", "pastille", "Aller \xC3\xA0 / Faire", "Signaler un probl\xC3\xA8me", "notes de version", "favoris", "r\xC3\xA9" "cents"},
          {"api", "ihm"},
          {},
          "",
@@ -391,21 +391,21 @@ const std::vector<Topic>& topics() {
          {}, "1.10"},
         // ---- Demarrer / plantages
         {"plantages", "Plantages et blocages : le rapport, l'historique interne", "D\xC3\xA9marrer",
-         "Si XPGAnalyser plante ou ne r\xC3\xA9pond plus, il \xC3\xA9" "crit un rapport dans le dossier "
+         "Si IHM Studio plante ou ne r\xC3\xA9pond plus, il \xC3\xA9" "crit un rapport dans le dossier "
          "crashs (\xC3\xA0 c\xC3\xB4t\xC3\xA9 des r\xC3\xA9glages) : la version, le syst\xC3\xA8me, la pile "
          "d'appels et son historique interne. Au lancement suivant, une fen\xC3\xAAtre le signale.",
          {
              {K::Heading, "Le plantage", {}},
-             {K::Paragraph, "Une petite fen\xC3\xAAtre s'ouvre tout de suite : \xC2\xAB XPGAnalyser a "
+             {K::Paragraph, "Une petite fen\xC3\xAAtre s'ouvre tout de suite : \xC2\xAB IHM Studio a "
                          "rencontr\xC3\xA9 un probl\xC3\xA8me et doit se fermer. Un rapport a "
                          "\xC3\xA9t\xC3\xA9 enregistr\xC3\xA9 : \xE2\x80\xA6 \xC2\xBB. Le rapport est "
                          "d\xC3\xA9j\xC3\xA0 \xC3\xA9" "crit quand elle s'ouvre. Sous Windows, un fichier "
                          ".dmp (minidump) l'accompagne : il sert au d\xC3\xA9veloppeur.", {}},
              {K::Heading, "Le blocage", {}},
              {K::Paragraph, "La boucle de l'application bat \xC3\xA0 chaque image. Sans battement depuis 8 s, "
-                         "XPGAnalyser \xC3\xA9" "crit un rapport \xC2\xAB blocage \xC2\xBB (la pile du fil "
+                         "IHM Studio \xC3\xA9" "crit un rapport \xC2\xAB blocage \xC2\xBB (la pile du fil "
                          "principal, ce qu'il \xC3\xA9tait en train de faire) et demande : **Attendre** ou "
-                         "**Fermer XPGAnalyser**. S'il repart, une note le dit dans le journal des messages, "
+                         "**Fermer**. S'il repart, une note le dit dans le journal des messages, "
                          "avec la dur\xC3\xA9" "e et le chemin du rapport.", {}},
              {K::Heading, "Au lancement suivant", {}},
              {K::Paragraph, "La fen\xC3\xAAtre \xC2\xAB Un plantage s'est produit le \xE2\x80\xA6 \xC2\xBB (ou "
@@ -433,7 +433,7 @@ const std::vector<Topic>& topics() {
                          "que rien ne va mal : il ne ralentit pas l'application.", {}},
          },
          {"menu-aide"},
-         {"plantage", "blocage", "rapport de plantage", "crashs", "Journal interne", "historique des appels", "ne r\xC3\xA9pond plus", "Attendre", "Fermer XPGAnalyser", "minidump"},
+         {"plantage", "blocage", "rapport de plantage", "crashs", "Journal interne", "historique des appels", "ne r\xC3\xA9pond plus", "Attendre", "Fermer", "minidump"},
          {"api", "ihm"},
          {},
          "",
@@ -2711,7 +2711,7 @@ const std::vector<Topic>& topics() {
                          "fen\xC3\xAAtre sans rien changer.", {}},
              {K::Bullet, "Un fichier fait par une version plus r\xC3\xA9" "cente est refus\xC3\xA9 : la "
                          "fen\xC3\xAAtre le dit, et Importer est gris\xC3\xA9 : \xC2\xAB ce fichier vient "
-                         "d'une version plus r\xC3\xA9" "cente de XpgAnalyzer (\xE2\x80\xA6) : cette version "
+                         "d'une version plus r\xC3\xA9" "cente d'IHM Studio (\xE2\x80\xA6) : cette version "
                          "(1.11.2) ne sait pas le lire (\xE2\x80\xA6). Rien n'est import\xC3\xA9 ; mets "
                          "l'application \xC3\xA0 jour pour l'importer. \xC2\xBB", {}},
              {K::Bullet, "Un mod\xC3\xA8le de vue (`.xpgmodele`) ne s'importe pas ici : Importer\xE2\x80\xA6 "
@@ -4358,7 +4358,7 @@ const std::vector<Topic>& topics() {
                          "temps de r\xC3\xA9ponse). L'espion garde les 20 000 derni\xC3\xA8res trames. "
                          "**Effacer**, **Exporter CSV** (dossier exports/).", {}},
              {K::Warning, "La capture sous Windows demande **Npcap**, install\xC3\xA9 \xC3\xA0 part "
-                         "(npcap.com) : XpgAnalyzer ne l'installe pas et ne l'embarque pas, il le charge "
+                         "(npcap.com) : IHM Studio ne l'installe pas et ne l'embarque pas, il le charge "
                          "s'il est l\xC3\xA0. La version gratuite de Npcap s'installe sur 5 PC au plus dans "
                          "une entreprise (plus Wireshark et Nmap) ; au-del\xC3\xA0, sa licence OEM "
                          "(payante). Sous Linux : libpcap, sinon un socket AF_PACKET (droits root). "
@@ -14225,7 +14225,7 @@ const std::vector<Topic>& topics() {
                          "(l'IHM prend du retard).\n`SYS.PaintTime`\tREAL\tLe dernier dessin de la vue, en "
                          "ms (mesur\xC3\xA9 par l'\xC3\xA9" "cran).\n`SYS.ExpressionCount`\tINT\tLes "
                          "expressions \xC3\xA9valu\xC3\xA9" "es au dernier rafra\xC3\xAE" "chissement de la "
-                         "vue.\n`SYS.StationMode`\tBOOL\tL'IHM tourne en poste d'exploitation (xpg_analyzer "
+                         "vue.\n`SYS.StationMode`\tBOOL\tL'IHM tourne en poste d'exploitation (IHM-Studio "
                          "--ihm : plein \xC3\xA9" "cran, sans "
                          "l'\xC3\xA9" "diteur).\n`SYS.StationScreens`\tINT\tLes \xC3\xA9" "crans du poste : "
                          "1, plus les \xC3\xA9" "crans secondaires qui montrent une vue.", {}},
@@ -14246,7 +14246,7 @@ const std::vector<Topic>& topics() {
                          "syst\xC3\xA8me : Windows, Linux ou macOS.\n`SYS.OsUser`\tSTRING\tLe compte du "
                          "syst\xC3\xA8me qui fait tourner l'application.\n`SYS.ProcessorCount`\tINT\tLes "
                          "processeurs du poste.\n`SYS.AppName`\tSTRING\tL'application : "
-                         "XpgAnalyzer.\n`SYS.AppVersion`\tSTRING\tSa version.\n`SYS.Language`\tSTRING\tLa "
+                         "IHM Studio.\n`SYS.AppVersion`\tSTRING\tSa version.\n`SYS.Language`\tSTRING\tLa "
                          "langue de l'IHM en marche (fr, en...) ; l'\xC3\xA9" "crire la change : "
                          "SYS.Language := 'en'.\n`SYS.LanguageName`\tSTRING\tSon nom (Fran\xC3\xA7" "ais, "
                          "English...).\n`SYS.LanguageCount`\tINT\tLes langues du "
@@ -15485,7 +15485,7 @@ const std::vector<Topic>& topics() {
                          "D\xC3\xA9" "boguer pas \xC3\xA0 pas \xC2\xBB et \xC2\xAB Modifier pendant une "
                          "pause \xC2\xBB le font faire : Aide \xE2\x80\xBA Nouveaut\xC3\xA9s\xE2\x80\xA6 "
                          "\xE2\x80\xBA Versions pr\xC3\xA9" "c\xC3\xA9" "dentes \xE2\x80\xBA La 1.8.0.", {}},
-             {K::Paragraph, "1.12.14 : dans XPGAnalyser IHM, Simuler (F5), le clic droit du dossier Simulation et les courbes d\xC3\xA9marrent l'IHM seule ; la Vue d'ensemble, le journal, les for\xC3\xA7" "ages, les courbes et la barre du haut ne parlent que de l'IHM.", {}, "1.12.14"},
+             {K::Paragraph, "1.12.14 : dans IHM Studio, Simuler (F5), le clic droit du dossier Simulation et les courbes d\xC3\xA9marrent l'IHM seule ; la Vue d'ensemble, le journal, les for\xC3\xA7" "ages, les courbes et la barre du haut ne parlent que de l'IHM.", {}, "1.12.14"},
              {K::Heading, "La barre", {}, "1.10"},
              {K::Paragraph, "La barre de l'onglet pilote l'IHM, plus l'automate : ses deux pastilles (IHM, API) "
                          "et leurs boutons, la vue en cours, l'utilisateur, les rep\xC3\xA8res, le zoom de "
@@ -15940,7 +15940,7 @@ const std::vector<Topic>& topics() {
          {}},
         // ---- Tester et livrer / poste-exploitation
         {"poste-exploitation", "Le poste d'exploitation : l'IHM seule, en plein \xC3\xA9" "cran", "Tester et livrer",
-         "Sur le PC de l'atelier, l'IHM sans l'\xC3\xA9" "diteur : xpg_analyzer --ihm <dossier du projet> "
+         "Sur le PC de l'atelier, l'IHM sans l'\xC3\xA9" "diteur : IHM-Studio --ihm <dossier du projet> "
          "ouvre la vue de d\xC3\xA9marrage sur tout l'\xC3\xA9" "cran, lit l'automate (ou le simulateur), et "
          "ne rend la main qu'avec le mot de passe de sortie. D'autres moniteurs montrent chacun une vue en "
          "direct.",
@@ -15960,7 +15960,7 @@ const std::vector<Topic>& topics() {
                          "`~/.config/autostart/xpg-poste.desktop`. **Un seul projet par PC** (en choisir un "
                          "autre remplace le premier), et un projet **FINISH**. Rien pour les autres "
                          "utilisateurs du PC ; **Ne plus d\xC3\xA9marrer** le retire ;", {}},
-             {K::Bullet, "**En ligne de commande** : `xpg_analyzer --ihm \"D:\\Projets\\Armoire_Gaz\"` (ou "
+             {K::Bullet, "**En ligne de commande** : `IHM-Studio --ihm \"D:\\Projets\\Armoire_Gaz\"` (ou "
                          "`--poste`) ouvre le projet et d\xC3\xA9marre le poste, sans passer par "
                          "l'\xC3\xA9" "diteur.", {}},
              {K::Heading, "Ce que fait le poste", {}},
@@ -16035,7 +16035,7 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Un PC sans personne : l'ouverture de session automatique", {}},
              {K::Paragraph, "Le poste d\xC3\xA9marre \xC3\xA0 l'ouverture de la session ; pour qu'un PC qui "
                          "red\xC3\xA9marre (une coupure de courant) retrouve son poste sans personne, la "
-                         "session doit s'ouvrir toute seule. XpgAnalyzer ne le r\xC3\xA8gle pas : c'est un "
+                         "session doit s'ouvrir toute seule. IHM Studio ne le r\xC3\xA8gle pas : c'est un "
                          "r\xC3\xA9glage du syst\xC3\xA8me, \xC3\xA0 faire une fois, avec un compte local "
                          "d\xC3\xA9" "di\xC3\xA9 au poste (pas celui d'un administrateur) :", {}},
              {K::Bullet, "**Windows 10 / 11** : d\xC3\xA9sactiver d'abord \xC2\xAB Pour plus de "
@@ -16693,7 +16693,7 @@ const std::vector<Topic>& topics() {
          "",
          {}, "1.10"},
     };
-    // 1.12.2 : XPGAnalyser IHM n'a pas d'automate - ses mots (HmiGuide.cpp, ihmWorded).
+    // 1.12.2 : IHM Studio n'a pas d'automate - ses mots (HmiGuide.cpp, ihmWorded).
     if (core::hasApi()) return all;
     static const std::vector<Topic> ihm = ihmWorded(all);
     return ihm;

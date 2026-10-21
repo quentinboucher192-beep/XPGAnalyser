@@ -139,7 +139,7 @@ const Entry* Store::find(Id variable, std::string_view path) const {
 
 std::string serialize(const Store& s) {
     std::string out(kHeader);
-    out += "\n# XPGAnalyser : les variables remanentes du poste d'exploitation. Ecrit par le poste.\n";
+    out += "\n# IHM Studio : les variables remanentes du poste d'exploitation. Ecrit par le poste.\n";
     out += "poste projet=" + quote(s.project) + " date=" + quote(s.date) + "\n";
     for (const auto& e : s.entries)
         out += "valeur variable=" + std::to_string(e.cell.variable) + " nom=" + quote(e.cell.name) + " declare=" + quote(e.cell.declared)

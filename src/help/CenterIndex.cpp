@@ -144,8 +144,8 @@ Index Index::build(const Inputs& in) {
         ix.add(Topic{"api-" + s.key, c, {}, s.title, s.summary, Source::ApiPage, s.key, s.kind, s.headings});
     };
 
-    // 1.12.0 : CHAQUE APPLICATION, SON AIDE. XPGAnalyser API : Demarrer (sans la page
-    // de l'IHM), l'automate, les macros, les blocs ; XPGAnalyser IHM : Demarrer (sans les
+    // 1.12.0 : CHAQUE APPLICATION, SON AIDE. API Studio : Demarrer (sans la page
+    // de l'IHM), l'automate, les macros, les blocs ; IHM Studio : Demarrer (sans les
     // pages de l'API), l'IHM, les expressions. Les deux : les raccourcis, les notes, Signaler.
     const bool api = core::hasApi(), ihm = core::hasIhm();
 
@@ -155,7 +155,7 @@ Index Index::build(const Inputs& in) {
     for (const auto& s : in.api)
         if (api && s.group == "start") fromApi(s, Chapter::Start);
 
-    // L'IHM : les chapitres 2 a 8 du guide, chacun un sous-chapitre. XPGAnalyser IHM n'a pas
+    // L'IHM : les chapitres 2 a 8 du guide, chacun un sous-chapitre. IHM Studio n'a pas
     // d'automate : ni « API. » (variables-api), ni les deux simulations (simulation-api-ihm).
     for (const auto& s : in.guide)
         if (ihm && s.group != kGuideStart && s.group != kGuidePlc && (api || (s.key != "variables-api" && s.key != "simulation-api-ihm")))
@@ -190,7 +190,7 @@ Index Index::build(const Inputs& in) {
     // dans hmi::exprguide::all() (T3) et les passe dans in.expressions (cle,
     // titre, resume) ; sans eux, la meme liste ecrite ici (cles et titres de T3).
     if (!ihm) {
-        // XPGAnalyser API : les expressions sont celles de l'IHM.
+        // API Studio : les expressions sont celles de l'IHM.
     } else if (!in.expressions.empty()) {
         for (const auto& s : in.expressions)
             ix.add(Topic{"expr-" + s.key, Chapter::Expressions, {}, s.title, s.summary, Source::Expression, s.key, {}, 0});
@@ -207,7 +207,7 @@ Index Index::build(const Inputs& in) {
 
     // Notes de version : une page par version, la plus recente d'abord.
     for (const auto& r : notes::releases())
-        ix.add(Topic{"notes-" + std::string(r.version), Chapter::Notes, {}, "XPGAnalyser " + std::string(r.version),
+        ix.add(Topic{"notes-" + std::string(r.version), Chapter::Notes, {}, core::productName() + " " + std::string(r.version),
                      notes::summary(r.version), Source::NotesPage, std::string(r.version), {}, 0});
 
     // Signaler un probleme.

@@ -2,6 +2,7 @@
 //  help/ProblemReport.cpp - 1.11 (chantier T2) : Signaler un probleme
 // =============================================================================
 #include "ProblemReport.hpp"
+#include "../core/Edition.hpp"   // 1.12.20 : le nom de l'application (API Studio, IHM Studio)
 
 #include "../export/DocKit.hpp"
 
@@ -163,7 +164,7 @@ std::vector<std::string> filterLog(const std::vector<std::string>& lines, std::s
 }
 
 std::string text(const Form& f, const Facts& facts) {
-    std::string out = "Signaler un probl\xC3\xA8me \xE2\x80\x94 XPGAnalyser ";
+    std::string out = "Signaler un probl\xC3\xA8me \xE2\x80\x94 " + core::productName() + " ";
     out += facts.version.empty() ? std::string("?") : facts.version;
     out += "\n\n";
     section(out, "Ce qui s'est pass\xC3\xA9", f.what);

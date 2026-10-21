@@ -123,14 +123,14 @@ std::string launcherText(const std::string& exe, const std::string& projectName,
         // CRLF : le format des fichiers de commandes. chcp 65001 : le chemin du
         // programme est ecrit en UTF-8.
         o << "@echo off\r\n"
-          << "rem Poste d'exploitation - " << projectName << " (xpg_analyzer)\r\n"
+          << "rem Poste d'exploitation - " << projectName << " (IHM Studio)\r\n"
           << "rem L'IHM seule, en plein ecran. Le projet est le dossier de ce fichier :\r\n"
           << "rem copie avec lui, il marche encore. Ctrl+Alt+Q pour en sortir.\r\n"
           << "chcp 65001 >nul\r\n"
           << "start \"\" " << winQuoted(exe) << " --ihm \"%~dp0.\"\r\n";
     } else {
         o << "#!/bin/sh\n"
-          << "# Poste d'exploitation - " << projectName << " (xpg_analyzer)\n"
+          << "# Poste d'exploitation - " << projectName << " (IHM Studio)\n"
           << "# L'IHM seule, en plein ecran. Le projet est le dossier de ce fichier :\n"
           << "# copie avec lui, il marche encore. Ctrl+Alt+Q pour en sortir.\n"
           << "cd \"$(dirname \"$0\")\" || exit 1\n"
@@ -223,7 +223,7 @@ std::string desktopEntry(const std::string& projectName, const std::string& exe,
     o << "[Desktop Entry]\n"
       << "Type=Application\n"
       << "Name=" << autostartName(projectName) << "\n"
-      << "Comment=Poste d'exploitation : l'IHM seule, en plein ecran (xpg_analyzer) - un projet par PC\n"
+      << "Comment=Poste d'exploitation : l'IHM seule, en plein ecran (IHM Studio) - un projet par PC\n"
       << "Exec=" << desktopArg(exe) << " --ihm " << desktopArg(projectFolder) << "\n"
       << "Terminal=false\n"
       << "X-GNOME-Autostart-enabled=true\n";

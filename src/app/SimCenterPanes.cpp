@@ -2,7 +2,7 @@
 //  app/SimCenterPanes.cpp - lot API 8 : Simulation > Forcages, Courbes, Journal
 // =============================================================================
 #include "SimCenter.hpp"
-#include "../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - sans automate
+#include "../core/Edition.hpp"   // 1.12.14 : IHM Studio - sans automate
 #include "SimCenterKit.hpp"
 
 #include "../ui/Commands.hpp"
@@ -143,7 +143,7 @@ SimForcingPane::SimForcingPane(std::string id, std::shared_ptr<SimCenterModel> m
         cols[i].title = tableModel_->headerText(i);
         cols[i].width = widths[i];
     }
-    if (!core::hasApi()) cols[Model::CProgram].visible = false;   // 1.12.14 : XPGAnalyser IHM - pas de programme
+    if (!core::hasApi()) cols[Model::CProgram].visible = false;   // 1.12.14 : IHM Studio - pas de programme
     table_->setColumns(std::move(cols));
     table_->setSelectionMode(ui::SelectionMode::Extended);
     table_->setTooltip(core::hasApi() ? "Tous les for\xC3\xA7" "ages de la simulation : l'automate, ceux pos\xC3\xA9s depuis l'IHM, les cases des esclaves simul\xC3\xA9s. "
@@ -263,7 +263,7 @@ void SimForcingPane::onPaint(const ui::PaintContext& ctx) {
     const std::string big = list.empty() ? std::string("Aucun for\xC3\xA7" "age")
                                          : ss::plural(list.size(), "variable forc\xC3\xA9" "e", "variables forc\xC3\xA9" "es");
     drawBold(ctx, {head.x + 38.f, head.y + 11.f}, big, gfx::FontId{17}, c.text);
-    // 1.12.14 : XPGAnalyser IHM - ni programme, ni automate : les esclaves simules.
+    // 1.12.14 : IHM Studio - ni programme, ni automate : les esclaves simules.
     std::string line = list.empty() ? (core::hasApi() ? std::string("Le programme \xC3\xA9" "crit librement dans toutes ses variables ; les esclaves simul\xC3\xA9s r\xC3\xA9pondent ce que dit leur m\xC3\xA9moire.")
                                                       : std::string("Les esclaves simul\xC3\xA9s r\xC3\xA9pondent ce que dit leur m\xC3\xA9moire."))
                      : core::hasApi() ? "Automate " + std::to_string(plc) + kMid + "depuis l'IHM " + std::to_string(ihm) + kMid + "esclaves simul\xC3\xA9s " + std::to_string(eq)
@@ -294,7 +294,7 @@ void SimForcingPane::onPaint(const ui::PaintContext& ctx) {
 SimTrendsPane::SimTrendsPane(std::string id, std::shared_ptr<SimCenterModel> model, SimCenterHosts hosts)
     : ui::Widget(std::move(id)), model_(std::move(model)), hosts_(std::move(hosts)) {
     field_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(this->id() + ".ajouter")));
-    // 1.12.14 : XPGAnalyser IHM - les variables de l'IHM seules.
+    // 1.12.14 : IHM Studio - les variables de l'IHM seules.
     field_->setPlaceholder(core::hasApi() ? "Ajouter une variable (automate ou IHM) : Armoires[0].ana.PT1.mes, Pompe_Marche\xE2\x80\xA6"
                                           : "Ajouter une variable de l'IHM : Consigne, Cuves[0].Niveau\xE2\x80\xA6");
     field_->setTooltip(core::hasApi() ? "Un chemin de l'automate (un membre, une case d'un tableau) ou une variable de l'IHM (\"ihm:\" devant, si le nom "
@@ -788,7 +788,7 @@ SimJournalPane::SimJournalPane(std::string id, std::shared_ptr<SimCenterModel> m
         cols[i].sortable = false;
     }
     cols[Model::CCycle].align = ui::Align::End;
-    if (!core::hasApi()) cols[Model::CCycle].visible = false;     // 1.12.14 : XPGAnalyser IHM - pas de cycle d'automate
+    if (!core::hasApi()) cols[Model::CCycle].visible = false;     // 1.12.14 : IHM Studio - pas de cycle d'automate
     table_->setColumns(std::move(cols));
     table_->setSelectionMode(ui::SelectionMode::Single);
     links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>&) {

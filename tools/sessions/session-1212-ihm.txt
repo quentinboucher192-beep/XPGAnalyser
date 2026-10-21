@@ -1,5 +1,5 @@
 # =============================================================================
-#  Session 1212 IHM : XPGAnalyser IHM (1.12.10 a 1.12.12), XpgAnalyzer-IHM.exe -
+#  Session 1212 IHM : IHM Studio (1.12.10 a 1.12.12), IHM-Studio.exe -
 #  les lots F, G et H de l'audit des objets. Armoire_Gaz (migre par la 1.12.1),
 #  avec les vues des sessions 1122 a 1129 et, par demo1212, la vue Vue_LotFGH :
 #    1. la vue dans l'editeur : la jauge, le bargraphe, la cuve et le curseur

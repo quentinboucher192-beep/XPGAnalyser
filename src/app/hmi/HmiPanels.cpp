@@ -1,7 +1,7 @@
 #include "HmiPanels.hpp"
 #include "../../hmi/HmiRoles.hpp"   // 1.12.6 (lot B) : le role de chaque propriete
 #include "../../hmi/HmiNatives.hpp"   // 1.12.1 : les enumerations natives des proprietes
-#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'automate
+#include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'automate
 #include "HmiParamPanes.hpp"   // 1.9 : les parametres des popups
 #include "HmiObjectAlarmPanes.hpp"    // 1.9 : la cloche des alarmes par defaut
 #include "HmiTreeData.hpp"            // 1.10.3 (Q1103) : l'objet deplie par familles, comme l'arbre
@@ -1204,14 +1204,14 @@ const std::vector<Category>& categories() {
                                      hmi::Kind::LanguageSelector, hmi::Kind::ThemeSelector,  // lot 13 : la langue, le theme
                                      hmi::Kind::Container}},
         // Lot 14 : la communication avec l'automate reel.
-        {"Communication", {hmi::Kind::CommStatus, hmi::Kind::PlcDiagnostic}},   // 1.12.0 : pas dans XPGAnalyser IHM (retire plus bas)
+        {"Communication", {hmi::Kind::CommStatus, hmi::Kind::PlcDiagnostic}},   // 1.12.0 : pas dans IHM Studio (retire plus bas)
         {"M\xC3\xA9" "dias", {hmi::Kind::Video, hmi::Kind::AnimatedImage, hmi::Kind::AnimatedGif}},
         // Lot 8 : se connecter, se deconnecter, voir qui est connecte, changer son
         // mot de passe, gerer les comptes.
         {"Utilisateurs", {hmi::Kind::LoginMenuButton, hmi::Kind::LoginPanel, hmi::Kind::LogoutButton, hmi::Kind::UserInfo,
                           hmi::Kind::PasswordChange, hmi::Kind::UserManager}},
     };
-    // 1.12.0 : XPGAnalyser IHM n'a pas d'automate du projet - ni l'etat de sa liaison, ni son diagnostic.
+    // 1.12.0 : IHM Studio n'a pas d'automate du projet - ni l'etat de sa liaison, ni son diagnostic.
     if (!core::hasApi()) {
         static const std::vector<Category> h = [] {
             std::vector<Category> out;
@@ -1924,7 +1924,7 @@ const std::vector<KeyInfo>& keyInfos() {
         {"pointsYMin", "Points depuis : Y min", PG::ValueType::Text, {}, "En bas du cadre. Vide : le plus petit Y des donn\xC3\xA9" "es."},
         {"pointsYMax", "Points depuis : Y max", PG::ValueType::Text, {}, "En haut du cadre. Vide : le plus grand Y des donn\xC3\xA9" "es."},
         {"clip", "Rogner le contenu", PG::ValueType::Boolean, {}, ""},
-        {"variable", core::hasApi() ? "Variable API" : "Variable", PG::ValueType::Text, {},          // 1.12.2 : XPGAnalyser IHM
+        {"variable", core::hasApi() ? "Variable API" : "Variable", PG::ValueType::Text, {},          // 1.12.2 : IHM Studio
          core::hasApi() ? "La variable de l'automate que l'objet repr\xC3\xA9sente." : "La variable que l'objet repr\xC3\xA9sente."},
         {"refresh", "Rafra\xC3\xAE" "chissement (ms)", PG::ValueType::Integer, {}, ""},
         {"access", "Niveau d'acc\xC3\xA8s", PG::ValueType::Integer, {},

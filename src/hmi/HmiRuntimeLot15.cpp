@@ -87,7 +87,7 @@ std::string valueText(const sim::Value& v) {
 } // namespace
 
 std::string Runtime::stateSnapshot() const {
-    std::string out = "# XpgAnalyzer - l'etat du poste d'exploitation\n";
+    std::string out = "# IHM Studio - l'etat du poste d'exploitation\n";
     out += "heure\t" + dateStampOf(now_) + "\n";
     if (const auto* v = viewOf(current_)) out += "vue\t" + escaped(v->name) + "\n";
     if (project_) {

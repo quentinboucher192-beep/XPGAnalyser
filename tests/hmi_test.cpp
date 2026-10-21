@@ -5903,7 +5903,7 @@ void variablesPubliquesLot9() {
     same(read("SYS.Running"), "TRUE", "SYS.Running");
     same(read("SYS.PlcConnected"), "FALSE", "SYS.PlcConnected : sans automate");
     same(read("SYS.PlcStatus"), "Absent", "SYS.PlcStatus : Absent");
-    same(read("SYS.AppName"), "XpgAnalyzer", "SYS.AppName");
+    same(read("SYS.AppName"), "IHM Studio", "SYS.AppName");
     {
         const std::string dt = read("SYS.DateTime");
         check(dt.size() == 19 && dt[4] == '-' && dt[10] == ' ' && dt[13] == ':', "SYS.DateTime : AAAA-MM-JJ hh:mm:ss (" + dt + ")");
@@ -12310,7 +12310,7 @@ void simulateurModbusLot14(const std::string& xpg) {
     check(link.read("UDINT_1174", v) && v.asInteger() == 70000, "l'IHM lit UDINT_1174 = 70000 par Modbus");
     check(link.read("NomArmoireModifs[3]", v) && v.asInteger() == 9, "... NomArmoireModifs[3] = 9");
     check(link.read("Armoires[0].ana.PT1.mes", v) && std::fabs(v.asReal() - 7.25) < 1e-9, "... Armoires[0].ana.PT1.mes = 7,25 (%MF3000)");
-    check(link.diagnostics().device.find("XpgAnalyzer") != std::string::npos, "l'identification : XpgAnalyzer (" + link.diagnostics().device + ")");
+    check(link.diagnostics().device.find("IHM Studio") != std::string::npos, "l'identification : IHM Studio (" + link.diagnostics().device + ")");
     check(link.write("UDINT_1174", sim::Value::integer(sim::Type::UDInt, 777)), "l'IHM \xC3\xA9" "crit UDINT_1174");
     link.cycle();
     bank->exchange(rt);
@@ -14709,7 +14709,7 @@ void symbolesExportImport1112() {
         for (const auto& f : serializeProject(back->content))
             if (f.data) items.emplace_back("ihm/" + f.path, std::string(f.data->begin(), f.data->end()));
         auto r = pk::fromZip(zipStored(items));
-        check(!r && pk::tooNew(r.error()) && r.error().context.find("version plus r\xC3\xA9" "cente de XpgAnalyzer (1.12.0)") != std::string::npos
+        check(!r && pk::tooNew(r.error()) && r.error().context.find("version plus r\xC3\xA9" "cente d'IHM Studio (1.12.0)") != std::string::npos
                   && r.error().context.find("Rien n'est import\xC3\xA9") != std::string::npos,
               "un paquet au format 3 (\xC3\xA9" "crit par la 1.12.0) est refus\xC3\xA9, et la raison le dit : " + (r ? std::string() : r.error().context));
         // Le format du paquet connu, mais un projet IHM plus recent (une methode d'objet de demain).
@@ -18969,7 +18969,7 @@ void operateurs110() {
         for (const auto& f : files) {
             const std::string text(f.data->begin(), f.data->end());
             if (f.path == files.front().path) index = text;
-            if (text.find("nom=\"Sym_Pompe\"") != std::string::npos && text.rfind("# XpgAnalyzer - vue", 0) == 0) symbolFile = text;
+            if (text.find("nom=\"Sym_Pompe\"") != std::string::npos && text.rfind("# IHM Studio - vue", 0) == 0) symbolFile = text;
         }
         check(index.find("operateur_type") != std::string::npos && symbolFile.find("operateur_symbole") != std::string::npos,
               "enregistr\xC3\xA9s : operateur_type dans l'index, operateur_symbole dans le fichier du symbole");

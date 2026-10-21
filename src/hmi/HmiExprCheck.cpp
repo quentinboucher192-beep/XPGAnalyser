@@ -7,7 +7,7 @@
 #include "HmiExprCheck.hpp"
 #include "HmiCalc.hpp"   // 1.12.7 : les constantes qualifiees (Reglages.Seuils)
 #include "../sim/DialectLib.hpp"   // 1.12.7 : les natives de std::numeric, de <bit>, les templates
-#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'espace API.
+#include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'espace API.
 #include "HmiNatives.hpp"   // 1.12.0 : les couleurs, l'aleatoire
 #include "HmiCallCheck.hpp"     // 1.11.20 : les appels, controles comme le moteur les fait
 #include "HmiOverload.hpp"      // 1.11.20 : les signatures et les surcharges
@@ -855,7 +855,7 @@ private:
         // 1.11.1 (API-M) : API.<globale>, API.<Unite>.<variable>, jusqu'au bout des
         // membres (une variable IHM, une vue nommee API sont vues avant ; un
         // parametre de la vue aussi). Sans le modele : rien a dire.
-        if (core::hasApi() && up(root) == "API" && !segs.empty() && !segs.front().index && !(p && pub::viewNamed(*p, root))) {   // 1.12.0 : pas dans XPGAnalyser IHM
+        if (core::hasApi() && up(root) == "API" && !segs.empty() && !segs.front().index && !(p && pub::viewNamed(*p, root))) {   // 1.12.0 : pas dans IHM Studio
             if (!ctx_.plc.api) return v;
             std::string apiText = root;
             for (const auto& sg : segs) {

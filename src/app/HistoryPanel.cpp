@@ -318,7 +318,7 @@ void HistoryPanel::onPaint(const ui::PaintContext& ctx) {
     float cx = d.x + 12.f;
     const float cy = d.y + kHeaderH + 8.f;
     for (int i = 0; i < 4; ++i) {
-        // 1.12.0 : une application, un domaine - ni API ni IHM a choisir (XPGAnalyser API ou IHM).
+        // 1.12.0 : une application, un domaine - ni API ni IHM a choisir (API Studio ou IHM).
         if ((i == 1 || i == 2) && core::edition() != core::Edition::Both) {
             chips_[i] = {};
             continue;

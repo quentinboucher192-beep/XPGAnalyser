@@ -4,7 +4,7 @@
 //  Quand XPG_TEXT_CENSUS est pose (le chemin d'un fichier), chaque texte que le
 //  rendu dessine pendant l'image courante est garde, mot pour mot ; la commande
 //  capture des sessions l'ecrit dans ce fichier a cote de l'image. Ce que
-//  l'ecran dit se relit alors sans OCR : une session de XPGAnalyser IHM qui passe
+//  l'ecran dit se relit alors sans OCR : une session de IHM Studio qui passe
 //  partout dit si un mot de l'automate traine encore quelque part.
 //  Sans la variable : un booleen lu, rien d'autre.
 // =============================================================================

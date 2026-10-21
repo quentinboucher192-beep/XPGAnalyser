@@ -1,4 +1,5 @@
 #include "EditionMigration.hpp"
+#include "../core/Edition.hpp"   // 1.12.20 : le nom de l'application (API Studio, IHM Studio)
 
 #include "../hmi/HmiStandalone.hpp"   // l'IHM recopiee, rendue autonome
 #include "../hmi/HmiStore.hpp"
@@ -178,7 +179,7 @@ MigrationReport migrateLegacyProjects(const fs::path& legacyRoot, const fs::path
     }
     // Le marqueur : fait, et ce qui l'a ete (pour qui se demande d'ou viennent ces copies).
     std::ofstream o(editionRoot / kMarker, std::ios::binary | std::ios::trunc);
-    o << "# XPGAnalyser 1.12 - les projets de la 1.11 recopies ici le " << nowText() << "\n";
+    o << "# " << core::productName() << " - les projets de la 1.11 recopies ici le " << nowText() << "\n";
     o << "# (les originaux sont restes dans le dossier parent ; ce fichier dit que c'est fait)\n";
     for (const auto& [a, b] : r.copied) o << "copie : " << a << " -> " << b << "\n";
     for (const auto& s : r.skipped) o << "laisse : " << s << "\n";

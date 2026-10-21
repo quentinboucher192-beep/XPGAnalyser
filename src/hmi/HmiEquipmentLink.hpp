@@ -82,7 +82,7 @@ struct Member {
 };
 // Les membres d'une structure (un type IHM du projet) ; vide : pas une structure connue.
 [[nodiscard]] std::vector<Member> membersOf(const Project&, std::string_view type);
-// Les DDT de l'automate (XPGAnalyser API), donnes par l'application quand le programme change ; nuls :
+// Les DDT de l'automate (API Studio), donnes par l'application quand le programme change ; nuls :
 // seuls les types IHM se lient.
 void setPlcTypes(std::shared_ptr<const params::PlcTypes>);
 // Le type de la structure qu'un chemin designe (P1, Pompes[2], le parametre type d'une popup ou

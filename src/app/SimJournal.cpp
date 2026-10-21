@@ -2,7 +2,7 @@
 //  app/SimJournal.cpp - lot API 8 : le journal de la simulation
 // =============================================================================
 #include "SimJournal.hpp"
-#include "../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - sans automate
+#include "../core/Edition.hpp"   // 1.12.14 : IHM Studio - sans automate
 #include "../ui/TextSearch.hpp"     // 1.12.19 : la recherche commune
 
 #include <algorithm>
@@ -222,7 +222,7 @@ std::string SimJournal::defaultExplanation(std::string_view kind, SimSource sour
                    : "Le programme a chang\xC3\xA9 sans arr\xC3\xAAter la simulation : les valeurs sont gard\xC3\xA9" "es, le nouveau code tourne d\xC3\xA8s le cycle suivant.";
     if (kind == "point-arret" || kind == "arret")
         return "La simulation s'est mise en pause sur un point d'arr\xC3\xAAt : tu peux lire les valeurs de la ligne, puis continuer.";
-    if (kind == "ihm-demarrage")       // 1.12.14 : XPGAnalyser IHM - sans automate
+    if (kind == "ihm-demarrage")       // 1.12.14 : IHM Studio - sans automate
         return core::hasApi() ? "L'IHM tourne sur l'automate simul\xC3\xA9 : ses vues lisent et \xC3\xA9" "crivent ses variables."
                               : "L'IHM tourne : ses vues lisent et \xC3\xA9" "crivent ses variables, et celles de ses \xC3\xA9quipements.";
     if (kind == "ihm-arret")
@@ -268,7 +268,7 @@ std::string SimJournal::line(const SimEvent& e) {
 }
 
 std::string SimJournal::csv() const {
-    // 1.12.14 : XPGAnalyser IHM - pas de cycle d'automate : pas de colonne Cycle.
+    // 1.12.14 : IHM Studio - pas de cycle d'automate : pas de colonne Cycle.
     const bool cycles = core::hasApi();
     std::string out = std::string("Heure;") + (cycles ? "Cycle;" : "") + "Source;Gravit\xC3\xA9;Genre;\xC3\x89v\xC3\xA9nement;Ce que \xC3\xA7" "a veut dire;R\xC3\xA9p\xC3\xA9t\xC3\xA9\r\n";
     for (const auto& e : events_)

@@ -139,7 +139,7 @@ public:
     // programme et non melangees a lui.
     // 1.12.0 : chaque application a son rangement - projets\api, projets\ihm.
     [[nodiscard]] static std::filesystem::path projectsRoot();
-    // 1.12.0 : XPGAnalyser IHM - Projet > Nouveau projet (un dossier d'IHM, sans programme).
+    // 1.12.0 : IHM Studio - Projet > Nouveau projet (un dossier d'IHM, sans programme).
     void newHmiProject();
 
     [[nodiscard]] std::shared_ptr<const domain::Project> project() const noexcept { return project_; }

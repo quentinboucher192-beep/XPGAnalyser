@@ -28,7 +28,7 @@
 
 #include "HmiModel.hpp"
 #include "HmiRoles.hpp"           // 1.12.6 (lot B) : le role (et le type) de chaque propriete
-#include "../core/Edition.hpp"   // 1.12.0 : les domaines de XPGAnalyser IHM
+#include "../core/Edition.hpp"   // 1.12.0 : les domaines de IHM Studio
 #include "HmiKeys.hpp"            // 1.11.23 : SYS.Key.<touche>
 #include "HmiObjectAlarms.hpp"   // 1.11.1 (decision 108) : les alarmes d'un objet (Vue.Objet.Alarmes.<alarme>)
 #include "HmiTemplates.hpp"
@@ -69,7 +69,7 @@ inline constexpr std::string_view kSysDomains[] = {
     "Souris et clavier",            // 1.11.23 : 14 - la souris, les touches, les raccourcis ; SYS.Key.<touche>
 };
 inline constexpr std::size_t kSysDomainCount = sizeof(kSysDomains) / sizeof(kSysDomains[0]);
-// 1.12.0 : XPGAnalyser IHM n'a pas d'automate - ni le domaine Automate (SYS.Plc...), ni
+// 1.12.0 : IHM Studio n'a pas d'automate - ni le domaine Automate (SYS.Plc...), ni
 // Communication (la liaison vers l'automate du projet) : ils ne se montrent pas (arbre,
 // volet, selecteurs, aide a la saisie). Le moteur les garde (des projets de la 1.11).
 [[nodiscard]] inline bool sysDomainShown(std::size_t domain) noexcept { return core::hasApi() || (domain != 6 && domain != 12); }
@@ -226,7 +226,7 @@ inline constexpr SysVar kSysVars[] = {
     {"OsName",              9, "STRING", "Son syst\xC3\xA8me : Windows, Linux ou macOS."},
     {"OsUser",              9, "STRING", "Le compte du syst\xC3\xA8me qui fait tourner l'application."},
     {"ProcessorCount",      9, "INT",    "Les processeurs du poste."},
-    {"AppName",             9, "STRING", "L'application : XpgAnalyzer."},
+    {"AppName",             9, "STRING", "L'application : IHM Studio."},
     {"AppVersion",          9, "STRING", "Sa version."},
     {"Language",            9, "STRING", "La langue de l'IHM en marche (fr, en...) ; l'\xC3\xA9" "crire la change : SYS.Language := 'en'."},
     // lot 13 : les langues (Configuration > Langues)
@@ -287,7 +287,7 @@ inline constexpr SysVar kSysVars[] = {
     {"EquipOfflineNames",   12, "STRING", "Leurs noms, s\xC3\xA9par\xC3\xA9s par des virgules ('' : tous r\xC3\xA9pondent)."},
     {"EquipSimulated",      12, "INT",    "Les \xC3\xA9quipements simul\xC3\xA9s (leur m\xC3\xA9moire dans l'application)."},
     // lot 14 : le poste d'exploitation
-    {"StationMode",         7, "BOOL",   "L'IHM tourne en poste d'exploitation (xpg_analyzer --ihm : plein \xC3\xA9" "cran, sans l'\xC3\xA9" "diteur)."},
+    {"StationMode",         7, "BOOL",   "L'IHM tourne en poste d'exploitation (IHM-Studio --ihm : plein \xC3\xA9" "cran, sans l'\xC3\xA9" "diteur)."},
     {"StationScreens",      7, "INT",    "Les \xC3\xA9" "crans du poste : 1, plus les \xC3\xA9" "crans secondaires qui montrent une vue."},
     // lot 14 : les notifications, les rapports, l'acces web
     {"NotifyEnabled",       3, "BOOL",   "Les notifications des alarmes sont actives (Configuration > Notifications)."},

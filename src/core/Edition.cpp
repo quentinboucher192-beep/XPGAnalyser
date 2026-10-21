@@ -31,8 +31,12 @@ std::string_view editionLabel() noexcept {
 }
 
 std::string productName() {
-    const auto label = editionLabel();
-    return label.empty() ? std::string(XPG_ANALYZER_NAME) : std::string(XPG_ANALYZER_NAME) + " " + std::string(label);
+    switch (edition()) {      // 1.12.20 : API Studio, IHM Studio ; les deux ensemble (les essais) : API IHM Studio
+        case Edition::Api: return XPG_PRODUCT_API;
+        case Edition::Ihm: return XPG_PRODUCT_IHM;
+        case Edition::Both: break;
+    }
+    return XPG_ANALYZER_NAME;
 }
 
 } // namespace core

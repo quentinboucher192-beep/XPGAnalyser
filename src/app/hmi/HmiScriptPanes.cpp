@@ -508,7 +508,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
                     }
                     const std::string name = v->name + "_scripts" + std::string(hmi::scriptfile::kExtension);
                     const std::weak_ptr<char> alive = alive_;
-                    if (!ui::browsePath(ui::saveFile("Scripts XPGAnalyser|*.xpgst", ui::pathIn(hmiProjectFolder(), "exports"),
+                    if (!ui::browsePath(ui::saveFile("Scripts IHM Studio|*.xpgst", ui::pathIn(hmiProjectFolder(), "exports"),
                                                      "Exporter les scripts de " + v->name),
                                         name, [this, alive](std::string path) {
                                             if (alive.expired()) return;
@@ -524,7 +524,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
                     if (hosts_.importAny) hosts_.importAny();
                 } else {
                     const std::weak_ptr<char> alive = alive_;
-                    if (!ui::browsePath(ui::openFile("Scripts XPGAnalyser|*.xpgst;*.st;*.txt", ui::pathIn(hmiProjectFolder(), "exports"),
+                    if (!ui::browsePath(ui::openFile("Scripts IHM Studio|*.xpgst;*.st;*.txt", ui::pathIn(hmiProjectFolder(), "exports"),
                                                      "Importer des scripts"),
                                         {}, [this, alive](std::string path) {
                                             if (alive.expired()) return;

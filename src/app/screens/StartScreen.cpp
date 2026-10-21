@@ -25,7 +25,7 @@
 //  de le relire du disque.
 // =============================================================================
 #include "../../help/Novelties.hpp"     // 1.10 (chantier P)
-#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API, XPGAnalyser IHM
+#include "../../core/Edition.hpp"   // 1.12.0 : API Studio, IHM Studio
 #include "Screens.hpp"
 
 #include "../App.hpp"
@@ -653,7 +653,7 @@ std::vector<start::ProjectEntry> StartupScreen::readRecent(std::string& autostar
         e.recentRank = i;
         std::error_code ec;
         e.isFolder = project::ProjectStore::isProjectFolder(e.path);
-        // 1.12.0 : XPGAnalyser IHM n'ouvre pas les exports de Control Expert (des recents de la 1.11).
+        // 1.12.0 : IHM Studio n'ouvre pas les exports de Control Expert (des recents de la 1.11).
         if (!core::hasApi() && !e.isFolder && fs::exists(e.path, ec)) continue;
         if (e.isFolder) {
             // A project folder knows its own name and state; a bare export does
@@ -664,7 +664,7 @@ std::vector<start::ProjectEntry> StartupScreen::readRecent(std::string& autostar
                 // distingue pas deux affaires.
                 e.name = leafName(e.path);
                 if (e.name.empty()) e.name = m->name;
-                if (core::hasApi()) e.cpu = prettyCpu(m->cpuReference);   // 1.12.0 : pas d'automate dans XPGAnalyser IHM
+                if (core::hasApi()) e.cpu = prettyCpu(m->cpuReference);   // 1.12.0 : pas d'automate dans IHM Studio
                 e.state = m->state;
                 e.stamp = m->modified;
             }
@@ -1311,7 +1311,7 @@ void StartupScreen::supprimerProjet() {
 // est la (MainAnalysisScreen::takePendingApiTutorial).
 void StartupScreen::showTutorial() {
     if (!claimDialog()) return;
-    // 1.12.0 : XPGAnalyser IHM - la visite « Decouvrir l'IHM ».
+    // 1.12.0 : IHM Studio - la visite « Decouvrir l'IHM ».
     MainAnalysisScreen::requestApiTutorial(core::hasApi() ? "api-decouvrir" : "decouvrir");
     if (app_.project()) {
         page_->status().setMessage("Le didacticiel s'ouvre sur le projet ouvert\xE2\x80\xA6", StatusBar::Severity::Info);

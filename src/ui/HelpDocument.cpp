@@ -267,8 +267,7 @@ HelpDocument buildHelp() {
     d.bullet("L'automate et l'IHM simul\xC3\xA9s chacun de son c\xC3\xB4t\xC3\xA9 : D\xC3\xA9marrer l'API (F5), D\xC3\xA9marrer "
              "l'IHM (F8, Maj+F8 l'arr\xC3\xAAte), ou les deux ; deux pastilles disent en permanence ce qui tourne.");
     d.bullet("Le menu Aide rang\xC3\xA9 en quatre blocs, une seule entr\xC3\xA9" "e Nouveaut\xC3\xA9s\xE2\x80\xA6 (la fen\xC3\xAAtre "
-             "des nouveaut\xC3\xA9s, Me montrer), les rep\xC3\xA8res des nouveaut\xC3\xA9s en case \xC3\xA0 cocher, \xC3\x80 propos "
-             "d'XPGAnalyser.");
+             "des nouveaut\xC3\xA9s, Me montrer), les rep\xC3\xA8res des nouveaut\xC3\xA9s en case \xC3\xA0 cocher, \xC3\x80 propos.");
     d.bullet("Les nouveaut\xC3\xA9s se voient : \xC3\xA0 la premi\xC3\xA8re ouverture d'une nouvelle version, la fen\xC3\xAAtre "
              "des nouveaut\xC3\xA9s ; les \xC3\xA9l\xC3\xA9ments nouveaux encadr\xC3\xA9s en orange (NOUVEAU) ; dans l'aide, ce qui "
              "est nouveau depuis la derni\xC3\xA8re version que tu as vue, encadr\xC3\xA9 en orange.");
@@ -567,7 +566,7 @@ HelpDocument buildHelp() {
              "ses explications (un chemin peut commencer par {Documents}, {Donnees}...).");
     d.bullet("La version de d\xC3\xA9veloppement (sans installation.ini \xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'exe) garde ses dossiers dans son dossier "
              "de travail, comme avant : la fen\xC3\xAAtre les montre et les ouvre, sans les changer.");
-    d.bullet("R\xC3\xA9parer, v\xC3\xA9rifier, restaurer une sauvegarde, collecter les journaux : menu D\xC3\xA9marrer \xE2\x80\xBA XPGAnalyser \xE2\x80\xBA "
+    d.bullet("R\xC3\xA9parer, v\xC3\xA9rifier, restaurer une sauvegarde, collecter les journaux : menu D\xC3\xA9marrer \xE2\x80\xBA API IHM Studio \xE2\x80\xBA "
              "Maintenance.");
 
     // ---- Lot API 8 : l'explorateur, l'arbre, les bandeaux (l'aide) ----

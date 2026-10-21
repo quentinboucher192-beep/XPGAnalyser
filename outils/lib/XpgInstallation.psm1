@@ -47,7 +47,8 @@ function Get-XpgInstallation {
     # (HKCU puis HKLM : Software\<nom>, puis la cle de desinstallation d'Inno Setup).
     param([string] $Dossier = '')
     $ctx = Get-XpgContexte
-    $nom = Get-XpgConfig -Section 'Produit' -Cle 'nom' -Defaut 'XPGAnalyser'
+    # 1.12.20 : la cle du registre garde le nom d'origine (config.ini, [Produit] cle) ; nom est celui montre.
+    $nom = Get-XpgConfig -Section 'Produit' -Cle 'cle' -Defaut 'XPGAnalyser'
     $guid = (Get-XpgConfig -Section 'Produit' -Cle 'app_id' -Defaut '').Trim('{', '}')
     $candidats = @()
     if ($Dossier) { $candidats += $Dossier }
@@ -102,7 +103,9 @@ function Read-XpgInstallation {
     if (-not $i.Sauvegardes) { $i.Sauvegardes = Join-Path $etat 'Sauvegardes' }
     if (-not $i.Reserve) { $i.Reserve = Join-Path $etat 'Reserve' }
     $hive = 'HKCU:'; if ($portee -eq 'tous') { $hive = 'HKLM:' }
-    $i.CleProduit = "$hive\Software\$($i.Nom)"
+    $cle = Get-XpgValeurIni $ini 'Installation' 'cle'      # 1.12.20 : la cle d'origine (Software\XPGAnalyser)
+    if (-not $cle) { $cle = Get-XpgConfig -Section 'Produit' -Cle 'cle' -Defaut 'XPGAnalyser' }
+    $i.CleProduit = "$hive\Software\$cle"
     $guid = (Get-XpgConfig -Section 'Produit' -Cle 'app_id' -Defaut '').Trim('{', '}')
     if ($guid) { $i.CleDesinstallation = "$hive\Software\Microsoft\Windows\CurrentVersion\Uninstall\{$guid}_is1" }
     Update-XpgDossiersDonnees $i

@@ -665,8 +665,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
 
     namespace {
         // 1.12.0 : LES DOMAINES DE LA RACINE. Les essais (Both) : API, IHM, Simulation,
-        // Versions avec l'IHM ; sans elle, la racine d'avant (vide ici). XPGAnalyser API :
-        // API, Simulation, Versions ; XPGAnalyser IHM : IHM, Simulation, Versions.
+        // Versions avec l'IHM ; sans elle, la racine d'avant (vide ici). API Studio :
+        // API, Simulation, Versions ; IHM Studio : IHM, Simulation, Versions.
         const std::vector<ProjectTreeModel::NodeKind>& rootDomainList(bool hmiDoc) {
             using NK = ProjectTreeModel::NodeKind;
             static const std::vector<NK> both{NK::ApiFolder, NK::HmiFolder, NK::SimFolder, NK::VersionsFolder};
@@ -681,7 +681,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return hmiDoc ? both : legacy;
         }
         // Les dossiers du centre de simulation : avec l'IHM et l'automate (Both), l'automate
-        // seul (XPGAnalyser API, ou les essais sans IHM), l'IHM seule (XPGAnalyser IHM).
+        // seul (API Studio, ou les essais sans IHM), l'IHM seule (IHM Studio).
         const std::vector<ProjectTreeModel::NodeKind>& simFolderList(bool hmiDoc) {
             using NK = ProjectTreeModel::NodeKind;
             static const std::vector<NK> both{NK::SimOverview, NK::ApiSimulation, NK::HmiSimulation, NK::SimEquipment,
@@ -1180,7 +1180,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::Root:
             // Lot 10 : l'automate et l'IHM, cote a cote. Lot API 8 : la
             // simulation entre l'IHM et les versions.
-            // 1.12.0 : les domaines de l'application (XPGAnalyser API : sans IHM ; IHM : sans API).
+            // 1.12.0 : les domaines de l'application (API Studio : sans IHM ; IHM : sans API).
             if (const auto& d = rootDomainList(hmi_ != nullptr); !d.empty()) return k < d.size() ? pack(d[k], 0) : ui::kInvalidNode;
             // Lot API 8 : sans IHM, le dossier Simulation apres les dix dossiers de l'automate.
             if (k == 10) return pack(NodeKind::SimFolder, 0);
@@ -1725,7 +1725,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return pack(NodeKind::HmiUsedVariable, static_cast<Index>(k));
         // ---- lot 9
         case NodeKind::HmiSysFolder:
-            // 1.12.0 : le k-ieme domaine montre (XPGAnalyser IHM saute Automate et Communication).
+            // 1.12.0 : le k-ieme domaine montre (IHM Studio saute Automate et Communication).
             for (std::size_t d = 0; d < hmi::pub::kSysDomainCount; ++d) {
                 if (!hmi::pub::sysDomainShown(d)) continue;
                 if (k == 0) return pack(NodeKind::HmiSysDomain, static_cast<Index>(d));

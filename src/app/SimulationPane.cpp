@@ -17,6 +17,7 @@
 //     qui la couvre - l'entree de MAST qui l'ecrit en premier dans le cycle.
 // =============================================================================
 #include "SimulationPane.hpp"
+#include "../core/Edition.hpp"   // 1.12.20 : le nom de l'application (API Studio, IHM Studio)
 #include "../sim/ValueText.hpp"   // 1.12.19 : la lecture d'une valeur tapee, partout la meme
 
 #include "ApiListKit.hpp"
@@ -3040,7 +3041,7 @@ std::string fileLiteral(const sim::Value& v) {
 // Les forcages en texte : une ligne « nom = valeur » par variable - un scenario
 // qui se garde avec le projet, se relit et se corrige dans un editeur de texte.
 std::string forcingText(const sim::Runtime& rt, const std::vector<std::string>& names, std::size_t& written) {
-    std::string out = "# Forcages de la simulation (XpgAnalyzer) : une variable par ligne, nom := valeur.\n"
+    std::string out = "# Forcages de la simulation (" + core::productName() + ") : une variable par ligne, nom := valeur.\n"
                       "# TRUE / FALSE, 42, 1.5, T#500ms, 'texte'. API > Simulation > Importer... les rappelle ;\n"
                       "# un nom qui n'existe plus est dit, pas ignore.\n";
     written = 0;

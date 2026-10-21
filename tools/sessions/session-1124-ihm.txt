@@ -1,5 +1,5 @@
 # =============================================================================
-#  Session 1124 IHM : XPGAnalyser IHM (1.12.4), XpgAnalyzer-IHM.exe - l'apercu de
+#  Session 1124 IHM : IHM Studio (1.12.4), IHM-Studio.exe - l'apercu de
 #  la Disposition, les membres objets des types IHM, les parametres objets.
 #  Armoire_Gaz (migre par la 1.12.1), avec Vue_Listes (la session 1122) et
 #  T_Recette, Recette, Pop_Etapes (demo1124) :

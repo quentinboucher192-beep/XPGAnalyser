@@ -1,5 +1,5 @@
 # =============================================================================
-#  Session 1122 IHM : XPGAnalyser IHM (1.12.2), XpgAnalyzer-IHM.exe - les types
+#  Session 1122 IHM : IHM Studio (1.12.2), IHM-Studio.exe - les types
 #  objets (LIST, MAP, TUPLE), la liste, la liste deroulante, les boutons radio et
 #  le tableau qui suivent des variables, les raccourcis de Visual Studio.
 #  Armoire_Gaz (migre par la 1.12.1) a une vue de plus, Vue_Listes : Recettes

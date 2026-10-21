@@ -1,5 +1,5 @@
 # =============================================================================
-#  Session 1129 IHM : XPGAnalyser IHM (1.12.8 et 1.12.9), XpgAnalyzer-IHM.exe -
+#  Session 1129 IHM : IHM Studio (1.12.8 et 1.12.9), IHM-Studio.exe -
 #  les lots D et E de l'audit des objets. Armoire_Gaz (migre par la 1.12.1),
 #  avec les vues des sessions 1122 a 1127 et, par demo1129, la vue Vue_LotDE :
 #    1. le selecteur, son onglet Contenu : une ligne par choix (libelle, valeur) ;

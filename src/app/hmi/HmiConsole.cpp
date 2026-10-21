@@ -156,7 +156,7 @@ std::string HmiConsole::lineOf(const ConsoleEntry& e) {
 }
 
 std::string HmiConsole::exportText(const Filter& f) const {
-    std::string out = "# XPGAnalyser - Console de la simulation IHM (" + today() + ")\n";
+    std::string out = "# IHM Studio - Console de la simulation IHM (" + today() + ")\n";
     out += "# " + std::to_string(entries_.size()) + " ligne(s) gard\xC3\xA9" "e(s)" + (dropped_ ? ", " + std::to_string(dropped_) + " plus ancienne(s) tomb\xC3\xA9" "e(s)" : std::string{})
          + " ; " + filterText(f) + "\n";
     int session = -1;

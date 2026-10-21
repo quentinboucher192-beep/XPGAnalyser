@@ -1,6 +1,6 @@
 // app/VariablesPane.cpp - les variables et les sous-routines de l'API (lot API 5).
 #include "VariablesPane.hpp"
-#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API - pas d'IHM
+#include "../core/Edition.hpp"   // 1.12.0 : API Studio - pas d'IHM
 
 #include "ApiPanes.hpp"
 #include "hmi/HmiPanels.hpp"
@@ -321,7 +321,7 @@ VariablesPane::VariablesPane(std::string id) : ui::Widget(std::move(id)) {
             cols[i].sortable = false;
         }
         cols[Model::CUsed].align = ui::Align::End;
-        cols[Model::CHmi].visible = core::hasIhm();      // 1.12.0 : XPGAnalyser API n'a pas d'IHM
+        cols[Model::CHmi].visible = core::hasIhm();      // 1.12.0 : API Studio n'a pas d'IHM
         table_->setColumns(std::move(cols));
     }
     // Lot recherche : LES FILTRES DES COLONNES. Le volet les applique lui-meme
@@ -656,7 +656,7 @@ void VariablesPane::refresh() {
     if (core::hasIhm())
         filters_->setChips({{"Toutes", infos_.size()}, {"Situ\xC3\xA9" "es", located}, {"Instances de DFB", dfb},
                             {"Pas utilis\xC3\xA9" "es", unused_}, {"Lues par l'IHM", readByHmi_}});
-    else      // 1.12.0 : XPGAnalyser API - pas d'IHM (la puce « Lues par l'IHM », la derniere, tombe)
+    else      // 1.12.0 : API Studio - pas d'IHM (la puce « Lues par l'IHM », la derniere, tombe)
         filters_->setChips({{"Toutes", infos_.size()}, {"Situ\xC3\xA9" "es", located}, {"Instances de DFB", dfb},
                             {"Pas utilis\xC3\xA9" "es", unused_}});
     rebuildRows();
@@ -1072,7 +1072,7 @@ void VariablesPane::refreshProperties() {
     const usage::Where where(*p);
     w.properties.push_back(ro("Programme", i.sections ? plural(i.sections, "section", "sections") + " : " + where.sectionNames(i.name, 8) : std::string("aucune section"),
                               "Les sections qui la nomment (commentaires et cha\xC3\xAEnes non compt\xC3\xA9s). Double-clic : chaque ligne."));
-    if (core::hasIhm())       // 1.12.0 : XPGAnalyser API n'a pas d'IHM
+    if (core::hasIhm())       // 1.12.0 : API Studio n'a pas d'IHM
     w.properties.push_back(ro("IHM", i.hmi ? "lue " + std::to_string(i.hmi->uses) + " fois" + (i.hmi->via.empty() ? std::string{} : " (par " + i.hmi->via + ")")
                                            : std::string("non"),
                               i.hmi ? std::string("Vues, scripts, alarmes : chaque endroit qui la montre ou la teste compte une fois.") : std::string{}));

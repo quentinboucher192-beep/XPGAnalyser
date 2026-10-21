@@ -1,5 +1,5 @@
 #include "HmiPanes.hpp"
-#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de variables du programme
+#include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas de variables du programme
 #include "../../hmi/HmiMigrate.hpp"   // 1.11.18 (lot 5) : des blocs VAR a migrer ?
 #include "../../hmi/HmiDuplicate.hpp"   // 1.10.4 : "Remplacer..." ; 1.11 (REP) : le constat d'un repere qui n'est pas une variable
 #include "../../hmi/HmiDesign.hpp"
@@ -257,7 +257,7 @@ HmiConfigPane::HmiConfigPane(std::string id, hmi::DocumentPtr doc, Apply apply,
     if (core::hasApi()) {
         varsPanel_ = &static_cast<HmiTitledPanel&>(split->addPane(std::move(vars), 0.48f, 140.f));
     } else {
-        // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - le panneau existe (ses liens), hors de l'ecran.
+        // 1.12.0 : IHM Studio n'a pas d'automate - le panneau existe (ses liens), hors de l'ecran.
         varsPanel_ = vars.get();
         unshownVars_ = std::move(vars);
     }

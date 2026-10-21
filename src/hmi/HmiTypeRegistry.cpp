@@ -3,7 +3,7 @@
 //  des types et la regle de conversion (voir l'en-tete)
 // =============================================================================
 #include "HmiTypeRegistry.hpp"
-#include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 
 #include "HmiPopupParams.hpp"
 
@@ -615,7 +615,7 @@ Registry::Registry() {
     any.key = "any";
     any.name = "ANY";
     any.category = Category::Generic;
-    any.provenance = "XPGAnalyser";
+    any.provenance = "IHM Studio";
     any.doc = "N'importe quel type : le param\xC3\xA8tre prend ce qu'on lui donne.";
     any.uses = UseParameter;
     any.proposed = UseParameter;
@@ -624,7 +624,7 @@ Registry::Registry() {
     none.key = "void";
     none.name = "Aucun";
     none.category = Category::Void;
-    none.provenance = "XPGAnalyser";
+    none.provenance = "IHM Studio";
     none.doc = "Pas de valeur de retour : la fonction est une proc\xC3\xA9" "dure.";
     none.uses = UseReturn;
     none.proposed = UseReturn;
@@ -646,7 +646,7 @@ Registry::Registry() {
         e.key = r.key;
         e.name = r.text;
         e.category = Category::Callback;
-        e.provenance = "XPGAnalyser";
+        e.provenance = "IHM Studio";
         e.doc = f.doc;
         e.uses = UseVariable | UseDeclaration | UseParameter | UseReturn;
         e.proposed = 0;

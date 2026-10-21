@@ -240,8 +240,8 @@ void SimOverviewPane::openMenuAt(gfx::Point at) {
     menu_->openAt(at, surface);
 }
 
-// 1.12.0 : les cartes de l'application - l'automate (XPGAnalyser API), l'IHM et ses
-// equipements (XPGAnalyser IHM), les trois (les essais).
+// 1.12.0 : les cartes de l'application - l'automate (API Studio), l'IHM et ses
+// equipements (IHM Studio), les trois (les essais).
 static std::vector<int> shownCards() {
     if (!core::hasIhm()) return {0};
     if (!core::hasApi()) return {1, 2};
@@ -279,7 +279,7 @@ SimOverviewPane::Plan SimOverviewPane::plan(float width) const {
     const std::size_t rows = std::max<std::size_t>(1, model_ ? model_->report.attention.size() : 0);
     const float attH = 48.f + static_cast<float>(rows) * 52.f + 6.f;
     const float chainH = 210.f;
-    // 1.12.0 : XPGAnalyser API - l'automate seul : pas de chaine, l'attention sur toute la largeur.
+    // 1.12.0 : API Studio - l'automate seul : pas de chaine, l'attention sur toute la largeur.
     if (!core::hasIhm()) {
         pl.chain = {};
         pl.attention = {pl.pad, y, inner, attH};
@@ -511,7 +511,7 @@ void SimOverviewPane::paintChain(const ui::PaintContext& ctx, const gfx::Rect& r
     rects[0] = {r.x + 14.f, by, boxW, boxH};
     rects[2] = {r.right() - 14.f - boxW, by, boxW, boxH};
     rects[1] = {r.x + (r.w - boxW) * 0.5f, by, boxW, boxH};
-    // 1.12.0 : XPGAnalyser IHM - pas d'automate : l'IHM a gauche, les equipements a droite.
+    // 1.12.0 : IHM Studio - pas d'automate : l'IHM a gauche, les equipements a droite.
     const bool noPlc = !core::hasApi();
     if (noPlc) rects[1] = rects[0];
     for (int i = 0; i < 3; ++i) {
@@ -667,7 +667,7 @@ void SimOverviewPane::paintTimeline(const ui::PaintContext& ctx, const gfx::Rect
         hits_.push_back({lr, "frise:journal", "journal", "Tous les \xC3\xA9v\xC3\xA9nements de la simulation, filtr\xC3\xA9s et expliqu\xC3\xA9s", false});
         ctx.r.drawText({lr.x, lr.y}, link, kSmall, hot ? c.text : c.accent);
     }
-    // 1.12.0 : les lignes de l'application (XPGAnalyser API : l'automate ; IHM : l'IHM, ses equipements).
+    // 1.12.0 : les lignes de l'application (API Studio : l'automate ; IHM : l'IHM, ses equipements).
     std::vector<SimSource> lanes;
     std::vector<const char*> laneNames;
     const auto lane = [&](SimSource src, const char* name) { lanes.push_back(src); laneNames.push_back(name); };

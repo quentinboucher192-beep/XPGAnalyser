@@ -48,7 +48,7 @@ struct Options {
     bool variablesAppendix{true};
     // Remplis par l'appelant : ce qui ne se lit pas dans le projet.
     std::string exportedAt;       // "30/09/2026 a 10:42"
-    std::string appName{"XPGAnalyser"};
+    std::string appName{"API Studio"};
     std::string appVersion;
     std::string projectName;      // le nom du projet (sinon celui du fichier)
 };

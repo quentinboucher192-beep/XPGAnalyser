@@ -504,7 +504,7 @@ bool Runtime::sysValue(std::string_view wanted, sim::Value& out) const {
 #endif
     if (n == "OsUser") return text(osUser());
     if (n == "ProcessorCount") return integer(static_cast<long long>(std::max(1u, std::thread::hardware_concurrency())));
-    if (n == "AppName") return text("XpgAnalyzer");
+    if (n == "AppName") return text("IHM Studio");
     if (n == "AppVersion") return text(XPG_ANALYZER_VERSION);
     // lot 13 : la langue de l'IHM (Configuration > Langues ; SYS.Language s'ecrit)
     if (n == "Language") return text(!language_.empty() ? language_ : p ? p->languages.source() : std::string("fr"));

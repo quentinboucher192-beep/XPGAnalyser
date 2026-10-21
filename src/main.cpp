@@ -12,7 +12,7 @@
 #include "app/Dossiers.hpp"
 #include "app/Settings.hpp"
 #include "core/Version.hpp"
-#include "core/Edition.hpp"    // 1.12.0 : XPGAnalyser API, XPGAnalyser IHM
+#include "core/Edition.hpp"    // 1.12.0 : API Studio, IHM Studio
 #include "help/TutorialLaunch.hpp"
 #include "core/CrashGuard.hpp"   // 1.10.2 (CR) : le rapport de plantage et de blocage
 #include "core/CallTrail.hpp"    // 1.10.2 (CR) : --sans-historique
@@ -234,10 +234,10 @@ int main(int argc, char** argv) {
         else if (a == "--captures" && i + 1 < argc) options.capturesDir = argv[++i];
         // Lot 14 : le poste d'exploitation - l'IHM seule, en plein ecran, sans
         // l'editeur (Configuration > Poste d'exploitation).
-        // 1.12.0 : le poste est celui de XPGAnalyser IHM.
+        // 1.12.0 : le poste est celui de IHM Studio.
         else if ((a == "--ihm" || a == "--poste") && i + 1 < argc) {
             if (core::hasIhm()) options.station = argv[++i];
-            else std::fprintf(stderr, "warning: %s : le poste d'exploitation est dans XPGAnalyser IHM\n", argv[++i]);
+            else std::fprintf(stderr, "warning: %s : le poste d'exploitation est dans IHM Studio\n", argv[++i]);
         }
         else if (a == "--size" && i + 1 < argc) {
             int w = 0, h = 0;
@@ -268,7 +268,7 @@ int main(int argc, char** argv) {
         attachParentConsole();
         // 1.12.0 : l'analyse d'un export (.XPG) est celle de l'automate.
         if (!core::hasApi()) {
-            std::fprintf(stderr, "--cli : l'analyse d'un programme est dans XPGAnalyser API\n");
+            std::fprintf(stderr, "--cli : l'analyse d'un programme est dans API Studio\n");
             return 2;
         }
         if (files.empty()) {

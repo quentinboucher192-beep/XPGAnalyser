@@ -130,7 +130,7 @@ void setSimulating(bool);
 //  dans une fenetre detachee), celle de devant avec ses sous-onglets (l'
 //  inspecteur d'une vue, le panneau de droite de la simulation, les onglets de la
 //  programmation generale) ; le panneau du bas (dessous ou a droite de l'editeur,
-//  ouvert ou replie) et ses sous-onglets ; la bande d'etat ; dans XPGAnalyser API,
+//  ouvert ou replie) et ses sous-onglets ; la bande d'etat ; dans API Studio,
 //  la rangee du bas. Les coordonnees vont de 0 a 1 (la fenetre) : le widget de la
 //  fenetre Disposition les met a sa taille. Sans widget : les essais le lisent.
 struct SketchTab {

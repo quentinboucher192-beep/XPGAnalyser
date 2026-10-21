@@ -4,7 +4,7 @@
 // virtuels) et le reseau simule.
 #include "HmiCommPanes.hpp"
 #include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture d'une valeur tapee, partout la meme
-#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de « suit l'automate »
+#include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas de « suit l'automate »
 
 #include "HmiCommHost.hpp"
 #include "HmiEquipmentHost.hpp"
@@ -640,7 +640,7 @@ bool HmiCommPane::applyDetected(std::string* why) {
     if (rep->failed) return fail("d\xC3\xA9tection en \xC3\xA9" "chec : " + rep->why);
     const auto* e = equipmentOf(detectEquip_);
     if (!e) return fail(core::hasApi() ? std::string("les zones de l'automate du projet viennent de sa configuration (.XHW)")
-                                       : "pas d'\xC3\xA9quipement " + detectEquip_);   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+                                       : "pas d'\xC3\xA9quipement " + detectEquip_);   // 1.12.2 : IHM Studio n'a pas d'automate
     const hmi::MemZones z = rep->zones("d\xC3\xA9tect\xC3\xA9" "es " + clockNow());
     const std::string name = e->name;
     if (!changeProject(name + " : zones d\xC3\xA9tect\xC3\xA9" "es", [&](hmi::Project& x) {
@@ -693,7 +693,7 @@ void HmiCommPane::refreshMapTargets() {
     const auto& p = doc_->project;
     mapTargets_.clear();
     std::vector<ui::DropDown::Item> items;
-    // 1.12.2 : l'automate du projet, XPGAnalyser API seulement - XPGAnalyser IHM n'a que ses equipements.
+    // 1.12.2 : l'automate du projet, API Studio seulement - IHM Studio n'a que ses equipements.
     const bool plc = core::hasApi();
     if (plc) {
         mapTargets_.push_back({kPlcKey, false});
@@ -966,7 +966,7 @@ void HmiCommPane::refreshMap(bool structure) {
                  + " case(s) active(s) : ce qui a \xC3\xA9t\xC3\xA9 vu reste affich\xC3\xA9";
         tone = 4;
     } else if (mapEquip_.empty() && !core::hasApi()) {
-        // 1.12.2 : XPGAnalyser IHM, sans equipement Modbus.
+        // 1.12.2 : IHM Studio, sans equipement Modbus.
         banner = "Aucun \xC3\xA9quipement Modbus : ajoutez-en un (onglet \xC3\x89quipements), sa m\xC3\xA9moire se voit ici";
     } else if (mapEquip_ == kPlcKey) {
         banner = doc_->project.comm.modbus() ? std::string("L'automate du projet : ses variables au plan d'adressage ; \xC2\xAB Scanner l'\xC3\xA9quipement \xC2\xBB lit sa m\xC3\xA9moire en boucle")
@@ -1065,7 +1065,7 @@ bool HmiCommPane::moveVariable(const std::string& variable, int delta, std::stri
         return false;
     };
     const auto* v = doc_->project.variable(variable);
-    if (!v || !v->bound())   // 1.12.2 : l'automate, XPGAnalyser API seulement
+    if (!v || !v->bound())   // 1.12.2 : l'automate, API Studio seulement
         return fail(variable + (core::hasApi() ? " n'est pas une variable IHM li\xC3\xA9" "e (les variables de l'automate se d\xC3\xA9placent dans son programme)"
                                                : " n'est pas une variable IHM li\xC3\xA9" "e \xC3\xA0 cet \xC3\xA9quipement"));
     if (delta == 0) return true;
@@ -1264,7 +1264,7 @@ void HmiCommPane::rebuildMapProperties(std::vector<PG::Category>& cats) {
             return [this, name, baddr, key](std::string_view v) { return setBehavior(name, baddr, key, std::string(v)); };
         };
         j.properties.push_back(prop("Comportement", b ? std::string(hmi::behaviorKindLabel(b->kind)) : std::string("aucun"), PG::ValueType::Enum, field("genre"),
-                                    // 1.12.2 : « suit l'automate », XPGAnalyser API seulement (comme la valeur).
+                                    // 1.12.2 : « suit l'automate », API Studio seulement (comme la valeur).
                                     std::string("Ce que la case fait toute seule : constante, sinus, rampe, compteur, clignote, al\xC3\xA9" "atoire, recopie (d'une autre case, avec un retard), ")
                                         + (core::hasApi() ? "suit l'automate (une variable du simulateur), " : "") + "\xC3\xA9tapes (une liste de valeurs rejou\xC3\xA9" "e).",
                                     kinds));

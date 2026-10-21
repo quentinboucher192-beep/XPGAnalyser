@@ -25,8 +25,8 @@ bool hasCondition(const domain::Project& p, const domain::Section& s) {
 MissingConditions missingTaskConditions(const domain::Project& p, const Manifest& m) {
     MissingConditions out;
     // Un projet importe d'un .XPG : son product est celui du fichier d'origine
-    // (« Control Expert V15.3 - 230214C ») ; un projet cree ici dit XpgAnalyzer.
-    const bool imported = !blank(m.product) && m.product.rfind("XpgAnalyzer", 0) != 0;
+    // (« Control Expert V15.3 - 230214C ») ; un projet cree ici dit API Studio (avant la 1.12.20 : XpgAnalyzer).
+    const bool imported = !blank(m.product) && m.product.rfind("XpgAnalyzer", 0) != 0 && m.product.rfind("API Studio", 0) != 0;   // 1.12.20 : le nouveau nom
     // Importe avant la 1.8.0 : son dossier a ete cree avant sa livraison
     // ("AAAA-MM-JJ hh:mm:ss" se compare comme du texte). Sans date : un projet ancien.
     const bool before180 = m.created.empty() || m.created < kConditionsSince;

@@ -542,7 +542,7 @@ Bytes toZip(const Package& pkg) {
     const auto& m = pkg.manifest;
     // 1.11.2 : le format du paquet et la version qui l'a ecrit (une version
     // d'avant les ignore ; une version d'apres refuse un format qu'elle ne connait pas).
-    std::string text = std::string("# XpgAnalyzer - paquet de ") + (m.kind == "modele" || m.kind.empty() ? std::string("vues") : m.kind) + " (format "
+    std::string text = std::string("# IHM Studio - paquet de ") + (m.kind == "modele" || m.kind.empty() ? std::string("vues") : m.kind) + " (format "
                      + std::to_string(kPackageFormat) + ")\n";
     text += "paquet format=" + std::to_string(kPackageFormat) + " version=" + quote(kWriterVersion) + " genre=" + quote(m.kind) + " nom=" + quote(m.name) + " categorie=" + quote(m.category)
           + " description=" + quote(m.description) + " projet=" + quote(m.fromProject) + " poste=" + quote(m.fromStation)
@@ -614,7 +614,7 @@ core::Result<Package> fromZip(const Bytes& bytes) {
     // 1.11.2 : un paquet d'une version plus recente est refuse, en le disant.
     const auto newer = [&](const std::string& what) {
         return core::fail(core::ErrorCode::XmlUnsupportedDtd,
-                          "ce fichier vient d'une version plus r\xC3\xA9" "cente de XpgAnalyzer"
+                          "ce fichier vient d'une version plus r\xC3\xA9" "cente d'IHM Studio"
                               + (pkg.manifest.writer.empty() ? std::string{} : " (" + pkg.manifest.writer + ")") + " : cette version ("
                               + std::string(kWriterVersion) + ") ne sait pas le lire (" + what
                               + "). Rien n'est import\xC3\xA9 ; mets l'application \xC3\xA0 jour pour l'importer.");

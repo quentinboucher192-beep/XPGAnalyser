@@ -13,7 +13,7 @@
 // =============================================================================
 #include "Screens.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : la bande d'etat de chaque application
-#include "../hmi/HmiSimulation.hpp"   // 1.12.0 : l'etat de la simulation de l'IHM (XPGAnalyser IHM)
+#include "../hmi/HmiSimulation.hpp"   // 1.12.0 : l'etat de la simulation de l'IHM (IHM Studio)
 
 #include "../App.hpp"
 #include "../ApiPanes.hpp"
@@ -270,7 +270,7 @@ void MainAnalysisScreen::buildStatusStrip(OverlayHost& host) {
     st.sim->setOnClick([this] { openSimCenter("ensemble"); });
     st.target = &chip("analysis.status.target", 40);
     st.target->setIcon(core::hasApi() ? Icon::Cpu : Icon::Screen);
-    // 1.12.0 : XPGAnalyser IHM - l'ecran de l'IHM (un clic : IHM > Configuration).
+    // 1.12.0 : IHM Studio - l'ecran de l'IHM (un clic : IHM > Configuration).
     tip(st.target, core::hasApi() ? "La cible : l'automate et la t\xC3\xA2" "che MAST (un clic : Configuration)"
                                   : "L'\xC3\xA9" "cran de l'IHM : sa taille (un clic : IHM \xE2\x80\xBA Configuration)");
     st.target->setOnClick([this] { if (core::hasApi()) openApiPane("configuration"); else openHmiPane("config"); });
@@ -404,7 +404,7 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
 
     // La simulation.
     if (!core::hasApi()) {
-        // 1.12.0 : XPGAnalyser IHM - la simulation de l'IHM (pas d'automate).
+        // 1.12.0 : IHM Studio - la simulation de l'IHM (pas d'automate).
         const auto tab = hmiTabs_.find("simulation");
         const auto* hsim = dynamic_cast<const HmiSimulationPane*>(tab != hmiTabs_.end() ? tab->second : nullptr);
         const bool running = hsim && hsim->hmiRunning();
@@ -447,7 +447,7 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
         }
     }
 
-    // La cible : l'automate, la periode de MAST. 1.12.0 : XPGAnalyser IHM - l'ecran de l'IHM.
+    // La cible : l'automate, la periode de MAST. 1.12.0 : IHM Studio - l'ecran de l'IHM.
     if (!core::hasApi()) {
         const auto doc = app_.hmi();
         st.target->setShown(doc != nullptr);

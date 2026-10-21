@@ -5,7 +5,7 @@
 #include "../../hmi/HmiDesign.hpp"   // 1.12.18 : Voir les usages (la recherche du projet)
 #include "../../hmi/HmiAddressPlan.hpp"   // 1.12.18 : l'adresse dans toutes les cases (une formule de i)
 #include "../../ui/Commands.hpp"   // 1.12.18 : le menu des variables
-#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 
 #include "HmiAssetPanes.hpp"
 #include "../RenameDialog.hpp"            // lot 7 : requestRename (en ligne : rien de plus a lier)

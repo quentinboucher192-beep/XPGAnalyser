@@ -94,7 +94,7 @@ public:
     void        setTabBadge(std::size_t index, std::string badge, Tone tone = Tone::None);
     void        setTabLive(std::size_t index, bool live);
     // 1.12.0 : un onglet cache - ni en-tete, ni place, ni dans la liste ; son rang ne
-    // change pas (les rangs d'un volet restent ses constantes). XPGAnalyser IHM cache
+    // change pas (les rangs d'un volet restent ses constantes). IHM Studio cache
     // l'onglet Variables API de la simulation.
     void        setTabHidden(std::size_t index, bool hidden);
     [[nodiscard]] bool tabHidden(std::size_t index) const noexcept { return index < tabs_.size() && tabs_[index].hidden; }

@@ -140,7 +140,7 @@ Dossier buildDossier(const Project& p, const std::map<Id, DossierImage>& thumbna
                  {"Vue de d\xC3\xA9marrage", start ? start->name : std::string("-")}},
                 {0.32, 0.68});
     }
-    w.add(K::Note, "Ce dossier est produit par XpgAnalyzer \xC3\xA0 partir du projet : il d\xC3\xA9" "crit l'IHM telle qu'elle est enregistr\xC3\xA9" "e. "
+    w.add(K::Note, "Ce dossier est produit par IHM Studio \xC3\xA0 partir du projet : il d\xC3\xA9" "crit l'IHM telle qu'elle est enregistr\xC3\xA9" "e. "
                    "Les mots de passe, les codes et les badges n'y figurent jamais.");
     w.add(K::Heading2, "Sommaire");
     std::vector<std::string> sections = {"1. Pr\xC3\xA9sentation", "2. Les vues", "3. Les variables IHM", "4. Les alarmes", "5. Les recettes",
@@ -753,7 +753,7 @@ Bytes dossierDocx(const Dossier& d) {
     const std::string core = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
                              "<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" "
                              "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">"
-                             "<dc:title>" + xmlEscape(d.title) + "</dc:title><dc:creator>" + xmlEscape(d.author.empty() ? std::string("XpgAnalyzer") : d.author)
+                             "<dc:title>" + xmlEscape(d.title) + "</dc:title><dc:creator>" + xmlEscape(d.author.empty() ? std::string("IHM Studio") : d.author)
                            + "</dc:creator></cp:coreProperties>";
     std::vector<std::pair<std::string, std::string>> items{{"[Content_Types].xml", types},
                                                            {"_rels/.rels", rootRels},
@@ -1163,7 +1163,7 @@ Bytes dossierPdf(const Dossier& d) {
         out += buf;
     }
     out += "trailer\n<< /Size " + std::to_string(objects.size() + 1) + " /Root 1 0 R /Info << /Title " + pdfLiteral(toWinAnsi(d.title))
-         + " /Producer (XpgAnalyzer) >> >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+         + " /Producer (IHM Studio) >> >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
     return Bytes(out.begin(), out.end());
 }
 

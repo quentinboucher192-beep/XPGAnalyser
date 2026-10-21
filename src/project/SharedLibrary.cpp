@@ -767,7 +767,7 @@ namespace project {
         item.category = "Macros";
         item.version = it->version.empty() ? "1.00" : it->version;
         item.comment = it->comment;
-        item.author = "XpgAnalyzer";
+        item.author = "API Studio";
         item.path = target.string();
         auto updated = items_;
         updated.push_back(item);

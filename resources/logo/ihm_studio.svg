@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- IHM Studio : un ecran de supervision, son cadran et son aiguille
+       (le point jaune, commun aux deux logos). -->
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1E8C86"/>
+      <stop offset="1" stop-color="#08201F"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5BE08F"/>
+      <stop offset="1" stop-color="#2FC1D6"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="54" ry="54" fill="url(#fond)"/>
+  <rect x="10" y="10" width="236" height="236" rx="52" ry="52" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="4"/>
+  <rect x="36" y="48" width="184" height="132" rx="18" ry="18" fill="#E9EFF7"/>
+  <rect x="50" y="62" width="156" height="104" rx="9" ry="9" fill="#0E2B2D"/>
+  <rect x="116" y="180" width="24" height="16" fill="#E9EFF7"/>
+  <rect x="80" y="192" width="96" height="16" rx="8" ry="8" fill="#E9EFF7"/>
+  <path d="M82 150A46 46 0 0 1 174 150" stroke="url(#accent)" stroke-width="13" stroke-linecap="round" fill="none"/>
+  <line x1="128" y1="150" x2="156" y2="116" stroke="#E9EFF7" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="128" cy="150" r="13" fill="#F2C94C" stroke="#0E2B2D" stroke-width="6"/>
+</svg>

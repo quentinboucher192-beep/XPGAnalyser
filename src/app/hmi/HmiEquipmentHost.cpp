@@ -2,7 +2,7 @@
 // pings, ports du PC (lot 15).
 #include "HmiEquipmentHost.hpp"
 #include "../../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
-#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet
+#include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate du projet
 
 #include "../../hmi/HmiEquipment.hpp"
 #include "../../hmi/HmiStore.hpp"
@@ -309,7 +309,7 @@ void EquipmentHost::runTwin(Running& r, const hmi::Equipment& e, const hmi::Proj
     if (wantServer && !r.server) {
         r.bank = std::make_shared<hmi::twin::TwinBank>();
         r.forcedSet = false;
-        r.bank->setIdentification({{0, "XpgAnalyzer"}, {1, "esclave virtuel"}, {2, "lot 17"}, {4, e.twinLabel()}});
+        r.bank->setIdentification({{0, "IHM Studio"}, {1, "esclave virtuel"}, {2, "lot 17"}, {4, e.twinLabel()}});
         r.bank->setZones(e.zones);
         r.primed.clear();
         r.behaviors.reset();
@@ -465,7 +465,7 @@ void EquipmentHost::tick(const hmi::Project* p, double dt) {
         }
     }
     running_ = std::move(keep);
-    // L'automate du projet : son ping, pour le schema du reseau (1.12.2 : XPGAnalyser API seulement ;
+    // L'automate du projet : son ping, pour le schema du reseau (1.12.2 : API Studio seulement ;
     // une IHM de la 1.11 migree garde l'ancien lien, que son equipement Automate reprend).
     plc_ = p && core::hasApi() ? p->comm : hmi::Communication{};
     if (plc_.modbus() && now >= plcNextPing_) {

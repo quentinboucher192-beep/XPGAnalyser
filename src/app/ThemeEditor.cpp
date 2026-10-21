@@ -575,7 +575,7 @@ core::Status ThemeEditorDialog::buildUi() {
         syncing_ = false;
     });
     links_ += export_->clicked->connect([this] {
-        const auto spec = ui::saveFile("Th\xC3\xA8mes XpgAnalyzer|*.xpgtheme", ui::pathIn(ui::UserThemes::folder(), theme_.name + ".xpgtheme"),
+        const auto spec = ui::saveFile("Th\xC3\xA8mes|*.xpgtheme", ui::pathIn(ui::UserThemes::folder(), theme_.name + ".xpgtheme"),
                                        "Exporter le th\xC3\xA8me");
         std::weak_ptr<char> alive = alive_;
         if (!ui::browsePath(spec, {}, [this, alive](std::string path) {

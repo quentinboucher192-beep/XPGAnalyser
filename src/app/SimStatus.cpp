@@ -132,7 +132,7 @@ Banner banner(const Snapshot& s) {
                                    : "La simulation fait tourner l'IHM du projet ouvert et ses \xC3\xA9quipements : ouvre d'abord un projet.";
         return b;
     }
-    // 1.12.0 : XPGAnalyser IHM - la simulation est celle de l'IHM (pas d'automate).
+    // 1.12.0 : IHM Studio - la simulation est celle de l'IHM (pas d'automate).
     if (!core::hasApi()) {
         const auto sims = simulatedCount(s.equip);
         const auto all = enabledCount(s.equip);
@@ -351,7 +351,7 @@ Card hmiCard(const Snapshot& s) {
     } else if (h.running) {
         c.tone = h.scriptErrors ? Tone::Error : h.unacked ? Tone::Warning : Tone::Ok;
         c.state = "en marche";
-        // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - l'IHM tourne seule.
+        // 1.12.14 : IHM Studio n'a pas d'automate - l'IHM tourne seule.
         c.sentence = std::string(core::hasApi() ? "Elle tourne sur l'automate simul\xC3\xA9" : "Elle tourne")
                    + (h.view.empty() ? std::string(".") : " et affiche " + h.view + ".");
     } else {
@@ -471,7 +471,7 @@ std::array<Link, 2> chain(const Snapshot& s) {
     auto& b = out[1];
     b.from = "automate";
     b.to = "ihm";
-    if (!core::hasApi()) {           // 1.12.14 : XPGAnalyser IHM - pas d'automate, pas de lien vers lui
+    if (!core::hasApi()) {           // 1.12.14 : IHM Studio - pas d'automate, pas de lien vers lui
         b.idle = true;
         return out;
     }
@@ -515,7 +515,7 @@ std::vector<Attention> attention(const Snapshot& s) {
         out.push_back(std::move(a));
     };
     if (!s.project) return out;
-    // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - ni sa preparation ("aucune section en ST de la
+    // 1.12.14 : IHM Studio n'a pas d'automate - ni sa preparation ("aucune section en ST de la
     // tache MAST"), ni ses haltes, ses fonctions non simulees, ses cycles, ses sections, son code.
     const bool plc = core::hasApi();
     if (plc && !p.prepared && !p.prepareError.empty())
@@ -573,7 +573,7 @@ std::vector<Attention> attention(const Snapshot& s) {
     }
     if (p.forced) {
         const bool old = p.oldestForcedSeconds >= 300.0;
-        // 1.12.14 : XPGAnalyser IHM - ses forcages sont des cases des esclaves simules.
+        // 1.12.14 : IHM Studio - ses forcages sont des cases des esclaves simules.
         const std::string what = plc ? (p.forced == 1 ? std::string("Une variable forc\xC3\xA9" "e") : std::to_string(p.forced) + " variables forc\xC3\xA9" "es")
                                      : (p.forced == 1 ? std::string("Une case forc\xC3\xA9" "e dans un esclave simul\xC3\xA9")
                                                       : std::to_string(p.forced) + " cases forc\xC3\xA9" "es dans les esclaves simul\xC3\xA9s");
@@ -686,7 +686,7 @@ std::string bannerLine(const Report& r) {
 Report compute(const Snapshot& s) {
     Report r;
     r.banner = banner(s);
-    r.cards[0] = core::hasApi() ? plcCard(s) : Card{};    // 1.12.14 : XPGAnalyser IHM - pas de carte de l'automate
+    r.cards[0] = core::hasApi() ? plcCard(s) : Card{};    // 1.12.14 : IHM Studio - pas de carte de l'automate
     r.cards[1] = hmiCard(s);
     r.cards[2] = equipCard(s);
     r.chain = chain(s);
@@ -694,7 +694,7 @@ Report compute(const Snapshot& s) {
     const auto& p = s.plc;
     if (!s.project) {
         r.folderTone = Tone::Off;
-    } else if (!core::hasApi()) {     // 1.12.14 : XPGAnalyser IHM - la simulation est celle de l'IHM
+    } else if (!core::hasApi()) {     // 1.12.14 : IHM Studio - la simulation est celle de l'IHM
         r.folderBadge = s.hmi.running ? "en marche" : "arr\xC3\xAAt\xC3\xA9" "e";
         r.folderTone = s.hmi.running ? Tone::Ok : Tone::Off;
     } else if (p.prepared && p.state == State::Running) {

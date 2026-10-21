@@ -33,7 +33,7 @@
 //  touche.
 // =============================================================================
 #include "Screens.hpp"
-#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - sans automate
+#include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - sans automate
 
 #include "../App.hpp"
 #include "../BackgroundTasks.hpp"      // Lot API 8 : bandeau haut (la cloche)
@@ -1158,7 +1158,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         icon = generate ? Icon::Analyze : Icon::Code;
     } else if (key == "simulation") {
         HmiSimulationHost host;
-        // 1.12.0 : XPGAnalyser IHM - pas d'automate : ni son simulateur, ni ses commandes, ni
+        // 1.12.0 : IHM Studio - pas d'automate : ni son simulateur, ni ses commandes, ni
         // ses forcages ; l'IHM tourne seule (ses variables, les esclaves simules).
         const bool plc = core::hasApi();
         if (plc) {
@@ -2201,7 +2201,7 @@ void MainAnalysisScreen::askHmiCreateVariable(std::uint64_t viewId, const valuek
     };
     const std::string zoneHmi = "IHM \xE2\x80\x94 une variable de l'IHM";
     const std::string zoneApi = "API \xE2\x80\x94 une variable de l'automate";
-    // 1.12.0 : XPGAnalyser IHM - une variable de l'IHM seulement : ni zone, ni adresse d'automate
+    // 1.12.0 : IHM Studio - une variable de l'IHM seulement : ni zone, ni adresse d'automate
     // (1.12.2 : les deux champs n'y sont plus du tout). Les champs se suivent par leur rang.
     const bool withApi = plc && core::hasApi();
     std::vector<FormDialog::Field> fields;

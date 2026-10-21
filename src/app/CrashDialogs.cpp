@@ -7,6 +7,7 @@
 //  s'ouvre.
 // =============================================================================
 #include "CrashDialogs.hpp"
+#include "../core/Edition.hpp"   // 1.12.20 : le nom de l'application (API Studio, IHM Studio)
 
 #include "App.hpp"
 #include "Dossiers.hpp"
@@ -32,7 +33,7 @@ namespace {
 bool hangDialog(const char* title, const char* message) {
     const SDL_MessageBoxButtonData buttons[] = {
         {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Attendre"},
-        {0, 1, "Fermer XPGAnalyser"},
+        {0, 1, "Fermer"},
     };
     SDL_MessageBoxData data{};
     data.flags = SDL_MESSAGEBOX_WARNING | SDL_MESSAGEBOX_BUTTONS_LEFT_TO_RIGHT;
@@ -75,8 +76,8 @@ bool showPendingReport() {
     XPG_TRACE(Dialog, "au lancement : la fen\xC3\xAAtre du %s du %s", report->kind.c_str(), report->when.c_str());
 #if XPG_WITH_SDL
     const std::string title = report->kind == "blocage"
-        ? "XPGAnalyser : un blocage s'est produit"
-        : "XPGAnalyser : un plantage s'est produit";
+        ? core::productName() + " : un blocage s'est produit"
+        : core::productName() + " : un plantage s'est produit";
     std::string note;
     for (;;) {
         std::string message = (report->kind == "blocage" ? "Un blocage s'est produit le " : "Un plantage s'est produit le ")
@@ -173,7 +174,7 @@ std::string recoveryNote(double stalledSeconds) {
     char buf[96];
     std::snprintf(buf, sizeof buf, "%.1f", stalledSeconds);
     for (char* c = buf; *c; ++c) if (*c == '.') *c = ',';
-    std::string note = std::string("XPGAnalyser ne r\xC3\xA9pondait plus depuis ") + buf + " s ; il est reparti.";
+    std::string note = core::productName() + " ne r\xC3\xA9pondait plus depuis " + buf + " s ; il est reparti.";
     const std::string report = core::crash::lastHangReport();
     if (!report.empty()) note += " Rapport de blocage : " + report;
     core::trail::note(core::trail::Kind::Watchdog, note);

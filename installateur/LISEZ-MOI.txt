@@ -1,12 +1,13 @@
-﻿XPGAnalyser {VERSION} - Windows 10 et 11, 64 bits
-=================================================
+﻿API Studio et IHM Studio {VERSION} - Windows 10 et 11, 64 bits
+==============================================================
 
 L'analyse, l'IHM et la simulation de tes projets Control Expert (.XPG).
 
 
 CE QUI EST INSTALLÉ
 -------------------
-Ce dossier : le programme (XpgAnalyzer.exe) et tout ce dont il a besoin
+Ce dossier : les deux applications (API-Studio.exe : le programme de
+l'automate ; IHM-Studio.exe : l'IHM) et tout ce dont elles ont besoin
 (SDL3.dll, le runtime Visual C++ s'il y en a un), resources\ et libs\ (les
 versions livrées, qui amorcent tes données), maintenance\ (les scripts de
 réparation), licences\, manifeste.json (chaque fichier, sa taille, son
@@ -18,20 +19,21 @@ TES DONNÉES
 Tes projets, ta bibliothèque (DFB, DDT, macros), ton catalogue et tes
 captures sont dans ton dossier des données : Documents\XPGAnalyser par
 défaut, ou celui choisi pendant l'installation. Pour les voir, les ouvrir ou
-les changer : l'accueil de XPGAnalyser, lien « Dossiers », ou le menu Projet
+les changer : l'accueil d'API Studio ou d'IHM Studio, lien « Dossiers », ou le menu Projet
 > Dossiers de l'application... Ils sont enregistrés dans
 %APPDATA%\XpgAnalyzer\XPGAnalyser.ini ; tes réglages, dans
-%APPDATA%\XpgAnalyzer\settings.txt.
+%APPDATA%\XpgAnalyzer\settings.txt (ces dossiers gardent leur nom d'origine :
+tes réglages et tes données restent où ils sont).
 
 METTRE À JOUR
 -------------
-Lance le nouvel installateur (XPGAnalyser-Setup-<version>.exe). Il trouve la
+Lance le nouvel installateur (API-IHM-Studio-Setup-<version>.exe). Il trouve la
 version installée, la sauvegarde, ferme l'application proprement, remplace le
 programme, met à jour les fichiers livrés sans écraser ceux que tu as
 modifiés, puis vérifie chaque fichier.
 
-EN CAS DE PROBLÈME (menu Démarrer > XPGAnalyser > Maintenance)
---------------------------------------------------------------
+EN CAS DE PROBLÈME (menu Démarrer > API IHM Studio > Maintenance)
+-----------------------------------------------------------------
   Vérifier l'installation                rien n'est modifié
   Réparer                                diagnostic, puis réparation de ce qui est cassé
   Reprendre une installation interrompue
@@ -43,9 +45,9 @@ seul) ou %ProgramData%\XPGAnalyser\Journaux (pour tous les comptes).
 
 DÉSINSTALLER
 ------------
-Menu Démarrer > XPGAnalyser > Désinstaller XPGAnalyser (tape « désinstaller »
+Menu Démarrer > API IHM Studio > Désinstaller API IHM Studio (tape « désinstaller »
 dans la recherche Windows), ou Paramètres > Applications > Applications
-installées > XPGAnalyser > Désinstaller. Tes données et tes réglages sont gardés, sauf si tu choisis de
+installées > API IHM Studio > Désinstaller. Tes données et tes réglages sont gardés, sauf si tu choisis de
 les supprimer (ils vont alors dans la Corbeille, après la confirmation
 SUPPRIMER).
 

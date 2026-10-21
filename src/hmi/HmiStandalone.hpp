@@ -2,7 +2,7 @@
 //  hmi/HmiStandalone.hpp - 1.12.0 : UNE IHM DE LA 1.11, RENDUE AUTONOME
 // -----------------------------------------------------------------------------
 //  Jusqu'a la 1.11, l'IHM lisait les variables de l'automate du projet par leur
-//  nom (Armoires[0].ana.PT1.mes). XPGAnalyser IHM n'a pas d'automate : ces noms
+//  nom (Armoires[0].ana.PT1.mes). IHM Studio n'a pas d'automate : ces noms
 //  y sont inconnus. fromPlc() les rend a l'IHM, une fois, depuis le programme
 //  du dossier d'origine :
 //

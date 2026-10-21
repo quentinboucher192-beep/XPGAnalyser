@@ -1,6 +1,6 @@
 #include "HmiSimulation.hpp"
 #include "../Disposition.hpp"
-#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - la simulation de l'IHM seule
+#include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - la simulation de l'IHM seule
 #include "../../core/AtomicFile.hpp"   // 1.11.15 : l'instantane de la simulation, ecrit d'un bloc
 #include "../../hmi/HmiSimData.hpp"
 #include "HmiParamPanes.hpp"   // 1.9 : setPlcTypes, le repere des copies modifiees
@@ -716,7 +716,7 @@ static void paintStoppedNote(const ui::PaintContext& ctx, gfx::Rect b, const std
     if (text.empty()) return;
     static const std::vector<HmiLiveCanvas::NoteButton> kDefault = {
         {"D\xC3\xA9marrer l'IHM", "hmi.start", true}, {"D\xC3\xA9marrer les deux", "both.start", false}};
-    static const std::vector<HmiLiveCanvas::NoteButton> kHmiOnly = {{"D\xC3\xA9marrer l'IHM", "hmi.start", true}};   // 1.12.0 : XPGAnalyser IHM
+    static const std::vector<HmiLiveCanvas::NoteButton> kHmiOnly = {{"D\xC3\xA9marrer l'IHM", "hmi.start", true}};   // 1.12.0 : IHM Studio
     const auto& buttons = !given.empty() ? given : core::hasApi() ? kDefault : kHmiOnly;
     const auto& c = ctx.theme.color;
     ctx.r.fillRect(b, gfx::Color{0, 0, 0, 96});
@@ -2511,7 +2511,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     plcChip_->setTooltip("L'API : le programme de l'automate simul\xC3\xA9. Ses commandes compl\xC3\xA8tes (pause, un cycle) "
                          "sont dans la barre du haut.");
     plcBtn_ = &bar->addButton("D\xC3\xA9marrer l'API", "plc.toggle", ui::Icon::Play);
-    // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - ni sa pastille, ni son bouton.
+    // 1.12.0 : IHM Studio n'a pas d'automate - ni sa pastille, ni son bouton.
     if (!core::hasApi()) {
         bar->setSlotHidden(*plcChip_, true);      // la barre decide de la visibilite de ses emplacements
         bar->setSlotHidden(*plcBtn_, true);
@@ -2810,7 +2810,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
             if (status_) status_->setTransientMessage(t, 6.0, error ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
         });
         const auto apiTab = tabs->addTab(ui::TabControl::Tab{"Variables API", ui::Icon::LocatedVariable, false, false}, std::move(tree));
-        // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - l'onglet reste (ses rangs aussi), cache.
+        // 1.12.0 : IHM Studio n'a pas d'automate - l'onglet reste (ses rangs aussi), cache.
         if (!core::hasApi()) tabs->setTabHidden(apiTab, true);
     }
     {
@@ -3223,7 +3223,7 @@ ui::EventResult HmiSimulationPane::onEvent(const ui::InputEvent& ev) {
         std::vector<ui::PopupMenu::Item> items;
         for (std::size_t i = 0; i < std::size(kBarMenu); ++i) {
             const auto& m = kBarMenu[i];
-            // 1.12.0 : XPGAnalyser IHM - ni l'API (les deux, tout arreter), ni ses forcages.
+            // 1.12.0 : IHM Studio - ni l'API (les deux, tout arreter), ni ses forcages.
             const std::string_view action(m.action);
             if (!core::hasApi() && (action == "both.start" || action == "all.stop" || action == "hmi.force" || action == "hmi.unforce")) continue;
             if (!core::hasApi() && !*m.label && i < 3) continue;     // le trait apres « Tout arreter »
@@ -3318,7 +3318,7 @@ void HmiSimulationPane::ensureStarted(double now) {
     sim::Environment* link = host_.link ? host_.link() : nullptr;
     // 1.10 : L'IHM SEULE - pas d'automate simule prepare : sa memoire se prepare
     // (sans cycle, l'API reste arretee) ; l'IHM y lit et y ecrit.
-    // 1.12.14 : XPGAnalyser IHM n'a pas d'automate - l'IHM ne demande plus sa memoire (chaque demarrage
+    // 1.12.14 : IHM Studio n'a pas d'automate - l'IHM ne demande plus sa memoire (chaque demarrage
     // essayait de preparer le programme de MAST, et le disait).
     if (core::hasApi() && !started_ && !rt && !link && host_.transport) {
         host_.transport("sim.prepare");
@@ -3605,7 +3605,7 @@ void HmiSimulationPane::startHmi(const std::string& source) {
     runtime_.log("Simulation", "IHM", "IHM d\xC3\xA9marr\xC3\xA9" "e" + (source.empty() ? std::string{} : " (" + source + ")"));
     // Rien ne demarre l'autre en cachette : ce que l'IHM lit, dit tout de suite.
     const std::string plc = plcStateText();
-    // 1.12.0 : XPGAnalyser IHM - l'IHM seule, ses variables et ses esclaves simules.
+    // 1.12.0 : IHM Studio - l'IHM seule, ses variables et ses esclaves simules.
     if (!core::hasApi()) {
         status_->setTransientMessage("IHM d\xC3\xA9marr\xC3\xA9" "e : ses variables, les esclaves simul\xC3\xA9s de ses \xC3\xA9quipements", 6.0,
                                      ui::StatusBar::Severity::Success);
@@ -4343,7 +4343,7 @@ void HmiSimulationPane::refreshPane() {
                                   : tone == "paused"            ? "L'API est en pause.\n"
                                   : tone == "halted"            ? "L'API est en d\xC3\xA9" "faut (arr\xC3\xAAt\xC3\xA9" "e sur une erreur).\n"
                                                                 : "L'API aussi est arr\xC3\xAAt\xC3\xA9" "e.\n";
-        if (!core::hasApi()) {      // 1.12.0 : XPGAnalyser IHM - pas d'automate
+        if (!core::hasApi()) {      // 1.12.0 : IHM Studio - pas d'automate
             canvas_->setStoppedNote("L'IHM est arr\xC3\xAAt\xC3\xA9" "e\nD\xC3\xA9marrer l'IHM (barre ci-dessus, ou F8).");
             status_->setMessage("IHM arr\xC3\xAAt\xC3\xA9" "e", ui::StatusBar::Severity::Info);
         } else {

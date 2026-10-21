@@ -2,7 +2,7 @@
 #include "HmiValueKind.hpp"   // 1.12.19 : le carre et la raison sous chaque case (valuekind::decorateCells)
 #include <optional>
 #include "../../ui/Commands.hpp"   // 1.12.18 : le menu de la liste
-#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 #include "HmiActionDialogs.hpp"   // 1.11.9 : l'operation en arbre, le script, la formule de Maths
 #include "HmiItemDuplicateDialog.hpp"   // 1.12.16 : Dupliquer... (N copies)
 #include "HmiParamPanes.hpp"   // 1.9 : les arguments types d'Ouvrir une popup

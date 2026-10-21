@@ -33,7 +33,7 @@ std::vector<TreeRow> treeRows(const Index& ix, const TreeState& state) {
     std::vector<TreeRow> rows;
     for (const Chapter c : kChapters) {
         const auto topics = ix.ofChapter(c);
-        // 1.12.0 : un chapitre vide est celui de l'autre application (XPGAnalyser API : ni l'IHM,
+        // 1.12.0 : un chapitre vide est celui de l'autre application (API Studio : ni l'IHM,
         // ni les expressions ; IHM : ni l'automate, ni les macros, ni les blocs) - il ne se montre pas.
         if (topics.empty() && c != Chapter::Start && core::edition() != core::Edition::Both) continue;
         TreeRow ch;

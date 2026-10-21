@@ -64,7 +64,7 @@ std::string plainWord(std::string_view s) {
     return out;
 }
 
-// Les DDT de l'automate (XPGAnalyser API), donnes par l'application ; nuls : les types IHM seuls.
+// Les DDT de l'automate (API Studio), donnes par l'application ; nuls : les types IHM seuls.
 std::mutex gPlcLock;
 std::shared_ptr<const params::PlcTypes> gPlc;
 

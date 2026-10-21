@@ -1,10 +1,10 @@
 # =============================================================================
-#  Session 1200 IHM : XPGAnalyser IHM (1.12.0), XpgAnalyzer-IHM.exe - l'IHM
+#  Session 1200 IHM : IHM Studio (1.12.0), IHM-Studio.exe - l'IHM
 #  seule. Avant le lancement, Armoire_Gaz (un projet de la 1.11 : l'automate et
 #  son IHM ensemble) est pose dans projets\ ; au premier lancement, XPGAnalyser
 #  IHM le recopie dans projets\ihm et rend son IHM autonome (les globales de
 #  l'automate qu'elle lisait deviennent ses variables, dossier Automate).
-#    1. l'accueil et l'arbre de XPGAnalyser IHM (ni API, ni simulation de
+#    1. l'accueil et l'arbre de IHM Studio (ni API, ni simulation de
 #       l'automate) ;
 #    2. les Natives (IHM > Programmation generale > Natives) : le sommaire,
 #       LIMIT en ST puis en C++, les couleurs, l'aleatoire, une conversion

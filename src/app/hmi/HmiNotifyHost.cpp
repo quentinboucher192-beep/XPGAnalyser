@@ -103,7 +103,7 @@ void NotifyHost::report(const hmi::ReportOutput& r) {
                                                                                 : "il est aussi enregistr\xC3\xA9 ici : " + r.path + ".";
     const std::string body = r.title + "\n\nDu " + r.from + " au " + r.to + ".\nLe rapport est en pi\xC3\xA8" "ce jointe (" + r.fileName
                            + ") ; " + kept + "\n\n-- \n" + (project_.empty() ? std::string("IHM") : project_)
-                           + " (IHM XpgAnalyzer). Ce message part tout seul : ne pas y r\xC3\xA9pondre.";
+                           + " (IHM Studio). Ce message part tout seul : ne pas y r\xC3\xA9pondre.";
     dispatcher_->sendReport(r.recipients, "[" + (project_.empty() ? std::string("IHM") : project_) + "] " + r.title, body, r.fileName, r.data, type);
     collect();
 }

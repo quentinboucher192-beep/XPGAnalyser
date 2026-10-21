@@ -1,5 +1,5 @@
 #include "HmiCheck.hpp"
-#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas d'espace API.
+#include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'espace API.
 #include "HmiKeys.hpp"            // 1.11.23 : les raccourcis
 #include "HmiOverload.hpp"   // 1.11.20 : les surcharges
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
@@ -311,7 +311,7 @@ bool known(const Project& p, const NameExists& plc, std::string_view name, const
     };
     // 1.11.1 (API-M) : API est l'espace des variables de l'automate (API.<globale>,
     // API.<Unite>.<variable>) ; le chemin entier est verifie par le modele (HmiApiVars).
-    // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - API n'y est qu'un nom comme un autre.
+    // 1.12.0 : IHM Studio n'a pas d'automate - API n'y est qu'un nom comme un autre.
     // 1.12.7 : un script general ouvre ses constantes publiques (Reglages.Seuils) ; le chemin entier
     // est verifie a part (qualifiedUses : publique, existante, lue seulement).
     return p.variable(name) || isHmiFunction(name) || pub::isSysRoot(name) || pub::viewNamed(p, name) || enumValue() || !plc
@@ -3038,7 +3038,7 @@ void checkComm(const Project& p, const NameExists& plc, const comm::Plan* plan, 
         if (cm.demoServer && cm.port == cm.demoPort && (cm.host == "127.0.0.1" || cm.host == "localhost"))
             add(out, S::Info, cat, kNoId, kNoId, "hote",
                 "l'IHM lit le serveur de d\xC3\xA9monstration (le simulateur en Modbus TCP) : un essai de la liaison, pas l'automate r\xC3\xA9" "el");
-    } else if (core::hasApi()) {      // 1.12.2 : XPGAnalyser IHM n'a pas d'automate (ni son simulateur)
+    } else if (core::hasApi()) {      // 1.12.2 : IHM Studio n'a pas d'automate (ni son simulateur)
         for (const auto& v : p.views)
             for (const auto& o : v.objects)
                 if (o.kind == Kind::CommStatus || o.kind == Kind::PlcDiagnostic) {

@@ -3,6 +3,7 @@
 //  centre d'aide unique. Voir l'en-tete.
 // =============================================================================
 #include "HelpCenterScreen.hpp"
+#include "../../core/Edition.hpp"   // 1.12.20 : le nom de l'application (API Studio, IHM Studio)
 #include "HmiExprScreen.hpp"   // integration I111, lien 4 : la page des expressions (T3)
 
 #include "../../core/CallTrail.hpp"
@@ -787,7 +788,7 @@ void HelpCenterScreen::showTopic(const std::string& key, bool record) {
                 "l'enregistre en PDF."));
             // Tranche 9 : en tableaux (les colonnes alignees), comme la fiche HTML :
             // toutes les touches, sans le filtre ni la recherche de la page.
-            a.blocks.push_back(block(HelpBlockKind::Subtitle, "XPGAnalyser " + help::news::sessionVersion()
+            a.blocks.push_back(block(HelpBlockKind::Subtitle, core::productName() + " " + help::news::sessionVersion()
                                                                   + " \xE2\x80\x94 les raccourcis clavier"));
             for (const auto& g : hc::keysPage({}, std::nullopt).groups) {
                 a.blocks.push_back(block(HelpBlockKind::Heading, g.label));

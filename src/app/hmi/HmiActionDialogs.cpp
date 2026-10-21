@@ -78,7 +78,7 @@ std::vector<Name> namesFor(const hmi::Project* hp, const hmi::View* view, const 
         for (auto& n : api) out.push_back(std::move(n));
     }
     for (const auto& sv : hmi::pub::kSysVars)
-        if (hmi::pub::sysDomainShown(sv.domain))      // 1.12.0 : XPGAnalyser IHM - ni Automate, ni Communication
+        if (hmi::pub::sysDomainShown(sv.domain))      // 1.12.0 : IHM Studio - ni Automate, ni Communication
             out.push_back({"SYS", "SYS." + std::string(sv.name), std::string(sv.type), std::string(sv.text)});
     return out;
 }

@@ -384,7 +384,7 @@ std::string serializeAction(Id owner, const Action& a) {
 
 std::string serializeView(const View& v) {
     std::string s;
-    s += "# XpgAnalyzer - vue IHM (format " + std::to_string(kFormatVersion) + ")\n";
+    s += "# IHM Studio - vue IHM (format " + std::to_string(kFormatVersion) + ")\n";
     s += "vue" + fieldInt("id", v.id) + field("nom", v.name) + field("description", v.description)
        + fieldInt("largeur", v.width) + fieldInt("hauteur", v.height) + field("fond", v.background)
        + fieldInt("calque_actif", v.activeLayer);
@@ -524,7 +524,7 @@ bool parseAction(const Record& r, Action& a, std::string& why) {
 core::Result<View> parseView(std::string_view text, LoadReport* report) {
     View v;
     bool sawView = false, sawEnd = false;
-    int fileFormat = kFormatVersion;     // "# XpgAnalyzer - vue IHM (format 6)" : l'en-tete le dit
+    int fileFormat = kFormatVersion;     // "# IHM Studio - vue IHM (format 6)" : l'en-tete le dit (avant la 1.12.20 : "# XpgAnalyzer - ...")
     Object* current = nullptr;
     std::vector<Declaration>* holder = nullptr;   // 1.11.18 (lot 3) : le porteur des lignes "declaration" qui suivent
     std::size_t lineNo = 0;
@@ -845,7 +845,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     const int format = callbackTypes ? kFormatVersion : viewMembers ? 26 : tableGestures ? 25 : shortcuts ? 24 : declared ? 23
                      : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
-    index += "# XpgAnalyzer - projet IHM (format " + std::to_string(format) + ")\n";
+    index += "# IHM Studio - projet IHM (format " + std::to_string(format) + ")\n";
     index += "ihm" + fieldInt("format", format) + fieldInt("prochain_id", p.nextId) + "\n";
     index += "config" + field("nom", cfg.name) + field("description", cfg.description)
            + field("version", cfg.version) + field("auteur", cfg.author) + field("cree", cfg.created)

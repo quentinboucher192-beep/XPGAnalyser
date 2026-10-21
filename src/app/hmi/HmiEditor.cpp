@@ -4,7 +4,7 @@
 #include "../../ui/Commands.hpp"      // 1.12.18 : la table des commandes du clic droit
 #include "../../hmi/HmiTable.hpp"   // 1.12.13 : le Tableau, un mode a la fois
 #include "../Disposition.hpp"
-#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de zone API
+#include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas de zone API
 #include "../RenameDialog.hpp"            // lot 7 : requestRename (en ligne : rien de plus a lier)
 #include "../../hmi/HmiSymbols.hpp"
 #include "../../hmi/HmiRenameRefs.hpp"     // Lot API 8 : renommer partout (IHM)

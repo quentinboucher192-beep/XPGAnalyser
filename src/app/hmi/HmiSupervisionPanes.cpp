@@ -1,5 +1,5 @@
 #include "HmiSupervisionPanes.hpp"
-#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 #include "HmiAssist.hpp"
 
 #include "HmiPaneKit.hpp"

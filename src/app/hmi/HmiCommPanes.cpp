@@ -4,7 +4,7 @@
 #include "HmiCommPanes.hpp"
 #include "../../ui/Commands.hpp"   // 1.12.18 : le menu d'un equipement
 #include "../Disposition.hpp"
-#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - ses equipements, pas d'automate du projet
+#include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - ses equipements, pas d'automate du projet
 #include "../ExportTarget.hpp"
 
 #include "HmiIcons.hpp"
@@ -422,7 +422,7 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     tools_->setVisibleWhen(CScanExport, on({TScanner}));
     tools_->setVisibleWhen(CRestore, real({TNetwork}));
     // 1.12.0 : l'automate du projet (sa table, son essai, sa liaison, la demonstration) :
-    // XPGAnalyser API seulement - XPGAnalyser IHM lit ses equipements.
+    // API Studio seulement - IHM Studio lit ses equipements.
     const auto withPlc = [](std::function<bool()> f) { return [f] { return core::hasApi() && f(); }; };
     tools_->setVisibleWhen(CTest, withPlc([on, planEquip] { return on({TTable, TPlan, TTest})() && !planEquip(); }));
     tools_->setVisibleWhen(CAdd, withPlc(on({TTable})));
@@ -1009,7 +1009,7 @@ void HmiCommPane::refresh() {
     for (const auto& [name, why] : plan.refused()) unlocated += why.rfind("non localis", 0) == 0;
     std::size_t bound = 0;
     for (const auto& v : doc_->project.programs.variables) bound += v.bound() ? 1 : 0;
-    if (!core::hasApi())      // 1.12.0 : XPGAnalyser IHM - ses equipements, ses variables liees
+    if (!core::hasApi())      // 1.12.0 : IHM Studio - ses equipements, ses variables liees
         status_->setMessage(std::to_string(doc_->project.equipments.size()) + " \xC3\xA9quipement(s), " + std::to_string(bound) + " variable(s) IHM li\xC3\xA9" "e(s)",
                             ui::StatusBar::Severity::Info);
     else
@@ -1049,7 +1049,7 @@ void HmiCommPane::refreshPlan() {
             {core::hasApi() ? "Tous : l'automate du projet + " + std::to_string(modbusEquipments) + " \xC3\xA9quipement" + (modbusEquipments > 1 ? "s" : "")
                             : "Tous : " + std::to_string(modbusEquipments) + " \xC3\xA9quipement" + (modbusEquipments > 1 ? "s" : ""),
              "", {}, true}};
-        // 1.12.0 : XPGAnalyser IHM n'a pas d'automate du projet.
+        // 1.12.0 : IHM Studio n'a pas d'automate du projet.
         if (core::hasApi()) items.push_back({"L'automate du projet", kPlcKey, {}, true});
         int selected = 0;
         if (planFilter_ == kPlcKey && core::hasApi()) selected = 1;
@@ -1069,7 +1069,7 @@ void HmiCommPane::refreshPlan() {
     std::size_t fromProgram = 0, fromTable = 0, unlocated = 0;
     for (const auto& pt : plan.points()) (pt.origin == "table" ? fromTable : fromProgram) += 1;
     for (const auto& [name, why] : plan.refused()) unlocated += why.rfind("non localis", 0) == 0 ? 1 : 0;
-    if (core::hasApi() && shown(kPlcKey)) {     // 1.12.0 : XPGAnalyser API seulement
+    if (core::hasApi() && shown(kPlcKey)) {     // 1.12.0 : API Studio seulement
         const bool open = !planClosed_.count(upperOf(kPlcKey));
         std::string state = comm.modbus() ? (link ? (link->diagnostics().connected ? std::string("connect\xC3\xA9") : std::string("pas de liaison")) : std::string("pas de liaison"))
                                           : std::string("simulateur de l'application");
@@ -1183,7 +1183,7 @@ void HmiCommPane::refreshPlan() {
         planRows_.push_back({PlanRow::Kind::Group, e.name, e.name, {}, {}});
         planNames_.push_back({});
         if (!open) continue;
-        // 1.12.2 : XPGAnalyser IHM n'a pas d'automate du projet : rien a distinguer.
+        // 1.12.2 : IHM Studio n'a pas d'automate du projet : rien a distinguer.
         const std::string notPlc = core::hasApi() ? "Ce n'est pas une variable de l'automate du projet. " : "";
         const auto leafQuality = [&](const std::string& name, int& tone) {
             tone = 0;
@@ -1384,7 +1384,7 @@ void HmiCommPane::refreshState() {
     const auto rowsOf = hmi::comm::diagnosticRows(comm, link, simulator, host && host->running(), host ? host->demoPort() : 0);
     std::vector<std::vector<std::string>> rows;
     std::vector<int> tones;
-    // Lot 15 : l'automate d'abord (son titre), puis chaque equipement. 1.12.2 : XPGAnalyser IHM
+    // Lot 15 : l'automate d'abord (son titre), puis chaque equipement. 1.12.2 : IHM Studio
     // n'a pas d'automate du projet (ni sa liaison, ni le serveur de demonstration) : ses
     // equipements seulement.
     if (core::hasApi()) {
@@ -1460,7 +1460,7 @@ void HmiCommPane::refreshState() {
             }
         }
     }
-    if (rows.empty()) {   // 1.12.2 : XPGAnalyser IHM, sans equipement
+    if (rows.empty()) {   // 1.12.2 : IHM Studio, sans equipement
         rows.push_back({"Aucun \xC3\xA9quipement", "onglet \xC3\x89quipements : + \xC3\x89quipement"});
         tones.push_back(0);
     }

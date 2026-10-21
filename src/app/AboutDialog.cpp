@@ -1,4 +1,5 @@
 #include "AboutDialog.hpp"
+#include "../core/Edition.hpp"   // 1.12.20 : le nom de l'application (API Studio, IHM Studio)
 #include "../core/CodeStats.hpp"   // 1.11.7 : les lignes de code
 
 #include "App.hpp"
@@ -113,7 +114,7 @@ namespace app {
     }
 
     void showAboutDialog(App& app) {
-        auto dialog = std::make_unique<MessageDialog>("\xC3\x80 propos d'XPGAnalyser", aboutText(app),
+        auto dialog = std::make_unique<MessageDialog>("\xC3\x80 propos d'" + core::productName(), aboutText(app),
                                                       MessageDialog::Icon::Info,
                                                       "Copier les informations pour le support");
         dialog->setCancelLabel("Fermer");

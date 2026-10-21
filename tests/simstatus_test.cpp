@@ -18,7 +18,7 @@
 #include "../src/app/SimJournal.hpp"
 #include "../src/app/SimStatus.hpp"
 #include "../src/app/SimCenter.hpp"   // lot API 8 (le moteur) : SimForcing::programSays
-#include "../src/core/Edition.hpp"    // 1.12.14 : XPGAnalyser IHM, sans automate
+#include "../src/core/Edition.hpp"    // 1.12.14 : IHM Studio, sans automate
 
 #include <cstdio>
 #include <string>
@@ -369,11 +369,11 @@ void programmeDirait() {
     check(model.forcings[1].programSays.empty(), "la case d'un jumeau : sans objet (vide)");
 }
 
-// 1.12.14 : XPGAnalyser IHM N'A PAS D'AUTOMATE - une erreur de preparation (qu'elle ne fait plus) ne se
+// 1.12.14 : IHM Studio N'A PAS D'AUTOMATE - une erreur de preparation (qu'elle ne fait plus) ne se
 // montre pas ; ni le bandeau, ni les cartes, ni la chaine, ni l'attention, ni la pastille ne parlent de
 // l'automate, de MAST ou du programme ; ses forcages sont des cases des esclaves simules.
 void ihmSeule11214() {
-    std::printf("1.12.14 : XPGAnalyser IHM - rien de l'automate\n");
+    std::printf("1.12.14 : IHM Studio - rien de l'automate\n");
     core::setEdition(core::Edition::Ihm);
     auto s = running();
     s.plc = ss::PlcFacts{};
@@ -414,7 +414,7 @@ void ihmSeule11214() {
     j.add(SimSource::Ihm, SimSeverity::Ok, "ihm-demarrage", "L'IHM d\xC3\xA9marre", {}, "ihm");
     check(j.csv().rfind("Heure;Source;", 0) == 0, "le CSV du journal : sans colonne Cycle");
     core::setEdition(core::Edition::Both);
-    check(ss::compute(s).cards[1].sentence.find("automate") != std::string::npos, "XPGAnalyser API (et les essais) : comme avant");
+    check(ss::compute(s).cards[1].sentence.find("automate") != std::string::npos, "API Studio (et les essais) : comme avant");
 }
 
 } // namespace
@@ -425,7 +425,7 @@ int main() {
     mots();
     journal();
     programmeDirait();   // lot API 8 (le moteur)
-    ihmSeule11214();     // 1.12.14 : XPGAnalyser IHM, sans automate
+    ihmSeule11214();     // 1.12.14 : IHM Studio, sans automate
     std::printf("\n%s (%d)\n", failures == 0 ? "simstatus : tout va bien" : "simstatus : ECHECS", failures);
     return failures == 0 ? 0 : 1;
 }

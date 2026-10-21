@@ -12,7 +12,7 @@
 #       DLL que l'exe importe (lues dans sa table d'importation) - l'arret si
 #       l'une d'elles n'est ni du systeme ni livree ;
 #    3. ISCC (Inno Setup 6.3 ou plus) sous Wine, avec les valeurs de config.ini
-#       passees par /D : XPGAnalyser-Setup-<version>.exe a la racine du projet ;
+#       passees par /D : API-IHM-Studio-Setup-<version>.exe a la racine du projet ;
 #    4. dist/SHA256SUMS.txt.
 #  Le runtime C++ est lie dans l'exe (-static) : pas de DLL du runtime a livrer.
 #
@@ -104,11 +104,12 @@ def winpath(path):
 
 # 1.12.0 : UN ZIP PORTABLE PAR APPLICATION - le dossier a livrer sans l'exe de l'autre,
 # son manifeste et sa maintenance\config.ini a lui (exe = le sien) :
-# <produit>-<edition>-<version>-portable.zip, un dossier <produit>-<edition>-<version> dedans.
-def portables(st, sortie, produit, version, editions):
+# <application>-<version>-portable.zip (1.12.20 : API-Studio-..., IHM-Studio-...), un dossier
+# <application>-<version> dedans.
+def portables(st, sortie, version, editions):
     os.makedirs(sortie, exist_ok=True)
-    for edition, exe, autre in editions:
-        nom = f"{produit}-{edition}-{version}"
+    for application, exe, autre in editions:
+        nom = f"{application}-{version}"
         travail = os.path.join(sortie, nom)
         if os.path.isdir(travail):
             shutil.rmtree(travail)
@@ -155,9 +156,9 @@ def portables(st, sortie, produit, version, editions):
 
 def main():
     ap = argparse.ArgumentParser()
-    # 1.12.0 : deux applications - XPGAnalyser API (--exe) et XPGAnalyser IHM (--exe-ihm).
-    ap.add_argument("--exe", default=os.path.join(ROOT, "build-mingw", "XpgAnalyzer-API.exe"))
-    ap.add_argument("--exe-ihm", default=os.path.join(ROOT, "build-mingw", "XpgAnalyzer-IHM.exe"))
+    # 1.12.0 : deux applications - API Studio (--exe) et IHM Studio (--exe-ihm).
+    ap.add_argument("--exe", default=os.path.join(ROOT, "build-mingw", "API-Studio.exe"))
+    ap.add_argument("--exe-ihm", default=os.path.join(ROOT, "build-mingw", "IHM-Studio.exe"))
     ap.add_argument("--portables", default="", help="un dossier : un zip portable par application")
     ap.add_argument("--sdl", default=os.path.join(ROOT, "third_party", "SDL3", "lib", "x64", "SDL3.dll"))
     ap.add_argument("--iscc", default="")
@@ -165,9 +166,11 @@ def main():
     a = ap.parse_args()
 
     produit = ini("Produit", "nom")
+    cle = ini("Produit", "cle", "XPGAnalyser")             # 1.12.20 : le nom d'origine (registre, dossiers)
+    fichier = ini("Produit", "fichier", "API-IHM-Studio")  # 1.12.20 : le debut du nom de l'installateur
     version = ini("Produit", "version")
-    exe_nom = ini("Produit", "exe", "XpgAnalyzer-API.exe")
-    exe_ihm_nom = ini("Produit", "exe_ihm", "XpgAnalyzer-IHM.exe")
+    exe_nom = ini("Produit", "exe", "API-Studio.exe")
+    exe_ihm_nom = ini("Produit", "exe_ihm", "IHM-Studio.exe")
     chaine = "mingw"
     dist = os.path.join(ROOT, ini("Installateur", "sortie", "dist"))
     st = os.path.join(dist, "staging")
@@ -198,9 +201,10 @@ def main():
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     write_text(os.path.join(m, "config.ini"),
                f"; maintenance\\config.ini - ecrit par package_mingw.py ({stamp}) depuis outils\\config.ini.\n"
-               "; Ce que les scripts de maintenance doivent savoir de XPGAnalyser. Ne pas modifier.\n"
+               f"; Ce que les scripts de maintenance doivent savoir d'{produit}. Ne pas modifier.\n"
                "[Produit]\n"
                f"nom = {produit}\n"
+               f"cle = {cle}\n"
                f"editeur = {ini('Produit', 'editeur')}\n"
                f"version = {version}\n"
                f"app_id = {ini('Produit', 'app_id')}\n"
@@ -253,16 +257,18 @@ def main():
         f.write(json.dumps(manifeste, ensure_ascii=False, indent=4).replace("\n", "\r\n"))
     print(f"manifeste : {len(fichiers)} fichiers ; DLL a livrer : {', '.join(a_livrer) or 'aucune'} ; importees : {', '.join(dlls)}")
     if a.portables:
-        portables(st, a.portables, produit, version, (("API", exe_nom, exe_ihm_nom), ("IHM", exe_ihm_nom, exe_nom)))
+        portables(st, a.portables, version, ((os.path.splitext(exe_nom)[0], exe_nom, exe_ihm_nom), (os.path.splitext(exe_ihm_nom)[0], exe_ihm_nom, exe_nom)))
     if a.sans_installateur:
         return
 
     # ---- 3. Inno Setup sous Wine ----
     if not a.iscc or not os.path.exists(a.iscc):
         sys.exit("ISCC.exe introuvable (--iscc).")
-    setup_nom = f"{produit}-Setup-{version}.exe"
+    setup_nom = f"{fichier}-Setup-{version}.exe"
     defs = {
         "Nom": produit,
+        "Cle": cle,
+        "Fichier": fichier,
         "Editeur": ini("Produit", "editeur"),
         "Version": version,
         "AppGuid": ini("Produit", "app_id").strip("{}"),

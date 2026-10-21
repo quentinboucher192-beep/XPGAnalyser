@@ -18,7 +18,7 @@
 //      src/MAST.XPG             generated on export
 //      src/CONFIG.XHW           generated on export
 //
-//  1.12.0 : DEUX APPLICATIONS. Dans XPGAnalyser IHM (core::hasApi() faux), un
+//  1.12.0 : DEUX APPLICATIONS. Dans IHM Studio (core::hasApi() faux), un
 //  projet n'est que son manifeste (edition = ihm), son verrou et ihm/ (ecrit par
 //  hmi::save) : open() ne lit pas le programme (un modele vide, au nom du projet),
 //  save() n'ecrit que le manifeste et le verrou - jamais config/, vars/... (un
@@ -70,8 +70,8 @@ namespace project {
         bool        crlf{ true };
         std::string contentDateTime;
         std::string contentKind;
-        // 1.12.0 : l'application du projet - "api" (XPGAnalyser API : le programme),
-        // "ihm" (XPGAnalyser IHM : ihm/ seule) ; vide : un projet de la 1.11, qui a
+        // 1.12.0 : l'application du projet - "api" (API Studio : le programme),
+        // "ihm" (IHM Studio : ihm/ seule) ; vide : un projet de la 1.11, qui a
         // les deux (chaque application n'y lit et n'y ecrit que sa moitie).
         std::string edition;
     };
@@ -101,7 +101,7 @@ namespace project {
         [[nodiscard]] static core::Result<OpenResult> open(const std::string& folder,
             std::string_view password,
             std::string_view masterKey = {});
-        // 1.12.0 : le programme d'un dossier, lu meme dans XPGAnalyser IHM - pour rendre son
+        // 1.12.0 : le programme d'un dossier, lu meme dans IHM Studio - pour rendre son
         // IHM autonome (hmi::standalone) a la migration. Un dossier verrouille : sans modele.
         [[nodiscard]] static core::Result<OpenResult> openModel(const std::string& folder);
 

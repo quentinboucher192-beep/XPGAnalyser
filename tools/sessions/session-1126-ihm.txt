@@ -1,5 +1,5 @@
 # =============================================================================
-#  Session 1126 IHM : XPGAnalyser IHM (1.12.6), XpgAnalyzer-IHM.exe - les lots
+#  Session 1126 IHM : IHM Studio (1.12.6), IHM-Studio.exe - les lots
 #  B et C de l'audit de la bibliotheque d'objets (un role par propriete,
 #  l'ecriture au type, le geste a cote d'une formule, les reperes partout).
 #  Armoire_Gaz (migre par la 1.12.1), avec Vue_Listes, Pop_Etapes, Vue_LotA

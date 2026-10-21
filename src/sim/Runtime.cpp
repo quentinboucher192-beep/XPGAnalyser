@@ -972,7 +972,7 @@ std::vector<std::string> Runtime::forcedNames() const {
 
 std::string Runtime::exportForcing() const {
     std::ostringstream out;
-    out << "# Forcing configuration for the XpgAnalyzer simulator.\n"
+    out << "# Forcing configuration for the API Studio simulator.\n"
            "# One variable per line: name = value. TRUE/FALSE, 42, 1.5, T#500ms.\n"
            "# Names that no longer exist are reported on import rather than\n"
            "# silently dropped: a scenario that half-applies is worse than one\n"

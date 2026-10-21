@@ -1,5 +1,5 @@
 # =============================================================================
-#  Session 1125 IHM : XPGAnalyser IHM (1.12.5), XpgAnalyzer-IHM.exe - le lot A
+#  Session 1125 IHM : IHM Studio (1.12.5), IHM-Studio.exe - le lot A
 #  de l'audit de la bibliotheque d'objets (les defauts corriges).
 #  Armoire_Gaz (migre par la 1.12.1), avec Vue_Listes, Pop_Etapes (sessions
 #  1122, 1124) et Vue_LotA (demo1125) :

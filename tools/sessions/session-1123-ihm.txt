@@ -1,5 +1,5 @@
 # =============================================================================
-#  Session 1123 IHM : XPGAnalyser IHM (1.12.3), XpgAnalyzer-IHM.exe - Projet >
+#  Session 1123 IHM : IHM Studio (1.12.3), IHM-Studio.exe - Projet >
 #  Disposition..., plusieurs objets choisis, la simulation.
 #  Armoire_Gaz (migre par la 1.12.1), avec Vue_Listes (la session 1122) :
 #    1. Projet > Disposition... (la fenetre, ses groupes) ;

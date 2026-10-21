@@ -2,7 +2,7 @@
 //  hmi/HmiOperators.cpp - les operateurs des symboles et des types IHM (1.10)
 // =============================================================================
 #include "HmiOperators.hpp"
-#include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 
 #include "HmiDecl.hpp"       // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiEnums.hpp"      // 1.10 (decision 15) : toString / fromString des enumerations

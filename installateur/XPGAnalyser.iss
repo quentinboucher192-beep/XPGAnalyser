@@ -1,5 +1,6 @@
 ﻿; =============================================================================
-;  installateur\XPGAnalyser.iss - l'installateur Windows de XPGAnalyser
+;  installateur\XPGAnalyser.iss - l'installateur Windows d'API Studio et d'IHM Studio (1.12.20 ;
+;  avant : XPGAnalyser - le nom de ce fichier, la cle du registre et les dossiers techniques le gardent)
 ; -----------------------------------------------------------------------------
 ;  Fabriqué par outils\build_installer.bat (ou package.bat) avec Inno Setup 6.3
 ;  ou plus : toutes les valeurs viennent de outils\config.ini, passées par /D
@@ -16,7 +17,7 @@
 ;     l'application proprement ; reprend les anciennes données (copiées, jamais
 ;     déplacées ni effacées) ; vérifie chaque fichier (manifeste SHA-256) ;
 ;   - laisse une réserve de réparation et les scripts de maintenance (menu
-;     Démarrer > XPGAnalyser > Maintenance) ;
+;     Démarrer > API IHM Studio > Maintenance) ;
 ;   - note chaque étape : une installation coupée se reprend ;
 ;   - la désinstallation garde tes données, sauf si tu tapes SUPPRIMER.
 ;
@@ -25,11 +26,11 @@
 ;     INSTALLÉES (leur exe est là, ou le lot 8 connu du registre) ;
 ;   - la page « Ta bibliothèque » : les blocs livrés, et les tiens, ajoutés par
 ;     glisser-déposer ou par Ajouter (une vraie liste Windows : aide\xpgliste.dll) ;
-;   - « Désinstaller XPGAnalyser » dans le menu Démarrer (la recherche Windows le trouve) ;
+;   - « Désinstaller API IHM Studio » dans le menu Démarrer (la recherche Windows le trouve) ;
 ;   - l'option « Épingler à la barre des tâches » (au premier lancement, par l'application) ;
 ;   - la page « Ce qui a été installé » : les programmes, leur architecture, les dossiers.
 ;
-;  Sans surveillance : XPGAnalyser-Setup-<v>.exe /VERYSILENT /SUPPRESSMSGBOXES
+;  Sans surveillance : API-IHM-Studio-Setup-<v>.exe /VERYSILENT /SUPPRESSMSGBOXES
 ;    [/CURRENTUSER | /ALLUSERS] [/DIR="..."] [/DONNEES="D:\Mes données"]
 ;    [/MIGRER=oui|non] [/DESINSTALLERLOT8=oui|non] [/LOG="fichier"]
 ;  (voir docs\GUIDE-INSTALLATION.md).
@@ -40,10 +41,24 @@
 #endif
 
 #ifndef Nom
-  #define Nom "XPGAnalyser"
+  #define Nom "API IHM Studio"
+#endif
+; 1.12.20 : les deux applications ; Cle : le nom d'origine, celui du registre (Software\XPGAnalyser) et
+; des dossiers techniques - une mise a jour retrouve ainsi l'installation, ses donnees et ses reglages.
+#ifndef NomApi
+  #define NomApi "API Studio"
+#endif
+#ifndef NomIhm
+  #define NomIhm "IHM Studio"
+#endif
+#ifndef Cle
+  #define Cle "XPGAnalyser"
+#endif
+#ifndef Fichier
+  #define Fichier "API-IHM-Studio"
 #endif
 #ifndef Editeur
-  #define Editeur "XPGAnalyser"
+  #define Editeur "API IHM Studio"
 #endif
 #ifndef Version
   #define Version "1.12.0"
@@ -52,11 +67,11 @@
   #define AppGuid "68A57092-419E-4BEF-8486-57B131E9C592"
 #endif
 #ifndef Exe
-  #define Exe "XpgAnalyzer-API.exe"
+  #define Exe "API-Studio.exe"
 #endif
-; 1.12.0 : deux applications - XPGAnalyser API ({#Exe}) et XPGAnalyser IHM ({#ExeIhm}).
+; 1.12.0 : deux applications - API Studio ({#Exe}) et IHM Studio ({#ExeIhm}).
 #ifndef ExeIhm
-  #define ExeIhm "XpgAnalyzer-IHM.exe"
+  #define ExeIhm "IHM-Studio.exe"
 #endif
 #ifndef Description
   #define Description "Analyse, IHM et simulation de projets Control Expert"
@@ -99,6 +114,8 @@ VersionInfoDescription=Installation de {#Nom} {#Version}
 VersionInfoCompany={#Editeur}
 DefaultDirName={autopf}\{#Nom}
 DefaultGroupName={#Nom}
+; 1.12.20 : le menu Demarrer prend le nouveau nom (l'ancien dossier XPGAnalyser s'en va, [InstallDelete]).
+UsePreviousGroup=no
 DisableProgramGroupPage=yes
 DisableDirPage=auto
 UsePreviousAppDir=yes
@@ -112,11 +129,11 @@ WizardStyle=modern
 WizardSizePercent=110
 WizardImageFile=images\grande.bmp,images\grande-2x.bmp
 WizardSmallImageFile=images\petite.bmp,images\petite-2x.bmp
-SetupIconFile=..\resources\logo\xpg_analyzer.ico
+SetupIconFile=..\resources\logo\studio.ico
 UninstallDisplayIcon={app}\{#Exe}
 UninstallDisplayName={#Nom}
 OutputDir={#Sortie}
-OutputBaseFilename={#Nom}-Setup-{#Version}
+OutputBaseFilename={#Fichier}-Setup-{#Version}
 Compression=lzma2/ultra
 SolidCompression=yes
 CloseApplications=yes
@@ -131,15 +148,15 @@ Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 
 [Messages]
 ; Le texte d'origine parle d'icônes « sur le Bureau », même quand il n'y en a pas.
-FinishedLabel=L'assistant a terminé l'installation de [name].%n%n{#Nom} API et {#Nom} IHM sont dans le menu Démarrer, avec sa Maintenance (vérifier, réparer, restaurer). Pour le désinstaller : tape « désinstaller » dans la recherche Windows. Tes dossiers se règlent dans l'application : accueil > Dossiers.
+FinishedLabel=L'assistant a terminé l'installation de [name].%n%n{#NomApi} et {#NomIhm} sont dans le menu Démarrer, avec sa Maintenance (vérifier, réparer, restaurer). Pour le désinstaller : tape « désinstaller » dans la recherche Windows. Tes dossiers se règlent dans l'application : accueil > Dossiers.
 FinishedLabelNoIcons=L'assistant a terminé l'installation de [name].
 
 [CustomMessages]
 fr.RaccourciBureau=Créer un raccourci sur le Bureau
 fr.Raccourcis=Raccourcis :
-fr.Lancer=Lancer {#Nom} API
-fr.LancerIhm=Lancer {#Nom} IHM
-fr.EpinglerBarre=Épingler {#Nom} à la barre des tâches (au premier lancement : Windows te demande de confirmer)
+fr.Lancer=Lancer {#NomApi}
+fr.LancerIhm=Lancer {#NomIhm}
+fr.EpinglerBarre=Épingler {#NomApi} et {#NomIhm} à la barre des tâches (au premier lancement : Windows te demande de confirmer)
 
 [Tasks]
 Name: "bureau"; Description: "{cm:RaccourciBureau}"; GroupDescription: "{cm:Raccourcis}"; Flags: unchecked
@@ -163,12 +180,18 @@ Source: "{#Staging}\libs\index.txt"; DestName: "libs-index.txt"; Flags: dontcopy
 [InstallDelete]
 ; 1.12.0 : deux applications - l'exe unique de la 1.11 et ses raccourcis s'en vont.
 Type: files; Name: "{app}\XpgAnalyzer.exe"
-Type: files; Name: "{autoprograms}\{#Nom}\{#Nom}.lnk"
-Type: files; Name: "{autodesktop}\{#Nom}.lnk"
+Type: files; Name: "{autoprograms}\{#Cle}\{#Cle}.lnk"
+Type: files; Name: "{autodesktop}\{#Cle}.lnk"
+; 1.12.20 : API Studio et IHM Studio - les exe, le menu Demarrer et les raccourcis de XPGAnalyser s'en vont.
+Type: files; Name: "{app}\XpgAnalyzer-API.exe"
+Type: files; Name: "{app}\XpgAnalyzer-IHM.exe"
+Type: filesandordirs; Name: "{autoprograms}\{#Cle}"
+Type: files; Name: "{autodesktop}\{#Cle} API.lnk"
+Type: files; Name: "{autodesktop}\{#Cle} IHM.lnk"
 
 [Icons]
-Name: "{autoprograms}\{#Nom}\{#Nom} API"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Comment: "Le programme de l'automate : analyse, variables, tables, simulation"
-Name: "{autoprograms}\{#Nom}\{#Nom} IHM"; Filename: "{app}\{#ExeIhm}"; WorkingDir: "{app}"; Comment: "Les vues, les scripts, les équipements, la simulation de l'IHM"
+Name: "{autoprograms}\{#Nom}\{#NomApi}"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Comment: "Le programme de l'automate : analyse, variables, tables, simulation"
+Name: "{autoprograms}\{#Nom}\{#NomIhm}"; Filename: "{app}\{#ExeIhm}"; WorkingDir: "{app}"; Comment: "Les vues, les scripts, les équipements, la simulation de l'IHM"
 Name: "{autoprograms}\{#Nom}\Maintenance\Réparer"; Filename: "{app}\maintenance\repair.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
 Name: "{autoprograms}\{#Nom}\Maintenance\Vérifier l'installation"; Filename: "{app}\maintenance\verify_installation.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
 Name: "{autoprograms}\{#Nom}\Maintenance\Reprendre une installation interrompue"; Filename: "{app}\maintenance\resume_installation.bat"; WorkingDir: "{app}\maintenance"; IconFilename: "{app}\{#Exe}"
@@ -178,15 +201,15 @@ Name: "{autoprograms}\{#Nom}\Maintenance\Réinitialiser mes réglages"; Filename
 Name: "{autoprograms}\{#Nom}\Tes données"; Filename: "{code:DonneesReel}"; Check: not IsAdminInstallMode
 ; 1.8.0 : trouvé par la recherche Windows (« désinstaller »). Tes données restent (voir plus bas).
 Name: "{autoprograms}\{#Nom}\Désinstaller {#Nom}"; Filename: "{uninstallexe}"; Comment: "Désinstaller {#Nom} (tes données sont gardées)"
-Name: "{autodesktop}\{#Nom} API"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Tasks: bureau
-Name: "{autodesktop}\{#Nom} IHM"; Filename: "{app}\{#ExeIhm}"; WorkingDir: "{app}"; Tasks: bureau
+Name: "{autodesktop}\{#NomApi}"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Tasks: bureau
+Name: "{autodesktop}\{#NomIhm}"; Filename: "{app}\{#ExeIhm}"; WorkingDir: "{app}"; Tasks: bureau
 
 [Registry]
-Root: HKA; Subkey: "Software\{#Nom}"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\{#Nom}"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"
-Root: HKA; Subkey: "Software\{#Nom}"; ValueType: string; ValueName: "Version"; ValueData: "{#Version}"
-Root: HKA; Subkey: "Software\{#Nom}"; ValueType: string; ValueName: "Portee"; ValueData: "{code:Portee}"
-Root: HKA; Subkey: "Software\{#Nom}"; ValueType: string; ValueName: "DossierDonnees"; ValueData: "{code:DonneesBrut}"
+Root: HKA; Subkey: "Software\{#Cle}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"
+Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "Version"; ValueData: "{#Version}"
+Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "Portee"; ValueData: "{code:Portee}"
+Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "DossierDonnees"; ValueData: "{code:DonneesBrut}"
 
 [Run]
 Filename: "{app}\{#Exe}"; Description: "{cm:Lancer}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
@@ -194,7 +217,8 @@ Filename: "{app}\{#ExeIhm}"; Description: "{cm:LancerIhm}"; WorkingDir: "{app}";
 
 [UninstallDelete]
 Type: files; Name: "{app}\installation.ini"
-Type: files; Name: "{code:DossierReserve}\{#Nom}-Setup-*.exe"
+Type: files; Name: "{code:DossierReserve}\{#Fichier}-Setup-*.exe"
+Type: files; Name: "{code:DossierReserve}\{#Cle}-Setup-*.exe"
 Type: dirifempty; Name: "{code:DossierReserve}"
 Type: dirifempty; Name: "{app}"
 
@@ -264,7 +288,7 @@ end;
 
 function DossierEtat(Param: String): String;
 begin
-  if IsAdminInstallMode then Result := ExpandConstant('{commonappdata}\{#Nom}')
+  if IsAdminInstallMode then Result := ExpandConstant('{commonappdata}\{#Cle}')
   else Result := ExpandConstant('{localappdata}\XpgAnalyzer');
 end;
 
@@ -408,6 +432,7 @@ end;
 function AUneApplication(Dossier: String): Boolean;
 begin
   Result := FileExists(Dossier + '\{#Exe}') or FileExists(Dossier + '\{#ExeIhm}') or FileExists(Dossier + '\XpgAnalyzer.exe')
+            or FileExists(Dossier + '\XpgAnalyzer-API.exe') or FileExists(Dossier + '\XpgAnalyzer-IHM.exe')
             or FileExists(Dossier + '\xpg_analyzer.exe');
 end;
 
@@ -669,8 +694,8 @@ begin
   Ajoute(L, 'Ce PC : ' + LeWindows);
   Ajoute(L, '');
   Ajoute(L, 'LES PROGRAMMES');
-  Ajoute(L, '  ' + Colonne('{#Exe}', 21) + Colonne('XPGAnalyser API', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#Exe}'));
-  Ajoute(L, '  ' + Colonne('{#ExeIhm}', 21) + Colonne('XPGAnalyser IHM', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#ExeIhm}'));
+  Ajoute(L, '  ' + Colonne('{#Exe}', 21) + Colonne('API Studio', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#Exe}'));
+  Ajoute(L, '  ' + Colonne('{#ExeIhm}', 21) + Colonne('IHM Studio', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#ExeIhm}'));
   Ajoute(L, '  ' + Colonne(ExtractFileName(Unins), 17) + Colonne('le désinstallateur', 27) + Colonne('32 bits (x86)', 15) + TailleDe(Unins));
   Ajoute(L, '  ' + Colonne('SDL3.dll', 17) + Colonne('fenêtres, affichage, son', 27) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\SDL3.dll'));
   Ajoute(L, '  ' + Colonne('maintenance\', 17) + '6 scripts (.bat) et leurs étapes PowerShell :');
@@ -679,8 +704,8 @@ begin
   Ajoute(L, '  Rien d''autre à installer : tout est à côté de l''exe.');
   Ajoute(L, '');
   Ajoute(L, 'LE PROGRAMME   ' + App);
-  Ajoute(L, '  ├─ ' + Colonne('{#Exe}', 32) + 'XPGAnalyser API');
-  Ajoute(L, '  ├─ ' + Colonne('{#ExeIhm}', 32) + 'XPGAnalyser IHM');
+  Ajoute(L, '  ├─ ' + Colonne('{#Exe}', 32) + 'API Studio');
+  Ajoute(L, '  ├─ ' + Colonne('{#ExeIhm}', 32) + 'IHM Studio');
   Ajoute(L, '  ├─ ' + Colonne('SDL3.dll', 32));
   Ajoute(L, '  ├─ ' + Colonne(ExtractFileName(Unins) + ', .dat', 32) + 'le désinstallateur');
   Ajoute(L, '  ├─ ' + Colonne('installation.ini', 32) + 'écrit par l''installateur');
@@ -690,7 +715,7 @@ begin
   Ajoute(L, '  ├─ ' + Colonne('resources\', 32) + 'le catalogue des automates');
   Ajoute(L, '  └─ ' + Colonne('licences\', 32) + 'SDL3, miniz, stb, nanosvg, minimp3');
   Ajoute(L, '');
-  if IsAdminInstallMode then Ajoute(L, 'TES DONNÉES   Documents\{#Nom} de chaque compte (ici : ' + Don + ')')
+  if IsAdminInstallMode then Ajoute(L, 'TES DONNÉES   Documents\{#Cle} de chaque compte (ici : ' + Don + ')')
   else Ajoute(L, 'TES DONNÉES   ' + Don);
   N := CompterSousDossiers(Don + '\projets');
   if N = 0 then S := 'vide : aucun projet' else S := IntToStr(N) + ' projet(s)';
@@ -713,18 +738,18 @@ begin
   Ajoute(L, '  └─ ' + Colonne('Etat\', 32));
   Ajoute(L, '');
   Ajoute(L, 'LE MENU DÉMARRER   ' + Menu);
-  Ajoute(L, '  ├─ ' + Colonne('{#Nom} API', 32));
-  Ajoute(L, '  ├─ ' + Colonne('{#Nom} IHM', 32));
+  Ajoute(L, '  ├─ ' + Colonne('{#NomApi}', 32));
+  Ajoute(L, '  ├─ ' + Colonne('{#NomIhm}', 32));
   Ajoute(L, '  ├─ ' + Colonne('Désinstaller {#Nom}', 32) + 'la recherche Windows le trouve');
   if not IsAdminInstallMode then Ajoute(L, '  ├─ ' + Colonne('Tes données', 32));
   Ajoute(L, '  └─ ' + Colonne('Maintenance\', 32) + '6 raccourcis');
   Ajoute(L, '');
-  if WizardIsTaskSelected('bureau') then S := '{#Nom} API, {#Nom} IHM' else S := 'aucun raccourci';
+  if WizardIsTaskSelected('bureau') then S := '{#NomApi}, {#NomIhm}' else S := 'aucun raccourci';
   Ajoute(L, Colonne('LE BUREAU', 20) + S);
   if WizardIsTaskSelected('barre') then S := 'épinglage proposé au premier lancement' else S := 'rien (non demandé)';
   Ajoute(L, Colonne('LA BARRE DES TÂCHES', 20) + S);
   if IsAdminInstallMode then S := 'HKLM' else S := 'HKCU';
-  Ajoute(L, Colonne('LE REGISTRE', 20) + S + '\Software\{#Nom}');
+  Ajoute(L, Colonne('LE REGISTRE', 20) + S + '\Software\{#Cle}');
   Ajoute(L, Colonne('', 20) + 'InstallDir, Version, Portee, DossierDonnees');
   Ajoute(L, Colonne('', 20) + 'et la désinstallation (Paramètres > Applications)');
   Result := L;
@@ -780,7 +805,7 @@ begin
   if FileExists(F) and LoadStringFromFile(F, Etat) and (Trim(Etat) <> '') and (Pos('terminee', Etat) <> 1) then begin
     Log('Installation precedente interrompue : ' + F);
     if not WizardSilent then
-      MsgBox('Une installation précédente de {#Nom} a été interrompue avant la fin.' + #13#10 + #13#10 +
+      MsgBox('Une installation précédente d''{#Nom} a été interrompue avant la fin.' + #13#10 + #13#10 +
              'Celle-ci va la reprendre : les fichiers seront recopiés et vérifiés. Tes données ne sont pas touchées.',
              mbInformation, MB_OK);
   end;
@@ -791,7 +816,7 @@ var Intro, Aide: TNewStaticText;
     BAjouter, BDossier, BRetirer: TNewButton;
     Haut, HListe, I: Integer;
 begin
-  PageBiblio := CreateCustomPage(PageAutre.ID, 'Ta bibliothèque', 'Les blocs livrés avec {#Nom}, et les tiens : DFB, DDT, macros.');
+  PageBiblio := CreateCustomPage(PageAutre.ID, 'Ta bibliothèque', 'Les blocs livrés avec {#NomApi}, et les tiens : DFB, DDT, macros.');
   ComboRangement := TNewComboBox.Create(PageBiblio);
   ComboRangement.Parent := PageBiblio.Surface;
   ComboRangement.Style := csDropDownList;
@@ -872,7 +897,7 @@ begin
     // les blocs s'ajoutent aussi plus tard, dans l'application.
     Intro.Height := ScaleY(60);
     Intro.Caption := 'La liste des blocs ne peut pas s''afficher sur ce PC. La bibliothèque livrée est installée ; '
-                   + 'tes blocs s''ajoutent aussi plus tard, dans {#Nom} (Bibliothèque).';
+                   + 'tes blocs s''ajoutent aussi plus tard, dans {#NomApi} (Bibliothèque).';
     ComboRangement.Visible := False;
     BAjouter.Enabled := False;
     BDossier.Enabled := False;
@@ -887,13 +912,13 @@ var I: Integer;
 begin
   // ---- Tes donnees ----
   S := 'Ce dossier reste à toi : une mise à jour, une réparation ou une désinstallation ne l''effacent jamais sans ta confirmation.' + #13#10 +
-       'Il ne peut pas être dans le dossier du programme. Tu pourras le changer plus tard : accueil de {#Nom} > Dossiers.';
+       'Il ne peut pas être dans le dossier du programme. Tu pourras le changer plus tard : accueil d''{#NomApi} ou d''{#NomIhm} > Dossiers.';
   if IsAdminInstallMode then
     S := S + #13#10 + #13#10 + 'Installation pour tous les comptes : avec le dossier proposé, chaque compte Windows a le sien, dans ses propres Documents.';
-  PageDonnees := CreateInputDirPage(wpSelectDir, 'Tes données', 'Où ranger tes projets, ta bibliothèque, ton catalogue et tes captures ?', S, False, '{#Nom}');
+  PageDonnees := CreateInputDirPage(wpSelectDir, 'Tes données', 'Où ranger tes projets, ta bibliothèque, ton catalogue et tes captures ?', S, False, '{#Cle}');
   PageDonnees.Add('Dossier des données :');
   PageDonnees.Values[0] := DonneesDefautReel;
-  if RegQueryStringValue(HKA, 'Software\{#Nom}', 'DossierDonnees', Precedent) and (Precedent <> '') then
+  if RegQueryStringValue(HKA, 'Software\{#Cle}', 'DossierDonnees', Precedent) and (Precedent <> '') then
     PageDonnees.Values[0] := DevelopperJetons(Precedent);
 
   // ---- Reprendre tes anciennes donnees ----
@@ -993,7 +1018,7 @@ begin
   if (PageAutre <> nil) and (CurPageID = PageAutre.ID) then begin
     D := Trim(PageAutre.Values[0]);
     if (D = '') or not DirExists(D) or not AUnAncienContenu(D) then begin
-      MsgBox('Ce dossier n''a ni projets\, ni libs\, ni captures\ : ce n''est pas une ancienne version de {#Nom}.', mbError, MB_OK);
+      MsgBox('Ce dossier n''a ni projets\, ni libs\, ni captures\ : ce n''est pas une ancienne version d''{#Nom}.', mbError, MB_OK);
       Result := False;
     end;
   end;
@@ -1025,12 +1050,12 @@ begin
       end;
     except
     end;
-  if RegQueryStringValue(HKA, 'Software\{#Nom}', 'Version', Prec) and (Prec <> '') then
+  if RegQueryStringValue(HKA, 'Software\{#Cle}', 'Version', Prec) and (Prec <> '') then
     S := S + NewLine + 'Mise à jour de la version ' + Prec + ' :' + NewLine +
          Space + 'elle est d''abord sauvegardée (programme, réglages, registre).' + NewLine;
   if MemoTasksInfo <> '' then S := S + NewLine + MemoTasksInfo;
   // 1.8.0 : toujours, dans le menu Demarrer (la recherche Windows le trouve).
-  S := S + NewLine + 'Menu Démarrer :' + NewLine + Space + '{#Nom} API, {#Nom} IHM, Désinstaller {#Nom}, Maintenance' + NewLine;
+  S := S + NewLine + 'Menu Démarrer :' + NewLine + Space + '{#NomApi}, {#NomIhm}, Désinstaller {#Nom}, Maintenance' + NewLine;
   Result := S;
 end;
 
@@ -1074,10 +1099,10 @@ begin
   // 1.8.0 : l'application demande l'epinglage a Windows au premier lancement (une fois par compte).
   if WizardIsTaskSelected('barre') then Barre := 'oui' else Barre := 'non';
   SetArrayLength(L, 22);
-  L[0] := '; installation.ini - écrit par l''installateur de {#Nom} {#Version}. Ne pas modifier :';
+  L[0] := '; installation.ini - écrit par l''installateur d''{#Nom} {#Version}. Ne pas modifier :';
   L[1] := '; tes dossiers se changent dans %APPDATA%\XpgAnalyzer\XPGAnalyser.ini (accueil > Dossiers).';
   L[2] := '[Installation]';
-  L[3] := 'nom = {#Nom}';
+  L[3] := 'nom = {#Nom}' + #13#10 + 'cle = {#Cle}';
   L[4] := 'version = {#Version}';
   L[5] := 'portee = ' + Portee('');
   L[6] := 'date = ' + GetDateTimeString('yyyy-mm-dd hh:nn:ss', '-', ':');

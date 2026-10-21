@@ -1091,7 +1091,7 @@ void MainAnalysisScreen::refreshTreeChrome() {
     if (!rail && !foot) return;
     // Un autre projet (un autre modele) repart de "tout" : le rail le suit.
     if (treeModel_) treeScope_ = kTreeScopes[std::clamp(treeModel_->scope(), 0, 5)];
-    // 1.12.0 : le rail moderne dans les deux applications (XPGAnalyser API n'a pas d'IHM).
+    // 1.12.0 : le rail moderne dans les deux applications (API Studio n'a pas d'IHM).
     const bool hmi = treeModel_ && (treeModel_->hasHmi() || core::edition() != core::Edition::Both);
     // L'etat de la simulation : la pastille du dossier Simulation (Centre de simulation).
     std::string simText;
@@ -1111,7 +1111,7 @@ void MainAnalysisScreen::refreshTreeChrome() {
                 : state == State::Halted ? ui::Tone::Error : ui::Tone::Muted;
     }
     // 1.11.23 : la ligne d'etat du titre Simulation ("arretee \xC2\xB7 cycle 0").
-    // 1.12.0 : XPGAnalyser IHM - la simulation de l'IHM (pas d'automate).
+    // 1.12.0 : IHM Studio - la simulation de l'IHM (pas d'automate).
     if (treeModel_ && !core::hasApi()) {
         const auto tab = hmiTabs_.find("simulation");
         const auto* hsim = dynamic_cast<const HmiSimulationPane*>(tab != hmiTabs_.end() ? tab->second : nullptr);
@@ -1260,7 +1260,7 @@ void MainAnalysisScreen::treeHeadAction(ui::NodeId node, std::size_t action) {
         break;
     }
     case Kind::SimFolder: {
-        // 1.12.0 : XPGAnalyser IHM - la simulation de l'IHM (F8 / Maj+F8).
+        // 1.12.0 : IHM Studio - la simulation de l'IHM (F8 / Maj+F8).
         if (!core::hasApi()) {
             (void)topBarLot8Action("hmi.toggle");
             break;

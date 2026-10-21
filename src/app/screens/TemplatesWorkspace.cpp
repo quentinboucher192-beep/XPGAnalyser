@@ -621,7 +621,7 @@ void MainAnalysisScreen::askHmiImport(const std::string& path, std::function<voi
     // paquet lache sur l'appli), ce qu'il apporte (le titre), ce qu'il emporte, les noms en conflit ; un
     // fichier plus recent, illisible ou un modele : la fenetre le dit et Importer est grise.
     auto spec = HmiImportDialog::load(doc->project, resolve(path));
-    spec.browse = ui::openFile("Paquets XpgAnalyzer|*.xpgvues;*.xpgsymboles;*.xpgtypes;*.xpgfonctions;*.xpgscripts",
+    spec.browse = ui::openFile("Paquets IHM Studio|*.xpgvues;*.xpgsymboles;*.xpgtypes;*.xpgfonctions;*.xpgscripts",
                                ui::pathIn(app_.projectFolder(), "exports"), "Importer");
     auto loader = [this, resolve](const std::string& file) {
         auto d = app_.hmi();

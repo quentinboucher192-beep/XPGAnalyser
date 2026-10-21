@@ -1,5 +1,5 @@
 #include "HmiFunctionPanes.hpp"
-#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 #include "../../hmi/HmiOverload.hpp"   // 1.11.20 : les surcharges (leur forme)
 
 #include "HmiAssetPanes.hpp"
@@ -656,7 +656,7 @@ std::vector<std::pair<hmi::pipeline::Severity, std::string>> HmiFunctionsPane::t
     for (const auto& j : trial_.journal) out.emplace_back(S::Information, "Journal : " + j);
     for (const auto& v : trial_.changed) out.emplace_back(S::Warning, "Variable IHM : " + v);
     // 1.11.21 : la simulation de l'API est lue des qu'elle est chargee, meme arretee - son etat est dit.
-    if (core::hasApi())   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate a lire
+    if (core::hasApi())   // 1.12.2 : IHM Studio n'a pas d'automate a lire
     out.emplace_back(S::Information, trial_.livePlc ? "Automate : lu dans la simulation de l'API ("
                                                           + (trial_.plcState.empty() ? std::string{} : trial_.plcState + ", ")
                                                           + "sans y \xC3\xA9" "crire)"

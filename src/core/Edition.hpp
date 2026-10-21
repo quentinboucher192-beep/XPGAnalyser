@@ -1,8 +1,8 @@
 // =============================================================================
 //  core/Edition.hpp - 1.12.0 : DEUX APPLICATIONS, UN SEUL CODE
 // -----------------------------------------------------------------------------
-//  XPGAnalyser API (l'automate : l'analyse du programme, sa simulation) et
-//  XPGAnalyser IHM (l'IHM : sa conception, sa simulation seule, le poste
+//  API Studio (l'automate : l'analyse du programme, sa simulation) et
+//  IHM Studio (l'IHM : sa conception, sa simulation seule, le poste
 //  d'exploitation) sont deux executables independants, faits du meme code.
 //  main.cpp fixe l'edition au lancement (XPG_EDITION, donne a la construction de
 //  chaque executable) ; les ecrans, les menus, l'arbre, l'aide, les dossiers des
@@ -32,7 +32,7 @@ void setEdition(Edition) noexcept;
 [[nodiscard]] std::string_view editionKey() noexcept;
 // "API", "IHM" ; "" pour Both.
 [[nodiscard]] std::string_view editionLabel() noexcept;
-// "XPGAnalyser API", "XPGAnalyser IHM" ; "XPGAnalyser" pour Both.
+// "API Studio", "IHM Studio" ; "API IHM Studio" pour Both (Version.hpp).
 [[nodiscard]] std::string productName();
 
 } // namespace core

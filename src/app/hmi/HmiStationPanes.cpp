@@ -1,6 +1,6 @@
 // Configuration > Poste d'exploitation (lot 14).
 #include "HmiStationPanes.hpp"
-#include "../../core/Edition.hpp"   // 1.12.0 : le poste de XPGAnalyser IHM
+#include "../../core/Edition.hpp"   // 1.12.0 : le poste de IHM Studio
 
 #include "HmiIcons.hpp"
 #include "HmiPaneKit.hpp"
@@ -266,7 +266,7 @@ void HmiStationPane::refreshLaunch() {
         0);
     const int monitors = hosts_.displays ? hosts_.displays() : 0;
     add("Moniteurs branch\xC3\xA9s", monitors > 0 ? std::to_string(monitors) : std::string("inconnu"), 0);
-    if (core::hasApi())       // 1.12.0 : XPGAnalyser IHM lit ses equipements, pas d'automate du projet
+    if (core::hasApi())       // 1.12.0 : IHM Studio lit ses equipements, pas d'automate du projet
     add("Automate", p.comm.modbus() ? "Modbus TCP " + p.comm.host + ":" + std::to_string(p.comm.port) + (p.comm.demoServer ? " (le serveur de d\xC3\xA9monstration)" : "")
                                     : std::string("le simulateur") + (st.runSimulator ? ", lanc\xC3\xA9 au d\xC3\xA9marrage du poste" : ", \xC3\xA0 lancer"),
         4);
@@ -512,7 +512,7 @@ void HmiStationPane::rebuildProperties() {
                                    "Un \xC3\xA9" "cran tactile sans clavier : cinq touchers du coin haut droit en trois secondes demandent la sortie."));
     post.properties.push_back(prop("Cacher le curseur", tf(st.hideCursor), PG::ValueType::Boolean, commit("sans_curseur"),
                                    "Un \xC3\xA9" "cran tactile : pas de fl\xC3\xA8" "che au milieu de la vue."));
-    if (core::hasApi())       // 1.12.0 : le simulateur de l'automate (XPGAnalyser API)
+    if (core::hasApi())       // 1.12.0 : le simulateur de l'automate (API Studio)
     post.properties.push_back(prop("Lancer le simulateur", tf(st.runSimulator), PG::ValueType::Boolean, commit("simulateur"),
                                    "Sur le simulateur (ou le serveur de d\xC3\xA9monstration) : l'automate simul\xC3\xA9 tourne d\xC3\xA8s le lancement du poste."));
     // 1.9 : la page Simulation de Parametres systeme, les reperes des lectures simulees.

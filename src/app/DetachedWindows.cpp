@@ -90,7 +90,7 @@ namespace {
 constexpr float kBand = 38.f;
 // Le titre de l'application, apres celui de l'onglet quand la fenetre
 // principale n'en dit pas plus (App : AppOptions::title).
-// 1.12.0 : celui de son application (XPGAnalyser API, XPGAnalyser IHM).
+// 1.12.0 : celui de son application (API Studio, IHM Studio).
 std::string appTitle() { return core::editionLabel().empty() ? std::string("PLC Project Analyzer") : core::productName(); }
 
 std::string lowerAscii(std::string_view s) {

@@ -1942,7 +1942,7 @@ std::vector<TrailCard> MainAnalysisScreen::ApiTrails::cards(MainAnalysisScreen& 
     const auto& settings = s.app_.settings();
     const std::string running = s.runningTrail();
     for (const auto& d : all()) {   // Lot API 8 : didacticiels et aide (all() : + ceux du lot 8)
-        if (!core::hasIhm() && std::string_view(d.key) == "api-ihm-table") continue;   // 1.12.0 : XPGAnalyser API n'a pas d'IHM
+        if (!core::hasIhm() && std::string_view(d.key) == "api-ihm-table") continue;   // 1.12.0 : API Studio n'a pas d'IHM
         TrailCard c;
         c.key = d.key;
         c.title = d.title;
@@ -2003,7 +2003,7 @@ void MainAnalysisScreen::openApiTutorial(const std::string& trail) {
             return reached > 0 && reached < d->steps;
         });
         tools.setEnabledWhen(PHmiTrails, [this] { return app_.hmi() != nullptr; });
-        tools.setVisibleWhen(PHmiTrails, [] { return core::hasIhm(); });      // 1.12.0 : XPGAnalyser API n'a pas d'IHM
+        tools.setVisibleWhen(PHmiTrails, [] { return core::hasIhm(); });      // 1.12.0 : API Studio n'a pas d'IHM
         paneLinks_ += tools.triggered->connect([this, last](int action) {
             switch (action) {
                 case PVisit: startTrail("api-decouvrir", false); break;
@@ -2037,7 +2037,7 @@ void MainAnalysisScreen::takePendingApiTutorial() {
     if (!pending || !app_.project() || !centre_) return;
     const std::string trail = *pending;
     pending.reset();
-    // 1.12.0 : XPGAnalyser IHM - un parcours de l'IHM (« decouvrir »), sans l'onglet API.
+    // 1.12.0 : IHM Studio - un parcours de l'IHM (« decouvrir »), sans l'onglet API.
     if (!ApiTrails::find(trail) && !trail.empty()) {
         startTrail(trail, false);
         return;

@@ -2,7 +2,7 @@
 //  app/hmi/HmiValueKind.cpp - voir HmiValueKind.hpp
 // =============================================================================
 #include "HmiValueKind.hpp"
-#include "../../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de variable API
+#include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas de variable API
 
 #include "HmiAssist.hpp"
 #include "HmiPanels.hpp"
@@ -284,7 +284,7 @@ Diag unknownDiag(const Env& env, std::string_view text, bool fx, std::string_vie
 
 // ---------------------------------------------------------------- les carres ---
 const std::vector<KindInfo>& kinds() {
-    // 1.12.0 : XPGAnalyser IHM n'a pas de variable API - pas de carre A dans la legende.
+    // 1.12.0 : IHM Studio n'a pas de variable API - pas de carre A dans la legende.
     if (!core::hasApi()) {
         static const std::vector<KindInfo> h = [] {
             std::vector<KindInfo> all = kindsWithApi();
@@ -385,7 +385,7 @@ bool pathInfo(const Env& env, std::string_view path, Style& zone, std::string& t
         zone = Style::Local;
         return describe() || true;
     }
-    if ((core::hasApi() && sameName(root, "API")) || isPlcRoot(env, root)) {   // 1.12.0 : pas dans XPGAnalyser IHM
+    if ((core::hasApi() && sameName(root, "API")) || isPlcRoot(env, root)) {   // 1.12.0 : pas dans IHM Studio
         zone = Style::Api;
         if (const auto roots = plcRoots(env.plc); roots && p.size() == root.size()) {
             const std::string key = upper(root);

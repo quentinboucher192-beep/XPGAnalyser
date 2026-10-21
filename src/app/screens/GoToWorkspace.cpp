@@ -158,7 +158,7 @@ const PaneEntry kPanes[] = {
     {"aide", "IHM \xE2\x80\xBA Aide", -1},
 };
 // 1.12.2 : un sous-onglet cache par l'application (Table des adresses : celle de l'automate,
-// cachee dans XPGAnalyser IHM) n'est plus propose - Aller a ouvrait une page vide.
+// cachee dans IHM Studio) n'est plus propose - Aller a ouvrait une page vide.
 bool paneShown(const PaneEntry& pe) {
     return !(pe.tab == HmiCommPane::TTable && std::string_view(pe.key) == "communication" && !core::hasApi());
 }
@@ -243,7 +243,7 @@ void MainAnalysisScreen::refreshGoToIndex() {
         ix.library.clear();
         project::SharedLibrary library(project::SharedLibrary::defaultRoot());
         // 1.12.0 : les macros et l'aide de la bibliotheque sont celles de l'automate ; l'aide
-        // de l'IHM, celle de XPGAnalyser IHM.
+        // de l'IHM, celle de IHM Studio.
         if (core::hasApi() && library.scan()) {
             for (const auto& item : library.items()) {
                 if (item.kind != project::LibraryItemKind::Macro) continue;
@@ -461,7 +461,7 @@ void MainAnalysisScreen::refreshGoToIndex() {
     }
 
     // ---- les volets et les actions ---------------------------------------------------
-    // 1.12.0 : les onglets de l'API dans XPGAnalyser API, les volets et actions de l'IHM dans XPGAnalyser IHM.
+    // 1.12.0 : les onglets de l'API dans API Studio, les volets et actions de l'IHM dans IHM Studio.
     if (core::hasApi())
         for (const auto& pe : kApiPanes) push(ix.entries, GPane, pe.title, "Onglet de l'API", std::string("apipane:") + pe.key, ui::Icon::Cpu);
     if (doc)

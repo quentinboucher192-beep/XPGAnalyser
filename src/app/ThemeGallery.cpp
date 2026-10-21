@@ -986,7 +986,7 @@ void ThemeGalleryDialog::onDelete() {
 
 void ThemeGalleryDialog::onExport() {
     const std::string key = chosenKey();
-    const auto spec = ui::saveFile("Th\xC3\xA8mes XpgAnalyzer|*.xpgtheme", ui::pathIn(startFolder(), ui::Theme::labelOf(key) + ".xpgtheme"),
+    const auto spec = ui::saveFile("Th\xC3\xA8mes|*.xpgtheme", ui::pathIn(startFolder(), ui::Theme::labelOf(key) + ".xpgtheme"),
                                    "Exporter le th\xC3\xA8me");
     std::weak_ptr<char> alive = alive_;
     if (!ui::browsePath(spec, {}, [this, alive, key](std::string path) {
@@ -997,7 +997,7 @@ void ThemeGalleryDialog::onExport() {
 }
 
 void ThemeGalleryDialog::onImport() {
-    const auto spec = ui::openFile("Th\xC3\xA8mes XpgAnalyzer|*.xpgtheme", startFolder(), "Importer un th\xC3\xA8me");
+    const auto spec = ui::openFile("Th\xC3\xA8mes|*.xpgtheme", startFolder(), "Importer un th\xC3\xA8me");
     std::weak_ptr<char> alive = alive_;
     if (!ui::browsePath(spec, {}, [this, alive](std::string path) {
             if (alive.expired()) return;

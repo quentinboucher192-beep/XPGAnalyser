@@ -3,7 +3,7 @@
 // -----------------------------------------------------------------------------
 //  Jusqu'a la 1.11, un projet avait les deux : le programme de l'automate et
 //  son IHM (ihm/), dans projets\<Nom>. Depuis la 1.12, deux applications, deux
-//  rangements : XPGAnalyser API range ses projets dans projets\api, XPGAnalyser
+//  rangements : API Studio range ses projets dans projets\api, XPGAnalyser
 //  IHM dans projets\ihm.
 //
 //  Au premier lancement de chaque application, ses projets de la 1.11 sont
@@ -11,7 +11,7 @@
 //    - API : tout, sauf ihm/ ;
 //    - IHM : le manifeste, ihm/, donnees/, versions/ (si l'IHM n'est pas la vue
 //      vide que la 1.11 creait pour chaque projet).
-//  XPGAnalyser IHM rend chaque IHM recopiee autonome (hmi::standalone) : les noms de
+//  IHM Studio rend chaque IHM recopiee autonome (hmi::standalone) : les noms de
 //  l'automate qu'elle lisait deviennent ses variables, depuis le programme d'origine.
 //  Le manifeste de la copie dit son application (edition = api | ihm). Les
 //  originaux ne bougent pas ; versions/ suit (chaque application n'y voit et

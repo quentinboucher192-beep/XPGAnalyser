@@ -1,6 +1,6 @@
 // app/screens/StationScreen.cpp - le poste d'exploitation (lot 14).
 #include "StationScreen.hpp"
-#include "../../core/Edition.hpp"   // 1.12.0 : le poste de XPGAnalyser IHM, sans automate
+#include "../../core/Edition.hpp"   // 1.12.0 : le poste de IHM Studio, sans automate
 #include "../hmi/HmiParamPanes.hpp"   // 1.9 : les parametres des popups
 
 #include "Screens.hpp"
@@ -84,7 +84,7 @@ core::Status StationScreen::buildUi() {
     if (!doc) return core::fail(core::ErrorCode::InvalidArgument, "pas d'IHM");
     auto root = std::make_unique<ui::DockLayout>("station.root");
     HmiSimulationHost host;
-    // 1.12.0 : XPGAnalyser IHM - le poste lit ses equipements (ou leurs esclaves
+    // 1.12.0 : IHM Studio - le poste lit ses equipements (ou leurs esclaves
     // simules), pas d'automate du projet : ni simulateur, ni liaison, ni demonstration.
     const bool plc = core::hasApi();
     if (plc) {

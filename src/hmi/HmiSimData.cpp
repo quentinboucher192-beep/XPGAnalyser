@@ -137,7 +137,7 @@ std::optional<sim::Value> convert(const sim::Value& from, sim::Type to) {
 
 std::string serialize(const Snapshot& s) {
     std::string out(kHeader);
-    out += "\n# XPGAnalyser : les donnees de la simulation IHM (remanence de simulation). Ecrit par l'application.\n";
+    out += "\n# IHM Studio : les donnees de la simulation IHM (remanence de simulation). Ecrit par l'application.\n";
     out += "prise date=" + quote(s.date) + " session=" + std::to_string(s.session) + "\n";
     for (const auto& c : s.cells)
         out += "case variable=" + std::to_string(c.variable) + " nom=" + quote(c.name) + " declare=" + quote(c.declared) + " chemin=" + quote(c.path)

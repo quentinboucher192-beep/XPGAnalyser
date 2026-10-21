@@ -3,10 +3,10 @@
 #  outils/mingw/cross_mingw.sh - 1.11.3 : l'exe pour Windows, compile sous Linux
 #  avec MinGW-w64 (comme l'exe des installateurs du lot 8 et de la 1.11.2). Il
 #  faut : g++-mingw-w64-x86-64-posix, cmake, ninja. 1.12.0 : DEUX EXE, faits du
-#  meme code - XpgAnalyzer-API.exe (l'automate) et XpgAnalyzer-IHM.exe (l'IHM).
+#  meme code - API-Studio.exe (l'automate) et IHM-Studio.exe (l'IHM).
 #
-#    outils/mingw/cross_mingw.sh            -> build-mingw/XpgAnalyzer-API.exe,
-#                                              build-mingw/XpgAnalyzer-IHM.exe (+ SDL3.dll)
+#    outils/mingw/cross_mingw.sh            -> build-mingw/API-Studio.exe,
+#                                              build-mingw/IHM-Studio.exe (+ SDL3.dll)
 #    JOBS=2 outils/mingw/cross_mingw.sh     -> moins de compilations a la fois
 #
 #  Le runtime C++ est lie dans l'exe (-static) : a cote, seulement SDL3.dll.
@@ -37,7 +37,8 @@ cmake -S . -B "$OUT" -G Ninja \
 ninja -C "$OUT" -j "$JOBS" xpg_api xpg_ihm
 cp -f third_party/SDL3/lib/x64/SDL3.dll "$OUT/SDL3.dll"
 rm -f "$OUT/XpgAnalyzer.exe" "$OUT/xpg_analyzer.exe"     # la 1.11 : un seul exe
-for exe in XpgAnalyzer-API XpgAnalyzer-IHM; do
+rm -f "$OUT/XpgAnalyzer-API.exe" "$OUT/XpgAnalyzer-IHM.exe"     # 1.12.0 a 1.12.19 : les anciens noms
+for exe in API-Studio IHM-Studio; do
     x86_64-w64-mingw32-strip "$OUT/$exe.exe"
     echo "fait : $OUT/$exe.exe"
 done

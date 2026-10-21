@@ -15,7 +15,7 @@
 //    - Deposer un fichier... : l'explorateur, puis la question du depot.
 // =============================================================================
 #include "Screens.hpp"
-#include "../../core/Edition.hpp"   // 1.12.14 : XPGAnalyser IHM - sans automate
+#include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio - sans automate
 
 #include "../ApiListKit.hpp"
 #include "../App.hpp"

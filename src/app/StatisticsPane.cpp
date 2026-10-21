@@ -2,7 +2,7 @@
 //  app/StatisticsPane.cpp - lot API 7 : l'onglet API > Statistiques
 // =============================================================================
 #include "StatisticsPane.hpp"
-#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API - pas d'IHM
+#include "../core/Edition.hpp"   // 1.12.0 : API Studio - pas d'IHM
 
 #include "ApiPanes.hpp"
 #include "ApiListKit.hpp"                  // lot API 8 : la recherche (ApiFilterBar)
@@ -1173,7 +1173,7 @@ void StatisticsPane::paintVariables(const ui::PaintContext& ctx, const gfx::Rect
     // Les noms, dans l'infobulle.
     std::vector<const std::vector<st::NamedVariable>*> lists = {&vs.unused, &vs.readByHmi, &vs.writtenNeverRead, &vs.readNeverWritten, nullptr,
                                                                 &vs.ioWithoutComment};
-    // 1.12.0 : XPGAnalyser API n'a pas d'IHM - ni « lues par l'IHM », ni l'IHM dans les phrases.
+    // 1.12.0 : API Studio n'a pas d'IHM - ni « lues par l'IHM », ni l'IHM dans les phrases.
     if (!core::hasIhm()) {
         counters.erase(counters.begin() + 1);
         lists.erase(lists.begin() + 1);

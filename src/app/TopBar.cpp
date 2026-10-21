@@ -183,8 +183,8 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     for (auto& p : parts_)
         if (p.key == "simuler" || p.key == "nouveau" || p.key == "affichage" || p.key == "aide") p.iconOnly = true;
     // ---- fin Lot API 8 : bandeau haut ----
-    // 1.12.0 : CHAQUE APPLICATION, SON BANDEAU. XPGAnalyser API : ni l'IHM ni « Les deux » ;
-    // XPGAnalyser IHM : ni la simulation de l'automate (Simuler, Arreter, Un cycle), ni
+    // 1.12.0 : CHAQUE APPLICATION, SON BANDEAU. API Studio : ni l'IHM ni « Les deux » ;
+    // IHM Studio : ni la simulation de l'automate (Simuler, Arreter, Un cycle), ni
     // « Les deux », ni Vers Control Expert, ni + Nouveau (des sections, des blocs, des racks).
     std::erase_if(parts_, [](const Part& p) {
         if (!core::hasIhm() && (p.key == "ihm" || p.key == "ihm-demarrer" || p.key == "ihm-arreter" || p.key == "les-deux")) return true;
@@ -208,7 +208,7 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(project_, "Enregistrer", "Ctrl+S", ui::Icon::Save, "project.save");
     e(project_, "Enregistrer sous\xE2\x80\xA6", "", ui::Icon::Document, "project.saveAs");
     sep(project_);
-    if (core::hasApi()) {      // 1.12.0 : l'automate (XPGAnalyser API)
+    if (core::hasApi()) {      // 1.12.0 : l'automate (API Studio)
     e(project_, "Importer la configuration (.XHW)\xE2\x80\xA6", "Ctrl+Maj+O", ui::Icon::Rack, "file.importHardware");   // 1.11 (T2) : la table help::keys
     // Lot 7 : un nouveau MAST dans le projet ouvert (le recapitulatif d'abord).
     e(project_, "Importer un .XPG (nouveau MAST)\xE2\x80\xA6", "", ui::Icon::Program, "file.importMast");
@@ -231,7 +231,7 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(project_, "Disposition\xE2\x80\xA6", "Ctrl+Maj+K", ui::Icon::Layers, "project.disposition");
     e(project_, "Revenir au menu principal", "Ctrl+Maj+H", ui::Icon::Project, "app.home");
 
-    if (core::hasApi()) {      // 1.12.2 : les creations de l'automate dans XPGAnalyser API seulement
+    if (core::hasApi()) {      // 1.12.2 : les creations de l'automate dans API Studio seulement
     e(create_, "Section", "", ui::Icon::Section, "create.section");
     e(create_, "Unit\xC3\xA9 de programme", "", ui::Icon::Program, "create.unit");
     e(create_, "Bloc DFB", "", ui::Icon::FunctionBlock, "create.dfb");
@@ -243,7 +243,7 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     sep(create_);
     e(create_, "Macro\xE2\x80\xA6", "", ui::Icon::Code, "macros.new");
     } else {
-    // 1.12.2 : XPGAnalyser IHM - Projet > Nouveau listait les creations de l'automate (Section,
+    // 1.12.2 : IHM Studio - Projet > Nouveau listait les creations de l'automate (Section,
     // DFB, Rack...), qui ne menaient nulle part ici.
     e(create_, "Vue\xE2\x80\xA6", "", ui::Icon::Screen, "hmi.new.view");
     e(create_, "Popup\xE2\x80\xA6", "", ui::Icon::Layers, "hmi.new.popup");
@@ -302,13 +302,13 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     sep(help_);
     head(help_, "Apprendre");
     if (core::hasApi()) e(help_, "Didacticiel de l'API", "", ui::Icon::Play, "help.apiTutorial");     // lot API 7
-    if (!core::hasApi()) e(help_, "Didacticiel de l'IHM", "", ui::Icon::Play, "help.hmiTutorial");    // 1.12.0 : XPGAnalyser IHM
+    if (!core::hasApi()) e(help_, "Didacticiel de l'IHM", "", ui::Icon::Play, "help.hmiTutorial");    // 1.12.0 : IHM Studio
     sep(help_);
     head(help_, "Nouveaut\xC3\xA9s et support");
     e(help_, "Nouveaut\xC3\xA9s\xE2\x80\xA6", "", ui::Icon::StarFilled, "help.news");
     e(help_, "Rep\xC3\xA8res des nouveaut\xC3\xA9s", "", ui::Icon::Ok, "help.newsMarks");
     e(help_, "Journal interne (historique des appels)\xE2\x80\xA6", "", ui::Icon::Document, "help.callTrail");   // 1.10.2 (CR)
-    e(help_, "\xC3\x80 propos d'XPGAnalyser\xE2\x80\xA6", "", ui::Icon::Info, "help.about");
+    e(help_, "\xC3\x80 propos d'" + core::productName() + "\xE2\x80\xA6", "", ui::Icon::Info, "help.about");
 }
 
 TopBar::~TopBar() = default;
@@ -727,7 +727,7 @@ void TopBar::paintVersion(const ui::PaintContext& ctx, const Part& p, bool hot) 
 }
 
 void TopBar::paintSim(const ui::PaintContext& ctx) const {
-    if (simRect_.w <= 0.f) return;       // 1.12.0 : XPGAnalyser IHM n'a pas la simulation de l'automate
+    if (simRect_.w <= 0.f) return;       // 1.12.0 : IHM Studio n'a pas la simulation de l'automate
     const auto& c = ctx.theme.color;
     ctx.r.fillRoundedRect(simRect_, c.border, 7.f);
     ctx.r.fillRoundedRect({simRect_.x + 1.f, simRect_.y + 1.f, simRect_.w - 2.f, simRect_.h - 2.f}, c.panelBg, 6.f);

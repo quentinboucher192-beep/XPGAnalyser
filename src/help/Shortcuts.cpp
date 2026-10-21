@@ -412,8 +412,8 @@ const std::vector<Shortcut>& all() { return kTable; }
 const std::vector<Context>& contexts() {
     static const std::vector<Context> k = {Context::General, Context::HmiEditor, Context::Scripts,
                                            Context::Simulation, Context::Grafcet, Context::Help};
-    // 1.12.0 : chaque application ses raccourcis - XPGAnalyser API sans l'editeur ni les
-    // scripts de l'IHM, XPGAnalyser IHM sans le Grafcet de l'automate.
+    // 1.12.0 : chaque application ses raccourcis - API Studio sans l'editeur ni les
+    // scripts de l'IHM, IHM Studio sans le Grafcet de l'automate.
     // 1.12.2 : les editeurs de code dans les deux (les sections ST de l'API ont le meme profil).
     static const std::vector<Context> api = {Context::General, Context::Scripts, Context::Simulation, Context::Grafcet, Context::Help};
     static const std::vector<Context> ihm = {Context::General, Context::HmiEditor, Context::Scripts, Context::Simulation, Context::Help};
@@ -521,7 +521,7 @@ std::vector<const Shortcut*> search(std::string_view term) {
 }
 
 std::string sheetText(std::string_view version) {
-    std::string out = "XPGAnalyser ";
+    std::string out = core::productName() + " ";
     out += version;
     out += " \xE2\x80\x94 les raccourcis clavier\n";
     constexpr std::size_t kKeyColumn = 26;

@@ -3,6 +3,7 @@
 //  et Notes de version, la partie pure (voir CenterPages.hpp)
 // =============================================================================
 #include "CenterPages.hpp"
+#include "../core/Edition.hpp"   // 1.12.20 : le nom de l'application (API Studio, IHM Studio)
 
 #include <algorithm>
 
@@ -150,7 +151,7 @@ std::string keysSheetHtml(std::string_view version, std::string_view term, std::
     const std::string v = escapeHtml(version);
     std::string h;
     h += "<!doctype html>\n<html lang=\"fr\"><head><meta charset=\"utf-8\">\n";
-    h += "<title>XPGAnalyser " + v + " \xE2\x80\x94 raccourcis clavier</title>\n<style>\n";
+    h += "<title>" + core::productName() + " " + v + " \xE2\x80\x94 raccourcis clavier</title>\n<style>\n";
     h += "@page { size: A4; margin: 12mm; }\n";
     h += "body { font: 9.5pt/1.35 system-ui, sans-serif; color: #111; margin: 0; }\n";
     h += "h1 { font-size: 14pt; margin: 0 0 2mm; } p.etat { color: #555; margin: 0 0 4mm; }\n";
@@ -163,7 +164,7 @@ std::string keysSheetHtml(std::string_view version, std::string_view term, std::
          " border-radius: 3px; padding: 0 3px; background: #f4f4f4; }\n";
     h += ".rep { font-size: 7.5pt; color: #fff; background: #3a6ea5; border-radius: 6px; padding: 0 4px; }\n";
     h += "</style></head><body>\n";
-    h += "<h1>XPGAnalyser " + v + " \xE2\x80\x94 raccourcis clavier</h1>\n";
+    h += "<h1>" + core::productName() + " " + v + " \xE2\x80\x94 raccourcis clavier</h1>\n";
     h += "<p class=\"etat\">" + escapeHtml(page.status) + "</p>\n<div class=\"groupes\">\n";
     for (const auto& g : page.groups) {
         h += "<section><h2>" + escapeHtml(g.label) + "</h2><table>\n";

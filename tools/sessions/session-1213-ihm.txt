@@ -1,5 +1,5 @@
 # =============================================================================
-#  Session 1213 IHM : XPGAnalyser IHM 1.12.13, XpgAnalyzer-IHM.exe - le Tableau v2.
+#  Session 1213 IHM : IHM Studio 1.12.13, IHM-Studio.exe - le Tableau v2.
 #  Armoire_Gaz (migre par la 1.12.1), avec les vues des sessions 1122 a 1212 et,
 #  par demo1213, la vue Vue_Tableaux creee comme « Nouvelle vue > Tableaux
 #  dynamiques » (Armoire_Gaz a deja T_Cuve, T_Vanne, T_Recette, Cuves et Recette,

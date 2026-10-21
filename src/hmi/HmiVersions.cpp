@@ -244,8 +244,8 @@ bool included(std::string_view p) {
     static const char* const kDirs[] = {"config/", "vars/", "ddt/", "dfb/", "units/", "sections/", "tables/", "ihm/", "donnees/"};
     for (const char* d : kDirs)
         if (startsWith(p, d)) {
-            // 1.12.0 : chaque application versionne (et restaure) sa moitie : XPGAnalyser IHM
-            // ne touche pas au programme d'un dossier de la 1.11, XPGAnalyser API pas a ihm/.
+            // 1.12.0 : chaque application versionne (et restaure) sa moitie : IHM Studio
+            // ne touche pas au programme d'un dossier de la 1.11, API Studio pas a ihm/.
             const bool ihm = startsWith(p, "ihm/");
             if (!startsWith(p, "donnees/") && (ihm ? !core::hasIhm() : !core::hasApi())) return false;
             return !startsWith(p, "ihm/historique/") && !startsWith(p, "ihm/corbeille/");
@@ -314,7 +314,7 @@ core::Result<Store> open(const std::string& projectFolder) {
 }
 
 core::Status saveIndex(const Store& s) {
-    std::string text = "# XpgAnalyzer - les versions du projet. Les fichiers de chacune : V0001.txt... ;\n"
+    std::string text = "# IHM Studio - les versions du projet. Les fichiers de chacune : V0001.txt... ;\n"
                        "# leur contenu, une fois par empreinte : objets/.\n";
     text += "reglages auto=" + std::string(autoKey(s.autoMode)) + " garder_auto=" + std::to_string(s.keepAuto) + "\n";
     for (const auto& v : s.versions) {
@@ -379,7 +379,7 @@ core::Result<Version> create(Store& s, const std::string& name, State state, con
     v.date = now.empty() ? nowStamp() : now;
     v.base = s.last() ? s.last()->number : 0;
     v.fileCount = files.size();
-    std::string manifest = "# XpgAnalyzer - la version " + std::to_string(v.number) + " : empreinte SHA-256, taille, chemin\n";
+    std::string manifest = "# IHM Studio - la version " + std::to_string(v.number) + " : empreinte SHA-256, taille, chemin\n";
     for (const auto& f : files) {
         v.bytes += f.size;
         manifest += f.hash + " " + std::to_string(f.size) + " " + f.path + "\n";
@@ -513,7 +513,7 @@ core::Status exportZip(const Store& s, int number, const std::string& zipPath) {
     auto files = filesOf(s, number);
     if (!files) return core::Err<core::Error>(files.error());
     std::vector<std::pair<std::string, std::string>> items;
-    std::string about = "XpgAnalyzer - le projet";
+    std::string about = "IHM Studio - le projet";
     if (const auto* v = s.find(number)) {
         about += ", version " + std::to_string(v->number) + " : " + v->name + "\r\n\xC3\x89tat : " + std::string(stateLabel(v->state))
                + "\r\nDate : " + v->date + "\r\nAuteur : " + v->author + "\r\nCommentaire : " + v->comment

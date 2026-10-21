@@ -171,8 +171,9 @@ endif()
 
 # --- application -------------------------------------------------------------
 #
-#  1.12.0 : DEUX APPLICATIONS, UN SEUL CODE. XPGAnalyser API (l'automate) et
-#  XPGAnalyser IHM (l'IHM seule) sont deux executables independants. Les sources
+#  1.12.0 : DEUX APPLICATIONS, UN SEUL CODE. API Studio (l'automate) et
+#  IHM Studio (l'IHM seule) sont deux executables independants (1.12.20 :
+#  API-Studio et IHM-Studio, avant XpgAnalyzer-API et XpgAnalyzer-IHM). Les sources
 #  de app/ sont compilees une fois, dans une bibliotheque d'objets (xpg_app : a
 #  l'edition des liens, rien n'en est laisse de cote, contrairement a une .a) ;
 #  chaque executable n'a en propre que main.cpp, compile avec XPG_EDITION_API ou
@@ -194,8 +195,8 @@ endif()
 
 # --- lot 12 : le logo de l'executable Windows ---------------------------------
 #
-#  resources/logo/xpg_analyzer.ico (fait depuis le SVG, 16 a 256 pixels) entre
-#  dans chaque .exe par une ressource : l'Explorateur, la barre des taches et
+#  1.12.20 : resources/logo/api_studio.ico et ihm_studio.ico (faits depuis leur SVG,
+#  16 a 256 pixels) entrent chacun dans son .exe par une ressource : l'Explorateur, la barre des taches et
 #  Alt+Tab le montrent. Le .rc est configure pour porter le chemin ABSOLU de
 #  l'icone : rc.exe et windres cherchent un nom relatif dans leur dossier de
 #  travail, qui est celui de la construction. La fenetre, elle, prend le logo
@@ -206,7 +207,7 @@ if(WIN32)
     set(XPG_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/xpg_analyzer.manifest")   # 1.11.3 : MinGW
 endif()
 
-function(xpg_add_edition target edition label exe)
+function(xpg_add_edition target edition label exe logo)
     add_executable(${target} src/main.cpp)
     target_link_libraries(${target} PRIVATE xpg_app)
     target_compile_definitions(${target} PRIVATE XPG_EDITION_${edition}=1)
@@ -214,17 +215,14 @@ function(xpg_add_edition target edition label exe)
     if(WIN32)
         set(XPG_RC_EDITION ${label})
         set(XPG_RC_EXE ${exe})
-        set(XPG_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/xpg_analyzer_${edition}.ico")
-        if(NOT EXISTS "${XPG_ICON}")
-            set(XPG_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/xpg_analyzer.ico")
-        endif()
+        set(XPG_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/${logo}.ico")   # 1.12.20 : un logo par application
         configure_file(resources/windows/xpg_analyzer.rc.in ${CMAKE_CURRENT_BINARY_DIR}/${target}.rc @ONLY)
         target_sources(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/${target}.rc)
     endif()
 endfunction()
 
-xpg_add_edition(xpg_api API API XpgAnalyzer-API)
-xpg_add_edition(xpg_ihm IHM IHM XpgAnalyzer-IHM)
+xpg_add_edition(xpg_api API API API-Studio api_studio)
+xpg_add_edition(xpg_ihm IHM IHM IHM-Studio ihm_studio)
 add_custom_target(xpg_analyzer DEPENDS xpg_api xpg_ihm)
 
 # ---------------------------------------------------------------------------

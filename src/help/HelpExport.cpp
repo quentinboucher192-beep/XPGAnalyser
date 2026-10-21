@@ -2,6 +2,7 @@
 //  help/HelpExport.cpp
 // =============================================================================
 #include "HelpExport.hpp"
+#include "../core/Edition.hpp"   // 1.12.20 : le nom de l'application (API Studio, IHM Studio)
 
 #include "HelpCodes.hpp"
 #include "HelpIndex.hpp"
@@ -518,7 +519,7 @@ std::string renderArticleHtml(const ui::HelpArticle& a, std::string_view title) 
         }
     }
 
-    o << "<footer>Imprimé depuis XpgAnalyzer &middot; " << escapeHtml(today())
+    o << "<footer>Imprimé depuis " << escapeHtml(core::productName()) << " &middot; " << escapeHtml(today())
       << "</footer>\n";
     closeDoc(o);
     return o.str();
@@ -660,7 +661,7 @@ std::string renderDossierHtml(const std::vector<project::CatalogEntry>& library,
         o << "</dl>\n</section>\n";
     }
 
-    o << "<footer>Dossier produit par XpgAnalyzer le " << escapeHtml(info.date)
+    o << "<footer>Dossier produit par " << escapeHtml(core::productName()) << " le " << escapeHtml(info.date)
       << " &middot; " << entries << " elements</footer>\n";
     closeDoc(o);
     return o.str();

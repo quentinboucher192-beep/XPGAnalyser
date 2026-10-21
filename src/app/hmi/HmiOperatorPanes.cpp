@@ -1,5 +1,5 @@
 #include "HmiOperatorPanes.hpp"
-#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 
 #include "HmiAssetPanes.hpp"
 #include "HmiIcons.hpp"
@@ -339,7 +339,7 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
             case TExport: {   // 1.11.3
                 const std::weak_ptr<char> alive = alive_;
                 const std::string name = owner_.name + "_operateurs" + std::string(hmi::scriptfile::kExtension);
-                if (!ui::browsePath(ui::saveFile("Op\xC3\xA9rateurs XPGAnalyser|*.xpgst", ui::pathIn(hmiProjectFolder(), "exports"),
+                if (!ui::browsePath(ui::saveFile("Op\xC3\xA9rateurs IHM Studio|*.xpgst", ui::pathIn(hmiProjectFolder(), "exports"),
                                                  "Exporter les op\xC3\xA9rateurs de " + owner_.name),
                                     name, [this, alive](std::string path) {
                                         if (alive.expired()) return;
@@ -352,7 +352,7 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
             }
             case TImport: {
                 const std::weak_ptr<char> alive = alive_;
-                if (!ui::browsePath(ui::openFile("Op\xC3\xA9rateurs XPGAnalyser|*.xpgst", ui::pathIn(hmiProjectFolder(), "exports"),
+                if (!ui::browsePath(ui::openFile("Op\xC3\xA9rateurs IHM Studio|*.xpgst", ui::pathIn(hmiProjectFolder(), "exports"),
                                                  "Importer des op\xC3\xA9rateurs"),
                                     {}, [this, alive](std::string path) {
                                         if (alive.expired()) return;

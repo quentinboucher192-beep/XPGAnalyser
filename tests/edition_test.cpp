@@ -3,13 +3,13 @@
 // -----------------------------------------------------------------------------
 //  core/Edition (les noms), app/EditionMigration (les projets de la 1.11 recopies,
 //  chacun sa moitie, une seule fois, les recents qui suivent), ProjectStore dans
-//  XPGAnalyser IHM (le programme ni lu ni ecrit : un dossier de la 1.11 garde le
+//  IHM Studio (le programme ni lu ni ecrit : un dossier de la 1.11 garde le
 //  sien), les versions (chaque application n'y voit que sa moitie), dupliquer.
 // =============================================================================
 #include "../src/app/EditionMigration.hpp"
 #include "../src/core/Edition.hpp"
 #include "../src/hmi/HmiCheck.hpp"
-#include "../src/hmi/HmiGuide.hpp"   // 1.12.2 : les mots de XPGAnalyser IHM
+#include "../src/hmi/HmiGuide.hpp"   // 1.12.2 : les mots de IHM Studio
 #include "../src/hmi/HmiStandalone.hpp"
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/hmi/HmiVersions.hpp"
@@ -67,14 +67,14 @@ int main(int argc, char** argv) {
 
     // ---- les noms -------------------------------------------------------------
     core::setEdition(core::Edition::Both);
-    check(core::hasApi() && core::hasIhm() && core::editionKey().empty() && core::productName() == "XPGAnalyser",
+    check(core::hasApi() && core::hasIhm() && core::editionKey().empty() && core::productName() == "API IHM Studio",
           "Both (les essais) : tout, le nom de toujours");
     core::setEdition(core::Edition::Api);
-    check(core::hasApi() && !core::hasIhm() && core::editionKey() == "api" && core::productName() == "XPGAnalyser API",
-          "API : l'automate seul, XPGAnalyser API");
+    check(core::hasApi() && !core::hasIhm() && core::editionKey() == "api" && core::productName() == "API Studio",
+          "API : l'automate seul, API Studio");
     core::setEdition(core::Edition::Ihm);
-    check(!core::hasApi() && core::hasIhm() && core::editionKey() == "ihm" && core::productName() == "XPGAnalyser IHM",
-          "IHM : l'IHM seule, XPGAnalyser IHM");
+    check(!core::hasApi() && core::hasIhm() && core::editionKey() == "ihm" && core::productName() == "IHM Studio",
+          "IHM : l'IHM seule, IHM Studio");
 
     // ---- la recopie des projets de la 1.11 -----------------------------------------
     const fs::path projets = root / "projets";
@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
     check(recent[0] == (projets / "ihm" / "Armoire").string() && recent[1] == (projets / "Pompe").string() && recent[2] == "C:/ailleurs/X.XPG",
           "les recents suivent les copies (et seulement elles)");
 
-    // ---- ProjectStore dans XPGAnalyser IHM -------------------------------------------
+    // ---- ProjectStore dans IHM Studio -------------------------------------------
     core::setEdition(core::Edition::Ihm);
     {
         auto opened = project::ProjectStore::open((projets / "Armoire").string());
@@ -206,7 +206,7 @@ int main(int argc, char** argv) {
         std::printf("%s", rep.standalone.empty() ? "" : rep.standalone.front().second.c_str());
     }
 
-    // ---- 1.12.2 : le guide de XPGAnalyser IHM, sans automate ---------------------------
+    // ---- 1.12.2 : le guide de IHM Studio, sans automate ---------------------------
     check(hmi::guide::ihmWords("Une variable IHM ou de l'automate : Compteur") == "Une variable IHM : Compteur"
               && hmi::guide::ihmWords("La variable (IHM ou automate) que le champ montre") == "La variable que le champ montre"
               && hmi::guide::ihmWords("une expression la relie \xC3\xA0 l'automate.") == "une expression la relie \xC3\xA0 une variable."

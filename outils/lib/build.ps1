@@ -163,9 +163,9 @@ try {
     $sln = Join-Path $X.Racine (Get-XpgConfig -Section 'Projet' -Cle 'solution' -Defaut 'XpgAnalyzer.sln')
     if (-not (Test-Path -LiteralPath $sln)) { Stop-Xpg -Code 1 -Message "Solution introuvable : $sln" }
     $cible = 'Build'; if ($Action -eq 'rebuild') { $cible = 'Rebuild' }
-    # 1.12.0 : deux applications, un seul projet (XpgEdition) - XPGAnalyser API, puis XPGAnalyser IHM.
+    # 1.12.0 : deux applications, un seul projet (XpgEdition) - API Studio, puis IHM Studio.
     $exes = @()
-    foreach ($ed in @(@{ Edition = 'API'; Cle = 'exe'; Defaut = 'XpgAnalyzer-API.exe' }, @{ Edition = 'IHM'; Cle = 'exe_ihm'; Defaut = 'XpgAnalyzer-IHM.exe' })) {
+    foreach ($ed in @(@{ Edition = 'API'; Cle = 'exe'; Defaut = 'API-Studio.exe' }, @{ Edition = 'IHM'; Cle = 'exe_ihm'; Defaut = 'IHM-Studio.exe' })) {
         $code = Invoke-XpgProcessus -Fichier $msvc.MsBuild -Arguments @($sln, "/t:$cible", "/p:Configuration=$Configuration", "/p:Platform=$plateforme", "/p:XpgEdition=$($ed.Edition)", '/m', '/nologo', '/v:minimal', '/nr:false', '/clp:Summary') `
                 -Dossier $X.Racine -Afficher -Libelle "MSBuild ($($ed.Edition))"
         if ($code -ne 0) {

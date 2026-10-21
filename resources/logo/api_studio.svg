@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- API Studio : un barreau de schema a contacts (ladder) entre ses deux rails,
+       un contact et sa bobine (le point jaune, commun aux deux logos). -->
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2A64AB"/>
+      <stop offset="1" stop-color="#0B182B"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8ED0FF"/>
+      <stop offset="1" stop-color="#3478DC"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="54" ry="54" fill="url(#fond)"/>
+  <rect x="10" y="10" width="236" height="236" rx="52" ry="52" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="4"/>
+  <rect x="36" y="50" width="24" height="156" rx="12" ry="12" fill="#E9EFF7"/>
+  <rect x="196" y="50" width="24" height="156" rx="12" ry="12" fill="#E9EFF7"/>
+  <path d="M60 128H82M132 128H150M186 128H196" stroke="#E9EFF7" stroke-width="12" fill="none"/>
+  <rect x="80" y="88" width="20" height="80" rx="6" ry="6" fill="url(#accent)"/>
+  <rect x="114" y="88" width="20" height="80" rx="6" ry="6" fill="url(#accent)"/>
+  <circle cx="168" cy="128" r="19" fill="#F2C94C" stroke="#0B182B" stroke-width="7"/>
+</svg>

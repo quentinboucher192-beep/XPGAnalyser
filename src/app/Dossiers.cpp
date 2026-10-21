@@ -339,7 +339,7 @@ bool ecrireIni(const fs::path& fichier, const Ini& ini, std::string* pourquoi) {
 
 std::string modeleIniUtilisateur() {
     return
-        "; XPGAnalyser.ini - les dossiers de XPGAnalyser, pour ce compte Windows.\n"
+        "; XPGAnalyser.ini - les dossiers d'API Studio et d'IHM Studio, pour ce compte Windows.\n"
         ";\n"
         "; L'accueil (Dossiers) et le menu Projet > Dossiers de l'application... les\n"
         "; montrent, les ouvrent et les changent. Tu peux aussi modifier ce fichier\n"

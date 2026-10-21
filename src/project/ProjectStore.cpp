@@ -1,7 +1,7 @@
 #include "ProjectStore.hpp"
 #include "ProjectIcon.hpp"
 
-#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM ne lit ni n'ecrit le programme
+#include "../core/Edition.hpp"   // 1.12.0 : IHM Studio ne lit ni n'ecrit le programme
 #include "../export/XpgWriter.hpp"
 #include "../import/ProjectParser.hpp"
 #include "../import/XmlReader.hpp"
@@ -226,7 +226,7 @@ Variable decodeVariable(Project& p, const std::vector<std::string>& f) {
 std::shared_ptr<Project> ProjectStore::createEmpty(std::string name, std::string cpuReference) {
     auto p = std::make_shared<Project>();
     p->header.company        = "Schneider Automation";
-    p->header.product        = "XpgAnalyzer 1.0";
+    p->header.product        = "API Studio";
     p->header.dtdVersion     = "41";
     p->header.projectName    = std::move(name);
     p->header.projectVersion = "0.0.1";
@@ -257,7 +257,7 @@ core::Status ProjectStore::save(const Project& p, const Manifest& manifest,
     // ---- manifest ---------------------------------------------------------
     {
         std::ostringstream m;
-        m << "# XpgAnalyzer project. Safe to read; edit with care.\n";
+        m << "# API Studio project. Safe to read; edit with care.\n";
         m << "formatVersion = " << manifest.formatVersion << '\n';
         m << "name = "     << manifest.name << '\n';
         m << "version = "  << manifest.version << '\n';
@@ -299,7 +299,7 @@ core::Status ProjectStore::save(const Project& p, const Manifest& manifest,
         fs::remove(root / "project.lock", ec);
     }
 
-    // 1.12.0 : XPGAnalyser IHM n'a pas de programme - et n'ecrase pas celui d'un
+    // 1.12.0 : IHM Studio n'a pas de programme - et n'ecrase pas celui d'un
     // dossier de la 1.11 (son modele est vide : il n'a rien lu).
     if (!core::hasApi()) return core::ok();
 
@@ -942,7 +942,7 @@ core::Result<OpenResult> ProjectStore::open(const std::string& folder) {
     out.project->header.contentKind    = out.manifest.contentKind;
     out.project->header.contentDateTime = out.manifest.contentDateTime;
     out.project->header.crlf           = out.manifest.crlf;
-    // 1.12.0 : XPGAnalyser IHM ne lit rien du programme (meme dans un dossier de la 1.11).
+    // 1.12.0 : IHM Studio ne lit rien du programme (meme dans un dossier de la 1.11).
     if (!core::hasApi()) return out;
     if (auto r = loadModel(fs::path(folder), *out.project); !r)
         return core::Err<core::Error>(r.error());
@@ -991,7 +991,7 @@ core::Result<OpenResult> ProjectStore::open(const std::string& folder,
     out.project->header.contentKind    = out.manifest.contentKind;
     out.project->header.contentDateTime = out.manifest.contentDateTime;
     out.project->header.crlf           = out.manifest.crlf;
-    // 1.12.0 : XPGAnalyser IHM ne lit rien du programme (meme dans un dossier de la 1.11).
+    // 1.12.0 : IHM Studio ne lit rien du programme (meme dans un dossier de la 1.11).
     if (!core::hasApi()) return out;
     if (auto r = loadModel(fs::path(folder), *out.project); !r)
         return core::Err<core::Error>(r.error());
@@ -1007,8 +1007,8 @@ core::Status ProjectStore::duplicate(const std::string& from, const std::string&
     if (fs::exists(to, ec))
         return core::fail(core::ErrorCode::InvalidArgument, "destination already exists", to);
 
-    // 1.12.0 : chaque application copie sa moitie - XPGAnalyser IHM : le manifeste,
-    // ihm/, donnees/, versions/ ; XPGAnalyser API : tout sauf ihm/.
+    // 1.12.0 : chaque application copie sa moitie - IHM Studio : le manifeste,
+    // ihm/, donnees/, versions/ ; API Studio : tout sauf ihm/.
     if (core::edition() == core::Edition::Both) {
         fs::copy(from, to, fs::copy_options::recursive, ec);
     } else {
@@ -1040,7 +1040,7 @@ core::Status ProjectStore::duplicate(const std::string& from, const std::string&
     manifest->modified = nowStamp();
 
     std::ostringstream m;
-    m << "# XpgAnalyzer project. Safe to read; edit with care.\n";
+    m << "# API Studio project. Safe to read; edit with care.\n";
     m << "formatVersion = " << manifest->formatVersion << '\n';
     m << "name = "     << manifest->name << '\n';
     m << "version = "  << manifest->version << '\n';

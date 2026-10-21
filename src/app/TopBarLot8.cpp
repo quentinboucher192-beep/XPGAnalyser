@@ -195,7 +195,7 @@ void TopBar::layoutLot8() const {
         const float simEnd = rx;
         stateRect_ = {};
         simRect_ = {};
-        if (core::hasApi()) {     // 1.12.0 : la simulation de l'automate (XPGAnalyser API)
+        if (core::hasApi()) {     // 1.12.0 : la simulation de l'automate (API Studio)
         const float textW = std::max({ui::measureWidth(hmi_ == Hmi::None ? "en d\xC3\xA9" "faut" : "API en d\xC3\xA9" "faut", kSmall8) + 1.f,
                                       ui::measureWidth("cycle 9\xE2\x80\xAF" "999\xE2\x80\xAF" "999", kTiny8),
                                       ui::measureWidth("F5 la lance", kTiny8)});

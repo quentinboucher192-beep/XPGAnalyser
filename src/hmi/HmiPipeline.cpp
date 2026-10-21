@@ -1,5 +1,5 @@
 #include "HmiPipeline.hpp"
-#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser IHM - pas de phase API
+#include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas de phase API
 
 #include "HmiComm.hpp"
 #include "HmiDecl.hpp"
@@ -533,7 +533,7 @@ std::vector<Element> collect(const Project& p, const ApiInfo& api) {
     };
 
     // ---- B. l'API ----
-    // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - pas d'elements de l'API.
+    // 1.12.0 : IHM Studio n'a pas d'automate - pas d'elements de l'API.
     const bool withApi = core::hasApi();
     if (withApi) {
         auto& e = make(ElementKind::ApiConfig, "api-config", "Configuration de l'API", "API/Configuration", kNoId, kNoId);
@@ -952,7 +952,7 @@ Severity severityFrom(std::string_view s) {
 } // namespace
 
 std::string serialize(const Cache& c) {
-    std::string s = "# XPGAnalyser - cache de build de l'IHM (ne pas modifier a la main)\n";
+    std::string s = "# IHM Studio - cache de build de l'IHM (ne pas modifier a la main)\n";
     s += "cache_build format=" + std::to_string(kCacheFormat) + " generateur=" + quote(c.generator.empty() ? std::string(kGeneratorVersion) : c.generator)
        + " ecrit=" + quote(c.written) + "\n";
     for (const auto& [key, e] : c.entries) {
@@ -1348,7 +1348,7 @@ std::string artifactPathOf(const Element& e) {
 // La forme generee d'un element : ce que la simulation charge, au format texte
 // des fichiers IHM. Une vue : ses instances de symboles deballees.
 std::string generatedText(const Project& p, const Element& e, const Item& it) {
-    std::string s = "# XPGAnalyser - artefact g\xC3\xA9n\xC3\xA9r\xC3\xA9 (ne pas modifier a la main)\n";
+    std::string s = "# IHM Studio - artefact g\xC3\xA9n\xC3\xA9r\xC3\xA9 (ne pas modifier a la main)\n";
     s += "artefact cle=" + quote(e.key) + " genre=" + quote(kindKey(e.kind)) + " chemin=" + quote(e.path) + " generateur=" + std::string(kGeneratorVersion)
        + " contenu=" + it.contentHash + " config=" + it.configHash + " dependances=" + it.depsHash + "\n";
     for (const auto& d : e.deps) s += "dependance nom=" + quote(d.name) + " cle=" + quote(d.key) + " mode=" + (d.mode == DepMode::Content ? "contenu" : "interface") + " via=" + quote(d.via) + "\n";
@@ -1711,8 +1711,8 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
         for (const auto k : pl.generate) if (areaOf(a.elements[k].kind) == area) list.push_back(k);
         if (list.empty()) {
             pr.phases[static_cast<int>(ph)] = PhaseState::Skipped;
-            // 1.12.0 : XPGAnalyser IHM - pas d'automate, pas d'API a generer.
-            pr.phaseNotes[static_cast<int>(ph)] = area == Area::Api && !core::hasApi() ? "pas d'automate (XPGAnalyser IHM)" : "\xC3\xA0 jour, r\xC3\xA9utilis\xC3\xA9";
+            // 1.12.0 : IHM Studio - pas d'automate, pas d'API a generer.
+            pr.phaseNotes[static_cast<int>(ph)] = area == Area::Api && !core::hasApi() ? "pas d'automate (IHM Studio)" : "\xC3\xA0 jour, r\xC3\xA9utilis\xC3\xA9";
             publish();
             continue;
         }
@@ -1900,7 +1900,7 @@ Report run(const Project& p, const ApiInfo& api, const Request& req, const Optio
         // Ce que Compiler a deja dit autrement : « variable inexistante dans le programme : X »
         // (Generer) quand une expression ou une action de la meme vue dit deja « X n'existe pas ».
         const auto saidByCompile = [&cache](const Issue& i) {
-            const std::string_view kPrefix = unknownVariablePrefix();   // 1.12.0 : « ... dans l'IHM : » dans XPGAnalyser IHM
+            const std::string_view kPrefix = unknownVariablePrefix();   // 1.12.0 : « ... dans l'IHM : » dans IHM Studio
             if (i.category != "Variable" || i.view == kNoId || i.message.rfind(kPrefix, 0) != 0) return false;
             std::string name = i.message.substr(kPrefix.size());
             if (const auto cut = name.find_first_of(" :"); cut != std::string::npos) name.resize(cut);

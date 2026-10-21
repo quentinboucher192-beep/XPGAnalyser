@@ -152,7 +152,7 @@ void MainAnalysisScreen::openDisposition() {
     spec.applied = dp::current();
     const std::string mine = app_.settings().getString(std::string(dp::kMineKey));
     spec.mine = mine.empty() ? dp::defaults() : dp::parse(mine);
-    spec.edition = !core::hasApi() ? "XPGAnalyser IHM" : !core::hasIhm() ? "XPGAnalyser API" : "XPGAnalyser";
+    spec.edition = core::productName();
     spec.apply = [this](const dp::Layout& l) {
         dp::setCurrent(l);
         saveDisposition();

@@ -1,8 +1,8 @@
 # =============================================================================
-#  Session 1121 IHM : XPGAnalyser IHM (1.12.1), XpgAnalyzer-IHM.exe - les
+#  Session 1121 IHM : IHM Studio (1.12.1), IHM-Studio.exe - les
 #  enumerations des objets, les operateurs, les instructions et les types de la
 #  liste du 10/10. Armoire_Gaz (un projet de la 1.11) est pose dans projets\ ;
-#  au premier lancement, XPGAnalyser IHM le recopie dans projets\ihm.
+#  au premier lancement, IHM Studio le recopie dans projets\ihm.
 #    1. les Natives : ALIGNEMENT et ou elle sert, le sommaire des enumerations,
 #       l'operateur ? :, l'instruction TRY, les types (les generiques ANY_),
 #       DATE_AND_TIME, MAINTENANT ;

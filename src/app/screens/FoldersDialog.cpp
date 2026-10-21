@@ -9,6 +9,7 @@
 //  Un champ laisse tel quel ne change rien ; un champ vide revient au defaut.
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.20 : le nom de l'application (API Studio, IHM Studio)
 
 #include "../App.hpp"
 #include "../Dossiers.hpp"
@@ -204,7 +205,7 @@ void FoldersDialog::save() {
     }
     std::string payload = b.ok ? "ok\n" : "attention\n";
     for (const auto& l : b.lignes) payload += l + "\n";
-    if (b.redemarrer) payload += "\nRelance XPGAnalyser pour que les nouveaux dossiers servent partout.\n";
+    if (b.redemarrer) payload += "\nRelance " + core::productName() + " pour que les nouveaux dossiers servent partout.\n";
     manager().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Ok, payload});
 }
 

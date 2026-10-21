@@ -1,5 +1,5 @@
 # =============================================================================
-#  Session 1127 IHM : XPGAnalyser IHM (1.12.7), XpgAnalyzer-IHM.exe - les
+#  Session 1127 IHM : IHM Studio (1.12.7), IHM-Studio.exe - les
 #  valeurs calculees au demarrage (comme un final de Java), les constantes des
 #  autres scripts par leur nom qualifie, le deballage et le tableau des elements.
 #  Armoire_Gaz (migre par la 1.12.1), avec les vues des sessions 1122 a 1126 et,

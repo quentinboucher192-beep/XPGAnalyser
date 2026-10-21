@@ -1,7 +1,7 @@
 #include "App.hpp"
 #include "../sim/Value.hpp"        // 1.12.19 : la valeur initiale d'une variable de l'automate, lue dans son type
 #include "../sim/ValueText.hpp"
-#include "../core/Edition.hpp"   // 1.12.0 : XPGAnalyser API, XPGAnalyser IHM
+#include "../core/Edition.hpp"   // 1.12.0 : API Studio, IHM Studio
 #include "Dossiers.hpp"
 #include "EditionMigration.hpp"   // 1.12.0 : les projets de la 1.11, recopies dans projets\api et projets\ihm
 #include "Epinglage.hpp"
@@ -209,7 +209,7 @@ std::string frenchLabel(const std::string& en, const std::string& place) {
 core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     std::unique_ptr<App> a(new App());
     a->options_ = std::move(options);
-    // 1.12.0 : la fenetre porte le nom de son application (XPGAnalyser API, XPGAnalyser IHM).
+    // 1.12.0 : la fenetre porte le nom de son application (API Studio, IHM Studio).
     if (!core::editionLabel().empty() && a->options_.title == AppOptions{}.title) a->options_.title = core::productName();
 
     // Settings are loaded before anything is built, so the first frame already
@@ -233,7 +233,7 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
             bgtasks::post({"edition:migration", "Projets",
                            std::to_string(n) + (n > 1 ? " projets de la 1.11 recopi\xC3\xA9s" : " projet de la 1.11 recopi\xC3\xA9") + " dans "
                                + dossiers::utf8De(root),
-                           core::hasApi() ? std::string("Leur programme, sans leur IHM (elle est dans XPGAnalyser IHM). Les originaux restent dans le dossier parent.")
+                           core::hasApi() ? std::string("Leur programme, sans leur IHM (elle est dans IHM Studio). Les originaux restent dans le dossier parent.")
                                           : std::string("Leur IHM, sans le programme de l'automate : les noms de l'automate qu'elle lisait sont devenus "
                                                         "ses variables IHM (dossier Automate), l'automate reli\xC3\xA9 par Modbus TCP l'\xC3\xA9quipement \xC2\xAB Automate \xC2\xBB. "
                                                         "Les originaux restent dans le dossier parent."),
@@ -710,7 +710,7 @@ void App::registerActions() {
 
     // 1.10 (R2, menu Aide) : la fenetre A propos (version, construction, dossiers,
     // composants et licences, informations pour le support).
-    actions_.add(Action{"help.about", "\xC3\x80 propos d'XPGAnalyser\xE2\x80\xA6", {}, {}, {}, nullptr,
+    actions_.add(Action{"help.about", "\xC3\x80 propos d'" + core::productName() + "\xE2\x80\xA6", {}, {}, {}, nullptr,
                         [this] { showAboutDialog(*this); }});
     // 1.10.2 (CR) : l'historique interne des appels (app/CrashDialogs.hpp).
     actions_.add(Action{"help.callTrail", "Journal interne (historique des appels)\xE2\x80\xA6", {}, {}, {}, nullptr,
@@ -775,7 +775,7 @@ void App::registerActions() {
     actions_.add(Action{"project.new", "Nouveau projet\xE2\x80\xA6", help::keys::bindingOf("project.new"), {}, {}, nullptr,
                         [this] {
                             namespace fs = std::filesystem;
-                            // 1.12.0 : XPGAnalyser IHM - un dossier d'IHM, sans programme : son nom, son dossier.
+                            // 1.12.0 : IHM Studio - un dossier d'IHM, sans programme : son nom, son dossier.
                             if (!core::hasApi()) {
                                 newHmiProject();
                                 return;
@@ -1418,7 +1418,7 @@ void App::registerActions() {
 void App::openPath(std::string path) {
     if (path.empty()) return;
     XPG_PORTEE_TEXTE("App::openPath", std::filesystem::path(path).filename().string());   // 1.10.2 (CR)
-    // 1.12.0 : XPGAnalyser IHM ouvre ses dossiers de projet, pas les exports de Control Expert.
+    // 1.12.0 : IHM Studio ouvre ses dossiers de projet, pas les exports de Control Expert.
     if (!core::hasApi()) {
         if (project::ProjectStore::isProjectFolder(path)) {
             openProjectFolder(std::move(path));
@@ -1427,8 +1427,8 @@ void App::openPath(std::string path) {
         menus_->ShowDialog(std::make_unique<MessageDialog>(
                                "Un export de l'automate",
                                std::filesystem::path(path).filename().string()
-                                   + " : les exports de Control Expert (.XPG, .XHW, .XDB) s'ouvrent avec XPGAnalyser API.\n\n"
-                                     "XPGAnalyser IHM ouvre les dossiers de ses projets (Projets\\ihm).",
+                                   + " : les exports de Control Expert (.XPG, .XHW, .XDB) s'ouvrent avec API Studio.\n\n"
+                                     "IHM Studio ouvre les dossiers de ses projets (Projets\\ihm).",
                                MessageDialog::Icon::Info),
                            [](const menu::DialogResult&) {});
         return;
@@ -1468,10 +1468,10 @@ void App::proposeTaskbarPin() {
     if (epinglage::demanderBarreDesTaches() == epinglage::Resultat::Demande) return;
     menus_->ShowDialog(
         std::make_unique<MessageDialog>(
-            "\xC3\x89pingler XPGAnalyser \xC3\xA0 la barre des t\xC3\xA2" "ches",
+            "\xC3\x89pingler " + core::productName() + " \xC3\xA0 la barre des t\xC3\xA2" "ches",
             "Tu as demand\xC3\xA9, \xC3\xA0 l'installation, une ic\xC3\xB4ne sur la barre des t\xC3\xA2" "ches. "
             "Sur ce PC, Windows ne laisse pas une application s'\xC3\xA9pingler elle-m\xC3\xAAme.\n\n"
-            "Pour l'\xC3\xA9pingler : clic droit sur l'ic\xC3\xB4ne de XPGAnalyser dans la barre des t\xC3\xA2" "ches "
+            "Pour l'\xC3\xA9pingler : clic droit sur l'ic\xC3\xB4ne d'" + core::productName() + " dans la barre des t\xC3\xA2" "ches "
             "(en bas de l'\xC3\xA9" "cran), puis \xC2\xAB \xC3\x89pingler \xC3\xA0 la barre des t\xC3\xA2" "ches \xC2\xBB.",
             MessageDialog::Icon::Info),
         [](const menu::DialogResult&) {});
@@ -1752,7 +1752,7 @@ void App::offerRecovery() {
     namespace fs = std::filesystem;
     const std::string name = c->project.empty() ? std::string("(sans projet)") : fs::path(c->project).filename().string();
     // Court : il tient dans le paragraphe du dialogue, sans barre de defilement.
-    std::string message = "XpgAnalyzer s'est arr\xC3\xAAt\xC3\xA9 brutalement" + (c->lastBeat.empty() ? std::string{} : " vers " + c->lastBeat)
+    std::string message = core::productName() + " s'est arr\xC3\xAAt\xC3\xA9 brutalement" + (c->lastBeat.empty() ? std::string{} : " vers " + c->lastBeat)
                           + " (PC \xC3\xA9teint, ou logiciel ferm\xC3\xA9 sans passer par Quitter).\n\n"
                           + "Projet : " + name + "\n";
     if (!c->autosave.empty())
@@ -1789,7 +1789,7 @@ void App::offerRecovery() {
 //  nom du projet. Rien n'est ecrit tant qu'on n'enregistre pas - ouvrir un
 //  projet ne doit pas modifier son dossier.
 void App::bindHmi() {
-    // 1.12.0 : XPGAnalyser API n'a pas d'IHM (meme dans un dossier de la 1.11 qui en a une).
+    // 1.12.0 : API Studio n'a pas d'IHM (meme dans un dossier de la 1.11 qui en a une).
     if (!core::hasIhm()) {
         hmi_.reset();
         hmiKey_.clear();
@@ -1892,9 +1892,9 @@ core::Status App::saveProject() {
 static std::string editionMismatch(const project::Manifest& m) {
     const std::string name = m.name.empty() ? std::string("Ce projet") : "\xC2\xAB " + m.name + " \xC2\xBB";
     if (m.edition == "ihm" && !core::hasIhm())
-        return name + " est un projet IHM : il s'ouvre avec XPGAnalyser IHM.\n\nXPGAnalyser API ouvre les projets de l'automate (Projets\\api).";
+        return name + " est un projet IHM : il s'ouvre avec IHM Studio.\n\nAPI Studio ouvre les projets de l'automate (Projets\\api).";
     if (m.edition == "api" && !core::hasApi())
-        return name + " est un projet de l'automate : il s'ouvre avec XPGAnalyser API.\n\nXPGAnalyser IHM ouvre les projets IHM (Projets\\ihm).";
+        return name + " est un projet de l'automate : il s'ouvre avec API Studio.\n\nIHM Studio ouvre les projets IHM (Projets\\ihm).";
     return {};
 }
 
@@ -2010,7 +2010,7 @@ void App::takeInstanceRequests() {
             instanceStation_ = !station.empty();
             instanceWaitSaid_ = false;          // la derniere demande l'emporte
         } else {
-            bus_.publish(StatusNotice{"XPGAnalyser est d\xC3\xA9j\xC3\xA0 ouvert : une seule fen\xC3\xAAtre \xC3\xA0 la fois.", 6.0});
+            bus_.publish(StatusNotice{core::productName() + " est d\xC3\xA9j\xC3\xA0 ouvert : une seule fen\xC3\xAAtre \xC3\xA0 la fois.", 6.0});
         }
     }
     if (!menus_) return;
@@ -2059,7 +2059,7 @@ void App::takeInstanceRequests() {
     const std::string name = !manifest_.name.empty() ? manifest_.name : folderName;
     const std::string keep = "Les enregistrer d'abord";
     const std::string drop = "Les abandonner";
-    std::string why = "XPGAnalyser est d\xC3\xA9j\xC3\xA0 ouvert : " + what
+    std::string why = core::productName() + " est d\xC3\xA9j\xC3\xA0 ouvert : " + what
                     + " a \xC3\xA9t\xC3\xA9 demand\xC3\xA9 dans cette fen\xC3\xAAtre (une seule \xC3\xA0 la fois).\n\n"
                     + name + " a des modifications qui ne sont pas encore enregistr\xC3\xA9" "es";
     if (const auto last = commands_.undoLabel(); !last.empty()) why += " (la derni\xC3\xA8re : " + last + ")";
@@ -2249,7 +2249,7 @@ std::filesystem::path App::projectsRoot() {
     return ec ? fs::current_path() : racine;
 }
 
-// 1.12.0 : XPGAnalyser IHM - un nouveau projet IHM : un dossier (Projets\ihm\<Nom>), son
+// 1.12.0 : IHM Studio - un nouveau projet IHM : un dossier (Projets\ihm\<Nom>), son
 // manifeste (edition = ihm), une vue de demarrage. Pas de programme : les variables de
 // l'IHM sont les siennes, liees aux adresses de ses equipements.
 void App::newHmiProject() {
@@ -2766,7 +2766,7 @@ void App::frame(double dt) {
     //     serveur de demonstration recoit les valeurs du simulateur.
     //     Le serveur expose le simulateur : il le prepare (sans le lancer), une
     //     fois par projet.
-    // 1.12.0 : XPGAnalyser IHM n'a pas d'automate - ni son simulateur, ni la liaison vers
+    // 1.12.0 : IHM Studio n'a pas d'automate - ni son simulateur, ni la liaison vers
     // « l'automate du projet », ni le serveur de demonstration ; ses equipements, oui.
     const bool plc = core::hasApi();
     if (plc && hmi_ && hmi_->project.comm.demoServer && project_ && !simulation_.attached() && demoPrepared_ != project_.get()) {

@@ -1,6 +1,6 @@
 #include "HmiRuntime.hpp"
 #include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
-#include "../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 #include "HmiNatives.hpp"   // 1.12.0 : couleurs, aleatoire, enumerations natives
 #include "HmiTypeForms.hpp"   // 1.12.19 : la valeur initiale d'un rappel (=Fonction)
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel

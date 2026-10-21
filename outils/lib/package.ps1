@@ -103,8 +103,8 @@ function Get-XpgDllImportees {
 try {
     $racine = $X.Racine
     $produit = Get-XpgConfig -Section 'Produit' -Cle 'nom' -Obligatoire
-    $exeNom = Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'XpgAnalyzer-API.exe'
-    $exeIhmNom = Get-XpgConfig -Section 'Produit' -Cle 'exe_ihm' -Defaut 'XpgAnalyzer-IHM.exe'   # 1.12.0 : XPGAnalyser IHM
+    $exeNom = Get-XpgConfig -Section 'Produit' -Cle 'exe' -Defaut 'API-Studio.exe'
+    $exeIhmNom = Get-XpgConfig -Section 'Produit' -Cle 'exe_ihm' -Defaut 'IHM-Studio.exe'   # 1.12.0 : IHM Studio
     $chaine = (Get-XpgOption -Noms @('chaine') -Defaut 'msvc').ToLowerInvariant()
     $exeFourni = Get-XpgOption -Noms @('exe')
 
@@ -152,9 +152,9 @@ try {
     if (-not $exe) { $exe = Join-Path $racine "build\Release\$exeNom" }
     if (-not (Test-Path -LiteralPath $exe)) { Stop-Xpg -Code 1 -Message "Exe introuvable : $exe" }
     Copy-Item -LiteralPath $exe -Destination (Join-Path $st $exeNom) -Force
-    # 1.12.0 : XPGAnalyser IHM, a cote (le meme dossier que l'exe de XPGAnalyser API).
+    # 1.12.0 : IHM Studio, a cote (le meme dossier que l'exe de API Studio).
     $exeIhm = Join-Path (Split-Path -Parent $exe) $exeIhmNom
-    if (-not (Test-Path -LiteralPath $exeIhm)) { Stop-Xpg -Code 1 -Message "Exe introuvable : $exeIhm" -Conseil 'build.bat compile les deux applications (XPGAnalyser API et XPGAnalyser IHM).' }
+    if (-not (Test-Path -LiteralPath $exeIhm)) { Stop-Xpg -Code 1 -Message "Exe introuvable : $exeIhm" -Conseil 'build.bat compile les deux applications (API Studio et IHM Studio).' }
     Copy-Item -LiteralPath $exeIhm -Destination (Join-Path $st $exeIhmNom) -Force
     $sdl = Get-XpgOption -Noms @('sdl')
     if (-not $sdl) { $sdl = Join-Path $racine 'third_party\SDL3\lib\x64\SDL3.dll' }
@@ -197,6 +197,7 @@ try {
 ; Ce que les scripts de maintenance doivent savoir de XPGAnalyser. Ne pas modifier.
 [Produit]
 nom = $produit
+cle = $(Get-XpgConfig -Section 'Produit' -Cle 'cle' -Defaut 'XPGAnalyser')
 editeur = $(Get-XpgConfig -Section 'Produit' -Cle 'editeur')
 version = $version
 app_id = $(Get-XpgConfig -Section 'Produit' -Cle 'app_id' -Obligatoire)
@@ -257,7 +258,7 @@ anciens_dossiers = $(Get-XpgConfig -Section 'Installateur' -Cle 'anciens_dossier
     }
     Start-XpgEtape 'L''installateur (Inno Setup)' | Out-Null
     Invoke-XpgEnfant -Script 'build_installer.ps1' -Args2 @("/staging:$st", "/chaine:$chaine") -Libelle 'La fabrication de l''installateur'
-    Complete-XpgEtape -Statut OK -Detail (Join-Path $racine ("{0}-Setup-{1}.exe" -f $produit, $version))
+    Complete-XpgEtape -Statut OK -Detail (Join-Path $racine ("{0}-Setup-{1}.exe" -f (Get-XpgConfig -Section 'Produit' -Cle 'fichier' -Defaut 'API-IHM-Studio'), $version))
     Exit-Xpg -Code 0
 } catch {
     Stop-Xpg -Code 1 -Message "Erreur inattendue : $($_.Exception.Message)" -Exception $_

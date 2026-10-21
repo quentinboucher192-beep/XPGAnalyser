@@ -3807,7 +3807,7 @@ void disposition1123() {
     app::DispositionDialog::Spec spec;
     spec.applied = base;
     spec.mine = base;
-    spec.edition = "XPGAnalyser IHM";
+    spec.edition = "IHM Studio";
     spec.apply = [&](const dp::Layout& l) { applied = l; };
     spec.keepMine = [&](const dp::Layout& l) { mine = dp::serialize(l); };
     spec.reset = [&] { ++resets; };
@@ -3921,7 +3921,7 @@ void apercuDisposition1124() {
         app::DispositionDialog::Spec spec;
         spec.applied = base;
         spec.mine = base;
-        spec.edition = "XPGAnalyser IHM";
+        spec.edition = "IHM Studio";
         app::DispositionDialog d(std::move(spec));
         check(static_cast<bool>(d.Initialize()) && d.preview() && !d.preview()->simulating(), "la fen\xC3\xAAtre a son aper\xC3\xA7u (en \xC3\xA9" "dition)");
         if (auto* root = d.widgetRoot(); root && d.preview() && d.grid()) {
@@ -7703,26 +7703,51 @@ void lot12_menu_connexion() {
 }
 
 void lot12_logo() {
-    std::printf("lot 12 : le logo (fen\xC3\xAAtre, accueil, ex\xC3\xA9" "cutable)\n");
-    const auto svg = app::brand::logoSvg();
-    check(svg.rfind("<svg", 0) == 0 && svg.find("</svg>") != std::string_view::npos, "le logo embarqu\xC3\xA9 : un SVG complet");
-    hmi::Rgba px;
-    check(app::brand::logoPixels(64, px) && px.width == 64 && px.height == 64, "rasteris\xC3\xA9 \xC3\xA0 64 x 64");
-    const auto at = [&](int x, int y) {
+    std::printf("lot 12 ; 1.12.20 : les logos d'API Studio et d'IHM Studio (fen\xC3\xAAtre, accueil, ex\xC3\xA9" "cutables)\n");
+    // 1.12.20 : un logo par application, de la meme famille (le cadre arrondi, les traits clairs, le point jaune).
+    const core::Edition before = core::edition();
+    const auto rgbaAt = [](const hmi::Rgba& px, int x, int y) {
         const std::size_t i = (static_cast<std::size_t>(y) * 64 + static_cast<std::size_t>(x)) * 4;
         return std::array<int, 4>{px.pixels[i], px.pixels[i + 1], px.pixels[i + 2], px.pixels[i + 3]};
     };
-    const auto corner = at(0, 0), centre = at(32, 32), rail = at(15, 32);
-    check(corner[3] == 0, "le coin : transparent (le carr\xC3\xA9 est arrondi)");
-    check(centre[3] == 255 && centre[0] > 200 && centre[1] > 170 && centre[2] < 120, "le centre : le point d'analyse, jaune");
-    check(rail[3] == 255 && rail[0] > 200 && rail[1] > 200 && rail[2] > 200, "le rail de gauche : clair");
+    const auto yellow = [](const std::array<int, 4>& c) { return c[3] == 255 && c[0] > 200 && c[1] > 170 && c[2] < 120; };
+    const auto light = [](const std::array<int, 4>& c) { return c[3] == 255 && c[0] > 200 && c[1] > 200 && c[2] > 200; };
+    for (const auto e : {core::Edition::Api, core::Edition::Ihm}) {
+        core::setEdition(e);
+        const bool ihm = e == core::Edition::Ihm;
+        const std::string who = ihm ? "IHM Studio" : "API Studio";
+        const auto svg = app::brand::logoSvg();
+        check(svg.rfind("<svg", 0) == 0 && svg.find("</svg>") != std::string_view::npos && svg == app::brand::logoSvg(e),
+              who + " : son logo embarqu\xC3\xA9, un SVG complet");
+        hmi::Rgba px;
+        check(app::brand::logoPixels(64, px) && px.width == 64 && px.height == 64, who + " : rasteris\xC3\xA9 \xC3\xA0 64 x 64");
+        if (px.pixels.size() < 64 * 64 * 4) continue;
+        check(rgbaAt(px, 0, 0)[3] == 0, who + " : le coin transparent (le carr\xC3\xA9 est arrondi)");
+        if (ihm) {
+            check(yellow(rgbaAt(px, 32, 37)), who + " : l'axe de l'aiguille, jaune");
+            check(light(rgbaAt(px, 10, 25)), who + " : le cadre de l'\xC3\xA9" "cran, clair");
+            const auto dial = rgbaAt(px, 20, 36);
+            check(dial[1] > 180 && dial[0] < 140, who + " : le cadran, vert");
+        } else {
+            check(yellow(rgbaAt(px, 42, 32)), who + " : la bobine, jaune");
+            check(light(rgbaAt(px, 12, 32)), who + " : le rail de gauche, clair");
+            const auto contact = rgbaAt(px, 30, 24);
+            check(contact[2] > 200 && contact[0] < 160, who + " : le contact, bleu");
+        }
+    }
+    check(app::brand::logoSvg(core::Edition::Api) != app::brand::logoSvg(core::Edition::Ihm), "deux logos distincts");
+    core::setEdition(core::Edition::Both);
+    check(app::brand::logoSvg() == app::brand::logoSvg(core::Edition::Api), "les essais (les deux \xC3\xA9" "ditions) : le logo d'API Studio");
+    core::setEdition(before);
     app::brand::LogoMark mark("logo", 54.f);
     check(mark.sizeHint().preferred.w == 54.f && mark.sizeHint().minimum.h == 54.f, "la marque de l'accueil : un carr\xC3\xA9 de 54");
     // Le depot, d'apres ce fichier (tests/hmi_editor_test.cpp).
     const auto root = std::filesystem::path(__FILE__).parent_path().parent_path();
-    if (std::filesystem::exists(root / "resources" / "logo" / "xpg_analyzer.svg")) {
+    for (const auto e : {core::Edition::Api, core::Edition::Ihm}) {
+        const std::string name = e == core::Edition::Ihm ? "ihm_studio" : "api_studio";
+        if (!std::filesystem::exists(root / "resources" / "logo" / (name + ".svg"))) continue;
         // Le SVG embarque et celui de resources/logo/ ne font qu'un (sans son commentaire).
-        std::ifstream in(root / "resources" / "logo" / "xpg_analyzer.svg");
+        std::ifstream in(root / "resources" / "logo" / (name + ".svg"));
         std::stringstream ss;
         ss << in.rdbuf();
         std::string file = ss.str();
@@ -7734,12 +7759,11 @@ void lot12_logo() {
             file.erase(from, close + 3 - from);
         }
         while (!file.empty() && (file.back() == '\n' || file.back() == ' ')) file.pop_back();
-        std::string embedded(svg);
+        std::string embedded(app::brand::logoSvg(e));
         while (!embedded.empty() && (embedded.back() == '\n' || embedded.back() == ' ')) embedded.pop_back();
-        check(!file.empty() && file == embedded, "resources/logo/xpg_analyzer.svg = le logo embarqu\xC3\xA9");
-        check(std::filesystem::exists(root / "resources" / "logo" / "xpg_analyzer.ico")
-                  && std::filesystem::exists(root / "resources" / "windows" / "xpg_analyzer.rc.in"),
-              "l'ic\xC3\xB4ne Windows et sa ressource sont l\xC3\xA0");
+        check(!file.empty() && file == embedded, "resources/logo/" + name + ".svg = le logo embarqu\xC3\xA9");
+        check(std::filesystem::exists(root / "resources" / "logo" / (name + ".ico")) && std::filesystem::exists(root / "resources" / "windows" / "xpg_analyzer.rc.in"),
+              "l'ic\xC3\xB4ne Windows de " + name + " et sa ressource sont l\xC3\xA0");
     }
 }
 
@@ -18195,7 +18219,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 372,   // 1.12.20 : + 2 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 373,   // 1.12.20 : + 3 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18384,10 +18408,10 @@ void centreAide111() {
             check(filtre.size() < html.size() && filtre.find("<kbd>F8</kbd>") != std::string::npos,
                   "fiche A4 : la recherche la filtre");
             // 1.11.1 (C111-1) : la fiche imprimee porte le nom de l'appli, comme A propos et Signaler.
-            check(html.find("<title>XPGAnalyser 1.11.0 \xE2\x80\x94 raccourcis clavier</title>") != std::string::npos
-                      && html.find("<h1>XPGAnalyser 1.11.0 \xE2\x80\x94 raccourcis clavier</h1>") != std::string::npos
+            check(html.find("<title>API IHM Studio 1.11.0 \xE2\x80\x94 raccourcis clavier</title>") != std::string::npos
+                      && html.find("<h1>API IHM Studio 1.11.0 \xE2\x80\x94 raccourcis clavier</h1>") != std::string::npos
                       && html.find("XPG Analyzer") == std::string::npos,
-                  "fiche A4 : son titre dit XPGAnalyser (C111-1)");
+                  "fiche A4 : son titre dit le nom de l'application (C111-1 ; 1.12.20 : API IHM Studio dans les essais)");
         }
         const auto aide = hc::keysPage("", hk::Context::Help);
         check(aide.groups.size() == 1 && aide.groups[0].context == hk::Context::Help && !aide.groups[0].rows.empty(),
@@ -18857,10 +18881,10 @@ void centreAide111() {
                     lancer = poste->blocks[b + 1].text;
             for (const auto& b : poste->blocks) {
                 if (b.text.find("Alt+F4 ouvre") != std::string::npos) accord += " " + b.text.substr(0, 60);
-                if (b.text.find("**En ligne de commande** : `xpg_analyzer --ihm") == 0) commande = true;
+                if (b.text.find("**En ligne de commande** : `IHM-Studio --ihm") == 0) commande = true;
             }
         }
-        check(lancer.rfind("**Essayer le poste**", 0) == 0 && lancer.find("xpg_analyzer") == std::string::npos && commande
+        check(lancer.rfind("**Essayer le poste**", 0) == 0 && lancer.find("IHM-Studio") == std::string::npos && commande
                   && accord.empty(),
               "poste-exploitation : Le lancer commence par Essayer le poste, la ligne de commande en dernier, l'accord ("
                   + lancer.substr(0, 40) + ")" + accord);

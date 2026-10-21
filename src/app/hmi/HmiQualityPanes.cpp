@@ -1,6 +1,6 @@
 // IHM > Essais : les essais de reception (lot 13).
 #include "HmiQualityPanes.hpp"
-#include "../../core/Edition.hpp"   // 1.12.2 : XPGAnalyser IHM n'a pas d'automate
+#include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 #include "../ExportTarget.hpp"
 #include "HmiAssist.hpp"
 #include "HmiPaneKit.hpp"
