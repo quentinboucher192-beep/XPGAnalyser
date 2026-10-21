@@ -479,6 +479,14 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     links_ += props_->legendClicked->connect([this](const std::string& cat, const std::string& name, gfx::Rect at) {
         (void)openLegendMenu(cat, name, {at.x, at.bottom() + 4.f});
     });
+    // 1.12.23 : les carres des onglets Contenu (une plume, une case de tableau), Actions et Raccourcis - posés depuis
+    // la 1.12.19, ils ne repondaient pas au clic. La meme liste, puis le meme selecteur, que l'inspecteur.
+    for (const char* gid : {"contenu", "actions", "raccourcis"}) {
+        if (auto* g = legendGrid(gid))
+            links_ += g->legendClicked->connect([this, id = std::string(gid)](const std::string& cat, const std::string& name, gfx::Rect at) {
+                (void)openLegendMenu(id, cat, name, {at.x, at.bottom() + 4.f});
+            });
+    }
 
     links_ += canvas_->selectionChanged->connect([this] {
         if (syncing_) return;
@@ -728,25 +736,39 @@ const ui::PropertyGrid::Property* findProperty(const std::vector<ui::PropertyGri
 
 void HmiEditor::setValueAsker(std::function<void(const ValueRequest&)> ask) {
     askValue_ = std::move(ask);
-    props_->setLegendClickable(static_cast<bool>(askValue_));
+    for (const char* gid : {"", "contenu", "actions", "raccourcis"})
+        if (auto* g = legendGrid(gid)) g->setLegendClickable(static_cast<bool>(askValue_));
 }
 
-bool HmiEditor::openLegendMenu(const std::string& category, const std::string& property, gfx::Point at) {
+ui::PropertyGrid* HmiEditor::legendGrid(const std::string& grid) const noexcept {
+    if (grid.empty()) return props_;
+    if (grid == "contenu") return content_ ? &content_->grid() : nullptr;
+    if (grid == "actions") return actions_ ? &actions_->grid() : nullptr;
+    if (grid == "raccourcis") return shortcuts_ ? &shortcuts_->grid() : nullptr;
+    return nullptr;
+}
+
+bool HmiEditor::openLegendMenu(const std::string& grid, const std::string& category, const std::string& property, gfx::Point at) {
     using S = ui::PropertyGrid::LegendStyle;
-    const auto* p = findProperty(props_->categories(), category, property);
+    const auto* g = legendGrid(grid);
+    const auto* p = g ? findProperty(g->categories(), category, property) : nullptr;
     if (!p || !p->legend || !askValue_) return false;
-    const bool fx = !p->expression.empty();
+    const valuekind::Env env{&doc_->project, doc_->project.view(viewId_), plc_.get()};
+    // 1.12.23 : une case « tout expression » (l'expression d'une plume) garde sa formule dans sa valeur : ce qui
+    // n'y est pas une constante du type attendu se lit en formule (la meme regle que decorateCells).
+    bool fx = !p->expression.empty();
+    if (!fx && p->exprWhole && !p->value.empty()) fx = valuekind::classify(env, p->value, false, p->legend->expected).error();
     ValueRequest req;
+    req.grid = grid;
     req.category = category;
     req.property = property;
     req.field = std::string(ui::exprfield::shownLabel(*p));
     if (const auto at2 = req.field.find(" \xC2\xB7 "); at2 != std::string::npos) req.field = req.field.substr(0, at2);   // « Name · STRING »
     if (const auto f = req.field.find("  \xC6\x92"); f != std::string::npos) req.field = req.field.substr(0, f);
-    req.text = fx ? p->expression : p->value;
+    req.text = p->expression.empty() ? p->value : p->expression;
     req.fx = fx || p->value.empty();
     req.expected = p->legend->expected;
     legendRequest_ = req;
-    const valuekind::Env env{&doc_->project, doc_->project.view(viewId_), plc_.get()};
     const auto res = valuekind::classify(env, req.text, fx, req.expected);
     legendUnknown_ = res.unknown;
     std::vector<ui::PopupMenu::Item> items;
@@ -788,15 +810,17 @@ bool HmiEditor::openLegendMenu(const std::string& category, const std::string& p
     return true;
 }
 
-bool HmiEditor::commitValue(const std::string& category, const std::string& property, const std::string& text, bool fx) {
-    const auto* p = findProperty(props_->categories(), category, property);
+bool HmiEditor::commitValue(const std::string& category, const std::string& property, const std::string& text, bool fx,
+                            const std::string& grid) {
+    auto* g = legendGrid(grid);
+    const auto* p = g ? findProperty(g->categories(), category, property) : nullptr;
     if (!p || !p->commit) return false;
     const auto commit = p->commit;   // la grille est refaite pendant l'appel
     std::string sent;
     if (text.empty()) sent = fx && !p->expression.empty() ? std::string("=") : std::string(ui::exprfield::kToDefault);
     else sent = fx && ui::exprfield::accepts(*p) ? "=" + text : text;
     const bool ok = commit(sent);
-    if (ok) props_->propertyChanged->emit(property, sent);
+    if (ok) g->propertyChanged->emit(property, sent);
     invalidateLayout();
     return ok;
 }

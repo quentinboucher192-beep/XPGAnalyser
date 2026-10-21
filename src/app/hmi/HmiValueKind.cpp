@@ -462,12 +462,21 @@ void decorateCells(std::vector<ui::PropertyGrid::Category>& cats, const Env& env
     for (auto& c : cats) {
         for (auto& p : c.properties) {
             if (!p.commit || p.type == VT::ReadOnly || !ui::exprfield::accepts(p) || p.mixed) continue;
-            const bool fx = !p.expression.empty();
+            bool fx = !p.expression.empty();
             std::string expected = expectedOfProperty(p);
             // Une duree se garde en nombre, dans l'unite de la case (60 : 60 s) : sa valeur fixe se lit en
             // nombre, sa formule en duree.
             if (expected == "TIME" && !fx) expected = "NOMBRE";
-            const auto res = classify(env, fx ? p.expression : p.value, fx, expected);
+            auto res = classify(env, fx ? p.expression : p.value, fx, expected);
+            // 1.12.23 : une case « tout expression » (markWhole : l'expression d'une plume, la condition d'une alarme)
+            // garde sa formule dans sa valeur : ce qui n'est pas une constante du type attendu (12, TRUE) se lit en
+            // formule. Avant : toujours en constante - « SPPV_TELUNA[0].SP n'est pas un nombre », une condition
+            // Pression > 10 refusee.
+            if (!fx && p.exprWhole && res.error()) {
+                fx = true;
+                expected = expectedOfProperty(p);
+                res = classify(env, p.value, true, expected);
+            }
             if (!p.legend) {
                 p.legend = legendOf(res);
                 p.legend->expected = expected;

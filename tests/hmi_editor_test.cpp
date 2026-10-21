@@ -17936,20 +17936,20 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56.
     const auto& rel = hn::releases();
-    check(rel.size() == 55 && rel.front().version == "1.12.22" && rel[1].version == "1.12.21" && rel[2].version == "1.12.20" && rel[3].version == "1.12.19" && rel[4].version == "1.12.18" && rel[5].version == "1.12.17" && rel[6].version == "1.12.16" && rel[7].version == "1.12.15" && rel[8].version == "1.12.14" && rel[9].version == "1.12.13" && rel[10].version == "1.12.12" && rel[11].version == "1.12.11" && rel[12].version == "1.12.10" && rel[13].version == "1.12.9" && rel[14].version == "1.12.8" && rel[15].version == "1.12.7" && rel[16].version == "1.12.6" && rel[17].version == "1.12.5" && rel[18].version == "1.12.4" && rel[19].version == "1.12.3" && rel[20].version == "1.12.2" && rel[21].version == "1.12.1"
-              && rel[22].version == "1.12.0" && rel[23].version == "1.11.24" && rel[24].version == "1.11.23"
-              && rel[25].version == "1.11.22" && rel[26].version == "1.11.21" && rel[27].version == "1.11.20" && rel[28].version == "1.11.19"
-              && rel[29].version == "1.11.18" && rel[30].version == "1.11.17"
-              && rel[31].version == "1.11.16" && rel[32].version == "1.11.15"
-              && rel[33].version == "1.11.14" && rel[34].version == "1.11.13" && rel[35].version == "1.11.12"
-              && rel[36].version == "1.11.11" && rel[37].version == "1.11.10"
-              && rel[38].version == "1.11.9" && rel[39].version == "1.11.8"
-              && rel[40].version == "1.11.7" && rel[41].version == "1.11.6" && rel[42].version == "1.11.5"
-              && rel[43].version == "1.11.4" && rel[44].version == "1.11.3" && rel[45].version == "1.11.2"
-              && rel[46].version == "1.11.1" && rel[47].version == "1.11" && rel[48].version == "1.10.4",
-          "notes : 55 versions, la 1.12.22 en tete, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 56 && rel.front().version == "1.12.23" && rel[1].version == "1.12.22" && rel[2].version == "1.12.21" && rel[3].version == "1.12.20" && rel[4].version == "1.12.19" && rel[5].version == "1.12.18" && rel[6].version == "1.12.17" && rel[7].version == "1.12.16" && rel[8].version == "1.12.15" && rel[9].version == "1.12.14" && rel[10].version == "1.12.13" && rel[11].version == "1.12.12" && rel[12].version == "1.12.11" && rel[13].version == "1.12.10" && rel[14].version == "1.12.9" && rel[15].version == "1.12.8" && rel[16].version == "1.12.7" && rel[17].version == "1.12.6" && rel[18].version == "1.12.5" && rel[19].version == "1.12.4" && rel[20].version == "1.12.3" && rel[21].version == "1.12.2" && rel[22].version == "1.12.1"
+              && rel[23].version == "1.12.0" && rel[24].version == "1.11.24" && rel[25].version == "1.11.23"
+              && rel[26].version == "1.11.22" && rel[27].version == "1.11.21" && rel[28].version == "1.11.20" && rel[29].version == "1.11.19"
+              && rel[30].version == "1.11.18" && rel[31].version == "1.11.17"
+              && rel[32].version == "1.11.16" && rel[33].version == "1.11.15"
+              && rel[34].version == "1.11.14" && rel[35].version == "1.11.13" && rel[36].version == "1.11.12"
+              && rel[37].version == "1.11.11" && rel[38].version == "1.11.10"
+              && rel[39].version == "1.11.9" && rel[40].version == "1.11.8"
+              && rel[41].version == "1.11.7" && rel[42].version == "1.11.6" && rel[43].version == "1.11.5"
+              && rel[44].version == "1.11.4" && rel[45].version == "1.11.3" && rel[46].version == "1.11.2"
+              && rel[47].version == "1.11.1" && rel[48].version == "1.11" && rel[49].version == "1.10.4",
+          "notes : 56 versions, la 1.12.23 en tete, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18220,7 +18220,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 380,   // 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 381,   // 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18363,7 +18363,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 211, "centre : L'IHM a les 211 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 55, "centre : 11 expressions, 55 notes (1.12.22)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 56, "centre : 11 expressions, 56 notes (1.12.23)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -18425,10 +18425,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 55
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 56
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.12.22" && hc::notesPage("9.9").version == "1.12.22",
+        check(hc::notesPage("").version == "1.12.23" && hc::notesPage("9.9").version == "1.12.23",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -18772,7 +18772,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 55;   // 1.11.3 a 1.12.22 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 56;   // 1.11.3 a 1.12.23 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -34086,6 +34086,98 @@ void generiquesSuiventEcran11221() {
     core::CommandGroupScope::registerStack(nullptr);
 }
 
+// 1.12.23 : la capture - une plume SPPV_TELUNA[0].SP (ARRAY[0..8] OF SPPV<INT>, SP : K) disait « n'est pas un
+// nombre » ; le carre C du Contenu n'ouvrait rien ; Types IHM disait « selon T » pour SPPV<K>.
+void plumeCarres11223() {
+    std::printf("-- 1.12.23 : la plume lit sa formule, les carres du Contenu s'ouvrent, selon K\n");
+    using PG = ui::PropertyGrid;
+    Bench b;
+    auto& p = b.doc->project;
+    HmiType sppv;
+    sppv.id = p.allocate();
+    sppv.name = "SPPV";
+    sppv.generics = {{"K", ""}};
+    sppv.members = {{"SP", "K", "", ""}, {"PV", "K", "", ""}};
+    p.programs.types.push_back(sppv);
+    hmi::Variable arr;
+    arr.id = p.allocate();
+    arr.name = "SPPV_TELUNA";
+    arr.type = "ARRAY[0..8] OF SPPV<INT>";
+    p.programs.variables.push_back(arr);
+    hmi::Variable niv = arr;
+    niv.id = p.allocate();
+    niv.name = "Niveau";
+    niv.type = "REAL";
+    p.programs.variables.push_back(niv);
+    auto& content = b.editor->content();
+    const Id trend = b.place(Kind::Trend, 100, 350);
+    b.editor->layout();
+    check(content.mode() == app::HmiContentPanel::Mode::Trend && content.addItem() && content.setField(0, "expression", "SPPV_TELUNA[0].SP"),
+          "une plume : SPPV_TELUNA[0].SP");
+    content.selectIndex(0);
+    b.editor->layout();
+    const auto find = [&](std::string_view name) -> const PG::Property* {
+        for (const auto& c : content.grid().categories())
+            for (const auto& q : c.properties)
+                if (q.name == name) return &q;
+        return nullptr;
+    };
+    const auto* ex = find("Expression");
+    check(ex && ex->exprError.empty() && ex->legend && ex->legend->style == PG::LegendStyle::Hmi,
+          "la plume lit sa formule : SPPV_TELUNA[0].SP, un INT (SP : K, K = INT), carr\xC3\xA9 I (" + (ex ? ex->exprError : std::string("?")) + ")");
+    check(content.setField(0, "expression", "Niveau * 2") && (ex = find("Expression")) && ex->exprError.empty()
+              && ex->legend && ex->legend->style == PG::LegendStyle::Formula,
+          "un calcul : carr\xC3\xA9 fx, sans faute");
+    check(content.setField(0, "expression", "Niveau +") && (ex = find("Expression")) && !ex->exprError.empty()
+              && ex->legend && ex->legend->style == PG::LegendStyle::Error,
+          "une formule qui ne se lit pas : la faute se dit encore (" + (ex ? ex->exprError : std::string("?")) + ")");
+    check(content.setField(0, "expression", "12.5") && (ex = find("Expression")) && ex->exprError.empty()
+              && ex->legend && ex->legend->style == PG::LegendStyle::Constant,
+          "une constante (12.5) reste une constante : carr\xC3\xA9 C");
+    check(content.setField(0, "expression", "SPPV_TELUNA[0].SP") && (ex = find("Expression")) && ex->exprError.empty(), "... et la plume revient");
+    // ---- le carre : sans hote, il ne fait que se lire ; avec, la liste puis le selecteur, sur la case du Contenu
+    check(!content.grid().legendClickable(), "sans s\xC3\xA9lecteur, le carr\xC3\xA9 ne r\xC3\xA9pond pas");
+    app::HmiEditor::ValueRequest got;
+    int asked = 0;
+    b.editor->setValueAsker([&](const app::HmiEditor::ValueRequest& r) { got = r; ++asked; });
+    check(content.grid().legendClickable() && b.editor->actions().grid().legendClickable(), "avec, les carr\xC3\xA9s du Contenu et des Actions r\xC3\xA9pondent");
+    check(b.editor->openLegendMenu("contenu", "Plume 1", "Expression", {20, 20}) && b.editor->legendMenu()->isOpen(),
+          "un clic sur le carr\xC3\xA9 de la plume : la liste des carr\xC3\xA9s");
+    b.editor->legendMenu()->itemChosen->emit(200);   // « Ouvrir le selecteur... »
+    check(asked == 1 && got.grid == "contenu" && got.category == "Plume 1" && got.property == "Expression" && got.text == "SPPV_TELUNA[0].SP"
+              && got.fx && got.expected == "NOMBRE",
+          "... puis le s\xC3\xA9lecteur : la case de la plume, sa formule, un nombre attendu");
+    check(b.editor->commitValue(got.category, got.property, "Niveau", true, got.grid) && b.v().object(trend)->text("variables") == "Niveau",
+          "le choix s'\xC3\xA9" "crit dans la plume (Niveau)");
+    check(!b.editor->commitValue(got.category, got.property, "Niveau", true, "ailleurs"), "une grille inconnue : rien n'est \xC3\xA9" "crit");
+    // ---- Types IHM : SPPV<K> se compte « selon K »
+    auto apply = [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); };
+    app::HmiTypesPane types("ty11223", b.doc, apply);
+    types.setBounds({0, 0, 1600, 900});
+    types.layout();
+    same_text(cellOf(types.typeTable(), "SPPV<K>", 2), "selon K", "Types IHM : SPPV<K>, ses mots selon K (avant : selon T)");
+    // ---- la regle, seule : une condition « tout expression » (celle d'une alarme) - une formule, sauf une constante
+    {
+        const auto cell = [&](std::string value) {
+            std::vector<PG::Category> cats(1);
+            PG::Property q;
+            q.name = "Condition";
+            q.value = std::move(value);
+            q.type = PG::ValueType::Text;
+            q.commit = [](std::string_view) { return true; };
+            ui::exprfield::markWhole(q, ui::exprfield::Expect::Bool, false);
+            cats[0].properties.push_back(std::move(q));
+            app::valuekind::decorateCells(cats, app::valuekind::Env{&p, nullptr, nullptr});
+            return cats[0].properties[0];
+        };
+        const auto cond = cell("Niveau > 10");
+        check(cond.exprError.empty() && cond.legend && cond.legend->style == PG::LegendStyle::Formula,
+              "une condition Niveau > 10 se lit en formule, sans faute (" + cond.exprError + ")");
+        const auto vrai = cell("TRUE");
+        check(vrai.exprError.empty() && vrai.legend && vrai.legend->style == PG::LegendStyle::Constant, "TRUE reste une constante (C)");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les natives rangees, Choisir une fonction... (Mes fonctions, Rend), seuls.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -34456,6 +34548,7 @@ int main(int argc, char** argv) {
     typesRappelEcran1220();                 // 1.12.20 (lot T) : Types IHM - Nouveau type, Rappel...
     generiquesFenetres11221();              // 1.12.21 : T, K au selecteur de types ; les fenetres se deplacent et s'agrandissent
     generiquesSuiventEcran11221();          // 1.12.21 : retirer un generique, les variables suivent
+    plumeCarres11223();                     // 1.12.23 : la plume lit sa formule, les carres du Contenu, selon K
     v1101_tableaux_onglet_cache();          // 1.10.1 (chantier B1) : la vue suit les tableaux, onglet cache ou non
     v1101_journal_vider();                  // 1.10.1 (integration I1101) : le Journal se vide ; les nouveautes 1.10.0 -> 1.10.1
     aideSaisie1102();                       // 1.10.2 (chantier A) : les objets des vues, les parametres des instances

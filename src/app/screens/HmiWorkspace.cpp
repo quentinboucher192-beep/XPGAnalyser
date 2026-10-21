@@ -2165,7 +2165,7 @@ void MainAnalysisScreen::askHmiValue(std::uint64_t viewId, const valuekind::Requ
 
 void MainAnalysisScreen::commitHmiValue(std::uint64_t viewId, const valuekind::Request& req, const std::string& text, bool fx) {
     auto* ed = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(viewId)));
-    if (!ed || !ed->commitValue(req.category, req.property, text, fx)) {
+    if (!ed || !ed->commitValue(req.category, req.property, text, fx, req.grid)) {   // 1.12.23 : la grille de la case
         status_->setTransientMessage("La case \xC2\xAB " + req.field + " \xC2\xBB n'est plus montr\xC3\xA9" "e : la valeur n'a pas \xC3\xA9t\xC3\xA9 \xC3\xA9" "crite.", 8.0);
         return;
     }

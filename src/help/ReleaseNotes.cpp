@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.23", "21/10/2026", "livr\xC3\xA9" "e le 21/10 tard le soir"},
     {"1.12.22", "21/10/2026", "livr\xC3\xA9" "e le 21/10 dans la soir\xC3\xA9" "e"},
     {"1.12.21", "21/10/2026", "livr\xC3\xA9" "e le 21/10 au soir"},
     {"1.12.20", "21/10/2026", "livr\xC3\xA9" "e le 21/10"},
@@ -128,6 +129,10 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.23 (21/10/2026) : voir docs/LIVRAISON-1.12.23.md (la plume lit sa formule, les carres du Contenu s'ouvrent, selon K).
+        note("1.12.23", "Vues", Kind::Fixed,
+         "LA PLUME LIT SA FORMULE, LES CARR\xC3\x89S DU CONTENU S'OUVRENT : la case Expression d'une plume (l'onglet Contenu d'une courbe) se lisait comme une valeur fixe - toute variable y \xC3\xA9tait \xC2\xAB n'est pas un nombre \xC2\xBB (SPPV_TELUNA[0].SP, le membre INT d'une structure g\xC3\xA9n\xC3\xA9rique SPPV<INT>, comme Niveau). Elle se lit maintenant en formule, comme \xC3\xA0 G\xC3\xA9n\xC3\xA9rer et en marche : une variable, un calcul ; une constante (12.5) reste une constante. M\xC3\xAAme correction pour les conditions des alarmes d'un symbole (Pression > 10 \xC3\xA9tait refus\xC3\xA9" "e). Le carr\xC3\xA9 au bout d'une case (C, fx, I, S\xE2\x80\xA6) des onglets Contenu, Actions et Raccourcis r\xC3\xA9pond au clic, comme dans l'inspecteur : la liste de ce qu'il dit, puis le s\xC3\xA9lecteur des constantes, des variables IHM et des variables syst\xC3\xA8me ; le choix s'\xC3\xA9" "crit dans la case (Ctrl+Z). Types IHM : une structure g\xC3\xA9n\xC3\xA9rique SPPV<K> compte ses mots \xC2\xAB selon K \xC2\xBB (c'\xC3\xA9tait \xC2\xAB selon T \xC2\xBB pour toutes).",
+         "champs-expressions", ""),
         // 1.12.22 (21/10/2026) : voir docs/LIVRAISON-1.12.22.md (les generiques changent, leurs emplois suivent).
         note("1.12.22", "Variables", Kind::New,
          "LES G\xC3\x89N\xC3\x89RIQUES CHANGENT, LEURS EMPLOIS SUIVENT TOUT SEULS : retirer K de T_Extractor<T, K> (Types IHM \xE2\x80\xBA la structure \xE2\x80\xBA G\xC3\xA9n\xC3\xA9riques) r\xC3\xA9\xC3\xA9" "crit chaque emploi - les variables IHM (T_Extractor<REAL, STRING> devient T_Extractor<REAL>, LIST OF T_Extractor<INT, STRING> devient LIST OF T_Extractor<INT>), les membres des autres types, les d\xC3\xA9" "clarations des scripts et des fonctions, les param\xC3\xA8tres de popup et de symbole, les retours, les rappels, le code. Dans les membres de la structure, K prend le type que lui donnaient ses emplois (MAP[K] OF T devient MAP[STRING] OF T ; s'ils ne s'accordaient pas, le plus fr\xC3\xA9quent, et le message le dit ; sans emploi, un type de sa contrainte). Renommer T en U fait suivre les membres ; d\xC3\xA9placer T et K fait suivre les arguments ; ajouter un g\xC3\xA9n\xC3\xA9rique donne \xC3\xA0 chaque emploi un type de sa contrainte (INT), \xC3\xA0 changer. Un symbole ou une popup : ses param\xC3\xA8tres suivent, et les arguments T := REAL de ses instances et de ceux qui l'ouvrent sont retir\xC3\xA9s ou renomm\xC3\xA9s. Le message dit ce qui a suivi ; Ctrl+Z reprend tout d'un coup. Corrig\xC3\xA9 en passant : le nom du param\xC3\xA8tre d'un rappel (CALLBACK (t : T) : BOOL) n'est plus pris pour le g\xC3\xA9n\xC3\xA9rique T.",

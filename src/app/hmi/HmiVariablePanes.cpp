@@ -3543,9 +3543,12 @@ void HmiTypesPane::refresh() {
         const bool cycle = !ty::cycleOf(p, t.name).empty();
         broken[t.id] = cycle;
         // 1.12.20 (lot G) : une structure generique - T_Mesure<T>, sa place selon ses types.
+        // 1.12.23 : « selon K », « selon T, K » - ses generiques a elle (avant : « selon T » pour tous).
         const bool generic = !t.generics.empty();
+        std::string selon;
+        for (const auto& g : t.generics) selon += (selon.empty() ? "selon " : ", ") + g.name;
         cells[t.id] = {generic ? t.name + "<" + hmi::genericsText(t.generics) + ">" : t.name, std::to_string(t.members.size()),
-                       cycle ? std::string("?") : generic ? std::string("selon T") : std::to_string(ty::weightOf(p, t.name).words),
+                       cycle ? std::string("?") : generic ? selon : std::to_string(ty::weightOf(p, t.name).words),
                        used.empty() ? std::string("(aucune variable)") : used};
     }
     syncing_ = true;

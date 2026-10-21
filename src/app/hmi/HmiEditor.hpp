@@ -150,10 +150,16 @@ public:
     using ValueRequest = valuekind::Request;
     void setValueAsker(std::function<void(const ValueRequest&)> ask);
     // La liste des carres d'une case (`at` : ou l'ouvrir). Faux : pas de telle case, ou pas d'hote.
-    bool openLegendMenu(const std::string& category, const std::string& property, gfx::Point at);
+    // 1.12.23 : `grid` - la grille de la case (Request::grid) : vide, l'inspecteur ; "contenu", "actions",
+    // "raccourcis" : ces onglets, dont les carres ne repondaient pas au clic.
+    bool openLegendMenu(const std::string& category, const std::string& property, gfx::Point at) {
+        return openLegendMenu({}, category, property, at);
+    }
+    bool openLegendMenu(const std::string& grid, const std::string& category, const std::string& property, gfx::Point at);
     [[nodiscard]] ui::PopupMenu* legendMenu() const noexcept { return legendMenu_; }
     // Ecrire une valeur choisie dans la case : une commande (Ctrl+Z). Faux : la case n'est plus la.
-    bool commitValue(const std::string& category, const std::string& property, const std::string& text, bool fx);
+    bool commitValue(const std::string& category, const std::string& property, const std::string& text, bool fx,
+                     const std::string& grid = {});
     bool makeStyle(const std::string& name, std::string* why = nullptr);
     // Ouvrir une autre vue (double-clic sur une instance : son symbole).
     const core::SignalPtr<hmi::Id> openView = core::Signal<hmi::Id>::create();
@@ -205,6 +211,8 @@ public:
     void editOverride(hmi::Id instance, const std::string& function);
 private:
     [[nodiscard]] std::vector<ui::PropertyGrid::Category> instanceFunctionCategories(const hmi::View&, const hmi::Object&);
+    // 1.12.23 : la grille nommee par Request::grid (nullptr : inconnue).
+    [[nodiscard]] ui::PropertyGrid* legendGrid(const std::string& grid) const noexcept;
 
     hmi::DocumentPtr                        doc_;
     hmi::Id                                 viewId_;

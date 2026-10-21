@@ -122,6 +122,8 @@ struct Request {
     std::string expected;              // le type attendu
     Style       source{Style::Empty};  // Empty : tout ; Api, Hmi, System, Local, Constant ; Markers : un repere
     std::string create;                // non vide : creer d'abord ce nom
+    // 1.12.23 : la grille de la case - vide : l'inspecteur ; "contenu", "actions", "raccourcis" : ces onglets.
+    std::string grid;
 };
 
 } // namespace app::valuekind
