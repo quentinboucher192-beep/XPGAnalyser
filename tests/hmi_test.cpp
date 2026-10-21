@@ -28555,6 +28555,87 @@ void finitions1220() {
 }
 
 // 1.12.20 (T) : les types rappel nommes du projet - TYPE T_Filtre : CALLBACK (x : REAL) : BOOL.
+// 1.12.20 (lot C) : les scripts C et C++ - la verification plus large (les chevrons d'un template, une lambda, le C++
+// dans un script C, un nom de fonction du projet mal ecrit) et l'en-tete du projet, en C et en C++.
+void scriptsC1220() {
+    std::printf("1.12.20 : les scripts C et C++ (verification, en-tete du projet)\n");
+    const auto firstError = [](const std::vector<ScriptDiagnostic>& d) {
+        for (const auto& x : d)
+            if (x.severity == ScriptDiagnostic::Severity::Error) return x.message;
+        return std::string{};
+    };
+    const auto clean = [&](ScriptLang lang, const std::string& code) { return firstError(checkScript(lang, code)); };
+    std::string e = clean(ScriptLang::Cpp, "std::function<BOOL(REAL)> garder = Est_Valide;\nstd::function<BOOL(REAL) trop_haut;\n");
+    check(e.find("il manque le > qui ferme std::function<") != std::string::npos, "C++ : le > qui ferme std::function<... manque (" + e + ")");
+    for (const char* ok : {"auto n = std::count_if(m.begin(), m.end(), [&](REAL x) { return x > Seuil; });\n",
+                           "std::map<std::string, std::vector<int>> m;\nstd::cout << x << std::endl;\n",
+                           "[[nodiscard]] int f();\nauto [a, b] = paire;\nint v = static_cast<int>(x) < 5;\n",
+                           "template <typename T> T limiter(T x, T bas, T haut) { return std::clamp(x, bas, haut); }\n"}) {
+        e = clean(ScriptLang::Cpp, ok);
+        check(e.empty(), std::string("C++ juste, pas de faute : ") + ok + " (" + e + ")");
+    }
+    e = clean(ScriptLang::Cpp, "auto f = [&] x > 1;\n");
+    check(e.find("une lambda") != std::string::npos, "C++ : une lambda sans parametres ni corps (" + e + ")");
+    e = clean(ScriptLang::C, "std::function<bool(float)> garder;\n");
+    check(e.find("std::function est du C++") != std::string::npos && e.find("pointeur de fonction") != std::string::npos,
+          "C : std::function est du C++, un pointeur de fonction propose (" + e + ")");
+    e = clean(ScriptLang::C, "int n = compter([](int x) { return x > 0; });\n");
+    check(e.find("une lambda est du C++") != std::string::npos, "C : une lambda est du C++ (" + e + ")");
+    e = clean(ScriptLang::C, "int a[6] = { [4] = 29, [2] = 15 };\nbool (*garder)(float) = &Est_Valide;\n");
+    check(e.empty(), "C : un initialiseur designe ([4] = 29) et un pointeur de fonction - pas de faute (" + e + ")");
+    // Le projet : une fonction, un type rappel, une structure, des variables.
+    Project p;
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = "Arreter_Pompe";
+    p.programs.functions.push_back(f);
+    HmiFunction g;
+    g.id = p.allocate();
+    g.name = "Est_Valide";
+    g.returnType = "BOOL";
+    Declaration x;
+    x.kind = DeclKind::Parameter;
+    x.name = "x";
+    x.type = "REAL";
+    g.decls.push_back(x);
+    p.programs.functions.push_back(g);
+    HmiType filtre;
+    filtre.id = p.allocate();
+    filtre.name = "T_Filtre";
+    filtre.kind = HmiTypeKind::Callback;
+    filtre.signature = "CALLBACK (x : REAL) : BOOL";
+    p.programs.types.push_back(filtre);
+    HmiType lot;
+    lot.id = p.allocate();
+    lot.name = "T_Lot";
+    lot.members = {TypeMember{"Nom", "STRING"}, TypeMember{"Poids", "REAL"}, TypeMember{"Bon", "BOOL", "TRUE"}};
+    p.programs.types.push_back(lot);
+    p.programs.variables.push_back(hmiVar(p, "Niveau", "REAL", "0.0"));
+    p.programs.variables.push_back(hmiVar(p, "Lots", "LIST OF T_Lot", ""));
+    p.programs.variables.push_back(hmiVar(p, "Tab", "ARRAY[1..5] OF INT", ""));
+    const auto warned = [&](const std::string& code) {
+        std::string w;
+        for (const auto& d : checkCNames(p, nullptr, code))
+            if (d.severity == ScriptDiagnostic::Severity::Warning) w += d.message + " | ";
+        return w;
+    };
+    std::string w = warned("ihm::apres(5s, Arreter_Pomp);\nT_Filtre garder = &Est_Valide;\n");
+    check(w.find("Arreter_Pomp n'est pas une fonction du projet") != std::string::npos && w.find("Arreter_Pompe") != std::string::npos,
+          "un nom de fonction du projet mal ecrit : averti, le bon propose (" + w + ")");
+    w = warned("void arreter_pomp() { }\narreter_pomp();\nint Niveau2 = 0;\nEst_Valide(Niveau);\n");
+    check(w.empty(), "une fonction declaree par le script, les bons noms : rien (" + w + ")");
+    // L'en-tete du projet.
+    const std::string cpp = projectHeader(p, ScriptLang::Cpp), c = projectHeader(p, ScriptLang::C);
+    for (const char* want : {"using T_Filtre = std::function<BOOL(REAL)>;", "struct T_Lot {", "    STRING Nom;", "    BOOL Bon = true;",
+                             "BOOL Est_Valide(REAL x);", "void Arreter_Pompe();", "extern REAL Niveau;", "extern std::list<T_Lot> Lots;",
+                             "extern std::array<INT, 5> Tab;", "using REAL = float;"})
+        check(cpp.find(want) != std::string::npos, std::string("en-tete C++ : ") + want);
+    for (const char* want : {"typedef bool (*T_Filtre)(float x);", "typedef struct {", "    char Nom[81];", "} T_Lot;",
+                             "bool Est_Valide(float x);", "void Arreter_Pompe(void);", "extern float Niveau;", "extern int16_t Tab[5];",
+                             "Lots : LIST OF T_Lot"})
+        check(c.find(want) != std::string::npos, std::string("en-tete C : ") + want);
+}
+
 void typesRappel1220() {
     std::printf("1.12.20 : les types rappel nommes (T_Filtre)\n");
     Project p;
@@ -28892,6 +28973,7 @@ int main(int argc, char** argv) {
     rappelsExpressions1219();         // 1.12.19 : un rappel dans une fx et un script (Compiler, la simulation)
     finitions1220();                  // 1.12.20 (F) : les finitions des rappels
     typesRappel1220();                // 1.12.20 (T) : les types rappel nommes
+    scriptsC1220();                   // 1.12.20 (C) : les scripts C et C++, l'en-tete du projet
     lotA1125();                       // 1.12.5 (lot A) : les defauts de l'audit des objets
     lotBC1126();                      // 1.12.6 (lots B et C) : le role de chaque propriete, les reperes partout
     lotD1127();                       // 1.12.7 (lot D) : les listes en tableau et les choix

@@ -6,6 +6,7 @@
 #include "HmiAssetPanes.hpp"
 #include "HmiIcons.hpp"
 #include "HmiAskDialog.hpp"                 // 1.11.3 : la fenetre d'import des scripts d'une vue
+#include "../../ui/Widget.hpp"             // 1.12.20 (lot C) : ui::setClipboardText
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/widgets/PathBrowse.hpp"
 #include "../../core/CallTrail.hpp"      // 1.10.4 : un diagnostic qui echoue va au journal interne
@@ -108,7 +109,8 @@ enum ToolAction : int { TAddSt = 1, TAddC, TAddCpp, TRename, TDelete, TCompile, 
                         TFolder,               // lot 21 : un dossier de scripts
                         TFix,                  // 1.10 (I2) : Ajouter les valeurs manquantes (CASE sur une enumeration)
                         TExport, TImport,      // 1.11.2 (decision 174) : les scripts generaux voyagent (.xpgscripts)
-                        TBuildGen, TBuildRegen, TBuildGenComp, TBuildState };   // 1.11.13 : la generation incrementale
+                        TBuildGen, TBuildRegen, TBuildGenComp, TBuildState,     // 1.11.13 : la generation incrementale
+                        THeader };             // 1.12.20 (lot C) : l'en-tete du projet, en C ou en C++
 
 ui::Language languageOf(ScriptLang l) {
     switch (l) {
@@ -143,7 +145,7 @@ std::string upperOf(std::string_view s) {
 }
 std::vector<hmi::ScriptDiagnostic> placedDiagnostics(const hmi::Project& p, const Script& sc, const hmi::View* v,
                                                      std::vector<hmi::scriptcheck::Finding>* fixes = nullptr) {
-    if (sc.lang != ScriptLang::ST) return {};
+    if (sc.lang != ScriptLang::ST) return hmi::checkCNames(p, v, sc.body);   // 1.12.20 (lot C) : un nom de fonction mal ecrit
     const auto plc = assist::sourcesFor(nullptr).plc();     // le programme de l'automate (vide : pas d'automate)
     return placedScriptDiagnostics(p, sc.body, v, nullptr, plc.get(), fixes, &sc.decls);   // 1.11.18 : ses declarations du modele
 }
@@ -372,6 +374,11 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
                "Ajouter les valeurs manquantes : une branche vide pour chaque valeur que le CASE ne traite pas, "
                "avant son END_CASE (Ctrl+Z les retire)",
                "Ajouter les valeurs manquantes");
+    // 1.12.20 (lot C) : l'en-tete du projet, pour un script C ou C++.
+    tools->add(THeader, HmiGlyph::Code,
+               "L'en-t\xC3\xAAte du projet, dans la langue du script (lecture seule) : ses types, ses rappels, ses fonctions et ses "
+               "variables, comme un script C ou C++ les emploie - Copier le met dans le presse-papiers",
+               "En-t\xC3\xAAte du projet");
     if (general()) {
         tools->separator();
         tools->add(TAddVar, HmiGlyph::Plus, "Nouvelle variable IHM", "Variable");
@@ -389,6 +396,10 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools_->setEnabledWhen(TEditVar, [this] { return selectedVariable() != kNoId; });
     tools_->setEnabledWhen(TDeleteVar, [this] { return selectedVariable() != kNoId; });
     tools_->setVisibleWhen(TFix, [this] { return fixRow() >= 0; });     // 1.10 (I2) : seulement s'il y a a corriger
+    tools_->setVisibleWhen(THeader, [this] {                            // 1.12.20 (lot C) : un script C ou C++
+        const auto* sc = current();
+        return sc && sc->lang != ScriptLang::ST;
+    });
     for (const int a : {static_cast<int>(TBuildGen), static_cast<int>(TBuildRegen), static_cast<int>(TBuildGenComp), static_cast<int>(TBuildState)}) {   // 1.11.13
         tools_->setVisibleWhen(a, [this] { return static_cast<bool>(hosts_.build); });
         if (a != TBuildState) tools_->setEnabledWhen(a, [this] { return selectedScript() != kNoId; });
@@ -549,6 +560,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
             case TBuildRegen: if (hosts_.build && sel) hosts_.build(hmi::pipeline::Mode::Regenerate, buildKey()); break;
             case TBuildGenComp: if (hosts_.build && sel) hosts_.build(hmi::pipeline::Mode::GenerateCompile, buildKey()); break;
             case TBuildState: if (hosts_.buildOutputs) hosts_.buildOutputs(); break;
+            case THeader: (void)showHeader(); break;      // 1.12.20 (lot C)
             case TFix:                        // 1.10 (I2) : Ajouter les valeurs manquantes
                 if (const int r = fixRow(); r >= 0) (void)applyResultFix(static_cast<std::size_t>(r));
                 break;
@@ -640,6 +652,36 @@ std::string HmiScriptsPane::selectedEvent() const {
 }
 
 const Script* HmiScriptsPane::current() const { return doc_->project.script(selectedScript()); }
+
+// 1.12.20 (lot C) : l'en-t\xC3\xAAte du projet, dans la langue du script choisi - une fen\xC3\xAAtre en lecture seule ; Copier le met
+// dans le presse-papiers. Rend son texte (vide : pas de script C ou C++ choisi).
+std::string HmiScriptsPane::showHeader() {
+    const Script* sc = current();
+    if (!sc || sc->lang == ScriptLang::ST) return {};
+    std::string text = hmi::projectHeader(doc_->project, sc->lang, doc_->project.view(view_));
+    auto* manager = menu::MenuManager::instance();
+    if (!manager) return text;                        // sans \xC3\xA9" "cran (essais) : le texte seul
+    app::HmiAskDialog::Spec spec;
+    spec.id = "dialog.hmiHeader";
+    spec.title = "En-t\xC3\xAAte du projet (" + std::string(hmi::scriptLangKey(sc->lang)) + ")";
+    spec.text = "En lecture seule : ce que le script peut employer. Copier le met dans le presse-papiers.";
+    std::size_t at = 0;
+    while (at < text.size()) {                        // une ligne par case de la liste (elle defile)
+        const auto nl = text.find('\n', at);
+        std::string line = text.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
+        if (!line.empty()) spec.items.push_back({std::move(line), {}, false});
+        if (nl == std::string::npos) break;
+        at = nl + 1;
+    }
+    spec.plainItems = true;
+    spec.confirm = "Copier";
+    spec.cancel = "Fermer";
+    spec.width = 760.f;
+    manager->ShowDialog(std::make_unique<app::HmiAskDialog>(std::move(spec)), [text](const menu::DialogResult& r) {
+        if (r.accepted()) ui::setClipboardText(text);
+    });
+    return text;
+}
 
 void HmiScriptsPane::refresh() {
     const Id keepScript = selectedScript();

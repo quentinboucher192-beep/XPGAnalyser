@@ -4911,6 +4911,9 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
             ++scripts;
             for (const auto& d : checkScript(sc, knownType))      // 1.11.18 (lot 3) : avec ses declarations du modele
                 add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id, d.line);
+            if (sc.lang != ScriptLang::ST)                        // 1.12.20 (lot C) : un nom de fonction mal ecrit
+                for (const auto& d : checkCNames(p, &v, sc.body))
+                    add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id, d.line);
             for (const auto& [d, decl] : checkCalculations(sc, knownType)) {     // 1.12.7
                 add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id, d.line);
                 out.back().declaration = decl;
@@ -4984,6 +4987,9 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
         ++scripts;
         for (const auto& d : checkScript(sc, knownType))      // 1.11.18 (lot 3) : avec ses declarations du modele
             add(out, severityOf(d.severity), "Script", kNoId, kNoId, sc.name, d.message, sc.id, d.line);
+        if (sc.lang != ScriptLang::ST)                        // 1.12.20 (lot C) : un nom de fonction mal ecrit
+            for (const auto& d : checkCNames(p, nullptr, sc.body))
+                add(out, severityOf(d.severity), "Script", kNoId, kNoId, sc.name, d.message, sc.id, d.line);
         for (const auto& [d, decl] : checkCalculations(sc, knownType)) {     // 1.12.7
             add(out, severityOf(d.severity), "Script", kNoId, kNoId, sc.name, d.message, sc.id, d.line);
             out.back().declaration = decl;

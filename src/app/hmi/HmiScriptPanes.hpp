@@ -191,6 +191,9 @@ public:
     // a chaque image : rien ne change si l'etat est le meme).
     [[nodiscard]] std::string buildKey() const;
     void refreshBuildState();
+    // 1.12.20 (lot C) : l'en-tete du projet (C ou C++, la langue du script choisi), dans une fenetre ; son texte
+    // (vide : pas de script C ou C++ choisi).
+    std::string showHeader();
 
     // Lot 16 : la Programmation generale a trois onglets - les scripts, les
     // variables IHM (dossiers, structures, tableaux, liaison), les types IHM.

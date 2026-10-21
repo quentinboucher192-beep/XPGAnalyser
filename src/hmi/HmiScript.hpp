@@ -42,6 +42,15 @@ using TypeKnown = std::function<bool(std::string_view)>;
 // celles-ci controlees d'abord (decl::checkDeclarations, ligne 0), puis le code, avec celles
 // qui sont justes reconstruites sur sa ligne 1 (decl::codeOf ; les lignes ne bougent pas).
 [[nodiscard]] std::vector<ScriptDiagnostic> checkScript(const Script&, const TypeKnown& knownType = {});
+// 1.12.20 (lot C) : un script C ou C++ et le projet - un nom de fonction du projet mal ecrit (Arreter_Pomp :
+// "veux-tu dire Arreter_Pompe ?"), un avertissement ; `view` : la vue du script (ses fonctions aussi). Les noms que le
+// script declare, ceux du C, du C++ et des natives ne sont pas lus.
+[[nodiscard]] std::vector<ScriptDiagnostic> checkCNames(const Project&, const View* view, std::string_view code);
+// 1.12.20 (lot C) : L'EN-TETE DU PROJET, en C ou en C++ (lecture seule) : ce qu'un script C ou C++ peut employer - les
+// types IHM (enumerations, structures, rappels : typedef bool (*T_Filtre)(float x) ; using T_Filtre =
+// std::function<BOOL(REAL)>), les fonctions IHM (et celles de `view`), les variables IHM (extern). En C++, les types du ST
+// gardent leur nom (REAL, BOOL...) : l'en-tete les definit ; en C, un type sans equivalent (une LIST) est dit en commentaire.
+[[nodiscard]] std::string projectHeader(const Project&, ScriptLang lang, const View* view = nullptr);
 // Les messages du simulateur, en francais ("line 3: expected THEN" -> "THEN attendu").
 [[nodiscard]] std::string frenchSimMessage(std::string_view english);
 // "line 3: ..." : la ligne annoncee (0 sinon), et le message sans elle.

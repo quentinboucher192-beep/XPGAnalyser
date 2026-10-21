@@ -11961,6 +11961,12 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Seul le **ST** s'ex\xC3\xA9" "cute en simulation ; C et C++ sont "
                          "\xC3\xA9" "dit\xC3\xA9s et v\xC3\xA9rifi\xC3\xA9s (accolades, parenth\xC3\xA8ses, "
                          "cha\xC3\xAEnes, commentaires) pour accompagner le projet vers la cible.", {}},
+             {K::Heading, "C et C++ : la v\xC3\xA9rification et l'en-t\xC3\xAAte du projet", {}, "1.12.20"},
+             {K::Bullet, "**La v\xC3\xA9rification** lit aussi les chevrons d'un template (`std::function<BOOL(REAL) f;` : \xC2\xAB il manque le > qui ferme std::function<\xE2\x80\xA6 \xC2\xBB), la forme d'une lambda (`[&](REAL x) { \xE2\x80\xA6 }`), le C++ \xC3\xA9" "crit dans un script C (`std::function`, `template`, une lambda, `nullptr` : dit, avec ce qu'il faut en C) et un nom de fonction du projet mal \xC3\xA9" "crit (`Arreter_Pomp` : \xC2\xAB veux-tu dire Arreter_Pompe ? \xC2\xBB, un avertissement).", {}, "1.12.20"},
+             {K::Bullet, "**L'en-t\xC3\xAAte du projet** (bouton *En-t\xC3\xAAte du projet* d'un script C ou C++) : en lecture seule, dans la langue du script, ce que le script peut employer - les types IHM, les rappels, les fonctions IHM (et celles de la vue), les variables IHM. *Copier* le met dans le presse-papiers.", {}, "1.12.20"},
+             {K::Code, "(* Le projet Armoire_Gaz, tel que l'en-t\xC3\xAAte le traduit *)\nTYPE T_Filtre : CALLBACK (x : REAL) : BOOL; END_TYPE\nTYPE T_Lot :\nSTRUCT\n    Nom   : STRING;\n    Poids : REAL;\nEND_STRUCT\nEND_TYPE\n(* la fonction IHM Est_Valide (x : REAL) : BOOL *)\n(* la variable IHM Niveau : REAL *)", "ST"},
+             {K::Code, "/* En-t\xC3\xAAte du projet Armoire_Gaz (lecture seule) */\ntypedef bool (*T_Filtre)(float x);\ntypedef struct {\n    char Nom[81];\n    float Poids;\n} T_Lot;\nbool Est_Valide(float x);\nextern float Niveau;", "C"},
+             {K::Code, "// En-t\xC3\xAAte du projet Armoire_Gaz (lecture seule)\nusing T_Filtre = std::function<BOOL(REAL)>;\nstruct T_Lot {\n    STRING Nom;\n    REAL Poids;\n};\nBOOL Est_Valide(REAL x);\nextern REAL Niveau;", "C++"},
              {K::Heading, "Les scripts de vue", {}},
              {K::Paragraph, "Sous une vue, **Scripts** : OnOpen (\xC3\xA0 l'ouverture), OnCycle (\xC3\xA0 "
                          "chaque cycle IHM), OnClose (\xC3\xA0 la fermeture). Taper dans un "

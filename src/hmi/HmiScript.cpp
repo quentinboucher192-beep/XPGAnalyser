@@ -10,6 +10,7 @@
 #include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : les types d'une locale
 #include "HmiTypes.hpp"            // 1.12.20 : un rappel nomme (T_Filtre)
 #include "HmiRoles.hpp"
+#include "HmiTypeForms.hpp"         // 1.12.20 (lot C) : les formes d'un type, la signature d'un rappel (l'en-tete du projet)
 #include "HmiNatives.hpp"           // 1.12.20 : une fonction IHM_ qui agit (pas une qui lit)            // 1.12.10 (lot F) : les bornes et les seuils tapes en nom de variable
 
 #include <algorithm>
@@ -33,8 +34,295 @@ bool identStart(char c) { return std::isalpha(static_cast<unsigned char>(c)) || 
 bool identChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
 bool startsWith(std::string_view s, std::string_view p) { return s.substr(0, p.size()) == p; }
 
-// Les delimiteurs d'un code C / C++, avec la ligne de la faute.
-std::vector<ScriptDiagnostic> checkC(std::string_view code) {
+// ---- 1.12.20 (lot C) : la verification plus large du C et du C++ ------------------------
+// Les jetons d'un code C ou C++ : noms (std::function compris), nombres, ponctuation ; une chaine devient une valeur.
+struct CTok {
+    enum class K : std::uint8_t { Name, Num, Punct } k{K::Punct};
+    std::string text;
+    int line{1};
+};
+std::vector<CTok> cTokens(std::string_view code) {
+    std::vector<CTok> out;
+    int line = 1;
+    for (std::size_t i = 0; i < code.size();) {
+        const char c = code[i];
+        const char n = i + 1 < code.size() ? code[i + 1] : '\0';
+        if (c == '\n') {
+            ++line;
+            ++i;
+            continue;
+        }
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            ++i;
+            continue;
+        }
+        if (c == '/' && n == '/') {
+            while (i < code.size() && code[i] != '\n') ++i;
+            continue;
+        }
+        if (c == '/' && n == '*') {
+            i += 2;
+            while (i + 1 < code.size() && !(code[i] == '*' && code[i + 1] == '/')) {
+                if (code[i] == '\n') ++line;
+                ++i;
+            }
+            i += 2;
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            ++i;
+            while (i < code.size() && code[i] != c && code[i] != '\n') i += code[i] == '\\' ? 2 : 1;
+            ++i;
+            out.push_back({CTok::K::Num, "\"\"", line});
+            continue;
+        }
+        if (identStart(c)) {
+            std::size_t j = i;
+            while (j < code.size()) {
+                if (identChar(code[j])) ++j;
+                else if (code[j] == ':' && j + 2 < code.size() && code[j + 1] == ':' && identStart(code[j + 2])) j += 2;
+                else break;
+            }
+            out.push_back({CTok::K::Name, std::string(code.substr(i, j - i)), line});
+            i = j;
+            continue;
+        }
+        if (std::isdigit(static_cast<unsigned char>(c))) {
+            std::size_t j = i;
+            while (j < code.size() && (identChar(code[j]) || code[j] == '.')) ++j;
+            out.push_back({CTok::K::Num, std::string(code.substr(i, j - i)), line});
+            i = j;
+            continue;
+        }
+        out.push_back({CTok::K::Punct, std::string(1, c), line});
+        ++i;
+    }
+    return out;
+}
+// Les mots du C et du C++, et ce qu'un script emploie sans le declarer.
+bool cWord(const std::string& n) {
+    static const std::set<std::string> k = {
+        "if", "else", "for", "while", "do", "switch", "case", "default", "break", "continue", "return", "goto", "sizeof", "typedef",
+        "struct", "union", "enum", "const", "static", "extern", "volatile", "register", "inline", "void", "char", "short", "int", "long",
+        "float", "double", "signed", "unsigned", "bool", "true", "false", "NULL", "auto", "class", "public", "private", "protected",
+        "template", "typename", "using", "namespace", "new", "delete", "this", "nullptr", "mutable", "constexpr", "static_cast",
+        "dynamic_cast", "const_cast", "reinterpret_cast", "operator", "virtual", "override", "final", "try", "catch", "throw",
+        "size_t", "int8_t", "int16_t", "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t", "printf", "fabs", "sqrt",
+        "abs", "min", "max"};
+    return k.count(n) > 0;
+}
+// Les modeles de la bibliotheque standard qui prennent des chevrons (std::cout << x n'en est pas un).
+bool cppTemplateName(const std::string& n) {
+    static const std::set<std::string> k = {
+        "template", "static_cast", "dynamic_cast", "const_cast", "reinterpret_cast", "std::function", "std::vector", "std::list",
+        "std::map", "std::set", "std::array", "std::deque", "std::tuple", "std::pair", "std::optional", "std::unique_ptr",
+        "std::shared_ptr", "std::weak_ptr", "std::unordered_map", "std::unordered_set", "std::multimap", "std::multiset",
+        "std::variant", "std::span", "std::numeric_limits", "std::make_unique", "std::make_shared", "std::atomic", "std::queue",
+        "std::stack", "std::priority_queue", "std::initializer_list", "std::basic_string"};
+    return k.count(n) > 0;
+}
+// Le C++ qui ne se lit pas en C ; les chevrons d'un template ; la forme d'une lambda.
+void cShapes(const std::vector<CTok>& t, ScriptLang lang, std::vector<ScriptDiagnostic>& out) {
+    using S = ScriptDiagnostic::Severity;
+    const auto is = [&](std::size_t k, const char* s) { return k < t.size() && t[k].text == s; };
+    // [ en tete d'expression (apres =, (, ,, return, {, ;) : une lambda si ses parametres ou son corps suivent le ].
+    const auto lambdaAt = [&](std::size_t k, bool& shaped) {
+        shaped = false;
+        if (!is(k, "[") || is(k + 1, "[") || (k > 0 && t[k - 1].text == "[")) return false;   // [[nodiscard]] : un attribut
+        if (k > 0) {
+            const std::string& p = t[k - 1].text;
+            if (!(p == "=" || p == "(" || p == "," || p == "return" || p == "{" || p == ";")) return false;
+        }
+        std::size_t j = k + 1;
+        int depth = 1;
+        for (; j < t.size() && depth > 0; ++j) {
+            if (t[j].text == "[") ++depth;
+            else if (t[j].text == "]") --depth;
+        }
+        if (depth != 0) return false;
+        shaped = j < t.size() && (t[j].text == "(" || t[j].text == "{" || t[j].text == "mutable" || t[j].text == "-" || t[j].text == "<");
+        return true;
+    };
+    std::set<std::string> said;
+    for (std::size_t k = 0; k < t.size(); ++k) {
+        const CTok& x = t[k];
+        bool shaped = false;
+        const bool lambda = lambdaAt(k, shaped);
+        if (lang == ScriptLang::C) {
+            std::string what, instead;
+            if (x.k == CTok::K::Name && x.text.rfind("std::", 0) == 0) {
+                what = x.text;
+                instead = x.text == "std::function" ? "un pointeur de fonction (bool (*f)(float)) ou un type rappel du projet (T_Filtre)"
+                                                    : "les tableaux et les fonctions du C";
+            } else if (x.text == "template") {
+                what = "template";
+                instead = "une fonction par type (et _Generic pour choisir)";
+            } else if (x.text == "nullptr") {
+                what = "nullptr";
+                instead = "NULL";
+            } else if (x.text == "class" || x.text == "namespace" || x.text == "using") {
+                what = x.text;
+                instead = x.text == "using" ? "typedef" : "struct et des fonctions";
+            } else if (lambda && shaped) {                   // un [4] = 29 (initialiseur designe) n'en est pas une
+                what = "une lambda";
+                instead = "une fonction nomm\xC3\xA9" "e, pass\xC3\xA9" "e par son nom";
+            }
+            if (!what.empty() && said.insert(what).second) out.push_back({S::Error, x.line, what + " est du C++ : en C, " + instead});
+            continue;
+        }
+        if (x.k == CTok::K::Name && cppTemplateName(x.text) && is(k + 1, "<")) {
+            int depth = 0, paren = 0;
+            bool closed = false;
+            for (std::size_t j = k + 1; j < t.size(); ++j) {
+                const std::string& s = t[j].text;
+                if (s == "<") ++depth;
+                else if (s == ">") {
+                    if (--depth == 0) {
+                        closed = true;
+                        break;
+                    }
+                } else if (s == "(") ++paren;
+                else if (s == ")") {
+                    if (--paren < 0) break;
+                } else if ((s == ";" || s == "{" || s == "}") && paren == 0) break;
+            }
+            if (!closed) out.push_back({S::Error, x.line, "il manque le > qui ferme " + x.text + "<\xE2\x80\xA6"});
+            continue;
+        }
+        if (lambda && !shaped) out.push_back({S::Error, x.line, "une lambda : apr\xC3\xA8s [&] viennent ses param\xC3\xA8tres (\xE2\x80\xA6) ou son corps { \xE2\x80\xA6 }"});
+    }
+}
+
+// ---- 1.12.20 (lot C) : L'EN-TETE DU PROJET, en C et en C++ ------------------------------
+// Les types elementaires en C (le C++ garde les noms du ST : l'en-tete les definit).
+std::string cElementary(const std::string& u) {
+    if (u == "BOOL") return "bool";
+    if (u == "REAL") return "float";
+    if (u == "LREAL") return "double";
+    if (u == "CHAR") return "char";
+    if (u == "TIME" || u == "LTIME") return "int32_t";
+    if (u == "DATE" || u == "TOD" || u == "DT" || u == "DATE_AND_TIME" || u == "TIME_OF_DAY" || u == "LDATE" || u == "LTOD" || u == "LDT")
+        return "int64_t";
+    const auto c = sim::lib::cTypeName(u);
+    return c.empty() ? std::string{} : std::string(c);
+}
+bool stringName(const std::string& u) { return u == "STRING" || u == "WSTRING" || u.rfind("STRING[", 0) == 0; }
+std::string trimmedCopy(std::string_view s) {
+    const auto a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string_view::npos) return {};
+    const auto b = s.find_last_not_of(" \t\r\n");
+    return std::string(s.substr(a, b - a + 1));
+}
+std::vector<std::int64_t> dimensionsOf(const std::string& bounds) {
+    std::vector<std::int64_t> out;
+    std::size_t at = 0;
+    while (at <= bounds.size()) {
+        const auto comma = bounds.find(',', at);
+        const std::string one = bounds.substr(at, comma == std::string::npos ? std::string::npos : comma - at);
+        if (const auto dots = one.find(".."); dots != std::string::npos) {
+            const long long lo = std::atoll(one.substr(0, dots).c_str()), hi = std::atoll(one.substr(dots + 2).c_str());
+            out.push_back(hi >= lo ? hi - lo + 1 : 0);
+        }
+        if (comma == std::string::npos) break;
+        at = comma + 1;
+    }
+    return out;
+}
+std::vector<std::string> typeList(const std::string& text) {
+    std::vector<std::string> out;
+    int depth = 0;
+    std::string cur;
+    for (const char c : text) {
+        if (c == '(' || c == '[') ++depth;
+        if (c == ')' || c == ']') --depth;
+        if (c == ',' && depth == 0) {
+            out.push_back(trimmedCopy(cur));
+            cur.clear();
+            continue;
+        }
+        cur += c;
+    }
+    if (!trimmedCopy(cur).empty()) out.push_back(trimmedCopy(cur));
+    return out;
+}
+// Le type en C++ : les formes du ST deviennent celles de la bibliotheque standard.
+std::string cppTypeOf(const Project& p, std::string_view text) {
+    const std::string t = trimmedCopy(text);
+    const std::string u = upper(t);
+    if (u.rfind("CALLBACK", 0) == 0) {
+        typeform::CallbackParts parts;
+        if (!typeform::callbackParts(p, t, parts)) return "std::function<void()>";
+        std::string out = "std::function<" + (parts.result.empty() ? std::string("void") : cppTypeOf(p, parts.result)) + "(";
+        for (std::size_t k = 0; k < parts.params.size(); ++k) out += (k ? ", " : "") + cppTypeOf(p, parts.params[k].second);
+        return out + ")>";
+    }
+    const auto s = typeform::decompose(t);
+    switch (s.form) {
+        case typeform::Form::Simple:
+            if (s.reference) return cppTypeOf(p, s.element) + "*";
+            if (stringName(u)) return "STRING";
+            return cElementary(u).empty() ? t : u;
+        case typeform::Form::Array: case typeform::Form::Array2D: {
+            std::string out = cppTypeOf(p, s.element);
+            const auto dims = dimensionsOf(s.parameter);
+            for (auto it = dims.rbegin(); it != dims.rend(); ++it) out = "std::array<" + out + ", " + std::to_string(*it) + ">";
+            return out;
+        }
+        case typeform::Form::List: return "std::list<" + cppTypeOf(p, s.element) + ">";
+        case typeform::Form::Vector: return "std::vector<" + cppTypeOf(p, s.element) + ">";
+        case typeform::Form::Set: return "std::set<" + cppTypeOf(p, s.element) + ">";
+        case typeform::Form::Ring: return "std::deque<" + cppTypeOf(p, s.element) + ">";
+        case typeform::Form::Map: return "std::map<" + cppTypeOf(p, s.parameter.empty() ? std::string("STRING") : s.parameter) + ", " + cppTypeOf(p, s.element) + ">";
+        case typeform::Form::Tuple: {
+            std::string out = "std::tuple<" + cppTypeOf(p, s.element);
+            for (const auto& more : typeList(s.parameter)) out += ", " + cppTypeOf(p, more);
+            return out + ">";
+        }
+    }
+    return t;
+}
+// Une declaration en C, le nom a sa place (un tableau : nom[N] ; un rappel : (*nom)(...)) ; vide : pas de C pour ce type.
+// `value` : un parametre ou un retour (un texte : const char*) ; sinon une variable ou un membre (char nom[81]).
+std::string cDeclOf(const Project& p, std::string_view text, const std::string& name, bool value) {
+    const std::string t = trimmedCopy(text);
+    const std::string u = upper(t);
+    const auto join = [&](const std::string& type) { return name.empty() ? type : type + " " + name; };
+    if (u.rfind("CALLBACK", 0) == 0) {
+        typeform::CallbackParts parts;
+        if (!typeform::callbackParts(p, t, parts)) return {};
+        const std::string result = parts.result.empty() ? std::string("void") : cDeclOf(p, parts.result, {}, true);
+        if (result.empty()) return {};
+        std::string out = result + " (*" + name + ")(";
+        if (parts.params.empty()) out += "void";
+        for (std::size_t k = 0; k < parts.params.size(); ++k) {
+            const std::string d = cDeclOf(p, parts.params[k].second, parts.params[k].first, true);
+            if (d.empty()) return {};
+            out += (k ? ", " : "") + d;
+        }
+        return out + ")";
+    }
+    const auto s = typeform::decompose(t);
+    if (s.form == typeform::Form::Simple) {
+        if (s.reference) {
+            const std::string inner = cDeclOf(p, s.element, {}, true);
+            return inner.empty() ? std::string{} : join(inner + "*");
+        }
+        if (stringName(u)) return value || name.empty() ? join("const char*") : "char " + name + "[81]";
+        if (const std::string c = cElementary(u); !c.empty()) return join(c);
+        return join(t);                                             // un type du projet : son typedef
+    }
+    if (s.form == typeform::Form::Array || s.form == typeform::Form::Array2D) {
+        std::string inner = cDeclOf(p, s.element, name, false);
+        if (inner.empty() || name.empty()) return {};
+        for (const auto n : dimensionsOf(s.parameter)) inner += "[" + std::to_string(n) + "]";
+        return inner;
+    }
+    return {};                                                      // LIST, VECTOR, MAP, TUPLE, SET, RING : pas en C
+}
+
+// Les delimiteurs d'un code C / C++, avec la ligne de la faute ; 1.12.20 (lot C) : puis les chevrons d'un template,
+// la forme d'une lambda, le C++ ecrit dans un script C (cShapes).
+std::vector<ScriptDiagnostic> checkC(std::string_view code, ScriptLang lang) {
     std::vector<ScriptDiagnostic> out;
     struct Open { char c; int line; };
     std::vector<Open> stack;
@@ -80,6 +368,7 @@ std::vector<ScriptDiagnostic> checkC(std::string_view code) {
     if (!stack.empty())
         out.push_back({ScriptDiagnostic::Severity::Error, stack.back().line,
                        std::string("'") + stack.back().c + "' ouvert ici n'est jamais ferm\xC3\xA9"});
+    if (out.empty()) cShapes(cTokens(code), lang, out);      // des delimiteurs justes d'abord
     return out;
 }
 
@@ -218,7 +507,7 @@ std::vector<ScriptDiagnostic> checkScript(ScriptLang lang, std::string_view code
     const std::string st = lang == ScriptLang::ST ? markers::strip(code) : std::string{};
     const std::string_view body = lang == ScriptLang::ST ? std::string_view(st) : code;
     if (lang != ScriptLang::ST) {
-        out = checkC(body);
+        out = checkC(body, lang);
         out.push_back({ScriptDiagnostic::Severity::Info, 0,
                        std::string(scriptLangKey(lang)) + " : \xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9, non ex\xC3\xA9" "cut\xC3\xA9 en simulation"});
         return out;
@@ -240,6 +529,151 @@ std::vector<ScriptDiagnostic> checkScript(ScriptLang lang, std::string_view code
         // y := $V[1]$; - un repere s'ecrit entre deux $..."), au lieu du seul "caractere inattendu : '$'".
         std::string fr = markers::explainScriptDollar(frenchSimMessage(rest), code, line);
         out.push_back({ScriptDiagnostic::Severity::Error, line, fr});
+    }
+    return out;
+}
+
+// 1.12.20 (lot C) : un nom de fonction du projet mal ecrit dans un script C ou C++ (voir HmiScript.hpp).
+std::vector<ScriptDiagnostic> checkCNames(const Project& p, const View* view, std::string_view code) {
+    std::vector<ScriptDiagnostic> out;
+    std::vector<std::string> pool;
+    std::set<std::string> known;
+    for (const auto& f : p.programs.functions) {
+        pool.push_back(f.name);
+        known.insert(upper(f.name));
+    }
+    if (view)
+        for (const auto& f : view->functions) {
+            pool.push_back(f.name);
+            known.insert(upper(f.name));
+        }
+    if (pool.empty()) return out;
+    for (const auto& v : p.programs.variables) known.insert(upper(v.name));
+    for (const auto& ty : p.programs.types) known.insert(upper(ty.name));
+    const auto t = cTokens(code);
+    // Les noms que le script declare : apres un type (un nom, *, &, >) - int x, T_Filtre garder, std::function<...> f.
+    static const std::set<std::string> notTypes = {"return", "case", "goto", "else", "do", "sizeof", "new", "delete", "throw"};
+    std::set<std::string> declared;
+    for (std::size_t k = 1; k < t.size(); ++k) {
+        if (t[k].k != CTok::K::Name) continue;
+        const CTok& prev = t[k - 1];
+        if ((prev.k == CTok::K::Name && !notTypes.count(prev.text)) || prev.text == "*" || prev.text == ">"
+            || (prev.text == "&" && k >= 2 && t[k - 2].k == CTok::K::Name))
+            declared.insert(upper(t[k].text));
+    }
+    std::set<std::string> said;
+    for (std::size_t k = 0; k < t.size(); ++k) {
+        const CTok& x = t[k];
+        if (x.k != CTok::K::Name || x.text.find("::") != std::string::npos || cWord(x.text)) continue;
+        if (k > 0 && (t[k - 1].text == "." || (t[k - 1].text == ">" && k > 1 && t[k - 2].text == "-"))) continue;   // un membre
+        const std::string u = upper(x.text);
+        if (known.count(u) || declared.count(u) || isHmiFunction(u) || natives::function(u) || sim::lib::native(u)) continue;
+        const std::string hint = sim::lib::closest(x.text, pool);
+        if (hint.empty() || !said.insert(u).second) continue;
+        out.push_back({ScriptDiagnostic::Severity::Warning, x.line, x.text + " n'est pas une fonction du projet" + hint});
+    }
+    return out;
+}
+
+// 1.12.20 (lot C) : l'en-tete du projet (voir HmiScript.hpp).
+std::string projectHeader(const Project& p, ScriptLang lang, const View* view) {
+    const bool cpp = lang == ScriptLang::Cpp;
+    std::string out;
+    const auto line = [&](const std::string& s) { out += s + "\n"; };
+    const auto comment = [&](const std::string& s) { line(cpp ? "// " + s : "/* " + s + " */"); };
+    comment("En-t\xC3\xAAte du projet " + p.config.name + " (lecture seule) : ses types, ses rappels, ses fonctions, ses variables.");
+    comment(cpp ? "C++ : \xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9, non ex\xC3\xA9" "cut\xC3\xA9 en simulation (seul le ST y tourne)."
+                : "C : \xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9, non ex\xC3\xA9" "cut\xC3\xA9 en simulation (seul le ST y tourne).");
+    if (cpp) {
+        line("#include <array>\n#include <cstdint>\n#include <deque>\n#include <functional>\n#include <list>\n#include <map>\n#include <set>\n#include <string>\n#include <tuple>\n#include <vector>");
+        line("");
+        comment("Les types du ST, en C++.");
+        line("using BOOL = bool;          using REAL = float;           using LREAL = double;\n"
+             "using SINT = std::int8_t;   using INT = std::int16_t;     using DINT = std::int32_t;    using LINT = std::int64_t;\n"
+             "using USINT = std::uint8_t; using UINT = std::uint16_t;   using UDINT = std::uint32_t;  using ULINT = std::uint64_t;\n"
+             "using BYTE = std::uint8_t;  using WORD = std::uint16_t;   using DWORD = std::uint32_t;  using LWORD = std::uint64_t;\n"
+             "using STRING = std::string; using TIME = std::int32_t;    using DATE_AND_TIME = std::int64_t;");
+    } else {
+        line("#include <stdbool.h>\n#include <stdint.h>");
+    }
+    // Les types IHM : enumerations, structures, rappels.
+    bool first = true;
+    for (const auto& ty : p.programs.types) {
+        if (first) {
+            line("");
+            comment("Les types IHM");
+            first = false;
+        }
+        if (ty.kind == HmiTypeKind::Enumeration) {
+            std::string values;
+            for (std::size_t k = 0; k < ty.values.size(); ++k)
+                values += (k ? ", " : "") + ty.values[k].name + " = " + std::to_string(ty.values[k].value);
+            line(cpp ? "enum class " + ty.name + " : DINT { " + values + " };" : "typedef enum { " + values + " } " + ty.name + ";");
+            continue;
+        }
+        if (ty.kind == HmiTypeKind::Callback) {
+            if (cpp) line("using " + ty.name + " = " + cppTypeOf(p, ty.signature) + ";");
+            else if (const std::string d = cDeclOf(p, ty.signature, ty.name, true); !d.empty()) line("typedef " + d + ";");
+            continue;
+        }
+        line(cpp ? "struct " + ty.name + " {" : "typedef struct {");
+        for (const auto& m : ty.members) {
+            if (cpp) {
+                std::string init;
+                const std::string iu = upper(trimmedCopy(m.initial));
+                if (iu == "TRUE" || iu == "FALSE") init = iu == "TRUE" ? " = true" : " = false";
+                else if (!iu.empty() && (std::isdigit(static_cast<unsigned char>(iu[0])) || iu[0] == '-')) init = " = " + trimmedCopy(m.initial);
+                line("    " + cppTypeOf(p, m.type) + " " + m.name + init + ";");
+            } else if (const std::string d = cDeclOf(p, m.type, m.name, false); !d.empty()) {
+                line("    " + d + ";");
+            } else {
+                line("    /* " + m.name + " : " + m.type + " - pas de C pour ce type */");
+            }
+        }
+        line(cpp ? "};" : "} " + ty.name + ";");
+    }
+    // Les fonctions IHM (et celles de la vue du script) : leurs prototypes.
+    std::vector<const HmiFunction*> fns;
+    for (const auto& f : p.programs.functions) fns.push_back(&f);
+    if (view)
+        for (const auto& f : view->functions) fns.push_back(&f);
+    if (!fns.empty()) {
+        line("");
+        comment(view ? "Les fonctions IHM, et celles de " + view->name : std::string("Les fonctions IHM"));
+    }
+    for (const HmiFunction* f : fns) {
+        std::string params;
+        bool ok = true;
+        for (const auto& d : f->decls) {
+            if (d.kind != DeclKind::Parameter) continue;
+            std::string one;
+            if (cpp) one = cppTypeOf(p, d.type) + (d.mode == PassMode::In ? " " : "& ") + d.name;
+            else {
+                one = d.mode == PassMode::In ? cDeclOf(p, d.type, d.name, true) : cDeclOf(p, d.type, "*" + d.name, true);
+                ok = ok && !one.empty();
+            }
+            params += (params.empty() ? "" : ", ") + one;
+        }
+        const std::string ret = f->returnType.empty() ? std::string("void") : cpp ? cppTypeOf(p, f->returnType) : cDeclOf(p, f->returnType, {}, true);
+        if (!ok || ret.empty()) {
+            comment(f->name + " : un param\xC3\xA8tre ou un retour sans \xC3\xA9quivalent en C (une liste, une MAP)");
+            continue;
+        }
+        line(ret + " " + f->name + "(" + (params.empty() && !cpp ? std::string("void") : params) + ");");
+    }
+    // Les variables IHM.
+    if (!p.programs.variables.empty()) {
+        line("");
+        comment("Les variables IHM");
+    }
+    for (const auto& v : p.programs.variables) {
+        if (cpp) {
+            line("extern " + cppTypeOf(p, v.type) + " " + v.name + ";");
+            continue;
+        }
+        const std::string d = cDeclOf(p, v.type, v.name, false);
+        if (d.empty()) comment(v.name + " : " + v.type + " - pas d'\xC3\xA9quivalent en C");
+        else line("extern " + d + ";");
     }
     return out;
 }
