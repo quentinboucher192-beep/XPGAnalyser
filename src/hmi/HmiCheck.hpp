@@ -48,7 +48,21 @@ struct Issue {
     // 1.12.17 : bloquant pour la simulation quelle que soit `category` (un tableau entier la ou une
     // valeur seule est attendue : une plume, une action, une alarme...). Faux : la categorie decide.
     bool        blocking{false};
+    // 1.12.20 : LA CORRECTION D'UN CLIC (Diagnostics, Ctrl+.) - remplacer `fixFrom` par `fixTo` dans le texte en
+    // cause : la case de l'objet (property), l'action (property "action N (...)" : sa valeur, sa cible), le script
+    // ou la fonction a sa ligne, la valeur initiale de la variable (item). Vide : aucune.
+    std::string fixFrom{}, fixTo{};
 };
+
+// 1.12.20 : ou s'applique une correction d'un clic (les champs d'un Issue, ou d'un diagnostic du build).
+struct FixPlace {
+    Id          view{kNoId}, object{kNoId}, script{kNoId}, item{kNoId};
+    std::string category, property;
+    int         line{0};
+};
+// Remplace `from` par `to` a cet endroit (la premiere fois sur la ligne, sinon dans tout le texte). Faux : rien de
+// change (l'endroit n'existe plus, ou `from` n'y est plus). `what` : l'endroit, dit a l'utilisateur.
+bool applyFix(Project&, const FixPlace&, std::string_view from, std::string_view to, std::string* what = nullptr);
 
 struct IssueCounts {
     std::size_t errors{0}, warnings{0}, infos{0};

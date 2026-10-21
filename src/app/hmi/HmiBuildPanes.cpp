@@ -805,7 +805,12 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
         items.push_back(ui::cmd::heading(level, d->path.empty() ? d->element : d->path));
         items.push_back({"Aller \xC3\xA0 l'\xC3\xA9l\xC3\xA9ment", "Entr\xC3\xA9" "e", {}, ui::Icon::GoTo, true, false, 2001});
         std::string from, to;
-        const bool fix = ui::exprfield::fixOf(d->message, from, to) && d->object != hmi::kNoId && !d->property.empty();
+        bool fix = ui::exprfield::fixOf(d->message, from, to) && d->object != hmi::kNoId && !d->property.empty();
+        if (!d->fixFrom.empty()) {               // 1.12.20 : la correction que le controle a donnee
+            fix = true;
+            from = d->fixFrom;
+            to = d->fixTo;
+        }
         items.push_back({fix ? "Appliquer la correction : " + from + " \xE2\x86\x92 " + to : std::string("Appliquer la correction"), "Ctrl+.",
                          "ce message ne propose pas de remplacement", ui::Icon::Wrench, fix, false, 2007});
         const std::string who = !d->element.empty() ? d->element : d->path;
@@ -1037,7 +1042,7 @@ void HmiBuildOutputPane::rowMenu(int action) {
         case 2007:
             if (const auto* d = selectedDiagnostic()) {
                 std::string from, to;
-                if (ui::exprfield::fixOf(d->message, from, to)) fixRequested->emit(hmi::pipeline::Diagnostic(*d));   // une copie
+                if (!d->fixFrom.empty() || ui::exprfield::fixOf(d->message, from, to)) fixRequested->emit(hmi::pipeline::Diagnostic(*d));   // une copie
             }
             break;
         default: break;

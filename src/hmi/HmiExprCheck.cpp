@@ -285,6 +285,50 @@ private:
     std::size_t      at_{0};
 
     std::vector<std::set<std::string>> lambdaNames_;      // 1.12.19 : les parametres des LAMBDA ouvertes (en majuscules)
+    int lambdaBody_{0};                                   // 1.12.20 : dans le corps d'une LAMBDA (une expression ne modifie rien)
+    // 1.12.20 : une LAMBDA d'une expression de propriete (pas d'un script) qui modifie quelque chose - refusee.
+    void lambdaEffect(const std::string& what) {
+        if (ctx_.script) return;
+        problem("une expression de propri\xC3\xA9t\xC3\xA9 ne modifie rien : la LAMBDA " + what
+                + " \xE2\x80\x94 \xC3\xA9" "cris-la dans une action ou un script");
+    }
+    // ... une fonction appelee dans son corps : ce qu'elle ecrit, ce qu'elle fait.
+    void lambdaCall(const std::vector<const HmiFunction*>& fs, const std::string& name) {
+        if (lambdaBody_ == 0 || ctx_.script || !ctx_.project) return;
+        for (const auto* f : fs) {
+            const auto e = functionEffects(*ctx_.project, *f, ctx_.view);
+            if (!e.writes.empty()) {
+                lambdaEffect("appelle " + name + ", qui \xC3\xA9" "crit " + e.writes.front());
+                return;
+            }
+            if (!e.acts.empty()) {
+                lambdaEffect("appelle " + name + ", qui appelle " + e.acts.front());
+                return;
+            }
+        }
+    }
+    // 1.12.20 : un nom de fonction en texte la ou va un rappel (LIST_TRANSFORM(S, D, 'Carre')) - il se lit encore,
+    // mais n'est ni verifie ni renomme : un avertissement, et la correction d'un clic ('Carre' -> Carre).
+    void quotedCallbacks(const std::string& u, const std::vector<Val>& args) {
+        const auto* f = natives::function(u);
+        if (!f || !ctx_.project) return;
+        for (std::size_t k = 0; k < args.size() && k < f->params.size(); ++k) {
+            if (!args[k].strKnown || std::string(f->params[k].type).find("CALLBACK") == std::string::npos) continue;
+            const std::string name = trimmed(args[k].str);
+            bool fn = !ctx_.project->functionsNamed(name).empty();
+            if (!fn && ctx_.view)
+                for (const auto& vf : ctx_.view->functions) fn = fn || up(vf.name) == up(name);
+            if (!fn) continue;
+            Problem pb{"'" + name + "' : un nom de fonction en texte n'est ni v\xC3\xA9rifi\xC3\xA9 ni renomm\xC3\xA9 \xE2\x80\x94 \xC3\xA9" "cris "
+                           + name + " (sans apostrophes)", {}, {}};
+            pb.warning = true;
+            pb.fixFrom = "'" + args[k].str + "'";
+            pb.fixTo = name;
+            bool said = false;
+            for (const auto& p : problems) said = said || p.message == pb.message;
+            if (!said) problems.push_back(std::move(pb));
+        }
+    }
     const Tok& peek() const { return toks_[std::min(at_, toks_.size() - 1)]; }
     const Tok& peekAt(std::size_t k) const { return toks_[std::min(at_ + k, toks_.size() - 1)]; }
     [[nodiscard]] bool inLambda(const std::string& name) const {
@@ -342,16 +386,56 @@ private:
             }
         }
         const auto arrow = [&] { return isOp("=") && peekAt(1).k == Tok::K::Op && peekAt(1).text == ">"; };
-        if (isOp(":")) {                                     // son type de retour, jusqu'a =>
+        // 1.12.20 : la forme en bloc - LAMBDA (...) : T VAR ... END_VAR instructions END_LAMBDA.
+        const auto blockStart = [&] {
+            return peek().k == Tok::K::Ident
+                && (isWord("VAR") || isWord("VAR_TEMP") || isWord("RETURN") || isWord("IF") || isWord("FOR") || isWord("WHILE")
+                    || isWord("REPEAT") || isWord("CASE") || isWord("END_LAMBDA") || (peekAt(1).k == Tok::K::Op && peekAt(1).text == ":="));
+        };
+        if (isOp(":")) {                                     // son type de retour, jusqu'a => (ou le debut du bloc)
             next();
-            while (peek().k != Tok::K::End && !arrow()) next();
+            while (peek().k != Tok::K::End && !arrow()) {
+                if (peek().k == Tok::K::Ident && blockStart() && !isWord("OF") && !isWord("ARRAY")) break;
+                next();
+            }
         }
         if (arrow()) {
             next();
             next();
             lambdaNames_.push_back(std::move(names));
+            ++lambdaBody_;
             (void)orExpr();
+            --lambdaBody_;
             lambdaNames_.pop_back();
+            return v;
+        }
+        // Le bloc : ses locales, ses ecritures, ses appels - jusqu'a son END_LAMBDA (les LAMBDA imbriquees comptees).
+        std::set<std::string> locals = names;
+        int depth = 1;
+        bool inVar = false;
+        Tok previous;
+        while (peek().k != Tok::K::End) {
+            const Tok t = next();
+            const std::string w = t.k == Tok::K::Ident ? up(t.text) : std::string{};
+            if (w == "LAMBDA") ++depth;
+            else if (w == "END_LAMBDA" && --depth == 0) break;
+            else if (w == "VAR" || w == "VAR_TEMP") inVar = true;
+            else if (w == "END_VAR") inVar = false;
+            else if (t.k == Tok::K::Ident && inVar && previous.k == Tok::K::Op && (previous.text == ";" || previous.text == ","))
+                locals.insert(w);
+            else if (t.k == Tok::K::Ident && inVar && (previous.k == Tok::K::Ident && (up(previous.text) == "VAR" || up(previous.text) == "VAR_TEMP")))
+                locals.insert(w);
+            else if (t.k == Tok::K::Ident && !inVar && depth == 1 && isOp(":=") && !locals.count(w)) {
+                if (ctx_.project && ctx_.project->variable(t.text)) lambdaEffect("\xC3\xA9" "crit " + t.text);
+            } else if (t.k == Tok::K::Ident && !inVar && isOp("(") && !locals.count(w)) {
+                if (hmiFunctionActs(w)) lambdaEffect("appelle " + w);
+                else if (ctx_.project) {
+                    ++lambdaBody_;
+                    lambdaCall(ctx_.project->functionsNamed(t.text), t.text);
+                    --lambdaBody_;
+                }
+            }
+            previous = t;
         }
         return v;
     }
@@ -963,6 +1047,7 @@ private:
         };
         if (symFn) {
             userCall(name, siblingsOf(symFn), n, r);
+            lambdaCall(siblingsOf(symFn), name);                // 1.12.20 : dans une LAMBDA d'une fx
             return r;
         }
         // 1.12.0 : les couleurs (RGB, COULEUR_...) et l'aleatoire (RANDOM...) : des textes de couleur
@@ -987,6 +1072,7 @@ private:
             else if (nat->writes || u == "TUPLE_UNPACK" || u == "LIST_COPY" || u == "LIST_TRANSFORM")
                 problem(u + " change son objet : une expression en lit une copie et ne change rien ; "
                             "fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB)");
+            quotedCallbacks(u, args);                         // 1.12.20 : LIST_TRANSFORM(S, D, 'Carre')
             if (n < nat->min || (nat->max >= 0 && n > nat->max))
                 problem(u + " prend " + (nat->max < 0 ? "au moins " + plural(nat->min, "argument")
                                           : nat->min == nat->max ? plural(nat->min, "argument")
@@ -1082,9 +1168,14 @@ private:
         if (const Project* p = ctx_.project)
             if (const auto fs = p->functionsNamed(name); !fs.empty()) {
                 userCall(name, fs, n, r);          // 1.11.20 : ses surcharges, tous leurs parametres
+                lambdaCall(fs, name);              // 1.12.20 : dans une LAMBDA d'une fx
                 return r;
             }
-        if (isHmiFunction(u)) return r;
+        if (isHmiFunction(u)) {
+            if (lambdaBody_ > 0 && hmiFunctionActs(u)) lambdaEffect("appelle " + u);   // 1.12.20
+            quotedCallbacks(u, args);                                                  // 1.12.20 : IHM_APRES(T#1s, 'Fermer')
+            return r;
+        }
         // 1.10.2 (chantier T3) : TO_STRING(Mode), TO_INT(x), TO_T_MODE(2) - les conversions
         // du dialecte et celles des types du projet, que le moteur sert (HmiExpr.cpp).
         if (ctx_.project && isConversion(*ctx_.project, u)) {

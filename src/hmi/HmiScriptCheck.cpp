@@ -474,6 +474,7 @@ public:
         constants_ = constantNames(code);
         body_ = parts_.body;
         toks_ = lex(body_);
+        foldLambdas();                  // 1.12.20 : une LAMBDA - ses parametres et ses types ne sont pas des variables
         lineStarts_.push_back(0);
         for (std::size_t i = 0; i < body_.size(); ++i)
             if (body_[i] == '\n') lineStarts_.push_back(i + 1);
@@ -482,6 +483,76 @@ public:
             if (isWord(i, "FOR") && isIdent(i + 1) && isOp(i + 2, ":=")) counters_.insert(up(toks_[i + 1].text));
         if (sc_.view && sc_.project && inherits(*sc_.project, *sc_.view)) composed_ = compose(*sc_.project, *sc_.view);
         scanDialect(code);
+    }
+
+    // 1.12.20 : LES LAMBDA, LUES AVANT TOUT - le moteur les sert, la verification ne voyait qu'un appel de
+    // « LAMBDA » et des noms inconnus (x, REAL, BOOL). Une LAMBDA d'une ligne (LAMBDA (x : REAL) : BOOL => x > 5) :
+    // son en-tete est retire et ses parametres, dans son corps, deviennent des valeurs (rien a chercher) - le
+    // corps reste verifie (les autres noms, les appels). Une LAMBDA en bloc (... END_LAMBDA) : tout entiere une
+    // valeur (ses instructions sont lues par le moteur a l'appel). Les positions des jetons restent : un message
+    // pointe toujours au bon endroit, et le texte d'une expression est celui du code.
+    void foldLambdas() {
+        const auto word = [&](std::size_t k, const char* w) { return k < toks_.size() && toks_[k].k == Tok::K::Ident && up(toks_[k].text) == w; };
+        const auto op = [&](std::size_t k, const char* o) { return k < toks_.size() && toks_[k].k == Tok::K::Op && toks_[k].text == o; };
+        const auto value = [&](const Tok& at) {
+            Tok v;
+            v.k = Tok::K::Num;
+            v.text = "0";
+            v.at = at.at;
+            v.len = at.len;
+            return v;
+        };
+        for (std::size_t k = toks_.size(); k-- > 0;) {          // de la derniere a la premiere : les imbriquees d'abord
+            if (!word(k, "LAMBDA") || !op(k + 1, "(")) continue;
+            // Les parametres : (x : REAL; y, z : INT)
+            std::set<std::string> params;
+            std::size_t j = k + 2;
+            int depth = 1;
+            bool name = true;
+            for (; j < toks_.size() && toks_[j].k != Tok::K::End; ++j) {
+                if (op(j, "(")) ++depth;
+                else if (op(j, ")") && --depth == 0) break;
+                else if (depth == 1 && (op(j, ";") || op(j, ","))) name = true;
+                else if (depth == 1 && op(j, ":")) name = false;
+                else if (depth == 1 && name && toks_[j].k == Tok::K::Ident) params.insert(up(toks_[j].text));
+            }
+            if (j >= toks_.size() || toks_[j].k == Tok::K::End) continue;
+            std::size_t h = j + 1;                               // apres la parenthese : : T, puis => ou le bloc
+            std::size_t arrow = toks_.size();
+            for (std::size_t m = h; m < toks_.size() && toks_[m].k != Tok::K::End; ++m) {
+                if (op(m, "=>")) { arrow = m; break; }
+                if (op(m, ";") || op(m, ",") || op(m, ")") || word(m, "END_LAMBDA") || word(m, "VAR") || word(m, "RETURN")) break;
+            }
+            if (arrow < toks_.size()) {
+                // Le corps : jusqu'a la virgule, la parenthese ou le point-virgule qui le ferme.
+                std::size_t e = arrow + 1;
+                int d = 0;
+                for (; e < toks_.size() && toks_[e].k != Tok::K::End; ++e) {
+                    if (op(e, "(") || op(e, "[")) ++d;
+                    else if ((op(e, ")") || op(e, "]")) && d-- == 0) break;
+                    else if (d == 0 && (op(e, ",") || op(e, ";"))) break;
+                    else if (d == 0 && (word(e, "THEN") || word(e, "DO") || word(e, "OF") || word(e, "ELSE") || word(e, "ELSIF")
+                                        || word(e, "END_IF") || word(e, "END_FOR") || word(e, "END_WHILE") || word(e, "UNTIL")))
+                        break;
+                }
+                for (std::size_t m = arrow + 1; m < e; ++m)
+                    if (toks_[m].k == Tok::K::Ident && params.count(up(toks_[m].text)) && !(m > 0 && op(m - 1, ".")))
+                        toks_[m] = value(toks_[m]);
+                toks_.erase(toks_.begin() + static_cast<std::ptrdiff_t>(k), toks_.begin() + static_cast<std::ptrdiff_t>(arrow + 1));
+                continue;
+            }
+            // Le bloc : jusqu'a son END_LAMBDA (les LAMBDA imbriquees comptees).
+            std::size_t e = h;
+            int nest = 1;
+            for (; e < toks_.size() && toks_[e].k != Tok::K::End; ++e) {
+                if (word(e, "LAMBDA")) ++nest;
+                else if (word(e, "END_LAMBDA") && --nest == 0) break;
+            }
+            if (e >= toks_.size() || toks_[e].k == Tok::K::End) continue;      // pas de fin : la syntaxe le dit
+            const Tok v = value(toks_[k]);
+            toks_.erase(toks_.begin() + static_cast<std::ptrdiff_t>(k + 1), toks_.begin() + static_cast<std::ptrdiff_t>(e + 1));
+            toks_[k] = v;
+        }
     }
 
     // 1.11.1 (REP-10) : les racines des reperes du script (en majuscules) - un ancien
@@ -508,6 +579,7 @@ public:
                        trimmedText(l.type) + " : un SET range des valeurs simples (des nombres, des textes, des dur\xC3\xA9" "es, une \xC3\xA9num\xC3\xA9ration)"
                        " \xE2\x80\x94 pour des structures, une LIST et LIST_SORT_BY");
         }
+        quotedCallbackNames();          // 1.12.20 : LIST_TRANSFORM(S, D, 'Carre')
         // 1.10.4 (le plantage de la 1.10.3) : un FOR, un IF, un CASE en fin de
         // texte menaient i apres le jeton de fin - toks_[i] lisait hors du
         // tableau (un jeton de hasard, puis bad_alloc). i reste dans le tableau.
@@ -780,6 +852,48 @@ private:
         for (const auto& o : out_)
             if (o.line == f.line && o.column == f.column && o.message == f.message) return;
         out_.push_back(std::move(f));
+    }
+    // 1.12.20 : un nom de fonction en texte la ou une native attend un rappel (IHM_APRES(T#1s, 'Fermer'),
+    // LIST_TRANSFORM(S, D, 'Carre')) - il se lit encore, mais n'est ni verifie ni renomme : un avertissement et sa
+    // correction d'un clic.
+    void quotedCallbackNames() {
+        if (!sc_.project) return;
+        for (std::size_t k = 0; k + 1 < toks_.size() && !atEnd(k); ++k) {
+            if (toks_[k].k != Tok::K::Ident || !isOp(k + 1, "(")) continue;
+            const auto* f = natives::function(up(toks_[k].text));
+            if (!f) continue;
+            std::size_t arg = 0, start = k + 2;
+            int depth = 0;
+            for (std::size_t j = k + 2; !atEnd(j); ++j) {
+                const bool close = isOp(j, ")") || isOp(j, "]");
+                if (isOp(j, "(") || isOp(j, "[")) ++depth;
+                else if (close && depth > 0) --depth;
+                else if ((close || isOp(j, ",")) && depth == 0) {
+                    // L'argument [start, j) : un texte seul, qui nomme une fonction du projet ou de la vue.
+                    if (j == start + 1 && toks_[start].k == Tok::K::Str && arg < f->params.size()
+                        && std::string(f->params[arg].type).find("CALLBACK") != std::string::npos) {
+                        std::string name = toks_[start].text;
+                        if (name.size() >= 2 && name.front() == '\'' && name.back() == '\'') name = name.substr(1, name.size() - 2);
+                        bool fn = !sc_.project->functionsNamed(name).empty();
+                        if (!fn && sc_.view)
+                            for (const auto& vf : sc_.view->functions) fn = fn || up(vf.name) == up(name);
+                        if (fn) {
+                            const std::size_t before = out_.size();
+                            reportTok(start, j, Finding::Severity::Warning,
+                                      "'" + name + "' : un nom de fonction en texte n'est ni v\xC3\xA9rifi\xC3\xA9 ni renomm\xC3\xA9 \xE2\x80\x94 \xC3\xA9" "cris "
+                                          + name + " (sans apostrophes)");
+                            if (out_.size() > before) {
+                                out_.back().fixFrom = toks_[start].text;
+                                out_.back().fixTo = name;
+                            }
+                        }
+                    }
+                    if (close) break;
+                    ++arg;
+                    start = j + 1;
+                }
+            }
+        }
     }
     void reportTok(std::size_t a, std::size_t b, Finding::Severity sev, std::string msg, std::string name = {}, std::string sug = {}) {
         if (atEnd(a)) return;
@@ -1759,7 +1873,8 @@ private:
                 || m.find("n'a pas de membre") != std::string::npos
                 // 1.12.16 : une native qui ecrit (Ancien := EXCHANGE(Etat, Nouvel_Etat), n := LIST_REMOVE_ALL(L, x)) ecrit
                 // vraiment dans un script : ce que l'expression fx en dit ne vaut pas ici.
-                || m.find(" : une expression en lit une copie") != std::string::npos || m.find(" : une expression ne change rien") != std::string::npos)
+                || m.find(" : une expression en lit une copie") != std::string::npos || m.find(" : une expression ne change rien") != std::string::npos
+                || m.find("un nom de fonction en texte n'est ni") != std::string::npos)      // 1.12.20 : dit a sa place
                 continue;
             out.push_back(m);
         }
@@ -2143,6 +2258,8 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
         i.line = f.line;
         i.column = f.column;
         i.length = f.length;
+        i.fixFrom = f.fixFrom;          // 1.12.20 : la correction d'un clic
+        i.fixTo = f.fixTo;
         out.push_back(std::move(i));
     };
     for (const auto& sc : p.programs.scripts) {

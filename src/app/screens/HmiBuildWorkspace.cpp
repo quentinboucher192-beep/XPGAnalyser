@@ -308,8 +308,35 @@ void MainAnalysisScreen::wireBottomPanel() {
     // (une commande : Ctrl+Z), puis la case montree comme un clic sur le diagnostic.
     links_ += bottomPanel_->fixRequested->connect([this](const pl::Diagnostic& d) {
         auto doc = app_.hmi();
+        if (!doc) return;
+        // 1.12.20 : la correction donnee par le controle ('Valider' -> Valider...) : a son endroit, quel qu'il soit
+        // (une case, une action, un script, une fonction, une valeur initiale).
+        if (!d.fixFrom.empty()) {
+            hmi::FixPlace at;
+            at.view = d.view;
+            at.object = d.object;
+            at.script = d.script;
+            at.item = d.item;
+            at.category = d.category;
+            at.property = d.property;
+            at.line = d.line;
+            std::string what;
+            {
+                hmi::Project probe = doc->project;          // l'endroit existe-t-il encore ?
+                if (!hmi::applyFix(probe, at, d.fixFrom, d.fixTo, &what)) {
+                    if (status_) status_->setTransientMessage("Rien \xC3\xA0 corriger : " + d.fixFrom + " n'est plus l\xC3\xA0.", 6.0);
+                    return;
+                }
+            }
+            auto cmd = hmi::changeProject(doc, "Corriger : " + d.fixFrom + " \xE2\x86\x92 " + d.fixTo,
+                                          [&](hmi::Project& pp) { (void)hmi::applyFix(pp, at, d.fixFrom, d.fixTo); });
+            if (cmd) app_.apply(std::move(cmd), /*refreshViews=*/true);
+            openHmiDiagnostic(d);
+            if (status_) status_->setTransientMessage("Corrig\xC3\xA9 dans " + what + " : " + d.fixFrom + " \xE2\x86\x92 " + d.fixTo + " (Ctrl+Z pour revenir)", 8.0);
+            return;
+        }
         std::string from, to;
-        if (!doc || !ui::exprfield::fixOf(d.message, from, to)) return;
+        if (!ui::exprfield::fixOf(d.message, from, to)) return;
         const auto* v = doc->project.view(d.view);
         const auto* o = v ? v->object(d.object) : nullptr;
         if (!o) return;

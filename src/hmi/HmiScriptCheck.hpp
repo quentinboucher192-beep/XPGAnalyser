@@ -54,6 +54,8 @@ struct Finding {
     // 1.11.20 : le nombre d'arguments d'une fonction interne, compte par S1 - remplace par le
     // controle des appels (callcheck) quand le code se lit.
     bool        callArity{false};
+    // 1.12.20 : la correction d'un clic (hmi::Issue::fixFrom) - remplacer ce texte de la ligne ; vide : aucune.
+    std::string fixFrom{}, fixTo{};
 };
 
 // Ce que le script voit.

@@ -109,6 +109,7 @@ struct ArgumentProblem {
     bool        error{true};     // false : un avertissement
     std::string param;           // le parametre en cause
     std::string message;         // en francais, tutoie, dit quoi faire
+    std::string fixFrom{}, fixTo{};   // 1.12.20 : la correction d'un clic ('Valider' -> Valider) ; vide : aucune
 };
 // 1.12.19 (R3) : l'argument d'un parametre rappel (Sur_Oui := Valider) - une fonction de la vue qui ouvre ou du
 // projet, de la bonne forme ; une variable rappel de la meme forme ; une LAMBDA, NULL ; un nom en texte ('Valider') :

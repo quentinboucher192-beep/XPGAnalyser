@@ -83,6 +83,8 @@ struct Problem {
     // attendue - une erreur qui bloque toujours (Generer, Compiler, la simulation), quelle que soit
     // la case (une plume, une action, une alarme comme une fx).
     bool        whole{false};
+    // 1.12.20 : la correction d'un clic (hmi::Issue::fixFrom) - 'Valider' -> Valider ; vide : aucune.
+    std::string fixFrom{}, fixTo{};
 };
 
 // Les problemes d'une expression qui se lit (sinon : rien, la syntaxe est

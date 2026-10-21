@@ -8,12 +8,14 @@
 #include "HmiOperators.hpp"        // 1.11.17 : la signature d'un operateur (le lieu d'un appel)
 #include "HmiSymbols.hpp"          // 1.11.17 : la portee d'un symbole, rewriteNames (les textes d'un objet)
 #include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : les types d'une locale
-#include "HmiRoles.hpp"            // 1.12.10 (lot F) : les bornes et les seuils tapes en nom de variable
+#include "HmiRoles.hpp"
+#include "HmiNatives.hpp"           // 1.12.20 : une fonction IHM_ qui agit (pas une qui lit)            // 1.12.10 (lot F) : les bornes et les seuils tapes en nom de variable
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <set>
 #include <type_traits>
 
@@ -277,10 +279,37 @@ std::vector<NameUse> scriptNames(std::string_view source) {
         for (const auto& n : lang.names) if (upper(n.name) == u) return true;
         return false;
     };
+    // 1.12.20 : les parametres des LAMBDA (LAMBDA (x : REAL; y : INT) ...) ne sont ni IHM ni de l'automate.
+    std::set<std::string> lambdaParams;
+    {
+        const std::string u = upper(parts.body);
+        for (auto at = u.find("LAMBDA"); at != std::string::npos; at = u.find("LAMBDA", at + 6)) {
+            if ((at > 0 && identChar(u[at - 1])) || (at + 6 < u.size() && identChar(u[at + 6]))) continue;
+            std::size_t j = at + 6;
+            while (j < u.size() && std::isspace(static_cast<unsigned char>(u[j]))) ++j;
+            if (j >= u.size() || u[j] != '(') continue;
+            int depth = 0;
+            bool naming = true;
+            for (; j < u.size(); ++j) {
+                const char c = u[j];
+                if (c == '(') { ++depth; if (depth == 1) naming = true; continue; }
+                if (c == ')' && --depth == 0) break;
+                if (depth != 1) continue;
+                if (c == ';' || c == ',') naming = true;
+                else if (c == ':') naming = false;
+                else if (naming && identStart(c)) {
+                    std::size_t e = j;
+                    while (e < u.size() && identChar(u[e])) ++e;
+                    lambdaParams.insert(u.substr(j, e - j));
+                    j = e - 1;
+                }
+            }
+        }
+    }
     std::vector<NameUse> all = scriptNamesRaw(parts.body);
     std::vector<NameUse> out;
     for (auto& u : all)
-        if (!parts.local(u.name) && !dialectName(u.name)) out.push_back(std::move(u));
+        if (!parts.local(u.name) && !dialectName(u.name) && !lambdaParams.count(upper(u.name))) out.push_back(std::move(u));
     return out;
 }
 
@@ -731,6 +760,147 @@ std::vector<NameUse> scriptCallees(std::string_view code) {
             if (!stKeywords().count(upper(name)) && seen.insert(upper(name)).second) out.push_back({name, line});
         }
     }
+    return out;
+}
+
+// 1.12.20 : les racines ecrites d'un code - Nom := ..., Nom.Membre := ..., Nom[i] := ... (hors chaines et commentaires).
+namespace {
+std::vector<std::string> assignedRoots(std::string_view s) {
+    std::vector<std::string> out;
+    const auto ident = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_'; };
+    for (std::size_t i = 0; i < s.size();) {
+        const char c = s[i];
+        if (c == '\'' || c == '"') {
+            std::size_t j = i + 1;
+            while (j < s.size() && s[j] != c) j += (s[j] == '$' && j + 1 < s.size()) ? 2 : 1;
+            i = j + 1;
+            continue;
+        }
+        if (c == '(' && i + 1 < s.size() && s[i + 1] == '*') {
+            const auto e = s.find("*)", i + 2);
+            i = e == std::string_view::npos ? s.size() : e + 2;
+            continue;
+        }
+        if (c == '/' && i + 1 < s.size() && s[i + 1] == '/') {
+            while (i < s.size() && s[i] != '\n') ++i;
+            continue;
+        }
+        if (!ident(c) || std::isdigit(static_cast<unsigned char>(c))) {
+            if (std::isdigit(static_cast<unsigned char>(c))) while (i < s.size() && (ident(s[i]) || s[i] == '#' || s[i] == '.')) ++i;
+            else ++i;
+            continue;
+        }
+        std::size_t j = i;
+        while (j < s.size() && ident(s[j])) ++j;
+        const bool member = i > 0 && s[i - 1] == '.';
+        const std::string root(s.substr(i, j - i));
+        std::size_t k = j;
+        // Le chemin : .Membre, [index] (les crochets imbriques comptes).
+        for (;;) {
+            while (k < s.size() && (s[k] == ' ' || s[k] == '\t')) ++k;
+            if (k + 1 < s.size() && s[k] == '.' && ident(s[k + 1])) {
+                ++k;
+                while (k < s.size() && ident(s[k])) ++k;
+                continue;
+            }
+            if (k < s.size() && s[k] == '[') {
+                int depth = 0;
+                for (; k < s.size(); ++k) {
+                    if (s[k] == '[') ++depth;
+                    else if (s[k] == ']' && --depth == 0) { ++k; break; }
+                }
+                continue;
+            }
+            break;
+        }
+        if (!member && k + 1 < s.size() && s[k] == ':' && s[k + 1] == '=') out.push_back(root);
+        i = j;
+    }
+    return out;
+}
+} // namespace
+
+// 1.12.20 : name := LAMBDA ... (voir HmiScript.hpp).
+bool assignsLambda(std::string_view s, std::string_view name) {
+    const std::string key = upper(name);
+    const auto ident = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_'; };
+    const auto blanks = [&](std::size_t k) {
+        while (k < s.size() && std::isspace(static_cast<unsigned char>(s[k]))) ++k;
+        return k;
+    };
+    for (std::size_t i = 0; i < s.size();) {
+        const char c = s[i];
+        if (c == '\'' || c == '"') {                                   // une chaine
+            std::size_t j = i + 1;
+            while (j < s.size() && s[j] != c) j += (s[j] == '$' && j + 1 < s.size()) ? 2 : 1;
+            i = j + 1;
+            continue;
+        }
+        if (c == '(' && i + 1 < s.size() && s[i + 1] == '*') {          // (* ... *)
+            const auto e = s.find("*)", i + 2);
+            i = e == std::string_view::npos ? s.size() : e + 2;
+            continue;
+        }
+        if (c == '/' && i + 1 < s.size() && s[i + 1] == '/') {          // // ...
+            while (i < s.size() && s[i] != '\n') ++i;
+            continue;
+        }
+        if (!ident(c)) { ++i; continue; }
+        std::size_t j = i;
+        while (j < s.size() && ident(s[j])) ++j;
+        const bool member = i > 0 && s[i - 1] == '.';
+        if (!member && upper(s.substr(i, j - i)) == key) {
+            std::size_t k = blanks(j);
+            if (k + 1 < s.size() && s[k] == ':' && s[k + 1] == '=') {
+                k = blanks(k + 2);
+                std::size_t e = k;
+                while (e < s.size() && ident(s[e])) ++e;
+                if (upper(s.substr(k, e - k)) == "LAMBDA") return true;
+            }
+        }
+        i = j;
+    }
+    return false;
+}
+
+// 1.12.20 : ce que fait une fonction (voir HmiScript.hpp).
+bool hmiFunctionActs(std::string_view name) {
+    if (!isHmiFunction(name)) return false;
+    const auto* f = natives::function(upper(name));
+    return !(f && f->readOnlyIhm);
+}
+
+Effects functionEffects(const Project& p, const HmiFunction& fn, const View* view) {
+    Effects out;
+    std::set<const HmiFunction*> seen;
+    const auto note = [](std::vector<std::string>& v, const std::string& n) {
+        for (const auto& x : v) if (upper(x) == upper(n)) return;
+        v.push_back(n);
+    };
+    const std::function<void(const HmiFunction&)> walk = [&](const HmiFunction& f) {
+        if (!seen.insert(&f).second) return;
+        std::set<std::string> locals{upper(f.name)};
+        for (const auto& d : f.decls) locals.insert(upper(d.name));
+        for (const auto& root : assignedRoots(f.body))
+            if (!locals.count(upper(root)) && p.variable(root)) note(out.writes, root);
+        for (const auto& c : scriptCallees(f.body)) {
+            if (locals.count(upper(c.name))) continue;
+            if (hmiFunctionActs(c.name)) {
+                note(out.acts, upper(c.name));
+                continue;
+            }
+            bool found = false;
+            if (view)
+                for (const auto& vf : view->functions)
+                    if (upper(vf.name) == upper(c.name)) {
+                        found = true;
+                        walk(vf);
+                    }
+            if (!found)
+                for (const auto* g : p.functionsNamed(c.name)) walk(*g);
+        }
+    };
+    walk(fn);
     return out;
 }
 

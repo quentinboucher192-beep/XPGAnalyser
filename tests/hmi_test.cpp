@@ -28431,6 +28431,129 @@ void rappelsExpressions1219() {
     check(errors == 0, "aucune erreur dans la Console");
 }
 
+// 1.12.20 (F) : les finitions des rappels - une LAMBDA d'une fx ne modifie rien ; un nom de fonction en texte
+// (avertissement et correction d'un clic) ; une LAMBDA dans une variable rappel remanente ; un rappel non donne.
+void finitions1220() {
+    std::printf("1.12.20 : les finitions des rappels\n");
+    Project p;
+    p.programs.functions.push_back(hmiFunction(p, "Tres_Grand", "BOOL", "VAR_INPUT x : REAL; END_VAR\nTres_Grand := x > 100.0;\n"));
+    p.programs.functions.push_back(hmiFunction(p, "Compter", "BOOL", "VAR_INPUT x : REAL; END_VAR\nCompteur_Clics := Compteur_Clics + 1;\nCompter := x > 1.0;\n"));
+    p.programs.functions.push_back(hmiFunction(p, "Valider", "", "N1 := N1 + 1;\n"));
+    p.programs.variables.push_back(hmiVar(p, "Mesures", "LIST OF REAL", "[12.5, 8.0, 150.0]"));
+    p.programs.variables.push_back(hmiVar(p, "Compteur_Clics", "DINT"));
+    p.programs.variables.push_back(hmiVar(p, "N1", "DINT"));
+    p.programs.variables.push_back(hmiVar(p, "Rappel_Texte", "CALLBACK ()", "'Valider'"));
+    Variable garde = hmiVar(p, "Filtre_Garde", "CALLBACK (x : REAL) : BOOL", "=Tres_Grand");
+    garde.retain = true;
+    const Id gardeId = garde.id;
+    p.programs.variables.push_back(garde);
+    View v = makeView(p, "V");
+    const Id ecrit = edit::add(p, v, Kind::Indicator, 10, 10);
+    const Id bloc = edit::add(p, v, Kind::Indicator, 60, 10);
+    const Id journal = edit::add(p, v, Kind::Indicator, 110, 10);
+    const Id pur = edit::add(p, v, Kind::Indicator, 160, 10);
+    const Id texte = edit::add(p, v, Kind::Indicator, 210, 10);
+    v.object(ecrit)->setExpr("visible", "LIST_ANY(Mesures, LAMBDA (x : REAL) : BOOL => Compter(x))");
+    v.object(bloc)->setExpr("visible", "LIST_ANY(Mesures, LAMBDA (x : REAL) : BOOL Compteur_Clics := Compteur_Clics + 1; RETURN x > 1.0; END_LAMBDA)");
+    v.object(journal)->setExpr("visible", "LIST_ANY(Mesures, LAMBDA (x : REAL) : BOOL => IHM_LOG(NIVEAU_LOG#INFO, 'vu'))");
+    v.object(pur)->setExpr("visible", "LIST_ANY(Mesures, LAMBDA (x : REAL) : BOOL => x > 10.0) AND LIST_ANY(Mesures, Tres_Grand)");
+    v.object(texte)->setExpr("visible", "LIST_COUNT_IF(Mesures, 'Tres_Grand') > 0");
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = "Script_Rappels";
+    sc.event = "Appel";
+    sc.body = "N1 := LIST_COUNT_IF(Mesures, LAMBDA (x : REAL) : BOOL => Compter(x));\nN1 := LIST_COUNT_IF(Mesures, 'Tres_Grand');\n"
+              "Filtre_Garde := LAMBDA (x : REAL) : BOOL => x > 5.0;\n";
+    const Id scId = sc.id;
+    p.programs.scripts.push_back(sc);
+    View pop = makeView(p, "Pop_Choix");
+    pop.role = "popup";
+    pop.params = {{"Sur_Oui", "", "", "CALLBACK ()", ParamMode::Copy}, {"Sur_Non", "", "", "CALLBACK ()", ParamMode::Copy}};
+    auto& b = addButton(p, v, "Btn_Ouvrir", 10, 100);
+    b.actions.push_back(act(Trigger::Click, Operation::Popup, "Pop_Choix", "Sur_Oui := 'Valider'"));
+    const Id btn = b.id;
+    const Id vid = v.id;
+    p.views = {v, pop};
+    p.config.startView = vid;
+    const NameExists none = [](std::string_view) { return false; };
+    std::vector<Issue> all = generate(p, none);
+    for (auto& i : compileWith(p, none)) all.push_back(i);
+    const auto find = [&](Id object, const std::string& part, Issue::Severity sev) -> const Issue* {
+        for (const auto& i : all)
+            if (i.severity == sev && (object == kNoId || i.object == object) && i.message.find(part) != std::string::npos) return &i;
+        return nullptr;
+    };
+    const auto list = [&] {
+        std::string out;
+        for (const auto& i : all) out += "\n    " + std::string(toString(i.severity)) + " " + i.category + " " + i.property + " : " + i.message;
+        return out;
+    };
+    // Une LAMBDA d'une fx ne modifie rien.
+    check(find(ecrit, "Compter, qui \xC3\xA9" "crit Compteur_Clics", Issue::Severity::Error) != nullptr,
+          "fx : une LAMBDA qui appelle une fonction qui ecrit une variable est refusee" + list());
+    // (une LAMBDA en bloc qui ecrit : l'expression elle-meme refuse le := ; sinon le controle de la LAMBDA le dit)
+    check(find(bloc, "la LAMBDA \xC3\xA9" "crit Compteur_Clics", Issue::Severity::Error) != nullptr
+              || find(bloc, "une expression n'affecte rien", Issue::Severity::Error) != nullptr,
+          "fx : une LAMBDA en bloc qui ecrit est refusee");
+    check(find(journal, "appelle IHM_LOG", Issue::Severity::Error) != nullptr, "fx : une LAMBDA qui appelle IHM_LOG est refusee");
+    bool pureQuiet = true;
+    for (const auto& i : all) pureQuiet = pureQuiet && !(i.object == pur && i.severity == Issue::Severity::Error);
+    check(pureQuiet, "fx : une LAMBDA qui ne fait que lire, une fonction qui ne fait que lire : acceptees");
+    bool scriptQuiet = true;
+    for (const auto& i : all) scriptQuiet = scriptQuiet && !(i.script == scId && i.message.find("ne modifie rien") != std::string::npos);
+    check(scriptQuiet, "un script : la LAMBDA peut y ecrire (permis hors des proprietes)");
+    // 1.12.20 : ni Generer ni Compiler ne prennent les parametres et les types d'une LAMBDA pour des variables
+    // (la 1.12.19 : « x n'existe pas », « fonction inconnue : LAMBDA », « variable inexistante : REAL »).
+    std::string falses;
+    for (const auto& i : all)
+        if (i.severity == Issue::Severity::Error && (i.script == scId || i.object == pur)) falses += "\n    " + i.message;
+    check(falses.empty(), "une LAMBDA (script, fx) : aucune fausse erreur a Generer ni a Compiler" + falses);
+    // Un nom de fonction en texte : un avertissement et sa correction d'un clic, a chaque endroit.
+    const Issue* inFx = find(texte, "'Tres_Grand' : un nom de fonction en texte", Issue::Severity::Warning);
+    const Issue* inArg = find(btn, "'Valider' : un nom de fonction en texte", Issue::Severity::Warning);
+    const Issue* inScript = nullptr;
+    for (const auto& i : all)
+        if (i.script == scId && i.severity == Issue::Severity::Warning && i.message.find("'Tres_Grand' : un nom de fonction en texte") != std::string::npos) inScript = &i;
+    const Issue* inVar = find(kNoId, "Rappel_Texte : 'Valider'", Issue::Severity::Warning);
+    check(inFx && inFx->fixFrom == "'Tres_Grand'" && inFx->fixTo == "Tres_Grand", "fx : 'Tres_Grand' averti, la correction : Tres_Grand");
+    check(inArg && inArg->fixFrom == "'Valider'" && inArg->fixTo == "Valider", "argument de popup : 'Valider' averti, la correction : Valider");
+    check(inScript && inScript->line == 2 && inScript->fixTo == "Tres_Grand", "script : 'Tres_Grand' averti a sa ligne, avec sa correction");
+    check(inVar && inVar->fixFrom == "'Valider'" && inVar->fixTo == "=Valider", "valeur initiale d'une variable rappel : 'Valider' -> =Valider");
+    const auto apply = [&](const Issue* i) {
+        if (!i) return false;
+        FixPlace at;
+        at.view = i->view;
+        at.object = i->object;
+        at.script = i->script;
+        at.item = i->item;
+        at.category = i->category;
+        at.property = i->property;
+        at.line = i->line;
+        return applyFix(p, at, i->fixFrom, i->fixTo);
+    };
+    check(apply(inFx) && p.view(vid)->object(texte)->expr("visible") == "LIST_COUNT_IF(Mesures, Tres_Grand) > 0", "Corriger (fx) : la case devient LIST_COUNT_IF(Mesures, Tres_Grand) > 0");
+    check(apply(inArg) && p.view(vid)->object(btn)->actions[0].value == "Sur_Oui := Valider", "Corriger (argument) : Sur_Oui := Valider");
+    check(apply(inScript) && p.programs.scripts.back().body.find("LIST_COUNT_IF(Mesures, Tres_Grand);") != std::string::npos,
+          "Corriger (script) : la ligne 2 devient LIST_COUNT_IF(Mesures, Tres_Grand)");
+    check(apply(inVar) && p.variable("Rappel_Texte")->initial == "=Valider", "Corriger (variable) : =Valider");
+    check(!apply(inArg), "Corriger deux fois : rien a corriger (le texte n'y est plus)");
+    // Une LAMBDA dans une variable rappel remanente ne se garde pas.
+    const Issue* held = find(kNoId, "une LAMBDA ne se garde pas", Issue::Severity::Warning);
+    check(held && held->item == gardeId && held->message.find("(=Tres_Grand)") != std::string::npos,
+          "remanente : Filtre_Garde := LAMBDA ... averti (elle reprend =Tres_Grand au redemarrage)");
+    // Un rappel non donne : un avertissement (il vaut NULL), pas une erreur.
+    check(find(btn, "le rappel Sur_Non de Pop_Choix n'est pas donn", Issue::Severity::Warning) != nullptr
+              && find(btn, "Sur_Non de Pop_Choix n'est pas donn", Issue::Severity::Error) == nullptr,
+          "un rappel non donne : un avertissement (il vaut NULL)");
+    // Les helpers.
+    check(assignsLambda("x := 1; (* Filtre_Garde := LAMBDA *) Filtre_Garde :=\n LAMBDA () => 1;", "filtre_garde")
+              && !assignsLambda("Filtre_Garde := Tres_Grand; s := 'Filtre_Garde := LAMBDA';", "Filtre_Garde"),
+          "assignsLambda : hors chaines et commentaires");
+    const auto e = functionEffects(p, *p.functionsNamed("Compter").front());
+    check(e.writes.size() == 1 && e.writes[0] == "Compteur_Clics" && functionEffects(p, *p.functionsNamed("Tres_Grand").front()).none(),
+          "functionEffects : Compter ecrit Compteur_Clics, Tres_Grand ne modifie rien");
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les performances dans le temps, les lenteurs, seules.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -28655,6 +28778,7 @@ int main(int argc, char** argv) {
     parametresObjets1124();           // 1.12.4 : les parametres objets des popups
     rappelsPopup1219();               // 1.12.19 (R3) : un rappel en parametre de popup
     rappelsExpressions1219();         // 1.12.19 : un rappel dans une fx et un script (Compiler, la simulation)
+    finitions1220();                  // 1.12.20 (F) : les finitions des rappels
     lotA1125();                       // 1.12.5 (lot A) : les defauts de l'audit des objets
     lotBC1126();                      // 1.12.6 (lots B et C) : le role de chaque propriete, les reperes partout
     lotD1127();                       // 1.12.7 (lot D) : les listes en tableau et les choix

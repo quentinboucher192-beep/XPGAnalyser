@@ -141,6 +141,7 @@ struct Diagnostic {
     std::string date;          // "2026-10-08 10:42:09"
     std::string step;          // "Génération", "Compilation", "Validation"
     std::string suggestion;
+    std::string fixFrom, fixTo;  // 1.12.20 : la correction d'un clic (hmi::Issue::fixFrom) ; vide : aucune
     // aller a la source (l'ecran), comme hmi::Issue
     Id          view{kNoId}, object{kNoId}, script{kNoId}, item{kNoId};
     std::string property;

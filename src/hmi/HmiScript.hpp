@@ -139,6 +139,18 @@ struct ScriptParts {
 [[nodiscard]] std::vector<ScriptDiagnostic> checkFunction(const HmiFunction&, const TypeKnown& knownType = {});
 // Les appels d'un code ST : les noms suivis d'une parenthese (Moyenne(...)).
 [[nodiscard]] std::vector<NameUse> scriptCallees(std::string_view body);
+// 1.12.20 : CE QUE FAIT UNE FONCTION hors de ses locales - les variables IHM qu'elle ecrit, les fonctions IHM_ qui
+// agissent (IHM_LOG, IHM_NAVIGUER... ; pas celles qui ne font que lire), elle et celles qu'elle appelle (du projet,
+// de `view`). Une expression de propriete ne modifie rien : une LAMBDA qui en appelle une y est refusee.
+struct Effects {
+    std::vector<std::string> writes, acts;
+    [[nodiscard]] bool none() const noexcept { return writes.empty() && acts.empty(); }
+};
+[[nodiscard]] Effects functionEffects(const Project&, const HmiFunction&, const View* view = nullptr);
+// ... une fonction IHM_ qui agit (pas une qui ne fait que lire : IHM_TEMPS, IHM_UTILISATEUR...).
+[[nodiscard]] bool hmiFunctionActs(std::string_view name);
+// 1.12.20 : ce code donne-t-il une LAMBDA a `name` (name := LAMBDA ...) ? Hors chaines et commentaires.
+[[nodiscard]] bool assignsLambda(std::string_view code, std::string_view name);
 
 // RENOMMER UNE FONCTION : ses appels (Nom(...)) dans un code ST ou une
 // expression, hors chaines et commentaires. `bare` : aussi le nom seul - le

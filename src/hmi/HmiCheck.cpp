@@ -62,6 +62,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <map>
 #include <set>
 
@@ -119,6 +120,13 @@ std::string actionLabel(std::size_t index, const Action& a) {
 // 1.12.4 : un litteral d'un type objet ([1, 2], ['a' := 1], (1, 'x')) donne a un parametre objet (une
 // valeur par defaut, un argument) : il ne se compile pas en expression (une MAP a des :=) - il se
 // verifie dans son type (typeform::valueFits).
+// 1.12.20 : un nom en majuscules (les comparaisons sans casse).
+std::string upperCopy(std::string_view s) {
+    std::string u(s);
+    for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return u;
+}
+
 // 1.12.19 : un type rappel (CALLBACK (x : REAL) : BOOL).
 bool callbackType(std::string_view type) {
     std::string u(type);
@@ -137,6 +145,84 @@ bool richLiteral(std::string_view type, std::string_view text) {
 }
 
 } // namespace
+
+// 1.12.20 : LA CORRECTION D'UN CLIC - `from` remplace par `to` dans le texte en cause, sur sa ligne d'abord.
+namespace {
+bool replaceIn(std::string& text, int line, std::string_view from, std::string_view to) {
+    if (from.empty()) return false;
+    std::size_t begin = 0, end = text.size();
+    if (line > 0) {
+        for (int l = 1; l < line && begin != std::string::npos; ++l) {
+            begin = text.find('\n', begin);
+            if (begin != std::string::npos) ++begin;
+        }
+        if (begin == std::string::npos) begin = 0;
+        else {
+            end = text.find('\n', begin);
+            if (end == std::string::npos) end = text.size();
+        }
+    }
+    std::size_t at = text.find(from, begin);
+    if (at == std::string::npos || at + from.size() > end) at = text.find(from);   // la ligne a bouge : tout le texte
+    if (at == std::string::npos) return false;
+    text.replace(at, from.size(), to);
+    return true;
+}
+} // namespace
+
+bool applyFix(Project& p, const FixPlace& at, std::string_view from, std::string_view to, std::string* what) {
+    const auto say = [&](std::string w) {
+        if (what) *what = std::move(w);
+        return true;
+    };
+    // Un script (general ou de vue), a sa ligne.
+    if (at.script != kNoId) {
+        for (auto& sc : p.programs.scripts)
+            if (sc.id == at.script) return replaceIn(sc.body, at.line, from, to) && say("le script " + sc.name);
+        for (auto& v : p.views)
+            for (auto& sc : v.scripts)
+                if (sc.id == at.script) return replaceIn(sc.body, at.line, from, to) && say("le script " + v.name + "." + sc.name);
+        return false;
+    }
+    if (at.item != kNoId) {
+        for (auto& f : p.programs.functions)
+            if (f.id == at.item) return replaceIn(f.body, at.line, from, to) && say("la fonction " + f.name);
+        for (auto& v : p.views)
+            for (auto& f : v.functions)
+                if (f.id == at.item) return replaceIn(f.body, at.line, from, to) && say("la fonction " + v.name + "." + f.name);
+        for (auto& var : p.programs.variables)
+            if (var.id == at.item) return replaceIn(var.initial, 0, from, to) && say("la valeur initiale de " + var.name);
+        return false;
+    }
+    View* v = p.view(at.view);
+    if (!v) return false;
+    Object* o = at.object != kNoId ? v->object(at.object) : nullptr;
+    if (at.object != kNoId && !o) return false;
+    // Une action : "action N (Clic)" - sa valeur (les arguments, le code), puis sa cible.
+    if (at.property.rfind("action ", 0) == 0) {
+        const int n = std::atoi(at.property.c_str() + 7);
+        auto& list = o ? o->actions : v->actions;
+        if (n < 1 || static_cast<std::size_t>(n) > list.size()) return false;
+        auto& a = list[static_cast<std::size_t>(n - 1)];
+        const std::string where = v->name + (o ? " \xE2\x80\xBA " + o->name : std::string{}) + " \xE2\x80\xBA " + at.property;
+        if (replaceIn(a.value, 0, from, to) || replaceIn(a.target, 0, from, to)) return say(where);
+        return false;
+    }
+    // Une case de l'objet : son expression, sinon sa valeur.
+    if (o && !at.property.empty()) {
+        std::string e = o->expr(at.property);
+        if (!e.empty() && replaceIn(e, 0, from, to)) {
+            o->setExpr(at.property, e);
+            return say(v->name + " \xE2\x80\xBA " + o->name + " \xE2\x80\xBA " + at.property);
+        }
+        std::string t = o->text(at.property);
+        if (!t.empty() && replaceIn(t, 0, from, to)) {
+            o->set(at.property, t);
+            return say(v->name + " \xE2\x80\xBA " + o->name + " \xE2\x80\xBA " + at.property);
+        }
+    }
+    return false;
+}
 
 std::string_view toString(Issue::Severity s) noexcept {
     switch (s) {
@@ -228,6 +314,7 @@ bool known(const Project& p, const NameExists& plc, std::string_view name, const
     // est verifie a part (qualifiedUses : publique, existante, lue seulement).
     return p.variable(name) || isHmiFunction(name) || pub::isSysRoot(name) || pub::viewNamed(p, name) || enumValue() || !plc
         || p.generalScript(name) != nullptr
+        || !p.functionsNamed(name).empty()             // 1.12.20 : une fonction passee en rappel (LIST_ANY(L, Tres_Grand))
         || plc(name) || (core::hasApi() && upperText(name) == "API");
 }
 
@@ -363,6 +450,19 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
 void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
     using S = Issue::Severity;
     std::set<std::string> varNames;
+    // 1.12.20 : les variables rappel remanentes auxquelles un code donne une LAMBDA - elle ne se garde pas.
+    std::set<std::string> lambdaHeld;
+    {
+        std::vector<std::string> retained;
+        for (const auto& var : p.programs.variables)
+            if (var.retain && callbackType(var.type)) retained.push_back(var.name);
+        if (!retained.empty())
+            forEachCode(p, [&](const std::string& text, CodeForm form, const CodeSite&) {
+                if (form != CodeForm::Code) return;
+                for (const auto& n : retained)
+                    if (assignsLambda(text, n)) lambdaHeld.insert(upperCopy(n));
+            });
+    }
     for (const auto& var : p.programs.variables) {
         const std::string key = [&] { std::string u = var.name; for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c))); return u; }();
         if (!isIdentifier(var.name)) add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, "nom invalide : '" + var.name + "'");
@@ -378,6 +478,30 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
             // 1.12.2 : un type objet (LIST, VECTOR, MAP, TUPLE) - sa valeur initiale, un litteral.
             if (!typeform::valueFits(p, var.type, var.initial, &why))
                 add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, var.name + " : valeur initiale illisible (" + why + ")");
+            // 1.12.20 : une variable rappel - un nom de fonction en texte ('Valider') : il se lit encore, mais n'est ni
+            // verifie ni renomme (la correction d'un clic : =Valider) ; remanente, une LAMBDA ne se garde pas.
+            if (callbackType(var.type)) {
+                std::string t = trimmedCopy(var.initial);
+                const bool formula = t.size() > 1 && t.front() == '=' && t[1] != '=';
+                if (formula) t = trimmedCopy(t.substr(1));
+                if (t.size() > 2 && t.front() == '\'' && t.back() == '\'') {
+                    const std::string name = t.substr(1, t.size() - 2);
+                    if (!p.functionsNamed(name).empty()) {
+                        add(out, S::Warning, "Variable IHM", kNoId, kNoId, var.name,
+                            var.name + " : '" + name + "' : un nom de fonction en texte n'est ni v\xC3\xA9rifi\xC3\xA9 ni renomm\xC3\xA9 \xE2\x80\x94 \xC3\xA9" "cris =" + name);
+                        out.back().item = var.id;
+                        out.back().fixFrom = t;
+                        out.back().fixTo = formula ? name : "=" + name;
+                    }
+                }
+                if (var.retain && lambdaHeld.count(upperCopy(var.name))) {
+                    add(out, S::Warning, "Variable IHM", kNoId, kNoId, var.name,
+                        var.name + " est r\xC3\xA9manente : une LAMBDA ne se garde pas ; au red\xC3\xA9marrage, " + var.name + " reprend sa valeur initiale"
+                            + (trimmedCopy(var.initial).empty() ? std::string(" (NULL)") : " (" + trimmedCopy(var.initial) + ")")
+                            + " \xE2\x80\x94 donne-lui une fonction (elle garde son nom)");
+                    out.back().item = var.id;
+                }
+            }
         } else if (types::isComposite(var.type)) {
             const auto f = types::flatten(p, var.name, var.type, var.initial, var.packBools);
             if (!f.ok()) add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, f.error);
@@ -1614,6 +1738,8 @@ void checkParams19(const Project& p, const exprcheck::PlcPaths& paths, std::vect
                     for (const auto& pb : params::checkArguments(p, &v, *target, a.value, plcTypes)) {
                         if (pb.kind == params::ArgumentProblem::Kind::UnknownParam) continue;   // deja dit (lot 8)
                         add(out, pb.error ? S::Error : S::Warning, "Action", v.id, obj, where, pb.message);
+                        out.back().fixFrom = pb.fixFrom;                                        // 1.12.20
+                        out.back().fixTo = pb.fixTo;
                     }
                 }
                 // 1.11.7 : Maths - des references (des chemins de variables), une formule qui se lit.
@@ -3635,8 +3761,11 @@ struct ExprWalker {
     }
 
     void push(const Where& w, std::string msg, const std::string& unknownName = {}, const std::string& suggestion = {},
-              const std::string& source = {}, Issue::Severity severity = Issue::Severity::Error, bool blocking = false) {
+              const std::string& source = {}, Issue::Severity severity = Issue::Severity::Error, bool blocking = false,
+              const std::string& fixFrom = {}, const std::string& fixTo = {}) {
         Issue i;
+        i.fixFrom = fixFrom;                            // 1.12.20 : la correction d'un clic
+        i.fixTo = fixTo;
         i.severity = severity;                          // 1.11.21 : un avertissement d'appel (exprcheck::Problem::warning)
         i.blocking = blocking;                          // 1.12.17 : un tableau entier (exprcheck::Problem::whole)
         i.category = w.category;
@@ -3694,7 +3823,7 @@ struct ExprWalker {
         }
         for (auto& pb : exprcheck::check(context(w.view), s, want, strict))
             push(w, prefix + s + " : " + pb.message + dup::markerHint(s, pb.unknownName), pb.unknownName, pb.suggestion, {},
-                 pb.warning ? Issue::Severity::Warning : Issue::Severity::Error, pb.whole);
+                 pb.warning ? Issue::Severity::Warning : Issue::Severity::Error, pb.whole, pb.fixFrom, pb.fixTo);
     }
     void text(const Where& w, const std::string& value, const std::string& prefix = {}) {
         for (const auto& piece : exprcheck::templateExpressions(value)) expr(w, piece, exprcheck::Want::Any, prefix + "{" + piece + "} : ");

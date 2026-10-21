@@ -680,9 +680,12 @@ std::vector<ArgumentProblem> callbackArgument(const Project& p, const View* call
             if (same(f.name, name)) fs.push_back(&f);
     if (fs.empty()) fs = p.functionsNamed(name);
     if (!fs.empty()) {
-        if (quoted)
+        if (quoted) {
             problem(false, "'" + name + "' : un nom de fonction en texte se lit encore ; \xC3\xA9" "cris " + name
                                + " (sans apostrophes) \xE2\x80\x94 Renommer et Voir les usages la suivront");
+            out.back().fixFrom = arg;           // 1.12.20 : la correction d'un clic
+            out.back().fixTo = name;
+        }
         if (fs.size() == 1) fits(name, overload::callbackText(overload::signatureOf(*fs.front())));
         return out;
     }
@@ -713,7 +716,13 @@ std::vector<ArgumentProblem> checkArguments(const Project& p, const View* caller
     for (const auto& prm : popup.params) {
         const auto it = std::find_if(given.begin(), given.end(), [&](const auto& g) { return same(g.first, prm.name); });
         if (it == given.end() || trim(it->second).empty()) {
-            if (trim(prm.defaultValue).empty())
+            // 1.12.20 : un rappel non donne vaut NULL - l'appeler ne fait rien (la Console le dit une fois) : un
+            // avertissement, plus une erreur (la maquette, planche 11 : « Sur_Oui n'a pas de defaut »).
+            if (trim(prm.defaultValue).empty() && up(trim(prm.type)).rfind("CALLBACK", 0) == 0)
+                out.push_back({ArgumentProblem::Kind::Missing, false, prm.name,
+                               "le rappel " + prm.name + " de " + popup.name + " n'est pas donn\xC3\xA9 et n'a pas de valeur par d\xC3\xA9" "faut : "
+                                   "il vaut NULL, et l'appeler ne fera rien \xE2\x80\x94 donne-le (une fonction, une LAMBDA), ou donne-lui un d\xC3\xA9" "faut"});
+            else if (trim(prm.defaultValue).empty())
                 out.push_back({ArgumentProblem::Kind::Missing, true, prm.name,
                                "le param\xC3\xA8tre " + prm.name + " de " + popup.name
                                    + " n'est pas donn\xC3\xA9 et n'a pas de valeur par d\xC3\xA9" "faut : donne-le"});

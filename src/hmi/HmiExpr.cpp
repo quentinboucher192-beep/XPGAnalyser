@@ -263,6 +263,7 @@ bool isReadOnly(std::string_view s, std::string* why) {
 std::vector<std::string> scanRoots(std::string_view s) {
     static const std::set<std::string> kKeywords = {"AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE"};
     std::vector<std::string> out;
+    std::set<std::string> lambdaParams;     // 1.12.20 : les parametres des LAMBDA lues (en majuscules)
     std::size_t i = 0;
     while (i < s.size()) {
         const char c = s[i];
@@ -310,7 +311,43 @@ std::vector<std::string> scanRoots(std::string_view s) {
                 }
                 continue;
             }
-            if (member || call || kKeywords.count(upper(word))) continue;
+            // 1.12.20 : LAMBDA (x : REAL) : BOOL => x > 5 - l'en-tete n'a pas de racine (ses types non plus), ses
+            // parametres non plus dans le corps ; LAMBDA ... END_LAMBDA (un bloc) : rien jusqu'a END_LAMBDA.
+            if (!member && call && upper(word) == "LAMBDA") {
+                std::size_t j = k + 1;
+                int depth = 1;
+                bool naming = true;
+                while (j < s.size() && depth > 0) {
+                    const char d = s[j];
+                    if (d == '(') ++depth;
+                    else if (d == ')') --depth;
+                    else if (depth == 1 && (d == ';' || d == ',')) naming = true;
+                    else if (depth == 1 && d == ':') naming = false;
+                    else if (depth == 1 && naming && isIdentStart(d)) {
+                        std::size_t e = j;
+                        while (e < s.size() && isIdentChar(s[e])) ++e;
+                        lambdaParams.insert(upper(s.substr(j, e - j)));
+                        j = e;
+                        continue;
+                    }
+                    ++j;
+                }
+                const auto arrow = s.find("=>", j);
+                const auto block = [&] {                       // le debut d'un bloc avant la fleche
+                    std::string rest = upper(s.substr(j, arrow == std::string_view::npos ? std::string_view::npos : arrow - j));
+                    return rest.find("END_LAMBDA") != std::string::npos || rest.find("RETURN") != std::string::npos
+                        || rest.find(":=") != std::string::npos;
+                }();
+                if (arrow != std::string_view::npos && !block) {
+                    i = arrow + 2;                             // le corps : lu comme le reste
+                    continue;
+                }
+                const std::string rest = upper(s.substr(j));
+                const auto end = rest.find("END_LAMBDA");
+                i = end == std::string::npos ? s.size() : j + end + 10;
+                continue;
+            }
+            if (member || call || kKeywords.count(upper(word)) || lambdaParams.count(upper(word))) continue;
             if (std::find(out.begin(), out.end(), word) == out.end()) out.push_back(word);
             continue;
         }
