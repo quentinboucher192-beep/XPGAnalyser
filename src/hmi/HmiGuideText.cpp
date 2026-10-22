@@ -4162,6 +4162,13 @@ const std::vector<Topic>& topics() {
                          "**Actualiser** relit les ports. Un clic sur un port : son adresse, \xC3\xA0 "
                          "droite. Sur un \xC3\xA9quipement : sa fiche, et Tester ; **Suppr** le supprime (le "
                          "m\xC3\xAAme dialogue que l'onglet \xC3\x89quipements).", {}},
+             {K::Paragraph, "Les \xC3\xA9quipements simul\xC3\xA9s sont rang\xC3\xA9s **dans le cadre du PC**, "
+                         "sous son nom, et le cadre grandit avec eux : avec plusieurs esclaves "
+                         "simul\xC3\xA9s, chaque fil de port part entre deux cartes, jamais contre une carte "
+                         "simul\xC3\xA9" "e ; un port \xC3\xA0 deux adresses est en face de son premier "
+                         "r\xC3\xA9seau, les autres suivent dessous. Le sch\xC3\xA9ma d\xC3\xA9" "file "
+                         "jusqu'au dernier \xC3\xA9quipement ; plus large que le panneau, **Maj+molette** "
+                         "(ou la molette horizontale) le fait d\xC3\xA9" "filer de c\xC3\xB4t\xC3\xA9.", {}, "1.12.24"},
              {K::Heading, "Glisser un \xC3\xA9quipement sur un port", {}},
              {K::Paragraph, "Un \xC3\xA9quipement se **tire \xC3\xA0 la souris** sur un autre port Ethernet : "
                          "le port vis\xC3\xA9 s'allume (\xC2\xAB L\xC3\xA2" "cher ici \xC2\xBB), la carte "
@@ -16253,6 +16260,17 @@ const std::vector<Topic>& topics() {
                          "l'IHM, le zoom (\xE2\x88\x92, la valeur, +, Ajuster) et **Quitter le plein "
                          "\xC3\xA9" "cran \xC2\xB7 \xC3\x89" "chap**. Elle s'efface apr\xC3\xA8s 3 secondes "
                          "sans souris et revient quand la souris approche du haut de l'\xC3\xA9" "cran.", {}},
+             {K::Bullet, "**La vue sur l'\xC3\xA9" "cran** (1.12.24) : un \xC3\xA9" "cran n'a pas toujours "
+                         "les proportions de la vue (une vue 1280 \xC3\x97 800 sur un \xC3\xA9" "cran 16:9). "
+                         "Apr\xC3\xA8s Ajuster, la barre flottante propose : **Remplir l'\xC3\xA9" "cran** "
+                         "(au d\xC3\xA9part), la vue \xC3\xA9tir\xC3\xA9" "e jusqu'aux bords, une "
+                         "\xC3\xA9" "chelle en largeur, une en hauteur (la valeur dit \xC2\xAB 150 \xC3\x97 "
+                         "135 % \xC2\xBB) ; **Garder les proportions**, la vue enti\xC3\xA8re, les bandes de "
+                         "c\xC3\xB4t\xC3\xA9 \xC3\xA0 sa couleur de fond ; **Taille r\xC3\xA9" "elle (100 "
+                         "%)**, centr\xC3\xA9" "e, un pixel de la vue pour un pixel de l'\xC3\xA9" "cran. Le "
+                         "choix est retenu d'une s\xC3\xA9" "ance \xC3\xA0 l'autre. Les clics restent justes "
+                         "dans les trois cas. Avant la 1.12.24, la vue gardait les proportions de la "
+                         "fen\xC3\xAAtre de l'appli et laissait des bandes vides.", {}, "1.12.24"},
              {K::Bullet, "**\xC3\x89" "chap** ou **F11** en sort : la fen\xC3\xAAtre redevient comme avant "
                          "(d\xC3\xA9j\xC3\xA0 en plein \xC3\xA9" "cran par F11, elle le reste), le zoom "
                          "d'avant revient.", {}},
@@ -16268,7 +16286,7 @@ const std::vector<Topic>& topics() {
                          "les vues comme sur le poste.", {}},
          },
          {"simulation-api-ihm", "simulation", "lectures-simulees", "securite"},
-         {"Pr\xC3\xA9" "c\xC3\xA9" "dente", "Vue de d\xC3\xA9marrage", "Ajuster", "100 %", "Zoom avant", "Zoom arri\xC3\xA8re", "Ctrl+molette", "Utilisateur", "Rep\xC3\xA8res", "Plein \xC3\xA9" "cran", "F11", "\xC3\x89" "chap"},
+         {"Pr\xC3\xA9" "c\xC3\xA9" "dente", "Vue de d\xC3\xA9marrage", "Ajuster", "100 %", "Zoom avant", "Zoom arri\xC3\xA8re", "Ctrl+molette", "Utilisateur", "Rep\xC3\xA8res", "Plein \xC3\xA9" "cran", "F11", "\xC3\x89" "chap", "Remplir l'\xC3\xA9" "cran", "Garder les proportions", "Taille r\xC3\xA9" "elle"},
          {"simulation"},
          {{"PNG_1024_zoom_200.png", "La vue \xC3\xA0 200 % : elle d\xC3\xA9passe la place, on la d\xC3\xA9place en tirant le fond ; la barre dit \xC2\xAB 200 % \xC2\xBB."}, {"PNG_1025_zoom_50.png", "La m\xC3\xAAme vue \xC3\xA0 50 %, et un clic sur un bouton : il touche le bon objet \xC3\xA0 tout zoom."}, {"PNG_1026_plein_ecran.png", "Le simulateur IHM en plein \xC3\xA9" "cran : la vue seule, ajust\xC3\xA9" "e, et la petite barre flottante en haut (la vue, \xC2\xAB IHM en marche \xC2\xBB, le zoom, \xC2\xAB Quitter le plein \xC3\xA9" "cran \xC2\xB7 \xC3\x89" "chap \xC2\xBB)."}, {"PNG_1029_plein_ecran_fenetre_detachee.png", "L'onglet Simulation \xC2\xB7 IHM d\xC3\xA9tach\xC3\xA9 dans sa fen\xC3\xAAtre : F11 y met la vue seule, et c'est cette fen\xC3\xAAtre qui passe en plein \xC3\xA9" "cran."}},
          "",
@@ -16529,7 +16547,13 @@ const std::vector<Topic>& topics() {
                          "coin haut droit en 3 s (\xC3\xA9" "cran tactile).\nCacher le "
                          "curseur\td\xC3\xA9" "coch\xC3\xA9\tUn \xC3\xA9" "cran tactile : pas de "
                          "fl\xC3\xA8" "che au milieu de la vue.\nLancer le simulateur\tcoch\xC3\xA9\tSur le "
-                         "simulateur : l'automate simul\xC3\xA9 tourne d\xC3\xA8s le lancement.", {}},
+                         "simulateur : l'automate simul\xC3\xA9 tourne d\xC3\xA8s le lancement.\nMise "
+                         "\xC3\xA0 l'\xC3\xA9" "chelle\tRemplir l'\xC3\xA9" "cran\t1.12.24 : quand "
+                         "l'\xC3\xA9" "cran n'a pas les proportions de la vue - **Remplir "
+                         "l'\xC3\xA9" "cran** (la vue \xC3\xA9tir\xC3\xA9" "e jusqu'aux bords, les textes "
+                         "gardent leur taille), **Garder les proportions** (la vue enti\xC3\xA8re, les "
+                         "bandes \xC3\xA0 sa couleur de fond) ou **Taille r\xC3\xA9" "elle (100 %)** "
+                         "(centr\xC3\xA9" "e). Les \xC3\xA9" "crans secondaires font de m\xC3\xAAme.", {}},
              {K::Heading, "Plusieurs \xC3\xA9" "crans", {}},
              {K::Paragraph, "**Ajouter un \xC3\xA9" "cran** : le 2, le 3... (le num\xC3\xA9ro du moniteur dans "
                          "l'ordre du syst\xC3\xA8me) et la **vue** qu'il montre - un synoptique "
@@ -16590,11 +16614,12 @@ const std::vector<Topic>& topics() {
                          "arr\xC3\xAAt brutal, il propose de le recharger, et le recharge d'office au bout "
                          "de 30 s si personne ne r\xC3\xA9pond (voir \xC2\xAB La reprise apr\xC3\xA8s un "
                          "arr\xC3\xAAt brutal \xC2\xBB).", {}},
-             {K::Paragraph, "**Garder les onglets, les panneaux repli\xC3\xA9s et le d\xC3\xA9" "filement** (1.12.3, "
-                         "coch\xC3\xA9" "e) : l'onglet choisi d'un conteneur \xC3\xA0 onglets, un panneau repli\xC3\xA9, "
-                         "le d\xC3\xA9" "filement d'un panneau d\xC3\xA9" "filant - y compris dans un symbole - "
-                         "reviennent au lancement suivant, avec les variables r\xC3\xA9manentes du poste. "
-                         "D\xC3\xA9" "coch\xC3\xA9" "e : tout repart comme dans l'\xC3\xA9" "diteur.", {}, "1.12.3"},
+             {K::Paragraph, "**Garder les onglets, les panneaux repli\xC3\xA9s et le d\xC3\xA9" "filement** "
+                         "(1.12.3, coch\xC3\xA9" "e) : l'onglet choisi d'un conteneur \xC3\xA0 onglets, un "
+                         "panneau repli\xC3\xA9, le d\xC3\xA9" "filement d'un panneau d\xC3\xA9" "filant - y "
+                         "compris dans un symbole - reviennent au lancement suivant, avec les variables "
+                         "r\xC3\xA9manentes du poste. D\xC3\xA9" "coch\xC3\xA9" "e : tout repart comme dans "
+                         "l'\xC3\xA9" "diteur.", {}, "1.12.3"},
              {K::Tip, "Sur le poste, l'IHM est la m\xC3\xAAme que dans la simulation : ce qu'on a "
                          "essay\xC3\xA9 dans l'\xC3\xA9" "diteur (et les essais de r\xC3\xA9" "ception) "
                          "tourne tel quel \xC3\xA0 l'atelier.", {}},

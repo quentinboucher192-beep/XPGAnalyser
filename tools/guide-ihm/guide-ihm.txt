@@ -1854,6 +1854,8 @@ Une consigne que l'IHM écrit (un champ de saisie, une action, un script `:=`) n
 ### Le schéma
 À gauche le PC (son nom, son système) et les équipements **simulés** (dans ce PC) ; au milieu, chaque **port** : son nom, sa carte, **branché** ou **câble débranché**, sa vitesse, son adresse et son masque (**auto** : donnée par DHCP), son adresse MAC ; à droite, un **réseau** par port (192.168.1.0 / 24) et ses équipements, chacun avec son état - vert joignable, rouge injoignable, bleu simulé -, son ping et son temps de réponse Modbus. **Actualiser** relit les ports.
 Un clic sur un port : son adresse, à droite. Sur un équipement : sa fiche, et Tester ; **Suppr** le supprime (le même dialogue que l'onglet Équipements).
+@nouveau 1.12.24
+Les équipements simulés sont rangés **dans le cadre du PC**, sous son nom, et le cadre grandit avec eux : avec plusieurs esclaves simulés, chaque fil de port part entre deux cartes, jamais contre une carte simulée ; un port à deux adresses est en face de son premier réseau, les autres suivent dessous. Le schéma défile jusqu'au dernier équipement ; plus large que le panneau, **Maj+molette** (ou la molette horizontale) le fait défiler de côté.
 ### Glisser un équipement sur un port
 Un équipement se **tire à la souris** sur un autre port Ethernet : le port visé s'allume (« Lâcher ici »), la carte suit la souris ; lâché ailleurs, elle revient ; **Échap** annule. Au lâcher, un dialogue propose :
 - **Changer l'adresse de l'équipement** : une adresse libre du réseau du port est proposée (elle se modifie) ; l'IHM le cherchera là - l'appareil doit l'avoir (elle se règle sur l'appareil lui-même). Ctrl+Z revient à l'ancienne ;
@@ -7469,7 +7471,7 @@ Le poste d'exploitation lit le vrai automate (Configuration › Communication). 
 == simulation-zoom | La barre de Simulation · IHM et le zoom de la vue
 : La barre de l'onglet Simulation · IHM pilote l'IHM (pas l'automate) : ses deux pastilles d'état, la vue en cours (la liste des vues, Précédente, Vue de démarrage), le zoom de la vue en cours, l'utilisateur connecté et les repères des lectures simulées.
 @depuis 1.10
-@mots Précédente, Vue de démarrage, Ajuster, 100 %, Zoom avant, Zoom arrière, Ctrl+molette, Utilisateur, Repères, Plein écran, F11, Échap
+@mots Précédente, Vue de démarrage, Ajuster, 100 %, Zoom avant, Zoom arrière, Ctrl+molette, Utilisateur, Repères, Plein écran, F11, Échap, Remplir l'écran, Garder les proportions, Taille réelle
 @lieux simulation
 @voir simulation-api-ihm, simulation, lectures-simulees, securite
 @capture PNG_1024_zoom_200.png | La vue à 200 % : elle dépasse la place, on la déplace en tirant le fond ; la barre dit « 200 % ».
@@ -7498,6 +7500,8 @@ Suivent Paramètres système, Page Simulation, Forcer..., Tout relâcher, Tout a
 ### Le plein écran
 Le bouton **Plein écran** de la barre (ou **F11** quand l'onglet Simulation · IHM est à l'écran) met la fenêtre de l'appli en plein écran et la **vue de l'IHM seule** dessus, ajustée : ni l'arbre, ni les onglets, ni les barres. Tout reste cliquable : les boutons de la vue, les saisies, les popups, Ctrl+molette.
 - Une **petite barre flottante** en haut garde le nom de la vue, l'état de l'IHM, le zoom (−, la valeur, +, Ajuster) et **Quitter le plein écran · Échap**. Elle s'efface après 3 secondes sans souris et revient quand la souris approche du haut de l'écran.
+@nouveau 1.12.24
+- **La vue sur l'écran** (1.12.24) : un écran n'a pas toujours les proportions de la vue (une vue 1280 × 800 sur un écran 16:9). Après Ajuster, la barre flottante propose : **Remplir l'écran** (au départ), la vue étirée jusqu'aux bords, une échelle en largeur, une en hauteur (la valeur dit « 150 × 135 % ») ; **Garder les proportions**, la vue entière, les bandes de côté à sa couleur de fond ; **Taille réelle (100 %)**, centrée, un pixel de la vue pour un pixel de l'écran. Le choix est retenu d'une séance à l'autre. Les clics restent justes dans les trois cas. Avant la 1.12.24, la vue gardait les proportions de la fenêtre de l'appli et laissait des bandes vides.
 - **Échap** ou **F11** en sort : la fenêtre redevient comme avant (déjà en plein écran par F11, elle le reste), le zoom d'avant revient.
 - Hors de l'onglet Simulation · IHM, F11 garde son sens habituel (le plein écran de la fenêtre ; dans Simulation › Débogage : Cycle suivant).
 - L'onglet Simulation · IHM **détaché dans une fenêtre à lui** : F11 (ou Plein écran) y met la vue seule et c'est **cette fenêtre** qui passe en plein écran ; la fenêtre principale garde son F11 à elle.
@@ -7632,6 +7636,7 @@ Le dialogue demande le **mot de passe de sortie** (outil **Mot de passe de sorti
 | Sortie par le coin | coché | Cinq touchers du coin haut droit en 3 s (écran tactile). |
 | Cacher le curseur | décoché | Un écran tactile : pas de flèche au milieu de la vue. |
 | Lancer le simulateur | coché | Sur le simulateur : l'automate simulé tourne dès le lancement. |
+| Mise à l'échelle | Remplir l'écran | 1.12.24 : quand l'écran n'a pas les proportions de la vue - **Remplir l'écran** (la vue étirée jusqu'aux bords, les textes gardent leur taille), **Garder les proportions** (la vue entière, les bandes à sa couleur de fond) ou **Taille réelle (100 %)** (centrée). Les écrans secondaires font de même. |
 ### Plusieurs écrans
 **Ajouter un écran** : le 2, le 3... (le numéro du moniteur dans l'ordre du système) et la **vue** qu'il montre - un synoptique général, les tendances, les alarmes. Chaque écran a sa fenêtre, en plein écran sur son moniteur ; un moniteur absent : une fenêtre ordinaire (l'onglet Écrans le dit). Un écran secondaire **montre** (dix images par seconde, la qualité des valeurs comprise) ; l'opérateur commande sur l'écran principal.
 ### Générer
