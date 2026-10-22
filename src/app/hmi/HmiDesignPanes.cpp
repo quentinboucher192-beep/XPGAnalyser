@@ -1,7 +1,10 @@
 #include "HmiDesignPanes.hpp"
 
 #include "HmiIcons.hpp"
+#include "HmiPainter.hpp"
+#include "HmiSimMarks.hpp"                 // 1.12.27 : fitText (l'apercu des styles)
 #include "../../hmi/HmiExpr.hpp"
+#include "../../hmi/HmiSymbols.hpp"
 #include "../../ui/widgets/Containers.hpp"
 
 #include <algorithm>
@@ -80,7 +83,85 @@ std::string trimmed(std::string_view s) {
 
 enum : int { SNew = 1, SDup, SDel, SFolder };
 
+// 1.12.27 : l'apercu d'un style - cinq objets poses sur 420 x 60.
+constexpr double kPreviewW = 420, kPreviewH = 60;
+
+std::string styleValue(const hmi::Style& s, std::string_view key) {
+    for (const auto& prop : s.props) if (prop.key == key) return prop.value;
+    return {};
+}
+
+// Le fond d'une vue du projet (la premiere qui n'est pas un symbole) : la ou le style servira.
+gfx::Color viewBackground(const hmi::Project& p) {
+    gfx::Color bg = gfx::Color::rgb(0x20242B);
+    for (const auto& v : p.views)
+        if (!hmi::isSymbolView(v)) {
+            (void)tryParseColor(v.background, bg);
+            break;
+        }
+    return bg;
+}
+
+class StylePreview final : public ui::Widget {
+public:
+    StylePreview(std::string id, hmi::DocumentPtr doc, std::function<Id()> selected)
+        : ui::Widget(std::move(id)), doc_(std::move(doc)), selected_(std::move(selected)) {}
+protected:
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto b = bounds();
+        const auto& c = ctx.theme.color;
+        const auto font = ctx.theme.font.smallUi;
+        ctx.r.fillRect(b, c.headerBg);
+        const hmi::Style* s = doc_->project.style(selected_());
+        const std::string head = s ? "Aper\xC3\xA7u : " + s->name : std::string("Aper\xC3\xA7u : choisis un style dans la liste");
+        ctx.r.drawText({b.x + 8, b.y + 5}, simmark::fitText(ctx.r, head, font, b.w - 16), font, c.textMuted);
+        const gfx::Rect well{b.x + 8, b.y + 24, std::max(0.f, b.w - 16), std::max(0.f, b.h - 30)};
+        ctx.r.fillRect(well, viewBackground(doc_->project));
+        ctx.r.strokeRect(well, c.border, 1);
+        if (!s || well.w < 20 || well.h < 20) return;
+        hmi::View v;
+        v.width = static_cast<int>(kPreviewW);
+        v.height = static_cast<int>(kPreviewH);
+        hmi::Layer layer;
+        layer.id = 1;
+        v.layers.push_back(layer);
+        const float z = std::min(1.25f, static_cast<float>(std::min((well.w - 12) / kPreviewW, (well.h - 8) / kPreviewH)));
+        const HmiViewport vp{static_cast<float>(well.x + (well.w - kPreviewW * z) / 2), static_cast<float>(well.y + (well.h - kPreviewH * z) / 2), z};
+        const HmiPropertySource src;
+        ctx.r.pushClip(well);
+        for (const auto& o : HmiStylesPane::previewObjects(*s)) paintHmiObject(ctx.r, v, o, vp, src, ctx.theme, {});
+        ctx.r.popClip();
+    }
+private:
+    hmi::DocumentPtr    doc_;
+    std::function<Id()> selected_;
+};
+
 } // namespace
+
+std::vector<hmi::Object> HmiStylesPane::previewObjects(const hmi::Style& s) {
+    struct Spec { hmi::Kind kind; double x, y, w, h; const char* value; };
+    static const Spec kSpecs[] = {
+        {hmi::Kind::Button, 0, 8, 132, 44, nullptr},
+        {hmi::Kind::Text, 142, 14, 112, 32, nullptr},
+        {hmi::Kind::Rectangle, 264, 8, 70, 44, nullptr},
+        {hmi::Kind::Indicator, 346, 14, 32, 32, "TRUE"},    // allume
+        {hmi::Kind::Indicator, 388, 14, 32, 32, "FALSE"},   // eteint
+    };
+    std::vector<hmi::Object> out;
+    Id id = 1;
+    for (const auto& sp : kSpecs) {
+        ++id;
+        auto o = hmi::makeObject(sp.kind, id, "apercu" + std::to_string(id), sp.x, sp.y, 1);
+        o.setNumber("w", sp.w);
+        o.setNumber("h", sp.h);
+        if (sp.kind == hmi::Kind::Text) o.set("text", "Texte 12,5");
+        hmi::design::applyStyle(o, s);
+        if (sp.value) o.set("value", sp.value);
+        out.push_back(std::move(o));
+    }
+    return out;
+}
 
 // =================================================================== styles ===
 HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
@@ -108,6 +189,21 @@ HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
     tools_->bindListKeys(*table_);
+    // 1.12.27 : chaque style a sa pastille dans la liste (remplissage, contour, texte).
+    table_->setIconPainter([this](gfx::IRenderer& r, int icon, const gfx::Rect& box, gfx::Color ink) {
+        const hmi::Style* s = doc_->project.style(static_cast<Id>(icon));
+        if (!s) return;
+        gfx::Color fill{0, 0, 0, 0}, stroke = ink.withAlpha(120), text{0, 0, 0, 0};
+        if (!tryParseColor(styleValue(*s, "fill"), fill)) (void)tryParseColor(styleValue(*s, "background"), fill);
+        (void)tryParseColor(styleValue(*s, "stroke"), stroke);
+        r.fillRoundedRect(box, fill.a ? fill : viewBackground(doc_->project), 3);
+        r.strokeRect(box, stroke, 1);
+        if (tryParseColor(styleValue(*s, "textColor"), text))
+            r.fillRect({box.x + 3, box.y + box.h / 2 - 1, std::max(0.f, box.w - 6), 2}, text);
+        gfx::Color on{};
+        if (tryParseColor(styleValue(*s, "colorOn"), on)) r.fillRoundedRect({box.x + box.w - 6, box.y + 2, 4, 4}, on, 2);
+    });
+    preview_ = &addChild(std::make_unique<StylePreview>(base + ".preview", doc_, [this] { return selectedStyle(); }));
     grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::make_unique<ui::PropertyGrid>(base + ".grid")));
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
     // Lot 21 : les styles ranges en dossiers ; glisser une ou plusieurs lignes.
@@ -178,9 +274,11 @@ void HmiStylesPane::refresh() {
                           for (const auto& prop : s->props) values += (values.empty() ? "" : ", ") + prop.key + " " + prop.value;
                           return {s->name, std::to_string(hmi::design::styleUsers(p, s->name)), values, s->description};
                       },
-                      [](Id, std::size_t col) {
+                      [](Id id, std::size_t col) {
                           ui::CellStyle cs;
-                          if (col == 0) cs.icon = ui::Icon::Settings;
+                          // 1.12.27 : la pastille du style (son identifiant ; la table la fait dessiner)
+                          if (col == 0) cs.customIcon = id > 0 && id < 0x7FFFFFFFu ? static_cast<int>(id) : 0;
+                          if (col == 0 && cs.customIcon == 0) cs.icon = ui::Icon::Settings;
                           return cs;
                       });
     if (message_.empty())
@@ -191,6 +289,7 @@ void HmiStylesPane::refresh() {
 }
 
 void HmiStylesPane::rebuildProperties() {
+    if (preview_) preview_->invalidate();   // 1.12.27 : l'apercu suit le style choisi
     const Id sel = selectedStyle();
     const hmi::Style* s = sel != kNoId ? styleById(doc_->project, sel) : nullptr;
     if (!s) {
@@ -330,7 +429,10 @@ void HmiStylesPane::onLayout() {
     // Lot API 8 : la recherche sous la barre (au-dessus de la table), comme celle des alarmes.
     search_->setBounds({b.x + 8, b.y + 42, std::max(0.f, std::min(560.f, b.w - gridW - 20)), 28});
     table_->setBounds({b.x, b.y + 76, b.w - gridW - 4, std::max(0.f, b.h - 100)});
-    grid_->setBounds({b.x + b.w - gridW, b.y + 38, gridW, std::max(0.f, b.h - 62)});
+    // 1.12.27 : l'apercu du style au-dessus de sa fiche
+    const float previewH = std::min(116.f, std::max(0.f, (b.h - 62) * 0.4f));
+    preview_->setBounds({b.x + b.w - gridW, b.y + 38, gridW, previewH});
+    grid_->setBounds({b.x + b.w - gridW, b.y + 42 + previewH, gridW, std::max(0.f, b.h - 66 - previewH)});
 }
 
 // ===================================================== rechercher / remplacer ===

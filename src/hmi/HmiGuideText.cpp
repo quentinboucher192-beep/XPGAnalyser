@@ -2760,6 +2760,11 @@ const std::vector<Topic>& topics() {
                          "citent le style** - sauf ceux qui avaient chang\xC3\xA9 cette valeur "
                          "eux-m\xC3\xAAmes : leur choix est gard\xC3\xA9. Renomm\xC3\xA9, le style reste "
                          "cit\xC3\xA9 sous son nouveau nom. Chaque changement est une commande (Ctrl+Z).", {}},
+             {K::Heading, "Voir un style", {}},
+             {K::Paragraph, "Au-dessus de la fiche, l'**aper\xC3\xA7u** montre le style choisi sur un bouton, un texte, "
+                         "un rectangle et un voyant (allum\xC3\xA9, \xC3\xA9teint), sur le fond d'une vue du projet : "
+                         "chaque changement s'y voit tout de suite. Dans la liste, chaque style a sa pastille "
+                         "(remplissage, contour, couleur du texte).", {}},
              {K::Heading, "Supprimer un style", {}},
              {K::Paragraph, "Les objets gardent leurs valeurs et ne le citent plus. G\xC3\xA9n\xC3\xA9rer "
                          "signale un objet qui cite un style disparu.", {}},

@@ -34911,10 +34911,90 @@ void touchesListes11227() {
     }
 }
 
+// 1.12.27 : l'apercu du style choisi (un bouton, un texte, un rectangle, un voyant allume et eteint) et sa pastille.
+void apercuStyles11227() {
+    std::printf("1.12.27 : l'aper\xC3\xA7u des styles\n");
+    struct Colors final : gfx::IRenderer {   // retient les couleurs posees et les textes
+        std::vector<gfx::Color> fills;
+        std::vector<std::string> texts;
+        void beginFrame(gfx::Color) override {}
+        void endFrame() override {}
+        void pushClip(const gfx::Rect&) override {}
+        void popClip() override {}
+        void fillRect(const gfx::Rect&, gfx::Color c) override { fills.push_back(c); }
+        void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+        void fillRoundedRect(const gfx::Rect&, gfx::Color c, float) override { fills.push_back(c); }
+        void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+        void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color) override { texts.emplace_back(t); }
+        void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+        void fillTriangles(const gfx::Vertex* v, std::size_t n) override {
+            for (std::size_t i = 0; i < n; ++i) fills.push_back(v[i].color);
+        }
+        gfx::TextMetrics measure(std::string_view t, gfx::FontId) const override { return {8.f * static_cast<float>(t.size()), 16.f, 12.f, 4.f}; }
+        float lineHeight(gfx::FontId) const override { return 16.f; }
+        gfx::Size surfaceSize() const override { return {1600.f, 900.f}; }
+        float dpiScale() const override { return 1.f; }
+        std::size_t fitCharacters(std::string_view t, gfx::FontId, float w) const override {
+            return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, w) / 8.f));
+        }
+        bool filled(gfx::Color c) const {
+            for (const auto& f : fills) if (f.r == c.r && f.g == c.g && f.b == c.b && f.a > 0) return true;
+            return false;
+        }
+        bool wrote(std::string_view part) const {
+            for (const auto& t : texts) if (t.find(part) != std::string::npos) return true;
+            return false;
+        }
+    };
+    Bench b;
+    app::HmiStylesPane styles("sty", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+    styles.setBounds({0, 0, 1400, 700});
+    styles.layout();
+    const Id sid = styles.addStyle("Alerte");
+    check(styles.setStyleField(sid, "fill", "#C0392B") && styles.setStyleField(sid, "textColor", "#FFEE00")
+              && styles.setStyleField(sid, "colorOn", "#FF7700"),
+          "1.12.27 : un style Alerte (rouge, texte jaune, voyant orange)");
+    styles.selectStyle(sid);
+    const auto* st = b.doc->project.style(sid);
+    if (!st) { check(false, "le style Alerte"); return; }
+    const auto objs = app::HmiStylesPane::previewObjects(*st);
+    check(objs.size() == 5 && objs[0].kind == Kind::Button && objs[0].text("fill") == "#C0392B" && objs[0].text("textColor") == "#FFEE00"
+              && objs[0].text("namedStyle") == "Alerte",
+          "l'aper\xC3\xA7u : un bouton fait par le style (remplissage, texte ; il le cite)");
+    check(objs.size() == 5 && objs[1].kind == Kind::Text && objs[1].text("fill") == "#C0392B" && objs[2].kind == Kind::Rectangle
+              && objs[2].text("fill") == "#C0392B",
+          "un texte et un rectangle, au remplissage du style");
+    check(objs.size() == 5 && objs[3].kind == Kind::Indicator && objs[3].text("colorOn") == "#FF7700" && objs[3].text("value") == "TRUE"
+              && objs[4].text("value") == "FALSE",
+          "un voyant allum\xC3\xA9 (la couleur du style) et un \xC3\xA9teint");
+    const auto pb = styles.preview().bounds(), gb = styles.properties().bounds();
+    check(pb.h > 60 && pb.y + pb.h <= gb.y && std::abs(pb.x - gb.x) < 1.f && std::abs(pb.w - gb.w) < 1.f,
+          "l'aper\xC3\xA7u : au-dessus de la fiche, de sa largeur");
+    Colors rec;
+    const auto theme = ui::Theme::dark();
+    std::vector<ui::Widget*> overlays;
+    const ui::PaintContext ctx{rec, theme, {0, 0, 1400, 700}, 0.0, &overlays};
+    styles.preview().render(ctx);
+    check(rec.filled(gfx::Color::rgb(0xC0392B)) && rec.filled(gfx::Color::rgb(0xFF7700)),
+          "dessin\xC3\xA9 par le painter : le rouge du style, l'orange du voyant allum\xC3\xA9");
+    check(rec.wrote("Alerte"), "l'en-t\xC3\xAAte de l'aper\xC3\xA7u : le nom du style");
+    const auto m = styles.table().model();
+    bool swatch = false;
+    for (std::size_t r = 0; m && r < m->rowCount(); ++r)
+        swatch = swatch || (m->cellText(r, 0) == "Alerte" && m->cellStyle(r, 0).customIcon == static_cast<int>(sid));
+    check(swatch, "la liste : la pastille du style (sa premi\xC3\xA8re case)");
+    styles.table().selectModelRows({});
+    rec.texts.clear();
+    rec.fills.clear();
+    styles.preview().render(ctx);
+    check(rec.wrote("choisis un style") && !rec.filled(gfx::Color::rgb(0xFF7700)), "sans style choisi : l'aper\xC3\xA7u invite \xC3\xA0 en choisir un");
+}
+
 int main(int argc, char** argv) {
     // 1.12.27 : HMI_TEST_11227=1 - Suppr et Ctrl+D dans les listes, seuls.
     if (const char* only = std::getenv("HMI_TEST_11227"); only && *only == '1') {
         touchesListes11227();
+        apercuStyles11227();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -35273,6 +35353,7 @@ int main(int argc, char** argv) {
     v1219_refus_sous_la_case();             // 1.12.19 : un refus se dit sous la case
     v1219_inspecteur();                     // 1.12.19 : nombres, durees, formules de l'inspecteur
     touchesListes11227();                   // 1.12.27 : Suppr et Ctrl+D dans les listes
+    apercuStyles11227();                    // 1.12.27 : l'apercu des styles
     v1219_cellules();                       // 1.12.19 (U3) : les cellules de tableau sous la meme regle
     v1219_modales();                        // 1.12.19 (U4) : les fenetres sous la meme regle
     v110_aide_saisie();                     // 1.10 (chantier K2) : l'aide a la saisie des scripts (S1, S2, enumerations)

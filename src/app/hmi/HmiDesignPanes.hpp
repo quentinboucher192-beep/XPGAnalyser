@@ -58,6 +58,12 @@ public:
     // dossier) ; "2 sur 9", retenue d'une seance a l'autre.
     [[nodiscard]] ui::SearchField&  search() noexcept { return *search_; }
     [[nodiscard]] std::size_t shownStyles() const noexcept { return shown_; }
+    // 1.12.27 : L'APERCU du style choisi, au-dessus de sa fiche - un bouton, un texte, un
+    // rectangle, un voyant allume et eteint, faits par le style (applyStyle) et dessines
+    // par le vrai painter, sur le fond d'une vue du projet. Dans la liste, chaque style a
+    // sa pastille (remplissage, contour, couleur du texte).
+    [[nodiscard]] static std::vector<hmi::Object> previewObjects(const hmi::Style&);
+    [[nodiscard]] ui::Widget& preview() noexcept { return *preview_; }
 protected:
     void onLayout() override;
 private:
@@ -65,6 +71,7 @@ private:
     void say(std::string text, bool error = false);
     hmi::DocumentPtr      doc_;
     Apply                 apply_;
+    ui::Widget*           preview_{nullptr};    // 1.12.27
     HmiToolStrip*         tools_{nullptr};
     ui::SearchField*      search_{nullptr};     // lot API 8
     std::size_t           shown_{0};            // lot API 8 : les styles montres
