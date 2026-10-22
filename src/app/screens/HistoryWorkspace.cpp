@@ -394,6 +394,11 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
         case Key::S:
             app_.saveFromKeyboard();
             return true;
+        // 1.12.27 : Ctrl+Maj+N - une autre fenetre (un deuxieme projet a cote, pour copier de l'un a l'autre).
+        case Key::N:
+            if (!k.mods.shift) return false;
+            app_.openNewWindow({});
+            return true;
         // 1.11.14 : Ctrl+J - le panneau du bas (Sorties, Console, Diagnostics).
         case Key::J:
             if (k.mods.shift || !core::hasIhm()) return false;   // 1.12.0 : le panneau du build de l'IHM

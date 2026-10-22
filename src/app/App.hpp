@@ -205,6 +205,10 @@ public:
     // Le nombre de pas entre l'etat enregistre et l'etat courant.
     [[nodiscard]] std::size_t pendingChanges() const noexcept;
     void openProjectFolder(std::string folder);      // prompts for a password if locked
+    // 1.12.27 : apres la question « deja ouvert dans une autre fenetre » (ou sans elle).
+    void openProjectFolderChecked(std::string folder);
+    // 1.12.27 : une autre fenetre d'IHM Studio (vide, ou avec ce projet) ; l'echec se dit.
+    void openNewWindow(const std::string& projet);
     // 1.11.2 (UNI, decision 204) : OUVRIR UN AUTRE PROJET REMPLACE CELUI QUI EST EN MEMOIRE.
     // S'il a des modifications non enregistrees : la question de l'accueil d'abord (la meme
     // que StartupScreen::confirmReplace : "Les enregistrer d'abord" / "Les abandonner" ;
@@ -385,6 +389,7 @@ private:
     std::vector<std::string>                   recent_;
     std::vector<std::string>                   sources_;   // files making up the project
     std::string                                projectFolder_;
+    std::string                                announcedFolder_;   // 1.12.27 : le projet annonce aux autres fenetres
     project::Manifest                          manifest_;
     project::MasterKey                         masterKey_;
     bool                                       taskbarPinPending_ = false;

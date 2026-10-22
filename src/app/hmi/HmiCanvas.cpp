@@ -1,4 +1,5 @@
 #include "HmiCanvas.hpp"
+#include "HmiPartage.hpp"   // 1.12.27 : copier dans une fenetre, coller dans l'autre
 #include "../TablePaste.hpp"
 #include "../../hmi/HmiNavigation.hpp"
 #include "HmiIcons.hpp"
@@ -47,6 +48,9 @@ struct Clipboard {
     // des objets, pour Excel). S'il y est encore, Ctrl+V colle les objets ; s'il
     // a change (une copie dans Excel), Ctrl+V colle le texte : des variables.
     std::string              systemText;
+    // 1.12.27 : le document de la copie. Un autre (un autre projet ouvert dans cette
+    // fenetre depuis) : la copie publiee, avec ce dont les objets ont besoin.
+    const void*              fromDoc{nullptr};
 };
 Clipboard& clipboard() {
     static Clipboard c;
@@ -427,7 +431,10 @@ void HmiCanvas::copySelection() {
               + num(o.number("w")) + "\t" + num(o.number("h")) + "\t" + value + "\r\n";
     }
     c.systemText = list;
+    c.fromDoc = doc_.get();
     ui::setClipboardText(list);
+    // 1.12.27 : publiee pour les autres fenetres (et les autres projets de celle-ci).
+    if (doc_) (void)partage::publier(doc_->project, viewId_, c.objects, list);
 }
 
 void HmiCanvas::cutSelection() {
@@ -439,6 +446,11 @@ void HmiCanvas::cutSelection() {
 
 void HmiCanvas::paste() {
     auto& c = clipboard();
+    // 1.12.27 : la copie d'une autre fenetre (ou d'un autre projet de celle-ci) : ses
+    // objets, et ce dont ils ont besoin (symboles, popups, images, styles, variables).
+    if (const std::string sys = ui::clipboardText();
+        !sys.empty() && (sys != c.systemText || c.fromDoc != doc_.get()) && pasteShared(sys))
+        return;
     // Lot 20 : le presse-papiers du systeme a change depuis la derniere copie
     // d'objets (une colonne copiee dans Excel) : ce sont des variables.
     if (const std::string sys = ui::clipboardText(); !sys.empty() && sys != c.systemText) {
@@ -669,8 +681,47 @@ void HmiCanvas::cancelPlacement() {
     }
 }
 
+bool HmiCanvas::pasteShared(const std::string& text, std::optional<hmi::edit::Pt> at) {
+    if (!doc_ || !view()) return false;
+    const auto copie = partage::lire(text);
+    if (!copie) return false;
+    double dx = 0, dy = 0;
+    if (at) {
+        // Le coin haut-gauche de ce qui est colle vient au point.
+        if (const auto box = partage::etendue(*copie)) {
+            dx = at->x - box->x;
+            dy = at->y - box->y;
+        }
+    } else {
+        // A la meme place la premiere fois (une autre vue), puis decale a chaque fois.
+        static std::string lastKey;
+        static int again = 0;
+        const std::string key = copie->cle + "@" + std::to_string(viewId_);
+        again = key == lastKey ? again + 1 : 0;
+        lastKey = key;
+        dx = dy = 20.0 * again;
+    }
+    partage::Resultat r;
+    const Id into = viewId_, group = insideGroup_;
+    auto cmd = hmi::changeProject(doc_, "Coller depuis l'autre fen\xC3\xAAtre",
+                                  [&](hmi::Project& p) { r = partage::coller(p, into, *copie, dx, dy, group); });
+    if (!cmd) return false;
+    apply_(std::move(cmd));
+    documentChanged();
+    setSelection(r.poses);
+    status->emit(partage::message(*copie, r));
+    return true;
+}
+
 void HmiCanvas::pasteAt(gfx::Point screen) {
     auto& c = clipboard();
+    // 1.12.27 : la copie d'une autre fenetre (ou d'un autre projet), au point du clic.
+    if (const std::string sys = ui::clipboardText(); !sys.empty() && (sys != c.systemText || c.fromDoc != doc_.get())) {
+        const auto* v = view();
+        Pt at = toView(screen);
+        if (v && v->grid.snapGrid) { at.x = hmi::edit::snapToGrid(at.x, v->grid.step); at.y = hmi::edit::snapToGrid(at.y, v->grid.step); }
+        if (pasteShared(sys, at)) return;
+    }
     if (c.objects.empty()) { paste(); return; }   // des noms de variables (Excel) : la colonne habituelle
     // Le coin haut-gauche de ce qui est colle (les objets du haut) vient au point du clic.
     double minX = 0, minY = 0;

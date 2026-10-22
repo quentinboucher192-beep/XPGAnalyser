@@ -43,6 +43,10 @@ const std::vector<Shortcut> kTable = {
     {Context::General, "Ctrl+N",
      "Nouveau projet",
      "", "project.new"},
+    // 1.12.27 : une autre fenetre (un deuxieme projet a cote, pour copier de l'un a l'autre).
+    {Context::General, "Ctrl+Maj+N",
+     "Nouvelle fen\xC3\xAAtre (un autre projet \xC3\xA0 c\xC3\xB4t\xC3\xA9, pour copier de l'un \xC3\xA0 l'autre)",
+     "", "app.newWindow"},
     {Context::General, "Ctrl+Z",
      "Annuler (dans un champ en cours de saisie : sa saisie d'abord)",
      "", "edit.undo"},

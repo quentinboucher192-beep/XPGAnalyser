@@ -461,6 +461,9 @@ core::Status StartupScreen::buildUi() {
                 case 3: renameSelected(); break;
                 case 4: forgetSelected(); break;
                 case 5: supprimerProjet(); break;
+                case 6:                                // 1.12.27 : Ouvrir dans une nouvelle fenetre
+                    if (const auto* e = page_->selected(); e && !e->missing) app_.openNewWindow(e->path);
+                    break;
                 default: pageMenuChosen(id); break;   // 1.12.27 : le menu de la page
             }
         });
@@ -598,6 +601,11 @@ bool StartupScreen::handleKey(const ui::KeyDown& k, bool beforeWidgets) {
     }
     if (ctrlOnly && k.key == Key::O) {
         if (!k.repeat) openFileDialog();
+        return true;
+    }
+    // 1.12.27 : Ctrl+Maj+N - une autre fenetre (un deuxieme projet a cote).
+    if (k.mods.ctrl && k.mods.shift && !k.mods.alt && !k.mods.super && k.key == Key::N) {
+        if (!k.repeat) app_.openNewWindow({});
         return true;
     }
     if (ui::isContextMenuKey(k)) {                     // 1.12.18 : Maj+F10, la touche Menu - le menu de la carte choisie
@@ -1204,6 +1212,8 @@ void StartupScreen::showCardMenu(gfx::Point at) {
     items.push_back(std::move(head));
     const std::string gone = e->missing ? std::string("introuvable sur le disque") : std::string{};
     add(1, "Ouvrir", ui::Icon::Open, "Entr\xC3\xA9" "e", gone);
+    // 1.12.27 : a cote du projet en cours, pour copier de l'un a l'autre.
+    add(6, "Ouvrir dans une nouvelle fen\xC3\xAAtre", ui::Icon::Window, {}, gone, "\xC3\xA0 c\xC3\xB4t\xC3\xA9 de celui-ci");
     add(2, "Ouvrir le dossier", ui::Icon::FolderOpen, {}, gone);
     add(3, "Renommer\xE2\x80\xA6", ui::Icon::Rename, "F2",
         !e->isFolder ? std::string("un export garde le nom de son fichier") : !gone.empty() ? gone
@@ -1223,7 +1233,7 @@ void StartupScreen::showCardMenu(gfx::Point at) {
 namespace {
 enum : int {
     kPageButton = 100, kPageNew, kPageOpen, kPageProjects, kPageSearch, kPageClear, kPageTutorial, kPageSettings,
-    kPageFolders, kPageHelp,
+    kPageFolders, kPageHelp, kPageNewWindow,
     kPageFilter = 200,   // + le filtre
     kPageSort = 220,     // + le tri
     kPageTheme = 300,    // + le rang du theme
@@ -1279,6 +1289,7 @@ void StartupScreen::showPageMenu(gfx::Point at) {
     if (!menuButton_) heading("Menu principal", core::productName());
     add(kPageNew, "Nouveau projet\xE2\x80\xA6", ui::Icon::Plus, "Ctrl+N");
     add(kPageOpen, "Ouvrir un projet\xE2\x80\xA6", ui::Icon::Open, "Ctrl+O");
+    add(kPageNewWindow, "Nouvelle fen\xC3\xAAtre", ui::Icon::Window, "Ctrl+Maj+N");   // un autre projet a cote
     add(kPageProjects, "Ouvrir le dossier des projets", ui::Icon::FolderOpen);
     rule();
     Item show;
@@ -1368,6 +1379,7 @@ void StartupScreen::pageMenuChosen(int id) {
             if (claimDialog()) showFoldersDialog(app_);
             break;
         case kPageHelp: triggerAction("help.open"); break;
+        case kPageNewWindow: app_.openNewWindow({}); break;
         default: break;
     }
 }

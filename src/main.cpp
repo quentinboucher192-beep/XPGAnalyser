@@ -228,6 +228,8 @@ int main(int argc, char** argv) {
         // 1.11.2 (UNI) : l'instance unique meme dans une session (le banc wine) ; lu par
         // core::instance::exempted.
         else if (a == "--instance-unique") {}
+        // 1.12.27 : une autre fenetre (Projet > Nouvelle fenetre) - lu par core::instance::exempted.
+        else if (a == "--nouvelle-fenetre") {}
         // Rejouer une session (voir app/ScriptRunner.hpp) : c'est ainsi que
         // sont faites les captures des livraisons.
         else if (a == "--script" && i + 1 < argc)   options.script = argv[++i];

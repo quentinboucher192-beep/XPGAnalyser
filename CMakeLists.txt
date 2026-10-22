@@ -637,6 +637,7 @@ if(XPG_BUILD_TESTS)
                    src/app/ViewModels.cpp src/app/Brand.cpp src/app/Capture.cpp src/app/Recovery.cpp
                    src/app/HistoryPanel.cpp src/app/TablePaste.cpp src/app/GoToPanel.cpp
                    src/app/Dossiers.cpp    # 1.8.0 : Capture.cpp demande le dossier des captures
+                   src/app/Fenetres.cpp    # 1.12.27 : le presse-papiers partage des fenetres (HmiPartage.cpp)
                    src/app/Disposition.cpp src/app/DispositionDialog.cpp
                    src/app/DispositionPreview.cpp)   # 1.12.3 : Projet > Disposition (1.12.4 : son apercu)
     # 1.11 (I111, decision 16) : l'editeur et ses essais appellent le centre

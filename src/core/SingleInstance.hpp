@@ -17,6 +17,8 @@
 //  verifications de tutoriels, les essais caches) ni avec XPG_INSTANCES_MULTIPLES=1 :
 //  les essais et les series de R111 lancent plusieurs applis a la fois.
 //  --instance-unique l'impose quand meme (la session du banc wine).
+//  1.12.27 : --nouvelle-fenetre non plus - une autre fenetre demandee (Projet >
+//  Nouvelle fenetre) ; relancer l'appli ramene toujours la premiere.
 //
 //  Sans SDL, sans ecran : hmi_test l'essaie (Linux : le second verrou est refuse,
 //  la ligne de commande arrive).

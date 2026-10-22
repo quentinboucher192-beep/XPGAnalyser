@@ -106,6 +106,7 @@ bool exempted(const std::vector<std::string>& args, const char* multiples, std::
         "--verifier-dossier", "--tutoriel-texte", "--compter-tutoriels", "--bilan",
         "--essai-plantage", "--essai-blocage", "--sans-historique",          // les essais (CR)
         "--cli", "--version",                                                // sans fenetre
+        "--nouvelle-fenetre",                                                // 1.12.27 : une autre fenetre, voulue
     };
     for (const auto& a : args)
         for (const char* t : kTests)

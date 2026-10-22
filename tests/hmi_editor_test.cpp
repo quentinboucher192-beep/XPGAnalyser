@@ -18142,11 +18142,14 @@ void centreAide111() {
     // 1.12.3 : + Ctrl+Maj+K (Projet > Disposition...). 1.12.16 : + Ctrl+I (Choisir une fonction...).
     // 1.12.18 : + Maj+F10 et les lettres d'un menu (General), Ctrl+D / Ctrl+Maj+D, Ctrl+G / Ctrl+Maj+G,
     // Ctrl+Alt+C / Ctrl+Alt+V (l'editeur de vues).
-    check(hk::all().size() == 102 && hk::ofContext(hk::Context::Scripts).size() == 37,
+    // 1.12.27 : + Ctrl+Maj+N (Nouvelle fenetre).
+    check(hk::all().size() == 103 && hk::ofContext(hk::Context::Scripts).size() == 37,
           "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17), "
-          "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3), Ctrl+I (1.12.16), les 5 du clic droit et Ctrl+Maj+T (1.12.18)");
-    check(hk::ofContext(hk::Context::General).size() == 29 && hk::ofContext(hk::Context::Help).size() == 7,
-          "raccourcis : General 29 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu, Ctrl+Maj+T), Aide 7");
+          "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3), Ctrl+I (1.12.16), les 5 du clic droit et Ctrl+Maj+T (1.12.18), "
+          "Ctrl+Maj+N (1.12.27)");
+    check(hk::ofContext(hk::Context::General).size() == 30 && hk::ofContext(hk::Context::Help).size() == 7,
+          "raccourcis : General 30 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu, Ctrl+Maj+T ; "
+          "1.12.27 : Ctrl+Maj+N), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,
     // dans l'ecriture du registre (Alt+Left, Shift+F5). Le registre lui-meme est lu juste apres.
     const std::pair<const char*, const char*> attendu[] = {
@@ -28311,6 +28314,13 @@ void apiVue1112_dupliquer(const std::string& xpg) {
 // 1.11.2 (API-V) : le cadenas d'une variable en lecture seule dit pourquoi ; une constante de
 // l'automate dit qu'un script ne peut pas l'ecrire (avant : la seule raison du plan).
 #include "../src/hmi/HmiApiVars.hpp"
+#include "../src/app/Fenetres.hpp"          // 1.12.27 : plusieurs fenetres
+#include "../src/app/hmi/HmiPartage.hpp"    // 1.12.27 : copier dans une fenetre, coller dans l'autre
+#include <filesystem>
+#include <fstream>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 void apiVue1112_cadenas() {
     std::printf("1.11.2 (API-V) : le cadenas dit pourquoi une variable est en lecture seule\n");
     using V = app::HmiApiVarsView;
@@ -35007,6 +35017,147 @@ void pourquoiSimulation11227() {
     check(!pane.explainObject(v.id, 987654), "un objet inconnu : refuse");
 }
 
+// 1.12.27 : PLUSIEURS FENETRES. La presence d'un projet (le meme projet ouvert ailleurs
+// se dit), et la copie publiee : copier dans un projet, coller dans un autre - les
+// objets, et ce qui manque (le symbole, la variable IHM) ; ce que le projet a deja (le
+// style de meme nom) reste le sien ; un seul Ctrl+Z.
+void fenetres11227() {
+    std::printf("1.12.27 : plusieurs fenetres (presence, copier dans l'une, coller dans l'autre)\n");
+    namespace fe = app::fenetres;
+    namespace pa = app::partage;
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const fs::path dir = fs::temp_directory_path(ec) / ("xpg-fenetres-essai-" + std::to_string(fe::processusCourant()));
+    fs::remove_all(dir, ec);
+    fe::poserDossier(dir);
+    const auto fichiers = [&] {
+        std::vector<fs::path> out;
+        for (const auto& e : fs::directory_iterator(dir, ec))
+            if (e.path().filename().string().rfind("projet-", 0) == 0) out.push_back(e.path());
+        return out;
+    };
+    // ---- la presence
+    check(fe::processusVivant(fe::processusCourant()) && !fe::processusVivant(0), "1.12.27 : ce processus vit ; le 0 n'en est pas un");
+    fe::annoncer("/srv/Projets/Tunnel/");
+    fe::annoncer("/srv/Projets/Tunnel");
+    check(fichiers().size() == 1, "1.12.27 : un fichier par projet (le / final ne compte pas)");
+    check(!fe::autreFenetre("/srv/Projets/Tunnel"), "1.12.27 : ouvert par cette fenetre-ci : pas d'autre fenetre");
+    const auto ecrire = [&](long pid) {
+        const auto f = fichiers();
+        if (f.empty()) return;
+        std::ofstream(f.front(), std::ios::binary | std::ios::trunc) << "pid " << pid << "\ndepuis 09:41\nprojet /srv/Projets/Tunnel\n";
+    };
+#ifndef _WIN32
+    ecrire(static_cast<long>(getppid()));
+    const auto autre = fe::autreFenetre("/srv/Projets/Tunnel");
+    check(autre && autre->pid == static_cast<long>(getppid()) && autre->depuis == "09:41",
+          "1.12.27 : ouvert par une autre fenetre vivante : son processus et depuis quand");
+    fe::retirer("/srv/Projets/Tunnel");
+    check(fichiers().size() == 1, "1.12.27 : fermer ici ne retire pas l'annonce d'une autre fenetre");
+#endif
+    ecrire(2147480000L);
+    check(!fe::autreFenetre("/srv/Projets/Tunnel") && fichiers().empty(),
+          "1.12.27 : l'annonce d'une fenetre disparue (un plantage) ne compte pas, et part");
+    fe::annoncer("/srv/Projets/Tunnel");
+    fe::retirer("/srv/Projets/Tunnel");
+    check(fichiers().empty(), "1.12.27 : fermer le projet retire son annonce");
+
+    // ---- copier dans le projet A, coller dans le projet B
+    Bench a, b;
+    installerPressePapiers();
+    a.doc->project.config.name = "Projet_A";
+    b.doc->project.config.name = "Projet_B";
+    {
+        auto& p = a.doc->project;
+        View sym = makeView(p, "Pompe");
+        sym.role = std::string(hmi::kSymbolRole);
+        sym.width = 80;
+        sym.height = 80;
+        const Id symId = sym.id;
+        p.views.push_back(sym);
+        (void)hmi::edit::add(p, *p.view(symId), Kind::Rectangle, 10, 10);
+        Variable niveau;
+        niveau.id = p.allocate();
+        niveau.name = "Niveau";
+        niveau.type = "REAL";
+        p.programs.variables.push_back(niveau);
+        Style alarme;
+        alarme.id = p.allocate();
+        alarme.name = "Alarme";
+        alarme.props = {{"fill", "#E5534B"}};
+        p.styles.push_back(alarme);
+    }
+    {
+        Style alarme;
+        alarme.id = b.doc->project.allocate();
+        alarme.name = "Alarme";
+        alarme.props = {{"fill", "#2ECC71"}};
+        b.doc->project.styles.push_back(alarme);
+    }
+    const Id inst = a.place(Kind::SymbolInstance, 100, 100);
+    const Id rect = a.place(Kind::Rectangle, 300, 100);
+    const Id disp = a.place(Kind::NumericDisplay, 500, 100);
+    check(inst != kNoId && rect != kNoId && disp != kNoId, "1.12.27 : trois objets dans la vue du projet A");
+    a.v().object(inst)->set("symbol", "Pompe");
+    a.v().object(rect)->set("namedStyle", "Alarme");
+    a.v().object(disp)->setExpr("value", "Niveau");
+    const std::string nomRect = a.v().object(rect)->name;
+    a.editor->canvas().setSelection({inst, rect, disp});
+    a.editor->canvas().copySelection();
+    const std::string texte = essaiPressePapiers();
+    check(fs::exists(pa::chemin()), "1.12.27 : la copie est publiee pour les autres fenetres");
+    const auto copie = pa::lire(texte);
+    check(copie && copie->projet == "Projet_A" && copie->vue == "Vue_Test" && pa::objetsDe(*copie) == 3
+              && copie->pid == fe::processusCourant(),
+          "1.12.27 : la copie publiee se relit (le projet, la vue, la fenetre, 3 objets)");
+    check(copie && copie->paquet.content.viewByName("Pompe") && copie->paquet.content.variable("Niveau"),
+          "1.12.27 : elle emporte le symbole de l'instance et la variable IHM lue");
+    check(!pa::lire(texte + "\nAutre\t1") && pa::lire(texte + "\r\n"),
+          "1.12.27 : un autre texte dans le presse-papiers : plus cette copie (les fins de ligne ne comptent pas)");
+    // Dans l'autre fenetre : le presse-papiers du systeme a le meme texte (sans ses \r).
+    std::string sansR;
+    for (char c : texte) if (c != '\r') sansR += c;
+    essaiPressePapiers() = sansR;
+    std::string dit;
+    core::ConnectionScope ecoute;
+    ecoute += b.editor->canvas().status->connect([&](const std::string& m) { dit = m; });
+    const std::size_t pas = b.stack.done().size();
+    b.editor->canvas().paste();
+    const auto& pb = b.doc->project;
+    check(b.v().objects.size() == 3 && b.stack.done().size() == pas + 1, "1.12.27 : Ctrl+V dans l'autre projet : les 3 objets, un seul pas");
+    const auto* symB = pb.viewByName("Pompe");
+    check(symB && hmi::isSymbolView(*symB) && !symB->objects.empty(), "1.12.27 : le symbole manquant est ajoute (avec son dessin)");
+    check(pb.variable("Niveau") != nullptr, "1.12.27 : la variable IHM manquante est creee");
+    check(pb.styles.size() == 1 && !pb.styles.front().props.empty() && pb.styles.front().props.front().value == "#2ECC71",
+          "1.12.27 : le style de meme nom : celui du projet est garde");
+    check(!pb.viewByName("__Copie_entre_fenetres__"), "1.12.27 : la vue de passage ne reste pas");
+    bool garde = false, instanceOk = false;
+    for (const auto& o : b.v().objects) {
+        if (o.name == nomRect && o.text("namedStyle") == "Alarme" && std::abs(o.number("x") - a.v().object(rect)->number("x")) < 0.5) garde = true;
+        if (o.kind == Kind::SymbolInstance && o.text("symbol") == "Pompe") instanceOk = true;
+    }
+    check(garde && instanceOk, "1.12.27 : les noms libres sont gardes, a la meme place ; l'instance cite le symbole ajoute");
+    check(b.editor->canvas().selection().size() == 3, "1.12.27 : les objets colles sont choisis");
+    check(dit.find("depuis l'autre fen\xC3\xAAtre") != std::string::npos && dit.find("Projet_A") != std::string::npos
+              && dit.find("symbole Pompe") != std::string::npos && dit.find("style Alarme") != std::string::npos,
+          "1.12.27 : la barre d'etat dit d'ou, ce qui est ajoute et ce qui est garde : " + dit);
+    // Une deuxieme fois : decale, et rien de plus a ajouter.
+    b.editor->canvas().paste();
+    check(b.v().objects.size() == 6 && pb.styles.size() == 1, "1.12.27 : recoller : 3 objets de plus, decales, rien d'ajoute en double");
+    (void)b.stack.undo();
+    (void)b.stack.undo();
+    check(b.v().objects.empty() && !pb.viewByName("Pompe") && !pb.variable("Niveau"),
+          "1.12.27 : Ctrl+Z annule le collage entier (les objets, le symbole, la variable)");
+    // Le meme projet : Ctrl+V recolle les objets du presse-papiers de la fenetre (rien a importer).
+    essaiPressePapiers() = texte;
+    const std::size_t avant = a.v().objects.size();
+    a.editor->canvas().paste();
+    check(a.v().objects.size() == avant + 3, "1.12.27 : dans le projet de la copie, Ctrl+V colle comme avant");
+    fs::remove_all(dir, ec);
+    fe::poserDossier({});
+}
+
+
 // 1.12.27 : l'apercu du style choisi (un bouton, un texte, un rectangle, un voyant allume et eteint) et sa pastille.
 void apercuStyles11227() {
     std::printf("1.12.27 : l'aper\xC3\xA7u des styles\n");
@@ -35092,6 +35243,7 @@ int main(int argc, char** argv) {
         touchesListes11227();
         apercuStyles11227();
         pourquoiSimulation11227();
+        fenetres11227();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -35452,6 +35604,7 @@ int main(int argc, char** argv) {
     touchesListes11227();                   // 1.12.27 : Suppr et Ctrl+D dans les listes
     apercuStyles11227();                    // 1.12.27 : l'apercu des styles
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
+    fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     v1219_cellules();                       // 1.12.19 (U3) : les cellules de tableau sous la meme regle
     v1219_modales();                        // 1.12.19 (U4) : les fenetres sous la meme regle
     v110_aide_saisie();                     // 1.10 (chantier K2) : l'aide a la saisie des scripts (S1, S2, enumerations)

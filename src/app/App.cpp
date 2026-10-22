@@ -34,6 +34,7 @@
 #include "screens/Screens.hpp"
 #include "../project/BlockLibrary.hpp"
 #include "AboutDialog.hpp"                    // 1.10 (R2) : A propos d'XPGAnalyser
+#include "Fenetres.hpp"                       // 1.12.27 : plusieurs fenetres d'IHM Studio
 #include "../project/GrafcetEdit.hpp"
 #include "../project/GrafcetRewrite.hpp"
 #include "../project/GrafcetRewrite2.hpp"   // 1.10 (R2) : Ctrl+Z des commandes du grafcet
@@ -418,6 +419,7 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
 
 App::~App() {
     if (auto* instance = core::instance::current()) instance->setWake({});   // 1.11.2 (UNI) : avant SDL_Quit
+    fenetres::retirer(announcedFolder_);   // 1.12.27 : ce projet n'est plus ouvert ici
     tutorials::shutdown();   // 1.11 (T1) : la session de tutoriel tient l'appli (UiDriver)
     // Lot API 7 : les onglets detaches rentrent D'ABORD - leur ecran (qui les
     // remet en onglets) est encore la, et leurs fenetres partent avant SDL_Quit.
@@ -682,6 +684,9 @@ void App::registerActions() {
     // comme tout le reste.
     actions_.add(Action{"app.home", "Revenir au menu principal", help::keys::bindingOf("app.home"), {}, {}, nullptr,
                         [this] { goHome(); }});
+    // 1.12.27 : une autre fenetre (un deuxieme projet a cote, pour copier de l'un a l'autre).
+    actions_.add(Action{"app.newWindow", "Nouvelle fen\xC3\xAAtre", help::keys::bindingOf("app.newWindow"), {}, {}, nullptr,
+                        [this] { openNewWindow({}); }});
     // 1.8.0 : les dossiers de l'application (app/Dossiers.hpp) - l'accueil en a le
     // lien, le menu Projet l'entree.
     actions_.add(Action{"app.folders", "Dossiers de l'application...", {}, {}, {}, nullptr,
@@ -1911,6 +1916,40 @@ static std::string editionMismatch(const project::Manifest& m) {
 }
 
 void App::openProjectFolder(std::string folder) {
+    // 1.12.27 : LE MEME PROJET DANS DEUX FENETRES s'ecraserait a l'enregistrement : la question d'abord.
+    if (!script_)
+        if (const auto other = fenetres::autreFenetre(folder)) {
+            const std::string leaf = std::filesystem::path(folder).filename().string();
+            menus_->ShowDialog(
+                std::make_unique<MessageDialog>(
+                    "D\xC3\xA9j\xC3\xA0 ouvert dans une autre fen\xC3\xAAtre",
+                    "\xC2\xAB " + leaf + " \xC2\xBB est ouvert dans une autre fen\xC3\xAAtre de " + core::productName()
+                        + (other->depuis.empty() ? std::string{} : " (depuis " + other->depuis + ")")
+                        + ".\n\nDeux fen\xC3\xAAtres qui enregistrent le m\xC3\xAAme projet effacent les changements l'une de l'autre. "
+                          "Pour copier d'un projet \xC3\xA0 l'autre, ouvre l'autre projet ici.",
+                    MessageDialog::Icon::Warning, "L'ouvrir quand m\xC3\xAAme"),
+                [this, folder](const menu::DialogResult& r) {
+                    if (r.accepted()) openProjectFolderChecked(folder);
+                });
+            return;
+        }
+    openProjectFolderChecked(std::move(folder));
+}
+
+void App::openNewWindow(const std::string& projet) {
+    std::string pourquoi;
+    if (fenetres::ouvrirNouvelleFenetre(projet, &pourquoi)) {
+        bus_.publish(StatusNotice{"Une nouvelle fen\xC3\xAAtre s'ouvre" + std::string(projet.empty() ? "." : " avec le projet.")
+                                      + " Copier ici, coller l\xC3\xA0-bas : les objets passent d'une fen\xC3\xAAtre \xC3\xA0 l'autre.", 6.0});
+        return;
+    }
+    menus_->ShowDialog(std::make_unique<MessageDialog>("Nouvelle fen\xC3\xAAtre",
+                                                       "La nouvelle fen\xC3\xAAtre ne s'ouvre pas : " + pourquoi + ".",
+                                                       MessageDialog::Icon::Error),
+                       [](const menu::DialogResult&) {});
+}
+
+void App::openProjectFolderChecked(std::string folder) {
     XPG_PORTEE_TEXTE("App::openProjectFolder", std::filesystem::path(folder).filename().string());   // 1.10.2 (CR)
     core::crash::setOpenDocuments(std::filesystem::path(folder).filename().string());   // le nom seul, pour le rapport
     auto opened = project::ProjectStore::open(folder);
@@ -2022,7 +2061,9 @@ void App::takeInstanceRequests() {
             instanceStation_ = !station.empty();
             instanceWaitSaid_ = false;          // la derniere demande l'emporte
         } else {
-            bus_.publish(StatusNotice{core::productName() + " est d\xC3\xA9j\xC3\xA0 ouvert : une seule fen\xC3\xAAtre \xC3\xA0 la fois.", 6.0});
+            // 1.12.27 : une AUTRE fenetre se demande (Ctrl+Maj+N) ; relancer ramene celle-ci.
+            bus_.publish(StatusNotice{core::productName() + " est d\xC3\xA9j\xC3\xA0 ouvert ici. Une autre fen\xC3\xAAtre : "
+                                      "Projet > Nouvelle fen\xC3\xAAtre (Ctrl+Maj+N).", 6.0});
         }
     }
     if (!menus_) return;
@@ -2423,6 +2464,12 @@ int App::run() {
             bus_.publish(StatusNotice{crashdialogs::recoveryNote(stalled), 12.0});
         pumpEvents(running);
         takeInstanceRequests();     // 1.11.2 (UNI) : une autre instance a ete lancee
+        // 1.12.27 : le projet ouvert, annonce aux autres fenetres (et retire quand il change).
+        if (projectFolder_ != announcedFolder_ && !script_) {
+            fenetres::retirer(announcedFolder_);
+            fenetres::annoncer(projectFolder_);
+            announcedFolder_ = projectFolder_;
+        }
         frame(dt);
     }
     // Une session rejouee dont une commande n'a pas trouve sa cible : le dire

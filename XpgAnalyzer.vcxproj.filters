@@ -493,6 +493,9 @@
     <ClCompile Include="src\app\hmi\HmiCanvas.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiPartage.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiChartsPainter.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1091,6 +1094,9 @@
       <Filter>project</Filter>
     </ClCompile>
     <ClCompile Include="src\app\AboutDialog.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\Fenetres.cpp">
       <Filter>app</Filter>
     </ClCompile>
     <ClCompile Include="src\app\ConditionsNotice.cpp">
@@ -1927,6 +1933,9 @@
     <ClInclude Include="src\app\hmi\HmiCanvas.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiPartage.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiCommHost.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -2411,6 +2420,9 @@
       <Filter>project</Filter>
     </ClInclude>
     <ClInclude Include="src\app\AboutDialog.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Fenetres.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ConditionsNotice.hpp">

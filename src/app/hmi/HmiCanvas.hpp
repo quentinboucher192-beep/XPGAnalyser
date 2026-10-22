@@ -91,6 +91,10 @@ public:
     // et l'objet de chaque variable, alignes depuis le dernier clic ; un seul
     // Ctrl+Z. Rend le nombre de variables posees.
     std::size_t pasteNames(const std::string& text);
+    // 1.12.27 : la copie publiee par une autre fenetre (app/hmi/HmiPartage.hpp) dont le
+    // texte est `text` : ses objets et ce qui manque au projet, en un seul Ctrl+Z ; `at` :
+    // le coin haut-gauche au point (Coller ici, un lacher). Faux : pas de telle copie.
+    bool pasteShared(const std::string& text, std::optional<hmi::edit::Pt> at = std::nullopt);
     // Les variables connues (IHM et automate), pour savoir quel objet poser.
     void setVariableSource(std::function<std::vector<hmi::design::VarInfo>()> f) { variableSource_ = std::move(f); }
     void copyStyle();
