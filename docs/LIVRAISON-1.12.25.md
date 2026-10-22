@@ -30,7 +30,7 @@ Le projet de l'affaire (dossier `2025_06_118_IHM`, et sa démonstration `2025_06
 
 - **Les adresses IP.** L'équipement `M580_HSBY`, celui des variables, interroge **192.125.6.40** : l'adresse principale de la paire Hot Standby (CPU IP 1), toujours portée par la CPU primaire. La CPU de secours porte 192.125.6.41 (IP 2) ; masque 255.255.255.0, passerelle 192.125.6.254. Jusque-là, l'adresse était provisoire (192.168.10.20).
 - **La vue Architecture** (nouvelle, menu Maintenance, avant Diagnostic API) : le réseau Ethernet TCP/Modbus (IHM A et IHM B, MAESTRO, CIMVIEW, la passerelle, le switch et l'état de la liaison IHM ↔ automate), la paire Hot Standby (le rôle de chaque CPU et l'adresse qu'elle porte en ce moment, la liaison Hot Standby), l'Ethernet RIO et ses deux stations (AMF, drop 1 ; LUNA, drop 2), puis le tableau des adresses IP.
-- **IHM B : 192.145.6.46**, l'adresse transmise, n'est pas dans le réseau 192.125.6.0/24 des automates (le masque 255.255.255.0 ne la laisse pas joindre la passerelle 192.125.6.254) : c'est sans doute 192.125.6.46. La vue la montre telle quelle, marquée « à confirmer ». Les adresses de MAESTRO et de CIMVIEW restent à communiquer.
+- **Les pupitres** : IHM A 192.125.6.45, IHM B **192.125.6.46** (le 192.145.6.46 du mail était une faute de frappe, corrigé le soir même : le projet a été relivré). Tout est sur le même réseau (masque 255.255.255.0, passerelle 192.125.6.254). Les adresses de MAESTRO et de CIMVIEW restent à communiquer.
 - **Les chevauchements.** Vue Réglages PID : la pastille EN SERVICE couvrait la case Td (12 px) ; les trois cases et la pastille sont maintenant côte à côte. Les voiles « boucle hors service » (posés sur les cartes Réglage PID, montrés en marche quand une boucle est hors service) couvraient les cartes dans l'éditeur : ils sont sur un calque à eux, « Voiles hors service », caché dans l'éditeur ; en marche rien ne change. Aussi : fenêtre Extracteur, le total des démarrages touchait la colonne 24 h (il a sa ligne) ; vue Régulation, les valeurs des cartes ; synoptiques, les pastilles des sondes. Toutes les vues ont été passées au crible : plus aucun objet n'en chevauche un autre.
 
 ## 3. Les essais
@@ -89,6 +89,6 @@ Les zips portables (151 fichiers chacun ; décompresse, puis lance l'exe) :
 
 ## 7. La suite
 
-- Confirmer l'adresse de l'IHM B (192.145.6.46 ou 192.125.6.46) et communiquer celles de MAESTRO et de CIMVIEW ; les reporter dans l'AF § 6 (champs « XXX ») à sa prochaine révision.
+- Communiquer les adresses de MAESTRO et de CIMVIEW ; reporter les adresses dans l'AF § 6 (champs « XXX ») à sa prochaine révision.
 - La fenêtre Historique des objets (clic droit : la liste des enregistrements, Avant / Après, Revenir, Restaurer, CSV ; la section Suivi de Propriétés ; la date dans l'Explorateur) : 1.12.26.
 - En attente : les fonctions IHM génériques (TEMPLATE) partout ; les raccourcis clavier avancés des éditeurs.
