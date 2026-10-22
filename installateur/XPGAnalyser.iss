@@ -30,6 +30,19 @@
 ;   - l'option « Épingler à la barre des tâches » (au premier lancement, par l'application) ;
 ;   - la page « Ce qui a été installé » : les programmes, leur architecture, les dossiers.
 ;
+;  1.12.27 - l'habillage :
+;   - une colonne à gauche, aux couleurs des deux logos : le logo, le nom, la version, et les
+;     ÉTAPES de l'installation (faite, en cours, à venir) - une liste générique, décrite à un
+;     seul endroit du [Code] (EtapesNoms, EtapeDePage) : une page de plus = une ligne ;
+;   - la police Barlow (images\..\polices, licence SIL OFL), chargée pour l'assistant seul :
+;     rien n'est installé dans Windows ;
+;   - des images : le bandeau de l'accueil et celui de la fin, une icône par étape dans
+;     l'en-tête, en 1x et en 2x (écrans à 200 %) ;
+;   - pendant la copie, une animation qui vient d'un GIF (images\animation.gif, découpé par
+;     outils\installateur_images.py - remplace le GIF pour changer l'animation), une barre en
+;     dégradé avec son pourcentage, et des astuces ;
+;   - la page d'accueil revient : les deux applications, ce que fait l'assistant.
+;
 ;  Sans surveillance : API-IHM-Studio-Setup-<v>.exe /VERYSILENT /SUPPRESSMSGBOXES
 ;    [/CURRENTUSER | /ALLUSERS] [/DIR="..."] [/DONNEES="D:\Mes données"]
 ;    [/MIGRER=oui|non] [/DESINSTALLERLOT8=oui|non] [/LOG="fichier"]
@@ -94,6 +107,12 @@
 #ifndef Chaine
   #define Chaine "msvc"
 #endif
+; 1.12.27 : l'animation de la copie - écrite par outils\installateur_images.py d'après images\animation.gif.
+#define AnimIni AddBackslash(SourcePath) + "images\ui\animation.ini"
+#define AnimImages ReadIni(AnimIni, "Animation", "images", "1")
+#define AnimDelai ReadIni(AnimIni, "Animation", "delai", "60")
+#define AnimLargeur ReadIni(AnimIni, "Animation", "largeur", "360")
+#define AnimHauteur ReadIni(AnimIni, "Animation", "hauteur", "120")
 
 [Setup]
 AppId={{{#AppGuid}}
@@ -126,7 +145,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 WizardStyle=modern
-WizardSizePercent=110
+; 1.12.27 : la colonne des étapes s'ajoute à gauche (l'assistant s'élargit d'autant) ; la page d'accueil revient.
+WizardSizePercent=130,140
+DisableWelcomePage=no
 WizardImageFile=images\grande.bmp,images\grande-2x.bmp
 WizardSmallImageFile=images\petite.bmp,images\petite-2x.bmp
 SetupIconFile=..\resources\logo\studio.ico
@@ -148,7 +169,19 @@ Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 
 [Messages]
 ; Le texte d'origine parle d'icônes « sur le Bureau », même quand il n'y en a pas.
-FinishedLabel=L'assistant a terminé l'installation de [name].%n%n{#NomApi} et {#NomIhm} sont dans le menu Démarrer, avec sa Maintenance (vérifier, réparer, restaurer). Pour le désinstaller : tape « désinstaller » dans la recherche Windows. Tes dossiers se règlent dans l'application : accueil > Dossiers.
+; 1.12.27 : des textes courts, au tutoiement, comme les pages de l'assistant (l'en-tête n'a que deux lignes).
+ClickNext=Clique sur Suivant pour continuer, ou sur Annuler pour quitter l'assistant.
+SelectDirDesc=Où installer [name] ?
+SelectDirBrowseLabel=Pour continuer, clique sur Suivant. Pour choisir un autre dossier, clique sur Parcourir.
+DiskSpaceMBLabel=Il faut au moins [mb] Mo d'espace libre.
+SelectTasksDesc=Les raccourcis, et ce que l'assistant fait en plus.
+SelectTasksLabel2=Choisis ce que l'assistant doit faire en plus, puis clique sur Suivant.
+ReadyLabel1=Tout est prêt : relis le résumé avant d'installer.
+ReadyLabel2a=Clique sur Installer pour commencer, ou sur Précédent pour changer un choix.
+InstallingLabel=Copie des fichiers de [name], puis vérification.
+ExitSetupMessage=L'installation n'est pas terminée : si tu quittes maintenant, [name] ne sera pas installé.%n%nTu pourras relancer l'assistant plus tard.%n%nQuitter l'assistant ?
+FinishedHeadingLabel=C'est installé !
+FinishedLabel={#NomApi} et {#NomIhm} sont dans le menu Démarrer, avec leur Maintenance (vérifier, réparer, restaurer). Tes dossiers se règlent dans l'application : accueil > Dossiers. Pour désinstaller : tape « désinstaller » dans la recherche Windows.
 FinishedLabelNoIcons=L'assistant a terminé l'installation de [name].
 
 [CustomMessages]
@@ -176,6 +209,11 @@ Source: "{#Staging}\maintenance\config.ini"; DestDir: "{tmp}\xpg"; Flags: dontco
 ; et l'index des blocs livrés (lu avant la copie).
 Source: "aide\xpgliste.dll"; Flags: dontcopy
 Source: "{#Staging}\libs\index.txt"; DestName: "libs-index.txt"; Flags: dontcopy
+; 1.12.27 : l'habillage de l'assistant - ses images et sa police (avec sa licence) ; lus par
+; l'assistant seul, rien n'est installé.
+Source: "images\ui\*.bmp"; Flags: dontcopy
+Source: "polices\*.ttf"; Flags: dontcopy
+Source: "polices\OFL-Barlow.txt"; Flags: dontcopy
 
 [InstallDelete]
 ; 1.12.0 : deux applications - l'exe unique de la 1.11 et ses raccourcis s'en vont.
@@ -789,6 +827,413 @@ begin
   TNewButton(Sender).Caption := 'Copié';
 end;
 
+// ============================================================ 1.12.27 : l'habillage ====
+//  La colonne de gauche (le logo, le nom, la version, les étapes), l'en-tête des pages, les
+//  bandeaux de l'accueil et de la fin ; pendant la copie, l'animation, la barre et les astuces.
+//  Les couleurs (TColor : $00BBGGRR) et les étapes sont décrites ici, et nulle part ailleurs.
+const
+  CouleurColonne = $003A1F0D;      // #0D1F3A : le marine des logos
+  CouleurTitre = $0047270F;        // #0F2747
+  CouleurTexte = $00806B5B;        // #5B6B80
+  CouleurFaite = $00EAD3BF;        // le nom d'une étape passée
+  CouleurAVenir = $00AD937F;       // le nom d'une étape à venir
+  CouleurTurquoise = $00B6C42D;    // #2DC4B6 : le trait entre deux étapes passées
+  CouleurLienAVenir = $005E3F2A;   // le trait entre deux étapes à venir
+  CouleurPiste = $00F3ECE6;        // #E6ECF3 : la barre, vide
+  CouleurCarte = $00FAF6F3;        // #F3F6FA : les cartes de l'accueil, le récapitulatif
+  FR_PRIVATE = $10;
+  SRCCOPY = $00CC0020;
+  // Les étapes, dans l'ordre : leur nom | leur icône (images\ui\icone-<nom>.bmp). Une page
+  // de plus dans l'assistant : son étape ici (ou une existante), et sa ligne dans EtapeDePage.
+  EtapesNoms = 'Bienvenue|Emplacement|Tes données|Bibliothèque|Raccourcis|Récapitulatif|Installation|Terminé';
+  EtapesIcones = 'bienvenue|emplacement|donnees|bibliotheque|raccourcis|recapitulatif|installation|termine';
+  Astuces = 'Tes données restent à toi : une mise à jour ou une réparation ne les efface jamais.|' +
+            'Menu Démarrer > {#Nom} > Maintenance : vérifier, réparer, revenir à la version d''avant.|' +
+            'F1 ouvre l''aide, dans {#NomApi} comme dans {#NomIhm}.|' +
+            '{#NomIhm} simule tes vues et tes équipements, sans automate branché.|' +
+            'Tes projets gardent leurs versions : tu peux les comparer et revenir en arrière.';
+
+var
+  PolicesOk, Ui2x: Boolean;
+  LargeurColonne: Integer;
+  ColonneEtapes: TPanel;
+  EtapeMarque: array of TBitmapImage;
+  EtapeTexte: array of TLabel;
+  EtapeLien: array of TPanel;
+  NbEtapes: Integer;
+  EnTeteIcone, EnTeteTrait, AccueilBandeau, FinBandeau: TBitmapImage;
+  AnimBande: TBitmap;
+  AnimImage, BarreDegrade: TBitmapImage;
+  AnimN, AnimL, AnimH, AnimIndex, AnimTics, AstuceIndex: Integer;
+  MinuterieAnim: LongWord;
+  BarrePiste, BarrePleine: TPanel;
+  BarrePourcent, Astuce: TLabel;
+
+function AddFontResourceEx(Fichier: String; Drapeaux: DWORD; Reserve: Cardinal): Integer;
+  external 'AddFontResourceExW@gdi32.dll stdcall setuponly';
+function BitBlt(Dest: LongWord; X, Y, L, H: Integer; Source: LongWord; XS, YS: Integer; Operation: DWORD): BOOL;
+  external 'BitBlt@gdi32.dll stdcall setuponly';
+function CreateRoundRectRgn(X1, Y1, X2, Y2, LE, HE: Integer): LongWord;
+  external 'CreateRoundRectRgn@gdi32.dll stdcall setuponly';
+function SetWindowRgn(Fenetre: HWND; Region: LongWord; Redessiner: BOOL): Integer;
+  external 'SetWindowRgn@user32.dll stdcall setuponly';
+
+// Le N-ième morceau (0...) de 'a|b|c', et leur nombre.
+function Morceau(S: String; N: Integer): String;
+var P: Integer;
+begin
+  while N > 0 do begin
+    P := Pos('|', S);
+    if P = 0 then begin
+      S := '';
+      Break;
+    end;
+    Delete(S, 1, P);
+    N := N - 1;
+  end;
+  P := Pos('|', S);
+  if P > 0 then Result := Copy(S, 1, P - 1) else Result := S;
+end;
+
+function NombreDeMorceaux(S: String): Integer;
+var I: Integer;
+begin
+  Result := 1;
+  for I := 1 to Length(S) do
+    if S[I] = '|' then Result := Result + 1;
+end;
+
+// Une image de l'habillage, sortie à la demande : en 2x dès que l'écran est agrandi (réduite,
+// elle reste nette), sinon en 1x.
+function ImageUi(Nom: String): String;
+begin
+  if Ui2x then Nom := Nom + '-2x';
+  Nom := Nom + '.bmp';
+  if not FileExists(ExpandConstant('{tmp}\') + Nom) then ExtractTemporaryFile(Nom);
+  Result := ExpandConstant('{tmp}\') + Nom;
+end;
+
+function NouvelleImage(Parent: TWinControl; Nom: String; X, Y, L, H: Integer): TBitmapImage;
+begin
+  Result := TBitmapImage.Create(WizardForm);
+  Result.Parent := Parent;
+  Result.SetBounds(X, Y, L, H);
+  Result.Stretch := True;
+  if Nom <> '' then Result.Bitmap.LoadFromFile(ImageUi(Nom));
+end;
+
+// La police : Barlow (Graisse : '', 'Medium', 'SemiBold'), ou celle de Windows si elle n'a pas pu
+// être chargée.
+procedure Ecrire(F: TFont; Graisse: String; Taille: Integer; Couleur: TColor);
+begin
+  if not PolicesOk then begin
+    F.Name := 'Segoe UI';
+    if Graisse = 'SemiBold' then F.Style := [fsBold] else F.Style := [];
+  end else begin
+    if Graisse = '' then F.Name := 'Barlow' else F.Name := 'Barlow ' + Graisse;
+    F.Style := [];
+  end;
+  F.Size := Taille;
+  F.Color := Couleur;
+end;
+
+function NouveauTexte(Parent: TWinControl; Texte: String; X, Y, L, H: Integer; Graisse: String; Taille: Integer; Couleur: TColor): TLabel;
+begin
+  Result := TLabel.Create(WizardForm);
+  Result.Parent := Parent;
+  Result.AutoSize := False;
+  Result.WordWrap := True;
+  Result.Transparent := True;
+  Result.SetBounds(X, Y, L, H);
+  Ecrire(Result.Font, Graisse, Taille, Couleur);
+  Result.Caption := Texte;
+end;
+
+function NouveauPanneau(Parent: TWinControl; X, Y, L, H: Integer; Couleur: TColor): TPanel;
+begin
+  Result := TPanel.Create(WizardForm);
+  Result.Parent := Parent;
+  Result.SetBounds(X, Y, L, H);
+  Result.BevelOuter := bvNone;
+  Result.ParentBackground := False;
+  Result.Color := Couleur;
+end;
+
+procedure Arrondir(P: TWinControl; Rayon: Integer);
+begin
+  SetWindowRgn(P.Handle, CreateRoundRectRgn(0, 0, P.Width + 1, P.Height + 1, Rayon, Rayon), True);
+end;
+
+procedure ChargerPolices;
+var I: Integer;
+    Nom: String;
+begin
+  PolicesOk := False;
+  for I := 0 to 3 do begin
+    Nom := Morceau('Barlow-Regular.ttf|Barlow-Medium.ttf|Barlow-SemiBold.ttf|Barlow-Bold.ttf', I);
+    try
+      ExtractTemporaryFile(Nom);
+      if AddFontResourceEx(ExpandConstant('{tmp}\') + Nom, FR_PRIVATE, 0) > 0 then PolicesOk := True
+      else Log('Police non chargée : ' + Nom);
+    except
+      Log('Police non chargée : ' + Nom + ' (' + GetExceptionMessage + ')');
+    end;
+  end;
+end;
+
+// L'étape d'une page (voir EtapesNoms).
+function EtapeDePage(PageID: Integer): Integer;
+begin
+  if PageID = wpWelcome then Result := 0
+  else if PageID = wpSelectDir then Result := 1
+  else if ((PageDonnees <> nil) and (PageID = PageDonnees.ID)) or ((PageReprise <> nil) and (PageID = PageReprise.ID))
+          or ((PageAutre <> nil) and (PageID = PageAutre.ID)) then Result := 2
+  else if (PageBiblio <> nil) and (PageID = PageBiblio.ID) then Result := 3
+  else if PageID = wpSelectTasks then Result := 4
+  else if PageID = wpReady then Result := 5
+  else if (PageID = wpPreparing) or (PageID = wpInstalling) then Result := 6
+  else Result := 7;   // « Ce qui a été installé » et la fin
+end;
+
+procedure MajEtapes(Courante: Integer);
+var I: Integer;
+    Etat: String;
+begin
+  if ColonneEtapes = nil then Exit;
+  for I := 0 to NbEtapes - 1 do begin
+    if I < Courante then Etat := 'fait' else if I = Courante then Etat := 'encours' else Etat := 'avenir';
+    EtapeMarque[I].Bitmap.LoadFromFile(ImageUi('marque-' + Etat));
+    if I = Courante then Ecrire(EtapeTexte[I].Font, 'SemiBold', 10, clWhite)
+    else if I < Courante then Ecrire(EtapeTexte[I].Font, '', 10, CouleurFaite)
+    else Ecrire(EtapeTexte[I].Font, '', 10, CouleurAVenir);
+    if I < NbEtapes - 1 then begin
+      if I < Courante then EtapeLien[I].Color := CouleurTurquoise else EtapeLien[I].Color := CouleurLienAVenir;
+    end;
+  end;
+  if EnTeteIcone <> nil then EnTeteIcone.Bitmap.LoadFromFile(ImageUi('icone-' + Morceau(EtapesIcones, Courante)));
+end;
+
+// La colonne : l'assistant s'élargit d'autant, ses pages et ses boutons glissent à droite.
+procedure CreerColonne;
+var L, I, X, Y0, PasY, TailleMarque: Integer;
+    Decor: TBitmapImage;
+    Pied: TLabel;
+begin
+  LargeurColonne := ScaleX(200);
+  L := WizardForm.ClientWidth;
+  WizardForm.ClientWidth := L + LargeurColonne;
+  WizardForm.OuterNotebook.Left := LargeurColonne;
+  WizardForm.OuterNotebook.Width := L;
+  WizardForm.Bevel.Left := LargeurColonne;
+  WizardForm.Bevel.Width := L;
+  WizardForm.BeveledLabel.Left := WizardForm.BeveledLabel.Left + LargeurColonne;
+
+  ColonneEtapes := NouveauPanneau(WizardForm, 0, 0, LargeurColonne, WizardForm.ClientHeight, CouleurColonne);
+  ColonneEtapes.Anchors := [akLeft, akTop, akBottom];
+  Decor := NouvelleImage(ColonneEtapes, 'decor', 0, ColonneEtapes.Height - ScaleY(110), LargeurColonne, ScaleY(110));
+  Decor.Anchors := [akLeft, akBottom];
+  X := ScaleX(22);
+  NouvelleImage(ColonneEtapes, 'logo', X, ScaleY(24), ScaleX(88), ScaleY(40));
+  NouveauTexte(ColonneEtapes, '{#Nom}', X, ScaleY(74), LargeurColonne - X - ScaleX(8), ScaleY(26), 'SemiBold', 14, clWhite);
+  NouveauTexte(ColonneEtapes, 'Version {#Version}', X, ScaleY(100), LargeurColonne - X - ScaleX(8), ScaleY(18), '', 9, CouleurAVenir);
+
+  NbEtapes := NombreDeMorceaux(EtapesNoms);
+  SetArrayLength(EtapeMarque, NbEtapes);
+  SetArrayLength(EtapeTexte, NbEtapes);
+  SetArrayLength(EtapeLien, NbEtapes);
+  Y0 := ScaleY(140);
+  TailleMarque := ScaleX(20);
+  PasY := ScaleY(30);
+  for I := 0 to NbEtapes - 1 do begin
+    if I < NbEtapes - 1 then
+      EtapeLien[I] := NouveauPanneau(ColonneEtapes, X + TailleMarque div 2 - ScaleX(1), Y0 + I * PasY + TailleMarque + ScaleY(3),
+                                     ScaleX(2), PasY - TailleMarque - ScaleY(6), CouleurLienAVenir);
+    EtapeMarque[I] := NouvelleImage(ColonneEtapes, 'marque-avenir', X, Y0 + I * PasY, TailleMarque, TailleMarque);
+    EtapeTexte[I] := NouveauTexte(ColonneEtapes, Morceau(EtapesNoms, I), X + TailleMarque + ScaleX(12), Y0 + I * PasY + ScaleY(1),
+                                  LargeurColonne - X - TailleMarque - ScaleX(16), ScaleY(20), '', 10, CouleurAVenir);
+  end;
+  Pied := NouveauTexte(ColonneEtapes, 'Tout est inclus : rien d''autre à installer, pas besoin d''Internet.', X, ColonneEtapes.Height - ScaleY(48),
+                       LargeurColonne - X - ScaleX(14), ScaleY(34), '', 8, CouleurAVenir);
+  Pied.Anchors := [akLeft, akBottom];
+end;
+
+// L'en-tête des pages : le titre, la description, l'icône de l'étape, un trait en dégradé.
+procedure HabillerEnTete;
+var T: Integer;
+begin
+  WizardForm.MainPanel.ParentBackground := False;
+  WizardForm.MainPanel.Color := clWhite;
+  // plus haut de 14 points : la description tient sur deux lignes ; les pages descendent d'autant
+  WizardForm.MainPanel.Height := WizardForm.MainPanel.Height + ScaleY(14);
+  WizardForm.InnerNotebook.Top := WizardForm.InnerNotebook.Top + ScaleY(14);
+  WizardForm.InnerNotebook.Height := WizardForm.InnerNotebook.Height - ScaleY(14);
+  Ecrire(WizardForm.PageNameLabel.Font, 'SemiBold', 13, CouleurTitre);
+  WizardForm.PageNameLabel.Height := ScaleY(24);
+  Ecrire(WizardForm.PageDescriptionLabel.Font, '', 10, CouleurTexte);
+  WizardForm.PageDescriptionLabel.Top := WizardForm.PageNameLabel.Top + ScaleY(24);
+  WizardForm.PageDescriptionLabel.Height := WizardForm.MainPanel.Height - WizardForm.PageDescriptionLabel.Top - ScaleY(2);
+  WizardForm.WizardSmallBitmapImage.Visible := False;
+  T := ScaleY(44);
+  EnTeteIcone := NouvelleImage(WizardForm.MainPanel, '', WizardForm.MainPanel.Width - T - ScaleX(18),
+                               (WizardForm.MainPanel.Height - T) div 2, T, T);
+  EnTeteIcone.Anchors := [akTop, akRight];
+  WizardForm.Bevel1.Visible := False;
+  EnTeteTrait := NouvelleImage(WizardForm.InnerPage, 'degrade', 0, WizardForm.MainPanel.Top + WizardForm.MainPanel.Height,
+                               WizardForm.InnerPage.Width, ScaleY(3));
+  EnTeteTrait.Anchors := [akLeft, akTop, akRight];
+end;
+
+function NouvelleCarte(Parent: TWinControl; X, Y, L, H: Integer; Logo, Titre, Texte: String): TPanel;
+begin
+  Result := NouveauPanneau(Parent, X, Y, L, H, CouleurCarte);
+  NouvelleImage(Result, Logo, ScaleX(12), (H - ScaleY(40)) div 2, ScaleX(40), ScaleY(40));
+  NouveauTexte(Result, Titre, ScaleX(64), ScaleY(11), L - ScaleX(72), ScaleY(20), 'SemiBold', 11, CouleurTitre);
+  NouveauTexte(Result, Texte, ScaleX(64), ScaleY(31), L - ScaleX(72), H - ScaleY(34), '', 9, CouleurTexte);
+  Arrondir(Result, ScaleX(14));
+end;
+
+// L'accueil : le bandeau, le titre, ce que fait l'assistant, les deux applications.
+procedure HabillerAccueil;
+var M, L, Y, H, LC: Integer;
+begin
+  if AccueilBandeau <> nil then Exit;
+  M := ScaleX(26);
+  L := WizardForm.WelcomePage.Width - 2 * M;
+  WizardForm.WizardBitmapImage.Visible := False;
+  H := L * 150 div 560;
+  // le tout (bandeau, titre, texte, cartes) centré en hauteur
+  Y := (WizardForm.WelcomePage.Height - (H + ScaleY(162))) div 2;
+  if Y < ScaleY(16) then Y := ScaleY(16);
+  AccueilBandeau := NouvelleImage(WizardForm.WelcomePage, 'accueil', M, Y, L, H);
+  Y := Y + H + ScaleY(14);
+  WizardForm.WelcomeLabel1.SetBounds(M, Y, L, ScaleY(30));
+  Ecrire(WizardForm.WelcomeLabel1.Font, 'SemiBold', 17, CouleurTitre);
+  WizardForm.WelcomeLabel1.Caption := 'Bienvenue dans {#Nom} {#Version}';
+  Y := Y + ScaleY(34);
+  WizardForm.WelcomeLabel2.SetBounds(M, Y, L, ScaleY(38));
+  Ecrire(WizardForm.WelcomeLabel2.Font, '', 10, CouleurTexte);
+  WizardForm.WelcomeLabel2.Caption := 'L''assistant installe les deux applications et tout ce dont elles ont besoin, étape par étape. '
+                                    + 'Tes données et tes réglages sont gardés.';
+  Y := Y + ScaleY(44);
+  LC := (L - ScaleX(12)) div 2;
+  NouvelleCarte(WizardForm.WelcomePage, M, Y, LC, ScaleY(70), 'logo-api', '{#NomApi}', 'Analyse et simulation du programme de l''automate');
+  NouvelleCarte(WizardForm.WelcomePage, M + LC + ScaleX(12), Y, LC, ScaleY(70), 'logo-ihm', '{#NomIhm}', 'Vues, scripts et équipements de l''IHM, et leur simulation');
+end;
+
+// La fin : l'assistant y place ses textes juste avant de l'afficher ; on les range ensuite.
+procedure HabillerFin;
+var M, L, Y, H: Integer;
+begin
+  M := ScaleX(26);
+  L := WizardForm.FinishedPage.Width - 2 * M;
+  WizardForm.WizardBitmapImage2.Visible := False;
+  H := L * 150 div 560;
+  Y := (WizardForm.FinishedPage.Height - (H + ScaleY(156))) div 2;
+  if Y < ScaleY(16) then Y := ScaleY(16);
+  if FinBandeau = nil then FinBandeau := NouvelleImage(WizardForm.FinishedPage, 'fin', M, Y, L, H)
+  else Y := FinBandeau.Top;
+  Y := Y + H + ScaleY(14);
+  WizardForm.FinishedHeadingLabel.SetBounds(M, Y, L, ScaleY(30));
+  Ecrire(WizardForm.FinishedHeadingLabel.Font, 'SemiBold', 17, CouleurTitre);
+  Y := Y + ScaleY(34);
+  WizardForm.FinishedLabel.SetBounds(M, Y, L, ScaleY(56));
+  Ecrire(WizardForm.FinishedLabel.Font, '', 10, CouleurTexte);
+  Y := Y + ScaleY(60);
+  WizardForm.RunList.SetBounds(M, Y, L, WizardForm.FinishedPage.Height - Y - ScaleY(6));
+  Ecrire(WizardForm.RunList.Font, '', 10, CouleurTitre);
+end;
+
+// La copie : l'animation (une bande d'images, recopiée image par image), l'état, la barre, les astuces.
+procedure HabillerInstallation;
+var P: TNewNotebookPage;
+    L, H, Y: Integer;
+begin
+  if BarrePiste <> nil then Exit;
+  P := WizardForm.InstallingPage;
+  AnimN := {#AnimImages};
+  L := ScaleX({#AnimLargeur});
+  H := ScaleY({#AnimHauteur});
+  try
+    AnimBande := TBitmap.Create;
+    AnimBande.LoadFromFile(ImageUi('animation'));
+    AnimL := AnimBande.Width;
+    AnimH := AnimBande.Height div AnimN;
+    AnimImage := NouvelleImage(P, '', (P.Width - L) div 2, 0, L, H);
+    AnimImage.Bitmap.Width := AnimL;
+    AnimImage.Bitmap.Height := AnimH;
+    BitBlt(AnimImage.Bitmap.Canvas.Handle, 0, 0, AnimL, AnimH, AnimBande.Canvas.Handle, 0, 0, SRCCOPY);
+  except
+    Log('Animation : ' + GetExceptionMessage);
+    AnimImage := nil;
+  end;
+  Y := H + ScaleY(10);
+  WizardForm.StatusLabel.SetBounds(0, Y, P.Width - ScaleX(64), ScaleY(22));
+  Ecrire(WizardForm.StatusLabel.Font, 'SemiBold', 11, CouleurTitre);
+  BarrePourcent := NouveauTexte(P, '', P.Width - ScaleX(64), Y, ScaleX(64), ScaleY(22), 'SemiBold', 11, CouleurTitre);
+  BarrePourcent.Alignment := taRightJustify;
+  Y := Y + ScaleY(24);
+  WizardForm.FilenameLabel.SetBounds(0, Y, P.Width, ScaleY(18));
+  Ecrire(WizardForm.FilenameLabel.Font, '', 9, CouleurTexte);
+  Y := Y + ScaleY(26);
+  WizardForm.ProgressGauge.Visible := False;
+  BarrePiste := NouveauPanneau(P, 0, Y, P.Width, ScaleY(10), CouleurPiste);
+  Arrondir(BarrePiste, ScaleY(10));
+  BarrePleine := NouveauPanneau(BarrePiste, 0, 0, 0, BarrePiste.Height, CouleurPiste);
+  BarreDegrade := NouvelleImage(BarrePleine, 'degrade', 0, 0, BarrePiste.Width, BarrePiste.Height);
+  Y := Y + ScaleY(28);
+  Astuce := NouveauTexte(P, '', 0, Y, P.Width, ScaleY(36), '', 9, CouleurTexte);
+end;
+
+procedure TicAnimation(Fenetre, Message, Id, Temps: LongWord);
+begin
+  if AnimImage <> nil then begin
+    AnimIndex := (AnimIndex + 1) mod AnimN;
+    BitBlt(AnimImage.Bitmap.Canvas.Handle, 0, 0, AnimL, AnimH, AnimBande.Canvas.Handle, 0, AnimIndex * AnimH, SRCCOPY);
+    AnimImage.Repaint;
+  end;
+  // une astuce toutes les 5 secondes
+  if (Astuce <> nil) and (AnimTics mod (5000 div {#AnimDelai}) = 0) then begin
+    Astuce.Caption := 'Le savais-tu ? ' + Morceau(Astuces, AstuceIndex);
+    AstuceIndex := (AstuceIndex + 1) mod NombreDeMorceaux(Astuces);
+  end;
+  AnimTics := AnimTics + 1;
+end;
+
+procedure Animer(Oui: Boolean);
+begin
+  if Oui and (MinuterieAnim = 0) then
+    MinuterieAnim := SetTimer(0, 0, {#AnimDelai}, CreateCallback(@TicAnimation))
+  else if not Oui and (MinuterieAnim <> 0) then begin
+    KillTimer(0, MinuterieAnim);
+    MinuterieAnim := 0;
+  end;
+end;
+
+procedure CurInstallProgressChanged(CurProgress, MaxProgress: Integer);
+var P: Integer;
+begin
+  if (BarrePiste = nil) or (MaxProgress <= 0) then Exit;
+  P := Round(100.0 * CurProgress / MaxProgress);
+  if P > 100 then P := 100;
+  if P < 0 then P := 0;
+  BarrePleine.Width := BarrePiste.Width * P div 100;
+  BarrePourcent.Caption := IntToStr(P) + ' %';
+end;
+
+procedure Habiller;
+begin
+  if WizardSilent then Exit;
+  Ui2x := ScaleX(100) > 100;
+  ChargerPolices;
+  if PolicesOk then WizardForm.Font.Name := 'Barlow';
+  CreerColonne;
+  HabillerEnTete;
+  // l'accueil, la copie et la fin s'habillent quand ils s'affichent : la fenêtre a alors sa taille
+  WizardForm.ReadyMemo.Color := CouleurCarte;
+  Ecrire(WizardForm.ReadyMemo.Font, '', 10, CouleurTitre);
+  MajEtapes(0);
+end;
+
 // --------------------------------------------------------------- l'assistant ----
 function InitializeSetup: Boolean;
 var Etat: AnsiString;
@@ -830,9 +1275,9 @@ begin
   Intro.Left := 0;
   Intro.Top := 0;
   Intro.Width := ComboRangement.Left - ScaleX(8);
-  Intro.Height := ScaleY(28);
+  Intro.Height := ScaleY(46);   { 1.12.27 : trois lignes (la police Barlow) }
   Intro.Caption := 'Glisse ici tes fichiers .dfb, .ddt, .mac (ou un dossier entier), ou utilise Ajouter. Rangés (sinon : Perso) :';
-  Haut := ScaleY(32);
+  Haut := ScaleY(52);
   HListe := PageBiblio.SurfaceHeight - Haut - ScaleY(50);
   BAjouter := TNewButton.Create(PageBiblio);
   BAjouter.Parent := PageBiblio.Surface;
@@ -864,9 +1309,10 @@ begin
 #if Ver >= EncodeVer(6, 5, 0)
   TexteCompte.Alignment := taRightJustify;   { 1.11.3 : Inno Setup 6.5 et plus ; avant, a gauche }
 #endif
-  TexteCompte.Left := BRetirer.Left + BRetirer.Width + ScaleX(6);
-  TexteCompte.Width := PageBiblio.SurfaceWidth - TexteCompte.Left;
-  TexteCompte.Top := BAjouter.Top + ScaleY(4);
+  // 1.12.27 : le compteur sous les boutons, a droite (a cote, il etait coupe)
+  TexteCompte.Width := ScaleX(150);
+  TexteCompte.Left := PageBiblio.SurfaceWidth - TexteCompte.Width;
+  TexteCompte.Top := BAjouter.Top + ScaleY(27);
   TexteCompte.Height := ScaleY(16);
   Aide := TNewStaticText.Create(PageBiblio);
   Aide.Parent := PageBiblio.Surface;
@@ -874,7 +1320,7 @@ begin
   Aide.WordWrap := True;
   Aide.Left := 0;
   Aide.Top := BAjouter.Top + ScaleY(27);
-  Aide.Width := PageBiblio.SurfaceWidth;
+  Aide.Width := PageBiblio.SurfaceWidth - ScaleX(156);
   Aide.Height := ScaleY(16);
   Aide.Font.Color := clGray;
   Aide.Caption := 'Même nom qu''un bloc livré : le tien est gardé, le livré rangé à côté.';
@@ -910,6 +1356,8 @@ procedure InitializeWizard;
 var I: Integer;
     S, Precedent: String;
 begin
+  // ---- 1.12.27 : l'habillage (avant les pages : elles prennent sa police) ----
+  Habiller;
   // ---- Tes donnees ----
   S := 'Ce dossier reste à toi : une mise à jour, une réparation ou une désinstallation ne l''effacent jamais sans ta confirmation.' + #13#10 +
        'Il ne peut pas être dans le dossier du programme. Tu pourras le changer plus tard : accueil d''{#NomApi} ou d''{#NomIhm} > Dossiers.';
@@ -924,16 +1372,16 @@ begin
   // ---- Reprendre tes anciennes donnees ----
   ChercherAnciennesVersions;
   PageReprise := CreateInputOptionPage(PageDonnees.ID, 'Reprendre tes anciennes données',
-    'Trouvées sur ce PC. Elles sont copiées dans ton dossier des données ; les originaux ne sont pas modifiés.',
+    'Trouvées sur ce PC : elles sont copiées dans ton dossier des données, les originaux restent intacts.',
     'Coche ce qu''il faut reprendre (projets, bibliothèque, catalogue, captures). Un fichier de bibliothèque que tu as modifié garde ta version ; la version livrée est rangée à côté.',
     False, False);
   for I := 0 to GetArrayLength(Sources) - 1 do begin
-    if I = SourceLot8 then S := 'Installation du lot 8 : ' else S := 'Ancien dossier : ';
+    if I = SourceLot8 then S := 'Version précédente : ' else S := 'Ancien dossier : ';
     PageReprise.Add(S + Sources[I]);
     PageReprise.Values[I] := True;
   end;
   if SourceLot8 >= 0 then begin
-    OptionLot8 := PageReprise.Add('Puis désinstaller la version du lot 8 (ses fichiers de programme seulement)');
+    OptionLot8 := PageReprise.Add('Puis désinstaller cette version précédente (son programme seulement)');
     PageReprise.Values[OptionLot8] := True;
   end;
   OptionAutre := PageReprise.Add('Ajouter un autre dossier (une version portable, par exemple)');
@@ -955,8 +1403,11 @@ begin
   BoutonCopier := TNewButton.Create(WizardForm);
   BoutonCopier.Parent := WizardForm;
   BoutonCopier.Caption := '&Copier';
-  BoutonCopier.Left := WizardForm.ClientWidth - WizardForm.CancelButton.Left - WizardForm.CancelButton.Width;   // la marge de droite, a gauche
+  // la marge de droite, a gauche (1.12.27 : apres la colonne des etapes)
+  BoutonCopier.Left := WizardForm.ClientWidth - WizardForm.CancelButton.Left - WizardForm.CancelButton.Width;
   if BoutonCopier.Left < ScaleX(10) then BoutonCopier.Left := ScaleX(10);
+  BoutonCopier.Left := BoutonCopier.Left + LargeurColonne;
+  BoutonCopier.Anchors := [akLeft, akBottom];
   BoutonCopier.Top := WizardForm.NextButton.Top;
   BoutonCopier.Width := WizardForm.NextButton.Width;
   BoutonCopier.Height := WizardForm.NextButton.Height;
@@ -966,6 +1417,14 @@ end;
 
 procedure CurPageChanged(CurPageID: Integer);
 begin
+  // 1.12.27 : l'etape en cours a gauche, l'icone de l'en-tete ; l'animation pendant la copie seulement.
+  if ColonneEtapes <> nil then begin
+    if CurPageID = wpWelcome then HabillerAccueil;
+    if CurPageID = wpInstalling then HabillerInstallation;
+    if CurPageID = wpFinished then HabillerFin;
+  end;
+  MajEtapes(EtapeDePage(CurPageID));
+  Animer((CurPageID = wpInstalling) and (AnimImage <> nil));
   // La page « Ta bibliothèque » : le compteur suit les depots (minuterie tant qu'elle est la).
   if (PageBiblio <> nil) and (CurPageID = PageBiblio.ID) and ListeOk then begin
     if MinuterieListe = 0 then MinuterieListe := SetTimer(0, 0, 400, CreateCallback(@MinuterieBiblio));
@@ -1168,6 +1627,16 @@ begin
       MsgBox('{#Nom} est installé, mais une étape n''a pas abouti (tes données, la reprise ou la vérification ; code ' + IntToStr(Code) + ').' + #13#10 + #13#10 +
              'Tes anciennes données n''ont pas été touchées. Pour finir : menu Démarrer > {#Nom} > Maintenance > Reprendre une installation interrompue.' + #13#10 + #13#10 +
              'Journal : ' + JournalInstallation, mbError, MB_OK);
+  end;
+end;
+
+// 1.12.27 : plus aucune minuterie quand l'assistant se ferme (meme annule au milieu d'une page).
+procedure DeinitializeSetup;
+begin
+  Animer(False);
+  if MinuterieListe <> 0 then begin
+    KillTimer(0, MinuterieListe);
+    MinuterieListe := 0;
   end;
 end;
 
