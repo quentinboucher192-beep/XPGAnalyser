@@ -291,8 +291,8 @@ std::string declarationsCanon(const std::vector<Declaration>& decls) {
     return s;
 }
 std::string scriptText(const Script& s) {
-    return "langage=" + std::string(scriptLangKey(s.lang)) + " evenement=" + s.event + " periode=" + std::to_string(s.periodMs) + " surveille=" + s.watch + "\n" + s.body
-         + declarationsCanon(s.decls);
+    return "langage=" + std::string(scriptLangKey(s.lang)) + " evenement=" + s.event + " periode=" + std::to_string(s.periodMs) + " surveille=" + s.watch
+         + (s.detached ? " detache=1" : "") + "\n" + s.body + declarationsCanon(s.decls);                  // 1.12.26 : detache
 }
 std::string functionCanon(const HmiFunction& f) {
     return "retour=" + f.returnType + " virtuelle=" + std::string(f.isVirtual ? "1" : "0") + "\n" + f.body + declarationsCanon(f.decls);

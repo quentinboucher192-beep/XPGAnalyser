@@ -698,6 +698,8 @@ const std::vector<NativeInfo>& natives() {
         {"WORDSWAP", 1, 1, false, false, false, false, "bits", "WORDSWAP(IN) : comme IN", "Les mots de 16 bits de IN dans l'ordre inverse : 16#12345678 devient 16#56781234. L'ordre des registres d'un \xC3\xA9quipement Modbus."},
         {"SWAP", 2, 2, true, false, false, false, "utility", "SWAP(A, B) : BOOL", "\xC3\x89" "change les valeurs de deux variables du m\xC3\xAAme type ; rend TRUE."},
         {"EXCHANGE", 2, 2, true, false, false, false, "utility", "EXCHANGE(X, NOUVELLE) : comme X", "\xC3\x89" "crit NOUVELLE dans X et rend l'ancienne valeur de X : un changement d'\xC3\xA9tat, un front."},
+        // ---- 1.12.26 : attendre dans un script (un script detache attend seul ; un autre bloque l'IHM, 10 s au plus)
+        {"WAIT", 1, 1, false, false, false, false, "attente", "WAIT(DUREE) : BOOL", "Attend DUREE (T#500ms, ou des millisecondes) avant l'instruction suivante. Un script d\xC3\xA9tach\xC3\xA9 attend seul, l'IHM continue ; un autre bloque l'IHM pendant l'attente (10 s au plus)."},
         // ---- 1.12.26 : les fichiers et les ressources du projet (<filesystem>, <fstream>). Un chemin relatif part
         // du dossier donnees/ du projet ; un echec ne coupe pas le script : FALSE, '' ou -1, et FILE_ERROR() dit pourquoi.
         {"FILE_READ", 1, 1, false, false, false, false, "fichiers", "FILE_READ(CHEMIN) : STRING", "Tout le texte d'un fichier ; '' s'il manque (FILE_ERROR() dit pourquoi)."},

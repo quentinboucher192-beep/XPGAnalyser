@@ -26,6 +26,9 @@
 #include "HmiOverload.hpp"     // 1.11.20 : les surcharges (la regle partagee avec le controle)
 #include "HmiEquipmentLink.hpp" // 1.12.11 (lot G) : la liaison Equipement des symboles du synoptique
 #include "HmiRanges.hpp"       // 1.12.10 (lot F) : la plage et les seuils de la variable
+#include "HmiScriptTask.hpp"   // 1.12.26 : les scripts detaches
+#include "HmiNet.hpp"          // 1.12.26 : WAIT, l'attente precise
+#include "../core/CrashGuard.hpp"   // 1.12.26 : un WAIT bloquant n'est pas un blocage
 #include "../sim/Interpreter.hpp"
 #include "../sim/Runtime.hpp"
 
@@ -38,6 +41,7 @@
 #include <ctime>
 #include <deque>
 #include <iterator>
+#include <limits>
 
 namespace hmi {
 
@@ -594,7 +598,8 @@ public:
         return u == "IHM_VUE" || u == "IHM_TEMPS" || u == "IHM_POPUP_OUVERTE" || u == "IHM_UTILISATEUR"
             || u == "IHM_NOM_UTILISATEUR" || u == "IHM_GROUPE" || u == "IHM_NIVEAU"
             || u == "IHM_EQUIPEMENT_OK" || u == "IHM_EQUIPEMENT_PING"                       // lot 15
-            || u == "IHM_ESCLAVE_SIMULE";                                                   // 1.9
+            || u == "IHM_ESCLAVE_SIMULE"                                                    // 1.9
+            || u == "IHM_SCRIPT_ACTIF";                                                     // 1.12.26
     }
     void report(sim::Diagnostic d) override { diagnostics.push_back(std::move(d)); }
     std::string caughtMessage(std::string_view m) override { return frenchSimMessage(m); }   // 1.12.1 : CATCH Erreur
@@ -706,6 +711,8 @@ public:
         return rt_.watchCallback(path, now, std::move(callback), passValue, id, why);
     }
     void nullCallback(std::string_view name, std::string_view where) override { rt_.nullCallback(name, where); }
+    // 1.12.26 : WAIT - un script detache rend la main jusqu'a son heure ; un autre bloque l'IHM (10 s au plus).
+    bool wait(std::int64_t milliseconds, std::string& why) override { return rt_.waitScript(milliseconds, why); }
     // 1.12.26 : FILE_READ, FILE_WRITE, DIR_LIST, RESOURCE_READ... (HmiRuntimeFiles.cpp).
     bool fileOp(std::string_view op, const std::vector<std::string>& args, FileResult& out, std::string& why) override {
         return rt_.fileOp(op, args, out, why);
@@ -946,6 +953,15 @@ private:
             result = sim::Value::boolean(rt_.callScript(text(0), now, &why));
             return true;
         }
+        // 1.12.26 : les scripts detaches - tourne-t-il ; l'arreter.
+        if (u == "IHM_SCRIPT_ACTIF") {
+            result = sim::Value::boolean(rt_.scriptRunning(text(0)));
+            return true;
+        }
+        if (u == "IHM_SCRIPT_ARRETER") {
+            result = sim::Value::boolean(rt_.stopScript(text(0)));
+            return true;
+        }
         if (u == "IHM_SON") {
             result = sim::Value::boolean(rt_.playSound(text(0), rt_.source_));
             return true;
@@ -1089,7 +1105,236 @@ std::shared_ptr<void> Runtime::viewAliases(Id view) {
     env->aliases = keep.get();
     return std::shared_ptr<void>(nullptr, [env, saved, keep](void*) { env->aliases = saved; });
 }
-Runtime::~Runtime() { unregisterChoiceResolver(this); }   // 1.12.2 : ses sources d'elements partent avec lui
+// ---- 1.12.26 : LES SCRIPTS DETACHES ------------------------------------------------------------------------------
+// Ce qui decrit le code qui tourne : a chaque passage de main entre l'IHM et une tache, la tache retrouve le sien (sa
+// source, sa pile de cadres, les parametres de vue qu'elle voit, ses compteurs...) et l'IHM le sien.
+struct Runtime::ExecState {
+    std::string                  source;
+    CodeOrigin                   origin;
+    sim::ExecTrace               trace;
+    int                          depth{0};
+    std::string                  abort;
+    int                          readOnly{0};
+    int                          gesture{0};
+    std::string                  gestureWhere, gestureVerb;
+    int                          exportAsk{0};
+    bool                         inCycle{false};
+    std::string                  actionOrigin;
+    std::vector<SlowFrame>       slow;
+    std::vector<Env::Frame*>     frames;
+    const Scope*                 aliases{nullptr};
+    std::vector<const Scope*>    savedAliases;
+    int                          callerLocals{0};
+    std::vector<sim::Diagnostic> diagnostics;
+};
+
+struct Runtime::TaskState {
+    Id                          script{kNoId};
+    std::string                 name, source;
+    Script                      copy;                 // le script tel qu'il est parti (le projet peut changer)
+    double                      startedAt{0};
+    double                      wakeAt{0};            // WAIT : l'heure (de marche) du reveil ; 0 : la reprise suivante
+    bool                        waiting{false};
+    bool                        stopAsked{false};     // IHM_SCRIPT_ARRETER : la fin le dit
+    bool                        ok{true};
+    std::int64_t                sliceStart{0};        // steady_clock (ns) : le debut de sa tranche
+    ExecState                   state;                // son contexte, quand il n'a pas la main
+    std::unique_ptr<ScriptTask> task;
+};
+
+void Runtime::exchange(ExecState& s) {
+    std::swap(source_, s.source);
+    std::swap(origin_, s.origin);
+    std::swap(trace_, s.trace);
+    std::swap(depth_, s.depth);
+    std::swap(abort_, s.abort);
+    std::swap(readOnly_, s.readOnly);
+    std::swap(gesture_, s.gesture);
+    std::swap(gestureWhere_, s.gestureWhere);
+    std::swap(gestureVerb_, s.gestureVerb);
+    std::swap(exportAsk_, s.exportAsk);
+    std::swap(inCycle_, s.inCycle);
+    std::swap(actionOrigin_, s.actionOrigin);
+    std::swap(slowStack_, s.slow);
+    std::swap(env_->frames, s.frames);
+    std::swap(env_->aliases, s.aliases);
+    std::swap(env_->savedAliases_, s.savedAliases);
+    std::swap(env_->callerLocals, s.callerLocals);
+    std::swap(env_->diagnostics, s.diagnostics);
+}
+
+namespace {
+constexpr std::int64_t kSliceNs = 8'000'000;          // une tache calcule 8 ms d'affilee au plus, puis rend la main
+constexpr std::int64_t kMaxBlockingWaitMs = 10'000;   // un WAIT qui bloque l'IHM : 10 s au plus
+constexpr std::size_t  kMaxTasks = 32;
+std::int64_t steadyNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+std::string secondsText(double s) {
+    char b[32];
+    if (s < 10) std::snprintf(b, sizeof b, "%.1f s", s);
+    else std::snprintf(b, sizeof b, "%.0f s", s);
+    std::string out = b;
+    for (auto& c : out) if (c == '.') c = ',';
+    return out;
+}
+} // namespace
+
+bool Runtime::startDetached(const Script& sc, const std::string& source, double now, std::string* error) {
+    (void)now;
+    for (const auto& t : tasks_)
+        if (t->script == sc.id && !t->task->finished()) return true;          // il tourne deja : une instance a la fois
+    if (tasks_.size() >= kMaxTasks) {
+        const std::string why = std::to_string(kMaxTasks) + " scripts d\xC3\xA9tach\xC3\xA9s tournent d\xC3\xA9j\xC3\xA0 : " + sc.name + " ne d\xC3\xA9marre pas";
+        if (error) *error = why;
+        log("Erreur", source, why);
+        return false;
+    }
+    auto t = std::make_unique<TaskState>();
+    TaskState* raw = t.get();
+    raw->script = sc.id;
+    raw->name = sc.name;
+    raw->source = source;
+    raw->copy = sc;
+    raw->startedAt = now_;
+    raw->task = std::make_unique<ScriptTask>([this, raw](ScriptTask&) {
+        // Les sources d'elements des listes se lisent par fil (HmiControls) : ce fil-ci les lit dans ce moteur aussi.
+        registerChoiceResolver(raw, [this](const Object& o, std::string_view src, std::vector<Choice>& out) { return resolveChoices(src, out, &o); });
+        std::string why;
+        raw->ok = runScriptHere(raw->copy, raw->source, now_, &why);
+        unregisterChoiceResolver(raw);
+    });
+    logAt(LogLevel::Info, "Script", source, sc.name + " : d\xC3\xA9marr\xC3\xA9 en arri\xC3\xA8re-plan (d\xC3\xA9tach\xC3\xA9)");
+    tasks_.push_back(std::move(t));
+    // Sa premiere tranche tout de suite ; lance depuis une autre tache : a la reprise suivante, par le fil de l'IHM.
+    if (!currentTask_) {
+        resumeTask(*raw);
+        finishTasks();
+    }
+    return true;
+}
+
+void Runtime::resumeTask(TaskState& t) {
+    if (t.task->finished()) return;
+    TaskState* outer = currentTask_;
+    exchange(t.state);
+    currentTask_ = &t;
+    t.sliceStart = steadyNs();
+    t.task->resume();
+    currentTask_ = outer;
+    exchange(t.state);
+}
+
+void Runtime::tasksTick(double now) {
+    std::vector<TaskState*> due;
+    for (const auto& t : tasks_)
+        if (!t->task->finished() && (t->task->cancelled() || now >= t->wakeAt)) due.push_back(t.get());
+    for (TaskState* t : due) resumeTask(*t);
+    finishTasks();
+}
+
+void Runtime::finishTasks() {
+    for (auto it = tasks_.begin(); it != tasks_.end();) {
+        TaskState& t = **it;
+        if (!t.task->finished()) {
+            ++it;
+            continue;
+        }
+        const std::string took = secondsText(std::max(0.0, now_ - t.startedAt));
+        if (t.stopAsked) logAt(LogLevel::Warning, "Script", t.source, t.name + " : arr\xC3\xAAt\xC3\xA9 (IHM_SCRIPT_ARRETER) apr\xC3\xA8s " + took);
+        else if (t.ok) logAt(LogLevel::Info, "Script", t.source, t.name + " : termin\xC3\xA9 (d\xC3\xA9tach\xC3\xA9, " + took + ")");
+        it = tasks_.erase(it);                                        // son fil est fini : il se rejoint
+    }
+}
+
+void Runtime::stopTasks() {
+    if (currentTask_) {                                               // depuis une tache : on ne s'attend pas soi-meme
+        for (const auto& t : tasks_) t->task->cancel();
+        return;
+    }
+    for (const auto& t : tasks_) t->task->cancel();
+    for (const auto& t : tasks_)
+        while (!t->task->finished()) resumeTask(*t);                  // chacun se deroule jusqu'a sa fin, sans erreur
+    tasks_.clear();
+}
+
+bool Runtime::taskSlice() {
+    TaskState* t = currentTask_;
+    if (!t) return true;
+    if (t->task->cancelled()) return false;
+    if (steadyNs() - t->sliceStart < kSliceNs) return true;
+    t->wakeAt = 0;                                                    // la suite a la reprise suivante (l'IHM respire)
+    return t->task->yield();
+}
+
+void Runtime::taskLimits(sim::RunLimits& limits) {
+    if (!currentTask_) return;
+    // Une tache rend la main toutes les 8 ms : une boucle longue (WHILE TRUE ... WAIT ...) n'est plus une faute.
+    limits.maxIterationsPerLoop = std::numeric_limits<std::uint32_t>::max();
+    limits.maxStatementsPerScan = std::numeric_limits<std::uint32_t>::max();
+    limits.slice = [this] { return taskSlice(); };
+}
+
+bool Runtime::waitScript(std::int64_t ms, std::string& why) {
+    if (readOnly_ > 0) {
+        why = "une fonction appel\xC3\xA9" "e par une expression n'attend pas";
+        return false;
+    }
+    if (TaskState* t = currentTask_) {
+        if (t->task->cancelled()) {
+            why.clear();
+            return false;
+        }
+        t->wakeAt = now_ + static_cast<double>(ms) / 1000.0;
+        t->waiting = true;
+        const bool go = t->task->yield();
+        t->waiting = false;
+        if (!go) why.clear();
+        return go;
+    }
+    // Un script qui n'est pas detache : il garde la main, l'IHM attend avec lui.
+    if (ms > kMaxBlockingWaitMs) {
+        why = "un script non d\xC3\xA9tach\xC3\xA9 bloque l'IHM pendant son attente : 10 s au plus (coche \xC2\xAB D\xC3\xA9tach\xC3\xA9 \xC2\xBB dans ses propri\xC3\xA9t\xC3\xA9s)";
+        return false;
+    }
+    if (ms > 0) {
+        core::crash::holdWatchdog(true);
+        net::preciseWait(static_cast<int>(ms));
+        core::crash::holdWatchdog(false);
+    }
+    return true;
+}
+
+std::vector<std::string> Runtime::runningScripts() const {
+    std::vector<std::string> out;
+    for (const auto& t : tasks_)
+        if (!t->task->finished()) out.push_back(t->name);
+    return out;
+}
+
+bool Runtime::scriptRunning(std::string_view name) const {
+    const std::string u = upper(name);
+    for (const auto& t : tasks_)
+        if (upper(t->name) == u && !t->task->finished()) return true;
+    return false;
+}
+
+bool Runtime::stopScript(std::string_view name) {
+    const std::string u = upper(name);
+    bool any = false;
+    for (const auto& t : tasks_)
+        if (upper(t->name) == u && !t->task->finished() && !t->task->cancelled()) {
+            t->stopAsked = true;
+            t->task->cancel();
+            any = true;
+        }
+    return any;
+}
+
+Runtime::~Runtime() {
+    stopTasks();                                       // 1.12.26 : les scripts detaches s'arretent avant le moteur
+    unregisterChoiceResolver(this);                    // 1.12.2 : ses sources d'elements partent avec lui
+}
 
 void Runtime::bind(const Project* project, sim::Environment* plc) {
     project_ = project;
@@ -1686,6 +1931,7 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
                             Id scriptId) {
     (void)now;
     const Prepared& prep = prepare(code, source, false);
+    const auto program = prep.program;           // 1.12.26 : une tache garde son programme pendant qu'elle attend
     if (!prep.program) {
         const std::string why = prep.error;
         if (error) *error = why;
@@ -1709,6 +1955,7 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     sim::RunLimits limits;
     limits.maxIterationsPerLoop = 100000;
     limits.maxStatementsPerScan = 200000;
+    taskLimits(limits);                          // 1.12.26 : dans un script detache, des tranches sans plafond
     limits.locals = kept;
     // 1.12.7 : ses valeurs calculees au demarrage (ses constantes, les valeurs initiales calculees).
     if (scriptId)
@@ -1717,11 +1964,16 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     const sim::ExecTrace callerTrace = trace_;
     trace_ = {};
     limits.trace = &trace_;
-    const auto result = sim::execute(*prep.program, *env_, limits);
+    const auto result = sim::execute(*program, *env_, limits);
     trace_ = callerTrace;
     env_->frames.pop_back();
     source_ = previous;
     if (scriptId) ++runs_[scriptId];
+    // 1.12.26 : un script detache arrete (la simulation s'arrete, IHM_SCRIPT_ARRETER) : ni erreur, ni message.
+    if (currentTask_ && currentTask_->task->cancelled()) {
+        if (depth_ <= 1) abort_.clear();
+        return false;
+    }
     std::string why;
     int whyLine = -1;                // -1 : pas de ligne (un budget depasse)
     for (const auto& d : env_->diagnostics)
@@ -1870,6 +2122,7 @@ void Runtime::fireCallback(const sim::ObjRef& callback, const std::vector<sim::V
     sim::RunLimits limits;
     limits.maxIterationsPerLoop = 100000;
     limits.maxStatementsPerScan = 200000;
+    taskLimits(limits);                                       // 1.12.26
     const sim::ExecTrace callerTrace = trace_;
     trace_ = {};
     limits.trace = &trace_;
@@ -1992,6 +2245,7 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     sim::RunLimits limits;
     limits.maxIterationsPerLoop = 100000;
     limits.maxStatementsPerScan = 200000;
+    taskLimits(limits);                                       // 1.12.26 : appelee par un script detache
     limits.trace = &trace_;
     if (!f.returnType.empty()) limits.returnTo = f.name;      // 1.12.16 : RETURN valeur ;
     const auto run = sim::execute(*prep.program, *env_, limits);
@@ -2019,7 +2273,13 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     return true;
 }
 
+// 1.12.26 : un script DETACHE tourne en arriere-plan (sa tache, a tour de role avec l'IHM) ; les autres, ici.
 bool Runtime::runScript(const Script& sc, const std::string& source, double now, std::string* error) {
+    if (sc.detached && sc.lang == ScriptLang::ST && running_) return startDetached(sc, source, now, error);
+    return runScriptHere(sc, source, now, error);
+}
+
+bool Runtime::runScriptHere(const Script& sc, const std::string& source, double now, std::string* error) {
     if (sc.lang != ScriptLang::ST) {
         log("Script", source, std::string(scriptLangKey(sc.lang)) + " : \xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9, non ex\xC3\xA9" "cut\xC3\xA9 en simulation");
         return true;
@@ -2039,9 +2299,11 @@ bool Runtime::runScript(const Script& sc, const std::string& source, double now,
     const Id scriptView = project_ ? project_->viewOfScript(sc.id) : kNoId;
     const View* ownerView = scriptView != kNoId ? viewOf(scriptView) : nullptr;
     const bool cyclic = inCycle_ && depth_ == 1;
-    SlowGuard slowFrame(*this, SlowKind::Script, "script:" + std::to_string(sc.id),
-                        "Script " + sc.name + (cyclic && ownerView ? ", \xC3\xA0 chaque cycle" : std::string{}),
-                        ownerView ? ownerView->name : std::string("IHM"), scriptView, kNoId, sc.id);
+    std::optional<SlowGuard> slowFrame;      // 1.12.26 : dans une tache, le temps compte ses attentes : pas une lenteur
+    if (!currentTask_)
+        slowFrame.emplace(*this, SlowKind::Script, "script:" + std::to_string(sc.id),
+                          "Script " + sc.name + (cyclic && ownerView ? ", \xC3\xA0 chaque cycle" : std::string{}),
+                          ownerView ? ownerView->name : std::string("IHM"), scriptView, kNoId, sc.id);
     XPG_PORTEE_TEXTE("script IHM", source);   // 1.10.2 (CR) : un script bloque se voit dans la pile
     // 1.11.2 (BLK) : la raison, meme quand l'appelant n'en veut pas (les scripts
     // cycliques et "sur changement" passent nullptr) : la trace du rapport la dit.
@@ -2060,8 +2322,8 @@ bool Runtime::runScript(const Script& sc, const std::string& source, double now,
     auto& sp = perf_.scripts[sc.id];
     if (sp.name.empty()) sp.name = source;
     const double scriptMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-    sp.time.add(scriptMs);
-    if (cyclic) {                                 // 1.12.17 : un poste du cycle
+    if (!currentTask_) sp.time.add(scriptMs);     // 1.12.26 : un script detache attend : pas une mesure
+    if (cyclic && !currentTask_) {                // 1.12.17 : un poste du cycle
         std::string label = ownerView ? "Script " + sc.name + " (" + ownerView->name + ")"
                                       : "Script g\xC3\xA9n\xC3\xA9ral " + sc.name
                                             + (sc.event == "Cyclique" ? " (toutes les " + perfMs(std::max(10, sc.periodMs)) + ")"
@@ -3301,6 +3563,7 @@ void Runtime::start(double now) {
     // l'application (un onglet Simulation referme puis rouvert ne repart pas a 1).
     static int sessions = 0;
     session_ = ++sessions;
+    stopTasks();                        // 1.12.26 : aucune tache d'avant ne survit
     // 1.12.2 : les sources d'elements (itemsFrom) se lisent dans ce moteur tant qu'il tourne.
     registerChoiceResolver(this, [this](const Object& o, std::string_view source, std::vector<Choice>& out) { return resolveChoices(source, out, &o); });
     composed_.clear(); boundCalls_.clear();
@@ -3754,6 +4017,7 @@ bool Runtime::runFunction(Id id, const std::vector<std::pair<std::string, sim::V
 }
 
 void Runtime::stop(double now, const std::string& why) {
+    stopTasks();                                     // 1.12.26 : les scripts detaches s'arretent avec l'IHM
     unregisterChoiceResolver(this);                  // 1.12.2
     if (!running_) return;
     now_ = std::max(now_, now);
@@ -4050,6 +4314,7 @@ void Runtime::tick(double now) {
     }
     if (!timers_.empty()) timersTick(now);   // 1.12.19 : IHM_APRES, IHM_CHAQUE
     if (!watches_.empty()) watchesTick();    // 1.12.20 : IHM_SUR_CHANGEMENT
+    if (!tasks_.empty()) tasksTick(now);     // 1.12.26 : les scripts detaches (leur reveil, leur tranche)
     // Les timers, a chaque appel ; le reste au rythme du cycle IHM.
     std::vector<Id> shown{current_};
     shown.insert(shown.end(), popups_.begin(), popups_.end());

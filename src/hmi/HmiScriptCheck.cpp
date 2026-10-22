@@ -356,6 +356,7 @@ constexpr Arity kHmi[] = {
     {"IHM_ESCLAVE_SIMULE", 1, 1},  {"IHM_LOG", 2, 2},
     {"IHM_APRES", 2, 2},           {"IHM_CHAQUE", 2, 2},         {"IHM_ANNULER", 1, 1},    // 1.12.19
     {"IHM_SUR_CHANGEMENT", 2, 2},                                                          // 1.12.20
+    {"IHM_SCRIPT_ACTIF", 1, 1},    {"IHM_SCRIPT_ARRETER", 1, 1},                            // 1.12.26
 };
 
 std::string plural(int n, const char* one) { return std::to_string(n) + " " + one + (n > 1 ? "s" : ""); }

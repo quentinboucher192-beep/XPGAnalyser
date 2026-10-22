@@ -978,6 +978,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                + fieldBare("evenement", sc.event.empty() ? "Appel" : sc.event) + fieldInt("periode", sc.periodMs)
                + field("surveille", sc.watch) + field("fichier", "scripts/" + file) + field("description", sc.description)
                + (sc.folder.empty() ? std::string{} : field("dossier", sc.folder))           // lot 21
+               + (sc.detached ? fieldBool("detache", true) : std::string{})                  // 1.12.26
                + "\n" + serializeDeclarations(sc.decls);                                    // 1.11.18 (lot 3)
     }
     // Lot 7 : les fonctions IHM, chacune dans son fichier (ihm/fonctions/).
@@ -1555,6 +1556,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             sc.watch = toStr(r.get("surveille"));
             sc.description = toStr(r.get("description"));
             sc.folder = toStr(r.get("dossier"));                    // lot 21
+            sc.detached = toBool(r.get("detache"), false);          // 1.12.26
             const std::string file = toStr(r.get("fichier"));
             if ((file.empty() || !read(file, sc.body)) && report)
                 report->warnings.push_back("script '" + sc.name + "' : fichier " + file + " absent");

@@ -26,6 +26,7 @@
 #include "Rich.hpp"
 #include "Value.hpp"
 
+#include <functional>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -244,6 +245,14 @@ public:
         why = "pas de fichiers ici (les fonctions FILE_, DIR_ et RESOURCE_ tournent dans un script de l'IHM)";
         return false;
     }
+    // 1.12.26 : WAIT(duree) - attendre dans un script. Vrai : attendu ; faux et `why` : refuse (pas ici, trop long pour
+    // un script qui bloque l'IHM) ; faux et `why` vide : le script est arrete pendant son attente (la simulation
+    // s'arrete, IHM_SCRIPT_ARRETER) - il s'arrete sans erreur. Par defaut : pas d'attente ici.
+    virtual bool wait(std::int64_t milliseconds, std::string& why) {
+        (void)milliseconds;
+        why = "pas d'attente ici (WAIT attend dans un script de l'IHM, pas dans une expression)";
+        return false;
+    }
 };
 
 // Lot API 8 : les variables d'une ligne, lues au passage (point d'arret) : le nom
@@ -391,6 +400,9 @@ struct RunLimits {
     const Locals*  initials{nullptr};
     // 1.10 : la profondeur d'appel des fonctions du dialecte, au plus.
     std::uint32_t  maxCallDepth{64};
+    // 1.12.26 : UN SCRIPT DETACHE rend la main de temps en temps (l'IHM continue pendant qu'il calcule) : appele
+    // toutes les 256 instructions ; faux : le script est arrete, sans erreur. Vide : jamais.
+    std::function<bool()> slice{};
     // 1.12.16 : le programme est le corps d'une fonction IHM (du projet, d'une vue, d'un symbole) :
     // RETURN valeur ; ecrit cette variable (le nom de la fonction) et rend la main. Vide : RETURN
     // valeur n'est permis que dans une FUNCTION du dialecte.

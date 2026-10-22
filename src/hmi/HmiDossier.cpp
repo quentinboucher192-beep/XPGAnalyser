@@ -103,6 +103,7 @@ std::string eventName(const Script& s) {
     std::string e = std::string(eventLabel(s.event));
     if (s.event == "Cyclique" || s.event == "OnCycle") e += " (" + std::to_string(s.periodMs) + " ms)";
     if (s.event == "Changement" && !s.watch.empty()) e += " : " + s.watch;
+    if (s.detached) e += ", d\xC3\xA9tach\xC3\xA9 (en arri\xC3\xA8re-plan)";                        // 1.12.26
     return e;
 }
 

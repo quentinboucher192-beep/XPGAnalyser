@@ -22,10 +22,12 @@
 #include "../src/hmi/HmiTypeForms.hpp"     // 1.12.19 : callbackInitial
 #include "../src/hmi/HmiTypes.hpp"
 #include "../src/hmi/HmiSimData.hpp"
+#include "../src/hmi/HmiStore.hpp"     // 1.12.26 : Detache enregistre
 #include "../src/sim/Interpreter.hpp"     // 1.12.1 : le ST de l'automate (sans le dialecte)
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -221,7 +223,7 @@ void catalogueComplet() {
                           "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE",
                           "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_GIF_JOUER", "IHM_GIF_PAUSE",
                           "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_ESCLAVE_SIMULE", "IHM_LOG",
-                          "IHM_APRES", "IHM_CHAQUE", "IHM_ANNULER", "IHM_SUR_CHANGEMENT"}) {
+                          "IHM_APRES", "IHM_CHAQUE", "IHM_ANNULER", "IHM_SUR_CHANGEMENT", "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER"}) {
         check(has(n), std::string("dans le catalogue : ") + n);
         check(isHmiFunction(n), std::string("connue de Compiler : ") + n);
     }
@@ -232,7 +234,7 @@ void catalogueComplet() {
             ++ihm;
             check(isHmiFunction(f.name), "la fonction du catalogue est connue de Compiler : " + std::string(f.name));
         }
-    check(ihm == 41, "41 fonctions IHM_ (" + std::to_string(ihm) + ")");
+    check(ihm == 43, "43 fonctions IHM_ (" + std::to_string(ihm) + ") - 1.12.26 : IHM_SCRIPT_ACTIF, IHM_SCRIPT_ARRETER");
     // Chaque fonction : sa categorie existe, sa syntaxe en C et C++ est dite.
     for (const auto& f : nt::functions()) {
         check(nt::category(f.category) != nullptr, std::string(f.name) + " : categorie " + std::string(f.category));
@@ -1072,6 +1074,187 @@ void fichiers1226() {
     }
 }
 
+// 1.12.26 : WAIT et les scripts detaches - un script qui n'est pas detache bloque (10 s au plus) ; un script detache
+// rend la main, reprend a son heure, garde ses locales, une instance a la fois ; IHM_SCRIPT_ACTIF, IHM_SCRIPT_ARRETER ;
+// une boucle de calcul ne fige pas l'IHM (des tranches) ; l'arret de l'IHM arrete tout, sans erreur ; Detache s'enregistre.
+void attente1226() {
+    std::printf("-- 1.12.26 : WAIT, les scripts detaches\n");
+    using Clock = std::chrono::steady_clock;
+    const auto msSince = [](Clock::time_point t0) { return std::chrono::duration<double, std::milli>(Clock::now() - t0).count(); };
+    const auto var = [](Project& p, const char* n, const char* t, const char* init) {
+        Variable v;
+        v.id = p.allocate();
+        v.name = n;
+        v.type = t;
+        v.initial = init;
+        p.programs.variables.push_back(v);
+    };
+    const auto script = [](Project& p, const char* n, const std::string& body, bool detached, const char* event = "Appel") {
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = n;
+        sc.event = event;
+        sc.body = body;
+        sc.detached = detached;
+        p.programs.scripts.push_back(sc);
+    };
+    const auto value = [](Runtime& rt, const char* n) {
+        sim::Value v;
+        return rt.environment().read(n, v) ? v.asInteger() : -1;
+    };
+    const auto said = [](const Runtime& rt, const std::string& what) {
+        for (const auto& e : rt.journal())
+            if (e.message.find(what) != std::string::npos) return true;
+        return false;
+    };
+    const auto errors = [](const Runtime& rt) {
+        std::string out;
+        for (const auto& e : rt.journal())
+            if (e.kind == "Erreur") out += " | " + e.message;
+        return out;
+    };
+    // 1. Non detache : WAIT bloque, le script tourne d'un trait ; au-dela de 10 s, refuse.
+    {
+        Project p;
+        var(p, "A", "INT", "0");
+        script(p, "Bloque", "A := 1;\nWAIT(T#30ms);\nA := 2;", false);
+        script(p, "Long", "WAIT(T#11s);\nA := 9;", false);
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        const auto t0 = Clock::now();
+        std::string err;
+        const bool ok = rt.callScript("Bloque", 0.1, &err);
+        const double ms = msSince(t0);
+        check(ok && err.empty() && value(rt, "A") == 2 && ms >= 25.0, "WAIT bloquant : A = " + std::to_string(value(rt, "A")) + " en " + std::to_string(ms) + " ms " + err);
+        err.clear();
+        const bool long11 = rt.callScript("Long", 0.2, &err);
+        check(!long11 && err.find("10 s au plus") != std::string::npos && value(rt, "A") == 2, "WAIT(T#11s) non detache : refuse - " + err);
+    }
+    // 2. Detache : la main revient tout de suite ; la suite a son heure, d'un tick a l'autre.
+    {
+        Project p;
+        var(p, "A", "INT", "0");
+        script(p, "Seq", "A := 1;\nWAIT(T#1s);\nA := 2;\nWAIT(T#1s);\nA := 3;", true);
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        const auto t0 = Clock::now();
+        check(rt.callScript("Seq", 0.1) && msSince(t0) < 500.0 && value(rt, "A") == 1, "detache : la main revient tout de suite (A = 1)");
+        const auto running = rt.runningScripts();
+        check(rt.scriptRunning("Seq") && running.size() == 1 && running[0] == "Seq", "detache : il tourne (runningScripts)");
+        rt.tick(0.5);
+        check(value(rt, "A") == 1, "detache : avant son heure, rien (A = 1)");
+        rt.tick(1.2);
+        check(value(rt, "A") == 2, "detache : a son heure, la suite (A = 2)");
+        rt.tick(2.3);
+        check(value(rt, "A") == 3 && !rt.scriptRunning("Seq"), "detache : fini (A = 3)");
+        check(said(rt, "Seq : d\xC3\xA9marr\xC3\xA9 en arri\xC3\xA8re-plan") && said(rt, "Seq : termin\xC3\xA9"), "detache : la Console dit le depart et la fin");
+        check(errors(rt).empty(), "detache : aucune erreur" + errors(rt));
+    }
+    // 3. Une instance a la fois ; IHM_SCRIPT_ACTIF et IHM_SCRIPT_ARRETER (depuis un autre script) ; une boucle sans fin.
+    {
+        Project p;
+        var(p, "N", "INT", "0");
+        var(p, "B", "BOOL", "FALSE");
+        script(p, "Boucle", "WHILE TRUE DO\n    N := N + 1;\n    WAIT(T#100ms);\nEND_WHILE", true);
+        script(p, "Stop", "B := IHM_SCRIPT_ACTIF('Boucle');\nIHM_SCRIPT_ARRETER('Boucle');", false);
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        (void)rt.callScript("Boucle", 0.1);
+        (void)rt.callScript("Boucle", 0.12);                    // deja en cours : pas une deuxieme
+        check(value(rt, "N") == 1 && rt.runningScripts().size() == 1, "une instance a la fois (N = " + std::to_string(value(rt, "N")) + ")");
+        rt.tick(0.25);
+        rt.tick(0.4);
+        check(value(rt, "N") == 3, "la boucle tourne a son rythme (N = " + std::to_string(value(rt, "N")) + ")");
+        (void)rt.callScript("Stop", 0.45);
+        sim::Value b;
+        check(rt.environment().read("B", b) && b.isTruthy(), "IHM_SCRIPT_ACTIF : vrai pendant qu'il tourne");
+        rt.tick(0.5);
+        check(!rt.scriptRunning("Boucle") && value(rt, "N") == 3, "IHM_SCRIPT_ARRETER : arrete, sans un tour de plus");
+        check(said(rt, "Boucle : arr\xC3\xAAt\xC3\xA9") && errors(rt).empty(), "arrete : la Console le dit, sans erreur" + errors(rt));
+    }
+    // 4. Un long calcul sans WAIT ne fige pas l'IHM : des tranches de 8 ms ; l'arret de l'IHM l'arrete, sans erreur.
+    {
+        Project p;
+        var(p, "N", "DINT", "0");
+        script(p, "Calcul", "WHILE N < 2000000000 DO\n    N := N + 1;\nEND_WHILE", true);
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        const auto t0 = Clock::now();
+        (void)rt.callScript("Calcul", 0.1);
+        const double first = msSince(t0);
+        const auto n1 = value(rt, "N");
+        rt.tick(0.2);
+        const auto n2 = value(rt, "N");
+        check(first < 300.0 && n1 > 0 && n2 > n1 && rt.scriptRunning("Calcul"),
+              "une boucle de calcul rend la main (" + std::to_string(first) + " ms, N " + std::to_string(n1) + " puis " + std::to_string(n2) + ")");
+        const auto t1 = Clock::now();
+        rt.stop(0.3, {});
+        check(msSince(t1) < 1000.0 && !rt.scriptRunning("Calcul") && errors(rt).empty(), "l'arret de l'IHM arrete la tache, sans erreur" + errors(rt));
+    }
+    // 5. Chacun son contexte : la tache garde ses locales (FOR) pendant qu'un autre script tourne entre deux reprises.
+    {
+        Project p;
+        var(p, "X", "INT", "0");
+        var(p, "Y", "INT", "0");
+        script(p, "Lent", "VAR i : INT; END_VAR\nFOR i := 1 TO 3 DO\n    X := X + i;\n    WAIT(T#100ms);\nEND_FOR", true);
+        script(p, "Vite", "VAR i : INT; END_VAR\nFOR i := 1 TO 5 DO\n    Y := Y + i;\nEND_FOR", false);
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        (void)rt.callScript("Lent", 0.1);
+        for (int k = 1; k <= 6; ++k) {
+            (void)rt.callScript("Vite", 0.1 + 0.11 * k - 0.05);
+            rt.tick(0.1 + 0.11 * k);
+        }
+        check(value(rt, "X") == 6 && value(rt, "Y") == 90 && !rt.scriptRunning("Lent"),
+              "chacun ses locales : X = " + std::to_string(value(rt, "X")) + " (6), Y = " + std::to_string(value(rt, "Y")) + " (90)");
+        check(errors(rt).empty(), "chacun son contexte : aucune erreur" + errors(rt));
+    }
+    // 6. Un script de Demarrage detache : l'IHM demarre sans l'attendre.
+    {
+        Project p;
+        var(p, "A", "INT", "0");
+        script(p, "Init", "A := 1;\nWAIT(T#2s);\nA := 2;", true, "Demarrage");
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        const auto t0 = Clock::now();
+        rt.start(0.0);
+        check(msSince(t0) < 500.0 && value(rt, "A") == 1 && rt.scriptRunning("Init"), "Demarrage detache : l'IHM ne l'attend pas");
+        rt.tick(2.1);
+        check(value(rt, "A") == 2, "Demarrage detache : la suite a son heure");
+    }
+    // 7. Detache s'enregistre (et ce qui ne l'est pas ne l'ecrit pas).
+    {
+        Project p;
+        script(p, "Seq", "WAIT(T#1s);", true);
+        script(p, "Simple", "A := 1;", false);
+        std::map<std::string, std::string> files;
+        for (const auto& f : serializeProject(p)) files[f.path] = std::string(f.data->begin(), f.data->end());
+        const auto back = parseProject([&](const std::string& path, std::string& out) {
+            const auto it = files.find(path);
+            if (it == files.end()) return false;
+            out = it->second;
+            return true;
+        });
+        check(back && back->programs.scripts.size() == 2 && back->programs.scripts[0].detached && !back->programs.scripts[1].detached,
+              "Detache : enregistre et relu");
+        check(files["ihm.txt"].find("detache") != std::string::npos && files["ihm.txt"].find("detache") == files["ihm.txt"].rfind("detache"),
+              "Detache : ecrit pour le seul script detache");
+    }
+    // 8. Le controle : WAIT dans une expression est refuse ; dans un script, il se lit.
+    {
+        const auto diags = checkScript(ScriptLang::ST, "WAIT(T#1s);\nWAIT(500);", "Essai");
+        std::string errs;
+        for (const auto& d : diags)
+            if (d.severity == ScriptDiagnostic::Severity::Error) errs += " | " + d.message;
+        check(errs.empty(), "WAIT se lit dans un script" + errs);
+    }
+}
+
 int main() {
     std::printf("1.12.0 : les natives de l'IHM (catalogue, exemples, conversions, types, enumerations, couleurs, aleatoire)\n");
     {
@@ -1093,6 +1276,7 @@ int main() {
     sondeControle1219();
     rappels1220();
     fichiers1226();
+    attente1226();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

@@ -949,6 +949,20 @@ void HmiScriptsPane::rebuildProperties() {
                                         [this, copy](std::string_view v) {
                                             return setTrigger(copy.id, copy.event, copy.periodMs, std::string(v));
                                         }));
+        // 1.12.26 : DETACHE - en arriere-plan : WAIT n'attend que lui, l'IHM continue.
+        c.properties.push_back(prop("D\xC3\xA9tach\xC3\xA9", sc->detached ? "TRUE" : "FALSE", PG::ValueType::Boolean, {},
+                                    [this, id](std::string_view v) {
+                                        const bool on = v == "TRUE" || v == "1" || v == "Vrai" || v == "true";
+                                        auto cmd = hmi::changeProject(doc_, on ? "Script d\xC3\xA9tach\xC3\xA9" : "Script non d\xC3\xA9tach\xC3\xA9",
+                                                                      [&](hmi::Project& p) {
+                                                                          if (auto* s = p.script(id)) s->detached = on;
+                                                                      });
+                                        if (cmd) apply_(std::move(cmd));
+                                        return true;
+                                    },
+                                    "Coch\xC3\xA9 : le script tourne en arri\xC3\xA8re-plan - WAIT n'attend que lui, l'IHM continue ; "
+                                    "une instance \xC3\xA0 la fois (IHM_SCRIPT_ACTIF, IHM_SCRIPT_ARRETER). D\xC3\xA9" "coch\xC3\xA9 : il tourne "
+                                    "d'un trait ; WAIT bloque l'IHM pendant l'attente (10 s au plus)."));
         c.properties.push_back(prop("Description", sc->description, PG::ValueType::Text, {},
                                     [this, id](std::string_view v) {
                                         auto cmd = hmi::changeProject(doc_, "Description du script", [&](hmi::Project& p) {

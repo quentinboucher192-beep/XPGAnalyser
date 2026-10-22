@@ -1066,6 +1066,8 @@ private:
             if (u == "SWAP" || u == "EXCHANGE")             // 1.12.16 : elles ecrivent des variables
                 problem(u + (u == "SWAP" ? " \xC3\xA9" "change deux variables" : " \xC3\xA9" "crit sa variable")
                         + " : une expression ne change rien ; fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB)");
+            else if (u == "WAIT")                           // 1.12.26
+                problem("WAIT attend dans un script, pas dans une expression : une expression calcule sa valeur tout de suite");
             else if (sim::lib::changesFiles(u))             // 1.12.26 : FILE_WRITE, FILE_DELETE, DIR_CREATE...
                 problem(u + " change un fichier : une expression ne fait que lire ; fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9"
                             "cuter un script \xC2\xBB)");

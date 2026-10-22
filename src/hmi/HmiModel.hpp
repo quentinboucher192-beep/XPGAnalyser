@@ -795,6 +795,9 @@ struct Script {
     std::string description;
     std::string folder{};           // lot 21 : son dossier dans la liste des scripts generaux ("" : la racine)
     std::vector<Declaration> decls{};   // 1.11.18 (lot 3) : ses constantes et variables
+    // 1.12.26 : DETACHE (un script general) : il tourne en arriere-plan - WAIT n'attend que lui, l'IHM continue ; une
+    // instance a la fois (relance pendant qu'il tourne : rien). Sinon il tourne d'un trait, et WAIT bloque l'IHM.
+    bool        detached{false};
     bool operator==(const Script&) const = default;
 };
 inline constexpr std::string_view kViewEvents[] = {"OnOpen", "OnCycle", "OnClose"};

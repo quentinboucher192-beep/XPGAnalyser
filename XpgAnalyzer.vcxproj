@@ -595,6 +595,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiRuntimeSlaves.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeSlow.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeFiles.cpp" />
+    <ClCompile Include="src\hmi\HmiScriptTask.cpp" />
     <ClCompile Include="src\hmi\HmiScriptCheck.cpp" />
     <ClCompile Include="src\hmi\HmiScriptCheck110.cpp" />
     <ClCompile Include="src\hmi\HmiScriptFile.cpp" />
@@ -775,6 +776,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiRecipes.hpp" />
     <ClInclude Include="src\hmi\HmiReports.hpp" />
     <ClInclude Include="src\hmi\HmiRuntime.hpp" />
+    <ClInclude Include="src\hmi\HmiScriptTask.hpp" />
     <ClInclude Include="src\hmi\HmiScenarios.hpp" />
     <ClInclude Include="src\hmi\HmiScript.hpp" />
     <ClInclude Include="src\hmi\HmiSignature.hpp" />

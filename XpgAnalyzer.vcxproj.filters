@@ -1423,6 +1423,9 @@
     <ClCompile Include="src\hmi\HmiRuntimeFiles.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiScriptTask.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiScriptCheck.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1844,6 +1847,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiRuntime.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiScriptTask.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiScenarios.hpp">

@@ -1888,7 +1888,9 @@ bool isHmiFunction(std::string_view name) noexcept {
                                    // 1.12.19 : un rappel plus tard (les minuteurs)
                                    "IHM_APRES", "IHM_CHAQUE", "IHM_ANNULER",
                                    // 1.12.20 : surveiller une variable
-                                   "IHM_SUR_CHANGEMENT"};
+                                   "IHM_SUR_CHANGEMENT",
+                                   // 1.12.26 : les scripts detaches
+                                   "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER"};
     const std::string u = upper(name);
     for (const char* n : kNames) if (u == n) return true;
     return false;

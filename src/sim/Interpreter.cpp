@@ -2526,6 +2526,11 @@ private:
     }
 
     [[nodiscard]] bool budgetExhausted(std::uint32_t line) {
+        // 1.12.26 : un script detache rend la main (sa tranche de temps) ; arrete pendant ce temps : sans erreur.
+        if (limits_.slice && (++sliced_ & 255u) == 0 && !limits_.slice()) {
+            aborted_ = true;
+            return true;
+        }
         if (limits_.scanStatements) {
             constexpr std::uint64_t kSpent = std::uint64_t{1} << 62;   // le budget est epuise : tout s'arrete
             const auto n = ++*limits_.scanStatements;
@@ -6776,6 +6781,7 @@ private:
             return std::optional<core::Result<RV>>(valueNative(u, e));
         if (info->group == "utility") return std::optional<core::Result<RV>>(utilityNative(u, e));                    // 1.12.16
         if (info->group == "fichiers") return std::optional<core::Result<RV>>(fileNative(u, e));                     // 1.12.26
+        if (info->group == "attente") return std::optional<core::Result<RV>>(waitNative(u, e));                      // 1.12.26
         return std::optional<core::Result<RV>>(listNative(u, *info, e));
     }
 
@@ -8541,6 +8547,29 @@ private:
     // le fait (fileOp). Un echec ne coupe pas le script : FALSE, '', une liste vide, -1 - et FILE_ERROR() dit pourquoi
     // (la derniere fonction de fichier de cette execution).
     std::string fileError_;
+    std::uint32_t sliced_{0};                // 1.12.26 : les instructions depuis le debut (la tranche d'un script detache)
+
+    // ---- 1.12.26 : WAIT(duree) - l'environnement attend : un script detache rend la main jusqu'a son heure, un autre
+    // bloque l'IHM (10 s au plus). Arrete pendant l'attente : le script s'arrete sans erreur (meme dans un TRY).
+    core::Result<RV> waitNative(const std::string& u, const Expr& e) {
+        auto v = rich(*e.arguments[0].second);
+        if (!v) return v;
+        const Type t = v->o ? Type::Unknown : v->v.type();
+        std::int64_t ms = 0;
+        if (t == Type::Time) ms = v->v.asInteger();
+        else if (isNumeric(t) && t != Type::Bool) ms = static_cast<std::int64_t>(std::llround(v->v.asReal()));
+        else return dialectError(u + " : une dur\xC3\xA9" "e est attendue (T#500ms, ou un nombre de millisecondes), pas "
+                                 + (v->o ? "un " + typeNameOf(*v) : v->v.display()));
+        if (ms < 0) ms = 0;
+        std::string why;
+        if (env_.wait(ms, why)) return RV{Value::boolean(true), nullptr};
+        if (why.empty()) {
+            aborted_ = true;
+            return core::fail(core::ErrorCode::InvalidArgument, "arr\xC3\xAAt\xC3\xA9 pendant WAIT");
+        }
+        return dialectError(u + " : " + why);
+    }
+
     core::Result<RV> fileNative(const std::string& u, const Expr& e) {
         std::vector<std::string> a;
         for (std::size_t k = 0; k < e.arguments.size(); ++k) {

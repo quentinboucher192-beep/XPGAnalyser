@@ -225,7 +225,7 @@ bool sameType(const HmiType& a, const HmiType& b) {
 }
 bool sameScript(const Script& a, const Script& b) {
     return a.lang == b.lang && a.event == b.event && a.body == b.body && a.periodMs == b.periodMs && a.watch == b.watch
-        && sameDeclarations(a.decls, b.decls);
+        && a.detached == b.detached && sameDeclarations(a.decls, b.decls);                                 // 1.12.26
 }
 
 // Un nom libre dans le projet ET dans le paquet (T_Mode_2...), pour un type, une

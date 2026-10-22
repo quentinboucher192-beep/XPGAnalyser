@@ -847,6 +847,11 @@ public:
     [[nodiscard]] std::vector<std::string> forcedVariables() const;
     // Un script general, par son nom (Programmation generale, et les tests).
     bool callScript(std::string_view name, double now, std::string* error = nullptr);
+    // 1.12.26 : LES SCRIPTS DETACHES qui tournent (leurs noms, dans l'ordre de depart) ; l'un d'eux tourne-t-il ; en
+    // arreter un (a sa prochaine instruction, ou tout de suite s'il attend) - faux : il ne tournait pas.
+    [[nodiscard]] std::vector<std::string> runningScripts() const;
+    [[nodiscard]] bool scriptRunning(std::string_view name) const;
+    bool stopScript(std::string_view name);
     // Combien de fois un script a tourne ; sa derniere erreur.
     [[nodiscard]] std::size_t runs(Id script) const;
     [[nodiscard]] std::string lastError(Id script) const;
@@ -1428,6 +1433,7 @@ private:
     void closeView(Id view, double now);
     void runViewScript(const View&, std::string_view event, double now);
     bool runScript(const Script&, const std::string& source, double now, std::string* error);
+    bool runScriptHere(const Script&, const std::string& source, double now, std::string* error);   // 1.12.26 : sur ce fil
     bool runStatements(const std::string& code, const std::string& source, double now, std::string* error,
                        Id scriptId = kNoId);
     void fire(const View&, const Object*, const Action&, double now, bool byUser = false);
@@ -1722,6 +1728,22 @@ private:
     // Un rappel appele par l'IHM (un minuteur, une surveillance), comme un script ; une erreur dans la Console.
     void fireCallback(const sim::ObjRef& callback, const std::vector<sim::Value>& args, const std::string& source);
     void nullCallback(std::string_view name, std::string_view where);
+    // 1.12.26 : LES SCRIPTS DETACHES (HmiScriptTask.hpp). Chacun a son fil, mais un seul tourne a la fois : le fil de
+    // l'IHM passe la main a une tache et attend qu'elle la rende. Ce qui decrit le code qui tourne (la source, la
+    // pile des cadres, les parametres de vue...) s'echange a chaque passage (exchange).
+    struct ExecState;
+    struct TaskState;
+    std::vector<std::unique_ptr<TaskState>> tasks_;
+    TaskState*                              currentTask_{nullptr};   // la tache qui tourne ; nul : le fil de l'IHM
+    void exchange(ExecState&);
+    bool startDetached(const Script&, const std::string& source, double now, std::string* error);
+    void resumeTask(TaskState&);
+    void tasksTick(double now);
+    void finishTasks();
+    void stopTasks();
+    bool waitScript(std::int64_t ms, std::string& why);                // WAIT
+    bool taskSlice();                                                  // la tranche d'une tache : rendre la main ?
+    void taskLimits(sim::RunLimits&);                                  // les limites d'un code qui tourne dans une tache
     // 1.12.26 : les fichiers et les ressources des scripts (HmiRuntimeFiles.cpp) ; une raison dite une fois a la Console.
     bool fileOp(std::string_view op, const std::vector<std::string>& args, sim::Environment::FileResult& out, std::string& why);
     void fileFailed(const std::string& op, const std::string& why);
