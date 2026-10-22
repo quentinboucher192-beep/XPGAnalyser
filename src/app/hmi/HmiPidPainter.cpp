@@ -689,9 +689,14 @@ void paintLearned(const Pen& p, PidPanelLayout& l, const hmi::Runtime& rt, const
     float y = left.y + 40 * k;
     if (!m.valid) {
         const int n = L.learner.learnedCount();
+        // 1.12.24 : deux echelons ou plus, mais un modele qui n'y colle pas encore assez (moins de 70 %).
+        const std::string why = n < 2 ? std::to_string(n) + " \xC3\xA9" "chelon(s) appris sur les 2 qu'il lui faut. Un changement de consigne "
+                                        "de quelques degr\xC3\xA9s, ou un mouvement de la sortie en MANU, sans perturbation, lui suffit."
+                                      : std::to_string(n) + " \xC3\xA9" "chelons appris, mais son mod\xC3\xA8le n'y colle " +
+                                            (m.fitLearn >= 0 ? "qu'\xC3\xA0 " + hmi::pidNumber(m.fitLearn, 0) + " % (il lui faut 70 %)" : std::string("pas encore assez")) +
+                                            ". Un changement de consigne plus net, ou un mouvement de la sortie en MANU, sans perturbation, le confirmera.";
         p.para(left.x + 16 * k, y, left.w - 32 * k,
-               "Il ne l'a pas encore appris : " + std::to_string(n) + " \xC3\xA9" "chelon(s) appris sur les 2 qu'il lui faut. Un changement de consigne "
-               "de quelques degr\xC3\xA9s, ou un mouvement de la sortie en MANU, sans perturbation, lui suffit. Les statistiques, elles, sont d\xC3\xA9j\xC3\xA0 l\xC3\xA0.",
+               "Il ne l'a pas encore appris : " + why + " Les statistiques, elles, sont d\xC3\xA9j\xC3\xA0 l\xC3\xA0.",
                13, kInk, left.bottom() - y - 16 * k);
     } else {
         const bool second = m.tau2 > 0;
@@ -1510,7 +1515,12 @@ void card(const Ctx& c, const hmi::PidLoop* L) {
         switch (state) {
             case hmi::pid::State::Learning: {
                 const int n = L->learner.learnedCount();
-                say = std::to_string(n) + (n > 1 ? " changements" : " changement") + " de consigne appris sur les 2 qu'il lui faut. Change la consigne de quelques degr\xC3\xA9s, ou passe en MANU et bouge la sortie : il apprendra plus vite.";
+                if (n < 2)
+                    say = std::to_string(n) + (n > 1 ? " changements" : " changement") + " de consigne appris sur les 2 qu'il lui faut. Change la consigne de quelques degr\xC3\xA9s, ou passe en MANU et bouge la sortie : il apprendra plus vite.";
+                else   // 1.12.24 : assez d'echelons, mais le modele n'y colle pas encore assez
+                    say = std::to_string(n) + " changements de consigne appris, mais son mod\xC3\xA8le n'y colle " +
+                          (m.fitLearn >= 0 ? "qu'\xC3\xA0 " + hmi::pidNumber(m.fitLearn, 0) + " % (il lui faut 70 %)" : std::string("pas encore assez")) +
+                          " : un changement plus net, sans perturbation, le confirmera.";
                 break;
             }
             case hmi::pid::State::Saturated:

@@ -988,7 +988,7 @@ void drawDamper(const Ctx& c, const Sym& s) {
     if (faulty) bladeCol = blinkOff ? shade(bad, 0.45f) : bad;
     const gfx::Color wall = faulty ? bladeCol : s.line;
     // La gaine : son fond, ses deux parois, ses brides.
-    fill(c, box(x0, top, x1 - x0, dh), c.fixed(0x1B2028));
+    fill(c, box(x0, top, x1 - x0, dh), c.color("fill", gfx::Color::rgb(0x1B2028)));   // 1.12.24 : sa couleur Fond
     seg(c, x0, top, x1, top, wall, s.lw);
     seg(c, x0, bottom, x1, bottom, wall, s.lw);
     const double fl = std::min(6.0, dh * 0.14);

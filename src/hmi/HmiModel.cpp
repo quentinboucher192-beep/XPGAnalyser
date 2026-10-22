@@ -881,6 +881,7 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             // une discordance, dite sur l'objet) ; "damperActuator" : son actionneur.
             synoptic(o, x, y, kind == Kind::Damper ? 90 : 100, kind == Kind::Damper ? 70 : 86, "FALSE");
             eraseKeys(o, {"animate"});
+            o.set("fill", "#1B2028");   // le fond de la gaine
             o.set("damperActuator", "servomoteur");
             o.set("opening", "");
             o.set("moving", "");
@@ -899,6 +900,7 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             synoptic(o, x, y, 90, 70, "TRUE");
             eraseKeys(o, {"animate"});
             o.set("colorOff", "#F2994A");
+            o.set("fill", "#1B2028");   // le fond de la gaine
             o.set("tripped", "");
             o.set("fireRelease", "fusible");
             o.set("limitOpen", "");

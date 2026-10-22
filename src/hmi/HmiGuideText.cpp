@@ -8311,12 +8311,14 @@ const std::vector<Topic>& topics() {
                          "ouvert\t#2ECC71\tLa couleur de la lame ouverte (ou en partie ouverte).\nCouleur "
                          "ferm\xC3\xA9\t#5A6577\tLa couleur de la lame ferm\xC3\xA9" "e.\nCouleur de "
                          "d\xC3\xA9" "faut\t#E5534B\tLa couleur du d\xC3\xA9" "faut et de la discordance "
-                         "(elle clignote).\nContour\t#C8D0DC\tLe trait de la gaine, de l'axe et de "
-                         "l'actionneur.\n\xC3\x89paisseur du contour\t2\tSon \xC3\xA9paisseur, en pixels de "
-                         "la vue.\nLibell\xC3\xA9\t(vide)\tLe rep\xC3\xA8re \xC3\xA9" "crit avec le symbole "
-                         "(RG-3212).\nPlace du libell\xC3\xA9\tdessous\tdessous, dessus, ou aucun "
-                         "(cach\xC3\xA9).\nTaille du texte\t13\tLa taille du libell\xC3\xA9.\nCouleur du "
-                         "texte\t#C8D0DC\tLa couleur du libell\xC3\xA9, du pourcentage et des voyants O et "
+                         "(elle clignote).\nFond\t#1B2028\tLe fond de la gaine, derri\xC3\xA8re la lame. Sur "
+                         "un synoptique clair : la couleur des gaines (#EEF1F5).\nContour\t#C8D0DC\tLe trait "
+                         "de la gaine, de l'axe et de l'actionneur.\n\xC3\x89paisseur du contour\t2\tSon "
+                         "\xC3\xA9paisseur, en pixels de la vue.\nLibell\xC3\xA9\t(vide)\tLe rep\xC3\xA8re "
+                         "\xC3\xA9" "crit avec le symbole (RG-3212).\nPlace du "
+                         "libell\xC3\xA9\tdessous\tdessous, dessus, ou aucun (cach\xC3\xA9).\nTaille du "
+                         "texte\t13\tLa taille du libell\xC3\xA9.\nCouleur du texte\t#C8D0DC\tLa couleur du "
+                         "libell\xC3\xA9, du pourcentage et des voyants O et "
                          "F.\nActionneur\tservomoteur\tservomoteur (M), manuel (un levier), pneumatique (un "
                          "v\xC3\xA9rin).\nOuverture (%)\t(vide)\tModulant : de 0 \xC3\xA0 100 % (une "
                          "expression : =RG_Position) ; la lame tourne d'autant. Vide : tout ou rien.\nEn "
@@ -8347,6 +8349,9 @@ const std::vector<Topic>& topics() {
             "La couleur de la lame ferm\xC3\xA9" "e."},
            {"colorFault", "Couleur de d\xC3\xA9" "faut", "#E5534B",
             "La couleur du d\xC3\xA9" "faut et de la discordance (elle clignote)."},
+           {"fill", "Fond", "#1B2028",
+            "Le fond de la gaine, derri\xC3\xA8re la lame. Sur un synoptique clair : la couleur des gaines "
+            "(#EEF1F5)."},
            {"stroke", "Contour", "#C8D0DC",
             "Le trait de la gaine, de l'axe et de l'actionneur."},
            {"strokeWidth", "\xC3\x89paisseur du contour", "2",
@@ -8372,7 +8377,8 @@ const std::vector<Topic>& topics() {
             "Vraie : il est ferm\xC3\xA9 (FCF). Le voyant F ; la lame se dresse."}},
          "Le registre RG-3212 s'ouvre \xC3\xA0 1 s (sa lame se couche, l'axe clignote pendant la course), "
          "module de 100 \xC3\xA0 30 % de 3 \xC3\xA0 6 s, se ferme \xC3\xA0 7 s ; de 8 \xC3\xA0 9,5 s, sa fin "
-         "de course ferm\xC3\xA9 ne revient pas alors qu'il est ferm\xC3\xA9 : discordance, il clignote en rouge.",
+         "de course ferm\xC3\xA9 ne revient pas alors qu'il est ferm\xC3\xA9 : discordance, il clignote en "
+         "rouge.",
          {}, "1.12.24"},
         // ---- La bibliotheque d'objets / objet-registre-multi-lames
         {"objet-registre-multi-lames", "Registre multi-lames", "La biblioth\xC3\xA8que d'objets",
@@ -8393,12 +8399,14 @@ const std::vector<Topic>& topics() {
                          "ouvert\t#2ECC71\tLa couleur des lames ouvertes.\nCouleur ferm\xC3\xA9\t#5A6577\tLa "
                          "couleur des lames ferm\xC3\xA9" "es.\nCouleur de d\xC3\xA9" "faut\t#E5534B\tLa "
                          "couleur du d\xC3\xA9" "faut et de la discordance (elle "
-                         "clignote).\nContour\t#C8D0DC\tLe trait de la gaine, des axes et de "
-                         "l'actionneur.\n\xC3\x89paisseur du contour\t2\tSon \xC3\xA9paisseur, en pixels de "
-                         "la vue.\nLibell\xC3\xA9\t(vide)\tLe rep\xC3\xA8re \xC3\xA9" "crit avec le symbole "
-                         "(RG-260).\nPlace du libell\xC3\xA9\tdessous\tdessous, dessus, ou aucun "
-                         "(cach\xC3\xA9).\nTaille du texte\t13\tLa taille du libell\xC3\xA9.\nCouleur du "
-                         "texte\t#C8D0DC\tLa couleur du libell\xC3\xA9, du pourcentage et des "
+                         "clignote).\nFond\t#1B2028\tLe fond de la gaine, derri\xC3\xA8re la lame. Sur un "
+                         "synoptique clair : la couleur des gaines (#EEF1F5).\nContour\t#C8D0DC\tLe trait de "
+                         "la gaine, des axes et de l'actionneur.\n\xC3\x89paisseur du contour\t2\tSon "
+                         "\xC3\xA9paisseur, en pixels de la vue.\nLibell\xC3\xA9\t(vide)\tLe rep\xC3\xA8re "
+                         "\xC3\xA9" "crit avec le symbole (RG-260).\nPlace du "
+                         "libell\xC3\xA9\tdessous\tdessous, dessus, ou aucun (cach\xC3\xA9).\nTaille du "
+                         "texte\t13\tLa taille du libell\xC3\xA9.\nCouleur du texte\t#C8D0DC\tLa couleur du "
+                         "libell\xC3\xA9, du pourcentage et des "
                          "voyants.\nActionneur\tservomoteur\tservomoteur (M), manuel (un levier), "
                          "pneumatique (un v\xC3\xA9rin).\nOuverture (%)\t(vide)\tModulant : de 0 \xC3\xA0 "
                          "100 % ; les lames tournent d'autant. Vide : tout ou rien.\nEn mouvement "
@@ -8429,6 +8437,9 @@ const std::vector<Topic>& topics() {
             "La couleur des lames ferm\xC3\xA9" "es."},
            {"colorFault", "Couleur de d\xC3\xA9" "faut", "#E5534B",
             "La couleur du d\xC3\xA9" "faut et de la discordance (elle clignote)."},
+           {"fill", "Fond", "#1B2028",
+            "Le fond de la gaine, derri\xC3\xA8re la lame. Sur un synoptique clair : la couleur des gaines "
+            "(#EEF1F5)."},
            {"stroke", "Contour", "#C8D0DC",
             "Le trait de la gaine, des axes et de l'actionneur."},
            {"strokeWidth", "\xC3\x89paisseur du contour", "2",
@@ -8480,7 +8491,9 @@ const std::vector<Topic>& topics() {
                          "ouvert (en veille).\nCouleur ferm\xC3\xA9\t#F2994A\tLa couleur du clapet "
                          "ferm\xC3\xA9 (non d\xC3\xA9" "clench\xC3\xA9).\nCouleur de "
                          "d\xC3\xA9" "faut\t#E5534B\tLa couleur du clapet d\xC3\xA9" "clench\xC3\xA9 ou en "
-                         "d\xC3\xA9" "faut (elle clignote).\nContour\t#C8D0DC\tLe trait de la gaine et du "
+                         "d\xC3\xA9" "faut (elle clignote).\nFond\t#1B2028\tLe fond de la gaine, "
+                         "derri\xC3\xA8re la lame. Sur un synoptique clair : la couleur des gaines "
+                         "(#EEF1F5).\nContour\t#C8D0DC\tLe trait de la gaine et du "
                          "d\xC3\xA9" "clencheur.\n\xC3\x89paisseur du contour\t2\tSon \xC3\xA9paisseur, en "
                          "pixels de la vue.\nLibell\xC3\xA9\t(vide)\tLe rep\xC3\xA8re \xC3\xA9" "crit avec "
                          "le symbole (CF-12).\nPlace du libell\xC3\xA9\tdessous\tdessous, dessus, ou aucun "
@@ -8515,6 +8528,9 @@ const std::vector<Topic>& topics() {
             "La couleur du clapet ferm\xC3\xA9 (non d\xC3\xA9" "clench\xC3\xA9)."},
            {"colorFault", "Couleur de d\xC3\xA9" "faut", "#E5534B",
             "La couleur du clapet d\xC3\xA9" "clench\xC3\xA9 ou en d\xC3\xA9" "faut (elle clignote)."},
+           {"fill", "Fond", "#1B2028",
+            "Le fond de la gaine, derri\xC3\xA8re la lame. Sur un synoptique clair : la couleur des gaines "
+            "(#EEF1F5)."},
            {"stroke", "Contour", "#C8D0DC",
             "Le trait de la gaine et du d\xC3\xA9" "clencheur."},
            {"strokeWidth", "\xC3\x89paisseur du contour", "2",

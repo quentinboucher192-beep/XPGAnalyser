@@ -576,6 +576,20 @@ void incidents() {
         check(lr.saturatedFor() > before + 100 && lr.state() == State::Saturated && total == 1 && open == 1,
               fmt("relancee 2 min plus tard : saturee depuis %.0f s, un evenement (%d), en cours", lr.saturatedFor(), total));
     }
+    // 1.12.24 : passee en MANU, la sortie toujours a 100 % : c'est l'operateur qui la tient, pas une saturation.
+    {
+        Learner lm(cfg);
+        check(lm.load(ls.save()), "la memoire saturee relue (MANU)");
+        for (int i = 0; i < 120; ++i) {
+            Sample s = r2.step();
+            s.autoMode = false;
+            lm.push(s, cur);
+        }
+        bool closed = false;
+        for (const Event& e : lm.events()) closed = closed || (e.kind == EventKind::Saturation && e.t2 > 0);
+        check(lm.saturatedFor() == 0 && lm.state() == State::Manual && closed,
+              fmt("en MANU a %.0f %% : En MANU, pas Saturee ; la saturation close dans le Journal", lm.recent().back().out));
+    }
     // Oublier et reapprendre
     l.forget();
     check(!l.model().valid && l.model().learned == 0, "Oublier : plus de modele");

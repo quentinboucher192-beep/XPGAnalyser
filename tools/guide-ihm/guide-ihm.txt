@@ -3484,6 +3484,7 @@ Le symbole d'un registre de gaine (extraction, ventilation, désenfumage) : une 
 @param colorOn | Couleur ouvert | #2ECC71 | La couleur de la lame ouverte (ou en partie ouverte).
 @param colorOff | Couleur fermé | #5A6577 | La couleur de la lame fermée.
 @param colorFault | Couleur de défaut | #E5534B | La couleur du défaut et de la discordance (elle clignote).
+@param fill | Fond | #1B2028 | Le fond de la gaine, derrière la lame. Sur un synoptique clair : la couleur des gaines (#EEF1F5).
 @param stroke | Contour | #C8D0DC | Le trait de la gaine, de l'axe et de l'actionneur.
 @param strokeWidth | Épaisseur du contour | 2 | Son épaisseur, en pixels de la vue.
 @param label | Libellé |  | Le repère écrit avec le symbole (RG-3212).
@@ -3514,6 +3515,7 @@ Le registre des grandes sections : de 2 à 8 lames, l'une au-dessus de l'autre, 
 @param colorOn | Couleur ouvert | #2ECC71 | La couleur des lames ouvertes.
 @param colorOff | Couleur fermé | #5A6577 | La couleur des lames fermées.
 @param colorFault | Couleur de défaut | #E5534B | La couleur du défaut et de la discordance (elle clignote).
+@param fill | Fond | #1B2028 | Le fond de la gaine, derrière la lame. Sur un synoptique clair : la couleur des gaines (#EEF1F5).
 @param stroke | Contour | #C8D0DC | Le trait de la gaine, des axes et de l'actionneur.
 @param strokeWidth | Épaisseur du contour | 2 | Son épaisseur, en pixels de la vue.
 @param label | Libellé |  | Le repère écrit avec le symbole (RG-260).
@@ -3546,6 +3548,7 @@ Le clapet coupe-feu (CF) d'une traversée de paroi : une gaine, sa lame, la marq
 @param colorOn | Couleur ouvert | #2ECC71 | La couleur du clapet ouvert (en veille).
 @param colorOff | Couleur fermé | #F2994A | La couleur du clapet fermé (non déclenché).
 @param colorFault | Couleur de défaut | #E5534B | La couleur du clapet déclenché ou en défaut (elle clignote).
+@param fill | Fond | #1B2028 | Le fond de la gaine, derrière la lame. Sur un synoptique clair : la couleur des gaines (#EEF1F5).
 @param stroke | Contour | #C8D0DC | Le trait de la gaine et du déclencheur.
 @param strokeWidth | Épaisseur du contour | 2 | Son épaisseur, en pixels de la vue.
 @param label | Libellé |  | Le repère écrit avec le symbole (CF-12).

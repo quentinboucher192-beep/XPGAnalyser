@@ -17,7 +17,7 @@ Un objet nouveau, codé d'après la maquette que tu as validée. Il regarde une 
 - **En marche, il lit la boucle à sa période** (100 ms à 10 s), que sa vue soit affichée ou non. Il apprend le procédé sur les échelons de consigne et les mouvements en MANU : le gain, la constante de temps, le retard, et la qualité de ce qu'il a appris. Un échelon sur trois est gardé pour vérifier le modèle.
 - **Il tient ses statistiques** : temps dans la tolérance, écart, dépassement, saturation, oscillation, sur 30 minutes, 8 heures, 24 heures ou 7 jours.
 - **Il propose un réglage** Robuste, Équilibré ou Rapide, avec la réponse prévue.
-- **La carte** dit l'état de la boucle (Saine, Oscille, Lente, Saturée, En MANU, Mesure figée), ses trois valeurs et ses 30 dernières minutes. Un clic ouvre la **fenêtre à quatre onglets** : Statistiques, Ce qu'il a appris, Réglage proposé, Journal.
+- **La carte** dit l'état de la boucle (Saine, Oscille, Lente, Saturée, En MANU, Mesure figée), ses trois valeurs et ses 30 dernières minutes. Un clic ouvre la **fenêtre à quatre onglets** : Statistiques, Ce qu'il a appris, Réglage proposé, Journal. Une butée qui dure quand le poste est relancé compte depuis son début ; en MANU, une sortie en butée est celle de l'opérateur, pas une saturation.
 - **Appliquer** écrit le réglage dans le bloc après confirmation, avec le niveau d'accès et la signature de l'objet. Le Journal le garde, **Revenir** remet l'ancien. Aussi : **Copier**, **Oublier et réapprendre**, **Exporter** en CSV.
 - **Sa mémoire reste dans l'historique du projet** (`ihm/historique/pid/<Vue.Objet>.mem`) : relancé, il reprend ce qu'il savait.
 - **Le bloc** : formes standard, parallèle et série ; Ti et Td en s, min, ms ou dixièmes de seconde ; Kp physique ou normalisé sur l'étendue de la mesure (le PID_INT de Control Expert).
@@ -73,7 +73,17 @@ Appliquer, Revenir et Oublier demandent le niveau Chef de quart. Kp, Ti et Td re
 
 ## 3. Les essais
 
-(À compléter.)
+79 suites sur 79 (deux nouvelles). Les essais nouveaux de cette version :
+- `hmipid` (92 contrôles), nouvelle : le moteur du Réglage PID sur sept jours d'un four simulé, seconde par seconde. Il apprend le gain, la constante de temps et le retard sur les échelons de consigne et les mouvements en MANU, garde un échelon sur trois pour vérifier, tient ses statistiques et propose un réglage ; les incidents : un trou dans les mesures, une mesure figée, une saturation ; la mémoire enregistrée puis relue. Ajouté en dernier : une butée qui dure quand le poste est relancé compte depuis son début (un seul événement dans le Journal, rouvert) ; passée en MANU, la sortie tenue à 100 % n'est plus une saturation (En MANU).
+- `graphxml`, nouvelle : un ladder et un GRAFCET gardés tels quels. Chaque schéma d'un XPG est lu en entier et réexporté à l'identique ; le GRAFCET est une seule section SFC ; les références croisées y trouvent les variables.
+- `hmi` (5765 contrôles) :
+  - `registres11224` : les trois registres, leur ouverture et sa plage, les fins de course et la discordance, le clapet déclenché, leurs alarmes d'objet ;
+  - `reglagePid11224` : une vue avec un Réglage PID en marche. Il lit la boucle, apprend deux échelons et propose un réglage ; Appliquer écrit KP et TI dans le bloc et le Journal le garde ; Revenir remet 2 et 8 ; la mémoire reste dans l'historique et une nouvelle marche la reprend ; Oublier ; l'export CSV.
+- `hmieditor` (7666 contrôles) :
+  - `schemaSimules11224` : quatre esclaves simulés et deux ports, rien ne se chevauche ;
+  - le plein écran : Remplir l'écran, Garder les proportions, Taille réelle (l'échelle, les clics justes, le choix retenu), et la fiche du poste d'exploitation ;
+  - `nouvelleFonction11224` : la case Retour ouvre le sélecteur de types ;
+  - le Réglage PID dans l'éditeur (ses six sections), la bibliothèque (28 tuiles), les notes (387) et les versions (57).
 
 ## 4. Les captures
 
@@ -89,4 +99,7 @@ Appliquer, Revenir et Oublier demandent le niveau Chef de quart. Kp, Ti et Td re
 
 ## 7. La suite
 
-(À compléter.)
+- Essayer sur un vrai Windows : le plein écran sur un écran d'une autre taille que la fenêtre, plusieurs esclaves simulés, la Vue_PID de la démonstration.
+- À la mise en service de l'affaire : laisser le Réglage PID apprendre sur quelques échelons avant d'appliquer un réglage, et vérifier que l'automate accepte l'écriture de KP_x et TI_x.
+- L'historique des modifications des objets (dates, PC, ce qui a changé, au clic droit) : la maquette est envoyée à part, elle attend ton avis.
+- En attente : les fonctions IHM génériques (TEMPLATE) partout ; les raccourcis clavier avancés des éditeurs.

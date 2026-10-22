@@ -216,7 +216,7 @@ void Learner::push(const Sample& s, const std::optional<Gains>& g) {
     addRaw(s);
     addMinute(s, sat);
     trackOutput(s.t, s.out);
-    watchSaturation(s, sat);
+    watchSaturation(s, sat && s.autoMode);   // 1.12.24 : en MANU, la sortie en butee est celle de l'operateur
     watchFrozen(s, prevPv);
     watchNoise(s);
     watchBlock(s, sat, dt);
