@@ -66,6 +66,12 @@ public:
     // Skip the current element and its whole subtree.
     core::Status skipElement();
 
+    // 1.12.24 : consume the current element and return its whole source, from its
+    // start tag to its end tag, byte for byte and still entity-encoded. A ladder
+    // network or a GRAFCET is a structure, not text: readElementText would keep
+    // only the scraps of character data between its tags.
+    [[nodiscard]] core::Result<std::string> readElementRaw();
+
     static std::string decodeEntities(std::string_view raw);
 
 private:
@@ -83,6 +89,7 @@ private:
     std::vector<XmlAttribute> attrs_;
     bool                      selfClosing_{false};
     bool                      pendingEnd_{false};   // synthesised </x> for <x/>
+    std::size_t               tagStart_{0};         // where the current start tag began
 };
 
 // Loads a whole file into memory once. Enforces a size ceiling so a mis-selected

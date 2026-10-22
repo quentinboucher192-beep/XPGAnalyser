@@ -38,6 +38,7 @@
 #include "../../help/HelpIndex.hpp"
 #include "../../help/HelpSession.hpp"
 #include "../../project/CrossReference.hpp"
+#include "../../project/GraphListing.hpp"   // 1.12.24 : un schema LD/SFC lu en texte
 #include "../../project/GrafcetEdit.hpp"
 #include "../../project/GrafcetLayoutFile.hpp"
 #include "../../project/GrafcetRewrite.hpp"
@@ -1299,8 +1300,18 @@ void MainAnalysisScreen::openDocument(domain::Index sectionIndex) {
 
     auto pane = std::make_unique<DocumentPane>("analysis.doc." + std::to_string(sectionIndex),
                                                initial);
-    pane->view().setText(section.body);
+    // 1.12.24 : un schema LD, FBD ou SFC est garde tel que Control Expert l'a ecrit.
+    // Il se LIT ici, en texte (project::graphListingText) ; il se modifie dans
+    // Control Expert : pas de bouton Modifier, et rien de ce qui s'affiche ne
+    // remplace jamais son XML.
+    const bool graph = domain::keepsSourceXml(section);
+    pane->view().setText(graph ? project::graphListingText(section) : section.body);
     pane->view().setReadOnly(true);        // the Edit toggle opens it
+    if (graph) {
+        pane->editToggle().setEnabled(false);
+        pane->editToggle().setTooltip("Un sch\xC3\xA9ma " + std::string(domain::toString(section.language))
+            + " se modifie dans Control Expert : API Studio le lit et le r\xC3\xA9" "exporte \xC3\xA0 l'identique.");
+    }
 
     // The editor knows nothing about PLCs; it asks, and this is the answer.
     // The document owns a shared_ptr to the model, so a completion request can
@@ -1409,8 +1420,8 @@ void MainAnalysisScreen::openDocument(domain::Index sectionIndex) {
     // sentence rather than a letter, and the views are not rebound while typing.
     auto* paneRaw = pane.get();
     paneLinks_ += paneRaw->view().textChanged->connect(
-        [this, sectionIndex](const std::string& body) {
-            if (!app_.document()) return;
+        [this, sectionIndex, graph](const std::string& body) {
+            if (!app_.document() || graph) return;   // 1.12.24 : un schema ne prend pas de texte
             app_.apply(std::make_unique<project::SetSectionBodyCommand>(
                            app_.document(), sectionIndex, body),
                        /*refreshViews*/ false);

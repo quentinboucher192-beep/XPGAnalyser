@@ -420,6 +420,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\screens\StartScreen.cpp" />
     <ClCompile Include="src\project\MastImport.cpp" />
     <ClCompile Include="src\project\MemberTree.cpp" />
+    <ClCompile Include="src\project\GraphListing.cpp" />
     <ClCompile Include="src\project\ProjectStats.cpp" />
     <ClCompile Include="src\project\RenamePlan.cpp" />
     <ClCompile Include="src\ui\TextSearch.cpp" />
@@ -870,6 +871,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\StatisticsPane.hpp" />
     <ClInclude Include="src\project\MastImport.hpp" />
     <ClInclude Include="src\project\MemberTree.hpp" />
+    <ClInclude Include="src\project\GraphListing.hpp" />
     <ClInclude Include="src\project\ProjectStats.hpp" />
     <ClInclude Include="src\project\RenamePlan.hpp" />
     <ClInclude Include="src\ui\TextSearch.hpp" />

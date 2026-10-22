@@ -895,6 +895,9 @@
     <ClCompile Include="src\project\MemberTree.cpp">
       <Filter>project</Filter>
     </ClCompile>
+    <ClCompile Include="src\project\GraphListing.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
     <ClCompile Include="src\project\ProjectStats.cpp">
       <Filter>project</Filter>
     </ClCompile>
@@ -2225,6 +2228,9 @@
       <Filter>project</Filter>
     </ClInclude>
     <ClInclude Include="src\project\MemberTree.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\GraphListing.hpp">
       <Filter>project</Filter>
     </ClInclude>
     <ClInclude Include="src\project\ProjectStats.hpp">

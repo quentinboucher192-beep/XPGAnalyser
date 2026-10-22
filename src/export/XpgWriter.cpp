@@ -33,6 +33,24 @@ namespace exporter {
                 if (crlf) text.push_back('\r');
                 text.push_back('\n');
             }
+            // 1.12.24 : un fragment garde tel que Control Expert l'a ecrit (un
+            // schema, des valeurs imbriquees) : ses lignes telles quelles, sa
+            // premiere a l'indentation courante, et les fins de ligne DU DOCUMENT -
+            // le fragment a pu passer par le dossier du projet, range en LF.
+            void block(std::string_view s) {
+                text.append(static_cast<std::size_t>(depth), '\t');
+                std::size_t from = 0;
+                for (;;) {
+                    const auto nl = s.find('\n', from);
+                    auto piece = s.substr(from, (nl == std::string_view::npos ? s.size() : nl) - from);
+                    if (!piece.empty() && piece.back() == '\r') piece.remove_suffix(1);
+                    text.append(piece);
+                    if (crlf) text.push_back('\r');
+                    text.push_back('\n');
+                    if (nl == std::string_view::npos || nl + 1 >= s.size()) break;
+                    from = nl + 1;
+                }
+            }
             void open(std::string_view s) { line(s); ++depth; }
             void close(std::string_view s) { --depth; line(s); }
             void raw(std::string_view s) { text.append(s); }
@@ -88,15 +106,28 @@ namespace exporter {
             if (!hasBody) { o.line(head + "></variables>"); return; }
 
             o.open(head + ">");
-            // Order follows the DTD: attributes, then the initial value, then the
-            // comment, then the per-element descriptors.
+            // L'ordre de Control Expert (1.12.24) : le commentaire, les attributs, la
+            // valeur initiale, puis les elements decrits. Le commentaire etait ecrit
+            // apres la valeur initiale : chaque variable commentee d'un fichier relu
+            // et reecrit changeait.
+            if (v.comment != 0)
+                o.line("<comment>" + escapeXml(p.strings.text(v.comment)) + "</comment>");
             for (const auto& [name, value] : v.attributes)
                 o.line("<attribute" + attr("name", name) + attr("value", value) + "></attribute>");
             if (v.initValue != 0)
                 o.line("<variableInit" + attr("value", p.strings.text(v.initValue)) + "></variableInit>");
-            if (v.comment != 0)
-                o.line("<comment>" + escapeXml(p.strings.text(v.comment)) + "</comment>");
             for (const auto& e : v.instanceElements) {
+                if (!e.raw.empty()) {
+                    // Rendu tel quel ; seul son nom suit un renommage (RenamePlan).
+                    std::string raw = e.raw;
+                    const auto gt = raw.find('>');
+                    const auto at = raw.find("name=\"");
+                    const auto end = at == std::string::npos ? std::string::npos : raw.find('"', at + 6);
+                    if (at != std::string::npos && end != std::string::npos && end < gt)
+                        raw.replace(at + 6, end - at - 6, escapeXml(e.name));
+                    o.block(raw);
+                    continue;
+                }
                 if (e.comment == 0) {
                     o.line("<instanceElementDesc" + attr("name", e.name) + "></instanceElementDesc>");
                     continue;
@@ -106,6 +137,36 @@ namespace exporter {
                 o.close("</instanceElementDesc>");
             }
             o.close("</variables>");
+        }
+
+        // 1.12.24 : un schema (LD, FBD) est rendu tel qu'il a ete lu ; un texte (ST,
+        // IL) est echappe dans l'element de son langage.
+        void writeBody(Out& o, const Section& s) {
+            if (keepsSourceXml(s)) { o.block(s.body); return; }
+            o.line("<" + std::string(languageElement(s.language)) + ">"
+                + escapeXml(s.body) + "</" + std::string(languageElement(s.language)) + ">");
+        }
+
+        // 1.12.24 : un GRAFCET natif est un <SFCProgram> entier. Son identProgram est
+        // refait depuis le modele (nom, type, ordre, tache : ce qu'on peut changer
+        // dans l'outil) ; le graphe et les receptivites sont rendus tels quels.
+        bool writeSfcProgram(Out& o, const Project& p, const Section& s, bool withTask) {
+            if (s.language != PouLanguage::SFC || !keepsSourceXml(s)
+                || s.body.compare(0, 11, "<SFCProgram") != 0)
+                return false;
+            std::string ident = "<identProgram";
+            ident += attr("name", p.strings.text(s.name));
+            ident += attr("type", s.isSubroutine ? "SR" : "section");
+            if (withTask) ident += attr("task", p.strings.text(s.task));
+            ident += attr("SectionOrder", std::to_string(s.order));
+            ident += "></identProgram>";
+            std::string body = s.body;
+            constexpr std::string_view kClose = "</identProgram>";
+            const auto a = body.find("<identProgram");
+            const auto b = a == std::string::npos ? std::string::npos : body.find(kClose, a);
+            if (b != std::string::npos) body.replace(a, b + kClose.size() - a, ident);
+            o.block(body);
+            return true;
         }
 
         void writeVariableGroup(Out& o, const Project& p, std::string_view element,
@@ -215,18 +276,30 @@ namespace exporter {
                 std::string t = "<taskDesc";
                 t += attr("task", p.strings.text(task.name));
                 t += attr("taskType", task.type.empty() ? "cyclic" : task.type);
-                // Lot API 4 : la periode d'une tache periodique (FAST, AUX).
-                if (task.type == "periodic" && task.period > 0) t += attr("value", std::to_string(task.period));
-                t += attr("valueType", "0");
+                // Lot API 4 : la periode d'une tache periodique (MAST, FAST, AUX), en ms.
+                // 1.12.24 : la ou Control Expert l'ecrit, dans valueType
+                // (taskType="periodic" valueType="100") ; 0 pour une tache cyclique.
+                t += attr("valueType", task.type == "periodic" && task.period > 0
+                    ? std::to_string(task.period) : std::string("0"));
                 t += attr("maxExecTime", std::to_string(task.watchdog));
                 o.open(t + ">");
+                // 1.12.24 : UN SEUL ORDRE, CELUI DE L'EXECUTION. Les sections et les
+                // unites de programme sont declarees entremelees, dans l'ordre de leur
+                // SectionOrder, comme Control Expert les ecrit : listees les unes puis
+                // les autres, un fichier relu ne disait plus d'un coup d'oeil ce qui
+                // s'execute avant quoi - et c'est l'ordre du document qu'un lecteur suit.
+                // Un sous-programme (SRDesc) ne s'execute pas a son rang : il garde sa
+                // place a la suite.
+                struct Entry { std::uint32_t order; std::string line; };
+                std::vector<Entry> entries;
+                std::vector<std::string> subroutines;
                 for (auto si : task.sections) {
                     const auto& s = p.sections[si];
                     // A SUBROUTINE IS NOT A SECTION. It is declared with <SRDesc>
                     // and it is CALLED; a section runs every scan. Writing one as
                     // the other changes what the program does.
                     if (s.isSubroutine) {
-                        o.line("<SRDesc" + attr("name", p.strings.text(s.name)) + "></SRDesc>");
+                        subroutines.push_back("<SRDesc" + attr("name", p.strings.text(s.name)) + "></SRDesc>");
                         continue;
                     }
                     std::string d = "<sectionDesc";
@@ -240,24 +313,23 @@ namespace exporter {
                     if (s.logicCondition != 0)
                         d += attr("logicCondition", p.strings.text(s.logicCondition));
                     d += attr("SectionOrder", std::to_string(s.order));
-                    o.line(d + "></sectionDesc>");
+                    entries.push_back(Entry{ s.order, d + "></sectionDesc>" });
                 }
-                // Program units are scheduled by the same descriptor list, after the
-                // plain sections. Sorted by SectionOrder rather than by position in
-                // the model: the model's order depends on how the project was
-                // loaded, and two loads of the same project must export identically.
-                std::vector<const Pou*> units;
-                for (const auto& pou : p.pous)
-                    if (pou.kind == PouKind::ProgramUnit && pou.task == task.name)
-                        units.push_back(&pou);
-                std::stable_sort(units.begin(), units.end(),
-                    [](const Pou* a, const Pou* b) { return a->order < b->order; });
-                for (const auto* pou : units) {
+                // Program units are scheduled by the same descriptor list. Sorted by
+                // SectionOrder rather than by position in the model: the model's order
+                // depends on how the project was loaded, and two loads of the same
+                // project must export identically.
+                for (const auto& pou : p.pous) {
+                    if (pou.kind != PouKind::ProgramUnit || pou.task != task.name) continue;
                     std::string d = "<programUnitDesc";
-                    d += attr("name", p.strings.text(pou->name));
-                    d += attr("SectionOrder", std::to_string(pou->order));
-                    o.line(d + "></programUnitDesc>");
+                    d += attr("name", p.strings.text(pou.name));
+                    d += attr("SectionOrder", std::to_string(pou.order));
+                    entries.push_back(Entry{ pou.order, d + "></programUnitDesc>" });
                 }
+                std::stable_sort(entries.begin(), entries.end(),
+                    [](const Entry& a, const Entry& b) { return a.order < b.order; });
+                for (const auto& e : entries) o.line(e.line);
+                for (const auto& sr : subroutines) o.line(sr);
                 o.close("</taskDesc>");
             }
             o.close("</resource>");
@@ -270,14 +342,28 @@ namespace exporter {
             std::string head = "<DDTSource";
             head += attr("DDTName", p.strings.text(ddt.name));
             head += attr("version", ddt.version.empty() ? "0.01" : ddt.version);
+            if (!ddt.dateTime.empty()) head += attr("dateTime", ddt.dateTime);
             o.open(head + ">");
+            if (ddt.comment != 0)
+                o.line("<comment>" + escapeXml(p.strings.text(ddt.comment)) + "</comment>");
 
             // Zeroed on instruction: Control Expert recomputes the signature on
             // import, and a stale value carried across an edit is worse than none.
-            std::string a = "<attribute";
-            a += attr("name", "TypeSignatureCheckSumString");
-            a += attr("value", opts.zeroChecksums ? "0" : ddt.checksum);
-            o.line(a + "></attribute>");
+            // 1.12.24 : les attributs lus sont rendus dans leur ordre ; un type cree
+            // dans l'outil n'en a pas et recoit sa somme de controle seule.
+            for (const auto& [name, value] : ddt.attributes) {
+                const bool isChecksum = name == "TypeSignatureCheckSumString";
+                std::string a = "<attribute";
+                a += attr("name", name);
+                a += attr("value", isChecksum && opts.zeroChecksums ? std::string("0") : value);
+                o.line(a + "></attribute>");
+            }
+            if (ddt.attributes.empty()) {
+                std::string a = "<attribute";
+                a += attr("name", "TypeSignatureCheckSumString");
+                a += attr("value", opts.zeroChecksums ? "0" : ddt.checksum);
+                o.line(a + "></attribute>");
+            }
 
             o.open("<structure>");
             for (auto fi : ddt.fields) writeVariable(o, p, p.variables[fi]);
@@ -293,6 +379,7 @@ namespace exporter {
             std::string head = "<FBSource";
             head += attr("nameOfFBType", p.strings.text(pou.name));
             head += attr("version", pou.version.empty() ? "0.01" : pou.version);
+            if (!pou.dateTime.empty()) head += attr("dateTime", pou.dateTime);
             o.open(head + ">");
 
             // Attributes first, then the declarations. The checksums among them are
@@ -324,8 +411,7 @@ namespace exporter {
                 if (s.logicCondition != 0)
                     prog += attr("logicCondition", p.strings.text(s.logicCondition));
                 o.open(prog + ">");
-                o.line("<" + std::string(languageElement(s.language)) + ">"
-                    + escapeXml(s.body) + "</" + std::string(languageElement(s.language)) + ">");
+                writeBody(o, s);
                 o.close("</FBProgram>");
             }
             o.close("</FBSource>");
@@ -348,6 +434,7 @@ namespace exporter {
 
             for (auto si : pou.sections) {
                 const auto& s = p.sections[si];
+                if (writeSfcProgram(o, p, s, /*withTask*/ false)) continue;
                 std::string prog = "<program";
                 if (s.activationCondition != 0)
                     prog += attr("activationCondition", p.strings.text(s.activationCondition));
@@ -360,8 +447,7 @@ namespace exporter {
                 ident += attr("type", s.isSubroutine ? "SR" : "section");
                 ident += attr("SectionOrder", std::to_string(s.order));
                 o.line(ident + "></identProgram>");
-                o.line("<" + std::string(languageElement(s.language)) + ">"
-                    + escapeXml(s.body) + "</" + std::string(languageElement(s.language)) + ">");
+                writeBody(o, s);
                 o.close("</program>");
             }
 
@@ -392,6 +478,7 @@ namespace exporter {
                 const auto kind = p.pous[s.owner].kind;
                 if (kind == PouKind::FunctionBlockType || kind == PouKind::ProgramUnit) continue;
             }
+            if (writeSfcProgram(o, p, s, /*withTask*/ true)) continue;
             std::string prog = "<program";
             // 1.8.0 : la condition est sur <sectionDesc> (ecrite plus haut) ; ici
             // seulement si le fichier lu l'y portait aussi.
@@ -407,8 +494,7 @@ namespace exporter {
             ident += attr("task", p.strings.text(s.task));
             ident += attr("SectionOrder", std::to_string(s.order));
             o.line(ident + "></identProgram>");
-            o.line("<" + std::string(languageElement(s.language)) + ">"
-                + escapeXml(s.body) + "</" + std::string(languageElement(s.language)) + ">");
+            writeBody(o, s);
             o.close("</program>");
         }
 

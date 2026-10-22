@@ -246,7 +246,8 @@ void testTasks(const std::string& xpg) {
     check(re && re->project->tasks.size() == 2 && re->project->tasks[0].period == 20 && re->project->tasks[1].period == 5,
           "tasks.txt garde les periodes");
     const auto xml = exporter::writeXpg(*p);
-    check(xml && xml->find("taskType=\"periodic\" value=\"20\"") != std::string::npos, "l'export ecrit la periode de MAST");
+    // 1.12.24 : la ou Control Expert l'ecrit (export reel V15.3 : taskType="periodic" valueType="100").
+    check(xml && xml->find("taskType=\"periodic\" valueType=\"20\"") != std::string::npos, "l'export ecrit la periode de MAST");
     project::RemoveTaskCommand removeFast(p, 1);
     check(static_cast<bool>(removeFast.execute()) && p->tasks.size() == 1, "retirer FAST (vide)");
     (void)removeFast.undo();

@@ -476,6 +476,9 @@ if(XPG_BUILD_TESTS)
     # Lot API 7 : les statistiques du projet ouvert (API > Statistiques).
     xpg_add_test_executable(projectstats_test tests/projectstats_test.cpp)
     xpg_target_link_libraries(projectstats_test PRIVATE xpg_import)
+    # 1.12.24 : un ladder et un GRAFCET gardes tels quels (import, export, dossier, lecture).
+    xpg_add_test_executable(graphxml_test tests/graphxml_test.cpp)
+    xpg_target_link_libraries(graphxml_test PRIVATE xpg_import)
     # ---- Lot API 8 : Simulation > Debogage (les phrases, la pile, les temps, la marge de l'editeur) ----
     xpg_add_test_executable(simdebugui_test tests/simdebugui_test.cpp src/app/SimDebugText.cpp)
     xpg_target_link_libraries(simdebugui_test PRIVATE xpg_import xpg_ui)
@@ -697,6 +700,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME renameplan   COMMAND renameplan_test ${XPG_FIXTURE})
     xpg_add_test(NAME mastimport   COMMAND mastimport_test ${XPG_FIXTURE} ${XHW_FIXTURE})
     xpg_add_test(NAME projectstats COMMAND projectstats_test ${XPG_FIXTURE})
+    xpg_add_test(NAME graphxml COMMAND graphxml_test)
     xpg_add_test(NAME simdebugui   COMMAND simdebugui_test ${XPG_FIXTURE})   # ---- Lot API 8 : Simulation > Debogage ----
     xpg_add_test(NAME dialogwindow COMMAND dialogwindow_test)                # ---- Lot API 8 : les dialogues dans la fenetre detachee ----
     xpg_add_test(NAME exportask    COMMAND exportask_test)                   # ---- Lot API 8 : les exports qui demandent ou ----

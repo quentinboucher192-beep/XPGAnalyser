@@ -22,6 +22,8 @@
 //        program/identProgram + STSource
 //        animationTable/elementDescription
 //      program/identProgram + STSource task sections
+//      LDSource / FBDSource / SFCProgram   kept verbatim (1.12.24) : the body of
+//                                      such a section is the element itself
 //      dataBlock/variables             global dictionary (+ topologicalAddress)
 // =============================================================================
 #include "ProjectParser.hpp"
@@ -139,11 +141,63 @@ namespace importer {
             return static_cast<std::uint32_t>(std::count(s.begin(), s.end(), '\n')) + 1;
         }
 
+        // 1.12.24 : la taille d'un schema garde tel quel - ses rangees de ladder,
+        // ses etapes et transitions de GRAFCET, ses blocs FBD. Pas ses lignes de
+        // XML, qui ne disent rien a qui lit le programme.
+        std::uint32_t countOccurrences(std::string_view s, std::string_view what) {
+            std::uint32_t n = 0;
+            for (auto at = s.find(what); at != std::string_view::npos; at = s.find(what, at + what.size())) ++n;
+            return n;
+        }
+        std::uint32_t countGraphRows(std::string_view xml) {
+            return countOccurrences(xml, "<typeLine>") + countOccurrences(xml, "<step ")
+                + countOccurrences(xml, "<transition>") + countOccurrences(xml, "<transition ")
+                + countOccurrences(xml, "<FFBBlock ");
+        }
+
     } // namespace
 
     // ---------------------------------------------------------------------------
     domain::TypeRef classifyTypeName(std::string_view raw, domain::StringPool& pool) {
         return classifyTypeImpl(raw, pool);
+    }
+
+    // ---------------------------------------------------------------------------
+    std::vector<domain::InstanceElement> readInstanceElements(std::string_view xml, domain::StringPool& pool) {
+        std::vector<domain::InstanceElement> out;
+        XmlReader r(xml);
+        for (;;) {
+            auto ev = r.next();
+            if (!ev || *ev == XmlEvent::EndOfDocument) break;
+            if (*ev != XmlEvent::StartElement || r.name() != "instanceElementDesc") continue;
+            domain::InstanceElement e{ r.attr("name"), 0, {} };
+            auto raw = r.readElementRaw();
+            if (!raw) break;
+            // Ce qu'il porte : un commentaire a lui (enfant direct), et autre chose ?
+            bool more = false;
+            XmlReader in(*raw);
+            if (auto first = in.next(); first && *first == XmlEvent::StartElement && !in.selfClosing()) {
+                const auto top = in.depth();
+                for (;;) {
+                    auto c = in.next();
+                    if (!c || *c == XmlEvent::EndOfDocument) break;
+                    if (*c == XmlEvent::EndElement && in.depth() < top) break;
+                    if (*c != XmlEvent::StartElement) continue;
+                    if (in.name() == "comment" && in.depth() == top + 1 && e.comment == 0) {
+                        if (auto t = in.readElementText()) e.comment = pool.intern(*t);
+                        continue;
+                    }
+                    more = true;
+                    if (in.depth() == top + 1) { if (!in.skipElement()) break; }
+                }
+            }
+            if (more) {
+                e.raw.reserve(raw->size());
+                for (char ch : *raw) if (ch != '\r') e.raw.push_back(ch);
+            }
+            out.push_back(std::move(e));
+        }
+        return out;
     }
 
     bool XpgParser::canParse(std::string_view head) const noexcept {
@@ -201,7 +255,6 @@ namespace importer {
         // still in the header of an FBSource, where the type checksums live.
         bool fbHeaderOpen = false;
         bool insideVariable = false;      // <attribute> means different things inside and outside
-        bool lastInstanceElement = false; // the next <comment> belongs to the element, not the variable
         std::vector<std::tuple<std::string, std::uint32_t, Index>> pendingUnitOrders;
         // 1.8.0 : la condition d'activation d'une section de tache est sur son
         // <sectionDesc> (Control Expert V15) ; le corps arrive plus loin : (nom,
@@ -217,8 +270,7 @@ namespace importer {
 
             if (*ev == XmlEvent::EndElement) {
                 const auto n = r.name();
-                if (n == "variables") { insideVariable = false; lastInstanceElement = false; }
-                else if (n == "instanceElementDesc")   lastInstanceElement = false;
+                if (n == "variables") insideVariable = false;
                 if (n == "FBSource" || n == "programUnit") currentPou = kNoIndex;
                 else if (n == "DDTSource")                      currentDdt = kNoIndex;
                 else if (n == "taskDesc")                       currentTask = kNoIndex;
@@ -286,7 +338,13 @@ namespace importer {
                 t.name = p.strings.intern(r.attr("task"));
                 t.type = r.attr("taskType");
                 t.watchdog = static_cast<std::uint32_t>(std::atoi(r.attr("maxExecTime", "0").c_str()));
-                t.period = static_cast<std::uint32_t>(std::atoi(r.attr("value", "0").c_str()));   // lot API 4
+                // La periode d'une tache periodique. Control Expert l'ecrit dans
+                // valueType (taskType="periodic" valueType="100" : 100 ms) ; l'outil,
+                // avant la 1.12.24, l'ecrivait dans value - les deux se relisent.
+                const auto value = r.attr("value");
+                const auto period = !value.empty() ? value
+                    : t.type == "periodic" ? r.attr("valueType", "0") : std::string("0");
+                t.period = static_cast<std::uint32_t>(std::atoi(period.c_str()));   // lot API 4
                 p.tasks.push_back(std::move(t));
                 currentTask = static_cast<Index>(p.tasks.size() - 1);
                 continue;
@@ -305,15 +363,22 @@ namespace importer {
                 DerivedType d;
                 d.name = p.strings.intern(r.attr("DDTName"));
                 d.version = r.attr("version");
+                d.dateTime = r.attr("dateTime");
                 p.derivedTypes.push_back(std::move(d));
                 currentDdt = static_cast<Index>(p.derivedTypes.size() - 1);
                 varScope = VariableScope::DerivedMember;
                 continue;
             }
             if (el == "attribute") {
-                if (currentDdt != kNoIndex && varScope != VariableScope::DerivedMember
-                    && r.attr("name") == "TypeSignatureCheckSumString")
-                    p.derivedTypes[currentDdt].checksum = r.attr("value");
+                // Les attributs du type lui-meme (hors de ses champs), tous et dans
+                // l'ordre ; la condition sur varScope ne laissait jamais passer la
+                // somme de controle, et les drapeaux d'un DDT d'equipement se perdaient.
+                if (currentDdt != kNoIndex && !insideVariable) {
+                    auto& d = p.derivedTypes[currentDdt];
+                    d.attributes.emplace_back(r.attr("name"), r.attr("value"));
+                    if (d.attributes.back().first == "TypeSignatureCheckSumString")
+                        d.checksum = d.attributes.back().second;
+                }
                 else if (fbHeaderOpen) {
                     if (auto* pou = at(p.pous, currentPou))
                         pou->attributes.emplace_back(r.attr("name"), r.attr("value"));
@@ -323,9 +388,12 @@ namespace importer {
                 continue;
             }
             if (el == "instanceElementDesc" && lastVariable != kNoIndex) {
-                p.variables[lastVariable].instanceElements.push_back(
-                    InstanceElement{ r.attr("name"), 0 });
-                lastInstanceElement = true;
+                // L'element entier, imbrications comprises : ses commentaires et ses
+                // valeurs ne passent plus par la boucle principale.
+                auto raw = r.readElementRaw();
+                if (!raw) return core::Err<core::Error>(raw.error());
+                for (auto& e : readInstanceElements(*raw, p.strings))
+                    p.variables[lastVariable].instanceElements.push_back(std::move(e));
                 continue;
             }
             if (el == "programUnitDesc") {
@@ -342,6 +410,7 @@ namespace importer {
                 pou.name = p.strings.intern(r.attr("nameOfFBType"));
                 pou.kind = PouKind::FunctionBlockType;
                 pou.version = r.attr("version");
+                pou.dateTime = r.attr("dateTime");
                 p.pous.push_back(std::move(pou));
                 currentPou = static_cast<Index>(p.pous.size() - 1);
 
@@ -398,7 +467,6 @@ namespace importer {
                 p.variables.push_back(std::move(v));
                 lastVariable = static_cast<Index>(p.variables.size() - 1);
                 insideVariable = !r.selfClosing();
-                lastInstanceElement = false;
 
                 if (varScope == VariableScope::DerivedMember) {
                     if (auto* ddt = at(p.derivedTypes, currentDdt))
@@ -413,14 +481,16 @@ namespace importer {
                 }
                 continue;
             }
-            if (el == "comment" && lastVariable != kNoIndex) {
+            if (el == "comment") {
+                // A qui il est : la variable ouverte, sinon le DDT ouvert. Un
+                // commentaire de DDT se posait sur la derniere variable lue, celle
+                // d'un autre type ou d'un DFB.
                 auto text = r.readElementText();
                 if (!text) return core::Err<core::Error>(text.error());
-                auto& v = p.variables[lastVariable];
-                if (lastInstanceElement && !v.instanceElements.empty())
-                    v.instanceElements.back().comment = p.strings.intern(*text);
-                else
-                    v.comment = p.strings.intern(*text);
+                if (lastVariable != kNoIndex && insideVariable)
+                    p.variables[lastVariable].comment = p.strings.intern(*text);
+                else if (currentDdt != kNoIndex)
+                    p.derivedTypes[currentDdt].comment = p.strings.intern(*text);
                 continue;
             }
             if (el == "variableInit" && lastVariable != kNoIndex) {
@@ -452,8 +522,62 @@ namespace importer {
                 continue;
             }
 
+            // 1.12.24 : UN GRAFCET NATIF (SFC). Son <SFCProgram> porte son
+            // identProgram, son graphe (chartSource) et ses receptivites
+            // (transitionSource, souvent en LD). Il est garde entier, tel quel : lu
+            // element par element, chaque receptivite devenait une section LD du nom
+            // du GRAFCET, et la reexportation ne rendait plus le GRAFCET.
+            if (el == "SFCProgram") {
+                auto raw = r.readElementRaw();
+                if (!raw) return core::Err<core::Error>(raw.error());
+
+                Section s;
+                {
+                    XmlReader inner(*raw);
+                    for (;;) {
+                        auto iev = inner.next();
+                        if (!iev || *iev == XmlEvent::EndOfDocument) break;
+                        if (*iev != XmlEvent::StartElement || inner.name() != "identProgram") continue;
+                        s.name = p.strings.intern(inner.attr("name"));
+                        s.task = p.strings.intern(inner.attr("task"));
+                        s.isSubroutine = inner.attr("type") == "SR";
+                        s.order = static_cast<std::uint32_t>(std::atoi(inner.attr("SectionOrder", "0").c_str()));
+                        break;
+                    }
+                }
+                s.language = PouLanguage::SFC;
+                s.activationCondition = p.strings.intern(pendingActivation);
+                s.logicCondition = p.strings.intern(pendingLogic);
+                s.conditionOnProgram = !pendingActivation.empty() || !pendingLogic.empty();
+                s.lineCount = countGraphRows(*raw);
+                s.statementCount = 0;
+                s.owner = currentPou;
+                if (opts.keepSourceBodies) s.body = std::move(*raw);
+
+                pendingSubroutine = false;
+                p.sections.push_back(std::move(s));
+                const auto sectionIndex = static_cast<Index>(p.sections.size() - 1);
+                if (auto* pou = at(p.pous, currentPou)) pou->sections.push_back(sectionIndex);
+                if (auto* task = at(p.tasks, currentTask)) task->sections.push_back(sectionIndex);
+                if (currentPou >= p.pous.size()) {
+                    Pou pou;
+                    pou.name = p.sections[sectionIndex].name;
+                    pou.kind = PouKind::Section;
+                    pou.sections.push_back(sectionIndex);
+                    p.pous.push_back(std::move(pou));
+                    p.sections[sectionIndex].owner = static_cast<Index>(p.pous.size() - 1);
+                }
+                pendingActivation.clear();
+                pendingLogic.clear();
+                continue;
+            }
+
             if (const auto lang = languageFromElement(el); lang != PouLanguage::Unknown) {
-                auto body = r.readElementText();
+                // 1.12.24 : un schema (LD, FBD, SFC) est garde tel quel ; seuls le ST
+                // et l'IL sont du texte.
+                const bool graph = lang == PouLanguage::LD || lang == PouLanguage::FBD
+                    || lang == PouLanguage::SFC;
+                auto body = graph ? r.readElementRaw() : r.readElementText();
                 if (!body) return core::Err<core::Error>(body.error());
 
                 Section s;
@@ -469,8 +593,8 @@ namespace importer {
                 s.logicCondition = p.strings.intern(pendingLogic);
                 s.conditionOnProgram = !pendingActivation.empty() || !pendingLogic.empty();
                 s.isSubroutine = pendingSubroutine;
-                s.lineCount = countLines(*body);
-                s.statementCount = countStatements(*body);
+                s.lineCount = graph ? countGraphRows(*body) : countLines(*body);
+                s.statementCount = graph ? 0 : countStatements(*body);
                 s.owner = currentPou;
                 if (opts.keepSourceBodies) s.body = std::move(*body);
 

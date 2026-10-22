@@ -944,7 +944,7 @@ Project merge(const Project& cur, const Project& imp, const Options& options) {
             v.initValue = out.strings.intern(cur.strings.text(old.initValue));
             v.instanceElements.clear();
             for (const auto& e : old.instanceElements)
-                v.instanceElements.push_back(InstanceElement{e.name, out.strings.intern(cur.strings.text(e.comment))});
+                v.instanceElements.push_back(InstanceElement{e.name, out.strings.intern(cur.strings.text(e.comment)), e.raw});
         }
         // Les tables d'animation du projet, sans les lignes des variables disparues.
         const auto gi = globalsOf(imp);

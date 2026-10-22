@@ -157,6 +157,7 @@ core::Result<XmlEvent> XmlReader::next() {
     }
 
     // Opening tag.
+    tagStart_ = pos_;
     ++pos_;
     const auto nameStart = pos_;
     while (pos_ < buf_.size() && isNameChar(buf_[pos_])) ++pos_;
@@ -233,6 +234,24 @@ core::Result<std::string> XmlReader::readElementText() {
         else if (*ev == XmlEvent::EndElement && depth_ == target) return out;
         else if (*ev == XmlEvent::EndOfDocument)
             return malformed("unexpected end of document while reading element text");
+    }
+}
+
+core::Result<std::string> XmlReader::readElementRaw() {
+    const std::size_t from = tagStart_;
+    if (selfClosing_) {
+        pendingEnd_ = false;
+        --depth_;
+        return std::string(buf_.substr(from, pos_ - from));
+    }
+    const std::size_t target = depth_ - 1;
+    for (;;) {
+        auto ev = next();
+        if (!ev) return core::Err<core::Error>(ev.error());
+        if (*ev == XmlEvent::EndElement && depth_ == target)
+            return std::string(buf_.substr(from, pos_ - from));
+        if (*ev == XmlEvent::EndOfDocument)
+            return malformed("unexpected end of document while reading an element");
     }
 }
 

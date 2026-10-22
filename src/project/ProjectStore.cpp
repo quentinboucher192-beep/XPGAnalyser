@@ -158,7 +158,7 @@ PouLanguage languageFromName(std::string_view s) {
 
 // --- one variable, one line -------------------------------------------------
 constexpr const char* kVariableHeader =
-    "# name ; type ; address ; scope ; init ; comment ; attributes ; element comments\n";
+    "# name ; type ; address ; scope ; init ; comment ; attributes ; element comments ; element sources\n";
 
 std::string encodeVariable(const Project& p, const Variable& v) {
     std::string attrs;
@@ -167,10 +167,24 @@ std::string encodeVariable(const Project& p, const Variable& v) {
         attrs += n + '=' + val;
     }
     std::string elements;
+    bool anyRaw = false;
     for (const auto& e : v.instanceElements) {
         if (!elements.empty()) elements += ',';
         elements += e.name + '=' + std::string(p.strings.text(e.comment));
+        anyRaw = anyRaw || !e.raw.empty();
     }
+    // 1.12.24 : des elements qui portent des valeurs imbriquees : TOUS les elements
+    // de la variable, en XML et dans l'ordre, dans un dernier champ - relus par le
+    // meme lecteur que l'import. Les noms et commentaires restent dans le champ
+    // precedent, lisible par une version anterieure.
+    std::string sources;
+    if (anyRaw)
+        for (const auto& e : v.instanceElements) {
+            if (!e.raw.empty()) { sources += e.raw; continue; }
+            sources += "<instanceElementDesc name=\"" + exporter::escapeXml(e.name) + "\">";
+            if (e.comment != 0) sources += "<comment>" + exporter::escapeXml(p.strings.text(e.comment)) + "</comment>";
+            sources += "</instanceElementDesc>";
+        }
     std::string line;
     line += encodeField(p.strings.text(v.name));            line += " ; ";
     line += encodeField(p.strings.text(v.type.name));       line += " ; ";
@@ -180,6 +194,7 @@ std::string encodeVariable(const Project& p, const Variable& v) {
     line += encodeField(p.strings.text(v.comment));         line += " ; ";
     line += encodeField(attrs);                             line += " ; ";
     line += encodeField(elements);
+    if (!sources.empty()) { line += " ; "; line += encodeField(sources); }
     return line;
 }
 
@@ -215,8 +230,11 @@ Variable decodeVariable(Project& p, const std::vector<std::string>& f) {
         return out;
     };
     for (auto& [n, val] : splitPairs(field(f, 6), ',')) v.attributes.emplace_back(n, val);
-    for (auto& [n, val] : splitPairs(field(f, 7), ','))
-        v.instanceElements.push_back(InstanceElement{n, p.strings.intern(val)});
+    if (const auto sources = field(f, 8); !sources.empty())
+        v.instanceElements = importer::readInstanceElements(sources, p.strings);
+    else
+        for (auto& [n, val] : splitPairs(field(f, 7), ','))
+            v.instanceElements.push_back(InstanceElement{n, p.strings.intern(val), {}});
     return v;
 }
 
@@ -372,6 +390,9 @@ core::Status ProjectStore::save(const Project& p, const Manifest& manifest,
         t << "# Derived data type.\n";
         t << "name = "     << p.strings.text(d.name) << '\n';
         t << "version = "  << d.version << '\n';
+        if (!d.dateTime.empty()) t << "dateTime = " << d.dateTime << '\n';
+        if (d.comment != 0) t << "comment = " << encodeField(p.strings.text(d.comment)) << '\n';
+        for (const auto& [n, v] : d.attributes) t << "attribute = " << n << " = " << encodeField(v) << '\n';
         t << "# checksum is recomputed by Control Expert on import; not stored.\n\n";
         t << kVariableHeader;
         for (auto fi : d.fields) t << encodeVariable(p, p.variables[fi]) << '\n';
@@ -404,6 +425,7 @@ core::Status ProjectStore::save(const Project& p, const Manifest& manifest,
         i << "# " << (isDfb ? "DFB type" : "Program unit") << " interface.\n";
         i << "name = "    << p.strings.text(pou.name) << '\n';
         i << "version = " << pou.version << '\n';
+        if (!pou.dateTime.empty()) i << "dateTime = " << pou.dateTime << '\n';
         if (isUnit) {
             i << "task = "  << p.strings.text(pou.task) << '\n';
             i << "order = " << pou.order << '\n';
@@ -416,7 +438,7 @@ core::Status ProjectStore::save(const Project& p, const Manifest& manifest,
         i << "\n# section ; name ; language ; order ; activation ; logic ; file\n";
         for (auto si : pou.sections) {
             const auto& s = p.sections[si];
-            const auto file = safeName(p.strings.text(s.name)) + ".st";
+            const auto file = safeName(p.strings.text(s.name)) + (keepsSourceXml(s) ? ".xml" : ".st");   // 1.12.24 : un schema LD/SFC est du XML
             i << "section ; " << encodeField(p.strings.text(s.name)) << " ; "
               << languageName(s.language) << " ; " << s.order << " ; "
               << encodeField(p.strings.text(s.activationCondition)) << " ; "
@@ -437,7 +459,7 @@ core::Status ProjectStore::save(const Project& p, const Manifest& manifest,
                 const auto k = p.pous[s.owner].kind;
                 if (k == PouKind::FunctionBlockType || k == PouKind::ProgramUnit) continue;
             }
-            const auto file = safeName(p.strings.text(s.name)) + ".st";
+            const auto file = safeName(p.strings.text(s.name)) + (keepsSourceXml(s) ? ".xml" : ".st");   // 1.12.24 : un schema LD/SFC est du XML
             idx << encodeField(p.strings.text(s.name)) << " ; "
                 << encodeField(p.strings.text(s.task)) << " ; " << languageName(s.language)
                 << " ; " << s.order << " ; "
@@ -746,6 +768,16 @@ core::Status loadModel(const fs::path& root, Project& p) {
                     const auto k = trim(line.substr(0, eq)), v = trim(line.substr(eq + 1));
                     if      (k == "name")    d.name = p.strings.intern(v);
                     else if (k == "version") d.version = v;
+                    else if (k == "dateTime") d.dateTime = v;
+                    else if (k == "comment") d.comment = p.strings.intern(decodeField(v));
+                    else if (k == "attribute") {
+                        const auto eq2 = v.find('=');
+                        if (eq2 != std::string::npos) {
+                            d.attributes.emplace_back(trim(v.substr(0, eq2)), decodeField(trim(v.substr(eq2 + 1))));
+                            if (d.attributes.back().first == "TypeSignatureCheckSumString")
+                                d.checksum = d.attributes.back().second;
+                        }
+                    }
                     return;
                 }
                 auto v = decodeVariable(p, splitFields(line));
@@ -805,6 +837,7 @@ core::Status loadModel(const fs::path& root, Project& p) {
                     const auto k = trim(line.substr(0, eq)), v = trim(line.substr(eq + 1));
                     if      (k == "name")    pou.name = p.strings.intern(v);
                     else if (k == "version") pou.version = v;
+                    else if (k == "dateTime") pou.dateTime = v;
                     else if (k == "task")    pou.task = p.strings.intern(v);
                     else if (k == "order")   pou.order = static_cast<std::uint32_t>(std::atoi(v.c_str()));
                     else if (k == "attribute") {

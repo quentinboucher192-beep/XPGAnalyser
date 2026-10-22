@@ -141,6 +141,13 @@ public:
 // disagree.
 [[nodiscard]] domain::TypeRef classifyTypeName(std::string_view raw, domain::StringPool&);
 
+// 1.12.24 : les <instanceElementDesc> d'une variable, lus depuis leur source (un ou
+// plusieurs elements a la suite). Un element qui ne porte qu'un commentaire est
+// range nom + commentaire ; un element qui porte davantage garde aussi sa source
+// (InstanceElement::raw). Partage par l'import du .XPG et le dossier du projet :
+// les deux relisent la meme chose de la meme facon.
+[[nodiscard]] std::vector<domain::InstanceElement> readInstanceElements(std::string_view xml, domain::StringPool&);
+
 class HardwareCatalog {
 public:
     // Limits published by Schneider for the processor. They are what makes the

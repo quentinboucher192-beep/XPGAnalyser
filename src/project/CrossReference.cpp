@@ -1,4 +1,5 @@
 #include "CrossReference.hpp"
+#include "GraphListing.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -166,6 +167,35 @@ namespace project {
             if (section.owner != kNoIndex && section.owner < p.pous.size())
                 ownerName = p.strings.text(p.pous[section.owner].name);
             const std::string sectionName(p.strings.text(section.name));
+
+            // 1.12.24 : un schema LD/FBD/SFC garde tel quel. On cherche dans sa
+            // lecture, une ligne par rangee, qui dit aussi ce que la ligne ecrit
+            // (bobine, sortie de bloc) et ce qu'elle lit.
+            if (keepsSourceXml(section)) {
+                const auto lines = graphListing(section);
+                const auto offset = graphListingHeaderLines(section);
+                for (std::size_t li = 0; li < lines.size(); ++li) {
+                    const auto& gl = lines[li];
+                    auto scan = [&](const std::vector<std::string>& names, Reference::Kind kind,
+                                    std::vector<Reference>& into) {
+                        for (const auto& n : names)
+                            for (const auto& hit : findTokens(n, lowerName)) {
+                                Reference ref;
+                                ref.section = s;
+                                ref.sectionName = sectionName;
+                                ref.ownerName = ownerName;
+                                ref.line = offset + li + 1;
+                                ref.kind = kind;
+                                ref.path = hit.path;
+                                ref.text = trim(gl.text);
+                                into.push_back(std::move(ref));
+                            }
+                    };
+                    scan(gl.writes, Reference::Kind::Write, out.writes);
+                    scan(gl.reads, Reference::Kind::Read, out.reads);
+                }
+                continue;
+            }
 
             bool inComment = false;
             // The innermost IF still open. Not a full parse: the condition a

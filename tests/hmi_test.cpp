@@ -17001,7 +17001,8 @@ void guideNouveautes110() {
         // 1.11.18 (refonte, lot 5) : le sujet a aussi ses onglets (un bloc marque 1.11.18) ; 1.11.20 : les E/S,
         // les sorties et les surcharges (des blocs marques 1.11.20) ; 1.11.21 : l'arbre deplie (un bloc
         // marque 1.11.21) - son changement le plus recent.
-        check(firstSince == "1.10" && guide::latestChange(*f) == "1.11.22", "guide 1.10 : @nouveau avant un exemple marque son premier bloc");
+        // 1.12.24 : la fenetre Nouvelle fonction (un bloc marque 1.12.24).
+        check(firstSince == "1.10" && guide::latestChange(*f) == "1.12.24", "guide 1.10 : @nouveau avant un exemple marque son premier bloc");
     } else {
         check(false, "guide 1.10 : le sujet fonctions existe");
     }

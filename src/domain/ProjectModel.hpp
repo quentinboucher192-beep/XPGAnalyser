@@ -129,6 +129,12 @@ namespace domain {
     struct InstanceElement {
         std::string name;       // "[0]", "[1]"...
         SymbolId    comment{ 0 };
+        // 1.12.24 : un element qui porte plus qu'un commentaire - des elements
+        // imbriques et leurs valeurs, comme les reglages des voies d'un module
+        // (ANA_CH_OUT / [0] / FCT_TYPE = 16#0001) - garde ici sa source entiere
+        // (fins de ligne LF), rendue telle quelle a l'export. Aplati en une liste
+        // de noms, il perdait ses valeurs et sa structure. Vide : nom + commentaire.
+        std::string raw;
     };
 
     struct Variable {
@@ -153,6 +159,14 @@ namespace domain {
         SymbolId            name{ 0 };
         std::string         version;
         std::string         checksum;          // TypeSignatureCheckSumString
+        // 1.12.24 : ce que Control Expert met sur le type lui-meme - sa date, son
+        // commentaire et ses attributs, dans l'ordre (IsTypeLocked, IsDeviceDDT,
+        // DeviceDDTKind... : un DDT d'equipement n'est pas un DDT de l'utilisateur).
+        // Perdus, un DDT d'equipement revenait en DDT ordinaire, et son commentaire
+        // allait se poser sur la derniere variable lue avant lui.
+        std::string         dateTime;
+        SymbolId            comment{ 0 };
+        std::vector<std::pair<std::string, std::string>> attributes;
         std::vector<Index>  fields;            // -> Project::variables
         std::uint32_t       instanceCount{ 0 };  // computed
     };
@@ -186,10 +200,23 @@ namespace domain {
         Index         owner{ kNoIndex };          // -> pous
     };
 
+    // 1.12.24 : UNE SECTION LD, FBD OU SFC GARDE LE XML DE CONTROL EXPERT. Son corps
+    // est l'element tel qu'il etait dans le fichier, octet pour octet :
+    // <LDSource ...>...</LDSource>, ou tout le <SFCProgram>...</SFCProgram> d'un
+    // GRAFCET (son identProgram, son graphe, ses receptivites). Le texte entre les
+    // balises, seul garde jusque-la, ne disait rien du schema : la reexportation
+    // rendait un ladder vide et un GRAFCET eclate en sections LD homonymes.
+    [[nodiscard]] inline bool keepsSourceXml(const Section& s) noexcept {
+        return (s.language == PouLanguage::LD || s.language == PouLanguage::FBD
+                || s.language == PouLanguage::SFC)
+            && !s.body.empty() && s.body.front() == '<';
+    }
+
     struct Pou {
         SymbolId            name{ 0 };
         PouKind             kind{ PouKind::Section };
         std::string         version;
+        std::string         dateTime;           // 1.12.24 : FBSource/dateTime, rendu tel quel
         std::vector<Index>  sections;           // -> Project::sections
         std::vector<Index>  parameters;         // -> variables (In/Out/InOut)
         std::vector<Index>  locals;             // -> variables
