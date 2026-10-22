@@ -257,6 +257,9 @@ void Learner::onGap(double from, double to) {
         for (auto it = events_.rbegin(); it != events_.rend(); ++it)
             if (it->kind == EventKind::Saturation && it->t2 == 0) { it->t2 = from; break; }
     }
+    // 1.12.24 : une butee qui dure encore au retour d'un trou d'une heure au plus (une relance du poste)
+    // compte depuis son debut (watchSaturation) ; plus long, on ne sait pas : elle repart.
+    satBeforeGap_ = to - from <= 3600.0 ? satSince_ : -1.0;
     satSince_ = -1;
     satEvent_ = false;
 }
@@ -351,6 +354,15 @@ void Learner::trackOutput(double t, double out) {
 }
 
 void Learner::watchSaturation(const Sample& s, bool sat) {
+    if (sat && satSince_ < 0 && satBeforeGap_ >= 0) {   // 1.12.24 : elle durait avant le trou ; son evenement reprend
+        satSince_ = satBeforeGap_;
+        for (auto it = events_.rbegin(); it != events_.rend(); ++it)
+            if (it->kind == EventKind::Saturation) {
+                if (std::abs(it->t - satSince_) < 1e-6) { it->t2 = 0; satEvent_ = true; }
+                break;
+            }
+    }
+    satBeforeGap_ = -1;
     if (sat) {
         if (satSince_ < 0) satSince_ = s.t;
         if (!satEvent_ && s.t - satSince_ >= 10.0) {
@@ -1385,6 +1397,20 @@ bool Learner::load(std::string_view data) {
     for (std::size_t i = 1; i < l.raw_.size(); ++i) if (!(l.raw_[i].t >= l.raw_[i - 1].t)) return false;
     l.started_ = false;                 // la prochaine mesure repart : ancres, differences, trous
     l.total_ = 0;
+    // 1.12.24 : la butee en cours a l'enregistrement, relue sur les derniers points (la relance la reprend).
+    {
+        const double span = l.cfg_.outSpan(), near = 0.01 * span;
+        for (auto it = l.raw_.rbegin(); it != l.raw_.rend(); ++it) {
+            if (!(it->out >= l.cfg_.outMax - near || it->out <= l.cfg_.outMin + near)) break;
+            l.satSince_ = it->t;
+        }
+        if (l.satSince_ >= 0)   // son evenement encore ouvert dit quand elle a commence
+            for (auto it = l.events_.rbegin(); it != l.events_.rend(); ++it)
+                if (it->kind == EventKind::Saturation) {
+                    if (it->t2 == 0) { l.satEvent_ = true; l.satSince_ = std::min(l.satSince_, it->t); }
+                    break;
+                }
+    }
     *this = std::move(l);
     invalidate();
     return true;

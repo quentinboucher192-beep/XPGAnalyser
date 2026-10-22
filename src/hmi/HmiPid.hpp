@@ -480,6 +480,7 @@ private:
     bool   frozen_{false};
     double satSince_{-1};
     bool   satEvent_{false};
+    double satBeforeGap_{-1};   // 1.12.24 : la butee d'avant un trou court (ou une relance), si elle dure encore apres
     double blockSum_{0}, blockStart_{0}, blockPrev_{0}, revExt_{0};
     std::size_t blockN_{0};
     bool   blockHave_{false};

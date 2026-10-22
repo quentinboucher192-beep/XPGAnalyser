@@ -6039,6 +6039,33 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         click(centre(r), MouseButton::Left, 1, {});
         return Step::Yield;
     }
+    // 1.12.24 : LE REGLAGE PID ET LE PLEIN ECRAN.
+    //   sim-pid "onglet:1"                       un clic dans la fenetre du Reglage PID ouverte, sur sa partie
+    //                                            (Runtime::pidPart : onglet:N, duree:N, objectif:N, appliquer,
+    //                                            appliquer:oui, appliquer:non, revenir:N, revenir:oui, copier,
+    //                                            oublier, oublier:oui, exporter, journal:haut, journal:bas, fermer)
+    //   simulation-echelle remplir               la mise a l'echelle du plein ecran (la barre flottante) :
+    //                                            remplir, proportions, reelle
+    if (cmd == "sim-pid") {
+        auto* pane = dynamic_cast<HmiSimulationPane*>(currentPage());
+        if (!pane) { fail("l'onglet courant n'est pas la simulation IHM (sim-pid)"); return Step::Next; }
+        gfx::Rect r{};
+        if (!pane->canvas().pidPartRect(arg(1), r)) {
+            if (retries_ < 3) return Step::Retry;
+            fail("partie introuvable dans la fen\xC3\xAAtre du R\xC3\xA9glage PID : " + arg(1));
+            return Step::Next;
+        }
+        click(centre(r), MouseButton::Left, 1, {});
+        return Step::Yield;
+    }
+    if (cmd == "simulation-echelle") {
+        auto* pane = dynamic_cast<HmiSimulationPane*>(currentPage());
+        if (!pane) { fail("l'onglet courant n'est pas la simulation IHM (simulation-echelle)"); return Step::Next; }
+        const auto fit = hmi::screenFitFrom(arg(1));
+        if (!fit) { fail("mise \xC3\xA0 l'\xC3\xA9" "chelle inconnue : " + arg(1) + " (remplir, proportions, reelle)"); return Step::Next; }
+        pane->setScreenFit(*fit);
+        return Step::Yield;
+    }
     if (cmd == "sim-clic" || cmd == "sim-appui" || cmd == "sim-relache") {
         // Un objet de la vue simulee (celle du dessus : la popup s'il y en a une).
         auto* pane = dynamic_cast<HmiSimulationPane*>(currentPage());

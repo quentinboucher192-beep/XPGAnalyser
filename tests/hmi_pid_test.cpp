@@ -562,6 +562,20 @@ void incidents() {
     bool satEv = false;
     for (const Event& e : ls.events()) if (e.kind == EventKind::Saturation) satEv = true;
     check(satEv, "la saturation dans le Journal");
+    // 1.12.24 : relancee (la memoire relue), deux minutes plus tard, toujours en butee : la saturation compte
+    // depuis son debut, des la premiere mesure ; un seul evenement, rouvert.
+    {
+        const double before = ls.saturatedFor();
+        Learner lr(cfg);
+        check(lr.load(ls.save()), "la memoire saturee relue");
+        for (int i = 0; i < 240; ++i) r2.step();                       // 2 min sans le poste
+        lr.push(r2.step(), cur);
+        int open = 0, total = 0;
+        for (const Event& e : lr.events())
+            if (e.kind == EventKind::Saturation) { ++total; open += e.t2 == 0 ? 1 : 0; }
+        check(lr.saturatedFor() > before + 100 && lr.state() == State::Saturated && total == 1 && open == 1,
+              fmt("relancee 2 min plus tard : saturee depuis %.0f s, un evenement (%d), en cours", lr.saturatedFor(), total));
+    }
     // Oublier et reapprendre
     l.forget();
     check(!l.model().valid && l.model().learned == 0, "Oublier : plus de modele");
