@@ -15544,16 +15544,37 @@ void v110_simulation(const std::string& xpg) {
                   "Remplir l'\xC3\xA9" "cran \xC3\xA0 nouveau");
             check(choose("keep", 0.75) && remembered == hmi::ScreenFit::Keep, "Garder les proportions, pour la suite (le retour en plein \xC3\xA9" "cran)");
         }
-        // Sans souris, elle s'efface ; la souris en haut, elle revient.
+        // Sans souris, elle s'efface. 1.12.25 : la souris sur la vue, meme sur son bandeau du haut
+        // (ses boutons), ne la ramene pas - elle les couvrait ; la souris au bord du haut, si.
         for (double t = 4.0; t <= 6.0; t += 0.25) frame(t);
         check(!pane.fullScreenBarShown(), "sans souris, la barre flottante s'efface");
-        (void)send(ui::MouseMove{{800.f, 20.f}, {0.f, 0.f}, {}});
+        (void)send(ui::MouseMove{{800.f, 30.f}, {0.f, 0.f}, {}});
         frame(6.25);
         frame(6.5);
-        check(pane.fullScreenBarShown(), "la souris en haut : elle revient");
+        (void)send(ui::MouseMove{{300.f, 500.f}, {0.f, 0.f}, {}});
+        frame(6.75);
+        check(!pane.fullScreenBarShown(), "la souris sur le bandeau de la vue, puis ailleurs : la barre ne revient pas (elle couvrait ses boutons)");
+        (void)send(ui::MouseMove{{800.f, 0.f}, {0.f, 0.f}, {}});
+        frame(7.0);
+        frame(7.25);
+        check(pane.fullScreenBarShown(), "la souris au bord du haut : elle revient");
+        (void)send(ui::MouseMove{{800.f, 30.f}, {0.f, 0.f}, {}});
+        for (double t = 7.5; t <= 9.0; t += 0.25) frame(t);
+        check(pane.fullScreenBarShown(), "...et reste tant que la souris est dessus");
+        (void)send(ui::MouseMove{{800.f, 400.f}, {0.f, 0.f}, {}});
+        for (double t = 9.25; t <= 11.0; t += 0.25) frame(t);
+        check(!pane.fullScreenBarShown(), "...et s'efface 1 s apr\xC3\xA8s, la souris partie");
+        (void)send(ui::MouseDown{{800.f, 30.f}, ui::MouseButton::Left, 1, {}});
+        (void)send(ui::MouseUp{{800.f, 30.f}, ui::MouseButton::Left, {}});
+        frame(11.1);
+        check(!pane.fullScreenBarShown(), "effac\xC3\xA9" "e, un clic sous elle (un bouton du bandeau de la vue) ne la ram\xC3\xA8ne pas");
+        (void)send(ui::MouseMove{{800.f, 1.f}, {0.f, 0.f}, {}});
+        frame(11.25);
+        frame(11.5);
+        check(pane.fullScreenBarShown(), "le bord du haut la ram\xC3\xA8ne encore");
         // Echap : la sortie, la fenetre et le zoom comme avant.
         check(send(ui::KeyDown{ui::Key::Escape, {}, false}), "\xC3\x89" "chap : le volet la prend");
-        frame(6.75);
+        frame(11.75);
         check(!pane.fullScreen() && window.size() == 2 && !window.back() && pane.bar().visible() && root.findOverlayOwner() == nullptr,
               "\xC3\x89" "chap : la sortie, la fen\xC3\xAAtre rendue, la barre de l'onglet revient");
         check(std::fabs(pane.canvas().displayZoom() - 1.5f) < 0.001f && pane.canvas().bounds().w < 1000.f,
@@ -15561,9 +15582,9 @@ void v110_simulation(const std::string& xpg) {
                   + std::to_string(pane.canvas().bounds().w) + " de large)");
         // Le bouton de la barre, puis F11 pour sortir.
         pane.command("hmi.fullscreen");
-        frame(7.0);
+        frame(12.0);
         check(pane.fullScreen() && window.size() == 3, "le bouton Plein \xC3\xA9" "cran de la barre");
-        frame(7.1);
+        frame(12.1);
         check(pane.screenFit() == hmi::ScreenFit::Keep && std::fabs(pane.canvas().shownZoomX() - 1.5f) < 0.001f
                   && std::fabs(pane.canvas().shownZoomY() - 1.5f) < 0.001f,
               "le retour en plein \xC3\xA9" "cran : la mise \xC3\xA0 l'\xC3\xA9" "chelle retenue (Garder les proportions)");
@@ -18206,20 +18227,20 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58.
     const auto& rel = hn::releases();
-    check(rel.size() == 57 && rel.front().version == "1.12.24" && rel[1].version == "1.12.23" && rel[2].version == "1.12.22" && rel[3].version == "1.12.21" && rel[4].version == "1.12.20" && rel[5].version == "1.12.19" && rel[6].version == "1.12.18" && rel[7].version == "1.12.17" && rel[8].version == "1.12.16" && rel[9].version == "1.12.15" && rel[10].version == "1.12.14" && rel[11].version == "1.12.13" && rel[12].version == "1.12.12" && rel[13].version == "1.12.11" && rel[14].version == "1.12.10" && rel[15].version == "1.12.9" && rel[16].version == "1.12.8" && rel[17].version == "1.12.7" && rel[18].version == "1.12.6" && rel[19].version == "1.12.5" && rel[20].version == "1.12.4" && rel[21].version == "1.12.3" && rel[22].version == "1.12.2" && rel[23].version == "1.12.1"
-              && rel[24].version == "1.12.0" && rel[25].version == "1.11.24" && rel[26].version == "1.11.23"
-              && rel[27].version == "1.11.22" && rel[28].version == "1.11.21" && rel[29].version == "1.11.20" && rel[30].version == "1.11.19"
-              && rel[31].version == "1.11.18" && rel[32].version == "1.11.17"
-              && rel[33].version == "1.11.16" && rel[34].version == "1.11.15"
-              && rel[35].version == "1.11.14" && rel[36].version == "1.11.13" && rel[37].version == "1.11.12"
-              && rel[38].version == "1.11.11" && rel[39].version == "1.11.10"
-              && rel[40].version == "1.11.9" && rel[41].version == "1.11.8"
-              && rel[42].version == "1.11.7" && rel[43].version == "1.11.6" && rel[44].version == "1.11.5"
-              && rel[45].version == "1.11.4" && rel[46].version == "1.11.3" && rel[47].version == "1.11.2"
-              && rel[48].version == "1.11.1" && rel[49].version == "1.11" && rel[50].version == "1.10.4",
-          "notes : 57 versions, la 1.12.24 en tete, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 58 && rel.front().version == "1.12.25" && rel[1].version == "1.12.24" && rel[2].version == "1.12.23" && rel[3].version == "1.12.22" && rel[4].version == "1.12.21" && rel[5].version == "1.12.20" && rel[6].version == "1.12.19" && rel[7].version == "1.12.18" && rel[8].version == "1.12.17" && rel[9].version == "1.12.16" && rel[10].version == "1.12.15" && rel[11].version == "1.12.14" && rel[12].version == "1.12.13" && rel[13].version == "1.12.12" && rel[14].version == "1.12.11" && rel[15].version == "1.12.10" && rel[16].version == "1.12.9" && rel[17].version == "1.12.8" && rel[18].version == "1.12.7" && rel[19].version == "1.12.6" && rel[20].version == "1.12.5" && rel[21].version == "1.12.4" && rel[22].version == "1.12.3" && rel[23].version == "1.12.2" && rel[24].version == "1.12.1"
+              && rel[25].version == "1.12.0" && rel[26].version == "1.11.24" && rel[27].version == "1.11.23"
+              && rel[28].version == "1.11.22" && rel[29].version == "1.11.21" && rel[30].version == "1.11.20" && rel[31].version == "1.11.19"
+              && rel[32].version == "1.11.18" && rel[33].version == "1.11.17"
+              && rel[34].version == "1.11.16" && rel[35].version == "1.11.15"
+              && rel[36].version == "1.11.14" && rel[37].version == "1.11.13" && rel[38].version == "1.11.12"
+              && rel[39].version == "1.11.11" && rel[40].version == "1.11.10"
+              && rel[41].version == "1.11.9" && rel[42].version == "1.11.8"
+              && rel[43].version == "1.11.7" && rel[44].version == "1.11.6" && rel[45].version == "1.11.5"
+              && rel[46].version == "1.11.4" && rel[47].version == "1.11.3" && rel[48].version == "1.11.2"
+              && rel[49].version == "1.11.1" && rel[50].version == "1.11" && rel[51].version == "1.10.4",
+          "notes : 58 versions, la 1.12.25 en tete, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18490,7 +18511,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 387,   // 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 390,   // 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18633,7 +18654,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 215, "centre : L'IHM a les 215 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 57, "centre : 11 expressions, 57 notes (1.12.24)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 58, "centre : 11 expressions, 58 notes (1.12.25)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -18695,10 +18716,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 57
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 58
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.12.24" && hc::notesPage("9.9").version == "1.12.24",
+        check(hc::notesPage("").version == "1.12.25" && hc::notesPage("9.9").version == "1.12.25",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -19042,7 +19063,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 57;   // 1.11.3 a 1.12.24 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 58;   // 1.11.3 a 1.12.25 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");

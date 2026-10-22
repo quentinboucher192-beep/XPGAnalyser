@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.25", "22/10/2026", "livr\xC3\xA9" "e le 22/10 en fin d'apr\xC3\xA8s-midi"},
     {"1.12.24", "22/10/2026", "livr\xC3\xA9" "e le 22/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.23", "21/10/2026", "livr\xC3\xA9" "e le 21/10 tard le soir"},
     {"1.12.22", "21/10/2026", "livr\xC3\xA9" "e le 21/10 dans la soir\xC3\xA9" "e"},
@@ -130,6 +131,17 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.25 (22/10/2026) : la barre du plein ecran ne couvre plus la vue, les graduations du temps des
+        // courbes restent dans l'objet ; l'historique des objets commence a s'ecrire (sa fenetre : 1.12.26).
+        note("1.12.25", "Simulation IHM", Kind::Fixed,
+         "LA BARRE DU PLEIN \xC3\x89" "CRAN NE COUVRE PLUS LA VUE : elle revenait au moindre mouvement de la souris et d\xC3\xA8s que la souris approchait du haut de l'\xC3\xA9" "cran, et cachait les boutons du bandeau de la vue au moment de les toucher. Elle se montre \xC3\xA0 l'entr\xC3\xA9" "e en plein \xC3\xA9" "cran, puis seulement la souris tout en haut de l'\xC3\xA9" "cran (un doigt au bord du haut sur un \xC3\xA9" "cran tactile), tant qu'elle est dessus ; elle s'efface 1 s apr\xC3\xA8s. \xC3\x89" "chap et F11 sortent toujours.",
+         "simulation-zoom", ""),
+        note("1.12.25", "Objets", Kind::Fixed,
+         "COURBES, LES GRADUATIONS DU TEMPS DANS L'OBJET : la derni\xC3\xA8re (l'heure) d\xC3\xA9passait de la moiti\xC3\xA9 de sa largeur et, sur une courbe \xC3\xA9troite, la carte voisine la coupait. Elles tiennent dans la courbe ; une graduation qui toucherait sa voisine n'est pas \xC3\xA9" "crite.",
+         "objet-courbe", ""),
+        note("1.12.25", "Vues", Kind::New,
+         "L'HISTORIQUE DES MODIFICATIONS DES OBJETS COMMENCE : \xC3\xA0 chaque Enregistrer, chaque objet cr\xC3\xA9\xC3\xA9, modifi\xC3\xA9 ou supprim\xC3\xA9 depuis le dernier enregistrement est not\xC3\xA9 dans le projet (ihm/historique-edition, un fichier par vue), propri\xC3\xA9t\xC3\xA9 par propri\xC3\xA9t\xC3\xA9, avant et apr\xC3\xA8s, sign\xC3\xA9 de la date, du nom du PC, du compte Windows et de la version ; 100 entr\xC3\xA9" "es par objet, les plus anciennes regroup\xC3\xA9" "es. La fen\xC3\xAAtre Historique (clic droit sur un objet ou sur la vue : la liste, Avant / Apr\xC3\xA8s, Revenir) arrive avec la 1.12.26 : elle lira ce qui est not\xC3\xA9 d\xC3\xA8s maintenant.",
+         "editeur", ""),
         // 1.12.24 (22/10/2026) : l'objet Reglage PID, les registres, le plein ecran qui remplit l'ecran, le schema du
         // reseau du PC avec plusieurs esclaves simules.
         note("1.12.24", "Objets", Kind::New,

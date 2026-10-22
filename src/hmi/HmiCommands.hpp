@@ -60,6 +60,13 @@ public:
     // (l'essai ; kNoId : tous).
     std::map<Id, ScenarioReport> reports;
     const core::SignalPtr<Id> reported = core::Signal<Id>::create();
+    // 1.12.25 : L'HISTORIQUE DES OBJETS (hmi/HmiEditHistory.hpp). `savedFolder` : le dossier du dernier
+    // enregistrement (ou de l'ouverture), celui auquel le prochain Enregistrer compare chaque vue ; vide :
+    // jamais enregistree. `editNotes` : ce que l'editeur dit d'un objet pour sa prochaine entree (d'ou il
+    // vient, un retour a une version). `editsRevision` change a chaque enregistrement : les volets relisent.
+    std::string               savedFolder;
+    std::map<Id, std::string> editNotes;
+    int                       editsRevision{0};
 
     void touched(Id view) { dirty = true; changed->emit(view); }
 };

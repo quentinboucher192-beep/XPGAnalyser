@@ -1318,6 +1318,9 @@
     <ClCompile Include="src\hmi\HmiDuplicate.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiEditHistory.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiEnums.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2621,6 +2624,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiDuplicate.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiEditHistory.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiEnums.hpp">

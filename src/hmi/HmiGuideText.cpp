@@ -16274,8 +16274,11 @@ const std::vector<Topic>& topics() {
                          "cliquable : les boutons de la vue, les saisies, les popups, Ctrl+molette.", {}},
              {K::Bullet, "Une **petite barre flottante** en haut garde le nom de la vue, l'\xC3\xA9tat de "
                          "l'IHM, le zoom (\xE2\x88\x92, la valeur, +, Ajuster) et **Quitter le plein "
-                         "\xC3\xA9" "cran \xC2\xB7 \xC3\x89" "chap**. Elle s'efface apr\xC3\xA8s 3 secondes "
-                         "sans souris et revient quand la souris approche du haut de l'\xC3\xA9" "cran.", {}},
+                         "\xC3\xA9" "cran \xC2\xB7 \xC3\x89" "chap**. Montr\xC3\xA9" "e \xC3\xA0 l'entr\xC3\xA9" "e, elle s'efface ; "
+                         "elle revient la souris **tout en haut de l'\xC3\xA9" "cran** (un doigt au bord du haut), "
+                         "reste tant que la souris est dessus et s'efface 1 s apr\xC3\xA8s. La souris sur la vue, "
+                         "m\xC3\xAAme sur son bandeau du haut, ne la ram\xC3\xA8ne pas (1.12.25 : elle revenait "
+                         "au moindre mouvement et couvrait les boutons du haut de la vue).", {}},
              {K::Bullet, "**La vue sur l'\xC3\xA9" "cran** (1.12.24) : un \xC3\xA9" "cran n'a pas toujours "
                          "les proportions de la vue (une vue 1280 \xC3\x97 800 sur un \xC3\xA9" "cran 16:9). "
                          "Apr\xC3\xA8s Ajuster, la barre flottante propose : **Remplir l'\xC3\xA9" "cran** "

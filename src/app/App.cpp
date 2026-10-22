@@ -43,6 +43,7 @@
 #include "../hmi/HmiNetInfo.hpp"
 #include "SimDebugPane.hpp"            // Lot API 8 : F11 dans Simulation > Debogage
 #include "../hmi/HmiStore.hpp"
+#include "../hmi/HmiEditHistory.hpp"   // 1.12.25 : l'historique des objets
 #include "NoveltyCenter.hpp"              // 1.10 (chantier P) : les nouveautes se voient
 #include "../core/CrashGuard.hpp"           // 1.10.2 (CR) : le chien de garde bat a chaque image
 #include "../core/CallTrail.hpp"            // 1.10.2 (CR) : le journal interne (XPG_TRACE, XPG_PORTEE)
@@ -1814,6 +1815,7 @@ void App::bindHmi() {
             doc->project = std::move(*p);
             hmiWarnings_ = std::move(report.warnings);
             doc->history = hmi::loadHistory(projectFolder_, &hmiWarnings_);
+            doc->savedFolder = projectFolder_;   // 1.12.25 : la reference de l'historique des objets
             loaded = true;
         } else {
             hmiUnreadable_ = p.error().message();
@@ -1845,7 +1847,15 @@ core::Status App::saveHmi(const std::string& folder) {
     auto& cfg = hmi_->project.config;
     if (cfg.created.empty()) cfg.created = hmi::nowStamp();
     cfg.modified = hmi::nowStamp();
+    // 1.12.25 : l'historique des objets - chaque vue comparee a son dernier enregistrement, avant d'etre
+    // ecrite ; une entree signee (ce PC, ce compte) par objet change. Une erreur ici n'empeche pas d'enregistrer.
+    if (auto rec = hmi::edits::record(hmi_->project, hmi_->savedFolder.empty() ? folder : hmi_->savedFolder, folder,
+                                      hmi::edits::currentSignature(), hmi_->editNotes);
+        rec && *rec >= 0)
+        hmi_->editNotes.clear();
     if (auto st = hmi::save(hmi_->project, folder); !st) return st;
+    hmi_->savedFolder = folder;
+    ++hmi_->editsRevision;
     // L'historique de la marche (lot 4), borne par les reglages du projet.
     hmi_->history.trim(hmi_->project.history, hmi::wallStamp());
     return hmi::saveHistory(hmi_->history, folder);

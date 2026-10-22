@@ -2379,8 +2379,11 @@ std::vector<HmiSimulationPane*>& simPanes() {
 // La barre flottante du plein ecran (maquette 1.10, scene 3) : le nom de la vue,
 // l'etat de l'IHM, le zoom (-, la valeur, +, Ajuster), Quitter le plein ecran.
 // Le dernier enfant du volet : elle voit chaque geste la premiere, ne garde que
-// ceux qui la touchent (et Echap, F11). Elle s'efface 3 s apres le dernier
-// mouvement de la souris, et revient quand la souris approche du haut.
+// ceux qui la touchent (et Echap, F11). 1.12.25 : montree a l'entree (4 s), puis
+// seulement la souris tout en haut de l'ecran (le bord), et tant qu'elle est dessus ;
+// elle s'efface 1 s apres. Avant, le moindre mouvement de la souris, ou la souris
+// pres du haut, la ramenait : elle couvrait les boutons du bandeau de la vue au
+// moment de les toucher.
 // 1.12.24 : apres Ajuster, la mise a l'echelle - Remplir l'ecran, Garder les
 // proportions, Taille reelle (100 %) ; la choisie est allumee (pas apres un zoom).
 class FullScreenBar final : public ui::Widget {
@@ -2402,8 +2405,9 @@ public:
     void enter(double now) {
         shownUntil_ = toastUntil_ = now + 4.0;
         alpha_ = 1.f;
-        lastMove_ = -100.0;
+        lastNear_ = -100.0;
         mouse_ = {-1.f, -1.f};
+        mouseKnown_ = false;
         hover_ = false;
         note_.clear();
     }
@@ -2444,9 +2448,11 @@ protected:
         const float total = others + fitsW(fitLabels);
         const int fit = fitShown ? fitShown() : -1;
         box_ = {b.x + (b.w - total) / 2.f, b.y + 10.f, total, h};
-        // Montree : a l'entree, 3 s apres un mouvement, la souris en haut ou dessus.
-        const bool near = mouse_.y >= 0.f && mouse_.y < box_.bottom() + 48.f;
-        const bool want = hover_ || near || now_ - lastMove_ < 3.0 || now_ < shownUntil_;
+        // Montree : a l'entree ; la souris au bord du haut, ou sur la barre montree (1 s apres).
+        const bool edge = mouseKnown_ && mouse_.y <= b.y + kEdge;
+        const gfx::Rect keep{box_.x - 12.f, b.y, box_.w + 24.f, box_.bottom() + 12.f - b.y};
+        if (edge || hover_ || (alpha_ > 0.05f && mouseKnown_ && keep.contains(mouse_))) lastNear_ = now_;
+        const bool want = now_ - lastNear_ < 1.0 || now_ < shownUntil_;
         alpha_ = want ? std::min(1.f, alpha_ + static_cast<float>(dt) * 6.f) : std::max(0.f, alpha_ - static_cast<float>(dt) * 2.5f);
         parts_.clear();
         float x = box_.x + 12.f;
@@ -2515,7 +2521,7 @@ protected:
         // A l'entree, en bas : comment sortir (1.12.24 : ou ce que dit say, le choix d'une mise a l'echelle).
         if (now_ < toastUntil_) {
             const std::string msg = !note_.empty() ? note_
-                                                   : std::string("Plein \xC3\xA9" "cran : la vue occupe tout l'\xC3\xA9" "cran \xC2\xB7 \xC3\x89" "chap ou F11 pour sortir");
+                                                   : std::string("Plein \xC3\xA9" "cran : \xC3\x89" "chap ou F11 pour sortir \xC2\xB7 la souris tout en haut : la barre");
             const float tw = width(msg, font) + 28.f;
             const gfx::Rect t{b.x + (b.w - tw) / 2.f, b.bottom() - 64.f, tw, 30.f};
             const auto k = static_cast<float>(std::clamp(toastUntil_ - now_, 0.0, 0.5) * 2.0);
@@ -2536,13 +2542,19 @@ protected:
         }
         const bool live = alpha_ > 0.3f;
         if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
-            lastMove_ = now_;
             mouse_ = m->pos;
+            mouseKnown_ = true;
             hover_ = live && box_.contains(m->pos);
             return hover_ ? R::Consumed : R::Ignored;
         }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
-            lastMove_ = now_;
+            // Un doigt au bord du haut (un ecran tactile n'a pas de survol) : la barre revient.
+            if (!live && d->pos.y <= bounds().y + 8.f) {
+                mouse_ = d->pos;
+                mouseKnown_ = true;
+                lastNear_ = now_;
+                return R::Ignored;
+            }
             if (!live || !box_.contains(d->pos)) return R::Ignored;
             if (d->button == ui::MouseButton::Left)
                 for (const auto& p : parts_) {
@@ -2566,10 +2578,11 @@ private:
     };
     std::vector<Part> parts_;
     gfx::Rect         box_{};
+    static constexpr float kEdge = 3.f;   // 1.12.25 : le bord du haut qui la ramene (px)
     gfx::Point        mouse_{-1.f, -1.f};
-    double            now_{0}, painted_{-1}, lastMove_{-100}, shownUntil_{0}, toastUntil_{0};
+    double            now_{0}, painted_{-1}, lastNear_{-100}, shownUntil_{0}, toastUntil_{0};
     float             alpha_{1.f};
-    bool              hover_{false};
+    bool              hover_{false}, mouseKnown_{false};
     std::string       note_;   // 1.12.24 : le message du bas (vide : comment sortir)
 };
 

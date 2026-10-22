@@ -561,6 +561,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiDecl.cpp" />
     <ClCompile Include="src\hmi\HmiDeclEdit.cpp" />
     <ClCompile Include="src\hmi\HmiDuplicate.cpp" />
+    <ClCompile Include="src\hmi\HmiEditHistory.cpp" />
     <ClCompile Include="src\hmi\HmiEnums.cpp" />
     <ClCompile Include="src\hmi\HmiEquipmentLink.cpp" />
     <ClCompile Include="src\hmi\HmiExprBench.cpp" />
@@ -1002,6 +1003,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiDecl.hpp" />
     <ClInclude Include="src\hmi\HmiDeclEdit.hpp" />
     <ClInclude Include="src\hmi\HmiDuplicate.hpp" />
+    <ClInclude Include="src\hmi\HmiEditHistory.hpp" />
     <ClInclude Include="src\hmi\HmiEnums.hpp" />
     <ClInclude Include="src\hmi\HmiEquipmentLink.hpp" />
     <ClInclude Include="src\hmi\HmiExprBench.hpp" />

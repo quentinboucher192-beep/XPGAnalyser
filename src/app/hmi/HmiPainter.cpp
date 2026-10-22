@@ -726,8 +726,25 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
     for (int k = 0; k <= 4; ++k) {
         const double x = left + pw * k / 4.0;
         c.r.line(c.map(x, top), c.map(x, top + ph), k == 0 ? axis : grid, 1);
-        std::string t = k == 4 ? endLabel : "-" + hmi::formatNumber(std::round(duration * (4 - k) / 4.0)) + " s";
-        text(c, t, x - 40, top + ph + 1, 80, bottom - 2, label, 11, k == 0 ? "gauche" : k == 4 ? "droite" : "centre");
+    }
+    // 1.12.25 : les graduations du temps restent dans l'objet - la derniere (l'heure) en
+    // debordait de la moitie de sa largeur, coupee par la carte voisine - et ne se touchent
+    // pas : sur une courbe etroite, celle qui toucherait une voisine deja posee est omise.
+    {
+        const auto px = static_cast<std::uint16_t>(std::clamp(11.0 * c.vp.zoom, 6.0, 200.0));
+        const double kx = std::max(0.01, static_cast<double>(c.vp.zoomX()));
+        std::vector<std::pair<double, double>> taken;
+        for (const int k : {4, 0, 2, 1, 3}) {
+            const std::string t = k == 4 ? endLabel : "-" + hmi::formatNumber(std::round(duration * (4 - k) / 4.0)) + " s";
+            if (t.empty()) continue;
+            const double tw = c.r.measure(t, gfx::FontId{px}).width / kx;
+            const double x0 = std::clamp(left + pw * k / 4.0 - tw / 2.0, 2.0, std::max(2.0, w - 2.0 - tw));
+            bool clash = false;
+            for (const auto& [a, b] : taken) clash = clash || (x0 < b + 6.0 && x0 + tw > a - 6.0);
+            if (clash) continue;
+            taken.emplace_back(x0, x0 + tw);
+            text(c, t, x0, top + ph + 1, tw, bottom - 2, label, 11, "centre");
+        }
     }
 
     // Les plumes.
