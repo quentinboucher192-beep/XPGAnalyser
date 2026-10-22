@@ -449,6 +449,7 @@ void MainAnalysisScreen::Update(const menu::FrameContext& f) {
     refreshHistoryButtons();
     // Lot API 2 : le numero de cycle de la simulation, le projet (nom, etat).
     if (topBar_ && app_.simulation().attached()) refreshSimulationIndicator();
+    else refreshHmiChip();         // 1.12.26 : l'IHM seule (IHM Studio, ou l'API arretee) - sa pastille suit
     frameClock_ = f.totalSeconds;   // ---- Lot API 8 : bandeau haut (l'horloge de l'appli) ----
     refreshTopBar();
     // Lot macros 1 : l'apercu de la macro, differe apres une frappe.

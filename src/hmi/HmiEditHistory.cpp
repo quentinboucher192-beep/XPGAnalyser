@@ -707,7 +707,8 @@ int countOf(const Log& log, Id object) noexcept {
     return n;
 }
 
-std::string dateText(std::int64_t t) {
+namespace {
+std::tm localOf(std::int64_t t) {
     const std::time_t tt = static_cast<std::time_t>(t);
     std::tm tm{};
 #ifdef _WIN32
@@ -715,9 +716,70 @@ std::string dateText(std::int64_t t) {
 #else
     localtime_r(&tt, &tm);
 #endif
+    return tm;
+}
+}   // namespace
+
+std::string dateText(std::int64_t t) {
+    const std::tm tm = localOf(t);
     char b[64];
     std::snprintf(b, sizeof b, "%02d/%02d/%04d %02d:%02d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, tm.tm_hour, tm.tm_min);
     return b;
+}
+
+std::string relativeText(std::int64_t t, std::int64_t now) {
+    const std::int64_t s = now - t;
+    if (s < 60) return "\xC3\xA0 l'instant";            // une horloge en avance : pareil
+    if (s < 3600) return "il y a " + std::to_string(s / 60) + " min";
+    const std::tm a = localOf(t), b = localOf(now);
+    char hm[16];
+    std::snprintf(hm, sizeof hm, "%02d:%02d", a.tm_hour, a.tm_min);
+    const bool sameDay = a.tm_year == b.tm_year && a.tm_yday == b.tm_yday;
+    if (sameDay && s < 6 * 3600) return "il y a " + std::to_string(s / 3600) + " h";
+    if (sameDay) return std::string("aujourd'hui ") + hm;
+    // hier : la veille du jour de `now` (a midi : un changement d'heure ne la deplace pas)
+    std::tm y = b;
+    y.tm_mday -= 1;
+    y.tm_hour = 12;
+    y.tm_min = y.tm_sec = 0;
+    y.tm_isdst = -1;
+    const std::tm yd = localOf(static_cast<std::int64_t>(std::mktime(&y)));
+    if (a.tm_year == yd.tm_year && a.tm_yday == yd.tm_yday) return std::string("hier ") + hm;
+    char d[32];
+    if (a.tm_year == b.tm_year) std::snprintf(d, sizeof d, "%02d/%02d %s", a.tm_mday, a.tm_mon + 1, hm);
+    else std::snprintf(d, sizeof d, "%02d/%02d/%04d", a.tm_mday, a.tm_mon + 1, a.tm_year + 1900);
+    return d;
+}
+
+std::map<Id, Mark> marksOf(const Log& log, const std::vector<Entry>& pending) {
+    std::map<Id, Mark> out;
+    std::map<Id, std::set<std::string>> pcs;
+    for (const auto& e : log.entries) {
+        auto& m = out[e.object];
+        if (e.what == What::Created && m.createdAt == 0) {
+            m.createdAt = e.t;
+            m.createdPc = e.pc;
+            m.createdAccount = e.account;
+            m.createdNote = e.note;
+        }
+        m.count += std::max(1, e.count);
+        if (e.t >= m.t) {
+            m.t = e.t;
+            m.pc = e.pc;
+            m.account = e.account;
+            m.created = e.what == What::Created;
+        }
+        pcs[e.object].insert(e.pc);
+    }
+    for (auto& [id, m] : out) m.pcs = static_cast<int>(pcs[id].size());
+    for (const auto& e : pending) {
+        if (e.what == What::Deleted) continue;
+        auto& m = out[e.object];
+        m.pending = true;
+        m.fresh = e.what == What::Created;
+        m.changes = static_cast<int>(e.changes.size());
+    }
+    return out;
 }
 
 } // namespace hmi::edits

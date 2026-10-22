@@ -655,6 +655,18 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     links_ += doc_->changed->connect([this](Id touched) {
         if (touched == viewId_ || touched == kNoId) refresh();
     });
+    // 1.12.26 : le suivi des modifications - l'infobulle et le point orange (retenus par projet) ;
+    // un Enregistrer : l'historique relu, la section Suivi refaite.
+    canvas_->setEditTip([this](Id id) { return editTip(id); });
+    {
+        const std::string kept = ui::FilterMemory::installed() ? ui::FilterMemory::read("hmi.suivi") : std::string{};
+        canvas_->setEditTipOn(kept.find("sans-infobulle") == std::string::npos);
+        canvas_->setPendingDotsOn(kept.find("sans-point") == std::string::npos);
+    }
+    links_ += doc_->editsSaved->connect([this] {
+        refreshEditMarks();
+        rebuildProperties();
+    });
     // La pastille de l'onglet Actions : combien en a l'objet (ou la vue).
     links_ += actions_->countChanged->connect([this](std::size_t n) {
         inspector_->setTabBadge(1, n ? std::to_string(n) : std::string{}, ui::Tone::Accent);
@@ -845,6 +857,7 @@ void HmiEditor::refresh() {
     objects_->setExpressionContext(&doc_->project, plc_.get());   // ---- Lot API 8 : les expressions impossibles (le badge fx) ----
     objects_->setView(v);
     objects_->setSelection(canvas_->selection());
+    refreshEditMarks();   // 1.12.26 : les dates, le point orange
     layers_->setView(v);
     if (actions_) actions_->refresh();
     if (shortcuts_) shortcuts_->refresh();          // 1.11.23
@@ -1071,6 +1084,7 @@ void HmiEditor::rebuildProperties() {
                         p.openTip = "Les \xC3\xA9tats en table : Contenu \xE2\x80\xBA \xC3\x89tats (une ligne par \xC3\xA9tat, "
                                     "selon la valeur ou selon des conditions)";
                     }
+    addSuiviCategory(*v, cats);   // 1.12.26 : apres les ajouts qui visent la premiere section
     applyPropertyFilters(*v, cats);
     // 1.12.19 : les sections ajoutees ici (alarmes de l'objet, fonctions d'une instance, liaison) ont aussi
     // leur carre et leur raison.
@@ -1775,7 +1789,7 @@ enum CanvasMenu : int {
     MPasteHere = 9, MSelectAll = 10, MRename = 11, MHelp = 12, MLocked = 13, MHidden = 14, MOpenSymbol = 15,
     MSymbolParams = 16, MEnterGroup = 17, MLeaveGroup = 18, MUnlockTarget = 19, MCopyTarget = 20, MViewProps = 21,
     MLibrary = 22, MZoom50 = 23, MZoom100 = 24, MZoom200 = 25, MGuideV = 26, MGuideH = 27, MHelpTarget = 28,
-    MShow = 29, MHistory = 30, MViewHistory = 31,
+    MShow = 29, MHistory = 30, MViewHistory = 31, MEditsTip = 32, MEditsDots = 33,
 };
 constexpr int kMenuCanvas = 0, kMenuLayers = 1, kMenuPalette = 2;   // le menu ouvert (context_ sert aux trois)
 enum PaletteMenu : int { kPalettePlace = 1, kPaletteFavorite = 2, kPaletteHelp = 3 };
@@ -1783,6 +1797,189 @@ constexpr hmi::Kind kInsertKinds[] = {hmi::Kind::Text, hmi::Kind::Button, hmi::K
 }   // namespace
 
 void HmiEditor::setHelpOpener(std::function<void(const std::string&)> open) { openHelp_ = std::move(open); }
+
+// ---- 1.12.26 : le suivi des modifications ------------------------------------------------
+namespace {
+void keepSuivi(bool tip, bool dots) {
+    if (ui::FilterMemory::installed())
+        ui::FilterMemory::write("hmi.suivi", std::string(tip ? "" : "sans-infobulle ") + (dots ? "" : "sans-point"));
+}
+}   // namespace
+
+void HmiEditor::setEditTipOn(bool on) {
+    canvas_->setEditTipOn(on);
+    keepSuivi(on, canvas_->pendingDotsOn());
+}
+
+void HmiEditor::setPendingDotsOn(bool on) {
+    canvas_->setPendingDotsOn(on);
+    keepSuivi(canvas_->editTipOn(), on);
+}
+
+void HmiEditor::setEditsClock(std::int64_t now) {
+    editsClock_ = now;
+    refreshEditMarks();
+}
+
+std::int64_t HmiEditor::editsNow() const {
+    return editsClock_ ? editsClock_ : static_cast<std::int64_t>(std::time(nullptr));
+}
+
+// L'historique relu apres chaque Enregistrer (le dossier, la revision) ; les marques refaites a chaque
+// modification : la vue comparee a son dernier enregistrement (2 a 5 ms pour 200 objets). Une vue jamais
+// enregistree : rien (l'historique commence a son premier Enregistrer).
+void HmiEditor::refreshEditMarks() {
+    namespace edits = hmi::edits;
+    const auto* v = doc_->project.view(viewId_);
+    if (!v) return;
+    if (editsFolder_ != doc_->savedFolder || editsRev_ != doc_->editsRevision) {
+        editsFolder_ = doc_->savedFolder;
+        editsRev_ = doc_->editsRevision;
+        editsLog_ = editsFolder_.empty() ? edits::Log{} : edits::load(editsFolder_, viewId_);
+        editsSaved_ = editsFolder_.empty() ? std::nullopt : edits::savedView(editsFolder_, viewId_);
+    }
+    const auto pending = editsSaved_ ? edits::compare(&*editsSaved_, *v, edits::Signature{}, doc_->editNotes) : std::vector<edits::Entry>{};
+    marks_ = edits::marksOf(editsLog_, pending);
+    objects_->setEditMarks(marks_, editsClock_);
+    std::vector<Id> dots;
+    for (const auto& [id, m] : marks_)
+        if (m.pending) dots.push_back(id);
+    canvas_->setPendingMarks(std::move(dots));
+}
+
+std::string HmiEditor::editTip(Id id) const {
+    namespace edits = hmi::edits;
+    const auto* v = doc_->project.view(viewId_);
+    const auto* o = v ? v->object(id) : nullptr;
+    if (!o) return {};
+    std::string t = o->name + " \xC2\xB7 " + std::string(hmi::kindLabel(o->kind));
+    const auto it = marks_.find(id);
+    const auto* m = it != marks_.end() ? &it->second : nullptr;
+    if (m && m->t)
+        t += std::string("\n") + (m->created ? "cr\xC3\xA9\xC3\xA9 " : "modifi\xC3\xA9 ") + edits::relativeText(m->t, editsNow()) + " sur " + m->pc
+           + (m->account.empty() ? std::string{} : " \xC2\xB7 " + m->account);
+    else if (!(m && m->fresh))
+        t += "\npas encore d'historique";
+    if (m && m->pending)
+        t += m->fresh ? std::string("\n\xE2\x97\x8F nouveau : pas encore enregistr\xC3\xA9")
+                      : "\n\xE2\x97\x8F non enregistr\xC3\xA9 : " + std::to_string(m->changes) + " changement" + (m->changes > 1 ? "s" : "");
+    return t;
+}
+
+// Proprietes > Suivi : un objet (en tete, comme la maquette), plusieurs, ou la vue (a la fin) ; rien pour une
+// vue jamais enregistree.
+void HmiEditor::addSuiviCategory(const hmi::View& v, std::vector<ui::PropertyGrid::Category>& cats) {
+    namespace edits = hmi::edits;
+    using PG = ui::PropertyGrid;
+    if (!editsSaved_) return;   // une vue jamais enregistree : pas encore de suivi
+    const auto sel = canvas_->selection();
+    const auto now = editsNow();
+    const auto longDate = [](std::int64_t t) {   // "le 22/10/2026 a 14:32"
+        const std::string d = edits::dateText(t);
+        const auto sp = d.find(' ');
+        return sp == std::string::npos ? "le " + d : "le " + d.substr(0, sp) + " \xC3\xA0 " + d.substr(sp + 1);
+    };
+    const auto who = [](const std::string& account, const std::string& pc) {
+        return (account.empty() ? std::string{} : " par " + account) + " sur " + pc;
+    };
+    const auto row = [](std::string name, std::string value, std::string description, std::string key) {
+        PG::Property p;
+        p.name = std::move(name);
+        p.value = std::move(value);
+        p.type = PG::ValueType::ReadOnly;
+        p.description = std::move(description);
+        p.key = std::move(key);
+        return p;
+    };
+    const bool host = static_cast<bool>(openHistory_);
+    PG::Category c;
+    c.name = "Suivi";
+    if (sel.size() == 1) {
+        const Id id = sel.front();
+        const auto it = marks_.find(id);
+        const edits::Mark m = it != marks_.end() ? it->second : edits::Mark{};
+        std::string created;
+        if (m.createdAt) created = longDate(m.createdAt) + who(m.createdAccount, m.createdPc) + (m.createdNote.empty() ? std::string{} : " (" + m.createdNote + ")");
+        else if (m.fresh) created = "pas encore enregistr\xC3\xA9";
+        else created = "avant le d\xC3\xA9" "but de l'historique";
+        c.properties.push_back(row("Cr\xC3\xA9\xC3\xA9", created,
+                                   "La cr\xC3\xA9" "ation de l'objet : la date, le compte Windows et le nom du PC, not\xC3\xA9s \xC3\xA0 l'Enregistrer.", "suivi.cree"));
+        if (m.t && !m.created)
+            c.properties.push_back(row("Modifi\xC3\xA9", longDate(m.t) + who(m.account, m.pc) + " (" + edits::relativeText(m.t, now) + ")",
+                                       "Le dernier enregistrement qui a chang\xC3\xA9 l'objet.", "suivi.modifie"));
+        if (m.pending && !m.fresh) {
+            auto p = row("Non enregistr\xC3\xA9", std::to_string(m.changes) + (m.changes > 1 ? " changements" : " changement") + ", sign\xC3\xA9"
+                             + (m.changes > 1 ? "s" : "") + " au prochain Enregistrer",
+                         "Ce qui a chang\xC3\xA9 depuis le dernier enregistrement : l'Historique le montre en t\xC3\xAAte.", "suivi.attente");
+            p.valueTone = ui::Tone::Warning;
+            c.properties.push_back(std::move(p));
+        }
+        auto h = row("Enregistrements",
+                     m.count ? std::to_string(m.count) + " \xC2\xB7 sur " + std::to_string(std::max(1, m.pcs)) + " PC" : std::string("aucun"),
+                     "Les enregistrements qui ont touch\xC3\xA9 l'objet. Le bouton \xE2\x80\xA6 : l'Historique (Avant / Apr\xC3\xA8s, Revenir).", "suivi.historique");
+        if (host) {
+            h.open = [this, id] { (void)requestHistory({id}); };
+            h.openTip = "Historique des modifications\xE2\x80\xA6";
+        }
+        c.properties.push_back(std::move(h));
+        cats.insert(cats.begin(), std::move(c));
+        return;
+    }
+    if (sel.size() > 1) {
+        c.name = "Suivi (" + std::to_string(sel.size()) + " objets)";
+        std::size_t shown = 0;
+        for (const Id id : sel) {
+            const auto* o = v.object(id);
+            if (!o) continue;
+            if (++shown > 12) {
+                c.properties.push_back(row("\xE2\x80\xA6", "et " + std::to_string(sel.size() - 12) + " autres", {}, "suivi.autres"));
+                break;
+            }
+            std::string val = "pas encore d'historique";
+            if (const auto it = marks_.find(id); it != marks_.end()) {
+                const auto& m = it->second;
+                if (m.pending) val = m.fresh ? std::string("nouveau, pas encore enregistr\xC3\xA9") : "non enregistr\xC3\xA9 (" + std::to_string(m.changes) + ")";
+                else if (m.t) val = std::string(m.created ? "cr\xC3\xA9\xC3\xA9 " : "modifi\xC3\xA9 ") + edits::relativeText(m.t, now) + " sur " + m.pc;
+            }
+            auto p = row(o->name, val, {}, "suivi.objet");
+            if (host) {
+                p.open = [this, id] { (void)requestHistory({id}); };
+                p.openTip = "Historique de " + o->name + "\xE2\x80\xA6";
+            }
+            c.properties.push_back(std::move(p));
+        }
+        auto h = row("Historique", "des " + std::to_string(sel.size()) + " objets", "Leurs enregistrements, ensemble.", "suivi.historique");
+        if (host) {
+            h.open = [this, ids = sel] { (void)requestHistory(ids); };
+            h.openTip = "Historique des " + std::to_string(sel.size()) + " objets\xE2\x80\xA6";
+        }
+        c.properties.push_back(std::move(h));
+        cats.insert(cats.begin(), std::move(c));
+        return;
+    }
+    // la vue : son dernier enregistrement, ce qui attend (a la fin : ses reglages d'abord)
+    std::int64_t last = 0;
+    std::string lastPc;
+    for (const auto& e : editsLog_.entries)
+        if (e.t >= last) { last = e.t; lastPc = e.pc; }
+    std::size_t waiting = 0;
+    for (const auto& [id, m] : marks_)
+        if (m.pending) ++waiting;
+    c.properties.push_back(row("Enregistr\xC3\xA9", last ? longDate(last) + " sur " + lastPc + " (" + edits::relativeText(last, now) + ")" : std::string("pas encore d'historique"),
+                               "Le dernier enregistrement qui a chang\xC3\xA9 un objet de la vue.", "suivi.vue"));
+    auto p = row("Non enregistr\xC3\xA9", waiting ? std::to_string(waiting) + (waiting > 1 ? " objets modifi\xC3\xA9s" : " objet modifi\xC3\xA9") : std::string("tout est enregistr\xC3\xA9"),
+                 "Les objets chang\xC3\xA9s depuis le dernier enregistrement (le point orange).", "suivi.attente");
+    if (waiting) p.valueTone = ui::Tone::Warning;
+    c.properties.push_back(std::move(p));
+    auto h = row("Historique", std::to_string(editsLog_.entries.size()) + (editsLog_.entries.size() > 1 ? " entr\xC3\xA9" "es" : " entr\xC3\xA9" "e"),
+                 "L'historique de la vue, les objets supprim\xC3\xA9s compris (ils se restaurent).", "suivi.historique");
+    if (host) {
+        h.open = [this] { (void)requestHistory({}); };
+        h.openTip = "Historique de la vue\xE2\x80\xA6";
+    }
+    c.properties.push_back(std::move(h));
+    cats.push_back(std::move(c));
+}
 
 bool HmiEditor::editView(const std::string& label, const std::function<bool(hmi::View&)>& change) {
     const auto* v = doc_->project.view(viewId_);
@@ -1862,6 +2059,9 @@ void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
         items.push_back(check("Grille", act(ActGrid), v->grid.visible));
         items.push_back(check("Magn\xC3\xA9tisme", act(ActSnap), v->grid.snapGrid || v->grid.snapObjects || v->grid.snapGuides));
         items.push_back(check("Objets cach\xC3\xA9s (estomp\xC3\xA9s)", act(ActShowHidden), c.showHidden()));
+        // 1.12.26 : le suivi des modifications
+        items.push_back(check("Infobulle de suivi au survol", MEditsTip, c.editTipOn()));
+        items.push_back(check("Point \xC2\xAB non enregistr\xC3\xA9 \xC2\xBB sur les objets", MEditsDots, c.pendingDotsOn()));
         ui::PopupMenu::Item guide = plain("Ajouter un guide", -1);
         guide.children = {plain("Vertical, ici", MGuideV), plain("Horizontal, ici", MGuideH)};
         items.push_back(std::move(guide));
@@ -2263,6 +2463,8 @@ void HmiEditor::canvasMenuChosen(int a) {
         case MViewHistory:
             if (openHistory_) openHistory_(viewId_, {});
             break;
+        case MEditsTip: setEditTipOn(!c.editTipOn()); break;
+        case MEditsDots: setPendingDotsOn(!c.pendingDotsOn()); break;
         case MViewProps:
             c.setSelection({});
             inspector_->setCurrentIndex(0);

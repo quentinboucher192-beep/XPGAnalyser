@@ -19,6 +19,7 @@
 #include "HmiPainter.hpp"
 #include "../../core/Signal.hpp"
 #include "../../hmi/HmiDesign.hpp"
+#include "../../hmi/HmiEditHistory.hpp"   // 1.12.26 : les dates des objets
 #include "../../hmi/HmiExprCheck.hpp"   // ---- Lot API 8 : les expressions impossibles ----
 #include "../../hmi/HmiModel.hpp"
 #include "../../ui/Widget.hpp"
@@ -178,10 +179,23 @@ public:
     // son titre) ; faux : pas montree. Le texte de chaque ligne montree sous l'objet.
     [[nodiscard]] bool familyRowRect(hmi::Id object, int family, int line, gfx::Rect& out) const;
     [[nodiscard]] std::vector<std::string> familyRowTexts(hmi::Id object) const;
+    // ---- 1.12.26 : LES DATES DES OBJETS (l'historique des modifications) ----
+    //  A droite du nom : la derniere modification enregistree (« il y a 2 h », « hier 14:32 »),
+    //  ou le point orange et « non enregistr\xC3\xA9 » (change depuis le dernier enregistrement) ;
+    //  trop etroit : le point seul. L'infobulle de la ligne : la date entiere, le PC, le compte.
+    //  `now` : maintenant, fige (essais) ; 0 : l'horloge du PC.
+    void setEditMarks(std::map<hmi::Id, hmi::edits::Mark> marks, std::int64_t now = 0);
+    [[nodiscard]] const std::map<hmi::Id, hmi::edits::Mark>& editMarks() const noexcept { return marks_; }
+    [[nodiscard]] std::string modifiedText(hmi::Id) const;   // ce que montre la ligne
+    [[nodiscard]] std::string modifiedTip(hmi::Id) const;    // son infobulle
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
+    [[nodiscard]] bool hasTooltip() const override { return !marks_.empty() || Widget::hasTooltip(); }
 protected:
     void            onPaint(const ui::PaintContext&) override;
     ui::EventResult onEvent(const ui::InputEvent&) override;
 private:
+    std::map<hmi::Id, hmi::edits::Mark> marks_;   // 1.12.26
+    std::int64_t              marksNow_{0};
     // alarm : -1 la ligne de l'objet ; 0 son noeud Alarmes ; k > 0 la ligne k de
     // ce noeud deplie (1.10).
     // 1.10.3 : family >= 0, une famille de l'objet (hmitree::Family) ; line >= 0, une de ses lignes.

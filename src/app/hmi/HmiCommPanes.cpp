@@ -1837,7 +1837,9 @@ void HmiCommPane::rebuildPlcProperties(std::vector<PG::Category>& cats) {
     rq.properties.push_back(prop("Mots par requ\xC3\xAAte", std::to_string(c.maxWords), PG::ValueType::Integer, commit("mots"), "125 au plus (la norme)."));
     rq.properties.push_back(prop("Bits par requ\xC3\xAAte", std::to_string(c.maxBits), PG::ValueType::Integer, commit("bits"), "2000 au plus."));
     rq.properties.push_back(prop("Regrouper \xC3\xA0 moins de (mots)", std::to_string(c.gap), PG::ValueType::Integer, commit("ecart"),
-                                 "Deux variables s\xC3\xA9par\xC3\xA9" "es de moins de N mots : lues d'une seule requ\xC3\xAAte (le trou avec)."));
+                                 "Deux variables s\xC3\xA9par\xC3\xA9" "es de moins de N mots : lues d'une seule requ\xC3\xAAte (le trou avec). "
+                                 "Moins de requ\xC3\xAAtes, une lecture plus rapide : 100 par d\xC3\xA9" "faut (8 avant la 1.12.26). "
+                                 "Un trou que l'automate refuse de lire, la liaison l'apprend et ne le lit plus."));
     cats.push_back(std::move(rq));
     PG::Category demo;
     demo.name = "Serveur de d\xC3\xA9monstration";

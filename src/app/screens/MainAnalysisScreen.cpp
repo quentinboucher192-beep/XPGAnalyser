@@ -1992,6 +1992,17 @@ void MainAnalysisScreen::runSimulationTransport(std::string_view id) {
     }
 }
 
+// 1.10 : la pastille de l'IHM, a cote de l'API (pas d'IHM dans le projet : aucune). 1.12.26 : relue a
+// chaque image (Update) - l'IHM demarre aussi depuis son onglet, la Vue d'ensemble, l'arbre, et s'arrete
+// seule (une modification) ; la pastille n'etait relue qu'apres F8 ou la barre du haut.
+void MainAnalysisScreen::refreshHmiChip() {
+    if (!topBar_) return;
+    if (!app_.hmi()) { topBar_->setHmi(TopBar::Hmi::None); return; }
+    const auto tab = hmiTabs_.find("simulation");   // aussi detache dans sa fenetre (hmiTab ne le voit pas)
+    const auto* hsim = dynamic_cast<const HmiSimulationPane*>(tab != hmiTabs_.end() ? tab->second : nullptr);
+    topBar_->setHmi(hsim && hsim->hmiRunning() ? TopBar::Hmi::Running : TopBar::Hmi::Stopped);
+}
+
 void MainAnalysisScreen::refreshSimulationIndicator() {
     using State = SimulationHost::State;
     if (!topBar_) return;
@@ -1999,13 +2010,7 @@ void MainAnalysisScreen::refreshSimulationIndicator() {
     const auto  state = sim.state();
     const bool  live  = sim.attached();
 
-    // 1.10 : la pastille de l'IHM, a cote de l'API (pas d'IHM dans le projet : aucune).
-    if (!app_.hmi()) topBar_->setHmi(TopBar::Hmi::None);
-    else {
-        const auto tab = hmiTabs_.find("simulation");   // aussi detache dans sa fenetre (hmiTab ne le voit pas)
-        const auto* hsim = dynamic_cast<const HmiSimulationPane*>(tab != hmiTabs_.end() ? tab->second : nullptr);
-        topBar_->setHmi(hsim && hsim->hmiRunning() ? TopBar::Hmi::Running : TopBar::Hmi::Stopped);
-    }
+    refreshHmiChip();
     // Lot API 2 : le bloc Simulation de la barre - Simuler / Pause, Arreter, Un
     // cycle, et l'etat en clair avec le numero de cycle.
     topBar_->setSimulation(!live ? TopBar::Sim::Off

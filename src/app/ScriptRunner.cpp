@@ -6878,6 +6878,42 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         send(ui::MouseUp{driver_.mouse(), MouseButton::Left, mods()});
         return Step::Yield;
     }
+    // 1.12.26 : vue-survol "NOM" | X Y - la souris sur un objet (son centre) ou un point de la vue, sans
+    // cliquer : l'infobulle de suivi vient au bout d'une seconde (attendre 45).
+    if (cmd == "vue-survol") {
+        const auto vp = editor->canvas().viewport();
+        if (w.size() > 2 && std::isdigit(static_cast<unsigned char>(arg(1).empty() ? 'x' : arg(1)[0]))) {
+            moveTo(vp.toScreen(num(1), num(2)), {});
+            return Step::Yield;
+        }
+        for (const auto& o : view->objects)
+            if (o.name == arg(1)) {
+                const auto box = o.box();
+                moveTo(vp.toScreen(box.x + box.w / 2, box.y + box.h / 2), {});
+                return Step::Yield;
+            }
+        fail("vue-survol : objet introuvable : " + arg(1));
+        return Step::Next;
+    }
+    // 1.12.26 : suivi-verifier "NOM" "TEXTE" - l'infobulle de suivi de l'objet contient TEXTE ;
+    // suivi-infobulle oui|non, suivi-point oui|non - les reglages du clic droit sur la vue.
+    if (cmd == "suivi-verifier") {
+        hmi::Id id = hmi::kNoId;
+        for (const auto& o : view->objects)
+            if (o.name == arg(1)) id = o.id;
+        const std::string tip = id == hmi::kNoId ? std::string{} : editor->editTip(id);
+        std::printf("[script] suivi %s : %s | %s\n", arg(1).c_str(), tip.c_str(), editor->objects().modifiedText(id).c_str());
+        if (id == hmi::kNoId) fail("suivi-verifier : objet introuvable : " + arg(1));
+        else if (!arg(2).empty() && tip.find(arg(2)) == std::string::npos && editor->objects().modifiedText(id).find(arg(2)) == std::string::npos)
+            fail("suivi-verifier : \xC2\xAB " + arg(2) + " \xC2\xBB absent du suivi de " + arg(1));
+        return Step::Next;
+    }
+    if (cmd == "suivi-infobulle" || cmd == "suivi-point") {
+        const bool on = lower(arg(1)) != "non";
+        if (cmd == "suivi-infobulle") editor->setEditTipOn(on);
+        else editor->setPendingDotsOn(on);
+        return Step::Yield;
+    }
     // 1.10 (chantier O) : objet-alarmes NOM [n] - dans l'explorateur, l'objet
     // deplie sur son noeud Alarmes, deplie lui aussi ; avec n, un clic sur la
     // ligne n de ce noeud (1 : la premiere alarme ; l'inspecteur s'ouvre sur elle).

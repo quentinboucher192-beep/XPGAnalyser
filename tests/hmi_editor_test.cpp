@@ -34592,6 +34592,106 @@ void nouvelleFonction11224() {
 //  (le non enregistre en tete, le plus recent ensuite), les filtres (sorte, PC, recherche), Avant /
 //  Apres et les libelles de l'inspecteur, Revenir une valeur (confirme, une commande), revenir a une
 //  version, la vue entiere et un objet supprime qui se restaure, le CSV.
+// 1.12.26 : le suivi des modifications - Proprietes > Suivi, l'Explorateur d'objets, l'infobulle, le point orange.
+void suivi11226() {
+    std::printf("-- 1.12.26 : le suivi des modifications (Suivi, Explorateur, infobulle, point orange)\n");
+    namespace edits = hmi::edits;
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "xpg_hmieditor_suivi11226";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    const std::string folder = (root / "P").string();
+    Bench b;
+    const Id a = b.place(Kind::Rectangle, 100, 100);
+    const Id c = b.place(Kind::Rectangle, 400, 100);
+    b.v().object(a)->name = "RECT_A";
+    b.v().object(c)->name = "RECT_C";
+    check(b.editor->editMarks().empty() && b.editor->objects().modifiedText(a).empty(),
+          "suivi : jamais enregistr\xC3\xA9 - rien (l'historique commence au premier Enregistrer)");
+    auto& p = b.doc->project;
+    check(static_cast<bool>(hmi::save(p, folder)), "suivi : le projet \xC3\xA9" "crit");
+    b.doc->savedFolder = folder;
+    const auto sign = [](std::int64_t t, const char* pc, const char* who) {
+        edits::Signature s;
+        s.t = t;
+        s.pc = pc;
+        s.account = who;
+        s.version = "1.12.26";
+        return s;
+    };
+    const std::int64_t t1 = 1760000000;
+    p.view(b.view)->object(c)->set("fill", "#EEF1F5");
+    auto r1 = edits::record(p, folder, folder, sign(t1, "PC-ATELIER", "tech"));
+    check(r1 && *r1 == 1 && static_cast<bool>(hmi::save(p, folder)), "suivi : un enregistrement (RECT_C)");
+    ++b.doc->editsRevision;
+    b.doc->editsSaved->emit();
+    b.editor->setEditsClock(t1 + 2 * 3600 + 60);
+    const auto& marks = b.editor->editMarks();
+    check(marks.count(c) && marks.at(c).t == t1 && marks.at(c).count == 1 && !marks.at(c).pending && !marks.count(a),
+          "suivi : RECT_C modifi\xC3\xA9 \xC3\xA0 t1, une fois ; RECT_A sans historique");
+    check(b.editor->objects().modifiedText(c) == edits::relativeText(t1, t1 + 2 * 3600 + 60) && b.editor->objects().modifiedText(a).empty(),
+          "l'Explorateur : la date de RECT_C (" + b.editor->objects().modifiedText(c) + ")");
+    check(b.editor->objects().modifiedTip(c).find("PC-ATELIER") != std::string::npos && b.editor->objects().modifiedTip(c).find("tech") != std::string::npos,
+          "l'infobulle de la ligne : le PC, le compte (" + b.editor->objects().modifiedTip(c) + ")");
+    // une modification pas encore enregistree
+    b.editor->canvas().setSelection({a});
+    b.editor->canvas().edit("fond", [&](Project&, View& v) { v.object(a)->set("fill", "#123456"); });
+    b.editor->layout();
+    check(b.editor->editMarks().count(a) && b.editor->editMarks().at(a).pending && b.editor->editMarks().at(a).changes == 1,
+          "RECT_A chang\xC3\xA9 : non enregistr\xC3\xA9, un changement");
+    check(b.editor->objects().modifiedText(a) == "non enregistr\xC3\xA9", "l'Explorateur : non enregistr\xC3\xA9 (" + b.editor->objects().modifiedText(a) + ")");
+    check(b.editor->canvas().pendingMarks() == std::vector<Id>{a}, "le point orange : RECT_A seul");
+    // Proprietes > Suivi
+    const auto& cats = b.editor->properties().categories();
+    const auto findRow = [&](const std::string& name) -> const ui::PropertyGrid::Property* {
+        for (const auto& cat : cats)
+            if (cat.name.rfind("Suivi", 0) == 0)
+                for (const auto& pr : cat.properties)
+                    if (pr.name == name) return &pr;
+        return nullptr;
+    };
+    check(!cats.empty() && cats.front().name == "Suivi", "Propri\xC3\xA9t\xC3\xA9s : la section Suivi en t\xC3\xAAte (" + (cats.empty() ? std::string("?") : cats.front().name) + ")");
+    const auto* attente = findRow("Non enregistr\xC3\xA9");
+    check(attente && attente->value.find("1 changement") == 0, "Suivi : 1 changement non enregistr\xC3\xA9");
+    check(findRow("Cr\xC3\xA9\xC3\xA9") && findRow("Cr\xC3\xA9\xC3\xA9")->value.find("avant le d\xC3\xA9" "but") == 0, "Suivi : cr\xC3\xA9\xC3\xA9 avant le d\xC3\xA9" "but de l'historique");
+    b.editor->canvas().setSelection({c});
+    b.editor->layout();
+    const auto* modif = findRow("Modifi\xC3\xA9");
+    check(modif && modif->value.find("PC-ATELIER") != std::string::npos && modif->value.find("par tech") != std::string::npos,
+          "Suivi de RECT_C : modifi\xC3\xA9 le ... par tech sur PC-ATELIER (" + (modif ? modif->value : std::string("?")) + ")");
+    const auto* regs = findRow("Enregistrements");
+    check(regs && regs->value.find("1 \xC2\xB7 sur 1 PC") == 0, "Suivi : 1 enregistrement, 1 PC");
+    // l'infobulle de suivi, sur la vue
+    const auto boxC = b.v().object(c)->box();
+    const std::string tip = b.editor->canvas().editTipAt(b.screen(boxC.x + boxC.w / 2, boxC.y + boxC.h / 2));
+    check(tip.find("RECT_C") == 0 && tip.find("modifi\xC3\xA9 il y a 2 h sur PC-ATELIER") != std::string::npos,
+          "l'infobulle de suivi : " + tip);
+    const auto boxA = b.v().object(a)->box();
+    const std::string tipA = b.editor->canvas().editTipAt(b.screen(boxA.x + boxA.w / 2, boxA.y + boxA.h / 2));
+    check(tipA.find("non enregistr\xC3\xA9 : 1 changement") != std::string::npos, "l'infobulle d'un objet chang\xC3\xA9 : " + tipA);
+    // les reglages du clic droit
+    b.editor->setEditTipOn(false);
+    b.editor->setPendingDotsOn(false);
+    check(!b.editor->canvas().editTipOn() && !b.editor->canvas().pendingDotsOn(), "l'infobulle et le point s'\xC3\xA9teignent");
+    b.editor->setEditTipOn(true);
+    b.editor->setPendingDotsOn(true);
+    // un Enregistrer : RECT_A enregistre, plus de point
+    auto r2 = edits::record(p, folder, folder, sign(t1 + 3 * 3600, "PC-BUREAU", "etudes"));
+    check(r2 && *r2 == 1 && static_cast<bool>(hmi::save(p, folder)), "suivi : 2e enregistrement (RECT_A)");
+    ++b.doc->editsRevision;
+    b.doc->editsSaved->emit();
+    check(b.editor->editMarks().count(a) && !b.editor->editMarks().at(a).pending && b.editor->editMarks().at(a).pc == "PC-BUREAU"
+              && b.editor->canvas().pendingMarks().empty(),
+          "apr\xC3\xA8s Enregistrer : RECT_A sign\xC3\xA9 PC-BUREAU, plus de point orange");
+    // la vue, rien de choisi
+    b.editor->canvas().setSelection({});
+    b.editor->layout();
+    check(findRow("Non enregistr\xC3\xA9") && findRow("Non enregistr\xC3\xA9")->value == "tout est enregistr\xC3\xA9" && findRow("Historique")
+              && findRow("Historique")->value == "2 entr\xC3\xA9" "es",
+          "Suivi de la vue : tout est enregistr\xC3\xA9, 2 entr\xC3\xA9" "es");
+    fs::remove_all(root, ec);
+}
+
 void historique11226() {
     std::printf("-- 1.12.26 : la fenetre Historique des objets\n");
     namespace edits = hmi::edits;
@@ -35077,6 +35177,7 @@ int main(int argc, char** argv) {
     plumeCarres11223();                     // 1.12.23 : la plume lit sa formule, les carres du Contenu, selon K
     nouvelleFonction11224();                // 1.12.24 : Nouvelle fonction, la case Retour ouvre le selecteur de types
     historique11226();                      // 1.12.26 : la fenetre Historique des objets (liste, filtres, Revenir, Restaurer, CSV)
+    suivi11226();                           // 1.12.26 : Suivi, Explorateur, infobulle, point orange
     v1101_tableaux_onglet_cache();          // 1.10.1 (chantier B1) : la vue suit les tableaux, onglet cache ou non
     v1101_journal_vider();                  // 1.10.1 (integration I1101) : le Journal se vide ; les nouveautes 1.10.0 -> 1.10.1
     aideSaisie1102();                       // 1.10.2 (chantier A) : les objets des vues, les parametres des instances

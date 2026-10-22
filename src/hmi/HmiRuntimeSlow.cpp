@@ -124,16 +124,25 @@ void Runtime::sampleExchanges(double now) {
         perfHistory_.exchanges(static_cast<std::uint32_t>(fresh), d.avgMs > 0 ? d.avgMs : d.lastMs);
         const double ms = d.cycleMs > 0 ? d.cycleMs : d.lastMs;
         if (ms <= 0) continue;
+        // 1.12.26 : une lecture se juge PAR REQUETE (300 variables en 15 requetes de 15 ms : pas une
+        // reponse lente - elle etait notee chaque seconde) ; une lecture plus longue que la periode de
+        // l'equipement est toujours une lenteur (l'IHM ne suit plus).
+        const std::size_t reqs = std::max<std::size_t>(1, d.requestsPerCycle);
+        const double per = ms / static_cast<double>(reqs);
+        const bool over = eq.periodMs > 0 && ms > eq.periodMs;
         const std::string key = "equipement:" + eq.name;
-        const double usual = usual_.usual(key);
-        const bool slow = slowRules_.slow(ms, usual);
-        usual_.add(key, ms, slow);
+        const double usual = usual_.usual(key);   // par requete
+        const bool slow = over || slowRules_.slow(per, usual);
+        usual_.add(key, per, slow);
         if (!slow) continue;
         SlowEntry e;
         e.kind = SlowKind::Equipment;
         e.ms = ms;
-        e.usual = usual;
-        e.what = "Lecture de " + std::to_string(d.subscribed) + (d.subscribed > 1 ? " variables" : " variable") + ", r\xC3\xA9ponse lente";
+        e.usual = usual * static_cast<double>(reqs);   // la meme lecture, au temps habituel par requete
+        const std::string what = "Lecture de " + std::to_string(d.subscribed) + (d.subscribed > 1 ? " variables" : " variable") + " ("
+                               + std::to_string(reqs) + (reqs > 1 ? " requ\xC3\xAAtes" : " requ\xC3\xAAte") + ")";
+        e.what = over ? what + ", plus longue que la p\xC3\xA9riode (" + std::to_string(eq.periodMs) + " ms)"
+                      : what + ", r\xC3\xA9ponse lente (" + slowMs(per) + " par requ\xC3\xAAte)";
         e.where = eq.name;
         e.equipment = eq.name;
         e.runs = usual_.runs(key);

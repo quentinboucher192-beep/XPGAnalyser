@@ -47,6 +47,7 @@
 #include "../../ui/widgets/Controls.hpp"
 
 #include <algorithm>
+#include <ctime>
 #include <cctype>
 #include <cmath>
 #include <map>
@@ -667,6 +668,49 @@ void HmiObjectList::reveal(Id id) {
         }
 }
 
+// ---- 1.12.26 : les dates des objets ----------------------------------------------------
+void HmiObjectList::setEditMarks(std::map<hmi::Id, hmi::edits::Mark> marks, std::int64_t now) {
+    marks_ = std::move(marks);
+    marksNow_ = now;
+    invalidate();
+}
+
+std::string HmiObjectList::modifiedText(hmi::Id id) const {
+    const auto it = marks_.find(id);
+    if (it == marks_.end()) return {};
+    const auto& m = it->second;
+    if (m.pending) return "non enregistr\xC3\xA9";
+    if (!m.t) return {};
+    return hmi::edits::relativeText(m.t, marksNow_ ? marksNow_ : static_cast<std::int64_t>(std::time(nullptr)));
+}
+
+std::string HmiObjectList::modifiedTip(hmi::Id id) const {
+    const auto it = marks_.find(id);
+    if (it == marks_.end()) return {};
+    const auto& m = it->second;
+    std::string t;
+    if (m.pending)
+        t = m.fresh ? std::string("Nouveau : pas encore enregistr\xC3\xA9 (sign\xC3\xA9 de ce PC au prochain Enregistrer)")
+                    : "Modifi\xC3\xA9 depuis l'enregistrement : " + std::to_string(m.changes) + " changement" + (m.changes > 1 ? "s" : "");
+    if (m.t) {
+        if (!t.empty()) t += "\n";
+        t += std::string(m.created ? "Cr\xC3\xA9\xC3\xA9 le " : "Modifi\xC3\xA9 le ") + hmi::edits::dateText(m.t) + " sur " + m.pc
+           + (m.account.empty() ? std::string{} : " \xC2\xB7 " + m.account);
+        t += "\n" + std::to_string(m.count) + " enregistrement" + (m.count > 1 ? "s" : "")
+           + " \xC2\xB7 clic droit : Historique des modifications\xE2\x80\xA6";
+    }
+    return t;
+}
+
+std::string HmiObjectList::liveTooltip(gfx::Point mouse) const {
+    if (!editor_ && listArea().contains(mouse)) {
+        const int i = rowAt(mouse.y);
+        if (i >= 0 && rows_[static_cast<std::size_t>(i)].object())
+            if (auto t = modifiedTip(rows_[static_cast<std::size_t>(i)].id); !t.empty()) return t;
+    }
+    return Widget::liveTooltip(mouse);
+}
+
 int HmiObjectList::rowAt(float y) const {
     const float local = y - bounds().y + scrollY_;
     if (local < 0) return -1;
@@ -820,9 +864,27 @@ void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
             drawHmiGlyph(ctx.r, HmiGlyph::Bell, {bx, y + (rowH_ - 14) / 2, 14, 14}, sel ? fg : c.textMuted);
             textCentred(ctx, {bx + 17, y, bellW - 17, rowH_}, alarmCount, small, sel ? fg : c.textMuted);
         }
+        // 1.12.26 : la derniere modification enregistree, ou le point orange (non enregistre),
+        // devant la cloche ; trop etroit pour le nom et la date : le point seul.
+        std::string when = modifiedText(row.id);
+        const auto mk = marks_.find(row.id);
+        const bool pend = mk != marks_.end() && mk->second.pending;
+        const float dotW = pend ? 11.f : 0.f;
+        float whenW = when.empty() ? 0.f : ctx.r.measure(when, small).width;
+        if (whenW > 0.f) {
+            const float free = lock.x - x - 8 - badgeW - bellW;
+            const float nameNeed = std::min(ctx.r.measure(o->name, f).width, 90.f);
+            if (free - whenW - dotW - 8.f < nameNeed) { when.clear(); whenW = 0.f; }
+        }
+        const float markW = dotW + (whenW > 0.f ? whenW + 8.f : 0.f);
+        if (markW > 0.f) {
+            const float mx = lock.x - 6 - bellW - markW;
+            if (pend) ctx.r.fillRoundedRect({mx + 1.f, y + (rowH_ - 7.f) * 0.5f, 7.f, 7.f}, c.warning, 3.5f);
+            if (whenW > 0.f) textCentred(ctx, {mx + dotW, y, whenW + 2.f, rowH_}, when, small, sel ? fg.withAlpha(200) : c.textMuted);
+        }
         // 1.11.24 : le nom d'abord, le genre prend ce qui reste (coupe, ou rien) - "Instance
         // de symbole" reduisait le nom d'une instance a "..." dans un explorateur etroit.
-        const float room = std::max(20.f, lock.x - x - 8 - badgeW - bellW);
+        const float room = std::max(20.f, lock.x - x - 8 - badgeW - bellW - markW);
         const float nameW = std::min(room, std::max(20.f, ctx.r.measure(o->name, f).width));
         const std::string name = fit(ctx.r, o->name, f, nameW);
         textCentred(ctx, {x, y, nameW, rowH_}, name, f, fg);

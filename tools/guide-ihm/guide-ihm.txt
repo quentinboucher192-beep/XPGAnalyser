@@ -1463,7 +1463,7 @@ Chaque changement est une commande (Ctrl+Z).
 | Écrire dans l'automate | coché | Décoché : lecture seule - les commandes de l'IHM ne changent rien dans l'automate (une mise en service prudente). |
 | Mots par requête | 120 | 125 au plus ; les variables proches se lisent d'une seule requête. |
 | Bits par requête | 1968 | 2000 au plus. |
-| Regrouper à moins de | 8 mots | Deux variables séparées de moins de N mots : une requête, le trou avec. |
+| Regrouper à moins de | 100 mots | Deux variables séparées de moins de N mots : une requête, le trou avec (8 avant la 1.12.26). Un trou que l'automate refuse de lire, la liaison l'apprend et ne le lit plus. |
 ### Générer
 Une ligne de la table illisible (une adresse refusée, un type inconnu), en double, deux lignes qui se recouvrent ; relié à un automate réel, chaque variable de l'automate que l'IHM utilise sans adresse Modbus (Proposer les place) ; en information, la lecture seule avec des commandes, l'IHM qui lit le serveur de démonstration.
 > Une structure entière ou une instance de bloc ne se lit pas par Modbus : l'IHM en lit les membres, un par un.
@@ -2023,7 +2023,7 @@ La tâche de communication (son propre fil : l'écran ne l'attend jamais) refait
 | Étape | Ce qu'elle fait | Le réglage |
 | Les écritures | ce que l'opérateur a commandé part d'abord, sans attendre la période : une écriture réveille la tâche | - |
 | Les lectures | ce que montrent les vues ouvertes, ce que surveillent les alarmes et les archives, en requêtes de mots qui se suivent | Période de scrutation (500 ms) |
-| Le regroupement | deux variables proches se lisent d'une seule requête, le trou avec : %MW100 et %MW104 en une lecture de 5 mots plutôt que deux | Regrouper à moins de (8 mots), Mots par requête (120) |
+| Le regroupement | deux variables proches se lisent d'une seule requête, le trou avec : %MW100 et %MW104 en une lecture de 5 mots plutôt que deux | Regrouper à moins de (100 mots), Mots par requête (120) |
 | L'attente | chaque requête attend sa réponse | Délai de réponse (1000 ms) |
 | Le nouvel essai | l'appareil injoignable : une connexion toutes les N secondes, la première une seconde après la coupure | Nouvel essai (5 s) |
 Une variable qu'on ne regarde plus depuis 10 s n'est plus lue : une vue fermée ne coûte rien au réseau.

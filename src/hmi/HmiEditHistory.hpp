@@ -136,4 +136,29 @@ void trim(Log&, std::size_t perObject = kKeepPerObject);
 // "22/10/2026 14:32" (l'heure du PC).
 [[nodiscard]] std::string dateText(std::int64_t t);
 
+// ---- 1.12.26 : ce que montrent Proprietes (la section Suivi), l'Explorateur d'objets, l'infobulle ----
+// Une date dite simplement, depuis `now` (secondes, UTC ; l'heure du PC) : "\xC3\xA0 l'instant",
+// "il y a 5 min", "il y a 2 h" (le meme jour, moins de 6 h), "aujourd'hui 14:32", "hier 14:32",
+// "20/10 14:05" (cette annee), "20/10/2025" (avant).
+[[nodiscard]] std::string relativeText(std::int64_t t, std::int64_t now);
+
+// CE QUE L'ON SAIT D'UN OBJET : son dernier enregistrement (la date, le PC, le compte ; sa creation
+// ou une modification), sa creation enregistree, combien d'enregistrements et de PC, et ce qui a
+// change depuis le dernier enregistrement.
+struct Mark {
+    std::int64_t t{0};              // le dernier enregistrement qui l'a touche (0 : jamais enregistre)
+    std::string  pc, account;
+    bool         created{false};    // ... etait sa creation
+    std::int64_t createdAt{0};      // sa creation enregistree (0 : inconnue - l'historique a commence apres)
+    std::string  createdPc, createdAccount, createdNote;
+    int          count{0};          // ses enregistrements (les regroupes compris)
+    int          pcs{0};            // sur combien de PC
+    bool         pending{false};    // change depuis le dernier enregistrement
+    bool         fresh{false};      // ... pose depuis : pas encore enregistre
+    int          changes{0};        // ... combien de changements (pas pour un objet pose)
+};
+// Les marques des objets d'une vue, depuis son historique enregistre et ce que compare() rend pour
+// la vue d'aujourd'hui (une suppression pas encore enregistree n'y laisse rien).
+[[nodiscard]] std::map<Id, Mark> marksOf(const Log&, const std::vector<Entry>& pending);
+
 } // namespace hmi::edits

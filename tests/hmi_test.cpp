@@ -11425,6 +11425,83 @@ void valeursLot14() {
           "au plus 4 mots par requ\xC3\xAAte : les mots 104-105 \xC3\xA0 part");
     const auto apart = planBlocks(pts, 120, 1968, 1);
     check(apart.size() == 4, "\xC3\xA9" "cart tol\xC3\xA9r\xC3\xA9 de 1 mot : 104 n'est plus avec 100-101");
+    // 1.12.26 : l'ecart par defaut (100 mots), et un trou refuse par l'appareil
+    std::vector<Point> spread;
+    for (const char* a : {"%MW100", "%MW150", "%MW240"}) {
+        Point p;
+        (void)placeAddress(a, sim::Type::Int, 16, p);
+        spread.push_back(p);
+    }
+    const auto narrow = planBlocks(spread, 120, 1968, 8);
+    const auto wide = planBlocks(spread, 120, 1968, Communication{}.gap);
+    check(Communication{}.gap == 100 && Equipment{}.gap == 100 && narrow.size() == 3 && wide.size() == 2
+              && wide.front().start == 100 && wide.front().count == 51,
+          "1.12.26 : regrouper Ã  moins de 100 mots par dÃ©" "faut - 100 et 150 d'une seule requÃªte, 240 Ã  part (120 mots au plus) : "
+              + std::to_string(narrow.size()) + " -> " + std::to_string(wide.size()));
+    const auto barred = planBlocks(spread, 120, 1968, 100, {Hole{Area::Holding, 120, 121}});
+    check(barred.size() == 2 && barred.front().start == 100 && barred.front().count == 1 && barred.back().start == 150 && barred.back().count == 91,
+          "un trou refusÃ© (le mot 120) : 100 seul, 150 Ã  240 ensemble");
+}
+
+// 1.12.26 : une memoire qui refuse le mot 50 et les lectures de plus de 10 mots - la liaison l'apprend.
+namespace {
+class PickyBank final : public hmi::modbus::MemoryBank {
+public:
+    PickyBank() : MemoryBank(1000, 1000) {}
+    int readRegisters(bool input, std::uint16_t address, std::uint16_t count, std::vector<std::uint16_t>& out) override {
+        if (address <= 50 && 50 < address + count) return 2;
+        if (address >= 500 && count > 10) return 2;
+        return MemoryBank::readRegisters(input, address, count, out);
+    }
+};
+}   // namespace
+
+void liaisonApprend11226() {
+    std::printf("1.12.26 : la liaison apprend les trous et la taille qu'un appareil refuse\n");
+    using namespace hmi::comm;
+    auto bank = std::make_shared<PickyBank>();
+    bank->setWord(40, 4);
+    bank->setWord(60, 6);
+    for (int i = 0; i < 20; ++i) bank->setWord(static_cast<std::size_t>(500 + i), static_cast<std::uint16_t>(i + 1));
+    modbus::Server server;
+    std::string why;
+    check(server.start("127.0.0.1", 0, bank, &why), "le serveur \xC3\xA9" "coute (" + why + ")");
+    Communication c;
+    c.mode = "modbus";
+    c.host = "127.0.0.1";
+    c.port = server.port();
+    c.timeoutMs = 300;
+    c.addresses = {{"A", "%MW40", "INT", false, {}}, {"B", "%MW60", "INT", false, {}}};
+    for (int i = 0; i < 20; ++i) c.addresses.push_back({"T" + std::to_string(i), "%MW" + std::to_string(500 + i), "INT", false, {}});
+    Link link(buildPlan(nullptr, c), settingsOf(c));
+    sim::Value v;
+    (void)link.read("A", v);
+    (void)link.read("B", v);
+    for (int i = 0; i < 20; ++i) (void)link.read("T" + std::to_string(i), v);
+    link.cycle();
+    auto d = link.diagnostics();
+    check(link.read("A", v) && v.asInteger() == 4 && link.read("B", v) && v.asInteger() == 6 && link.quality("B") == Quality::Good,
+          "1er cycle : le bloc 40-60 refus\xC3\xA9, relu place par place, A et B bonnes");
+    check(link.read("T19", v) && v.asInteger() == 20 && link.quality("T0") == Quality::Good, "1er cycle : les 20 mots 500 a 519 relus un a un");
+    const auto ev = link.takeEvents();
+    check(hasEvent(ev, "plus lu") && hasEvent(ev, "au plus"), "le journal : le trou appris, la taille apprise");
+    const auto exceptions = d.exceptions;
+    link.cycle();
+    d = link.diagnostics();
+    check(d.exceptions == exceptions && d.requestsPerCycle == 4,
+          "2e cycle : plus d'exception - 40 et 60 a part, 500-509 et 510-519 (" + std::to_string(d.requestsPerCycle) + " requ\xC3\xAAtes)");
+    check(link.read("T15", v) && v.asInteger() == 16 && link.read("A", v) && v.asInteger() == 4, "les valeurs restent bonnes");
+    link.stop();
+    server.stop();
+}
+
+// 1.12.26 : l'attente d'un esclave simule, a la milliseconde pres (Windows arrondissait a 15,6 ms)
+void attentePrecise11226() {
+    std::printf("1.12.26 : preciseWait\n");
+    const auto t0 = std::chrono::steady_clock::now();
+    for (int i = 0; i < 10; ++i) hmi::net::preciseWait(3);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    check(ms >= 29.5 && ms < 120.0, "10 attentes de 3 ms : " + std::to_string(ms) + " ms");
 }
 
 void liaisonLot14() {
@@ -29393,6 +29470,8 @@ int main(int argc, char** argv) {
     tramesLot14();
     valeursLot14();
     liaisonLot14();
+    liaisonApprend11226();   // 1.12.26
+    attentePrecise11226();
     cheminsLot14();
     moteurLot14();
     genererLot14();

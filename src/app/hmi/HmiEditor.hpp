@@ -193,6 +193,18 @@ public:
     }
     // Une modification de la vue en une commande (Ctrl+Z l'annule) : Revenir, Restaurer. Faux : rien n'a change.
     bool editView(const std::string& label, const std::function<bool(hmi::View&)>& change);
+    // ---- 1.12.26 : LE SUIVI DES MODIFICATIONS (l'historique des objets) ----
+    //  Proprietes : la section Suivi (cree, modifie le ... sur ..., non enregistre, les
+    //  enregistrements ; le bouton ... ouvre l'Historique). L'Explorateur d'objets : la date de la
+    //  derniere modification, le point orange. La vue : l'infobulle de suivi et le point orange (le
+    //  clic droit sur le fond de la vue les allume ou les eteint ; retenu par projet). Rien avant le
+    //  premier Enregistrer de la vue : l'historique commence la.
+    [[nodiscard]] const std::map<hmi::Id, hmi::edits::Mark>& editMarks() const noexcept { return marks_; }
+    [[nodiscard]] std::string editTip(hmi::Id object) const;   // l'infobulle de suivi d'un objet
+    void setEditTipOn(bool on);
+    void setPendingDotsOn(bool on);
+    void setEditsClock(std::int64_t now);   // essais : maintenant, fige (0 : l'horloge du PC)
+    void refreshEditMarks();
     void openCanvasMenu(gfx::Point at, bool explorer = false);   // ce que vise le canevas ; explorer : la selection
     void canvasMenuChosen(int id);
     void openLayerMenu(hmi::Id layer, gfx::Point at);           // planche 7 : un calque (sans le rendre actif)
@@ -274,6 +286,16 @@ private:
     std::function<void(const ValueRequest&)> askValue_;   // 1.11.3 : le selecteur de valeur
     std::function<void(const std::string&)> openHelp_;   // 1.12.18 : « Aide sur ... »
     std::function<void(hmi::Id, std::vector<hmi::Id>)> openHistory_;   // 1.12.26 : la fenetre Historique
+    // 1.12.26 : le suivi des modifications - l'historique de la vue et la vue a son dernier enregistrement
+    // (relus apres chaque Enregistrer), les marques des objets (refaites a chaque modification).
+    [[nodiscard]] std::int64_t editsNow() const;
+    void addSuiviCategory(const hmi::View&, std::vector<ui::PropertyGrid::Category>& cats);
+    std::string                         editsFolder_;
+    int                                 editsRev_{-1};
+    hmi::edits::Log                     editsLog_;
+    std::optional<hmi::View>            editsSaved_;
+    std::map<hmi::Id, hmi::edits::Mark> marks_;
+    std::int64_t                        editsClock_{0};
     std::vector<hmi::Id>      menuLayers_;                // 1.12.18 : le sous-menu Calque, dans l'ordre
     std::vector<hmi::Id>      menuPopups_;                // ... et Ses popups (une instance)
     int                       menuKind_{0};               // le menu ouvert : la vue, un calque, la bibliotheque

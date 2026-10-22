@@ -590,6 +590,7 @@ private:
     };
     // The run indicator and transport on the workspace toolbar.
     void refreshSimulationIndicator();
+    void refreshHmiChip();          // 1.12.26 : la pastille IHM de la barre du haut
     void runSimulationTransport(std::string_view id);   // sim.run / pause / stop / step
     void askHmiForce(std::string variable);             // le dialogue "Forcer" du volet Simulation IHM
 

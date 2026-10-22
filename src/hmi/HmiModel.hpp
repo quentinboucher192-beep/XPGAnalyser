@@ -1507,7 +1507,8 @@ struct Communication {
     std::string wordOrder{"faible"};    // 32 bits : "faible" (poids faible d'abord, Schneider), "fort"
     int         maxWords{120};          // une requete : au plus N mots (125 au plus)
     int         maxBits{1968};          // ... au plus N bits (2000 au plus)
-    int         gap{8};                 // deux zones a moins de N mots l'une de l'autre : une seule requete
+    int         gap{100};               // deux zones a moins de N mots l'une de l'autre : une seule requete
+                                        // (1.12.26 : 8 avant ; un trou que l'appareil refuse, la liaison l'apprend)
     bool        writes{true};           // faux : lecture seule (rien n'est ecrit dans l'automate)
     int         badAfterS{30};          // liaison perdue : "ancienne" N s, puis "mauvaise"
     std::vector<CommAddress> addresses;
@@ -1657,7 +1658,7 @@ struct Equipment {
     std::string   wordOrder{"faible"};  // 32 bits : "faible" (poids faible d'abord), "fort"
     int           maxWords{120};
     int           maxBits{1968};
-    int           gap{8};
+    int           gap{100};             // 1.12.26 : 8 avant
     bool          writes{true};         // faux : lecture seule
     int           badAfterS{30};
     int           pingS{10};            // la surveillance par ping : toutes les N s (0 : jamais)

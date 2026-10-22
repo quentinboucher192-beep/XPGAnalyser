@@ -97,4 +97,9 @@ private:
 // Base64 (l'authentification SMTP, les en-tetes HTTP).
 [[nodiscard]] std::string base64(std::string_view bytes);
 
+// 1.12.26 : attendre `ms` millisecondes a la milliseconde pres (le temps de reponse d'un esclave
+// simule). Windows arrondit Sleep() au pas de son horloge, 15,6 ms le plus souvent : un esclave
+// « a 5 ms » repondait en 15,6 ms, et une lecture de 15 requetes durait 235 ms au lieu de 90.
+void preciseWait(int ms);
+
 } // namespace hmi::net

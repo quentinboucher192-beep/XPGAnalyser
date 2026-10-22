@@ -1856,6 +1856,7 @@ core::Status App::saveHmi(const std::string& folder) {
     if (auto st = hmi::save(hmi_->project, folder); !st) return st;
     hmi_->savedFolder = folder;
     ++hmi_->editsRevision;
+    hmi_->editsSaved->emit();   // 1.12.26 : Suivi, l'Explorateur d'objets
     // L'historique de la marche (lot 4), borne par les reglages du projet.
     hmi_->history.trim(hmi_->project.history, hmi::wallStamp());
     return hmi::saveHistory(hmi_->history, folder);

@@ -67,6 +67,8 @@ public:
     std::string               savedFolder;
     std::map<Id, std::string> editNotes;
     int                       editsRevision{0};
+    // 1.12.26 : un Enregistrer a ecrit l'historique (les volets relisent : Suivi, Explorateur d'objets).
+    const core::SignalPtr<>   editsSaved = core::Signal<>::create();
 
     void touched(Id view) { dirty = true; changed->emit(view); }
 };

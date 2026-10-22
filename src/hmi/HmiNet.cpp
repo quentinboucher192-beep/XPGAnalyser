@@ -35,6 +35,7 @@
 #include <climits>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -542,6 +543,43 @@ std::string base64(std::string_view bytes) {
         out += '=';
     }
     return out;
+}
+
+// 1.12.26 : un minuteur haute resolution (Windows 10 1803 et apres) ; sans lui, dormir le gros de
+// l'attente et finir en cedant la main (quelques millisecondes d'un fil, pendant une simulation).
+void preciseWait(int ms) {
+    if (ms <= 0) return;
+    using namespace std::chrono;
+    const auto end = steady_clock::now() + milliseconds(ms);
+#if defined(_WIN32)
+#  ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#    define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#  endif
+    struct Timer {
+        HANDLE h{nullptr};
+        Timer() : h(CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS)) {}
+        ~Timer() { if (h) CloseHandle(h); }
+        Timer(const Timer&) = delete;
+        Timer& operator=(const Timer&) = delete;
+    };
+    static thread_local Timer timer;
+    if (timer.h) {
+        LARGE_INTEGER due;
+        due.QuadPart = -static_cast<LONGLONG>(ms) * 10000;   // relatif, en 100 ns
+        if (SetWaitableTimer(timer.h, &due, 0, nullptr, nullptr, FALSE) && WaitForSingleObject(timer.h, INFINITE) == WAIT_OBJECT_0) {
+            while (steady_clock::now() < end) std::this_thread::yield();   // rendu un rien trop tot
+            return;
+        }
+    }
+    for (;;) {
+        const auto left = duration_cast<milliseconds>(end - steady_clock::now()).count();
+        if (left <= 0) return;
+        if (left > 17) Sleep(static_cast<DWORD>(left - 16));
+        else std::this_thread::yield();
+    }
+#else
+    std::this_thread::sleep_until(end);
+#endif
 }
 
 } // namespace hmi::net

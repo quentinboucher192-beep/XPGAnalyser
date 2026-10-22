@@ -183,6 +183,23 @@ public:
     void setSnapLinesForTest(std::vector<double> xs, std::vector<double> ys) { snapX_ = std::move(xs); snapY_ = std::move(ys); }
     void setPointerForTest(gfx::Point p) { pointer_ = p; pointerIn_ = true; }
 
+    // ---- 1.12.26 : LE SUIVI DES MODIFICATIONS SUR LA VUE ----------------------
+    //  L'infobulle de suivi : la souris arretee sur un objet (une demi-seconde) - son nom, son
+    //  genre, sa derniere modification (quand, sur quel PC, quel compte), ce qui n'est pas
+    //  enregistre. Le point orange : un objet change depuis le dernier enregistrement. L'editeur
+    //  donne les textes et les objets ; le clic droit sur le fond de la vue les allume ou les eteint.
+    void setEditTip(std::function<std::string(hmi::Id)> tip) { editTip_ = std::move(tip); }
+    void setEditTipOn(bool on) noexcept { editTipOn_ = on; }
+    [[nodiscard]] bool editTipOn() const noexcept { return editTipOn_; }
+    void setPendingMarks(std::vector<hmi::Id> ids) { pendingMarks_ = std::move(ids); invalidate(); }
+    [[nodiscard]] const std::vector<hmi::Id>& pendingMarks() const noexcept { return pendingMarks_; }
+    void setPendingDotsOn(bool on) { pendingDots_ = on; invalidate(); }
+    [[nodiscard]] bool pendingDotsOn() const noexcept { return pendingDots_; }
+    // L'infobulle de suivi a ce point de l'ecran, sans attendre (essais, scripts) ; vide : aucun objet.
+    [[nodiscard]] std::string editTipAt(gfx::Point screen) const;
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
+    [[nodiscard]] bool hasTooltip() const override { return (editTipOn_ && static_cast<bool>(editTip_)) || Widget::hasTooltip(); }
+
 protected:
     void               onLayout() override;
     void               onPaint(const ui::PaintContext&) override;
@@ -241,6 +258,14 @@ private:
     bool                   marqueeShown_{false};
     std::vector<double>    snapX_, snapY_;
     std::vector<hmi::edit::SpacingMark> spacing_;     // lot 12 : les ecarts egaux, pendant qu'on deplace
+    // 1.12.26 : le suivi des modifications (l'infobulle, le point orange)
+    std::function<std::string(hmi::Id)> editTip_;
+    bool                   editTipOn_{true};
+    bool                   pendingDots_{true};
+    std::vector<hmi::Id>   pendingMarks_;
+    double                 paintTime_{0};
+    double                 hoverSince_{-1};             // -1 : a poser au prochain dessin
+    void paintPendingDots(const ui::PaintContext&, const HmiViewport&);
 
     // 1.12.12 (lot H) : les sommets.
     void traceClick(gfx::Point screen, int clicks, bool free);

@@ -559,6 +559,17 @@ std::vector<std::uint16_t> encodeWords(const Point& p, const sim::Value& v, bool
 }
 
 std::vector<Block> planBlocks(const std::vector<Point>& points, int maxWords, int maxBits, int gap) {
+    return planBlocks(points, maxWords, maxBits, gap, {});
+}
+
+std::vector<Block> planBlocks(const std::vector<Point>& points, int maxWords, int maxBits, int gap,
+                              const std::vector<Hole>& refused) {
+    // un trou [a, b) de cette zone qui touche un trou refuse : on ne le lit pas
+    const auto barred = [&](Area area, std::size_t a, std::size_t b) {
+        for (const auto& h : refused)
+            if (h.area == area && a < h.end && h.first < b) return true;
+        return false;
+    };
     std::vector<Block> out;
     for (const Area area : {Area::Coils, Area::DiscreteInputs, Area::Holding, Area::InputRegisters}) {
         std::vector<std::size_t> order;
@@ -582,7 +593,7 @@ std::vector<Block> planBlocks(const std::vector<Point>& points, int maxWords, in
                 const std::size_t curEnd = static_cast<std::size_t>(cur.start) + cur.count;
                 const long long hole = static_cast<long long>(first) - static_cast<long long>(curEnd);
                 const std::size_t newEnd = std::max(curEnd, end);
-                if (hole <= tolerance && newEnd - cur.start <= limit) {
+                if (hole <= tolerance && newEnd - cur.start <= limit && (hole <= 0 || !barred(area, curEnd, first))) {
                     cur.count = static_cast<std::uint16_t>(newEnd - cur.start);
                     cur.items.push_back(i);
                     continue;
@@ -970,7 +981,9 @@ void Link::doReads(double now) {
     std::vector<Point> pts;
     pts.reserve(items.size());
     for (const auto& i : items) pts.push_back(i.point);
-    const auto blocks = planBlocks(pts, settings_.maxWords, settings_.maxBits, settings_.gap);
+    const int maxWords = learnedWords_ > 0 ? std::min(learnedWords_, settings_.maxWords) : settings_.maxWords;
+    const int maxBits = learnedBits_ > 0 ? std::min(learnedBits_, settings_.maxBits) : settings_.maxBits;
+    const auto blocks = planBlocks(pts, maxWords, maxBits, settings_.gap, holes_);
     const double t0 = monoNow();
     std::size_t requests = 0;
     bool alive = true;
@@ -1009,6 +1022,38 @@ void Link::doReads(double now) {
                 if (stop_.load()) break;
                 ++requests;
                 if (!(alive = readOne(items[k]))) break;
+            }
+            // 1.12.26 : et la liaison s'en souvient - les trous du bloc ne sont plus lus avec ses places
+            // (un bloc sans trou : des requetes deux fois plus petites), au lieu de relire chaque place
+            // seule a chaque cycle.
+            // (une place refusee seule explique le refus : rien a apprendre, elle est relue a part)
+            bool anyBad = false;
+            {
+                std::lock_guard<std::mutex> look(mutex_);
+                for (const auto k : b.items)
+                    if (const auto it = entries_.find(items[k].key); it != entries_.end() && it->second.excluded) anyBad = true;
+            }
+            if (alive && !anyBad) {
+                std::vector<std::size_t> order(b.items.begin(), b.items.end());
+                std::sort(order.begin(), order.end(), [&](std::size_t x, std::size_t y) { return pts[x].offset < pts[y].offset; });
+                std::size_t end = b.start, learned = 0;
+                for (const auto k : order) {
+                    const auto& p = pts[k];
+                    if (p.offset > end) {
+                        holes_.push_back({b.area, static_cast<std::uint16_t>(end), p.offset});
+                        ++learned;
+                    }
+                    end = std::max<std::size_t>(end, static_cast<std::size_t>(p.offset) + (isBits ? 1u : p.size));
+                }
+                if (learned == 0) {
+                    int& limit = isBits ? learnedBits_ : learnedWords_;
+                    limit = std::max(1, static_cast<int>(b.count) / 2);
+                }
+                std::lock_guard<std::mutex> again(mutex_);
+                event(learned ? "Lecture group\xC3\xA9" "e refus\xC3\xA9" "e par " + settings_.peer + " (exception " + modbus::exceptionText(o.exception)
+                                    + ") : " + std::to_string(learned) + (learned > 1 ? " trous ne sont" : " trou n'est") + " plus lu" + (learned > 1 ? "s" : "")
+                              : "Lecture de " + std::to_string(b.count) + (isBits ? " bits" : " mots") + " refus\xC3\xA9" "e par " + settings_.peer
+                                    + " : des requ\xC3\xAAtes de " + std::to_string(isBits ? learnedBits_ : learnedWords_) + " au plus");
             }
             continue;
         }

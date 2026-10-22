@@ -451,7 +451,7 @@ void SimOverviewPane::paintSlow(const ui::PaintContext& ctx, const gfx::Rect& r)
         chip(hmi::slowMs(view.rules.absoluteMs), "lenteurs:seuil-ms", "@seuil-ms", "Un clic : le seuil suivant (20, 50, 100, 200, 500 ms) - pour le projet");
         text(", ou plus de");
         chip(decimal(view.rules.factor, 0) + " \xC3\x97", "lenteurs:seuil-fois", "@seuil-fois", "Un clic : le rapport suivant (3, 5, 10, 20) - pour le projet");
-        text("son temps habituel (et au moins " + hmi::slowMs(view.rules.floorMs) + "). Un cycle plus long que sa p\xC3\xA9riode, toujours.");
+        text("son temps habituel (et au moins " + hmi::slowMs(view.rules.floorMs) + "). Un cycle plus long que sa p\xC3\xA9riode, toujours. Un \xC3\xA9quipement : par requ\xC3\xAAte, et une lecture plus longue que sa p\xC3\xA9riode.");
     }
     y += 26.f;
     // Les filtres.

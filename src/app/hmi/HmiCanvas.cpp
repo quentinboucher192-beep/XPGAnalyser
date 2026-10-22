@@ -864,6 +864,39 @@ void HmiCanvas::paintGrid(const ui::PaintContext& ctx, const HmiViewport& vp, co
     }
 }
 
+// ---- 1.12.26 : le suivi des modifications -------------------------------------------
+// Le point orange des objets changes depuis le dernier enregistrement, en haut a droite de l'objet.
+void HmiCanvas::paintPendingDots(const ui::PaintContext& ctx, const HmiViewport& vp) {
+    if (!pendingDots_ || pendingMarks_.empty()) return;
+    const auto* v = view();
+    if (!v) return;
+    const auto orange = gfx::Color::rgb(0xF2994A), white = gfx::Color::rgb(0xFFFFFF);
+    for (const Id id : pendingMarks_) {
+        const auto* o = v->object(id);
+        if (!o || (!showHidden_ && v->effectivelyHidden(*o))) continue;
+        const Box b = hmi::edit::rotatedBounds(*o);
+        const gfx::Point p = vp.toScreen(b.right(), b.y);
+        ctx.r.fillRoundedRect({p.x - 5.5f, p.y - 5.5f, 11.f, 11.f}, white, 5.5f);
+        ctx.r.fillRoundedRect({p.x - 4.f, p.y - 4.f, 8.f, 8.f}, orange, 4.f);
+    }
+}
+
+std::string HmiCanvas::editTipAt(gfx::Point screen) const {
+    const auto* v = view();
+    if (!v || !editTip_) return {};
+    const Pt p = toView(screen);
+    const Id id = hmi::edit::hitTest(*v, p.x, p.y, insideGroup_, 4.0 / zoom_);
+    return id == kNoId ? std::string{} : editTip_(id);
+}
+
+// La souris arretee une demi-seconde sur le meme objet (et pas pendant un glisser, une pose, un trace).
+std::string HmiCanvas::liveTooltip(gfx::Point mouse) const {
+    if (editTipOn_ && editTip_ && drag_ == Drag::None && !placeKind_ && traceMap_ == kNoId && hover_ != kNoId && hoverSince_ >= 0
+        && paintTime_ - hoverSince_ >= 0.5)
+        if (auto t = editTipAt(mouse); !t.empty()) return t;
+    return Widget::liveTooltip(mouse);
+}
+
 void HmiCanvas::paintSelection(const ui::PaintContext& ctx, const HmiViewport& vp) {
     const auto* v = view();
     if (!v) return;
@@ -920,6 +953,8 @@ void HmiCanvas::paintSelection(const ui::PaintContext& ctx, const HmiViewport& v
 }
 
 void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
+    paintTime_ = ctx.time;                       // 1.12.26 : le delai de l'infobulle de suivi
+    if (hoverSince_ < 0) hoverSince_ = ctx.time;
     const auto r = bounds();
     ctx.r.fillRect(r, ctx.theme.color.panelBg);
     const auto* v = view();
@@ -1054,6 +1089,7 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
         ctx.r.drawText({badge.x + 4.f, badge.y + 1.f}, label, f, gfx::Color::rgb(0xFFFFFF));
     }
 
+    paintPendingDots(ctx, vp);   // 1.12.26
     paintSelection(ctx, vp);
 
     if (marqueeShown_) {
@@ -1429,7 +1465,7 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
         switch (drag_) {
             case Drag::None: {
                 const Id h = hmi::edit::hitTest(*v, p.x, p.y, insideGroup_, 4.0 / zoom_);
-                if (h != hover_) { hover_ = h; invalidate(); }
+                if (h != hover_) { hover_ = h; hoverSince_ = -1; invalidate(); }   // 1.12.26 : l'infobulle de suivi repart
                 if (placeKind_ || traceMap_ != kNoId) invalidate();   // 1.12.12 (lot H) : la zone qui se trace
                 break;
             }

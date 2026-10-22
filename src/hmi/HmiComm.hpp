@@ -150,6 +150,16 @@ struct Block {
     std::vector<std::size_t> items;     // les rangs, dans `points`
 };
 [[nodiscard]] std::vector<Block> planBlocks(const std::vector<Point>& points, int maxWords, int maxBits, int gap);
+// 1.12.26 : LES TROUS REFUSES - des mots (ou des bits) qu'un appareil refuse de lire (une adresse qui
+// n'existe pas chez lui) : un trou entre deux places qui en touche un n'est plus lu avec elles (deux
+// requetes). La liaison les apprend : un bloc refuse, ses places relues une a une, toutes bonnes - un
+// trou genait.
+struct Hole {
+    Area          area{Area::Holding};
+    std::uint16_t first{0}, end{0};   // [first, end)
+};
+[[nodiscard]] std::vector<Block> planBlocks(const std::vector<Point>& points, int maxWords, int maxBits, int gap,
+                                            const std::vector<Hole>& refused);
 
 // ----------------------------------------------------------------- la liaison ---
 struct Settings {
@@ -162,7 +172,7 @@ struct Settings {
     bool        lowWordFirst{true};
     int         maxWords{120};
     int         maxBits{1968};
-    int         gap{8};
+    int         gap{100};          // 1.12.26 : 8 avant (une requete par zone de quelques mots)
     bool        writes{true};
     int         badAfterS{30};
     // Lot 15 : qui est au bout, pour le journal ("l'automate", "l'equipement Centrale").
@@ -325,6 +335,11 @@ private:
     std::unordered_map<std::string, Missing> missing_;
     // 1.9 : les listes suivies en permanence, par proprietaire (follow).
     std::unordered_map<std::string, std::vector<std::string>> follows_;
+    // 1.12.26 : ce que l'appareil a appris a la liaison (le fil de communication seul y touche) : les
+    // trous qu'il refuse de lire, et la taille d'une requete qu'il accepte (un bloc sans trou refuse :
+    // deux fois plus petit, jusqu'a une place).
+    std::vector<Hole>        holes_;
+    int                      learnedWords_{0}, learnedBits_{0};   // 0 : ce que disent les reglages
 };
 
 // ------------------------------------------------ le serveur de demonstration ---

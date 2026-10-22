@@ -1001,7 +1001,10 @@ void HmiCommPane::rebuildEquipmentProperties(std::vector<PG::Category>& cats) {
                                        "Un REAL, un DINT tiennent deux registres : Schneider met le poids faible d'abord, beaucoup d'autres le poids fort.",
                                        {"poids faible d'abord (Schneider)", "poids fort d'abord"}));
         link.properties.push_back(prop("Mots par requ\xC3\xAAte", std::to_string(e->maxWords), PG::ValueType::Integer, field("mots"), "125 au plus (la norme)."));
-        link.properties.push_back(prop("Regrouper \xC3\xA0 moins de (mots)", std::to_string(e->gap), PG::ValueType::Integer, field("ecart")));
+        link.properties.push_back(prop("Regrouper \xC3\xA0 moins de (mots)", std::to_string(e->gap), PG::ValueType::Integer, field("ecart"),
+                                       "Deux variables s\xC3\xA9par\xC3\xA9" "es de moins de N mots : lues d'une seule requ\xC3\xAAte (le trou avec). "
+                                       "Moins de requ\xC3\xAAtes, une lecture plus rapide : 100 par d\xC3\xA9" "faut (8 avant la 1.12.26). "
+                                       "Un trou que l'appareil refuse de lire, la liaison l'apprend et ne le lit plus."));
         link.expanded = false;
         cats.push_back(std::move(link));
         // Les zones : le vrai appareil et son esclave ont les memes.

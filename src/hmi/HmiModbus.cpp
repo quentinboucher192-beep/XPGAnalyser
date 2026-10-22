@@ -846,7 +846,7 @@ void Server::loop() {
                 if (const int d = delayMs_.load(); (d > 0 || jitterMs_.load() > 0) && !tool()) {
                     const int j = jitterMs_.load();
                     const int wait = std::max(0, d + (j > 0 ? static_cast<int>(rq.transaction % static_cast<unsigned>(2 * j + 1)) - j : 0));
-                    std::this_thread::sleep_for(std::chrono::milliseconds(wait));
+                    net::preciseWait(wait);   // 1.12.26 : a la milliseconde pres (Windows arrondissait a 15,6 ms)
                 }
                 const Frame out = encode(rs);
                 if (tapServer_.load() && tapOn().load(std::memory_order_relaxed)) tapFrame(true, listener_, peer.name, out);
