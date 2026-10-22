@@ -1078,6 +1078,8 @@ void paintTuning(const Pen& p, PidPanelLayout& l, const hmi::Runtime& rt, const 
                     p.polyline(b, cols[i], wdt * 0.8f);
                 }
             // Le pic du choisi, et celui d'aujourd'hui.
+            gfx::Rect placed{};
+            bool havePlaced = false;
             const auto peak = [&](int i) {
                 const auto& t = pv.traces[static_cast<std::size_t>(i)];
                 if (!t || t->pv.empty()) return;
@@ -1087,8 +1089,17 @@ void paintTuning(const Pen& p, PidPanelLayout& l, const hmi::Runtime& rt, const 
                 for (std::size_t j = 0; j < end; ++j)
                     if (up ? t->pv[j] > t->pv[im] : t->pv[j] < t->pv[im]) im = j;
                 const std::string s = std::string(names[i]) + " : " + withUnit(L, t->pv[im]) + (i - 1 == chosen ? ", pos\xC3\xA9 en " + hmi::pidTime(pv.metrics[static_cast<std::size_t>(i)].settle) : std::string{});
-                const float x = std::min(py.X(t->dt * static_cast<double>(im)) + 8 * k, right - p.width(s, 12));
-                p.text(x, std::max(py.r.y, py.Y(t->pv[im]) - p.lineH(12) - 4 * k), s, 12, kInk, i - 1 == chosen);
+                const float w = p.width(s, 12), h = p.lineH(12);
+                const float x = std::min(py.X(t->dt * static_cast<double>(im)) + 8 * k, right - w);
+                float ty = std::max(py.r.y, py.Y(t->pv[im]) - h - 4 * k);
+                // 1.12.24 : deux pics proches - la seconde etiquette passe au-dessus de la premiere (ou dessous).
+                if (havePlaced && x < placed.x + placed.w && placed.x < x + w && ty < placed.y + placed.h && placed.y < ty + h) {
+                    const float above = placed.y - h - 2 * k;
+                    ty = above >= py.r.y ? above : placed.y + placed.h + 2 * k;
+                }
+                p.text(x, ty, s, 12, kInk, i - 1 == chosen);
+                placed = {x, ty, w, h};
+                havePlaced = true;
             };
             peak(0);
             peak(chosen + 1);

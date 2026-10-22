@@ -87,15 +87,71 @@ Appliquer, Revenir et Oublier demandent le niveau Chef de quart. Kp, Ti et Td re
 
 ## 4. Les captures
 
-(À compléter.)
+Prises avec l'exe Windows livré, lancé sous Wine. Elles ne sont pas envoyées cette fois (tu as demandé l'installateur et le projet IHM) ; celles de l'affaire sont dans sa livraison (`2025_06_118_captures_IHM.zip`) et dans l'AF (§ 4.2.6).
+
+**L'affaire**, sur sa démonstration (`2025_06_118_IHM_DEMO`), en simulation (1292 × 812) :
+- `07_pid.png` : la Vue_PID. AMF Nord « Oscille » (dans ±2 mmCE tout le temps, mais un dépassement de 70 % au dernier échelon) ; AMF Sud « Saine », rien à changer ; AMF complet voilé, hors service ; LUNA « Saturée », sortie à 100 % depuis 8 h 59 min (le défaut de VE260).
+- `07b` à `07g` : la fenêtre du Réglage PID d'AMF Nord : Statistiques sur 30 min et sur 24 h, Ce qu'il a appris, Réglage proposé (Équilibré allonge Ti), la confirmation d'Appliquer, le Journal.
+- `07h` : AMF Sud, Réglage proposé : « le réglage du bloc tient : rien d'urgent à changer ».
+- `07i`, `07j` : LUNA, Statistiques (saturée 100 % du temps sur 30 min) et Journal.
+- `02_reseau_amf.png`, `04_reseau_luna.png` : les registres des synoptiques, des objets Registre (caisson clair comme les gaines ; lame couchée ouverte, debout fermée).
+
+**Le plein écran**, la Synthèse de la même démonstration (1280 × 800) sur un écran de 1920 × 1080 :
+- `1224_30_plein_ecran_remplir.png` : Remplir l'écran, la vue jusqu'aux bords ;
+- `1224_31_plein_ecran_proportions.png` : Garder les proportions, deux bandes de 96 px à la couleur du fond de la vue ;
+- `1224_32_plein_ecran_reelle.png` : Taille réelle, la vue centrée.
+
+**Le réseau du PC**, sur Armoire_Gaz, quatre esclaves virtuels ajoutés à l'outil (six simulés en tout) :
+- `1224_40_equipements_esclaves.png` : la liste des équipements, les quatre nouveaux en bas ;
+- `1224_41_reseau_du_pc.png` : le schéma. Les cartes des simulés sont dans le cadre du PC, l'une sous l'autre ; les fils des ports partent entre elles ; l'encadré Hors réseau à droite.
+
+**L'éditeur** :
+- `1224_01_accueil.png` : l'accueil, la version 1.12.24 ;
+- `1224_50_editeur_reglage_pid.png` : un Réglage PID sélectionné (Vue_PID), ses sections dans Propriétés ;
+- `1224_51_editeur_registre.png` : un registre sélectionné (Vue_Reseau_AMF).
+
+Deux défauts vus sur les captures et corrigés avant la livraison : le caisson des registres restait noir sur un synoptique clair (il suit maintenant la couleur Fond de l'objet), et dans la prévision du Réglage proposé, deux étiquettes de pic proches se chevauchaient (la seconde passe au-dessus).
 
 ## 5. Installer
 
-(À compléter.)
+Fichiers livrés :
+- `API-IHM-Studio-Setup-1.12.24.exe` : l'installateur, qui pose les deux applications ;
+- `API-Studio-1.12.24-portable.zip` et `IHM-Studio-1.12.24-portable.zip` : chaque application, sans installation ;
+- ce document.
+
+1. Lance `API-IHM-Studio-Setup-1.12.24.exe`. Il met à jour la version installée (la 1.12.23 ou une plus ancienne) en place : même identité d'installation, même dossier, données reprises sans être déplacées. Les projets s'ouvrent tels quels : le format des fichiers ne change pas (un registre posé avant prend le fond sombre par défaut).
+2. Windows SmartScreen peut avertir, parce que l'installateur n'est pas signé. Choisis « Informations complémentaires », puis « Exécuter quand même ».
+
+Empreinte SHA-256 de `API-IHM-Studio-Setup-1.12.24.exe` (34,5 Mo, 36 196 924 octets) :
+`C097225697984678E59CF6C72BCBB9E1B987AC74E5101AB7B48848B0F26A613E`
+
+**Les zips portables.** Chacun contient une application et ce qu'il lui faut, dans un dossier `API-Studio-1.12.24` ou `IHM-Studio-1.12.24`. Décompresse, puis lance l'exe.
+- `API-Studio-1.12.24-portable.zip` (25,6 Mo) :
+  `F7068E24E511678FA34071D49DBDF6D6CEFC6E14CCC7B6A12AC011B4B499A0FF`
+- `IHM-Studio-1.12.24-portable.zip` (25,6 Mo) :
+  `CF6897D1598447600054839842FAD055433CE9DE14E69C894D08A83F3A7785B4`
+
+**Le projet IHM de l'affaire** : `2025_06_118_IHM_Studio.zip` (le projet de livraison : 19 vues, 129 variables, 140 alarmes ; Générer et Compiler sans erreur ni avertissement) et `2025_06_118_IHM_DEMO.zip` (la démonstration : boucles simulées, 7 jours d'historique, Réglages PID qui ont déjà appris). Il faut IHM Studio 1.12.24. La démonstration est la même à chaque génération : les perturbations simulées ne dépendent plus de l'heure à laquelle elle est faite.
 
 ## 6. Les vérifications sous Windows
 
-(À compléter.)
+**Les deux exe Windows**, compilés sous Linux avec MinGW-w64 et lancés sous Wine :
+- `--version` répond `API Studio 1.12.24` et `IHM Studio 1.12.24` ;
+- ils importent les mêmes DLL que ceux de la 1.12.23 (ADVAPI32, IPHLPAPI, KERNEL32, SDL3, SHELL32, USER32, WS2_32, msvcrt, ole32) ;
+- `API-Studio.exe --cli MAST.XPG` analyse le projet d'essai comme avant (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB) ;
+- quatre sessions scriptées : les captures ci-dessus. Le Réglage PID y est cliqué comme à la souris (sa carte, ses onglets, Appliquer puis Non), le plein écran par F11 et la barre flottante.
+
+**L'installateur**, compilé par Inno Setup 6.4.1 sous Wine, puis installé en silencieux pour tous les comptes, par-dessus la 1.12.23 :
+- avant, la 1.12.23 était installée (`IHM Studio 1.12.23`) ;
+- « Installation process succeeded ». Il a repris l'installation en place : même dossier, journal de désinstallation complété ;
+- le dossier d'installation a `API-Studio.exe`, `IHM-Studio.exe` et le désinstalleur ; le menu Démarrer garde son dossier **API IHM Studio** (API Studio, IHM Studio, Maintenance) ;
+- les deux exe installés sont identiques à ceux qui ont été testés. Installés, ils répondent `API Studio 1.12.24` et `IHM Studio 1.12.24`, et l'API installée analyse `MAST.XPG` comme avant.
+
+**Les zips portables** ont chacun 151 fichiers, dont l'exe testé.
+
+**Le projet Visual Studio** a les mêmes 476 fichiers .cpp et 429 en-têtes que CMake (`outils/verifier_vcxproj.py`), dont les sept nouveaux de cette version (le Réglage PID, la fenêtre Nouvelle fonction, la lecture des schémas LD et SFC).
+
+**Pas encore fait :** ni les exe ni l'installateur n'ont été lancés sur un vrai Windows, et le projet Visual Studio n'a pas été compilé (pas de MSVC ici).
 
 ## 7. La suite
 

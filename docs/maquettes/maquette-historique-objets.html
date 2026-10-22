@@ -97,17 +97,18 @@ button,input,select,textarea{font:inherit;color:inherit}
 .eyebrow{font:500 12px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:0 0 8px}
 h1{font-size:clamp(28px,3.4vw,38px);line-height:1.1;letter-spacing:-.01em;margin:0 0 12px;font-weight:600;text-wrap:balance}
 .lead{margin:0;color:var(--ink-2);max-width:66ch}
-.try{margin:0;padding:12px 16px 12px 34px;border:1px solid var(--rule);border-radius:8px;background:var(--page-2);font-size:14px;line-height:1.5}
+.try{margin:0;padding:12px 16px;border:1px solid var(--rule);border-radius:8px;background:var(--page-2);font-size:14px;line-height:1.5}
+.try ol{margin:0;padding-left:20px}
 .try li{margin:3px 0}
 .try b{font-weight:600}
-.try-title{font:500 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px -18px;list-style:none}
+.try-title{font:500 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px}
 kbd{font:500 12px var(--mono);padding:0 5px;border:1px solid var(--rule);border-bottom-width:2px;border-radius:4px;background:var(--page);white-space:nowrap}
 
 /* ---- la bande de demonstration ---- */
 .demo{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:9px 12px;border:1px dashed var(--border-2);border-radius:8px;background:var(--page-2);font-size:13px;color:var(--ink-2)}
 .demo .tag{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
-.demo label{display:flex;align-items:center;gap:8px}
-.demo select{background:var(--input);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font:13px var(--ui);color:var(--text)}
+.demo label{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;max-width:100%;min-width:0}
+.demo select{max-width:100%;min-width:0;background:var(--input);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font:13px var(--ui);color:var(--text)}
 .seg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
 .seg button{background:var(--input);border:0;padding:4px 10px;font:13px var(--ui);color:var(--muted);cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--sel);color:var(--sel-fg)}
@@ -135,36 +136,36 @@ kbd{font:500 12px var(--mono);padding:0 5px;border:1px solid var(--rule);border-
 .pcchip{display:inline-flex;align-items:center;gap:5px;font:500 11.5px var(--mono);padding:1px 6px;border-radius:4px;border:1px solid var(--border);background:var(--input);color:var(--text);white-space:nowrap}
 .pcchip svg{width:12px;height:12px}
 
-.body{display:grid;grid-template-columns:240px minmax(0,1fr) 304px;min-height:560px}
-.body > *{min-width:0}
-@media (max-width:1180px){.body{grid-template-columns:220px minmax(0,1fr)}.insp{grid-column:1 / -1;border-left:0!important;border-top:1px solid var(--border)}}
+.body{display:grid;grid-template-columns:240px minmax(0,1fr) 304px;height:640px}
+.body > *{min-width:0;min-height:0}
+@media (max-width:1180px){.body{grid-template-columns:220px minmax(0,1fr);height:auto}.insp{grid-column:1 / -1;border-left:0!important;border-top:1px solid var(--border)}.insp .scroll{overflow:visible}.olist{max-height:420px}}
 @media (max-width:760px){.body{grid-template-columns:minmax(0,1fr)}.center{order:-1}.explorer{border-right:0!important;border-top:1px solid var(--border)}}
 
 /* l'Explorateur d'objets */
 .explorer{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column}
-.ph{display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--head);border-bottom:1px solid var(--border);font-weight:600;font-size:12.5px}
+.ph{display:flex;align-items:center;gap:6px;white-space:nowrap;padding:7px 10px;background:var(--head);border-bottom:1px solid var(--border);font-weight:600;font-size:12.5px}
 .ph .n{color:var(--muted);font-weight:400}
 .ph .sp{margin-left:auto}
 .ib{display:inline-grid;place-items:center;width:24px;height:22px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--muted);cursor:pointer}
 .ib:hover{background:var(--hover);border-color:var(--border);color:var(--text)}
 .ib svg{width:15px;height:15px}
-.cols{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;padding:4px 10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;padding:4px 36px 4px 35px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
 .cols button{background:none;border:0;padding:0;cursor:pointer;color:inherit;font:inherit;text-align:left}
 .cols button:hover{color:var(--text)}
 .cols button[aria-sort="ascending"]::after{content:" \25B2";font-size:9px}
 .cols button[aria-sort="descending"]::after{content:" \25BC";font-size:9px}
 .olist{list-style:none;margin:0;padding:3px 0;overflow:auto;flex:1}
-.orow{display:grid;grid-template-columns:18px minmax(0,1fr) auto 22px;align-items:center;gap:7px;padding:4px 6px 4px 10px;cursor:default;border-left:2px solid transparent}
+.orow{display:grid;grid-template-columns:18px minmax(0,1fr) 22px;align-items:center;gap:7px;padding:4px 6px 4px 10px;cursor:default;border-left:2px solid transparent}
 .orow:hover{background:var(--hover)}
 .orow.sel{background:var(--sel);color:var(--sel-fg);border-left-color:var(--accent)}
 .orow .ico{width:16px;height:16px;color:var(--muted)}
 .orow.sel .ico{color:var(--sel-fg)}
 .orow .nm{min-width:0}
 .orow .nm b{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.orow .nm span{display:block;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.orow.sel .nm span{color:inherit;opacity:.78}
-.orow .md{font-size:11.5px;color:var(--muted);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:5px;justify-content:flex-end}
-.orow.sel .md{color:inherit;opacity:.85}
+.orow .sub{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)}
+.orow .sub > span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.orow.sel .sub{color:inherit;opacity:.85}
+.orow .md{white-space:nowrap;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:5px;flex:none}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--pend);flex:none}
 .orow .more{opacity:0}
 .orow:hover .more,.orow.sel .more,.orow .more:focus-visible{opacity:1}
@@ -176,7 +177,7 @@ kbd{font:500 12px var(--mono);padding:0 5px;border:1px solid var(--rule);border-
 .tab{display:flex;align-items:center;gap:7px;padding:5px 12px;border:1px solid var(--border);border-bottom:0;border-radius:5px 5px 0 0;background:var(--win);font-size:12.5px;margin-bottom:-1px}
 .tab .dot{display:inline-block}
 .tabs .zoom{margin-left:auto;align-self:center;color:var(--muted);font-size:12px;padding-bottom:3px;white-space:nowrap}
-.stage{position:relative;flex:1;overflow:hidden;padding:14px;outline:none;
+.stage{position:relative;flex:1;min-height:0;overflow:hidden;padding:14px 14px 34px;outline:none;
   background-color:var(--surround);background-image:radial-gradient(var(--surround-dot) 1px, transparent 1.2px);background-size:16px 16px}
 .stage:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
 .viewwrap{position:relative;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,.25)}
@@ -184,7 +185,7 @@ kbd{font:500 12px var(--mono);padding:0 5px;border:1px solid var(--rule);border-
 .view .bg{position:absolute;inset:0}
 .obj{position:absolute;cursor:move}
 .obj svg.draw{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
-.obj .lbl{position:absolute;pointer-events:none;white-space:nowrap;font:12px/1.25 var(--ui);color:var(--v-ink)}
+.obj .lbl{position:absolute;white-space:nowrap;font:12px/1.25 var(--ui);color:var(--v-ink)}
 .obj .lbl b{font-weight:600;font-size:13px}
 .obj.sel{outline:1.5px solid #4C8DFF;outline-offset:3px}
 .obj .hd{position:absolute;width:9px;height:9px;background:#FFFFFF;border:1.5px solid #4C8DFF;border-radius:1px;z-index:2}
@@ -273,7 +274,7 @@ kbd{font:500 12px var(--mono);padding:0 5px;border:1px solid var(--rule);border-
 .chip i{width:8px;height:8px;border-radius:50%;display:inline-block}
 .chip[aria-pressed="true"]{background:var(--sel);color:var(--sel-fg);border-color:var(--accent)}
 .dlg-tools select,.dlg-tools input{background:var(--input);border:1px solid var(--border);border-radius:5px;padding:3px 8px;font:12.5px var(--ui);color:var(--text);min-width:0}
-.dlg-tools input{width:220px;max-width:100%}
+.dlg-tools input{width:190px;max-width:100%}
 .dlg-tools .grow{flex:1}
 .dlg-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(260px, 38%) minmax(0,1fr)}
 .hl{overflow:auto;border-right:1px solid var(--border);background:var(--alt)}
@@ -308,7 +309,6 @@ table.chg th{position:sticky;top:0;text-align:left;font-weight:600;font-size:11.
 table.chg td{padding:5px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
 table.chg tr:last-child td{border-bottom:0}
 table.chg tr.objh td{background:var(--alt);font-weight:600}
-table.chg tr.objh td .bt{float:right}
 .val{display:inline-flex;align-items:center;gap:6px;max-width:100%;word-break:break-word}
 .val.expr{font:12px var(--mono)}
 .val .sw{width:14px;height:14px;border-radius:3px;border:1px solid var(--border-2);flex:none}
@@ -368,14 +368,16 @@ pre.json{margin:10px 0 0;overflow-x:auto;background:var(--page);border:1px solid
       <h1>Historique des objets</h1>
       <p class="lead">Chaque objet d'une vue garde ses modifications : quand, sur quel PC, avec quel compte Windows, et ce qui a changé, propriété par propriété. Une entrée est signée à chaque Enregistrer. On la lit au clic droit sur l'objet, dans Propriétés et dans l'Explorateur d'objets. Tout se manipule ici ; rien ne sort de cette page.</p>
     </div>
-    <ol class="try">
-      <li class="try-title">À essayer</li>
+    <div class="try">
+      <p class="try-title">À essayer</p>
+      <ol>
       <li>Clic droit sur le registre <b>RG-3212</b> › <b>Historique des modifications…</b></li>
       <li>Déplace le ventilateur ou change une couleur dans Propriétés : la ligne <b>Non enregistré</b> apparaît en tête de l'historique.</li>
       <li>Choisis un autre PC dans la bande ci-dessous, puis <kbd>Ctrl+S</kbd> : l'entrée est signée de ce PC.</li>
       <li>Historique du ventilateur, entrée du 21/10 (PC-MAINT-03) : <b>Revenir à Avant</b> le remet dans l'axe de la gaine.</li>
       <li>Clic droit sur le fond de la vue › <b>Historique de la vue…</b> : le texte supprimé le 19/10 se restaure.</li>
-    </ol>
+      </ol>
+    </div>
   </header>
 
   <div class="demo" role="group" aria-label="Réglages de la démonstration">
@@ -465,6 +467,7 @@ pre.json{margin:10px 0 0;overflow-x:auto;background:var(--page);border:1px solid
 <script>
 (() => {
 'use strict';
+document.documentElement.lang = 'fr';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -695,6 +698,16 @@ function pendingItems() {
   return out;
 }
 const countChanges = items => items.reduce((n, it) => n + (it.kind === 'change' ? it.changes.length : 1), 0);
+function countLabel(items) {
+  let ch = 0, cr = 0, re = 0, de = 0;
+  for (const it of items) { if (it.kind === 'change') ch += it.changes.length; else if (it.kind === 'create') ++cr; else if (it.kind === 'restore') ++re; else ++de; }
+  const parts = [];
+  if (ch) parts.push(`${ch} changement${ch > 1 ? 's' : ''}`);
+  if (cr) parts.push(cr > 1 ? `${cr} créations` : 'création');
+  if (re) parts.push(re > 1 ? `${re} restaurations` : 'restauration');
+  if (de) parts.push(de > 1 ? `${de} suppressions` : 'suppression');
+  return parts.join(' · ');
+}
 const pendingOf = id => pendingItems().find(it => it.obj === id);
 
 /* ---------- annuler, retablir ---------- */
@@ -837,13 +850,15 @@ function viewBackground() {
   return `<svg class="bg" viewBox="0 0 ${VIEW_W} ${VIEW_H}" preserveAspectRatio="none" aria-hidden="true">`
     + `<rect x="16" y="16" width="${VIEW_W - 32}" height="${VIEW_H - 32}" rx="8" fill="var(--v-panel)" stroke="var(--v-line)"/>`
     + `<text x="34" y="44" font-family="Segoe UI, DejaVu Sans, sans-serif" font-size="12" letter-spacing=".6" fill="var(--v-muted)">SYNOPTIQUE AMF · COLLECTEUR SUD</text>`
-    + `<rect x="291" y="146" width="18" height="216" fill="var(--v-duct)" stroke="var(--v-duct-line)"/>`
+    + `<rect x="291" y="136" width="18" height="226" fill="var(--v-duct)" stroke="var(--v-duct-line)"/>`
     + `<line x1="300" y1="150" x2="300" y2="356" stroke="var(--v-flow)" stroke-width="2.5" stroke-dasharray="9 8"/>`
     + `</svg>`;
 }
 
 /* ---------- rendre ---------- */
 let sortBy = 'mod', sortDir = -1, showTip = true, showDots = true, scale = 1;
+const WIDE = matchMedia('(min-width: 1181px)');
+WIDE.addEventListener('change', () => layoutStage());
 function lastSignature(id) {        // la derniere entree enregistree (creation ou modification)
   const list = savedItemsOf(id);
   return list.length ? list[list.length - 1] : null;
@@ -863,7 +878,7 @@ function renderToolbar() {
 }
 function renderExplorer() {
   const ids = objIds();
-  $('#objCount').textContent = `· ${ids.length} objets`;
+  $('#objCount').textContent = String(ids.length);
   const modT = id => { const p = pendingOf(id); if (p) return Infinity; const s = lastSignature(id); return s ? s.save.t : 0; };
   ids.sort((a, b) => sortBy === 'name' ? sortDir * nameOf(a).localeCompare(nameOf(b)) : sortDir * (modT(a) - modT(b)) || nameOf(a).localeCompare(nameOf(b)));
   for (const b of document.querySelectorAll('#cols button'))
@@ -873,8 +888,8 @@ function renderExplorer() {
     const md = p ? 'non enregistré' : s ? rel(s.save.t) : '';
     const title = s ? `${s.item.kind === 'create' ? 'Créé' : 'Modifié'} le ${fDate(s.save.t)} à ${fTime(s.save.t, true)} sur ${s.save.pc} · ${s.save.user}` : 'Nouveau, pas encore enregistré';
     return `<li class="orow${selection.includes(id) ? ' sel' : ''}" role="option" aria-selected="${selection.includes(id)}" data-id="${id}" title="${esc(title)}">`
-      + `${ico(SCHEMA[o.kind].icon, 'ico')}<span class="nm"><b>${esc(o.name)}</b><span>${esc(kindLabel(o.kind))}</span></span>`
-      + `<span class="md">${showDots && p ? '<i class="dot" aria-label="modifié depuis l\'enregistrement"></i>' : ''}${esc(md)}</span>`
+      + `${ico(SCHEMA[o.kind].icon, 'ico')}<span class="nm"><b>${esc(o.name)}</b><span class="sub"><span>${esc(kindLabel(o.kind))}</span>`
+      + `<span class="md">${showDots && p ? '<i class="dot" aria-label="modifié depuis l\'enregistrement"></i>' : ''}${esc(md)}</span></span></span>`
       + `<button type="button" class="ib more" data-more="${id}" aria-label="Menu de ${esc(o.name)}">${ico('more')}</button></li>`;
   }).join('');
   const items = pendingItems();
@@ -899,8 +914,7 @@ function renderCanvas() {
 function layoutStage() {
   const stage = $('#stage'), wrap = $('#viewwrap');
   const availW = Math.max(200, stage.clientWidth - 28), availH = Math.max(180, stage.clientHeight - 48);
-  scale = Math.min(1, availW / VIEW_W, availH / VIEW_H);
-  if (stage.clientHeight < 260) scale = Math.min(1, availW / VIEW_W);
+  scale = WIDE.matches ? Math.min(1, availW / VIEW_W, availH / VIEW_H) : Math.min(1, availW / VIEW_W);
   $('#view').style.transform = `scale(${scale})`;
   wrap.style.width = VIEW_W * scale + 'px';
   wrap.style.height = VIEW_H * scale + 'px';
@@ -1048,7 +1062,10 @@ view.addEventListener('pointermove', e => {
     if (h < 12) { if (hnd.includes('n')) y -= 12 - h; h = 12; }
     Object.assign(o, { x, y, w, h });
     const el = view.querySelector(`.obj[data-id="${drag.id}"]`);
-    if (el) { el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.width = w + 'px'; el.style.height = h + 'px'; el.innerHTML = drawObj(o) + el.innerHTML.slice(el.innerHTML.indexOf('<i class="hd')); }
+    if (el) {
+      el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.width = w + 'px'; el.style.height = h + 'px';
+      el.innerHTML = drawObj(o) + '<i class="hd nw" data-h="nw"></i><i class="hd ne" data-h="ne"></i><i class="hd sw" data-h="sw"></i><i class="hd se" data-h="se"></i>';
+    }
   } else {
     for (const [sid, s] of Object.entries(drag.start)) {
       const o = work[sid];
@@ -1272,10 +1289,11 @@ document.addEventListener('keydown', e => {
   const inField = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
   const ctrl = e.ctrlKey || e.metaKey;
   if (ctrl && (e.key === 's' || e.key === 'S')) { e.preventDefault(); if (inField && e.target.closest('#insp')) commitField(e.target); save(); return; }
-  if (inField || H.open) return;
+  if (inField) return;
   if (ctrl && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); undo(); return; }
   if (ctrl && (e.key === 'y' || e.key === 'Y' || ((e.key === 'z' || e.key === 'Z') && e.shiftKey))) { e.preventDefault(); redo(); return; }
-  const onStage = document.activeElement === $('#stage') || document.activeElement === document.body;
+  if (H.open) return;
+  const onStage = document.activeElement === $('#stage');
   if (!onStage) return;
   if (ctrl && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); duplicate(); return; }
   if (e.key === 'Delete') { e.preventDefault(); removeSel(); return; }
@@ -1344,7 +1362,7 @@ function passes(e) {
   const q = H.q.trim().toLowerCase();
   return e.items.some(it => {
     const rows = rowsOf(it);
-    const groupOk = H.filter === 'all' || (it.kind === 'change' && rows.some(r => r.info.group === H.filter || (H.filter === 'look' && r.info.group === 'name')));
+    const groupOk = H.filter === 'all' || (it.kind === 'change' && rows.some(r => r.info.group === H.filter));
     if (!groupOk) return false;
     if (!q) return true;
     const hay = [nameOf(it.obj), it.note || '', e.pc, e.user, e.ver, ...rows.map(r => `${r.info.label} ${r.before == null ? '' : r.before} ${r.after}`)].join(' ').toLowerCase();
@@ -1352,7 +1370,7 @@ function passes(e) {
   });
 }
 function rowPasses(r) {
-  if (H.filter !== 'all' && !(r.info.group === H.filter || (H.filter === 'look' && r.info.group === 'name'))) return false;
+  if (H.filter !== 'all' && r.info.group !== H.filter) return false;
   const q = H.q.trim().toLowerCase();
   return !q || `${r.info.label} ${r.before == null ? '' : r.before} ${r.after}`.toLowerCase().includes(q);
 }
@@ -1386,30 +1404,33 @@ function renderHistory(first) {
   let list = '', day = '';
   for (const e of es) {
     const dt = e.pending ? 'pending' : dayTitle(e.t);
-    if (dt !== day && !e.pending) { list += `<div class="day">${esc(dt)}</div>`; day = dt; }
+    if (dt !== day && !e.pending) { list += `${day && day !== 'pending' ? '</div>' : ''}<div class="dgrp"><div class="day">${esc(dt)}</div>`; day = dt; }
+    else if (e.pending) day = 'pending';
     const kinds = []; e.items.forEach(it => itemKinds(it).forEach(k => { if (!kinds.includes(k)) kinds.push(k); }));
-    const n = countChanges(e.items);
+    const n = countLabel(e.items);
     const objs = H.scope.type !== 'object' ? `<div class="objs">${e.items.map(it => (it.kind === 'delete' ? `<s>${esc(nameOf(it.obj))}</s>` : esc(nameOf(it.obj)))).join(', ')}</div>` : '';
     if (e.pending)
       list += `<div class="ent pending${H.sel === e.key ? ' on' : ''}" data-key="${e.key}" role="option" aria-selected="${H.sel === e.key}"><span class="tm">Non<br>enreg.</span><div>`
-        + `<div class="who"><b>Non enregistré</b><span class="cnt">${n} changement${n > 1 ? 's' : ''}</span></div>`
+        + `<div class="who"><b>Non enregistré</b><span class="cnt">${n}</span></div>`
         + `<div class="who"><span class="u">sera signé</span><span class="pcchip">${ico('pc')}${esc(me.pc)}</span><span class="u">${esc(me.user)} à l'enregistrement</span></div>${objs}`
         + `<div class="pills">${kinds.map(pill).join('')}</div></div></div>`;
     else
       list += `<div class="ent${H.sel === e.key ? ' on' : ''}" data-key="${e.key}" role="option" aria-selected="${H.sel === e.key}"><span class="tm">${fTime(e.t)}</span><div>`
-        + `<div class="who"><span class="pcchip">${ico('pc')}${esc(e.pc)}</span><span class="u">${esc(e.user)} · ${esc(e.ver)}</span><span class="cnt">${n} changement${n > 1 ? 's' : ''}</span></div>${objs}`
+        + `<div class="who"><span class="pcchip">${ico('pc')}${esc(e.pc)}</span><span class="u">${esc(e.user)} · ${esc(e.ver)}</span><span class="cnt">${n}</span></div>${objs}`
         + `<div class="pills">${kinds.map(pill).join('')}</div></div></div>`;
   }
+  if (day && day !== 'pending') list += '</div>';
   if (!es.length) list = `<div class="nothing">Aucune entrée ne répond à ces filtres.</div>`;
   const cur = es.find(e => e.key === H.sel);
   const oldest = all.length ? all[all.length - 1].t : null;
-  const foot = `${all.filter(e => !e.pending).length} enregistrement${all.length > 1 ? 's' : ''} · ${pcs.length} PC${oldest ? ` · le plus ancien le ${fDate(oldest)}` : ''}`;
+  const nSaved = all.filter(e => !e.pending).length;
+  const foot = `${nSaved} enregistrement${nSaved > 1 ? 's' : ''} · ${pcs.length} PC${oldest ? ` · le plus ancien le ${fDate(oldest)}` : ''}`;
   host.innerHTML = `<div class="scrim" data-close="1"></div>`
     + `<div class="dlg" id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">`
     + `<div class="dlg-head" id="dlgHead">${ico('hist', 'h')}<div class="t" id="dlgTitle">${scopeTitle()}</div><button type="button" class="ib x" data-close="1" aria-label="Fermer">${ico('x')}</button></div>`
     + `<div class="dlg-sub">Une entrée par Enregistrer, signée : date, PC, compte Windows, version d'IHM Studio. Les Ctrl+Z entre deux enregistrements n'en font pas.${H.scope.type === 'view' ? ' Les objets supprimés y restent : leur entrée « Supprimé » les restaure.' : ''}</div>`
     + `<div class="dlg-tools">${chips}<select id="hpc" aria-label="Filtrer par PC"><option value="">Tous les PC</option>${pcs.map(p => `<option value="${esc(p)}"${H.pc === p ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select>`
-    + `<input id="hq" type="search" placeholder="Chercher une propriété, une valeur, un PC…" value="${esc(H.q)}" aria-label="Chercher dans l'historique"><span class="grow"></span>`
+    + `<input id="hq" type="search" placeholder="Propriété, valeur, PC…" value="${esc(H.q)}" aria-label="Chercher dans l'historique"><span class="grow"></span>`
     + `<button type="button" class="bt" data-copy="1">${ico('copy')}Copier</button><button type="button" class="bt" data-csv="1">${ico('csv')}Exporter en CSV…</button></div>`
     + `<div class="dlg-main"><div class="hl" role="listbox" aria-label="Enregistrements">${list}</div><div class="hd">${cur ? detailHtml(cur) : '<div class="nothing">Choisis une entrée à gauche.</div>'}</div></div>`
     + `<div class="dlg-foot"><span>${foot}</span><button type="button" class="bt" data-close="1">Fermer</button></div>`
@@ -1439,10 +1460,10 @@ function detailHtml(e) {
     if (multi) {
       const btn = it.kind === 'delete' ? (present ? `<span class="grp">déjà restauré</span>` : (e.pending ? '' : `<button type="button" class="bt" data-restore="${it.obj}" data-at="${e.idx}">${ico('restore')}Restaurer l'objet</button>`))
         : canVersion ? `<button type="button" class="bt" data-version="${it.obj}" data-at="${e.idx}">${ico('revert')}Revenir à cette version</button>` : '';
-      rows += `<tr class="objh"><td colspan="5">${esc(o.name)} <span class="grp">· ${esc(kindLabel(o.kind))}${it.kind === 'create' ? ' · création' : it.kind === 'restore' ? ' · restauré' : it.kind === 'delete' ? ' · supprimé' : ''}</span><span class="bt" style="all:unset;float:right">${btn}</span></td></tr>`;
+      rows += `<tr class="objh"><td colspan="4"><span style="float:right">${btn}</span>${esc(o.name)} <span class="grp">· ${esc(kindLabel(o.kind))}${it.kind === 'create' ? ' · création' : it.kind === 'restore' ? ' · restauré' : it.kind === 'delete' ? ' · supprimé' : ''}</span></td></tr>`;
     }
     if (it.kind === 'delete') {
-      rows += `<tr><td colspan="5"><span class="grp">Supprimé de la vue. Son dernier état est gardé${present ? ' ; il a été restauré depuis.' : ' : « Restaurer l\'objet » le remet à sa place.'}</span></td></tr>`;
+      rows += `<tr><td colspan="4"><span class="grp">Supprimé de la vue. Son dernier état est gardé${present ? ' ; il a été restauré depuis.' : ' : « Restaurer l\'objet » le remet à sa place.'}</span></td></tr>`;
       continue;
     }
     for (const r of shown) {
@@ -1458,7 +1479,7 @@ function detailHtml(e) {
       }
       rows += `<tr><td>${esc(r.info.label)}<br><span class="grp">${esc(GROUPS[r.info.group])}</span></td><td>${valHtml(r.before, r.info.type, true)}</td><td>${valHtml(r.after, r.info.type)}</td><td style="text-align:right">${act}</td></tr>`;
     }
-    if (!shown.length && all.length) rows += `<tr><td colspan="5"><span class="grp">${all.length} ligne${all.length > 1 ? 's' : ''} cachée${all.length > 1 ? 's' : ''} par le filtre.</span></td></tr>`;
+    if (!shown.length && all.length) rows += `<tr><td colspan="4"><span class="grp">${all.length} ligne${all.length > 1 ? 's' : ''} cachée${all.length > 1 ? 's' : ''} par le filtre.</span></td></tr>`;
   }
   h += `<div class="tblwrap"><table class="chg"><thead><tr><th>Propriété</th><th>Avant</th><th>Après</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   if (!multi) {
