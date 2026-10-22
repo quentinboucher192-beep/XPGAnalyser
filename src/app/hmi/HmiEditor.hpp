@@ -182,6 +182,17 @@ public:
     // ---- 1.12.18 : le menu du clic droit sur la vue ----
     // « Aide sur Voyant » : l'hote ouvre le sujet de l'aide (le genre de l'objet).
     void setHelpOpener(std::function<void(const std::string& topic)> open);
+    // 1.12.26 : l'historique des modifications des objets - le clic droit (un objet, plusieurs,
+    // le fond de la vue) demande a l'hote la fenetre Historique ; objects vide : toute la vue.
+    void setHistoryOpener(std::function<void(hmi::Id view, std::vector<hmi::Id> objects)> open) { openHistory_ = std::move(open); }
+    // Ce que fait le clic droit (scripts, essais) : faux sans hote.
+    bool requestHistory(std::vector<hmi::Id> objects) {
+        if (!openHistory_) return false;
+        openHistory_(viewId_, std::move(objects));
+        return true;
+    }
+    // Une modification de la vue en une commande (Ctrl+Z l'annule) : Revenir, Restaurer. Faux : rien n'a change.
+    bool editView(const std::string& label, const std::function<bool(hmi::View&)>& change);
     void openCanvasMenu(gfx::Point at, bool explorer = false);   // ce que vise le canevas ; explorer : la selection
     void canvasMenuChosen(int id);
     void openLayerMenu(hmi::Id layer, gfx::Point at);           // planche 7 : un calque (sans le rendre actif)
@@ -262,6 +273,7 @@ private:
     std::function<void()>     askDuplicate_;     // 1.10.2 (chantier D)
     std::function<void(const ValueRequest&)> askValue_;   // 1.11.3 : le selecteur de valeur
     std::function<void(const std::string&)> openHelp_;   // 1.12.18 : « Aide sur ... »
+    std::function<void(hmi::Id, std::vector<hmi::Id>)> openHistory_;   // 1.12.26 : la fenetre Historique
     std::vector<hmi::Id>      menuLayers_;                // 1.12.18 : le sous-menu Calque, dans l'ordre
     std::vector<hmi::Id>      menuPopups_;                // ... et Ses popups (une instance)
     int                       menuKind_{0};               // le menu ouvert : la vue, un calque, la bibliotheque

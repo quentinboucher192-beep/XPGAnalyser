@@ -47,6 +47,9 @@
 #include "../src/app/hmi/HmiActionDialogs.hpp"     // 1.11.9 : l'operation en arbre, le script, Maths
 #include "../src/app/hmi/HmiAddressDialog.hpp"   // 1.12.18 : l'adresse dans toutes les cases
 #include "../src/app/hmi/HmiFunctionDialog.hpp"  // 1.12.24 : Nouvelle fonction
+#include "../src/app/hmi/HmiEditHistoryDialog.hpp"   // 1.12.26 : la fenetre Historique des objets
+#include "../src/hmi/HmiEditHistory.hpp"
+#include "../src/hmi/HmiStore.hpp"
 #include "../src/app/hmi/HmiItemDuplicateDialog.hpp"   // 1.12.16 : Dupliquer... d'un element
 #include "../src/hmi/HmiTable.hpp"   // 1.12.13 : le Tableau, un mode a la fois
 #include "../src/hmi/HmiActionKinds.hpp"
@@ -34584,6 +34587,122 @@ void nouvelleFonction11224() {
     app::typepicker::setHost({});
 }
 
+// ---- 1.12.26 : LA FENETRE HISTORIQUE DES OBJETS ----
+//  Deux enregistrements signes de deux PC, puis un changement pas encore enregistre : la liste
+//  (le non enregistre en tete, le plus recent ensuite), les filtres (sorte, PC, recherche), Avant /
+//  Apres et les libelles de l'inspecteur, Revenir une valeur (confirme, une commande), revenir a une
+//  version, la vue entiere et un objet supprime qui se restaure, le CSV.
+void historique11226() {
+    std::printf("-- 1.12.26 : la fenetre Historique des objets\n");
+    namespace edits = hmi::edits;
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "xpg_hmieditor_historique11226";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    const std::string folder = (root / "P").string();
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    View v0 = makeView(p, "Vue_Hist");
+    const Id layer = v0.activeLayer;
+    v0.objects.push_back(makeObject(Kind::Damper, p.allocate(), "RG_1", 100, 200, layer));
+    v0.objects.push_back(makeObject(Kind::Text, p.allocate(), "TXT_1", 40, 40, layer));
+    const Id rg = v0.objects[0].id, txt = v0.objects[1].id, vid = v0.id;
+    p.views.push_back(std::move(v0));
+    check(static_cast<bool>(hmi::save(p, folder)), "historique : le projet \xC3\xA9" "crit");
+    doc->savedFolder = folder;
+    const auto sign = [](std::int64_t t, const char* pc, const char* who) {
+        edits::Signature s;
+        s.t = t;
+        s.pc = pc;
+        s.account = who;
+        s.version = "1.12.26";
+        return s;
+    };
+    // 1er enregistrement (PC-XFAB-B32) : le fond du registre
+    p.view(vid)->object(rg)->set("fill", "#EEF1F5");
+    auto r1 = edits::record(p, folder, folder, sign(1760000000, "PC-XFAB-B32", "mmartin"));
+    check(r1 && *r1 == 1 && static_cast<bool>(hmi::save(p, folder)), "historique : 1er enregistrement, une entr\xC3\xA9" "e");
+    // 2e enregistrement (PC-SEATI-QB12) : le registre deplace, le texte supprime
+    p.view(vid)->object(rg)->set("x", "140");
+    auto& objs = p.view(vid)->objects;
+    objs.erase(std::remove_if(objs.begin(), objs.end(), [&](const Object& o) { return o.id == txt; }), objs.end());
+    auto r2 = edits::record(p, folder, folder, sign(1760003600, "PC-SEATI-QB12", "qboucher"));
+    check(r2 && *r2 == 2 && static_cast<bool>(hmi::save(p, folder)), "historique : 2e enregistrement, deux entr\xC3\xA9" "es (d\xC3\xA9plac\xC3\xA9, supprim\xC3\xA9)");
+    // pas encore enregistre : renomme
+    p.view(vid)->object(rg)->name = "RG_2";
+    int edited = 0;
+    const auto makeSpec = [&](std::vector<Id> objects) {
+        app::HmiEditHistoryDialog::Spec spec;
+        spec.doc = doc;
+        spec.view = vid;
+        spec.objects = std::move(objects);
+        spec.edit = [&](const std::string&, const std::function<bool(View&)>& change) {
+            View after = *p.view(vid);
+            if (!change(after) || after == *p.view(vid)) return false;
+            *p.view(vid) = std::move(after);
+            ++edited;
+            return true;
+        };
+        spec.label = [](Kind k, std::string_view key) { return app::hmiPropertyLabel(k, key); };
+        return spec;
+    };
+    app::HmiEditHistoryDialog d(makeSpec({rg}));
+    check(d.rowCount() == 3 && d.isPending(0) && !d.isPending(1) && d.entry(1)->pc == "PC-SEATI-QB12" && d.entry(2)->pc == "PC-XFAB-B32",
+          "historique RG : 3 lignes, le non enregistr\xC3\xA9 en t\xC3\xAAte, puis le plus r\xC3\xA9" "cent (" + std::to_string(d.rowCount()) + ")");
+    check(d.title().find("RG_2") != std::string::npos, "le titre : le nom d'aujourd'hui (" + d.title() + ")");
+    check(d.rowText(0).find("Non enregistr") == 0 && d.rowText(2).find("PC-XFAB-B32") != std::string::npos && d.rowText(2).find("mmartin") != std::string::npos,
+          "une ligne : la date, le PC, le compte (" + d.rowText(2) + ")");
+    check(d.pcs() == std::vector<std::string>{"PC-SEATI-QB12", "PC-XFAB-B32"}, "les PC de l'historique, pour le filtre");
+    d.setSortFilter(edits::Sort::Geometry);
+    check(d.rowCount() == 1 && d.entry(0)->pc == "PC-SEATI-QB12", "le filtre Position et taille : le d\xC3\xA9placement seul");
+    d.setSortFilter(std::nullopt);
+    d.setPcFilter("PC-XFAB-B32");
+    check(d.rowCount() == 1, "le filtre PC");
+    d.setPcFilter("");
+    d.setSearch("eef1f5");
+    check(d.rowCount() == 1 && d.entry(0)->pc == "PC-XFAB-B32", "la recherche (une valeur, sans la casse)");
+    d.setSearch("");
+    check(d.rowCount() == 3, "sans filtre : tout");
+    // le 1er enregistrement : le fond, Avant / Apres, le libelle de l'inspecteur
+    d.select(2);
+    const auto* e1 = d.entry(2);
+    const auto* fill = e1 ? &e1->changes.front() : nullptr;
+    check(fill && fill->key == "fill" && d.changeLabel(*e1, *fill) == app::hmiPropertyLabel(Kind::Damper, "fill")
+              && d.valueText(*e1, *fill, true) == "#1B2028" && d.valueText(*e1, *fill, false) == "#EEF1F5",
+          "Avant / Apr\xC3\xA8s : " + (fill ? d.changeLabel(*e1, *fill) + " " + d.valueText(*e1, *fill, true) + " -> " + d.valueText(*e1, *fill, false) : std::string("?")));
+    check(d.selectedText().find("PC-XFAB-B32") != std::string::npos && d.selectedText().find("#EEF1F5") != std::string::npos, "Copier : le texte du choisi");
+    // Revenir a Avant (une valeur) : confirme d'abord, puis une commande
+    check(d.revertChange(0) && d.confirming() && edited == 0, "Revenir \xC3\xA0 Avant : la confirmation d'abord (" + d.confirmText() + ")");
+    d.confirmNo();
+    check(!d.confirming() && edited == 0, "Non : rien ne change");
+    check(d.revertChange(0) && d.confirmYes() && edited == 1 && p.view(vid)->object(rg)->text("fill") == "#1B2028",
+          "Oui : le fond revient \xC3\xA0 #1B2028, en une modification (Ctrl+Z)");
+    check(doc->editNotes.count(rg) == 1 && doc->editNotes[rg].find("retour") == 0, "not\xC3\xA9 pour le prochain enregistrement : " + doc->editNotes[rg]);
+    check(d.rowCount() == 3 && d.isPending(0) && d.entry(0)->changes.size() == 2, "relu : le non enregistr\xC3\xA9 compte le nom et le fond");
+    // revenir a une version : l'objet tel qu'apres le 1er enregistrement (x 100, fond #EEF1F5, nom RG_1)
+    d.select(2);
+    check(d.revertEntry(true) && edited == 2, "Revenir \xC3\xA0 cette version");
+    const auto* back = p.view(vid)->object(rg);
+    check(back && back->name == "RG_1" && back->text("x") == "100" && back->text("fill") == "#EEF1F5",
+          "l'objet tel qu'apr\xC3\xA8s le 1er enregistrement : RG_1, x 100, fond #EEF1F5");
+    // la vue : le texte supprime se restaure
+    app::HmiEditHistoryDialog dv(makeSpec({}));
+    std::size_t gone = dv.rowCount();
+    for (std::size_t i = 0; i < dv.rowCount(); ++i)
+        if (dv.entry(i)->what == edits::What::Deleted) gone = i;
+    check(gone < dv.rowCount() && dv.entry(gone)->name == "TXT_1", "la vue : la suppression de TXT_1");
+    dv.select(gone);
+    check(dv.restoreDeleted(true) && p.view(vid)->object(txt) && p.view(vid)->object(txt)->name == "TXT_1", "Restaurer : TXT_1 revient, son identit\xC3\xA9 aussi");
+    check(!dv.restoreDeleted(true), "...une seule fois");
+    // le CSV
+    const std::string csv = dv.csv();
+    check(csv.rfind("Date;PC;Compte;Version;Objet;Type;Sorte;", 0) == 0 && csv.find("PC-SEATI-QB12;qboucher;1.12.26;RG_1") != std::string::npos,
+          "le CSV : l'en-t\xC3\xAAte, une ligne par changement");
+    const std::string csvPath = (root / "historique.csv").string();
+    check(dv.exportCsv(csvPath) && fs::file_size(csvPath) > csv.size(), "Exporter en CSV : le fichier (avec son BOM)");
+    fs::remove_all(root, ec);
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les natives rangees, Choisir une fonction... (Mes fonctions, Rend), seuls.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -34957,6 +35076,7 @@ int main(int argc, char** argv) {
     generiquesSuiventEcran11221();          // 1.12.21 : retirer un generique, les variables suivent
     plumeCarres11223();                     // 1.12.23 : la plume lit sa formule, les carres du Contenu, selon K
     nouvelleFonction11224();                // 1.12.24 : Nouvelle fonction, la case Retour ouvre le selecteur de types
+    historique11226();                      // 1.12.26 : la fenetre Historique des objets (liste, filtres, Revenir, Restaurer, CSV)
     v1101_tableaux_onglet_cache();          // 1.10.1 (chantier B1) : la vue suit les tableaux, onglet cache ou non
     v1101_journal_vider();                  // 1.10.1 (integration I1101) : le Journal se vide ; les nouveautes 1.10.0 -> 1.10.1
     aideSaisie1102();                       // 1.10.2 (chantier A) : les objets des vues, les parametres des instances

@@ -40,6 +40,7 @@
 #include "../../hmi/HmiBuildState.hpp"  // 1.11 (chantier T3, C4) : les icones compilable / generable
 #include "../../hmi/HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele
 #include "../hmi/HmiDesignPanes.hpp"
+#include "../hmi/HmiEditHistoryDialog.hpp"   // 1.12.26 : la fenetre Historique des objets
 #include "../hmi/HmiItemsDialog.hpp"   // 1.12.7 : le tableau des elements
 #include "../../core/FieldCodec.hpp"
 #include "../hmi/HmiCalcDialog.hpp"    // 1.12.7 : la fenetre d'une valeur calculee
@@ -1995,6 +1996,9 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
         made->setStyleAsker([this, viewId] { askHmiStyle(viewId); });     // lot 12
         made->setDuplicateAsker([this, viewId] { askHmiDuplicate(viewId); });   // 1.10.2 (chantier D)
         made->setHelpOpener([this](const std::string& topic) { openHmiHelp(topic); });   // 1.12.18 : Aide sur ...
+        made->setHistoryOpener([this](hmi::Id view, std::vector<hmi::Id> objects) {    // 1.12.26 : l'historique des objets
+            openHmiHistory(view, std::vector<std::uint64_t>(objects.begin(), objects.end()));
+        });
         made->setTemplateAsker([this, viewId] { askHmiSaveTemplate(viewId); });   // lot 20
         // 1.11.22 : Nouvelle fonction d'un symbole demande son nom (un nom pris : une surcharge).
         if (auto* fns = made->symbolFunctions()) {
@@ -3745,6 +3749,23 @@ void MainAnalysisScreen::startHmiTutorial() { startTrail("decouvrir", false); }
 
 // 1.10.2 (chantier D) : "DUPLIQUER..." - Ctrl+Maj+D, la barre d'outils. La fenetre
 // rend un plan (hmi::dup) ; il se joue en UNE commande : Ctrl+Z retire tout.
+// 1.12.26 : LA FENETRE HISTORIQUE d'un objet, de plusieurs, d'une vue (objects vide). Revenir et
+// Restaurer passent par l'editeur de la vue, retrouve a chaque geste : une commande, Ctrl+Z l'annule.
+void MainAnalysisScreen::openHmiHistory(std::uint64_t viewId, std::vector<std::uint64_t> objects) {
+    auto doc = app_.hmi();
+    if (!doc || !doc->project.view(asId(viewId))) return;
+    HmiEditHistoryDialog::Spec spec;
+    spec.doc = doc;
+    spec.view = asId(viewId);
+    for (const auto o : objects) spec.objects.push_back(asId(o));
+    spec.edit = [this, viewId](const std::string& label, const std::function<bool(hmi::View&)>& change) {
+        auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(viewId)));
+        return editor && editor->editView(label, change);
+    };
+    spec.label = [](hmi::Kind kind, std::string_view key) { return hmiPropertyLabel(kind, key); };
+    app_.menus().ShowDialog(std::make_unique<HmiEditHistoryDialog>(std::move(spec)), [](const menu::DialogResult&) {});
+}
+
 void MainAnalysisScreen::askHmiDuplicate(std::uint64_t viewId) {
     // 1.10.4 : le nombre de copies de depart (0 : "Remplacer..." de Compiler), une fois.
     const int copies = std::exchange(nextDuplicateCopies(), 3);

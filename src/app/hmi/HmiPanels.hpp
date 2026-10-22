@@ -257,6 +257,8 @@ private:
 // ------------------------------------------------------------- palette ------
 // 1.12.18 : la famille d'un genre dans la bibliotheque (« Affichage », « Synoptique ») ; vide : aucune.
 [[nodiscard]] std::string hmiPaletteFamily(hmi::Kind kind);
+// 1.12.26 : le libelle d'une propriete d'un objet, celui de l'inspecteur (la fenetre Historique).
+[[nodiscard]] std::string hmiPropertyLabel(hmi::Kind kind, std::string_view key);
 class HmiPalette final : public ui::Widget {
 public:
     explicit HmiPalette(std::string id = {});

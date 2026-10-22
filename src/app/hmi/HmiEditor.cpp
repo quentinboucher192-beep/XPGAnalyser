@@ -1775,7 +1775,7 @@ enum CanvasMenu : int {
     MPasteHere = 9, MSelectAll = 10, MRename = 11, MHelp = 12, MLocked = 13, MHidden = 14, MOpenSymbol = 15,
     MSymbolParams = 16, MEnterGroup = 17, MLeaveGroup = 18, MUnlockTarget = 19, MCopyTarget = 20, MViewProps = 21,
     MLibrary = 22, MZoom50 = 23, MZoom100 = 24, MZoom200 = 25, MGuideV = 26, MGuideH = 27, MHelpTarget = 28,
-    MShow = 29,
+    MShow = 29, MHistory = 30, MViewHistory = 31,
 };
 constexpr int kMenuCanvas = 0, kMenuLayers = 1, kMenuPalette = 2;   // le menu ouvert (context_ sert aux trois)
 enum PaletteMenu : int { kPalettePlace = 1, kPaletteFavorite = 2, kPaletteHelp = 3 };
@@ -1783,6 +1783,15 @@ constexpr hmi::Kind kInsertKinds[] = {hmi::Kind::Text, hmi::Kind::Button, hmi::K
 }   // namespace
 
 void HmiEditor::setHelpOpener(std::function<void(const std::string&)> open) { openHelp_ = std::move(open); }
+
+bool HmiEditor::editView(const std::string& label, const std::function<bool(hmi::View&)>& change) {
+    const auto* v = doc_->project.view(viewId_);
+    if (!v || !change || !apply_) return false;
+    hmi::View after = *v;
+    if (!change(after) || after == *v) return false;
+    apply_(std::make_unique<hmi::ViewCommand>(doc_, *v, std::move(after), label));
+    return true;
+}
 
 void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
     namespace cmd = ui::cmd;
@@ -1870,6 +1879,8 @@ void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
         }
         items.push_back(std::move(zoom));
         items.push_back(cmd::separator());
+        // 1.12.26 : l'historique de la vue - ses objets, les supprimes compris (ils se restaurent).
+        items.push_back(plain("Historique de la vue\xE2\x80\xA6", MViewHistory, static_cast<bool>(openHistory_), "pas ici"));
         items.push_back(plain("Propri\xC3\xA9t\xC3\xA9s de la vue", MViewProps));
         context_->setItems(std::move(items));
         openMenuAt(*context_, at);
@@ -2009,6 +2020,10 @@ void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
     items.push_back(cmd::separator());
     items.push_back(cmd::item(cmd::Id::Renommer, MRename, one != nullptr, "un objet \xC3\xA0 la fois"));
     items.push_back(plain("Cr\xC3\xA9" "er un symbole\xE2\x80\xA6", act(ActMakeSymbol)));
+    // 1.12.26 : l'historique des modifications (l'objet, ou les objets choisis).
+    items.push_back(plain(sel.size() == 1 ? std::string("Historique des modifications\xE2\x80\xA6")
+                                          : "Historique des " + std::to_string(sel.size()) + " objets\xE2\x80\xA6",
+                          MHistory, static_cast<bool>(openHistory_), "pas ici"));
     items.push_back(cmd::separator());
     {
         auto del = cmd::item(cmd::Id::Supprimer, MDelete);
@@ -2242,6 +2257,12 @@ void HmiEditor::canvasMenuChosen(int a) {
             if (const auto* o = v->object(c.contextLocked())) helpOn(o->kind);
             break;
         case MShow: c.hideSelection(false); break;
+        case MHistory:
+            if (openHistory_) openHistory_(viewId_, c.selection());
+            break;
+        case MViewHistory:
+            if (openHistory_) openHistory_(viewId_, {});
+            break;
         case MViewProps:
             c.setSelection({});
             inspector_->setCurrentIndex(0);

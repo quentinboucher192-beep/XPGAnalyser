@@ -2538,6 +2538,12 @@ void splitPidSections(std::vector<PG::Category>& out, const std::string& typeNam
 
 } // namespace
 
+std::string hmiPropertyLabel(hmi::Kind kind, std::string_view key) {
+    if (std::string special = labelForKind(kind, key); !special.empty()) return special;
+    if (const auto* k = infoOf(key)) return k->label;
+    return std::string(key);
+}
+
 bool hmiPropertyInfo(std::string_view key, std::string& label, std::string& help) {
     const auto* k = infoOf(key);
     if (!k) return false;

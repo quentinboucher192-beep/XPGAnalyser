@@ -14,6 +14,7 @@
 #include "Capture.hpp"
 #include "hmi/HmiCommPanes.hpp"         // lot 15 : les equipements, le reseau du PC
 #include "hmi/HmiEditor.hpp"
+#include "hmi/HmiEditHistoryDialog.hpp"   // 1.12.26 : les commandes historique-...
 #include "hmi/HmiValuePicker.hpp"        // 1.11.3 : le selecteur de valeur (selecteur-...)
 #include "hmi/HmiFunctionPicker.hpp"   // 1.12.17 : les commandes fonction-...
 #include "hmi/HmiAssist.hpp"           // 1.12.17 : pickerSpec (fonction-choisir)
@@ -6705,6 +6706,71 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (cmd == "frise-choisir") { pane->selectVersion(static_cast<int>(num(1))); return Step::Yield; }
         fail("commande inconnue : " + cmd);
         return Step::Next;
+    }
+
+    // 1.12.26 : LA FENETRE HISTORIQUE DES OBJETS.
+    //   historique [objet] ["NOM" ...]          le clic droit sur ces objets de la vue courante (aucun : la vue)
+    //   historique-choisir N                     l'enregistrement N de la liste (1 : en haut)
+    //   historique-filtre tout|objet|geometrie|apparence|liaisons|actions
+    //   historique-pc [NOM]                      les enregistrements de ce PC (sans NOM : tous)
+    //   historique-chercher TEXTE
+    //   historique-revenir [N]                   la valeur Avant du changement N (1 : le premier), ou toute la version
+    //   historique-restaurer                     l'objet supprime choisi
+    //   historique-oui, historique-non           la confirmation
+    //   historique-csv CHEMIN, historique-copier, historique-fermer
+    //   historique-verifier N [TEXTE]            echec sans N enregistrements montres, ou sans TEXTE dans le choisi
+    if (cmd == "historique") {
+        auto* ed = currentEditor();
+        if (!ed) { fail("l'onglet courant n'est pas une vue IHM (historique)"); return Step::Next; }
+        const auto hd = app_.hmi();
+        const auto* hv = hd ? hd->project.view(ed->viewId()) : nullptr;
+        if (!hv) { fail("vue introuvable"); return Step::Next; }
+        std::vector<hmi::Id> ids;
+        for (std::size_t k = 1; k < w.size(); ++k) {
+            if (lower(w[k]) == "objet" || lower(w[k]) == "objets") continue;
+            bool found = false;
+            for (const auto& o : hv->objects)
+                if (o.name == w[k]) { ids.push_back(o.id); found = true; }
+            if (!found) { fail("historique : objet introuvable " + w[k]); return Step::Next; }
+        }
+        if (!ed->requestHistory(std::move(ids))) fail("historique : pas de fen\xC3\xAAtre Historique ici");
+        return Step::Yield;
+    }
+    if (cmd.rfind("historique-", 0) == 0) {
+        auto* d = dynamic_cast<HmiEditHistoryDialog*>(app_.menus().top());
+        if (!d) { fail(cmd + " : la fen\xC3\xAAtre Historique n'est pas ouverte"); return Step::Next; }
+        const auto n = static_cast<std::size_t>(std::max(1, std::atoi(arg(1).c_str())) - 1);
+        if (cmd == "historique-choisir") d->select(n);
+        else if (cmd == "historique-filtre") {
+            const auto f = lower(arg(1));
+            using S = hmi::edits::Sort;
+            d->setSortFilter(f == "objet" ? std::optional<S>(S::Object) : f == "geometrie" || f == "position" ? std::optional<S>(S::Geometry)
+                             : f == "apparence" ? std::optional<S>(S::Appearance) : f == "liaisons" ? std::optional<S>(S::Bindings)
+                             : f == "actions" ? std::optional<S>(S::Actions) : std::nullopt);
+        }
+        else if (cmd == "historique-pc") d->setPcFilter(arg(1));
+        else if (cmd == "historique-chercher") d->setSearch(arg(1));
+        else if (cmd == "historique-revenir") {
+            const bool ok = arg(1).empty() ? d->revertEntry() : d->revertChange(n);
+            if (!ok) fail(cmd + " : " + d->message());
+        }
+        else if (cmd == "historique-restaurer") { if (!d->restoreDeleted()) fail(cmd + " : " + d->message()); }
+        else if (cmd == "historique-oui") { if (!d->confirmYes()) fail(cmd + " : " + d->message()); }
+        else if (cmd == "historique-non") d->confirmNo();
+        else if (cmd == "historique-copier") d->copy();
+        else if (cmd == "historique-csv") {
+            std::string why;
+            if (!d->exportCsv(arg(1), &why)) fail(cmd + " : " + why);
+        }
+        else if (cmd == "historique-fermer") d->dismiss();
+        else if (cmd == "historique-verifier") {
+            const auto want = static_cast<std::size_t>(std::atoi(arg(1).c_str()));
+            if (d->rowCount() != want) fail(cmd + " : " + std::to_string(d->rowCount()) + " enregistrement(s) montr\xC3\xA9(s), " + arg(1) + " attendu(s)");
+            if (!arg(2).empty() && d->selectedText().find(arg(2)) == std::string::npos) fail(cmd + " : \xC2\xAB " + arg(2) + " \xC2\xBB absent du choisi");
+        }
+        else fail("commande inconnue : " + cmd);
+        for (std::size_t i = 0; i < d->rowCount() && i < 3; ++i) std::printf("[script] historique %zu : %s\n", i + 1, d->rowText(i).c_str());
+        return Step::Yield;
     }
 
     auto* editor = currentEditor();

@@ -1144,6 +1144,9 @@
     <ClCompile Include="src\app\hmi\HmiDuplicateDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiEditHistoryDialog.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiEnumPanes.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -2438,6 +2441,9 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiDuplicateDialog.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiEditHistoryDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiEnumPanes.hpp">
