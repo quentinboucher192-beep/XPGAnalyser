@@ -139,6 +139,11 @@ public:
     using DialogHost = std::function<void(menu::MenuPtr, std::function<void(const menu::DialogResult&)>)>;
     void setDialogHost(DialogHost host) { host_ = std::move(host); }
     bool openDuplicate();
+    // 1.12.27 : CTRL+D - une copie tout de suite, juste apres l'element (les indices suivis et le nom
+    // numerote quand l'element s'y prete, sinon la meme ligne) ; la page d'un onglet ne se duplique pas
+    // (ses objets). Faux : rien.
+    bool duplicateNow(int index);
+    [[nodiscard]] bool canDuplicateNow(int index) const;
     [[nodiscard]] std::vector<hmi::dup::ItemField> duplicateFields(int index) const;
     bool insertCopies(int index, const std::vector<std::vector<std::string>>& rows);
 

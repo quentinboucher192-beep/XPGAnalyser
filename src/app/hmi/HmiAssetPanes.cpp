@@ -344,6 +344,8 @@ HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply a
                        {"D\xC3\xA9tail", 240.f}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table_ = &static_cast<ui::TableView&>(split->addPane(std::move(table), 0.60f, 300.f));
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*table_, {RDelete});
     // Lot 21 : les ressources rangees en dossiers ; glisser une ou plusieurs lignes.
     folders_ = std::make_unique<HmiFolderTable>(*table_, doc_, apply_);
     preview_ = &static_cast<HmiResourcePreview&>(split->addPane(std::make_unique<HmiResourcePreview>(base + ".preview"), 0.40f, 240.f));
@@ -735,6 +737,8 @@ HmiFilesPane::HmiFilesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                        {"Taille", 90.f, 60.f, true, true, true, ui::Align::End}, {"\xC3\x89tat", 130.f}, {"Utilis\xC3\xA9 par", 260.f}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table_ = &static_cast<ui::TableView&>(split->addPane(std::move(table), 0.42f, 120.f));
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*table_, {FRemove});
     preview_ = &static_cast<HmiFilePreview&>(split->addPane(std::make_unique<HmiFilePreview>(base + ".preview"), 0.58f, 160.f));
     split_ = &static_cast<ui::Splitter&>(addChild(std::move(split)));
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));

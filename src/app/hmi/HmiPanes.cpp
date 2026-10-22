@@ -713,6 +713,8 @@ HmiViewsPane::HmiViewsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                        {"Description", 320.f}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*table_, {VDelete, VDuplicate, VNew});
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(this->id() + ".status")));
     // Lot 21 : la liste rangee en dossiers (plusieurs lignes choisies, glissees).
     folders_ = std::make_unique<HmiFolderTable>(*table_, doc_, apply_);

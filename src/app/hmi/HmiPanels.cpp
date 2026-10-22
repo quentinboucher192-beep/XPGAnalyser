@@ -260,6 +260,42 @@ bool HmiToolStrip::isEnabled(int action) const {
     return false;
 }
 
+void HmiToolStrip::bindListKeys(ui::TableView& table) {
+    const auto byGlyph = [this](HmiGlyph g) {
+        for (const auto& it : items_)
+            if (!it.separator && it.glyph == g) return it.action;
+        return 0;
+    };
+    ListKeys k;
+    k.remove = byGlyph(HmiGlyph::Delete);
+    k.duplicate = byGlyph(HmiGlyph::Duplicate);
+    k.add = byGlyph(HmiGlyph::Plus);
+    k.up = byGlyph(HmiGlyph::Up);
+    k.down = byGlyph(HmiGlyph::Down);
+    bindListKeys(table, k);
+}
+
+void HmiToolStrip::bindListKeys(ui::TableView& table, ListKeys k) {
+    auto before = table.keyHandler();
+    table.setKeyHandler([this, k, before = std::move(before)](const ui::KeyDown& e) {
+        if (before && before(e)) return true;
+        const auto fire = [this](int a) {
+            if (a <= 0 || !isEnabled(a)) return false;
+            triggered->emit(a);
+            return true;
+        };
+        const bool alt = e.mods.alt && !e.mods.ctrl && !e.mods.shift;
+        if (e.key == ui::Key::Delete && e.mods.none()) return fire(k.remove);
+        if (e.key == ui::Key::Insert && e.mods.none()) return fire(k.add);
+        if (e.key == ui::Key::D && e.mods.ctrl && !e.mods.alt)
+            return fire(e.mods.shift && k.duplicateDialog > 0 ? k.duplicateDialog : k.duplicate);
+        if (alt && e.key == ui::Key::Up) return fire(k.up);
+        if (alt && e.key == ui::Key::Down) return fire(k.down);
+        return false;
+    });
+    focusTarget_ = &table;
+}
+
 int HmiToolStrip::itemAt(gfx::Point p) const {
     for (std::size_t i = 0; i < items_.size(); ++i) {
         const auto& it = items_[i];
@@ -319,7 +355,12 @@ ui::EventResult HmiToolStrip::onEvent(const ui::InputEvent& ev) {
         invalidate();
         if (was >= 0 && itemAt(m->pos) == was) {
             const auto& it = items_[static_cast<std::size_t>(was)];
-            if (!it.enabled || it.enabled()) triggered->emit(it.action);
+            if (!it.enabled || it.enabled()) {
+                // 1.12.27 : la liste reprend la main AVANT l'action (Suppr, Ctrl+D la visent ensuite ;
+                // une fenetre que le bouton ouvre prend la sienne apres).
+                if (focusTarget_ && focusTarget_->visible()) focusTarget_->takeFocus();
+                triggered->emit(it.action);
+            }
             return ui::EventResult::Consumed;
         }
     }

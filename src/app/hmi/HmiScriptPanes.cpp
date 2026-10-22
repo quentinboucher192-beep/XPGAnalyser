@@ -422,6 +422,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
                                {"Lignes", 84.f, 40.f, true, true, true, ui::Align::End}, {"\xC3\x89tat", 120.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         scripts_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
+        tools_->bindListKeys(*scripts_, {TDelete});   // 1.12.27 : Suppr (comme le bouton)
         left->addPane(std::move(panel), general() ? 0.42f : 0.40f, 100.f);
         // Lot 21 : les scripts generaux ranges en dossiers (glisser une ou plusieurs lignes).
         if (general()) folders_ = std::make_unique<HmiFolderTable>(*scripts_, doc_, apply_);

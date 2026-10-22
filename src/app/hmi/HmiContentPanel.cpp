@@ -45,6 +45,7 @@ namespace {
 enum Act : int { AAdd = 1, ARemove, AUp, ADown, AAddColumn, ARemoveColumn, ADuplicate };
 constexpr int kMenuTool = 1000;          // 1.12.18 : + une commande de la barre (le menu de la liste)
 constexpr int kMenuCopyItem = 1101, kMenuPasteItem = 1102;
+constexpr int kMenuDuplicateNow = 1103;   // 1.12.27 : Ctrl+D
 constexpr std::string_view kItemClip = "XPG-ELEMENT";   // la premiere ligne d'un element copie
 
 class Rows final : public ui::ITableModel {
@@ -706,7 +707,8 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     table_->setExtraContextOnly(true);
     table_->setExtraContextItems([this] { return contextItems(); });
     links_ += table_->contextAction->connect([this](int a) {
-        if (a == kMenuCopyItem) (void)copyItem(selectedIndex());
+        if (a == kMenuDuplicateNow) (void)duplicateNow(selectedIndex());
+        else if (a == kMenuCopyItem) (void)copyItem(selectedIndex());
         else if (a == kMenuPasteItem) (void)pasteItem();
         else if (a > kMenuTool && a < kMenuTool + 100) tools_->triggered->emit(a - kMenuTool);
     });
@@ -721,6 +723,7 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
         if (alt && k.key == ui::Key::Up) { tools_->triggered->emit(AUp); return true; }
         if (alt && k.key == ui::Key::Down) { tools_->triggered->emit(ADown); return true; }
         if (k.key == ui::Key::D && k.mods.ctrl && k.mods.shift && !k.mods.alt) { tools_->triggered->emit(ADuplicate); return true; }
+        if (ctrl && k.key == ui::Key::D) { (void)duplicateNow(sel); return true; }   // 1.12.27 : une copie tout de suite
         if (ctrl && k.key == ui::Key::C && sel >= 0 && !duplicateFields(sel).empty()) return copyItem(sel);
         if (ctrl && k.key == ui::Key::V) return pasteItem();
         return false;
@@ -745,6 +748,7 @@ HmiContentPanel::HmiContentPanel(std::string id, hmi::DocumentPtr doc, Id view, 
 
     links_ += tools_->triggered->connect([this](int a) {
         const int sel = selectedIndex();
+        table_->takeFocus();   // 1.12.27 : apres un clic sur la barre, les touches (Suppr, Ctrl+D) visent la liste
         switch (a) {
             case AAdd:
                 // 1.12.12 (lot H) : une zone de plan se trace sur le dessin (l'editeur la passe au canevas).
@@ -1457,8 +1461,15 @@ std::vector<ui::PopupMenu::Item> HmiContentPanel::contextItems() const {
     auto add = tool(AAdd, "Ajouter " + one, "Inser", "pas ici");
     add.icon = ui::Icon::Plus;
     items.push_back(std::move(add));
-    items.push_back(tool(ADuplicate, "Dupliquer\xE2\x80\xA6", "Ctrl+Maj+D", sel < 0 ? none : std::string("pas pour cet \xC3\xA9l\xC3\xA9ment")));
-    items.back().icon = ui::Icon::Duplicate;
+    ui::PopupMenu::Item dupNow;   // 1.12.27 : Ctrl+D, une copie tout de suite
+    dupNow.label = "Dupliquer";
+    dupNow.shortcut = "Ctrl+D";
+    dupNow.icon = ui::Icon::Duplicate;
+    dupNow.id = kMenuDuplicateNow;
+    dupNow.enabled = canDuplicateNow(sel);
+    if (!dupNow.enabled) dupNow.disabledReason = sel < 0 ? none : std::string("pas pour cet \xC3\xA9l\xC3\xA9ment");
+    items.push_back(std::move(dupNow));
+    items.push_back(tool(ADuplicate, "Dupliquer\xE2\x80\xA6 (plusieurs copies)", "Ctrl+Maj+D", sel < 0 ? none : std::string("pas pour cet \xC3\xA9l\xC3\xA9ment")));
     const bool copyable = sel >= 0 && !duplicateFields(sel).empty();
     ui::PopupMenu::Item copy;
     copy.label = "Copier " + the;
@@ -1493,6 +1504,112 @@ std::vector<ui::PopupMenu::Item> HmiContentPanel::contextItems() const {
     rem.icon = ui::Icon::Delete;
     items.push_back(std::move(rem));
     return items;
+}
+
+bool HmiContentPanel::canDuplicateNow(int index) const {
+    if (index < 0 || index >= static_cast<int>(count())) return false;
+    switch (mode()) {
+        case Mode::Trend: case Mode::Table: case Mode::Choices: case Mode::States:
+            return !xyReference_ && !duplicateFields(index).empty();
+        case Mode::DynColumns: case Mode::Aspects: case Mode::AnimatedImage: case Mode::Zones:
+        case Mode::Bands: case Mode::Schedule: case Mode::NavItems:
+            return true;
+        case Mode::Points: {
+            const auto* o = current();
+            return o && o->kind != hmi::Kind::XYChart && hmi::vertices::editable(*o);
+        }
+        default: return false;   // les pages d'un onglet (leurs objets), les colonnes d'une source, les membres
+    }
+}
+
+bool HmiContentPanel::duplicateNow(int index) {
+    if (!canDuplicateNow(index)) return false;
+    // une plume, une ligne, un choix, un etat : comme Dupliquer... avec une copie (indices suivis, nom numerote)
+    if (auto fields = duplicateFields(index); !fields.empty()) {
+        const auto indices = hmi::dup::itemIndices(fields, hmi::dup::projectBounds(doc_->project));
+        const bool ok = insertCopies(index, hmi::dup::itemCopies(fields, indices, {}, 1));
+        if (ok) selectIndex(index + 1);
+        return ok;
+    }
+    const auto i = static_cast<std::size_t>(index);
+    const auto twice = [i](auto& list) {   // l'element i, une deuxieme fois juste apres lui
+        if (i >= list.size()) return false;
+        auto copy = list[i];
+        list.insert(list.begin() + static_cast<std::ptrdiff_t>(i + 1), std::move(copy));
+        return true;
+    };
+    bool ok = false;
+    switch (mode()) {
+        case Mode::DynColumns:
+            ok = change("Dupliquer la colonne", [this, &twice](hmi::Object& o) {
+                auto cols = readDynColumns(doc_->project, o);
+                if (!twice(cols)) return false;
+                writeDynColumns(o, cols);
+                return true;
+            });
+            break;
+        case Mode::Aspects:
+            ok = change("Dupliquer l'\xC3\xA9tat", [&twice](hmi::Object& o) {
+                auto list = readAspects(o);
+                if (!twice(list)) return false;
+                writeAspects(o, list);
+                return true;
+            });
+            break;
+        case Mode::AnimatedImage:
+            ok = change("Dupliquer l'\xC3\xA9tat", [&twice](hmi::Object& o) {
+                auto states = hmi::parseImageStates(o.text("states"));
+                if (!twice(states)) return false;
+                o.set("states", hmi::formatImageStates(states));
+                return true;
+            });
+            break;
+        case Mode::Zones:
+            ok = change("Dupliquer la zone", [&twice](hmi::Object& o) {
+                auto zones = hmi::parseMapZones(o.text("mapZones"));
+                if (!twice(zones)) return false;
+                o.set("mapZones", hmi::formatMapZones(zones));
+                return true;
+            });
+            break;
+        case Mode::Bands:
+            ok = change("Dupliquer la zone", [&twice](hmi::Object& o) {
+                auto bands = readBands(o);
+                if (!twice(bands)) return false;
+                writeBands(o, bands);
+                return true;
+            });
+            break;
+        case Mode::Schedule:
+            ok = change("Dupliquer la plage", [&twice](hmi::Object& o) {
+                auto slots = readSlots(o);
+                if (!twice(slots)) return false;
+                writeSlots(o, slots);
+                return true;
+            });
+            break;
+        case Mode::Points:
+            ok = changeInView("Dupliquer le sommet", [&twice](hmi::View& v, hmi::Object& o) {
+                auto pts = hmi::vertices::parse(o.text("points")).entries;
+                if (!twice(pts)) return false;
+                hmi::vertices::setVertices(o, std::move(pts));
+                hmi::edit::refreshGroupBounds(v);
+                return true;
+            });
+            break;
+        case Mode::NavItems:
+            ok = change("Dupliquer la vue de la barre", [this, i, &twice](hmi::Object& o) {
+                auto n = readNav(doc_->project, o);
+                if (!twice(n.views)) return false;
+                if (i < n.labels.size()) (void)twice(n.labels);   // un libelle vide : la vue seule
+                writeNav(o, n);
+                return true;
+            });
+            break;
+        default: break;
+    }
+    if (ok) selectIndex(index + 1);
+    return ok;
 }
 
 bool HmiContentPanel::openDuplicate() {

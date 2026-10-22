@@ -704,6 +704,8 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
             if (passes(v, static_cast<int>(col))) emit(cellOf(v, col));
     });
     table_ = &static_cast<ui::TableView&>(split->addPane(std::move(table), 0.76f, 400.f));
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*table_, {VDelete, VDuplicate, VAdd});
     auto grid = std::make_unique<ui::PropertyGrid>(base + ".props");
     grid->setShowDescriptionPane(true);
     grid->setNameColumnRatio(0.44f);
@@ -3328,6 +3330,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                            {"Utilis\xC3\xA9 par", 170.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         types_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
+        tools_->bindListKeys(*types_, {TDelete, TDuplicate, TAdd});   // 1.12.27 : Suppr, Ctrl+D, Inser
         split->addPane(std::move(panel), 0.30f, 220.f);
         // Lot 21 : les types ranges en dossiers ; le nom d'un type se change dans sa case.
         folders_ = std::make_unique<HmiFolderTable>(*types_, doc_, apply_);

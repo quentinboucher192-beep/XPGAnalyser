@@ -84,6 +84,8 @@ HmiLanguagesPane::HmiLanguagesPane(std::string id, hmi::DocumentPtr doc, Apply a
                        {"D\xC3\xA9marrage", 104.f, 60.f, true, false, true, ui::Align::Center}});
     langs->setSelectionMode(ui::SelectionMode::Single);
     langs_ = &static_cast<ui::TableView&>(addChild(std::move(langs)));
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*langs_, {TRemove, 0, TAdd});
     auto texts = std::make_unique<ui::TableView>(base + ".texts");
     texts->setSelectionMode(ui::SelectionMode::Single);
     texts_ = &static_cast<ui::TableView&>(addChild(std::move(texts)));
@@ -637,6 +639,8 @@ HmiUnitsPane::HmiUnitsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                        {"Seuil haut", 80.f}, {"Alarme basse", 90.f}, {"Alarme haute", 90.f}, {"Exemple", 150.f}, {"Montr\xC3\xA9" "e par", 380.f}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*table_, {URemove, 0, UAdd});
     grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::make_unique<ui::PropertyGrid>(base + ".grid")));
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
     links_ += tools_->triggered->connect([this](int a) {

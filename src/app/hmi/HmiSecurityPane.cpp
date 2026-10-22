@@ -200,6 +200,7 @@ HmiUsersPane::HmiUsersPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                        {"Protection", 130.f}, {"\xC3\x89tat", 170.f}, {"Permissions", 320.f}});
         t->setSelectionMode(ui::SelectionMode::Single);
         users_ = t.get();
+        tools_->bindListKeys(*users_, {UDelete});   // 1.12.27 : Suppr (comme le bouton)
         tabs->addTab(ui::TabControl::Tab{"Utilisateurs", ui::Icon::User, false, false}, std::move(t));
     }
     {
@@ -208,6 +209,7 @@ HmiUsersPane::HmiUsersPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                        {"Utilisateurs", 90.f, 40.f, true, true, true, ui::Align::End}, {"Description", 260.f}});
         t->setSelectionMode(ui::SelectionMode::Single);
         groups_ = t.get();
+        tools_->bindListKeys(*groups_, {UDelete});
         tabs->addTab(ui::TabControl::Tab{"Groupes", ui::Icon::Folder, false, false}, std::move(t));
     }
     {
@@ -215,6 +217,7 @@ HmiUsersPane::HmiUsersPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         t->setColumns({{"R\xC3\xB4le", 140.f}, {"Permissions", 300.f}, {"Groupes", 220.f}, {"Description", 260.f}});
         t->setSelectionMode(ui::SelectionMode::Single);
         roles_ = t.get();
+        tools_->bindListKeys(*roles_, {UDelete});
         tabs->addTab(ui::TabControl::Tab{"R\xC3\xB4les et permissions", ui::Icon::Lock, false, false}, std::move(t));
     }
     tabs->setCurrentIndex(0);

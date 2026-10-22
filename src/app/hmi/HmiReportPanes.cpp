@@ -87,6 +87,8 @@ HmiReportsPane::HmiReportsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     auto files = std::make_unique<ui::TableView>(base + ".files");
     files->setColumns({{"Fichier", 380.f}, {"\xC3\x89" "crit le", 160.f}, {"Taille", 90.f}});
     table_ = static_cast<ui::TableView*>(table.get());
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*table_, {CRemove, 0, CAdd});
     files_ = static_cast<ui::TableView*>(files.get());
     tabs->addTab({"Rapports", ui::Icon::Document}, std::move(table));
     tabs->addTab({"\xC3\x89" "crits", ui::Icon::Document}, std::move(files));

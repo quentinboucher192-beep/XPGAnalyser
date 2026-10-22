@@ -276,6 +276,7 @@ HmiOperatorsPane::HmiOperatorsPane(std::string id, hmi::DocumentPtr doc, Apply a
                            {"Fonction", 110.f}, {"Description", 220.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         table_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
+        tools_->bindListKeys(*table_);   // 1.12.27 : Suppr, Ctrl+D, Inser (comme les boutons)
         listPanel_ = panel.get();
         left->addPane(std::move(panel), 0.55f, 100.f);
     }

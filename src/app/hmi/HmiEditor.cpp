@@ -574,6 +574,14 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
             case ui::Key::V: if (k.mods.ctrl) run(ActPaste); break;
             // 1.12.3 : Ctrl+A choisit tous les objets de la vue (l'inspecteur montre leurs proprietes communes).
             case ui::Key::A: if (k.mods.ctrl) canvas_->selectAll(); break;
+            // 1.12.27 : Ctrl+D duplique tout de suite, Ctrl+Maj+D ouvre « Dupliquer... » - comme sur la vue
+            // (la touche se perdait ici).
+            case ui::Key::D:
+                if (k.mods.ctrl && !k.mods.alt && !canvas_->selection().empty()) {
+                    if (k.mods.shift) run(ActDuplicate);
+                    else canvas_->duplicateSelection();
+                }
+                break;
             default: break;
         }
     });

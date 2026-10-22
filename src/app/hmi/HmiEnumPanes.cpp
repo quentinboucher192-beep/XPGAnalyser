@@ -544,6 +544,7 @@ HmiEnumValuesPane::HmiEnumValuesPane(std::string id, hmi::DocumentPtr doc, Apply
     grid->setSelectionMode(ui::SelectionMode::Single);
     grid->setPasteHandler([this](const ui::TableView::PasteRequest& rq) { (void)openPaste(rq.text); });
     grid_ = &static_cast<ui::TableView&>(addChild(std::move(grid)));
+    tools_->bindListKeys(*grid_, {0, EDuplicate, EAdd});   // 1.12.27 : Ctrl+D, Inser (Suppr : onEvent)
     links_ += grid_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
         if (syncing_ || rows.empty()) return;
         const auto r = static_cast<std::size_t>(rows.front());

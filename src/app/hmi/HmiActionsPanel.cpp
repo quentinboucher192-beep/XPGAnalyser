@@ -40,6 +40,7 @@ namespace {
 enum Act : int { AAdd = 1, ADuplicate, ARemove, AUp, ADown };
 constexpr int kMenuTool = 1000;          // 1.12.18 : + une commande de la barre (le menu de la liste)
 constexpr int kMenuCopyAction = 1101, kMenuPasteAction = 1102;
+constexpr int kMenuDuplicateNow = 1103;   // 1.12.27 : Ctrl+D
 // 1.12.18 : l'action copiee (Copier l'action), et le texte mis au presse-papiers avec elle : si le
 // presse-papiers a change depuis (un texte copie ailleurs), il n'y a plus d'action a coller.
 struct ActionClip { std::optional<hmi::Action> action; std::string text; };
@@ -196,7 +197,8 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
     table_->setExtraContextOnly(true);
     table_->setExtraContextItems([this] { return contextItems(); });
     links_ += table_->contextAction->connect([this](int a) {
-        if (a == kMenuCopyAction) (void)copyAction(selectedIndex());
+        if (a == kMenuDuplicateNow) (void)duplicateNow(selectedIndex());
+        else if (a == kMenuCopyAction) (void)copyAction(selectedIndex());
         else if (a == kMenuPasteAction) (void)pasteAction();
         else if (a > kMenuTool && a < kMenuTool + 100) tools_->triggered->emit(a - kMenuTool);
     });
@@ -210,6 +212,7 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
         if (alt && k.key == ui::Key::Up) { tools_->triggered->emit(AUp); return true; }
         if (alt && k.key == ui::Key::Down) { tools_->triggered->emit(ADown); return true; }
         if (k.key == ui::Key::D && k.mods.ctrl && k.mods.shift && !k.mods.alt) { tools_->triggered->emit(ADuplicate); return true; }
+        if (ctrl && k.key == ui::Key::D) { (void)duplicateNow(sel); return true; }   // 1.12.27 : une copie tout de suite
         if (ctrl && k.key == ui::Key::C && sel >= 0) return copyAction(sel);
         if (ctrl && k.key == ui::Key::V) return pasteAction();
         return false;
@@ -217,6 +220,7 @@ HmiActionsPanel::HmiActionsPanel(std::string id, hmi::DocumentPtr doc, Id view, 
 
     links_ += tools_->triggered->connect([this](int a) {
         const int sel = selectedIndex();
+        table_->takeFocus();   // 1.12.27 : apres un clic sur la barre, les touches (Suppr, Ctrl+D) visent la liste
         switch (a) {
             case AAdd: {
                 Action fresh;
@@ -509,9 +513,15 @@ std::vector<ui::PopupMenu::Item> HmiActionsPanel::contextItems() const {
     auto add = tool(AAdd, keys ? "Ajouter un raccourci" : "Ajouter une action", "Inser", "une action est \xC3\xA0 un objet");
     add.icon = ui::Icon::Plus;
     items.push_back(std::move(add));
-    auto dup = tool(ADuplicate, "Dupliquer\xE2\x80\xA6", "Ctrl+Maj+D", none);
-    dup.icon = ui::Icon::Duplicate;
-    items.push_back(std::move(dup));
+    ui::PopupMenu::Item now;   // 1.12.27 : Ctrl+D, une copie tout de suite
+    now.label = "Dupliquer";
+    now.shortcut = "Ctrl+D";
+    now.icon = ui::Icon::Duplicate;
+    now.id = kMenuDuplicateNow;
+    now.enabled = sel >= 0 && several_.empty();
+    if (!now.enabled) now.disabledReason = none;
+    items.push_back(std::move(now));
+    items.push_back(tool(ADuplicate, "Dupliquer\xE2\x80\xA6 (plusieurs copies)", "Ctrl+Maj+D", none));
     ui::PopupMenu::Item copy;
     copy.label = keys ? "Copier le raccourci" : "Copier l'action";
     copy.shortcut = "Ctrl+C";
@@ -540,16 +550,23 @@ std::vector<ui::PopupMenu::Item> HmiActionsPanel::contextItems() const {
     return items;
 }
 
+bool HmiActionsPanel::duplicateNow(int index) {
+    const auto* list = actions();
+    if (!several_.empty() || !list || index < 0 || index >= static_cast<int>(list->size())) return false;
+    const auto fields = duplicateFields(index);
+    std::vector<std::vector<std::string>> rows{{}};   // rien a suivre : la meme action
+    if (!fields.empty()) rows = hmi::dup::itemCopies(fields, hmi::dup::itemIndices(fields, hmi::dup::projectBounds(doc_->project)), {}, 1);
+    if (!insertCopies(index, rows)) return false;
+    selectIndex(index + 1);
+    return true;
+}
+
 bool HmiActionsPanel::openDuplicate() {
     const auto* list = actions();
     const int index = selectedIndex();
     if (!list || index < 0 || index >= static_cast<int>(list->size())) return false;
     const Action original = (*list)[static_cast<std::size_t>(index)];
-    if (!host_) {   // sans hote : une copie, comme avant
-        const int made = add(original);
-        if (made >= 0) selectIndex(made);
-        return made >= 0;
-    }
+    if (!host_) return duplicateNow(index);   // sans hote : une copie, juste apres (1.12.27 ; avant : a la fin)
     HmiItemDuplicateDialog::Spec spec;
     spec.title = scope_ == Scope::Shortcuts ? "Dupliquer le raccourci" : "Dupliquer l'action";
     spec.what = ownerName() + " \xC2\xB7 n\xC2\xB0 " + std::to_string(index + 1) + " : " + hmi::describeAction(original);

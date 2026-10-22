@@ -49,6 +49,7 @@ HmiSymbolPopupsPane::HmiSymbolPopupsPane(std::string id, hmi::DocumentPtr doc, I
         table->setColumns({{"Nom", 190.f}, {"Taille", 100.f}, {"Param\xC3\xA8tres propres", 170.f}, {"Ouverte par", 150.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         table_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
+        tools_->bindListKeys(*table_);   // 1.12.27 : Suppr, Inser (comme les boutons)
         split->addPane(std::move(panel), 0.55f, 260.f);
     }
     {

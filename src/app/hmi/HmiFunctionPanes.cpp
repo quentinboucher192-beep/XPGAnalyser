@@ -250,6 +250,7 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
                            {"Description", 260.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         functions_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
+        tools_->bindListKeys(*functions_, {TDelete, 0, TNew});   // 1.12.27 : Suppr, Inser (comme les boutons)
         left->addPane(std::move(panel), 0.52f, 100.f);
     }
     {

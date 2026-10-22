@@ -11725,8 +11725,14 @@ void posteLot14() {
               && screenFitFrom(screenFitLabel(ScreenFit::Actual)) == ScreenFit::Actual && screenFitFrom("Remplir l'\xC3\xA9" "cran") == ScreenFit::Fill
               && !screenFitFrom("plein"),
           "la mise \xC3\xA0 l'\xC3\xA9" "chelle se lit par sa cl\xC3\xA9 ou son libell\xC3\xA9");
-    check(index.find("1234") == std::string::npos && index.find(p.station.exitHash) != std::string::npos,
-          "le mot de passe de sortie : son empreinte seule");
+    {
+        // Le sel et l'empreinte sont tires au hasard : ils peuvent contenir "1234" (le test echouait une fois sur quelques-unes).
+        std::string scrub = index;
+        for (const std::string& s : {p.station.exitHash, p.station.exitSalt})
+            for (auto at = s.empty() ? std::string::npos : scrub.find(s); at != std::string::npos; at = scrub.find(s)) scrub.erase(at, s.size());
+        check(scrub.find("1234") == std::string::npos && index.find(p.station.exitHash) != std::string::npos,
+              "le mot de passe de sortie : son empreinte seule");
+    }
     auto again = parseProject([&](const std::string& rel, std::string& out) {
         for (const auto& f : files)
             if (f.path == rel) {

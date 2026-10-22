@@ -33743,8 +33743,8 @@ void dupliquerElements11216() {
         a.target = "V[0].CMD";
         a.value = "1";
         acts.selectIndex(acts.add(a));
-        check(acts.openDuplicate() && b.v().object(btn)->actions.size() == 2 && b.v().object(btn)->actions[1].target == "V[0].CMD",
-              "sans h\xC3\xB4te : une copie, comme avant");
+        check(acts.openDuplicate() && b.v().object(btn)->actions.size() == 2 && b.v().object(btn)->actions[1].target == "V[1].CMD",
+              "sans h\xC3\xB4te : une copie juste apr\xC3\xA8s, indices suivis (comme Ctrl+D, 1.12.27)");
         (void)b.stack.undo();
         menu::MenuManager mm{menu::MenuFactory{}};
         acts.setDialogHost([&](menu::MenuPtr d, std::function<void(const menu::DialogResult&)> done) { mm.ShowDialog(std::move(d), std::move(done)); }, {});
@@ -34803,7 +34803,121 @@ void historique11226() {
     fs::remove_all(root, ec);
 }
 
+// 1.12.27 : SUPPR ET CTRL+D DANS LES LISTES - la touche fait ce que fait le bouton de la barre.
+void touchesListes11227() {
+    std::printf("== 1.12.27 : Suppr et Ctrl+D dans les listes (Contenu, Actions, volets a barre) ==\n");
+    using Mode = app::HmiContentPanel::Mode;
+    const ui::KeyMods ctrl{true, false, false, false};
+    // ---- Contenu : une plume - Ctrl+D tout de suite (l'indice suivi), Suppr la retire, Ctrl+Z la rend
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        Variable cuves;
+        cuves.id = b.doc->project.allocate();
+        cuves.name = "Cuves";
+        cuves.type = "ARRAY[0..7] OF REAL";
+        b.doc->project.programs.variables.push_back(cuves);
+        const Id trend = b.place(Kind::Trend, 100, 100);
+        b.editor->layout();
+        b.v().object(trend)->set("variables", "Cuves[0];Debit");
+        b.v().object(trend)->set("names", "Cuve 1;D\xC3\xA9" "bit");
+        b.editor->layout();
+        check(content.mode() == Mode::Trend && content.count() == 2, "1.12.27 : une courbe a deux plumes");
+        content.selectIndex(0);
+        content.table().takeFocus();
+        (void)content.table().dispatch(ui::KeyDown{ui::Key::D, ctrl, false});
+        same_text(b.v().object(trend)->text("variables"), "Cuves[0];Cuves[1];Debit", "1.12.27 : Ctrl+D - la copie juste apres, l'indice suivi");
+        same_text(b.v().object(trend)->text("names"), "Cuve 1;Cuve 2;D\xC3\xA9" "bit", "... son nom numerote");
+        check(content.selectedIndex() == 1, "1.12.27 : la copie est choisie");
+        (void)content.table().dispatch(ui::KeyDown{ui::Key::Delete, {}, false});
+        same_text(b.v().object(trend)->text("variables"), "Cuves[0];Debit", "1.12.27 : Suppr retire l'element choisi (sans la poubelle)");
+        (void)b.stack.undo();
+        same_text(b.v().object(trend)->text("variables"), "Cuves[0];Cuves[1];Debit", "1.12.27 : Ctrl+Z rend l'element retire");
+        // le menu de la liste dit les deux : Dupliquer (Ctrl+D), Dupliquer... (Ctrl+Maj+D)
+        bool now = false, dialog = false;
+        content.selectIndex(0);
+        for (const auto& it : content.contextItems()) {
+            if (it.label == "Dupliquer" && it.shortcut == "Ctrl+D" && it.enabled) now = true;
+            if (it.shortcut == "Ctrl+Maj+D") dialog = true;
+        }
+        check(now && dialog, "1.12.27 : le menu de la liste - Dupliquer (Ctrl+D) et Dupliquer... (Ctrl+Maj+D)");
+        // un clic sur la barre rend la main a la liste : Suppr la vise, pas le dessin
+        b.editor->canvas().takeFocus();
+        content.tools().triggered->emit(3);   // Monter, ici sans effet : seulement la main a la liste
+        check(content.table().focused(), "1.12.27 : apres un clic sur la barre, la liste a la main");
+    }
+    // ---- Contenu : les zones d'un bargraphe (rien a suivre) - la meme zone, une deuxieme fois
+    {
+        Bench b;
+        auto& content = b.editor->content();
+        const Id bar = b.place(Kind::Bargraph, 100, 100);
+        b.editor->layout();
+        b.v().object(bar)->set("zones", "0..60=#2ECC71;60..80=#F2C94C");
+        b.editor->layout();
+        check(content.mode() == Mode::Bands && content.count() == 2, "1.12.27 : un bargraphe a deux zones");
+        check(content.duplicateNow(1), "1.12.27 : Ctrl+D sur la 2e zone");
+        same_text(b.v().object(bar)->text("zones"), "0..60 = #2ECC71;60..80 = #F2C94C;60..80 = #F2C94C", "... la meme zone juste apres");
+        check(content.selectedIndex() == 2, "... et choisie");
+    }
+    // ---- Actions : la copie juste apres l'original (avant : a la fin)
+    {
+        Bench b;
+        auto& actions = b.editor->actions();
+        Action first, second;
+        first.trigger = Trigger::ViewOpen;
+        first.operation = Operation::Log;
+        first.value = "premiere";
+        second = first;
+        second.value = "seconde";
+        check(actions.add(first) == 0 && actions.add(second) == 1, "1.12.27 : deux actions de la vue");
+        actions.selectIndex(0);
+        actions.table().takeFocus();
+        (void)actions.table().dispatch(ui::KeyDown{ui::Key::D, ctrl, false});
+        check(b.v().actions.size() == 3 && b.v().actions[1].value == "premiere" && b.v().actions[2].value == "seconde",
+              "1.12.27 : Ctrl+D - la copie de la 1re action juste apres elle");
+        check(actions.selectedIndex() == 1, "... et choisie");
+        (void)actions.table().dispatch(ui::KeyDown{ui::Key::Delete, {}, false});
+        check(b.v().actions.size() == 2 && b.v().actions[1].value == "seconde", "1.12.27 : Suppr la retire");
+    }
+    // ---- l'aide commune des volets a barre : la touche fait le clic du bouton, s'il est actif
+    {
+        app::HmiToolStrip strip("essai.tools");
+        strip.add(1, app::HmiGlyph::Plus, "Ajouter");
+        strip.add(2, app::HmiGlyph::Duplicate, "Dupliquer");
+        strip.add(3, app::HmiGlyph::Delete, "Supprimer");
+        bool canDelete = true;
+        strip.setEnabledWhen(3, [&canDelete] { return canDelete; });
+        ui::TableView table("essai.table");
+        struct Lignes final : ui::ITableModel {   // une table a un modele (sans lui, elle ignore les touches)
+            std::size_t rowCount() const override { return 2; }
+            std::size_t columnCount() const override { return 1; }
+            std::string headerText(std::size_t) const override { return "Nom"; }
+            std::string cellText(ui::RowIndex r, std::size_t) const override { return r == 0 ? "A" : "B"; }
+            bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
+        };
+        table.setModel(std::make_shared<Lignes>());
+        strip.bindListKeys(table);
+        std::vector<int> got;
+        auto link = strip.triggered->connect([&got](int a) { got.push_back(a); });
+        table.takeFocus();
+        (void)table.dispatch(ui::KeyDown{ui::Key::Delete, {}, false});
+        (void)table.dispatch(ui::KeyDown{ui::Key::D, ctrl, false});
+        (void)table.dispatch(ui::KeyDown{ui::Key::Insert, {}, false});
+        check(got == std::vector<int>{3, 2, 1}, "1.12.27 : Suppr, Ctrl+D, Inser - les boutons corbeille, double page, plus");
+        canDelete = false;
+        got.clear();
+        (void)table.dispatch(ui::KeyDown{ui::Key::Delete, {}, false});
+        check(got.empty(), "1.12.27 : un bouton grise - la touche ne fait rien");
+    }
+}
+
 int main(int argc, char** argv) {
+    // 1.12.27 : HMI_TEST_11227=1 - Suppr et Ctrl+D dans les listes, seuls.
+    if (const char* only = std::getenv("HMI_TEST_11227"); only && *only == '1') {
+        touchesListes11227();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.17 : HMI_TEST_1217=1 - les natives rangees, Choisir une fonction... (Mes fonctions, Rend), seuls.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
         natives1217();
@@ -35158,6 +35272,7 @@ int main(int argc, char** argv) {
     v110_champs_expressions();              // 1.10 (chantier K) : les champs a expression, partout pareils
     v1219_refus_sous_la_case();             // 1.12.19 : un refus se dit sous la case
     v1219_inspecteur();                     // 1.12.19 : nombres, durees, formules de l'inspecteur
+    touchesListes11227();                   // 1.12.27 : Suppr et Ctrl+D dans les listes
     v1219_cellules();                       // 1.12.19 (U3) : les cellules de tableau sous la meme regle
     v1219_modales();                        // 1.12.19 (U4) : les fenetres sous la meme regle
     v110_aide_saisie();                     // 1.10 (chantier K2) : l'aide a la saisie des scripts (S1, S2, enumerations)

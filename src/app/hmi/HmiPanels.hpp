@@ -87,6 +87,16 @@ public:
     // 1.11.17 : pour les essais et les scripts - le bouton est-il actif (setEnabledWhen) ?
     // Faux : grise, ou pas de bouton `action`.
     [[nodiscard]] bool isEnabled(int action) const;
+    // 1.12.27 : LES TOUCHES D'UNE LISTE A BARRE. Quand `table` a la main (hors edition d'une case) :
+    // Suppr retire, Ctrl+D duplique, Ctrl+Maj+D le bouton « Dupliquer... » s'il y en a un a part, Inser
+    // ajoute, Alt+Haut / Alt+Bas montent et descendent - exactement comme le clic sur le bouton de la
+    // barre, et seulement s'il est actif. Les touches que la liste prenait deja passent d'abord. Un clic
+    // sur la barre rend aussi la main a la liste (avant l'action : une fenetre ouverte par le bouton
+    // garde la sienne). Sans `keys`, les boutons se reconnaissent a leur dessin (corbeille, double page,
+    // plus, fleches) ; avec, 0 : pas de touche.
+    struct ListKeys { int remove{0}, duplicate{0}, add{0}, up{0}, down{0}, duplicateDialog{0}; };
+    void bindListKeys(ui::TableView& table);
+    void bindListKeys(ui::TableView& table, ListKeys keys);
 protected:
     void            onPaint(const ui::PaintContext&) override;
     ui::EventResult onEvent(const ui::InputEvent&) override;
@@ -104,6 +114,7 @@ private:
     [[nodiscard]] int itemAt(gfx::Point) const;
     std::vector<Item> items_;
     int hover_{-1}, pressed_{-1};
+    ui::TableView* focusTarget_{nullptr};   // 1.12.27 : la liste qui reprend la main a chaque clic
 };
 
 // ------------------------------------------------------------ explorateur ---

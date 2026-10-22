@@ -1004,6 +1004,8 @@ HmiSymbolAlarmsPane::HmiSymbolAlarmsPane(std::string id, hmi::DocumentPtr doc, h
                        {"D\xC3\xA9lai (ms)", 90.f, 50.f, true, true, true, ui::Align::End}});
     table->setIconPainter(&objalarms::paintFx);   // decision 7 : la pastille fx des conditions
     table_ = &static_cast<ui::TableView&>(split->addPane(std::move(table), 0.66f, 320.f));
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*table_);
     auto grid = std::make_unique<ui::PropertyGrid>(base + ".grid");
     // 1.10.2 (chantier A) : la condition d'une alarme du symbole a l'aide a la saisie
     // (variables, Vue.Objet.Propriete, parametres des instances), comme l'inspecteur.

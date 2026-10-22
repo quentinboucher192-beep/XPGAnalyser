@@ -106,6 +106,8 @@ HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                        {"Description", 300.f}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*table_);
     grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::make_unique<ui::PropertyGrid>(base + ".grid")));
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
     // Lot 21 : les styles ranges en dossiers ; glisser une ou plusieurs lignes.

@@ -90,6 +90,9 @@ HmiScenariosPane::HmiScenariosPane(std::string id, hmi::DocumentPtr doc, Apply a
     steps->setColumns({{"N\xC2\xB0", 44.f, 36.f, true, false, true, ui::Align::End}, {"Pas", 330.f}, {"Verdict", 96.f}, {"D\xC3\xA9tail", 330.f}});
     steps->setSelectionMode(ui::SelectionMode::Single);
     steps_ = &static_cast<ui::TableView&>(addChild(std::move(steps)));
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*list_, {TDel, TDup, TNew});
+    tools_->bindListKeys(*steps_, {TStepDel, 0, TStepAdd});
     auto grid = std::make_unique<ui::PropertyGrid>(base + ".grid");
     grid->setFieldAssist(assist::gridAssist(assist::sourcesFor(doc_)));
     grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::move(grid)));

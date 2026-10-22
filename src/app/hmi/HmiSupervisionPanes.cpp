@@ -89,6 +89,7 @@ HmiAlarmsPane::HmiAlarmsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         // puis Objets du synoptique) - HmiObjectAlarmPanes.hpp.
         auto left = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".left");
         table_ = &static_cast<ui::TableView&>(left->addPane(std::move(table), 0.55f, 120.f));
+        tools_->bindListKeys(*table_);   // 1.12.27 : Suppr, Ctrl+D, Inser (comme les boutons)
         generated_ = &static_cast<HmiGeneratedAlarmsTable&>(
             left->addPane(std::make_unique<HmiGeneratedAlarmsTable>(base + ".generated", doc_, apply_), 0.45f, 120.f));
         split->addPane(std::move(left), 0.64f, 320.f);
@@ -842,6 +843,7 @@ HmiRecipesPane::HmiRecipesPane(std::string id, hmi::DocumentPtr doc, Apply apply
                            {"Jeux", 56.f, 40.f, true, true, true, ui::Align::End}, {"Description", 200.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         recipes_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
+        tools_->bindListKeys(*recipes_, {RDel, RDup, RNew});   // 1.12.27 : les recettes
         split->addPane(std::move(panel), 0.24f, 200.f);
     }
     {
@@ -852,12 +854,14 @@ HmiRecipesPane::HmiRecipesPane(std::string id, hmi::DocumentPtr doc, Apply apply
                            {"Max", 70.f, 40.f, true, true, true, ui::Align::End}});
         table->setSelectionMode(ui::SelectionMode::Single);
         fields_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
+        tools_->bindListKeys(*fields_, {FDel, 0, FNew});   // 1.12.27 : les elements
         centre->addPane(std::move(panel), 0.38f, 120.f);
         auto tabs = std::make_unique<ui::TabControl>(base + ".tabs");
         {
             auto table2 = std::make_unique<ui::TableView>(base + ".records");
             table2->setSelectionMode(ui::SelectionMode::Single);
             records_ = table2.get();
+        tools_->bindListKeys(*records_, {SDel, SDup, SNew});   // 1.12.27 : les jeux
             tabs->addTab(ui::TabControl::Tab{"Jeux de valeurs", ui::Icon::AnimationTable, false, false}, std::move(table2));
         }
         {

@@ -711,6 +711,8 @@ public:
     // 1.12.18 : les touches du proprietaire d'abord (Inser, Suppr, Alt+Haut, Ctrl+C d'une plume...) ;
     // vrai : la touche est prise. Pas pendant l'edition d'une case.
     void setKeyHandler(std::function<bool(const KeyDown&)> handler) { keyHandler_ = std::move(handler); }
+    // 1.12.27 : celui qui est en place (pour en ajouter un sans perdre le premier).
+    [[nodiscard]] const std::function<bool(const KeyDown&)>& keyHandler() const noexcept { return keyHandler_; }
     const core::SignalPtr<int> contextAction = core::Signal<int>::create();
     // ---- 1.12.18 (planche 20) : LE MENU D'UN TITRE DE COLONNE - Trier de A a Z, de Z a A,
     //  Ajuster la largeur, Masquer la colonne, Colonnes > (les cocher), Filtrer la colonne...,

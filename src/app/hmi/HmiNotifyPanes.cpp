@@ -153,6 +153,8 @@ HmiNotifyPane::HmiNotifyPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     auto box = std::make_unique<ui::TableView>(base + ".box");
     box->setColumns({{"Heure", 80.f}, {"Canal", 80.f}, {"De", 195.f}, {"\xC3\x80", 190.f}, {"Sujet", 285.f}, {"Texte", 420.f}, {"Pi\xC3\xA8" "ce jointe", 240.f}});
     table_ = static_cast<ui::TableView*>(table.get());
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    tools_->bindListKeys(*table_, {CRemove, 0, CAdd});
     sent_ = static_cast<ui::TableView*>(sent.get());
     box_ = static_cast<ui::TableView*>(box.get());
     tabs->addTab({"Destinataires", ui::Icon::User}, std::move(table));

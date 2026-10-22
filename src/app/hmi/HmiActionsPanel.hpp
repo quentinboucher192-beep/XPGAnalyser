@@ -85,6 +85,9 @@ public:
     // (HmiItemDuplicateDialog). Sans hote : une copie, comme avant. Les champs que la fenetre montre (et dans cet
     // ordre, les cases d'une copie), et les copies inserees apres l'action en UNE commande.
     bool openDuplicate();
+    // 1.12.27 : CTRL+D - une copie tout de suite, juste apres l'action (ses indices suivis, la touche qui
+    // suit son numero, comme Dupliquer... avec une copie). Faux : rien.
+    bool duplicateNow(int index);
     [[nodiscard]] std::vector<hmi::dup::ItemField> duplicateFields(int index) const;
     bool insertCopies(int index, const std::vector<std::vector<std::string>>& rows);
 
