@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.26", "22/10/2026", "livr\xC3\xA9" "e le 22/10 au soir"},
     {"1.12.25", "22/10/2026", "livr\xC3\xA9" "e le 22/10 en fin d'apr\xC3\xA8s-midi"},
     {"1.12.24", "22/10/2026", "livr\xC3\xA9" "e le 22/10 dans l'apr\xC3\xA8s-midi"},
     {"1.12.23", "21/10/2026", "livr\xC3\xA9" "e le 21/10 tard le soir"},
@@ -131,6 +132,26 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.26 (22/10/2026) : la fenetre Historique et le suivi des objets, WAIT et les scripts detaches, les
+        // fichiers dans les scripts, moins de trames Modbus, la pastille IHM.
+        note("1.12.26", "Vues", Kind::New,
+         "LA FEN\xC3\x8ATRE HISTORIQUE DES OBJETS : clic droit sur un objet (ou sur un groupe, ou sur le fond de la vue) \xE2\x80\xBA Historique des modifications\xE2\x80\xA6 La liste des enregistrements qui l'ont touch\xC3\xA9 (la date, le PC, le compte Windows, la version) ; \xC3\xA0 droite, propri\xC3\xA9t\xC3\xA9 par propri\xC3\xA9t\xC3\xA9, Avant et Apr\xC3\xA8s. Rechercher (une propri\xC3\xA9t\xC3\xA9, une valeur, un PC), filtrer par PC ; Revenir \xC3\xA0 Avant, Revenir \xC3\xA0 cette version (avec confirmation, et un seul Ctrl+Z pour annuler) ; un objet supprim\xC3\xA9 se restaure ; Copier, Exporter en CSV. Ce qui n'est pas encore enregistr\xC3\xA9 est en t\xC3\xAAte, \xC2\xAB Non enregistr\xC3\xA9 \xC2\xBB.",
+         "editeur", ""),
+        note("1.12.26", "Vues", Kind::New,
+         "LE SUIVI DES OBJETS : la section Suivi de Propri\xC3\xA9t\xC3\xA9s dit quand l'objet a \xC3\xA9t\xC3\xA9 cr\xC3\xA9\xC3\xA9 et modifi\xC3\xA9, sur quel PC, ce qui n'est pas encore enregistr\xC3\xA9 et combien d'enregistrements l'ont touch\xC3\xA9 (\xE2\x80\xA6 ouvre l'Historique) ; l'Explorateur d'objets montre la date de la derni\xC3\xA8re modification (\xC2\xAB il y a 5 min \xC2\xBB, \xC2\xAB hier 14:05 \xC2\xBB) et un point orange sur un objet modifi\xC3\xA9 non enregistr\xC3\xA9, comme la vue ; le survol d'un objet le r\xC3\xA9sume dans une infobulle. Le clic droit sur le fond de la vue coupe l'infobulle ou le point.",
+         "editeur", ""),
+        note("1.12.26", "Scripts", Kind::New,
+         "WAIT ET LES SCRIPTS D\xC3\x89TACH\xC3\x89S : WAIT(T#2s) attend dans un script (ST ; WAIT(2000) en C, WAIT(2s) en C++). Un script g\xC3\xA9n\xC3\xA9ral a une nouvelle propri\xC3\xA9t\xC3\xA9, D\xC3\xA9tach\xC3\xA9 : coch\xC3\xA9" "e, il tourne en arri\xC3\xA8re-plan - WAIT n'attend que lui, l'IHM continue, une boucle sans fin (WHILE TRUE DO \xE2\x80\xA6 WAIT(T#1s); END_WHILE) se laisse \xC3\xA9" "crire et un long calcul rend la main toutes les 8 ms ; une instance \xC3\xA0 la fois. D\xC3\xA9" "coch\xC3\xA9" "e, le script tourne d'un trait et WAIT bloque l'IHM pendant l'attente (10 s au plus). IHM_SCRIPT_ACTIF('Nom') dit s'il tourne, IHM_SCRIPT_ARRETER('Nom') l'arr\xC3\xAAte ; la Console dit son d\xC3\xA9part et sa fin.",
+         "scripts", ""),
+        note("1.12.26", "Scripts", Kind::New,
+         "LES FICHIERS ET LES RESSOURCES DANS LES SCRIPTS (29 natives, dossier Fichiers) : lire un fichier (FILE_READ, FILE_READ_LINES), l'\xC3\xA9" "crire d'un bloc (FILE_WRITE, FILE_WRITE_LINES), ajouter \xC3\xA0 la fin (FILE_APPEND, FILE_APPEND_LINE : un journal, un CSV), copier, d\xC3\xA9placer, supprimer ; les dossiers (DIR_CREATE, DIR_LIST avec un filtre '*.csv', DIR_DELETE) ; les chemins (PATH_JOIN, PATH_NAME, PATH_EXTENSION, PATH_PARENT) ; les ressources du projet (RESOURCE_READ, RESOURCE_LINES, RESOURCE_LIST, RESOURCE_EXTRACT). Un chemin relatif part du dossier donnees/ du projet ; les fichiers du projet ne s'\xC3\xA9" "crivent pas par un script ; un \xC3\xA9" "chec ne coupe pas le script et FILE_ERROR() dit pourquoi. Dans une expression (fx), elles lisent : {RESOURCE_READ('consignes.txt')}.",
+         "scripts", ""),
+        note("1.12.26", "Communication", Kind::Changed,
+         "MOINS DE TRAMES VERS LES \xC3\x89QUIPEMENTS : deux variables s\xC3\xA9par\xC3\xA9" "es de moins de 100 mots se lisent d'une seule requ\xC3\xAAte (8 avant ; un nouvel \xC3\xA9quipement part \xC3\xA0 100, un projet existant garde son r\xC3\xA9glage : mets 100 dans Regrouper \xC3\xA0 moins de) ; un \xC3\xA9quipement qui refuse une lecture group\xC3\xA9" "e (un trou qu'il n'a pas, trop de mots d'un coup) : l'IHM lit chaque variable, apprend o\xC3\xB9 sont les trous et ne les relit plus. L'esclave simul\xC3\xA9 r\xC3\xA9pond \xC3\xA0 la milliseconde (Windows arrondissait ses attentes \xC3\xA0 15,6 ms : une vue de 15 requ\xC3\xAAtes mettait 235 ms). La lenteur d'un \xC3\xA9quipement se juge par requ\xC3\xAAte.",
+         "communication", ""),
+        note("1.12.26", "Simulation IHM", Kind::Fixed,
+         "LA PASTILLE DE L'IHM, EN HAUT \xC3\x80 DROITE : elle disait \xC2\xAB IHM arr\xC3\xAAt\xC3\xA9" "e \xC2\xBB alors que l'IHM tournait (sans automate simul\xC3\xA9, elle n'\xC3\xA9tait plus rafra\xC3\xAE" "chie). Elle suit l'IHM \xC3\xA0 chaque image.",
+         "simulation", ""),
         // 1.12.25 (22/10/2026) : la barre du plein ecran ne couvre plus la vue, les graduations du temps des
         // courbes restent dans l'objet ; l'historique des objets commence a s'ecrire (sa fenetre : 1.12.26).
         note("1.12.25", "Simulation IHM", Kind::Fixed,

@@ -1202,6 +1202,11 @@ const std::vector<Topic>& topics() {
              {K::Tip, "L'\xC3\xA9" "diteur suit le th\xC3\xA8me de l'application ; la vue garde sa propre "
                          "couleur de fond.", {}},
              {K::Paragraph, "1.12.12 : les sommets d'une ligne, d'un polygone, d'une zone de plan et de la r\xC3\xA9" "f\xC3\xA9rence d'une courbe XY ont des poign\xC3\xA9" "es rondes : glisser (Alt : sans magn\xC3\xA9tisme), double-clic sur un segment pour ajouter, clic droit \xE2\x80\xBA Retirer le sommet ou Suppr. Chaque geste s'annule d'un Ctrl+Z.", {}, "1.12.12"},
+             {K::Heading, "L'historique des modifications des objets", {}, "1.12.26"},
+             {K::Paragraph, "\xC3\x80 chaque **Enregistrer**, chaque objet cr\xC3\xA9\xC3\xA9, modifi\xC3\xA9 ou supprim\xC3\xA9 depuis le dernier enregistrement est not\xC3\xA9 dans le projet (ihm/historique-edition), propri\xC3\xA9t\xC3\xA9 par propri\xC3\xA9t\xC3\xA9, sign\xC3\xA9 de la date, du PC, du compte Windows et de la version ; 100 entr\xC3\xA9" "es par objet.", {}, "1.12.26"},
+             {K::Bullet, "**Clic droit sur un objet \xE2\x80\xBA Historique des modifications\xE2\x80\xA6** (ou sur le fond de la vue : Historique de la vue\xE2\x80\xA6) : la liste des enregistrements \xC3\xA0 gauche, Avant et Apr\xC3\xA8s \xC3\xA0 droite. Rechercher (une propri\xC3\xA9t\xC3\xA9, une valeur, un PC), filtrer par PC ; **Revenir \xC3\xA0 Avant** ou **Revenir \xC3\xA0 cette version** (une confirmation, et Ctrl+Z annule) ; un objet supprim\xC3\xA9 se **restaure** ; Copier, Exporter en CSV. Ce qui n'est pas encore enregistr\xC3\xA9 vient en t\xC3\xAAte, \xC2\xAB Non enregistr\xC3\xA9 \xC2\xBB.", {}, "1.12.26"},
+             {K::Bullet, "**Propri\xC3\xA9t\xC3\xA9s \xE2\x80\xBA Suivi** : cr\xC3\xA9\xC3\xA9 et modifi\xC3\xA9 (quand, sur quel PC), ce qui n'est pas enregistr\xC3\xA9, le nombre d'enregistrements (\xE2\x80\xA6 ouvre l'Historique). Plusieurs objets choisis : une ligne par objet ; la vue seule : son dernier enregistrement.", {}, "1.12.26"},
+             {K::Bullet, "**L'Explorateur d'objets** montre la date de la derni\xC3\xA8re modification (\xC2\xAB il y a 5 min \xC2\xBB, \xC2\xAB hier 14:05 \xC2\xBB) ; **un point orange** marque un objet modifi\xC3\xA9 et pas encore enregistr\xC3\xA9, dans l'Explorateur et sur la vue. **Le survol** d'un objet (une demi-seconde) le r\xC3\xA9sume dans une infobulle. Clic droit sur le fond de la vue : couper l'infobulle de suivi, ou le point.", {}, "1.12.26"},
          },
          {"objets", "proprietes", "actions", "contenu"},
          {},
@@ -3304,8 +3309,9 @@ const std::vector<Topic>& topics() {
                          "de l'IHM ne changent rien dans l'automate (une mise en service prudente).\nMots "
                          "par requ\xC3\xAAte\t120\t125 au plus ; les variables proches se lisent d'une seule "
                          "requ\xC3\xAAte.\nBits par requ\xC3\xAAte\t1968\t2000 au plus.\nRegrouper \xC3\xA0 "
-                         "moins de\t8 mots\tDeux variables s\xC3\xA9par\xC3\xA9" "es de moins de N mots : "
-                         "une requ\xC3\xAAte, le trou avec.", {}},
+                         "moins de\t100 mots\tDeux variables s\xC3\xA9par\xC3\xA9" "es de moins de N mots : "
+                         "une requ\xC3\xAAte, le trou avec (8 avant la 1.12.26). Un \xC3\xA9quipement qui refuse "
+                         "un trou : l'IHM l'apprend et ne le relit plus.", {}},
              {K::Heading, "G\xC3\xA9n\xC3\xA9rer", {}},
              {K::Paragraph, "Une ligne de la table illisible (une adresse refus\xC3\xA9" "e, un type inconnu), "
                          "en double, deux lignes qui se recouvrent ; reli\xC3\xA9 \xC3\xA0 un automate "
@@ -12509,6 +12515,24 @@ const std::vector<Topic>& topics() {
                          "leurs membres (`Moteur.Vitesse`) ; en Copie ou Les deux, le script \xC3\xA9" "crit "
                          "la copie, pas l'original (voir \xC2\xAB Les param\xC3\xA8tres d'une popup "
                          "\xC2\xBB).", {}},
+             {K::Heading, "Attendre : WAIT, et les scripts d\xC3\xA9tach\xC3\xA9s", {}, "1.12.26"},
+             {K::Paragraph, "`WAIT(T#2s)` attend avant l'instruction suivante (une dur\xC3\xA9" "e, ou un nombre de millisecondes : `WAIT(500)`). Ce que fait l'IHM pendant ce temps d\xC3\xA9pend du script, et de sa propri\xC3\xA9t\xC3\xA9 **D\xC3\xA9tach\xC3\xA9** (Propri\xC3\xA9t\xC3\xA9s d'un script g\xC3\xA9n\xC3\xA9ral) :", {}, "1.12.26"},
+             {K::Table, "Le script	Pendant WAIT	Une boucle sans fin\nD\xC3\xA9tach\xC3\xA9 (coch\xC3\xA9)	seul le script attend : l'IHM continue (les vues, la communication, les autres scripts)	permise : il rend la main \xC3\xA0 chaque WAIT, et toutes les 8 ms s'il calcule\nNon d\xC3\xA9tach\xC3\xA9 (par d\xC3\xA9" "faut)	l'IHM attend avec lui : elle se fige (10 s au plus par WAIT)	coup\xC3\xA9" "e par le budget d'instructions", {}, "1.12.26"},
+             {K::Code, "(* Script Sequence_Remplissage : D\xC3\xA9tach\xC3\xA9, d\xC3\xA9" "clencheur Appel\xC3\xA9 (un bouton : Script g\xC3\xA9n\xC3\xA9ral) *)\nVanne_Entree := TRUE;\nWAIT(T#2s);\nWHILE Niveau < Consigne_Niveau DO\n    WAIT(T#500ms);\nEND_WHILE;\nVanne_Entree := FALSE;\nIHM_JOURNAL('Remplissage termin\xC3\xA9 : {Niveau:0.0} %');", "ST", "1.12.26"},
+             {K::Code, "Vanne_Entree = true;\nWAIT(2000);   /* ms */\nwhile (Niveau < Consigne_Niveau) WAIT(500);\nVanne_Entree = false;", "C", "1.12.26"},
+             {K::Code, "Vanne_Entree = true;\nWAIT(2s);\nwhile (Niveau < Consigne_Niveau) WAIT(500ms);\nVanne_Entree = false;", "C++", "1.12.26"},
+             {K::Bullet, "**Une instance \xC3\xA0 la fois** : un script d\xC3\xA9tach\xC3\xA9 relanc\xC3\xA9 pendant qu'il tourne (Cyclique, IHM_APPELER, le bouton) ne repart pas. `IHM_SCRIPT_ACTIF('Sequence_Remplissage')` dit s'il tourne (dans une expression : un bouton gris\xC3\xA9 pendant la s\xC3\xA9quence) ; `IHM_SCRIPT_ARRETER('Sequence_Remplissage')` l'arr\xC3\xAAte, \xC3\xA0 sa prochaine instruction ou tout de suite s'il attend.", {}, "1.12.26"},
+             {K::Bullet, "**La Console** dit le d\xC3\xA9part (\xC2\xAB d\xC3\xA9marr\xC3\xA9 en arri\xC3\xA8re-plan \xC2\xBB), la fin et sa dur\xC3\xA9" "e, ou l'arr\xC3\xAAt ; une erreur, \xC3\xA0 sa ligne, comme pour un autre script. L'arr\xC3\xAAt de l'IHM arr\xC3\xAAte les scripts d\xC3\xA9tach\xC3\xA9s, sans erreur.", {}, "1.12.26"},
+             {K::Bullet, "Un script d\xC3\xA9tach\xC3\xA9 garde ses variables (VAR) d'une attente \xC3\xA0 l'autre ; les fonctions qu'il appelle peuvent attendre aussi. Les scripts de vue (OnOpen, OnCycle, OnClose) ne se d\xC3\xA9tachent pas : un OnOpen lance une s\xC3\xA9quence par `IHM_APPELER('Sequence')`.", {}, "1.12.26"},
+             {K::Warning, "Un WAIT dans un script non d\xC3\xA9tach\xC3\xA9 fige l'IHM pendant l'attente, et les \xC3\xA9" "critures vers l'automate ne partent qu'apr\xC3\xA8s : pour une s\xC3\xA9quence, coche D\xC3\xA9tach\xC3\xA9. Dans une expression (fx), WAIT est refus\xC3\xA9.", {}, "1.12.26"},
+             {K::Heading, "Lire et \xC3\xA9" "crire des fichiers, les ressources du projet", {}, "1.12.26"},
+             {K::Paragraph, "Les natives du dossier **Fichiers** lisent et \xC3\xA9" "crivent des fichiers texte (UTF-8), parcourent un dossier et lisent les ressources du projet. Un chemin relatif part du dossier **donnees/** du projet (`DIR_DATA()` le dit) ; un chemin complet (`C:/Donnees/recette.csv`) va o\xC3\xB9 il dit.", {}, "1.12.26"},
+             {K::Table, "Native	Ce qu'elle fait\nFILE_READ(chemin), FILE_READ_LINES(chemin)	tout le texte ; ses lignes (LIST OF STRING)\nFILE_WRITE(chemin, texte), FILE_WRITE_LINES(chemin, lignes)	\xC3\xA9" "crit le fichier d'un bloc (cr\xC3\xA9\xC3\xA9 ou remplac\xC3\xA9, ses dossiers aussi)\nFILE_APPEND(chemin, texte), FILE_APPEND_LINE(chemin, ligne)	ajoute \xC3\xA0 la fin : un journal, un CSV\nFILE_EXISTS, FILE_SIZE, FILE_TIME	est-il l\xC3\xA0, sa taille, sa derni\xC3\xA8re modification\nFILE_COPY, FILE_MOVE, FILE_DELETE	copier, d\xC3\xA9placer ou renommer, supprimer\nDIR_CREATE, DIR_EXISTS, DIR_LIST(chemin, '*.csv'), DIR_DELETE	les dossiers ; DIR_LIST rend les noms, rang\xC3\xA9s (un dossier finit par /)\nPATH_JOIN, PATH_NAME, PATH_STEM, PATH_EXTENSION, PATH_PARENT	les chemins, sans toucher au disque\nRESOURCE_READ, RESOURCE_LINES, RESOURCE_EXISTS, RESOURCE_SIZE, RESOURCE_LIST, RESOURCE_EXTRACT	les ressources du projet (un .txt, un .csv import\xC3\xA9 dans Ressources) : elles voyagent avec lui\nFILE_ERROR()	pourquoi la derni\xC3\xA8re a \xC3\xA9" "chou\xC3\xA9 ('' : elle a r\xC3\xA9ussi)", {}, "1.12.26"},
+             {K::Code, "(* Un CSV de mesures, une ligne par cycle (script Cyclique, 1 s) *)\nIF NOT FILE_EXISTS('mesures.csv') THEN\n    FILE_WRITE('mesures.csv', 'Heure;Niveau;Debit$N');\nEND_IF;\nIF NOT FILE_APPEND_LINE('mesures.csv', FORMAT('{};{:.1f};{:.2f}', FORMAT_DT(MAINTENANT(), '%H:%M:%S'), Niveau, Debit)) THEN\n    IHM_LOG(WARNING, FILE_ERROR());\nEND_IF;", "ST", "1.12.26"},
+             {K::Code, "/* Un CSV de mesures, une ligne par cycle (le C de la cible : fopen, fprintf) */\nFILE *f = fopen(\"donnees/mesures.csv\", \"a\");\nif (f) {\n    fprintf(f, \"%s;%.1f;%.2f\\n\", heure, Niveau, Debit);\n    fclose(f);\n}", "C", "1.12.26"},
+             {K::Code, "// Un CSV de mesures, une ligne par cycle (<fstream>)\nstd::ofstream f(\"donnees/mesures.csv\", std::ios::app);\nf << heure << ';' << Niveau << ';' << Debit << '\\n';", "C++", "1.12.26"},
+             {K::Bullet, "**Un \xC3\xA9" "chec ne coupe pas le script** : la fonction rend FALSE, '' ou -1, `FILE_ERROR()` dit pourquoi (un fichier introuvable, ouvert par un autre programme, un disque plein), et la Console le dit une fois.", {}, "1.12.26"},
+             {K::Bullet, "**Les fichiers du projet** (ihm/, project.xpgproj) ne s'\xC3\xA9" "crivent, ne se d\xC3\xA9placent ni ne se suppriment par un script. Dans une expression (fx), les natives de fichiers lisent seulement : `{RESOURCE_READ('consignes.txt')}` dans un texte.", {}, "1.12.26"},
              {K::Heading, "Le langage des scripts (1.10)", {}, "1.10"},
              {K::Bullet, "Un script d\xC3\xA9" "clare ses **fonctions internes** (FUNCTION ... "
                          "END_FUNCTION), passe ses param\xC3\xA8tres par valeur, par "
@@ -14179,7 +14203,7 @@ const std::vector<Topic>& topics() {
                          "trous)\nIHM_LOG(INFO, 'texte {Var:0.0}')\tBOOL\t\xC3\xA9" "crit une ligne dans la Console (le "
                          "panneau du bas) : l'heure, le niveau (TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR, CRITICAL ; "
                          "ou NIVEAU_LOG#INFO), la source, la ligne du code\nIHM_APPELER('Script')\tBOOL\tex\xC3\xA9" "cute tout de suite un script "
-                         "g\xC3\xA9n\xC3\xA9ral\nIHM_SON('bip.wav')\tBOOL\tjoue un son des ressources (WAV, "
+                         "g\xC3\xA9n\xC3\xA9ral (d\xC3\xA9tach\xC3\xA9 : il part en arri\xC3\xA8re-plan)\nIHM_SCRIPT_ACTIF('Script')\tBOOL\tvrai si ce script d\xC3\xA9tach\xC3\xA9 tourne\nIHM_SCRIPT_ARRETER('Script')\tBOOL\tarr\xC3\xAAte un script d\xC3\xA9tach\xC3\xA9 qui tourne\nIHM_SON('bip.wav')\tBOOL\tjoue un son des ressources (WAV, "
                          "MP3, OGG)\nIHM_VUE()\tSTRING\tle nom de la vue "
                          "affich\xC3\xA9" "e\nIHM_TEMPS()\tTIME\tle temps \xC3\xA9" "coul\xC3\xA9 depuis le "
                          "lancement de l'IHM\nIHM_UTILISATEUR(), IHM_NOM_UTILISATEUR(), "
@@ -14252,7 +14276,7 @@ const std::vector<Topic>& topics() {
                          "trous : `{IHM_NOM_UTILISATEUR()}`.", {}},
          },
          {"scripts", "fonctions", "actions", "navigation-marche", "equipements", "variables-esclaves"},
-         {"IHM_NAVIGUER", "IHM_POPUP", "IHM_FERMER_POPUP", "IHM_JOURNAL", "IHM_LOG", "NIVEAU_LOG", "IHM_APPELER", "IHM_SON", "IHM_VUE", "IHM_TEMPS", "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME", "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE", "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_APRES", "IHM_CHAQUE", "IHM_SUR_CHANGEMENT", "IHM_ANNULER"},
+         {"IHM_NAVIGUER", "IHM_POPUP", "IHM_FERMER_POPUP", "IHM_JOURNAL", "IHM_LOG", "NIVEAU_LOG", "IHM_APPELER", "IHM_SON", "IHM_VUE", "IHM_TEMPS", "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME", "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE", "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_APRES", "IHM_CHAQUE", "IHM_SUR_CHANGEMENT", "IHM_ANNULER", "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER", "WAIT"},
          {},
          {{"PNG_133_st_fonction_ihm_signature_et_vues.png", "IHM_NAVIGUER : sa signature, et les vues propos\xC3\xA9" "es entre les guillemets."}, {"PNG_191_aide_reference_ihm.png", "F1 sur IHM_JOURNAL, dans un script : la r\xC3\xA9" "f\xC3\xA9rence des fonctions IHM_."}},
          "",
