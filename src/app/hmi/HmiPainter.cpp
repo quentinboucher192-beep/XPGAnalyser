@@ -153,9 +153,12 @@ void text(const Ctx& c, std::string_view raw, double bx, double by, double bw, d
           double sizePx, std::string_view align, bool wrap) {
     if (raw.empty() || col.a == 0) return;
     const auto px = static_cast<std::uint16_t>(std::clamp(sizePx * c.vp.zoom, 6.0, 200.0));
+    // 1.12.24 : la vue etiree (plein ecran Remplir) - la police reste a `zoom`, les
+    // largeurs et hauteurs de l'ecran reviennent au repere local par leur axe.
+    const double kx = c.vp.zoomX(), ky = c.vp.zoomY();
     // Multiligne : "\n" tape dans le texte ; et le retour a la ligne automatique.
     std::string owned = hmi::unescapeText(raw);
-    if (wrap) owned = wrapText(c, owned, gfx::FontId{px}, static_cast<float>(std::max(1.0, (bw - 8) * c.vp.zoom)));
+    if (wrap) owned = wrapText(c, owned, gfx::FontId{px}, static_cast<float>(std::max(1.0, (bw - 8) * kx)));
     const std::string_view s = owned;
     const gfx::FontId f{px};
     // UNE POLICE IMPORTEE : chaque ligne est ecrite avec elle (une image
@@ -175,11 +178,11 @@ void text(const Ctx& c, std::string_view raw, double bx, double by, double bw, d
             if (rows[i].empty()) continue;
             const auto img = HmiImageCache::instance().fontText(c.r, *font, rows[i], static_cast<float>(px));
             if (!img.valid()) { drawn = false; break; }
-            const double lw = img.width / c.vp.zoom, lhh = rowH / c.vp.zoom;
+            const double lw = img.width / kx, lhh = rowH / ky;
             double lx = bx + (bw - lw) / 2;
             if (align == "gauche") lx = bx + 4;
             else if (align == "droite") lx = bx + bw - lw - 4;
-            const double ly = by + (bh - total / c.vp.zoom) / 2 + static_cast<double>(i) * lhh;
+            const double ly = by + (bh - total / ky) / 2 + static_cast<double>(i) * lhh;
             const gfx::Point centre = c.map(lx + lw / 2, ly + lhh / 2);
             const auto iw = static_cast<float>(img.width), ih = static_cast<float>(img.height);
             c.r.drawImage(img.tex, {centre.x - iw / 2, centre.y - ih / 2, iw, ih}, static_cast<float>(c.o.rotation()) + c.vp.angle,
@@ -200,12 +203,12 @@ void text(const Ctx& c, std::string_view raw, double bx, double by, double bw, d
     const double angle = c.o.rotation() + c.vp.angle;
     for (std::size_t i = 0; i < lines.size(); ++i) {
         const float tw = c.r.measure(lines[i], f).width;
-        // La ligne, dans le repere local, en pixels ecran divises par le zoom.
-        const double lw = tw / c.vp.zoom, lhh = lh / c.vp.zoom;
+        // La ligne, dans le repere local, en pixels ecran divises par le zoom (de chaque axe).
+        const double lw = tw / kx, lhh = lh / ky;
         double lx = bx + (bw - lw) / 2;
         if (align == "gauche") lx = bx + 4;
         else if (align == "droite") lx = bx + bw - lw - 4;
-        const double ly = by + (bh - total / c.vp.zoom) / 2 + static_cast<double>(i) * lhh;
+        const double ly = by + (bh - total / ky) / 2 + static_cast<double>(i) * lhh;
         const gfx::Point centre = c.map(lx + lw / 2, ly + lhh / 2);
         const gfx::Point origin{centre.x - tw / 2, centre.y - lh / 2};
         c.r.drawTextRotated(origin, lines[i], f, col, static_cast<float>(angle), centre);
@@ -266,7 +269,8 @@ void drawResourceImage(const Ctx& c, const HmiImageCache::Image& img, std::strin
         dh = img.height * scale;
     }
     const gfx::Point centre = c.map(lx + lw / 2, ly + lh / 2);
-    const float sw = static_cast<float>(dw * c.vp.zoom), sh = static_cast<float>(dh * c.vp.zoom);
+    // 1.12.24 : etiree avec la vue (plein ecran Remplir) : un fond d'image couvre l'ecran.
+    const float sw = static_cast<float>(dw * c.vp.zoomX()), sh = static_cast<float>(dh * c.vp.zoomY());
     const hmi::SvgRecolor rc = recolorOf(c);
     gfx::TextureId tex = img.tex;
     gfx::Color tint{255, 255, 255, static_cast<std::uint8_t>(255 * c.alpha)};
@@ -330,7 +334,7 @@ void drawTable(const Ctx& c, const std::vector<std::string>& headers, int rows) 
 std::string fitted(const Ctx& c, const std::string& s, double maxLocal, double sizePx) {
     if (s.empty()) return s;
     const auto px = static_cast<std::uint16_t>(std::clamp(sizePx * c.vp.zoom, 6.0, 200.0));
-    const float maxPx = static_cast<float>(maxLocal * c.vp.zoom);
+    const float maxPx = static_cast<float>(maxLocal * c.vp.zoomX());   // 1.12.24 : la largeur a l'ecran (vue etiree)
     if (c.r.measure(s, gfx::FontId{px}).width <= maxPx) return s;
     if (maxPx <= 0.f) return {};
     const auto cutAt = [&s](std::size_t n) {
@@ -752,7 +756,7 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
             // 1.9 : une bascule vers l'esclave simule (ou le retour au vrai) - le violet du simule.
             const gfx::Color col = fade(m.slave ? c.fixed(0x8B8FE8) : m.forced ? c.fixed(0xEC8426) : c.fixed(0x4FA3FF), c.alpha);
             for (double y = top; y < top + ph; y += 7) c.r.line(c.map(x, y), c.map(x, std::min(top + ph, y + 4)), col, 1);
-            const double tw = std::min(260.0, c.r.measure(m.text, gfx::FontId{px}).width / std::max(0.01f, c.vp.zoom) + 8.0);
+            const double tw = std::min(260.0, c.r.measure(m.text, gfx::FontId{px}).width / std::max(0.01f, c.vp.zoomX()) + 8.0);
             labels.push_back({x, tw, m.text, m.slave ? fade(c.fixed(0xB3B6F5), c.alpha) : col});
         }
         const gfx::Color plate = c.color("fill");
@@ -810,7 +814,7 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
             if (!series[i].empty() && !preview) name += " = " + hmi::formatNumber(std::round(series[i].back().second * 100) / 100);
             // La largeur du libelle, mesuree a la taille ou il sera ecrit.
             const auto px = static_cast<std::uint16_t>(std::clamp(11.0 * c.vp.zoom, 6.0, 200.0));
-            const double textW = c.r.measure(name, gfx::FontId{px}).width / std::max(0.01f, c.vp.zoom);
+            const double textW = c.r.measure(name, gfx::FontId{px}).width / std::max(0.01f, c.vp.zoomX());
             const double tw = std::min(legendRight - x - 8, 26.0 + textW);
             if (tw < 40) break;
             const auto sw = c.map({{static_cast<float>(x), 8.f}, {static_cast<float>(x + 10), 8.f},
@@ -1146,7 +1150,7 @@ gfx::Color accentOf(const Ctx& c) { return c.color("accent", gfx::Color::rgb(0x2
 std::string tailFitting(const Ctx& c, const std::string& s, double maxLocal, double sizePx, std::size_t& dropped) {
     dropped = 0;
     const auto px = static_cast<std::uint16_t>(std::clamp(sizePx * c.vp.zoom, 6.0, 200.0));
-    const float maxPx = static_cast<float>(maxLocal * c.vp.zoom);
+    const float maxPx = static_cast<float>(maxLocal * c.vp.zoomX());   // 1.12.24 : la largeur a l'ecran (vue etiree)
     std::size_t from = 0;
     while (from < s.size() && c.r.measure(std::string_view(s).substr(from), gfx::FontId{px}).width > maxPx) {
         ++from;
@@ -1178,9 +1182,9 @@ void drawField(const Ctx& c, const hmi::Box& b, const std::string& shown, const 
     // Le curseur : au bout de ce qui le precede, aligne comme le texte.
     const auto px = static_cast<std::uint16_t>(std::clamp(fs * c.vp.zoom, 6.0, 200.0));
     const gfx::FontId f{px};
-    const double tw = c.r.measure(visible, f).width / c.vp.zoom;
+    const double tw = c.r.measure(visible, f).width / c.vp.zoomX();   // 1.12.24 : comme text(), par l'axe x
     const std::string before = beforeCaret->size() >= dropped ? beforeCaret->substr(dropped) : std::string{};
-    const double bw = c.r.measure(before, f).width / c.vp.zoom;
+    const double bw = c.r.measure(before, f).width / c.vp.zoomX();
     const double bx = b.x + 2, bwBox = b.w - 4;
     double start = bx + (bwBox - tw) / 2;
     if (align == "gauche") start = bx + 4;
@@ -1241,7 +1245,7 @@ void drawInputField(const Ctx& c) {
         // La valeur montree au moment du clic : surlignee tant qu'on n'a rien tape.
         if (f->fresh && !shown.empty()) {
             const auto px = static_cast<std::uint16_t>(std::clamp(fs * c.vp.zoom, 6.0, 200.0));
-            const double tw = std::min(box.w - 8, static_cast<double>(c.r.measure(shown, gfx::FontId{px}).width / c.vp.zoom));
+            const double tw = std::min(box.w - 8, static_cast<double>(c.r.measure(shown, gfx::FontId{px}).width / c.vp.zoomX()));
             const double x0 = align == "droite" ? box.w - tw - 6 : align == "gauche" ? 6 : (box.w - tw) / 2;
             shapes::fillPolygon(c.r, c.map(shapes::roundedRect(static_cast<float>(x0), static_cast<float>(h * 0.18), static_cast<float>(tw),
                                                               static_cast<float>(h * 0.64), 2)),
@@ -1380,7 +1384,7 @@ void drawPasswordChange(const Ctx& c) {
     // La largeur prise par le titre (en pixels de la vue) : la mention de droite tient dans le reste.
     const double titleUsed = ic + 6 + [&] {
         const auto px = static_cast<std::uint16_t>(std::clamp(16 * l.scale * c.vp.zoom, 6.0, 200.0));
-        return c.vp.zoom > 0 ? static_cast<double>(c.r.measure(titleText, gfx::FontId{px}).width) / c.vp.zoom : 0.0;
+        return c.vp.zoom > 0 ? static_cast<double>(c.r.measure(titleText, gfx::FontId{px}).width) / c.vp.zoomX() : 0.0;
     }();
     const bool focusedObj = c.opt.runtime && c.opt.runtime->focusedObject() == c.o.id && f;
     for (const auto& field : l.fields) {
@@ -1732,6 +1736,7 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
     // Lot 13 : le selecteur de langue.
     if (drawLot13(c)) return;
     if (drawLot14(c)) return;
+    if (drawPidTuner(c)) return;     // 1.12.24
 
     switch (o.kind) {
         case Kind::Rectangle:
@@ -2096,7 +2101,7 @@ void paintHmiView(gfx::IRenderer& r, const hmi::View& view, const HmiViewport& v
                                std::clamp(opt.alpha, 0.f, 1.f));
     if (vp.angle == 0.f) {
         const gfx::Point a = vp.toScreen(0, 0);
-        r.fillRect({a.x, a.y, view.width * vp.zoom, view.height * vp.zoom}, bg);
+        r.fillRect({a.x, a.y, view.width * vp.zoomX(), view.height * vp.zoomY()}, bg);   // 1.12.24 : etiree (Remplir)
     } else {
         // Tournee (transition) : le fond est un quadrilatere.
         shapes::fillPolygon(r, {vp.toScreen(0, 0), vp.toScreen(view.width, 0), vp.toScreen(view.width, view.height),

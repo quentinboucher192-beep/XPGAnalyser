@@ -66,6 +66,8 @@ enum class HmiGlyph : std::uint8_t {
     Pause,
     // 1.10.4 : la vanne 3 voies
     ThreeWayValve,
+    // 1.12.24 : le Reglage PID ; les registres (une lame, multi-lames, coupe-feu)
+    PidTuner, Damper, MultiBladeDamper, FireDamper,
 };
 
 [[nodiscard]] HmiGlyph glyphFor(hmi::Kind) noexcept;

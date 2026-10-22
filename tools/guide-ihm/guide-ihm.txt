@@ -3460,6 +3460,104 @@ Le symbole d'une vanne 3 voies : trois triangles qui se rejoignent au centre - l
 ### Avec une version plus ancienne
 Une version 1.10.3 ou plus ancienne ne connaît pas la vanne 3 voies : à l'ouverture du projet, elle le dit (« type d'objet inconnu 'ThreeWayValve', lu comme un rectangle ») et montre un rectangle à sa place, sans planter. Si elle enregistre le projet, ce rectangle garde toutes les propriétés de la vanne : la 1.10.4 le relit comme une vanne 3 voies, et le dit. Le mieux reste d'ouvrir le projet avec la 1.10.4.
 
+== objet-registre | Registre
+: Un registre à une lame (papillon), tout ou rien ou modulant : la lame tourne avec son ouverture ; ses fins de course (O et F) se voient, une discordance le met en défaut.
+@objet Damper
+@depuis 1.12.24
+@voir objet-registre-multi-lames, objet-clapet-coupe-feu, objet-vanne, synoptique, objet-communs, proprietes, simulation
+@exemple Le registre RG-3212 s'ouvre à 1 s (sa lame se couche, l'axe clignote pendant la course), module de 100 à 30 % de 3 à 6 s, se ferme à 7 s ; de 8 à 9,5 s, sa fin de course fermé ne revient pas alors qu'il est fermé : discordance, il clignote en rouge.
+@capture EX_Damper.png | L'exemple animé : registre
+### À quoi il sert
+Le symbole d'un registre de gaine (extraction, ventilation, désenfumage) : une gaine (deux parois, une bride à chaque bout) et sa lame qui tourne sur son axe, au centre. **Ouvert**, la lame est à plat, dans le sens du flux ; **fermé**, elle est debout et barre la gaine. L'axe monte à son actionneur : un servomoteur (M), un levier, un vérin pneumatique. Il est dans la famille Synoptique, à côté des vannes ; on le tourne (une gaine verticale) et on le retourne comme elles.
+### Tout ou rien ou modulant
+- **Tout ou rien** : **Ouvert** (la Valeur, un booléen) couche ou dresse la lame.
+- **Modulant** : **Ouverture (%)** (de 0 à 100, une expression : =RG_Position) tourne la lame d'autant, et le pourcentage s'écrit à côté de l'actionneur. Un signal brut (0..27648, 0..1) : sa plage avec **Ouverture : min** et **Ouverture : max**, ou la plage de sa variable (Configuration › Unités et formats), comme la vanne réglante.
+- **En mouvement** (une expression vraie pendant la course) fait clignoter l'axe ; reliée, elle donne l'alarme par défaut **Course_Trop_Longue** (30 s).
+### Les fins de course
+- **Fin de course ouvert** et **Fin de course fermé** (deux expressions : =RG_FCO, =RG_FCF) allument deux voyants **O** et **F** à gauche de l'actionneur ; la lame suit ce qu'ils disent (l'état réel, pas la commande).
+- **Discordance** : les deux à la fois, ou aucune hors mouvement, les deux étant reliées : le registre se dessine en défaut et clignote. Reliées toutes les deux, elles donnent l'alarme par défaut **Discordance** (10 s).
+### Ses paramètres
+@param value | Ouvert | FALSE | Vrai : ouvert (la lame à plat) ; faux : fermé. Une expression : =RG3212_Ouvert.
+@param fault | Défaut (expression) | FALSE | Vrai : la couleur de défaut, qui clignote. Une expression : =RG3212_Defaut.
+@param colorOn | Couleur ouvert | #2ECC71 | La couleur de la lame ouverte (ou en partie ouverte).
+@param colorOff | Couleur fermé | #5A6577 | La couleur de la lame fermée.
+@param colorFault | Couleur de défaut | #E5534B | La couleur du défaut et de la discordance (elle clignote).
+@param stroke | Contour | #C8D0DC | Le trait de la gaine, de l'axe et de l'actionneur.
+@param strokeWidth | Épaisseur du contour | 2 | Son épaisseur, en pixels de la vue.
+@param label | Libellé |  | Le repère écrit avec le symbole (RG-3212).
+@param labelPosition | Place du libellé | dessous | dessous, dessus, ou aucun (caché).
+@param fontSize | Taille du texte | 13 | La taille du libellé.
+@param textColor | Couleur du texte | #C8D0DC | La couleur du libellé, du pourcentage et des voyants O et F.
+@param damperActuator | Actionneur | servomoteur | servomoteur (M), manuel (un levier), pneumatique (un vérin).
+@param opening | Ouverture (%) | (vide) | Modulant : de 0 à 100 % (une expression : =RG_Position) ; la lame tourne d'autant. Vide : tout ou rien.
+@param moving | En mouvement (expression) | (vide) | Vraie : l'axe clignote (le registre bouge) : =RG_Ouvre OR RG_Ferme.
+@param limitOpen | Fin de course ouvert | (vide) | Vraie : il est ouvert (FCO). Le voyant O ; la lame se couche.
+@param limitClosed | Fin de course fermé | (vide) | Vraie : il est fermé (FCF). Le voyant F ; la lame se dresse.
+### En marche
+- sa valeur, son ouverture et ses fins de course, évaluées à chaque cycle, tournent la lame ; le défaut et la discordance le font clignoter en rouge ;
+- Générer signale une variable inconnue dans ses expressions, une ouverture hors de 0 à 100 %, une seule fin de course reliée (la discordance ne se verrait pas).
+
+== objet-registre-multi-lames | Registre multi-lames
+: Un registre à plusieurs lames, opposées ou parallèles, tout ou rien ou modulant : ses lames tournent ensemble ; ses fins de course comme le registre.
+@objet MultiBladeDamper
+@depuis 1.12.24
+@voir objet-registre, objet-clapet-coupe-feu, synoptique, objet-communs, proprietes, simulation
+@exemple Le registre RG-260 (quatre lames opposées) s'ouvre de 0 à 100 % en 4 s puis revient à 40 %, ses lames tournent ensemble ; à 8 s, il se ferme.
+@capture EX_MultiBladeDamper.png | L'exemple animé : registre multi-lames
+### À quoi il sert
+Le registre des grandes sections : de 2 à 8 lames, l'une au-dessus de l'autre, liées par une tringle. **Opposées**, une lame sur deux tourne dans l'autre sens (le réglage le plus fin du débit) ; **parallèles**, toutes dans le même sens. Le reste - ouvert ou fermé, l'ouverture, le mouvement, les fins de course O et F, la discordance - comme le registre.
+### Ses paramètres
+@param value | Ouvert | FALSE | Vrai : ouvert (les lames à plat) ; faux : fermé.
+@param fault | Défaut (expression) | FALSE | Vrai : la couleur de défaut, qui clignote.
+@param colorOn | Couleur ouvert | #2ECC71 | La couleur des lames ouvertes.
+@param colorOff | Couleur fermé | #5A6577 | La couleur des lames fermées.
+@param colorFault | Couleur de défaut | #E5534B | La couleur du défaut et de la discordance (elle clignote).
+@param stroke | Contour | #C8D0DC | Le trait de la gaine, des axes et de l'actionneur.
+@param strokeWidth | Épaisseur du contour | 2 | Son épaisseur, en pixels de la vue.
+@param label | Libellé |  | Le repère écrit avec le symbole (RG-260).
+@param labelPosition | Place du libellé | dessous | dessous, dessus, ou aucun (caché).
+@param fontSize | Taille du texte | 13 | La taille du libellé.
+@param textColor | Couleur du texte | #C8D0DC | La couleur du libellé, du pourcentage et des voyants.
+@param damperActuator | Actionneur | servomoteur | servomoteur (M), manuel (un levier), pneumatique (un vérin).
+@param opening | Ouverture (%) | (vide) | Modulant : de 0 à 100 % ; les lames tournent d'autant. Vide : tout ou rien.
+@param moving | En mouvement (expression) | (vide) | Vraie : l'axe clignote.
+@param limitOpen | Fin de course ouvert | (vide) | Vraie : il est ouvert (FCO). Le voyant O.
+@param limitClosed | Fin de course fermé | (vide) | Vraie : il est fermé (FCF). Le voyant F.
+@param blades | Nombre de lames | 4 | De 2 à 8 lames, qui tournent ensemble.
+@param bladeMode | Disposition des lames | opposées | opposées (une sur deux dans l'autre sens) ou parallèles.
+### En marche
+- ses lames suivent sa valeur, son ouverture et ses fins de course ; le défaut et la discordance le font clignoter en rouge ;
+- Générer signale un nombre de lames hors de 2 à 8 (il en dessine 2 ou 8).
+
+== objet-clapet-coupe-feu | Clapet coupe-feu
+: Un clapet coupe-feu : ouvert en veille, il se ferme quand il est déclenché (fusible, électro-aimant, commande de sécurité) ; déclenché, il est rouge et clignote.
+@objet FireDamper
+@depuis 1.12.24
+@voir objet-registre, objet-registre-multi-lames, synoptique, objet-communs, proprietes, simulation
+@exemple Le clapet CF-12 est ouvert (en veille) ; à 3 s, il est déclenché : il se ferme, rouge et clignotant, son fusible aussi ; réarmé à 8 s, il rouvre.
+@capture EX_FireDamper.png | L'exemple animé : clapet coupe-feu
+### À quoi il sert
+Le clapet coupe-feu (CF) d'une traversée de paroi : une gaine, sa lame, la marque **CF** et son déclencheur au-dessus - un **fusible** thermique (70 °C, réarmement à la main), un **électro-aimant** (commande à rupture) ou un **moteur** (réarmable à distance). **Ouvert (en veille)**, la lame est à plat, verte ; **fermé**, elle est debout, orange ; **déclenché**, fermé, rouge, il clignote.
+### Ses paramètres
+@param value | Ouvert (en veille) | TRUE | Vrai : ouvert, la position normale ; faux : fermé.
+@param fault | Défaut (expression) | FALSE | Vrai : la couleur de défaut, qui clignote.
+@param colorOn | Couleur ouvert | #2ECC71 | La couleur du clapet ouvert (en veille).
+@param colorOff | Couleur fermé | #F2994A | La couleur du clapet fermé (non déclenché).
+@param colorFault | Couleur de défaut | #E5534B | La couleur du clapet déclenché ou en défaut (elle clignote).
+@param stroke | Contour | #C8D0DC | Le trait de la gaine et du déclencheur.
+@param strokeWidth | Épaisseur du contour | 2 | Son épaisseur, en pixels de la vue.
+@param label | Libellé |  | Le repère écrit avec le symbole (CF-12).
+@param labelPosition | Place du libellé | dessous | dessous, dessus, ou aucun (caché).
+@param fontSize | Taille du texte | 13 | La taille du libellé.
+@param textColor | Couleur du texte | #C8D0DC | La couleur du libellé et des voyants.
+@param tripped | Déclenché (expression) | (vide) | Vraie : déclenché (fusible fondu, commande de sécurité) : fermé, rouge, il clignote. Reliée, elle donne l'alarme par défaut **Declenche** (priorité 1).
+@param fireRelease | Déclencheur | fusible | fusible (thermique), électro-aimant (à rupture) ou moteur (réarmable à distance).
+@param limitOpen | Fin de course ouvert | (vide) | Vraie : il est ouvert. Le voyant O.
+@param limitClosed | Fin de course fermé | (vide) | Vraie : il est fermé. Le voyant F.
+### En marche
+- déclenché, il se ferme, rouge et clignotant, et l'alarme **Declenche** part ; ses fins de course corrigent la lame et disent la discordance comme le registre ;
+- Générer signale une variable inconnue dans ses expressions.
+
 == objet-clapet-anti-retour | Clapet anti-retour
 : Un clapet anti-retour : il laisse passer dans le sens de la flèche, jamais à contre-sens.
 @objet CheckValve
@@ -4603,6 +4701,72 @@ Remettre au client ou au service qualité ce que l'IHM montre, sans passer par l
 @param radius | Rayon des coins | 4 | L'arrondi.
 ### En marche
 Le clic demande où écrire le fichier : **exports/** à côté du projet, sous son nom, est proposé (**Exporter** ou Entrée), le bouton … choisit ailleurs, **Annuler** (Échap) n'écrit rien ; **Demander où enregistrer** décoché : exports/ tout de suite. La barre d'état de la simulation dit où, le journal et les événements gardent la trace (« Export : alarmes → alarmes_2026-09-24.csv (12 ligne(s), CSV) »), `SYS.LastExport` donne son nom. Un fichier du même nom est remplacé : mets `{SYS.Time}` dans le nom pour les garder tous.
+
+== objet-reglage-pid | Réglage PID
+: Une carte qui regarde une boucle de régulation (consigne, mesure, sortie, mode) : elle apprend son procédé en marche, en tire ses statistiques et propose un réglage, qu'elle écrit dans le bloc PID après confirmation.
+@objet PidTuner
+@depuis 1.12.24
+@mots PID, Régulation, Réglage, Kp, Ti, Td, Autoréglage
+@voir objet-courbe, simulation, securite, signature, objet-communs, proprietes
+@exemple La boucle TE-101 : la consigne passe de 60 à 70 °C à 2 s, la mesure la rejoint ; la carte montre ses trois valeurs, ses 30 dernières minutes, et ce qu'il apprend.
+@capture EX_PidTuner.png | L'exemple animé : la carte en marche
+### À quoi il sert
+Un régulateur PID tourne dans l'automate ; l'IHM le regarde. Toutes les **Période** millisecondes, la carte lit la **consigne**, la **mesure**, la **sortie** et le **mode** (AUTO ou MANU), que sa vue soit affichée ou non. De ce qu'elle voit, elle apprend le procédé (un premier ordre avec retard, ou deux constantes de temps et un retard), en tire ses statistiques et calcule trois réglages - **Robuste**, **Équilibré**, **Rapide** - qu'elle compare au réglage du bloc. Sa mémoire (7 jours par défaut) se garde dans l'historique du projet : elle reprend où elle en était.
+### La boucle
+- **Structure de la boucle** : une structure qui porte la consigne et la mesure (SPPV_TELUNA[0]) ; ses membres se trouvent par leur nom - **SP** (ou Consigne), **PV** (Mesure), **OUT** (Sortie), **AUTO**, **KP**, **TI**, **TD** - et remplissent les cases laissées vides. Sinon, chaque case dit sa variable (une formule : SUIVI_REG[44]/10.0).
+- **En AUTO** vide : toujours en AUTO. En MANU, elle apprend aussi : la sortie bougée à la main, boucle ouverte, est le plus riche des échelons.
+- Elle **écarte** ce qui ne dit rien du procédé : une perturbation en cours, la sortie en butée, un trou de données, une mesure figée, une réponse que le modèle n'explique pas. Un échelon sur trois est gardé de côté pour vérifier le modèle.
+### Le bloc PID
+- **Kp**, **Ti**, **Td** : les variables du bloc. Elle les lit (le réglage actuel, comparé aux propositions) et, **Écrire le réglage : après confirmation**, Appliquer les écrit - au niveau d'accès de l'objet, avec sa signature électronique si elle est demandée, sans à-coup. L'ancien réglage reste dans le Journal : **Revenir** le remet.
+- **Forme** : standard (ISA, Kp · (e + intégrale de e / Ti + Td de/dt)), parallèle (Kp, Ki, Kd) ou série. **Unité de Ti et Td** : secondes, minutes, millisecondes, dixièmes de seconde. **Kp du bloc** : physique (% de sortie par unité de mesure) ou normalisé sur les étendues (un PID_INT). **Échelle de Kp** : un Kp gardé au dixième dans un INT : 10.
+### Sa fenêtre
+Un clic sur la carte l'ouvre, par-dessus la vue :
+- **Statistiques** : l'écart moyen, le temps dans la tolérance, le dépassement, le temps de réponse, l'oscillation, la course de la sortie - sur 30 min, 8 h, 24 h ou 7 jours ; la courbe (la souris dit l'instant), l'histogramme de l'écart, le tableau par période, l'indice de performance (Harris). **Exporter (CSV)** écrit les minutes dans exports/.
+- **Ce qu'il a appris** : le modèle (gain, constante de temps, retard, leurs intervalles), à quel point il colle, le dernier échelon appris (mesure et modèle), ce qu'il a vu (appris, écarté, gardé pour vérifier), le gain jour après jour, la qualité des données. **Oublier et réapprendre**.
+- **Réglage proposé** : ce qui ne va pas dans le réglage actuel, les trois propositions, leur réponse prévue (un changement de consigne puis une perturbation), le tableau qui les compare (dépassement, temps de réponse, robustesse Ms, marges, bruit envoyé à la sortie), ce qui s'écrit dans le bloc : **Appliquer**, **Copier les valeurs**.
+- **Journal** : les réglages écrits (Revenir), leur vérification au changement de consigne suivant (dépassement prévu et mesuré), les réglages changés dans le bloc, les changements du procédé.
+### Ses paramètres
+@param title | Titre | (vide) | Le titre de la carte ; vide : la structure de la boucle, sinon la mesure, sinon le nom de l'objet.
+@param pidLoop | Structure de la boucle | (vide) | Une structure qui porte SP et PV (et OUT, AUTO, KP, TI, TD) : ses membres remplissent les cases vides.
+@param pidSp | Consigne (SP) | (vide) | La consigne lue : une variable ou une formule. Vide : le membre SP de la structure.
+@param pidPv | Mesure (PV) | (vide) | La mesure lue. Vide : le membre PV de la structure.
+@param pidOut | Sortie (OUT) | (vide) | La sortie du régulateur, entre Sortie : min et max : l'entrée du procédé qu'elle apprend.
+@param pidAuto | En AUTO | (vide) | Vraie : en automatique. Vide : toujours en AUTO.
+@param pidKp | Kp | (vide) | La variable du gain du bloc (lue, écrite après confirmation). En forme parallèle : Kp.
+@param pidTi | Ti | (vide) | Le temps d'intégrale (0 : sans intégrale). En forme parallèle : Ki.
+@param pidTd | Td | (vide) | Le temps de dérivée (0 : sans dérivée). En forme parallèle : Kd.
+@param pidForm | Forme | standard | standard, parallèle ou série ; ou une variable qui la dit (0, 1, 2).
+@param pidTimeUnit | Unité de Ti et Td | s | s, min, ms ou 0,1 s (dixièmes de seconde).
+@param pidKpMode | Kp du bloc | physique | physique (% par unité de mesure) ou normalisé (sur les étendues de la mesure et de la sortie).
+@param pidKpScale | Échelle de Kp | 1 | Le bloc garde Kp multiplié par ce nombre (10 : au dixième).
+@param pidWrite | Écrire le réglage | après confirmation | après confirmation (Appliquer écrit Kp, Ti, Td) ou jamais (proposer seulement, Copier les valeurs).
+@param pidPvMin | Mesure : min | (vide) | Le bas de l'étendue de la mesure ; vide : le Min de sa variable, sinon ce qu'il a vu.
+@param pidPvMax | Mesure : max | (vide) | Le haut de l'étendue de la mesure ; vide : le Max de sa variable.
+@param unit | Unité | (vide) | L'unité de la mesure (°C, mmCE) ; vide : celle de sa variable.
+@param pidOutMin | Sortie : min | 0 | La butée basse de la sortie.
+@param pidOutMax | Sortie : max | 100 | La butée haute de la sortie.
+@param pidAction | Sens d'action | détecté | détecté (appris), inverse (la sortie monte quand la mesure baisse : une chauffe) ou direct.
+@param pidPeriod | Période (ms) | 1000 | Chaque combien il lit la boucle : de 100 ms à 10 s.
+@param pidLearn | Apprendre | en AUTO et en MANU | en AUTO et en MANU, en AUTO, en MANU, ou jamais (les statistiques seules).
+@param pidMemory | Mémoire (jours) | 7 | Ce qu'il garde, de 1 à 30 jours (ihm/historique/pid).
+@param pidForget | Oubli (h) | 24 | Un échelon vieux de tant d'heures compte moitié moins (0 : tous pareil).
+@param pidTolerance | Tolérance (±) | (vide) | La bande autour de la consigne des statistiques ; vide : 1 % de l'étendue.
+@param pidGoal | Objectif | Équilibré | Le réglage conseillé : Robuste (Ms ≤ 1,4), Équilibré (Ms ≤ 1,6), Rapide (Ms ≤ 1,9).
+@param pidDerivative | Dérivée | si elle aide | si elle aide, jamais, toujours.
+@param pidClick | Au clic | ouvrir ses statistiques | ouvrir ses statistiques (sa fenêtre) ou rien.
+@param fontSize | Taille du texte | 13 | La taille des textes de la carte.
+@param textColor | Couleur du texte | #E6EAF0 | La couleur des textes de la carte.
+@param colorPv | Couleur de la mesure | #3B8FD9 | La courbe de la mesure.
+@param colorSp | Couleur de la consigne | #E8743B | La consigne (en tirets).
+@param colorOut | Couleur de la sortie | #8B7CF6 | La sortie.
+@param fill | Remplissage | #222831 | Le fond de la carte.
+@param stroke | Contour | #38414D | Son cadre.
+@param strokeWidth | Épaisseur du contour | 1 | Son épaisseur.
+@param radius | Rayon des coins | 8 | L'arrondi de la carte.
+### En marche
+- la carte dit son état d'une pastille - **Apprend**, **Saine**, **Oscille**, **Lente**, **Saturée**, **En MANU**, **Mesure figée**, **Non lue** - et une phrase : ce qu'il faut pour apprendre, le temps dans la tolérance, la saturation ;
+- en pied : le modèle appris et le réglage conseillé (« Réglage conseillé : Équilibré › » quand le réglage du bloc oscille ou traîne) ;
+- Générer signale une variable inconnue, une boucle sans mesure ni consigne, une période hors de 100 ms à 10 s, Kp, Ti ou Td qui sont des formules (ils se lisent, mais ne s'écrivent pas).
 
 == navigation | La navigation et la structure
 : Passer d'une vue à l'autre (barre de navigation, fil d'Ariane, Précédent / Suivant, vue d'accueil, glisser), ranger une vue (onglets, cadres, panneaux défilants ou repliables) et montrer un site sur son plan.

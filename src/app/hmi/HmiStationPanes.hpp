@@ -50,7 +50,8 @@ public:
     void refresh();
 
     // Les gestes du volet, pour les boutons, les scripts et les tests.
-    // Un reglage : "plein_ecran", "kiosque", "coin", "sans_curseur", "simulateur".
+    // Un reglage : "plein_ecran", "kiosque", "coin", "sans_curseur", "simulateur" ;
+    // 1.12.24 : "echelle" (Remplir l'ecran, Garder les proportions, Taille reelle).
     bool setSetting(const std::string& key, const std::string& value, std::string* why = nullptr);
     // Un ecran secondaire ; `display` 0 : le prochain numero libre ; `view` vide :
     // la premiere vue qu'aucun ecran ne montre.

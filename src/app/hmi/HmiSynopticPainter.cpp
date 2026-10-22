@@ -923,6 +923,169 @@ void drawTransformer(const Ctx& c, const Sym& s) {
     outline(c, circle(cx, c2, r), true, s.col, s.lw * 1.2);
 }
 
+// ---- 1.12.24 : les registres ---------------------------------------------------------------
+//  Une gaine (deux parois, une bride a chaque bout), la lame qui tourne sur son axe au
+//  centre : a plat (parallele au flux) ouverte, debout fermee ; modulant, de l'ouverture
+//  (0 a 100 %). L'axe monte a l'actionneur (servomoteur M, levier, verin) ; il clignote
+//  en mouvement. Les fins de course : deux voyants O et F a gauche de l'actionneur - la
+//  lame suit ce qu'ils disent, et une discordance (les deux, ou aucun a l'arret) se
+//  dessine en defaut. Le registre multi-lames : 2 a 8 lames l'une au-dessus de l'autre,
+//  opposees ou paralleles. Le clapet coupe-feu : une lame, la marque CF et son
+//  declencheur (fusible, electro-aimant, moteur) ; declenche, il est ferme, rouge, il clignote.
+struct DamperState {
+    double angle{0};        // 0 : a plat (ouvert), 90 : debout (ferme)
+    double opening{-1};     // % ; -1 : tout ou rien
+    bool   open{false}, moving{false}, discord{false}, tripped{false};
+    bool   hasLimits{false}, limitO{false}, limitF{false};
+};
+
+DamperState damperState(const Ctx& c, const Sym& s) {
+    DamperState d;
+    double n = 0;
+    d.open = s.on;
+    const std::string openingText = c.o.kind == Kind::FireDamper ? std::string() : c.src.text(c.o, "opening");
+    if (!openingText.empty() && hmi::parseNumber(openingText, n)) d.opening = std::clamp(n, 0.0, 100.0);
+    d.moving = !c.opt.editor && truthy(c.src.text(c.o, "moving"), n);
+    if (c.o.kind == Kind::FireDamper) d.tripped = truthy(c.src.text(c.o, "tripped"), n);
+    const std::string lo = c.src.text(c.o, "limitOpen"), lf = c.src.text(c.o, "limitClosed");
+    d.hasLimits = !lo.empty() || !lf.empty();
+    d.limitO = !lo.empty() && truthy(lo, n);
+    d.limitF = !lf.empty() && truthy(lf, n);
+    // La position : l'ouverture (modulant), sinon l'etat ; les fins de course la corrigent.
+    double frac = d.opening >= 0 ? d.opening / 100.0 : (d.open ? 1.0 : 0.0);
+    if (d.tripped) frac = 0;
+    if (d.hasLimits && !d.moving) {
+        if (d.limitO && !d.limitF) frac = d.opening >= 0 ? std::max(frac, 0.98) : 1.0;
+        if (d.limitF && !d.limitO) frac = 0;
+        // Une discordance : les deux fins de course a la fois, ou aucune (les deux etant cablees) a l'arret.
+        const bool both = !lo.empty() && !lf.empty();
+        d.discord = (d.limitO && d.limitF) || (both && !d.limitO && !d.limitF && !c.opt.editor);
+    }
+    d.angle = 90.0 * (1.0 - std::clamp(frac, 0.0, 1.0));
+    return d;
+}
+
+// Une lame centree en (cx, cy), de longueur `len`, tournee de `deg` (0 : a plat).
+void blade(const Ctx& c, double cx, double cy, double len, double deg, gfx::Color col, double width) {
+    const double a = deg * kPi / 180, dx = std::cos(a) * len / 2, dy = std::sin(a) * len / 2;
+    seg(c, cx - dx, cy + dy, cx + dx, cy - dy, col, width);
+}
+
+void drawDamper(const Ctx& c, const Sym& s) {
+    const DamperState d = damperState(c, s);
+    const bool multi = c.o.kind == Kind::MultiBladeDamper, fire = c.o.kind == Kind::FireDamper;
+    // La place : l'actionneur en haut, la gaine dessous.
+    const double actH = std::min(s.h * 0.34, s.w * 0.36);
+    const double top = s.y + actH + 2, bottom = s.y + s.h - 1;
+    const double dh = std::max(6.0, bottom - top), cy = top + dh / 2;
+    const double x0 = s.x + std::max(2.0, s.lw), x1 = s.x + s.w - std::max(2.0, s.lw);
+    const bool faulty = s.fault || d.discord || d.tripped;
+    const bool blinkOff = !c.opt.editor && std::fmod(c.opt.time, 1.0) >= 0.5;
+    const gfx::Color bad = c.color("colorFault", gfx::Color::rgb(0xE5534B));
+    const gfx::Color onCol = c.color("colorOn", gfx::Color::rgb(0x2ECC71));
+    const double frac = 1.0 - d.angle / 90.0;
+    gfx::Color bladeCol = frac > 0.02 ? onCol : s.off;
+    if (faulty) bladeCol = blinkOff ? shade(bad, 0.45f) : bad;
+    const gfx::Color wall = faulty ? bladeCol : s.line;
+    // La gaine : son fond, ses deux parois, ses brides.
+    fill(c, box(x0, top, x1 - x0, dh), c.fixed(0x1B2028));
+    seg(c, x0, top, x1, top, wall, s.lw);
+    seg(c, x0, bottom, x1, bottom, wall, s.lw);
+    const double fl = std::min(6.0, dh * 0.14);
+    seg(c, x0, top - fl, x0, bottom + std::min(fl, 0.5), wall, s.lw);
+    seg(c, x1, top - fl, x1, bottom + std::min(fl, 0.5), wall, s.lw);
+    const double bw = std::max(2.0, s.lw * 1.6);
+    if (multi) {
+        const int n = std::clamp(static_cast<int>(std::lround(c.src.number(c.o, "blades", 4))), 2, 8);
+        const bool opposed = c.src.text(c.o, "bladeMode", "oppos\xC3\xA9" "es").rfind("oppos", 0) == 0;
+        const double slot = dh / n;
+        const double len = std::min(slot * 1.04, (x1 - x0) * 0.8);
+        for (int i = 0; i < n; ++i) {
+            const double by = top + slot * (i + 0.5);
+            const double deg = opposed && i % 2 == 1 ? -d.angle : d.angle;
+            blade(c, s.cx(), by, len, deg, bladeCol, bw);
+            fill(c, circle(s.cx(), by, std::max(1.5, bw * 0.75), 14), s.line);
+        }
+        // La tringle qui les lie, a droite des axes.
+        seg(c, s.cx() + len * 0.18, top + slot * 0.5, s.cx() + len * 0.18, top + slot * (n - 0.5), withA(s.line, 0.55f), 1);
+    } else {
+        const double len = std::min(dh * 0.92, (x1 - x0) * 0.86);
+        blade(c, s.cx(), cy, len, d.angle, bladeCol, bw * 1.15);
+        fill(c, circle(s.cx(), cy, std::max(2.0, bw), 16), s.line);
+    }
+    // L'axe jusqu'a l'actionneur ; il clignote en mouvement.
+    const double axisTop = multi ? top + dh / std::max(2.0, c.src.number(c.o, "blades", 4)) * 0.5 : cy;
+    const bool blinkAxis = d.moving && std::fmod(c.opt.time, 0.6) >= 0.3;
+    const double ay = s.y + actH * 0.5;
+    seg(c, s.cx(), multi ? top : axisTop, s.cx(), ay + actH * 0.3, blinkAxis ? onCol : s.line, s.lw);
+    const double r = std::max(3.0, std::min(actH * 0.42, s.w * 0.16));
+    if (fire) {
+        // Le declencheur : un fusible (un trait en zigzag dans sa boite), un electro-aimant
+        // (une bobine), un moteur (M) ; et la marque CF a gauche.
+        const std::string rel = c.src.text(c.o, "fireRelease", "fusible");
+        if (rel == "moteur") {
+            fill(c, circle(s.cx(), ay, r), c.fixed(0x2B333F));
+            outline(c, circle(s.cx(), ay, r), true, s.line, s.lw * 0.8);
+            text(c, "M", s.cx() - r, ay - r, 2 * r, 2 * r, s.txt, r * 1.2, "centre");
+        } else {
+            const Pts b = box(s.cx() - r * 1.1, ay - r * 0.7, r * 2.2, r * 1.4, 2);
+            fill(c, b, c.fixed(0x2B333F));
+            outline(c, b, true, s.line, s.lw * 0.8);
+            Pts zig;
+            const int k = rel == "fusible" ? 5 : 7;
+            for (int i = 0; i <= k; ++i)
+                zig.push_back(P(s.cx() - r * 0.8 + r * 1.6 * i / k, ay + (i % 2 ? -r * 0.35 : r * 0.35)));
+            outline(c, zig, false, d.tripped ? bladeCol : s.txt, 1.3);
+        }
+        const double fs = std::clamp(actH * 0.55, 7.0, 16.0);
+        const double tagW = fs * 1.9, tagX = s.x + 2, tagY = ay - fs * 0.7;
+        const Pts tag = box(tagX, tagY, tagW, fs * 1.4, 3);
+        fill(c, tag, d.tripped ? bladeCol : c.fixed(0x3A2A1E));
+        outline(c, tag, true, d.tripped ? bladeCol : c.fixed(0xF2994A), 1);
+        text(c, "CF", tagX, tagY, tagW, fs * 1.4, d.tripped ? c.fixedOn(0x111418) : c.fixedText(0xF2994A), fs, "centre");
+    } else {
+        const std::string act = c.src.text(c.o, "damperActuator", "servomoteur");
+        if (act == "manuel") {
+            // Un levier : un trait incline et sa boule.
+            const double lx = s.cx() + r * 1.2 * std::cos((d.angle - 90) * kPi / 180), ly = ay - r * 0.9;
+            seg(c, s.cx(), ay + r * 0.3, lx, ly, s.line, s.lw * 1.2);
+            fill(c, circle(lx, ly, std::max(2.0, r * 0.28), 14), s.line);
+        } else if (act == "pneumatique") {
+            Pts dome;
+            for (int k = 0; k <= 20; ++k) {
+                const double ang = kPi + kPi * k / 20.0;
+                dome.push_back(P(s.cx() + r * std::cos(ang), ay + r * 0.45 + r * std::sin(ang)));
+            }
+            fill(c, dome, c.fixed(0x2B333F));
+            outline(c, dome, true, s.line, s.lw * 0.8);
+        } else {
+            fill(c, circle(s.cx(), ay, r), c.fixed(0x2B333F));
+            outline(c, circle(s.cx(), ay, r), true, s.line, s.lw * 0.8);
+            text(c, "M", s.cx() - r, ay - r, 2 * r, 2 * r, s.txt, r * 1.2, "centre");
+        }
+    }
+    // L'ouverture (modulant), a droite de l'actionneur.
+    if (d.opening >= 0) {
+        const double fs = std::clamp(std::min(actH * 0.5, 12.0), 7.0, 12.0);
+        const double tx = s.cx() + r * 1.3 + 2;
+        text(c, hmi::formatNumber(std::round(d.opening)) + " %", tx, ay - fs * 0.75, std::max(fs * 3.2, s.x + s.w - tx), fs * 1.5, s.txt, fs, "gauche");
+    }
+    // Les fins de course : O (ouvert) et F (ferme), a gauche de l'actionneur.
+    if (d.hasLimits) {
+        const double lr = std::clamp(actH * 0.16, 2.5, 6.0);
+        const double base = s.cx() - r * 1.3 - 4 - lr;
+        const struct { double x; bool on; const char* tag; } leds[] = {{base - lr * 3.4, d.limitO, "O"}, {base, d.limitF, "F"}};
+        for (const auto& l : leds) {
+            if (fire && l.x - lr < s.x + std::clamp(actH * 0.55, 7.0, 16.0) * 2.2) continue;   // la marque CF garde sa place
+            const gfx::Color lc = d.discord ? bladeCol : l.on ? onCol : withA(s.off, 0.8f);
+            fill(c, circle(l.x, ay - lr * 0.6, lr, 16), lc);
+            outline(c, circle(l.x, ay - lr * 0.6, lr, 16), true, c.fixed(0x10141A), 1);
+            text(c, l.tag, l.x - lr * 2, ay + lr * 0.5, lr * 4, lr * 2.6, s.txt, std::max(6.0, lr * 2.2), "centre");
+        }
+    }
+    if (faulty && !s.fault && c.src.flag(c.o, "a11ySymbols", false)) drawFaultBadge(c, s.x + s.w, s.y, std::clamp(s.r() * 0.45, 9.0, 22.0));
+}
+
 } // namespace
 
 bool drawSynoptic(const Ctx& c) {
@@ -955,6 +1118,9 @@ bool drawSynoptic(const Ctx& c) {
         case Kind::Mixer:          drawMixer(c, s); break;
         case Kind::CheckValve:     drawCheckValve(c, s); break;
         case Kind::FlowArrow:      drawFlowArrow(c, s); break;
+        case Kind::Damper:
+        case Kind::MultiBladeDamper:
+        case Kind::FireDamper:     drawDamper(c, s); break;      // 1.12.24
         default:                   return false;
     }
     // Lot 13 : l'accessibilite - un defaut se lit aussi a son triangle.

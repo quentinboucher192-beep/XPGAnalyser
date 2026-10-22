@@ -871,6 +871,39 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.set("moving", "");
             o.setFlag("showPorts", true);
             break;
+        case Kind::Damper:
+        case Kind::MultiBladeDamper:
+            // 1.12.24 : le registre (une lame, papillon) et le registre multi-lames. "value" :
+            // ouvert (vrai) ou ferme ; "opening" : modulant, de 0 a 100 % (sa plage :
+            // openingMin, openingMax ; vide : tout ou rien) - la lame tourne avec lui ;
+            // "moving" : il bouge (l'axe clignote) ; "limitOpen" / "limitClosed" : ses fins
+            // de course (deux voyants O et F ; ni l'une ni l'autre a l'arret, ou les deux :
+            // une discordance, dite sur l'objet) ; "damperActuator" : son actionneur.
+            synoptic(o, x, y, kind == Kind::Damper ? 90 : 100, kind == Kind::Damper ? 70 : 86, "FALSE");
+            eraseKeys(o, {"animate"});
+            o.set("damperActuator", "servomoteur");
+            o.set("opening", "");
+            o.set("moving", "");
+            o.set("limitOpen", "");
+            o.set("limitClosed", "");
+            if (kind == Kind::MultiBladeDamper) {
+                o.setNumber("blades", 4);
+                o.set("bladeMode", "oppos\xC3\xA9" "es");
+            }
+            break;
+        case Kind::FireDamper:
+            // 1.12.24 : le clapet coupe-feu. "value" : ouvert (vrai : en veille, la position
+            // normale) ; "tripped" : declenche (le fusible a fondu, la commande de securite) -
+            // ferme, rouge, il clignote ; "fireRelease" : fusible, electro-aimant ou moteur
+            // (le reamement) ; ses fins de course comme le registre.
+            synoptic(o, x, y, 90, 70, "TRUE");
+            eraseKeys(o, {"animate"});
+            o.set("colorOff", "#F2994A");
+            o.set("tripped", "");
+            o.set("fireRelease", "fusible");
+            o.set("limitOpen", "");
+            o.set("limitClosed", "");
+            break;
         case Kind::FlowArrow:
             synoptic(o, x, y, 90, 36, "FALSE");
             o.set("colorOn", "#4FA3FF");
@@ -1290,6 +1323,53 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.set("condition", "");
             o.set("end", "derni\xC3\xA8re image");
             o.set("stretch", "ajuster");
+            break;
+        case Kind::PidTuner:
+            // 1.12.24 : le Reglage PID - une carte qui regarde une boucle (consigne,
+            // mesure, sortie, mode), apprend son procede, en tire ses statistiques et
+            // propose un reglage ; un clic ouvre sa fenetre (Statistiques, Ce qu'il a
+            // appris, Reglage propose, Journal). Les cles "pid..." : la boucle, le bloc
+            // (Kp, Ti, Td, sa forme, ses unites ; ecrits apres confirmation), les
+            // echelles, l'apprentissage, l'objectif du reglage. Vide : deduit (le titre
+            // de la boucle, l'etendue de la variable, toujours en AUTO...).
+            common(o, x, y, 340, 176);
+            o.set("title", "");
+            o.set("pidLoop", "");
+            o.set("pidSp", "");
+            o.set("pidPv", "");
+            o.set("pidOut", "");
+            o.set("pidAuto", "");
+            o.set("pidKp", "");
+            o.set("pidTi", "");
+            o.set("pidTd", "");
+            o.set("pidForm", "standard");
+            o.set("pidTimeUnit", "s");
+            o.set("pidKpMode", "physique");
+            o.setNumber("pidKpScale", 1);
+            o.set("pidWrite", "apr\xC3\xA8s confirmation");
+            o.set("pidPvMin", "");
+            o.set("pidPvMax", "");
+            o.set("unit", "");
+            o.setNumber("pidOutMin", 0);
+            o.setNumber("pidOutMax", 100);
+            o.set("pidAction", "d\xC3\xA9tect\xC3\xA9");
+            o.setNumber("pidPeriod", 1000);
+            o.set("pidLearn", "en AUTO et en MANU");
+            o.setNumber("pidMemory", 7);
+            o.setNumber("pidForget", 24);
+            o.set("pidTolerance", "");
+            o.set("pidGoal", "\xC3\x89quilibr\xC3\xA9");
+            o.set("pidDerivative", "si elle aide");
+            o.set("pidClick", "ouvrir ses statistiques");
+            o.setNumber("fontSize", 13);
+            o.set("textColor", "#E6EAF0");
+            o.set("colorPv", "#3B8FD9");
+            o.set("colorSp", "#E8743B");
+            o.set("colorOut", "#8B7CF6");
+            o.set("fill", "#222831");
+            o.set("stroke", "#38414D");
+            o.setNumber("strokeWidth", 1);
+            o.setNumber("radius", 8);
             break;
         case Kind::ThemeSelector:
             // Lot 13 : deux boutons, Jour et Nuit ("themeLabels"), le theme en cours

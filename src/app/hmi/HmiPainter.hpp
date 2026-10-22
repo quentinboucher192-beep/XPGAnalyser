@@ -33,8 +33,14 @@ struct HmiViewport {
     // Toute la vue tournee (une transition "rotation") : de `angle` degres, sens
     // horaire, autour de (pivotX, pivotY) a l'ecran. 0 dans l'editeur.
     float angle{0}, pivotX{0}, pivotY{0};
+    // 1.12.24 : LA VUE ETIREE (le plein ecran Remplir) - une echelle par axe :
+    // zoom * stretchX en x, zoom * stretchY en y. Les tailles (textes, traits)
+    // restent a `zoom`. 1 : sans etirement (l'editeur, les apercus).
+    float stretchX{1}, stretchY{1};
+    [[nodiscard]] float zoomX() const noexcept { return zoom * stretchX; }
+    [[nodiscard]] float zoomY() const noexcept { return zoom * stretchY; }
     [[nodiscard]] gfx::Point toScreen(double x, double y) const noexcept {
-        gfx::Point p{originX + static_cast<float>(x) * zoom, originY + static_cast<float>(y) * zoom};
+        gfx::Point p{originX + static_cast<float>(x) * zoomX(), originY + static_cast<float>(y) * zoomY()};
         if (angle != 0.f) {
             const float rad = angle * 3.14159265f / 180.f, c = std::cos(rad), s = std::sin(rad);
             const float dx = p.x - pivotX, dy = p.y - pivotY;
@@ -43,8 +49,8 @@ struct HmiViewport {
         return p;
     }
     // L'inverse, sans rotation (l'editeur, et les clics hors transition).
-    [[nodiscard]] double toViewX(float sx) const noexcept { return (sx - originX) / zoom; }
-    [[nodiscard]] double toViewY(float sy) const noexcept { return (sy - originY) / zoom; }
+    [[nodiscard]] double toViewX(float sx) const noexcept { return (sx - originX) / zoomX(); }
+    [[nodiscard]] double toViewY(float sy) const noexcept { return (sy - originY) / zoomY(); }
 };
 
 class HmiPropertySource {

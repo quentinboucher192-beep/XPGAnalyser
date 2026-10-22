@@ -39,6 +39,7 @@
 #include "HmiExpr.hpp"
 #include "HmiPopupParams.hpp"
 #include "HmiHistory.hpp"
+#include "HmiPidLoop.hpp"   // 1.12.24 : le Reglage PID
 #include "HmiControls.hpp"
 #include "HmiLoginMenu.hpp"
 #include "HmiModel.hpp"
@@ -1160,6 +1161,24 @@ public:
     [[nodiscard]] std::vector<AlarmDef> activeObjectAlarmDefs() const;
     [[nodiscard]] std::uint64_t         objectAlarmsGeneration() const noexcept { return objectAlarmsGen_; }
 
+    // ---- 1.12.24 : le Reglage PID (HmiRuntimePid.cpp) ----------------------------------------
+    //  Chaque objet Reglage PID des vues lit sa boucle a sa periode, affichee ou non ; sa memoire se
+    //  garde dans l'historique (History::pid). Sa fenetre (une a la fois) : pidOpen, pidPart.
+    [[nodiscard]] const PidLoop*   pidLoop(Id view, Id object) const;   // nul : pas encore lue
+    [[nodiscard]] const PidLoop*   pidLoop(Id object) const;            // celle de la vue ouverte qui le tient
+    [[nodiscard]] const PidWindow& pidWindow() const noexcept { return pidWindow_; }
+    [[nodiscard]] bool             pidShown() const noexcept { return pidWindow_.shown; }
+    [[nodiscard]] const PidLoop*   pidShownLoop() const;
+    [[nodiscard]] std::size_t      pidLoopCount() const noexcept { return pid_.size(); }
+    void pidOpen(Id view, Id object, int tab, double now);
+    //  Un clic dans la fenetre : "onglet:N", "duree:N", "objectif:N", "appliquer" (puis ":oui" / ":non"),
+    //  "copier", "oublier" (":oui", ":non"), "revenir:N" (":oui", ":non"), "exporter", "journal:haut",
+    //  "journal:bas", "fermer", "dehors".
+    void pidPart(std::string_view part, double now);
+    void pidHover(double t) noexcept { pidWindow_.hoverT = t; }
+    // Les memoires de tous les Reglages PID dans l'historique (l'arret le fait ; l'ecran avant d'enregistrer).
+    void pidKeepAll();
+
     // ---- lot 11 : la production ---------------------------------------------------------
     [[nodiscard]] ProductionFigures production(Id object) const;   // dans la vue ouverte qui le tient
     // 1.12.5 (lot A, D10) : le compte d'un objet d'une vue, pour le jeu d'arguments en cours.
@@ -1419,6 +1438,18 @@ private:
     // soit alle sur sa page. Les vues du projet : relues au plus une fois par seconde.
     [[nodiscard]] std::vector<Id> samplingPlan(double now);
     std::vector<Id> samplePlan_;
+    // ---- 1.12.24 : le Reglage PID (HmiRuntimePid.cpp)
+    void pidCycle(double now);
+    bool pidRead(const std::string& expr, double& out, bool* time = nullptr);
+    void pidResolve(PidLoop&, const View&, const Object& o, const Object& shown);
+    bool pidWrite(PidLoop&, const View&, const Object&, const pid::Gains&, const std::string& what, double now);
+    void pidDo(std::string_view part, double now, bool signedAlready);
+    void pidSay(std::string message, bool bad, double now);
+    void pidObjectPart(const View&, const Object&, std::string_view part, double now);
+    std::map<std::string, PidLoop>   pid_;
+    PidWindow                        pidWindow_;
+    std::vector<std::pair<Id, Id>>   pidPlan_;
+    double                           pidPlanAt_{-1e9};
     // 1.12.3 : les lignes gardees en memoire, et les erreurs comptees depuis le demarrage.
     [[nodiscard]] std::size_t journalCap() const;
     long long   errorCount_{0};

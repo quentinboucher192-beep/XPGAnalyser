@@ -1244,6 +1244,11 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
 #endif
             app_.setStationWindow(on || *before, false);
         };
+        // 1.12.24 : la mise a l'echelle en plein ecran (la barre flottante), retenue d'une seance a l'autre.
+        host.screenFit = [this] {
+            return hmi::screenFitFrom(app_.settings().getString("simulation.screenFit", "remplir")).value_or(hmi::ScreenFit::Fill);
+        };
+        host.setScreenFit = [this](hmi::ScreenFit f) { app_.settings().set("simulation.screenFit", std::string(hmi::screenFitKey(f))); };
         host.recipe = [this](const hmi::RecipeRequest& rq) { askHmiRecipeRecord(rq); };
         host.users = [this](const hmi::UserRequest& rq) { askHmiUserRecord(rq); };
         host.resource = [this](const hmi::ResourceRequest& rq) { askHmiRuntimeResource(rq); };

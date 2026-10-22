@@ -137,4 +137,8 @@ void drawFaultBadge(const Ctx& c, double right, double top, double size);
 // L'etat de la communication, le diagnostic automate. Faux : l'objet n'en est pas un.
 bool drawLot14(const Ctx& c);
 
+// ---- 1.12.24 (HmiPidPainter.cpp) ---------------------------------------------------------
+// La carte du Reglage PID (en marche : sa boucle ; dans l'editeur : un apercu). Faux : pas un Reglage PID.
+bool drawPidTuner(const Ctx& c);
+
 } // namespace app::paint

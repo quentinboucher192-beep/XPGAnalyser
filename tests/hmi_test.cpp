@@ -33,6 +33,7 @@
 #include "../src/hmi/HmiMarquee.hpp"   // 1.12.12 (lot H) : le texte defilant depuis une source
 #include "../src/hmi/HmiRecipes.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
+#include "../src/hmi/HmiPidLoop.hpp"   // 1.12.24 : le Reglage PID
 #include "../src/core/CallTrail.hpp"
 #include "../src/hmi/HmiScript.hpp"
 #include "../src/hmi/HmiGenericEdit.hpp"   // 1.12.21 : les generiques changent, leurs emplois suivent
@@ -11621,10 +11622,32 @@ void posteLot14() {
     p.station.hideCursor = true;
     p.station.runSimulator = false;
     p.station.screens = {{2, "Tendances"}, {3, "Synoptique"}};
+    p.station.screenFit = ScreenFit::Keep;   // 1.12.24
     const auto files = serializeProject(p);
     std::string index(files.front().data->begin(), files.front().data->end());
     check(index.find("poste plein_ecran=0") != std::string::npos && index.find("poste_ecran ecran=2 vue=\"Tendances\"") != std::string::npos,
           "ihm.txt : le poste et ses \xC3\xA9" "crans");
+    // 1.12.24 : la mise a l'echelle de la vue - ecrite si ce n'est pas Remplir ; absente (un projet d'avant) : Remplir.
+    check(index.find(" echelle=proportions") != std::string::npos, "ihm.txt : la mise \xC3\xA0 l'\xC3\xA9" "chelle du poste (Garder les proportions)");
+    {
+        std::string old = index;
+        old.erase(old.find(" echelle=proportions"), std::string(" echelle=proportions").size());
+        auto before = parseProject([&](const std::string& rel, std::string& out) {
+            for (const auto& f : files)
+                if (f.path == rel) {
+                    if (&f == &files.front()) out = old;
+                    else out.assign(f.data->begin(), f.data->end());
+                    return true;
+                }
+            return false;
+        });
+        check(before && before->station.screenFit == ScreenFit::Fill && !before->station.fullScreen,
+              "un projet d'avant (le poste sans \xC2\xAB echelle \xC2\xBB) : Remplir l'\xC3\xA9" "cran");
+    }
+    check(screenFitFrom("Garder les proportions") == ScreenFit::Keep && screenFitFrom("reelle") == ScreenFit::Actual
+              && screenFitFrom(screenFitLabel(ScreenFit::Actual)) == ScreenFit::Actual && screenFitFrom("Remplir l'\xC3\xA9" "cran") == ScreenFit::Fill
+              && !screenFitFrom("plein"),
+          "la mise \xC3\xA0 l'\xC3\xA9" "chelle se lit par sa cl\xC3\xA9 ou son libell\xC3\xA9");
     check(index.find("1234") == std::string::npos && index.find(p.station.exitHash) != std::string::npos,
           "le mot de passe de sortie : son empreinte seule");
     auto again = parseProject([&](const std::string& rel, std::string& out) {
@@ -29040,6 +29063,165 @@ void generiquesSuivent11221() {
           "symbole : U retire - Valeur : REAL (ce que donnait l'instance), U := REAL part de l'instance (" + p.view(hostId)->object(i1)->text("params") + ")");
 }
 
+// ============================================================== 1.12.24 ======
+//  Les registres du synoptique et le Reglage PID en marche.
+void registres11224() {
+    std::printf("1.12.24 : les registres (papillon, multi-lames, clapet coupe-feu)\n");
+    namespace g = hmi::guide;
+    const Kind ks[] = {Kind::Damper, Kind::MultiBladeDamper, Kind::FireDamper};
+    bool ok = true;
+    for (const auto k : ks)
+        ok = ok && kindIsSynoptic(k) && kindIsDamper(k) && kindFromKey(kindKey(k)) == k
+          && std::find(std::begin(kPlaceableKinds), std::end(kPlaceableKinds), k) != std::end(kPlaceableKinds)
+          && examples::exampleFor(k).has_value() && g::topicForKind(kindKey(k)) != nullptr;
+    check(ok, "les trois registres : du synoptique, posables, leur cl\xC3\xA9, leur exemple, leur sujet du guide");
+    check(kindHasOpening(Kind::Valve) && kindHasOpening(Kind::Damper) && kindHasOpening(Kind::MultiBladeDamper) && !kindHasOpening(Kind::FireDamper)
+              && !kindIsDamper(Kind::Valve),
+          "l'ouverture (0 \xC3\xA0 100 %) : la vanne, le registre, le multi-lames ; pas le clapet coupe-feu");
+    const auto at = std::find(std::begin(kPlaceableKinds), std::end(kPlaceableKinds), Kind::ThreeWayValve);
+    check(std::distance(at, std::end(kPlaceableKinds)) > 3 && at[1] == Kind::Damper && at[2] == Kind::MultiBladeDamper && at[3] == Kind::FireDamper,
+          "dans la biblioth\xC3\xA8que : apr\xC3\xA8s la vanne 3 voies");
+    const Object mb = makeObject(Kind::MultiBladeDamper, 7, "RG_2", 0, 0, 1);
+    const Object cf = makeObject(Kind::FireDamper, 8, "CF_1", 0, 0, 1);
+    check(mb.number("blades", 0) == 4 && mb.find("bladeMode") && cf.find("tripped") && cf.find("fireRelease") && cf.text("colorOff") == "#F2994A",
+          "les valeurs neuves : quatre lames ; le clapet, son d\xC3\xA9" "clenchement et sa couleur");
+    // En marche : l'ouverture publiee, les alarmes de l'objet.
+    Project p;
+    p.programs.variables.push_back(hmiVar(p, "Ouv", "REAL", "35.0"));
+    p.programs.variables.push_back(hmiVar(p, "FCO", "BOOL", "TRUE"));
+    p.programs.variables.push_back(hmiVar(p, "FCF", "BOOL", "TRUE"));
+    p.programs.variables.push_back(hmiVar(p, "Feu", "BOOL", "FALSE"));
+    View w = makeView(p, "Vue_R");
+    const Id rid = edit::add(p, w, Kind::Damper, 10, 10);
+    w.object(rid)->name = "RG_1";
+    w.object(rid)->setExpr("opening", "Ouv");
+    w.object(rid)->setExpr("limitOpen", "FCO");
+    w.object(rid)->setExpr("limitClosed", "FCF");
+    const Id fid = edit::add(p, w, Kind::FireDamper, 200, 10);
+    w.object(fid)->name = "CF_1";
+    w.object(fid)->setExpr("tripped", "Feu");
+    p.views = {w};
+    p.config.startView = w.id;
+    bool disc = false, fire = false;
+    for (const auto& a : objectAlarms(p)) {
+        disc = disc || (a.objectName == "RG_1" && a.localName == "Discordance" && a.def.condition.find("FCO") != std::string::npos
+                        && a.def.condition.find("FCF") != std::string::npos);
+        fire = fire || (a.objectName == "CF_1" && a.localName == "Declenche" && a.def.condition.find("Feu") != std::string::npos);
+    }
+    check(disc && fire, "les alarmes des objets : la discordance des fins de course du registre, le d\xC3\xA9" "clenchement du clapet");
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0);
+    rt.tick(0.1);
+    sim::Value out;
+    check(rt.publicRead("Vue_R.RG_1.Opening", out) && std::fabs(out.asReal() - 35.0) < 1e-9, "variable d'instance : Vue_R.RG_1.Opening = 35");
+}
+
+void reglagePid11224() {
+    std::printf("1.12.24 : le R\xC3\xA9glage PID en marche (lire, apprendre, appliquer, revenir, se souvenir, oublier)\n");
+    Project p;
+    const char* vars[][3] = {{"SP", "REAL", "60.0"}, {"PV", "REAL", "60.0"}, {"X2", "REAL", "60.0"}, {"I", "REAL", "30.0"}, {"E", "REAL", "0.0"},
+                             {"OUT", "REAL", "30.0"}, {"KP", "REAL", "2.0"}, {"TI", "REAL", "8.0"}, {"N", "DINT", "0"}};
+    for (const auto& v : vars) p.programs.variables.push_back(hmiVar(p, v[0], v[1], v[2]));
+    // Le procede (deux constantes de temps, 8 s et 3 s, gain 0,5) et son PI, tous les 100 ms ; trois echelons espaces
+    // de 400 s (l'apprentissage attend 4 min de calme apres un echelon tant qu'il n'a pas de modele).
+    Script sc = generalScript(p, "Boucle",
+                              "N := N + 1;\n"
+                              "IF N < 1500 THEN SP := 60.0; ELSIF N < 5500 THEN SP := 70.0; ELSIF N < 9500 THEN SP := 62.0;\n"
+                              "ELSE SP := 68.0; END_IF;\n"
+                              "E := SP - PV;\n"
+                              "I := LIMIT(0.0, I + 0.1 * KP * E / TI, 100.0);\n"
+                              "OUT := LIMIT(0.0, KP * E + I, 100.0);\n"
+                              "X2 := X2 + 0.1 / 8.0 * (45.0 + 0.5 * OUT - X2);\n"
+                              "PV := PV + 0.1 / 3.0 * (X2 - PV);");
+    sc.event = "Cyclique";
+    sc.periodMs = 100;
+    p.programs.scripts.push_back(sc);
+    View v = makeView(p, "Vue_PID");
+    const Id id = edit::add(p, v, Kind::PidTuner, 10, 10);
+    Object& o = *v.object(id);
+    o.name = "TE_1";
+    o.set("pidSp", "SP");
+    o.set("pidPv", "PV");
+    o.set("pidOut", "OUT");
+    o.set("pidKp", "KP");
+    o.set("pidTi", "TI");
+    o.set("pidPvMin", "40");
+    o.set("pidPvMax", "90");
+    o.setNumber("pidPeriod", 100);
+    p.views = {v};
+    p.config.startView = v.id;
+    const Id viewId = v.id;
+    History h;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.setHistory(&h);
+    double t = 0;
+    rt.start(t);
+    const auto run = [&](Runtime& r, double seconds) {
+        const double end = t + seconds;
+        while (t < end - 1e-9) {
+            t += 0.05;
+            r.tick(t);
+        }
+    };
+    run(rt, 5);
+    const PidLoop* L = rt.pidLoop(viewId, id);
+    check(L && L->read && L->error.empty() && rt.pidLoopCount() == 1, "lu toutes les 100 ms, affich\xC3\xA9 ou non : consigne, mesure, sortie");
+    check(L && L->gains && std::fabs(L->gains->kp - 2.0) < 1e-9 && std::fabs(L->gains->ti - 8.0) < 1e-9, "le r\xC3\xA9glage du bloc lu : Kp 2, Ti 8 s");
+    check(L && L->learner.state() == pid::State::Learning, "sans \xC3\xA9" "chelon : il apprend");
+    run(rt, 1250);
+    L = rt.pidLoop(viewId, id);
+    const bool learned = L && L->learner.model().valid && L->learner.model().learned >= 2;
+    check(learned, "trois \xC3\xA9" "chelons : le proc\xC3\xA9" "d\xC3\xA9 appris (" + std::to_string(L ? L->learner.model().learned : 0) + " \xC3\xA9" "chelons, le dernier gard\xC3\xA9 pour v\xC3\xA9rifier)");
+    check(L && std::fabs(L->learner.model().k - 0.5) < 0.1, "son gain : 0,5 (" + (L ? pidNumber(L->learner.model().k, 3) : std::string("?")) + ")");
+    const auto& pr = L->learner.proposal(L->learner.config().goal, L->learner.config().derivative, L->bind.form);
+    check(pr.ok && pr.gains.kp > 0 && pr.gains.ti > 0, "un r\xC3\xA9glage propos\xC3\xA9");
+    // Appliquer : demander, confirmer ; le bloc recoit le reglage propose, le Journal le garde.
+    rt.pidOpen(viewId, id, 2, t);
+    check(rt.pidShown() && rt.pidWindow().tab == 2, "la fen\xC3\xAAtre s'ouvre sur R\xC3\xA9glage propos\xC3\xA9");
+    rt.pidPart("appliquer", t);
+    check(rt.pidWindow().confirm, "Appliquer demande confirmation");
+    rt.pidPart("appliquer:oui", t);
+    run(rt, 1);
+    const auto blk = pidBlockOf(*rt.pidLoop(viewId, id), pr.gains);
+    const double kp = rt.variable("KP") ? rt.variable("KP")->asReal() : 0, ti = rt.variable("TI") ? rt.variable("TI")->asReal() : 0;
+    check(std::fabs(kp - blk.p) < 1e-3 && std::fabs(ti - blk.i) < 1e-3, "confirm\xC3\xA9 : KP et TI \xC3\xA9" "crits (" + pidNumber(kp, 3) + ", " + pidNumber(ti, 3) + ")");
+    L = rt.pidLoop(viewId, id);
+    bool appliedEvent = false;
+    for (const auto& e : L->learner.events()) appliedEvent = appliedEvent || e.kind == pid::EventKind::Applied;
+    check(!L->applied.empty() && appliedEvent, "le Journal garde le r\xC3\xA9glage \xC3\xA9" "crit (Revenir le remettra)");
+    // Revenir : l'ancien reglage revient.
+    rt.pidPart("onglet:3", t);
+    rt.pidPart("revenir:0", t);
+    check(rt.pidWindow().revertAsk == 0, "Revenir demande confirmation");
+    rt.pidPart("revenir:oui", t);
+    run(rt, 1);
+    check(std::fabs(rt.variable("KP")->asReal() - 2.0) < 1e-6 && std::fabs(rt.variable("TI")->asReal() - 8.0) < 1e-6, "Revenir : Kp 2 et Ti 8 remis");
+    // La memoire : gardee dans l'historique, reprise par un autre moteur.
+    rt.pidKeepAll();
+    const auto mem = h.pid.find(pidMemoryName("Vue_PID.TE_1"));
+    check(mem != h.pid.end() && !mem->second.empty(), "la m\xC3\xA9moire gard\xC3\xA9" "e dans l'historique (pid/Vue_PID.TE_1.mem)");
+    rt.stop(t);
+    Runtime again;
+    again.bind(&p, nullptr);
+    again.setHistory(&h);
+    again.start(t);
+    run(again, 2);
+    const PidLoop* L2 = again.pidLoop(viewId, id);
+    check(L2 && L2->loaded && L2->learner.model().valid, "relanc\xC3\xA9 : il reprend ce qu'il avait appris");
+    // Oublier : le modele repart de zero, les statistiques restent.
+    again.pidOpen(viewId, id, 1, t);
+    again.pidPart("oublier", t);
+    again.pidPart("oublier:oui", t);
+    run(again, 1);
+    L2 = again.pidLoop(viewId, id);
+    check(L2 && !L2->learner.model().valid && L2->learner.sampleCount() > 0, "Oublier : le mod\xC3\xA8le repart de z\xC3\xA9ro, les mesures restent");
+    // L'export : l'en-tete et une ligne par minute.
+    const std::string csv = pidCsv(*L2, 1800);
+    check(csv.rfind("heure;consigne;mesure", 0) == 0 && std::count(csv.begin(), csv.end(), '\n') > 10, "l'export CSV : une ligne par minute");
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les performances dans le temps, les lenteurs, seules.
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
@@ -29266,6 +29448,8 @@ int main(int argc, char** argv) {
     rappelsExpressions1219();         // 1.12.19 : un rappel dans une fx et un script (Compiler, la simulation)
     finitions1220();                  // 1.12.20 (F) : les finitions des rappels
     typesRappel1220();                // 1.12.20 (T) : les types rappel nommes
+    registres11224();                 // 1.12.24 : les registres du synoptique
+    reglagePid11224();                // 1.12.24 : le Reglage PID en marche
     scriptsC1220();                   // 1.12.20 (C) : les scripts C et C++, l'en-tete du projet
     generiques1220();                 // 1.12.20 (G) : les structures, les symboles et les popups generiques
     generiquesSuivent11221();         // 1.12.21 : les generiques changent, leurs emplois suivent

@@ -119,11 +119,12 @@ std::vector<const RoleInfo*> rolesOf(Kind k) {
     };
     add(kindHasLevel(k) || k == Kind::IsaInstrument ? Role::Measure : k == Kind::ThreeWayValve ? Role::Position : Role::Running);
     add(Role::Fault);
-    if (k == Kind::Valve) add(Role::Opening);
-    if (k == Kind::Valve || k == Kind::ThreeWayValve) add(Role::Moving);
+    if (kindHasOpening(k)) add(Role::Opening);   // 1.12.24 : la vanne et les registres
+    if (k == Kind::Valve || k == Kind::ThreeWayValve || kindIsDamper(k)) add(Role::Moving);
     // Le mode (Auto, Manu) : ce qui se pilote - pas un tube, une fleche, un contenant, un appareil electrique.
     if (k == Kind::Pump || k == Kind::Motor || k == Kind::Fan || k == Kind::Compressor || k == Kind::HeatExchanger || k == Kind::Boiler
-        || k == Kind::Mixer || k == Kind::Conveyor || k == Kind::Valve || k == Kind::ThreeWayValve || k == Kind::Cylinder)
+        || k == Kind::Mixer || k == Kind::Conveyor || k == Kind::Valve || k == Kind::ThreeWayValve || k == Kind::Cylinder
+        || k == Kind::Damper || k == Kind::MultiBladeDamper)
         add(Role::Mode);
     add(Role::Label);
     return out;

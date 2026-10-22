@@ -10,6 +10,12 @@
 //
 //  Le volet (HmiCommPane) calcule ce qu'il faut montrer (NetDiagram) ; le
 //  schema le dessine et dit ce qu'on y clique.
+//
+//  1.12.24 : place() pose tout, les cartes simulees du PC aussi, et le cadre
+//  du PC les contient (on defile jusqu'a la derniere). La prise d'un port, sur
+//  le bord du PC, n'est jamais contre une carte simulee : au milieu du port,
+//  sinon dans un ecart entre deux cartes. Les reseaux d'un meme port se
+//  suivent en face de lui, chacun son bus. Etroit : Maj+molette.
 // =============================================================================
 #pragma once
 
@@ -138,8 +144,12 @@ private:
     [[nodiscard]] gfx::Rect dragOrigin(int equip) const;
     mutable gfx::Rect                 pcRect_{}, outsideRect_{};
     mutable float                     contentH_{0};
+    mutable float                     contentW_{0};           // 1.12.24 : la largeur, pour Maj+molette
+    mutable float                     simTitleY_{0}, summaryY_{0};    // 1.12.24 : dans le PC, "DANS CE PC", "PORTS"
+    mutable std::vector<float>        jackY_;                 // 1.12.24 : la prise de chaque port sur le bord du PC
     mutable bool                      placed_{false};
     float                             scroll_{0};
+    float                             scrollX_{0};            // 1.12.24 : le defilement de cote (panneau etroit)
     int                               hoverPort_{-1}, hoverEquip_{-1}, hoverButton_{-1};
     bool                              hoverGive_{false};
 };

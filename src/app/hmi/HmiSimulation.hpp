@@ -19,6 +19,7 @@
 // =============================================================================
 #pragma once
 
+#include "HmiPidPainter.hpp"   // 1.12.24
 #include "HmiPainter.hpp"
 #include "../../hmi/HmiRetain.hpp"
 #include "../../hmi/HmiViewPaths.hpp"   // 1.11.6 : sur la vue actuelle
@@ -114,6 +115,11 @@ struct HmiSimulationHost {
     // 1.10 (decision 12) : le plein ecran de l'IHM - la fenetre de l'appli en plein
     // ecran (vrai), puis rendue comme avant (faux). Nul : la vue couvre la fenetre seule.
     std::function<void(bool)>                             fullScreenWindow;
+    // 1.12.24 : la mise a l'echelle en plein ecran (Remplir, Garder les proportions,
+    // Taille reelle), retenue par l'hote (un reglage de l'application). Nuls : Remplir,
+    // gardee pour la seance.
+    std::function<hmi::ScreenFit()>                       screenFit;
+    std::function<void(hmi::ScreenFit)>                   setScreenFit;
     // ---- 1.11.13 : LA GENERATION INCREMENTALE ----
     //  Demarrer l'IHM passe par le build (analyse des modifications, API, IHM,
     //  compilation, validation ; un projet a jour ne refait rien) : l'hote le lance
@@ -207,8 +213,23 @@ public:
     void setLive(const hmi::Runtime* runtime, const hmi::History* history) noexcept { runtime_ = runtime; history_ = history; }
     // Le projet (lot 6) : les recettes des gestionnaires de recettes.
     void setProject(const hmi::Project* project) noexcept { project_ = project; }
-    // Lot 14 : le poste d'exploitation - fond noir, la vue a toute la place.
+    // Lot 14 : le poste d'exploitation - la vue a toute la place (1.12.24 : sur tout
+    // l'ecran, selon setScreenFit ; le tour a la couleur de fond de la vue).
     void setStation(bool on) noexcept { station_ = on; invalidate(); }
+    // ---- 1.12.24 : LA VUE SUR TOUT L'ECRAN (le plein ecran, le poste d'exploitation) ----
+    //  Sans marge ; ajustee (zoom 0, et toujours sur le poste), elle suit `fit` :
+    //  Remplir - etiree jusqu'aux quatre bords, une echelle par axe (HmiViewport::stretchX,
+    //  stretchY : les clics et le survol suivent ; textes et traits gardent la plus petite) ;
+    //  Garder les proportions - ajustee, centree ; Taille reelle - 100 %, centree (plus
+    //  grande, elle se deplace). Autour : la couleur de fond de la vue.
+    void setWholeScreen(bool on) noexcept {
+        if (wholeScreen_ != on) { wholeScreen_ = on; invalidate(); }
+    }
+    [[nodiscard]] bool wholeScreen() const noexcept { return wholeScreen_ || station_; }
+    void setScreenFit(hmi::ScreenFit fit) noexcept {
+        if (fit_ != fit) { fit_ = fit; invalidate(); }
+    }
+    [[nodiscard]] hmi::ScreenFit screenFit() const noexcept { return fit_; }
     [[nodiscard]] HmiViewport viewport() const noexcept { return vp_; }
     // Les couches montrees (lot 14 : les essais y lisent la qualite des objets).
     [[nodiscard]] const std::vector<HmiLiveLayer>& layers() const noexcept { return layers_; }
@@ -256,6 +277,11 @@ public:
     // toucher sur l'ecran en veille (il le rallume, rien d'autre).
     const core::SignalPtr<std::string> systemPartClicked = core::Signal<std::string>::create();
     const core::SignalPtr<> wakeRequested = core::Signal<>::create();
+    // 1.12.24 : la fenetre du Reglage PID - la partie touchee (Runtime::pidPart : "onglet:1", "appliquer",
+    // "dehors"...) ; l'instant survole sur sa courbe (< 0 : hors d'elle) ; une partie a l'ecran (les essais).
+    const core::SignalPtr<std::string> pidPartClicked = core::Signal<std::string>::create();
+    const core::SignalPtr<double> pidHovered = core::Signal<double>::create();
+    [[nodiscard]] bool pidPartRect(std::string_view part, gfx::Rect& out) const;
     // Le cadre du menu Parametres systeme au dernier dessin (vide : ferme) ; une
     // de ses parties a l'ecran (pour les scripts et les tests) ; l'ecran de
     // l'IHM (le cadre de la vue courante), ou le menu, la veille et la
@@ -335,6 +361,9 @@ public:
     void panDisplay(float dx, float dy);
     [[nodiscard]] float      displayZoom() const noexcept { return displayZoom_; }
     [[nodiscard]] float      shownZoom() const noexcept { return shownZoom_; }    // l'echelle au dernier dessin
+    // 1.12.24 : celle de chaque axe (Remplir : elles different ; sinon shownZoom).
+    [[nodiscard]] float      shownZoomX() const noexcept { return shownZoom_ * shownSx_; }
+    [[nodiscard]] float      shownZoomY() const noexcept { return shownZoom_ * shownSy_; }
     [[nodiscard]] gfx::Point displayPan() const noexcept { return displayPan_; }
     [[nodiscard]] bool       viewOverflows() const noexcept { return overflowX_ || overflowY_; }
     const core::SignalPtr<> displayZoomChanged = core::Signal<>::create();
@@ -408,6 +437,7 @@ private:
     int                       dragSlot_{-1};
     gfx::Point                dragGrab_{};
     float                     baseZoom_{1.f};
+    float                     baseSx_{1.f}, baseSy_{1.f};   // 1.12.24 : l'etirement (Remplir)
     gfx::Point                baseOrigin_{};
     gfx::Rect                 keyboardRect_{};
     std::vector<hmi::KeyCap>  keys_;
@@ -421,12 +451,16 @@ private:
     const hmi::Runtime*       runtime_{nullptr};
     const hmi::History*       history_{nullptr};
     const hmi::Project*       project_{nullptr};
-    bool                      station_{false};         // lot 14 : fond noir, sans marge
+    bool                      station_{false};         // lot 14 : sans marge, sur tout l'ecran
+    bool                      wholeScreen_{false};     // 1.12.24 : le plein ecran de la simulation
+    hmi::ScreenFit            fit_{hmi::ScreenFit::Fill};
     hmi::Id                   down_{hmi::kNoId};
     gfx::Rect                 systemRect_{};
     gfx::Rect                 screen_{};
     gfx::Rect                 systemScreen_{};     // 1.9 : la ou le menu Parametres systeme est dessine (la page Simulation : tout le canevas)
     std::optional<hmi::SystemMenuLayout> systemLayout_;   // le menu, au dernier dessin
+    std::optional<PidPanelLayout> pidLayout_;             // 1.12.24 : la fenetre du Reglage PID, au dernier dessin
+    double                    pidHoverShown_{-1};
     int                       systemTabShown_{0};
     gfx::Rect                 loginRect_{};
     std::optional<hmi::LoginMenuLayout> loginLayout_;     // lot 12 : le menu de connexion, au dernier dessin
@@ -464,6 +498,7 @@ private:
     // 1.10 : le zoom de la vue en cours, son deplacement ; la taille de la vue du
     // dernier dessin (le zoom autour du curseur) ; l'IHM arretee.
     float                     displayZoom_{0.f}, shownZoom_{1.f};
+    float                     shownSx_{1.f}, shownSy_{1.f};   // 1.12.24 : l'etirement au dernier dessin
     gfx::Point                displayPan_{};
     bool                      overflowX_{false}, overflowY_{false};
     float                     shownViewW_{0.f}, shownViewH_{0.f};
@@ -581,7 +616,8 @@ public:
     // sur le poste ; `source` : ce qui l'ouvre (le journal le dit).
     void openSystemMenu(int tab, const std::string& source);
     // Lot 14 : LE POSTE D'EXPLOITATION - la vue seule, sur tout le volet (ni
-    // barre, ni tableaux, ni etat) ; un fond noir autour.
+    // barre, ni tableaux, ni etat). 1.12.24 : mise a l'echelle comme le dit le
+    // projet (station.screenFit : Remplir par defaut), le tour au fond de la vue.
     void setStationMode(bool on);
     [[nodiscard]] bool stationMode() const noexcept { return station_; }
     // 1.9 : LES REPERES DES LECTURES SIMULEES pour cette seance (le bouton Reperes de
@@ -668,10 +704,18 @@ public:
     //  haut (la vue, l'etat de l'IHM, le zoom, Quitter) s'efface apres 3 s sans souris
     //  et revient quand la souris approche du haut. Echap ou F11 : la sortie, la fenetre
     //  et le zoom comme avant. Tout reste cliquable (la vue recoit les gestes).
+    //  1.12.24 : LA MISE A L'ECHELLE EN PLEIN ECRAN, a cote d'Ajuster dans la barre
+    //  flottante ("hmi.fitFill", "hmi.fitKeep", "hmi.fitActual") : Remplir l'ecran (le
+    //  defaut : la vue etiree jusqu'aux bords), Garder les proportions (les bandes a la
+    //  couleur de fond de la vue), Taille reelle (100 %). Retenue par l'hote ; Ajuster
+    //  (apres un zoom) y revient.
     void setFullScreen(bool on);
     [[nodiscard]] bool fullScreen() const noexcept { return fullScreen_; }
     [[nodiscard]] bool fullScreenBarShown() const;
-    // Les parties de la barre flottante : "barre", "zoomOut", "zoom", "zoomIn", "fit", "exit".
+    void setScreenFit(hmi::ScreenFit fit);
+    [[nodiscard]] hmi::ScreenFit screenFit() const noexcept { return screenFit_; }
+    // Les parties de la barre flottante : "barre", "zoomOut", "zoom", "zoomIn", "fit",
+    // "fill", "keep", "actual" (1.12.24 : la mise a l'echelle), "exit".
     [[nodiscard]] gfx::Rect fullScreenBarPart(std::string_view part) const;
     // F11 : un onglet Simulation . IHM a l'ecran (ou en plein ecran) la prend - dans
     // la fenetre principale (windowRoot nul : les volets hors des fenetres detachees),
@@ -688,6 +732,7 @@ private:
     void run(core::ActionId id);
     bool                  fullScreen_{false};     // 1.10 : le plein ecran
     float                 zoomBeforeFull_{0.f};   // ... et le zoom d'avant (rendu a la sortie)
+    hmi::ScreenFit        screenFit_{hmi::ScreenFit::Fill};   // 1.12.24 : sa mise a l'echelle
     gfx::Rect             fullRect_{};            // toute la fenetre
     ui::Widget*           fsBar_{nullptr};        // la barre flottante (devant tout)
     void ensureStarted(double now);

@@ -6695,7 +6695,7 @@ void lot10_synoptique() {
             glyphs += app::glyphFor(k) != app::HmiGlyph::None ? 1u : 0u;
         }
         pal.setFilter("");
-        check(tiles == 25 && glyphs == 25, "la famille Synoptique : 25 tuiles (1.10.4 : la vanne 3 voies), chacune son ic\xC3\xB4ne");
+        check(tiles == 28 && glyphs == 28, "la famille Synoptique : 28 tuiles (1.10.4 : la vanne 3 voies ; 1.12.24 : les trois registres), chacune son ic\xC3\xB4ne");
         (void)b.place(Kind::Pump, 100, 100);
         b.editor->layout();
         std::set<std::string> inSynoptic;
@@ -9029,6 +9029,14 @@ void lot14_poste() {
     (void)stack.undo();
     check(doc->project.station.kiosk && doc->project.station.hideCursor, "Ctrl+Z : de nouveau le kiosque");
     check(!pane.setSetting("inconnu", "1", &why) && why.find("inconnu") != std::string::npos, "un r\xC3\xA9glage inconnu : refus\xC3\xA9");
+    // 1.12.24 : la mise a l'echelle de la vue sur l'ecran du poste (Remplir l'ecran par defaut).
+    check(gridValue(cats(), "Mise \xC3\xA0 l'\xC3\xA9" "chelle") == "Remplir l'\xC3\xA9" "cran", "la fiche : Remplir l'\xC3\xA9" "cran par d\xC3\xA9" "faut");
+    check(pane.setSetting("echelle", "Garder les proportions") && doc->project.station.screenFit == hmi::ScreenFit::Keep
+              && gridValue(cats(), "Mise \xC3\xA0 l'\xC3\xA9" "chelle") == "Garder les proportions",
+          "Mise \xC3\xA0 l'\xC3\xA9" "chelle : Garder les proportions");
+    (void)stack.undo();
+    check(doc->project.station.screenFit == hmi::ScreenFit::Fill && !pane.setSetting("echelle", "plein", &why) && !why.empty(),
+          "Ctrl+Z : Remplir de nouveau ; une mise \xC3\xA0 l'\xC3\xA9" "chelle inconnue : refus\xC3\xA9" "e");
 
     // Les ecrans secondaires.
     check(pane.addScreen() && doc->project.station.screens.size() == 1 && doc->project.station.screens[0].display == 2
@@ -10363,6 +10371,160 @@ void lot17_schema_simule_sans_port() {
     (void)d.dispatch(ui::MouseMove{to, {to.x - from.x, to.y - from.y}, {}});
     (void)d.dispatch(ui::MouseUp{to, ui::MouseButton::Left, {}});
     check(dropped.size() == 1 && dropped[0].second == "eth2", "un glisser pendant que le sch\xC3\xA9ma se refait : l\xC3\xA2" "ch\xC3\xA9" "e sur eth2, la cam\xC3\xA9ra y va");
+}
+
+// 1.12.24 : le schema du reseau, plusieurs esclaves simules dans le PC. Leurs cartes
+// etaient posees au dessin, sans place gardee : elles sortaient du cadre du PC (on ne
+// defilait pas jusqu'a elles) et leurs prises tombaient sur celles des ports (un esclave
+// semblait branche a eth2). Un port a deux adresses allait en face de son dernier reseau.
+void schemaSimules11224() {
+    std::printf("-- 1.12.24 : le sch\xC3\xA9ma du r\xC3\xA9seau - 4 esclaves simul\xC3\xA9s et 2 ports ne se chevauchent plus\n");
+    ui::PlatformServices services;
+    services.measureWidth = [](std::string_view t, gfx::FontId) { return largeurProportionnelle(t); };
+    services.lineHeight = [](gfx::FontId) { return 16.f; };
+    ui::installPlatformServices(std::move(services));
+    // Retient les fonds arrondis (le cadre du PC) et les contours (les prises : des carres de 28).
+    struct Cadres final : gfx::IRenderer {
+        std::vector<gfx::Rect> fonds, contours;
+        void beginFrame(gfx::Color) override {}
+        void endFrame() override {}
+        void pushClip(const gfx::Rect&) override {}
+        void popClip() override {}
+        void fillRect(const gfx::Rect&, gfx::Color) override {}
+        void strokeRect(const gfx::Rect& r, gfx::Color, float) override { contours.push_back(r); }
+        void fillRoundedRect(const gfx::Rect& r, gfx::Color, float) override { fonds.push_back(r); }
+        void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+        void drawText(gfx::Point, std::string_view, gfx::FontId, gfx::Color) override {}
+        void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+        gfx::TextMetrics measure(std::string_view t, gfx::FontId) const override { return {largeurProportionnelle(t), 16.f, 12.f, 4.f}; }
+        float lineHeight(gfx::FontId) const override { return 16.f; }
+        gfx::Size surfaceSize() const override { return {2000.f, 1000.f}; }
+        float dpiScale() const override { return 1.f; }
+        std::size_t fitCharacters(std::string_view t, gfx::FontId, float maxWidth) const override {
+            return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, maxWidth) / 9.f));
+        }
+    };
+    const auto chevauche = [](const gfx::Rect& a, const gfx::Rect& b) { return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h; };
+    // Le vrai reseau : eth1 (l'automate), eth2 (rien), 4 esclaves seulement simules dans le PC.
+    app::NetDiagram s;
+    s.computer = "POSTE";
+    s.system = "Windows 11 Professionnel \xC2\xB7 ce PC";
+    s.portsSummary = {"2 Ethernet (2 branch\xC3\xA9s)"};
+    for (int i = 0; i < 2; ++i) {
+        app::NetDiagram::Port p;
+        p.key = "eth" + std::to_string(i + 1);
+        p.number = i + 1;
+        p.title = p.key;
+        p.up = true;
+        p.ip = "192.168." + std::to_string(i + 1) + ".20";
+        p.prefix = "24";
+        p.mac = "MAC 00-1B-21-3A-4F-1" + std::to_string(i);
+        s.ports.push_back(p);
+    }
+    app::NetDiagram::Net n0;
+    n0.label = "R\xC3\xA9seau 192.168.1.0 / 24 \xC2\xB7 1 \xC3\xA9quipement";
+    n0.port = 0;
+    s.nets.push_back(n0);
+    s.ports[0].net = 0;
+    app::NetDiagram::Equip plc;
+    plc.key = plc.name = "Automate";
+    plc.line1 = "192.168.1.30 \xC2\xB7 Modbus TCP/IP \xC2\xB7 esclave 1";
+    plc.net = 0;
+    s.equips.push_back(plc);
+    for (int i = 1; i <= 4; ++i) {
+        app::NetDiagram::Equip e;
+        e.key = e.name = "Esclave virtuel " + std::to_string(i);
+        e.line1 = "Modbus TCP/IP \xC2\xB7 seulement simul\xC3\xA9";
+        e.line2 = "127.0.0.1:5012" + std::to_string(i) + " \xC2\xB7 son esclave virtuel (sa fiche, la carte m\xC3\xA9moire)";
+        e.tone = 4;
+        e.simulated = true;
+        s.equips.push_back(e);
+    }
+    app::HmiNetDiagram d("schema");
+    d.setBounds({0, 0, 1100, 600});
+    d.setData(s);
+    const auto theme = ui::Theme::dark();
+    Cadres r;
+    d.render(ui::PaintContext{r, theme, {0, 0, 1100, 600}, 0.0, nullptr});
+    std::vector<std::pair<std::string, gfx::Rect>> blocs;
+    std::vector<gfx::Rect> simules;
+    for (const auto& p : s.ports)
+        if (gfx::Rect x{}; d.portRect(p.key, x)) blocs.emplace_back(p.key, x);
+    for (const auto& e : s.equips)
+        if (gfx::Rect x{}; d.equipmentRect(e.key, x)) {
+            blocs.emplace_back(e.key, x);
+            if (e.simulated) simules.push_back(x);
+        }
+    check(blocs.size() == 7 && simules.size() == 4, "les 2 ports, l'automate et les 4 esclaves simul\xC3\xA9s sont plac\xC3\xA9s");
+    std::string recouvre;
+    for (std::size_t i = 0; i < blocs.size(); ++i)
+        for (std::size_t j = i + 1; j < blocs.size(); ++j)
+            if (chevauche(blocs[i].second, blocs[j].second)) recouvre += " " + blocs[i].first + " / " + blocs[j].first;
+    check(recouvre.empty(), "aucun bloc ne se recouvre (2 ports, 1 \xC3\xA9quipement, 4 esclaves simul\xC3\xA9s)" + recouvre);
+    // Les prises du bord du PC : aucune sur une autre ; celle d'un port jamais contre une
+    // carte simulee (la carte n'y a que la sienne, en son milieu).
+    std::vector<gfx::Rect> prises;
+    for (const auto& c : r.contours)
+        if (c.w == 28.f && c.h == 28.f) prises.push_back(c);
+    bool disjointes = prises.size() == 6;
+    for (std::size_t i = 0; i < prises.size(); ++i)
+        for (std::size_t j = i + 1; j < prises.size(); ++j) disjointes = disjointes && !chevauche(prises[i], prises[j]);
+    check(disjointes, "les 6 prises du bord du PC (2 ports, 4 esclaves) ne se chevauchent pas");
+    bool contre = false;
+    for (const auto& p : prises)
+        for (const auto& x : simules) {
+            const bool sienne = std::fabs(p.y + 14 - (x.y + x.h / 2)) < 0.5f;
+            contre = contre || (!sienne && p.y < x.y + x.h && x.y < p.y + p.h);
+        }
+    check(!contre, "aucune prise de port contre un esclave simul\xC3\xA9 (eth2 semblait le brancher)");
+    gfx::Rect pc{};
+    for (const auto& f : r.fonds)
+        if (f.w == 210.f) {        // le cadre du PC : le premier fond de sa largeur
+            pc = f;
+            break;
+        }
+    bool dedans = pc.w > 0;
+    for (const auto& x : simules) dedans = dedans && x.y >= pc.y && x.y + x.h <= pc.y + pc.h;
+    check(dedans, "les 4 esclaves sont dans le cadre du PC (ils en sortaient)");
+    // Au bout du defilement : le dernier esclave se voit en entier (la hauteur le compte).
+    (void)d.dispatch(ui::MouseWheel{{550.f, 300.f}, 0.f, -100.f, {}});
+    Cadres r2;
+    d.render(ui::PaintContext{r2, theme, {0, 0, 1100, 600}, 0.1, nullptr});
+    gfx::Rect dernier{};
+    check(d.equipmentRect("Esclave virtuel 4", dernier) && dernier.y >= 0 && dernier.y + dernier.h <= 600,
+          "d\xC3\xA9" "fil\xC3\xA9 au bout : le dernier esclave se voit en entier");
+    (void)d.dispatch(ui::MouseWheel{{550.f, 300.f}, 0.f, 100.f, {}});
+    // Un port a deux adresses (deux reseaux) : en face du premier, le second dessous.
+    app::NetDiagram deux = s;
+    app::NetDiagram::Net n1;
+    n1.label = "R\xC3\xA9seau 192.168.50.0 / 24 \xC2\xB7 1 \xC3\xA9quipement";
+    n1.port = 0;
+    deux.nets.push_back(n1);
+    app::NetDiagram::Equip bal;
+    bal.key = bal.name = "Balance";
+    bal.line1 = "192.168.50.7";
+    bal.net = 1;
+    deux.equips.push_back(bal);
+    d.setData(deux);
+    Cadres r3;
+    d.render(ui::PaintContext{r3, theme, {0, 0, 1100, 600}, 0.2, nullptr});
+    gfx::Rect p1{}, a1{}, b1{};
+    check(d.portRect("eth1", p1) && d.equipmentRect("Automate", a1) && d.equipmentRect("Balance", b1) && p1.y == a1.y && b1.y > a1.y + a1.h,
+          "un port \xC3\xA0 deux adresses : en face de son premier r\xC3\xA9seau, le second dessous (il allait au dernier)");
+    // Etroit (640) : rien ne se recouvre ; Maj+molette amene la colonne des equipements.
+    d.setData(s);
+    d.setBounds({0, 0, 640, 600});
+    Cadres r4;
+    d.render(ui::PaintContext{r4, theme, {0, 0, 640, 600}, 0.3, nullptr});
+    gfx::Rect au{};
+    const bool coupe = d.equipmentRect("Automate", au) && au.x + au.w > 640;
+    ui::KeyMods maj{};
+    maj.shift = true;
+    (void)d.dispatch(ui::MouseWheel{{320.f, 300.f}, 0.f, -100.f, maj});
+    Cadres r5;
+    d.render(ui::PaintContext{r5, theme, {0, 0, 640, 600}, 0.4, nullptr});
+    check(coupe && d.equipmentRect("Automate", au) && au.x + au.w <= 640,
+          "\xC3\xA9troit : Maj+molette am\xC3\xA8ne la colonne des \xC3\xA9quipements (elle \xC3\xA9tait coup\xC3\xA9" "e)");
 }
 
 // =============================================================================
@@ -15246,6 +15408,14 @@ void v110_simulation(const std::string& xpg) {
         inc.target = "Compteur";
         inc.value = "1";
         v.object(far)->actions.push_back(inc);
+        // 1.12.24 : un bouton dans le coin bas droit de la vue (980..1000 x 580..600).
+        const Id corner = edit::add(p, v, Kind::Button, 980, 580);
+        v.object(corner)->name = "Btn_Coin";
+        v.object(corner)->set("w", "20");
+        v.object(corner)->set("h", "20");
+        Action incCoin = inc;
+        incCoin.target = "Coin";
+        v.object(corner)->actions.push_back(incCoin);
         p.views.push_back(v);
         p.config.startView = v.id;
         Variable var;
@@ -15254,9 +15424,17 @@ void v110_simulation(const std::string& xpg) {
         var.type = "INT";
         var.initial = "0";
         p.programs.variables.push_back(var);
+        Variable coinVar = var;
+        coinVar.id = p.allocate();
+        coinVar.name = "Coin";
+        p.programs.variables.push_back(coinVar);
         std::vector<bool> window;   // ce que l'hote fait de la fenetre
         app::HmiSimulationHost host;
         host.fullScreenWindow = [&](bool on) { window.push_back(on); };
+        // 1.12.24 : la mise a l'echelle retenue par l'hote (un reglage de l'application).
+        hmi::ScreenFit remembered = hmi::ScreenFit::Fill;
+        host.screenFit = [&] { return remembered; };
+        host.setScreenFit = [&](hmi::ScreenFit f) { remembered = f; };
         // L'ecran : une racine (toute la fenetre), le volet dans sa place d'onglet.
         ui::Widget root("racine");
         auto& pane = static_cast<app::HmiSimulationPane&>(root.addChild(std::make_unique<app::HmiSimulationPane>("sim110f", doc, host)));
@@ -15289,14 +15467,40 @@ void v110_simulation(const std::string& xpg) {
         check(pane.fullScreen() && window.size() == 1 && window.back(), "F11 : le plein \xC3\xA9" "cran, la fen\xC3\xAAtre de l'appli aussi");
         check(cb.x == 0.f && cb.y == 0.f && cb.w == 1600.f && cb.h == 900.f,
               "la vue couvre toute la fen\xC3\xAAtre (" + std::to_string(cb.x) + ", " + std::to_string(cb.y) + ", " + std::to_string(cb.w) + " x " + std::to_string(cb.h) + ")");
-        // Ajustee comme "Ajuster" de la barre (et la maquette) : 12 px de marge autour.
-        const float fitted = std::min((1600.f - 24.f) / 1000.f, (900.f - 24.f) / 600.f);
-        check(pane.canvas().displayZoom() == 0.f && std::fabs(pane.canvas().shownZoom() - fitted) < 0.01f,
-              "ajust\xC3\xA9" "e : 1000 x 600 dans 1600 x 900, " + std::to_string(pane.canvas().shownZoom()));
+        // 1.12.24 : REMPLIR L'ECRAN (le defaut) - la vue 1000 x 600 (5:3) sur 1600 x 900 (16:9) occupe
+        // tout l'ecran : 160 % en largeur, 150 % en hauteur, sans bande ni marge.
+        {
+            const auto fill = pane.canvas().viewport();
+            const auto a = fill.toScreen(0, 0), e = fill.toScreen(1000, 600);
+            check(pane.screenFit() == hmi::ScreenFit::Fill && pane.canvas().displayZoom() == 0.f && std::fabs(a.x) < 0.01f && std::fabs(a.y) < 0.01f
+                      && std::fabs(e.x - 1600.f) < 0.05f && std::fabs(e.y - 900.f) < 0.05f,
+                  "Remplir : la vue occupe tout le rectangle de l'\xC3\xA9" "cran ((" + std::to_string(a.x) + ", " + std::to_string(a.y) + ") - ("
+                      + std::to_string(e.x) + ", " + std::to_string(e.y) + "))");
+            check(std::fabs(pane.canvas().shownZoomX() - 1.6f) < 0.001f && std::fabs(pane.canvas().shownZoomY() - 1.5f) < 0.001f
+                      && std::fabs(pane.canvas().shownZoom() - 1.5f) < 0.001f,
+                  "Remplir : une \xC3\xA9" "chelle par axe (160 % x 150 %), les textes \xC3\xA0 la plus petite");
+            // Le coin bas droit de l'ecran : le coin bas droit de la vue (Btn_Coin), au survol et au clic.
+            const gfx::Point corner2{1598.f, 898.f};
+            Id hv = kNoId, ho = kNoId;
+            check(pane.canvas().hitAt(corner2, hv, ho) && ho == corner && std::fabs(fill.toViewX(corner2.x) - 998.75) < 0.01
+                      && std::fabs(fill.toViewY(corner2.y) - 598.67) < 0.01,
+                  "Remplir : le coin bas droit de l'\xC3\xA9" "cran est le coin bas droit de la vue (" + std::to_string(fill.toViewX(corner2.x)) + ", "
+                      + std::to_string(fill.toViewY(corner2.y)) + ")");
+            const auto* coin = pane.runtime().variable("Coin");
+            const auto coinBefore = coin ? coin->asInteger() : -1;
+            check(press(corner2), "un clic au coin bas droit de l'\xC3\xA9" "cran");
+            frame(0.45);
+            coin = pane.runtime().variable("Coin");
+            check(coin && coin->asInteger() == coinBefore + 1,
+                  "...touche Btn_Coin, au coin de la vue : Coin " + std::to_string(coinBefore) + " -> " + std::to_string(coin ? coin->asInteger() : -1));
+        }
         check(!pane.bar().visible() && root.findOverlayOwner() == &pane, "ni la barre de l'onglet ; la passe du dessus : le volet re\xC3\xA7oit les gestes le premier");
         const auto top = pane.fullScreenBarPart("barre");
-        check(pane.fullScreenBarShown() && top.y < 60.f && top.x > 300.f && top.right() < 1300.f,
+        check(pane.fullScreenBarShown() && top.y < 60.f && top.x > 0.f && top.right() < 1600.f && std::fabs(top.x + top.w / 2.f - 800.f) < 1.f,
               "la barre flottante en haut, au milieu (" + std::to_string(top.x) + ", " + std::to_string(top.y) + ")");
+        check(pane.fullScreenBarPart("fill").w > 0.f && pane.fullScreenBarPart("keep").x > pane.fullScreenBarPart("fit").right()
+                  && pane.fullScreenBarPart("actual").right() < pane.fullScreenBarPart("exit").x,
+              "la mise \xC3\xA0 l'\xC3\xA9" "chelle (Remplir, Garder les proportions, Taille r\xC3\xA9" "elle) \xC3\xA0 c\xC3\xB4t\xC3\xA9 d'Ajuster");
         // Un clic sur le bouton de la vue, hors de la place de l'onglet : il touche le bon objet.
         gfx::Rect r;
         check(pane.canvas().objectRect("Btn_Loin", r), "le bouton de la vue est dessin\xC3\xA9");
@@ -15315,6 +15519,31 @@ void v110_simulation(const std::string& xpg) {
               "+ dans la barre flottante : " + std::to_string(pane.canvas().displayZoom()));
         const auto fit = pane.fullScreenBarPart("fit");
         check(press({fit.x + fit.w / 2.f, fit.y + fit.h / 2.f}) && pane.canvas().displayZoom() == 0.f, "Ajuster dans la barre flottante");
+        // 1.12.24 : la mise a l'echelle, choisie dans la barre flottante et retenue par l'hote.
+        {
+            const auto choose = [&](const char* part, double t) {
+                const auto box = pane.fullScreenBarPart(part);
+                const bool ok = box.w > 0.f && press({box.x + box.w / 2.f, box.y + box.h / 2.f});
+                frame(t);
+                return ok;
+            };
+            frame(0.55);
+            check(std::fabs(pane.canvas().shownZoomX() - 1.6f) < 0.001f, "Ajuster : revenue \xC3\xA0 Remplir (le choix)");
+            check(choose("keep", 0.6) && pane.screenFit() == hmi::ScreenFit::Keep && remembered == hmi::ScreenFit::Keep,
+                  "Garder les proportions : choisi, et retenu par l'h\xC3\xB4te");
+            const auto keep = pane.canvas().viewport();
+            check(std::fabs(pane.canvas().shownZoomX() - 1.5f) < 0.001f && std::fabs(pane.canvas().shownZoomY() - 1.5f) < 0.001f
+                      && std::fabs(keep.toScreen(0, 0).x - 50.f) < 0.05f && std::fabs(keep.toScreen(0, 0).y) < 0.05f,
+                  "Garder les proportions : 150 %, centr\xC3\xA9" "e, sans marge (des bandes de 50 px \xC3\xA0 la couleur de fond de la vue)");
+            Id hv = kNoId, ho = kNoId;
+            check(!pane.canvas().hitAt({1580.f, 450.f}, hv, ho) && hv == kNoId, "...une bande n'est pas la vue");
+            check(choose("actual", 0.65) && pane.screenFit() == hmi::ScreenFit::Actual && std::fabs(pane.canvas().shownZoom() - 1.f) < 0.001f
+                      && std::fabs(pane.canvas().viewport().toScreen(0, 0).x - 300.f) < 0.05f && std::fabs(pane.canvas().viewport().toScreen(0, 0).y - 150.f) < 0.05f,
+                  "Taille r\xC3\xA9" "elle : 100 %, centr\xC3\xA9" "e");
+            check(choose("fill", 0.7) && remembered == hmi::ScreenFit::Fill && std::fabs(pane.canvas().viewport().toScreen(1000, 600).x - 1600.f) < 0.05f,
+                  "Remplir l'\xC3\xA9" "cran \xC3\xA0 nouveau");
+            check(choose("keep", 0.75) && remembered == hmi::ScreenFit::Keep, "Garder les proportions, pour la suite (le retour en plein \xC3\xA9" "cran)");
+        }
         // Sans souris, elle s'efface ; la souris en haut, elle revient.
         for (double t = 4.0; t <= 6.0; t += 0.25) frame(t);
         check(!pane.fullScreenBarShown(), "sans souris, la barre flottante s'efface");
@@ -15334,6 +15563,10 @@ void v110_simulation(const std::string& xpg) {
         pane.command("hmi.fullscreen");
         frame(7.0);
         check(pane.fullScreen() && window.size() == 3, "le bouton Plein \xC3\xA9" "cran de la barre");
+        frame(7.1);
+        check(pane.screenFit() == hmi::ScreenFit::Keep && std::fabs(pane.canvas().shownZoomX() - 1.5f) < 0.001f
+                  && std::fabs(pane.canvas().shownZoomY() - 1.5f) < 0.001f,
+              "le retour en plein \xC3\xA9" "cran : la mise \xC3\xA0 l'\xC3\xA9" "chelle retenue (Garder les proportions)");
         check(send(ui::KeyDown{ui::Key::F11, {}, false}) && !pane.fullScreen() && window.size() == 4, "F11 en sort aussi");
         // L'onglet cache : F11 reste a l'appli (son plein ecran sans bordure).
         pane.setVisibility(ui::Visibility::Collapsed);
@@ -15356,6 +15589,42 @@ void v110_simulation(const std::string& xpg) {
                   "l'onglet IHM de la fen\xC3\xAAtre principale prend F11 de la principale");
         }
         pane.setVisibility(ui::Visibility::Visible);
+    }
+    // ---- 1.12.24 : le poste d'exploitation sur tout l'ecran, comme le dit le projet (station.screenFit) ----
+    {
+        auto doc = std::make_shared<Document>();
+        auto& p = doc->project;
+        View v = makeView(p, "Poste");
+        v.width = 1280;
+        v.height = 800;
+        const Id corner = edit::add(p, v, Kind::Button, 1260, 780);
+        v.object(corner)->name = "Btn_Coin";
+        v.object(corner)->set("w", "20");
+        v.object(corner)->set("h", "20");
+        p.views.push_back(v);
+        p.config.startView = v.id;
+        app::HmiSimulationHost host;
+        app::HmiSimulationPane station("poste11224", doc, host);
+        station.setStationMode(true);
+        station.setBounds({0, 0, 1920, 1080});
+        const auto draw = [&](double t) {
+            rec.clear();
+            station.layout();
+            station.render(ui::PaintContext{rec, theme, {0, 0, 1920, 1080}, t, nullptr});
+        };
+        for (double t = 0.0; t <= 0.21; t += 0.1) draw(t);
+        auto& canvas = station.canvas();
+        const auto fill = canvas.viewport();
+        const auto e = fill.toScreen(1280, 800);
+        check(canvas.bounds().w == 1920.f && std::fabs(fill.toScreen(0, 0).x) < 0.05f && std::fabs(e.x - 1920.f) < 0.05f && std::fabs(e.y - 1080.f) < 0.05f,
+              "le poste (Remplir, le d\xC3\xA9" "faut) : la vue 1280 x 800 sur tout l'\xC3\xA9" "cran 1920 x 1080 (" + std::to_string(canvas.bounds().w) + ", "
+                  + std::to_string(e.x) + ", " + std::to_string(e.y) + ")");
+        Id hv = kNoId, ho = kNoId;
+        check(canvas.hitAt({1918.f, 1078.f}, hv, ho) && ho == corner, "le poste : le coin bas droit de l'\xC3\xA9" "cran touche le coin bas droit de la vue");
+        doc->project.station.screenFit = hmi::ScreenFit::Keep;
+        draw(0.3);
+        check(std::fabs(canvas.shownZoom() - 1.35f) < 0.001f && std::fabs(canvas.viewport().toScreen(0, 0).x - 96.f) < 0.05f,
+              "le poste (Garder les proportions) : 135 %, centr\xC3\xA9" "e (des bandes de 96 px)");
     }
     // ---- l'IHM seule et les esclaves simules : ils tournent, l'IHM les lit ----
     {
@@ -18363,7 +18632,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 211, "centre : L'IHM a les 211 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels)");
+    check(ix.count(hc::Chapter::Hmi) == 215, "centre : L'IHM a les 215 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 57, "centre : 11 expressions, 57 notes (1.12.24)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -26800,8 +27069,14 @@ void inspecteur_range_1104() {
         const auto names = k3Names(cats);
         // Les sections : les communes, dans le meme ordre pour tous, puis celle du genre.
         bool order = names.size() == 4 || names.size() == 5;
+        // 1.12.24 : le Reglage PID range ses cases en six sections (sa boucle, son bloc, ses echelles...).
+        const std::vector<std::string> pidSections{"Boucle", "Param\xC3\xA8tres du bloc PID", "\xC3\x89" "chelles", "Apprentissage",
+                                                   "R\xC3\xA9glage", "Carte"};
+        if (k == Kind::PidTuner) order = names.size() == 4 + pidSections.size();
         for (std::size_t i = 0; order && i < 4; ++i) order = names[i] == common[i];
-        if (order && names.size() == 5) order = names[4] == std::string(hmi::kindLabel(k));
+        if (order && k == Kind::PidTuner)
+            for (std::size_t i = 0; order && i < pidSections.size(); ++i) order = names[4 + i] == pidSections[i];
+        else if (order && names.size() == 5) order = names[4] == std::string(hmi::kindLabel(k));
         if (!order) bad(k, "sections " + k3Join(names));
         bool old = true;
         for (const auto& n : names)
@@ -34624,6 +34899,7 @@ int main(int argc, char** argv) {
     lot16_variables_types_tutoriel();
     lot17_zones_jumeaux_carte();
     lot17_schema_simule_sans_port();
+    schemaSimules11224();                   // 1.12.24 : le schema du reseau - les esclaves simules ne chevauchent plus les ports
     lot18_valeurs_simulees();
     lecture_cyclique_19();
     lot19_historique_onglets();

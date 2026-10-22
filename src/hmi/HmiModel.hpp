@@ -107,6 +107,11 @@ enum class Kind : std::uint8_t {
     // L ; une voie active parmi 1-2, 1-3, 2-3 ou fermee). Un symbole de
     // synoptique comme la vanne (kindIsSynoptic), pose a cote d'elle.
     ThreeWayValve,
+    // 1.12.24, A LA FIN : le Reglage PID (il regarde une boucle, apprend son
+    // procede, en tire ses statistiques et propose un reglage) ; les registres du
+    // synoptique - le registre a une lame (papillon), le registre multi-lames, le
+    // clapet coupe-feu -, symboles comme la vanne (kindIsSynoptic), poses apres elle.
+    PidTuner, Damper, MultiBladeDamper, FireDamper,
 };
 
 // Tout ce qu'on peut poser sur une vue, dans l'ordre de la palette. Le groupe
@@ -124,7 +129,7 @@ inline constexpr Kind kPlaceableKinds[] = {
     Kind::Dial, Kind::Clock, Kind::HourMeter, Kind::SevenSegment, Kind::TrendArrow, Kind::Marquee, Kind::QrCode,
     // lot 10 : l'objet Parametres systeme, les symboles de synoptique
     Kind::SystemButton,
-    Kind::Valve, Kind::ThreeWayValve, Kind::Pump, Kind::Motor, Kind::Pipe, Kind::Tank, Kind::GasBottle, Kind::Fan,
+    Kind::Valve, Kind::ThreeWayValve, Kind::Damper, Kind::MultiBladeDamper, Kind::FireDamper, Kind::Pump, Kind::Motor, Kind::Pipe, Kind::Tank, Kind::GasBottle, Kind::Fan,
     Kind::Compressor, Kind::HeatExchanger, Kind::Filter, Kind::Boiler, Kind::Conveyor, Kind::Cylinder, Kind::IsaInstrument,
     Kind::CircuitBreaker, Kind::Disconnector, Kind::Contactor, Kind::Lamp, Kind::Transformer, Kind::Silo, Kind::Hopper,
     Kind::Mixer, Kind::CheckValve, Kind::FlowArrow,
@@ -141,6 +146,8 @@ inline constexpr Kind kPlaceableKinds[] = {
     Kind::CommStatus, Kind::PlcDiagnostic,
     // lot 16 : le GIF anime
     Kind::AnimatedGif,
+    // 1.12.24 : la regulation
+    Kind::PidTuner,
 };
 // Lot 8 : les objets qui repondent au clavier en marche (un champ a le focus).
 [[nodiscard]] bool kindTakesText(Kind) noexcept;   // champ de saisie, connexion, changer le mot de passe
@@ -156,7 +163,17 @@ inline constexpr Kind kPlaceableKinds[] = {
 //  sert sans lier la bibliotheque de l'IHM.
 [[nodiscard]] inline bool kindIsSynoptic(Kind k) noexcept {
     return (static_cast<int>(k) >= static_cast<int>(Kind::Valve) && static_cast<int>(k) <= static_cast<int>(Kind::FlowArrow))
-        || k == Kind::ThreeWayValve;   // 1.10.4
+        || k == Kind::ThreeWayValve   // 1.10.4
+        || k == Kind::Damper || k == Kind::MultiBladeDamper || k == Kind::FireDamper;   // 1.12.24
+}
+// 1.12.24 : ceux qui ont une ouverture (0 a 100 %, sa plage openingMin / openingMax) :
+// la vanne, le registre, le registre multi-lames.
+[[nodiscard]] inline bool kindHasOpening(Kind k) noexcept {
+    return k == Kind::Valve || k == Kind::Damper || k == Kind::MultiBladeDamper;
+}
+// ... et les registres (les trois), qui partagent leur dessin et leurs fins de course.
+[[nodiscard]] inline bool kindIsDamper(Kind k) noexcept {
+    return k == Kind::Damper || k == Kind::MultiBladeDamper || k == Kind::FireDamper;
 }
 [[nodiscard]] inline bool kindHasLevel(Kind k) noexcept {
     return k == Kind::Tank || k == Kind::GasBottle || k == Kind::Silo || k == Kind::Hopper || k == Kind::Cylinder;
@@ -308,9 +325,13 @@ inline constexpr KindInfo kKindInfos[] = {
     {Kind::PlcDiagnostic,       "PlcDiagnostic",       "Diagnostic automate"},
     {Kind::AnimatedGif,         "AnimatedGif",         "GIF anim\xC3\xA9"},                        // lot 16
     {Kind::ThreeWayValve,       "ThreeWayValve",       "Vanne 3 voies"},                           // 1.10.4
+    {Kind::PidTuner,            "PidTuner",            "R\xC3\xA9glage PID"},                         // 1.12.24
+    {Kind::Damper,              "Damper",              "Registre"},
+    {Kind::MultiBladeDamper,    "MultiBladeDamper",    "Registre multi-lames"},
+    {Kind::FireDamper,          "FireDamper",          "Clapet coupe-feu"},
 };
 
-static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::ThreeWayValve) + 1, "une ligne par genre d'objet, dans l'ordre");
+static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::FireDamper) + 1, "une ligne par genre d'objet, dans l'ordre");
 [[nodiscard]] inline std::string_view kindKey(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].key; }      // "Rectangle" : enregistre
 [[nodiscard]] inline std::string_view kindLabel(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].label; }  // affiche
 [[nodiscard]] std::optional<Kind>     kindFromKey(std::string_view) noexcept;
@@ -1687,6 +1708,37 @@ struct Equipment {
 //  kiosque, fermer la fenetre (Alt+F4) ne fait rien, et la sortie (Ctrl+Alt+Q,
 //  ou cinq touchers du coin haut droit) demande le mot de passe de sortie. Les
 //  ecrans en plus (2, 3...) montrent chacun une vue, en direct.
+// 1.12.24 : LA VUE SUR TOUT UN ECRAN qui n'a pas ses proportions (le poste, le plein
+// ecran de la simulation) : Remplir - etiree jusqu'aux bords, une echelle par axe ;
+// Garder les proportions - ajustee, le tour a la couleur de fond de la vue ; Taille
+// reelle - 100 %, centree.
+enum class ScreenFit : std::uint8_t { Fill = 0, Keep = 1, Actual = 2 };
+// "remplir", "proportions", "reelle" : enregistre.
+[[nodiscard]] inline std::string_view screenFitKey(ScreenFit f) noexcept {
+    return f == ScreenFit::Keep ? "proportions" : f == ScreenFit::Actual ? "reelle" : "remplir";
+}
+[[nodiscard]] inline std::string_view screenFitLabel(ScreenFit f) noexcept {
+    return f == ScreenFit::Keep ? "Garder les proportions" : f == ScreenFit::Actual ? "Taille r\xC3\xA9" "elle (100 %)" : "Remplir l'\xC3\xA9" "cran";
+}
+// La cle ou le libelle, sans casse ; nul : ni l'un ni l'autre.
+[[nodiscard]] inline std::optional<ScreenFit> screenFitFrom(std::string_view s) noexcept {
+    const auto has = [s](std::string_view needle) {
+        for (std::size_t i = 0; i + needle.size() <= s.size(); ++i) {
+            std::size_t k = 0;
+            for (; k < needle.size(); ++k) {
+                char ch = s[i + k];
+                if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a');
+                if (ch != needle[k]) break;
+            }
+            if (k == needle.size()) return true;
+        }
+        return false;
+    };
+    if (has("rempl")) return ScreenFit::Fill;
+    if (has("proportion")) return ScreenFit::Keep;
+    if (has("reel") || has("r\xC3\xA9" "el") || has("100")) return ScreenFit::Actual;
+    return std::nullopt;
+}
 struct StationScreen {
     int         display{2};            // l'ecran (1 : le principal)
     std::string view;                  // la vue qu'il montre
@@ -1711,6 +1763,8 @@ struct Station {
     // 1.12.3 : le poste garde l'onglet choisi, les panneaux replies et le defilement
     // d'un lancement a l'autre (avec ses variables remanentes). Faux : tout repart de l'editeur.
     bool        keepLayout{true};
+    // 1.12.24 : la vue sur l'ecran (et les ecrans en plus) ; absent du projet : Remplir.
+    ScreenFit   screenFit{ScreenFit::Fill};
     bool operator==(const Station&) const = default;
 };
 

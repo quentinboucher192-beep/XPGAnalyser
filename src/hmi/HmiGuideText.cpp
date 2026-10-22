@@ -8262,6 +8262,278 @@ const std::vector<Topic>& topics() {
          "tourne (le passage clignote en ambre) ; en d\xC3\xA9" "faut de 7,5 \xC3\xA0 9 s, son passage est "
          "rouge, dans un cadre tiret\xC3\xA9.",
          {}},
+        // ---- La bibliotheque d'objets / objet-registre
+        {"objet-registre", "Registre", "La biblioth\xC3\xA8que d'objets",
+         "Un registre \xC3\xA0 une lame (papillon), tout ou rien ou modulant : la lame tourne avec son "
+         "ouverture ; ses fins de course (O et F) se voient, une discordance le met en d\xC3\xA9" "faut.",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Le symbole d'un registre de gaine (extraction, ventilation, d\xC3\xA9senfumage) : "
+                         "une gaine (deux parois, une bride \xC3\xA0 chaque bout) et sa lame qui tourne sur "
+                         "son axe, au centre. **Ouvert**, la lame est \xC3\xA0 plat, dans le sens du flux ; "
+                         "**ferm\xC3\xA9**, elle est debout et barre la gaine. L'axe monte \xC3\xA0 son "
+                         "actionneur : un servomoteur (M), un levier, un v\xC3\xA9rin pneumatique. Il est "
+                         "dans la famille Synoptique, \xC3\xA0 c\xC3\xB4t\xC3\xA9 des vannes ; on le tourne "
+                         "(une gaine verticale) et on le retourne comme elles.", {}},
+             {K::Heading, "Tout ou rien ou modulant", {}},
+             {K::Bullet, "**Tout ou rien** : **Ouvert** (la Valeur, un bool\xC3\xA9" "en) couche ou dresse "
+                         "la lame.", {}},
+             {K::Bullet, "**Modulant** : **Ouverture (%)** (de 0 \xC3\xA0 100, une expression : "
+                         "=RG_Position) tourne la lame d'autant, et le pourcentage s'\xC3\xA9" "crit "
+                         "\xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'actionneur. Un signal brut (0..27648, 0..1) : sa "
+                         "plage avec **Ouverture : min** et **Ouverture : max**, ou la plage de sa variable "
+                         "(Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats), comme la vanne "
+                         "r\xC3\xA9glante.", {}},
+             {K::Bullet, "**En mouvement** (une expression vraie pendant la course) fait clignoter l'axe ; "
+                         "reli\xC3\xA9" "e, elle donne l'alarme par d\xC3\xA9" "faut **Course_Trop_Longue** "
+                         "(30 s).", {}},
+             {K::Heading, "Les fins de course", {}},
+             {K::Bullet, "**Fin de course ouvert** et **Fin de course ferm\xC3\xA9** (deux expressions : "
+                         "=RG_FCO, =RG_FCF) allument deux voyants **O** et **F** \xC3\xA0 gauche de "
+                         "l'actionneur ; la lame suit ce qu'ils disent (l'\xC3\xA9tat r\xC3\xA9" "el, pas la "
+                         "commande).", {}},
+             {K::Bullet, "**Discordance** : les deux \xC3\xA0 la fois, ou aucune hors mouvement, les deux "
+                         "\xC3\xA9tant reli\xC3\xA9" "es : le registre se dessine en d\xC3\xA9" "faut et "
+                         "clignote. Reli\xC3\xA9" "es toutes les deux, elles donnent l'alarme par "
+                         "d\xC3\xA9" "faut **Discordance** (10 s).", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nOuvert\tFALSE\tVrai "
+                         ": ouvert (la lame \xC3\xA0 plat) ; faux : ferm\xC3\xA9. Une expression : "
+                         "=RG3212_Ouvert.\nD\xC3\xA9" "faut (expression)\tFALSE\tVrai : la couleur de "
+                         "d\xC3\xA9" "faut, qui clignote. Une expression : =RG3212_Defaut.\nCouleur "
+                         "ouvert\t#2ECC71\tLa couleur de la lame ouverte (ou en partie ouverte).\nCouleur "
+                         "ferm\xC3\xA9\t#5A6577\tLa couleur de la lame ferm\xC3\xA9" "e.\nCouleur de "
+                         "d\xC3\xA9" "faut\t#E5534B\tLa couleur du d\xC3\xA9" "faut et de la discordance "
+                         "(elle clignote).\nContour\t#C8D0DC\tLe trait de la gaine, de l'axe et de "
+                         "l'actionneur.\n\xC3\x89paisseur du contour\t2\tSon \xC3\xA9paisseur, en pixels de "
+                         "la vue.\nLibell\xC3\xA9\t(vide)\tLe rep\xC3\xA8re \xC3\xA9" "crit avec le symbole "
+                         "(RG-3212).\nPlace du libell\xC3\xA9\tdessous\tdessous, dessus, ou aucun "
+                         "(cach\xC3\xA9).\nTaille du texte\t13\tLa taille du libell\xC3\xA9.\nCouleur du "
+                         "texte\t#C8D0DC\tLa couleur du libell\xC3\xA9, du pourcentage et des voyants O et "
+                         "F.\nActionneur\tservomoteur\tservomoteur (M), manuel (un levier), pneumatique (un "
+                         "v\xC3\xA9rin).\nOuverture (%)\t(vide)\tModulant : de 0 \xC3\xA0 100 % (une "
+                         "expression : =RG_Position) ; la lame tourne d'autant. Vide : tout ou rien.\nEn "
+                         "mouvement (expression)\t(vide)\tVraie : l'axe clignote (le registre bouge) : "
+                         "=RG_Ouvre OR RG_Ferme.\nFin de course ouvert\t(vide)\tVraie : il est ouvert (FCO). "
+                         "Le voyant O ; la lame se couche.\nFin de course ferm\xC3\xA9\t(vide)\tVraie : il "
+                         "est ferm\xC3\xA9 (FCF). Le voyant F ; la lame se dresse.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "sa valeur, son ouverture et ses fins de course, \xC3\xA9valu\xC3\xA9" "es \xC3\xA0 "
+                         "chaque cycle, tournent la lame ; le d\xC3\xA9" "faut et la discordance le font "
+                         "clignoter en rouge ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale une variable inconnue dans ses expressions, une "
+                         "ouverture hors de 0 \xC3\xA0 100 %, une seule fin de course reli\xC3\xA9" "e (la "
+                         "discordance ne se verrait pas).", {}},
+         },
+         {"objet-registre-multi-lames", "objet-clapet-coupe-feu", "objet-vanne", "synoptique", "objet-communs", "proprietes", "simulation"},
+         {},
+         {},
+         {{"EX_Damper.png", "L'exemple anim\xC3\xA9 : registre"}},
+         "Damper",
+         {{"value", "Ouvert", "FALSE",
+            "Vrai : ouvert (la lame \xC3\xA0 plat) ; faux : ferm\xC3\xA9. Une expression : =RG3212_Ouvert."},
+           {"fault", "D\xC3\xA9" "faut (expression)", "FALSE",
+            "Vrai : la couleur de d\xC3\xA9" "faut, qui clignote. Une expression : =RG3212_Defaut."},
+           {"colorOn", "Couleur ouvert", "#2ECC71",
+            "La couleur de la lame ouverte (ou en partie ouverte)."},
+           {"colorOff", "Couleur ferm\xC3\xA9", "#5A6577",
+            "La couleur de la lame ferm\xC3\xA9" "e."},
+           {"colorFault", "Couleur de d\xC3\xA9" "faut", "#E5534B",
+            "La couleur du d\xC3\xA9" "faut et de la discordance (elle clignote)."},
+           {"stroke", "Contour", "#C8D0DC",
+            "Le trait de la gaine, de l'axe et de l'actionneur."},
+           {"strokeWidth", "\xC3\x89paisseur du contour", "2",
+            "Son \xC3\xA9paisseur, en pixels de la vue."},
+           {"label", "Libell\xC3\xA9", "",
+            "Le rep\xC3\xA8re \xC3\xA9" "crit avec le symbole (RG-3212)."},
+           {"labelPosition", "Place du libell\xC3\xA9", "dessous",
+            "dessous, dessus, ou aucun (cach\xC3\xA9)."},
+           {"fontSize", "Taille du texte", "13",
+            "La taille du libell\xC3\xA9."},
+           {"textColor", "Couleur du texte", "#C8D0DC",
+            "La couleur du libell\xC3\xA9, du pourcentage et des voyants O et F."},
+           {"damperActuator", "Actionneur", "servomoteur",
+            "servomoteur (M), manuel (un levier), pneumatique (un v\xC3\xA9rin)."},
+           {"opening", "Ouverture (%)", "(vide)",
+            "Modulant : de 0 \xC3\xA0 100 % (une expression : =RG_Position) ; la lame tourne d'autant. Vide "
+            ": tout ou rien."},
+           {"moving", "En mouvement (expression)", "(vide)",
+            "Vraie : l'axe clignote (le registre bouge) : =RG_Ouvre OR RG_Ferme."},
+           {"limitOpen", "Fin de course ouvert", "(vide)",
+            "Vraie : il est ouvert (FCO). Le voyant O ; la lame se couche."},
+           {"limitClosed", "Fin de course ferm\xC3\xA9", "(vide)",
+            "Vraie : il est ferm\xC3\xA9 (FCF). Le voyant F ; la lame se dresse."}},
+         "Le registre RG-3212 s'ouvre \xC3\xA0 1 s (sa lame se couche, l'axe clignote pendant la course), "
+         "module de 100 \xC3\xA0 30 % de 3 \xC3\xA0 6 s, se ferme \xC3\xA0 7 s ; de 8 \xC3\xA0 9,5 s, sa fin "
+         "de course ferm\xC3\xA9 ne revient pas alors qu'il est ferm\xC3\xA9 : discordance, il clignote en rouge.",
+         {}, "1.12.24"},
+        // ---- La bibliotheque d'objets / objet-registre-multi-lames
+        {"objet-registre-multi-lames", "Registre multi-lames", "La biblioth\xC3\xA8que d'objets",
+         "Un registre \xC3\xA0 plusieurs lames, oppos\xC3\xA9" "es ou parall\xC3\xA8les, tout ou rien ou "
+         "modulant : ses lames tournent ensemble ; ses fins de course comme le registre.",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Le registre des grandes sections : de 2 \xC3\xA0 8 lames, l'une au-dessus de "
+                         "l'autre, li\xC3\xA9" "es par une tringle. **Oppos\xC3\xA9" "es**, une lame sur "
+                         "deux tourne dans l'autre sens (le r\xC3\xA9glage le plus fin du d\xC3\xA9" "bit) ; "
+                         "**parall\xC3\xA8les**, toutes dans le m\xC3\xAAme sens. Le reste - ouvert ou "
+                         "ferm\xC3\xA9, l'ouverture, le mouvement, les fins de course O et F, la discordance "
+                         "- comme le registre.", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nOuvert\tFALSE\tVrai "
+                         ": ouvert (les lames \xC3\xA0 plat) ; faux : ferm\xC3\xA9.\nD\xC3\xA9" "faut "
+                         "(expression)\tFALSE\tVrai : la couleur de d\xC3\xA9" "faut, qui clignote.\nCouleur "
+                         "ouvert\t#2ECC71\tLa couleur des lames ouvertes.\nCouleur ferm\xC3\xA9\t#5A6577\tLa "
+                         "couleur des lames ferm\xC3\xA9" "es.\nCouleur de d\xC3\xA9" "faut\t#E5534B\tLa "
+                         "couleur du d\xC3\xA9" "faut et de la discordance (elle "
+                         "clignote).\nContour\t#C8D0DC\tLe trait de la gaine, des axes et de "
+                         "l'actionneur.\n\xC3\x89paisseur du contour\t2\tSon \xC3\xA9paisseur, en pixels de "
+                         "la vue.\nLibell\xC3\xA9\t(vide)\tLe rep\xC3\xA8re \xC3\xA9" "crit avec le symbole "
+                         "(RG-260).\nPlace du libell\xC3\xA9\tdessous\tdessous, dessus, ou aucun "
+                         "(cach\xC3\xA9).\nTaille du texte\t13\tLa taille du libell\xC3\xA9.\nCouleur du "
+                         "texte\t#C8D0DC\tLa couleur du libell\xC3\xA9, du pourcentage et des "
+                         "voyants.\nActionneur\tservomoteur\tservomoteur (M), manuel (un levier), "
+                         "pneumatique (un v\xC3\xA9rin).\nOuverture (%)\t(vide)\tModulant : de 0 \xC3\xA0 "
+                         "100 % ; les lames tournent d'autant. Vide : tout ou rien.\nEn mouvement "
+                         "(expression)\t(vide)\tVraie : l'axe clignote.\nFin de course ouvert\t(vide)\tVraie "
+                         ": il est ouvert (FCO). Le voyant O.\nFin de course ferm\xC3\xA9\t(vide)\tVraie : "
+                         "il est ferm\xC3\xA9 (FCF). Le voyant F.\nNombre de lames\t4\tDe 2 \xC3\xA0 8 "
+                         "lames, qui tournent ensemble.\nDisposition des "
+                         "lames\toppos\xC3\xA9" "es\toppos\xC3\xA9" "es (une sur deux dans l'autre sens) ou "
+                         "parall\xC3\xA8les.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "ses lames suivent sa valeur, son ouverture et ses fins de course ; le "
+                         "d\xC3\xA9" "faut et la discordance le font clignoter en rouge ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale un nombre de lames hors de 2 \xC3\xA0 8 (il en "
+                         "dessine 2 ou 8).", {}},
+         },
+         {"objet-registre", "objet-clapet-coupe-feu", "synoptique", "objet-communs", "proprietes", "simulation"},
+         {},
+         {},
+         {{"EX_MultiBladeDamper.png", "L'exemple anim\xC3\xA9 : registre multi-lames"}},
+         "MultiBladeDamper",
+         {{"value", "Ouvert", "FALSE",
+            "Vrai : ouvert (les lames \xC3\xA0 plat) ; faux : ferm\xC3\xA9."},
+           {"fault", "D\xC3\xA9" "faut (expression)", "FALSE",
+            "Vrai : la couleur de d\xC3\xA9" "faut, qui clignote."},
+           {"colorOn", "Couleur ouvert", "#2ECC71",
+            "La couleur des lames ouvertes."},
+           {"colorOff", "Couleur ferm\xC3\xA9", "#5A6577",
+            "La couleur des lames ferm\xC3\xA9" "es."},
+           {"colorFault", "Couleur de d\xC3\xA9" "faut", "#E5534B",
+            "La couleur du d\xC3\xA9" "faut et de la discordance (elle clignote)."},
+           {"stroke", "Contour", "#C8D0DC",
+            "Le trait de la gaine, des axes et de l'actionneur."},
+           {"strokeWidth", "\xC3\x89paisseur du contour", "2",
+            "Son \xC3\xA9paisseur, en pixels de la vue."},
+           {"label", "Libell\xC3\xA9", "",
+            "Le rep\xC3\xA8re \xC3\xA9" "crit avec le symbole (RG-260)."},
+           {"labelPosition", "Place du libell\xC3\xA9", "dessous",
+            "dessous, dessus, ou aucun (cach\xC3\xA9)."},
+           {"fontSize", "Taille du texte", "13",
+            "La taille du libell\xC3\xA9."},
+           {"textColor", "Couleur du texte", "#C8D0DC",
+            "La couleur du libell\xC3\xA9, du pourcentage et des voyants."},
+           {"damperActuator", "Actionneur", "servomoteur",
+            "servomoteur (M), manuel (un levier), pneumatique (un v\xC3\xA9rin)."},
+           {"opening", "Ouverture (%)", "(vide)",
+            "Modulant : de 0 \xC3\xA0 100 % ; les lames tournent d'autant. Vide : tout ou rien."},
+           {"moving", "En mouvement (expression)", "(vide)",
+            "Vraie : l'axe clignote."},
+           {"limitOpen", "Fin de course ouvert", "(vide)",
+            "Vraie : il est ouvert (FCO). Le voyant O."},
+           {"limitClosed", "Fin de course ferm\xC3\xA9", "(vide)",
+            "Vraie : il est ferm\xC3\xA9 (FCF). Le voyant F."},
+           {"blades", "Nombre de lames", "4",
+            "De 2 \xC3\xA0 8 lames, qui tournent ensemble."},
+           {"bladeMode", "Disposition des lames", "oppos\xC3\xA9" "es",
+            "oppos\xC3\xA9" "es (une sur deux dans l'autre sens) ou parall\xC3\xA8les."}},
+         "Le registre RG-260 (quatre lames oppos\xC3\xA9" "es) s'ouvre de 0 \xC3\xA0 100 % en 4 s puis "
+         "revient \xC3\xA0 40 %, ses lames tournent ensemble ; \xC3\xA0 8 s, il se ferme.",
+         {}, "1.12.24"},
+        // ---- La bibliotheque d'objets / objet-clapet-coupe-feu
+        {"objet-clapet-coupe-feu", "Clapet coupe-feu", "La biblioth\xC3\xA8que d'objets",
+         "Un clapet coupe-feu : ouvert en veille, il se ferme quand il est d\xC3\xA9" "clench\xC3\xA9 "
+         "(fusible, \xC3\xA9lectro-aimant, commande de s\xC3\xA9" "curit\xC3\xA9) ; "
+         "d\xC3\xA9" "clench\xC3\xA9, il est rouge et clignote.",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Le clapet coupe-feu (CF) d'une travers\xC3\xA9" "e de paroi : une gaine, sa lame, "
+                         "la marque **CF** et son d\xC3\xA9" "clencheur au-dessus - un **fusible** thermique "
+                         "(70 \xC2\xB0" "C, r\xC3\xA9" "armement \xC3\xA0 la main), un "
+                         "**\xC3\xA9lectro-aimant** (commande \xC3\xA0 rupture) ou un **moteur** "
+                         "(r\xC3\xA9" "armable \xC3\xA0 distance). **Ouvert (en veille)**, la lame est "
+                         "\xC3\xA0 plat, verte ; **ferm\xC3\xA9**, elle est debout, orange ; "
+                         "**d\xC3\xA9" "clench\xC3\xA9**, ferm\xC3\xA9, rouge, il clignote.", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nOuvert (en "
+                         "veille)\tTRUE\tVrai : ouvert, la position normale ; faux : "
+                         "ferm\xC3\xA9.\nD\xC3\xA9" "faut (expression)\tFALSE\tVrai : la couleur de "
+                         "d\xC3\xA9" "faut, qui clignote.\nCouleur ouvert\t#2ECC71\tLa couleur du clapet "
+                         "ouvert (en veille).\nCouleur ferm\xC3\xA9\t#F2994A\tLa couleur du clapet "
+                         "ferm\xC3\xA9 (non d\xC3\xA9" "clench\xC3\xA9).\nCouleur de "
+                         "d\xC3\xA9" "faut\t#E5534B\tLa couleur du clapet d\xC3\xA9" "clench\xC3\xA9 ou en "
+                         "d\xC3\xA9" "faut (elle clignote).\nContour\t#C8D0DC\tLe trait de la gaine et du "
+                         "d\xC3\xA9" "clencheur.\n\xC3\x89paisseur du contour\t2\tSon \xC3\xA9paisseur, en "
+                         "pixels de la vue.\nLibell\xC3\xA9\t(vide)\tLe rep\xC3\xA8re \xC3\xA9" "crit avec "
+                         "le symbole (CF-12).\nPlace du libell\xC3\xA9\tdessous\tdessous, dessus, ou aucun "
+                         "(cach\xC3\xA9).\nTaille du texte\t13\tLa taille du libell\xC3\xA9.\nCouleur du "
+                         "texte\t#C8D0DC\tLa couleur du libell\xC3\xA9 et des "
+                         "voyants.\nD\xC3\xA9" "clench\xC3\xA9 (expression)\t(vide)\tVraie : "
+                         "d\xC3\xA9" "clench\xC3\xA9 (fusible fondu, commande de s\xC3\xA9" "curit\xC3\xA9) "
+                         ": ferm\xC3\xA9, rouge, il clignote. Reli\xC3\xA9" "e, elle donne l'alarme par "
+                         "d\xC3\xA9" "faut **Declenche** (priorit\xC3\xA9 "
+                         "1).\nD\xC3\xA9" "clencheur\tfusible\tfusible (thermique), \xC3\xA9lectro-aimant "
+                         "(\xC3\xA0 rupture) ou moteur (r\xC3\xA9" "armable \xC3\xA0 distance).\nFin de "
+                         "course ouvert\t(vide)\tVraie : il est ouvert. Le voyant O.\nFin de course "
+                         "ferm\xC3\xA9\t(vide)\tVraie : il est ferm\xC3\xA9. Le voyant F.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "d\xC3\xA9" "clench\xC3\xA9, il se ferme, rouge et clignotant, et l'alarme "
+                         "**Declenche** part ; ses fins de course corrigent la lame et disent la discordance "
+                         "comme le registre ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale une variable inconnue dans ses expressions.", {}},
+         },
+         {"objet-registre", "objet-registre-multi-lames", "synoptique", "objet-communs", "proprietes", "simulation"},
+         {},
+         {},
+         {{"EX_FireDamper.png", "L'exemple anim\xC3\xA9 : clapet coupe-feu"}},
+         "FireDamper",
+         {{"value", "Ouvert (en veille)", "TRUE",
+            "Vrai : ouvert, la position normale ; faux : ferm\xC3\xA9."},
+           {"fault", "D\xC3\xA9" "faut (expression)", "FALSE",
+            "Vrai : la couleur de d\xC3\xA9" "faut, qui clignote."},
+           {"colorOn", "Couleur ouvert", "#2ECC71",
+            "La couleur du clapet ouvert (en veille)."},
+           {"colorOff", "Couleur ferm\xC3\xA9", "#F2994A",
+            "La couleur du clapet ferm\xC3\xA9 (non d\xC3\xA9" "clench\xC3\xA9)."},
+           {"colorFault", "Couleur de d\xC3\xA9" "faut", "#E5534B",
+            "La couleur du clapet d\xC3\xA9" "clench\xC3\xA9 ou en d\xC3\xA9" "faut (elle clignote)."},
+           {"stroke", "Contour", "#C8D0DC",
+            "Le trait de la gaine et du d\xC3\xA9" "clencheur."},
+           {"strokeWidth", "\xC3\x89paisseur du contour", "2",
+            "Son \xC3\xA9paisseur, en pixels de la vue."},
+           {"label", "Libell\xC3\xA9", "",
+            "Le rep\xC3\xA8re \xC3\xA9" "crit avec le symbole (CF-12)."},
+           {"labelPosition", "Place du libell\xC3\xA9", "dessous",
+            "dessous, dessus, ou aucun (cach\xC3\xA9)."},
+           {"fontSize", "Taille du texte", "13",
+            "La taille du libell\xC3\xA9."},
+           {"textColor", "Couleur du texte", "#C8D0DC",
+            "La couleur du libell\xC3\xA9 et des voyants."},
+           {"tripped", "D\xC3\xA9" "clench\xC3\xA9 (expression)", "(vide)",
+            "Vraie : d\xC3\xA9" "clench\xC3\xA9 (fusible fondu, commande de s\xC3\xA9" "curit\xC3\xA9) : "
+            "ferm\xC3\xA9, rouge, il clignote. Reli\xC3\xA9" "e, elle donne l'alarme par d\xC3\xA9" "faut "
+            "**Declenche** (priorit\xC3\xA9 1)."},
+           {"fireRelease", "D\xC3\xA9" "clencheur", "fusible",
+            "fusible (thermique), \xC3\xA9lectro-aimant (\xC3\xA0 rupture) ou moteur (r\xC3\xA9" "armable "
+            "\xC3\xA0 distance)."},
+           {"limitOpen", "Fin de course ouvert", "(vide)",
+            "Vraie : il est ouvert. Le voyant O."},
+           {"limitClosed", "Fin de course ferm\xC3\xA9", "(vide)",
+            "Vraie : il est ferm\xC3\xA9. Le voyant F."}},
+         "Le clapet CF-12 est ouvert (en veille) ; \xC3\xA0 3 s, il est d\xC3\xA9" "clench\xC3\xA9 : il se "
+         "ferme, rouge et clignotant, son fusible aussi ; r\xC3\xA9" "arm\xC3\xA9 \xC3\xA0 8 s, il rouvre.",
+         {}, "1.12.24"},
         // ---- La bibliotheque d'objets / objet-clapet-anti-retour
         {"objet-clapet-anti-retour", "Clapet anti-retour", "La biblioth\xC3\xA8que d'objets",
          "Un clapet anti-retour : il laisse passer dans le sens de la fl\xC3\xA8" "che, jamais \xC3\xA0 "
@@ -11172,6 +11444,222 @@ const std::vector<Topic>& topics() {
          "Deux alarmes sont en cours ; les trois boutons les exportent en CSV, en Excel et en PDF : le nom "
          "du dernier fichier s'affiche dessous.",
          {}},
+        // ---- La bibliotheque d'objets / objet-reglage-pid
+        {"objet-reglage-pid", "R\xC3\xA9glage PID", "La biblioth\xC3\xA8que d'objets",
+         "Une carte qui regarde une boucle de r\xC3\xA9gulation (consigne, mesure, sortie, mode) : elle "
+         "apprend son proc\xC3\xA9" "d\xC3\xA9 en marche, en tire ses statistiques et propose un "
+         "r\xC3\xA9glage, qu'elle \xC3\xA9" "crit dans le bloc PID apr\xC3\xA8s confirmation.",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Un r\xC3\xA9gulateur PID tourne dans l'automate ; l'IHM le regarde. Toutes les "
+                         "**P\xC3\xA9riode** millisecondes, la carte lit la **consigne**, la **mesure**, la "
+                         "**sortie** et le **mode** (AUTO ou MANU), que sa vue soit affich\xC3\xA9" "e ou "
+                         "non. De ce qu'elle voit, elle apprend le proc\xC3\xA9" "d\xC3\xA9 (un premier "
+                         "ordre avec retard, ou deux constantes de temps et un retard), en tire ses "
+                         "statistiques et calcule trois r\xC3\xA9glages - **Robuste**, "
+                         "**\xC3\x89quilibr\xC3\xA9**, **Rapide** - qu'elle compare au r\xC3\xA9glage du "
+                         "bloc. Sa m\xC3\xA9moire (7 jours par d\xC3\xA9" "faut) se garde dans l'historique "
+                         "du projet : elle reprend o\xC3\xB9 elle en \xC3\xA9tait.", {}},
+             {K::Heading, "La boucle", {}},
+             {K::Bullet, "**Structure de la boucle** : une structure qui porte la consigne et la mesure "
+                         "(SPPV_TELUNA[0]) ; ses membres se trouvent par leur nom - **SP** (ou Consigne), "
+                         "**PV** (Mesure), **OUT** (Sortie), **AUTO**, **KP**, **TI**, **TD** - et "
+                         "remplissent les cases laiss\xC3\xA9" "es vides. Sinon, chaque case dit sa variable "
+                         "(une formule : SUIVI_REG[44]/10.0).", {}},
+             {K::Bullet, "**En AUTO** vide : toujours en AUTO. En MANU, elle apprend aussi : la sortie "
+                         "boug\xC3\xA9" "e \xC3\xA0 la main, boucle ouverte, est le plus riche des "
+                         "\xC3\xA9" "chelons.", {}},
+             {K::Bullet, "Elle **\xC3\xA9" "carte** ce qui ne dit rien du proc\xC3\xA9" "d\xC3\xA9 : une "
+                         "perturbation en cours, la sortie en but\xC3\xA9" "e, un trou de donn\xC3\xA9" "es, "
+                         "une mesure fig\xC3\xA9" "e, une r\xC3\xA9ponse que le mod\xC3\xA8le n'explique "
+                         "pas. Un \xC3\xA9" "chelon sur trois est gard\xC3\xA9 de c\xC3\xB4t\xC3\xA9 pour "
+                         "v\xC3\xA9rifier le mod\xC3\xA8le.", {}},
+             {K::Heading, "Le bloc PID", {}},
+             {K::Bullet, "**Kp**, **Ti**, **Td** : les variables du bloc. Elle les lit (le r\xC3\xA9glage "
+                         "actuel, compar\xC3\xA9 aux propositions) et, **\xC3\x89" "crire le r\xC3\xA9glage "
+                         ": apr\xC3\xA8s confirmation**, Appliquer les \xC3\xA9" "crit - au niveau "
+                         "d'acc\xC3\xA8s de l'objet, avec sa signature \xC3\xA9lectronique si elle est "
+                         "demand\xC3\xA9" "e, sans \xC3\xA0-coup. L'ancien r\xC3\xA9glage reste dans le "
+                         "Journal : **Revenir** le remet.", {}},
+             {K::Bullet, "**Forme** : standard (ISA, Kp \xC2\xB7 (e + int\xC3\xA9grale de e / Ti + Td de/dt)), "
+                         "parall\xC3\xA8le (Kp, Ki, Kd) ou s\xC3\xA9rie. **Unit\xC3\xA9 de Ti et Td** : "
+                         "secondes, minutes, millisecondes, dixi\xC3\xA8mes de seconde. **Kp du bloc** : "
+                         "physique (% de sortie par unit\xC3\xA9 de mesure) ou normalis\xC3\xA9 sur les "
+                         "\xC3\xA9tendues (un PID_INT). **\xC3\x89" "chelle de Kp** : un Kp gard\xC3\xA9 au "
+                         "dixi\xC3\xA8me dans un INT : 10.", {}},
+             {K::Heading, "Sa fen\xC3\xAAtre", {}},
+             {K::Paragraph, "Un clic sur la carte l'ouvre, par-dessus la vue :", {}},
+             {K::Bullet, "**Statistiques** : l'\xC3\xA9" "cart moyen, le temps dans la tol\xC3\xA9rance, le "
+                         "d\xC3\xA9passement, le temps de r\xC3\xA9ponse, l'oscillation, la course de la "
+                         "sortie - sur 30 min, 8 h, 24 h ou 7 jours ; la courbe (la souris dit l'instant), "
+                         "l'histogramme de l'\xC3\xA9" "cart, le tableau par p\xC3\xA9riode, l'indice de "
+                         "performance (Harris). **Exporter (CSV)** \xC3\xA9" "crit les minutes dans exports/.", {}},
+             {K::Bullet, "**Ce qu'il a appris** : le mod\xC3\xA8le (gain, constante de temps, retard, leurs "
+                         "intervalles), \xC3\xA0 quel point il colle, le dernier \xC3\xA9" "chelon appris "
+                         "(mesure et mod\xC3\xA8le), ce qu'il a vu (appris, \xC3\xA9" "cart\xC3\xA9, "
+                         "gard\xC3\xA9 pour v\xC3\xA9rifier), le gain jour apr\xC3\xA8s jour, la "
+                         "qualit\xC3\xA9 des donn\xC3\xA9" "es. **Oublier et r\xC3\xA9" "apprendre**.", {}},
+             {K::Bullet, "**R\xC3\xA9glage propos\xC3\xA9** : ce qui ne va pas dans le r\xC3\xA9glage "
+                         "actuel, les trois propositions, leur r\xC3\xA9ponse pr\xC3\xA9vue (un changement "
+                         "de consigne puis une perturbation), le tableau qui les compare "
+                         "(d\xC3\xA9passement, temps de r\xC3\xA9ponse, robustesse Ms, marges, bruit "
+                         "envoy\xC3\xA9 \xC3\xA0 la sortie), ce qui s'\xC3\xA9" "crit dans le bloc : "
+                         "**Appliquer**, **Copier les valeurs**.", {}},
+             {K::Bullet, "**Journal** : les r\xC3\xA9glages \xC3\xA9" "crits (Revenir), leur "
+                         "v\xC3\xA9rification au changement de consigne suivant (d\xC3\xA9passement "
+                         "pr\xC3\xA9vu et mesur\xC3\xA9), les r\xC3\xA9glages chang\xC3\xA9s dans le bloc, "
+                         "les changements du proc\xC3\xA9" "d\xC3\xA9.", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nTitre\t(vide)\tLe "
+                         "titre de la carte ; vide : la structure de la boucle, sinon la mesure, sinon le "
+                         "nom de l'objet.\nStructure de la boucle\t(vide)\tUne structure qui porte SP et PV "
+                         "(et OUT, AUTO, KP, TI, TD) : ses membres remplissent les cases vides.\nConsigne "
+                         "(SP)\t(vide)\tLa consigne lue : une variable ou une formule. Vide : le membre SP "
+                         "de la structure.\nMesure (PV)\t(vide)\tLa mesure lue. Vide : le membre PV de la "
+                         "structure.\nSortie (OUT)\t(vide)\tLa sortie du r\xC3\xA9gulateur, entre Sortie : "
+                         "min et max : l'entr\xC3\xA9" "e du proc\xC3\xA9" "d\xC3\xA9 qu'elle apprend.\nEn "
+                         "AUTO\t(vide)\tVraie : en automatique. Vide : toujours en AUTO.\nKp\t(vide)\tLa "
+                         "variable du gain du bloc (lue, \xC3\xA9" "crite apr\xC3\xA8s confirmation). En "
+                         "forme parall\xC3\xA8le : Kp.\nTi\t(vide)\tLe temps d'int\xC3\xA9grale (0 : sans "
+                         "int\xC3\xA9grale). En forme parall\xC3\xA8le : Ki.\nTd\t(vide)\tLe temps de "
+                         "d\xC3\xA9riv\xC3\xA9" "e (0 : sans d\xC3\xA9riv\xC3\xA9" "e). En forme "
+                         "parall\xC3\xA8le : Kd.\nForme\tstandard\tstandard, parall\xC3\xA8le ou "
+                         "s\xC3\xA9rie ; ou une variable qui la dit (0, 1, 2).\nUnit\xC3\xA9 de Ti et "
+                         "Td\ts\ts, min, ms ou 0,1 s (dixi\xC3\xA8mes de seconde).\nKp du "
+                         "bloc\tphysique\tphysique (% par unit\xC3\xA9 de mesure) ou normalis\xC3\xA9 (sur "
+                         "les \xC3\xA9tendues de la mesure et de la sortie).\n\xC3\x89" "chelle de Kp\t1\tLe "
+                         "bloc garde Kp multipli\xC3\xA9 par ce nombre (10 : au "
+                         "dixi\xC3\xA8me).\n\xC3\x89" "crire le r\xC3\xA9glage\tapr\xC3\xA8s "
+                         "confirmation\tapr\xC3\xA8s confirmation (Appliquer \xC3\xA9" "crit Kp, Ti, Td) ou "
+                         "jamais (proposer seulement, Copier les valeurs).\nMesure : min\t(vide)\tLe bas de "
+                         "l'\xC3\xA9tendue de la mesure ; vide : le Min de sa variable, sinon ce qu'il a "
+                         "vu.\nMesure : max\t(vide)\tLe haut de l'\xC3\xA9tendue de la mesure ; vide : le "
+                         "Max de sa variable.\nUnit\xC3\xA9\t(vide)\tL'unit\xC3\xA9 de la mesure "
+                         "(\xC2\xB0" "C, mmCE) ; vide : celle de sa variable.\nSortie : min\t0\tLa "
+                         "but\xC3\xA9" "e basse de la sortie.\nSortie : max\t100\tLa but\xC3\xA9" "e haute "
+                         "de la sortie.\nSens d'action\td\xC3\xA9tect\xC3\xA9\td\xC3\xA9tect\xC3\xA9 "
+                         "(appris), inverse (la sortie monte quand la mesure baisse : une chauffe) ou "
+                         "direct.\nP\xC3\xA9riode (ms)\t1000\tChaque combien il lit la boucle : de 100 ms "
+                         "\xC3\xA0 10 s.\nApprendre\ten AUTO et en MANU\ten AUTO et en MANU, en AUTO, en "
+                         "MANU, ou jamais (les statistiques seules).\nM\xC3\xA9moire (jours)\t7\tCe qu'il "
+                         "garde, de 1 \xC3\xA0 30 jours (ihm/historique/pid).\nOubli (h)\t24\tUn "
+                         "\xC3\xA9" "chelon vieux de tant d'heures compte moiti\xC3\xA9 moins (0 : tous "
+                         "pareil).\nTol\xC3\xA9rance (\xC2\xB1)\t(vide)\tLa bande autour de la consigne des "
+                         "statistiques ; vide : 1 % de "
+                         "l'\xC3\xA9tendue.\nObjectif\t\xC3\x89quilibr\xC3\xA9\tLe r\xC3\xA9glage "
+                         "conseill\xC3\xA9 : Robuste (Ms \xE2\x89\xA4 1,4), \xC3\x89quilibr\xC3\xA9 (Ms "
+                         "\xE2\x89\xA4 1,6), Rapide (Ms \xE2\x89\xA4 1,9).\nD\xC3\xA9riv\xC3\xA9" "e\tsi "
+                         "elle aide\tsi elle aide, jamais, toujours.\nAu clic\touvrir ses "
+                         "statistiques\touvrir ses statistiques (sa fen\xC3\xAAtre) ou rien.\nTaille du "
+                         "texte\t13\tLa taille des textes de la carte.\nCouleur du texte\t#E6EAF0\tLa "
+                         "couleur des textes de la carte.\nCouleur de la mesure\t#3B8FD9\tLa courbe de la "
+                         "mesure.\nCouleur de la consigne\t#E8743B\tLa consigne (en tirets).\nCouleur de la "
+                         "sortie\t#8B7CF6\tLa sortie.\nRemplissage\t#222831\tLe fond de la "
+                         "carte.\nContour\t#38414D\tSon cadre.\n\xC3\x89paisseur du contour\t1\tSon "
+                         "\xC3\xA9paisseur.\nRayon des coins\t8\tL'arrondi de la carte.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "la carte dit son \xC3\xA9tat d'une pastille - **Apprend**, **Saine**, **Oscille**, "
+                         "**Lente**, **Satur\xC3\xA9" "e**, **En MANU**, **Mesure fig\xC3\xA9" "e**, **Non "
+                         "lue** - et une phrase : ce qu'il faut pour apprendre, le temps dans la "
+                         "tol\xC3\xA9rance, la saturation ;", {}},
+             {K::Bullet, "en pied : le mod\xC3\xA8le appris et le r\xC3\xA9glage conseill\xC3\xA9 (\xC2\xAB "
+                         "R\xC3\xA9glage conseill\xC3\xA9 : \xC3\x89quilibr\xC3\xA9 \xE2\x80\xBA \xC2\xBB "
+                         "quand le r\xC3\xA9glage du bloc oscille ou tra\xC3\xAEne) ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale une variable inconnue, une boucle sans mesure ni "
+                         "consigne, une p\xC3\xA9riode hors de 100 ms \xC3\xA0 10 s, Kp, Ti ou Td qui sont "
+                         "des formules (ils se lisent, mais ne s'\xC3\xA9" "crivent pas).", {}},
+         },
+         {"objet-courbe", "simulation", "securite", "signature", "objet-communs", "proprietes"},
+         {"PID", "R\xC3\xA9gulation", "R\xC3\xA9glage", "Kp", "Ti", "Td", "Autor\xC3\xA9glage"},
+         {},
+         {{"EX_PidTuner.png", "L'exemple anim\xC3\xA9 : la carte en marche"}},
+         "PidTuner",
+         {{"title", "Titre", "(vide)",
+            "Le titre de la carte ; vide : la structure de la boucle, sinon la mesure, sinon le nom de "
+            "l'objet."},
+           {"pidLoop", "Structure de la boucle", "(vide)",
+            "Une structure qui porte SP et PV (et OUT, AUTO, KP, TI, TD) : ses membres remplissent les cases "
+            "vides."},
+           {"pidSp", "Consigne (SP)", "(vide)",
+            "La consigne lue : une variable ou une formule. Vide : le membre SP de la structure."},
+           {"pidPv", "Mesure (PV)", "(vide)",
+            "La mesure lue. Vide : le membre PV de la structure."},
+           {"pidOut", "Sortie (OUT)", "(vide)",
+            "La sortie du r\xC3\xA9gulateur, entre Sortie : min et max : l'entr\xC3\xA9" "e du "
+            "proc\xC3\xA9" "d\xC3\xA9 qu'elle apprend."},
+           {"pidAuto", "En AUTO", "(vide)",
+            "Vraie : en automatique. Vide : toujours en AUTO."},
+           {"pidKp", "Kp", "(vide)",
+            "La variable du gain du bloc (lue, \xC3\xA9" "crite apr\xC3\xA8s confirmation). En forme "
+            "parall\xC3\xA8le : Kp."},
+           {"pidTi", "Ti", "(vide)",
+            "Le temps d'int\xC3\xA9grale (0 : sans int\xC3\xA9grale). En forme parall\xC3\xA8le : Ki."},
+           {"pidTd", "Td", "(vide)",
+            "Le temps de d\xC3\xA9riv\xC3\xA9" "e (0 : sans d\xC3\xA9riv\xC3\xA9" "e). En forme "
+            "parall\xC3\xA8le : Kd."},
+           {"pidForm", "Forme", "standard",
+            "standard, parall\xC3\xA8le ou s\xC3\xA9rie ; ou une variable qui la dit (0, 1, 2)."},
+           {"pidTimeUnit", "Unit\xC3\xA9 de Ti et Td", "s",
+            "s, min, ms ou 0,1 s (dixi\xC3\xA8mes de seconde)."},
+           {"pidKpMode", "Kp du bloc", "physique",
+            "physique (% par unit\xC3\xA9 de mesure) ou normalis\xC3\xA9 (sur les \xC3\xA9tendues de la "
+            "mesure et de la sortie)."},
+           {"pidKpScale", "\xC3\x89" "chelle de Kp", "1",
+            "Le bloc garde Kp multipli\xC3\xA9 par ce nombre (10 : au dixi\xC3\xA8me)."},
+           {"pidWrite", "\xC3\x89" "crire le r\xC3\xA9glage", "apr\xC3\xA8s confirmation",
+            "apr\xC3\xA8s confirmation (Appliquer \xC3\xA9" "crit Kp, Ti, Td) ou jamais (proposer seulement, "
+            "Copier les valeurs)."},
+           {"pidPvMin", "Mesure : min", "(vide)",
+            "Le bas de l'\xC3\xA9tendue de la mesure ; vide : le Min de sa variable, sinon ce qu'il a vu."},
+           {"pidPvMax", "Mesure : max", "(vide)",
+            "Le haut de l'\xC3\xA9tendue de la mesure ; vide : le Max de sa variable."},
+           {"unit", "Unit\xC3\xA9", "(vide)",
+            "L'unit\xC3\xA9 de la mesure (\xC2\xB0" "C, mmCE) ; vide : celle de sa variable."},
+           {"pidOutMin", "Sortie : min", "0",
+            "La but\xC3\xA9" "e basse de la sortie."},
+           {"pidOutMax", "Sortie : max", "100",
+            "La but\xC3\xA9" "e haute de la sortie."},
+           {"pidAction", "Sens d'action", "d\xC3\xA9tect\xC3\xA9",
+            "d\xC3\xA9tect\xC3\xA9 (appris), inverse (la sortie monte quand la mesure baisse : une chauffe) "
+            "ou direct."},
+           {"pidPeriod", "P\xC3\xA9riode (ms)", "1000",
+            "Chaque combien il lit la boucle : de 100 ms \xC3\xA0 10 s."},
+           {"pidLearn", "Apprendre", "en AUTO et en MANU",
+            "en AUTO et en MANU, en AUTO, en MANU, ou jamais (les statistiques seules)."},
+           {"pidMemory", "M\xC3\xA9moire (jours)", "7",
+            "Ce qu'il garde, de 1 \xC3\xA0 30 jours (ihm/historique/pid)."},
+           {"pidForget", "Oubli (h)", "24",
+            "Un \xC3\xA9" "chelon vieux de tant d'heures compte moiti\xC3\xA9 moins (0 : tous pareil)."},
+           {"pidTolerance", "Tol\xC3\xA9rance (\xC2\xB1)", "(vide)",
+            "La bande autour de la consigne des statistiques ; vide : 1 % de l'\xC3\xA9tendue."},
+           {"pidGoal", "Objectif", "\xC3\x89quilibr\xC3\xA9",
+            "Le r\xC3\xA9glage conseill\xC3\xA9 : Robuste (Ms \xE2\x89\xA4 1,4), \xC3\x89quilibr\xC3\xA9 (Ms "
+            "\xE2\x89\xA4 1,6), Rapide (Ms \xE2\x89\xA4 1,9)."},
+           {"pidDerivative", "D\xC3\xA9riv\xC3\xA9" "e", "si elle aide",
+            "si elle aide, jamais, toujours."},
+           {"pidClick", "Au clic", "ouvrir ses statistiques",
+            "ouvrir ses statistiques (sa fen\xC3\xAAtre) ou rien."},
+           {"fontSize", "Taille du texte", "13",
+            "La taille des textes de la carte."},
+           {"textColor", "Couleur du texte", "#E6EAF0",
+            "La couleur des textes de la carte."},
+           {"colorPv", "Couleur de la mesure", "#3B8FD9",
+            "La courbe de la mesure."},
+           {"colorSp", "Couleur de la consigne", "#E8743B",
+            "La consigne (en tirets)."},
+           {"colorOut", "Couleur de la sortie", "#8B7CF6",
+            "La sortie."},
+           {"fill", "Remplissage", "#222831",
+            "Le fond de la carte."},
+           {"stroke", "Contour", "#38414D",
+            "Son cadre."},
+           {"strokeWidth", "\xC3\x89paisseur du contour", "1",
+            "Son \xC3\xA9paisseur."},
+           {"radius", "Rayon des coins", "8",
+            "L'arrondi de la carte."}},
+         "La boucle TE-101 : la consigne passe de 60 \xC3\xA0 70 \xC2\xB0" "C \xC3\xA0 2 s, la mesure la "
+         "rejoint ; la carte montre ses trois valeurs, ses 30 derni\xC3\xA8res minutes, et ce qu'il apprend.",
+         {}, "1.12.24"},
         // ---- La bibliotheque d'objets / navigation
         {"navigation", "La navigation et la structure", "La biblioth\xC3\xA8que d'objets",
          "Passer d'une vue \xC3\xA0 l'autre (barre de navigation, fil d'Ariane, "

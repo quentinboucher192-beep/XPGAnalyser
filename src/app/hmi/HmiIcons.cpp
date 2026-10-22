@@ -118,6 +118,10 @@ HmiGlyph glyphFor(hmi::Kind k) noexcept {
         case hmi::Kind::PlcDiagnostic:        return HmiGlyph::Diagnostic;
         case hmi::Kind::AnimatedGif:          return HmiGlyph::Gif;           // lot 16
         case hmi::Kind::ThreeWayValve:        return HmiGlyph::ThreeWayValve; // 1.10.4
+        case hmi::Kind::PidTuner:             return HmiGlyph::PidTuner;      // 1.12.24
+        case hmi::Kind::Damper:               return HmiGlyph::Damper;
+        case hmi::Kind::MultiBladeDamper:     return HmiGlyph::MultiBladeDamper;
+        case hmi::Kind::FireDamper:           return HmiGlyph::FireDamper;
     }
     return HmiGlyph::None;
 }
@@ -738,6 +742,27 @@ void drawHmiGlyph(gfx::IRenderer& r, HmiGlyph g, const gfx::Rect& b, gfx::Color 
         case HmiGlyph::ThreeWayValve:   // 1.10.4 : trois triangles, la tige, le moteur
             poly({{1.5f, 6}, {1.5f, 11}, {7, 8.5f}}, true); poly({{14.5f, 6}, {14.5f, 11}, {9, 8.5f}}, true);
             poly({{5.5f, 15}, {10.5f, 15}, {8, 9.5f}}, false); L(8, 8.5f, 8, 4); circle(8, 3, 2, false);
+            break;
+        case HmiGlyph::PidTuner:        // 1.12.24 : une consigne en echelon et la mesure qui la rejoint
+            L(1.5f, 13.5f, 14.5f, 13.5f, 0.9f);
+            L(1.5f, 10, 5, 10, 1.0f); L(5, 10, 5, 4.5f, 1.0f); L(5, 4.5f, 14.5f, 4.5f, 1.0f);
+            L(1.5f, 11, 5.5f, 11); L(5.5f, 11, 7, 6); L(7, 6, 8.5f, 3.4f); L(8.5f, 3.4f, 10, 4.2f); L(10, 4.2f, 11.5f, 5); L(11.5f, 5, 14.5f, 4.6f);
+            break;
+        case HmiGlyph::Damper:          // 1.12.24 : la gaine, la lame inclinee, l'axe et son moteur
+            L(1.5f, 7, 14.5f, 7, 1.0f); L(1.5f, 14.5f, 14.5f, 14.5f, 1.0f);
+            L(5, 13.4f, 11, 8.1f, 1.6f); circle(8, 10.75f, 0.9f, true);
+            L(8, 7, 8, 4.4f); circle(8, 2.6f, 1.8f, false);
+            break;
+        case HmiGlyph::MultiBladeDamper:   // la gaine, trois lames opposees
+            L(1.5f, 2, 14.5f, 2, 1.0f); L(1.5f, 14.5f, 14.5f, 14.5f, 1.0f);
+            L(5, 5.6f, 11, 2.9f, 1.4f); L(5, 7.6f, 11, 10.3f, 1.4f); L(5, 13.6f, 11, 10.9f, 1.4f);
+            break;
+        case HmiGlyph::FireDamper:      // la gaine, la lame fermee, la marque CF
+            L(1.5f, 7, 14.5f, 7, 1.0f); L(1.5f, 14.5f, 14.5f, 14.5f, 1.0f);
+            L(10, 7.6f, 10, 13.9f, 1.6f);
+            R(1.5f, 1.2f, 6.5f, 4.4f);
+            L(3, 2.5f, 3, 4.3f, 0.9f); L(3, 2.5f, 4.2f, 2.5f, 0.9f); L(3, 4.3f, 4.2f, 4.3f, 0.9f);
+            L(5.4f, 2.5f, 5.4f, 4.3f, 0.9f); L(5.4f, 2.5f, 6.6f, 2.5f, 0.9f); L(5.4f, 3.4f, 6.3f, 3.4f, 0.9f);
             break;
         case HmiGlyph::Pause:           // 1.9 : deux barres (Figer l'affichage)
             F(4, 3, 2.6f, 10, c); F(9.4f, 3, 2.6f, 10, c);

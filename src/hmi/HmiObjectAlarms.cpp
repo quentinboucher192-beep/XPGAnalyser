@@ -157,10 +157,26 @@ std::vector<LibraryAlarm> libraryAlarms(const Object& o) {
     }
     // La vanne dont "moving" est relie : elle ne finit pas sa course en 30 s.
     // 1.10.4 : la vanne 3 voies aussi (son boisseau tourne d'une voie a l'autre).
-    if (o.kind == Kind::Valve || o.kind == Kind::ThreeWayValve) {
+    if (o.kind == Kind::Valve || o.kind == Kind::ThreeWayValve || kindIsDamper(o.kind)) {   // 1.12.24 : et les registres
         const std::string moving = linkedSource(o, "moving");
         auto la = make("Course_Trop_Longue", moving, cap + " : ne finit pas sa course", 3, "Alarme", 30000);
         out.push_back(moving.empty() ? unusable(std::move(la), "le mouvement (moving) n'est pas reli\xC3\xA9") : std::move(la));
+    }
+    // 1.12.24 : le registre dont les deux fins de course sont reliees - ni l'une ni l'autre hors mouvement (il
+    // est reste en route), ou les deux a la fois (un capteur colle) ; le clapet coupe-feu declenche.
+    if (kindIsDamper(o.kind)) {
+        const std::string fco = linkedSource(o, "limitOpen"), fcf = linkedSource(o, "limitClosed");
+        const std::string moving = linkedSource(o, "moving");
+        const std::string still = moving.empty() ? std::string{} : " AND NOT (" + moving + ")";
+        auto la = make("Discordance", "((" + fco + ") AND (" + fcf + ")) OR (NOT (" + fco + ") AND NOT (" + fcf + ")" + still + ")",
+                       cap + " : discordance des fins de course", 2, "Alarme", 10000);
+        out.push_back(fco.empty() || fcf.empty() ? unusable(std::move(la), "les deux fins de course (limitOpen, limitClosed) ne sont pas reli\xC3\xA9" "es")
+                                                 : std::move(la));
+    }
+    if (o.kind == Kind::FireDamper) {
+        const std::string tripped = linkedSource(o, "tripped");
+        auto la = make("Declenche", tripped, cap + " : clapet coupe-feu d\xC3\xA9" "clench\xC3\xA9", 1, "Alarme", 0);
+        out.push_back(tripped.empty() ? unusable(std::move(la), "le d\xC3\xA9" "clenchement (tripped) n'est pas reli\xC3\xA9") : std::move(la));
     }
     return out;
 }

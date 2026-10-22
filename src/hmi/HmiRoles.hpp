@@ -168,6 +168,24 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"colorMoving", Role::Color}, {"valve3Function", Role::Choice}, {"valve3Bore", Role::Choice},
     {"positionMode", Role::Choice}, {"positionA", Role::Formula, Role::Boolean}, {"positionB", Role::Formula, Role::Boolean},
     {"showPorts", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    // 1.12.24 : les registres (actionneur, fins de course, lames) et le clapet coupe-feu (declenche, son declencheur)
+    {"damperActuator", Role::Choice}, {"limitOpen", Role::Formula, Role::Boolean}, {"limitClosed", Role::Formula, Role::Boolean},
+    {"blades", Role::Number, Role::Text, Unit::None, "INT"}, {"bladeMode", Role::Choice},
+    {"tripped", Role::Formula, Role::Boolean}, {"fireRelease", Role::Choice},
+    // 1.12.24 : le Reglage PID - la boucle (des formules lues par le moteur), le bloc (ses variables, ecrites apres
+    // confirmation), les echelles, l'apprentissage, le reglage, le clic, ses couleurs
+    {"pidLoop", Role::Formula, Role::Text}, {"pidSp", Role::Formula, Role::Number}, {"pidPv", Role::Formula, Role::Number},
+    {"pidOut", Role::Formula, Role::Number}, {"pidAuto", Role::Formula, Role::Boolean},
+    {"pidKp", Role::Formula, Role::Number}, {"pidTi", Role::Formula, Role::Number}, {"pidTd", Role::Formula, Role::Number},
+    {"pidForm", Role::Choice}, {"pidTimeUnit", Role::Choice}, {"pidKpMode", Role::Choice},
+    {"pidKpScale", Role::Number, Role::Text, Unit::None, "REAL"}, {"pidWrite", Role::Choice},
+    {"pidPvMin", Role::Number, Role::Text, Unit::None, "REAL"}, {"pidPvMax", Role::Number, Role::Text, Unit::None, "REAL"},
+    {"pidOutMin", Role::Number, Role::Text, Unit::None, "REAL"}, {"pidOutMax", Role::Number, Role::Text, Unit::None, "REAL"},
+    {"pidAction", Role::Choice}, {"pidPeriod", Role::Duration, Role::Text, Unit::Milliseconds, "INT"},
+    {"pidLearn", Role::Choice}, {"pidMemory", Role::Number, Role::Text, Unit::None, "REAL"},
+    {"pidForget", Role::Number, Role::Text, Unit::None, "REAL"}, {"pidTolerance", Role::Number, Role::Text, Unit::None, "REAL"},
+    {"pidGoal", Role::Choice}, {"pidDerivative", Role::Choice}, {"pidClick", Role::Choice},
+    {"colorPv", Role::Color}, {"colorSp", Role::Color}, {"colorOut", Role::Color},
     // 1.12.11 (lot G) : la liaison Equipement (le chemin d'une structure), le mode Etat (valeur -> aspect), le mode montre
     {"equipment", Role::Formula, Role::Text}, {"stateAspects", Role::Mini}, {"operatingMode", Role::Text},
     {"cylinderMode", Role::Choice},
@@ -289,7 +307,7 @@ inline constexpr KeyRole kKeyRoles[] = {
         case Kind::NumericDisplay: case Kind::IsaInstrument: return thresholds;
         case Kind::Tank: case Kind::GasBottle: case Kind::Silo: case Kind::Hopper: return bounds || thresholds;
         case Kind::Trend: return key == "ymin" || key == "ymax";
-        case Kind::Valve: return key == "openingMin" || key == "openingMax";
+        case Kind::Valve: case Kind::Damper: case Kind::MultiBladeDamper: return key == "openingMin" || key == "openingMax";   // 1.12.24 : les registres
         default: return false;
     }
 }

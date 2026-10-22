@@ -305,6 +305,19 @@ bool HmiStationPane::change(const std::string& label, const std::function<void(h
 }
 
 bool HmiStationPane::setSetting(const std::string& key, const std::string& raw, std::string* why) {
+    // 1.12.24 : la mise a l'echelle de la vue sur l'ecran du poste.
+    if (key == "echelle") {
+        const std::string v = trimmed(raw);
+        const auto fit = hmi::screenFitFrom(v);
+        if (!fit) {
+            const std::string m = "mise \xC3\xA0 l'\xC3\xA9" "chelle \xC2\xAB " + v + " \xC2\xBB : Remplir l'\xC3\xA9" "cran, Garder les proportions ou Taille r\xC3\xA9" "elle (100 %)";
+            say(m, true);
+            if (why) *why = m;
+            return false;
+        }
+        if (doc_->project.station.screenFit == *fit) return true;
+        return change("Poste : " + std::string(hmi::screenFitLabel(*fit)), [&](hmi::Station& s) { s.screenFit = *fit; });
+    }
     const bool on = yes(trimmed(raw));
     struct Flag {
         const char* key;
@@ -506,6 +519,14 @@ void HmiStationPane::rebuildProperties() {
     post.name = "Poste";
     post.properties.push_back(prop("Plein \xC3\xA9" "cran", tf(st.fullScreen), PG::ValueType::Boolean, commit("plein_ecran"),
                                    "La vue de d\xC3\xA9marrage sur tout l'\xC3\xA9" "cran, sans barre de titre ni bordure."));
+    // 1.12.24 : la vue sur l'ecran (et les ecrans en plus) quand il n'a pas ses proportions.
+    post.properties.push_back(prop("Mise \xC3\xA0 l'\xC3\xA9" "chelle", std::string(hmi::screenFitLabel(st.screenFit)), PG::ValueType::Enum, commit("echelle"),
+                                   "Quand l'\xC3\xA9" "cran n'a pas les proportions de la vue (une vue 1280 x 800 sur un \xC3\xA9" "cran 16:9) : "
+                                   "Remplir l'\xC3\xA9" "cran, la vue \xC3\xA9tir\xC3\xA9" "e jusqu'aux bords (les textes gardent leur taille) ; "
+                                   "Garder les proportions, la vue enti\xC3\xA8re et les bandes \xC3\xA0 sa couleur de fond ; "
+                                   "Taille r\xC3\xA9" "elle, un pixel de la vue pour un pixel de l'\xC3\xA9" "cran, centr\xC3\xA9" "e.",
+                                   {std::string(hmi::screenFitLabel(hmi::ScreenFit::Fill)), std::string(hmi::screenFitLabel(hmi::ScreenFit::Keep)),
+                                    std::string(hmi::screenFitLabel(hmi::ScreenFit::Actual))}));
     post.properties.push_back(prop("Kiosque", tf(st.kiosk), PG::ValueType::Boolean, commit("kiosque"),
                                    "Fermer la fen\xC3\xAAtre (Alt+F4) ne fait rien, F11 non plus ; la sortie (Ctrl+Alt+Q) demande le mot de passe de sortie."));
     post.properties.push_back(prop("Sortie par le coin", tf(st.cornerExit), PG::ValueType::Boolean, commit("coin"),

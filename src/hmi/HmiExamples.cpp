@@ -1937,6 +1937,117 @@ Example threeWayValve() {
     return m.done(10);
 }
 
+// ---- 1.12.24 : les registres et le clapet coupe-feu ----------------------------------------
+Example damper() {
+    Maker m;
+    m.var("Ouvert", "BOOL", "FALSE");
+    m.var("Position", "REAL", "0.0");
+    m.var("Bouge", "BOOL", "FALSE");
+    m.var("FCO", "BOOL", "FALSE");
+    m.var("FCF", "BOOL", "TRUE");
+    m.cyclic("Position := 0.0;\n"
+             "IF T >= 1.0 THEN Position := (T - 1.0) * 100.0; END_IF;\n"
+             "IF T >= 2.0 THEN Position := 100.0; END_IF;\n"
+             "IF T >= 3.0 THEN Position := 100.0 - (T - 3.0) * 23.3; END_IF;\n"
+             "IF T >= 6.0 THEN Position := 30.0; END_IF;\n"
+             "IF T >= 7.0 THEN Position := 30.0 - (T - 7.0) * 30.0; END_IF;\n"
+             "IF T >= 8.0 THEN Position := 0.0; END_IF;\n"
+             "Ouvert := Position > 1.0;\n"
+             "Bouge := (T >= 1.0 AND T < 2.0) OR (T >= 3.0 AND T < 6.0) OR (T >= 7.0 AND T < 8.0);\n"
+             "FCO := Position >= 99.0;\n"
+             "FCF := Position <= 1.0 AND NOT (T >= 8.0 AND T < 9.5);");
+    auto& o = m.add(Kind::Damper, "RG", 60, std::max(10.0, (kHeight - 150.0) / 2), 190, 150);
+    o.set("label", "RG-3212");
+    o.setExpr("value", "Ouvert");
+    o.setExpr("opening", "Position");
+    o.setExpr("moving", "Bouge");
+    o.setExpr("limitOpen", "FCO");
+    o.setExpr("limitClosed", "FCF");
+    m.title("Etat", 300, 40, 280, "Ouverture : {Position:0} %{Bouge: - en mouvement|}", 18);
+    m.note("Explication", 300, 110, 280, 170,
+           "La lame tourne avec l'ouverture (0 \xC3\xA0 100 %) : \xC3\xA0 plat ouverte, debout ferm\xC3\xA9" "e. Les voyants O et F sont ses fins de "
+           "course ; de 8 \xC3\xA0 9,5 s, F ne revient pas alors qu'il est ferm\xC3\xA9 : discordance, il clignote en rouge.");
+    return m.done(10);
+}
+
+Example multiBladeDamper() {
+    Maker m;
+    m.var("Position", "REAL", "0.0");
+    m.var("Bouge", "BOOL", "FALSE");
+    m.cyclic("Position := T * 25.0;\n"
+             "IF T >= 4.0 THEN Position := 100.0 - (T - 4.0) * 30.0; END_IF;\n"
+             "IF T >= 6.0 THEN Position := 40.0; END_IF;\n"
+             "IF T >= 8.0 THEN Position := 40.0 - (T - 8.0) * 40.0; END_IF;\n"
+             "IF T >= 9.0 THEN Position := 0.0; END_IF;\n"
+             "Bouge := T < 6.0 OR (T >= 8.0 AND T < 9.0);");
+    auto& o = m.add(Kind::MultiBladeDamper, "RG", 60, std::max(10.0, (kHeight - 190.0) / 2), 190, 190);
+    o.set("label", "RG-260");
+    o.setExpr("value", "Position > 1.0");
+    o.setExpr("opening", "Position");
+    o.setExpr("moving", "Bouge");
+    m.title("Etat", 300, 40, 280, "Ouverture : {Position:0} %", 18);
+    m.note("Explication", 300, 110, 280, 170,
+           "Quatre lames oppos\xC3\xA9" "es : une sur deux tourne dans l'autre sens. Elles suivent l'ouverture ensemble, de 0 \xC3\xA0 100 %, "
+           "puis 40 % ; l'axe clignote pendant la course.");
+    return m.done(10);
+}
+
+Example fireDamper() {
+    Maker m;
+    m.var("Declenche", "BOOL", "FALSE");
+    m.var("Ouvert", "BOOL", "TRUE");
+    m.cyclic("Declenche := T >= 3.0 AND T < 8.0;\nOuvert := NOT Declenche;");
+    auto& o = m.add(Kind::FireDamper, "CF", 60, std::max(10.0, (kHeight - 150.0) / 2), 190, 150);
+    o.set("label", "CF-12");
+    o.setExpr("value", "Ouvert");
+    o.setExpr("tripped", "Declenche");
+    o.setExpr("limitOpen", "Ouvert");
+    o.setExpr("limitClosed", "NOT Ouvert");
+    m.title("Etat", 300, 40, 280, "{Declenche:D\xC3\x89" "CLENCH\xC3\x89|En veille (ouvert)}", 18);
+    m.note("Explication", 300, 110, 280, 170,
+           "Ouvert en veille ; d\xC3\xA9" "clench\xC3\xA9 \xC3\xA0 3 s (le fusible a fondu), il se ferme, rouge et clignotant ; r\xC3\xA9" "arm\xC3\xA9 \xC3\xA0 8 s, il rouvre.");
+    return m.done(10);
+}
+
+// ---- 1.12.24 : le Reglage PID - une boucle simulee (un procede a deux constantes de temps et son PI) ----
+Example pidTuner() {
+    Maker m;
+    m.var("SP", "REAL", "60.0");
+    m.var("PV", "REAL", "60.0");
+    m.var("X2", "REAL", "60.0");
+    m.var("I", "REAL", "30.0");
+    m.var("E", "REAL", "0.0");
+    m.var("OUT", "REAL", "30.0");
+    m.var("KP", "REAL", "4.0");
+    m.var("TI", "REAL", "2.0");
+    m.cyclic("IF T < 0.06 THEN SP := 60.0; PV := 60.0; X2 := 60.0; I := 30.0; END_IF;\n"
+             "IF T >= 2.0 THEN SP := 70.0; END_IF;\n"
+             "E := SP - PV;\n"
+             "I := I + 0.05 * KP * E / TI;\n"
+             "IF I > 100.0 THEN I := 100.0; END_IF;\n"
+             "IF I < 0.0 THEN I := 0.0; END_IF;\n"
+             "OUT := KP * E + I;\n"
+             "IF OUT > 100.0 THEN OUT := 100.0; END_IF;\n"
+             "IF OUT < 0.0 THEN OUT := 0.0; END_IF;\n"
+             "X2 := X2 + 0.05 / 1.5 * (45.0 + 0.5 * OUT - X2);\n"
+             "PV := PV + 0.05 / 0.6 * (X2 - PV);");
+    auto& o = m.add(Kind::PidTuner, "TE_101", 16, 16, 360, 268);
+    o.set("title", "TE-101");
+    o.set("pidSp", "SP");
+    o.set("pidPv", "PV");
+    o.set("pidOut", "OUT");
+    o.set("pidKp", "KP");
+    o.set("pidTi", "TI");
+    o.set("unit", "\xC2\xB0" "C");
+    o.set("pidPvMin", "40");
+    o.set("pidPvMax", "90");
+    o.setNumber("pidPeriod", 100);
+    m.note("Explication", 392, 30, 196, 250,
+           "La carte lit la boucle toutes les 100 ms : la consigne passe de 60 \xC3\xA0 70 \xC2\xB0" "C \xC3\xA0 2 s, la mesure la rejoint. "
+           "En marche, elle apprend le proc\xC3\xA9" "d\xC3\xA9, en tire ses statistiques et propose un r\xC3\xA9glage ; un clic ouvre sa fen\xC3\xAAtre.");
+    return m.done(10);
+}
+
 // ---- lot 12 : la navigation et la structure --------------------------------------------
 // Une vue de l'exemple de navigation : son titre, sa couleur, sa barre.
 void navPage(Maker& m, Id view, const std::string& title, const std::string& color, const std::string& text) {
@@ -2471,6 +2582,10 @@ std::optional<Example> exampleFor(Kind kind) {
         case Kind::CheckValve:
         case Kind::FlowArrow:           return synoptic(kind);
         case Kind::ThreeWayValve:       return threeWayValve();     // 1.10.4
+        case Kind::Damper:              return damper();            // 1.12.24
+        case Kind::MultiBladeDamper:    return multiBladeDamper();
+        case Kind::FireDamper:          return fireDamper();
+        case Kind::PidTuner:            return pidTuner();
         case Kind::SymbolInstance:      return symbolInstance();     // lot 10
         // lot 11
         case Kind::BarChart:            return barChart();

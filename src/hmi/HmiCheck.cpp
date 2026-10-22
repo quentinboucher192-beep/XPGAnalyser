@@ -2605,6 +2605,67 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                         }
                     break;
                 }
+                // ---- 1.12.24 : le Reglage PID - sa boucle (des noms qui existent), son bloc, ses echelles
+                case Kind::PidTuner: {
+                    const auto text = [&](const char* key) {
+                        const auto* pr = o.find(key);
+                        return pr ? trimmedCopy(pr->expr.empty() ? pr->value : pr->expr) : std::string{};
+                    };
+                    for (const char* key : {"pidLoop", "pidSp", "pidPv", "pidOut", "pidAuto", "pidKp", "pidTi", "pidTd"})
+                        if (const std::string e = text(key); !e.empty()) exprCheck(key, e, key);
+                    const bool loop = !text("pidLoop").empty();
+                    if (!loop && text("pidPv").empty())
+                        issue(S::Error, "pidPv", "la boucle n'a pas de mesure : remplis Mesure (PV) ou Structure de la boucle");
+                    if (!loop && text("pidSp").empty())
+                        issue(S::Error, "pidSp", "la boucle n'a pas de consigne : remplis Consigne (SP) ou Structure de la boucle");
+                    if (!loop && text("pidOut").empty())
+                        issue(S::Warning, "pidOut", "sans la sortie (OUT), il ne peut pas apprendre le proc\xC3\xA9" "d\xC3\xA9 : les statistiques seules");
+                    const bool writes = o.text("pidWrite", "apr\xC3\xA8s").rfind("apr", 0) == 0;
+                    for (const char* key : {"pidKp", "pidTi", "pidTd"})
+                        if (const std::string e = text(key); writes && !e.empty() && !ranges::isName(e))
+                            issue(S::Info, key, std::string(key + 3) + " est une formule : il se lit, mais le r\xC3\xA9glage ne s'y \xC3\xA9" "crira pas");
+                    if (!loop && text("pidKp").empty())
+                        issue(S::Info, "pidKp", "sans Kp, Ti et Td : il apprend et propose, sans comparer au r\xC3\xA9glage actuel ni l'\xC3\xA9" "crire");
+                    double period = 1000;
+                    if (const auto* pr = o.find("pidPeriod"); pr && pr->expr.empty() && parseNumber(trimmedCopy(pr->value), period)
+                        && (period < 100 || period > 10000))
+                        issue(S::Warning, "pidPeriod", "p\xC3\xA9riode de " + formatNumber(period) + " ms : il la ram\xC3\xA8ne entre 100 ms et 10 s");
+                    const double outMin = o.number("pidOutMin", 0), outMax = o.number("pidOutMax", 100);
+                    if (outMax <= outMin) issue(S::Error, "pidOutMax", "Sortie : max doit d\xC3\xA9passer Sortie : min");
+                    double pvMin = 0, pvMax = 0;
+                    if (parseNumber(text("pidPvMin"), pvMin) && parseNumber(text("pidPvMax"), pvMax) && pvMax <= pvMin)
+                        issue(S::Error, "pidPvMax", "Mesure : max doit d\xC3\xA9passer Mesure : min");
+                    if (o.number("pidKpScale", 1) <= 0) issue(S::Error, "pidKpScale", "\xC3\xA9" "chelle de Kp : un nombre positif (1, 10, 100)");
+                    const double days = o.number("pidMemory", 7);
+                    if (days < 1 || days > 30) issue(S::Warning, "pidMemory", "m\xC3\xA9moire de " + formatNumber(days) + " jours : il garde de 1 \xC3\xA0 30 jours");
+                    break;
+                }
+                // ---- 1.12.24 : les registres - l'ouverture (modulant), les fins de course, le declenchement
+                case Kind::Damper:
+                case Kind::MultiBladeDamper:
+                case Kind::FireDamper: {
+                    if (const auto* op = o.find("opening"); op && op->expr.empty() && !trimmedCopy(op->value).empty()) {
+                        double x = 0;
+                        if (!parseNumber(trimmedCopy(op->value), x)) exprCheck("opening", trimmedCopy(op->value), "opening");
+                        else if (x < 0 || x > 100) issue(S::Warning, "opening", "ouverture hors de 0 \xC3\xA0 100 %");
+                    }
+                    if (o.kind == Kind::MultiBladeDamper) {
+                        const double n = o.number("blades", 4);
+                        if (n < 2 || n > 8) issue(S::Warning, "blades", "nombre de lames hors de 2 \xC3\xA0 8 : il en dessine " + formatNumber(std::clamp(std::round(n), 2.0, 8.0)));
+                    }
+                    for (const char* key : {"moving", "limitOpen", "limitClosed", "tripped"})
+                        if (const auto* pr = o.find(key); pr && pr->expr.empty() && !trimmedCopy(pr->value).empty()) {
+                            double x = 0;
+                            if (!parseNumber(trimmedCopy(pr->value), x)) exprCheck(key, trimmedCopy(pr->value), key);
+                        }
+                    const auto* fo = o.find("limitOpen");
+                    const auto* ff = o.find("limitClosed");
+                    const auto set = [&](const Prop* pr) { return pr && (!pr->expr.empty() || !trimmedCopy(pr->value).empty()); };
+                    if (set(fo) != set(ff))
+                        issue(S::Info, set(fo) ? "limitClosed" : "limitOpen",
+                              "une seule fin de course reli\xC3\xA9" "e : la discordance (aucune des deux \xC3\xA0 l'arr\xC3\xAAt) ne se voit pas");
+                    break;
+                }
                 // ---- 1.10.4 : la vanne 3 voies - sa voie active (un entier, ou deux booleens)
                 case Kind::ThreeWayValve: {
                     const std::string mode = o.text("positionMode", "entier");

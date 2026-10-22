@@ -322,6 +322,7 @@ void StationScreen::paintSecondaries(double time) {
         if (v && rt.running()) {
             auto layers = sec->builder.build(rt, doc->project, rt.now(), nullptr, v->id);
             sec->canvas.setStation(true);
+            sec->canvas.setScreenFit(doc->project.station.screenFit);   // 1.12.24 : comme l'ecran principal
             sec->canvas.setAssets(&doc->project.assets);
             sec->canvas.setLive(&rt, &doc->history);
             sec->canvas.setProject(&doc->project);

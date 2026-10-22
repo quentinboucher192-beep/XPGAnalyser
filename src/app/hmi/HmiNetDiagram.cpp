@@ -20,6 +20,13 @@ constexpr float kEquipH = 68.f;
 constexpr float kEquipGap = 14.f;
 constexpr float kPillH = 22.f;
 constexpr float kLegendH = 34.f;
+// 1.12.24 : le haut du PC (l'ecran, le nom, le systeme, le trait), une prise sur
+// son bord (demi-hauteur, et l'ecart garde autour), le decalage des bus d'un port.
+constexpr float kPcHead = 136.f;
+constexpr float kJack = 14.f;
+constexpr float kJackGap = 6.f;
+constexpr float kBusStep = 12.f;
+constexpr float kSimTitleH = 22.f;
 
 const gfx::FontId kSmall{13};
 const gfx::FontId kBody{16};
@@ -183,6 +190,11 @@ void dashedLine(gfx::IRenderer& r, gfx::Point a, gfx::Point b, gfx::Color c) {
 
 bool inside(const gfx::Rect& r, gfx::Point p) { return r.w > 0 && p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h; }
 
+// Le texte sous le nom d'une carte simulee du PC (place() et le dessin le coupent pareil).
+std::string simText(const NetDiagram::Equip& e) {
+    return e.line2.empty() ? std::string("sa m\xC3\xA9moire se r\xC3\xA8gle \xC3\xA0 la main") : e.line2;
+}
+
 } // namespace
 
 HmiNetDiagram::HmiNetDiagram(std::string id) : ui::Widget(std::move(id)) {
@@ -255,7 +267,6 @@ void HmiNetDiagram::place(gfx::IRenderer& r) const {
     const auto b = bounds();
     const float bar = data_.toggle ? 40.f : 0.f;           // lot 17 : Reel | Simule
     const float top = b.y + 12 + bar - scroll_;
-    const float x0 = b.x + kPad;
     if (data_.toggle) {
         const float w0 = textW(r, "R\xC3\xA9" "el", kSmall) + 28, w1 = textW(r, "Simul\xC3\xA9", kSmall) + 28;
         toggleRects_[0] = {b.x + kPad, b.y + 8, w0, 26};
@@ -263,12 +274,24 @@ void HmiNetDiagram::place(gfx::IRenderer& r) const {
     } else {
         toggleRects_[0] = toggleRects_[1] = gfx::Rect{};
     }
-    const float portX = x0 + kPcW + kGapPcPort;
-    const float avail = b.w - (portX - b.x) - kPad;
+    // Les colonnes : leurs largeurs viennent du panneau, pas du defilement de cote.
+    const float ux0 = b.x + kPad;
+    const float uPortX = ux0 + kPcW + kGapPcPort;
+    const float avail = b.w - (uPortX - b.x) - kPad;
     const float portW = std::clamp(avail * 0.34f, 200.f, 250.f);
-    const float busX = portX + portW + kBus;
-    const float eqX = busX + kBusToEquip;
-    const float eqW = std::clamp(b.x + b.w - kPad - eqX - 30.f, 240.f, 420.f);
+    const float uBusX = uPortX + portW + kBus;
+    const float uEqX = uBusX + kBusToEquip;
+    const float eqW = std::clamp(b.x + b.w - kPad - uEqX - 30.f, 240.f, 420.f);
+    // L'encadre Hors reseau : a la largeur du panneau, mais jamais si etroit que son
+    // texte tombe mot a mot ou que ses boutons en sortent (on defile de cote).
+    float buttons = 0;
+    for (const auto& o : data_.outside)
+        buttons = std::max({buttons, o.give.empty() ? 0.f : textW(r, o.give, kSmall) + 26, o.edit.empty() ? 0.f : textW(r, o.edit, kSmall) + 26});
+    const float ow = std::max({std::min(eqW + 120.f, b.x + b.w - kPad - uBusX), 300.f, buttons + 36});
+    const float x0 = ux0 - scrollX_;
+    const float portX = uPortX - scrollX_;
+    const float busX = uBusX - scrollX_;
+    const float eqX = uEqX - scrollX_;
     portRects_.assign(data_.ports.size(), gfx::Rect{});
     equipRects_.assign(data_.equips.size(), gfx::Rect{});
     pillRects_.assign(data_.nets.size(), gfx::Rect{});
@@ -276,31 +299,51 @@ void HmiNetDiagram::place(gfx::IRenderer& r) const {
     editRects_.assign(data_.outside.size(), gfx::Rect{});
     outsideTitleRects_.assign(data_.outside.size(), gfx::Rect{});
     const auto portH = [&](const NetDiagram::Port& p) { return p.ip.empty() ? 76.f : (p.mac.empty() ? 112.f : 132.f); };
-    float y = top;
-    std::vector<bool> placedPort(data_.ports.size(), false);
-    // Chaque reseau : son etiquette, ses equipements, son port en face.
-    for (std::size_t n = 0; n < data_.nets.size(); ++n) {
-        const auto& net = data_.nets[n];
-        const float pillW = textW(r, net.label, kSmall) + 24;
-        pillRects_[n] = {eqX + (eqW - pillW) / 2 - 40, y, pillW, kPillH};
-        y += kPillH + 8;
-        const float groupTop = y;
-        float ey = y;
+    // L'etiquette d'un reseau : dans la colonne des equipements, a droite des bus.
+    const auto pill = [&](std::size_t n, float at) {
+        const float minX = busX + 10;
+        const float w = std::min(textW(r, data_.nets[n].label, kSmall) + 24, eqX + eqW - minX);
+        pillRects_[n] = {std::clamp(eqX + (eqW - w) / 2 - 40, minX, eqX + eqW - w), at, w, kPillH};
+    };
+    // Les equipements d'un reseau, l'un sous l'autre a partir de `ey`.
+    const auto stack = [&](std::size_t n, float& ey) {
         for (std::size_t i = 0; i < data_.equips.size(); ++i) {
             const auto& e = data_.equips[i];
             if (e.simulated || e.net != static_cast<int>(n)) continue;
             equipRects_[i] = {eqX, ey, eqW, kEquipH};
             ey += kEquipH + kEquipGap;
         }
-        float groupH = std::max(0.f, ey - groupTop - kEquipGap);
-        if (net.port >= 0 && static_cast<std::size_t>(net.port) < data_.ports.size()) {
-            const auto& p = data_.ports[static_cast<std::size_t>(net.port)];
-            const float h = portH(p);
-            portRects_[static_cast<std::size_t>(net.port)] = {portX, groupTop, portW, h};
-            placedPort[static_cast<std::size_t>(net.port)] = true;
-            groupH = std::max(groupH, h);
+    };
+    float y = top;
+    std::vector<bool> placedPort(data_.ports.size(), false), placedNet(data_.nets.size(), false);
+    // Chaque reseau : son etiquette, ses equipements, son port en face. Les autres
+    // reseaux du meme port (un port a plusieurs adresses) suivent : le port n'est
+    // pose qu'une fois (il allait au dernier, en face de rien pour le premier).
+    for (std::size_t n = 0; n < data_.nets.size(); ++n) {
+        if (placedNet[n]) continue;
+        const int port = data_.nets[n].port;
+        const bool hasPort = port >= 0 && static_cast<std::size_t>(port) < data_.ports.size();
+        pill(n, y);
+        y += kPillH + 8;
+        const float groupTop = y;
+        float ey = y;
+        stack(n, ey);
+        placedNet[n] = true;
+        for (std::size_t m = n + 1; hasPort && m < data_.nets.size(); ++m) {
+            if (placedNet[m] || data_.nets[m].port != port) continue;
+            ey = std::max(groupTop, ey - kEquipGap) + 28;
+            pill(m, ey);
+            ey += kPillH + 8;
+            stack(m, ey);
+            placedNet[m] = true;
         }
-        y = groupTop + groupH + 28;
+        if (hasPort && !placedPort[static_cast<std::size_t>(port)]) {
+            const float h = portH(data_.ports[static_cast<std::size_t>(port)]);
+            portRects_[static_cast<std::size_t>(port)] = {portX, groupTop, portW, h};
+            placedPort[static_cast<std::size_t>(port)] = true;
+            ey = std::max(ey, groupTop + h + kEquipGap);
+        }
+        y = std::max(groupTop, ey - kEquipGap) + 28;
     }
     // Les ports sans equipement, dessous ; l'encadre Hors reseau en face.
     const float restTop = y;
@@ -314,11 +357,10 @@ void HmiNetDiagram::place(gfx::IRenderer& r) const {
     float oy = restTop;
     outsideRect_ = {};
     if (!data_.outside.empty()) {
-        const float ow = std::min(eqX + eqW + 60 - busX, b.x + b.w - kPad - busX);
         float h = 44;
         for (std::size_t i = 0; i < data_.outside.size(); ++i) {
             const auto& o = data_.outside[i];
-            outsideTitleRects_[i] = {busX + 12, oy + h - 3, std::max(40.f, ow - 24), 26};
+            outsideTitleRects_[i] = {busX + 12, oy + h - 3, ow - 24, 26};
             h += 24;
             h += static_cast<float>(wrap(r, o.text, kSmall, ow - 36).size()) * 18 + 8;
             if (!o.give.empty()) {
@@ -334,10 +376,77 @@ void HmiNetDiagram::place(gfx::IRenderer& r) const {
         outsideRect_ = {busX, oy, ow, h};
         oy += h + 14;
     }
-    // Le PC : de haut en bas.
-    const float bottom = std::max({py, oy, y, top + 420.f});
+    // Le PC : son haut, puis les equipements simules qu'il porte, l'un sous l'autre,
+    // puis ses ports. Les cartes simulees etaient posees au dessin, sans place
+    // gardee : elles sortaient du cadre du PC et leurs prises tombaient sur celles
+    // des ports (une carte semblait branchee a un port).
+    struct Sim {
+        std::size_t i;
+        float       y, h;
+    };
+    std::vector<Sim> sims;
+    float sy = top + kPcHead + kSimTitleH;
+    for (std::size_t i = 0; i < data_.equips.size(); ++i) {
+        if (!data_.equips[i].simulated) continue;
+        const float h = 48 + static_cast<float>(wrap(r, simText(data_.equips[i]), kSmall, kPcW - 44).size()) * 17;
+        sims.push_back({i, sy, h});
+        sy += h + 10;
+    }
+    const auto push = [&](std::size_t k, float d) {
+        for (; d > 0 && k < sims.size(); ++k) sims[k].y += d;
+    };
+    // La prise d'un port, sur le bord du PC : au milieu du port, sinon (une carte
+    // simulee est la) dans un ecart entre deux cartes, ouvert s'il le faut - toujours
+    // en face du port. De haut en bas : une carte poussee s'eloigne des prises deja posees.
+    std::vector<std::size_t> order;
+    for (std::size_t i = 0; i < portRects_.size(); ++i)
+        if (portRects_[i].w > 0) order.push_back(i);
+    std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t c) { return portRects_[a].y < portRects_[c].y; });
+    jackY_.assign(data_.ports.size(), 0.f);
+    const float clear = kJack + kJackGap;
+    for (const std::size_t p : order) {
+        const gfx::Rect& pr = portRects_[p];
+        const float mid = pr.y + pr.h / 2;
+        const float lo = std::min(mid, pr.y + kJack + 4), hi = std::max(mid, pr.y + pr.h - kJack - 4);
+        // Un ecart libre en face du port (avant la premiere carte, entre deux, apres la
+        // derniere) : le point le plus pres de son milieu.
+        float j = mid;
+        bool found = false;
+        for (std::size_t g = 0; g <= sims.size(); ++g) {
+            const float a = g > 0 ? std::max(lo, sims[g - 1].y + sims[g - 1].h + clear) : lo;
+            const float z = g < sims.size() ? std::min(hi, sims[g].y - clear) : hi;
+            if (a > z) continue;
+            const float c = std::clamp(mid, a, z);
+            if (!found || std::abs(c - mid) < std::abs(j - mid)) j = c;
+            found = true;
+        }
+        // Sinon l'ouvrir : apres la premiere carte qui arrive a la prise, si le port y
+        // arrive et qu'on pousse moins les cartes du dessous, sinon avant elle.
+        std::size_t k = 0;
+        while (!found && k < sims.size() && sims[k].y + sims[k].h + clear <= lo) ++k;
+        if (!found && k < sims.size()) {
+            const float after = sims[k].y + sims[k].h + clear;
+            const float pushAfter = k + 1 < sims.size() ? after + clear - sims[k + 1].y : 0.f;
+            const float pushBefore = lo + clear - sims[k].y;
+            if (after <= hi && pushAfter <= pushBefore) {
+                j = after;
+                push(k + 1, pushAfter);
+            } else {
+                j = lo;
+                push(k, pushBefore);
+            }
+        }
+        jackY_[p] = j;
+    }
+    for (const auto& s : sims) equipRects_[s.i] = {x0 + 12, s.y, kPcW - 24, s.h};
+    simTitleY_ = sims.empty() ? 0.f : sims.front().y - kSimTitleH;
+    sy = sims.empty() ? top + kPcHead : sims.back().y + sims.back().h + 18;
+    summaryY_ = sy;
+    if (!data_.portsSummary.empty()) sy += 22 + 18 * static_cast<float>(data_.portsSummary.size());
+    const float bottom = std::max({py, oy, y, sy + 12, top + 420.f});
     pcRect_ = {x0, top, kPcW, bottom - top};
     contentH_ = bottom - top + kLegendH + 24 + bar;
+    contentW_ = std::max(uEqX + eqW, data_.outside.empty() ? 0.f : uBusX + ow) + kPad - b.x;
     placed_ = true;
 }
 
@@ -375,11 +484,13 @@ void HmiNetDiagram::onPaint(const ui::PaintContext& ctx) {
         drawToggle();
         return;
     }
-    // Le defilement borne a ce qui existe.
+    // Le defilement borne a ce qui existe (en hauteur, et de cote si c'est etroit).
     place(r);
     const float maxScroll = std::max(0.f, contentH_ - b.h);
-    if (scroll_ > maxScroll) {
-        scroll_ = maxScroll;
+    const float maxScrollX = std::max(0.f, contentW_ - b.w);
+    if (scroll_ > maxScroll || scrollX_ > maxScrollX) {
+        scroll_ = std::min(scroll_, maxScroll);
+        scrollX_ = std::min(scrollX_, maxScrollX);
         place(r);
     }
     r.pushClip(b);
@@ -398,28 +509,28 @@ void HmiNetDiagram::onPaint(const ui::PaintContext& ctx) {
         r.fillRect({cx - 4, y + 36, 8, 6}, t.color.textMuted);
         r.fillRoundedRect({cx - 14, y + 42, 28, 4}, t.color.textMuted, 2);
         y += 58;
-        const std::string name = fit(r, data_.computer, kBody, pcRect_.w - 16);
+        // Les textes du PC s'arretent avant les prises de son bord droit (un nom
+        // long passait sous la prise du premier port).
+        const float room = pcRect_.w - 2 * (kJack + 4);
+        const std::string name = fit(r, data_.computer, kBody, room);
         bold(r, {cx - textW(r, name, kBody) / 2, y}, name, kBody, t.color.text);
         y += 22;
-        const std::string sys = fit(r, data_.system, kSmall, pcRect_.w - 16);
+        const std::string sys = fit(r, data_.system, kSmall, room);
         r.drawText({cx - textW(r, sys, kSmall) / 2, y}, sys, kSmall, t.color.textMuted);
         y += 26;
         r.fillRect({pcRect_.x, y, pcRect_.w, 1}, cardBorder);
-        y += 14;
-        // Les equipements simules : dans le PC.
+        // Les equipements simules : dans le PC, a la place que place() leur garde.
         bool anySim = false;
-        for (std::size_t i = 0; i < data_.equips.size(); ++i) {
+        for (std::size_t i = 0; i < data_.equips.size() && i < equipRects_.size(); ++i) {
             const auto& e = data_.equips[i];
-            if (!e.simulated) continue;
+            if (!e.simulated || equipRects_[i].w <= 0) continue;
             if (!anySim) {
-                r.drawText({pcRect_.x + 12, y}, "DANS CE PC (SIMUL\xC3\x89S)", gfx::FontId{12}, t.color.textMuted);
-                y += 22;
+                r.drawText({pcRect_.x + 12, simTitleY_}, fit(r, "DANS CE PC (SIMUL\xC3\x89S)", gfx::FontId{12}, pcRect_.w - 12 - kJack - 4), gfx::FontId{12},
+                           t.color.textMuted);
                 anySim = true;
             }
-            const auto lines = wrap(r, e.line2.empty() ? std::string("sa m\xC3\xA9moire se r\xC3\xA8gle \xC3\xA0 la main") : e.line2, kSmall, pcRect_.w - 44);
-            const float h = 48 + static_cast<float>(lines.size()) * 17;
-            const gfx::Rect cr{pcRect_.x + 12, y, pcRect_.w - 24, h};
-            equipRects_[i] = cr;
+            const auto lines = wrap(r, simText(e), kSmall, pcRect_.w - 44);
+            const gfx::Rect cr = equipRects_[i];
             r.fillRoundedRect(cr, card, 6);
             const gfx::Color edge = e.selected ? t.color.accent : (static_cast<int>(i) == hoverEquip_ ? t.color.text : t.color.info);
             r.strokeRect(cr, edge, e.selected ? 2.f : 1.2f);
@@ -430,28 +541,37 @@ void HmiNetDiagram::onPaint(const ui::PaintContext& ctx) {
                 r.drawText({cr.x + 10, ly}, l, kSmall, t.color.textMuted);
                 ly += 17;
             }
-            // Le fil vers la prise du PC.
+            // Le fil vers la prise du PC (sa bande n'a pas de prise de port).
             jack(r, pcRect_.x + pcRect_.w, cr.y + cr.h / 2, true, t.color.info, t.color.textMuted, t.color.panelBg);
-            y += h + 10;
         }
-        if (anySim) y += 8;
         if (!data_.portsSummary.empty()) {
+            y = summaryY_;
             r.drawText({pcRect_.x + 12, y}, "PORTS", gfx::FontId{12}, t.color.textMuted);
             y += 22;
             for (const auto& l : data_.portsSummary) {
-                r.drawText({pcRect_.x + 12, y}, fit(r, l, kSmall, pcRect_.w - 24), kSmall, t.color.textMuted);
+                r.drawText({pcRect_.x + 12, y}, fit(r, l, kSmall, pcRect_.w - 12 - kJack - 4), kSmall, t.color.textMuted);
                 y += 18;
             }
         }
     }
 
     // ---- les liens des reseaux (sous les cartes) -------------------------------
-    for (std::size_t n = 0; n < data_.nets.size(); ++n) {
+    // A rebours : le premier reseau d'un port peint en dernier le tronc qu'ils partagent.
+    for (std::size_t n = data_.nets.size(); n-- > 0;) {
         const auto& net = data_.nets[n];
         if (net.port < 0 || static_cast<std::size_t>(net.port) >= portRects_.size()) continue;
         const gfx::Rect pr = portRects_[static_cast<std::size_t>(net.port)];
+        if (pr.w <= 0) continue;
         const gfx::Color c = netColor(static_cast<int>(n));
-        const float busX = pr.x + pr.w + kBus;
+        // Les reseaux d'un meme port : chacun son bus, les suivants decales vers le port.
+        int rank = 0, count = 0;
+        for (std::size_t m = 0; m < data_.nets.size(); ++m) {
+            if (data_.nets[m].port != net.port) continue;
+            rank += m < n ? 1 : 0;
+            ++count;
+        }
+        const float step = count > 1 ? std::min(kBusStep, (kBus - 10) / static_cast<float>(count - 1)) : 0.f;
+        const float busX = pr.x + pr.w + kBus - step * static_cast<float>(rank);
         const float py = pr.y + pr.h / 2;
         float lo = py, hi = py;
         for (std::size_t i = 0; i < data_.equips.size(); ++i) {
@@ -470,8 +590,8 @@ void HmiNetDiagram::onPaint(const ui::PaintContext& ctx) {
         const auto& p = data_.ports[i];
         const gfx::Rect pr = portRects_[i];
         if (pr.w <= 0) continue;
-        const float cy = pr.y + pr.h / 2;
-        // Le fil du PC au port.
+        // Le fil du PC au port, a la hauteur de sa prise (pas contre une carte simulee).
+        const float cy = i < jackY_.size() ? jackY_[i] : pr.y + pr.h / 2;
         const float jx = pcRect_.x + pcRect_.w;
         if (p.wifi) {
             wifi(r, jx, cy - 4, p.up ? t.color.text : t.color.textMuted);
@@ -526,7 +646,7 @@ void HmiNetDiagram::onPaint(const ui::PaintContext& ctx) {
         const gfx::Color c = netColor(static_cast<int>(n));
         r.fillRoundedRect(pill, alpha(c, 40), kPillH / 2);
         r.strokeRect(pill, alpha(c, 160), 1.f);
-        r.drawText({pill.x + 12, pill.y + (kPillH - r.lineHeight(kSmall)) / 2}, data_.nets[n].label, kSmall, t.color.text);
+        r.drawText({pill.x + 12, pill.y + (kPillH - r.lineHeight(kSmall)) / 2}, fit(r, data_.nets[n].label, kSmall, pill.w - 23), kSmall, t.color.text);
     }
 
     // ---- les equipements --------------------------------------------------------
@@ -542,13 +662,18 @@ void HmiNetDiagram::onPaint(const ui::PaintContext& ctx) {
         r.strokeRect(er, edge, e.selected ? 2.f : 1.f);
         stateIcon(r, er.x + 22, er.y + er.h / 2, e.tone, tc);
         const gfx::Color nameColor = e.tone == 3 ? t.color.error : e.disabled ? t.color.textMuted : t.color.text;
-        const std::string name = fit(r, e.name, kBody, er.w - 60 - (e.tag.empty() ? 0.f : textW(r, e.tag, gfx::FontId{12}) + 20));
+        // Le nom et sa pastille se partagent la ligne ; le nom en garde au moins un
+        // tiers (une longue pastille, "esclave simule de ...", sortait de la carte).
+        const float room = er.w - 60;
+        const float tagRoom = room - std::min(textW(r, e.name, kBody), room * 0.35f) - 20;
+        const std::string tag = e.tag.empty() ? std::string{} : fit(r, e.tag, gfx::FontId{12}, std::max(20.f, tagRoom));
+        const std::string name = fit(r, e.name, kBody, room - (tag.empty() ? 0.f : textW(r, tag, gfx::FontId{12}) + 20));
         bold(r, {er.x + 44, er.y + 9}, name, kBody, nameColor);
-        if (!e.tag.empty()) {
+        if (!tag.empty()) {
             const float x = er.x + 52 + textW(r, name, kBody);
-            const gfx::Rect chip{x, er.y + 10, textW(r, e.tag, gfx::FontId{12}) + 14, 18};
+            const gfx::Rect chip{x, er.y + 10, textW(r, tag, gfx::FontId{12}) + 14, 18};
             r.fillRoundedRect(chip, alpha(t.color.info, 45), 9);
-            r.drawText({chip.x + 7, chip.y + (18 - r.lineHeight(gfx::FontId{12})) / 2}, e.tag, gfx::FontId{12}, t.color.text);
+            r.drawText({chip.x + 7, chip.y + (18 - r.lineHeight(gfx::FontId{12})) / 2}, tag, gfx::FontId{12}, t.color.text);
         }
         r.drawText({er.x + 44, er.y + 30}, fit(r, e.line1, kSmall, er.w - 54), kSmall, e.disabled ? t.color.textMuted : t.color.text);
         r.drawText({er.x + 44, er.y + 48}, fit(r, e.line2, kSmall, er.w - 54), kSmall, e.tone == 0 || e.tone == 5 ? t.color.textMuted : tc);
@@ -566,12 +691,15 @@ void HmiNetDiagram::onPaint(const ui::PaintContext& ctx) {
         r.line({tx + 8, y}, {tx + 16, y + 14}, t.color.error, 2.f);
         r.line({tx, y + 14}, {tx + 16, y + 14}, t.color.error, 2.f);
         r.line({tx + 8, y + 5}, {tx + 8, y + 9}, t.color.error, 2.f);
-        bold(r, {o.x + 42, y - 1}, data_.outsideTitle, kBody, t.color.error);
+        bold(r, {o.x + 42, y - 1}, fit(r, data_.outsideTitle, kBody, o.w - 54), kBody, t.color.error);
         y += 30;
         for (std::size_t i = 0; i < data_.outside.size(); ++i) {
             const auto& e = data_.outside[i];
-            bold(r, {o.x + 18, y}, e.title, kBody, t.color.text);
-            r.drawText({o.x + 26 + textW(r, e.title, kBody), y + 2}, "\xC2\xB7 " + e.line, kSmall, t.color.text);
+            // Le nom, puis l'adresse : coupes a la largeur de l'encadre.
+            const std::string title = fit(r, e.title, kBody, (o.w - 36) * 0.6f);
+            bold(r, {o.x + 18, y}, title, kBody, t.color.text);
+            const float lx = o.x + 26 + textW(r, title, kBody);
+            r.drawText({lx, y + 2}, fit(r, "\xC2\xB7 " + e.line, kSmall, o.x + o.w - 18 - lx), kSmall, t.color.text);
             y += 24;
             for (const auto& l : wrap(r, e.text, kSmall, o.w - 36)) {
                 r.drawText({o.x + 18, y}, l, kSmall, t.color.text);
@@ -752,9 +880,16 @@ ui::EventResult HmiNetDiagram::onEvent(const ui::InputEvent& ev) {
         return ui::EventResult::Ignored;
     }
     if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
-        const float before = scroll_;
-        scroll_ = std::clamp(scroll_ - w->dy * 48.f, 0.f, std::max(0.f, contentH_ - bounds().h));
-        if (scroll_ != before) {
+        const float before = scroll_, beforeX = scrollX_;
+        // 1.12.24 : Maj+molette (ou la molette de cote) : de cote, quand le schema
+        // est plus large que le panneau (la colonne des equipements etait coupee).
+        if ((w->mods.shift || (w->dx != 0.f && w->dy == 0.f)) && contentW_ > bounds().w) {
+            const float d = w->mods.shift ? -w->dy : w->dx;
+            scrollX_ = std::clamp(scrollX_ + d * 48.f, 0.f, std::max(0.f, contentW_ - bounds().w));
+        } else {
+            scroll_ = std::clamp(scroll_ - w->dy * 48.f, 0.f, std::max(0.f, contentH_ - bounds().h));
+        }
+        if (scroll_ != before || scrollX_ != beforeX) {
             invalidate();
             return ui::EventResult::Consumed;
         }

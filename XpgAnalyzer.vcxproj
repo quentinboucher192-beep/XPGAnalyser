@@ -175,6 +175,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiLot11Painter.cpp" />
     <ClCompile Include="src\app\hmi\HmiLot13Painter.cpp" />
     <ClCompile Include="src\app\hmi\HmiLot14Painter.cpp" />
+    <ClCompile Include="src\app\hmi\HmiPidPainter.cpp" />
     <ClCompile Include="src\app\hmi\HmiMemoryMap.cpp" />
     <ClCompile Include="src\app\hmi\HmiModbusToolPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiNavPainter.cpp" />
@@ -578,6 +579,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiPerfHistory.cpp" />
     <ClCompile Include="src\hmi\HmiPid.cpp" />
     <ClCompile Include="src\hmi\HmiPidLearn.cpp" />
+    <ClCompile Include="src\hmi\HmiPidLoop.cpp" />
     <ClCompile Include="src\hmi\HmiPipeline.cpp" />
     <ClCompile Include="src\hmi\HmiPopupParams.cpp" />
     <ClCompile Include="src\hmi\HmiPrompt.cpp" />
@@ -599,6 +601,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiSymbolArgCheck.cpp" />
     <ClCompile Include="src\hmi\HmiTable.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeTable.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimePid.cpp" />
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp" />
     <ClCompile Include="src\hmi\HmiTypeForms.cpp" />
     <ClCompile Include="src\hmi\HmiTypeRegistry.cpp" />
@@ -665,6 +668,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiNotifyPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiObjectTutorial.hpp" />
     <ClInclude Include="src\app\hmi\HmiPainter.hpp" />
+    <ClInclude Include="src\app\hmi\HmiPidPainter.hpp" />
     <ClInclude Include="src\app\hmi\HmiPaintKit.hpp" />
     <ClInclude Include="src\app\hmi\HmiPaneKit.hpp" />
     <ClInclude Include="src\app\hmi\HmiPanels.hpp" />
@@ -1014,6 +1018,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiOverload.hpp" />
     <ClInclude Include="src\hmi\HmiPerfHistory.hpp" />
     <ClInclude Include="src\hmi\HmiPid.hpp" />
+    <ClInclude Include="src\hmi\HmiPidLoop.hpp" />
     <ClInclude Include="src\hmi\HmiPipeline.hpp" />
     <ClInclude Include="src\hmi\HmiPopupParams.hpp" />
     <ClInclude Include="src\hmi\HmiPrompt.hpp" />

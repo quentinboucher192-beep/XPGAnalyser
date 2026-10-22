@@ -341,7 +341,36 @@ core::Status saveHistory(const History& h, const std::string& projectFolder) {
             if (ec) return core::fail(core::ErrorCode::FileUnreadable, "remplacement impossible : " + target.string());
         }
     }
+    // 1.12.24 : la memoire des Reglages PID, un fichier chacun.
+    if (!h.pid.empty()) {
+        const fs::path pdir = dir / "pid";
+        fs::create_directories(pdir, ec);
+        for (const auto& [key, blob] : h.pid) {
+            const fs::path target = pdir / (pidMemoryName(key) + ".mem");
+            const fs::path tmp = target.string() + ".tmp";
+            {
+                std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+                if (!out) return core::fail(core::ErrorCode::FileUnreadable, "\xC3\xA9" "criture impossible : " + tmp.string());
+                out.write(blob.data(), static_cast<std::streamsize>(blob.size()));
+                if (!out) return core::fail(core::ErrorCode::FileUnreadable, "\xC3\xA9" "criture incompl\xC3\xA8" "te : " + tmp.string());
+            }
+            fs::rename(tmp, target, ec);
+            if (ec) {
+                fs::remove(target, ec);
+                fs::rename(tmp, target, ec);
+            }
+        }
+    }
     return core::ok();
+}
+
+std::string pidMemoryName(std::string_view key) {
+    std::string out;
+    for (const char c : key) {
+        const auto u = static_cast<unsigned char>(c);
+        out += std::isalnum(u) || c == '_' || c == '-' || c == '.' ? c : '_';
+    }
+    return out.empty() ? std::string("pid") : out;
 }
 
 core::Status appendAuditFile(const AuditEntry& e, const std::string& projectFolder) {
@@ -376,6 +405,17 @@ History loadHistory(const std::string& projectFolder, std::vector<std::string>* 
         if (!parseHistoryCsv(s.str(), which, h, &error) && warnings)
             warnings->push_back("historique " + std::string(which) + ".csv : " + error);
     }
+    // 1.12.24 : la memoire des Reglages PID (le nom du fichier est sa cle).
+    const fs::path pdir = dir / "pid";
+    if (fs::is_directory(pdir, ec))
+        for (const auto& e : fs::directory_iterator(pdir, ec)) {
+            if (!e.is_regular_file(ec) || e.path().extension() != ".mem") continue;
+            std::ifstream in(e.path(), std::ios::binary);
+            if (!in) continue;
+            std::ostringstream s;
+            s << in.rdbuf();
+            h.pid[e.path().stem().string()] = s.str();
+        }
     return h;
 }
 

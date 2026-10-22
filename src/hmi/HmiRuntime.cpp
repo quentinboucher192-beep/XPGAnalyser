@@ -3377,6 +3377,10 @@ void Runtime::start(double now) {
     alarmBroken_.clear();
     events_.clear();
     closed_.clear();
+    pid_.clear();                       // 1.12.24 : les Reglages PID se relisent (leur memoire : l'historique)
+    pidPlan_.clear();
+    pidPlanAt_ = -1e9;
+    pidWindow_ = PidWindow{};
     trends_.clear();
     trendPaused_.clear();   // 1.12.16
     resetLot11();            // lot 11 : graphiques, mises de cote, production, editeurs, export
@@ -3766,6 +3770,8 @@ void Runtime::stop(double now, const std::string& why) {
     timers_.clear();                    // 1.12.19 : les minuteurs d'IHM_APRES et IHM_CHAQUE s'arretent avec l'IHM
     watches_.clear();                   // 1.12.20 : les surveillances d'IHM_SUR_CHANGEMENT aussi
     nullSaid_.clear();
+    pidKeepAll();                       // 1.12.24 : ce qu'ont appris les Reglages PID, dans l'historique
+    pidWindow_ = PidWindow{};
 }
 
 void Runtime::press(Id object, double now) {
@@ -3801,7 +3807,8 @@ void Runtime::release(Id object, double now, bool inside) {
     GestureGuard gesture(*this, where(snapshot, snapshot.object(object)), "Clic sur");         // lot 13 : l'audit
     // Lot 13 : une commande a signature attend le panneau - la bascule avant de
     // basculer, le bouton apres sa confirmation.
-    const bool signs = click && signatureNeeded(snapshot, *snapshot.object(object));
+    // 1.12.24 : le Reglage PID signe ce qu'il ecrit (Appliquer, Revenir), pas l'ouverture de sa fenetre.
+    const bool signs = click && o->kind != Kind::PidTuner && signatureNeeded(snapshot, *snapshot.object(object));
     if (signs && o->kind != Kind::Button) {
         requestSignature(snapshot, *snapshot.object(object), SignatureRequest::Gesture::Click, now);
         return;
@@ -3815,6 +3822,9 @@ void Runtime::release(Id object, double now, bool inside) {
         requestSignature(snapshot, *snapshot.object(object), SignatureRequest::Gesture::Click, now);
         return;
     }
+    // 1.12.24 : le Reglage PID ouvre sa fenetre (Au clic : ouvrir ses statistiques).
+    if (o->kind == Kind::PidTuner && shownText(snapshot.id, *o, "pidClick", "ouvrir").rfind("ouvrir", 0) == 0)
+        pidOpen(snapshot.id, object, 0, now);
     // Lot 10 : l'objet Parametres systeme ouvre le menu natif, sur son onglet.
     if (o->kind == Kind::SystemButton) {
         const Object& so = *snapshot.object(object);
@@ -3989,6 +3999,7 @@ void Runtime::cycle(double now) {
     controlsCycle(now);      // lot 9 : compteurs horaires, fleches de tendance, programmateurs
     zoneMapsCycle();         // 1.12.12 (lot H) : la zone choisie par un programme
     productionCycle(now);    // lot 11 : compteurs de production
+    pidCycle(now);           // 1.12.24 : les Reglages PID
     editorsCycle();          // lot 11 : les valeurs de l'installation, pour les editeurs de recette
     reportsCycle(now);       // lot 14 : les rapports periodiques a leur heure
     cyclePost("reste", "Le reste (compteurs, horloges, m\xC3\xA9" "dias, rapports)", rest + lap());
@@ -5363,6 +5374,11 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
     if (found->kind == Kind::RecipeManager) {
         GestureGuard gesture(*this, where(*v, found), "Clic sur");   // lot 13 : l'audit
         recipeManagerClick(object, part, now);
+        return;
+    }
+    // 1.12.24 : le Reglage PID - une partie de sa carte, ou le geste que la signature a valide.
+    if (found->kind == Kind::PidTuner) {
+        pidObjectPart(*v, *found, part, now);
         return;
     }
     // 1.12.16 : le bouton Pause / Continuer d'une courbe pilotable.

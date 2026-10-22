@@ -1192,8 +1192,11 @@ const std::vector<Category>& categories() {
                      hmi::Kind::AlarmInstruction, hmi::Kind::AlarmStats}},
         {"Production", {hmi::Kind::ProductionCounter, hmi::Kind::VariableTable, hmi::Kind::RecipeEditor, hmi::Kind::RecipeManager,
                         hmi::Kind::ExportButton}},
+        // 1.12.24 : la regulation - le Reglage PID.
+        {"R\xC3\xA9gulation", {hmi::Kind::PidTuner}},
         // Lot 10 : les symboles de synoptique - process, stockage, electrique.
-        {"Synoptique", {hmi::Kind::Valve, hmi::Kind::ThreeWayValve, hmi::Kind::CheckValve, hmi::Kind::Pump, hmi::Kind::Motor, hmi::Kind::Pipe, hmi::Kind::FlowArrow,
+        {"Synoptique", {hmi::Kind::Valve, hmi::Kind::ThreeWayValve, hmi::Kind::Damper, hmi::Kind::MultiBladeDamper,   // 1.12.24 : les registres
+                        hmi::Kind::FireDamper, hmi::Kind::CheckValve, hmi::Kind::Pump, hmi::Kind::Motor, hmi::Kind::Pipe, hmi::Kind::FlowArrow,
                         hmi::Kind::Fan, hmi::Kind::Compressor, hmi::Kind::HeatExchanger, hmi::Kind::Filter, hmi::Kind::Boiler,
                         hmi::Kind::Mixer, hmi::Kind::Conveyor, hmi::Kind::Cylinder, hmi::Kind::IsaInstrument, hmi::Kind::Tank,
                         hmi::Kind::Silo, hmi::Kind::Hopper, hmi::Kind::GasBottle, hmi::Kind::Transformer, hmi::Kind::CircuitBreaker,
@@ -2212,6 +2215,87 @@ const std::vector<KeyInfo>& keyInfos() {
          "Position par deux bool\xC3\xA9" "ens : B seul, la voie 1-3 ; avec A, la voie 2-3. Une expression : =V3_B."},
         {"showPorts", "Num\xC3\xA9ros des voies", PG::ValueType::Boolean, {}, "Coch\xC3\xA9 : 1, 2 et 3 \xC3\xA9" "crits pr\xC3\xA8s des voies."},
         {"colorMoving", "Couleur de mouvement", PG::ValueType::Color, {}, "Celle du passage en mouvement (elle clignote)."},
+        // ---- 1.12.24 : les registres et le clapet coupe-feu
+        {"damperActuator", "Actionneur", PG::ValueType::Enum, {"servomoteur", "manuel", "pneumatique"},
+         "Dessin\xC3\xA9 au bout de l'axe : un servomoteur (M), un levier, un v\xC3\xA9rin pneumatique."},
+        {"limitOpen", "Fin de course ouvert", PG::ValueType::Text, {},
+         "Vraie : le registre est ouvert (FCO, une expression : =RG_FCO). Avec Fin de course ferm\xC3\xA9 : deux voyants O et F ; "
+         "\xC3\xA0 l'arr\xC3\xAAt, ni l'une ni l'autre, ou les deux \xC3\xA0 la fois : une discordance, et le registre se dessine en d\xC3\xA9" "faut."},
+        {"limitClosed", "Fin de course ferm\xC3\xA9", PG::ValueType::Text, {},
+         "Vraie : le registre est ferm\xC3\xA9 (FCF, une expression : =RG_FCF). Voir Fin de course ouvert."},
+        {"blades", "Nombre de lames", PG::ValueType::Integer, {}, "De 2 \xC3\xA0 8 lames, qui tournent ensemble."},
+        {"bladeMode", "Disposition des lames", PG::ValueType::Enum, {"oppos\xC3\xA9" "es", "parall\xC3\xA8les"},
+         "Oppos\xC3\xA9" "es : une lame sur deux tourne dans l'autre sens (le r\xC3\xA9glage le plus fin) ; parall\xC3\xA8les : toutes dans le m\xC3\xAAme sens."},
+        {"tripped", "D\xC3\xA9" "clench\xC3\xA9 (expression)", PG::ValueType::Text, {},
+         "Vraie : le clapet est d\xC3\xA9" "clench\xC3\xA9 (fusible fondu, commande de s\xC3\xA9" "curit\xC3\xA9, d\xC3\xA9tection incendie) : ferm\xC3\xA9, "
+         "rouge, il clignote. Une expression : =CCF_Declenche."},
+        {"fireRelease", "D\xC3\xA9" "clencheur", PG::ValueType::Enum, {"fusible", "\xC3\xA9lectro-aimant", "moteur"},
+         "Fusible thermique (70 \xC2\xB0" "C, r\xC3\xA9" "armement \xC3\xA0 la main), \xC3\xA9lectro-aimant (commande \xC3\xA0 rupture), moteur (r\xC3\xA9" "armable \xC3\xA0 distance)."},
+        // ---- 1.12.24 : le Reglage PID (les mots de la maquette)
+        {"pidLoop", "Structure de la boucle", PG::ValueType::Text, {},
+         "Une structure qui porte la consigne et la mesure : SPPV_TELUNA[0]. Ses membres se trouvent par leur nom - SP (ou Consigne, "
+         "Setpoint), PV (Mesure, Measure), OUT (Sortie), AUTO, KP, TI, TD - et remplissent les cases laiss\xC3\xA9" "es vides. Vide : chaque case dit sa variable."},
+        {"pidSp", "Consigne (SP)", PG::ValueType::Text, {},
+         "La consigne lue : une variable ou une formule (SPPV_TELUNA[0].SP). Vide : le membre SP de la structure de la boucle."},
+        {"pidPv", "Mesure (PV)", PG::ValueType::Text, {}, "La mesure lue (PV_TE3214). Vide : le membre PV de la structure de la boucle."},
+        {"pidOut", "Sortie (OUT)", PG::ValueType::Text, {},
+         "La sortie du r\xC3\xA9gulateur (ce qu'il envoie \xC3\xA0 la vanne, au variateur), entre Sortie : min et max. C'est l'entr\xC3\xA9" "e du proc\xC3\xA9" "d\xC3\xA9 qu'il apprend."},
+        {"pidAuto", "En AUTO", PG::ValueType::Text, {},
+         "Vraie : le r\xC3\xA9gulateur est en automatique. Vide : toujours en AUTO. En MANU il apprend aussi (la boucle est ouverte : "
+         "la sortie boug\xC3\xA9" "e \xC3\xA0 la main est le plus riche des \xC3\xA9" "chelons)."},
+        {"pidKp", "Kp", PG::ValueType::Text, {},
+         "La variable du gain du bloc PID : lue en marche, \xC3\xA9" "crite apr\xC3\xA8s confirmation (\xC3\x89" "crire le r\xC3\xA9glage). Une formule qui "
+         "n'est pas une variable se lit seulement. En forme parall\xC3\xA8le : Kp."},
+        {"pidTi", "Ti", PG::ValueType::Text, {},
+         "Le temps d'int\xC3\xA9grale du bloc, dans l'unit\xC3\xA9 de Ti et Td (0 : sans int\xC3\xA9grale). En forme parall\xC3\xA8le : Ki (Kp / Ti par unit\xC3\xA9 de temps)."},
+        {"pidTd", "Td", PG::ValueType::Text, {},
+         "Le temps de d\xC3\xA9riv\xC3\xA9" "e du bloc (0 : sans d\xC3\xA9riv\xC3\xA9" "e). En forme parall\xC3\xA8le : Kd (Kp \xC3\x97 Td)."},
+        {"pidForm", "Forme", PG::ValueType::Enum, {"standard", "parall\xC3\xA8le", "s\xC3\xA9rie"},
+         "Standard (ISA) : Kp \xC2\xB7 (e + int\xC3\xA9grale de e / Ti + Td de/dt) ; parall\xC3\xA8le : Kp, Ki, Kd ; s\xC3\xA9rie : Kc \xC2\xB7 (1 + 1/(Ti s)) (1 + Td s). "
+         "Une variable qui la dit (0, 1, 2 ou STANDARD, PARALLELE, SERIE) : =FORME_PID."},
+        {"pidTimeUnit", "Unit\xC3\xA9 de Ti et Td", PG::ValueType::Enum, {"s", "min", "ms", "0,1 s"},
+         "L'unit\xC3\xA9 des variables Ti et Td (et du temps de Ki, Kd en forme parall\xC3\xA8le) : secondes, minutes, millisecondes, "
+         "ou dixi\xC3\xA8mes de seconde (un INT de l'automate)."},
+        {"pidKpMode", "Kp du bloc", PG::ValueType::Enum, {"physique", "normalis\xC3\xA9"},
+         "Physique : en unit\xC3\xA9s de sortie par unit\xC3\xA9 de mesure (% par \xC2\xB0" "C). Normalis\xC3\xA9 : en % de l'\xC3\xA9tendue de la sortie par % de "
+         "l'\xC3\xA9tendue de la mesure (Mesure : min et max), comme un PID_INT ou un PIDFF."},
+        {"pidKpScale", "\xC3\x89" "chelle de Kp", PG::ValueType::Real, {},
+         "Le bloc garde Kp multipli\xC3\xA9 par ce nombre : 10 pour un Kp au dixi\xC3\xA8me dans un INT, 100 au centi\xC3\xA8me. 1 : tel quel."},
+        {"pidWrite", "\xC3\x89" "crire le r\xC3\xA9glage", PG::ValueType::Enum, {"apr\xC3\xA8s confirmation", "jamais"},
+         "Apr\xC3\xA8s confirmation : Appliquer \xC3\xA9" "crit Kp, Ti et Td dans leurs variables (le niveau d'acc\xC3\xA8s de l'objet, sa signature si "
+         "elle est demand\xC3\xA9" "e), sans \xC3\xA0-coup ; l'ancien r\xC3\xA9glage reste dans le Journal (Revenir). Jamais : il propose, Copier les valeurs."},
+        {"pidPvMin", "Mesure : min", PG::ValueType::Text, {},
+         "Le bas de l'\xC3\xA9tendue de la mesure (le Kp normalis\xC3\xA9, la tol\xC3\xA9rance, les courbes). Vide : le Min de sa variable "
+         "(Configuration > Unit\xC3\xA9s et formats), sinon ce qu'il a vu."},
+        {"pidPvMax", "Mesure : max", PG::ValueType::Text, {}, "Le haut de l'\xC3\xA9tendue de la mesure. Vide : le Max de sa variable."},
+        {"pidOutMin", "Sortie : min", PG::ValueType::Real, {}, "La but\xC3\xA9" "e basse de la sortie (0 %) : la saturation se voit contre elle."},
+        {"pidOutMax", "Sortie : max", PG::ValueType::Real, {}, "La but\xC3\xA9" "e haute de la sortie (100 %)."},
+        {"pidAction", "Sens d'action", PG::ValueType::Enum, {"d\xC3\xA9tect\xC3\xA9", "inverse", "direct"},
+         "Inverse : la sortie monte quand la mesure baisse (une chauffe). Direct : elle monte quand la mesure monte (un refroidissement, "
+         "un ventilateur d'extraction sur une d\xC3\xA9pression). D\xC3\xA9tect\xC3\xA9 : appris sur les \xC3\xA9" "chelons."},
+        {"pidPeriod", "P\xC3\xA9riode (ms)", PG::ValueType::Integer, {},
+         "Chaque combien il lit SP, PV et OUT : de 100 ms \xC3\xA0 10 s, celle du r\xC3\xA9gulateur de pr\xC3\xA9" "f\xC3\xA9rence. Une constante ou une variable."},
+        {"pidLearn", "Apprendre", PG::ValueType::Enum, {"en AUTO et en MANU", "en AUTO", "en MANU", "jamais"},
+         "Ce qui lui apprend le proc\xC3\xA9" "d\xC3\xA9 : les changements de consigne en AUTO, les mouvements de la sortie en MANU. Jamais : les "
+         "statistiques seules. Il \xC3\xA9" "carte les saturations, les trous de donn\xC3\xA9" "es, les valeurs fig\xC3\xA9" "es, les perturbations en cours."},
+        {"pidMemory", "M\xC3\xA9moire (jours)", PG::ValueType::Integer, {},
+         "Ce qu'il garde - les minutes, les \xC3\xA9" "chelons, le journal - de 1 \xC3\xA0 30 jours, sur disque (ihm/historique/pid) : il reprend o\xC3\xB9 il en \xC3\xA9tait."},
+        {"pidForget", "Oubli (h)", PG::ValueType::Real, {},
+         "Le proc\xC3\xA9" "d\xC3\xA9 change : un \xC3\xA9" "chelon vieux de tant d'heures compte moiti\xC3\xA9 moins (24 : il suit le proc\xC3\xA9" "d\xC3\xA9 de jour en jour). "
+         "0 : tous comptent pareil."},
+        {"pidTolerance", "Tol\xC3\xA9rance (\xC2\xB1)", PG::ValueType::Text, {},
+         "La bande autour de la consigne des statistiques (dans \xC2\xB1" "1 \xC2\xB0" "C : 84 % du temps), dans l'unit\xC3\xA9 de la mesure. Vide : 1 % de son \xC3\xA9tendue."},
+        {"pidGoal", "Objectif", PG::ValueType::Enum, {"Robuste", "\xC3\x89quilibr\xC3\xA9", "Rapide"},
+         "Le r\xC3\xA9glage conseill\xC3\xA9. Robuste : Ms \xE2\x89\xA4 1,4, d\xC3\xA9passement \xE2\x89\xA4 5 %, bruit envoy\xC3\xA9 \xC3\xA0 la sortie \xE2\x89\xA4 0,2 %. "
+         "\xC3\x89quilibr\xC3\xA9 : Ms \xE2\x89\xA4 1,6, d\xC3\xA9passement \xE2\x89\xA4 10 %, bruit \xE2\x89\xA4 0,3 %. Rapide : Ms \xE2\x89\xA4 1,9, d\xC3\xA9passement \xE2\x89\xA4 20 %, "
+         "bruit \xE2\x89\xA4 0,6 %. Les trois se comparent dans R\xC3\xA9glage propos\xC3\xA9."},
+        {"pidDerivative", "D\xC3\xA9riv\xC3\xA9" "e", PG::ValueType::Enum, {"si elle aide", "jamais", "toujours"},
+         "Si elle aide : seulement quand elle rend la boucle plus rapide sans mettre trop de bruit sur la sortie."},
+        {"pidClick", "Au clic", PG::ValueType::Enum, {"ouvrir ses statistiques", "rien"},
+         "En marche, un clic sur la carte ouvre sa fen\xC3\xAAtre : Statistiques, Ce qu'il a appris, R\xC3\xA9glage propos\xC3\xA9, Journal."},
+        {"colorPv", "Couleur de la mesure", PG::ValueType::Color, {}, ""},
+        {"colorSp", "Couleur de la consigne", PG::ValueType::Color, {}, ""},
+        {"colorOut", "Couleur de la sortie", PG::ValueType::Color, {}, ""},
         // ---- lot 12 : la navigation et la structure
         {"views", "Vues (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {},
          "Les vues de la barre, dans l'ordre : Vue_Accueil;Vue_Ligne;Vue_Alarmes. Vide : toutes les vues ordinaires du projet."},
@@ -2379,6 +2463,12 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
     if (key == "image" && kind == K::ZoneMap) return "Plan (image)";
     if (key == "colorOk" && kind == K::ZoneMap) return "Couleur d'une zone calme";
     if (key == "orientation" && kind == K::NavBar) return "Orientation";
+    // 1.12.24 : les registres - la Valeur dit s'il est ouvert.
+    if (hmi::kindIsDamper(kind)) {
+        if (key == "value") return kind == K::FireDamper ? "Ouvert (en veille)" : "Ouvert";
+        if (key == "colorOn") return "Couleur ouvert";
+        if (key == "colorOff") return "Couleur ferm\xC3\xA9";
+    }
     // 1.10.4 : la vanne 3 voies, avec les mots de la maquette (scene 4).
     if (kind == K::ThreeWayValve) {
         if (key == "value") return "Position";
@@ -2406,6 +2496,41 @@ bool tableKeyHidden(const hmi::Object& o, std::string_view key) {
 const KeyInfo* infoOf(std::string_view key) {
     for (const auto& k : keyInfos()) if (key == k.key) return &k;
     return nullptr;
+}
+
+// 1.12.24 : LE REGLAGE PID RANGE SA SECTION EN CINQ, comme la maquette - la boucle, le bloc PID, les
+// echelles, l'apprentissage, le reglage -, puis la carte (le clic, les couleurs des courbes). Ce qu'aucune
+// ne prend reste dans la section au nom du genre, apres elles.
+void splitPidSections(std::vector<PG::Category>& out, const std::string& typeName) {
+    const auto it = std::find_if(out.begin(), out.end(), [&](const PG::Category& c) { return c.name == typeName; });
+    if (it == out.end()) return;
+    struct Group { const char* name; std::vector<std::string_view> keys; };
+    static const Group kGroups[] = {
+        {"Boucle", {"title", "pidLoop", "pidSp", "pidPv", "pidOut", "pidAuto"}},
+        {"Param\xC3\xA8tres du bloc PID", {"pidKp", "pidTi", "pidTd", "pidForm", "pidTimeUnit", "pidKpMode", "pidKpScale", "pidWrite"}},
+        {"\xC3\x89" "chelles", {"pidPvMin", "pidPvMax", "unit", "varFormat", "pidOutMin", "pidOutMax", "pidAction"}},
+        {"Apprentissage", {"pidPeriod", "pidLearn", "pidMemory", "pidForget", "pidTolerance"}},
+        {"R\xC3\xA9glage", {"pidGoal", "pidDerivative"}},
+        {"Carte", {"pidClick", "colorPv", "colorSp", "colorOut"}},
+    };
+    std::vector<PG::Property> rest = std::move(it->properties);
+    std::vector<PG::Category> groups;
+    for (const auto& g : kGroups) {
+        PG::Category c;
+        c.name = g.name;
+        for (const auto key : g.keys)
+            for (auto& p : rest)
+                if (!p.name.empty() && p.key == key) {
+                    c.properties.push_back(std::move(p));
+                    p.name.clear();
+                }
+        if (!c.properties.empty()) groups.push_back(std::move(c));
+    }
+    std::erase_if(rest, [](const PG::Property& p) { return p.name.empty(); });
+    const auto at = static_cast<std::size_t>(it - out.begin());
+    if (rest.empty()) out.erase(out.begin() + static_cast<std::ptrdiff_t>(at));
+    else out[at].properties = std::move(rest);
+    out.insert(out.begin() + static_cast<std::ptrdiff_t>(at), std::make_move_iterator(groups.begin()), std::make_move_iterator(groups.end()));
 }
 
 // 1.10.4 (K3) : la section d'une propriete se decide dans hmiPropertyCategories
@@ -3012,7 +3137,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
             allProps.push_back({"varFormat", "TRUE", ""});
         // 1.12.10 (lot F) : la plage de l'ouverture d'une vanne, les seuils d'un instrument ISA, d'une jauge, d'un
         // thermometre (absents d'un objet neuf : rien ne change dans son fichier ; vides, ceux de la variable).
-        if (o->kind == hmi::Kind::Valve && !many)
+        if (hmi::kindHasOpening(o->kind) && !many)   // 1.12.24 : et les registres
             for (const char* key : {"openingMin", "openingMax"})
                 if (!o->find(key)) allProps.push_back({key, "", ""});
         if ((o->kind == hmi::Kind::IsaInstrument || o->kind == hmi::Kind::Gauge || o->kind == hmi::Kind::Thermometer) && !many)
@@ -3848,6 +3973,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
     // (une valeur a change), jamais a chaque image. Les parametres d'un symbole ont deja le leur.
     // 1.12.19 (la regle des cases) : la meme passe que toutes les grilles (valuekind::decorateCells), qui pose
     // aussi la raison sous une case en faute.
+    if (o->kind == hmi::Kind::PidTuner && !many) splitPidSections(out, typeName);   // 1.12.24
     valuekind::decorateCells(out, valuekind::Env{project, &view, plc});
     return out;
 }

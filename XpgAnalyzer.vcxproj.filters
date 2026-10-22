@@ -565,6 +565,9 @@
     <ClCompile Include="src\app\hmi\HmiLot14Painter.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiPidPainter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiMemoryMap.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1369,6 +1372,12 @@
     <ClCompile Include="src\hmi\HmiPidLearn.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimePid.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiPidLoop.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiPipeline.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1976,6 +1985,9 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiPainter.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiPidPainter.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiPaintKit.hpp">
@@ -2657,6 +2669,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiPid.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiPidLoop.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiPipeline.hpp">

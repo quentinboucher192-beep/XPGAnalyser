@@ -825,10 +825,16 @@ void HmiLiveCanvas::zoomDisplayAround(float factor, gfx::Point anchor) {
         const float cx = b.x + b.w / 2.f, cy = b.y + b.h / 2.f;
         const float ox = cx - shownViewW_ * before / 2.f + displayPan_.x;
         const float oy = cy - shownViewH_ * before / 2.f + displayPan_.y;
-        const float nx = anchor.x - (anchor.x - ox) * k, ny = anchor.y - (anchor.y - oy) * k;
+        float nx = anchor.x - (anchor.x - ox) * k, ny = anchor.y - (anchor.y - oy) * k;
+        if (shownSx_ != 1.f || shownSy_ != 1.f) {
+            // 1.12.24 : depuis la vue etiree (Remplir), le point sous `anchor` lu sur le dernier dessin.
+            nx = anchor.x - static_cast<float>(vp_.toViewX(anchor.x)) * next;
+            ny = anchor.y - static_cast<float>(vp_.toViewY(anchor.y)) * next;
+        }
         displayPan_ = {nx - (cx - shownViewW_ * next / 2.f), ny - (cy - shownViewH_ * next / 2.f)};
         displayZoom_ = next;
         shownZoom_ = next;
+        shownSx_ = shownSy_ = 1.f;   // un zoom choisi : une seule echelle
     }
     displayZoomChanged->emit();
     invalidate();
@@ -841,7 +847,7 @@ void HmiLiveCanvas::panDisplay(float dx, float dy) {
 }
 
 gfx::Point HmiLiveCanvas::baseToScreen(double x, double y) const {
-    return {baseOrigin_.x + static_cast<float>(x) * baseZoom_, baseOrigin_.y + static_cast<float>(y) * baseZoom_};
+    return {baseOrigin_.x + static_cast<float>(x) * baseZoom_ * baseSx_, baseOrigin_.y + static_cast<float>(y) * baseZoom_ * baseSy_};
 }
 
 void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
@@ -878,25 +884,44 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
     // celle qui arrive peuvent ne pas avoir la meme taille (1280 x 800 vers
     // 1920 x 1080). Lot 8 : une popup est POSEE dans la vue du dessous (sa place
     // est en pixels de cette vue), a la meme echelle.
-    const float margin = station_ ? 0.f : 24.f;   // lot 14 : le poste, sans marge
+    const auto& v0 = layers_.front().view;
+    const bool whole = wholeScreen();                // 1.12.24 : le plein ecran, le poste
+    const float margin = whole ? 0.f : 24.f;          // lot 14 : le poste, sans marge (1.12.24 : le plein ecran aussi)
+    // 1.12.24 : REMPLIR L'ECRAN - la vue du dessous etiree jusqu'aux quatre bords. Tout
+    // se place a l'echelle commune (la plus petite) dans `fitArea`, puis s'etire de (sx, sy)
+    // depuis le coin haut gauche de la place : vps_ le porte, les clics suivent.
+    float sx = 1.f, sy = 1.f;
+    if (whole && fit_ == hmi::ScreenFit::Fill && (station_ || displayZoom_ <= 0.f)) {
+        const float zx = b.w / static_cast<float>(std::max(1, v0.width)), zy = b.h / static_cast<float>(std::max(1, v0.height));
+        const float z0 = std::min(zx, zy);
+        if (z0 > 0.f) {
+            sx = std::max(1.f, zx / z0);
+            sy = std::max(1.f, zy / z0);
+        }
+    }
+    const gfx::Rect fitArea{b.x, b.y, b.w / sx, b.h / sy};
+    const auto stretchX = [&](float x) { return b.x + (x - b.x) * sx; };
+    const auto stretchY = [&](float y) { return b.y + (y - b.y) * sy; };
     // 1.10 : le zoom de la vue en cours (la barre) - 0 : ajustee ; sinon son echelle.
     const auto fit = [&](const hmi::View& v) {
         if (displayZoom_ > 0.f && !station_) return displayZoom_;
-        return std::max(0.05f, std::min((b.w - margin) / static_cast<float>(std::max(1, v.width)),
-                                        (b.h - margin) / static_cast<float>(std::max(1, v.height))));
+        if (whole && fit_ == hmi::ScreenFit::Actual) return 1.f;   // 1.12.24 : Taille reelle
+        return std::max(0.05f, std::min((fitArea.w - margin) / static_cast<float>(std::max(1, v.width)),
+                                        (fitArea.h - margin) / static_cast<float>(std::max(1, v.height))));
     };
     // 1.10 : une vue plus grande que la place se deplace ; le deplacement reste
     // borne (la vue ne quitte pas la place), nul quand elle tient.
     {
-        const auto& v0 = layers_.front().view;
         const float s = fit(v0);
         const float vw = static_cast<float>(v0.width) * s, vh = static_cast<float>(v0.height) * s;
-        overflowX_ = vw + margin > b.w + 0.5f;
-        overflowY_ = vh + margin > b.h + 0.5f;
-        const float mx = overflowX_ ? (vw + margin - b.w) / 2.f : 0.f;
-        const float my = overflowY_ ? (vh + margin - b.h) / 2.f : 0.f;
+        overflowX_ = vw + margin > fitArea.w + 0.5f;
+        overflowY_ = vh + margin > fitArea.h + 0.5f;
+        const float mx = overflowX_ ? (vw + margin - fitArea.w) / 2.f : 0.f;
+        const float my = overflowY_ ? (vh + margin - fitArea.h) / 2.f : 0.f;
         displayPan_ = {std::clamp(displayPan_.x, -mx, mx), std::clamp(displayPan_.y, -my, my)};
         shownZoom_ = s;
+        shownSx_ = sx;
+        shownSy_ = sy;
         shownViewW_ = static_cast<float>(v0.width);
         shownViewH_ = static_cast<float>(v0.height);
     }
@@ -908,12 +933,21 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
     // dessin des objets et de la barre de titre des popups.
     const hmi::DisplayOptions shown = runtime_ ? runtime_->displayOptions() : hmi::DisplayOptions{};
     const hmi::DisplayOptions* display = hmi::changesColors(shown) ? &shown : nullptr;
+    // 1.12.24 : sur tout l'ecran, le tour de la vue (les bandes) a sa couleur de fond, pas le vide.
+    if (whole) {
+        gfx::Color own;
+        ctx.r.fillRect(b, tryParseColor(v0.background, own) ? own : hmiSeenColor(gfx::Color::rgb(0x20242B), display));
+    }
     float baseZoom = fit(layers_.front().view);
     gfx::Rect baseRect{};
     gfx::Point baseOrigin{};
+    // Les deplacements (barre, vue zoomable) sont en pixels d'ecran : dans fitArea, divises
+    // par l'etirement.
     vp_.zoom = baseZoom;
-    vp_.originX = b.x + (b.w - static_cast<float>(layers_.front().view.width) * baseZoom) / 2.f + displayPan_.x;
-    vp_.originY = b.y + (b.h - static_cast<float>(layers_.front().view.height) * baseZoom) / 2.f + displayPan_.y;
+    vp_.stretchX = sx;
+    vp_.stretchY = sy;
+    vp_.originX = stretchX(fitArea.x + (fitArea.w - static_cast<float>(v0.width) * baseZoom) / 2.f + displayPan_.x / sx);
+    vp_.originY = stretchY(fitArea.y + (fitArea.h - static_cast<float>(v0.height) * baseZoom) / 2.f + displayPan_.y / sy);
     ctx.r.pushClip(b);
     for (std::size_t li = 0; li < layers_.size(); ++li) {
         const auto& layer = layers_[li];
@@ -935,19 +969,19 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
                 pan_x = userPan_.x;
                 pan_y = userPan_.y;
             }
-            ox = b.x + (b.w - static_cast<float>(v.width) * z) / 2.f + pan_x + displayPan_.x;
-            oy = b.y + (b.h - static_cast<float>(v.height) * z) / 2.f + pan_y + displayPan_.y;
+            ox = fitArea.x + (fitArea.w - static_cast<float>(v.width) * z) / 2.f + (pan_x + displayPan_.x) / sx;
+            oy = fitArea.y + (fitArea.h - static_cast<float>(v.height) * z) / 2.f + (pan_y + displayPan_.y) / sy;
             baseZoom = z;
             baseOrigin = {ox, oy};
-            baseRect = {ox, oy, static_cast<float>(v.width) * z, static_cast<float>(v.height) * z};
+            baseRect = {stretchX(ox), stretchY(oy), static_cast<float>(v.width) * z * sx, static_cast<float>(v.height) * z * sy};
         } else {
             z = baseZoom;
             if (layer.slot != -1) {      // -2 : une popup qui se ferme, a sa derniere place
                 ox = baseOrigin.x + static_cast<float>(layer.px) * z;
                 oy = baseOrigin.y + (static_cast<float>(layer.py) + titleH) * z;
             } else {
-                ox = b.x + (b.w - static_cast<float>(v.width) * z) / 2.f;
-                oy = b.y + (b.h - static_cast<float>(v.height) * z) / 2.f;
+                ox = fitArea.x + (fitArea.w - static_cast<float>(v.width) * z) / 2.f;
+                oy = fitArea.y + (fitArea.h - static_cast<float>(v.height) * z) / 2.f;
             }
             // Le voile : la vue du dessous s'assombrit sous une popup modale.
             if (layer.modal && layer.veil > 0.f)
@@ -957,13 +991,16 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
         const float w = static_cast<float>(v.width) * z, h = static_cast<float>(v.height) * z;
         const float cx = ox + w / 2.f + static_cast<float>(layer.frame.offsetX) * w;
         const float cy = oy + h / 2.f + static_cast<float>(layer.frame.offsetY) * h;
+        // 1.12.24 : a l'ecran, le centre etire, la vue de part et d'autre a l'echelle de chaque axe.
         HmiViewport vp;
         vp.zoom = z * static_cast<float>(layer.frame.scale);
-        vp.originX = cx - static_cast<float>(v.width) * vp.zoom / 2.f;
-        vp.originY = cy - static_cast<float>(v.height) * vp.zoom / 2.f;
+        vp.stretchX = sx;
+        vp.stretchY = sy;
+        vp.originX = stretchX(cx) - static_cast<float>(v.width) * vp.zoomX() / 2.f;
+        vp.originY = stretchY(cy) - static_cast<float>(v.height) * vp.zoomY() / 2.f;
         vp.angle = static_cast<float>(layer.frame.angle);
-        vp.pivotX = cx;
-        vp.pivotY = cy;
+        vp.pivotX = stretchX(cx);
+        vp.pivotY = stretchY(cy);
         vps_.push_back(vp);
         if (layer.frame.opacity <= 0.001) continue;
         const float op = static_cast<float>(layer.frame.opacity);
@@ -977,8 +1014,8 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
         opt.project = project_;
         opt.display = display;
         const gfx::Point a = vp.toScreen(0, 0);
-        const float vw = static_cast<float>(v.width) * vp.zoom, vh = static_cast<float>(v.height) * vp.zoom;
-        const float tb = titleH * vp.zoom;
+        const float vw = static_cast<float>(v.width) * vp.zoomX(), vh = static_cast<float>(v.height) * vp.zoomY();
+        const float tb = titleH * vp.zoomY();
         if (layer.popup && vp.angle == 0.f) {
             // Une ombre ; la barre de titre au-dessus du contenu.
             ctx.r.fillRect({a.x + 6, a.y - tb + 8, vw, vh + tb}, gfx::Color{0, 0, 0, static_cast<std::uint8_t>(90 * op)});
@@ -1101,7 +1138,9 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
         }
     }
     baseZoom_ = baseZoom;
-    baseOrigin_ = baseOrigin;
+    baseSx_ = sx;
+    baseSy_ = sy;
+    baseOrigin_ = {stretchX(baseOrigin.x), stretchY(baseOrigin.y)};
     screen_ = baseRect;
     // 1.9 : le bandeau LECTURES SIMULEES, en haut de l'ecran de l'IHM, par-dessus la
     // vue ; l'infobulle d'un objet repere sous la souris.
@@ -1139,6 +1178,9 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
             break;
         }
     }
+    // 1.12.24 : la fenetre du Reglage PID, par-dessus la vue (sous la connexion et la signature).
+    pidLayout_.reset();
+    if (runtime_ && runtime_->pidShown()) pidLayout_ = paintPidPanel(ctx.r, ctx.theme, *runtime_, baseRect);
     // Lot 12 : le menu natif de connexion, par-dessus la vue ; le clavier virtuel
     // de son champ vient ensuite, par-dessus lui (le menu se range au-dessus).
     loginRect_ = {};
@@ -1220,7 +1262,7 @@ void HmiLiveCanvas::onPaint(const ui::PaintContext& ctx) {
     // 1.10 : la vue zoomee qui depasse - la petite carte et l'indication des gestes.
     if (viewOverflows() && stoppedNote_.empty() && !station_ && vp_.zoom > 0.f)
         paintZoomMap(ctx, b, shownViewW_, shownViewH_,
-                     {static_cast<float>(vp_.toViewX(b.x)), static_cast<float>(vp_.toViewY(b.y)), b.w / vp_.zoom, b.h / vp_.zoom});
+                     {static_cast<float>(vp_.toViewX(b.x)), static_cast<float>(vp_.toViewY(b.y)), b.w / vp_.zoomX(), b.h / vp_.zoomY()});
     paintStoppedNote(ctx, b, stoppedNote_, noteButtons_, noteRects_, noteActions_);   // 1.10 : l'IHM arretee
     ctx.r.popClip();
 }
@@ -1237,6 +1279,16 @@ bool HmiLiveCanvas::systemPartRect(std::string_view part, gfx::Rect& out) const 
     if (!hmi::systemMenuPartBox(*systemLayout_, systemTabShown_, part, b)) return false;
     out = {sc.x + static_cast<float>(b.x), sc.y + static_cast<float>(b.y), static_cast<float>(b.w), static_cast<float>(b.h)};
     return true;
+}
+
+bool HmiLiveCanvas::pidPartRect(std::string_view part, gfx::Rect& out) const {
+    if (!pidLayout_) return false;
+    for (const auto& [name, r] : pidLayout_->parts)
+        if (name == part) {
+            out = r;
+            return true;
+        }
+    return false;
 }
 
 bool HmiLiveCanvas::signaturePartRect(std::string_view part, gfx::Rect& out) const {
@@ -2005,6 +2057,12 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
             loginPartClicked->emit(part);
             return ui::EventResult::Consumed;
         }
+        // 1.12.24 : la fenetre du Reglage PID - elle prend tous les clics ; dehors, elle se ferme.
+        if (runtime_ && runtime_->pidShown()) {
+            const std::string part = pidLayout_ ? pidPanelHit(*pidLayout_, d->pos) : std::string("dehors");
+            if (!part.empty()) pidPartClicked->emit(part);
+            return ui::EventResult::Consumed;
+        }
         if (!interactive_) return ui::EventResult::Consumed;   // une transition : on attend
         // Lot 8 : le clavier virtuel d'abord (il est par-dessus tout).
         if (keyboardRect_.contains(d->pos)) {
@@ -2155,6 +2213,14 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
         // 1.9 : la souris, pour l'infobulle d'une lecture simulee.
         if (!simRects_.empty() || !qualityRects_.empty() || !simTipAt(mouse_).empty()) invalidate();
         mouse_ = m->pos;
+        // 1.12.24 : la courbe des Statistiques du Reglage PID suit la souris (la bulle de l'instant).
+        if (pidLayout_ && runtime_ && runtime_->pidShown()) {
+            const double t = pidPanelHoverTime(*pidLayout_, m->pos);
+            if (std::abs(t - pidHoverShown_) > 1e-6) {
+                pidHoverShown_ = t;
+                pidHovered->emit(t);
+            }
+        }
         // Lot 12 : la barre d'un panneau defilant suit la souris ; une vue zoomee se tire.
         if (scrollDrag_ != kNoId) {
             if (scrollDragLayer_ < layers_.size() && scrollDragLayer_ < vps_.size())
@@ -2194,7 +2260,7 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
         }
         if (dragSlot_ < 0) return ui::EventResult::Ignored;
         const float x = m->pos.x - dragGrab_.x, y = m->pos.y - dragGrab_.y;
-        popupMoved->emit(dragSlot_, (x - baseOrigin_.x) / std::max(0.01f, baseZoom_), (y - baseOrigin_.y) / std::max(0.01f, baseZoom_));
+        popupMoved->emit(dragSlot_, (x - baseOrigin_.x) / std::max(0.01f, baseZoom_ * baseSx_), (y - baseOrigin_.y) / std::max(0.01f, baseZoom_ * baseSy_));
         return ui::EventResult::Consumed;
     }
     if (const auto* u = std::get_if<ui::MouseUp>(&ev)) {
@@ -2315,12 +2381,20 @@ std::vector<HmiSimulationPane*>& simPanes() {
 // Le dernier enfant du volet : elle voit chaque geste la premiere, ne garde que
 // ceux qui la touchent (et Echap, F11). Elle s'efface 3 s apres le dernier
 // mouvement de la souris, et revient quand la souris approche du haut.
+// 1.12.24 : apres Ajuster, la mise a l'echelle - Remplir l'ecran, Garder les
+// proportions, Taille reelle (100 %) ; la choisie est allumee (pas apres un zoom).
 class FullScreenBar final : public ui::Widget {
 public:
     explicit FullScreenBar(std::string id) : ui::Widget(std::move(id)) {}
     std::function<std::string()>        viewName, zoomText;
     std::function<bool()>               running;
     std::function<void(core::ActionId)> sink;
+    std::function<int()>                fitShown;   // 1.12.24 : 0 Remplir, 1 Garder les proportions, 2 Taille reelle ; -1 : aucune
+    // 1.12.24 : un message en bas, 3 s (a la place de "comment sortir").
+    void say(std::string text) {
+        note_ = std::move(text);
+        toastUntil_ = now_ + 3.0;
+    }
     // 1.10.2 : Echap va d'abord a la vue (fermer la popup du dessus, annuler une
     // saisie) ; il ne quitte le plein ecran que si elle ne le prend pas. La barre
     // est le dernier enfant du volet : sans cela elle prenait Echap avant le canevas.
@@ -2331,6 +2405,7 @@ public:
         lastMove_ = -100.0;
         mouse_ = {-1.f, -1.f};
         hover_ = false;
+        note_.clear();
     }
     [[nodiscard]] bool shown() const noexcept { return visible() && alpha_ > 0.05f; }
     [[nodiscard]] gfx::Rect part(std::string_view id) const {
@@ -2356,7 +2431,18 @@ protected:
         const float h = 38.f, bh = 26.f, gap = 6.f;
         const float nameW = width(name, bold), stateW = width(state, font) + 30.f, zoomW = std::max(54.f, width(zoom, font) + 18.f);
         const float fitW = width("Ajuster", font) + 20.f, quitW = width(quit, font) + 22.f, btnW = 28.f;
-        const float total = 12.f + nameW + 10.f + stateW + 3.f * gap + btnW + gap + zoomW + gap + btnW + gap + fitW + 3.f * gap + quitW + 8.f;
+        // 1.12.24 : la mise a l'echelle en toutes lettres ; trop large pour l'ecran, en court.
+        static const char* const kFitLong[] = {"Remplir l'\xC3\xA9" "cran", "Garder les proportions", "Taille r\xC3\xA9" "elle (100 %)"};
+        static const char* const kFitShort[] = {"Remplir", "Proportions", "100 %"};
+        const auto fitsW = [&](const char* const* labels) {
+            float s = 2.f * 2.f;   // deux joints de 2 px
+            for (int k = 0; k < 3; ++k) s += width(labels[k], font) + 18.f;
+            return s;
+        };
+        const float others = 12.f + nameW + 10.f + stateW + 3.f * gap + btnW + gap + zoomW + gap + btnW + gap + fitW + gap + 3.f * gap + quitW + 8.f;
+        const char* const* fitLabels = others + fitsW(kFitLong) <= b.w - 24.f ? kFitLong : kFitShort;
+        const float total = others + fitsW(fitLabels);
+        const int fit = fitShown ? fitShown() : -1;
         box_ = {b.x + (b.w - total) / 2.f, b.y + 10.f, total, h};
         // Montree : a l'entree, 3 s apres un mouvement, la souris en haut ou dessus.
         const bool near = mouse_.y >= 0.f && mouse_.y < box_.bottom() + 48.f;
@@ -2380,6 +2466,12 @@ protected:
         add("zoomIn", btnW);
         x += gap;
         add("fit", fitW);
+        x += gap;
+        static const char* const kFitIds[] = {"fill", "keep", "actual"};
+        for (int k = 0; k < 3; ++k) {
+            if (k) x += 2.f;
+            add(kFitIds[k], width(fitLabels[k], font) + 18.f);
+        }
         x += 3.f * gap;
         add("exit", quitW);
         if (alpha_ > 0.01f) {
@@ -2392,10 +2484,11 @@ protected:
                 const float tw = width(s, f);
                 ctx.r.drawText({centered ? r.x + (r.w - tw) / 2.f : r.x, r.y + (r.h - ctx.r.lineHeight(f)) / 2.f}, s, f, fade(col));
             };
-            const auto button = [&](const gfx::Rect& r, gfx::Color border) {
+            const auto button = [&](const gfx::Rect& r, gfx::Color border, bool lit = false) {
                 const bool over = r.contains(mouse_);
                 ctx.r.fillRoundedRect(r, fade(border), 4.f);
-                ctx.r.fillRoundedRect({r.x + 1.f, r.y + 1.f, r.w - 2.f, r.h - 2.f}, fade(over ? gfx::Color{20, 64, 76, 255} : gfx::Color{0, 40, 50, 255}), 3.f);
+                ctx.r.fillRoundedRect({r.x + 1.f, r.y + 1.f, r.w - 2.f, r.h - 2.f},
+                                      fade(lit ? gfx::Color{0, 84, 102, 255} : over ? gfx::Color{20, 64, 76, 255} : gfx::Color{0, 40, 50, 255}), 3.f);
             };
             for (const auto& p : parts_) {
                 if (p.id == "vue") text(p.r, name, bold, ink, false);
@@ -2409,15 +2502,20 @@ protected:
                 else if (p.id == "exit") {
                     button(p.r, c.accent);
                     text(p.r, quit, font, c.accent, true);
+                } else if (p.id == "fill" || p.id == "keep" || p.id == "actual") {   // 1.12.24
+                    const int k = p.id == "fill" ? 0 : p.id == "keep" ? 1 : 2;
+                    button(p.r, k == fit ? c.accent : line, k == fit);
+                    text(p.r, fitLabels[k], font, ink, true);
                 } else {
                     button(p.r, line);
                     text(p.r, p.id == "zoomOut" ? "\xE2\x88\x92" : p.id == "zoomIn" ? "+" : "Ajuster", font, ink, true);
                 }
             }
         }
-        // A l'entree, en bas : comment sortir.
+        // A l'entree, en bas : comment sortir (1.12.24 : ou ce que dit say, le choix d'une mise a l'echelle).
         if (now_ < toastUntil_) {
-            const std::string msg = "Plein \xC3\xA9" "cran : la vue occupe tout l'\xC3\xA9" "cran \xC2\xB7 \xC3\x89" "chap ou F11 pour sortir";
+            const std::string msg = !note_.empty() ? note_
+                                                   : std::string("Plein \xC3\xA9" "cran : la vue occupe tout l'\xC3\xA9" "cran \xC2\xB7 \xC3\x89" "chap ou F11 pour sortir");
             const float tw = width(msg, font) + 28.f;
             const gfx::Rect t{b.x + (b.w - tw) / 2.f, b.bottom() - 64.f, tw, 30.f};
             const auto k = static_cast<float>(std::clamp(toastUntil_ - now_, 0.0, 0.5) * 2.0);
@@ -2450,7 +2548,8 @@ protected:
                 for (const auto& p : parts_) {
                     if (!p.r.contains(d->pos)) continue;
                     const core::ActionId a = p.id == "zoomOut" ? "hmi.zoomOut" : p.id == "zoomIn" ? "hmi.zoomIn" : p.id == "fit" ? "hmi.zoomFit"
-                                           : p.id == "zoom" ? "hmi.zoom100" : p.id == "exit" ? "hmi.fullscreen" : "";
+                                           : p.id == "zoom" ? "hmi.zoom100" : p.id == "exit" ? "hmi.fullscreen"
+                                           : p.id == "fill" ? "hmi.fitFill" : p.id == "keep" ? "hmi.fitKeep" : p.id == "actual" ? "hmi.fitActual" : "";
                     if (!a.empty() && sink) sink(a);
                     break;
                 }
@@ -2471,6 +2570,7 @@ private:
     double            now_{0}, painted_{-1}, lastMove_{-100}, shownUntil_{0}, toastUntil_{0};
     float             alpha_{1.f};
     bool              hover_{false};
+    std::string       note_;   // 1.12.24 : le message du bas (vide : comment sortir)
 };
 
 HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSimulationHost host)
@@ -2552,7 +2652,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     bar->addButton("100 %", "hmi.zoom100").setTooltip("La vue \xC3\xA0 sa taille r\xC3\xA9" "elle");
     // 1.10 (decision 12) : le simulateur IHM en plein ecran.
     bar->addButton("Plein \xC3\xA9" "cran", "hmi.fullscreen", ui::Icon::Expand)
-        .setTooltip("La vue de l'IHM sur tout l'\xC3\xA9" "cran, ajust\xC3\xA9" "e (F11) ; \xC3\x89" "chap ou F11 pour sortir");
+        .setTooltip("La vue de l'IHM sur tout l'\xC3\xA9" "cran (F11) : Remplir l'\xC3\xA9" "cran, Garder les proportions ou Taille r\xC3\xA9" "elle, "
+                    "au choix dans sa barre ; \xC3\x89" "chap ou F11 pour sortir");
     // 1.10.3 (demande du client) : LES 5 BOUTONS DE DROITE ET LA LISTE DEROULANTE DE
     // DROITE (le menu de ce qui debordait) SONT RETIRES. Leurs commandes restent :
     //   Les deux, Tout arreter       la barre du haut de l'application (et la carte
@@ -3062,6 +3163,16 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         runtime_.systemPart(part, now_);
         refreshNow();
     });
+    // 1.12.24 : la fenetre du Reglage PID ; Copier les valeurs passe par le presse-papiers.
+    links_ += canvas_->pidPartClicked->connect([this](const std::string& part) {
+        runtime_.pidPart(part, now_);
+        if (part == "copier" && !runtime_.pidWindow().clipboard.empty()) ui::setClipboardText(runtime_.pidWindow().clipboard);
+        refreshNow();
+    });
+    links_ += canvas_->pidHovered->connect([this](double t) {
+        runtime_.pidHover(t);
+        canvas_->invalidate();
+    });
     // Lot 13 : le panneau de signature ; rester connecte (l'avertissement).
     links_ += canvas_->promptPartClicked->connect([this](const std::string& part) {   // 1.11.7
         runtime_.promptPart(part, now_);
@@ -3140,13 +3251,19 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
                 if (v.id == runtime_.currentView()) return v.name;
             return std::string{};
         };
-        fs->zoomText = [this] { return std::to_string(static_cast<int>(std::lround(canvas_->shownZoom() * 100.f))) + " %"; };
+        // 1.12.24 : Remplir etire la vue, une echelle par axe : "150 x 135 %".
+        fs->zoomText = [this] {
+            const int zx = static_cast<int>(std::lround(canvas_->shownZoomX() * 100.f)), zy = static_cast<int>(std::lround(canvas_->shownZoomY() * 100.f));
+            return zx == zy ? std::to_string(zx) + " %" : std::to_string(zx) + " \xC3\x97 " + std::to_string(zy) + " %";
+        };
+        fs->fitShown = [this] { return canvas_->displayZoom() > 0.f ? -1 : static_cast<int>(screenFit_); };
         fs->running = [this] { return started_; };
         fs->sink = [this](core::ActionId a) { run(a); };
         fs->escapeFirst = [this](const ui::InputEvent& e) { return canvas_->dispatch(e) == ui::EventResult::Consumed; };
         fs->setVisibility(ui::Visibility::Collapsed);
         fsBar_ = &addChild(std::move(fs));
     }
+    if (host_.screenFit) screenFit_ = host_.screenFit();   // 1.12.24 : la mise a l'echelle retenue
     simPanes().push_back(this);
     refreshBar();
 }
@@ -3162,15 +3279,36 @@ void HmiSimulationPane::setFullScreen(bool on) {
     fsBar_->setVisibility(on ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     if (on) {
         zoomBeforeFull_ = canvas_->displayZoom();
-        canvas_->setDisplayZoom(0.f);   // ajustee
+        // 1.12.24 : la vue sur tout l'ecran, a la mise a l'echelle retenue (Remplir par defaut).
+        if (host_.screenFit) screenFit_ = host_.screenFit();
+        canvas_->setScreenFit(screenFit_);
+        canvas_->setWholeScreen(true);
+        canvas_->setDisplayZoom(0.f);   // ajustee (selon ce choix)
         static_cast<FullScreenBar*>(fsBar_)->enter(now_);
     } else {
+        canvas_->setWholeScreen(false);
         canvas_->setDisplayZoom(zoomBeforeFull_);
         status_->setTransientMessage("Sortie du plein \xC3\xA9" "cran", 3.0);
     }
     if (host_.fullScreenWindow) host_.fullScreenWindow(on);
     invalidateLayout();
     invalidate();
+}
+
+// 1.12.24 : LA MISE A L'ECHELLE EN PLEIN ECRAN (la barre flottante) - retenue par l'hote ;
+// en plein ecran, la vue la prend tout de suite (un zoom choisi s'efface). Le poste suit son
+// projet (station.screenFit), pas ce choix.
+void HmiSimulationPane::setScreenFit(hmi::ScreenFit fit) {
+    if (station_) return;
+    screenFit_ = fit;
+    if (host_.setScreenFit) host_.setScreenFit(fit);
+    canvas_->setScreenFit(fit);
+    if (!fullScreen_) return;
+    canvas_->setDisplayZoom(0.f);
+    const char* what = fit == hmi::ScreenFit::Fill   ? " : la vue \xC3\xA9tir\xC3\xA9" "e jusqu'aux bords de l'\xC3\xA9" "cran"
+                       : fit == hmi::ScreenFit::Keep ? " : la vue enti\xC3\xA8re, les bandes \xC3\xA0 sa couleur de fond"
+                                                     : " : un pixel de la vue pour un pixel de l'\xC3\xA9" "cran";
+    static_cast<FullScreenBar*>(fsBar_)->say(std::string(hmi::screenFitLabel(fit)) + what);
 }
 
 bool HmiSimulationPane::fullScreenBarShown() const {
@@ -3413,6 +3551,11 @@ void HmiSimulationPane::run(core::ActionId id) {
     // 1.10 (decision 12) : le plein ecran (le bouton, F11, Echap, la barre flottante).
     if (id == "hmi.fullscreen") {
         setFullScreen(!fullScreen_);
+        return;
+    }
+    // 1.12.24 : sa mise a l'echelle (la barre flottante) : Remplir, Garder les proportions, Taille reelle.
+    if (id == "hmi.fitFill" || id == "hmi.fitKeep" || id == "hmi.fitActual") {
+        setScreenFit(id == "hmi.fitFill" ? hmi::ScreenFit::Fill : id == "hmi.fitKeep" ? hmi::ScreenFit::Keep : hmi::ScreenFit::Actual);
         return;
     }
     // 1.10 : l'IHM arretee - ce qui la suppose en marche le dit, et ne la demarre pas
@@ -5105,6 +5248,8 @@ void HmiSimulationPane::setStationMode(bool on) {
     status_->setVisibility(shown);
     split_->collapsePane(1, on);
     canvas_->setStation(on);
+    // 1.12.24 : le poste met la vue a l'echelle comme le dit son projet (Remplir par defaut).
+    canvas_->setScreenFit(on ? doc_->project.station.screenFit : screenFit_);
     invalidateLayout();
     invalidate();
 }
@@ -5124,7 +5269,9 @@ void HmiSimulationPane::onLayout() {
     }
     fsBar_->setBounds({b.x, b.y, 0.f, 0.f});
     if (station_) {
-        split_->setBounds(b);
+        // 1.12.24 : comme en plein ecran, la poignee du partage (5 px) hors de l'ecran : la vue
+        // a toute la largeur (Remplir va jusqu'au bord droit).
+        split_->setBounds({b.x, b.y, b.w + 5.f, b.h});
         return;
     }
     const float barH = 38.f, statusH = 24.f;
@@ -5194,6 +5341,7 @@ void HmiSimulationPane::onPaint(const ui::PaintContext& ctx) {
         }
     }
     ctx.r.fillRect(bounds(), station_ ? gfx::Color{0, 0, 0, 255} : ctx.theme.color.windowBg);
+    if (station_) canvas_->setScreenFit(doc_->project.station.screenFit);   // 1.12.24 : le projet a pu changer
     // Chaque image : l'automate et l'IHM avancent entre deux dessins (1.10.1 : a
     // l'horloge du dessin, la source Paint de followClock).
     followClock(ctx.time, ClockSource::Paint);

@@ -1130,7 +1130,8 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                    + field("sortie", st.exitHash) + fieldBool("coin", st.cornerExit) + fieldBool("sans_curseur", st.hideCursor)
                    + fieldBool("simulateur", st.runSimulator) + (st.simPage ? std::string{} : fieldBool("page_simulation", false))
                    + (st.simMarks ? std::string{} : fieldBool("reperes_simules", false))
-                   + (st.keepLayout ? std::string{} : fieldBool("garder_disposition", false)) + "\n";   // 1.12.3
+                   + (st.keepLayout ? std::string{} : fieldBool("garder_disposition", false))   // 1.12.3
+                   + (st.screenFit == ScreenFit::Fill ? std::string{} : fieldBare("echelle", screenFitKey(st.screenFit))) + "\n";   // 1.12.24
             for (const auto& e : st.screens) index += "poste_ecran" + fieldInt("ecran", e.display) + field("vue", e.view) + "\n";
         }
     }
@@ -1667,6 +1668,8 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             st.simPage = toBool(r.get("page_simulation"), true);          // 1.9
             st.simMarks = toBool(r.get("reperes_simules"), true);
             st.keepLayout = toBool(r.get("garder_disposition"), true);  // 1.12.3
+            // 1.12.24 : la mise a l'echelle de la vue ; absente (un projet d'avant) : Remplir.
+            st.screenFit = screenFitFrom(toStr(r.get("echelle"))).value_or(ScreenFit::Fill);
         } else if (r.word == "poste_ecran") {
             StationScreen e;
             e.display = static_cast<int>(std::clamp<long long>(toInt(r.get("ecran"), 2), 1, 16));

@@ -352,7 +352,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 case hmi::Kind::Video:       return ui::Icon::Image;
                 case hmi::Kind::Gauge:
                 case hmi::Kind::ProgressBar:
-                case hmi::Kind::Trend:       return ui::Icon::Chart;
+                case hmi::Kind::Trend:
+                case hmi::Kind::PidTuner:    return ui::Icon::Chart;   // 1.12.24
                 case hmi::Kind::Table:
                 case hmi::Kind::List:
                 case hmi::Kind::History:

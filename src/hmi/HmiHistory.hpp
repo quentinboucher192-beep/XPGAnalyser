@@ -21,6 +21,7 @@
 #include "HmiModel.hpp"
 #include "../core/Result.hpp"
 
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -114,8 +115,11 @@ struct History {
     std::vector<HistorySample>   samples;
     std::vector<AuditEntry>      audit;       // lot 13
     std::vector<AccountState>    accounts;    // lot 13
+    // 1.12.24 : la memoire de chaque Reglage PID (Vue.Objet -> ce qu'il a appris, un bloc d'octets), un fichier
+    // chacun : ihm/historique/pid/<Vue.Objet>.mem. Il reprend ou il en etait.
+    std::map<std::string, std::string> pid;
     [[nodiscard]] bool empty() const noexcept {
-        return alarms.empty() && events.empty() && system.empty() && samples.empty() && audit.empty() && accounts.empty();
+        return alarms.empty() && events.empty() && system.empty() && samples.empty() && audit.empty() && accounts.empty() && pid.empty();
     }
     [[nodiscard]] AccountState*       account(std::string_view login) noexcept;   // sans casse
     [[nodiscard]] const AccountState* account(std::string_view login) const noexcept;
@@ -136,6 +140,8 @@ struct History {
 inline constexpr std::string_view kHistoryFiles[] = {"alarmes", "evenements", "systeme", "mesures", "audit", "comptes"};
 
 [[nodiscard]] core::Status saveHistory(const History&, const std::string& projectFolder);
+// 1.12.24 : le nom du fichier de la memoire d'un Reglage PID (sa cle, sans ce qu'un nom de fichier n'aime pas).
+[[nodiscard]] std::string  pidMemoryName(std::string_view key);
 [[nodiscard]] History      loadHistory(const std::string& projectFolder, std::vector<std::string>* warnings = nullptr);
 // Lot 13 : une ligne d'audit ajoutee tout de suite au fichier (l'en-tete s'il est
 // neuf) - une panne ne la perd pas ; l'enregistrement du projet reecrit le tout.

@@ -434,7 +434,7 @@ std::vector<std::string_view> inheritedKeys(Kind k) {
             return {"min", "max", "lowAlarm", "low", "high", "highAlarm"};
         case Kind::Trend:
             return {"ymin", "ymax"};
-        case Kind::Valve:
+        case Kind::Valve: case Kind::Damper: case Kind::MultiBladeDamper:   // 1.12.24 : les registres
             return {kOpeningMin, kOpeningMax};
         default:
             return {};
@@ -462,7 +462,7 @@ std::string defaultOf(Kind k, std::string_view key) {
 }
 
 std::string variableOf(const Object& o) {
-    if (o.kind == Kind::Valve) {
+    if (kindHasOpening(o.kind)) {
         const auto* op = o.find("opening");
         if (!op) return {};
         const std::string src = !op->expr.empty() ? op->expr : op->value;
@@ -516,7 +516,7 @@ bool apply(Object& o, const Project& p, const View* in) {
     if (!touched(o.kind)) return false;
     const Pass pass(p);
     bool changed = false;
-    if (o.kind == Kind::Valve) {
+    if (kindHasOpening(o.kind)) {
         Prop opening;
         if (valveOpening(p, o, in, opening)) {
             *o.find("opening") = std::move(opening);
@@ -547,7 +547,7 @@ bool needed(const Project& p, const View& v) {
     const Pass pass(p);
     for (const auto& o : v.objects) {
         if (!touched(o.kind)) continue;
-        if (o.kind == Kind::Valve) {
+        if (kindHasOpening(o.kind)) {
             Prop dummy;
             if (valveOpening(p, o, &v, dummy)) return true;
             continue;
@@ -560,7 +560,7 @@ bool needed(const Project& p, const View& v) {
 bool preview(const Project& p, const View& v, const Object& o, Object& out) {
     if (!touched(o.kind)) return false;
     const Pass pass(p);
-    if (o.kind == Kind::Valve) {
+    if (kindHasOpening(o.kind)) {
         Prop opening;
         if (!valveOpening(p, o, &v, opening) || !opening.expr.empty()) return false;   // une formule : l'editeur ne la calcule pas
         out = o;
@@ -614,7 +614,7 @@ std::string hint(const Project& p, const View& v, const Object& o, std::string_v
     }
     const std::string def = defaultOf(o.kind, key);
     if (!def.empty()) return roles::defaultInvite(def);
-    if (o.kind == Kind::Valve) return roles::defaultInvite(key == kOpeningMin ? "0" : "100");
+    if (kindHasOpening(o.kind)) return roles::defaultInvite(key == kOpeningMin ? "0" : "100");
     if (o.kind == Kind::InputField) return "sans borne";
     return thresholdKey(key) ? std::string("aucun") : std::string{};
 }
@@ -744,14 +744,14 @@ std::vector<Issue> check(const Project& p, const NameExists& plc) {
                 const auto& s = seen[key];
                 return label(key) + " " + formatNumber(s.value) + (s.inherited ? " (" + s.origin + ")" : std::string{});
             };
-            const std::string loKey = o.kind == Kind::Trend ? "ymin" : o.kind == Kind::Valve ? std::string(kOpeningMin) : "min";
-            const std::string hiKey = o.kind == Kind::Trend ? "ymax" : o.kind == Kind::Valve ? std::string(kOpeningMax) : "max";
+            const std::string loKey = o.kind == Kind::Trend ? "ymin" : kindHasOpening(o.kind) ? std::string(kOpeningMin) : "min";
+            const std::string hiKey = o.kind == Kind::Trend ? "ymax" : kindHasOpening(o.kind) ? std::string(kOpeningMax) : "max";
             const auto& lo = seen[loKey];
             const auto& hi = seen[hiKey];
             // Une plage ecrite sur l'objet qui n'est pas celle de sa variable (un objet d'avant, 0..100 sur une variable
             // mise a l'echelle 0..10) : une information - vider Min et Max lui fait suivre la variable.
             if (lo.has && hi.has && !lo.inherited && !hi.inherited && followsVariableFormat(o) && o.kind != Kind::InputField
-                && o.kind != Kind::Trend && o.kind != Kind::Valve) {
+                && o.kind != Kind::Trend && !kindHasOpening(o.kind)) {
                 const Inherited vlo = inheritedFor(p, o, loKey, &v), vhi = inheritedFor(p, o, hiKey, &v);
                 double a = 0, b = 0;
                 if (number(vlo.value, a) && number(vhi.value, b) && a < b && (a != lo.value || b != hi.value))
@@ -762,7 +762,7 @@ std::vector<Issue> check(const Project& p, const NameExists& plc) {
             }
             // Min >= Max : deja une erreur pour une valeur ecrite sur un curseur, un bargraphe, une cuve... ;
             // ici, une borne heritee, ou une jauge et une barre de progression (rien ne le disait).
-            const bool plainCheck = o.kind == Kind::Gauge || o.kind == Kind::ProgressBar || o.kind == Kind::Trend || o.kind == Kind::Valve
+            const bool plainCheck = o.kind == Kind::Gauge || o.kind == Kind::ProgressBar || o.kind == Kind::Trend || kindHasOpening(o.kind)
                                  || o.kind == Kind::InputField;
             // (Ce qui vient tout entier de la ligne de la variable est dit une fois, sur la ligne ; ici, le melange de
             // l'objet et de sa variable.)
