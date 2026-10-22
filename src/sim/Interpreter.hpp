@@ -228,6 +228,22 @@ public:
         if (why) *why = "pas de surveillance ici (IHM_SUR_CHANGEMENT tourne dans la simulation de l'IHM)";
         return false;
     }
+    // 1.12.26 : LES FICHIERS ET LES RESSOURCES DU PROJET (FILE_READ, FILE_WRITE, DIR_LIST, RESOURCE_READ...) : le
+    // dialecte en lit les arguments et en rend le resultat, l'environnement les fait (le dossier des donnees du projet,
+    // ses ressources, ce qui est permis). `op` : le nom de la native, en majuscules ; `args` : ses arguments, en texte
+    // (FILE_WRITE_LINES : les lignes deja jointes ; DIR_DELETE : TOUT en "1" ou "0"). Vrai et `out` : `text` (un
+    // contenu, un chemin), `lines` (des lignes, des noms), `number` (une taille ; 0 ou 1 ; une date : des millisecondes
+    // depuis 1970, a l'heure du poste) ; faux et `why` (FILE_ERROR() le dit). Par defaut : pas de fichiers ici.
+    struct FileResult {
+        std::string              text;
+        std::vector<std::string> lines;
+        std::int64_t             number{0};
+    };
+    virtual bool fileOp(std::string_view op, const std::vector<std::string>& args, FileResult& out, std::string& why) {
+        (void)op; (void)args; (void)out;
+        why = "pas de fichiers ici (les fonctions FILE_, DIR_ et RESOURCE_ tournent dans un script de l'IHM)";
+        return false;
+    }
 };
 
 // Lot API 8 : les variables d'une ligne, lues au passage (point d'arret) : le nom

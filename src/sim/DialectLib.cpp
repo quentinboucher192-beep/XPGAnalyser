@@ -698,6 +698,37 @@ const std::vector<NativeInfo>& natives() {
         {"WORDSWAP", 1, 1, false, false, false, false, "bits", "WORDSWAP(IN) : comme IN", "Les mots de 16 bits de IN dans l'ordre inverse : 16#12345678 devient 16#56781234. L'ordre des registres d'un \xC3\xA9quipement Modbus."},
         {"SWAP", 2, 2, true, false, false, false, "utility", "SWAP(A, B) : BOOL", "\xC3\x89" "change les valeurs de deux variables du m\xC3\xAAme type ; rend TRUE."},
         {"EXCHANGE", 2, 2, true, false, false, false, "utility", "EXCHANGE(X, NOUVELLE) : comme X", "\xC3\x89" "crit NOUVELLE dans X et rend l'ancienne valeur de X : un changement d'\xC3\xA9tat, un front."},
+        // ---- 1.12.26 : les fichiers et les ressources du projet (<filesystem>, <fstream>). Un chemin relatif part
+        // du dossier donnees/ du projet ; un echec ne coupe pas le script : FALSE, '' ou -1, et FILE_ERROR() dit pourquoi.
+        {"FILE_READ", 1, 1, false, false, false, false, "fichiers", "FILE_READ(CHEMIN) : STRING", "Tout le texte d'un fichier ; '' s'il manque (FILE_ERROR() dit pourquoi)."},
+        {"FILE_READ_LINES", 1, 1, false, false, false, false, "fichiers", "FILE_READ_LINES(CHEMIN) : LIST OF STRING", "Les lignes d'un fichier texte, une par \xC3\xA9l\xC3\xA9ment (sans les retours \xC3\xA0 la ligne)."},
+        {"FILE_WRITE", 2, 2, false, false, false, false, "fichiers", "FILE_WRITE(CHEMIN, TEXTE) : BOOL", "\xC3\x89" "crit le texte dans le fichier, cr\xC3\xA9\xC3\xA9 ou remplac\xC3\xA9 (ses dossiers manquants aussi)."},
+        {"FILE_APPEND", 2, 2, false, false, false, false, "fichiers", "FILE_APPEND(CHEMIN, TEXTE) : BOOL", "Ajoute le texte \xC3\xA0 la fin du fichier (cr\xC3\xA9\xC3\xA9 s'il manque)."},
+        {"FILE_APPEND_LINE", 2, 2, false, false, false, false, "fichiers", "FILE_APPEND_LINE(CHEMIN, LIGNE) : BOOL", "Ajoute une ligne \xC3\xA0 la fin du fichier : un journal, un CSV."},
+        {"FILE_WRITE_LINES", 2, 2, false, false, false, false, "fichiers", "FILE_WRITE_LINES(CHEMIN, LIGNES) : BOOL", "\xC3\x89" "crit une ligne par \xC3\xA9l\xC3\xA9ment d'une LIST, d'un VECTOR ou d'un ARRAY (le fichier est remplac\xC3\xA9)."},
+        {"FILE_EXISTS", 1, 1, false, false, false, false, "fichiers", "FILE_EXISTS(CHEMIN) : BOOL", "Vrai si ce fichier est l\xC3\xA0 (un dossier : DIR_EXISTS)."},
+        {"FILE_SIZE", 1, 1, false, false, false, false, "fichiers", "FILE_SIZE(CHEMIN) : LINT", "Sa taille en octets ; -1 s'il manque."},
+        {"FILE_TIME", 1, 1, false, false, false, false, "fichiers", "FILE_TIME(CHEMIN) : DATE_AND_TIME", "Sa derni\xC3\xA8re modification, \xC3\xA0 l'heure du poste ; DT#1970-01-01-00:00:00 s'il manque."},
+        {"FILE_COPY", 2, 2, false, false, false, false, "fichiers", "FILE_COPY(SOURCE, DESTINATION) : BOOL", "Copie un fichier ; la destination est remplac\xC3\xA9" "e."},
+        {"FILE_MOVE", 2, 2, false, false, false, false, "fichiers", "FILE_MOVE(SOURCE, DESTINATION) : BOOL", "D\xC3\xA9place ou renomme un fichier (ou un dossier)."},
+        {"FILE_DELETE", 1, 1, false, false, false, false, "fichiers", "FILE_DELETE(CHEMIN) : BOOL", "Supprime un fichier ; FALSE s'il n'\xC3\xA9tait pas l\xC3\xA0."},
+        {"FILE_ERROR", 0, 0, false, false, false, false, "fichiers", "FILE_ERROR() : STRING", "Pourquoi la derni\xC3\xA8re fonction de fichier du script a \xC3\xA9" "chou\xC3\xA9 ; '' : elle a r\xC3\xA9ussi."},
+        {"DIR_CREATE", 1, 1, false, false, false, false, "fichiers", "DIR_CREATE(CHEMIN) : BOOL", "Cr\xC3\xA9" "e un dossier, et ses parents ; TRUE s'il est l\xC3\xA0 ensuite."},
+        {"DIR_EXISTS", 1, 1, false, false, false, false, "fichiers", "DIR_EXISTS(CHEMIN) : BOOL", "Vrai si ce dossier est l\xC3\xA0."},
+        {"DIR_LIST", 1, 2, false, false, false, false, "fichiers", "DIR_LIST(CHEMIN [, FILTRE]) : LIST OF STRING", "Les noms de ce que contient un dossier, rang\xC3\xA9s ; un sous-dossier finit par / ; FILTRE : '*.csv', 'recette_?.txt'."},
+        {"DIR_DELETE", 1, 2, false, false, false, false, "fichiers", "DIR_DELETE(CHEMIN [, TOUT]) : BOOL", "Supprime un dossier vide ; TOUT \xC3\xA0 TRUE : avec tout ce qu'il contient."},
+        {"DIR_DATA", 0, 0, false, false, false, false, "fichiers", "DIR_DATA() : STRING", "Le dossier des donn\xC3\xA9" "es du projet (donnees/), d'o\xC3\xB9 partent les chemins relatifs ; '' : le projet n'est pas enregistr\xC3\xA9."},
+        {"PATH_JOIN", 2, 2, false, false, false, false, "fichiers", "PATH_JOIN(DOSSIER, NOM) : STRING", "Un chemin fait d'un dossier et d'un nom, le / entre les deux (un NOM complet reste tel quel)."},
+        {"PATH_NAME", 1, 1, false, false, false, false, "fichiers", "PATH_NAME(CHEMIN) : STRING", "Le nom du fichier, avec son extension : 'recette.csv'."},
+        {"PATH_STEM", 1, 1, false, false, false, false, "fichiers", "PATH_STEM(CHEMIN) : STRING", "Le nom du fichier, sans son extension : 'recette'."},
+        {"PATH_EXTENSION", 1, 1, false, false, false, false, "fichiers", "PATH_EXTENSION(CHEMIN) : STRING", "Son extension, avec le point : '.csv' ; '' s'il n'en a pas."},
+        {"PATH_PARENT", 1, 1, false, false, false, false, "fichiers", "PATH_PARENT(CHEMIN) : STRING", "Le dossier qui le contient : 'C:/Donnees/recette.csv' donne 'C:/Donnees'."},
+        {"RESOURCE_READ", 1, 1, false, false, false, false, "fichiers", "RESOURCE_READ(NOM) : STRING", "Le texte d'une ressource du projet (un .txt, un .csv, un .json import\xC3\xA9 dans Ressources) ; '' si le projet ne l'a pas."},
+        {"RESOURCE_LINES", 1, 1, false, false, false, false, "fichiers", "RESOURCE_LINES(NOM) : LIST OF STRING", "Les lignes d'une ressource texte du projet."},
+        {"RESOURCE_EXISTS", 1, 1, false, false, false, false, "fichiers", "RESOURCE_EXISTS(NOM) : BOOL", "Vrai si le projet a cette ressource (et son contenu)."},
+        {"RESOURCE_SIZE", 1, 1, false, false, false, false, "fichiers", "RESOURCE_SIZE(NOM) : LINT", "Sa taille en octets ; -1 si le projet ne l'a pas."},
+        {"RESOURCE_LIST", 0, 1, false, false, false, false, "fichiers", "RESOURCE_LIST([DOSSIER]) : LIST OF STRING", "Les noms des ressources du projet, rang\xC3\xA9s ; DOSSIER : celles d'un dossier de la liste des ressources."},
+        {"RESOURCE_EXTRACT", 2, 2, false, false, false, false, "fichiers", "RESOURCE_EXTRACT(NOM, CHEMIN) : BOOL", "Copie une ressource du projet dans un fichier (pour un autre programme, un mod\xC3\xA8le \xC3\xA0 remplir)."},
     };
     return k;
 }
@@ -720,6 +751,14 @@ bool oldListResizes(std::string_view name) noexcept {
     const std::string u = upper(name);
     for (const char* n : {"LIST_ADD", "LIST_INSERT", "LIST_REMOVE_AT", "LIST_REMOVE", "LIST_CLEAR", "VECTOR_PUSH", "VECTOR_POP", "VECTOR_INSERT",
                           "VECTOR_ERASE", "VECTOR_CLEAR", "VECTOR_RESIZE"})
+        if (u == n) return true;
+    return false;
+}
+
+bool changesFiles(std::string_view name) noexcept {
+    const std::string u = upper(name);
+    for (const char* n : {"FILE_WRITE", "FILE_APPEND", "FILE_APPEND_LINE", "FILE_WRITE_LINES", "FILE_COPY", "FILE_MOVE", "FILE_DELETE",
+                          "DIR_CREATE", "DIR_DELETE", "RESOURCE_EXTRACT"})
         if (u == n) return true;
     return false;
 }

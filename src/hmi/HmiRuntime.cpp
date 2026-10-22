@@ -706,6 +706,10 @@ public:
         return rt_.watchCallback(path, now, std::move(callback), passValue, id, why);
     }
     void nullCallback(std::string_view name, std::string_view where) override { rt_.nullCallback(name, where); }
+    // 1.12.26 : FILE_READ, FILE_WRITE, DIR_LIST, RESOURCE_READ... (HmiRuntimeFiles.cpp).
+    bool fileOp(std::string_view op, const std::vector<std::string>& args, FileResult& out, std::string& why) override {
+        return rt_.fileOp(op, args, out, why);
+    }
     // 1.10 (integration, S1 <-> S2) : un operateur d'un type IHM ou d'un symbole
     // (`a + b`, `a += b`, `TO_xxx(a)`...) : S2 le trouve, S1 l'appelle.
     bool findOperator(std::string_view op, std::string_view l, std::string_view r, sim::OperatorSource& out) override {
@@ -3770,6 +3774,7 @@ void Runtime::stop(double now, const std::string& why) {
     timers_.clear();                    // 1.12.19 : les minuteurs d'IHM_APRES et IHM_CHAQUE s'arretent avec l'IHM
     watches_.clear();                   // 1.12.20 : les surveillances d'IHM_SUR_CHANGEMENT aussi
     nullSaid_.clear();
+    fileSaid_.clear();
     pidKeepAll();                       // 1.12.24 : ce qu'ont appris les Reglages PID, dans l'historique
     pidWindow_ = PidWindow{};
 }

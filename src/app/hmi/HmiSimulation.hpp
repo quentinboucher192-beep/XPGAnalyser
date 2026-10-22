@@ -74,6 +74,9 @@ struct HmiSimulationHost {
     // Lot 11 : ecrire un fichier exporte (bouton d'export, action Exporter) ; vrai :
     // ecrit, `where` son chemin (sinon pourquoi).
     std::function<bool(const hmi::ExportRequest&, std::string* where)> exportFile;
+    // 1.12.26 : le dossier du projet (les fichiers des scripts : FILE_READ('recette.csv') lit <projet>/donnees/) ;
+    // vide : pas enregistre.
+    std::function<std::string()>                     projectFolder;
     // Lot 13 : une ligne du journal d'audit, a peine ecrite (ajoutee tout de suite
     // a ihm/historique/audit.csv).
     std::function<void(const hmi::AuditEntry&)>      audit;

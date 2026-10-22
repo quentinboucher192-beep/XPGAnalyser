@@ -154,6 +154,7 @@ core::Status StationScreen::buildUi() {
     };
     }
     host.exportFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeExport(app_.projectFolder(), rq, where); };
+    host.projectFolder = [this] { return app_.projectFolder(); };           // 1.12.26 : les fichiers des scripts
     // ---- Lot API 8 : les exports qui demandent ou ----
     // Lance par un geste de l'operateur : le dialogue du poste, au doigt (askExport).
     host.askExport = [this](const hmi::ExportRequest& rq, std::function<void(bool, const std::string&)> done) {

@@ -29,6 +29,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <set>
@@ -82,6 +84,12 @@ bool sameValue(const std::string& got, std::string_view want) {
 
 std::string shown(const sim::Value& v) { return v.type() == sim::Type::String ? v.asString() : v.display(); }
 
+// 1.12.26 : le dossier du projet d'essai (les exemples des fonctions de fichiers ecrivent dans son donnees/).
+std::string benchFolder() {
+    const auto u = (std::filesystem::temp_directory_path() / "xpg_natives_essai").u8string();
+    return std::string(u.begin(), u.end());
+}
+
 // Le projet d'essai : les variables des exemples, une vue, un script appele.
 struct Bench {
     Project p;
@@ -113,6 +121,9 @@ struct Bench {
         p.programs.scripts.push_back(s);
         if (extra) extra(p);                       // 1.12.19 : des fonctions, des variables de plus
         rt.bind(&p, nullptr);
+        Runtime::Hooks hooks;                      // 1.12.26 : les fichiers des exemples, dans un dossier d'essai
+        hooks.projectFolder = [] { return benchFolder(); };
+        rt.setHooks(std::move(hooks));
         rt.start(0.0);
         rt.tick(0.1);
     }
@@ -585,7 +596,7 @@ void rangement1217() {
     check(homeBad == 0, "homeOf : le dossier qui la garde");
     check(mixed == 0, "un dossier a sous-dossiers ne garde aucune fonction (" + std::to_string(mixed) + ")");
     check(empty == 0, "aucun dossier vide");
-    check(nt::shelves().front().folders.size() == 8, "huit themes");
+    check(nt::shelves().front().folders.size() == 9, "neuf themes (1.12.26 : Fichiers)");
     check(nt::shelves().front().total == nt::functions().size() + nt::conversions().size(), "Fonctions : toutes, X_TO_Y compris");
     std::size_t over = 0;
     for (const auto& s : nt::shelves())
@@ -943,8 +954,130 @@ void sondeControle1219() {
     }
 }
 
+// 1.12.26 : les fichiers et les ressources des scripts - le dossier donnees/, les fichiers du projet proteges, une
+// expression qui lit sans ecrire, FILE_ERROR, les ressources du projet.
+void fichiers1226() {
+    std::printf("-- 1.12.26 : les fichiers et les ressources des scripts\n");
+    namespace fs = std::filesystem;
+    const fs::path root = fs::path(benchFolder());
+    const auto run = [](const std::string& type, const std::string& body, const std::function<void(Project&)>& extra = {}) {
+        Bench b(type, body, extra);
+        std::string err;
+        const std::string got = b.runScript(&err);
+        return std::make_pair(got, err);
+    };
+    // Un chemin relatif : <projet>/donnees/ ; les dossiers manquants sont crees.
+    {
+        const auto [got, err] = run("BOOL", "R := FILE_WRITE('f1226/a/b.txt', 'Bonjour');");
+        check(err.empty() && got == "TRUE", "FILE_WRITE relatif : " + got + " " + err);
+        std::string back;
+        std::ifstream in(root / "donnees" / "f1226" / "a" / "b.txt", std::ios::binary);
+        std::getline(in, back);
+        check(back == "Bonjour", "ecrit dans <projet>/donnees/f1226/a/b.txt : " + back);
+    }
+    // Les fichiers du projet ne s'ecrivent pas : ihm/, project.xpgproj, le dossier du projet.
+    for (const char* body : {"R := FILE_WRITE('../ihm/vues/x.txt', 'x');", "R := FILE_WRITE('../project.xpgproj', 'x');",
+                             "R := DIR_DELETE('..', TRUE);", "R := FILE_MOVE('../ihm', 'ailleurs');"}) {
+        const auto [got, err] = run("BOOL", std::string(body) + "\nIF NOT R THEN IHM_LOG(WARNING, FILE_ERROR()); END_IF;");
+        check(err.empty() && got == "FALSE", std::string("refuse : ") + body + " -> " + got + " " + err);
+    }
+    {
+        const auto [got, err] = run("STRING", "FILE_WRITE('../ihm/x.txt', 'x');\nR := FILE_ERROR();");
+        check(got.find("ne se changent pas par un script") != std::string::npos, "FILE_ERROR dit pourquoi : " + got);
+    }
+    // Un echec ne coupe pas le script ; la raison reste jusqu'a la fonction de fichier suivante.
+    {
+        const auto [got, err] = run("STRING", "VAR t : STRING; END_VAR\nt := FILE_READ('f1226/absent.txt');\nR := CONCAT('[', t, ']', FILE_ERROR());");
+        check(err.empty() && got.rfind("[]FILE_READ : introuvable", 0) == 0, "FILE_READ absent : " + got + " " + err);
+        const auto [g2, e2] = run("STRING", "FILE_READ('f1226/absent.txt');\nFILE_EXISTS('f1226/absent.txt');\nR := FILE_ERROR();");
+        check(e2.empty() && g2.empty(), "FILE_ERROR remis a '' par la fonction suivante : " + g2);
+    }
+    // Les lignes, le filtre, l'ajout, la taille.
+    {
+        const auto [got, err] = run("STRING",
+                                    "VAR L : LIST OF STRING; END_VAR\n"
+                                    "DIR_DELETE('f1226/l', TRUE);\n"
+                                    "FILE_WRITE('f1226/l/z.csv', 'x$R$Ny$R$N');\n"
+                                    "FILE_APPEND_LINE('f1226/l/z.csv', 'z');\n"
+                                    "FILE_WRITE('f1226/l/a.csv', '');\n"
+                                    "FILE_WRITE('f1226/l/n.txt', '');\n"
+                                    "DIR_CREATE('f1226/l/sous');\n"
+                                    "L := FILE_READ_LINES('f1226/l/z.csv');\n"
+                                    "R := CONCAT(JOIN(L, '|'), ' ; ', JOIN(DIR_LIST('f1226/l', '*.CSV'), ','), ' ; ', JOIN(DIR_LIST('f1226/l'), ','), ' ; ', TO_STRING(FILE_SIZE('f1226/l/z.csv')));");
+        check(err.empty() && got == "x|y|z ; a.csv,z.csv ; a.csv,n.txt,sous/,z.csv ; 8", "lignes, filtre, dossiers : " + got + " " + err);
+    }
+    // Les chemins (sans le disque).
+    {
+        const auto [got, err] = run("STRING",
+                                    "R := CONCAT(PATH_JOIN('C:\\Donnees\\', 'a.csv'), '|', PATH_JOIN('x', 'C:/y.txt'), '|', PATH_PARENT('C:/a.csv'), '|', "
+                                    "PATH_STEM('/x/.ini'), '|', PATH_EXTENSION('archive.tar.gz'), '|', PATH_NAME('C:\\a\\b\\'));");
+        check(err.empty() && got == "C:\\Donnees\\a.csv|C:/y.txt|C:/|.ini|.gz|b", "les chemins : " + got + " " + err);
+    }
+    // Une expression lit, n'ecrit pas.
+    {
+        Bench b("BOOL", "R := FILE_WRITE('f1226/expr.txt', 'x');");
+        std::string err;
+        (void)b.runScript(&err);
+        const auto read = Expression::compile("FILE_EXISTS('f1226/expr.txt')").evaluate(b.rt.environment());
+        check(read && read->isTruthy(), "une expression lit (FILE_EXISTS)");
+        const auto write = Expression::compile("FILE_WRITE('f1226/expr2.txt', 'x')").evaluate(b.rt.environment());
+        check(write && !write->isTruthy() && !fs::exists(root / "donnees" / "f1226" / "expr2.txt"), "une expression n'ecrit pas (FILE_WRITE : FALSE)");
+    }
+    // Les ressources du projet.
+    {
+        const auto withResource = [](Project& p) {
+            Resource r;
+            r.id = p.allocate();
+            r.name = "aide.txt";
+            r.format = "TXT";
+            r.folder = "textes";
+            const std::string text = "\xEF\xBB\xBF" "ligne 1\r\nligne 2\r\n";
+            r.data = std::make_shared<const Bytes>(text.begin(), text.end());
+            r.bytes = text.size();
+            p.assets.resources.push_back(r);
+            Resource img;
+            img.id = p.allocate();
+            img.name = "logo.png";
+            img.format = "PNG";
+            p.assets.resources.push_back(img);                          // sans contenu : le fichier manque
+        };
+        const auto [got, err] = run("STRING",
+                                    "R := CONCAT(RESOURCE_READ('aide.txt'), '|', TO_STRING(LIST_COUNT(RESOURCE_LINES('aide.txt'))), '|', "
+                                    "JOIN(RESOURCE_LIST(), ','), '|', JOIN(RESOURCE_LIST('textes'), ','), '|', TO_STRING(RESOURCE_SIZE('aide.txt')), '|', "
+                                    "TO_STRING(RESOURCE_EXISTS('logo.png')), '|', TO_STRING(RESOURCE_EXTRACT('aide.txt', 'f1226/aide_copie.txt')), '|', "
+                                    "TO_STRING(FILE_SIZE('f1226/aide_copie.txt')));",
+                                    withResource);
+        check(err.empty() && got == "ligne 1\r\nligne 2\r\n|2|aide.txt,logo.png|aide.txt|21|FALSE|TRUE|21",
+              "les ressources : " + got + " " + err);
+    }
+    // Sans dossier de projet : un chemin relatif est refuse, un chemin complet passe.
+    {
+        Project p;
+        Script s;
+        s.id = p.allocate();
+        s.name = "Essai";
+        s.event = "Appel";
+        const std::string full = (root / "donnees" / "f1226" / "complet.txt").generic_string();
+        s.body = "VAR a, b : BOOL; e : STRING; END_VAR\na := FILE_WRITE('relatif.txt', 'x');\ne := FILE_ERROR();\nb := FILE_WRITE('" + full + "', 'x');\nIHM_LOG(INFO, CONCAT(TO_STRING(a), '|', TO_STRING(b), '|', e));";
+        p.programs.scripts.push_back(s);
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        std::string err;
+        check(rt.callScript("Essai", 0.1, &err) && err.empty(), "sans dossier : le script tourne " + err);
+        bool said = false;
+        for (const auto& line : rt.journal())
+            if (line.message.find("FALSE|TRUE|FILE_WRITE : le projet n'est pas encore enregistr") != std::string::npos) said = true;
+        check(said && fs::exists(full), "sans dossier : relatif refuse, complet ecrit");
+    }
+}
+
 int main() {
     std::printf("1.12.0 : les natives de l'IHM (catalogue, exemples, conversions, types, enumerations, couleurs, aleatoire)\n");
+    {
+        std::error_code ec;
+        std::filesystem::remove_all(std::filesystem::path(benchFolder()), ec);   // 1.12.26 : un dossier d'essai neuf
+    }
     catalogueComplet();
     exemples();
     conversions();
@@ -959,6 +1092,7 @@ int main() {
     rappels1219();
     sondeControle1219();
     rappels1220();
+    fichiers1226();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

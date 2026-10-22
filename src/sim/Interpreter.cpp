@@ -6775,6 +6775,7 @@ private:
         if (info->group == "math" || info->group == "texte" || info->group == "date")                                 // 1.12.16
             return std::optional<core::Result<RV>>(valueNative(u, e));
         if (info->group == "utility") return std::optional<core::Result<RV>>(utilityNative(u, e));                    // 1.12.16
+        if (info->group == "fichiers") return std::optional<core::Result<RV>>(fileNative(u, e));                     // 1.12.26
         return std::optional<core::Result<RV>>(listNative(u, *info, e));
     }
 
@@ -8533,6 +8534,91 @@ private:
         std::string why;
         if (!writePlace(*px, next, &why)) return dialectError(u + " : " + why);
         return kept;
+    }
+
+    // ---- 1.12.26 : LES FICHIERS ET LES RESSOURCES DU PROJET (FILE_, DIR_, RESOURCE_, PATH_) ----------------------
+    // Les chemins se calculent ici (PATH_ : du texte, '/' et '\' tous deux separateurs) ; le reste, l'environnement
+    // le fait (fileOp). Un echec ne coupe pas le script : FALSE, '', une liste vide, -1 - et FILE_ERROR() dit pourquoi
+    // (la derniere fonction de fichier de cette execution).
+    std::string fileError_;
+    core::Result<RV> fileNative(const std::string& u, const Expr& e) {
+        std::vector<std::string> a;
+        for (std::size_t k = 0; k < e.arguments.size(); ++k) {
+            const Expr& x = *e.arguments[k].second;
+            if (u == "FILE_WRITE_LINES" && k == 1) {             // une LIST, un VECTOR, un ARRAY de valeurs simples
+                auto held = objArg(x);
+                if (!held) return core::Err<core::Error>(held.error());
+                const Obj* list = held->isScalar ? nullptr : held->obj.get();
+                if (!list || !list->type || (list->type->kind != TypeDesc::Kind::List && list->type->kind != TypeDesc::Kind::Array))
+                    return dialectError(u + " : une liste de textes est attendue (LIST, VECTOR ou ARRAY), pas "
+                                        + (list && list->type ? list->type->text() : std::string(toString(held->scalar.type()))));
+                std::string all;
+                for (const auto& item : list->items) {
+                    if (!item || !item->type || item->type->kind != TypeDesc::Kind::Scalar)
+                        return dialectError(u + " : une ligne est une valeur simple, pas un " + (item && item->type ? item->type->text() : std::string("?")));
+                    all += (item->value.type() == Type::String ? item->value.asString() : item->value.display()) + "\n";
+                }
+                a.push_back(std::move(all));
+                continue;
+            }
+            auto v = rich(x);
+            if (!v) return v;
+            if (v->o) return dialectError(u + " : un texte est attendu, pas un " + typeNameOf(*v));
+            if (u == "DIR_DELETE" && k == 1) {
+                a.push_back(v->v.isTruthy() ? "1" : "0");
+                continue;
+            }
+            a.push_back(v->v.type() == Type::String ? v->v.asString() : v->v.display());
+        }
+        const auto text = [](std::string t) { return core::Result<RV>(RV{Value::text(std::move(t)), nullptr}); };
+        const auto list = [](const std::vector<std::string>& lines) {
+            auto out = makeObj(listType(scalarType(Type::String)));
+            for (const auto& l : lines) {
+                auto item = makeObj(scalarType(Type::String));
+                item->value = Value::text(l);
+                out->items.push_back(item);
+            }
+            return core::Result<RV>(RV{{}, out});
+        };
+        if (u == "FILE_ERROR") return text(fileError_);
+        if (u.rfind("PATH_", 0) == 0) {
+            const auto sep = [](char c) { return c == '/' || c == '\\'; };
+            if (u == "PATH_JOIN") {
+                const std::string& dir = a[0];
+                const std::string& name = a[1];
+                const bool whole = !name.empty() && (sep(name[0]) || (name.size() > 1 && name[1] == ':'));
+                if (whole || dir.empty()) return text(name);
+                if (name.empty()) return text(dir);
+                return text(sep(dir.back()) ? dir + name : dir + "/" + name);
+            }
+            std::string p = a[0];
+            while (p.size() > 1 && sep(p.back()) && !(p.size() == 3 && p[1] == ':')) p.pop_back();    // 'C:/Donnees/' : 'C:/Donnees'
+            std::size_t cut = std::string::npos;
+            for (std::size_t k = p.size(); k-- > 0;)
+                if (sep(p[k])) { cut = k; break; }
+            const std::string name = cut == std::string::npos ? p : p.substr(cut + 1);
+            if (u == "PATH_NAME") return text(name);
+            if (u == "PATH_PARENT") {
+                if (cut == std::string::npos) return text({});
+                if (cut == 0) return text(p.substr(0, 1));                                   // '/journal.csv' : '/'
+                if (cut == 2 && p[1] == ':') return text(p.substr(0, 3));                    // 'C:/x.csv' : 'C:/'
+                return text(p.substr(0, cut));
+            }
+            const auto dot = name.rfind('.');
+            const bool ext = dot != std::string::npos && dot > 0 && name != "..";             // '.ini' seul : un nom, sans extension
+            if (u == "PATH_EXTENSION") return text(ext ? name.substr(dot) : std::string{});
+            return text(ext ? name.substr(0, dot) : name);                                    // PATH_STEM
+        }
+        Environment::FileResult r;
+        std::string why;
+        const bool ok = env_.fileOp(u, a, r, why);
+        fileError_ = ok ? std::string{} : u + " : " + (why.empty() ? std::string("refus\xC3\xA9") : why);
+        if (u == "FILE_READ" || u == "RESOURCE_READ" || u == "DIR_DATA") return text(ok ? r.text : std::string{});
+        if (u == "FILE_READ_LINES" || u == "RESOURCE_LINES" || u == "DIR_LIST" || u == "RESOURCE_LIST")
+            return list(ok ? r.lines : std::vector<std::string>{});
+        if (u == "FILE_SIZE" || u == "RESOURCE_SIZE") return RV{Value::integer(Type::LInt, ok ? r.number : -1), nullptr};
+        if (u == "FILE_TIME") return RV{Value::integer(Type::Dt, ok ? r.number : 0), nullptr};
+        return RV{Value::boolean(ok && r.number != 0), nullptr};
     }
 
     // ---- LIST_TRANSFORM(SOURCE, DESTINATION, OP) : DESTINATION videe, puis un resultat par element ; rend leur nombre.

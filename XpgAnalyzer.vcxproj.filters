@@ -1420,6 +1420,9 @@
     <ClCompile Include="src\hmi\HmiRuntimeSlow.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeFiles.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiScriptCheck.cpp">
       <Filter>hmi</Filter>
     </ClCompile>

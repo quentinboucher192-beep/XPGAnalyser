@@ -121,6 +121,15 @@ public:
     void report(sim::Diagnostic d) override {
         if (message_.empty()) message_ = d.message;
     }
+    // 1.12.26 : une expression lit un fichier, une ressource du projet (RESOURCE_READ('aide.txt'), FILE_EXISTS(...)) ;
+    // elle n'en ecrit, n'en copie, n'en supprime aucun.
+    bool fileOp(std::string_view op, const std::vector<std::string>& args, FileResult& out, std::string& why) override {
+        if (sim::lib::changesFiles(op)) {
+            why = "une expression ne change rien : " + std::string(op) + " se fait dans un script";
+            return false;
+        }
+        return plc_.fileOp(op, args, out, why);
+    }
     // 1.11 (chantier T3, porte en 1.10.2) : les conversions d'une enumeration
     // sont des operateurs du type (regenerateEnumConversions). Le dialecte les
     // trouve par le type declare de l'argument : sans ces quatre relais vers

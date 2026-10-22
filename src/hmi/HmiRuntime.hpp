@@ -497,6 +497,9 @@ public:
         // exportAnswered. Faux (ou vide) : personne pour repondre ici - exportFile
         // l'ecrit tout de suite dans exports/, comme avant.
         std::function<bool(const ExportRequest&)>                askExport;
+        // 1.12.26 : le dossier du projet - les fonctions de fichiers des scripts (FILE_READ...) : un chemin relatif
+        // part de son dossier donnees/. Vide (ou nul) : le projet n'est pas enregistre, seuls les chemins complets.
+        std::function<std::string()>                             projectFolder;
     };
     struct Animation {
         Id         from{kNoId}, to{kNoId};
@@ -1702,6 +1705,7 @@ private:
     std::vector<CallbackTimer> timers_;
     std::int64_t               timerSeq_{0};
     std::set<std::string>      nullSaid_;
+    std::set<std::string>      fileSaid_;                // 1.12.26 : les echecs de fichiers deja dits a la Console
     // 1.12.20 : les surveillances (IHM_SUR_CHANGEMENT) - le chemin relu, sa derniere valeur.
     struct CallbackWatch {
         std::int64_t id{0};
@@ -1718,6 +1722,9 @@ private:
     // Un rappel appele par l'IHM (un minuteur, une surveillance), comme un script ; une erreur dans la Console.
     void fireCallback(const sim::ObjRef& callback, const std::vector<sim::Value>& args, const std::string& source);
     void nullCallback(std::string_view name, std::string_view where);
+    // 1.12.26 : les fichiers et les ressources des scripts (HmiRuntimeFiles.cpp) ; une raison dite une fois a la Console.
+    bool fileOp(std::string_view op, const std::vector<std::string>& args, sim::Environment::FileResult& out, std::string& why);
+    void fileFailed(const std::string& op, const std::string& why);
     bool callFunction(const HmiFunction&, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result,
                       std::vector<std::pair<std::string, sim::Value>>* outputs = nullptr);
     std::map<std::string, Prepared, std::less<>> programs_;   // par source

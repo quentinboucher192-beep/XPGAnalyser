@@ -1066,6 +1066,9 @@ private:
             if (u == "SWAP" || u == "EXCHANGE")             // 1.12.16 : elles ecrivent des variables
                 problem(u + (u == "SWAP" ? " \xC3\xA9" "change deux variables" : " \xC3\xA9" "crit sa variable")
                         + " : une expression ne change rien ; fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB)");
+            else if (sim::lib::changesFiles(u))             // 1.12.26 : FILE_WRITE, FILE_DELETE, DIR_CREATE...
+                problem(u + " change un fichier : une expression ne fait que lire ; fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9"
+                            "cuter un script \xC2\xBB)");
             else if (nat->writes || u == "TUPLE_UNPACK" || u == "LIST_COPY" || u == "LIST_TRANSFORM")
                 problem(u + " change son objet : une expression en lit une copie et ne change rien ; "
                             "fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB)");
@@ -1084,6 +1087,7 @@ private:
             // lecture des fx a deja ote le <T> (templatesAsValues), le resultat reste ouvert.
             if (sim::lib::castTemplate(u)) r.type = T::Unknown;
             if (ret == "INT" || ret == "REAL" || (ret == "comme IN" && nat->group != "utility")) r.type = T::Num;    // 1.12.16 : YEAR, FMOD, CEIL, BYTESWAP...
+            if (ret == "LINT") r.type = T::Num;                                                                         // 1.12.26 : FILE_SIZE
             return r;
         }
         // 1.12.4 : les fonctions des listes, des vecteurs, des MAP et des tableaux (JOIN, LIST_COUNT,

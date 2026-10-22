@@ -3024,6 +3024,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
                                      8.0, ok ? ui::StatusBar::Severity::Success : ui::StatusBar::Severity::Warning);
         return ok;
     };
+    hooks.projectFolder = [this] { return host_.projectFolder ? host_.projectFolder() : std::string{}; };   // 1.12.26
     // ---- Lot API 8 : les exports qui demandent ou ----
     //  Un export parti d'un geste de l'operateur, l'option cochee (le moteur en
     //  decide) : l'hote pose la question et ecrit a la reponse ; le moteur

@@ -594,6 +594,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiRuntimeSimPage.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeSlaves.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeSlow.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeFiles.cpp" />
     <ClCompile Include="src\hmi\HmiScriptCheck.cpp" />
     <ClCompile Include="src\hmi\HmiScriptCheck110.cpp" />
     <ClCompile Include="src\hmi\HmiScriptFile.cpp" />

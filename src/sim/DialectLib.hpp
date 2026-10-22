@@ -138,7 +138,8 @@ struct NativeInfo {
     bool             arrayOk{false};        // elle lit aussi un ARRAY
     bool             member{false};         // son dernier argument facultatif est un membre ('Poids')
     std::string_view group;                 // "liste", "map", "tuple", "numeric", "bits" ; 1.12.7 : "set", "ring" ;
-                                            // 1.12.16 : "math", "texte", "date", "utility"
+                                            // 1.12.16 : "math", "texte", "date", "utility" ;
+                                            // 1.12.26 : "fichiers"
     std::string_view signature;             // "LIST_SET(L, i, x) : BOOL"
     std::string_view summary;
 };
@@ -148,6 +149,9 @@ struct NativeInfo {
 [[nodiscard]] bool oldListAcceptsArray(std::string_view name) noexcept;
 // Les natives LIST_ et VECTOR_ d'avant qui changent la taille (un ARRAY : refuse).
 [[nodiscard]] bool oldListResizes(std::string_view name) noexcept;
+// 1.12.26 : les natives de fichiers qui changent le disque (FILE_WRITE, FILE_DELETE, DIR_CREATE, RESOURCE_EXTRACT...) :
+// une expression (fx) les refuse, elle ne fait que lire.
+[[nodiscard]] bool changesFiles(std::string_view name) noexcept;
 
 // ---------------------------------------------------------------- veux-tu dire ? ---
 // " \xE2\x80\x94 veux-tu dire MAX ?" (le plus proche, a 2 ou 3 lettres pres) ; "" : aucun.

@@ -67,6 +67,12 @@ const ShelfDef kShelves[] = {
     {"conteneurs/cumuls", "Cumuls et pliages", "Plier, cumuler, les \xC3\xA9" "carts entre voisins, remplir d'une suite (<numeric>).", false},
     {"conversions", "Conversions", "D'un type \xC3\xA0 un autre : TO_\xE2\x80\xA6 depuis n'importe quel type, X_TO_Y d'un type pr\xC3\xA9" "cis.", true},
     {"conversions/to", "Vers un type : TO_\xE2\x80\xA6", "La valeur convertie vers ce type, quel que soit son type de d\xC3\xA9part.", false},
+    {"fichiers", "Fichiers", "Lire et \xC3\xA9" "crire des fichiers, les dossiers, les chemins, les ressources du projet (<filesystem>).", false},
+    {"fichiers/lire", "Lire", "Le texte d'un fichier, ses lignes ; est-il l\xC3\xA0, sa taille, sa date ; pourquoi \xC3\xA7" "a a \xC3\xA9" "chou\xC3\xA9.", false},
+    {"fichiers/ecrire", "\xC3\x89" "crire, copier, supprimer", "\xC3\x89" "crire, ajouter \xC3\xA0 la fin, une ligne de plus ; copier, d\xC3\xA9placer, supprimer.", false},
+    {"fichiers/dossiers", "Dossiers", "Cr\xC3\xA9" "er, lister, supprimer un dossier ; le dossier donnees/ du projet.", false},
+    {"fichiers/chemins", "Chemins", "Assembler un chemin ; le nom, l'extension, le dossier d'un chemin.", false},
+    {"fichiers/ressources", "Ressources du projet", "Lire une ressource texte du projet, la liste des ressources, en tirer une copie.", false},
     {"ihm", "L'IHM (IHM_)", "Ce que l'IHM fait en marche : naviguer, ouvrir une popup, les utilisateurs, les alarmes\xE2\x80\xA6", false},
     {"ihm/nav", "Navigation et vues", "Afficher une vue, revenir, l'accueil, le nom de la vue montr\xC3\xA9" "e.", false},
     {"ihm/popup", "Popups", "Ouvrir, remplacer, centrer, fermer une popup.", false},
@@ -118,6 +124,11 @@ const std::vector<Rule>& rules() {
         {"conv", "conversions/to", {}},
         {"ref", "references", {}},
         {"utility", "references", {}},
+        {"fichiers", "fichiers/lire", {"FILE_READ", "FILE_READ_LINES", "FILE_EXISTS", "FILE_SIZE", "FILE_TIME", "FILE_ERROR"}},   // 1.12.26
+        {"fichiers", "fichiers/ecrire", {"FILE_"}},
+        {"fichiers", "fichiers/dossiers", {"DIR_"}},
+        {"fichiers", "fichiers/chemins", {"PATH_"}},
+        {"fichiers", "fichiers/ressources", {}},
         {"nav", "ihm/nav", {}},
         {"popup", "ihm/popup", {}},
         {"user", "ihm/user", {}},
@@ -413,6 +424,7 @@ std::string_view cppHeader(const Function& f) noexcept {
     if (f.category == "limits") return "<limits>";
     if (f.category == "numbers") return "<numbers>";
     if (f.category == "utility") return "<utility>";
+    if (f.category == "fichiers") return f.name.rfind("RESOURCE_", 0) == 0 ? std::string_view{} : std::string_view("<filesystem>");   // 1.12.26
     return {};
 }
 

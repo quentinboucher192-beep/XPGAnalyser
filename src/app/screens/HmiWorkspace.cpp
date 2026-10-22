@@ -1255,6 +1255,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         host.resource = [this](const hmi::ResourceRequest& rq) { askHmiRuntimeResource(rq); };
         // Lot 11 : un export va dans exports/ du dossier du projet.
         host.exportFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeHmiExport(rq, where); };
+        host.projectFolder = [this] { return app_.projectFolder(); };       // 1.12.26 : les fichiers des scripts
         // ---- Lot API 8 : les exports qui demandent ou ----
         // Lance par un geste de l'operateur (le bouton d'export, l'action Exporter,
         // IHM_EXPORTER) : le dialogue du lot 7, puis l'ecriture a l'endroit choisi.
