@@ -850,6 +850,9 @@
     <ClCompile Include="src\hmi\HmiVersionState.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiWhy.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\project\MacroSpecWriter.cpp">
       <Filter>project</Filter>
     </ClCompile>
@@ -2216,6 +2219,9 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiVersionState.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiWhy.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\project\MacroSpecWriter.hpp">

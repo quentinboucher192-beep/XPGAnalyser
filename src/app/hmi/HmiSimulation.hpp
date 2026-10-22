@@ -32,6 +32,7 @@
 #include "../../hmi/HmiLive.hpp"
 #include "../../hmi/HmiRuntime.hpp"
 #include "../../hmi/HmiScenarios.hpp"          // lot 13 : les essais
+#include "../../hmi/HmiWhy.hpp"                // 1.12.27 : Pourquoi ?
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -564,7 +565,17 @@ public:
     // Lot 18 : Jumeaux (ce que font les esclaves simules : animer, la zone, forcer).
     // 1.11.5 : Variables API apres Variables IHM (les deux en arbre, avec la recherche et le forcage).
     // 1.11.24 : plus d'onglets Journal, Alarmes ni Recettes (la Console du panneau du bas les dit).
-    enum Tab : std::size_t { TabValues = 0, TabVariables = 1, TabApiVariables = 2, TabPerf = 3, TabTwins = 4 };
+    // 1.12.27 : Pourquoi ? avant Popups (le dernier).
+    enum Tab : std::size_t { TabValues = 0, TabVariables = 1, TabApiVariables = 2, TabPerf = 3, TabTwins = 4, TabWhy = 5 };
+    // 1.12.27 : « POURQUOI ? » - l'onglet qui dit ce que montre un objet de la vue en marche et
+    // pourquoi : chaque propriete calculee, sa formule, la valeur de chaque terme, l'etat retenu
+    // (« allume : #2ECC71 », « etat 3 sur 3 : 2 = Defaut »). Le clic droit sur l'objet > Pourquoi ?
+    // le choisit (ou ceci, `view` : sa vue, popup comprise) ; l'onglet suit la marche a chaque image.
+    // Faux : pas d'objet a cet identifiant dans la vue.
+    bool explainObject(hmi::Id view, hmi::Id object);
+    [[nodiscard]] const hmi::why::Report& whyReport() const noexcept { return whyReport_; }
+    [[nodiscard]] ui::TableView& whyTable() noexcept { return *whyTable_; }
+    [[nodiscard]] bool whyGone() const noexcept { return whyGone_; }
     [[nodiscard]] HmiTwinValues& twins() noexcept { return *twins_; }
     // 1.11.5 : les onglets Variables IHM et Variables API (pour les scripts et les tests).
     [[nodiscard]] HmiSimVarTree& ihmVariables() noexcept { return *ihmVars_; }
@@ -889,6 +900,17 @@ private:
     void viewMenuChosen(int id);
     void runMenuKey(const std::string& key);  // une entree d'un menu (la vue, les Expressions)
     [[nodiscard]] std::vector<ui::PopupMenu::Item> exprMenuItems();
+    // 1.12.27 : Pourquoi ?
+    void refreshWhy();
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> whyMenuItems();
+    hmi::Id                          whyView_{hmi::kNoId}, whyObject_{hmi::kNoId};
+    hmi::Id                          whySource_{hmi::kNoId};   // l'objet du projet (un enfant de symbole : son instance)
+    hmi::LiveView                    whyLive_;
+    hmi::why::Report                 whyReport_;
+    bool                             whyGone_{false};
+    ui::TableView*                   whyTable_{nullptr};
+    ui::Widget*                      whyPage_{nullptr};
+    std::shared_ptr<ui::ITableModel> whyModel_;
     core::ConnectionScope links_;
 };
 

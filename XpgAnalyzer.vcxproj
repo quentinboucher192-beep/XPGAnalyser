@@ -405,6 +405,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\VersionClose.cpp" />
     <ClCompile Include="src\app\screens\IconWorkspace.cpp" />
     <ClCompile Include="src\hmi\HmiVersionState.cpp" />
+    <ClCompile Include="src\hmi\HmiWhy.cpp" />
     <ClCompile Include="src\project\MacroSpecWriter.cpp" />
     <ClCompile Include="src\project\ProjectIcon.cpp" />
     <ClCompile Include="src\app\ApiTrails.cpp" />
@@ -867,6 +868,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ThemeGallery.hpp" />
     <ClInclude Include="src\app\VersionClose.hpp" />
     <ClInclude Include="src\hmi\HmiVersionState.hpp" />
+    <ClInclude Include="src\hmi\HmiWhy.hpp" />
     <ClInclude Include="src\project\MacroSpecWriter.hpp" />
     <ClInclude Include="src\project\ProjectIcon.hpp" />
     <ClInclude Include="src\app\ApiTrails.hpp" />

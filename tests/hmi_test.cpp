@@ -67,6 +67,7 @@
 #include "../src/hmi/HmiDesign.hpp"
 #include "../src/hmi/HmiDuplicate.hpp"   // 1.10.2 (chantier D)
 #include "../src/hmi/HmiMarkers.hpp"     // 1.11 (REP) : le lecteur des reperes $...$
+#include "../src/hmi/HmiWhy.hpp"         // 1.12.27 : Pourquoi ?
 #include "../src/hmi/HmiApiVars.hpp"     // 1.11.1 (API-M) : les variables de l'automate sous API.
 #include "../src/hmi/HmiPolicy.hpp"
 #include "../src/hmi/HmiSignature.hpp"
@@ -29305,8 +29306,116 @@ void reglagePid11224() {
     check(csv.rfind("heure;consigne;mesure", 0) == 0 && std::count(csv.begin(), csv.end(), '\n') > 10, "l'export CSV : une ligne par minute");
 }
 
+// 1.12.27 : « POURQUOI ? » - les termes d'une formule, la valeur de chacun, l'etat retenu.
+void pourquoi11227() {
+    std::printf("1.12.27 : Pourquoi ? (les termes, leurs valeurs, l'etat retenu)\n");
+    namespace w = hmi::why;
+    const auto has = [](const std::vector<std::string>& v, const std::string& x) { return std::find(v.begin(), v.end(), x) != v.end(); };
+    const auto join = [](const std::vector<std::string>& v) {
+        std::string s;
+        for (const auto& x : v) s += (s.empty() ? "" : " | ") + x;
+        return s;
+    };
+    const auto t1 = w::termsOf("=Marche AND NOT Defaut AND (Niveau > 80)");
+    check(t1.size() == 5 && t1[0] == "Marche" && t1[1] == "NOT Defaut" && t1[2] == "Niveau > 80" && t1[3] == "Defaut" && t1[4] == "Niveau",
+          "les operandes du AND dans l'ordre, puis les noms lus (" + join(t1) + ")");
+    const auto t2 = w::termsOf("Pompes[i + 1].Temp >= Seuil * 1.2");
+    check(t2.size() >= 4 && t2[0] == "Pompes[i + 1].Temp" && t2[1] == "Seuil * 1.2" && has(t2, "i") && has(t2, "Seuil"),
+          "une comparaison : ses deux cotes, puis les noms (l'indice aussi) (" + join(t2) + ")");
+    check(w::termsOf("Marche").empty(), "une formule d'un seul nom : rien de plus a dire que sa valeur");
+    const auto t3 = w::termsOf("Mode = 2 ? Consigne_Auto : Consigne_Manu");
+    check(!t3.empty() && t3[0] == "Mode = 2" && has(t3, "Consigne_Auto"), "un ? : : la condition d'abord (" + join(t3) + ")");
+    const auto names = w::namesOf("ABS(Consigne - Pression) < T#2s + Liste.LENGTH() AND Mode = T_MODE#Auto AND Nom = 'a.b' AND $V[0]$.Etat");
+    check(names == std::vector<std::string>{"Consigne", "Pression", "Liste", "Mode", "Nom", "V[0].Etat"} || names == std::vector<std::string>{"Consigne", "Pression", "Liste", "Mode", "Nom", "V[0]"},
+          "les noms : sans les fonctions, mots cles, litteraux types ni textes (" + join(names) + ")");
+    const auto holes = w::holesOf("Pression : {PT1:0.0} bar, {{brut}}, {Mode}");
+    check(holes == std::vector<std::string>{"PT1", "Mode"}, "les trous d'un texte, sans leur format (" + join(holes) + ")");
+
+    // Un voyant, un voyant multi-etats et un texte, evalues comme en marche.
+    Project p;
+    View v = makeView(p, "Vue_Pompe");
+    const Id voy = edit::add(p, v, Kind::Indicator, 10, 10);
+    v.object(voy)->name = "Voyant_P1";
+    v.object(voy)->setExpr("value", "Marche AND NOT Defaut");
+    v.object(voy)->setExpr("visible", "Niveau > 80");
+    const Id ms = edit::add(p, v, Kind::MultiStateIndicator, 10, 60);
+    v.object(ms)->name = "Etat_P1";
+    v.object(ms)->setExpr("value", conditionChain({"Defaut", "Marche"}));
+    const Id txt = edit::add(p, v, Kind::Text, 10, 120);
+    v.object(txt)->set("text", "Niveau : {Niveau:0.0} %");
+    const Id fixe = edit::add(p, v, Kind::Rectangle, 10, 160);
+    FakePlc plc;
+    plc.values["Marche"] = sim::Value::boolean(true);
+    plc.values["Defaut"] = sim::Value::boolean(false);
+    plc.values["Niveau"] = sim::Value::real(85.0);
+    LiveView live;
+    live.bind(v);
+    std::vector<LiveValue> values;
+    View shown = live.evaluate(plc, &values);
+    const auto rep = w::explain(*shown.object(voy), values, plc);
+    const auto item = [](const w::Report& r, const std::string& key) -> const w::Item* {
+        for (const auto& it : r.items) if (it.key == key) return &it;
+        return nullptr;
+    };
+    const auto* value = item(rep, "value");
+    const auto* visible = item(rep, "visible");
+    check(rep.items.size() == 2 && value && visible && rep.name == "Voyant_P1", "le voyant : deux proprietes calculees (value, visible)");
+    if (value) {
+        check(valueOn(value->value) && value->state.rfind("allum", 0) == 0 && value->state.find("#2ECC71") != std::string::npos,
+              "value vraie : l'etat retenu - allume, sa couleur (" + value->state + ")");
+        const auto term = [&](const std::string& t) -> const w::Term* {
+            for (const auto& x : value->terms) if (x.text == t) return &x;
+            return nullptr;
+        };
+        const auto* marche = term("Marche");
+        const auto* notDefaut = term("NOT Defaut");
+        const auto* defaut = term("Defaut");
+        check(marche && marche->name && valueOn(marche->value) && notDefaut && !notDefaut->name && valueOn(notDefaut->value) && defaut
+                  && defaut->name && !valueOn(defaut->value) && !defaut->error,
+              "chaque terme a sa valeur : Marche vrai, NOT Defaut vrai, Defaut faux (les noms se forcent)");
+    }
+    if (visible) {
+        check(visible->state == "visible" && !visible->terms.empty() && visible->terms[0].text == "Niveau" && visible->terms[0].value.rfind("85", 0) == 0,
+              "visible : Niveau > 80, Niveau = 85");
+    }
+    const auto ms1 = w::explain(*shown.object(ms), values, plc);
+    const auto* msv = item(ms1, "value");
+    check(msv && msv->state.find("condition 2 vraie (Marche)") != std::string::npos && msv->state.find("\xC3\xA9tat 3 sur 3") != std::string::npos,
+          "multi-etats : la condition vraie, puis l'etat retenu (" + (msv ? msv->state : std::string("rien")) + ")");
+    plc.values["Defaut"] = sim::Value::boolean(true);
+    shown = live.evaluate(plc, &values);
+    const auto ms2 = w::explain(*shown.object(ms), values, plc);
+    const auto* msv2 = item(ms2, "value");
+    check(msv2 && msv2->state.find("condition 1 vraie (Defaut)") != std::string::npos && msv2->state.find("\xC3\xA9tat 2 sur 3") != std::string::npos,
+          "Defaut vient : la condition 1 l'emporte (" + (msv2 ? msv2->state : std::string("rien")) + ")");
+    const auto rv = w::explain(*shown.object(voy), values, plc);
+    const auto* vv = item(rv, "value");
+    check(vv && !valueOn(vv->value) && vv->state.rfind("\xC3\xA9teint", 0) == 0, "le voyant s'eteint : l'etat retenu le dit");
+    const auto rt = w::explain(*shown.object(txt), values, plc);
+    check(rt.items.size() == 1 && rt.items[0].text && rt.items[0].terms.size() == 1 && rt.items[0].terms[0].text == "Niveau"
+              && rt.items[0].terms[0].name,
+          "un texte a trous : ses trous, un a un");
+    check(w::explain(*shown.object(fixe), values, plc).items.empty(), "un objet sans formule : rien ne se calcule");
+    const std::string text = w::toText(rv);
+    check(text.find("Voyant_P1") != std::string::npos && text.find("Defaut = TRUE") != std::string::npos, "le rapport en texte (Copier)");
+    // Une formule fausse : l'erreur du terme.
+    v.object(voy)->setExpr("value", "Marche AND Inconnue");
+    live.bind(v);
+    shown = live.evaluate(plc, &values);
+    const auto bad = w::explain(*shown.object(voy), values, plc);
+    const auto* bv = item(bad, "value");
+    bool unknown = false;
+    for (const auto& t : bv ? bv->terms : std::vector<w::Term>{}) unknown = unknown || (t.text == "Inconnue" && t.error);
+    check(bv && bv->error && unknown, "un nom inconnu : la propriete et son terme en erreur");
+}
+
 int main(int argc, char** argv) {
     // 1.12.17 : HMI_TEST_1217=1 - les performances dans le temps, les lenteurs, seules.
+    if (const char* only = std::getenv("HMI_TEST_11227"); only && *only == '1') {   // 1.12.27 : Pourquoi ?, seul
+        pourquoi11227();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     if (const char* only = std::getenv("HMI_TEST_1217"); only && *only == '1') {
         lenteurs1217();
         tableauEntier1217();
@@ -29601,6 +29710,7 @@ int main(int argc, char** argv) {
     clavierSouris11123();             // 1.11.23 : la souris, le clavier, les raccourcis des vues
     validerSaisies11123();            // 1.11.23 : Valider les saisies (le bouton Valider de la popup consigne)
     enumsProprietes1121();            // 1.12.1 : les enumerations natives des proprietes des objets
+    pourquoi11227();                  // 1.12.27 : Pourquoi ? (les termes, leurs valeurs, l'etat retenu)
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

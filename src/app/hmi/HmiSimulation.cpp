@@ -574,6 +574,84 @@ private:
     ui::TableView* table_{nullptr};
 };
 
+// 1.12.27 : LES LIGNES DE L'ONGLET POURQUOI ? - chaque propriete calculee (en gras), son etat
+// retenu, puis ses termes (en retrait) ; les valeurs en erreur en orange.
+class WhyRows final : public ui::ITableModel {
+public:
+    struct Line {
+        std::string   a, b, c;
+        ui::CellStyle first;
+        bool          error{false};
+        std::size_t   item{0};
+        int           term{-1};      // -1 : la propriete (ou son etat)
+        bool          state{false};
+    };
+    std::vector<Line> lines;
+    [[nodiscard]] std::size_t rowCount() const override { return lines.size(); }
+    [[nodiscard]] std::size_t columnCount() const override { return 3; }
+    [[nodiscard]] std::string headerText(std::size_t c) const override {
+        return c == 0 ? std::string("Ce qui compte") : c == 1 ? std::string("Formule ou terme") : std::string("Maintenant");
+    }
+    [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
+        if (r >= lines.size()) return {};
+        return c == 0 ? lines[r].a : c == 1 ? lines[r].b : lines[r].c;
+    }
+    [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
+        if (r >= lines.size()) return {};
+        const auto& l = lines[r];
+        if (c == 0) return l.first;
+        ui::CellStyle cs;
+        if (c == 1 && l.term < 0 && !l.state) cs.monospace = true;
+        if (c == 2 && l.error) cs.fgTone = ui::Tone::Warning;
+        if (l.state) cs.fgTone = ui::Tone::Accent;
+        if (l.term < 0 && !l.state && c == 2) cs.bold = true;
+        return cs;
+    }
+    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
+};
+
+// La page Pourquoi ? : en tete l'objet (ou comment en choisir un) et Copier, puis les lignes.
+class WhyPage final : public ui::Widget {
+public:
+    WhyPage(std::string id, std::unique_ptr<ui::TableView> table) : ui::Widget(std::move(id)) {
+        auto copy = std::make_unique<ui::Button>("Copier", this->id() + ".copier");
+        copy->setStyle(ui::Button::Style::Flat);
+        copy->setTooltip("Le rapport en texte, dans le presse-papiers (un message, un ticket)");
+        copy_ = &static_cast<ui::Button&>(addChild(std::move(copy)));
+        table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
+    }
+    [[nodiscard]] ui::Button& copy() noexcept { return *copy_; }
+    void setHead(std::string head, bool warn) {
+        if (head == head_ && warn == warn_) return;
+        head_ = std::move(head);
+        warn_ = warn;
+        invalidate();
+    }
+    [[nodiscard]] const std::string& head() const noexcept { return head_; }
+protected:
+    void onLayout() override {
+        const auto b = bounds();
+        const float w = std::min(std::max(0.f, b.w - 16.f), std::max(80.f, copy_->sizeHint().preferred.w));
+        copy_->setBounds({b.x + b.w - 8.f - w, b.y + 4.f, w, 26.f});
+        table_->setBounds({b.x, b.y + 34.f, b.w, std::max(0.f, b.h - 34.f)});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto& c = ctx.theme.color;
+        const auto b = bounds();
+        ctx.r.fillRect({b.x, b.y, b.w, 34.f}, c.panelBg);
+        const gfx::FontId font = ctx.theme.font.smallUi;
+        const float room = b.w - 28.f - copy_->bounds().w;
+        if (room > 60.f)
+            ctx.r.drawText({b.x + 10.f, b.y + (34.f - ctx.r.lineHeight(font)) / 2.f}, simmark::fitText(ctx.r, head_, font, room), font,
+                           warn_ ? c.warning : c.textMuted);
+    }
+private:
+    ui::Button*    copy_{nullptr};
+    ui::TableView* table_{nullptr};
+    std::string    head_;
+    bool           warn_{false};
+};
+
 } // namespace
 
 // ------------------------------------------------------------ le dessin ----
@@ -2957,6 +3035,39 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         twinsCtl_->attach(*twins_);
         tabs->addTab(ui::TabControl::Tab{"Esclaves simul\xC3\xA9s", ui::Icon::Play, false, false}, std::move(twins));
     }
+    {
+        // 1.12.27 : Pourquoi ? - ce que montre l'objet choisi (clic droit > Pourquoi ?), et pourquoi.
+        auto table = std::make_unique<ui::TableView>(base + ".pourquoi");
+        table->setColumns({{"Ce qui compte", 170.f}, {"Formule ou terme", 220.f}, {"Maintenant", 150.f}});
+        table->setSelectionMode(ui::SelectionMode::Single);
+        table->setExtraContextOnly(true);
+        table->setExtraContextItems([this] { return whyMenuItems(); });
+        links_ += table->contextAction->connect([this](int choice) {
+            if (choice >= 1000 && static_cast<std::size_t>(choice - 1000) < viewMenuGo_.size()) runMenuKey(viewMenuGo_[static_cast<std::size_t>(choice - 1000)]);
+        });
+        whyTable_ = table.get();
+        // Le double clic sur un nom lu : le forcer (comme dans Variables IHM).
+        links_ += table->activated->connect([this](ui::RowIndex r) {
+            const auto* rows = static_cast<const WhyRows*>(whyModel_.get());
+            if (!rows || r >= rows->lines.size()) return;
+            const auto& l = rows->lines[r];
+            if (l.item >= whyReport_.items.size() || l.term < 0) return;
+            const auto& item = whyReport_.items[l.item];
+            if (static_cast<std::size_t>(l.term) < item.terms.size() && item.terms[static_cast<std::size_t>(l.term)].name)
+                runMenuKey("forcer:" + item.terms[static_cast<std::size_t>(l.term)].text);
+        });
+        auto page = std::make_unique<WhyPage>(base + ".pourquoiPage", std::move(table));
+        links_ += page->copy().clicked->connect([this] {
+            if (whyObject_ == kNoId) return;
+            ui::setClipboardText(hmi::why::toText(whyReport_));
+            if (status_) status_->setTransientMessage("Pourquoi ? : le rapport de " + whyReport_.name + " est copi\xC3\xA9.", 5.0,
+                                                      ui::StatusBar::Severity::Success);
+        });
+        whyPage_ = page.get();
+        tabs->addTab(ui::TabControl::Tab{"Pourquoi ?", ui::Icon::Help, false, false}, std::move(page));
+        whyModel_ = std::make_shared<WhyRows>();
+        whyTable_->setModel(whyModel_);
+    }
     // 1.9 : les popups ouvertes et les copies de leurs parametres (HmiParamPanes) - le dernier onglet.
     tabs->addTab(ui::TabControl::Tab{"Popups", ui::Icon::Document, false, false}, hmiparams::makePopupsTab(base + ".popups"));
     tabs->setCurrentIndex(0);
@@ -4573,6 +4684,8 @@ void HmiSimulationPane::refreshPane() {
         }
         values_.push_back(std::move(lv));
     }
+    // 1.12.27 : Pourquoi ? - l'objet choisi, recalcule a chaque image quand l'onglet est montre.
+    if (whyObject_ != kNoId && tabs_ && tabs_->currentIndex() == TabWhy) refreshWhy();
     // Lot 13 : l'evaluation des expressions, et le dessin d'avant (mesure par le canevas).
     const bool painted = canvas_->paintCount() != paintSeen_;
     paintSeen_ = canvas_->paintCount();
@@ -4877,6 +4990,12 @@ void HmiSimulationPane::runMenuKey(const std::string& key) {
     } else if (key.rfind("copier:", 0) == 0) {
         ui::setClipboardText(key.substr(7));
         say("Copi\xC3\xA9 : " + key.substr(7), false);
+    } else if (const auto why = arg("pourquoi:"); !why.empty()) {   // 1.12.27
+        Id view = kNoId, obj = kNoId;
+        if (twoIds(why, view, obj) && !explainObject(view, obj)) say("Pourquoi ? : l'objet n'est plus \xC3\xA0 l'\xC3\xA9" "cran.", true);
+    } else if (key.rfind("copier-pourquoi", 0) == 0) {
+        ui::setClipboardText(hmi::why::toText(whyReport_));
+        say("Pourquoi ? : le rapport de " + whyReport_.name + " est copi\xC3\xA9.", false);
     } else if (const auto rest = arg("objet:"); !rest.empty()) {
         Id view = kNoId, obj = kNoId;
         if (twoIds(rest, view, obj) && host_.goToObject) host_.goToObject(view, obj);
@@ -4901,6 +5020,154 @@ void HmiSimulationPane::runMenuKey(const std::string& key) {
     } else if (key == "@deplier-tout" || key == "@replier-tout") {
         expandExpressions(key == "@deplier-tout");
     }
+}
+
+// ---- 1.12.27 : Pourquoi ? -------------------------------------------------------
+bool HmiSimulationPane::explainObject(Id view, Id object) {
+    const auto* v = runtime_.composedView(view);
+    if (!v || !v->object(object)) return false;
+    whyView_ = view;
+    whyObject_ = object;
+    // L'objet du projet : un enfant de symbole remonte a son instance (Aller a l'objet).
+    whySource_ = object;
+    for (int guard = 0; guard < 16 && (whySource_ & 0x80000000u) != 0; ++guard) {
+        const auto* p = v->object(whySource_);
+        if (!p || p->parent == kNoId) break;
+        whySource_ = p->parent;
+    }
+    whyLive_ = hmi::LiveView{};
+    whyGone_ = false;
+    if (tabs_) tabs_->setCurrentIndex(TabWhy);
+    refreshWhy();
+    return true;
+}
+
+void HmiSimulationPane::refreshWhy() {
+    auto* page = static_cast<WhyPage*>(whyPage_);
+    auto* rows = static_cast<WhyRows*>(whyModel_.get());
+    if (!page || !rows) return;
+    if (whyObject_ == kNoId) {
+        page->setHead("Clic droit sur un objet de la vue \xE2\x80\xBA Pourquoi ? : ce qu'il montre, ses formules, la valeur de chaque terme.", false);
+        return;
+    }
+    const auto* v = runtime_.composedView(whyView_);
+    const hmi::Object* source = v ? v->object(whyObject_) : nullptr;
+    if (!source) {
+        whyGone_ = true;
+        page->setHead((whyReport_.name.empty() ? std::string("L'objet") : whyReport_.name)
+                          + " n'est plus \xC3\xA0 l'\xC3\xA9" "cran (la vue a chang\xC3\xA9) : le dernier rapport reste ci-dessous.", true);
+        return;
+    }
+    whyGone_ = false;
+    if (!(whyLive_.source() == *v)) whyLive_.bind(*v);
+    std::vector<hmi::LiveValue> values;
+    auto& env = runtime_.environment();
+    const auto* scope = runtime_.viewScope(whyView_);
+    const auto shown = whyLive_.evaluate(env, &values, scope, now_ - runtime_.startedAt());
+    const hmi::Object* o = shown.object(whyObject_);
+    whyReport_ = hmi::why::explain(o ? *o : *source, values, env, scope);
+    const auto forced = [this](const std::string& path) {
+        return (ihmVars_ && ihmVars_->isForced(path)) || (apiVars_ && apiVars_->isForced(path));
+    };
+    std::vector<WhyRows::Line> lines;
+    for (std::size_t i = 0; i < whyReport_.items.size(); ++i) {
+        const auto& it = whyReport_.items[i];
+        WhyRows::Line head;
+        head.a = hmiPropertyLabel(source->kind, it.key);
+        if (head.a.empty()) head.a = it.key;
+        head.b = it.text ? it.formula : "=" + it.formula;
+        head.c = it.value;
+        head.error = it.error;
+        head.item = i;
+        head.first.bold = true;
+        head.first.icon = it.text ? ui::Icon::Document : ui::Icon::Code;
+        lines.push_back(std::move(head));
+        if (!it.state.empty()) {
+            WhyRows::Line st;
+            st.a = "\xE2\x86\x92 \xC3\xA9tat retenu";
+            st.b = it.state;
+            st.item = i;
+            st.state = true;
+            st.first.indent = 18.f;
+            st.first.fgTone = ui::Tone::Accent;
+            lines.push_back(std::move(st));
+        }
+        for (std::size_t k = 0; k < it.terms.size(); ++k) {
+            const auto& t = it.terms[k];
+            WhyRows::Line tl;
+            tl.a = t.name ? std::string("nom lu") : std::string("terme");
+            tl.b = t.text;
+            tl.c = t.value + (t.name && forced(t.text) ? std::string("  (forc\xC3\xA9" "e)") : std::string{});
+            tl.error = t.error;
+            tl.item = i;
+            tl.term = static_cast<int>(k);
+            tl.first.indent = 18.f;
+            tl.first.fgTone = ui::Tone::Muted;
+            lines.push_back(std::move(tl));
+        }
+    }
+    const bool changed = lines.size() != rows->lines.size();
+    rows->lines = std::move(lines);
+    page->setHead(whyReport_.items.empty()
+                      ? whyReport_.name + " (" + whyReport_.kind + ") : rien ne se calcule, ses propri\xC3\xA9t\xC3\xA9s sont fixes."
+                      : "Pourquoi ? " + whyReport_.name + " (" + whyReport_.kind + ") : " + std::to_string(whyReport_.items.size())
+                            + (whyReport_.items.size() > 1 ? " propri\xC3\xA9t\xC3\xA9s calcul\xC3\xA9" "es" : " propri\xC3\xA9t\xC3\xA9 calcul\xC3\xA9" "e")
+                            + ", leurs termes maintenant",
+                  false);
+    if (changed) whyTable_->setModel(whyModel_);
+    else whyTable_->invalidate();
+}
+
+std::vector<ui::PopupMenu::Item> HmiSimulationPane::whyMenuItems() {
+    viewMenuGo_.clear();
+    std::vector<ui::PopupMenu::Item> items;
+    const auto add = [&](ui::PopupMenu::Item it, std::string go) {
+        it.id = 1000 + static_cast<int>(viewMenuGo_.size());
+        viewMenuGo_.push_back(std::move(go));
+        items.push_back(std::move(it));
+    };
+    const auto* rows = static_cast<const WhyRows*>(whyModel_.get());
+    const auto sel = whyTable_ ? whyTable_->selectedModelRows() : std::vector<ui::RowIndex>{};
+    if (rows && sel.size() == 1 && sel.front() < rows->lines.size()) {
+        const auto& l = rows->lines[sel.front()];
+        if (l.item < whyReport_.items.size()) {
+            const auto& it = whyReport_.items[l.item];
+            const hmi::why::Term* t = l.term >= 0 && static_cast<std::size_t>(l.term) < it.terms.size() ? &it.terms[static_cast<std::size_t>(l.term)] : nullptr;
+            const std::string what = t ? t->text : it.formula;
+            const std::string value = t ? t->value : it.value;
+            items.push_back(ui::cmd::heading(what.size() > 48 ? what.substr(0, 46) + "\xE2\x80\xA6" : what, value));
+            const bool name = t && t->name;
+            HmiSimVarTree* vars = nullptr;
+            if (name && ihmVars_ && ihmVars_->valueText(t->text) != "-") vars = ihmVars_;
+            else if (name && apiVars_ && apiVars_->valueText(t->text) != "-") vars = apiVars_;
+            const std::string noName = name ? std::string("pas une variable de la simulation") : std::string("un calcul ne se force pas");
+            add(ui::cmd::item(ui::cmd::Id::Forcer, 0, vars != nullptr, noName), "forcer:" + what);
+            add(ui::cmd::item(ui::cmd::Id::Relacher, 0, vars && vars->isForced(what), "pas forc\xC3\xA9" "e"), "relacher:" + what);
+            {
+                auto follow = ui::cmd::item(ui::cmd::Id::SuivreCourbe, 0, name && static_cast<bool>(host_.follow),
+                                            name ? std::string("pas de courbe ici") : std::string("un calcul ne se suit pas"));
+                follow.note = "dans Simulation \xE2\x80\xBA Courbes";
+                add(std::move(follow), "suivre:" + what);
+            }
+            ui::PopupMenu::Item expr;
+            expr.label = "Ajouter aux expressions";
+            add(std::move(expr), "expr:" + what);
+            add(ui::cmd::item(ui::cmd::Id::CopierValeur, 0), "copier:" + value);
+            items.push_back(ui::cmd::separator());
+        }
+    }
+    ui::PopupMenu::Item all;
+    all.label = "Copier le rapport";
+    all.icon = ui::Icon::Copy;
+    all.enabled = whyObject_ != kNoId;
+    if (!all.enabled) all.disabledReason = "aucun objet choisi";
+    add(std::move(all), "copier-pourquoi");
+    ui::PopupMenu::Item go;
+    go.label = "Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur";
+    go.enabled = whyObject_ != kNoId && static_cast<bool>(host_.goToObject);
+    if (!go.enabled) go.disabledReason = "pas ici";
+    add(std::move(go), "objet:" + std::to_string(whyView_) + ":" + std::to_string(whySource_));
+    return items;
 }
 
 bool HmiSimulationPane::openViewMenu(gfx::Point at) {
@@ -5001,6 +5268,12 @@ bool HmiSimulationPane::openViewMenu(gfx::Point at) {
             }
             add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);
         }
+    }
+    if (!station_) {   // 1.12.27 : Pourquoi ? - ce que montre l'objet, ses formules, la valeur de chaque terme
+        auto why = entry("Pourquoi ?");
+        why.icon = ui::Icon::Help;
+        why.note = "dans l'onglet Pourquoi ?";
+        add(std::move(why), "pourquoi:" + std::to_string(view) + ":" + std::to_string(obj));
     }
     if (!viewMenu_) {
         viewMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".vueMenu")));

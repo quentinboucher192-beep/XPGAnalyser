@@ -3403,7 +3403,7 @@ void simulation_supervision() {
     {
         std::string titles;
         for (std::size_t i = 0; i < pane.tabs().tabCount(); ++i) titles += (titles.empty() ? "" : " | ") + pane.tabs().tab(i)->title;
-        check(titles == "Expressions | Variables IHM | Variables API | Performances | Esclaves simul\xC3\xA9s | Popups",
+        check(titles == "Expressions | Variables IHM | Variables API | Performances | Esclaves simul\xC3\xA9s | Pourquoi ? | Popups",   // 1.12.27
               "1.11.24 : les onglets de la simulation, sans Journal, Alarmes ni Recettes : " + titles);
     }
     // Deconnexion : 1.10.3 - le bouton a quitte la barre ; le clic droit sur la barre
@@ -3910,7 +3910,7 @@ void apercuDisposition1124() {
         check(titles(bas) == "Sorties,Console*+,Diagnostics", "en simulation : la Console, devant, li\xC3\xA9r\xC3\xA9" "e (" + titles(bas) + ")");
         check(cote && centre && cote->x > centre->x && titles(cote) == "Simulation \xC2\xB7 IHM*+" && dp::sketchBox(sim, "sim"),
               "la simulation c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, avec son panneau de droite (" + titles(cote) + ")");
-        check(titles(dp::sketchBox(sim, "sim")) == "Expressions,Variables IHM*,Performances+,Esclaves simul\xC3\xA9s,Popups",
+        check(titles(dp::sketchBox(sim, "sim")) == "Expressions,Variables IHM*,Performances+,Esclaves simul\xC3\xA9s,Pourquoi ?,Popups",
               "... ses onglets : Variables IHM devant, Performances seulement en simulation (" + titles(dp::sketchBox(sim, "sim")) + ")");
     }
     {
@@ -34911,6 +34911,102 @@ void touchesListes11227() {
     }
 }
 
+// 1.12.27 : « Pourquoi ? » dans la vue en marche - le clic droit sur l'objet, l'onglet, les termes en direct.
+void pourquoiSimulation11227() {
+    std::printf("1.12.27 : Pourquoi ? (la vue en marche, l'onglet, les termes en direct)\n");
+    installerPressePapiers();
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    for (const auto& [name, type] : {std::pair{"Marche", "BOOL"}, {"Defaut", "BOOL"}, {"Niveau", "REAL"}}) {
+        Variable var;
+        var.id = p.allocate();
+        var.name = name;
+        var.type = type;
+        p.programs.variables.push_back(var);
+    }
+    View v = makeView(p, "Vue_Pompe");
+    const Id voy = edit::add(p, v, Kind::Indicator, 100, 100);
+    v.object(voy)->name = "Voyant_P1";
+    v.object(voy)->setNumber("w", 60);
+    v.object(voy)->setNumber("h", 60);
+    v.object(voy)->setExpr("value", "Marche AND NOT Defaut");
+    p.config.startView = v.id;
+    p.views.push_back(v);
+    app::HmiSimulationHost host;
+    std::pair<Id, Id> went{kNoId, kNoId};
+    host.goToObject = [&went](Id view, Id object) { went = {view, object}; };
+    app::HmiSimulationPane pane("sim11227", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    auto paintAt = [&](double t) {
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    paintAt(0.0);
+    paintAt(0.1);
+    gfx::Rect r{};
+    check(pane.canvas().objectRect("Voyant_P1", r), "le voyant \xC3\xA0 l'\xC3\xA9" "cran");
+    const gfx::Point at{r.x + r.w * 0.5f, r.y + r.h * 0.5f};
+    pane.canvas().dispatch(ui::MouseDown{at, ui::MouseButton::Right, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{at, ui::MouseButton::Right, {}});
+    auto* vm = pane.viewMenu();
+    const ui::PopupMenu::Item* why = nullptr;
+    if (vm)
+        for (const auto& it : vm->items())
+            if (!it.separator && !it.heading && it.label == "Pourquoi ?") why = &it;
+    check(vm && vm->isOpen() && why && why->enabled, "le clic droit sur le voyant : Pourquoi ?");
+    if (!why) return;
+    vm->itemChosen->emit(why->id);
+    paintAt(0.2);
+    check(pane.tabs().currentIndex() == app::HmiSimulationPane::TabWhy, "Pourquoi ? : l'onglet s'ouvre");
+    const auto& rep = pane.whyReport();
+    check(rep.name == "Voyant_P1" && !rep.items.empty(), "le rapport du voyant");
+    const auto cellIs = [&](std::string_view col1, std::string_view prefix) {
+        const auto m = pane.whyTable().model();
+        for (std::size_t i = 0; m && i < m->rowCount(); ++i)
+            if (m->cellText(i, 1) == col1 && m->cellText(i, 2).rfind(prefix, 0) == 0) return true;
+        return false;
+    };
+    const auto stateHas = [&](std::string_view part) {
+        const auto m = pane.whyTable().model();
+        for (std::size_t i = 0; m && i < m->rowCount(); ++i)
+            if (m->cellText(i, 1).find(part) != std::string::npos) return true;
+        return false;
+    };
+    check(cellIs("=Marche AND NOT Defaut", "") && cellIs("Marche", "FALSE") && cellIs("NOT Defaut", "TRUE"),
+          "la propriete et ses termes, chacun avec sa valeur (Marche FALSE, NOT Defaut TRUE)");
+    check(stateHas("\xC3\xA9teint"), "l'etat retenu : eteint");
+    // En direct : Marche passe a vrai, l'onglet suit.
+    check(pane.ihmVariables().forcePath("Marche", "TRUE"), "Marche forcee a TRUE");
+    paintAt(0.4);
+    paintAt(0.6);
+    check(cellIs("Marche", "TRUE") && stateHas("allum"), "Marche forcee : le terme et l'etat suivent (allume)");
+    check(cellIs("Marche", "TRUE  (forc"), "le terme dit qu'il est forc\xC3\xA9");
+    // Le menu d'un terme : Forcer, Relacher, Copier la valeur.
+    {
+        const auto m = pane.whyTable().model();
+        std::size_t row = m ? m->rowCount() : 0;
+        for (std::size_t i = 0; m && i < m->rowCount(); ++i)
+            if (m->cellText(i, 1) == "Marche") row = i;
+        check(m && row < m->rowCount(), "la ligne du terme Marche");
+        pane.whyTable().selectModelRows({static_cast<ui::RowIndex>(row)});
+    }
+    const auto tb = pane.whyTable().bounds();
+    pane.whyTable().openContextMenu({tb.x + 40.f, tb.y + 40.f});
+    auto* cm = pane.whyTable().contextMenu();
+    bool relacher = false, copie = false;
+    for (const auto& it : cm ? cm->items() : std::vector<ui::PopupMenu::Item>{}) {
+        relacher = relacher || (it.label == "Rel\xC3\xA2" "cher" && it.enabled);
+        copie = copie || it.label == "Copier le rapport";
+    }
+    check(relacher && copie, "le menu d'un terme : Relacher (il est forc\xC3\xA9), Copier le rapport");
+    (void)pane.ihmVariables().unforcePath("Marche");
+    // Hors de l'onglet, rien ne se recalcule ; un objet inconnu est refuse.
+    check(!pane.explainObject(v.id, 987654), "un objet inconnu : refuse");
+}
+
 // 1.12.27 : l'apercu du style choisi (un bouton, un texte, un rectangle, un voyant allume et eteint) et sa pastille.
 void apercuStyles11227() {
     std::printf("1.12.27 : l'aper\xC3\xA7u des styles\n");
@@ -34995,6 +35091,7 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_11227"); only && *only == '1') {
         touchesListes11227();
         apercuStyles11227();
+        pourquoiSimulation11227();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -35354,6 +35451,7 @@ int main(int argc, char** argv) {
     v1219_inspecteur();                     // 1.12.19 : nombres, durees, formules de l'inspecteur
     touchesListes11227();                   // 1.12.27 : Suppr et Ctrl+D dans les listes
     apercuStyles11227();                    // 1.12.27 : l'apercu des styles
+    pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     v1219_cellules();                       // 1.12.19 (U3) : les cellules de tableau sous la meme regle
     v1219_modales();                        // 1.12.19 (U4) : les fenetres sous la meme regle
     v110_aide_saisie();                     // 1.10 (chantier K2) : l'aide a la saisie des scripts (S1, S2, enumerations)

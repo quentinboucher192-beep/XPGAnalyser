@@ -16129,6 +16129,15 @@ const std::vector<Topic>& topics() {
                          "fausse) ;", {}},
              {K::Bullet, "**Variables IHM** et **Variables API** : leurs valeurs du moment ;", {}},
              {K::Bullet, "**Performances** : le cycle de l'IHM, les scripts, le calcul, le dessin ;", {}},
+             {K::Bullet, "**Pourquoi ?** : clic droit sur un objet de la vue en marche \xE2\x80\xBA **Pourquoi ?** - ce qu'il "
+                         "montre et pourquoi, suivi \xC3\xA0 chaque image : chaque propri\xC3\xA9t\xC3\xA9 calcul\xC3\xA9" "e "
+                         "(sa formule, sa valeur), puis la valeur de **chaque terme** (les op\xC3\xA9randes d'un AND / OR, "
+                         "les deux c\xC3\xB4t\xC3\xA9s d'une comparaison, les conditions des \xC3\xA9tats, chaque nom lu, "
+                         "\xC2\xAB forc\xC3\xA9" "e \xC2\xBB s'il l'est) et **l'\xC3\xA9tat retenu** (\xC2\xAB allum\xC3\xA9 : "
+                         "#2ECC71 \xC2\xBB, \xC2\xAB condition 1 vraie (Defaut) ; \xC3\xA9tat 2 sur 3 \xC2\xBB, \xC2\xAB zone "
+                         "60..80 \xC2\xBB, \xC2\xAB cach\xC3\xA9 \xC2\xBB). Double clic sur un nom : le forcer ; clic droit : "
+                         "Forcer, Rel\xC3\xA2" "cher, Suivre sur la courbe, Ajouter aux expressions, Copier la valeur, Copier "
+                         "le rapport ;", {}},
              {K::Bullet, "**Esclaves simul\xC3\xA9s** (l'ancien onglet Jumeaux) : les esclaves rang\xC3\xA9s "
                          "par groupe - li\xC3\xA9 pr\xC3\xAAt, li\xC3\xA9 lu par l'IHM, seulement "
                          "simul\xC3\xA9 - et les valeurs simul\xC3\xA9" "es des esclaves (animer, la zone de "
