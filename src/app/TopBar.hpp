@@ -49,7 +49,8 @@ public:
     enum class Sim : std::uint8_t { Off, Stopped, Running, Paused, Halted };
     enum class Menu : std::uint8_t { None, Project, New, View, Help, Version,
                                      UndoList, Notices, Tasks,     // Lot API 8 : bandeau haut
-                                     Both };                       // 1.10 : "Les deux" (l'API et l'IHM)
+                                     Both,                         // 1.10 : "Les deux" (l'API et l'IHM)
+                                     Context };                    // 1.12.27 : le menu du clic droit
     struct Entry {
         std::string label;
         std::string shortcut;
@@ -126,6 +127,15 @@ public:
     [[nodiscard]] std::string actionForLabel(std::string_view label) const;
     // L'ancienne barre : { libelle, action }, dans son ordre.
     [[nodiscard]] static const std::vector<std::pair<std::string, std::string>>& legacyButtons();
+    // 1.12.27 : LE CLIC DROIT SUR LA BARRE ET SUR SES MENUS. Sur une partie (Projet, Annuler,
+    // Simuler, la cloche...) ou sur une entree d'un menu ouvert (Enregistrer sous..., un projet
+    // recent) : son nom en tete, Executer (ou Ouvrir le menu), Epingler dans Aller a / Faire
+    // (ou l'en retirer), Copier le nom, Raccourcis clavier..., Aide. Epingler envoie
+    // "bar.pin:<action>\t<libelle>" (retirer : "bar.unpin:...") ; l'ecran les garde, et la
+    // palette vide les montre en tete. `pinned` dit si une action est epinglee.
+    void setPinnedProvider(std::function<bool(std::string_view)> f) { pinned_ = std::move(f); }
+    void openContextMenu(gfx::Point at);                 // la partie sous `at` (ou la barre)
+    bool openEntryContextMenu(int popupId, gfx::Point at);   // une entree du menu ouvert
     // Une action est-elle joignable depuis la nouvelle barre (une partie ou une
     // entree de menu) ?
     [[nodiscard]] bool reaches(std::string_view action) const;
@@ -221,6 +231,9 @@ private:
     Menu                                 opened_{Menu::None};
     std::vector<std::string>             popupActions_;
     core::ConnectionScope                links_;
+    std::function<bool(std::string_view)> pinned_;      // 1.12.27
+    void openContext(const std::string& label, const std::string& shortcut, const std::string& action, Menu menu,
+                     bool canRun, gfx::Point at);         // 1.12.27
 
     std::string   name_{"Projet"}, state_;
     bool          modified_{false};

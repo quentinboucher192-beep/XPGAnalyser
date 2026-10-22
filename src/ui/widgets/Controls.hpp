@@ -1001,6 +1001,10 @@ namespace ui {
         // renumber the actions the caller connected.
         const core::SignalPtr<int> itemChosen = core::Signal<int>::create();
         const core::SignalPtr<>    dismissed = core::Signal<>::create();
+        // 1.12.27 : LE CLIC DROIT SUR UNE ENTREE (le menu principal, la barre du haut) : rendu a
+        // l'appelant (son id, ou). Vrai : il l'a pris (il ouvre le menu de cette entree a la
+        // place) ; faux, ou pas d'appelant : le clic droit la choisit, comme avant.
+        void setItemContextHandler(std::function<bool(int id, gfx::Point at)> handler) { itemContext_ = std::move(handler); }
 
     protected:
         void        onPaintOverlay(const PaintContext&) override;
@@ -1032,6 +1036,7 @@ namespace ui {
         std::size_t         keyCol_{ 0 };         // la colonne ou vont les fleches
         bool                cues_{ false };       // les lettres soulignees se voient
         Widget*             restoreFocus_{ nullptr };   // le clavier y revient a la fermeture
+        std::function<bool(int, gfx::Point)> itemContext_;   // 1.12.27
     };
 
 } // namespace ui

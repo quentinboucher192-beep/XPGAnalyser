@@ -461,7 +461,7 @@ core::Status StartupScreen::buildUi() {
                 case 3: renameSelected(); break;
                 case 4: forgetSelected(); break;
                 case 5: supprimerProjet(); break;
-                default: break;
+                default: pageMenuChosen(id); break;   // 1.12.27 : le menu de la page
             }
         });
     }
@@ -543,6 +543,13 @@ ui::EventResult StartupScreen::HandleEvent(const ui::InputEvent& ev) {
         t && t->utf8.find_first_not_of(' ') != std::string::npos && !page_->search().focused()
         && !page_->rail().pathField().focused() && !page_->sortBox().isOpen())
         page_->search().takeFocus();
+    // 1.12.27 : un clic droit que personne n'a pris (pas une carte, pas un champ) : le menu de la page.
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right) {
+        const bool menuWasOpen = cardMenu_ && cardMenu_->isOpen();
+        if (menu::WidgetMenu::HandleEvent(ev) == ui::EventResult::Consumed) return ui::EventResult::Consumed;
+        if (!menuWasOpen) showPageMenu(d->pos);
+        return ui::EventResult::Consumed;
+    }
     const auto* k = std::get_if<ui::KeyDown>(&ev);
     if (!k) return menu::WidgetMenu::HandleEvent(ev);
     if (handleKey(*k, true)) return ui::EventResult::Consumed;
@@ -594,10 +601,13 @@ bool StartupScreen::handleKey(const ui::KeyDown& k, bool beforeWidgets) {
         return true;
     }
     if (ui::isContextMenuKey(k)) {                     // 1.12.18 : Maj+F10, la touche Menu - le menu de la carte choisie
+        ui::KeyboardMenuScope scope;
         if (const int at = grid.selected(); at >= 0) {
             const auto r = grid.cardRect(at);
-            ui::KeyboardMenuScope scope;
             showCardMenu({r.x + 24.f, r.y + 28.f});
+        } else {                                       // 1.12.27 : sans carte, le menu de la page
+            const auto g = grid.bounds();
+            showPageMenu({g.x + 24.f, g.y + 28.f});
         }
         return true;
     }
@@ -1207,6 +1217,159 @@ void StartupScreen::showCardMenu(gfx::Point at) {
     cardMenu_->setItems(std::move(items));
     const auto surface = page_->bounds();
     cardMenu_->openAt(at, {surface.w, surface.h});
+}
+
+// 1.12.27 : le menu de la page (le menu principal), hors des cartes.
+namespace {
+enum : int {
+    kPageButton = 100, kPageNew, kPageOpen, kPageProjects, kPageSearch, kPageClear, kPageTutorial, kPageSettings,
+    kPageFolders, kPageHelp,
+    kPageFilter = 200,   // + le filtre
+    kPageSort = 220,     // + le tri
+    kPageTheme = 300,    // + le rang du theme
+};
+} // namespace
+
+void StartupScreen::showPageMenu(gfx::Point at) {
+    if (!cardMenu_ || !page_) return;
+    auto& page = *page_;
+    // Le panneau du projet choisi : le menu de sa carte.
+    if (page.selected() && page.detail().visible() && page.detail().bounds().contains(at)) {
+        showCardMenu(at);
+        return;
+    }
+    using Item = ui::PopupMenu::Item;
+    std::vector<Item> items;
+    const auto add = [&items](int id, std::string label, ui::Icon icon, std::string key = {}, std::string why = {}) {
+        Item it;
+        it.id = id;
+        it.label = std::move(label);
+        it.icon = icon;
+        it.shortcut = std::move(key);
+        it.enabled = why.empty();
+        it.disabledReason = std::move(why);
+        items.push_back(std::move(it));
+    };
+    const auto rule = [&items] {
+        Item it;
+        it.separator = true;
+        items.push_back(std::move(it));
+    };
+    const auto heading = [&items](std::string label, std::string right = {}) {
+        Item it;
+        it.heading = true;
+        it.label = std::move(label);
+        it.shortcut = std::move(right);
+        items.push_back(std::move(it));
+    };
+    // Le bouton sous la souris : son geste d'abord.
+    menuButton_ = nullptr;
+    auto& rail = page.rail();
+    start::StartButton* const buttons[] = {&rail.newCard(), &rail.openCard(), &rail.tutorialLink(), &rail.helpLink(),
+                                           &rail.settingsLink(), &rail.foldersLink(), &rail.autostartButton()};
+    for (auto* b : buttons)
+        if (b->visible() && b->bounds().contains(at) && !b->text().empty()) {
+            heading(b->text());
+            add(kPageButton, b->text(), ui::Icon::Play, b->hint() == ">" ? std::string{} : b->hint(),
+                b->enabled() ? std::string{} : std::string("pas maintenant"));
+            rule();
+            menuButton_ = b;
+            break;
+        }
+    if (!menuButton_) heading("Menu principal", core::productName());
+    add(kPageNew, "Nouveau projet\xE2\x80\xA6", ui::Icon::Plus, "Ctrl+N");
+    add(kPageOpen, "Ouvrir un projet\xE2\x80\xA6", ui::Icon::Open, "Ctrl+O");
+    add(kPageProjects, "Ouvrir le dossier des projets", ui::Icon::FolderOpen);
+    rule();
+    Item show;
+    show.label = "Afficher";
+    show.icon = ui::Icon::Filter;
+    for (std::size_t f = 0; f < start::kFilterCount; ++f) {
+        Item it;
+        it.id = kPageFilter + static_cast<int>(f);
+        it.label = start::filterLabel(static_cast<start::Filter>(f));
+        it.radio = true;
+        it.checked = page.filter() == static_cast<start::Filter>(f);
+        show.children.push_back(std::move(it));
+    }
+    items.push_back(std::move(show));
+    Item sort;
+    sort.label = "Trier";
+    sort.icon = ui::Icon::Sort;
+    const auto& sorts = page.sortBox().items();
+    for (std::size_t i = 0; i < sorts.size(); ++i) {
+        Item it;
+        it.id = kPageSort + static_cast<int>(i);
+        it.label = sorts[i].label;
+        it.radio = true;
+        it.checked = page.sort() == static_cast<start::Sort>(i);
+        sort.children.push_back(std::move(it));
+    }
+    items.push_back(std::move(sort));
+    Item theme;
+    theme.label = "Th\xC3\xA8me";
+    theme.icon = ui::Icon::Layers;
+    menuThemes_.clear();
+    for (const auto& t : ui::Theme::all()) {
+        Item it;
+        it.id = kPageTheme + static_cast<int>(menuThemes_.size());
+        it.label = t.label;
+        it.radio = true;
+        it.checked = ui::Theme::fold(t.key) == ui::Theme::fold(app_.theme().name);
+        theme.children.push_back(std::move(it));
+        menuThemes_.push_back(t.key);
+    }
+    items.push_back(std::move(theme));
+    rule();
+    add(kPageSearch, "Chercher un projet", ui::Icon::Search, "Ctrl+F");
+    if (!page.query().empty()) add(kPageClear, "Effacer la recherche", ui::Icon::Clear, "\xC3\x89" "chap");
+    rule();
+    add(kPageTutorial, "Didacticiel", ui::Icon::Play);
+    add(kPageSettings, "R\xC3\xA9glages\xE2\x80\xA6", ui::Icon::Settings);
+    add(kPageFolders, "Dossiers de l'application\xE2\x80\xA6", ui::Icon::Folder);
+    add(kPageHelp, "Aide", ui::Icon::Help, "F1");
+    cardMenu_->setItems(std::move(items));
+    const auto surface = page.bounds();
+    if (ui::KeyboardMenuScope::active()) cardMenu_->openFromKeyboard(at, {surface.w, surface.h});
+    else cardMenu_->openAt(at, {surface.w, surface.h});
+}
+
+void StartupScreen::pageMenuChosen(int id) {
+    if (!page_) return;
+    auto& page = *page_;
+    if (id >= kPageTheme) {
+        const auto i = static_cast<std::size_t>(id - kPageTheme);
+        if (i < menuThemes_.size()) chooseTheme(menuThemes_[i]);
+        return;
+    }
+    if (id >= kPageSort) {
+        if (id - kPageSort < static_cast<int>(page.sortBox().items().size())) page.setSort(static_cast<start::Sort>(id - kPageSort));
+        return;
+    }
+    if (id >= kPageFilter) {
+        if (id - kPageFilter < static_cast<int>(start::kFilterCount)) page.setFilter(static_cast<start::Filter>(id - kPageFilter));
+        return;
+    }
+    switch (id) {
+        case kPageButton:
+            if (menuButton_ && menuButton_->enabled()) menuButton_->clicked->emit();
+            break;
+        case kPageNew: newProject(); break;
+        case kPageOpen: openFileDialog(); break;
+        case kPageProjects:
+            if (const auto why = dossiers::ouvrirDansLeSysteme(App::projectsRoot().string()); !why.empty())
+                page.status().setTransientMessage("Ouvrir le dossier des projets : " + why, 6.0, StatusBar::Severity::Warning);
+            break;
+        case kPageSearch: page.search().takeFocus(); break;
+        case kPageClear: page.setQuery({}); break;
+        case kPageTutorial: showTutorial(); break;
+        case kPageSettings: showSettings(); break;
+        case kPageFolders:
+            if (claimDialog()) showFoldersDialog(app_);
+            break;
+        case kPageHelp: triggerAction("help.open"); break;
+        default: break;
+    }
 }
 
 void StartupScreen::supprimerProjet() {

@@ -341,4 +341,36 @@ void MainAnalysisScreen::topBarRememberGoTo(const GoToPanel::Result& r) {
 
 // topBarPalette : dans GoToWorkspace.cpp (il lui faut l'index d'Aller a, complet la seulement).
 
+// 1.12.27 : LES COMMANDES EPINGLEES dans Aller a / Faire (le clic droit sur la barre du haut ou sur
+// une entree de ses menus), retenues dans les reglages de l'utilisateur : "action\tlibelle", la
+// derniere epinglee en tete, douze au plus. La palette vide les montre avant les derniers choix.
+namespace {
+constexpr const char* kBarPinsKey = "aller.epingles";
+std::string pinAction(const std::string& line) { return line.substr(0, line.find('\t')); }
+} // namespace
+
+bool MainAnalysisScreen::barActionPinned(std::string_view action) const {
+    for (const auto& line : app_.settings().getList(kBarPinsKey))
+        if (pinAction(line) == action) return true;
+    return false;
+}
+
+void MainAnalysisScreen::pinBarAction(std::string_view id) {
+    const bool pin = id.rfind("bar.pin:", 0) == 0;
+    const std::string rest(id.substr(pin ? 8 : 10));
+    const auto tab = rest.find('\t');
+    const std::string action = rest.substr(0, tab);
+    const std::string label = tab == std::string::npos || tab + 1 >= rest.size() ? action : rest.substr(tab + 1);
+    if (action.empty()) return;
+    auto pins = app_.settings().getList(kBarPinsKey);
+    std::erase_if(pins, [&](const std::string& line) { return pinAction(line) == action; });
+    if (pin) pins.insert(pins.begin(), action + "\t" + label);
+    if (pins.size() > 12) pins.resize(12);
+    app_.settings().setList(kBarPinsKey, pins);
+    (void)app_.settings().save();
+    app_.events().publish(StatusNotice{pin ? "\xC3\x89pingl\xC3\xA9" "e dans Aller \xC3\xA0 / Faire (Ctrl+K) : " + label
+                                           : "Retir\xC3\xA9" "e d'Aller \xC3\xA0 / Faire : " + label,
+                                       5.0});
+}
+
 } // namespace app

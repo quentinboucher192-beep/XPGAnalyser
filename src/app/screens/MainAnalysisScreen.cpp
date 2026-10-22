@@ -3604,6 +3604,7 @@ void MainAnalysisScreen::onEnter() {
             if (const auto* a = app_.actions().find(id)) return !a->enabled || a->enabled();
             return true;
         });
+        topBar_->setPinnedProvider([this](std::string_view a) { return barActionPinned(a); });   // 1.12.27
     }
 
     // One line for the state, refreshed from the host rather than polled, so the

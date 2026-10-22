@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <chrono>      // Lot API 8 : bandeau haut (le clic long sur Annuler)
 #include <cmath>
+#include <cstdlib>     // 1.12.27 : std::atoi (Ouvrir le menu)
 
 namespace app {
 
@@ -329,6 +330,108 @@ void TopBar::setPopup(ui::PopupMenu* popup) {
         }
     });
     links_ += popup_->dismissed->connect([this] { opened_ = Menu::None; invalidate(); });
+    // 1.12.27 : le clic droit sur une entree d'un menu de la barre - le menu de cette entree.
+    popup_->setItemContextHandler([this](int id, gfx::Point at) { return openEntryContextMenu(id, at); });
+}
+
+// ------------------------------------------------------- 1.12.27 : le clic droit ----
+namespace {
+std::string firstLine(const std::string& s) {
+    const auto nl = s.find('\n');
+    return nl == std::string::npos ? s : s.substr(0, nl);
+}
+const TopBar::Menu kContextMenus[] = {TopBar::Menu::Project, TopBar::Menu::New, TopBar::Menu::View, TopBar::Menu::Help,
+                                      TopBar::Menu::Version, TopBar::Menu::Both};
+} // namespace
+
+void TopBar::openContext(const std::string& label, const std::string& shortcut, const std::string& action, Menu menu,
+                         bool canRun, gfx::Point at) {
+    if (!popup_) return;
+    using Item = ui::PopupMenu::Item;
+    std::vector<Item> items;
+    popupActions_.clear();
+    const auto entry = [&](std::string text, std::string right, ui::Icon icon, std::string what, std::string why = {}) {
+        Item it;
+        it.label = std::move(text);
+        it.shortcut = std::move(right);
+        it.icon = icon;
+        it.enabled = why.empty();
+        it.disabledReason = std::move(why);
+        it.id = static_cast<int>(popupActions_.size());
+        popupActions_.push_back(std::move(what));
+        items.push_back(std::move(it));
+    };
+    const auto rule = [&items] {
+        Item it;
+        it.separator = true;
+        items.push_back(std::move(it));
+    };
+    Item head;
+    head.heading = true;
+    head.enabled = false;
+    head.label = label.empty() ? std::string("La barre du haut") : label;
+    head.shortcut = shortcut;
+    items.push_back(std::move(head));
+    if (menu != Menu::None) {
+        entry("Ouvrir le menu", {}, ui::Icon::Expand, "bar.openMenu:" + std::to_string(static_cast<int>(menu)));
+    } else if (!action.empty()) {
+        entry("Ex\xC3\xA9" "cuter", shortcut, ui::Icon::Play, action, canRun ? std::string{} : std::string("pas maintenant"));
+        const bool pinned = pinned_ && pinned_(action);
+        entry(pinned ? "Retirer d'Aller \xC3\xA0 / Faire" : "\xC3\x89pingler dans Aller \xC3\xA0 / Faire", "Ctrl+K", ui::Icon::Pin,
+              std::string(pinned ? "bar.unpin:" : "bar.pin:") + action + "\t" + label);
+    }
+    if (!label.empty()) entry("Copier le nom", {}, ui::Icon::Copy, "bar.copy:" + label);
+    rule();
+    entry("Raccourcis clavier\xE2\x80\xA6", {}, ui::Icon::Keyboard, "help.shortcuts");
+    entry("Aide", "F1", ui::Icon::Help, "help.open");
+    popup_->setItems(std::move(items));
+    opened_ = Menu::Context;
+    if (ui::KeyboardMenuScope::active()) popup_->openFromKeyboard(at, surface_);
+    else popup_->openAt(at, surface_);
+    invalidate();
+}
+
+void TopBar::openContextMenu(gfx::Point at) {
+    const int i = partAt(at);
+    if (i >= 0) {
+        const auto& p = parts_[static_cast<std::size_t>(i)];
+        std::string label = p.label.empty() ? firstLine(p.tip) : p.label;
+        if (p.key == "projet") label = "Projet " + name_;
+        openContext(label, {}, p.action, p.action.empty() ? p.menu : Menu::None, partEnabled(p), at);
+        return;
+    }
+    if (partRect("etat").contains(at)) {
+        openContext("L'\xC3\xA9tat de la simulation", {}, "sim.center", Menu::None, true, at);
+        return;
+    }
+    openContext({}, {}, {}, Menu::None, false, at);
+}
+
+bool TopBar::openEntryContextMenu(int id, gfx::Point at) {
+    if (!popup_ || opened_ == Menu::None || opened_ == Menu::Context) return false;
+    if (id < 0 || static_cast<std::size_t>(id) >= popupActions_.size()) return false;
+    const std::string action = popupActions_[static_cast<std::size_t>(id)];
+    if (action.empty()) return false;
+    // Son libelle, sa touche, s'il sert maintenant : l'entree du menu ouvert (ou d'un sous-menu).
+    std::string label, shortcut;
+    bool enabled = true;
+    std::function<bool(const std::vector<ui::PopupMenu::Item>&)> find = [&](const std::vector<ui::PopupMenu::Item>& list) {
+        for (const auto& it : list) {
+            if (it.id == id && it.children.empty() && !it.separator && !it.heading) {
+                label = it.label;
+                shortcut = it.shortcut;
+                enabled = it.enabled;
+                return true;
+            }
+            if (find(it.children)) return true;
+        }
+        return false;
+    };
+    if (!find(popup_->items())) return false;
+    // Un projet recent : son nom, pas le chemin (a droite dans le menu).
+    if (action.rfind("project.openRecent:", 0) == 0) shortcut.clear();
+    openContext(label, shortcut, action, Menu::None, enabled, at);
+    return true;
 }
 
 void TopBar::setGoTo(ui::WidgetPtr w) {
@@ -576,6 +679,17 @@ void TopBar::trigger(std::string_view action) {
     // ---- Lot API 8 : bandeau haut (la cloche : Tout marquer comme lu, a la barre seule) ----
     if (action == "bandeau.notices.read") { markNoticesRead(); return; }
     // ---- fin Lot API 8 : bandeau haut ----
+    // 1.12.27 : le menu du clic droit - Copier le nom, Ouvrir le menu (a la barre seule).
+    if (action.rfind("bar.copy:", 0) == 0) {
+        ui::setClipboardText(action.substr(9));
+        return;
+    }
+    if (action.rfind("bar.openMenu:", 0) == 0) {
+        const int m = std::atoi(std::string(action.substr(13)).c_str());
+        for (const auto menu : kContextMenus)
+            if (static_cast<int>(menu) == m) openMenu(menu);
+        return;
+    }
     if (action.empty() || !sink_) return;
     const std::string keep(action);     // l'action peut rouvrir un menu et vider popupActions_
     XPG_TRACE(Menu, "barre : %s", keep.c_str());   // 1.10.2 (CR) : le journal interne
@@ -919,6 +1033,12 @@ ui::EventResult TopBar::onEvent(const ui::InputEvent& ev) {
         return ui::EventResult::Ignored;
     }
     if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
+        // 1.12.27 : le clic droit - le menu de la partie (ou de la barre).
+        if (m->button == ui::MouseButton::Right) {
+            if (!bounds().contains(m->pos)) return ui::EventResult::Ignored;
+            openContextMenu(m->pos);
+            return ui::EventResult::Consumed;
+        }
         if (m->button != ui::MouseButton::Left) return ui::EventResult::Ignored;
         pressed_ = partAt(m->pos);
         // ---- Lot API 8 : Centre de simulation ----

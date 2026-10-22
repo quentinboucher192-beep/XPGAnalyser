@@ -744,16 +744,49 @@ void MainAnalysisScreen::goToResult(const GoToPanel::Result& r) {
 //  La palette Aller a / Faire... : ">texte" ne cherche que les commandes ;
 //  vide, elle montre les derniers choix (TopBarWorkspace.cpp les retient).
 std::optional<GoToPanel::Outcome> MainAnalysisScreen::topBarPalette(const std::string& text, int group) {
-    // Vide : les derniers choix, les plus recents d'abord.
+    // Vide : les commandes epinglees (1.12.27), puis les derniers choix, les plus recents d'abord.
     if (text.empty()) {
-        if (topBarGoToRecents_.empty() || group >= 0) return std::nullopt;
+        constexpr int kPinned = gotosearch::GCount + 1;
+        const auto pins = app_.settings().getList("aller.epingles");
+        if (pins.empty() && topBarGoToRecents_.empty()) return std::nullopt;
+        if (group >= 0 && group != kPinned && group != gotosearch::GAction) return std::nullopt;
         GoToPanel::Outcome out;
-        for (auto r : topBarGoToRecents_) {
-            r.group = gotosearch::GAction;
-            r.groupTitle = "R\xC3\xA9" "CENTS";
-            out.results.push_back(std::move(r));
+        std::vector<std::string> pinnedKeys;
+        if (group < 0 || group == kPinned) {
+            for (const auto& line : pins) {
+                const auto tab = line.find('\t');
+                GoToPanel::Result r;
+                r.group = kPinned;
+                r.groupTitle = "\xC3\x89PINGL\xC3\x89" "ES";
+                r.key = "bar:" + line.substr(0, tab);
+                r.title = tab == std::string::npos ? line : line.substr(tab + 1);
+                r.subtitle = "\xC3\x89pingl\xC3\xA9" "e (clic droit sur la barre du haut pour l'en retirer)";
+                r.icon = ui::Icon::Pin;
+                if (goToIndex_)
+                    for (const auto& e : goToIndex_->entries)
+                        if (e.key == r.key) {
+                            r.hint = e.hint;
+                            if (e.icon != ui::Icon::None) r.icon = e.icon;
+                            break;
+                        }
+                pinnedKeys.push_back(r.key);
+                out.results.push_back(std::move(r));
+            }
+            if (!pinnedKeys.empty())
+                out.categories.push_back({kPinned, "\xC3\x89PINGL\xC3\x89" "ES", "\xC3\x89pingl\xC3\xA9" "es", pinnedKeys.size()});
         }
-        out.categories.push_back({gotosearch::GAction, "R\xC3\xA9" "CENTS", "R\xC3\xA9" "cents", out.results.size()});
+        if (group < 0 || group == gotosearch::GAction) {
+            std::size_t n = 0;
+            for (auto r : topBarGoToRecents_) {
+                if (std::find(pinnedKeys.begin(), pinnedKeys.end(), r.key) != pinnedKeys.end()) continue;
+                r.group = gotosearch::GAction;
+                r.groupTitle = "R\xC3\xA9" "CENTS";
+                out.results.push_back(std::move(r));
+                ++n;
+            }
+            if (n > 0) out.categories.push_back({gotosearch::GAction, "R\xC3\xA9" "CENTS", "R\xC3\xA9" "cents", n});
+        }
+        if (out.results.empty()) return std::nullopt;
         return out;
     }
     if (text[0] != '>' || !goToIndex_) return std::nullopt;

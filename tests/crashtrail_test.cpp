@@ -16,7 +16,9 @@
 #include "core/Version.hpp"   // 1.11 (I111) : la version du rapport, pas un 1.10.2 ecrit en dur
 
 #include <atomic>
+#include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -234,7 +236,15 @@ static void testHang(const fs::path& dir) {
     CHECK(text.find("Raison      : blocage : la boucle principale ne bat plus depuis") != std::string::npos);
     CHECK(text.find("Pile d'appels du fil principal") != std::string::npos);
     CHECK(text.find("(pile non lue)") == std::string::npos);
-    CHECK(text.find("essai::boucle_bloquee   depuis 1,") != std::string::npos);
+    {
+        // La portee est entree ~50 ms apres le dernier battement : le chien de garde (1 s) la voit
+        // depuis 0,95 s au moins - 1,x le plus souvent, 0,99x sous charge (l'essai attendait "1,").
+        const std::string key = "essai::boucle_bloquee   depuis ";
+        const auto at = text.find(key);
+        std::string number = at == std::string::npos ? std::string{} : text.substr(at + key.size(), 8);
+        std::replace(number.begin(), number.end(), ',', '.');
+        CHECK(at != std::string::npos && std::atof(number.c_str()) >= 0.9);
+    }
     std::printf("blocage : %s\n", after.back().filename().string().c_str());
 }
 

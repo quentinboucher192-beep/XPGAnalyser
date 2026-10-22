@@ -345,6 +345,8 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 | API | les variables globales de l'automate ; le type, l'adresse | la liste des variables de l'automate, filtrée sur elle |
 | Volets et actions | les volets (Équipements › Valeurs simulées, IHM › Recettes...) et des actions : Nouvelle vue, Importer des vues, Exporter les vues, Enregistrer, Historique, Annuler, Rétablir | le volet (et son sous-onglet), ou l'action |
 Cinq résultats au plus par groupe : une lettre de plus affine.
+### Épingler une commande
+Le clic droit sur une partie de la barre du haut, ou sur une entrée d'un de ses menus, propose **Épingler dans Aller à / Faire** : Ctrl+K, le champ encore vide, montre les commandes épinglées en tête (douze au plus, la dernière d'abord), avant les derniers choix ; Entrée la lance. Le même clic droit l'en retire. Elles sont gardées d'une séance à l'autre (les réglages de l'utilisateur).
 ### Au clavier
 - **↑** et **↓** : choisir un résultat ; **Entrée** : y aller ;
 - **Échap** : fermer ; un clic ailleurs ferme aussi ;

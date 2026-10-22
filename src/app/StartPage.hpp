@@ -113,6 +113,7 @@ public:
 
     void setSubtitle(std::string s);   // la seconde ligne d'une grande action ; apres le libelle d'un lien
     void setHint(std::string s);       // a droite : "Ctrl+N", "F1" ; ">" dessine un chevron
+    [[nodiscard]] const std::string& hint() const noexcept { return hint_; }   // 1.12.27 : le clic droit le reprend
     void setGlyph(Glyph g);
     void setLook(Look l);              // "Supprimer..." rouge, "Retirer de la liste" encadre
     [[nodiscard]] Look  look() const noexcept { return look_; }

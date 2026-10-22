@@ -135,6 +135,7 @@ void MainAnalysisScreen::onBarAction(std::string_view id) {
     // ---- Lot API 8 : bandeau haut (Revenir avant, un projet recent, la cloche, Deposer) ----
     if (topBarLot8Action(id)) return;
     // ---- fin Lot API 8 : bandeau haut ----
+    if (id.rfind("bar.pin:", 0) == 0 || id.rfind("bar.unpin:", 0) == 0) { pinBarAction(id); return; }   // 1.12.27
     if (id == "edit.history") { toggleHistory(); return; }
     if (id.rfind("version.", 0) == 0) { onVersionAction(std::string(id)); return; }   // lot API 6
     if (id == "project.icon") { showIconEditor(); return; }                            // lot API 6

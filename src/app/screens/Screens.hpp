@@ -114,6 +114,11 @@ public:
     // 1.12.18 : le menu d'une carte (clic droit, Maj+F10) : Ouvrir, Ouvrir le dossier, Renommer...,
     // Retirer de la liste, Supprimer du disque... ; `at` : ou l'ouvrir.
     void showCardMenu(gfx::Point at);
+    // 1.12.27 : LE CLIC DROIT AILLEURS QUE SUR UNE CARTE (le menu principal) : le bouton sous la
+    // souris (son geste), puis Nouveau projet, Ouvrir, le dossier des projets, Afficher, Trier, le
+    // theme, chercher, le didacticiel, les reglages, les dossiers, l'aide. Sur le panneau du projet
+    // choisi : le menu de sa carte. Maj+F10 sans carte choisie l'ouvre aussi.
+    void showPageMenu(gfx::Point at);
     [[nodiscard]] ui::PopupMenu* cardMenu() const noexcept { return cardMenu_; }
     [[nodiscard]] start::StartPage* page() const noexcept { return page_; }
 
@@ -149,7 +154,10 @@ private:
 
     App&                     app_;
     start::StartPage*        page_{nullptr};
-    ui::PopupMenu*           cardMenu_{nullptr};           // 1.12.18 : le menu d'une carte
+    ui::PopupMenu*           cardMenu_{nullptr};           // 1.12.18 : le menu d'une carte (1.12.27 : et celui de la page)
+    void pageMenuChosen(int id);                           // 1.12.27
+    ui::Button*              menuButton_{nullptr};         // 1.12.27 : le bouton sous le clic droit
+    std::vector<std::string> menuThemes_;                  // 1.12.27 : les themes du sous-menu, dans l'ordre
     std::vector<std::string> pendingDrops_;                // glisses dans la fenetre, ouverts dans Update
     std::uint64_t            frame_{0};
     std::uint64_t            dialogFrame_{~std::uint64_t{0}};
@@ -1134,6 +1142,9 @@ private:
     //  nouvelles du bandeau (faux : pas une des siennes).
     void refreshTopBarLot8();
     bool topBarLot8Action(std::string_view id);
+    // 1.12.27 : les commandes epinglees dans Aller a / Faire (le clic droit de la barre du haut).
+    [[nodiscard]] bool barActionPinned(std::string_view action) const;
+    void pinBarAction(std::string_view id);                // "bar.pin:<action>\t<libelle>", "bar.unpin:..."
     double        topBarCycleAt_{-100.0}, topBarNoticesAt_{-100.0}, topBarLibraryAt_{-100.0};
     //  L'horloge de l'appli (FrameContext::totalSeconds, posee par Update) : celle d'une session
     //  rejouee avance de 1/30 s par image - la cloche et les taches s'y rafraichissent comme a l'ecran.

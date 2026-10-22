@@ -670,6 +670,15 @@ const std::vector<Topic>& topics() {
                          "menu de ce qu'elle vise.", {}, "1.12.18"},
              {K::Bullet, "**L'historique** : Aller \xC3\xA0 (Entr\xC3\xA9" "e), Ouvrir dans une fen\xC3\xAAtre, Revenir \xC3\xA0 cet \xC3\xA9tat\xE2\x80\xA6 (le double "
                          "clic), Retirer de l'historique (Suppr), Vider l'historique - la liste seulement, Ctrl+Z annule toujours.", {}, "1.12.18"},
+             {K::Bullet, "**Le menu principal (l'accueil)** : une carte a son menu ; ailleurs (le vide, un bouton, la colonne de gauche), "
+                         "le bouton vis\xC3\xA9 d'abord, puis Nouveau projet\xE2\x80\xA6 (Ctrl+N), Ouvrir un projet\xE2\x80\xA6 (Ctrl+O), Ouvrir le "
+                         "dossier des projets, Afficher \xE2\x80\xBA (le filtre), Trier \xE2\x80\xBA, Th\xC3\xA8me \xE2\x80\xBA, Chercher un projet (Ctrl+F), "
+                         "le didacticiel, les r\xC3\xA9glages, les dossiers de l'application, l'aide ; le panneau du projet choisi : le menu "
+                         "de sa carte.", {}},
+             {K::Bullet, "**La barre du haut et ses menus** : le clic droit sur une partie (Projet, Annuler, Simuler, la cloche...) ou sur "
+                         "une entr\xC3\xA9" "e d'un menu ouvert (Enregistrer sous\xE2\x80\xA6, un projet r\xC3\xA9" "cent) : son nom en t\xC3\xAA" "te, "
+                         "Ex\xC3\xA9" "cuter (ou Ouvrir le menu), **\xC3\x89pingler dans Aller \xC3\xA0 / Faire**, Copier le nom, Raccourcis "
+                         "clavier\xE2\x80\xA6, Aide.", {}},
              {K::Heading, "Les raccourcis", {}},
              {K::Table, "Touche\tCe qu'elle fait\nCtrl+Z\tAnnuler (dans un champ en cours de saisie : sa "
                          "saisie d'abord)\nCtrl+Y, "
@@ -732,6 +741,12 @@ const std::vector<Topic>& topics() {
                          "actions : Nouvelle vue, Importer des vues, Exporter les vues, Enregistrer, "
                          "Historique, Annuler, R\xC3\xA9tablir\tle volet (et son sous-onglet), ou l'action", {}},
              {K::Paragraph, "Cinq r\xC3\xA9sultats au plus par groupe : une lettre de plus affine.", {}},
+             {K::Heading, "\xC3\x89pingler une commande", {}},
+             {K::Paragraph, "Le clic droit sur une partie de la barre du haut, ou sur une entr\xC3\xA9" "e d'un de ses menus, propose "
+                         "**\xC3\x89pingler dans Aller \xC3\xA0 / Faire** : Ctrl+K, le champ encore vide, montre les commandes "
+                         "\xC3\xA9pingl\xC3\xA9" "es en t\xC3\xAA" "te (douze au plus, la derni\xC3\xA8re d'abord), avant les derniers choix ; "
+                         "Entr\xC3\xA9" "e la lance. Le m\xC3\xAA" "me clic droit l'en retire. Elles sont gard\xC3\xA9" "es d'une s\xC3\xA9" "ance "
+                         "\xC3\xA0 l'autre (les r\xC3\xA9glages de l'utilisateur).", {}},
              {K::Heading, "Au clavier", {}},
              {K::Bullet, "**\xE2\x86\x91** et **\xE2\x86\x93** : choisir un r\xC3\xA9sultat ; "
                          "**Entr\xC3\xA9" "e** : y aller ;", {}},

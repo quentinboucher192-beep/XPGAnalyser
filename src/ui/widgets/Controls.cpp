@@ -4079,6 +4079,11 @@ namespace ui {
                 (void)openSubmenuAt(c, static_cast<std::size_t>(r));
                 return EventResult::Consumed;
             }
+            // 1.12.27 : le clic droit sur une entree - son menu, si l'appelant en a un.
+            if (d->button == MouseButton::Right && itemContext_) {
+                const int id = item.id;
+                if (auto handler = itemContext_; handler(id, d->pos)) return EventResult::Consumed;
+            }
             choose(item.id);
             return EventResult::Consumed;
         }

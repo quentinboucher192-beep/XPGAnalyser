@@ -275,6 +275,72 @@ void testProjectName() {
     }
 }
 
+// 1.12.27 : le clic droit sur la barre (une partie, un menu) et sur une entree d'un menu ouvert.
+void testRightClick() {
+    std::printf("6. 1.12.27 : le clic droit sur la barre et sur ses menus\n");
+    app::TopBar bar("barre");
+    bar.setProject("Armoire_Gaz", "DEV", false);
+    bar.setBounds(gfx::Rect{0.f, 0.f, 1600.f, 44.f});
+    std::vector<std::string> fired;
+    bar.setActionSink([&](core::ActionId id) { fired.emplace_back(id); });
+    std::vector<std::string> pins;
+    bar.setPinnedProvider([&](std::string_view a) {
+        for (const auto& p : pins) if (p == a) return true;
+        return false;
+    });
+    ui::PopupMenu popup("barre.menu");
+    bar.setPopup(&popup);
+    const auto label = [&](std::size_t i) { return i < popup.items().size() ? popup.items()[i].label : std::string{}; };
+    const auto centre = [](const gfx::Rect& r) { return gfx::Point{r.x + r.w / 2.f, r.y + r.h / 2.f}; };
+    const auto undo = bar.partRect("annuler");
+    (void)bar.dispatch(ui::MouseDown{centre(undo), ui::MouseButton::Right, 1, {}});
+    check(popup.isOpen() && bar.openedMenu() == app::TopBar::Menu::Context, "clic droit sur Annuler : son menu");
+    check(popup.items().size() >= 6 && popup.items()[0].heading && label(1) == "Ex\xC3\xA9" "cuter"
+              && label(2).find("pingler dans Aller") != std::string::npos && label(3) == "Copier le nom",
+          "en tete son nom, puis Executer, Epingler dans Aller a / Faire, Copier le nom");
+    check(popup.items().size() >= 2 && !popup.items()[1].enabled, "rien a annuler : Executer grise");
+    popup.itemChosen->emit(popup.items()[2].id);
+    check(fired.size() == 1 && fired[0].rfind("bar.pin:edit.undo\t", 0) == 0,
+          "Epingler : bar.pin:edit.undo et son libelle (" + (fired.empty() ? std::string("rien") : fired[0]) + ")");
+    pins.push_back("edit.undo");
+    fired.clear();
+    (void)bar.dispatch(ui::MouseDown{centre(undo), ui::MouseButton::Right, 1, {}});
+    check(label(2).rfind("Retirer d'Aller", 0) == 0, "epinglee : Retirer d'Aller a / Faire");
+    popup.itemChosen->emit(popup.items()[2].id);
+    check(fired.size() == 1 && fired[0].rfind("bar.unpin:edit.undo", 0) == 0, "Retirer : bar.unpin:edit.undo");
+    fired.clear();
+    // Une partie a menu : Ouvrir le menu.
+    const auto aide = bar.partRect("aide");
+    (void)bar.dispatch(ui::MouseDown{centre(aide), ui::MouseButton::Right, 1, {}});
+    check(label(1) == "Ouvrir le menu", "clic droit sur Aide : Ouvrir le menu");
+    popup.itemChosen->emit(popup.items()[1].id);
+    check(bar.openedMenu() == app::TopBar::Menu::Help && popup.isOpen() && fired.empty(), "Ouvrir le menu : le menu Aide s'ouvre");
+    // Une entree du menu ouvert : son propre menu, a la place du choix.
+    std::size_t row = popup.items().size();
+    for (std::size_t i = 0; i < popup.items().size(); ++i)
+        if (popup.items()[i].label == "Raccourcis clavier") row = i;
+    check(row < popup.items().size(), "le menu Aide montre Raccourcis clavier");
+    if (row >= popup.items().size()) return;
+    (void)popup.dispatch(ui::MouseDown{centre(popup.itemRect(row)), ui::MouseButton::Right, 1, {}});
+    check(fired.empty() && popup.isOpen() && bar.openedMenu() == app::TopBar::Menu::Context && popup.items()[0].heading
+              && label(0) == "Raccourcis clavier" && label(1) == "Ex\xC3\xA9" "cuter",
+          "clic droit sur une entree : son menu (rien ne part)");
+    popup.itemChosen->emit(popup.items()[1].id);
+    check(fired.size() == 1 && fired[0] == "help.shortcuts", "Executer : l'action de l'entree (help.shortcuts)");
+    fired.clear();
+    // Un clic gauche sur une entree la choisit toujours.
+    bar.openMenu(app::TopBar::Menu::Help);
+    (void)popup.dispatch(ui::MouseDown{centre(popup.itemRect(row)), ui::MouseButton::Left, 1, {}});
+    check(fired.size() == 1 && fired[0] == "help.shortcuts" && !popup.isOpen(), "le clic gauche choisit, comme avant");
+    // Hors des parties : le menu de la barre (Raccourcis clavier, Aide).
+    fired.clear();
+    bar.setBounds(gfx::Rect{0.f, 0.f, 3000.f, 44.f});
+    (void)bar.dispatch(ui::MouseDown{gfx::Point{2990.f, 2.f}, ui::MouseButton::Right, 1, {}});
+    bool help = false;
+    for (const auto& it : popup.items()) help = help || it.label == "Aide";
+    check(popup.isOpen() && bar.openedMenu() == app::TopBar::Menu::Context && help, "ailleurs sur la barre : son menu (Raccourcis clavier, Aide)");
+}
+
 } // namespace
 
 int main() {
@@ -283,6 +349,7 @@ int main() {
     testBellTasks();
     testRegistry();
     testProjectName();
+    testRightClick();
     std::printf("\n%d echec(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }
