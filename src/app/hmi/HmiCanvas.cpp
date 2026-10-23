@@ -1436,7 +1436,12 @@ void HmiCanvas::paintDimensions(const ui::PaintContext& ctx, const HmiViewport& 
         const std::string label = std::fabs(value - std::round(value)) < 0.05 ? std::to_string(static_cast<long>(std::lround(value)))
                                                                               : fmt(value);
         const float lw = ctx.r.measure(label, f).width + 10.f, lh = ctx.r.lineHeight(f) + 4.f;
-        const gfx::Point mid{(p0.x + p1.x) / 2.f, (p0.y + p1.y) / 2.f};
+        // Le milieu de ce qui se voit du trait (une cote jusqu'au bord de la vue peut sortir du dessin).
+        const auto area = drawArea();
+        const float lo = d.horizontal ? std::max(p0.x, area.x) : std::max(p0.y, area.y);
+        const float hi = d.horizontal ? std::min(p1.x, area.right()) : std::min(p1.y, area.bottom());
+        if (hi <= lo) continue;
+        const gfx::Point mid = d.horizontal ? gfx::Point{(lo + hi) / 2.f, p0.y} : gfx::Point{p0.x, (lo + hi) / 2.f};
         gfx::Rect pill = {mid.x - lw / 2.f, mid.y - lh / 2.f, lw, lh};
         if (d.horizontal && len < lw + 12.f) pill.y = mid.y - lh - 6.f;
         if (!d.horizontal && len < lh + 12.f) pill.x = mid.x + 8.f;
