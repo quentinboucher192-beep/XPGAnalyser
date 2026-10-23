@@ -1159,6 +1159,7 @@ begin
   Ajoute(L, '  ' + Colonne('{#ExeIhm}', 21) + Colonne('IHM Studio', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#ExeIhm}'));
   Ajoute(L, '  ' + Colonne(ExtractFileName(Unins), 17) + Colonne('le désinstallateur', 27) + Colonne('32 bits (x86)', 15) + TailleDe(Unins));
   Ajoute(L, '  ' + Colonne('SDL3.dll', 17) + Colonne('fenêtres, affichage, son', 27) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\SDL3.dll'));
+  Ajoute(L, '  ' + Colonne('pdfium.dll', 17) + Colonne('les PDF (1.12.30)', 27) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\pdfium.dll'));
   Ajoute(L, '  ' + Colonne('maintenance\', 17) + '6 scripts (.bat) et leurs étapes PowerShell :');
   Ajoute(L, '  ' + Colonne('', 17) + 'réparer, vérifier, reprendre, restaurer,');
   Ajoute(L, '  ' + Colonne('', 17) + 'journaux, réinitialiser les réglages');
@@ -1168,13 +1169,14 @@ begin
   Ajoute(L, '  ├─ ' + Colonne('{#Exe}', 32) + 'API Studio');
   Ajoute(L, '  ├─ ' + Colonne('{#ExeIhm}', 32) + 'IHM Studio');
   Ajoute(L, '  ├─ ' + Colonne('SDL3.dll', 32));
+  Ajoute(L, '  ├─ ' + Colonne('pdfium.dll', 32) + 'le lecteur PDF de la visionneuse');
   Ajoute(L, '  ├─ ' + Colonne(ExtractFileName(Unins) + ', .dat', 32) + 'le désinstallateur');
   Ajoute(L, '  ├─ ' + Colonne('installation.ini', 32) + 'écrit par l''installateur');
   Ajoute(L, '  ├─ ' + Colonne('manifeste.json', 32) + 'chaque fichier, sa taille, son SHA-256');
   Ajoute(L, '  ├─ ' + Colonne('libs\', 32) + 'la bibliothèque livrée');
   Ajoute(L, '  ├─ ' + Colonne('maintenance\', 32) + 'les scripts, lib\ (PowerShell)');
   Ajoute(L, '  ├─ ' + Colonne('resources\', 32) + 'le catalogue des automates');
-  Ajoute(L, '  └─ ' + Colonne('licences\', 32) + 'SDL3, miniz, stb, nanosvg, minimp3');
+  Ajoute(L, '  └─ ' + Colonne('licences\', 32) + 'SDL3, PDFium, miniz, stb, nanosvg, minimp3');
   Ajoute(L, '');
   if IsAdminInstallMode then Ajoute(L, 'TES DONNÉES   Documents\{#Cle} de chaque compte (ici : ' + Don + ')')
   else Ajoute(L, 'TES DONNÉES   ' + Don);
