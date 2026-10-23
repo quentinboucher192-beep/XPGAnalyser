@@ -154,6 +154,7 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 
 == zoom | Le zoom des pages
 : Chaque page se zoome : la puce du bandeau bas (−, le pourcentage, +), Ctrl + molette, Ctrl + plus, Ctrl + moins, Ctrl + 0. Le texte, la hauteur des lignes, les marges et les icônes grandissent ensemble ; chaque page garde le sien.
+@depuis 1.12.30
 @mots zoom, Zoom, zoomer, agrandir, Ctrl+molette, Ctrl+plus, Ctrl+moins, Ctrl+0, 100 %, puce du zoom, bandeau bas, lisibilité
 @voir onglets, raccourcis, editeur, regles-guides, langues-cote
 ### La puce du zoom
@@ -673,6 +674,7 @@ Chaque vue a au moins un calque. Un calque se renomme, s'ordonne, se masque (ses
 
 == regles-guides | Les règles, les guides et les cotes
 : Les règles graduées en pixels de la vue, les guides qu'on en tire (gardés avec la vue), la grille de colonnes, et Alt au survol : les distances aux voisins et aux bords, comme dans un logiciel de dessin.
+@depuis 1.12.30
 @mots règle, règles, Ctrl+R, guide, guides, tirer un guide, Ctrl+;, Ctrl+Alt+;, verrouiller les guides, cacher les guides, retirer les guides, cote, cotes, distance, distances, Alt, grille de colonnes, colonnes, gouttière, marges, mise en page
 @voir editeur, concevoir-vite, zoom
 ### Les règles
@@ -1606,6 +1608,7 @@ Pour chaque langue, combien de textes restent à traduire ; une traduction qui p
 
 == langues-cote | Les langues côte à côte
 : La vue dans chaque langue du projet, côte à côte et à la même échelle ; les textes qui débordent entourés de rouge ; la pseudo-langue (+40 %) pour voir ce qui va déborder avant la traduction.
+@depuis 1.12.30
 @mots langues côte à côte, côte à côte, débordement, déborde, déborder, pseudo-langue, Pseudo (+40 %), pseudo, texte coupé, traduction trop longue
 @lieux langues-cote
 @voir langues, verifier, editeur, zoom
@@ -4242,6 +4245,7 @@ Posé, un objet du synoptique porte ses **alarmes par défaut**, actives et déc
 
 1.12.11 : Contenu › Mode État - la Valeur choisit un aspect : arrêt, marche, défaut, maintenance (une couleur, animé ou non). Depuis une énumération : ETAT_MOTEUR, ou une énumération du projet d'après ses noms (ARRET, MARCHE, DEFAUT, MAINT…). Un moteur ETAT_MOTEUR en Défaut (2) se dessine en défaut.
 
+@nouveau 1.12.30
 1.12.30 : le **Variateur de vitesse** - marche, sens, prêt, défaut, sa fréquence et sa consigne, son courant, sa vitesse, local ou distance ; ses membres se lient par leur nom (Marche, Defaut, Pret, Sens, Frequence, Consigne, Courant...). Voir « Variateur de vitesse ».
 
 == alarmes-bibliotheque | Les alarmes par défaut des objets du synoptique
@@ -4524,6 +4528,7 @@ Le moteur, sa boîte à bornes et son arbre (à droite). Il se pose au bout d'un
 
 == objet-variateur-de-vitesse | Variateur de vitesse
 : Un variateur de vitesse, dessiné comme un convertisseur normalisé (un cadre, sa diagonale, le réseau ~ et la sortie en deux ondes) : sa couleur dit s'il tourne, s'il est prêt ou en défaut ; à côté, sa fréquence, sa consigne, son courant et sa vitesse ; en marche, les ondes avancent dans le sens de rotation.
+@depuis 1.12.30
 @mots variateur, variateur de vitesse, variateur de fréquence, VAR, ATV, Altivar, fréquence, Hz, consigne de fréquence, courant moteur, sens de rotation, marche arrière, local, distance, LOC, DIST, prêt
 @voir objet-moteur, synoptique, alarmes-bibliotheque, objet-communs, proprietes, simulation
 @capture EX_SpeedDrive.png | L'exemple animé : variateur de vitesse
@@ -5532,6 +5537,7 @@ La page de maintenance d'une IHM : savoir si l'automate répond, depuis quand, e
 
 == objet-visionneuse-de-documents | Visionneuse de documents
 : Une notice, une procédure, un schéma à lire sur le poste : un PDF, une image (PNG, JPEG, BMP, GIF, SVG) ou un texte (TXT), avec sa barre d'outils - les pages, le zoom, tourner, les vignettes, la recherche. Sa page peut suivre une variable : la vue tourne la page quand la procédure avance.
+@depuis 1.12.30
 @mots visionneuse, document, PDF, notice, procédure, mode opératoire, schéma, manuel, page, zoom, vignettes, recherche, PDFium, pdfium.dll, lecteur PDF, Lecteur PDF absent, TXT, PageCount, CurrentPage
 @voir ressources, fichiers, objet-video, variables-instances, objet-communs, proprietes, simulation
 @capture EX_DocumentViewer.png | L'exemple animé de la visionneuse : la notice suit l'étape de la procédure.
@@ -8954,10 +8960,13 @@ Le bouton **Déverrouiller** de la barre d'outils (ou Projet › Déverrouiller 
 @capture PNG_124_import_controle_coherence.png | Importer : le contrôle de cohérence.
 ### Exporter
 **Exporter** écrit une archive avec un manifeste et l'empreinte SHA-256 de chaque fichier.
+@nouveau 1.12.30
 Depuis la 1.12.30, c'est l'archive `.xihm` du **projet entier** - ressources, fichiers externes, équipements, simulation, versions -, comme **Projet › Exporter en archive .xihm…** (voir « Le projet dans un seul fichier : l'archive .xihm ») ; son rapport s'affiche ici : ses comptes, ses fichiers.
 ### Importer
 **Importer** vérifie l'archive (une archive retouchée ou abîmée est refusée, et la raison est dite), contrôle les variables du programme, puis reconstruit l'IHM ; un seul Ctrl+Z revient en arrière.
+@nouveau 1.12.30
 Il lit une archive `.xihm` comme l'ancienne `.zip` de l'IHM : seule son IHM est reprise, dans le projet ouvert. Pour ouvrir une archive comme un projet à part, avec tout ce qu'elle contient : **Projet › Ouvrir…**.
+@nouveau 1.12.30
 ### La page web
 **Page web** écrit l'IHM dans un seul fichier `.html`, qui s'ouvre dans un navigateur (voir « L'IHM en page web : un seul .html »).
 ### Quelques vues seulement
@@ -8967,6 +8976,7 @@ Pour passer quelques vues, et ce dont elles ont besoin, d'un projet à l'autre :
 
 == archive-projet | Le projet dans un seul fichier : l'archive .xihm
 : Projet › Exporter en archive .xihm… met tout le projet dans un seul fichier - les vues, les ressources de tout genre, les fichiers externes liés, les équipements, la simulation, l'historique des objets, les versions. Il se rouvre à l'identique : Projet › Ouvrir…, un double-clic sur le fichier, ou le fichier lâché sur la fenêtre.
+@depuis 1.12.30
 @mots archive, .xihm, xihm, Exporter en archive .xihm, Importer une archive, Ouvrir l'archive, Déballer et ouvrir, déballer, Déballer ce qui est intact, archive abîmée, version plus récente, manifeste, manifeste.txt, SHA-256, empreinte, transmettre un projet, envoyer un projet, IHM-Studio.exe, double-clic, _externes, .zip
 @voir echange, page-web, versions, dossiers
 @capture PNG_echanges_02_exporter_archive.png | Projet › Exporter en archive .xihm… : le fichier, les versions, l'historique de marche.
@@ -8998,6 +9008,7 @@ Un fichier externe lié hors du projet revient dans le dossier `externes/` du pr
 
 == page-web | L'IHM en page web : un seul .html
 : Projet › Exporter en page web (.html)… écrit l'IHM dans un seul fichier, qui s'ouvre dans n'importe quel navigateur, sans Internet : chaque vue et chaque popup dessinée comme dans IHM Studio, les boutons qui naviguent, les alarmes, les variables, les scripts. Le projet entier est dans la page : Projet › Importer depuis une page web… le reconstruit à l'identique.
+@depuis 1.12.30
 @mots page web, HTML, .html, navigateur, Exporter en page web, Importer depuis une page web, Mettre à jour la page web à chaque enregistrement, hors ligne, sans Internet, SVG, Télécharger le projet, cette page n'a pas été écrite par IHM Studio
 @voir archive-projet, echange, dossier
 @capture PNG_echanges_05_page_web_ihm.png | La page web de l'IHM dans un navigateur : le menu des vues, la vue de démarrage dessinée, ses boutons cliquables.
@@ -9322,6 +9333,7 @@ Une modification faite dans le grafcet (le volet Code, un dialogue, l'outil Supp
 
 == echanges-api | Le projet de l'automate dans un seul fichier (.xapi) et en page web
 : API Studio met tout le projet de l'automate dans un seul fichier .xapi - le programme, les ladders et les GRAFCET gardés tels quels, la configuration, les versions, les macros -, et l'écrit en page web (.html) : le programme lisible dans un navigateur, avec le projet dedans. Les deux se rouvrent à l'identique.
+@depuis 1.12.30
 @mots archive, .xapi, xapi, Exporter en archive .xapi, Importer une archive, page web, HTML, .html, Exporter en page web, Importer depuis une page web, Mettre à jour la page web à chaque enregistrement, API-Studio.exe, manifeste, SHA-256, macros, .xpglayout
 @voir archive-projet, page-web, grafcet
 @capture PNG_echanges_03_exporter_xapi.png | Projet › Exporter en archive .xapi… : le fichier, les versions, l'historique, les macros.

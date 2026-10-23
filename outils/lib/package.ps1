@@ -5,7 +5,7 @@
 #   1. les versions concordent (config.ini, CMakeLists.txt, Version.hpp, .rc) ;
 #   2. la compilation Release (build.ps1) ;
 #   3. les tests (test_build.ps1) ;
-#   4. le dossier a livrer, dist\staging : l'exe, SDL3.dll, le runtime Visual C++
+#   4. le dossier a livrer, dist\staging : l'exe, SDL3.dll, pdfium.dll (1.12.30), le runtime Visual C++
 #      (deploiement local : un PC vierge n'a rien a installer), resources\,
 #      libs\, maintenance\ (repair, verify...), licences\, LISEZ-MOI.txt ;
 #   5. manifeste.json : chaque fichier, sa taille, son SHA-256, son role, et
@@ -13,7 +13,7 @@
 #   6. l'installateur (build_installer.ps1) : XPGAnalyser-Setup-<version>.exe a la racine
 #      du dossier, et son empreinte dans dist\SHA256SUMS.txt.
 #
-#  /exe:<fichier> /sdl:<SDL3.dll> /chaine:mingw : empaqueter un exe deja
+#  /exe:<fichier> /sdl:<SDL3.dll> /pdfium:<pdfium.dll> /chaine:mingw : empaqueter un exe deja
 #  compile ailleurs (c'est ainsi qu'a ete fait l'installateur livre avec la
 #  chaine, sous Linux, avec MinGW : pas de runtime Visual C++ a y mettre).
 # =============================================================================
@@ -26,6 +26,7 @@ package.bat [options]
   /sans-tests          ne lance pas test_build (plus rapide ; déconseillé)
   /sans-installateur   s'arrête au dossier dist\staging (sans Inno Setup)
   /exe:<fichier>       empaquette cet exe au lieu de compiler (avec /sdl:<SDL3.dll>)
+  /pdfium:<fichier>    le pdfium.dll à livrer (par défaut third_party\pdfium\win-x64\pdfium.dll)
   /chaine:msvc|mingw   la chaîne qui a compilé l'exe (msvc par défaut : runtime VC++ livré)
 '@
 $X = Initialize-Xpg -Nom 'package' -Titre 'XPGAnalyser - compilation, tests et installateur' -Arguments $Arguments -Usage $usage
@@ -160,6 +161,11 @@ try {
     if (-not $sdl) { $sdl = Join-Path $racine 'third_party\SDL3\lib\x64\SDL3.dll' }
     if (-not (Test-Path -LiteralPath $sdl)) { Stop-Xpg -Code 1 -Message "SDL3.dll introuvable : $sdl" }
     Copy-Item -LiteralPath $sdl -Destination (Join-Path $st 'SDL3.dll') -Force
+    # 1.12.30 : PDFium, le moteur PDF de la visionneuse de documents (charge a la demande), a cote des exe.
+    $pdfium = Get-XpgOption -Noms @('pdfium')
+    if (-not $pdfium) { $pdfium = Join-Path $racine 'third_party\pdfium\win-x64\pdfium.dll' }
+    if (-not (Test-Path -LiteralPath $pdfium)) { Stop-Xpg -Code 1 -Message "pdfium.dll introuvable : $pdfium" -Conseil 'python outils\pdfium\obtenir_pdfium.py le pose (third_party\pdfium\ORIGINE.txt).' }
+    Copy-Item -LiteralPath $pdfium -Destination (Join-Path $st 'pdfium.dll') -Force
     $runtime = @()
     if ($chaine -eq 'msvc') {
         $msvc = Get-XpgChaineMsvc
@@ -215,6 +221,12 @@ anciens_dossiers = $(Get-XpgConfig -Section 'Installateur' -Cle 'anciens_dossier
     New-Item -ItemType Directory -Path $lic -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $racine 'third_party\SDL3\LICENSE.txt') -Destination (Join-Path $lic 'SDL3-LICENSE.txt') -Force
     foreach ($f in Get-ChildItem -LiteralPath (Join-Path $racine 'third_party') -Filter '*.LICENSE' -File) { Copy-Item -LiteralPath $f.FullName -Destination $lic -Force }
+    # 1.12.30 : les licences de PDFium et de sa construction (le dossier LICENSES a cote de pdfium.dll).
+    $licPdfium = Join-Path (Split-Path -Parent $pdfium) 'LICENSES'
+    if (-not (Test-Path -LiteralPath $licPdfium)) { Stop-Xpg -Code 1 -Message "Les licences de PDFium manquent : $licPdfium" -Conseil 'python outils\pdfium\obtenir_pdfium.py les pose avec pdfium.dll.' }
+    $licP = Join-Path $lic 'pdfium'
+    New-Item -ItemType Directory -Path $licP -Force | Out-Null
+    foreach ($f in Get-ChildItem -LiteralPath $licPdfium -File) { Copy-Item -LiteralPath $f.FullName -Destination $licP -Force }
     $stb = [System.IO.File]::ReadAllText((Join-Path $racine 'third_party\stb_image.h'))
     $i = $stb.IndexOf('This software is available under 2 licenses')
     if ($i -ge 0) { Write-XpgTexte -Chemin (Join-Path $lic 'stb.LICENSE') -Texte ($stb.Substring($i).Replace('*/', '').Trim() + "`r`n") -SansBom }
@@ -223,7 +235,7 @@ anciens_dossiers = $(Get-XpgConfig -Section 'Installateur' -Cle 'anciens_dossier
         $t = [System.IO.File]::ReadAllText($lisez, [System.Text.Encoding]::UTF8).Replace('{VERSION}', $version)
         Write-XpgTexte -Chemin (Join-Path $st 'LISEZ-MOI.txt') -Texte (($t -replace "`r?`n", "`n") -replace "`n", "`r`n")
     }
-    Complete-XpgEtape -Statut OK -Detail ("exe, SDL3.dll, {0} DLL du runtime, {1} ressource(s), {2} fichier(s) de bibliothèque, 6 scripts de maintenance" -f $runtime.Count, $nRes, $nLibs)
+    Complete-XpgEtape -Statut OK -Detail ("exe, SDL3.dll, pdfium.dll, {0} DLL du runtime, {1} ressource(s), {2} fichier(s) de bibliothèque, 6 scripts de maintenance" -f $runtime.Count, $nRes, $nLibs)
 
     # ---- le manifeste ------------------------------------------------------------------------
     Start-XpgEtape 'Le manifeste (tailles et SHA-256)' | Out-Null

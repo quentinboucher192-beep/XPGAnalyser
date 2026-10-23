@@ -346,7 +346,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.12.30"},
         // ---- Demarrer / raccourcis
         {"raccourcis", "Raccourcis clavier", "D\xC3\xA9marrer",
          "Les touches de l'\xC3\xA9" "diteur de vues, des scripts et de l'aide.",
@@ -1433,7 +1433,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.12.30"},
         // ---- Concevoir les vues  Les vues et l'editeur / objets
         {"objets", "Les objets de la biblioth\xC3\xA8que", "Concevoir les vues \xE2\x80\xBA Les vues et l'\xC3\xA9" "diteur",
          "La biblioth\xC3\xA8que range les composants en familles : formes, commandes, affichage, "
@@ -3460,7 +3460,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.12.30"},
         // ---- Concevoir les vues  Langues, unites, affichage / unites-formats
         {"unites-formats", "Unit\xC3\xA9s et formats des variables", "Concevoir les vues \xE2\x80\xBA Langues, unit\xC3\xA9s, affichage",
          "L'unit\xC3\xA9 et le format d'une variable, donn\xC3\xA9s une fois, repris partout o\xC3\xB9 elle "
@@ -9682,7 +9682,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "1.12.30 : le **Variateur de vitesse** - marche, sens, pr\xC3\xAAt, "
                          "d\xC3\xA9" "faut, sa fr\xC3\xA9quence et sa consigne, son courant, sa vitesse, "
                          "local ou distance ; ses membres se lient par leur nom (Marche, Defaut, Pret, Sens, "
-                         "Frequence, Consigne, Courant...). Voir \xC2\xAB Variateur de vitesse \xC2\xBB.", {}},
+                         "Frequence, Consigne, Courant...). Voir \xC2\xAB Variateur de vitesse \xC2\xBB.", {}, "1.12.30"},
          },
          {"objets", "objet-communs", "proprietes", "simulation", "variables-instances", "symboles", "alarmes-bibliotheque", "groupes-objets"},
          {"Synoptique"},
@@ -10619,7 +10619,7 @@ const std::vector<Topic>& topics() {
          "droite) ; \xC3\xA0 5 s, il repart en arri\xC3\xA8re \xC3\xA0 35 Hz, command\xC3\xA9 en local (LOC) "
          "; de 9 \xC3\xA0 10,5 s, il est en d\xC3\xA9" "faut, rouge et clignotant ; puis pr\xC3\xAAt de "
          "nouveau.",
-         {}},
+         {}, "1.12.30"},
         // ---- La bibliotheque d'objets  Synoptique / objet-tuyauterie
         {"objet-tuyauterie", "Tuyauterie", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique",
          "Un tube anim\xC3\xA9 : droit, coude, t\xC3\xA9 ou croix ; quand il coule, le fluide avance "
@@ -13056,7 +13056,7 @@ const std::vector<Topic>& topics() {
          "La notice d'un ventilateur (un PDF de quatre pages) suit la variable Etape : \xC3\xA0 chaque "
          "\xC3\xA9tape de la proc\xC3\xA9" "dure, la visionneuse tourne la page, et la liste des "
          "\xC3\xA9tapes, \xC3\xA0 droite, montre celle en cours.",
-         {}},
+         {}, "1.12.30"},
         // ---- La bibliotheque d'objets  Medias / objet-image-animee
         {"objet-image-animee", "Image anim\xC3\xA9" "e", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA M\xC3\xA9" "dias",
          "Des \xC3\xA9tats, chacun avec sa condition et ses images qui d\xC3\xA9" "filent : une pompe qui "
@@ -18350,22 +18350,23 @@ const std::vector<Topic>& topics() {
          {
              {K::Heading, "Exporter", {}},
              {K::Paragraph, "**Exporter** \xC3\xA9" "crit une archive avec un manifeste et l'empreinte SHA-256 "
-                         "de chaque fichier. Depuis la 1.12.30, c'est l'archive `.xihm` du **projet entier** "
-                         "- ressources, fichiers externes, \xC3\xA9quipements, simulation, versions -, comme "
-                         "**Projet \xE2\x80\xBA Exporter en archive .xihm\xE2\x80\xA6** (voir \xC2\xAB Le "
-                         "projet dans un seul fichier : l'archive .xihm \xC2\xBB) ; son rapport s'affiche "
-                         "ici : ses comptes, ses fichiers.", {}},
+                         "de chaque fichier.", {}},
+             {K::Paragraph, "Depuis la 1.12.30, c'est l'archive `.xihm` du **projet entier** - ressources, "
+                         "fichiers externes, \xC3\xA9quipements, simulation, versions -, comme **Projet "
+                         "\xE2\x80\xBA Exporter en archive .xihm\xE2\x80\xA6** (voir \xC2\xAB Le projet dans "
+                         "un seul fichier : l'archive .xihm \xC2\xBB) ; son rapport s'affiche ici : ses "
+                         "comptes, ses fichiers.", {}, "1.12.30"},
              {K::Heading, "Importer", {}},
              {K::Paragraph, "**Importer** v\xC3\xA9rifie l'archive (une archive retouch\xC3\xA9" "e ou "
                          "ab\xC3\xAEm\xC3\xA9" "e est refus\xC3\xA9" "e, et la raison est dite), "
                          "contr\xC3\xB4le les variables du programme, puis reconstruit l'IHM ; un seul "
-                         "Ctrl+Z revient en arri\xC3\xA8re. Il lit une archive `.xihm` comme l'ancienne "
-                         "`.zip` de l'IHM : seule son IHM est reprise, dans le projet ouvert. Pour ouvrir "
-                         "une archive comme un projet \xC3\xA0 part, avec tout ce qu'elle contient : "
-                         "**Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6**.", {}},
-             {K::Heading, "La page web", {}},
+                         "Ctrl+Z revient en arri\xC3\xA8re.", {}},
+             {K::Paragraph, "Il lit une archive `.xihm` comme l'ancienne `.zip` de l'IHM : seule son IHM est "
+                         "reprise, dans le projet ouvert. Pour ouvrir une archive comme un projet \xC3\xA0 "
+                         "part, avec tout ce qu'elle contient : **Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6**.", {}, "1.12.30"},
+             {K::Heading, "La page web", {}, "1.12.30"},
              {K::Paragraph, "**Page web** \xC3\xA9" "crit l'IHM dans un seul fichier `.html`, qui s'ouvre dans "
-                         "un navigateur (voir \xC2\xAB L'IHM en page web : un seul .html \xC2\xBB).", {}},
+                         "un navigateur (voir \xC2\xAB L'IHM en page web : un seul .html \xC2\xBB).", {}, "1.12.30"},
              {K::Heading, "Quelques vues seulement", {}},
              {K::Paragraph, "Pour passer quelques vues, et ce dont elles ont besoin, d'un projet \xC3\xA0 "
                          "l'autre : IHM \xE2\x80\xBA Vues, **Exporter les vues\xE2\x80\xA6** et **Importer "
@@ -18452,7 +18453,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.12.30"},
         // ---- Tester et livrer  Livrer et exploiter / page-web
         {"page-web", "L'IHM en page web : un seul .html", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
          "Projet \xE2\x80\xBA Exporter en page web (.html)\xE2\x80\xA6 \xC3\xA9" "crit l'IHM dans un seul "
@@ -18505,7 +18506,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.12.30"},
         // ---- Tester et livrer  Livrer et exploiter / dossier
         {"dossier", "Le dossier de l'IHM", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
          "Un document Word ou PDF qui d\xC3\xA9" "crit l'IHM telle qu'elle est enregistr\xC3\xA9" "e : "
@@ -19333,7 +19334,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.12.30"},
     };
     // 1.12.2 : XPGAnalyser IHM n'a pas d'automate - ses mots (HmiGuide.cpp, ihmWorded).
     if (core::hasApi()) return all;
