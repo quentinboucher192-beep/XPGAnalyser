@@ -7,6 +7,7 @@
 // =============================================================================
 #include "StartPage.hpp"
 #include "../core/Edition.hpp"   // 1.12.0 : API Studio, IHM Studio
+#include "../help/Trails.hpp"     // 1.12.28 : la duree de la visite, celle de sa carte
 
 #include "Brand.hpp"
 #include "../project/ProjectIcon.hpp"
@@ -1503,12 +1504,15 @@ StartRail::StartRail(std::string id) : ui::Widget(std::move(id)) {
         "startup.parcourir")));
     browse_->setFieldLabel(api ? "Un dossier de projet ou un export" : "Un dossier de projet IHM");
     tutorial_ = make(api ? "D\xC3\xA9" "couvrir l'application" : "D\xC3\xA9" "couvrir l'IHM", "startup.tutorial", L::Link, G::Tutorial);
-    tutorial_->setSubtitle("le didacticiel, 5 min");
+    // 1.12.28 : IHM Studio, la duree que dit la carte de la visite (Demarrer > Le didacticiel).
+    const auto* visit = help::trails::find("decouvrir");
+    tutorial_->setSubtitle(api || !visit ? std::string("le didacticiel, 5 min")
+                                         : "la visite, " + std::to_string(visit->minutes) + " min");
     tutorial_->setHint(">");
     tutorial_->setTooltip(api ? "La visite \xC2\xAB D\xC3\xA9" "couvrir l'API \xC2\xBB (14 \xC3\xA9tapes, 5 min), sur le projet ouvert ou sur celui que tu choisis ici ; "
                                 "les parcours guid\xC3\xA9s sont dans l'onglet API \xC2\xB7 Didacticiel"
                               : "La visite \xC2\xAB D\xC3\xA9" "couvrir l'IHM \xC2\xBB, sur le projet ouvert ou sur celui que tu choisis ici ; "
-                                "les parcours guid\xC3\xA9s sont dans l'onglet IHM \xC2\xB7 Didacticiel");
+                                "les parcours guid\xC3\xA9s sont dans l'aide (F1) \xE2\x80\xBA D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel");
     help_ = make("Aide", "startup.help", L::Link, G::Help);
     help_->setHint("F1");
     help_->setTooltip("L'aide de l'application (F1, depuis n'importe quel \xC3\xA9" "cran)");

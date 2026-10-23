@@ -1513,6 +1513,9 @@
     <ClCompile Include="src\app\ReportWindow.cpp">
       <Filter></Filter>
     </ClCompile>
+    <ClCompile Include="src\help\Trails.cpp">
+      <Filter></Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\ARCHITECTURE.md" />
@@ -2837,6 +2840,9 @@
       <Filter></Filter>
     </ClInclude>
     <ClInclude Include="src\app\ReportWindow.hpp">
+      <Filter></Filter>
+    </ClInclude>
+    <ClInclude Include="src\help\Trails.hpp">
       <Filter></Filter>
     </ClInclude>
   </ItemGroup>

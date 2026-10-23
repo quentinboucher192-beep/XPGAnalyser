@@ -558,16 +558,18 @@ DWORD WINAPI reporterThread(LPVOID) {
         if (j.count == 0 && j.ep && j.ep->ContextRecord)
             j.count = walkContext(*j.ep->ContextRecord, j.thread ? j.thread : GetCurrentThread(), j.frames, kMaxFrames);
         const std::uint64_t now = trail::nowMs();
+        bool aside = false;
         if (openReport(g_writer, j.kind, now, j.path, sizeof j.path)) {
             writeBody(g_writer, j.kind, j.reason, j.trailThread, now, j.frames, j.count, nullptr);
             g_writer.close();
+            // 1.12.28 : la fenetre de rapport a part tout de suite, le minidump ensuite.
+            aside = j.kind == ReportKind::Crash && launchReportWindow("plantage", j.path, 0);
             writeMiniDump(j.path, j.ep, j.threadId);
         } else {
             j.path[0] = '\0';
         }
-        // 1.12.28 : la fenetre de rapport a part ; sinon (ou sans rapport) la boite d'avant.
-        if (!(j.path[0] && j.kind == ReportKind::Crash && launchReportWindow("plantage", j.path, 0)))
-            showCrashBox(j.path[0] ? j.path : "(le rapport n'a pas pu \xC3\xAA" "tre \xC3\xA9" "crit)");
+        // Sans fenetre a part (ou sans rapport) : la boite d'avant.
+        if (!aside) showCrashBox(j.path[0] ? j.path : "(le rapport n'a pas pu \xC3\xAA" "tre \xC3\xA9" "crit)");
         SetEvent(g_jobDone);
     }
 }
@@ -907,9 +909,6 @@ std::string writeHangReport(double seconds) {
     if (!openReport(writer, ReportKind::Hang, now, path, sizeof path)) return {};
     writeBody(writer, ReportKind::Hang, reason, g_mainThread, now, frames, count, stackNote);
     writer.close();
-#if defined(_WIN32)
-    writeMiniDump(path, nullptr, 0);
-#endif
     return path;
 }
 
@@ -1021,6 +1020,9 @@ void watchdogLoop(unsigned seconds, bool dialog) {
                 aside = (last != 0 && awakeMs() - last < 60000)
                      || launchReportWindow("blocage", path.c_str(), static_cast<double>(now - from) / 1000.0);
             }
+            // 1.12.28 : la fenetre d'abord, le minidump ensuite : sous Wine il prend plus de 10 s,
+            // et la fenetre attendait la fin.
+            if (!path.empty()) writeMiniDump(path.c_str(), nullptr, 0);
 #endif
             if (dialog && g_dialogs && !aside && showHangDialog(path, seconds)) {
                 trail::note(trail::Kind::Watchdog, "Fermer (fen\xC3\xAAtre de blocage)");
@@ -1315,6 +1317,21 @@ std::optional<PendingReport> takeNewReport() {
     { std::ifstream in(marker); std::getline(in, seen); }
     if (!seen.empty() && newestDate <= seen) return std::nullopt;
     { std::ofstream out(marker, std::ios::trunc); out << newestDate << "\n"; }
+    return readReport(utf8Of(newest));
+}
+
+std::optional<PendingReport> newestReport() {
+    if (!g_folder[0]) return std::nullopt;
+    std::error_code ec;
+    fs::path newest;
+    std::string newestDate;
+    for (const auto& e : fs::directory_iterator(pathFromUtf8(g_folder), ec)) {
+        const auto name = e.path().filename().string();
+        if (e.path().extension() != ".txt" || (name.rfind("plantage-", 0) != 0 && name.rfind("blocage-", 0) != 0)) continue;
+        const auto date = name.substr(name.find('-') + 1);
+        if (date > newestDate) { newestDate = date; newest = e.path(); }
+    }
+    if (newest.empty()) return std::nullopt;
     return readReport(utf8Of(newest));
 }
 

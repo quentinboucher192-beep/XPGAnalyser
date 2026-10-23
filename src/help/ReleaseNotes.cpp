@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.28", "23/10/2026", "livr\xC3\xA9" "e le 23/10 dans la journ\xC3\xA9" "e"},
     {"1.12.27", "23/10/2026", "livr\xC3\xA9" "e le 23/10 dans la nuit"},
     {"1.12.26", "22/10/2026", "livr\xC3\xA9" "e le 22/10 au soir"},
     {"1.12.25", "22/10/2026", "livr\xC3\xA9" "e le 22/10 en fin d'apr\xC3\xA8s-midi"},
@@ -133,6 +134,23 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.28 (23/10/2026) : la fenetre du plantage et du blocage dessinee par l'appli, la veille qui n'est
+        // plus un blocage, le didacticiel dans l'aide F1, la visite a jour, l'arbre de l'aide qui se replie partout.
+        note("1.12.28", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
+         "LA FEN\xC3\x8ATRE DU PLANTAGE ET DU BLOCAGE, DESSIN\xC3\x89" "E PAR L'APPLICATION : plus de bo\xC3\xAEte Windows grise aux boutons coup\xC3\xA9s. Pendant un blocage, une fen\xC3\xAAtre d'IHM Studio s'ouvre \xC3\xA0 part, avec le th\xC3\xA8me de l'application : \xC2\xAB IHM Studio ne r\xC3\xA9pond plus \xC2\xBB, le temps qui passe, ce qui s'est pass\xC3\xA9 et ce que l'application faisait, le rapport ; Attendre (l'application continue) ou Fermer IHM Studio. Quand la boucle repart, elle le dit et se ferme. Apr\xC3\xA8s un plantage : \xC2\xAB IHM Studio s'est arr\xC3\xAAt\xC3\xA9 \xC2\xBB, Relancer IHM Studio. Au lancement suivant, un rapport pas encore montr\xC3\xA9 s'ouvre dans l'application, d\xC3\xA8s sa premi\xC3\xA8re image : Ouvrir le dossier, Copier le rapport, Signaler le probl\xC3\xA8me, Fermer.",
+         "plantages", ""),
+        note("1.12.28", "G\xC3\xA9n\xC3\xA9ral", Kind::Fixed,
+         "LA VEILLE N'EST PLUS UN BLOCAGE : le chien de garde comptait l'heure du mur, et les minutes de veille du PC devenaient \xC2\xAB 8 s sans battement \xC2\xBB - un faux rapport de blocage au r\xC3\xA9veil. Il compte maintenant le temps o\xC3\xB9 le PC est \xC3\xA9veill\xC3\xA9, se tait quand le PC s'endort ou que l'\xC3\xA9" "cran s'\xC3\xA9teint (et quand l'application elle-m\xC3\xAAme a \xC3\xA9t\xC3\xA9 fig\xC3\xA9" "e), puis laisse 30 s \xC3\xA0 l'application pour repartir au r\xC3\xA9veil.",
+         "plantages", ""),
+        note("1.12.28", "Aide", Kind::New,
+         "LE DIDACTICIEL DANS L'AIDE F1 : les six parcours (une visite, des exercices qui font faire et v\xC3\xA9rifient chaque geste) sont des pages de l'aide, D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel - une page d'ensemble avec toutes leurs cartes, et une page par parcours qui dit ce qu'il fait \xC3\xA9tape par \xC3\xA9tape, avec son bouton Commencer, Reprendre ou Refaire et sa progression. Le parcours se joue sur le projet ouvert : l'aide se ferme et il commence l\xC3\xA0 o\xC3\xB9 tu travailles. Une page qui parle du m\xC3\xAAme sujet le propose en t\xC3\xAAte (\xC2\xAB Parcours guid\xC3\xA9 : Cr\xC3\xA9" "er un symbole de projet \xC2\xBB sur celle des symboles). Aide \xE2\x80\xBA Didacticiel de l'IHM y m\xC3\xA8ne.",
+         "didacticiel", ""),
+        note("1.12.28", "Aide", Kind::Changed,
+         "LA VISITE \xC2\xAB D\xC3\x89" "COUVRIR L'IHM \xC2\xBB \xC3\x80 JOUR : seize \xC3\xA9tapes, sans l'automate ni le dossier API, avec la biblioth\xC3\xA8que par familles, l'aper\xC3\xA7u des styles, Pourquoi ? en simulation, plusieurs fen\xC3\xAAtres et Aller \xC3\xA0, et l'aide o\xC3\xB9 vit maintenant le didacticiel.",
+         "parcours-decouvrir", ""),
+        note("1.12.28", "Aide", Kind::Fixed,
+         "L'ARBRE DE L'AIDE SE REPLIE PARTOUT : le chapitre de la page ouverte (L'IHM, en haut) et ses sous-chapitres \xC3\xA9taient d\xC3\xA9pli\xC3\xA9s d'office et ne se repliaient plus ; un clic les replie, et aller sur une autre page rouvre les siens.",
+         "menu-aide", ""),
         // 1.12.27 (23/10/2026) : plusieurs fenetres (copier, coller, glisser d'un projet a l'autre), Suppr et Ctrl+D
         // dans les listes, l'apercu des styles, le clic droit du menu principal et de la barre du haut, Pourquoi ?,
         // l'aide F1 rangee, l'installateur habille.

@@ -149,16 +149,21 @@ Index Index::build(const Inputs& in) {
     // pages de l'API), l'IHM, les expressions. Les deux : les raccourcis, les notes, Signaler.
     const bool api = core::hasApi(), ihm = core::hasIhm();
 
-    // Demarrer : le chapitre 1 du guide, puis les pages generales de l'API.
+    // Demarrer : le chapitre 1 du guide, puis les pages generales de l'API. 1.12.28 : puis ses
+    // sous-chapitres (Le didacticiel, les parcours de l'IHM), dans IHM Studio, en bas du chapitre.
+    const std::string startSub = std::string(kGuideStart) + " \xE2\x80\xBA ";
+    const auto inStart = [&startSub](const std::string& group) { return group.rfind(startSub, 0) == 0; };
     for (const auto& s : in.guide)
         if (s.group == kGuideStart && (ihm || s.key.rfind("ihm", 0) != 0)) fromGuide(s, Chapter::Start, {});
     for (const auto& s : in.api)
         if (api && s.group == "start") fromApi(s, Chapter::Start);
+    for (const auto& s : in.guide)
+        if (ihm && inStart(s.group)) fromGuide(s, Chapter::Start, s.group.substr(startSub.size()));
 
     // L'IHM : les chapitres 2 a 8 du guide, chacun un sous-chapitre. IHM Studio n'a pas
     // d'automate : ni « API. » (variables-api), ni les deux simulations (simulation-api-ihm).
     for (const auto& s : in.guide)
-        if (ihm && s.group != kGuideStart && s.group != kGuidePlc && (api || (s.key != "variables-api" && s.key != "simulation-api-ihm")))
+        if (ihm && s.group != kGuideStart && !inStart(s.group) && s.group != kGuidePlc && (api || (s.key != "variables-api" && s.key != "simulation-api-ihm")))
             fromGuide(s, Chapter::Hmi, s.group);
 
     // L'automate (API) : le chapitre 9 du guide, puis les pages de l'API.

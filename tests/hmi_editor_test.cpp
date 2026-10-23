@@ -14,6 +14,7 @@
 #include "../src/help/CenterSources.hpp"
 #include "../src/help/HelpSession.hpp"         // 1.11 (T2, tranche 2) : la navigation du centre
 #include "../src/help/CenterView.hpp"          // 1.11 (T2, tranche 2) : ce que l'ecran du centre dessine
+#include "../src/help/Trails.hpp"              // 1.12.28 : les parcours du didacticiel, dans l'aide
 #include "../src/project/ImportSchema.hpp"
 #include "../src/project/Table.hpp"
 #include "../src/project/LibraryCatalog.hpp"
@@ -18248,20 +18249,20 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61.
     const auto& rel = hn::releases();
-    check(rel.size() == 60 && rel.front().version == "1.12.27" && rel[1].version == "1.12.26" && rel[2].version == "1.12.25" && rel[3].version == "1.12.24" && rel[4].version == "1.12.23" && rel[5].version == "1.12.22" && rel[6].version == "1.12.21" && rel[7].version == "1.12.20" && rel[8].version == "1.12.19" && rel[9].version == "1.12.18" && rel[10].version == "1.12.17" && rel[11].version == "1.12.16" && rel[12].version == "1.12.15" && rel[13].version == "1.12.14" && rel[14].version == "1.12.13" && rel[15].version == "1.12.12" && rel[16].version == "1.12.11" && rel[17].version == "1.12.10" && rel[18].version == "1.12.9" && rel[19].version == "1.12.8" && rel[20].version == "1.12.7" && rel[21].version == "1.12.6" && rel[22].version == "1.12.5" && rel[23].version == "1.12.4" && rel[24].version == "1.12.3" && rel[25].version == "1.12.2" && rel[26].version == "1.12.1"
-              && rel[27].version == "1.12.0" && rel[28].version == "1.11.24" && rel[29].version == "1.11.23"
-              && rel[30].version == "1.11.22" && rel[31].version == "1.11.21" && rel[32].version == "1.11.20" && rel[33].version == "1.11.19"
-              && rel[34].version == "1.11.18" && rel[35].version == "1.11.17"
-              && rel[36].version == "1.11.16" && rel[37].version == "1.11.15"
-              && rel[38].version == "1.11.14" && rel[39].version == "1.11.13" && rel[40].version == "1.11.12"
-              && rel[41].version == "1.11.11" && rel[42].version == "1.11.10"
-              && rel[43].version == "1.11.9" && rel[44].version == "1.11.8"
-              && rel[45].version == "1.11.7" && rel[46].version == "1.11.6" && rel[47].version == "1.11.5"
-              && rel[48].version == "1.11.4" && rel[49].version == "1.11.3" && rel[50].version == "1.11.2"
-              && rel[51].version == "1.11.1" && rel[52].version == "1.11" && rel[53].version == "1.10.4",
-          "notes : 60 versions, la 1.12.27 en tete, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+    check(rel.size() == 61 && rel.front().version == "1.12.28" && rel[1].version == "1.12.27" && rel[2].version == "1.12.26" && rel[3].version == "1.12.25" && rel[4].version == "1.12.24" && rel[5].version == "1.12.23" && rel[6].version == "1.12.22" && rel[7].version == "1.12.21" && rel[8].version == "1.12.20" && rel[9].version == "1.12.19" && rel[10].version == "1.12.18" && rel[11].version == "1.12.17" && rel[12].version == "1.12.16" && rel[13].version == "1.12.15" && rel[14].version == "1.12.14" && rel[15].version == "1.12.13" && rel[16].version == "1.12.12" && rel[17].version == "1.12.11" && rel[18].version == "1.12.10" && rel[19].version == "1.12.9" && rel[20].version == "1.12.8" && rel[21].version == "1.12.7" && rel[22].version == "1.12.6" && rel[23].version == "1.12.5" && rel[24].version == "1.12.4" && rel[25].version == "1.12.3" && rel[26].version == "1.12.2" && rel[27].version == "1.12.1"
+              && rel[28].version == "1.12.0" && rel[29].version == "1.11.24" && rel[30].version == "1.11.23"
+              && rel[31].version == "1.11.22" && rel[32].version == "1.11.21" && rel[33].version == "1.11.20" && rel[34].version == "1.11.19"
+              && rel[35].version == "1.11.18" && rel[36].version == "1.11.17"
+              && rel[37].version == "1.11.16" && rel[38].version == "1.11.15"
+              && rel[39].version == "1.11.14" && rel[40].version == "1.11.13" && rel[41].version == "1.11.12"
+              && rel[42].version == "1.11.11" && rel[43].version == "1.11.10"
+              && rel[44].version == "1.11.9" && rel[45].version == "1.11.8"
+              && rel[46].version == "1.11.7" && rel[47].version == "1.11.6" && rel[48].version == "1.11.5"
+              && rel[49].version == "1.11.4" && rel[50].version == "1.11.3" && rel[51].version == "1.11.2"
+              && rel[52].version == "1.11.1" && rel[53].version == "1.11" && rel[54].version == "1.10.4",
+          "notes : 61 versions, la 1.12.28 en tete, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18532,7 +18533,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 404,   // 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 409,   // 1.12.28 : + 5 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18669,15 +18670,16 @@ void centreAide111() {
     // Concevoir les vues en gagne 5 (l'IHM : 205). L'automate ne change pas (2 + 14).
     // 1.12.27 : + Plusieurs fenetres ; l'aide rangee : les 4 nouveautes partent dans leur chapitre (L'IHM),
     // les raccourcis clavier y viennent de Tester et livrer (Demarrer 21 : 14 du guide + 7 de l'API).
-    check(ix.count(hc::Chapter::Start) == 21 && ix.count(hc::Chapter::Plc) == 16,
-          "centre : Demarrer 21 (les gestes de base, 1.12.27) et L'automate 16");
+    // 1.12.28 : le didacticiel dans l'aide - Demarrer > Le didacticiel, sa page et les 6 des parcours (27).
+    check(ix.count(hc::Chapter::Start) == 27 && ix.count(hc::Chapter::Plc) == 16,
+          "centre : Demarrer 27 (les gestes de base, 1.12.27 ; Le didacticiel, 1.12.28) et L'automate 16");
     check(ix.find("api-dossiers") && ix.find("dossiers") && ix.find("api-alarmes") && ix.find("alarmes"),
           "centre : api-dossiers et dossiers, api-alarmes et alarmes, sans collision");
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 218, "centre : L'IHM a les 218 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 60, "centre : 11 expressions, 60 notes (1.12.27)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 61, "centre : 11 expressions, 61 notes (1.12.28)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -18739,10 +18741,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 60
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 61
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.12.27" && hc::notesPage("9.9").version == "1.12.27",
+        check(hc::notesPage("").version == "1.12.28" && hc::notesPage("9.9").version == "1.12.28",
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -19117,8 +19119,11 @@ void centreAide111() {
               "ecran : la carte du tutoriel");
         const auto n = hc::tutorialCount(ix);
         // Decision 12 du chef : les notes de version (9 en 1.11.1) n'ont pas de tutoriel ; le compteur ne les compte pas.
-        check(n.total == ix.topics().size() - ix.count(hc::Chapter::Notes) && n.provided == 0,
-              "ecran : le compteur, sans les notes de version (tout est estime tant que T1 ne fournit rien)");
+        // 1.12.28 : ni les pages des parcours du didacticiel (le parcours est leur tutoriel).
+        std::size_t parcours = 0;
+        for (const auto& t : ix.topics()) parcours += help::trails::ofPage(t.key) != nullptr ? 1u : 0u;
+        check(parcours == 6 && n.total == ix.topics().size() - ix.count(hc::Chapter::Notes) - parcours && n.provided == 0,
+              "ecran : le compteur, sans les notes de version ni les parcours (tout est estime tant que T1 ne fournit rien)");
         const auto pied = hc::pageFooter(ix, "objet-vanne");
         check(!pied.prevKey.empty() && !pied.nextKey.empty(), "ecran : precedent / suivant en bas de page");
         check(hc::pageFooter(ix, ix.topics().front().key).prevKey.empty(), "ecran : rien avant le premier sujet");
@@ -19129,7 +19134,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 60;   // 1.11.3 a 1.12.27 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 61;   // 1.11.3 a 1.12.28 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -21697,7 +21702,9 @@ void demarrerEndroits111() {
     const bool centreSur = tt::conditionDeclaredSafe("centre.ouvert = oui");
     for (const auto& g : hmi::guide::topics()) {
         // 1.12.27 : les nouveautes ont leur chapitre ; leurs tutoriels restent ceux de Demarrer (le « ? »).
-        if (g.chapter != "D\xC3\xA9marrer" && g.chapter != "Les nouveaut\xC3\xA9s") continue;
+        // 1.12.28 : Demarrer > Le didacticiel en est ; les pages des parcours n'ont pas de deduit.
+        if (g.chapter.rfind("D\xC3\xA9marrer", 0) != 0 && g.chapter != "Les nouveaut\xC3\xA9s") continue;
+        if (help::trails::ofPage(g.key)) continue;
         ++demarrer;
         const std::string text = help::deduceTutorial(tt::fromGuide(g));
         std::vector<help::TutorialProblem> problems;
@@ -22828,7 +22835,9 @@ void tutoDeduits111() {
     for (const auto& [k, n] : deduced) std::printf(" %s %d,", k.c_str(), n);
     std::printf(" impossibles %zu\n", impossible.size());
     for (const auto& [why, n] : impossible) std::printf("    impossible : %s (%d)\n", why.c_str(), n);
-    check(total == static_cast<int>(hmi::guide::topics().size() + hmi::exprguide::all().size()), "tous les sujets du guide et les 11 types");
+    // 1.12.28 : sans les pages des parcours du didacticiel (le parcours est leur tutoriel).
+    check(total == static_cast<int>(hmi::guide::topics().size() - help::trails::ihm().size() + hmi::exprguide::all().size()),
+          "tous les sujets du guide, sans les 6 parcours, et les 11 types");
     check(impossible.empty(), "aucun sujet sans tutoriel");
     check(malformed == 0, "tous bien formes, 5 etapes au plus, un A toi, des cibles qui existent (" + std::to_string(malformed) + ")");
     check(deduced["expression"] == 11, "les 11 types d'expression");
@@ -35361,6 +35370,85 @@ void apercuStyles11227() {
     check(rec.wrote("choisis un style") && !rec.filled(gfx::Color::rgb(0xFF7700)), "sans style choisi : l'aper\xC3\xA7u invite \xC3\xA0 en choisir un");
 }
 
+// 1.12.28 : « j'aimerais combiner le didacticiel de l'ihm avec l'aide F1 ». Le catalogue des parcours
+// (help/Trails), leurs pages du guide (Demarrer > Le didacticiel), le sous-chapitre du centre, en bas
+// de Demarrer, et les pages qui les proposent.
+void didacticielAide11228() {
+    std::printf("== 1.12.28 : le didacticiel dans l'aide F1 ==\n");
+    namespace tr = help::trails;
+    namespace hc = help::center;
+    const std::string chapitre = "D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel";
+    const auto& all = tr::ihm();
+    check(all.size() == 6 && all.front().key == "decouvrir" && all.front().steps == 16 && all.front().kind == "visite",
+          "parcours : six, la visite d'abord (16 etapes)");
+    // Chaque parcours a sa page, avec ses etapes numerotees : autant que le parcours en a.
+    int pages = 0, etapesJustes = 0, sujets = 0, sujetsConnus = 0, allerRetour = 0;
+    std::string ecart;
+    for (const auto& t : all) {
+        const auto* g = hmi::guide::topic(tr::pageOf(t));
+        if (g && g->chapter == chapitre) ++pages;
+        int n = 0;
+        if (g)
+            for (const auto& b : g->blocks) n += b.kind == hmi::guide::BlockKind::Step ? 1 : 0;
+        if (n == t.steps) ++etapesJustes;
+        else if (ecart.empty())
+            ecart = " ; " + std::string(t.key) + " : " + std::to_string(n) + " dans le guide, " + std::to_string(t.steps) + " au parcours";
+        for (const auto& k : t.topics) {
+            ++sujets;
+            sujetsConnus += hmi::guide::topic(std::string(k)) != nullptr ? 1 : 0;
+        }
+        allerRetour += tr::ofPage(tr::pageOf(t)) == &t && tr::find(t.key) == &t ? 1 : 0;
+    }
+    const auto* ensemble = hmi::guide::topic(std::string(tr::kOverview));
+    check(ensemble && ensemble->chapter == chapitre && pages == 6,
+          "parcours : la page d'ensemble et une page par parcours, dans Demarrer > Le didacticiel (" + std::to_string(pages) + ")");
+    check(etapesJustes == 6, "parcours : la page de chacun a autant d'etapes que lui" + ecart);
+    check(sujets >= 12 && sujetsConnus == sujets, "parcours : les pages qui les proposent existent (" + std::to_string(sujetsConnus) + "/"
+                                                      + std::to_string(sujets) + ")");
+    check(allerRetour == 6 && !tr::ofPage("symboles") && !tr::ofPage("parcours-inconnu") && !tr::ofPage(tr::kOverview),
+          "parcours : de la page au parcours et retour ; une autre page n'en est pas un");
+    const auto sym = tr::proposedOn("symboles");
+    check(sym.size() == 1 && sym[0]->key == "symbole" && tr::proposedOn("objet-vanne").empty(),
+          "parcours : la page des symboles propose Creer un symbole de projet, celle de la vanne aucun");
+    check(tr::stepKey(all[2]) == "didacticiel.symbole.etape" && tr::doneKey(all[2]) == "didacticiel.symbole.fait",
+          "parcours : la progression, sous les cles de l'ecran du projet");
+
+    // Le centre d'aide : Demarrer > Le didacticiel, en bas de Demarrer ; ses pages sans tutoriel deduit.
+    const auto edition = core::edition();
+    core::setEdition(core::Edition::Ihm);
+    hc::Inputs in;
+    in.guide = hc::guideSources();
+    in.api = hc::apiSources();
+    const auto ix = hc::Index::build(in);
+    const auto* d = ix.find("didacticiel");
+    const auto* p = ix.find("parcours-symbole");
+    check(d && d->chapter == hc::Chapter::Start && d->sub == "Le didacticiel" && p && p->chapter == hc::Chapter::Start
+              && p->sub == "Le didacticiel",
+          "centre : le didacticiel et ses parcours dans Demarrer, sous-chapitre Le didacticiel");
+    check(d && p && hc::hasTutorial(*d) && !hc::hasTutorial(*p), "centre : la page d'ensemble a son tutoriel, celle d'un parcours non");
+    const auto start = ix.ofChapter(hc::Chapter::Start);
+    std::size_t enBas = 0;
+    for (std::size_t i = start.size() >= 7 ? start.size() - 7 : 0; i < start.size(); ++i) enBas += start[i]->sub == "Le didacticiel" ? 1u : 0u;
+    check(start.size() == 20 && enBas == 7, "centre : IHM Studio, Demarrer a 13 pages et Le didacticiel (7), en bas ("
+                                                + std::to_string(start.size()) + ")");
+    hc::TreeState st;
+    st.current = "parcours-symbole";
+    bool sousChapitre = false, page = false;
+    for (const auto& r : hc::treeRows(ix, st)) {
+        if (r.kind == hc::RowKind::Sub && r.chapter == hc::Chapter::Start && r.label == "Le didacticiel")
+            sousChapitre = r.open && r.current && r.depth == 1 && r.count == 7;
+        if (r.kind == hc::RowKind::Topic && r.key == "parcours-symbole") page = r.current && r.depth == 2 && r.pill.empty();
+    }
+    check(sousChapitre && page, "centre : la page d'un parcours ouvre Demarrer > Le didacticiel, sans pastille de tutoriel");
+    const auto fil = hc::breadcrumb(ix, "parcours-symbole");
+    check(fil.size() == 3 && fil[0] == "D\xC3\xA9marrer" && fil[1] == "Le didacticiel", "centre : le fil d'Ariane Demarrer > Le didacticiel > le parcours");
+    // API Studio n'a pas les parcours de l'IHM.
+    core::setEdition(core::Edition::Api);
+    const auto ixApi = hc::Index::build(in);
+    check(!ixApi.find("didacticiel") && !ixApi.find("parcours-symbole"), "centre : API Studio n'a pas le didacticiel de l'IHM");
+    core::setEdition(edition);
+}
+
 int main(int argc, char** argv) {
     // 1.12.27 : HMI_TEST_11227=1 - Suppr et Ctrl+D dans les listes, seuls.
     if (const char* only = std::getenv("HMI_TEST_11227"); only && *only == '1') {
@@ -35729,6 +35817,7 @@ int main(int argc, char** argv) {
     apercuStyles11227();                    // 1.12.27 : l'apercu des styles
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
+    didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)
     v1219_cellules();                       // 1.12.19 (U3) : les cellules de tableau sous la meme regle
     v1219_modales();                        // 1.12.19 (U4) : les fenetres sous la meme regle
     v110_aide_saisie();                     // 1.10 (chantier K2) : l'aide a la saisie des scripts (S1, S2, enumerations)

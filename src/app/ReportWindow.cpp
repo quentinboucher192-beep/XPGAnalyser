@@ -114,6 +114,8 @@ int run(const Args& args) {
     const ui::Theme theme = ui::Theme::byName(settings.getString("view.theme", "Light"));
 
     bool quit = false;
+    // Signaler le probleme : le meme zip qu'au lancement suivant (rien n'est envoye).
+    crashdialogs::setReportHook(crashdialogs::prepareSignal);
     ui::CrashReportSetup setup = crashdialogs::setupFor(*report, hang ? ui::crashreport::Mode::Hang : ui::crashreport::Mode::Crash);
     setup.stalledSeconds = args.seconds;
     setup.close = [&quit] { quit = true; };
@@ -185,6 +187,17 @@ int run(const Args& args) {
     menus.applyPending();
     view = raw->view();
 
+    // Les captures des livraisons, pendant un vrai blocage ou apres un vrai plantage :
+    // XPG_FENETRE_RAPPORT_CAPTURES=<dossier> - la fenetre a 1,5 s et a 5 s, puis 0,8 s apres la
+    // reprise (ou la fin de l'appli bloquee). Elle continue ensuite comme d'habitude.
+    const char* shotsDir = std::getenv("XPG_FENETRE_RAPPORT_CAPTURES");
+    int shotsTaken = 0;
+    double changedAt = -1;
+    const auto shoot = [&](const char* name) {
+        if (!shotsDir || !*shotsDir) return;
+        const std::string file = std::string(shotsDir) + "/rapport-" + args.kind + "-" + name + ".png";
+        if (auto ok = captureToPng(*renderer, file); ok) std::fprintf(stderr, "capture : %s\n", file.c_str());
+    };
     using Clock = std::chrono::steady_clock;
     const auto start = Clock::now();
     auto last = start;
@@ -219,6 +232,10 @@ int run(const Args& args) {
         menus.Update(fc);
         renderer->beginFrame(theme.color.windowBg);
         menus.Render(*renderer, fc);
+        if (view && changedAt < 0 && (view->recovered() || view->gone())) changedAt = time;
+        if (shotsTaken == 0 && time >= 1.5) { shoot("1"); ++shotsTaken; }
+        else if (shotsTaken == 1 && time >= 5.0) { shoot("2"); ++shotsTaken; }
+        else if (shotsTaken <= 2 && changedAt >= 0 && time >= changedAt + 0.8) { shoot("fin"); shotsTaken = 3; }
         if (!args.capture.empty() && !captured && time >= args.captureAfter) {
             captured = true;
             if (auto ok = captureToPng(*renderer, args.capture); ok) std::fprintf(stderr, "capture : %s\n", args.capture.c_str());

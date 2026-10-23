@@ -164,106 +164,6 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.10"},
-        // ---- Demarrer / didacticiel
-        {"didacticiel", "Le didacticiel : les parcours, l'aide et le tutoriel de chaque objet", "D\xC3\xA9marrer",
-         "Le didacticiel propose des parcours au choix : une visite qui montre l'IHM, et des parcours "
-         "interactifs qui font faire - une \xC3\xA9tape attend ton geste et le v\xC3\xA9rifie, Montre-moi le "
-         "fait \xC3\xA0 ta place. Il retient o\xC3\xB9 tu en es. F1 ouvre l'aide de l'endroit o\xC3\xB9 tu "
-         "es ; ses sujets ont chacun leur ic\xC3\xB4ne, et la page d'un objet son exemple anim\xC3\xA9 et "
-         "son tutoriel, jou\xC3\xA9 par le vrai moteur.",
-         {
-             {K::Heading, "Les parcours", {}},
-             {K::Paragraph, "Le bouton **Didacticiel** de l'aide de l'IHM (F1) ouvre la page du didacticiel : "
-                         "ses **parcours au choix**, en cartes.", {}},
-             {K::Table, "Parcours\tSorte\tCe qu'on y fait\nD\xC3\xA9" "couvrir l'IHM\tvisite, 14 "
-                         "\xC3\xA9tapes\tl'arbre, la configuration, les vues, les symboles, les styles, la "
-                         "programmation, la simulation, l'outil Modbus, G\xC3\xA9n\xC3\xA9rer, l'historique, "
-                         "les versions\nMa premi\xC3\xA8re vue\tinteractif, 7 \xC3\xA9tapes\tune vue, un "
-                         "afficheur reli\xC3\xA9 \xC3\xA0 une variable, un bouton et son action, puis la "
-                         "simulation\nCr\xC3\xA9" "er un symbole de projet\tinteractif, 9 \xC3\xA9tapes\tune "
-                         "carte d'armoire devient un symbole, pos\xC3\xA9 deux fois, modifi\xC3\xA9 une fois "
-                         "(voir \xC2\xAB Tutoriel : cr\xC3\xA9" "er un symbole de projet \xC2\xBB)\nRelier "
-                         "un \xC3\xA9quipement Modbus\tvisite, 7 \xC3\xA9tapes\tles \xC3\xA9quipements, les "
-                         "variables li\xC3\xA9" "es, le plan d'adressage, l'outil Modbus, l'esclave "
-                         "simul\xC3\xA9, la qualit\xC3\xA9 en marche\nColler depuis Excel\tinteractif, 4 "
-                         "\xC3\xA9tapes\tdes lignes d'un tableur deviennent des variables IHM, puis un seul "
-                         "Ctrl+Z les retire\nHistorique et versions\tinteractif, 6 \xC3\xA9tapes\tannuler, "
-                         "r\xC3\xA9tablir, l'historique, cr\xC3\xA9" "er une version et la comparer", {}},
-             {K::Paragraph, "Chaque carte dit sa progression : **fait**, **en cours 4 / 9**. Son bouton : "
-                         "**Commencer**, **Reprendre** (l\xC3\xA0 o\xC3\xB9 tu t'\xC3\xA9tais "
-                         "arr\xC3\xAAt\xC3\xA9) ou **Refaire**. Le didacticiel retient o\xC3\xB9 tu en es "
-                         "d'une s\xC3\xA9" "ance \xC3\xA0 l'autre.", {}},
-             {K::Heading, "Une visite, une \xC3\xA9tape interactive", {}},
-             {K::Bullet, "**Une visite** montre : tout s'assombrit sauf la zone d\xC3\xA9" "crite (une "
-                         "entr\xC3\xA9" "e de l'arbre, un bouton), une bulle l'explique. **Suivant** (ou "
-                         "Entr\xC3\xA9" "e, ou la fl\xC3\xA8" "che droite), "
-                         "**Pr\xC3\xA9" "c\xC3\xA9" "dent** (ou la fl\xC3\xA8" "che gauche), **Passer** (ou "
-                         "\xC3\x89" "chap).", {}},
-             {K::Bullet, "**Une \xC3\xA9tape interactive** fait faire : rien ne s'assombrit, la zone du "
-                         "geste est entour\xC3\xA9" "e (un bouton, une ligne de l'arbre, un objet de la vue, "
-                         "une propri\xC3\xA9t\xC3\xA9), la bulle dit ce qui est attendu (\xC2\xAB J'attends "
-                         "le clic sur Cr\xC3\xA9" "er un symbole... \xC2\xBB). Fais le geste : "
-                         "l'\xC3\xA9tape le v\xC3\xA9rifie et passe \xC3\xA0 la suivante, dont la bulle dit "
-                         "la r\xC3\xA9ussite (\xC2\xAB \xC3\x89tape 3 r\xC3\xA9ussie : 5 objets choisis "
-                         "\xC2\xBB). **Montre-moi** le fait \xC3\xA0 ta place, avec les m\xC3\xAAmes "
-                         "commandes que toi.", {}},
-             {K::Bullet, "Une \xC3\xA9tape **d\xC3\xA9j\xC3\xA0 faite** en y arrivant "
-                         "(Pr\xC3\xA9" "c\xC3\xA9" "dent, un parcours repris) le dit : **Suivant** continue.", {}},
-             {K::Bullet, "**Au bout d'un parcours interactif** : **Garder** ce qu'il a cr\xC3\xA9\xC3\xA9, "
-                         "ou **Tout d\xC3\xA9" "faire** - l'historique revient \xC3\xA0 l'\xC3\xA9tat "
-                         "d'avant le parcours (une version cr\xC3\xA9\xC3\xA9" "e reste : elle est sur le "
-                         "disque).", {}},
-             {K::Bullet, "**Passer** ferme le parcours ; il reprend l\xC3\xA0 o\xC3\xB9 tu t'\xC3\xA9tais "
-                         "arr\xC3\xAAt\xC3\xA9.", {}},
-             {K::Paragraph, "\xC3\x80 la premi\xC3\xA8re ouverture de l'IHM, la visite s'ouvre "
-                         "d'elle-m\xC3\xAAme ; elle ne revient plus ensuite.", {}},
-             {K::Heading, "L'aide", {}},
-             {K::Bullet, "**F1** ouvre l'aide de l'endroit o\xC3\xB9 tu es : le volet courant (vues, "
-                         "scripts, alarmes...), le nom sous le curseur dans un script (une fonction IHM_, "
-                         "VAR_TEMP, une fonction du projet), l'**objet choisi** dans l'\xC3\xA9" "diteur ou "
-                         "la **tuile survol\xC3\xA9" "e** de la biblioth\xC3\xA8que : sa page, avec son "
-                         "exemple anim\xC3\xA9.", {}},
-             {K::Bullet, "La liste des sujets se parcourt par chapitres, se cherche par mot et relie les "
-                         "sujets entre eux.", {}},
-             {K::Bullet, "**Chaque chapitre a son ic\xC3\xB4ne et sa couleur**, que ses sujets reprennent ; "
-                         "**un objet a l'ic\xC3\xB4ne de sa tuile** dans la biblioth\xC3\xA8que. Deux "
-                         "colonnes de marques : **l'\xC5\x93il**, un exemple anim\xC3\xA9 ; **le triangle**, "
-                         "un tutoriel jou\xC3\xA9 par le moteur (vert : d\xC3\xA9" "duit de l'exemple ; "
-                         "orange : \xC3\xA9" "crit dans le guide). La **l\xC3\xA9gende**, sous la liste, les "
-                         "rappelle ; un clic sur son titre la replie.", {}},
-             {K::Bullet, "Le **guide complet** (Word et PDF), illustr\xC3\xA9 de captures, reprend "
-                         "exactement ces pages.", {}},
-             {K::Heading, "Le tutoriel de chaque objet", {}},
-             {K::Paragraph, "La page d'aide d'un objet de la biblioth\xC3\xA8que a deux onglets : **Page de "
-                         "l'objet** (son exemple anim\xC3\xA9, ses param\xC3\xA8tres) et **Tutoriel \xC2\xB7 "
-                         "jou\xC3\xA9 par le moteur** (ou le bouton **Tutoriel de l'objet**). Le tutoriel, "
-                         "c'est l'exemple de l'objet - sa vue, ses variables, ses gestes - qui tourne sur le "
-                         "**vrai moteur de l'IHM**, d\xC3\xA9" "coup\xC3\xA9 en **chapitres** :", {}},
-             {K::Bullet, "\xC3\xA0 gauche, les chapitres (un clic y va, et joue) ; sur la sc\xC3\xA8ne, la "
-                         "**bulle** du chapitre pointe l'objet dont il parle, qui respire ;", {}},
-             {K::Bullet, "la barre : **Au d\xC3\xA9" "but**, **Lecture / Pause** (Espace), **Arr\xC3\xAAt** "
-                         "; la vitesse **\xC3\x97" "0,5**, **\xC3\x97" "1**, **\xC3\x97" "2** ; la **frise** "
-                         "(un clic ou un glisser y va ; reculer rejoue le tour depuis le d\xC3\xA9" "but, "
-                         "\xC3\xA0 l'identique) et ses rep\xC3\xA8res de chapitres ; les fl\xC3\xA8" "ches "
-                         "gauche et droite : le chapitre d'avant, d'apr\xC3\xA8s ;", {}},
-             {K::Bullet, "**\xC3\x80 toi** : le sc\xC3\xA9nario se tait, la souris et le clavier vont au "
-                         "moteur, comme en simulation - cliquer, taper au clavier virtuel, tirer une "
-                         "poign\xC3\xA9" "e ; **Tutoriel guid\xC3\xA9** y revient.", {}},
-             {K::Paragraph, "Le tutoriel du GIF anim\xC3\xA9 est \xC3\xA9" "crit dans le guide ; celui des "
-                         "autres objets se d\xC3\xA9" "duit de leur exemple : la pr\xC3\xA9sentation, un "
-                         "chapitre par geste (un clic et l'action qu'il d\xC3\xA9" "clenche, le second clic "
-                         "qui confirme, les touches d'un clavier, une poign\xC3\xA9" "e tir\xC3\xA9" "e), "
-                         "ou, pour un objet qu'on ne touche pas, ce qu'il montre en marche et ses "
-                         "param\xC3\xA8tres ; puis \xC3\x80 toi.", {}},
-         },
-         {"tutoriel-symbole", "ihm", "objet-communs", "historique", "versions", "excel", "nouveautes-lot8"},
-         {"tutoriel", "Tutoriel", "\xC3\x80 toi", "chapitre", "chapitres", "frise", "didacticiel", "Didacticiel", "parcours", "Montre-moi", "Commencer", "Reprendre", "Refaire", "Garder", "Tout d\xC3\xA9" "faire", "l\xC3\xA9gende", "L\xC3\xA9gende"},
-         {"aide"},
-         {{"PNG_527_didacticiel_parcours.png", "Aide IHM \xE2\x80\xBA Didacticiel : les parcours en cartes - leur sorte, leurs \xC3\xA9tapes, leur dur\xC3\xA9" "e, leur progression (fait, en cours 5 / 7) et leur bouton : Commencer, Reprendre, Refaire."}, {"PNG_528_didacticiel_visite.png", "La visite \xC2\xAB D\xC3\xA9" "couvrir l'IHM \xC2\xBB : la zone d\xC3\xA9" "crite \xC3\xA9" "clair\xC3\xA9" "e, le reste assombri ; Suivant, Pr\xC3\xA9" "c\xC3\xA9" "dent, Passer."}, {"PNG_531_symbole_etape_3.png", "Une \xC3\xA9tape interactive : rien ne s'assombrit, la bulle dit le geste attendu (\xC2\xAB J'attends la s\xC3\xA9lection... \xC2\xBB) ; Montre-moi le fait \xC3\xA0 ta place."}, {"PNG_538_symbole_garder.png", "Au bout d'un parcours interactif : garder ce qu'il a cr\xC3\xA9\xC3\xA9, ou tout d\xC3\xA9" "faire."}, {"PNG_539_aide_icones_legende.png", "La liste de l'aide : une ic\xC3\xB4ne par chapitre, reprise par ses sujets ; un objet a l'ic\xC3\xB4ne de sa tuile ; l'\xC5\x93il marque un exemple anim\xC3\xA9, le triangle un tutoriel (vert : d\xC3\xA9" "duit de l'exemple, orange : \xC3\xA9" "crit) ; la l\xC3\xA9gende dessous."}, {"PNG_453_tutoriel_gif_presentation.png", "Le tutoriel du GIF anim\xC3\xA9 : les chapitres \xC3\xA0 gauche, la sc\xC3\xA8ne jou\xC3\xA9" "e par le vrai moteur, la bulle du chapitre point\xC3\xA9" "e sur l'objet, la barre de lecture et sa frise."}, {"PNG_456_tutoriel_gif_a_toi.png", "\xC2\xAB \xC3\x80 toi \xC2\xBB : le sc\xC3\xA9nario se tait, les clics vont au moteur - ici Arr\xC3\xAAter puis Jouer, cliqu\xC3\xA9s \xC3\xA0 la main."}, {"PNG_189_aide_f1_fonctions.png", "F1 dans le volet Fonctions : l'aide s'ouvre sur le bon sujet."}, {"PNG_192_aide_recherche.png", "La recherche dans l'aide, sans casse ni accents."}},
-         "",
-         {},
-         "",
-         {}},
         // ---- Demarrer / onglets
         {"onglets", "Les onglets et les raccourcis", "D\xC3\xA9marrer",
          "Quand les sous-onglets d'un volet ne tiennent pas, ils se r\xC3\xA9" "duisent : les pastilles "
@@ -908,26 +808,39 @@ const std::vector<Topic>& topics() {
         // ---- Demarrer / plantages
         {"plantages", "Plantages et blocages : le rapport, l'historique interne", "D\xC3\xA9marrer",
          "Si IHM Studio plante ou ne r\xC3\xA9pond plus, il \xC3\xA9" "crit un rapport dans le dossier "
-         "crashs (\xC3\xA0 c\xC3\xB4t\xC3\xA9 des r\xC3\xA9glages) : la version, le syst\xC3\xA8me, la pile "
-         "d'appels et son historique interne. Au lancement suivant, une fen\xC3\xAAtre le signale.",
+         "crashs (\xC3\xA0 c\xC3\xB4t\xC3\xA9 des r\xC3\xA9glages) - la version, le syst\xC3\xA8me, la pile "
+         "d'appels, son historique interne - et ouvre sa fen\xC3\xAAtre de rapport, dessin\xC3\xA9" "e comme "
+         "l'application : ce qui s'est pass\xC3\xA9, ce qu'il faisait, le rapport. La veille du PC n'est pas "
+         "un blocage.",
          {
-             {K::Heading, "Le plantage", {}},
-             {K::Paragraph, "Une petite fen\xC3\xAAtre s'ouvre tout de suite : \xC2\xAB IHM Studio a "
-                         "rencontr\xC3\xA9 un probl\xC3\xA8me et doit se fermer. Un rapport a "
-                         "\xC3\xA9t\xC3\xA9 enregistr\xC3\xA9 : \xE2\x80\xA6 \xC2\xBB. Le rapport est "
-                         "d\xC3\xA9j\xC3\xA0 \xC3\xA9" "crit quand elle s'ouvre. Sous Windows, un fichier "
-                         ".dmp (minidump) l'accompagne : il sert au d\xC3\xA9veloppeur.", {}},
-             {K::Heading, "Le blocage", {}},
+             {K::Heading, "Le plantage", {}, "1.12.28"},
+             {K::Paragraph, "Une fen\xC3\xAAtre d'IHM Studio s'ouvre tout de suite, \xC3\xA0 part "
+                         "(l'application, elle, s'est ferm\xC3\xA9" "e) : \xC2\xAB IHM Studio s'est "
+                         "arr\xC3\xAAt\xC3\xA9 \xC2\xBB, ce qui s'est pass\xC3\xA9, ce qu'il faisait, le "
+                         "rapport ; **Relancer IHM Studio**, **Ouvrir le dossier**, **Copier le rapport**, "
+                         "**Signaler le probl\xC3\xA8me**, **Fermer**. Le rapport est d\xC3\xA9j\xC3\xA0 "
+                         "\xC3\xA9" "crit quand elle s'ouvre. Sous Windows, un fichier .dmp (minidump) "
+                         "l'accompagne : il sert au d\xC3\xA9veloppeur.", {}, "1.12.28"},
+             {K::Heading, "Le blocage", {}, "1.12.28"},
              {K::Paragraph, "La boucle de l'application bat \xC3\xA0 chaque image. Sans battement depuis 8 s, "
                          "IHM Studio \xC3\xA9" "crit un rapport \xC2\xAB blocage \xC2\xBB (la pile du fil "
-                         "principal, ce qu'il \xC3\xA9tait en train de faire) et demande : **Attendre** ou "
-                         "**Fermer**. S'il repart, une note le dit dans le journal des messages, avec la "
-                         "dur\xC3\xA9" "e et le chemin du rapport.", {}},
-             {K::Heading, "Au lancement suivant", {}},
-             {K::Paragraph, "La fen\xC3\xAAtre \xC2\xAB Un plantage s'est produit le \xE2\x80\xA6 \xC2\xBB (ou "
-                         "\xC2\xAB Un blocage\xE2\x80\xA6 \xC2\xBB) montre le chemin du rapport, avec "
-                         "**Ouvrir le dossier**, **Copier le rapport** et **Fermer**. Elle ne s'ouvre qu'une "
-                         "fois par rapport.", {}},
+                         "principal, ce qu'il \xC3\xA9tait en train de faire) et ouvre sa fen\xC3\xAAtre "
+                         "\xC3\xA0 part : \xC2\xAB IHM Studio ne r\xC3\xA9pond plus \xC2\xBB, le temps qui "
+                         "passe, ce qu'il faisait ; **Attendre** (l'application continue) ou **Fermer IHM "
+                         "Studio**. S'il repart, la fen\xC3\xAAtre le dit et se ferme ; une note le dit "
+                         "aussi dans le journal des messages, avec la dur\xC3\xA9" "e et le chemin du "
+                         "rapport. **La veille n'est pas un blocage** : le temps compt\xC3\xA9 est celui "
+                         "o\xC3\xB9 le PC est \xC3\xA9veill\xC3\xA9. Quand le PC s'endort ou que "
+                         "l'\xC3\xA9" "cran s'\xC3\xA9teint, le chien de garde se tait ; au r\xC3\xA9veil, "
+                         "l'application a 30 s pour repartir avant d'\xC3\xAAtre surveill\xC3\xA9" "e de "
+                         "nouveau.", {}, "1.12.28"},
+             {K::Heading, "Au lancement suivant", {}, "1.12.28"},
+             {K::Paragraph, "Un rapport qu'aucune fen\xC3\xAAtre n'a encore montr\xC3\xA9 s'ouvre dans "
+                         "l'application, d\xC3\xA8s sa premi\xC3\xA8re image : \xC2\xAB Un plantage s'est "
+                         "produit \xC2\xBB (ou \xC2\xAB Un blocage\xE2\x80\xA6 \xC2\xBB), la date, ce qui "
+                         "s'est pass\xC3\xA9, ce qu'il faisait, avec **Ouvrir le dossier**, **Copier le "
+                         "rapport**, **Signaler le probl\xC3\xA8me** et **Fermer**. Elle ne s'ouvre qu'une "
+                         "fois par rapport.", {}, "1.12.28"},
              {K::Heading, "Ce que contient le rapport", {}},
              {K::Table, "Partie\tCe qu'elle dit\nEn-t\xC3\xAAte\tLa version, le syst\xC3\xA8me (Windows, et "
                          "wine s'il est l\xC3\xA0), l'heure.\nRaison\tLe code et l'adresse de l'exception "
@@ -956,6 +869,314 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Demarrer  Le didacticiel / didacticiel
+        {"didacticiel", "Le didacticiel, dans l'aide : les parcours et le tutoriel de chaque page", "D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel",
+         "Le didacticiel est ici, dans l'aide (F1) : six parcours qui se jouent sur ton projet - une visite "
+         "qui montre l'IHM, des exercices qui font faire et v\xC3\xA9rifient chaque geste - et, en "
+         "t\xC3\xAAte de chaque page de l'aide, le tutoriel de son sujet, jou\xC3\xA9 par le vrai moteur. Il "
+         "retient o\xC3\xB9 tu en es.",
+         {
+             {K::Heading, "Un seul endroit pour apprendre", {}, "1.12.28"},
+             {K::Bullet, "**Les parcours** : cette page les montre tous, en cartes ; chacun a aussi sa page, "
+                         "juste dessous dans l'arbre (D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel), qui dit "
+                         "ce qu'il fait \xC3\xA9tape par \xC3\xA9tape, avec son bouton.", {}, "1.12.28"},
+             {K::Bullet, "**Le tutoriel de la page** : en t\xC3\xAAte de chaque page de l'aide, **Regarder "
+                         "le tutoriel** le joue, **Essayer** te laisse faire.", {}, "1.12.28"},
+             {K::Bullet, "**Une page li\xC3\xA9" "e \xC3\xA0 un parcours** le propose en t\xC3\xAAte : "
+                         "\xC2\xAB Parcours guid\xC3\xA9 : Cr\xC3\xA9" "er un symbole de projet \xC2\xBB sur "
+                         "la page des symboles, \xC2\xAB Coller depuis Excel \xC2\xBB sur celle d'Excel...", {}, "1.12.28"},
+             {K::Bullet, "**Aide \xE2\x80\xBA Didacticiel de l'IHM** m\xC3\xA8ne ici. Sur l'accueil, "
+                         "**D\xC3\xA9" "couvrir l'IHM** (ou **Didacticiel**, dans le menu du clic droit) "
+                         "lance la visite, sur le projet ouvert ou celui que tu choisis.", {}, "1.12.28"},
+             {K::Heading, "Les parcours", {}, "1.12.28"},
+             {K::Table, "Parcours\tSorte\tCe qu'on y fait\nD\xC3\xA9" "couvrir l'IHM\tvisite, 16 "
+                         "\xC3\xA9tapes\tl'arbre, la configuration, les vues, les symboles, les styles, la "
+                         "programmation, la simulation et Pourquoi ?, l'outil Modbus, G\xC3\xA9n\xC3\xA9rer, "
+                         "l'historique, les versions, plusieurs fen\xC3\xAAtres, Aller \xC3\xA0, l'aide\nMa "
+                         "premi\xC3\xA8re vue\tinteractif, 7 \xC3\xA9tapes\tune vue, un afficheur "
+                         "reli\xC3\xA9 \xC3\xA0 une variable, un bouton et son action, puis la "
+                         "simulation\nCr\xC3\xA9" "er un symbole de projet\tinteractif, 9 \xC3\xA9tapes\tune "
+                         "carte d'armoire devient un symbole, pos\xC3\xA9 deux fois, modifi\xC3\xA9 une "
+                         "fois\nRelier un \xC3\xA9quipement Modbus\tvisite, 7 \xC3\xA9tapes\tles "
+                         "\xC3\xA9quipements, les variables li\xC3\xA9" "es, le plan d'adressage, l'outil "
+                         "Modbus, l'esclave simul\xC3\xA9, la qualit\xC3\xA9 en marche\nColler depuis "
+                         "Excel\tinteractif, 4 \xC3\xA9tapes\tdes lignes d'un tableur deviennent des "
+                         "variables IHM, puis un seul Ctrl+Z les retire\nHistorique et versions\tinteractif, "
+                         "6 \xC3\xA9tapes\tannuler, r\xC3\xA9tablir, l'historique, cr\xC3\xA9" "er une "
+                         "version, la comparer, restaurer un \xC3\xA9l\xC3\xA9ment", {}, "1.12.28"},
+             {K::Paragraph, "Chaque carte dit sa progression : **fait**, **en cours 4 / 9**. Son bouton : "
+                         "**Commencer**, **Reprendre** (l\xC3\xA0 o\xC3\xB9 tu t'\xC3\xA9tais "
+                         "arr\xC3\xAAt\xC3\xA9) ou **Refaire**. Le parcours se joue sur le **projet ouvert** "
+                         ": l'aide se ferme et il commence l\xC3\xA0 o\xC3\xB9 tu travailles. Sans projet "
+                         "ouvert, la carte le dit : ouvre ou cr\xC3\xA9" "e un projet, puis reviens ici (F1).", {}, "1.12.28"},
+             {K::Heading, "Une visite, une \xC3\xA9tape interactive", {}},
+             {K::Bullet, "**Une visite** montre : tout s'assombrit sauf la zone d\xC3\xA9" "crite (une "
+                         "entr\xC3\xA9" "e de l'arbre, un bouton), une bulle l'explique. **Suivant** (ou "
+                         "Entr\xC3\xA9" "e, ou la fl\xC3\xA8" "che droite), "
+                         "**Pr\xC3\xA9" "c\xC3\xA9" "dent** (ou la fl\xC3\xA8" "che gauche), **Passer** (ou "
+                         "\xC3\x89" "chap).", {}},
+             {K::Bullet, "**Une \xC3\xA9tape interactive** fait faire : rien ne s'assombrit, la zone du "
+                         "geste est entour\xC3\xA9" "e (un bouton, une ligne de l'arbre, un objet de la vue, "
+                         "une propri\xC3\xA9t\xC3\xA9), la bulle dit ce qui est attendu (\xC2\xAB J'attends "
+                         "le clic sur Cr\xC3\xA9" "er un symbole... \xC2\xBB). Fais le geste : "
+                         "l'\xC3\xA9tape le v\xC3\xA9rifie et passe \xC3\xA0 la suivante, dont la bulle dit "
+                         "la r\xC3\xA9ussite (\xC2\xAB \xC3\x89tape 3 r\xC3\xA9ussie : 5 objets choisis "
+                         "\xC2\xBB). **Montre-moi** le fait \xC3\xA0 ta place, avec les m\xC3\xAAmes "
+                         "commandes que toi.", {}},
+             {K::Bullet, "Une \xC3\xA9tape **d\xC3\xA9j\xC3\xA0 faite** en y arrivant "
+                         "(Pr\xC3\xA9" "c\xC3\xA9" "dent, un parcours repris) le dit : **Suivant** continue.", {}},
+             {K::Bullet, "**Au bout d'un parcours interactif** : **Garder** ce qu'il a cr\xC3\xA9\xC3\xA9, "
+                         "ou **Tout d\xC3\xA9" "faire** - l'historique revient \xC3\xA0 l'\xC3\xA9tat "
+                         "d'avant le parcours (une version cr\xC3\xA9\xC3\xA9" "e reste : elle est sur le "
+                         "disque).", {}},
+             {K::Bullet, "**Passer** ferme le parcours ; il reprend l\xC3\xA0 o\xC3\xB9 tu t'\xC3\xA9tais "
+                         "arr\xC3\xAAt\xC3\xA9.", {}},
+             {K::Paragraph, "\xC3\x80 la premi\xC3\xA8re ouverture de l'IHM, la visite s'ouvre "
+                         "d'elle-m\xC3\xAAme ; elle ne revient plus ensuite.", {}},
+             {K::Heading, "L'aide", {}, "1.12.28"},
+             {K::Bullet, "**F1** ouvre l'aide de l'endroit o\xC3\xB9 tu es : le volet courant (vues, "
+                         "scripts, alarmes...), le nom sous le curseur dans un script (une fonction IHM_, "
+                         "VAR_TEMP, une fonction du projet), l'**objet choisi** dans l'\xC3\xA9" "diteur ou "
+                         "la **tuile survol\xC3\xA9" "e** de la biblioth\xC3\xA8que : sa page, avec son "
+                         "exemple anim\xC3\xA9.", {}, "1.12.28"},
+             {K::Bullet, "L'arbre de gauche range les pages en chapitres et sous-chapitres ; **chaque niveau "
+                         "se replie d'un clic**, celui de la page ouverte aussi. La recherche trouve un mot "
+                         "dans toutes les pages ; le fil d'Ariane dit o\xC3\xB9 l'on est.", {}, "1.12.28"},
+             {K::Bullet, "**Chaque chapitre a son ic\xC3\xB4ne et sa couleur**, que ses pages reprennent ; "
+                         "**un objet a l'ic\xC3\xB4ne de sa tuile** dans la biblioth\xC3\xA8que.", {}, "1.12.28"},
+             {K::Bullet, "Le **guide complet** (Word et PDF), illustr\xC3\xA9 de captures, reprend "
+                         "exactement ces pages.", {}, "1.12.28"},
+             {K::Heading, "Le tutoriel de chaque objet", {}},
+             {K::Paragraph, "La page d'aide d'un objet de la biblioth\xC3\xA8que a deux onglets : **Page de "
+                         "l'objet** (son exemple anim\xC3\xA9, ses param\xC3\xA8tres) et **Tutoriel \xC2\xB7 "
+                         "jou\xC3\xA9 par le moteur** (ou le bouton **Tutoriel de l'objet**). Le tutoriel, "
+                         "c'est l'exemple de l'objet - sa vue, ses variables, ses gestes - qui tourne sur le "
+                         "**vrai moteur de l'IHM**, d\xC3\xA9" "coup\xC3\xA9 en **chapitres** :", {}},
+             {K::Bullet, "\xC3\xA0 gauche, les chapitres (un clic y va, et joue) ; sur la sc\xC3\xA8ne, la "
+                         "**bulle** du chapitre pointe l'objet dont il parle, qui respire ;", {}},
+             {K::Bullet, "la barre : **Au d\xC3\xA9" "but**, **Lecture / Pause** (Espace), **Arr\xC3\xAAt** "
+                         "; la vitesse **\xC3\x97" "0,5**, **\xC3\x97" "1**, **\xC3\x97" "2** ; la **frise** "
+                         "(un clic ou un glisser y va ; reculer rejoue le tour depuis le d\xC3\xA9" "but, "
+                         "\xC3\xA0 l'identique) et ses rep\xC3\xA8res de chapitres ; les fl\xC3\xA8" "ches "
+                         "gauche et droite : le chapitre d'avant, d'apr\xC3\xA8s ;", {}},
+             {K::Bullet, "**\xC3\x80 toi** : le sc\xC3\xA9nario se tait, la souris et le clavier vont au "
+                         "moteur, comme en simulation - cliquer, taper au clavier virtuel, tirer une "
+                         "poign\xC3\xA9" "e ; **Tutoriel guid\xC3\xA9** y revient.", {}},
+             {K::Paragraph, "Le tutoriel du GIF anim\xC3\xA9 est \xC3\xA9" "crit dans le guide ; celui des "
+                         "autres objets se d\xC3\xA9" "duit de leur exemple : la pr\xC3\xA9sentation, un "
+                         "chapitre par geste (un clic et l'action qu'il d\xC3\xA9" "clenche, le second clic "
+                         "qui confirme, les touches d'un clavier, une poign\xC3\xA9" "e tir\xC3\xA9" "e), "
+                         "ou, pour un objet qu'on ne touche pas, ce qu'il montre en marche et ses "
+                         "param\xC3\xA8tres ; puis \xC3\x80 toi.", {}},
+         },
+         {"parcours-decouvrir", "parcours-premiere-vue", "parcours-symbole", "parcours-modbus", "parcours-excel", "parcours-versions", "tutoriel-symbole", "menu-aide"},
+         {"tutoriel", "Tutoriel", "\xC3\x80 toi", "chapitre", "chapitres", "frise", "didacticiel", "Didacticiel", "parcours", "Parcours", "parcours guid\xC3\xA9", "Montre-moi", "Commencer", "Reprendre", "Refaire", "Garder", "Tout d\xC3\xA9" "faire", "l\xC3\xA9gende", "L\xC3\xA9gende", "Didacticiel de l'IHM"},
+         {"aide"},
+         {{"PNG_527_didacticiel_parcours.png", "L'aide \xE2\x80\xBA D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel : les parcours en cartes - leur sorte, leurs \xC3\xA9tapes, leur dur\xC3\xA9" "e, leur progression (fait, en cours 5 / 7) et leur bouton : Commencer, Reprendre, Refaire."}, {"PNG_528_didacticiel_visite.png", "La visite \xC2\xAB D\xC3\xA9" "couvrir l'IHM \xC2\xBB : la zone d\xC3\xA9" "crite \xC3\xA9" "clair\xC3\xA9" "e, le reste assombri ; Suivant, Pr\xC3\xA9" "c\xC3\xA9" "dent, Passer."}, {"PNG_531_symbole_etape_3.png", "Une \xC3\xA9tape interactive : rien ne s'assombrit, la bulle dit le geste attendu (\xC2\xAB J'attends la s\xC3\xA9lection... \xC2\xBB) ; Montre-moi le fait \xC3\xA0 ta place."}, {"PNG_538_symbole_garder.png", "Au bout d'un parcours interactif : garder ce qu'il a cr\xC3\xA9\xC3\xA9, ou tout d\xC3\xA9" "faire."}, {"PNG_453_tutoriel_gif_presentation.png", "Le tutoriel du GIF anim\xC3\xA9 : les chapitres \xC3\xA0 gauche, la sc\xC3\xA8ne jou\xC3\xA9" "e par le vrai moteur, la bulle du chapitre point\xC3\xA9" "e sur l'objet, la barre de lecture et sa frise."}, {"PNG_456_tutoriel_gif_a_toi.png", "\xC2\xAB \xC3\x80 toi \xC2\xBB : le sc\xC3\xA9nario se tait, les clics vont au moteur - ici Arr\xC3\xAAter puis Jouer, cliqu\xC3\xA9s \xC3\xA0 la main."}},
+         "",
+         {},
+         "",
+         {}},
+        // ---- Demarrer  Le didacticiel / parcours-decouvrir
+        {"parcours-decouvrir", "Parcours : D\xC3\xA9" "couvrir l'IHM", "D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel",
+         "Une visite de trois minutes, sur ton projet : o\xC3\xB9 tout se trouve dans IHM Studio, de l'arbre "
+         "\xC3\xA0 l'aide. Elle montre sans rien changer : tout s'assombrit sauf la zone d\xC3\xA9" "crite, "
+         "une bulle l'explique.",
+         {
+             {K::Heading, "Les \xC3\xA9tapes", {}},
+             {K::Step, "**Bienvenue** : ce que la visite montre, et comment avancer (Suivant, "
+                         "Pr\xC3\xA9" "c\xC3\xA9" "dent, Passer).", "1"},
+             {K::Step, "**Le dossier IHM** : tout part de l'arbre du projet ; chaque entr\xC3\xA9" "e "
+                         "ouvre son onglet au centre, le triangle d\xC3\xA9plie.", "2"},
+             {K::Step, "**La configuration** : l'identit\xC3\xA9 de l'IHM, sa r\xC3\xA9solution, sa vue de "
+                         "d\xC3\xA9marrage ; les alarmes, les recettes, les utilisateurs, les historiques, "
+                         "les langues, les \xC3\xA9quipements, le poste d'exploitation.", "3"},
+             {K::Step, "**Les vues** : les mod\xC3\xA8les, les vues, les popups ; l'\xC3\xA9" "diteur, la "
+                         "biblioth\xC3\xA8que \xC3\xA0 droite, l'inspecteur.", "4"},
+             {K::Step, "**Les symboles** : une carte dessin\xC3\xA9" "e une fois, pos\xC3\xA9" "e partout, "
+                         "chaque instance reli\xC3\xA9" "e \xC3\xA0 son armoire.", "5"},
+             {K::Step, "**Les styles** : des apparences nomm\xC3\xA9" "es, avec leur aper\xC3\xA7u ; "
+                         "changer le style change tous les objets qui le citent.", "6"},
+             {K::Step, "**Ressources et fichiers** : images, sons, vid\xC3\xA9os, polices, et les fichiers "
+                         "qu'un tableau affiche.", "7"},
+             {K::Step, "**La programmation** : scripts, fonctions IHM, variables et types IHM ; l'aide "
+                         "\xC3\xA0 la saisie.", "8"},
+             {K::Step, "**La simulation** : l'IHM en marche, ses clics, ses scripts, ses alarmes ; forcer "
+                         "une variable.", "9"},
+             {K::Step, "**Pourquoi ?** : en marche, le clic droit sur un objet dit ce qu'il montre et "
+                         "pourquoi, terme par terme.", "10"},
+             {K::Step, "**L'outil Modbus et les essais** : lire et \xC3\xA9" "crire un \xC3\xA9quipement, "
+                         "voir les trames ; rejouer un sc\xC3\xA9nario.", "11"},
+             {K::Step, "**G\xC3\xA9n\xC3\xA9rer et Compiler** : la coh\xC3\xA9rence du projet, son code ; "
+                         "un double-clic m\xC3\xA8ne \xC3\xA0 la source.", "12"},
+             {K::Step, "**L'historique** : Ctrl+Z, Ctrl+Y, et Ctrl+H qui liste chaque action.", "13"},
+             {K::Step, "**Les versions** : garder tout le projet (Ctrl+Alt+S), comparer, restaurer un "
+                         "\xC3\xA9l\xC3\xA9ment.", "14"},
+             {K::Step, "**Plusieurs fen\xC3\xAAtres et Aller \xC3\xA0** : Ctrl+Maj+N ouvre une autre "
+                         "fen\xC3\xAAtre (copier d'un projet \xC3\xA0 l'autre) ; Ctrl+K trouve une commande.", "15"},
+             {K::Step, "**L'aide, partout** : F1 ouvre la page de l'endroit ; D\xC3\xA9marrer \xE2\x80\xBA "
+                         "Le didacticiel, les autres parcours.", "16"},
+             {K::Heading, "Apr\xC3\xA8s", {}},
+             {K::Paragraph, "La visite ne change rien au projet. Elle s'ouvre d'elle-m\xC3\xAAme \xC3\xA0 la "
+                         "premi\xC3\xA8re ouverture de l'IHM, puis ici, quand tu veux.", {}},
+         },
+         {"didacticiel", "ihm", "onglets", "simulation", "historique", "versions", "fenetres", "aller-a"},
+         {"D\xC3\xA9" "couvrir l'IHM", "visite", "visite guid\xC3\xA9" "e", "d\xC3\xA9" "couvrir"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.12.28"},
+        // ---- Demarrer  Le didacticiel / parcours-premiere-vue
+        {"parcours-premiere-vue", "Parcours : Ma premi\xC3\xA8re vue", "D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel",
+         "Un exercice de six minutes : tu cr\xC3\xA9" "es une vue, tu y poses un afficheur reli\xC3\xA9 "
+         "\xC3\xA0 une variable et un bouton avec son action, puis tu la simules. Chaque geste est "
+         "v\xC3\xA9rifi\xC3\xA9 ; Montre-moi le fait \xC3\xA0 ta place.",
+         {
+             {K::Heading, "Les \xC3\xA9tapes", {}},
+             {K::Step, "**Cr\xC3\xA9" "e une vue** : IHM \xE2\x80\xBA Vues \xE2\x80\xBA Vues, Nouvelle "
+                         "vue, un mod\xC3\xA8le de la galerie (Vide suffit), un nom.", "1"},
+             {K::Step, "**Ouvre-la** : un clic sur son nom dans l'arbre ; elle s'ouvre dans "
+                         "l'\xC3\xA9" "diteur.", "2"},
+             {K::Step, "**Pose un afficheur num\xC3\xA9rique** : la tuile de la biblioth\xC3\xA8que, puis "
+                         "un clic dans la vue.", "3"},
+             {K::Step, "**Relie-le \xC3\xA0 une variable** : sa Valeur (expression), par exemple "
+                         "`Armoires[0].ana.PT1.mes` ; l'aide \xC3\xA0 la saisie propose les noms "
+                         "(Ctrl+Espace).", "4"},
+             {K::Step, "**Pose un bouton** : sous l'afficheur.", "5"},
+             {K::Step, "**Donne-lui une action** : l'onglet Actions de l'inspecteur, Ajouter une action - "
+                         "naviguer vers une vue, \xC3\xA9" "crire une valeur.", "6"},
+             {K::Step, "**Simule-la** : Simulation \xE2\x80\xBA IHM, Marche, puis ta vue : l'afficheur "
+                         "montre la mesure, le bouton fait son action.", "7"},
+             {K::Heading, "\xC3\x80 la fin", {}},
+             {K::Paragraph, "**Garder** ta vue, ou **Tout d\xC3\xA9" "faire** : l'historique revient \xC3\xA0 "
+                         "l'\xC3\xA9tat d'avant le parcours.", {}},
+         },
+         {"didacticiel", "vues", "editeur", "objet-afficheur-numerique", "objet-bouton", "actions", "simulation"},
+         {"Ma premi\xC3\xA8re vue", "premi\xC3\xA8re vue", "premier \xC3\xA9" "cran"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.12.28"},
+        // ---- Demarrer  Le didacticiel / parcours-symbole
+        {"parcours-symbole", "Parcours : Cr\xC3\xA9" "er un symbole de projet", "D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel",
+         "Un exercice de huit minutes : une carte d'armoire dessin\xC3\xA9" "e une fois devient un symbole, "
+         "pos\xC3\xA9 deux fois - chaque instance reli\xC3\xA9" "e \xC3\xA0 son armoire - puis "
+         "modifi\xC3\xA9 une fois pour les deux. La page \xC2\xAB Tutoriel : cr\xC3\xA9" "er un symbole de "
+         "projet \xC2\xBB le raconte pas \xC3\xA0 pas.",
+         {
+             {K::Heading, "Les \xC3\xA9tapes", {}},
+             {K::Step, "**Ouvre la vue de l'exercice** : le parcours l'a cr\xC3\xA9\xC3\xA9" "e ; un clic "
+                         "sur son nom dans l'arbre.", "1"},
+             {K::Step, "**Pose une carte pour l'armoire 1** : un cadre, un titre, deux afficheurs et un "
+                         "voyant reli\xC3\xA9s \xC3\xA0 `Armoires[0]`.", "2"},
+             {K::Step, "**Choisis les objets de la carte** : un cadre de s\xC3\xA9lection autour d'eux.", "3"},
+             {K::Step, "**Transforme la carte en symbole** : le clic droit, Cr\xC3\xA9" "er un symbole.", "4"},
+             {K::Step, "**Nomme-le, garde son param\xC3\xA8tre** : `Armoires[0]` devient le "
+                         "param\xC3\xA8tre Armoire du symbole.", "5"},
+             {K::Step, "**Ouvre le symbole** : IHM \xE2\x80\xBA Symboles ; ses objets lisent `Armoire`.", "6"},
+             {K::Step, "**Pose une deuxi\xC3\xA8me carte** : une instance de plus, reli\xC3\xA9" "e "
+                         "\xC3\xA0 `Armoires[1]`.", "7"},
+             {K::Step, "**Change le cadre, dans le symbole** : les deux cartes changent ensemble.", "8"},
+             {K::Step, "**Lance la simulation** : chaque carte montre son armoire.", "9"},
+             {K::Heading, "\xC3\x80 la fin", {}},
+             {K::Paragraph, "**Garder** le symbole et ses deux instances, ou **Tout d\xC3\xA9" "faire**.", {}},
+         },
+         {"didacticiel", "symboles", "tutoriel-symbole", "objet-instance-de-symbole", "simulation"},
+         {"Cr\xC3\xA9" "er un symbole de projet", "parcours symbole"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.12.28"},
+        // ---- Demarrer  Le didacticiel / parcours-modbus
+        {"parcours-modbus", "Parcours : Relier un \xC3\xA9quipement Modbus", "D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel",
+         "Une visite de quatre minutes, dans l'ordre de la mise en service : o\xC3\xB9 l'on d\xC3\xA9" "crit "
+         "un \xC3\xA9quipement Modbus TCP, comment une variable IHM s'y lit et s'y \xC3\xA9" "crit, l'outil "
+         "qui v\xC3\xA9rifie, l'esclave simul\xC3\xA9 qui r\xC3\xA9pond sans l'\xC3\xA9quipement.",
+         {
+             {K::Heading, "Les \xC3\xA9tapes", {}},
+             {K::Step, "**Une variable dans un \xC3\xA9quipement** : une centrale de mesure, un variateur, "
+                         "un automate - l'IHM les lit et les \xC3\xA9" "crit en Modbus TCP.", "1"},
+             {K::Step, "**Configuration \xE2\x80\xBA \xC3\x89quipements** : leur adresse IP, leur port, "
+                         "leur num\xC3\xA9ro d'unit\xC3\xA9, le scanner IP.", "2"},
+             {K::Step, "**Les variables li\xC3\xA9" "es** : la colonne \xC3\x89quipement et l'Adresse dans "
+                         "Variables IHM, l'acc\xC3\xA8s, la mise \xC3\xA0 l'\xC3\xA9" "chelle.", "3"},
+             {K::Step, "**Le plan d'adressage** : chaque variable \xC3\xA0 sa place, les trous et les "
+                         "chevauchements signal\xC3\xA9s.", "4"},
+             {K::Step, "**L'outil Modbus** : lire, \xC3\xA9" "crire, les trames, l'espion, le ping.", "5"},
+             {K::Step, "**L'esclave simul\xC3\xA9** : sans l'\xC3\xA9quipement, il r\xC3\xA9pond \xC3\xA0 "
+                         "sa place.", "6"},
+             {K::Step, "**En marche : la qualit\xC3\xA9** : bonne, p\xC3\xA9rim\xC3\xA9" "e, en "
+                         "d\xC3\xA9" "faut ; G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie les adresses.", "7"},
+             {K::Heading, "Apr\xC3\xA8s", {}},
+             {K::Paragraph, "La visite ne change rien au projet.", {}},
+         },
+         {"didacticiel", "equipements", "outil-modbus", "esclaves-virtuels", "variables-ihm"},
+         {"Relier un \xC3\xA9quipement Modbus", "parcours Modbus"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.12.28"},
+        // ---- Demarrer  Le didacticiel / parcours-excel
+        {"parcours-excel", "Parcours : Coller depuis Excel", "D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel",
+         "Un exercice de trois minutes : des lignes copi\xC3\xA9" "es d'un tableur deviennent des variables "
+         "IHM, reconnues par les titres de leurs colonnes ; tout le collage est un seul pas de l'historique.",
+         {
+             {K::Heading, "Les \xC3\xA9tapes", {}},
+             {K::Step, "**Ouvre les variables IHM** : IHM \xE2\x80\xBA Programmation "
+                         "g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Variables IHM.", "1"},
+             {K::Step, "**Copie des lignes dans un tableur** : avec leurs titres - Nom, Type, Initiale, "
+                         "Description, Dossier. Sans tableur, Montre-moi en met trois dans le presse-papiers.", "2"},
+             {K::Step, "**Colle dans la table** : Ctrl+V ; un nom nouveau cr\xC3\xA9" "e la variable, un "
+                         "nom connu la met \xC3\xA0 jour, une case refus\xC3\xA9" "e dit pourquoi.", "3"},
+             {K::Step, "**Un seul Ctrl+Z** : tout le collage part d'un coup ; Ctrl+Y le remet.", "4"},
+             {K::Heading, "\xC3\x80 la fin", {}},
+             {K::Paragraph, "**Garder** les variables, ou **Tout d\xC3\xA9" "faire**.", {}},
+         },
+         {"didacticiel", "excel", "variables-ihm", "historique"},
+         {"Coller depuis Excel", "parcours Excel"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.12.28"},
+        // ---- Demarrer  Le didacticiel / parcours-versions
+        {"parcours-versions", "Parcours : Historique et versions", "D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel",
+         "Un exercice de quatre minutes : annuler et r\xC3\xA9tablir, l'historique, puis une version du "
+         "projet que tu compares \xC3\xA0 l'\xC3\xA9tat d'avant - et ce qui se restaure, "
+         "\xC3\xA9l\xC3\xA9ment par \xC3\xA9l\xC3\xA9ment.",
+         {
+             {K::Heading, "Les \xC3\xA9tapes", {}},
+             {K::Step, "**Fais un changement** : renomme une variable, d\xC3\xA9place un objet...", "1"},
+             {K::Step, "**Annule, puis r\xC3\xA9tablis** : Ctrl+Z, Ctrl+Y ; l'\xC3\xA9" "cran montre "
+                         "l'endroit.", "2"},
+             {K::Step, "**Ouvre l'historique** : Ctrl+H, chaque action, son heure ; un double clic revient "
+                         "\xC3\xA0 cet \xC3\xA9tat.", "3"},
+             {K::Step, "**Cr\xC3\xA9" "e une version** : Ctrl+Alt+S, un nom, un \xC3\xA9tat (brouillon, "
+                         "valid\xC3\xA9" "e, livr\xC3\xA9" "e).", "4"},
+             {K::Step, "**Compare-la** : ce qui a chang\xC3\xA9, \xC3\xA9l\xC3\xA9ment par "
+                         "\xC3\xA9l\xC3\xA9ment.", "5"},
+             {K::Step, "**Restaurer, au besoin** : un \xC3\xA9l\xC3\xA9ment seul, ou toute la version.", "6"},
+             {K::Heading, "\xC3\x80 la fin", {}},
+             {K::Paragraph, "**Garder**, ou **Tout d\xC3\xA9" "faire** : l'historique revient \xC3\xA0 "
+                         "l'\xC3\xA9tat d'avant ; une version cr\xC3\xA9\xC3\xA9" "e reste sur le disque.", {}},
+         },
+         {"didacticiel", "historique", "versions", "comparer-versions"},
+         {"Historique et versions", "parcours versions"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.12.28"},
         // ---- Concevoir les vues  Les vues et l'editeur / vues
         {"vues", "Les vues", "Concevoir les vues \xE2\x80\xBA Les vues et l'\xC3\xA9" "diteur",
          "Une vue est un \xC3\xA9" "cran de l'IHM ; on la cr\xC3\xA9" "e, la duplique, l'ordonne et on "

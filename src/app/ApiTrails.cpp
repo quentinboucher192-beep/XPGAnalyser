@@ -309,6 +309,11 @@ std::optional<std::string>& pendingTutorial() {
     static std::optional<std::string> pending;
     return pending;
 }
+// 1.12.28 : Reprendre (un parcours de l'IHM demande depuis l'aide).
+bool& pendingResume() {
+    static bool resume = false;
+    return resume;
+}
 
 // ---- l'onglet des cartes ----------------------------------------------------------
 class ApiTrailsPage final : public ui::Widget {
@@ -2030,7 +2035,15 @@ void MainAnalysisScreen::openApiTutorial(const std::string& trail) {
     }
 }
 
-void MainAnalysisScreen::requestApiTutorial(std::string trail) { pendingTutorial() = std::move(trail); }
+void MainAnalysisScreen::requestApiTutorial(std::string trail) {
+    pendingTutorial() = std::move(trail);
+    pendingResume() = false;
+}
+
+void MainAnalysisScreen::requestTrail(std::string trail, bool resume) {
+    pendingTutorial() = std::move(trail);
+    pendingResume() = resume;
+}
 
 void MainAnalysisScreen::takePendingApiTutorial() {
     auto& pending = pendingTutorial();
@@ -2039,7 +2052,8 @@ void MainAnalysisScreen::takePendingApiTutorial() {
     pending.reset();
     // 1.12.0 : IHM Studio - un parcours de l'IHM (« decouvrir »), sans l'onglet API.
     if (!ApiTrails::find(trail) && !trail.empty()) {
-        startTrail(trail, false);
+        startTrail(trail, pendingResume());   // 1.12.28 : Reprendre, depuis l'aide
+        pendingResume() = false;
         return;
     }
     openApiTutorial(trail);

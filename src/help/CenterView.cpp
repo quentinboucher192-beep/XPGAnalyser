@@ -150,7 +150,11 @@ std::string tutorialCardText(const TutorialInfo& info) {
     return s;
 }
 
-bool hasTutorial(const Topic& t) { return t.source != Source::NotesPage; }
+// 1.12.28 : la page d'un parcours du didacticiel n'a pas de tutoriel deduit : le parcours en est un
+// (sa carte, Commencer, en tete de page).
+bool hasTutorial(const Topic& t) {
+    return t.source != Source::NotesPage && !(t.source == Source::Guide && t.ref.rfind("parcours-", 0) == 0);
+}
 
 TutorialCount tutorialCount(const Index& ix) {
     TutorialCount c;

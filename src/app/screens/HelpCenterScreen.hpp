@@ -50,6 +50,8 @@ public:
     // Tranche 8 : suivre un lien de la page comme un clic ("domaine:Alarmes",
     // "contexte:1", "montrer:1.10.1|0|0", "tuto:<cle>", "signaler:capture"...).
     void follow(const std::string& target) { onLink(target); }
+    // 1.12.28 : les cartes des parcours de la page (le didacticiel, un parcours) ; nul ailleurs.
+    [[nodiscard]] class HmiTrailCards* trails() const noexcept;
 
     // Alt+Gauche / Alt+Droite : l'historique du centre, toujours (la touche
     // globale Retour reste en dehors du centre) ; Ctrl+F : la recherche.
@@ -94,6 +96,11 @@ private:
     // panneau (visible sur page-signaler seulement) et le dernier zip prepare.
     help::report::Form       reportForm_;
     ui::Widget*              reportPanel_{nullptr};
+    // 1.12.28 : le didacticiel dans l'aide - les cartes des parcours, en haut de sa page
+    // (toutes) et de la page d'un parcours (la sienne) ; leur hauteur suit la largeur.
+    class HmiTrailCards*     trails_{nullptr};
+    float                    trailsExtent_{0.f};
+    void refreshTrails();
     std::filesystem::path    lastZip_;
     std::filesystem::path    captureFile_;      // tranche 8 : la capture jointe (F12 de Signaler)
 

@@ -201,6 +201,9 @@ public:
     // l'API ; l'ecran l'ouvre des qu'un projet est la (takePendingApiTutorial).
     // `trail` : un parcours a lancer aussi ("api-decouvrir"...) ; vide : les cartes.
     static void requestApiTutorial(std::string trail = {});
+    // 1.12.28 : un parcours de l'IHM demande depuis l'aide (F1) : l'ecran le lance en revenant
+    // au premier plan ; `resume` : la ou on s'etait arrete (Reprendre).
+    static void requestTrail(std::string trail, bool resume);
 
     // ---- lot API 7 : les onglets de l'API, pour les scripts et les tests -----
     //  Le volet d'un onglet de l'API ("simulation", "statistiques",

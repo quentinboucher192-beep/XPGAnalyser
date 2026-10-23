@@ -33,6 +33,9 @@
 #include "../TutorialsLot8.hpp"
 #include "../hmi/HmiExprPage.hpp"
 #include "../hmi/HmiHelpPane.hpp"
+#include "../hmi/HmiTrails.hpp"          // 1.12.28 : les cartes des parcours du didacticiel
+#include "../../help/Trails.hpp"        // 1.12.28 : le catalogue des parcours
+#include "Screens.hpp"                 // 1.12.28 : MainAnalysisScreen::requestTrail
 
 #include <algorithm>
 #include <cmath>
@@ -320,6 +323,14 @@ void HelpCenterScreen::Update(const menu::FrameContext& fc) {
     // barre. Reste l'espace qui suit le bloc de la carte (14 px) : la bande de
     // ~40 px de T2_10 en fait 16. HelpArticleView.hpp n'est pas touche : 17 objets
     // de la construction en dependent (App.cpp, ScriptRunner.cpp...).
+    // 1.12.28 : les cartes des parcours, a la hauteur qu'elles demandent pour leur largeur.
+    if (trails_ && pageDock_ && trails_->visible() && trails_->bounds().w > 1.f) {
+        const float want = std::ceil(trails_->preferredHeight(trails_->bounds().w));
+        if (std::abs(want - trailsExtent_) > 1.f) {
+            trailsExtent_ = want;
+            pageDock_->setExtent(*trails_, want);
+        }
+    }
     if (!head_ || !pageDock_ || !head_->visible() || head_->contentHeight() < 1.f) return;
     constexpr float kArticlePadBottom = 24.f;
     const float want = std::clamp(std::ceil(head_->contentHeight() - kArticlePadBottom) + 2.f, 40.f, 200.f);
@@ -455,6 +466,21 @@ core::Status HelpCenterScreen::buildUi() {
         form->addChild(std::move(actions));
         reportPanel_ = &page->dock(std::move(form), DockLayout::Side::Top, 318.f);   // T2-7 : + les trois etiquettes
         reportPanel_->setVisibility(Visibility::Collapsed);
+    }
+    // ---- 1.12.28 : les parcours du didacticiel (la page du didacticiel, celle d'un parcours) ----
+    {
+        auto cards = std::make_unique<HmiTrailCards>(id + ".parcours");
+        HmiTrailCards::Style style;
+        style.title = "Le didacticiel : les parcours";
+        style.countStarted = true;
+        style.summaryLines = 2;
+        style.note = "Un parcours se joue sur le projet ouvert : l'aide se ferme, il commence l\xC3\xA0 o\xC3\xB9 tu travailles.";
+        cards->setStyle(std::move(style));
+        trails_ = &static_cast<HmiTrailCards&>(page->dock(std::move(cards), DockLayout::Side::Top, 220.f));
+        trails_->setVisibility(Visibility::Collapsed);
+        links_ += trails_->startRequested->connect([this](const std::string& key, bool resume) {
+            onLink((resume ? "parcours-reprendre:" : "parcours:") + key);
+        });
     }
     page_ = &static_cast<HelpArticleView&>(page->dock(std::make_unique<HelpArticleView>(id + ".pane.article"),
                                                       DockLayout::Side::Center, 0.f));
@@ -639,6 +665,44 @@ void HelpCenterScreen::rebuildList() {
     listMode_ = mode;
 }
 
+HmiTrailCards* HelpCenterScreen::trails() const noexcept {
+    return trails_ && trails_->visible() ? trails_ : nullptr;
+}
+
+void HelpCenterScreen::refreshTrails() {
+    if (!trails_) return;
+    const auto* one = help::trails::ofPage(current_);
+    const bool all = current_ == help::trails::kOverview;
+    if (!core::hasIhm() || (!one && !all)) {
+        trails_->setVisibility(Visibility::Collapsed);
+        return;
+    }
+    // La progression : celle que l'ecran du projet ecrit (didacticiel.<cle>.etape / .fait).
+    const auto& settings = app_.settings();
+    std::vector<TrailCard> cards;
+    for (const auto& d : help::trails::ihm()) {
+        if (one && &d != one) continue;
+        TrailCard c;
+        c.key = std::string(d.key);
+        c.title = std::string(d.title);
+        c.kind = std::string(d.kind);
+        c.summary = std::string(d.summary);
+        c.steps = d.steps;
+        c.minutes = d.minutes;
+        c.isNew = d.isNew;
+        c.reached = std::clamp(settings.getInt(help::trails::stepKey(d), 0), 0, d.steps);
+        c.done = settings.getBool(help::trails::doneKey(d), false);
+        cards.push_back(std::move(c));
+    }
+    HmiTrailCards::Style style = trails_->style();
+    style.title = one ? "Le parcours" : "Le didacticiel : les parcours";
+    style.countStarted = !one;
+    trails_->setStyle(std::move(style));
+    trails_->setCards(std::move(cards));
+    trails_->setVisibility(Visibility::Visible);
+    trailsExtent_ = 0.f;   // remesuree a la prochaine image (Update)
+}
+
 void HelpCenterScreen::onRow(std::size_t r) {
     if (r >= rows_.size()) return;
     const Row row = rows_[r];
@@ -702,6 +766,16 @@ void HelpCenterScreen::showTopic(const std::string& key, bool record) {
                                           "La visite et les parcours de l'API, sur ton projet"});
         head.blocks.push_back(std::move(card));
     }
+    // 1.12.28 : une page qui parle du sujet d'un parcours le propose (sa page : sa carte, ses etapes).
+    if (t->source == hc::Source::Guide && core::hasIhm()) {
+        auto propose = block(HelpBlockKind::Links, {});
+        for (const auto* tr : help::trails::proposedOn(t->ref))
+            propose.links.push_back(HelpLink{"\xE2\x96\xB6 Parcours guid\xC3\xA9 : " + std::string(tr->title) + " \xC2\xB7 "
+                                                 + std::string(tr->kind) + ", " + std::to_string(tr->steps) + " \xC3\xA9tapes, "
+                                                 + std::to_string(tr->minutes) + " min \xE2\x80\xBA",
+                                             "topic:" + help::trails::pageOf(*tr), std::string(tr->summary)});
+        if (!propose.links.empty()) head.blocks.push_back(std::move(propose));
+    }
 
     // ---- le texte de la source ----
     const bool api = t->source == hc::Source::ApiPage;
@@ -711,6 +785,7 @@ void HelpCenterScreen::showTopic(const std::string& key, bool record) {
     // Signaler : le formulaire tient le haut (son titre) ; l'article n'a que l'apercu.
     const bool report = t->source == hc::Source::ReportPage;
     if (reportPanel_) reportPanel_->setVisibility(report ? Visibility::Visible : Visibility::Collapsed);
+    refreshTrails();   // 1.12.28 : les cartes des parcours, sur leurs pages
     if (keysPanel_)
         keysPanel_->setVisibility(t->source == hc::Source::ShortcutsPage ? Visibility::Visible : Visibility::Collapsed);
     HelpArticle a;
@@ -996,6 +1071,23 @@ void HelpCenterScreen::onLink(const std::string& target) {
     if (target.rfind("domaine:", 0) == 0) {
         notesDomain_ = after("domaine:");
         if (!current_.empty()) showTopic(current_, false);
+        return;
+    }
+    // 1.12.28 : un parcours du didacticiel de l'IHM, depuis sa carte. Il se joue sur le projet
+    // ouvert : l'aide se ferme, l'ecran du projet le lance en revenant (requestTrail).
+    if (target.rfind("parcours:", 0) == 0 || target.rfind("parcours-reprendre:", 0) == 0) {
+        const bool resume = target.rfind("parcours-reprendre:", 0) == 0;
+        const std::string key = after(resume ? "parcours-reprendre:" : "parcours:");
+        const auto* tr = help::trails::find(key);
+        if (!tr) return;
+        if (!app_.project() || !app_.hmi() || !app_.menus().contains("analysis")) {
+            if (status_)
+                status_->setMessage("\xC2\xAB " + std::string(tr->title) + " \xC2\xBB se joue sur un projet : ouvre ou cr\xC3\xA9" "e un projet, "
+                                    "puis reviens ici (F1).");
+            return;
+        }
+        MainAnalysisScreen::requestTrail(key, resume);
+        app_.menus().PopTo("analysis");
         return;
     }
     if (target == "didacticiel-api:") {

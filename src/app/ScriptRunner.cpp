@@ -1,3 +1,4 @@
+#include "CrashDialogs.hpp"   // 1.12.28 : rapport-dialogue
 #include "ScriptRunner.hpp"
 #include "tutorial/TutorialApp.hpp"
 #include "tutorial/TutorialStageApp.hpp"
@@ -2853,6 +2854,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  explorateur-valider               le bouton principal (Ouvrir, Enregistrer, Remplacer, Choisir)
     //  explorateur-annuler               Annuler (la demande recoit "")
     //  explorateur-lignes                ce que montre la liste, une ligne par element (et l'etat)
+    //  rapport-dialogue                  1.12.28 : le dialogue du rapport le plus recent (plantage, blocage),
+    //                                    comme au lancement suivant - meme deja vu (les captures)
+    if (cmd == "rapport-dialogue") {
+        if (!crashdialogs::showNewestReport(app_)) fail("rapport-dialogue : aucun rapport dans le dossier crashs");
+        return Step::Next;
+    }
     if (cmd == "explorateur-montrer") {
         explorer::showNextInScript();
         return Step::Next;
@@ -4713,6 +4720,29 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                     if (topRoot) walk(*topRoot, [&](ui::Widget& x) { if (!bar) bar = dynamic_cast<TopBar*>(&x); });
                     if (!bar || retries_ >= 3) { fail("onglet API \xC2\xB7 Didacticiel introuvable (" + cmd + ")"); return Step::Next; }
                     bar->trigger("help.apiTutorial");
+                    return Step::Retry;
+                }
+                if (cmd == "parcours") {
+                    if (has("debut")) { cards->startRequested->emit(arg(1), false); return Step::Yield; }
+                    if (!cards->press(arg(1))) fail("parcours inconnu : " + arg(1));
+                    return Step::Yield;
+                }
+                gfx::Rect r{};
+                if (!cards->buttonRect(arg(1), r)) {
+                    if (retries_ < 3) return Step::Retry;
+                    fail("carte de parcours introuvable : " + arg(1));
+                    return Step::Next;
+                }
+                click(centre(r), MouseButton::Left, 1, {});
+                return Step::Yield;
+            }
+            // 1.12.28 : le didacticiel est une page de l'aide (F1) - ses cartes y sont, ou sur la page
+            // d'un parcours ; le centre d'aide a l'ecran les prend d'abord.
+            if (auto* helpCentre = dynamic_cast<HelpCenterScreen*>(app_.menus().top())) {
+                HmiTrailCards* cards = helpCentre->trails();
+                if (!cards) {
+                    if (retries_ >= 3) { fail("les cartes du didacticiel ne sont pas a l'ecran (" + cmd + ")"); return Step::Next; }
+                    helpCentre->open("didacticiel");
                     return Step::Retry;
                 }
                 if (cmd == "parcours") {

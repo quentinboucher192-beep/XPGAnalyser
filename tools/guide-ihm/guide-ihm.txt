@@ -94,49 +94,6 @@ La version, la date de construction, les dossiers de l'application (données, pr
 ### Aller à / Faire…
 Ctrl+K : les commandes de l'application s'y cherchent en français (Ouvrir un projet…, Enregistrer le projet, Fermer le projet, Revenir au menu principal…), avec leur raccourci à droite.
 
-== didacticiel | Le didacticiel : les parcours, l'aide et le tutoriel de chaque objet
-: Le didacticiel propose des parcours au choix : une visite qui montre l'IHM, et des parcours interactifs qui font faire - une étape attend ton geste et le vérifie, Montre-moi le fait à ta place. Il retient où tu en es. F1 ouvre l'aide de l'endroit où tu es ; ses sujets ont chacun leur icône, et la page d'un objet son exemple animé et son tutoriel, joué par le vrai moteur.
-@mots tutoriel, Tutoriel, À toi, chapitre, chapitres, frise, didacticiel, Didacticiel, parcours, Montre-moi, Commencer, Reprendre, Refaire, Garder, Tout défaire, légende, Légende
-@lieux aide
-@voir tutoriel-symbole, ihm, objet-communs, historique, versions, excel, nouveautes-lot8
-@capture PNG_527_didacticiel_parcours.png | Aide IHM › Didacticiel : les parcours en cartes - leur sorte, leurs étapes, leur durée, leur progression (fait, en cours 5 / 7) et leur bouton : Commencer, Reprendre, Refaire.
-@capture PNG_528_didacticiel_visite.png | La visite « Découvrir l'IHM » : la zone décrite éclairée, le reste assombri ; Suivant, Précédent, Passer.
-@capture PNG_531_symbole_etape_3.png | Une étape interactive : rien ne s'assombrit, la bulle dit le geste attendu (« J'attends la sélection... ») ; Montre-moi le fait à ta place.
-@capture PNG_538_symbole_garder.png | Au bout d'un parcours interactif : garder ce qu'il a créé, ou tout défaire.
-@capture PNG_539_aide_icones_legende.png | La liste de l'aide : une icône par chapitre, reprise par ses sujets ; un objet a l'icône de sa tuile ; l'œil marque un exemple animé, le triangle un tutoriel (vert : déduit de l'exemple, orange : écrit) ; la légende dessous.
-@capture PNG_453_tutoriel_gif_presentation.png | Le tutoriel du GIF animé : les chapitres à gauche, la scène jouée par le vrai moteur, la bulle du chapitre pointée sur l'objet, la barre de lecture et sa frise.
-@capture PNG_456_tutoriel_gif_a_toi.png | « À toi » : le scénario se tait, les clics vont au moteur - ici Arrêter puis Jouer, cliqués à la main.
-@capture PNG_189_aide_f1_fonctions.png | F1 dans le volet Fonctions : l'aide s'ouvre sur le bon sujet.
-@capture PNG_192_aide_recherche.png | La recherche dans l'aide, sans casse ni accents.
-### Les parcours
-Le bouton **Didacticiel** de l'aide de l'IHM (F1) ouvre la page du didacticiel : ses **parcours au choix**, en cartes.
-| Parcours | Sorte | Ce qu'on y fait |
-| Découvrir l'IHM | visite, 14 étapes | l'arbre, la configuration, les vues, les symboles, les styles, la programmation, la simulation, l'outil Modbus, Générer, l'historique, les versions |
-| Ma première vue | interactif, 7 étapes | une vue, un afficheur relié à une variable, un bouton et son action, puis la simulation |
-| Créer un symbole de projet | interactif, 9 étapes | une carte d'armoire devient un symbole, posé deux fois, modifié une fois (voir « Tutoriel : créer un symbole de projet ») |
-| Relier un équipement Modbus | visite, 7 étapes | les équipements, les variables liées, le plan d'adressage, l'outil Modbus, l'esclave simulé, la qualité en marche |
-| Coller depuis Excel | interactif, 4 étapes | des lignes d'un tableur deviennent des variables IHM, puis un seul Ctrl+Z les retire |
-| Historique et versions | interactif, 6 étapes | annuler, rétablir, l'historique, créer une version et la comparer |
-Chaque carte dit sa progression : **fait**, **en cours 4 / 9**. Son bouton : **Commencer**, **Reprendre** (là où tu t'étais arrêté) ou **Refaire**. Le didacticiel retient où tu en es d'une séance à l'autre.
-### Une visite, une étape interactive
-- **Une visite** montre : tout s'assombrit sauf la zone décrite (une entrée de l'arbre, un bouton), une bulle l'explique. **Suivant** (ou Entrée, ou la flèche droite), **Précédent** (ou la flèche gauche), **Passer** (ou Échap).
-- **Une étape interactive** fait faire : rien ne s'assombrit, la zone du geste est entourée (un bouton, une ligne de l'arbre, un objet de la vue, une propriété), la bulle dit ce qui est attendu (« J'attends le clic sur Créer un symbole... »). Fais le geste : l'étape le vérifie et passe à la suivante, dont la bulle dit la réussite (« Étape 3 réussie : 5 objets choisis »). **Montre-moi** le fait à ta place, avec les mêmes commandes que toi.
-- Une étape **déjà faite** en y arrivant (Précédent, un parcours repris) le dit : **Suivant** continue.
-- **Au bout d'un parcours interactif** : **Garder** ce qu'il a créé, ou **Tout défaire** - l'historique revient à l'état d'avant le parcours (une version créée reste : elle est sur le disque).
-- **Passer** ferme le parcours ; il reprend là où tu t'étais arrêté.
-À la première ouverture de l'IHM, la visite s'ouvre d'elle-même ; elle ne revient plus ensuite.
-### L'aide
-- **F1** ouvre l'aide de l'endroit où tu es : le volet courant (vues, scripts, alarmes...), le nom sous le curseur dans un script (une fonction IHM_, VAR_TEMP, une fonction du projet), l'**objet choisi** dans l'éditeur ou la **tuile survolée** de la bibliothèque : sa page, avec son exemple animé.
-- La liste des sujets se parcourt par chapitres, se cherche par mot et relie les sujets entre eux.
-- **Chaque chapitre a son icône et sa couleur**, que ses sujets reprennent ; **un objet a l'icône de sa tuile** dans la bibliothèque. Deux colonnes de marques : **l'œil**, un exemple animé ; **le triangle**, un tutoriel joué par le moteur (vert : déduit de l'exemple ; orange : écrit dans le guide). La **légende**, sous la liste, les rappelle ; un clic sur son titre la replie.
-- Le **guide complet** (Word et PDF), illustré de captures, reprend exactement ces pages.
-### Le tutoriel de chaque objet
-La page d'aide d'un objet de la bibliothèque a deux onglets : **Page de l'objet** (son exemple animé, ses paramètres) et **Tutoriel · joué par le moteur** (ou le bouton **Tutoriel de l'objet**). Le tutoriel, c'est l'exemple de l'objet - sa vue, ses variables, ses gestes - qui tourne sur le **vrai moteur de l'IHM**, découpé en **chapitres** :
-- à gauche, les chapitres (un clic y va, et joue) ; sur la scène, la **bulle** du chapitre pointe l'objet dont il parle, qui respire ;
-- la barre : **Au début**, **Lecture / Pause** (Espace), **Arrêt** ; la vitesse **×0,5**, **×1**, **×2** ; la **frise** (un clic ou un glisser y va ; reculer rejoue le tour depuis le début, à l'identique) et ses repères de chapitres ; les flèches gauche et droite : le chapitre d'avant, d'après ;
-- **À toi** : le scénario se tait, la souris et le clavier vont au moteur, comme en simulation - cliquer, taper au clavier virtuel, tirer une poignée ; **Tutoriel guidé** y revient.
-Le tutoriel du GIF animé est écrit dans le guide ; celui des autres objets se déduit de leur exemple : la présentation, un chapitre par geste (un clic et l'action qu'il déclenche, le second clic qui confirme, les touches d'un clavier, une poignée tirée), ou, pour un objet qu'on ne touche pas, ce qu'il montre en marche et ses paramètres ; puis À toi.
-
 == onglets | Les onglets et les raccourcis
 : Quand les sous-onglets d'un volet ne tiennent pas, ils se réduisent : les pastilles d'abord, puis les onglets inactifs à leur icône. Le bouton à droite de la bande les liste tous, Ctrl+Tab passe de l'un à l'autre ; et les raccourcis qui marchent partout.
 @mots sous-onglets, sous-onglet, onglets, fenêtre, fenêtres, déplacer, agrandir, redimensionner, barre de titre, Ctrl+Tab, Ctrl+PgSuiv, liste des onglets, Tous les onglets, raccourcis, raccourci, disposition, Disposition, panneaux, Ctrl+Maj+K, clic droit, menu contextuel, Maj+F10, Ctrl+Maj+T, Rouvrir
@@ -446,16 +403,20 @@ Tire les objets choisis **hors de la fenêtre** et lâche-les sur une vue de l'a
 Ouvrir un projet déjà ouvert dans une autre fenêtre se demande d'abord : deux fenêtres qui enregistrent le même projet effacent les changements l'une de l'autre. **L'ouvrir quand même** reste possible (pour le relire) ; pour copier, ouvre plutôt l'autre projet.
 
 == plantages | Plantages et blocages : le rapport, l'historique interne
-: Si IHM Studio plante ou ne répond plus, il écrit un rapport dans le dossier crashs (à côté des réglages) : la version, le système, la pile d'appels et son historique interne. Au lancement suivant, une fenêtre le signale.
+: Si IHM Studio plante ou ne répond plus, il écrit un rapport dans le dossier crashs (à côté des réglages) - la version, le système, la pile d'appels, son historique interne - et ouvre sa fenêtre de rapport, dessinée comme l'application : ce qui s'est passé, ce qu'il faisait, le rapport. La veille du PC n'est pas un blocage.
 @mots plantage, blocage, rapport de plantage, crashs, Journal interne, historique des appels, ne répond plus, Attendre, Fermer, minidump
 @lieux api, ihm
 @voir menu-aide
+@nouveau 1.12.28
 ### Le plantage
-Une petite fenêtre s'ouvre tout de suite : « IHM Studio a rencontré un problème et doit se fermer. Un rapport a été enregistré : … ». Le rapport est déjà écrit quand elle s'ouvre. Sous Windows, un fichier .dmp (minidump) l'accompagne : il sert au développeur.
+Une fenêtre d'IHM Studio s'ouvre tout de suite, à part (l'application, elle, s'est fermée) : « IHM Studio s'est arrêté », ce qui s'est passé, ce qu'il faisait, le rapport ; **Relancer IHM Studio**, **Ouvrir le dossier**, **Copier le rapport**, **Signaler le problème**, **Fermer**. Le rapport est déjà écrit quand elle s'ouvre. Sous Windows, un fichier .dmp (minidump) l'accompagne : il sert au développeur.
+@nouveau 1.12.28
 ### Le blocage
-La boucle de l'application bat à chaque image. Sans battement depuis 8 s, IHM Studio écrit un rapport « blocage » (la pile du fil principal, ce qu'il était en train de faire) et demande : **Attendre** ou **Fermer**. S'il repart, une note le dit dans le journal des messages, avec la durée et le chemin du rapport.
+La boucle de l'application bat à chaque image. Sans battement depuis 8 s, IHM Studio écrit un rapport « blocage » (la pile du fil principal, ce qu'il était en train de faire) et ouvre sa fenêtre à part : « IHM Studio ne répond plus », le temps qui passe, ce qu'il faisait ; **Attendre** (l'application continue) ou **Fermer IHM Studio**. S'il repart, la fenêtre le dit et se ferme ; une note le dit aussi dans le journal des messages, avec la durée et le chemin du rapport.
+**La veille n'est pas un blocage** : le temps compté est celui où le PC est éveillé. Quand le PC s'endort ou que l'écran s'éteint, le chien de garde se tait ; au réveil, l'application a 30 s pour repartir avant d'être surveillée de nouveau.
+@nouveau 1.12.28
 ### Au lancement suivant
-La fenêtre « Un plantage s'est produit le … » (ou « Un blocage… ») montre le chemin du rapport, avec **Ouvrir le dossier**, **Copier le rapport** et **Fermer**. Elle ne s'ouvre qu'une fois par rapport.
+Un rapport qu'aucune fenêtre n'a encore montré s'ouvre dans l'application, dès sa première image : « Un plantage s'est produit » (ou « Un blocage… »), la date, ce qui s'est passé, ce qu'il faisait, avec **Ouvrir le dossier**, **Copier le rapport**, **Signaler le problème** et **Fermer**. Elle ne s'ouvre qu'une fois par rapport.
 ### Ce que contient le rapport
 | Partie | Ce qu'elle dit |
 | En-tête | La version, le système (Windows, et wine s'il est là), l'heure. |
@@ -468,6 +429,158 @@ Le dossier garde les 20 rapports les plus récents.
 ### Aide › Journal interne (historique des appels)
 La pile des portées ouvertes de chaque fil et les 40 dernières entrées, les plus récentes en tête. **Copier et exporter** met les 2 000 dernières dans le presse-papiers et dans un fichier rapport-….txt du dossier crashs : c'est ce qu'on joint à un signalement.
 > L'historique est tenu en mémoire, sans écrire sur le disque tant que rien ne va mal : il ne ralentit pas l'application.
+
+= Démarrer › Le didacticiel
+
+== didacticiel | Le didacticiel, dans l'aide : les parcours et le tutoriel de chaque page
+: Le didacticiel est ici, dans l'aide (F1) : six parcours qui se jouent sur ton projet - une visite qui montre l'IHM, des exercices qui font faire et vérifient chaque geste - et, en tête de chaque page de l'aide, le tutoriel de son sujet, joué par le vrai moteur. Il retient où tu en es.
+@mots tutoriel, Tutoriel, À toi, chapitre, chapitres, frise, didacticiel, Didacticiel, parcours, Parcours, parcours guidé, Montre-moi, Commencer, Reprendre, Refaire, Garder, Tout défaire, légende, Légende, Didacticiel de l'IHM
+@lieux aide
+@voir parcours-decouvrir, parcours-premiere-vue, parcours-symbole, parcours-modbus, parcours-excel, parcours-versions, tutoriel-symbole, menu-aide
+@capture PNG_527_didacticiel_parcours.png | L'aide › Démarrer › Le didacticiel : les parcours en cartes - leur sorte, leurs étapes, leur durée, leur progression (fait, en cours 5 / 7) et leur bouton : Commencer, Reprendre, Refaire.
+@capture PNG_528_didacticiel_visite.png | La visite « Découvrir l'IHM » : la zone décrite éclairée, le reste assombri ; Suivant, Précédent, Passer.
+@capture PNG_531_symbole_etape_3.png | Une étape interactive : rien ne s'assombrit, la bulle dit le geste attendu (« J'attends la sélection... ») ; Montre-moi le fait à ta place.
+@capture PNG_538_symbole_garder.png | Au bout d'un parcours interactif : garder ce qu'il a créé, ou tout défaire.
+@capture PNG_453_tutoriel_gif_presentation.png | Le tutoriel du GIF animé : les chapitres à gauche, la scène jouée par le vrai moteur, la bulle du chapitre pointée sur l'objet, la barre de lecture et sa frise.
+@capture PNG_456_tutoriel_gif_a_toi.png | « À toi » : le scénario se tait, les clics vont au moteur - ici Arrêter puis Jouer, cliqués à la main.
+@nouveau 1.12.28
+### Un seul endroit pour apprendre
+- **Les parcours** : cette page les montre tous, en cartes ; chacun a aussi sa page, juste dessous dans l'arbre (Démarrer › Le didacticiel), qui dit ce qu'il fait étape par étape, avec son bouton.
+- **Le tutoriel de la page** : en tête de chaque page de l'aide, **Regarder le tutoriel** le joue, **Essayer** te laisse faire.
+- **Une page liée à un parcours** le propose en tête : « Parcours guidé : Créer un symbole de projet » sur la page des symboles, « Coller depuis Excel » sur celle d'Excel...
+- **Aide › Didacticiel de l'IHM** mène ici. Sur l'accueil, **Découvrir l'IHM** (ou **Didacticiel**, dans le menu du clic droit) lance la visite, sur le projet ouvert ou celui que tu choisis.
+@nouveau 1.12.28
+### Les parcours
+| Parcours | Sorte | Ce qu'on y fait |
+| Découvrir l'IHM | visite, 16 étapes | l'arbre, la configuration, les vues, les symboles, les styles, la programmation, la simulation et Pourquoi ?, l'outil Modbus, Générer, l'historique, les versions, plusieurs fenêtres, Aller à, l'aide |
+| Ma première vue | interactif, 7 étapes | une vue, un afficheur relié à une variable, un bouton et son action, puis la simulation |
+| Créer un symbole de projet | interactif, 9 étapes | une carte d'armoire devient un symbole, posé deux fois, modifié une fois |
+| Relier un équipement Modbus | visite, 7 étapes | les équipements, les variables liées, le plan d'adressage, l'outil Modbus, l'esclave simulé, la qualité en marche |
+| Coller depuis Excel | interactif, 4 étapes | des lignes d'un tableur deviennent des variables IHM, puis un seul Ctrl+Z les retire |
+| Historique et versions | interactif, 6 étapes | annuler, rétablir, l'historique, créer une version, la comparer, restaurer un élément |
+Chaque carte dit sa progression : **fait**, **en cours 4 / 9**. Son bouton : **Commencer**, **Reprendre** (là où tu t'étais arrêté) ou **Refaire**. Le parcours se joue sur le **projet ouvert** : l'aide se ferme et il commence là où tu travailles. Sans projet ouvert, la carte le dit : ouvre ou crée un projet, puis reviens ici (F1).
+### Une visite, une étape interactive
+- **Une visite** montre : tout s'assombrit sauf la zone décrite (une entrée de l'arbre, un bouton), une bulle l'explique. **Suivant** (ou Entrée, ou la flèche droite), **Précédent** (ou la flèche gauche), **Passer** (ou Échap).
+- **Une étape interactive** fait faire : rien ne s'assombrit, la zone du geste est entourée (un bouton, une ligne de l'arbre, un objet de la vue, une propriété), la bulle dit ce qui est attendu (« J'attends le clic sur Créer un symbole... »). Fais le geste : l'étape le vérifie et passe à la suivante, dont la bulle dit la réussite (« Étape 3 réussie : 5 objets choisis »). **Montre-moi** le fait à ta place, avec les mêmes commandes que toi.
+- Une étape **déjà faite** en y arrivant (Précédent, un parcours repris) le dit : **Suivant** continue.
+- **Au bout d'un parcours interactif** : **Garder** ce qu'il a créé, ou **Tout défaire** - l'historique revient à l'état d'avant le parcours (une version créée reste : elle est sur le disque).
+- **Passer** ferme le parcours ; il reprend là où tu t'étais arrêté.
+À la première ouverture de l'IHM, la visite s'ouvre d'elle-même ; elle ne revient plus ensuite.
+@nouveau 1.12.28
+### L'aide
+- **F1** ouvre l'aide de l'endroit où tu es : le volet courant (vues, scripts, alarmes...), le nom sous le curseur dans un script (une fonction IHM_, VAR_TEMP, une fonction du projet), l'**objet choisi** dans l'éditeur ou la **tuile survolée** de la bibliothèque : sa page, avec son exemple animé.
+- L'arbre de gauche range les pages en chapitres et sous-chapitres ; **chaque niveau se replie d'un clic**, celui de la page ouverte aussi. La recherche trouve un mot dans toutes les pages ; le fil d'Ariane dit où l'on est.
+- **Chaque chapitre a son icône et sa couleur**, que ses pages reprennent ; **un objet a l'icône de sa tuile** dans la bibliothèque.
+- Le **guide complet** (Word et PDF), illustré de captures, reprend exactement ces pages.
+### Le tutoriel de chaque objet
+La page d'aide d'un objet de la bibliothèque a deux onglets : **Page de l'objet** (son exemple animé, ses paramètres) et **Tutoriel · joué par le moteur** (ou le bouton **Tutoriel de l'objet**). Le tutoriel, c'est l'exemple de l'objet - sa vue, ses variables, ses gestes - qui tourne sur le **vrai moteur de l'IHM**, découpé en **chapitres** :
+- à gauche, les chapitres (un clic y va, et joue) ; sur la scène, la **bulle** du chapitre pointe l'objet dont il parle, qui respire ;
+- la barre : **Au début**, **Lecture / Pause** (Espace), **Arrêt** ; la vitesse **×0,5**, **×1**, **×2** ; la **frise** (un clic ou un glisser y va ; reculer rejoue le tour depuis le début, à l'identique) et ses repères de chapitres ; les flèches gauche et droite : le chapitre d'avant, d'après ;
+- **À toi** : le scénario se tait, la souris et le clavier vont au moteur, comme en simulation - cliquer, taper au clavier virtuel, tirer une poignée ; **Tutoriel guidé** y revient.
+Le tutoriel du GIF animé est écrit dans le guide ; celui des autres objets se déduit de leur exemple : la présentation, un chapitre par geste (un clic et l'action qu'il déclenche, le second clic qui confirme, les touches d'un clavier, une poignée tirée), ou, pour un objet qu'on ne touche pas, ce qu'il montre en marche et ses paramètres ; puis À toi.
+
+== parcours-decouvrir | Parcours : Découvrir l'IHM
+: Une visite de trois minutes, sur ton projet : où tout se trouve dans IHM Studio, de l'arbre à l'aide. Elle montre sans rien changer : tout s'assombrit sauf la zone décrite, une bulle l'explique.
+@depuis 1.12.28
+@mots Découvrir l'IHM, visite, visite guidée, découvrir
+@voir didacticiel, ihm, onglets, simulation, historique, versions, fenetres, aller-a
+### Les étapes
+1. **Bienvenue** : ce que la visite montre, et comment avancer (Suivant, Précédent, Passer).
+2. **Le dossier IHM** : tout part de l'arbre du projet ; chaque entrée ouvre son onglet au centre, le triangle déplie.
+3. **La configuration** : l'identité de l'IHM, sa résolution, sa vue de démarrage ; les alarmes, les recettes, les utilisateurs, les historiques, les langues, les équipements, le poste d'exploitation.
+4. **Les vues** : les modèles, les vues, les popups ; l'éditeur, la bibliothèque à droite, l'inspecteur.
+5. **Les symboles** : une carte dessinée une fois, posée partout, chaque instance reliée à son armoire.
+6. **Les styles** : des apparences nommées, avec leur aperçu ; changer le style change tous les objets qui le citent.
+7. **Ressources et fichiers** : images, sons, vidéos, polices, et les fichiers qu'un tableau affiche.
+8. **La programmation** : scripts, fonctions IHM, variables et types IHM ; l'aide à la saisie.
+9. **La simulation** : l'IHM en marche, ses clics, ses scripts, ses alarmes ; forcer une variable.
+10. **Pourquoi ?** : en marche, le clic droit sur un objet dit ce qu'il montre et pourquoi, terme par terme.
+11. **L'outil Modbus et les essais** : lire et écrire un équipement, voir les trames ; rejouer un scénario.
+12. **Générer et Compiler** : la cohérence du projet, son code ; un double-clic mène à la source.
+13. **L'historique** : Ctrl+Z, Ctrl+Y, et Ctrl+H qui liste chaque action.
+14. **Les versions** : garder tout le projet (Ctrl+Alt+S), comparer, restaurer un élément.
+15. **Plusieurs fenêtres et Aller à** : Ctrl+Maj+N ouvre une autre fenêtre (copier d'un projet à l'autre) ; Ctrl+K trouve une commande.
+16. **L'aide, partout** : F1 ouvre la page de l'endroit ; Démarrer › Le didacticiel, les autres parcours.
+### Après
+La visite ne change rien au projet. Elle s'ouvre d'elle-même à la première ouverture de l'IHM, puis ici, quand tu veux.
+
+== parcours-premiere-vue | Parcours : Ma première vue
+: Un exercice de six minutes : tu crées une vue, tu y poses un afficheur relié à une variable et un bouton avec son action, puis tu la simules. Chaque geste est vérifié ; Montre-moi le fait à ta place.
+@depuis 1.12.28
+@mots Ma première vue, première vue, premier écran
+@voir didacticiel, vues, editeur, objet-afficheur-numerique, objet-bouton, actions, simulation
+### Les étapes
+1. **Crée une vue** : IHM › Vues › Vues, Nouvelle vue, un modèle de la galerie (Vide suffit), un nom.
+2. **Ouvre-la** : un clic sur son nom dans l'arbre ; elle s'ouvre dans l'éditeur.
+3. **Pose un afficheur numérique** : la tuile de la bibliothèque, puis un clic dans la vue.
+4. **Relie-le à une variable** : sa Valeur (expression), par exemple `Armoires[0].ana.PT1.mes` ; l'aide à la saisie propose les noms (Ctrl+Espace).
+5. **Pose un bouton** : sous l'afficheur.
+6. **Donne-lui une action** : l'onglet Actions de l'inspecteur, Ajouter une action - naviguer vers une vue, écrire une valeur.
+7. **Simule-la** : Simulation › IHM, Marche, puis ta vue : l'afficheur montre la mesure, le bouton fait son action.
+### À la fin
+**Garder** ta vue, ou **Tout défaire** : l'historique revient à l'état d'avant le parcours.
+
+== parcours-symbole | Parcours : Créer un symbole de projet
+: Un exercice de huit minutes : une carte d'armoire dessinée une fois devient un symbole, posé deux fois - chaque instance reliée à son armoire - puis modifié une fois pour les deux. La page « Tutoriel : créer un symbole de projet » le raconte pas à pas.
+@depuis 1.12.28
+@mots Créer un symbole de projet, parcours symbole
+@voir didacticiel, symboles, tutoriel-symbole, objet-instance-de-symbole, simulation
+### Les étapes
+1. **Ouvre la vue de l'exercice** : le parcours l'a créée ; un clic sur son nom dans l'arbre.
+2. **Pose une carte pour l'armoire 1** : un cadre, un titre, deux afficheurs et un voyant reliés à `Armoires[0]`.
+3. **Choisis les objets de la carte** : un cadre de sélection autour d'eux.
+4. **Transforme la carte en symbole** : le clic droit, Créer un symbole.
+5. **Nomme-le, garde son paramètre** : `Armoires[0]` devient le paramètre Armoire du symbole.
+6. **Ouvre le symbole** : IHM › Symboles ; ses objets lisent `Armoire`.
+7. **Pose une deuxième carte** : une instance de plus, reliée à `Armoires[1]`.
+8. **Change le cadre, dans le symbole** : les deux cartes changent ensemble.
+9. **Lance la simulation** : chaque carte montre son armoire.
+### À la fin
+**Garder** le symbole et ses deux instances, ou **Tout défaire**.
+
+== parcours-modbus | Parcours : Relier un équipement Modbus
+: Une visite de quatre minutes, dans l'ordre de la mise en service : où l'on décrit un équipement Modbus TCP, comment une variable IHM s'y lit et s'y écrit, l'outil qui vérifie, l'esclave simulé qui répond sans l'équipement.
+@depuis 1.12.28
+@mots Relier un équipement Modbus, parcours Modbus
+@voir didacticiel, equipements, outil-modbus, esclaves-virtuels, variables-ihm
+### Les étapes
+1. **Une variable dans un équipement** : une centrale de mesure, un variateur, un automate - l'IHM les lit et les écrit en Modbus TCP.
+2. **Configuration › Équipements** : leur adresse IP, leur port, leur numéro d'unité, le scanner IP.
+3. **Les variables liées** : la colonne Équipement et l'Adresse dans Variables IHM, l'accès, la mise à l'échelle.
+4. **Le plan d'adressage** : chaque variable à sa place, les trous et les chevauchements signalés.
+5. **L'outil Modbus** : lire, écrire, les trames, l'espion, le ping.
+6. **L'esclave simulé** : sans l'équipement, il répond à sa place.
+7. **En marche : la qualité** : bonne, périmée, en défaut ; Générer vérifie les adresses.
+### Après
+La visite ne change rien au projet.
+
+== parcours-excel | Parcours : Coller depuis Excel
+: Un exercice de trois minutes : des lignes copiées d'un tableur deviennent des variables IHM, reconnues par les titres de leurs colonnes ; tout le collage est un seul pas de l'historique.
+@depuis 1.12.28
+@mots Coller depuis Excel, parcours Excel
+@voir didacticiel, excel, variables-ihm, historique
+### Les étapes
+1. **Ouvre les variables IHM** : IHM › Programmation générale › Variables IHM.
+2. **Copie des lignes dans un tableur** : avec leurs titres - Nom, Type, Initiale, Description, Dossier. Sans tableur, Montre-moi en met trois dans le presse-papiers.
+3. **Colle dans la table** : Ctrl+V ; un nom nouveau crée la variable, un nom connu la met à jour, une case refusée dit pourquoi.
+4. **Un seul Ctrl+Z** : tout le collage part d'un coup ; Ctrl+Y le remet.
+### À la fin
+**Garder** les variables, ou **Tout défaire**.
+
+== parcours-versions | Parcours : Historique et versions
+: Un exercice de quatre minutes : annuler et rétablir, l'historique, puis une version du projet que tu compares à l'état d'avant - et ce qui se restaure, élément par élément.
+@depuis 1.12.28
+@mots Historique et versions, parcours versions
+@voir didacticiel, historique, versions, comparer-versions
+### Les étapes
+1. **Fais un changement** : renomme une variable, déplace un objet...
+2. **Annule, puis rétablis** : Ctrl+Z, Ctrl+Y ; l'écran montre l'endroit.
+3. **Ouvre l'historique** : Ctrl+H, chaque action, son heure ; un double clic revient à cet état.
+4. **Crée une version** : Ctrl+Alt+S, un nom, un état (brouillon, validée, livrée).
+5. **Compare-la** : ce qui a changé, élément par élément.
+6. **Restaurer, au besoin** : un élément seul, ou toute la version.
+### À la fin
+**Garder**, ou **Tout défaire** : l'historique revient à l'état d'avant ; une version créée reste sur le disque.
 
 = Concevoir les vues › Les vues et l'éditeur
 

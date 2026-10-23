@@ -35,6 +35,7 @@
 //  depart : Tout defaire retire aussi ce que ses premieres etapes ont cree.
 //  Leur bulle montre toujours Precedent et Suivant (setFullNavigation).
 // =============================================================================
+#include "../../help/Trails.hpp"   // 1.12.28 : le catalogue des parcours (l'aide F1 les montre aussi)
 #include "Screens.hpp"
 #include "../TopBar.hpp"   // lot API 2
 
@@ -294,39 +295,22 @@ struct MainAnalysisScreen::TrailRun {
 };
 
 // ============================================================ les cartes =====
-namespace {
-struct TrailDef {
-    const char* key;
-    const char* title;
-    const char* kind;
-    const char* summary;
-    int         steps, minutes;
-    bool        isNew;
-};
-const TrailDef kTrails[] = {
-    {"decouvrir", "D\xC3\xA9" "couvrir l'IHM", "visite", "L'arbre, les vues, les symboles, la simulation, l'historique, les versions.", 14, 3, false},
-    {"premiere-vue", "Ma premi\xC3\xA8re vue", "interactif", "Une vue, un afficheur reli\xC3\xA9, un bouton et son action, puis la simulation.", 7, 6, false},
-    {"symbole", "Cr\xC3\xA9" "er un symbole de projet", "interactif", "Une carte d'armoire devient un symbole, pos\xC3\xA9 deux fois, modifi\xC3\xA9 une fois.", 9, 8, false},
-    {"modbus", "Relier un \xC3\xA9quipement Modbus", "visite", "Les \xC3\xA9quipements, les adresses, l'outil Modbus, l'esclave simul\xC3\xA9.", 7, 4, false},
-    {"excel", "Coller depuis Excel", "interactif", "Des lignes d'un tableur deviennent des variables IHM, en un seul Ctrl+Z.", 4, 3, true},
-    {"versions", "Historique et versions", "interactif", "Annuler, r\xC3\xA9tablir, l'historique, une version, la comparer.", 6, 4, true},
-};
-} // namespace
+// 1.12.28 : le catalogue des parcours est dans help/Trails (l'aide F1 montre les memes cartes).
 
 std::vector<TrailCard> MainAnalysisScreen::tutorialTrails() const {
     std::vector<TrailCard> out;
     const auto& settings = app_.settings();
-    for (const auto& d : kTrails) {
+    for (const auto& d : help::trails::ihm()) {
         TrailCard c;
-        c.key = d.key;
-        c.title = d.title;
-        c.kind = d.kind;
-        c.summary = d.summary;
+        c.key = std::string(d.key);
+        c.title = std::string(d.title);
+        c.kind = std::string(d.kind);
+        c.summary = std::string(d.summary);
         c.steps = d.steps;
         c.minutes = d.minutes;
         c.isNew = d.isNew;
-        c.reached = std::clamp(settings.getInt(std::string("didacticiel.") + d.key + ".etape", 0), 0, d.steps);
-        c.done = settings.getBool(std::string("didacticiel.") + d.key + ".fait", false);
+        c.reached = std::clamp(settings.getInt(help::trails::stepKey(d), 0), 0, d.steps);
+        c.done = settings.getBool(help::trails::doneKey(d), false);
         c.running = trailRun_ && trailRun_->key == d.key && hmiTutorial_ && hmiTutorial_->active();
         out.push_back(std::move(c));
     }
@@ -390,9 +374,7 @@ bool MainAnalysisScreen::revealTreeNode(ui::NodeId node, gfx::Rect* rowOut) {
 // ============================================================ lancer ========
 void MainAnalysisScreen::startTrail(const std::string& key, bool resume) {
     if (!hmiTutorial_ || !treeModel_ || !explorer_) return;
-    const TrailDef* def = nullptr;
-    for (const auto& d : kTrails)
-        if (key == d.key) def = &d;
+    const help::trails::Trail* def = help::trails::find(key);
     // Lot API 7 : les parcours de l'API (ApiTrails.cpp) ont besoin du programme,
     // pas de l'IHM ; ceux de l'IHM, de son projet.
     const ApiTrailDef* apiDef = def ? nullptr : ApiTrails::find(key);
@@ -409,8 +391,8 @@ void MainAnalysisScreen::startTrail(const std::string& key, bool resume) {
     if (hmiTutorial_->active()) hmiTutorial_->stop(false);   // le parcours en cours retient son etape
 
     auto run = std::make_shared<TrailRun>();
-    run->key = def ? def->key : apiDef->key;
-    run->title = def ? def->title : apiDef->title;
+    run->key = def ? std::string(def->key) : std::string(apiDef->key);
+    run->title = def ? std::string(def->title) : std::string(apiDef->title);
     run->api = apiDef != nullptr;
     run->serial0 = topSerial(app_.commands());
     const std::string prefix = run->api ? ApiTrails::prefix(*this, run->key) : "didacticiel." + run->key;
@@ -465,8 +447,8 @@ void MainAnalysisScreen::startTrail(const std::string& key, bool resume) {
         if (run->closed) run->closed();
         if (trailRun_ == run) trailRun_.reset();
         trailSymbolName_.clear();
-        // Les autres parcours : dans l'aide de l'IHM (F1), ou dans l'onglet API . Didacticiel.
-        const std::string where = run->api ? "Aide \xE2\x80\xBA Didacticiel de l'API" : "F1, puis Didacticiel";
+        // Les autres parcours : dans l'aide (Aide > Didacticiel de l'IHM, 1.12.28), ou dans l'onglet API . Didacticiel.
+        const std::string where = run->api ? "Aide \xE2\x80\xBA Didacticiel de l'API" : "Aide \xE2\x80\xBA Didacticiel de l'IHM";
         if (status_)
             status_->setTransientMessage(finished ? "Parcours termin\xC3\xA9 : " + run->title + ". " + where + ", pour les autres parcours."
                                                   : "Parcours interrompu : " + run->title + ". " + where + ", puis Reprendre.",
@@ -480,7 +462,7 @@ void MainAnalysisScreen::startTrail(const std::string& key, bool resume) {
     // Un parcours interactif peut tout defaire, a la fin : l'historique revient a son debut.
     // Lot API 7 : ce que l'historique ne porte pas se defait autour (ApiTrails::Built),
     // et le propose meme quand la pile n'a rien de neuf (un bloc mis a jour par la macro).
-    if (std::string(def ? def->kind : apiDef->kind) == "interactif") {
+    if ((def ? std::string(def->kind) : std::string(apiDef->kind)) == "interactif") {
         const std::uint64_t serial0 = run->serial0;
         hmiTutorial_->setUndo(
             [this, serial0, run] {
@@ -495,27 +477,29 @@ void MainAnalysisScreen::startTrail(const std::string& key, bool resume) {
 
 // ============================================================ Decouvrir l'IHM
 std::vector<Step> MainAnalysisScreen::TrailRun::discover(MainAnalysisScreen& s) {
+    // 1.12.28 : la visite a jour d'IHM Studio (16 etapes) - sans l'automate ni le dossier API,
+    // avec Pourquoi ?, plusieurs fenetres, Aller a et l'aide ou vit maintenant le didacticiel.
     std::vector<Step> st;
-    st.push_back({"Bienvenue dans l'IHM",
-                  "Cette visite montre en trois minutes o\xC3\xB9 tout se trouve : l'arbre IHM, la configuration, les vues et les "
-                  "symboles, la programmation, la simulation, l'historique et les versions.\n"
-                  "Suivant (ou Entr\xC3\xA9" "e) pour continuer, Passer (ou \xC3\x89" "chap) pour la fermer. Les autres parcours du "
-                  "didacticiel font faire : F1, puis Didacticiel.",
+    st.push_back({"Bienvenue dans IHM Studio",
+                  "Cette visite montre en trois minutes o\xC3\xB9 tout se trouve : l'arbre, la configuration, les vues et les "
+                  "symboles, la programmation, la simulation, l'historique, les versions et l'aide.\n"
+                  "Suivant (ou Entr\xC3\xA9" "e) pour continuer, Passer (ou \xC3\x89" "chap) pour la fermer. Les autres parcours font "
+                  "faire : F1, puis D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel.",
                   {}, {}});
     st.push_back({"Le dossier IHM",
-                  "Tout part d'ici, dans l'arbre du projet, \xC3\xA0 c\xC3\xB4t\xC3\xA9 du dossier API. Chaque entr\xC3\xA9" "e ouvre son onglet au "
-                  "centre ; le triangle d\xC3\xA9plie les vues, les alarmes, les utilisateurs, la programmation... et un clic "
-                  "m\xC3\xA8ne au bon endroit. Les listes se rangent en dossiers, qu'on glisse et d\xC3\xA9pose.",
+                  "Tout part d'ici, dans l'arbre du projet. Chaque entr\xC3\xA9" "e ouvre son onglet au centre ; le triangle d\xC3\xA9plie "
+                  "les vues, les alarmes, les utilisateurs, la programmation... et un clic m\xC3\xA8ne au bon endroit. Les listes "
+                  "se rangent en dossiers, qu'on glisse et d\xC3\xA9pose.",
                   row(s, NK::HmiFolder), reveal(s, NK::HmiFolder)});
     st.push_back({"La configuration",
                   "L'identit\xC3\xA9 de l'IHM, sa r\xC3\xA9solution, sa vue de d\xC3\xA9marrage, son cycle. Dessous : les alarmes, les "
-                  "recettes, les utilisateurs, les historiques, les langues, les \xC3\xA9quipements (Modbus), le poste "
+                  "recettes, les utilisateurs, les historiques, les langues, les \xC3\xA9quipements (Modbus TCP), le poste "
                   "d'exploitation.",
                   row(s, NK::HmiConfig), reveal(s, NK::HmiConfig)});
     st.push_back({"Les vues",
                   "Tes \xC3\xA9" "crans, en trois dossiers : Mod\xC3\xA8les (\xC3\xA9" "crans mod\xC3\xA8les, en-t\xC3\xAAtes, pieds de page), Vues et Popups. "
-                  "Une vue s'ouvre dans l'\xC3\xA9" "diteur : la biblioth\xC3\xA8que \xC3\xA0 droite, les propri\xC3\xA9t\xC3\xA9s et les actions dans "
-                  "l'inspecteur. Nouvelle vue part d'un mod\xC3\xA8le de la galerie.",
+                  "Une vue s'ouvre dans l'\xC3\xA9" "diteur : la biblioth\xC3\xA8que \xC3\xA0 droite, rang\xC3\xA9" "e par familles (Formes, Commandes, "
+                  "Synoptique...), les propri\xC3\xA9t\xC3\xA9s et les actions dans l'inspecteur. Suppr retire, Ctrl+D duplique.",
                   row(s, NK::HmiViews), reveal(s, NK::HmiViews)});
     st.push_back({"Les symboles",
                   "Une carte dessin\xC3\xA9" "e une fois, pos\xC3\xA9" "e partout : un symbole d\xC3\xA9" "clare des param\xC3\xA8tres (Armoire), chaque "
@@ -523,8 +507,8 @@ std::vector<Step> MainAnalysisScreen::TrailRun::discover(MainAnalysisScreen& s) 
                   "Le parcours \xC2\xAB Cr\xC3\xA9" "er un symbole de projet \xC2\xBB le fait faire.",
                   row(s, NK::HmiSymbolsFolder), reveal(s, NK::HmiSymbolsFolder)});
     st.push_back({"Les styles",
-                  "Des apparences nomm\xC3\xA9" "es (couleurs, police, bordure) que les objets citent : changer le style change "
-                  "tous les objets qui le citent.",
+                  "Des apparences nomm\xC3\xA9" "es (couleurs, police, bordure), chacune avec son aper\xC3\xA7u, que les objets citent : "
+                  "changer le style change tous les objets qui le citent.",
                   row(s, NK::HmiStyles), reveal(s, NK::HmiStyles)});
     st.push_back({"Ressources et fichiers",
                   "Les images, sons, vid\xC3\xA9os et polices du projet, et les fichiers externes (Excel, CSV, JSON, "
@@ -535,10 +519,13 @@ std::vector<Step> MainAnalysisScreen::TrailRun::discover(MainAnalysisScreen& s) 
                   "\xC3\xA9" "crit. L'aide \xC3\xA0 la saisie propose les noms pendant la frappe ; une table se colle depuis Excel.",
                   row(s, NK::HmiScripts), reveal(s, NK::HmiScripts)});
     st.push_back({"La simulation",
-                  // ---- Lot API 8 : didacticiels et aide ---- IHM > Simulation est devenu Simulation > IHM.
-                  "Simulation \xE2\x80\xBA IHM (le dossier Simulation, au m\xC3\xAAme niveau qu'API et IHM ; F9 ouvre sa Vue d'ensemble) : "
-                  "l'IHM en marche, sur le simulateur de l'automate : les clics, les scripts, les alarmes, les "
-                  "recettes ; forcer une variable, changer d'utilisateur ; le journal dit tout.",
+                  "Le dossier Simulation (F9 ouvre sa Vue d'ensemble) : l'IHM en marche - ses clics, ses scripts, ses "
+                  "alarmes, ses recettes, ses \xC3\xA9quipements simul\xC3\xA9s ; forcer une variable, changer d'utilisateur ; "
+                  "le journal dit tout.",
+                  row(s, NK::HmiSimulation), reveal(s, NK::HmiSimulation)});
+    st.push_back({"Pourquoi ?",
+                  "En marche, le clic droit sur un objet \xE2\x80\xBA Pourquoi ? : ce qu'il montre et pourquoi - chaque propri\xC3\xA9t\xC3\xA9 "
+                  "calcul\xC3\xA9" "e, sa formule, la valeur de chaque terme, l'\xC3\xA9tat retenu. Un double clic sur un nom le force.",
                   row(s, NK::HmiSimulation), reveal(s, NK::HmiSimulation)});
     st.push_back({"L'outil Modbus et les essais",
                   "L'outil Modbus lit et \xC3\xA9" "crit un \xC3\xA9quipement, montre les trames, espionne le r\xC3\xA9seau : la mise en "
@@ -556,11 +543,15 @@ std::vector<Step> MainAnalysisScreen::TrailRun::discover(MainAnalysisScreen& s) 
                   "Une version garde tout le projet tel qu'il est (Ctrl+Alt+S) : nomm\xC3\xA9" "e, dat\xC3\xA9" "e, brouillon, valid\xC3\xA9" "e ou "
                   "livr\xC3\xA9" "e. Comparer deux versions montre ce qui a chang\xC3\xA9 ; on restaure un \xC3\xA9l\xC3\xA9ment seul, ou tout.",
                   row(s, NK::VersionsFolder), reveal(s, NK::VersionsFolder)});
-    st.push_back({"F1, partout",
-                  "F1 ouvre l'aide de l'endroit o\xC3\xB9 tu es : le volet, l'objet choisi, le nom sous le curseur. Dans "
-                  "l'aide, Didacticiel m\xC3\xA8ne aux parcours : cr\xC3\xA9" "er un symbole, coller depuis Excel, l'historique et les "
-                  "versions...",
-                  {}, {}});
+    st.push_back({"Plusieurs fen\xC3\xAAtres, Aller \xC3\xA0",
+                  "Projet \xE2\x80\xBA Nouvelle fen\xC3\xAAtre (Ctrl+Maj+N) ouvre un autre projet \xC3\xA0 c\xC3\xB4t\xC3\xA9 : on copie, on colle, on glisse "
+                  "des objets d'un projet \xC3\xA0 l'autre. Ctrl+K (Aller \xC3\xA0) trouve une commande par son nom.",
+                  [&s](Rect& r) { return barPart(s, "projet", r); }, {}});
+    st.push_back({"L'aide, partout",
+                  "F1 ouvre l'aide de l'endroit o\xC3\xB9 tu es : le volet, l'objet choisi, le nom sous le curseur ; chaque page a "
+                  "son tutoriel. Dans l'aide, D\xC3\xA9marrer \xE2\x80\xBA Le didacticiel r\xC3\xA9unit les parcours : cr\xC3\xA9" "er un symbole, "
+                  "coller depuis Excel, l'historique et les versions...",
+                  [&s](Rect& r) { return barPart(s, "aide", r); }, {}});
     return st;
 }
 
@@ -572,7 +563,7 @@ std::vector<Step> MainAnalysisScreen::TrailRun::modbus(MainAnalysisScreen& s) {
                   "de mesure, un variateur. Cette visite montre o\xC3\xB9 tout se r\xC3\xA8gle, dans l'ordre de la mise en service.",
                   {}, {}});
     st.push_back({"Configuration \xE2\x80\xBA \xC3\x89quipements",
-                  "La liste des \xC3\xA9quipements : l'automate, les \xC3\xA9quipements du r\xC3\xA9seau (adresse IP, port 502, num\xC3\xA9ro "
+                  "La liste des \xC3\xA9quipements du r\xC3\xA9seau (adresse IP, port 502, num\xC3\xA9ro "
                   "d'unit\xC3\xA9), le r\xC3\xA9seau du PC, et le scanner IP qui les trouve.",
                   row(s, NK::HmiComm), reveal(s, NK::HmiComm)});
     st.push_back({"Les variables li\xC3\xA9" "es",

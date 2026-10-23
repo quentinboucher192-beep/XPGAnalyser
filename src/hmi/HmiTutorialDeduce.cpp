@@ -1,5 +1,6 @@
 #include "hmi/HmiTutorialDeduce.hpp"
 
+#include "help/Trails.hpp"    // 1.12.28 : les pages des parcours
 #include "help/Tutorial.hpp"   // tranche 12 : isPrepareCommand (le lecteur de T1 connait-il « action » ?)
 #include "hmi/HmiExprGuide.hpp"
 #include "hmi/HmiGuide.hpp"
@@ -1731,7 +1732,9 @@ std::string valueLabel(const help::TopicInfo& i) {
 
 std::vector<help::TopicInfo> all() {
     std::vector<help::TopicInfo> out;
-    for (const auto& t : guide::topics()) out.push_back(fromGuide(t));
+    // 1.12.28 : la page d'un parcours du didacticiel n'a pas de deduit - le parcours est son tutoriel.
+    for (const auto& t : guide::topics())
+        if (!help::trails::ofPage(t.key)) out.push_back(fromGuide(t));
     for (const auto& t : exprguide::all()) out.push_back(fromExprType(t));
     return out;
 }

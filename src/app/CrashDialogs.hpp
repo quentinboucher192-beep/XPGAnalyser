@@ -32,6 +32,9 @@ void install();
 // (avant, la boite native venait avant la premiere image : la fenetre restait noire).
 // Rend vrai s'il y avait un rapport.
 bool showPendingReport(App& app);
+// 1.12.28 : le dialogue sur le rapport le plus recent, meme deja vu (la session rejouee
+// « rapport-dialogue », pour les captures). Faux : aucun rapport.
+bool showNewestReport(App& app);
 
 // Ce que la fenetre d'un rapport sait faire, pour ce rapport : les gestes communs au dialogue
 // (au lancement suivant) et a la fenetre a part (app/ReportWindow : un blocage, un plantage).

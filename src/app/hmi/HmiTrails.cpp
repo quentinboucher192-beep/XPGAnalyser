@@ -218,8 +218,11 @@ void HmiTrailCards::onPaint(const ui::PaintContext& ctx) {
         if (startedCount > 0)
             tally += " \xC2\xB7 " + std::to_string(startedCount) + " commenc\xC3\xA9" + (startedCount > 1 ? "s" : "");
     }
-    const float tw = ctx.r.measure(tally, f.caption).width;
-    ctx.r.drawText({b.right() - kPad - tw, b.y + (kHeaderH - ctx.r.lineHeight(f.caption)) / 2.f}, tally, f.caption, c.textMuted);
+    // 1.12.28 : une seule carte (la page d'un parcours, dans l'aide) dit elle-meme ou elle en est.
+    if (cards_.size() > 1) {
+        const float tw = ctx.r.measure(tally, f.caption).width;
+        ctx.r.drawText({b.right() - kPad - tw, b.y + (kHeaderH - ctx.r.lineHeight(f.caption)) / 2.f}, tally, f.caption, c.textMuted);
+    }
 
     const float uh = ctx.r.lineHeight(f.ui), ch = ctx.r.lineHeight(f.caption);
     const auto measureCaption = [&](const std::string& t) { return ctx.r.measure(t, f.caption).width; };

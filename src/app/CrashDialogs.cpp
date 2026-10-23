@@ -105,6 +105,13 @@ bool showPendingReport(App& app) {
     return true;
 }
 
+bool showNewestReport(App& app) {
+    auto report = core::crash::newestReport();
+    if (!report) return false;
+    app.menus().ShowDialog(std::make_unique<ui::CrashReportDialog>(setupFor(*report, ui::crashreport::Mode::Pending)), {});
+    return true;
+}
+
 std::string prepareSignal(const core::crash::PendingReport& r) {
     namespace fs = std::filesystem;
     help::report::Form form;

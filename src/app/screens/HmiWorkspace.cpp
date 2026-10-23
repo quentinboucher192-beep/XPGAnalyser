@@ -3618,16 +3618,12 @@ std::string placeOfNode(NK kind) {
 } // namespace
 
 // 1.11 (T2, tranche 16, decision du chef) : l'aide de l'IHM, c'est le centre d'aide,
-// au sujet demande (F1, Aller a..., le ? des volets). L'onglet "IHM . Aide" de la 1.10
-// ne s'ouvre plus que pour le didacticiel de l'IHM (ses parcours, PHmiTrails).
+// au sujet demande (F1, Aller a..., le ? des volets).
 void MainAnalysisScreen::openHmiHelp(const std::string& topic) {
-    if (topic != "didacticiel") {
-        app_.setHelpTopic(topic.empty() ? std::string("ihm") : topic);   // lu par HelpCenterScreen::onEnter (forF1)
-        app_.menus().PushMenu("help.hmi");
-        return;
-    }
-    openHmiPane("aide");
-    if (auto* pane = dynamic_cast<HmiHelpPane*>(hmiTab("aide"))) pane->show(topic);
+    // 1.12.28 : le didacticiel aussi est une page de l'aide (Demarrer > Le didacticiel) :
+    // ses parcours y ont leurs cartes. Le volet Aide IHM ne l'ouvre plus a part.
+    app_.setHelpTopic(topic.empty() ? std::string("ihm") : topic);   // lu par HelpCenterScreen::onEnter (forF1)
+    app_.menus().PushMenu("help.hmi");
 }
 
 bool MainAnalysisScreen::openHmiHelpNow() {

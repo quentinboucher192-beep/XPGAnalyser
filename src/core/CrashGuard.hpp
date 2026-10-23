@@ -120,6 +120,8 @@ struct PendingReport {
 std::optional<PendingReport> takeNewReport();
 // 1.12.28 : un rapport par son chemin (le genre et la date viennent du nom du fichier).
 std::optional<PendingReport> readReport(const std::string& pathUtf8);
+// 1.12.28 : le rapport le plus recent, vu ou non (les sessions rejouees le montrent pour une capture).
+std::optional<PendingReport> newestReport();
 
 // ---- les essais caches (--essai-plantage, --essai-blocage) ----------------------------
 enum class Test { None, Crash, Hang };
