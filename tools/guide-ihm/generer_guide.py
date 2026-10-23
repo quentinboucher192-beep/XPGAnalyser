@@ -102,8 +102,9 @@ def parse(path):
                 topic['since'] = check_version(topic, rest)
             elif tag == '@nouveau':
                 # 1.10 : le bloc qui suit a change dans cette version ; un intertitre
-                # emporte toute sa section (jusqu'a l'intertitre suivant).
-                topic['blocks'].append({'kind': 'mark', 'since': check_version(topic, rest)})
+                # emporte toute sa section (jusqu'a l'intertitre suivant). 1.12.27 :
+                # « @nouveau - » : le bloc qui suit est d'avant, meme dans une section nouvelle.
+                topic['blocks'].append({'kind': 'mark', 'since': '-' if rest.strip() == '-' else check_version(topic, rest)})
             elif tag == '@objet':
                 topic['kind'] = rest
             elif tag == '@exemple':
@@ -213,8 +214,8 @@ def apply_marks(topic):
             pending = b['since']
             continue
         if b['kind'] == 'heading':
-            section = pending
-        since = pending or section
+            section = '' if pending == '-' else pending
+        since = '' if pending == '-' else (pending or section)
         if since:
             b['since'] = since
         pending = ''
@@ -337,7 +338,7 @@ def emit_cpp(chapters, path):
     lines.append('//      python3 tools/guide-ihm/generer_guide.py --cpp src/hmi/HmiGuideText.cpp')
     lines.append('// ' + '=' * 77)
     lines.append('#include "HmiGuide.hpp"')
-    lines.append('#include "../core/Edition.hpp"   // 1.12.2 : les mots de XPGAnalyser IHM')
+    lines.append('#include "../core/Edition.hpp"   // 1.12.2 : les mots de IHM Studio')
     lines.append('')
     lines.append('namespace hmi::guide {')
     lines.append('')
