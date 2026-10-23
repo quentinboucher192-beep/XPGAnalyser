@@ -122,6 +122,7 @@ HmiGlyph glyphFor(hmi::Kind k) noexcept {
         case hmi::Kind::Damper:               return HmiGlyph::Damper;
         case hmi::Kind::MultiBladeDamper:     return HmiGlyph::MultiBladeDamper;
         case hmi::Kind::FireDamper:           return HmiGlyph::FireDamper;
+        case hmi::Kind::SpeedDrive:           return HmiGlyph::SpeedDrive;    // 1.12.30
     }
     return HmiGlyph::None;
 }
@@ -764,6 +765,22 @@ void drawHmiGlyph(gfx::IRenderer& r, HmiGlyph g, const gfx::Rect& b, gfx::Color 
             L(3, 2.5f, 3, 4.3f, 0.9f); L(3, 2.5f, 4.2f, 2.5f, 0.9f); L(3, 4.3f, 4.2f, 4.3f, 0.9f);
             L(5.4f, 2.5f, 5.4f, 4.3f, 0.9f); L(5.4f, 2.5f, 6.6f, 2.5f, 0.9f); L(5.4f, 3.4f, 6.3f, 3.4f, 0.9f);
             break;
+        case HmiGlyph::SpeedDrive: {    // 1.12.30 : le cadre, sa diagonale, le reseau (~) et la sortie (deux ondes)
+            R(1.5f, 1.5f, 13, 13);
+            L(1.5f, 14.5f, 14.5f, 1.5f, 1.0f);
+            const auto wave = [&](float cx, float cy) {
+                std::vector<gfx::Point> v;
+                for (int i = 0; i <= 12; ++i) {
+                    const float u = static_cast<float>(i) / 12.f;
+                    v.push_back(P(cx - 2.6f + 5.2f * u, cy - 0.9f * std::sin(u * 3.f * 3.14159265f)));
+                }
+                shapes::strokePolyline(r, v, false, c, std::max(1.f, 1.0f * s));
+            };
+            wave(5.2f, 5.2f);
+            wave(10.8f, 10.0f);
+            wave(10.8f, 12.0f);
+            break;
+        }
         case HmiGlyph::Pause:           // 1.9 : deux barres (Figer l'affichage)
             F(4, 3, 2.6f, 10, c); F(9.4f, 3, 2.6f, 10, c);
             break;

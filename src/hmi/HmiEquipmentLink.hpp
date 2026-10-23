@@ -17,6 +17,14 @@
 //    En mouvement      <- EnMouvement, Mouvement, Moving   (vannes)
 //    Mode              <- Mode                             (un badge : Auto, Manu)
 //    Libelle           <- Nom, Repere, Tag                 (un texte a trous)
+//  1.12.30, le variateur de vitesse en plus :
+//    Pret              <- Pret, Ready, PretMarche
+//    Sens (arriere)    <- Arriere, Sens, Reverse, Direction
+//    Frequence         <- Frequence, Freq, Frequency, Hz
+//    Consigne          <- Consigne, ConsigneFreq, Setpoint, Sp
+//    Courant           <- Courant, Intensite, Current, Amperes
+//    Vitesse           <- Vitesse, Speed, VitessePct
+//    Local / distance  <- Local, EnLocal, Loc
 //  Le tableau de correspondance (role -> membre) se choisit PAR TYPE DE
 //  STRUCTURE (Project::equipmentLinks) : toutes les T_Pompe se lient pareil ;
 //  ce qui n'est pas choisi suit les noms proposes. CE QUI EST REGLE A LA MAIN
@@ -60,7 +68,11 @@ inline constexpr std::string_view kAspectsKey = "stateAspects";
 inline constexpr std::string_view kModeKey = "operatingMode";
 
 // ---- les roles ---------------------------------------------------------------------
-enum class Role : std::uint8_t { Running, Measure, Position, Fault, Opening, Moving, Mode, Label };
+enum class Role : std::uint8_t {
+    Running, Measure, Position, Fault, Opening, Moving, Mode, Label,
+    // 1.12.30 : le variateur de vitesse
+    Ready, Direction, Frequency, Setpoint, Current, Speed, Local,
+};
 struct RoleInfo {
     Role                            role;
     std::string_view                key;        // enregistre : "marche", "mesure"...

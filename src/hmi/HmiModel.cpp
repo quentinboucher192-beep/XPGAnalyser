@@ -906,6 +906,32 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.set("limitOpen", "");
             o.set("limitClosed", "");
             break;
+        case Kind::SpeedDrive:
+            // 1.12.30 : le variateur de vitesse. "value" : en marche ; "fault" : en defaut ;
+            // "ready" : pret (vide : on ne le sait pas) ; "reverse" : il tourne en arriere
+            // (vide : le signe de la frequence) ; "frequency", "frequencySetpoint" : la frequence
+            // de sortie et sa consigne (Hz) ; "current" : le courant (A) ; "speedPercent" : la
+            // vitesse (vide : pas montree) ; "localMode" : vrai en local (LOC), faux a distance
+            // (DIST) ; vide : rien. Chaque valeur a son format et son unite ; "showValues" les
+            // cache. En marche, les ondes de la sortie avancent dans le sens de rotation.
+            synoptic(o, x, y, 220, 110, "FALSE");
+            o.set("ready", "");
+            o.set("reverse", "");
+            o.set("frequency", "");
+            o.set("frequencySetpoint", "");
+            o.set("current", "");
+            o.set("speedPercent", "");
+            o.set("localMode", "");
+            o.setFlag("showValues", true);
+            o.set("frequencyFormat", "0.0");
+            o.set("frequencyUnit", "Hz");
+            o.set("currentFormat", "0.0");
+            o.set("currentUnit", "A");
+            o.set("speedFormat", "0");
+            o.set("speedUnit", "%");
+            o.set("colorReady", "#4FA3FF");
+            o.set("fill", "#1F252E");   // le fond du cadre
+            break;
         case Kind::FlowArrow:
             synoptic(o, x, y, 90, 36, "FALSE");
             o.set("colorOn", "#4FA3FF");

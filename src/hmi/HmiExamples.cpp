@@ -2009,6 +2009,56 @@ Example fireDamper() {
     return m.done(10);
 }
 
+// ---- 1.12.30 : le variateur de vitesse - marche avant, arret, marche arriere, defaut, pret ----
+Example speedDrive() {
+    Maker m;
+    m.var("Marche", "BOOL", "FALSE");
+    m.var("Arriere", "BOOL", "FALSE");
+    m.var("Pret", "BOOL", "TRUE");
+    m.var("Defaut", "BOOL", "FALSE");
+    m.var("Local", "BOOL", "FALSE");
+    m.var("Consigne", "REAL", "50.0");
+    m.var("Frequence", "REAL", "0.0");
+    m.var("Courant", "REAL", "0.0");
+    m.var("Vitesse", "REAL", "0.0");
+    // 0-1 s pret a l'arret ; 1-4,5 s marche avant (rampe jusqu'a 50 Hz) ; 4,5-5 s ralentit ; 5-8,5 s marche arriere
+    // a 35 Hz, en local ; 8,5-9 s ralentit ; 9-10,5 s en defaut ; ensuite pret.
+    m.cyclic("IF T < 0.06 THEN Frequence := 0.0; END_IF;\n"
+             "Marche := (T >= 1.0 AND T < 4.5) OR (T >= 5.0 AND T < 8.5);\n"
+             "Arriere := T >= 5.0 AND T < 9.0;\n"
+             "Local := T >= 5.0 AND T < 9.0;\n"
+             "Defaut := T >= 9.0 AND T < 10.5;\n"
+             "Pret := NOT Defaut;\n"
+             "Consigne := SEL(Arriere, 50.0, 35.0);\n"
+             "IF Marche THEN\n"
+             "  IF Frequence < Consigne THEN Frequence := MIN(Consigne, Frequence + 1.25); END_IF;\n"
+             "  IF Frequence > Consigne THEN Frequence := MAX(Consigne, Frequence - 1.25); END_IF;\n"
+             "ELSE\n"
+             "  Frequence := MAX(0.0, Frequence - 5.0);\n"
+             "END_IF;\n"
+             "Courant := SEL(Frequence > 0.1, 0.0, 4.0 + Frequence * 0.22);\n"
+             "Vitesse := Frequence * 2.0;");
+    auto& o = m.add(Kind::SpeedDrive, "VAR", 24, std::max(10.0, (kHeight - 150.0) / 2), 230, 150);
+    o.set("label", "VAR-101");
+    o.setExpr("value", "Marche");
+    o.setExpr("fault", "Defaut");
+    o.setExpr("ready", "Pret");
+    o.setExpr("reverse", "Arriere");
+    o.setExpr("localMode", "Local");
+    o.setExpr("frequency", "Frequence");
+    o.setExpr("frequencySetpoint", "Consigne");
+    o.setExpr("current", "Courant");
+    o.setExpr("speedPercent", "Vitesse");
+    auto& mot = m.add(Kind::Motor, "Moteur", 268, std::max(10.0, (kHeight - 150.0) / 2) + 34, 74, 70);
+    mot.set("label", "M-101");
+    mot.setExpr("value", "Marche");
+    m.title("Etat", 356, 34, 236, "{Frequence:0.0} Hz{Arriere: arri\xC3\xA8re| avant}", 18);
+    m.note("Explication", 356, 92, 236, 190,
+           "Pr\xC3\xAAt \xC3\xA0 l'arr\xC3\xAAt (bleu) ; \xC3\xA0 1 s, marche avant jusqu'\xC3\xA0 50 Hz : les ondes et les chevrons avancent vers la droite. "
+           "\xC3\x80 5 s, marche arri\xC3\xA8re \xC3\xA0 35 Hz, en local (LOC) : ils vont vers la gauche. De 9 \xC3\xA0 10,5 s, en d\xC3\xA9" "faut : rouge, il clignote.");
+    return m.done(12);
+}
+
 // ---- 1.12.24 : le Reglage PID - une boucle simulee (un procede a deux constantes de temps et son PI) ----
 Example pidTuner() {
     Maker m;
@@ -2586,6 +2636,7 @@ std::optional<Example> exampleFor(Kind kind) {
         case Kind::MultiBladeDamper:    return multiBladeDamper();
         case Kind::FireDamper:          return fireDamper();
         case Kind::PidTuner:            return pidTuner();
+        case Kind::SpeedDrive:          return speedDrive();         // 1.12.30
         case Kind::SymbolInstance:      return symbolInstance();     // lot 10
         // lot 11
         case Kind::BarChart:            return barChart();

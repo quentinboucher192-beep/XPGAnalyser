@@ -29221,6 +29221,103 @@ void registres11224() {
     check(rt.publicRead("Vue_R.RG_1.Opening", out) && std::fabs(out.asReal() - 35.0) < 1e-9, "variable d'instance : Vue_R.RG_1.Opening = 35");
 }
 
+// ============================================================== 1.12.30 ======
+//  Le variateur de vitesse : un symbole du synoptique, sa liaison Equipement (Marche, Defaut, Pret, Sens,
+//  Frequence, Consigne, Courant, Vitesse, Local), son alarme Defaut, ses variables d'instances, Generer.
+void variateur11230() {
+    std::printf("1.12.30 : le variateur de vitesse\n");
+    namespace g = hmi::guide;
+    const Kind k = Kind::SpeedDrive;
+    check(kindIsSynoptic(k) && kindFromKey("SpeedDrive") == k && kindLabel(k) == "Variateur de vitesse" && examples::exampleFor(k).has_value()
+              && g::topicForKind(kindKey(k)) != nullptr && eqlink::kindHasAspects(k),
+          "le variateur : du synoptique, sa cl\xC3\xA9, son libell\xC3\xA9, son exemple, son sujet du guide, le mode \xC3\x89tat");
+    const auto at = std::find(std::begin(kPlaceableKinds), std::end(kPlaceableKinds), Kind::Motor);
+    check(at != std::end(kPlaceableKinds) && at + 1 != std::end(kPlaceableKinds) && at[1] == k, "dans la biblioth\xC3\xA8que : apr\xC3\xA8s le moteur");
+    const Object fresh = makeObject(k, 9, "VAR_1", 0, 0, 1);
+    check(fresh.flag("showValues", false) && fresh.text("frequencyUnit") == "Hz" && fresh.text("currentUnit") == "A" && fresh.text("speedUnit") == "%"
+              && fresh.text("frequencyFormat") == "0.0" && fresh.text("colorReady") == "#4FA3FF" && fresh.find("ready") && fresh.find("reverse")
+              && fresh.find("localMode") && fresh.text("frequency").empty() && fresh.flag("animate", false),
+          "les valeurs neuves : valeurs affich\xC3\xA9" "es, Hz, A, %, 0.0, la couleur pr\xC3\xAAt, rien de reli\xC3\xA9");
+    // La liaison Equipement : une structure T_Variateur, ses membres par leur nom.
+    Project p;
+    HmiType t;
+    t.id = p.allocate();
+    t.name = "T_Variateur";
+    t.members = {{"Marche", "BOOL", "", ""}, {"Defaut", "BOOL", "", ""}, {"Pret", "BOOL", "", ""}, {"Sens", "BOOL", "", ""},
+                 {"Frequence", "REAL", "", ""}, {"Consigne", "REAL", "", ""}, {"Courant", "REAL", "", ""}, {"Vitesse", "REAL", "", ""},
+                 {"Local", "BOOL", "", ""}, {"Nom", "STRING", "", ""}};
+    p.programs.types.push_back(t);
+    p.programs.variables.push_back(hmiVar(p, "VAR1", "T_Variateur"));
+    View v = makeView(p, "Vue_CVC");
+    const Id id = edit::add(p, v, k, 10, 10);
+    v.object(id)->name = "VAR_101";
+    v.object(id)->set("equipment", "VAR1");
+    p.views = {v};
+    p.config.startView = v.id;
+    const auto b = eqlink::bindingOf(p, &p.views[0], *p.views[0].object(id));
+    std::string rows;
+    for (const auto& r : b.rows) rows += std::string(r.role->key) + "=" + r.source + ";";
+    same(rows, "marche=VAR1.Marche;defaut=VAR1.Defaut;pret=VAR1.Pret;sens=VAR1.Sens;frequence=VAR1.Frequence;consigne=VAR1.Consigne;"
+               "courant=VAR1.Courant;vitesse=VAR1.Vitesse;local=VAR1.Local;mode=;libelle={VAR1.Nom};",
+         "la liaison \xC3\x89quipement : chaque membre par son nom (Marche, Defaut, Pret, Sens, Frequence, Consigne, Courant, Vitesse, Local, Nom)");
+    const Object bound = eqlink::bound(p, &p.views[0], *p.views[0].object(id));
+    check(bound.expr("ready") == "VAR1.Pret" && bound.expr("reverse") == "VAR1.Sens" && bound.expr("frequency") == "VAR1.Frequence"
+              && bound.expr("frequencySetpoint") == "VAR1.Consigne" && bound.expr("current") == "VAR1.Courant" && bound.expr("speedPercent") == "VAR1.Vitesse"
+              && bound.expr("localMode") == "VAR1.Local" && bound.text("label") == "{VAR1.Nom}",
+          "... l'objet que la liaison remplit (des formules VAR1.Frequence...)");
+    std::vector<Issue> linkIssues;
+    eqlink::check(p, linkIssues);
+    check(linkIssues.empty(), "Generer : la liaison du variateur ne dit rien (" + std::to_string(linkIssues.size()) + ")");
+    // L'alarme Defaut, des que le defaut est relie (ici par la liaison).
+    bool defaut = false;
+    for (const auto& a : objectAlarms(p)) defaut = defaut || (a.objectName == "VAR_101" && a.localName == "Defaut" && a.def.condition == "VAR1.Defaut");
+    check(defaut, "l'alarme par d\xC3\xA9" "faut Defaut du variateur (son d\xC3\xA9" "faut reli\xC3\xA9 par la liaison)");
+    // En marche : ses variables d'instances.
+    Project q;
+    q.programs.variables.push_back(hmiVar(q, "F", "REAL", "47.5"));
+    q.programs.variables.push_back(hmiVar(q, "Ok", "BOOL", "TRUE"));
+    View w = makeView(q, "Vue_V");
+    const Id did = edit::add(q, w, k, 10, 10);
+    w.object(did)->name = "VAR_2";
+    w.object(did)->setExpr("frequency", "F");
+    w.object(did)->setExpr("ready", "Ok");
+    w.object(did)->setExpr("value", "F > 1.0");
+    q.views = {w};
+    q.config.startView = w.id;
+    Runtime rt;
+    rt.bind(&q, nullptr);
+    rt.start(0);
+    rt.tick(0.1);
+    sim::Value out;
+    check(rt.publicRead("Vue_V.VAR_2.Frequency", out) && std::fabs(out.asReal() - 47.5) < 1e-9, "variable d'instance : Vue_V.VAR_2.Frequency = 47.5");
+    check(rt.publicRead("Vue_V.VAR_2.Ready", out) && out.isTruthy(), "... Vue_V.VAR_2.Ready = TRUE");
+    check(rt.publicRead("Vue_V.VAR_2.Value", out) && out.isTruthy(), "... Vue_V.VAR_2.Value (en marche) = TRUE");
+    // Generer : une valeur tapee qui n'est ni un nombre ni une variable, la consigne sans la frequence, des valeurs cachees.
+    Project r = q;
+    Object& o = *r.views[0].object(did);
+    o.setExpr("frequency", "");
+    o.set("frequency", "abc");
+    o.setExpr("frequencySetpoint", "F");
+    o.set("reverse", "peut-etre");
+    const auto has = [&](const std::vector<Issue>& is, const char* prop, const char* part) {
+        for (const auto& i : is)
+            if (i.property == prop && i.message.find(part) != std::string::npos) return true;
+        return false;
+    };
+    const auto gen = generate(r, [](std::string_view) { return false; });
+    check(has(gen, "frequency", "ni un nombre ni une variable") && has(gen, "reverse", "ni vrai / faux"),
+          "Generer : une fr\xC3\xA9quence \xC2\xAB abc \xC2\xBB, un sens \xC2\xAB peut-etre \xC2\xBB (ni nombre, ni bool\xC3\xA9" "en, ni variable)");
+    o.set("frequency", "");
+    o.set("reverse", "arri\xC3\xA8re");
+    const auto gen2 = generate(r, [](std::string_view) { return false; });
+    check(has(gen2, "frequency", "la consigne est reli") && !has(gen2, "reverse", "ni vrai"),
+          "Generer : la consigne sans la fr\xC3\xA9quence (une information) ; \xC2\xAB arri\xC3\xA8re \xC2\xBB se lit");
+    o.setExpr("frequency", "F");
+    o.setFlag("showValues", false);
+    const auto gen3 = generate(r, [](std::string_view) { return false; });
+    check(has(gen3, "showValues", "Valeurs affich"), "Generer : des valeurs reli\xC3\xA9" "es mais cach\xC3\xA9" "es (Valeurs affich\xC3\xA9" "es d\xC3\xA9" "coch\xC3\xA9)");
+}
+
 void reglagePid11224() {
     std::printf("1.12.24 : le R\xC3\xA9glage PID en marche (lire, apprendre, appliquer, revenir, se souvenir, oublier)\n");
     Project p;
@@ -29663,6 +29760,7 @@ int main(int argc, char** argv) {
     finitions1220();                  // 1.12.20 (F) : les finitions des rappels
     typesRappel1220();                // 1.12.20 (T) : les types rappel nommes
     registres11224();                 // 1.12.24 : les registres du synoptique
+    variateur11230();                 // 1.12.30 : le variateur de vitesse
     reglagePid11224();                // 1.12.24 : le Reglage PID en marche
     scriptsC1220();                   // 1.12.20 (C) : les scripts C et C++, l'en-tete du projet
     generiques1220();                 // 1.12.20 (G) : les structures, les symboles et les popups generiques

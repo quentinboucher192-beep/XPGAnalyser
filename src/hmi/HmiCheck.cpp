@@ -2666,6 +2666,45 @@ void checkLot11(const Project& p, const NameExists& plc, std::vector<Issue>& out
                               "une seule fin de course reli\xC3\xA9" "e : la discordance (aucune des deux \xC3\xA0 l'arr\xC3\xAAt) ne se voit pas");
                     break;
                 }
+                // ---- 1.12.30 : le variateur de vitesse - ses valeurs (des nombres), ses booleens, ce qui ne se verra pas
+                case Kind::SpeedDrive: {
+                    const auto given = [&](const char* key) {
+                        const Prop* pr = o.find(key);
+                        return pr && (!trimmedCopy(pr->expr).empty() || !trimmedCopy(markers::strip(pr->value)).empty());
+                    };
+                    // Une valeur fixe tapee : un nombre (la frequence, la consigne, le courant, la vitesse) ; un nom inconnu
+                    // n'en est pas un (un nom connu tape sans = : roleChecks le dit).
+                    const struct { const char* key; const char* what; } numbers[] = {
+                        {"frequency", "fr\xC3\xA9quence"}, {"frequencySetpoint", "consigne"}, {"current", "courant"}, {"speedPercent", "vitesse"}};
+                    for (const auto& nk : numbers) {
+                        const Prop* pr = o.find(nk.key);
+                        if (!pr || !trimmedCopy(pr->expr).empty()) continue;
+                        const std::string t = trimmedCopy(markers::strip(pr->value));
+                        double x = 0;
+                        if (!t.empty() && !roles::readNumber(t, x) && params::expressionType(p, &v, t).empty())
+                            issue(S::Warning, nk.key, std::string(nk.what) + " \xC2\xAB " + t + " \xC2\xBB : ni un nombre ni une variable - tape =la variable (=VAR1."
+                                                          + (std::string_view(nk.key) == "frequency" ? "Frequence" : std::string_view(nk.key) == "current" ? "Courant"
+                                                             : std::string_view(nk.key) == "speedPercent" ? "Vitesse" : "Consigne") + ")");
+                    }
+                    for (const char* key : {"ready", "reverse", "localMode"}) {
+                        const Prop* pr = o.find(key);
+                        if (!pr || !trimmedCopy(pr->expr).empty()) continue;
+                        const std::string t = trimmedCopy(markers::strip(pr->value));
+                        if (t.empty() || roles::readBool(t, false) == roles::readBool(t, true)) continue;
+                        std::string low;
+                        for (const char ch : t) low += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                        const bool word = std::string_view(key) == "reverse"
+                                              ? (low.rfind("av", 0) == 0 || low.rfind("ar", 0) == 0)
+                                              : std::string_view(key) == "localMode" && (low.rfind("loc", 0) == 0 || low.rfind("dist", 0) == 0);
+                        if (!word && params::expressionType(p, &v, t).empty())
+                            issue(S::Warning, key, "\xC2\xAB " + t + " \xC2\xBB : ni vrai / faux ni une variable - tape =la variable");
+                    }
+                    if (given("frequencySetpoint") && !given("frequency"))
+                        issue(S::Info, "frequency", "la consigne est reli\xC3\xA9" "e mais pas la fr\xC3\xA9quence : on ne verra pas si le variateur la suit");
+                    if (!o.flag("showValues", true) && (given("frequency") || given("current") || given("speedPercent")))
+                        issue(S::Info, "showValues", "des valeurs sont reli\xC3\xA9" "es mais Valeurs affich\xC3\xA9" "es est d\xC3\xA9" "coch\xC3\xA9 : le symbole seul se voit");
+                    break;
+                }
                 // ---- 1.10.4 : la vanne 3 voies - sa voie active (un entier, ou deux booleens)
                 case Kind::ThreeWayValve: {
                     const std::string mode = o.text("positionMode", "entier");

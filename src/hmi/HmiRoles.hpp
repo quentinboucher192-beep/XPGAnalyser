@@ -172,6 +172,16 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"damperActuator", Role::Choice}, {"limitOpen", Role::Formula, Role::Boolean}, {"limitClosed", Role::Formula, Role::Boolean},
     {"blades", Role::Number, Role::Text, Unit::None, "INT"}, {"bladeMode", Role::Choice},
     {"tripped", Role::Formula, Role::Boolean}, {"fireRelease", Role::Choice},
+    // 1.12.30 : le variateur de vitesse - pret, arriere, local (des booleens), la frequence, sa consigne, le
+    // courant, la vitesse (des nombres) ; une variable tapee seule y devient sa formule, comme pour l'ouverture.
+    {"ready", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"reverse", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"localMode", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"frequency", Role::Number, Role::Text, Unit::None, "REAL"}, {"frequencySetpoint", Role::Number, Role::Text, Unit::None, "REAL"},
+    {"current", Role::Number, Role::Text, Unit::None, "REAL"}, {"speedPercent", Role::Number, Role::Text, Unit::None, "REAL"},
+    {"showValues", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"frequencyFormat", Role::Format}, {"currentFormat", Role::Format}, {"speedFormat", Role::Format},
+    {"frequencyUnit", Role::Text}, {"currentUnit", Role::Text}, {"speedUnit", Role::Text},
+    {"colorReady", Role::Color},
     // 1.12.24 : le Reglage PID - la boucle (des formules lues par le moteur), le bloc (ses variables, ecrites apres
     // confirmation), les echelles, l'apprentissage, le reglage, le clic, ses couleurs
     {"pidLoop", Role::Formula, Role::Text}, {"pidSp", Role::Formula, Role::Number}, {"pidPv", Role::Formula, Role::Number},

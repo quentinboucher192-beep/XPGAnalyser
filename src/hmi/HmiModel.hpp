@@ -112,6 +112,10 @@ enum class Kind : std::uint8_t {
     // synoptique - le registre a une lame (papillon), le registre multi-lames, le
     // clapet coupe-feu -, symboles comme la vanne (kindIsSynoptic), poses apres elle.
     PidTuner, Damper, MultiBladeDamper, FireDamper,
+    // 1.12.30, A LA FIN : le variateur de vitesse (marche, sens, pret, defaut, frequence
+    // et sa consigne, courant, vitesse, local / distance) - un symbole du synoptique
+    // (kindIsSynoptic), pose dans la palette apres le moteur.
+    SpeedDrive,
 };
 
 // Tout ce qu'on peut poser sur une vue, dans l'ordre de la palette. Le groupe
@@ -129,7 +133,9 @@ inline constexpr Kind kPlaceableKinds[] = {
     Kind::Dial, Kind::Clock, Kind::HourMeter, Kind::SevenSegment, Kind::TrendArrow, Kind::Marquee, Kind::QrCode,
     // lot 10 : l'objet Parametres systeme, les symboles de synoptique
     Kind::SystemButton,
-    Kind::Valve, Kind::ThreeWayValve, Kind::Damper, Kind::MultiBladeDamper, Kind::FireDamper, Kind::Pump, Kind::Motor, Kind::Pipe, Kind::Tank, Kind::GasBottle, Kind::Fan,
+    Kind::Valve, Kind::ThreeWayValve, Kind::Damper, Kind::MultiBladeDamper, Kind::FireDamper, Kind::Pump, Kind::Motor,
+    Kind::SpeedDrive,   // 1.12.30 : le variateur de vitesse, apres le moteur
+    Kind::Pipe, Kind::Tank, Kind::GasBottle, Kind::Fan,
     Kind::Compressor, Kind::HeatExchanger, Kind::Filter, Kind::Boiler, Kind::Conveyor, Kind::Cylinder, Kind::IsaInstrument,
     Kind::CircuitBreaker, Kind::Disconnector, Kind::Contactor, Kind::Lamp, Kind::Transformer, Kind::Silo, Kind::Hopper,
     Kind::Mixer, Kind::CheckValve, Kind::FlowArrow,
@@ -164,7 +170,8 @@ inline constexpr Kind kPlaceableKinds[] = {
 [[nodiscard]] inline bool kindIsSynoptic(Kind k) noexcept {
     return (static_cast<int>(k) >= static_cast<int>(Kind::Valve) && static_cast<int>(k) <= static_cast<int>(Kind::FlowArrow))
         || k == Kind::ThreeWayValve   // 1.10.4
-        || k == Kind::Damper || k == Kind::MultiBladeDamper || k == Kind::FireDamper;   // 1.12.24
+        || k == Kind::Damper || k == Kind::MultiBladeDamper || k == Kind::FireDamper   // 1.12.24
+        || k == Kind::SpeedDrive;   // 1.12.30
 }
 // 1.12.24 : ceux qui ont une ouverture (0 a 100 %, sa plage openingMin / openingMax) :
 // la vanne, le registre, le registre multi-lames.
@@ -329,9 +336,10 @@ inline constexpr KindInfo kKindInfos[] = {
     {Kind::Damper,              "Damper",              "Registre"},
     {Kind::MultiBladeDamper,    "MultiBladeDamper",    "Registre multi-lames"},
     {Kind::FireDamper,          "FireDamper",          "Clapet coupe-feu"},
+    {Kind::SpeedDrive,          "SpeedDrive",          "Variateur de vitesse"},                    // 1.12.30
 };
 
-static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::FireDamper) + 1, "une ligne par genre d'objet, dans l'ordre");
+static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::SpeedDrive) + 1, "une ligne par genre d'objet, dans l'ordre");
 [[nodiscard]] inline std::string_view kindKey(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].key; }      // "Rectangle" : enregistre
 [[nodiscard]] inline std::string_view kindLabel(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].label; }  // affiche
 [[nodiscard]] std::optional<Kind>     kindFromKey(std::string_view) noexcept;

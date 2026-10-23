@@ -96,6 +96,14 @@ const std::vector<RoleInfo>& allRoles() {
         {Role::Moving, "mouvement", "En mouvement", "moving", {"EnMouvement", "Mouvement", "Moving", ""}},
         {Role::Mode, "mode", "Mode", "operatingMode", {"Mode", "", "", ""}},
         {Role::Label, "libelle", "Libell\xC3\xA9", "label", {"Nom", "Repere", "Tag", ""}},
+        // 1.12.30 : le variateur de vitesse
+        {Role::Ready, "pret", "Pr\xC3\xAAt", "ready", {"Pret", "Ready", "PretMarche", ""}},
+        {Role::Direction, "sens", "Sens (arri\xC3\xA8re)", "reverse", {"Arriere", "Sens", "Reverse", "Direction"}},
+        {Role::Frequency, "frequence", "Fr\xC3\xA9quence (Hz)", "frequency", {"Frequence", "Freq", "Frequency", "Hz"}},
+        {Role::Setpoint, "consigne", "Consigne (Hz)", "frequencySetpoint", {"Consigne", "ConsigneFreq", "Setpoint", "Sp"}},
+        {Role::Current, "courant", "Courant (A)", "current", {"Courant", "Intensite", "Current", "Amperes"}},
+        {Role::Speed, "vitesse", "Vitesse", "speedPercent", {"Vitesse", "Speed", "VitessePct", ""}},
+        {Role::Local, "local", "Local / distance", "localMode", {"Local", "EnLocal", "Loc", ""}},
     };
     return all;
 }
@@ -121,10 +129,14 @@ std::vector<const RoleInfo*> rolesOf(Kind k) {
     add(Role::Fault);
     if (kindHasOpening(k)) add(Role::Opening);   // 1.12.24 : la vanne et les registres
     if (k == Kind::Valve || k == Kind::ThreeWayValve || kindIsDamper(k)) add(Role::Moving);
+    // 1.12.30 : le variateur de vitesse - pret, le sens, la frequence et sa consigne, le courant, la vitesse, le local.
+    if (k == Kind::SpeedDrive)
+        for (const Role r : {Role::Ready, Role::Direction, Role::Frequency, Role::Setpoint, Role::Current, Role::Speed, Role::Local})
+            add(r);
     // Le mode (Auto, Manu) : ce qui se pilote - pas un tube, une fleche, un contenant, un appareil electrique.
     if (k == Kind::Pump || k == Kind::Motor || k == Kind::Fan || k == Kind::Compressor || k == Kind::HeatExchanger || k == Kind::Boiler
         || k == Kind::Mixer || k == Kind::Conveyor || k == Kind::Valve || k == Kind::ThreeWayValve || k == Kind::Cylinder
-        || k == Kind::Damper || k == Kind::MultiBladeDamper)
+        || k == Kind::Damper || k == Kind::MultiBladeDamper || k == Kind::SpeedDrive)
         add(Role::Mode);
     add(Role::Label);
     return out;
@@ -478,10 +490,13 @@ void check(const Project& p, std::vector<Issue>& out) {
                             const std::string where = "\xC3\xA9quipement " + path + " : " + std::string(row.role->label) + " <- " + row.member + " (" + mt + ")";
                             if (!membersOf(p, mt).empty() || (types::parseSpec(mt, spec) && spec.array()))
                                 add(S::Warning, v, o, std::string(kEquipmentKey), where + " est un agr\xC3\xA9gat : choisis un membre simple (Liaison \xC3\x89quipement)");
-                            else if ((row.role->role == Role::Running || row.role->role == Role::Fault || row.role->role == Role::Moving)
+                            else if ((row.role->role == Role::Running || row.role->role == Role::Fault || row.role->role == Role::Moving
+                                      || row.role->role == Role::Ready || row.role->role == Role::Direction || row.role->role == Role::Local)   // 1.12.30
                                      && (st == sim::Type::String || st == sim::Type::Time || date))
                                 add(S::Warning, v, o, std::string(kEquipmentKey), where + " se lit vrai / faux : un BOOL, un entier ou une \xC3\xA9num\xC3\xA9ration est attendu");
-                            else if ((row.role->role == Role::Measure || row.role->role == Role::Opening || row.role->role == Role::Position)
+                            else if ((row.role->role == Role::Measure || row.role->role == Role::Opening || row.role->role == Role::Position
+                                      || row.role->role == Role::Frequency || row.role->role == Role::Setpoint || row.role->role == Role::Current
+                                      || row.role->role == Role::Speed)   // 1.12.30 : le variateur
                                      && (st == sim::Type::String || date))
                                 add(S::Warning, v, o, std::string(kEquipmentKey), where + " : un nombre est attendu (une STRING s'y montrerait ###)");
                         }

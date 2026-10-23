@@ -9,7 +9,8 @@
 //                 echangeur, filtre, chaudiere, convoyeur, verin, melangeur,
 //                 clapet anti-retour, fleche de flux, instrument ISA ;
 //    stockage     cuve, bouteille de gaz, silo, tremie ;
-//    electrique   disjoncteur, sectionneur, contacteur, lampe, transformateur.
+//    electrique   disjoncteur, sectionneur, contacteur, lampe, transformateur ;
+//                 1.12.30 : le variateur de vitesse (son etat, son sens, ses valeurs).
 //
 //  CE QU'ILS MONTRENT : "value" - l'etat (en marche, ouvert, ferme, sous
 //  tension) ou le niveau (entre min et max) ; "fault" - le defaut, qui
@@ -25,8 +26,10 @@
 #include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : le mode Etat, le mode montre
 
 #include <algorithm>
+#include <cctype>
 #include <optional>
 #include <cmath>
+#include <string>
 #include <vector>
 
 namespace app::paint {
@@ -1086,6 +1089,250 @@ void drawDamper(const Ctx& c, const Sym& s) {
     if (faulty && !s.fault && c.src.flag(c.o, "a11ySymbols", false)) drawFaultBadge(c, s.x + s.w, s.y, std::clamp(s.r() * 0.45, 9.0, 22.0));
 }
 
+// ---- 1.12.30 : le variateur de vitesse ------------------------------------------------------
+//  Le symbole normalise d'un convertisseur : un cadre carre, sa diagonale, le reseau (~) en
+//  haut a gauche, la sortie a frequence variable (deux ondes) en bas a droite. Le cadre prend
+//  la couleur de l'etat : en marche, pret (a l'arret), a l'arret, en defaut (il clignote). En
+//  marche, les ondes de la sortie avancent dans le sens de rotation (vers la droite en avant,
+//  vers la gauche en arriere) et les chevrons de la pastille d'etat aussi. A cote (ou dessous
+//  s'il est haut et etroit) : la pastille d'etat (MARCHE AV, PRET, ARRET, DEFAUT), la
+//  frequence en gros, la consigne, le courant, la vitesse - seulement ce qui est donne -, et
+//  LOC ou DIST quand le mode local est relie.
+struct DriveReading {
+    bool   hasReady{false}, ready{false};
+    bool   hasDirection{false}, reverse{false};
+    bool   hasLocal{false}, local{false};
+    bool   maintenance{false};
+};
+
+// Un mot de sens : arriere (ar, rev, back) ou avant (av, fw, for) ; sinon vrai / faux (vrai : arriere).
+bool reverseWord(const std::string& raw, bool& out) {
+    std::string t;
+    for (const char ch : raw)
+        if (!std::isspace(static_cast<unsigned char>(ch))) t += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    if (t.empty()) return false;
+    if (t.rfind("ar", 0) == 0 || t.rfind("rev", 0) == 0 || t.rfind("back", 0) == 0) { out = true; return true; }
+    if (t.rfind("av", 0) == 0 || t.rfind("fw", 0) == 0 || t.rfind("for", 0) == 0) { out = false; return true; }
+    double n = 0;
+    out = truthy(raw, n);
+    return true;
+}
+
+// Une valeur montree du variateur : sa valeur a son format, et son unite ; vide : pas donnee. Dans l'editeur,
+// une valeur pilotee par une formule se montre en tirets (la place qu'elle prendra).
+std::string driveValue(const Ctx& c, const char* key, const char* formatKey, const char* unitKey, const char* defFormat, const char* defUnit,
+                       double* number = nullptr) {
+    const std::string raw = c.src.text(c.o, key);
+    const std::string unit = c.src.text(c.o, unitKey, defUnit);
+    const auto withUnit = [&](std::string v) { return unit.empty() ? v : v + " " + unit; };
+    std::string t = raw;
+    while (!t.empty() && std::isspace(static_cast<unsigned char>(t.back()))) t.pop_back();
+    while (!t.empty() && std::isspace(static_cast<unsigned char>(t.front()))) t.erase(t.begin());
+    if (t.empty()) {
+        const hmi::Prop* p = c.o.find(key);
+        if (c.opt.editor && p && !p->expr.empty()) return withUnit("--");
+        return {};
+    }
+    double n = 0;
+    if (!hmi::parseNumber(t, n)) return withUnit(t);   // ### (une valeur qui ne convient pas) : telle quelle
+    if (number) *number = n;
+    return withUnit(hmi::formatValue(sim::Value::real(n), c.src.text(c.o, formatKey, defFormat)));
+}
+
+// Largeur d'un texte, en pixels de la vue.
+double textWidth(const Ctx& c, const std::string& s, double sizePx) {
+    const auto px = static_cast<std::uint16_t>(std::clamp(sizePx * c.vp.zoom, 6.0, 200.0));
+    return c.r.measure(s, gfx::FontId{px}).width / std::max(0.01, static_cast<double>(c.vp.zoomX()));
+}
+
+// Une onde (une periode et demie) centree en (cx, cy), large de `w`, d'amplitude `a` ; `phase` en radians.
+Pts wave(double cx, double cy, double w, double a, double phase) {
+    Pts out;
+    const int n = 24;
+    for (int i = 0; i <= n; ++i) {
+        const double u = static_cast<double>(i) / n;
+        out.push_back(P(cx - w / 2 + w * u, cy - a * std::sin(u * 3.0 * kPi - phase)));
+    }
+    return out;
+}
+
+// Trois chevrons dans (x, y, w, h), vers la droite (`forward`) ou la gauche ; en marche, l'un apres l'autre
+// s'allume dans le sens de rotation.
+void chevrons(const Ctx& c, double x, double y, double w, double h, bool forward, bool moving, double t, gfx::Color col, double width) {
+    const double step = w / 3.0, half = h * 0.42, depth = std::min(step * 0.55, h * 0.4);
+    const int lit = moving ? static_cast<int>(std::fmod(t * 4.0, 3.0)) : -1;
+    for (int k = 0; k < 3; ++k) {
+        const int rank = forward ? k : 2 - k;
+        const double cx = x + step * (k + 0.5), cy = y + h / 2;
+        const double tip = forward ? cx + depth / 2 : cx - depth / 2, back = forward ? cx - depth / 2 : cx + depth / 2;
+        const gfx::Color col2 = !moving ? withA(col, 0.75f) : rank == lit ? col : withA(col, 0.35f);
+        outline(c, {P(back, cy - half), P(tip, cy), P(back, cy + half)}, false, col2, width);
+    }
+}
+
+void drawSpeedDrive(const Ctx& c, const Sym& s) {
+    DriveReading d;
+    double n = 0;
+    if (const std::string r = c.src.text(c.o, "ready"); r.find_first_not_of(" \t") != std::string::npos) {
+        d.hasReady = true;
+        d.ready = truthy(r, n);
+    }
+    double freq = 0;
+    const std::string freqText = driveValue(c, "frequency", "frequencyFormat", "frequencyUnit", "0.0", "Hz", &freq);
+    const std::string spText = driveValue(c, "frequencySetpoint", "frequencyFormat", "frequencyUnit", "0.0", "Hz");
+    const std::string curText = driveValue(c, "current", "currentFormat", "currentUnit", "0.0", "A");
+    const std::string speedText = driveValue(c, "speedPercent", "speedFormat", "speedUnit", "0", "%");
+    // Le sens : sa propriete (vraie : arriere ; ou un mot, avant / arriere), sinon le signe de la frequence.
+    if (const std::string r = c.src.text(c.o, "reverse"); r.find_first_not_of(" \t") != std::string::npos)
+        d.hasDirection = reverseWord(r, d.reverse);
+    else if (!freqText.empty() && freq != 0) {
+        d.hasDirection = true;
+        d.reverse = freq < 0;
+    }
+    if (const std::string r = c.src.text(c.o, "localMode"); r.find_first_not_of(" \t") != std::string::npos) {
+        d.hasLocal = true;
+        std::string w;
+        for (const char ch : r) w += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        d.local = w.rfind("loc", 0) == 0 ? true : (w.rfind("dist", 0) == 0 || w.rfind("rem", 0) == 0) ? false : truthy(r, n);
+    }
+    // Le mode Etat : une maintenance se dit (sa couleur vient de prepare).
+    if (hmi::eqlink::hasAspects(c.o))
+        if (const auto aspects = hmi::eqlink::parseAspects(c.src.text(c.o, "stateAspects")); !aspects.empty())
+            d.maintenance = hmi::eqlink::aspectOf(aspects, c.src.text(c.o, "value"), c.src.text(c.o, "valueName")).look
+                            == hmi::eqlink::Look::Maintenance;
+    // La couleur de l'etat : le defaut (il clignote), la marche, pret a l'arret, l'arret.
+    gfx::Color stateCol = s.col;
+    const bool readyShown = !s.fault && !s.on && !d.maintenance && d.hasReady && d.ready;
+    if (readyShown) stateCol = c.color("colorReady", gfx::Color::rgb(0x4FA3FF));
+    const bool forward = !d.reverse;
+    std::string stateText = s.fault ? "D\xC3\x89" "FAUT" : s.on ? std::string("MARCHE") : d.maintenance ? "MAINTENANCE" : readyShown ? "PR\xC3\x8A" "T" : "ARR\xC3\x8A" "T";
+    if (s.on && !s.fault && d.hasDirection) stateText += forward ? " AV" : " AR";
+
+    // ---- la place : le carre, et les valeurs a cote (ou dessous)
+    const bool showValues = c.src.flag(c.o, "showValues", true);
+    struct Row { std::string label, value; bool big; };
+    std::vector<Row> rows;
+    if (showValues) {
+        if (!freqText.empty()) rows.push_back({"", freqText, true});
+        if (!spText.empty()) rows.push_back({"Consigne", spText, false});
+        if (!curText.empty()) rows.push_back({"Courant", curText, false});
+        if (!speedText.empty()) rows.push_back({"Vitesse", speedText, false});
+    }
+    const bool wide = s.w >= s.h * 1.15;
+    double side = 0, qx = 0, qy = 0, vx = 0, vy = 0, vw = 0, vh = 0;
+    if (!showValues) {
+        side = std::max(4.0, std::min(s.w, s.h) - 2);
+        qx = s.cx() - side / 2;
+        qy = s.cy() - side / 2;
+    } else if (wide) {
+        side = std::max(4.0, std::min(s.h - 2, s.w * 0.5));
+        qx = s.x + 1;
+        qy = s.cy() - side / 2;
+        vx = qx + side + std::max(4.0, side * 0.08);
+        vw = s.x + s.w - vx;
+        vy = s.y;
+        vh = s.h;
+    } else {
+        side = std::max(4.0, std::min(s.w - 2, s.h * 0.56));
+        qx = s.cx() - side / 2;
+        qy = s.y + 1;
+        vx = s.x;
+        vw = s.w;
+        vy = qy + side + 3;
+        vh = s.y + s.h - vy;
+    }
+    // ---- le carre : son fond (teinte de l'etat), son cadre, la diagonale, ~ et les ondes de sortie
+    const Pts frame = box(qx, qy, side, side, std::min(4.0, side * 0.06));
+    fill(c, frame, c.color("fill", gfx::Color::rgb(0x1F252E)));
+    fill(c, frame, withA(stateCol, 0.2f));
+    outline(c, frame, true, stateCol, s.lw * 1.3);
+    const double inset = std::max(1.0, s.lw * 0.6);
+    seg(c, qx + inset, qy + side - inset, qx + side - inset, qy + inset, s.line, s.lw);
+    const double ww = side * 0.34, amp = side * 0.055;
+    outline(c, wave(qx + side * 0.3, qy + side * 0.3, ww, amp, 0.0), false, s.line, std::max(1.0, s.lw * 0.9));
+    // La sortie : deux ondes ; en marche, elles avancent dans le sens de rotation.
+    const double phase = s.moving ? s.t * 2.0 * kPi * 1.4 * (forward ? 1.0 : -1.0) : 0.0;
+    const gfx::Color outCol = s.on || s.fault ? stateCol : s.line;
+    for (const double dy : {-side * 0.06, side * 0.06})
+        outline(c, wave(qx + side * 0.7, qy + side * 0.7 + dy, ww, amp, phase), false, outCol, std::max(1.0, s.lw * 0.9));
+    // En marche, une bille court sur l'onde du bas dans le sens de rotation : le sens se voit d'un coup d'oeil.
+    if (s.moving && !s.fault) {
+        const double u = std::fmod(s.t * 0.8, 1.0), ud = forward ? u : 1.0 - u;
+        const double bx = qx + side * 0.7 - ww / 2 + ww * ud;
+        const double by = qy + side * 0.7 + side * 0.06 - amp * std::sin(ud * 3.0 * kPi - phase);
+        fill(c, circle(bx, by, std::max(1.6, side * 0.035), 16), stateCol);
+    }
+    // Sans valeurs montrees, le sens en chevrons sous les ondes (en marche).
+    if (!showValues && s.on && !s.fault && side >= 24)
+        chevrons(c, qx + side * 0.52, qy + side * 0.8, side * 0.36, side * 0.12, forward, s.moving, s.t, stateCol, std::max(1.0, s.lw * 0.8));
+    // Local / distance sans valeurs montrees : une pastille sur le coin haut droit du carre.
+    const auto localTag = [&](double rx, double ty, double fs) {
+        if (!d.hasLocal) return 0.0;
+        const std::string tag = d.local ? "LOC" : "DIST";
+        const double tw = textWidth(c, tag, fs) + fs * 0.8, th = fs * 1.35;
+        const gfx::Color tc = d.local ? c.fixed(0xF2994A) : withA(s.txt, 0.85f);
+        const Pts b = box(rx - tw, ty, tw, th, 3);
+        fill(c, b, d.local ? withA(tc, 0.18f) : c.fixed(0x141820));
+        outline(c, b, true, tc, 1.0);
+        text(c, tag, rx - tw, ty, tw, th, tc, fs, "centre");
+        return tw;
+    };
+    if (!showValues) {
+        (void)localTag(qx + side, qy - 2, std::clamp(side * 0.13, 7.0, 12.0));
+        return;
+    }
+    // ---- les valeurs : la pastille d'etat, la frequence en gros, la consigne, le courant, la vitesse
+    if (vw < 8 || vh < 8) return;
+    double fs = std::clamp(c.src.number(c.o, "fontSize", 13), 6.0, 60.0);
+    const auto needed = [&](double f) {
+        double hh = f * 1.55;                         // la pastille
+        for (const auto& r : rows) hh += r.big ? f * 1.6 : f * 1.3;
+        return hh + 2;
+    };
+    while (fs > 6.5 && needed(fs) > vh) fs -= 0.5;
+    while (!rows.empty() && needed(fs) > vh) rows.pop_back();   // ce qui ne tient pas, en partant du bas
+    double y = vy + std::max(0.0, (vh - needed(fs)) / 2);
+    // LOC / DIST : a droite de la frequence ; sans elle, dans la pastille.
+    const bool tagOnFrequency = d.hasLocal && !rows.empty() && rows.front().big;
+    // La pastille : les chevrons du sens (en marche), le mot de l'etat (sa police se resserre s'il est long).
+    {
+        const double ph = fs * 1.4;
+        const double tagW = d.hasLocal && !tagOnFrequency ? localTag(vx + vw, y, fs * 0.82) + 3 : 0.0;
+        const double pw = std::max(fs * 3.0, vw - tagW);
+        const Pts pill = box(vx, y, pw, ph, ph / 2);
+        fill(c, pill, withA(stateCol, 0.24f));
+        outline(c, pill, true, stateCol, 1.2);
+        double tx = vx + ph * 0.45;
+        if (s.on && !s.fault && d.hasDirection) {
+            const double cw = fs * 1.3;
+            chevrons(c, tx, y + ph * 0.18, cw, ph * 0.64, forward, s.moving, s.t, stateCol, std::max(1.2, fs * 0.13));
+            tx += cw + fs * 0.35;
+        }
+        const double room = vx + pw - tx - ph * 0.3;
+        double tf = fs;
+        if (const double tw = textWidth(c, stateText, tf); tw > room && tw > 0) tf = std::max(fs * 0.7, tf * room / tw);
+        text(c, fitted(c, stateText, room, tf), tx, y, vx + pw - tx, ph, stateCol, tf, "gauche");
+        y += fs * 1.55;
+    }
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        const double rh = r.big ? fs * 1.6 : fs * 1.3, f = r.big ? fs * 1.25 : fs * 0.92;
+        const gfx::Color valueCol = r.big ? s.txt : withA(s.txt, 0.92f);
+        double right = vx + vw;
+        if (i == 0 && tagOnFrequency) right -= localTag(vx + vw, y + (rh - fs * 1.35 * 0.82 * 1.0) / 2, fs * 0.82) + 4;
+        const double rw = right - vx;
+        // L'etiquette a gauche (si elle tient avec la valeur), la valeur a droite ; sinon la valeur seule.
+        const double valueW = textWidth(c, r.value, f);
+        if (!r.label.empty() && textWidth(c, r.label, f * 0.9) + valueW + f <= rw - 2) {
+            text(c, r.label, vx + 2, y, rw, rh, withA(s.txt, 0.6f), f * 0.9, "gauche");
+            text(c, r.value, vx, y, rw - 4, rh, valueCol, f, "droite");
+        } else {
+            text(c, fitted(c, r.value, rw - 6, f), vx, y, rw - 4, rh, valueCol, f, r.big ? "gauche" : "droite");
+        }
+        y += rh;
+    }
+}
+
 } // namespace
 
 bool drawSynoptic(const Ctx& c) {
@@ -1121,6 +1368,7 @@ bool drawSynoptic(const Ctx& c) {
         case Kind::Damper:
         case Kind::MultiBladeDamper:
         case Kind::FireDamper:     drawDamper(c, s); break;      // 1.12.24
+        case Kind::SpeedDrive:     drawSpeedDrive(c, s); break;  // 1.12.30
         default:                   return false;
     }
     // Lot 13 : l'accessibilite - un defaut se lit aussi a son triangle.

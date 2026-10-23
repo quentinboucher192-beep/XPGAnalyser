@@ -1299,7 +1299,9 @@ const std::vector<Category>& categories() {
         {"R\xC3\xA9gulation", {hmi::Kind::PidTuner}},
         // Lot 10 : les symboles de synoptique - process, stockage, electrique.
         {"Synoptique", {hmi::Kind::Valve, hmi::Kind::ThreeWayValve, hmi::Kind::Damper, hmi::Kind::MultiBladeDamper,   // 1.12.24 : les registres
-                        hmi::Kind::FireDamper, hmi::Kind::CheckValve, hmi::Kind::Pump, hmi::Kind::Motor, hmi::Kind::Pipe, hmi::Kind::FlowArrow,
+                        hmi::Kind::FireDamper, hmi::Kind::CheckValve, hmi::Kind::Pump, hmi::Kind::Motor,
+                        hmi::Kind::SpeedDrive,   // 1.12.30 : le variateur de vitesse, a cote du moteur
+                        hmi::Kind::Pipe, hmi::Kind::FlowArrow,
                         hmi::Kind::Fan, hmi::Kind::Compressor, hmi::Kind::HeatExchanger, hmi::Kind::Filter, hmi::Kind::Boiler,
                         hmi::Kind::Mixer, hmi::Kind::Conveyor, hmi::Kind::Cylinder, hmi::Kind::IsaInstrument, hmi::Kind::Tank,
                         hmi::Kind::Silo, hmi::Kind::Hopper, hmi::Kind::GasBottle, hmi::Kind::Transformer, hmi::Kind::CircuitBreaker,
@@ -2334,6 +2336,37 @@ const std::vector<KeyInfo>& keyInfos() {
          "rouge, il clignote. Une expression : =CCF_Declenche."},
         {"fireRelease", "D\xC3\xA9" "clencheur", PG::ValueType::Enum, {"fusible", "\xC3\xA9lectro-aimant", "moteur"},
          "Fusible thermique (70 \xC2\xB0" "C, r\xC3\xA9" "armement \xC3\xA0 la main), \xC3\xA9lectro-aimant (commande \xC3\xA0 rupture), moteur (r\xC3\xA9" "armable \xC3\xA0 distance)."},
+        // ---- 1.12.30 : le variateur de vitesse
+        {"ready", "Pr\xC3\xAAt (expression)", PG::ValueType::Text, {},
+         "Vraie : le variateur est pr\xC3\xAAt (sous tension, sans d\xC3\xA9" "faut, verrouillages faits). \xC3\x80 l'arr\xC3\xAAt et pr\xC3\xAAt, il prend la couleur pr\xC3\xAAt. Une expression : =VAR1.Pret. Vide : on ne le sait pas."},
+        {"reverse", "Sens arri\xC3\xA8re (expression)", PG::ValueType::Text, {},
+         "Vraie : il tourne en arri\xC3\xA8re (le bit 15 de l'ETA d'un Altivar). Un mot se lit aussi : avant, arri\xC3\xA8re. Vide : le signe de la fr\xC3\xA9quence (n\xC3\xA9gative : arri\xC3\xA8re)."},
+        {"frequency", "Fr\xC3\xA9quence (Hz)", PG::ValueType::Text, {},
+         "La fr\xC3\xA9quence de sortie (une expression : =VAR1.Frequence), \xC3\xA9" "crite en gros \xC3\xA0 c\xC3\xB4t\xC3\xA9 du symbole. Vide : pas montr\xC3\xA9" "e."},
+        {"frequencySetpoint", "Consigne de fr\xC3\xA9quence", PG::ValueType::Text, {},
+         "La consigne (=VAR1.Consigne), \xC3\xA9" "crite sous la fr\xC3\xA9quence. Vide : pas montr\xC3\xA9" "e."},
+        {"current", "Courant (A)", PG::ValueType::Text, {},
+         "Le courant moteur (=VAR1.Courant). Vide : pas montr\xC3\xA9."},
+        {"speedPercent", "Vitesse", PG::ValueType::Text, {},
+         "La vitesse (=VAR1.Vitesse), en % par d\xC3\xA9" "faut (son unit\xC3\xA9 : tr/min, %). Vide : pas montr\xC3\xA9" "e."},
+        {"localMode", "En local (expression)", PG::ValueType::Text, {},
+         "Vraie : command\xC3\xA9 en local (au clavier du variateur) : LOC ; fausse : \xC3\xA0 distance : DIST. Vide : rien."},
+        {"showValues", "Valeurs affich\xC3\xA9" "es", PG::ValueType::Boolean, {},
+         "Coch\xC3\xA9 : l'\xC3\xA9tat, la fr\xC3\xA9quence, la consigne, le courant et la vitesse \xC3\xA0 c\xC3\xB4t\xC3\xA9 du symbole (dessous s'il est haut et \xC3\xA9troit). D\xC3\xA9" "coch\xC3\xA9 : le symbole seul."},
+        {"frequencyFormat", "Format de la fr\xC3\xA9quence", PG::ValueType::Text, {},
+         "0.0 : un chiffre apr\xC3\xA8s la virgule (la consigne aussi)."},
+        {"frequencyUnit", "Unit\xC3\xA9 de la fr\xC3\xA9quence", PG::ValueType::Text, {},
+         "Hz par d\xC3\xA9" "faut (la consigne aussi)."},
+        {"currentFormat", "Format du courant", PG::ValueType::Text, {},
+         "0.0 : un chiffre apr\xC3\xA8s la virgule."},
+        {"currentUnit", "Unit\xC3\xA9 du courant", PG::ValueType::Text, {},
+         "A par d\xC3\xA9" "faut."},
+        {"speedFormat", "Format de la vitesse", PG::ValueType::Text, {},
+         "0 : sans d\xC3\xA9" "cimale."},
+        {"speedUnit", "Unit\xC3\xA9 de la vitesse", PG::ValueType::Text, {},
+         "% par d\xC3\xA9" "faut ; tr/min pour une vitesse en tours."},
+        {"colorReady", "Couleur pr\xC3\xAAt", PG::ValueType::Color, {},
+         "Celle du variateur pr\xC3\xAAt, \xC3\xA0 l'arr\xC3\xAAt."},
         // ---- 1.12.24 : le Reglage PID (les mots de la maquette)
         {"pidLoop", "Structure de la boucle", PG::ValueType::Text, {},
          "Une structure qui porte la consigne et la mesure : SPPV_TELUNA[0]. Ses membres se trouvent par leur nom - SP (ou Consigne, "
@@ -2571,6 +2604,13 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
         if (key == "value") return kind == K::FireDamper ? "Ouvert (en veille)" : "Ouvert";
         if (key == "colorOn") return "Couleur ouvert";
         if (key == "colorOff") return "Couleur ferm\xC3\xA9";
+    }
+    // 1.12.30 : le variateur de vitesse - la Valeur dit s'il tourne ; le fond est celui de son cadre.
+    if (kind == K::SpeedDrive) {
+        if (key == "value") return "En marche";
+        if (key == "colorOn") return "Couleur en marche";
+        if (key == "colorOff") return "Couleur \xC3\xA0 l'arr\xC3\xAA" "t";
+        if (key == "fill") return "Fond du cadre";
     }
     // 1.10.4 : la vanne 3 voies, avec les mots de la maquette (scene 4).
     if (kind == K::ThreeWayValve) {

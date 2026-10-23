@@ -6714,7 +6714,8 @@ void lot10_synoptique() {
             glyphs += app::glyphFor(k) != app::HmiGlyph::None ? 1u : 0u;
         }
         pal.setFilter("");
-        check(tiles == 28 && glyphs == 28, "la famille Synoptique : 28 tuiles (1.10.4 : la vanne 3 voies ; 1.12.24 : les trois registres), chacune son ic\xC3\xB4ne");
+        check(tiles == 29 && glyphs == 29, "la famille Synoptique : 29 tuiles (1.10.4 : la vanne 3 voies ; 1.12.24 : les trois registres ; "
+                                           "1.12.30 : le variateur de vitesse), chacune son ic\xC3\xB4ne");
         (void)b.place(Kind::Pump, 100, 100);
         b.editor->layout();
         std::set<std::string> inSynoptic;
@@ -6753,6 +6754,78 @@ void lot10_synoptique() {
         if (rec.tris.empty() || !rec.wrote("L_" + std::string(hmi::kindKey(o.kind)))) silent += std::string(hmi::kindKey(o.kind)) + " ";
     }
     check(silent.empty(), "les 24 symboles se dessinent, leur libell\xC3\xA9 compris " + silent);
+    // 1.12.30 : le variateur de vitesse - la pastille d'etat (marche avant, arriere, pret, arret, defaut), ses valeurs
+    // a leur format et leur unite, ce qui n'est pas donne n'est pas ecrit ; LOC / DIST ; ses chevrons du sens.
+    {
+        Object d = hmi::makeObject(Kind::SpeedDrive, 900, "VAR_1", 20, 20, v.layers.front().id);
+        d.set("label", "VAR-101");
+        d.set("value", "TRUE");
+        d.set("ready", "TRUE");
+        d.set("frequency", "48.27");
+        d.set("frequencySetpoint", "50");
+        d.set("current", "12.44");
+        app::HmiPaintOptions run;
+        run.editor = false;
+        run.time = 0.3;
+        const auto paintDrive = [&](const Object& o, TriRecorder& rec) { app::paintHmiObject(rec, v, o, vp, app::HmiPropertySource{}, theme, run); };
+        TriRecorder a;
+        paintDrive(d, a);
+        check(a.wrote("MARCHE AV") && a.wrote("48.3 Hz") && a.wrote("50.0 Hz") && a.wrote("12.4 A") && a.wrote("VAR-101") && !a.wrote("%")
+                  && !a.wrote("LOC") && !a.wrote("DIST"),
+              "le variateur en marche avant : MARCHE AV, 48.3 Hz, la consigne 50.0 Hz, 12.4 A, son libell\xC3\xA9 ; ni vitesse ni LOC (non donn\xC3\xA9s)");
+        Object r = d;
+        r.set("reverse", "TRUE");
+        r.set("speedPercent", "96.6");
+        r.set("localMode", "TRUE");
+        TriRecorder b2;
+        paintDrive(r, b2);
+        check(b2.wrote("MARCHE AR") && b2.wrote("97 %") && b2.wrote("LOC"), "en arri\xC3\xA8re et en local : MARCHE AR, 97 %, LOC");
+        Object neg = d;
+        neg.set("frequency", "-30");
+        TriRecorder c2;
+        paintDrive(neg, c2);
+        check(c2.wrote("MARCHE AR") && c2.wrote("-30.0 Hz"), "sans Sens arri\xC3\xA8re : une fr\xC3\xA9quence n\xC3\xA9gative dit l'arri\xC3\xA8re");
+        Object ready = d;
+        ready.set("value", "FALSE");
+        ready.set("localMode", "FALSE");
+        TriRecorder d2;
+        paintDrive(ready, d2);
+        check(d2.wrote("PR\xC3\x8A" "T") && d2.wrote("DIST") && !d2.wrote("MARCHE"), "\xC3\xA0 l'arr\xC3\xAAt et pr\xC3\xAAt : PR\xC3\x8A" "T ; \xC3\xA0 distance : DIST");
+        Object stop = ready;
+        stop.set("ready", "FALSE");
+        TriRecorder e2;
+        paintDrive(stop, e2);
+        check(e2.wrote("ARR\xC3\x8A" "T") && !e2.wrote("PR\xC3\x8A" "T"), "\xC3\xA0 l'arr\xC3\xAAt, pas pr\xC3\xAAt : ARR\xC3\x8A" "T");
+        Object fault = d;
+        fault.set("fault", "TRUE");
+        TriRecorder f2;
+        paintDrive(fault, f2);
+        check(f2.wrote("D\xC3\x89" "FAUT") && !f2.wrote("MARCHE"), "en d\xC3\xA9" "faut : D\xC3\x89" "FAUT (avant la marche)");
+        Object bare = d;
+        bare.setFlag("showValues", false);
+        TriRecorder g2;
+        paintDrive(bare, g2);
+        check(!g2.wrote("Hz") && !g2.wrote("MARCHE") && g2.wrote("VAR-101") && !g2.tris.empty(), "Valeurs affich\xC3\xA9" "es d\xC3\xA9" "coch\xC3\xA9 : le symbole et son libell\xC3\xA9 seuls");
+        // L'animation : en marche, les ondes de la sortie avancent ; a l'arret, ou dans l'editeur, elles ne bougent pas.
+        const auto shot = [&](const Object& o, double t, bool editor) {
+            app::HmiPaintOptions op;
+            op.editor = editor;
+            op.time = t;
+            TriRecorder rec;
+            app::paintHmiObject(rec, v, o, vp, app::HmiPropertySource{}, theme, op);
+            return rec.tris;
+        };
+        check(!samePoints(shot(d, 0.1, false), shot(d, 0.35, false)) && samePoints(shot(ready, 0.1, false), shot(ready, 0.35, false))
+                  && samePoints(shot(d, 0.1, true), shot(d, 0.35, true)),
+              "en marche les ondes et les chevrons avancent ; \xC3\xA0 l'arr\xC3\xAAt et dans l'\xC3\xA9" "diteur, rien ne bouge");
+        // Haut et etroit : les valeurs passent sous le carre.
+        Object tall = d;
+        tall.setNumber("w", 120);
+        tall.setNumber("h", 260);
+        TriRecorder h2;
+        paintDrive(tall, h2);
+        check(h2.wrote("MARCHE AV") && h2.wrote("48.3 Hz"), "haut et \xC3\xA9troit : la pastille et les valeurs sous le symbole");
+    }
     {
         const auto* tank = v.objectByName("Tank_1");
         TriRecorder rec;
@@ -18678,7 +18751,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 218, "centre : L'IHM a les 218 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis)");
+    check(ix.count(hc::Chapter::Hmi) == 219, "centre : L'IHM a les 219 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 62, "centre : 11 expressions, 62 notes (1.12.29)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -19069,7 +19142,7 @@ void centreAide111() {
             if (r.kind == hc::RowKind::Topic && r.key == "objet-vanne") vanne = r.current && r.depth == 3 && !r.pill.empty();
             if (r.kind == hc::RowKind::Sub && r.current) {
                 sousChapitre = r.open && (sousChapitre || r.depth == 1);
-                if (r.depth == 2) famille = r.open && r.label == "Synoptique" && r.count == 30;
+                if (r.depth == 2) famille = r.open && r.label == "Synoptique" && r.count == 31;   // 1.12.30 : le variateur de vitesse
             }
         }
         check(vanne && sousChapitre && famille, "ecran : le sujet ouvert deplie son chapitre, son sous-chapitre et sa famille, avec sa pastille");

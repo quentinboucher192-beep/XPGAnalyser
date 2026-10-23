@@ -9454,16 +9454,17 @@ const std::vector<Topic>& topics() {
          {}, "1.12.24"},
         // ---- La bibliotheque d'objets  Synoptique / synoptique
         {"synoptique", "Les symboles de synoptique", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique",
-         "Vingt-quatre symboles de process, de stockage et d'\xC3\xA9lectricit\xC3\xA9, dessin\xC3\xA9s en "
+         "Vingt-neuf symboles de process, de stockage et d'\xC3\xA9lectricit\xC3\xA9, dessin\xC3\xA9s en "
          "vectoriel : ils montrent l'\xC3\xA9tat ou le niveau d'un \xC3\xA9quipement, clignotent en "
          "d\xC3\xA9" "faut, s'animent en marche.",
          {
              {K::Heading, "La famille Synoptique", {}},
-             {K::Table, "Genre\tSymboles\nProcess\tVanne, Vanne 3 voies, Clapet anti-retour, Pompe, Moteur, "
-                         "Tuyauterie, Fl\xC3\xA8" "che de flux, Ventilateur, Compresseur, "
-                         "\xC3\x89" "changeur, Filtre, Chaudi\xC3\xA8re, M\xC3\xA9langeur, Convoyeur, "
-                         "V\xC3\xA9rin, Instrument ISA\nStockage\tCuve, Silo, Tr\xC3\xA9mie, Bouteille de "
-                         "gaz\n\xC3\x89lectrique\tTransformateur, Disjoncteur, Sectionneur, Contacteur, Lampe", {}},
+             {K::Table, "Genre\tSymboles\nProcess\tVanne, Vanne 3 voies, Registre, Registre multi-lames, "
+                         "Clapet coupe-feu, Clapet anti-retour, Pompe, Moteur, Tuyauterie, Fl\xC3\xA8" "che "
+                         "de flux, Ventilateur, Compresseur, \xC3\x89" "changeur, Filtre, Chaudi\xC3\xA8re, "
+                         "M\xC3\xA9langeur, Convoyeur, V\xC3\xA9rin, Instrument ISA\nStockage\tCuve, Silo, "
+                         "Tr\xC3\xA9mie, Bouteille de gaz\n\xC3\x89lectrique\tVariateur de vitesse, "
+                         "Transformateur, Disjoncteur, Sectionneur, Contacteur, Lampe", {}},
              {K::Heading, "Ce qu'ils montrent", {}},
              {K::Bullet, "**Valeur** : l'\xC3\xA9tat (vrai : en marche, ouvert, ferm\xC3\xA9, sous tension "
                          "selon le symbole) ou le niveau (cuve, silo, tr\xC3\xA9mie, bouteille, v\xC3\xA9rin "
@@ -9522,6 +9523,10 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9num\xC3\xA9ration du projet d'apr\xC3\xA8s ses noms (ARRET, MARCHE, "
                          "DEFAUT, MAINT\xE2\x80\xA6). Un moteur ETAT_MOTEUR en D\xC3\xA9" "faut (2) se "
                          "dessine en d\xC3\xA9" "faut.", {}, "1.12.11"},
+             {K::Paragraph, "1.12.30 : le **Variateur de vitesse** - marche, sens, pr\xC3\xAAt, "
+                         "d\xC3\xA9" "faut, sa fr\xC3\xA9quence et sa consigne, son courant, sa vitesse, "
+                         "local ou distance ; ses membres se lient par leur nom (Marche, Defaut, Pret, Sens, "
+                         "Frequence, Consigne, Courant...). Voir \xC2\xAB Variateur de vitesse \xC2\xBB.", {}},
          },
          {"objets", "objet-communs", "proprietes", "simulation", "variables-instances", "symboles", "alarmes-bibliotheque", "groupes-objets"},
          {"Synoptique"},
@@ -10253,7 +10258,7 @@ const std::vector<Topic>& topics() {
                          "G\xC3\xA9n\xC3\xA9rer signale une variable inconnue dans sa valeur ou son "
                          "d\xC3\xA9" "faut.", {}},
          },
-         {"synoptique", "objet-communs", "proprietes", "simulation"},
+         {"synoptique", "objet-variateur-de-vitesse", "objet-communs", "proprietes", "simulation"},
          {},
          {},
          {{"EX_Motor.png", "L'exemple anim\xC3\xA9 : moteur"}},
@@ -10284,6 +10289,180 @@ const std::vector<Topic>& topics() {
             "En marche, deux rep\xC3\xA8res tournent autour de la carcasse ; faux : immobile."}},
          "Le moteur M-12 d\xC3\xA9marre \xC3\xA0 1 s, passe en d\xC3\xA9" "faut de 5,5 \xC3\xA0 7 s, "
          "s'arr\xC3\xAAte \xC3\xA0 8,5 s.",
+         {}},
+        // ---- La bibliotheque d'objets  Synoptique / objet-variateur-de-vitesse
+        {"objet-variateur-de-vitesse", "Variateur de vitesse", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique",
+         "Un variateur de vitesse, dessin\xC3\xA9 comme un convertisseur normalis\xC3\xA9 (un cadre, sa "
+         "diagonale, le r\xC3\xA9seau ~ et la sortie en deux ondes) : sa couleur dit s'il tourne, s'il est "
+         "pr\xC3\xAAt ou en d\xC3\xA9" "faut ; \xC3\xA0 c\xC3\xB4t\xC3\xA9, sa fr\xC3\xA9quence, sa "
+         "consigne, son courant et sa vitesse ; en marche, les ondes avancent dans le sens de rotation.",
+         {
+             {K::Heading, "\xC3\x80 quoi il sert", {}},
+             {K::Paragraph, "Le variateur qui alimente un moteur (une pompe, un ventilateur d'extraction, un "
+                         "compresseur) : jusqu'ici un \xC3\xA9quipement Modbus sans dessin, il a son "
+                         "symbole. Le carr\xC3\xA9 est le symbole normalis\xC3\xA9 d'un convertisseur : la "
+                         "diagonale s\xC3\xA9pare le r\xC3\xA9seau (~, en haut \xC3\xA0 gauche) de la sortie "
+                         "\xC3\xA0 fr\xC3\xA9quence variable (deux ondes, en bas \xC3\xA0 droite). Il est "
+                         "dans la famille Synoptique, \xC3\xA0 c\xC3\xB4t\xC3\xA9 du moteur ; on le pose "
+                         "devant le moteur qu'il commande, on le tourne et on le retourne (miroirs) comme "
+                         "les autres symboles.", {}},
+             {K::Heading, "Ce qu'il montre", {}},
+             {K::Bullet, "**En marche** (la Valeur) : le cadre prend la couleur en marche, et la sortie "
+                         "aussi ; \xC3\xA0 l'arr\xC3\xAAt, la couleur \xC3\xA0 l'arr\xC3\xAAt.", {}},
+             {K::Bullet, "**Pr\xC3\xAAt** : \xC3\xA0 l'arr\xC3\xAAt et pr\xC3\xAAt, le cadre prend la "
+                         "couleur pr\xC3\xAAt (bleu) et la pastille dit PR\xC3\x8AT ; vide, on ne le sait "
+                         "pas (ARR\xC3\x8AT).", {}},
+             {K::Bullet, "**D\xC3\xA9" "faut** : le cadre et la pastille passent \xC3\xA0 la couleur de "
+                         "d\xC3\xA9" "faut et clignotent. Reli\xC3\xA9, le d\xC3\xA9" "faut fait l'alarme "
+                         "par d\xC3\xA9" "faut **Defaut** de l'objet.", {}},
+             {K::Bullet, "**Sens arri\xC3\xA8re** : vrai, il tourne en arri\xC3\xA8re (la pastille dit "
+                         "MARCHE AR, les ondes et les chevrons vont vers la gauche). Un mot se lit aussi "
+                         "(avant, arri\xC3\xA8re). Vide : le signe de la fr\xC3\xA9quence (n\xC3\xA9gative : "
+                         "arri\xC3\xA8re).", {}},
+             {K::Bullet, "**Fr\xC3\xA9quence**, **Consigne de fr\xC3\xA9quence**, **Courant**, **Vitesse** : "
+                         "\xC3\xA0 c\xC3\xB4t\xC3\xA9 du symbole (dessous s'il est haut et \xC3\xA9troit), "
+                         "seulement celles qui sont donn\xC3\xA9" "es - la fr\xC3\xA9quence en gros, les "
+                         "autres avec leur nom quand la place le permet. Chacune a son format et son "
+                         "unit\xC3\xA9 (tr/min pour une vitesse en tours).", {}},
+             {K::Bullet, "**En local** : vrai, la pastille LOC (command\xC3\xA9 au clavier du variateur) ; "
+                         "faux, DIST (\xC3\xA0 distance) ; vide, rien.", {}},
+             {K::Bullet, "**Valeurs affich\xC3\xA9" "es** d\xC3\xA9" "coch\xC3\xA9 : le carr\xC3\xA9 seul ; "
+                         "en marche, des chevrons sous les ondes disent le sens.", {}},
+             {K::Heading, "Avec sa structure (\xC3\x89quipement)", {}},
+             {K::Paragraph, "Donne-lui la structure du variateur dans **\xC3\x89quipement** (VAR1, "
+                         "Variateurs[2], le param\xC3\xA8tre d'une popup) : ses membres se lient par leur "
+                         "nom - En marche \xE2\x86\x90 Marche, D\xC3\xA9" "faut \xE2\x86\x90 Defaut, "
+                         "Pr\xC3\xAAt \xE2\x86\x90 Pret, Sens arri\xC3\xA8re \xE2\x86\x90 Arriere ou Sens, "
+                         "Fr\xC3\xA9quence \xE2\x86\x90 Frequence, Consigne de fr\xC3\xA9quence \xE2\x86\x90 "
+                         "Consigne, Courant \xE2\x86\x90 Courant, Vitesse \xE2\x86\x90 Vitesse, En local "
+                         "\xE2\x86\x90 Local, Mode \xE2\x86\x90 Mode, Libell\xC3\xA9 \xE2\x86\x90 Nom. La "
+                         "section Liaison \xC3\x89quipement montre chaque r\xC3\xB4le et le membre lu ; ce "
+                         "que tu r\xC3\xA8gles \xC3\xA0 la main gagne.", {}},
+             {K::Tip, "Un mot d'\xC3\xA9tat entier (0 arr\xC3\xAAt, 1 marche, 2 d\xC3\xA9" "faut, 3 "
+                         "maintenance) ou une \xC3\xA9num\xC3\xA9ration : Contenu \xE2\x80\xBA Mode "
+                         "\xC3\x89tat choisit l'aspect de chaque valeur.", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il r\xC3\xA8gle\nEn "
+                         "marche\tFALSE\tVraie : il tourne. Une expression la relie : "
+                         "=VAR1.Marche.\nD\xC3\xA9" "faut (expression)\tFALSE\tVrai : la couleur de "
+                         "d\xC3\xA9" "faut, qui clignote. Une expression : =VAR1.Defaut.\nCouleur en "
+                         "marche\t#2ECC71\tLe cadre et la sortie quand il tourne.\nCouleur \xC3\xA0 "
+                         "l'arr\xC3\xAAt\t#5A6577\tLe cadre \xC3\xA0 l'arr\xC3\xAAt (pas pr\xC3\xAAt, ou on "
+                         "ne le sait pas).\nCouleur de d\xC3\xA9" "faut\t#E5534B\tLa couleur du "
+                         "d\xC3\xA9" "faut (elle clignote).\nContour\t#C8D0DC\tLe trait de la diagonale et "
+                         "du r\xC3\xA9seau.\n\xC3\x89paisseur du contour\t2\tSon \xC3\xA9paisseur, en pixels "
+                         "de la vue.\nLibell\xC3\xA9\t(vide)\tLe rep\xC3\xA8re \xC3\xA9" "crit avec le "
+                         "symbole (VAR-101).\nPlace du libell\xC3\xA9\tdessous\tdessous, dessus, ou aucun "
+                         "(cach\xC3\xA9).\nTaille du texte\t13\tLa taille du libell\xC3\xA9 et des valeurs "
+                         "(elles rapetissent si la place manque).\nCouleur du texte\t#C8D0DC\tLa couleur du "
+                         "libell\xC3\xA9 et des valeurs.\nAnimer en marche\tTRUE\tEn marche, les ondes de la "
+                         "sortie et les chevrons avancent dans le sens de rotation ; faux : "
+                         "immobiles.\nPr\xC3\xAAt (expression)\t(vide)\tVraie : pr\xC3\xAAt (sous tension, "
+                         "sans d\xC3\xA9" "faut). \xC3\x80 l'arr\xC3\xAAt et pr\xC3\xAAt : la couleur "
+                         "pr\xC3\xAAt. Une expression : =VAR1.Pret.\nSens arri\xC3\xA8re "
+                         "(expression)\t(vide)\tVraie : il tourne en arri\xC3\xA8re (le bit 15 de l'ETA d'un "
+                         "Altivar). Vide : le signe de la fr\xC3\xA9quence.\nFr\xC3\xA9quence "
+                         "(Hz)\t(vide)\tLa fr\xC3\xA9quence de sortie, en gros : =VAR1.Frequence. Vide : pas "
+                         "montr\xC3\xA9" "e.\nConsigne de fr\xC3\xA9quence\t(vide)\tLa consigne, sous la "
+                         "fr\xC3\xA9quence : =VAR1.Consigne. Vide : pas montr\xC3\xA9" "e.\nCourant "
+                         "(A)\t(vide)\tLe courant moteur : =VAR1.Courant. Vide : pas "
+                         "montr\xC3\xA9.\nVitesse\t(vide)\tLa vitesse, en % par d\xC3\xA9" "faut : "
+                         "=VAR1.Vitesse. Vide : pas montr\xC3\xA9" "e.\nEn local (expression)\t(vide)\tVraie "
+                         ": LOC (command\xC3\xA9 au clavier du variateur) ; fausse : DIST. Vide : "
+                         "rien.\nValeurs affich\xC3\xA9" "es\tTRUE\tCoch\xC3\xA9 : la pastille d'\xC3\xA9tat "
+                         "et les valeurs \xC3\xA0 c\xC3\xB4t\xC3\xA9 du symbole ; d\xC3\xA9" "coch\xC3\xA9 : "
+                         "le symbole seul.\nFormat de la fr\xC3\xA9quence\t0.0\tLe format de la "
+                         "fr\xC3\xA9quence et de la consigne.\nUnit\xC3\xA9 de la "
+                         "fr\xC3\xA9quence\tHz\tL'unit\xC3\xA9 de la fr\xC3\xA9quence et de la "
+                         "consigne.\nFormat du courant\t0.0\tLe format du courant.\nUnit\xC3\xA9 du "
+                         "courant\tA\tL'unit\xC3\xA9 du courant.\nFormat de la vitesse\t0\tLe format de la "
+                         "vitesse.\nUnit\xC3\xA9 de la vitesse\t%\t% par d\xC3\xA9" "faut ; tr/min pour une "
+                         "vitesse en tours.\nCouleur pr\xC3\xAAt\t#4FA3FF\tLe cadre pr\xC3\xAAt, \xC3\xA0 "
+                         "l'arr\xC3\xAAt.\nFond du cadre\t#1F252E\tLe fond du carr\xC3\xA9, sous la teinte "
+                         "de l'\xC3\xA9tat. Sur un synoptique clair : #EEF1F5.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "sa valeur, son d\xC3\xA9" "faut, pr\xC3\xAAt et le sens, \xC3\xA9valu\xC3\xA9s "
+                         "\xC3\xA0 chaque cycle, colorent le cadre et la pastille (MARCHE AV, MARCHE AR, "
+                         "PR\xC3\x8AT, ARR\xC3\x8AT, D\xC3\x89" "FAUT) ; en marche, les ondes avancent dans "
+                         "le sens de rotation ;", {}},
+             {K::Bullet, "reli\xC3\xA9, son d\xC3\xA9" "faut fait l'alarme **Defaut** (priorit\xC3\xA9 2) ; "
+                         "ses variables d'instances se lisent comme celles de tout objet : "
+                         "`Vue_CVC.VAR_101.Frequency`, `.Current`, `.Ready`... ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale une variable inconnue dans ses expressions, une "
+                         "fr\xC3\xA9quence, une consigne, un courant ou une vitesse tap\xC3\xA9s qui ne sont "
+                         "ni un nombre ni une variable, une consigne reli\xC3\xA9" "e sans fr\xC3\xA9quence, "
+                         "des valeurs reli\xC3\xA9" "es mais cach\xC3\xA9" "es.", {}},
+         },
+         {"objet-moteur", "synoptique", "alarmes-bibliotheque", "objet-communs", "proprietes", "simulation"},
+         {"variateur", "variateur de vitesse", "variateur de fr\xC3\xA9quence", "VAR", "ATV", "Altivar", "fr\xC3\xA9quence", "Hz", "consigne de fr\xC3\xA9quence", "courant moteur", "sens de rotation", "marche arri\xC3\xA8re", "local", "distance", "LOC", "DIST", "pr\xC3\xAAt"},
+         {},
+         {{"EX_SpeedDrive.png", "L'exemple anim\xC3\xA9 : variateur de vitesse"}},
+         "SpeedDrive",
+         {{"value", "En marche", "FALSE",
+            "Vraie : il tourne. Une expression la relie : =VAR1.Marche."},
+           {"fault", "D\xC3\xA9" "faut (expression)", "FALSE",
+            "Vrai : la couleur de d\xC3\xA9" "faut, qui clignote. Une expression : =VAR1.Defaut."},
+           {"colorOn", "Couleur en marche", "#2ECC71",
+            "Le cadre et la sortie quand il tourne."},
+           {"colorOff", "Couleur \xC3\xA0 l'arr\xC3\xAAt", "#5A6577",
+            "Le cadre \xC3\xA0 l'arr\xC3\xAAt (pas pr\xC3\xAAt, ou on ne le sait pas)."},
+           {"colorFault", "Couleur de d\xC3\xA9" "faut", "#E5534B",
+            "La couleur du d\xC3\xA9" "faut (elle clignote)."},
+           {"stroke", "Contour", "#C8D0DC",
+            "Le trait de la diagonale et du r\xC3\xA9seau."},
+           {"strokeWidth", "\xC3\x89paisseur du contour", "2",
+            "Son \xC3\xA9paisseur, en pixels de la vue."},
+           {"label", "Libell\xC3\xA9", "",
+            "Le rep\xC3\xA8re \xC3\xA9" "crit avec le symbole (VAR-101)."},
+           {"labelPosition", "Place du libell\xC3\xA9", "dessous",
+            "dessous, dessus, ou aucun (cach\xC3\xA9)."},
+           {"fontSize", "Taille du texte", "13",
+            "La taille du libell\xC3\xA9 et des valeurs (elles rapetissent si la place manque)."},
+           {"textColor", "Couleur du texte", "#C8D0DC",
+            "La couleur du libell\xC3\xA9 et des valeurs."},
+           {"animate", "Animer en marche", "TRUE",
+            "En marche, les ondes de la sortie et les chevrons avancent dans le sens de rotation ; faux : "
+            "immobiles."},
+           {"ready", "Pr\xC3\xAAt (expression)", "(vide)",
+            "Vraie : pr\xC3\xAAt (sous tension, sans d\xC3\xA9" "faut). \xC3\x80 l'arr\xC3\xAAt et "
+            "pr\xC3\xAAt : la couleur pr\xC3\xAAt. Une expression : =VAR1.Pret."},
+           {"reverse", "Sens arri\xC3\xA8re (expression)", "(vide)",
+            "Vraie : il tourne en arri\xC3\xA8re (le bit 15 de l'ETA d'un Altivar). Vide : le signe de la "
+            "fr\xC3\xA9quence."},
+           {"frequency", "Fr\xC3\xA9quence (Hz)", "(vide)",
+            "La fr\xC3\xA9quence de sortie, en gros : =VAR1.Frequence. Vide : pas montr\xC3\xA9" "e."},
+           {"frequencySetpoint", "Consigne de fr\xC3\xA9quence", "(vide)",
+            "La consigne, sous la fr\xC3\xA9quence : =VAR1.Consigne. Vide : pas montr\xC3\xA9" "e."},
+           {"current", "Courant (A)", "(vide)",
+            "Le courant moteur : =VAR1.Courant. Vide : pas montr\xC3\xA9."},
+           {"speedPercent", "Vitesse", "(vide)",
+            "La vitesse, en % par d\xC3\xA9" "faut : =VAR1.Vitesse. Vide : pas montr\xC3\xA9" "e."},
+           {"localMode", "En local (expression)", "(vide)",
+            "Vraie : LOC (command\xC3\xA9 au clavier du variateur) ; fausse : DIST. Vide : rien."},
+           {"showValues", "Valeurs affich\xC3\xA9" "es", "TRUE",
+            "Coch\xC3\xA9 : la pastille d'\xC3\xA9tat et les valeurs \xC3\xA0 c\xC3\xB4t\xC3\xA9 du symbole "
+            "; d\xC3\xA9" "coch\xC3\xA9 : le symbole seul."},
+           {"frequencyFormat", "Format de la fr\xC3\xA9quence", "0.0",
+            "Le format de la fr\xC3\xA9quence et de la consigne."},
+           {"frequencyUnit", "Unit\xC3\xA9 de la fr\xC3\xA9quence", "Hz",
+            "L'unit\xC3\xA9 de la fr\xC3\xA9quence et de la consigne."},
+           {"currentFormat", "Format du courant", "0.0",
+            "Le format du courant."},
+           {"currentUnit", "Unit\xC3\xA9 du courant", "A",
+            "L'unit\xC3\xA9 du courant."},
+           {"speedFormat", "Format de la vitesse", "0",
+            "Le format de la vitesse."},
+           {"speedUnit", "Unit\xC3\xA9 de la vitesse", "%",
+            "% par d\xC3\xA9" "faut ; tr/min pour une vitesse en tours."},
+           {"colorReady", "Couleur pr\xC3\xAAt", "#4FA3FF",
+            "Le cadre pr\xC3\xAAt, \xC3\xA0 l'arr\xC3\xAAt."},
+           {"fill", "Fond du cadre", "#1F252E",
+            "Le fond du carr\xC3\xA9, sous la teinte de l'\xC3\xA9tat. Sur un synoptique clair : #EEF1F5."}},
+         "Le variateur VAR-101 est pr\xC3\xAAt \xC3\xA0 l'arr\xC3\xAAt (bleu) ; \xC3\xA0 1 s, il "
+         "d\xC3\xA9marre en avant et monte \xC3\xA0 50 Hz (les ondes et les chevrons avancent vers la "
+         "droite) ; \xC3\xA0 5 s, il repart en arri\xC3\xA8re \xC3\xA0 35 Hz, command\xC3\xA9 en local (LOC) "
+         "; de 9 \xC3\xA0 10,5 s, il est en d\xC3\xA9" "faut, rouge et clignotant ; puis pr\xC3\xAAt de "
+         "nouveau.",
          {}},
         // ---- La bibliotheque d'objets  Synoptique / objet-tuyauterie
         {"objet-tuyauterie", "Tuyauterie", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique",

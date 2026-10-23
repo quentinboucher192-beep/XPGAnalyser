@@ -4148,7 +4148,7 @@ Un clic sur la carte l'ouvre, par-dessus la vue :
 = La bibliothèque d'objets › Synoptique
 
 == synoptique | Les symboles de synoptique
-: Vingt-quatre symboles de process, de stockage et d'électricité, dessinés en vectoriel : ils montrent l'état ou le niveau d'un équipement, clignotent en défaut, s'animent en marche.
+: Vingt-neuf symboles de process, de stockage et d'électricité, dessinés en vectoriel : ils montrent l'état ou le niveau d'un équipement, clignotent en défaut, s'animent en marche.
 @mots Synoptique
 @voir objets, objet-communs, proprietes, simulation, variables-instances, symboles, alarmes-bibliotheque, groupes-objets
 @capture PNG_262_vue_synoptique_editeur.png | Une vue synoptique : la ligne de gaz, le vrac, l'électrique ; l'inspecteur d'une cuve (catégorie Synoptique).
@@ -4158,9 +4158,9 @@ Un clic sur la carte l'ouvre, par-dessus la vue :
 @capture PNG_297_vanne_reglante_seuils_cuve.png | Une vanne réglante qui s'ouvre, une cuve et ses seuils L, H, HH (H franchi).
 ### La famille Synoptique
 | Genre | Symboles |
-| Process | Vanne, Vanne 3 voies, Clapet anti-retour, Pompe, Moteur, Tuyauterie, Flèche de flux, Ventilateur, Compresseur, Échangeur, Filtre, Chaudière, Mélangeur, Convoyeur, Vérin, Instrument ISA |
+| Process | Vanne, Vanne 3 voies, Registre, Registre multi-lames, Clapet coupe-feu, Clapet anti-retour, Pompe, Moteur, Tuyauterie, Flèche de flux, Ventilateur, Compresseur, Échangeur, Filtre, Chaudière, Mélangeur, Convoyeur, Vérin, Instrument ISA |
 | Stockage | Cuve, Silo, Trémie, Bouteille de gaz |
-| Électrique | Transformateur, Disjoncteur, Sectionneur, Contacteur, Lampe |
+| Électrique | Variateur de vitesse, Transformateur, Disjoncteur, Sectionneur, Contacteur, Lampe |
 ### Ce qu'ils montrent
 - **Valeur** : l'état (vrai : en marche, ouvert, fermé, sous tension selon le symbole) ou le niveau (cuve, silo, trémie, bouteille, vérin : entre Minimum et Maximum). Tape `=` et la variable (`=V_101.Ouv`) : poser le symbole, lui donner sa valeur, c'est tout. Un projet d'avant la 1.10.4 garde sa **Variable montrée**, juste après Valeur.
 - **Défaut** : une expression (=Pompe_Defaut, =Pression > 9) ; vraie, le symbole prend la couleur de défaut et clignote. Reliée, elle fait aussi l'alarme **Defaut** de l'objet.
@@ -4182,6 +4182,8 @@ Posé, un objet du synoptique porte ses **alarmes par défaut**, actives et déc
 @nouveau 1.12.11
 
 1.12.11 : Contenu › Mode État - la Valeur choisit un aspect : arrêt, marche, défaut, maintenance (une couleur, animé ou non). Depuis une énumération : ETAT_MOTEUR, ou une énumération du projet d'après ses noms (ARRET, MARCHE, DEFAUT, MAINT…). Un moteur ETAT_MOTEUR en Défaut (2) se dessine en défaut.
+
+1.12.30 : le **Variateur de vitesse** - marche, sens, prêt, défaut, sa fréquence et sa consigne, son courant, sa vitesse, local ou distance ; ses membres se lient par leur nom (Marche, Defaut, Pret, Sens, Frequence, Consigne, Courant...). Voir « Variateur de vitesse ».
 
 == alarmes-bibliotheque | Les alarmes par défaut des objets du synoptique
 : Les objets du synoptique (pompe, vanne, moteur, cuve…) portent des alarmes par défaut, actives dès qu'on pose l'objet et décochables. Chacune n'existe que si sa source est réglée ; une cloche et un nombre, dans la bibliothèque, disent combien un objet en porte.
@@ -4438,7 +4440,7 @@ Le corps de pompe, sa roue à trois aubes, son refoulement et son socle. Le refo
 
 == objet-moteur | Moteur
 : Un moteur électrique : un M dans son cercle ; en marche, deux repères tournent autour.
-@voir synoptique, objet-communs, proprietes, simulation
+@voir synoptique, objet-variateur-de-vitesse, objet-communs, proprietes, simulation
 @capture EX_Motor.png | L'exemple animé : moteur
 @objet Motor
 @exemple Le moteur M-12 démarre à 1 s, passe en défaut de 5,5 à 7 s, s'arrête à 8,5 s.
@@ -4460,6 +4462,60 @@ Le moteur, sa boîte à bornes et son arbre (à droite). Il se pose au bout d'un
 ### En marche
 - en marche (valeur vraie), deux repères tournent autour de la carcasse ; Animer en marche l'arrête ;
 - en défaut, il prend la couleur de défaut et clignote ; Générer signale une variable inconnue dans sa valeur ou son défaut.
+
+== objet-variateur-de-vitesse | Variateur de vitesse
+: Un variateur de vitesse, dessiné comme un convertisseur normalisé (un cadre, sa diagonale, le réseau ~ et la sortie en deux ondes) : sa couleur dit s'il tourne, s'il est prêt ou en défaut ; à côté, sa fréquence, sa consigne, son courant et sa vitesse ; en marche, les ondes avancent dans le sens de rotation.
+@mots variateur, variateur de vitesse, variateur de fréquence, VAR, ATV, Altivar, fréquence, Hz, consigne de fréquence, courant moteur, sens de rotation, marche arrière, local, distance, LOC, DIST, prêt
+@voir objet-moteur, synoptique, alarmes-bibliotheque, objet-communs, proprietes, simulation
+@capture EX_SpeedDrive.png | L'exemple animé : variateur de vitesse
+@objet SpeedDrive
+@exemple Le variateur VAR-101 est prêt à l'arrêt (bleu) ; à 1 s, il démarre en avant et monte à 50 Hz (les ondes et les chevrons avancent vers la droite) ; à 5 s, il repart en arrière à 35 Hz, commandé en local (LOC) ; de 9 à 10,5 s, il est en défaut, rouge et clignotant ; puis prêt de nouveau.
+### À quoi il sert
+Le variateur qui alimente un moteur (une pompe, un ventilateur d'extraction, un compresseur) : jusqu'ici un équipement Modbus sans dessin, il a son symbole. Le carré est le symbole normalisé d'un convertisseur : la diagonale sépare le réseau (~, en haut à gauche) de la sortie à fréquence variable (deux ondes, en bas à droite). Il est dans la famille Synoptique, à côté du moteur ; on le pose devant le moteur qu'il commande, on le tourne et on le retourne (miroirs) comme les autres symboles.
+### Ce qu'il montre
+- **En marche** (la Valeur) : le cadre prend la couleur en marche, et la sortie aussi ; à l'arrêt, la couleur à l'arrêt.
+- **Prêt** : à l'arrêt et prêt, le cadre prend la couleur prêt (bleu) et la pastille dit PRÊT ; vide, on ne le sait pas (ARRÊT).
+- **Défaut** : le cadre et la pastille passent à la couleur de défaut et clignotent. Relié, le défaut fait l'alarme par défaut **Defaut** de l'objet.
+- **Sens arrière** : vrai, il tourne en arrière (la pastille dit MARCHE AR, les ondes et les chevrons vont vers la gauche). Un mot se lit aussi (avant, arrière). Vide : le signe de la fréquence (négative : arrière).
+- **Fréquence**, **Consigne de fréquence**, **Courant**, **Vitesse** : à côté du symbole (dessous s'il est haut et étroit), seulement celles qui sont données - la fréquence en gros, les autres avec leur nom quand la place le permet. Chacune a son format et son unité (tr/min pour une vitesse en tours).
+- **En local** : vrai, la pastille LOC (commandé au clavier du variateur) ; faux, DIST (à distance) ; vide, rien.
+- **Valeurs affichées** décoché : le carré seul ; en marche, des chevrons sous les ondes disent le sens.
+### Avec sa structure (Équipement)
+Donne-lui la structure du variateur dans **Équipement** (VAR1, Variateurs[2], le paramètre d'une popup) : ses membres se lient par leur nom - En marche ← Marche, Défaut ← Defaut, Prêt ← Pret, Sens arrière ← Arriere ou Sens, Fréquence ← Frequence, Consigne de fréquence ← Consigne, Courant ← Courant, Vitesse ← Vitesse, En local ← Local, Mode ← Mode, Libellé ← Nom. La section Liaison Équipement montre chaque rôle et le membre lu ; ce que tu règles à la main gagne.
+> Un mot d'état entier (0 arrêt, 1 marche, 2 défaut, 3 maintenance) ou une énumération : Contenu › Mode État choisit l'aspect de chaque valeur.
+### Ses paramètres
+@param value | En marche | FALSE | Vraie : il tourne. Une expression la relie : =VAR1.Marche.
+@param fault | Défaut (expression) | FALSE | Vrai : la couleur de défaut, qui clignote. Une expression : =VAR1.Defaut.
+@param colorOn | Couleur en marche | #2ECC71 | Le cadre et la sortie quand il tourne.
+@param colorOff | Couleur à l'arrêt | #5A6577 | Le cadre à l'arrêt (pas prêt, ou on ne le sait pas).
+@param colorFault | Couleur de défaut | #E5534B | La couleur du défaut (elle clignote).
+@param stroke | Contour | #C8D0DC | Le trait de la diagonale et du réseau.
+@param strokeWidth | Épaisseur du contour | 2 | Son épaisseur, en pixels de la vue.
+@param label | Libellé |  | Le repère écrit avec le symbole (VAR-101).
+@param labelPosition | Place du libellé | dessous | dessous, dessus, ou aucun (caché).
+@param fontSize | Taille du texte | 13 | La taille du libellé et des valeurs (elles rapetissent si la place manque).
+@param textColor | Couleur du texte | #C8D0DC | La couleur du libellé et des valeurs.
+@param animate | Animer en marche | TRUE | En marche, les ondes de la sortie et les chevrons avancent dans le sens de rotation ; faux : immobiles.
+@param ready | Prêt (expression) | (vide) | Vraie : prêt (sous tension, sans défaut). À l'arrêt et prêt : la couleur prêt. Une expression : =VAR1.Pret.
+@param reverse | Sens arrière (expression) | (vide) | Vraie : il tourne en arrière (le bit 15 de l'ETA d'un Altivar). Vide : le signe de la fréquence.
+@param frequency | Fréquence (Hz) | (vide) | La fréquence de sortie, en gros : =VAR1.Frequence. Vide : pas montrée.
+@param frequencySetpoint | Consigne de fréquence | (vide) | La consigne, sous la fréquence : =VAR1.Consigne. Vide : pas montrée.
+@param current | Courant (A) | (vide) | Le courant moteur : =VAR1.Courant. Vide : pas montré.
+@param speedPercent | Vitesse | (vide) | La vitesse, en % par défaut : =VAR1.Vitesse. Vide : pas montrée.
+@param localMode | En local (expression) | (vide) | Vraie : LOC (commandé au clavier du variateur) ; fausse : DIST. Vide : rien.
+@param showValues | Valeurs affichées | TRUE | Coché : la pastille d'état et les valeurs à côté du symbole ; décoché : le symbole seul.
+@param frequencyFormat | Format de la fréquence | 0.0 | Le format de la fréquence et de la consigne.
+@param frequencyUnit | Unité de la fréquence | Hz | L'unité de la fréquence et de la consigne.
+@param currentFormat | Format du courant | 0.0 | Le format du courant.
+@param currentUnit | Unité du courant | A | L'unité du courant.
+@param speedFormat | Format de la vitesse | 0 | Le format de la vitesse.
+@param speedUnit | Unité de la vitesse | % | % par défaut ; tr/min pour une vitesse en tours.
+@param colorReady | Couleur prêt | #4FA3FF | Le cadre prêt, à l'arrêt.
+@param fill | Fond du cadre | #1F252E | Le fond du carré, sous la teinte de l'état. Sur un synoptique clair : #EEF1F5.
+### En marche
+- sa valeur, son défaut, prêt et le sens, évalués à chaque cycle, colorent le cadre et la pastille (MARCHE AV, MARCHE AR, PRÊT, ARRÊT, DÉFAUT) ; en marche, les ondes avancent dans le sens de rotation ;
+- relié, son défaut fait l'alarme **Defaut** (priorité 2) ; ses variables d'instances se lisent comme celles de tout objet : `Vue_CVC.VAR_101.Frequency`, `.Current`, `.Ready`... ;
+- Générer signale une variable inconnue dans ses expressions, une fréquence, une consigne, un courant ou une vitesse tapés qui ne sont ni un nombre ni une variable, une consigne reliée sans fréquence, des valeurs reliées mais cachées.
 
 == objet-tuyauterie | Tuyauterie
 : Un tube animé : droit, coude, té ou croix ; quand il coule, le fluide avance (à l'envers si la valeur est négative).
