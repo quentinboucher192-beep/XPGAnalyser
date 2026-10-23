@@ -386,6 +386,9 @@ public:
     bool importFrom(const std::string& zipPath, std::string* why = nullptr);
     // Le controle seul, sur le projet tel qu'il est : ses comptes et Generer.
     void check();
+    // 1.12.30 : le rapport d'une archive .xihm du projet entier, ecrite ailleurs (Projet >
+    // Exporter en archive .xihm...) : ses comptes, ses fichiers, ce qu'elle n'a pas pris.
+    void showArchive(hmi::ArchiveReport report, const std::string& path);
     void setNameExists(hmi::NameExists f) { exists_ = std::move(f); }
     void setProjectFolder(std::string f) { folder_ = std::move(f); }
 
@@ -403,6 +406,7 @@ public:
 
     struct Hosts {
         std::function<void()> exportArchive, importArchive;
+        std::function<void()> exportWeb;      // 1.12.30 : la page web (Projet > Exporter en page web)
         std::function<void(const hmi::Issue&)> openIssue;
         std::function<bool(const hmi::ExportRequest&, std::string*)> writeFile;     // lot 13 : le dossier
     };

@@ -33,6 +33,7 @@
 //  touche.
 // =============================================================================
 #include "Screens.hpp"
+#include "../ProjectExchange.hpp"   // 1.12.30 : la page web (IHM > Exporter / Importer)
 #include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - sans automate
 
 #include "../App.hpp"
@@ -1887,6 +1888,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         HmiExchangePane::Hosts hosts;
         hosts.exportArchive = [this] { askHmiArchive(false); };
         hosts.importArchive = [this] { askHmiArchive(true); };
+        hosts.exportWeb = [this] { exchange::askExportWeb(app_); };     // 1.12.30 : la page web
         hosts.openIssue = [this](const hmi::Issue& i) { openHmiIssue(i); };
         // Lot 13 : le dossier de l'IHM va dans exports/, comme les exports.
         hosts.writeFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeHmiExport(rq, where); };

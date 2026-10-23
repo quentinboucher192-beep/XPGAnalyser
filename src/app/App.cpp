@@ -6,6 +6,7 @@
 #include "EditionMigration.hpp"   // 1.12.0 : les projets de la 1.11, recopies dans projets\api et projets\ihm
 #include "Epinglage.hpp"
 #include "BackgroundTasks.hpp"          // Lot API 8 : bandeau haut (la cloche : l'export termine)
+#include "ProjectExchange.hpp"          // 1.12.30 : archives .xihm / .xapi, page web
 #include "screens/StationScreen.hpp"
 #include "hmi/HmiSimulation.hpp"
 #include "../ui/widgets/Containers.hpp"
@@ -420,6 +421,7 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
 
 App::~App() {
     if (auto* instance = core::instance::current()) instance->setWake({});   // 1.11.2 (UNI) : avant SDL_Quit
+    exchange::shutdown();   // 1.12.30 : une archive, une page web en cours d'ecriture se terminent
     fenetres::retirer(announcedFolder_);   // 1.12.27 : ce projet n'est plus ouvert ici
     tutorials::shutdown();   // 1.11 (T1) : la session de tutoriel tient l'appli (UiDriver)
     // Lot API 7 : les onglets detaches rentrent D'ABORD - leur ecran (qui les
@@ -784,6 +786,20 @@ void App::registerActions() {
                             if (auto* screen = dynamic_cast<MainAnalysisScreen*>(menus_->top())) screen->askImportMast();
                             else bus_.publish(StatusNotice{"Importer un .XPG : depuis l'espace de travail du projet (Projet \xE2\x80\xBA Importer un .XPG).", 8.0});
                         }});
+    // 1.12.30 : LES ECHANGES DE PROJETS (app/ProjectExchange) - tout le projet dans un seul
+    // fichier (.xihm dans IHM Studio, .xapi dans API Studio), l'appli en page web (.html,
+    // l'archive dedans), et leurs imports : le fichier redevient un dossier de projet qui s'ouvre.
+    actions_.add(Action{"project.exportArchive",
+                        core::hasApi() ? "Exporter en archive .xapi\xE2\x80\xA6" : "Exporter en archive .xihm\xE2\x80\xA6", "",
+                        [this] { return project_ != nullptr || hmi_ != nullptr; }, {}, nullptr,
+                        [this] { exchange::askExportArchive(*this); }});
+    actions_.add(Action{"project.importArchive", "Importer une archive\xE2\x80\xA6", "", {}, {}, nullptr,
+                        [this] { confirmReplace([this] { exchange::askImportArchive(*this); }); }});
+    actions_.add(Action{"project.exportWeb", "Exporter en page web (.html)\xE2\x80\xA6", "",
+                        [this] { return project_ != nullptr || hmi_ != nullptr; }, {}, nullptr,
+                        [this] { exchange::askExportWeb(*this); }});
+    actions_.add(Action{"project.importWeb", "Importer depuis une page web\xE2\x80\xA6", "", {}, {}, nullptr,
+                        [this] { confirmReplace([this] { exchange::askImportWeb(*this); }); }});
     actions_.add(Action{"project.new", "Nouveau projet\xE2\x80\xA6", help::keys::bindingOf("project.new"), {}, {}, nullptr,
                         [this] {
                             namespace fs = std::filesystem;
@@ -1430,17 +1446,26 @@ void App::registerActions() {
 void App::openPath(std::string path) {
     if (path.empty()) return;
     XPG_PORTEE_TEXTE("App::openPath", std::filesystem::path(path).filename().string());   // 1.10.2 (CR)
+    // 1.12.30 : UNE ARCHIVE DE PROJET (.xihm, .xapi) OU UNE PAGE WEB (.html) - Ouvrir..., la
+    // ligne de commande (IHM-Studio.exe chemin.xihm), une autre instance, un fichier lache :
+    // relue, verifiee, deballee (ou l'on veut), puis le projet s'ouvre (app/ProjectExchange).
+    if (exchange::openArchive(*this, path)) return;
     // 1.12.0 : IHM Studio ouvre ses dossiers de projet, pas les exports de Control Expert.
     if (!core::hasApi()) {
         if (project::ProjectStore::isProjectFolder(path)) {
             openProjectFolder(std::move(path));
             return;
         }
+        const auto leaf = std::filesystem::path(path).filename().string();
+        const auto format = importer::ProjectImporter::sniff({}, path);
+        const bool plcExport = format != importer::SourceFormat::Unknown;
         menus_->ShowDialog(std::make_unique<MessageDialog>(
-                               "Un export de l'automate",
-                               std::filesystem::path(path).filename().string()
-                                   + " : les exports de Control Expert (.XPG, .XHW, .XDB) s'ouvrent avec API Studio.\n\n"
-                                     "IHM Studio ouvre les dossiers de ses projets (Projets\\ihm).",
+                               plcExport ? "Un export de l'automate" : "Pas un projet IHM",
+                               plcExport ? leaf + " : les exports de Control Expert (.XPG, .XHW, .XDB) s'ouvrent avec API Studio.\n\n"
+                                                  "IHM Studio ouvre les dossiers de ses projets (Projets\\ihm), leurs archives (.xihm) "
+                                                  "et leurs pages web (.html)."
+                                         : leaf + " n'est ni un dossier de projet IHM, ni une archive de projet (.xihm), ni la page web "
+                                                  "d'un projet : IHM Studio ne sait pas l'ouvrir.",
                                MessageDialog::Icon::Info),
                            [](const menu::DialogResult&) {});
         return;
@@ -1906,6 +1931,9 @@ core::Status App::saveProject() {
             saved.autoVersion = "V" + std::to_string((*made)->number);
     }
     bus_.publish(saved);
+    // 1.12.30 : la page web du projet, si elle suit chaque enregistrement - dessinee entre
+    // deux images, ecrite a cote : l'enregistrement ne l'attend pas.
+    exchange::afterSave(*this);
     return core::ok();
 }
 
@@ -2409,6 +2437,22 @@ core::Status App::setProjectState(project::State state, const std::string& passw
     return core::ok();
 }
 
+// 1.12.30 : la case "Mettre a jour la page web a chaque enregistrement", gardee dans le
+// manifeste seul (le reste du projet n'est pas reecrit, rien ne passe pour enregistre).
+core::Status App::setWebPage(bool on, std::string file) {
+    if (!project_ || projectFolder_.empty())
+        return core::fail(core::ErrorCode::InvalidArgument, "le projet n'a pas encore de dossier");
+    if (manifest_.state == project::State::Lock)
+        return core::fail(core::ErrorCode::InvalidArgument,
+                          "projet verrouill\xC3\xA9 (LOCK) : sa fiche ne change pas - Projet \xE2\x80\xBA D\xC3\xA9verrouiller d'abord");
+    auto manifest = manifest_;
+    manifest.webPage = on;
+    manifest.webFile = on ? std::move(file) : std::string{};
+    if (auto ok = project::ProjectStore::saveManifest(*project_, manifest, projectFolder_); !ok) return ok;
+    manifest_ = std::move(manifest);
+    return core::ok();
+}
+
 void App::refreshWindowIcon() {
 #if XPG_HAVE_SDL3
     if (!window_) return;
@@ -2834,6 +2878,7 @@ void App::frame(double dt) {
     //     d'analyse - avant applyPending : l'ecran du dessus est encore celui
     //     qui les a recus.
     deliverDroppedFiles();
+    exchange::poll(*this);   // 1a ter. 1.12.30 : les archives et la page web (les taches finies, les vues de la page)
     refreshWindowTitle();    // 1b. lot 19 : le nom du projet, et " *" s'il est modifie
     settleReopened();        // 1c. lot API 6 : tout annule - l'etat d'avant la 1re modification
     refreshWindowIcon();     // 1d. lot API 6 : l'icone du projet sur la fenetre

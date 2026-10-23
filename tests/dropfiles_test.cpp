@@ -97,6 +97,26 @@ int main(int argc, char** argv) {
         check(df::isWorkbook(df::Genre::Workbook) && df::isWorkbook(df::Genre::Table) && !df::isWorkbook(df::Genre::Pdf), "isWorkbook");
     }
 
+    // ---- 1 bis. 1.12.30 : une archive de projet, la page web d'un projet -------------------
+    //  .xihm / .xapi par leur extension ; une page .html si son en-tete porte la marque de
+    //  l'archive (IHM Studio, API Studio l'y mettent) ; une autre page reste un fichier.
+    {
+        touch(tmp / "Ligne_gaz.xihm", "PK");
+        touch(tmp / "Ligne_gaz.xapi", "PK");
+        touch(tmp / "Ligne_gaz.html", "<!doctype html><html><head><meta name=\"xpg-archive\" content=\"ihm\"></head><body></body></html>");
+        touch(tmp / "manuel.html", "<!doctype html><html><head><title>Manuel</title></head><body>rien</body></html>");
+        check(df::genreOf((tmp / "Ligne_gaz.xihm").string()) == df::Genre::Archive, "une archive .xihm");
+        check(df::genreOf((tmp / "Ligne_gaz.xapi").string()) == df::Genre::Archive, "une archive .xapi");
+        check(df::genreOf((tmp / "Ligne_gaz.html").string()) == df::Genre::Archive, "la page web d'un projet");
+        check(df::genreOf((tmp / "manuel.html").string()) == df::Genre::Other, "une autre page web : un fichier");
+        check(df::genreLabel(df::Genre::Archive) == "Archive de projet", "le libelle d'une archive");
+        df::Context none;
+        const auto plan = df::analyse({(tmp / "Ligne_gaz.xihm").string(), (tmp / "Ligne_gaz.html").string(), (tmp / "manuel.html").string()}, none);
+        check(plan.archives.size() == 1 && plan.archives.front() == (tmp / "Ligne_gaz.xihm").string(), "le depot : une archive (la premiere)");
+        check(plan.ignored.size() == 1 && plan.ignored.front().find("une seule archive") != std::string::npos, "la deuxieme : dite ignoree");
+        check(plan.files.size() == 1 && plan.files.front().name == "manuel.html", "l'autre page : un fichier du depot");
+    }
+
     // ---- 2. la case par defaut selon le genre (une IHM vide) ---------------------------
     hmi::Project emptyHmi;
     df::Context ctx;

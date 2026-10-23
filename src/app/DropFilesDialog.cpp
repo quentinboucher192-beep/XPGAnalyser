@@ -728,6 +728,10 @@ std::size_t DropFilesDialog::addFiles(const std::vector<std::string>& paths, std
         for (const auto& p : *list)
             plan_->ignored.push_back(fs::path(p).filename().string()
                                      + " (un .XPG / .XHW se d\xC3\xA9pose seul, ou avec les autres d\xC3\xA8s le d\xC3\xA9" "but)");
+    // 1.12.30 : une archive de projet s'ouvre quand on la depose sur le projet (pas sur ce dialogue).
+    for (const auto& p : more.archives)
+        plan_->ignored.push_back(fs::path(p).filename().string()
+                                 + " (une archive de projet s'ouvre quand on la d\xC3\xA9pose seule sur la fen\xC3\xAAtre)");
     // Les lignes refaites depuis le plan : les cases, les listes et le choix du
     // .XPG y sont ecrits, rien ne se perd.
     if (content_ && scroll_) {

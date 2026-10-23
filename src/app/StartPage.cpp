@@ -1486,23 +1486,29 @@ StartRail::StartRail(std::string id) : ui::Widget(std::move(id)) {
     new_->setTooltip(api ? "Cr\xC3\xA9" "e un dossier de projet avec la t\xC3\xA2" "che MAST ; les sections, les types et les blocs s'ajoutent ensuite (Ctrl+N)"
                          : "Cr\xC3\xA9" "e le dossier d'un projet IHM (Projets\\ihm) : ses vues, ses variables, ses \xC3\xA9quipements (Ctrl+N)");
     open_ = make("Ouvrir\xE2\x80\xA6", "startup.open", L::Card, G::Open);
-    open_->setSubtitle(api ? "un dossier de projet, ou un export .XPG / .XHW / .XDB" : "un dossier de projet IHM");
+    // 1.12.30 : les archives de projet (.xapi, .xihm) et les pages web (.html) s'ouvrent aussi.
+    open_->setSubtitle(api ? "un dossier de projet, une archive .xapi, ou un export .XPG / .XHW / .XDB"
+                           : "un dossier de projet IHM, ou une archive .xihm");
     open_->setHint("Ctrl+O");
-    open_->setTooltip(api ? "Ouvre un dossier de projet ou un export Control Expert (Ctrl+O) ; un .XHW ou un .XDB compl\xC3\xA8te le projet ouvert"
-                          : "Ouvre le dossier d'un projet IHM (Ctrl+O)");
+    open_->setTooltip(api ? "Ouvre un dossier de projet, une archive .xapi, une page web d'API Studio ou un export Control Expert (Ctrl+O) ; "
+                            "un .XHW ou un .XDB compl\xC3\xA8te le projet ouvert"
+                          : "Ouvre le dossier d'un projet IHM, une archive .xihm ou une page web d'IHM Studio (Ctrl+O)");
     path_ = &static_cast<StartField&>(addChild(std::make_unique<StartField>("startup.path", ui::Icon::Folder)));
-    path_->setPlaceholder(api ? "chemin d'un dossier ou d'un export, puis Entr\xC3\xA9" "e" : "chemin d'un dossier de projet IHM, puis Entr\xC3\xA9" "e");
-    path_->setTooltip(api ? "Un dossier de projet ou un export, puis Entr\xC3\xA9" "e. Plusieurs fichiers s\xC3\xA9par\xC3\xA9s par ';' (un .XPG et son .XHW) "
-                            "s'importent ensemble. Ctrl+V colle un chemin copi\xC3\xA9."
-                          : "Le dossier d'un projet IHM, puis Entr\xC3\xA9" "e. Ctrl+V colle un chemin copi\xC3\xA9.");
+    path_->setPlaceholder(api ? "chemin d'un dossier, d'une archive ou d'un export, puis Entr\xC3\xA9" "e"
+                              : "chemin d'un dossier de projet IHM ou d'une archive, puis Entr\xC3\xA9" "e");
+    path_->setTooltip(api ? "Un dossier de projet, une archive .xapi, une page web ou un export, puis Entr\xC3\xA9" "e. Plusieurs fichiers "
+                            "s\xC3\xA9par\xC3\xA9s par ';' (un .XPG et son .XHW) s'importent ensemble. Ctrl+V colle un chemin copi\xC3\xA9."
+                          : "Le dossier d'un projet IHM, une archive .xihm ou une page web, puis Entr\xC3\xA9" "e. Ctrl+V colle un chemin copi\xC3\xA9.");
     // Le bouton ... : l'explorateur de fichiers. Un export, ou le project.xpgproj
     // d'un dossier de projet (l'ecran ouvre alors le dossier).
     browse_ = &static_cast<ui::BrowseButton&>(addChild(std::make_unique<ui::BrowseButton>(
-        *path_, api ? ui::openFile("Projets et exports|*.xpgproj;*.xpg;*.xhw;*.xdb;*.xef|Projets (project.xpgproj)|*.xpgproj"
-                                   "|Exports Control Expert|*.xpg;*.xhw;*.xdb;*.xef", {}, "Ouvrir un projet ou un export")
-                    : ui::openFile("Projets IHM (project.xpgproj)|*.xpgproj", {}, "Ouvrir un projet IHM"),
+        *path_, api ? ui::openFile("Projets, archives et exports|*.xpgproj;*.xapi;*.html;*.htm;*.xpg;*.xhw;*.xdb;*.xef"
+                                   "|Projets (project.xpgproj)|*.xpgproj|Archives API Studio (.xapi)|*.xapi|Pages web (.html)|*.html;*.htm"
+                                   "|Exports Control Expert|*.xpg;*.xhw;*.xdb;*.xef", {}, "Ouvrir un projet, une archive ou un export")
+                    : ui::openFile("Projets et archives IHM|*.xpgproj;*.xihm;*.zip;*.html;*.htm|Projets IHM (project.xpgproj)|*.xpgproj"
+                                   "|Archives IHM Studio (.xihm)|*.xihm;*.zip|Pages web (.html)|*.html;*.htm", {}, "Ouvrir un projet IHM ou une archive"),
         "startup.parcourir")));
-    browse_->setFieldLabel(api ? "Un dossier de projet ou un export" : "Un dossier de projet IHM");
+    browse_->setFieldLabel(api ? "Un dossier de projet, une archive ou un export" : "Un dossier de projet IHM ou une archive");
     tutorial_ = make(api ? "D\xC3\xA9" "couvrir l'application" : "D\xC3\xA9" "couvrir l'IHM", "startup.tutorial", L::Link, G::Tutorial);
     // 1.12.28 : IHM Studio, la duree que dit la carte de la visite (Demarrer > Le didacticiel).
     const auto* visit = help::trails::find("decouvrir");

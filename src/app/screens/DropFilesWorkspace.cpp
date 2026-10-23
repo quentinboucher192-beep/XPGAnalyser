@@ -18,6 +18,7 @@
 //  Ce qui a ete fait, une ligne par chose : dropReport() (le script depot-bilan).
 // =============================================================================
 #include "Screens.hpp"
+#include "../ProjectExchange.hpp"   // 1.12.30 : une archive deposee s'ouvre
 
 #include "../App.hpp"
 #include "../DropFilesDialog.hpp"
@@ -83,6 +84,19 @@ void MainAnalysisScreen::askDroppedFiles(std::vector<std::string> paths) {
     ctx.macroWorkbook = xls::MacroXls::instance().loadedWorkbook();
     auto plan = std::make_shared<df::Plan>(df::analyse(paths, ctx));
     plan->projectName = dropProjectName(app_);
+
+    // 1.12.30 : UNE ARCHIVE DE PROJET (.xihm, .xapi) OU LA PAGE WEB D'UN PROJET : elle s'ouvre,
+    // comme Projet > Ouvrir... - le projet ouvert d'abord (ses modifications se demandent). Le
+    // reste du depot attend : il se lache a nouveau sur le projet qui s'ouvre.
+    if (!plan->archives.empty()) {
+        const std::string archive = plan->archives.front();
+        if (paths.size() > 1 && status_)
+            status_->setTransientMessage("L'archive " + leafName(archive) + " s'ouvre ; les " + std::to_string(paths.size() - 1)
+                                             + " autre(s) fichier(s) d\xC3\xA9pos\xC3\xA9(s) avec elle attendent : l\xC3\xA2" "che-les sur le projet ouvert.",
+                                         10.0, StatusBar::Severity::Info);
+        app_.confirmReplace([this, archive] { (void)exchange::openArchive(app_, archive); });
+        return;
+    }
 
     // Rien d'autre qu'un .XPG / .XHW de lisible (le reste : un dossier, un
     // fichier absent) : la question du lot 7, telle quelle.

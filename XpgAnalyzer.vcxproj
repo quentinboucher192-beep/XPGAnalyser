@@ -500,6 +500,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
     <ClCompile Include="src\app\HmiWebPage.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
+    <ClCompile Include="src\app\ProjectExchange.cpp" />
     <ClCompile Include="src\app\SimCenterPerf.cpp" />
     <ClCompile Include="src\app\hmi\HmiApiVarsPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiBuild.cpp" />
@@ -957,6 +958,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
     <ClInclude Include="src\app\HmiWebPage.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />
+    <ClInclude Include="src\app\ProjectExchange.hpp" />
     <ClInclude Include="src\app\hmi\HmiApiVarsPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiBuild.hpp" />
     <ClInclude Include="src\app\hmi\HmiBuildPanes.hpp" />

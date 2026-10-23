@@ -294,9 +294,9 @@ std::string manifestText(const Project& p, const Manifest& manifest) {
     m << "content-date = " << (manifest.contentDateTime.empty() ? p.header.contentDateTime : manifest.contentDateTime) << '\n';
     m << "crlf = "         << (p.header.crlf ? "oui" : "non") << '\n';
     if (!manifest.edition.empty()) m << "edition = " << manifest.edition << '\n';   // 1.12.0
-    // 1.12.30 : la page web refaite a chaque enregistrement, et son dossier.
+    // 1.12.30 : la page web refaite a chaque enregistrement, et son fichier (vide : a cote du dossier).
     if (manifest.webPage) m << "web = oui\n";
-    if (!manifest.webFolder.empty()) m << "web-dossier = " << manifest.webFolder << '\n';
+    if (!manifest.webFile.empty()) m << "web-fichier = " << manifest.webFile << '\n';
     return m.str();
 }
 } // namespace
@@ -587,7 +587,7 @@ core::Result<Manifest> ProjectStore::readManifest(const std::string& folder) {
         else if (k == "crlf")          m.crlf = v != "non" && v != "0";
         else if (k == "edition")       m.edition = v;      // 1.12.0
         else if (k == "web")           m.webPage = v == "oui" || v == "1";   // 1.12.30 : la page web
-        else if (k == "web-dossier")   m.webFolder = v;
+        else if (k == "web-fichier")   m.webFile = v;
     });
     return m;
 }
@@ -1102,7 +1102,7 @@ core::Status ProjectStore::duplicate(const std::string& from, const std::string&
     m << "comment = "  << manifest->comment << '\n';
     if (!manifest->edition.empty()) m << "edition = " << manifest->edition << '\n';   // 1.12.0
     if (manifest->webPage) m << "web = oui\n";                                         // 1.12.30
-    if (!manifest->webFolder.empty()) m << "web-dossier = " << manifest->webFolder << '\n';
+    if (!manifest->webFile.empty()) m << "web-fichier = " << manifest->webFile << '\n';
     return writeText(fs::path(to) / "project.xpgproj", m.str());
 }
 

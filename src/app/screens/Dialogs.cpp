@@ -2,6 +2,7 @@
 //  app/screens/Dialogs.cpp — modal and dialog layers
 // =============================================================================
 #include "Screens.hpp"
+#include "../../core/Edition.hpp"   // 1.12.30 : ce que chaque application ouvre (archives, pages web)
 #include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 
 #include "../../core/FieldCodec.hpp"
@@ -775,9 +776,12 @@ namespace app {
         auto row = std::make_unique<BoxLayout>(Orientation::Horizontal, "dialog.open.row");
         row->setSpacing(6.f);
         auto input = std::make_unique<InputText>("dialog.open.path");
+        // 1.12.30 : une archive de projet (.xapi, .xihm) ou sa page web (.html) s'ouvre aussi.
+        const bool api = core::hasApi();
         input->setPlaceholder(hardwareOnly_
             ? "Chemin de l'export .XHW de la configuration  (Ctrl+V pour coller)"
-            : "Un dossier de projet, ou un export .XPG / .XHW / .XDB / .XEF  (Ctrl+V pour coller)");
+            : api ? "Un dossier de projet, une archive .xapi, une page web, ou un export .XPG / .XHW / .XDB / .XEF  (Ctrl+V pour coller)"
+                  : "Un dossier de projet IHM, une archive .xihm, ou une page web .html  (Ctrl+V pour coller)");
         if (!hardwareOnly_ && !app_.recentPaths().empty()) input->setText(app_.recentPaths().front());
         if (hardwareOnly_ && !app_.sourcePaths().empty()) {
             // Offer the .XHW sitting next to the program export, since that is where
@@ -797,11 +801,18 @@ namespace app {
             // prend alors le dossier (c'est lui qui s'ouvre).
             auto file = std::make_unique<BrowseButton>(
                 *path_, openFile(hardwareOnly_ ? "Configuration mat\xC3\xA9rielle (.XHW)|*.xhw"
-                                               : "Projets et exports|*.xpgproj;*.xpg;*.xhw;*.xdb;*.xef|Projets (project.xpgproj)|*.xpgproj"
-                                                 "|Exports Control Expert|*.xpg;*.xhw;*.xdb;*.xef",
-                                 from, hardwareOnly_ ? "Importer la configuration mat\xC3\xA9rielle" : "Ouvrir un projet ou un export"),
+                                 : api ? "Projets, archives et exports|*.xpgproj;*.xapi;*.html;*.htm;*.xpg;*.xhw;*.xdb;*.xef"
+                                         "|Projets (project.xpgproj)|*.xpgproj|Archives API Studio (.xapi)|*.xapi|Pages web (.html)|*.html;*.htm"
+                                         "|Exports Control Expert|*.xpg;*.xhw;*.xdb;*.xef"
+                                       : "Projets et archives|*.xpgproj;*.xihm;*.zip;*.html;*.htm|Projets (project.xpgproj)|*.xpgproj"
+                                         "|Archives IHM Studio (.xihm)|*.xihm;*.zip|Pages web (.html)|*.html;*.htm",
+                                 from, hardwareOnly_ ? "Importer la configuration mat\xC3\xA9rielle"
+                                       : api           ? "Ouvrir un projet, une archive ou un export"
+                                                       : "Ouvrir un projet ou une archive"),
                 "dialog.open.parcourir");
-            file->setFieldLabel(hardwareOnly_ ? "L'export .XHW" : "Un projet ou un export .XPG, .XHW, .XDB, .XEF");
+            file->setFieldLabel(hardwareOnly_ ? "L'export .XHW"
+                                : api ? "Un projet, une archive .xapi, une page web ou un export .XPG, .XHW, .XDB, .XEF"
+                                      : "Un projet IHM, une archive .xihm ou une page web");
             auto& fileRef = static_cast<BrowseButton&>(row->addChild(std::move(file)));
             links_ += fileRef.chosen->connect([this](const std::string& p) {
                 const std::string_view project = ".xpgproj";

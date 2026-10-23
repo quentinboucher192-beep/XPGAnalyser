@@ -75,9 +75,9 @@ namespace project {
         // les deux (chaque application n'y lit et n'y ecrit que sa moitie).
         std::string edition;
         // 1.12.30 : LA PAGE WEB DU PROJET, refaite a chaque enregistrement (web = oui) :
-        // <dossier du projet>.html a cote du dossier, ou dans `webFolder` s'il est donne.
+        // <dossier du projet>.html a cote du dossier, ou `webFile` s'il est donne.
         bool        webPage{ false };
-        std::string webFolder;
+        std::string webFile;
     };
 
     struct OpenResult {

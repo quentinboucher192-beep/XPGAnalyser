@@ -1135,6 +1135,9 @@
     <ClCompile Include="src\app\NoveltyCenter.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\ProjectExchange.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\SimCenterPerf.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -2486,6 +2489,9 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\NoveltyCenter.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ProjectExchange.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiApiVarsPane.hpp">

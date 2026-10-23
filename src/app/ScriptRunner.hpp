@@ -14,6 +14,9 @@
 //    # commentaire
 //    attendre N                   laisser passer N images
 //    attendre-projet              jusqu'a ce qu'un projet soit ouvert
+//    attendre-echanges            1.12.30 : jusqu'a la fin des archives et des pages web en cours
+//                                 (les exporter, en ouvrir une) - 120 s au plus ; la sortie dit
+//                                 ce qu'a fait la derniere (app/ProjectExchange)
 //    theme Dark | Light | "High contrast"
 //    importer <fichier>           ouvrir un export (.XPG), comme Fichier > Ouvrir
 //    ouvrir <dossier>             ouvrir un dossier de projet

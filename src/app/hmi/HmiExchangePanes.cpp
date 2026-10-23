@@ -70,7 +70,7 @@ ui::Tone auditTone(const hmi::AuditEntry& e) {
     if (e.kind == "Connexion" || e.kind.rfind("D\xC3\xA9" "connexion", 0) == 0) return ui::Tone::Ok;
     return ui::Tone::Muted;
 }
-enum ExchangeAction : int { XExport = 1, XImport, XCheck, XWord, XPdf };
+enum ExchangeAction : int { XExport = 1, XImport, XCheck, XWord, XPdf, XWeb };
 
 // Lot 13 : la vignette de chaque vue et popup, dessinee hors de l'ecran (comme
 // l'editeur la montre) puis gardee en JPEG. Vide : le renderer ne sait pas.
@@ -442,8 +442,16 @@ HmiExchangePane::HmiExchangePane(std::string id, hmi::DocumentPtr doc, Apply app
       folder_(std::move(projectFolder)) {
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
-    tools->add(XExport, HmiGlyph::Export, "Exporter tout le projet IHM dans une archive (.zip)", "Exporter");
-    tools->add(XImport, HmiGlyph::Import, "Importer une archive : reconstruire le projet IHM, puis le contr\xC3\xB4ler", "Importer");
+    // 1.12.30 : l'archive du projet ENTIER (.xihm : ressources, fichiers externes, equipements,
+    // simulation, versions...), comme Projet > Exporter en archive .xihm ; Importer reconstruit
+    // l'IHM du projet ouvert depuis une archive (.xihm, ou l'ancienne .zip).
+    tools->add(XExport, HmiGlyph::Export, "Exporter tout le projet dans une archive .xihm (Projet \xE2\x80\xBA Exporter en archive .xihm)",
+               "Exporter");
+    tools->add(XImport, HmiGlyph::Import, "Importer une archive (.xihm, .zip) : reconstruire l'IHM de ce projet, puis la contr\xC3\xB4ler",
+               "Importer");
+    tools->add(XWeb, HmiGlyph::Language, "Exporter en page web (.html) : chaque vue dessin\xC3\xA9" "e, la navigation, les alarmes, "
+                                         "les variables, les scripts - et l'archive du projet dedans",
+               "Page web");
     tools->separator();
     tools->add(XCheck, HmiGlyph::Check, "Contr\xC3\xB4ler le projet tel qu'il est (comptes et G\xC3\xA9n\xC3\xA9rer)", "Contr\xC3\xB4ler");
     tools->separator();
@@ -491,6 +499,7 @@ HmiExchangePane::HmiExchangePane(std::string id, hmi::DocumentPtr doc, Apply app
         switch (a) {
             case XExport: if (hosts_.exportArchive) hosts_.exportArchive(); break;
             case XImport: if (hosts_.importArchive) hosts_.importArchive(); break;
+            case XWeb: if (hosts_.exportWeb) hosts_.exportWeb(); break;
             case XCheck: check(); break;
             case XWord: case XPdf: {
                 // Au prochain dessin : les vignettes se dessinent avec le renderer de l'ecran.
@@ -515,8 +524,8 @@ HmiExchangePane::HmiExchangePane(std::string id, hmi::DocumentPtr doc, Apply app
         if (r < issues_.size() && hosts_.openIssue) hosts_.openIssue(issues_[r]);
     });
     rebuildTables();
-    status_->setMessage("Exporter : une archive .zip de tout le projet IHM. Importer : le reconstruire depuis une archive, "
-                        "puis le contr\xC3\xB4ler.");
+    status_->setMessage("Exporter : tout le projet dans une archive .xihm. Importer : reconstruire l'IHM depuis une archive, "
+                        "puis la contr\xC3\xB4ler. Page web : l'IHM dans un .html.");
 }
 
 void HmiExchangePane::say(std::string text, bool warning) {
@@ -618,6 +627,18 @@ bool HmiExchangePane::exportTo(const std::string& zipPath, std::string* why) {
     say("Archive \xC3\xA9" "crite : " + zipPath + " (" + std::to_string(report_.entries.size() + 1) + " fichiers, "
         + bytesText(report_.archiveBytes) + ")");
     return true;
+}
+
+void HmiExchangePane::showArchive(hmi::ArchiveReport report, const std::string& path) {
+    report_ = std::move(report);
+    issues_.clear();
+    archive_ = path;
+    operation_ = "Export\xC3\xA9" "e";
+    stamp_ = hmi::wallStamp().substr(0, 19);
+    rebuildTables();
+    tabs_->setCurrentIndex(1);
+    say("Archive \xC3\xA9" "crite : " + path + " (" + std::to_string(report_.entries.size()) + " fichiers, " + bytesText(report_.archiveBytes)
+        + ")" + (report_.skipped.empty() ? std::string{} : " \xC2\xB7 pas pris : " + std::to_string(report_.skipped.size())));
 }
 
 bool HmiExchangePane::importFrom(const std::string& zipPath, std::string* why) {

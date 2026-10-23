@@ -3,6 +3,7 @@
 //  (voir l'en-tete). Rien n'est dessine ni modifie ici.
 // =============================================================================
 #include "DropFilesPlan.hpp"
+#include "../project/ProjectArchive.hpp"   // 1.12.30 : les archives de projet, les pages web
 
 #include "../domain/ProjectModel.hpp"
 #include "../hmi/HmiAssets.hpp"
@@ -812,6 +813,8 @@ Genre genreOf(const std::string& path) {
     std::error_code ec;
     if (fs::is_directory(path, ec)) return Genre::Folder;
     if (!fs::is_regular_file(path, ec)) return Genre::Missing;
+    // 1.12.30 : une archive de projet, ou une page web qui en porte une (son en-tete le dit).
+    if (project::archive::sniff(path).archive) return Genre::Archive;
     const std::string ext = extOf(path);
     // Un classeur ou une image ne se lisent pas comme un export : pas la peine
     // de les ouvrir pour le savoir. Le reste (un .XPG, un .XML renomme...) par
@@ -862,6 +865,7 @@ std::string genreLabel(Genre g) {
         case Genre::Folder:   return "Dossier";
         case Genre::Other:    return "Fichier";
         case Genre::Missing:  return "Introuvable";
+        case Genre::Archive:  return "Archive de projet";
     }
     return "Fichier";
 }
@@ -1125,6 +1129,10 @@ Plan analyse(const std::vector<std::string>& paths, const Context& ctx) {
                 break;
             case Genre::Missing:
                 p.ignored.push_back(leafOf(path) + " (introuvable)");
+                break;
+            case Genre::Archive:
+                if (p.archives.empty()) p.archives.push_back(path);
+                else p.ignored.push_back(leafOf(path) + " (une seule archive \xC3\xA0 la fois)");
                 break;
             default:
                 p.files.push_back(analyseFile(path, ctx));

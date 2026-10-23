@@ -27,6 +27,7 @@
 #include "../../help/Novelties.hpp"     // 1.10 (chantier P)
 #include "../../core/Edition.hpp"   // 1.12.0 : API Studio, IHM Studio
 #include "Screens.hpp"
+#include "../ProjectExchange.hpp"   // 1.12.30 : les archives et les pages web deposees ensemble
 
 #include "../App.hpp"
 #include "../Dossiers.hpp"
@@ -936,6 +937,13 @@ void StartupScreen::openPath(const std::string& path) {
             openPath(p);                        // un dossier de projet parmi eux : lui
             return;
         }
+    // 1.12.30 : une archive de projet (.xihm, .xapi) ou une page web parmi eux : elle, seule.
+    if (parts.size() > 1)
+        for (const auto& p : parts)
+            if (exchange::isExchangeFile(p)) {
+                app_.openPath(p);
+                return;
+            }
     page_->status().setMessage(parts.size() == 1 ? "Lecture de " + leafName(parts.front()) + "\xE2\x80\xA6"
                                                  : "Lecture de " + std::to_string(parts.size()) + " fichiers\xE2\x80\xA6",
                                StatusBar::Severity::Info);

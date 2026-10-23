@@ -45,7 +45,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace hmi { struct Issue; enum class ScriptLang : std::uint8_t; struct RecipeRequest; struct ResourceRequest; struct UserRequest; struct ExportRequest; }
+namespace hmi { struct Issue; enum class ScriptLang : std::uint8_t; struct RecipeRequest; struct ResourceRequest; struct UserRequest; struct ExportRequest; struct ArchiveReport; }
 namespace hmi::pipeline { struct Report; struct Diagnostic; struct Request; enum class Mode : std::uint8_t; }   // 1.11.13
 
 namespace app {
@@ -1026,6 +1026,11 @@ private:
     void askHmiHistoryExport(int tab);
     void askHmiClearHistory();
     void askHmiArchive(bool import);
+public:
+    // 1.12.30 : l'archive .xihm du projet entier vient d'etre ecrite (app/ProjectExchange) :
+    // son rapport dans IHM > Exporter / Importer, si l'onglet est ouvert.
+    void showHmiArchiveReport(const hmi::ArchiveReport& report, const std::string& path);
+private:
     void askHmiLogin(std::string login);
     // Le lot 6 (HmiRuntimeDialogs.cpp) : ce que l'IHM en marche demande a
     // l'ecran - un jeu de recette a ajouter, modifier, supprimer ou relire
