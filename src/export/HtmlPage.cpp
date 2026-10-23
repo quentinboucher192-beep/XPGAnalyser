@@ -51,8 +51,7 @@ svg text{white-space:pre}
 .hot{cursor:pointer}
 .hot rect,.hot polygon{fill:transparent;stroke:transparent}
 .hot:hover rect,.hot:hover polygon,.hot:focus rect,.hot:focus polygon{fill:rgba(47,111,222,.14);stroke:#2f6fde;stroke-width:2}
-.links{margin:10px 2px;color:var(--muted)}
-.links a{margin-right:10px}
+.links{margin:10px 2px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px}
 p.desc{margin:8px 2px;color:var(--muted)}
 table.t{border-collapse:collapse;width:100%;background:var(--panel);border:1px solid var(--line)}
 table.t th,table.t td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
