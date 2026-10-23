@@ -1,125 +1,24 @@
 #include "HmiArchive.hpp"
 
-#include "HmiCrypto.hpp"
-#include "../../third_party/miniz.h"
+#include "HmiAssets.hpp"
+#include "../core/AtomicFile.hpp"
+#include "../project/ProjectArchive.hpp"
+#include "../core/Version.hpp"
+#include "../project/Security.hpp"
 
-#include <chrono>
-#include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <ctime>
 #include <filesystem>
-#include <fstream>
 #include <map>
 #include <set>
 #include <system_error>
 
 namespace fs = std::filesystem;
+namespace pa = project::archive;
 
 namespace hmi {
 
 namespace {
-
-// ---- un zip "stored", ecrit a la main -------------------------------------------
-void put16(std::string& out, std::uint32_t v) {
-    out += static_cast<char>(v & 0xFF);
-    out += static_cast<char>((v >> 8) & 0xFF);
-}
-void put32(std::string& out, std::uint32_t v) {
-    put16(out, v & 0xFFFF);
-    put16(out, (v >> 16) & 0xFFFF);
-}
-
-struct DosTime { std::uint16_t time{0}, date{0}; };
-DosTime dosNow() {
-    const std::time_t t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    std::tm tm{};
-#ifdef _WIN32
-    localtime_s(&tm, &t);
-#else
-    localtime_r(&t, &tm);
-#endif
-    DosTime d;
-    d.time = static_cast<std::uint16_t>((tm.tm_hour << 11) | (tm.tm_min << 5) | (tm.tm_sec / 2));
-    d.date = static_cast<std::uint16_t>(((tm.tm_year - 80) << 9) | ((tm.tm_mon + 1) << 5) | tm.tm_mday);
-    return d;
-}
-
-struct ZipItem {
-    std::string                  name;
-    std::shared_ptr<const Bytes> data;
-};
-
-core::Status writeZip(const std::string& path, const std::vector<ZipItem>& items, std::uint64_t* written) {
-    const DosTime when = dosNow();
-    std::string central;
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out) return core::fail(core::ErrorCode::FileUnreadable, "\xC3\xA9" "criture impossible : " + path);
-    std::uint32_t offset = 0;
-    for (const auto& it : items) {
-        const auto& data = *it.data;
-        if (data.size() > 0xFFFFFFF0u || offset > 0xFFFFFFF0u)
-            return core::fail(core::ErrorCode::InvalidArgument, "archive trop grande (zip 32 bits) : " + it.name);
-        const auto crc = static_cast<std::uint32_t>(mz_crc32(MZ_CRC32_INIT, data.data(), data.size()));
-        const auto size = static_cast<std::uint32_t>(data.size());
-        std::string local;
-        put32(local, 0x04034b50);
-        put16(local, 20);            // version
-        put16(local, 0x0800);        // noms en UTF-8
-        put16(local, 0);             // stored
-        put16(local, when.time);
-        put16(local, when.date);
-        put32(local, crc);
-        put32(local, size);
-        put32(local, size);
-        put16(local, static_cast<std::uint32_t>(it.name.size()));
-        put16(local, 0);
-        local += it.name;
-        out.write(local.data(), static_cast<std::streamsize>(local.size()));
-        if (!data.empty()) out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
-
-        put32(central, 0x02014b50);
-        put16(central, 20);
-        put16(central, 20);
-        put16(central, 0x0800);
-        put16(central, 0);
-        put16(central, when.time);
-        put16(central, when.date);
-        put32(central, crc);
-        put32(central, size);
-        put32(central, size);
-        put16(central, static_cast<std::uint32_t>(it.name.size()));
-        put16(central, 0);           // extra
-        put16(central, 0);           // commentaire
-        put16(central, 0);           // disque
-        put16(central, 0);           // attributs internes
-        put32(central, 0);           // attributs externes
-        put32(central, offset);
-        central += it.name;
-        offset += static_cast<std::uint32_t>(local.size()) + size;
-    }
-    std::string end;
-    put32(end, 0x06054b50);
-    put16(end, 0);
-    put16(end, 0);
-    put16(end, static_cast<std::uint32_t>(items.size()));
-    put16(end, static_cast<std::uint32_t>(items.size()));
-    put32(end, static_cast<std::uint32_t>(central.size()));
-    put32(end, offset);
-    put16(end, 0);
-    out.write(central.data(), static_cast<std::streamsize>(central.size()));
-    out.write(end.data(), static_cast<std::streamsize>(end.size()));
-    out.flush();
-    if (!out) return core::fail(core::ErrorCode::FileUnreadable, "\xC3\xA9" "criture incompl\xC3\xA8" "te : " + path);
-    if (written) *written = offset + central.size() + end.size();
-    return core::ok();
-}
-
-std::string digestOf(const Bytes& data) { return toHex(sha256(data.data(), data.size())); }
-
-std::shared_ptr<const Bytes> bytesOf(const std::string& text) {
-    return std::make_shared<const Bytes>(text.begin(), text.end());
-}
 
 // Les sections du manifeste : leur cle (enregistree) et leur libelle (affiche).
 struct SectionName { const char* key; const char* label; };
@@ -131,6 +30,118 @@ constexpr SectionName kSections[] = {
     {"utilisateurs", "Utilisateurs"}, {"groupes", "Groupes"}, {"roles", "R\xC3\xB4les"},
     {"historique", "Entr\xC3\xA9" "es d'historique"},
 };
+// 1.12.30 : l'archive du projet entier compte aussi ses versions.
+constexpr SectionName kVersions = {"versions", "Versions"};
+
+std::string toolName() { return std::string(XPG_PRODUCT_IHM) + " " + XPG_ANALYZER_VERSION; }
+
+std::shared_ptr<const pa::Bytes> bytesOf(const std::string& text) {
+    return std::make_shared<const pa::Bytes>(text.begin(), text.end());
+}
+
+std::string keyOf(const std::string& label) {
+    for (const auto& s : kSections) if (label == s.label) return s.key;
+    if (label == kVersions.label) return kVersions.key;
+    return label;
+}
+
+std::vector<pa::Count> toCounts(const std::vector<ArchiveCount>& counts) {
+    std::vector<pa::Count> out;
+    for (const auto& c : counts) {
+        pa::Count x;
+        x.key = keyOf(c.section);
+        x.label = c.section;
+        x.expected = c.expected;
+        x.found = c.found;
+        out.push_back(std::move(x));
+    }
+    return out;
+}
+
+// Le format ecrit dans ihm.txt ("ihm format=25 ...") ; 0 : illisible.
+int dataFormatOf(std::string_view index) {
+    std::size_t at = 0;
+    while (at < index.size()) {
+        const auto eol = index.find('\n', at);
+        const auto line = index.substr(at, eol == std::string_view::npos ? std::string_view::npos : eol - at);
+        if (line.rfind("ihm format=", 0) == 0) return static_cast<int>(std::strtol(std::string(line.substr(11, 6)).c_str(), nullptr, 10));
+        if (eol == std::string_view::npos) break;
+        at = eol + 1;
+    }
+    return 0;
+}
+
+void fillFrom(ArchiveReport& rep, const pa::Contents& c) {
+    rep.entries.clear();
+    for (const auto& e : c.manifest.entries) rep.entries.push_back({e.path, e.bytes, e.sha256, e.ok});
+    rep.problems = c.problems;
+    rep.created = c.manifest.created;
+    rep.projectName = c.manifest.project;
+    rep.archiveBytes = c.archiveBytes;
+    rep.format = c.hasManifest ? c.manifest.format : 0;
+    rep.tool = c.manifest.tool;
+}
+
+void fillFrom(ArchiveReport& rep, const pa::Manifest& m, std::uint64_t bytes) {
+    rep.entries.clear();
+    for (const auto& e : m.entries) rep.entries.push_back({e.path, e.bytes, e.sha256, true});
+    rep.created = m.created;
+    rep.projectName = m.project;
+    rep.archiveBytes = bytes;
+    rep.format = m.format;
+    rep.tool = m.tool;
+}
+
+// L'historique d'une archive (ses CSV et la memoire des reglages PID).
+History historyOf(const pa::Contents& c, std::vector<std::string>& problems) {
+    History h;
+    for (const auto which : kHistoryFiles) {
+        const auto* text = c.file("ihm/historique/" + std::string(which) + ".csv");
+        if (!text) continue;
+        std::string error;
+        if (!parseHistoryCsv(*text, which, h, &error)) problems.push_back("historique " + std::string(which) + ".csv : " + error);
+    }
+    const std::string pid = "ihm/historique/pid/";
+    for (auto it = c.files.lower_bound(pid); it != c.files.end() && it->first.rfind(pid, 0) == 0; ++it) {
+        const std::string leaf = it->first.substr(pid.size());
+        if (leaf.size() > 4 && leaf.compare(leaf.size() - 4, 4, ".mem") == 0 && leaf.find('/') == std::string::npos)
+            h.pid[leaf.substr(0, leaf.size() - 4)] = it->second;
+    }
+    return h;
+}
+
+// Comparer les comptes relus a ceux du manifeste (par cle).
+void compareCounts(ArchiveReport& rep, std::vector<ArchiveCount> found, const pa::Manifest& m) {
+    rep.counts = std::move(found);
+    for (auto& c : rep.counts) {
+        const std::string key = keyOf(c.section);
+        for (const auto& expected : m.counts) {
+            if (expected.key != key) continue;
+            c.expected = expected.expected;
+            if (!c.ok())
+                rep.problems.push_back(c.section + " : " + std::to_string(expected.expected) + " annonc\xC3\xA9(s), "
+                                       + std::to_string(c.found) + " relu(s)");
+        }
+    }
+}
+
+std::string folderLeaf(const std::string& folder) {
+    fs::path p(folder);
+    if (!p.has_filename()) p = p.parent_path();
+    return p.filename().string();
+}
+
+// Un fichier externe : son chemin relatif au dossier s'il y est ("" sinon).
+std::string insideFolder(const std::string& resolved, const std::string& folder) {
+    std::error_code ec;
+    const fs::path a = fs::weakly_canonical(fs::path(resolved), ec);
+    const fs::path b = fs::weakly_canonical(fs::path(folder), ec);
+    if (ec) return {};
+    const fs::path rel = a.lexically_relative(b);
+    const std::string s = rel.generic_string();
+    if (s.empty() || s == "." || s.rfind("..", 0) == 0 || rel.is_absolute()) return {};
+    return s;
+}
 
 } // namespace
 
@@ -154,155 +165,248 @@ std::vector<ArchiveCount> projectCounts(const Project& p, const History* h) {
     return out;
 }
 
+// ============================================================ l'IHM en memoire ==
 core::Status exportArchive(const Project& p, const History* history, const std::string& zipPath, ArchiveReport* report) {
-    std::vector<ZipItem> items;
-    for (const auto& f : serializeProject(p)) items.push_back({"ihm/" + f.path, f.data});
-    if (history && !history->empty())
-        for (const auto which : kHistoryFiles)
-            items.push_back({"ihm/historique/" + std::string(which) + ".csv", bytesOf(historyCsv(*history, which))});
-
-    const std::string created = nowStamp();
-    std::string manifest = "# IHM Studio - archive du projet IHM\n";
-    manifest += "archive format=1 outil=XpgAnalyzer format_ihm=" + std::to_string(kFormatVersion) + " cree=" + quote(created)
-              + " projet=" + quote(p.config.name) + "\n";
-    const auto counts = projectCounts(p, history);
-    for (std::size_t i = 0; i < counts.size(); ++i)
-        manifest += "section nom=" + std::string(kSections[i].key) + " nombre=" + std::to_string(counts[i].expected) + "\n";
     ArchiveReport local;
     auto& rep = report ? *report : local;
     rep = ArchiveReport{};
-    for (const auto& it : items) {
-        ArchiveEntry e{it.name, it.data->size(), digestOf(*it.data), true};
-        manifest += "fichier chemin=" + quote(e.path) + " octets=" + std::to_string(e.bytes) + " sha256=" + e.sha256 + "\n";
-        rep.entries.push_back(std::move(e));
+    const auto now = static_cast<std::int64_t>(std::time(nullptr));
+    std::vector<pa::Item> items;
+    int format = 0;
+    for (const auto& f : serializeProject(p)) {
+        if (f.path == "ihm.txt") format = dataFormatOf(std::string_view(reinterpret_cast<const char*>(f.data->data()), f.data->size()));
+        items.push_back({"ihm/" + f.path, f.data, now, pa::Origin::Folder, {}});
     }
-    manifest += "fin\n";
-    items.insert(items.begin(), ZipItem{"manifeste.txt", bytesOf(manifest)});
-    rep.counts = counts;
-    rep.created = created;
-    rep.projectName = p.config.name;
-    std::error_code ec;
-    if (const auto parent = fs::path(zipPath).parent_path(); !parent.empty()) fs::create_directories(parent, ec);
-    return writeZip(zipPath, items, &rep.archiveBytes);
+    if (history && !history->empty()) {
+        for (const auto which : kHistoryFiles)
+            items.push_back({"ihm/historique/" + std::string(which) + ".csv", bytesOf(historyCsv(*history, which)), now, pa::Origin::Folder, {}});
+        for (const auto& [k, blob] : history->pid)
+            items.push_back({"ihm/historique/pid/" + pidMemoryName(k) + ".mem", bytesOf(blob), now, pa::Origin::Folder, {}});
+    }
+    pa::Manifest m;
+    m.kind = pa::Kind::Ihm;
+    m.kindKnown = true;
+    m.tool = toolName();
+    m.created = nowStamp();
+    m.project = p.config.name;
+    m.dataFormat = format;
+    rep.counts = projectCounts(p, history);
+    m.counts = toCounts(rep.counts);
+    auto zip = pa::pack(m, items);
+    if (!zip) return core::Err<core::Error>(zip.error());
+    fillFrom(rep, m, zip->size());
+    return pa::writeFile(zipPath, *zip);
 }
 
 core::Result<Project> importArchive(const std::string& zipPath, History* history, ArchiveReport* report, LoadReport* load) {
     ArchiveReport local;
     auto& rep = report ? *report : local;
     rep = ArchiveReport{};
-
-    // Toutes les entrees, en memoire (un projet IHM tient en memoire). Une
-    // entree que le zip lui-meme refuse (CRC faux) est notee a part : elle est
-    // alteree, pas absente.
-    std::map<std::string, std::string> files;
-    std::set<std::string> broken;
-    {
-        mz_zip_archive zip;
-        std::memset(&zip, 0, sizeof zip);
-        if (!mz_zip_reader_init_file(&zip, zipPath.c_str(), 0))
-            return core::fail(core::ErrorCode::FileUnreadable, "archive illisible (pas un zip) : " + zipPath);
-        const mz_uint n = mz_zip_reader_get_num_files(&zip);
-        for (mz_uint i = 0; i < n; ++i) {
-            mz_zip_archive_file_stat st;
-            if (!mz_zip_reader_file_stat(&zip, i, &st) || st.m_is_directory) continue;
-            std::size_t size = 0;
-            std::string name = st.m_filename;
-            for (auto& c : name) if (c == '\\') c = '/';
-            void* data = mz_zip_reader_extract_to_heap(&zip, i, &size, 0);
-            if (!data) {
-                broken.insert(name);
-                continue;
-            }
-            files[name].assign(static_cast<const char*>(data), size);
-            mz_free(data);
-        }
-        mz_zip_reader_end(&zip);
-    }
-    std::error_code ec;
-    rep.archiveBytes = fs::file_size(zipPath, ec);
-
-    // Le manifeste : ce que l'archive doit contenir.
-    std::map<std::string, long long> expected;
-    const auto manifestIt = files.find("manifeste.txt");
-    if (manifestIt == files.end()) {
-        rep.problems.push_back("manifeste.txt absent : l'archive n'a pas \xC3\xA9t\xC3\xA9 faite par Exporter, rien \xC3\xA0 v\xC3\xA9rifier");
-    } else {
-        std::size_t pos = 0;
-        const std::string& m = manifestIt->second;
-        while (pos < m.size()) {
-            const std::size_t eol = m.find('\n', pos);
-            std::string_view line(m.data() + pos, (eol == std::string::npos ? m.size() : eol) - pos);
-            pos = eol == std::string::npos ? m.size() : eol + 1;
-            if (line.empty() || line[0] == '#') continue;
-            Record r;
-            std::string error;
-            if (!parseRecord(line, r, error)) { rep.problems.push_back("manifeste : " + error); continue; }
-            if (r.word == "archive") {
-                if (const auto* c = r.get("cree")) rep.created = *c;
-                if (const auto* c = r.get("projet")) rep.projectName = *c;
-            } else if (r.word == "section") {
-                const auto* name = r.get("nom");
-                const auto* count = r.get("nombre");
-                if (name && count) expected[*name] = std::strtoll(count->c_str(), nullptr, 10);
-            } else if (r.word == "fichier") {
-                ArchiveEntry e;
-                e.path = r.get("chemin") ? *r.get("chemin") : std::string{};
-                e.bytes = r.get("octets") ? std::strtoull(r.get("octets")->c_str(), nullptr, 10) : 0;
-                e.sha256 = r.get("sha256") ? *r.get("sha256") : std::string{};
-                const auto it = files.find(e.path);
-                if (broken.count(e.path)) {
-                    e.ok = false;
-                    rep.problems.push_back(e.path + " : alt\xC3\xA9r\xC3\xA9 (le contr\xC3\xB4le CRC du zip \xC3\xA9" "choue)");
-                    broken.erase(e.path);
-                } else if (it == files.end()) {
-                    e.ok = false;
-                    rep.problems.push_back(e.path + " : absent de l'archive");
-                } else {
-                    const Bytes data(it->second.begin(), it->second.end());
-                    if (data.size() != e.bytes || digestOf(data) != e.sha256) {
-                        e.ok = false;
-                        rep.problems.push_back(e.path + " : alt\xC3\xA9r\xC3\xA9 (taille ou empreinte SHA-256 diff\xC3\xA9rente)");
-                    }
-                }
-                rep.entries.push_back(std::move(e));
-            }
-        }
-    }
-
-    for (const auto& name : broken)
-        rep.problems.push_back(name + " : entr\xC3\xA9" "e illisible (le contr\xC3\xB4le CRC du zip \xC3\xA9" "choue)");
+    auto contents = pa::readFile(zipPath);
+    if (!contents) return core::fail(contents.error().code, "archive illisible : " + contents.error().context);
+    fillFrom(rep, *contents);
+    if (contents->newer) return core::fail(core::ErrorCode::NotImplemented, refusal(*contents));
+    if (contents->hasManifest && contents->manifest.kindKnown && contents->manifest.kind == pa::Kind::Api)
+        return core::fail(core::ErrorCode::InvalidArgument, refusal(*contents));
 
     // Le projet, relu par le meme code que le dossier ihm/.
-    const auto read = [&files](const std::string& path, std::string& content) {
-        const auto it = files.find("ihm/" + path);
-        if (it == files.end()) return false;
-        content = it->second;
+    const auto read = [&contents](const std::string& path, std::string& content) {
+        const auto* f = contents->file("ihm/" + path);
+        if (!f) return false;
+        content = *f;
         return true;
     };
     auto project = parseProject(read, load);
     if (!project) return core::fail(project.error().code, "archive : " + project.error().context);
-
-    History imported;
-    for (const auto which : kHistoryFiles) {
-        const auto it = files.find("ihm/historique/" + std::string(which) + ".csv");
-        if (it == files.end()) continue;
-        std::string error;
-        if (!parseHistoryCsv(it->second, which, imported, &error))
-            rep.problems.push_back("historique " + std::string(which) + ".csv : " + error);
-    }
-
+    History imported = historyOf(*contents, rep.problems);
     // Le controle de coherence : chaque compte annonce, retrouve.
-    rep.counts = projectCounts(*project, &imported);
-    for (std::size_t i = 0; i < rep.counts.size() && i < std::size(kSections); ++i) {
-        const auto it = expected.find(kSections[i].key);
-        if (it == expected.end()) continue;
-        rep.counts[i].expected = it->second;
-        if (!rep.counts[i].ok())
-            rep.problems.push_back(rep.counts[i].section + " : " + std::to_string(it->second) + " annonc\xC3\xA9(s), "
-                                   + std::to_string(rep.counts[i].found) + " relu(s)");
-    }
+    compareCounts(rep, projectCounts(*project, &imported), contents->manifest);
     if (history) *history = std::move(imported);
     return project;
+}
+
+// ============================================================ le projet entier ==
+core::Result<pa::Bytes> projectArchive(const std::string& folder, const ProjectArchiveOptions& opt, ArchiveReport* report) {
+    ArchiveReport local;
+    auto& rep = report ? *report : local;
+    rep = ArchiveReport{};
+    if (!exists(folder))
+        return core::fail(core::ErrorCode::FileNotFound,
+                          "ce dossier n'a pas d'IHM enregistr\xC3\xA9" "e (ihm/ihm.txt manque) : enregistre d'abord le projet");
+    LoadReport loaded;
+    auto project = load(folder, &loaded);
+    if (!project) return core::fail(project.error().code, "l'IHM du dossier ne se relit pas : " + project.error().context);
+    const History h = opt.history ? loadHistory(folder) : History{};
+
+    std::vector<pa::Skipped> skipped;
+    auto items = pa::collectFolder(folder, pa::CollectOptions{opt.versions, opt.history}, &skipped);
+    if (!items) return core::Err<core::Error>(items.error());
+    for (const auto& s : skipped)
+        rep.skipped.push_back(s.what + " : " + s.why + " (" + std::to_string(s.files) + " fichier(s), " + pa::sizeText(s.bytes) + ")");
+
+    // Les fichiers externes : dans le dossier, ils y sont deja ; ailleurs, ils viennent avec.
+    std::set<std::string> have;
+    for (const auto& it : *items) have.insert(it.path);
+    for (const auto& f : project->assets.files) {
+        if (f.kind == ExternalKind::Database) continue;
+        const std::string resolved = resolveExternalPath(f, folder);
+        std::error_code ec;
+        if (!fs::is_regular_file(fs::path(resolved), ec)) {
+            rep.notes.push_back("fichier externe \xC2\xAB " + f.name + " \xC2\xBB introuvable (" + f.path + ") : il n'est pas dans l'archive");
+            continue;
+        }
+        const std::string inside = insideFolder(resolved, folder);
+        if (!inside.empty()) {
+            if (have.count(inside)) continue;
+            pa::Item it;
+            if (!pa::readItem(resolved, it)) continue;
+            it.path = inside;
+            have.insert(inside);
+            items->push_back(std::move(it));
+            rep.notes.push_back("fichier externe \xC2\xAB " + f.name + " \xC2\xBB pris aussi (" + inside + ")");
+            continue;
+        }
+        pa::Item it;
+        if (!pa::readItem(resolved, it)) {
+            rep.notes.push_back("fichier externe \xC2\xAB " + f.name + " \xC2\xBB illisible (" + resolved + ") : il n'est pas dans l'archive");
+            continue;
+        }
+        it.path = "_externes/" + std::to_string(f.id) + "-" + fs::path(resolved).filename().string();
+        it.origin = pa::Origin::External;
+        it.link = f.path;
+        items->push_back(std::move(it));
+        rep.notes.push_back("fichier externe \xC2\xAB " + f.name + " \xC2\xBB joint (il est hors du projet : " + resolved + ")");
+    }
+
+    pa::Manifest m;
+    m.kind = pa::Kind::Ihm;
+    m.kindKnown = true;
+    m.tool = opt.tool.empty() ? toolName() : opt.tool;
+    m.created = nowStamp();
+    m.project = project->config.name;
+    m.folder = folderLeaf(folder);
+    std::string index;
+    if (core::readFileAll(fs::path(folder) / "ihm" / "ihm.txt", index)) m.dataFormat = dataFormatOf(index);
+    rep.counts = projectCounts(*project, &h);
+    const long long versions = opt.versions ? pa::versionCount(folder) : 0;
+    rep.counts.push_back({kVersions.label, versions, versions});
+    m.counts = toCounts(rep.counts);
+    auto zip = pa::pack(m, *items);
+    if (!zip) return zip;
+    fillFrom(rep, m, zip->size());
+    return zip;
+}
+
+core::Status exportProjectArchive(const std::string& folder, const std::string& path, const ProjectArchiveOptions& opt,
+                                  ArchiveReport* report) {
+    ArchiveReport local;
+    auto& rep = report ? *report : local;
+    auto zip = projectArchive(folder, opt, &rep);
+    if (!zip) return core::Err<core::Error>(zip.error());
+    return pa::writeFile(path, *zip);
+}
+
+std::string refusal(const pa::Contents& c) {
+    if (!c.hasManifest)
+        return "ce n'est pas une archive de projet : manifeste.txt manque (un zip fait \xC3\xA0 la main ne s'ouvre pas comme un projet)";
+    if (c.newer)
+        return "cette archive a \xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par une version plus r\xC3\xA9" "cente ("
+             + (c.manifest.tool.empty() ? std::string("format ") + std::to_string(c.manifest.format) : c.manifest.tool)
+             + ") : cette version d'" + std::string(XPG_PRODUCT_IHM) + " (" + XPG_ANALYZER_VERSION + ") ne sait pas la relire en entier. "
+               "Mets " + XPG_PRODUCT_IHM + " \xC3\xA0 jour pour l'ouvrir";
+    if (c.manifest.kindKnown && c.manifest.kind == pa::Kind::Api)
+        return "c'est l'archive d'un projet de l'automate (.xapi) : elle s'ouvre avec API Studio";
+    if (c.manifest.dataFormat > kFormatVersion)
+        return "son projet IHM est au format " + std::to_string(c.manifest.dataFormat) + ", plus r\xC3\xA9" "cent que celui de cette version ("
+             + std::to_string(kFormatVersion) + ", " + XPG_PRODUCT_IHM + " " + XPG_ANALYZER_VERSION + ") : mets "
+             + XPG_PRODUCT_IHM + " \xC3\xA0 jour pour l'ouvrir";
+    if (!c.file("ihm/ihm.txt") && !c.damaged.count("ihm/ihm.txt"))
+        return "cette archive ne contient pas d'IHM (ihm/ihm.txt manque)";
+    return {};
+}
+
+core::Status unpackProjectArchive(const pa::Contents& c, const std::string& folder, ArchiveReport* report, bool skipDamaged) {
+    ArchiveReport local;
+    auto& rep = report ? *report : local;
+    rep = ArchiveReport{};
+    fillFrom(rep, c);
+    if (const std::string why = refusal(c); !why.empty()) return core::fail(core::ErrorCode::InvalidArgument, why);
+    pa::UnpackOptions uo;
+    uo.skipDamaged = skipDamaged;
+    pa::Unpacked u;
+    if (auto st = pa::unpack(c, folder, uo, &u); !st) return st;
+    rep.folder = folder;
+    rep.notes = u.notes;
+
+    // Une archive de la 1.x (l'IHM seule) : le dossier recoit sa fiche.
+    std::error_code ec;
+    if (!fs::exists(fs::path(folder) / "project.xpgproj", ec)) {
+        const std::string name = c.manifest.project.empty() ? folderLeaf(folder) : c.manifest.project;
+        const std::string now = pa::nowText() + ":00";
+        std::string m = "# IHM Studio project. Safe to read; edit with care.\n";
+        m += "formatVersion = 1\nname = " + name + "\nversion = 0.0.1\nstate = DEV\ncreated = " + now + "\nmodified = " + now
+           + "\nauthor = \ncpu = \nfirmware = \ncomment = Recr\xC3\xA9\xC3\xA9 depuis une archive de l'IHM\nedition = ihm\n";
+        if (auto st = core::writeFileAtomic(fs::path(folder) / "project.xpgproj", m, {false, false}); !st) return st;
+        rep.notes.push_back("archive de l'IHM seule (1.x) : la fiche du projet (project.xpgproj) est cr\xC3\xA9\xC3\xA9" "e");
+    }
+
+    // Les fichiers externes lies hors du dossier : deja la, identiques, ou relies a leur copie.
+    if (!u.externals.empty()) {
+        LoadReport lr;
+        if (auto p = load(folder, &lr)) {
+            bool changed = false;
+            for (std::size_t i = 0; i < u.externals.size(); ++i) {
+                const auto& e = u.externals[i];
+                const std::string& copy = u.externalPaths[i];
+                for (auto& f : p->assets.files) {
+                    if (f.path != e.link || f.kind == ExternalKind::Database) continue;
+                    const std::string original = resolveExternalPath(f, folder);
+                    std::string there;
+                    const bool present = fs::is_regular_file(fs::path(original), ec);
+                    if (present && core::readFileAll(fs::path(original), there)
+                        && project::toHex(project::sha256(there)) == e.sha256) {
+                        fs::remove(fs::path(folder) / fs::path(copy), ec);
+                        rep.notes.push_back("fichier externe \xC2\xAB " + f.name + " \xC2\xBB : d\xC3\xA9j\xC3\xA0 l\xC3\xA0, identique ("
+                                            + original + ") : le lien ne change pas");
+                    } else {
+                        rep.notes.push_back("fichier externe \xC2\xAB " + f.name + " \xC2\xBB : " + e.link
+                                            + (present ? " est diff\xC3\xA9rent ici" : " n'existe pas ici")
+                                            + " ; il est reli\xC3\xA9 \xC3\xA0 sa copie, " + copy + " (dans le projet)");
+                        f.path = copy;
+                        changed = true;
+                    }
+                }
+            }
+            if (changed) {
+                const auto files = serializeProject(*p);
+                if (!files.empty() && files.front().path == "ihm.txt") {
+                    const auto& d = *files.front().data;
+                    if (auto st = core::writeFileAtomic(fs::path(folder) / "ihm" / "ihm.txt",
+                                                        std::string_view(reinterpret_cast<const char*>(d.data()), d.size()), {false, true});
+                        !st)
+                        return st;
+                }
+            }
+            if (fs::is_empty(fs::path(folder) / "externes", ec) && !ec) fs::remove(fs::path(folder) / "externes", ec);
+        }
+    }
+
+    // Le controle : le projet relu, chaque compte annonce retrouve.
+    LoadReport lr;
+    auto p = load(folder, &lr);
+    if (!p) {
+        rep.problems.push_back("l'IHM d\xC3\xA9" "ball\xC3\xA9" "e ne se relit pas : " + p.error().context);
+        return core::ok();
+    }
+    for (const auto& w : lr.warnings) rep.notes.push_back("lecture : " + w);
+    std::vector<std::string> historyProblems;
+    const History h = loadHistory(folder, &historyProblems);
+    for (const auto& w : historyProblems) rep.problems.push_back(w);
+    auto found = projectCounts(*p, &h);
+    const long long versions = pa::versionCount(folder);
+    found.push_back({kVersions.label, versions, versions});
+    compareCounts(rep, std::move(found), c.manifest);
+    return core::ok();
 }
 
 } // namespace hmi

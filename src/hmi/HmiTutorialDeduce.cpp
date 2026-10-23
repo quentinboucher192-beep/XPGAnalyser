@@ -1207,6 +1207,9 @@ constexpr TopicPlace kTopicPlaces[] = {
     {"menu-connexion", "arbre:IHM/Configuration/Utilisateurs"}, {"actions-ressources", "arbre:IHM/Ressources"},
     {"verifier", "arbre:IHM"}, {"performances", "arbre:Simulation/IHM"}, {"reprise", "arbre:IHM"},
     {"etats-projet", "arbre:IHM"}, {"echange", "arbre:IHM"}, {"dossier", "arbre:IHM/Fichiers externes"},
+    // 1.12.30 : les echanges de projets (Projet > Exporter en archive, en page web) - la racine du projet, comme
+    // l'etat du projet (son clic droit les a aussi).
+    {"archive-projet", "arbre:IHM"}, {"page-web", "arbre:IHM"}, {"echanges-api", "arbre:API"},
     // Tranche 20 (R111-1, decision 36 du chef : 17 tutoriels de Demarrer et de L'automate sans geste, une bulle seule) :
     // les 21 pages de l'aide generale (help::center::apiPageGroups, sujets "api-<ancre>") ont leur endroit, d'apres la
     // table de F1 (help/F1Table.cpp, T2) quand elle les cite : l'onglet de l'API ou de la simulation que F1 y ouvre, par

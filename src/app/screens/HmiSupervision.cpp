@@ -7,6 +7,7 @@
 //  dialogue etait ouvert) et les actions visent un identifiant.
 // =============================================================================
 #include "Screens.hpp"
+#include "../ProjectExchange.hpp"   // 1.12.30 : Exporter = l'archive .xihm du projet entier
 
 #include "../App.hpp"
 #include "../hmi/HmiDisplayPanes.hpp"
@@ -318,30 +319,36 @@ void MainAnalysisScreen::askHmiClearHistory() {
 void MainAnalysisScreen::askHmiArchive(bool import) {
     auto doc = app_.hmi();
     if (!doc) return;
+    // 1.12.30 : EXPORTER, c'est le projet ENTIER dans une archive .xihm (Projet > Exporter en
+    // archive .xihm) - ressources, fichiers externes, equipements, simulation, versions.
+    if (!import) {
+        exchange::askExportArchive(app_);
+        return;
+    }
     std::vector<FormDialog::Field> fields;
-    fields.push_back({"Archive", suggested(app_.projectFolder(), fileSafe(doc->project.config.name) + "_ihm.zip"),
-                      "C:\\Sauvegardes\\ligne_gaz_ihm.zip", false, {}});
-    const std::string text = import
-        ? "Le projet IHM est RECONSTRUIT depuis l'archive : configuration, vues, ressources, scripts, variables, alarmes, "
-          "recettes, utilisateurs, historiques. Puis le contr\xC3\xB4le : chaque compte du manifeste est retrouv\xC3\xA9, "
-          "chaque fichier a son empreinte SHA-256, et G\xC3\xA9n\xC3\xA9rer passe. Ctrl+Z rend le projet d'avant."
-        : "Tout le projet IHM dans un .zip : un manifeste (comptes par section, empreinte SHA-256 de chaque fichier) et "
-          "le dossier ihm/ tel qu'il est enregistr\xC3\xA9, historiques compris.";
-    const std::string zipTitle = import ? "Importer une archive IHM" : "Exporter le projet IHM";
+    fields.push_back({"Archive", suggested(app_.projectFolder(), fileSafe(doc->project.config.name) + ".xihm"),
+                      "C:\\Sauvegardes\\ligne_gaz.xihm", false, {}});
+    const std::string text =
+        "L'IHM du projet ouvert est RECONSTRUITE depuis l'archive (.xihm, ou l'ancienne .zip de l'IHM) : configuration, vues, "
+        "ressources, scripts, variables, alarmes, recettes, utilisateurs, historiques. Puis le contr\xC3\xB4le : chaque compte du "
+        "manifeste est retrouv\xC3\xA9, chaque fichier a son empreinte SHA-256, et G\xC3\xA9n\xC3\xA9rer passe. Ctrl+Z rend le projet d'avant.\n"
+        "Pour ouvrir l'archive comme un projet \xC3\xA0 part : Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6";
+    const std::string zipTitle = "Importer une archive IHM";
     app_.menus().ShowDialog(
-        FormDialog::withBrowse(std::make_unique<FormDialog>(import ? "dialog.hmiImportArchive" : "dialog.hmiExportArchive",
-                                                            zipTitle, text, std::move(fields), import ? "Importer" : "Exporter"),
-                               0, import ? ui::openFile("Archives IHM (.zip)|*.zip", app_.projectFolder(), zipTitle)
-                                         : ui::saveFile("Archives IHM (.zip)|*.zip", app_.projectFolder(), zipTitle)),
-        [this, import](const menu::DialogResult& res) {
+        FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.hmiImportArchive", zipTitle, text, std::move(fields), "Importer"), 0,
+                               ui::openFile("Archives IHM Studio (.xihm, .zip)|*.xihm;*.zip", app_.projectFolder(), zipTitle)),
+        [this](const menu::DialogResult& res) {
             auto* pane = dynamic_cast<HmiExchangePane*>(hmiTab("echange"));
             if (!res.accepted() || !pane) return;
             const auto v = FormDialog::split(res.payload);
             if (v.empty() || cleanPath(v[0]).empty()) return;
             std::string why;
-            const bool ok = import ? pane->importFrom(cleanPath(v[0]), &why) : pane->exportTo(cleanPath(v[0]), &why);
-            if (!ok) status_->setTransientMessage((import ? "Import impossible : " : "Export impossible : ") + why, 10.0);
+            if (!pane->importFrom(cleanPath(v[0]), &why)) status_->setTransientMessage("Import impossible : " + why, 10.0);
         });
+}
+
+void MainAnalysisScreen::showHmiArchiveReport(const hmi::ArchiveReport& report, const std::string& path) {
+    if (auto* pane = dynamic_cast<HmiExchangePane*>(hmiTab("echange"))) pane->showArchive(report, path);
 }
 
 // ------------------------------------------------------ connexion (simulation) --

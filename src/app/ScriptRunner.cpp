@@ -1,5 +1,6 @@
 #include "CrashDialogs.hpp"   // 1.12.28 : rapport-dialogue
 #include "ScriptRunner.hpp"
+#include "ProjectExchange.hpp"   // 1.12.30 : attendre-echanges
 #include "tutorial/TutorialApp.hpp"
 #include "tutorial/TutorialStageApp.hpp"
 #include "tutorial/TutorialOverlay.hpp"   // 1.11.1 (T1, R111-18) : clic-souris lecteur:<partie>
@@ -588,6 +589,25 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         return Step::Yield;
     }
     if (cmd == "attendre-projet") return app_.project() ? Step::Yield : Step::Retry;
+    // 1.12.30 : les echanges de projets (une archive, une page web) tournent sur un autre fil ;
+    // la page web dessine ses vues entre deux images. Les images continuent ; 120 s au plus.
+    if (cmd == "attendre-echanges") {
+        const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (realUntil_ < 0) realUntil_ = now + 120.0;
+        bool done = !exchange::busy();
+        if (!done && now >= realUntil_) {
+            fail("attendre-echanges : pas fini apr\xC3\xA8s 120 s");
+            done = true;
+        }
+        if (done) {
+            realUntil_ = -1;
+            std::printf("[script] echanges : %s\n", exchange::lastReport().c_str());
+            return Step::Yield;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        retries_ = 0;
+        return Step::Retry;
+    }
     // Lot 14 : la liaison Modbus TCP vit en temps reel. "attendre-reel 3" :
     // trois secondes de l'horloge du poste ; "attendre-liaison connectee" (ou
     // "coupee") : jusqu'a cet etat, 20 s au plus. Les images continuent.

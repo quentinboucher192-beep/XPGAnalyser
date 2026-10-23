@@ -266,6 +266,47 @@ std::shared_ptr<Project> ProjectStore::createEmpty(std::string name, std::string
 }
 
 // --------------------------------------------------------------------- save --
+namespace {
+// Le manifeste (project.xpgproj), tel que save() et saveManifest() l'ecrivent.
+std::string manifestText(const Project& p, const Manifest& manifest) {
+    std::ostringstream m;
+    m << "# API Studio project. Safe to read; edit with care.\n";
+    m << "formatVersion = " << manifest.formatVersion << '\n';
+    m << "name = "     << manifest.name << '\n';
+    m << "version = "  << manifest.version << '\n';
+    m << "state = "    << toString(manifest.state) << '\n';
+    m << "created = "  << (manifest.created.empty() ? nowStamp() : manifest.created) << '\n';
+    m << "modified = " << nowStamp() << '\n';
+    m << "author = "   << manifest.author << '\n';
+    m << "cpu = "      << (manifest.cpuReference.empty() ? p.hardware.cpuReference
+                                                         : manifest.cpuReference) << '\n';
+    m << "firmware = " << (manifest.cpuFirmware.empty() ? p.hardware.cpuFirmware
+                                                        : manifest.cpuFirmware) << '\n';
+    m << "comment = "  << manifest.comment << '\n';
+    m << "company = "  << (manifest.company.empty() ? p.header.company : manifest.company) << '\n';
+    m << "product = "  << (manifest.product.empty() ? p.header.product : manifest.product) << '\n';
+    m << "dtd = "      << (manifest.dtdVersion.empty() ? p.header.dtdVersion
+                                                       : manifest.dtdVersion) << '\n';
+    // Lot API 5 : le reste de l'en-tete du fichier d'origine (« multiprogramme »,
+    // la date du contentHeader, les fins de ligne). Sans eux, l'export d'un
+    // projet range en dossier ne rendait plus les memes octets qu'un export direct.
+    m << "content = "      << (manifest.contentKind.empty() ? p.header.contentKind : manifest.contentKind) << '\n';
+    m << "content-date = " << (manifest.contentDateTime.empty() ? p.header.contentDateTime : manifest.contentDateTime) << '\n';
+    m << "crlf = "         << (p.header.crlf ? "oui" : "non") << '\n';
+    if (!manifest.edition.empty()) m << "edition = " << manifest.edition << '\n';   // 1.12.0
+    // 1.12.30 : la page web refaite a chaque enregistrement, et son fichier (vide : a cote du dossier).
+    if (manifest.webPage) m << "web = oui\n";
+    if (!manifest.webFile.empty()) m << "web-fichier = " << manifest.webFile << '\n';
+    return m.str();
+}
+} // namespace
+
+core::Status ProjectStore::saveManifest(const Project& p, const Manifest& manifest, const std::string& folder) {
+    std::error_code ec;
+    fs::create_directories(fs::path(folder), ec);
+    return writeText(fs::path(folder) / "project.xpgproj", manifestText(p, manifest));
+}
+
 core::Status ProjectStore::save(const Project& p, const Manifest& manifest,
                                 const std::string& folder, const LockRecord& lock) {
     const fs::path root(folder);
@@ -273,34 +314,7 @@ core::Status ProjectStore::save(const Project& p, const Manifest& manifest,
     fs::create_directories(root, ec);
 
     // ---- manifest ---------------------------------------------------------
-    {
-        std::ostringstream m;
-        m << "# API Studio project. Safe to read; edit with care.\n";
-        m << "formatVersion = " << manifest.formatVersion << '\n';
-        m << "name = "     << manifest.name << '\n';
-        m << "version = "  << manifest.version << '\n';
-        m << "state = "    << toString(manifest.state) << '\n';
-        m << "created = "  << (manifest.created.empty() ? nowStamp() : manifest.created) << '\n';
-        m << "modified = " << nowStamp() << '\n';
-        m << "author = "   << manifest.author << '\n';
-        m << "cpu = "      << (manifest.cpuReference.empty() ? p.hardware.cpuReference
-                                                             : manifest.cpuReference) << '\n';
-        m << "firmware = " << (manifest.cpuFirmware.empty() ? p.hardware.cpuFirmware
-                                                            : manifest.cpuFirmware) << '\n';
-        m << "comment = "  << manifest.comment << '\n';
-        m << "company = "  << (manifest.company.empty() ? p.header.company : manifest.company) << '\n';
-        m << "product = "  << (manifest.product.empty() ? p.header.product : manifest.product) << '\n';
-        m << "dtd = "      << (manifest.dtdVersion.empty() ? p.header.dtdVersion
-                                                           : manifest.dtdVersion) << '\n';
-        // Lot API 5 : le reste de l'en-tete du fichier d'origine (« multiprogramme »,
-        // la date du contentHeader, les fins de ligne). Sans eux, l'export d'un
-        // projet range en dossier ne rendait plus les memes octets qu'un export direct.
-        m << "content = "      << (manifest.contentKind.empty() ? p.header.contentKind : manifest.contentKind) << '\n';
-        m << "content-date = " << (manifest.contentDateTime.empty() ? p.header.contentDateTime : manifest.contentDateTime) << '\n';
-        m << "crlf = "         << (p.header.crlf ? "oui" : "non") << '\n';
-        if (!manifest.edition.empty()) m << "edition = " << manifest.edition << '\n';   // 1.12.0
-        if (auto r = writeText(root / "project.xpgproj", m.str()); !r) return r;
-    }
+    if (auto r = writeText(root / "project.xpgproj", manifestText(p, manifest)); !r) return r;
 
     // ---- lock -------------------------------------------------------------
     if (manifest.state == State::Lock && lock.valid()) {
@@ -572,6 +586,8 @@ core::Result<Manifest> ProjectStore::readManifest(const std::string& folder) {
         else if (k == "content-date")  m.contentDateTime = v;
         else if (k == "crlf")          m.crlf = v != "non" && v != "0";
         else if (k == "edition")       m.edition = v;      // 1.12.0
+        else if (k == "web")           m.webPage = v == "oui" || v == "1";   // 1.12.30 : la page web
+        else if (k == "web-fichier")   m.webFile = v;
     });
     return m;
 }
@@ -1085,6 +1101,8 @@ core::Status ProjectStore::duplicate(const std::string& from, const std::string&
     m << "firmware = " << manifest->cpuFirmware << '\n';
     m << "comment = "  << manifest->comment << '\n';
     if (!manifest->edition.empty()) m << "edition = " << manifest->edition << '\n';   // 1.12.0
+    if (manifest->webPage) m << "web = oui\n";                                         // 1.12.30
+    if (!manifest->webFile.empty()) m << "web-fichier = " << manifest->webFile << '\n';
     return writeText(fs::path(to) / "project.xpgproj", m.str());
 }
 

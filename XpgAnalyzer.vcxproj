@@ -484,7 +484,9 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\screens\LisibleWorkspace.cpp" />
     <ClCompile Include="src\core\CodeIcons.cpp" />
     <ClCompile Include="src\export\DocKit.cpp" />
+    <ClCompile Include="src\export\HtmlPage.cpp" />
     <ClCompile Include="src\export\ProgramBook.cpp" />
+    <ClCompile Include="src\export\ProgramBookHtml.cpp" />
     <ClCompile Include="src\export\ProgramBookPdf.cpp" />
     <ClCompile Include="src\export\ProgramBookXlsx.cpp" />
     <ClCompile Include="src\project\CodeIconKeys.cpp" />
@@ -499,7 +501,9 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\DispositionPreview.cpp" />
     <ClCompile Include="src\app\EditionMigration.cpp" />
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
+    <ClCompile Include="src\app\HmiWebPage.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
+    <ClCompile Include="src\app\ProjectExchange.cpp" />
     <ClCompile Include="src\app\SimCenterPerf.cpp" />
     <ClCompile Include="src\app\hmi\HmiApiVarsPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiBuild.cpp" />
@@ -626,9 +630,11 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiVertices.cpp" />
     <ClCompile Include="src\hmi\HmiViewPaths.cpp" />
     <ClCompile Include="src\project\ActivationConditions.cpp" />
+    <ClCompile Include="src\project\ApiArchive.cpp" />
     <ClCompile Include="src\project\GrafcetCheck.cpp" />
     <ClCompile Include="src\project\GrafcetDiagram.cpp" />
     <ClCompile Include="src\project\GrafcetRewrite2.cpp" />
+    <ClCompile Include="src\project\ProjectArchive.cpp" />
     <ClCompile Include="src\sim\Rich.cpp" />
     <ClCompile Include="src\sim\ValueText.cpp" />
     <ClCompile Include="src\ui\NoveltyBoard.cpp" />
@@ -636,6 +642,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\ui\Zoom.cpp" />
     <ClCompile Include="src\ui\widgets\CrashReport.cpp" />
     <ClCompile Include="src\app\ReportWindow.cpp" />
+    <ClCompile Include="src\app\SvgRenderer.cpp" />
     <ClCompile Include="src\help\Trails.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -945,6 +952,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\core\CodeIcons.hpp" />
     <ClInclude Include="src\core\Version.hpp" />
     <ClInclude Include="src\export\DocKit.hpp" />
+    <ClInclude Include="src\export\HtmlPage.hpp" />
     <ClInclude Include="src\export\ProgramBook.hpp" />
     <ClInclude Include="src\project\CodeIconKeys.hpp" />
     <ClInclude Include="src\project\SectionCompare.hpp" />
@@ -958,7 +966,9 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\DispositionPreview.hpp" />
     <ClInclude Include="src\app\EditionMigration.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
+    <ClInclude Include="src\app\HmiWebPage.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />
+    <ClInclude Include="src\app\ProjectExchange.hpp" />
     <ClInclude Include="src\app\hmi\HmiApiVarsPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiBuild.hpp" />
     <ClInclude Include="src\app\hmi\HmiBuildPanes.hpp" />
@@ -1074,9 +1084,11 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\platform\AtlasSymbols.hpp" />
     <ClInclude Include="src\platform\TextCensus.hpp" />
     <ClInclude Include="src\project\ActivationConditions.hpp" />
+    <ClInclude Include="src\project\ApiArchive.hpp" />
     <ClInclude Include="src\project\GrafcetCheck.hpp" />
     <ClInclude Include="src\project\GrafcetDiagram.hpp" />
     <ClInclude Include="src\project\GrafcetRewrite2.hpp" />
+    <ClInclude Include="src\project\ProjectArchive.hpp" />
     <ClInclude Include="src\sim\Rich.hpp" />
     <ClInclude Include="src\sim\ValueText.hpp" />
     <ClInclude Include="src\ui\NoveltyBoard.hpp" />
@@ -1090,6 +1102,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\ui\widgets\TrailSymbols.hpp" />
     <ClInclude Include="src\ui\widgets\CrashReport.hpp" />
     <ClInclude Include="src\app\ReportWindow.hpp" />
+    <ClInclude Include="src\app\SvgRenderer.hpp" />
     <ClInclude Include="src\help\Trails.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
