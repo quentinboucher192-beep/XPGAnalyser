@@ -119,8 +119,8 @@ const std::vector<Topic>& topics() {
                          "chemin, \xE2\x98\x86 met le sujet dans tes favoris, et **R\xC3\xA9" "cents** les "
                          "montre avec les derniers sujets lus. ST, C et C++ changent la notation de tous les "
                          "exemples.", {}},
-             {K::Paragraph, "L'IHM se lit en chapitres : Concevoir les vues, Communiquer avec les "
-                         "\xC3\xA9quipements, La biblioth\xC3\xA8que d'objets, Programmer, Superviser, "
+             {K::Paragraph, "L'IHM se lit en chapitres : Concevoir les vues, Communiquer (avec les "
+                         "\xC3\xA9quipements), La biblioth\xC3\xA8que d'objets, Programmer, Superviser, "
                          "Ressources et donn\xC3\xA9" "es, Tester et livrer, Les nouveaut\xC3\xA9s. Un "
                          "chapitre a ses sous-chapitres - la biblioth\xC3\xA8que, ses familles, celles de la "
                          "palette (Formes, Commandes, Affichage, Synoptique\xE2\x80\xA6). Chaque niveau se "
@@ -3195,8 +3195,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements / principe-communication
-        {"principe-communication", "Le principe de la communication", "Communiquer avec les \xC3\xA9quipements",
+        // ---- Communiquer / principe-communication
+        {"principe-communication", "Le principe de la communication", "Communiquer",
          "L'IHM est le client - le ma\xC3\xAEtre : elle demande, l'appareil r\xC3\xA9pond, une "
          "requ\xC3\xAAte puis sa r\xC3\xA9ponse, \xC3\xA0 tour de r\xC3\xB4le. Ce sujet dit ce qu'est un "
          "cycle, une liaison, la qualit\xC3\xA9 d'une valeur, une \xC3\xA9" "criture, ce que jouent le "
@@ -3318,8 +3318,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.10"},
-        // ---- Communiquer avec les equipements / moyens-communication
-        {"moyens-communication", "Les moyens de communication, comment ils fonctionnent", "Communiquer avec les \xC3\xA9quipements",
+        // ---- Communiquer / moyens-communication
+        {"moyens-communication", "Les moyens de communication, comment ils fonctionnent", "Communiquer",
          "Par o\xC3\xB9 passent les requ\xC3\xAAtes de l'IHM : Modbus TCP/IP sur Ethernet (lire et "
          "\xC3\xA9" "crire), Ethernet TCP/IP (surveiller : ping, un port) ; et, pr\xC3\xA9vus en 1.12, "
          "Modbus RTU sur RS-485 et sur RS-232, la passerelle TCP \xE2\x86\x94 RTU et CANopen. Comment chacun "
@@ -3413,8 +3413,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.10"},
-        // ---- Communiquer avec les equipements / lexique-communication
-        {"lexique-communication", "Lexique : les mots de la communication", "Communiquer avec les \xC3\xA9quipements",
+        // ---- Communiquer / lexique-communication
+        {"lexique-communication", "Lexique : les mots de la communication", "Communiquer",
          "Les mots de la communication et ce qu'ils veulent dire, en une ou deux lignes : ma\xC3\xAEtre, "
          "esclave, Unit Id, registre, trame, CRC, MBAP ; les codes d'exception (01, 02, 03, 04, 06, 0A, 0B) "
          "et ce qu'il faut faire ; qualit\xC3\xA9, bascule, esclave simul\xC3\xA9 ; RS-485, baud, "
@@ -3512,8 +3512,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.10"},
-        // ---- Communiquer avec les equipements  Les equipements / communication
-        {"communication", "La communication : l'automate r\xC3\xA9" "el (Modbus TCP)", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les \xC3\xA9quipements",
+        // ---- Communiquer  Les equipements / communication
+        {"communication", "La communication : l'automate r\xC3\xA9" "el (Modbus TCP)", "Communiquer \xE2\x80\xBA Les \xC3\xA9quipements",
          "Relier l'IHM \xC3\xA0 un automate r\xC3\xA9" "el - un M340, un M580, ou tout \xC3\xA9quipement "
          "Modbus TCP : son adresse, la place de chaque variable (le plan d'adressage), un essai de la "
          "liaison ; et le serveur de d\xC3\xA9monstration, qui expose le simulateur en Modbus TCP pour tout "
@@ -3640,8 +3640,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les equipements / equipements
-        {"equipements", "Les \xC3\xA9quipements du r\xC3\xA9seau", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les \xC3\xA9quipements",
+        // ---- Communiquer  Les equipements / equipements
+        {"equipements", "Les \xC3\xA9quipements du r\xC3\xA9seau", "Communiquer \xE2\x80\xBA Les \xC3\xA9quipements",
          "En plus de l'automate du projet, l'IHM lit et surveille les appareils du r\xC3\xA9seau : une "
          "centrale de mesure, un analyseur, un variateur en Modbus TCP/IP ; une cam\xC3\xA9ra, une "
          "imprimante, un switch en Ethernet TCP/IP. Chacun a son adresse, son essai et son ping ; l'IHM les "
@@ -3809,8 +3809,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les equipements / variables-liees
-        {"variables-liees", "Les variables li\xC3\xA9" "es \xC3\xA0 un \xC3\xA9quipement", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les \xC3\xA9quipements",
+        // ---- Communiquer  Les equipements / variables-liees
+        {"variables-liees", "Les variables li\xC3\xA9" "es \xC3\xA0 un \xC3\xA9quipement", "Communiquer \xE2\x80\xBA Les \xC3\xA9quipements",
          "Une variable IHM li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement Modbus TCP/IP se lit (et "
          "s'\xC3\xA9" "crit) dans ses registres, \xC3\xA0 son adresse - not\xC3\xA9" "e \xC3\xA0 la Modicon "
          "(40101) ou \xC3\xA0 la Schneider (%MW100) -, avec une mise \xC3\xA0 l'\xC3\xA9" "chelle si le "
@@ -3894,8 +3894,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les equipements / zones-memoire
-        {"zones-memoire", "Les zones m\xC3\xA9moire d'un \xC3\xA9quipement", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les \xC3\xA9quipements",
+        // ---- Communiquer  Les equipements / zones-memoire
+        {"zones-memoire", "Les zones m\xC3\xA9moire d'un \xC3\xA9quipement", "Communiquer \xE2\x80\xBA Les \xC3\xA9quipements",
          "Ce qu'un \xC3\xA9quipement a dans sa m\xC3\xA9moire, table par table - bobines, entr\xC3\xA9" "es "
          "TOR, registres d'entr\xC3\xA9" "e, registres de maintien -, chacune en une ou plusieurs plages. "
          "D\xC3\xA9" "clar\xC3\xA9" "es, elles v\xC3\xA9rifient les adresses des variables li\xC3\xA9" "es "
@@ -3948,8 +3948,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les equipements / carte-memoire
-        {"carte-memoire", "La carte m\xC3\xA9moire", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les \xC3\xA9quipements",
+        // ---- Communiquer  Les equipements / carte-memoire
+        {"carte-memoire", "La carte m\xC3\xA9moire", "Communiquer \xE2\x80\xBA Les \xC3\xA9quipements",
          "Les variables IHM d'un \xC3\xA9quipement, case par case, dans ses zones : qui lit, qui "
          "\xC3\xA9" "crit, o\xC3\xB9 elles se chevauchent. Le scanner lit l'\xC3\xA9quipement en boucle "
          "(lecture seule) et montre en gris l'activit\xC3\xA9 de l'esclave, l\xC3\xA0 o\xC3\xB9 l'on n'a pas "
@@ -4016,8 +4016,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les equipements / types-acces
-        {"types-acces", "Les types d'acc\xC3\xA8s", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les \xC3\xA9quipements",
+        // ---- Communiquer  Les equipements / types-acces
+        {"types-acces", "Les types d'acc\xC3\xA8s", "Communiquer \xE2\x80\xBA Les \xC3\xA9quipements",
          "Ce qu'on a le droit de faire d'une donn\xC3\xA9" "e : la lire seulement, la lire et "
          "l'\xC3\xA9" "crire, ou l'\xC3\xA9" "crire seulement. En Modbus, la table dit l'acc\xC3\xA8s : "
          "bobines et registres de maintien se lisent et s'\xC3\xA9" "crivent, entr\xC3\xA9" "es TOR et "
@@ -4102,8 +4102,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.10"},
-        // ---- Communiquer avec les equipements  Les equipements / qualite-valeurs
-        {"qualite-valeurs", "La qualit\xC3\xA9 des valeurs lues", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les \xC3\xA9quipements",
+        // ---- Communiquer  Les equipements / qualite-valeurs
+        {"qualite-valeurs", "La qualit\xC3\xA9 des valeurs lues", "Communiquer \xE2\x80\xBA Les \xC3\xA9quipements",
          "Reli\xC3\xA9 \xC3\xA0 un automate r\xC3\xA9" "el, chaque valeur lue a une qualit\xC3\xA9 - bonne, "
          "ancienne, mauvaise - et les objets de la vue la montrent : un cadre orange et une horloge, un "
          "voile, un cadre rouge et une croix.",
@@ -4162,8 +4162,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les esclaves simules / esclaves-virtuels
-        {"esclaves-virtuels", "Les esclaves simul\xC3\xA9s", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les esclaves simul\xC3\xA9s",
+        // ---- Communiquer  Les esclaves simules / esclaves-virtuels
+        {"esclaves-virtuels", "Les esclaves simul\xC3\xA9s", "Communiquer \xE2\x80\xBA Les esclaves simul\xC3\xA9s",
          "Un esclave Modbus TCP dans l'application : l'esclave simul\xC3\xA9 li\xC3\xA9 d'un vrai appareil "
          "(anciennement appel\xC3\xA9 jumeau), ou un \xC3\xA9quipement seulement simul\xC3\xA9. Il a les "
          "zones de l'\xC3\xA9quipement, une m\xC3\xA9moire qui part de valeurs choisies, des comportements "
@@ -4250,8 +4250,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les esclaves simules / esclaves-lies
-        {"esclaves-lies", "Les esclaves simul\xC3\xA9s li\xC3\xA9s", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les esclaves simul\xC3\xA9s",
+        // ---- Communiquer  Les esclaves simules / esclaves-lies
+        {"esclaves-lies", "Les esclaves simul\xC3\xA9s li\xC3\xA9s", "Communiquer \xE2\x80\xBA Les esclaves simul\xC3\xA9s",
          "Un vrai appareil Modbus TCP peut avoir un clone simul\xC3\xA9 : un esclave Modbus dans "
          "l'application, avec sa configuration, li\xC3\xA9 \xC3\xA0 lui (le cadenas). L'IHM le lit \xC3\xA0 "
          "la place du vrai quand tu le choisis, ou toute seule quand le vrai ne r\xC3\xA9pond plus.",
@@ -4369,8 +4369,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.9"},
-        // ---- Communiquer avec les equipements  Les esclaves simules / lectures-simulees
-        {"lectures-simulees", "Les lectures simul\xC3\xA9" "es et leurs rep\xC3\xA8res", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les esclaves simul\xC3\xA9s",
+        // ---- Communiquer  Les esclaves simules / lectures-simulees
+        {"lectures-simulees", "Les lectures simul\xC3\xA9" "es et leurs rep\xC3\xA8res", "Communiquer \xE2\x80\xBA Les esclaves simul\xC3\xA9s",
          "En marche, une valeur lue sur un esclave simul\xC3\xA9 (et non sur le vrai appareil) se voit : un "
          "cadre violet en tirets et une pastille sur l'objet, le bandeau LECTURES SIMUL\xC3\x89" "ES en haut "
          "de l'IHM, la barre d'\xC3\xA9tat, les marques des courbes, un avis \xC3\xA0 chaque bascule.",
@@ -4441,8 +4441,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.9"},
-        // ---- Communiquer avec les equipements  Les esclaves simules / valeurs-simulees
-        {"valeurs-simulees", "Les valeurs simul\xC3\xA9" "es : animer, la zone de mouvement, forcer", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les esclaves simul\xC3\xA9s",
+        // ---- Communiquer  Les esclaves simules / valeurs-simulees
+        {"valeurs-simulees", "Les valeurs simul\xC3\xA9" "es : animer, la zone de mouvement, forcer", "Communiquer \xE2\x80\xBA Les esclaves simul\xC3\xA9s",
          "Ce que les esclaves simul\xC3\xA9s font tout seuls, ligne par ligne : cocher \xC2\xAB Animer "
          "\xC2\xBB fait bouger une valeur dans une zone plac\xC3\xA9" "e par deux poign\xC3\xA9" "es ; "
          "\xC2\xAB Forcer \xC2\xBB tient une case \xC3\xA0 une valeur brute (une bobine, un bit : 0 ou 1). "
@@ -4548,8 +4548,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les outils du reseau / reseau-pc
-        {"reseau-pc", "Le r\xC3\xA9seau du PC : ports Ethernet et adresses", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les outils du r\xC3\xA9seau",
+        // ---- Communiquer  Les outils du reseau / reseau-pc
+        {"reseau-pc", "Le r\xC3\xA9seau du PC : ports Ethernet et adresses", "Communiquer \xE2\x80\xBA Les outils du r\xC3\xA9seau",
          "Le sch\xC3\xA9ma du PC : ses ports Ethernet, l'adresse de chacun, et les \xC3\xA9quipements qu'il "
          "joint - rang\xC3\xA9s par r\xC3\xA9seau. Un \xC3\xA9quipement hors de tout r\xC3\xA9seau du PC est "
          "signal\xC3\xA9, avec la correction : donner une adresse \xC3\xA0 un port libre, ou changer celle "
@@ -4639,8 +4639,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les outils du reseau / scanner-ip
-        {"scanner-ip", "Le scanner IP", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les outils du r\xC3\xA9seau",
+        // ---- Communiquer  Les outils du reseau / scanner-ip
+        {"scanner-ip", "Le scanner IP", "Communiquer \xE2\x80\xBA Les outils du r\xC3\xA9seau",
          "Trouver ce qui est branch\xC3\xA9 sur le r\xC3\xA9seau d'un port, quand on ne conna\xC3\xAEt pas "
          "les adresses : chaque adresse de la plage est essay\xC3\xA9" "e - ping, table ARP, ports TCP, "
          "identification Modbus -, et chaque appareil trouv\xC3\xA9 dit son adresse MAC, son fabricant, ses "
@@ -4691,8 +4691,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les outils du reseau / outil-modbus
-        {"outil-modbus", "L'outil Modbus : lire, \xC3\xA9" "crire, trames, espion", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les outils du r\xC3\xA9seau",
+        // ---- Communiquer  Les outils du reseau / outil-modbus
+        {"outil-modbus", "L'outil Modbus : lire, \xC3\xA9" "crire, trames, espion", "Communiquer \xE2\x80\xBA Les outils du r\xC3\xA9seau",
          "Un outil de mise en service \xC3\xA0 la fa\xC3\xA7on de Modbus Doctor : lire et \xC3\xA9" "crire "
          "les registres d'un \xC3\xA9quipement (ou de n'importe quelle adresse), dans le format voulu ; une "
          "lecture cyclique et son graphique ; une trame tap\xC3\xA9" "e en hexad\xC3\xA9" "cimal ; l'espion "
@@ -4797,8 +4797,8 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
-        // ---- Communiquer avec les equipements  Les outils du reseau / outil-cyclique
-        {"outil-cyclique", "La lecture cyclique \xC3\xA0 plusieurs requ\xC3\xAAtes", "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les outils du r\xC3\xA9seau",
+        // ---- Communiquer  Les outils du reseau / outil-cyclique
+        {"outil-cyclique", "La lecture cyclique \xC3\xA0 plusieurs requ\xC3\xAAtes", "Communiquer \xE2\x80\xBA Les outils du r\xC3\xA9seau",
          "L'onglet Lecture cyclique de l'outil Modbus lit une liste de requ\xC3\xAAtes, chacune vers sa "
          "cible (un \xC3\xA9quipement, l'automate, une adresse, ou l'esclave simul\xC3\xA9 d'un "
          "\xC3\xA9quipement), chacune \xC3\xA0 sa p\xC3\xA9riode. Une connexion par \xC3\xA9quipement : deux "

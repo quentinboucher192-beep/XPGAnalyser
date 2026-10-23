@@ -80,7 +80,7 @@ L'IHM s'enregistre avec le projet (Ctrl+S), dans le dossier `ihm/` du projet. To
 ### Le centre d'aide
 À gauche, l'arbre : Démarrer, L'IHM, L'automate (API), Macros, Blocs DFB / DDT, Expressions, Raccourcis, Notes de version, Signaler un problème. Au-dessus, la recherche (Ctrl+F) cherche partout et groupe ses résultats par chapitre ; « … les N autres » montre tout le groupe. ‹ et › (Alt+← et Alt+→) refont ton chemin, ☆ met le sujet dans tes favoris, et **Récents** les montre avec les derniers sujets lus. ST, C et C++ changent la notation de tous les exemples.
 @nouveau 1.12.27
-L'IHM se lit en chapitres : Concevoir les vues, Communiquer avec les équipements, La bibliothèque d'objets, Programmer, Superviser, Ressources et données, Tester et livrer, Les nouveautés. Un chapitre a ses sous-chapitres - la bibliothèque, ses familles, celles de la palette (Formes, Commandes, Affichage, Synoptique…). Chaque niveau se replie d'un clic ; le fil d'Ariane, en haut de la page, dit où l'on est (L'IHM › La bibliothèque d'objets › Synoptique › Vanne).
+L'IHM se lit en chapitres : Concevoir les vues, Communiquer (avec les équipements), La bibliothèque d'objets, Programmer, Superviser, Ressources et données, Tester et livrer, Les nouveautés. Un chapitre a ses sous-chapitres - la bibliothèque, ses familles, celles de la palette (Formes, Commandes, Affichage, Synoptique…). Chaque niveau se replie d'un clic ; le fil d'Ariane, en haut de la page, dit où l'on est (L'IHM › La bibliothèque d'objets › Synoptique › Vanne).
 ### F1
 F1 ouvre le centre au sujet de l'endroit : le volet de l'IHM ou le nœud choisi dans l'arbre, l'objet choisi dans la vue, le mot sous le curseur dans un script, l'onglet de l'API ou de la simulation. Sur une page de L'automate, **Didacticiel de l'API ›** ouvre ses parcours.
 ### Les quatre blocs du menu
@@ -1500,7 +1500,7 @@ Chaque changement est écrit au journal.
 - **Thème jour** : les gris sombres (les fonds, les cadres) deviennent clairs, les textes clairs deviennent sombres ; une couleur franche trop lumineuse fonce jusqu'à se lire sur un fond clair (un texte jaune devient ocre, plus foncé qu'un fond jaune), un fond bleu nuit s'éclaircit ; un texte posé sur une couleur franche (un bouton bleu) garde la sienne, le bouton d'un potentiomètre aussi. Les couleurs propres au dessin des objets (le fond des champs d'un sélecteur de date, les flèches, l'en-tête d'un tableau) suivent la même règle. La vue se conçoit une fois, en nuit.
 > Les menus natifs (Paramètres système, connexion, signature) gardent leur apparence.
 
-= Communiquer avec les équipements
+= Communiquer
 
 == principe-communication | Le principe de la communication
 : L'IHM est le client - le maître : elle demande, l'appareil répond, une requête puis sa réponse, à tour de rôle. Ce sujet dit ce qu'est un cycle, une liaison, la qualité d'une valeur, une écriture, ce que jouent le simulateur et les esclaves simulés, et ce qui se passe quand un appareil se tait.
@@ -1638,7 +1638,7 @@ Un appareil qui ne peut pas faire ce qu'on demande répond par une **exception**
 | COB-ID | l'identifiant d'un message CAN : son type et le nœud (0x180 + nœud pour le premier PDO émis). |
 | Bus-off | un nœud qui a fait trop d'erreurs se retire seul du bus ; il n'y revient qu'après une relance (seul ou à la main, selon l'appareil). |
 
-= Communiquer avec les équipements › Les équipements
+= Communiquer › Les équipements
 
 == communication | La communication : l'automate réel (Modbus TCP)
 : Relier l'IHM à un automate réel - un M340, un M580, ou tout équipement Modbus TCP : son adresse, la place de chaque variable (le plan d'adressage), un essai de la liaison ; et le serveur de démonstration, qui expose le simulateur en Modbus TCP pour tout essayer sans automate.
@@ -1935,7 +1935,7 @@ Une valeur ancienne compte encore : c'est la dernière lue.
 L'objet **État de la communication**, l'objet **Diagnostic automate**, les variables système `SYS.Comm*` (le domaine Communication) ; Configuration › Équipements, onglet **État des liaisons** (l'automate, puis chaque équipement).
 > 1.9 : une valeur lue sur un esclave simulé porte en plus le repère violet des lectures simulées (cadre en tirets, pastille) ; les deux restent lisibles, la pastille violette se pousse à gauche de l'autre (voir « Les lectures simulées et leurs repères »).
 
-= Communiquer avec les équipements › Les esclaves simulés
+= Communiquer › Les esclaves simulés
 
 == esclaves-virtuels | Les esclaves simulés
 : Un esclave Modbus TCP dans l'application : l'esclave simulé lié d'un vrai appareil (anciennement appelé jumeau), ou un équipement seulement simulé. Il a les zones de l'équipement, une mémoire qui part de valeurs choisies, des comportements (sinus, rampe, compteur...), et des pannes à la demande. L'IHM le lit quand tu le choisis, ou quand le vrai ne répond plus ; l'outil Modbus, la carte mémoire, la détection le voient comme un vrai.
@@ -2106,7 +2106,7 @@ Une consigne que l'IHM écrit (un champ de saisie, une action, un script `:=`) n
 **Tout animer**, **Tout arrêter** (les réglages restent), **Déforcer tout**, **Ajouter un registre** (la première case libre des zones de l'esclave simulé choisi, animée, sans variable IHM), **Carte mémoire** (celle de l'esclave, sur la case choisie), **Outil Modbus** (vers l'esclave).
 > L'IHM lit-elle l'esclave ? La ligne de l'esclave le dit (« l'IHM lit le vrai appareil » sinon) ; la fiche du vrai appareil : **L'IHM lit** ; en marche, les repères violets des lectures simulées (voir « Les lectures simulées et leurs repères »).
 
-= Communiquer avec les équipements › Les outils du réseau
+= Communiquer › Les outils du réseau
 
 == reseau-pc | Le réseau du PC : ports Ethernet et adresses
 : Le schéma du PC : ses ports Ethernet, l'adresse de chacun, et les équipements qu'il joint - rangés par réseau. Un équipement hors de tout réseau du PC est signalé, avec la correction : donner une adresse à un port libre, ou changer celle de l'équipement. L'adresse d'un port se change d'ici, vérifiée avant d'être appliquée.

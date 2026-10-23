@@ -111,7 +111,7 @@ const ChapterLook kChapterLooks[] = {
     {"D\xC3\xA9marrer", HmiGlyph::Help, ui::Tone::Accent, "D\xC3\xA9marrer"},
     {"Concevoir les vues", HmiGlyph::View, ui::Tone::Family0, "Concevoir les vues"},
     // 1.12.27 : la communication a son chapitre ; les variables systeme rejoignent Programmer.
-    {"Communiquer avec les \xC3\xA9quipements", HmiGlyph::Network, ui::Tone::Family3, "Communiquer"},
+    {"Communiquer", HmiGlyph::Network, ui::Tone::Family3, "Communiquer"},
     {"La biblioth\xC3\xA8que d'objets", HmiGlyph::Template, ui::Tone::Family1, "Les objets"},
     {"Programmer", HmiGlyph::Code, ui::Tone::Family2, "Programmer"},
     {"Superviser", HmiGlyph::Bell, ui::Tone::Warning, "Superviser"},

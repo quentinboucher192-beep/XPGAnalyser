@@ -3527,7 +3527,7 @@ void guideLot7() {
     for (const auto& c : chapters)
         if (const auto top = g::chapterPath(c).front(); std::find(tops.begin(), tops.end(), top) == tops.end()) tops.push_back(top);
     check(tops.size() == 10 && tops.front() == "D\xC3\xA9marrer" && tops[1] == "Concevoir les vues"
-              && tops[2] == "Communiquer avec les \xC3\xA9quipements" && tops[3] == "La biblioth\xC3\xA8que d'objets"
+              && tops[2] == "Communiquer" && tops[3] == "La biblioth\xC3\xA8que d'objets"
               && tops[7] == "Tester et livrer" && tops[8] == "Les nouveaut\xC3\xA9s" && tops.back() == "L'automate (API)",
           "dix chapitres, de D\xC3\xA9marrer \xC3\xA0 Tester et livrer, les nouveaut\xC3\xA9s, puis L'automate (API)");
     const auto chapterOf = [](const char* key) { const auto* t = g::topic(key); return t ? t->chapter : std::string{}; };
@@ -3535,7 +3535,7 @@ void guideLot7() {
               && chapterOf("objet-bouton") == "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Commandes"
               && chapterOf("objet-communs") == "La biblioth\xC3\xA8que d'objets"
               && chapterOf("variables-systeme") == "Programmer \xE2\x80\xBA Variables syst\xC3\xA8me et d'instances"
-              && chapterOf("equipements") == "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les \xC3\xA9quipements"
+              && chapterOf("equipements") == "Communiquer \xE2\x80\xBA Les \xC3\xA9quipements"
               && chapterOf("raccourcis") == "D\xC3\xA9marrer" && chapterOf("nouveautes-1-10") == "Les nouveaut\xC3\xA9s",
           "chaque sujet a sa place : l'objet dans sa famille, les variables syst\xC3\xA8me dans Programmer");
     bool rangee = true;   // un chapitre ne revient pas plus loin : ses sujets se suivent
