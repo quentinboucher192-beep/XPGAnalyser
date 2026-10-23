@@ -119,6 +119,14 @@ const std::vector<Topic>& topics() {
                          "chemin, \xE2\x98\x86 met le sujet dans tes favoris, et **R\xC3\xA9" "cents** les "
                          "montre avec les derniers sujets lus. ST, C et C++ changent la notation de tous les "
                          "exemples.", {}},
+             {K::Paragraph, "L'IHM se lit en chapitres : Concevoir les vues, Communiquer avec les "
+                         "\xC3\xA9quipements, La biblioth\xC3\xA8que d'objets, Programmer, Superviser, "
+                         "Ressources et donn\xC3\xA9" "es, Tester et livrer, Les nouveaut\xC3\xA9s. Un "
+                         "chapitre a ses sous-chapitres - la biblioth\xC3\xA8que, ses familles, celles de la "
+                         "palette (Formes, Commandes, Affichage, Synoptique\xE2\x80\xA6). Chaque niveau se "
+                         "replie d'un clic ; le fil d'Ariane, en haut de la page, dit o\xC3\xB9 l'on est "
+                         "(L'IHM \xE2\x80\xBA La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique "
+                         "\xE2\x80\xBA Vanne).", {}, "1.12.27"},
              {K::Heading, "F1", {}},
              {K::Paragraph, "F1 ouvre le centre au sujet de l'endroit : le volet de l'IHM ou le n\xC5\x93ud "
                          "choisi dans l'arbre, l'objet choisi dans la vue, le mot sous le curseur dans un "
@@ -344,12 +352,12 @@ const std::vector<Topic>& topics() {
                          "dossier des projets, Afficher \xE2\x80\xBA (le filtre), Trier \xE2\x80\xBA, "
                          "Th\xC3\xA8me \xE2\x80\xBA, Chercher un projet (Ctrl+F), le didacticiel, les "
                          "r\xC3\xA9glages, les dossiers de l'application, l'aide ; le panneau du projet "
-                         "choisi : le menu de sa carte.", {}},
+                         "choisi : le menu de sa carte.", {}, "1.12.27"},
              {K::Bullet, "**La barre du haut et ses menus** : le clic droit sur une partie (Projet, Annuler, "
                          "Simuler, la cloche...) ou sur une entr\xC3\xA9" "e d'un menu ouvert (Enregistrer "
                          "sous\xE2\x80\xA6, un projet r\xC3\xA9" "cent) : son nom en t\xC3\xAAte, "
                          "Ex\xC3\xA9" "cuter (ou Ouvrir le menu), **\xC3\x89pingler dans Aller \xC3\xA0 / "
-                         "Faire**, Copier le nom, Raccourcis clavier\xE2\x80\xA6, Aide.", {}},
+                         "Faire**, Copier le nom, Raccourcis clavier\xE2\x80\xA6, Aide.", {}, "1.12.27"},
              {K::Heading, "Les raccourcis", {}},
              {K::Table, "Touche\tCe qu'elle fait\nCtrl+Z\tAnnuler (dans un champ en cours de saisie : sa "
                          "saisie d'abord)\nCtrl+Y, "
@@ -452,14 +460,14 @@ const std::vector<Topic>& topics() {
                          "actions : Nouvelle vue, Importer des vues, Exporter les vues, Enregistrer, "
                          "Historique, Annuler, R\xC3\xA9tablir\tle volet (et son sous-onglet), ou l'action", {}},
              {K::Paragraph, "Cinq r\xC3\xA9sultats au plus par groupe : une lettre de plus affine.", {}},
-             {K::Heading, "\xC3\x89pingler une commande", {}},
+             {K::Heading, "\xC3\x89pingler une commande", {}, "1.12.27"},
              {K::Paragraph, "Le clic droit sur une partie de la barre du haut, ou sur une entr\xC3\xA9" "e d'un "
                          "de ses menus, propose **\xC3\x89pingler dans Aller \xC3\xA0 / Faire** : Ctrl+K, le "
                          "champ encore vide, montre les commandes \xC3\xA9pingl\xC3\xA9" "es en t\xC3\xAAte "
                          "(douze au plus, la derni\xC3\xA8re d'abord), avant les derniers choix ; "
                          "Entr\xC3\xA9" "e la lance. Le m\xC3\xAAme clic droit l'en retire. Elles sont "
                          "gard\xC3\xA9" "es d'une s\xC3\xA9" "ance \xC3\xA0 l'autre (les r\xC3\xA9glages de "
-                         "l'utilisateur).", {}},
+                         "l'utilisateur).", {}, "1.12.27"},
              {K::Heading, "Au clavier", {}},
              {K::Bullet, "**\xE2\x86\x91** et **\xE2\x86\x93** : choisir un r\xC3\xA9sultat ; "
                          "**Entr\xC3\xA9" "e** : y aller ;", {}},
@@ -896,7 +904,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.12.27"},
         // ---- Demarrer / plantages
         {"plantages", "Plantages et blocages : le rapport, l'historique interne", "D\xC3\xA9marrer",
          "Si IHM Studio plante ou ne r\xC3\xA9pond plus, il \xC3\xA9" "crit un rapport dans le dossier "
@@ -1135,7 +1143,8 @@ const std::vector<Topic>& topics() {
                          "Gestion des utilisateurs\nSymboles du projet\tLes symboles r\xC3\xA9utilisables du "
                          "projet, dessin\xC3\xA9s en miniature (juste apr\xC3\xA8s les Favoris)", {}},
              {K::Heading, "La page de chaque objet", {}},
-             {K::Paragraph, "Chaque objet a sa page dans le chapitre **La biblioth\xC3\xA8que d'objets** : "
+             {K::Paragraph, "Chaque objet a sa page dans le chapitre **La biblioth\xC3\xA8que d'objets**, "
+                         "rang\xC3\xA9" "e dans la famille de sa tuile (Commandes, Synoptique\xE2\x80\xA6) : "
                          "\xC3\xA0 quoi il sert, **chacun de ses param\xC3\xA8tres** (ce qu'il r\xC3\xA8gle, "
                          "sa valeur par d\xC3\xA9" "faut), ce qu'il fait en marche, et un **exemple "
                          "anim\xC3\xA9** qui tourne sur le vrai moteur de l'IHM, gestes de l'utilisateur "
@@ -2713,11 +2722,12 @@ const std::vector<Topic>& topics() {
                          "citent le style** - sauf ceux qui avaient chang\xC3\xA9 cette valeur "
                          "eux-m\xC3\xAAmes : leur choix est gard\xC3\xA9. Renomm\xC3\xA9, le style reste "
                          "cit\xC3\xA9 sous son nouveau nom. Chaque changement est une commande (Ctrl+Z).", {}},
-             {K::Heading, "Voir un style", {}},
+             {K::Heading, "Voir un style", {}, "1.12.27"},
              {K::Paragraph, "Au-dessus de la fiche, l'**aper\xC3\xA7u** montre le style choisi sur un bouton, "
                          "un texte, un rectangle et un voyant (allum\xC3\xA9, \xC3\xA9teint), sur le fond "
                          "d'une vue du projet : chaque changement s'y voit tout de suite. Dans la liste, "
-                         "chaque style a sa pastille (remplissage, contour, couleur du texte).", {}},
+                         "chaque style a sa pastille (remplissage, contour, couleur du texte, couleur "
+                         "allum\xC3\xA9).", {}, "1.12.27"},
              {K::Heading, "Supprimer un style", {}},
              {K::Paragraph, "Les objets gardent leurs valeurs et ne le citent plus. G\xC3\xA9n\xC3\xA9rer "
                          "signale un objet qui cite un style disparu.", {}},
@@ -17109,7 +17119,7 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9tat 2 sur 3 \xC2\xBB, \xC2\xAB zone 60..80 \xC2\xBB, \xC2\xAB cach\xC3\xA9 "
                          "\xC2\xBB). Double clic sur un nom : le forcer ; clic droit : Forcer, "
                          "Rel\xC3\xA2" "cher, Suivre sur la courbe, Ajouter aux expressions, Copier la "
-                         "valeur, Copier le rapport ;", {}},
+                         "valeur, Copier le rapport ;", {}, "1.12.27"},
              {K::Bullet, "**Esclaves simul\xC3\xA9s** (l'ancien onglet Jumeaux) : les esclaves rang\xC3\xA9s "
                          "par groupe - li\xC3\xA9 pr\xC3\xAAt, li\xC3\xA9 lu par l'IHM, seulement "
                          "simul\xC3\xA9 - et les valeurs simul\xC3\xA9" "es des esclaves (animer, la zone de "

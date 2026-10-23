@@ -79,6 +79,8 @@ L'IHM s'enregistre avec le projet (Ctrl+S), dans le dossier `ihm/` du projet. To
 @voir reperes-nouveautes
 ### Le centre d'aide
 À gauche, l'arbre : Démarrer, L'IHM, L'automate (API), Macros, Blocs DFB / DDT, Expressions, Raccourcis, Notes de version, Signaler un problème. Au-dessus, la recherche (Ctrl+F) cherche partout et groupe ses résultats par chapitre ; « … les N autres » montre tout le groupe. ‹ et › (Alt+← et Alt+→) refont ton chemin, ☆ met le sujet dans tes favoris, et **Récents** les montre avec les derniers sujets lus. ST, C et C++ changent la notation de tous les exemples.
+@nouveau 1.12.27
+L'IHM se lit en chapitres : Concevoir les vues, Communiquer avec les équipements, La bibliothèque d'objets, Programmer, Superviser, Ressources et données, Tester et livrer, Les nouveautés. Un chapitre a ses sous-chapitres - la bibliothèque, ses familles, celles de la palette (Formes, Commandes, Affichage, Synoptique…). Chaque niveau se replie d'un clic ; le fil d'Ariane, en haut de la page, dit où l'on est (L'IHM › La bibliothèque d'objets › Synoptique › Vanne).
 ### F1
 F1 ouvre le centre au sujet de l'endroit : le volet de l'IHM ou le nœud choisi dans l'arbre, l'objet choisi dans la vue, le mot sous le curseur dans un script, l'onglet de l'API ou de la simulation. Sur une page de L'automate, **Didacticiel de l'API ›** ouvre ses parcours.
 ### Les quatre blocs du menu
@@ -161,9 +163,9 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 - **Le titre d'une colonne** : Trier de A à Z, de Z à A, Ajuster la largeur, Masquer la colonne, Colonnes › (les remontrer), Filtrer la colonne…, Effacer les filtres, **Exporter en CSV…** (Excel).
 - **L'arbre du projet** : chaque nœud a ses gestes - Ouvrir (Entrée), Ouvrir dans une fenêtre, Dupliquer (Ctrl+D), Renommer (F2), Copier le nom (Ctrl+C), Voir les usages (Maj+F12), Épingler, Supprimer (Suppr) ; un dossier crée ce qu'il range (Nouvelle alarme…) ; plusieurs lignes choisies : Copier les N noms, Supprimer les N… ; la racine : Nouveau ›, Enregistrer, Créer une version, Ouvrir le dossier du projet, Rechercher ; le vide et le rail : Nouveau ›, Tout déplier, Tout replier ; une ligne d'Épinglés ou de Récents a tout le menu de ce qu'elle vise.
 - **L'historique** : Aller à (Entrée), Ouvrir dans une fenêtre, Revenir à cet état… (le double clic), Retirer de l'historique (Suppr), Vider l'historique - la liste seulement, Ctrl+Z annule toujours.
-@nouveau -
+@nouveau 1.12.27
 - **Le menu principal (l'accueil)** : une carte a son menu ; ailleurs (le vide, un bouton, la colonne de gauche), le bouton visé d'abord, puis Nouveau projet… (Ctrl+N), Ouvrir un projet… (Ctrl+O), Ouvrir le dossier des projets, Afficher › (le filtre), Trier ›, Thème ›, Chercher un projet (Ctrl+F), le didacticiel, les réglages, les dossiers de l'application, l'aide ; le panneau du projet choisi : le menu de sa carte.
-@nouveau -
+@nouveau 1.12.27
 - **La barre du haut et ses menus** : le clic droit sur une partie (Projet, Annuler, Simuler, la cloche...) ou sur une entrée d'un menu ouvert (Enregistrer sous…, un projet récent) : son nom en tête, Exécuter (ou Ouvrir le menu), **Épingler dans Aller à / Faire**, Copier le nom, Raccourcis clavier…, Aide.
 ### Les raccourcis
 | Touche | Ce qu'elle fait |
@@ -230,6 +232,7 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 | API | les variables globales de l'automate ; le type, l'adresse | la liste des variables de l'automate, filtrée sur elle |
 | Volets et actions | les volets (Équipements › Valeurs simulées, IHM › Recettes...) et des actions : Nouvelle vue, Importer des vues, Exporter les vues, Enregistrer, Historique, Annuler, Rétablir | le volet (et son sous-onglet), ou l'action |
 Cinq résultats au plus par groupe : une lettre de plus affine.
+@nouveau 1.12.27
 ### Épingler une commande
 Le clic droit sur une partie de la barre du haut, ou sur une entrée d'un de ses menus, propose **Épingler dans Aller à / Faire** : Ctrl+K, le champ encore vide, montre les commandes épinglées en tête (douze au plus, la dernière d'abord), avant les derniers choix ; Entrée la lance. Le même clic droit l'en retire. Elles sont gardées d'une séance à l'autre (les réglages de l'utilisateur).
 ### Au clavier
@@ -424,6 +427,7 @@ Dans l'éditeur de vues, un clic à l'endroit voulu puis **Ctrl+V** : une colonn
 
 == fenetres | Plusieurs fenêtres : copier d'un projet à l'autre
 : Deux projets côte à côte, chacun dans sa fenêtre : on copie des objets dans l'une (Ctrl+C) et on les colle dans l'autre (Ctrl+V), ou on les glisse d'une fenêtre à l'autre. Ce dont ils ont besoin les suit : leurs symboles, leurs images, leurs styles, les variables IHM qu'ils lisent.
+@depuis 1.12.27
 @mots Nouvelle fenêtre, Ctrl+Maj+N, plusieurs fenêtres, deux fenêtres, plusieurs instances, Ouvrir dans une nouvelle fenêtre, copier d'un projet à l'autre, glisser d'une fenêtre à l'autre, L'ouvrir quand même
 @voir excel, symboles, styles-nommes, paquets-de-vues, onglets
 ### Ouvrir une autre fenêtre
@@ -558,7 +562,7 @@ Chaque vue a au moins un calque. Un calque se renomme, s'ordonne, se masque (ses
 | Utilisateurs | Menu de connexion, Connexion, Déconnexion, Utilisateur connecté, Changer le mot de passe, Gestion des utilisateurs |
 | Symboles du projet | Les symboles réutilisables du projet, dessinés en miniature (juste après les Favoris) |
 ### La page de chaque objet
-Chaque objet a sa page dans le chapitre **La bibliothèque d'objets** : à quoi il sert, **chacun de ses paramètres** (ce qu'il règle, sa valeur par défaut), ce qu'il fait en marche, et un **exemple animé** qui tourne sur le vrai moteur de l'IHM, gestes de l'utilisateur compris. **F1** sur un objet choisi dans l'éditeur, ou au survol d'une tuile de la bibliothèque, ouvre sa page ; la bulle d'aide d'une propriété de l'inspecteur reprend la même description.
+Chaque objet a sa page dans le chapitre **La bibliothèque d'objets**, rangée dans la famille de sa tuile (Commandes, Synoptique…) : à quoi il sert, **chacun de ses paramètres** (ce qu'il règle, sa valeur par défaut), ce qu'il fait en marche, et un **exemple animé** qui tourne sur le vrai moteur de l'IHM, gestes de l'utilisateur compris. **F1** sur un objet choisi dans l'éditeur, ou au survol d'une tuile de la bibliothèque, ouvre sa page ; la bulle d'aide d'une propriété de l'inspecteur reprend la même description.
 ### Favoris et recherche
 L'étoile d'un composant le met dans les **Favoris**, en tête de la bibliothèque ; les favoris sont gardés d'un lancement à l'autre. Le champ de recherche filtre par nom ou par famille. Le survol d'un composant montre son aperçu.
 ### Quelques composants
@@ -1317,8 +1321,9 @@ Choisis un objet bien réglé, puis **Créer un style** (barre d'outils de l'éd
 Dans l'inspecteur, catégorie **Apparence**, la propriété **Style nommé** : choisir un style copie ses valeurs dans l'objet et le lui fait citer (une commande). Vide : l'objet ne le cite plus et garde ses valeurs.
 ### Changer un style
 Dans IHM › Styles, changer une valeur change **tous les objets qui citent le style** - sauf ceux qui avaient changé cette valeur eux-mêmes : leur choix est gardé. Renommé, le style reste cité sous son nouveau nom. Chaque changement est une commande (Ctrl+Z).
+@nouveau 1.12.27
 ### Voir un style
-Au-dessus de la fiche, l'**aperçu** montre le style choisi sur un bouton, un texte, un rectangle et un voyant (allumé, éteint), sur le fond d'une vue du projet : chaque changement s'y voit tout de suite. Dans la liste, chaque style a sa pastille (remplissage, contour, couleur du texte).
+Au-dessus de la fiche, l'**aperçu** montre le style choisi sur un bouton, un texte, un rectangle et un voyant (allumé, éteint), sur le fond d'une vue du projet : chaque changement s'y voit tout de suite. Dans la liste, chaque style a sa pastille (remplissage, contour, couleur du texte, couleur allumé).
 ### Supprimer un style
 Les objets gardent leurs valeurs et ne le citent plus. Générer signale un objet qui cite un style disparu.
 > Copier le style / Coller le style (barre d'outils) reste là pour reporter une apparence une fois, sans lien.
@@ -8447,6 +8452,7 @@ Sur le poste d'exploitation, la barre est cachée : le clic droit en haut n'ouvr
 - **Expressions** : chaque expression de la vue et sa valeur (en rouge si elle est fausse) ;
 - **Variables IHM** et **Variables API** : leurs valeurs du moment ;
 - **Performances** : le cycle de l'IHM, les scripts, le calcul, le dessin ;
+@nouveau 1.12.27
 - **Pourquoi ?** : clic droit sur un objet de la vue en marche › **Pourquoi ?** - ce qu'il montre et pourquoi, suivi à chaque image : chaque propriété calculée (sa formule, sa valeur), puis la valeur de **chaque terme** (les opérandes d'un AND / OR, les deux côtés d'une comparaison, les conditions des états, chaque nom lu, « forcée » s'il l'est) et **l'état retenu** (« allumé : #2ECC71 », « condition 1 vraie (Defaut) ; état 2 sur 3 », « zone 60..80 », « caché »). Double clic sur un nom : le forcer ; clic droit : Forcer, Relâcher, Suivre sur la courbe, Ajouter aux expressions, Copier la valeur, Copier le rapport ;
 - **Esclaves simulés** (l'ancien onglet Jumeaux) : les esclaves rangés par groupe - lié prêt, lié lu par l'IHM, seulement simulé - et les valeurs simulées des esclaves (animer, la zone de mouvement, forcer), serrées, pour régler pendant la marche ; les Graphiques de la vue marquent une zone tirée, un forçage (voir « Les valeurs simulées »).
 @nouveau 1.11.24

@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.27", "23/10/2026", "livr\xC3\xA9" "e le 23/10 dans la nuit"},
     {"1.12.26", "22/10/2026", "livr\xC3\xA9" "e le 22/10 au soir"},
     {"1.12.25", "22/10/2026", "livr\xC3\xA9" "e le 22/10 en fin d'apr\xC3\xA8s-midi"},
     {"1.12.24", "22/10/2026", "livr\xC3\xA9" "e le 22/10 dans l'apr\xC3\xA8s-midi"},
@@ -132,6 +133,30 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.27 (23/10/2026) : plusieurs fenetres (copier, coller, glisser d'un projet a l'autre), Suppr et Ctrl+D
+        // dans les listes, l'apercu des styles, le clic droit du menu principal et de la barre du haut, Pourquoi ?,
+        // l'aide F1 rangee, l'installateur habille.
+        note("1.12.27", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
+         "PLUSIEURS FEN\xC3\x8ATRES D'IHM STUDIO : Projet \xE2\x80\xBA Nouvelle fen\xC3\xAAtre (Ctrl+Maj+N), ou le clic droit du menu principal \xE2\x80\xBA Nouvelle fen\xC3\xAAtre ; sur la carte d'un projet, Ouvrir dans une nouvelle fen\xC3\xAAtre. Deux projets c\xC3\xB4te \xC3\xA0 c\xC3\xB4te : des objets copi\xC3\xA9s dans l'un (Ctrl+C) se collent dans l'autre (Ctrl+V), ou s'y glissent \xC3\xA0 la souris et se posent o\xC3\xB9 on les l\xC3\xA2" "che. Ce dont ils ont besoin les suit : leurs symboles, les popups qu'ouvrent leurs actions, leurs images, leurs styles, les variables, les types et les fonctions IHM qu'ils emploient ; ce que le projet a d\xC3\xA9j\xC3\xA0 sous le m\xC3\xAAme nom est gard\xC3\xA9. Un seul Ctrl+Z annule le collage. Le m\xC3\xAAme projet dans deux fen\xC3\xAAtres : une question d'abord. L\xC3\xA2" "ch\xC3\xA9s dans Excel ou le Bloc-notes, les objets donnent leur liste.",
+         "fenetres", ""),
+        note("1.12.27", "Vues", Kind::New,
+         "SUPPR ET CTRL+D DANS LES LISTES : dans l'onglet Contenu (les lignes et les colonnes d'un tableau, les plumes d'une courbe, les \xC3\xA9tats\xE2\x80\xA6), l'onglet Actions et les tableaux des volets de l'IHM (styles, alarmes, recettes, utilisateurs, rapports, scripts\xE2\x80\xA6), Suppr retire l'\xC3\xA9l\xC3\xA9ment choisi - plus besoin de cliquer la corbeille - et Ctrl+D le duplique tout de suite, juste apr\xC3\xA8s lui, ses indices suivis ; Ctrl+Maj+D ouvre la fen\xC3\xAAtre des copies multiples. Dans les volets, Inser ajoute et Alt+\xE2\x86\x91 / Alt+\xE2\x86\x93 d\xC3\xA9placent, comme les boutons de la barre. Dans l'Explorateur d'objets, Ctrl+D duplique la s\xC3\xA9lection. Apr\xC3\xA8s un clic sur la barre d'une liste, le clavier revient \xC3\xA0 la liste.",
+         "contenu", ""),
+        note("1.12.27", "Vues", Kind::New,
+         "L'APER\xC3\x87U DES STYLES : IHM \xE2\x80\xBA Styles montre, au-dessus de la fiche, le style choisi sur un bouton, un texte, un rectangle et un voyant allum\xC3\xA9 puis \xC3\xA9teint, dessin\xC3\xA9s comme dans une vue, sur le fond d'une vue du projet ; l'aper\xC3\xA7u suit chaque changement. Dans la liste, chaque style a sa pastille : son remplissage, son contour, la couleur de son texte et celle d'allum\xC3\xA9.",
+         "styles-nommes", ""),
+        note("1.12.27", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
+         "LE CLIC DROIT SUR LE MENU PRINCIPAL ET LA BARRE DU HAUT : sur l'accueil, hors des cartes, le menu de la page (Nouveau projet, Ouvrir un projet, Nouvelle fen\xC3\xAAtre, Ouvrir le dossier des projets, Afficher, Trier, Th\xC3\xA8me, Chercher un projet, Didacticiel, R\xC3\xA9glages, Dossiers de l'application, Aide) ; sur une carte ou sur le panneau du projet choisi, le menu du projet ; Maj+F10 au clavier. Sur une partie de la barre du haut, ou sur une entr\xC3\xA9" "e de ses menus : son nom, Ex\xC3\xA9" "cuter, \xC3\x89pingler dans Aller \xC3\xA0 (ou l'en retirer), Copier le nom, Raccourcis clavier, Aide. Les commandes \xC3\xA9pingl\xC3\xA9" "es viennent en t\xC3\xAAte d'Aller \xC3\xA0 (Ctrl+K), avant les derniers choix.",
+         "onglets", ""),
+        note("1.12.27", "Simulation IHM", Kind::New,
+         "POURQUOI ? : clic droit sur un objet de la vue en marche \xE2\x80\xBA Pourquoi ? L'onglet Pourquoi ? de la simulation dit ce que l'objet montre et pourquoi, suivi \xC3\xA0 chaque image : chaque propri\xC3\xA9t\xC3\xA9 calcul\xC3\xA9" "e (sa formule, sa valeur), puis la valeur de chaque terme - les deux c\xC3\xB4t\xC3\xA9s d'une comparaison, les op\xC3\xA9randes d'un AND ou d'un OR, la condition d'un ? :, les conditions des \xC3\xA9tats, chaque nom lu (\xC2\xAB forc\xC3\xA9" "e \xC2\xBB s'il l'est) - et l'\xC3\xA9tat retenu : allum\xC3\xA9 et sa couleur, la condition vraie et l'\xC3\xA9tat d'un multi-\xC3\xA9tats, la zone d'un bargraphe, cach\xC3\xA9. Double clic sur un nom : le forcer ; clic droit : Forcer, Rel\xC3\xA2" "cher, Suivre sur la courbe, Ajouter aux expressions, Copier la valeur ou le rapport, Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur.",
+         "simulation", ""),
+        note("1.12.27", "Aide", Kind::Changed,
+         "L'AIDE F1 RANG\xC3\x89" "E : la biblioth\xC3\xA8que d'objets se range par familles, celles de la palette (Formes, Commandes, Affichage, Graphiques, Alarmes, Production, R\xC3\xA9gulation, Synoptique, Navigation et structure, Communication, M\xC3\xA9" "dias, Utilisateurs) ; Concevoir les vues, Programmer et Tester et livrer ont leurs sous-chapitres ; la communication a son chapitre, Communiquer avec les \xC3\xA9quipements ; les variables syst\xC3\xA8me et d'instances passent dans Programmer, les notifications et les rapports dans Superviser ; les nouveaut\xC3\xA9s ont leur chapitre, et D\xC3\xA9marrer garde les gestes de base. Dans le centre d'aide, chaque niveau se replie, et le fil d'Ariane dit o\xC3\xB9 l'on est (L'IHM \xE2\x80\xBA La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique \xE2\x80\xBA Vanne).",
+         "menu-aide", ""),
+        note("1.12.27", "G\xC3\xA9n\xC3\xA9ral", Kind::Changed,
+         "L'INSTALLATEUR HABILL\xC3\x89 : \xC3\xA0 gauche, aux couleurs des deux logos, le nom, la version et les \xC3\xA9tapes de l'installation (faites, en cours, \xC3\xA0 venir) ; sa police, des bandeaux d'accueil et de fin, une ic\xC3\xB4ne par \xC3\xA9tape ; pendant la copie, une animation, une barre en d\xC3\xA9grad\xC3\xA9 avec son pourcentage, et des astuces. Il pose toujours les deux applications et met \xC3\xA0 jour celle qui est install\xC3\xA9" "e, sans toucher \xC3\xA0 tes donn\xC3\xA9" "es.",
+         "menu-aide", ""),
         // 1.12.26 (22/10/2026) : la fenetre Historique et le suivi des objets, WAIT et les scripts detaches, les
         // fichiers dans les scripts, moins de trames Modbus, la pastille IHM.
         note("1.12.26", "Vues", Kind::New,
