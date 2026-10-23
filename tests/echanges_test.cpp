@@ -500,6 +500,32 @@ void archiveApi(const fs::path& bac, const fs::path& libs) {
               + ") ; celle qui y est deja est gardee");
     auto again = project::ProjectStore::openModel(dest.string());
     check(again && again->project && !again->project->sections.empty(), "le projet deballe se rouvre (son programme)");
+
+    // La page web suit le dossier : un chemin absolu (celui du poste qui a ecrit l'archive) part
+    // au deballage ; "web = oui" reste - la page s'ecrira a cote du nouveau dossier.
+    {
+        const fs::path withWeb = scratch() / "api" / "web" / "Armoire_Gaz";
+        copyFolder(bac, withWeb);
+        std::string manifest = readAll(withWeb / "project.xpgproj");
+        manifest += "web = oui\nweb-fichier = D:\\Partage\\Ligne_gaz.html\n";
+        writeAll(withWeb / "project.xpgproj", manifest);
+        auto m = project::ProjectStore::readManifest(withWeb.string());
+        check(m && m->webPage && m->webFile == "D:\\Partage\\Ligne_gaz.html", "le manifeste garde la page web (web, web-fichier)");
+        pa::ApiOptions o2;
+        o2.macros = false;
+        auto zip = pa::apiArchive(withWeb.string(), o2, nullptr);
+        check(static_cast<bool>(zip), "l'archive du projet a page web");
+        if (!zip) return;
+        auto back = pa::read(*zip);
+        const fs::path out2 = scratch() / "api" / "web" / "out" / "Armoire_Gaz";
+        pa::ApiReport r2;
+        check(back && static_cast<bool>(pa::unpackApiArchive(*back, out2.string(), pa::UnpackOptions{}, &r2)), "deballer le projet a page web");
+        auto m2 = project::ProjectStore::readManifest(out2.string());
+        bool said = false;
+        for (const auto& n : r2.notes) said = said || n.find("page web") != std::string::npos;
+        check(m2 && m2->webPage && m2->webFile.empty() && said,
+              "deballe ailleurs : la page web reste a faire, a cote du nouveau dossier (le chemin de l'autre poste part, et c'est dit)");
+    }
 }
 
 // ============================================================= 6. les pages web ==

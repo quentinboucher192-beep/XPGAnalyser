@@ -2186,6 +2186,12 @@ void App::openRequested(const std::vector<std::string>& paths, bool station) {
             openProjectFolder(p);
             return;
         }
+    // 1.12.30 : une archive de projet (.xihm, .xapi) ou une page web parmi eux : elle.
+    for (const auto& p : paths)
+        if (exchange::isExchangeFile(p)) {
+            openPath(p);
+            return;
+        }
     if (paths.size() == 1) openPath(paths.front());
     else importer_->importAsync(paths);
 }

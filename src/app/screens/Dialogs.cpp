@@ -173,6 +173,14 @@ namespace app {
         fields_(std::move(fields)),
         cancellable_(cancellable) {}
 
+    ui::EventResult FormDialog::HandleEvent(const ui::InputEvent& ev) {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); help_ && k && k->key == ui::Key::F1 && k->mods.none() && !k->repeat) {
+            help_();
+            return ui::EventResult::Consumed;
+        }
+        return menu::WidgetMenu::HandleEvent(ev);
+    }
+
     menu::MenuTraits FormDialog::traits() const {
         auto t = dialogTraits();
         // A dialog the user cannot escape from - the master key on first run - must

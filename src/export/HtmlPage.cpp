@@ -30,8 +30,8 @@ button.btn{font:inherit;border:1px solid var(--accent);background:var(--accent);
 padding:6px 12px;cursor:pointer;white-space:nowrap}
 button.btn:hover{filter:brightness(1.08)}
 .hint{color:var(--muted);font-size:12px}
-.layout{display:flex;align-items:flex-start;min-height:calc(100vh - 60px)}
-nav.side{flex:0 0 250px;position:sticky;top:60px;max-height:calc(100vh - 60px);overflow:auto;padding:12px 10px 30px;
+.layout{display:flex;align-items:flex-start;min-height:calc(100vh - var(--top,60px))}
+nav.side{flex:0 0 250px;position:sticky;top:var(--top,60px);max-height:calc(100vh - var(--top,60px));overflow:auto;padding:12px 10px 30px;
 border-right:1px solid var(--line);background:var(--panel)}
 nav.side input{width:100%;font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
 nav.side h3{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:16px 6px 4px}
@@ -55,7 +55,7 @@ svg text{white-space:pre}
 p.desc{margin:8px 2px;color:var(--muted)}
 table.t{border-collapse:collapse;width:100%;background:var(--panel);border:1px solid var(--line)}
 table.t th,table.t td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
-table.t th{background:var(--soft);position:sticky;top:60px;font-weight:600}
+table.t th{background:var(--soft);position:sticky;top:var(--top,60px);font-weight:600}
 table.t td.num{text-align:right;white-space:nowrap}
 table.t td.mono,.mono{font-family:Consolas,"DejaVu Sans Mono",monospace;font-size:12.5px}
 table.t td.warn{color:var(--warn)}
@@ -103,8 +103,18 @@ constexpr const char* kScript = R"JS(
     var links = document.querySelectorAll('nav.side a');
     for (var j = 0; j < links.length; j++) links[j].classList.toggle('on', links[j].getAttribute('href') === '#' + id);
     closePopup();
+    // Une autre page : en haut (le navigateur, lui, viendrait au titre, sous le bandeau).
     window.scrollTo(0, 0);
+    setTimeout(function(){ window.scrollTo(0, 0); }, 0);
   }
+  // La hauteur du bandeau (il passe sur deux lignes dans une fenetre etroite) : le menu et
+  // les titres des tableaux restent juste dessous.
+  function setTop(){
+    var h = document.querySelector('header.top');
+    if (h) document.documentElement.style.setProperty('--top', h.offsetHeight + 'px');
+  }
+  setTop();
+  window.addEventListener('resize', setTop);
   function route(){ show(decodeURIComponent(location.hash.slice(1)) || first); }
   var ov = document.getElementById('ov');
   function closePopup(){ if (ov) { ov.hidden = true; ov.querySelector('.wbody').innerHTML = ''; } }

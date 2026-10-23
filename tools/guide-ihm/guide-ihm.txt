@@ -8790,19 +8790,76 @@ Le bouton **Déverrouiller** de la barre d'outils (ou Projet › Déverrouiller 
 > Le verrou n'est pas un chiffrement : les fichiers restent lisibles sur le disque. Il empêche de modifier par erreur un projet livré.
 
 == echange | Exporter / Importer
-: L'IHM entière (vues, scripts, fonctions, ressources, réglages, historiques) s'exporte dans une archive .zip, et s'importe à l'identique dans un autre projet.
+: L'IHM entière (vues, scripts, fonctions, ressources, réglages, historiques) se contrôle ici, et s'importe à l'identique depuis une archive ; le projet entier s'exporte dans une archive .xihm, ou en page web.
 @lieux echange
-@voir configuration, verifier, paquets-de-vues
+@voir configuration, verifier, paquets-de-vues, archive-projet, page-web
 @capture PNG_122_exporter_archive_dialogue.png | Exporter l'IHM dans une archive.
 @capture PNG_124_import_controle_coherence.png | Importer : le contrôle de cohérence.
 ### Exporter
-**Exporter** écrit une archive `.zip` avec un manifeste et l'empreinte SHA-256 de chaque fichier.
+**Exporter** écrit une archive avec un manifeste et l'empreinte SHA-256 de chaque fichier.
+Depuis la 1.12.30, c'est l'archive `.xihm` du **projet entier** - ressources, fichiers externes, équipements, simulation, versions -, comme **Projet › Exporter en archive .xihm…** (voir « Le projet dans un seul fichier : l'archive .xihm ») ; son rapport s'affiche ici : ses comptes, ses fichiers.
 ### Importer
 **Importer** vérifie l'archive (une archive retouchée ou abîmée est refusée, et la raison est dite), contrôle les variables du programme, puis reconstruit l'IHM ; un seul Ctrl+Z revient en arrière.
+Il lit une archive `.xihm` comme l'ancienne `.zip` de l'IHM : seule son IHM est reprise, dans le projet ouvert. Pour ouvrir une archive comme un projet à part, avec tout ce qu'elle contient : **Projet › Ouvrir…**.
+### La page web
+**Page web** écrit l'IHM dans un seul fichier `.html`, qui s'ouvre dans un navigateur (voir « L'IHM en page web : un seul .html »).
 ### Quelques vues seulement
 Pour passer quelques vues, et ce dont elles ont besoin, d'un projet à l'autre : IHM › Vues, **Exporter les vues…** et **Importer des vues…** (voir « Exporter et importer des vues »).
 ### Le dossier de l'IHM
 **Dossier Word** et **Dossier PDF** écrivent la documentation de l'IHM (voir « Le dossier de l'IHM »).
+
+== archive-projet | Le projet dans un seul fichier : l'archive .xihm
+: Projet › Exporter en archive .xihm… met tout le projet dans un seul fichier - les vues, les ressources de tout genre, les fichiers externes liés, les équipements, la simulation, l'historique des objets, les versions. Il se rouvre à l'identique : Projet › Ouvrir…, un double-clic sur le fichier, ou le fichier lâché sur la fenêtre.
+@mots archive, .xihm, xihm, Exporter en archive .xihm, Importer une archive, Ouvrir l'archive, Déballer et ouvrir, déballer, Déballer ce qui est intact, archive abîmée, version plus récente, manifeste, manifeste.txt, SHA-256, empreinte, transmettre un projet, envoyer un projet, IHM-Studio.exe, double-clic, _externes, .zip
+@voir echange, page-web, versions, dossiers
+@capture PNG_echanges_02_exporter_archive.png | Projet › Exporter en archive .xihm… : le fichier, les versions, l'historique de marche.
+@capture PNG_echanges_04_ouvrir_archive.png | Une archive à ouvrir : où la déballer (le dossier des projets, sous son nom), puis le projet s'ouvre.
+### L'écrire
+**Projet › Exporter en archive .xihm…** (ou le clic droit sur la racine de l'arbre du projet, ou IHM › Exporter / Importer, **Exporter**) : un seul fichier, par défaut dans le dossier `exports/` du projet. Deux choix : **les versions du projet** et **l'historique de marche** (alarmes, mesures, audit) - les joindre, ou les laisser. Le projet a des modifications non enregistrées ? La question d'abord : les enregistrer, ou prendre le projet tel qu'il est sur le disque. L'archive s'écrit à côté (la barre du haut la suit) ; la cloche dit où elle est, et **Ouvrir le dossier** y mène.
+### Ce qu'elle contient
+| Dans l'archive | Ce que c'est |
+| Le projet | la fiche, l'icône, la configuration, les vues, les popups, les modèles, les symboles, les styles, les thèmes, les scripts, les fonctions, les variables, les alarmes, les recettes, les utilisateurs |
+| Les ressources | images, polices, sons, vidéos, documents : tous les genres |
+| Les fichiers externes | ceux du projet, et ceux liés hors du projet (rangés à part dans l'archive) |
+| Les équipements | la communication, les équipements du réseau, les esclaves simulés |
+| La simulation | ses réglages, ses scénarios, ses essais |
+| L'historique des objets | qui a changé quoi, objet par objet |
+| Les versions | les versions du projet (au choix) |
+| L'historique de marche | alarmes, mesures, audit, mémoire des réglages PID (au choix) |
+Ne sont pas pris : le cache de construction, `exports/` et la corbeille. Son **manifeste** dit l'application qui l'a écrite et sa version, les comptes du projet (vues, objets, ressources, scripts, alarmes, versions…) et, pour chaque fichier, sa taille, sa date et son empreinte SHA-256.
+### L'ouvrir
+**Projet › Ouvrir…** (un fichier `.xihm`), **Projet › Importer une archive…**, un **double-clic** sur le fichier (l'installation associe `.xihm` à IHM Studio : `IHM-Studio.exe chemin.xihm`), ou le fichier **lâché sur la fenêtre**. IHM Studio est déjà ouvert ? La demande lui passe, comme pour un projet. Puis :
+1. l'archive est relue, chaque fichier vérifié (sa taille, son empreinte) ;
+2. **où la déballer** : par défaut le dossier des projets, sous son nom (« Ligne_gaz (2) » s'il est pris) - un dossier neuf, ou vide ;
+3. le projet s'ouvre (le projet en mémoire, s'il est modifié, se demande d'abord), et le contrôle dit ce qu'il a retrouvé : chaque compte du manifeste, relu.
+Un fichier externe lié hors du projet revient dans le dossier `externes/` du projet, et le lien le suit - sauf si son fichier d'origine est là, intact : le lien d'origine reste.
+### Une archive abîmée, ou plus récente
+- **Abîmée** (une copie interrompue, un fichier altéré) : elle le dit, fichier par fichier ; **Déballer ce qui est intact** ouvre le projet sans eux, et ce qui manque est dit.
+- **Écrite par une version plus récente** d'IHM Studio : rien n'est déballé, mets IHM Studio à jour pour l'ouvrir.
+- **L'archive d'un projet de l'automate** (`.xapi`) : elle s'ouvre avec API Studio. Un fichier qui n'est pas une archive : la raison est dite.
+> L'ancienne archive `.zip` de l'IHM (jusqu'à la 1.12.29) s'ouvre toujours.
+
+== page-web | L'IHM en page web : un seul .html
+: Projet › Exporter en page web (.html)… écrit l'IHM dans un seul fichier, qui s'ouvre dans n'importe quel navigateur, sans Internet : chaque vue et chaque popup dessinée comme dans IHM Studio, les boutons qui naviguent, les alarmes, les variables, les scripts. Le projet entier est dans la page : Projet › Importer depuis une page web… le reconstruit à l'identique.
+@mots page web, HTML, .html, navigateur, Exporter en page web, Importer depuis une page web, Mettre à jour la page web à chaque enregistrement, hors ligne, sans Internet, SVG, Télécharger le projet, cette page n'a pas été écrite par IHM Studio
+@voir archive-projet, echange, dossier
+@capture PNG_echanges_05_page_web_ihm.png | La page web de l'IHM dans un navigateur : le menu des vues, la vue de démarrage dessinée, ses boutons cliquables.
+@capture PNG_echanges_06_page_web_navigation.png | Un clic sur un bouton de navigation : sa vue s'ouvre ; Précédent revient.
+### L'écrire
+**Projet › Exporter en page web (.html)…** (ou le clic droit sur la racine de l'arbre du projet, ou IHM › Exporter / Importer, **Page web**) : par défaut `<dossier du projet>.html`, à côté du dossier du projet. Les vues se dessinent entre deux images, le reste s'écrit à côté : l'application ne se fige pas ; la cloche dit où est la page.
+### Ce qu'elle montre
+| Dans la page | Ce qu'on y voit |
+| Les vues et les popups | dessinées par le dessin d'IHM Studio, en vectoriel (nettes à tous les zooms, leurs textes se cherchent), au repos : une valeur affichée y est marquée « — » |
+| La navigation | un bouton ou une zone qui ouvre une vue ou une popup se clique ; Précédent et Fermer la popup aussi ; le menu de gauche liste les vues et les popups ; la vue de démarrage s'ouvre d'abord |
+| Les alarmes | chaque alarme : sa priorité, sa catégorie, son groupe, sa condition, son message, sa consigne |
+| Les variables IHM | leur type, leur valeur initiale, leur équipement et leur adresse |
+| Les scripts et les fonctions | leur code coloré, en lecture |
+| La fiche du projet | ce qu'il contient, sa version, son auteur, ses dates, sa résolution ; **Télécharger le projet** |
+Aucun lien vers Internet : elle se lit hors ligne, s'envoie par courriel, se range avec la documentation.
+### À chaque enregistrement
+**Mettre à jour la page web à chaque enregistrement** (dans la fenêtre Exporter en page web) : à chaque Ctrl+S, la page se réécrit toute seule, au même endroit, sans ralentir l'enregistrement ; la barre d'état dit « Page web mise à jour ». Le choix est gardé dans la fiche du projet.
+### La réimporter
+**Projet › Importer depuis une page web…** (ou **Projet › Ouvrir…** sur le `.html`, ou la page lâchée sur la fenêtre) : le projet que porte la page est déballé, où tu veux, puis il s'ouvre - à l'identique, comme une archive .xihm. Une page qu'une autre application a écrite est refusée : « cette page n'a pas été écrite par IHM Studio ni par API Studio ».
 
 == dossier | Le dossier de l'IHM
 : Un document Word ou PDF qui décrit l'IHM telle qu'elle est enregistrée : chaque vue avec sa vignette, les variables, les alarmes, les recettes, les utilisateurs, les scripts, les essais. Il se refait en un clic, toujours à jour.
@@ -9105,3 +9162,16 @@ Le titre du volet dit « modifié » dès que le texte change. **Ctrl+Entrée**,
 Une modification faite dans le grafcet (le volet Code, un dialogue, l'outil Supprimer) réécrit aussitôt les sections du programme, et **les onglets ST ouverts sur ces sections montrent le nouveau texte au même instant**. Un onglet ouvert en modification le dit dans la barre d'état : rien de ce qui y a été tapé n'est perdu (chaque frappe y est déjà enregistrée). À l'inverse, **une section modifiée en ST redessine le grafcet aussitôt** (un libellé, une réceptivité, une action), et son volet Code suit s'il n'est pas lui-même en cours de modification. Ctrl+Z défait l'un ou l'autre, et les deux suivent. En simulation de l'API, le programme modifié passe par la **modification en ligne** (entre deux cycles, les valeurs gardées) : le volet dit « Appliqué en ligne », ou pourquoi le nouveau code n'a pas pu être pris.
 ### Supprimer, modifier : ce qui va changer dans le programme
 **Supprimer une transition** (outil Supprimer ou Suppr) retire ses deux appels Builder et sa réceptivité ; les transitions suivantes descendent d'un numéro (T5 devient T4). La confirmation dit aussi ce que la suppression laisse au grafcet : « X3 n'aura plus de transition de sortie », « X5 ne sera plus atteinte ». **Supprimer une action** retire ses appels Builder, sa condition et son bloc IF … END_IF ; les actions suivantes descendent d'un numéro, y compris dans les réceptivités (FIN(A5) devient FIN(A4)) et dans les autres sections de l'unité (SFC_DEBUG). Si une réceptivité ou une autre section emploie l'action (FIN(A2), Acts_…[2].Started…), la suppression est **refusée** et le message dit où : change d'abord ces lignes. **Modifier une action** (double-clic sur l'action) : son genre (continue, à l'activation, retardée, limitée…, avec son code K du moteur), sa durée, son nom (8 caractères au plus : le moteur jette un nom plus long), son étape. Seuls les champs changés sont réécrits. Avant d'appliquer, quand plusieurs lignes bougent, la fenêtre **Ce qui va changer dans le programme** les liste : la section, le numéro de ligne, le texte d'avant et celui d'après. Ctrl+Z défait tout d'un coup. Insérer ou supprimer une étape, une transition, une action renumérote aussi les autres sections de l'unité qui nomment ses tableaux (SFC_DEBUG lit Steps_…, Acts_…) : elles continuent de désigner le même élément.
+
+== echanges-api | Le projet de l'automate dans un seul fichier (.xapi) et en page web
+: API Studio met tout le projet de l'automate dans un seul fichier .xapi - le programme, les ladders et les GRAFCET gardés tels quels, la configuration, les versions, les macros -, et l'écrit en page web (.html) : le programme lisible dans un navigateur, avec le projet dedans. Les deux se rouvrent à l'identique.
+@mots archive, .xapi, xapi, Exporter en archive .xapi, Importer une archive, page web, HTML, .html, Exporter en page web, Importer depuis une page web, Mettre à jour la page web à chaque enregistrement, API-Studio.exe, manifeste, SHA-256, macros, .xpglayout
+@voir archive-projet, page-web, grafcet
+@capture PNG_echanges_03_exporter_xapi.png | Projet › Exporter en archive .xapi… : le fichier, les versions, l'historique, les macros.
+@capture PNG_echanges_07_page_web_api.png | La page web du programme : les tâches et l'ordre d'exécution, chaque section et son code.
+### L'archive .xapi
+**Projet › Exporter en archive .xapi…** (ou le clic droit sur la racine de l'arbre) : la fiche du projet, les sections (ST, ladders, FBD, GRAFCET, gardés tels quels), les unités de programme, les DFB, les DDT, les variables, les tâches, la configuration, les tables d'animation, l'icône, les données, la disposition des grafcets (le fichier `.xpglayout` d'à côté) ; au choix, les **versions**, l'**historique** et les **macros** de la bibliothèque. Le manifeste compte les sections, les unités, les DFB, les DDT, les variables globales, les tâches, les modules, les tables et les versions, et garde l'empreinte SHA-256 de chaque fichier.
+### L'ouvrir
+**Projet › Ouvrir…** sur un `.xapi`, **Projet › Importer une archive…**, un double-clic (`API-Studio.exe chemin.xapi`), ou le fichier lâché sur la fenêtre : où la déballer (par défaut le dossier des projets, sous son nom), puis le projet s'ouvre et chaque compte est relu. Une macro de l'archive qui manque à ta bibliothèque y est ajoutée ; une macro que tu as déjà n'est pas remplacée. Une archive abîmée, plus récente, ou d'un projet IHM (`.xihm`) : la raison est dite.
+### La page web
+**Projet › Exporter en page web (.html)…** : un seul fichier, sans Internet - la fiche, la configuration, les tâches et l'ordre d'exécution, chaque section et son code (un ladder, un FBD ou un GRAFCET : sa lecture en texte), les unités, les DFB, les types dérivés, les variables, avec un filtre sur les tableaux. **Mettre à jour la page web à chaque enregistrement** la réécrit à chaque Ctrl+S. **Projet › Importer depuis une page web…** (ou Ouvrir… sur le `.html`) reconstruit le projet qu'elle porte.

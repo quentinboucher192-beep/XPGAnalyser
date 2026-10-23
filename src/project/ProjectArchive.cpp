@@ -774,6 +774,37 @@ core::Status unpack(const Contents& c, const std::string& folder, const UnpackOp
             }
         }
     }
+    // 1.12.30 : LA PAGE WEB SUIT LE DOSSIER. Un chemin absolu ("web-fichier = D:\Partage\Ligne.html")
+    // vient du poste qui a ecrit l'archive : il part, la page s'ecrira a cote du nouveau dossier.
+    for (const auto& e : c.manifest.entries) {
+        if (e.path != "project.xpgproj" || e.origin != Origin::Folder) continue;
+        const fs::path file = root / "project.xpgproj";
+        std::string text;
+        if (!core::readFileAll(file, text) || text.find("web-fichier") == std::string::npos) break;
+        std::string kept, dropped;
+        std::size_t at = 0;
+        while (at < text.size()) {
+            const auto end = text.find('\n', at);
+            const std::string line = text.substr(at, end == std::string::npos ? std::string::npos : end + 1 - at);
+            at = end == std::string::npos ? text.size() : end + 1;
+            if (startsWith(line, "web-fichier")) {
+                std::string value = line.substr(std::min(line.size(), line.find('=') == std::string::npos ? line.size() : line.find('=') + 1));
+                while (!value.empty() && (value.back() == '\n' || value.back() == '\r' || value.back() == ' ')) value.pop_back();
+                while (!value.empty() && value.front() == ' ') value.erase(value.begin());
+                const bool absolute = !value.empty() && (value[0] == '/' || value[0] == '\\' || (value.size() > 2 && value[1] == ':'));
+                if (absolute) {
+                    dropped = value;
+                    continue;
+                }
+            }
+            kept += line;
+        }
+        if (!dropped.empty()) {
+            if (auto st = write(file, kept, e.mtime); !st) return st;
+            u.notes.push_back("la page web du projet s'\xC3\xA9" "crira \xC3\xA0 c\xC3\xB4t\xC3\xA9 de son nouveau dossier (plus dans " + dropped + ")");
+        }
+        break;
+    }
     return core::ok();
 }
 

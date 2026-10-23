@@ -17877,17 +17877,28 @@ const std::vector<Topic>& topics() {
          {}},
         // ---- Tester et livrer  Livrer et exploiter / echange
         {"echange", "Exporter / Importer", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
-         "L'IHM enti\xC3\xA8re (vues, scripts, fonctions, ressources, r\xC3\xA9glages, historiques) "
-         "s'exporte dans une archive .zip, et s'importe \xC3\xA0 l'identique dans un autre projet.",
+         "L'IHM enti\xC3\xA8re (vues, scripts, fonctions, ressources, r\xC3\xA9glages, historiques) se "
+         "contr\xC3\xB4le ici, et s'importe \xC3\xA0 l'identique depuis une archive ; le projet entier "
+         "s'exporte dans une archive .xihm, ou en page web.",
          {
              {K::Heading, "Exporter", {}},
-             {K::Paragraph, "**Exporter** \xC3\xA9" "crit une archive `.zip` avec un manifeste et l'empreinte "
-                         "SHA-256 de chaque fichier.", {}},
+             {K::Paragraph, "**Exporter** \xC3\xA9" "crit une archive avec un manifeste et l'empreinte SHA-256 "
+                         "de chaque fichier. Depuis la 1.12.30, c'est l'archive `.xihm` du **projet entier** "
+                         "- ressources, fichiers externes, \xC3\xA9quipements, simulation, versions -, comme "
+                         "**Projet \xE2\x80\xBA Exporter en archive .xihm\xE2\x80\xA6** (voir \xC2\xAB Le "
+                         "projet dans un seul fichier : l'archive .xihm \xC2\xBB) ; son rapport s'affiche "
+                         "ici : ses comptes, ses fichiers.", {}},
              {K::Heading, "Importer", {}},
              {K::Paragraph, "**Importer** v\xC3\xA9rifie l'archive (une archive retouch\xC3\xA9" "e ou "
                          "ab\xC3\xAEm\xC3\xA9" "e est refus\xC3\xA9" "e, et la raison est dite), "
                          "contr\xC3\xB4le les variables du programme, puis reconstruit l'IHM ; un seul "
-                         "Ctrl+Z revient en arri\xC3\xA8re.", {}},
+                         "Ctrl+Z revient en arri\xC3\xA8re. Il lit une archive `.xihm` comme l'ancienne "
+                         "`.zip` de l'IHM : seule son IHM est reprise, dans le projet ouvert. Pour ouvrir "
+                         "une archive comme un projet \xC3\xA0 part, avec tout ce qu'elle contient : "
+                         "**Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6**.", {}},
+             {K::Heading, "La page web", {}},
+             {K::Paragraph, "**Page web** \xC3\xA9" "crit l'IHM dans un seul fichier `.html`, qui s'ouvre dans "
+                         "un navigateur (voir \xC2\xAB L'IHM en page web : un seul .html \xC2\xBB).", {}},
              {K::Heading, "Quelques vues seulement", {}},
              {K::Paragraph, "Pour passer quelques vues, et ce dont elles ont besoin, d'un projet \xC3\xA0 "
                          "l'autre : IHM \xE2\x80\xBA Vues, **Exporter les vues\xE2\x80\xA6** et **Importer "
@@ -17896,10 +17907,134 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "**Dossier Word** et **Dossier PDF** \xC3\xA9" "crivent la documentation de l'IHM "
                          "(voir \xC2\xAB Le dossier de l'IHM \xC2\xBB).", {}},
          },
-         {"configuration", "verifier", "paquets-de-vues"},
+         {"configuration", "verifier", "paquets-de-vues", "archive-projet", "page-web"},
          {},
          {"echange"},
          {{"PNG_122_exporter_archive_dialogue.png", "Exporter l'IHM dans une archive."}, {"PNG_124_import_controle_coherence.png", "Importer : le contr\xC3\xB4le de coh\xC3\xA9rence."}},
+         "",
+         {},
+         "",
+         {}},
+        // ---- Tester et livrer  Livrer et exploiter / archive-projet
+        {"archive-projet", "Le projet dans un seul fichier : l'archive .xihm", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
+         "Projet \xE2\x80\xBA Exporter en archive .xihm\xE2\x80\xA6 met tout le projet dans un seul fichier "
+         "- les vues, les ressources de tout genre, les fichiers externes li\xC3\xA9s, les "
+         "\xC3\xA9quipements, la simulation, l'historique des objets, les versions. Il se rouvre \xC3\xA0 "
+         "l'identique : Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6, un double-clic sur le fichier, ou le fichier "
+         "l\xC3\xA2" "ch\xC3\xA9 sur la fen\xC3\xAAtre.",
+         {
+             {K::Heading, "L'\xC3\xA9" "crire", {}},
+             {K::Paragraph, "**Projet \xE2\x80\xBA Exporter en archive .xihm\xE2\x80\xA6** (ou le clic droit "
+                         "sur la racine de l'arbre du projet, ou IHM \xE2\x80\xBA Exporter / Importer, "
+                         "**Exporter**) : un seul fichier, par d\xC3\xA9" "faut dans le dossier `exports/` "
+                         "du projet. Deux choix : **les versions du projet** et **l'historique de marche** "
+                         "(alarmes, mesures, audit) - les joindre, ou les laisser. Le projet a des "
+                         "modifications non enregistr\xC3\xA9" "es ? La question d'abord : les enregistrer, "
+                         "ou prendre le projet tel qu'il est sur le disque. L'archive s'\xC3\xA9" "crit "
+                         "\xC3\xA0 c\xC3\xB4t\xC3\xA9 (la barre du haut la suit) ; la cloche dit o\xC3\xB9 "
+                         "elle est, et **Ouvrir le dossier** y m\xC3\xA8ne.", {}},
+             {K::Heading, "Ce qu'elle contient", {}},
+             {K::Table, "Dans l'archive\tCe que c'est\nLe projet\tla fiche, l'ic\xC3\xB4ne, la "
+                         "configuration, les vues, les popups, les mod\xC3\xA8les, les symboles, les styles, "
+                         "les th\xC3\xA8mes, les scripts, les fonctions, les variables, les alarmes, les "
+                         "recettes, les utilisateurs\nLes ressources\timages, polices, sons, vid\xC3\xA9os, "
+                         "documents : tous les genres\nLes fichiers externes\tceux du projet, et ceux "
+                         "li\xC3\xA9s hors du projet (rang\xC3\xA9s \xC3\xA0 part dans l'archive)\nLes "
+                         "\xC3\xA9quipements\tla communication, les \xC3\xA9quipements du r\xC3\xA9seau, les "
+                         "esclaves simul\xC3\xA9s\nLa simulation\tses r\xC3\xA9glages, ses sc\xC3\xA9narios, "
+                         "ses essais\nL'historique des objets\tqui a chang\xC3\xA9 quoi, objet par "
+                         "objet\nLes versions\tles versions du projet (au choix)\nL'historique de "
+                         "marche\talarmes, mesures, audit, m\xC3\xA9moire des r\xC3\xA9glages PID (au choix)", {}},
+             {K::Paragraph, "Ne sont pas pris : le cache de construction, `exports/` et la corbeille. Son "
+                         "**manifeste** dit l'application qui l'a \xC3\xA9" "crite et sa version, les "
+                         "comptes du projet (vues, objets, ressources, scripts, alarmes, "
+                         "versions\xE2\x80\xA6) et, pour chaque fichier, sa taille, sa date et son empreinte "
+                         "SHA-256.", {}},
+             {K::Heading, "L'ouvrir", {}},
+             {K::Paragraph, "**Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6** (un fichier `.xihm`), **Projet "
+                         "\xE2\x80\xBA Importer une archive\xE2\x80\xA6**, un **double-clic** sur le fichier "
+                         "(l'installation associe `.xihm` \xC3\xA0 IHM Studio : `IHM-Studio.exe "
+                         "chemin.xihm`), ou le fichier **l\xC3\xA2" "ch\xC3\xA9 sur la fen\xC3\xAAtre**. IHM "
+                         "Studio est d\xC3\xA9j\xC3\xA0 ouvert ? La demande lui passe, comme pour un projet. "
+                         "Puis :", {}},
+             {K::Step, "l'archive est relue, chaque fichier v\xC3\xA9rifi\xC3\xA9 (sa taille, son "
+                         "empreinte) ;", "1"},
+             {K::Step, "**o\xC3\xB9 la d\xC3\xA9" "baller** : par d\xC3\xA9" "faut le dossier des projets, "
+                         "sous son nom (\xC2\xAB Ligne_gaz (2) \xC2\xBB s'il est pris) - un dossier neuf, ou "
+                         "vide ;", "2"},
+             {K::Step, "le projet s'ouvre (le projet en m\xC3\xA9moire, s'il est modifi\xC3\xA9, se "
+                         "demande d'abord), et le contr\xC3\xB4le dit ce qu'il a retrouv\xC3\xA9 : chaque "
+                         "compte du manifeste, relu.", "3"},
+             {K::Paragraph, "Un fichier externe li\xC3\xA9 hors du projet revient dans le dossier `externes/` "
+                         "du projet, et le lien le suit - sauf si son fichier d'origine est l\xC3\xA0, "
+                         "intact : le lien d'origine reste.", {}},
+             {K::Heading, "Une archive ab\xC3\xAEm\xC3\xA9" "e, ou plus r\xC3\xA9" "cente", {}},
+             {K::Bullet, "**Ab\xC3\xAEm\xC3\xA9" "e** (une copie interrompue, un fichier "
+                         "alt\xC3\xA9r\xC3\xA9) : elle le dit, fichier par fichier ; **D\xC3\xA9" "baller ce "
+                         "qui est intact** ouvre le projet sans eux, et ce qui manque est dit.", {}},
+             {K::Bullet, "**\xC3\x89" "crite par une version plus r\xC3\xA9" "cente** d'IHM Studio : rien "
+                         "n'est d\xC3\xA9" "ball\xC3\xA9, mets IHM Studio \xC3\xA0 jour pour l'ouvrir.", {}},
+             {K::Bullet, "**L'archive d'un projet de l'automate** (`.xapi`) : elle s'ouvre avec API Studio. "
+                         "Un fichier qui n'est pas une archive : la raison est dite.", {}},
+             {K::Tip, "L'ancienne archive `.zip` de l'IHM (jusqu'\xC3\xA0 la 1.12.29) s'ouvre toujours.", {}},
+         },
+         {"echange", "page-web", "versions", "dossiers"},
+         {"archive", ".xihm", "xihm", "Exporter en archive .xihm", "Importer une archive", "Ouvrir l'archive", "D\xC3\xA9" "baller et ouvrir", "d\xC3\xA9" "baller", "D\xC3\xA9" "baller ce qui est intact", "archive ab\xC3\xAEm\xC3\xA9" "e", "version plus r\xC3\xA9" "cente", "manifeste", "manifeste.txt", "SHA-256", "empreinte", "transmettre un projet", "envoyer un projet", "IHM-Studio.exe", "double-clic", "_externes", ".zip"},
+         {},
+         {{"PNG_echanges_02_exporter_archive.png", "Projet \xE2\x80\xBA Exporter en archive .xihm\xE2\x80\xA6 : le fichier, les versions, l'historique de marche."}, {"PNG_echanges_04_ouvrir_archive.png", "Une archive \xC3\xA0 ouvrir : o\xC3\xB9 la d\xC3\xA9" "baller (le dossier des projets, sous son nom), puis le projet s'ouvre."}},
+         "",
+         {},
+         "",
+         {}},
+        // ---- Tester et livrer  Livrer et exploiter / page-web
+        {"page-web", "L'IHM en page web : un seul .html", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
+         "Projet \xE2\x80\xBA Exporter en page web (.html)\xE2\x80\xA6 \xC3\xA9" "crit l'IHM dans un seul "
+         "fichier, qui s'ouvre dans n'importe quel navigateur, sans Internet : chaque vue et chaque popup "
+         "dessin\xC3\xA9" "e comme dans IHM Studio, les boutons qui naviguent, les alarmes, les variables, "
+         "les scripts. Le projet entier est dans la page : Projet \xE2\x80\xBA Importer depuis une page "
+         "web\xE2\x80\xA6 le reconstruit \xC3\xA0 l'identique.",
+         {
+             {K::Heading, "L'\xC3\xA9" "crire", {}},
+             {K::Paragraph, "**Projet \xE2\x80\xBA Exporter en page web (.html)\xE2\x80\xA6** (ou le clic droit "
+                         "sur la racine de l'arbre du projet, ou IHM \xE2\x80\xBA Exporter / Importer, "
+                         "**Page web**) : par d\xC3\xA9" "faut `<dossier du projet>.html`, \xC3\xA0 "
+                         "c\xC3\xB4t\xC3\xA9 du dossier du projet. Les vues se dessinent entre deux images, "
+                         "le reste s'\xC3\xA9" "crit \xC3\xA0 c\xC3\xB4t\xC3\xA9 : l'application ne se fige "
+                         "pas ; la cloche dit o\xC3\xB9 est la page.", {}},
+             {K::Heading, "Ce qu'elle montre", {}},
+             {K::Table, "Dans la page\tCe qu'on y voit\nLes vues et les popups\tdessin\xC3\xA9" "es par le "
+                         "dessin d'IHM Studio, en vectoriel (nettes \xC3\xA0 tous les zooms, leurs textes se "
+                         "cherchent), au repos : une valeur affich\xC3\xA9" "e y est marqu\xC3\xA9" "e "
+                         "\xC2\xAB \xE2\x80\x94 \xC2\xBB\nLa navigation\tun bouton ou une zone qui ouvre une "
+                         "vue ou une popup se clique ; Pr\xC3\xA9" "c\xC3\xA9" "dent et Fermer la popup "
+                         "aussi ; le menu de gauche liste les vues et les popups ; la vue de "
+                         "d\xC3\xA9marrage s'ouvre d'abord\nLes alarmes\tchaque alarme : sa priorit\xC3\xA9, "
+                         "sa cat\xC3\xA9gorie, son groupe, sa condition, son message, sa consigne\nLes "
+                         "variables IHM\tleur type, leur valeur initiale, leur \xC3\xA9quipement et leur "
+                         "adresse\nLes scripts et les fonctions\tleur code color\xC3\xA9, en lecture\nLa "
+                         "fiche du projet\tce qu'il contient, sa version, son auteur, ses dates, sa "
+                         "r\xC3\xA9solution ; **T\xC3\xA9l\xC3\xA9" "charger le projet**", {}},
+             {K::Paragraph, "Aucun lien vers Internet : elle se lit hors ligne, s'envoie par courriel, se range "
+                         "avec la documentation.", {}},
+             {K::Heading, "\xC3\x80 chaque enregistrement", {}},
+             {K::Paragraph, "**Mettre \xC3\xA0 jour la page web \xC3\xA0 chaque enregistrement** (dans la "
+                         "fen\xC3\xAAtre Exporter en page web) : \xC3\xA0 chaque Ctrl+S, la page se "
+                         "r\xC3\xA9\xC3\xA9" "crit toute seule, au m\xC3\xAAme endroit, sans ralentir "
+                         "l'enregistrement ; la barre d'\xC3\xA9tat dit \xC2\xAB Page web mise \xC3\xA0 jour "
+                         "\xC2\xBB. Le choix est gard\xC3\xA9 dans la fiche du projet.", {}},
+             {K::Heading, "La r\xC3\xA9importer", {}},
+             {K::Paragraph, "**Projet \xE2\x80\xBA Importer depuis une page web\xE2\x80\xA6** (ou **Projet "
+                         "\xE2\x80\xBA Ouvrir\xE2\x80\xA6** sur le `.html`, ou la page "
+                         "l\xC3\xA2" "ch\xC3\xA9" "e sur la fen\xC3\xAAtre) : le projet que porte la page "
+                         "est d\xC3\xA9" "ball\xC3\xA9, o\xC3\xB9 tu veux, puis il s'ouvre - \xC3\xA0 "
+                         "l'identique, comme une archive .xihm. Une page qu'une autre application a "
+                         "\xC3\xA9" "crite est refus\xC3\xA9" "e : \xC2\xAB cette page n'a pas "
+                         "\xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio ni par API Studio \xC2\xBB.", {}},
+         },
+         {"archive-projet", "echange", "dossier"},
+         {"page web", "HTML", ".html", "navigateur", "Exporter en page web", "Importer depuis une page web", "Mettre \xC3\xA0 jour la page web \xC3\xA0 chaque enregistrement", "hors ligne", "sans Internet", "SVG", "T\xC3\xA9l\xC3\xA9" "charger le projet", "cette page n'a pas \xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio"},
+         {},
+         {{"PNG_echanges_05_page_web_ihm.png", "La page web de l'IHM dans un navigateur : le menu des vues, la vue de d\xC3\xA9marrage dessin\xC3\xA9" "e, ses boutons cliquables."}, {"PNG_echanges_06_page_web_navigation.png", "Un clic sur un bouton de navigation : sa vue s'ouvre ; Pr\xC3\xA9" "c\xC3\xA9" "dent revient."}},
          "",
          {},
          "",
@@ -18685,6 +18820,53 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.10"},
+        // ---- L'automate (API) / echanges-api
+        {"echanges-api", "Le projet de l'automate dans un seul fichier (.xapi) et en page web", "L'automate (API)",
+         "API Studio met tout le projet de l'automate dans un seul fichier .xapi - le programme, les ladders "
+         "et les GRAFCET gard\xC3\xA9s tels quels, la configuration, les versions, les macros -, et "
+         "l'\xC3\xA9" "crit en page web (.html) : le programme lisible dans un navigateur, avec le projet "
+         "dedans. Les deux se rouvrent \xC3\xA0 l'identique.",
+         {
+             {K::Heading, "L'archive .xapi", {}},
+             {K::Paragraph, "**Projet \xE2\x80\xBA Exporter en archive .xapi\xE2\x80\xA6** (ou le clic droit "
+                         "sur la racine de l'arbre) : la fiche du projet, les sections (ST, ladders, FBD, "
+                         "GRAFCET, gard\xC3\xA9s tels quels), les unit\xC3\xA9s de programme, les DFB, les "
+                         "DDT, les variables, les t\xC3\xA2" "ches, la configuration, les tables "
+                         "d'animation, l'ic\xC3\xB4ne, les donn\xC3\xA9" "es, la disposition des grafcets "
+                         "(le fichier `.xpglayout` d'\xC3\xA0 c\xC3\xB4t\xC3\xA9) ; au choix, les "
+                         "**versions**, l'**historique** et les **macros** de la biblioth\xC3\xA8que. Le "
+                         "manifeste compte les sections, les unit\xC3\xA9s, les DFB, les DDT, les variables "
+                         "globales, les t\xC3\xA2" "ches, les modules, les tables et les versions, et garde "
+                         "l'empreinte SHA-256 de chaque fichier.", {}},
+             {K::Heading, "L'ouvrir", {}},
+             {K::Paragraph, "**Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6** sur un `.xapi`, **Projet \xE2\x80\xBA "
+                         "Importer une archive\xE2\x80\xA6**, un double-clic (`API-Studio.exe chemin.xapi`), "
+                         "ou le fichier l\xC3\xA2" "ch\xC3\xA9 sur la fen\xC3\xAAtre : o\xC3\xB9 la "
+                         "d\xC3\xA9" "baller (par d\xC3\xA9" "faut le dossier des projets, sous son nom), "
+                         "puis le projet s'ouvre et chaque compte est relu. Une macro de l'archive qui "
+                         "manque \xC3\xA0 ta biblioth\xC3\xA8que y est ajout\xC3\xA9" "e ; une macro que tu "
+                         "as d\xC3\xA9j\xC3\xA0 n'est pas remplac\xC3\xA9" "e. Une archive "
+                         "ab\xC3\xAEm\xC3\xA9" "e, plus r\xC3\xA9" "cente, ou d'un projet IHM (`.xihm`) : la "
+                         "raison est dite.", {}},
+             {K::Heading, "La page web", {}},
+             {K::Paragraph, "**Projet \xE2\x80\xBA Exporter en page web (.html)\xE2\x80\xA6** : un seul "
+                         "fichier, sans Internet - la fiche, la configuration, les t\xC3\xA2" "ches et "
+                         "l'ordre d'ex\xC3\xA9" "cution, chaque section et son code (un ladder, un FBD ou un "
+                         "GRAFCET : sa lecture en texte), les unit\xC3\xA9s, les DFB, les types "
+                         "d\xC3\xA9riv\xC3\xA9s, les variables, avec un filtre sur les tableaux. **Mettre "
+                         "\xC3\xA0 jour la page web \xC3\xA0 chaque enregistrement** la "
+                         "r\xC3\xA9\xC3\xA9" "crit \xC3\xA0 chaque Ctrl+S. **Projet \xE2\x80\xBA Importer "
+                         "depuis une page web\xE2\x80\xA6** (ou Ouvrir\xE2\x80\xA6 sur le `.html`) "
+                         "reconstruit le projet qu'elle porte.", {}},
+         },
+         {"archive-projet", "page-web", "grafcet"},
+         {"archive", ".xapi", "xapi", "Exporter en archive .xapi", "Importer une archive", "page web", "HTML", ".html", "Exporter en page web", "Importer depuis une page web", "Mettre \xC3\xA0 jour la page web \xC3\xA0 chaque enregistrement", "API-Studio.exe", "manifeste", "SHA-256", "macros", ".xpglayout"},
+         {},
+         {{"PNG_echanges_03_exporter_xapi.png", "Projet \xE2\x80\xBA Exporter en archive .xapi\xE2\x80\xA6 : le fichier, les versions, l'historique, les macros."}, {"PNG_echanges_07_page_web_api.png", "La page web du programme : les t\xC3\xA2" "ches et l'ordre d'ex\xC3\xA9" "cution, chaque section et son code."}},
+         "",
+         {},
+         "",
+         {}},
     };
     // 1.12.2 : XPGAnalyser IHM n'a pas d'automate - ses mots (HmiGuide.cpp, ihmWorded).
     if (core::hasApi()) return all;

@@ -129,6 +129,14 @@ void tell(App& app, std::string title, std::string text, MessageDialog::Icon ico
     app.menus().ShowDialog(std::make_unique<MessageDialog>(std::move(title), std::move(text), icon), [](const menu::DialogResult&) {});
 }
 
+// F1 dans un dialogue : son sujet du centre d'aide (API Studio : celui de l'automate).
+void helpOn(App& app, FormDialog& dialog, const char* ihmTopic) {
+    dialog.setHelp([&app, topic = std::string(core::hasApi() ? "echanges-api" : ihmTopic)] {
+        app.setHelpTopic(topic);
+        app.menus().PushMenu(core::hasApi() ? "help" : "help.hmi");
+    });
+}
+
 std::string listed(const std::vector<std::string>& items, std::size_t max = 6) {
     std::string out;
     for (std::size_t i = 0; i < items.size(); ++i) {
@@ -272,6 +280,7 @@ void finishWeb() {
     };
     auto out = std::make_shared<Out>();
     run("Page web", [j, out] {
+        out->error = "l'\xC3\xA9" "criture s'est interrompue";      // ce qui reste si rien ne la remplace
         pa::Bytes zip;
         if (!j->api) {
             hmi::ProjectArchiveOptions o;
@@ -319,6 +328,7 @@ void finishWeb() {
             out->error = errorText(st.error());
             return;
         }
+        out->error.clear();
         out->bytes = html.size();
     }, [j, out](App& app) {
         webWriting() = false;
@@ -367,6 +377,7 @@ void unpackAndOpen(std::shared_ptr<pa::Contents> contents, const std::string& so
     };
     auto out = std::make_shared<Out>();
     run("Ouverture de l'archive", [contents, folder, skipDamaged, api, out] {
+        out->error = "le d\xC3\xA9" "ballage s'est interrompu";
         if (api) {
             pa::UnpackOptions uo;
             uo.skipDamaged = skipDamaged;
@@ -437,6 +448,7 @@ void askWhere(App& app, std::shared_ptr<pa::Contents> c, const std::string& sour
     auto dialog = std::make_unique<FormDialog>(c->fromPage ? "dialog.webOpen" : "dialog.archiveOpen",
                                                c->fromPage ? "Importer depuis une page web" : "Ouvrir l'archive", text, std::move(fields),
                                                "D\xC3\xA9" "baller et ouvrir");
+    helpOn(app, *dialog, c->fromPage ? "page-web" : "archive-projet");
     dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
         field = 0;
         const std::string folder = v.empty() ? std::string{} : trimmed(v[0]);
@@ -518,6 +530,7 @@ void askFile(App& app, bool page) {
                                      : (api ? "Archives API Studio (.xapi)|*.xapi" : "Archives IHM Studio (.xihm)|*.xihm;*.zip");
     const std::string title = page ? "Importer depuis une page web" : "Importer une archive";
     auto dialog = std::make_unique<FormDialog>(page ? "dialog.exchangeImportWeb" : "dialog.exchangeImport", title, text, std::move(fields), "Ouvrir");
+    helpOn(app, *dialog, page ? "page-web" : "archive-projet");
     dialog->setValidator([page](const std::vector<std::string>& v, std::size_t& field) -> std::string {
         field = 0;
         const std::string path = v.empty() ? std::string{} : trimmed(v[0]);
@@ -573,6 +586,7 @@ void askExportArchive(App& app) {
         auto dialog = std::make_unique<FormDialog>(
             "dialog.exchangeArchive", title, text + " Ne sont pas pris : le cache de construction, exports/ et la corbeille.", std::move(fields),
             "Exporter");
+        helpOn(app, *dialog, "archive-projet");
         dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
             field = 0;
             return v.empty() || trimmed(v[0]).empty() ? "O\xC3\xB9 \xC3\xA9" "crire l'archive ?" : std::string{};
@@ -597,6 +611,7 @@ void askExportArchive(App& app) {
                 };
                 auto out = std::make_shared<Out>();
                 run("Archive du projet", [out, api, folder, path, withVersions, withHistory, withMacros] {
+                    out->error = "l'\xC3\xA9" "criture s'est interrompue";
                     std::error_code ec;
                     fs::create_directories(fs::path(path).parent_path(), ec);
                     if (api) {
@@ -607,12 +622,14 @@ void askExportArchive(App& app) {
                         o.libraryRoot = project::SharedLibrary::defaultRoot();
                         o.tool = toolName();
                         if (auto st = pa::exportApiArchive(folder, path, o, &out->api); !st) out->error = errorText(st.error());
+                        else out->error.clear();
                     } else {
                         hmi::ProjectArchiveOptions o;
                         o.versions = withVersions;
                         o.history = withHistory;
                         o.tool = toolName();
                         if (auto st = hmi::exportProjectArchive(folder, path, o, &out->hmi); !st) out->error = errorText(st.error());
+                        else out->error.clear();
                     }
                 }, [out, api, path](App& a) {
                     if (!out->error.empty()) {
@@ -663,6 +680,7 @@ void askExportWeb(App& app) {
             text + "\n\n\xC3\x80 chaque enregistrement (Oui) : la page se r\xC3\xA9\xC3\xA9" "crit toute seule, \xC3\xA0 cet endroit, sans ralentir "
                    "l'enregistrement.",
             std::move(fields), "\xC3\x89" "crire la page");
+        helpOn(app, *dialog, "page-web");
         dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
             field = 0;
             return v.empty() || trimmed(v[0]).empty() ? "O\xC3\xB9 \xC3\xA9" "crire la page ?" : std::string{};
@@ -721,6 +739,7 @@ bool openArchive(App& app, const std::string& path) {
     auto read = std::make_shared<Read>();
     say(app, "Lecture de " + leafOf(path) + "\xE2\x80\xA6", 4.0);
     run("Lecture de l'archive", [read, path] {
+        read->error = "la lecture s'est interrompue";
         auto c = pa::readFile(path);
         if (c) read->contents = std::make_shared<pa::Contents>(std::move(*c));
         else read->error = errorText(c.error());

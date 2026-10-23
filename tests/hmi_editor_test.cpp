@@ -8,6 +8,7 @@
 //  d'annulation.
 // =============================================================================
 #include "../src/app/ViewModels.hpp"
+#include "../third_party/miniz.h"   // 1.12.30 : une archive retouchee comme par un outil zip
 #include "../src/help/CenterIndex.hpp"        // 1.11 (T2)
 #include "../src/platform/AtlasSymbols.hpp"    // 1.11.2 (T2, decision 155) : la garde des glyphes, en-tete seul
 #include "../src/help/F1Table.hpp"            // 1.11 (T2, tranche 16) : la table de F1
@@ -3278,6 +3279,33 @@ void volet_echange() {
         std::ifstream f(zip, std::ios::binary);
         bytes.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     }
+    // 1.12.30 : l'archive compresse ses fichiers texte. La retouche se fait sur une copie
+    // refaite comme par un outil zip, ihm/ihm.txt range tel quel (sans compression) : ses
+    // octets se lisent, et se changent.
+    {
+        mz_zip_archive in{}, out{};
+        bool made = mz_zip_reader_init_mem(&in, bytes.data(), bytes.size(), 0) && mz_zip_writer_init_heap(&out, 0, 0);
+        for (mz_uint i = 0; made && i < mz_zip_reader_get_num_files(&in); ++i) {
+            mz_zip_archive_file_stat st;
+            if (!mz_zip_reader_file_stat(&in, i, &st)) { made = false; break; }
+            if (std::string(st.m_filename) == "ihm/ihm.txt") {
+                std::size_t n = 0;
+                void* data = mz_zip_reader_extract_to_heap(&in, i, &n, 0);
+                made = data && mz_zip_writer_add_mem(&out, st.m_filename, data, n, MZ_NO_COMPRESSION);
+                mz_free(data);
+            } else {
+                made = mz_zip_writer_add_from_zip_reader(&out, &in, i);
+            }
+        }
+        void* buf = nullptr;
+        std::size_t len = 0;
+        if (made && mz_zip_writer_finalize_heap_archive(&out, &buf, &len)) bytes.assign(static_cast<const char*>(buf), len);
+        else made = false;
+        mz_free(buf);
+        mz_zip_writer_end(&out);
+        mz_zip_reader_end(&in);
+        check(made, "la copie de l'archive, ihm/ihm.txt sans compression");
+    }
     const auto retouched = [&](bool fixCrc) {
         std::string zb = bytes;
         const auto header = zb.find(std::string("PK\x03\x04"));
@@ -3286,7 +3314,15 @@ void volet_echange() {
         if (local == std::string::npos) return std::string{};
         const auto u16 = [&](std::size_t at) { return static_cast<std::size_t>(static_cast<unsigned char>(zb[at]) | (static_cast<unsigned char>(zb[at + 1]) << 8)); };
         const auto u32 = [&](std::size_t at) { return u16(at) | (u16(at + 2) << 16); };
-        const std::size_t size = u32(local + 18), data = local + 30 + u16(local + 26) + u16(local + 28);
+        // L'entree du repertoire central (signature PK\1\2) de ce fichier.
+        std::size_t central = std::string::npos;
+        for (auto cd = zb.find(std::string("PK\x01\x02")); cd != std::string::npos; cd = zb.find(std::string("PK\x01\x02"), cd + 4))
+            if (zb.compare(cd + 46, 11, "ihm/ihm.txt") == 0) central = cd;
+        // 1.12.30 : le bit 3 (un outil zip comme miniz) - la taille et le CRC suivent les donnees,
+        // l'en-tete local les laisse a zero ; le repertoire central les a.
+        const bool descriptor = (u16(local + 6) & 0x8u) != 0;
+        const std::size_t data = local + 30 + u16(local + 26) + u16(local + 28);
+        const std::size_t size = descriptor && central != std::string::npos ? u32(central + 20) : u32(local + 18);
         const auto at = zb.find("Niveau_Haut", data);
         if (at == std::string::npos || at >= data + size) return std::string{};
         zb.replace(at, 11, "Niveau_Bass");
@@ -3298,10 +3334,9 @@ void volet_echange() {
             }
             crc = ~crc;
             const auto put = [&](std::size_t pos) { for (int k = 0; k < 4; ++k) zb[pos + k] = static_cast<char>((crc >> (8 * k)) & 0xFF); };
-            put(local + 14);
-            // L'entree du repertoire central (signature PK\1\2) de ce fichier.
-            for (auto cd = zb.find(std::string("PK\x01\x02")); cd != std::string::npos; cd = zb.find(std::string("PK\x01\x02"), cd + 4))
-                if (zb.compare(cd + 46, 11, "ihm/ihm.txt") == 0) put(cd + 16);
+            if (!descriptor) put(local + 14);
+            else if (zb.compare(data + size, 4, std::string("PK\x07\x08")) == 0) put(data + size + 4);
+            if (central != std::string::npos) put(central + 16);
         }
         return zb;
     };
@@ -18671,14 +18706,15 @@ void centreAide111() {
     // 1.12.27 : + Plusieurs fenetres ; l'aide rangee : les 4 nouveautes partent dans leur chapitre (L'IHM),
     // les raccourcis clavier y viennent de Tester et livrer (Demarrer 21 : 14 du guide + 7 de l'API).
     // 1.12.28 : le didacticiel dans l'aide - Demarrer > Le didacticiel, sa page et les 6 des parcours (27).
-    check(ix.count(hc::Chapter::Start) == 27 && ix.count(hc::Chapter::Plc) == 16,
-          "centre : Demarrer 27 (les gestes de base, 1.12.27 ; Le didacticiel, 1.12.28) et L'automate 16");
+    // 1.12.30 : L'automate gagne echanges-api (l'archive .xapi et la page web du programme) : 17.
+    check(ix.count(hc::Chapter::Start) == 27 && ix.count(hc::Chapter::Plc) == 17,
+          "centre : Demarrer 27 (les gestes de base, 1.12.27 ; Le didacticiel, 1.12.28) et L'automate 17 (1.12.30 : echanges-api)");
     check(ix.find("api-dossiers") && ix.find("dossiers") && ix.find("api-alarmes") && ix.find("alarmes"),
           "centre : api-dossiers et dossiers, api-alarmes et alarmes, sans collision");
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 218, "centre : L'IHM a les 218 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis)");
+    check(ix.count(hc::Chapter::Hmi) == 220, "centre : L'IHM a les 220 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : archive-projet, page-web)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 62, "centre : 11 expressions, 62 notes (1.12.29)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
