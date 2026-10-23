@@ -53,6 +53,7 @@ bool valueAt(const HmiQuickTrend::Series& s, double t, double& out) {
 
 HmiQuickTrend::HmiQuickTrend(std::string id, std::vector<std::string> paths, Source source)
     : ui::Widget(std::move(id)), source_(std::move(source)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     for (const auto& p : paths) (void)addVariable(p);
 }
 

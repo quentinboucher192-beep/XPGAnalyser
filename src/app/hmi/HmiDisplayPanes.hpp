@@ -75,6 +75,7 @@ public:
         std::function<void()>                                         askImport;    // demander le fichier
         std::function<void()>                                         askAdd;       // demander la langue
         std::function<void(const std::string& code)>                  tryIt;        // la simulation dans cette langue
+        std::function<void()>                                         sideBySide;   // 1.12.30 : les langues cote a cote
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
 

@@ -89,7 +89,9 @@ std::vector<std::string> wrap(gfx::IRenderer& r, std::string_view text,
 
 } // namespace
 
-HelpView::HelpView(std::string id) : Widget(std::move(id)) {}
+HelpView::HelpView(std::string id) : Widget(std::move(id)) {
+    setZoomSupport(ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page (Widget.hpp)
+}
 
 void HelpView::setDocument(std::shared_ptr<const HelpDocument> doc) {
     doc_ = std::move(doc);

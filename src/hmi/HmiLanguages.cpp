@@ -328,6 +328,80 @@ View translatedView(const View& v, const Languages& l, std::string_view code) {
     return out;
 }
 
+// ======================================================= 1.12.30 : pseudo ===
+namespace {
+
+// Une ligne allongee de 40 % : les lettres accentuees, les trous {...} gardes, des
+// lettres en plus a la fin, entre crochets.
+std::string pseudoLine(std::string_view line) {
+    std::string out = "[";
+    std::size_t visible = 0;
+    int depth = 0;
+    for (std::size_t i = 0; i < line.size(); ++i) {
+        const char ch = line[i];
+        if (ch == '{') ++depth;
+        if (depth > 0) {
+            out += ch;
+            if (ch == '}') --depth;
+            continue;
+        }
+        const auto u = static_cast<unsigned char>(ch);
+        if (u >= 0x80) {                      // un caractere deja accentue : tel quel
+            out += ch;
+            if ((u & 0xC0) != 0x80) ++visible;
+            continue;
+        }
+        ++visible;
+        switch (ch) {
+            case 'a': out += "\xC3\xA1"; break;   case 'A': out += "\xC3\x81"; break;
+            case 'e': out += "\xC3\xA9"; break;   case 'E': out += "\xC3\x89"; break;
+            case 'i': out += "\xC3\xAD"; break;   case 'I': out += "\xC3\x8D"; break;
+            case 'o': out += "\xC3\xB3"; break;   case 'O': out += "\xC3\x93"; break;
+            case 'u': out += "\xC3\xBA"; break;   case 'U': out += "\xC3\x9A"; break;
+            case 'c': out += "\xC3\xA7"; break;   case 'C': out += "\xC3\x87"; break;
+            case 'n': out += "\xC3\xB1"; break;   case 'N': out += "\xC3\x91"; break;
+            case 'y': out += "\xC3\xBD"; break;   case 'Y': out += "\xC3\x9D"; break;
+            default: out += ch; break;
+        }
+    }
+    // +40 % de caracteres : les deux crochets, puis des lettres (largeur moyenne).
+    static const char* const kPad[] = {"\xC3\xA0", "\xC3\xA9", "\xC3\xAE", "\xC3\xB5", "\xC3\xBC"};
+    const std::size_t extra = (visible * 4 + 9) / 10;
+    std::size_t pad = extra > 2 ? extra - 2 : 0;
+    if (pad > 0) out += ' ';
+    for (std::size_t k = 0; k + 1 < pad; ++k) out += kPad[k % 5];
+    out += ']';
+    return out;
+}
+
+} // namespace
+
+std::string pseudoText(std::string_view source) {
+    if (source.empty()) return {};
+    // Ligne par ligne (un vrai retour, ou "\n" ecrit dans le texte).
+    std::string out;
+    std::size_t start = 0;
+    for (std::size_t i = 0; i <= source.size(); ++i) {
+        const bool real = i < source.size() && source[i] == '\n';
+        const bool escaped = i + 1 < source.size() && source[i] == '\\' && source[i + 1] == 'n';
+        if (i < source.size() && !real && !escaped) continue;
+        out += pseudoLine(source.substr(start, i - start));
+        if (real) { out += '\n'; start = i + 1; }
+        else if (escaped) { out += "\\n"; start = i + 2; ++i; }
+        else break;
+    }
+    return out;
+}
+
+std::string pseudoName() { return "Pseudo (+40 %)"; }
+
+Languages withPseudo(const Project& p) {
+    Languages l = p.languages;
+    l.list.push_back({std::string(kPseudoCode), pseudoName()});
+    for (const auto& t : translatableTexts(p)) l.texts[t.source][std::string(kPseudoCode)] = pseudoText(t.source);
+    return l;
+}
+
 // ================================================================ langues ===
 std::string languageName(std::string_view code) {
     for (const auto& k : kKnownNames) if (iequal(k.code, code)) return std::string(k.name);

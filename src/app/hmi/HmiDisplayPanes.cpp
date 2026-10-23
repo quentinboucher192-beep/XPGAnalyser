@@ -29,7 +29,7 @@ using namespace hmikit;
 
 namespace {
 
-enum : int { TAdd = 1, TRemove, TStart, TMissing, TExport, TImport, TTry };
+enum : int { TAdd = 1, TRemove, TStart, TMissing, TExport, TImport, TTry, TSide };
 
 std::string upperCode(std::string s) {
     for (auto& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
@@ -70,7 +70,12 @@ HmiLanguagesPane::HmiLanguagesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(TImport, HmiGlyph::Import, "Importer les traductions d'un classeur Excel (le tableau export\xC3\xA9, rempli)", "Importer (Excel)");
     tools->separator();
     tools->add(TTry, HmiGlyph::View, "Essayer : la simulation s'ouvre dans la langue choisie", "Essayer");
+    // 1.12.30 : la vue dans chaque langue, cote a cote, les debordements entoures.
+    tools->add(TSide, HmiGlyph::LanguagesSide,
+               "Langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te : une vue dans chaque langue, les textes qui d\xC3\xA9" "bordent entour\xC3\xA9s",
+               "C\xC3\xB4te \xC3\xA0 c\xC3\xB4te");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
+    tools_->setEnabledWhen(TSide, [this] { return static_cast<bool>(hosts_.sideBySide); });
     tools_->setEnabledWhen(TRemove, [this] {
         const auto code = selectedLanguage();
         return !code.empty() && !same(code, doc_->project.languages.source());
@@ -107,6 +112,9 @@ HmiLanguagesPane::HmiLanguagesPane(std::string id, hmi::DocumentPtr doc, Apply a
             case TImport:
                 if (hosts_.askImport) hosts_.askImport();
                 else say("Importer : le chemin du classeur est demand\xC3\xA9 par l'application.", true);
+                break;
+            case TSide:
+                if (hosts_.sideBySide) hosts_.sideBySide();
                 break;
             case TTry:
                 if (!code.empty() && hosts_.tryIt) {

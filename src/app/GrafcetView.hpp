@@ -70,8 +70,11 @@ namespace app {
         // Les controles du grafcet, montres sur le dessin (cadre rouge + raison).
         void setChecks(std::vector<grafcet::Check> checks);
 
-        void setZoom(float zoom);
-        [[nodiscard]] float zoom() const noexcept { return zoom_; }
+        // 1.12.30 : un zoom Native (le contrat de Widget), de 30 a 300 %.
+        void setZoom(float zoom) override;
+        [[nodiscard]] float zoom() const noexcept override { return zoom_; }
+        [[nodiscard]] float minZoom() const override { return 0.3f; }
+        [[nodiscard]] float maxZoom() const override { return 3.f; }
         // Tout le grafcet dans la fenetre (Ajuster).
         void fit();
         // Amene un element au milieu de la vue (recherche, liste, controle).

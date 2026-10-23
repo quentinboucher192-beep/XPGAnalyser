@@ -103,6 +103,7 @@ ui::Key keyFrom(SDL_Keycode k) {
         case SDLK_DOLLAR:    return ui::Key::Dollar;
         case SDLK_SEMICOLON: return ui::Key::Semicolon;
         case SDLK_APPLICATION: case SDLK_MENU: return ui::Key::Menu;   // 1.12.18
+        case SDLK_PLUS: case SDLK_EQUALS: case SDLK_KP_PLUS: return ui::Key::Plus;   // 1.12.30 : le zoom
         default:             return ui::Key::Unknown;
     }
 }

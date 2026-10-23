@@ -198,6 +198,7 @@ std::string simText(const NetDiagram::Equip& e) {
 } // namespace
 
 HmiNetDiagram::HmiNetDiagram(std::string id) : ui::Widget(std::move(id)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     setFocusPolicy(true);           // lot 17 : Suppr, Echap (un glisser)
 }
 

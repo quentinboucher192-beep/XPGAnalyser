@@ -109,6 +109,32 @@ namespace ui {
         bool      hadPrevious_;
     };
 
+    // 1.12.30 : LA MESURE DU TEXTE PENDANT UNE MISE EN PAGE ZOOMEE. Un widget
+    // zoome (ZoomSupport::Scaled) se met en page dans son repere agrandi :
+    // measureWidth() et lineHeight() y rendent la mesure de la police a la
+    // taille dessinee, ramenee a ce repere - la meme que celle du dessin
+    // (ui/Zoom.hpp, ZoomRenderer). Les portees s'imbriquent (les zooms se
+    // multiplient) ; la sortie rend la precedente.
+    class MeasureZoomScope {
+    public:
+        explicit MeasureZoomScope(float factor) noexcept;
+        ~MeasureZoomScope();
+        MeasureZoomScope(const MeasureZoomScope&) = delete;
+        MeasureZoomScope& operator=(const MeasureZoomScope&) = delete;
+    private:
+        float previous_;
+    };
+    [[nodiscard]] float measureZoom() noexcept;       // 1 : pas de zoom en cours
+    // La police a la taille dessinee sous un zoom (6 px au moins).
+    [[nodiscard]] gfx::FontId zoomedFont(gfx::FontId font, float factor) noexcept;
+
+    // 1.12.30 : CE QU'UN WIDGET SAIT DU ZOOM (voir Widget, "le contrat du zoom").
+    enum class ZoomSupport : std::uint8_t {
+        None,     // pas de zoom (le defaut)
+        Scaled,   // la base le zoome : mis en page dans un repere agrandi, dessine a l'echelle
+        Native,   // il zoome lui-meme (un canevas, un grafcet, un code, le rack) : zoom(), setZoom()
+    };
+
     // What a widget wants; the parent layout arbitrates.
     struct SizeHint {
         gfx::Size preferred{};
@@ -239,6 +265,44 @@ namespace ui {
         // tooltip on a cell should beat one on the panel that contains it.
         [[nodiscard]] const Widget* tooltipAt(gfx::Point p) const;
 
+        // --- 1.12.30 : LE CONTRAT DU ZOOM ---------------------------------------
+        //  zoomSupport() dit si le widget se zoome. Scaled : la BASE s'en charge -
+        //  le widget et ses enfants sont mis en page dans un repere agrandi (ses
+        //  bornes divisees par le zoom, le coin haut-gauche ne bouge pas), puis
+        //  dessines a l'echelle : le texte, la hauteur des lignes, les marges, les
+        //  icones et les barres de defilement suivent, sans rien changer a leur
+        //  code ; les evenements leur arrivent dans ce repere. Native : le widget
+        //  zoome lui-meme et redefinit zoom() / setZoom() (et ses bornes).
+        //  A 100 %, rien ne change : ni repere, ni renderer.
+        //  Ctrl + molette sur un widget Scaled (hors d'un widget Native) demande un
+        //  cran (setZoomRequestHandler : l'appli zoome la page entiere).
+        [[nodiscard]] ZoomSupport zoomSupport() const noexcept { return zoomSupport_; }
+        [[nodiscard]] bool zoomable() const noexcept { return zoomSupport_ != ZoomSupport::None; }
+        void setZoomSupport(ZoomSupport s);
+        [[nodiscard]] virtual float zoom() const { return zoomFactor_; }
+        virtual void setZoom(float zoom);
+        [[nodiscard]] virtual float minZoom() const { return 0.5f; }
+        [[nodiscard]] virtual float maxZoom() const { return 2.f; }
+        //  Le cadre donne par le parent (dans SON repere) : bounds() a 100 %.
+        [[nodiscard]] gfx::Rect zoomFrame() const noexcept { return frame_; }
+        //  Un point (un cadre) du repere de ce widget vers celui de la surface - les
+        //  widgets zoomes au-dessus de lui compris - et l'inverse. Un signal qui
+        //  donne une position (un menu a ouvrir) la donne dans la surface.
+        [[nodiscard]] gfx::Point toSurface(gfx::Point own) const noexcept;
+        [[nodiscard]] gfx::Rect  toSurface(const gfx::Rect& own) const noexcept;
+        [[nodiscard]] gfx::Point fromSurface(gfx::Point surface) const noexcept;
+        [[nodiscard]] float      surfaceScale() const noexcept;        // le produit des zooms (1 : aucun)
+        //  Un evenement venu de la surface (l'hote : une liste ouverte, un menu)
+        //  pour ce widget, ramene au repere de son parent.
+        EventResult dispatchFromSurface(const InputEvent& ev);
+        //  L'infobulle du moment, la souris donnee dans la surface.
+        [[nodiscard]] std::string liveTooltipAt(gfx::Point surfaceMouse) const;
+        //  Ce que fait Ctrl + molette sur un widget Scaled : `step` +1 / -1. Sans
+        //  hote (les essais), le widget zoome seul, d'un cran.
+        using ZoomRequest = std::function<void(Widget&, int step)>;
+        static void setZoomRequestHandler(ZoomRequest handler);
+        static void requestZoomStep(Widget& w, int step);
+
         // --- signals ----------------------------------------------------------
         const core::SignalPtr<>      focusGained = core::Signal<>::create();
         const core::SignalPtr<>      focusLost = core::Signal<>::create();
@@ -265,8 +329,18 @@ namespace ui {
         friend class WidgetHost;
         void setHovered(bool h);
         void setFocusedInternal(bool f);
+        // 1.12.30 : le zoom. Vrai : un repere agrandi (Scaled, zoom different de 1).
+        [[nodiscard]] bool scaledNow() const noexcept { return zoomSupport_ == ZoomSupport::Scaled && zoomFactor_ != 1.f; }
+        [[nodiscard]] gfx::Point toParentSpace(gfx::Point own) const noexcept;    // le repere du parent
+        [[nodiscard]] gfx::Point fromParentSpace(gfx::Point outer) const noexcept;
+        [[nodiscard]] gfx::Rect  outerEventBounds() const;                        // eventBounds(), dans le repere du parent
+        [[nodiscard]] bool       nativeZoomAt(gfx::Point own) const;              // un widget Native sous ce point ?
+        EventResult dispatchOwn(const InputEvent& ev, const gfx::Point* p, bool inside);
 
         std::string             id_;
+        gfx::Rect               frame_{};     // 1.12.30 : le cadre donne par le parent
+        float                   zoomFactor_{ 1.f };
+        ZoomSupport             zoomSupport_{ ZoomSupport::None };
         gfx::Rect               bounds_{};
         gfx::Edges              padding_{};
         Visibility              visibility_{ Visibility::Visible };

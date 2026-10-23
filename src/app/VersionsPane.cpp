@@ -376,6 +376,7 @@ private:
 
 // ---- le volet ----------------------------------------------------------------------
 VersionsPane::VersionsPane(std::string id, std::string folder) : ui::Widget(std::move(id)), folder_(std::move(folder)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
     tools->add(ACreate, HmiGlyph::Plus,

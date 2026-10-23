@@ -156,7 +156,7 @@ bool UiDriver::parseKey(const std::string& combo, Key& key, KeyMods& mods) {
         {"u", Key::U}, {"0", Key::Num0}, {"2", Key::Num2}, {"3", Key::Num3}, {"4", Key::Num4}, {"6", Key::Num6},
         {"7", Key::Num7}, {"8", Key::Num8}, {"9", Key::Num9}, {"f4", Key::F4}, {"f6", Key::F6},
         // 1.12.2 : les raccourcis des editeurs de code (Ctrl+L, Ctrl+/, Ctrl+], Ctrl+., Ctrl+,, Ctrl+-)
-        {"l", Key::L}, {"/", Key::Slash}, {".", Key::Period}, {",", Key::Comma}, {"-", Key::Minus},
+        {"l", Key::L}, {"/", Key::Slash}, {".", Key::Period}, {",", Key::Comma}, {"-", Key::Minus}, {"+", Key::Plus}, {"plus", Key::Plus},   // 1.12.30 : Ctrl+plus (le zoom)
         {"]", Key::RightBracket}, {":", Key::Colon}, {"$", Key::Dollar}, {";", Key::Semicolon},
         {"menu", Key::Menu}};                                                  // 1.12.18 : la touche Menu
     mods = {};

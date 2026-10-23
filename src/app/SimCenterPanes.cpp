@@ -293,6 +293,7 @@ void SimForcingPane::onPaint(const ui::PaintContext& ctx) {
 // =============================================================== les courbes ====
 SimTrendsPane::SimTrendsPane(std::string id, std::shared_ptr<SimCenterModel> model, SimCenterHosts hosts)
     : ui::Widget(std::move(id)), model_(std::move(model)), hosts_(std::move(hosts)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     field_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(this->id() + ".ajouter")));
     // 1.12.14 : IHM Studio - les variables de l'IHM seules.
     field_->setPlaceholder(core::hasApi() ? "Ajouter une variable (automate ou IHM) : Armoires[0].ana.PT1.mes, Pompe_Marche\xE2\x80\xA6"
@@ -770,6 +771,7 @@ public:
 
 SimJournalPane::SimJournalPane(std::string id, std::shared_ptr<SimCenterModel> model, SimCenterHosts hosts)
     : ui::Widget(std::move(id)), model_(std::move(model)), hosts_(std::move(hosts)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     search_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(this->id() + ".chercher")));
     search_->setPlaceholder("Chercher dans le journal\xE2\x80\xA6");
     search_->setTooltip("Dans le texte, le genre et l'explication de chaque \xC3\xA9v\xC3\xA9nement, sans casse ni accents.");

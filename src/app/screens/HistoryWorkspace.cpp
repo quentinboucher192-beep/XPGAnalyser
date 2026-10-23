@@ -371,6 +371,10 @@ bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
         if (k.key == Key::PageUp) { cycleCentreTab(-1); return true; }
         return false;
     }
+    // 1.12.30 : Ctrl+plus, Ctrl+moins, Ctrl+0 - le zoom de la page (apres les widgets : un
+    // editeur de code garde Ctrl+- pour Revenir) ; tenus, ils repetent.
+    if (k.key == Key::Plus || (k.key == Key::Minus && !k.mods.shift) || (k.key == Key::Num0 && !k.mods.shift && !k.repeat))
+        return zoomFromKeys(k.key == Key::Plus ? 1 : k.key == Key::Minus ? -1 : 0);
     if (k.repeat && k.key != Key::Z && k.key != Key::Y) return false;
     // ---- Lot API 8 : finitions (Ctrl+F dans les volets) ----
     //  Apres les widgets (un editeur qui aurait son chercher le garde) : le

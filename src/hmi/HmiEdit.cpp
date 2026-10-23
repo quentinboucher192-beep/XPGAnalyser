@@ -851,6 +851,150 @@ void pasteStyle(View& v, const std::vector<Id>& ids, const std::vector<Prop>& st
     }
 }
 
+// ------------------------------------------------- 1.12.30 : les colonnes ---
+std::vector<ColumnSpan> columnSpans(const View& v) {
+    std::vector<ColumnSpan> out;
+    const auto& c = v.columns;
+    if (c.count < 1 || v.width <= 0) return out;
+    const double inner = static_cast<double>(v.width) - 2.0 * c.margin;
+    const double colW = (inner - c.gutter * static_cast<double>(c.count - 1)) / static_cast<double>(c.count);
+    if (inner <= 0 || colW < 1.0) return out;
+    for (int i = 0; i < c.count; ++i) out.push_back({c.margin + static_cast<double>(i) * (colW + c.gutter), colW});
+    return out;
+}
+
+std::vector<double> columnEdges(const View& v) {
+    std::vector<double> out;
+    for (const auto& s : columnSpans(v)) {
+        out.push_back(s.x);
+        out.push_back(s.x + s.w);
+    }
+    return out;
+}
+
+void snapLines(const View& v, std::vector<double>& xs, std::vector<double>& ys) {
+    if (v.grid.snapGuides && !v.grid.guidesHidden)
+        for (const auto& g : v.guides) (g.vertical ? xs : ys).push_back(g.position);
+    if (v.columns.visible && v.columns.snap)
+        for (double x : columnEdges(v)) xs.push_back(x);
+}
+
+// ---------------------------------------------------- 1.12.30 : les cotes ---
+namespace {
+
+// Une cote entre [lo1, hi1] (la selection) et [lo2, hi2] (l'autre) sur un axe, posee
+// sur l'autre axe : au milieu de ce qu'ils ont en commun, sinon au milieu de la
+// selection, avec un trait de rappel pour l'autre.
+Dimension facing(bool horizontal, double from, double to, double selLo, double selHi, double otherLo, double otherHi,
+                 bool selFirst) {
+    Dimension d;
+    d.horizontal = horizontal;
+    d.from = from;
+    d.to = to;
+    const double lo = std::max(selLo, otherLo), hi = std::min(selHi, otherHi);
+    if (hi >= lo) {
+        d.at = (lo + hi) / 2;
+    } else {
+        d.at = (selLo + selHi) / 2;
+        // Le bord de l'autre est tire jusqu'a la cote (du cote ou elle passe).
+        const double near = d.at < otherLo ? otherLo : otherHi;
+        if (selFirst) { d.toLo = std::min(near, d.at); d.toHi = std::max(near, d.at); }
+        else { d.fromLo = std::min(near, d.at); d.fromHi = std::max(near, d.at); }
+    }
+    return d;
+}
+
+bool overlaps(double a0, double a1, double b0, double b1) { return a0 < b1 - 0.01 && b0 < a1 - 0.01; }
+
+} // namespace
+
+std::vector<Dimension> dimensions(const View& v, const Box& sel, const std::vector<Id>& exclude, Id target) {
+    std::vector<Dimension> out;
+    if (sel.w <= 0 && sel.h <= 0) return out;
+    std::set<Id> skip;
+    for (Id e : exclude) {
+        skip.insert(e);
+        for (Id d : v.descendantsOf(e)) skip.insert(d);
+    }
+    const auto add = [&out](Dimension d) {
+        if (std::fabs(d.to - d.from) >= 0.5) out.push_back(d);
+    };
+    const Object* t = target != kNoId && !skip.count(target) ? v.object(target) : nullptr;
+    if (t) {
+        const Box o = rotatedBounds(*t);
+        const bool selInside = sel.x >= o.x - 0.01 && sel.y >= o.y - 0.01 && sel.right() <= o.right() + 0.01 && sel.bottom() <= o.bottom() + 0.01;
+        const bool otherInside = o.x >= sel.x - 0.01 && o.y >= sel.y - 0.01 && o.right() <= sel.right() + 0.01 && o.bottom() <= sel.bottom() + 0.01;
+        if (selInside || otherInside) {
+            // L'un dans l'autre : les quatre ecarts du dedans, a mi-hauteur (mi-largeur) du petit.
+            const Box& in = selInside ? sel : o;
+            const Box& outer = selInside ? o : sel;
+            Dimension d;
+            d.horizontal = true;
+            d.at = in.cy();
+            d.from = outer.x; d.to = in.x; add(d);
+            d.from = in.right(); d.to = outer.right(); add(d);
+            d.horizontal = false;
+            d.at = in.cx();
+            d.from = outer.y; d.to = in.y; add(d);
+            d.from = in.bottom(); d.to = outer.bottom(); add(d);
+            return out;
+        }
+        // Cote a cote : l'ecart entre les bords qui se font face, sur chaque axe ou ils sont separes.
+        if (sel.right() <= o.x) add(facing(true, sel.right(), o.x, sel.y, sel.bottom(), o.y, o.bottom(), true));
+        else if (o.right() <= sel.x) add(facing(true, o.right(), sel.x, sel.y, sel.bottom(), o.y, o.bottom(), false));
+        if (sel.bottom() <= o.y) add(facing(false, sel.bottom(), o.y, sel.x, sel.right(), o.x, o.right(), true));
+        else if (o.bottom() <= sel.y) add(facing(false, o.bottom(), sel.y, sel.x, sel.right(), o.x, o.right(), false));
+        if (out.empty()) {
+            // Ils se chevauchent sans que l'un contienne l'autre : l'ecart de leurs bords gauches et hauts.
+            Dimension d;
+            d.horizontal = true;
+            d.at = (std::max(sel.y, o.y) + std::min(sel.bottom(), o.bottom())) / 2;
+            d.from = std::min(sel.x, o.x); d.to = std::max(sel.x, o.x); add(d);
+            d.horizontal = false;
+            d.at = (std::max(sel.x, o.x) + std::min(sel.right(), o.right())) / 2;
+            d.from = std::min(sel.y, o.y); d.to = std::max(sel.y, o.y); add(d);
+        }
+        return out;
+    }
+    // Rien de vise : le voisin le plus proche dans chaque direction, sinon le bord de la vue.
+    const Box* best[4] = {nullptr, nullptr, nullptr, nullptr};    // gauche, droite, haut, bas
+    std::vector<Box> boxes;
+    boxes.reserve(v.objects.size());
+    for (const auto& o : v.objects) {
+        if (skip.count(o.id) || o.parent != kNoId || v.effectivelyHidden(o)) continue;
+        boxes.push_back(rotatedBounds(o));
+    }
+    for (const auto& b : boxes) {
+        if (overlaps(b.y, b.bottom(), sel.y, sel.bottom())) {
+            if (b.right() <= sel.x + 0.01 && (!best[0] || b.right() > best[0]->right())) best[0] = &b;
+            if (b.x >= sel.right() - 0.01 && (!best[1] || b.x < best[1]->x)) best[1] = &b;
+        }
+        if (overlaps(b.x, b.right(), sel.x, sel.right())) {
+            if (b.bottom() <= sel.y + 0.01 && (!best[2] || b.bottom() > best[2]->bottom())) best[2] = &b;
+            if (b.y >= sel.bottom() - 0.01 && (!best[3] || b.y < best[3]->y)) best[3] = &b;
+        }
+    }
+    const double W = static_cast<double>(v.width), H = static_cast<double>(v.height);
+    const auto edgeDim = [&](bool horizontal, double from, double to) {
+        Dimension d;
+        d.horizontal = horizontal;
+        d.from = from;
+        d.to = to;
+        d.at = horizontal ? sel.cy() : sel.cx();
+        d.edge = true;
+        add(d);
+    };
+    if (best[0]) add(facing(true, best[0]->right(), sel.x, sel.y, sel.bottom(), best[0]->y, best[0]->bottom(), false));
+    else if (sel.x > 0) edgeDim(true, 0, sel.x);
+    if (best[1]) add(facing(true, sel.right(), best[1]->x, sel.y, sel.bottom(), best[1]->y, best[1]->bottom(), true));
+    else if (sel.right() < W) edgeDim(true, sel.right(), W);
+    if (best[2]) add(facing(false, best[2]->bottom(), sel.y, sel.x, sel.right(), best[2]->x, best[2]->right(), false));
+    else if (sel.y > 0) edgeDim(false, 0, sel.y);
+    if (best[3]) add(facing(false, sel.bottom(), best[3]->y, sel.x, sel.right(), best[3]->x, best[3]->right(), true));
+    else if (sel.bottom() < H) edgeDim(false, sel.bottom(), H);
+    return out;
+}
+
 // ------------------------------------------------------------ magnetisme ---
 double snapToGrid(double value, int step) noexcept {
     if (step <= 1) return value;
@@ -866,8 +1010,7 @@ SnapResult snapMove(const View& v, const Box& moving, double dx, double dy, cons
 
     std::vector<double> tx, ty;
     std::vector<Box> others;                 // lot 12 : les voisins, pour l'espacement egal
-    if (v.grid.snapGuides)
-        for (const auto& g : v.guides) (g.vertical ? tx : ty).push_back(g.position);
+    snapLines(v, tx, ty);                    // les guides, les bords des colonnes (1.12.30)
     if (v.grid.snapObjects) {
         tx.insert(tx.end(), {0.0, v.width / 2.0, static_cast<double>(v.width)});
         ty.insert(ty.end(), {0.0, v.height / 2.0, static_cast<double>(v.height)});

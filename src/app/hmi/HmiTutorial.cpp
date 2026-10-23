@@ -492,7 +492,7 @@ ui::EventResult HmiTutorial::passThrough(const ui::InputEvent& ev) {
         for (auto it = kids.rbegin(); it != kids.rend(); ++it) {
             if (it->get() == this) continue;
             if (ui::Widget* owner = (*it)->findOverlayOwner(); owner && owner != this) {
-                if (owner->dispatch(ev) == ui::EventResult::Consumed) return ui::EventResult::Consumed;
+                if (owner->dispatchFromSurface(ev) == ui::EventResult::Consumed) return ui::EventResult::Consumed;
                 break;
             }
         }

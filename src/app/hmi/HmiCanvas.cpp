@@ -67,6 +67,7 @@ double angleOf(Pt c, Pt p) { return std::atan2(p.y - c.y, p.x - c.x) * 180.0 / k
 HmiCanvas::HmiCanvas(std::string id, hmi::DocumentPtr doc, Id view, Apply apply)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), viewId_(view), apply_(std::move(apply)) {
     setFocusPolicy(true);
+    setZoomSupport(ui::ZoomSupport::Native);   // 1.12.30 : le zoom de la vue, celui de la puce du bandeau bas
 }
 
 ui::SizeHint HmiCanvas::sizeHint() const {
@@ -81,8 +82,94 @@ ui::SizeHint HmiCanvas::sizeHint() const {
 const hmi::View* HmiCanvas::view() const { return doc_ ? doc_->project.view(viewId_) : nullptr; }
 
 HmiViewport HmiCanvas::viewport() const noexcept {
+    const auto o = drawOrigin();
+    return {o.x + panX_, o.y + panY_, zoom_};
+}
+
+// ---- 1.12.30 : les regles ------------------------------------------------------------
+gfx::Point HmiCanvas::drawOrigin() const noexcept {
     const auto r = contentRect();
-    return {r.x + panX_, r.y + panY_, zoom_};
+    const float off = rulers_ ? kRuler : 0.f;
+    return {r.x + off, r.y + off};
+}
+
+gfx::Rect HmiCanvas::drawArea() const noexcept {
+    const auto r = contentRect();
+    const float off = rulers_ ? kRuler : 0.f;
+    return {r.x + off, r.y + off, std::max(0.f, r.w - off), std::max(0.f, r.h - off)};
+}
+
+gfx::Rect HmiCanvas::topRuler() const noexcept {
+    if (!rulers_) return {};
+    const auto r = contentRect();
+    return {r.x + kRuler, r.y, std::max(0.f, r.w - kRuler), kRuler};
+}
+
+gfx::Rect HmiCanvas::leftRuler() const noexcept {
+    if (!rulers_) return {};
+    const auto r = contentRect();
+    return {r.x, r.y + kRuler, kRuler, std::max(0.f, r.h - kRuler)};
+}
+
+int HmiCanvas::rulerAt(gfx::Point s) const noexcept {
+    if (!rulers_) return 0;
+    if (topRuler().contains(s)) return 1;
+    if (leftRuler().contains(s)) return 2;
+    const auto r = contentRect();
+    if (gfx::Rect{r.x, r.y, kRuler, kRuler}.contains(s)) return 3;   // le coin
+    return 0;
+}
+
+void HmiCanvas::setRulersShown(bool on) {
+    if (on == rulers_) return;
+    // Le dessin ne saute pas : la vue garde sa place a l'ecran, la place du dessin change.
+    const float d = on ? kRuler : -kRuler;
+    panX_ -= d;
+    panY_ -= d;
+    rulers_ = on;
+    invalidate();
+}
+
+void HmiCanvas::toggleGuidesHidden() {
+    edit("Guides", [&](hmi::Project&, hmi::View& v) { v.grid.guidesHidden = !v.grid.guidesHidden; });
+    if (const auto* v = view()) status->emit(v->grid.guidesHidden ? "Guides cach\xC3\xA9s (ils ne sont plus magn\xC3\xA9tiques)" : "Guides montr\xC3\xA9s");
+}
+
+void HmiCanvas::toggleGuidesLocked() {
+    edit("Guides", [&](hmi::Project&, hmi::View& v) { v.grid.guidesLocked = !v.grid.guidesLocked; });
+    if (const auto* v = view()) status->emit(v->grid.guidesLocked ? "Guides verrouill\xC3\xA9s : ils ne se d\xC3\xA9placent plus" : "Guides d\xC3\xA9verrouill\xC3\xA9s");
+}
+
+void HmiCanvas::clearGuides() {
+    const auto* v = view();
+    if (!v || v->guides.empty()) return;
+    const auto n = v->guides.size();
+    edit("Retirer les guides", [&](hmi::Project&, hmi::View& vv) { vv.guides.clear(); });
+    status->emit(std::to_string(n) + (n > 1 ? " guides retir\xC3\xA9s" : " guide retir\xC3\xA9") + " (Ctrl+Z les remet)");
+}
+
+void HmiCanvas::toggleColumns() {
+    edit("Grille de colonnes", [&](hmi::Project&, hmi::View& v) { v.columns.visible = !v.columns.visible; });
+}
+
+std::vector<hmi::edit::Dimension> HmiCanvas::dimensionsAt(gfx::Point screen, Id* target) const {
+    if (target) *target = kNoId;
+    const auto* v = view();
+    if (!v || selection_.empty()) return {};
+    const auto units = hmi::edit::units(*v, selection_);
+    if (units.empty()) return {};
+    const Box sel = hmi::edit::selectionBounds(*v, units);
+    Id t = kNoId;
+    if (drawArea().contains(screen)) {
+        const Pt p = toView(screen);
+        t = hmi::edit::hitTest(*v, p.x, p.y, insideGroup_, 4.0 / zoom_, true);
+        // L'objet vise fait partie de la selection (ou de l'un de ses groupes) : rien de vise.
+        for (Id u : units)
+            if (t == u || (t != kNoId && hmi::edit::topLevelOf(*v, t) == u)) t = kNoId;
+        // Un groupe en edition interne : on vise ses enfants, comme le clic.
+    }
+    if (target) *target = t;
+    return hmi::edit::dimensions(*v, sel, units, t);
 }
 
 Pt HmiCanvas::toView(gfx::Point s) const {
@@ -340,7 +427,7 @@ void HmiCanvas::setZoom(float z) { zoomBy(z / zoom_); }
 
 void HmiCanvas::zoomBy(float factor, std::optional<gfx::Point> anchor) {
     const float nz = std::clamp(zoom_ * factor, 0.05f, 16.f);
-    const auto r = contentRect();
+    const auto r = drawArea();    // 1.12.30 : sans les regles
     const gfx::Point a = anchor.value_or(gfx::Point{r.x + r.w / 2, r.y + r.h / 2});
     // Le point sous l'ancre reste sous l'ancre.
     const double vx = (a.x - r.x - panX_) / zoom_, vy = (a.y - r.y - panY_) / zoom_;
@@ -361,7 +448,7 @@ void HmiCanvas::scrollTo(double x, double y, float margin) {
 
 void HmiCanvas::zoomToFit() {
     const auto* v = view();
-    const auto r = contentRect();
+    const auto r = drawArea();    // 1.12.30 : sans les regles
     if (!v || r.w < 10 || r.h < 10 || v->width <= 0 || v->height <= 0) return;
     const float margin = 32.f;
     zoom_ = std::clamp(std::min((r.w - 2 * margin) / static_cast<float>(v->width),
@@ -658,6 +745,7 @@ void HmiCanvas::nudge(double dx, double dy) {
     }
     const auto sel = selection_;
     edit("D\xC3\xA9placer", [&](hmi::Project&, hmi::View& v) { hmi::edit::move(v, sel, dx, dy); }, "nudge");
+    nudgedAt_ = paintTime_;    // 1.12.30 : les cotes aux voisins, un moment
 }
 void HmiCanvas::addGuide(bool vertical) {
     edit(vertical ? "Guide vertical" : "Guide horizontal", [&](hmi::Project&, hmi::View& v) {
@@ -893,7 +981,8 @@ int HmiCanvas::handleAt(gfx::Point s) const {
 
 int HmiCanvas::guideAt(gfx::Point s) const {
     const auto* v = view();
-    if (!v) return -1;
+    // 1.12.30 : des guides caches ou verrouilles ne se prennent pas.
+    if (!v || v->grid.guidesHidden || v->grid.guidesLocked) return -1;
     const auto vp = viewport();
     for (std::size_t i = 0; i < v->guides.size(); ++i) {
         const auto& g = v->guides[i];
@@ -933,6 +1022,16 @@ void HmiCanvas::emitStatus(gfx::Point s) {
                       + fmt(pts[static_cast<std::size_t>(vertex_)].y);
         }
     if (traceMap_ != kNoId) text += "   |   zone : " + std::to_string(trace_.size()) + " point(s), double-clic pour la fermer";
+    // 1.12.30 : Alt au survol - les cotes, en clair.
+    if (altHeld_ && drag_ == Drag::None && !selection_.empty() && !placeKind_) {
+        Id target = kNoId;
+        const auto dims = dimensionsAt(s, &target);
+        if (!dims.empty()) {
+            const auto* t = target != kNoId ? v->object(target) : nullptr;
+            text += t ? "   |   cotes vers " + t->name + " :" : std::string("   |   cotes (voisins, bords) :");
+            for (const auto& d : dims) text += " " + fmt(d.value());
+        }
+    }
     if (insideGroup_ != kNoId) if (const auto* g = v->object(insideGroup_)) text += "   |   dans " + g->name;
     if (placeKind_)
         text += placeSymbol_.empty() ? "   |   clic : poser un(e) " + std::string(hmi::kindLabel(*placeKind_))
@@ -1060,7 +1159,7 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
         ctx.r.drawText({r.x + 16, r.y + 16}, "Cette vue n'existe plus.", ctx.theme.font.ui, ctx.theme.color.textMuted);
         return;
     }
-    ctx.r.pushClip(r);
+    ctx.r.pushClip(drawArea());    // 1.12.30 : les regles se dessinent a part, par-dessus
     const auto vp = viewport();
     const gfx::Point a = vp.toScreen(0, 0);
     const float w = static_cast<float>(v->width) * vp.zoom, h = static_cast<float>(v->height) * vp.zoom;
@@ -1115,6 +1214,7 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
         }
     }
     paintGrid(ctx, vp, *v);
+    paintColumns(ctx, vp, *v);     // 1.12.30 : la grille de colonnes
     ctx.r.popClip();
     ctx.r.strokeRect({a.x - 1, a.y - 1, w + 2, h + 2}, ctx.theme.color.borderStrong, 1.f);
     // Lot 8 : une popup montre, au-dessus de son contenu, la barre de titre
@@ -1149,16 +1249,32 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
         }
     }
 
-    // Les guides.
+    // Les guides (1.12.30 : caches, rien ; tire jusqu'a une regle, il est en rouge : lache, il part).
     const auto guideColor = gfx::Color::rgb(0x21B8C8);
-    for (std::size_t i = 0; i < v->guides.size(); ++i) {
+    const bool overRuler = (drag_ == Drag::Guide || drag_ == Drag::NewGuide) && pointerIn_ && rulerAt(pointer_) != 0;
+    for (std::size_t i = 0; i < v->guides.size() && !v->grid.guidesHidden; ++i) {
         const auto& g = v->guides[i];
         const bool dragged = drag_ == Drag::Guide && dragGuide_ == static_cast<int>(i);
-        const auto col = dragged && (g.position < 0 || g.position > (g.vertical ? v->width : v->height))
-                             ? ctx.theme.color.error : guideColor;
+        const auto col = dragged && (overRuler || g.position < 0 || g.position > (g.vertical ? v->width : v->height))
+                             ? ctx.theme.color.error : v->grid.guidesLocked ? guideColor.withAlpha(150) : guideColor;
         const gfx::Point p = vp.toScreen(g.vertical ? g.position : 0, g.vertical ? 0 : g.position);
         if (g.vertical) for (float y = r.y; y < r.y + r.h; y += 6) ctx.r.fillRect({p.x, y, 1, 3}, col);
         else for (float x = r.x; x < r.x + r.w; x += 6) ctx.r.fillRect({x, p.y, 3, 1}, col);
+    }
+    // 1.12.30 : le guide qu'on tire d'une regle - plein, et sa position.
+    if (drag_ == Drag::NewGuide && pointerIn_) {
+        const auto col = overRuler ? ctx.theme.color.error : guideColor;
+        const gfx::Point p = vp.toScreen(newGuideVertical_ ? newGuidePos_ : 0, newGuideVertical_ ? 0 : newGuidePos_);
+        if (newGuideVertical_) ctx.r.fillRect({p.x, r.y, 1, r.h}, col);
+        else ctx.r.fillRect({r.x, p.y, r.w, 1}, col);
+        const std::string tag = overRuler ? std::string("l\xC3\xA2" "cher : pas de guide")
+                                          : (newGuideVertical_ ? "x " : "y ") + fmt(newGuidePos_);
+        const auto f = ctx.theme.font.smallUi;
+        const float tw = ctx.r.measure(tag, f).width + 10.f, th = ctx.r.lineHeight(f) + 4.f;
+        const gfx::Rect box = newGuideVertical_ ? gfx::Rect{p.x + 6.f, pointer_.y + 8.f, tw, th}
+                                                : gfx::Rect{pointer_.x + 10.f, p.y + 6.f, tw, th};
+        ctx.r.fillRoundedRect(box, col, 3.f);
+        ctx.r.drawText({box.x + 5.f, box.y + 2.f}, tag, f, gfx::Color::rgb(0xFFFFFF));
     }
     // Les reperes du magnetisme.
     const auto snapColor = gfx::Color::rgb(0xE0409A);
@@ -1189,6 +1305,7 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
 
     paintPendingDots(ctx, vp);   // 1.12.26
     paintSelection(ctx, vp);
+    paintDimensions(ctx, vp);    // 1.12.30 : les cotes (Alt au survol, un deplacement)
 
     if (marqueeShown_) {
         const gfx::Point m0 = vp.toScreen(marquee_.x, marquee_.y), m1 = vp.toScreen(marquee_.right(), marquee_.bottom());
@@ -1225,6 +1342,218 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
         ctx.r.strokeRect(gr, ctx.theme.color.accent, 1.f);
         ctx.r.drawText({gr.x + 4, gr.y + gr.h + 4}, ghostLabel, ctx.theme.font.smallUi, ctx.theme.color.accent);
     }
+    ctx.r.popClip();
+    paintRulers(ctx, vp, *v);    // 1.12.30 : par-dessus le dessin, hors de sa decoupe
+}
+
+// ---- 1.12.30 : la grille de colonnes --------------------------------------------------
+void HmiCanvas::paintColumns(const ui::PaintContext& ctx, const HmiViewport& vp, const hmi::View& v) {
+    if (!v.columns.visible) return;
+    const auto spans = hmi::edit::columnSpans(v);
+    const auto red = gfx::Color::rgb(0xE5484D);
+    const gfx::Point top = vp.toScreen(0, 0), bottom = vp.toScreen(0, v.height);
+    for (const auto& c : spans) {
+        const float x0 = vp.toScreen(c.x, 0).x, x1 = vp.toScreen(c.x + c.w, 0).x;
+        ctx.r.fillRect({x0, top.y, std::max(1.f, x1 - x0), bottom.y - top.y}, red.withAlpha(24));
+        ctx.r.fillRect({x0, top.y, 1.f, bottom.y - top.y}, red.withAlpha(70));
+        ctx.r.fillRect({x1 - 1.f, top.y, 1.f, bottom.y - top.y}, red.withAlpha(70));
+    }
+}
+
+// ---- 1.12.30 : les cotes ----------------------------------------------------------------
+void HmiCanvas::paintDimensions(const ui::PaintContext& ctx, const HmiViewport& vp) {
+    dims_.clear();
+    dimTarget_ = kNoId;
+    const auto* v = view();
+    if (!v || selection_.empty() || placeKind_ || traceMap_ != kNoId) return;
+    const bool nudged = ctx.time - nudgedAt_ < 1.5;
+    const bool altHover = altHeld_ && pointerIn_ && drag_ == Drag::None;
+    const bool altMove = altHeld_ && drag_ == Drag::Move;
+    if (!altHover && !altMove && !(nudged && drag_ == Drag::None)) return;
+    if (altHover) dims_ = dimensionsAt(pointer_, &dimTarget_);
+    else {
+        const auto units = hmi::edit::units(*v, selection_);
+        dims_ = hmi::edit::dimensions(*v, hmi::edit::selectionBounds(*v, units), units, kNoId);
+    }
+    if (dims_.empty()) return;
+    const auto col = gfx::Color::rgb(0xE0409A);     // la couleur des cotes de l'espacement egal
+    // L'objet vise : son cadre, de la couleur des cotes.
+    if (dimTarget_ != kNoId)
+        if (const auto* t = v->object(dimTarget_)) {
+            std::vector<gfx::Point> pts;
+            for (const auto& p : hmi::edit::corners(*t)) pts.push_back(vp.toScreen(p.x, p.y));
+            shapes::strokePolyline(ctx.r, pts, true, col, 1.f);
+        }
+    const auto f = ctx.theme.font.smallUi;
+    for (const auto& d : dims_) {
+        const gfx::Point p0 = d.horizontal ? vp.toScreen(d.from, d.at) : vp.toScreen(d.at, d.from);
+        const gfx::Point p1 = d.horizontal ? vp.toScreen(d.to, d.at) : vp.toScreen(d.at, d.to);
+        // Les traits de rappel (pointilles), d'un bord jusqu'a la cote.
+        const auto witness = [&](double along, double lo, double hi) {
+            if (hi - lo < 0.5) return;
+            const gfx::Point a = d.horizontal ? vp.toScreen(along, lo) : vp.toScreen(lo, along);
+            const gfx::Point b = d.horizontal ? vp.toScreen(along, hi) : vp.toScreen(hi, along);
+            if (d.horizontal) for (float y = a.y; y < b.y; y += 4) ctx.r.fillRect({a.x, y, 1, std::min(2.f, b.y - y)}, col.withAlpha(170));
+            else for (float x = a.x; x < b.x; x += 4) ctx.r.fillRect({x, a.y, std::min(2.f, b.x - x), 1}, col.withAlpha(170));
+        };
+        witness(d.from, d.fromLo, d.fromHi);
+        witness(d.to, d.toLo, d.toHi);
+        // Le trait de cote : plein entre deux objets, en tirets jusqu'au bord de la vue.
+        const float len = d.horizontal ? p1.x - p0.x : p1.y - p0.y;
+        if (d.edge) {
+            for (float t = 0; t < len; t += 7) {
+                const float e = std::min(4.f, len - t);
+                if (d.horizontal) ctx.r.fillRect({p0.x + t, p0.y, e, 1}, col);
+                else ctx.r.fillRect({p0.x, p0.y + t, 1, e}, col);
+            }
+        } else {
+            ctx.r.line(p0, p1, col, 1.f);
+        }
+        // Les fleches (assez de place : dedans), les petits traits des bouts.
+        const float t = 4.f;
+        if (d.horizontal) {
+            ctx.r.line({p0.x, p0.y - t}, {p0.x, p0.y + t}, col, 1.f);
+            ctx.r.line({p1.x, p1.y - t}, {p1.x, p1.y + t}, col, 1.f);
+        } else {
+            ctx.r.line({p0.x - t, p0.y}, {p0.x + t, p0.y}, col, 1.f);
+            ctx.r.line({p1.x - t, p1.y}, {p1.x + t, p1.y}, col, 1.f);
+        }
+        if (len >= 18.f) {
+            const float k = 5.f, wing = 3.f;
+            std::vector<gfx::Point> a0, a1;
+            if (d.horizontal) {
+                a0 = {p0, {p0.x + k, p0.y - wing}, {p0.x + k, p0.y + wing}};
+                a1 = {p1, {p1.x - k, p1.y - wing}, {p1.x - k, p1.y + wing}};
+            } else {
+                a0 = {p0, {p0.x - wing, p0.y + k}, {p0.x + wing, p0.y + k}};
+                a1 = {p1, {p1.x - wing, p1.y - k}, {p1.x + wing, p1.y - k}};
+            }
+            shapes::fillPolygon(ctx.r, a0, col);
+            shapes::fillPolygon(ctx.r, a1, col);
+        }
+        // Le nombre, lisible : sur une pastille, au milieu (a cote du trait s'il est court).
+        const double value = d.value();
+        const std::string label = std::fabs(value - std::round(value)) < 0.05 ? std::to_string(static_cast<long>(std::lround(value)))
+                                                                              : fmt(value);
+        const float lw = ctx.r.measure(label, f).width + 10.f, lh = ctx.r.lineHeight(f) + 4.f;
+        // Le milieu de ce qui se voit du trait (une cote jusqu'au bord de la vue peut sortir du dessin).
+        const auto area = drawArea();
+        const float lo = d.horizontal ? std::max(p0.x, area.x) : std::max(p0.y, area.y);
+        const float hi = d.horizontal ? std::min(p1.x, area.right()) : std::min(p1.y, area.bottom());
+        if (hi <= lo) continue;
+        const gfx::Point mid = d.horizontal ? gfx::Point{(lo + hi) / 2.f, p0.y} : gfx::Point{p0.x, (lo + hi) / 2.f};
+        gfx::Rect pill = {mid.x - lw / 2.f, mid.y - lh / 2.f, lw, lh};
+        if (d.horizontal && len < lw + 12.f) pill.y = mid.y - lh - 6.f;
+        if (!d.horizontal && len < lh + 12.f) pill.x = mid.x + 8.f;
+        ctx.r.fillRoundedRect(pill, col, lh / 2.f);
+        ctx.r.drawText({pill.x + 5.f, pill.y + 2.f}, label, f, gfx::Color::rgb(0xFFFFFF));
+    }
+}
+
+// ---- 1.12.30 : les regles ------------------------------------------------------------
+void HmiCanvas::paintRulers(const ui::PaintContext& ctx, const HmiViewport& vp, const hmi::View& v) {
+    if (!rulers_) return;
+    const auto& c = ctx.theme.color;
+    const auto top = topRuler(), left = leftRuler();
+    const auto cr = contentRect();
+    const gfx::Rect corner{cr.x, cr.y, kRuler, kRuler};
+    ctx.r.pushClip(bounds());
+    ctx.r.fillRect(top, c.headerBg);
+    ctx.r.fillRect(left, c.headerBg);
+    ctx.r.fillRect(corner, c.headerBg);
+    // L'etendue de la vue sur chaque regle, un peu plus claire.
+    const gfx::Point v0 = vp.toScreen(0, 0), v1 = vp.toScreen(v.width, v.height);
+    const auto lit = c.panelBg;
+    ctx.r.pushClip(top);
+    ctx.r.fillRect({v0.x, top.y + 2.f, v1.x - v0.x, top.h - 2.f}, lit);
+    ctx.r.popClip();
+    ctx.r.pushClip(left);
+    ctx.r.fillRect({left.x + 2.f, v0.y, left.w - 2.f, v1.y - v0.y}, lit);
+    ctx.r.popClip();
+    // L'etendue de la selection, en bleu leger.
+    if (const auto* vv = view(); vv && !selection_.empty()) {
+        const auto units = hmi::edit::units(*vv, selection_);
+        if (!units.empty()) {
+            const Box b = hmi::edit::selectionBounds(*vv, units);
+            const gfx::Point s0 = vp.toScreen(b.x, b.y), s1 = vp.toScreen(b.right(), b.bottom());
+            ctx.r.pushClip(top);
+            ctx.r.fillRect({s0.x, top.y, std::max(1.f, s1.x - s0.x), top.h}, c.accent.withAlpha(60));
+            ctx.r.popClip();
+            ctx.r.pushClip(left);
+            ctx.r.fillRect({left.x, s0.y, left.w, std::max(1.f, s1.y - s0.y)}, c.accent.withAlpha(60));
+            ctx.r.popClip();
+        }
+    }
+    // Les graduations : un pas majeur d'au moins 56 px a l'ecran (1, 2, 5, 10, 20, 25, 50...).
+    double major = 1;
+    for (const double m : {1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 200.0, 250.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0}) {
+        major = m;
+        if (m * vp.zoom >= 56.0) break;
+    }
+    const int parts = (major * vp.zoom >= 100.0) ? 10 : 5;
+    const double minor = major / parts;
+    const auto f = gfx::FontId{static_cast<std::uint16_t>(std::max<int>(9, ctx.theme.font.smallUi.v - 2))};
+    const gfx::Color tick = c.textMuted;
+    // La regle du haut.
+    ctx.r.pushClip(top);
+    {
+        const double from = std::floor(vp.toViewX(top.x) / minor) * minor, to = vp.toViewX(top.right());
+        int guard = 0;
+        for (double x = from; x <= to && guard < 4000; x += minor, ++guard) {
+            const float sx = vp.toScreen(x, 0).x;
+            const bool isMajor = std::fabs(std::fmod(std::fabs(x) + 1e-6, major)) < minor * 0.5;
+            // Le trait majeur s'arrete sous le nombre : "|500" ne se lit pas "1500".
+            const float hgt = isMajor ? 9.f : (std::fabs(std::fmod(std::fabs(x) + 1e-6, major / 2)) < minor * 0.5 ? 6.f : 3.f);
+            ctx.r.fillRect({std::round(sx), top.bottom() - hgt, 1.f, hgt}, tick);
+            if (isMajor) ctx.r.drawText({std::round(sx) + 3.f, top.y + 1.f}, std::to_string(static_cast<long>(std::lround(x))), f, c.textMuted);
+        }
+    }
+    ctx.r.popClip();
+    // La regle de gauche : les nombres tournes, lus de bas en haut.
+    ctx.r.pushClip(left);
+    {
+        const double from = std::floor(vp.toViewY(left.y) / minor) * minor, to = vp.toViewY(left.bottom());
+        int guard = 0;
+        for (double y = from; y <= to && guard < 4000; y += minor, ++guard) {
+            const float sy = vp.toScreen(0, y).y;
+            const bool isMajor = std::fabs(std::fmod(std::fabs(y) + 1e-6, major)) < minor * 0.5;
+            const float wid = isMajor ? 9.f : (std::fabs(std::fmod(std::fabs(y) + 1e-6, major / 2)) < minor * 0.5 ? 6.f : 3.f);
+            ctx.r.fillRect({left.right() - wid, std::round(sy), wid, 1.f}, tick);
+            if (isMajor) {
+                const std::string n = std::to_string(static_cast<long>(std::lround(y)));
+                const float tw = ctx.r.measure(n, f).width;
+                const gfx::Point o{left.x + 1.f, std::round(sy) + 3.f + tw};
+                ctx.r.drawTextRotated(o, n, f, c.textMuted, -90.f, o);
+            }
+        }
+    }
+    ctx.r.popClip();
+    // Les guides sur les regles : un petit triangle a leur place.
+    if (!v.grid.guidesHidden) {
+        const auto gc = gfx::Color::rgb(0x21B8C8).withAlpha(v.grid.guidesLocked ? 150 : 255);
+        for (const auto& g : v.guides) {
+            if (g.vertical) {
+                const float x = vp.toScreen(g.position, 0).x;
+                if (x >= top.x && x <= top.right())
+                    shapes::fillPolygon(ctx.r, {{x - 4.f, top.bottom() - 6.f}, {x + 4.f, top.bottom() - 6.f}, {x, top.bottom()}}, gc);
+            } else {
+                const float y = vp.toScreen(0, g.position).y;
+                if (y >= left.y && y <= left.bottom())
+                    shapes::fillPolygon(ctx.r, {{left.right() - 6.f, y - 4.f}, {left.right() - 6.f, y + 4.f}, {left.right(), y}}, gc);
+            }
+        }
+    }
+    // La souris : un trait sur chaque regle.
+    if (pointerIn_ && drawArea().contains(pointer_)) {
+        ctx.r.fillRect({std::round(pointer_.x), top.y, 1.f, top.h}, c.accent);
+        ctx.r.fillRect({left.x, std::round(pointer_.y), left.w, 1.f}, c.accent);
+    }
+    // Les bords, et le coin : l'unite.
+    ctx.r.fillRect({top.x, top.bottom() - 1.f, top.w, 1.f}, c.border);
+    ctx.r.fillRect({left.right() - 1.f, left.y, 1.f, left.h}, c.border);
+    ctx.r.fillRect({corner.x, corner.bottom() - 1.f, corner.w, 1.f}, c.border);
+    ctx.r.fillRect({corner.right() - 1.f, corner.y, 1.f, corner.h}, c.border);
+    ctx.r.drawText({corner.x + 4.f, corner.y + 3.f}, "px", f, c.textMuted);
     ctx.r.popClip();
 }
 
@@ -1377,6 +1706,21 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
     const auto* v = view();
     if (!v) return ui::EventResult::Ignored;
 
+    // 1.12.30 : Alt tenu (les cotes au survol) - suivi par la souris et par les touches,
+    // sans rien prendre.
+    {
+        bool alt = altHeld_;
+        if (const auto* m = std::get_if<ui::MouseMove>(&ev)) alt = m->mods.alt;
+        else if (const auto* k = std::get_if<ui::KeyDown>(&ev)) alt = k->mods.alt;
+        else if (const auto* u = std::get_if<ui::KeyUp>(&ev)) alt = u->mods.alt;
+        else if (std::holds_alternative<ui::FocusChange>(ev)) alt = false;
+        if (alt != altHeld_) {
+            altHeld_ = alt;
+            invalidate();
+            if (pointerIn_ && drag_ == Drag::None) emitStatus(pointer_);
+        }
+    }
+
     // 1.12.27 : du texte lache sur la vue - les objets glisses depuis une autre fenetre
     // (leur copie publiee) se posent la ; une colonne de noms y devient des etiquettes
     // et des afficheurs (comme Ctrl+V).
@@ -1404,6 +1748,30 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
         pressScreen_ = m->pos;
         pressView_ = toView(m->pos);
         const bool shift = m->mods.shift, ctrl = m->mods.ctrl;
+
+        // 1.12.30 : LES REGLES. Le clic droit : leur menu (les regles, les guides, les colonnes) ;
+        // un appui a gauche sur celle du haut (de gauche) tire un guide horizontal (vertical).
+        if (const int ruler = rulerAt(m->pos); ruler != 0) {
+            if (m->button == ui::MouseButton::Right) {
+                if (placeKind_ || traceMap_ != kNoId) cancelPlacement();
+                contextScreen_ = m->pos;
+                contextLocked_ = kNoId;
+                contextTarget_ = ContextTarget::Ruler;
+                contextRequested->emit(m->pos);
+                return ui::EventResult::Consumed;
+            }
+            if (m->button != ui::MouseButton::Left || ruler == 3) return ui::EventResult::Consumed;
+            if (v->grid.guidesLocked) {
+                status->emit("Les guides sont verrouill\xC3\xA9s : clic droit sur la r\xC3\xA8gle, D\xC3\xA9verrouiller les guides");
+                return ui::EventResult::Consumed;
+            }
+            newGuideVertical_ = ruler == 2;
+            newGuidePos_ = newGuideVertical_ ? pressView_.x : pressView_.y;
+            ++dragSerial_;
+            drag_ = Drag::NewGuide;
+            invalidate();
+            return ui::EventResult::Consumed;
+        }
 
         if (m->button == ui::MouseButton::Middle || (m->button == ui::MouseButton::Left && spaceDown_)) {
             drag_ = Drag::Pan;
@@ -1723,6 +2091,14 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
                 marquee_ = {std::min(pressView_.x, p.x), std::min(pressView_.y, p.y), std::fabs(dx), std::fabs(dy)};
                 invalidate();
                 break;
+            case Drag::NewGuide: {
+                // 1.12.30 : le guide tire d'une regle suit la souris (au pas de la grille).
+                double pos = newGuideVertical_ ? p.x : p.y;
+                if (v->grid.snapGrid) pos = hmi::edit::snapToGrid(pos, v->grid.step);
+                newGuidePos_ = std::round(pos);
+                invalidate();
+                break;
+            }
             case Drag::Guide: {
                 const hmi::View start = snapshot_;
                 const int g = dragGuide_;
@@ -1782,12 +2158,28 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
                 setSelection(sel);
             }
         }
+        if (was == Drag::NewGuide) {
+            // 1.12.30 : lache sur la place du dessin, le guide est pose (un pas d'annulation) ;
+            // ramene sur une regle (ou hors du canevas), il n'y en a pas.
+            if (rulerAt(m->pos) != 0 || !drawArea().contains(m->pos)) {
+                status->emit("Pas de guide : l\xC3\xA2" "ch\xC3\xA9 sur la r\xC3\xA8gle");
+            } else {
+                const bool vertical = newGuideVertical_;
+                const double pos = newGuidePos_;
+                edit(vertical ? "Guide vertical" : "Guide horizontal", [&](hmi::Project&, hmi::View& vv) {
+                    vv.guides.push_back({vertical, pos});
+                    vv.grid.guidesHidden = false;
+                });
+                status->emit(std::string(vertical ? "Guide vertical \xC3\xA0 x = " : "Guide horizontal \xC3\xA0 y = ") + fmt(pos)
+                             + " : le ramener sur la r\xC3\xA8gle le retire");
+            }
+        }
         if (was == Drag::Guide && dragGuide_ >= 0) {
-            // Un guide tire hors de la vue est retire.
+            // Un guide tire hors de la vue est retire ; 1.12.30 : ramene sur une regle aussi.
             const auto* cur = view();
             if (cur && static_cast<std::size_t>(dragGuide_) < cur->guides.size()) {
                 const auto& g = cur->guides[static_cast<std::size_t>(dragGuide_)];
-                if (g.position < 0 || g.position > (g.vertical ? cur->width : cur->height)) {
+                if (rulerAt(m->pos) != 0 || g.position < 0 || g.position > (g.vertical ? cur->width : cur->height)) {
                     const int idx = dragGuide_;
                     edit("Retirer le guide", [&](hmi::Project&, hmi::View& vv) {
                         vv.guides.erase(vv.guides.begin() + idx);
@@ -1878,6 +2270,21 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
                 if (k->mods.none() && !selection_.empty()) { renameRequested->emit(); return ui::EventResult::Consumed; }
                 break;
             case ui::Key::A: if (k->mods.ctrl) { selectAll(); return ui::EventResult::Consumed; } break;
+            // 1.12.30 : Ctrl+R les regles ; Ctrl+; cacher les guides, Ctrl+Alt+; les verrouiller.
+            case ui::Key::R:
+                if (k->mods.ctrl && !k->mods.alt && !k->mods.shift) {
+                    setRulersShown(!rulers_);
+                    rulersToggled->emit(rulers_);
+                    return ui::EventResult::Consumed;
+                }
+                break;
+            case ui::Key::Semicolon:
+                if (k->mods.ctrl && !k->mods.shift) {
+                    if (k->mods.alt) toggleGuidesLocked();
+                    else toggleGuidesHidden();
+                    return ui::EventResult::Consumed;
+                }
+                break;
             case ui::Key::Z: if (k->mods.ctrl) { historyRequested->emit(k->mods.shift); return ui::EventResult::Consumed; } break;
             case ui::Key::Y: if (k->mods.ctrl) { historyRequested->emit(true); return ui::EventResult::Consumed; } break;
             // 1.12.18 : un mot, un raccourci - le style passe sur Ctrl+Alt+C / Ctrl+Alt+V

@@ -72,6 +72,7 @@
 #include "../hmi/HmiNativesPane.hpp"
 #include "../hmi/HmiQualityPanes.hpp"                // lot 13 : les essais
 #include "../hmi/HmiDisplayPanes.hpp"               // lot 13 : les langues
+#include "../hmi/HmiLanguageCompare.hpp"             // 1.12.30 : les langues cote a cote
 #include "../hmi/HmiCommPanes.hpp"                  // lot 14 : la communication
 #include "../hmi/HmiModbusToolPane.hpp"              // lot 15 : l'outil Modbus
 #include "../hmi/HmiCyclicPage.hpp"                  // 1.9 : la lecture cyclique (importer un jeu)
@@ -1564,6 +1565,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         hosts.exportFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeHmiExport(rq, where); };
         hosts.askImport = [this] { askHmiImportTranslations(); };
         hosts.askAdd = [this] { askHmiAddLanguage(); };
+        hosts.sideBySide = [this] { openHmiLanguageCompare(0); };    // 1.12.30
         hosts.tryIt = [this](const std::string& code) {
             openHmiPane("simulation");
             if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) {
@@ -1577,6 +1579,26 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         pane->setHosts(std::move(hosts));
         page = std::move(pane);
         title = "IHM \xC2\xB7 Langues";
+        icon = Icon::Globe;
+    } else if (key == "langues-cote") {
+        // 1.12.30 : la vue dans chaque langue, cote a cote ; les textes qui debordent entoures.
+        auto pane = std::make_unique<HmiLanguageCompare>("hmi.languageCompare", doc);
+        HmiLanguageCompare::Hosts hosts;
+        hosts.selectInEditor = [this](hmi::Id view, hmi::Id object) {
+            openHmiView(static_cast<std::uint64_t>(view), -1, static_cast<std::uint64_t>(object));
+        };
+        hosts.openTranslation = [this](const std::string& code, const std::string& source) {
+            openHmiPane("langues");
+            if (auto* langs = dynamic_cast<HmiLanguagesPane*>(hmiTab("langues"))) {
+                langs->selectLanguage(code);
+                if (!source.empty()) langs->selectText(source);
+            }
+            status_->setTransientMessage("Sa traduction en " + hmi::languageName(code) + " : la fiche \xC3\xA0 droite (IHM \xE2\x80\xBA Langues)", 6.0);
+        };
+        hosts.status = [this](const std::string& text) { status_->setTransientMessage(text, 4.0); };
+        pane->setHosts(std::move(hosts));
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 Langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te";
         icon = Icon::Globe;
     } else if (key == "unites") {
         // Lot 13 : Configuration > Unites et formats - ceux des variables, repris partout.
@@ -1937,6 +1959,17 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         placeDispositionPage(row, tab);
 }
 
+// 1.12.30 : la page Langues cote a cote, sur une vue (0 : celle de l'editeur ouvert, sinon celle
+// que la page montrait).
+void MainAnalysisScreen::openHmiLanguageCompare(std::uint64_t viewId) {
+    if (viewId == 0 && centre_ && centre_->tabCount() > 0)
+        if (auto* ed = dynamic_cast<HmiEditor*>(centre_->page(centre_->currentIndex())))
+            viewId = static_cast<std::uint64_t>(ed->viewId());
+    openHmiPane("langues-cote");
+    if (auto* page = dynamic_cast<HmiLanguageCompare*>(hmiTab("langues-cote")); page && viewId != 0)
+        page->setView(asId(viewId));
+}
+
 void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64_t objectId) {
     auto doc = app_.hmi();
     if (!doc || !centre_) return;
@@ -2000,6 +2033,7 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
         made->setHistoryOpener([this](hmi::Id view, std::vector<hmi::Id> objects) {    // 1.12.26 : l'historique des objets
             openHmiHistory(view, std::vector<std::uint64_t>(objects.begin(), objects.end()));
         });
+        made->setLanguagesOpener([this](hmi::Id v) { openHmiLanguageCompare(v); });   // 1.12.30 : les langues cote a cote
         made->setTemplateAsker([this, viewId] { askHmiSaveTemplate(viewId); });   // lot 20
         // 1.11.22 : Nouvelle fonction d'un symbole demande son nom (un nom pris : une surcharge).
         if (auto* fns = made->symbolFunctions()) {
@@ -3685,6 +3719,10 @@ bool MainAnalysisScreen::openHmiHelpNow() {
             if (topic.empty() && doc->project.functionByName(word)) topic = "fonctions";
             if (topic.empty() && doc->project.variable(word)) topic = "variables-ihm";
         }
+        // 1.12.30 : la souris sur une regle de l'editeur : les regles, les guides, les cotes.
+        if (topic.empty())
+            if (auto* editor = dynamic_cast<HmiEditor*>(hmiTab(key)); editor && editor->canvas().pointerOnRuler())
+                topic = "regles-guides";
         // Lot 8 : dans l'editeur, la tuile survolee de la bibliotheque, sinon
         // l'objet choisi : la page de cet objet, avec son exemple anime.
         if (topic.empty())

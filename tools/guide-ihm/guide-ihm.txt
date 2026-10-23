@@ -152,6 +152,24 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 - **En grand** : un double clic sur la barre de titre la met en grand ; un autre la rend à sa place. Tirée par son titre, une fenêtre en grand reprend sa taille sous la souris.
 - **Retenue** : rouverte pendant la séance, une fenêtre revient là où tu l'as laissée, à la taille choisie.
 
+== zoom | Le zoom des pages
+: Chaque page se zoome : la puce du bandeau bas (−, le pourcentage, +), Ctrl + molette, Ctrl + plus, Ctrl + moins, Ctrl + 0. Le texte, la hauteur des lignes, les marges et les icônes grandissent ensemble ; chaque page garde le sien.
+@mots zoom, Zoom, zoomer, agrandir, Ctrl+molette, Ctrl+plus, Ctrl+moins, Ctrl+0, 100 %, puce du zoom, bandeau bas, lisibilité
+@voir onglets, raccourcis, editeur, regles-guides, langues-cote
+### La puce du zoom
+En bas à droite, dans le bandeau bas : **−** et **+** changent le zoom d'un cran (50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200 %) ; un clic sur le pourcentage ouvre son menu : 50 % à 200 %, Zoom avant, Zoom arrière, **Revenir à 100 %**. La puce montre le zoom de la page ouverte ; grise, la page n'en a pas.
+### Ce qui se zoome
+- les **tableaux et les listes** (variables, E/S, types, alarmes, recettes, références croisées, équipements, tables d'animation, Générer, Compiler…) : le texte, la hauteur des lignes, les marges, les icônes, les barres de défilement ;
+- les **arbres** : la bibliothèque, les natives ; Ctrl + molette sur l'explorateur du projet zoome l'explorateur seul ;
+- les **panneaux et les fiches** : Configuration, l'inspecteur de l'éditeur de vues, l'aide ;
+- les **pages de la simulation** : Vue d'ensemble, Forçages, Courbes, Journal, Expressions ;
+- les **documents** gardent leur propre zoom : un code, un grafcet, une vue dans l'éditeur, le rack, l'IHM en marche, les langues côte à côte - la puce suit celui que tu as cliqué en dernier.
+### Le même geste partout
+- **Ctrl + molette** sur une page : un cran pour toute la page ; sur un code, un grafcet, une vue : leur zoom à eux ;
+- **Ctrl + plus** (le + du pavé numérique, ou la touche =), **Ctrl + moins**, **Ctrl + 0** (100 %) ; dans un code, Ctrl + moins garde « Revenir où l'on était » (profil Visual Studio) : la molette ou la puce zooment ;
+- chaque page **garde son zoom** tant qu'elle est ouverte : ses tableaux, ses arbres et ses listes grandissent ensemble.
+> À 100 %, rien ne change : le zoom ne touche pas à la mise en page.
+
 == raccourcis | Raccourcis clavier
 : Les touches de l'éditeur de vues, des scripts et de l'aide.
 @voir editeur, aide-saisie, aller-a, excel
@@ -652,6 +670,29 @@ Chaque vue a au moins un calque. Un calque se renomme, s'ordonne, se masque (ses
 - **Clic droit sur un objet › Historique des modifications…** (ou sur le fond de la vue : Historique de la vue…) : la liste des enregistrements à gauche, Avant et Après à droite. Rechercher (une propriété, une valeur, un PC), filtrer par PC ; **Revenir à Avant** ou **Revenir à cette version** (une confirmation, et Ctrl+Z annule) ; un objet supprimé se **restaure** ; Copier, Exporter en CSV. Ce qui n'est pas encore enregistré vient en tête, « Non enregistré ».
 - **Propriétés › Suivi** : créé et modifié (quand, sur quel PC), ce qui n'est pas enregistré, le nombre d'enregistrements (… ouvre l'Historique). Plusieurs objets choisis : une ligne par objet ; la vue seule : son dernier enregistrement.
 - **L'Explorateur d'objets** montre la date de la dernière modification (« il y a 5 min », « hier 14:05 ») ; **un point orange** marque un objet modifié et pas encore enregistré, dans l'Explorateur et sur la vue. **Le survol** d'un objet (une demi-seconde) le résume dans une infobulle. Clic droit sur le fond de la vue : couper l'infobulle de suivi, ou le point.
+
+== regles-guides | Les règles, les guides et les cotes
+: Les règles graduées en pixels de la vue, les guides qu'on en tire (gardés avec la vue), la grille de colonnes, et Alt au survol : les distances aux voisins et aux bords, comme dans un logiciel de dessin.
+@mots règle, règles, Ctrl+R, guide, guides, tirer un guide, Ctrl+;, Ctrl+Alt+;, verrouiller les guides, cacher les guides, retirer les guides, cote, cotes, distance, distances, Alt, grille de colonnes, colonnes, gouttière, marges, mise en page
+@voir editeur, concevoir-vite, zoom
+### Les règles
+**Règles** (la barre d'outils, Ctrl+R, le clic droit sur la vue) : en haut et à gauche de la vue, graduées en **pixels de la vue** - elles suivent le zoom et le défilement. Un trait bleu y suit la souris, une bande bleue y marque l'étendue de la sélection, un petit triangle la place de chaque guide. Montrées ou cachées : le choix est retenu.
+### Les guides
+1. Appuie sur la **règle du haut** (un guide horizontal) ou sur celle **de gauche** (un guide vertical), et tire dans la vue : le guide suit la souris, au pas de la grille, sa position écrite à côté.
+2. Lâche : il est posé et **gardé avec la vue** (enregistré, relu) ; Ctrl+Z le retire.
+3. Tire-le pour le déplacer ; pour le **retirer**, ramène-le sur la règle (il rougit : lâché, il part), ou hors de la vue.
+- le **magnétisme** s'y accroche : les bords et le milieu des objets ;
+- **Cacher les guides** (Ctrl+;) : ni vus ni magnétiques ; **Verrouiller les guides** (Ctrl+Alt+;) : ils ne bougent plus, la règle n'en tire pas d'autre ; **Retirer tous les guides** - le clic droit sur une règle, ou sur la vue (Guides) ;
+- en marche (la simulation, le poste), aucun guide ne se voit.
+### La grille de colonnes
+**Grille de colonnes** (la barre d'outils, le clic droit) : des colonnes égales entre deux marges, séparées par une gouttière, en rose sur la vue. Leurs réglages sont dans **Propriétés de la vue** (rien de choisi) : Colonnes (1 à 48), Gouttière, Marges, Magnétisme ; la largeur d'une colonne s'y lit. Le magnétisme s'accroche à leurs bords. Elle est gardée avec la vue ; en marche, rien ne se voit.
+### Les cotes (Alt)
+Un objet choisi, tiens **Alt** et survole :
+- **un autre objet** : la distance entre leurs bords qui se font face (un trait de rappel tire jusqu'à la cote le bord d'un objet décalé) ; l'un dans l'autre, les quatre écarts du dedans ;
+- **le vide** : la distance au voisin le plus proche dans chaque direction, sinon au bord de la vue (en tirets).
+Les cotes sont en pixels de la vue, leur nombre sur une pastille ; la barre d'état les redit. Elles paraissent aussi un moment après un déplacement aux flèches, et pendant Alt + glisser (sans magnétisme).
+### Générer
+Un guide hors de la vue, une grille de colonnes qui ne tient pas (des marges et des gouttières plus larges que la vue) : Générer le dit (Mise en page, pour information).
 
 == objets | Les objets de la bibliothèque
 : La bibliothèque range les composants en familles : formes, commandes, affichage, graphiques, alarmes, production, synoptique, navigation et structure, médias, utilisateurs. Chacun se règle dans l'inspecteur et a sa page d'aide, avec un exemple animé.
@@ -1562,6 +1603,24 @@ La vue montrée se traduit aussitôt ; une alarme prend son message et sa consig
 ### Générer
 Pour chaque langue, combien de textes restent à traduire ; une traduction qui perd un trou ; un code de langue en double ou invalide ; une langue de démarrage absente ; une action, un sélecteur ou un `IHM_LANGUE('…')` qui vise une langue que le projet n'a pas ; un sélecteur dans un projet en une langue.
 > Le fichier du projet n'écrit rien de plus pour un projet en une seule langue.
+
+== langues-cote | Les langues côte à côte
+: La vue dans chaque langue du projet, côte à côte et à la même échelle ; les textes qui débordent entourés de rouge ; la pseudo-langue (+40 %) pour voir ce qui va déborder avant la traduction.
+@mots langues côte à côte, côte à côte, débordement, déborde, déborder, pseudo-langue, Pseudo (+40 %), pseudo, texte coupé, traduction trop longue
+@lieux langues-cote
+@voir langues, verifier, editeur, zoom
+### Ouvrir la page
+Dans l'éditeur de vues, **Langues côte à côte** (le dernier bouton de la barre d'outils, ou le clic droit sur la vue) ; dans **Configuration › Langues**, **Côte à côte**. La page s'ouvre sur la vue de l'éditeur ; la liste en haut à gauche en montre une autre.
+### Ce qu'elle montre
+- une colonne par langue, la langue du projet d'abord, puis la **pseudo-langue** ; **Par 2, Par 3, Par 4** en montre deux à quatre à la fois, les flèches (Maj + molette) font défiler les autres ;
+- toutes à la même échelle : **Ajuster** montre la vue entière, le zoom (la puce du bandeau bas, Ctrl + molette) l'agrandit, la molette la fait défiler ;
+- l'en-tête de chaque langue dit combien de textes y débordent (en vert : aucun).
+### Les débordements
+Un texte qui sort de sa boîte dans une langue - trop large, trop haut, le texte coupé d'une case à cocher : le contrôle de Générer - est **entouré de rouge**, une pastille « ! » à son coin ; son infobulle dit de combien. Un clic sur la marque : **Choisir l'objet dans l'éditeur**, **Aller à sa traduction** (Configuration › Langues, la fiche du texte), **Copier le message**.
+### La pseudo-langue
+**Pseudo (+40 %)** : chaque texte allongé de 40 %, ses lettres accentuées (é, á, ç, ñ…), entre crochets - « Pompe » devient « [Pómpé] » ; un crochet qui manque, et le texte est coupé. Elle montre avant toute traduction les boîtes trop justes : une traduction est souvent 30 à 40 % plus longue que le texte d'origine. Les trous `{…}` restent tels quels. Elle n'est **jamais enregistrée** comme une langue du projet.
+### Générer
+Générer signale aussi les textes qui débordent **dans chaque langue** du projet (« en English (en) : le texte déborde… »), quand ils tiennent dans la langue du projet.
 
 == unites-formats | Unités et formats des variables
 : L'unité et le format d'une variable, donnés une fois, repris partout où elle s'affiche : afficheurs, champs de saisie, jauges, tableaux de variables, trous des textes.

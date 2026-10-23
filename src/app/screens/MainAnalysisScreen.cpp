@@ -3941,8 +3941,12 @@ ui::EventResult MainAnalysisScreen::HandleEvent(const InputEvent& ev) {
                                                       && !(goToBox_ && goToBox_->bounds().contains(d->pos)))
         goToPanel_->close();
     if (key && !tutorial && handleShortcut(*key, true)) return EventResult::Consumed;
+    // 1.12.30 : le widget zoomable vise par un clic ou Ctrl + molette - la puce du zoom le suit.
+    if (const auto* d = std::get_if<MouseDown>(&ev)) noteZoomGesture(d->pos);
+    else if (const auto* w = std::get_if<MouseWheel>(&ev); w && w->mods.ctrl) noteZoomGesture(w->pos);
     // Lot API 3 : l'appui dans l'arbre, le glisser qui en part, le lacher.
-    if (const auto* d = std::get_if<MouseDown>(&ev); d && explorer_ && explorer_->bounds().contains(d->pos)) {
+    // 1.12.30 : zoomFrame - le cadre a l'ecran (l'arbre zoome seul a ses bornes dans son repere agrandi).
+    if (const auto* d = std::get_if<MouseDown>(&ev); d && explorer_ && explorer_->zoomFrame().contains(d->pos)) {
         treePress_ = true;
         treeDragged_ = false;
         deferredTreeNode_ = kInvalidNode;

@@ -320,7 +320,8 @@ if(XPG_BUILD_TESTS)
     #  popup      the context menu: geometry, dismissal, event routing
     #  sharedlib  publish, import, notify - it existed and was never registered
     foreach(t menu import hardware roundtrip project edit editor library simulation
-              sharedlib delete grafcet table macro xref equipment font theme corner parser_robustness syntax fold layout popup)
+              sharedlib delete grafcet table macro xref equipment font theme corner parser_robustness syntax fold layout popup
+              zoom)   # 1.12.30 : le contrat du zoom
         xpg_add_test_executable(${t}_test tests/${t}_test.cpp)
     endforeach()
 
@@ -349,6 +350,7 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(syntax_test            PRIVATE xpg_ui)
     xpg_target_link_libraries(fold_test              PRIVATE xpg_ui)
     xpg_target_link_libraries(layout_test            PRIVATE xpg_ui)
+    xpg_target_link_libraries(zoom_test              PRIVATE xpg_ui)
 
     # Lot 16 : ViewModels.cpp montre les types et les dossiers des variables IHM
     # (hmi::types, dans xpg_hmi) : les trois tests qui le compilent lient xpg_hmi.
@@ -664,6 +666,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME fold       COMMAND fold_test)
     xpg_add_test(NAME layout     COMMAND layout_test)
     xpg_add_test(NAME popup      COMMAND popup_test)
+    xpg_add_test(NAME zoom       COMMAND zoom_test)        # 1.12.30 : le contrat du zoom
     xpg_add_test(NAME sharedlib  COMMAND sharedlib_test)
     xpg_add_test(NAME settings   COMMAND settings_test)
     xpg_add_test(NAME dossiers   COMMAND dossiers_test)   # 1.8.0

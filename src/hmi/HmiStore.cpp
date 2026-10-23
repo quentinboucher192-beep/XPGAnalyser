@@ -436,7 +436,15 @@ std::string serializeView(const View& v) {
     s += "grille" + fieldBool("visible", v.grid.visible) + fieldInt("pas", v.grid.step)
        + fieldBool("magnetisme_grille", v.grid.snapGrid)
        + fieldBool("magnetisme_objets", v.grid.snapObjects)
-       + fieldBool("magnetisme_guides", v.grid.snapGuides) + "\n";
+       + fieldBool("magnetisme_guides", v.grid.snapGuides)
+       // 1.12.30 : des guides caches ou verrouilles (ecrits seulement s'ils le sont : un fichier d'avant ne change pas)
+       + (v.grid.guidesHidden ? fieldBool("guides_caches", true) : std::string{})
+       + (v.grid.guidesLocked ? fieldBool("guides_verrouilles", true) : std::string{}) + "\n";
+    // 1.12.30 : la grille de colonnes (ecrite seulement si elle a ete reglee).
+    if (v.columns != ColumnGrid{})
+        s += "colonnes" + fieldBool("visible", v.columns.visible) + fieldInt("nombre", v.columns.count)
+           + fieldBare("gouttiere", formatNumber(v.columns.gutter)) + fieldBare("marge", formatNumber(v.columns.margin))
+           + fieldBool("magnetisme", v.columns.snap) + "\n";
     for (const auto& g : v.guides)
         s += "guide" + fieldBare("sens", g.vertical ? "V" : "H") + fieldBare("position", formatNumber(g.position)) + "\n";
     for (const auto& l : v.layers)
@@ -672,6 +680,16 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             v.grid.snapGrid = toBool(r.get("magnetisme_grille"), true);
             v.grid.snapObjects = toBool(r.get("magnetisme_objets"), true);
             v.grid.snapGuides = toBool(r.get("magnetisme_guides"), true);
+            v.grid.guidesHidden = toBool(r.get("guides_caches"), false);          // 1.12.30
+            v.grid.guidesLocked = toBool(r.get("guides_verrouilles"), false);
+        } else if (r.word == "colonnes") {
+            // 1.12.30 : la grille de colonnes.
+            v.columns.visible = toBool(r.get("visible"), false);
+            v.columns.count = static_cast<int>(std::clamp<long long>(toInt(r.get("nombre"), 12), 1, 48));
+            double n = 0;
+            if (const auto* x = r.get("gouttiere"); x && parseNumber(*x, n)) v.columns.gutter = std::clamp(n, 0.0, 1000.0);
+            if (const auto* x = r.get("marge"); x && parseNumber(*x, n)) v.columns.margin = std::clamp(n, 0.0, 10000.0);
+            v.columns.snap = toBool(r.get("magnetisme"), true);
         } else if (r.word == "guide") {
             Guide g;
             g.vertical = toStr(r.get("sens")) != "H";

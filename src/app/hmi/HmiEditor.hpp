@@ -126,6 +126,8 @@ public:
         ActMakeSymbol,   // lot 10 : Creer un symbole (la selection)
         ActMakeStyle,    // lot 12 : Creer un style nomme (l'objet choisi)
         ActSaveTemplate, // lot 20 : Enregistrer la vue comme modele
+        // 1.12.30 : les regles, la grille de colonnes, les guides ; les langues cote a cote
+        ActRulers, ActColumns, ActGuidesHide, ActGuidesLock, ActGuidesClear, ActLanguages,
     };
     void run(int action);
 
@@ -185,6 +187,8 @@ public:
     // 1.12.26 : l'historique des modifications des objets - le clic droit (un objet, plusieurs,
     // le fond de la vue) demande a l'hote la fenetre Historique ; objects vide : toute la vue.
     void setHistoryOpener(std::function<void(hmi::Id view, std::vector<hmi::Id> objects)> open) { openHistory_ = std::move(open); }
+    // 1.12.30 : "Langues cote a cote" (la barre d'outils, le clic droit) : l'hote ouvre la page sur cette vue.
+    void setLanguagesOpener(std::function<void(hmi::Id view)> open) { openLanguages_ = std::move(open); }
     // Ce que fait le clic droit (scripts, essais) : faux sans hote.
     bool requestHistory(std::vector<hmi::Id> objects) {
         if (!openHistory_) return false;
@@ -286,6 +290,7 @@ private:
     std::function<void(const ValueRequest&)> askValue_;   // 1.11.3 : le selecteur de valeur
     std::function<void(const std::string&)> openHelp_;   // 1.12.18 : « Aide sur ... »
     std::function<void(hmi::Id, std::vector<hmi::Id>)> openHistory_;   // 1.12.26 : la fenetre Historique
+    std::function<void(hmi::Id)> openLanguages_;                         // 1.12.30 : les langues cote a cote
     // 1.12.26 : le suivi des modifications - l'historique de la vue et la vue a son dernier enregistrement
     // (relus apres chaque Enregistrer), les marques des objets (refaites a chaque modification).
     [[nodiscard]] std::int64_t editsNow() const;

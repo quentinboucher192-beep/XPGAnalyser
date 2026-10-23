@@ -80,6 +80,16 @@ public:
     [[nodiscard]] bool elastic() const noexcept { return elastic_; }
     void setOnClick(std::function<void()> f) { onClick_ = std::move(f); }
     void click() { if (onClick_) onClick_(); }
+    //  1.12.30 : UNE PASTILLE A CRANS (le zoom) - un moins a gauche, un plus a
+    //  droite, le texte au milieu : un clic sur le moins ou le plus appelle
+    //  `step` (-1, +1), un clic au milieu, setOnClick (le menu). Muette (setMuted),
+    //  elle reste grise, sans clic.
+    void setStepper(std::function<void(int)> step);
+    [[nodiscard]] bool stepper() const noexcept { return static_cast<bool>(step_); }
+    // Les cadres du moins et du plus (au dernier rangement) ; vides sans crans.
+    [[nodiscard]] gfx::Rect minusRect() const noexcept;
+    [[nodiscard]] gfx::Rect plusRect() const noexcept;
+    void stepBy(int step) { if (step_ && !muted_) step_(step); }
     [[nodiscard]] const std::string& text() const noexcept { return text_; }
     [[nodiscard]] ui::SizeHint sizeHint() const override;
 protected:
@@ -91,6 +101,9 @@ private:
     ui::Tone    tone_{ui::Tone::None}, dotTone_{ui::Tone::None};
     bool        dot_{false}, muted_{false}, caret_{false}, pressed_{false}, shown_{true}, elastic_{false}, quiet_{false};
     std::function<void()> onClick_;
+    std::function<void(int)> step_;     // 1.12.30 : les crans (le zoom)
+    int         pressedPart_{0};        // -1 le moins, 0 le milieu, +1 le plus
+    int         hoverPart_{0};
     core::ConnectionScope links_;       // le survol perdu annule l'appui
 };
 

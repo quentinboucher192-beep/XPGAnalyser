@@ -70,6 +70,9 @@ enum class HmiGlyph : std::uint8_t {
     PidTuner, Damper, MultiBladeDamper, FireDamper,
     // 1.12.30 : le variateur de vitesse ; la visionneuse de documents
     SpeedDrive, DocumentViewer,
+    // 1.12.30 : les regles, la grille de colonnes, les cotes, les langues cote a cote (et leurs
+    // fleches : les langues d'avant, les suivantes)
+    Ruler, Columns, Dimension, LanguagesSide, ChevronLeft, ChevronRight,
 };
 
 [[nodiscard]] HmiGlyph glyphFor(hmi::Kind) noexcept;

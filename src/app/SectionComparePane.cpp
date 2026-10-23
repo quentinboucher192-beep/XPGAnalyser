@@ -222,6 +222,7 @@ private:
 
 // ---- le volet ---------------------------------------------------------------------
 SectionComparePane::SectionComparePane(std::string id) : ui::Widget(std::move(id)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
     tools->add(APrev, HmiGlyph::Up, "Diff\xC3\xA9rence pr\xC3\xA9" "c\xC3\xA9" "dente", "Pr\xC3\xA9" "c\xC3\xA9" "dente");

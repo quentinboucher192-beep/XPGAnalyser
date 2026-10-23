@@ -73,9 +73,10 @@ const ui::Widget* WidgetMenu::tooltipTargetAt(ui::Widget& root, gfx::Point mouse
     // Sans cela, l'infobulle d'un bouton cache sous le voile du didacticiel
     // (ou sous une liste ouverte) s'affichait par-dessus : les infobulles se
     // dessinent apres tout le reste.
-    if (ui::Widget* overlay = root.findOverlayOwner(); overlay && overlay->eventBounds().contains(mouse)
-                                                       && overlay->overlayCovers(mouse))
-        return overlay->tooltipAt(mouse);
+    // 1.12.30 : la liste d'un tableau zoome est dans le repere de ce tableau.
+    if (ui::Widget* overlay = root.findOverlayOwner(); overlay && overlay->eventBounds().contains(overlay->fromSurface(mouse))
+                                                       && overlay->overlayCovers(overlay->fromSurface(mouse)))
+        return overlay->tooltipAt(overlay->parent() ? overlay->parent()->fromSurface(mouse) : mouse);
     return root.tooltipAt(mouse);
 }
 
@@ -110,7 +111,7 @@ void WidgetMenu::drawTooltip(gfx::IRenderer& r, const FrameContext& fc) {
     // trop longue coupee entre deux mots (lot 16), a l'ecran, et le cote choisi
     // a l'ouverture garde tant qu'elle reste ouverte - elle ne saute pas quand
     // son texte change de largeur.
-    const std::string text = tooltipTarget_->liveTooltip(mouse_);
+    const std::string text = tooltipTarget_->liveTooltipAt(mouse_);
     if (text.empty()) return;
     ui::TooltipPlacement placed{tipPlaced_, tipLeft_, tipAbove_, tipMouse_};
     ui::WidgetHost::paintTooltip(r, *fc.theme, fc.surface, mouse_, text, &placed);
@@ -161,7 +162,7 @@ ui::EventResult WidgetMenu::HandleEvent(const ui::InputEvent& ev) {
     // below it but the table receives the click, because dispatch order is
     // tree order and the table happens to come later.
     if (ui::Widget* overlay = root_->findOverlayOwner())
-        if (overlay->dispatch(ev) == ui::EventResult::Consumed)
+        if (overlay->dispatchFromSurface(ev) == ui::EventResult::Consumed)
             return ui::EventResult::Consumed;
 
     // Tab traversal is a menu-level concern: the focused widget gets first

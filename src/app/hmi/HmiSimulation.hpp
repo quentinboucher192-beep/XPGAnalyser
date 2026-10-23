@@ -364,6 +364,11 @@ public:
     void zoomDisplayAround(float factor, gfx::Point anchor);
     void panDisplay(float dx, float dy);
     [[nodiscard]] float      displayZoom() const noexcept { return displayZoom_; }
+    // 1.12.30 : un zoom Native (le contrat de Widget) : la puce du bandeau bas, Ctrl+plus.
+    [[nodiscard]] float zoom() const override { return shownZoom_ > 0.f ? shownZoom_ : 1.f; }
+    void setZoom(float z) override { setDisplayZoom(z); }
+    [[nodiscard]] float minZoom() const override { return kMinDisplayZoom; }
+    [[nodiscard]] float maxZoom() const override { return kMaxDisplayZoom; }
     [[nodiscard]] float      shownZoom() const noexcept { return shownZoom_; }    // l'echelle au dernier dessin
     // 1.12.24 : celle de chaque axe (Remplir : elles different ; sinon shownZoom).
     [[nodiscard]] float      shownZoomX() const noexcept { return shownZoom_ * shownSx_; }

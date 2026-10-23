@@ -138,6 +138,7 @@ std::string cellsText(MemTable t, std::uint32_t n) {
 } // namespace
 
 HmiMemoryMap::HmiMemoryMap(std::string id) : ui::Widget(std::move(id)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     setFocusPolicy(true);
 }
 

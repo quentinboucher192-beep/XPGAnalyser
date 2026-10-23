@@ -71,6 +71,17 @@ struct TranslatableText {
 // "fr", "en", "pt-BR" : 2 ou 3 lettres, un sous-code facultatif.
 [[nodiscard]] bool validLanguageCode(std::string_view code) noexcept;
 
+// ---- 1.12.30 : LA PSEUDO-LANGUE --------------------------------------------------
+//  Pour voir AVANT la traduction ce qui va deborder : chaque texte allonge de
+//  40 %, ses lettres accentuees, entre crochets ("Pompe" -> "[Pompe]" accentue) - un
+//  crochet qui manque : le texte est coupe. Les trous {...} restent tels quels.
+//  Elle n'est jamais une langue du projet : withPseudo() rend une COPIE des
+//  langues ou elle s'ajoute (code kPseudoCode), pour translatedView.
+inline constexpr std::string_view kPseudoCode = "qps";
+[[nodiscard]] std::string pseudoText(std::string_view source);
+[[nodiscard]] Languages withPseudo(const Project&);
+[[nodiscard]] std::string pseudoName();     // "Pseudo (+40 %)"
+
 struct LanguageCoverage {
     std::string code, name;
     std::size_t translated{0}, total{0};

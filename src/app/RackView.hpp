@@ -33,8 +33,10 @@ public:
     explicit RackView(std::string id = {});
 
     void setHardware(std::shared_ptr<const domain::Project> project);
-    void setZoom(float zoom);
-    [[nodiscard]] float zoom() const noexcept { return zoom_; }
+    // 1.12.30 : un zoom Native (le contrat de Widget), de 50 a 250 %.
+    void setZoom(float zoom) override;
+    [[nodiscard]] float zoom() const noexcept override { return zoom_; }
+    [[nodiscard]] float maxZoom() const override { return 2.5f; }
 
     // Emitted with the rack index and slot; slot -1 is the power supply.
     const core::SignalPtr<std::uint16_t, std::int16_t> moduleSelected =

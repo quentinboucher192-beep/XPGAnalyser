@@ -66,7 +66,15 @@ struct QualityOptions {
 // une vue dont le nom se calcule (IHM_NAVIGUER(Nom_Vue)) - on ne sait pas laquelle.
 [[nodiscard]] std::set<Id> reachableViews(const Project&, bool* dynamic = nullptr);
 
-// Les controles de qualite, ajoutes a `out`.
+// Les controles de qualite, ajoutes a `out`. 1.12.30 : les textes qui debordent le
+// sont aussi dans chaque langue du projet ("en English (en) : le texte deborde..."),
+// quand ils ne debordent pas deja dans la langue du projet ; un guide hors de la vue,
+// une grille de colonnes qui ne tient pas (Mise en page, pour information).
 void checkQuality(const Project&, const QualityOptions&, std::vector<Issue>& out);
+
+// 1.12.30 : LES TEXTES QUI DEBORDENT d'une vue (le controle "Lisibilite" de
+// Generer) - pour une vue telle quelle, traduite (translatedView) ou en
+// pseudo-langue : les Langues cote a cote les entourent.
+[[nodiscard]] std::vector<Issue> textOverflows(const Project&, const View&, const QualityOptions&);
 
 } // namespace hmi

@@ -341,7 +341,10 @@ void draw(gfx::IRenderer& r, std::string_view text, gfx::FontId font, float x, f
 } // namespace trailsym
 
 // ============================================================== ListView ====
-ListView::ListView(std::string id) : Widget(std::move(id)) { setFocusPolicy(true); }
+ListView::ListView(std::string id) : Widget(std::move(id)) {
+    setFocusPolicy(true);
+    setZoomSupport(ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page (Widget.hpp)
+}
 
 void ListView::setModel(std::shared_ptr<IListModel> m) {
     model_ = std::move(m);
@@ -464,6 +467,7 @@ EventResult ListView::onEvent(const InputEvent& ev) {
 TreeView::TreeView(std::string id) : Widget(std::move(id)) {
     setFocusPolicy(true);
     setPadding({2.f, 2.f, 2.f, 2.f});
+    setZoomSupport(ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page (Widget.hpp)
 }
 
 void TreeView::setModel(std::shared_ptr<ITreeModel> m) {
@@ -1141,7 +1145,7 @@ EventResult TreeView::onEvent(const InputEvent& ev) {
         const int ri = rowAt(d->pos.y);
         if (ri < 0) {
             // 1.12.18 (planche 19) : le clic droit sous les lignes - le menu du vide.
-            if (d->button == MouseButton::Right) emptyContextRequested->emit(d->pos);
+            if (d->button == MouseButton::Right) emptyContextRequested->emit(toSurface(d->pos));   // 1.12.30 : dans la surface
             return EventResult::Consumed;
         }
 
@@ -1191,7 +1195,7 @@ EventResult TreeView::onEvent(const InputEvent& ev) {
             // agit sur B, le courant d'avant.
             current_ = vr.node;
             invalidate();
-            contextMenuRequested->emit(vr.node, d->pos);
+            contextMenuRequested->emit(vr.node, toSurface(d->pos));   // 1.12.30 : dans la surface (arbre zoome)
             return EventResult::Consumed;
         }
         if (vr.expandable && d->pos.x >= expanderX && d->pos.x <= expanderX + 14.f) {
@@ -1312,7 +1316,7 @@ EventResult TreeView::onEvent(const InputEvent& ev) {
             gfx::Rect r;
             if (!rowRect(current_, r)) return EventResult::Consumed;
             KeyboardMenuScope scope;
-            contextMenuRequested->emit(current_, gfx::Point{r.x + 32.f, r.bottom()});
+            contextMenuRequested->emit(current_, toSurface(gfx::Point{r.x + 32.f, r.bottom()}));
             return EventResult::Consumed;
         }
 
@@ -1395,6 +1399,7 @@ std::string TableView::liveTooltip(gfx::Point mouse) const {
 TableView::TableView(std::string id) : Widget(std::move(id)) {
     setFocusPolicy(true);
     setPadding({0.f, 0.f, 0.f, 0.f});
+    setZoomSupport(ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page (Widget.hpp)
     // Lot 20 : le menu du clic droit - copier, coller, tout choisir.
     auto menu = std::make_unique<PopupMenu>(this->id() + ".context");
     context_ = &static_cast<PopupMenu&>(addChild(std::move(menu)));
@@ -2914,6 +2919,7 @@ const NameHook& nameHook() { return nameSlot(); }
 PropertyGrid::PropertyGrid(std::string id) : Widget(std::move(id)) {
     setFocusPolicy(true);
     setPadding({2.f, 2.f, 2.f, 2.f});
+    setZoomSupport(ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page (Widget.hpp)
 }
 
 namespace {
@@ -4535,7 +4541,7 @@ EventResult PropertyGrid::onEvent(const InputEvent& ev) {
                     finishEdit(false, {});
                     const std::string cat = vr.cat ? vr.cat->name : std::string{};
                     const std::string name = vr.prop->name;
-                    legendClicked->emit(cat, name, b);
+                    legendClicked->emit(cat, name, toSurface(b));   // 1.12.30 : dans la surface (grille zoomee)
                     invalidate();
                     return EventResult::Consumed;
                 }

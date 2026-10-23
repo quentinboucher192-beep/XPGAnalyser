@@ -1174,6 +1174,10 @@ constexpr TopicPlace kTopicPlaces[] = {
     {"raccourcis-vue", "arbre:IHM/Vues"},                                  // 1.11.23 : les raccourcis d'une vue
     {"legende-explorateur", "arbre:IHM"},                                  // 1.11.23 : la legende de l'explorateur
     {"fenetres", "arbre:IHM"},                                             // 1.12.27 : plusieurs fenetres
+    // 1.12.30 : le zoom d'une page (un tableau), les regles de l'editeur de vues, les langues cote a cote
+    // (Configuration > Langues, son bouton Cote a cote).
+    {"zoom", "arbre:IHM/Programmation/Variables IHM"}, {"regles-guides", "arbre:IHM/Vues"},
+    {"langues-cote", "arbre:IHM/Configuration/Langues"},
     {"modeles-de-vues", "arbre:IHM/Vues/Mod\xC3\xA8les"}, {"paquets-de-vues", "arbre:IHM/Vues"},
     // 1.11.2 (T2, decision 247 : la chaine 4 le disait « sans lieu ») : l'export et l'import des symboles, des types, des
     // fonctions et des scripts partent du dossier IHM > Symboles (ses boutons, son clic droit), comme les vues de leur dossier.
