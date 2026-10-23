@@ -10,6 +10,9 @@
 #  Utilise par repair, verify_installation, restore_backup,
 #  resume_installation, reset_user_settings, collect_diagnostics, et par
 #  l'installateur lui-meme (installer_etape.ps1).
+#  1.12.29 : -CleProgres (sauvegarde, donnees livrees, reprise, verification) :
+#  les « Détails » de l'assistant suivent chaque action (Write-XpgProgres) ;
+#  sans /progres, rien ne change.
 # =============================================================================
 
 Set-StrictMode -Off
@@ -160,11 +163,16 @@ function Stop-XpgApplication {
 # ----------------------------------------------------------- la verification ----
 function Test-XpgFichiers {
     # Chaque fichier du manifeste : present, sa taille, son SHA-256. Rend la liste des ecarts.
-    param($Installation, [string] $Dossier = '', [switch] $SansEmpreinte)
+    # 1.12.29 : -CleProgres : « Vérification des fichiers : 37 / 151 » dans les Détails de l'assistant.
+    param($Installation, [string] $Dossier = '', [switch] $SansEmpreinte, [string] $CleProgres = '')
     if (-not $Dossier) { $Dossier = $Installation.Dossier }
     $ecarts = New-Object System.Collections.ArrayList
     if (-not $Installation.Manifeste) { return $null }
+    $total = @($Installation.Manifeste.fichiers).Count
+    $vus = 0
     foreach ($f in $Installation.Manifeste.fichiers) {
+        $vus++
+        if ($CleProgres) { Write-XpgProgres -Etat encours -Cle $CleProgres -Souvent -Texte ("Vérification des fichiers : {0} / {1} (taille et SHA-256)" -f $vus, $total) }
         $p = Join-Path $Dossier $f.chemin
         if (-not (Test-Path -LiteralPath $p)) { [void]$ecarts.Add([pscustomobject]@{ Chemin = $f.chemin; Etat = 'absent'; Role = $f.role; Attendu = $f.sha256 }); continue }
         $taille = (Get-Item -LiteralPath $p).Length
@@ -245,27 +253,51 @@ function Get-XpgDemarrageAuto {
     return $null
 }
 
+function Get-XpgExePoste {
+    # L'exe du poste d'exploitation : IHM Studio depuis la 1.12.0 (API Studio ignore --poste/--ihm
+    # et ouvre l'editeur). L'exe principal seulement si IHM Studio n'est pas la (un zip portable
+    # API seule enleve exe_ihm de config.ini).
+    param($Installation)
+    $ihm = Get-XpgConfig -Section 'Produit' -Cle 'exe_ihm' -Defaut 'IHM-Studio.exe'
+    if ($ihm) {
+        $e = Join-Path $Installation.Dossier $ihm
+        if (Test-Path -LiteralPath $e) { return $e }
+    }
+    return (Join-Path $Installation.Dossier $Installation.Exe)
+}
+
 # ---------------------------------------------------- sauvegarder, restaurer ----
 function New-XpgSauvegarde {
     # Le programme (les fichiers du manifeste), les reglages (%APPDATA%\XpgAnalyzer), les cles
     # de registre ; jamais les projets (ils ne sont pas touches). Garde les N dernieres.
-    param($Installation, [string] $Raison, [switch] $SansProgramme)
+    # 1.12.29 : -CleProgres : les Détails de l'assistant suivent la copie (fichiers, taille), puis
+    # disent ce qui est sauvegardé et où (et la même chose pour « Ce qui a été installé »).
+    param($Installation, [string] $Raison, [switch] $SansProgramme, [string] $CleProgres = '')
     $nom = "{0}_{1}" -f (Get-Date).ToString('yyyy-MM-dd_HH-mm-ss'), ($Raison -replace '[^\w\.-]', '-')
     $d = Join-Path $Installation.Sauvegardes $nom
     New-Item -ItemType Directory -Path $d -Force | Out-Null
     $contenu = @()
+    $dit = @()
+    $court = @()   # (1.12.29) la même chose, plus court : la ligne des Détails tient sur une ligne
     if (-not $SansProgramme -and (Test-Path -LiteralPath $Installation.Dossier)) {
         $n = 0
-        foreach ($f in Get-ChildItem -LiteralPath $Installation.Dossier -Recurse -File -Force -ErrorAction SilentlyContinue) {
+        $octets = 0
+        $tous = @(Get-ChildItem -LiteralPath $Installation.Dossier -Recurse -File -Force -ErrorAction SilentlyContinue |
+                  Where-Object { $_.FullName.Substring($Installation.Dossier.Length + 1) -notlike 'unins*' })
+        $taille = [double](($tous | Measure-Object -Property Length -Sum).Sum)
+        foreach ($f in $tous) {
             $rel = $f.FullName.Substring($Installation.Dossier.Length + 1)
-            if ($rel -like 'unins*') { continue }
             $c = Join-Path $d "programme\$rel"
             $cd = Split-Path -Parent $c
             if (-not (Test-Path -LiteralPath $cd)) { New-Item -ItemType Directory -Path $cd -Force | Out-Null }
             Copy-Item -LiteralPath $f.FullName -Destination $c -Force
             $n++
+            $octets += $f.Length
+            if ($CleProgres) { Write-XpgProgres -Etat encours -Cle $CleProgres -Souvent -Texte ("Sauvegarde de la version {0} : {1} / {2} fichiers ({3} / {4})" -f $Installation.Version, $n, $tous.Count, (Format-XpgTaille $octets), (Format-XpgTaille $taille)) }
         }
         $contenu += "programme ($n fichiers)"
+        $dit += ("le programme ({0} fichiers, {1})" -f $n, (Format-XpgTaille $octets))
+        $court += $dit[-1]
     }
     if (Test-Path -LiteralPath $Installation.Reglages) {
         $n = 0
@@ -278,6 +310,8 @@ function New-XpgSauvegarde {
             $n++
         }
         $contenu += "réglages ($n fichiers)"
+        $dit += ("tes réglages ({0} fichier(s))" -f $n)
+        $court += 'tes réglages'
     }
     $reg = @()
     foreach ($k in @($Installation.CleProduit, $Installation.CleDesinstallation)) {
@@ -289,15 +323,27 @@ function New-XpgSauvegarde {
             if ($LASTEXITCODE -eq 0) { $reg += $f }
         } catch { Write-XpgDetail "reg.exe export $natif : $($_.Exception.Message)" }
     }
-    if ($reg.Count) { $contenu += "registre ($($reg.Count) clé(s))" }
+    if ($reg.Count) { $contenu += "registre ($($reg.Count) clé(s))"; $dit += ("le registre ({0} clé(s))" -f $reg.Count); $court += 'le registre' }
     $info = [pscustomobject]@{ date = (Get-Date).ToString('s'); raison = $Raison; version = $Installation.Version; programme = $Installation.Dossier; contenu = $contenu; projets = 'non (jamais touchés)' }
     Write-XpgTexte -Chemin (Join-Path $d 'sauvegarde.json') -Texte ($info | ConvertTo-Json -Depth 4)
     Write-XpgLog -Niveau OK -Message ("Sauvegarde : {0} ({1})" -f $d, ($contenu -join ', '))
+    if ($CleProgres) {
+        if (-not $dit.Count) { $dit = @('rien de plus que le dossier') }
+        if (-not $court.Count) { $court = $dit }
+        if ($SansProgramme) { $t = 'Tes réglages sont sauvegardés : ' + ($dit -join ', ') }
+        else { $t = ("Version {0} sauvegardée : " -f $Installation.Version) + ($court -join ', ') }
+        Write-XpgProgres -Etat fait -Cle $CleProgres -Texte $t
+        Write-XpgProgres -Etat info -Niveau 1 -Texte ("dans {0}" -f (Format-XpgCheminCourt $d))
+        if ($SansProgramme) { Write-XpgProgres -Etat recap -Cle 'avant' -Texte ("Tes réglages d'avant : {0}" -f ($dit -join ', ')) }
+        else { Write-XpgProgres -Etat recap -Cle 'avant' -Texte ("{0} : {1}" -f $Installation.Version, ($dit -join ', ')) }
+        Write-XpgProgres -Etat recap -Cle 'avant' -Niveau 1 -Texte ("sauvegardé dans {0}" -f $d)
+    }
     # Les plus anciennes au-dela de N (les sauvegardes « avant-restauration » comptent aussi).
     $garder = [int](Get-XpgConfig -Section 'Maintenance' -Cle 'sauvegardes_a_garder' -Defaut '3')
     $toutes = @(Get-ChildItem -LiteralPath $Installation.Sauvegardes -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
     if ($toutes.Count -gt $garder) {
         foreach ($v in $toutes[$garder..($toutes.Count - 1)]) { Remove-Item -LiteralPath $v.FullName -Recurse -Force -ErrorAction SilentlyContinue; Write-XpgDetail "Ancienne sauvegarde retirée : $($v.Name)" }
+        if ($CleProgres) { Write-XpgProgres -Etat info -Niveau 1 -Texte ("{0} ancienne(s) sauvegarde(s) retirée(s) : les {1} plus récentes restent" -f ($toutes.Count - $garder), $garder) }
     }
     return $d
 }
@@ -365,18 +411,24 @@ function Copy-XpgFusion {
     #    le nouveau (celui de $Vers) ;
     #  - different, et l'ancien est A TOI : ta version prend la place, la version livree
     #    est rangee a cote (<nom>.livre-<version>) ; rien n'est perdu.
-    param([string] $De, [string] $Vers, [hashtable] $Livrees, [string] $Version, [System.Collections.ArrayList] $Rapport)
-    $b = [pscustomobject]@{ Copies = 0; Identiques = 0; Anciens = 0; Tiens = 0; Erreurs = 0 }
+    # 1.12.29 : -CleProgres, -Libelle : un compteur dans les Détails de l'assistant ; Octets : la
+    # taille de ce qui a été copié.
+    param([string] $De, [string] $Vers, [hashtable] $Livrees, [string] $Version, [System.Collections.ArrayList] $Rapport,
+          [string] $CleProgres = '', [string] $Libelle = '')
+    $b = [pscustomobject]@{ Copies = 0; Identiques = 0; Anciens = 0; Tiens = 0; Erreurs = 0; Octets = 0 }
     if (-not (Test-Path -LiteralPath $De)) { return $b }
     $base = (Get-Item -LiteralPath $De).FullName.TrimEnd('\')
+    $vus = 0
     foreach ($f in Get-ChildItem -LiteralPath $De -Recurse -File -Force -ErrorAction SilentlyContinue) {
         $rel = $f.FullName.Substring($base.Length + 1)
         $c = Join-Path $Vers $rel
+        $vus++
+        if ($CleProgres) { Write-XpgProgres -Etat encours -Cle $CleProgres -Niveau 1 -Souvent -Texte ("{0} : {1} fichier(s) vu(s), {2} copié(s)" -f $Libelle, $vus, $b.Copies) }
         try {
             if (-not (Test-Path -LiteralPath $c)) {
                 $cd = Split-Path -Parent $c
                 if (-not (Test-Path -LiteralPath $cd)) { New-Item -ItemType Directory -Path $cd -Force | Out-Null }
-                Copy-Item -LiteralPath $f.FullName -Destination $c; $b.Copies++
+                Copy-Item -LiteralPath $f.FullName -Destination $c; $b.Copies++; $b.Octets += $f.Length
                 continue
             }
             $ha = Get-XpgSha256 $f.FullName
@@ -386,8 +438,9 @@ function Copy-XpgFusion {
             $livre = "$c.livre-$Version"
             if (-not (Test-Path -LiteralPath $livre)) { Move-Item -LiteralPath $c -Destination $livre }
             Copy-Item -LiteralPath $f.FullName -Destination $c -Force
-            $b.Tiens++
+            $b.Tiens++; $b.Octets += $f.Length
             if ($Rapport) { [void]$Rapport.Add("  $rel : TA version gardée ; celle de $Version rangée à côté ($([System.IO.Path]::GetFileName($livre)))") }
+            if ($CleProgres) { Write-XpgProgres -Etat attention -Niveau 1 -Texte ("{0}\{1} : ta version est gardée ; celle de {2} est rangée à côté" -f $Libelle, $rel, $Version) }
         } catch {
             $b.Erreurs++
             if ($Rapport) { [void]$Rapport.Add("  $rel : ERREUR $($_.Exception.Message)") }
@@ -438,13 +491,18 @@ function Update-XpgDonneesLivrees {
     # l'utilisateur : absent -> copie ; identique -> rien ; l'ancien est une version livree
     # non modifiee (empreinte connue) -> remplace (garde en .avant-<version>) ; l'ancien est
     # A TOI -> garde, la nouvelle version rangee a cote (<nom>.livre-<version>).
-    param([string] $De, [string] $Vers, [hashtable] $Livrees, [string] $Version, [System.Collections.ArrayList] $Rapport)
+    # 1.12.29 : -CleProgres, -Libelle : un compteur dans les Détails de l'assistant.
+    param([string] $De, [string] $Vers, [hashtable] $Livrees, [string] $Version, [System.Collections.ArrayList] $Rapport,
+          [string] $CleProgres = '', [string] $Libelle = '')
     $b = [pscustomobject]@{ Copies = 0; Identiques = 0; MisAJour = 0; Tiens = 0; Erreurs = 0 }
     if (-not (Test-Path -LiteralPath $De)) { return $b }
     $base = (Get-Item -LiteralPath $De).FullName.TrimEnd('\')
+    $vus = 0
     foreach ($f in Get-ChildItem -LiteralPath $De -Recurse -File -Force -ErrorAction SilentlyContinue) {
         $rel = $f.FullName.Substring($base.Length + 1)
         $c = Join-Path $Vers $rel
+        $vus++
+        if ($CleProgres) { Write-XpgProgres -Etat encours -Cle $CleProgres -Souvent -Texte ("Les fichiers livrés vont dans tes données : {0}, {1} fichier(s) vu(s)" -f $Libelle, $vus) }
         try {
             if (-not (Test-Path -LiteralPath $c)) {
                 $cd = Split-Path -Parent $c
@@ -464,6 +522,7 @@ function Update-XpgDonneesLivrees {
                 [System.IO.File]::WriteAllLines($c, [string[]]$m.Lignes, (New-Object System.Text.UTF8Encoding $false))
                 $b.MisAJour++
                 if ($Rapport) { [void]$Rapport.Add("  $rel : fusionné ($($m.Livres) blocs livrés, $($m.Tiens) à toi gardés ; l'ancien en .avant-$Version)") }
+                if ($CleProgres) { Write-XpgProgres -Etat info -Niveau 1 -Texte ("L'index de ta bibliothèque est fusionné : {0} blocs livrés, {1} à toi gardés" -f $m.Livres, $m.Tiens) }
                 continue
             }
             if ($Livrees.ContainsKey($hu)) {
@@ -475,6 +534,7 @@ function Update-XpgDonneesLivrees {
                 Copy-Item -LiteralPath $f.FullName -Destination "$c.livre-$Version" -Force
                 $b.Tiens++
                 if ($Rapport) { [void]$Rapport.Add("  $rel : TA version gardée ; celle de $Version rangée à côté (.livre-$Version)") }
+                if ($CleProgres) { Write-XpgProgres -Etat attention -Niveau 1 -Texte ("{0}\{1} : ta version est gardée ; celle de {2} est rangée à côté" -f $Libelle, $rel, $Version) }
             }
         } catch {
             $b.Erreurs++
@@ -490,7 +550,8 @@ function Add-XpgBlocsAjoutes {
     # une ligne "chemin<TAB>categorie" par bloc. Le nom et la version sont lus dans le fichier
     # (name = ..., version = ..., #! summary = ...). Meme nom qu'un bloc deja la : le tien le
     # remplace, dans SA categorie ; l'autre est range a cote (.livre-<version>).
-    param($Installation, [string] $Liste, [string] $Version, [System.Collections.ArrayList] $Rapport)
+    # 1.12.29 : -CleProgres : chaque bloc dans les Détails de l'assistant.
+    param($Installation, [string] $Liste, [string] $Version, [System.Collections.ArrayList] $Rapport, [string] $CleProgres = '')
     $b = [pscustomobject]@{ Ajoutes = 0; Remplaces = 0; Erreurs = 0 }
     $lib = $Installation.Bibliotheque
     if (-not $lib) { return $b }
@@ -535,9 +596,11 @@ function Add-XpgBlocsAjoutes {
             if ($deja) { [void]$lignes.Remove($deja) }
             [void]$lignes.Add(("{0} ; {1} ; {2} ; {3} ; {4} ; {5}" -f $ext, $cat, $nom, $ver, $env:USERNAME, $resume))
             $b.Ajoutes++
+            if ($CleProgres) { Write-XpgProgres -Etat fait -Niveau 1 -Texte ("Bloc « {0} » : dans libs\{1}" -f $nom, $cat) }
         } catch {
             $b.Erreurs++
             if ($Rapport) { [void]$Rapport.Add("  $src : ERREUR $($_.Exception.Message)") }
+            if ($CleProgres) { Write-XpgProgres -Etat erreur -Niveau 1 -Texte ("{0} : {1}" -f [System.IO.Path]::GetFileName($src), $_.Exception.Message) }
         }
     }
     if ($b.Ajoutes) { [System.IO.File]::WriteAllLines($index, [string[]]$lignes, $utf8) }
@@ -547,8 +610,11 @@ function Add-XpgBlocsAjoutes {
 function Copy-XpgProjets {
     # Chaque projet (un dossier) de $De va dans $Vers ; un projet du meme nom deja la et
     # different : copie sous "<nom> (repris de <origine>)". Rien n'est ecrase.
-    param([string] $De, [string] $Vers, [string] $Origine, [System.Collections.ArrayList] $Rapport, [hashtable] $Correspondances)
-    $b = [pscustomobject]@{ Projets = 0; Deja = 0; Renommes = 0; Fichiers = 0 }
+    # 1.12.29 : -CleProgres : chaque projet repris dans les Détails de l'assistant ; Octets : la
+    # taille de ce qui a été copié.
+    param([string] $De, [string] $Vers, [string] $Origine, [System.Collections.ArrayList] $Rapport, [hashtable] $Correspondances,
+          [string] $CleProgres = '')
+    $b = [pscustomobject]@{ Projets = 0; Deja = 0; Renommes = 0; Fichiers = 0; Octets = 0; Noms = (New-Object System.Collections.ArrayList) }
     if (-not (Test-Path -LiteralPath $De)) { return $b }
     New-Item -ItemType Directory -Path $Vers -Force | Out-Null
     foreach ($p in Get-ChildItem -LiteralPath $De -Directory -Force -ErrorAction SilentlyContinue) {
@@ -563,15 +629,29 @@ function Copy-XpgProjets {
             $b.Renommes++
             if ($Rapport) { [void]$Rapport.Add("  projet $($p.Name) : un autre du même nom existe déjà ; repris sous « $([System.IO.Path]::GetFileName($cible)) »") }
         }
+        $cleP = "$CleProgres-p$($b.Projets + 1)"
+        if ($CleProgres) { Write-XpgProgres -Etat encours -Cle $cleP -Niveau 1 -Texte ("Projet « {0} »…" -f $p.Name) }
         Copy-Item -LiteralPath $p.FullName -Destination $cible -Recurse
         $b.Projets++
-        $b.Fichiers += @(Get-ChildItem -LiteralPath $cible -Recurse -File -Force).Count
+        $fs = @(Get-ChildItem -LiteralPath $cible -Recurse -File -Force)
+        $o = [double](($fs | Measure-Object -Property Length -Sum).Sum)
+        $b.Fichiers += $fs.Count
+        $b.Octets += $o
+        if ([System.IO.Path]::GetFileName($cible) -ne $p.Name) { [void]$b.Noms.Add(("{0} (repris sous « {1} »)" -f $p.Name, [System.IO.Path]::GetFileName($cible))) }
+        else { [void]$b.Noms.Add($p.Name) }
         if ($Correspondances) { $Correspondances[$p.FullName] = $cible }
+        if ($CleProgres) {
+            if ([System.IO.Path]::GetFileName($cible) -ne $p.Name) {
+                Write-XpgProgres -Etat attention -Cle $cleP -Niveau 1 -Texte ("Projet « {0} » repris sous « {1} » : ce nom était déjà pris" -f $p.Name, [System.IO.Path]::GetFileName($cible))
+            } else {
+                Write-XpgProgres -Etat fait -Cle $cleP -Niveau 1 -Texte ("Projet « {0} » repris : {1} fichier(s), {2}" -f $p.Name, $fs.Count, (Format-XpgTaille $o))
+            }
+        }
     }
     # Les fichiers poses a la racine de projets\ (des exports) : copies sans ecraser.
     foreach ($f in Get-ChildItem -LiteralPath $De -File -Force -ErrorAction SilentlyContinue) {
         $c = Join-Path $Vers $f.Name
-        if (-not (Test-Path -LiteralPath $c)) { Copy-Item -LiteralPath $f.FullName -Destination $c; $b.Fichiers++ }
+        if (-not (Test-Path -LiteralPath $c)) { Copy-Item -LiteralPath $f.FullName -Destination $c; $b.Fichiers++; $b.Octets += $f.Length }
     }
     return $b
 }
@@ -617,24 +697,59 @@ function Invoke-XpgMigration {
     # Copy-XpgProjets) ; reecrit les projets recents de settings.txt (sauvegarde avant) et
     # le demarrage du poste d'exploitation s'il visait un ancien exe. Les anciens dossiers
     # ne sont jamais modifies.
+    # 1.12.29 : chaque ancienne version, ce qui en est repris et sa taille, dans les Détails de
+    # l'assistant et dans « Ce qui a été installé » (Write-XpgProgres ; sans /progres, rien).
     param($Installation, [object[]] $Sources, [System.Collections.ArrayList] $Rapport)
     $livrees = Get-XpgEmpreintesLivrees
     $corr = @{}
     $bilan = [pscustomobject]@{ Projets = 0; Fichiers = 0; Tiens = 0; Erreurs = 0 }
+    $k = 0
     foreach ($s in $Sources) {
         [void]$Rapport.Add("Depuis $($s.Chemin) ($($s.Origine)) :")
+        $k++
+        $cle = "source$k"
+        Write-XpgProgres -Etat encours -Cle $cle -Texte ("Reprise depuis {0}…" -f $s.Chemin)
+        Write-XpgProgres -Etat recap -Cle 'reprise' -Texte $s.Chemin
+        $sp = 0; $sf = 0; $so = 0; $se = 0
         foreach ($sous in @('projets', 'build\Debug\projets', 'build\Release\projets')) {
-            $b = Copy-XpgProjets -De (Join-Path $s.Chemin $sous) -Vers $Installation.Projets -Origine $s.Origine -Rapport $Rapport -Correspondances $corr
-            if ($b.Projets -or $b.Deja) { [void]$Rapport.Add(("  {0} : {1} projet(s) repris ({2} fichiers), {3} déjà là" -f $sous, $b.Projets, $b.Fichiers, $b.Deja)) }
+            $b = Copy-XpgProjets -De (Join-Path $s.Chemin $sous) -Vers $Installation.Projets -Origine $s.Origine -Rapport $Rapport -Correspondances $corr -CleProgres "$cle-$sous"
+            if ($b.Projets -or $b.Deja) {
+                [void]$Rapport.Add(("  {0} : {1} projet(s) repris ({2} fichiers), {3} déjà là" -f $sous, $b.Projets, $b.Fichiers, $b.Deja))
+                # (les comptes à zéro ne sont pas dits)
+                if ($b.Projets) {
+                    $t = "{0} : {1} projet(s) repris ({2} fichiers, {3})" -f $sous, $b.Projets, $b.Fichiers, (Format-XpgTaille $b.Octets)
+                    if ($b.Deja) { $t += (", {0} déjà là" -f $b.Deja) }
+                } else { $t = "{0} : {1} projet(s) déjà là, rien à reprendre" -f $sous, $b.Deja }
+                Write-XpgProgres -Etat info -Niveau 1 -Texte $t
+                if ($b.Noms.Count) { $t = "{0} ({1} fichiers, {2}) : {3}" -f $sous, $b.Fichiers, (Format-XpgTaille $b.Octets), ($b.Noms -join ', ') }
+                Write-XpgProgres -Etat recap -Cle 'reprise' -Niveau 1 -Texte $t
+            }
             $bilan.Projets += $b.Projets; $bilan.Fichiers += $b.Fichiers
+            $sp += $b.Projets; $sf += $b.Fichiers; $so += $b.Octets
         }
         foreach ($p in @(@('libs', $Installation.Bibliotheque), @('resources', (Join-Path $Installation.Donnees 'resources')), @('captures', $Installation.Captures))) {
-            $b = Copy-XpgFusion -De (Join-Path $s.Chemin $p[0]) -Vers $p[1] -Livrees $livrees -Version $Installation.Version -Rapport $Rapport
+            $b = Copy-XpgFusion -De (Join-Path $s.Chemin $p[0]) -Vers $p[1] -Livrees $livrees -Version $Installation.Version -Rapport $Rapport -CleProgres "$cle-$($p[0])" -Libelle $p[0]
             if ($b.Copies + $b.Identiques + $b.Anciens + $b.Tiens) {
                 [void]$Rapport.Add(("  {0} : {1} copié(s), {2} identique(s), {3} ancienne(s) version(s) livrée(s), {4} à toi gardé(s)" -f $p[0], $b.Copies, $b.Identiques, $b.Anciens, $b.Tiens))
+                # (les comptes à zéro ne sont pas dits)
+                $m = @()
+                if ($b.Copies + $b.Tiens) {
+                    $c = "{0} copié(s) ({1})" -f ($b.Copies + $b.Tiens), (Format-XpgTaille $b.Octets)
+                    if ($b.Tiens) { $c += (" dont {0} modifié(s) par toi" -f $b.Tiens) }
+                    $m += $c
+                }
+                if ($b.Identiques) { $m += ("{0} déjà là" -f $b.Identiques) }
+                if ($b.Anciens) { $m += ("{0} ancienne(s) version(s) livrée(s), non reprise(s)" -f $b.Anciens) }
+                $t = "{0} : {1}" -f $p[0], ($m -join ', ')
+                $etat = 'info'; if ($b.Erreurs) { $etat = 'attention' }
+                Write-XpgProgres -Etat $etat -Cle "$cle-$($p[0])" -Niveau 1 -Texte $t
+                Write-XpgProgres -Etat recap -Cle 'reprise' -Niveau 1 -Texte $t
             }
             $bilan.Fichiers += $b.Copies; $bilan.Tiens += $b.Tiens; $bilan.Erreurs += $b.Erreurs
+            $sf += $b.Copies + $b.Tiens; $so += $b.Octets; $se += $b.Erreurs
         }
+        $etat = 'fait'; if ($se) { $etat = 'attention' }
+        Write-XpgProgres -Etat $etat -Cle $cle -Texte ("Repris depuis {0} : {1} projet(s), {2} fichier(s), {3}" -f $s.Chemin, $sp, $sf, (Format-XpgTaille $so))
     }
     # Les projets recents : l'ancien chemin -> le nouveau (settings.txt sauvegarde avant).
     $reglages = Join-Path $Installation.Reglages 'settings.txt'
@@ -643,7 +758,11 @@ function Invoke-XpgMigration {
         # a pu ecrire des chemins accentues en ANSI ; les relire en UTF-8 les abimerait.
         $texte = $null
         try { $texte = (New-Object System.Text.UTF8Encoding($false, $true)).GetString([System.IO.File]::ReadAllBytes($reglages)) } catch { }
-        if ($null -eq $texte) { [void]$Rapport.Add("Réglages : settings.txt n'est pas en UTF-8 : les projets récents ne sont pas réécrits (ils visent les anciens dossiers, toujours là)."); $corr = @{} ; $texte = '' }
+        if ($null -eq $texte) {
+            [void]$Rapport.Add("Réglages : settings.txt n'est pas en UTF-8 : les projets récents ne sont pas réécrits (ils visent les anciens dossiers, toujours là).")
+            Write-XpgProgres -Etat attention -Texte 'Tes réglages : tes projets récents visent toujours les anciens dossiers (settings.txt n''est pas en UTF-8)'
+            $corr = @{} ; $texte = ''
+        }
         # (Pas StartsWith : en comparaison culturelle, le BOM est ignorable et tout texte « commence » par lui.)
         if ($texte.Length -gt 0 -and $texte[0] -eq [char]0xFEFF) { $texte = $texte.Substring(1) }
         $nouveau = $texte; $n = 0
@@ -652,18 +771,26 @@ function Invoke-XpgMigration {
             Copy-Item -LiteralPath $reglages -Destination "$reglages.avant-$($Installation.Version)" -Force
             [System.IO.File]::WriteAllText($reglages, $nouveau, (New-Object System.Text.UTF8Encoding $false))
             [void]$Rapport.Add("Réglages : $n chemin(s) de projet réécrit(s) vers le nouveau dossier (l'ancien settings.txt gardé en settings.txt.avant-$($Installation.Version)).")
+            $t = "Tes réglages : {0} projet(s) récent(s) visent maintenant leur nouveau dossier" -f $n
+            Write-XpgProgres -Etat fait -Texte $t
+            Write-XpgProgres -Etat info -Niveau 1 -Texte ("l'ancien settings.txt est gardé (settings.txt.avant-{0})" -f $Installation.Version)
+            Write-XpgProgres -Etat recap -Cle 'reprise' -Texte $t
         }
     }
-    # Le poste d'exploitation lance au demarrage : vers le nouvel exe.
+    # Le poste d'exploitation lance au demarrage : vers le nouvel exe - celui d'IHM Studio, qui a
+    # le poste (1.12.29 : avant, l'exe principal, API Studio, qui ne l'a plus depuis la 1.12.0).
     $run = Get-XpgDemarrageAuto
     if ($run) {
         foreach ($s in $Sources) {
             if ($run.Valeur.IndexOf($s.Chemin, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
-                $exe = Join-Path $Installation.Dossier $Installation.Exe
+                $exe = Get-XpgExePoste $Installation
                 $v = [regex]::Replace($run.Valeur, '^"[^"]*"', ('"' + $exe.Replace('$', '$$') + '"'))
                 foreach ($k in $corr.Keys) { $v = [regex]::Replace($v, [regex]::Escape($k), ($corr[$k] -replace '\$', '$$$$'), 'IgnoreCase') }
                 Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name $run.Nom -Value $v
                 [void]$Rapport.Add("Démarrage du poste d'exploitation : réécrit vers $exe (avant : $($run.Valeur)).")
+                $t = "Le poste d'exploitation démarre maintenant {0}" -f $exe
+                Write-XpgProgres -Etat fait -Texte $t
+                Write-XpgProgres -Etat recap -Cle 'reprise' -Texte $t
                 break
             }
         }
@@ -770,7 +897,9 @@ function Invoke-XpgDiagnostic {
     $run = Get-XpgDemarrageAuto
     if ($run) {
         $exeRun = ($run.Valeur -replace '^"([^"]+)".*$', '$1')
+        # (1.12.29 : ou vers API Studio - une reprise d'avant la 1.12.29 l'y envoyait - qui n'a pas le poste)
         if (-not (Test-Path -LiteralPath $exeRun)) { Add-XpgLigne "Démarrage du poste d'exploitation : vise un exe absent ($exeRun)" 'ATTENTION'; [void]$pb.Add((New-XpgProbleme 'parametres' 'démarrage automatique vers un exe absent' 'attention' 'parametres' $run)) }
+        elseif (($exeRun -ieq (Join-Path $i.Dossier $i.Exe)) -and ((Get-XpgExePoste $i) -ine $exeRun)) { Add-XpgLigne "Démarrage du poste d'exploitation : vise API Studio, qui n'a pas le poste ($exeRun)" 'ATTENTION'; [void]$pb.Add((New-XpgProbleme 'parametres' "démarrage automatique vers API Studio (le poste d'exploitation est dans IHM Studio)" 'attention' 'parametres' $run)) }
     }
     # 15. une installation interrompue ?
     $etat = Read-XpgEtat (Get-XpgFichierEtat $i)

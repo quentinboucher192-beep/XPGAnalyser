@@ -109,7 +109,7 @@ function Repair-XpgParametres {
         } elseif ($p.Texte -like 'dossier des*absent*' -and $p.Donnee) {
             New-Item -ItemType Directory -Path $p.Donnee -Force | Out-Null; Add-Rapport "  dossier recréé (vide) : $($p.Donnee)"; $n++
         } elseif ($p.Texte -like 'démarrage automatique*' -and $p.Donnee) {
-            $exe = Join-Path $Installation.Dossier $Installation.Exe
+            $exe = Get-XpgExePoste $Installation   # 1.12.29 : IHM Studio (le poste), pas API Studio
             $v = [regex]::Replace($p.Donnee.Valeur, '^"[^"]*"', ('"' + $exe.Replace('$', '$$') + '"'))
             Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name $p.Donnee.Nom -Value $v
             Add-Rapport "  démarrage du poste d'exploitation : vers $exe (avant : $($p.Donnee.Valeur))"; $n++

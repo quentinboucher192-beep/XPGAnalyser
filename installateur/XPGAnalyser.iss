@@ -62,10 +62,28 @@
 ;   - sans assistant (/SILENT, /VERYSILENT), rien de tout cela n'est créé ; une erreur pendant
 ;     une animation l'arrête (notée dans le journal), jamais l'installation.
 ;
+;  1.12.29 - plus grand, plus calme, plus de détails :
+;   - l'assistant fait 912 x 580 à 96 ppp (Dimensionner ; plus grand à 125, 150, 200 %, ramené à
+;     la taille de l'écran s'il le faut) ; la colonne, les bandeaux, les cartes et la page de la
+;     copie sont refaits à cette taille (outils\installateur_images.py) ;
+;   - rien ne clignote : la fenêtre se dessine d'un bloc (WS_EX_COMPOSITED ; /COMPOSITION=non
+;     l'enlève) ; aucun texte n'est posé sur une animation (les noms des étapes sont une image à
+;     part, que la pulsation ne touche pas ; la note de la colonne est au-dessus du décor) ; les
+;     textes ne changent plus de couleur en arrivant ; le pourcentage, le fichier en cours et le
+;     temps qui reste s'écrivent dans des images, au plus cinq fois par seconde ;
+;   - la préparation et la copie ont leurs « Détails » : chaque action, son heure et son état (en
+;     cours, fait, attention, erreur) - la version trouvée et sa sauvegarde, la copie (fichiers,
+;     tailles), les raccourcis, puis tes dossiers, la reprise de chaque ancienne version (ce qui en
+;     est pris), le lot 8, la vérification. Les étapes PowerShell écrivent leurs lignes au fur et à
+;     mesure (/progres:<fichier>, voir installer_etape.ps1), que l'assistant lit pendant qu'elles
+;     tournent ; sans assistant, les mêmes lignes vont dans le journal (/LOG) ;
+;   - « Ce qui a été installé » dit ce qui a été sauvegardé, ce qui a été repris et d'où.
+;
 ;  Sans surveillance : API-IHM-Studio-Setup-<v>.exe /VERYSILENT /SUPPRESSMSGBOXES
 ;    [/CURRENTUSER | /ALLUSERS] [/DIR="..."] [/DONNEES="D:\Mes données"]
 ;    [/MIGRER=oui|non] [/DESINSTALLERLOT8=oui|non] [/LOG="fichier"]
-;  (voir docs\GUIDE-INSTALLATION.md).
+;  (voir docs\GUIDE-INSTALLATION.md). Avec l'assistant : /COMPOSITION=non (1.12.29) si sa fenêtre
+;  se dessine mal sur un PC (le double tampon de Windows est alors enlevé).
 ; =============================================================================
 
 #if Ver < EncodeVer(6, 3, 0)
@@ -148,6 +166,46 @@
 #define DecorPistes ReadIni(HabIni, "Decor", "pistes", "")
 #define DecorHaut ReadIni(HabIni, "Decor", "haut", "54")
 #define DecorH ReadIni(HabIni, "Decor", "hauteur", "96")
+; 1.12.29 : la colonne, les bandeaux de l'accueil et de la fin (leur taille, leur éclat, la lueur de l'accueil).
+#define ColonneL ReadIni(HabIni, "Colonne", "largeur", "232")
+#define AccueilTaille ReadIni(HabIni, "Accueil", "taille", "620,196")
+#define AccueilEclat ReadIni(HabIni, "Accueil", "eclat", "277,675")
+#define AccueilLueur ReadIni(HabIni, "Accueil", "lueur", "207")
+#define FinTaille ReadIni(HabIni, "Fin", "taille", "620,196")
+#define FinEclat ReadIni(HabIni, "Fin", "eclat", "310,664")
+; 1.12.29 : ce que la copie pose, d'après le manifeste de la livraison (les « Détails » de la copie) :
+; le nombre de fichiers, leur taille, et les gros (un Mo et plus : leur nom et leur taille).
+#define ManifesteFichier AddBackslash(Staging) + "manifeste.json"
+#define NbFichiers 0
+#define TailleFichiers 0
+#define GrosFichiers ""
+#define ManifesteH 0
+#define ManifesteLigne ""
+#define ManifesteChemin ""
+#define ManifesteTaille 0
+; (dans un #sub, #define ferait une variable locale : les globales changent par #expr)
+#sub ManifesteLire
+  #expr ManifesteLigne = Trim(FileRead(ManifesteH))
+  #if Pos('"chemin":', ManifesteLigne) == 1
+    #expr ManifesteChemin = StringChange(StringChange(StringChange(Trim(Copy(ManifesteLigne, 10)), '"', ""), ",", ""), "\\", "\")
+  #elif Pos('"taille":', ManifesteLigne) == 1
+    #expr ManifesteTaille = Int(StringChange(Trim(Copy(ManifesteLigne, 10)), ",", ""), 0)
+    #expr NbFichiers = NbFichiers + 1
+    #expr TailleFichiers = TailleFichiers + ManifesteTaille
+    #if ManifesteTaille >= 1048576
+      #expr GrosFichiers = GrosFichiers + StringChange(ManifesteChemin, "'", "''") + ":" + Str(ManifesteTaille) + "|"
+    #endif
+  #endif
+#endsub
+#if FileExists(ManifesteFichier)
+  #for {ManifesteH = FileOpen(ManifesteFichier); ManifesteH && !FileEof(ManifesteH); 0} ManifesteLire
+  #if ManifesteH
+    #expr FileClose(ManifesteH)
+  #endif
+  ; le manifeste lui-même est copié aussi (il ne se cite pas)
+  #expr NbFichiers = NbFichiers + 1
+  #expr TailleFichiers = TailleFichiers + FileSize(ManifesteFichier)
+#endif
 
 [Setup]
 AppId={{{#AppGuid}}
@@ -180,8 +238,13 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 WizardStyle=modern
-; 1.12.27 : la colonne des étapes s'ajoute à gauche (l'assistant s'élargit d'autant) ; la page d'accueil revient.
-WizardSizePercent=130,140
+; 1.12.27 : la colonne des étapes s'ajoute à gauche ; la page d'accueil revient. 1.12.29 : la taille vient
+; du [Code] (Dimensionner : 912 x 580 à 96 ppp, ramenée à l'écran s'il le faut) - un pourcentage ici,
+; Inno Setup l'appliquait APRÈS InitializeWizard, colonne comprise (sans assistant : comme avant). Et
+; l'assistant « modern » était redimensionnable, mais pas au-delà de 150 % de sa taille d'origine : la
+; 1.12.28 restait ainsi à 750 de large ; une taille fixe (la mise en page des pages en dépend).
+WizardSizePercent=100
+WizardResizable=no
 DisableWelcomePage=no
 WizardImageFile=images\grande.bmp,images\grande-2x.bmp
 WizardSmallImageFile=images\petite.bmp,images\petite-2x.bmp
@@ -472,6 +535,232 @@ begin
   Result := DevelopperJetons(DonneesBrut(''));
 end;
 
+// ================================================ 1.12.29 : les détails, les lignes ====
+//  Les « Détails » de la préparation et de la copie : une ligne par action - son heure, son état
+//  (en cours, fait, attention, erreur, ou une information), son texte, court et au tutoiement.
+//  Ici, les lignes elles-mêmes, qu'elles viennent de l'assistant ou d'une étape PowerShell
+//  (/progres:<fichier>, voir Write-XpgProgres, lu pendant que l'étape tourne : Exec attend en
+//  traitant les messages, la minuterie continue). Une ligne qui a une clé se met à jour (« 37 / 151 »,
+//  puis « 151 / 151 ») ; chacune va aussi dans le journal de l'installation (/LOG), avec ou sans
+//  assistant. Leur dessin : plus bas, « les détails, à l'écran ».
+const
+  jEnCours = 0;
+  jFait = 1;
+  jAttention = 2;
+  jErreur = 3;
+  jInfo = 4;
+
+type
+  TLigneJournal = record
+    Heure, Cle, Texte: String;
+    Etat, Niveau: Integer;
+  end;
+
+var
+  Lignes: array of TLigneJournal;
+  JournalSale: Boolean;
+  // le fichier de l'étape PowerShell en cours ('' : aucune), ce qui en a été lu (octets, lignes
+  // entières, lignes prises), le numéro de l'étape (ses clés lui sont propres), la dernière lecture
+  ProgresFichier: String;
+  ProgresOctets, ProgresComplet, ProgresPris, ProgresEtape, ProgresVu: Integer;
+  // les lignes « recap » des étapes (« rubrique|niveau|texte ») : pour « Ce qui a été installé »
+  RecapPs: TArrayOfString;
+  // le début de l'installation (la préparation), pour sa durée
+  InstallDebut: DWORD;
+
+function GetTickCount: DWORD;
+  external 'GetTickCount@kernel32.dll stdcall setuponly';
+
+function JournalNomEtat(Etat: Integer): String;
+begin
+  case Etat of
+    jEnCours: Result := 'en cours';
+    jFait: Result := 'fait';
+    jAttention: Result := 'attention';
+    jErreur: Result := 'erreur';
+  else
+    Result := 'info';
+  end;
+end;
+
+// Une ligne de plus - ou, si sa clé est déjà là, la mise à jour de la sienne (elle garde sa place et
+// son heure, celle de son début : la colonne des heures se lit de haut en bas) ; rend son numéro. Le
+// journal (/LOG) la reçoit à chaque état.
+function JournalEcrire(Etat, Niveau: Integer; Cle, Texte, Heure: String): Integer;
+var I, N: Integer;
+    Retrait: String;
+begin
+  Result := -1;
+  if Heure = '' then Heure := GetDateTimeString('hh:nn:ss', '-', ':');
+  if Niveau > 0 then Retrait := '    ' else Retrait := '';
+  if Cle <> '' then
+    for I := GetArrayLength(Lignes) - 1 downto 0 do
+      if Lignes[I].Cle = Cle then begin
+        Result := I;
+        Break;
+      end;
+  if Result >= 0 then begin
+    if Lignes[Result].Etat <> Etat then begin
+      Log('Détails : ' + Retrait + '[' + JournalNomEtat(Etat) + '] ' + Texte);
+      Lignes[Result].Etat := Etat;
+      Lignes[Result].Texte := Texte;
+      JournalSale := True;
+    end else if Lignes[Result].Texte <> Texte then begin
+      Lignes[Result].Texte := Texte;
+      JournalSale := True;
+    end;
+    Exit;
+  end;
+  N := GetArrayLength(Lignes);
+  SetArrayLength(Lignes, N + 1);
+  Lignes[N].Heure := Heure;
+  Lignes[N].Cle := Cle;
+  Lignes[N].Texte := Texte;
+  Lignes[N].Etat := Etat;
+  Lignes[N].Niveau := Niveau;
+  Log('Détails : ' + Retrait + '[' + JournalNomEtat(Etat) + '] ' + Texte);
+  JournalSale := True;
+  Result := N;
+end;
+
+procedure JournalNote(Etat: Integer; Cle, Texte: String);
+begin
+  JournalEcrire(Etat, 0, Cle, Texte, '');
+end;
+
+function JournalALaCle(Cle: String): Boolean;
+var I: Integer;
+begin
+  Result := False;
+  for I := 0 to GetArrayLength(Lignes) - 1 do
+    if Lignes[I].Cle = Cle then Result := True;
+end;
+
+procedure JournalDetail(Etat: Integer; Cle, Texte: String);
+begin
+  JournalEcrire(Etat, 1, Cle, Texte, '');
+end;
+
+// Un détail de la ligne Parent, posé sous elle (et sous ses autres détails, « Parent:... ») même si
+// d'autres lignes l'ont suivie ; à son heure, pour que les heures se suivent. Sans elle : à la fin.
+procedure JournalSous(Etat: Integer; Parent, Cle, Texte: String);
+var I, P, N: Integer;
+begin
+  P := -1;
+  for I := 0 to GetArrayLength(Lignes) - 1 do
+    if (Lignes[I].Cle = Parent) or (Copy(Lignes[I].Cle, 1, Length(Parent) + 1) = Parent + ':') then P := I;
+  N := GetArrayLength(Lignes);
+  if (P < 0) or (P = N - 1) or ((Cle <> '') and JournalALaCle(Cle)) then begin
+    JournalEcrire(Etat, 1, Cle, Texte, '');
+    Exit;
+  end;
+  SetArrayLength(Lignes, N + 1);
+  for I := N downto P + 2 do begin
+    Lignes[I].Heure := Lignes[I - 1].Heure;
+    Lignes[I].Cle := Lignes[I - 1].Cle;
+    Lignes[I].Texte := Lignes[I - 1].Texte;
+    Lignes[I].Etat := Lignes[I - 1].Etat;
+    Lignes[I].Niveau := Lignes[I - 1].Niveau;
+  end;
+  Lignes[P + 1].Heure := Lignes[P].Heure;
+  Lignes[P + 1].Cle := Cle;
+  Lignes[P + 1].Texte := Texte;
+  Lignes[P + 1].Etat := Etat;
+  Lignes[P + 1].Niveau := 1;
+  Log('Détails :     [' + JournalNomEtat(Etat) + '] ' + Texte);
+  JournalSale := True;
+end;
+
+// Une ligne d'une étape PowerShell : « HH:mm:ss|etat|niveau|cle|texte » (le texte peut avoir des |).
+procedure ProgresLigne(L: String);
+var P, K, Etat, N: Integer;
+    Champ: TArrayOfString;
+begin
+  SetArrayLength(Champ, 4);
+  for K := 0 to 3 do begin
+    P := Pos('|', L);
+    if P = 0 then Exit;
+    Champ[K] := Copy(L, 1, P - 1);
+    Delete(L, 1, P);
+  end;
+  if Champ[1] = 'recap' then begin
+    N := GetArrayLength(RecapPs);
+    SetArrayLength(RecapPs, N + 1);
+    RecapPs[N] := Champ[3] + '|' + IntToStr(StrToIntDef(Champ[2], 0)) + '|' + L;
+    Exit;
+  end;
+  if Champ[1] = 'encours' then Etat := jEnCours
+  else if Champ[1] = 'fait' then Etat := jFait
+  else if Champ[1] = 'attention' then Etat := jAttention
+  else if Champ[1] = 'erreur' then Etat := jErreur
+  else Etat := jInfo;
+  if Champ[3] <> '' then Champ[3] := 'ps' + IntToStr(ProgresEtape) + ':' + Champ[3];
+  JournalEcrire(Etat, StrToIntDef(Champ[2], 0), Champ[3], L, Champ[0]);
+end;
+
+// Les lignes nouvelles du fichier de l'étape en cours. Une ligne n'est prise qu'entière (son saut
+// de ligne est écrit : PowerShell écrit chaque ligne d'un coup) ; Fin : l'étape est finie, tout est
+// pris. Le texte est relu par LoadStringsFromLockedFile (l'UTF-8 y est reconnu ; « locked » :
+// PowerShell peut écrire pendant qu'on lit).
+procedure ProgresLire(Fin: Boolean);
+var Brut: AnsiString;
+    Texte: TArrayOfString;
+    I, N: Integer;
+begin
+  if ProgresFichier = '' then Exit;
+  if not LoadStringFromLockedFile(ProgresFichier, Brut) then Exit;
+  N := Length(Brut);
+  for I := ProgresOctets + 1 to N do
+    if Ord(Brut[I]) = 10 then ProgresComplet := ProgresComplet + 1;
+  ProgresOctets := N;
+  if (ProgresComplet <= ProgresPris) and not Fin then Exit;
+  if not LoadStringsFromLockedFile(ProgresFichier, Texte) then Exit;
+  N := GetArrayLength(Texte);
+  if not Fin and (N > ProgresComplet) then N := ProgresComplet;
+  for I := ProgresPris to N - 1 do
+    if Trim(Texte[I]) <> '' then ProgresLigne(Texte[I]);
+  if N > ProgresPris then ProgresPris := N;
+end;
+
+procedure ProgresCommencer(Fichier: String; Etape: Integer);
+begin
+  ProgresFichier := Fichier;
+  ProgresOctets := 0;
+  ProgresComplet := 0;
+  ProgresPris := 0;
+  ProgresEtape := Etape;
+  ProgresVu := 0;
+end;
+
+procedure ProgresFinir;
+begin
+  try
+    ProgresLire(True);
+  except
+    Log('Détails : ' + GetExceptionMessage);
+  end;
+  ProgresFichier := '';
+end;
+
+// 52220928 -> « 49,8 Mo »
+function TailleLisible(T: Extended): String;
+begin
+  if T >= 1073741824 then Result := Format('%.1f Go', [T / 1073741824])
+  else if T >= 1048576 then Result := Format('%.1f Mo', [T / 1048576])
+  else if T >= 1024 then Result := IntToStr(Round(T / 1024)) + ' Ko'
+  else Result := IntToStr(Round(T)) + ' o';
+  StringChangeEx(Result, '.', ',', True);
+end;
+
+// 72400 -> « 1 min 12 s »
+function DureeLisible(Ms: Integer): String;
+var S: Integer;
+begin
+  S := (Ms + 500) div 1000;
+  if S < 60 then Result := IntToStr(S) + ' s'
+  else Result := IntToStr(S div 60) + ' min ' + Format('%.2d', [S mod 60]) + ' s';
+end;
+
 function PowerShell: String;
 begin
   Result := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
@@ -484,17 +773,31 @@ end;
 
 // Une etape PowerShell (installer_etape.ps1), cachee, attendue ; son code. Demarre : le script a
 // vraiment demarre (il a ecrit sa marque) ; sinon, Windows l'a refuse (strategie de groupe).
+// 1.12.29 : a l'installation, /progres:<fichier> - ses lignes pour les « Détails », lues pendant
+// qu'elle tourne (la minuterie de l'assistant), puis les dernieres a la fin (aussi sans assistant :
+// elles vont dans le journal). La desinstallation n'en a pas.
 function EtapePowerShell(Script, Arguments: String; var Code: Integer; var Demarre: Boolean): Boolean;
-var Params, FichierMarque: String;
+var Params, FichierMarque, Progres: String;
 begin
   NumeroEtape := NumeroEtape + 1;
   FichierMarque := ExpandConstant('{tmp}') + '\xpg-marque-' + IntToStr(NumeroEtape) + '.txt';
   DeleteFile(FichierMarque);
+  Progres := '';
+  if not IsUninstaller then begin
+    Progres := ExpandConstant('{tmp}') + '\xpg-progres-' + IntToStr(NumeroEtape) + '.txt';
+    DeleteFile(Progres);
+  end;
   Params := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Script + '" ' + Arguments +
             ' /journal:"' + JournalInstallation + '" /marque:"' + FichierMarque + '"';
+  if Progres <> '' then Params := Params + ' /progres:"' + Progres + '"';
   Log('PowerShell : ' + Params);
   Code := -1;
-  Result := Exec(PowerShell, Params, '', SW_HIDE, ewWaitUntilTerminated, Code);
+  ProgresCommencer(Progres, NumeroEtape);
+  try
+    Result := Exec(PowerShell, Params, '', SW_HIDE, ewWaitUntilTerminated, Code);
+  finally
+    ProgresFinir;
+  end;
   Demarre := FileExists(FichierMarque);
   DeleteFile(FichierMarque);
   if Demarre then Log('PowerShell : code ' + IntToStr(Code))
@@ -763,6 +1066,27 @@ begin
   else Result := Result + ', 32 bits';
 end;
 
+// 1.12.29 : une rubrique des lignes « recap » des étapes PowerShell (rubrique|niveau|texte), sous son titre.
+procedure RecapRubrique(var L: TArrayOfString; Rubrique, Titre, Note: String);
+var I, N: Integer;
+    S, Niveau: String;
+begin
+  N := 0;
+  for I := 0 to GetArrayLength(RecapPs) - 1 do begin
+    S := RecapPs[I];
+    if Copy(S, 1, Length(Rubrique) + 1) <> Rubrique + '|' then Continue;
+    Delete(S, 1, Length(Rubrique) + 1);
+    Niveau := Copy(S, 1, Pos('|', S) - 1);
+    Delete(S, 1, Pos('|', S));
+    if N = 0 then begin
+      if Note <> '' then Ajoute(L, Titre + '   (' + Note + ')') else Ajoute(L, Titre);
+    end;
+    N := N + 1;
+    if Niveau = '0' then Ajoute(L, '  ' + S) else Ajoute(L, '      ' + S);
+  end;
+  if N > 0 then Ajoute(L, '');
+end;
+
 function RecapLignes: TArrayOfString;
 var L: TArrayOfString;
     App, Don, Etat, Menu, Unins, S: String;
@@ -777,6 +1101,11 @@ begin
   Ajoute(L, '{#Nom} {#Version} · installé le ' + GetDateTimeString('dd/mm/yyyy à hh:nn', '/', ':') + ' · ' + S);
   Ajoute(L, 'Ce PC : ' + LeWindows);
   Ajoute(L, '');
+  // 1.12.29 : ce que les étapes PowerShell ont fait (leurs lignes « recap ») : la version d'avant,
+  // ce qui a été repris et d'où, tes blocs
+  RecapRubrique(L, 'avant', 'LA VERSION D''AVANT', '');
+  RecapRubrique(L, 'reprise', 'REPRIS DE TES ANCIENNES VERSIONS', 'copié : les originaux ne sont pas modifiés');
+  RecapRubrique(L, 'blocs', 'TES BLOCS', '');
   Ajoute(L, 'LES PROGRAMMES');
   Ajoute(L, '  ' + Colonne('{#Exe}', 21) + Colonne('API Studio', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#Exe}'));
   Ajoute(L, '  ' + Colonne('{#ExeIhm}', 21) + Colonne('IHM Studio', 23) + Colonne('64 bits (x64)', 15) + TailleDe(App + '\{#ExeIhm}'));
@@ -817,6 +1146,10 @@ begin
   Ajoute(L, '');
   Ajoute(L, 'LA MAINTENANCE   ' + Etat);
   Ajoute(L, '  ├─ ' + Colonne('Journaux\', 32) + ExtractFileName(JournalInstallation));
+  // 1.12.29 : le rapport de l'étape d'après la copie (tes données, la reprise, la vérification)
+  for N := 0 to GetArrayLength(RecapPs) - 1 do
+    if Copy(RecapPs[N], 1, 8) = 'rapport|' then
+      Ajoute(L, '  │  ' + Colonne('', 33) + ExtractFileName(Copy(RecapPs[N], 11, Length(RecapPs[N]))) + ' : tes données, la reprise, la vérification');
   Ajoute(L, '  ├─ ' + Colonne('Sauvegardes\', 32) + 'la version d''avant, s''il y en avait une');
   Ajoute(L, '  ├─ ' + Colonne('Reserve\{#Version}\', 32) + 'de quoi réparer sans Internet');
   Ajoute(L, '  └─ ' + Colonne('Etat\', 32));
@@ -925,26 +1258,51 @@ const
                  'Menu Démarrer > {#Nom} > Maintenance' + #160 + ': vérifier, réparer, revenir à la version d''avant.';
   DiapoDuree = 5600;
   DiapoFondu = 700;
-  // 1.12.28 : la colonne des étapes est une seule image, le « rail » (unités 1x : posé en RailX,
-  // RailY de la colonne ; l'étape I a son centre à RailPremier + RailPas * I du haut du rail).
-  RailX = 10;
-  RailY = 130;
-  RailL = 180;
-  RailH = 246;
-  RailPremier = 20;
-  RailPas = 30;
+  // 1.12.28 : les étapes de la colonne, le « rail » (unités 1x : posé en RailX, RailY de la colonne ;
+  // l'étape I a son centre à RailPremier + RailPas * I du haut du rail). 1.12.29 : DEUX images côte à
+  // côte, coupées en RailCoupe - les marques (elles bougent : la pulsation, l'anneau de la copie) et
+  // les noms (redessinés seulement quand une étape change d'état) : la pulsation d'une marque ne
+  // redessine jamais le nom à côté d'elle.
+  RailX = 12;
+  RailY = 140;
+  RailL = 208;
+  RailH = 274;
+  RailPremier = 18;
+  RailPas = 34;
   RailMarqueX = 22;
-  RailTexteX = 44;
+  RailCoupe = 40;
+  RailTexteX = 46;
   // le décor du bas de la colonne : sa hauteur (images\ui\decor.bmp, 1x)
   DecorH = {#DecorH};
-  // les courbes (voir Courbe) et ce qu'une transition change (voir TransitionAjouter)
+  // 1.12.29 : la taille de l'assistant (unités 1x : des pixels à 96 ppp avec sa police, Tahoma 8 ;
+  // voir Dimensionner), la largeur de la colonne (images\ui\habillage.ini)
+  FenetreL = 912;
+  FenetreH = 580;
+  ColonneL = {#ColonneL};
+  GWL_EXSTYLE = -20;
+  WS_EX_COMPOSITED = $02000000;
+  SPI_GETWORKAREA = $0030;
+  // 1.12.29 : les détails, à l'écran (unités 1x) : l'en-tête, une ligne, ses colonnes (l'heure, le
+  // centre de la marque, le texte ; le retrait du niveau 1), les couleurs de l'heure et des états
+  JournalTeteH = 30;
+  JournalLigneH = 19;
+  JournalHeureX = 14;
+  JournalMarqueX = 70;
+  JournalTexteX = 84;
+  JournalRetrait = 16;
+  CouleurHeure = $00A08E7E;        // #7E8EA0
+  CouleurAttention = $00006A9A;    // #9A6A00
+  CouleurErreur = $002828C6;       // #C62828
+  // les courbes (voir Courbe) et ce qu'une transition change (voir TransitionAjouter) ; 1.12.29 : un
+  // texte ne change plus de couleur en arrivant (il se redessinait à chaque pas) : il apparaît
+  // (gVisible), puis glisse
   cLineaire = 0;
   cSortie = 1;
   cRebond = 2;
   cDouce = 3;
   gPosition = 0;
   gBornes = 1;
-  gTexte = 2;
+  gVisible = 2;
   gLargeur = 3;
 
 type
@@ -975,6 +1333,14 @@ type
     X, Y, VX, VY, Tour, Phase: Extended;
     Couleur, Taille: Integer;
   end;
+  // 1.12.29 : un texte qui change souvent (le pourcentage, le fichier en cours, le temps qui reste) :
+  // une image où il s'écrit, sur son fond - un changement, un seul dessin, sans effacer (un TLabel
+  // s'efface avant de se redessiner : il clignotait). Aligne : 0 à gauche, 1 à droite, 2 au centre.
+  TTexteVif = record
+    Image: TBitmapImage;
+    Texte, Graisse: String;
+    Taille, Couleur, Fond, Aligne: Integer;
+  end;
 
 var
   PolicesOk, Ui2x: Boolean;
@@ -986,15 +1352,19 @@ var
   AnimN, AnimL, AnimH, CopieX, CopieY: Integer;
   BarreDegrade: TBitmapImage;
   BarrePiste, BarrePleine: TPanel;
-  BarrePourcent, CopieFichier, CopieReste, PreparationTexte: TLabel;
+  PreparationTexte: TLabel;
+  VifPourcent, VifFichier, VifReste: TTexteVif;
+  // 1.12.29 : la fenêtre double-tamponnée (son handle : s'il change, on recommence) ; /COMPOSITION=non
+  FenetreComposee: HWND;
+  SansComposition, Dimensionne: Boolean;
   // 1.12.28 : le moteur
   HorlogeBase, Minuterie, RappelTic: LongWord;
   MoteurEnPanne, EnTic: Boolean;
   Transitions: array of TTransition;
   SensPage, PageAvant: Integer;
   NotebookX, NotebookY, TitreX, TitreY, DescX, DescY, IconeX, IconeY, IconeT: Integer;
-  // les scènes et leurs calques
-  Rail, Decor, Heros, Succes, Copie: TScene;
+  // les scènes et leurs calques (1.12.29 : le rail, ses marques ; RailNoms, les noms des étapes)
+  Rail, RailNoms, Decor, Heros, Succes, Copie: TScene;
   SpriteAvenir, SpriteArrivee, SpritePulse, SpriteCoche, SpriteAnneau, SpritePastille: TSprite;
   SpriteLueur, SpriteLueurT, SpriteApi, SpriteIhm, SpritePoints, SpriteEclat: TSprite;
   SpriteDisque, SpriteCocheFin, SpriteEtincA, SpriteEtincB, SpriteBarreEclat: TSprite;
@@ -1005,6 +1375,9 @@ var
   RailP, RailP0, RailCible, RailPastille, RailPastille0: Extended;
   RailEtat, RailAvant, RailDepuis, RailCouleur: TEntiers;
   RailTemps, RailVu, RailHorloge, RailDepart, RailDuree, EtapeCopie: Integer;
+  // 1.12.29 : quand les noms ont été dessinés la dernière fois (leur fin de changement doit l'être,
+  // même si la minuterie s'est arrêtée entre-temps : une sortie de fichiers, une étape qui bloque)
+  RailNomsVu: Integer;
   // le décor : ses pistes (à la suite), trois impulsions qui les parcourent
   PisteX, PisteY, PistePremier, PisteNb: TEntiers;
   ImpPiste, ImpDebut, ImpDuree, ImpSens: TEntiers;
@@ -1012,25 +1385,39 @@ var
   // l'accueil : le réseau (noeuds X, Y, rayon en dixièmes ; liens A-B), les deux logos, les points
   HerosNX, HerosNY, HerosNR, HerosLA, HerosLB, HerosPX, HerosPY, HerosImpLien, HerosImpDebut: TEntiers;
   HerosApiX, HerosApiY, HerosIhmX, HerosIhmY, HerosImpProchaine: Integer;
-  AccTitreX, AccTitreY, AccTexteX, AccTexteY: Integer;
+  AccTitreX, AccTitreY, AccTexteX, AccTexteY, AccEclat0, AccEclat1: Integer;
   CartePanneau: array of TPanel;
   CarteLogo: array of TBitmapImage;
   CarteTitre, CarteTexte: array of TLabel;
   CarteX, CarteY, CarteLogoX, CarteLogoY, CarteLogoL, CarteLogoH: TEntiers;
   // la fin : le réseau, les étincelles (X, Y, taille, couleur), le cercle, la coche, les confettis
   FinNX, FinNY, FinNR, FinEX, FinEY, FinES, FinEC: TEntiers;
-  FinDisqueX, FinDisqueY, FinCocheX, FinCocheY, FinCX, FinCY: Integer;
+  FinDisqueX, FinDisqueY, FinCocheX, FinCocheY, FinCX, FinCY, FinH1, FinEclat0, FinEclat1: Integer;
   Confettis: array of TConfetti;
   // la copie : la barre (sa cible, ce qui est affiché), le temps qui reste, le fichier, le diaporama
   BarreCible, BarreAffiche, CopieEtaLisse: Extended;
   CopieDebut, CopieVu, BarreVu: Integer;
   CopieEnCours: Boolean;
-  DernierFichier, AppDossier, ReserveDossier: String;
+  AppDossier, ReserveDossier: String;
   DiapoCarte: TPanel;
   DiapoImage: TBitmapImage;
   DiapoCache: array of TBitmap;
   DiapoActif: Boolean;
-  DiapoDebut, DiapoVu, DiapoY: Integer;
+  DiapoDebut, DiapoVu, DiapoY, DiapoH: Integer;
+  // 1.12.29 : la copie, pour les détails - le groupe en cours (1 le programme, 2 la réserve, 3 les
+  // raccourcis, 4 le registre, 5 la désinstallation), ses fichiers vus, le dernier fichier et le
+  // dernier état vus, la ligne du gros fichier en cours
+  CopieGroupe, CopieN: Integer;
+  CopieVuFichier, CopieVuStatut, CopieGros, CopieGrosTexte: String;
+  // 1.12.29 : les détails, à l'écran - l'image (une scène), la roue (la ligne en cours la plus
+  // récente), les marques par état ; la ligne du bas à l'écran (fractionnaire pendant le
+  // défilement), le dernier dessin, la taille en unités 1x, la page où ils sont, la phase
+  Journal, JournalRoue: TScene;
+  SpriteJRoue: TSprite;
+  JournalPos: Extended;
+  JournalVu, JournalHorloge, JournalL1, JournalH1, JournalRoueVu, JournalY: Integer;
+  JournalActif: Boolean;
+  JournalPhase: String;
 
 function AddFontResourceEx(Fichier: String; Drapeaux: DWORD; Reserve: Cardinal): Integer;
   external 'AddFontResourceExW@gdi32.dll stdcall setuponly';
@@ -1040,9 +1427,8 @@ function CreateRoundRectRgn(X1, Y1, X2, Y2, LE, HE: Integer): LongWord;
   external 'CreateRoundRectRgn@gdi32.dll stdcall setuponly';
 function SetWindowRgn(Fenetre: HWND; Region: LongWord; Redessiner: BOOL): Integer;
   external 'SetWindowRgn@user32.dll stdcall setuponly';
-// 1.12.28 : le temps, et le dessin des calques (AlphaBlend : l'alpha prémultiplié des BMP 32 bits)
-function GetTickCount: DWORD;
-  external 'GetTickCount@kernel32.dll stdcall setuponly';
+// 1.12.28 : le dessin des calques (AlphaBlend : l'alpha prémultiplié des BMP 32 bits ; le temps,
+// GetTickCount, est déclaré plus haut, avec les lignes des détails)
 function GdiAlphaBlend(Dest: LongWord; X, Y, L, H: Integer; Source: LongWord; XS, YS, LS, HS: Integer; Melange: DWORD): BOOL;
   external 'GdiAlphaBlend@gdi32.dll stdcall setuponly';
 function StretchBlt(Dest: LongWord; X, Y, L, H: Integer; Source: LongWord; XS, YS, LS, HS: Integer; Operation: DWORD): BOOL;
@@ -1055,6 +1441,18 @@ function IsIconic(Fenetre: HWND): Integer;
   external 'IsIconic@user32.dll stdcall setuponly';
 function RedrawWindow(Fenetre: HWND; Zone, Region: LongWord; Drapeaux: Cardinal): BOOL;
   external 'RedrawWindow@user32.dll stdcall setuponly';
+// 1.12.29 : la fenêtre double-tamponnée (WS_EX_COMPOSITED), la zone de travail de l'écran (la taille
+// de l'assistant), la découpe d'un dessin (les lignes des détails sous leur en-tête)
+function GetWindowLong(Fenetre: HWND; Index: Integer): Longint;
+  external 'GetWindowLongW@user32.dll stdcall setuponly';
+function SetWindowLong(Fenetre: HWND; Index: Integer; Valeur: Longint): Longint;
+  external 'SetWindowLongW@user32.dll stdcall setuponly';
+function SystemParametersInfo(Action, Param: Cardinal; var Zone: TRect; WinIni: Cardinal): BOOL;
+  external 'SystemParametersInfoW@user32.dll stdcall setuponly';
+function IntersectClipRect(DC: LongWord; X1, Y1, X2, Y2: Integer): Integer;
+  external 'IntersectClipRect@gdi32.dll stdcall setuponly';
+function SelectClipRgn(DC: LongWord; Region: LongWord): Integer;
+  external 'SelectClipRgn@gdi32.dll stdcall setuponly';
 
 // Le N-ième morceau (0...) de 'a|b|c' (ou d'une liste à un autre séparateur), et leur nombre.
 function MorceauDe(S: String; N: Integer; Sep: String): String;
@@ -1273,25 +1671,32 @@ begin
             or (Entre((A shr 16) and $FF, (B shr 16) and $FF, F) shl 16);
 end;
 
-procedure ChangerCouleur(C: TControl; Couleur: Integer);
-begin
-  if C is TNewStaticText then TNewStaticText(C).Font.Color := Couleur
-  else if C is TLabel then TLabel(C).Font.Color := Couleur
-  else if C is TPanel then TPanel(C).Color := Couleur;
-end;
-
 // ------------------------------------------------------------------ les transitions ----
+// 1.12.29 : rien n'est écrit qui ne change pas (une position, une taille, la visibilité).
 procedure TransitionAppliquer(I: Integer; F: Extended);
 var C: TControl;
+    X, Y, L, H: Integer;
 begin
   C := Transitions[I].Cible;
   if C = nil then Exit;
   case Transitions[I].Genre of
-    gPosition: C.SetBounds(Entre(Transitions[I].A0, Transitions[I].B0, F), Entre(Transitions[I].A1, Transitions[I].B1, F), C.Width, C.Height);
-    gBornes: C.SetBounds(Entre(Transitions[I].A0, Transitions[I].B0, F), Entre(Transitions[I].A1, Transitions[I].B1, F),
-                         Entre(Transitions[I].A2, Transitions[I].B2, F), Entre(Transitions[I].A3, Transitions[I].B3, F));
-    gTexte: ChangerCouleur(C, CouleurEntre(Transitions[I].A0, Transitions[I].B0, F));
-    gLargeur: C.Width := Maxi(0, Entre(Transitions[I].A0, Transitions[I].B0, F));
+    gPosition: begin
+        X := Entre(Transitions[I].A0, Transitions[I].B0, F);
+        Y := Entre(Transitions[I].A1, Transitions[I].B1, F);
+        if (X <> C.Left) or (Y <> C.Top) then C.SetBounds(X, Y, C.Width, C.Height);
+      end;
+    gBornes: begin
+        X := Entre(Transitions[I].A0, Transitions[I].B0, F);
+        Y := Entre(Transitions[I].A1, Transitions[I].B1, F);
+        L := Entre(Transitions[I].A2, Transitions[I].B2, F);
+        H := Entre(Transitions[I].A3, Transitions[I].B3, F);
+        if (X <> C.Left) or (Y <> C.Top) or (L <> C.Width) or (H <> C.Height) then C.SetBounds(X, Y, L, H);
+      end;
+    gVisible: if C.Visible <> (F > 0) then C.Visible := F > 0;
+    gLargeur: begin
+        L := Maxi(0, Entre(Transitions[I].A0, Transitions[I].B0, F));
+        if L <> C.Width then C.Width := L;
+      end;
   end;
 end;
 
@@ -1338,10 +1743,11 @@ begin
   TransitionAjouter(C, gPosition, Allure, Delai, Duree, X + DX, Y + DY, 0, 0, X, Y, 0, 0);
 end;
 
-// La couleur du texte de C (ou du fond, pour un panneau) passe de De à Vers.
-procedure Teinter(C: TControl; De, Vers, Delai, Duree: Integer);
+// 1.12.29 : C apparaît après Delai ms (caché jusque-là). Avant, un texte arrivait en changeant de
+// couleur : il se redessinait à chaque pas (sur l'écran, il clignotait).
+procedure Apparaitre(C: TControl; Delai: Integer);
 begin
-  TransitionAjouter(C, gTexte, cSortie, Delai, Duree, De, 0, 0, 0, Vers, 0, 0, 0);
+  TransitionAjouter(C, gVisible, cLineaire, Delai, 1, 0, 0, 0, 0, 1, 0, 0, 0);
 end;
 
 // C grandit jusqu'à (X, Y, L, H), depuis Pourcent % de sa taille, autour de son centre, avec un
@@ -1517,6 +1923,59 @@ begin
   end;
 end;
 
+// 1.12.29 : un texte qui tient dans L - trop long, il perd son milieu (« … ») : le début et la fin
+// d'un chemin, d'un compte, restent lisibles.
+function TexteTenu(C: TCanvas; S: String; L: Integer): String;
+var A, B: Integer;
+begin
+  Result := S;
+  if (L <= 0) or (C.TextWidth(S) <= L) then Exit;
+  A := Length(S) div 2;
+  B := A + 1;
+  while (A > 1) and (B <= Length(S)) and (C.TextWidth(Copy(S, 1, A) + '…' + Copy(S, B, Length(S))) > L) do
+    if (B - A) mod 2 = 1 then A := A - 1 else B := B + 1;
+  Result := Copy(S, 1, A) + '…' + Copy(S, B, Length(S));
+end;
+
+// 1.12.29 : un texte qui change souvent, dans son image (voir TTexteVif) : écrit seulement s'il change.
+procedure TexteVifPoser(var T: TTexteVif; S: String);
+var C: TCanvas;
+    X, L, H: Integer;
+begin
+  if (T.Image = nil) or (S = T.Texte) then Exit;
+  T.Texte := S;
+  C := T.Image.Bitmap.Canvas;
+  L := T.Image.Bitmap.Width;
+  H := T.Image.Bitmap.Height;
+  Remplir(C, 0, 0, L, H, T.Fond);
+  if S <> '' then begin
+    Ecrire(C.Font, T.Graisse, T.Taille, T.Couleur);
+    S := TexteTenu(C, S, L);
+    if T.Aligne = 1 then X := L - C.TextWidth(S)
+    else if T.Aligne = 2 then X := (L - C.TextWidth(S)) div 2
+    else X := 0;
+    C.Brush.Style := bsClear;
+    C.TextOut(X, (H - C.TextHeight('Ég')) div 2, S);
+  end;
+  T.Image.Repaint;
+end;
+
+procedure TexteVifCreer(var T: TTexteVif; Parent: TWinControl; X, Y, L, H: Integer; Graisse: String; Taille, Couleur, Fond, Aligne: Integer);
+begin
+  T.Image := TBitmapImage.Create(WizardForm);
+  T.Image.Parent := Parent;
+  T.Image.SetBounds(X, Y, L, H);
+  T.Image.Bitmap.Width := L;
+  T.Image.Bitmap.Height := H;
+  T.Graisse := Graisse;
+  T.Taille := Taille;
+  T.Couleur := Couleur;
+  T.Fond := Fond;
+  T.Aligne := Aligne;
+  T.Texte := '-';
+  TexteVifPoser(T, '');
+end;
+
 // Les noeuds d'un réseau, lus dans habillage.ini : 'x,y,r;x,y,r...' (r : dixièmes de point).
 procedure LireNoeuds(S: String; var X, Y, R: TEntiers);
 var I, N: Integer;
@@ -1610,23 +2069,20 @@ begin
   else Result := CouleurAVenir;
 end;
 
-// Le rail : la pastille de l'étape en cours (elle glisse d'une étape à l'autre), les liens (ils
-// se remplissent), les marques (l'arrivée, la pulsation, la coche qui se dessine ; pendant la
-// copie, l'anneau qui se remplit), puis les noms, à la taille de l'écran (leur couleur passe
-// d'un état à l'autre, l'étape en cours s'avance un peu). À l'ouverture, tout apparaît de haut
-// en bas.
-procedure DessinerRail(Ms: Integer);
+// Les marques du rail (à gauche de RailCoupe) : le bout gauche de la pastille de l'étape en cours (elle
+// glisse d'une étape à l'autre), les liens (ils se remplissent), les marques (l'arrivée, la pulsation,
+// la coche qui se dessine ; pendant la copie, l'anneau qui se remplit). À l'ouverture, tout apparaît
+// de haut en bas.
+procedure DessinerMarques(Ms: Integer);
 var B: TBitmap;
-    C: TCanvas;
-    I, E, X, Y, Y1, Y2, Yf, T, Dx, Couleur, H, A: Integer;
-    F, Entree: Extended;
-    Graisse: String;
+    I, E, X, Y, Y1, Y2, Yf, T, A: Integer;
+    Entree: Extended;
 begin
   E := Echelle;
   B := Rail.Travail;
   Remplir(B.Canvas, 0, 0, Rail.LT, Rail.HT, CouleurColonne);
   A := Round(255 * Borne((Ms - Rail.Debut) / 400.0));
-  SpritePoser(B, SpritePastille, 0, 2 * E, Round((RailPremier + RailPas * RailPastille - 14) * E), A);
+  SpritePoser(B, SpritePastille, 0, 2 * E, Round((RailPremier + RailPas * RailPastille) * E) - SpritePastille.H div 2, A);
   for I := 0 to NbEtapes - 2 do begin
     Entree := Borne((Ms - Rail.Debut - I * 60) / 260.0);
     Y1 := (RailPremier + RailPas * I + 11) * E;
@@ -1635,9 +2091,9 @@ begin
     Remplir(B.Canvas, (RailMarqueX - 1) * E, Y1, (RailMarqueX + 1) * E, Yf, CouleurEntre(CouleurColonne, CouleurTurquoise, Entree));
     Remplir(B.Canvas, (RailMarqueX - 1) * E, Yf, (RailMarqueX + 1) * E, Y2, CouleurEntre(CouleurColonne, CouleurLienAVenir, Entree));
   end;
-  X := (RailMarqueX - 14) * E;
+  X := RailMarqueX * E - SpriteAvenir.L div 2;
   for I := 0 to NbEtapes - 1 do begin
-    Y := (RailPremier + RailPas * I - 14) * E;
+    Y := (RailPremier + RailPas * I) * E - SpriteAvenir.H div 2;
     T := Ms - RailDepuis[I];
     A := Round(255 * Borne((Ms - Rail.Debut - I * 60) / 260.0));
     case RailEtat[I] of
@@ -1652,7 +2108,26 @@ begin
     end;
   end;
   SceneMontrer(Rail);
-  C := Rail.Image.Bitmap.Canvas;
+  Rail.Image.Repaint;
+end;
+
+// Les noms des étapes (à droite de RailCoupe) : le reste de la pastille, puis les noms, à la taille
+// de l'écran (leur couleur passe d'un état à l'autre, l'étape en cours s'avance un peu). Redessinés
+// seulement quand quelque chose y change (voir TicRail).
+procedure DessinerNoms(Ms: Integer);
+var B: TBitmap;
+    C: TCanvas;
+    I, E, T, Dx, Couleur, H, A: Integer;
+    F: Extended;
+    Graisse: String;
+begin
+  E := Echelle;
+  B := RailNoms.Travail;
+  Remplir(B.Canvas, 0, 0, RailNoms.LT, RailNoms.HT, CouleurColonne);
+  A := Round(255 * Borne((Ms - Rail.Debut) / 400.0));
+  SpritePoser(B, SpritePastille, 0, (2 - RailCoupe) * E, Round((RailPremier + RailPas * RailPastille) * E) - SpritePastille.H div 2, A);
+  SceneMontrer(RailNoms);
+  C := RailNoms.Image.Bitmap.Canvas;
   for I := 0 to NbEtapes - 1 do begin
     T := Ms - RailDepuis[I];
     F := Courbe(cSortie, T / 300.0);
@@ -1665,22 +2140,24 @@ begin
       Graisse := '';
       if RailAvant[I] = 1 then Dx := Round(ScaleX(4) * (1 - F));
     end;
-    Ecrire(C.Font, Graisse, 10, Couleur);
+    Ecrire(C.Font, Graisse, 11, Couleur);
     H := C.TextHeight('Ég');
     C.Brush.Style := bsClear;
-    C.TextOut(ScaleX(RailTexteX) + Dx, ScaleY(RailPremier + RailPas * I) - H div 2, Morceau(EtapesNoms, I));
+    C.TextOut(ScaleX(RailTexteX - RailCoupe) + Dx, ScaleY(RailPremier + RailPas * I) - H div 2, Morceau(EtapesNoms, I));
   end;
-  Rail.Image.Repaint;
+  RailNoms.Image.Repaint;
+  RailNomsVu := Ms;
 end;
 
 // La progression rejoint sa cible : d'une page à l'autre, en douceur (RailDuree) ; pendant la
 // copie, elle suit la barre (vite, puis doucement). La pastille, elle, va d'étape en étape. Une
-// étape qui change d'état part de là ; on redessine pendant un mouvement, sinon au rythme de la
-// pulsation (20 images/s).
+// étape qui change d'état part de là. Les marques se redessinent pendant un mouvement, sinon au
+// rythme de la pulsation (20 images/s) ; les noms, seulement quand la pastille bouge, qu'une étape
+// change d'état (300 ms), et à l'ouverture.
 procedure TicRail(Ms: Integer);
 var I, Etat, Dt: Integer;
-    Ecart, F: Extended;
-    Bouge: Boolean;
+    Ecart, F, Pastille: Extended;
+    Bouge, Noms: Boolean;
 begin
   if Rail.Image = nil then Exit;
   if Rail.Debut < 0 then begin
@@ -1696,6 +2173,7 @@ begin
   Dt := Mini(100, Maxi(0, Ms - RailHorloge));
   RailHorloge := Ms;
   Bouge := False;
+  Pastille := RailPastille;
   if RailDuree > 0 then begin
     if RailDepart < 0 then RailDepart := Ms;
     F := (Ms - RailDepart) * 1.0 / RailDuree;
@@ -1733,9 +2211,11 @@ begin
       RailTemps := Ms;
     end;
   end;
-  if Bouge or (Ms - RailTemps < 450) or (Ms - Rail.Debut < NbEtapes * 60 + 700) or (Ms div 50 <> RailVu) then begin
+  Noms := (Pastille <> RailPastille) or (RailNomsVu < RailTemps + 320) or (Ms - Rail.Debut < NbEtapes * 60 + 700);
+  if Noms then DessinerNoms(Ms);
+  if Noms or Bouge or (Ms div 50 <> RailVu) then begin
     RailVu := Ms div 50;
-    DessinerRail(Ms);
+    DessinerMarques(Ms);
   end;
 end;
 
@@ -1755,7 +2235,8 @@ begin
       RailDepuis[I] := -100000;
       RailCouleur[I] := CouleurEtat(RailEtat[I]);
     end;
-    DessinerRail(0);
+    DessinerMarques(0);
+    DessinerNoms(0);
   except
     Log('Habillage, colonne : ' + GetExceptionMessage);
   end;
@@ -1872,13 +2353,61 @@ begin
 end;
 
 // La colonne : l'assistant s'élargit d'autant, ses pages et ses boutons glissent à droite.
+// 1.12.29 : la taille de l'assistant - FenetreL x FenetreH (912 x 580) à 96 ppp : avec sa police
+// (Tahoma 8), ScaleX et ScaleY y sont des pixels ; à 125, 150, 200 %, elle grandit d'autant. Ramenée
+// à la zone de travail de l'écran (sans la barre des tâches) s'il est plus petit : l'écran a le
+// dernier mot (même sous la taille de la 1.12.28, 750 x 504 : la mise en page se resserre). Les pages
+// et les boutons d'Inno Setup suivent (leurs ancrages) ; le reste se pose ensuite, à cette taille.
+procedure Dimensionner;
+var Zone: TRect;
+    L, H, BordL, BordH, ZoneL, ZoneH: Integer;
+begin
+  L := ScaleX(FenetreL);
+  H := ScaleY(FenetreH);
+  BordL := WizardForm.Width - WizardForm.ClientWidth;
+  BordH := WizardForm.Height - WizardForm.ClientHeight;
+  ZoneL := 0;
+  ZoneH := 0;
+  if SystemParametersInfo(SPI_GETWORKAREA, 0, Zone, 0) then begin
+    ZoneL := Zone.Right - Zone.Left;
+    ZoneH := Zone.Bottom - Zone.Top;
+    if (ZoneL > 0) and (L > ZoneL - BordL - ScaleX(8)) then L := Maxi(ZoneL - BordL - ScaleX(8), 640);
+    if (ZoneH > 0) and (H > ZoneH - BordH - ScaleY(8)) then H := Maxi(ZoneH - BordH - ScaleY(8), 400);
+  end;
+  WizardForm.ClientWidth := L;
+  WizardForm.ClientHeight := H;
+  Dimensionne := True;
+  Log(Format('Habillage : fenêtre %d x %d ; écran (zone de travail) %d x %d, bords %d x %d ; ScaleX(100) = %d, ScaleY(100) = %d', [WizardForm.ClientWidth,
+             WizardForm.ClientHeight, ZoneL, ZoneH, BordL, BordH, ScaleX(100), ScaleY(100)]));
+end;
+
+// 1.12.29 : la fenêtre se dessine d'un bloc (WS_EX_COMPOSITED : Windows peint la fenêtre et tout ce
+// qu'elle contient dans un tampon, puis l'affiche) - un texte posé sur une image ne s'efface plus
+// avant de se redessiner. De nouveau si la fenêtre a été recréée (son handle change) ; jamais avec
+// /COMPOSITION=non.
+procedure Composer;
+var H: HWND;
+begin
+  if (ColonneEtapes = nil) or SansComposition then Exit;
+  try
+    H := WizardForm.Handle;
+    if H = FenetreComposee then Exit;
+    SetWindowLong(H, GWL_EXSTYLE, GetWindowLong(H, GWL_EXSTYLE) or WS_EX_COMPOSITED);
+    FenetreComposee := H;
+    Log('Habillage : la fenêtre se dessine d''un bloc (WS_EX_COMPOSITED).');
+  except
+    Log('Habillage, WS_EX_COMPOSITED : ' + GetExceptionMessage);
+  end;
+end;
+
+// La colonne, à gauche de l'assistant (à sa taille : voir Dimensionner) : les pages et les boutons
+// glissent à droite.
 procedure CreerColonne;
-var L, I, X: Integer;
+var L, I, X, Y: Integer;
     Pied: TLabel;
 begin
-  LargeurColonne := ScaleX(200);
-  L := WizardForm.ClientWidth;
-  WizardForm.ClientWidth := L + LargeurColonne;
+  LargeurColonne := ScaleX(ColonneL);
+  L := WizardForm.ClientWidth - LargeurColonne;
   WizardForm.OuterNotebook.Left := LargeurColonne;
   WizardForm.OuterNotebook.Width := L;
   WizardForm.Bevel.Left := LargeurColonne;
@@ -1896,12 +2425,12 @@ begin
   SceneMontrer(Decor);
   SpriteCharger(SpriteLueurT, 'lueur-turquoise');
   LirePistes;
-  X := ScaleX(22);
-  NouvelleImage(ColonneEtapes, 'logo', X, ScaleY(24), ScaleX(88), ScaleY(40));
-  NouveauTexte(ColonneEtapes, '{#Nom}', X, ScaleY(74), LargeurColonne - X - ScaleX(8), ScaleY(26), 'SemiBold', 14, clWhite);
-  NouveauTexte(ColonneEtapes, 'Version {#Version}', X, ScaleY(100), LargeurColonne - X - ScaleX(8), ScaleY(18), '', 9, CouleurAVenir);
+  X := ScaleX(24);
+  NouvelleImage(ColonneEtapes, 'logo', X, ScaleY(26), ScaleX(88), ScaleY(40));
+  NouveauTexte(ColonneEtapes, '{#Nom}', X, ScaleY(78), LargeurColonne - X - ScaleX(8), ScaleY(30), 'SemiBold', 15, clWhite);
+  NouveauTexte(ColonneEtapes, 'Version {#Version}', X, ScaleY(108), LargeurColonne - X - ScaleX(8), ScaleY(18), '', 9, CouleurAVenir);
 
-  // les étapes : une seule image, le rail, redessinée par la minuterie
+  // les étapes : deux images, les marques et les noms (le rail), redessinées par la minuterie
   NbEtapes := NombreDeMorceaux(EtapesNoms);
   EtapeCopie := EtapeDePage(wpInstalling);
   SetArrayLength(RailEtat, NbEtapes);
@@ -1920,14 +2449,22 @@ begin
   SpriteCharger(SpriteCoche, 'rail-coche');
   SpriteCharger(SpriteAnneau, 'rail-anneau');
   SpriteCharger(SpritePastille, 'rail-pastille');
-  ScenePreparer(Rail, ColonneEtapes, ScaleX(RailX), ScaleY(RailY), ScaleX(RailL), ScaleY(RailH), RailL * Echelle, RailH * Echelle);
+  ScenePreparer(Rail, ColonneEtapes, ScaleX(RailX), ScaleY(RailY), ScaleX(RailX + RailCoupe) - ScaleX(RailX), ScaleY(RailH),
+                RailCoupe * Echelle, RailH * Echelle);
   Remplir(Rail.Image.Bitmap.Canvas, 0, 0, Rail.Image.Bitmap.Width, Rail.Image.Bitmap.Height, CouleurColonne);
+  ScenePreparer(RailNoms, ColonneEtapes, ScaleX(RailX + RailCoupe), ScaleY(RailY), ScaleX(RailX + RailL) - ScaleX(RailX + RailCoupe),
+                ScaleY(RailH), (RailL - RailCoupe) * Echelle, RailH * Echelle);
+  Remplir(RailNoms.Image.Bitmap.Canvas, 0, 0, RailNoms.Image.Bitmap.Width, RailNoms.Image.Bitmap.Height, CouleurColonne);
   RailP := 0;
   RailCible := 0;
   RailPastille := 0;
-  Pied := NouveauTexte(ColonneEtapes, 'Tout est inclus : rien d''autre à installer, pas besoin d''Internet.', X, ColonneEtapes.Height - ScaleY(48),
-                       LargeurColonne - X - ScaleX(14), ScaleY(34), '', 8, CouleurAVenir);
+  // 1.12.29 : la note, AU-DESSUS du décor (les impulsions ne passent plus sous elle) ; elle se retire
+  // si la fenêtre est trop basse pour elle (l'écran est petit)
+  Y := ColonneEtapes.Height - ScaleY(DecorH) - ScaleY(40);
+  Pied := NouveauTexte(ColonneEtapes, 'Tout est inclus : rien d''autre à installer, pas besoin d''Internet.', X, Y,
+                       LargeurColonne - X - ScaleX(14), ScaleY(36), '', 8, CouleurAVenir);
   Pied.Anchors := [akLeft, akBottom];
+  Pied.Visible := Y >= ScaleY(RailY + RailH + 4);
 end;
 
 // L'étape en cours : la progression y va en douceur (plus longtemps si elle saute des étapes).
@@ -1989,31 +2526,44 @@ begin
   CartePanneau[K] := Result;
   CarteX[K] := X;
   CarteY[K] := Y;
-  CarteLogoX[K] := ScaleX(12);
-  CarteLogoY[K] := (H - ScaleY(40)) div 2;
-  CarteLogoL[K] := ScaleX(40);
-  CarteLogoH[K] := ScaleY(40);
+  CarteLogoX[K] := ScaleX(16);
+  CarteLogoY[K] := (H - ScaleY(48)) div 2;
+  CarteLogoL[K] := ScaleX(48);
+  CarteLogoH[K] := ScaleY(48);
   CarteLogo[K] := NouvelleImage(Result, Logo, CarteLogoX[K], CarteLogoY[K], CarteLogoL[K], CarteLogoH[K]);
-  CarteTitre[K] := NouveauTexte(Result, Titre, ScaleX(64), ScaleY(11), L - ScaleX(72), ScaleY(20), 'SemiBold', 11, CouleurTitre);
-  CarteTexte[K] := NouveauTexte(Result, Texte, ScaleX(64), ScaleY(31), L - ScaleX(72), H - ScaleY(34), '', 9, CouleurTexte);
+  CarteTitre[K] := NouveauTexte(Result, Titre, ScaleX(78), ScaleY(15), L - ScaleX(88), ScaleY(24), 'SemiBold', 12, CouleurTitre);
+  CarteTexte[K] := NouveauTexte(Result, Texte, ScaleX(78), ScaleY(41), L - ScaleX(88), H - ScaleY(45), '', 10, CouleurTexte);
   Arrondir(Result, ScaleX(14));
 end;
 
 // L'accueil : le bandeau (une scène : le réseau s'allume, les deux logos arrivent, le lien se
 // fait, l'éclat passe), le titre, ce que fait l'assistant, les deux applications.
 procedure HabillerAccueil;
-var M, L, Y, H, LC: Integer;
+var M, L, Y, H, LC, LB, Bloc, PH, CarteH: Integer;
 begin
   if Heros.Image <> nil then Exit;
-  M := ScaleX(26);
+  M := ScaleX(30);
   L := WizardForm.WelcomePage.Width - 2 * M;
+  PH := WizardForm.WelcomePage.Height;
   WizardForm.WizardBitmapImage.Visible := False;
-  H := L * 150 div 560;
-  // le tout (bandeau, titre, texte, cartes) centré en hauteur
-  Y := (WizardForm.WelcomePage.Height - (H + ScaleY(170))) div 2;
-  if Y < ScaleY(16) then Y := ScaleY(16);
+  // 1.12.29 : le bandeau garde ses proportions (images\ui\habillage.ini : 620 x 196) ; sous lui, le
+  // titre, le texte et les cartes (Bloc ; une carte étroite - un écran petit - a la place d'une ligne
+  // de plus). Sur un écran bas, le bandeau rétrécit (centré). Le tout, centré en hauteur.
+  LC := (L - ScaleX(14)) div 2;
+  if LC < ScaleX(292) then CarteH := ScaleY(110) else CarteH := ScaleY(92);
+  Bloc := ScaleY(18) + ScaleY(40) + ScaleY(58) + CarteH;
+  H := L * Nombre('{#AccueilTaille}', 1) div Nombre('{#AccueilTaille}', 0);
+  LB := L;
+  if H + Bloc > PH - ScaleY(24) then begin
+    H := Maxi(ScaleY(80), PH - ScaleY(24) - Bloc);
+    LB := H * Nombre('{#AccueilTaille}', 0) div Nombre('{#AccueilTaille}', 1);
+  end;
+  Y := (PH - (H + Bloc)) div 2;
+  if Y < ScaleY(12) then Y := ScaleY(12);
   FondAccueil := FondCharger('accueil-fond');
-  ScenePreparer(Heros, WizardForm.WelcomePage, M, Y, L, H, FondAccueil.Width, FondAccueil.Height);
+  AccEclat0 := Nombre('{#AccueilEclat}', 0);
+  AccEclat1 := Nombre('{#AccueilEclat}', 1);
+  ScenePreparer(Heros, WizardForm.WelcomePage, M + (L - LB) div 2, Y, LB, H, FondAccueil.Width, FondAccueil.Height);
   BitBlt(Heros.Travail.Canvas.Handle, 0, 0, Heros.LT, Heros.HT, FondAccueil.Canvas.Handle, 0, 0, SRCCOPY);
   SceneMontrer(Heros);
   SpriteCharger(SpriteApi, 'heros-api');
@@ -2033,21 +2583,20 @@ begin
   HerosImpLien[0] := -1;
   HerosImpLien[1] := -1;
   HerosImpLien[2] := -1;
-  Y := Y + H + ScaleY(14);
-  WizardForm.WelcomeLabel1.SetBounds(M, Y, L, ScaleY(30));
-  Ecrire(WizardForm.WelcomeLabel1.Font, 'SemiBold', 17, CouleurTitre);
+  Y := Y + H + ScaleY(18);
+  WizardForm.WelcomeLabel1.SetBounds(M, Y, L, ScaleY(34));
+  Ecrire(WizardForm.WelcomeLabel1.Font, 'SemiBold', 18, CouleurTitre);
   WizardForm.WelcomeLabel1.Caption := 'Bienvenue dans {#Nom} {#Version}';
   AccTitreX := M;
   AccTitreY := Y;
-  Y := Y + ScaleY(34);
-  WizardForm.WelcomeLabel2.SetBounds(M, Y, L, ScaleY(44));
-  Ecrire(WizardForm.WelcomeLabel2.Font, '', 10, CouleurTexte);
+  Y := Y + ScaleY(40);
+  WizardForm.WelcomeLabel2.SetBounds(M, Y, L, ScaleY(50));
+  Ecrire(WizardForm.WelcomeLabel2.Font, '', 11, CouleurTexte);
   WizardForm.WelcomeLabel2.Caption := 'L''assistant installe les deux applications et tout ce dont elles ont besoin, étape par étape. '
                                     + 'Tes données et tes réglages sont gardés.';
   AccTexteX := M;
   AccTexteY := Y;
-  Y := Y + ScaleY(48);
-  LC := (L - ScaleX(12)) div 2;
+  Y := Y + ScaleY(58);
   SetArrayLength(CartePanneau, 2);
   SetArrayLength(CarteLogo, 2);
   SetArrayLength(CarteTitre, 2);
@@ -2058,8 +2607,8 @@ begin
   SetArrayLength(CarteLogoY, 2);
   SetArrayLength(CarteLogoL, 2);
   SetArrayLength(CarteLogoH, 2);
-  NouvelleCarte(WizardForm.WelcomePage, 0, M, Y, LC, ScaleY(74), 'logo-api', '{#NomApi}', 'Analyse et simulation du programme de l''automate');
-  NouvelleCarte(WizardForm.WelcomePage, 1, M + LC + ScaleX(12), Y, LC, ScaleY(74), 'logo-ihm', '{#NomIhm}', 'Vues, scripts et équipements de l''IHM, et leur simulation');
+  NouvelleCarte(WizardForm.WelcomePage, 0, M, Y, LC, CarteH, 'logo-api', '{#NomApi}', 'Analyse et simulation du programme de l''automate');
+  NouvelleCarte(WizardForm.WelcomePage, 1, M + LC + ScaleX(14), Y, LC, CarteH, 'logo-ihm', '{#NomIhm}', 'Vues, scripts et équipements de l''IHM, et leur simulation');
 end;
 
 // Des impulsions parcourent les liens du réseau de l'accueil (des données qui circulent).
@@ -2110,8 +2659,8 @@ begin
   if T > 1300 then begin
     F := ((T - 1300) mod 1600) / 1600.0;
     A := Round(170 * Borne(1 - Abs(F - 0.40) / 0.22));
-    L := 170 * E;
-    SpritePoserTaille(B, SpriteLueurT, 0, (HerosIhmX + 66) * E - L div 2, (HerosIhmY + 66) * E - L div 2, L, L, A);
+    L := {#AccueilLueur} * E;
+    SpritePoserTaille(B, SpriteLueurT, 0, HerosIhmX * E + SpriteIhm.L div 2 - L div 2, HerosIhmY * E + SpriteIhm.H div 2 - L div 2, L, L, A);
   end;
   // les deux logos arrivent, de chaque côté, en fondu
   F := Courbe(cSortie, (T - 100) / 650.0);
@@ -2131,7 +2680,7 @@ begin
       end;
     end;
   end;
-  DessinerEclat(B, T, 1150, 5200, 250, 610);
+  DessinerEclat(B, T, 1150, 5200, AccEclat0, AccEclat1);
   SceneMontrer(Heros);
   Heros.Image.Repaint;
 end;
@@ -2150,19 +2699,31 @@ end;
 // ---------------------------------------------------------------------------- la fin ----
 // La fin : l'assistant y place ses textes juste avant de l'afficher ; on les range ensuite.
 procedure HabillerFin;
-var M, L, Y, H, I: Integer;
+var M, L, Y, H, I, LB, Bloc, PH: Integer;
     S: String;
 begin
-  M := ScaleX(26);
+  M := ScaleX(30);
   L := WizardForm.FinishedPage.Width - 2 * M;
+  PH := WizardForm.FinishedPage.Height;
   WizardForm.WizardBitmapImage2.Visible := False;
-  H := L * 150 div 560;
-  Y := (WizardForm.FinishedPage.Height - (H + ScaleY(164))) div 2;
-  if Y < ScaleY(16) then Y := ScaleY(16);
+  // 1.12.29 : comme l'accueil - le bandeau garde ses proportions (620 x 196), rétrécit sur un écran
+  // bas ; sous lui, le titre, le texte et les cases (Bloc) ; le tout centré en hauteur
+  Bloc := ScaleY(18) + ScaleY(40) + ScaleY(72) + ScaleY(54);
+  H := L * Nombre('{#FinTaille}', 1) div Nombre('{#FinTaille}', 0);
+  LB := L;
+  if H + Bloc > PH - ScaleY(24) then begin
+    H := Maxi(ScaleY(80), PH - ScaleY(24) - Bloc);
+    LB := H * Nombre('{#FinTaille}', 0) div Nombre('{#FinTaille}', 1);
+  end;
+  Y := (PH - (H + Bloc)) div 2;
+  if Y < ScaleY(12) then Y := ScaleY(12);
   if Succes.Image = nil then begin
     // 1.12.28 : le bandeau est une scène (le cercle surgit, la coche se dessine, les confettis)
     FondFin := FondCharger('fin-fond');
-    ScenePreparer(Succes, WizardForm.FinishedPage, M, Y, L, H, FondFin.Width, FondFin.Height);
+    FinH1 := Nombre('{#FinTaille}', 1);
+    FinEclat0 := Nombre('{#FinEclat}', 0);
+    FinEclat1 := Nombre('{#FinEclat}', 1);
+    ScenePreparer(Succes, WizardForm.FinishedPage, M + (L - LB) div 2, Y, LB, H, FondFin.Width, FondFin.Height);
     BitBlt(Succes.Travail.Canvas.Handle, 0, 0, Succes.LT, Succes.HT, FondFin.Canvas.Handle, 0, 0, SRCCOPY);
     SceneMontrer(Succes);
     SpriteCharger(SpriteDisque, 'succes-disque');
@@ -2190,14 +2751,14 @@ begin
     FinCX := Nombre('{#FinCentre}', 0);
     FinCY := Nombre('{#FinCentre}', 1);
   end else Y := Succes.Image.Top;
-  Y := Y + H + ScaleY(14);
-  WizardForm.FinishedHeadingLabel.SetBounds(M, Y, L, ScaleY(30));
-  Ecrire(WizardForm.FinishedHeadingLabel.Font, 'SemiBold', 17, CouleurTitre);
-  Y := Y + ScaleY(34);
-  WizardForm.FinishedLabel.SetBounds(M, Y, L, ScaleY(64));
+  Y := Y + H + ScaleY(18);
+  WizardForm.FinishedHeadingLabel.SetBounds(M, Y, L, ScaleY(34));
+  Ecrire(WizardForm.FinishedHeadingLabel.Font, 'SemiBold', 18, CouleurTitre);
+  Y := Y + ScaleY(40);
+  WizardForm.FinishedLabel.SetBounds(M, Y, L, ScaleY(66));
   Ecrire(WizardForm.FinishedLabel.Font, '', 10, CouleurTexte);
-  Y := Y + ScaleY(68);
-  WizardForm.RunList.SetBounds(M, Y, L, WizardForm.FinishedPage.Height - Y - ScaleY(6));
+  Y := Y + ScaleY(72);
+  WizardForm.RunList.SetBounds(M, Y, L, PH - Y - ScaleY(6));
   Ecrire(WizardForm.RunList.Font, '', 10, CouleurTitre);
 end;
 
@@ -2237,7 +2798,7 @@ begin
   D := T / (1 + T / 430.0);
   for I := 0 to GetArrayLength(Confettis) - 1 do begin
     Y := Round((Confettis[I].Y + Confettis[I].VY * D + 0.5 * 0.00045 * T * T) * E);
-    if Y > 158 * E then Continue;
+    if Y > (FinH1 + 8) * E then Continue;
     X := Round((Confettis[I].X + Confettis[I].VX * D) * E);
     // il tourne sur lui-même : sa largeur bat
     L := Maxi(E, Round(Confettis[I].Taille * E * Abs(Cos(Confettis[I].Phase + Confettis[I].Tour * T))));
@@ -2273,11 +2834,11 @@ begin
       M := Round((FinES[K] / 8.0 - 0.25) / 0.75 * 7);
       if F < 1 then L := Round(M * Courbe(cRebond, F))
       else L := Round(M * (0.62 + 0.38 * (0.5 + 0.5 * Sin(2 * Pi * ((T - 960 - K * 110) / 1500.0 + K * 0.29)))));
-      if FinEC[K] = 0 then SpritePoser(B, SpriteEtincA, L, (FinEX[K] - 11) * E, (FinEY[K] - 11) * E, 255)
-      else SpritePoser(B, SpriteEtincB, L, (FinEX[K] - 11) * E, (FinEY[K] - 11) * E, 255);
+      if FinEC[K] = 0 then SpritePoser(B, SpriteEtincA, L, FinEX[K] * E - SpriteEtincA.L div 2, FinEY[K] * E - SpriteEtincA.H div 2, 255)
+      else SpritePoser(B, SpriteEtincB, L, FinEX[K] * E - SpriteEtincB.L div 2, FinEY[K] * E - SpriteEtincB.H div 2, 255);
     end;
   end;
-  DessinerEclat(B, T, 2600, 6000, 280, 600);
+  DessinerEclat(B, T, 2600, 6000, FinEclat0, FinEclat1);
   SceneMontrer(Succes);
   Succes.Image.Repaint;
 end;
@@ -2310,34 +2871,234 @@ begin
   C := B.Canvas;
   Remplir(C, 0, 0, L, H, CouleurCarte);
   Img := FondCharger(Morceau(DiaposImages, I));
-  Reduire(C.Handle, ScaleX(14), (H - ScaleY(56)) div 2, ScaleX(56), ScaleY(56), Img.Canvas.Handle, Img.Width, Img.Height);
+  Reduire(C.Handle, ScaleX(14), (H - ScaleY(52)) div 2, ScaleX(52), ScaleY(52), Img.Canvas.Handle, Img.Width, Img.Height);
   Img.Free;
   Ecrire(C.Font, 'SemiBold', 11, CouleurTitre);
   C.Brush.Style := bsClear;
-  C.TextOut(ScaleX(84), ScaleY(14), Morceau(DiaposTitres, I));
-  Ecrire(C.Font, '', 9, CouleurTexte);
-  TexteCoupe(C, ScaleX(84), ScaleY(38), L - ScaleX(84) - ScaleX(18), Morceau(DiaposTextes, I));
+  C.TextOut(ScaleX(80), ScaleY(12), Morceau(DiaposTitres, I));
+  Ecrire(C.Font, '', 10, CouleurTexte);
+  TexteCoupe(C, ScaleX(80), ScaleY(35), L - ScaleX(80) - ScaleX(18), Morceau(DiaposTextes, I));
   DiapoCache[I] := B;
 end;
 
+// ================================================== 1.12.29 : les détails, à l'écran ====
+//  UNE image (une scène : le fond et les marques à l'échelle des images, les textes à la taille de
+//  l'écran), redessinée quand une ligne arrive ou change - au plus toutes les 150 ms - et pendant
+//  qu'elle défile (une ligne nouvelle pousse les autres vers le haut). La roue, à part (une petite
+//  image posée sur la marque de la ligne en cours la plus récente), tourne sans redessiner un texte.
+var
+  SpriteJEnCours, SpriteJFait, SpriteJAttention, SpriteJErreur, SpriteJInfo: TSprite;
+  // la hauteur de la carte à l'écran (1x) et sa cible : après la copie, le diaporama s'en va et les
+  // détails prennent sa place (JournalAgrandir)
+  FacteurY, JournalHVue, JournalHCible: Extended;
+
+procedure JournalCreer(Parent: TWinControl; X, Y, L, H: Integer);
+begin
+  JournalL1 := L * 100 div ScaleX(100);
+  JournalH1 := H * 100 div ScaleY(100);
+  FacteurY := ScaleY(1000) / 1000.0;
+  ScenePreparer(Journal, Parent, X, Y, L, H, JournalL1 * Echelle, JournalH1 * Echelle);
+  SpriteCharger(SpriteJEnCours, 'journal-encours');
+  SpriteCharger(SpriteJFait, 'journal-fait');
+  SpriteCharger(SpriteJAttention, 'journal-attention');
+  SpriteCharger(SpriteJErreur, 'journal-erreur');
+  SpriteCharger(SpriteJInfo, 'journal-info');
+  SpriteCharger(SpriteJRoue, 'journal-roue');
+  ScenePreparer(JournalRoue, Parent, X, Y, ScaleX(16), ScaleY(16), SpriteJRoue.L, SpriteJRoue.H);
+  JournalRoue.Image.Visible := False;
+  JournalHVue := JournalH1;
+  JournalHCible := JournalH1;
+  JournalPos := GetArrayLength(Lignes) - 1;
+  JournalSale := True;
+  JournalVu := -100000;
+  JournalRoueVu := -1;
+end;
+
+procedure JournalMarque(B: TBitmap; Etat, X, Y: Integer);
+begin
+  case Etat of
+    jEnCours: SpritePoser(B, SpriteJEnCours, 0, X, Y, 255);
+    jFait: SpritePoser(B, SpriteJFait, 0, X, Y, 255);
+    jAttention: SpritePoser(B, SpriteJAttention, 0, X, Y, 255);
+    jErreur: SpritePoser(B, SpriteJErreur, 0, X, Y, 255);
+  else
+    SpritePoser(B, SpriteJInfo, 0, X, Y, 255);
+  end;
+end;
+
+// Les lignes, la dernière en bas (pendant le défilement, tout est décalé d'une fraction de ligne) ;
+// l'heure, la marque, le texte (en cours : en gras ; attention, erreur : en couleur ; le détail d'une
+// ligne : en retrait). La roue va sur la ligne en cours la plus récente (cachée pendant le défilement).
+procedure JournalDessiner(Ms: Integer);
+var B: TBitmap;
+    C: TCanvas;
+    N, K, I, E, Y, X, HT, Roue, HV: Integer;
+    Premier, Y1: Extended;
+begin
+  E := Echelle;
+  B := Journal.Travail;
+  N := GetArrayLength(Lignes);
+  HV := Round(JournalHVue);
+  K := Maxi(1, (HV - JournalTeteH - 6) div JournalLigneH);
+  Premier := JournalPos - K + 1;
+  if Premier < 0 then Premier := 0;
+  // le fond : la carte, arrondie, sur la page blanche (de la hauteur visible) ; le trait sous l'en-tête
+  Remplir(B.Canvas, 0, 0, Journal.LT, Journal.HT, clWhite);
+  B.Canvas.Brush.Style := bsSolid;
+  B.Canvas.Brush.Color := CouleurCarte;
+  B.Canvas.Pen.Color := CouleurCarte;
+  B.Canvas.RoundRect(0, 0, Journal.LT, HV * E, 16 * E, 16 * E);
+  Remplir(B.Canvas, 14 * E, (JournalTeteH - 1) * E, Journal.LT - 14 * E, JournalTeteH * E, CouleurPiste);
+  // les marques, sous l'en-tête seulement
+  IntersectClipRect(B.Canvas.Handle, 0, JournalTeteH * E, Journal.LT, (HV - 3) * E);
+  for I := Trunc(Premier) to N - 1 do begin
+    Y1 := JournalTeteH + 3 + (I - Premier) * JournalLigneH;
+    if Y1 >= HV then Break;
+    X := (JournalMarqueX + Lignes[I].Niveau * JournalRetrait) * E - SpriteJFait.L div 2;
+    JournalMarque(B, Lignes[I].Etat, X, Round((Y1 + JournalLigneH / 2) * E) - SpriteJFait.H div 2);
+  end;
+  SelectClipRgn(B.Canvas.Handle, 0);
+  SceneMontrer(Journal);
+  // les textes, à la taille de l'écran
+  C := Journal.Image.Bitmap.Canvas;
+  C.Brush.Style := bsClear;
+  Ecrire(C.Font, 'SemiBold', 10, CouleurTitre);
+  C.TextOut(ScaleX(JournalHeureX), (ScaleY(JournalTeteH) - C.TextHeight('Ég')) div 2, 'Détails');
+  if JournalPhase <> '' then begin
+    Ecrire(C.Font, '', 9, CouleurHeure);
+    C.TextOut(Journal.Image.Width - ScaleX(14) - C.TextWidth(JournalPhase), (ScaleY(JournalTeteH) - C.TextHeight('Ég')) div 2, JournalPhase);
+  end;
+  IntersectClipRect(C.Handle, 0, ScaleY(JournalTeteH), Journal.Image.Width, Round((HV - 3) * FacteurY));
+  Roue := -1;
+  for I := Trunc(Premier) to N - 1 do begin
+    Y1 := JournalTeteH + 3 + (I - Premier) * JournalLigneH;
+    if Y1 >= HV then Break;
+    Y := Round(Y1 * FacteurY);
+    Ecrire(C.Font, '', 9, CouleurHeure);
+    HT := C.TextHeight('Ég');
+    C.TextOut(ScaleX(JournalHeureX), Y + (ScaleY(JournalLigneH) - HT) div 2, Lignes[I].Heure);
+    case Lignes[I].Etat of
+      jEnCours: Ecrire(C.Font, 'SemiBold', 9, CouleurTitre);
+      jAttention: Ecrire(C.Font, 'Medium', 9, CouleurAttention);
+      jErreur: Ecrire(C.Font, 'Medium', 9, CouleurErreur);
+      jInfo: Ecrire(C.Font, '', 9, CouleurTexte);
+    else
+      Ecrire(C.Font, '', 9, CouleurTitre);
+    end;
+    X := ScaleX(JournalTexteX + Lignes[I].Niveau * JournalRetrait);
+    C.TextOut(X, Y + (ScaleY(JournalLigneH) - HT) div 2, TexteTenu(C, Lignes[I].Texte, Journal.Image.Width - X - ScaleX(14)));
+    if Lignes[I].Etat = jEnCours then Roue := I;
+  end;
+  SelectClipRgn(C.Handle, 0);
+  Journal.Image.Repaint;
+  if (Roue >= 0) and (Abs(JournalPos - (N - 1)) < 0.02) and (Abs(JournalHVue - JournalHCible) < 0.5) then begin
+    Y1 := JournalTeteH + 3 + (Roue - Premier) * JournalLigneH + JournalLigneH / 2;
+    X := Journal.Image.Left + ScaleX(JournalMarqueX + Lignes[Roue].Niveau * JournalRetrait) - JournalRoue.Image.Width div 2;
+    Y := Journal.Image.Top + Round(Y1 * FacteurY) - JournalRoue.Image.Height div 2;
+    if (JournalRoue.Image.Left <> X) or (JournalRoue.Image.Top <> Y) then
+      JournalRoue.Image.SetBounds(X, Y, JournalRoue.Image.Width, JournalRoue.Image.Height);
+    if not JournalRoue.Image.Visible then begin
+      JournalRoueVu := -1;
+      JournalRoue.Image.Visible := True;
+    end;
+  end else if JournalRoue.Image.Visible then JournalRoue.Image.Visible := False;
+end;
+
+// La roue : une image de sa bande toutes les 70 ms (rien d'autre n'est redessiné).
+procedure JournalRoueDessiner(Ms: Integer);
+var K: Integer;
+begin
+  if (JournalRoue.Image = nil) or not JournalRoue.Image.Visible then Exit;
+  K := (Ms div 70) mod SpriteJRoue.N;
+  if K = JournalRoueVu then Exit;
+  JournalRoueVu := K;
+  Remplir(JournalRoue.Travail.Canvas, 0, 0, JournalRoue.LT, JournalRoue.HT, CouleurCarte);
+  SpritePoser(JournalRoue.Travail, SpriteJRoue, K, 0, 0, 255);
+  SceneMontrer(JournalRoue);
+  JournalRoue.Image.Repaint;
+end;
+
+// Le tic des détails : les lignes de l'étape PowerShell en cours (toutes les 150 ms), le défilement,
+// un dessin si une ligne a changé (au plus toutes les 150 ms), la roue.
+procedure TicJournal(Ms: Integer);
+var Dt, N: Integer;
+    Bouge: Boolean;
+begin
+  if (ProgresFichier <> '') and (Ms - ProgresVu >= 150) then begin
+    ProgresVu := Ms;
+    ProgresLire(False);
+  end;
+  if (Journal.Image = nil) or not JournalActif then Exit;
+  Dt := Mini(100, Maxi(0, Ms - JournalHorloge));
+  JournalHorloge := Ms;
+  N := GetArrayLength(Lignes);
+  Bouge := False;
+  if JournalPos <> N - 1 then begin
+    if Abs(N - 1 - JournalPos) < 0.02 then JournalPos := N - 1
+    else JournalPos := JournalPos + (N - 1 - JournalPos) * Dt / (Dt + 55.0);
+    Bouge := True;
+  end;
+  if JournalHVue <> JournalHCible then begin
+    if Abs(JournalHCible - JournalHVue) < 0.5 then JournalHVue := JournalHCible
+    else JournalHVue := JournalHVue + (JournalHCible - JournalHVue) * Dt / (Dt + 90.0);
+    Bouge := True;
+  end;
+  if Bouge or (JournalSale and (Ms - JournalVu >= 150)) then begin
+    JournalVu := Ms;
+    JournalSale := False;
+    JournalDessiner(Ms);
+  end;
+  JournalRoueDessiner(Ms);
+end;
+
+// Après la copie : le diaporama descend et s'en va, les détails prennent sa place (plus de lignes à
+// l'écran pour tes données, la reprise, la vérification).
+procedure JournalAgrandir;
+begin
+  if (Journal.Image = nil) or (DiapoCarte = nil) or MoteurEnPanne or (JournalHCible >= JournalH1) then Exit;
+  JournalHCible := JournalH1;
+  DiapoActif := False;
+  TransitionAjouter(DiapoCarte, gPosition, cSortie, 0, 520, 0, DiapoY, 0, 0, 0, WizardForm.InnerNotebook.Height + ScaleY(24), 0, 0);
+end;
+
+// Tout de suite (avant un moment où l'assistant ne répond pas : la sortie des étapes PowerShell ; ou
+// sans le mouvement), sans défilement.
+procedure JournalMontrerMaintenant;
+begin
+  if Journal.Image = nil then Exit;
+  try
+    JournalPos := GetArrayLength(Lignes) - 1;
+    if MoteurEnPanne then JournalHVue := JournalHCible;
+    JournalSale := False;
+    JournalVu := Horloge;
+    JournalDessiner(JournalVu);
+  except
+    Log('Détails : ' + GetExceptionMessage);
+  end;
+end;
+
 // La copie : l'animation (une bande d'images, une scène), l'état, la barre (son dégradé et son
-// éclat), le fichier en cours, le temps qui reste, le diaporama.
+// éclat), le fichier en cours, le temps qui reste, les détails (1.12.29), le diaporama. Les tailles :
+// celles de la page intérieure (la même pour la préparation et la copie).
 procedure HabillerInstallation;
 var P: TNewNotebookPage;
-    L, H, Y, I: Integer;
+    L, H, Y, I, PL, PH, HJ: Integer;
     Bmp: TBitmap;
 begin
   if BarrePiste <> nil then Exit;
   P := WizardForm.InstallingPage;
+  PL := WizardForm.InnerNotebook.Width;
+  PH := WizardForm.InnerNotebook.Height;
   AnimN := {#AnimImages};
-  L := ScaleX({#AnimLargeur});
-  H := ScaleY({#AnimHauteur});
+  // 1.12.29 : l'animation au cinq sixièmes (300 x 100 à 96 ppp) : la place va aux détails
+  L := ScaleX({#AnimLargeur} * 5 div 6);
+  H := ScaleY({#AnimHauteur} * 5 div 6);
   try
     AnimBande := TBitmap.Create;
     AnimBande.LoadFromFile(ImageUi('animation'));
     AnimL := AnimBande.Width;
     AnimH := AnimBande.Height div AnimN;
-    CopieX := (P.Width - L) div 2;
+    CopieX := (PL - L) div 2;
     CopieY := 0;
     ScenePreparer(Copie, P, CopieX, CopieY, L, H, AnimL, AnimH);
     BitBlt(Copie.Travail.Canvas.Handle, 0, 0, AnimL, AnimH, AnimBande.Canvas.Handle, 0, 0, SRCCOPY);
@@ -2346,14 +3107,14 @@ begin
     Log('Animation : ' + GetExceptionMessage);
     Copie.Image := nil;
   end;
-  Y := H + ScaleY(8);
-  WizardForm.StatusLabel.SetBounds(0, Y, P.Width - ScaleX(64), ScaleY(22));
+  Y := H + ScaleY(6);
+  WizardForm.StatusLabel.SetBounds(0, Y, PL - ScaleX(84), ScaleY(22));
   Ecrire(WizardForm.StatusLabel.Font, 'SemiBold', 11, CouleurTitre);
-  BarrePourcent := NouveauTexte(P, '', P.Width - ScaleX(64), Y, ScaleX(64), ScaleY(22), 'SemiBold', 11, CouleurTitre);
-  BarrePourcent.Alignment := taRightJustify;
+  // 1.12.29 : le pourcentage, le fichier, le temps qui reste : des images (TTexteVif), pas des TLabel
+  TexteVifCreer(VifPourcent, P, PL - ScaleX(84), Y, ScaleX(84), ScaleY(22), 'SemiBold', 11, CouleurTitre, clWhite, 1);
   Y := Y + ScaleY(26);
   WizardForm.ProgressGauge.Visible := False;
-  BarrePiste := NouveauPanneau(P, 0, Y, P.Width, ScaleY(10), CouleurPiste);
+  BarrePiste := NouveauPanneau(P, 0, Y, PL, ScaleY(10), CouleurPiste);
   Arrondir(BarrePiste, ScaleY(10));
   BarrePleine := NouveauPanneau(BarrePiste, 0, 0, 0, BarrePiste.Height, CouleurPiste);
   BarreDegrade := NouvelleImage(BarrePleine, '', 0, 0, BarrePiste.Width, BarrePiste.Height);
@@ -2370,26 +3131,44 @@ begin
   BitBlt(BarreDegrade.Bitmap.Canvas.Handle, 0, 0, BarreFond.Width, BarreFond.Height, BarreFond.Canvas.Handle, 0, 0, SRCCOPY);
   SpriteCharger(SpriteBarreEclat, 'barre-eclat');
   Y := Y + ScaleY(16);
-  // le fichier en cours (court : relatif au dossier du programme) et le temps qui reste
+  // le fichier en cours (court : relatif au dossier du programme) et le temps qui reste. 1.12.29 : le
+  // nom du fichier, Inno Setup le raccourcit (« ... ») à la largeur de son étiquette (cachée) : très
+  // large, elle garde le chemin entier (les détails savent ainsi où va le fichier)
   WizardForm.FilenameLabel.Visible := False;
-  CopieFichier := NouveauTexte(P, '', 0, Y, P.Width - ScaleX(160), ScaleY(18), '', 9, CouleurTexte);
-  CopieFichier.WordWrap := False;
-  CopieReste := NouveauTexte(P, '', P.Width - ScaleX(160), Y, ScaleX(160), ScaleY(18), '', 9, CouleurTexte);
-  CopieReste.Alignment := taRightJustify;
-  Y := Y + ScaleY(30);
-  // le diaporama : ce que t'apportent les deux applications, en fondu enchaîné
-  DiapoY := Y;
-  DiapoCarte := NouveauPanneau(P, 0, Y, P.Width, ScaleY(84), CouleurCarte);
-  DiapoImage := NouvelleImage(DiapoCarte, '', 0, 0, P.Width, ScaleY(84));
-  DiapoImage.Stretch := False;
-  DiapoImage.Bitmap.Width := P.Width;
-  DiapoImage.Bitmap.Height := ScaleY(84);
-  Remplir(DiapoImage.Bitmap.Canvas, 0, 0, P.Width, ScaleY(84), CouleurCarte);
-  Arrondir(DiapoCarte, ScaleX(14));
-  SetArrayLength(DiapoCache, NombreDeMorceaux(DiaposImages));
-  // toutes les diapositives tout de suite : pendant la copie, l'extracteur d'Inno Setup est
-  // occupé (une image sortie à ce moment-là : « Cannot call file extractor recursively »)
-  for I := 0 to GetArrayLength(DiapoCache) - 1 do DiapoRendre(I);
+  WizardForm.FilenameLabel.Width := ScaleX(4000);
+  TexteVifCreer(VifFichier, P, 0, Y, PL - ScaleX(200), ScaleY(18), '', 9, CouleurTexte, clWhite, 0);
+  TexteVifCreer(VifReste, P, PL - ScaleX(200), Y, ScaleX(200), ScaleY(18), '', 9, CouleurTexte, clWhite, 1);
+  Y := Y + ScaleY(28);
+  // 1.12.29 : les détails ; le diaporama en bas, s'il reste de la place (un écran bas : les détails
+  // d'abord)
+  JournalY := Y;
+  DiapoH := ScaleY(76);
+  if PH - Y - DiapoH - ScaleY(10) >= ScaleY(120) then begin
+    DiapoY := PH - DiapoH;
+    HJ := DiapoY - ScaleY(10) - Y;
+  end else begin
+    DiapoY := -1;
+    HJ := PH - Y;
+  end;
+  // l'image des détails va jusqu'en bas de la page ; tant que le diaporama est là (par-dessus), seule sa
+  // partie du haut est une carte (JournalHVue)
+  JournalCreer(P, 0, Y, PL, PH - Y);
+  JournalHVue := HJ * 100 div ScaleY(100);
+  JournalHCible := JournalHVue;
+  if DiapoY >= 0 then begin
+    // le diaporama : ce que t'apportent les deux applications, en fondu enchaîné
+    DiapoCarte := NouveauPanneau(P, 0, DiapoY, PL, DiapoH, CouleurCarte);
+    DiapoImage := NouvelleImage(DiapoCarte, '', 0, 0, PL, DiapoH);
+    DiapoImage.Stretch := False;
+    DiapoImage.Bitmap.Width := PL;
+    DiapoImage.Bitmap.Height := DiapoH;
+    Remplir(DiapoImage.Bitmap.Canvas, 0, 0, PL, DiapoH, CouleurCarte);
+    Arrondir(DiapoCarte, ScaleX(14));
+    SetArrayLength(DiapoCache, NombreDeMorceaux(DiaposImages));
+    // toutes les diapositives tout de suite : pendant la copie, l'extracteur d'Inno Setup est
+    // occupé (une image sortie à ce moment-là : « Cannot call file extractor recursively »)
+    for I := 0 to GetArrayLength(DiapoCache) - 1 do DiapoRendre(I);
+  end;
   DiapoDebut := -1;
   DiapoVu := -1;
   CopieDebut := -1;
@@ -2403,7 +3182,7 @@ procedure DessinerPoints(C: TCanvas; Courante, Suivante: Integer; F: Extended);
 var I, X, D, W, Y, Couleur: Integer;
 begin
   D := ScaleX(6);
-  Y := ScaleY(20);
+  Y := ScaleY(16);
   X := DiapoImage.Bitmap.Width - ScaleX(16);
   for I := GetArrayLength(DiapoCache) - 1 downto 0 do begin
     W := D;
@@ -2466,8 +3245,9 @@ begin
   else Result := 'Encore environ ' + IntToStr((N + 30) div 60) + ' min';
 end;
 
-// La barre suit la progression en douceur (son pourcentage compte), son éclat la parcourt ; le
-// fichier en cours et le temps qui reste, deux fois par seconde.
+// La barre suit la progression en douceur, son éclat la parcourt. 1.12.29 : son pourcentage, le
+// fichier en cours et le temps qui reste, au plus cinq fois par seconde, et seulement s'ils changent
+// (dans leurs images : voir TTexteVif).
 procedure TicBarre(Ms: Integer);
 var W, X, LE, Dt: Integer;
     F, Reste: Extended;
@@ -2480,8 +3260,6 @@ begin
   if Abs(BarreCible - BarreAffiche) < 0.0005 then BarreAffiche := BarreCible;
   W := Round(BarrePiste.Width * BarreAffiche);
   if W <> BarrePleine.Width then BarrePleine.Width := W;
-  S := IntToStr(Round(100 * BarreAffiche)) + ' %';
-  if BarrePourcent.Caption <> S then BarrePourcent.Caption := S;
   if W > 0 then begin
     BitBlt(BarreDegrade.Bitmap.Canvas.Handle, 0, 0, BarreFond.Width, BarreFond.Height, BarreFond.Canvas.Handle, 0, 0, SRCCOPY);
     F := (Ms mod 2300) / 1500.0;
@@ -2492,22 +3270,21 @@ begin
     end;
     BarreDegrade.Repaint;
   end;
-  if Ms - CopieVu < 450 then Exit;
+  if Ms - CopieVu < 200 then Exit;
   CopieVu := Ms;
-  S := WizardForm.FilenameLabel.Caption;
-  if S <> DernierFichier then begin
-    DernierFichier := S;
-    CopieFichier.Caption := FichierCourt(S);
-  end;
-  if (BarreCible >= 0.995) or (CopieDebut < 0) then S := ''
+  TexteVifPoser(VifPourcent, IntToStr(Round(100 * BarreAffiche)) + ' %');
+  if WizardForm.FilenameLabel.Caption = '' then S := '' else S := FichierCourt(WizardForm.FilenameLabel.Caption);
+  TexteVifPoser(VifFichier, S);
+  if ProgresFichier <> '' then S := 'Les dernières étapes…'
+  else if (BarreCible >= 0.995) or (CopieDebut < 0) then S := ''
   else if (BarreCible > 0.03) and (Ms - CopieDebut > 2500) then begin
     Reste := (Ms - CopieDebut) * (1 - BarreCible) / BarreCible / 1000;
     if CopieEtaLisse < 0 then CopieEtaLisse := Reste
-    else CopieEtaLisse := 0.75 * CopieEtaLisse + 0.25 * Reste;
+    else CopieEtaLisse := 0.88 * CopieEtaLisse + 0.12 * Reste;
     S := TempsRestant(Round(CopieEtaLisse));
   end else
     S := 'Calcul du temps restant…';
-  if CopieReste.Caption <> S then CopieReste.Caption := S;
+  TexteVifPoser(VifReste, S);
 end;
 
 // L'animation de la copie (aussi pendant la préparation) : une image de la bande à la fois.
@@ -2523,9 +3300,152 @@ begin
   Copie.Image.Repaint;
 end;
 
-// Pendant PrepareToInstall (la sauvegarde de la version installée) : l'animation de la copie
-// et une phrase, sur la page « Préparation ». Ensuite la page reprend ses propres textes (une
-// erreur, des applications à fermer...).
+// ------------------------------------------------------------- la copie, dans les détails ----
+// 1.12.29 : la copie telle qu'Inno Setup la fait - le programme (dans {app}), puis les mêmes fichiers
+// dans la réserve de réparation, puis les raccourcis, le registre, la désinstallation (son état dans
+// la page). Un groupe a sa ligne (ses fichiers et leur taille : d'après le manifeste, à la
+// compilation) ; un gros fichier du programme (un Mo et plus) a la sienne. Aussi sans assistant : les
+// lignes vont dans le journal. CopieFraction : la progression (0 à 1), qu'il y ait une barre ou non.
+const
+  CopieNbFichiers = {#NbFichiers};
+  CopieTaille = {#TailleFichiers};
+
+var
+  CopieFraction, CopieOctets: Extended;
+  CopieVuTexte: Integer;
+  CopieChemin: String;
+
+// La taille d'un gros fichier du programme (relatif à {app}), 0 s'il n'en est pas un.
+function CopieTailleGros(Rel: String): Integer;
+var S, Un: String;
+    P, Q: Integer;
+begin
+  Result := 0;
+  S := '{#GrosFichiers}';
+  while S <> '' do begin
+    P := Pos('|', S);
+    if P = 0 then P := Length(S) + 1;
+    Un := Copy(S, 1, P - 1);
+    Delete(S, 1, P);
+    Q := Pos(':', Un);
+    if (Q > 0) and (CompareText(Copy(Un, 1, Q - 1), Rel) = 0) then begin
+      Result := StrToIntDef(Copy(Un, Q + 1, 20), 0);
+      Exit;
+    end;
+  end;
+end;
+
+function CopieCompte: String;
+begin
+  if CopieNbFichiers > 0 then Result := IntToStr(Mini(CopieN, CopieNbFichiers)) + ' / ' + IntToStr(CopieNbFichiers) + ' fichiers'
+  else Result := IntToStr(CopieN) + ' fichiers';
+end;
+
+// Le texte de la ligne du groupe G (1 le programme, 2 la réserve), en cours ou fini. La taille
+// copiée : celle des fichiers finis (CopieOctets) ; la totale : celle du manifeste.
+function CopieTexte(G: Integer; Fini: Boolean): String;
+var Total, Fait: Extended;
+begin
+  Total := CopieTaille;
+  Fait := CopieOctets;
+  if Fait > Total then Fait := Total;
+  if G = 1 then begin
+    if Fini then Result := 'Le programme est copié : ' + IntToStr(CopieNbFichiers) + ' fichiers, ' + TailleLisible(Total)
+    else Result := 'Le programme : ' + CopieCompte + ' (' + TailleLisible(Fait) + ' sur ' + TailleLisible(Total) + ')';
+  end else begin
+    if Fini then Result := 'La réserve de réparation est prête : ' + IntToStr(CopieNbFichiers) + ' fichiers, ' + TailleLisible(Total) + ', pour réparer sans Internet'
+    else Result := 'La réserve de réparation : ' + CopieCompte + ' (' + TailleLisible(Fait) + ' sur ' + TailleLisible(Total) + ')';
+  end;
+end;
+
+// Le fichier d'avant est fini (le suivant commence) : sa taille compte.
+procedure CopieFichierFini;
+var T: Integer;
+begin
+  if (CopieChemin <> '') and FileSize(CopieChemin, T) then CopieOctets := CopieOctets + T;
+  CopieChemin := '';
+end;
+
+function Ruche: String;
+begin
+  if IsAdminInstallMode then Result := 'HKLM' else Result := 'HKCU';
+end;
+
+// Le groupe en cours est fini : sa ligne (et celle de son gros fichier) passent à « fait ».
+procedure CopieFinGroupe;
+begin
+  if CopieGros <> '' then begin
+    JournalEcrire(jFait, 1, CopieGros, CopieGrosTexte, '');
+    CopieGros := '';
+  end;
+  if (CopieGroupe = 1) or (CopieGroupe = 2) then JournalEcrire(jFait, 0, 'copie' + IntToStr(CopieGroupe), CopieTexte(CopieGroupe, True), '')
+  else if CopieGroupe = 4 then JournalEcrire(jFait, 0, 'registre', 'Le registre : ' + Ruche + '\Software\{#Cle} (InstallDir, Version, Portee, DossierDonnees)', '');
+end;
+
+// Un fichier de plus (son chemin, tel qu'Inno Setup l'affiche) : son groupe, son compte, sa ligne.
+procedure CopieFichierVu(S: String);
+var G, T: Integer;
+    Rel: String;
+begin
+  if AppDossier = '' then AppDossier := ExpandConstant('{app}');
+  if ReserveDossier = '' then ReserveDossier := DossierReserve('');
+  G := 0;
+  Rel := '';
+  if CompareText(Copy(S, 1, Length(AppDossier) + 1), AppDossier + '\') = 0 then begin
+    G := 1;
+    Rel := Copy(S, Length(AppDossier) + 2, Length(S));
+  end else if CompareText(Copy(S, 1, Length(ReserveDossier) + 1), ReserveDossier + '\') = 0 then G := 2;
+  if G = 0 then Exit;
+  CopieFichierFini;
+  if G <> CopieGroupe then begin
+    CopieFinGroupe;
+    CopieGroupe := G;
+    CopieN := 0;
+    CopieOctets := 0;
+  end else if CopieGros <> '' then begin
+    JournalEcrire(jFait, 1, CopieGros, CopieGrosTexte, '');
+    CopieGros := '';
+  end;
+  CopieN := CopieN + 1;
+  CopieChemin := S;
+  CopieVuTexte := Horloge;
+  JournalEcrire(jEnCours, 0, 'copie' + IntToStr(G), CopieTexte(G, False), '');
+  // où vont le programme et la réserve, sur leur ligne (avec un long chemin, celle du compte était coupée)
+  if G = 1 then JournalEcrire(jInfo, 1, 'copie1:dans', 'dans ' + AppDossier, '')
+  else JournalEcrire(jInfo, 1, 'copie2:dans', 'dans ' + ReserveDossier, '');
+  if G = 1 then begin
+    T := CopieTailleGros(Rel);
+    if T > 0 then begin
+      CopieGros := 'gros:' + Rel;
+      CopieGrosTexte := Rel + ' · ' + TailleLisible(T);
+      JournalEcrire(jEnCours, 1, CopieGros, CopieGrosTexte, '');
+    end;
+  end;
+end;
+
+// L'état de la copie a changé (la phrase d'Inno Setup) : les raccourcis, le registre, la désinstallation.
+procedure CopieEtatVu(S: String);
+begin
+  if S = SetupMessage(msgStatusCreateIcons) then begin
+    CopieFinGroupe;
+    CopieGroupe := 3;
+    JournalNote(jEnCours, 'raccourcis', 'Les raccourcis : menu Démarrer > {#Nom}…');
+  end else if S = SetupMessage(msgStatusCreateRegistryEntries) then begin
+    if CopieGroupe <> 4 then begin
+      CopieFinGroupe;
+      CopieGroupe := 4;
+      JournalNote(jEnCours, 'registre', 'Le registre : ' + Ruche + '\Software\{#Cle}…');
+    end;
+  end else if S = SetupMessage(msgStatusSavingUninstall) then begin
+    CopieFinGroupe;
+    CopieGroupe := 5;
+    JournalNote(jEnCours, 'desinst', 'La désinstallation s''enregistre…');
+  end;
+end;
+
+// Pendant PrepareToInstall (la sauvegarde de la version installée) : l'animation de la copie, une
+// phrase et (1.12.29) les détails, sur la page « Préparation » ; ils passent ensuite sur la page de
+// la copie. La page reprend ses propres textes (une erreur, des applications à fermer...).
 procedure MontrerPreparation(Oui: Boolean);
 var P: TNewNotebookPage;
 begin
@@ -2535,16 +3455,22 @@ begin
     if Copie.Image = nil then Exit;
     P := WizardForm.PreparingPage;
     if Oui then begin
+      JournalPhase := 'Avant la copie';
       Copie.Image.Parent := P;
-      Copie.Image.SetBounds((P.Width - Copie.Image.Width) div 2, ScaleY(10), Copie.Image.Width, Copie.Image.Height);
+      Copie.Image.SetBounds(CopieX, CopieY, Copie.Image.Width, Copie.Image.Height);
       if PreparationTexte = nil then begin
         PreparationTexte := NouveauTexte(P, 'L''assistant prépare la copie' + #160 + ': la version déjà installée, s''il y en a une, est d''abord sauvegardée.',
-                                         0, ScaleY(10) + Copie.Image.Height + ScaleY(14), P.Width, ScaleY(40), '', 10, CouleurTexte);
+                                         0, Copie.Image.Height + ScaleY(12), WizardForm.InnerNotebook.Width, ScaleY(40), '', 10, CouleurTexte);
         PreparationTexte.Alignment := taCenter;
       end;
       PreparationTexte.Visible := True;
       Copie.Image.Visible := True;
       Copie.Active := True;
+      if Journal.Image <> nil then begin
+        Journal.Image.Parent := P;
+        JournalRoue.Image.Parent := P;
+        JournalActif := True;
+      end;
       // la suite (sortir les étapes PowerShell) bloque l'assistant un moment : la page s'affiche
       // d'abord entière, à son état final (pas à moitié arrivée)
       TransitionsFinir;
@@ -2554,12 +3480,19 @@ begin
       TicRail(Horloge);
       Copie.Dernier := -1;
       TicCopie(Horloge);
+      JournalMontrerMaintenant;
       RedrawWindow(WizardForm.Handle, 0, 0, RDW_TOUT);
     end else begin
       Copie.Active := False;
       if PreparationTexte <> nil then PreparationTexte.Visible := False;
       Copie.Image.Parent := WizardForm.InstallingPage;
       Copie.Image.SetBounds(CopieX, CopieY, Copie.Image.Width, Copie.Image.Height);
+      if Journal.Image <> nil then begin
+        Journal.Image.Parent := WizardForm.InstallingPage;
+        JournalRoue.Image.Visible := False;
+        JournalRoue.Image.Parent := WizardForm.InstallingPage;
+        JournalActif := False;
+      end;
     end;
   except
     Log('Habillage, préparation : ' + GetExceptionMessage);
@@ -2621,6 +3554,7 @@ begin
         DessinerPoints(DiapoImage.Bitmap.Canvas, 0, 1, 0);
         DiapoImage.Repaint;
       end;
+    JournalMontrerMaintenant;
   except
     Log('Habillage, figer : ' + GetExceptionMessage);
   end;
@@ -2645,34 +3579,40 @@ begin
   CopieEnCours := CurPageID = wpInstalling;
   DiapoActif := CurPageID = wpInstalling;
   if Copie.Image <> nil then Copie.Active := CurPageID = wpInstalling;
+  // 1.12.29 : les détails vivent sur la page de la copie (et sur celle de la préparation, le temps
+  // de PrepareToInstall : voir MontrerPreparation)
+  if CurPageID = wpInstalling then begin
+    JournalActif := Journal.Image <> nil;
+    JournalPhase := 'La copie';
+    JournalSale := True;
+  end else if CurPageID <> wpPreparing then JournalActif := False;
   if CurPageID = PageAvant then Exit;   // la même page, encore (la préparation, après les applications à fermer)
   PageAvant := CurPageID;
   if CurPageID = wpWelcome then begin
+    // 1.12.29 : les textes et les cartes apparaissent, puis montent (sans changer de couleur : ils se
+    // redessinaient à chaque pas)
     Heros.Debut := -1;
+    Apparaitre(WizardForm.WelcomeLabel1, 320);
     Arriver(WizardForm.WelcomeLabel1, AccTitreX, AccTitreY, 0, ScaleY(12), 320, 520, cSortie);
-    Teinter(WizardForm.WelcomeLabel1, clWhite, CouleurTitre, 320, 480);
+    Apparaitre(WizardForm.WelcomeLabel2, 420);
     Arriver(WizardForm.WelcomeLabel2, AccTexteX, AccTexteY, 0, ScaleY(12), 420, 520, cSortie);
-    Teinter(WizardForm.WelcomeLabel2, clWhite, CouleurTexte, 420, 480);
     for I := 0 to GetArrayLength(CartePanneau) - 1 do begin
+      Apparaitre(CartePanneau[I], 560 + I * 130);
       Arriver(CartePanneau[I], CarteX[I], CarteY[I], 0, ScaleY(18), 560 + I * 130, 560, cSortie);
-      Teinter(CartePanneau[I], clWhite, CouleurCarte, 560 + I * 130, 420);
-      Teinter(CarteTitre[I], CouleurCarte, CouleurTitre, 620 + I * 130, 460);
-      Teinter(CarteTexte[I], CouleurCarte, CouleurTexte, 680 + I * 130, 460);
       Grandir(CarteLogo[I], CarteLogoX[I], CarteLogoY[I], CarteLogoL[I], CarteLogoH[I], 30, 640 + I * 130, 520);
     end;
   end else if CurPageID = wpFinished then begin
     Succes.Debut := -1;
+    Apparaitre(WizardForm.FinishedHeadingLabel, 650);
     Arriver(WizardForm.FinishedHeadingLabel, WizardForm.FinishedHeadingLabel.Left, WizardForm.FinishedHeadingLabel.Top, 0, ScaleY(12), 650, 520, cSortie);
-    Teinter(WizardForm.FinishedHeadingLabel, clWhite, CouleurTitre, 650, 460);
+    Apparaitre(WizardForm.FinishedLabel, 780);
     Arriver(WizardForm.FinishedLabel, WizardForm.FinishedLabel.Left, WizardForm.FinishedLabel.Top, 0, ScaleY(12), 780, 520, cSortie);
-    Teinter(WizardForm.FinishedLabel, clWhite, CouleurTexte, 780, 460);
+    Apparaitre(WizardForm.RunList, 900);
     Arriver(WizardForm.RunList, WizardForm.RunList.Left, WizardForm.RunList.Top, 0, ScaleY(14), 900, 520, cSortie);
   end else begin
     Arriver(WizardForm.InnerNotebook, NotebookX, NotebookY, S * ScaleX(32), 0, 0, 360, cSortie);
     Arriver(WizardForm.PageNameLabel, TitreX, TitreY, S * ScaleX(16), 0, 0, 420, cSortie);
-    Teinter(WizardForm.PageNameLabel, clWhite, CouleurTitre, 0, 380);
     Arriver(WizardForm.PageDescriptionLabel, DescX, DescY, S * ScaleX(16), 0, 70, 420, cSortie);
-    Teinter(WizardForm.PageDescriptionLabel, clWhite, CouleurTexte, 70, 380);
     // (les tailles d'ici : celles de la page à l'écran ; avant le premier affichage, la page
     // intérieure garde la largeur de sa conception)
     IconeX := WizardForm.MainPanel.Width - IconeT - ScaleX(18);
@@ -2704,6 +3644,7 @@ begin
         TicCopie(Ms);
         if CopieEnCours then TicBarre(Ms);
         if DiapoActif then TicDiapos(Ms);
+        TicJournal(Ms);
         TicRecap(Ms);
       end;
     except
@@ -2722,22 +3663,45 @@ begin
   Minuterie := SetTimer(0, 0, 15, RappelTic);
 end;
 
-// La progression de la copie (Inno Setup l'appelle) : la barre et l'anneau de l'étape la suivent.
+// La progression de la copie (Inno Setup l'appelle) : 1.12.29 : ses détails (aussi sans assistant :
+// le journal) ; la barre et l'anneau de l'étape la suivent.
 procedure CurInstallProgressChanged(CurProgress, MaxProgress: Integer);
 var W: Integer;
+    S: String;
 begin
-  if (BarrePiste = nil) or (MaxProgress <= 0) then Exit;
-  BarreCible := Borne(CurProgress * 1.0 / MaxProgress);
+  if MaxProgress <= 0 then Exit;
+  CopieFraction := Borne(CurProgress * 1.0 / MaxProgress);
+  try
+    S := WizardForm.StatusLabel.Caption;
+    if S <> CopieVuStatut then begin
+      CopieVuStatut := S;
+      CopieEtatVu(S);
+    end;
+    S := WizardForm.FilenameLabel.Caption;
+    if S <> CopieVuFichier then begin
+      CopieVuFichier := S;
+      if S <> '' then CopieFichierVu(S);
+    end else if ((CopieGroupe = 1) or (CopieGroupe = 2)) and (Horloge - CopieVuTexte >= 250) then begin
+      // un gros fichier : sa taille avance sans qu'un autre fichier commence
+      CopieVuTexte := Horloge;
+      JournalEcrire(jEnCours, 0, 'copie' + IntToStr(CopieGroupe), CopieTexte(CopieGroupe, False), '');
+    end;
+  except
+    Log('Détails, copie : ' + GetExceptionMessage);
+  end;
+  if BarrePiste = nil then Exit;
+  BarreCible := CopieFraction;
   if CopieDebut < 0 then CopieDebut := Horloge;
   // l'anneau de l'étape suit la barre ; le lien vers la dernière étape se remplit
   RailCible := EtapeCopie + 0.92 * BarreCible;
   RailDuree := 0;
   if MoteurEnPanne then begin
-    // sans le mouvement : la barre, son pourcentage et le fichier en cours, directement
+    // sans le mouvement : la barre, son pourcentage, le fichier en cours et les détails, directement
     W := Round(BarrePiste.Width * BarreCible);
-    BarrePleine.Width := W;
-    BarrePourcent.Caption := IntToStr(Round(100 * BarreCible)) + ' %';
-    if CopieFichier <> nil then CopieFichier.Caption := FichierCourt(WizardForm.FilenameLabel.Caption);
+    if BarrePleine.Width <> W then BarrePleine.Width := W;
+    TexteVifPoser(VifPourcent, IntToStr(Round(100 * BarreCible)) + ' %');
+    TexteVifPoser(VifFichier, FichierCourt(WizardForm.FilenameLabel.Caption));
+    if JournalSale and (Horloge - JournalVu >= 500) then JournalMontrerMaintenant;
   end;
 end;
 
@@ -2758,9 +3722,12 @@ begin
   HorlogeBase := GetTickCount;
   SensPage := 1;
   PageAvant := -1;
+  SansComposition := Lowercase(ExpandConstant('{param:COMPOSITION|oui}')) = 'non';
   if PolicesOk then WizardForm.Font.Name := 'Barlow';
   // une erreur ici n'arrête jamais l'assistant (InitializeWizard) : le mouvement, seulement
   try
+    // 1.12.29 : la taille d'abord (les pages et la colonne se posent à cette taille)
+    Dimensionner;
     CreerColonne;
     HabillerEnTete;
     // l'accueil, la copie et la fin s'habillent quand ils s'affichent : la fenêtre a alors sa taille
@@ -2772,6 +3739,7 @@ begin
     Panne('habillage : ' + GetExceptionMessage);
     Figer;
   end;
+  Composer;
 end;
 
 // --------------------------------------------------------------- l'assistant ----
@@ -2898,6 +3866,12 @@ var I: Integer;
 begin
   // ---- 1.12.27 : l'habillage (avant les pages : elles prennent sa police) ----
   Habiller;
+  // 1.12.29 : sans habillage (sans assistant, ou ses images n'ont pas pu sortir), la taille de la
+  // 1.12.28 (WizardSizePercent=130,140, qui s'appliquait ensuite) : /SILENT ne change pas
+  if not Dimensionne then begin
+    WizardForm.ClientWidth := WizardForm.ClientWidth * 130 div 100;
+    WizardForm.ClientHeight := WizardForm.ClientHeight * 140 div 100;
+  end;
   // ---- Tes donnees ----
   S := 'Ce dossier reste à toi : une mise à jour, une réparation ou une désinstallation ne l''effacent jamais sans ta confirmation.' + #13#10 +
        'Il ne peut pas être dans le dossier du programme. Tu pourras le changer plus tard : accueil d''{#NomApi} ou d''{#NomIhm} > Dossiers.';
@@ -2920,6 +3894,9 @@ begin
     PageReprise.Add(S + Sources[I]);
     PageReprise.Values[I] := True;
   end;
+  // 1.12.29 : la page est créée à la taille de l'assistant (Dimensionner, avant) ; sa liste, posée par
+  // Inno Setup à la hauteur d'origine, descend jusqu'en bas
+  PageReprise.CheckListBox.Height := PageReprise.SurfaceHeight - PageReprise.CheckListBox.Top;
   if SourceLot8 >= 0 then begin
     OptionLot8 := PageReprise.Add('Puis désinstaller cette version précédente (son programme seulement)');
     PageReprise.Values[OptionLot8] := True;
@@ -2936,6 +3913,8 @@ begin
   // ---- 1.8.0 : Ce qui a été installé (après la copie) ----
   PageRecap := CreateOutputMsgMemoPage(wpInstalling, 'Ce qui a été installé',
     'Les programmes, leur architecture, et où se trouve chaque chose.', 'Le même texte est enregistré dans tes journaux.', '');
+  // 1.12.29 : le texte descend jusqu'en bas de la page (Inno Setup le pose à la hauteur d'origine)
+  PageRecap.RichEditViewer.Height := PageRecap.SurfaceHeight - PageRecap.RichEditViewer.Top;
   PageRecap.RichEditViewer.Font.Name := 'Consolas';
   PageRecap.RichEditViewer.Font.Size := 9;
   PageRecap.RichEditViewer.WordWrap := False;
@@ -2957,6 +3936,8 @@ end;
 
 procedure CurPageChanged(CurPageID: Integer);
 begin
+  // 1.12.29 : la fenetre se dessine toujours d'un bloc (si elle a ete recreee, son handle a change)
+  Composer;
   // 1.12.27 : l'etape en cours a gauche, l'icone de l'en-tete. 1.12.28 : la page entre en scene
   // (MouvementPage) ; une erreur de l'habillage arrete le mouvement, jamais l'assistant.
   if ColonneEtapes <> nil then
@@ -3072,21 +4053,97 @@ begin
 end;
 
 // --------------------------------------------------------------- installer ----
-// La sauvegarde de la version installée, avant la copie (l'étape PowerShell avant-copie).
+// 1.12.29 : les raccourcis, vérifiés (les détails) : ceux du menu Démarrer, ceux du Bureau (demandés).
+procedure RaccourcisVerifier;
+var G, D, Noms, Manque, S, L: String;
+    I, N, Total, NB, K: Integer;
+begin
+  G := ExpandConstant('{autoprograms}\{#Nom}');
+  Noms := '{#NomApi}|{#NomIhm}|Désinstaller {#Nom}|Maintenance\Réparer|Maintenance\Vérifier l''installation|' +
+          'Maintenance\Reprendre une installation interrompue|Maintenance\Restaurer une sauvegarde|' +
+          'Maintenance\Collecter les journaux|Maintenance\Réinitialiser mes réglages';
+  if not IsAdminInstallMode then Noms := Noms + '|Tes données';
+  Total := NombreDeMorceaux(Noms);
+  N := 0;
+  Manque := '';
+  for I := 0 to Total - 1 do
+    if FileExists(G + '\' + Morceau(Noms, I) + '.lnk') then N := N + 1
+    else begin
+      if Manque <> '' then Manque := Manque + '|';
+      Manque := Manque + Morceau(Noms, I);
+    end;
+  S := IntToStr(N) + ' dans le menu Démarrer';
+  if WizardIsTaskSelected('bureau') then begin
+    D := ExpandConstant('{autodesktop}');
+    NB := 0;
+    for I := 0 to 1 do begin
+      Total := Total + 1;
+      if FileExists(D + '\' + Morceau('{#NomApi}|{#NomIhm}', I) + '.lnk') then begin
+        N := N + 1;
+        NB := NB + 1;
+      end else begin
+        if Manque <> '' then Manque := Manque + '|';
+        Manque := Manque + Morceau('{#NomApi}|{#NomIhm}', I) + ' (Bureau)';
+      end;
+    end;
+    S := S + ', ' + IntToStr(NB) + ' sur le Bureau';
+  end;
+  // (le dossier du menu, sur sa ligne : il est long)
+  if Manque = '' then begin
+    JournalNote(jFait, 'raccourcis', 'Raccourcis : ' + S);
+    JournalSous(jInfo, 'raccourcis', 'raccourcis:dossier', 'dans ' + G);
+  end else begin
+    // ceux qui manquent, un par ligne (quatre au plus ; tous dans le journal)
+    K := NombreDeMorceaux(Manque);
+    JournalNote(jAttention, 'raccourcis', 'Raccourcis : ' + IntToStr(N) + ' sur ' + IntToStr(Total) + ', il en manque ' + IntToStr(K));
+    JournalSous(jInfo, 'raccourcis', 'raccourcis:dossier', 'dans ' + G);
+    L := Manque;
+    StringChangeEx(L, '|', ', ', True);
+    Log('Raccourcis manquants : ' + L);
+    for I := 0 to Mini(K, 4) - 1 do JournalSous(jInfo, 'raccourcis', 'raccourcis:' + IntToStr(I), 'il manque « ' + Morceau(Manque, I) + ' »');
+    if K > 4 then JournalSous(jInfo, 'raccourcis', 'raccourcis:plus', 'et ' + IntToStr(K - 4) + ' autre(s) : voir le journal de l''installation');
+  end;
+end;
+
+// La sauvegarde de la version installée, avant la copie (l'étape PowerShell avant-copie). 1.12.29 :
+// chaque action dans les détails.
 function PreparerCopie: String;
 var Code: Integer;
     Lance, Demarre: Boolean;
+    Prec, PrecDossier, L: String;
 begin
   Result := '';
+  InstallDebut := GetTickCount;
+  JournalNote(jEnCours, 'prep', 'L''assistant prépare l''installation d''{#Nom} {#Version}…');
+  if RegQueryStringValue(HKA, 'Software\{#Cle}', 'Version', Prec) and (Prec <> '') then begin
+    if not RegQueryStringValue(HKA, 'Software\{#Cle}', 'InstallDir', PrecDossier) or (PrecDossier = '') then PrecDossier := ExpandConstant('{app}');
+    if Prec = '{#Version}' then JournalDetail(jInfo, '', 'La version ' + Prec + ' est déjà installée : elle est réinstallée')
+    else JournalDetail(jInfo, '', 'La version ' + Prec + ' est installée : la {#Version} la remplace');
+    if CompareText(RemoveBackslashUnlessRoot(PrecDossier), RemoveBackslashUnlessRoot(ExpandConstant('{app}'))) <> 0 then
+      JournalDetail(jInfo, '', 'Elle était dans ' + PrecDossier);
+  end else
+    JournalDetail(jInfo, '', 'Pas de version installée ici : c''est une première installation');
+  JournalDetail(jInfo, '', 'Le programme ira dans ' + ExpandConstant('{app}'));
+  JournalDetail(jInfo, '', 'Tes données : ' + DonneesReel(''));
+  L := ListeSources;
+  if (L <> '') and (Lowercase(ExpandConstant('{param:MIGRER|}')) <> 'non') then begin
+    StringChangeEx(L, '|', ', ', True);
+    JournalDetail(jInfo, '', 'À reprendre après la copie : ' + L);
+  end;
+  JournalNote(jEnCours, 'outils', 'Les étapes de maintenance (PowerShell) sortent de l''installateur…');
+  JournalMontrerMaintenant;
   ExtractTemporaryFiles('{tmp}\xpg\lib\*');
   ExtractTemporaryFiles('{tmp}\xpg\config.ini');
   if not FileExists(PowerShell) then begin
+    JournalNote(jErreur, 'outils', 'Windows PowerShell 5.1 est introuvable : ' + PowerShell);
     Result := 'Windows PowerShell 5.1 est introuvable (' + PowerShell + ') : il fait partie de Windows 10 et 11.';
     Exit;
   end;
+  JournalNote(jFait, 'outils', 'Les étapes de maintenance (PowerShell) sont prêtes');
   Lance := EtapePowerShell(ExpandConstant('{tmp}\xpg\lib\installer_etape.ps1'),
        '/etape:avant-copie /dossier:"' + ExpandConstant('{app}') + '" /version:{#Version} /etat:"' + DossierEtat('') + '"', Code, Demarre);
   if not Demarre then begin
+    JournalNote(jAttention, 'prep', 'Windows refuse les scripts PowerShell : pas de sauvegarde, de reprise ni de vérification ; la copie se fait quand même');
     // Une strategie de groupe interdit les scripts (ou PowerShell lui-meme : AppLocker, SRP ; Exec
     // echoue alors) : l'installation se fait quand meme (le programme ; l'application prepare
     // elle-meme tes donnees au premier lancement), sans les etapes PowerShell. Rien n'est contourne.
@@ -3099,9 +4156,12 @@ begin
              mbInformation, MB_OK);
     Exit;
   end;
-  if Code <> 0 then
+  if Code <> 0 then begin
+    JournalNote(jErreur, 'prep', 'La sauvegarde de la version installée a échoué (code ' + IntToStr(Code) + ') : rien n''a été modifié');
     Result := 'La sauvegarde de la version installée n''a pas pu être faite (code ' + IntToStr(Code) + '). Rien n''a été modifié.' + #13#10 +
               'Journal : ' + JournalInstallation;
+  end else
+    JournalNote(jFait, 'prep', 'Préparation terminée : la copie commence');
 end;
 
 // 1.12.28 : pendant la sauvegarde, l'animation de la copie et une phrase (MontrerPreparation).
@@ -3160,14 +4220,42 @@ begin
     Exit;
   end;
   if CurStep <> ssPostInstall then Exit;
+  // 1.12.29 : la copie est finie (ses dernières lignes, les raccourcis vérifiés) ; puis chaque action,
+  // dans les détails
+  try
+    CopieFinGroupe;
+    CopieGroupe := 0;
+    // (Inno Setup ne redit pas sa progression en l'enregistrant : la ligne vient ici, vérifiée)
+    if RegKeyExists(HKA, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + #123 + '{#AppGuid}' + #125 + '_is1') then
+      JournalNote(jFait, 'desinst', 'La désinstallation est enregistrée : Paramètres > Applications')
+    else
+      JournalNote(jAttention, 'desinst', 'Désinstallation : absente de Paramètres > Applications ; unins000.exe la fait');
+    RaccourcisVerifier;
+  except
+    Log('Détails : ' + GetExceptionMessage);
+  end;
   EcrireInstallationIni;
+  JournalNote(jFait, 'ini', 'installation.ini est écrit : la version, tes dossiers, la maintenance');
   // L'installateur lui-meme dans la reserve : repair.bat (reinstaller) et la reprise s'en servent.
+  // (1.12.29 : CopyFile depuis Inno Setup 6.4 - FileCopy, son ancien nom, y donne un avertissement.)
   Setup := ExpandConstant('{srcexe}');
-  if not FileCopy(Setup, DossierReserve('') + '\' + ExtractFileName(Setup), False) then Log('Copie de l''installateur dans la reserve : echec');
+#if Ver >= EncodeVer(6, 4, 0)
+  if not CopyFile(Setup, DossierReserve('') + '\' + ExtractFileName(Setup), False) then begin
+#else
+  if not FileCopy(Setup, DossierReserve('') + '\' + ExtractFileName(Setup), False) then begin
+#endif
+    Log('Copie de l''installateur dans la reserve : echec');
+    JournalNote(jAttention, 'setup', 'L''installateur n''a pas pu être rangé dans la réserve de réparation');
+  end else
+    JournalNote(jFait, 'setup', 'L''installateur est rangé dans la réserve : réparer n''aura pas besoin d''Internet');
   if PowerShellBloque then begin
     Log('Etape apres-copie non lancee : Windows refuse les scripts PowerShell (voir plus haut).');
+    JournalNote(jAttention, 'fin', 'Installé, sans les étapes PowerShell (Windows les refuse), en ' + DureeLisible(GetTickCount - InstallDebut));
+    JournalMontrerMaintenant;
     Exit;
   end;
+  JournalPhase := 'Après la copie';
+  JournalAgrandir;
   // Les donnees, la reprise des anciennes versions, la verification.
   Sources2 := ListeSources;
   Migrer := Lowercase(ExpandConstant('{param:MIGRER|}'));
@@ -3188,10 +4276,16 @@ begin
        '/etape:apres-copie /dossier:"' + ExpandConstant('{app}') + '" /sources:"' + Sources2 + '" /desinstaller-lot8:' + Lot8
        + ' /libs-ajoutees:"' + FichierBlocsAjoutes + '"', Code, Demarre) or (Code <> 0) then begin
     Log('Etape apres-copie : echec, code ' + IntToStr(Code));
+    JournalNote(jErreur, 'fin', 'Une étape n''a pas abouti (code ' + IntToStr(Code) + ') : tes anciennes données ne sont pas touchées');
+    JournalMontrerMaintenant;
     if not WizardSilent then
       MsgBox('{#Nom} est installé, mais une étape n''a pas abouti (tes données, la reprise ou la vérification ; code ' + IntToStr(Code) + ').' + #13#10 + #13#10 +
              'Tes anciennes données n''ont pas été touchées. Pour finir : menu Démarrer > {#Nom} > Maintenance > Reprendre une installation interrompue.' + #13#10 + #13#10 +
              'Journal : ' + JournalInstallation, mbError, MB_OK);
+  end else begin
+    JournalNote(jFait, 'fin', 'Tout est installé, en ' + DureeLisible(GetTickCount - InstallDebut));
+    JournalPhase := 'Terminé';
+    JournalMontrerMaintenant;
   end;
 end;
 

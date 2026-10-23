@@ -35,7 +35,9 @@ Pour l'utilisateur, sur un PC vierge ou non. Un seul fichier, à la racine du do
 
    Chaque étape est notée : si le PC s'éteint en plein milieu, l'installation se reprend (voir § 4).
 
-10. **Ce qui a été installé** : les programmes (`XpgAnalyzer.exe`, le désinstallateur, `SDL3.dll`, les scripts de maintenance), leur **architecture** (64 bits x64, 32 bits x86) et leur taille, puis l'arborescence : le programme, tes données, la maintenance, le menu Démarrer, le Bureau, la barre des tâches, le registre. La zone défile ; **Copier** met le texte dans le presse-papiers ; **Suivant** mène à la fin. Le même texte est enregistré : `Journaux\recapitulatif_<date>.txt` (aussi en installation sans surveillance).
+   Pendant la préparation et la copie, le panneau **Détails** (1.12.29) montre chaque action au moment où elle se fait, avec son heure et son état (en cours, fait, attention, erreur) : la version trouvée et sa sauvegarde, les fichiers copiés et leur taille, les raccourcis, le registre, puis tes dossiers, la reprise de chaque ancienne version (ce qui en est pris, un projet renommé, un fichier que tu avais modifié et qui est gardé), le lot 8, la vérification. Sans assistant (`/SILENT`, `/VERYSILENT`), les mêmes lignes vont dans le journal de l'installation (`/LOG`).
+
+10. **Ce qui a été installé** : les programmes (`XpgAnalyzer.exe`, le désinstallateur, `SDL3.dll`, les scripts de maintenance), leur **architecture** (64 bits x64, 32 bits x86) et leur taille, puis l'arborescence : le programme, tes données, la maintenance, le menu Démarrer, le Bureau, la barre des tâches, le registre. La zone défile ; **Copier** met le texte dans le presse-papiers ; **Suivant** mène à la fin. Le même texte est enregistré : `Journaux\recapitulatif_<date>.txt` (aussi en installation sans surveillance). Depuis la 1.12.29, il dit aussi **la version d'avant** (ce qui en a été sauvegardé, et où) et **ce qui a été repris** de chaque ancienne version.
 
 À la fin, un rapport liste ce qui a été repris et gardé : `Journaux\migration_<date>.txt`.
 
@@ -57,6 +59,7 @@ XPGAnalyser-Setup-1.11.2.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS /DONNEES="D
 | `/DONNEES="…"` | le dossier des données |
 | `/MIGRER=oui` | reprend toutes les anciennes versions trouvées ; `non` n'en reprend aucune |
 | `/DESINSTALLERLOT8=non` | ne désinstalle pas la version du lot 8 |
+| `/COMPOSITION=non` | avec l'assistant (1.12.29) : si sa fenêtre se dessine mal sur un PC, enlève le double tampon de Windows qui l'empêche de clignoter |
 
 ## 2. Où sont les choses
 

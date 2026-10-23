@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # =============================================================================
-#  outils/installateur_images.py - les images de l'installateur (1.12.27, 1.12.28)
+#  outils/installateur_images.py - les images de l'installateur (1.12.27 a 1.12.29)
 # -----------------------------------------------------------------------------
 #  Fabrique installateur/images/ui/*.bmp, chaque image en 1x et en 2x (pour les
 #  ecrans agrandis) :
@@ -17,6 +17,10 @@
 #         et la coche qui se dessine : des bandes), la pastille de l'etape en cours ;
 #       . la copie : la barre (son degrade, l'eclat qui la parcourt) et les images
 #         du diaporama.
+#   - 1.12.29 : l'assistant est plus grand (912 x 580 a 96 ppp) : la colonne (232),
+#     les bandeaux de l'accueil et de la fin (620 x 196), la pastille, la barre sont
+#     refaits a leur nouvelle taille ; les marques des « Details » de la copie (fait,
+#     en cours, attention, erreur, info) et la roue de l'etape en cours.
 #     Les calques ont un canal alpha : BMP 32 bits, alpha premultiplie (celui
 #     qu'attend AlphaBlend de Windows). Une bande = les images l'une sous l'autre.
 #     Les reperes (noeuds du reseau, pistes du decor, etincelles...) et le nombre
@@ -66,6 +70,15 @@ CARTE = (243, 246, 250)        # le fond des cartes de l'accueil et du diaporama
 PISTE = (227, 233, 242)        # le cable de l'animation
 
 SS = 4  # le sur-echantillonnage des petites images (bords lisses)
+ROUGE = (229, 72, 77)          # une erreur, dans les « Details »
+GRIS_INFO = (148, 163, 184)
+
+# 1.12.29 : les tailles de l'assistant (unites 1x : des pixels a 96 ppp). La colonne de gauche ;
+# les bandeaux de l'accueil et de la fin (1.12.28 : 560 x 150 ; K : le rapport des hauteurs, pour
+# garder les proportions des elements poses dessus).
+COLONNE = 232
+BANDEAU_L, BANDEAU_H = 620, 196
+K = BANDEAU_H / 150
 
 # 1.12.28 : les reperes ecrits dans habillage.ini (section -> cle -> valeur)
 REPERES = {}
@@ -203,15 +216,16 @@ def logo_carte(nom, taille=40):
 
 
 # ------------------------------------------------------ le decor de la colonne ----
-# Des pistes de circuit, discretes, en bas de la colonne (unites 1x, dans 200 x 150) ;
+# Des pistes de circuit, discretes, en bas de la colonne (unites 1x, dans 232 x 150) ;
 # 1.12.28 : des impulsions les parcourent (l'installateur lit les pistes dans habillage.ini).
+# 1.12.29 : la colonne passe de 200 a 232 (les pistes s'allongent d'autant).
 PISTES = [
-    [(0, 120), (40, 120), (60, 100), (120, 100), (140, 80), (200, 80)],
-    [(0, 136), (70, 136), (86, 120), (150, 120), (170, 140), (200, 140)],
-    [(20, 150), (20, 112), (34, 98), (34, 60)],
-    [(96, 150), (96, 128), (110, 114), (176, 114)],
-    [(150, 60), (150, 92), (166, 108), (200, 108)],
-    [(56, 40), (56, 78), (74, 96)],
+    [(0, 120), (46, 120), (68, 100), (138, 100), (160, 80), (232, 80)],
+    [(0, 136), (80, 136), (98, 120), (172, 120), (194, 140), (232, 140)],
+    [(22, 150), (22, 112), (38, 98), (38, 60)],
+    [(110, 150), (110, 128), (126, 114), (204, 114)],
+    [(172, 60), (172, 92), (190, 108), (232, 108)],
+    [(64, 40), (64, 78), (84, 96)],
 ]
 
 
@@ -221,7 +235,7 @@ DECOR_HAUT = 54
 
 
 def decor(e):
-    l, h = 200 * e, 150 * e
+    l, h = COLONNE * e, 150 * e
     g = SS
     im = Image.new("RGB", (l * g, h * g), MARINE)
     d = ImageDraw.Draw(im)
@@ -280,7 +294,7 @@ def reseau(d, l, h, e, graine):
 
 
 def reperes_reseau(section, graine):
-    pts, liens, rayons = reseau_points(560, 150, 1, graine)
+    pts, liens, rayons = reseau_points(BANDEAU_L, BANDEAU_H, 1, graine)
     repere(section, "noeuds", ";".join(f"{round(x)},{round(y)},{round(r * 10)}" for (x, y), r in zip(pts, rayons)))
     repere(section, "liens", ";".join(f"{i},{j}" for i, j in liens))
 
@@ -294,7 +308,7 @@ def ombre(rgba, rayon, opacite=110):
 
 def fond_reseau(graine):
     def f(e):
-        l, h = 560 * e, 150 * e
+        l, h = BANDEAU_L * e, BANDEAU_H * e
         im = fond_bandeau(l, h).convert("RGBA")
         calque = Image.new("RGBA", (l, h), (0, 0, 0, 0))
         reseau(ImageDraw.Draw(calque), l, h, e, graine)
@@ -304,11 +318,14 @@ def fond_reseau(graine):
 
 
 # ------------------------------------------- 1.12.28 : l'accueil, en calques ----
-# Les deux logos (92 px, comme le bandeau de la 1.12.27), chacun avec son ombre, dans un
-# carre de 132 ; les trois points du lien ; l'eclat (une bande de lumiere oblique).
-LOGO_HEROS, MARGE_HEROS = 92, 20
-LOGOS_HEROS = (("api_studio", 324, 26), ("ihm_studio", 436, 32))
-POINTS_HEROS = ((419, 75, BLEU), (426, 75, melange(BLEU, TURQUOISE, 0.5)), (433, 75, TURQUOISE))
+# Les deux logos (1.12.29 : 112 px, pour le bandeau de 196), chacun avec son ombre, dans un
+# carre de 152 ; les trois points du lien ; l'eclat (une bande de lumiere oblique).
+LOGO_HEROS, MARGE_HEROS = 112, 20
+LOGOS_HEROS = (("api_studio", 346, 40), ("ihm_studio", 484, 48))
+POINTS_HEROS = ((463, 100, BLEU), (471, 100, melange(BLEU, TURQUOISE, 0.5)), (479, 100, TURQUOISE))
+# l'eclat passe de... a... (son centre, 1x) ; la lueur de l'ecran qui recoit (sa taille, 1x)
+ECLAT_ACCUEIL = (277, 675)
+LUEUR_ACCUEIL = 207
 
 
 def heros_logo(nom):
@@ -336,7 +353,7 @@ def heros_points(e):
 
 def eclat(e):
     """Une bande de lumiere oblique (20 degres), douce : elle passe sur le bandeau."""
-    l, h = 90 * e, 150 * e
+    l, h = 90 * e, BANDEAU_H * e
     im = Image.new("RGBA", (l, h), (0, 0, 0, 0))
     px = im.load()
     pente = math.tan(math.radians(20))
@@ -370,28 +387,36 @@ def lueur(couleur, coeur=BLANC):
 
 
 def reperes_accueil():
+    repere("Accueil", "taille", f"{BANDEAU_L},{BANDEAU_H}")
+    repere("Accueil", "eclat", f"{ECLAT_ACCUEIL[0]},{ECLAT_ACCUEIL[1]}")
+    repere("Accueil", "lueur", LUEUR_ACCUEIL)
     repere("Accueil", "logos", ";".join(f"{x - MARGE_HEROS},{y - MARGE_HEROS}" for (_, x, y) in LOGOS_HEROS))
     repere("Accueil", "points", ";".join(f"{x},{y}" for (x, y, _) in POINTS_HEROS))
     reperes_reseau("Accueil", 7)
 
 
 # ----------------------------------------------- 1.12.28 : la fin, en calques ----
-# Le cercle de la coche (centre 400,75), la coche qui se dessine, les etincelles.
-CENTRE_SUCCES = (400, 75)
-BOITE_COCHE = (370, 52, 62, 50)          # x, y, largeur, hauteur (1x)
-ETINCELLES = ((324, 28, 7, 0), (468, 34, 5, 1), (490, 108, 8, 0), (310, 118, 5, 1), (440, 128, 4, 0))   # x, y, taille, 0 ambre / 1 blanc
+# Le cercle de la coche, la coche qui se dessine, les etincelles. 1.12.29 : le bandeau passe de
+# 560 x 150 a 620 x 196 ; tout grandit dans le rapport des hauteurs (K), autour du centre.
+CENTRE_SUCCES = (443, 98)
+DISQUE = round(104 * K)                  # le cercle (avec son anneau clair)
+BOITE_DISQUE = round(150 * K)            # son carre, avec l'ombre
+BOITE_COCHE = (404, 68, 81, 65)          # x, y, largeur, hauteur (1x)
+ETINCELLE = 28                           # le carre d'une etincelle (1.12.28 : 22)
+ETINCELLES = ((344, 37, 7, 0), (532, 44, 5, 1), (561, 141, 8, 0), (325, 154, 5, 1), (495, 167, 4, 0))   # x, y, taille, 0 ambre / 1 blanc
+ECLAT_FIN = (310, 664)
 
 
 def succes_disque(e):
     g = SS
-    t = 104 * e
+    t = DISQUE * e
     c = Image.new("RGBA", (t * g, t * g), (0, 0, 0, 0))
     d = ImageDraw.Draw(c)
     d.ellipse((0, 0, t * g - 1, t * g - 1), fill=(255, 255, 255, 40))
-    m = 12 * e * g
+    m = round(12 * K) * e * g
     d.ellipse((m, m, t * g - m, t * g - m), fill=TURQUOISE + (255,))
     c = reduire(c, (t, t))
-    b = 150 * e
+    b = BOITE_DISQUE * e
     im = Image.new("RGBA", (b, b), (0, 0, 0, 0))
     x = (b - t) // 2
     porteur = Image.new("RGBA", (b, b), (0, 0, 0, 0))
@@ -405,15 +430,16 @@ def succes_coche(e):
     """La coche blanche, dessinee peu a peu : 10 images."""
     bx, by, bl, bh = BOITE_COCHE
     cx, cy = CENTRE_SUCCES
-    # les points de la 1.12.27 (dans le carre de 104 du cercle), ramenes dans la boite de la coche
-    x0, y0 = cx - 52, cy - 52
-    pts = [(x0 + 104 * 0.32 - bx, y0 + 104 * 0.52 - by), (x0 + 104 * 0.45 - bx, y0 + 104 * 0.65 - by), (x0 + 104 * 0.70 - bx, y0 + 104 * 0.38 - by)]
+    # les points de la 1.12.27 (dans le carre du cercle), ramenes dans la boite de la coche
+    t = DISQUE
+    x0, y0 = cx - t / 2, cy - t / 2
+    pts = [(x0 + t * 0.32 - bx, y0 + t * 0.52 - by), (x0 + t * 0.45 - bx, y0 + t * 0.65 - by), (x0 + t * 0.70 - bx, y0 + t * 0.38 - by)]
     images = []
     g = SS * e
     for k in range(10):
         f = douce((k + 1) / 10)
         im = Image.new("RGBA", (bl * g, bh * g), (0, 0, 0, 0))
-        trait(ImageDraw.Draw(im), [(x * g, y * g) for x, y in polyligne_partielle(pts, f)], BLANC + (255,), 9 * g)
+        trait(ImageDraw.Draw(im), [(x * g, y * g) for x, y in polyligne_partielle(pts, f)], BLANC + (255,), 9 * K * g)
         images.append(reduire(im, (bl * e, bh * e)))
     return images
 
@@ -423,9 +449,9 @@ def etincelle(couleur):
     def f(e):
         images = []
         g = SS * e
-        t = 22
+        t = ETINCELLE
         for k in range(8):
-            s = 8 * (0.25 + 0.75 * k / 7) * g
+            s = 8 * K * (0.25 + 0.75 * k / 7) * g
             sx = sy = t * g / 2
             im = Image.new("RGBA", (t * g, t * g), (0, 0, 0, 0))
             ImageDraw.Draw(im).polygon([(sx, sy - s), (sx + s * 0.28, sy - s * 0.28), (sx + s, sy), (sx + s * 0.28, sy + s * 0.28),
@@ -437,7 +463,9 @@ def etincelle(couleur):
 
 
 def reperes_fin():
-    repere("Fin", "disque", f"{CENTRE_SUCCES[0] - 75},{CENTRE_SUCCES[1] - 75}")
+    repere("Fin", "taille", f"{BANDEAU_L},{BANDEAU_H}")
+    repere("Fin", "eclat", f"{ECLAT_FIN[0]},{ECLAT_FIN[1]}")
+    repere("Fin", "disque", f"{CENTRE_SUCCES[0] - BOITE_DISQUE // 2},{CENTRE_SUCCES[1] - BOITE_DISQUE // 2}")
     repere("Fin", "coche", f"{BOITE_COCHE[0]},{BOITE_COCHE[1]}")
     repere("Fin", "centre", f"{CENTRE_SUCCES[0]},{CENTRE_SUCCES[1]}")
     repere("Fin", "etincelles", ";".join(f"{x},{y},{s},{c}" for (x, y, s, c) in ETINCELLES))
@@ -538,9 +566,12 @@ def rail_anneau(e):
     return images
 
 
+PASTILLE = (204, 30)    # 1.12.29 (1.12.28 : 176 x 28)
+
+
 def rail_pastille(e):
     """La pastille de l'etape en cours : elle glisse d'une etape a l'autre."""
-    l, h = 176 * e, 28 * e
+    l, h = PASTILLE[0] * e, PASTILLE[1] * e
     g = SS
     im = Image.new("RGBA", (l * g, h * g), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
@@ -560,7 +591,7 @@ def rail_pastille(e):
 
 # ---------------------------------------------- 1.12.28 : la barre de la copie ----
 def barre_degrade(e):
-    l, h = 480 * e, 10 * e
+    l, h = 600 * e, 10 * e
     im = degrade_horizontal(l, h, BLEU, TURQUOISE)
     # un reflet en haut : la barre a du relief
     reflet = Image.new("L", (l, h))
@@ -623,6 +654,59 @@ ICONES = {   # l'etape -> le nom de l'icone Material
 
 def icone(police, code):
     return tuile_icone(police, code, 44, BLANC)
+
+
+# --------------------------------------- 1.12.29 : les « Details » de la copie ----
+# Une marque devant chaque ligne (16 x 16) : fait (la coche turquoise), en cours (un anneau),
+# attention (l'ambre et son point d'exclamation), erreur (le rouge et sa croix), info (un point) ;
+# la roue (12 images) tourne devant la ligne en cours la plus recente.
+MARQUE_J = 16
+
+
+def marque_journal(dessin, n=1):
+    def f(e):
+        images = []
+        for k in range(n):
+            g = MARQUE_J * e * SS
+            im = Image.new("RGBA", (g, g), (0, 0, 0, 0))
+            dessin(ImageDraw.Draw(im), g / 2, e * SS, k)
+            images.append(reduire(im, (MARQUE_J * e, MARQUE_J * e)))
+        return images if n > 1 else images[0]
+    return f
+
+
+def j_fait(d, c, u, k):
+    disque(d, c, c, 6.6 * u, TURQUOISE + (255,))
+    trait(d, [(c - 3.0 * u, c + 0.1 * u), (c - 0.9 * u, c + 2.3 * u), (c + 3.1 * u, c - 2.1 * u)], BLANC + (255,), 1.7 * u)
+
+
+def j_encours(d, c, u, k):
+    r = 5.6 * u
+    d.ellipse((c - r, c - r, c + r, c + r), outline=TURQUOISE + (255,), width=int(1.7 * u))
+
+
+def j_attention(d, c, u, k):
+    disque(d, c, c, 6.6 * u, AMBRE + (255,))
+    trait(d, [(c, c - 3.4 * u), (c, c + 0.6 * u)], MARINE + (255,), 1.8 * u)
+    disque(d, c, c + 3.0 * u, 1.05 * u, MARINE + (255,))
+
+
+def j_erreur(d, c, u, k):
+    disque(d, c, c, 6.6 * u, ROUGE + (255,))
+    trait(d, [(c - 2.4 * u, c - 2.4 * u), (c + 2.4 * u, c + 2.4 * u)], BLANC + (255,), 1.7 * u)
+    trait(d, [(c - 2.4 * u, c + 2.4 * u), (c + 2.4 * u, c - 2.4 * u)], BLANC + (255,), 1.7 * u)
+
+
+def j_info(d, c, u, k):
+    disque(d, c, c, 2.6 * u, GRIS_INFO + (255,))
+
+
+def j_roue(d, c, u, k):
+    r = 5.6 * u
+    w = max(1, int(1.7 * u))
+    d.ellipse((c - r, c - r, c + r, c + r), outline=TURQUOISE + (55,), width=w)
+    a = -90 + 30 * k
+    d.arc((c - r, c - r, c + r, c + r), a, a + 110, fill=TURQUOISE + (255,), width=w)
 
 
 # ------------------------------------------------------------- l'animation ----
@@ -741,29 +825,30 @@ def main():
             if os.path.exists(os.path.join(UI, ancien + suffixe + ".bmp")):
                 os.remove(os.path.join(UI, ancien + suffixe + ".bmp"))
     deux_tailles("logo", logo_colonne, 88, 40)
-    deux_tailles("logo-api", logo_carte("api_studio"), 40, 40)
-    deux_tailles("logo-ihm", logo_carte("ihm_studio"), 40, 40)
-    deux_tailles("decor", decor, 200, 150 - DECOR_HAUT)
+    deux_tailles("logo-api", logo_carte("api_studio", 48), 48, 48)
+    deux_tailles("logo-ihm", logo_carte("ihm_studio", 48), 48, 48)
+    deux_tailles("decor", decor, COLONNE, 150 - DECOR_HAUT)
+    repere("Colonne", "largeur", COLONNE)
     deux_tailles("degrade", lambda e: degrade_horizontal(512 * e, 4 * e, BLEU, TURQUOISE), 512, 4)
     repere("Decor", "haut", DECOR_HAUT)
     repere("Decor", "hauteur", 150 - DECOR_HAUT)
     repere("Decor", "pistes", "|".join(" ".join(f"{x},{y}" for x, y in p) for p in PISTES))
 
     # 1.12.28 : l'accueil
-    deux_tailles("accueil-fond", fond_reseau(7), 560, 150)
+    deux_tailles("accueil-fond", fond_reseau(7), BANDEAU_L, BANDEAU_H)
     deux_tailles_alpha("heros-api", heros_logo("api_studio"), LOGO_HEROS + 2 * MARGE_HEROS, LOGO_HEROS + 2 * MARGE_HEROS)
     deux_tailles_alpha("heros-ihm", heros_logo("ihm_studio"), LOGO_HEROS + 2 * MARGE_HEROS, LOGO_HEROS + 2 * MARGE_HEROS)
     deux_tailles_alpha("heros-points", heros_points, 10, 10, 3)
-    deux_tailles_alpha("eclat", eclat, 90, 150)
+    deux_tailles_alpha("eclat", eclat, 90, BANDEAU_H)
     deux_tailles_alpha("lueur", lueur((200, 230, 255)), 32, 32)
     deux_tailles_alpha("lueur-turquoise", lueur(TURQUOISE, (210, 255, 248)), 32, 32)
     reperes_accueil()
     # la fin
-    deux_tailles("fin-fond", fond_reseau(11), 560, 150)
-    deux_tailles_alpha("succes-disque", succes_disque, 150, 150)
+    deux_tailles("fin-fond", fond_reseau(11), BANDEAU_L, BANDEAU_H)
+    deux_tailles_alpha("succes-disque", succes_disque, BOITE_DISQUE, BOITE_DISQUE)
     deux_tailles_alpha("succes-coche", succes_coche, BOITE_COCHE[2], BOITE_COCHE[3], 10)
-    deux_tailles_alpha("etincelle-ambre", etincelle(AMBRE), 22, 22, 8)
-    deux_tailles_alpha("etincelle-blanche", etincelle(BLANC), 22, 22, 8)
+    deux_tailles_alpha("etincelle-ambre", etincelle(AMBRE), ETINCELLE, ETINCELLE, 8)
+    deux_tailles_alpha("etincelle-blanche", etincelle(BLANC), ETINCELLE, ETINCELLE, 8)
     reperes_fin()
     # la colonne
     deux_tailles_alpha("rail-avenir", rail_avenir, RAIL, RAIL)
@@ -771,9 +856,14 @@ def main():
     deux_tailles_alpha("rail-pulse", rail_pulse, RAIL, RAIL, 24)
     deux_tailles_alpha("rail-coche", rail_coche, RAIL, RAIL, 12)
     deux_tailles_alpha("rail-anneau", rail_anneau, RAIL, RAIL, 25)
-    deux_tailles_alpha("rail-pastille", rail_pastille, 176, 28)
+    deux_tailles_alpha("rail-pastille", rail_pastille, PASTILLE[0], PASTILLE[1])
     # la copie
-    deux_tailles("barre-degrade", barre_degrade, 480, 10)
+    deux_tailles("barre-degrade", barre_degrade, 600, 10)
+    # 1.12.29 : les « Details »
+    for nom, dessin in (("journal-fait", j_fait), ("journal-encours", j_encours), ("journal-attention", j_attention),
+                        ("journal-erreur", j_erreur), ("journal-info", j_info)):
+        deux_tailles_alpha(nom, marque_journal(dessin), MARQUE_J, MARQUE_J)
+    deux_tailles_alpha("journal-roue", marque_journal(j_roue, 12), MARQUE_J, MARQUE_J, 12)
     deux_tailles_alpha("barre-eclat", barre_eclat, 64, 10)
     deux_tailles("diapo-api", logo_carte("api_studio", 56), 56, 56)
     deux_tailles("diapo-ihm", logo_carte("ihm_studio", 56), 56, 56)

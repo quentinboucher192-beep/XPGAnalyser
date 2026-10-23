@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.29", "23/10/2026", "livr\xC3\xA9" "e le 23/10 en fin de journ\xC3\xA9" "e"},
     {"1.12.28", "23/10/2026", "livr\xC3\xA9" "e le 23/10 dans la journ\xC3\xA9" "e"},
     {"1.12.27", "23/10/2026", "livr\xC3\xA9" "e le 23/10 dans la nuit"},
     {"1.12.26", "22/10/2026", "livr\xC3\xA9" "e le 22/10 au soir"},
@@ -134,6 +135,17 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.29 (23/10/2026) : l'installateur sans clignotement, plus grand, avec le detail de l'installation et de la migration ;
+        // le poste d'exploitation repris vers IHM Studio (et non API Studio).
+        note("1.12.29", "G\xC3\xA9n\xC3\xA9ral", Kind::Fixed,
+         "LES TEXTES DE L'INSTALLATEUR NE CLIGNOTENT PLUS : sur Windows, des textes clignotaient pendant les animations (ils s'effa\xC3\xA7" "aient avant chaque nouveau dessin). La fen\xC3\xAAtre se dessine maintenant d'un bloc, aucun texte n'est pos\xC3\xA9 sur une animation, les textes ne changent plus de couleur en arrivant, et le pourcentage, le fichier en cours et le temps restant se r\xC3\xA9\xC3\xA9" "crivent au plus cinq fois par seconde.",
+         "menu-aide", ""),
+        note("1.12.29", "G\xC3\xA9n\xC3\xA9ral", Kind::Changed,
+         "L'INSTALLATEUR PLUS GRAND, ET CE QU'IL FAIT EN D\xC3\x89TAIL : sa fen\xC3\xAAtre passe \xC3\xA0 912 \xC3\x97 580 (750 \xC3\x97 465 avant ; plus grande \xC3\xA0 125, 150 et 200 %, ramen\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "cran s'il le faut). La pr\xC3\xA9paration et la copie ont leurs \xC2\xAB D\xC3\xA9tails \xC2\xBB : chaque action, son heure et son \xC3\xA9tat (en cours, fait, attention, erreur) - la version trouv\xC3\xA9" "e et sa sauvegarde, les fichiers copi\xC3\xA9s et leur taille, les raccourcis, puis tes dossiers et la reprise de chaque ancienne version (ce qui en est pris), le lot 8, la v\xC3\xA9rification. \xC2\xAB Ce qui a \xC3\xA9t\xC3\xA9 install\xC3\xA9 \xC2\xBB dit aussi ce qui a \xC3\xA9t\xC3\xA9 sauvegard\xC3\xA9 et repris, et d'o\xC3\xB9. Les m\xC3\xAAmes lignes vont dans le journal de l'installation (/LOG), avec ou sans assistant.",
+         "menu-aide", ""),
+        note("1.12.29", "G\xC3\xA9n\xC3\xA9ral", Kind::Fixed,
+         "LE POSTE D'EXPLOITATION APR\xC3\x88S UNE MISE \xC3\x80 JOUR : sur un PC o\xC3\xB9 Windows lan\xC3\xA7" "ait un poste d'exploitation au d\xC3\xA9marrage (lot 8, 1.11), la reprise le faisait d\xC3\xA9marrer API Studio, qui n'a pas le poste : l'\xC3\xA9" "diteur s'ouvrait \xC3\xA0 sa place. Il d\xC3\xA9marre maintenant IHM Studio, avec son projet. La v\xC3\xA9rification de la maintenance signale un poste qui vise encore API Studio, et la r\xC3\xA9paration des param\xC3\xA8tres le corrige.",
+         "poste-exploitation", ""),
         // 1.12.28 (23/10/2026) : la fenetre du plantage et du blocage dessinee par l'appli, la veille qui n'est
         // plus un blocage, l'installateur vivant, le didacticiel dans l'aide F1, la visite a jour, l'arbre de l'aide qui se replie partout.
         note("1.12.28", "G\xC3\xA9n\xC3\xA9ral", Kind::New,

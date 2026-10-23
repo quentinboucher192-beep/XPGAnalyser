@@ -13,6 +13,8 @@
 #        par défaut, ou un arrêt propre qui dit quelle option manque)
 #    Exit-Xpg / Stop-Xpg : le résumé final, la pause si le script a été lancé
 #        par un double-clic, le code de retour.
+#    Write-XpgProgres (1.12.29) : une ligne courte pour les « Détails » de
+#        l'assistant d'installation (/progres:<fichier>) ; sans /progres, rien.
 #
 #  PowerShell 5.1 (Windows 10 et 11) : pas de ?? ni de ?. ni de ternaire ici.
 #  Ce fichier est en UTF-8 AVEC BOM : sans BOM, PowerShell 5.1 le lirait en ANSI.
@@ -223,6 +225,51 @@ function Write-XpgLog {
 
 function Write-XpgDetail { param([string] $Message) Write-XpgLog -Niveau DETAIL -Message $Message }
 
+# ----------------------------------------------- 1.12.29 : les « Détails » ----
+function Write-XpgProgres {
+    # Une ligne pour les « Détails » de l'assistant d'installation (/progres:<fichier>, que
+    # l'assistant lit pendant que l'étape tourne) : « HH:mm:ss|etat|niveau|cle|texte ».
+    #  etat   : encours, fait, attention, erreur, info ; recap : une ligne pour la page
+    #           « Ce qui a été installé » (cle : sa rubrique) ;
+    #  niveau : 0, ou 1 (le détail de la ligne d'au-dessus) ;
+    #  cle    : une ligne de la même clé remplace la précédente (« 37 / 151 », puis « 151 / 151 ») ;
+    #  texte  : court, au tutoiement.
+    # -Souvent : un compteur, écrit au plus une fois par quart de seconde (la ligne finale, sans
+    # -Souvent, a le dernier mot). Sans /progres : rien. Jamais d'erreur : l'étape continue, et son
+    # journal a tout.
+    param([ValidateSet('encours', 'fait', 'attention', 'erreur', 'info', 'recap')] [string] $Etat = 'info',
+          [string] $Texte = '', [string] $Cle = '', [int] $Niveau = 0, [switch] $Souvent)
+    if (-not ($script:X -and $script:X.Progres)) { return }
+    if ($Souvent) {
+        $maintenant = [DateTime]::UtcNow
+        $k = 'souvent:' + $Cle
+        if ($script:X.ProgresVu.ContainsKey($k) -and ($maintenant - $script:X.ProgresVu[$k]).TotalMilliseconds -lt 250) { return }
+        $script:X.ProgresVu[$k] = $maintenant
+    }
+    $ligne = '{0}|{1}|{2}|{3}|{4}' -f (Get-Date).ToString('HH:mm:ss'), $Etat, $Niveau, ($Cle -replace '[|\r\n]', '_'), (($Texte -replace '[\r\n\t]+', ' ').Trim())
+    $enc = New-Object System.Text.UTF8Encoding $false
+    for ($essai = 0; $essai -lt 6; $essai++) {
+        # l'assistant lit le fichier pendant qu'on l'écrit : un essai de plus s'il est occupé
+        try { [System.IO.File]::AppendAllText($script:X.Progres, $ligne + "`r`n", $enc); return } catch { Start-Sleep -Milliseconds 20 }
+    }
+}
+
+function Format-XpgCheminCourt {
+    # Un chemin pour les « Détails » : Documents\XPGAnalyser plutôt que C:\Users\<toi>\Documents\...
+    # (le journal garde le chemin complet).
+    param([string] $Chemin)
+    if (-not $Chemin) { return '' }
+    foreach ($p in @(@('MyDocuments', 'Documents'), @('Desktop', 'Bureau'), @('LocalApplicationData', 'AppData\Local'), @('ApplicationData', 'AppData\Roaming'))) {
+        try {
+            $d = ([Environment]::GetFolderPath($p[0])).TrimEnd('\')
+            if (-not $d) { continue }
+            if ($Chemin -ieq $d) { return $p[1] }
+            if ($Chemin.StartsWith($d + '\', [StringComparison]::OrdinalIgnoreCase)) { return $p[1] + $Chemin.Substring($d.Length) }
+        } catch { }
+    }
+    return $Chemin
+}
+
 # ------------------------------------------------------------------ etapes ----
 function Start-XpgEtape {
     param([string] $Nom)
@@ -309,6 +356,16 @@ function Initialize-Xpg {
         Journal = ''; DossierJournaux = ''
         Etapes = New-Object System.Collections.ArrayList
         Debut = Get-Date; DoubleClic = $false
+        Progres = ''; ProgresVu = @{}
+    }
+    # 1.12.29 : /progres:<fichier> - les lignes des « Détails » de l'assistant (Write-XpgProgres),
+    # tout de suite : l'assistant les montre pendant que l'étape tourne.
+    if ($opts.ContainsKey('progres') -and $opts['progres']) {
+        try {
+            $p = [System.IO.Path]::GetFullPath($opts['progres'])
+            [System.IO.File]::WriteAllText($p, '', (New-Object System.Text.UTF8Encoding $false))
+            $script:X.Progres = $p
+        } catch { }
     }
     $script:X.DoubleClic = Test-XpgDoubleClic
 
