@@ -110,19 +110,23 @@ struct ChapterLook {
 const ChapterLook kChapterLooks[] = {
     {"D\xC3\xA9marrer", HmiGlyph::Help, ui::Tone::Accent, "D\xC3\xA9marrer"},
     {"Concevoir les vues", HmiGlyph::View, ui::Tone::Family0, "Concevoir les vues"},
+    // 1.12.27 : la communication a son chapitre ; les variables systeme rejoignent Programmer.
+    {"Communiquer avec les \xC3\xA9quipements", HmiGlyph::Network, ui::Tone::Family3, "Communiquer"},
     {"La biblioth\xC3\xA8que d'objets", HmiGlyph::Template, ui::Tone::Family1, "Les objets"},
     {"Programmer", HmiGlyph::Code, ui::Tone::Family2, "Programmer"},
-    {"Variables syst\xC3\xA8me et d'instances", HmiGlyph::SystemVars, ui::Tone::Family3, "Variables syst\xC3\xA8me"},
     {"Superviser", HmiGlyph::Bell, ui::Tone::Warning, "Superviser"},
     {"Ressources et donn\xC3\xA9" "es", HmiGlyph::Image, ui::Tone::Family4, "Ressources, donn\xC3\xA9" "es"},
     {"Tester et livrer", HmiGlyph::Check, ui::Tone::Ok, "Tester et livrer"},
+    {"Les nouveaut\xC3\xA9s", HmiGlyph::Star, ui::Tone::Warning, "Les nouveaut\xC3\xA9s"},
     // 1.10 (H) : les sujets de l'API (le grafcet, son code) - fusion de l'aide 1.10.
     {"L'automate (API)", HmiGlyph::Gear, ui::Tone::Family5, "L'automate (API)"},
 };
+// Un sous-chapitre ("La bibliotheque d'objets > Formes") a l'allure de son chapitre.
 const ChapterLook& lookOf(const std::string& chapter) {
     static const ChapterLook other{"", HmiGlyph::Help, ui::Tone::Muted, ""};
+    const std::string top = guide::chapterPath(chapter).front();
     for (const auto& c : kChapterLooks)
-        if (chapter == c.name) return c;
+        if (top == c.name) return c;
     return other;
 }
 // Un numero d'icone pour la table (0 : aucune) : le glyphe de l'IHM, plus un.
@@ -196,6 +200,7 @@ public:
     struct Row {
         std::string text;
         bool        chapter{false};
+        int         level{0};           // 1.12.27 : 0 un chapitre (ou l'un de ses sujets), 1 un sous-chapitre (ou l'un des siens)
         std::string hint;
         HmiGlyph    glyph{HmiGlyph::None};
         ui::Tone    tone{ui::Tone::None};
@@ -220,10 +225,11 @@ public:
                 s.customIcon = row.glyph == HmiGlyph::None ? 0 : iconOf(row.glyph);
                 s.iconTone = row.tone;
                 if (row.chapter) {
-                    s.fgTone = ui::Tone::Accent;
+                    if (row.level == 0) s.fgTone = ui::Tone::Accent;   // un sous-chapitre : en retrait, a l'encre du texte
                     s.bold = true;
+                    s.indent = 12.f * static_cast<float>(row.level);
                 } else {
-                    s.indent = 12.f;
+                    s.indent = 12.f * static_cast<float>(row.level + 1);
                 }
                 if (row.fresh) {
                     // 1.10 : la pastille NOUVEAU (un sujet nouveau) ou MODIFIE (un
@@ -375,7 +381,12 @@ ui::HelpArticle HmiHelpPane::compose(const guide::Topic& t) {
     {
         ui::HelpBlock hero = block(ui::HelpBlockKind::Hero, t.title);
         hero.links.push_back({"Aide IHM", "topic:ihm", "Le sommaire de l'aide"});
-        hero.links.push_back({t.chapter, "chapter:" + t.chapter, "Le premier sujet de ce chapitre"});
+        // 1.12.27 : le chapitre, puis son sous-chapitre (Aide IHM / La bibliotheque d'objets / Formes / Texte).
+        std::string chapter;
+        for (const auto& part : guide::chapterPath(t.chapter)) {
+            chapter += (chapter.empty() ? std::string{} : std::string(guide::kChapterSep)) + part;
+            hero.links.push_back({part, "chapter:" + chapter, "Le premier sujet de ce chapitre"});
+        }
         hero.links.push_back({t.title, {}, {}});
         hero.tone = ui::Tone::Accent;
         hero.icon = ui::Icon::Info;
@@ -571,9 +582,11 @@ HmiHelpPane::HmiHelpPane(std::string id) : ui::Widget(std::move(id)) {
             }
         } else if (target.rfind("topic:", 0) == 0) show(target.substr(6));
         else if (target.rfind("chapter:", 0) == 0) {
+            // 1.12.27 : un chapitre mene a son premier sujet, celui d'un sous-chapitre compris.
             const auto chapter = target.substr(8);
+            const std::string within = chapter + std::string(guide::kChapterSep);
             for (const auto& t : guide::topics())
-                if (t.chapter == chapter) { show(t.key); break; }
+                if (t.chapter == chapter || t.chapter.rfind(within, 0) == 0) { show(t.key); break; }
         }
     });
     onlyNew_ = help::news::session().helpOnlyNew && newTopicCount() > 0;   // 1.10 : le filtre retenu
@@ -616,20 +629,34 @@ void HmiHelpPane::rebuildList() {
     // 1.10 : "Nouveautes seulement" - les sujets nouveaux ou changes.
     const bool only = onlyNew_ && newTopicCount() > 0;
     if (filter_.empty()) {
+        // 1.12.27 : un sous-chapitre ("La bibliotheque d'objets > Formes") a sa ligne, en retrait sous
+        // celle de son chapitre, qui ne se redit pas ; son icone : celle de son premier sujet.
+        std::vector<std::string> before;   // les morceaux du chapitre d'avant
         for (const auto& chapter : guide::chapters()) {
             if (only && std::none_of(guide::topics().begin(), guide::topics().end(),
                                      [&](const guide::Topic& t) { return t.chapter == chapter && isNewTopic(t); }))
                 continue;
-            TopicRows::Row head;
-            head.text = chapter;
-            head.chapter = true;
-            head.glyph = lookOf(chapter).glyph;
-            head.tone = lookOf(chapter).tone;
-            rows.push_back(std::move(head));
-            rowKeys_.emplace_back();
+            const auto path = guide::chapterPath(chapter);
+            const guide::Topic* first = nullptr;
+            for (const auto& t : guide::topics())
+                if (t.chapter == chapter && (!only || isNewTopic(t))) { first = &t; break; }
+            std::size_t same = 0;
+            while (same < path.size() && same < before.size() && path[same] == before[same]) ++same;
+            for (std::size_t level = same; level < path.size(); ++level) {
+                TopicRows::Row head;
+                head.text = path[level];
+                head.chapter = true;
+                head.level = static_cast<int>(level);
+                head.glyph = level > 0 && level + 1 == path.size() && first ? topicGlyph(*first) : lookOf(chapter).glyph;
+                head.tone = lookOf(chapter).tone;
+                rows.push_back(std::move(head));
+                rowKeys_.emplace_back();
+            }
+            before = path;
             for (const auto& t : guide::topics())
                 if (t.chapter == chapter && (!only || isNewTopic(t))) {
                     rows.push_back(topicRow(t, {}));
+                    rows.back().level = static_cast<int>(path.size()) - 1;
                     rowKeys_.push_back(t.key);
                 }
         }

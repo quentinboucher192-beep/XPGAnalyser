@@ -99,6 +99,10 @@ struct Topic {
 [[nodiscard]] std::vector<Topic> ihmWorded(const std::vector<Topic>& topics);
 // Les chapitres, dans l'ordre.
 [[nodiscard]] std::vector<std::string> chapters();
+// 1.12.27 : UN CHAPITRE A SES SOUS-CHAPITRES. "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Formes" : le chapitre,
+// puis le sous-chapitre, separes par kChapterSep. chapterPath : ses morceaux, du chapitre au plus fin.
+inline constexpr std::string_view kChapterSep = " \xE2\x80\xBA ";
+[[nodiscard]] std::vector<std::string> chapterPath(std::string_view chapter);
 [[nodiscard]] const Topic* topic(std::string_view key) noexcept;
 
 // F1. Le nom sous le curseur (sans casse) : le sujet qui en parle, "" sinon.

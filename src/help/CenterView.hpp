@@ -28,6 +28,7 @@ enum class RowKind : std::uint8_t { Chapter, Sub, Topic };
 struct TreeRow {
     RowKind     kind{RowKind::Topic};
     int         depth{0};          // 0 : un chapitre ; 1 : un sous-chapitre, ou un sujet sans sous-chapitre ; 2 : un sujet d'un sous-chapitre
+                                   // (1.12.27 : un niveau de plus par sous-chapitre d'un sous-chapitre, "A \xE2\x80\xBA B")
     std::string label;             // ce que la ligne ecrit
     std::string key;               // un sujet : sa cle ; un chapitre / sous-chapitre : sa cle de depliage (foldKey)
     Chapter     chapter{Chapter::Start};
@@ -45,7 +46,8 @@ struct TreeState {
     std::string           current;
 };
 
-// "ch:<n>" pour un chapitre, "sub:<n>:<sous-chapitre>" pour un sous-chapitre.
+// "ch:<n>" pour un chapitre, "sub:<n>:<sous-chapitre>" pour un sous-chapitre (1.12.27 : son chemin
+// entier, "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Formes").
 [[nodiscard]] std::string foldKey(Chapter c, std::string_view sub = {});
 
 // Les lignes de l'arbre, dans l'ordre : les 9 chapitres toujours, leurs
@@ -53,7 +55,7 @@ struct TreeState {
 [[nodiscard]] std::vector<TreeRow> treeRows(const Index& ix, const TreeState& state);
 
 // ---- la page ----------------------------------------------------------------
-// Le fil d'Ariane : le chapitre, le sous-chapitre s'il y en a un, le titre.
+// Le fil d'Ariane : le chapitre, le sous-chapitre s'il y en a un (1.12.27 : chacun de ses niveaux), le titre.
 [[nodiscard]] std::vector<std::string> breadcrumb(const Index& ix, std::string_view key);
 
 // La carte du tutoriel, en tete de page : "\xE2\x96\xB6 Regarder le tutoriel \xC2\xB7 1 min 04 \xC2\xB7 7 \xC3\xA9tapes"

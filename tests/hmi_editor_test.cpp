@@ -5396,14 +5396,26 @@ void lot7_aide_et_didacticiel() {
     pane.layout();
     same_text(pane.current(), "ihm", "le premier sujet s'ouvre : L'IHM dans le projet");
     const std::size_t rows = pane.topicList().model() ? pane.topicList().model()->rowCount() : 0;
-    check(rows == g::topics().size() + g::chapters().size(), "la liste : " + std::to_string(g::chapters().size())
-                                                                 + " chapitres et " + std::to_string(g::topics().size()) + " sujets");
+    // 1.12.27 : un sous-chapitre a sa ligne, sous celle de son chapitre (qui ne se redit pas).
+    std::set<std::string> heads;
+    for (const auto& c : g::chapters()) {
+        std::string level;
+        for (const auto& part : g::chapterPath(c)) {
+            level += (level.empty() ? std::string{} : std::string(g::kChapterSep)) + part;
+            heads.insert(level);
+        }
+    }
+    check(rows == g::topics().size() + heads.size(), "la liste : " + std::to_string(heads.size())
+                                                         + " chapitres et sous-chapitres, " + std::to_string(g::topics().size()) + " sujets");
     pane.show("fonctions");
     same_text(pane.current(), "fonctions", "montrer un sujet");
     const auto& art = pane.article().article();
     check(!art.blocks.empty() && art.blocks.front().kind == ui::HelpBlockKind::Hero && art.blocks.front().text == "Fonctions IHM",
           "l'en-t\xC3\xAAte : le titre du sujet");
-    check(art.blocks.front().links.size() == 3 && art.blocks.front().links[1].text == "Programmer", "le fil : Aide IHM / Programmer / Fonctions IHM");
+    check(art.blocks.front().links.size() == 4 && art.blocks.front().links[1].text == "Programmer"
+              && art.blocks.front().links[2].text == "Scripts et fonctions"
+              && art.blocks.front().links[2].target == "chapter:Programmer \xE2\x80\xBA Scripts et fonctions",
+          "le fil : Aide IHM / Programmer / Scripts et fonctions / Fonctions IHM (1.12.27 : le sous-chapitre)");
     bool code = false, links = false, plainText = true;
     for (const auto& b : art.blocks) {
         code = code || (b.kind == ui::HelpBlockKind::Code && b.text.find("Moyenne_Pression") != std::string::npos);
@@ -5419,6 +5431,9 @@ void lot7_aide_et_didacticiel() {
     same_text(pane.current(), "reference", "un lien suivi : la r\xC3\xA9" "f\xC3\xA9rence IHM_");
     pane.article().linkActivated->emit(std::string("chapter:Superviser"));
     same_text(pane.current(), "alarmes", "le fil : un chapitre ouvre son premier sujet");
+    pane.article().linkActivated->emit(std::string("chapter:Programmer"));
+    same_text(pane.current(), "variables-ihm", "le fil : un chapitre de sous-chapitres ouvre le premier de ses sujets (1.12.27)");
+    (void)pane.back();
     check(pane.back() && pane.current() == "reference" && pane.back() && pane.current() == "fonctions",
           "Pr\xC3\xA9" "c\xC3\xA9" "dent : l'historique, dans l'ordre");
     pane.setSearch("VAR_TEMP");
@@ -18652,16 +18667,16 @@ void centreAide111() {
     }
     // 1.10.2 (fusion) : le guide passe de 216 a 222 sujets ; Demarrer gagne "plantages" (15 + 7 = 22),
     // Concevoir les vues en gagne 5 (l'IHM : 205). L'automate ne change pas (2 + 14).
-    // 1.12.27 : + Plusieurs fenetres (Demarrer 24).
-    check(ix.count(hc::Chapter::Start) == 24 && ix.count(hc::Chapter::Plc) == 16,
-          "centre : Demarrer 24 (21 de la maquette + plantages, 1.10.2 ; la legende de l'explorateur, 1.11.23 ; plusieurs fenetres, 1.12.27) "
-          "et L'automate 16");
+    // 1.12.27 : + Plusieurs fenetres ; l'aide rangee : les 4 nouveautes partent dans leur chapitre (L'IHM),
+    // les raccourcis clavier y viennent de Tester et livrer (Demarrer 21 : 14 du guide + 7 de l'API).
+    check(ix.count(hc::Chapter::Start) == 21 && ix.count(hc::Chapter::Plc) == 16,
+          "centre : Demarrer 21 (les gestes de base, 1.12.27) et L'automate 16");
     check(ix.find("api-dossiers") && ix.find("dossiers") && ix.find("api-alarmes") && ix.find("alarmes"),
           "centre : api-dossiers et dossiers, api-alarmes et alarmes, sans collision");
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 215, "centre : L'IHM a les 215 sujets des chapitres 2 a 8 du guide (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID)");
+    check(ix.count(hc::Chapter::Hmi) == 218, "centre : L'IHM a les 218 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 59, "centre : 11 expressions, 59 notes (1.12.26)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -19046,14 +19061,31 @@ void centreAide111() {
               "ecran : l'arbre replie montre les 9 chapitres");
         st.current = "objet-vanne";
         rows = hc::treeRows(ix, st);
-        bool vanne = false, sousChapitre = false;
+        bool vanne = false, sousChapitre = false, famille = false;
         for (const auto& r : rows) {
-            if (r.kind == hc::RowKind::Topic && r.key == "objet-vanne") vanne = r.current && r.depth == 2 && !r.pill.empty();
-            if (r.kind == hc::RowKind::Sub && r.current) sousChapitre = r.open;
+            // 1.12.27 : L'IHM > La bibliotheque d'objets > Synoptique > Vanne.
+            if (r.kind == hc::RowKind::Topic && r.key == "objet-vanne") vanne = r.current && r.depth == 3 && !r.pill.empty();
+            if (r.kind == hc::RowKind::Sub && r.current) {
+                sousChapitre = r.open && (sousChapitre || r.depth == 1);
+                if (r.depth == 2) famille = r.open && r.label == "Synoptique" && r.count == 30;
+            }
         }
-        check(vanne && sousChapitre, "ecran : le sujet ouvert deplie son chapitre et son sous-chapitre, avec sa pastille");
+        check(vanne && sousChapitre && famille, "ecran : le sujet ouvert deplie son chapitre, son sous-chapitre et sa famille, avec sa pastille");
         const auto fil = hc::breadcrumb(ix, "objet-vanne");
-        check(fil.size() == 3 && fil.front() == hc::chapterLabel(hc::Chapter::Hmi), "ecran : le fil d'Ariane chapitre > sous-chapitre > titre");
+        check(fil.size() == 4 && fil.front() == hc::chapterLabel(hc::Chapter::Hmi) && fil[1] == "La biblioth\xC3\xA8que d'objets"
+                  && fil[2] == "Synoptique" && fil[3] == "Vanne",
+              "ecran : le fil d'Ariane chapitre > sous-chapitre > famille > titre");
+        // 1.12.27 : une famille repliee cache ses sujets, pas les familles voisines.
+        st.open.insert(hc::foldKey(hc::Chapter::Hmi, "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Commandes"));
+        st.current = "objet-texte";
+        std::size_t commandes = 0, formes = 0, familles = 0;
+        for (const auto& r : hc::treeRows(ix, st)) {
+            if (r.kind == hc::RowKind::Topic && r.key == "objet-bouton") ++commandes;
+            if (r.kind == hc::RowKind::Topic && r.key == "objet-rectangle") ++formes;
+            if (r.kind == hc::RowKind::Sub && r.depth == 2 && r.chapter == hc::Chapter::Hmi) ++familles;
+        }
+        check(commandes == 1 && formes == 1 && familles >= 12, "ecran : deux familles depliees, les autres repliees, toutes listees ("
+                                                                 + std::to_string(familles) + " familles)");
         hc::TutorialInfo ti; ti.durationMs = 64000; ti.steps = 7; ti.estimated = false;
         check(hc::tutorialCardText(ti) == "\xE2\x96\xB6 Regarder le tutoriel \xC2\xB7 1 min 04 \xC2\xB7 7 \xC3\xA9tapes",
               "ecran : la carte du tutoriel");
@@ -21638,7 +21670,8 @@ void demarrerEndroits111() {
     // Tranche 23 (decision 62) : l'« A toi » du « ? » (centre.ouvert) attend que T1 declare sa condition sure.
     const bool centreSur = tt::conditionDeclaredSafe("centre.ouvert = oui");
     for (const auto& g : hmi::guide::topics()) {
-        if (g.chapter != "D\xC3\xA9marrer") continue;
+        // 1.12.27 : les nouveautes ont leur chapitre ; leurs tutoriels restent ceux de Demarrer (le « ? »).
+        if (g.chapter != "D\xC3\xA9marrer" && g.chapter != "Les nouveaut\xC3\xA9s") continue;
         ++demarrer;
         const std::string text = help::deduceTutorial(tt::fromGuide(g));
         std::vector<help::TutorialProblem> problems;

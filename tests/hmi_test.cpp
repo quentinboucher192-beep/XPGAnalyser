@@ -3520,11 +3520,31 @@ void guideLot7() {
     // Lot 8 : un septieme, La bibliotheque d'objets ; lot 9 : un huitieme, les
     // variables systeme et d'instances.
     // 1.10 (H) : un neuvieme, L'automate (API) - le grafcet et son code.
-    check(chapters.size() == 9 && chapters.front() == "D\xC3\xA9marrer" && chapters[7] == "Tester et livrer"
-              && chapters.back() == "L'automate (API)",
-          "neuf chapitres, de D\xC3\xA9marrer \xC3\xA0 Tester et livrer, puis L'automate (API)");
-    check(std::find(chapters.begin(), chapters.end(), "Variables syst\xC3\xA8me et d'instances") != chapters.end(),
-          "un chapitre pour les variables syst\xC3\xA8me et d'instances");
+    // 1.12.27 : L'AIDE RANGEE. Dix chapitres, et des sous-chapitres ("Chapitre > Sous-chapitre") : la
+    // communication a le sien, la bibliotheque ses familles (celles de la palette), les variables
+    // systeme vont dans Programmer, les nouveautes a part.
+    std::vector<std::string> tops;
+    for (const auto& c : chapters)
+        if (const auto top = g::chapterPath(c).front(); std::find(tops.begin(), tops.end(), top) == tops.end()) tops.push_back(top);
+    check(tops.size() == 10 && tops.front() == "D\xC3\xA9marrer" && tops[1] == "Concevoir les vues"
+              && tops[2] == "Communiquer avec les \xC3\xA9quipements" && tops[3] == "La biblioth\xC3\xA8que d'objets"
+              && tops[7] == "Tester et livrer" && tops[8] == "Les nouveaut\xC3\xA9s" && tops.back() == "L'automate (API)",
+          "dix chapitres, de D\xC3\xA9marrer \xC3\xA0 Tester et livrer, les nouveaut\xC3\xA9s, puis L'automate (API)");
+    const auto chapterOf = [](const char* key) { const auto* t = g::topic(key); return t ? t->chapter : std::string{}; };
+    check(chapterOf("objet-vanne") == "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique"
+              && chapterOf("objet-bouton") == "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Commandes"
+              && chapterOf("objet-communs") == "La biblioth\xC3\xA8que d'objets"
+              && chapterOf("variables-systeme") == "Programmer \xE2\x80\xBA Variables syst\xC3\xA8me et d'instances"
+              && chapterOf("equipements") == "Communiquer avec les \xC3\xA9quipements \xE2\x80\xBA Les \xC3\xA9quipements"
+              && chapterOf("raccourcis") == "D\xC3\xA9marrer" && chapterOf("nouveautes-1-10") == "Les nouveaut\xC3\xA9s",
+          "chaque sujet a sa place : l'objet dans sa famille, les variables syst\xC3\xA8me dans Programmer");
+    bool rangee = true;   // un chapitre ne revient pas plus loin : ses sujets se suivent
+    for (std::size_t i = 1; i < g::topics().size(); ++i)
+        if (g::topics()[i].chapter != g::topics()[i - 1].chapter)
+            for (std::size_t j = 0; j + 1 < i; ++j)
+                rangee = rangee && g::topics()[j].chapter != g::topics()[i].chapter;
+    check(rangee && g::chapterPath("A \xE2\x80\xBA B").size() == 2 && g::chapterPath("A").size() == 1,
+          "les sujets d'un chapitre se suivent ; chapterPath d\xC3\xA9" "coupe le chapitre");
     // F1 : un nom sous le curseur.
     same(g::topicForWord("ihm_naviguer"), "reference", "F1 sur IHM_NAVIGUER (sans casse) : la r\xC3\xA9" "f\xC3\xA9rence");
     same(g::topicForWord("VAR_TEMP"), "variables-locales", "F1 sur VAR_TEMP : les variables locales");
@@ -21349,12 +21369,12 @@ void vanne3Voies1104() {
     {
         namespace g = hmi::guide;
         const auto* t = g::topicForKind("ThreeWayValve");
-        check(t && t->title == "La vanne 3 voies" && g::topic("objet-vanne-3-voies") == t, "l'aide F1 : le sujet \xC2\xAB La vanne 3 voies \xC2\xBB");
+        check(t && t->title == "Vanne 3 voies" && g::topic("objet-vanne-3-voies") == t, "l'aide F1 : le sujet \xC2\xAB Vanne 3 voies \xC2\xBB (1.12.27 : le nom de sa tuile)");
         const auto ex = examples::exampleFor(Kind::ThreeWayValve);
         check(ex && ex->period > 9.0, "son exemple anim\xC3\xA9");
         if (ex) {
             const auto chapters = examples::tutorialFor(Kind::ThreeWayValve, *ex);
-            check(chapters.size() >= 2 && chapters.front().title == "La vanne 3 voies" && chapters.back().yourTurn,
+            check(chapters.size() >= 2 && chapters.front().title == "Vanne 3 voies" && chapters.back().yourTurn,
                   "son tutoriel, d\xC3\xA9" "duit du guide et de l'exemple");
         }
     }

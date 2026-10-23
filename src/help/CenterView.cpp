@@ -5,6 +5,8 @@
 #include "CenterView.hpp"
 #include "../core/Edition.hpp"   // 1.12.0 : les chapitres de chaque application
 
+#include <algorithm>
+
 namespace help::center {
 
 namespace {
@@ -16,6 +18,32 @@ constexpr Chapter kChapters[] = {Chapter::Start,  Chapter::Hmi,         Chapter:
 std::string pillOf(const TutorialInfo& info) {
     if (info.steps <= 0) return {};
     return "\xE2\x96\xB6 " + formatDuration(info.durationMs);
+}
+
+// 1.12.27 : UN SOUS-CHAPITRE A LES SIENS. Le guide ecrit "La bibliotheque d'objets > Formes" (le
+// chapitre du guide, puis sa famille) : deux niveaux de l'arbre, chacun repliable.
+constexpr std::string_view kSubSep = " \xE2\x80\xBA ";
+
+// Les niveaux d'un sous-chapitre, chacun par son chemin entier : "A > B" -> {"A", "A > B"}.
+std::vector<std::string> levelsOf(const std::string& sub) {
+    std::vector<std::string> out;
+    if (sub.empty()) return out;
+    for (auto at = sub.find(kSubSep); at != std::string::npos; at = sub.find(kSubSep, at + kSubSep.size()))
+        out.push_back(sub.substr(0, at));
+    out.push_back(sub);
+    return out;
+}
+
+// Ce que la ligne d'un niveau ecrit : son dernier morceau.
+std::string lastPart(const std::string& level) {
+    const auto at = level.rfind(kSubSep);
+    return at == std::string::npos ? level : level.substr(at + kSubSep.size());
+}
+
+// Le sous-chapitre `sub` est-il dans le niveau `level` (lui-meme, ou plus fin) ?
+bool within(const std::string& sub, const std::string& level) {
+    if (sub.size() < level.size() || sub.compare(0, level.size(), level) != 0) return false;
+    return sub.size() == level.size() || sub.compare(level.size(), kSubSep.size(), kSubSep) == 0;
 }
 
 } // namespace
@@ -49,32 +77,37 @@ std::vector<TreeRow> treeRows(const Index& ix, const TreeState& state) {
         if (!ch.open) continue;
 
         // Les sujets dans l'ordre de l'arbre ; un sous-chapitre s'ouvre a son
-        // premier sujet (l'index les garde groupes).
-        std::string lastSub;
-        bool subOpen = true;
+        // premier sujet (l'index les garde groupes). 1.12.27 : il peut en avoir
+        // lui-meme (levelsOf) ; un niveau replie cache tout ce qu'il contient.
+        std::vector<std::string> levels;   // les niveaux ouverts par le sujet d'avant
+        std::vector<bool> levelOpen;       // deplie, pour chacun
         for (const Topic* t : topics) {
-            if (!t->sub.empty() && t->sub != lastSub) {
-                lastSub = t->sub;
+            const auto path = levelsOf(t->sub);
+            std::size_t same = 0;
+            while (same < path.size() && same < levels.size() && path[same] == levels[same]) ++same;
+            levels.resize(same);
+            levelOpen.resize(same);
+            bool shown = std::find(levelOpen.begin(), levelOpen.end(), false) == levelOpen.end();
+            for (std::size_t lv = same; lv < path.size(); ++lv) {
                 TreeRow s;
                 s.kind = RowKind::Sub;
-                s.depth = 1;
-                s.label = t->sub;
-                s.key = foldKey(c, t->sub);
+                s.depth = static_cast<int>(lv) + 1;
+                s.label = lastPart(path[lv]);
+                s.key = foldKey(c, path[lv]);
                 s.chapter = c;
-                for (const Topic* u : topics) s.count += u->sub == t->sub ? 1u : 0u;
-                s.current = cur != nullptr && cur->chapter == c && cur->sub == t->sub;
+                for (const Topic* u : topics) s.count += within(u->sub, path[lv]) ? 1u : 0u;
+                s.current = cur != nullptr && cur->chapter == c && within(cur->sub, path[lv]);
                 s.open = isOpen(s.key, s.current);
-                subOpen = s.open;
-                rows.push_back(s);
-            } else if (t->sub.empty()) {
-                lastSub.clear();
-                subOpen = true;
+                if (shown) rows.push_back(s);
+                levels.push_back(path[lv]);
+                levelOpen.push_back(s.open);
+                shown = shown && s.open;
             }
-            if (!subOpen) continue;
+            if (!shown) continue;
             const TutorialInfo info = tutorialInfo(*t);
             TreeRow r;
             r.kind = RowKind::Topic;
-            r.depth = t->sub.empty() ? 1 : 2;
+            r.depth = static_cast<int>(path.size()) + 1;
             r.label = t->title;
             r.key = t->key;
             r.chapter = c;
@@ -93,7 +126,7 @@ std::vector<std::string> breadcrumb(const Index& ix, std::string_view key) {
     const Topic* t = ix.find(key);
     if (t == nullptr) return {};
     std::vector<std::string> out{std::string(chapterLabel(t->chapter))};
-    if (!t->sub.empty()) out.push_back(t->sub);
+    for (const auto& level : levelsOf(t->sub)) out.push_back(lastPart(level));   // 1.12.27 : chaque niveau
     out.push_back(t->title);
     return out;
 }

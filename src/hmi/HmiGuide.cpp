@@ -130,6 +130,16 @@ std::vector<std::string> chapters() {
     return out;
 }
 
+std::vector<std::string> chapterPath(std::string_view chapter) {
+    std::vector<std::string> out;
+    for (std::size_t from = 0;;) {
+        const auto at = chapter.find(kChapterSep, from);
+        out.emplace_back(chapter.substr(from, at == std::string_view::npos ? std::string_view::npos : at - from));
+        if (at == std::string_view::npos) return out;
+        from = at + kChapterSep.size();
+    }
+}
+
 std::string latestChange(const Topic& t) {
     // Les versions se comparent champ par champ, en nombres ("1.10" > "1.9").
     const auto newer = [](const std::string& a, const std::string& b) {
