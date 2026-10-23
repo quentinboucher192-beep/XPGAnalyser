@@ -178,7 +178,9 @@ void drawCyclicGlyph(gfx::IRenderer& r, int glyph, const gfx::Rect& b, gfx::Colo
 }
 
 // ================================================================ le graphique ===
-HmiLaneChart::HmiLaneChart(std::string id) : ui::Widget(std::move(id)) {}
+HmiLaneChart::HmiLaneChart(std::string id) : ui::Widget(std::move(id)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
+}
 
 void HmiLaneChart::setData(std::vector<Series> series, double from, double to, bool lanes, std::string empty) {
     series_ = std::move(series);

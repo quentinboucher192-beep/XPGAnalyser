@@ -767,6 +767,26 @@ void drawHmiGlyph(gfx::IRenderer& r, HmiGlyph g, const gfx::Rect& b, gfx::Color 
         case HmiGlyph::Pause:           // 1.9 : deux barres (Figer l'affichage)
             F(4, 3, 2.6f, 10, c); F(9.4f, 3, 2.6f, 10, c);
             break;
+        case HmiGlyph::Ruler:           // 1.12.30 : l'equerre des deux regles, graduee
+            L(2, 2, 14, 2, 1.0f); L(2, 2, 2, 14, 1.0f); L(2, 5.5f, 14, 5.5f, 1.0f); L(5.5f, 5.5f, 5.5f, 14, 1.0f);
+            for (int k = 0; k < 3; ++k) {
+                const float o = 7.f + 2.7f * static_cast<float>(k);
+                L(o, 2, o, 4, 0.9f);
+                L(2, o, 4, o, 0.9f);
+            }
+            break;
+        case HmiGlyph::Columns:         // 1.12.30 : trois colonnes entre deux marges
+            L(1.5f, 2, 1.5f, 14, 0.9f); L(14.5f, 2, 14.5f, 14, 0.9f);
+            F(3, 2, 2.6f, 12, soft); F(6.7f, 2, 2.6f, 12, soft); F(10.4f, 2, 2.6f, 12, soft);
+            break;
+        case HmiGlyph::Dimension:       // 1.12.30 : une cote - deux traits de rappel, la fleche double
+            L(2, 4, 2, 13, 1.0f); L(14, 4, 14, 13, 1.0f); L(2.5f, 9, 13.5f, 9, 1.1f);
+            poly({{2.5f, 9}, {5, 7.4f}, {5, 10.6f}}, true); poly({{13.5f, 9}, {11, 7.4f}, {11, 10.6f}}, true);
+            break;
+        case HmiGlyph::LanguagesSide:   // 1.12.30 : deux pages cote a cote, une bulle de langue
+            R(1.5f, 3, 6, 10); R(8.5f, 3, 6, 10); L(3, 6, 6, 6, 0.9f); L(3, 8.5f, 6, 8.5f, 0.9f);
+            L(10, 6, 13, 6, 0.9f); L(10, 8.5f, 12, 8.5f, 0.9f); F(10, 10.5f, 3.4f, 1.3f, c);
+            break;
     }
 }
 

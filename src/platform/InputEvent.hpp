@@ -44,6 +44,8 @@ enum class Key : std::uint16_t {
     // 1.12.18 : la touche Menu (a cote de la barre d'espace) - ouvre le menu du clic
     // droit au clavier, comme Maj+F10.
     Menu,
+    // 1.12.30 : Ctrl + plus (le zoom) - la touche + du pave, et = / + du clavier.
+    Plus,
 };
 
 struct KeyMods {

@@ -2,7 +2,9 @@
 #include "HmiRoles.hpp"   // 1.12.6 (lot C) : les noms sans les $ de leurs reperes
 
 #include "HmiControls.hpp"
+#include "HmiEdit.hpp"         // 1.12.30 : la grille de colonnes (columnSpans)
 #include "HmiExpr.hpp"
+#include "HmiLanguages.hpp"    // 1.12.30 : les debordements dans chaque langue
 #include "HmiNavigation.hpp"
 #include "HmiSymbols.hpp"
 
@@ -13,6 +15,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <set>
 #include <utility>
 
 namespace hmi {
@@ -678,6 +681,16 @@ void checkPlacement(Ctx& c, const View& v, const Object& o, bool& never) {
 
 } // namespace
 
+std::vector<Issue> textOverflows(const Project& p, const View& v, const QualityOptions& opt) {
+    std::vector<Issue> out;
+    Ctx c{p, opt, out, {}};
+    for (const Object* po : drawOrder(v)) {
+        if (v.effectivelyHidden(*po)) continue;       // un objet cache (une autre page) : on le verra montre
+        checkOverflow(c, v, *po);
+    }
+    return out;
+}
+
 void checkQuality(const Project& p, const QualityOptions& opt, std::vector<Issue>& out) {
     Ctx c{p, opt, out, {}};
     // Le code qui peut changer un objet en marche (Vue.Objet.Visible := TRUE).
@@ -714,6 +727,51 @@ void checkQuality(const Project& p, const QualityOptions& opt, std::vector<Issue
             i.message = "vue charg\xC3\xA9" "e : " + std::to_string(v.objects.size()) + " objets (dont " + std::to_string(expressions)
                       + " expressions) - au-del\xC3\xA0 de " + std::to_string(opt.heavyObjects)
                       + ", le dessin et le cycle ralentissent : la d\xC3\xA9" "couper, ou r\xC3\xA9utiliser un symbole";
+            out.push_back(std::move(i));
+        }
+    }
+
+    // 1.12.30 : les textes qui debordent dans une autre langue du projet (traduits plus
+    // longs) - seulement ceux qui tiennent dans la langue du projet (sinon : deja dit).
+    for (std::size_t li = 1; li < p.languages.list.size(); ++li) {
+        const auto& lang = p.languages.list[li];
+        if (!isTranslated(p.languages, lang.code)) continue;
+        const std::string name = (lang.name.empty() ? languageName(lang.code) : lang.name) + " (" + lang.code + ")";
+        for (const auto& v : p.views) {
+            std::set<Id> already;
+            for (const auto& i : textOverflows(p, v, opt)) already.insert(i.object);
+            const View tv = translatedView(v, p.languages, lang.code);
+            for (auto& i : textOverflows(p, tv, opt)) {
+                if (already.count(i.object)) continue;
+                i.message = "en " + name + " : " + i.message;
+                out.push_back(std::move(i));
+            }
+        }
+    }
+
+    // 1.12.30 : la mise en page de l'editeur - un guide hors de la vue, une grille de colonnes
+    // qui ne tient pas (rien ne se voit en marche : pour information).
+    for (const auto& v : p.views) {
+        for (const auto& g : v.guides) {
+            const double limit = g.vertical ? v.width : v.height;
+            if (g.position >= 0 && g.position <= limit) continue;
+            Issue i;
+            i.severity = S::Info;
+            i.category = "Mise en page";
+            i.view = v.id;
+            i.message = std::string("guide ") + (g.vertical ? "vertical hors de la vue : x = " : "horizontal hors de la vue : y = ")
+                      + formatNumber(g.position) + " (la vue fait " + formatNumber(limit)
+                      + " px) - le ramener sur la r\xC3\xA8gle le retire";
+            out.push_back(std::move(i));
+        }
+        if (v.columns.visible && edit::columnSpans(v).empty()) {
+            Issue i;
+            i.severity = S::Info;
+            i.category = "Mise en page";
+            i.view = v.id;
+            i.message = "grille de colonnes trop large : " + std::to_string(v.columns.count) + " colonnes, une goutti\xC3\xA8re de "
+                      + formatNumber(v.columns.gutter) + " px et des marges de " + formatNumber(v.columns.margin)
+                      + " px ne tiennent pas dans " + std::to_string(v.width) + " px";
             out.push_back(std::move(i));
         }
     }

@@ -929,6 +929,7 @@ namespace ui {
     MultiLineText::MultiLineText(std::string id) : Widget(std::move(id)) {
         setFocusPolicy(true);
         setPadding({ 2.f, 4.f, 2.f, 4.f });
+        setZoomSupport(ZoomSupport::Native);   // 1.12.30 : son zoom est celui de la puce du bandeau bas
     }
 
     SizeHint MultiLineText::sizeHint() const {

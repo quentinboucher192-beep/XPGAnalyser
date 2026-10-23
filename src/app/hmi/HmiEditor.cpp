@@ -287,13 +287,25 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     tools->separator();
     tools->add(ActGrid, HmiGlyph::Grid, "Afficher la grille");
     tools->add(ActSnap, HmiGlyph::Magnet, "Magn\xC3\xA9tisme (grille, objets, guides)");
-    tools->add(ActGuideV, HmiGlyph::Guide, "Ajouter un guide vertical (le tirer hors de la vue le retire)", "V");
+    tools->add(ActGuideV, HmiGlyph::Guide, "Ajouter un guide vertical (le ramener sur la r\xC3\xA8gle le retire)", "V");
     tools->add(ActGuideH, HmiGlyph::Guide, "Ajouter un guide horizontal", "H");
+    // 1.12.30 : les regles (on y tire les guides) et la grille de colonnes.
+    tools->add(ActRulers, HmiGlyph::Ruler,
+               "R\xC3\xA8gles (Ctrl+R) : gradu\xC3\xA9" "es en pixels de la vue. Tire un guide d'une r\xC3\xA8gle, ram\xC3\xA8ne-le dessus "
+               "pour le retirer. Alt au survol : les cotes");
+    tools->add(ActColumns, HmiGlyph::Columns,
+               "Grille de colonnes : le magn\xC3\xA9tisme s'accroche \xC3\xA0 leurs bords (colonnes, goutti\xC3\xA8re, marges : "
+               "Propri\xC3\xA9t\xC3\xA9s de la vue)");
     tools->add(ActShowHidden, HmiGlyph::Eye, "Montrer les objets cach\xC3\xA9s (estomp\xC3\xA9s)");
     tools->separator();
     tools->add(ActZoomOut, HmiGlyph::ZoomOut, "Zoom arri\xC3\xA8re (Ctrl + molette)");
     tools->add(ActZoomIn, HmiGlyph::ZoomIn, "Zoom avant");
     tools->add(ActZoomFit, HmiGlyph::ZoomFit, "Toute la vue");
+    tools->separator();
+    // 1.12.30 : la vue dans chaque langue du projet, cote a cote.
+    tools->add(ActLanguages, HmiGlyph::LanguagesSide,
+               "Langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te : la vue dans chaque langue, les textes qui d\xC3\xA9" "bordent entour\xC3\xA9s "
+               "(et la pseudo-langue, +40 %)");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
 
     // ---- le centre, et ses deux colonnes -------------------------------------
@@ -413,6 +425,9 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         return v && (v->grid.snapGrid || v->grid.snapObjects || v->grid.snapGuides);
     });
     tools_->setCheckedWhen(ActShowHidden, [this] { return canvas_->showHidden(); });
+    tools_->setCheckedWhen(ActRulers, [this] { return canvas_->rulersShown(); });                  // 1.12.30
+    tools_->setCheckedWhen(ActColumns, [this] { const auto* v = canvas_->view(); return v && v->columns.visible; });
+    tools_->setEnabledWhen(ActLanguages, [this] { return static_cast<bool>(openLanguages_); });
     tools_->setEnabledWhen(ActUndo, [this] { return history_ && (!historyPossible_ || historyPossible_(false)); });
     tools_->setEnabledWhen(ActRedo, [this] { return history_ && (!historyPossible_ || historyPossible_(true)); });
     links_ += canvas_->historyRequested->connect([this](bool redo) { run(redo ? ActRedo : ActUndo); });
@@ -671,6 +686,12 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         canvas_->setEditTipOn(kept.find("sans-infobulle") == std::string::npos);
         canvas_->setPendingDotsOn(kept.find("sans-point") == std::string::npos);
     }
+    // 1.12.30 : les regles - montrees dans l'appli sauf si on les a cachees (retenu par projet) ;
+    // Ctrl+R sur la vue les montre ou les cache.
+    if (ui::FilterMemory::installed()) canvas_->setRulersShown(ui::FilterMemory::read("hmi.regles") != "sans");
+    links_ += canvas_->rulersToggled->connect([](bool on) {
+        if (ui::FilterMemory::installed()) ui::FilterMemory::write("hmi.regles", on ? std::string{} : std::string("sans"));
+    });
     links_ += doc_->editsSaved->connect([this] {
         refreshEditMarks();
         rebuildProperties();
@@ -1629,6 +1650,31 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
         else if (field == "mag_grille") vv.grid.snapGrid = hmi::parseBool(value, true);
         else if (field == "mag_objets") vv.grid.snapObjects = hmi::parseBool(value, true);
         else if (field == "mag_guides") vv.grid.snapGuides = hmi::parseBool(value, true);
+        // 1.12.30 : les guides caches, verrouilles ; la grille de colonnes.
+        else if (field == "guides_caches") vv.grid.guidesHidden = hmi::parseBool(value, false);
+        else if (field == "guides_verrous") vv.grid.guidesLocked = hmi::parseBool(value, false);
+        else if (field == "colonnes") vv.columns.visible = hmi::parseBool(value, false);
+        else if (field == "col_magnetisme") vv.columns.snap = hmi::parseBool(value, true);
+        else if (field == "col_nombre") {
+            long long n = 0;
+            if (!sim::readInteger(value, n) || n < 1 || n > 48) {
+                ok = false;
+                why = "Colonnes : un nombre entier, de 1 \xC3\xA0 48";
+                return;
+            }
+            vv.columns.count = static_cast<int>(n);
+            vv.columns.visible = true;
+        }
+        else if (field == "col_gouttiere" || field == "col_marge") {
+            double n = 0;
+            if (!hmi::parseNumber(value, n) || n < 0 || n > 10000) {
+                ok = false;
+                why = std::string(field == "col_marge" ? "Marges" : "Goutti\xC3\xA8re") + " : un nombre de pixels, 0 au moins";
+                return;
+            }
+            (field == "col_marge" ? vv.columns.margin : vv.columns.gutter) = n;
+            vv.columns.visible = true;
+        }
         else if (field == "calque_actif") {
             for (const auto& l : vv.layers) if (l.name == value) vv.activeLayer = l.id;
         }
@@ -1798,6 +1844,7 @@ enum CanvasMenu : int {
     MSymbolParams = 16, MEnterGroup = 17, MLeaveGroup = 18, MUnlockTarget = 19, MCopyTarget = 20, MViewProps = 21,
     MLibrary = 22, MZoom50 = 23, MZoom100 = 24, MZoom200 = 25, MGuideV = 26, MGuideH = 27, MHelpTarget = 28,
     MShow = 29, MHistory = 30, MViewHistory = 31, MEditsTip = 32, MEditsDots = 33,
+    MRulersHelp = 34,   // 1.12.30 : l'aide des regles et des guides
 };
 constexpr int kMenuCanvas = 0, kMenuLayers = 1, kMenuPalette = 2;   // le menu ouvert (context_ sert aux trois)
 enum PaletteMenu : int { kPalettePlace = 1, kPaletteFavorite = 2, kPaletteHelp = 3 };
@@ -2029,6 +2076,32 @@ void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
 
     menuKind_ = kMenuCanvas;
     if (explorer && c.selection().empty()) return;
+    // ---- 1.12.30 : une regle - les regles, les guides, la grille de colonnes ----
+    if (!explorer && c.contextTarget() == Target::Ruler) {
+        items.push_back(cmd::heading("R\xC3\xA8gles et guides", std::to_string(v->guides.size()) + (v->guides.size() > 1 ? " guides" : " guide")));
+        auto rulers = check("R\xC3\xA8gles", act(ActRulers), c.rulersShown());
+        rulers.shortcut = "Ctrl+R";
+        items.push_back(std::move(rulers));
+        items.push_back(cmd::separator());
+        items.push_back(plain("Ajouter un guide vertical ici", MGuideV, !v->grid.guidesLocked, "les guides sont verrouill\xC3\xA9s"));
+        items.push_back(plain("Ajouter un guide horizontal ici", MGuideH, !v->grid.guidesLocked, "les guides sont verrouill\xC3\xA9s"));
+        auto hide = check("Cacher les guides", act(ActGuidesHide), v->grid.guidesHidden);
+        hide.shortcut = "Ctrl+;";
+        items.push_back(std::move(hide));
+        auto lock = check("Verrouiller les guides", act(ActGuidesLock), v->grid.guidesLocked);
+        lock.shortcut = "Ctrl+Alt+;";
+        items.push_back(std::move(lock));
+        items.push_back(plain("Retirer tous les guides", act(ActGuidesClear), !v->guides.empty(), "aucun guide"));
+        items.push_back(cmd::separator());
+        items.push_back(check("Grille de colonnes", act(ActColumns), v->columns.visible));
+        items.push_back(plain("R\xC3\xA9gler la grille de colonnes\xE2\x80\xA6", MViewProps));
+        items.push_back(cmd::separator());
+        items.push_back(cmd::item(cmd::Id::Aide, MRulersHelp, static_cast<bool>(openHelp_), "l'aide n'est pas joignable ici",
+                                  "Aide : r\xC3\xA8gles, guides et cotes"));
+        context_->setItems(std::move(items));
+        openMenuAt(*context_, at);
+        return;
+    }
     // ---- un objet verrouille (le clic ne l'avait jamais pris) ----
     if (!explorer && c.contextTarget() == Target::Locked) {
         const auto* o = v->object(c.contextLocked());
@@ -2066,12 +2139,27 @@ void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
         items.push_back(cmd::separator());
         items.push_back(check("Grille", act(ActGrid), v->grid.visible));
         items.push_back(check("Magn\xC3\xA9tisme", act(ActSnap), v->grid.snapGrid || v->grid.snapObjects || v->grid.snapGuides));
+        // 1.12.30 : les regles et la grille de colonnes
+        auto rulers = check("R\xC3\xA8gles", act(ActRulers), c.rulersShown());
+        rulers.shortcut = "Ctrl+R";
+        items.push_back(std::move(rulers));
+        items.push_back(check("Grille de colonnes", act(ActColumns), v->columns.visible));
         items.push_back(check("Objets cach\xC3\xA9s (estomp\xC3\xA9s)", act(ActShowHidden), c.showHidden()));
         // 1.12.26 : le suivi des modifications
         items.push_back(check("Infobulle de suivi au survol", MEditsTip, c.editTipOn()));
         items.push_back(check("Point \xC2\xAB non enregistr\xC3\xA9 \xC2\xBB sur les objets", MEditsDots, c.pendingDotsOn()));
-        ui::PopupMenu::Item guide = plain("Ajouter un guide", -1);
-        guide.children = {plain("Vertical, ici", MGuideV), plain("Horizontal, ici", MGuideH)};
+        ui::PopupMenu::Item guide = plain("Guides", -1);
+        guide.children = {plain("Vertical, ici", MGuideV, !v->grid.guidesLocked, "les guides sont verrouill\xC3\xA9s"),
+                          plain("Horizontal, ici", MGuideH, !v->grid.guidesLocked, "les guides sont verrouill\xC3\xA9s")};
+        // 1.12.30 : les cacher, les verrouiller, les retirer.
+        guide.children.push_back(cmd::separator());
+        auto hide = check("Cacher les guides", act(ActGuidesHide), v->grid.guidesHidden);
+        hide.shortcut = "Ctrl+;";
+        guide.children.push_back(std::move(hide));
+        auto lock = check("Verrouiller les guides", act(ActGuidesLock), v->grid.guidesLocked);
+        lock.shortcut = "Ctrl+Alt+;";
+        guide.children.push_back(std::move(lock));
+        guide.children.push_back(plain("Retirer tous les guides", act(ActGuidesClear), !v->guides.empty(), "aucun guide"));
         items.push_back(std::move(guide));
         ui::PopupMenu::Item zoom = plain("Zoom", -1);
         zoom.children.push_back(plain("Toute la vue", act(ActZoomFit)));
@@ -2087,6 +2175,8 @@ void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
         }
         items.push_back(std::move(zoom));
         items.push_back(cmd::separator());
+        // 1.12.30 : la vue dans chaque langue, cote a cote.
+        items.push_back(plain("Langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te\xE2\x80\xA6", act(ActLanguages), static_cast<bool>(openLanguages_), "pas ici"));
         // 1.12.26 : l'historique de la vue - ses objets, les supprimes compris (ils se restaurent).
         items.push_back(plain("Historique de la vue\xE2\x80\xA6", MViewHistory, static_cast<bool>(openHistory_), "pas ici"));
         items.push_back(plain("Propri\xC3\xA9t\xC3\xA9s de la vue", MViewProps));
@@ -2486,6 +2576,7 @@ void HmiEditor::canvasMenuChosen(int a) {
         case MZoom200: c.setZoom(2.f); break;
         case MGuideV:  c.addGuideAt(true, c.contextScreen()); break;
         case MGuideH:  c.addGuideAt(false, c.contextScreen()); break;
+        case MRulersHelp: if (openHelp_) openHelp_("regles-guides"); break;   // 1.12.30
         default: break;
     }
     invalidate();
@@ -2554,6 +2645,16 @@ void HmiEditor::run(int action) {
         case ActSnap:         c.toggleSnap(); break;
         case ActGuideV:       c.addGuide(true); break;
         case ActGuideH:       c.addGuide(false); break;
+        // 1.12.30 : les regles, la grille de colonnes, les guides, les langues
+        case ActRulers:
+            c.setRulersShown(!c.rulersShown());
+            c.rulersToggled->emit(c.rulersShown());
+            break;
+        case ActColumns:      c.toggleColumns(); break;
+        case ActGuidesHide:   c.toggleGuidesHidden(); break;
+        case ActGuidesLock:   c.toggleGuidesLocked(); break;
+        case ActGuidesClear:  c.clearGuides(); break;
+        case ActLanguages:    if (openLanguages_) openLanguages_(viewId_); break;
         case ActShowHidden:   c.setShowHidden(!c.showHidden()); break;
         case ActZoomOut:      c.zoomBy(1.f / 1.25f); break;
         case ActZoomIn:       c.zoomBy(1.25f); break;

@@ -129,4 +129,35 @@ struct SnapResult {
                                   const std::vector<Id>& exclude, double threshold);
 [[nodiscard]] double snapToGrid(double v, int step) noexcept;
 
+// ------------------------------------------------- 1.12.30 : les colonnes ---
+// La grille de colonnes (View::columns) : le bord gauche et la largeur de chaque
+// colonne ; vide quand elle ne tient pas dans la vue (les marges et les
+// gouttieres prennent toute la largeur). Ses bords : ceux qu'accroche le magnetisme.
+struct ColumnSpan { double x{0}, w{0}; };
+[[nodiscard]] std::vector<ColumnSpan> columnSpans(const View&);
+[[nodiscard]] std::vector<double>     columnEdges(const View&);
+// Les reperes du magnetisme qui ne sont pas des objets : les guides montres (s'ils
+// sont magnetiques) et les bords des colonnes montrees (si elles le sont).
+void snapLines(const View&, std::vector<double>& xs, std::vector<double>& ys);
+
+// ---------------------------------------------------- 1.12.30 : les cotes ---
+//  LES COTES, comme dans un logiciel de dessin : Alt au survol, les distances en
+//  pixels de la vue entre la selection (son cadre, `sel`) et
+//    - l'objet vise (`target`) : l'ecart entre leurs bords qui se font face ; l'un
+//      dans l'autre, les quatre ecarts du dedans ;
+//    - rien (kNoId) : ses voisins les plus proches dans les quatre directions (un
+//      objet qui deborde sur sa rangee ou sa colonne), sinon le bord de la vue.
+//  Une cote horizontale va de `from` a `to` (x) a la hauteur `at` (y) ; une cote
+//  verticale de `from` a `to` (y) a l'abscisse `at` (x). Un trait de rappel tire
+//  un bord jusqu'a la cote quand elle passe a cote de lui : [fromLo, fromHi] sur
+//  l'autre axe au bout `from`, [toLo, toHi] au bout `to` (lo == hi : aucun).
+struct Dimension {
+    bool   horizontal{true};
+    double from{0}, to{0}, at{0};
+    double fromLo{0}, fromHi{0}, toLo{0}, toHi{0};
+    bool   edge{false};          // jusqu'au bord de la vue
+    [[nodiscard]] double value() const noexcept { return to - from; }
+};
+[[nodiscard]] std::vector<Dimension> dimensions(const View&, const Box& sel, const std::vector<Id>& exclude, Id target);
+
 } // namespace hmi::edit

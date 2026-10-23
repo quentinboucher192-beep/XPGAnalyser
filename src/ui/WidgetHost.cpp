@@ -38,7 +38,7 @@ void WidgetHost::paint(gfx::IRenderer& r, const Theme& theme, gfx::Size surface,
     }
     // Lot 7 : le texte du moment, relu a chaque image (une valeur qui change).
     if (tooltipTarget_ && time - hoverSince_ >= 0.9)
-        paintTooltip(r, theme, surface, mouse_, tooltipTarget_->liveTooltip(mouse_), &tipPlacement_);
+        paintTooltip(r, theme, surface, mouse_, tooltipTarget_->liveTooltipAt(mouse_), &tipPlacement_);
 }
 
 EventResult WidgetHost::dispatch(const InputEvent& ev) {
@@ -52,7 +52,7 @@ EventResult WidgetHost::dispatch(const InputEvent& ev) {
     // Ce qui peint par-dessus tout (une liste ouverte) recoit l'evenement avant
     // l'arbre : sinon le tableau dessous prend le clic destine a la liste.
     if (Widget* overlay = root_->findOverlayOwner())
-        if (overlay->dispatch(ev) == EventResult::Consumed) return EventResult::Consumed;
+        if (overlay->dispatchFromSurface(ev) == EventResult::Consumed) return EventResult::Consumed;
     // Tab : le widget qui a le focus d'abord, puis le suivant dans l'ordre.
     if (const auto* k = std::get_if<KeyDown>(&ev); k && k->key == Key::Tab) {
         if (root_->dispatch(ev) == EventResult::Consumed) return EventResult::Consumed;
@@ -82,8 +82,10 @@ void WidgetHost::release(Widget& w) {
 const Widget* WidgetHost::tooltipTargetAt(Widget& root, gfx::Point p) {
     // Comme WidgetMenu::tooltipTargetAt : l'infobulle d'un widget cache sous une
     // liste ouverte ne perce pas au travers.
-    if (Widget* overlay = root.findOverlayOwner(); overlay && overlay->eventBounds().contains(p) && overlay->overlayCovers(p))
-        return overlay->tooltipAt(p);
+    // 1.12.30 : la liste d'un tableau zoome est dans le repere de ce tableau.
+    if (Widget* overlay = root.findOverlayOwner(); overlay && overlay->eventBounds().contains(overlay->fromSurface(p))
+                                                  && overlay->overlayCovers(overlay->fromSurface(p)))
+        return overlay->tooltipAt(overlay->parent() ? overlay->parent()->fromSurface(p) : p);
     return root.tooltipAt(p);
 }
 

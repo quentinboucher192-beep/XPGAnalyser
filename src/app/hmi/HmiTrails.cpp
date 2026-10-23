@@ -104,7 +104,9 @@ bool started(const TrailCard& t) { return t.running || (t.reached > 0 && t.reach
 
 } // namespace
 
-HmiTrailCards::HmiTrailCards(std::string id) : ui::Widget(std::move(id)) {}
+HmiTrailCards::HmiTrailCards(std::string id) : ui::Widget(std::move(id)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
+}
 
 void HmiTrailCards::setCards(std::vector<TrailCard> cards) {
     cards_ = std::move(cards);

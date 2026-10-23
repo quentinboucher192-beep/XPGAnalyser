@@ -130,7 +130,9 @@ void ApiFrame::onPaint(const ui::PaintContext& ctx) {
 }
 
 // ======================================================= le tableau de bord ====
-ApiDashboard::ApiDashboard(std::string id) : ui::Widget(std::move(id)) {}
+ApiDashboard::ApiDashboard(std::string id) : ui::Widget(std::move(id)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
+}
 
 ui::SizeHint ApiDashboard::sizeHint() const {
     ui::SizeHint h;

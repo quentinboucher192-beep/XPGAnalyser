@@ -130,6 +130,7 @@ std::string SimCenterModel::trendsCsv() const {
 // ======================================================= la vue d'ensemble ====
 SimOverviewPane::SimOverviewPane(std::string id, std::shared_ptr<SimCenterModel> model, SimCenterHosts hosts)
     : ui::Widget(std::move(id)), model_(std::move(model)), hosts_(std::move(hosts)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     // 1.12.18 : le menu du clic droit (planche 17).
     menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(this->id() + ".menu")));
     menu_->itemChosen->connect([this](int choice) { menuChosen(choice); }).release();

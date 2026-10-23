@@ -85,6 +85,9 @@
 #include "../src/app/hmi/HmiNativesPane.hpp"
 #include "../src/app/hmi/HmiQualityPanes.hpp"
 #include "../src/app/hmi/HmiDisplayPanes.hpp"
+#include "../src/app/hmi/HmiLanguageCompare.hpp"   // 1.12.30 : les langues cote a cote
+#include "../src/hmi/HmiQuality.hpp"
+#include "../src/hmi/HmiLanguages.hpp"
 #include "../src/app/hmi/HmiScriptPanes.hpp"
 #include "../src/app/hmi/HmiTypePicker.hpp"          // 1.11.19 (refonte, lot 6) : le selecteur de types
 #include "../src/ui/DialogFrame.hpp"                 // 1.12.21 : les fenetres se deplacent et s'agrandissent
@@ -18159,13 +18162,15 @@ void centreAide111() {
     // 1.12.18 : + Maj+F10 et les lettres d'un menu (General), Ctrl+D / Ctrl+Maj+D, Ctrl+G / Ctrl+Maj+G,
     // Ctrl+Alt+C / Ctrl+Alt+V (l'editeur de vues).
     // 1.12.27 : + Ctrl+Maj+N (Nouvelle fenetre).
-    check(hk::all().size() == 103 && hk::ofContext(hk::Context::Scripts).size() == 37,
+    // 1.12.30 : + le zoom des pages (Ctrl+plus / Ctrl+moins / Ctrl+0, Ctrl+molette : General) ; Ctrl+R,
+    // Ctrl+; / Ctrl+Alt+; et Alt+survol (l'editeur de vues : les regles, les guides, les cotes).
+    check(hk::all().size() == 108 && hk::ofContext(hk::Context::Scripts).size() == 37,
           "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17), "
           "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3), Ctrl+I (1.12.16), les 5 du clic droit et Ctrl+Maj+T (1.12.18), "
-          "Ctrl+Maj+N (1.12.27)");
-    check(hk::ofContext(hk::Context::General).size() == 30 && hk::ofContext(hk::Context::Help).size() == 7,
-          "raccourcis : General 30 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu, Ctrl+Maj+T ; "
-          "1.12.27 : Ctrl+Maj+N), Aide 7");
+          "Ctrl+Maj+N (1.12.27), les 2 du zoom et les 3 des r\xC3\xA8gles (1.12.30)");
+    check(hk::ofContext(hk::Context::General).size() == 32 && hk::ofContext(hk::Context::Help).size() == 7,
+          "raccourcis : General 32 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu, Ctrl+Maj+T ; "
+          "1.12.27 : Ctrl+Maj+N ; 1.12.30 : le zoom), Aide 7");
     // La table contre le registre d'App.cpp : chaque action qu'elle nomme a la touche que la table lui donne,
     // dans l'ecriture du registre (Alt+Left, Shift+F5). Le registre lui-meme est lu juste apres.
     const std::pair<const char*, const char*> attendu[] = {
@@ -18671,14 +18676,15 @@ void centreAide111() {
     // 1.12.27 : + Plusieurs fenetres ; l'aide rangee : les 4 nouveautes partent dans leur chapitre (L'IHM),
     // les raccourcis clavier y viennent de Tester et livrer (Demarrer 21 : 14 du guide + 7 de l'API).
     // 1.12.28 : le didacticiel dans l'aide - Demarrer > Le didacticiel, sa page et les 6 des parcours (27).
-    check(ix.count(hc::Chapter::Start) == 27 && ix.count(hc::Chapter::Plc) == 16,
-          "centre : Demarrer 27 (les gestes de base, 1.12.27 ; Le didacticiel, 1.12.28) et L'automate 16");
+    // 1.12.30 : + Le zoom des pages (28).
+    check(ix.count(hc::Chapter::Start) == 28 && ix.count(hc::Chapter::Plc) == 16,
+          "centre : Demarrer 28 (les gestes de base, 1.12.27 ; Le didacticiel, 1.12.28 ; le zoom, 1.12.30) et L'automate 16");
     check(ix.find("api-dossiers") && ix.find("dossiers") && ix.find("api-alarmes") && ix.find("alarmes"),
           "centre : api-dossiers et dossiers, api-alarmes et alarmes, sans collision");
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 218, "centre : L'IHM a les 218 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis)");
+    check(ix.count(hc::Chapter::Hmi) == 220, "centre : L'IHM a les 220 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : regles-guides, langues-cote)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 62, "centre : 11 expressions, 62 notes (1.12.29)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -35429,7 +35435,8 @@ void didacticielAide11228() {
     const auto start = ix.ofChapter(hc::Chapter::Start);
     std::size_t enBas = 0;
     for (std::size_t i = start.size() >= 7 ? start.size() - 7 : 0; i < start.size(); ++i) enBas += start[i]->sub == "Le didacticiel" ? 1u : 0u;
-    check(start.size() == 20 && enBas == 7, "centre : IHM Studio, Demarrer a 13 pages et Le didacticiel (7), en bas ("
+    // 1.12.30 : + Le zoom des pages (14 pages).
+    check(start.size() == 21 && enBas == 7, "centre : IHM Studio, Demarrer a 14 pages et Le didacticiel (7), en bas ("
                                                 + std::to_string(start.size()) + ")");
     hc::TreeState st;
     st.current = "parcours-symbole";
@@ -35449,7 +35456,343 @@ void didacticielAide11228() {
     core::setEdition(edition);
 }
 
+// =============================================================================
+//  1.12.30 : LES REGLES, LES GUIDES, LA GRILLE DE COLONNES, LES COTES (Alt)
+// =============================================================================
+void regles11230() {
+    std::printf("1.12.30 : les regles, les guides tires d'une regle, la grille de colonnes, les cotes\n");
+    namespace E = hmi::edit;
+    // ---- le fichier : des guides caches et verrouilles, la grille de colonnes
+    {
+        Project p;
+        View v = makeView(p, "Vue_Colonnes");
+        v.grid.guidesHidden = true;
+        v.grid.guidesLocked = true;
+        v.columns.visible = true;
+        v.columns.count = 6;
+        v.columns.gutter = 24;
+        v.columns.margin = 60;
+        v.columns.snap = false;
+        v.guides.push_back({true, 480});
+        const std::string text = hmi::serializeView(v);
+        const auto back = hmi::parseView(text);
+        check(back && back->grid == v.grid && back->columns == v.columns && back->guides == v.guides,
+              "fichier : guides cach\xC3\xA9s et verrouill\xC3\xA9s, la grille de colonnes (6, 24, 60, sans magn\xC3\xA9tisme) relus tels quels");
+        View plain = makeView(p, "Vue_Simple");
+        const std::string t2 = hmi::serializeView(plain);
+        check(t2.find("colonnes") == std::string::npos && t2.find("guides_caches") == std::string::npos,
+              "fichier : une vue sans r\xC3\xA9glage n'\xC3\xA9" "crit rien de plus (un fichier d'avant ne change pas)");
+    }
+    // ---- les colonnes : leurs bords, le magnetisme s'y accroche ; trop larges, rien
+    {
+        Project p;
+        View v = makeView(p, "V");
+        v.width = 1000;
+        v.columns.visible = true;
+        v.columns.count = 4;
+        v.columns.gutter = 20;
+        v.columns.margin = 40;
+        const auto spans = E::columnSpans(v);
+        check(spans.size() == 4, "colonnes : 4 colonnes");
+        if (spans.size() == 4) {
+            near(spans[0].x, 40, "colonnes : la premiere apres la marge (40)");
+            near(spans[0].w, 215, "colonnes : (1000 - 2 x 40 - 3 x 20) / 4 = 215");
+            near(spans[1].x, 275, "colonnes : la deuxieme a 40 + 215 + 20 = 275");
+        }
+        v.grid.snapObjects = false;
+        v.grid.snapGrid = false;
+        const auto snap = E::snapMove(v, Box{100, 100, 50, 30}, 172, 0, {}, 6.0);
+        near(snap.dx, 175, "magn\xC3\xA9tisme : un objet tir\xC3\xA9 a x = 272 s'accroche au bord de la colonne (275)");
+        v.columns.visible = false;
+        const auto free = E::snapMove(v, Box{100, 100, 50, 30}, 172, 0, {}, 6.0);
+        near(free.dx, 172, "magn\xC3\xA9tisme : la grille de colonnes cachee n'accroche plus");
+        v.columns.visible = true;
+        v.columns.margin = 600;
+        check(E::columnSpans(v).empty(), "colonnes : des marges plus larges que la vue - la grille ne tient pas");
+        // Les guides caches ne sont plus magnetiques.
+        View g = makeView(p, "G");
+        g.grid.snapObjects = false;
+        g.grid.snapGrid = false;
+        g.guides.push_back({true, 303});
+        near(E::snapMove(g, Box{100, 100, 50, 30}, 200, 0, {}, 6.0).dx, 203, "guides : un guide accroche le bord gauche (303)");
+        g.grid.guidesHidden = true;
+        near(E::snapMove(g, Box{100, 100, 50, 30}, 200, 0, {}, 6.0).dx, 200, "guides : caches, ils n'accrochent plus");
+    }
+    // ---- les cotes : vers un objet, dans le vide (voisins et bords), l'un dans l'autre
+    {
+        Project p;
+        View v = makeView(p, "Cotes");
+        v.width = 1000;
+        v.height = 600;
+        const auto put = [&](const char* name, double x, double y, double w, double h) {
+            const Id id = E::add(p, v, Kind::Rectangle, x, y);
+            if (auto* o = v.object(id)) {
+                o->name = name;
+                o->setNumber("w", w);
+                o->setNumber("h", h);
+            }
+            return id;
+        };
+        const Id a = put("A", 100, 100, 100, 50);
+        const Id b = put("B", 300, 110, 80, 40);
+        put("C", 150, 400, 60, 60);
+        const Box sel = v.object(a)->box();
+        const auto toB = E::dimensions(v, sel, {a}, b);
+        check(toB.size() == 1 && toB[0].horizontal, "cotes vers B : une cote horizontale");
+        if (!toB.empty()) {
+            near(toB[0].value(), 100, "cotes vers B : 300 - 200 = 100");
+            near(toB[0].at, 130, "cotes vers B : au milieu de ce qu'ils ont en commun (110 a 150)");
+        }
+        const auto around = E::dimensions(v, sel, {a}, kNoId);
+        double right = -1, left = -1, top = -1, bottom = -1;
+        bool leftEdge = false;
+        for (const auto& d : around) {
+            if (d.horizontal && d.from >= 199) right = d.value();
+            if (d.horizontal && d.to <= 101) { left = d.value(); leftEdge = d.edge; }
+            if (!d.horizontal && d.to <= 101) top = d.value();
+            if (!d.horizontal && d.from >= 149) bottom = d.value();
+        }
+        near(right, 100, "dans le vide : le voisin de droite (B) a 100");
+        near(left, 100, "dans le vide : rien a gauche, le bord de la vue a 100");
+        check(leftEdge, "dans le vide : la cote de gauche va jusqu'au bord");
+        near(top, 100, "dans le vide : le bord du haut a 100");
+        near(bottom, 250, "dans le vide : C dessous, de 150 a 400");
+        const Id panel = put("Fond", 50, 50, 500, 300);
+        const auto inside = E::dimensions(v, sel, {a}, panel);
+        check(inside.size() == 4, "l'un dans l'autre : les quatre ecarts du dedans");
+        if (inside.size() == 4) {
+            near(inside[0].value(), 50, "dedans : a gauche 50");
+            near(inside[1].value(), 350, "dedans : a droite 550 - 200 = 350");
+            near(inside[2].value(), 50, "dedans : en haut 50");
+            near(inside[3].value(), 200, "dedans : en bas 350 - 150 = 200");
+        }
+        // Pas de recouvrement vertical : la cote passe au milieu de la selection, un trait de rappel tire l'autre.
+        const Id far = put("Loin", 400, 300, 50, 50);
+        const auto toFar = E::dimensions(v, sel, {a}, far);
+        bool rappel = false;
+        for (const auto& d : toFar) if (d.horizontal && d.toHi > d.toLo) rappel = true;
+        check(rappel, "cotes vers un objet decale : un trait de rappel tire son bord jusqu'a la cote");
+    }
+    // ---- l'editeur : les regles, un guide tire de la regle, ramene dessus, verrouille
+    {
+        Bench b;
+        auto& c = b.editor->canvas();
+        check(!c.rulersShown(), "regles : cachees dans les essais (l'appli les montre)");
+        b.editor->run(app::HmiEditor::ActRulers);
+        b.editor->layout();
+        check(c.rulersShown() && c.topRuler().h > 19.f && c.leftRuler().w > 19.f, "regles : Ctrl+R / la barre les montre, en haut et a gauche");
+        check(c.drawArea().y >= c.topRuler().bottom() - 0.5f && c.drawArea().x >= c.leftRuler().right() - 0.5f,
+              "regles : le dessin commence apres elles");
+        const auto top = c.topRuler();
+        const float x = b.screen(300, 0).x;
+        b.drag({x, top.y + 10.f}, b.screen(300, 204));
+        check(b.v().guides.size() == 1 && !b.v().guides.front().vertical, "regles : celle du haut tire un guide horizontal");
+        if (!b.v().guides.empty()) near(b.v().guides.front().position, 200, "regles : pose au pas de la grille (204 -> 200)");
+        (void)b.stack.undo();
+        check(b.v().guides.empty(), "regles : un Ctrl+Z retire le guide pose");
+        (void)b.stack.redo();
+        // Lache sur la regle : pas de guide.
+        b.drag({x, top.y + 10.f}, {x, top.y + 6.f});
+        check(b.v().guides.size() == 1, "regles : un guide lache sur la regle ne se pose pas");
+        // Un guide ramene sur la regle part.
+        const float gy = b.screen(0, 200).y;
+        b.drag({b.screen(600, 0).x, gy}, {b.screen(600, 0).x, top.y + 8.f});
+        check(b.v().guides.empty(), "guides : ramene sur la regle, il part");
+        (void)b.stack.undo();
+        // Verrouilles : la regle ne tire plus, un guide ne bouge plus.
+        b.editor->run(app::HmiEditor::ActGuidesLock);
+        check(b.v().grid.guidesLocked, "guides : verrouilles (la barre, le menu, Ctrl+Alt+;)");
+        const auto before = b.v().guides;
+        b.drag({x + 40.f, top.y + 10.f}, b.screen(340, 300));
+        check(b.v().guides == before, "guides verrouilles : la regle n'en tire pas d'autre");
+        b.editor->run(app::HmiEditor::ActGuidesLock);
+        // Ctrl+; les cache.
+        b.key(ui::Key::Semicolon, ui::KeyMods{true, false, false, false});
+        check(b.v().grid.guidesHidden, "guides : Ctrl+; les cache");
+        b.key(ui::Key::Semicolon, ui::KeyMods{true, false, false, false});
+        check(!b.v().grid.guidesHidden, "guides : Ctrl+; les remontre");
+        // La grille de colonnes.
+        b.editor->run(app::HmiEditor::ActColumns);
+        check(b.v().columns.visible, "colonnes : la barre les montre");
+        // Le menu d'une regle.
+        c.dispatch(ui::MouseDown{{x, top.y + 10.f}, ui::MouseButton::Right, 1, {}});
+        c.dispatch(ui::MouseUp{{x, top.y + 10.f}, ui::MouseButton::Right, {}});
+        auto* menu = dynamic_cast<ui::PopupMenu*>(b.editor->findById("ed.context"));
+        check(menu && findItem(menu->items(), "Cacher les guides") && findItem(menu->items(), "Verrouiller les guides")
+                  && findItem(menu->items(), "Retirer tous les guides") && findItem(menu->items(), "Grille de colonnes"),
+              "regles : le clic droit - cacher, verrouiller, retirer les guides, la grille de colonnes");
+        if (menu) menu->close();
+        // Ctrl+R les cache.
+        b.key(ui::Key::R, ui::KeyMods{true, false, false, false});
+        check(!c.rulersShown(), "regles : Ctrl+R les cache");
+    }
+    // ---- Alt au survol : les cotes dessinees, et la barre d'etat
+    {
+        Bench b;
+        auto& c = b.editor->canvas();
+        const Id r1 = b.place(Kind::Rectangle, 100, 100);    // 160 x 100
+        const Id r2 = b.place(Kind::Rectangle, 400, 100);
+        check(r1 != kNoId && r2 != kNoId, "cotes : deux rectangles poses");
+        c.setSelection({r1});
+        std::string said;
+        auto link = c.status->connect([&](const std::string& t) { said = t; });
+        b.move(b.screen(450, 150), ui::KeyMods{false, false, true, false});
+        Id target = kNoId;
+        const auto dims = c.dimensionsAt(b.screen(450, 150), &target);
+        check(target == r2 && dims.size() == 1, "Alt au survol d'un autre objet : une cote vers lui");
+        if (!dims.empty()) near(dims.front().value(), 140, "cotes : 400 - 260 = 140");
+        check(said.find("cotes vers") != std::string::npos && said.find("140") != std::string::npos,
+              "cotes : la barre d'etat les dit (" + said + ")");
+        Recorder rec;
+        const auto theme = ui::Theme::dark();
+        c.render(ui::PaintContext{rec, theme, c.bounds(), 1.0, nullptr});
+        check(rec.wrote("140") && !c.shownDimensions().empty(), "cotes : dessinees, avec leur valeur sur une pastille");
+        b.move(b.screen(700, 400), ui::KeyMods{false, false, true, false});
+        Recorder rec2;
+        c.render(ui::PaintContext{rec2, theme, c.bounds(), 1.0, nullptr});
+        check(c.dimensionTarget() == kNoId && c.shownDimensions().size() >= 3, "Alt dans le vide : les voisins et les bords");
+        b.move(b.screen(700, 400));
+        Recorder rec3;
+        c.render(ui::PaintContext{rec3, theme, c.bounds(), 1.0, nullptr});
+        check(c.shownDimensions().empty(), "Alt relache : plus de cotes");
+        // Un deplacement aux fleches : les cotes un moment.
+        b.key(ui::Key::Right);
+        Recorder rec4;
+        c.render(ui::PaintContext{rec4, theme, c.bounds(), 1.2, nullptr});
+        check(!c.shownDimensions().empty(), "fleches : les cotes aux voisins, un moment");
+        Recorder rec5;
+        c.render(ui::PaintContext{rec5, theme, c.bounds(), 4.0, nullptr});
+        check(c.shownDimensions().empty(), "fleches : ... puis plus rien");
+        (void)link;
+    }
+    // ---- Generer : un guide hors de la vue, une grille de colonnes trop large
+    {
+        Project p;
+        View v = makeView(p, "Mise_En_Page");
+        v.width = 800;
+        v.guides.push_back({true, 1200});
+        v.columns.visible = true;
+        v.columns.count = 12;
+        v.columns.margin = 500;
+        p.views.push_back(v);
+        std::vector<Issue> out;
+        hmi::checkQuality(p, hmi::qualityOptions(p), out);
+        bool guide = false, grid = false;
+        for (const auto& i : out) {
+            if (i.category == "Mise en page" && i.message.find("guide vertical hors de la vue") != std::string::npos) guide = true;
+            if (i.category == "Mise en page" && i.message.find("grille de colonnes trop large") != std::string::npos) grid = true;
+        }
+        check(guide && grid, "Generer : un guide hors de la vue, une grille de colonnes qui ne tient pas (Mise en page)");
+    }
+}
+
+// =============================================================================
+//  1.12.30 : LES LANGUES COTE A COTE, LA PSEUDO-LANGUE, LES DEBORDEMENTS
+// =============================================================================
+void langues11230() {
+    std::printf("1.12.30 : les langues cote a cote, la pseudo-langue, les debordements dans chaque langue\n");
+    // ---- la pseudo-langue : +40 %, des lettres accentuees, les trous gardes
+    const auto codepoints = [](const std::string& t) {
+        std::size_t n = 0;
+        for (const char ch : t) if ((static_cast<unsigned char>(ch) & 0xC0) != 0x80) ++n;
+        return n;
+    };
+    same_text(hmi::pseudoText("Pompe"), "[P\xC3\xB3mp\xC3\xA9]", "pseudo : Pompe -> [P\xC3\xB3mp\xC3\xA9] (+2)");
+    const std::string long1 = hmi::pseudoText("Pompe en marche");
+    check(codepoints(long1) == 21 && long1.front() == '[' && long1.back() == ']', "pseudo : 15 caracteres -> 21 (+40 %) : " + long1);
+    const std::string holes = hmi::pseudoText("Niveau {Niv:0.0} m");
+    check(holes.find("{Niv:0.0}") != std::string::npos, "pseudo : un trou {Niv:0.0} reste tel quel : " + holes);
+    const std::string lines = hmi::pseudoText("Ligne 1\\nLigne 2");
+    check(lines.find("\\n") != std::string::npos && std::count(lines.begin(), lines.end(), '[') == 2, "pseudo : chaque ligne a ses crochets");
+    // ---- un projet en deux langues : un texte qui tient en francais, deborde en anglais
+    Project p;
+    View v = makeView(p, "Vue_Langues");
+    v.width = 800;
+    v.height = 400;
+    const Id t = hmi::edit::add(p, v, Kind::Text, 40, 40);
+    if (auto* o = v.object(t)) {
+        o->name = "Txt_Etat";
+        o->set("text", "Marche");
+        o->setNumber("w", 90);
+        o->setNumber("h", 24);
+        o->setNumber("fontSize", 16);
+    }
+    p.views.push_back(v);
+    p.languages.list.push_back({"en", "English"});
+    p.languages.texts["Marche"]["en"] = "Running at full speed";
+    const auto opt = hmi::qualityOptions(p);
+    check(hmi::textOverflows(p, v, opt).empty(), "debordements : en francais, Marche tient dans 90 px");
+    const auto en = hmi::translatedView(v, p.languages, "en");
+    const auto over = hmi::textOverflows(p, en, opt);
+    check(over.size() == 1 && over.front().object == t, "debordements : en anglais, le texte sort de sa boite");
+    // Generer le dit, dans la langue.
+    std::vector<Issue> out;
+    hmi::checkQuality(p, opt, out);
+    bool said = false;
+    for (const auto& i : out) if (i.message.rfind("en English (en) : le texte d\xC3\xA9" "borde", 0) == 0 && i.object == t) said = true;
+    check(said, "Generer : \xC2\xAB en English (en) : le texte d\xC3\xA9" "borde \xC2\xBB (une langue apres la premiere)");
+    // La pseudo-langue : une copie des langues, jamais celles du projet.
+    const auto withPseudo = hmi::withPseudo(p);
+    check(withPseudo.list.size() == 3 && p.languages.list.size() == 2, "pseudo : ajoutee a une copie des langues, pas au projet");
+    const auto pv = hmi::translatedView(v, withPseudo, std::string(hmi::kPseudoCode));
+    check(pv.object(t) && pv.object(t)->text("text").front() == '[', "pseudo : la vue montre le texte allonge");
+    // ---- la page Langues cote a cote
+    auto doc = std::make_shared<Document>();
+    doc->project = p;
+    app::HmiLanguageCompare page("lc", doc);
+    page.setView(v.id);
+    page.setBounds({0, 0, 1500, 700});
+    page.layout();
+    const auto& cols = page.columns();
+    check(cols.size() == 3 && cols[0].source && cols[1].code == "en" && cols[2].pseudo,
+          "page : une colonne par langue (francais, anglais), puis la pseudo-langue");
+    if (cols.size() == 3) {
+        check(cols[0].overflows.empty() && cols[1].overflows.size() == 1, "page : le debordement de l'anglais, aucun en francais");
+    }
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    page.render(ui::PaintContext{rec, theme, page.bounds(), 0.0, nullptr});
+    check(!page.marks().empty() && rec.wrote("English") && rec.wrote("1 texte d\xC3\xA9" "borde"),
+          "page : l'en-tete dit la langue et son debordement ; la marque est dessinee");
+    Id chosen = kNoId;
+    std::string code, source;
+    app::HmiLanguageCompare::Hosts h;
+    h.selectInEditor = [&](Id, Id o) { chosen = o; };
+    h.openTranslation = [&](const std::string& c, const std::string& s) { code = c; source = s; };
+    page.setHosts(h);
+    std::size_t enMark = page.marks().size();
+    for (std::size_t i = 0; i < page.marks().size(); ++i)
+        if (page.marks()[i].column == 1) enMark = i;
+    check(enMark < page.marks().size() && page.openMarkMenu(enMark) && page.markMenu() && page.markMenu()->isOpen(),
+          "page : un clic sur la marque ouvre son menu");
+    if (page.markMenu()) {
+        page.markMenu()->itemChosen->emit(1);
+        page.markMenu()->close();
+        check(chosen == t, "page : Choisir l'objet dans l'editeur");
+        (void)page.openMarkMenu(enMark);
+        page.markMenu()->itemChosen->emit(2);
+        page.markMenu()->close();
+        check(code == "en" && source == "Marche", "page : Aller a sa traduction (en, Marche)");
+    }
+    // Le zoom : l'echelle commune.
+    const float fit = page.zoom();
+    page.setZoom(1.5f);
+    near(page.zoom(), 1.5, "page : le zoom (la puce du bandeau bas) fixe l'echelle commune", 0.01);
+    page.fitAll();
+    near(page.zoom(), fit, "page : Ajuster revient a la vue entiere", 0.01);
+    check(page.zoomSupport() == ui::ZoomSupport::Native, "page : un zoom Native (celui de la puce)");
+    page.setPseudo(false);
+    check(page.columns().size() == 2, "page : sans la pseudo-langue, deux colonnes");
+}
+
 int main(int argc, char** argv) {
+    // 1.12.30 : HMI_TEST_11230=1 - les regles, les guides, les colonnes, les cotes ; les langues cote a cote, seuls.
+    if (const char* only = std::getenv("HMI_TEST_11230"); only && *only == '1') {
+        regles11230();
+        langues11230();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.27 : HMI_TEST_11227=1 - Suppr et Ctrl+D dans les listes, seuls.
     if (const char* only = std::getenv("HMI_TEST_11227"); only && *only == '1') {
         touchesListes11227();
@@ -35958,6 +36301,8 @@ int main(int argc, char** argv) {
     saisieNatives1127();                    // 1.12.7 : l'aide a la saisie des templates et des nouvelles natives
     setRing1127();                          // 1.12.7 : SET et RING - l'aide a la saisie, le tableau des elements
     enumsInspecteur1121();                  // 1.12.1 : les enumerations natives des proprietes et l'inspecteur
+    regles11230();                          // 1.12.30 : les regles, les guides, la grille de colonnes, les cotes
+    langues11230();                         // 1.12.30 : les langues cote a cote, la pseudo-langue
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

@@ -217,6 +217,7 @@ View strippedView(const View& v) {
     c.folder.clear();
     c.guides.clear();
     c.grid = GridSettings{};
+    c.columns = ColumnGrid{};      // 1.12.30 : la grille de colonnes, de l'editeur seulement
     c.activeLayer = kNoId;
     c.scripts.clear();
     c.actions.clear();

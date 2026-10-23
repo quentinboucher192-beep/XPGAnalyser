@@ -29,6 +29,8 @@
 #include "hmi/HmiCyclicPage.hpp"         // 1.9 : la lecture cyclique a plusieurs requetes
 #include "hmi/HmiNetDiagram.hpp"
 #include "hmi/HmiHelpPane.hpp"
+#include "hmi/HmiLanguageCompare.hpp"    // 1.12.30 : langues-cote, langues-marques, langues-marque
+#include "hmi/HmiDisplayPanes.hpp"       // 1.12.30 : langue-ajouter, traduction
 #include "hmi/HmiTutorial.hpp"               // lot 21 : les parcours du didacticiel
 #include "hmi/HmiTemplateGallery.hpp"      // lot 20 : la galerie des modeles
 #include "hmi/HmiQualityPanes.hpp"
@@ -414,11 +416,15 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  messages-journal [ouvrir|fermer]   le journal des messages de la barre d'etat (sans mot : l'ouvre) ; ses lignes au journal du script
     //  barre-bas                          ce que montre le bandeau bas : le message, puis chaque pastille (au journal du script)
     //  barre-compteurs                    les pastilles au journal du script, puis le clic sur les compteurs (IHM > Compiler, ou A regarder)
-    //  barre-zoom 125                     le zoom de l'onglet ouvert (75, 100, 125, 150 ; sans nombre : ouvre le menu du zoom)
+    //  barre-zoom 125                     le zoom de la page ouverte (en %) ; + et - : un cran, 0 : 100 % (1.12.30) ; sans
+    //                                     nombre : ouvre le menu du zoom
+    //  zoom-bilan                         1.12.30 : le zoom de la page ouverte au journal du script - ce qu'il vise (la page,
+    //                                     un document), ses widgets zoomes, la part de la page qu'ils couvrent, et les plus
+    //                                     grands morceaux qui ne se zooment pas
     //  barre-theme "Nord"                 le theme, par sa cle ou son libelle (sans nom : ouvre le menu des themes recents)
     //  barre-clic journal|selection|erreurs|avertissements|simulation|cible|zoom|theme|enregistrement   le clic d'une pastille
     if (cmd == "messages-journal" || cmd == "barre-bas" || cmd == "barre-compteurs" || cmd == "barre-zoom" || cmd == "barre-theme"
-        || cmd == "barre-clic") {
+        || cmd == "barre-clic" || cmd == "zoom-bilan") {
         auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
         if (!screen) { fail(cmd + " : pas d'\xC3\xA9" "cran d'analyse"); return Step::Next; }
         if (cmd == "messages-journal") {
@@ -435,9 +441,18 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         }
         if (cmd == "barre-zoom") {
             if (arg(1).empty()) { (void)screen->clickStatusChip("zoom"); return Step::Yield; }
+            if (arg(1) == "+" || arg(1) == "-" || arg(1) == "0") {
+                if (!screen->stepTabZoom(arg(1) == "+" ? 1 : arg(1) == "-" ? -1 : 0)) fail("barre-zoom " + arg(1) + " : la page n'a pas de zoom");
+                return Step::Yield;
+            }
             if (!screen->setTabZoomPercent(std::atoi(arg(1).c_str())))
-                fail("barre-zoom " + arg(1) + " : l'onglet ouvert n'a pas de zoom (ou pourcentage hors de 25 a 400)");
+                fail("barre-zoom " + arg(1) + " : la page ouverte n'a pas de zoom (ou pourcentage hors de 5 a 1600)");
             return Step::Yield;
+        }
+        if (cmd == "zoom-bilan") {
+            for (const auto& l : screen->zoomReport()) std::printf("[script] zoom : %s\n", l.c_str());
+            std::fflush(stdout);
+            return Step::Next;
         }
         if (cmd == "barre-theme") {
             if (arg(1).empty()) { (void)screen->clickStatusChip("theme"); return Step::Yield; }
@@ -1020,7 +1035,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         return Step::Yield;
     }
     if (cmd == "glisser") { drag({num(1), num(2)}, {num(3), num(4)}, mods()); return Step::Yield; }
-    if (cmd == "survol") { moveTo({num(1), num(2)}, {}); return Step::Yield; }
+    // survol X Y [alt|ctrl|maj] : 1.12.30 - Alt tenu au survol (les cotes de l'editeur de vues)
+    if (cmd == "survol") { moveTo({num(1), num(2)}, mods()); return Step::Yield; }
     if (cmd == "molette") {
         const gfx::Point p{num(1), num(2)};
         moveTo(p, mods());
@@ -2797,6 +2813,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 tree->ensureVisible(node);
                 gfx::Rect r;
                 if (!tree->rowRect(node, r)) return Step::Retry;
+                r = tree->toSurface(r);      // 1.12.30 : l'arbre zoome seul (Ctrl + molette)
                 const gfx::Point p{r.right() - 30.f, r.y + r.h * 0.5f};
                 click(p, has("droit") ? MouseButton::Right : MouseButton::Left, 1, {});   // lot API 3 : "droit", le menu du clic droit
                 if (has("double")) click(p, MouseButton::Left, 2, {});
@@ -2813,6 +2830,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             tree->ensureVisible(node);
             gfx::Rect r;
             if (!tree->rowRect(node, r)) return Step::Retry;     // le temps d'un dessin
+            r = tree->toSurface(r);      // 1.12.30 : l'arbre zoome seul (Ctrl + molette)
             const gfx::Point p{r.right() - 30.f, r.y + r.h * 0.5f};
             click(p, has("droit") ? MouseButton::Right : MouseButton::Left, 1, {});
             if (has("double")) click(p, MouseButton::Left, 2, {});
@@ -3404,6 +3422,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                     const std::string cell = table->model()->cellText(table->viewRow(i), c);
                     if (exact ? (c != 0 || cell != arg(1)) : cell.find(arg(1)) == std::string::npos) continue;
                     ok = table->rowRect(i, r);
+                    if (ok) r = table->toSurface(r);     // 1.12.30 : la page zoomee
                     foundTable = table;
                     foundRow = i;
                     // Lot 13 : une ligne hors de la zone visible - amenee en vue
@@ -3443,7 +3462,10 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                     for (std::size_t c = 0; c < foundTable->model()->columnCount(); ++c)
                         if (startsWith(foundTable->model()->headerText(c), w[k + 1])) {
                             gfx::Rect cr{};
-                            if (foundTable->cellRect(foundRow, c, cr)) at = {cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f};
+                            if (foundTable->cellRect(foundRow, c, cr)) {
+                                cr = foundTable->toSurface(cr);     // 1.12.30 : la page zoomee
+                                at = {cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f};
+                            }
                             break;
                         }
                 }
@@ -4979,6 +5001,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                     const std::string cell = table->model()->cellText(table->viewRow(i), c);
                     if (exact ? (c != 0 || cell != arg(2)) : cell.find(arg(2)) == std::string::npos) continue;
                     ok = table->rowRect(i, r);
+                    if (ok) r = table->toSurface(r);     // 1.12.30 : la page zoomee
                     if (!ok) {
                         offscreen = true;
                         table->selectModelRows({table->viewRow(i)}, false);
@@ -6803,6 +6826,63 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         return Step::Yield;
     }
 
+    // ---- 1.12.30 : LES LANGUES COTE A COTE ----
+    //  langues-cote ["VUE"] [pseudo|sans-pseudo] [par 2|3|4] [debut|fin]   la page (la vue de l'onglet ouvert, sinon
+    //                                        VUE) ; debut, fin : les premieres langues, les dernieres
+    //  langues-marques                       les debordements marques au journal (la langue, l'objet, le message)
+    //  langues-marque N                      le menu de la marque N (1 : la premiere)
+    //  langue-ajouter CODE ["NOM"]           une langue au projet (IHM > Configuration > Langues ouvert ; Ctrl+Z la retire)
+    //  traduction "TEXTE" CODE "TRADUCTION"  la traduction d'un texte dans une langue (vide : retiree)
+    if (cmd == "langue-ajouter" || cmd == "traduction") {
+        auto* pane = dynamic_cast<HmiLanguagesPane*>(top() ? top()->findById("hmi.languages") : nullptr);
+        if (!pane) { fail(cmd + " : ouvre d'abord IHM > Configuration > Langues"); return Step::Next; }
+        std::string why;
+        const bool ok = cmd == "langue-ajouter" ? pane->addLanguage(arg(1), arg(2), &why) : pane->setTranslation(arg(1), arg(2), arg(3), &why);
+        if (!ok) fail(cmd + " : " + why);
+        return Step::Yield;
+    }
+    if (cmd == "langues-cote" || cmd == "langues-marques" || cmd == "langues-marque") {
+        auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
+        auto doc = app_.hmi();
+        if (!screen || !doc) { fail(cmd + " : pas de projet IHM ouvert"); return Step::Next; }
+        if (cmd == "langues-cote") {
+            std::uint64_t id = 0;
+            for (std::size_t k = 1; k < w.size(); ++k)
+                if (const auto* v = doc->project.viewByName(w[k])) id = static_cast<std::uint64_t>(v->id);
+            screen->openHmiLanguageCompare(id);
+        }
+        auto* page = dynamic_cast<HmiLanguageCompare*>(top() ? top()->findById("hmi.languageCompare") : nullptr);
+        if (!page) { fail(cmd + " : la page Langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te n'est pas ouverte"); return Step::Next; }
+        if (cmd == "langues-cote") {
+            if (has("pseudo")) page->setPseudo(true);
+            if (has("sans-pseudo")) page->setPseudo(false);
+            for (std::size_t k = 1; k + 1 < w.size(); ++k)
+                if (w[k] == "par") page->setPerRow(std::atoi(w[k + 1].c_str()));
+            if (has("fin"))
+                for (int k = 0; k < 8; ++k) page->scrollLanguages(1);
+            if (has("debut"))
+                for (int k = 0; k < 8; ++k) page->scrollLanguages(-1);
+            return Step::Yield;
+        }
+        if (cmd == "langues-marques") {
+            const auto& cols = page->columns();
+            for (const auto& c : cols)
+                std::printf("[script] langue %s : %zu d\xC3\xA9" "bordement(s)\n", c.name.c_str(), c.overflows.size());
+            for (const auto& m : page->marks()) {
+                const auto* o = m.column < cols.size() ? cols[m.column].view.object(m.object) : nullptr;
+                std::printf("[script] marque %s / %s : %s\n", m.column < cols.size() ? cols[m.column].code.c_str() : "?",
+                            o ? o->name.c_str() : "?", m.message.c_str());
+            }
+            return Step::Next;
+        }
+        const auto n = static_cast<std::size_t>(std::max(1, std::atoi(arg(1).c_str())));
+        if (!page->openMarkMenu(n - 1)) {
+            if (retries_ < 3) return Step::Retry;     // les marques sont posees au dessin
+            fail("langues-marque " + arg(1) + " : pas de telle marque (" + std::to_string(page->marks().size()) + ")");
+        }
+        return Step::Yield;
+    }
+
     auto* editor = currentEditor();
     if (!editor) { fail("l'onglet courant n'est pas une vue IHM (" + cmd + ")"); return Step::Next; }
     const auto doc = app_.hmi();
@@ -6910,19 +6990,104 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     }
     // 1.12.26 : vue-survol "NOM" | X Y - la souris sur un objet (son centre) ou un point de la vue, sans
     // cliquer : l'infobulle de suivi vient au bout d'une seconde (attendre 45).
+    // 1.12.30 : vue-survol ... alt - Alt tenu au survol (les cotes).
     if (cmd == "vue-survol") {
         const auto vp = editor->canvas().viewport();
         if (w.size() > 2 && std::isdigit(static_cast<unsigned char>(arg(1).empty() ? 'x' : arg(1)[0]))) {
-            moveTo(vp.toScreen(num(1), num(2)), {});
+            moveTo(vp.toScreen(num(1), num(2)), mods());
             return Step::Yield;
         }
         for (const auto& o : view->objects)
             if (o.name == arg(1)) {
                 const auto box = o.box();
-                moveTo(vp.toScreen(box.x + box.w / 2, box.y + box.h / 2), {});
+                moveTo(vp.toScreen(box.x + box.w / 2, box.y + box.h / 2), mods());
                 return Step::Yield;
             }
         fail("vue-survol : objet introuvable : " + arg(1));
+        return Step::Next;
+    }
+    // ---- 1.12.30 : LES REGLES, LES GUIDES, LA GRILLE DE COLONNES, LES COTES ----
+    //  vue-regles oui|non                     montrer ou cacher les regles de l'editeur
+    //  vue-guide-tirer haut|gauche X Y [tenir] tirer un guide de la regle du haut (horizontal) ou de gauche (vertical)
+    //                                         jusqu'au point (X, Y) de la vue ; tenir : la souris reste appuyee (vue-lacher)
+    //  vue-guide-ramener N                    le guide N (1 : le premier) ramene sur sa regle (il part)
+    //  vue-guides cacher|montrer|verrouiller|deverrouiller|retirer
+    //  vue-colonnes N [GOUTTIERE] [MARGE] | vue-colonnes non   la grille de colonnes
+    //  vue-cotes ["NOM"]                      les cotes de la selection (vers l'objet NOM, sinon voisins et bords) au journal
+    if (cmd == "vue-regles") {
+        auto& c = editor->canvas();
+        const bool on = lower(arg(1)) != "non";
+        if (c.rulersShown() != on) editor->run(HmiEditor::ActRulers);
+        return Step::Yield;
+    }
+    if (cmd == "vue-guide-tirer") {
+        auto& c = editor->canvas();
+        if (!c.rulersShown()) editor->run(HmiEditor::ActRulers);
+        const bool fromTop = lower(arg(1)) != "gauche";
+        const auto r = fromTop ? c.topRuler() : c.leftRuler();
+        const auto to = c.viewport().toScreen(num(2), num(3));
+        const gfx::Point from = fromTop ? gfx::Point{to.x, r.y + r.h / 2} : gfx::Point{r.x + r.w / 2, to.y};
+        drag(from, to, mods(), !has("tenir"));
+        return Step::Yield;
+    }
+    //  vue-regle-menu haut|gauche              le clic droit sur une regle (son menu)
+    if (cmd == "vue-regle-menu") {
+        auto& c = editor->canvas();
+        if (!c.rulersShown()) editor->run(HmiEditor::ActRulers);
+        const auto r = lower(arg(1)) == "gauche" ? c.leftRuler() : c.topRuler();
+        click({r.x + r.w / 2, r.y + r.h / 2}, MouseButton::Right, 1, {});
+        return Step::Yield;
+    }
+    if (cmd == "vue-guide-ramener") {
+        auto& c = editor->canvas();
+        const auto k = static_cast<std::size_t>(std::max(1, std::atoi(arg(1).c_str()))) - 1;
+        if (k >= view->guides.size()) { fail("vue-guide-ramener : pas de guide " + arg(1)); return Step::Next; }
+        if (!c.rulersShown()) editor->run(HmiEditor::ActRulers);
+        const auto& g = view->guides[k];
+        const auto vp = c.viewport();
+        const auto p = vp.toScreen(g.vertical ? g.position : view->width / 2.0, g.vertical ? view->height / 2.0 : g.position);
+        const auto r = g.vertical ? c.leftRuler() : c.topRuler();
+        drag(p, g.vertical ? gfx::Point{r.x + r.w / 2, p.y} : gfx::Point{p.x, r.y + r.h / 2}, {}, true);
+        return Step::Yield;
+    }
+    if (cmd == "vue-guides") {
+        const auto& g = view->grid;
+        const std::string what = lower(arg(1));
+        if ((what == "cacher" && !g.guidesHidden) || (what == "montrer" && g.guidesHidden)) editor->run(HmiEditor::ActGuidesHide);
+        else if ((what == "verrouiller" && !g.guidesLocked) || (what == "deverrouiller" && g.guidesLocked)) editor->run(HmiEditor::ActGuidesLock);
+        else if (what == "retirer") editor->run(HmiEditor::ActGuidesClear);
+        return Step::Yield;
+    }
+    if (cmd == "vue-colonnes") {
+        const bool off = lower(arg(1)) == "non";
+        const int count = std::atoi(arg(1).c_str());
+        const double gutter = w.size() > 2 ? std::atof(arg(2).c_str()) : view->columns.gutter;
+        const double margin = w.size() > 3 ? std::atof(arg(3).c_str()) : view->columns.margin;
+        (void)editor->editView("Grille de colonnes", [&](hmi::View& vv) {
+            if (off) { vv.columns.visible = false; return true; }
+            vv.columns.visible = true;
+            if (count > 0) vv.columns.count = std::clamp(count, 1, 48);
+            vv.columns.gutter = std::max(0.0, gutter);
+            vv.columns.margin = std::max(0.0, margin);
+            return true;
+        });
+        return Step::Yield;
+    }
+    if (cmd == "vue-cotes") {
+        auto& c = editor->canvas();
+        gfx::Point at{c.drawArea().x + 2.f, c.drawArea().y + 2.f};
+        if (!arg(1).empty()) {
+            const auto* o = view->objectByName(arg(1));
+            if (!o) { fail("vue-cotes : objet introuvable : " + arg(1)); return Step::Next; }
+            const auto b = o->box();
+            at = c.viewport().toScreen(b.x + b.w / 2, b.y + b.h / 2);
+        }
+        hmi::Id target = hmi::kNoId;
+        const auto dims = c.dimensionsAt(at, &target);
+        for (const auto& d : dims)
+            std::printf("[script] cote %s %.1f (de %.1f a %.1f, a %.1f)%s\n", d.horizontal ? "horizontale" : "verticale", d.value(),
+                        d.from, d.to, d.at, d.edge ? " jusqu'au bord" : "");
+        if (dims.empty()) fail("vue-cotes : aucune cote (rien de choisi ?)");
         return Step::Next;
     }
     // 1.12.26 : suivi-verifier "NOM" "TEXTE" - l'infobulle de suivi de l'objet contient TEXTE ;

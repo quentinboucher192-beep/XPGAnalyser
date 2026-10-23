@@ -1047,6 +1047,7 @@ EventResult TabControl::onEvent(const InputEvent& ev) {
 
 // ======================================================= ScrollablePanel ====
 ScrollablePanel::ScrollablePanel(std::string id) : Widget(std::move(id)) {
+    setZoomSupport(ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page (Widget.hpp) : son contenu suit
     const std::string base = this->id().empty() ? std::string("scroll") : this->id();
     vBar_ = &static_cast<ScrollBar&>(addChild(std::make_unique<ScrollBar>(base + ".vbar", false)));
     hBar_ = &static_cast<ScrollBar&>(addChild(std::make_unique<ScrollBar>(base + ".hbar", true)));

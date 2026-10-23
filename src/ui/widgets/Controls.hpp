@@ -506,8 +506,10 @@ namespace ui {
 
         // Font scale for this view only, so one section can be enlarged without
         // changing the whole application's theme. Ctrl+wheel drives it.
-        void setZoom(float zoom);
-        [[nodiscard]] float zoom() const noexcept { return zoom_; }
+        // 1.12.30 : un zoom Native (le contrat de Widget) - le texte et la gouttiere, de 50 a 300 %.
+        void setZoom(float zoom) override;
+        [[nodiscard]] float zoom() const noexcept override { return zoom_; }
+        [[nodiscard]] float maxZoom() const override { return 3.f; }
 
         void selectAll();                       // Ctrl+A
         void copySelection() const;             // Ctrl+C; whole buffer when nothing is selected

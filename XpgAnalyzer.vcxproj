@@ -517,6 +517,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiInitDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiInitModel.cpp" />
     <ClCompile Include="src\app\hmi\HmiItemDuplicateDialog.cpp" />
+    <ClCompile Include="src\app\hmi\HmiLanguageCompare.cpp" />
     <ClCompile Include="src\app\hmi\HmiNativesCards.cpp" />
     <ClCompile Include="src\app\hmi\HmiNativesPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiObjectAlarmPanes.cpp" />
@@ -624,6 +625,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\sim\ValueText.cpp" />
     <ClCompile Include="src\ui\NoveltyBoard.cpp" />
     <ClCompile Include="src\ui\NoveltyMarks.cpp" />
+    <ClCompile Include="src\ui\Zoom.cpp" />
     <ClCompile Include="src\ui\widgets\CrashReport.cpp" />
     <ClCompile Include="src\app\ReportWindow.cpp" />
     <ClCompile Include="src\help\Trails.cpp" />
@@ -965,6 +967,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiFunctionPicker.hpp" />
     <ClInclude Include="src\app\hmi\HmiInitModel.hpp" />
     <ClInclude Include="src\app\hmi\HmiItemDuplicateDialog.hpp" />
+    <ClInclude Include="src\app\hmi\HmiLanguageCompare.hpp" />
     <ClInclude Include="src\app\hmi\HmiLive.hpp" />
     <ClInclude Include="src\app\hmi\HmiNativesCards.hpp" />
     <ClInclude Include="src\app\hmi\HmiNativesPane.hpp" />
@@ -1067,6 +1070,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\sim\ValueText.hpp" />
     <ClInclude Include="src\ui\NoveltyBoard.hpp" />
     <ClInclude Include="src\ui\NoveltyMarks.hpp" />
+    <ClInclude Include="src\ui\Zoom.hpp" />
     <ClInclude Include="src\ui\widgets\ExprField.hpp" />
     <ClInclude Include="src\ui\widgets\ExprMarkers.hpp" />
     <ClInclude Include="src\ui\widgets\KindBadge.hpp" />

@@ -103,6 +103,7 @@ std::optional<sim::Value> parseTypedValue(const std::string& text, const sim::Va
 }
 
 HmiSimVarTree::HmiSimVarTree(std::string id, std::string what) : ui::Widget(std::move(id)), what_(std::move(what)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     setFocusPolicy(true);   // 1.12.18 : Entree, Suppr, Ctrl+C sur la ligne courante
     const std::string base = this->id();
     search_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + ".search")));

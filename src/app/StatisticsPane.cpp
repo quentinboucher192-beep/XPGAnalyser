@@ -363,6 +363,7 @@ private:
 
 // ================================================================ le volet ====
 StatisticsPane::StatisticsPane(std::string id) : ui::Widget(std::move(id)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<TypeTable>(this->id() + ".types", *this)));
     model_ = std::make_shared<TypeModel>(*this);
     table_->setModel(model_);

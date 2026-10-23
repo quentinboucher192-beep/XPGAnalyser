@@ -60,6 +60,7 @@ namespace app {
 
     GrafcetView::GrafcetView(std::string id) : Widget(std::move(id)) {
         setFocusPolicy(true);
+        setZoomSupport(ui::ZoomSupport::Native);   // 1.12.30
     }
 
     void GrafcetView::setChart(grafcet::Chart chart) {

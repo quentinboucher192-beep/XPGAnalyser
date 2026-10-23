@@ -140,8 +140,33 @@ void StatusChip::setShown(bool shown) {
     invalidate();
 }
 
+// ---- 1.12.30 : la pastille a crans (le zoom) ----
+namespace {
+constexpr float kStepW = 18.f;           // la place du moins, et celle du plus
+}
+
+void StatusChip::setStepper(std::function<void(int)> step) {
+    const bool had = static_cast<bool>(step_);
+    step_ = std::move(step);
+    if (had != static_cast<bool>(step_) && parent()) parent()->invalidateLayout();
+    invalidate();
+}
+
+gfx::Rect StatusChip::minusRect() const noexcept {
+    if (!step_) return {};
+    const auto r = bounds();
+    return {r.x, r.y, kStepW, r.h};
+}
+
+gfx::Rect StatusChip::plusRect() const noexcept {
+    if (!step_) return {};
+    const auto r = bounds();
+    return {r.right() - kStepW, r.y, kStepW, r.h};
+}
+
 ui::SizeHint StatusChip::sizeHint() const {
     float w = kPad * 2.f;
+    if (step_) w += 2.f * kStepW - 2.f * kPad + 8.f;   // le moins et le plus a la place des marges
     if (dot_) w += kDot + kGap;
     if (icon_ != ui::Icon::None) w += kIcon + kGap;
     w += ui::measureWidth(text_, kChipFont);
@@ -159,6 +184,33 @@ void StatusChip::onPaint(const ui::PaintContext& ctx) {
     const auto& th = ctx.theme;
     const auto& c = th.color;
     const auto r = bounds();
+    if (step_) {
+        // 1.12.30 : [-]  150 %  [+] - chaque partie a sa surbrillance ; muette, tout est gris.
+        const float cy = r.y + r.h * 0.5f;
+        const gfx::Rect parts[3] = {minusRect(), {r.x + kStepW, r.y, r.w - 2.f * kStepW, r.h}, plusRect()};
+        for (int i = 0; i < 3; ++i) {
+            const int part = i - 1;
+            const bool lit = !muted_ && ((hovered() && !quiet_ && hoverPart_ == part) || (pressed_ && pressedPart_ == part));
+            if (lit) ctx.r.fillRoundedRect({parts[i].x, r.y + 1.f, parts[i].w, r.h - 2.f},
+                                           c.border.withAlpha(pressed_ && pressedPart_ == part ? 150 : 90), 4.f);
+        }
+        const gfx::Color fg = muted_ ? c.textMuted : c.text;
+        const float arm = 4.f;
+        const float mx = parts[0].x + parts[0].w * 0.5f, px = parts[2].x + parts[2].w * 0.5f;
+        ctx.r.line({mx - arm, cy}, {mx + arm, cy}, fg, 1.5f);
+        ctx.r.line({px - arm, cy}, {px + arm, cy}, fg, 1.5f);
+        ctx.r.line({px, cy - arm}, {px, cy + arm}, fg, 1.5f);
+        // Le texte au milieu (l'icone devant, s'il y en a une).
+        const float lh = ctx.r.lineHeight(kChipFont);
+        const float tw = ctx.r.measure(text_, kChipFont).width + (icon_ != ui::Icon::None ? kIcon + kGap : 0.f);
+        float x = parts[1].x + std::max(0.f, (parts[1].w - tw) * 0.5f);
+        if (icon_ != ui::Icon::None) {
+            ui::drawIcon(ctx.r, icon_, {x, cy - kIcon * 0.5f, kIcon, kIcon}, fg);
+            x += kIcon + kGap;
+        }
+        ctx.r.drawText({x, cy - lh * 0.5f}, text_, kChipFont, fg);
+        return;
+    }
     const bool clickable = static_cast<bool>(onClick_) && !muted_;
     if (clickable && ((hovered() && !quiet_) || pressed_))
         ctx.r.fillRoundedRect({r.x, r.y + 1.f, r.w, r.h - 2.f}, c.border.withAlpha(pressed_ ? 150 : 90), 4.f);
@@ -206,6 +258,43 @@ void StatusChip::onPaint(const ui::PaintContext& ctx) {
 }
 
 ui::EventResult StatusChip::onEvent(const ui::InputEvent& ev) {
+    if (step_) {
+        // 1.12.30 : le moins, le milieu (le menu), le plus.
+        const auto partAt = [this](gfx::Point p) {
+            return minusRect().contains(p) ? -1 : plusRect().contains(p) ? 1 : 0;
+        };
+        if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
+            const int part = bounds().contains(m->pos) ? partAt(m->pos) : 0;
+            if (part != hoverPart_) { hoverPart_ = part; invalidate(); }
+            return ui::EventResult::Ignored;
+        }
+        if (muted_) {
+            // Gris : le milieu ouvre quand meme le menu (il dit pourquoi), les crans ne font rien.
+            if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && bounds().contains(d->pos)
+                                                                   && partAt(d->pos) == 0 && onClick_) {
+                click();
+                return ui::EventResult::Consumed;
+            }
+            return ui::EventResult::Ignored;
+        }
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
+            if (!bounds().contains(d->pos)) return ui::EventResult::Ignored;
+            pressed_ = true;
+            pressedPart_ = partAt(d->pos);
+            invalidate();
+            return ui::EventResult::Consumed;
+        }
+        if (const auto* u = std::get_if<ui::MouseUp>(&ev); u && u->button == ui::MouseButton::Left && pressed_) {
+            pressed_ = false;
+            invalidate();
+            if (bounds().contains(u->pos) && partAt(u->pos) == pressedPart_) {
+                if (pressedPart_ == 0) click();
+                else stepBy(pressedPart_);
+            }
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
     if (!onClick_ || muted_) return ui::EventResult::Ignored;
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
         if (!bounds().contains(d->pos)) return ui::EventResult::Ignored;

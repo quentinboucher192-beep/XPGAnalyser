@@ -770,7 +770,24 @@ struct GridSettings {
     bool snapGrid{true};
     bool snapObjects{true};
     bool snapGuides{true};
+    // 1.12.30 : les guides caches (ni vus ni magnetiques) ou verrouilles (ils ne se
+    // tirent plus) - dans l'editeur seulement : en marche, aucun guide ne se voit.
+    bool guidesHidden{false};
+    bool guidesLocked{false};
     bool operator==(const GridSettings&) const = default;
+};
+
+// 1.12.30 : LA GRILLE DE COLONNES. Une mise en page en colonnes, comme une page de
+// journal : `count` colonnes egales entre deux marges (a gauche et a droite),
+// separees par une gouttiere. Dessinee dans l'editeur seulement (en marche, rien) ;
+// le magnetisme s'accroche aux bords des colonnes.
+struct ColumnGrid {
+    bool   visible{false};
+    int    count{12};
+    double gutter{20};
+    double margin{40};
+    bool   snap{true};
+    bool operator==(const ColumnGrid&) const = default;
 };
 
 enum class ScriptLang : std::uint8_t { ST, C, Cpp };
@@ -868,6 +885,7 @@ struct View {
     std::vector<Action> actions;       // de la vue : ouverture, fermeture, timer, fronts
     std::vector<Guide>  guides;
     GridSettings        grid;
+    ColumnGrid          columns;       // 1.12.30 : la grille de colonnes
 
     // ---- lot 6 : ecrans modeles, en-tetes et pieds de page ----------------------
     //  `role` : "vue" (ordinaire), "modele" (un ecran modele : une vue en herite,

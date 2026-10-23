@@ -985,7 +985,7 @@ bool MainAnalysisScreen::dropTreeDragOnTables(const ui::InputEvent& ev) {
         up = true;
     }
     if (!pos) return false;
-    if (explorer_->bounds().contains(*pos)) {
+    if (explorer_->zoomFrame().contains(*pos)) {     // 1.12.30 : le cadre a l'ecran (l'arbre zoome seul)
         if (pane) pane->setDropHint(false);
         return false;
     }

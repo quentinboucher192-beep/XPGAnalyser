@@ -10,6 +10,7 @@ namespace app {
 namespace eg = hmi::exprguide;
 
 HmiExprPageView::HmiExprPageView(std::string id) : ui::Widget(std::move(id)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     const std::string base = this->id();
     view_ = &static_cast<ui::HelpArticleView&>(addChild(std::make_unique<ui::HelpArticleView>(base + ".article")));
     auto field = std::make_unique<ui::InputText>(base + ".essai");

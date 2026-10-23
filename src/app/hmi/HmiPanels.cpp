@@ -3110,7 +3110,38 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         addG("Magn\xC3\xA9tisme : objets", view.grid.snapObjects ? "TRUE" : "FALSE", PG::ValueType::Boolean, "mag_objets");
         addG("Magn\xC3\xA9tisme : guides", view.grid.snapGuides ? "TRUE" : "FALSE", PG::ValueType::Boolean, "mag_guides");
         addG("Guides", std::to_string(view.guides.size()), PG::ValueType::ReadOnly, "guides");
+        // 1.12.30 : les guides caches ou verrouilles (l'editeur seulement : en marche, aucun guide).
+        addG("Guides cach\xC3\xA9s", view.grid.guidesHidden ? "TRUE" : "FALSE", PG::ValueType::Boolean, "guides_caches");
+        addG("Guides verrouill\xC3\xA9s", view.grid.guidesLocked ? "TRUE" : "FALSE", PG::ValueType::Boolean, "guides_verrous");
         out.push_back(std::move(g));
+        // 1.12.30 : LA GRILLE DE COLONNES - N colonnes egales entre deux marges, une gouttiere entre elles.
+        PG::Category cg;
+        cg.name = "Grille de colonnes";
+        auto addC = [&](std::string name, std::string value, PG::ValueType t, std::string field, std::string help) {
+            PG::Property p;
+            p.name = std::move(name);
+            p.value = std::move(value);
+            p.type = t;
+            p.description = std::move(help);
+            p.commit = [commit, field](std::string_view s) { return commit.view && commit.view(field, std::string(s)); };
+            cg.properties.push_back(std::move(p));
+        };
+        addC("Afficher", view.columns.visible ? "TRUE" : "FALSE", PG::ValueType::Boolean, "colonnes",
+             "Des colonnes \xC3\xA9gales sur la vue, dans l'\xC3\xA9" "diteur seulement : en marche, rien ne se voit.");
+        addC("Colonnes", std::to_string(view.columns.count), PG::ValueType::Integer, "col_nombre", "Le nombre de colonnes (1 \xC3\xA0 48).");
+        addC("Goutti\xC3\xA8re", hmi::formatNumber(view.columns.gutter), PG::ValueType::Real, "col_gouttiere",
+             "L'espace entre deux colonnes, en pixels de la vue.");
+        addC("Marges", hmi::formatNumber(view.columns.margin), PG::ValueType::Real, "col_marge",
+             "L'espace \xC3\xA0 gauche et \xC3\xA0 droite des colonnes, en pixels de la vue.");
+        addC("Magn\xC3\xA9tisme", view.columns.snap ? "TRUE" : "FALSE", PG::ValueType::Boolean, "col_magnetisme",
+             "Les objets et les guides s'accrochent aux bords des colonnes.");
+        if (const auto spans = hmi::edit::columnSpans(view); !spans.empty())
+            addC("Largeur d'une colonne", hmi::formatNumber(std::round(spans.front().w * 10) / 10) + " px", PG::ValueType::ReadOnly, "col_largeur",
+                 "Ce qui reste a chaque colonne, les marges et les goutti\xC3\xA8res retir\xC3\xA9" "es.");
+        else
+            addC("Largeur d'une colonne", "ne tient pas", PG::ValueType::ReadOnly, "col_largeur",
+                 "Les marges et les goutti\xC3\xA8res prennent toute la largeur de la vue : moins de colonnes, ou des marges plus petites.");
+        out.push_back(std::move(cg));
         return out;
     }
 

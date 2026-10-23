@@ -159,7 +159,9 @@ private:
 } // namespace
 
 // ================================================================ graphique ===
-HmiSeriesChart::HmiSeriesChart(std::string id) : ui::Widget(std::move(id)) {}
+HmiSeriesChart::HmiSeriesChart(std::string id) : ui::Widget(std::move(id)) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
+}
 
 void HmiSeriesChart::setData(std::vector<Series> series, double from, double to, std::string empty) {
     series_ = std::move(series);

@@ -54,6 +54,7 @@ Icon iconFor(ModuleKind k) {
 
 RackView::RackView(std::string id) : Widget(std::move(id)) {
     setFocusPolicy(true);
+    setZoomSupport(ui::ZoomSupport::Native);   // 1.12.30
     setPadding({10.f, 10.f, 10.f, 10.f});
 }
 

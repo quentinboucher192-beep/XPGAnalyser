@@ -1055,6 +1055,7 @@ HelpLayout layoutArticle(const HelpArticle& a, float width, const HelpMetrics& m
 // ---------------------------------------------------------------------------
 HelpArticleView::HelpArticleView(std::string id) : Widget(std::move(id)) {
     setFocusPolicy(true);
+    setZoomSupport(ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page (Widget.hpp)
 }
 
 void HelpArticleView::setArticle(HelpArticle a) {
@@ -1566,7 +1567,7 @@ EventResult HelpArticleView::onEvent(const InputEvent& ev) {
         // 1.12.18 : le clic droit - l'ecran ouvre son menu (sans lui, rien).
         if (d->button == MouseButton::Right && bounds().contains(d->pos) && contextRequested->slotCount() > 0) {
             rebuild(nullptr);
-            contextRequested->emit(d->pos, codeBlockAt(d->pos));
+            contextRequested->emit(toSurface(d->pos), codeBlockAt(d->pos));   // 1.12.30 : dans la surface
             return EventResult::Consumed;
         }
         if (!bounds().contains(d->pos) || d->button != MouseButton::Left)

@@ -300,6 +300,16 @@ public:
     void openStatusCounts();                               // le clic sur les compteurs
     [[nodiscard]] int tabZoomPercent() const;              // 0 : l'onglet ouvert n'a pas de zoom
     bool setTabZoomPercent(int percent);                   // faux : pas de zoom dans cet onglet
+    //  1.12.30 : le zoom de la page ouverte d'un cran (+1, -1 ; 0 : 100 %) - la puce, ses
+    //  crans, Ctrl+plus, Ctrl+moins, Ctrl+0. Faux : la page n'a pas de zoom.
+    bool stepTabZoom(int step);
+    //  Le widget zoomable vise par un geste (un clic, Ctrl + molette) au point `at` de la
+    //  surface : la puce suit son zoom (un document, ou la page).
+    void noteZoomGesture(gfx::Point at);
+    //  Le bilan du zoom de la page ouverte (zoom-bilan) : une ligne par constat.
+    [[nodiscard]] std::vector<std::string> zoomReport() const;
+    //  1.12.30 : la page Langues cote a cote, sur cette vue (0 : celle de l'onglet ouvert, sinon la sienne).
+    void openHmiLanguageCompare(std::uint64_t viewId);
     bool setStatusTheme(const std::string& name);          // faux : theme inconnu
     //  Le clic d'une pastille par son nom : journal, selection, erreurs,
     //  avertissements, simulation, cible, zoom, theme, enregistrement (faux :
@@ -312,6 +322,13 @@ private:
     void tickStatusStrip(double now);
     void runStatusMenu(int id);
     void openStatusMenu(int which);                        // 1 : le zoom, 2 : le theme
+    // 1.12.30 : le zoom de chaque page (ses widgets Scaled ensemble).
+    [[nodiscard]] ui::Widget* pageOfWidget(const ui::Widget* w) const;
+    [[nodiscard]] float pageZoomOf(const ui::Widget* page) const;
+    void setPageZoom(ui::Widget& page, float zoom);
+    void syncPageZoom();
+    void zoomRequested(ui::Widget& w, int step);
+    bool zoomFromKeys(int step);
     [[nodiscard]] std::string describeStatusSelection(const std::string& key) const;
     // ---- fin Lot API 8 : le bandeau bas ----
 
@@ -842,6 +859,7 @@ private:
     void askHmiStyle(std::uint64_t viewId);   // lot 12 : "Creer un style" (son nom)
     void askHmiDuplicate(std::uint64_t viewId);   // 1.10.2 (chantier D) : "Dupliquer..." (reperes, indices, pose)
     void openHmiHistory(std::uint64_t viewId, std::vector<std::uint64_t> objects);   // 1.12.26 : la fenetre Historique
+
     void askHmiDuplicateReplace(std::uint64_t viewId);   // lot 12 : "Dupliquer en remplacant"
     // 1.11.18 (refonte des scripts, lot 5) : "Migrer les declarations..." (IHM > Compiler) - le
     // rapport et les codes a cocher, la version "Avant migration des declarations", une commande.

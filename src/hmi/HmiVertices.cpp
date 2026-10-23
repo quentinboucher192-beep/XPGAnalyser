@@ -539,8 +539,7 @@ Snap snapPoint(const View& v, edit::Pt p, const std::vector<edit::Pt>& siblings,
     Snap r;
     r.at = p;
     std::vector<double> tx, ty;
-    if (v.grid.snapGuides)
-        for (const auto& g : v.guides) (g.vertical ? tx : ty).push_back(g.position);
+    edit::snapLines(v, tx, ty);     // les guides montres, les bords des colonnes (1.12.30)
     if (v.grid.snapObjects) {
         tx.insert(tx.end(), {0.0, v.width / 2.0, static_cast<double>(v.width)});
         ty.insert(ty.end(), {0.0, v.height / 2.0, static_cast<double>(v.height)});

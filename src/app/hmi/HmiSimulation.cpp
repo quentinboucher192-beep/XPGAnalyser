@@ -657,6 +657,7 @@ private:
 // ------------------------------------------------------------ le dessin ----
 HmiLiveCanvas::HmiLiveCanvas(std::string id) : ui::Widget(std::move(id)) {
     setFocusPolicy(true);
+    setZoomSupport(ui::ZoomSupport::Native);   // 1.12.30
     // 1.11.23 : la souris sortie du canevas - dehors, et ses boutons relaches (un MouseUp
     // dehors ne revient jamais).
     (void)hoverChanged->connect([this](bool in) {
@@ -689,6 +690,7 @@ std::string HmiLiveCanvas::keyToken(ui::Key k) {
         // 1.12.2 : les signes (les raccourcis des editeurs) ne sont pas des touches de vue.
         case K::Slash: case K::Period: case K::Comma: case K::Minus: case K::RightBracket:
         case K::Colon: case K::Dollar: case K::Semicolon:
+        case K::Plus:      // 1.12.30 : Ctrl + plus, le zoom
         case K::Menu:      // 1.12.18 : la touche Menu ouvre le menu du clic droit, pas une touche de vue
         case K::Unknown: break;
     }

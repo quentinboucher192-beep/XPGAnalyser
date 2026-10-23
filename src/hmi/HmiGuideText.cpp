@@ -302,6 +302,51 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Demarrer / zoom
+        {"zoom", "Le zoom des pages", "D\xC3\xA9marrer",
+         "Chaque page se zoome : la puce du bandeau bas (\xE2\x88\x92, le pourcentage, +), Ctrl + molette, "
+         "Ctrl + plus, Ctrl + moins, Ctrl + 0. Le texte, la hauteur des lignes, les marges et les "
+         "ic\xC3\xB4nes grandissent ensemble ; chaque page garde le sien.",
+         {
+             {K::Heading, "La puce du zoom", {}},
+             {K::Paragraph, "En bas \xC3\xA0 droite, dans le bandeau bas : **\xE2\x88\x92** et **+** changent "
+                         "le zoom d'un cran (50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200 %) ; un clic "
+                         "sur le pourcentage ouvre son menu : 50 % \xC3\xA0 200 %, Zoom avant, Zoom "
+                         "arri\xC3\xA8re, **Revenir \xC3\xA0 100 %**. La puce montre le zoom de la page "
+                         "ouverte ; grise, la page n'en a pas.", {}},
+             {K::Heading, "Ce qui se zoome", {}},
+             {K::Bullet, "les **tableaux et les listes** (variables, E/S, types, alarmes, recettes, "
+                         "r\xC3\xA9" "f\xC3\xA9rences crois\xC3\xA9" "es, \xC3\xA9quipements, tables "
+                         "d'animation, G\xC3\xA9n\xC3\xA9rer, Compiler\xE2\x80\xA6) : le texte, la hauteur "
+                         "des lignes, les marges, les ic\xC3\xB4nes, les barres de d\xC3\xA9" "filement ;", {}},
+             {K::Bullet, "les **arbres** : la biblioth\xC3\xA8que, les natives ; Ctrl + molette sur "
+                         "l'explorateur du projet zoome l'explorateur seul ;", {}},
+             {K::Bullet, "les **panneaux et les fiches** : Configuration, l'inspecteur de "
+                         "l'\xC3\xA9" "diteur de vues, l'aide ;", {}},
+             {K::Bullet, "les **pages de la simulation** : Vue d'ensemble, For\xC3\xA7" "ages, Courbes, "
+                         "Journal, Expressions ;", {}},
+             {K::Bullet, "les **documents** gardent leur propre zoom : un code, un grafcet, une vue dans "
+                         "l'\xC3\xA9" "diteur, le rack, l'IHM en marche, les langues c\xC3\xB4te \xC3\xA0 "
+                         "c\xC3\xB4te - la puce suit celui que tu as cliqu\xC3\xA9 en dernier.", {}},
+             {K::Heading, "Le m\xC3\xAAme geste partout", {}},
+             {K::Bullet, "**Ctrl + molette** sur une page : un cran pour toute la page ; sur un code, un "
+                         "grafcet, une vue : leur zoom \xC3\xA0 eux ;", {}},
+             {K::Bullet, "**Ctrl + plus** (le + du pav\xC3\xA9 num\xC3\xA9rique, ou la touche =), **Ctrl + "
+                         "moins**, **Ctrl + 0** (100 %) ; dans un code, Ctrl + moins garde \xC2\xAB Revenir "
+                         "o\xC3\xB9 l'on \xC3\xA9tait \xC2\xBB (profil Visual Studio) : la molette ou la "
+                         "puce zooment ;", {}},
+             {K::Bullet, "chaque page **garde son zoom** tant qu'elle est ouverte : ses tableaux, ses arbres "
+                         "et ses listes grandissent ensemble.", {}},
+             {K::Tip, "\xC3\x80 100 %, rien ne change : le zoom ne touche pas \xC3\xA0 la mise en page.", {}},
+         },
+         {"onglets", "raccourcis", "editeur", "regles-guides", "langues-cote"},
+         {"zoom", "Zoom", "zoomer", "agrandir", "Ctrl+molette", "Ctrl+plus", "Ctrl+moins", "Ctrl+0", "100 %", "puce du zoom", "bandeau bas", "lisibilit\xC3\xA9"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}},
         // ---- Demarrer / raccourcis
         {"raccourcis", "Raccourcis clavier", "D\xC3\xA9marrer",
          "Les touches de l'\xC3\xA9" "diteur de vues, des scripts et de l'aide.",
@@ -1326,6 +1371,65 @@ const std::vector<Topic>& topics() {
          {},
          {"vue"},
          {{"PNG_005_calques_et_fond.png", "L'\xC3\xA9" "diteur : explorateur d'objets, calques, la vue, l'inspecteur et la biblioth\xC3\xA8que."}, {"PNG_009_alignes_distribues.png", "Trois boutons align\xC3\xA9s et distribu\xC3\xA9s."}},
+         "",
+         {},
+         "",
+         {}},
+        // ---- Concevoir les vues  Les vues et l'editeur / regles-guides
+        {"regles-guides", "Les r\xC3\xA8gles, les guides et les cotes", "Concevoir les vues \xE2\x80\xBA Les vues et l'\xC3\xA9" "diteur",
+         "Les r\xC3\xA8gles gradu\xC3\xA9" "es en pixels de la vue, les guides qu'on en tire (gard\xC3\xA9s "
+         "avec la vue), la grille de colonnes, et Alt au survol : les distances aux voisins et aux bords, "
+         "comme dans un logiciel de dessin.",
+         {
+             {K::Heading, "Les r\xC3\xA8gles", {}},
+             {K::Paragraph, "**R\xC3\xA8gles** (la barre d'outils, Ctrl+R, le clic droit sur la vue) : en haut "
+                         "et \xC3\xA0 gauche de la vue, gradu\xC3\xA9" "es en **pixels de la vue** - elles "
+                         "suivent le zoom et le d\xC3\xA9" "filement. Un trait bleu y suit la souris, une "
+                         "bande bleue y marque l'\xC3\xA9tendue de la s\xC3\xA9lection, un petit triangle la "
+                         "place de chaque guide. Montr\xC3\xA9" "es ou cach\xC3\xA9" "es : le choix est "
+                         "retenu.", {}},
+             {K::Heading, "Les guides", {}},
+             {K::Step, "Appuie sur la **r\xC3\xA8gle du haut** (un guide horizontal) ou sur celle **de "
+                         "gauche** (un guide vertical), et tire dans la vue : le guide suit la souris, au "
+                         "pas de la grille, sa position \xC3\xA9" "crite \xC3\xA0 c\xC3\xB4t\xC3\xA9.", "1"},
+             {K::Step, "L\xC3\xA2" "che : il est pos\xC3\xA9 et **gard\xC3\xA9 avec la vue** "
+                         "(enregistr\xC3\xA9, relu) ; Ctrl+Z le retire.", "2"},
+             {K::Step, "Tire-le pour le d\xC3\xA9placer ; pour le **retirer**, ram\xC3\xA8ne-le sur la "
+                         "r\xC3\xA8gle (il rougit : l\xC3\xA2" "ch\xC3\xA9, il part), ou hors de la vue.", "3"},
+             {K::Bullet, "le **magn\xC3\xA9tisme** s'y accroche : les bords et le milieu des objets ;", {}},
+             {K::Bullet, "**Cacher les guides** (Ctrl+;) : ni vus ni magn\xC3\xA9tiques ; **Verrouiller les "
+                         "guides** (Ctrl+Alt+;) : ils ne bougent plus, la r\xC3\xA8gle n'en tire pas d'autre "
+                         "; **Retirer tous les guides** - le clic droit sur une r\xC3\xA8gle, ou sur la vue "
+                         "(Guides) ;", {}},
+             {K::Bullet, "en marche (la simulation, le poste), aucun guide ne se voit.", {}},
+             {K::Heading, "La grille de colonnes", {}},
+             {K::Paragraph, "**Grille de colonnes** (la barre d'outils, le clic droit) : des colonnes "
+                         "\xC3\xA9gales entre deux marges, s\xC3\xA9par\xC3\xA9" "es par une "
+                         "goutti\xC3\xA8re, en rose sur la vue. Leurs r\xC3\xA9glages sont dans "
+                         "**Propri\xC3\xA9t\xC3\xA9s de la vue** (rien de choisi) : Colonnes (1 \xC3\xA0 "
+                         "48), Goutti\xC3\xA8re, Marges, Magn\xC3\xA9tisme ; la largeur d'une colonne s'y "
+                         "lit. Le magn\xC3\xA9tisme s'accroche \xC3\xA0 leurs bords. Elle est "
+                         "gard\xC3\xA9" "e avec la vue ; en marche, rien ne se voit.", {}},
+             {K::Heading, "Les cotes (Alt)", {}},
+             {K::Paragraph, "Un objet choisi, tiens **Alt** et survole :", {}},
+             {K::Bullet, "**un autre objet** : la distance entre leurs bords qui se font face (un trait de "
+                         "rappel tire jusqu'\xC3\xA0 la cote le bord d'un objet d\xC3\xA9" "cal\xC3\xA9) ; "
+                         "l'un dans l'autre, les quatre \xC3\xA9" "carts du dedans ;", {}},
+             {K::Bullet, "**le vide** : la distance au voisin le plus proche dans chaque direction, sinon au "
+                         "bord de la vue (en tirets).", {}},
+             {K::Paragraph, "Les cotes sont en pixels de la vue, leur nombre sur une pastille ; la barre "
+                         "d'\xC3\xA9tat les redit. Elles paraissent aussi un moment apr\xC3\xA8s un "
+                         "d\xC3\xA9placement aux fl\xC3\xA8" "ches, et pendant Alt + glisser (sans "
+                         "magn\xC3\xA9tisme).", {}},
+             {K::Heading, "G\xC3\xA9n\xC3\xA9rer", {}},
+             {K::Paragraph, "Un guide hors de la vue, une grille de colonnes qui ne tient pas (des marges et "
+                         "des goutti\xC3\xA8res plus larges que la vue) : G\xC3\xA9n\xC3\xA9rer le dit (Mise "
+                         "en page, pour information).", {}},
+         },
+         {"editeur", "concevoir-vite", "zoom"},
+         {"r\xC3\xA8gle", "r\xC3\xA8gles", "Ctrl+R", "guide", "guides", "tirer un guide", "Ctrl+;", "Ctrl+Alt+;", "verrouiller les guides", "cacher les guides", "retirer les guides", "cote", "cotes", "distance", "distances", "Alt", "grille de colonnes", "colonnes", "goutti\xC3\xA8re", "marges", "mise en page"},
+         {},
+         {},
          "",
          {},
          "",
@@ -3301,6 +3405,56 @@ const std::vector<Topic>& topics() {
          {"langue", "langues", "traduction", "traduire", "SYS.Language", "IHM_LANGUE", "Changer de langue", "multilingue", "Excel"},
          {"langues"},
          {{"PNG_355_langues_volet.png", "Configuration \xE2\x80\xBA Langues apr\xC3\xA8s l'import du classeur : l'anglais (171 textes sur 186), l'allemand (41), chaque texte et ses traductions ; la fiche du texte choisi."}, {"PNG_356_langues_a_traduire.png", "\xC3\x80 traduire : seulement les textes qui manquent dans une langue au moins (les cases orange)."}, {"PNG_358_sim_anglais.png", "La vue des commandes en marche, en anglais : les textes, les libell\xC3\xA9s de l'interrupteur, les choix, les \xC3\xA9tats ; en haut \xC3\xA0 droite, le s\xC3\xA9lecteur de langue et le s\xC3\xA9lecteur de th\xC3\xA8me."}, {"PNG_359_sim_allemand.png", "La m\xC3\xAAme vue en allemand : ce qui n'est pas traduit reste en fran\xC3\xA7" "ais."}, {"PNG_366_generer_langues.png", "G\xC3\xA9n\xC3\xA9rer : pour chaque langue, combien de textes restent \xC3\xA0 traduire."}},
+         "",
+         {},
+         "",
+         {}},
+        // ---- Concevoir les vues  Langues, unites, affichage / langues-cote
+        {"langues-cote", "Les langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te", "Concevoir les vues \xE2\x80\xBA Langues, unit\xC3\xA9s, affichage",
+         "La vue dans chaque langue du projet, c\xC3\xB4te \xC3\xA0 c\xC3\xB4te et \xC3\xA0 la m\xC3\xAAme "
+         "\xC3\xA9" "chelle ; les textes qui d\xC3\xA9" "bordent entour\xC3\xA9s de rouge ; la pseudo-langue "
+         "(+40 %) pour voir ce qui va d\xC3\xA9" "border avant la traduction.",
+         {
+             {K::Heading, "Ouvrir la page", {}},
+             {K::Paragraph, "Dans l'\xC3\xA9" "diteur de vues, **Langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te** (le "
+                         "dernier bouton de la barre d'outils, ou le clic droit sur la vue) ; dans "
+                         "**Configuration \xE2\x80\xBA Langues**, **C\xC3\xB4te \xC3\xA0 c\xC3\xB4te**. La "
+                         "page s'ouvre sur la vue de l'\xC3\xA9" "diteur ; la liste en haut \xC3\xA0 gauche "
+                         "en montre une autre.", {}},
+             {K::Heading, "Ce qu'elle montre", {}},
+             {K::Bullet, "une colonne par langue, la langue du projet d'abord, puis la **pseudo-langue** ; "
+                         "**Par 2, Par 3, Par 4** en montre deux \xC3\xA0 quatre \xC3\xA0 la fois, les "
+                         "fl\xC3\xA8" "ches (Maj + molette) font d\xC3\xA9" "filer les autres ;", {}},
+             {K::Bullet, "toutes \xC3\xA0 la m\xC3\xAAme \xC3\xA9" "chelle : **Ajuster** montre la vue "
+                         "enti\xC3\xA8re, le zoom (la puce du bandeau bas, Ctrl + molette) l'agrandit, la "
+                         "molette la fait d\xC3\xA9" "filer ;", {}},
+             {K::Bullet, "l'en-t\xC3\xAAte de chaque langue dit combien de textes y d\xC3\xA9" "bordent (en "
+                         "vert : aucun).", {}},
+             {K::Heading, "Les d\xC3\xA9" "bordements", {}},
+             {K::Paragraph, "Un texte qui sort de sa bo\xC3\xAEte dans une langue - trop large, trop haut, le "
+                         "texte coup\xC3\xA9 d'une case \xC3\xA0 cocher : le contr\xC3\xB4le de "
+                         "G\xC3\xA9n\xC3\xA9rer - est **entour\xC3\xA9 de rouge**, une pastille \xC2\xAB ! "
+                         "\xC2\xBB \xC3\xA0 son coin ; son infobulle dit de combien. Un clic sur la marque : "
+                         "**Choisir l'objet dans l'\xC3\xA9" "diteur**, **Aller \xC3\xA0 sa traduction** "
+                         "(Configuration \xE2\x80\xBA Langues, la fiche du texte), **Copier le message**.", {}},
+             {K::Heading, "La pseudo-langue", {}},
+             {K::Paragraph, "**Pseudo (+40 %)** : chaque texte allong\xC3\xA9 de 40 %, ses lettres "
+                         "accentu\xC3\xA9" "es (\xC3\xA9, \xC3\xA1, \xC3\xA7, \xC3\xB1\xE2\x80\xA6), entre "
+                         "crochets - \xC2\xAB Pompe \xC2\xBB devient \xC2\xAB [P\xC3\xB3mp\xC3\xA9] \xC2\xBB "
+                         "; un crochet qui manque, et le texte est coup\xC3\xA9. Elle montre avant toute "
+                         "traduction les bo\xC3\xAEtes trop justes : une traduction est souvent 30 \xC3\xA0 "
+                         "40 % plus longue que le texte d'origine. Les trous `{\xE2\x80\xA6}` restent tels "
+                         "quels. Elle n'est **jamais enregistr\xC3\xA9" "e** comme une langue du projet.", {}},
+             {K::Heading, "G\xC3\xA9n\xC3\xA9rer", {}},
+             {K::Paragraph, "G\xC3\xA9n\xC3\xA9rer signale aussi les textes qui d\xC3\xA9" "bordent **dans "
+                         "chaque langue** du projet (\xC2\xAB en English (en) : le texte "
+                         "d\xC3\xA9" "borde\xE2\x80\xA6 \xC2\xBB), quand ils tiennent dans la langue du "
+                         "projet.", {}},
+         },
+         {"langues", "verifier", "editeur", "zoom"},
+         {"langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te", "c\xC3\xB4te \xC3\xA0 c\xC3\xB4te", "d\xC3\xA9" "bordement", "d\xC3\xA9" "borde", "d\xC3\xA9" "border", "pseudo-langue", "Pseudo (+40 %)", "pseudo", "texte coup\xC3\xA9", "traduction trop longue"},
+         {"langues-cote"},
+         {},
          "",
          {},
          "",

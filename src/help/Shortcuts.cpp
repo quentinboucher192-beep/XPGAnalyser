@@ -118,6 +118,13 @@ const std::vector<Shortcut> kTable = {
      "Dans un menu : aller \xC3\xA0 l'entr\xC3\xA9" "e soulign\xC3\xA9" "e, \xC3\xA0 la premi\xC3\xA8re, \xC3\xA0 la derni\xC3\xA8re "
      "(\xE2\x86\x92 ouvre un sous-menu, \xE2\x86\x90 le ferme)",
      "1.12.18", ""},
+    // 1.12.30 : le zoom des pages (la puce du bandeau bas fait de meme).
+    {Context::General, "Ctrl+plus / Ctrl+moins / Ctrl+0",
+     "Le zoom de la page : un cran de plus, un cran de moins, 100 % (la puce du bandeau bas fait de m\xC3\xAAme)",
+     "1.12.30", ""},
+    {Context::General, "Ctrl+molette",
+     "Le zoom de ce qui est sous la souris : la page, le texte, la vue, le grafcet",
+     "1.12.30", ""},
     // ---- HmiEditor
     {Context::HmiEditor, "Ctrl+C / Ctrl+V",
      "Copier, coller (animations et actions comprises) ; un tableau : vers Excel, depuis Excel",
@@ -156,6 +163,16 @@ const std::vector<Shortcut> kTable = {
     {Context::HmiEditor, "I",
      "La pipette de la palette des couleurs",
      "1.10", ""},
+    // 1.12.30 : les regles, les guides et les cotes.
+    {Context::HmiEditor, "Ctrl+R",
+     "Montrer, cacher les r\xC3\xA8gles ; un guide se tire d'une r\xC3\xA8gle, ram\xC3\xA8ne-le dessus pour le retirer",
+     "1.12.30", ""},
+    {Context::HmiEditor, "Ctrl+; / Ctrl+Alt+;",
+     "Cacher les guides, les verrouiller",
+     "1.12.30", ""},
+    {Context::HmiEditor, "Alt+survol",
+     "Les cotes : les distances de l'objet choisi \xC3\xA0 ses voisins, aux bords de la vue (aussi en le d\xC3\xA9pla\xC3\xA7" "ant)",
+     "1.12.30", ""},
     // ---- Scripts (1.12.2 : les editeurs de code, profil Visual Studio ; ui/KeyMap.cpp en
     // est la table, keymap_test verifie que chaque touche ecrite ici y est)
     {Context::Scripts, "F7 / Ctrl+F7",

@@ -225,6 +225,7 @@ protected:
 
 // ===================================================================== le widget ===
 HmiTwinValues::HmiTwinValues(std::string id, bool compact) : ui::Widget(std::move(id)), compact_(compact) {
+    setZoomSupport(ui::ZoomSupport::Scaled);   // 1.12.30 : le zoom de la page
     const std::string base = this->id();
     if (!compact_) {
         twinBox_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>(base + ".twins")));

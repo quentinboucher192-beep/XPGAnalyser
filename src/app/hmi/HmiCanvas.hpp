@@ -13,6 +13,16 @@
 //  Bouton du milieu, ou Espace + glisser : faire defiler. Ctrl + molette :
 //  zoomer sous la souris. Fleches : 1 pixel, Maj + fleches : le pas de grille.
 //
+//  1.12.30 : LES REGLES, en haut et a gauche, graduees en pixels de la vue
+//  (elles suivent le zoom et le defilement), la souris et l'etendue de la
+//  selection marquees. Un GUIDE se tire d'une regle (celle du haut : un guide
+//  horizontal), se deplace, se retire en le ramenant sur la regle ; caches,
+//  ni vus ni magnetiques ; verrouilles, ils ne bougent plus. LA GRILLE DE
+//  COLONNES (View::columns) se dessine sous les guides. LES COTES : Alt tenu au
+//  survol, les distances de la selection a l'objet vise, ou a ses voisins et aux
+//  bords de la vue (dans le vide) ; aussi pendant un deplacement avec Alt, et un
+//  moment apres un deplacement aux fleches.
+//
 //  TOUT CE QUI MODIFIE PASSE PAR `apply` : une commande de la pile de
 //  l'application. Un glisser est recalcule a chaque image depuis l'etat du
 //  depart, avec une cle de fusion : la pile n'en garde qu'un pas.
@@ -67,13 +77,16 @@ public:
     [[nodiscard]] bool showHidden() const noexcept { return showHidden_; }
 
     // ---- zoom ---------------------------------------------------------------
-    void  setZoom(float z);
+    // 1.12.30 : un zoom Native (le contrat de Widget), de 5 a 1600 %.
+    void  setZoom(float z) override;
+    [[nodiscard]] float minZoom() const override { return 0.05f; }
+    [[nodiscard]] float maxZoom() const override { return 16.f; }
     void  zoomBy(float factor, std::optional<gfx::Point> anchor = std::nullopt);
     void  zoomToFit();
     // Lot 12 : le point (x, y) de la vue en haut a gauche de la zone de dessin
     // (a `margin` pixels du bord), au zoom courant.
     void  scrollTo(double x, double y, float margin = 24.f);
-    [[nodiscard]] float zoom() const noexcept { return zoom_; }
+    [[nodiscard]] float zoom() const noexcept override { return zoom_; }
     [[nodiscard]] HmiViewport viewport() const noexcept;
 
     // ---- ce que font les barres d'outils ------------------------------------
@@ -115,6 +128,22 @@ public:
     void addGuide(bool vertical);
     void toggleGrid();
     void toggleSnap();
+    // ---- 1.12.30 : les regles, les guides, la grille de colonnes, les cotes ----
+    static constexpr float kRuler = 20.f;               // l'epaisseur d'une regle (px de l'ecran)
+    void setRulersShown(bool on);
+    [[nodiscard]] bool rulersShown() const noexcept { return rulers_; }
+    [[nodiscard]] gfx::Rect topRuler() const noexcept;  // vides sans regles
+    [[nodiscard]] gfx::Rect leftRuler() const noexcept;
+    [[nodiscard]] gfx::Rect drawArea() const noexcept;  // la place du dessin (sans les regles)
+    void toggleGuidesHidden();
+    void toggleGuidesLocked();
+    void clearGuides();
+    void toggleColumns();
+    // Les cotes montrees au dernier dessin (Alt au survol, un deplacement) ; l'objet vise.
+    [[nodiscard]] const std::vector<hmi::edit::Dimension>& shownDimensions() const noexcept { return dims_; }
+    [[nodiscard]] hmi::Id dimensionTarget() const noexcept { return dimTarget_; }
+    // Les cotes de ce moment, sans dessiner (scripts, essais) : Alt tenu au point `screen`.
+    [[nodiscard]] std::vector<hmi::edit::Dimension> dimensionsAt(gfx::Point screen, hmi::Id* target = nullptr) const;
 
     // Le document a change ailleurs (annulation, explorateur, proprietes) :
     // la selection oublie ce qui a disparu.
@@ -156,6 +185,8 @@ public:
     const core::SignalPtr<gfx::Point>         contextRequested = core::Signal<gfx::Point>::create();
     // 1.12.18 : F2 sur la vue - l'editeur renomme l'objet choisi (dans l'explorateur).
     const core::SignalPtr<>                   renameRequested = core::Signal<>::create();
+    // 1.12.30 : Ctrl+R a montre (vrai) ou cache les regles - l'editeur le retient.
+    const core::SignalPtr<bool>               rulersToggled = core::Signal<bool>::create();
 
     // ---- 1.12.18 : CE QUE VISE LE CLIC DROIT ---------------------------------
     //  Un objet libre : il rejoint la selection (gardee s'il y est deja) - le menu
@@ -165,7 +196,7 @@ public:
     //  menu est celui de la vue. Pendant une pose ou le trace d'une zone, le clic
     //  droit l'annule, comme Echap, sans menu. Maj+F10 / Menu : le menu de la
     //  selection, sous elle (ou celui de la vue).
-    enum class ContextTarget : std::uint8_t { View, Selection, Locked };
+    enum class ContextTarget : std::uint8_t { View, Selection, Locked, Ruler };   // 1.12.30 : une regle
     [[nodiscard]] ContextTarget contextTarget() const noexcept { return contextTarget_; }
     [[nodiscard]] hmi::Id       contextLocked() const noexcept { return contextLocked_; }
     [[nodiscard]] gfx::Point    contextScreen() const noexcept { return contextScreen_; }   // le point du clic
@@ -213,7 +244,7 @@ protected:
     ui::EventResult    onEvent(const ui::InputEvent&) override;
 
 private:
-    enum class Drag : std::uint8_t { None, Move, Resize, Rotate, Marquee, Pan, Guide, Vertex };
+    enum class Drag : std::uint8_t { None, Move, Resize, Rotate, Marquee, Pan, Guide, Vertex, NewGuide };
 
     [[nodiscard]] hmi::edit::Pt toView(gfx::Point screen) const;
     [[nodiscard]] int  handleAt(gfx::Point screen) const;          // -1 : aucune ; 8 : rotation
@@ -223,6 +254,12 @@ private:
     void emitStatus(gfx::Point screen);
     void paintSelection(const ui::PaintContext&, const HmiViewport&);
     void paintGrid(const ui::PaintContext&, const HmiViewport&, const hmi::View&);
+    // 1.12.30 : les colonnes, les regles, les cotes ; une regle sous ce point (0 : non, 1 : haut, 2 : gauche).
+    void paintColumns(const ui::PaintContext&, const HmiViewport&, const hmi::View&);
+    void paintRulers(const ui::PaintContext&, const HmiViewport&, const hmi::View&);
+    void paintDimensions(const ui::PaintContext&, const HmiViewport&);
+    [[nodiscard]] int rulerAt(gfx::Point screen) const noexcept;
+    [[nodiscard]] gfx::Point drawOrigin() const noexcept;      // le coin de la place du dessin
 
     hmi::DocumentPtr       doc_;
     hmi::Id                viewId_;
@@ -243,8 +280,16 @@ private:
     std::function<std::vector<hmi::design::VarInfo>()> variableSource_;   // lot 20
 
     float                  zoom_{1.f};
-    float                  panX_{24.f}, panY_{24.f};     // le coin de la vue, depuis le coin du widget
+    float                  panX_{24.f}, panY_{24.f};     // le coin de la vue, depuis le coin de la place du dessin
     bool                   fitted_{false};
+    // 1.12.30 : les regles, le guide tire d'une regle, les cotes.
+    bool                   rulers_{false};                 // l'editeur les montre (sa preference, hmi.regles)
+    bool                   newGuideVertical_{false};
+    double                 newGuidePos_{0};
+    bool                   altHeld_{false};
+    double                 nudgedAt_{-1.0e9};              // le dernier deplacement aux fleches (heure du dessin)
+    std::vector<hmi::edit::Dimension> dims_;               // les cotes du dernier dessin
+    hmi::Id                dimTarget_{hmi::kNoId};
 
     Drag                   drag_{Drag::None};
     int                    dragHandle_{-1};

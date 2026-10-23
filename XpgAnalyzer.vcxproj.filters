@@ -1186,6 +1186,9 @@
     <ClCompile Include="src\app\hmi\HmiItemDuplicateDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiLanguageCompare.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiNativesCards.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1505,6 +1508,9 @@
       <Filter>ui</Filter>
     </ClCompile>
     <ClCompile Include="src\ui\NoveltyMarks.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Zoom.cpp">
       <Filter>ui</Filter>
     </ClCompile>
     <ClCompile Include="src\ui\widgets\CrashReport.cpp">
@@ -2512,6 +2518,9 @@
     <ClInclude Include="src\app\hmi\HmiItemDuplicateDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiLanguageCompare.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiLive.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -2816,6 +2825,9 @@
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\NoveltyMarks.hpp">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Zoom.hpp">
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\widgets\ExprField.hpp">
