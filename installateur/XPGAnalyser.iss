@@ -79,11 +79,25 @@
 ;     tournent ; sans assistant, les mêmes lignes vont dans le journal (/LOG) ;
 ;   - « Ce qui a été installé » dit ce qui a été sauvegardé, ce qui a été repris et d'où.
 ;
+;  1.12.30 - les listes défilent, rien ne clignote près d'elles :
+;   - plus de WS_EX_COMPOSITED sur la fenêtre entière (1.12.29) : sous Windows, il cassait ce qui
+;     défile (la liste de la bibliothèque, les listes à cocher, les textes du récapitulatif, les
+;     champs : la barre de défilement ne suivait plus le curseur, et chaque image de la colonne
+;     repeignait toute la fenêtre - la liste clignotait). Il ne reste que sur ce qui n'est que
+;     dessiné : l'en-tête, l'accueil, la page de la copie (Composer) ; jamais sur une page qui a une
+;     liste, un texte qui défile, un champ ou une case ;
+;   - les pages à liste ou à champ ne glissent plus en arrivant (seul leur en-tête s'anime) ; la
+;     liste « Lancer » de la fin apparaît sans bouger ; « Ce qui a été installé » s'affiche d'un
+;     coup (il s'écrivait ligne à ligne) ;
+;   - les archives d'un projet s'ouvrent d'un double-clic : .xihm avec IHM Studio, .xapi avec API
+;     Studio ([Registry], Software\Classes ; la désinstallation les enlève).
+;
 ;  Sans surveillance : API-IHM-Studio-Setup-<v>.exe /VERYSILENT /SUPPRESSMSGBOXES
 ;    [/CURRENTUSER | /ALLUSERS] [/DIR="..."] [/DONNEES="D:\Mes données"]
 ;    [/MIGRER=oui|non] [/DESINSTALLERLOT8=oui|non] [/LOG="fichier"]
 ;  (voir docs\GUIDE-INSTALLATION.md). Avec l'assistant : /COMPOSITION=non (1.12.29) si sa fenêtre
-;  se dessine mal sur un PC (le double tampon de Windows est alors enlevé).
+;  se dessine mal sur un PC (le double tampon de Windows est alors enlevé ; 1.12.30 : il n'est plus
+;  que sur l'en-tête, l'accueil et la page de la copie).
 ; =============================================================================
 
 #if Ver < EncodeVer(6, 3, 0)
@@ -123,6 +137,9 @@
 #ifndef ExeIhm
   #define ExeIhm "IHM-Studio.exe"
 #endif
+; 1.12.30 : les archives d'un projet (un seul fichier, tout compris) et leur type (Software\Classes).
+#define ProgIdIhm "APIIHMStudio.xihm"
+#define ProgIdApi "APIIHMStudio.xapi"
 #ifndef Description
   #define Description "Analyse, IHM et simulation de projets Control Expert"
 #endif
@@ -257,6 +274,8 @@ Compression=lzma2/ultra
 SolidCompression=yes
 CloseApplications=yes
 RestartApplications=no
+; 1.12.30 : .xihm et .xapi ([Registry]) - l'Explorateur est prévenu à la fin (et à la désinstallation)
+ChangesAssociations=yes
 SetupLogging=yes
 ShowLanguageDialog=no
 LanguageDetectionMethod=none
@@ -354,6 +373,20 @@ Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "InstallDir"
 Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "Version"; ValueData: "{#Version}"
 Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "Portee"; ValueData: "{code:Portee}"
 Root: HKA; Subkey: "Software\{#Cle}"; ValueType: string; ValueName: "DossierDonnees"; ValueData: "{code:DonneesBrut}"
+; 1.12.30 : les archives d'un projet s'ouvrent d'un double-clic - .xihm (un projet IHM, tout compris)
+; avec IHM Studio, .xapi (un projet API) avec API Studio : l'exe reçoit le chemin de l'archive, comme
+; tout fichier qu'il ouvre. Un ProgID par extension. La désinstallation enlève tout : le ProgID, la
+; valeur de l'extension, puis sa clé si elle est vide (une autre application a pu s'y inscrire).
+Root: HKA; Subkey: "Software\Classes\.xihm"; ValueType: string; ValueName: ""; ValueData: "{#ProgIdIhm}"; Flags: uninsdeletevalue uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\.xihm\OpenWithProgids"; ValueType: string; ValueName: "{#ProgIdIhm}"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\{#ProgIdIhm}"; ValueType: string; ValueName: ""; ValueData: "Projet {#NomIhm} (archive)"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\{#ProgIdIhm}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ExeIhm},0"
+Root: HKA; Subkey: "Software\Classes\{#ProgIdIhm}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExeIhm}"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\.xapi"; ValueType: string; ValueName: ""; ValueData: "{#ProgIdApi}"; Flags: uninsdeletevalue uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\.xapi\OpenWithProgids"; ValueType: string; ValueName: "{#ProgIdApi}"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\{#ProgIdApi}"; ValueType: string; ValueName: ""; ValueData: "Projet {#NomApi} (archive)"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\{#ProgIdApi}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#Exe},0"
+Root: HKA; Subkey: "Software\Classes\{#ProgIdApi}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#Exe}"" ""%1"""
 
 [Run]
 Filename: "{app}\{#Exe}"; Description: "{cm:Lancer}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
@@ -392,13 +425,13 @@ var
   ComboRangement: TNewComboBox;
   TexteCompte: TNewStaticText;
   ListeOk: Boolean;
-  MinuterieListe: LongWord;
+  MinuterieListe, RappelListe: LongWord;
   CategoriesLivrees: TStringList;
   RecapEcrit: Boolean;
   BoutonCopier: TNewButton;
-  // 1.12.28 : le récapitulatif s'écrit ligne à ligne (voir TicRecap)
+  // le texte de « Ce qui a été installé » ; RecapVu : ses lignes à l'écran (1.12.30 : toutes, d'un coup)
   RecapTexte: TArrayOfString;
-  RecapDebut, RecapVu: Integer;
+  RecapVu: Integer;
 
 // ---------------------------------------------- 1.8.0 : la liste des blocs ----
 //  Une vraie ListView de Windows (aide\xpgliste.c) : setuponly et delayload - la DLL
@@ -928,10 +961,13 @@ begin
 end;
 
 procedure MajCompteBiblio;
+var S: String;
 begin
   if (TexteCompte = nil) or not ListeOk then Exit;
   try
-    TexteCompte.Caption := IntToStr(ListeNombreLivrees) + ' livrés · ' + IntToStr(ListeNombreAjoutees) + ' à toi';
+    // 1.12.30 : écrit seulement s'il change (la minuterie le demande toutes les 400 ms)
+    S := IntToStr(ListeNombreLivrees) + ' livrés · ' + IntToStr(ListeNombreAjoutees) + ' à toi';
+    if TexteCompte.Caption <> S then TexteCompte.Caption := S;
   except
     Log('Ta bibliothèque : ' + GetExceptionMessage);
   end;
@@ -1066,6 +1102,18 @@ begin
   else Result := Result + ', 32 bits';
 end;
 
+// 1.12.30 : .xihm et .xapi sont à nous : la valeur de chaque extension (notre ProgID) et sa commande.
+function AssociationsOk: Boolean;
+var V: String;
+begin
+  Result := False;
+  if not RegQueryStringValue(HKA, 'Software\Classes\.xihm', '', V) or (CompareText(V, '{#ProgIdIhm}') <> 0) then Exit;
+  if not RegQueryStringValue(HKA, 'Software\Classes\.xapi', '', V) or (CompareText(V, '{#ProgIdApi}') <> 0) then Exit;
+  if not RegQueryStringValue(HKA, 'Software\Classes\{#ProgIdIhm}\shell\open\command', '', V) or (Pos('{#ExeIhm}', V) = 0) then Exit;
+  if not RegQueryStringValue(HKA, 'Software\Classes\{#ProgIdApi}\shell\open\command', '', V) or (Pos('{#Exe}', V) = 0) then Exit;
+  Result := True;
+end;
+
 // 1.12.29 : une rubrique des lignes « recap » des étapes PowerShell (rubrique|niveau|texte), sous son titre.
 procedure RecapRubrique(var L: TArrayOfString; Rubrique, Titre, Note: String);
 var I, N: Integer;
@@ -1169,6 +1217,14 @@ begin
   Ajoute(L, Colonne('LE REGISTRE', 20) + S + '\Software\{#Cle}');
   Ajoute(L, Colonne('', 20) + 'InstallDir, Version, Portee, DossierDonnees');
   Ajoute(L, Colonne('', 20) + 'et la désinstallation (Paramètres > Applications)');
+  // 1.12.30 : les archives d'un projet
+  Ajoute(L, '');
+  if AssociationsOk then begin
+    Ajoute(L, Colonne('LES FICHIERS', 20) + '.xihm (un projet IHM, tout compris) : {#NomIhm}');
+    Ajoute(L, Colonne('', 20) + '.xapi (un projet API) : {#NomApi}');
+    Ajoute(L, Colonne('', 20) + 'un double-clic les ouvre (' + S + '\Software\Classes)');
+  end else
+    Ajoute(L, Colonne('LES FICHIERS', 20) + '.xihm et .xapi : pas associés (voir le journal)');
   Result := L;
 end;
 
@@ -1239,8 +1295,9 @@ const
   FR_PRIVATE = $10;
   SRCCOPY = $00CC0020;
   HALFTONE = 4;
-  WM_SETREDRAW = $000B;
-  RDW_TOUT = $0185;                // RedrawWindow : INVALIDATE, ERASE, ALLCHILDREN, UPDATENOW
+  // RedrawWindow : UPDATENOW, ALLCHILDREN - ce qui attend d'être peint l'est tout de suite (1.12.30 : sans
+  // INVALIDATE ni ERASE, qui faisaient effacer puis repeindre toute la fenêtre, d'où un éclair)
+  RDW_MAINTENANT = $0180;
   // Les étapes, dans l'ordre : leur nom | leur icône (images\ui\icone-<nom>.bmp). Une page
   // de plus dans l'assistant : son étape ici (ou une existante), et sa ligne dans EtapeDePage.
   EtapesNoms = 'Bienvenue|Emplacement|Tes données|Bibliothèque|Raccourcis|Récapitulatif|Installation|Terminé';
@@ -1354,8 +1411,9 @@ var
   BarrePiste, BarrePleine: TPanel;
   PreparationTexte: TLabel;
   VifPourcent, VifFichier, VifReste: TTexteVif;
-  // 1.12.29 : la fenêtre double-tamponnée (son handle : s'il change, on recommence) ; /COMPOSITION=non
-  FenetreComposee: HWND;
+  // 1.12.29 : le double tampon de Windows (WS_EX_COMPOSITED) ; 1.12.30 : sur l'en-tête, l'accueil et la
+  // page de la copie seulement (leur handle : s'il change, on recommence) ; /COMPOSITION=non : nulle part
+  ComposeEnTete, ComposeAccueil, ComposeCopie: HWND;
   SansComposition, Dimensionne: Boolean;
   // 1.12.28 : le moteur
   HorlogeBase, Minuterie, RappelTic: LongWord;
@@ -2381,20 +2439,36 @@ begin
              WizardForm.ClientHeight, ZoneL, ZoneH, BordL, BordH, ScaleX(100), ScaleY(100)]));
 end;
 
-// 1.12.29 : la fenêtre se dessine d'un bloc (WS_EX_COMPOSITED : Windows peint la fenêtre et tout ce
-// qu'elle contient dans un tampon, puis l'affiche) - un texte posé sur une image ne s'efface plus
-// avant de se redessiner. De nouveau si la fenêtre a été recréée (son handle change) ; jamais avec
-// /COMPOSITION=non.
-procedure Composer;
+// Le double tampon de Windows (WS_EX_COMPOSITED : Windows peint le conteneur et tout ce qu'il contient
+// dans un tampon, puis l'affiche d'un coup) : ce qui y arrive (un texte qui monte, une icône qui
+// grandit, la barre qui avance) ne s'efface pas avant de se redessiner.
+// 1.12.30 : seulement sur ce qui n'est QUE dessiné et sans rien qui défile - l'en-tête (le titre, la
+// description, l'icône de l'étape), l'accueil (son bandeau, ses textes, ses cartes), la page de la
+// copie (l'animation, la barre, les textes devenus images, les détails, le diaporama). Jamais sur la
+// fenêtre entière (la 1.12.29 l'y posait), ni sur une page qui a une liste, un texte qui défile, un
+// champ, une case ou une liste déroulante, ni sur la fin (sa liste « Lancer ») : sous Windows, ce qui
+// défile par ScrollWindowEx ou se peint hors de WM_PAINT (la barre de défilement qu'on tire, le
+// curseur d'un champ, le survol d'une liste) n'y suit plus, et chaque image de la colonne y
+// repeignait toute la fenêtre - la liste de la bibliothèque ne défilait plus, et clignotait. La
+// colonne n'en a pas besoin : ses images se peignent d'un coup (opaques, sans effacement). De
+// nouveau si un handle change ; jamais avec /COMPOSITION=non, ni après une panne du mouvement.
+procedure ComposerUn(C: TWinControl; var Vu: HWND; Nom: String);
 var H: HWND;
 begin
-  if (ColonneEtapes = nil) or SansComposition then Exit;
+  H := C.Handle;
+  if H = Vu then Exit;
+  SetWindowLong(H, GWL_EXSTYLE, GetWindowLong(H, GWL_EXSTYLE) or WS_EX_COMPOSITED);
+  Vu := H;
+  Log('Habillage : ' + Nom + ' se dessine d''un bloc (WS_EX_COMPOSITED).');
+end;
+
+procedure Composer;
+begin
+  if (ColonneEtapes = nil) or SansComposition or MoteurEnPanne then Exit;
   try
-    H := WizardForm.Handle;
-    if H = FenetreComposee then Exit;
-    SetWindowLong(H, GWL_EXSTYLE, GetWindowLong(H, GWL_EXSTYLE) or WS_EX_COMPOSITED);
-    FenetreComposee := H;
-    Log('Habillage : la fenêtre se dessine d''un bloc (WS_EX_COMPOSITED).');
+    ComposerUn(WizardForm.MainPanel, ComposeEnTete, 'l''en-tête');
+    ComposerUn(WizardForm.WelcomePage, ComposeAccueil, 'l''accueil');
+    ComposerUn(WizardForm.InstallingPage, ComposeCopie, 'la page de la copie');
   except
     Log('Habillage, WS_EX_COMPOSITED : ' + GetExceptionMessage);
   end;
@@ -3481,7 +3555,7 @@ begin
       Copie.Dernier := -1;
       TicCopie(Horloge);
       JournalMontrerMaintenant;
-      RedrawWindow(WizardForm.Handle, 0, 0, RDW_TOUT);
+      RedrawWindow(WizardForm.Handle, 0, 0, RDW_MAINTENANT);
     end else begin
       Copie.Active := False;
       if PreparationTexte <> nil then PreparationTexte.Visible := False;
@@ -3499,44 +3573,13 @@ begin
   end;
 end;
 
-// ----------------------------------------------------- le récapitulatif s'écrit ----
-// « Ce qui a été installé » : les lignes arrivent l'une après l'autre (ce qui se voit), le reste
-// d'un coup (EcrireRecap a mis tout le texte : on repart de rien).
+// ------------------------------------------------------- le récapitulatif ----
+// « Ce qui a été installé » : tout le texte, d'un coup. (1.12.28 : il s'écrivait ligne à ligne - le
+// texte, remplacé 24 fois, se repeignait et revenait en haut : on ne fait pas défiler un texte qui
+// bouge. 1.12.30 : plus rien ne s'anime dans un texte qui défile.)
 procedure RecapCommencer;
 begin
-  if (ColonneEtapes = nil) or MoteurEnPanne or (PageRecap = nil) or (GetArrayLength(RecapTexte) = 0) then Exit;
-  RecapDebut := -1;
-  RecapVu := 0;
-  PageRecap.RichEditViewer.Lines.Text := '';
-end;
-
-procedure TicRecap(Ms: Integer);
-var N, K, I: Integer;
-    S: String;
-begin
-  N := GetArrayLength(RecapTexte);
-  if (PageRecap = nil) or (RecapVu >= N) then Exit;
-  if RecapDebut < 0 then RecapDebut := Ms;
-  K := (Ms - RecapDebut) div 28 + 1;
-  if K > 24 then K := N;
-  if K <= RecapVu then Exit;
-  if K > N then K := N;
-  if K >= N then begin
-    // tout le texte, normalement : le RichEdit refait alors ses barres de défilement
-    RecapVu := N;
-    PageRecap.RichEditViewer.Lines.Text := Joindre(RecapTexte);
-    Exit;
-  end;
-  RecapVu := K;
-  S := '';
-  for I := 0 to K - 1 do begin
-    if I > 0 then S := S + #13#10;
-    S := S + RecapTexte[I];
-  end;
-  SendMessage(PageRecap.RichEditViewer.Handle, WM_SETREDRAW, 0, 0);
-  PageRecap.RichEditViewer.Lines.Text := S;
-  SendMessage(PageRecap.RichEditViewer.Handle, WM_SETREDRAW, 1, 0);
-  PageRecap.RichEditViewer.Invalidate;
+  RecapTout;
 end;
 
 // ------------------------------------------------------------------- sans mouvement ----
@@ -3607,10 +3650,13 @@ begin
     Arriver(WizardForm.FinishedHeadingLabel, WizardForm.FinishedHeadingLabel.Left, WizardForm.FinishedHeadingLabel.Top, 0, ScaleY(12), 650, 520, cSortie);
     Apparaitre(WizardForm.FinishedLabel, 780);
     Arriver(WizardForm.FinishedLabel, WizardForm.FinishedLabel.Left, WizardForm.FinishedLabel.Top, 0, ScaleY(12), 780, 520, cSortie);
+    // 1.12.30 : la liste « Lancer » apparaît, sans glisser (rien ne bouge près d'une liste)
     Apparaitre(WizardForm.RunList, 900);
-    Arriver(WizardForm.RunList, WizardForm.RunList.Left, WizardForm.RunList.Top, 0, ScaleY(14), 900, 520, cSortie);
   end else begin
-    Arriver(WizardForm.InnerNotebook, NotebookX, NotebookY, S * ScaleX(32), 0, 0, 360, cSortie);
+    // 1.12.30 : seule la page de la copie glisse en arrivant ; les autres ont une liste, un texte qui
+    // défile, un champ ou une case : elles s'affichent en place, seul leur en-tête s'anime
+    if CurPageID = wpInstalling then
+      Arriver(WizardForm.InnerNotebook, NotebookX, NotebookY, S * ScaleX(32), 0, 0, 360, cSortie);
     Arriver(WizardForm.PageNameLabel, TitreX, TitreY, S * ScaleX(16), 0, 0, 420, cSortie);
     Arriver(WizardForm.PageDescriptionLabel, DescX, DescY, S * ScaleX(16), 0, 70, 420, cSortie);
     // (les tailles d'ici : celles de la page à l'écran ; avant le premier affichage, la page
@@ -3645,7 +3691,6 @@ begin
         if CopieEnCours then TicBarre(Ms);
         if DiapoActif then TicDiapos(Ms);
         TicJournal(Ms);
-        TicRecap(Ms);
       end;
     except
       Panne(GetExceptionMessage);
@@ -3936,7 +3981,8 @@ end;
 
 procedure CurPageChanged(CurPageID: Integer);
 begin
-  // 1.12.29 : la fenetre se dessine toujours d'un bloc (si elle a ete recreee, son handle a change)
+  // 1.12.30 : l'en-tete, l'accueil et la page de la copie se dessinent d'un bloc (un handle recree :
+  // de nouveau ; voir Composer)
   Composer;
   // 1.12.27 : l'etape en cours a gauche, l'icone de l'en-tete. 1.12.28 : la page entre en scene
   // (MouvementPage) ; une erreur de l'habillage arrete le mouvement, jamais l'assistant.
@@ -3953,7 +3999,8 @@ begin
   MouvementPage(CurPageID);
   // La page « Ta bibliothèque » : le compteur suit les depots (minuterie tant qu'elle est la).
   if (PageBiblio <> nil) and (CurPageID = PageBiblio.ID) and ListeOk then begin
-    if MinuterieListe = 0 then MinuterieListe := SetTimer(0, 0, 400, CreateCallback(@MinuterieBiblio));
+    if RappelListe = 0 then RappelListe := CreateCallback(@MinuterieBiblio);
+    if MinuterieListe = 0 then MinuterieListe := SetTimer(0, 0, 400, RappelListe);
     MajCompteBiblio;
   end else if MinuterieListe <> 0 then begin
     KillTimer(0, MinuterieListe);
@@ -4230,6 +4277,13 @@ begin
       JournalNote(jFait, 'desinst', 'La désinstallation est enregistrée : Paramètres > Applications')
     else
       JournalNote(jAttention, 'desinst', 'Désinstallation : absente de Paramètres > Applications ; unins000.exe la fait');
+    // 1.12.30 : les archives d'un projet, vérifiées (la valeur de l'extension, sa commande)
+    if AssociationsOk then
+      JournalNote(jFait, 'assoc', 'Les fichiers .xihm s''ouvrent avec {#NomIhm}, les .xapi avec {#NomApi} (un double-clic)')
+    else begin
+      Log('Associations : .xihm ou .xapi ne vise pas {#ProgIdIhm} / {#ProgIdApi} (Software\Classes)');
+      JournalNote(jAttention, 'assoc', 'Les fichiers .xihm et .xapi ne s''ouvrent pas d''un double-clic : voir le journal');
+    end;
     RaccourcisVerifier;
   except
     Log('Détails : ' + GetExceptionMessage);

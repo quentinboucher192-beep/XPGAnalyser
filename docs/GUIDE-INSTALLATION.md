@@ -59,7 +59,7 @@ XPGAnalyser-Setup-1.11.2.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS /DONNEES="D
 | `/DONNEES="…"` | le dossier des données |
 | `/MIGRER=oui` | reprend toutes les anciennes versions trouvées ; `non` n'en reprend aucune |
 | `/DESINSTALLERLOT8=non` | ne désinstalle pas la version du lot 8 |
-| `/COMPOSITION=non` | avec l'assistant (1.12.29) : si sa fenêtre se dessine mal sur un PC, enlève le double tampon de Windows qui l'empêche de clignoter |
+| `/COMPOSITION=non` | avec l'assistant (1.12.29) : si sa fenêtre se dessine mal sur un PC, enlève le double tampon de Windows qui l'empêche de clignoter (1.12.30 : il n'est plus que sur l'en-tête, l'accueil et la page de la copie, jamais sur une page à liste) |
 
 ## 2. Où sont les choses
 
@@ -70,6 +70,7 @@ XPGAnalyser-Setup-1.11.2.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS /DONNEES="D
 | Tes réglages | `%APPDATA%\XpgAnalyzer` : `settings.txt`, `XPGAnalyser.ini` (tes dossiers), `themes\`, `reprise\` |
 | Journaux, sauvegardes, réserve de réparation, état | `%LOCALAPPDATA%\XpgAnalyzer\` (pour toi seul) ou `%ProgramData%\XPGAnalyser\` (tous les comptes) |
 | Registre | `HKCU` ou `HKLM\Software\XPGAnalyser`, et la fiche « Applications installées » |
+| Les archives d'un projet (1.12.30) | un double-clic ouvre un `.xihm` (un projet IHM, tout compris) dans IHM Studio et un `.xapi` (un projet API) dans API Studio : `HKCU` ou `HKLM\Software\Classes` (`APIIHMStudio.xihm`, `APIIHMStudio.xapi`) ; la désinstallation les enlève |
 
 Dans l'application, l'accueil (lien **Dossiers**) et le menu **Projet › Dossiers de l'application…** montrent tous ces dossiers. Chacun a un bouton **Ouvrir** (l'Explorateur). Les données, les projets, la bibliothèque et les captures ont aussi **Changer…**, avec la copie du contenu si tu la demandes ; l'ancien dossier n'est jamais effacé. Le bouton **Ouvrir XPGAnalyser.ini** permet de modifier le fichier à la main. Les projets et les captures changent tout de suite ; les données et la bibliothèque, au prochain démarrage.
 
@@ -110,7 +111,7 @@ Tape « désinstaller » dans la recherche Windows : **Désinstaller XPGAnalyser
 
 - Par défaut, tes données (projets, bibliothèque, captures), tes réglages et tes sauvegardes **restent**.
 - Répondre « Non » à « Les garder ? » ouvre une confirmation : il faut taper **SUPPRIMER**. Ils partent alors dans la **Corbeille**, pas directement à la poubelle. Un dossier réglé ailleurs (une bibliothèque sur un partage réseau) n'est jamais supprimé.
-- Le programme, ses raccourcis, ses clés de registre, la réserve et l'état sont retirés.
+- Le programme, ses raccourcis, ses clés de registre (et les associations `.xihm` et `.xapi`), la réserve et l'état sont retirés.
 
 Sans surveillance : `unins000.exe /VERYSILENT` (dans le dossier du programme) garde les données ; `/SUPPRIMERDONNEES=oui` les envoie à la Corbeille.
 
