@@ -594,7 +594,7 @@ void HelpCenterScreen::rebuildList() {
             if (r.current && r.kind == hc::RowKind::Topic && indent >= 3 && line.size() > indent)
                 line.replace(indent - 3, 3, "\xE2\x80\xA2 ");
             lines.push_back(std::move(line));
-            rows_.push_back(r.kind == hc::RowKind::Topic ? Row{r.key, {}} : Row{{}, r.key});
+            rows_.push_back(r.kind == hc::RowKind::Topic ? Row{r.key, {}, false} : Row{{}, r.key, r.open});
         }
     } else {
         // Recette 1.11 : le compte de la barre d'etat est celui des groupes (tout ce
@@ -648,7 +648,14 @@ void HelpCenterScreen::onRow(std::size_t r) {
         return;
     }
     if (!row.fold.empty()) {
-        if (!state_.open.erase(row.fold)) state_.open.insert(row.fold);
+        // 1.12.28 : replier ce qui est deplie - meme d'office (le chapitre de la page ouverte).
+        if (row.open) {
+            state_.open.erase(row.fold);
+            state_.closed.insert(row.fold);
+        } else {
+            state_.closed.erase(row.fold);
+            state_.open.insert(row.fold);
+        }
         rebuildList();
         return;
     }
@@ -659,6 +666,9 @@ void HelpCenterScreen::showTopic(const std::string& key, bool record) {
     const auto& ix = index();
     const hc::Topic* t = ix.find(key);
     if (!t || !page_ || !head_) return;
+    // 1.12.28 : un autre sujet : son chapitre et ses sous-chapitres se rouvrent, meme replies.
+    if (key != current_)
+        for (const auto& k : hc::foldsOf(ix, key)) state_.closed.erase(k);
     current_ = key;
     state_.current = key;
     if (record) nav_.go(hc::topicTarget(key));

@@ -40,11 +40,19 @@ struct TreeRow {
 };
 
 // Ce qui est deplie (les cles de depliage) et le sujet ouvert. Le chapitre et
-// le sous-chapitre du sujet ouvert sont deplies d'office.
+// le sous-chapitre du sujet ouvert sont deplies d'office - 1.12.28 : sauf ceux que
+// l'utilisateur a replies lui-meme (`closed`). Le client : « le deballage/remballage ne
+// fonctionne pas partout par exemple IHM en haut » - le chapitre de la page ouverte,
+// deplie d'office, ne se repliait plus. Aller a un autre sujet rouvre les siens (foldsOf).
 struct TreeState {
     std::set<std::string> open;
+    std::set<std::string> closed;
     std::string           current;
 };
+
+// 1.12.28 : les cles de depliage qui contiennent le sujet `key` (son chapitre, chacun de ses
+// sous-chapitres), du plus large au plus fin ; vide : sujet inconnu.
+[[nodiscard]] std::vector<std::string> foldsOf(const Index& ix, std::string_view key);
 
 // "ch:<n>" pour un chapitre, "sub:<n>:<sous-chapitre>" pour un sous-chapitre (1.12.27 : son chemin
 // entier, "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Formes").

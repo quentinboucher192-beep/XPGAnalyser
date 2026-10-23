@@ -10,6 +10,7 @@
 #include "app/App.hpp"
 #include "app/CrashDialogs.hpp"   // 1.10.2 (CR) : la fenetre de blocage de l'appli
 #include "app/Dossiers.hpp"
+#include "app/ReportWindow.hpp"   // 1.12.28 : la fenetre de rapport a part (un blocage, un plantage)
 #include "app/Settings.hpp"
 #include "core/Version.hpp"
 #include "core/Edition.hpp"    // 1.12.0 : API Studio, IHM Studio
@@ -176,6 +177,10 @@ int main(int argc, char** argv) {
 #elif defined(XPG_EDITION_IHM)
     core::setEdition(core::Edition::Ihm);
 #endif
+    // 1.12.28 : LA FENETRE DE RAPPORT A PART (core::crash::launchReportWindow) - l'exe relance
+    // pendant un blocage ou apres un plantage : sa fenetre, et rien d'autre (ni instance unique,
+    // ni chien de garde, ni reglages ecrits).
+    if (app::reportwindow::Args report; app::reportwindow::parse(argc, argv, report)) return app::reportwindow::run(report);
     std::vector<std::string> files;
     app::AppOptions options;
     bool cli = false;
@@ -355,6 +360,7 @@ int main(int argc, char** argv) {
         core::crash::Options crash;
         crash.folder = app::dossiers::utf8De(fs::path(app::Settings::defaultPath()).parent_path() / "crashs");
         crash.dialogs = !scripted;
+        crash.reportWindow = !scripted;   // 1.12.28 : la fenetre de rapport a part, plus la boite native
         core::crash::install(crash);
         app::crashdialogs::install();
         if (essai != core::crash::Test::None) core::crash::armTest(essai);
@@ -368,32 +374,9 @@ int main(int argc, char** argv) {
     // 1.11 (T2) : le bouton « Signaler le probleme » de la fenetre du plantage. Il
     // prepare le zip de Signaler (help::report::writeZip) dans <reglages>/signalements,
     // le rapport de crashs/ joint tel quel. Rien ne part par le reseau.
-    app::crashdialogs::setReportHook([](const core::crash::PendingReport& r) -> std::string {
-        namespace fs = std::filesystem;
-        help::report::Form form;
-        form.what = std::string(r.kind == "blocage" ? "Un blocage" : "Un plantage") + " s'est produit le " + r.when + ".";
-        form.withProject = false;   // aucun projet n'est encore ouvert
-        form.withLog = false;       // le rapport joint a deja l'historique interne
-        form.attachedName = app::dossiers::utf8De(app::dossiers::cheminDe(r.path).filename());
-        form.attachedText = r.text;
-        help::report::Facts facts;
-        facts.version = XPG_ANALYZER_VERSION;
-        facts.system = help::report::systemName();
-        const std::time_t t = std::time(nullptr);
-        std::tm tm{};
-#if defined(_WIN32)
-        localtime_s(&tm, &t);
-#else
-        localtime_r(&t, &tm);
-#endif
-        const help::report::Stamp when{tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min};
-        std::string why;
-        const fs::path zip = help::report::writeZip(fs::path(app::Settings::defaultPath()).parent_path(), form, facts,
-                                                    {}, when, &why);
-        if (zip.empty()) return "Le signalement n'a pas pu \xC3\xAAtre pr\xC3\xA9par\xC3\xA9 : " + why;
-        return "Le signalement est pr\xC3\xAAt (rien n'est envoy\xC3\xA9) :\n" + app::dossiers::utf8De(zip);
-    });
-    if (!scripted) app::crashdialogs::showPendingReport();   // 1.10.2 (CR) : « Un plantage s'est produit le … »
+    app::crashdialogs::setReportHook(app::crashdialogs::prepareSignal);
+    // 1.10.2 (CR) : « Un plantage s'est produit le … » - 1.12.28 : un dialogue de l'appli, a la premiere image.
+    if (!scripted) app::crashdialogs::showPendingReport(**app);
     core::crash::startWatchdog(8, !scripted);
     const int code = (*app)->run();
     core::crash::stopWatchdog();

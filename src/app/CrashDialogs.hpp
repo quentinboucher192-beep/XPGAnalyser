@@ -9,6 +9,8 @@
 #include <string>
 #include <string_view>
 
+#include "../ui/widgets/CrashReport.hpp"   // 1.12.28 : la fenetre du rapport, dessinee par l'appli
+
 namespace core::crash { struct PendingReport; }
 
 namespace app {
@@ -23,17 +25,25 @@ namespace app::crashdialogs {
 void install();
 
 // ---- au lancement suivant ------------------------------------------------------------
-// La fenetre « Un plantage s'est produit le … » s'il y a un rapport nouveau
-// (core::crash::takeNewReport) : Ouvrir le dossier, Copier le rapport, Fermer.
-// Une boite native de SDL, avant la premiere image (le chien de garde ne tourne pas
-// encore). Rend vrai si elle s'est ouverte.
-bool showPendingReport();
+// 1.12.28 : le dialogue de l'appli (ui::CrashReportDialog), plus la boite native : « Un
+// blocage s'est produit » s'il y a un rapport nouveau (core::crash::takeNewReport) - ce qui
+// s'est passe, ce que l'appli faisait, le rapport ; Ouvrir le dossier, Copier le rapport,
+// Signaler le probleme, Fermer. Il s'ouvre a la premiere image, dans la fenetre principale
+// (avant, la boite native venait avant la premiere image : la fenetre restait noire).
+// Rend vrai s'il y avait un rapport.
+bool showPendingReport(App& app);
+
+// Ce que la fenetre d'un rapport sait faire, pour ce rapport : les gestes communs au dialogue
+// (au lancement suivant) et a la fenetre a part (app/ReportWindow : un blocage, un plantage).
+[[nodiscard]] ui::CrashReportSetup setupFor(const core::crash::PendingReport& report, ui::crashreport::Mode mode);
 
 // Le crochet de la 1.11 : « Signaler le probleme ». Quand il est donne, la fenetre a un
 // bouton de plus, qui l'appelle avec le rapport (le chemin, la date, le genre, le texte).
 // Il rend le message a montrer ensuite (vide : rien), la fenetre reste ouverte.
+// 1.12.28 : prepareSignal est celui de l'appli (le zip de Signaler) ; main le pose.
 using ReportHook = std::function<std::string(const core::crash::PendingReport&)>;
 void setReportHook(ReportHook hook);
+[[nodiscard]] std::string prepareSignal(const core::crash::PendingReport& report);
 inline constexpr const char* kReportButton = "Signaler le probl\xC3\xA8me";
 
 // ---- Aide > Journal interne (historique des appels) ---------------------------------

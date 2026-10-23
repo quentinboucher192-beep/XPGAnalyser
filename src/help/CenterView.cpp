@@ -56,7 +56,10 @@ std::string foldKey(Chapter c, std::string_view sub) {
 
 std::vector<TreeRow> treeRows(const Index& ix, const TreeState& state) {
     const Topic* cur = state.current.empty() ? nullptr : ix.find(state.current);
-    const auto isOpen = [&](const std::string& k, bool forced) { return forced || state.open.count(k) != 0; };
+    // 1.12.28 : deplie d'office (la page ouverte est dedans), sauf si on l'a replie soi-meme.
+    const auto isOpen = [&](const std::string& k, bool forced) {
+        return (forced && state.closed.count(k) == 0) || state.open.count(k) != 0;
+    };
 
     std::vector<TreeRow> rows;
     for (const Chapter c : kChapters) {
@@ -120,6 +123,14 @@ std::vector<TreeRow> treeRows(const Index& ix, const TreeState& state) {
         }
     }
     return rows;
+}
+
+std::vector<std::string> foldsOf(const Index& ix, std::string_view key) {
+    const Topic* t = ix.find(key);
+    if (t == nullptr) return {};
+    std::vector<std::string> out{foldKey(t->chapter)};
+    for (const auto& level : levelsOf(t->sub)) out.push_back(foldKey(t->chapter, level));
+    return out;
 }
 
 std::vector<std::string> breadcrumb(const Index& ix, std::string_view key) {

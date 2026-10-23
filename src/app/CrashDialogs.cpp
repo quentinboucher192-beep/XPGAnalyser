@@ -11,6 +11,10 @@
 
 #include "App.hpp"
 #include "Dossiers.hpp"
+#include "Settings.hpp"
+#include "../core/Version.hpp"
+#include "../help/ProblemReport.hpp"   // 1.12.28 : « Signaler le probleme » (venu de main.cpp)
+#include "../menu/MenuManager.hpp"
 #include "screens/Screens.hpp"            // MessageDialog
 #include "../core/CallTrail.hpp"
 #include "../core/CrashGuard.hpp"
@@ -19,6 +23,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <vector>
 
@@ -70,49 +75,59 @@ void install() {
 
 void setReportHook(ReportHook hook) { reportHook() = std::move(hook); }
 
-bool showPendingReport() {
+ui::CrashReportSetup setupFor(const core::crash::PendingReport& report, ui::crashreport::Mode mode) {
+    ui::CrashReportSetup s;
+    s.mode = mode;
+    s.product = core::productName();
+    s.path = report.path;
+    s.text = report.text;
+    s.when = report.when;
+    const std::string folder = dossiers::utf8De(std::filesystem::path(dossiers::cheminDe(report.path)).parent_path());
+    s.openFolder = [folder]() -> std::string {
+        const std::string why = dossiers::ouvrirDansLeSysteme(folder);
+        return why.empty() ? std::string("Le dossier des rapports s'ouvre.") : "Le dossier ne s'ouvre pas : " + why;
+    };
+    const std::string text = report.text;
+    s.copyReport = [text]() -> std::string {
+        ui::setClipboardText(text);
+        return "Le rapport est copi\xC3\xA9 dans le presse-papiers : colle-le dans un courriel ou un ticket.";
+    };
+    if (reportHook()) s.signal = [report]() -> std::string { return reportHook() ? reportHook()(report) : std::string{}; };
+    return s;
+}
+
+bool showPendingReport(App& app) {
     auto report = core::crash::takeNewReport();
     if (!report) return false;
     XPG_TRACE(Dialog, "au lancement : la fen\xC3\xAAtre du %s du %s", report->kind.c_str(), report->when.c_str());
-#if XPG_WITH_SDL
-    const std::string title = report->kind == "blocage"
-        ? core::productName() + " : un blocage s'est produit"
-        : core::productName() + " : un plantage s'est produit";
-    std::string note;
-    for (;;) {
-        std::string message = (report->kind == "blocage" ? "Un blocage s'est produit le " : "Un plantage s'est produit le ")
-            + report->when + ".\n\nUn rapport a \xC3\xA9t\xC3\xA9 enregistr\xC3\xA9 :\n" + report->path
-            + "\n\nIl contient la version, le syst\xC3\xA8me, la pile d'appels et l'historique interne"
-              " (les noms des documents ouverts, jamais leurs donn\xC3\xA9" "es).";
-        if (!note.empty()) message += "\n\n" + note;
-        std::vector<SDL_MessageBoxButtonData> buttons{
-            {0, 1, "Ouvrir le dossier"},
-            {0, 2, "Copier le rapport"},
-        };
-        if (reportHook()) buttons.push_back({0, 3, kReportButton});   // 1.11 : « Signaler le probleme »
-        buttons.push_back({SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Fermer"});
-        SDL_MessageBoxData data{};
-        data.flags = SDL_MESSAGEBOX_WARNING | SDL_MESSAGEBOX_BUTTONS_LEFT_TO_RIGHT;
-        data.title = title.c_str();
-        data.message = message.c_str();
-        data.numbuttons = static_cast<int>(buttons.size());
-        data.buttons = buttons.data();
-        int chosen = 0;
-        if (!SDL_ShowMessageBox(&data, &chosen) || chosen <= 0) break;
-        if (chosen == 1) {
-            const std::string why = dossiers::ouvrirDansLeSysteme(
-                dossiers::utf8De(std::filesystem::path(dossiers::cheminDe(report->path)).parent_path()));
-            note = why.empty() ? std::string{} : "Le dossier ne s'ouvre pas : " + why;
-        } else if (chosen == 2) {
-            note = SDL_SetClipboardText(report->text.c_str())
-                ? "Le rapport est copi\xC3\xA9 dans le presse-papiers."
-                : "Le rapport n'a pas pu \xC3\xAAtre copi\xC3\xA9.";
-        } else if (chosen == 3 && reportHook()) {
-            note = reportHook()(*report);
-        }
-    }
-#endif
+    // 1.12.28 : le dialogue de l'appli, a la premiere image (plus la boite native d'avant).
+    app.menus().ShowDialog(std::make_unique<ui::CrashReportDialog>(setupFor(*report, ui::crashreport::Mode::Pending)), {});
     return true;
+}
+
+std::string prepareSignal(const core::crash::PendingReport& r) {
+    namespace fs = std::filesystem;
+    help::report::Form form;
+    form.what = std::string(r.kind == "blocage" ? "Un blocage" : "Un plantage") + " s'est produit le " + r.when + ".";
+    form.withProject = false;   // aucun projet n'est encore ouvert
+    form.withLog = false;       // le rapport joint a deja l'historique interne
+    form.attachedName = dossiers::utf8De(dossiers::cheminDe(r.path).filename());
+    form.attachedText = r.text;
+    help::report::Facts facts;
+    facts.version = XPG_ANALYZER_VERSION;
+    facts.system = help::report::systemName();
+    const std::time_t t = std::time(nullptr);
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    const help::report::Stamp when{tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min};
+    std::string why;
+    const fs::path zip = help::report::writeZip(fs::path(Settings::defaultPath()).parent_path(), form, facts, {}, when, &why);
+    if (zip.empty()) return "Le signalement n'a pas pu \xC3\xAAtre pr\xC3\xA9par\xC3\xA9 : " + why;
+    return "Le signalement est pr\xC3\xAAt (rien n'est envoy\xC3\xA9) : " + dossiers::utf8De(zip);
 }
 
 std::string callTrailText(std::size_t entries, std::string_view filter) {

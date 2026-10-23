@@ -19086,6 +19086,32 @@ void centreAide111() {
         }
         check(commandes == 1 && formes == 1 && familles >= 12, "ecran : deux familles depliees, les autres repliees, toutes listees ("
                                                                  + std::to_string(familles) + " familles)");
+        // 1.12.28 : « le deballage/remballage ne fonctionne pas partout par exemple IHM en haut ». Le chapitre
+        // de la page ouverte se replie (et ses niveaux aussi) ; aller ailleurs rouvre ceux du nouveau sujet.
+        {
+            hc::TreeState fs;
+            fs.current = "objet-vanne";
+            const auto folds = hc::foldsOf(ix, "objet-vanne");
+            check(folds.size() == 3 && folds[0] == hc::foldKey(hc::Chapter::Hmi)
+                      && folds[2] == hc::foldKey(hc::Chapter::Hmi, "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA Synoptique"),
+                  "replier : les cles du sujet ouvert - L'IHM, la biblioth\xC3\xA8que, Synoptique");
+            fs.closed.insert(hc::foldKey(hc::Chapter::Hmi));
+            std::size_t ihm = 0;
+            bool ferme = false;
+            for (const auto& r : hc::treeRows(ix, fs)) {
+                if (r.chapter == hc::Chapter::Hmi) ++ihm;
+                if (r.kind == hc::RowKind::Chapter && r.chapter == hc::Chapter::Hmi) ferme = !r.open && r.current;
+            }
+            check(ferme && ihm == 1, "replier : L'IHM, le chapitre de la page ouverte, se replie (une seule ligne, marqu\xC3\xA9" "e courante)");
+            fs.closed.clear();
+            fs.closed.insert(folds[2]);
+            bool vanne = false, synoptique = false;
+            for (const auto& r : hc::treeRows(ix, fs)) {
+                if (r.key == "objet-vanne") vanne = true;
+                if (r.kind == hc::RowKind::Sub && r.label == "Synoptique") synoptique = !r.open;
+            }
+            check(synoptique && !vanne, "replier : Synoptique, la famille de la page ouverte, se replie et cache la Vanne");
+        }
         hc::TutorialInfo ti; ti.durationMs = 64000; ti.steps = 7; ti.estimated = false;
         check(hc::tutorialCardText(ti) == "\xE2\x96\xB6 Regarder le tutoriel \xC2\xB7 1 min 04 \xC2\xB7 7 \xC3\xA9tapes",
               "ecran : la carte du tutoriel");

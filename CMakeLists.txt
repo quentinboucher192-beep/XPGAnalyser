@@ -491,6 +491,9 @@ if(XPG_BUILD_TESTS)
     # principale quand sa fenetre se ferme) - la pile seule, sans ecran ----
     xpg_add_test_executable(dialogwindow_test tests/dialogwindow_test.cpp)
     xpg_target_link_libraries(dialogwindow_test PRIVATE xpg_ui)
+    # 1.12.28 : la fenetre du plantage et du blocage, dessinee par l'appli
+    xpg_add_test_executable(crashreport_test tests/crashreport_test.cpp)
+    xpg_target_link_libraries(crashreport_test PRIVATE xpg_ui)
     # ---- Lot API 8 : les exports qui demandent ou (la fin) - le moteur de l'IHM
     # (la question pendant un geste, jamais seul ; la reponse), l'option relue,
     # ExportTarget.hpp, le dialogue du poste (StationExportDialog, un vrai
@@ -706,6 +709,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME graphxml COMMAND graphxml_test)
     xpg_add_test(NAME simdebugui   COMMAND simdebugui_test ${XPG_FIXTURE})   # ---- Lot API 8 : Simulation > Debogage ----
     xpg_add_test(NAME dialogwindow COMMAND dialogwindow_test)                # ---- Lot API 8 : les dialogues dans la fenetre detachee ----
+    xpg_add_test(NAME crashreport COMMAND crashreport_test)                  # 1.12.28 : la fenetre du plantage et du blocage
     xpg_add_test(NAME exportask    COMMAND exportask_test)                   # ---- Lot API 8 : les exports qui demandent ou ----
     xpg_add_test(NAME themefile    COMMAND themefile_test)                   # ---- Lot API 8 : themes ----
     xpg_add_test(NAME simstatus    COMMAND simstatus_test)                   # ---- Lot API 8 : Centre de simulation ----

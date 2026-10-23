@@ -1507,6 +1507,12 @@
     <ClCompile Include="src\ui\NoveltyMarks.cpp">
       <Filter>ui</Filter>
     </ClCompile>
+    <ClCompile Include="src\ui\widgets\CrashReport.cpp">
+      <Filter></Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\ReportWindow.cpp">
+      <Filter></Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\ARCHITECTURE.md" />
@@ -2826,6 +2832,12 @@
     </ClInclude>
     <ClInclude Include="src\ui\widgets\TrailSymbols.hpp">
       <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\CrashReport.hpp">
+      <Filter></Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ReportWindow.hpp">
+      <Filter></Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

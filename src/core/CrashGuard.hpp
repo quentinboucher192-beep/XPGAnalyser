@@ -19,7 +19,8 @@
 //
 //  LE BLOCAGE. La boucle principale appelle heartbeat() a chaque image ; le
 //  chien de garde (un fil) regarde quatre fois par seconde. Sans battement
-//  depuis 8 s : un rapport « blocage » (la pile du fil principal - Windows : le
+//  depuis 8 s de PC eveille (1.12.28 : la veille ne compte pas, voir
+//  powerChanged) : un rapport « blocage » (la pile du fil principal - Windows : le
 //  fil est suspendu le temps de lire son contexte ; Linux : un signal lui fait
 //  lire sa propre pile), puis une fenetre native « ne repond plus » avec
 //  Attendre et Fermer. Si la boucle repart : takeRecovery() le dit a l'appli,
@@ -40,7 +41,20 @@ namespace core::crash {
 struct Options {
     std::string folder;               // le dossier des rapports (UTF-8), cree s'il manque
     bool dialogs = true;              // les fenetres natives (pas dans les essais sans ecran)
+    // 1.12.28 : LA FENETRE DE RAPPORT A PART (voir launchReportWindow) plutot que la boite
+    // native, pendant un blocage et apres un plantage. Faux : la boite d'avant.
+    bool reportWindow = true;
 };
+
+// 1.12.28 : la fenetre de rapport, dessinee par l'appli (app/ReportWindow). Pendant un blocage
+// (la boucle principale ne dessine plus) et apres un plantage, l'exe se relance lui-meme :
+//   <exe> --fenetre-rapport blocage|plantage --rapport <chemin> --pid <processus> --secondes <arret>
+// Pendant un blocage, l'evenement nomme recoveryEventName(pid) est leve quand la boucle repart :
+// la fenetre le dit et se ferme. Elle note le rapport comme vu (markShown) : le lancement
+// suivant ne le remontre pas. Rend faux si elle n'a pas pu partir (pas Windows, l'exe
+// introuvable, le lancement refuse) : la boite native d'avant prend le relais.
+[[nodiscard]] std::string recoveryEventName(unsigned long pid);
+void markShown(const std::string& reportPathUtf8);
 
 // A appeler depuis le fil principal, le plus tot possible (main).
 void install(const Options& options);
@@ -75,6 +89,18 @@ void stopWatchdog();
 void holdWatchdog(bool hold) noexcept;
 // Vrai une fois apres une reprise : `seconds` dit combien de temps la boucle s'est arretee.
 bool takeRecovery(double& seconds) noexcept;
+
+// 1.12.28 : LA VEILLE N'EST PAS UN BLOCAGE. Le client (23/10, au reveil du PC) : « attention
+// a ne pas faire un blocage quand le pc est en veille ». Le chien de garde lisait l'heure du
+// mur : les minutes de veille faisaient « 8 s sans battement ». Maintenant il compte le temps
+// ou le PC est eveille (la veille n'y entre pas) ; il se tait quand il n'a pas tourne lui-meme
+// (le processus fige : la veille moderne, un debogueur, une machine virtuelle en pause) et
+// quand le systeme dit que le PC s'endort ou que l'ecran s'eteint ; au reveil, la boucle a
+// 30 s pour repartir. Sous Windows, startWatchdog s'abonne aux avis du systeme ; les essais
+// appellent powerChanged eux-memes.
+enum class Power { Sleeping, Awake, DisplayOff, DisplayOn };
+void powerChanged(Power p) noexcept;
+void setResumeGrace(unsigned ms) noexcept;      // le silence apres un reveil (30 000 ms ; les essais)
 // Le dernier rapport de blocage ecrit pendant cette session (vide sinon).
 std::string lastHangReport();
 
@@ -92,6 +118,8 @@ struct PendingReport {
     std::string text;      // le rapport entier
 };
 std::optional<PendingReport> takeNewReport();
+// 1.12.28 : un rapport par son chemin (le genre et la date viennent du nom du fichier).
+std::optional<PendingReport> readReport(const std::string& pathUtf8);
 
 // ---- les essais caches (--essai-plantage, --essai-blocage) ----------------------------
 enum class Test { None, Crash, Hang };

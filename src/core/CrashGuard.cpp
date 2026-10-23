@@ -76,9 +76,23 @@ std::atomic<HangDialog> g_hangDialog{nullptr};
 std::atomic<CrashBox> g_crashBox{nullptr};
 
 // ---- le chien de garde -------------------------------------------------------------
+// 1.12.28 : les temps du chien de garde sont en temps EVEILLE (awakeMs), pas a l'heure du mur.
 std::atomic<std::uint64_t> g_lastBeatMs{0};
 std::atomic<std::uint64_t> g_lastGapMs{0};    // le dernier long arret, vu par heartbeat() lui-meme
 std::atomic<int> g_hold{0};
+// 1.12.28 : la veille (powerChanged). Le PC s'endort, l'ecran est eteint ; le dernier reveil pas
+// encore vu par le chien de garde (0 : aucun) ; le silence qui suit un reveil.
+std::atomic<bool> g_sleeping{false}, g_displayOff{false};
+std::atomic<std::uint64_t> g_sleepAt{0};
+std::atomic<std::uint64_t> g_wokeAt{0};
+std::atomic<unsigned> g_resumeGraceMs{30000};
+// Le chien de garde n'a pas tourne pendant plus de 2 s (il tourne toutes les 250 ms) : le
+// processus etait fige, ou le PC dormait. Et un avis « le PC s'endort » sans reveil apres 2 min
+// de PC eveille : le reveil s'est perdu.
+constexpr std::uint64_t kFrozenMs = 2000;
+constexpr std::uint64_t kLostWakeMs = 120000;
+// 1.12.28 : la fenetre de rapport a part (plus bas), appelee aussi par le rapporteur.
+bool launchReportWindow(const char* kind, const char* reportUtf8, double seconds) noexcept;
 
 // Une boite de plantage ou de blocage est ouverte : le chien de garde se tait (1.10.2).
 // Sans cela, la boite du plantage laissee ouverte plus de 8 s devenait AUSSI un blocage
@@ -551,7 +565,9 @@ DWORD WINAPI reporterThread(LPVOID) {
         } else {
             j.path[0] = '\0';
         }
-        showCrashBox(j.path[0] ? j.path : "(le rapport n'a pas pu \xC3\xAA" "tre \xC3\xA9" "crit)");
+        // 1.12.28 : la fenetre de rapport a part ; sinon (ou sans rapport) la boite d'avant.
+        if (!(j.path[0] && j.kind == ReportKind::Crash && launchReportWindow("plantage", j.path, 0)))
+            showCrashBox(j.path[0] ? j.path : "(le rapport n'a pas pu \xC3\xAA" "tre \xC3\xA9" "crit)");
         SetEvent(g_jobDone);
     }
 }
@@ -716,6 +732,138 @@ void onProbe(int) {
 #endif
 }
 
+// ---- 1.12.28 : les horloges du chien de garde -------------------------------------------
+// awakeMs : le temps ou le PC est eveille - la veille et la veille prolongee n'y comptent pas
+// (Windows : QueryUnbiasedInterruptTime ; ailleurs : CLOCK_MONOTONIC, arrete pendant la
+// veille). realMs : le temps qui passe, veille comprise (GetTickCount64 ; CLOCK_BOOTTIME).
+// L'ecart entre les deux, d'un tour du chien de garde au suivant : le PC a dormi.
+std::uint64_t awakeMs() noexcept {
+#if defined(_WIN32)
+    using Unbiased_t = BOOL(WINAPI*)(PULONGLONG);
+    static const Unbiased_t unbiased = [] {
+        Unbiased_t f = nullptr;
+        if (HMODULE k32 = GetModuleHandleW(L"kernel32.dll")) load(f, k32, "QueryUnbiasedInterruptTime");
+        return f;
+    }();
+    ULONGLONG t = 0;
+    if (unbiased && unbiased(&t)) return static_cast<std::uint64_t>(t / 10000);   // des 100 ns
+    return static_cast<std::uint64_t>(GetTickCount64());
+#else
+    timespec ts{};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<std::uint64_t>(ts.tv_sec) * 1000 + static_cast<std::uint64_t>(ts.tv_nsec) / 1000000;
+#endif
+}
+
+std::uint64_t realMs() noexcept {
+#if defined(_WIN32)
+    return static_cast<std::uint64_t>(GetTickCount64());
+#else
+    timespec ts{};
+#  if defined(CLOCK_BOOTTIME)
+    clock_gettime(CLOCK_BOOTTIME, &ts);
+#  else
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+#  endif
+    return static_cast<std::uint64_t>(ts.tv_sec) * 1000 + static_cast<std::uint64_t>(ts.tv_nsec) / 1000000;
+#endif
+}
+
+#if defined(_WIN32)
+// ---- 1.12.28 : les avis du systeme (powrprof, Windows 8 et plus) -------------------------
+// Des rappels, sur un fil du systeme : ils arrivent meme quand la boucle de messages de la
+// fenetre est arretee. Le PC s'endort et se reveille (PBT_APMSUSPEND, PBT_APMRESUME...) ;
+// l'ecran s'eteint et se rallume (GUID_CONSOLE_DISPLAY_STATE, donne aussi a l'abonnement).
+using PowerCallback_t = ULONG(CALLBACK*)(PVOID, ULONG, PVOID);
+struct PowerParams { PowerCallback_t callback; PVOID context; };   // DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS
+using RegisterSuspend_t = DWORD(WINAPI*)(DWORD, HANDLE, PVOID*);
+using RegisterSetting_t = DWORD(WINAPI*)(LPCGUID, DWORD, HANDLE, PVOID*);
+using Unregister_t = DWORD(WINAPI*)(PVOID);
+constexpr DWORD kNotifyCallback = 2;   // DEVICE_NOTIFY_CALLBACK
+const GUID kConsoleDisplayState = {0x6fe69556, 0x704a, 0x47a0, {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
+PowerParams g_powerParams{};
+PVOID g_suspendHandle = nullptr, g_displayHandle = nullptr;
+Unregister_t g_unregisterSuspend = nullptr, g_unregisterSetting = nullptr;
+
+ULONG CALLBACK onPowerNotice(PVOID, ULONG type, PVOID setting) {
+    switch (type) {
+        case 0x0004: powerChanged(Power::Sleeping); break;          // PBT_APMSUSPEND
+        case 0x0007:                                                // PBT_APMRESUMESUSPEND
+        case 0x0012: powerChanged(Power::Awake); break;             // PBT_APMRESUMEAUTOMATIC
+        case 0x8013: {                                              // PBT_POWERSETTINGCHANGE
+            const auto* s = static_cast<const POWERBROADCAST_SETTING*>(setting);
+            if (s && IsEqualGUID(s->PowerSetting, kConsoleDisplayState) && s->DataLength >= sizeof(DWORD)) {
+                DWORD state = 0;
+                std::memcpy(&state, s->Data, sizeof state);
+                powerChanged(state == 0 ? Power::DisplayOff : Power::DisplayOn);   // 1 allume, 2 attenue
+            }
+            break;
+        }
+        default: break;
+    }
+    return 0;
+}
+
+void subscribePower() {
+    if (g_suspendHandle || g_displayHandle) return;
+    HMODULE m = LoadLibraryW(L"powrprof.dll");
+    if (!m) return;
+    RegisterSuspend_t registerSuspend = nullptr;
+    RegisterSetting_t registerSetting = nullptr;
+    load(registerSuspend, m, "PowerRegisterSuspendResumeNotification");
+    load(registerSetting, m, "PowerSettingRegisterNotification");
+    load(g_unregisterSuspend, m, "PowerUnregisterSuspendResumeNotification");
+    load(g_unregisterSetting, m, "PowerSettingUnregisterNotification");
+    g_powerParams.callback = onPowerNotice;
+    g_powerParams.context = nullptr;
+    if (registerSuspend && registerSuspend(kNotifyCallback, &g_powerParams, &g_suspendHandle) != ERROR_SUCCESS)
+        g_suspendHandle = nullptr;
+    if (registerSetting && registerSetting(&kConsoleDisplayState, kNotifyCallback, &g_powerParams, &g_displayHandle) != ERROR_SUCCESS)
+        g_displayHandle = nullptr;
+    trail::notef(trail::Kind::Watchdog, "avis du syst\xC3\xA8me : veille %s, \xC3\xA9" "cran %s",
+                 g_suspendHandle ? "oui" : "non", g_displayHandle ? "oui" : "non");
+}
+
+void unsubscribePower() {
+    if (g_suspendHandle && g_unregisterSuspend) g_unregisterSuspend(g_suspendHandle);
+    if (g_displayHandle && g_unregisterSetting) g_unregisterSetting(g_displayHandle);
+    g_suspendHandle = g_displayHandle = nullptr;
+}
+#endif
+
+// ---- 1.12.28 : la fenetre de rapport a part -----------------------------------------------
+bool g_reportWindow = false;
+#if defined(_WIN32)
+wchar_t g_exeW[MAX_PATH * 2];
+HANDLE g_recoveryEvent = nullptr;
+std::atomic<std::uint64_t> g_windowLaunchedAt{0};
+
+// L'exe se relance en fenetre de rapport. Depuis le rapporteur (un plantage) ou le chien de
+// garde (un blocage) : pas d'allocation de notre part, des tampons fixes.
+bool launchReportWindow(const char* kind, const char* reportUtf8, double seconds) noexcept {
+    if (!g_reportWindow || !g_exeW[0] || !reportUtf8 || !reportUtf8[0]) return false;
+    static wchar_t report[1400];
+    static wchar_t kindW[32];
+    static wchar_t cmd[4096];
+    if (!MultiByteToWideChar(CP_UTF8, 0, reportUtf8, -1, report, 1400)) return false;
+    if (!MultiByteToWideChar(CP_UTF8, 0, kind, -1, kindW, 32)) return false;
+    const long tenths = static_cast<long>(seconds * 10.0 + 0.5);
+    _snwprintf(cmd, 4095, L"\"%ls\" --fenetre-rapport %ls --rapport \"%ls\" --pid %lu --secondes %ld.%ld", g_exeW, kindW,
+               report, static_cast<unsigned long>(GetCurrentProcessId()), tenths / 10, tenths % 10);
+    cmd[4095] = L'\0';
+    STARTUPINFOW si{};
+    si.cb = sizeof si;
+    PROCESS_INFORMATION pi{};
+    if (!CreateProcessW(g_exeW, cmd, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) return false;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    g_windowLaunchedAt.store(awakeMs(), std::memory_order_relaxed);
+    return true;
+}
+#else
+[[maybe_unused]] bool launchReportWindow(const char*, const char*, double) noexcept { return false; }
+#endif
+
 // ---- le rapport de blocage (depuis le chien de garde) -----------------------------------
 std::string writeHangReport(double seconds) {
     void* frames[kMaxFrames];
@@ -794,14 +942,47 @@ void watchdogLoop(unsigned seconds, bool dialog) {
     const std::uint64_t limit = static_cast<std::uint64_t>(seconds) * 1000;
     std::uint64_t reportedBeat = 0;     // le battement d'avant le blocage rapporte
     int ticks = 0;
+    // 1.12.28 : le tour d'avant (temps eveille, temps reel), le silence qui suit un reveil, et
+    // le moment d'ou l'on compte (le dernier battement, ou le reveil s'il est plus recent).
+    std::uint64_t lastAwake = awakeMs(), lastReal = realMs();
+    std::uint64_t quietUntil = 0, countFrom = 0;
+    const auto quiet = [&](std::uint64_t now) {
+        countFrom = now;
+        quietUntil = std::max(quietUntil, now + g_resumeGraceMs.load(std::memory_order_relaxed));
+    };
     std::unique_lock lock(g_wdMutex);
     while (!g_wdStop) {
         g_wdCv.wait_for(lock, std::chrono::milliseconds(250));
         if (g_wdStop) break;
         if (++ticks % 240 == 0) trail::refreshLocalOffset();
+        const std::uint64_t now = awakeMs(), real = realMs();
+        const std::uint64_t awakeStep = now - lastAwake;
+        const std::uint64_t realStep = real >= lastReal ? real - lastReal : 0;
+        lastAwake = now;
+        lastReal = real;
+        // Le chien de garde n'a pas tourne lui-meme (le processus fige), ou le PC a dormi entre
+        // deux tours (le temps reel a avance, pas le temps eveille) : pas un blocage.
+        if (awakeStep > kFrozenMs || realStep > awakeStep + kFrozenMs) {
+            trail::notef(trail::Kind::Watchdog,
+                         "le chien de garde n'a pas tourn\xC3\xA9 pendant %.0f s (veille, processus fig\xC3\xA9) :"
+                         " pas un blocage, il se tait %u s", static_cast<double>(std::max(awakeStep, realStep)) / 1000.0,
+                         g_resumeGraceMs.load(std::memory_order_relaxed) / 1000);
+            quiet(now);
+            continue;
+        }
+        // Le systeme l'a dit : le PC s'endort, l'ecran est eteint. Puis le reveil. Un avis
+        // « s'endort » reste sans reveil 2 min de PC eveille : le reveil s'est perdu.
+        if (g_sleeping.load(std::memory_order_acquire) && now - g_sleepAt.load(std::memory_order_relaxed) > kLostWakeMs) {
+            g_sleeping.store(false, std::memory_order_release);
+            trail::note(trail::Kind::Watchdog, "le PC tourne depuis 2 min sans avis de r\xC3\xA9veil : le chien de garde reprend");
+        }
+        if (g_sleeping.load(std::memory_order_acquire) || g_displayOff.load(std::memory_order_acquire)) {
+            quiet(now);
+            continue;
+        }
+        if (g_wokeAt.exchange(0, std::memory_order_acq_rel) != 0) quiet(now);
         const std::uint64_t beat = g_lastBeatMs.load(std::memory_order_acquire);
         if (beat == 0) continue;
-        const std::uint64_t now = trail::nowMs();
         if (reportedBeat != 0) {
             if (beat != reportedBeat) {
                 // La duree vraie de l'arret : l'ecart vu par le premier battement d'apres.
@@ -810,6 +991,9 @@ void watchdogLoop(unsigned seconds, bool dialog) {
                 const double stopped = static_cast<double>(gap) / 1000.0;
                 g_recoveredMs.store(gap, std::memory_order_relaxed);
                 g_recovered.store(true, std::memory_order_release);
+#if defined(_WIN32)
+                if (g_recoveryEvent) SetEvent(g_recoveryEvent);   // 1.12.28 : la fenetre de rapport le dit
+#endif
                 trail::notef(trail::Kind::Watchdog, "la boucle principale repart apr\xC3\xA8s %.1f s", stopped);
                 reportedBeat = 0;
             }
@@ -818,15 +1002,27 @@ void watchdogLoop(unsigned seconds, bool dialog) {
         // Une boite ouverte, ou un plantage en cours (le rapport, le minidump, sa boite :
         // le fil qui plante ne bat plus) : rien a dire.
         if (g_hold.load(std::memory_order_relaxed) > 0 || g_handling.load(std::memory_order_acquire) != 0) continue;
-        if (now > beat && now - beat >= limit) {
+        if (now < quietUntil) continue;
+        const std::uint64_t from = std::max(beat, countFrom);
+        if (now > from && now - from >= limit) {
             reportedBeat = beat;
             lock.unlock();
-            const std::string path = writeHangReport(static_cast<double>(now - beat) / 1000.0);
+            const std::string path = writeHangReport(static_cast<double>(now - from) / 1000.0);
             {
                 std::lock_guard g(g_lastHangMutex);
                 g_lastHang = path;
             }
-            if (dialog && g_dialogs && showHangDialog(path, seconds)) {
+            // 1.12.28 : la fenetre de rapport a part (une par minute au plus), sinon la boite d'avant.
+            bool aside = false;
+#if defined(_WIN32)
+            if (dialog && g_dialogs) {
+                const std::uint64_t last = g_windowLaunchedAt.load(std::memory_order_relaxed);
+                if (g_recoveryEvent) ResetEvent(g_recoveryEvent);
+                aside = (last != 0 && awakeMs() - last < 60000)
+                     || launchReportWindow("blocage", path.c_str(), static_cast<double>(now - from) / 1000.0);
+            }
+#endif
+            if (dialog && g_dialogs && !aside && showHangDialog(path, seconds)) {
                 trail::note(trail::Kind::Watchdog, "Fermer (fen\xC3\xAAtre de blocage)");
 #if defined(_WIN32)
                 TerminateProcess(GetCurrentProcess(), 4);
@@ -876,6 +1072,7 @@ void removeOldReports(const fs::path& folder) {
 void install(const Options& options) {
     if (g_installed.exchange(true)) return;
     g_dialogs = options.dialogs;
+    g_reportWindow = options.dialogs && options.reportWindow;   // 1.12.28
     trail::nameThread("principal");
     g_mainThread = trail::currentThread();
     trail::refreshLocalOffset();
@@ -892,6 +1089,13 @@ void install(const Options& options) {
     MultiByteToWideChar(CP_UTF8, 0, g_product, -1, g_productW, 64);
     if (HMODULE user32 = LoadLibraryW(L"user32.dll")) load(g_messageBox, user32, "MessageBoxW");
     loadDbgHelp();
+    // 1.12.28 : la fenetre de rapport a part - l'exe a relancer, l'evenement de la reprise.
+    if (!GetModuleFileNameW(nullptr, g_exeW, MAX_PATH * 2)) g_exeW[0] = L'\0';
+    if (g_reportWindow) {
+        wchar_t name[96];
+        MultiByteToWideChar(CP_UTF8, 0, recoveryEventName(GetCurrentProcessId()).c_str(), -1, name, 96);
+        g_recoveryEvent = CreateEventW(nullptr, TRUE, FALSE, name);
+    }
     // Le systeme : RtlGetVersion (GetVersionEx ment depuis Windows 8.1), et wine s'il est la.
     {
         RTL_OSVERSIONINFOW v{};
@@ -992,7 +1196,7 @@ void setHangDialog(HangDialog dialog) noexcept { g_hangDialog.store(dialog); }
 void setCrashBox(CrashBox box) noexcept { g_crashBox.store(box); }
 
 void heartbeat() noexcept {
-    const std::uint64_t now = trail::nowMs();
+    const std::uint64_t now = awakeMs();   // 1.12.28 : le temps eveille (la veille ne compte pas)
     const std::uint64_t previous = g_lastBeatMs.exchange(now, std::memory_order_acq_rel);
     if (previous != 0 && now > previous + 1000) g_lastGapMs.store(now - previous, std::memory_order_release);
     const int test = g_test.load(std::memory_order_relaxed);
@@ -1010,6 +1214,9 @@ void startWatchdog(unsigned seconds, bool dialog) {
         g_wdStop = false;
     }
     g_watchdog = std::thread(watchdogLoop, seconds ? seconds : 8, dialog);
+#if defined(_WIN32)
+    if (dialog) subscribePower();   // 1.12.28 : la veille et l'ecran (l'appli, pas les essais)
+#endif
 }
 
 void stopWatchdog() {
@@ -1020,13 +1227,43 @@ void stopWatchdog() {
     }
     g_wdCv.notify_all();
     g_watchdog.join();
+#if defined(_WIN32)
+    unsubscribePower();
+#endif
 }
 
 void holdWatchdog(bool hold) noexcept {
     if (hold) g_hold.fetch_add(1, std::memory_order_relaxed);
     else if (g_hold.fetch_sub(1, std::memory_order_relaxed) <= 0) g_hold.store(0);
-    g_lastBeatMs.store(trail::nowMs(), std::memory_order_release);
+    g_lastBeatMs.store(awakeMs(), std::memory_order_release);
 }
+
+void powerChanged(Power p) noexcept {
+    switch (p) {
+        case Power::Sleeping:
+            g_sleepAt.store(awakeMs(), std::memory_order_relaxed);
+            if (!g_sleeping.exchange(true, std::memory_order_acq_rel))
+                trail::note(trail::Kind::Watchdog, "le PC s'endort : le chien de garde se tait");
+            break;
+        case Power::Awake:
+            if (g_sleeping.exchange(false, std::memory_order_acq_rel))
+                trail::note(trail::Kind::Watchdog, "le PC se r\xC3\xA9veille : le chien de garde reprend dans 30 s");
+            g_wokeAt.store(awakeMs() | 1, std::memory_order_release);
+            break;
+        case Power::DisplayOff:
+            if (!g_displayOff.exchange(true, std::memory_order_acq_rel))
+                trail::note(trail::Kind::Watchdog, "l'\xC3\xA9" "cran s'\xC3\xA9teint : le chien de garde se tait");
+            break;
+        case Power::DisplayOn:
+            if (g_displayOff.exchange(false, std::memory_order_acq_rel)) {
+                trail::note(trail::Kind::Watchdog, "l'\xC3\xA9" "cran se rallume : le chien de garde reprend dans 30 s");
+                g_wokeAt.store(awakeMs() | 1, std::memory_order_release);
+            }
+            break;
+    }
+}
+
+void setResumeGrace(unsigned ms) noexcept { g_resumeGraceMs.store(ms, std::memory_order_relaxed); }
 
 bool takeRecovery(double& seconds) noexcept {
     if (!g_recovered.exchange(false, std::memory_order_acq_rel)) return false;
@@ -1078,16 +1315,24 @@ std::optional<PendingReport> takeNewReport() {
     { std::ifstream in(marker); std::getline(in, seen); }
     if (!seen.empty() && newestDate <= seen) return std::nullopt;
     { std::ofstream out(marker, std::ios::trunc); out << newestDate << "\n"; }
+    return readReport(utf8Of(newest));
+}
 
+// 1.12.28 : un rapport par son chemin (la fenetre de rapport a part le lit ainsi).
+std::optional<PendingReport> readReport(const std::string& pathUtf8) {
+    const fs::path file = pathFromUtf8(pathUtf8);
+    std::ifstream in(file, std::ios::binary);
+    if (!in) return std::nullopt;
     PendingReport r;
-    r.path = utf8Of(newest);
-    const auto name = newest.filename().string();
-    r.kind = name.substr(0, name.find('-'));
+    r.path = pathUtf8;
+    const auto name = file.filename().string();
+    const auto dash = name.find('-');
+    r.kind = dash == std::string::npos ? std::string("rapport") : name.substr(0, dash);
     // 2026-10-02_13-05-11.txt -> « 02/10/2026 a 13:05 »
-    if (newestDate.size() >= 16)
-        r.when = newestDate.substr(8, 2) + "/" + newestDate.substr(5, 2) + "/" + newestDate.substr(0, 4) + " \xC3\xA0 "
-               + newestDate.substr(11, 2) + ":" + newestDate.substr(14, 2);
-    std::ifstream in(newest, std::ios::binary);
+    const std::string date = dash == std::string::npos ? std::string{} : name.substr(dash + 1);
+    if (date.size() >= 16)
+        r.when = date.substr(8, 2) + "/" + date.substr(5, 2) + "/" + date.substr(0, 4) + " \xC3\xA0 "
+               + date.substr(11, 2) + ":" + date.substr(14, 2);
     std::ostringstream text;
     text << in.rdbuf();
     r.text = text.str();
@@ -1095,8 +1340,28 @@ std::optional<PendingReport> takeNewReport() {
     return r;
 }
 
+std::string recoveryEventName(unsigned long pid) {
+    return "Local\\XpgAnalyzer-reprise-" + std::to_string(pid);
+}
+
+void markShown(const std::string& reportPathUtf8) {
+    // « blocage-2026-10-23_10-57-52.txt » : sa date, dans dernier-montre.txt de son dossier
+    // (comme takeNewReport), si elle est plus recente que celle qui y est.
+    const fs::path report = pathFromUtf8(reportPathUtf8);
+    const auto name = report.filename().string();
+    const auto dash = name.find('-');
+    if (dash == std::string::npos || report.extension() != ".txt") return;
+    const std::string date = name.substr(dash + 1);
+    const fs::path marker = report.parent_path() / "dernier-montre.txt";
+    std::string seen;
+    { std::ifstream in(marker); std::getline(in, seen); }
+    if (!seen.empty() && date <= seen) return;
+    std::ofstream out(marker, std::ios::trunc);
+    out << date << "\n";
+}
+
 void armTest(Test test, unsigned afterMs) noexcept {
-    g_testAt.store(trail::nowMs() + afterMs, std::memory_order_relaxed);
+    g_testAt.store(awakeMs() + afterMs, std::memory_order_relaxed);   // 1.12.28 : l'horloge de heartbeat()
     g_test.store(static_cast<int>(test), std::memory_order_relaxed);
 }
 

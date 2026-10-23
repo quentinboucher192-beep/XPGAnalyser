@@ -248,6 +248,64 @@ static void testHang(const fs::path& dir) {
     std::printf("blocage : %s\n", after.back().filename().string().c_str());
 }
 
+// 1.12.28 : LA VEILLE N'EST PAS UN BLOCAGE. Le processus fige 3 s (SIGSTOP : comme la veille
+// moderne fige les applis) avec un chien de garde a 1 s : au reveil, aucun rapport. Avant, le
+// chien de garde lisait l'heure du mur et voyait « 3 s sans battement ».
+static void testFrozen(const fs::path& dir) {
+    const auto before = reports(dir, "blocage-").size();
+    const pid_t pid = fork();
+    if (pid == 0) {
+        crash::startWatchdog(1, false);
+        const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(5500);
+        while (std::chrono::steady_clock::now() < end) {
+            crash::heartbeat();
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        crash::stopWatchdog();
+        _exit(0);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(800));
+    kill(pid, SIGSTOP);
+    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    kill(pid, SIGCONT);
+    int status = 0;
+    waitpid(pid, &status, 0);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    CHECK(reports(dir, "blocage-").size() == before);
+    std::printf("processus fige 3 s : %zu blocage en plus\n", reports(dir, "blocage-").size() - before);
+}
+
+// 1.12.28 : l'avis « le PC s'endort » : la boucle arretee 2,5 s ne fait pas de rapport ; au reveil,
+// elle a le temps de repartir (ici 1,5 s) ; passe ce temps, un vrai blocage se rapporte.
+static void testPower(const fs::path& dir) {
+    const auto before = reports(dir, "blocage-").size();
+    const pid_t pid = fork();
+    if (pid == 0) {
+        crash::setResumeGrace(1500);
+        crash::startWatchdog(1, false);
+        for (int i = 0; i < 5; ++i) { crash::heartbeat(); std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
+        crash::powerChanged(crash::Power::Sleeping);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2500));    // endormi
+        crash::powerChanged(crash::Power::Awake);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1200));    // le silence du reveil
+        crash::heartbeat();
+        const bool none = reports(dir, "blocage-").size() == before;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2600));    // un vrai blocage, apres le silence
+        crash::heartbeat();
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        const bool one = reports(dir, "blocage-").size() == before + 1;
+        crash::stopWatchdog();
+        _exit(!none ? 8 : !one ? 9 : 0);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
+        std::printf("veille : %s\n", WEXITSTATUS(status) == 8 ? "un rapport pendant la veille ou le silence du r\xC3\xA9veil"
+                                                               : "pas de rapport pour le vrai blocage");
+    CHECK(reports(dir, "blocage-").size() == before + 1);
+}
+
 // 1.10.2 : la boite du plantage, simulee, reste ouverte 10 s ; le chien de garde est a 1 s.
 // Sous wine, la vraie boite laissee ouverte plus de 8 s faisait AUSSI un rapport de blocage
 // (et une 2e boite) : il ne doit y avoir qu'un rapport, celui du plantage.
@@ -363,6 +421,8 @@ int main(int argc, char** argv) {
 #if !defined(_WIN32)
     testCrash(dir);
     testHang(dir);
+    testFrozen(dir);     // 1.12.28 : la veille n'est pas un blocage
+    testPower(dir);
     testCrashBoxOpen(dir);
 #endif
     testPending(dir);

@@ -118,7 +118,7 @@ private:
     // Ce que montre la liste de gauche : l'arbre, ou les resultats groupes de
     // la recherche. Une ligne : un sujet (key), un chapitre a deplier (fold), ou
     // un titre de groupe (ni l'un ni l'autre).
-    struct Row { std::string key; std::string fold; };
+    struct Row { std::string key; std::string fold; bool open{false}; };   // 1.12.28 : open, la ligne depliee
     std::vector<Row>         rows_;
     // Tranche 8 : le modele de l'arbre est garde (setModel remet le defilement a
     // zero) ; on ne le remplace qu'en passant de l'arbre a la recherche ou aux recents.

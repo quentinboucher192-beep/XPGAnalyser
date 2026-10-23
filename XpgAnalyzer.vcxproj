@@ -624,6 +624,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\sim\ValueText.cpp" />
     <ClCompile Include="src\ui\NoveltyBoard.cpp" />
     <ClCompile Include="src\ui\NoveltyMarks.cpp" />
+    <ClCompile Include="src\ui\widgets\CrashReport.cpp" />
+    <ClCompile Include="src\app\ReportWindow.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\ARCHITECTURE.md" />
@@ -1070,6 +1072,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\ui\widgets\PropertyGridHooks.hpp" />
     <ClInclude Include="src\ui\widgets\ScrollBar.hpp" />
     <ClInclude Include="src\ui\widgets\TrailSymbols.hpp" />
+    <ClInclude Include="src\ui\widgets\CrashReport.hpp" />
+    <ClInclude Include="src\app\ReportWindow.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
