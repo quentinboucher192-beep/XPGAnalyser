@@ -43,6 +43,25 @@
 ;     dégradé avec son pourcentage, et des astuces ;
 ;   - la page d'accueil revient : les deux applications, ce que fait l'assistant.
 ;
+;  1.12.28 - le mouvement (un seul moteur : une minuterie, des transitions et des scènes,
+;  voir « le mouvement » dans le [Code]) :
+;   - chaque page arrive en glissant (du côté où l'on va), son titre et sa description
+;     apparaissent, l'icône de l'étape grandit, le trait de l'en-tête se dessine ;
+;   - la colonne avance d'une étape à l'autre : la pastille glisse, le lien se remplit, la coche
+;     se dessine, l'étape en cours bat ; pendant la copie, son anneau se remplit ; des
+;     impulsions parcourent le décor du bas ;
+;   - l'accueil s'assemble (le réseau s'allume, les deux logos arrivent, le lien se fait, un
+;     éclat passe), puis le titre, le texte et les cartes montent ;
+;   - pendant la préparation et la copie : l'animation, une barre qui suit en douceur (son
+;     éclat, son pourcentage qui compte), le fichier en cours, le temps qui reste, et un
+;     diaporama de ce que t'apportent les deux applications (il remplace les astuces) ;
+;   - « Ce qui a été installé » s'écrit ligne à ligne ; la fin : le cercle surgit, la coche se
+;     dessine, des confettis, des étincelles ;
+;   - les calques et leurs repères : outils\installateur_images.py (images\ui\*.bmp, 1x et 2x,
+;     et images\ui\habillage.ini, lu à la compilation) ;
+;   - sans assistant (/SILENT, /VERYSILENT), rien de tout cela n'est créé ; une erreur pendant
+;     une animation l'arrête (notée dans le journal), jamais l'installation.
+;
 ;  Sans surveillance : API-IHM-Studio-Setup-<v>.exe /VERYSILENT /SUPPRESSMSGBOXES
 ;    [/CURRENTUSER | /ALLUSERS] [/DIR="..."] [/DONNEES="D:\Mes données"]
 ;    [/MIGRER=oui|non] [/DESINSTALLERLOT8=oui|non] [/LOG="fichier"]
@@ -113,6 +132,22 @@
 #define AnimDelai ReadIni(AnimIni, "Animation", "delai", "60")
 #define AnimLargeur ReadIni(AnimIni, "Animation", "largeur", "360")
 #define AnimHauteur ReadIni(AnimIni, "Animation", "hauteur", "120")
+; 1.12.28 : les repères des calques (positions, nombre d'images de chaque bande) - écrits par
+; outils\installateur_images.py.
+#define HabIni AddBackslash(SourcePath) + "images\ui\habillage.ini"
+#define HabBandes ReadIni(HabIni, "Bandes", "liste", "")
+#define AccueilLogos ReadIni(HabIni, "Accueil", "logos", "304,6;416,12")
+#define AccueilPoints ReadIni(HabIni, "Accueil", "points", "")
+#define AccueilNoeuds ReadIni(HabIni, "Accueil", "noeuds", "")
+#define AccueilLiens ReadIni(HabIni, "Accueil", "liens", "")
+#define FinDisque ReadIni(HabIni, "Fin", "disque", "325,0")
+#define FinCoche ReadIni(HabIni, "Fin", "coche", "370,52")
+#define FinCentre ReadIni(HabIni, "Fin", "centre", "400,75")
+#define FinEtincelles ReadIni(HabIni, "Fin", "etincelles", "")
+#define FinNoeuds ReadIni(HabIni, "Fin", "noeuds", "")
+#define DecorPistes ReadIni(HabIni, "Decor", "pistes", "")
+#define DecorHaut ReadIni(HabIni, "Decor", "haut", "54")
+#define DecorH ReadIni(HabIni, "Decor", "hauteur", "96")
 
 [Setup]
 AppId={{{#AppGuid}}
@@ -178,8 +213,11 @@ SelectTasksDesc=Les raccourcis, et ce que l'assistant fait en plus.
 SelectTasksLabel2=Choisis ce que l'assistant doit faire en plus, puis clique sur Suivant.
 ReadyLabel1=Tout est prêt : relis le résumé avant d'installer.
 ReadyLabel2a=Clique sur Installer pour commencer, ou sur Précédent pour changer un choix.
-InstallingLabel=Copie des fichiers de [name], puis vérification.
-ExitSetupMessage=L'installation n'est pas terminée : si tu quittes maintenant, [name] ne sera pas installé.%n%nTu pourras relancer l'assistant plus tard.%n%nQuitter l'assistant ?
+InstallingLabel=Copie des fichiers d'{#Nom}, puis vérification.
+; 1.12.28 : la page « Préparation » (le texte d'origine vouvoie).
+PreparingDesc=L'assistant prépare l'installation d'{#Nom} sur ton PC.
+; 1.12.28 : ce message-là ne remplace pas [name] (il s'affichait tel quel) : le nom, directement.
+ExitSetupMessage=L'installation n'est pas terminée : si tu quittes maintenant, {#Nom} ne sera pas installé.%n%nTu pourras relancer l'assistant plus tard.%n%nQuitter l'assistant ?
 FinishedHeadingLabel=C'est installé !
 FinishedLabel={#NomApi} et {#NomIhm} sont dans le menu Démarrer, avec leur Maintenance (vérifier, réparer, restaurer). Tes dossiers se règlent dans l'application : accueil > Dossiers. Pour désinstaller : tape « désinstaller » dans la recherche Windows.
 FinishedLabelNoIcons=L'assistant a terminé l'installation de [name].
@@ -205,15 +243,20 @@ Source: "{#Staging}\*"; DestDir: "{code:DossierReserve}"; Flags: ignoreversion r
 ; Les étapes PowerShell, pour la sauvegarde AVANT la copie (le programme n'est pas encore là).
 Source: "{#Staging}\maintenance\lib\*"; DestDir: "{tmp}\xpg\lib"; Flags: dontcopy
 Source: "{#Staging}\maintenance\config.ini"; DestDir: "{tmp}\xpg"; Flags: dontcopy
-; 1.8.0 : la page « Ta bibliothèque » - la liste Windows (une DLL 32 bits, comme Setup.exe)
-; et l'index des blocs livrés (lu avant la copie).
-Source: "aide\xpgliste.dll"; Flags: dontcopy
+; 1.8.0 : la page « Ta bibliothèque » - l'index des blocs livrés (lu avant la copie) et la liste
+; Windows (une DLL 32 bits, comme Setup.exe).
 Source: "{#Staging}\libs\index.txt"; DestName: "libs-index.txt"; Flags: dontcopy
-; 1.12.27 : l'habillage de l'assistant - ses images et sa police (avec sa licence) ; lus par
-; l'assistant seul, rien n'est installé.
-Source: "images\ui\*.bmp"; Flags: dontcopy
+; 1.12.28 : ce que l'assistant sort pour lui seul (la liste, la police, les images) a son propre
+; bloc compressé (solidbreak) : il le lit sans décompresser le programme. Avant, chaque image sortie
+; à la demande refaisait tout le flux (1 à 3 secondes d'attente au démarrage et à chaque page).
+Source: "aide\xpgliste.dll"; Flags: dontcopy solidbreak
+; 1.12.27 : l'habillage de l'assistant - sa police (avec sa licence) et ses images ; lus par
+; l'assistant seul, rien n'est installé. 1.12.28 : les images d'une échelle (1x : {tmp}\ui,
+; 2x : {tmp}\ui2x) sortent d'un coup au démarrage (voir Habiller).
 Source: "polices\*.ttf"; Flags: dontcopy
 Source: "polices\OFL-Barlow.txt"; Flags: dontcopy
+Source: "images\ui\*.bmp"; Excludes: "*-2x.bmp"; DestDir: "{tmp}\ui"; Flags: dontcopy
+Source: "images\ui\*-2x.bmp"; DestDir: "{tmp}\ui2x"; Flags: dontcopy
 
 [InstallDelete]
 ; 1.12.0 : deux applications - l'exe unique de la 1.11 et ses raccourcis s'en vont.
@@ -290,6 +333,9 @@ var
   CategoriesLivrees: TStringList;
   RecapEcrit: Boolean;
   BoutonCopier: TNewButton;
+  // 1.12.28 : le récapitulatif s'écrit ligne à ligne (voir TicRecap)
+  RecapTexte: TArrayOfString;
+  RecapDebut, RecapVu: Integer;
 
 // ---------------------------------------------- 1.8.0 : la liste des blocs ----
 //  Une vraie ListView de Windows (aide\xpgliste.c) : setuponly et delayload - la DLL
@@ -803,6 +849,14 @@ begin
   end;
 end;
 
+// 1.12.28 : tout le texte, d'un coup (la fin du défilé, une copie, une panne du mouvement).
+procedure RecapTout;
+begin
+  if (PageRecap = nil) or (RecapVu >= GetArrayLength(RecapTexte)) then Exit;
+  RecapVu := GetArrayLength(RecapTexte);
+  PageRecap.RichEditViewer.Lines.Text := Joindre(RecapTexte);
+end;
+
 procedure EcrireRecap;
 var L: TArrayOfString;
     F: String;
@@ -813,7 +867,9 @@ begin
   F := DossierEtat('') + '\Journaux\recapitulatif_' + Horodatage + '.txt';
   if not SaveStringsToUTF8File(F, L, False) then Log('Récapitulatif : écriture impossible (' + F + ')');
   if PageRecap <> nil then begin
-    PageRecap.RichEditViewer.Lines.Text := Joindre(L);
+    RecapTexte := L;
+    RecapVu := 0;
+    RecapTout;
     PageRecap.SubCaptionLabel.Caption := 'Aussi enregistré dans tes journaux : ' + ExtractFileName(F);
   end;
 end;
@@ -821,6 +877,7 @@ end;
 procedure CopierRecapClick(Sender: TObject);
 begin
   if PageRecap = nil then Exit;
+  RecapTout;
   // Tout choisir, puis WM_COPY (le presse-papiers de Windows).
   SendMessage(PageRecap.RichEditViewer.Handle, $00B1 {EM_SETSEL}, 0, -1);
   SendMessage(PageRecap.RichEditViewer.Handle, $0301 {WM_COPY}, 0, 0);
@@ -829,8 +886,9 @@ end;
 
 // ============================================================ 1.12.27 : l'habillage ====
 //  La colonne de gauche (le logo, le nom, la version, les étapes), l'en-tête des pages, les
-//  bandeaux de l'accueil et de la fin ; pendant la copie, l'animation, la barre et les astuces.
+//  bandeaux de l'accueil et de la fin ; pendant la copie, l'animation, la barre et le diaporama.
 //  Les couleurs (TColor : $00BBGGRR) et les étapes sont décrites ici, et nulle part ailleurs.
+//  1.12.28 : tout cela BOUGE - voir « le mouvement », plus bas.
 const
   CouleurColonne = $003A1F0D;      // #0D1F3A : le marine des logos
   CouleurTitre = $0047270F;        // #0F2747
@@ -841,33 +899,138 @@ const
   CouleurLienAVenir = $005E3F2A;   // le trait entre deux étapes à venir
   CouleurPiste = $00F3ECE6;        // #E6ECF3 : la barre, vide
   CouleurCarte = $00FAF6F3;        // #F3F6FA : les cartes de l'accueil, le récapitulatif
+  CouleurPoint = $00E2D8CC;        // #CCD8E2 : les points du diaporama
+  CouleurAmbre = $0042C5F5;        // #F5C542 : le jaune des logos
+  CouleurBleu = $00F6823B;         // #3B82F6
+  CouleurRose = $009C78F2;         // #F2789C : une couleur de plus pour les confettis
   FR_PRIVATE = $10;
   SRCCOPY = $00CC0020;
+  HALFTONE = 4;
+  WM_SETREDRAW = $000B;
+  RDW_TOUT = $0185;                // RedrawWindow : INVALIDATE, ERASE, ALLCHILDREN, UPDATENOW
   // Les étapes, dans l'ordre : leur nom | leur icône (images\ui\icone-<nom>.bmp). Une page
   // de plus dans l'assistant : son étape ici (ou une existante), et sa ligne dans EtapeDePage.
   EtapesNoms = 'Bienvenue|Emplacement|Tes données|Bibliothèque|Raccourcis|Récapitulatif|Installation|Terminé';
   EtapesIcones = 'bienvenue|emplacement|donnees|bibliotheque|raccourcis|recapitulatif|installation|termine';
-  Astuces = 'Tes données restent à toi : une mise à jour ou une réparation ne les efface jamais.|' +
-            'Menu Démarrer > {#Nom} > Maintenance : vérifier, réparer, revenir à la version d''avant.|' +
-            'F1 ouvre l''aide, dans {#NomApi} comme dans {#NomIhm}.|' +
-            '{#NomIhm} simule tes vues et tes équipements, sans automate branché.|' +
-            'Tes projets gardent leurs versions : tu peux les comparer et revenir en arrière.';
+  // 1.12.28 : le diaporama de la copie (une diapositive toutes les 5,6 s) : son image
+  // (images\ui\<image>.bmp) | son titre | son texte. Une diapositive de plus = un morceau de plus
+  // dans chacune des trois listes. (#160 : une espace insécable, devant les deux-points.)
+  DiaposImages = 'diapo-api|diapo-ihm|diapo-versions|diapo-donnees|diapo-aide|diapo-maintenance';
+  DiaposTitres = '{#NomApi}|{#NomIhm}|Tes projets gardent leurs versions|Tes données restent à toi|L''aide est toujours là|Une maintenance intégrée';
+  DiaposTextes = 'Le programme de ton automate' + #160 + ': analyse, variables, tables et simulation.|' +
+                 'Tes vues, tes scripts et tes équipements, simulés sans automate branché.|' +
+                 'Compare-les, et reviens en arrière quand tu veux.|' +
+                 'Une mise à jour ou une réparation ne les efface jamais.|' +
+                 'F1 l''ouvre, dans {#NomApi} comme dans {#NomIhm}.|' +
+                 'Menu Démarrer > {#Nom} > Maintenance' + #160 + ': vérifier, réparer, revenir à la version d''avant.';
+  DiapoDuree = 5600;
+  DiapoFondu = 700;
+  // 1.12.28 : la colonne des étapes est une seule image, le « rail » (unités 1x : posé en RailX,
+  // RailY de la colonne ; l'étape I a son centre à RailPremier + RailPas * I du haut du rail).
+  RailX = 10;
+  RailY = 130;
+  RailL = 180;
+  RailH = 246;
+  RailPremier = 20;
+  RailPas = 30;
+  RailMarqueX = 22;
+  RailTexteX = 44;
+  // le décor du bas de la colonne : sa hauteur (images\ui\decor.bmp, 1x)
+  DecorH = {#DecorH};
+  // les courbes (voir Courbe) et ce qu'une transition change (voir TransitionAjouter)
+  cLineaire = 0;
+  cSortie = 1;
+  cRebond = 2;
+  cDouce = 3;
+  gPosition = 0;
+  gBornes = 1;
+  gTexte = 2;
+  gLargeur = 3;
+
+type
+  TEntiers = array of Integer;
+  // Une transition : un contrôle va d'un état (A) à un autre (B) en Duree ms, après Delai ms,
+  // selon une courbe (Allure). Debut : -1 tant que la minuterie ne l'a pas vue.
+  TTransition = record
+    Cible: TControl;
+    Genre, Allure, Delai, Duree, Debut: Integer;
+    A0, A1, A2, A3, B0, B1, B2, B3: Integer;
+  end;
+  // Un calque : une image, ou une bande d'images l'une sous l'autre (N images de L x H), à
+  // l'échelle des images (1x ou 2x).
+  TSprite = record
+    Bmp: TBitmap;
+    L, H, N: Integer;
+  end;
+  // Une scène : une image recomposée par la minuterie. Travail : à l'échelle des images (LT x HT) ;
+  // Image : à la taille de l'écran (le même bitmap quand les tailles sont égales).
+  TScene = record
+    Image: TBitmapImage;
+    Travail: TBitmap;
+    LT, HT, Debut, Dernier: Integer;
+    Active: Boolean;
+  end;
+  // Un confetti de la fin (unités 1x ; ms) : son départ, sa vitesse, sa rotation.
+  TConfetti = record
+    X, Y, VX, VY, Tour, Phase: Extended;
+    Couleur, Taille: Integer;
+  end;
 
 var
   PolicesOk, Ui2x: Boolean;
-  LargeurColonne: Integer;
+  LargeurColonne, NbEtapes, Echelle: Integer;
   ColonneEtapes: TPanel;
-  EtapeMarque: array of TBitmapImage;
-  EtapeTexte: array of TLabel;
-  EtapeLien: array of TPanel;
-  NbEtapes: Integer;
-  EnTeteIcone, EnTeteTrait, AccueilBandeau, FinBandeau: TBitmapImage;
+  EnTeteIcone, EnTeteTrait: TBitmapImage;
+  EnTeteCadre: TPanel;
   AnimBande: TBitmap;
-  AnimImage, BarreDegrade: TBitmapImage;
-  AnimN, AnimL, AnimH, AnimIndex, AnimTics, AstuceIndex: Integer;
-  MinuterieAnim: LongWord;
+  AnimN, AnimL, AnimH, CopieX, CopieY: Integer;
+  BarreDegrade: TBitmapImage;
   BarrePiste, BarrePleine: TPanel;
-  BarrePourcent, Astuce: TLabel;
+  BarrePourcent, CopieFichier, CopieReste, PreparationTexte: TLabel;
+  // 1.12.28 : le moteur
+  HorlogeBase, Minuterie, RappelTic: LongWord;
+  MoteurEnPanne, EnTic: Boolean;
+  Transitions: array of TTransition;
+  SensPage, PageAvant: Integer;
+  NotebookX, NotebookY, TitreX, TitreY, DescX, DescY, IconeX, IconeY, IconeT: Integer;
+  // les scènes et leurs calques
+  Rail, Decor, Heros, Succes, Copie: TScene;
+  SpriteAvenir, SpriteArrivee, SpritePulse, SpriteCoche, SpriteAnneau, SpritePastille: TSprite;
+  SpriteLueur, SpriteLueurT, SpriteApi, SpriteIhm, SpritePoints, SpriteEclat: TSprite;
+  SpriteDisque, SpriteCocheFin, SpriteEtincA, SpriteEtincB, SpriteBarreEclat: TSprite;
+  FondAccueil, FondFin, FondDecor, BarreFond: TBitmap;
+  // la colonne : la progression P (en étapes : 2,5 = entre la 3e et la 4e) et sa cible ;
+  // l'état de chaque étape (0 à venir, 1 en cours, 2 faite), le précédent, depuis quand, la
+  // couleur de son nom avant le changement
+  RailP, RailP0, RailCible, RailPastille, RailPastille0: Extended;
+  RailEtat, RailAvant, RailDepuis, RailCouleur: TEntiers;
+  RailTemps, RailVu, RailHorloge, RailDepart, RailDuree, EtapeCopie: Integer;
+  // le décor : ses pistes (à la suite), trois impulsions qui les parcourent
+  PisteX, PisteY, PistePremier, PisteNb: TEntiers;
+  ImpPiste, ImpDebut, ImpDuree, ImpSens: TEntiers;
+  ImpProchaine: Integer;
+  // l'accueil : le réseau (noeuds X, Y, rayon en dixièmes ; liens A-B), les deux logos, les points
+  HerosNX, HerosNY, HerosNR, HerosLA, HerosLB, HerosPX, HerosPY, HerosImpLien, HerosImpDebut: TEntiers;
+  HerosApiX, HerosApiY, HerosIhmX, HerosIhmY, HerosImpProchaine: Integer;
+  AccTitreX, AccTitreY, AccTexteX, AccTexteY: Integer;
+  CartePanneau: array of TPanel;
+  CarteLogo: array of TBitmapImage;
+  CarteTitre, CarteTexte: array of TLabel;
+  CarteX, CarteY, CarteLogoX, CarteLogoY, CarteLogoL, CarteLogoH: TEntiers;
+  // la fin : le réseau, les étincelles (X, Y, taille, couleur), le cercle, la coche, les confettis
+  FinNX, FinNY, FinNR, FinEX, FinEY, FinES, FinEC: TEntiers;
+  FinDisqueX, FinDisqueY, FinCocheX, FinCocheY, FinCX, FinCY: Integer;
+  Confettis: array of TConfetti;
+  // la copie : la barre (sa cible, ce qui est affiché), le temps qui reste, le fichier, le diaporama
+  BarreCible, BarreAffiche, CopieEtaLisse: Extended;
+  CopieDebut, CopieVu, BarreVu: Integer;
+  CopieEnCours: Boolean;
+  DernierFichier, AppDossier, ReserveDossier: String;
+  DiapoCarte: TPanel;
+  DiapoImage: TBitmapImage;
+  DiapoCache: array of TBitmap;
+  DiapoActif: Boolean;
+  DiapoDebut, DiapoVu, DiapoY: Integer;
 
 function AddFontResourceEx(Fichier: String; Drapeaux: DWORD; Reserve: Cardinal): Integer;
   external 'AddFontResourceExW@gdi32.dll stdcall setuponly';
@@ -877,13 +1040,28 @@ function CreateRoundRectRgn(X1, Y1, X2, Y2, LE, HE: Integer): LongWord;
   external 'CreateRoundRectRgn@gdi32.dll stdcall setuponly';
 function SetWindowRgn(Fenetre: HWND; Region: LongWord; Redessiner: BOOL): Integer;
   external 'SetWindowRgn@user32.dll stdcall setuponly';
+// 1.12.28 : le temps, et le dessin des calques (AlphaBlend : l'alpha prémultiplié des BMP 32 bits)
+function GetTickCount: DWORD;
+  external 'GetTickCount@kernel32.dll stdcall setuponly';
+function GdiAlphaBlend(Dest: LongWord; X, Y, L, H: Integer; Source: LongWord; XS, YS, LS, HS: Integer; Melange: DWORD): BOOL;
+  external 'GdiAlphaBlend@gdi32.dll stdcall setuponly';
+function StretchBlt(Dest: LongWord; X, Y, L, H: Integer; Source: LongWord; XS, YS, LS, HS: Integer; Operation: DWORD): BOOL;
+  external 'StretchBlt@gdi32.dll stdcall setuponly';
+function SetStretchBltMode(DC: LongWord; Mode: Integer): Integer;
+  external 'SetStretchBltMode@gdi32.dll stdcall setuponly';
+function SetBrushOrgEx(DC: LongWord; X, Y: Integer; Ancien: LongWord): BOOL;
+  external 'SetBrushOrgEx@gdi32.dll stdcall setuponly';
+function IsIconic(Fenetre: HWND): Integer;
+  external 'IsIconic@user32.dll stdcall setuponly';
+function RedrawWindow(Fenetre: HWND; Zone, Region: LongWord; Drapeaux: Cardinal): BOOL;
+  external 'RedrawWindow@user32.dll stdcall setuponly';
 
-// Le N-ième morceau (0...) de 'a|b|c', et leur nombre.
-function Morceau(S: String; N: Integer): String;
+// Le N-ième morceau (0...) de 'a|b|c' (ou d'une liste à un autre séparateur), et leur nombre.
+function MorceauDe(S: String; N: Integer; Sep: String): String;
 var P: Integer;
 begin
   while N > 0 do begin
-    P := Pos('|', S);
+    P := Pos(Sep, S);
     if P = 0 then begin
       S := '';
       Break;
@@ -891,26 +1069,53 @@ begin
     Delete(S, 1, P);
     N := N - 1;
   end;
-  P := Pos('|', S);
+  P := Pos(Sep, S);
   if P > 0 then Result := Copy(S, 1, P - 1) else Result := S;
 end;
 
-function NombreDeMorceaux(S: String): Integer;
-var I: Integer;
+function Morceau(S: String; N: Integer): String;
 begin
-  Result := 1;
-  for I := 1 to Length(S) do
-    if S[I] = '|' then Result := Result + 1;
+  Result := MorceauDe(S, N, '|');
 end;
 
-// Une image de l'habillage, sortie à la demande : en 2x dès que l'écran est agrandi (réduite,
-// elle reste nette), sinon en 1x.
+function NombreDe(S, Sep: String): Integer;
+var I: Integer;
+begin
+  Result := 0;
+  if S = '' then Exit;
+  Result := 1;
+  for I := 1 to Length(S) do
+    if S[I] = Sep[1] then Result := Result + 1;
+end;
+
+function NombreDeMorceaux(S: String): Integer;
+begin
+  Result := NombreDe(S, '|');
+end;
+
+// Le N-ième entier (0...) de 'a,b,c'.
+function Nombre(S: String; N: Integer): Integer;
+begin
+  Result := StrToIntDef(Trim(MorceauDe(S, N, ',')), 0);
+end;
+
+function Mini(A, B: Integer): Integer;
+begin
+  if A < B then Result := A else Result := B;
+end;
+
+function Maxi(A, B: Integer): Integer;
+begin
+  if A > B then Result := A else Result := B;
+end;
+
+// Une image de l'habillage : en 2x dès que l'écran est agrandi (réduite, elle reste nette), sinon
+// en 1x. 1.12.28 : toutes celles d'une échelle sont sorties au démarrage (Habiller) - jamais à la
+// demande : pendant la copie, l'extracteur d'Inno Setup est occupé (et ne se rappelle pas lui-même).
 function ImageUi(Nom: String): String;
 begin
-  if Ui2x then Nom := Nom + '-2x';
-  Nom := Nom + '.bmp';
-  if not FileExists(ExpandConstant('{tmp}\') + Nom) then ExtractTemporaryFile(Nom);
-  Result := ExpandConstant('{tmp}\') + Nom;
+  if Ui2x then Result := ExpandConstant('{tmp}\ui2x\') + Nom + '-2x.bmp'
+  else Result := ExpandConstant('{tmp}\ui\') + Nom + '.bmp';
 end;
 
 function NouvelleImage(Parent: TWinControl; Nom: String; X, Y, L, H: Integer): TBitmapImage;
@@ -969,15 +1174,16 @@ var I: Integer;
     Nom: String;
 begin
   PolicesOk := False;
+  try
+    ExtractTemporaryFiles('{tmp}\Barlow-*.ttf');   // 1.12.28 : les quatre d'un coup
+  except
+    Log('Police non chargée (' + GetExceptionMessage + ')');
+    Exit;
+  end;
   for I := 0 to 3 do begin
     Nom := Morceau('Barlow-Regular.ttf|Barlow-Medium.ttf|Barlow-SemiBold.ttf|Barlow-Bold.ttf', I);
-    try
-      ExtractTemporaryFile(Nom);
-      if AddFontResourceEx(ExpandConstant('{tmp}\') + Nom, FR_PRIVATE, 0) > 0 then PolicesOk := True
-      else Log('Police non chargée : ' + Nom);
-    except
-      Log('Police non chargée : ' + Nom + ' (' + GetExceptionMessage + ')');
-    end;
+    if AddFontResourceEx(ExpandConstant('{tmp}\') + Nom, FR_PRIVATE, 0) > 0 then PolicesOk := True
+    else Log('Police non chargée : ' + Nom);
   end;
 end;
 
@@ -995,28 +1201,679 @@ begin
   else Result := 7;   // « Ce qui a été installé » et la fin
 end;
 
-procedure MajEtapes(Courante: Integer);
-var I: Integer;
-    Etat: String;
+// ======================================================== 1.12.28 : le mouvement ====
+//  Tout ce qui bouge passe par un seul moteur : UNE minuterie (SetTimer + CreateCallback, un tic
+//  toutes les 15 ms, voir Tic) et deux sortes d'animations :
+//   - les TRANSITIONS (Transitions[]) : un contrôle va d'un état à un autre en un temps donné,
+//     selon une courbe - il glisse (Arriver), grandit (Grandir), change de couleur (Teinter) ou
+//     de largeur (Elargir). Une page qui arrive, un titre qui apparaît, une carte qui monte ;
+//   - les SCÈNES : une image recomposée à chaque tic - les étapes de la colonne (Rail), le décor
+//     du bas de la colonne (Decor), l'accueil (Heros), la fin (Succes), l'animation de la copie
+//     (Copie) ; pendant la copie, la barre et le diaporama. Une scène dessine dans son image de
+//     TRAVAIL, à l'échelle des images (1x, ou 2x dès que l'écran est agrandi), puis la pose à
+//     l'écran (réduite en HALFTONE si la taille diffère : nette à 100, 125, 150, 200 %) ; ses
+//     textes s'écrivent ensuite, à la taille de l'écran.
+//  Les calques (images\ui\*.bmp, 32 bits) et leurs repères (images\ui\habillage.ini) viennent de
+//  outils\installateur_images.py. Le temps : GetTickCount ; une animation créée avant que
+//  l'assistant soit à l'écran part au premier tic où il l'est (rien ne se joue en coulisse).
+//  Sans assistant (/SILENT, /VERYSILENT) : rien n'est créé, la minuterie ne démarre jamais.
+//  Une erreur pendant un tic : notée dans le journal, tout se met à son état final et s'arrête
+//  (rien ne reste à moitié) ; l'installation continue.
+
+// ------------------------------------------------------------- le temps, les courbes ----
+function Horloge: Integer;
 begin
-  if ColonneEtapes = nil then Exit;
+  Result := GetTickCount - HorlogeBase;
+end;
+
+function Borne(F: Extended): Extended;
+begin
+  if F < 0 then Result := 0
+  else if F > 1 then Result := 1
+  else Result := F;
+end;
+
+// De 0 à 1 : cSortie (vite, puis doucement), cRebond (dépasse un peu, puis revient), cDouce
+// (doucement au début et à la fin), cLineaire.
+function Courbe(C: Integer; T: Extended): Extended;
+var U: Extended;
+begin
+  if T <= 0 then begin
+    Result := 0;
+    Exit;
+  end;
+  if T >= 1 then begin
+    Result := 1;
+    Exit;
+  end;
+  case C of
+    cSortie: begin
+        U := 1 - T;
+        Result := 1 - U * U * U;
+      end;
+    cRebond: begin
+        U := T - 1;
+        Result := 1 + 2.70158 * U * U * U + 1.70158 * U * U;
+      end;
+    cDouce: Result := (1 - Cos(Pi * T)) / 2;
+  else
+    Result := T;
+  end;
+end;
+
+function Entre(A, B: Integer; F: Extended): Integer;
+begin
+  Result := A + Round((B - A) * F);
+end;
+
+function CouleurEntre(A, B: Integer; F: Extended): Integer;
+begin
+  F := Borne(F);
+  Result := Entre(A and $FF, B and $FF, F) or (Entre((A shr 8) and $FF, (B shr 8) and $FF, F) shl 8)
+            or (Entre((A shr 16) and $FF, (B shr 16) and $FF, F) shl 16);
+end;
+
+procedure ChangerCouleur(C: TControl; Couleur: Integer);
+begin
+  if C is TNewStaticText then TNewStaticText(C).Font.Color := Couleur
+  else if C is TLabel then TLabel(C).Font.Color := Couleur
+  else if C is TPanel then TPanel(C).Color := Couleur;
+end;
+
+// ------------------------------------------------------------------ les transitions ----
+procedure TransitionAppliquer(I: Integer; F: Extended);
+var C: TControl;
+begin
+  C := Transitions[I].Cible;
+  if C = nil then Exit;
+  case Transitions[I].Genre of
+    gPosition: C.SetBounds(Entre(Transitions[I].A0, Transitions[I].B0, F), Entre(Transitions[I].A1, Transitions[I].B1, F), C.Width, C.Height);
+    gBornes: C.SetBounds(Entre(Transitions[I].A0, Transitions[I].B0, F), Entre(Transitions[I].A1, Transitions[I].B1, F),
+                         Entre(Transitions[I].A2, Transitions[I].B2, F), Entre(Transitions[I].A3, Transitions[I].B3, F));
+    gTexte: ChangerCouleur(C, CouleurEntre(Transitions[I].A0, Transitions[I].B0, F));
+    gLargeur: C.Width := Maxi(0, Entre(Transitions[I].A0, Transitions[I].B0, F));
+  end;
+end;
+
+// Une transition de plus (elle remplace celle qui changeait déjà la même chose du même contrôle) ;
+// le contrôle prend aussitôt son état de départ (le premier dessin de la page le montre ainsi).
+procedure TransitionAjouter(Cible: TControl; Genre, Allure, Delai, Duree, A0, A1, A2, A3, B0, B1, B2, B3: Integer);
+var I, Libre: Integer;
+begin
+  if Cible = nil then Exit;
+  Libre := -1;
+  for I := 0 to GetArrayLength(Transitions) - 1 do
+    if (Transitions[I].Cible = nil) or ((Transitions[I].Cible = Cible) and (Transitions[I].Genre = Genre)) then begin
+      Transitions[I].Cible := nil;
+      if Libre < 0 then Libre := I;
+    end;
+  if Libre < 0 then begin
+    Libre := GetArrayLength(Transitions);
+    SetArrayLength(Transitions, Libre + 1);
+  end;
+  Transitions[Libre].Cible := Cible;
+  Transitions[Libre].Genre := Genre;
+  Transitions[Libre].Allure := Allure;
+  Transitions[Libre].Delai := Delai;
+  Transitions[Libre].Duree := Maxi(1, Duree);
+  Transitions[Libre].Debut := -1;
+  Transitions[Libre].A0 := A0;
+  Transitions[Libre].A1 := A1;
+  Transitions[Libre].A2 := A2;
+  Transitions[Libre].A3 := A3;
+  Transitions[Libre].B0 := B0;
+  Transitions[Libre].B1 := B1;
+  Transitions[Libre].B2 := B2;
+  Transitions[Libre].B3 := B3;
+  if MoteurEnPanne then begin
+    TransitionAppliquer(Libre, 1);
+    Transitions[Libre].Cible := nil;
+  end else
+    TransitionAppliquer(Libre, 0);
+end;
+
+// C arrive en (X, Y), depuis (X + DX, Y + DY).
+procedure Arriver(C: TControl; X, Y, DX, DY, Delai, Duree, Allure: Integer);
+begin
+  TransitionAjouter(C, gPosition, Allure, Delai, Duree, X + DX, Y + DY, 0, 0, X, Y, 0, 0);
+end;
+
+// La couleur du texte de C (ou du fond, pour un panneau) passe de De à Vers.
+procedure Teinter(C: TControl; De, Vers, Delai, Duree: Integer);
+begin
+  TransitionAjouter(C, gTexte, cSortie, Delai, Duree, De, 0, 0, 0, Vers, 0, 0, 0);
+end;
+
+// C grandit jusqu'à (X, Y, L, H), depuis Pourcent % de sa taille, autour de son centre, avec un
+// petit rebond à la fin.
+procedure Grandir(C: TControl; X, Y, L, H, Pourcent, Delai, Duree: Integer);
+var L0, H0: Integer;
+begin
+  L0 := Maxi(1, L * Pourcent div 100);
+  H0 := Maxi(1, H * Pourcent div 100);
+  TransitionAjouter(C, gBornes, cRebond, Delai, Duree, X + (L - L0) div 2, Y + (H - H0) div 2, L0, H0, X, Y, L, H);
+end;
+
+// La largeur de C passe de De à Vers.
+procedure Elargir(C: TControl; De, Vers, Delai, Duree: Integer);
+begin
+  TransitionAjouter(C, gLargeur, cDouce, Delai, Duree, De, 0, 0, 0, Vers, 0, 0, 0);
+end;
+
+// Tout à son état final (une panne).
+procedure TransitionsFinir;
+var I: Integer;
+begin
+  for I := 0 to GetArrayLength(Transitions) - 1 do
+    if Transitions[I].Cible <> nil then begin
+      try
+        TransitionAppliquer(I, 1);
+      except
+        Log('Habillage : ' + GetExceptionMessage);
+      end;
+      Transitions[I].Cible := nil;
+    end;
+end;
+
+procedure TicTransitions(Ms: Integer);
+var I, T: Integer;
+begin
+  for I := 0 to GetArrayLength(Transitions) - 1 do
+    if Transitions[I].Cible <> nil then begin
+      if Transitions[I].Debut < 0 then Transitions[I].Debut := Ms + Transitions[I].Delai;
+      T := Ms - Transitions[I].Debut;
+      if T >= Transitions[I].Duree then begin
+        TransitionAppliquer(I, 1);
+        Transitions[I].Cible := nil;
+      end else if T >= 0 then
+        TransitionAppliquer(I, Courbe(Transitions[I].Allure, T * 1.0 / Transitions[I].Duree));
+    end;
+end;
+
+// ----------------------------------------------------------- les calques, les scènes ----
+// Le nombre d'images d'une bande (images\ui\habillage.ini, lu à la compilation).
+function NombreImages(Nom: String): Integer;
+var S: String;
+    P: Integer;
+begin
+  Result := 1;
+  S := ';{#HabBandes};';
+  P := Pos(';' + Nom + ':', S);
+  if P = 0 then Exit;
+  Delete(S, 1, P + Length(Nom) + 1);
+  P := Pos(';', S);
+  if P > 0 then S := Copy(S, 1, P - 1);
+  Result := Maxi(1, Nombre(S, 2));
+end;
+
+procedure SpriteCharger(var S: TSprite; Nom: String);
+begin
+  S.Bmp := TBitmap.Create;
+  S.Bmp.LoadFromFile(ImageUi(Nom));
+  S.N := NombreImages(Nom);
+  S.L := S.Bmp.Width;
+  S.H := S.Bmp.Height div S.N;
+end;
+
+function FondCharger(Nom: String): TBitmap;
+begin
+  Result := TBitmap.Create;
+  Result.LoadFromFile(ImageUi(Nom));
+end;
+
+// L'image K (0...) de la bande S, posée en (X, Y) de Dest et étirée en L x H (les lueurs, douces :
+// l'étirement ne se voit pas), opacité Alpha (0 à 255).
+procedure SpritePoserTaille(Dest: TBitmap; var S: TSprite; K, X, Y, L, H, Alpha: Integer);
+begin
+  if (S.Bmp = nil) or (Alpha <= 0) or (L <= 0) or (H <= 0) then Exit;
+  if Alpha > 255 then Alpha := 255;
+  if K < 0 then K := 0;
+  if K >= S.N then K := S.N - 1;
+  GdiAlphaBlend(Dest.Canvas.Handle, X, Y, L, H, S.Bmp.Canvas.Handle, 0, K * S.H, S.L, S.H, $01000000 or (Alpha shl 16));
+end;
+
+procedure SpritePoser(Dest: TBitmap; var S: TSprite; K, X, Y, Alpha: Integer);
+begin
+  SpritePoserTaille(Dest, S, K, X, Y, S.L, S.H, Alpha);
+end;
+
+procedure Remplir(C: TCanvas; X1, Y1, X2, Y2, Couleur: Integer);
+var R: TRect;
+begin
+  if (X2 <= X1) or (Y2 <= Y1) then Exit;
+  R.Left := X1;
+  R.Top := Y1;
+  R.Right := X2;
+  R.Bottom := Y2;
+  C.Brush.Style := bsSolid;
+  C.Brush.Color := Couleur;
+  C.FillRect(R);
+end;
+
+// Une image réduite (ou agrandie) proprement (HALFTONE) : de Source (LS x HS) vers Dest (L x H).
+procedure Reduire(Dest: LongWord; X, Y, L, H: Integer; Source: LongWord; LS, HS: Integer);
+begin
+  SetStretchBltMode(Dest, HALFTONE);
+  SetBrushOrgEx(Dest, 0, 0, 0);
+  StretchBlt(Dest, X, Y, L, H, Source, 0, 0, LS, HS, SRCCOPY);
+end;
+
+// Une scène : son image à l'écran (X, Y, L x H, dans Parent) et son image de travail (LT x HT).
+procedure ScenePreparer(var S: TScene; Parent: TWinControl; X, Y, L, H, LT, HT: Integer);
+begin
+  S.Image := TBitmapImage.Create(WizardForm);
+  S.Image.Parent := Parent;
+  S.Image.SetBounds(X, Y, L, H);
+  S.Image.Bitmap.Width := L;
+  S.Image.Bitmap.Height := H;
+  S.LT := LT;
+  S.HT := HT;
+  if (LT = L) and (HT = H) then S.Travail := S.Image.Bitmap
+  else begin
+    S.Travail := TBitmap.Create;
+    S.Travail.Width := LT;
+    S.Travail.Height := HT;
+  end;
+  S.Debut := -1;
+  S.Dernier := -100000;
+  S.Active := False;
+end;
+
+// Le travail à l'écran (réduit s'il le faut) ; l'appelant écrit ensuite ses textes, puis Repaint.
+procedure SceneMontrer(var S: TScene);
+begin
+  if S.Travail <> S.Image.Bitmap then
+    Reduire(S.Image.Bitmap.Canvas.Handle, 0, 0, S.Image.Bitmap.Width, S.Image.Bitmap.Height, S.Travail.Canvas.Handle, S.LT, S.HT);
+end;
+
+// Écrit Texte en (X, Y), coupé aux espaces pour tenir dans la largeur L ; rend la hauteur écrite.
+function TexteCoupe(C: TCanvas; X, Y, L: Integer; Texte: String): Integer;
+var Ligne, Mot: String;
+    P, H: Integer;
+begin
+  Result := 0;
+  H := C.TextHeight('Ég');
+  C.Brush.Style := bsClear;
+  Ligne := '';
+  while Texte <> '' do begin
+    P := Pos(' ', Texte);
+    if P = 0 then begin
+      Mot := Texte;
+      Texte := '';
+    end else begin
+      Mot := Copy(Texte, 1, P - 1);
+      Delete(Texte, 1, P);
+    end;
+    if (Ligne <> '') and (C.TextWidth(Ligne + ' ' + Mot) > L) then begin
+      C.TextOut(X, Y + Result, Ligne);
+      Result := Result + H;
+      Ligne := Mot;
+    end else if Ligne = '' then Ligne := Mot
+    else Ligne := Ligne + ' ' + Mot;
+  end;
+  if Ligne <> '' then begin
+    C.TextOut(X, Y + Result, Ligne);
+    Result := Result + H;
+  end;
+end;
+
+// Les noeuds d'un réseau, lus dans habillage.ini : 'x,y,r;x,y,r...' (r : dixièmes de point).
+procedure LireNoeuds(S: String; var X, Y, R: TEntiers);
+var I, N: Integer;
+    U: String;
+begin
+  N := NombreDe(S, ';');
+  SetArrayLength(X, N);
+  SetArrayLength(Y, N);
+  SetArrayLength(R, N);
+  for I := 0 to N - 1 do begin
+    U := MorceauDe(S, I, ';');
+    X[I] := Nombre(U, 0);
+    Y[I] := Nombre(U, 1);
+    R[I] := Nombre(U, 2);
+  end;
+end;
+
+// Une liste de couples 'a,b;a,b...' (les liens d'un réseau, les points du lien de l'accueil).
+procedure LireCouples(S: String; var A, B: TEntiers);
+var I, N: Integer;
+    U: String;
+begin
+  N := NombreDe(S, ';');
+  SetArrayLength(A, N);
+  SetArrayLength(B, N);
+  for I := 0 to N - 1 do begin
+    U := MorceauDe(S, I, ';');
+    A[I] := Nombre(U, 0);
+    B[I] := Nombre(U, 1);
+  end;
+end;
+
+// Les noeuds d'un réseau s'allument (de gauche à droite, à l'entrée), puis scintillent.
+procedure DessinerNoeuds(B: TBitmap; var X, Y, R: TEntiers; T: Integer);
+var K, L, A: Integer;
+    Entree, Scint: Extended;
+begin
+  for K := 0 to GetArrayLength(X) - 1 do begin
+    Entree := Borne((T - 80 - X[K] * 1.6) / 380.0);
+    Scint := 0.5 + 0.5 * Sin(2 * Pi * (T / 2600.0 + K * 0.137));
+    A := Round(255 * Entree * (0.18 + 0.55 * Scint * Scint));
+    L := Round(R[K] * 0.55 * Echelle);
+    SpritePoserTaille(B, SpriteLueur, 0, X[K] * Echelle - L div 2, Y[K] * Echelle - L div 2, L, L, A);
+  end;
+end;
+
+// L'éclat : une bande de lumière traverse le bandeau (de X0 à X1, unités 1x), à partir de Debut,
+// puis toutes les Periode ms.
+procedure DessinerEclat(B: TBitmap; T, Debut, Periode, X0, X1: Integer);
+var U: Extended;
+begin
+  if T < Debut then Exit;
+  U := ((T - Debut) mod Periode) / 950.0;
+  if U >= 1 then Exit;
+  SpritePoser(B, SpriteEclat, 0, Round((X0 + (X1 - X0) * Courbe(cDouce, U)) * Echelle) - SpriteEclat.L div 2, 0, 255);
+end;
+
+// --------------------------------------------------------------------- la minuterie ----
+procedure MoteurArreter;
+begin
+  if Minuterie <> 0 then begin
+    KillTimer(0, Minuterie);
+    Minuterie := 0;
+  end;
+end;
+
+procedure Panne(Raison: String);
+begin
+  if MoteurEnPanne then Exit;
+  MoteurEnPanne := True;
+  MoteurArreter;
+  Log('Habillage : le mouvement s''arrête (' + Raison + ') ; l''installation continue.');
+  TransitionsFinir;
+  RecapTout;
+end;
+
+// ------------------------------------------------ la colonne : les étapes, le décor ----
+// L'état d'une étape d'après la progression P : 2 faite (la ligne a rejoint l'étape suivante),
+// 1 en cours, 0 à venir.
+function EtatEtape(I: Integer; P: Extended): Integer;
+begin
+  if P >= I + 1 - 0.001 then Result := 2
+  else if P >= I - 0.001 then Result := 1
+  else Result := 0;
+end;
+
+function CouleurEtat(Etat: Integer): Integer;
+begin
+  if Etat = 2 then Result := CouleurFaite
+  else if Etat = 1 then Result := clWhite
+  else Result := CouleurAVenir;
+end;
+
+// Le rail : la pastille de l'étape en cours (elle glisse d'une étape à l'autre), les liens (ils
+// se remplissent), les marques (l'arrivée, la pulsation, la coche qui se dessine ; pendant la
+// copie, l'anneau qui se remplit), puis les noms, à la taille de l'écran (leur couleur passe
+// d'un état à l'autre, l'étape en cours s'avance un peu). À l'ouverture, tout apparaît de haut
+// en bas.
+procedure DessinerRail(Ms: Integer);
+var B: TBitmap;
+    C: TCanvas;
+    I, E, X, Y, Y1, Y2, Yf, T, Dx, Couleur, H, A: Integer;
+    F, Entree: Extended;
+    Graisse: String;
+begin
+  E := Echelle;
+  B := Rail.Travail;
+  Remplir(B.Canvas, 0, 0, Rail.LT, Rail.HT, CouleurColonne);
+  A := Round(255 * Borne((Ms - Rail.Debut) / 400.0));
+  SpritePoser(B, SpritePastille, 0, 2 * E, Round((RailPremier + RailPas * RailPastille - 14) * E), A);
+  for I := 0 to NbEtapes - 2 do begin
+    Entree := Borne((Ms - Rail.Debut - I * 60) / 260.0);
+    Y1 := (RailPremier + RailPas * I + 11) * E;
+    Y2 := (RailPremier + RailPas * (I + 1) - 11) * E;
+    Yf := Y1 + Round((Y2 - Y1) * Borne(RailP - I));
+    Remplir(B.Canvas, (RailMarqueX - 1) * E, Y1, (RailMarqueX + 1) * E, Yf, CouleurEntre(CouleurColonne, CouleurTurquoise, Entree));
+    Remplir(B.Canvas, (RailMarqueX - 1) * E, Yf, (RailMarqueX + 1) * E, Y2, CouleurEntre(CouleurColonne, CouleurLienAVenir, Entree));
+  end;
+  X := (RailMarqueX - 14) * E;
   for I := 0 to NbEtapes - 1 do begin
-    if I < Courante then Etat := 'fait' else if I = Courante then Etat := 'encours' else Etat := 'avenir';
-    EtapeMarque[I].Bitmap.LoadFromFile(ImageUi('marque-' + Etat));
-    if I = Courante then Ecrire(EtapeTexte[I].Font, 'SemiBold', 10, clWhite)
-    else if I < Courante then Ecrire(EtapeTexte[I].Font, '', 10, CouleurFaite)
-    else Ecrire(EtapeTexte[I].Font, '', 10, CouleurAVenir);
-    if I < NbEtapes - 1 then begin
-      if I < Courante then EtapeLien[I].Color := CouleurTurquoise else EtapeLien[I].Color := CouleurLienAVenir;
+    Y := (RailPremier + RailPas * I - 14) * E;
+    T := Ms - RailDepuis[I];
+    A := Round(255 * Borne((Ms - Rail.Debut - I * 60) / 260.0));
+    case RailEtat[I] of
+      2: SpritePoser(B, SpriteCoche, T * SpriteCoche.N div 380, X, Y, A);
+      1: begin
+           if T < 320 then SpritePoser(B, SpriteArrivee, T * SpriteArrivee.N div 320, X, Y, A)
+           else if (I = EtapeCopie) and CopieEnCours then SpritePoser(B, SpriteAnneau, Round(BarreAffiche * (SpriteAnneau.N - 1)), X, Y, A)
+           else SpritePoser(B, SpritePulse, ((T - 320) div 50) mod SpritePulse.N, X, Y, A);
+         end;
+    else
+      SpritePoser(B, SpriteAvenir, 0, X, Y, A);
     end;
   end;
-  if EnTeteIcone <> nil then EnTeteIcone.Bitmap.LoadFromFile(ImageUi('icone-' + Morceau(EtapesIcones, Courante)));
+  SceneMontrer(Rail);
+  C := Rail.Image.Bitmap.Canvas;
+  for I := 0 to NbEtapes - 1 do begin
+    T := Ms - RailDepuis[I];
+    F := Courbe(cSortie, T / 300.0);
+    Couleur := CouleurEntre(RailCouleur[I], CouleurEtat(RailEtat[I]), F);
+    Dx := 0;
+    if RailEtat[I] = 1 then begin
+      Graisse := 'SemiBold';
+      Dx := Round(ScaleX(4) * F);
+    end else begin
+      Graisse := '';
+      if RailAvant[I] = 1 then Dx := Round(ScaleX(4) * (1 - F));
+    end;
+    Ecrire(C.Font, Graisse, 10, Couleur);
+    H := C.TextHeight('Ég');
+    C.Brush.Style := bsClear;
+    C.TextOut(ScaleX(RailTexteX) + Dx, ScaleY(RailPremier + RailPas * I) - H div 2, Morceau(EtapesNoms, I));
+  end;
+  Rail.Image.Repaint;
+end;
+
+// La progression rejoint sa cible : d'une page à l'autre, en douceur (RailDuree) ; pendant la
+// copie, elle suit la barre (vite, puis doucement). La pastille, elle, va d'étape en étape. Une
+// étape qui change d'état part de là ; on redessine pendant un mouvement, sinon au rythme de la
+// pulsation (20 images/s).
+procedure TicRail(Ms: Integer);
+var I, Etat, Dt: Integer;
+    Ecart, F: Extended;
+    Bouge: Boolean;
+begin
+  if Rail.Image = nil then Exit;
+  if Rail.Debut < 0 then begin
+    Rail.Debut := Ms;
+    RailHorloge := Ms;
+    for I := 0 to NbEtapes - 1 do begin
+      RailEtat[I] := EtatEtape(I, RailP);
+      RailAvant[I] := 0;
+      RailCouleur[I] := CouleurColonne;
+      RailDepuis[I] := Ms + I * 60;
+    end;
+  end;
+  Dt := Mini(100, Maxi(0, Ms - RailHorloge));
+  RailHorloge := Ms;
+  Bouge := False;
+  if RailDuree > 0 then begin
+    if RailDepart < 0 then RailDepart := Ms;
+    F := (Ms - RailDepart) * 1.0 / RailDuree;
+    if F >= 1 then begin
+      RailP := RailCible;
+      RailPastille := RailCible;
+      RailDuree := 0;
+    end else begin
+      RailP := RailP0 + (RailCible - RailP0) * Courbe(cDouce, F);
+      RailPastille := RailPastille0 + (RailCible - RailPastille0) * Courbe(cDouce, F);
+    end;
+    Bouge := True;
+  end else begin
+    Ecart := RailCible - RailP;
+    if Ecart <> 0 then begin
+      if (Ecart < 0.003) and (Ecart > -0.003) then RailP := RailCible
+      else RailP := RailP + Ecart * Dt / (Dt + 85.0);
+      Bouge := True;
+    end;
+    // pendant la copie, la pastille reste sur son étape
+    Ecart := Trunc(RailCible + 0.001) - RailPastille;
+    if Ecart <> 0 then begin
+      if (Ecart < 0.003) and (Ecart > -0.003) then RailPastille := Trunc(RailCible + 0.001)
+      else RailPastille := RailPastille + Ecart * Dt / (Dt + 70.0);
+      Bouge := True;
+    end;
+  end;
+  for I := 0 to NbEtapes - 1 do begin
+    Etat := EtatEtape(I, RailP);
+    if Etat <> RailEtat[I] then begin
+      RailCouleur[I] := CouleurEtat(RailEtat[I]);
+      RailAvant[I] := RailEtat[I];
+      RailEtat[I] := Etat;
+      RailDepuis[I] := Ms;
+      RailTemps := Ms;
+    end;
+  end;
+  if Bouge or (Ms - RailTemps < 450) or (Ms - Rail.Debut < NbEtapes * 60 + 700) or (Ms div 50 <> RailVu) then begin
+    RailVu := Ms div 50;
+    DessinerRail(Ms);
+  end;
+end;
+
+// Sans le mouvement (une panne) : le rail à son état, sans animation, une fois.
+procedure RailFige;
+var I: Integer;
+begin
+  if (Rail.Image = nil) or (NbEtapes = 0) then Exit;
+  try
+    RailP := RailCible;
+    RailPastille := Trunc(RailCible + 0.001);
+    RailDuree := 0;
+    Rail.Debut := -100000;
+    for I := 0 to NbEtapes - 1 do begin
+      RailEtat[I] := EtatEtape(I, RailP);
+      RailAvant[I] := RailEtat[I];
+      RailDepuis[I] := -100000;
+      RailCouleur[I] := CouleurEtat(RailEtat[I]);
+    end;
+    DessinerRail(0);
+  except
+    Log('Habillage, colonne : ' + GetExceptionMessage);
+  end;
+end;
+
+// Les pistes du décor (habillage.ini : 'x,y x,y...|...', unités 1x de l'image de 150 de haut,
+// dont on voit le bas) : leurs points, à la suite.
+procedure LirePistes;
+var S, P, Q: String;
+    I, J, N, M: Integer;
+begin
+  S := '{#DecorPistes}';
+  N := NombreDe(S, '|');
+  SetArrayLength(PistePremier, N);
+  SetArrayLength(PisteNb, N);
+  M := 0;
+  for I := 0 to N - 1 do begin
+    P := Trim(MorceauDe(S, I, '|'));
+    PistePremier[I] := M;
+    PisteNb[I] := NombreDe(P, ' ');
+    SetArrayLength(PisteX, M + PisteNb[I]);
+    SetArrayLength(PisteY, M + PisteNb[I]);
+    for J := 0 to PisteNb[I] - 1 do begin
+      Q := MorceauDe(P, J, ' ');
+      PisteX[M + J] := Nombre(Q, 0);
+      PisteY[M + J] := Nombre(Q, 1) - {#DecorHaut};
+    end;
+    M := M + PisteNb[I];
+  end;
+  SetArrayLength(ImpPiste, 3);
+  SetArrayLength(ImpDebut, 3);
+  SetArrayLength(ImpDuree, 3);
+  SetArrayLength(ImpSens, 3);
+  for I := 0 to 2 do ImpPiste[I] := -1;
+end;
+
+function SegmentLongueur(K: Integer): Extended;
+begin
+  Result := Sqrt((PisteX[K + 1] - PisteX[K]) * (PisteX[K + 1] - PisteX[K]) + (PisteY[K + 1] - PisteY[K]) * (PisteY[K + 1] - PisteY[K]));
+end;
+
+function PisteLongueur(I: Integer): Extended;
+var J: Integer;
+begin
+  Result := 0;
+  for J := 0 to PisteNb[I] - 2 do Result := Result + SegmentLongueur(PistePremier[I] + J);
+end;
+
+// Le point à la distance D (unités 1x) le long de la piste I.
+procedure PistePoint(I: Integer; D: Extended; var X, Y: Extended);
+var J, K: Integer;
+    L: Extended;
+begin
+  K := PistePremier[I];
+  X := PisteX[K];
+  Y := PisteY[K];
+  for J := 0 to PisteNb[I] - 2 do begin
+    K := PistePremier[I] + J;
+    L := SegmentLongueur(K);
+    if (D <= L) and (L > 0) then begin
+      X := PisteX[K] + (PisteX[K + 1] - PisteX[K]) * D / L;
+      Y := PisteY[K] + (PisteY[K + 1] - PisteY[K]) * D / L;
+      Exit;
+    end;
+    D := D - L;
+    X := PisteX[K + 1];
+    Y := PisteY[K + 1];
+  end;
+end;
+
+// Le décor : des impulsions parcourent les pistes du circuit (30 images/s).
+procedure TicDecor(Ms: Integer);
+var B: TBitmap;
+    K, E, T, L: Integer;
+    D, X, Y, U, A, Long: Extended;
+begin
+  if (Decor.Image = nil) or (GetArrayLength(PisteNb) = 0) then Exit;
+  if Ms - Decor.Dernier < 33 then Exit;
+  Decor.Dernier := Ms;
+  if Ms >= ImpProchaine then
+    for K := 0 to 2 do
+      if ImpPiste[K] < 0 then begin
+        ImpPiste[K] := Random(GetArrayLength(PisteNb));
+        ImpDebut[K] := Ms;
+        ImpDuree[K] := Maxi(400, Round(PisteLongueur(ImpPiste[K]) * 1000 / 60));
+        if Random(2) = 0 then ImpSens[K] := 1 else ImpSens[K] := -1;
+        ImpProchaine := Ms + 700 + Random(1300);
+        Break;
+      end;
+  E := Echelle;
+  B := Decor.Travail;
+  BitBlt(B.Canvas.Handle, 0, 0, Decor.LT, Decor.HT, FondDecor.Canvas.Handle, 0, 0, SRCCOPY);
+  for K := 0 to 2 do
+    if ImpPiste[K] >= 0 then begin
+      T := Ms - ImpDebut[K];
+      if T >= ImpDuree[K] then ImpPiste[K] := -1
+      else begin
+        U := T * 1.0 / ImpDuree[K];
+        Long := PisteLongueur(ImpPiste[K]);
+        if ImpSens[K] > 0 then D := U * Long else D := (1 - U) * Long;
+        PistePoint(ImpPiste[K], D, X, Y);
+        // elle naît et s'éteint doucement, et s'efface vers le haut, comme le décor
+        A := Borne(U / 0.1) * Borne((1 - U) / 0.1) * Borne((Y - 4) / 36.0);
+        L := 18 * E;
+        SpritePoserTaille(B, SpriteLueurT, 0, Round(X * E) - L div 2, Round(Y * E) - L div 2, L, L, Round(240 * A));
+        // une traîne, plus petite
+        PistePoint(ImpPiste[K], D - 7 * ImpSens[K], X, Y);
+        L := 11 * E;
+        SpritePoserTaille(B, SpriteLueurT, 0, Round(X * E) - L div 2, Round(Y * E) - L div 2, L, L, Round(110 * A));
+      end;
+    end;
+  SceneMontrer(Decor);
+  Decor.Image.Repaint;
 end;
 
 // La colonne : l'assistant s'élargit d'autant, ses pages et ses boutons glissent à droite.
 procedure CreerColonne;
-var L, I, X, Y0, PasY, TailleMarque: Integer;
-    Decor: TBitmapImage;
+var L, I, X: Integer;
     Pied: TLabel;
 begin
   LargeurColonne := ScaleX(200);
@@ -1030,34 +1887,66 @@ begin
 
   ColonneEtapes := NouveauPanneau(WizardForm, 0, 0, LargeurColonne, WizardForm.ClientHeight, CouleurColonne);
   ColonneEtapes.Anchors := [akLeft, akTop, akBottom];
-  Decor := NouvelleImage(ColonneEtapes, 'decor', 0, ColonneEtapes.Height - ScaleY(110), LargeurColonne, ScaleY(110));
-  Decor.Anchors := [akLeft, akBottom];
+  // 1.12.28 : le décor (le bas de la colonne) est une scène : des impulsions parcourent ses pistes
+  FondDecor := FondCharger('decor');
+  ScenePreparer(Decor, ColonneEtapes, 0, ColonneEtapes.Height - ScaleY(DecorH), LargeurColonne, ScaleY(DecorH),
+                FondDecor.Width, FondDecor.Height);
+  Decor.Image.Anchors := [akLeft, akBottom];
+  BitBlt(Decor.Travail.Canvas.Handle, 0, 0, Decor.LT, Decor.HT, FondDecor.Canvas.Handle, 0, 0, SRCCOPY);
+  SceneMontrer(Decor);
+  SpriteCharger(SpriteLueurT, 'lueur-turquoise');
+  LirePistes;
   X := ScaleX(22);
   NouvelleImage(ColonneEtapes, 'logo', X, ScaleY(24), ScaleX(88), ScaleY(40));
   NouveauTexte(ColonneEtapes, '{#Nom}', X, ScaleY(74), LargeurColonne - X - ScaleX(8), ScaleY(26), 'SemiBold', 14, clWhite);
   NouveauTexte(ColonneEtapes, 'Version {#Version}', X, ScaleY(100), LargeurColonne - X - ScaleX(8), ScaleY(18), '', 9, CouleurAVenir);
 
+  // les étapes : une seule image, le rail, redessinée par la minuterie
   NbEtapes := NombreDeMorceaux(EtapesNoms);
-  SetArrayLength(EtapeMarque, NbEtapes);
-  SetArrayLength(EtapeTexte, NbEtapes);
-  SetArrayLength(EtapeLien, NbEtapes);
-  Y0 := ScaleY(140);
-  TailleMarque := ScaleX(20);
-  PasY := ScaleY(30);
+  EtapeCopie := EtapeDePage(wpInstalling);
+  SetArrayLength(RailEtat, NbEtapes);
+  SetArrayLength(RailAvant, NbEtapes);
+  SetArrayLength(RailDepuis, NbEtapes);
+  SetArrayLength(RailCouleur, NbEtapes);
   for I := 0 to NbEtapes - 1 do begin
-    if I < NbEtapes - 1 then
-      EtapeLien[I] := NouveauPanneau(ColonneEtapes, X + TailleMarque div 2 - ScaleX(1), Y0 + I * PasY + TailleMarque + ScaleY(3),
-                                     ScaleX(2), PasY - TailleMarque - ScaleY(6), CouleurLienAVenir);
-    EtapeMarque[I] := NouvelleImage(ColonneEtapes, 'marque-avenir', X, Y0 + I * PasY, TailleMarque, TailleMarque);
-    EtapeTexte[I] := NouveauTexte(ColonneEtapes, Morceau(EtapesNoms, I), X + TailleMarque + ScaleX(12), Y0 + I * PasY + ScaleY(1),
-                                  LargeurColonne - X - TailleMarque - ScaleX(16), ScaleY(20), '', 10, CouleurAVenir);
+    RailEtat[I] := 0;
+    RailAvant[I] := 0;
+    RailDepuis[I] := 0;
+    RailCouleur[I] := CouleurColonne;
   end;
+  SpriteCharger(SpriteAvenir, 'rail-avenir');
+  SpriteCharger(SpriteArrivee, 'rail-arrivee');
+  SpriteCharger(SpritePulse, 'rail-pulse');
+  SpriteCharger(SpriteCoche, 'rail-coche');
+  SpriteCharger(SpriteAnneau, 'rail-anneau');
+  SpriteCharger(SpritePastille, 'rail-pastille');
+  ScenePreparer(Rail, ColonneEtapes, ScaleX(RailX), ScaleY(RailY), ScaleX(RailL), ScaleY(RailH), RailL * Echelle, RailH * Echelle);
+  Remplir(Rail.Image.Bitmap.Canvas, 0, 0, Rail.Image.Bitmap.Width, Rail.Image.Bitmap.Height, CouleurColonne);
+  RailP := 0;
+  RailCible := 0;
+  RailPastille := 0;
   Pied := NouveauTexte(ColonneEtapes, 'Tout est inclus : rien d''autre à installer, pas besoin d''Internet.', X, ColonneEtapes.Height - ScaleY(48),
                        LargeurColonne - X - ScaleX(14), ScaleY(34), '', 8, CouleurAVenir);
   Pied.Anchors := [akLeft, akBottom];
 end;
 
-// L'en-tête des pages : le titre, la description, l'icône de l'étape, un trait en dégradé.
+// L'étape en cours : la progression y va en douceur (plus longtemps si elle saute des étapes).
+procedure MajEtapes(Courante: Integer);
+begin
+  if ColonneEtapes = nil then Exit;
+  if Courante <> RailCible then begin
+    RailP0 := RailP;
+    RailPastille0 := RailPastille;
+    RailCible := Courante;
+    RailDepart := -1;
+    RailDuree := Mini(820, 320 + Round(140 * Abs(Courante - RailP)));
+  end;
+  if MoteurEnPanne then RailFige;
+  if EnTeteIcone <> nil then EnTeteIcone.Bitmap.LoadFromFile(ImageUi('icone-' + Morceau(EtapesIcones, Courante)));
+end;
+
+// L'en-tête des pages : le titre, la description, l'icône de l'étape, un trait en dégradé (1.12.28 :
+// dans un cadre dont la largeur s'anime - le trait se dessine à chaque page).
 procedure HabillerEnTete;
 var T: Integer;
 begin
@@ -1078,75 +1967,365 @@ begin
                                (WizardForm.MainPanel.Height - T) div 2, T, T);
   EnTeteIcone.Anchors := [akTop, akRight];
   WizardForm.Bevel1.Visible := False;
-  EnTeteTrait := NouvelleImage(WizardForm.InnerPage, 'degrade', 0, WizardForm.MainPanel.Top + WizardForm.MainPanel.Height,
-                               WizardForm.InnerPage.Width, ScaleY(3));
-  EnTeteTrait.Anchors := [akLeft, akTop, akRight];
+  EnTeteCadre := NouveauPanneau(WizardForm.InnerPage, 0, WizardForm.MainPanel.Top + WizardForm.MainPanel.Height,
+                                WizardForm.InnerPage.Width, ScaleY(3), clWhite);
+  EnTeteTrait := NouvelleImage(EnTeteCadre, 'degrade', 0, 0, WizardForm.InnerPage.Width, ScaleY(3));
+  // 1.12.28 : les positions de repos de ce qui glisse à chaque page
+  NotebookX := WizardForm.InnerNotebook.Left;
+  NotebookY := WizardForm.InnerNotebook.Top;
+  TitreX := WizardForm.PageNameLabel.Left;
+  TitreY := WizardForm.PageNameLabel.Top;
+  DescX := WizardForm.PageDescriptionLabel.Left;
+  DescY := WizardForm.PageDescriptionLabel.Top;
+  IconeX := EnTeteIcone.Left;
+  IconeY := EnTeteIcone.Top;
+  IconeT := T;
 end;
 
-function NouvelleCarte(Parent: TWinControl; X, Y, L, H: Integer; Logo, Titre, Texte: String): TPanel;
+// ------------------------------------------------------------------------ l'accueil ----
+function NouvelleCarte(Parent: TWinControl; K, X, Y, L, H: Integer; Logo, Titre, Texte: String): TPanel;
 begin
   Result := NouveauPanneau(Parent, X, Y, L, H, CouleurCarte);
-  NouvelleImage(Result, Logo, ScaleX(12), (H - ScaleY(40)) div 2, ScaleX(40), ScaleY(40));
-  NouveauTexte(Result, Titre, ScaleX(64), ScaleY(11), L - ScaleX(72), ScaleY(20), 'SemiBold', 11, CouleurTitre);
-  NouveauTexte(Result, Texte, ScaleX(64), ScaleY(31), L - ScaleX(72), H - ScaleY(34), '', 9, CouleurTexte);
+  CartePanneau[K] := Result;
+  CarteX[K] := X;
+  CarteY[K] := Y;
+  CarteLogoX[K] := ScaleX(12);
+  CarteLogoY[K] := (H - ScaleY(40)) div 2;
+  CarteLogoL[K] := ScaleX(40);
+  CarteLogoH[K] := ScaleY(40);
+  CarteLogo[K] := NouvelleImage(Result, Logo, CarteLogoX[K], CarteLogoY[K], CarteLogoL[K], CarteLogoH[K]);
+  CarteTitre[K] := NouveauTexte(Result, Titre, ScaleX(64), ScaleY(11), L - ScaleX(72), ScaleY(20), 'SemiBold', 11, CouleurTitre);
+  CarteTexte[K] := NouveauTexte(Result, Texte, ScaleX(64), ScaleY(31), L - ScaleX(72), H - ScaleY(34), '', 9, CouleurTexte);
   Arrondir(Result, ScaleX(14));
 end;
 
-// L'accueil : le bandeau, le titre, ce que fait l'assistant, les deux applications.
+// L'accueil : le bandeau (une scène : le réseau s'allume, les deux logos arrivent, le lien se
+// fait, l'éclat passe), le titre, ce que fait l'assistant, les deux applications.
 procedure HabillerAccueil;
 var M, L, Y, H, LC: Integer;
 begin
-  if AccueilBandeau <> nil then Exit;
+  if Heros.Image <> nil then Exit;
   M := ScaleX(26);
   L := WizardForm.WelcomePage.Width - 2 * M;
   WizardForm.WizardBitmapImage.Visible := False;
   H := L * 150 div 560;
   // le tout (bandeau, titre, texte, cartes) centré en hauteur
-  Y := (WizardForm.WelcomePage.Height - (H + ScaleY(162))) div 2;
+  Y := (WizardForm.WelcomePage.Height - (H + ScaleY(170))) div 2;
   if Y < ScaleY(16) then Y := ScaleY(16);
-  AccueilBandeau := NouvelleImage(WizardForm.WelcomePage, 'accueil', M, Y, L, H);
+  FondAccueil := FondCharger('accueil-fond');
+  ScenePreparer(Heros, WizardForm.WelcomePage, M, Y, L, H, FondAccueil.Width, FondAccueil.Height);
+  BitBlt(Heros.Travail.Canvas.Handle, 0, 0, Heros.LT, Heros.HT, FondAccueil.Canvas.Handle, 0, 0, SRCCOPY);
+  SceneMontrer(Heros);
+  SpriteCharger(SpriteApi, 'heros-api');
+  SpriteCharger(SpriteIhm, 'heros-ihm');
+  SpriteCharger(SpritePoints, 'heros-points');
+  SpriteCharger(SpriteEclat, 'eclat');
+  SpriteCharger(SpriteLueur, 'lueur');
+  LireNoeuds('{#AccueilNoeuds}', HerosNX, HerosNY, HerosNR);
+  LireCouples('{#AccueilLiens}', HerosLA, HerosLB);
+  LireCouples('{#AccueilPoints}', HerosPX, HerosPY);
+  HerosApiX := Nombre(MorceauDe('{#AccueilLogos}', 0, ';'), 0);
+  HerosApiY := Nombre(MorceauDe('{#AccueilLogos}', 0, ';'), 1);
+  HerosIhmX := Nombre(MorceauDe('{#AccueilLogos}', 1, ';'), 0);
+  HerosIhmY := Nombre(MorceauDe('{#AccueilLogos}', 1, ';'), 1);
+  SetArrayLength(HerosImpLien, 3);
+  SetArrayLength(HerosImpDebut, 3);
+  HerosImpLien[0] := -1;
+  HerosImpLien[1] := -1;
+  HerosImpLien[2] := -1;
   Y := Y + H + ScaleY(14);
   WizardForm.WelcomeLabel1.SetBounds(M, Y, L, ScaleY(30));
   Ecrire(WizardForm.WelcomeLabel1.Font, 'SemiBold', 17, CouleurTitre);
   WizardForm.WelcomeLabel1.Caption := 'Bienvenue dans {#Nom} {#Version}';
+  AccTitreX := M;
+  AccTitreY := Y;
   Y := Y + ScaleY(34);
-  WizardForm.WelcomeLabel2.SetBounds(M, Y, L, ScaleY(38));
+  WizardForm.WelcomeLabel2.SetBounds(M, Y, L, ScaleY(44));
   Ecrire(WizardForm.WelcomeLabel2.Font, '', 10, CouleurTexte);
   WizardForm.WelcomeLabel2.Caption := 'L''assistant installe les deux applications et tout ce dont elles ont besoin, étape par étape. '
                                     + 'Tes données et tes réglages sont gardés.';
-  Y := Y + ScaleY(44);
+  AccTexteX := M;
+  AccTexteY := Y;
+  Y := Y + ScaleY(48);
   LC := (L - ScaleX(12)) div 2;
-  NouvelleCarte(WizardForm.WelcomePage, M, Y, LC, ScaleY(70), 'logo-api', '{#NomApi}', 'Analyse et simulation du programme de l''automate');
-  NouvelleCarte(WizardForm.WelcomePage, M + LC + ScaleX(12), Y, LC, ScaleY(70), 'logo-ihm', '{#NomIhm}', 'Vues, scripts et équipements de l''IHM, et leur simulation');
+  SetArrayLength(CartePanneau, 2);
+  SetArrayLength(CarteLogo, 2);
+  SetArrayLength(CarteTitre, 2);
+  SetArrayLength(CarteTexte, 2);
+  SetArrayLength(CarteX, 2);
+  SetArrayLength(CarteY, 2);
+  SetArrayLength(CarteLogoX, 2);
+  SetArrayLength(CarteLogoY, 2);
+  SetArrayLength(CarteLogoL, 2);
+  SetArrayLength(CarteLogoH, 2);
+  NouvelleCarte(WizardForm.WelcomePage, 0, M, Y, LC, ScaleY(74), 'logo-api', '{#NomApi}', 'Analyse et simulation du programme de l''automate');
+  NouvelleCarte(WizardForm.WelcomePage, 1, M + LC + ScaleX(12), Y, LC, ScaleY(74), 'logo-ihm', '{#NomIhm}', 'Vues, scripts et équipements de l''IHM, et leur simulation');
 end;
 
+// Des impulsions parcourent les liens du réseau de l'accueil (des données qui circulent).
+procedure DessinerImpulsions(B: TBitmap; T: Integer);
+var K, I, J, L, A: Integer;
+    U, X, Y: Extended;
+begin
+  for K := 0 to 2 do begin
+    if (HerosImpLien[K] < 0) and (T > 1400) and (T >= HerosImpProchaine) and (GetArrayLength(HerosLA) > 0) then begin
+      HerosImpLien[K] := Random(GetArrayLength(HerosLA));
+      if Random(2) = 1 then HerosImpLien[K] := HerosImpLien[K] + 1000;   // dans l'autre sens
+      HerosImpDebut[K] := T;
+      HerosImpProchaine := T + 300 + Random(500);
+    end;
+    if HerosImpLien[K] >= 0 then begin
+      U := (T - HerosImpDebut[K]) / 950.0;
+      if U >= 1 then HerosImpLien[K] := -1
+      else begin
+        I := HerosLA[HerosImpLien[K] mod 1000];
+        J := HerosLB[HerosImpLien[K] mod 1000];
+        if HerosImpLien[K] >= 1000 then begin
+          L := I;
+          I := J;
+          J := L;
+        end;
+        A := Round(230 * Sin(Pi * U));
+        X := HerosNX[I] + (HerosNX[J] - HerosNX[I]) * U;
+        Y := HerosNY[I] + (HerosNY[J] - HerosNY[I]) * U;
+        L := 15 * Echelle;
+        SpritePoserTaille(B, SpriteLueur, 0, Round(X * Echelle) - L div 2, Round(Y * Echelle) - L div 2, L, L, A);
+      end;
+    end;
+  end;
+end;
+
+// Le bandeau de l'accueil à l'instant T (ms depuis son entrée).
+procedure DessinerHeros(T: Integer);
+var B: TBitmap;
+    K, E, A, L: Integer;
+    F, Vague: Extended;
+begin
+  E := Echelle;
+  B := Heros.Travail;
+  BitBlt(B.Canvas.Handle, 0, 0, Heros.LT, Heros.HT, FondAccueil.Canvas.Handle, 0, 0, SRCCOPY);
+  DessinerNoeuds(B, HerosNX, HerosNY, HerosNR, T);
+  DessinerImpulsions(B, T);
+  // le lien : une vague part de l'automate toutes les 1,6 s et arrive à l'écran, qui s'éclaire
+  if T > 1300 then begin
+    F := ((T - 1300) mod 1600) / 1600.0;
+    A := Round(170 * Borne(1 - Abs(F - 0.40) / 0.22));
+    L := 170 * E;
+    SpritePoserTaille(B, SpriteLueurT, 0, (HerosIhmX + 66) * E - L div 2, (HerosIhmY + 66) * E - L div 2, L, L, A);
+  end;
+  // les deux logos arrivent, de chaque côté, en fondu
+  F := Courbe(cSortie, (T - 100) / 650.0);
+  if F > 0 then SpritePoser(B, SpriteApi, 0, Round((HerosApiX - 40 * (1 - F)) * E), HerosApiY * E, Round(255 * Borne(F * 1.4)));
+  F := Courbe(cSortie, (T - 260) / 650.0);
+  if F > 0 then SpritePoser(B, SpriteIhm, 0, Round((HerosIhmX + 40 * (1 - F)) * E), HerosIhmY * E, Round(255 * Borne(F * 1.4)));
+  // les trois points, l'un après l'autre ; ensuite, la vague les fait briller
+  for K := 0 to GetArrayLength(HerosPX) - 1 do begin
+    A := Round(255 * Borne((T - 820 - K * 120) / 220.0));
+    SpritePoser(B, SpritePoints, K, (HerosPX[K] - 5) * E, (HerosPY[K] - 5) * E, A);
+    if T > 1300 then begin
+      F := ((T - 1300) mod 1600) / 1600.0;
+      Vague := Borne(1 - Abs(F - 0.08 - K * 0.09) / 0.07);
+      if Vague > 0 then begin
+        L := 18 * E;
+        SpritePoserTaille(B, SpriteLueur, 0, HerosPX[K] * E - L div 2, HerosPY[K] * E - L div 2, L, L, Round(255 * Vague));
+      end;
+    end;
+  end;
+  DessinerEclat(B, T, 1150, 5200, 250, 610);
+  SceneMontrer(Heros);
+  Heros.Image.Repaint;
+end;
+
+procedure TicHeros(Ms: Integer);
+var T: Integer;
+begin
+  if Heros.Debut < 0 then Heros.Debut := Ms;
+  T := Ms - Heros.Debut;
+  // l'entrée à 60 images par seconde, ensuite 30
+  if (T > 2400) and (Ms - Heros.Dernier < 30) then Exit;
+  Heros.Dernier := Ms;
+  DessinerHeros(T);
+end;
+
+// ---------------------------------------------------------------------------- la fin ----
 // La fin : l'assistant y place ses textes juste avant de l'afficher ; on les range ensuite.
 procedure HabillerFin;
-var M, L, Y, H: Integer;
+var M, L, Y, H, I: Integer;
+    S: String;
 begin
   M := ScaleX(26);
   L := WizardForm.FinishedPage.Width - 2 * M;
   WizardForm.WizardBitmapImage2.Visible := False;
   H := L * 150 div 560;
-  Y := (WizardForm.FinishedPage.Height - (H + ScaleY(156))) div 2;
+  Y := (WizardForm.FinishedPage.Height - (H + ScaleY(164))) div 2;
   if Y < ScaleY(16) then Y := ScaleY(16);
-  if FinBandeau = nil then FinBandeau := NouvelleImage(WizardForm.FinishedPage, 'fin', M, Y, L, H)
-  else Y := FinBandeau.Top;
+  if Succes.Image = nil then begin
+    // 1.12.28 : le bandeau est une scène (le cercle surgit, la coche se dessine, les confettis)
+    FondFin := FondCharger('fin-fond');
+    ScenePreparer(Succes, WizardForm.FinishedPage, M, Y, L, H, FondFin.Width, FondFin.Height);
+    BitBlt(Succes.Travail.Canvas.Handle, 0, 0, Succes.LT, Succes.HT, FondFin.Canvas.Handle, 0, 0, SRCCOPY);
+    SceneMontrer(Succes);
+    SpriteCharger(SpriteDisque, 'succes-disque');
+    SpriteCharger(SpriteCocheFin, 'succes-coche');
+    SpriteCharger(SpriteEtincA, 'etincelle-ambre');
+    SpriteCharger(SpriteEtincB, 'etincelle-blanche');
+    if SpriteLueur.Bmp = nil then SpriteCharger(SpriteLueur, 'lueur');
+    if SpriteEclat.Bmp = nil then SpriteCharger(SpriteEclat, 'eclat');
+    LireNoeuds('{#FinNoeuds}', FinNX, FinNY, FinNR);
+    S := '{#FinEtincelles}';
+    SetArrayLength(FinEX, NombreDe(S, ';'));
+    SetArrayLength(FinEY, NombreDe(S, ';'));
+    SetArrayLength(FinES, NombreDe(S, ';'));
+    SetArrayLength(FinEC, NombreDe(S, ';'));
+    for I := 0 to NombreDe(S, ';') - 1 do begin
+      FinEX[I] := Nombre(MorceauDe(S, I, ';'), 0);
+      FinEY[I] := Nombre(MorceauDe(S, I, ';'), 1);
+      FinES[I] := Nombre(MorceauDe(S, I, ';'), 2);
+      FinEC[I] := Nombre(MorceauDe(S, I, ';'), 3);
+    end;
+    FinDisqueX := Nombre('{#FinDisque}', 0);
+    FinDisqueY := Nombre('{#FinDisque}', 1);
+    FinCocheX := Nombre('{#FinCoche}', 0);
+    FinCocheY := Nombre('{#FinCoche}', 1);
+    FinCX := Nombre('{#FinCentre}', 0);
+    FinCY := Nombre('{#FinCentre}', 1);
+  end else Y := Succes.Image.Top;
   Y := Y + H + ScaleY(14);
   WizardForm.FinishedHeadingLabel.SetBounds(M, Y, L, ScaleY(30));
   Ecrire(WizardForm.FinishedHeadingLabel.Font, 'SemiBold', 17, CouleurTitre);
   Y := Y + ScaleY(34);
-  WizardForm.FinishedLabel.SetBounds(M, Y, L, ScaleY(56));
+  WizardForm.FinishedLabel.SetBounds(M, Y, L, ScaleY(64));
   Ecrire(WizardForm.FinishedLabel.Font, '', 10, CouleurTexte);
-  Y := Y + ScaleY(60);
+  Y := Y + ScaleY(68);
   WizardForm.RunList.SetBounds(M, Y, L, WizardForm.FinishedPage.Height - Y - ScaleY(6));
   Ecrire(WizardForm.RunList.Font, '', 10, CouleurTitre);
 end;
 
-// La copie : l'animation (une bande d'images, recopiée image par image), l'état, la barre, les astuces.
+// Les confettis partent du cercle, en éventail vers le haut, puis retombent hors du bandeau.
+procedure LancerConfettis;
+var I: Integer;
+    Angle, Vitesse: Extended;
+begin
+  SetArrayLength(Confettis, 96);
+  for I := 0 to GetArrayLength(Confettis) - 1 do begin
+    Angle := Pi * (1.04 + 0.92 * Random(1000) / 1000.0);
+    Vitesse := 0.14 + 0.26 * Random(1000) / 1000.0;
+    Confettis[I].X := FinCX - 12 + Random(25);
+    Confettis[I].Y := FinCY - 10 + Random(21);
+    Confettis[I].VX := Cos(Angle) * Vitesse * 1.6;
+    Confettis[I].VY := Sin(Angle) * Vitesse * 1.25;
+    Confettis[I].Tour := 0.006 + 0.016 * Random(1000) / 1000.0;
+    Confettis[I].Phase := 2 * Pi * Random(1000) / 1000.0;
+    Confettis[I].Taille := 4 + Random(5);
+    case Random(5) of
+      0: Confettis[I].Couleur := CouleurAmbre;
+      1: Confettis[I].Couleur := CouleurTurquoise;
+      2: Confettis[I].Couleur := CouleurBleu;
+      3: Confettis[I].Couleur := CouleurRose;
+    else
+      Confettis[I].Couleur := clWhite;
+    end;
+  end;
+end;
+
+procedure DessinerConfettis(B: TBitmap; T: Integer);
+var I, E, X, Y, L, H: Integer;
+    D: Extended;
+begin
+  if (T < 0) or (T > 4000) then Exit;
+  E := Echelle;
+  D := T / (1 + T / 430.0);
+  for I := 0 to GetArrayLength(Confettis) - 1 do begin
+    Y := Round((Confettis[I].Y + Confettis[I].VY * D + 0.5 * 0.00045 * T * T) * E);
+    if Y > 158 * E then Continue;
+    X := Round((Confettis[I].X + Confettis[I].VX * D) * E);
+    // il tourne sur lui-même : sa largeur bat
+    L := Maxi(E, Round(Confettis[I].Taille * E * Abs(Cos(Confettis[I].Phase + Confettis[I].Tour * T))));
+    H := Maxi(E, Round(Confettis[I].Taille * 0.6 * E));
+    Remplir(B.Canvas, X - L div 2, Y - H div 2, X - L div 2 + L, Y - H div 2 + H, Confettis[I].Couleur);
+  end;
+end;
+
+// Le bandeau de la fin à l'instant T (ms depuis son entrée).
+procedure DessinerSucces(T: Integer);
+var B: TBitmap;
+    E, K, L, M: Integer;
+    F: Extended;
+begin
+  E := Echelle;
+  B := Succes.Travail;
+  BitBlt(B.Canvas.Handle, 0, 0, Succes.LT, Succes.HT, FondFin.Canvas.Handle, 0, 0, SRCCOPY);
+  DessinerNoeuds(B, FinNX, FinNY, FinNR, T);
+  // les confettis (derrière le cercle : ils en jaillissent)
+  DessinerConfettis(B, T - 600);
+  // le cercle surgit (avec un rebond), puis la coche se dessine
+  F := Borne((T - 150) / 480.0);
+  if F >= 1 then SpritePoser(B, SpriteDisque, 0, FinDisqueX * E, FinDisqueY * E, 255)
+  else if F > 0 then begin
+    L := Round(SpriteDisque.L * Courbe(cRebond, F));
+    SpritePoserTaille(B, SpriteDisque, 0, FinCX * E - L div 2, FinCY * E - L div 2, L, L, Round(255 * Borne(F * 3)));
+  end;
+  if T >= 560 then SpritePoser(B, SpriteCocheFin, (T - 560) * SpriteCocheFin.N div 420, FinCocheX * E, FinCocheY * E, 255);
+  // les étincelles s'allument l'une après l'autre, puis scintillent
+  for K := 0 to GetArrayLength(FinEX) - 1 do begin
+    F := Borne((T - 700 - K * 110) / 260.0);
+    if F > 0 then begin
+      M := Round((FinES[K] / 8.0 - 0.25) / 0.75 * 7);
+      if F < 1 then L := Round(M * Courbe(cRebond, F))
+      else L := Round(M * (0.62 + 0.38 * (0.5 + 0.5 * Sin(2 * Pi * ((T - 960 - K * 110) / 1500.0 + K * 0.29)))));
+      if FinEC[K] = 0 then SpritePoser(B, SpriteEtincA, L, (FinEX[K] - 11) * E, (FinEY[K] - 11) * E, 255)
+      else SpritePoser(B, SpriteEtincB, L, (FinEX[K] - 11) * E, (FinEY[K] - 11) * E, 255);
+    end;
+  end;
+  DessinerEclat(B, T, 2600, 6000, 280, 600);
+  SceneMontrer(Succes);
+  Succes.Image.Repaint;
+end;
+
+procedure TicSucces(Ms: Integer);
+var T: Integer;
+begin
+  if Succes.Debut < 0 then begin
+    Succes.Debut := Ms;
+    LancerConfettis;
+  end;
+  T := Ms - Succes.Debut;
+  if (T > 3300) and (Ms - Succes.Dernier < 30) then Exit;
+  Succes.Dernier := Ms;
+  DessinerSucces(T);
+end;
+
+// ------------------------------------------------------------------------ la copie ----
+// Une diapositive, dessinée une fois à la taille de l'écran : son image, son titre, son texte.
+procedure DiapoRendre(I: Integer);
+var B, Img: TBitmap;
+    C: TCanvas;
+    L, H: Integer;
+begin
+  L := DiapoImage.Bitmap.Width;
+  H := DiapoImage.Bitmap.Height;
+  B := TBitmap.Create;
+  B.Width := L;
+  B.Height := H;
+  C := B.Canvas;
+  Remplir(C, 0, 0, L, H, CouleurCarte);
+  Img := FondCharger(Morceau(DiaposImages, I));
+  Reduire(C.Handle, ScaleX(14), (H - ScaleY(56)) div 2, ScaleX(56), ScaleY(56), Img.Canvas.Handle, Img.Width, Img.Height);
+  Img.Free;
+  Ecrire(C.Font, 'SemiBold', 11, CouleurTitre);
+  C.Brush.Style := bsClear;
+  C.TextOut(ScaleX(84), ScaleY(14), Morceau(DiaposTitres, I));
+  Ecrire(C.Font, '', 9, CouleurTexte);
+  TexteCoupe(C, ScaleX(84), ScaleY(38), L - ScaleX(84) - ScaleX(18), Morceau(DiaposTextes, I));
+  DiapoCache[I] := B;
+end;
+
+// La copie : l'animation (une bande d'images, une scène), l'état, la barre (son dégradé et son
+// éclat), le fichier en cours, le temps qui reste, le diaporama.
 procedure HabillerInstallation;
 var P: TNewNotebookPage;
-    L, H, Y: Integer;
+    L, H, Y, I: Integer;
+    Bmp: TBitmap;
 begin
   if BarrePiste <> nil then Exit;
   P := WizardForm.InstallingPage;
@@ -1158,80 +2337,441 @@ begin
     AnimBande.LoadFromFile(ImageUi('animation'));
     AnimL := AnimBande.Width;
     AnimH := AnimBande.Height div AnimN;
-    AnimImage := NouvelleImage(P, '', (P.Width - L) div 2, 0, L, H);
-    AnimImage.Bitmap.Width := AnimL;
-    AnimImage.Bitmap.Height := AnimH;
-    BitBlt(AnimImage.Bitmap.Canvas.Handle, 0, 0, AnimL, AnimH, AnimBande.Canvas.Handle, 0, 0, SRCCOPY);
+    CopieX := (P.Width - L) div 2;
+    CopieY := 0;
+    ScenePreparer(Copie, P, CopieX, CopieY, L, H, AnimL, AnimH);
+    BitBlt(Copie.Travail.Canvas.Handle, 0, 0, AnimL, AnimH, AnimBande.Canvas.Handle, 0, 0, SRCCOPY);
+    SceneMontrer(Copie);
   except
     Log('Animation : ' + GetExceptionMessage);
-    AnimImage := nil;
+    Copie.Image := nil;
   end;
-  Y := H + ScaleY(10);
+  Y := H + ScaleY(8);
   WizardForm.StatusLabel.SetBounds(0, Y, P.Width - ScaleX(64), ScaleY(22));
   Ecrire(WizardForm.StatusLabel.Font, 'SemiBold', 11, CouleurTitre);
   BarrePourcent := NouveauTexte(P, '', P.Width - ScaleX(64), Y, ScaleX(64), ScaleY(22), 'SemiBold', 11, CouleurTitre);
   BarrePourcent.Alignment := taRightJustify;
-  Y := Y + ScaleY(24);
-  WizardForm.FilenameLabel.SetBounds(0, Y, P.Width, ScaleY(18));
-  Ecrire(WizardForm.FilenameLabel.Font, '', 9, CouleurTexte);
   Y := Y + ScaleY(26);
   WizardForm.ProgressGauge.Visible := False;
   BarrePiste := NouveauPanneau(P, 0, Y, P.Width, ScaleY(10), CouleurPiste);
   Arrondir(BarrePiste, ScaleY(10));
   BarrePleine := NouveauPanneau(BarrePiste, 0, 0, 0, BarrePiste.Height, CouleurPiste);
-  BarreDegrade := NouvelleImage(BarrePleine, 'degrade', 0, 0, BarrePiste.Width, BarrePiste.Height);
-  Y := Y + ScaleY(28);
-  Astuce := NouveauTexte(P, '', 0, Y, P.Width, ScaleY(36), '', 9, CouleurTexte);
+  BarreDegrade := NouvelleImage(BarrePleine, '', 0, 0, BarrePiste.Width, BarrePiste.Height);
+  BarreDegrade.Stretch := False;
+  BarreDegrade.Bitmap.Width := BarrePiste.Width;
+  BarreDegrade.Bitmap.Height := BarrePiste.Height;
+  // le dégradé, mis une fois pour toutes à la taille de la barre
+  BarreFond := TBitmap.Create;
+  BarreFond.Width := BarrePiste.Width;
+  BarreFond.Height := BarrePiste.Height;
+  Bmp := FondCharger('barre-degrade');
+  Reduire(BarreFond.Canvas.Handle, 0, 0, BarreFond.Width, BarreFond.Height, Bmp.Canvas.Handle, Bmp.Width, Bmp.Height);
+  Bmp.Free;
+  BitBlt(BarreDegrade.Bitmap.Canvas.Handle, 0, 0, BarreFond.Width, BarreFond.Height, BarreFond.Canvas.Handle, 0, 0, SRCCOPY);
+  SpriteCharger(SpriteBarreEclat, 'barre-eclat');
+  Y := Y + ScaleY(16);
+  // le fichier en cours (court : relatif au dossier du programme) et le temps qui reste
+  WizardForm.FilenameLabel.Visible := False;
+  CopieFichier := NouveauTexte(P, '', 0, Y, P.Width - ScaleX(160), ScaleY(18), '', 9, CouleurTexte);
+  CopieFichier.WordWrap := False;
+  CopieReste := NouveauTexte(P, '', P.Width - ScaleX(160), Y, ScaleX(160), ScaleY(18), '', 9, CouleurTexte);
+  CopieReste.Alignment := taRightJustify;
+  Y := Y + ScaleY(30);
+  // le diaporama : ce que t'apportent les deux applications, en fondu enchaîné
+  DiapoY := Y;
+  DiapoCarte := NouveauPanneau(P, 0, Y, P.Width, ScaleY(84), CouleurCarte);
+  DiapoImage := NouvelleImage(DiapoCarte, '', 0, 0, P.Width, ScaleY(84));
+  DiapoImage.Stretch := False;
+  DiapoImage.Bitmap.Width := P.Width;
+  DiapoImage.Bitmap.Height := ScaleY(84);
+  Remplir(DiapoImage.Bitmap.Canvas, 0, 0, P.Width, ScaleY(84), CouleurCarte);
+  Arrondir(DiapoCarte, ScaleX(14));
+  SetArrayLength(DiapoCache, NombreDeMorceaux(DiaposImages));
+  // toutes les diapositives tout de suite : pendant la copie, l'extracteur d'Inno Setup est
+  // occupé (une image sortie à ce moment-là : « Cannot call file extractor recursively »)
+  for I := 0 to GetArrayLength(DiapoCache) - 1 do DiapoRendre(I);
+  DiapoDebut := -1;
+  DiapoVu := -1;
+  CopieDebut := -1;
+  CopieEtaLisse := -1;
+  AppDossier := ExpandConstant('{app}');
+  ReserveDossier := DossierReserve('');
 end;
 
-procedure TicAnimation(Fenetre, Message, Id, Temps: LongWord);
+// Les points du diaporama, en haut à droite : celui de la diapositive en cours s'allonge.
+procedure DessinerPoints(C: TCanvas; Courante, Suivante: Integer; F: Extended);
+var I, X, D, W, Y, Couleur: Integer;
 begin
-  if AnimImage <> nil then begin
-    AnimIndex := (AnimIndex + 1) mod AnimN;
-    BitBlt(AnimImage.Bitmap.Canvas.Handle, 0, 0, AnimL, AnimH, AnimBande.Canvas.Handle, 0, AnimIndex * AnimH, SRCCOPY);
-    AnimImage.Repaint;
+  D := ScaleX(6);
+  Y := ScaleY(20);
+  X := DiapoImage.Bitmap.Width - ScaleX(16);
+  for I := GetArrayLength(DiapoCache) - 1 downto 0 do begin
+    W := D;
+    Couleur := CouleurPoint;
+    if I = Courante then begin
+      W := D + Round(ScaleX(10) * (1 - F));
+      Couleur := CouleurEntre(CouleurTurquoise, CouleurPoint, F);
+    end else if I = Suivante then begin
+      W := D + Round(ScaleX(10) * F);
+      Couleur := CouleurEntre(CouleurPoint, CouleurTurquoise, F);
+    end;
+    X := X - W;
+    C.Brush.Style := bsSolid;
+    C.Brush.Color := Couleur;
+    C.Pen.Color := Couleur;
+    C.RoundRect(X, Y, X + W, Y + D, D, D);
+    X := X - ScaleX(5);
   end;
-  // une astuce toutes les 5 secondes
-  if (Astuce <> nil) and (AnimTics mod (5000 div {#AnimDelai}) = 0) then begin
-    Astuce.Caption := 'Le savais-tu ? ' + Morceau(Astuces, AstuceIndex);
-    AstuceIndex := (AstuceIndex + 1) mod NombreDeMorceaux(Astuces);
-  end;
-  AnimTics := AnimTics + 1;
 end;
 
-procedure Animer(Oui: Boolean);
+// Une diapositive toutes les 5,6 s ; la suivante arrive en fondu (700 ms).
+procedure TicDiapos(Ms: Integer);
+var N, T, I, J: Integer;
+    F: Extended;
+    B: TBitmap;
 begin
-  if Oui and (MinuterieAnim = 0) then
-    MinuterieAnim := SetTimer(0, 0, {#AnimDelai}, CreateCallback(@TicAnimation))
-  else if not Oui and (MinuterieAnim <> 0) then begin
-    KillTimer(0, MinuterieAnim);
-    MinuterieAnim := 0;
+  N := GetArrayLength(DiapoCache);
+  if (N = 0) or (DiapoImage = nil) then Exit;
+  if DiapoDebut < 0 then DiapoDebut := Ms;
+  T := Ms - DiapoDebut;
+  I := (T div DiapoDuree) mod N;
+  J := (I + 1) mod N;
+  F := Courbe(cDouce, ((T mod DiapoDuree) - (DiapoDuree - DiapoFondu)) * 1.0 / DiapoFondu);
+  if (F <= 0) and (DiapoVu = I) then Exit;
+  DiapoVu := I;
+  if DiapoCache[I] = nil then DiapoRendre(I);
+  if (F > 0) and (DiapoCache[J] = nil) then DiapoRendre(J);
+  B := DiapoImage.Bitmap;
+  BitBlt(B.Canvas.Handle, 0, 0, B.Width, B.Height, DiapoCache[I].Canvas.Handle, 0, 0, SRCCOPY);
+  if F > 0 then GdiAlphaBlend(B.Canvas.Handle, 0, 0, B.Width, B.Height, DiapoCache[J].Canvas.Handle, 0, 0, B.Width, B.Height, Round(255 * F) shl 16);
+  DessinerPoints(B.Canvas, I, J, F);
+  DiapoImage.Repaint;
+end;
+
+// Le chemin d'un fichier, court : relatif au dossier du programme (ou à la réserve).
+function FichierCourt(S: String): String;
+begin
+  if (AppDossier <> '') and (CompareText(Copy(S, 1, Length(AppDossier) + 1), AppDossier + '\') = 0) then
+    Result := Copy(S, Length(AppDossier) + 2, Length(S))
+  else if (ReserveDossier <> '') and (CompareText(Copy(S, 1, Length(ReserveDossier) + 1), ReserveDossier + '\') = 0) then
+    Result := 'Réserve de réparation : ' + Copy(S, Length(ReserveDossier) + 2, Length(S))
+  else
+    Result := ExtractFileName(S);
+end;
+
+function TempsRestant(N: Integer): String;
+begin
+  if N < 5 then Result := 'Presque fini…'
+  else if N < 60 then Result := 'Encore environ ' + IntToStr(((N + 4) div 5) * 5) + ' s'
+  else Result := 'Encore environ ' + IntToStr((N + 30) div 60) + ' min';
+end;
+
+// La barre suit la progression en douceur (son pourcentage compte), son éclat la parcourt ; le
+// fichier en cours et le temps qui reste, deux fois par seconde.
+procedure TicBarre(Ms: Integer);
+var W, X, LE, Dt: Integer;
+    F, Reste: Extended;
+    S: String;
+begin
+  if BarrePiste = nil then Exit;
+  Dt := Mini(100, Maxi(0, Ms - BarreVu));
+  BarreVu := Ms;
+  BarreAffiche := BarreAffiche + (BarreCible - BarreAffiche) * Dt / (Dt + 140.0);
+  if Abs(BarreCible - BarreAffiche) < 0.0005 then BarreAffiche := BarreCible;
+  W := Round(BarrePiste.Width * BarreAffiche);
+  if W <> BarrePleine.Width then BarrePleine.Width := W;
+  S := IntToStr(Round(100 * BarreAffiche)) + ' %';
+  if BarrePourcent.Caption <> S then BarrePourcent.Caption := S;
+  if W > 0 then begin
+    BitBlt(BarreDegrade.Bitmap.Canvas.Handle, 0, 0, BarreFond.Width, BarreFond.Height, BarreFond.Canvas.Handle, 0, 0, SRCCOPY);
+    F := (Ms mod 2300) / 1500.0;
+    if F < 1 then begin
+      LE := ScaleX(64);
+      X := Round((W + LE) * Courbe(cDouce, F)) - LE;
+      SpritePoserTaille(BarreDegrade.Bitmap, SpriteBarreEclat, 0, X, 0, LE, BarreFond.Height, 255);
+    end;
+    BarreDegrade.Repaint;
+  end;
+  if Ms - CopieVu < 450 then Exit;
+  CopieVu := Ms;
+  S := WizardForm.FilenameLabel.Caption;
+  if S <> DernierFichier then begin
+    DernierFichier := S;
+    CopieFichier.Caption := FichierCourt(S);
+  end;
+  if (BarreCible >= 0.995) or (CopieDebut < 0) then S := ''
+  else if (BarreCible > 0.03) and (Ms - CopieDebut > 2500) then begin
+    Reste := (Ms - CopieDebut) * (1 - BarreCible) / BarreCible / 1000;
+    if CopieEtaLisse < 0 then CopieEtaLisse := Reste
+    else CopieEtaLisse := 0.75 * CopieEtaLisse + 0.25 * Reste;
+    S := TempsRestant(Round(CopieEtaLisse));
+  end else
+    S := 'Calcul du temps restant…';
+  if CopieReste.Caption <> S then CopieReste.Caption := S;
+end;
+
+// L'animation de la copie (aussi pendant la préparation) : une image de la bande à la fois.
+procedure TicCopie(Ms: Integer);
+var K: Integer;
+begin
+  if (Copie.Image = nil) or not Copie.Active then Exit;
+  K := (Ms div {#AnimDelai}) mod AnimN;
+  if K = Copie.Dernier then Exit;
+  Copie.Dernier := K;
+  BitBlt(Copie.Travail.Canvas.Handle, 0, 0, AnimL, AnimH, AnimBande.Canvas.Handle, 0, K * AnimH, SRCCOPY);
+  SceneMontrer(Copie);
+  Copie.Image.Repaint;
+end;
+
+// Pendant PrepareToInstall (la sauvegarde de la version installée) : l'animation de la copie
+// et une phrase, sur la page « Préparation ». Ensuite la page reprend ses propres textes (une
+// erreur, des applications à fermer...).
+procedure MontrerPreparation(Oui: Boolean);
+var P: TNewNotebookPage;
+begin
+  if (ColonneEtapes = nil) or MoteurEnPanne then Exit;
+  try
+    HabillerInstallation;
+    if Copie.Image = nil then Exit;
+    P := WizardForm.PreparingPage;
+    if Oui then begin
+      Copie.Image.Parent := P;
+      Copie.Image.SetBounds((P.Width - Copie.Image.Width) div 2, ScaleY(10), Copie.Image.Width, Copie.Image.Height);
+      if PreparationTexte = nil then begin
+        PreparationTexte := NouveauTexte(P, 'L''assistant prépare la copie' + #160 + ': la version déjà installée, s''il y en a une, est d''abord sauvegardée.',
+                                         0, ScaleY(10) + Copie.Image.Height + ScaleY(14), P.Width, ScaleY(40), '', 10, CouleurTexte);
+        PreparationTexte.Alignment := taCenter;
+      end;
+      PreparationTexte.Visible := True;
+      Copie.Image.Visible := True;
+      Copie.Active := True;
+      // la suite (sortir les étapes PowerShell) bloque l'assistant un moment : la page s'affiche
+      // d'abord entière, à son état final (pas à moitié arrivée)
+      TransitionsFinir;
+      RailP := RailCible;
+      RailPastille := RailCible;
+      RailDuree := 0;
+      TicRail(Horloge);
+      Copie.Dernier := -1;
+      TicCopie(Horloge);
+      RedrawWindow(WizardForm.Handle, 0, 0, RDW_TOUT);
+    end else begin
+      Copie.Active := False;
+      if PreparationTexte <> nil then PreparationTexte.Visible := False;
+      Copie.Image.Parent := WizardForm.InstallingPage;
+      Copie.Image.SetBounds(CopieX, CopieY, Copie.Image.Width, Copie.Image.Height);
+    end;
+  except
+    Log('Habillage, préparation : ' + GetExceptionMessage);
   end;
 end;
 
+// ----------------------------------------------------- le récapitulatif s'écrit ----
+// « Ce qui a été installé » : les lignes arrivent l'une après l'autre (ce qui se voit), le reste
+// d'un coup (EcrireRecap a mis tout le texte : on repart de rien).
+procedure RecapCommencer;
+begin
+  if (ColonneEtapes = nil) or MoteurEnPanne or (PageRecap = nil) or (GetArrayLength(RecapTexte) = 0) then Exit;
+  RecapDebut := -1;
+  RecapVu := 0;
+  PageRecap.RichEditViewer.Lines.Text := '';
+end;
+
+procedure TicRecap(Ms: Integer);
+var N, K, I: Integer;
+    S: String;
+begin
+  N := GetArrayLength(RecapTexte);
+  if (PageRecap = nil) or (RecapVu >= N) then Exit;
+  if RecapDebut < 0 then RecapDebut := Ms;
+  K := (Ms - RecapDebut) div 28 + 1;
+  if K > 24 then K := N;
+  if K <= RecapVu then Exit;
+  if K > N then K := N;
+  if K >= N then begin
+    // tout le texte, normalement : le RichEdit refait alors ses barres de défilement
+    RecapVu := N;
+    PageRecap.RichEditViewer.Lines.Text := Joindre(RecapTexte);
+    Exit;
+  end;
+  RecapVu := K;
+  S := '';
+  for I := 0 to K - 1 do begin
+    if I > 0 then S := S + #13#10;
+    S := S + RecapTexte[I];
+  end;
+  SendMessage(PageRecap.RichEditViewer.Handle, WM_SETREDRAW, 0, 0);
+  PageRecap.RichEditViewer.Lines.Text := S;
+  SendMessage(PageRecap.RichEditViewer.Handle, WM_SETREDRAW, 1, 0);
+  PageRecap.RichEditViewer.Invalidate;
+end;
+
+// ------------------------------------------------------------------- sans mouvement ----
+// Après une panne du mouvement : chaque scène à son état final, une fois (les instants choisis :
+// ni éclat ni vague en cours).
+procedure Figer;
+begin
+  try
+    RailFige;
+    if Heros.Image <> nil then DessinerHeros(101950);
+    if Succes.Image <> nil then DessinerSucces(100000);
+    if (DiapoImage <> nil) and (GetArrayLength(DiapoCache) > 0) then
+      if DiapoCache[0] <> nil then begin
+        BitBlt(DiapoImage.Bitmap.Canvas.Handle, 0, 0, DiapoImage.Bitmap.Width, DiapoImage.Bitmap.Height, DiapoCache[0].Canvas.Handle, 0, 0, SRCCOPY);
+        DessinerPoints(DiapoImage.Bitmap.Canvas, 0, 1, 0);
+        DiapoImage.Repaint;
+      end;
+  except
+    Log('Habillage, figer : ' + GetExceptionMessage);
+  end;
+end;
+
+// ------------------------------------------------------------ chaque page arrive ----
+// La page qui s'affiche entre en scène : une page intérieure glisse du côté où l'on va (Suivant :
+// de la droite, Précédent : de la gauche), son titre et sa description apparaissent, l'icône de
+// l'étape grandit, le trait se dessine ; l'accueil et la fin ont leur propre entrée.
+procedure MouvementPage(CurPageID: Integer);
+var S, I: Integer;
+begin
+  S := SensPage;
+  SensPage := 1;
+  if ColonneEtapes = nil then Exit;
+  if MoteurEnPanne then begin
+    Figer;
+    Exit;
+  end;
+  Heros.Active := CurPageID = wpWelcome;
+  Succes.Active := CurPageID = wpFinished;
+  CopieEnCours := CurPageID = wpInstalling;
+  DiapoActif := CurPageID = wpInstalling;
+  if Copie.Image <> nil then Copie.Active := CurPageID = wpInstalling;
+  if CurPageID = PageAvant then Exit;   // la même page, encore (la préparation, après les applications à fermer)
+  PageAvant := CurPageID;
+  if CurPageID = wpWelcome then begin
+    Heros.Debut := -1;
+    Arriver(WizardForm.WelcomeLabel1, AccTitreX, AccTitreY, 0, ScaleY(12), 320, 520, cSortie);
+    Teinter(WizardForm.WelcomeLabel1, clWhite, CouleurTitre, 320, 480);
+    Arriver(WizardForm.WelcomeLabel2, AccTexteX, AccTexteY, 0, ScaleY(12), 420, 520, cSortie);
+    Teinter(WizardForm.WelcomeLabel2, clWhite, CouleurTexte, 420, 480);
+    for I := 0 to GetArrayLength(CartePanneau) - 1 do begin
+      Arriver(CartePanneau[I], CarteX[I], CarteY[I], 0, ScaleY(18), 560 + I * 130, 560, cSortie);
+      Teinter(CartePanneau[I], clWhite, CouleurCarte, 560 + I * 130, 420);
+      Teinter(CarteTitre[I], CouleurCarte, CouleurTitre, 620 + I * 130, 460);
+      Teinter(CarteTexte[I], CouleurCarte, CouleurTexte, 680 + I * 130, 460);
+      Grandir(CarteLogo[I], CarteLogoX[I], CarteLogoY[I], CarteLogoL[I], CarteLogoH[I], 30, 640 + I * 130, 520);
+    end;
+  end else if CurPageID = wpFinished then begin
+    Succes.Debut := -1;
+    Arriver(WizardForm.FinishedHeadingLabel, WizardForm.FinishedHeadingLabel.Left, WizardForm.FinishedHeadingLabel.Top, 0, ScaleY(12), 650, 520, cSortie);
+    Teinter(WizardForm.FinishedHeadingLabel, clWhite, CouleurTitre, 650, 460);
+    Arriver(WizardForm.FinishedLabel, WizardForm.FinishedLabel.Left, WizardForm.FinishedLabel.Top, 0, ScaleY(12), 780, 520, cSortie);
+    Teinter(WizardForm.FinishedLabel, clWhite, CouleurTexte, 780, 460);
+    Arriver(WizardForm.RunList, WizardForm.RunList.Left, WizardForm.RunList.Top, 0, ScaleY(14), 900, 520, cSortie);
+  end else begin
+    Arriver(WizardForm.InnerNotebook, NotebookX, NotebookY, S * ScaleX(32), 0, 0, 360, cSortie);
+    Arriver(WizardForm.PageNameLabel, TitreX, TitreY, S * ScaleX(16), 0, 0, 420, cSortie);
+    Teinter(WizardForm.PageNameLabel, clWhite, CouleurTitre, 0, 380);
+    Arriver(WizardForm.PageDescriptionLabel, DescX, DescY, S * ScaleX(16), 0, 70, 420, cSortie);
+    Teinter(WizardForm.PageDescriptionLabel, clWhite, CouleurTexte, 70, 380);
+    // (les tailles d'ici : celles de la page à l'écran ; avant le premier affichage, la page
+    // intérieure garde la largeur de sa conception)
+    IconeX := WizardForm.MainPanel.Width - IconeT - ScaleX(18);
+    Grandir(EnTeteIcone, IconeX, IconeY, IconeT, IconeT, 45, 40, 480);
+    EnTeteTrait.Width := WizardForm.InnerPage.Width;
+    Elargir(EnTeteCadre, 0, WizardForm.InnerPage.Width, 60, 620);
+    if (CurPageID = wpInstalling) and (DiapoCarte <> nil) then
+      Arriver(DiapoCarte, 0, DiapoY, 0, ScaleY(18), 260, 560, cSortie);
+  end;
+end;
+
+// ----------------------------------------------------------------------- le tic ----
+// Toutes les 15 ms : les transitions, puis les scènes à l'écran. Rien tant que l'assistant
+// n'est pas visible (ou s'il est réduit).
+procedure Tic(Fenetre, Message, Id, Temps: LongWord);
+var Ms: Integer;
+begin
+  if MoteurEnPanne or EnTic or (ColonneEtapes = nil) then Exit;
+  EnTic := True;
+  try
+    try
+      if WizardForm.Visible and (IsIconic(WizardForm.Handle) = 0) then begin
+        Ms := Horloge;
+        TicTransitions(Ms);
+        TicRail(Ms);
+        TicDecor(Ms);
+        if Heros.Active and (Heros.Image <> nil) then TicHeros(Ms);
+        if Succes.Active and (Succes.Image <> nil) then TicSucces(Ms);
+        TicCopie(Ms);
+        if CopieEnCours then TicBarre(Ms);
+        if DiapoActif then TicDiapos(Ms);
+        TicRecap(Ms);
+      end;
+    except
+      Panne(GetExceptionMessage);
+      Figer;
+    end;
+  finally
+    EnTic := False;
+  end;
+end;
+
+procedure MoteurDemarrer;
+begin
+  if MoteurEnPanne or (Minuterie <> 0) or (ColonneEtapes = nil) then Exit;
+  if RappelTic = 0 then RappelTic := CreateCallback(@Tic);
+  Minuterie := SetTimer(0, 0, 15, RappelTic);
+end;
+
+// La progression de la copie (Inno Setup l'appelle) : la barre et l'anneau de l'étape la suivent.
 procedure CurInstallProgressChanged(CurProgress, MaxProgress: Integer);
-var P: Integer;
+var W: Integer;
 begin
   if (BarrePiste = nil) or (MaxProgress <= 0) then Exit;
-  P := Round(100.0 * CurProgress / MaxProgress);
-  if P > 100 then P := 100;
-  if P < 0 then P := 0;
-  BarrePleine.Width := BarrePiste.Width * P div 100;
-  BarrePourcent.Caption := IntToStr(P) + ' %';
+  BarreCible := Borne(CurProgress * 1.0 / MaxProgress);
+  if CopieDebut < 0 then CopieDebut := Horloge;
+  // l'anneau de l'étape suit la barre ; le lien vers la dernière étape se remplit
+  RailCible := EtapeCopie + 0.92 * BarreCible;
+  RailDuree := 0;
+  if MoteurEnPanne then begin
+    // sans le mouvement : la barre, son pourcentage et le fichier en cours, directement
+    W := Round(BarrePiste.Width * BarreCible);
+    BarrePleine.Width := W;
+    BarrePourcent.Caption := IntToStr(Round(100 * BarreCible)) + ' %';
+    if CopieFichier <> nil then CopieFichier.Caption := FichierCourt(WizardForm.FilenameLabel.Caption);
+  end;
 end;
 
 procedure Habiller;
 begin
   if WizardSilent then Exit;
   Ui2x := ScaleX(100) > 100;
+  if Ui2x then Echelle := 2 else Echelle := 1;
+  // 1.12.28 : la police, puis les images de l'échelle de l'écran, d'un coup (leur bloc compressé
+  // est à part, dans cet ordre) ; sans les images, l'assistant reste celui d'Inno Setup
   ChargerPolices;
+  try
+    if Ui2x then ExtractTemporaryFiles('{tmp}\ui2x\*') else ExtractTemporaryFiles('{tmp}\ui\*');
+  except
+    Log('Habillage : les images ne sortent pas (' + GetExceptionMessage + ') ; l''assistant reste sobre.');
+    Exit;
+  end;
+  HorlogeBase := GetTickCount;
+  SensPage := 1;
+  PageAvant := -1;
   if PolicesOk then WizardForm.Font.Name := 'Barlow';
-  CreerColonne;
-  HabillerEnTete;
-  // l'accueil, la copie et la fin s'habillent quand ils s'affichent : la fenêtre a alors sa taille
-  WizardForm.ReadyMemo.Color := CouleurCarte;
-  Ecrire(WizardForm.ReadyMemo.Font, '', 10, CouleurTitre);
-  MajEtapes(0);
+  // une erreur ici n'arrête jamais l'assistant (InitializeWizard) : le mouvement, seulement
+  try
+    CreerColonne;
+    HabillerEnTete;
+    // l'accueil, la copie et la fin s'habillent quand ils s'affichent : la fenêtre a alors sa taille
+    WizardForm.ReadyMemo.Color := CouleurCarte;
+    Ecrire(WizardForm.ReadyMemo.Font, '', 10, CouleurTitre);
+    MajEtapes(0);
+    MoteurDemarrer;
+  except
+    Panne('habillage : ' + GetExceptionMessage);
+    Figer;
+  end;
 end;
 
 // --------------------------------------------------------------- l'assistant ----
@@ -1417,14 +2957,19 @@ end;
 
 procedure CurPageChanged(CurPageID: Integer);
 begin
-  // 1.12.27 : l'etape en cours a gauche, l'icone de l'en-tete ; l'animation pendant la copie seulement.
-  if ColonneEtapes <> nil then begin
-    if CurPageID = wpWelcome then HabillerAccueil;
-    if CurPageID = wpInstalling then HabillerInstallation;
-    if CurPageID = wpFinished then HabillerFin;
-  end;
+  // 1.12.27 : l'etape en cours a gauche, l'icone de l'en-tete. 1.12.28 : la page entre en scene
+  // (MouvementPage) ; une erreur de l'habillage arrete le mouvement, jamais l'assistant.
+  if ColonneEtapes <> nil then
+    try
+      if CurPageID = wpWelcome then HabillerAccueil;
+      if CurPageID = wpInstalling then HabillerInstallation;
+      if CurPageID = wpFinished then HabillerFin;
+    except
+      Panne('page ' + IntToStr(CurPageID) + ' : ' + GetExceptionMessage);
+      Figer;
+    end;
   MajEtapes(EtapeDePage(CurPageID));
-  Animer((CurPageID = wpInstalling) and (AnimImage <> nil));
+  MouvementPage(CurPageID);
   // La page « Ta bibliothèque » : le compteur suit les depots (minuterie tant qu'elle est la).
   if (PageBiblio <> nil) and (CurPageID = PageBiblio.ID) and ListeOk then begin
     if MinuterieListe = 0 then MinuterieListe := SetTimer(0, 0, 400, CreateCallback(@MinuterieBiblio));
@@ -1438,6 +2983,7 @@ begin
   if CurPageID = wpFinished then WizardForm.BackButton.Visible := False;
   if (PageRecap <> nil) and (CurPageID = PageRecap.ID) then begin
     EcrireRecap;
+    RecapCommencer;
     // Installe : plus de retour, plus d'annulation ; Suivant mene a la fin.
     WizardForm.BackButton.Visible := False;
     WizardForm.CancelButton.Visible := False;
@@ -1483,6 +3029,13 @@ begin
   end;
 end;
 
+// 1.12.28 : Précédent - la page arrive de la gauche (voir MouvementPage).
+function BackButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  SensPage := -1;
+end;
+
 // Le resume de la page « Pret a installer » : des lignes courtes (le cadre ne les coupe pas).
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
 var S, L, Prec: String;
@@ -1519,7 +3072,8 @@ begin
 end;
 
 // --------------------------------------------------------------- installer ----
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+// La sauvegarde de la version installée, avant la copie (l'étape PowerShell avant-copie).
+function PreparerCopie: String;
 var Code: Integer;
     Lance, Demarre: Boolean;
 begin
@@ -1548,6 +3102,17 @@ begin
   if Code <> 0 then
     Result := 'La sauvegarde de la version installée n''a pas pu être faite (code ' + IntToStr(Code) + '). Rien n''a été modifié.' + #13#10 +
               'Journal : ' + JournalInstallation;
+end;
+
+// 1.12.28 : pendant la sauvegarde, l'animation de la copie et une phrase (MontrerPreparation).
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  MontrerPreparation(True);
+  try
+    Result := PreparerCopie;
+  finally
+    MontrerPreparation(False);
+  end;
 end;
 
 procedure EcrireInstallationIni;
@@ -1633,7 +3198,7 @@ end;
 // 1.12.27 : plus aucune minuterie quand l'assistant se ferme (meme annule au milieu d'une page).
 procedure DeinitializeSetup;
 begin
-  Animer(False);
+  MoteurArreter;
   if MinuterieListe <> 0 then begin
     KillTimer(0, MinuterieListe);
     MinuterieListe := 0;
