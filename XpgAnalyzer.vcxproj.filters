@@ -1078,7 +1078,13 @@
     <ClCompile Include="src\export\DocKit.cpp">
       <Filter>export</Filter>
     </ClCompile>
+    <ClCompile Include="src\export\HtmlPage.cpp">
+      <Filter>export</Filter>
+    </ClCompile>
     <ClCompile Include="src\export\ProgramBook.cpp">
+      <Filter>export</Filter>
+    </ClCompile>
+    <ClCompile Include="src\export\ProgramBookHtml.cpp">
       <Filter>export</Filter>
     </ClCompile>
     <ClCompile Include="src\export\ProgramBookPdf.cpp">
@@ -1486,6 +1492,9 @@
     <ClCompile Include="src\project\ActivationConditions.cpp">
       <Filter>project</Filter>
     </ClCompile>
+    <ClCompile Include="src\project\ApiArchive.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
     <ClCompile Include="src\project\GrafcetCheck.cpp">
       <Filter>project</Filter>
     </ClCompile>
@@ -1493,6 +1502,9 @@
       <Filter>project</Filter>
     </ClCompile>
     <ClCompile Include="src\project\GrafcetRewrite2.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\ProjectArchive.cpp">
       <Filter>project</Filter>
     </ClCompile>
     <ClCompile Include="src\sim\Rich.cpp">
@@ -1512,6 +1524,9 @@
     </ClCompile>
     <ClCompile Include="src\app\ReportWindow.cpp">
       <Filter></Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SvgRenderer.cpp">
+      <Filter>app</Filter>
     </ClCompile>
     <ClCompile Include="src\help\Trails.cpp">
       <Filter></Filter>
@@ -2422,6 +2437,9 @@
     <ClInclude Include="src\export\DocKit.hpp">
       <Filter>export</Filter>
     </ClInclude>
+    <ClInclude Include="src\export\HtmlPage.hpp">
+      <Filter>export</Filter>
+    </ClInclude>
     <ClInclude Include="src\export\ProgramBook.hpp">
       <Filter>export</Filter>
     </ClInclude>
@@ -2797,6 +2815,9 @@
     <ClInclude Include="src\project\ActivationConditions.hpp">
       <Filter>project</Filter>
     </ClInclude>
+    <ClInclude Include="src\project\ApiArchive.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
     <ClInclude Include="src\project\GrafcetCheck.hpp">
       <Filter>project</Filter>
     </ClInclude>
@@ -2804,6 +2825,9 @@
       <Filter>project</Filter>
     </ClInclude>
     <ClInclude Include="src\project\GrafcetRewrite2.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\ProjectArchive.hpp">
       <Filter>project</Filter>
     </ClInclude>
     <ClInclude Include="src\sim\Rich.hpp">
@@ -2841,6 +2865,9 @@
     </ClInclude>
     <ClInclude Include="src\app\ReportWindow.hpp">
       <Filter></Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SvgRenderer.hpp">
+      <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\help\Trails.hpp">
       <Filter></Filter>

@@ -43,6 +43,17 @@ bool encodeJpeg(const std::vector<std::uint8_t>& rgba, int w, int h, int quality
     return stbi_write_jpg_to_func(sink, &out, w, h, 3, rgb.data(), std::clamp(quality, 1, 100)) != 0 && !out.empty();
 }
 
+bool encodePng(const std::vector<std::uint8_t>& rgba, int w, int h, std::vector<std::uint8_t>& out) {
+    out.clear();
+    if (w <= 0 || h <= 0 || rgba.size() < static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4) return false;
+    const auto sink = [](void* context, void* data, int size) {
+        auto* v = static_cast<std::vector<std::uint8_t>*>(context);
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        v->insert(v->end(), bytes, bytes + size);
+    };
+    return stbi_write_png_to_func(sink, &out, w, h, 4, rgba.data(), w * 4) != 0 && !out.empty();
+}
+
 core::Status captureToPng(gfx::IRenderer& renderer, const std::string& path) {
     std::vector<std::uint8_t> rgba;
     int w = 0, h = 0;

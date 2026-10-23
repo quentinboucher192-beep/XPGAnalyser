@@ -182,13 +182,16 @@ endif()
 xpg_sources(APP_SOURCES app)
 add_library(xpg_app OBJECT ${APP_SOURCES})
 target_link_libraries(xpg_app PUBLIC xpg_ui xpg_import xpg_help xpg_hmi)
+# 1.12.30 : FontAtlas (sans SDL) mesure aussi les textes de la page web de l'IHM (app/SvgRenderer) :
+# il est dans xpg_app avec ou sans ecran (avant : avec SDL seulement, pour SdlRenderer).
+target_sources(xpg_app PRIVATE src/platform/FontAtlas.cpp)
 
 if(XPG_WITH_SDL)
     find_package(SDL3 CONFIG REQUIRED)
     file(GLOB SDL_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/Sdl*.cpp")
-    # SdlRenderer dessine le texte avec FontAtlas : sans lui, l'executable ne
-    # se lie pas ("undefined reference to gfx::FontAtlas").
-    target_sources(xpg_app PRIVATE ${SDL_SOURCES} src/platform/FontAtlas.cpp)
+    # SdlRenderer dessine le texte avec FontAtlas (ajoute plus haut, avec ou sans
+    # SDL) : sans lui, l'executable ne se lie pas ("undefined reference to gfx::FontAtlas").
+    target_sources(xpg_app PRIVATE ${SDL_SOURCES})
     target_link_libraries(xpg_app PUBLIC SDL3::SDL3)
     target_compile_definitions(xpg_app PUBLIC XPG_WITH_SDL=1)
 endif()
@@ -629,6 +632,12 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(fileexplorer_test tests/fileexplorer_test.cpp src/app/FilePreview.cpp)
     xpg_target_link_libraries(fileexplorer_test PRIVATE xpg_ui xpg_hmi)
     # ---- fin Lot API 8 : l'explorateur de fichiers ----
+    # 1.12.30 : les echanges de projets - les archives .xihm et .xapi (aller-retour fichier par
+    # fichier et compte par compte, abimees, plus recentes, d'une autre application), les pages web
+    # (la page de l'IHM dessinee par le vrai dessin de l'appli : xpg_app, deja construit pour les
+    # deux applications, sans rien recompiler).
+    xpg_add_test_executable(echanges_test tests/echanges_test.cpp)
+    xpg_target_link_libraries(echanges_test PRIVATE xpg_app)
     file(GLOB HMI_EDITOR_SOURCES CONFIGURE_DEPENDS
          ${CMAKE_CURRENT_SOURCE_DIR}/src/app/hmi/*.cpp)
     # Lot 13 : Capture.cpp pour le JPEG des vignettes du dossier de l'IHM.
@@ -757,6 +766,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME searchfocus COMMAND searchfocus_test)                  # ---- Lot API 8 : finitions (Ctrl+F) ----
     xpg_add_test(NAME lot8tutorials COMMAND lot8tutorials_test)              # ---- Lot API 8 : didacticiels et aide ----
     xpg_add_test(NAME topbar8 COMMAND topbar8_test)                          # ---- Lot API 8 : bandeau haut ----
+    xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi, .html
     xpg_add_test(NAME fileexplorer COMMAND fileexplorer_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # ---- Lot API 8 : l'explorateur de fichiers (2e partie : [MAST.XPG] [ihm]) ----
 
     # LES TESTS QUI LISENT libs/ NE SONT ENREGISTRES QUE SI libs/ EST LA.
