@@ -41,7 +41,7 @@ nav.side a.on{background:var(--accent);color:var(--accent-ink)}
 nav.side a .b{color:var(--muted);font-size:12px;white-space:nowrap}
 nav.side a.on .b{color:inherit}
 main{flex:1 1 auto;min-width:0;padding:18px 22px 60px}
-.sec{display:none}
+.sec{display:none;scroll-margin-top:calc(var(--top,60px) + 18px)}
 .sec.on{display:block}
 .sec>h2{font-size:20px;margin:0 0 12px;font-weight:600}
 .sec>h2 small{font-size:13px;color:var(--muted);font-weight:400;margin-left:8px}
@@ -85,7 +85,7 @@ h3.sub{font-size:15px;margin:22px 0 8px}
 .ov .wbody{padding:8px}
 .ov .wbody .screen{box-shadow:none;border:0;padding:0}
 @media (max-width:760px){.layout{display:block}nav.side{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line)}
-main{padding:12px}header.top{position:static}table.t th{top:0}}
+main{padding:12px}header.top{position:static}table.t th{top:0}.sec{scroll-margin-top:12px}}
 @media print{header.top,nav.side{position:static}nav.side,#dl,.hint,input.filter{display:none}.sec{display:block!important;break-before:page}
 .layout{display:block}body{background:#fff}}
 )CSS";
@@ -103,9 +103,16 @@ constexpr const char* kScript = R"JS(
     var links = document.querySelectorAll('nav.side a');
     for (var j = 0; j < links.length; j++) links[j].classList.toggle('on', links[j].getAttribute('href') === '#' + id);
     closePopup();
-    // Une autre page : en haut (le navigateur, lui, viendrait au titre, sous le bandeau).
-    window.scrollTo(0, 0);
-    setTimeout(function(){ window.scrollTo(0, 0); }, 0);
+    // Une autre page : son debut, juste sous le bandeau (le navigateur, lui, vient au titre de
+    // la section ; scroll-margin-top l'arrete au meme endroit).
+    toTop();
+    setTimeout(toTop, 0);
+  }
+  function toTop(){
+    var m = document.querySelector('main'), h = document.querySelector('header.top');
+    var sticky = h && getComputedStyle(h).position === 'sticky';
+    var y = m ? m.getBoundingClientRect().top + window.scrollY - (sticky ? h.offsetHeight : 0) : 0;
+    window.scrollTo(0, Math.max(0, y));
   }
   // La hauteur du bandeau (il passe sur deux lignes dans une fenetre etroite) : le menu et
   // les titres des tableaux restent juste dessous.

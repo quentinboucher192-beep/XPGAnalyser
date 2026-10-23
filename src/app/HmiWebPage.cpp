@@ -11,6 +11,7 @@
 #include "../hmi/HmiMarkers.hpp"
 #include "../hmi/HmiNavigation.hpp"
 #include "../hmi/HmiSymbols.hpp"
+#include "../hmi/HmiTable.hpp"
 #include "../hmi/HmiTemplates.hpp"
 #include "../hmi/HmiWidgets.hpp"
 #include "../project/ProjectArchive.hpp"
@@ -106,6 +107,18 @@ hmi::View prepared(const hmi::Project& p, const hmi::View& v) {
     // Les cases pilotees d'un tableau ("=expression", un texte a trous) : au repos aussi.
     for (auto& o : shown.objects) {
         if (o.kind != hmi::Kind::Table) continue;
+        // Les colonnes dynamiques (1.12.13) : le contenu de chaque colonne - une formule, un
+        // chemin de la ligne ([*].Niveau, [#]), un texte a trous - au repos ; un texte fixe reste.
+        if (hmi::table::hasColumns(o)) {
+            auto columns = hmi::table::columnsOf(o);
+            for (auto& c : columns) {
+                if (c.content.empty()) continue;
+                if (c.content.front() == '=') c.content = "\xE2\x80\x94";
+                else if (c.content.find('{') != std::string::npos) c.content = atRest(c.content);
+                else if (c.content.find("[*]") != std::string::npos || c.content.find("[#]") != std::string::npos) c.content = "\xE2\x80\x94";
+            }
+            if (auto* dyn = o.find(hmi::table::kColumnsKey)) dyn->value = hmi::table::formatColumns(columns);
+        }
         auto* cells = o.find("cells");
         if (!cells || cells->value.empty()) continue;
         auto rows = hmi::parseCells(cells->value);

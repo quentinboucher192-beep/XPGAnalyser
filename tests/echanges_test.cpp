@@ -572,7 +572,18 @@ void pagesWeb(const fs::path& bac) {
     info.archive = &*zip;
     info.archiveName = "Armoire_Gaz.xihm";
     app::WebPageStats stats;
+    // Un tableau a colonnes dynamiques (1.12.13) : ses contenus - une formule, le numero de la ligne,
+    // un texte a trous - se dessinent au repos (un tiret), pas en formules.
+    for (auto& v : p->views)
+        if (v.role == "vue") {
+            auto t = hmi::makeObject(hmi::Kind::Table, p->allocate(), "Table_Essai", 30, 30, v.layers.empty() ? hmi::kNoId : v.layers.front().id);
+            t.set("dynColumns", "Voie\t{[#] - 1:0}\t\t\t44\tcentre\tR\t\t\t\nRep\xC3\xA8re\t=CONCAT('ZQ_XW_TABLE.S32A[', TO_STRING([#] - 1), ']')\t\t\t92\tgauche\tR\t\t\t");
+            v.objects.push_back(t);
+            break;
+        }
     const std::string html = app::hmiWebPage(*p, ui::Theme::light(), info, &stats);
+    check(html.find("ZQ_XW_TABLE") == std::string::npos && html.find("[#]") == std::string::npos,
+          "un tableau a colonnes dynamiques se dessine au repos : ni formule ni [#]");
     std::size_t shown = 0;
     for (const auto& v : p->views) shown += (v.role == "vue" || v.role == "popup") ? 1 : 0;
     check(stats.views + stats.popups == shown && occurrences(html, "<svg viewBox=") == shown,
