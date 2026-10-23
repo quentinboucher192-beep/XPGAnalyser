@@ -3621,6 +3621,7 @@ void Runtime::start(double now) {
     backgrounds_.clear();
     gifs_.clear();                      // lot 16
     mediasReset();                      // 1.12.12 (lot H)
+    docsReset();                        // 1.12.30
     openCounts_.clear();
     previousView_ = kNoId;
     navigations_ = cycles_ = recipeApplies_ = 0;
@@ -3978,6 +3979,7 @@ void Runtime::prime(double now) {
     backgrounds_.clear();
     gifs_.clear();                      // lot 16
     mediasReset();                      // 1.12.12 (lot H)
+    docsReset();                        // 1.12.30
     initVariables();
     // 1.12.7 : l'essai d'une fonction, le banc des expressions lisent aussi les constantes calculees.
     (void)computeDeclarations();
@@ -4217,6 +4219,7 @@ void Runtime::cycle(double now) {
     };
     gifsCycle(now);                     // lot 16 : les GIF animes (conditions, fin de lecture)
     mediasCycle(now);                   // 1.12.12 (lot H) : les videos, les textes defilants, les codes QR
+    docsCycle(now);                     // 1.12.30 : les visionneuses de documents (document, page)
     double rest = lap();
     double scripted = 0;
     for (const auto& part : cycleParts_) scripted += part.ms;
@@ -5589,6 +5592,7 @@ std::string Runtime::keyboardMode() const {
     const View* v = shownViewOf(focused_);
     const Object* o = v ? v->object(focused_) : nullptr;
     if (!o) return {};
+    if (o->kind == Kind::DocumentViewer) return docKeyboardMode();   // 1.12.30 : son numero de page, sa recherche
     // Lot 10 : le reglage du poste - jamais aucun clavier, ou toujours un.
     if (settings_.keyboard == "jamais") return {};
     const std::string k = plain(o->text("keyboard", "aucun"));
@@ -5649,6 +5653,11 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
     // 1.12.24 : le Reglage PID - une partie de sa carte, ou le geste que la signature a valide.
     if (found->kind == Kind::PidTuner) {
         pidObjectPart(*v, *found, part, now);
+        return;
+    }
+    // 1.12.30 : la visionneuse de documents - ses pages, son zoom, sa recherche (HmiRuntimeDocs.cpp).
+    if (found->kind == Kind::DocumentViewer) {
+        docObjectPart(*v, *found, part, now);
         return;
     }
     // 1.12.16 : le bouton Pause / Continuer d'une courbe pilotable.
@@ -5797,6 +5806,7 @@ void Runtime::typeText(std::string_view text, double now) {
     const View* v = shownViewOf(focused_);
     const Object* o = v ? v->object(focused_) : nullptr;
     if (!o) { focused_ = kNoId; return; }
+    if (o->kind == Kind::DocumentViewer) { docTypeText(*v, *o, text, now); return; }   // 1.12.30
     auto& f = forms_[focused_];
     if (f.focus.empty()) return;
     auto& buffer = f.text[f.focus];
@@ -5839,6 +5849,7 @@ void Runtime::typeKey(EditKey k, double now) {
     const View* v = shownViewOf(focused_);
     const Object* o = v ? v->object(focused_) : nullptr;
     if (!o) { focused_ = kNoId; return; }
+    if (o->kind == Kind::DocumentViewer) { docTypeKey(*v, *o, k, now); return; }   // 1.12.30
     const Id object = focused_;
     auto& f = forms_[object];
     if (f.focus.empty()) return;
@@ -5933,6 +5944,13 @@ void Runtime::unfocus(double now, Id towards) {
         f.focus.clear();
         f.fresh = false;
         if (o && o->kind == Kind::InputField) f.text.clear();
+        // 1.12.30 : la visionneuse quitte ses champs (le numero tape a moitie est oublie).
+        if (const auto d = docs_.find(object); d != docs_.end()) {
+            d->second.state.editingPage = false;
+            d->second.state.pageText.clear();
+            d->second.state.editingSearch = false;
+            d->second.state.zoomMenu = false;
+        }
         focused_ = kNoId;
     }
 }

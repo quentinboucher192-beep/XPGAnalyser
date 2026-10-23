@@ -1754,6 +1754,7 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
     if (drawLot13(c)) return;
     if (drawLot14(c)) return;
     if (drawPidTuner(c)) return;     // 1.12.24
+    if (drawDocumentViewer(c)) return;   // 1.12.30
 
     switch (o.kind) {
         case Kind::Rectangle:

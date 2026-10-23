@@ -376,6 +376,14 @@ inline constexpr InfoVar kGifInfo[] = {
     {"FrameCount", "INT",  Access::Read, "Les images du GIF."},
     {"Loops",      "DINT", Access::Read, "Les tours faits depuis le d\xC3\xA9part."},
 };
+// 1.12.30 : ce que le moteur sait d'une visionneuse de documents, en plus.
+inline constexpr InfoVar kDocInfo[] = {
+    {"PageCount",     "INT",    Access::Read, "Les pages du document montr\xC3\xA9 (0 : pas encore lu, ou illisible)."},
+    {"CurrentPage",   "INT",    Access::Read, "La page en haut de la visionneuse, \xC3\xA0 partir de 1."},
+    {"Zoom",          "REAL",   Access::Read, "Le zoom montr\xC3\xA9, en % (100 : la taille vraie de la page)."},
+    {"Loaded",        "BOOL",   Access::Read, "Le document est lu (ses pages se montrent)."},
+    {"DocumentError", "STRING", Access::Read, "Pourquoi le document ne se montre pas (introuvable, lecteur PDF absent...) ; vide : il se montre."},
+};
 // 1.9 : le groupe d'alarmes interne d'un objet qui porte des alarmes (un objet du
 // synoptique, une instance de symbole : ses objets compris) - HmiObjectAlarms.hpp.
 inline constexpr InfoVar kAlarmInfo[] = {
@@ -462,6 +470,7 @@ inline constexpr InfoVar kViewInfo[] = {
 [[nodiscard]] inline const InfoVar* objectInfo(std::string_view name) noexcept {
     for (const auto& v : kObjectInfo) if (same(v.name, name)) return &v;
     for (const auto& v : kGifInfo) if (same(v.name, name)) return &v;      // lot 16 (un GIF anime)
+    for (const auto& v : kDocInfo) if (same(v.name, name)) return &v;      // 1.12.30 (une visionneuse de documents)
     for (const auto& v : kAlarmInfo) if (same(v.name, name)) return &v;    // 1.9 (un objet qui porte des alarmes)
     return nullptr;
 }
@@ -614,6 +623,7 @@ struct Member {
     std::vector<Member> out;
     std::vector<InfoVar> infos(std::begin(kObjectInfo), std::end(kObjectInfo));
     if (o.kind == Kind::AnimatedGif) infos.insert(infos.end(), std::begin(kGifInfo), std::end(kGifInfo));   // lot 16
+    if (o.kind == Kind::DocumentViewer) infos.insert(infos.end(), std::begin(kDocInfo), std::end(kDocInfo));   // 1.12.30
     for (const auto& i : infos) {
         Member m;
         m.name = std::string(i.name);

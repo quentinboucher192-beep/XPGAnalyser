@@ -58,6 +58,7 @@
 #include "HmiSources.hpp"              // 1.12.7 (lot E) : le joker [*], « Repeter depuis »
 #include "HmiVideo.hpp"                // 1.12.12 (lot H) : la lecture d'une video
 #include "HmiTable.hpp"                // 1.12.13 : le Tableau, un mode a la fois
+#include "HmiDocView.hpp"              // 1.12.30 : la visionneuse de documents
 
 #include <cstdint>
 #include <deque>
@@ -782,6 +783,36 @@ public:
     [[nodiscard]] const video::Playback* videoPlayback(Id object) const;
     // Nul : l'objet n'a pas de source (il defile son texte) ; vide : sa source n'a rien en ce moment.
     [[nodiscard]] const std::vector<std::string>* marqueeMessages(Id object) const;
+
+    // ---- 1.12.30 : LA VISIONNEUSE DE DOCUMENTS (HmiRuntimeDocs.cpp, HmiDocView.hpp) ----------------
+    //  A chaque cycle, son document (une ressource, un fichier : la propriete Document, une formule qui
+    //  rend un chemin) s'ouvre ou change ; sa page suit sa variable (Variable de la page) ou sa
+    //  propriete Page. Les gestes de l'operateur (objectPart "doc:...", ou "doc:at:x:y" : ce qui est
+    //  sous ce point local) tournent les pages, zooment, defilent, cherchent ; une page changee
+    //  s'ecrit dans la variable (sinon la propriete garde la page en marche). Navigation interdite
+    //  (Navigation autorisee decochee, ou un niveau d'acces qui manque) : une seule page, celle que
+    //  dit la variable ; zoomer, deplacer, tourner, chercher restent permis.
+    struct DocViewer {
+        std::string                     spec;            // le document demande (evalue, sans ses reperes)
+        std::shared_ptr<doc::Document>  document;        // nul : pas ouvert (why)
+        std::string                     why;
+        docview::Settings               settings;
+        docview::State                  state;
+        docview::Layout                 layout;          // a la taille de l'objet, au dernier cycle
+        std::vector<doc::Size>          sizes;           // les pages a 100 % (le document lu)
+        bool                            navigation{true};
+        bool                            ready{false};    // le document lu et son etat pose
+        int                             lastRead{0};     // la page lue (variable ou propriete) au dernier cycle
+        int                             written{0};      // la derniere page ecrite par un geste (son echo)
+        bool                            thumbsSetting{false};
+        double                          checkedAt{-1e9}; // la derniere fois que le fichier a ete regarde
+    };
+    [[nodiscard]] const DocViewer* docViewer(Id object) const;
+    // Ce qui est sous un point local de la visionneuse ("doc:next", "doc:area"...) ; vide : rien.
+    [[nodiscard]] std::string docPartAt(Id object, double lx, double ly) const;
+    // La visionneuse a le clavier ; ... et un de ses champs (le numero de page, la recherche) est en saisie.
+    [[nodiscard]] bool docFocused() const;
+    [[nodiscard]] bool docTyping() const;
     [[nodiscard]] comm::Link*      equipmentLink(std::string_view equipment);
     [[nodiscard]] std::vector<EquipmentStatus> equipmentStatuses() const;
     [[nodiscard]] std::optional<EquipmentStatus> equipmentStatus(std::string_view name) const;
@@ -1578,6 +1609,18 @@ private:
     void mediasReset();
     void mediasOpenView(const View&, double now);
     void mediasCycle(double now);
+    // 1.12.30 : la visionneuse de documents (HmiRuntimeDocs.cpp).
+    std::map<Id, DocViewer>                    docs_;
+    void docsReset();
+    void docsCycle(double now);
+    void docRefresh(const View&, const Object& raw, const Object& shown, double now);
+    void docObjectPart(const View&, const Object&, std::string_view part, double now);
+    void docTypeText(const View&, const Object&, std::string_view text, double now);
+    void docTypeKey(const View&, const Object&, EditKey, double now);
+    void docApply(const View&, const Object&, DocViewer&, const docview::Effect&, double now);
+    [[nodiscard]] int docPageRead(const Object& shown);
+    [[nodiscard]] bool docMemberValue(const Object&, std::string_view info, sim::Value& out) const;
+    [[nodiscard]] std::string docKeyboardMode() const;
     [[nodiscard]] std::vector<std::string> marqueeSource(std::string_view from, Id view) const;
     void reportsCycle(double now);                                      // lot 14 : les rapports a leur heure
     std::map<Id, std::pair<std::string, std::vector<std::string>>> alarmPaths_;   // la condition, ses chemins d'automate

@@ -479,6 +479,10 @@ private:
     hmi::Id                   scrollDrag_{hmi::kNoId};
     std::size_t               scrollDragLayer_{0};
     bool                      scrollDragVertical_{true};
+    // 1.12.30 : la visionneuse de documents qu'on tire (la main : la page suit la souris).
+    hmi::Id                   docDrag_{hmi::kNoId};
+    std::size_t               docDragLayer_{0};
+    gfx::Point                docDragLast_{};
     bool                      swipeArmed_{false};
     gfx::Point                swipeFrom_{};
     std::size_t               swipeLayer_{0};

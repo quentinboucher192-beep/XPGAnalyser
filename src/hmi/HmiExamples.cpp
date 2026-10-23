@@ -10,6 +10,7 @@
 #include "HmiRuntime.hpp"
 #include "HmiWidgets.hpp"
 #include "HmiTable.hpp"     // 1.12.13 : l'exemple du tableau en lignes dynamiques, ses chapitres
+#include "HmiDocument.hpp"  // 1.12.30 : la notice d'exemple de la visionneuse de documents
 
 #include <algorithm>
 #include <cmath>
@@ -2059,6 +2060,35 @@ Example speedDrive() {
     return m.done(12);
 }
 
+// ---- 1.12.30 : la visionneuse de documents - la notice suit l'etape de la procedure ----
+Example documentViewer() {
+    Maker m(420);
+    {
+        auto blob = std::make_shared<Bytes>(doc::sampleNotice());
+        m.project().assets.resources.push_back(makeResource(m.project(), "notice_VE-101.pdf", blob, "exemple"));
+    }
+    m.var("Etape", "INT", "1");
+    m.cyclic("IF T < 3.0 THEN Etape := 1; ELSIF T < 6.0 THEN Etape := 2; ELSIF T < 9.0 THEN Etape := 3; ELSE Etape := 4; END_IF;");
+    auto& o = m.add(Kind::DocumentViewer, "Notice", 16, 16, 330, 388);
+    o.set("document", "notice_VE-101.pdf");
+    o.set("variable", "Etape");
+    o.set("startZoom", "page enti\xC3\xA8re");
+    m.title("Titre", 362, 18, 230, "\xC3\x89tape {Etape} / 4", 20);
+    const char* steps[] = {"1. Le sommaire", "2. Le sch\xC3\xA9ma", "3. Mettre en route", "4. D\xC3\xA9" "fauts et rem\xC3\xA8" "des"};
+    for (int i = 0; i < 4; ++i) {
+        auto& t = m.add(Kind::Text, "Etape_" + std::to_string(i + 1), 362, 70 + 32.0 * i, 230, 28);
+        t.set("text", steps[i]);
+        t.setNumber("fontSize", 15);
+        t.set("align", "gauche");
+        t.setExpr("textColor", "SEL(Etape = " + std::to_string(i + 1) + ", '#6B7686', '#F2C94C')");
+    }
+    m.note("Explication", 362, 210, 230, 190,
+           "La Variable de la page est Etape : quand la proc\xC3\xA9" "dure passe \xC3\xA0 l'\xC3\xA9tape suivante, la visionneuse tourne la page. "
+           "L'op\xC3\xA9rateur, lui, zoome (molette avec Ctrl), d\xC3\xA9place la page et change de page ; la page qu'il choisit "
+           "s'\xC3\xA9" "crit dans Etape.");
+    return m.done(12);
+}
+
 // ---- 1.12.24 : le Reglage PID - une boucle simulee (un procede a deux constantes de temps et son PI) ----
 Example pidTuner() {
     Maker m;
@@ -2637,6 +2667,7 @@ std::optional<Example> exampleFor(Kind kind) {
         case Kind::FireDamper:          return fireDamper();
         case Kind::PidTuner:            return pidTuner();
         case Kind::SpeedDrive:          return speedDrive();         // 1.12.30
+        case Kind::DocumentViewer:      return documentViewer();     // 1.12.30
         case Kind::SymbolInstance:      return symbolInstance();     // lot 10
         // lot 11
         case Kind::BarChart:            return barChart();

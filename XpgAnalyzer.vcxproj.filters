@@ -1153,6 +1153,9 @@
     <ClCompile Include="src\app\hmi\HmiDeclGrid.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiDocPainter.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiDuplicateDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1330,6 +1333,12 @@
     <ClCompile Include="src\hmi\HmiDeclEdit.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiDocument.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiDocView.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiDuplicate.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1381,6 +1390,9 @@
     <ClCompile Include="src\hmi\HmiOverload.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiPdf.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiPerfHistory.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1412,6 +1424,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRoles.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeDocs.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRuntimeInput.cpp">
@@ -2671,6 +2686,12 @@
     <ClInclude Include="src\hmi\HmiDeclEdit.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiDocument.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiDocView.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiDuplicate.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
@@ -2717,6 +2738,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiOverload.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiPdf.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiPerfHistory.hpp">

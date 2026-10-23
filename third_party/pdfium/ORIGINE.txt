@@ -1,0 +1,42 @@
+PDFium 156.0.8076.0 - le moteur PDF de la visionneuse de documents (1.12.30)
+===========================================================================
+
+PDFium est le moteur PDF de Chromium (licence BSD-3-Clause, avec des parties Apache-2.0).
+Les binaires sont ceux de pdfium-binaries (https://github.com/bblanchon/pdfium-binaries,
+licence MIT pour la construction), tels que la roue pypdfium2 5.14.0 de PyPI les livre :
+
+  https://pypi.org/project/pypdfium2/5.14.0/
+  pypdfium2-5.14.0-py3-none-win_amd64.whl
+    SHA-256 : 149fd5c6397b8df8bf7911a93506eff0be874f877afe7ac936cf5d37d21a6a06
+  pypdfium2-5.14.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+    SHA-256 : 11f281613fa22313d9c7ab89947665e84eccf8ebe40e1198a84a88352305648d
+
+outils/pdfium/obtenir_pdfium.py les telecharge (pip download, sans rien installer), verifie ces
+empreintes et pose, hors du depot (.gitignore) :
+
+  win-x64/pdfium.dll       SHA-256 69f1e860f6742fbaafcc4db80e785eec9a4ee0da36ea6d1dc0867ea0f18baea6
+  linux-x64/libpdfium.so   SHA-256 fd4de9f91f183476d04b1bc3fd17dacd95aba349c55d2c376512d95e082b441e
+  */version.json           la version (156.0.8076.0, origine pdfium-binaries)
+  */LICENSES/              les licences de la construction : pdfium.txt, pdfium-binaries.txt, et
+                           celles de ce qu'elle contient (abseil, agg23, fast_float, freetype, icu,
+                           lcms, libjpeg_turbo, libopenjpeg, libpng, llvm-libc, simdutf, zlib)
+
+Ses dependances : pdfium.dll n'importe que KERNEL32, ADVAPI32, GDI32 et USER32 (Windows lui-meme) ;
+libpdfium.so, libc, libm, libpthread et libgcc_s.
+
+L'APPLICATION NE SE LIE PAS A PDFium : src/hmi/HmiPdf.cpp le charge a la premiere page demandee
+(LoadLibrary / dlopen), comme Media Foundation pour la video. Sans lui, les deux applications
+demarrent ; la visionneuse le dit dans son cadre, et les images et le texte s'y lisent toujours.
+Il est cherche : dans la variable d'environnement XPG_PDFIUM (un fichier ou un dossier), puis a
+cote de l'executable (pdfium.dll a cote de IHM-Studio.exe), et sous Linux dans le chemin de
+recherche du systeme.
+
+Qui le livre :
+  - outils/mingw/cross_mingw.sh copie win-x64/pdfium.dll a cote des exe (build-mingw) ;
+  - outils/mingw/package_mingw.py le met dans les zips portables et le paquet, avec ses licences
+    (licences\pdfium\) ;
+  - le projet Visual Studio (XpgAnalyzer.vcxproj, son evenement apres la generation) copie
+    third_party\pdfium\win-x64\pdfium.dll a cote de l'exe, comme SDL3.dll, s'il est la ;
+  - le paquet fait sous Windows (outils\lib\package.ps1) doit faire comme package_mingw.py :
+    pdfium.dll a cote des exe, win-x64\LICENSES\ dans licences\pdfium\ ;
+  - les essais sous Linux (hmi_docviewer_test) chargent linux-x64/libpdfium.so.

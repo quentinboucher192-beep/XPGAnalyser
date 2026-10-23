@@ -123,6 +123,7 @@ HmiGlyph glyphFor(hmi::Kind k) noexcept {
         case hmi::Kind::MultiBladeDamper:     return HmiGlyph::MultiBladeDamper;
         case hmi::Kind::FireDamper:           return HmiGlyph::FireDamper;
         case hmi::Kind::SpeedDrive:           return HmiGlyph::SpeedDrive;    // 1.12.30
+        case hmi::Kind::DocumentViewer:       return HmiGlyph::DocumentViewer;   // 1.12.30
     }
     return HmiGlyph::None;
 }
@@ -781,6 +782,14 @@ void drawHmiGlyph(gfx::IRenderer& r, HmiGlyph g, const gfx::Rect& b, gfx::Color 
             wave(10.8f, 12.0f);
             break;
         }
+        case HmiGlyph::DocumentViewer:  // 1.12.30 : une page cornee, ses lignes, et la loupe du zoom
+            L(2.5f, 1.5f, 9, 1.5f); L(9, 1.5f, 12, 4.5f); L(12, 4.5f, 12, 8.2f);
+            L(2.5f, 1.5f, 2.5f, 14.5f); L(2.5f, 14.5f, 8.2f, 14.5f);
+            L(9, 1.5f, 9, 4.5f, 0.9f); L(9, 4.5f, 12, 4.5f, 0.9f);
+            L(4.5f, 5, 7.5f, 5, 0.9f); L(4.5f, 7.5f, 10, 7.5f, 0.9f); L(4.5f, 10, 7.5f, 10, 0.9f);
+            circle(11.2f, 11.2f, 2.3f, false);
+            L(12.9f, 12.9f, 15, 15, 1.6f);
+            break;
         case HmiGlyph::Pause:           // 1.9 : deux barres (Figer l'affichage)
             F(4, 3, 2.6f, 10, c); F(9.4f, 3, 2.6f, 10, c);
             break;

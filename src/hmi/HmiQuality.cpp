@@ -2,6 +2,7 @@
 #include "HmiRoles.hpp"   // 1.12.6 (lot C) : les noms sans les $ de leurs reperes
 
 #include "HmiControls.hpp"
+#include "HmiDocView.hpp"   // 1.12.30 : les boutons de la visionneuse de documents
 #include "HmiExpr.hpp"
 #include "HmiNavigation.hpp"
 #include "HmiSymbols.hpp"
@@ -556,6 +557,7 @@ bool clickableKind(Kind k) {
         case Kind::LoginMenuButton: case Kind::SystemButton: case Kind::ExportButton: case Kind::NavBar: case Kind::TabContainer:
         case Kind::LanguageSelector: case Kind::ThemeSelector:
         case Kind::PlcDiagnostic:   // lot 14 : ses deux boutons
+        case Kind::DocumentViewer:  // 1.12.30 : les boutons de sa barre
             return true;
         default:
             return false;
@@ -611,6 +613,18 @@ void checkTouch(Ctx& c, const View& v, const Object& o) {
                 return;
             }
             break;
+        case Kind::DocumentViewer: {
+            // 1.12.30 : les boutons et les champs de sa barre (32 px : ils ne grandissent pas avec l'objet).
+            const auto settings = docview::settingsOf(o);
+            if (!settings.toolbar) return;
+            const auto l = docview::layoutOf(w, h, settings, docview::initialState(settings));
+            std::vector<Box> boxes;
+            for (const auto& b : l.buttons) boxes.push_back(b.box);
+            boxes.push_back(l.pageField);
+            boxes.push_back(l.zoomField);
+            parts(boxes, "les boutons de la barre");
+            return;
+        }
         default:
             break;
     }

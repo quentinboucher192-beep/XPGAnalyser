@@ -264,7 +264,8 @@ std::vector<Runtime::UiState> Runtime::uiState() const {
         if (!o) continue;
         for (const auto& [key, value] : props) {
             const bool kept = (o->kind == Kind::TabContainer && key == "page") || (o->kind == Kind::CollapsiblePanel && key == "collapsed")
-                           || (o->kind == Kind::ScrollPanel && (key == "scrollX" || key == "scrollY"));
+                           || (o->kind == Kind::ScrollPanel && (key == "scrollX" || key == "scrollY"))
+                           || (o->kind == Kind::DocumentViewer && key == "page");   // 1.12.30 : la page lue (sans variable)
             if (kept) out.push_back({at.first, at.second, key, value});
         }
     }

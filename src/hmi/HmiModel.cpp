@@ -671,6 +671,25 @@ Object makeObject(Kind kind, Id id, std::string name, double x, double y, Id lay
             o.set("poster", "");      // l'image d'attente (une ressource image)
             o.set("fill", "#101318");
             break;
+        case Kind::DocumentViewer:
+            // 1.12.30 : la visionneuse de documents. "document" : une ressource du projet (PDF, image, texte), un
+            // fichier externe du projet, ou un chemin (absolu, ou relatif au dossier du projet ; une formule qui rend
+            // un chemin le change en marche) ; "page" : la page montree, a partir de 1 (la Variable de la page la
+            // suit et l'ecrit) ; "startZoom" : ajuster a la largeur, page entiere, 50 % a 400 % ; la barre d'outils,
+            // la colonne des vignettes ; la navigation (decochee : une seule page, celle que dit la variable).
+            common(o, x, y, 480, 600);
+            o.set("document", "");
+            o.setNumber("page", 1);
+            o.set("startZoom", "ajuster \xC3\xA0 la largeur");
+            o.setFlag("showToolbar", true);
+            o.setFlag("showThumbnails", false);
+            o.setFlag("allowNavigation", true);
+            o.set("fill", "#4A5059");        // le fond derriere les pages
+            o.set("stroke", "#3A4556");
+            o.setNumber("strokeWidth", 1);
+            o.set("accent", "#2F6FD6");      // le bouton actif, la page courante, l'occurrence montree
+            o.set("textColor", "#DDE3EA");   // les boutons et les champs de la barre
+            break;
         case Kind::Container:
             common(o, x, y, 400, 300);
             o.set("fill", "#262C36");

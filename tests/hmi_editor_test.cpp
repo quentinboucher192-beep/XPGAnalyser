@@ -6863,6 +6863,75 @@ void lot10_synoptique() {
     check(frame(lamp, false, 0.2).size() == frame(lamp, false, 0.7).size(), "une lampe en d\xC3\xA9" "faut se dessine aux deux phases du clignotement");
 }
 
+// ------------------------------------------------ 1.12.30 : la visionneuse de documents (ecran) --
+void visionneuse11230() {
+    std::printf("1.12.30 : la visionneuse de documents \xC3\xA0 l'\xC3\xA9" "cran (biblioth\xC3\xA8que, inspecteur, dessin dans l'\xC3\xA9" "diteur)\n");
+    {
+        Bench b;
+        auto& pal = b.editor->palette();
+        pal.setFilter("m\xC3\xA9" "dias");
+        gfx::Rect r;
+        if (!pal.tileRect(Kind::DocumentViewer, r)) pal.revealKind(Kind::DocumentViewer);
+        check(pal.tileRect(Kind::DocumentViewer, r) && app::glyphFor(Kind::DocumentViewer) == app::HmiGlyph::DocumentViewer,
+              "la tuile Visionneuse de documents dans la famille M\xC3\xA9" "dias, son ic\xC3\xB4ne");
+        pal.setFilter("");
+        (void)b.place(Kind::DocumentViewer, 100, 100);
+        b.editor->layout();
+        std::set<std::string> names;
+        std::size_t props = 0, described = 0;
+        for (const auto& c : b.editor->properties().categories())
+            for (const auto& pr : c.properties) {
+                names.insert(pr.name);
+                ++props;
+                described += !pr.description.empty();
+            }
+        check(names.count("Document") && names.count("Page montr\xC3\xA9" "e") && names.count("Zoom de d\xC3\xA9part")
+                  && names.count("Navigation autoris\xC3\xA9" "e") && names.count("Barre d'outils") && names.count("Vignettes affich\xC3\xA9" "es")
+                  && names.count("Variable de la page (INT)"),
+              "l'inspecteur : Document, Page montr\xC3\xA9" "e, sa variable, Zoom de d\xC3\xA9part, la barre, les vignettes, la navigation");
+        check(described == props, "... chaque case a son aide");
+    }
+    // Le dessin dans l'editeur : un texte des ressources, sa barre, ses lignes, sa page.
+    Project p;
+    std::string body;
+    for (int i = 1; i <= 120; ++i) body += "Consigne " + std::to_string(i) + "\n";
+    p.assets.resources.push_back(hmi::makeResource(p, "procedure.txt", std::make_shared<const hmi::Bytes>(body.begin(), body.end()), "essai"));
+    View v = makeView(p, "Vue");
+    Object o = makeObject(Kind::DocumentViewer, 900, "Doc", 10, 10, v.layers.front().id);
+    o.set("document", "procedure.txt");
+    o.setNumber("w", 420);
+    o.setNumber("h", 560);
+    const auto doc = app::HmiImageCache::instance().document(p.assets, "procedure.txt");
+    check(doc && doc->waitReady(3000) && doc->pageCount() == 3, "le texte ouvert pour l'apercu : 3 pages");
+    app::HmiViewport vp;
+    vp.zoom = 1.f;
+    const auto theme = ui::Theme::dark();
+    app::HmiPaintOptions opt;
+    opt.editor = true;
+    opt.assets = &p.assets;
+    const auto paint = [&](const Object& x) {
+        TriRecorder rec;
+        app::paintHmiObject(rec, v, x, vp, app::HmiPropertySource{}, theme, opt);
+        return rec;
+    };
+    const auto a = paint(o);
+    check(a.wrote("1 / 3") && a.wrote("Consigne 1") && a.wrote("50 %") && !a.tris.empty(),
+          "l'apercu : la page 1 sur 3, ses lignes, le zoom ajust\xC3\xA9 \xC3\xA0 la largeur (50 %)");
+    Object two = o;
+    two.setNumber("page", 2);
+    const auto b2 = paint(two);
+    check(b2.wrote("2 / 3") && b2.wrote("Consigne 51"), "Page montr\xC3\xA9" "e 2 : la page 2 (Consigne 51)");
+    Object bare = o;
+    bare.setFlag("showToolbar", false);
+    check(!paint(bare).wrote("1 / 3"), "Barre d'outils d\xC3\xA9" "coch\xC3\xA9" "e : pas de barre");
+    Object none = o;
+    none.set("document", "");
+    check(paint(none).wrote("choisis"), "sans document : ce qu'il faut faire (choisis un document)");
+    Object missing = o;
+    missing.set("document", "absent.pdf");
+    check(paint(missing).wrote("introuvable"), "un document introuvable : dit dans son cadre");
+}
+
 // ------------------------------------------------ lot 10 : SVG net et recolorable (ecran) --
 void lot10_svg() {
     std::printf("lot 10 : le SVG \xC3\xA0 l'\xC3\xA9" "cran - redessin\xC3\xA9 \xC3\xA0 sa taille, recolori\xC3\xA9 par une expression\n");
@@ -18751,7 +18820,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 219, "centre : L'IHM a les 219 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse)");
+    check(ix.count(hc::Chapter::Hmi) == 220, "centre : L'IHM a les 220 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 62, "centre : 11 expressions, 62 notes (1.12.29)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -35844,6 +35913,7 @@ int main(int argc, char** argv) {
     lot9_variables_publiques();
     lot10_parametres_systeme();
     lot10_synoptique();
+    visionneuse11230();   // 1.12.30
     lot10_svg();
     lot10_symboles();
     lot11_bibliotheque();

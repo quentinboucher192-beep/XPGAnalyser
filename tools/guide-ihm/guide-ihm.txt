@@ -669,9 +669,9 @@ Chaque vue a au moins un calque. Un calque se renomme, s'ordonne, se masque (ses
 | Graphiques | Courbe, Graphique en barres, Courbe XY, Chronogramme d'états, Camembert, Radar, Histogramme |
 | Alarmes | Historique, Bandeau d'alarme, Compteur d'alarmes, Résumé par zone, Consigne d'alarme, Statistiques d'alarmes |
 | Production | Compteurs de production, Tableau de variables, Éditeur de recette, Gestion de recettes, Bouton d'export |
-| Synoptique | Vanne, Clapet anti-retour, Pompe, Moteur, Tuyauterie, Flèche de flux, Ventilateur, Compresseur, Échangeur, Filtre, Chaudière, Mélangeur, Convoyeur, Vérin, Instrument ISA, Cuve, Silo, Trémie, Bouteille de gaz, Transformateur, Disjoncteur, Sectionneur, Contacteur, Lampe |
+| Synoptique | Vanne, Vanne 3 voies, Registre, Registre multi-lames, Clapet coupe-feu, Clapet anti-retour, Pompe, Moteur, Variateur de vitesse, Tuyauterie, Flèche de flux, Ventilateur, Compresseur, Échangeur, Filtre, Chaudière, Mélangeur, Convoyeur, Vérin, Instrument ISA, Cuve, Silo, Trémie, Bouteille de gaz, Transformateur, Disjoncteur, Sectionneur, Contacteur, Lampe |
 | Navigation et structure | Barre de navigation, Fil d'Ariane, Conteneur à onglets, Cadre avec titre, Panneau défilant, Panneau repliable, Plan à zones, Sélecteur de langue, Sélecteur de thème, Conteneur |
-| Médias | Vidéo, Image animée, GIF animé |
+| Médias | Vidéo, Visionneuse de documents, Image animée, GIF animé |
 | Utilisateurs | Menu de connexion, Connexion, Déconnexion, Utilisateur connecté, Changer le mot de passe, Gestion des utilisateurs |
 | Symboles du projet | Les symboles réutilisables du projet, dessinés en miniature (juste après les Favoris) |
 ### La page de chaque objet
@@ -5459,7 +5459,7 @@ La page de maintenance d'une IHM : savoir si l'automate répond, depuis quand, e
 
 == objet-video | Vidéo
 : Une vidéo des ressources (MP4, WEBM...) : son image d'attente, sa fiche (taille, durée) et, en marche, sa barre de lecture.
-@voir objet-communs, ressources
+@voir objet-communs, ressources, objet-visionneuse-de-documents
 @capture EX_Video.png | L'exemple animé de la vidéo.
 @objet Video
 @exemple L'image d'attente et la barre de lecture qui avance au rythme de la vidéo.
@@ -5470,6 +5470,48 @@ La page de maintenance d'une IHM : savoir si l'automate répond, depuis quand, e
 > Une procédure filmée, une présentation d'équipement : ajoute la vidéo dans les ressources, puis pose l'objet.
 @nouveau 1.12.12
 1.12.12 : la vidéo se décode - un AVI Motion-JPEG partout, et sous Windows les MP4 (H.264), WMV, MOV. Lecture (une variable BOOL) la met en pause, Départ la fait partir à l'affichage ou sur condition, Répétition la fait boucler ou s'arrêter sur sa dernière image ; sa position peut s'écrire dans une variable. Avant la première image, ou si le format ne se décode pas ici, l'image d'attente se montre et le bandeau dit pourquoi : convertir en Motion-JPEG AVI (`ffmpeg -i film.mp4 -an -c:v mjpeg -q:v 3 film.avi`) pour qu'elle se lise partout.
+
+== objet-visionneuse-de-documents | Visionneuse de documents
+: Une notice, une procédure, un schéma à lire sur le poste : un PDF, une image (PNG, JPEG, BMP, GIF, SVG) ou un texte (TXT), avec sa barre d'outils - les pages, le zoom, tourner, les vignettes, la recherche. Sa page peut suivre une variable : la vue tourne la page quand la procédure avance.
+@mots visionneuse, document, PDF, notice, procédure, mode opératoire, schéma, manuel, page, zoom, vignettes, recherche, PDFium, pdfium.dll, lecteur PDF, Lecteur PDF absent, TXT, PageCount, CurrentPage
+@voir ressources, fichiers, objet-video, variables-instances, objet-communs, proprietes, simulation
+@capture EX_DocumentViewer.png | L'exemple animé de la visionneuse : la notice suit l'étape de la procédure.
+@objet DocumentViewer
+@exemple La notice d'un ventilateur (un PDF de quatre pages) suit la variable Etape : à chaque étape de la procédure, la visionneuse tourne la page, et la liste des étapes, à droite, montre celle en cours.
+### À quoi elle sert
+Mettre la documentation là où l'on conduit : la notice du variateur à côté de son synoptique, la procédure de démarrage d'une chaufferie pas à pas, le schéma d'une armoire, la fiche de sécurité d'un gaz. Elle est dans la famille **Médias**, après la vidéo.
+### Le document
+- **Une ressource du projet** : importe le PDF (ou l'image, le texte) dans les ressources, puis choisis-le dans la liste **Document**. Il voyage avec le projet.
+- **Un fichier externe du projet**, ou **un chemin** tapé : absolu (`D:\Notices\VE-101.pdf`), ou relatif au dossier du projet (`notices/VE-101.pdf`). Un fichier changé sur le disque se relit.
+- **Une expression** qui rend un chemin (`=CheminNotice`, une STRING) change de document en marche : une seule visionneuse pour la notice de l'équipement choisi.
+### La lire
+- La barre d'outils : première, précédente, suivante, dernière page ; le champ « 3 / 12 » (un clic, le numéro, Entrée) ; zoom - et + ; le menu des zooms (ajuster à la largeur, page entière, 50 % à 400 %) ; tourner d'un quart de tour ; les vignettes ; la recherche. Chaque bouton est une cible de 32 pixels au moins, pour un écran tactile ; quand la place manque, les moins utiles partent (première, dernière, puis le menu des zooms).
+- La molette fait défiler les pages (Maj : en largeur) ; **Ctrl+molette** zoome autour du curseur ; glisser déplace la page (la main) ; un double-clic passe de l'ajustement à 100 % et revient.
+- Au clavier, après un clic dans les pages : Page précédente / suivante, Début, Fin, les flèches, + et -, **Ctrl+0** la page entière, **Ctrl+F** la recherche (Entrée : l'occurrence suivante, Échap la ferme).
+- La recherche (un PDF, un texte) trouve sans tenir compte des majuscules ; les occurrences sont surlignées, celle qu'on montre est cerclée d'orange ; « 3 / 12 » dit où l'on en est.
+### Sa page suit une variable
+Relie la **Variable de la page** (un INT) : quand le programme y écrit 4, la visionneuse va à la page 4 ; quand l'opérateur change de page, elle y écrit le numéro. Sans variable, la propriété **Page** (un nombre, ou une formule) donne la page de départ, et l'opérateur la change en marche ; le poste d'exploitation la retrouve à son redémarrage, comme l'onglet d'un conteneur.
+- **Navigation autorisée** décochée : une seule page, celle que dit la variable - une procédure pas à pas que l'opérateur ne quitte pas ; il zoome et déplace la page, sans en changer. Un **niveau d'accès** qui manque fait de même.
+- Ses variables d'instances : `Vue.Notice.PageCount` (les pages), `.CurrentPage`, `.Zoom` (en %), `.Loaded`, `.DocumentError` (pourquoi elle ne montre rien).
+### Le lecteur PDF
+Les PDF se lisent avec PDFium (le moteur PDF de Chromium, licence BSD), livré à côté de l'application (`pdfium.dll`). Il se charge à la première page ; sans lui, l'application démarre quand même : la visionneuse dit **Lecteur PDF absent** dans son cadre, Générer aussi, et les images et le texte se lisent toujours.
+- Seules les pages visibles se dessinent, à la finesse du zoom ; les autres attendent qu'on y aille. Un document de 200 pages s'ouvre aussitôt, les vignettes se font en arrière-plan, en basse définition.
+### Ses paramètres
+@param document | Document | (vide) | Une ressource (PDF, image, texte), un fichier externe du projet, ou un chemin (absolu, ou relatif au dossier du projet). Une expression qui rend un chemin change de document en marche.
+@param page | Page montrée | 1 | La page de départ, à partir de 1 (un nombre, ou une formule). Avec une Variable de la page, c'est elle qui compte.
+@param variable | Variable de la page (INT) | (vide) | La page suit sa valeur ; l'opérateur qui change de page l'y écrit. Une étape de procédure, un numéro de fiche.
+@param startZoom | Zoom de départ | ajuster à la largeur | ajuster à la largeur, page entière, ou un pourcentage (50 % à 400 %, ou un autre tapé : 175 %).
+@param showToolbar | Barre d'outils | TRUE | Décochée : la page seule ; la molette, le glisser et le clavier restent.
+@param showThumbnails | Vignettes affichées | FALSE | La colonne des vignettes, ouverte au départ (son bouton l'ouvre et la ferme).
+@param allowNavigation | Navigation autorisée | TRUE | Décochée : une seule page, celle de la variable (ou de Page) ; zoomer et déplacer restent permis.
+@param fill | Fond derrière les pages | #4A5059 | Le fond autour des pages ; la barre d'outils en est une teinte plus sombre.
+@param stroke | Contour | #3A4556 | Le cadre de la visionneuse.
+@param strokeWidth | Épaisseur du contour | 1 | Son épaisseur, en pixels de la vue.
+@param accent | Couleur d'accent | #2F6FD6 | Le bouton actif, la vignette de la page courante, le champ en saisie.
+@param textColor | Couleur des boutons | #DDE3EA | Les icônes et les textes de la barre.
+### En marche
+- le document s'ouvre en arrière-plan : « Ouverture de… », puis ses pages ; un document introuvable, illisible, ou un PDF sans lecteur, se disent dans le cadre et dans la Console ;
+- Générer signale un document introuvable, une page plus loin que la dernière, une Variable de la page inconnue ou qui n'est pas un entier, une page qui ne bougera jamais (navigation interdite sans variable), et le lecteur PDF absent.
 
 == objet-image-animee | Image animée
 : Des états, chacun avec sa condition et ses images qui défilent : une pompe qui tourne, une vanne en mouvement, un défaut rouge.

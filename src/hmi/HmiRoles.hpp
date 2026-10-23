@@ -267,6 +267,10 @@ inline constexpr KeyRole kKeyRoles[] = {
     {"dateFormat", Role::Choice}, {"hourFormat", Role::Choice}, {"timeZone", Role::Choice},
     {"messagesFrom", Role::Name},
     {"playing", Role::Formula, Role::Boolean}, {"positionVariable", Role::Formula, Role::Number},
+    // 1.12.30 : la visionneuse de documents (sa page : roleOf, un nombre ; "page" est l'onglet d'un conteneur)
+    {"document", Role::Name}, {"startZoom", Role::Choice},
+    {"showToolbar", Role::Boolean, Role::Text, Unit::None, "BOOL"}, {"showThumbnails", Role::Boolean, Role::Text, Unit::None, "BOOL"},
+    {"allowNavigation", Role::Boolean, Role::Text, Unit::None, "BOOL"},
 };
 
 // La ligne d'une cle ; nul : une cle que la table ne connait pas.
@@ -352,6 +356,8 @@ inline constexpr KeyRole kKeyRoles[] = {
         if (k == Kind::History) r.role = Role::Choice;
     } else if (key == "count") {
         if (k == Kind::AnimatedGif) { r.role = Role::Number; r.type = "INT"; }
+    } else if (key == "page") {
+        if (k == Kind::DocumentViewer) { r.role = Role::Number; r.type = "INT"; }   // 1.12.30 : la page d'un document
     } else if (rangeNameKey(k, key)) {
         // une borne, un seuil se tapent aussi en formule sans = (Consigne_Max) ; 1.12.10 : plus seulement
         // celles du champ de saisie

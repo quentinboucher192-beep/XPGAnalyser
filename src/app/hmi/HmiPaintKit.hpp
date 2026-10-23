@@ -141,4 +141,8 @@ bool drawLot14(const Ctx& c);
 // La carte du Reglage PID (en marche : sa boucle ; dans l'editeur : un apercu). Faux : pas un Reglage PID.
 bool drawPidTuner(const Ctx& c);
 
+// ---- 1.12.30 (HmiDocPainter.cpp) ---------------------------------------------------------
+// La visionneuse de documents (en marche : l'etat du moteur ; dans l'editeur : sa page). Faux : pas une visionneuse.
+bool drawDocumentViewer(const Ctx& c);
+
 } // namespace app::paint

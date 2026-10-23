@@ -5940,8 +5940,11 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             return Step::Next;
         }
         const auto p = centre(r);
-        moveTo(p, {});
-        send(ui::MouseWheel{p, 0.f, num(2), {}});
+        // 1.12.30 : sim-molette "Notice" 2 ctrl - Ctrl+molette (le zoom d'une visionneuse de documents).
+        KeyMods mods{};
+        if (has("ctrl")) mods.ctrl = true;
+        moveTo(p, mods);
+        send(ui::MouseWheel{p, 0.f, num(2), mods});
         return Step::Yield;
     }
     // 1.9 (chantier C) : la souris sur un objet de la vue simulee (son infobulle :

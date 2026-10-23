@@ -27,6 +27,7 @@
 #include "HmiQr.hpp"
 #include "HmiClock.hpp"        // 1.12.12 (lot H) : l'horloge liee a une variable
 #include "HmiMarquee.hpp"      // 1.12.12 (lot H) : le texte defilant depuis une source
+#include "HmiPdf.hpp"          // 1.12.30 : la visionneuse de documents, son lecteur PDF
 #include "HmiAlarmViews.hpp"
 #include "HmiCharts.hpp"
 #include "HmiControls.hpp"
@@ -1702,6 +1703,74 @@ void checkMedias11212(const Project& p, const NameExists& plc, std::vector<Issue
                 }
                 default:
                     break;
+            }
+        }
+}
+
+// ---- 1.12.30 : la visionneuse de documents ------------------------------------------
+//  Son document (une ressource PDF, image ou texte, un fichier externe, un chemin : trouve ? lisible ici ? un PDF
+//  sans le lecteur PDF), sa page (dans les bornes du document), sa Variable de la page (connue, un entier), et la
+//  page qui ne bouge jamais (navigation interdite sans variable).
+void checkDocViewers11230(const Project& p, const NameExists& plc, const std::string& folder, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    for (const auto& v : p.views)
+        for (const auto& o : v.objects) {
+            if (o.kind != Kind::DocumentViewer) continue;
+            const std::string label = std::string(kindLabel(o.kind));
+            const auto issue = [&](S sev, const char* key, std::string msg) { add(out, sev, label, v.id, o.id, key, std::move(msg)); };
+            int count = -1;   // les pages du document (-1 : on ne sait pas)
+            if (const Prop* dp = o.find("document"); dp && dp->expr.empty()) {
+                const std::string spec = trimmedCopy(roles::nameOf(dp->value));
+                if (spec.empty()) {
+                    issue(S::Warning, "document", "aucun document : la visionneuse restera vide - choisis une ressource (PDF, image, texte) "
+                                                  "ou tape un chemin");
+                } else {
+                    const doc::Resolved r = doc::resolve(p.assets, spec, folder);
+                    if (!r.error.empty()) {
+                        issue(r.resource ? S::Error : S::Warning, "document", r.error);
+                    } else if (r.type == doc::Type::Pdf && !pdf::library().ok) {
+                        issue(S::Warning, "document", pdf::missingAdvice());
+                    } else if (r.type == doc::Type::Image || r.type == doc::Type::Svg) {
+                        count = 1;
+                    } else {
+                        // Un texte, un PDF : ouvert ici (deux secondes au plus) pour compter ses pages.
+                        std::string why;
+                        if (const auto d = doc::open(p.assets, spec, folder, &why)) {
+                            if (d->waitReady(2000)) count = d->pageCount();
+                            else if (d->state() == doc::Document::State::Failed) issue(S::Warning, "document", d->error());
+                        }
+                    }
+                }
+            }
+            // La Variable de la page : connue, et un nombre.
+            const std::string var = trimmedCopy(markers::strip(o.text("variable")));
+            if (!var.empty()) {
+                bool allKnown = true;
+                for (const auto& root : scanRoots(var))
+                    if (!known(p, plc, root, &v)) {
+                        allKnown = false;
+                        issue(S::Warning, "variable", "variable de la page : " + std::string(unknownVariablePrefix()) + root);
+                    }
+                if (allKnown) {
+                    const std::string type = params::expressionType(p, &v, var);
+                    const sim::Type st = typereg::simTypeOf(type);
+                    if (!type.empty() && (st == sim::Type::Bool || (!sim::isNumeric(st) && st != sim::Type::String)))
+                        issue(S::Warning, "variable", "variable de la page : " + var + " (" + type + ") n'est pas un entier - INT, DINT...");
+                }
+            }
+            // La page fixe : dans les bornes.
+            const Prop* pp = o.find("page");
+            if (var.empty() && pp && pp->expr.empty()) {
+                double n = 1;
+                const std::string text = trimmedCopy(markers::strip(pp->value));
+                if (!text.empty() && (!parseNumber(text, n) || n < 1))
+                    issue(S::Warning, "page", "page \xC2\xAB " + text + " \xC2\xBB : un num\xC3\xA9ro de page, \xC3\xA0 partir de 1");
+                else if (count > 0 && n > count)
+                    issue(S::Warning, "page", "page " + formatNumber(n) + " : le document n'en a que " + std::to_string(count)
+                                                  + " - la visionneuse montrera la derni\xC3\xA8re");
+                if (!o.flag("allowNavigation", true) && o.find("allowNavigation") && o.find("allowNavigation")->expr.empty())
+                    issue(S::Info, "allowNavigation", "navigation interdite et pas de Variable de la page : la visionneuse montrera "
+                                                      "toujours la m\xC3\xAAme page (relie une variable pour qu'elle suive une \xC3\xA9tape)");
             }
         }
 }
@@ -4866,6 +4935,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkParams19(p, options.plcPaths, out);   // 1.9 : les parametres des popups
     checkLot9(p, plcHasName, out);
     checkMedias11212(p, plcHasName, out);   // 1.12.12 (lot H) : l'horloge, le texte defilant, la video
+    checkDocViewers11230(p, plcHasName, projectFolder, out);   // 1.12.30 : la visionneuse de documents
     checkPublicVars(p, out);
     checkSymbols(p, plcHasName, out);   // lot 10
     eqlink::check(p, out);              // 1.12.11 (lot G) : la liaison Equipement, le mode Etat

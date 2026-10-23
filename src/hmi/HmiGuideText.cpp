@@ -1351,18 +1351,20 @@ const std::vector<Topic>& topics() {
                          "R\xC3\xA9sum\xC3\xA9 par zone, Consigne d'alarme, Statistiques "
                          "d'alarmes\nProduction\tCompteurs de production, Tableau de variables, "
                          "\xC3\x89" "diteur de recette, Gestion de recettes, Bouton "
-                         "d'export\nSynoptique\tVanne, Clapet anti-retour, Pompe, Moteur, Tuyauterie, "
+                         "d'export\nSynoptique\tVanne, Vanne 3 voies, Registre, Registre multi-lames, Clapet "
+                         "coupe-feu, Clapet anti-retour, Pompe, Moteur, Variateur de vitesse, Tuyauterie, "
                          "Fl\xC3\xA8" "che de flux, Ventilateur, Compresseur, \xC3\x89" "changeur, Filtre, "
                          "Chaudi\xC3\xA8re, M\xC3\xA9langeur, Convoyeur, V\xC3\xA9rin, Instrument ISA, Cuve, "
                          "Silo, Tr\xC3\xA9mie, Bouteille de gaz, Transformateur, Disjoncteur, Sectionneur, "
                          "Contacteur, Lampe\nNavigation et structure\tBarre de navigation, Fil d'Ariane, "
                          "Conteneur \xC3\xA0 onglets, Cadre avec titre, Panneau d\xC3\xA9" "filant, Panneau "
                          "repliable, Plan \xC3\xA0 zones, S\xC3\xA9lecteur de langue, S\xC3\xA9lecteur de "
-                         "th\xC3\xA8me, Conteneur\nM\xC3\xA9" "dias\tVid\xC3\xA9o, Image anim\xC3\xA9" "e, "
-                         "GIF anim\xC3\xA9\nUtilisateurs\tMenu de connexion, Connexion, "
-                         "D\xC3\xA9" "connexion, Utilisateur connect\xC3\xA9, Changer le mot de passe, "
-                         "Gestion des utilisateurs\nSymboles du projet\tLes symboles r\xC3\xA9utilisables du "
-                         "projet, dessin\xC3\xA9s en miniature (juste apr\xC3\xA8s les Favoris)", {}},
+                         "th\xC3\xA8me, Conteneur\nM\xC3\xA9" "dias\tVid\xC3\xA9o, Visionneuse de documents, "
+                         "Image anim\xC3\xA9" "e, GIF anim\xC3\xA9\nUtilisateurs\tMenu de connexion, "
+                         "Connexion, D\xC3\xA9" "connexion, Utilisateur connect\xC3\xA9, Changer le mot de "
+                         "passe, Gestion des utilisateurs\nSymboles du projet\tLes symboles "
+                         "r\xC3\xA9utilisables du projet, dessin\xC3\xA9s en miniature (juste apr\xC3\xA8s "
+                         "les Favoris)", {}},
              {K::Heading, "La page de chaque objet", {}},
              {K::Paragraph, "Chaque objet a sa page dans le chapitre **La biblioth\xC3\xA8que d'objets**, "
                          "rang\xC3\xA9" "e dans la famille de sa tuile (Commandes, Synoptique\xE2\x80\xA6) : "
@@ -12756,7 +12758,7 @@ const std::vector<Topic>& topics() {
                          "AVI (`ffmpeg -i film.mp4 -an -c:v mjpeg -q:v 3 film.avi`) pour qu'elle se lise "
                          "partout.", {}, "1.12.12"},
          },
-         {"objet-communs", "ressources"},
+         {"objet-communs", "ressources", "objet-visionneuse-de-documents"},
          {},
          {},
          {{"EX_Video.png", "L'exemple anim\xC3\xA9 de la vid\xC3\xA9o."}},
@@ -12768,6 +12770,138 @@ const std::vector<Topic>& topics() {
            {"fill", "Remplissage", "#101318",
             "Le fond, autour de l'image."}},
          "L'image d'attente et la barre de lecture qui avance au rythme de la vid\xC3\xA9o.",
+         {}},
+        // ---- La bibliotheque d'objets  Medias / objet-visionneuse-de-documents
+        {"objet-visionneuse-de-documents", "Visionneuse de documents", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA M\xC3\xA9" "dias",
+         "Une notice, une proc\xC3\xA9" "dure, un sch\xC3\xA9ma \xC3\xA0 lire sur le poste : un PDF, une "
+         "image (PNG, JPEG, BMP, GIF, SVG) ou un texte (TXT), avec sa barre d'outils - les pages, le zoom, "
+         "tourner, les vignettes, la recherche. Sa page peut suivre une variable : la vue tourne la page "
+         "quand la proc\xC3\xA9" "dure avance.",
+         {
+             {K::Heading, "\xC3\x80 quoi elle sert", {}},
+             {K::Paragraph, "Mettre la documentation l\xC3\xA0 o\xC3\xB9 l'on conduit : la notice du variateur "
+                         "\xC3\xA0 c\xC3\xB4t\xC3\xA9 de son synoptique, la proc\xC3\xA9" "dure de "
+                         "d\xC3\xA9marrage d'une chaufferie pas \xC3\xA0 pas, le sch\xC3\xA9ma d'une "
+                         "armoire, la fiche de s\xC3\xA9" "curit\xC3\xA9 d'un gaz. Elle est dans la famille "
+                         "**M\xC3\xA9" "dias**, apr\xC3\xA8s la vid\xC3\xA9o.", {}},
+             {K::Heading, "Le document", {}},
+             {K::Bullet, "**Une ressource du projet** : importe le PDF (ou l'image, le texte) dans les "
+                         "ressources, puis choisis-le dans la liste **Document**. Il voyage avec le projet.", {}},
+             {K::Bullet, "**Un fichier externe du projet**, ou **un chemin** tap\xC3\xA9 : absolu "
+                         "(`D:\\Notices\\VE-101.pdf`), ou relatif au dossier du projet "
+                         "(`notices/VE-101.pdf`). Un fichier chang\xC3\xA9 sur le disque se relit.", {}},
+             {K::Bullet, "**Une expression** qui rend un chemin (`=CheminNotice`, une STRING) change de "
+                         "document en marche : une seule visionneuse pour la notice de l'\xC3\xA9quipement "
+                         "choisi.", {}},
+             {K::Heading, "La lire", {}},
+             {K::Bullet, "La barre d'outils : premi\xC3\xA8re, pr\xC3\xA9" "c\xC3\xA9" "dente, suivante, "
+                         "derni\xC3\xA8re page ; le champ \xC2\xAB 3 / 12 \xC2\xBB (un clic, le "
+                         "num\xC3\xA9ro, Entr\xC3\xA9" "e) ; zoom - et + ; le menu des zooms (ajuster "
+                         "\xC3\xA0 la largeur, page enti\xC3\xA8re, 50 % \xC3\xA0 400 %) ; tourner d'un "
+                         "quart de tour ; les vignettes ; la recherche. Chaque bouton est une cible de 32 "
+                         "pixels au moins, pour un \xC3\xA9" "cran tactile ; quand la place manque, les "
+                         "moins utiles partent (premi\xC3\xA8re, derni\xC3\xA8re, puis le menu des zooms).", {}},
+             {K::Bullet, "La molette fait d\xC3\xA9" "filer les pages (Maj : en largeur) ; **Ctrl+molette** "
+                         "zoome autour du curseur ; glisser d\xC3\xA9place la page (la main) ; un "
+                         "double-clic passe de l'ajustement \xC3\xA0 100 % et revient.", {}},
+             {K::Bullet, "Au clavier, apr\xC3\xA8s un clic dans les pages : Page "
+                         "pr\xC3\xA9" "c\xC3\xA9" "dente / suivante, D\xC3\xA9" "but, Fin, les "
+                         "fl\xC3\xA8" "ches, + et -, **Ctrl+0** la page enti\xC3\xA8re, **Ctrl+F** la "
+                         "recherche (Entr\xC3\xA9" "e : l'occurrence suivante, \xC3\x89" "chap la ferme).", {}},
+             {K::Bullet, "La recherche (un PDF, un texte) trouve sans tenir compte des majuscules ; les "
+                         "occurrences sont surlign\xC3\xA9" "es, celle qu'on montre est cercl\xC3\xA9" "e "
+                         "d'orange ; \xC2\xAB 3 / 12 \xC2\xBB dit o\xC3\xB9 l'on en est.", {}},
+             {K::Heading, "Sa page suit une variable", {}},
+             {K::Paragraph, "Relie la **Variable de la page** (un INT) : quand le programme y \xC3\xA9" "crit "
+                         "4, la visionneuse va \xC3\xA0 la page 4 ; quand l'op\xC3\xA9rateur change de page, "
+                         "elle y \xC3\xA9" "crit le num\xC3\xA9ro. Sans variable, la propri\xC3\xA9t\xC3\xA9 "
+                         "**Page** (un nombre, ou une formule) donne la page de d\xC3\xA9part, et "
+                         "l'op\xC3\xA9rateur la change en marche ; le poste d'exploitation la retrouve "
+                         "\xC3\xA0 son red\xC3\xA9marrage, comme l'onglet d'un conteneur.", {}},
+             {K::Bullet, "**Navigation autoris\xC3\xA9" "e** d\xC3\xA9" "coch\xC3\xA9" "e : une seule page, "
+                         "celle que dit la variable - une proc\xC3\xA9" "dure pas \xC3\xA0 pas que "
+                         "l'op\xC3\xA9rateur ne quitte pas ; il zoome et d\xC3\xA9place la page, sans en "
+                         "changer. Un **niveau d'acc\xC3\xA8s** qui manque fait de m\xC3\xAAme.", {}},
+             {K::Bullet, "Ses variables d'instances : `Vue.Notice.PageCount` (les pages), `.CurrentPage`, "
+                         "`.Zoom` (en %), `.Loaded`, `.DocumentError` (pourquoi elle ne montre rien).", {}},
+             {K::Heading, "Le lecteur PDF", {}},
+             {K::Paragraph, "Les PDF se lisent avec PDFium (le moteur PDF de Chromium, licence BSD), "
+                         "livr\xC3\xA9 \xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'application (`pdfium.dll`). Il se "
+                         "charge \xC3\xA0 la premi\xC3\xA8re page ; sans lui, l'application d\xC3\xA9marre "
+                         "quand m\xC3\xAAme : la visionneuse dit **Lecteur PDF absent** dans son cadre, "
+                         "G\xC3\xA9n\xC3\xA9rer aussi, et les images et le texte se lisent toujours.", {}},
+             {K::Bullet, "Seules les pages visibles se dessinent, \xC3\xA0 la finesse du zoom ; les autres "
+                         "attendent qu'on y aille. Un document de 200 pages s'ouvre aussit\xC3\xB4t, les "
+                         "vignettes se font en arri\xC3\xA8re-plan, en basse d\xC3\xA9" "finition.", {}},
+             {K::Heading, "Ses param\xC3\xA8tres", {}},
+             {K::Table, "Param\xC3\xA8tre\tPar d\xC3\xA9" "faut\tCe qu'il "
+                         "r\xC3\xA8gle\nDocument\t(vide)\tUne ressource (PDF, image, texte), un fichier "
+                         "externe du projet, ou un chemin (absolu, ou relatif au dossier du projet). Une "
+                         "expression qui rend un chemin change de document en marche.\nPage "
+                         "montr\xC3\xA9" "e\t1\tLa page de d\xC3\xA9part, \xC3\xA0 partir de 1 (un nombre, "
+                         "ou une formule). Avec une Variable de la page, c'est elle qui compte.\nVariable de "
+                         "la page (INT)\t(vide)\tLa page suit sa valeur ; l'op\xC3\xA9rateur qui change de "
+                         "page l'y \xC3\xA9" "crit. Une \xC3\xA9tape de proc\xC3\xA9" "dure, un "
+                         "num\xC3\xA9ro de fiche.\nZoom de d\xC3\xA9part\tajuster \xC3\xA0 la "
+                         "largeur\tajuster \xC3\xA0 la largeur, page enti\xC3\xA8re, ou un pourcentage (50 % "
+                         "\xC3\xA0 400 %, ou un autre tap\xC3\xA9 : 175 %).\nBarre "
+                         "d'outils\tTRUE\tD\xC3\xA9" "coch\xC3\xA9" "e : la page seule ; la molette, le "
+                         "glisser et le clavier restent.\nVignettes affich\xC3\xA9" "es\tFALSE\tLa colonne "
+                         "des vignettes, ouverte au d\xC3\xA9part (son bouton l'ouvre et la "
+                         "ferme).\nNavigation autoris\xC3\xA9" "e\tTRUE\tD\xC3\xA9" "coch\xC3\xA9" "e : une "
+                         "seule page, celle de la variable (ou de Page) ; zoomer et d\xC3\xA9placer restent "
+                         "permis.\nFond derri\xC3\xA8re les pages\t#4A5059\tLe fond autour des pages ; la "
+                         "barre d'outils en est une teinte plus sombre.\nContour\t#3A4556\tLe cadre de la "
+                         "visionneuse.\n\xC3\x89paisseur du contour\t1\tSon \xC3\xA9paisseur, en pixels de "
+                         "la vue.\nCouleur d'accent\t#2F6FD6\tLe bouton actif, la vignette de la page "
+                         "courante, le champ en saisie.\nCouleur des boutons\t#DDE3EA\tLes ic\xC3\xB4nes et "
+                         "les textes de la barre.", {}},
+             {K::Heading, "En marche", {}},
+             {K::Bullet, "le document s'ouvre en arri\xC3\xA8re-plan : \xC2\xAB Ouverture de\xE2\x80\xA6 "
+                         "\xC2\xBB, puis ses pages ; un document introuvable, illisible, ou un PDF sans "
+                         "lecteur, se disent dans le cadre et dans la Console ;", {}},
+             {K::Bullet, "G\xC3\xA9n\xC3\xA9rer signale un document introuvable, une page plus loin que la "
+                         "derni\xC3\xA8re, une Variable de la page inconnue ou qui n'est pas un entier, une "
+                         "page qui ne bougera jamais (navigation interdite sans variable), et le lecteur PDF "
+                         "absent.", {}},
+         },
+         {"ressources", "fichiers", "objet-video", "variables-instances", "objet-communs", "proprietes", "simulation"},
+         {"visionneuse", "document", "PDF", "notice", "proc\xC3\xA9" "dure", "mode op\xC3\xA9ratoire", "sch\xC3\xA9ma", "manuel", "page", "zoom", "vignettes", "recherche", "PDFium", "pdfium.dll", "lecteur PDF", "Lecteur PDF absent", "TXT", "PageCount", "CurrentPage"},
+         {},
+         {{"EX_DocumentViewer.png", "L'exemple anim\xC3\xA9 de la visionneuse : la notice suit l'\xC3\xA9tape de la proc\xC3\xA9" "dure."}},
+         "DocumentViewer",
+         {{"document", "Document", "(vide)",
+            "Une ressource (PDF, image, texte), un fichier externe du projet, ou un chemin (absolu, ou "
+            "relatif au dossier du projet). Une expression qui rend un chemin change de document en marche."},
+           {"page", "Page montr\xC3\xA9" "e", "1",
+            "La page de d\xC3\xA9part, \xC3\xA0 partir de 1 (un nombre, ou une formule). Avec une Variable "
+            "de la page, c'est elle qui compte."},
+           {"variable", "Variable de la page (INT)", "(vide)",
+            "La page suit sa valeur ; l'op\xC3\xA9rateur qui change de page l'y \xC3\xA9" "crit. Une "
+            "\xC3\xA9tape de proc\xC3\xA9" "dure, un num\xC3\xA9ro de fiche."},
+           {"startZoom", "Zoom de d\xC3\xA9part", "ajuster \xC3\xA0 la largeur",
+            "ajuster \xC3\xA0 la largeur, page enti\xC3\xA8re, ou un pourcentage (50 % \xC3\xA0 400 %, ou un "
+            "autre tap\xC3\xA9 : 175 %)."},
+           {"showToolbar", "Barre d'outils", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9" "e : la page seule ; la molette, le glisser et le clavier restent."},
+           {"showThumbnails", "Vignettes affich\xC3\xA9" "es", "FALSE",
+            "La colonne des vignettes, ouverte au d\xC3\xA9part (son bouton l'ouvre et la ferme)."},
+           {"allowNavigation", "Navigation autoris\xC3\xA9" "e", "TRUE",
+            "D\xC3\xA9" "coch\xC3\xA9" "e : une seule page, celle de la variable (ou de Page) ; zoomer et "
+            "d\xC3\xA9placer restent permis."},
+           {"fill", "Fond derri\xC3\xA8re les pages", "#4A5059",
+            "Le fond autour des pages ; la barre d'outils en est une teinte plus sombre."},
+           {"stroke", "Contour", "#3A4556",
+            "Le cadre de la visionneuse."},
+           {"strokeWidth", "\xC3\x89paisseur du contour", "1",
+            "Son \xC3\xA9paisseur, en pixels de la vue."},
+           {"accent", "Couleur d'accent", "#2F6FD6",
+            "Le bouton actif, la vignette de la page courante, le champ en saisie."},
+           {"textColor", "Couleur des boutons", "#DDE3EA",
+            "Les ic\xC3\xB4nes et les textes de la barre."}},
+         "La notice d'un ventilateur (un PDF de quatre pages) suit la variable Etape : \xC3\xA0 chaque "
+         "\xC3\xA9tape de la proc\xC3\xA9" "dure, la visionneuse tourne la page, et la liste des "
+         "\xC3\xA9tapes, \xC3\xA0 droite, montre celle en cours.",
          {}},
         // ---- La bibliotheque d'objets  Medias / objet-image-animee
         {"objet-image-animee", "Image anim\xC3\xA9" "e", "La biblioth\xC3\xA8que d'objets \xE2\x80\xBA M\xC3\xA9" "dias",

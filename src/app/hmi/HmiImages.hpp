@@ -21,6 +21,7 @@
 #include "../../hmi/HmiMedia.hpp"
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiVideo.hpp"          // 1.12.12 (lot H) : la video decodee
+#include "../../hmi/HmiDocument.hpp"       // 1.12.30 : la visionneuse de documents
 #include "../../platform/Renderer.hpp"
 
 #include <cstdint>
@@ -82,6 +83,12 @@ public:
     // a son rythme ; hmi::kNoId : l'apercu, sa premiere image). Invalide : pas encore d'image (le fil la
     // decode : l'objet montre son image d'attente), ou ce format ne se decode pas ici (`why` le dit).
     [[nodiscard]] Image videoFrame(gfx::IRenderer&, const hmi::Resource&, hmi::Id object, double seconds, std::string* why = nullptr);
+    // 1.12.30 : LA VISIONNEUSE DE DOCUMENTS. Le document d'une visionneuse dessinee hors du moteur (l'editeur,
+    // les apercus) : ouvert une fois et garde tant qu'il sert (les huit derniers ; un fichier change se rouvre) ;
+    // nul : `why` dit pourquoi. La texture d'une page rendue : une par image, rendue au renderer quand le
+    // document l'oublie (son cache), ou au-dela de 192 Mo de pages a l'ecran.
+    [[nodiscard]] std::shared_ptr<hmi::doc::Document> document(const hmi::Assets&, std::string_view spec, std::string* why = nullptr);
+    [[nodiscard]] Image docPage(gfx::IRenderer&, const std::shared_ptr<const hmi::Rgba>& image);
 
 private:
     struct Entry {
@@ -112,6 +119,21 @@ private:
         std::string                              why;
     };
     std::map<std::pair<hmi::Id, const void*>, VideoEntry> videos_;
+    struct DocHeld {                                             // 1.12.30
+        std::shared_ptr<hmi::doc::Document> doc;
+        std::string                         why;
+        std::uint64_t                       used{0};
+        double                              checked{-1e9};
+    };
+    std::map<std::string, DocHeld>           docsHeld_;
+    struct DocTexture {
+        std::weak_ptr<const hmi::Rgba> image;
+        Image                          image2;
+        std::uint64_t                  used{0};
+        std::size_t                    bytes{0};
+    };
+    std::map<const void*, DocTexture>        docTextures_;
+    std::size_t                              docTextureBytes_{0};
     std::size_t                              svgRasterized_{0};
     struct Envelope { std::weak_ptr<const hmi::Bytes> blob; std::vector<float> minMax; };
     std::map<const void*, Envelope>          envelopes_;

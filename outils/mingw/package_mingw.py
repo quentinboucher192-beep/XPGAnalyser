@@ -5,7 +5,8 @@
 # -----------------------------------------------------------------------------
 #  Le meme resultat que outils\package.bat /exe:... /sdl:... /chaine:mingw sous
 #  Windows, etape par etape (outils\lib\package.ps1 et build_installer.ps1) :
-#    1. dist/staging : l'exe, SDL3.dll, resources\ (les deux catalogues), libs\,
+#    1. dist/staging : l'exe, SDL3.dll, pdfium.dll (1.12.30 : le moteur PDF de la
+#       visionneuse, charge a la demande), resources\ (les deux catalogues), libs\,
 #       maintenance\ (les six scripts, leur lib\ et leur config.ini), licences\,
 #       LISEZ-MOI.txt (la version mise) ;
 #    2. manifeste.json : chaque fichier, sa taille, son SHA-256, son role, et les
@@ -18,6 +19,7 @@
 #
 #    python3 outils/mingw/package_mingw.py --iscc /chemin/ISCC.exe
 #        [--exe build-mingw/XpgAnalyzer.exe] [--sdl third_party/SDL3/lib/x64/SDL3.dll]
+#        [--pdfium third_party/pdfium/win-x64/pdfium.dll]
 #        [--sans-installateur]
 #  Wine : WINEPREFIX et WINEDEBUG sont pris dans l'environnement.
 # =============================================================================
@@ -161,6 +163,8 @@ def main():
     ap.add_argument("--exe-ihm", default=os.path.join(ROOT, "build-mingw", "IHM-Studio.exe"))
     ap.add_argument("--portables", default="", help="un dossier : un zip portable par application")
     ap.add_argument("--sdl", default=os.path.join(ROOT, "third_party", "SDL3", "lib", "x64", "SDL3.dll"))
+    # 1.12.30 : PDFium (outils/pdfium/obtenir_pdfium.py le pose la).
+    ap.add_argument("--pdfium", default=os.path.join(ROOT, "third_party", "pdfium", "win-x64", "pdfium.dll"))
     ap.add_argument("--iscc", default="")
     ap.add_argument("--sans-installateur", action="store_true")
     a = ap.parse_args()
@@ -182,6 +186,11 @@ def main():
     shutil.copy2(a.exe, os.path.join(st, exe_nom))
     shutil.copy2(a.exe_ihm, os.path.join(st, exe_ihm_nom))
     shutil.copy2(a.sdl, os.path.join(st, "SDL3.dll"))
+    # 1.12.30 : le moteur PDF de la visionneuse de documents. L'exe ne l'importe pas (il le charge a la demande) :
+    # le manifeste ne le demande pas, il est livre quand meme, a cote des exe, avec ses licences.
+    if not os.path.isfile(a.pdfium):
+        sys.exit(f"{a.pdfium} manque : python3 outils/pdfium/obtenir_pdfium.py (third_party/pdfium/ORIGINE.txt)")
+    shutil.copy2(a.pdfium, os.path.join(st, "pdfium.dll"))
     n_res = 0
     for f in ("schneider_library.txt", "plc_catalog.txt"):
         os.makedirs(os.path.join(st, "resources"), exist_ok=True)
@@ -218,6 +227,15 @@ def main():
     lic = os.path.join(st, "licences")
     os.makedirs(lic)
     shutil.copy2(os.path.join(ROOT, "third_party", "SDL3", "LICENSE.txt"), os.path.join(lic, "SDL3-LICENSE.txt"))
+    # 1.12.30 : les licences de PDFium et de sa construction (BSD-3-Clause, Apache-2.0, MIT...).
+    lic_pdfium = os.path.join(os.path.dirname(a.pdfium), "LICENSES")
+    if os.path.isdir(lic_pdfium):
+        os.makedirs(os.path.join(lic, "pdfium"))
+        for f in sorted(os.listdir(lic_pdfium)):
+            if os.path.isfile(os.path.join(lic_pdfium, f)):
+                shutil.copy2(os.path.join(lic_pdfium, f), os.path.join(lic, "pdfium", f))
+    else:
+        sys.exit(f"{lic_pdfium} manque : les licences de PDFium (python3 outils/pdfium/obtenir_pdfium.py)")
     for f in sorted(os.listdir(os.path.join(ROOT, "third_party"))):
         if f.endswith(".LICENSE"):
             shutil.copy2(os.path.join(ROOT, "third_party", f), lic)
@@ -228,7 +246,7 @@ def main():
         write_text(os.path.join(lic, "stb.LICENSE"), stb[i:].replace("*/", "").strip() + "\n", bom=False)
     with open(os.path.join(ROOT, "installateur", "LISEZ-MOI.txt"), encoding="utf-8-sig") as f:
         write_text(os.path.join(st, "LISEZ-MOI.txt"), f.read().replace("{VERSION}", version))
-    print(f"staging : {exe_nom}, {exe_ihm_nom}, SDL3.dll, 0 DLL du runtime (statique), {n_res} ressource(s), {n_libs} fichier(s) de bibliotheque, 6 scripts")
+    print(f"staging : {exe_nom}, {exe_ihm_nom}, SDL3.dll, pdfium.dll, 0 DLL du runtime (statique), {n_res} ressource(s), {n_libs} fichier(s) de bibliotheque, 6 scripts")
 
     # ---- 2. le manifeste ----
     dlls = sorted(set(imported_dlls(os.path.join(st, exe_nom))) | set(imported_dlls(os.path.join(st, exe_ihm_nom))), key=str.lower)

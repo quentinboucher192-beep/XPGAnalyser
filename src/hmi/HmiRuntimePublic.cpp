@@ -610,6 +610,8 @@ bool Runtime::objectMemberValue(const View& v, const Object& o, std::string_view
             out = sim::Value::boolean(running_ && viewOpen(v.id) && visible.isTruthy());
         } else if (gifMemberValue(o, n, out)) {
             // lot 16 : Playing, Frame, FrameCount, Loops d'un GIF anime
+        } else if (docMemberValue(o, n, out)) {
+            // 1.12.30 : PageCount, CurrentPage, Zoom, Loaded, DocumentError d'une visionneuse de documents
         } else if (n.rfind("Alarm", 0) == 0) {
             // 1.9 : le groupe d'alarmes interne d'un objet du synoptique ou d'une instance.
             if (!kindIsSynoptic(o.kind) && o.kind != Kind::SymbolInstance) return false;

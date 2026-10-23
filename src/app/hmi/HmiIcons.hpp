@@ -68,8 +68,8 @@ enum class HmiGlyph : std::uint8_t {
     ThreeWayValve,
     // 1.12.24 : le Reglage PID ; les registres (une lame, multi-lames, coupe-feu)
     PidTuner, Damper, MultiBladeDamper, FireDamper,
-    // 1.12.30 : le variateur de vitesse
-    SpeedDrive,
+    // 1.12.30 : le variateur de vitesse ; la visionneuse de documents
+    SpeedDrive, DocumentViewer,
 };
 
 [[nodiscard]] HmiGlyph glyphFor(hmi::Kind) noexcept;

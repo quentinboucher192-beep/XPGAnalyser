@@ -42,6 +42,7 @@
 #include "../../hmi/HmiQr.hpp"          // 1.12.12 (lot H) : la place qui reste dans un code QR
 #include "../../hmi/HmiRanges.hpp"      // 1.12.10 (lot F) : la plage et les seuils de la variable
 #include "../../hmi/HmiTable.hpp"       // 1.12.13 : le Tableau, un mode a la fois
+#include "../../hmi/HmiDocView.hpp"     // 1.12.30 : la visionneuse de documents (ses zooms, ses documents)
 #include "../../ui/Shapes.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -1313,7 +1314,8 @@ const std::vector<Category>& categories() {
                                      hmi::Kind::Container}},
         // Lot 14 : la communication avec l'automate reel.
         {"Communication", {hmi::Kind::CommStatus, hmi::Kind::PlcDiagnostic}},   // 1.12.0 : pas dans IHM Studio (retire plus bas)
-        {"M\xC3\xA9" "dias", {hmi::Kind::Video, hmi::Kind::AnimatedImage, hmi::Kind::AnimatedGif}},
+        {"M\xC3\xA9" "dias", {hmi::Kind::Video, hmi::Kind::DocumentViewer,   // 1.12.30 : la visionneuse de documents
+                     hmi::Kind::AnimatedImage, hmi::Kind::AnimatedGif}},
         // Lot 8 : se connecter, se deconnecter, voir qui est connecte, changer son
         // mot de passe, gerer les comptes.
         {"Utilisateurs", {hmi::Kind::LoginMenuButton, hmi::Kind::LoginPanel, hmi::Kind::LogoutButton, hmi::Kind::UserInfo,
@@ -2367,6 +2369,21 @@ const std::vector<KeyInfo>& keyInfos() {
          "% par d\xC3\xA9" "faut ; tr/min pour une vitesse en tours."},
         {"colorReady", "Couleur pr\xC3\xAAt", PG::ValueType::Color, {},
          "Celle du variateur pr\xC3\xAAt, \xC3\xA0 l'arr\xC3\xAAt."},
+        // ---- 1.12.30 : la visionneuse de documents
+        {"document", "Document", PG::ValueType::Text, {},
+         "Une ressource du projet (un PDF, une image PNG, JPEG, BMP, GIF ou SVG, un texte TXT), un fichier externe du projet, "
+         "ou un chemin : absolu (D:\\Notices\\VE-101.pdf), ou relatif au dossier du projet (notices/VE-101.pdf). Une expression "
+         "qui rend un chemin (=CheminNotice, une STRING) change de document en marche."},
+        {"startZoom", "Zoom de d\xC3\xA9part", PG::ValueType::Enum, {},
+         "Ajuster \xC3\xA0 la largeur, page enti\xC3\xA8re, ou un pourcentage (50 % \xC3\xA0 400 %, ou un autre tap\xC3\xA9 : 175 %)."},
+        {"showToolbar", "Barre d'outils", PG::ValueType::Boolean, {},
+         "Les pages, le num\xC3\xA9ro de page, le zoom, tourner, les vignettes, la recherche. D\xC3\xA9" "coch\xC3\xA9" "e : la molette, le "
+         "glisser et le clavier restent."},
+        {"showThumbnails", "Vignettes affich\xC3\xA9" "es", PG::ValueType::Boolean, {},
+         "La colonne des vignettes \xC3\xA0 gauche, ouverte au d\xC3\xA9part (le bouton de la barre l'ouvre et la ferme)."},
+        {"allowNavigation", "Navigation autoris\xC3\xA9" "e", PG::ValueType::Boolean, {},
+         "D\xC3\xA9" "coch\xC3\xA9" "e : une seule page, celle que dit la Variable de la page (ou Page) - une proc\xC3\xA9" "dure pas \xC3\xA0 pas ; "
+         "l'op\xC3\xA9rateur zoome et d\xC3\xA9place la page, sans en changer."},
         // ---- 1.12.24 : le Reglage PID (les mots de la maquette)
         {"pidLoop", "Structure de la boucle", PG::ValueType::Text, {},
          "Une structure qui porte la consigne et la mesure : SPPV_TELUNA[0]. Ses membres se trouvent par leur nom - SP (ou Consigne, "
@@ -2604,6 +2621,14 @@ std::string labelForKind(hmi::Kind kind, std::string_view key) {
         if (key == "value") return kind == K::FireDamper ? "Ouvert (en veille)" : "Ouvert";
         if (key == "colorOn") return "Couleur ouvert";
         if (key == "colorOff") return "Couleur ferm\xC3\xA9";
+    }
+    // 1.12.30 : la visionneuse de documents - sa page, sa variable, ses couleurs.
+    if (kind == K::DocumentViewer) {
+        if (key == "page") return "Page montr\xC3\xA9" "e";
+        if (key == "variable") return "Variable de la page (INT)";
+        if (key == "fill") return "Fond derri\xC3\xA8re les pages";
+        if (key == "accent") return "Couleur d'accent";
+        if (key == "textColor") return "Couleur des boutons";
     }
     // 1.12.30 : le variateur de vitesse - la Valeur dit s'il tourne ; le fond est celui de son cadre.
     if (kind == K::SpeedDrive) {
@@ -2922,6 +2947,35 @@ void lotHOffered(const hmi::Object& o, std::vector<hmi::Prop>& props) {
         }
         default:
             break;
+    }
+}
+
+// 1.12.30 : la visionneuse de documents - le Document parmi les ressources qu'elle lit (PDF, images, textes) et les
+// fichiers externes, ou un chemin tape ; le Zoom de depart parmi les zooms tout faits, ou un pourcentage tape.
+void docProperty(const hmi::Object& o, const hmi::Prop& prop, PG::Property& p, const hmi::Assets* assets) {
+    if (o.kind != hmi::Kind::DocumentViewer) return;
+    const auto keep = [&] {
+        if (std::find(p.enumValues.begin(), p.enumValues.end(), prop.value) == p.enumValues.end()) p.enumValues.push_back(prop.value);
+    };
+    if (prop.key == "document") {
+        p.type = PG::ValueType::Enum;
+        p.enumValues = {""};
+        if (assets) {
+            for (const auto& r : assets->resources)
+                if (hmi::doc::typeOfFormat(r.format) != hmi::doc::Type::None) p.enumValues.push_back(r.name);
+            for (const auto& f : assets->files)
+                if (hmi::doc::typeOfName(f.path) != hmi::doc::Type::None) p.enumValues.push_back(f.name);
+        }
+        keep();
+        p.typeIn = true;
+    } else if (prop.key == "startZoom") {
+        p.type = PG::ValueType::Enum;
+        p.enumValues.clear();
+        for (const auto z : hmi::docview::kZoomChoices) p.enumValues.emplace_back(z);
+        keep();
+        p.typeIn = true;
+    } else if (prop.key == "page") {
+        p.type = PG::ValueType::Integer;
     }
 }
 
@@ -3803,6 +3857,8 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         }
         // 1.12.12 (lot H) : l'horloge, le texte defilant, la video, le code QR - leurs libelles et leurs choix.
         lotHProperty(*o, prop, p, project);
+        // 1.12.30 : la visionneuse de documents - ses documents, ses zooms.
+        docProperty(*o, prop, p, assets);
         // 1.10 (chantier K) : toute propriete modifiable de l'inspecteur accepte "=expression".
         // 1.12.11 (lot G) : la Valeur d'un symbole en mode Etat attend un etat (un entier, une enumeration), celle
         // d'un verin rentre / sorti un booleen.
@@ -4140,7 +4196,7 @@ void hmiPublishPlcNames(const domain::Project* plc) {
 bool hmiObjectNeedsVariable(hmi::Kind k) noexcept {
     using K = hmi::Kind;
     return hmi::kindWritesVariable(k) || k == K::InputField || k == K::Histogram || k == K::TabContainer || k == K::CollapsiblePanel
-        || k == K::ZoneMap || k == K::AlarmSummary || k == K::HourMeter;
+        || k == K::ZoneMap || k == K::AlarmSummary || k == K::HourMeter || k == K::DocumentViewer;   // 1.12.30 : sa page
 }
 
 std::string hmiVariableLabel(hmi::Kind k) {

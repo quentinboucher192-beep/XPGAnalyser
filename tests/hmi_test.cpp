@@ -29224,6 +29224,33 @@ void registres11224() {
 // ============================================================== 1.12.30 ======
 //  Le variateur de vitesse : un symbole du synoptique, sa liaison Equipement (Marche, Defaut, Pret, Sens,
 //  Frequence, Consigne, Courant, Vitesse, Local), son alarme Defaut, ses variables d'instances, Generer.
+// 1.12.30 : la visionneuse de documents dans la bibliotheque (le reste : hmi_docviewer_test).
+void visionneuse11230() {
+    std::printf("1.12.30 : la visionneuse de documents (la biblioth\xC3\xA8que, ses r\xC3\xB4les, ses variables d'instance)\n");
+    namespace g = hmi::guide;
+    const Kind k = Kind::DocumentViewer;
+    check(!kindIsSynoptic(k) && kindFromKey("DocumentViewer") == k && kindLabel(k) == "Visionneuse de documents" && examples::exampleFor(k).has_value()
+              && g::topicForKind(kindKey(k)) != nullptr && g::topicForKind(kindKey(k))->key == "objet-visionneuse-de-documents",
+          "la visionneuse : sa cl\xC3\xA9, son libell\xC3\xA9, son exemple, son sujet du guide");
+    const auto at = std::find(std::begin(kPlaceableKinds), std::end(kPlaceableKinds), Kind::Video);
+    check(at != std::end(kPlaceableKinds) && at + 1 != std::end(kPlaceableKinds) && at[1] == k, "dans la biblioth\xC3\xA8que : apr\xC3\xA8s la vid\xC3\xA9o");
+    const Object fresh = makeObject(k, 9, "Doc_1", 0, 0, 1);
+    check(fresh.text("document").empty() && fresh.number("page") == 1 && fresh.flag("showToolbar", false) && !fresh.flag("showThumbnails", true)
+              && fresh.flag("allowNavigation", false) && fresh.text("startZoom") == "ajuster \xC3\xA0 la largeur" && fresh.find("variable")
+              && fresh.find("access"),
+          "les valeurs neuves : page 1, la barre, ni vignettes ni document, ajuster \xC3\xA0 la largeur, sa variable, son niveau d'acc\xC3\xA8s");
+    check(roles::roleOf(k, "page").role == roles::Role::Number && roles::roleOf(k, "page").type == "INT"
+              && roles::roleOf(Kind::TabContainer, "page").role == roles::Role::State && roles::roleOf(k, "document").role == roles::Role::Name
+              && citesResource("document"),
+          "ses r\xC3\xB4les : Page un entier (l'onglet d'un conteneur reste un \xC3\xA9tat), Document un nom de ressource (cit\xC3\xA9" "e)");
+    std::string infos;
+    for (const auto& m : pub::objectMembers(fresh))
+        if (m.key.empty()) infos += m.name + " ";
+    check(infos.find("PageCount") != std::string::npos && infos.find("CurrentPage") != std::string::npos && infos.find("Zoom") != std::string::npos
+              && infos.find("Loaded") != std::string::npos && infos.find("DocumentError") != std::string::npos,
+          "ses variables d'instance : PageCount, CurrentPage, Zoom, Loaded, DocumentError (" + infos + ")");
+}
+
 void variateur11230() {
     std::printf("1.12.30 : le variateur de vitesse\n");
     namespace g = hmi::guide;
@@ -29761,6 +29788,7 @@ int main(int argc, char** argv) {
     typesRappel1220();                // 1.12.20 (T) : les types rappel nommes
     registres11224();                 // 1.12.24 : les registres du synoptique
     variateur11230();                 // 1.12.30 : le variateur de vitesse
+    visionneuse11230();               // 1.12.30 : la visionneuse de documents
     reglagePid11224();                // 1.12.24 : le Reglage PID en marche
     scriptsC1220();                   // 1.12.20 (C) : les scripts C et C++, l'en-tete du projet
     generiques1220();                 // 1.12.20 (G) : les structures, les symboles et les popups generiques

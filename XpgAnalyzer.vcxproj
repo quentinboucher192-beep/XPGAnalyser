@@ -102,10 +102,13 @@
       <AdditionalManifestFiles>$(ProjectDir)resources\windows\xpg_analyzer.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
     </Manifest>
     <!-- Lot API 8 : SDL3.dll a cote de l'executable (xcopy /D : seulement s'il est plus
-         recent ; code 1 = rien a copier, ce n'est pas une erreur). -->
+         recent ; code 1 = rien a copier, ce n'est pas une erreur). 1.12.30 : pdfium.dll aussi
+         (le lecteur PDF de la visionneuse, charge a la demande : outils\pdfium\obtenir_pdfium.py
+         le pose dans third_party\pdfium\win-x64 ; absent, l'application dit Lecteur PDF absent). -->
     <PostBuildEvent>
-      <Message>bac\ et SDL3.dll vers $(OutDir)</Message>
+      <Message>bac\, SDL3.dll et pdfium.dll vers $(OutDir)</Message>
       <Command>if exist "$(ProjectDir)bac\Armoire_Gaz\project.xpgproj" (xcopy /E /I /Y /D /Q "$(ProjectDir)bac" "$(OutDir)bac" &gt;NUL &amp; if errorlevel 2 exit /b 1)
+if exist "$(ProjectDir)third_party\pdfium\win-x64\pdfium.dll" (xcopy /Y /D /Q "$(ProjectDir)third_party\pdfium\win-x64\pdfium.dll" "$(OutDir)" &gt;NUL &amp; if errorlevel 2 exit /b 1)
 xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if errorlevel 2 (exit /b 1) else (exit /b 0)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -506,6 +509,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiCyclicPageSets.cpp" />
     <ClCompile Include="src\app\hmi\HmiCyclicWidgets.cpp" />
     <ClCompile Include="src\app\hmi\HmiDeclGrid.cpp" />
+    <ClCompile Include="src\app\hmi\HmiDocPainter.cpp" />
     <ClCompile Include="src\app\hmi\HmiDuplicateDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiEditHistoryDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiEnumPanes.cpp" />
@@ -565,6 +569,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiCalc.cpp" />
     <ClCompile Include="src\hmi\HmiDecl.cpp" />
     <ClCompile Include="src\hmi\HmiDeclEdit.cpp" />
+    <ClCompile Include="src\hmi\HmiDocument.cpp" />
+    <ClCompile Include="src\hmi\HmiDocView.cpp" />
     <ClCompile Include="src\hmi\HmiDuplicate.cpp" />
     <ClCompile Include="src\hmi\HmiEditHistory.cpp" />
     <ClCompile Include="src\hmi\HmiEnums.cpp" />
@@ -582,6 +588,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiObjectAlarms.cpp" />
     <ClCompile Include="src\hmi\HmiOperators.cpp" />
     <ClCompile Include="src\hmi\HmiOverload.cpp" />
+    <ClCompile Include="src\hmi\HmiPdf.cpp" />
     <ClCompile Include="src\hmi\HmiPerfHistory.cpp" />
     <ClCompile Include="src\hmi\HmiPid.cpp" />
     <ClCompile Include="src\hmi\HmiPidLearn.cpp" />
@@ -592,6 +599,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiRetain.cpp" />
     <ClCompile Include="src\hmi\HmiRanges.cpp" />
     <ClCompile Include="src\hmi\HmiRoles.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeDocs.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeInput.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeObjectAlarms.cpp" />
     <ClCompile Include="src\hmi\HmiRuntimeParams.cpp" />
@@ -1018,6 +1026,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiChoiceLists.hpp" />
     <ClInclude Include="src\hmi\HmiDecl.hpp" />
     <ClInclude Include="src\hmi\HmiDeclEdit.hpp" />
+    <ClInclude Include="src\hmi\HmiDocument.hpp" />
+    <ClInclude Include="src\hmi\HmiDocView.hpp" />
     <ClInclude Include="src\hmi\HmiDuplicate.hpp" />
     <ClInclude Include="src\hmi\HmiEditHistory.hpp" />
     <ClInclude Include="src\hmi\HmiEnums.hpp" />
@@ -1034,6 +1044,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiObjectAlarms.hpp" />
     <ClInclude Include="src\hmi\HmiOperators.hpp" />
     <ClInclude Include="src\hmi\HmiOverload.hpp" />
+    <ClInclude Include="src\hmi\HmiPdf.hpp" />
     <ClInclude Include="src\hmi\HmiPerfHistory.hpp" />
     <ClInclude Include="src\hmi\HmiPid.hpp" />
     <ClInclude Include="src\hmi\HmiPidLoop.hpp" />

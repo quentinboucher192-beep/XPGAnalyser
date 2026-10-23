@@ -1579,6 +1579,32 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                         else if (part == "defiler:1" && l.down.w > 0) { local = l.down; found = true; }
                         break;
                     }
+                    case hmi::Kind::DocumentViewer: {
+                        // 1.12.30 : la visionneuse de documents - un bouton ("doc:next"), un champ ("doc:page",
+                        // "doc:zoommenu", "doc:searchfield"), un choix du menu des zooms ("doc:zoom:4"), une vignette
+                        // ("doc:thumb:3"), la zone des pages ("doc:area"), telle que le moteur l'a disposee.
+                        const auto* d = runtime_ ? runtime_->docViewer(o.id) : nullptr;
+                        if (!d) break;
+                        const auto& l = d->layout;
+                        for (const auto& b : l.buttons)
+                            if (b.part == part) { local = b.box; found = true; }
+                        if (found) break;
+                        if (part == "doc:page") { local = l.pageField; found = l.pageField.w > 0; }
+                        else if (part == "doc:zoommenu") { local = l.zoomField; found = l.zoomField.w > 0; }
+                        else if (part == "doc:searchfield") { local = l.searchField; found = l.searchField.w > 0; }
+                        else if (part == "doc:area") { local = l.area; found = l.area.w > 0; }
+                        else if (const int z = index("doc:zoom:"); z >= 0 && static_cast<std::size_t>(z) < l.zoomMenu.size()) {
+                            local = l.zoomMenu[static_cast<std::size_t>(z)];
+                            found = true;
+                        } else if (const int t = index("doc:thumb:"); t >= 1) {
+                            const auto thumbs = hmi::docview::thumbsOf(l, d->state, d->sizes);
+                            if (static_cast<std::size_t>(t) <= thumbs.size()) {
+                                local = thumbs[static_cast<std::size_t>(t) - 1].frame;
+                                found = true;
+                            }
+                        }
+                        break;
+                    }
                     case hmi::Kind::DateTimePicker: {
                         const auto l = hmi::pickerLayout(o, box.w, box.h);
                         if (part == "maintenant") { local = l.now; found = true; }
@@ -1810,6 +1836,23 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
         const auto& vp = vps_[layer];
         const auto box = o->box();
         const double lx = vp.toViewX(p.x) - box.x, ly = vp.toViewY(p.y) - box.y;
+        // 1.12.30 : la visionneuse de documents - un bouton, un champ, une vignette ; dans la zone des pages, un
+        // glisser deplace la page (la main), un double-clic passe de l'ajustement a 100 %.
+        if (o->kind == hmi::Kind::DocumentViewer) {
+            if (runtime_ && runtime_->focusedObject() != kNoId && runtime_->focusedObject() != id) clickedAway->emit(id);
+            const std::string part = runtime_ ? runtime_->docPartAt(id, lx, ly) : std::string{};
+            if (part == "doc:area") {
+                if (clickCount >= 2) {
+                    partClicked->emit(id, "doc:dbl:" + hmi::formatNumber(lx) + ":" + hmi::formatNumber(ly));
+                    return;
+                }
+                docDrag_ = id;
+                docDragLayer_ = layer;
+                docDragLast_ = p;
+            }
+            if (!part.empty()) partClicked->emit(id, "doc:at:" + hmi::formatNumber(lx) + ":" + hmi::formatNumber(ly));
+            return;
+        }
         // Un objet a parties : la partie touchee (bouton, ligne, champ).
         if (o->kind == hmi::Kind::RecipeManager || o->kind == hmi::Kind::UserManager) {
             std::size_t rows = 0;
@@ -2207,6 +2250,43 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
         return ui::EventResult::Consumed;
     }
     if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
+        // 1.12.30 : sur une visionneuse de documents, la molette fait defiler ses pages (Maj : en largeur ; sur la
+        // colonne, les vignettes) ; Ctrl+molette zoome la page autour du curseur, pas la vue.
+        if (runtime_ && interactive_ && !layers_.empty() && vps_.size() == layers_.size() && bounds().contains(w->pos)
+            && (w->dy != 0 || w->dx != 0) && !runtime_->systemShown() && !runtime_->loginShown()) {
+            std::size_t li = liveTopLayer();
+            if (!popupRects_.empty()) {
+                bool over = false;
+                for (auto it = popupRects_.rbegin(); it != popupRects_.rend() && !over; ++it)
+                    if (it->window.contains(w->pos)) { li = it->layer; over = true; }
+                if (!over)
+                    for (std::size_t k = 0; k < layers_.size(); ++k) if (!layers_[k].popup) li = k;
+            }
+            if (li < layers_.size()) {
+                const auto& vp = vps_[li];
+                const double x = vp.toViewX(w->pos.x), y = vp.toViewY(w->pos.y);
+                const auto order = layers_[li].view.paintOrder();
+                for (auto it = order.rbegin(); it != order.rend(); ++it) {
+                    const auto* o = *it;
+                    if (!o->flag("visible", true) || !o->box().contains(x, y) || hmi::clippedAt(layers_[li].view, *o, x, y)) continue;
+                    if (o->kind != hmi::Kind::DocumentViewer) break;   // un autre objet par-dessus : il garde la molette
+                    const double lx = x - o->box().x, ly = y - o->box().y;
+                    if (w->mods.ctrl) {
+                        const double f = std::pow(1.15, std::clamp(static_cast<double>(w->dy), -4.0, 4.0));
+                        partClicked->emit(o->id, "doc:zoomat:" + hmi::formatNumber(f) + ":" + hmi::formatNumber(lx) + ":" + hmi::formatNumber(ly));
+                    } else {
+                        const std::string under = runtime_->docPartAt(o->id, lx, ly);
+                        const double dy = -60.0 * std::clamp(static_cast<double>(w->dy), -4.0, 4.0);
+                        const double dx = -60.0 * std::clamp(static_cast<double>(w->dx), -4.0, 4.0);
+                        if (under.rfind("doc:thumb", 0) == 0) partClicked->emit(o->id, "doc:thumbwheel:" + hmi::formatNumber(dy));
+                        else if (w->mods.shift || (w->dy == 0 && w->dx != 0))
+                            partClicked->emit(o->id, "doc:wheelx:" + hmi::formatNumber(w->dy != 0 ? dy : dx));
+                        else partClicked->emit(o->id, "doc:wheel:" + hmi::formatNumber(dy));
+                    }
+                    return ui::EventResult::Consumed;
+                }
+            }
+        }
         // 1.10 : Ctrl+molette - le zoom de la vue en cours, autour du curseur.
         if (w->mods.ctrl && bounds().contains(w->pos) && !station_ && w->dy != 0) {
             zoomDisplayAround(std::pow(1.15f, std::clamp(w->dy, -4.f, 4.f)), w->pos);
@@ -2299,6 +2379,18 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
                 pidHovered->emit(t);
             }
         }
+        // 1.12.30 : la page d'une visionneuse suit la souris (en pixels de la vue).
+        if (docDrag_ != kNoId) {
+            if (docDragLayer_ < vps_.size()) {
+                const float k = std::max(0.01f, vps_[docDragLayer_].zoom);
+                const double dx = (m->pos.x - docDragLast_.x) / k, dy = (m->pos.y - docDragLast_.y) / k;
+                if (std::fabs(dx) + std::fabs(dy) >= 0.5) {
+                    partClicked->emit(docDrag_, "doc:pan:" + hmi::formatNumber(dx) + ":" + hmi::formatNumber(dy));
+                    docDragLast_ = m->pos;
+                }
+            }
+            return ui::EventResult::Consumed;
+        }
         // Lot 12 : la barre d'un panneau defilant suit la souris ; une vue zoomee se tire.
         if (scrollDrag_ != kNoId) {
             if (scrollDragLayer_ < layers_.size() && scrollDragLayer_ < vps_.size())
@@ -2346,6 +2438,10 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
         // vue zoomee ; un glisser horizontal ample sur le fond change de vue.
         if (scrollDrag_ != kNoId) {
             scrollDrag_ = kNoId;
+            return ui::EventResult::Consumed;
+        }
+        if (docDrag_ != kNoId) {     // 1.12.30
+            docDrag_ = kNoId;
             return ui::EventResult::Consumed;
         }
         if (panning_) {
@@ -2410,6 +2506,23 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
         }
         return ui::EventResult::Ignored;
     }
+    // 1.12.30 : la visionneuse de documents qui a le clavier, hors de ses champs : Page precedente / suivante, les
+    // fleches, Ctrl+0 (la page entiere), Ctrl+F (chercher) ; + et - arrivent en texte (le moteur zoome).
+    if (focused() && runtime_ && runtime_->docFocused() && !runtime_->docTyping() && !runtime_->loginShown() && !runtime_->signatureShown()
+        && !runtime_->promptShown())
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+            std::string part;
+            if (k->key == ui::Key::PageUp && !k->mods.ctrl) part = "doc:key:PageUp";
+            else if (k->key == ui::Key::PageDown && !k->mods.ctrl) part = "doc:key:PageDown";
+            else if (k->key == ui::Key::Up && !k->mods.ctrl) part = "doc:key:Up";
+            else if (k->key == ui::Key::Down && !k->mods.ctrl) part = "doc:key:Down";
+            else if (k->key == ui::Key::Num0 && k->mods.ctrl) part = "doc:key:Zero";
+            else if (k->key == ui::Key::F && k->mods.ctrl) part = "doc:search";
+            if (!part.empty()) {
+                partClicked->emit(runtime_->focusedObject(), part);
+                return ui::EventResult::Consumed;
+            }
+        }
     // Lot 8 : le clavier, quand un champ de la vue a le focus (lot 12 : ou que le
     // menu de connexion est ouvert - Echap le ferme, Entree connecte ; lot 13 : ou
     // le panneau de signature).

@@ -602,6 +602,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_video_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_pid_test tests/hmi_pid_test.cpp)              # 1.12.24 : le Reglage PID (apprendre, statistiques, regler)
     xpg_target_link_libraries(hmi_pid_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(hmi_docviewer_test tests/hmi_docviewer_test.cpp)  # 1.12.30 : la visionneuse de documents (PDFium a la demande)
+    xpg_target_link_libraries(hmi_docviewer_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_edits_test tests/hmi_edits_test.cpp)          # 1.12.25 : l'historique des modifications des objets
     xpg_target_link_libraries(hmi_edits_test PRIVATE xpg_hmi)
     # 1.12.0 : deux applications, deux rangements (la recopie des projets de la 1.11,
@@ -743,6 +745,9 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmiqr        COMMAND hmi_qr_test)                      # ---- 1.12.12 (lot H) : le code QR, versions 1 a 40 ----
     xpg_add_test(NAME hmivideo     COMMAND hmi_video_test)                   # ---- 1.12.12 (lot H) : le Motion-JPEG en AVI, la lecture ----
     xpg_add_test(NAME hmipid       COMMAND hmi_pid_test)                     # ---- 1.12.24 : le Reglage PID, sept jours d'un four simule ----
+    # ---- 1.12.30 : la visionneuse de documents - third_party/pdfium (ORIGINE.txt y est toujours ; libpdfium.so, que pose
+    # outils/pdfium/obtenir_pdfium.py, dans linux-x64/ : absent, l'essai le dit et echoue) ----
+    xpg_add_test(NAME hmidocviewer COMMAND hmi_docviewer_test ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pdfium)
     xpg_add_test(NAME hmiedits     COMMAND hmi_edits_test)                   # ---- 1.12.25 : l'historique des modifications des objets ----
     xpg_add_test(NAME edition      COMMAND edition_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz)   # ---- 1.12.0 : deux applications ----
     xpg_add_test(NAME hmioverload  COMMAND hmi_overload_test)                # ---- 1.11.20 : les signatures et les surcharges ----

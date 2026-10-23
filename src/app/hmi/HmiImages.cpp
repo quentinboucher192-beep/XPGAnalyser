@@ -7,6 +7,7 @@
 #include "../../ui/Widget.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <iterator>
 #include <vector>
@@ -47,6 +48,8 @@ void HmiImageCache::adopt(gfx::IRenderer& r) {
     svgs_.clear();
     gifs_.clear();
     videos_.clear();   // 1.12.12 (lot H)
+    docTextures_.clear();   // 1.12.30
+    docTextureBytes_ = 0;
 }
 
 void HmiImageCache::purge(gfx::IRenderer& r) {
@@ -201,6 +204,69 @@ HmiImageCache::Image HmiImageCache::videoFrame(gfx::IRenderer& r, const hmi::Res
         e.serial = serial;
     }
     return e.image;
+}
+
+// ---- 1.12.30 : la visionneuse de documents ---------------------------------------------------
+std::shared_ptr<hmi::doc::Document> HmiImageCache::document(const hmi::Assets& assets, std::string_view spec, std::string* why) {
+    const std::string folder = hmiProjectFolder();
+    const std::string key = std::string(spec) + "\n" + folder;
+    const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    auto& held = docsHeld_[key];
+    held.used = ++tick_;
+    // Une ressource change de contenu, un fichier sur le disque : regarde au plus une fois par seconde.
+    if (now - held.checked >= 1.0 || (!held.doc && held.why.empty())) {
+        held.checked = now;
+        std::string reason;
+        held.doc = hmi::doc::open(assets, spec, folder, &reason);
+        held.why = held.doc ? std::string{} : reason;
+    }
+    if (why) *why = held.why;
+    const auto out = held.doc;
+    if (docsHeld_.size() > 8) {
+        auto oldest = docsHeld_.begin();
+        for (auto it = docsHeld_.begin(); it != docsHeld_.end(); ++it)
+            if (it->second.used < oldest->second.used) oldest = it;
+        docsHeld_.erase(oldest);
+    }
+    return out;
+}
+
+HmiImageCache::Image HmiImageCache::docPage(gfx::IRenderer& r, const std::shared_ptr<const hmi::Rgba>& image) {
+    if (!image || image->width <= 0 || image->height <= 0) return {};
+    adopt(r);
+    purge(r);
+    auto& e = docTextures_[image.get()];
+    e.used = ++tick_;
+    if (e.image2.valid() && !e.image.expired()) return e.image2;
+    if (e.image2.tex.v) r.releaseImage(e.image2.tex);
+    docTextureBytes_ -= std::min(docTextureBytes_, e.bytes);
+    e.image = image;
+    e.image2.tex = r.createImage(image->pixels.data(), image->width, image->height);
+    e.image2.width = image->width;
+    e.image2.height = image->height;
+    e.bytes = image->pixels.size();
+    docTextureBytes_ += e.bytes;
+    const Image made = e.image2;
+    // Les pages que le document a oubliees, puis les moins recemment dessinees au-dela de 192 Mo.
+    for (auto it = docTextures_.begin(); it != docTextures_.end();) {
+        if (it->second.image.expired()) {
+            if (it->second.image2.tex.v) r.releaseImage(it->second.image2.tex);
+            docTextureBytes_ -= std::min(docTextureBytes_, it->second.bytes);
+            it = docTextures_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    while (docTextureBytes_ > 192u * 1024u * 1024u && docTextures_.size() > 1) {
+        auto oldest = docTextures_.end();
+        for (auto it = docTextures_.begin(); it != docTextures_.end(); ++it)
+            if (it->first != image.get() && (oldest == docTextures_.end() || it->second.used < oldest->second.used)) oldest = it;
+        if (oldest == docTextures_.end()) break;
+        if (oldest->second.image2.tex.v) r.releaseImage(oldest->second.image2.tex);
+        docTextureBytes_ -= std::min(docTextureBytes_, oldest->second.bytes);
+        docTextures_.erase(oldest);
+    }
+    return made.tex.v ? made : Image{};
 }
 
 HmiImageCache::Image HmiImageCache::svg(gfx::IRenderer& r, const hmi::Resource& res, int width, int height,

@@ -96,7 +96,8 @@ namespace app {
         out += "Les dossiers de l'application :\n" + foldersText() + "\n";
         out += "Le projet ouvert :\n" + projectText(app) + "\n";
         out += "Composants libres embarqu\xC3\xA9s et leurs licences : SDL3 (zlib), miniz (MIT), nanosvg (zlib), "
-               "stb (domaine public), minimp3 (CC0).\n\n";
+               "stb (domaine public), minimp3 (CC0) ; PDFium, le lecteur PDF de la visionneuse de documents, charg\xC3\xA9 \xC3\xA0 "
+               "la demande (pdfium.dll : BSD-3-Clause et Apache-2.0, ses licences dans licences\\pdfium).\n\n";
         out += "\xC2\xAB Copier les informations pour le support \xC2\xBB met dans le presse-papiers la version, "
                "le syst\xC3\xA8me, les dossiers et le r\xC3\xA9sum\xC3\xA9 du projet ouvert (nom, nombre de sections et de vues), "
                "jamais ses donn\xC3\xA9" "es.";

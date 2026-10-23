@@ -64,6 +64,10 @@
 //    sous-onglet "Titre"          un onglet dans l'onglet courant (Actions, Journal...)
 //    editeur "texte" [ajout]      l'editeur de code de l'onglet (\n, \t)
 //    sim-clic "Objet" [double]    un objet de la vue simulee ; sim-appui / sim-relache
+//    sim-partie "Objet" "partie"  une partie d'un objet simule (1.12.30 : d'une visionneuse de
+//                                 documents - "doc:next", "doc:page", "doc:thumb:3", "doc:area"...)
+//    sim-molette "Objet" N [ctrl] la molette sur un objet simule (N crans ; 1.12.30 : ctrl, le
+//                                 zoom d'une visionneuse de documents autour du curseur)
 //    --- lot API 7 : API > Simulation et API > Statistiques (l'onglet s'ouvre s'il
 //        ne l'est pas ; il peut etre derriere un autre, dans un autre groupe, detache) ---
 //    simulation-deplier "Armoires[0].ana"    deplier une variable (ses parents et son

@@ -18,3 +18,6 @@ outils/etat/
 /XPGAnalyser-Setup-*.exe
 /API-IHM-Studio-Setup-*.exe
 __pycache__/
+# 1.12.30 : PDFium, pose par outils/pdfium/obtenir_pdfium.py (third_party/pdfium/ORIGINE.txt)
+/third_party/pdfium/win-x64/
+/third_party/pdfium/linux-x64/

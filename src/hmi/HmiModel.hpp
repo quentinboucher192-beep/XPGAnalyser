@@ -114,8 +114,10 @@ enum class Kind : std::uint8_t {
     PidTuner, Damper, MultiBladeDamper, FireDamper,
     // 1.12.30, A LA FIN : le variateur de vitesse (marche, sens, pret, defaut, frequence
     // et sa consigne, courant, vitesse, local / distance) - un symbole du synoptique
-    // (kindIsSynoptic), pose dans la palette apres le moteur.
-    SpeedDrive,
+    // (kindIsSynoptic), pose dans la palette apres le moteur. La visionneuse de documents
+    // (un PDF, une image, un texte : les pages, le zoom, les vignettes, la recherche ; sa
+    // page suit une variable), dans la famille Medias apres la video (HmiDocView.hpp).
+    SpeedDrive, DocumentViewer,
 };
 
 // Tout ce qu'on peut poser sur une vue, dans l'ordre de la palette. Le groupe
@@ -124,6 +126,7 @@ inline constexpr Kind kPlaceableKinds[] = {
     Kind::Text,  Kind::Image,     Kind::Button,      Kind::Rectangle, Kind::Ellipse,
     Kind::Line,  Kind::Polygon,   Kind::Indicator,   Kind::ProgressBar, Kind::Gauge,
     Kind::Table, Kind::History,   Kind::Trend,       Kind::List,      Kind::Video,
+    Kind::DocumentViewer,   // 1.12.30 : la visionneuse de documents, apres la video
     Kind::Container, Kind::RecipeManager, Kind::AnimatedImage,
     Kind::InputField, Kind::LoginPanel, Kind::LogoutButton, Kind::UserInfo, Kind::PasswordChange, Kind::UserManager,
     // lot 9
@@ -337,9 +340,10 @@ inline constexpr KindInfo kKindInfos[] = {
     {Kind::MultiBladeDamper,    "MultiBladeDamper",    "Registre multi-lames"},
     {Kind::FireDamper,          "FireDamper",          "Clapet coupe-feu"},
     {Kind::SpeedDrive,          "SpeedDrive",          "Variateur de vitesse"},                    // 1.12.30
+    {Kind::DocumentViewer,      "DocumentViewer",      "Visionneuse de documents"},                // 1.12.30
 };
 
-static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::SpeedDrive) + 1, "une ligne par genre d'objet, dans l'ordre");
+static_assert(sizeof(kKindInfos) / sizeof(kKindInfos[0]) == static_cast<std::size_t>(Kind::DocumentViewer) + 1, "une ligne par genre d'objet, dans l'ordre");
 [[nodiscard]] inline std::string_view kindKey(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].key; }      // "Rectangle" : enregistre
 [[nodiscard]] inline std::string_view kindLabel(Kind k) noexcept { return kKindInfos[static_cast<std::size_t>(k)].label; }  // affiche
 [[nodiscard]] std::optional<Kind>     kindFromKey(std::string_view) noexcept;

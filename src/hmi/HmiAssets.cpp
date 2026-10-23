@@ -150,7 +150,7 @@ core::Result<Resource> readResource(Project& p, const std::string& path, std::st
 }
 
 bool citesResource(std::string_view key) noexcept {
-    return key == "image" || key == "video" || key == "poster" || key == "font";
+    return key == "image" || key == "video" || key == "poster" || key == "font" || key == "document";   // 1.12.30 : la visionneuse
 }
 
 std::vector<Citation> citations(const Project& p, std::string_view name) {
