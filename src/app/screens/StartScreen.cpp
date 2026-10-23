@@ -1226,6 +1226,8 @@ void StartupScreen::showCardMenu(gfx::Point at) {
         !e->isFolder ? std::string("un export n'est pas un projet : Retirer de la liste suffit") : gone);
     cardMenu_->setItems(std::move(items));
     const auto surface = page_->bounds();
+    // 1.12.27 : un menu sans cadre ne se dessine jamais (la passe du dessus le saute) : celui de la page.
+    cardMenu_->setBounds(surface);
     cardMenu_->openAt(at, {surface.w, surface.h});
 }
 
@@ -1341,6 +1343,7 @@ void StartupScreen::showPageMenu(gfx::Point at) {
     add(kPageHelp, "Aide", ui::Icon::Help, "F1");
     cardMenu_->setItems(std::move(items));
     const auto surface = page.bounds();
+    cardMenu_->setBounds(surface);   // sinon il ne se dessine pas (voir showCardMenu)
     if (ui::KeyboardMenuScope::active()) cardMenu_->openFromKeyboard(at, {surface.w, surface.h});
     else cardMenu_->openAt(at, {surface.w, surface.h});
 }

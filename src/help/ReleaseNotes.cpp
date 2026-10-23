@@ -157,6 +157,9 @@ const std::vector<Note>& table() {
         note("1.12.27", "G\xC3\xA9n\xC3\xA9ral", Kind::Changed,
          "L'INSTALLATEUR HABILL\xC3\x89 : \xC3\xA0 gauche, aux couleurs des deux logos, le nom, la version et les \xC3\xA9tapes de l'installation (faites, en cours, \xC3\xA0 venir) ; sa police, des bandeaux d'accueil et de fin, une ic\xC3\xB4ne par \xC3\xA9tape ; pendant la copie, une animation, une barre en d\xC3\xA9grad\xC3\xA9 avec son pourcentage, et des astuces. Il pose toujours les deux applications et met \xC3\xA0 jour celle qui est install\xC3\xA9" "e, sans toucher \xC3\xA0 tes donn\xC3\xA9" "es.",
          "menu-aide", ""),
+        note("1.12.27", "G\xC3\xA9n\xC3\xA9ral", Kind::Fixed,
+         "LE MENU DU CLIC DROIT DE L'ACCUEIL S'AFFICHE : celui d'une carte de projet (1.12.18 : Ouvrir, Ouvrir le dossier, Renommer\xE2\x80\xA6, Retirer de la liste) s'ouvrait sans se dessiner, et rien ne paraissait. Il s'affiche, comme le nouveau menu de la page.",
+         "onglets", ""),
         // 1.12.26 (22/10/2026) : la fenetre Historique et le suivi des objets, WAIT et les scripts detaches, les
         // fichiers dans les scripts, moins de trames Modbus, la pastille IHM.
         note("1.12.26", "Vues", Kind::New,
