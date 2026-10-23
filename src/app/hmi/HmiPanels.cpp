@@ -227,6 +227,99 @@ void HmiToolStrip::layoutItems(float) const {
         it.rect = {x, b.y + 3, w, b.h - 6};
         x += w + 2;
     }
+    // 1.12.30 : CE QUI NE TIENT TOUJOURS PAS (les libelles tombes) passe dans le menu du bouton
+    // ">>", au bout de la barre : un bouton coupe par le bord ne se voyait plus, ne se cliquait plus.
+    overflow_.clear();
+    moreRect_ = {};
+    if (b.w > 0.f && x - 2.f > b.right()) {
+        constexpr float kMore = 26.f;
+        const float limit = b.right() - kMore - 4.f;
+        std::size_t cut = items_.size();
+        for (std::size_t i = 0; i < items_.size(); ++i)
+            if (on[i] && !items_[i].separator && items_[i].rect.right() > limit) { cut = i; break; }
+        for (std::size_t i = cut; i < items_.size(); ++i) {
+            if (!on[i]) continue;
+            if (!items_[i].separator) overflow_.push_back(i);
+            items_[i].rect = {b.x, b.y, 0, 0};
+        }
+        // Le separateur juste avant la coupure ne separe plus rien.
+        for (std::size_t i = cut; i-- > 0;) {
+            if (!on[i]) continue;
+            if (items_[i].separator) items_[i].rect = {b.x, b.y, 0, 0};
+            break;
+        }
+        if (!overflow_.empty()) moreRect_ = {b.right() - kMore - 2.f, b.y + 3.f, kMore, b.h - 6.f};
+    }
+}
+
+bool HmiToolStrip::inOverflow(int action) const {
+    layoutItems(1);
+    for (const auto i : overflow_)
+        if (items_[i].action == action) return true;
+    return false;
+}
+
+gfx::Rect HmiToolStrip::moreRect() const {
+    layoutItems(1);
+    return moreRect_;
+}
+
+bool HmiToolStrip::trigger(int action) {
+    for (const auto& it : items_)
+        if (!it.separator && it.action == action) {
+            if (it.enabled && !it.enabled()) return false;
+            if (focusTarget_ && focusTarget_->visible()) focusTarget_->takeFocus();
+            triggered->emit(action);
+            return true;
+        }
+    return false;
+}
+
+namespace {
+// Le libelle d'un bouton dans le menu ">>" : son infobulle jusqu'a la premiere precision
+// ("Zoom arriere (Ctrl + molette)" -> "Zoom arriere"), sinon son libelle.
+std::string overflowLabel(const std::string& tip, const std::string& label) {
+    std::string out = tip;
+    for (const char* cut : {" (", " : ", ". ", " ; "})
+        if (const auto at = out.find(cut); at != std::string::npos && at > 0) out.resize(at);
+    if (out.empty()) out = label;
+    return out;
+}
+} // namespace
+
+void HmiToolStrip::openMore() {
+    layoutItems(1);
+    if (overflow_.empty()) return;
+    if (!more_) {
+        more_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".plus")));
+        more_->itemChosen->connect([this](int a) { (void)trigger(a); }).release();
+    }
+    std::vector<ui::PopupMenu::Item> items;
+    for (const auto i : overflow_) {
+        const auto& it = items_[i];
+        ui::PopupMenu::Item m;
+        m.label = overflowLabel(it.tip, it.label);
+        m.id = it.action;
+        m.enabled = !it.enabled || it.enabled();
+        m.disabledReason = "pas maintenant";
+        if (it.checked) {
+            m.checkable = true;
+            m.checked = it.checked();
+        } else {
+            m.paintIcon = [glyph = it.glyph, on = m.enabled](const ui::PaintContext& ctx, gfx::Rect r) {
+                const float g = std::min(16.f, std::min(r.w, r.h));
+                drawHmiGlyph(ctx.r, glyph, {r.x + (r.w - g) / 2.f, r.y + (r.h - g) / 2.f, g, g},
+                             on ? ctx.theme.color.text : ctx.theme.color.textDisabled);
+            };
+        }
+        items.push_back(std::move(m));
+    }
+    more_->setItems(std::move(items));
+    more_->setBounds(bounds());
+    const auto s = ui::surfaceSize();
+    more_->openAt({moreRect_.x, moreRect_.bottom() + 2.f},
+                  s.w > 0.f ? s : gfx::Size{moreRect_.right() + 400.f, moreRect_.bottom() + 600.f});
+    invalidate();
 }
 
 gfx::Rect HmiToolStrip::rectOf(int action) const {
@@ -330,24 +423,45 @@ void HmiToolStrip::onPaint(const ui::PaintContext& ctx) {
         if (!it.label.empty() && !it.compact)
             textCentred(ctx, {it.rect.x + 29, it.rect.y, it.rect.w - 30, it.rect.h}, it.label, gfx::FontId{13}, col);
     }
+    // 1.12.30 : le bouton des outils qui ne tiennent pas.
+    if (moreRect_.w > 0.f) {
+        if (morePressed_) ctx.r.fillRoundedRect(moreRect_, ctx.theme.color.accent.withAlpha(90), 4);
+        else if (moreHot_ || (more_ && more_->isOpen())) ctx.r.fillRoundedRect(moreRect_, ctx.theme.color.text.withAlpha(24), 4);
+        textCentred(ctx, moreRect_, "\xC2\xBB", gfx::FontId{18}, ctx.theme.color.text);
+    }
     ctx.r.popClip();
 }
 
 ui::EventResult HmiToolStrip::onEvent(const ui::InputEvent& ev) {
     if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
         const int h = itemAt(m->pos);
-        if (h != hover_) {
+        const bool more = moreRect_.w > 0.f && moreRect_.contains(m->pos);
+        if (h != hover_ || more != moreHot_) {
             hover_ = h;
-            setTooltip(h >= 0 ? items_[static_cast<std::size_t>(h)].tip : std::string{});
+            moreHot_ = more;
+            setTooltip(h >= 0 ? items_[static_cast<std::size_t>(h)].tip
+                       : more ? std::string("Les autres outils : la barre est trop \xC3\xA9troite pour eux")
+                              : std::string{});
             invalidate();
         }
         return ui::EventResult::Ignored;
     }
     if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
         if (m->button != ui::MouseButton::Left) return ui::EventResult::Ignored;
+        if (moreRect_.w > 0.f && moreRect_.contains(m->pos)) {
+            morePressed_ = true;
+            invalidate();
+            return ui::EventResult::Consumed;
+        }
         pressed_ = itemAt(m->pos);
         invalidate();
         return pressed_ >= 0 ? ui::EventResult::Consumed : ui::EventResult::Ignored;
+    }
+    if (const auto* m = std::get_if<ui::MouseUp>(&ev); m && morePressed_) {
+        morePressed_ = false;
+        if (moreRect_.contains(m->pos)) openMore();
+        invalidate();
+        return ui::EventResult::Consumed;
     }
     if (const auto* m = std::get_if<ui::MouseUp>(&ev)) {
         const int was = pressed_;

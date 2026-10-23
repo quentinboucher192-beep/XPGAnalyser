@@ -50,8 +50,8 @@ HmiLanguageCompare::HmiLanguageCompare(std::string id, hmi::DocumentPtr doc) : u
     tools->add(TThree, HmiGlyph::LanguagesSide, "Trois langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te", "Par 3");
     tools->add(TFour, HmiGlyph::LanguagesSide, "Quatre langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te", "Par 4");
     tools->separator();
-    tools->add(TPrev, HmiGlyph::Backward, "Les langues d'avant (Maj + molette)");
-    tools->add(TNext, HmiGlyph::Forward, "Les langues suivantes (Maj + molette)");
+    tools->add(TPrev, HmiGlyph::ChevronLeft, "Les langues d'avant (Maj + molette)");
+    tools->add(TNext, HmiGlyph::ChevronRight, "Les langues suivantes (Maj + molette)");
     tools->add(TFit, HmiGlyph::ZoomFit, "Ajuster : la vue enti\xC3\xA8re dans chaque colonne (Ctrl + molette : zoomer)", "Ajuster");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setCheckedWhen(TPseudo, [this] { return pseudo_; });
@@ -233,7 +233,9 @@ void HmiLanguageCompare::onPaint(const ui::PaintContext& ctx) {
     }
     const std::size_t n = std::min<std::size_t>(static_cast<std::size_t>(perRow_), cols.size());
     const float colW = std::max(80.f, (board.w - kGap * static_cast<float>(n + 1)) / static_cast<float>(n));
-    const float colH = std::max(60.f, board.h - 2.f * kGap);
+    // Plus de langues que de colonnes : une ligne en bas dit ou on en est (sous les colonnes).
+    const float foot = cols.size() > n ? ctx.r.lineHeight(th.font.smallUi) + 4.f : 0.f;
+    const float colH = std::max(60.f, board.h - 2.f * kGap - foot);
     const float vw = static_cast<float>(std::max(1, src->width)), vh = static_cast<float>(std::max(1, src->height));
     lastFit_ = std::clamp(std::min((colW - 2.f * kInset) / vw, (colH - kHead - 2.f * kInset) / vh), 0.05f, 4.f);
     const float scale = fit_ ? lastFit_ : scale_;
@@ -299,7 +301,7 @@ void HmiLanguageCompare::onPaint(const ui::PaintContext& ctx) {
         const std::string where = "langues " + std::to_string(first_ + 1) + " \xC3\xA0 " + std::to_string(first_ + n) + " sur "
                                 + std::to_string(cols.size()) + "  \xC2\xB7  Maj + molette";
         const float ww = ctx.r.measure(where, f.smallUi).width;
-        ctx.r.drawText({board.right() - ww - 12.f, board.bottom() - ctx.r.lineHeight(f.smallUi) - 2.f}, where, f.smallUi, c.textMuted);
+        ctx.r.drawText({board.right() - ww - 12.f, board.y + kGap + colH + 3.f}, where, f.smallUi, c.textMuted);
     }
 }
 

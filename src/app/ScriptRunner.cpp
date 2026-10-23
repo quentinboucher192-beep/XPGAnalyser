@@ -15,6 +15,7 @@
 #include "Capture.hpp"
 #include "hmi/HmiCommPanes.hpp"         // lot 15 : les equipements, le reseau du PC
 #include "hmi/HmiEditor.hpp"
+#include "../hmi/HmiEdit.hpp"           // 1.12.30 : vue-survol vide (hitTest)
 #include "hmi/HmiEditHistoryDialog.hpp"   // 1.12.26 : les commandes historique-...
 #include "hmi/HmiValuePicker.hpp"        // 1.11.3 : le selecteur de valeur (selecteur-...)
 #include "hmi/HmiFunctionPicker.hpp"   // 1.12.17 : les commandes fonction-...
@@ -3379,20 +3380,40 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             });
         return found;
     };
+    // 1.12.30 : outils-plus - le menu ">>" de la premiere barre de l'onglet qui en a un (ses
+    // boutons qui ne tiennent pas).
+    if (cmd == "outils-plus") {
+        HmiToolStrip* found = nullptr;
+        if (auto* page = currentPage())
+            walk(*page, [&](ui::Widget& x) {
+                auto* strip = dynamic_cast<HmiToolStrip*>(&x);
+                if (!found && strip && shown(*strip) && strip->moreRect().w > 0.f) found = strip;
+            });
+        if (!found) { fail("outils-plus : aucune barre trop etroite dans l'onglet"); return Step::Next; }
+        click(centre(found->toSurface(found->moreRect())), MouseButton::Left, 1, {});
+        return Step::Yield;
+    }
     if (cmd == "outil") {
         auto* page = currentPage();
         auto* panel = bottomPanel();
         if (!page && !panel) { fail("aucun onglet"); return Step::Next; }
         gfx::Rect r{};
         bool ok = false;
+        HmiToolStrip* folded = nullptr;      // 1.12.30 : le bouton est dans le menu ">>" de sa barre
+        int foldedAction = -1;
         const auto look = [&](ui::Widget& x) {
             auto* strip = dynamic_cast<HmiToolStrip*>(&x);
             if (ok || !strip || !shown(*strip)) return;
             const int a = strip->actionByTip(arg(1));
-            if (a >= 0) { r = strip->rectOf(a); ok = r.w > 0.f; }
+            if (a >= 0) { r = strip->toSurface(strip->rectOf(a)); ok = r.w > 0.f; }
+            if (a >= 0 && !ok && !folded && strip->inOverflow(a)) { folded = strip; foldedAction = a; }
         };
         if (page) walk(*page, look);
         if (!ok && panel) walk(*panel, look);
+        if (!ok && folded) {
+            if (!folded->trigger(foldedAction)) fail("outil gris\xC3\xA9 : " + arg(1));
+            return Step::Yield;
+        }
         if (!ok) { fail("outil introuvable : " + arg(1)); return Step::Next; }
         click(centre(r), MouseButton::Left, 1, {});
         return Step::Yield;
@@ -6995,6 +7016,31 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         const auto vp = editor->canvas().viewport();
         if (w.size() > 2 && std::isdigit(static_cast<unsigned char>(arg(1).empty() ? 'x' : arg(1)[0]))) {
             moveTo(vp.toScreen(num(1), num(2)), mods());
+            return Step::Yield;
+        }
+        // 1.12.30 : vue-survol vide [alt] - un point de la vue montree ou il n'y a aucun objet,
+        // le plus pres de la selection (les cotes aux voisins et aux bords).
+        if (lower(arg(1)) == "vide") {
+            auto& c = editor->canvas();
+            const auto area = c.drawArea();
+            const auto units = hmi::edit::units(*view, c.selection());
+            const hmi::Box sel = units.empty() ? hmi::Box{vp.toViewX(area.x + area.w / 2), vp.toViewY(area.y + area.h / 2), 0, 0}
+                                               : hmi::edit::selectionBounds(*view, units);
+            const double cx = sel.x + sel.w / 2, cy = sel.y + sel.h / 2;
+            bool found = false;
+            gfx::Point best{};
+            double bestD = 0;
+            for (float y = area.y + 6.f; y < area.bottom() - 6.f; y += 8.f)
+                for (float x = area.x + 6.f; x < area.right() - 6.f; x += 8.f) {
+                    const double vx = vp.toViewX(x), vy = vp.toViewY(y);
+                    if (vx < 0 || vy < 0 || vx > view->width || vy > view->height) continue;
+                    if (vx >= sel.x && vx <= sel.right() && vy >= sel.y && vy <= sel.bottom()) continue;
+                    if (hmi::edit::hitTest(*view, vx, vy, hmi::kNoId, 4.0, true) != hmi::kNoId) continue;
+                    const double d = (vx - cx) * (vx - cx) + (vy - cy) * (vy - cy);
+                    if (!found || d < bestD) { found = true; bestD = d; best = {x, y}; }
+                }
+            if (!found) { fail("vue-survol vide : aucun point libre dans la vue montree"); return Step::Next; }
+            moveTo(best, mods());
             return Step::Yield;
         }
         for (const auto& o : view->objects)

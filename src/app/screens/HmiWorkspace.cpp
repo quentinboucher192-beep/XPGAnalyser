@@ -3719,6 +3719,10 @@ bool MainAnalysisScreen::openHmiHelpNow() {
             if (topic.empty() && doc->project.functionByName(word)) topic = "fonctions";
             if (topic.empty() && doc->project.variable(word)) topic = "variables-ihm";
         }
+        // 1.12.30 : la souris sur une regle de l'editeur : les regles, les guides, les cotes.
+        if (topic.empty())
+            if (auto* editor = dynamic_cast<HmiEditor*>(hmiTab(key)); editor && editor->canvas().pointerOnRuler())
+                topic = "regles-guides";
         // Lot 8 : dans l'editeur, la tuile survolee de la bibliotheque, sinon
         // l'objet choisi : la page de cet objet, avec son exemple anime.
         if (topic.empty())

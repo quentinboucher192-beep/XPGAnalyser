@@ -146,7 +146,9 @@ private:
 // Ce que la tache execute, dans l'ordre, en poids de lignes (une barre par entree).
 class TasksPane::Weights final : public ui::Widget {
 public:
-    explicit Weights(std::string id) : ui::Widget(std::move(id)) {}
+    explicit Weights(std::string id) : ui::Widget(std::move(id)) {
+        setZoomSupport(ui::ZoomSupport::Scaled);     // 1.12.30 : le zoom de la page
+    }
     // Lot API 8 : une recherche n'en montre qu'une partie - `ranks` : le rang de
     // chacune dans la tache, `query` : surlignee, `all` : combien en tout.
     void set(std::string task, std::vector<project::api::Entry> entries, std::vector<std::size_t> ranks = {},

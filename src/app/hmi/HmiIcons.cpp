@@ -787,6 +787,12 @@ void drawHmiGlyph(gfx::IRenderer& r, HmiGlyph g, const gfx::Rect& b, gfx::Color 
             R(1.5f, 3, 6, 10); R(8.5f, 3, 6, 10); L(3, 6, 6, 6, 0.9f); L(3, 8.5f, 6, 8.5f, 0.9f);
             L(10, 6, 13, 6, 0.9f); L(10, 8.5f, 12, 8.5f, 0.9f); F(10, 10.5f, 3.4f, 1.3f, c);
             break;
+        case HmiGlyph::ChevronLeft:     // 1.12.30 : les langues d'avant
+            L(10.5f, 3, 5.5f, 8, 1.8f); L(5.5f, 8, 10.5f, 13, 1.8f);
+            break;
+        case HmiGlyph::ChevronRight:    // 1.12.30 : les langues suivantes
+            L(5.5f, 3, 10.5f, 8, 1.8f); L(10.5f, 8, 5.5f, 13, 1.8f);
+            break;
     }
 }
 

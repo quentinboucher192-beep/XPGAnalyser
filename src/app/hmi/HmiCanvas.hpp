@@ -132,6 +132,8 @@ public:
     static constexpr float kRuler = 20.f;               // l'epaisseur d'une regle (px de l'ecran)
     void setRulersShown(bool on);
     [[nodiscard]] bool rulersShown() const noexcept { return rulers_; }
+    // La souris sur une regle (F1 : l'aide des regles, des guides et des cotes).
+    [[nodiscard]] bool pointerOnRuler() const { return pointerIn_ && rulerAt(pointer_) != 0; }
     [[nodiscard]] gfx::Rect topRuler() const noexcept;  // vides sans regles
     [[nodiscard]] gfx::Rect leftRuler() const noexcept;
     [[nodiscard]] gfx::Rect drawArea() const noexcept;  // la place du dessin (sans les regles)

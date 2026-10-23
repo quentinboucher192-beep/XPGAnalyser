@@ -1497,7 +1497,8 @@ void HmiCanvas::paintRulers(const ui::PaintContext& ctx, const HmiViewport& vp, 
         for (double x = from; x <= to && guard < 4000; x += minor, ++guard) {
             const float sx = vp.toScreen(x, 0).x;
             const bool isMajor = std::fabs(std::fmod(std::fabs(x) + 1e-6, major)) < minor * 0.5;
-            const float hgt = isMajor ? top.h - 4.f : (std::fabs(std::fmod(std::fabs(x) + 1e-6, major / 2)) < minor * 0.5 ? 7.f : 4.f);
+            // Le trait majeur s'arrete sous le nombre : "|500" ne se lit pas "1500".
+            const float hgt = isMajor ? 9.f : (std::fabs(std::fmod(std::fabs(x) + 1e-6, major / 2)) < minor * 0.5 ? 6.f : 3.f);
             ctx.r.fillRect({std::round(sx), top.bottom() - hgt, 1.f, hgt}, tick);
             if (isMajor) ctx.r.drawText({std::round(sx) + 3.f, top.y + 1.f}, std::to_string(static_cast<long>(std::lround(x))), f, c.textMuted);
         }
@@ -1511,7 +1512,7 @@ void HmiCanvas::paintRulers(const ui::PaintContext& ctx, const HmiViewport& vp, 
         for (double y = from; y <= to && guard < 4000; y += minor, ++guard) {
             const float sy = vp.toScreen(0, y).y;
             const bool isMajor = std::fabs(std::fmod(std::fabs(y) + 1e-6, major)) < minor * 0.5;
-            const float wid = isMajor ? left.w - 4.f : (std::fabs(std::fmod(std::fabs(y) + 1e-6, major / 2)) < minor * 0.5 ? 7.f : 4.f);
+            const float wid = isMajor ? 9.f : (std::fabs(std::fmod(std::fabs(y) + 1e-6, major / 2)) < minor * 0.5 ? 6.f : 3.f);
             ctx.r.fillRect({left.right() - wid, std::round(sy), wid, 1.f}, tick);
             if (isMajor) {
                 const std::string n = std::to_string(static_cast<long>(std::lround(y)));

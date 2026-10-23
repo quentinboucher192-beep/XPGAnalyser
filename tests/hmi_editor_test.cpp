@@ -35684,6 +35684,38 @@ void regles11230() {
         }
         check(guide && grid, "Generer : un guide hors de la vue, une grille de colonnes qui ne tient pas (Mise en page)");
     }
+    // ---- la barre trop etroite : les derniers boutons dans le menu ">>" (l'editeur a trois boutons de plus)
+    {
+        app::HmiToolStrip strip("essai.barre");
+        int fired = -1;
+        bool on = true;
+        auto link = strip.triggered->connect([&](int a) { fired = a; });
+        for (int a = 1; a <= 12; ++a) strip.add(a, app::HmiGlyph::Plus, "Outil " + std::to_string(a) + " (essai)");
+        strip.setCheckedWhen(12, [&] { return on; });
+        strip.setEnabledWhen(11, [] { return false; });
+        strip.setBounds({0, 0, 200, 36});
+        const auto more = strip.moreRect();
+        check(more.w > 0.f && more.right() <= 200.f && strip.inOverflow(12) && strip.inOverflow(11) && !strip.inOverflow(1),
+              "barre trop etroite : le bouton >> au bout, les derniers outils dedans");
+        check(strip.rectOf(12).w <= 0.f && strip.rectOf(1).w > 0.f && strip.rectOf(1).right() <= more.x,
+              "barre trop etroite : un outil se voit en entier ou passe dans le menu (aucun coupe par le bord)");
+        strip.openMore();
+        auto* menu = strip.moreMenu();
+        check(menu && menu->isOpen() && !menu->items().empty() && menu->items().back().label == "Outil 12"
+                  && menu->items().back().checkable && menu->items().back().checked,
+              "le menu >> : chaque outil cache, son infobulle en libelle (Outil 12), coche comme sur la barre");
+        if (menu) {
+            menu->itemChosen->emit(12);
+            menu->close();
+        }
+        check(fired == 12, "le menu >> : choisir un outil, c'est le cliquer");
+        fired = -1;
+        check(!strip.trigger(11) && fired == -1 && strip.trigger(2) && fired == 2, "trigger : un outil grise ne part pas, un autre oui");
+        strip.setBounds({0, 0, 1000, 36});
+        check(strip.moreRect().w <= 0.f && !strip.inOverflow(12) && strip.rectOf(12).w > 0.f,
+              "barre assez large : pas de menu >>, tous les outils montres");
+        (void)link;
+    }
 }
 
 // =============================================================================

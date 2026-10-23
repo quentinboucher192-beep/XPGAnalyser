@@ -37,6 +37,8 @@
 namespace domain { class Project; }
 namespace hmi::apivars { class Model; }   // 1.11.1 (R1111-6) : l'arbre de la bibliotheque
 
+namespace ui { class PopupMenu; }   // 1.12.30 : le menu ">>" de la barre
+
 namespace app {
 
 class HmiApiVarsView;     // 1.11.1 (R1111-6) : HmiApiVarsPane.hpp
@@ -97,6 +99,15 @@ public:
     struct ListKeys { int remove{0}, duplicate{0}, add{0}, up{0}, down{0}, duplicateDialog{0}; };
     void bindListKeys(ui::TableView& table);
     void bindListKeys(ui::TableView& table, ListKeys keys);
+    // 1.12.30 : TROP ETROITE, MEME SANS LES LIBELLES, les derniers boutons passent dans le menu
+    // du bouton ">>" au bout de la barre (leur infobulle en libelle, grises et coches comme sur la
+    // barre). Pour les scripts et les essais : un bouton y est-il, son cadre, ouvrir ce menu ;
+    // trigger : comme un clic sur le bouton (faux : grise, ou pas de tel bouton).
+    [[nodiscard]] bool inOverflow(int action) const;
+    [[nodiscard]] gfx::Rect moreRect() const;
+    void openMore();
+    [[nodiscard]] ui::PopupMenu* moreMenu() const noexcept { return more_; }
+    bool trigger(int action);
 protected:
     void            onPaint(const ui::PaintContext&) override;
     ui::EventResult onEvent(const ui::InputEvent&) override;
@@ -115,6 +126,11 @@ private:
     std::vector<Item> items_;
     int hover_{-1}, pressed_{-1};
     ui::TableView* focusTarget_{nullptr};   // 1.12.27 : la liste qui reprend la main a chaque clic
+    // 1.12.30 : les boutons qui ne tiennent pas (leurs rangs), le bouton du menu, le menu.
+    mutable std::vector<std::size_t> overflow_;
+    mutable gfx::Rect moreRect_{};
+    bool moreHot_{false}, morePressed_{false};
+    ui::PopupMenu* more_{nullptr};
 };
 
 // ------------------------------------------------------------ explorateur ---
