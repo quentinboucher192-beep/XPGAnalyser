@@ -95,6 +95,9 @@ public:
     // texte est `text` : ses objets et ce qui manque au projet, en un seul Ctrl+Z ; `at` :
     // le coin haut-gauche au point (Coller ici, un lacher). Faux : pas de telle copie.
     bool pasteShared(const std::string& text, std::optional<hmi::edit::Pt> at = std::nullopt);
+    // 1.12.27 : le glisser en cours sort de la fenetre : les objets restent ici (le
+    // deplacement s'annule) et leur copie part avec la souris (ui::dragText).
+    void dragOut();
     // Les variables connues (IHM et automate), pour savoir quel objet poser.
     void setVariableSource(std::function<std::vector<hmi::design::VarInfo>()> f) { variableSource_ = std::move(f); }
     void copyStyle();
@@ -247,6 +250,10 @@ private:
     int                    dragHandle_{-1};
     int                    dragGuide_{-1};
     unsigned               dragSerial_{0};
+    // 1.12.27 : tirer les objets hors de la fenetre (vers une autre fenetre d'IHM Studio).
+    bool                   dragOutOk_{false};      // ce glisser peut sortir (pas Alt : une copie posee ici)
+    int                    moveSegments_{0};       // les pas "Deplacer" de ce glisser (un arret de plus de 2 s : un de plus)
+    double                 lastMoveAt_{-1};        // l'heure du dernier pas (steady_clock, s)
     gfx::Point             pressScreen_{};
     hmi::edit::Pt          pressView_{};
     hmi::View              snapshot_;

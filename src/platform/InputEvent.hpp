@@ -68,10 +68,13 @@ struct TextInput   { std::string utf8; };
 struct FocusChange { bool gained; };
 struct WindowResize{ gfx::Size size; float dpiScale; };
 struct FileDropped { std::string path; gfx::Point pos; };
+// 1.12.27 : du texte lache sur la fenetre (une autre fenetre d'IHM Studio y glisse
+// des objets : leur liste ; Excel, le Bloc-notes : du texte).
+struct TextDropped { std::string text; gfx::Point pos; };
 
 using InputEvent = std::variant<MouseMove, MouseDown, MouseUp, MouseWheel,
                                 KeyDown, KeyUp, TextInput, FocusChange,
-                                WindowResize, FileDropped>;
+                                WindowResize, FileDropped, TextDropped>;
 
 // Returned by HandleEvent to drive propagation (see docs/ARCHITECTURE.md).
 enum class EventResult : std::uint8_t {

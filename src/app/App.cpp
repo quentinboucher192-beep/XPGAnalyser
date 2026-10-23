@@ -35,6 +35,7 @@
 #include "../project/BlockLibrary.hpp"
 #include "AboutDialog.hpp"                    // 1.10 (R2) : A propos d'XPGAnalyser
 #include "Fenetres.hpp"                       // 1.12.27 : plusieurs fenetres d'IHM Studio
+#include "GlisserDehors.hpp"                  // 1.12.27 : glisser des objets vers une autre fenetre
 #include "../project/GrafcetEdit.hpp"
 #include "../project/GrafcetRewrite.hpp"
 #include "../project/GrafcetRewrite2.hpp"   // 1.10 (R2) : Ctrl+Z des commandes du grafcet
@@ -599,6 +600,10 @@ core::Status App::initPlatform(const AppOptions& o) {
         return out;
 #endif
     };
+    // 1.12.27 : des objets tires hors de la fenetre (vers une autre fenetre d'IHM Studio).
+#if defined(_WIN32)
+    services.dragText = [](std::string_view text) { return glisser::texteDehors(text); };
+#endif
     ui::installPlatformServices(std::move(services));
     return core::ok();
 #else
@@ -2616,6 +2621,11 @@ void App::pumpEvents(bool& running) {
                 dropFile(*drop);
                 continue;
             }
+            // 1.12.27 : du texte lache (des objets d'une autre fenetre).
+            if (const auto* text = std::get_if<ui::TextDropped>(&*ev)) {
+                dropText(*text);
+                continue;
+            }
             // 1.11.1 (T1, R111-18) : la bulle des nouveautes, le calque du
             // tutoriel, puis les ecrans (voir deliverClientEvent).
             deliverClientEvent(*ev);
@@ -2670,6 +2680,21 @@ void App::dropFile(const ui::FileDropped& drop) {
     }
     // L'accueil (il ouvre ce qu'on lui depose), un dialogue, le poste : comme avant.
     if (menus_) (void)menus_->HandleEvent(drop);
+}
+
+// 1.12.27 : du texte lache sur la fenetre. Une vue ouverte dans l'editeur le prend (les
+// objets glisses depuis une autre fenetre s'y posent, une colonne de noms y devient des
+// etiquettes et des afficheurs) ; ailleurs, la barre d'etat le dit.
+void App::dropText(const ui::TextDropped& drop) {
+    if (drop.text.empty() || !menus_) return;
+    if (menus_->HandleEvent(drop) == ui::EventResult::Consumed) {
+#if XPG_HAVE_SDL3
+        if (window_) SDL_RaiseWindow(window_);
+#endif
+        return;
+    }
+    bus_.publish(StatusNotice{"L\xC3\xA2" "ch\xC3\xA9 ici : rien \xC3\xA0 en faire. Les objets d'une autre fen\xC3\xAAtre se l\xC3\xA2" "chent "
+                              "sur une vue ouverte dans l'\xC3\xA9" "diteur.", 6.0});
 }
 
 // ---- Lot API 8 : glisser n'importe quel fichier ----

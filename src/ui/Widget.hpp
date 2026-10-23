@@ -68,6 +68,10 @@ namespace ui {
         // d'explorateur ici (tests, console), `done` ne sera jamais appele.
         std::function<bool(const FilePick&, std::function<void(std::string)>)> pickFile;
         std::function<std::vector<std::string>()>                       clipboardFiles;
+        // 1.12.27 : glisser du texte HORS de la fenetre (vers une autre fenetre,
+        // une autre application), jusqu'au lacher : 1 depose, 0 annule. Absent :
+        // pas de glisser hors de la fenetre ici (les essais, Linux).
+        std::function<int(std::string_view)>                            dragText;
     };
 
     void        installPlatformServices(PlatformServices services);
@@ -81,6 +85,9 @@ namespace ui {
     [[nodiscard]] bool canPickFile();
     // Les fichiers copies dans l'Explorateur (vide : aucun, ou du texte).
     [[nodiscard]] std::vector<std::string> clipboardFiles();
+    // 1.12.27 : glisser du texte hors de la fenetre (-1 : pas ici ; 0 annule ; 1 depose).
+    int                dragText(std::string_view utf8);
+    [[nodiscard]] bool canDragText();
     // Pour les sessions rejouees : la prochaine reponse de l'explorateur (il
     // ne s'ouvre pas), et le contenu "fichiers" du presse-papiers.
     void        queueFilePick(std::string answer);

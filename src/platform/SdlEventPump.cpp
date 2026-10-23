@@ -164,6 +164,11 @@ std::optional<ui::InputEvent> translate(const SDL_Event& e) {
             return ui::FileDropped{e.drop.data ? std::string(e.drop.data) : std::string{},
                                    {e.drop.x, e.drop.y}};
 
+        // 1.12.27 : du texte lache (les objets glisses depuis une autre fenetre : leur liste).
+        case SDL_EVENT_DROP_TEXT:
+            return ui::TextDropped{e.drop.data ? std::string(e.drop.data) : std::string{},
+                                   {e.drop.x, e.drop.y}};
+
         default:
             return std::nullopt;
     }

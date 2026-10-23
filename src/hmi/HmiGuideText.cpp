@@ -902,6 +902,57 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Demarrer / fenetres (1.12.27)
+        {"fenetres", "Plusieurs fen\xC3\xAAtres : copier d'un projet \xC3\xA0 l'autre", "D\xC3\xA9marrer",
+         "Deux projets c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, chacun dans sa fen\xC3\xAAtre : on copie des objets dans "
+         "l'une (Ctrl+C) et on les colle dans l'autre (Ctrl+V), ou on les glisse d'une fen\xC3\xAAtre \xC3\xA0 "
+         "l'autre. Ce dont ils ont besoin les suit : leurs symboles, leurs images, leurs styles, les variables "
+         "IHM qu'ils lisent.",
+         {
+             {K::Heading, "Ouvrir une autre fen\xC3\xAAtre", {}},
+             {K::Bullet, "**Projet \xE2\x80\xBA Nouvelle fen\xC3\xAAtre** (**Ctrl+Maj+N**), ou le clic droit du menu "
+                         "principal \xE2\x80\xBA Nouvelle fen\xC3\xAAtre : une fen\xC3\xAAtre vide, o\xC3\xB9 l'on ouvre "
+                         "l'autre projet.", {}},
+             {K::Bullet, "Le clic droit sur la carte d'un projet, dans le menu principal \xE2\x80\xBA **Ouvrir dans une "
+                         "nouvelle fen\xC3\xAAtre** : le projet s'ouvre \xC3\xA0 c\xC3\xB4t\xC3\xA9 de celui en cours.", {}},
+             {K::Bullet, "Relancer IHM Studio (son ic\xC3\xB4ne, un double-clic sur un projet) ram\xC3\xA8ne toujours la "
+                         "fen\xC3\xAAtre d\xC3\xA9j\xC3\xA0 ouverte : une autre fen\xC3\xAAtre se demande.", {}},
+             {K::Heading, "Copier, coller d'une fen\xC3\xAAtre \xC3\xA0 l'autre", {}},
+             {K::Step, "Dans la premi\xC3\xA8re fen\xC3\xAAtre, choisis les objets et copie-les (**Ctrl+C**).", "1"},
+             {K::Step, "Dans l'autre, ouvre la vue et colle (**Ctrl+V**, ou clic droit \xE2\x80\xBA **Coller ici** "
+                         "pour les poser au point du clic).", "2"},
+             {K::Paragraph, "Ce qui **manque** au projet est **ajout\xC3\xA9** : les symboles des instances (et ceux "
+                         "qu'ils contiennent), les popups que leurs actions ouvrent, les images, les styles nomm\xC3\xA9s, "
+                         "les variables IHM lues ou \xC3\xA9" "crites, leurs types et les fonctions IHM appel\xC3\xA9" "es. Ce "
+                         "que le projet a **d\xC3\xA9j\xC3\xA0** (le m\xC3\xAAme nom) **reste le sien**. La barre d'\xC3\xA9tat "
+                         "dit d'o\xC3\xB9 viennent les objets, ce qui est ajout\xC3\xA9 et ce qui est gard\xC3\xA9 ; **un seul "
+                         "Ctrl+Z** annule le collage entier. Un nom d'objet libre est gard\xC3\xA9 (les scripts le "
+                         "citent) ; un nom pris re\xC3\xA7oit le suivant libre.", {}},
+             {K::Paragraph, "Cela marche aussi dans **une seule fen\xC3\xAAtre** : copier dans un projet, en ouvrir un "
+                         "autre, coller.", {}},
+             {K::Heading, "Glisser d'une fen\xC3\xAAtre \xC3\xA0 l'autre", {}},
+             {K::Paragraph, "Tire les objets choisis **hors de la fen\xC3\xAAtre** et l\xC3\xA2" "che-les sur une vue de "
+                         "l'autre : ils s'y posent au point du l\xC3\xA2" "cher, avec ce qui leur manque, comme un "
+                         "collage. Dans la premi\xC3\xA8re fen\xC3\xAAtre, **rien ne bouge** : c'est une copie. \xC3\x89" "chap "
+                         "pendant le glisser l'annule. L\xC3\xA2" "ch\xC3\xA9" "e sur Excel ou le Bloc-notes, c'est la liste "
+                         "des objets (nom, genre, place, taille, valeur) qui arrive. Une colonne de noms de variables "
+                         "l\xC3\xA2" "ch\xC3\xA9" "e sur une vue y devient des \xC3\xA9tiquettes et des afficheurs, comme Ctrl+V.", {}},
+             {K::Heading, "Le m\xC3\xAAme projet dans deux fen\xC3\xAAtres", {}},
+             {K::Paragraph, "Ouvrir un projet d\xC3\xA9j\xC3\xA0 ouvert dans une autre fen\xC3\xAAtre se demande "
+                         "d'abord : deux fen\xC3\xAAtres qui enregistrent le m\xC3\xAAme projet effacent les changements "
+                         "l'une de l'autre. **L'ouvrir quand m\xC3\xAAme** reste possible (pour le relire) ; pour copier, "
+                         "ouvre plut\xC3\xB4t l'autre projet.", {}},
+         },
+         {"excel", "symboles", "styles-nommes", "paquets-de-vues", "onglets"},
+         {"Nouvelle fen\xC3\xAAtre", "Ctrl+Maj+N", "plusieurs fen\xC3\xAAtres", "deux fen\xC3\xAAtres", "plusieurs instances",
+          "Ouvrir dans une nouvelle fen\xC3\xAAtre", "copier d'un projet \xC3\xA0 l'autre", "glisser d'une fen\xC3\xAAtre \xC3\xA0 l'autre",
+          "L'ouvrir quand m\xC3\xAAme"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}},
         // ---- Demarrer / dossiers
         {"dossiers", "Ranger en dossiers : glisser, d\xC3\xA9poser", "D\xC3\xA9marrer",
          "Les listes de l'IHM se rangent en dossiers, comme les variables IHM : les vues, les popups, les "

@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -420,16 +421,7 @@ void HmiCanvas::copySelection() {
     for (const auto& o : v->objects) if (wanted.count(o.id)) c.objects.push_back(o);
     // Lot 20 : pour Excel, la liste des objets copies (nom, genre, place, taille,
     // ce qu'ils montrent) ; collee dans une vue, elle redonne les objets.
-    std::string list = "Nom\tGenre\tX\tY\tLargeur\tHauteur\tValeur\r\n";
-    const auto num = [](double d) { return hmi::formatNumber(std::round(d * 10) / 10); };
-    for (const auto& o : c.objects) {
-        if (o.parent != kNoId && wanted.count(o.parent)) continue;      // le contenu d'un groupe : le groupe suffit
-        std::string value = o.expr("value");
-        if (value.empty()) value = o.text("text");
-        for (auto& ch : value) if (ch == '\t' || ch == '\r' || ch == '\n') ch = ' ';
-        list += o.name + "\t" + std::string(hmi::kindLabel(o.kind)) + "\t" + num(o.number("x")) + "\t" + num(o.number("y")) + "\t"
-              + num(o.number("w")) + "\t" + num(o.number("h")) + "\t" + value + "\r\n";
-    }
+    const std::string list = partage::texteDesObjets(c.objects);
     c.systemText = list;
     c.fromDoc = doc_.get();
     ui::setClipboardText(list);
@@ -454,6 +446,13 @@ void HmiCanvas::paste() {
     // Lot 20 : le presse-papiers du systeme a change depuis la derniere copie
     // d'objets (une colonne copiee dans Excel) : ce sont des variables.
     if (const std::string sys = ui::clipboardText(); !sys.empty() && sys != c.systemText) {
+        // 1.12.27 : la liste des objets d'une autre fenetre dont la copie n'est plus la :
+        // ce ne sont pas des noms de variables.
+        if (partage::listeObjets(sys)) {
+            status->emit("Coller : ce sont les objets d'une autre fen\xC3\xAAtre, mais leur copie n'est plus l\xC3\xA0 "
+                         "(recopie-les dans l'autre fen\xC3\xAAtre).");
+            return;
+        }
         if (pasteNames(sys) > 0) return;
         if (c.objects.empty()) {
             status->emit("Coller : le presse-papiers ne contient ni objets ni noms de variables");
@@ -711,6 +710,54 @@ bool HmiCanvas::pasteShared(const std::string& text, std::optional<hmi::edit::Pt
     setSelection(r.poses);
     status->emit(partage::message(*copie, r));
     return true;
+}
+
+void HmiCanvas::dragOut() {
+    dragOutOk_ = false;
+    const auto* v = view();
+    // Les objets tires, a leur place de depart, avec leur contenu.
+    std::set<Id> wanted;
+    for (Id id : hmi::edit::units(snapshot_, selection_)) {
+        wanted.insert(id);
+        for (Id d : snapshot_.descendantsOf(id)) wanted.insert(d);
+    }
+    std::vector<hmi::Object> objets;
+    for (const auto& o : snapshot_.objects)
+        if (wanted.count(o.id)) objets.push_back(o);
+    // Ici, rien ne bouge : le deplacement s'annule (Ctrl+Z s'il tient en un pas ;
+    // sinon la place de depart, remise en un pas de plus).
+    drag_ = Drag::None;
+    snapX_.clear();
+    snapY_.clear();
+    spacing_.clear();
+    if (moveSegments_ == 1) {
+        historyRequested->emit(false);
+    } else if (moveSegments_ > 1 && v) {
+        const hmi::View start = snapshot_;
+        const auto sel = wanted;
+        (void)edit("D\xC3\xA9placer", [&](hmi::Project&, hmi::View& vv) {
+            for (auto& o : vv.objects)
+                if (sel.count(o.id))
+                    if (const auto* was = start.object(o.id)) o = *was;
+        }, "move:" + std::to_string(dragSerial_));
+    }
+    moveSegments_ = 0;
+    invalidate();
+    if (objets.empty() || !doc_) return;
+    const std::string texte = partage::texteDesObjets(objets);
+    if (!partage::publier(doc_->project, viewId_, objets, texte, partage::Canal::Glisser)) {
+        status->emit("Glisser vers une autre fen\xC3\xAAtre : la copie ne s'\xC3\xA9" "crit pas dans le dossier des fen\xC3\xAAtres.");
+        return;
+    }
+    std::size_t haut = 0;
+    for (const auto& o : objets)
+        if (!wanted.count(o.parent)) ++haut;
+    const int r = ui::dragText(texte);
+    if (r > 0)
+        status->emit(std::to_string(haut) + (haut == 1 ? " objet copi\xC3\xA9" : " objets copi\xC3\xA9s")
+                     + " vers l'autre fen\xC3\xAAtre (ici, rien ne bouge).");
+    else
+        status->emit("Glisser vers une autre fen\xC3\xAAtre : annul\xC3\xA9 (\xC3\x89" "chap, ou l\xC3\xA2" "ch\xC3\xA9 sur rien).");
 }
 
 void HmiCanvas::pasteAt(gfx::Point screen) {
@@ -1330,6 +1377,27 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
     const auto* v = view();
     if (!v) return ui::EventResult::Ignored;
 
+    // 1.12.27 : du texte lache sur la vue - les objets glisses depuis une autre fenetre
+    // (leur copie publiee) se posent la ; une colonne de noms y devient des etiquettes
+    // et des afficheurs (comme Ctrl+V).
+    if (const auto* t = std::get_if<ui::TextDropped>(&ev)) {
+        if (!bounds().contains(t->pos)) return ui::EventResult::Ignored;
+        Pt at = toView(t->pos);
+        if (v->grid.snapGrid) {
+            at.x = hmi::edit::snapToGrid(at.x, v->grid.step);
+            at.y = hmi::edit::snapToGrid(at.y, v->grid.step);
+        }
+        if (pasteShared(t->text, at)) return ui::EventResult::Consumed;
+        if (partage::listeObjets(t->text)) {
+            status->emit("L\xC3\xA2" "cher : les objets d'une autre fen\xC3\xAAtre, mais leur copie n'est plus l\xC3\xA0 : rien n'est pos\xC3\xA9.");
+            return ui::EventResult::Consumed;
+        }
+        pressView_ = at;
+        if (pasteNames(t->text) == 0)
+            status->emit("L\xC3\xA2" "cher : ni des objets d'une autre fen\xC3\xAAtre, ni des noms de variables.");
+        return ui::EventResult::Consumed;
+    }
+
     if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
         grabFocus();
         downHere_ = true;
@@ -1490,6 +1558,9 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
             ++dragSerial_;
             startBox_ = hmi::edit::selectionBounds(*v, selection_);
             drag_ = Drag::Move;
+            dragOutOk_ = !m->mods.alt;     // 1.12.27 : Alt pose une copie ici : elle ne sort pas
+            moveSegments_ = 0;
+            lastMoveAt_ = -1;
             return ui::EventResult::Consumed;
         }
         // Dans le vide.
@@ -1550,6 +1621,14 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
                 invalidate();
                 break;
             case Drag::Move: {
+                // 1.12.27 : tire hors de la fenetre - vers une autre fenetre d'IHM Studio.
+                if (dragOutOk_ && ui::canDragText()) {
+                    const auto s = ui::surfaceSize();
+                    if (s.w > 0 && s.h > 0 && (m->pos.x < 0 || m->pos.y < 0 || m->pos.x >= s.w || m->pos.y >= s.h)) {
+                        dragOut();
+                        return ui::EventResult::Consumed;
+                    }
+                }
                 hmi::edit::SnapResult snap;
                 snap.dx = dx;
                 snap.dy = dy;
@@ -1559,10 +1638,15 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
                 spacing_ = snap.spacing;
                 const auto sel = selection_;
                 const hmi::View start = snapshot_;
-                edit("D\xC3\xA9placer", [&](hmi::Project&, hmi::View& vv) {
+                if (edit("D\xC3\xA9placer", [&](hmi::Project&, hmi::View& vv) {
                     vv = start;
                     hmi::edit::move(vv, sel, snap.dx, snap.dy);
-                }, "move:" + std::to_string(dragSerial_));
+                }, "move:" + std::to_string(dragSerial_))) {
+                    // 1.12.27 : un arret de plus de 2 s et la pile commence un autre pas (dragOut).
+                    const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                    if (moveSegments_ == 0 || now - lastMoveAt_ > 2.0) ++moveSegments_;
+                    lastMoveAt_ = now;
+                }
                 break;
             }
             case Drag::Resize: {

@@ -86,6 +86,10 @@ namespace ui {
         return g_services.clipboardFiles ? g_services.clipboardFiles() : std::vector<std::string>{};
     }
 
+    // 1.12.27 : glisser du texte hors de la fenetre.
+    int dragText(std::string_view utf8) { return g_services.dragText ? g_services.dragText(utf8) : -1; }
+    bool canDragText() { return static_cast<bool>(g_services.dragText); }
+
     void queueFilePick(std::string answer) { g_pickAnswers.push_back(std::move(answer)); }
     void setScriptedClipboardFiles(std::vector<std::string> files) { g_scriptedClipboardFiles = std::move(files); }
 
@@ -305,6 +309,7 @@ namespace ui {
             if (const auto* m = std::get_if<MouseUp>(&ev))     return &m->pos;
             if (const auto* m = std::get_if<MouseWheel>(&ev))  return &m->pos;
             if (const auto* m = std::get_if<FileDropped>(&ev)) return &m->pos;
+            if (const auto* m = std::get_if<TextDropped>(&ev)) return &m->pos;   // 1.12.27
             return nullptr;
         }
     } // namespace

@@ -18652,8 +18652,10 @@ void centreAide111() {
     }
     // 1.10.2 (fusion) : le guide passe de 216 a 222 sujets ; Demarrer gagne "plantages" (15 + 7 = 22),
     // Concevoir les vues en gagne 5 (l'IHM : 205). L'automate ne change pas (2 + 14).
-    check(ix.count(hc::Chapter::Start) == 23 && ix.count(hc::Chapter::Plc) == 16,
-          "centre : Demarrer 23 (21 de la maquette + plantages, 1.10.2 ; la legende de l'explorateur, 1.11.23) et L'automate 16");
+    // 1.12.27 : + Plusieurs fenetres (Demarrer 24).
+    check(ix.count(hc::Chapter::Start) == 24 && ix.count(hc::Chapter::Plc) == 16,
+          "centre : Demarrer 24 (21 de la maquette + plantages, 1.10.2 ; la legende de l'explorateur, 1.11.23 ; plusieurs fenetres, 1.12.27) "
+          "et L'automate 16");
     check(ix.find("api-dossiers") && ix.find("dossiers") && ix.find("api-alarmes") && ix.find("alarmes"),
           "centre : api-dossiers et dossiers, api-alarmes et alarmes, sans collision");
     check(ix.duplicates().empty(), "centre : aucune cle en double");
@@ -35153,6 +35155,69 @@ void fenetres11227() {
     const std::size_t avant = a.v().objects.size();
     a.editor->canvas().paste();
     check(a.v().objects.size() == avant + 3, "1.12.27 : dans le projet de la copie, Ctrl+V colle comme avant");
+    (void)a.stack.undo();   // les copies posees sur les originaux : la souris attraperait la copie
+
+    // ---- glisser hors de la fenetre A, lacher dans la fenetre B
+    {
+        std::string emporte;
+        int appels = 0;
+        ui::PlatformServices s;
+        s.measureWidth = [](std::string_view t, gfx::FontId) { return 8.f * static_cast<float>(t.size()); };
+        s.lineHeight = [](gfx::FontId f) { return static_cast<float>(f.v) + 4.f; };
+        s.clipboardGet = [] { return essaiPressePapiers(); };
+        s.clipboardSet = [](std::string_view t) { essaiPressePapiers() = std::string(t); };
+        s.surfaceSize = [] { return gfx::Size{2000.f, 1000.f}; };
+        s.dragText = [&](std::string_view t) { emporte = std::string(t); ++appels; return 1; };
+        ui::installPlatformServices(std::move(s));
+        a.editor->setHistory([&](bool redo) { (void)(redo ? a.stack.redo() : a.stack.undo()); });
+        essaiPressePapiers() = "rien a voir";
+        const auto* r0 = a.v().object(rect);
+        const double x0 = r0->number("x"), y0 = r0->number("y");
+        const std::size_t pasA = a.stack.done().size();
+        a.editor->canvas().setSelection({rect});
+        const auto centre = a.screen(x0 + r0->number("w") / 2, y0 + r0->number("h") / 2);
+        a.down(centre);
+        a.move({centre.x + 30.f, centre.y + 10.f});
+        a.move({centre.x + 60.f, centre.y + 20.f});
+        check(std::abs(a.v().object(rect)->number("x") - x0) > 1.0, "1.12.27 : le glisser deplace d'abord l'objet dans sa vue");
+        a.move({-20.f, centre.y});   // hors de la fenetre
+        a.up({-20.f, centre.y});
+        check(appels == 1 && pa::listeObjets(emporte) && emporte.find(nomRect) != std::string::npos,
+              "1.12.27 : tire hors de la fenetre : la liste des objets part avec la souris");
+        check(std::abs(a.v().object(rect)->number("x") - x0) < 0.01 && std::abs(a.v().object(rect)->number("y") - y0) < 0.01
+                  && a.stack.done().size() == pasA,
+              "1.12.27 : ici, rien ne bouge (le deplacement s'annule, sans pas de plus)");
+        check(fs::exists(pa::chemin(pa::Canal::Glisser)) && pa::lire(texte), "1.12.27 : le glisser a son paquet ; celui de Ctrl+C reste");
+        // Lache dans B : les objets s'y posent au point du lacher, avec ce qui manque.
+        const std::size_t avantB = b.v().objects.size();
+        const auto point = b.screen(600, 400);
+        (void)b.editor->canvas().dispatch(ui::TextDropped{emporte, point});
+        check(b.v().objects.size() == avantB + 1, "1.12.27 : lache dans l'autre fenetre : l'objet s'y pose");
+        bool place = false;
+        for (const auto& o : b.v().objects)
+            if (o.text("namedStyle") == "Alarme" && std::abs(o.number("x") - 600) < 0.5 && std::abs(o.number("y") - 400) < 0.5) place = true;
+        check(place, "1.12.27 : au point du lacher (son coin haut-gauche)");
+        // Une colonne de noms lachee (Excel) : des etiquettes et des afficheurs, au point.
+        const std::size_t avantNoms = b.v().objects.size();
+        (void)b.editor->canvas().dispatch(ui::TextDropped{"Niveau_Cuve\r\nPression\r\n", b.screen(100, 500)});
+        check(b.v().objects.size() == avantNoms + 4, "1.12.27 : une colonne de noms lachee : une etiquette et un afficheur par nom");
+        // La liste d'objets sans sa copie (l'autre fenetre l'a remplacee) : rien ne se pose.
+        const std::size_t avantListe = b.v().objects.size();
+        (void)b.editor->canvas().dispatch(ui::TextDropped{"Nom\tGenre\tX\tY\tLargeur\tHauteur\tValeur\r\nBouton_9\tBouton\t1\t2\t3\t4\t\r\n",
+                                                         b.screen(300, 300)});
+        check(b.v().objects.size() == avantListe, "1.12.27 : une liste d'objets sans sa copie : rien n'est pose (ce ne sont pas des variables)");
+        // Alt+glisser (une copie posee ici) ne sort pas de la fenetre.
+        appels = 0;
+        const auto* r1 = a.v().object(rect);
+        const auto c1 = a.screen(r1->number("x") + r1->number("w") / 2, r1->number("y") + r1->number("h") / 2);
+        const ui::KeyMods alt{false, false, true, false};
+        a.down(c1, alt);
+        a.move({c1.x + 20.f, c1.y}, alt);
+        a.move({-20.f, c1.y}, alt);
+        a.up({-20.f, c1.y});
+        check(appels == 0, "1.12.27 : Alt+glisser (une copie posee ici) reste dans la fenetre");
+        installerPressePapiers();
+    }
     fs::remove_all(dir, ec);
     fe::poserDossier({});
 }

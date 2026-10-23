@@ -334,6 +334,8 @@ public:
     // dialogue, le poste d'exploitation : comme avant. Les fichiers d'un meme
     // depot arrivent un a un dans la meme image : ils sont donnes ensemble.
     void dropFile(const ui::FileDropped& drop);
+    // 1.12.27 : du texte lache (des objets glisses depuis une autre fenetre) : a ce qui est dessous.
+    void dropText(const ui::TextDropped& drop);
     // ---- Lot API 8 : glisser n'importe quel fichier ----
     //  Un fichier lache sur une fenetre detachee que sa page n'a pas pris
     //  (DetachedWindows) : la question du depot se pose dans la principale,

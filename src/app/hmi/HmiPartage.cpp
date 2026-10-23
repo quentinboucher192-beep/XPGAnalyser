@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -59,9 +60,29 @@ std::string empreinte(std::string_view texteSysteme) {
     return buf;
 }
 
-std::string chemin() { return (fenetres::dossier() / "presse-papiers.xpgvues").string(); }
+std::string chemin(Canal canal) {
+    return (fenetres::dossier() / (canal == Canal::Glisser ? "glisser.xpgvues" : "presse-papiers.xpgvues")).string();
+}
 
-bool publier(const hmi::Project& p, Id from, const std::vector<hmi::Object>& objects, const std::string& texteSysteme) {
+std::string texteDesObjets(const std::vector<hmi::Object>& objects) {
+    std::set<Id> ids;
+    for (const auto& o : objects) ids.insert(o.id);
+    std::string list = "Nom\tGenre\tX\tY\tLargeur\tHauteur\tValeur\r\n";
+    const auto num = [](double d) { return hmi::formatNumber(std::round(d * 10) / 10); };
+    for (const auto& o : objects) {
+        if (o.parent != kNoId && ids.count(o.parent)) continue;      // le contenu d'un groupe : le groupe suffit
+        std::string value = o.expr("value");
+        if (value.empty()) value = o.text("text");
+        for (auto& ch : value) if (ch == '\t' || ch == '\r' || ch == '\n') ch = ' ';
+        list += o.name + "\t" + std::string(hmi::kindLabel(o.kind)) + "\t" + num(o.number("x")) + "\t" + num(o.number("y")) + "\t"
+              + num(o.number("w")) + "\t" + num(o.number("h")) + "\t" + value + "\r\n";
+    }
+    return list;
+}
+
+bool listeObjets(std::string_view texte) { return texte.rfind("Nom\tGenre\tX\tY\tLargeur\tHauteur", 0) == 0; }
+
+bool publier(const hmi::Project& p, Id from, const std::vector<hmi::Object>& objects, const std::string& texteSysteme, Canal canal) {
     if (objects.empty() || normalise(texteSysteme).empty()) return false;
     // Une vue de passage, dans une copie du projet : ce qu'elle emporte se cherche
     // comme pour une vue exportee (les symboles, les popups, les images, les styles,
@@ -92,26 +113,27 @@ bool publier(const hmi::Project& p, Id from, const std::vector<hmi::Object>& obj
     fs::create_directories(dir, ec);
     // Ecrit a cote puis renomme : une fenetre qui lit au meme moment voit l'ancien
     // paquet ou le nouveau, jamais la moitie d'un.
-    const fs::path part = dir / ("presse-papiers." + std::to_string(fenetres::processusCourant()) + ".part");
+    const std::string cible = chemin(canal);
+    const fs::path part = dir / ((canal == Canal::Glisser ? "glisser." : "presse-papiers.") + std::to_string(fenetres::processusCourant()) + ".part");
     if (!hmi::pkg::writeFile(pk, part.string())) {
         fs::remove(part, ec);
         return false;
     }
-    fs::rename(part, chemin(), ec);
+    fs::rename(part, cible, ec);
     if (ec) {
-        fs::remove(chemin(), ec);
+        fs::remove(cible, ec);
         ec.clear();
-        fs::rename(part, chemin(), ec);
+        fs::rename(part, cible, ec);
     }
     if (ec) fs::remove(part, ec);
     return !ec;
 }
 
-std::optional<Copie> lire(const std::string& texteSysteme) {
-    if (normalise(texteSysteme).empty()) return std::nullopt;
+namespace {
+std::optional<Copie> lireCanal(const std::string& texteSysteme, Canal canal) {
     std::error_code ec;
-    if (!fs::exists(chemin(), ec)) return std::nullopt;
-    auto r = hmi::pkg::readFile(chemin());
+    if (!fs::exists(chemin(canal), ec)) return std::nullopt;
+    auto r = hmi::pkg::readFile(chemin(canal));
     if (!r) return std::nullopt;
     Copie c;
     c.paquet = std::move(r).value();
@@ -130,6 +152,13 @@ std::optional<Copie> lire(const std::string& texteSysteme) {
     if (!vueDe(c)) return std::nullopt;
     c.projet = c.paquet.manifest.fromProject;
     return c;
+}
+} // namespace
+
+std::optional<Copie> lire(const std::string& texteSysteme) {
+    if (normalise(texteSysteme).empty()) return std::nullopt;
+    if (auto c = lireCanal(texteSysteme, Canal::Glisser)) return c;
+    return lireCanal(texteSysteme, Canal::Copie);
 }
 
 std::size_t objetsDe(const Copie& c) {

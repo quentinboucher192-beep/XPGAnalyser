@@ -488,6 +488,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\project\SectionCompare.cpp" />
     <ClCompile Include="src\app\AboutDialog.cpp" />
     <ClCompile Include="src\app\Fenetres.cpp" />
+    <ClCompile Include="src\app\GlisserDehors.cpp" />
     <ClCompile Include="src\app\ConditionsNotice.cpp" />
     <ClCompile Include="src\app\CrashDialogs.cpp" />
     <ClCompile Include="src\app\Disposition.cpp" />
@@ -936,6 +937,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\project\SectionCompare.hpp" />
     <ClInclude Include="src\app\AboutDialog.hpp" />
     <ClInclude Include="src\app\Fenetres.hpp" />
+    <ClInclude Include="src\app\GlisserDehors.hpp" />
     <ClInclude Include="src\app\ConditionsNotice.hpp" />
     <ClInclude Include="src\app\CrashDialogs.hpp" />
     <ClInclude Include="src\app\Disposition.hpp" />

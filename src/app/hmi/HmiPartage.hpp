@@ -23,6 +23,7 @@
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiPackage.hpp"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -34,16 +35,29 @@ namespace app::partage {
 // de ligne en trop : le systeme peut les changer d'une fenetre a l'autre.
 [[nodiscard]] std::string empreinte(std::string_view texteSysteme);
 
+// Deux paquets : celui de Ctrl+C, celui d'un glisser hors de la fenetre - un glisser
+// ne remplace pas la copie que le presse-papiers porte encore.
+enum class Canal : std::uint8_t { Copie, Glisser };
+
 // Le fichier du paquet (dans le dossier des fenetres).
-[[nodiscard]] std::string chemin();
+[[nodiscard]] std::string chemin(Canal = Canal::Copie);
+
+// Le texte des objets pour Excel (et pour le presse-papiers du systeme) : une ligne
+// de titres, puis nom, genre, place, taille, valeur ; le contenu d'un groupe : le
+// groupe suffit. listeObjets : un tel texte (sa ligne de titres).
+[[nodiscard]] std::string texteDesObjets(const std::vector<hmi::Object>& objects);
+[[nodiscard]] bool        listeObjets(std::string_view texte);
 
 // Publier la copie : les objets `objects` (avec leurs enfants) de la vue `from`
 // du projet `p` ; `texteSysteme` : ce que la copie a mis dans le presse-papiers
-// du systeme. Faux : rien d'ecrit (le dossier refuse) - la copie reste locale.
-bool publier(const hmi::Project& p, hmi::Id from, const std::vector<hmi::Object>& objects, const std::string& texteSysteme);
+// du systeme (ou ce que le glisser emporte). Faux : rien d'ecrit (le dossier
+// refuse) - la copie reste locale.
+bool publier(const hmi::Project& p, hmi::Id from, const std::vector<hmi::Object>& objects, const std::string& texteSysteme,
+             Canal = Canal::Copie);
 
-// La copie publiee dont le texte est `texteSysteme` (le presse-papiers du systeme,
-// maintenant). nullopt : aucune, ou une autre copie depuis.
+// La copie publiee (par Ctrl+C ou par un glisser) dont le texte est `texteSysteme`
+// (le presse-papiers du systeme maintenant, ou ce qui est lache). nullopt : aucune,
+// ou une autre copie depuis.
 struct Copie {
     hmi::pkg::Package paquet;
     std::string       projet;     // le projet d'origine

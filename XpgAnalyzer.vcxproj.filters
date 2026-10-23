@@ -1099,6 +1099,9 @@
     <ClCompile Include="src\app\Fenetres.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\GlisserDehors.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\ConditionsNotice.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -2423,6 +2426,9 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\Fenetres.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\GlisserDehors.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ConditionsNotice.hpp">
