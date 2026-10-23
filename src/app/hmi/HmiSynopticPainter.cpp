@@ -1264,7 +1264,7 @@ void drawSpeedDrive(const Ctx& c, const Sym& s) {
     }
     // Sans valeurs montrees, le sens en chevrons sous les ondes (en marche).
     if (!showValues && s.on && !s.fault && side >= 24)
-        chevrons(c, qx + side * 0.52, qy + side * 0.8, side * 0.36, side * 0.12, forward, s.moving, s.t, stateCol, std::max(1.0, s.lw * 0.8));
+        chevrons(c, qx + side * 0.42, qy + side * 0.86, side * 0.34, side * 0.1, forward, s.moving, s.t, stateCol, std::max(1.0, s.lw * 0.8));
     // Local / distance sans valeurs montrees : une pastille sur le coin haut droit du carre.
     const auto localTag = [&](double rx, double ty, double fs) {
         if (!d.hasLocal) return 0.0;
@@ -1272,7 +1272,7 @@ void drawSpeedDrive(const Ctx& c, const Sym& s) {
         const double tw = textWidth(c, tag, fs) + fs * 0.8, th = fs * 1.35;
         const gfx::Color tc = d.local ? c.fixed(0xF2994A) : withA(s.txt, 0.85f);
         const Pts b = box(rx - tw, ty, tw, th, 3);
-        fill(c, b, d.local ? withA(tc, 0.18f) : c.fixed(0x141820));
+        fill(c, b, withA(tc, d.local ? 0.18f : 0.12f));   // une teinte de son texte : lisible sur un synoptique sombre ou clair
         outline(c, b, true, tc, 1.0);
         text(c, tag, rx - tw, ty, tw, th, tc, fs, "centre");
         return tw;
@@ -1311,7 +1311,13 @@ void drawSpeedDrive(const Ctx& c, const Sym& s) {
         const double room = vx + pw - tx - ph * 0.3;
         double tf = fs;
         if (const double tw = textWidth(c, stateText, tf); tw > room && tw > 0) tf = std::max(fs * 0.7, tf * room / tw);
-        text(c, fitted(c, stateText, room, tf), tx, y, vx + pw - tx, ph, stateCol, tf, "gauche");
+        // Sur un synoptique clair (le fond du cadre clair) : le mot plus fonce que sa couleur, lisible sur la pastille teintee.
+        const gfx::Color ground = c.color("fill", gfx::Color::rgb(0x1F252E));
+        const double light = (0.299 * ground.r + 0.587 * ground.g + 0.114 * ground.b) / 255.0;
+        const gfx::Color ink = light > 0.55 ? gfx::Color{static_cast<std::uint8_t>(stateCol.r * 0.55), static_cast<std::uint8_t>(stateCol.g * 0.55),
+                                                         static_cast<std::uint8_t>(stateCol.b * 0.55), stateCol.a}
+                                            : stateCol;
+        text(c, fitted(c, stateText, room, tf), tx, y, vx + pw - tx, ph, ink, tf, "gauche");
         y += fs * 1.55;
     }
     for (std::size_t i = 0; i < rows.size(); ++i) {
