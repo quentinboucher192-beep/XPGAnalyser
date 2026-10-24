@@ -1757,7 +1757,7 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
                 contextScreen_ = m->pos;
                 contextLocked_ = kNoId;
                 contextTarget_ = ContextTarget::Ruler;
-                contextRequested->emit(m->pos);
+                contextRequested->emit(toSurface(m->pos));   // 1.12.31 : dans la surface (un ilot : la meme)
                 return ui::EventResult::Consumed;
             }
             if (m->button != ui::MouseButton::Left || ruler == 3) return ui::EventResult::Consumed;
@@ -1803,7 +1803,7 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
             // 1.12.12 (lot H) : sur un sommet, le menu peut le retirer.
             if (const auto t = vertexTarget(); t.valid())
                 if (const int k = hmi::vertices::vertexAt(*v, t, pressView_, (kVertex + 3.0) / zoom_); k >= 0) selectVertex(k);
-            contextRequested->emit(m->pos);
+            contextRequested->emit(toSurface(m->pos));   // 1.12.31 : dans la surface
             return ui::EventResult::Consumed;
         }
         if (m->button != ui::MouseButton::Left) return ui::EventResult::Consumed;

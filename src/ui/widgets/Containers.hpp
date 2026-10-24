@@ -132,7 +132,8 @@ public:
 
     // LOT 7 : LE CLIC DROIT SUR UN EN-TETE. Le proprietaire montre son menu
     // (Fermer, Fermer tout, Fermer tout sauf celui-ci) a `where`, juste sous
-    // l'en-tete, en coordonnees de la fenetre. Il vise CET onglet : l'onglet
+    // l'en-tete, en coordonnees de la fenetre (1.12.31 : la surface, meme dans une
+    // page zoomee - PopupMenu::openAtSurface). Il vise CET onglet : l'onglet
     // ouvert ne change pas.
     const core::SignalPtr<std::size_t, gfx::Point> contextMenuRequested =
         core::Signal<std::size_t, gfx::Point>::create();

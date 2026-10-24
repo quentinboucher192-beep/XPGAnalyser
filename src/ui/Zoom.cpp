@@ -129,6 +129,12 @@ bool ZoomRenderer::endOffscreen(std::vector<std::uint8_t>& rgba, int& w, int& h)
     return ok;
 }
 
+gfx::IRenderer& unzoomed(gfx::IRenderer& r) noexcept {
+    gfx::IRenderer* out = &r;
+    while (auto* z = dynamic_cast<ZoomRenderer*>(out)) out = &z->under();
+    return *out;
+}
+
 // ================================================================ les crans ===
 const std::vector<float>& zoomSteps() {
     static const std::vector<float> steps{0.1f, 0.25f, 0.33f, 0.5f, 0.67f, 0.75f, 0.8f, 0.9f, 1.f, 1.1f, 1.25f,
@@ -180,8 +186,15 @@ void collectScaled(Widget& w, std::vector<Widget*>& out) {
 void collectNatives(Widget& w, std::vector<Widget*>& out) {
     if (!w.visible()) return;
     if (w.zoomSupport() == ZoomSupport::Native) { out.push_back(&w); return; }
-    if (w.zoomSupport() == ZoomSupport::Scaled) return;    // couvert par son zoom
+    // 1.12.31 : sous un widget Scaled aussi (une page zoomee) - un document y garde son zoom.
     for (const auto& c : w.children()) collectNatives(*c, out);
+}
+
+float surfaceArea(const Widget* w) {
+    // Le cadre a l'ecran (une page zoomee agrandit celui de ses widgets).
+    const auto f = w->zoomFrame();
+    const auto r = w->parent() ? w->parent()->toSurface(f) : f;
+    return r.w * r.h;
 }
 
 } // namespace
@@ -201,9 +214,7 @@ std::vector<Widget*> scaledUnder(Widget& root) {
 std::vector<Widget*> nativesUnder(Widget& root) {
     std::vector<Widget*> out;
     collectNatives(root, out);
-    std::stable_sort(out.begin(), out.end(), [](const Widget* a, const Widget* b) {
-        return a->zoomFrame().w * a->zoomFrame().h > b->zoomFrame().w * b->zoomFrame().h;
-    });
+    std::stable_sort(out.begin(), out.end(), [](const Widget* a, const Widget* b) { return surfaceArea(a) > surfaceArea(b); });
     return out;
 }
 

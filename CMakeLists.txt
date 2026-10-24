@@ -355,7 +355,9 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(layout_test            PRIVATE xpg_ui)
     xpg_target_link_libraries(zoom_test              PRIVATE xpg_ui)
     # 1.12.31 : les touches du zoom sur tous les claviers (platform/KeyTranslate.hpp : les
-    # en-tetes de third_party/SDL3, les valeurs des touches, rien a lier).
+    # en-tetes de third_party/SDL3, les valeurs des touches, rien a lier) et le zoom garde
+    # d'une seance a l'autre (app/ZoomMemory.hpp sur app/Settings.cpp).
+    xpg_target_sources(zoom_test PRIVATE ${CMAKE_SOURCE_DIR}/src/app/Settings.cpp)
     if(TARGET zoom_test)
         target_include_directories(zoom_test PRIVATE ${CMAKE_SOURCE_DIR}/third_party/SDL3/include)
     endif()

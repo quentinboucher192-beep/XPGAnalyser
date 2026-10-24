@@ -23,7 +23,9 @@
 #include "../StatusStrip.hpp"
 #include "../TaskPanes.hpp"
 #include "../VariablesPane.hpp"
+#include "../hmi/HmiBuildPanes.hpp"   // 1.12.31 : le panneau du bas (son zoom)
 #include "../hmi/HmiCanvas.hpp"
+#include "../hmi/HmiLanguageCompare.hpp"   // 1.12.31 : le tableau des langues (son zoom)
 #include "../hmi/HmiPanes.hpp"
 #include "../hmi/HmiVariablePanes.hpp"
 #include "../../core/Command.hpp"
@@ -35,6 +37,7 @@
 #include "../../ui/widgets/DataViews.hpp"
 #include "../../ui/widgets/TabArea.hpp"
 #include "../../ui/Zoom.hpp"          // 1.12.30 : le zoom de chaque page
+#include "../ZoomMemory.hpp"             // 1.12.31 : le zoom garde d'une seance a l'autre
 
 #include <algorithm>
 #include <cctype>
@@ -42,6 +45,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <map>
+#include <set>
 #include <string>
 #include <typeinfo>
 #include <vector>
@@ -91,20 +95,36 @@ const Widget* focusedUnder(const Widget& w) {
     return nullptr;
 }
 
-// 1.12.30 : CE QUE ZOOME UNE PAGE. Le contrat est celui de Widget (zoomSupport) :
-// - ses widgets Scaled (tableaux, arbres, listes, grilles, panneaux) se zooment
-//   ENSEMBLE, au zoom de la page ;
-// - un widget Native (un code, un grafcet, une vue, le rack, l'IHM en marche)
-//   garde le sien : c'est le document de la page.
+// 1.12.30 : CE QUE ZOOME UNE PAGE. Le contrat est celui de Widget (zoomSupport).
+// 1.12.31 : LA PAGE ENTIERE. Son widget du haut se zoome (Scaled) : ses barres
+// d'outils et de filtres, ses sous-onglets, ses tableaux, ses arbres, ses panneaux,
+// ses lignes d'etat grandissent ensemble, et ses marges ; un widget Native (un code,
+// un grafcet, une vue, le rack, l'IHM en marche) y est un ILOT : il garde son zoom
+// a lui - c'est le document de la page (ui/Widget.hpp).
 // La puce vise le dernier vise (un clic, Ctrl + molette) s'il est dans la page,
-// sinon le plus grand des deux : le document s'il couvre plus que les tableaux.
+// sinon le plus grand document s'il couvre au moins le tiers de la page, sinon la page.
 struct PageZoomTarget {
     Widget* native{nullptr};                 // un document : son zoom
-    std::vector<Widget*> scaled;             // sinon : la page (ses widgets Scaled)
+    std::vector<Widget*> scaled;             // sinon : la page (son widget du haut)
     [[nodiscard]] bool any() const noexcept { return native || !scaled.empty(); }
 };
 
-float areaOf(const Widget* w) { return w ? w->zoomFrame().w * w->zoomFrame().h : 0.f; }
+// Le cadre d'un widget a l'ecran (une page zoomee agrandit celui de ses widgets).
+gfx::Rect onScreen(const Widget* w) {
+    if (!w) return {};
+    const auto f = w->zoomFrame();
+    return w->parent() ? w->parent()->toSurface(f) : f;
+}
+float areaOf(const Widget* w) {
+    const auto r = onScreen(w);
+    return r.w * r.h;
+}
+
+// La page se zoome toute : son widget du haut (sans zoom) devient Scaled - a 100 %,
+// rien ne change (ui/Widget.hpp). Un widget du haut Native (un document seul) garde le sien.
+void ensurePageZoomable(Widget& page) {
+    if (page.zoomSupport() == ZoomSupport::None) page.setZoomSupport(ZoomSupport::Scaled);
+}
 
 PageZoomTarget pageZoomTarget(Widget& page, const Widget* active) {
     PageZoomTarget t;
@@ -116,12 +136,7 @@ PageZoomTarget pageZoomTarget(Widget& page, const Widget* active) {
     }
     if (activeHere && active->zoomSupport() == ZoomSupport::Scaled) return t;
     const auto natives = ui::nativesUnder(page);
-    if (!natives.empty()) {
-        float largest = 0.f;
-        for (const auto* w : t.scaled)
-            if (w->visible()) largest = std::max(largest, areaOf(w));
-        if (areaOf(natives.front()) >= largest) t.native = natives.front();
-    }
+    if (!natives.empty() && (t.scaled.empty() || areaOf(natives.front()) * 3.f >= areaOf(&page))) t.native = natives.front();
     return t;
 }
 
@@ -132,7 +147,15 @@ std::string zoomTargetName(const PageZoomTarget& t) {
     if (dynamic_cast<GrafcetView*>(t.native)) return "le grafcet";
     if (dynamic_cast<HmiCanvas*>(t.native)) return "la vue";
     if (dynamic_cast<RackView*>(t.native)) return "le rack";
+    if (dynamic_cast<HmiLanguageBoard*>(t.native)) return "la vue dans chaque langue";   // 1.12.31
     return "la vue en marche";
+}
+
+// 1.12.31 : les codes d'une page (leur zoom se garde aussi : la taille du texte a lire ;
+// celui d'une vue, d'un grafcet, du rack est un cadrage, refait a chaque ouverture).
+void codesUnder(Widget& w, std::vector<MultiLineText*>& out) {
+    if (auto* m = dynamic_cast<MultiLineText*>(&w); m && m->zoomSupport() == ZoomSupport::Native) { out.push_back(m); return; }
+    for (const auto& c : w.children()) codesUnder(*c, out);
 }
 
 // Le premier widget de ce type sous `w`, montre (un volet dans un autre).
@@ -180,6 +203,10 @@ struct MainAnalysisScreen::StatusStripState {
     std::map<const Widget*, float> pageZoom;
     const Widget*  activeZoomable{nullptr};
     double         lastZoomSync{-1.0e9};
+    // 1.12.31 : les pages deja vues (une page vue pour la premiere fois reprend son zoom
+    // retenu), et le zoom retenu de chaque code (pour n'ecrire que ce qui change).
+    std::set<const Widget*> seenPages;
+    std::map<const Widget*, float> codeZoom;
 };
 
 // Le texte de la selection d'une cle (voir tickStatusStrip) ; "" : rien.
@@ -519,8 +546,11 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
         std::string what = "la page";
         if (Widget* page = centre_ && centre_->tabCount() > 0 ? centre_->page(centre_->currentIndex()) : nullptr)
             what = zoomTargetName(pageZoomTarget(*page, st.activeZoomable));
+        // 1.12.31 : celui de la page et celui d'un code se gardent d'une seance a l'autre.
+        const bool kept = what == "la page" || what == "le texte";
         tip(st.zoom, pct > 0 ? "Le zoom de " + what + " : \xE2\x88\x92 et + d'un cran, un clic sur le nombre pour 50 \xC3\xA0 200 %."
                                    "\nCtrl + molette, Ctrl + plus, Ctrl + moins, Ctrl + 0 (100 %) font de m\xC3\xAAme."
+                                   + std::string(kept ? "\nIl est gard\xC3\xA9 d'une s\xC3\xA9" "ance \xC3\xA0 l'autre ; 100 % l'oublie." : "")
                              : "Cette page n'a pas de zoom");
         st.zoom->setShown(centre_ && centre_->tabCount() > 0);
     }
@@ -726,31 +756,89 @@ float MainAnalysisScreen::pageZoomOf(const Widget* page) const {
     return it == strip_->pageZoom.end() ? 1.f : it->second;
 }
 
+// ---- 1.12.31 : le zoom garde d'une seance a l'autre (app/ZoomMemory.hpp) ----
+// Les bornes : celles du widget (un code va jusqu'a 300 %), dans celles d'une page au moins.
+float MainAnalysisScreen::rememberedZoom(const Widget& w) const {
+    return zoommemory::read(app_.zoomSettings(), w.id(), std::min(zoommemory::kMin, w.minZoom()), std::max(zoommemory::kMax, w.maxZoom()));
+}
+
+void MainAnalysisScreen::rememberZoom(const Widget& w, float zoom) {
+    if (zoommemory::write(app_.zoomSettings(), w.id(), zoom, std::min(zoommemory::kMin, w.minZoom()), std::max(zoommemory::kMax, w.maxZoom())))
+        app_.zoomSettingsChanged();
+}
+
+void MainAnalysisScreen::applyPageZoom(Widget& page, float zoom) {
+    // Le widget du haut porte le zoom de toute la page ; ses widgets Scaled restent a 100 %
+    // dedans (un zoom de plus les agrandirait deux fois). Une page qui est un document : rien.
+    ensurePageZoomable(page);
+    if (page.zoomSupport() == ZoomSupport::Scaled && std::fabs(page.zoom() - zoom) > 1e-4f) page.setZoom(zoom);
+}
+
 void MainAnalysisScreen::setPageZoom(Widget& page, float zoom) {
     if (!strip_) return;
-    const float z = std::clamp(zoom, 0.5f, 2.f);
+    const float z = std::clamp(zoom, zoommemory::kMin, zoommemory::kMax);
     if (std::fabs(z - 1.f) < 1e-4f) strip_->pageZoom.erase(&page);
     else strip_->pageZoom[&page] = z;
-    for (auto* w : ui::scaledUnder(page)) w->setZoom(z);
+    applyPageZoom(page, z);
+    rememberZoom(page, z);
+}
+
+void MainAnalysisScreen::sayPanelZoom(const Widget& w) {
+    if (!status_) return;
+    const bool tree = treeColumn_ && &w == treeColumn_;
+    const bool bottom = bottomPanel_ && &w == static_cast<const Widget*>(bottomPanel_);
+    const std::string what = tree ? "l'arbre du projet" : bottom ? "le panneau du bas" : "ce panneau";
+    status_->setTransientMessage("Zoom de " + what + " : " + std::to_string(ui::zoomPercent(w.zoom())) + " %"
+                                     + (std::fabs(w.zoom() - 1.f) < 1e-4f ? std::string{} : std::string(" (Ctrl+0 : 100 %)")),
+                                 3.0);
 }
 
 void MainAnalysisScreen::syncPageZoom() {
     if (!strip_ || !centre_) return;
     // Les pages fermees s'oublient (une page detachee dans sa fenetre garde son zoom) ;
-    // une page ouverte reprend le sien.
+    // une page ouverte reprend le sien. 1.12.31 : une page vue pour la premiere fois
+    // reprend celui qui est retenu (son identifiant), et ses codes le leur.
     auto& detached = app_.detachedWindows();
+    const auto isOpen = [this, &detached](const Widget* p) { return centre_->indexOf(p) >= 0 || detached.isDetached(p); };
     for (auto it = strip_->pageZoom.begin(); it != strip_->pageZoom.end();) {
-        if (centre_->indexOf(it->first) < 0 && !detached.isDetached(it->first)) it = strip_->pageZoom.erase(it);
+        if (!isOpen(it->first)) it = strip_->pageZoom.erase(it);
         else ++it;
     }
-    const auto apply = [this](Widget* page) {
-        if (!page || !page->visible()) return;
-        const float z = pageZoomOf(page);
-        for (auto* w : ui::scaledUnder(*page))
-            if (std::fabs(w->zoom() - z) > 1e-4f) w->setZoom(z);
+    for (auto it = strip_->seenPages.begin(); it != strip_->seenPages.end();) {
+        if (!isOpen(*it)) it = strip_->seenPages.erase(it);
+        else ++it;
+    }
+    std::set<const Widget*> codesNow;
+    const auto apply = [this, &codesNow](Widget* page) {
+        if (!page) return;
+        const bool first = strip_->seenPages.insert(page).second;
+        if (first) {
+            const float z = rememberedZoom(*page);
+            if (std::fabs(z - 1.f) > 1e-4f) strip_->pageZoom[page] = z;
+        }
+        applyPageZoom(*page, pageZoomOf(page));
+        // Les codes de la page : le zoom retenu a leur premiere vue, puis chaque changement retenu.
+        std::vector<MultiLineText*> codes;
+        codesUnder(*page, codes);
+        for (auto* code : codes) {
+            codesNow.insert(code);
+            const auto it = strip_->codeZoom.find(code);
+            if (it == strip_->codeZoom.end()) {
+                const float z = rememberedZoom(*code);
+                if (std::fabs(z - 1.f) > 1e-4f) code->setZoom(z);
+                strip_->codeZoom[code] = code->zoom();
+            } else if (std::fabs(it->second - code->zoom()) > 1e-4f) {
+                it->second = code->zoom();
+                rememberZoom(*code, code->zoom());
+            }
+        }
     };
     for (std::size_t i = 0; i < centre_->tabCount(); ++i) apply(centre_->page(i));
     for (const auto* page : detached.pages()) apply(const_cast<Widget*>(page));
+    for (auto it = strip_->codeZoom.begin(); it != strip_->codeZoom.end();) {
+        if (!codesNow.count(it->first)) it = strip_->codeZoom.erase(it);
+        else ++it;
+    }
 }
 
 void MainAnalysisScreen::noteZoomGesture(gfx::Point at) {
@@ -764,10 +852,13 @@ void MainAnalysisScreen::zoomRequested(Widget& w, int step) {
     if (strip_) strip_->activeZoomable = &w;
     if (Widget* page = pageOfWidget(&w)) {
         const float now = pageZoomOf(page);
-        setPageZoom(*page, ui::zoomStep(now, step, 0.5f, 2.f));
+        setPageZoom(*page, ui::zoomStep(now, step, zoommemory::kMin, zoommemory::kMax));
         return;
     }
     w.setZoom(ui::zoomStep(w.zoom(), step, w.minZoom(), w.maxZoom()));
+    // 1.12.31 : l'arbre du projet, le panneau du bas - gardes d'une seance a l'autre.
+    if (&w == treeColumn_ || &w == static_cast<const Widget*>(bottomPanel_)) rememberZoom(w, w.zoom());
+    sayPanelZoom(w);
 }
 
 int MainAnalysisScreen::tabZoomPercent() const {
@@ -784,6 +875,7 @@ bool MainAnalysisScreen::setTabZoomPercent(int percent) {
     if (!centre_ || centre_->tabCount() == 0 || percent < 5 || percent > 1600) return false;
     auto* page = centre_->page(centre_->currentIndex());
     if (!page) return false;
+    ensurePageZoomable(*page);
     const auto t = pageZoomTarget(*page, strip_ ? strip_->activeZoomable : nullptr);
     const float z = static_cast<float>(percent) / 100.f;
     if (t.native) { t.native->setZoom(z); return true; }
@@ -792,10 +884,30 @@ bool MainAnalysisScreen::setTabZoomPercent(int percent) {
     return true;
 }
 
+void MainAnalysisScreen::reloadRememberedZoom() {
+    if (treeColumn_) treeColumn_->setZoom(rememberedZoom(*treeColumn_));
+    if (bottomPanel_) bottomPanel_->setZoom(rememberedZoom(*bottomPanel_));
+    if (!strip_) return;
+    strip_->seenPages.clear();
+    strip_->pageZoom.clear();
+    strip_->codeZoom.clear();
+    syncPageZoom();
+}
+
+bool MainAnalysisScreen::setOpenPageZoomPercent(int percent) {
+    if (!centre_ || centre_->tabCount() == 0 || percent < 50 || percent > 200) return false;
+    auto* page = centre_->page(centre_->currentIndex());
+    if (!page || page->zoomSupport() == ZoomSupport::Native) return false;
+    if (strip_) strip_->activeZoomable = page;      // la puce suit la page
+    setPageZoom(*page, static_cast<float>(percent) / 100.f);
+    return true;
+}
+
 bool MainAnalysisScreen::stepTabZoom(int step) {
     if (!centre_ || centre_->tabCount() == 0) return false;
     auto* page = centre_->page(centre_->currentIndex());
     if (!page) return false;
+    ensurePageZoomable(*page);
     const auto t = pageZoomTarget(*page, strip_ ? strip_->activeZoomable : nullptr);
     if (t.native) {
         auto* n = t.native;
@@ -803,7 +915,7 @@ bool MainAnalysisScreen::stepTabZoom(int step) {
         return true;
     }
     if (t.scaled.empty()) return false;
-    setPageZoom(*page, step == 0 ? 1.f : ui::zoomStep(pageZoomOf(page), step, 0.5f, 2.f));
+    setPageZoom(*page, step == 0 ? 1.f : ui::zoomStep(pageZoomOf(page), step, zoommemory::kMin, zoommemory::kMax));
     return true;
 }
 
@@ -832,6 +944,17 @@ float coveredArea(const Widget& w) {
 
 std::vector<std::string> MainAnalysisScreen::zoomReport() const {
     std::vector<std::string> out;
+    char buf[200];
+    // 1.12.31 : l'arbre du projet et le panneau du bas, chacun son zoom.
+    if (treeColumn_) {
+        std::snprintf(buf, sizeof buf, "arbre du projet : %d %%", ui::zoomPercent(treeColumn_->zoom()));
+        out.push_back(buf);
+    }
+    if (bottomPanel_) {
+        std::snprintf(buf, sizeof buf, "panneau du bas : %d %%%s", ui::zoomPercent(bottomPanel_->zoom()),
+                      bottomPanel_->visible() ? "" : " (cach\xC3\xA9)");
+        out.push_back(buf);
+    }
     if (!centre_ || centre_->tabCount() == 0) { out.push_back("aucune page ouverte"); return out; }
     Widget* page = centre_->page(centre_->currentIndex());
     const auto* tab = centre_->tab(centre_->currentIndex());
@@ -843,17 +966,29 @@ std::vector<std::string> MainAnalysisScreen::zoomReport() const {
     else if (!t.scaled.empty()) head += "la page, " + std::to_string(t.scaled.size()) + " widget(s) zoom\xC3\xA9(s) " + std::to_string(pct) + " %";
     else head += "PAS DE ZOOM";
     out.push_back(head);
+    std::snprintf(buf, sizeof buf, "page \"%s\" : %s, zoom %d %%", page->id().c_str(),
+                  page->zoomSupport() == ZoomSupport::Scaled ? "zoom\xC3\xA9" "e enti\xC3\xA8re"
+                  : page->zoomSupport() == ZoomSupport::Native ? "un document" : "sans zoom",
+                  ui::zoomPercent(pageZoomOf(page)));
+    out.push_back(buf);
+    // Les documents de la page : chacun son zoom (un ilot quand la page est zoomee).
+    for (const auto* n : ui::nativesUnder(*page)) {
+        std::snprintf(buf, sizeof buf, "document a part : %s \"%s\" %d %%%s", typeid(*n).name(), n->id().c_str(),
+                      ui::zoomPercent(n->zoom()), n->zoomIsland() ? " (ilot)" : "");
+        out.push_back(buf);
+    }
     const float pageArea = std::max(1.f, areaOf(page));
-    char buf[160];
     std::snprintf(buf, sizeof buf, "couverture : %.0f %% de la page", std::min(100.f, 100.f * coveredArea(*page) / pageArea));
     out.push_back(buf);
+    // 1.12.31 : une page zoomee entiere (son widget du haut Scaled) couvre tous ses morceaux.
     std::vector<const Widget*> blocks;
-    for (const auto& c : page->children()) plainBlocks(*c, blocks);
+    if (page->zoomSupport() != ZoomSupport::Scaled)
+        for (const auto& c : page->children()) plainBlocks(*c, blocks);
     if (!page->zoomable() && !holdsZoomable(*page)) blocks.assign(1, page);
     std::stable_sort(blocks.begin(), blocks.end(), [](const Widget* a, const Widget* b) { return areaOf(a) > areaOf(b); });
     for (std::size_t i = 0; i < blocks.size() && i < 6; ++i) {
         const float share = 100.f * areaOf(blocks[i]) / pageArea;
-        if (share < 4.f) break;
+        if (share < 1.f) break;
         std::snprintf(buf, sizeof buf, "sans zoom : %s \"%s\" (%.0f %%)", typeid(*blocks[i]).name(), blocks[i]->id().c_str(), share);
         out.push_back(buf);
     }
@@ -861,14 +996,17 @@ std::vector<std::string> MainAnalysisScreen::zoomReport() const {
 }
 
 bool MainAnalysisScreen::zoomFromKeys(int step) {
-    // Le clavier dans un widget zoomable hors des pages (l'arbre du projet) : lui ;
-    // sinon la page ouverte.
+    // Le clavier dans un widget zoomable hors des pages (l'arbre du projet, le panneau du
+    // bas) : lui ; sinon la page ouverte.
     if (Widget* f = Widget::focusedIn(root())) {
         Widget* scaled = nullptr;
         for (Widget* a = f; a; a = a->parent())
             if (a->zoomSupport() == ZoomSupport::Scaled) scaled = a;
         if (scaled && !pageOfWidget(scaled)) {
             scaled->setZoom(step == 0 ? 1.f : ui::zoomStep(scaled->zoom(), step, scaled->minZoom(), scaled->maxZoom()));
+            // 1.12.31 : l'arbre du projet, le panneau du bas - gardes d'une seance a l'autre.
+            if (scaled == treeColumn_ || scaled == static_cast<Widget*>(bottomPanel_)) rememberZoom(*scaled, scaled->zoom());
+            sayPanelZoom(*scaled);
             return true;
         }
     }

@@ -104,12 +104,19 @@ Rect unite(Rect a, Rect b) {
     return {x, y, std::max(a.right(), b.right()) - x, std::max(a.bottom(), b.bottom()) - y};
 }
 
+// 1.12.31 : LES CADRES QUE LA BULLE ECLAIRE SONT A L'ECRAN - un cadre du repere de `w` (une page
+// zoomee, l'arbre zoome) y est ramene (toSurface). `ok` : le cadre a ete trouve.
+bool onSurface(const ui::Widget& w, bool ok, Rect& r) {
+    if (ok) r = w.toSurface(r);
+    return ok;
+}
+
 // Le cadre d'un objet de la vue, a l'ecran (l'editeur montre), rogne a la zone de dessin.
 Rect screenBox(HmiEditor& ed, const hmi::Object& o) {
     const auto vp = ed.canvas().viewport();
     const auto b = o.box();
     const auto a = vp.toScreen(b.x, b.y), c = vp.toScreen(b.right(), b.bottom());
-    return ed.canvas().bounds().intersect({a.x, a.y, c.x - a.x, c.y - a.y});
+    return ed.canvas().toSurface(ed.canvas().bounds().intersect({a.x, a.y, c.x - a.x, c.y - a.y}));
 }
 
 // "Rectangle, Texte, 2 Afficheur numerique, Voyant" : les genres d'une selection.
@@ -246,24 +253,26 @@ struct MainAnalysisScreen::TrailRun {
     // Generer, Compiler...) : son bouton dans la rangee sous le titre IHM.
     static std::function<bool(Rect&)> row(MainAnalysisScreen& s, NK kind) {
         return [&s, kind](Rect& r) {
-            return s.treeToolRect(ProjectTreeModel::pack(kind, 0), r) || (s.explorer_ && s.explorer_->rowRect(nodeOf(s, kind), r));
+            return s.treeToolRect(ProjectTreeModel::pack(kind, 0), r)
+                   || (s.explorer_ && onSurface(*s.explorer_, s.explorer_->rowRect(nodeOf(s, kind), r), r));
         };
     }
     static std::function<void()> reveal(MainAnalysisScreen& s, NK kind) {
         return [&s, kind] { if (!s.revealTreeTool(ProjectTreeModel::pack(kind, 0))) (void)s.revealTreeNode(nodeOf(s, kind)); };
     }
     static bool viewRow(MainAnalysisScreen& s, hmi::Id id, Rect& r) {
-        return s.explorer_ && s.treeModel_ && id != hmi::kNoId && s.explorer_->rowRect(s.treeModel_->hmiViewNode(id), r);
+        return s.explorer_ && s.treeModel_ && id != hmi::kNoId
+               && onSurface(*s.explorer_, s.explorer_->rowRect(s.treeModel_->hmiViewNode(id), r), r);
     }
     static bool button(ui::Button* b, Rect& r) {
         if (!b || !b->visible()) return false;
-        r = b->bounds();
+        r = b->toSurface(b->bounds());
         return !r.empty();
     }
     // Lot API 2 : une partie de la barre du haut (Annuler, Retablir, Historique).
     static bool barPart(MainAnalysisScreen& s, std::string_view part, Rect& r) {
         if (!s.topBar_) return false;
-        r = s.topBar_->partRect(part);
+        r = s.topBar_->toSurface(s.topBar_->partRect(part));
         return !r.empty();
     }
     // La simulation IHM sur cette vue, en marche.
@@ -368,7 +377,10 @@ bool MainAnalysisScreen::revealTreeNode(ui::NodeId node, gfx::Rect* rowOut) {
     if (!find(treeModel_->root(), 0)) return false;
     for (const auto n : path) explorer_->expand(n);
     explorer_->ensureVisible(node);
-    return rowOut ? explorer_->rowRect(node, *rowOut) : true;
+    if (!rowOut) return true;
+    if (!explorer_->rowRect(node, *rowOut)) return false;
+    *rowOut = explorer_->toSurface(*rowOut);     // 1.12.31 : a l'ecran (l'arbre zoome)
+    return true;
 }
 
 // ============================================================ lancer ========
@@ -679,7 +691,7 @@ std::vector<Step> MainAnalysisScreen::TrailRun::symbol(MainAnalysisScreen& s, co
                [&s, run](Rect& r) {
                    auto* ed = currentEditor(s);
                    if (!ed || ed->viewId() != run->viewId) return viewRow(s, run->viewId, r);
-                   r = ed->canvas().bounds();
+                   r = ed->canvas().toSurface(ed->canvas().bounds());
                    return !r.empty();
                },
                {}};
@@ -767,7 +779,7 @@ std::vector<Step> MainAnalysisScreen::TrailRun::symbol(MainAnalysisScreen& s, co
                [&s, run](Rect& r) {
                    auto* ed = currentEditor(s);
                    if (!ed || ed->viewId() != run->viewId) return viewRow(s, run->viewId, r);
-                   r = ed->tools().rectOf(HmiEditor::ActMakeSymbol);
+                   r = ed->tools().toSurface(ed->tools().rectOf(HmiEditor::ActMakeSymbol));
                    return !r.empty();
                },
                {}};
@@ -857,7 +869,7 @@ std::vector<Step> MainAnalysisScreen::TrailRun::symbol(MainAnalysisScreen& s, co
                    if (!ed || !v || ed->viewId() != run->viewId) return viewRow(s, run->viewId, r);
                    const auto inst = instancesIn(*v, run->symbolName);
                    if (inst.size() < 2) {
-                       if (ed->palette().symbolTileRect(run->symbolName, r)) return true;
+                       if (onSurface(ed->palette(), ed->palette().symbolTileRect(run->symbolName, r), r)) return true;
                        if (!run->revealed) {
                            run->revealed = true;
                            ed->palette().revealSymbol(run->symbolName);
@@ -869,9 +881,9 @@ std::vector<Step> MainAnalysisScreen::TrailRun::symbol(MainAnalysisScreen& s, co
                    for (const auto& cat : ed->properties().categories()) {
                        if (cat.name != "Param\xC3\xA8tres du symbole") continue;
                        for (const auto& pr : cat.properties)
-                           if (pr.name.rfind("Armoire \xC2\xB7 ", 0) == 0 && ed->properties().valueRect(pr.name, r)) return true;
+                           if (pr.name.rfind("Armoire \xC2\xB7 ", 0) == 0 && onSurface(ed->properties(), ed->properties().valueRect(pr.name, r), r)) return true;
                    }
-                   if (ed->properties().valueRect("Arguments", r)) return true;
+                   if (onSurface(ed->properties(), ed->properties().valueRect("Arguments", r), r)) return true;
                    r = screenBox(*ed, *inst.back());
                    return !r.empty();
                },
@@ -931,7 +943,7 @@ std::vector<Step> MainAnalysisScreen::TrailRun::symbol(MainAnalysisScreen& s, co
                    const auto* sym = symbolView();
                    if (!ed || !sym) return false;
                    if (ed->viewId() == sym->id) {
-                       if (ed->properties().valueRect("Remplissage", r)) return true;
+                       if (onSurface(ed->properties(), ed->properties().valueRect("Remplissage", r), r)) return true;
                        for (const auto& o : sym->objects)
                            if (o.kind == hmi::Kind::Rectangle) {
                                r = screenBox(*ed, o);
@@ -1026,7 +1038,7 @@ std::vector<Step> MainAnalysisScreen::TrailRun::firstView(MainAnalysisScreen& s,
         return std::function<bool(Rect&)>([&s, run, kind](Rect& r) {
             auto* ed = currentEditor(s);
             if (!ed || ed->viewId() != run->viewId) return viewRow(s, run->viewId, r);
-            if (ed->palette().tileRect(kind, r)) return true;
+            if (onSurface(ed->palette(), ed->palette().tileRect(kind, r), r)) return true;
             if (!run->revealed) {
                 run->revealed = true;
                 ed->palette().revealKind(kind);
@@ -1055,11 +1067,11 @@ std::vector<Step> MainAnalysisScreen::TrailRun::firstView(MainAnalysisScreen& s,
                    if (auto* pane = dynamic_cast<HmiViewsPane*>(currentPage(s))) {
                        const int a = pane->tools().actionByTip("Nouvelle vue");
                        if (a >= 0) {
-                           r = pane->tools().rectOf(a);
+                           r = pane->tools().toSurface(pane->tools().rectOf(a));
                            if (!r.empty()) return true;
                        }
                    }
-                   return s.explorer_ && s.explorer_->rowRect(nodeOf(s, NK::HmiViewFolder), r);
+                   return s.explorer_ && onSurface(*s.explorer_, s.explorer_->rowRect(nodeOf(s, NK::HmiViewFolder), r), r);
                },
                reveal(s, NK::HmiViewFolder)};
         x.done = [&s, run](std::string& what) {
@@ -1127,7 +1139,7 @@ std::vector<Step> MainAnalysisScreen::TrailRun::firstView(MainAnalysisScreen& s,
                [&s, run, firstOf](Rect& r) {
                    auto* ed = currentEditor(s);
                    if (!ed || ed->viewId() != run->viewId) return viewRow(s, run->viewId, r);
-                   if (ed->properties().valueRect("Valeur (expression)", r)) return true;
+                   if (onSurface(ed->properties(), ed->properties().valueRect("Valeur (expression)", r), r)) return true;
                    if (const auto* o = firstOf(hmi::Kind::NumericDisplay)) {
                        r = screenBox(*ed, *o);
                        return !r.empty();
@@ -1257,7 +1269,7 @@ std::vector<Step> MainAnalysisScreen::TrailRun::excel(MainAnalysisScreen& s, con
     const auto tableRect = [varsPane](Rect& r) {
         auto* vars = varsPane();
         if (!vars) return false;
-        r = vars->table().bounds();
+        r = vars->table().toSurface(vars->table().bounds());
         return !r.empty();
     };
     {
@@ -1472,10 +1484,10 @@ std::vector<Step> MainAnalysisScreen::TrailRun::versions(MainAnalysisScreen& s, 
                "les sections, les vues, les variables ; un texte c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, une vue en vignettes.",
                [&s](Rect& r) {
                    if (auto* pane = dynamic_cast<VersionsPane*>(currentPage(s))) {
-                       r = pane->tools().rectOf(VersionsPane::ACompare);
+                       r = pane->tools().toSurface(pane->tools().rectOf(VersionsPane::ACompare));
                        return !r.empty();
                    }
-                   return s.explorer_ && s.explorer_->rowRect(ProjectTreeModel::versionsFolderNode(), r);
+                   return s.explorer_ && onSurface(*s.explorer_, s.explorer_->rowRect(ProjectTreeModel::versionsFolderNode(), r), r);
                },
                {}};
         x.done = [&s](std::string& what) {

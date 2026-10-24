@@ -2207,6 +2207,9 @@ void TableView::onPaint(const PaintContext& ctx) {
             // Sous les barres, le fond (les lignes passent dessous).
             if (vbar_.space(va, ch, va.h) > 0.f) ctx.r.fillRect({va.right() - kScrollBarThickness - 1.f, va.y, kScrollBarThickness + 1.f, va.h}, c.panelBg);
             if (hbar_.space(ha, cw, ha.w) > 0.f) ctx.r.fillRect({ha.x, ha.bottom() - kScrollBarThickness - 1.f, ha.w, kScrollBarThickness + 1.f}, c.panelBg);
+            // 1.12.31 : le coin entre les deux barres aussi - une ligne n'y depasse plus.
+            if (vbar_.space(va, ch, va.h) > 0.f && hbar_.space(ha, cw, ha.w) > 0.f)
+                ctx.r.fillRect({ha.right(), va.bottom(), va.right() - ha.right(), ha.bottom() - va.bottom()}, c.panelBg);
         }
         vbar_.paint(ctx, va, ch, va.h, scrollY_);
         hbar_.paint(ctx, ha, cw, ha.w, scrollX_);
@@ -4443,9 +4446,14 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
             const float cy = ob.y + ob.h * 0.5f + 0.5f;
             for (int k = -1; k <= 1; ++k) ctx.r.fillRect({ob.x + ob.w * 0.5f + static_cast<float>(k) * 4.f - 1.f, cy - 1.f, 2.f, 2.f}, c.text);
         }
+        // 1.12.31 : le trait entre le nom et la valeur, sur les lignes d'une propriete
+        // seulement - il ne barre plus le titre d'une categorie (une page zoomee, un volet etroit).
+        if (vr.prop) ctx.r.line({split, r.y}, {split, r.bottom()}, c.border, 1.f);
         ctx.r.line({r.x, r.bottom()}, {r.right(), r.bottom()}, c.gridLine, 1.f);
     }
-    ctx.r.line({split, area.y}, {split, area.bottom()}, c.border, 1.f);
+    // Sous la derniere ligne, le trait continue jusqu'en bas.
+    if (const float end = area.y + static_cast<float>(rows_.size()) * rowH - scrollY_; end < area.bottom())
+        ctx.r.line({split, std::max(area.y, end)}, {split, area.bottom()}, c.border, 1.f);
     // 1.11.4 : la barre de defilement, dans la marge de droite.
     {
         const gfx::Rect inner{bounds().x + 2.f, bounds().y + 2.f, std::max(0.f, bounds().w - 4.f), std::max(0.f, bounds().h - 4.f)};

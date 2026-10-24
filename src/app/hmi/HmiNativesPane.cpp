@@ -105,9 +105,7 @@ void HmiNativesPane::openContextMenu(gfx::Point at, int block) {
     items.push_back(entry("Fiche pr\xC3\xA9" "c\xC3\xA9" "dente", MBack, {}, !history_.empty(), "aucune fiche avant celle-ci"));
     menu_->setItems(std::move(items));
     menu_->setBounds(bounds());
-    gfx::Size surface = ui::surfaceSize();
-    if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
-    menu_->openAt(at, surface);
+    menu_->openAtSurface(at);     // 1.12.31 : `at` est dans la surface (la page peut etre zoomee)
 }
 
 std::string HmiNativesPane::notation() {

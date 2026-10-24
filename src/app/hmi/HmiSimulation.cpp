@@ -5396,9 +5396,9 @@ bool HmiSimulationPane::openViewMenu(gfx::Point at) {
     }
     viewMenu_->setItems(std::move(items));
     viewMenu_->setBounds(bounds());
-    gfx::Size surface = ui::surfaceSize();
-    if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
-    viewMenu_->openAt(at, surface);
+    // 1.12.31 : `at` est dans le repere de la vue en marche (un ilot dans la page zoomee) ;
+    // le menu est dans celui de la page.
+    viewMenu_->openAtSurface(canvas_->toSurface(at));
     return true;
 }
 

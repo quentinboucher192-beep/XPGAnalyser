@@ -30,10 +30,11 @@ void drawPill(gfx::IRenderer& r, const Theme& t, gfx::Point at, std::string_view
 }
 
 bool visibleRect(const Widget& w, gfx::Rect& out) {
-    gfx::Rect rect = w.bounds();
+    // 1.12.31 : A L'ECRAN - chacun son repere (une page zoomee, un ilot) : tout vu de la surface.
+    gfx::Rect rect = w.toSurface(w.bounds());
     for (const Widget* p = &w; p; p = p->parent()) {
         if (!p->visible()) return false;
-        if (p != &w) rect = rect.intersect(p->bounds());
+        if (p != &w) rect = rect.intersect(p->toSurface(p->bounds()));
         if (rect.w < 1.f || rect.h < 1.f) return false;
     }
     // Hors de la fenetre (un panneau defile tres loin) : pas a l'ecran.
@@ -115,7 +116,7 @@ bool targetRect(Widget& root, std::string_view spec, gfx::Rect& out) {
         out = r;
         return true;
     }
-    part = part.intersect(r);
+    part = w->toSurface(part).intersect(r);     // 1.12.31 : la partie est dans le repere du widget
     if (part.w < 1.f || part.h < 1.f) {
         out = r;
         return true;

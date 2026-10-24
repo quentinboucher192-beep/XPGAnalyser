@@ -590,10 +590,29 @@ protected:
     void onLayout() override {
         const auto b = bounds();
         float x = b.x + 8.f;
-        const float widths[] = {230.f, 300.f, 250.f, 250.f};
-        for (std::size_t i = 0; i < children().size() && i < 4; ++i) {
+        // 1.12.31 : la place manque (une page zoomee, un volet etroit) - la recherche, puis la
+        // liste des dossiers raccourcissent, puis les cases (leur libelle finit par ...) : rien ne
+        // sort de la barre.
+        float widths[] = {230.f, 300.f, 250.f, 250.f};
+        const std::size_t n = std::min<std::size_t>(children().size(), 4);
+        const auto total = [&] {
+            float t = 8.f;
+            for (std::size_t i = 0; i < n; ++i) t += widths[i] + 12.f;
+            return t;
+        };
+        const float room = b.w;
+        if (total() > room)
+            for (std::size_t i = 2; i < n; ++i) widths[i] = std::min(widths[i], children()[i]->sizeHint().preferred.w);
+        if (total() > room) widths[1] = std::max(140.f, widths[1] - (total() - room));
+        if (total() > room) widths[0] = std::max(140.f, widths[0] - (total() - room));
+        if (total() > room && n > 2) {
+            const float over = total() - room;
+            for (std::size_t i = 2; i < n; ++i) widths[i] = std::max(40.f, widths[i] - over / static_cast<float>(n - 2));
+        }
+        for (std::size_t i = 0; i < n; ++i) {
             const float h = i < 2 ? 26.f : 24.f;
-            children()[i]->setBounds({x, b.y + (b.h - h) * 0.5f, widths[i], h});
+            const float w = std::max(0.f, std::min(widths[i], b.right() - 4.f - x));
+            children()[i]->setBounds({x, b.y + (b.h - h) * 0.5f, w, h});
             x += widths[i] + 12.f;
         }
     }
@@ -4644,9 +4663,7 @@ void HmiTypesPane::openNewTypeMenu() {
     items.push_back({"Rappel\xE2\x80\xA6", "", "", ui::Icon::None, true, false, 3});   // 1.12.20 (lot T) : T_Filtre
     newMenu_->setItems(std::move(items));
     const auto r = tools_->rectOf(TAdd);
-    auto* root = rootWidget();
-    const auto sb = root ? root->bounds() : bounds();
-    newMenu_->openAt({r.x, r.bottom()}, {sb.w, sb.h});
+    newMenu_->openInWindow({r.x, r.bottom()});     // 1.12.31 : garde dans la fenetre (une page zoomee)
 }
 
 void HmiTypesPane::openEnumCreation() {

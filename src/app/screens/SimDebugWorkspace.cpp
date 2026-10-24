@@ -336,9 +336,7 @@ void MainAnalysisScreen::wireSectionBreakpoints(ui::MultiLineText& editor, domai
         items.push_back(std::move(all));
         margin->setItems(std::move(items));
         margin->setBounds(editor.bounds());
-        gfx::Size surface = ui::surfaceSize();
-        if (surface.w <= 0.f || surface.h <= 0.f) surface = {at.x + 400.f, at.y + 400.f};
-        margin->openAt(at, surface);
+        margin->openAtSurface(at);     // 1.12.31 : `at` est dans la surface (la page peut etre zoomee)
     });
     // Lot API 8 (2e partie) : un clic droit dans la marge (sur le point, ou sur une
     // ligne sans point : il est pose d'abord) - le dialogue de sa condition.

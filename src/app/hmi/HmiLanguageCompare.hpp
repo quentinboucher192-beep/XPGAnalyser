@@ -18,6 +18,10 @@
 //
 //  LE ZOOM (la puce du bandeau bas, Ctrl + molette, Ctrl + plus) : l'echelle
 //  commune des vues ; Ajuster : la vue entiere dans chaque colonne.
+//  1.12.31 : les colonnes sont un widget a part, le TABLEAU DES LANGUES (Native :
+//  l'echelle commune est son zoom a lui). La page zoomee (la puce, la barre visee)
+//  agrandit la barre du haut, le menu d'une marque, les en-tetes des colonnes et
+//  leurs marges ; les vues gardent leur echelle (le tableau est un ilot, ui/Widget.hpp).
 // =============================================================================
 #pragma once
 
@@ -38,6 +42,30 @@ namespace ui { class DropDown; class PopupMenu; }
 namespace app {
 
 class HmiToolStrip;
+class HmiLanguageCompare;
+
+// 1.12.31 : LE TABLEAU DES LANGUES - les colonnes de la page, a l'echelle commune : le
+// document de la page. Son zoom (Native) est cette echelle ; le dessin, la souris et les
+// marques sont ceux de la page (HmiLanguageCompare).
+class HmiLanguageBoard final : public ui::Widget {
+public:
+    HmiLanguageBoard(std::string id, HmiLanguageCompare& owner);
+
+    [[nodiscard]] float zoom() const override;
+    void setZoom(float z) override;
+    [[nodiscard]] float minZoom() const override { return 0.1f; }
+    [[nodiscard]] float maxZoom() const override { return 4.f; }
+
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
+    [[nodiscard]] bool hasTooltip() const override { return true; }
+
+protected:
+    void            onPaint(const ui::PaintContext&) override;
+    ui::EventResult onEvent(const ui::InputEvent&) override;
+
+private:
+    HmiLanguageCompare& owner_;
+};
 
 class HmiLanguageCompare final : public ui::Widget {
 public:
@@ -61,7 +89,8 @@ public:
         std::vector<hmi::Issue>    overflows;
     };
     [[nodiscard]] const std::vector<Column>& columns();
-    // Une marque dessinee (au dernier dessin) : la colonne, l'objet, son cadre a l'ecran.
+    // Une marque dessinee (au dernier dessin) : la colonne, l'objet, son cadre dans le tableau
+    // des langues (son repere : celui de l'ecran quand la page est zoomee).
     struct Mark { std::size_t column{0}; hmi::Id object{hmi::kNoId}; std::string message; gfx::Rect rect; };
     [[nodiscard]] const std::vector<Mark>& marks() const noexcept { return marks_; }
     // Le menu d'une marque (scripts, essais) ; faux : pas de telle marque.
@@ -76,28 +105,29 @@ public:
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
 
-    // Le zoom : l'echelle commune (Native, le contrat de Widget) ; 0 : ajustee.
-    [[nodiscard]] float zoom() const override { return fit_ ? lastFit_ : scale_; }
-    void setZoom(float z) override;
-    [[nodiscard]] float minZoom() const override { return 0.1f; }
-    [[nodiscard]] float maxZoom() const override { return 4.f; }
+    // Le zoom : l'echelle commune, celui du tableau des langues (Native, le contrat de
+    // Widget ; 1.12.31). La page, elle, se zoome toute (sa barre, ses en-tetes).
+    [[nodiscard]] HmiLanguageBoard& board() noexcept { return *board_; }
+    [[nodiscard]] const HmiLanguageBoard& board() const noexcept { return *board_; }
     void fitAll();
-
-    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
-    [[nodiscard]] bool hasTooltip() const override { return true; }
 
 protected:
     void            onLayout() override;
     void            onPaint(const ui::PaintContext&) override;
-    ui::EventResult onEvent(const ui::InputEvent&) override;
 
 private:
+    friend class HmiLanguageBoard;
     enum Tool : int { TPseudo = 1, TTwo, TThree, TFour, TPrev, TNext, TFit };
     void refreshViews();
     void rebuild();
     void chooseMark(int action);
-    [[nodiscard]] gfx::Rect boardRect() const noexcept;
     [[nodiscard]] int markAt(gfx::Point p) const;
+    // Le tableau des langues (HmiLanguageBoard) : son echelle, son dessin, sa souris, ses infobulles.
+    [[nodiscard]] float scale() const noexcept { return fit_ ? lastFit_ : scale_; }
+    void setScale(float z);
+    void paintBoard(const ui::PaintContext& ctx, const gfx::Rect& board);
+    ui::EventResult boardEvent(const ui::InputEvent& ev, const gfx::Rect& board);
+    [[nodiscard]] std::string markTooltip(gfx::Point mouse) const;
 
     hmi::DocumentPtr   doc_;
     hmi::Id            view_{hmi::kNoId};
@@ -114,6 +144,7 @@ private:
     std::size_t        menuMark_{0};
     ui::DropDown*      views_{nullptr};
     HmiToolStrip*      tools_{nullptr};
+    HmiLanguageBoard*  board_{nullptr};
     ui::PopupMenu*     menu_{nullptr};
     std::vector<hmi::Id> viewIds_;
     Hosts              hosts_;

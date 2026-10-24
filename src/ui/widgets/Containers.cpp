@@ -536,6 +536,16 @@ void TabControl::onLayout() {
                 arrowLeft_ = {area.x, area.y, kArrowW, th};
                 arrowRight_ = {area.x + avail - kArrowW, area.y, kArrowW, th};
                 viewport_ = {area.x + kArrowW, area.y, std::max(20.f, avail - 2 * kArrowW), th};
+                // 1.12.31 : l'onglet ouvert dont le titre ne tient pas dans la place (un volet etroit,
+                // une page zoomee ; ses marges peuvent rogner) se reduit lui aussi - son icone -
+                // plutot qu'un bout de son titre.
+                if (current_ < n && widths[current_] - 2.f * kTabPadX > viewport_.w) {
+                    tabs_[current_].compact = true;
+                    tabs_[current_].shortBadge = true;
+                    total -= widths[current_];
+                    widths[current_] = width(tabs_[current_], true, true);
+                    total += widths[current_];
+                }
             }
         }
         stripWidth_ = total;
@@ -773,7 +783,7 @@ gfx::Point TabControl::contextAnchor(std::size_t index) const {
 }
 
 void TabControl::requestContextMenu(std::size_t index) {
-    if (index < tabs_.size()) contextMenuRequested->emit(index, contextAnchor(index));
+    if (index < tabs_.size()) contextMenuRequested->emit(index, toSurface(contextAnchor(index)));   // 1.12.31 : dans la surface
 }
 
 void TabControl::markTab(std::size_t index, const PopupMenu* menu) {
@@ -1010,7 +1020,7 @@ EventResult TabControl::onEvent(const InputEvent& ev) {
                 if (d->button == MouseButton::Right) {
                     const bool menu = contextMenuRequested->slotCount() > 0;
                     if (!menu || rightClickSelects_) setCurrentIndex(i);
-                    if (menu) contextMenuRequested->emit(i, contextAnchor(i));
+                    if (menu) contextMenuRequested->emit(i, toSurface(contextAnchor(i)));   // 1.12.31 : dans la surface (une page zoomee)
                     return EventResult::Consumed;
                 }
                 if (d->button == MouseButton::Middle) {
@@ -1037,7 +1047,7 @@ EventResult TabControl::onEvent(const InputEvent& ev) {
         if (d->button == MouseButton::Right && viewport_.h > 0.f && barContextRequested->slotCount() > 0) {
             const gfx::Rect band{contentRect().x, viewport_.y, contentRect().w, viewport_.h};
             if (band.contains(d->pos)) {
-                barContextRequested->emit(d->pos);
+                barContextRequested->emit(toSurface(d->pos));   // 1.12.31 : dans la surface
                 return EventResult::Consumed;
             }
         }

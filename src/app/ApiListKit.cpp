@@ -48,7 +48,7 @@ void ApiFilterBar::setChips(std::vector<std::pair<std::string, std::size_t>> chi
             if (apikit::lower(chips_[i].first) == apikit::lower(pendingChip_)) current_ = i;
         pendingChip_.clear();
     }
-    invalidate();
+    invalidateLayout();     // 1.12.31 : la recherche fait place aux pastilles (onLayout)
 }
 
 void ApiFilterBar::setCurrent(std::size_t index) {
@@ -134,7 +134,15 @@ void ApiFilterBar::onLayout() {
     // au premier placement, avant le premier dessin.
     if (!recalled_) recall();
     const auto b = bounds();
-    field_->setBounds({b.x + 12.f, b.y + 7.f, std::clamp(b.w * 0.26f, 180.f, 340.f), 30.f});
+    // 1.12.31 : la place manque (une page zoomee, un volet etroit) - la recherche raccourcit
+    // (jusqu'a 120) pour les pastilles ; s'il en manque encore, leurs libelles finissent par ...
+    float fieldW = std::clamp(b.w * 0.26f, 180.f, 340.f);
+    float chipsW = 0.f;
+    for (const auto& [label, count] : chips_)
+        chipsW += ui::measureWidth(label, kSmall) + ui::measureWidth(std::to_string(count), kSmall) + 32.f + 8.f;
+    const float room = b.w - 12.f - 14.f - 8.f;
+    if (fieldW + chipsW > room) fieldW = std::max(120.f, room - chipsW);
+    field_->setBounds({b.x + 12.f, b.y + 7.f, fieldW, 30.f});
 }
 
 void ApiFilterBar::onPaint(const ui::PaintContext& ctx) {
@@ -145,9 +153,28 @@ void ApiFilterBar::onPaint(const ui::PaintContext& ctx) {
     r.fillRect({b.x, b.bottom() - 1.f, b.w, 1.f}, c.border);
     rects_.clear();
     float x = field_->bounds().right() + 14.f;
+    // 1.12.31 : les pastilles qui ne tiennent pas : leurs libelles se partagent la place, et
+    // finissent par ... (le nombre reste entier) - aucune ne sort de la barre.
+    float labelRoom = -1.f;
+    {
+        float natural = 0.f, fixed = 0.f;
+        for (const auto& [label, n] : chips_) {
+            const float cw = r.measure(std::to_string(n), kSmall).width + 32.f + 8.f;
+            natural += r.measure(label, kSmall).width + cw;
+            fixed += cw;
+        }
+        const float avail = b.right() - 8.f - x;
+        if (!chips_.empty() && natural > avail) labelRoom = std::max(0.f, (avail - fixed) / static_cast<float>(chips_.size()));
+    }
     for (std::size_t i = 0; i < chips_.size(); ++i) {
-        const std::string label = chips_[i].first;
+        std::string label = chips_[i].first;
         const std::string count = std::to_string(chips_[i].second);
+        if (labelRoom >= 0.f && r.measure(label, kSmall).width > labelRoom) {
+            const float dots = r.measure("\xE2\x80\xA6", kSmall).width;
+            std::size_t k = labelRoom > dots ? r.fitCharacters(label, kSmall, labelRoom - dots) : std::size_t{0};
+            while (k > 0 && k < label.size() && (static_cast<unsigned char>(label[k]) & 0xC0) == 0x80) --k;
+            label = k > 0 ? label.substr(0, k) + "\xE2\x80\xA6" : std::string{};
+        }
         const float lw = r.measure(label, kSmall).width, cw = r.measure(count, kSmall).width;
         const gfx::Rect chip{x, b.y + 10.f, lw + cw + 32.f, 24.f};
         const bool on = i == current_;
