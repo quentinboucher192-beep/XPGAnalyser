@@ -15,12 +15,19 @@
 #include "../hmi/HmiTemplates.hpp"
 #include "../hmi/HmiWidgets.hpp"
 #include "../project/ProjectArchive.hpp"
+#include "Dossiers.hpp"
+#include "hmi/HmiStationLaunch.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace app {
@@ -28,6 +35,7 @@ namespace app {
 namespace {
 
 namespace h = exporter::html;
+namespace fs = std::filesystem;
 
 std::string viewId(hmi::Id id) { return "v" + std::to_string(id); }
 
@@ -234,140 +242,10 @@ std::string scriptBlock(const hmi::Script& s) {
     return out;
 }
 
-} // namespace
-
-// ============================================================ la page en deux temps ==
-struct HmiWebPageBuilder::Impl {
-    hmi::Project             project;
-    ui::Theme                theme;
-    std::vector<hmi::Id>     order;          // la vue de demarrage, puis les vues et les popups
-    std::size_t              next{0};
-    HmiImageCache            cache;          // ses images sont celles de ce renderer
-    SvgImages                images;
-    SvgRenderer              renderer{images};
-    struct Drawn {
-        hmi::Id              id{hmi::kNoId};
-        int                  width{0}, height{0};
-        std::string          svg;
-        std::vector<Hot>     hots;
-    };
-    std::vector<Drawn>       drawn;
-    std::size_t              elements{0};
-    Impl(hmi::Project p, ui::Theme t) : project(std::move(p)), theme(std::move(t)) {
-        const hmi::View* start = project.view(project.config.startView);
-        if (start && shownView(*start) && start->role == "vue") order.push_back(start->id);
-        for (const auto& v : project.views)
-            if (shownView(v) && &v != start) order.push_back(v.id);
-    }
-};
-
-HmiWebPageBuilder::HmiWebPageBuilder(hmi::Project project, ui::Theme theme)
-    : impl_(std::make_unique<Impl>(std::move(project), std::move(theme))) {}
-HmiWebPageBuilder::~HmiWebPageBuilder() = default;
-
-float HmiWebPageBuilder::progress() const noexcept {
-    return impl_->order.empty() ? 1.f : static_cast<float>(impl_->next) / static_cast<float>(impl_->order.size());
-}
-
-bool HmiWebPageBuilder::draw(double budgetMs) {
-    auto& m = *impl_;
-    HmiImageCache::Scope scope(m.cache);
-    const auto t0 = std::chrono::steady_clock::now();
-    while (m.next < m.order.size()) {
-        const auto* v = m.project.view(m.order[m.next++]);
-        if (!v) continue;
-        const hmi::View shown = prepared(m.project, *v);
-        const float w = static_cast<float>(shown.width), hgt = static_cast<float>(shown.height);
-        auto& r = m.renderer;
-        r.begin(w, hgt, viewId(v->id) + "-");
-        HmiPaintOptions opt;
-        opt.editor = false;                    // la vue en marche, au repos (sans moteur, sans valeur)
-        opt.project = &m.project;
-        opt.assets = &m.project.assets;
-        r.pushClip({0.f, 0.f, w, hgt});
-        paintHmiView(r, shown, HmiViewport{0.f, 0.f, 1.f}, RestingSource{}, m.theme, opt);
-        r.popClip();
-        m.elements += r.elements();
-        Impl::Drawn d;
-        d.id = v->id;
-        d.width = shown.width;
-        d.height = shown.height;
-        d.hots = hotsOf(m.project, shown);
-        d.svg = "<svg viewBox=\"0 0 " + std::to_string(shown.width) + " " + std::to_string(shown.height) + "\" width=\""
-              + std::to_string(shown.width) + "\" height=\"" + std::to_string(shown.height) + "\" font-family=\""
-              + h::escape(r.fontFamily()) + "\" role=\"img\" aria-label=\"" + h::escape(v->name) + "\">" + r.body();
-        for (const auto& hot : d.hots) d.svg += hotSvg(hot);
-        d.svg += "</svg>";
-        m.drawn.push_back(std::move(d));
-        const double spent = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-        if (spent >= budgetMs) break;
-    }
-    return m.next >= m.order.size();
-}
-
-std::string HmiWebPageBuilder::page(const WebPageInfo& info, WebPageStats* stats) const {
-    const auto& m = *impl_;
-    const hmi::Project& p = m.project;
-    WebPageStats local;
-    auto& st = stats ? *stats : local;
-    st = WebPageStats{};
-    st.elements = m.elements;
-
-    h::Page page;
-    page.kind = project::archive::Kind::Ihm;
-    page.application = info.application;
-    page.title = p.config.name.empty() ? info.manifest.name : p.config.name;
-    std::string sub;
-    if (!p.config.version.empty()) sub += "version " + p.config.version;
-    if (!p.config.author.empty()) sub += (sub.empty() ? "" : " \xC2\xB7 ") + p.config.author;
-    sub += (sub.empty() ? std::string("export\xC3\xA9" "e le ") : std::string(" \xC2\xB7 export\xC3\xA9" "e le ")) + info.exportedAt;
-    page.subtitle = sub;
-    page.archive = info.archive;
-    page.archiveName = info.archiveName;
-
-    // ---- les vues et les popups, deja dessinees ---------------------------------------
-    h::NavGroup viewsNav{"Vues", {}}, popupsNav{"Popups", {}};
+// Les listes du projet - les alarmes, les variables IHM, les scripts et les fonctions, la fiche :
+// la page au repos les montre apres les vues ; 1.12.31 : la page en marche, dans sa documentation.
+void appendListSections(h::Page& page, const hmi::Project& p, const WebPageInfo& info, std::size_t views, std::size_t popups) {
     const hmi::View* start = p.view(p.config.startView);
-    for (const auto& d : m.drawn) {
-        const auto* v = p.view(d.id);
-        if (!v) continue;
-        st.svgBytes += d.svg.size();
-        st.hotspots += d.hots.size();
-        h::Section s;
-        s.id = viewId(v->id);
-        s.title = v->name;
-        const bool popup = v->role == "popup";
-        s.css = popup ? "popup" : "view";
-        s.subtitle = std::to_string(d.width) + " \xC3\x97 " + std::to_string(d.height) + " px"
-                   + (popup ? " \xC2\xB7 popup" : v == start ? " \xC2\xB7 vue de d\xC3\xA9marrage" : "");
-        s.attributes = "data-width=\"" + std::to_string(d.width) + "\"";
-        s.html = "<div class=\"screen\" style=\"max-width:" + std::to_string(d.width + 14) + "px\">" + d.svg + "</div>\n";
-        if (!v->description.empty()) s.html += "<p class=\"desc\">" + h::escape(v->description) + "</p>\n";
-        // Ou elle mene (les zones cliquables), une fois chacune.
-        std::set<hmi::Id> seen;
-        std::string links;
-        for (const auto& hot : d.hots) {
-            if (hot.target == hmi::kNoId || !seen.insert(hot.target).second) continue;
-            const auto* t = p.view(hot.target);
-            if (!t) continue;
-            const bool toPopup = hot.attribute.rfind("data-popup", 0) == 0;
-            links += "<a href=\"#" + viewId(t->id) + "\" " + (toPopup ? "data-popup=\"" : "data-go=\"") + viewId(t->id) + "\">" + h::escape(t->name)
-                   + "</a>";
-        }
-        if (!links.empty()) s.html += "<div class=\"links\">M\xC3\xA8ne \xC3\xA0 : " + links + "</div>\n";
-        if (!v->scripts.empty()) {
-            s.html += "<details><summary>Ses scripts (" + std::to_string(v->scripts.size()) + ")</summary>\n";
-            for (const auto& sc : v->scripts) s.html += scriptBlock(sc);
-            s.html += "</details>\n";
-        }
-        (popup ? popupsNav : viewsNav).links.push_back({s.id, v->name, v == start ? std::string("d\xC3\xA9marrage") : std::string{}});
-        (popup ? st.popups : st.views) += 1;
-        page.sections.push_back(std::move(s));
-    }
-    st.images = m.images.count();
-    page.defs = m.images.defs();
-    page.first = m.drawn.empty() ? std::string("fiche") : viewId(m.drawn.front().id);
-
     // ---- les alarmes ----------------------------------------------------------------------
     {
         h::Section s;
@@ -420,7 +298,7 @@ std::string HmiWebPageBuilder::page(const WebPageInfo& info, WebPageStats* stats
         h::Section s;
         s.id = "fiche";
         s.title = "Fiche du projet";
-        s.html = h::tiles({{std::to_string(st.views), "vues"}, {std::to_string(st.popups), "popups"}, {thousands(stats2.objects), "objets"},
+        s.html = h::tiles({{std::to_string(views), "vues"}, {std::to_string(popups), "popups"}, {thousands(stats2.objects), "objets"},
                            {thousands(p.alarms.size()), "alarmes"}, {thousands(p.programs.variables.size()), "variables IHM"},
                            {thousands(stats2.scripts), "scripts"}, {thousands(p.programs.functions.size()), "fonctions"},
                            {thousands(p.assets.resources.size()), "ressources"}});
@@ -442,12 +320,293 @@ std::string HmiWebPageBuilder::page(const WebPageInfo& info, WebPageStats* stats
         s.html += h::card(rows);
         page.sections.push_back(std::move(s));
     }
+}
+
+// ---- 1.12.31 : la page EN MARCHE ------------------------------------------------------
+//  Le moteur de l'IHM en WebAssembly et ce que la page embarque avec lui (outils/web/
+//  construire_web.sh) : dans web/ a cote de l'exe (ou XPG_WEB_DIR, ou le dossier donne).
+struct WebBundle {
+    std::string engine, font;          // ihm-web.wasm.gz, ihm-web.ttf
+    std::string host, boot, page;      // web_host.js, amorce.js, page_ihm.html
+};
+
+// Les fichiers du dossier web/ : ceux sans lesquels la page ne demarre pas.
+constexpr const char* kBundleFiles[] = {"ihm-web.wasm.gz", "web_host.js", "amorce.js", "page_ihm.html"};
+
+fs::path pathOf(const std::string& utf8) { return fs::path(std::u8string(utf8.begin(), utf8.end())); }
+
+bool readAll(const fs::path& f, std::string& out) {
+    std::ifstream in(f, std::ios::binary);
+    if (!in) return false;
+    out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    return !out.empty();
+}
+
+bool loadBundle(const std::string& folder, WebBundle& b, std::string* why) {
+    const fs::path d = pathOf(folder);
+    std::string* into[] = {&b.engine, &b.host, &b.boot, &b.page};
+    for (std::size_t i = 0; i < std::size(kBundleFiles); ++i)
+        if (!readAll(d / kBundleFiles[i], *into[i])) {
+            if (why) *why = std::string(kBundleFiles[i]) + " illisible dans " + folder;
+            return false;
+        }
+    (void)readAll(d / "ihm-web.ttf", b.font);      // sans elle : des mesures de texte estimees
+    return true;
+}
+
+// Le gabarit rempli en un passage : {{CLE}} -> sa valeur (une valeur n'est jamais relue).
+std::string fillTemplate(const std::string& t, const std::vector<std::pair<std::string_view, std::string>>& values) {
+    std::size_t total = t.size();
+    for (const auto& kv : values) total += kv.second.size();
+    std::string out;
+    out.reserve(total);
+    std::size_t from = 0;
+    for (std::size_t at; (at = t.find("{{", from)) != std::string::npos;) {
+        const auto close = t.find("}}", at + 2);
+        if (close == std::string::npos) break;
+        const std::string_view key(t.data() + at + 2, close - at - 2);
+        const auto it = std::find_if(values.begin(), values.end(), [&](const auto& kv) { return kv.first == key; });
+        out.append(t, from, at - from);
+        if (it != values.end()) out += it->second;
+        else out.append(t, at, close + 2 - at);       // inconnue : laissee telle quelle
+        from = close + 2;
+    }
+    out.append(t, from, std::string::npos);
+    return out;
+}
+
+std::string base64Of(const std::string& bytes) {
+    return project::archive::base64(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size());
+}
+
+h::NavGroup projectNav(const hmi::Project& p);
+
+std::string livePage(const hmi::Project& p, const WebPageInfo& info, const WebBundle& b, WebPageStats& st) {
+    namespace pa = project::archive;
+    for (const auto& v : p.views)
+        if (shownView(v)) (v.role == "popup" ? st.popups : st.views) += 1;
+    st.live = true;
+    st.engineBytes = b.engine.size();
+    const std::string title = p.config.name.empty() ? info.manifest.name : p.config.name;
+    // La documentation (les listes de la 1.12.30) : une page a part, montree dans un cadre.
+    h::Page docs;
+    docs.kind = pa::Kind::Ihm;
+    docs.application = info.application;
+    docs.title = title;
+    docs.subtitle = "la documentation du projet \xC2\xB7 export\xC3\xA9" "e le " + info.exportedAt;
+    docs.first = "alarmes";
+    appendListSections(docs, p, info, st.views, st.popups);
+    docs.nav.push_back(projectNav(p));
+    std::string download;
+    if (info.archive)
+        download = "<button type=\"button\" id=\"dl\" title=\"Le projet entier, dans un seul fichier. Le rouvrir : IHM Studio \xE2\x80\xBA "
+                   "Projet \xE2\x80\xBA Importer depuis une page web\xE2\x80\xA6\">T\xC3\xA9l\xC3\xA9" "charger le projet ("
+                 + h::escape(info.archiveName) + ", " + h::escape(pa::sizeText(info.archive->size())) + ")</button>";
+    std::string page = fillTemplate(
+        b.page, {{"APPLICATION", h::escape(info.application)},
+                 {"TITRE", h::escape(title)},
+                 {"ARCHIVE_MARKER", info.archive ? pa::pageHeadMarker(pa::Kind::Ihm) : std::string{}},
+                 {"DOC_BLOCK", "<script type=\"application/x-xpg-doc\" id=\"xpg-doc\">" + base64Of(h::render(docs)) + "</script>"},
+                 {"DOWNLOAD_BUTTON", download},
+                 {"MOTEUR_GZIP", "1"},
+                 {"MOTEUR", base64Of(b.engine)},
+                 {"POLICE", base64Of(b.font)},
+                 {"ARCHIVE_BLOCK", info.archive ? pa::pageArchiveBlock(*info.archive, pa::Kind::Ihm, info.archiveName) : std::string{}},
+                 {"HOTE", b.host},
+                 {"AMORCE", b.boot}});
+    st.pageBytes = page.size();
+    return page;
+}
+
+h::NavGroup projectNav(const hmi::Project& p) {
+    return {"Le projet", {{"alarmes", "Alarmes", thousands(p.alarms.size())},
+                          {"variables", "Variables IHM", thousands(p.programs.variables.size())},
+                          {"scripts", "Scripts et fonctions", std::to_string(p.programs.scripts.size() + p.programs.functions.size())},
+                          {"fiche", "Fiche du projet", {}}}};
+}
+
+} // namespace
+
+// ======================================================= 1.12.31 : le moteur web ==
+std::string webBundleFolder(const std::string& explicitFolder, std::string* why) {
+    std::vector<std::string> candidates;
+    if (!explicitFolder.empty()) candidates.push_back(explicitFolder);
+    if (const char* env = std::getenv("XPG_WEB_DIR"); env && *env) candidates.push_back(env);
+    // Le dossier du programme (UTF-8, pose au demarrage), sinon le chemin de l'exe.
+    std::string programme = dossiers::actuel().programme;
+    if (programme.empty()) {
+        const std::string exe = station::currentExecutable();
+        if (!exe.empty()) programme = dossiers::utf8De(dossiers::cheminDe(exe).parent_path());
+    }
+    if (!programme.empty()) candidates.push_back(dossiers::utf8De(dossiers::cheminDe(programme) / "web"));
+    std::string lastWhy = "le dossier web/ du moteur de l'IHM n'est pas \xC3\xA0 c\xC3\xB4t\xC3\xA9 du programme";
+    for (const auto& c : candidates) {
+        std::error_code ec;
+        const fs::path d = pathOf(c);
+        if (!fs::is_directory(d, ec)) {
+            lastWhy = "le dossier " + c + " n'existe pas";
+            continue;
+        }
+        const char* missing = nullptr;
+        for (const char* f : kBundleFiles)
+            if (!fs::is_regular_file(d / f, ec)) {
+                missing = f;
+                break;
+            }
+        if (!missing) return c;
+        lastWhy = std::string(missing) + " manque dans " + c;
+    }
+    if (why) *why = lastWhy;
+    return {};
+}
+
+// ============================================================ la page en deux temps ==
+struct HmiWebPageBuilder::Impl {
+    hmi::Project             project;
+    ui::Theme                theme;
+    std::vector<hmi::Id>     order;          // la vue de demarrage, puis les vues et les popups
+    std::size_t              next{0};
+    HmiImageCache            cache;          // ses images sont celles de ce renderer
+    SvgImages                images;
+    SvgRenderer              renderer{images};
+    struct Drawn {
+        hmi::Id              id{hmi::kNoId};
+        int                  width{0}, height{0};
+        std::string          svg;
+        std::vector<Hot>     hots;
+    };
+    std::vector<Drawn>       drawn;
+    std::size_t              elements{0};
+    Impl(hmi::Project p, ui::Theme t, bool live) : project(std::move(p)), theme(std::move(t)) {
+        if (live) return;                    // 1.12.31 : la page en marche dessine elle-meme ses vues
+        const hmi::View* start = project.view(project.config.startView);
+        if (start && shownView(*start) && start->role == "vue") order.push_back(start->id);
+        for (const auto& v : project.views)
+            if (shownView(v) && &v != start) order.push_back(v.id);
+    }
+};
+
+HmiWebPageBuilder::HmiWebPageBuilder(hmi::Project project, ui::Theme theme, bool live)
+    : impl_(std::make_unique<Impl>(std::move(project), std::move(theme), live)) {}
+HmiWebPageBuilder::~HmiWebPageBuilder() = default;
+
+float HmiWebPageBuilder::progress() const noexcept {
+    return impl_->order.empty() ? 1.f : static_cast<float>(impl_->next) / static_cast<float>(impl_->order.size());
+}
+
+bool HmiWebPageBuilder::draw(double budgetMs) {
+    auto& m = *impl_;
+    HmiImageCache::Scope scope(m.cache);
+    const auto t0 = std::chrono::steady_clock::now();
+    while (m.next < m.order.size()) {
+        const auto* v = m.project.view(m.order[m.next++]);
+        if (!v) continue;
+        const hmi::View shown = prepared(m.project, *v);
+        const float w = static_cast<float>(shown.width), hgt = static_cast<float>(shown.height);
+        auto& r = m.renderer;
+        r.begin(w, hgt, viewId(v->id) + "-");
+        HmiPaintOptions opt;
+        opt.editor = false;                    // la vue en marche, au repos (sans moteur, sans valeur)
+        opt.project = &m.project;
+        opt.assets = &m.project.assets;
+        r.pushClip({0.f, 0.f, w, hgt});
+        paintHmiView(r, shown, HmiViewport{0.f, 0.f, 1.f}, RestingSource{}, m.theme, opt);
+        r.popClip();
+        m.elements += r.elements();
+        Impl::Drawn d;
+        d.id = v->id;
+        d.width = shown.width;
+        d.height = shown.height;
+        d.hots = hotsOf(m.project, shown);
+        d.svg = "<svg viewBox=\"0 0 " + std::to_string(shown.width) + " " + std::to_string(shown.height) + "\" width=\""
+              + std::to_string(shown.width) + "\" height=\"" + std::to_string(shown.height) + "\" font-family=\""
+              + h::escape(r.fontFamily()) + "\" role=\"img\" aria-label=\"" + h::escape(v->name) + "\">" + r.body();
+        for (const auto& hot : d.hots) d.svg += hotSvg(hot);
+        d.svg += "</svg>";
+        m.drawn.push_back(std::move(d));
+        const double spent = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        if (spent >= budgetMs) break;
+    }
+    return m.next >= m.order.size();
+}
+
+std::string HmiWebPageBuilder::page(const WebPageInfo& info, WebPageStats* stats) const {
+    const auto& m = *impl_;
+    const hmi::Project& p = m.project;
+    WebPageStats local;
+    auto& st = stats ? *stats : local;
+    st = WebPageStats{};
+    st.elements = m.elements;
+    // 1.12.31 : LA PAGE EN MARCHE, si le moteur de l'IHM est livre (web/) ; sinon celle de la 1.12.30.
+    st.restWhy = info.restWhy;
+    if (!info.webFolder.empty()) {
+        WebBundle bundle;
+        if (loadBundle(info.webFolder, bundle, &st.restWhy)) return livePage(p, info, bundle, st);
+    }
+
+    h::Page page;
+    page.kind = project::archive::Kind::Ihm;
+    page.application = info.application;
+    page.title = p.config.name.empty() ? info.manifest.name : p.config.name;
+    std::string sub;
+    if (!p.config.version.empty()) sub += "version " + p.config.version;
+    if (!p.config.author.empty()) sub += (sub.empty() ? "" : " \xC2\xB7 ") + p.config.author;
+    sub += (sub.empty() ? std::string("export\xC3\xA9" "e le ") : std::string(" \xC2\xB7 export\xC3\xA9" "e le ")) + info.exportedAt;
+    if (!st.restWhy.empty()) sub += " \xC2\xB7 page au repos";
+    page.subtitle = sub;
+    page.archive = info.archive;
+    page.archiveName = info.archiveName;
+
+    // ---- les vues et les popups, deja dessinees ---------------------------------------
+    h::NavGroup viewsNav{"Vues", {}}, popupsNav{"Popups", {}};
+    const hmi::View* start = p.view(p.config.startView);
+    for (const auto& d : m.drawn) {
+        const auto* v = p.view(d.id);
+        if (!v) continue;
+        st.svgBytes += d.svg.size();
+        st.hotspots += d.hots.size();
+        h::Section s;
+        s.id = viewId(v->id);
+        s.title = v->name;
+        const bool popup = v->role == "popup";
+        s.css = popup ? "popup" : "view";
+        s.subtitle = std::to_string(d.width) + " \xC3\x97 " + std::to_string(d.height) + " px"
+                   + (popup ? " \xC2\xB7 popup" : v == start ? " \xC2\xB7 vue de d\xC3\xA9marrage" : "");
+        s.attributes = "data-width=\"" + std::to_string(d.width) + "\"";
+        s.html = "<div class=\"screen\" style=\"max-width:" + std::to_string(d.width + 14) + "px\">" + d.svg + "</div>\n";
+        if (!v->description.empty()) s.html += "<p class=\"desc\">" + h::escape(v->description) + "</p>\n";
+        if (!st.restWhy.empty() && m.drawn.front().id == d.id)
+            s.html += "<p class=\"desc\">Page au repos : les vues sont dessin\xC3\xA9" "es sans valeurs, l'IHM n'y tourne pas ("
+                    + h::escape(st.restWhy) + "). Avec le moteur web d'IHM Studio (son dossier web/), la page fait tourner l'IHM.</p>\n";
+        // Ou elle mene (les zones cliquables), une fois chacune.
+        std::set<hmi::Id> seen;
+        std::string links;
+        for (const auto& hot : d.hots) {
+            if (hot.target == hmi::kNoId || !seen.insert(hot.target).second) continue;
+            const auto* t = p.view(hot.target);
+            if (!t) continue;
+            const bool toPopup = hot.attribute.rfind("data-popup", 0) == 0;
+            links += "<a href=\"#" + viewId(t->id) + "\" " + (toPopup ? "data-popup=\"" : "data-go=\"") + viewId(t->id) + "\">" + h::escape(t->name)
+                   + "</a>";
+        }
+        if (!links.empty()) s.html += "<div class=\"links\">M\xC3\xA8ne \xC3\xA0 : " + links + "</div>\n";
+        if (!v->scripts.empty()) {
+            s.html += "<details><summary>Ses scripts (" + std::to_string(v->scripts.size()) + ")</summary>\n";
+            for (const auto& sc : v->scripts) s.html += scriptBlock(sc);
+            s.html += "</details>\n";
+        }
+        (popup ? popupsNav : viewsNav).links.push_back({s.id, v->name, v == start ? std::string("d\xC3\xA9marrage") : std::string{}});
+        (popup ? st.popups : st.views) += 1;
+        page.sections.push_back(std::move(s));
+    }
+    st.images = m.images.count();
+    page.defs = m.images.defs();
+    page.first = m.drawn.empty() ? std::string("fiche") : viewId(m.drawn.front().id);
+
+    appendListSections(page, p, info, st.views, st.popups);
     page.nav.push_back(std::move(viewsNav));
     page.nav.push_back(std::move(popupsNav));
-    page.nav.push_back({"Le projet", {{"alarmes", "Alarmes", thousands(p.alarms.size())},
-                                       {"variables", "Variables IHM", thousands(p.programs.variables.size())},
-                                       {"scripts", "Scripts et fonctions", std::to_string(p.programs.scripts.size() + p.programs.functions.size())},
-                                       {"fiche", "Fiche du projet", {}}}});
+    page.nav.push_back(projectNav(p));
     std::string html = h::render(page);
     st.pageBytes = html.size();
     return html;
@@ -455,7 +614,9 @@ std::string HmiWebPageBuilder::page(const WebPageInfo& info, WebPageStats* stats
 
 
 std::string hmiWebPage(const hmi::Project& p, const ui::Theme& theme, const WebPageInfo& info, WebPageStats* stats) {
-    HmiWebPageBuilder builder(p, theme);
+    // Le moteur donne et complet : la page en marche (rien a dessiner ici) ; sinon au repos.
+    const bool live = !info.webFolder.empty() && webBundleFolder(info.webFolder) == info.webFolder;
+    HmiWebPageBuilder builder(p, theme, live);
     while (!builder.draw(1e12)) {}
     return builder.page(info, stats);
 }

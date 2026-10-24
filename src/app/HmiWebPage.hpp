@@ -38,12 +38,26 @@ struct WebPageInfo {
     bool                             hasManifest{false};
     const std::vector<std::uint8_t>* archive{nullptr};   // l'archive du projet, portee par la page
     std::string                      archiveName;     // "Ligne_gaz.xihm"
+    // 1.12.31 : le dossier du moteur web (webBundleFolder) : la page EN MARCHE. Vide : la page au
+    // repos (celle de la 1.12.30) ; restWhy dit pourquoi (vide : rien a dire, comme les essais).
+    std::string                      webFolder;
+    std::string                      restWhy;
 };
 
 struct WebPageStats {
     std::size_t views{0}, popups{0}, hotspots{0}, images{0}, elements{0};
     std::size_t svgBytes{0}, pageBytes{0};
+    // 1.12.31 : la page EN MARCHE (le moteur de l'IHM y tourne) ; sinon, au repos et pourquoi.
+    bool        live{false};
+    std::size_t engineBytes{0};
+    std::string restWhy;
 };
+
+// 1.12.31 : LA PAGE EN MARCHE. Le moteur de l'IHM compile en WebAssembly (outils/web/
+// construire_web.sh) est livre dans web/ a cote de l'exe : la page l'embarque et l'IHM y
+// tourne. Le dossier : celui donne, sinon XPG_WEB_DIR, sinon web/ a cote du programme. Vide,
+// et `why` : pourquoi la page restera au repos. Sur le fil de l'interface (les dossiers).
+[[nodiscard]] std::string webBundleFolder(const std::string& explicitFolder = {}, std::string* why = nullptr);
 
 // LA PAGE EN DEUX TEMPS - la mise a jour a chaque enregistrement ne doit pas figer l'appli :
 // draw() dessine les vues une a une, sur le fil de l'interface (le dessin des vues y vit), dans
@@ -51,7 +65,8 @@ struct WebPageStats {
 // copie : il peut changer pendant ce temps.
 class HmiWebPageBuilder {
 public:
-    HmiWebPageBuilder(hmi::Project project, ui::Theme theme);
+    // `live` (1.12.31) : la page sera en marche (WebPageInfo::webFolder), draw() n'a rien a dessiner.
+    HmiWebPageBuilder(hmi::Project project, ui::Theme theme, bool live = false);
     ~HmiWebPageBuilder();
     HmiWebPageBuilder(const HmiWebPageBuilder&) = delete;
     HmiWebPageBuilder& operator=(const HmiWebPageBuilder&) = delete;

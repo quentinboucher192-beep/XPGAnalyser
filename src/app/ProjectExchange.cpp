@@ -254,7 +254,9 @@ void startWeb(App& app, const std::string& path, bool quiet, bool history) {
             say(app, "La page web : ce projet n'a pas d'IHM.", 8.0);
             return;
         }
-        j->builder = std::make_unique<HmiWebPageBuilder>(doc->project, app.theme());
+        // 1.12.31 : le moteur de l'IHM (web/ a cote du programme) : la page sera en marche.
+        j->info.webFolder = webBundleFolder({}, &j->info.restWhy);
+        j->builder = std::make_unique<HmiWebPageBuilder>(doc->project, app.theme(), !j->info.webFolder.empty());
     } else {
         const auto plc = app.project();
         if (!plc) return;
@@ -337,14 +339,19 @@ void finishWeb() {
             bgtasks::post({"echange:page", "Projet", "La page web ne s'est pas \xC3\xA9" "crite", out->error, "", "", "warning"});
             say(app, "La page web ne s'est pas \xC3\xA9" "crite : " + out->error, 10.0);
         } else {
-            report() = "page web ecrite : " + j->path + " (" + pa::sizeText(out->bytes) + ")";
+            report() = "page web ecrite : " + j->path + " (" + pa::sizeText(out->bytes) + ")"
+                     + (j->api ? std::string{} : out->stats.live ? std::string(", en marche") : ", au repos : " + out->stats.restWhy);
             const std::string folder = fs::path(j->path).parent_path().string();
             bgtasks::post({"echange:page", "Projet", "Page web \xC3\xA9" "crite : " + leafOf(j->path), j->path + " \xC2\xB7 " + pa::sizeText(out->bytes),
                            "Ouvrir le dossier", "open.folder:" + folder, "ok"});
+            // 1.12.31 : l'IHM tourne dans la page (le moteur web livre) ; sinon, au repos : le dire.
+            const std::string state = j->api ? std::string{}
+                                    : out->stats.live ? std::string(", l'IHM y tourne")
+                                                      : ", au repos (" + out->stats.restWhy + ")";
             if (j->quiet)
-                say(app, "Page web mise \xC3\xA0 jour : " + j->path + " (" + pa::sizeText(out->bytes) + ")", 5.0);
+                say(app, "Page web mise \xC3\xA0 jour : " + j->path + " (" + pa::sizeText(out->bytes) + ")" + state, 5.0);
             else
-                say(app, "Page web \xC3\xA9" "crite : " + j->path + " (" + pa::sizeText(out->bytes) + ") \xE2\x80\x94 elle s'ouvre dans un "
+                say(app, "Page web \xC3\xA9" "crite : " + j->path + " (" + pa::sizeText(out->bytes) + ")" + state + " \xE2\x80\x94 elle s'ouvre dans un "
                          "navigateur, et se r\xC3\xA9importe par Projet \xE2\x80\xBA Importer depuis une page web\xE2\x80\xA6", 12.0);
         }
         if (webAgain()) {
@@ -671,10 +678,17 @@ void askExportWeb(App& app) {
               "projet, la configuration, les t\xC3\xA2" "ches et l'ordre d'ex\xC3\xA9" "cution, chaque section et son code, les unit\xC3\xA9s, les blocs DFB, "
               "les types d\xC3\xA9riv\xC3\xA9s, les variables. Le projet entier (.xapi) est dans la page : Projet \xE2\x80\xBA Importer depuis une page "
               "web\xE2\x80\xA6 le reconstruit \xC3\xA0 l'identique."
-            : "L'IHM en page web : un seul fichier .html, qui s'ouvre dans n'importe quel navigateur, sans Internet - chaque vue et chaque "
-              "popup dessin\xC3\xA9" "e comme dans IHM Studio (les boutons qui ouvrent une vue ou une popup se cliquent), le menu des vues, les "
-              "alarmes, les variables, les scripts et la fiche du projet. Le projet entier (.xihm) est dans la page : Projet \xE2\x80\xBA "
-              "Importer depuis une page web\xE2\x80\xA6 le reconstruit \xC3\xA0 l'identique.";
+            // 1.12.31 : l'IHM tourne dans la page (le moteur web livre avec IHM Studio) ; sans lui, au repos.
+            : "L'IHM en page web : un seul fichier .html, qui s'ouvre dans un navigateur, sans Internet. L'IHM y tourne, avec le moteur et "
+              "le dessin d'IHM Studio : les vues s'animent, les scripts et les alarmes tournent, les boutons et les saisies r\xC3\xA9pondent (les "
+              "\xC3\xA9quipements n'y sont pas reli\xC3\xA9s). La barre du bas ouvre les alarmes, les variables, les scripts et la fiche du projet. "
+              "Le projet entier (.xihm) est dans la page : Projet \xE2\x80\xBA Importer depuis une page web\xE2\x80\xA6 le reconstruit \xC3\xA0 "
+              "l'identique." + [] {
+                  std::string why;
+                  return webBundleFolder({}, &why).empty() ? "\n\nLe moteur web d'IHM Studio manque (" + why + ") : la page sera au repos, ses vues "
+                                                             "dessin\xC3\xA9" "es sans valeurs."
+                                                           : std::string{};
+              }();
         auto dialog = std::make_unique<FormDialog>(
             "dialog.exchangeWeb", "Exporter en page web (.html)",
             text + "\n\n\xC3\x80 chaque enregistrement (Oui) : la page se r\xC3\xA9\xC3\xA9" "crit toute seule, \xC3\xA0 cet endroit, sans ralentir "

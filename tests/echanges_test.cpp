@@ -535,6 +535,76 @@ std::size_t occurrences(const std::string& text, const std::string& what) {
     return n;
 }
 
+// 1.12.31 : LA PAGE EN MARCHE - le moteur de l'IHM en WebAssembly (bash outils/web/construire_web.sh :
+// third_party/web, ou XPG_WEB_DIR). La page l'embarque : l'IHM y tourne. Sans lui : saute, et dit.
+void pageEnMarche(const hmi::Project& p, app::WebPageInfo info, const fs::path& bac, const fs::path& src) {
+    fs::path root = fs::absolute(bac).lexically_normal();
+    if (!root.has_filename()) root = root.parent_path();
+    const std::string web = app::webBundleFolder((root.parent_path().parent_path() / "third_party" / "web").string());
+    // Sans moteur : la page de la 1.12.30, qui dit pourquoi elle est au repos.
+    {
+        app::WebPageInfo rest = info;
+        rest.restWhy = "ihm-web.wasm.gz manque dans web";
+        app::WebPageStats st;
+        const std::string still = app::hmiWebPage(p, ui::Theme::light(), rest, &st);
+        check(!st.live && still.find("page au repos") != std::string::npos && still.find("ihm-web.wasm.gz manque dans web") != std::string::npos
+                  && occurrences(still, "<svg viewBox=") == st.views + st.popups && still.find("id=\"xpg-moteur\"") == std::string::npos,
+              "sans moteur web : la page au repos (celle de la 1.12.30), et elle dit pourquoi");
+        app::WebPageInfo empty = info;
+        empty.webFolder = (scratch() / "page" / "web-vide").string();
+        std::error_code ec;
+        fs::create_directories(fs::path(empty.webFolder), ec);
+        const std::string broken = app::hmiWebPage(p, ui::Theme::light(), empty, &st);
+        check(!st.live && st.restWhy.find("ihm-web.wasm.gz") != std::string::npos && occurrences(broken, "<svg viewBox=") > 0,
+              "un dossier web/ incomplet : la page au repos, ses vues dessinees, et le fichier qui manque est dit");
+    }
+    if (web.empty()) {
+        std::printf("   page en marche : moteur web absent (bash outils/web/construire_web.sh) - essai saute\n");
+        return;
+    }
+    info.webFolder = web;
+    app::WebPageStats st;
+    const auto t0 = std::chrono::steady_clock::now();
+    const std::string html = app::hmiWebPage(p, ui::Theme::light(), info, &st);
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+    check(st.live && st.engineBytes > 100000 && html.find("id=\"xpg-moteur\"") != std::string::npos
+              && html.find("id=\"ihm-canvas\"") != std::string::npos && html.find("id=\"xpg-police\"") != std::string::npos,
+          "la page en marche embarque le moteur de l'IHM (" + pa::sizeText(st.engineBytes) + ") et sa police");
+    check(html.find("{{") == std::string::npos, "son gabarit est rempli : plus aucun {{...}}");
+    check(occurrences(html, "<svg viewBox=") == 0, "en marche, aucune vue dessinee d'avance : le moteur les dessine dans la page");
+    check(html.find("<script>alert") == std::string::npos && html.find("<b>gras</b>") == std::string::npos,
+          "rien du projet n'y est lu tel quel par le navigateur");
+    check(html.find("http://") == std::string::npos && html.find("https://") == std::string::npos && html.find("src=\"") == std::string::npos,
+          "en marche aussi : aucun lien vers Internet, rien a charger ailleurs");
+    // Sa documentation (les listes de la 1.12.30) : une page a part, en base64.
+    std::string docs;
+    if (const auto at = html.find("id=\"xpg-doc\">"); at != std::string::npos) {
+        const auto from = html.find('>', at) + 1, to = html.find("</script>", from);
+        pa::Bytes bytes;
+        if (to != std::string::npos && pa::fromBase64(std::string_view(html).substr(from, to - from), bytes)) docs.assign(bytes.begin(), bytes.end());
+    }
+    check(docs.find("id=\"alarmes\"") != std::string::npos && docs.find("id=\"variables\"") != std::string::npos
+              && docs.find("id=\"scripts\"") != std::string::npos && docs.find("id=\"fiche\"") != std::string::npos
+              && docs.find("&lt;b&gt;gras&lt;/b&gt;") != std::string::npos && docs.find("<b>gras</b>") == std::string::npos
+              && docs.find("id=\"xpg-archive\"") == std::string::npos,
+          "sa documentation : les alarmes, les variables, les scripts, la fiche (echappees, sans seconde archive)");
+    const fs::path page = scratch() / "page" / "Armoire_Gaz-en-marche.html";
+    writeAll(page, html);
+    const auto sn = pa::sniff(page.string());
+    check(sn.archive && sn.page && sn.kind == pa::Kind::Ihm, "la page en marche se reconnait : elle porte l'archive IHM");
+    auto c = pa::readFile(page.string());
+    check(c && c->fromPage && c->intact(), "l'archive de la page en marche se relit, intacte");
+    if (c) {
+        const fs::path dest = scratch() / "page" / "out-marche" / "Armoire_Gaz";
+        hmi::ArchiveReport in;
+        check(static_cast<bool>(hmi::unpackProjectArchive(*c, dest.string(), &in)) && in.coherent(),
+              "importer depuis la page en marche : le projet se reconstruit, coherent");
+        check(sameFolders(src, dest, "page-marche"), "fichier par fichier : identique");
+    }
+    std::printf("   page IHM en marche : %s en %lld ms (moteur %s, %s)\n", pa::sizeText(st.pageBytes).c_str(), static_cast<long long>(ms),
+                pa::sizeText(st.engineBytes).c_str(), web.c_str());
+}
+
 void pagesWeb(const fs::path& bac) {
     std::printf("6. les pages web : la page de l'IHM, celle du programme, l'archive dedans\n");
     core::setEdition(core::Edition::Ihm);
@@ -630,6 +700,7 @@ void pagesWeb(const fs::path& bac) {
         auto r = pa::readFile(badPage.string());
         check(!r && r.error().context.find("abim\xC3\xA9" "e") != std::string::npos, "une page a l'archive abimee : refusee, et c'est dit");
     }
+    pageEnMarche(*p, info, bac, src);
 
     // ---- la page du programme (API Studio) ----
     core::setEdition(core::Edition::Api);
@@ -732,6 +803,21 @@ void allerRetour(const fs::path& folder) {
         hmi::ArchiveReport in2;
         check(static_cast<bool>(hmi::unpackProjectArchive(*c, dest2.string(), &in2)) && in2.coherent(), "importer depuis sa page : coherent");
         check(sameFolders(folder, dest2, "demo-page"), "importer depuis sa page : identique, fichier par fichier");
+    }
+    // 1.12.31 : sa page EN MARCHE (le moteur web : XPG_WEB_DIR, sinon web/ a cote du programme).
+    if (const std::string web = app::webBundleFolder(); !web.empty()) {
+        info.webFolder = web;
+        app::WebPageStats live;
+        const auto t5 = std::chrono::steady_clock::now();
+        const std::string running = app::hmiWebPage(*p, ui::Theme::light(), info, &live);
+        const auto t6 = std::chrono::steady_clock::now();
+        const fs::path livePage = scratch() / "demo" / (folder.filename().string() + "-en-marche.html");
+        writeAll(livePage, running);
+        std::printf("   page en marche : %s en %lld ms (moteur %s) - %s\n", pa::sizeText(running.size()).c_str(),
+                    static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(t6 - t5).count()),
+                    pa::sizeText(live.engineBytes).c_str(), livePage.string().c_str());
+        auto lc = pa::readFile(livePage.string());
+        check(live.live && lc && lc->intact(), "sa page en marche porte l'archive, intacte");
     }
 }
 
