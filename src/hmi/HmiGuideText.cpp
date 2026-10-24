@@ -18457,33 +18457,70 @@ const std::vector<Topic>& topics() {
         // ---- Tester et livrer  Livrer et exploiter / page-web
         {"page-web", "L'IHM en page web : un seul .html", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
          "Projet \xE2\x80\xBA Exporter en page web (.html)\xE2\x80\xA6 \xC3\xA9" "crit l'IHM dans un seul "
-         "fichier, qui s'ouvre dans n'importe quel navigateur, sans Internet : chaque vue et chaque popup "
-         "dessin\xC3\xA9" "e comme dans IHM Studio, les boutons qui naviguent, les alarmes, les variables, "
-         "les scripts. Le projet entier est dans la page : Projet \xE2\x80\xBA Importer depuis une page "
-         "web\xE2\x80\xA6 le reconstruit \xC3\xA0 l'identique.",
+         "fichier, qui s'ouvre dans un navigateur, sans Internet : l'IHM y tourne, avec le moteur et le "
+         "dessin d'IHM Studio - ses vues s'animent, ses scripts et ses alarmes tournent, ses boutons et ses "
+         "saisies r\xC3\xA9pondent. Le projet entier est dans la page : Projet \xE2\x80\xBA Importer depuis "
+         "une page web\xE2\x80\xA6 le reconstruit \xC3\xA0 l'identique.",
          {
              {K::Heading, "L'\xC3\xA9" "crire", {}},
              {K::Paragraph, "**Projet \xE2\x80\xBA Exporter en page web (.html)\xE2\x80\xA6** (ou le clic droit "
                          "sur la racine de l'arbre du projet, ou IHM \xE2\x80\xBA Exporter / Importer, "
                          "**Page web**) : par d\xC3\xA9" "faut `<dossier du projet>.html`, \xC3\xA0 "
-                         "c\xC3\xB4t\xC3\xA9 du dossier du projet. Les vues se dessinent entre deux images, "
-                         "le reste s'\xC3\xA9" "crit \xC3\xA0 c\xC3\xB4t\xC3\xA9 : l'application ne se fige "
-                         "pas ; la cloche dit o\xC3\xB9 est la page.", {}},
-             {K::Heading, "Ce qu'elle montre", {}},
-             {K::Table, "Dans la page\tCe qu'on y voit\nLes vues et les popups\tdessin\xC3\xA9" "es par le "
-                         "dessin d'IHM Studio, en vectoriel (nettes \xC3\xA0 tous les zooms, leurs textes se "
-                         "cherchent), au repos : une valeur affich\xC3\xA9" "e y est marqu\xC3\xA9" "e "
-                         "\xC2\xAB \xE2\x80\x94 \xC2\xBB\nLa navigation\tun bouton ou une zone qui ouvre une "
-                         "vue ou une popup se clique ; Pr\xC3\xA9" "c\xC3\xA9" "dent et Fermer la popup "
-                         "aussi ; le menu de gauche liste les vues et les popups ; la vue de "
-                         "d\xC3\xA9marrage s'ouvre d'abord\nLes alarmes\tchaque alarme : sa priorit\xC3\xA9, "
-                         "sa cat\xC3\xA9gorie, son groupe, sa condition, son message, sa consigne\nLes "
-                         "variables IHM\tleur type, leur valeur initiale, leur \xC3\xA9quipement et leur "
-                         "adresse\nLes scripts et les fonctions\tleur code color\xC3\xA9, en lecture\nLa "
-                         "fiche du projet\tce qu'il contient, sa version, son auteur, ses dates, sa "
-                         "r\xC3\xA9solution ; **T\xC3\xA9l\xC3\xA9" "charger le projet**", {}},
-             {K::Paragraph, "Aucun lien vers Internet : elle se lit hors ligne, s'envoie par courriel, se range "
-                         "avec la documentation.", {}},
+                         "c\xC3\xB4t\xC3\xA9 du dossier du projet. La page s'\xC3\xA9" "crit \xC3\xA0 "
+                         "c\xC3\xB4t\xC3\xA9, l'application ne se fige pas ; la cloche dit o\xC3\xB9 est la "
+                         "page, la barre d'\xC3\xA9tat dit \xC2\xAB l'IHM y tourne \xC2\xBB.", {}},
+             {K::Heading, "Dans le navigateur : l'IHM en marche", {}},
+             {K::Paragraph, "Le moteur de l'IHM d'IHM Studio, compil\xC3\xA9 pour le navigateur (WebAssembly), "
+                         "est dans la page avec le projet : il le fait tourner comme la simulation d'IHM "
+                         "Studio, et dessine chaque vue avec le m\xC3\xAAme dessin.", {}},
+             {K::Table, "Dans la page\tCe qui se passe\nLes vues et les popups\tdessin\xC3\xA9" "es comme "
+                         "dans IHM Studio, anim\xC3\xA9" "es par les valeurs ; la vue de d\xC3\xA9marrage "
+                         "s'ouvre d'abord, \xC3\xA0 la taille de la fen\xC3\xAAtre (le r\xC3\xA9glage "
+                         "d'affichage du poste)\nLa navigation\tun bouton qui ouvre une vue ou une popup, "
+                         "Pr\xC3\xA9" "c\xC3\xA9" "dent, Fermer la popup ; une popup se d\xC3\xA9place par "
+                         "son titre\nLes saisies\tun clic sur un bouton, un interrupteur, une liste "
+                         "d\xC3\xA9roulante, des boutons radio ; un curseur se glisse ; un champ de saisie "
+                         "se tape au clavier (Entr\xC3\xA9" "e valide)\nLes scripts\tcycliques, sur "
+                         "\xC3\xA9v\xC3\xA9nement, au d\xC3\xA9marrage ; un script d\xC3\xA9tach\xC3\xA9 "
+                         "attend sur WAIT sans figer la page ; les fonctions IHM\nLes alarmes\telles "
+                         "apparaissent et disparaissent avec leur condition, dans le bandeau et les listes "
+                         "d'alarmes des vues ; elles s'acquittent\nLes utilisateurs\tl'utilisateur de "
+                         "d\xC3\xA9part ; **Changer d'utilisateur** ouvre le menu de connexion du poste (le "
+                         "compte, le mot de passe ou le code) ; une commande \xC3\xA0 signer ouvre le "
+                         "panneau de signature ; le menu Param\xC3\xA8tres syst\xC3\xA8me s'ouvre comme sur "
+                         "le poste\nLes variables IHM\tleur valeur initiale, puis ce que les scripts et les "
+                         "saisies y \xC3\xA9" "crivent ; une variable **R\xC3\xA9manente** est "
+                         "gard\xC3\xA9" "e par le navigateur et revient \xC3\xA0 l'ouverture suivante de la "
+                         "page, comme sur le poste d'exploitation", {}},
+             {K::Paragraph, "La barre du bas : le mode, les \xC3\xA9quipements, l'utilisateur connect\xC3\xA9, "
+                         "la vue ouverte ; **Alarmes**, **Variables**, **Scripts**, **Fiche** ouvrent la "
+                         "documentation du projet (les listes, le code color\xC3\xA9, la fiche) ; "
+                         "**T\xC3\xA9l\xC3\xA9" "charger le projet** enregistre l'archive .xihm que porte la "
+                         "page.", {}},
+             {K::Heading, "Ce que la page ne fait pas", {}},
+             {K::Paragraph, "Un navigateur ne laisse pas une page ouvrir une connexion r\xC3\xA9seau \xC3\xA0 "
+                         "un appareil, ni toucher au PC. Dans la page :", {}},
+             {K::Bullet, "**les \xC3\xA9quipements** (Modbus TCP) ne sont pas reli\xC3\xA9s : une variable "
+                         "li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement garde sa valeur initiale, et la barre "
+                         "du bas le dit. Pour piloter les vrais appareils, ouvre le projet dans IHM Studio "
+                         "ou en poste d'exploitation ;", {}},
+             {K::Bullet, "pas de ping ni de recherche d'adresses IP, pas de port s\xC3\xA9rie, pas de "
+                         "courriel ni de SMS, pas de vid\xC3\xA9o d\xC3\xA9" "cod\xC3\xA9" "e par Windows "
+                         "(MP4, WMV), pas de lecteur PDF, pas de serveur web int\xC3\xA9gr\xC3\xA9 ;", {}},
+             {K::Bullet, "pas de clavier virtuel \xC3\xA0 l'\xC3\xA9" "cran : tu tapes au clavier du poste ; "
+                         "pas de fen\xC3\xAAtre R\xC3\xA9glage PID, ni de page Simulation dans "
+                         "Param\xC3\xA8tres syst\xC3\xA8me ;", {}},
+             {K::Bullet, "dans un onglet cach\xC3\xA9 ou une fen\xC3\xAAtre r\xC3\xA9" "duite, le navigateur "
+                         "ralentit la page : l'IHM y tourne au ralenti, ses scripts cycliques et ses alarmes "
+                         "aussi. Garde la page affich\xC3\xA9" "e.", {}},
+             {K::Tip, "Il faut un navigateur r\xC3\xA9" "cent (Edge, Chrome, Firefox, Safari de 2023 ou "
+                         "plus) : la page le dit sinon.", {}},
+             {K::Heading, "Le moteur web, livr\xC3\xA9 avec IHM Studio", {}},
+             {K::Paragraph, "Le moteur est dans le dossier `web` \xC3\xA0 c\xC3\xB4t\xC3\xA9 d'IHM-Studio.exe "
+                         "(livr\xC3\xA9 par l'installateur). S'il manque, la page s'\xC3\xA9" "crit quand "
+                         "m\xC3\xAAme, **au repos** - les vues dessin\xC3\xA9" "es sans valeurs, les boutons "
+                         "de navigation cliquables, les listes du projet -, et elle le dit, comme la barre "
+                         "d'\xC3\xA9tat.", {}},
              {K::Heading, "\xC3\x80 chaque enregistrement", {}},
              {K::Paragraph, "**Mettre \xC3\xA0 jour la page web \xC3\xA0 chaque enregistrement** (dans la "
                          "fen\xC3\xAAtre Exporter en page web) : \xC3\xA0 chaque Ctrl+S, la page se "
@@ -18499,8 +18536,8 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9" "crite est refus\xC3\xA9" "e : \xC2\xAB cette page n'a pas "
                          "\xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio ni par API Studio \xC2\xBB.", {}},
          },
-         {"archive-projet", "echange", "dossier"},
-         {"page web", "HTML", ".html", "navigateur", "Exporter en page web", "Importer depuis une page web", "Mettre \xC3\xA0 jour la page web \xC3\xA0 chaque enregistrement", "hors ligne", "sans Internet", "SVG", "T\xC3\xA9l\xC3\xA9" "charger le projet", "cette page n'a pas \xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio"},
+         {"archive-projet", "echange", "dossier", "simulation"},
+         {"page web", "HTML", ".html", "navigateur", "Exporter en page web", "Importer depuis une page web", "Mettre \xC3\xA0 jour la page web \xC3\xA0 chaque enregistrement", "hors ligne", "sans Internet", "SVG", "WebAssembly", "wasm", "page en marche", "page au repos", "ihm-web.wasm.gz", "T\xC3\xA9l\xC3\xA9" "charger le projet", "cette page n'a pas \xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio"},
          {},
          {{"PNG_echanges_05_page_web_ihm.png", "La page web de l'IHM dans un navigateur : le menu des vues, la vue de d\xC3\xA9marrage dessin\xC3\xA9" "e, ses boutons cliquables."}, {"PNG_echanges_06_page_web_navigation.png", "Un clic sur un bouton de navigation : sa vue s'ouvre ; Pr\xC3\xA9" "c\xC3\xA9" "dent revient."}},
          "",
