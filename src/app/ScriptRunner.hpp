@@ -26,6 +26,8 @@
 //    survol X Y
 //    molette X Y DY [ctrl]
 //    touche Ctrl+Z | Return | Escape | Maj+Tab ...
+//                                 1.12.31 : touche Ctrl+6 dispo=- - avec la touche de la disposition
+//                                 (la touche 6/- d'un AZERTY, telle que la plateforme la rend)
 //    texte "..."
 //    bouton "Libelle"             un bouton de l'ecran du dessus (dialogue compris)
 //    champ N "texte"              le N-ieme champ de saisie de l'ecran du dessus

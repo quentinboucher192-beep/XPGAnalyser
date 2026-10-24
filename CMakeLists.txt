@@ -354,6 +354,11 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(fold_test              PRIVATE xpg_ui)
     xpg_target_link_libraries(layout_test            PRIVATE xpg_ui)
     xpg_target_link_libraries(zoom_test              PRIVATE xpg_ui)
+    # 1.12.31 : les touches du zoom sur tous les claviers (platform/KeyTranslate.hpp : les
+    # en-tetes de third_party/SDL3, les valeurs des touches, rien a lier).
+    if(TARGET zoom_test)
+        target_include_directories(zoom_test PRIVATE ${CMAKE_SOURCE_DIR}/third_party/SDL3/include)
+    endif()
 
     # Lot 16 : ViewModels.cpp montre les types et les dossiers des variables IHM
     # (hmi::types, dans xpg_hmi) : les trois tests qui le compilent lient xpg_hmi.

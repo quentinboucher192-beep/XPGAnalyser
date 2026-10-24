@@ -1068,7 +1068,17 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         Key k{};
         KeyMods m;
         if (!parseKey(arg(1), k, m)) { fail("touche inconnue : " + arg(1)); return Step::Next; }
-        send(ui::KeyDown{k, m, false});
+        ui::KeyDown down{k, m, false};
+        // 1.12.31 : touche ctrl+6 dispo=- - la touche de la disposition (KeyDown::layout) : ce que rend la
+        // couche de la plateforme pour la touche 6/- d'un AZERTY (SDL dit 6, la disposition dit -).
+        for (std::size_t i = 2; i < w.size(); ++i)
+            if (w[i].rfind("dispo=", 0) == 0) {
+                Key layout{};
+                KeyMods ignored;
+                if (!parseKey(w[i].substr(6), layout, ignored)) { fail("touche de disposition inconnue : " + w[i]); return Step::Next; }
+                down.layout = layout;
+            }
+        send(down);
         send(ui::KeyUp{k, m});
         return Step::Yield;
     }

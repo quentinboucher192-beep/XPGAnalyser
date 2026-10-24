@@ -1082,6 +1082,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiVertices.hpp" />
     <ClInclude Include="src\hmi\HmiViewPaths.hpp" />
     <ClInclude Include="src\platform\AtlasSymbols.hpp" />
+    <ClInclude Include="src\platform\KeyTranslate.hpp" />
     <ClInclude Include="src\platform\TextCensus.hpp" />
     <ClInclude Include="src\project\ActivationConditions.hpp" />
     <ClInclude Include="src\project\ApiArchive.hpp" />

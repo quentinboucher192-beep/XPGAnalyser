@@ -6,14 +6,20 @@
 //  dessin, la souris, la souris tenue, la passe du dessus, les infobulles -, que
 //  rien ne change a 100 %, les crans, Ctrl + molette, et le geste qui vise le bon
 //  widget (le Native le plus profond, sinon le Scaled le plus haut).
+//  1.12.31 : les touches du zoom sur un AZERTY (FR, BE), un QWERTZ, un QWERTY et
+//  le pave numerique.
 // =============================================================================
 #include "../src/ui/Widget.hpp"
 #include "../src/ui/Zoom.hpp"
+#include "../src/ui/KeyMap.hpp"
 #include "../src/ui/widgets/DataViews.hpp"
+// 1.12.31 : les touches du zoom sur tous les claviers (les en-tetes de SDL3, sans le lier).
+#include "../src/platform/KeyTranslate.hpp"
 
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -289,6 +295,108 @@ void testTargets() {
     CHECK(tree.zoomSupport() == ZoomSupport::Scaled);
 }
 
+// ---- 1.12.31 : les touches du zoom, sur tous les claviers ---------------------------
+//  Un clavier simule : la touche de chaque emplacement (scancode) sans Maj, et ce que
+//  SDL met dans l'evenement avec son option par defaut (french_numbers : la rangee des
+//  chiffres d'un AZERTY en chiffres).
+struct Layout {
+    std::map<SDL_Scancode, SDL_Keycode> plain;    // SDL_GetKeyFromScancode(sc, SDL_KMOD_NONE, false)
+    bool frenchNumbers{false};
+    [[nodiscard]] SDL_Keycode eventKey(SDL_Scancode sc) const {
+        if (frenchNumbers && sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_0)
+            return sc == SDL_SCANCODE_0 ? SDLK_0 : static_cast<SDL_Keycode>(SDLK_1 + (sc - SDL_SCANCODE_1));
+        const auto it = plain.find(sc);
+        return it == plain.end() ? SDLK_UNKNOWN : it->second;
+    }
+    [[nodiscard]] KeyDown press(SDL_Scancode sc, SDL_Keymod mod, bool repeat = false) const {
+        return app::sdlkeys::keyDownFrom(sc, eventKey(sc), mod, repeat, [this](SDL_Scancode s) {
+            const auto it = plain.find(s);
+            return it == plain.end() ? SDLK_UNKNOWN : it->second;
+        });
+    }
+};
+
+Layout common() {
+    Layout l;
+    l.plain[SDL_SCANCODE_KP_MINUS] = SDLK_KP_MINUS;
+    l.plain[SDL_SCANCODE_KP_PLUS] = SDLK_KP_PLUS;
+    l.plain[SDL_SCANCODE_KP_0] = SDLK_KP_0;
+    l.plain[SDL_SCANCODE_A] = SDLK_A;
+    return l;
+}
+
+void testZoomKeys() {
+    const SDL_Keymod ctrl = SDL_KMOD_LCTRL, ctrlShift = static_cast<SDL_Keymod>(SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT);
+    // AZERTY francais : (le carre) & e " ' ( - e _ c a ) = ; le - sur la touche 6, le = a cote de la ).
+    Layout fr = common();
+    fr.frenchNumbers = true;
+    const SDL_Keycode frRow[10] = {'&', 0xE9, '"', '\'', '(', '-', 0xE8, '_', 0xE7, 0xE0};
+    for (int i = 0; i < 10; ++i) fr.plain[static_cast<SDL_Scancode>(SDL_SCANCODE_1 + i)] = frRow[i];
+    fr.plain[SDL_SCANCODE_MINUS] = ')';
+    fr.plain[SDL_SCANCODE_EQUALS] = SDLK_EQUALS;
+    const auto minus = fr.press(SDL_SCANCODE_6, ctrl);
+    CHECK(minus.key == Key::Num6 && minus.layout == Key::Minus);       // SDL dit 6, la disposition dit -
+    CHECK(zoomKeyStep(minus) == -1);                                    // Ctrl + - : un cran de moins
+    CHECK(commandKey(minus) == Key::Minus);                             // et Revenir dans un code (Ctrl+-)
+    CHECK(keymap::strokeOf(minus).key == Key::Minus);
+    CHECK(zoomKeyStep(fr.press(SDL_SCANCODE_6, ctrlShift)) == kNotZoomKey);   // Ctrl+Maj : pas le zoom
+    CHECK(zoomKeyStep(fr.press(SDL_SCANCODE_EQUALS, ctrl)) == 1);       // Ctrl + = : un cran de plus
+    CHECK(zoomKeyStep(fr.press(SDL_SCANCODE_EQUALS, ctrlShift)) == 1);  // Ctrl + + (Maj + =) aussi
+    CHECK(zoomKeyStep(fr.press(SDL_SCANCODE_0, ctrl)) == 0);            // Ctrl + 0 : 100 %
+    CHECK(zoomKeyStep(fr.press(SDL_SCANCODE_0, ctrl, true)) == kNotZoomKey);   // tenu, il ne repete pas
+    // Les chiffres des autres raccourcis restent des chiffres : Ctrl+1, Ctrl+5, la touche 6 sans Ctrl.
+    CHECK(fr.press(SDL_SCANCODE_1, ctrl).key == Key::Num1 && zoomKeyStep(fr.press(SDL_SCANCODE_1, ctrl)) == kNotZoomKey);
+    CHECK(fr.press(SDL_SCANCODE_5, ctrl).key == Key::Num5);
+    const auto six = fr.press(SDL_SCANCODE_6, SDL_KMOD_NONE);
+    CHECK(six.key == Key::Num6 && commandKey(six) == Key::Num6 && zoomKeyStep(six) == kNotZoomKey);
+    // AltGr (Ctrl+Alt) n'est pas Ctrl : pas le zoom.
+    CHECK(zoomKeyStep(fr.press(SDL_SCANCODE_6, static_cast<SDL_Keymod>(SDL_KMOD_LCTRL | SDL_KMOD_RALT))) == kNotZoomKey);
+    // Le pave numerique.
+    CHECK(zoomKeyStep(fr.press(SDL_SCANCODE_KP_MINUS, ctrl)) == -1);
+    CHECK(zoomKeyStep(fr.press(SDL_SCANCODE_KP_PLUS, ctrl)) == 1);
+    CHECK(zoomKeyStep(fr.press(SDL_SCANCODE_KP_0, ctrl)) == 0);
+    // Sans Ctrl : rien (le - et le + d'un champ s'ecrivent).
+    CHECK(zoomKeyStep(fr.press(SDL_SCANCODE_KP_MINUS, SDL_KMOD_NONE)) == kNotZoomKey);
+
+    // AZERTY belge : & e " ' ( (le paragraphe) e ! c a ) - ; le - a la place du = d'un QWERTY, le = sous le /.
+    Layout be = common();
+    be.frenchNumbers = true;
+    const SDL_Keycode beRow[10] = {'&', 0xE9, '"', '\'', '(', 0xA7, 0xE8, '!', 0xE7, 0xE0};
+    for (int i = 0; i < 10; ++i) be.plain[static_cast<SDL_Scancode>(SDL_SCANCODE_1 + i)] = beRow[i];
+    be.plain[SDL_SCANCODE_MINUS] = ')';
+    be.plain[SDL_SCANCODE_EQUALS] = SDLK_MINUS;
+    be.plain[SDL_SCANCODE_SLASH] = SDLK_EQUALS;
+    CHECK(zoomKeyStep(be.press(SDL_SCANCODE_EQUALS, ctrl)) == -1);
+    CHECK(zoomKeyStep(be.press(SDL_SCANCODE_SLASH, ctrlShift)) == 1);
+    CHECK(zoomKeyStep(be.press(SDL_SCANCODE_6, ctrl)) == kNotZoomKey);   // le paragraphe : rien
+
+    // QWERTZ allemand : le eszett et l'accent aigu a droite du 0, le + a cote du U (sa touche a lui), le - pres du point.
+    Layout de = common();
+    for (int i = 0; i < 9; ++i) de.plain[static_cast<SDL_Scancode>(SDL_SCANCODE_1 + i)] = static_cast<SDL_Keycode>('1' + i);
+    de.plain[SDL_SCANCODE_0] = SDLK_0;
+    de.plain[SDL_SCANCODE_MINUS] = 0xDF;
+    de.plain[SDL_SCANCODE_RIGHTBRACKET] = SDLK_PLUS;
+    de.plain[SDL_SCANCODE_SLASH] = SDLK_MINUS;
+    CHECK(zoomKeyStep(de.press(SDL_SCANCODE_RIGHTBRACKET, ctrl)) == 1);
+    CHECK(zoomKeyStep(de.press(SDL_SCANCODE_SLASH, ctrl)) == -1);
+    CHECK(zoomKeyStep(de.press(SDL_SCANCODE_0, ctrl)) == 0);
+    CHECK(zoomKeyStep(de.press(SDL_SCANCODE_6, ctrl)) == kNotZoomKey);
+
+    // QWERTY : Ctrl + - , Ctrl + = , Ctrl + + (Maj + =) ; Ctrl+Maj+- (Ctrl+_) n'est pas le zoom.
+    Layout us = common();
+    for (int i = 0; i < 9; ++i) us.plain[static_cast<SDL_Scancode>(SDL_SCANCODE_1 + i)] = static_cast<SDL_Keycode>('1' + i);
+    us.plain[SDL_SCANCODE_0] = SDLK_0;
+    us.plain[SDL_SCANCODE_MINUS] = SDLK_MINUS;
+    us.plain[SDL_SCANCODE_EQUALS] = SDLK_EQUALS;
+    CHECK(zoomKeyStep(us.press(SDL_SCANCODE_MINUS, ctrl)) == -1);
+    CHECK(zoomKeyStep(us.press(SDL_SCANCODE_MINUS, ctrlShift)) == kNotZoomKey);
+    CHECK(zoomKeyStep(us.press(SDL_SCANCODE_EQUALS, ctrl)) == 1);
+    CHECK(zoomKeyStep(us.press(SDL_SCANCODE_EQUALS, ctrlShift)) == 1);
+    CHECK(zoomKeyStep(us.press(SDL_SCANCODE_EQUALS, ctrl, true)) == 1);   // tenu, il repete
+    CHECK(zoomKeyStep(us.press(SDL_SCANCODE_6, ctrl)) == kNotZoomKey);
+    CHECK(us.press(SDL_SCANCODE_A, ctrl).key == Key::A);
+}
+
 } // namespace
 
 int main() {
@@ -298,6 +406,7 @@ int main() {
     testMeasureAndRenderer();
     testCtrlWheel();
     testTargets();
+    testZoomKeys();
     if (g_failures) {
         std::fprintf(stderr, "zoom_test : %d echec(s)\n", g_failures);
         return 1;
