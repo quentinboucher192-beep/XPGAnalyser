@@ -10,6 +10,7 @@
 #include "HmiSources.hpp"   // 1.12.7 (lot E) : « Repeter depuis »
 #include "HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement remplit le Defaut
 #include "HmiRanges.hpp"   // 1.12.10 (lot F) : les seuils pris a la variable
+#include "HmiRoles.hpp"    // 1.12.31 : formulaValueKey, d'apres le role de la propriete
 
 #include <algorithm>
 #include <optional>
@@ -98,6 +99,16 @@ bool synopticLinkedKey(const Object& o, std::string_view key) {
         if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.' || c == '[' || c == ']' || c == ',' || c == ' '))
             return false;
     return t.find('#') == std::string::npos;
+}
+
+bool formulaValueKey(const Object& o, std::string_view key) {
+    if (key == "variable" || key == "state" || key == "lamp") return false;   // leur valeur : "value" (autoValueSource)
+    const auto r = roles::roleOf(o.kind, key);
+    if (r.role != roles::Role::Formula) return false;
+    using R = roles::Role;
+    if (r.item == R::Text || r.item == R::List || r.item == R::Name || r.item == R::Mini) return false;   // un chemin, une source
+    const Prop* pr = o.find(key);
+    return pr && trimmed(pr->expr).empty() && linksVariable(pr->value);
 }
 
 std::string linkedSource(const Object& o, std::string_view key) {

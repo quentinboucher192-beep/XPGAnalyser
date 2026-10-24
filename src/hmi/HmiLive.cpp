@@ -89,9 +89,13 @@ void LiveView::bind(const View& view) {
                 b.key = p.key;
                 b.expr = Expression::compile(p.expr);
                 bound_.push_back(std::move(b));
-            } else if (synopticLinkedKey(o, p.key)) {
+            } else if (synopticLinkedKey(o, p.key) || formulaValueKey(o, p.key)) {
                 // 1.12.5 (lot A, D13) : le Defaut, le Mouvement ou la Valeur d'un symbole du
                 // synoptique tape sans '=' (P1.Defaut) : une formule, comme pour son alarme.
+                // 1.12.31 : TOUTE PROPRIETE DE ROLE FORMULE dont la valeur se montre, tapee dans
+                // l'inspecteur (sans son =) - les fins de course et le declenchement des registres,
+                // les booleens A et B d'une vanne 3 voies, une condition... : calculee comme une
+                // expression, selon la table des roles (avant : leur texte, lu comme une constante).
                 Bound b;
                 b.object = o.id;
                 b.key = p.key;

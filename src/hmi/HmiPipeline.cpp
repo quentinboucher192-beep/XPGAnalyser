@@ -1555,6 +1555,39 @@ std::vector<Diagnostic> generationProblems(const Analysis& a, const Element& e, 
 }
 } // namespace
 
+// ---- 1.12.31 : les artefacts d'un cache deballe (voir le .hpp) ----
+Restored restoreArtifacts(const Project& p, const ApiInfo& api, const std::string& buildFolder) {
+    Restored r;
+    if (buildFolder.empty()) return r;
+    const Cache cache = loadCache(buildFolder);
+    if (cache.status != Cache::Status::Ok) return r;      // pas de cache (une archive d'avant) : le build refera tout
+    r.cache = true;
+    // Les empreintes de chaque element, sans regarder les artefacts : ce sont eux qu'on refait.
+    const Analysis a = analyse(collect(p, api), cache, ArtifactCheck{});
+    const ArtifactCheck there = diskArtifacts(buildFolder);
+    for (std::size_t k = 0; k < a.elements.size(); ++k) {
+        const Element& e = a.elements[k];
+        const auto ce = cache.entries.find(e.key);
+        // Un element en echec (ou jamais genere) au dernier build : le build le refera de toute facon.
+        if (ce == cache.entries.end() || ce->second.artifact.empty() || ce->second.generation != State::Generated) continue;
+        const CacheEntry& en = ce->second;
+        // Son chemin : celui que le build lui donne (des lettres, des chiffres, _ et -) ; sinon il a ete renomme.
+        if (en.artifact != artifactPathOf(e)) { ++r.stale; continue; }
+        if (there(en.artifact, en.artifactHash)) { ++r.present; continue; }
+        // Le meme texte, a la meme empreinte ; sinon l'element a change depuis le build (modifie, une dependance...).
+        const std::string text = generatedText(p, e, a.items[k]);
+        if (hash(text) != en.artifactHash || !core::writeFileAtomic(fs::path(buildFolder) / en.artifact, text, core::AtomicWrite{false, true})) {
+            ++r.stale;
+            continue;
+        }
+        ++r.written;
+    }
+    // Un element du cache qui n'est plus dans le projet : il partira au prochain build.
+    for (const auto& [key, en] : cache.entries)
+        if (!a.byKey.count(key) && !en.artifact.empty() && en.generation == State::Generated) ++r.stale;
+    return r;
+}
+
 Report run(const Project& p, const ApiInfo& api, const Request& req, const Options& o, const ProgressFn& onProgress, const std::atomic<bool>* cancel) {
     using Clock = std::chrono::steady_clock;
     const auto t0 = Clock::now();

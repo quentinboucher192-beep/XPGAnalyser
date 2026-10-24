@@ -29553,7 +29553,249 @@ void pourquoi11227() {
     check(bv && bv->error && unknown, "un nom inconnu : la propriete et son terme en erreur");
 }
 
+// ============================================================== 1.12.31 ======
+//  LES FORMULES TAPEES DANS L'INSPECTEUR, A L'ECRAN EN MARCHE (l'apercu relie). Une propriete de role
+//  Formule (HmiRoles.hpp) tapee dans l'inspecteur y garde sa formule sans son = (la regle des cases,
+//  1.12.19 : la valeur EST la formule). L'ecran - LiveView sur la vue composee du moteur, comme la
+//  simulation, le poste et les exemples - la calcule, pour tout genre d'objet. Avant, seuls le Defaut,
+//  le Mouvement et la Valeur du synoptique l'etaient : les fins de course et le declenchement des
+//  registres, les booleens A et B de la vanne 3 voies se lisaient comme des constantes (FAUX ; le
+//  registre a l'arret se dessinait en discordance). La boucle suit la bibliotheque et la table des
+//  roles : un objet ajoute plus tard est couvert. Dans un symbole, le parametre cite s'y remplace ;
+//  renommer un parametre ou une variable suit la formule.
+void formulesTapees11231() {
+    std::printf("1.12.31 : les formules tapees dans l'inspecteur, calculees a l'ecran en marche\n");
+    using R = roles::Role;
+    Project p;
+    View host = makeView(p, "Vue_Formules");
+    host.width = 8000;
+    host.height = 8000;
+    // Un objet par (genre, propriete de role Formule) : la formule y est seule, telle que l'inspecteur l'enregistre.
+    enum class What { Value, Source, Path };
+    struct Case {
+        std::string kind, object, key, formula, expect;
+        What        what{What::Value};
+        R           item{R::Number};
+    };
+    std::vector<Case> cases;
+    std::set<std::string> kinds;
+    std::size_t fresh = 0, freshTaken = 0;
+    double x = 0, y = 0;
+    for (const Kind k : kPlaceableKinds) {
+        const Object neuf = makeObject(k, kNoId, {}, 0, 0, kNoId);
+        for (const auto& prop : neuf.props) {
+            const auto r = roles::roleOf(k, prop.key);
+            if (r.role != R::Formula) continue;
+            // Un objet neuf : sa valeur par defaut n'est jamais prise pour une formule.
+            ++fresh;
+            if (formulaValueKey(neuf, prop.key)) {
+                ++freshTaken;
+                std::printf("  objet neuf, valeur prise pour une formule : %s.%s = %s\n", std::string(kindKey(k)).c_str(), prop.key.c_str(),
+                            prop.value.c_str());
+            }
+            kinds.insert(std::string(kindKey(k)));
+            const Id id = edit::add(p, host, k, x, y);
+            x += 230;
+            if (x > 7600) { x = 0; y += 230; }
+            Object& o = *host.object(id);
+            Case c;
+            c.kind = std::string(kindKey(k));
+            c.object = "F" + std::to_string(cases.size() + 1) + "_" + c.kind + "_" + prop.key;
+            c.key = prop.key;
+            o.name = c.object;
+            const bool source = prop.key == "variable" || prop.key == "state" || prop.key == "lamp";
+            const R item = source ? roles::valueRoleOf(k, "value") : r.item;
+            // Sa variable a elle (un BOOL vrai, un etat 2, un REAL 42.5) : un objet qui ecrit la sienne (la sortie
+            // d'un programme horaire, la position d'une video) ne change pas celle des autres.
+            Variable var;
+            var.id = p.allocate();
+            var.name = "Var_" + std::to_string(cases.size() + 1);
+            var.type = item == R::Boolean ? "BOOL" : item == R::State ? "INT" : "REAL";
+            var.initial = item == R::Boolean ? "TRUE" : item == R::State ? "2" : "42.5";
+            p.programs.variables.push_back(var);
+            c.formula = var.name;
+            c.item = item;
+            for (const char* other : {"variable", "state", "lamp"})
+                if (auto* pp = o.find(other)) { pp->value.clear(); pp->expr.clear(); }
+            if (auto* pp = o.find(prop.key)) {
+                pp->expr.clear();
+                pp->value = c.formula;
+            }
+            if (source) c.what = autoValueSource(o) == c.formula ? What::Source : What::Path;
+            else if (r.item == R::Text || r.item == R::List || r.item == R::Name || r.item == R::Mini) c.what = What::Path;
+            else c.expect = item == R::Boolean ? "TRUE" : item == R::State ? "2" : "42.5";
+            cases.push_back(std::move(c));
+        }
+    }
+    check(fresh > 0 && freshTaken == 0, "un objet neuf de chaque genre : aucune valeur par d\xC3\xA9" "faut prise pour une formule ("
+                                            + std::to_string(fresh) + " propri\xC3\xA9t\xC3\xA9s de r\xC3\xB4le Formule)");
+    p.views.push_back(host);
+    p.config.startView = host.id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    const View* composed = rt.composedView(host.id);
+    check(composed != nullptr, "la vue composee du moteur");
+    if (!composed) return;
+    LiveView live;
+    live.bind(*composed);
+    std::vector<LiveValue> values;
+    const View shown = live.evaluate(rt.environment(), &values, rt.viewScope(host.id), 0.1);
+    const auto liveOf = [&](const std::string& object, const std::string& key) -> const LiveValue* {
+        for (const auto& lv : values)
+            if (lv.objectName == object && lv.key == key) return &lv;
+        return nullptr;
+    };
+    std::size_t nValue = 0, okValue = 0, nSource = 0, okSource = 0, nPath = 0, okPath = 0, nWritten = 0;
+    std::set<std::string> named;   // les cinq du rapport de la 1.12.30, vus calcules
+    for (const auto& c : cases) {
+        const Object* so = shown.objectByName(c.object);
+        bool ok = false;
+        std::string seen;
+        if (c.what == What::Value) {
+            ++nValue;
+            const auto* lv = liveOf(c.object, c.key);
+            seen = so ? so->text(c.key) : std::string("(objet absent)");
+            // Un objet qui ecrit sa variable (la sortie d'un programme horaire...) : la valeur qu'il y a mise.
+            bool written = false;
+            if (auto cur = Expression::compile(c.formula).evaluate(rt.environment()))
+                written = c.item == R::Boolean ? !cur->isTruthy() : c.item == R::State ? cur->asInteger() != 2 : cur->asReal() != 42.5;
+            ok = lv && lv->expression == c.formula && !lv->error && seen == lv->value && (written ? lv->value != c.formula : lv->value == c.expect);
+            if (ok && written) ++nWritten;
+            okValue += ok ? 1 : 0;
+            if (ok && ((c.kind == "Damper" && (c.key == "limitOpen" || c.key == "limitClosed")) || (c.kind == "FireDamper" && c.key == "tripped")
+                       || (c.kind == "ThreeWayValve" && (c.key == "positionA" || c.key == "positionB"))))
+                named.insert(c.kind + "." + c.key);
+        } else if (c.what == What::Source) {
+            ++nSource;
+            const auto* lv = liveOf(c.object, "value");
+            seen = so ? so->text("value") : std::string("(objet absent)");
+            ok = lv && lv->expression == c.formula && !lv->error && seen == lv->value;
+            okSource += ok ? 1 : 0;
+        } else {
+            ++nPath;
+            seen = so ? so->text(c.key) : std::string("(objet absent)");
+            ok = !liveOf(c.object, c.key) && seen == c.formula;
+            okPath += ok ? 1 : 0;
+        }
+        if (!ok)
+            std::printf("  %s.%s = %s (formule %s, attendu %s) : %s\n", c.kind.c_str(), c.key.c_str(), seen.c_str(), c.formula.c_str(),
+                        c.what == What::Value ? c.expect.c_str() : c.what == What::Source ? "sa Valeur calcul\xC3\xA9" "e" : "le chemin, tel quel",
+                        c.what == What::Value ? "valeur" : c.what == What::Source ? "source de la Valeur" : "chemin");
+    }
+    check(nValue > 0 && okValue == nValue, "par la table des r\xC3\xB4les : " + std::to_string(okValue) + " / " + std::to_string(nValue)
+                                               + " propri\xC3\xA9t\xC3\xA9s de r\xC3\xB4le Formule tap\xC3\xA9" "es dans l'inspecteur, calcul\xC3\xA9" "es \xC3\xA0 l'\xC3\xA9" "cran ("
+                                               + std::to_string(kinds.size()) + " genres d'objets ; " + std::to_string(nWritten)
+                                               + " \xC3\xA9" "crite(s) par l'objet lui-m\xC3\xAA" "me, sa valeur montr\xC3\xA9" "e)");
+    check(named.size() == 5, "dont les cinq du rapport : les fins de course et le d\xC3\xA9" "clenchement des registres, A et B de la vanne 3 voies ("
+                                 + std::to_string(named.size()) + ")");
+    check(nSource > 0 && okSource == nSource, "la variable, le retour d'\xC3\xA9tat, le voyant : leur Valeur calcul\xC3\xA9" "e ("
+                                                  + std::to_string(okSource) + " / " + std::to_string(nSource) + ")");
+    check(nPath > 0 && okPath == nPath, "un chemin (l'\xC3\xA9quipement, la boucle d'un R\xC3\xA9glage PID, une source, une variable \xC3\xA9" "crite) : "
+                                            "jamais remplac\xC3\xA9 par sa valeur (" + std::to_string(okPath) + " / " + std::to_string(nPath) + ")");
+    // Le registre a l'arret, ses deux fins de course reliees et coherentes : plus de discordance.
+    {
+        const Object* rg = nullptr;
+        for (const auto& c : cases)
+            if (c.kind == "Damper" && c.key == "limitOpen") rg = shown.objectByName(c.object);
+        check(rg && rg->text("limitOpen") == "TRUE", "un registre : sa fin de course ouvert tap\xC3\xA9" "e en formule (sa variable vraie) se voit allum\xC3\xA9" "e");
+    }
+
+    // ---- Dans un symbole : la formule tapee cite un parametre, l'instance le remplace (le moteur et l'ecran).
+    Project q;
+    q.programs.variables.push_back(hmiVar(q, "FCO_1", "BOOL", "TRUE"));
+    q.programs.variables.push_back(hmiVar(q, "FCF_1", "BOOL", "FALSE"));
+    q.programs.variables.push_back(hmiVar(q, "V3A_1", "BOOL", "FALSE"));
+    q.programs.variables.push_back(hmiVar(q, "V3B_1", "BOOL", "TRUE"));
+    q.programs.variables.push_back(hmiVar(q, "Feu_1", "BOOL", "TRUE"));
+    {
+        View sym = makeView(q, "S_Gaine");
+        sym.role = "symbole";
+        for (const char* prm : {"FinO", "FinF", "VoieA", "VoieB", "Feu"}) sym.params.push_back({prm, "", "", "BOOL", ParamMode::Reference});
+        const Id rg = edit::add(q, sym, Kind::Damper, 0, 0);
+        sym.object(rg)->name = "RG";
+        sym.object(rg)->set("limitOpen", "FinO");
+        sym.object(rg)->set("limitClosed", "FinF");
+        const Id cf = edit::add(q, sym, Kind::FireDamper, 0, 120);
+        sym.object(cf)->name = "CF";
+        sym.object(cf)->set("tripped", "Feu");
+        const Id v3 = edit::add(q, sym, Kind::ThreeWayValve, 200, 0);
+        sym.object(v3)->name = "V3";
+        sym.object(v3)->set("positionMode", "deux bool\xC3\xA9" "ens");
+        sym.object(v3)->set("positionA", "VoieA");
+        sym.object(v3)->set("positionB", "VoieB");
+        q.views.push_back(sym);
+        View v = makeView(q, "Vue_Gaine");
+        const Id inst = placeSymbol(q, v, "S_Gaine", 10, 10);
+        v.object(inst)->name = "Gaine_1";
+        v.object(inst)->set("params", "FinO := FCO_1; FinF := FCF_1; VoieA := V3A_1; VoieB := V3B_1; Feu := Feu_1");
+        q.views.push_back(v);
+        q.config.startView = v.id;
+    }
+    const View& qv = *q.viewByName("Vue_Gaine");
+    Runtime rt2;
+    rt2.bind(&q, nullptr);
+    rt2.start(0.0);
+    rt2.tick(0.1);
+    const View* qc = rt2.composedView(qv.id);
+    const Object* crg = qc ? qc->objectByName("Gaine_1.RG") : nullptr;
+    check(crg && crg->text("limitOpen") == "FCO_1" && crg->text("limitClosed") == "FCF_1",
+          "dans un symbole : la formule tap\xC3\xA9" "e (FinO) re\xC3\xA7oit l'argument de l'instance (FCO_1)");
+    if (qc) {
+        LiveView live2;
+        live2.bind(*qc);
+        std::vector<LiveValue> vals2;
+        const View sh = live2.evaluate(rt2.environment(), &vals2, rt2.viewScope(qv.id), 0.1);
+        const Object* rgo = sh.objectByName("Gaine_1.RG");
+        const Object* cfo = sh.objectByName("Gaine_1.CF");
+        const Object* v3o = sh.objectByName("Gaine_1.V3");
+        check(rgo && rgo->text("limitOpen") == "TRUE" && rgo->text("limitClosed") == "FALSE" && cfo && cfo->text("tripped") == "TRUE" && v3o
+                  && v3o->text("positionA") == "FALSE" && v3o->text("positionB") == "TRUE",
+              "... et l'\xC3\xA9" "cran les calcule : le registre ouvert (O allum\xC3\xA9, F \xC3\xA9teint), le clapet d\xC3\xA9" "clench\xC3\xA9, la vanne 3 voies sur B");
+        bool errors = false;
+        for (const auto& lv : vals2) errors = errors || lv.error;
+        check(!errors, "aucune formule en erreur dans l'instance");
+        // Ce que la vue lit (le filtre des variables de la simulation) : les formules tapees comptent.
+        std::set<std::string> read;
+        for (const auto& path : hmi::viewpaths::ofView(*qc, rt2.viewScope(qv.id))) read.insert(path);
+        check(read.count("FCO_1") && read.count("FCF_1") && read.count("Feu_1") && read.count("V3A_1") && read.count("V3B_1"),
+              "ce que la vue lit (les variables de la vue en simulation) : les cinq, venues des formules tap\xC3\xA9" "es");
+    }
+    // Les chemins de l'automate que l'IHM lit (le plan d'adressage, la verification) : une formule tapee aussi.
+    {
+        Project r;
+        View v = makeView(r, "Vue_Automate");
+        const Id rg = edit::add(r, v, Kind::Damper, 0, 0);
+        v.object(rg)->set("limitOpen", "FC_OUVERT_RG1");
+        const Id cf = edit::add(r, v, Kind::FireDamper, 0, 200);
+        v.object(cf)->set("tripped", "DECL_CF1 AND NOT ACQ_CF1");
+        r.views.push_back(v);
+        std::set<std::string> plc;
+        for (const auto& path : hmi::comm::projectPlcPaths(r)) plc.insert(path);
+        check(plc.count("FC_OUVERT_RG1") && plc.count("DECL_CF1") && plc.count("ACQ_CF1"),
+              "les chemins de l'automate que l'IHM lit : ceux des formules tap\xC3\xA9" "es (le plan d'adressage les propose)");
+    }
+    // ---- Renommer suit la formule tapee : un parametre du symbole, une variable.
+    {
+        std::vector<std::string> where;
+        (void)params::renameParam(q, "S_Gaine", "FinO", "FinOuvert", &where);
+        const Object* rg = q.viewByName("S_Gaine")->objectByName("RG");
+        check(rg && rg->text("limitOpen") == "FinOuvert", "renommer le param\xC3\xA8tre FinO en FinOuvert : la fin de course tap\xC3\xA9" "e suit");
+        Object o = *q.viewByName("S_Gaine")->objectByName("V3");
+        o.set("positionA", "V3A_1");
+        rewriteNames(o, [](std::string_view t, bool code) { return replacePath(t, "V3A_1", "V3_Voie_A", code); });
+        check(o.text("positionA") == "V3_Voie_A", "renommer une variable (V3A_1 en V3_Voie_A) : le bool\xC3\xA9" "en A tap\xC3\xA9 suit");
+    }
+}
+
 int main(int argc, char** argv) {
+    // 1.12.31 : HMI_TEST_11231=1 - les formules tapees dans l'inspecteur, a l'ecran en marche, seules.
+    if (const char* only = std::getenv("HMI_TEST_11231"); only && *only == '1') {
+        formulesTapees11231();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.17 : HMI_TEST_1217=1 - les performances dans le temps, les lenteurs, seules.
     if (const char* only = std::getenv("HMI_TEST_11227"); only && *only == '1') {   // 1.12.27 : Pourquoi ?, seul
         pourquoi11227();
@@ -29788,6 +30030,7 @@ int main(int argc, char** argv) {
     typesRappel1220();                // 1.12.20 (T) : les types rappel nommes
     registres11224();                 // 1.12.24 : les registres du synoptique
     variateur11230();                 // 1.12.30 : le variateur de vitesse
+    formulesTapees11231();            // 1.12.31 : les formules tapees dans l'inspecteur, a l'ecran en marche
     visionneuse11230();               // 1.12.30 : la visionneuse de documents
     reglagePid11224();                // 1.12.24 : le Reglage PID en marche
     scriptsC1220();                   // 1.12.20 (C) : les scripts C et C++, l'en-tete du projet

@@ -93,6 +93,16 @@ std::size_t renameOverridePaths(Project&, std::string_view symbol, std::string_v
 // ... la Valeur, seulement un chemin de variable (Niveau_1, Cuves[2].Niveau) : "1-2" reste la
 // position ecrite d'une vanne 3 voies.
 [[nodiscard]] bool synopticLinkedKey(const Object&, std::string_view key);
+// 1.12.31 : UNE PROPRIETE DE ROLE FORMULE (HmiRoles.hpp) TAPEE DANS L'INSPECTEUR, sans fx : la regle
+// des cases (1.12.19) y garde la formule sans son = (la valeur EST la formule). Celles dont la
+// valeur se montre - un booleen, un nombre, un etat, une duree : une fin de course, un declenchement,
+// les booleens A et B d'une vanne 3 voies, une condition, une consigne de Reglage PID... - et qui
+// lisent une variable (linksVariable : pas une constante). L'ecran en marche les calcule comme une
+// expression, quel que soit l'objet (avant : le Defaut et le Mouvement du synoptique seulement). Pas
+// un chemin (le role Formule d'un texte ou d'une liste : l'equipement, la boucle d'un Reglage PID,
+// une source de lignes), ni la variable, le retour d'etat et le voyant : leur valeur va dans
+// "value" (autoValueSource), leur texte reste le chemin que l'objet lit et ecrit.
+[[nodiscard]] bool formulaValueKey(const Object&, std::string_view key);
 
 // ---- la generation --------------------------------------------------------------------
 struct ObjectAlarm {

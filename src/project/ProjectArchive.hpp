@@ -19,8 +19,15 @@
 //  l'archive .zip de l'IHM (1.x) : une archive d'avant se relit, et une version
 //  d'avant relit l'IHM d'une archive .xihm renommee en .zip.
 //
-//  CE QU'ELLE NE PREND PAS : ce qui se refait (le cache de construction
-//  .xpg/build), ce qui sort du projet (exports/), la corbeille de l'IHM
+//  1.12.31 : LE CACHE DE CONSTRUCTION VIENT AVEC (.xpg/build/build-cache.txt :
+//  les empreintes, les etats et les diagnostics du dernier build) - un projet
+//  rouvert reprend son build ou il en etait, sans rien regenerer. Ses artefacts
+//  (la forme generee de chaque element) se deduisent du projet : ils ne voyagent
+//  pas, le deballage les refait d'apres le cache (hmi::pipeline::restoreArtifacts),
+//  chacun a l'empreinte que le cache a retenue, sinon rien (il sera regenere).
+//
+//  CE QU'ELLE NE PREND PAS : les artefacts du build, son verrou et la copie de
+//  secours de son cache, ce qui sort du projet (exports/), la corbeille de l'IHM
 //  (ihm/corbeille/), les fichiers temporaires (.tmp, ~) - et les archives et les
 //  pages web d'archive posees dans le dossier (elles se contiendraient l'une
 //  l'autre). Au choix : les versions (versions/) et l'historique de marche
@@ -122,7 +129,7 @@ struct CollectOptions {
     bool history{true};     // ihm/historique/ : l'historique de marche
 };
 // Ce que l'archive ne prend pas (chemin relatif au dossier, avec des '/') ;
-// `why` : pourquoi, pour le dire ("cache de construction, refait au besoin").
+// `why` : pourquoi, pour le dire ("les artefacts du build, refaits au deballage...").
 [[nodiscard]] bool excluded(std::string_view relative, const CollectOptions&, std::string* why = nullptr);
 struct Skipped {
     std::string   what, why;     // "exports/", "ce qui sort du projet"

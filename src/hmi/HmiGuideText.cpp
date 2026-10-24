@@ -16017,6 +16017,11 @@ const std::vector<Topic>& topics() {
                          "variables syst\xC3\xA8me. Une case qui n'attend qu'une formule (l'expression d'une "
                          "plume, la condition d'une alarme) se lit en formule : `SPPV_TELUNA[0].SP`, "
                          "`Pression > 10` ; `12.5` ou `TRUE` y restent des constantes.", {}, "1.12.23"},
+             {K::Bullet, "**En marche, une case qui n'attend qu'une formule se calcule**, quel que soit "
+                         "l'objet : la fin de course d'un registre (`=FCO_RG1`), le d\xC3\xA9" "clenchement "
+                         "d'un clapet coupe-feu, les bool\xC3\xA9" "ens A et B d'une vanne 3 voies, une "
+                         "condition. Dans un symbole, le param\xC3\xA8tre qu'elle cite re\xC3\xA7oit "
+                         "l'argument de l'instance ; renommer la variable ou le param\xC3\xA8tre la suit.", {}, "1.12.19"},
              {K::Bullet, "**Les listes** s'\xC3\xA9" "crivent entre parenth\xC3\xA8ses, "
                          "s\xC3\xA9par\xC3\xA9" "es par des points-virgules : `(a;b;\xE2\x80\xA6)` ; les "
                          "**intervalles** `a..b` (`0..100`).", {}, "1.12.19"},
@@ -18387,8 +18392,9 @@ const std::vector<Topic>& topics() {
         {"archive-projet", "Le projet dans un seul fichier : l'archive .xihm", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
          "Projet \xE2\x80\xBA Exporter en archive .xihm\xE2\x80\xA6 met tout le projet dans un seul fichier "
          "- les vues, les ressources de tout genre, les fichiers externes li\xC3\xA9s, les "
-         "\xC3\xA9quipements, la simulation, l'historique des objets, les versions. Il se rouvre \xC3\xA0 "
-         "l'identique : Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6, un double-clic sur le fichier, ou le fichier "
+         "\xC3\xA9quipements, la simulation, l'historique des objets, les versions, le cache de "
+         "construction. Il se rouvre \xC3\xA0 l'identique, sans se r\xC3\xA9g\xC3\xA9n\xC3\xA9rer : Projet "
+         "\xE2\x80\xBA Ouvrir\xE2\x80\xA6, un double-clic sur le fichier, ou le fichier "
          "l\xC3\xA2" "ch\xC3\xA9 sur la fen\xC3\xAAtre.",
          {
              {K::Heading, "L'\xC3\xA9" "crire", {}},
@@ -18412,8 +18418,12 @@ const std::vector<Topic>& topics() {
                          "esclaves simul\xC3\xA9s\nLa simulation\tses r\xC3\xA9glages, ses sc\xC3\xA9narios, "
                          "ses essais\nL'historique des objets\tqui a chang\xC3\xA9 quoi, objet par "
                          "objet\nLes versions\tles versions du projet (au choix)\nL'historique de "
-                         "marche\talarmes, mesures, audit, m\xC3\xA9moire des r\xC3\xA9glages PID (au choix)", {}},
-             {K::Paragraph, "Ne sont pas pris : le cache de construction, `exports/` et la corbeille. Son "
+                         "marche\talarmes, mesures, audit, m\xC3\xA9moire des r\xC3\xA9glages PID (au "
+                         "choix)\nLe cache de construction\tce que le dernier build a fait, "
+                         "\xC3\xA9l\xC3\xA9ment par \xC3\xA9l\xC3\xA9ment : rouvert, le projet ne se "
+                         "r\xC3\xA9g\xC3\xA9n\xC3\xA8re pas", {}},
+             {K::Paragraph, "Ne sont pas pris : `exports/` et la corbeille ; du cache, ni ses artefacts "
+                         "(refaits au d\xC3\xA9" "ballage, d'apr\xC3\xA8s lui) ni sa copie de secours. Son "
                          "**manifeste** dit l'application qui l'a \xC3\xA9" "crite et sa version, les "
                          "comptes du projet (vues, objets, ressources, scripts, alarmes, "
                          "versions\xE2\x80\xA6) et, pour chaque fichier, sa taille, sa date et son empreinte "
@@ -18436,6 +18446,18 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Un fichier externe li\xC3\xA9 hors du projet revient dans le dossier `externes/` "
                          "du projet, et le lien le suit - sauf si son fichier d'origine est l\xC3\xA0, "
                          "intact : le lien d'origine reste.", {}},
+             {K::Heading, "Le build reprend o\xC3\xB9 il en \xC3\xA9tait", {}},
+             {K::Paragraph, "Le **cache de construction** (`.xpg/build/build-cache.txt`) a suivi : ce qui "
+                         "\xC3\xA9tait g\xC3\xA9n\xC3\xA9r\xC3\xA9 et compil\xC3\xA9 l'est encore, "
+                         "**D\xC3\xA9marrer** ne r\xC3\xA9g\xC3\xA9n\xC3\xA8re rien de plus qu'avant "
+                         "l'export. Ses artefacts (la forme g\xC3\xA9n\xC3\xA9r\xC3\xA9" "e de chaque "
+                         "\xC3\xA9l\xC3\xA9ment) se refont au d\xC3\xA9" "ballage, d'apr\xC3\xA8s lui, "
+                         "chacun \xC3\xA0 l'empreinte que le cache a retenue. Un \xC3\xA9l\xC3\xA9ment qui a "
+                         "chang\xC3\xA9 depuis le dernier build (modifi\xC3\xA9 et enregistr\xC3\xA9 "
+                         "apr\xC3\xA8s lui, ou un fichier externe reli\xC3\xA9 \xC3\xA0 sa copie) n'a plus "
+                         "la m\xC3\xAAme empreinte : il est refait au prochain build, jamais pris pour "
+                         "\xC3\xA0 jour. Une archive sans cache (\xC3\xA9" "crite par une version d'avant) : "
+                         "le premier build refait tout, comme avant.", {}},
              {K::Heading, "Une archive ab\xC3\xAEm\xC3\xA9" "e, ou plus r\xC3\xA9" "cente", {}},
              {K::Bullet, "**Ab\xC3\xAEm\xC3\xA9" "e** (une copie interrompue, un fichier "
                          "alt\xC3\xA9r\xC3\xA9) : elle le dit, fichier par fichier ; **D\xC3\xA9" "baller ce "
@@ -18447,7 +18469,7 @@ const std::vector<Topic>& topics() {
              {K::Tip, "L'ancienne archive `.zip` de l'IHM (jusqu'\xC3\xA0 la 1.12.29) s'ouvre toujours.", {}},
          },
          {"echange", "page-web", "versions", "dossiers"},
-         {"archive", ".xihm", "xihm", "Exporter en archive .xihm", "Importer une archive", "Ouvrir l'archive", "D\xC3\xA9" "baller et ouvrir", "d\xC3\xA9" "baller", "D\xC3\xA9" "baller ce qui est intact", "archive ab\xC3\xAEm\xC3\xA9" "e", "version plus r\xC3\xA9" "cente", "manifeste", "manifeste.txt", "SHA-256", "empreinte", "transmettre un projet", "envoyer un projet", "IHM-Studio.exe", "double-clic", "_externes", ".zip"},
+         {"archive", ".xihm", "xihm", "Exporter en archive .xihm", "Importer une archive", "Ouvrir l'archive", "D\xC3\xA9" "baller et ouvrir", "d\xC3\xA9" "baller", "D\xC3\xA9" "baller ce qui est intact", "archive ab\xC3\xAEm\xC3\xA9" "e", "version plus r\xC3\xA9" "cente", "manifeste", "manifeste.txt", "SHA-256", "empreinte", "transmettre un projet", "envoyer un projet", "IHM-Studio.exe", "double-clic", "_externes", ".zip", "cache de construction", "build-cache.txt", ".xpg/build", "artefacts"},
          {},
          {{"PNG_echanges_02_exporter_archive.png", "Projet \xE2\x80\xBA Exporter en archive .xihm\xE2\x80\xA6 : le fichier, les versions, l'historique de marche."}, {"PNG_echanges_04_ouvrir_archive.png", "Une archive \xC3\xA0 ouvrir : o\xC3\xB9 la d\xC3\xA9" "baller (le dossier des projets, sous son nom), puis le projet s'ouvre."}},
          "",
@@ -18495,7 +18517,8 @@ const std::vector<Topic>& topics() {
                          "\xE2\x80\xBA Ouvrir\xE2\x80\xA6** sur le `.html`, ou la page "
                          "l\xC3\xA2" "ch\xC3\xA9" "e sur la fen\xC3\xAAtre) : le projet que porte la page "
                          "est d\xC3\xA9" "ball\xC3\xA9, o\xC3\xB9 tu veux, puis il s'ouvre - \xC3\xA0 "
-                         "l'identique, comme une archive .xihm. Une page qu'une autre application a "
+                         "l'identique, comme une archive .xihm, son cache de construction compris (il ne se "
+                         "r\xC3\xA9g\xC3\xA9n\xC3\xA8re pas). Une page qu'une autre application a "
                          "\xC3\xA9" "crite est refus\xC3\xA9" "e : \xC2\xAB cette page n'a pas "
                          "\xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio ni par API Studio \xC2\xBB.", {}},
          },
@@ -19305,7 +19328,11 @@ const std::vector<Topic>& topics() {
                          "**versions**, l'**historique** et les **macros** de la biblioth\xC3\xA8que. Le "
                          "manifeste compte les sections, les unit\xC3\xA9s, les DFB, les DDT, les variables "
                          "globales, les t\xC3\xA2" "ches, les modules, les tables et les versions, et garde "
-                         "l'empreinte SHA-256 de chaque fichier.", {}},
+                         "l'empreinte SHA-256 de chaque fichier. Ne sont pas pris : `exports/` et la "
+                         "corbeille. Le dossier a aussi une IHM (un projet de la 1.11) ? Le cache de son "
+                         "build (`.xpg/build/build-cache.txt`) vient avec et ses artefacts se refont au "
+                         "d\xC3\xA9" "ballage : IHM Studio le trouve \xC3\xA0 jour, comme apr\xC3\xA8s une "
+                         "archive .xihm.", {}},
              {K::Heading, "L'ouvrir", {}},
              {K::Paragraph, "**Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6** sur un `.xapi`, **Projet \xE2\x80\xBA "
                          "Importer une archive\xE2\x80\xA6**, un double-clic (`API-Studio.exe chemin.xapi`), "

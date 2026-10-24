@@ -1,6 +1,7 @@
 #include "HmiArchive.hpp"
 
 #include "HmiAssets.hpp"
+#include "HmiPipeline.hpp"      // 1.12.31 : les artefacts du cache de construction, refaits au deballage
 #include "../core/AtomicFile.hpp"
 #include "../project/ProjectArchive.hpp"
 #include "../core/Version.hpp"
@@ -399,6 +400,16 @@ core::Status unpackProjectArchive(const pa::Contents& c, const std::string& fold
         return core::ok();
     }
     for (const auto& w : lr.warnings) rep.notes.push_back("lecture : " + w);
+    // 1.12.31 : le cache de construction est venu avec - ses artefacts, refaits d'apres lui (chacun a son empreinte).
+    // L'API vide : c'est ce que voit le build d'IHM Studio (il ne lit rien du programme : ProjectStore::open lui
+    // rend un modele vide, et sans automate pas d'elements de l'API) ; un artefact qui n'aurait pas exactement
+    // l'empreinte du cache n'est de toute facon pas pose (il se regenere au build).
+    if (c.file(".xpg/build/build-cache.txt") && fs::is_regular_file(fs::path(pipeline::buildFolderOf(folder)) / "build-cache.txt", ec)) {
+        const auto restored = pipeline::restoreArtifacts(*p, pipeline::ApiInfo{}, pipeline::buildFolderOf(folder));
+        rep.buildCache = restored.cache;
+        rep.artifacts = restored.written + restored.present;
+        rep.stale = restored.stale;
+    }
     std::vector<std::string> historyProblems;
     const History h = loadHistory(folder, &historyProblems);
     for (const auto& w : historyProblems) rep.problems.push_back(w);

@@ -26,6 +26,8 @@ namespace project::archive {
 namespace {
 
 constexpr const char* kManifestName = "manifeste.txt";
+// 1.12.31 : le cache de construction de l'IHM (hmi/HmiPipeline : buildFolderOf, build-cache.txt).
+constexpr std::string_view kBuildCache = ".xpg/build/build-cache.txt";
 
 std::string lower(std::string_view s) {
     std::string out(s);
@@ -344,7 +346,15 @@ bool excluded(std::string_view p, const CollectOptions& opt, std::string* why) {
     };
     if (p.empty()) return say("");
     if (endsWith(p, ".tmp") || endsWith(p, "~")) return say("fichier temporaire");
-    if (p == ".xpg/build" || startsWith(p, ".xpg/build/")) return say("cache de construction, refait au besoin");
+    // 1.12.31 : LE CACHE DE CONSTRUCTION VIENT AVEC (.xpg/build/build-cache.txt : ce que le dernier build a fait,
+    // element par element) - le projet rouvert ne se regenere pas. Ses artefacts se deduisent du projet : ils ne
+    // voyagent pas, le deballage les refait d'apres le cache (hmi::pipeline::restoreArtifacts). Ni le verrou du
+    // build (le poste qui construit), ni la copie de secours du cache.
+    if (startsWith(p, ".xpg/build/") && p != kBuildCache) {
+        if (p == ".xpg/build/build.lock") return say("le verrou du build (le poste qui construit)");
+        if (endsWith(p, ".bak")) return say("la copie de secours du cache de construction");
+        return say("les artefacts du build, refaits au d\xC3\xA9" "ballage d'apr\xC3\xA8s le cache");
+    }
     if (p == "exports" || startsWith(p, "exports/")) return say("ce qui sort du projet (documents, exports)");
     if (p == "ihm/corbeille" || startsWith(p, "ihm/corbeille/")) return say("la corbeille de l'IHM");
     if (p == ".git" || startsWith(p, ".git/") || p == ".svn" || startsWith(p, ".svn/")) return say("le d\xC3\xA9p\xC3\xB4t de versions");

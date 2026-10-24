@@ -21,6 +21,10 @@
 //  ailleurs que dans le projet est pose dans externes/ et le lien le suit - sauf
 //  s'il est deja la, identique, a son chemin d'origine.
 //
+//  1.12.31 : LE CACHE DE CONSTRUCTION SUIT (.xpg/build/build-cache.txt) ; ses
+//  artefacts sont refaits au deballage, d'apres lui (hmi::pipeline::restoreArtifacts) :
+//  le projet rouvert reprend son build ou il en etait, sans rien regenerer.
+//
 //  IMPORTER (le volet Exporter / Importer) reconstruit l'IHM du projet ouvert
 //  depuis une archive (.xihm, ou .zip de la 1.x) : une seule commande, Ctrl+Z
 //  rend l'IHM d'avant. exportArchive ecrit l'IHM en memoire (sans le reste du
@@ -69,6 +73,11 @@ struct ArchiveReport {
     std::vector<std::string>  skipped;      // ce qu'elle n'a pas pris, et pourquoi
     std::vector<std::string>  notes;        // ce qui merite d'etre dit (un fichier externe relie...)
     std::string               folder;       // le dossier deballe
+    // 1.12.31 : le cache de construction deballe (buildCache faux : l'archive n'en avait pas - une
+    // archive d'avant, le build refera tout) ; ses artefacts refaits, et les elements qui ont change
+    // depuis le build (un fichier externe relie a sa copie...) : ceux-la seront regeneres.
+    bool                      buildCache{false};
+    std::size_t               artifacts{0}, stale{0};
     [[nodiscard]] bool coherent() const noexcept { return problems.empty(); }
 };
 

@@ -3,6 +3,7 @@
 #include "HmiCharts.hpp"      // chartItems
 #include "HmiExpr.hpp"        // Scope
 #include "HmiLive.hpp"        // autoValueSource
+#include "HmiRoles.hpp"       // 1.12.31 : les cases de role Formule
 #include "HmiRuntime.hpp"     // parseArguments (1.11.7)
 #include "HmiWidgets.hpp"     // parseCells, parseImageStates
 
@@ -170,6 +171,10 @@ std::vector<std::string> ofView(const View& v, const Scope* scope) {
             else if (p.value.find('{') != std::string::npos && (p.key == "text" || p.key == "title" || p.key == "label"))
                 add(raw, inTemplate(p.value));
             else if ((p.key == "variable" || p.key == "feedback" || p.key == "xVariable") && !p.value.empty())
+                add(raw, inCode(p.value));
+            // 1.12.31 : une case de role Formule (HmiRoles.hpp) tapee sans fx - sa valeur EST la formule (une fin de
+            // course, un declenchement, A et B d'une vanne 3 voies, une condition...) : ce qu'elle lit compte aussi.
+            else if (roles::roleOf(o.kind, p.key).role == roles::Role::Formula && !p.value.empty())
                 add(raw, inCode(p.value));
         }
         if (const std::string source = autoValueSource(o); !source.empty()) add(raw, inCode(source));
