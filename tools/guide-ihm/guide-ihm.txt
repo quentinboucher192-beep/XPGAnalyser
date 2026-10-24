@@ -9025,7 +9025,7 @@ Le moteur de l'IHM d'IHM Studio, compilé pour le navigateur (WebAssembly), est 
 | Les alarmes | elles apparaissent et disparaissent avec leur condition, dans le bandeau et les listes d'alarmes des vues ; elles s'acquittent |
 | Les utilisateurs | l'utilisateur de départ ; **Changer d'utilisateur** ouvre le menu de connexion du poste (le compte, le mot de passe ou le code) ; une commande à signer ouvre le panneau de signature ; le menu Paramètres système s'ouvre comme sur le poste |
 | Les variables IHM | leur valeur initiale, puis ce que les scripts et les saisies y écrivent ; une variable **Rémanente** est gardée par le navigateur et revient à l'ouverture suivante de la page, comme sur le poste d'exploitation |
-La barre du bas : le mode, les équipements, l'utilisateur connecté, la vue ouverte ; **Alarmes**, **Variables**, **Scripts**, **Fiche** ouvrent la documentation du projet (les listes, le code coloré, la fiche) ; **Télécharger le projet** enregistre l'archive .xihm que porte la page.
+La barre du bas : le mode, les équipements, l'utilisateur connecté, la vue ouverte ; **Alarmes**, **Variables**, **Scripts**, **Fiche** ouvrent la documentation du projet (les listes, le code coloré, la fiche) ; **Limites** dit ce que la page ne fait pas ; **Télécharger le projet** enregistre l'archive .xihm que porte la page.
 ### Ce que la page ne fait pas
 Un navigateur ne laisse pas une page ouvrir une connexion réseau à un appareil, ni toucher au PC. Dans la page :
 - **les équipements** (Modbus TCP) ne sont pas reliés : une variable liée à un équipement garde sa valeur initiale, et la barre du bas le dit. Pour piloter les vrais appareils, ouvre le projet dans IHM Studio ou en poste d'exploitation ;

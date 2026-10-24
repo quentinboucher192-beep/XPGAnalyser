@@ -223,6 +223,14 @@ await shot('7_documentation.png');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(200);
 check(await page.evaluate(() => document.getElementById('doc').hidden), 'Echap referme la documentation');
+// Les limites de la page, dites dans la page (la barre : Limites).
+await page.click('button[data-doc="limites"]');
+await page.waitForTimeout(300);
+check(await page.evaluate(() => { const l = document.getElementById('doc-limites'); return !l.hidden && l.innerText.includes('Modbus') && l.innerText.includes('PDF'); }),
+      'la barre dit ce que la page ne fait pas (les equipements, le PDF...)');
+await shot('8_limites.png');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
 const bar = await page.evaluate(() => document.getElementById('barre').innerText.replace(/\s+/g, ' '));
 console.log('barre : ' + bar);
 check(bar.includes('Accueil') && bar.includes('Simulation'), 'la barre dit le mode et la vue ouverte');

@@ -36,22 +36,38 @@ background:var(--panel);border-top:1px solid var(--line);white-space:nowrap;over
 #etat[hidden]{display:none}
 #doc .wbody{padding:0}
 #doc-cadre{display:block;width:100%;height:calc(100vh - 120px);border:0;background:#fff}
+#doc-cadre[hidden],#doc-limites[hidden]{display:none}
+.lim{padding:14px 22px 22px;line-height:1.55;font-size:14px}
+.lim ul{margin:8px 0 12px 18px;padding:0}
 </style>
 </head>
 <body>
 <div id="ihm"><canvas id="ihm-canvas" aria-label="{{TITRE}} : l'IHM en marche"></canvas></div>
 <div id="etat">L'IHM démarre…</div>
 <div id="barre" role="toolbar" aria-label="Barre de l'IHM">
-  <span class="grp" title="L'IHM tourne dans la page : ses vues, ses variables IHM, ses scripts, ses alarmes. Les équipements (Modbus TCP) n'y sont pas reliés."><span class="k">Mode</span><span id="mode">Simulation</span></span>
+  <span class="grp" title="L'IHM tourne dans la page : ses vues, ses variables IHM, ses scripts, ses alarmes, la connexion et la signature. Les équipements (Modbus TCP) n'y sont pas reliés."><span class="k">Mode</span><span id="mode">Simulation</span></span>
   <span id="equip"></span>
   <span class="grp"><span class="k">Utilisateur</span><span id="user">—</span></span>
   <span class="grp"><span class="k">Vue</span><span id="vue">—</span></span>
   <span id="msg"></span>
   <span style="flex:1"></span>
-  <span class="grp"><button type="button" data-doc="alarmes">Alarmes</button><button type="button" data-doc="variables">Variables</button><button type="button" data-doc="scripts">Scripts</button><button type="button" data-doc="fiche">Fiche</button></span>
+  <span class="grp"><button type="button" data-doc="alarmes">Alarmes</button><button type="button" data-doc="variables">Variables</button><button type="button" data-doc="scripts">Scripts</button><button type="button" data-doc="fiche">Fiche</button><button type="button" data-doc="limites" title="Ce que la page ne fait pas">Limites</button></span>
   {{DOWNLOAD_BUTTON}}
 </div>
-<div id="doc" class="ov" hidden><div class="win"><div class="wbar"><b id="doc-titre"></b><button type="button" id="doc-fermer">Fermer (Échap)</button></div><div class="wbody"><iframe id="doc-cadre" title="La documentation du projet"></iframe></div></div></div>
+<div id="doc" class="ov" hidden><div class="win"><div class="wbar"><b id="doc-titre"></b><button type="button" id="doc-fermer">Fermer (Échap)</button></div><div class="wbody"><iframe id="doc-cadre" title="La documentation du projet"></iframe>
+<div id="doc-limites" class="lim" hidden>
+<p>Cette page fait tourner l'IHM : ses vues, ses scripts, ses alarmes, la connexion et la signature. Un navigateur ne laisse pas une page joindre un appareil ni toucher au PC. Dans la page :</p>
+<ul>
+<li><b>les équipements</b> (Modbus TCP) ne sont pas reliés : leurs variables gardent leur valeur initiale ;</li>
+<li>pas de ping ni de recherche d'adresses IP, pas de port série ;</li>
+<li>pas de courriel ni de SMS ;</li>
+<li>pas de vidéo décodée par Windows (MP4, WMV) : le Motion-JPEG (AVI) passe ;</li>
+<li>pas de lecteur PDF, pas de serveur web ;</li>
+<li>pas de clavier virtuel (tape au clavier du poste), pas de fenêtre Réglage PID ;</li>
+<li>dans un onglet caché, le navigateur ralentit la page : garde-la affichée.</li>
+</ul>
+<p>Pour tout cela : ouvre le projet dans IHM Studio, ou en poste d'exploitation (<b>Télécharger le projet</b>, puis Projet › Importer depuis une page web…).</p>
+</div></div></div></div>
 {{DOC_BLOCK}}
 <script id="xpg-moteur" type="application/x-xpg-wasm" data-gzip="{{MOTEUR_GZIP}}">{{MOTEUR}}</script>
 <script id="xpg-police" type="application/x-xpg-font">{{POLICE}}</script>

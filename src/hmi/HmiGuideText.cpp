@@ -18495,8 +18495,8 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "La barre du bas : le mode, les \xC3\xA9quipements, l'utilisateur connect\xC3\xA9, "
                          "la vue ouverte ; **Alarmes**, **Variables**, **Scripts**, **Fiche** ouvrent la "
                          "documentation du projet (les listes, le code color\xC3\xA9, la fiche) ; "
-                         "**T\xC3\xA9l\xC3\xA9" "charger le projet** enregistre l'archive .xihm que porte la "
-                         "page.", {}},
+                         "**Limites** dit ce que la page ne fait pas ; **T\xC3\xA9l\xC3\xA9" "charger le "
+                         "projet** enregistre l'archive .xihm que porte la page.", {}},
              {K::Heading, "Ce que la page ne fait pas", {}},
              {K::Paragraph, "Un navigateur ne laisse pas une page ouvrir une connexion r\xC3\xA9seau \xC3\xA0 "
                          "un appareil, ni toucher au PC. Dans la page :", {}},

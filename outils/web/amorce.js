@@ -17,11 +17,17 @@
   //  Une page a part (alarmes, variables, scripts, fiche), dans un cadre : son style
   //  et ses scripts ne touchent pas l'IHM en marche.
   const doc = $('doc'), cadre = $('doc-cadre');
-  const titres = { alarmes: 'Alarmes', variables: 'Variables IHM', scripts: 'Scripts et fonctions', fiche: 'Fiche du projet' };
+  const titres = { alarmes: 'Alarmes', variables: 'Variables IHM', scripts: 'Scripts et fonctions', fiche: 'Fiche du projet',
+                   limites: 'Ce que la page ne fait pas' };
   function showDoc(id) {
+    $('doc-titre').textContent = titres[id] || id;
+    // Les limites de la page : un texte de la page elle-meme (pas la documentation du projet).
+    const lim = id === 'limites';
+    $('doc-limites').hidden = !lim;
+    cadre.hidden = lim;
+    if (lim) { doc.hidden = false; return; }
     const block = $('xpg-doc');
     if (!block) return;
-    $('doc-titre').textContent = titres[id] || id;
     const go = () => { try { cadre.contentWindow.location.hash = '#' + id; } catch (_) {} };
     if (!cadre.getAttribute('data-pret')) {
       cadre.setAttribute('data-pret', '1');
