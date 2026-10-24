@@ -15,9 +15,14 @@
 #pragma once
 #ifdef XPG_WEB
 
+#include "../app/hmi/HmiLot13Painter.hpp"
 #include "../app/hmi/HmiPainter.hpp"
 #include "../hmi/HmiLive.hpp"
+#include "../hmi/HmiLoginMenu.hpp"
+#include "../hmi/HmiPrompt.hpp"
 #include "../hmi/HmiRuntime.hpp"
+#include "../hmi/HmiSignature.hpp"
+#include "../hmi/HmiSystemMenu.hpp"
 #include "../ui/Theme.hpp"
 #include "WebRenderer.hpp"
 
@@ -90,6 +95,16 @@ private:
     std::vector<Layer>                   layers_;
     std::vector<HmiViewport>             vps_;
     std::vector<PopupRect>               popupRects_;
+    // Ce que l'IHM dessine d'elle-meme par-dessus la vue (comme HmiLiveCanvas) : leur
+    // geometrie au dernier dessin, pour le clic. screen_ : le cadre de la vue a l'ecran.
+    gfx::Rect                            screen_{};
+    std::optional<hmi::LoginMenuLayout>  loginLayout_;
+    hmi::LoginTab                        loginTab_{};
+    std::optional<hmi::SignatureLayout>  signLayout_;
+    std::optional<hmi::PromptLayout>     promptLayout_;
+    std::optional<hmi::SystemMenuLayout> systemLayout_;
+    int                                  systemTab_{0};
+    LogoutWarningRects                   warning_{};
     hmi::Id                              down_{hmi::kNoId};
     std::size_t                          downLayer_{0};
     hmi::Id                              valueDrag_{hmi::kNoId};

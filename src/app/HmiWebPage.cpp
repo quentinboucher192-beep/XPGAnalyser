@@ -397,11 +397,12 @@ std::string livePage(const hmi::Project& p, const WebPageInfo& info, const WebBu
     docs.first = "alarmes";
     appendListSections(docs, p, info, st.views, st.popups);
     docs.nav.push_back(projectNav(p));
+    // Le bouton de la barre : court (la barre est etroite) ; le nom du fichier dans sa bulle.
     std::string download;
     if (info.archive)
-        download = "<button type=\"button\" id=\"dl\" title=\"Le projet entier, dans un seul fichier. Le rouvrir : IHM Studio \xE2\x80\xBA "
-                   "Projet \xE2\x80\xBA Importer depuis une page web\xE2\x80\xA6\">T\xC3\xA9l\xC3\xA9" "charger le projet ("
-                 + h::escape(info.archiveName) + ", " + h::escape(pa::sizeText(info.archive->size())) + ")</button>";
+        download = "<button type=\"button\" id=\"dl\" title=\"" + h::escape(info.archiveName) + ", "
+                 + h::escape(pa::sizeText(info.archive->size())) + " : le projet entier, dans un seul fichier. Le rouvrir : IHM Studio \xE2\x80\xBA "
+                   "Projet \xE2\x80\xBA Importer depuis une page web\xE2\x80\xA6\">T\xC3\xA9l\xC3\xA9" "charger le projet</button>";
     std::string page = fillTemplate(
         b.page, {{"APPLICATION", h::escape(info.application)},
                  {"TITRE", h::escape(title)},

@@ -96,6 +96,12 @@ XPG_WEB_EXPORT(xpg_load) int xpg_load(const std::uint8_t* zip, int len) {
         e.journal.push_back(j.stamp + " [" + j.kind + "] " + j.source + " : " + j.message);
         if (e.journal.size() > 5000) e.journal.erase(e.journal.begin(), e.journal.begin() + 2500);
     };
+    // "Changer d'utilisateur" : IHM Studio pose sa question dans une fenetre de l'appli ; la page
+    // ouvre le menu natif de connexion du moteur (le compte, le mot de passe ou le code), le meme
+    // que celui du poste d'exploitation.
+    hooks.askLogin = [&e](const std::string&) {
+        if (e.runtime) e.runtime->openLoginMenu(hmi::LoginTab::Connexion, e.runtime->now(), "Changer d'utilisateur");
+    };
     e.runtime->setHooks(std::move(hooks));
     e.runtime->bind(&e.project, nullptr);     // la simulation : pas d'automate du projet
     e.runtime->setHistory(&e.history);
@@ -249,7 +255,11 @@ XPG_WEB_EXPORT(xpg_object_box) const char* xpg_object_box(const char* name) {
 // Un champ de saisie a-t-il le clavier (la page lui passe alors les caracteres) ?
 XPG_WEB_EXPORT(xpg_focused) int xpg_focused() {
     auto& e = engine();
-    return e.runtime && e.runtime->focusedObject() != hmi::kNoId ? 1 : 0;
+    // Le menu de connexion, la signature, le champ d'une action : ils prennent le clavier aussi.
+    return e.runtime && (e.runtime->focusedObject() != hmi::kNoId || e.runtime->loginShown() || e.runtime->signatureShown()
+                         || e.runtime->promptShown())
+               ? 1
+               : 0;
 }
 
 // L'utilisateur connecte (son identifiant ; vide : personne).

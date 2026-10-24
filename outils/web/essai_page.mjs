@@ -6,7 +6,7 @@
 //    aucune erreur JS ; la vue se dessine ; elle change en simulation (le script
 //    cyclique) ; un clic de navigation, et le retour ; une popup ouverte et fermee ;
 //    une consigne saisie au clavier ; un curseur glisse ; le WAIT d'un script
-//    detache ; l'alarme qui apparait ; la documentation du projet (la barre) ; la
+//    detache ; l'alarme qui apparait, et s'acquitte ; la documentation (la barre) ; la
 //    consigne remanente rendue apres un rechargement (la memoire du navigateur).
 //  XPG_CAPTURES=<dossier> : les captures de chaque etape y sont ecrites (et, avec
 //  XPG_IMAGES=1, une image toutes les 100 ms pour en faire une animation).
@@ -87,7 +87,7 @@ const lit = async () => page.evaluate(() => {
 check((await lit()) > 1000, 'la vue se dessine (des pixels allumes)');
 
 // Une image toutes les 100 ms (XPG_IMAGES=1) : de quoi faire une animation.
-let film = null, filmN = 0;
+let film = null, filmN = 0, steadyMs = -1;   // steadyMs : la mediane des images en marche (avant un rechargement)
 if (caps && process.env.XPG_IMAGES) {
   fs.mkdirSync(path.join(caps, 'film'), { recursive: true });
   film = setInterval(() => { page.screenshot({ path: path.join(caps, 'film', String(filmN++).padStart(4, '0') + '.png') }).catch(() => {}); }, 100);
@@ -95,9 +95,9 @@ if (caps && process.env.XPG_IMAGES) {
 const finish = async () => {
   if (film) clearInterval(film);
   const frameMs = await page.evaluate(() => XpgIhm.lastFrameMs());
-  const avgMs = await page.evaluate(() => (XpgIhm.averageFrameMs ? XpgIhm.averageFrameMs() : 0));
+  const avgMs = steadyMs >= 0 ? steadyMs : await page.evaluate(() => (XpgIhm.medianFrameMs ? XpgIhm.medianFrameMs() : 0));
   const frames = await page.evaluate(() => XpgIhm.frames());
-  console.log('temps d\'ouverture : ' + openMs + ' ms ; une image : ' + avgMs.toFixed(1) + ' ms en moyenne (la derniere '
+  console.log('temps d\'ouverture : ' + openMs + ' ms ; une image : ' + avgMs.toFixed(1) + ' ms (mediane des 120 dernieres ; la derniere '
               + frameMs.toFixed(1) + ' ms, ' + frames + ' images) ; page : ' + (fs.statSync(html).size / 1048576).toFixed(2) + ' Mo');
   check(errors.length === 0, 'aucune erreur JS' + (errors.length ? ' : ' + errors.slice(0, 3).join(' | ') : ''));
   await browser.close();
@@ -200,6 +200,15 @@ await page.waitForTimeout(400);
 const journal = await page.evaluate(() => XpgIhm.journal());
 check(journal.includes('Compteur au-dessus de 50'), 'l\'alarme Seuil apparait (le journal la note)');
 await shot('6_alarme.png');
+// Acquitter, sur le bandeau : le journal le note.
+const banner = await page.evaluate(() => XpgIhm.objectBox('Bandeau_Alarmes'));
+if (banner) {
+  const box = await page.locator('#ihm-canvas').boundingBox();
+  await page.mouse.click(box.x + banner.x + banner.w - banner.h * 1.6, box.y + banner.y + banner.h / 2);
+  await page.waitForTimeout(500);
+}
+check(/Acquitt/i.test((await page.evaluate(() => XpgIhm.journal())).split('\n').slice(-8).join('\n')), 'l\'alarme s\'acquitte sur le bandeau (le journal le note)');
+await shot('6b_acquittee.png');
 
 // La documentation du projet : Alarmes, dans la barre du bas.
 await page.click('button[data-doc="alarmes"]');
@@ -220,6 +229,7 @@ check(bar.includes('Accueil') && bar.includes('Simulation'), 'la barre dit le mo
 
 // La memoire du navigateur : la consigne (remanente) revient apres un rechargement de la page.
 await page.waitForTimeout(2500);            // gardee toutes les 2 s
+steadyMs = await page.evaluate(() => (XpgIhm.medianFrameMs ? XpgIhm.medianFrameMs() : 0));
 await page.reload();
 await page.waitForFunction(() => window.XpgIhm && window.XpgIhm.frames() > 2, null, { timeout: 30000 });
 const consAfter = await page.evaluate(() => XpgIhm.read('Consigne'));

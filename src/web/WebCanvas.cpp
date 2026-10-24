@@ -11,6 +11,9 @@
 
 #include "WebCanvas.hpp"
 
+#include "../app/hmi/HmiLoginPainter.hpp"
+#include "../app/hmi/HmiSystemPainter.hpp"
+
 #include "../hmi/HmiAlarmViews.hpp"
 #include "../hmi/HmiChoiceLists.hpp"
 #include "../hmi/HmiComm.hpp"
@@ -307,6 +310,29 @@ void WebCanvas::paint(WebRenderer& r, float w, float h, double time) {
                 r.fillRect({p0.x, p0.y, p1.x - p0.x, p1.y - p0.y}, gfx::Color{20, 24, 30, 110});
             }
     }
+    // Les fenetres de l'IHM par-dessus la vue, dans le meme ordre que HmiLiveCanvas : le menu
+    // natif de connexion, le panneau de signature, le champ d'une action Clavier virtuel,
+    // l'avertissement de la deconnexion automatique, le menu Parametres systeme (sans sa page
+    // Simulation : pas d'esclave simule ici), l'ecran en veille et la luminosite. (Pas de
+    // clavier virtuel : la page a le clavier du poste ; pas de fenetre Reglage PID.)
+    screen_ = baseRect;
+    loginLayout_.reset();
+    signLayout_.reset();
+    promptLayout_.reset();
+    systemLayout_.reset();
+    if (rt_->loginShown()) {
+        loginLayout_ = paintLoginMenu(r, theme_, *rt_, baseRect, baseRect.h);
+        loginTab_ = rt_->loginTab();
+    }
+    if (rt_->signatureShown()) signLayout_ = paintSignaturePanel(r, theme_, *rt_, baseRect, baseRect.h);
+    if (rt_->promptShown()) promptLayout_ = paintPromptPanel(r, theme_, *rt_, baseRect, baseRect.h);
+    warning_ = paintLogoutWarning(r, theme_, *rt_, baseRect);
+    if (rt_->systemShown()) {
+        systemLayout_ = paintSystemMenu(r, theme_, *rt_, baseRect, nullptr);
+        systemTab_ = rt_->systemTab();
+    }
+    if (rt_->asleep(time)) paintSleepScreen(r, theme_, baseRect);
+    else paintBrightness(r, baseRect, rt_->settings().brightness);
 }
 
 // =================================================================== les clics ==
@@ -514,6 +540,68 @@ void WebCanvas::mouseDown(float x, float y, int button, int clicks, double now) 
     const gfx::Point p{x, y};
     rt_->pointerButton(button, true, now);
     if (button != 0) return;
+    // L'ecran en veille : ce toucher le rallume, rien d'autre.
+    if (rt_->asleep(now)) {
+        (void)rt_->wake(now);
+        return;
+    }
+    // Les fenetres de l'IHM par-dessus la vue prennent tous les clics (modales), comme dans
+    // HmiLiveCanvas : le champ d'une action, la signature ; le bandeau de l'avertissement
+    // (rester connecte) ; le menu de connexion (hors de son panneau : il se ferme).
+    const gfx::Point at{p.x - screen_.x, p.y - screen_.y};
+    if (rt_->promptShown()) {
+        std::string part = "dehors";
+        if (promptLayout_) {
+            part = hmi::promptHit(*promptLayout_, at.x, at.y);
+            if (part.empty()) part = "rien";
+        }
+        rt_->promptPart(part, now);
+        return;
+    }
+    if (rt_->signatureShown()) {
+        std::string part = "rien";
+        if (signLayout_) {
+            part = hmi::signatureHit(*signLayout_, at.x, at.y);
+            if (part.empty()) part = "rien";
+        }
+        rt_->signaturePart(part, now);
+        return;
+    }
+    if (warning_.bar.w > 0.f && warning_.bar.contains(p)) {
+        rt_->stayConnected(now);
+        return;
+    }
+    if (rt_->systemShown()) {
+        std::string part = "fermer";
+        if (systemLayout_) {
+            part = hmi::systemMenuHit(*systemLayout_, systemTab_, at.x, at.y);
+            if ((part == "defiler:-1" || part == "defiler:1") && systemTab_ != hmi::kSimulationTab) {
+                const long page = static_cast<long>(std::max<std::size_t>(1, systemLayout_->diagVisible));
+                std::size_t maxScroll = 0;
+                (void)hmi::diagLines(rt_->diagnostics(), *systemLayout_, rt_->systemScroll(), &maxScroll);
+                const long next = std::clamp(static_cast<long>(rt_->systemScroll()) + (part == "defiler:1" ? page : -page), 0L,
+                                             static_cast<long>(maxScroll));
+                part = "defiler:=" + std::to_string(next);
+            }
+        }
+        if (!part.empty()) rt_->systemPart(part, now);
+        return;
+    }
+    if (rt_->loginShown()) {
+        std::string part = "fermer";
+        if (loginLayout_) {
+            part = hmi::loginMenuHit(*loginLayout_, loginTab_, at.x, at.y, rt_->loginScroll(), rt_->loginRows());
+            if (part == "defiler:-1" || part == "defiler:1") {
+                const long page = static_cast<long>(std::max<std::size_t>(1, loginLayout_->rows.size()));
+                const long maxScroll = static_cast<long>(loginMaxScroll(*rt_, *loginLayout_));
+                const long next = std::clamp(static_cast<long>(rt_->loginScroll()) + (part == "defiler:1" ? page : -page), 0L, maxScroll);
+                part = "defiler:=" + std::to_string(next);
+            }
+            if (part.empty()) part = "rien";
+        }
+        rt_->loginPart(part, now);
+        return;
+    }
     // Une liste deroulante ouverte (dans la couche du dessus) prend le clic d'abord.
     if (!layers_.empty() && vps_.size() == layers_.size()) {
         const std::size_t li = liveTopLayer();
@@ -628,7 +716,10 @@ bool WebCanvas::key(const std::string& token, bool ctrl, bool shift, bool alt, b
         chord.ctrl = ctrl;
         chord.shift = shift;
         chord.alt = alt;
-        return rt_->keyDown(chord, now, repeat, rt_->focusedObject() != kNoId);
+        // On tape (un champ, le menu de connexion, la signature, le champ d'une action) : les
+        // raccourcis de la vue se taisent (comme dans HmiLiveCanvas).
+        const bool typing = rt_->focusedObject() != kNoId || rt_->loginShown() || rt_->signatureShown() || rt_->promptShown();
+        return rt_->keyDown(chord, now, repeat, typing);
     }
     const bool taken = rt_->keyUp(token, now);
     rt_->keyModifiers(ctrl, shift, alt);

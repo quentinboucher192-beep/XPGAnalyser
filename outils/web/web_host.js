@@ -261,6 +261,7 @@
     window.addEventListener('resize', resize);
 
     let frames = 0, lastMs = 0, avgMs = 0;
+    const recent = [];                     // les 120 dernieres images : la mediane
     function frame() {
       const a = performance.now();
       const ptr = ex.xpg_frame(now(), W, H);
@@ -271,6 +272,8 @@
       replay(ctx, cmd, images, family);
       lastMs = performance.now() - a;
       avgMs = frames ? avgMs * 0.95 + lastMs * 0.05 : lastMs;   // la moyenne glissante (une vingtaine d'images)
+      recent.push(lastMs);
+      if (recent.length > 120) recent.shift();
       frames++;
     }
     let raf = 0;
@@ -317,6 +320,7 @@
       now,
       lastFrameMs: () => lastMs,
       averageFrameMs: () => avgMs,
+      medianFrameMs: () => { const s = recent.slice().sort((a, b) => a - b); return s.length ? s[s.length >> 1] : 0; },
       frames: () => frames,
       read: (name) => withStr(name, (p) => cstr(ex.xpg_read(p))),
       write: (name, value) => withStr(name, (pn) => withStr(value, (pv) => ex.xpg_write(pn, pv))),

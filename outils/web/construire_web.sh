@@ -82,9 +82,11 @@ mapfile -t FILES < <(
 # le chien de garde (CrashGuard, SingleInstance, HmiScriptTask : src/web/WebScriptTask.cpp),
 # le serveur web (HmiWeb), le courriel et les SMS (HmiNotify), PDFium (HmiPdf :
 # src/web/WebStubs.cpp), le poste lance a part (HmiStandalone), l'import de projets
-# d'autres logiciels (ProjectImporter). HmiVideoMf y est (hors Windows : sans Media
-# Foundation, le Motion-JPEG seul), HmiExternal aussi (sans disque : "illisible").
-BLOCK='/(CrashGuard|SingleInstance|ProjectImporter|HmiNet|HmiNetInfo|HmiSpy|HmiIpScan|HmiModbusTool|HmiModbusCyclic|HmiWeb|HmiNotify|HmiPdf|HmiStandalone|HmiScriptTask)\.cpp$'
+# d'autres logiciels (ProjectImporter), l'aide F1 et les didacticiels qui la lisent
+# (HmiGuideText, HmiTutorialDeduce : la page n'a pas l'aide de l'editeur). HmiVideoMf y
+# est (hors Windows : sans Media Foundation, le Motion-JPEG seul), HmiExternal aussi
+# (sans disque : "illisible").
+BLOCK='/(CrashGuard|SingleInstance|ProjectImporter|HmiNet|HmiNetInfo|HmiSpy|HmiIpScan|HmiModbusTool|HmiModbusCyclic|HmiWeb|HmiNotify|HmiPdf|HmiStandalone|HmiScriptTask|HmiGuideText|HmiTutorialDeduce)\.cpp$'
 
 OBJS=()
 SRCS=()
