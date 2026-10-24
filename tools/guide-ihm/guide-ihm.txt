@@ -159,13 +159,16 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 @voir onglets, raccourcis, editeur, regles-guides, langues-cote
 ### La puce du zoom
 En bas à droite, dans le bandeau bas : **−** et **+** changent le zoom d'un cran (50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200 %) ; un clic sur le pourcentage ouvre son menu : 50 % à 200 %, Zoom avant, Zoom arrière, **Revenir à 100 %**. La puce montre le zoom de la page ouverte ; grise, la page n'en a pas.
+@nouveau 1.12.31
 ### Ce qui se zoome
 - **toute la page** : ses barres d'outils et de filtres, ses sous-onglets, ses tableaux, ses listes, ses arbres, ses fiches, ses panneaux et sa ligne d'état ; dans l'éditeur de vues, l'explorateur d'objets, les calques, la bibliothèque et l'inspecteur ;
 - l'**arbre du projet** (son filtre, ses puces, son rail compris) et le **panneau du bas** (Sorties, Console, Diagnostics) ont chacun le leur : Ctrl + molette dessus, ou Ctrl + plus, Ctrl + moins, Ctrl + 0 quand le clavier y est ; le bandeau bas dit le pourcentage ;
 - les **documents** gardent leur propre zoom et ne grandissent pas avec la page : un code, un grafcet, une vue dans l'éditeur, le rack, l'IHM en marche, les vues des langues côte à côte (leurs en-têtes, eux, grandissent) - la puce suit celui que tu as cliqué en dernier ; un clic sur une barre de la page la ramène à toute la page.
 ### Le même geste partout
 - **Ctrl + molette** sur une page : un cran pour toute la page ; sur un code, un grafcet, une vue : leur zoom à eux ;
+@nouveau 1.12.31
 - **Ctrl + plus** (la touche = avec ou sans Maj, le + du pavé numérique), **Ctrl + moins** (la touche − de la rangée des chiffres, sur un clavier AZERTY aussi, ou celle du pavé), **Ctrl + 0** (100 %) ; dans un code, Ctrl + moins garde « Revenir où l'on était » (profil Visual Studio) : la molette ou la puce zooment.
+@nouveau 1.12.31
 ### Gardé d'une séance à l'autre
 - le zoom de chaque page, celui de l'arbre du projet, du panneau du bas et de chaque code se gardent dans tes réglages : la page rouverte, le lendemain, revient à son zoom ;
 - **Revenir à 100 %** (Ctrl + 0, ou le menu de la puce) l'oublie ;
@@ -1617,6 +1620,7 @@ Pour chaque langue, combien de textes restent à traduire ; une traduction qui p
 Dans l'éditeur de vues, **Langues côte à côte** (le dernier bouton de la barre d'outils, ou le clic droit sur la vue) ; dans **Configuration › Langues**, **Côte à côte**. La page s'ouvre sur la vue de l'éditeur ; la liste en haut à gauche en montre une autre.
 ### Ce qu'elle montre
 - une colonne par langue, la langue du projet d'abord, puis la **pseudo-langue** ; **Par 2, Par 3, Par 4** en montre deux à quatre à la fois, les flèches (Maj + molette) font défiler les autres ;
+@nouveau 1.12.31
 - toutes à la même échelle : **Ajuster** montre la vue entière, le zoom (la puce du bandeau bas, Ctrl + molette sur les vues) l'agrandit, la molette la fait défiler ; un clic sur la barre du haut, et la puce zoome toute la page - la barre, les en-têtes des langues (voir « Le zoom des pages ») ;
 - l'en-tête de chaque langue dit combien de textes y débordent (en vert : aucun).
 ### Les débordements
@@ -7703,6 +7707,7 @@ Là où un type est attendu (`n := ` pour un INT, l'argument d'une fonction, `IF
 - **Une saisie refusée ne se perd pas** : une ligne rouge sous la case dit pourquoi (« n'est pas un nombre entier (INT) », « hors des bornes d'un INT ») avec **Reprendre « ce que tu avais tapé »** pour la corriger, et quand c'est possible **Ramener à 32767** ou **Remplacer par Debit_Entree**. La valeur d'avant reste ; Échap efface la ligne.
 @nouveau 1.12.23
 - **Le carré au bout de la case s'ouvre partout** : dans l'inspecteur comme dans les onglets Contenu (une plume, une case de tableau), Actions et Raccourcis, un clic sur le carré (C, fx, I, S…) dit d'où vient la valeur et ouvre le sélecteur des constantes, des variables IHM et des variables système. Une case qui n'attend qu'une formule (l'expression d'une plume, la condition d'une alarme) se lit en formule : `SPPV_TELUNA[0].SP`, `Pression > 10` ; `12.5` ou `TRUE` y restent des constantes.
+@nouveau 1.12.31
 - **En marche, une case qui n'attend qu'une formule se calcule**, quel que soit l'objet : la fin de course d'un registre (`=FCO_RG1`), le déclenchement d'un clapet coupe-feu, les booléens A et B d'une vanne 3 voies, une condition. Dans un symbole, le paramètre qu'elle cite reçoit l'argument de l'instance ; renommer la variable ou le paramètre la suit.
 - **Les listes** s'écrivent entre parenthèses, séparées par des points-virgules : `(a;b;…)` ; les **intervalles** `a..b` (`0..100`).
 | Le type de la case | Tu écris | La case garde |
@@ -9003,6 +9008,7 @@ Ne sont pas pris : `exports/` et la corbeille ; du cache, ni ses artefacts (refa
 2. **où la déballer** : par défaut le dossier des projets, sous son nom (« Ligne_gaz (2) » s'il est pris) - un dossier neuf, ou vide ;
 3. le projet s'ouvre (le projet en mémoire, s'il est modifié, se demande d'abord), et le contrôle dit ce qu'il a retrouvé : chaque compte du manifeste, relu.
 Un fichier externe lié hors du projet revient dans le dossier `externes/` du projet, et le lien le suit - sauf si son fichier d'origine est là, intact : le lien d'origine reste.
+@nouveau 1.12.31
 ### Le build reprend où il en était
 Le **cache de construction** (`.xpg/build/build-cache.txt`) a suivi : ce qui était généré et compilé l'est encore, **Démarrer** ne régénère rien de plus qu'avant l'export. Ses artefacts (la forme générée de chaque élément) se refont au déballage, d'après lui, chacun à l'empreinte que le cache a retenue. Un élément qui a changé depuis le dernier build (modifié et enregistré après lui, ou un fichier externe relié à sa copie) n'a plus la même empreinte : il est refait au prochain build, jamais pris pour à jour. Une archive sans cache (écrite par une version d'avant) : le premier build refait tout, comme avant.
 ### Une archive abîmée, ou plus récente
@@ -9020,6 +9026,7 @@ Le **cache de construction** (`.xpg/build/build-cache.txt`) a suivi : ce qui ét
 @capture PNG_echanges_06_page_web_navigation.png | Un clic sur un bouton de navigation : sa vue s'ouvre ; Précédent revient.
 ### L'écrire
 **Projet › Exporter en page web (.html)…** (ou le clic droit sur la racine de l'arbre du projet, ou IHM › Exporter / Importer, **Page web**) : par défaut `<dossier du projet>.html`, à côté du dossier du projet. La page s'écrit à côté, l'application ne se fige pas ; la cloche dit où est la page, la barre d'état dit « l'IHM y tourne ».
+@nouveau 1.12.31
 ### Dans le navigateur : l'IHM en marche
 Le moteur de l'IHM d'IHM Studio, compilé pour le navigateur (WebAssembly), est dans la page avec le projet : il le fait tourner comme la simulation d'IHM Studio, et dessine chaque vue avec le même dessin.
 | Dans la page | Ce qui se passe |
@@ -9031,6 +9038,7 @@ Le moteur de l'IHM d'IHM Studio, compilé pour le navigateur (WebAssembly), est 
 | Les utilisateurs | l'utilisateur de départ ; **Changer d'utilisateur** ouvre le menu de connexion du poste (le compte, le mot de passe ou le code) ; une commande à signer ouvre le panneau de signature ; le menu Paramètres système s'ouvre comme sur le poste |
 | Les variables IHM | leur valeur initiale, puis ce que les scripts et les saisies y écrivent ; une variable **Rémanente** est gardée par le navigateur et revient à l'ouverture suivante de la page, comme sur le poste d'exploitation |
 La barre du bas : le mode, les équipements, l'utilisateur connecté, la vue ouverte ; **Alarmes**, **Variables**, **Scripts**, **Fiche** ouvrent la documentation du projet (les listes, le code coloré, la fiche) ; **Limites** dit ce que la page ne fait pas ; **Télécharger le projet** enregistre l'archive .xihm que porte la page.
+@nouveau 1.12.31
 ### Ce que la page ne fait pas
 Un navigateur ne laisse pas une page ouvrir une connexion réseau à un appareil, ni toucher au PC. Dans la page :
 - **les équipements** (Modbus TCP) ne sont pas reliés : une variable liée à un équipement garde sa valeur initiale, et la barre du bas le dit. Pour piloter les vrais appareils, ouvre le projet dans IHM Studio ou en poste d'exploitation ;
@@ -9038,11 +9046,13 @@ Un navigateur ne laisse pas une page ouvrir une connexion réseau à un appareil
 - pas de clavier virtuel à l'écran : tu tapes au clavier du poste ; pas de fenêtre Réglage PID, ni de page Simulation dans Paramètres système ;
 - dans un onglet caché ou une fenêtre réduite, le navigateur ralentit la page : l'IHM y tourne au ralenti, ses scripts cycliques et ses alarmes aussi. Garde la page affichée.
 > Il faut un navigateur récent (Edge, Chrome, Firefox, Safari de 2023 ou plus) : la page le dit sinon.
+@nouveau 1.12.31
 ### Le moteur web, livré avec IHM Studio
 Le moteur est dans le dossier `web` à côté d'IHM-Studio.exe (livré par l'installateur). S'il manque, la page s'écrit quand même, **au repos** - les vues dessinées sans valeurs, les boutons de navigation cliquables, les listes du projet -, et elle le dit, comme la barre d'état.
 ### À chaque enregistrement
 **Mettre à jour la page web à chaque enregistrement** (dans la fenêtre Exporter en page web) : à chaque Ctrl+S, la page se réécrit toute seule, au même endroit, sans ralentir l'enregistrement ; la barre d'état dit « Page web mise à jour ». Le choix est gardé dans la fiche du projet.
 ### La réimporter
+@nouveau 1.12.31
 **Projet › Importer depuis une page web…** (ou **Projet › Ouvrir…** sur le `.html`, ou la page lâchée sur la fenêtre) : le projet que porte la page est déballé, où tu veux, puis il s'ouvre - à l'identique, comme une archive .xihm, son cache de construction compris (il ne se régénère pas). Une page qu'une autre application a écrite est refusée : « cette page n'a pas été écrite par IHM Studio ni par API Studio ».
 
 == dossier | Le dossier de l'IHM
@@ -9355,6 +9365,7 @@ Une modification faite dans le grafcet (le volet Code, un dialogue, l'outil Supp
 @capture PNG_echanges_03_exporter_xapi.png | Projet › Exporter en archive .xapi… : le fichier, les versions, l'historique, les macros.
 @capture PNG_echanges_07_page_web_api.png | La page web du programme : les tâches et l'ordre d'exécution, chaque section et son code.
 ### L'archive .xapi
+@nouveau 1.12.31
 **Projet › Exporter en archive .xapi…** (ou le clic droit sur la racine de l'arbre) : la fiche du projet, les sections (ST, ladders, FBD, GRAFCET, gardés tels quels), les unités de programme, les DFB, les DDT, les variables, les tâches, la configuration, les tables d'animation, l'icône, les données, la disposition des grafcets (le fichier `.xpglayout` d'à côté) ; au choix, les **versions**, l'**historique** et les **macros** de la bibliothèque. Le manifeste compte les sections, les unités, les DFB, les DDT, les variables globales, les tâches, les modules, les tables et les versions, et garde l'empreinte SHA-256 de chaque fichier. Ne sont pas pris : `exports/` et la corbeille. Le dossier a aussi une IHM (un projet de la 1.11) ? Le cache de son build (`.xpg/build/build-cache.txt`) vient avec et ses artefacts se refont au déballage : IHM Studio le trouve à jour, comme après une archive .xihm.
 ### L'ouvrir
 **Projet › Ouvrir…** sur un `.xapi`, **Projet › Importer une archive…**, un double-clic (`API-Studio.exe chemin.xapi`), ou le fichier lâché sur la fenêtre : où la déballer (par défaut le dossier des projets, sous son nom), puis le projet s'ouvre et chaque compte est relu. Une macro de l'archive qui manque à ta bibliothèque y est ajoutée ; une macro que tu as déjà n'est pas remplacée. Une archive abîmée, plus récente, ou d'un projet IHM (`.xihm`) : la raison est dite.

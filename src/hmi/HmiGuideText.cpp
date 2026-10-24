@@ -315,20 +315,20 @@ const std::vector<Topic>& topics() {
                          "sur le pourcentage ouvre son menu : 50 % \xC3\xA0 200 %, Zoom avant, Zoom "
                          "arri\xC3\xA8re, **Revenir \xC3\xA0 100 %**. La puce montre le zoom de la page "
                          "ouverte ; grise, la page n'en a pas.", {}},
-             {K::Heading, "Ce qui se zoome", {}},
+             {K::Heading, "Ce qui se zoome", {}, "1.12.31"},
              {K::Bullet, "**toute la page** : ses barres d'outils et de filtres, ses sous-onglets, ses "
                          "tableaux, ses listes, ses arbres, ses fiches, ses panneaux et sa ligne "
                          "d'\xC3\xA9tat ; dans l'\xC3\xA9" "diteur de vues, l'explorateur d'objets, les "
-                         "calques, la biblioth\xC3\xA8que et l'inspecteur ;", {}},
+                         "calques, la biblioth\xC3\xA8que et l'inspecteur ;", {}, "1.12.31"},
              {K::Bullet, "l'**arbre du projet** (son filtre, ses puces, son rail compris) et le **panneau du "
                          "bas** (Sorties, Console, Diagnostics) ont chacun le leur : Ctrl + molette dessus, "
                          "ou Ctrl + plus, Ctrl + moins, Ctrl + 0 quand le clavier y est ; le bandeau bas dit "
-                         "le pourcentage ;", {}},
+                         "le pourcentage ;", {}, "1.12.31"},
              {K::Bullet, "les **documents** gardent leur propre zoom et ne grandissent pas avec la page : un "
                          "code, un grafcet, une vue dans l'\xC3\xA9" "diteur, le rack, l'IHM en marche, les "
                          "vues des langues c\xC3\xB4te \xC3\xA0 c\xC3\xB4te (leurs en-t\xC3\xAAtes, eux, "
                          "grandissent) - la puce suit celui que tu as cliqu\xC3\xA9 en dernier ; un clic sur "
-                         "une barre de la page la ram\xC3\xA8ne \xC3\xA0 toute la page.", {}},
+                         "une barre de la page la ram\xC3\xA8ne \xC3\xA0 toute la page.", {}, "1.12.31"},
              {K::Heading, "Le m\xC3\xAAme geste partout", {}},
              {K::Bullet, "**Ctrl + molette** sur une page : un cran pour toute la page ; sur un code, un "
                          "grafcet, une vue : leur zoom \xC3\xA0 eux ;", {}},
@@ -336,15 +336,15 @@ const std::vector<Topic>& topics() {
                          "num\xC3\xA9rique), **Ctrl + moins** (la touche \xE2\x88\x92 de la rang\xC3\xA9" "e "
                          "des chiffres, sur un clavier AZERTY aussi, ou celle du pav\xC3\xA9), **Ctrl + 0** "
                          "(100 %) ; dans un code, Ctrl + moins garde \xC2\xAB Revenir o\xC3\xB9 l'on "
-                         "\xC3\xA9tait \xC2\xBB (profil Visual Studio) : la molette ou la puce zooment.", {}},
-             {K::Heading, "Gard\xC3\xA9 d'une s\xC3\xA9" "ance \xC3\xA0 l'autre", {}},
+                         "\xC3\xA9tait \xC2\xBB (profil Visual Studio) : la molette ou la puce zooment.", {}, "1.12.31"},
+             {K::Heading, "Gard\xC3\xA9 d'une s\xC3\xA9" "ance \xC3\xA0 l'autre", {}, "1.12.31"},
              {K::Bullet, "le zoom de chaque page, celui de l'arbre du projet, du panneau du bas et de chaque "
                          "code se gardent dans tes r\xC3\xA9glages : la page rouverte, le lendemain, revient "
-                         "\xC3\xA0 son zoom ;", {}},
-             {K::Bullet, "**Revenir \xC3\xA0 100 %** (Ctrl + 0, ou le menu de la puce) l'oublie ;", {}},
+                         "\xC3\xA0 son zoom ;", {}, "1.12.31"},
+             {K::Bullet, "**Revenir \xC3\xA0 100 %** (Ctrl + 0, ou le menu de la puce) l'oublie ;", {}, "1.12.31"},
              {K::Bullet, "le zoom d'une vue dans l'\xC3\xA9" "diteur, d'un grafcet, du rack ne se garde pas "
-                         ": ils s'ouvrent comme avant.", {}},
-             {K::Tip, "\xC3\x80 100 %, rien ne change : le zoom ne touche pas \xC3\xA0 la mise en page.", {}},
+                         ": ils s'ouvrent comme avant.", {}, "1.12.31"},
+             {K::Tip, "\xC3\x80 100 %, rien ne change : le zoom ne touche pas \xC3\xA0 la mise en page.", {}, "1.12.31"},
          },
          {"onglets", "raccourcis", "editeur", "regles-guides", "langues-cote"},
          {"zoom", "Zoom", "zoomer", "agrandir", "Ctrl+molette", "Ctrl+plus", "Ctrl+moins", "Ctrl+0", "100 %", "puce du zoom", "bandeau bas", "lisibilit\xC3\xA9", "AZERTY", "pav\xC3\xA9 num\xC3\xA9rique", "arbre du projet", "panneau du bas", "Revenir \xC3\xA0 100 %"},
@@ -3438,7 +3438,7 @@ const std::vector<Topic>& topics() {
                          "enti\xC3\xA8re, le zoom (la puce du bandeau bas, Ctrl + molette sur les vues) "
                          "l'agrandit, la molette la fait d\xC3\xA9" "filer ; un clic sur la barre du haut, "
                          "et la puce zoome toute la page - la barre, les en-t\xC3\xAAtes des langues (voir "
-                         "\xC2\xAB Le zoom des pages \xC2\xBB) ;", {}},
+                         "\xC2\xAB Le zoom des pages \xC2\xBB) ;", {}, "1.12.31"},
              {K::Bullet, "l'en-t\xC3\xAAte de chaque langue dit combien de textes y d\xC3\xA9" "bordent (en "
                          "vert : aucun).", {}},
              {K::Heading, "Les d\xC3\xA9" "bordements", {}},
@@ -16030,7 +16030,7 @@ const std::vector<Topic>& topics() {
                          "l'objet : la fin de course d'un registre (`=FCO_RG1`), le d\xC3\xA9" "clenchement "
                          "d'un clapet coupe-feu, les bool\xC3\xA9" "ens A et B d'une vanne 3 voies, une "
                          "condition. Dans un symbole, le param\xC3\xA8tre qu'elle cite re\xC3\xA7oit "
-                         "l'argument de l'instance ; renommer la variable ou le param\xC3\xA8tre la suit.", {}, "1.12.19"},
+                         "l'argument de l'instance ; renommer la variable ou le param\xC3\xA8tre la suit.", {}, "1.12.31"},
              {K::Bullet, "**Les listes** s'\xC3\xA9" "crivent entre parenth\xC3\xA8ses, "
                          "s\xC3\xA9par\xC3\xA9" "es par des points-virgules : `(a;b;\xE2\x80\xA6)` ; les "
                          "**intervalles** `a..b` (`0..100`).", {}, "1.12.19"},
@@ -18455,7 +18455,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Un fichier externe li\xC3\xA9 hors du projet revient dans le dossier `externes/` "
                          "du projet, et le lien le suit - sauf si son fichier d'origine est l\xC3\xA0, "
                          "intact : le lien d'origine reste.", {}},
-             {K::Heading, "Le build reprend o\xC3\xB9 il en \xC3\xA9tait", {}},
+             {K::Heading, "Le build reprend o\xC3\xB9 il en \xC3\xA9tait", {}, "1.12.31"},
              {K::Paragraph, "Le **cache de construction** (`.xpg/build/build-cache.txt`) a suivi : ce qui "
                          "\xC3\xA9tait g\xC3\xA9n\xC3\xA9r\xC3\xA9 et compil\xC3\xA9 l'est encore, "
                          "**D\xC3\xA9marrer** ne r\xC3\xA9g\xC3\xA9n\xC3\xA8re rien de plus qu'avant "
@@ -18466,7 +18466,7 @@ const std::vector<Topic>& topics() {
                          "apr\xC3\xA8s lui, ou un fichier externe reli\xC3\xA9 \xC3\xA0 sa copie) n'a plus "
                          "la m\xC3\xAAme empreinte : il est refait au prochain build, jamais pris pour "
                          "\xC3\xA0 jour. Une archive sans cache (\xC3\xA9" "crite par une version d'avant) : "
-                         "le premier build refait tout, comme avant.", {}},
+                         "le premier build refait tout, comme avant.", {}, "1.12.31"},
              {K::Heading, "Une archive ab\xC3\xAEm\xC3\xA9" "e, ou plus r\xC3\xA9" "cente", {}},
              {K::Bullet, "**Ab\xC3\xAEm\xC3\xA9" "e** (une copie interrompue, un fichier "
                          "alt\xC3\xA9r\xC3\xA9) : elle le dit, fichier par fichier ; **D\xC3\xA9" "baller ce "
@@ -18500,10 +18500,10 @@ const std::vector<Topic>& topics() {
                          "c\xC3\xB4t\xC3\xA9 du dossier du projet. La page s'\xC3\xA9" "crit \xC3\xA0 "
                          "c\xC3\xB4t\xC3\xA9, l'application ne se fige pas ; la cloche dit o\xC3\xB9 est la "
                          "page, la barre d'\xC3\xA9tat dit \xC2\xAB l'IHM y tourne \xC2\xBB.", {}},
-             {K::Heading, "Dans le navigateur : l'IHM en marche", {}},
+             {K::Heading, "Dans le navigateur : l'IHM en marche", {}, "1.12.31"},
              {K::Paragraph, "Le moteur de l'IHM d'IHM Studio, compil\xC3\xA9 pour le navigateur (WebAssembly), "
                          "est dans la page avec le projet : il le fait tourner comme la simulation d'IHM "
-                         "Studio, et dessine chaque vue avec le m\xC3\xAAme dessin.", {}},
+                         "Studio, et dessine chaque vue avec le m\xC3\xAAme dessin.", {}, "1.12.31"},
              {K::Table, "Dans la page\tCe qui se passe\nLes vues et les popups\tdessin\xC3\xA9" "es comme "
                          "dans IHM Studio, anim\xC3\xA9" "es par les valeurs ; la vue de d\xC3\xA9marrage "
                          "s'ouvre d'abord, \xC3\xA0 la taille de la fen\xC3\xAAtre (le r\xC3\xA9glage "
@@ -18522,36 +18522,36 @@ const std::vector<Topic>& topics() {
                          "le poste\nLes variables IHM\tleur valeur initiale, puis ce que les scripts et les "
                          "saisies y \xC3\xA9" "crivent ; une variable **R\xC3\xA9manente** est "
                          "gard\xC3\xA9" "e par le navigateur et revient \xC3\xA0 l'ouverture suivante de la "
-                         "page, comme sur le poste d'exploitation", {}},
+                         "page, comme sur le poste d'exploitation", {}, "1.12.31"},
              {K::Paragraph, "La barre du bas : le mode, les \xC3\xA9quipements, l'utilisateur connect\xC3\xA9, "
                          "la vue ouverte ; **Alarmes**, **Variables**, **Scripts**, **Fiche** ouvrent la "
                          "documentation du projet (les listes, le code color\xC3\xA9, la fiche) ; "
                          "**Limites** dit ce que la page ne fait pas ; **T\xC3\xA9l\xC3\xA9" "charger le "
-                         "projet** enregistre l'archive .xihm que porte la page.", {}},
-             {K::Heading, "Ce que la page ne fait pas", {}},
+                         "projet** enregistre l'archive .xihm que porte la page.", {}, "1.12.31"},
+             {K::Heading, "Ce que la page ne fait pas", {}, "1.12.31"},
              {K::Paragraph, "Un navigateur ne laisse pas une page ouvrir une connexion r\xC3\xA9seau \xC3\xA0 "
-                         "un appareil, ni toucher au PC. Dans la page :", {}},
+                         "un appareil, ni toucher au PC. Dans la page :", {}, "1.12.31"},
              {K::Bullet, "**les \xC3\xA9quipements** (Modbus TCP) ne sont pas reli\xC3\xA9s : une variable "
                          "li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement garde sa valeur initiale, et la barre "
                          "du bas le dit. Pour piloter les vrais appareils, ouvre le projet dans IHM Studio "
-                         "ou en poste d'exploitation ;", {}},
+                         "ou en poste d'exploitation ;", {}, "1.12.31"},
              {K::Bullet, "pas de ping ni de recherche d'adresses IP, pas de port s\xC3\xA9rie, pas de "
                          "courriel ni de SMS, pas de vid\xC3\xA9o d\xC3\xA9" "cod\xC3\xA9" "e par Windows "
-                         "(MP4, WMV), pas de lecteur PDF, pas de serveur web int\xC3\xA9gr\xC3\xA9 ;", {}},
+                         "(MP4, WMV), pas de lecteur PDF, pas de serveur web int\xC3\xA9gr\xC3\xA9 ;", {}, "1.12.31"},
              {K::Bullet, "pas de clavier virtuel \xC3\xA0 l'\xC3\xA9" "cran : tu tapes au clavier du poste ; "
                          "pas de fen\xC3\xAAtre R\xC3\xA9glage PID, ni de page Simulation dans "
-                         "Param\xC3\xA8tres syst\xC3\xA8me ;", {}},
+                         "Param\xC3\xA8tres syst\xC3\xA8me ;", {}, "1.12.31"},
              {K::Bullet, "dans un onglet cach\xC3\xA9 ou une fen\xC3\xAAtre r\xC3\xA9" "duite, le navigateur "
                          "ralentit la page : l'IHM y tourne au ralenti, ses scripts cycliques et ses alarmes "
-                         "aussi. Garde la page affich\xC3\xA9" "e.", {}},
+                         "aussi. Garde la page affich\xC3\xA9" "e.", {}, "1.12.31"},
              {K::Tip, "Il faut un navigateur r\xC3\xA9" "cent (Edge, Chrome, Firefox, Safari de 2023 ou "
-                         "plus) : la page le dit sinon.", {}},
-             {K::Heading, "Le moteur web, livr\xC3\xA9 avec IHM Studio", {}},
+                         "plus) : la page le dit sinon.", {}, "1.12.31"},
+             {K::Heading, "Le moteur web, livr\xC3\xA9 avec IHM Studio", {}, "1.12.31"},
              {K::Paragraph, "Le moteur est dans le dossier `web` \xC3\xA0 c\xC3\xB4t\xC3\xA9 d'IHM-Studio.exe "
                          "(livr\xC3\xA9 par l'installateur). S'il manque, la page s'\xC3\xA9" "crit quand "
                          "m\xC3\xAAme, **au repos** - les vues dessin\xC3\xA9" "es sans valeurs, les boutons "
                          "de navigation cliquables, les listes du projet -, et elle le dit, comme la barre "
-                         "d'\xC3\xA9tat.", {}},
+                         "d'\xC3\xA9tat.", {}, "1.12.31"},
              {K::Heading, "\xC3\x80 chaque enregistrement", {}},
              {K::Paragraph, "**Mettre \xC3\xA0 jour la page web \xC3\xA0 chaque enregistrement** (dans la "
                          "fen\xC3\xAAtre Exporter en page web) : \xC3\xA0 chaque Ctrl+S, la page se "
@@ -18566,7 +18566,7 @@ const std::vector<Topic>& topics() {
                          "l'identique, comme une archive .xihm, son cache de construction compris (il ne se "
                          "r\xC3\xA9g\xC3\xA9n\xC3\xA8re pas). Une page qu'une autre application a "
                          "\xC3\xA9" "crite est refus\xC3\xA9" "e : \xC2\xAB cette page n'a pas "
-                         "\xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio ni par API Studio \xC2\xBB.", {}},
+                         "\xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio ni par API Studio \xC2\xBB.", {}, "1.12.31"},
          },
          {"archive-projet", "echange", "dossier", "simulation"},
          {"page web", "HTML", ".html", "navigateur", "Exporter en page web", "Importer depuis une page web", "Mettre \xC3\xA0 jour la page web \xC3\xA0 chaque enregistrement", "hors ligne", "sans Internet", "SVG", "WebAssembly", "wasm", "page en marche", "page au repos", "ihm-web.wasm.gz", "T\xC3\xA9l\xC3\xA9" "charger le projet", "cette page n'a pas \xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio"},
@@ -19378,7 +19378,7 @@ const std::vector<Topic>& topics() {
                          "corbeille. Le dossier a aussi une IHM (un projet de la 1.11) ? Le cache de son "
                          "build (`.xpg/build/build-cache.txt`) vient avec et ses artefacts se refont au "
                          "d\xC3\xA9" "ballage : IHM Studio le trouve \xC3\xA0 jour, comme apr\xC3\xA8s une "
-                         "archive .xihm.", {}},
+                         "archive .xihm.", {}, "1.12.31"},
              {K::Heading, "L'ouvrir", {}},
              {K::Paragraph, "**Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6** sur un `.xapi`, **Projet \xE2\x80\xBA "
                          "Importer une archive\xE2\x80\xA6**, un double-clic (`API-Studio.exe chemin.xapi`), "

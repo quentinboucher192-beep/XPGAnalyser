@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.12.31", "24/10/2026", "livr\xC3\xA9" "e le 24/10 dans la journ\xC3\xA9" "e"},
     {"1.12.30", "24/10/2026", "livr\xC3\xA9" "e le 24/10 dans la nuit"},
     {"1.12.29", "23/10/2026", "livr\xC3\xA9" "e le 23/10 en fin de journ\xC3\xA9" "e"},
     {"1.12.28", "23/10/2026", "livr\xC3\xA9" "e le 23/10 dans la journ\xC3\xA9" "e"},
@@ -136,6 +137,30 @@ const std::vector<Note>& table() {
     static const std::vector<Note> t = {
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
+        // 1.12.31 (24/10/2026) : la page web en marche (le moteur de l'IHM en WebAssembly, sans les equipements),
+        // le zoom de toute la page, de l'arbre du projet et du panneau du bas, garde d'une seance a l'autre ;
+        // corrections : le cache de construction dans l'archive, les formules tapees calculees en marche, Ctrl + moins en AZERTY.
+        note("1.12.31", "Projet", Kind::New,
+         "LA PAGE WEB EN MARCHE : la page qu'\xC3\xA9" "crit Projet \xE2\x80\xBA Exporter en page web (.html)\xE2\x80\xA6 fait maintenant tourner ton IHM dans le navigateur, sans Internet, avec le moteur et le dessin d'IHM Studio (compil\xC3\xA9s en WebAssembly, livr\xC3\xA9s avec l'application dans le dossier web). Les vues s'animent ; les scripts tournent - cycliques, sur \xC3\xA9v\xC3\xA9nement, au d\xC3\xA9marrage, et un script d\xC3\xA9tach\xC3\xA9 attend sur WAIT sans figer la page ; les alarmes apparaissent, disparaissent et s'acquittent ; les boutons, les interrupteurs, les listes, les curseurs et les champs de saisie r\xC3\xA9pondent ; Changer d'utilisateur, la signature et Param\xC3\xA8tres syst\xC3\xA8me s'ouvrent comme sur le poste, et une variable R\xC3\xA9manente revient \xC3\xA0 l'ouverture suivante. La barre du bas dit le mode, les \xC3\xA9quipements, l'utilisateur et la vue ; Limites dit ce que la page ne fait pas : les \xC3\xA9quipements (Modbus TCP) n'y sont pas reli\xC3\xA9s, leurs variables gardent leur valeur initiale. Sans le moteur, la page s'\xC3\xA9" "crit au repos, comme en 1.12.30, et le dit.",
+         "page-web", ""),
+        note("1.12.31", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
+         "LE ZOOM DE TOUTE LA PAGE : la puce du zoom grandit maintenant la page enti\xC3\xA8re - ses barres d'outils et de filtres, ses sous-onglets, ses tableaux, ses fiches et sa ligne d'\xC3\xA9tat, avec leurs ic\xC3\xB4nes, leurs hauteurs et leurs marges ; dans l'\xC3\xA9" "diteur de vues, l'explorateur d'objets, les calques, la biblioth\xC3\xA8que et l'inspecteur aussi. Un code, une vue, un grafcet, le rack, l'IHM en marche gardent leur zoom \xC3\xA0 eux et restent nets ; un clic sur une barre de la page ram\xC3\xA8ne la puce \xC3\xA0 toute la page. Quand la place manque, une barre de filtres raccourcit sa recherche et ses libell\xC3\xA9s : rien ne sort de la page.",
+         "zoom", ""),
+        note("1.12.31", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
+         "L'ARBRE DU PROJET ET LE PANNEAU DU BAS ONT LEUR ZOOM : Ctrl + molette sur l'arbre du projet le zoome tout entier - son filtre, ses puces, son rail ; sur le panneau du bas (Sorties, Console, Diagnostics), de m\xC3\xAAme. Avec le clavier dedans, Ctrl + plus, Ctrl + moins et Ctrl + 0 font pareil ; le bandeau bas dit le pourcentage.",
+         "zoom", ""),
+        note("1.12.31", "G\xC3\xA9n\xC3\xA9ral", Kind::New,
+         "LE ZOOM GARD\xC3\x89 D'UNE S\xC3\x89" "ANCE \xC3\x80 L'AUTRE : chaque page retrouve son zoom quand tu la rouvres, m\xC3\xAAme le lendemain ; l'arbre du projet, le panneau du bas et chaque code aussi. Il est rang\xC3\xA9 avec tes r\xC3\xA9glages ; Revenir \xC3\xA0 100 % (Ctrl + 0) l'oublie.",
+         "zoom", ""),
+        note("1.12.31", "Projet", Kind::Fixed,
+         "L'ARCHIVE EMPORTE LE CACHE DE CONSTRUCTION : un projet rouvert depuis une archive .xihm, ou depuis sa page web, ne se r\xC3\xA9g\xC3\xA9n\xC3\xA8re plus. Le cache du dernier build vient avec (quelques dizaines de Ko) ; ses artefacts se refont au d\xC3\xA9" "ballage, chacun v\xC3\xA9rifi\xC3\xA9 par l'empreinte que le cache a retenue : l'arbre dit \xC2\xAB Projet \xC3\xA0 jour \xC2\xBB et D\xC3\xA9marrer ne g\xC3\xA9n\xC3\xA8re ni ne compile rien. Ce qui a chang\xC3\xA9 depuis le dernier build (un \xC3\xA9l\xC3\xA9ment enregistr\xC3\xA9 apr\xC3\xA8s lui, un fichier externe reli\xC3\xA9 \xC3\xA0 sa copie) se refait, jamais un cache d\xC3\xA9pass\xC3\xA9 pris pour bon. Une archive d'avant, sans cache, s'ouvre toujours : son premier build refait tout. La .xapi d'un dossier qui a aussi son IHM l'emporte de m\xC3\xAAme.",
+         "archive-projet", ""),
+        note("1.12.31", "Vues", Kind::Fixed,
+         "LES FORMULES TAP\xC3\x89" "ES DANS L'INSPECTEUR SE CALCULENT EN MARCHE, POUR TOUS LES OBJETS : une case qui n'attend qu'une formule (les fins de course et le d\xC3\xA9" "clenchement des registres, les bool\xC3\xA9" "ens A et B de la vanne 3 voies, une condition\xE2\x80\xA6), tap\xC3\xA9" "e =FCO_RG1, se lisait comme une constante en simulation et sur le poste : le registre \xC3\xA0 l'arr\xC3\xAAt en discordance, le clapet jamais d\xC3\xA9" "clench\xC3\xA9, la vanne ferm\xC3\xA9" "e. Toute propri\xC3\xA9t\xC3\xA9 de r\xC3\xB4le Formule se calcule maintenant comme une expression, et l'onglet Expressions de la simulation la montre avec sa valeur. Dans un symbole, le param\xC3\xA8tre qu'elle cite re\xC3\xA7oit l'argument de l'instance ; renommer la variable ou le param\xC3\xA8tre la suit.",
+         "champs-expressions", ""),
+        note("1.12.31", "G\xC3\xA9n\xC3\xA9ral", Kind::Fixed,
+         "CTRL + MOINS SUR UN CLAVIER AZERTY : la touche - de la rang\xC3\xA9" "e des chiffres (celle du 6) d\xC3\xA9zoome, comme celle du pav\xC3\xA9 num\xC3\xA9rique ; Ctrl + = (avec ou sans Maj) zoome ; dans un code, Ctrl + moins revient o\xC3\xB9 tu \xC3\xA9tais. Les chiffres des autres raccourcis restent des chiffres. Vaut aussi pour un AZERTY belge et un QWERTZ.",
+         "zoom", ""),
         // 1.12.30 (24/10/2026) : la visionneuse de documents, le variateur de vitesse, le zoom sur toutes les pages,
         // les regles, les guides et les cotes de l'editeur de vues, les langues cote a cote, les archives .xihm et
         // .xapi, la page web d'une IHM (et retour) ; la page Bibliotheque de l'installateur.
