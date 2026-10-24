@@ -181,7 +181,7 @@ std::vector<Binding> build(Profile p) {
 
 Stroke strokeOf(const KeyDown& k) noexcept {
     Stroke s;
-    s.key = k.key;
+    s.key = commandKey(k);     // 1.12.31 : Ctrl + la touche 6/- d'un AZERTY est Ctrl+- (pas Ctrl+6)
     s.ctrl = k.mods.ctrl;
     s.shift = k.mods.shift;
     s.alt = k.mods.alt;

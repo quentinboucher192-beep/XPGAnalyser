@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <set>
 
 namespace app {
@@ -34,10 +35,34 @@ constexpr int kMenuSelect = 1, kMenuTranslate = 2, kMenuCopy = 3;
 const gfx::Color kRed = gfx::Color::rgb(0xE5484D);
 }
 
-HmiLanguageCompare::HmiLanguageCompare(std::string id, hmi::DocumentPtr doc) : ui::Widget(std::move(id)), doc_(std::move(doc)) {
+// ---------------------------------------------- 1.12.31 : le tableau des langues ---
+HmiLanguageBoard::HmiLanguageBoard(std::string id, HmiLanguageCompare& owner) : ui::Widget(std::move(id)), owner_(owner) {
     setFocusPolicy(true);
     setZoomSupport(ui::ZoomSupport::Native);     // l'echelle commune : celle de la puce du bandeau bas
+}
+
+float HmiLanguageBoard::zoom() const { return owner_.scale(); }
+void HmiLanguageBoard::setZoom(float z) { owner_.setScale(z); }
+
+std::string HmiLanguageBoard::liveTooltip(gfx::Point mouse) const {
+    if (auto tip = owner_.markTooltip(mouse); !tip.empty()) return tip;
+    return Widget::liveTooltip(mouse);
+}
+
+void HmiLanguageBoard::onPaint(const ui::PaintContext& ctx) { owner_.paintBoard(ctx, bounds()); }
+
+ui::EventResult HmiLanguageBoard::onEvent(const ui::InputEvent& ev) {
+    // Un clic dans les colonnes : le clavier vient au tableau (Ctrl + plus : son echelle).
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && bounds().contains(d->pos)) grabFocus();
+    return owner_.boardEvent(ev, bounds());
+}
+
+// ------------------------------------------------------------------- la page ---
+HmiLanguageCompare::HmiLanguageCompare(std::string id, hmi::DocumentPtr doc) : ui::Widget(std::move(id)), doc_(std::move(doc)) {
+    setFocusPolicy(true);
     const std::string base = this->id();
+    // 1.12.31 : les colonnes, a part - le document de la page (son zoom : l'echelle commune).
+    board_ = &static_cast<HmiLanguageBoard&>(addChild(std::make_unique<HmiLanguageBoard>(base + ".langues", *this)));
     auto views = std::make_unique<ui::DropDown>(base + ".vue");
     views->setTooltip("La vue montr\xC3\xA9" "e dans chaque langue");
     views_ = &static_cast<ui::DropDown&>(addChild(std::move(views)));
@@ -142,15 +167,18 @@ void HmiLanguageCompare::scrollLanguages(int step) {
     invalidate();
 }
 
-void HmiLanguageCompare::setZoom(float z) {
+void HmiLanguageCompare::setScale(float z) {
+    if (!std::isfinite(z)) return;
     fit_ = false;
-    scale_ = std::clamp(z, minZoom(), maxZoom());
+    scale_ = std::clamp(z, board_->minZoom(), board_->maxZoom());
+    board_->invalidate();
     invalidate();
 }
 
 void HmiLanguageCompare::fitAll() {
     fit_ = true;
     scrollX_ = scrollY_ = 0.f;
+    board_->invalidate();
     invalidate();
 }
 
@@ -203,44 +231,56 @@ void HmiLanguageCompare::rebuild() {
 }
 
 // ---------------------------------------------------------------- la page ---
-gfx::Rect HmiLanguageCompare::boardRect() const noexcept {
-    const auto r = bounds();
-    return {r.x, r.y + kBar, r.w, std::max(0.f, r.h - kBar)};
-}
-
 void HmiLanguageCompare::onLayout() {
     const auto r = bounds();
     const float viewsW = std::min(300.f, std::max(160.f, r.w * 0.22f));
     views_->setBounds({r.x + 8.f, r.y + 5.f, viewsW, kBar - 10.f});
     tools_->setBounds({r.x + 16.f + viewsW, r.y + 2.f, std::max(0.f, r.w - viewsW - 24.f), kBar - 4.f});
+    board_->setBounds({r.x, r.y + kBar, r.w, std::max(0.f, r.h - kBar)});
     menu_->setBounds(r);
 }
 
 void HmiLanguageCompare::onPaint(const ui::PaintContext& ctx) {
-    const auto& th = ctx.theme;
-    const auto& c = th.color;
+    const auto& c = ctx.theme.color;
     const auto r = bounds();
     ctx.r.fillRect(r, c.panelBg);
     ctx.r.fillRect({r.x, r.y, r.w, kBar}, c.headerBg);
     ctx.r.fillRect({r.x, r.y + kBar - 1.f, r.w, 1.f}, c.border);
+}
+
+// Le tableau des langues (son repere : celui de l'ecran quand la page est zoomee, un ilot).
+// 1.12.31 : les en-tetes, les marges et la ligne du bas suivent le zoom de la page (pz) ;
+// les vues, l'echelle commune (le zoom du tableau).
+void HmiLanguageCompare::paintBoard(const ui::PaintContext& ctx, const gfx::Rect& board) {
+    const auto& th = ctx.theme;
+    const auto& c = th.color;
+    const float pz = std::clamp(board_->parent() ? board_->parent()->surfaceScale() : 1.f, 0.25f, 4.f);
+    // Un texte (un en-tete) a la taille de la page : dessine dans un repere agrandi autour de `corner`.
+    std::optional<ui::ZoomRenderer> zoomed;
+    const auto pageRenderer = [&](gfx::Point corner) -> gfx::IRenderer& {
+        if (std::fabs(pz - 1.f) < 1e-4f) return ctx.r;
+        zoomed.emplace(ctx.r, ui::ZoomMap::about(corner, pz));
+        return *zoomed;
+    };
+    const float gap = kGap * pz, inset = kInset * pz, headH = kHead * pz;
     marks_.clear();
     const auto& cols = columns();
-    const auto board = boardRect();
     const auto* src = doc_ ? doc_->project.view(view_) : nullptr;
     if (!src || cols.empty()) {
-        ctx.r.drawText({board.x + 16.f, board.y + 16.f}, "Aucune vue \xC3\xA0 montrer.", th.font.ui, c.textMuted);
+        const gfx::Point at{board.x + 16.f * pz, board.y + 16.f * pz};
+        pageRenderer(at).drawText(at, "Aucune vue \xC3\xA0 montrer.", th.font.ui, c.textMuted);
         return;
     }
     const std::size_t n = std::min<std::size_t>(static_cast<std::size_t>(perRow_), cols.size());
-    const float colW = std::max(80.f, (board.w - kGap * static_cast<float>(n + 1)) / static_cast<float>(n));
+    const float colW = std::max(80.f, (board.w - gap * static_cast<float>(n + 1)) / static_cast<float>(n));
     // Plus de langues que de colonnes : une ligne en bas dit ou on en est (sous les colonnes).
-    const float foot = cols.size() > n ? ctx.r.lineHeight(th.font.smallUi) + 4.f : 0.f;
-    const float colH = std::max(60.f, board.h - 2.f * kGap - foot);
+    const float foot = cols.size() > n ? (pageRenderer({board.x, board.y}).lineHeight(th.font.smallUi) + 4.f) * pz : 0.f;
+    const float colH = std::max(60.f, board.h - 2.f * gap - foot);
     const float vw = static_cast<float>(std::max(1, src->width)), vh = static_cast<float>(std::max(1, src->height));
-    lastFit_ = std::clamp(std::min((colW - 2.f * kInset) / vw, (colH - kHead - 2.f * kInset) / vh), 0.05f, 4.f);
+    lastFit_ = std::clamp(std::min((colW - 2.f * inset) / vw, (colH - headH - 2.f * inset) / vh), 0.05f, 4.f);
     const float scale = fit_ ? lastFit_ : scale_;
     // Le defilement (zoome au-dela de la place) : le meme dans toutes les colonnes.
-    const float maxX = std::max(0.f, vw * scale - (colW - 2.f * kInset)), maxY = std::max(0.f, vh * scale - (colH - kHead - 2.f * kInset));
+    const float maxX = std::max(0.f, vw * scale - (colW - 2.f * inset)), maxY = std::max(0.f, vh * scale - (colH - headH - 2.f * inset));
     scrollX_ = std::clamp(scrollX_, 0.f, maxX);
     scrollY_ = std::clamp(scrollY_, 0.f, maxY);
     HmiPropertySource statics;
@@ -252,31 +292,35 @@ void HmiLanguageCompare::onPaint(const ui::PaintContext& ctx) {
     for (std::size_t k = 0; k < n && first_ + k < cols.size(); ++k) {
         const std::size_t ci = first_ + k;
         const auto& col = cols[ci];
-        const gfx::Rect panel{board.x + kGap + static_cast<float>(k) * (colW + kGap), board.y + kGap, colW, colH};
-        ctx.r.fillRoundedRect(panel, c.windowBg, 6.f);
+        const gfx::Rect panel{board.x + gap + static_cast<float>(k) * (colW + gap), board.y + gap, colW, colH};
+        ctx.r.fillRoundedRect(panel, c.windowBg, 6.f * pz);
         ctx.r.strokeRect(panel, c.border, 1.f);
-        // L'en-tete : la langue, son code ; combien de textes debordent.
-        const gfx::Rect head{panel.x, panel.y, panel.w, kHead};
-        ctx.r.fillRect({head.x + 1.f, head.bottom() - 1.f, head.w - 2.f, 1.f}, c.border);
-        const float lh = ctx.r.lineHeight(f.ui);
-        std::string title = col.name + (col.pseudo ? std::string{} : "  (" + col.code + ")");
-        if (col.source) title += "  \xC2\xB7 langue du projet";
-        const std::size_t over = col.overflows.size();
-        const std::string count = over == 0 ? std::string("aucun d\xC3\xA9" "bordement")
-                                            : std::to_string(over) + (over > 1 ? " textes d\xC3\xA9" "bordent" : " texte d\xC3\xA9" "borde");
-        const float cw = ctx.r.measure(count, f.smallUi).width + 14.f, ch = ctx.r.lineHeight(f.smallUi) + 4.f;
-        const gfx::Rect pill{head.right() - cw - 8.f, head.y + (kHead - ch) / 2.f, cw, ch};
-        const float titleRoom = std::max(0.f, pill.x - head.x - 18.f);
-        const auto keep = ctx.r.fitCharacters(title, f.ui, titleRoom);
-        ctx.r.drawText({head.x + 10.f, head.y + (kHead - lh) / 2.f}, std::string_view(title).substr(0, keep), f.ui,
-                       col.pseudo ? c.accent : c.text);
-        const gfx::Color pc = over == 0 ? th.tone(ui::Tone::Ok, c.ok) : kRed;
-        ctx.r.fillRoundedRect(pill, pc, ch / 2.f);
-        ctx.r.drawText({pill.x + 7.f, pill.y + 2.f}, count, f.smallUi, gfx::Color::rgb(0xFFFFFF));
+        // L'en-tete : la langue, son code ; combien de textes debordent (a la taille de la page :
+        // dessine dans son repere, `hr`, de la largeur de la colonne divisee par le zoom de la page).
+        ctx.r.fillRect({panel.x + 1.f, panel.y + headH - 1.f, panel.w - 2.f, 1.f}, c.border);
+        {
+            auto& hr = pageRenderer({panel.x, panel.y});
+            const gfx::Rect head{panel.x, panel.y, panel.w / pz, kHead};
+            const float lh = hr.lineHeight(f.ui);
+            std::string title = col.name + (col.pseudo ? std::string{} : "  (" + col.code + ")");
+            if (col.source) title += "  \xC2\xB7 langue du projet";
+            const std::size_t over = col.overflows.size();
+            const std::string count = over == 0 ? std::string("aucun d\xC3\xA9" "bordement")
+                                                : std::to_string(over) + (over > 1 ? " textes d\xC3\xA9" "bordent" : " texte d\xC3\xA9" "borde");
+            const float cw = hr.measure(count, f.smallUi).width + 14.f, ch = hr.lineHeight(f.smallUi) + 4.f;
+            const gfx::Rect pill{head.right() - cw - 8.f, head.y + (kHead - ch) / 2.f, cw, ch};
+            const float titleRoom = std::max(0.f, pill.x - head.x - 18.f);
+            const auto keep = hr.fitCharacters(title, f.ui, titleRoom);
+            hr.drawText({head.x + 10.f, head.y + (kHead - lh) / 2.f}, std::string_view(title).substr(0, keep), f.ui,
+                        col.pseudo ? c.accent : c.text);
+            const gfx::Color pc = over == 0 ? th.tone(ui::Tone::Ok, c.ok) : kRed;
+            hr.fillRoundedRect(pill, pc, ch / 2.f);
+            hr.drawText({pill.x + 7.f, pill.y + 2.f}, count, f.smallUi, gfx::Color::rgb(0xFFFFFF));
+        }
         // La vue, a l'echelle commune.
-        const gfx::Rect body{panel.x + 1.f, head.bottom(), panel.w - 2.f, panel.h - kHead - 1.f};
+        const gfx::Rect body{panel.x + 1.f, panel.y + headH, panel.w - 2.f, panel.h - headH - 1.f};
         ctx.r.pushClip(body);
-        HmiViewport vp{body.x + kInset - scrollX_, body.y + kInset - scrollY_, scale};
+        HmiViewport vp{body.x + inset - scrollX_, body.y + inset - scrollY_, scale};
         ctx.r.fillRect({vp.originX, vp.originY, vw * scale, vh * scale}, parseColor(col.view.background, gfx::Color::rgb(0x20242B)));
         paintHmiView(ctx.r, col.view, vp, statics, th, opt);
         ctx.r.strokeRect({vp.originX - 1.f, vp.originY - 1.f, vw * scale + 2.f, vh * scale + 2.f}, c.borderStrong, 1.f);
@@ -300,8 +344,10 @@ void HmiLanguageCompare::onPaint(const ui::PaintContext& ctx) {
     if (cols.size() > n) {
         const std::string where = "langues " + std::to_string(first_ + 1) + " \xC3\xA0 " + std::to_string(first_ + n) + " sur "
                                 + std::to_string(cols.size()) + "  \xC2\xB7  Maj + molette";
-        const float ww = ctx.r.measure(where, f.smallUi).width;
-        ctx.r.drawText({board.right() - ww - 12.f, board.y + kGap + colH + 3.f}, where, f.smallUi, c.textMuted);
+        // Dans le repere de la page, autour du coin bas-droit des colonnes.
+        auto& fr = pageRenderer({board.right(), board.y + gap + colH});
+        const float ww = fr.measure(where, f.smallUi).width;
+        fr.drawText({board.right() - ww - 12.f, board.y + gap + colH + 3.f}, where, f.smallUi, c.textMuted);
     }
 }
 
@@ -311,13 +357,13 @@ int HmiLanguageCompare::markAt(gfx::Point p) const {
     return -1;
 }
 
-std::string HmiLanguageCompare::liveTooltip(gfx::Point mouse) const {
+std::string HmiLanguageCompare::markTooltip(gfx::Point mouse) const {
     if (const int m = markAt(mouse); m >= 0) {
         const auto& mk = marks_[static_cast<std::size_t>(m)];
         const auto* o = mk.column < columns_.size() ? columns_[mk.column].view.object(mk.object) : nullptr;
         return (o ? o->name + " : " : std::string{}) + mk.message + "\nUn clic : le choisir dans l'\xC3\xA9" "diteur, ou aller \xC3\xA0 sa traduction.";
     }
-    return Widget::liveTooltip(mouse);
+    return {};
 }
 
 bool HmiLanguageCompare::openMarkMenu(std::size_t index) {
@@ -355,9 +401,8 @@ bool HmiLanguageCompare::openMarkMenu(std::size_t index) {
     copy.id = kMenuCopy;
     items.push_back(copy);
     menu_->setItems(std::move(items));
-    const auto surface = ui::surfaceSize();
-    menu_->openAt({mk.rect.x + 4.f, mk.rect.bottom() + 2.f},
-                  surface.w > 0.f ? surface : gfx::Size{bounds().right() + 400.f, bounds().bottom() + 400.f});
+    // 1.12.31 : la marque est dans le tableau des langues, le menu dans la page (zoomee ou non).
+    menu_->openAtSurface(board_->toSurface(gfx::Point{mk.rect.x + 4.f, mk.rect.bottom() + 2.f}));
     return true;
 }
 
@@ -383,10 +428,10 @@ void HmiLanguageCompare::chooseMark(int action) {
     }
 }
 
-ui::EventResult HmiLanguageCompare::onEvent(const ui::InputEvent& ev) {
-    if (const auto* w = std::get_if<ui::MouseWheel>(&ev); w && boardRect().contains(w->pos)) {
+ui::EventResult HmiLanguageCompare::boardEvent(const ui::InputEvent& ev, const gfx::Rect& board) {
+    if (const auto* w = std::get_if<ui::MouseWheel>(&ev); w && board.contains(w->pos)) {
         if (w->mods.ctrl && w->dy != 0.f) {
-            setZoom(ui::zoomStep(zoom(), w->dy > 0.f ? 1 : -1, minZoom(), maxZoom()));
+            setScale(ui::zoomStep(scale(), w->dy > 0.f ? 1 : -1, board_->minZoom(), board_->maxZoom()));
             return ui::EventResult::Consumed;
         }
         if (w->mods.shift && w->dy != 0.f) {
@@ -395,11 +440,11 @@ ui::EventResult HmiLanguageCompare::onEvent(const ui::InputEvent& ev) {
         }
         scrollY_ -= w->dy * 48.f;
         scrollX_ -= w->dx * 48.f;
+        board_->invalidate();
         invalidate();
         return ui::EventResult::Consumed;
     }
-    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && boardRect().contains(d->pos)) {
-        grabFocus();
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && board.contains(d->pos)) {
         if (const int m = markAt(d->pos); m >= 0) {
             (void)openMarkMenu(static_cast<std::size_t>(m));
             return ui::EventResult::Consumed;

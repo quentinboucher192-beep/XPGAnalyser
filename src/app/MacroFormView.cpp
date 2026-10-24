@@ -618,6 +618,8 @@ void MacroFormView::buildControls(Row& row) {
             m->setReadOnly(false);
             m->setShowLineNumbers(false);
             m->setLanguage(ui::Language::PlainText);
+            // 1.12.31 : un champ du formulaire, pas un document - il suit le zoom de la page.
+            m->setZoomSupport(ui::ZoomSupport::None);
             row.lines = &static_cast<ui::MultiLineText&>(addChild(std::move(m)));
             const std::string separator = spec.membersOf.empty() ? "," : ", ";
             row.links += row.lines->textChanged->connect([this, r, separator](const std::string& t) {

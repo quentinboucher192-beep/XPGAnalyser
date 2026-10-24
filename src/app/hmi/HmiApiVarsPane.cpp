@@ -684,8 +684,7 @@ bool HmiApiVarsView::showUses(std::size_t line) {
         gfx::Rect cell{};
         if (table_->viewRow(i) == line && table_->cellRect(i, Usage, cell)) at = {cell.x, cell.bottom()};
     }
-    const auto& root = rootOf(*this);
-    usesMenu_->openAt(at, {root.bounds().right(), root.bounds().bottom()});
+    usesMenu_->openInWindow(at);     // 1.12.31 : garde dans la fenetre (une page zoomee)
     return true;
 }
 

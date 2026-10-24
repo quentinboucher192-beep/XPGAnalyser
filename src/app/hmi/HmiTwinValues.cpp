@@ -423,9 +423,7 @@ bool HmiTwinValues::openContextMenu(std::size_t line, gfx::Point at) {
     }
     ctxLine_ = line;
     ctxMenu_->setItems(std::move(items));
-    auto* root = rootWidget();
-    const auto sb = root ? root->bounds() : bounds();
-    ctxMenu_->openAt(at, {sb.w, sb.h});
+    ctxMenu_->openInWindow(at);     // 1.12.31 : garde dans la fenetre (une page zoomee)
     return true;
 }
 
@@ -921,9 +919,7 @@ void HmiTwinValues::openKindMenu(std::size_t i, gfx::Point at) {
         items.push_back(it);
     }
     menu_->setItems(std::move(items));
-    auto* root = rootWidget();
-    const auto sb = root ? root->bounds() : bounds();
-    menu_->openAt(at, {sb.w, sb.h});
+    menu_->openInWindow(at);     // 1.12.31 : garde dans la fenetre (une page zoomee)
 }
 
 // ------------------------------------------------------------------ peinture ---

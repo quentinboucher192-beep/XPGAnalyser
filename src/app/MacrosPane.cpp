@@ -1848,8 +1848,7 @@ void MacrosPane::showContextMenu(ui::NodeId n, gfx::Point at) {
         items.push_back({"Nouveau dossier\xE2\x80\xA6", "", "", ui::Icon::Folder, true, false, ANewFolder});
     }
     menu->setItems(std::move(items));
-    const auto surface = ui::surfaceSize();
-    menu->openAt(at, surface.w > 0 ? surface : gfx::Size{bounds().x + bounds().w, bounds().y + bounds().h});
+    menu->openAtSurface(at);     // 1.12.31 : `at` est dans la surface (l'arbre, la page zoomes)
 }
 
 void MacrosPane::wireDrag() {

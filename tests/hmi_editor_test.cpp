@@ -35983,18 +35983,223 @@ void langues11230() {
         page.markMenu()->close();
         check(code == "en" && source == "Marche", "page : Aller a sa traduction (en, Marche)");
     }
-    // Le zoom : l'echelle commune.
-    const float fit = page.zoom();
-    page.setZoom(1.5f);
-    near(page.zoom(), 1.5, "page : le zoom (la puce du bandeau bas) fixe l'echelle commune", 0.01);
+    // Le zoom : l'echelle commune (1.12.31 : celle du tableau des langues).
+    auto& board = page.board();
+    const float fit = board.zoom();
+    board.setZoom(1.5f);
+    near(board.zoom(), 1.5, "page : le zoom (la puce du bandeau bas) fixe l'echelle commune", 0.01);
     page.fitAll();
-    near(page.zoom(), fit, "page : Ajuster revient a la vue entiere", 0.01);
-    check(page.zoomSupport() == ui::ZoomSupport::Native, "page : un zoom Native (celui de la puce)");
+    near(board.zoom(), fit, "page : Ajuster revient a la vue entiere", 0.01);
+    check(board.zoomSupport() == ui::ZoomSupport::Native, "page : un zoom Native (celui de la puce)");
+    // 1.12.31 : la page entiere se zoome (la puce, la barre visee) - la barre du haut grandit, les
+    // en-tetes des colonnes aussi ; les vues gardent leur echelle (le tableau est un ilot).
+    {
+        check(page.zoomSupport() != ui::ZoomSupport::Native, "page 1.12.31 : la page n'est plus le document, elle peut se zoomer toute");
+        const auto barBefore = page.toSurface(gfx::Rect{0, 0, 1500, 36}).h;
+        const auto boardBefore = board.toSurface(board.bounds());
+        page.setZoomSupport(ui::ZoomSupport::Scaled);
+        page.setZoom(1.5f);
+        page.layout();
+        Recorder zr;
+        page.render(ui::PaintContext{zr, theme, page.zoomFrame(), 0.0, nullptr});
+        check(board.zoomIsland(), "page a 150 % : le tableau des langues est un ilot");
+        near(board.surfaceScale(), 1.0, "page a 150 % : les vues ne sont pas agrandies par la page", 0.001);
+        near(board.zoom(), fit, "page a 150 % : l'echelle commune ne bouge pas (ajustee)", 0.05);
+        const auto boardNow = board.toSurface(board.bounds());
+        near(boardNow.y - boardBefore.y, barBefore * 0.5f, "page a 150 % : la barre du haut 1,5 fois plus haute", 1.0);
+        check(boardNow.right() <= 1500.5f && boardNow.bottom() <= 700.5f, "page a 150 % : le tableau reste dans la page");
+        check(!page.marks().empty(), "page a 150 % : les marques sont dessinees");
+        bool marksIn = true;
+        for (const auto& m : page.marks())
+            if (!(m.rect.x >= boardNow.x - 0.5f && m.rect.right() <= boardNow.right() + 0.5f && m.rect.y >= boardNow.y - 0.5f
+                  && m.rect.bottom() <= boardNow.bottom() + 0.5f))
+                marksIn = false;
+        check(marksIn, "page a 150 % : chaque marque dans le tableau (a l'ecran)");
+        // Le menu d'une marque s'ouvre sous elle, a l'ecran (et pas a 1,5 fois sa place).
+        std::size_t enZoomed = page.marks().size();
+        for (std::size_t i = 0; i < page.marks().size(); ++i)
+            if (page.marks()[i].column == 1) enZoomed = i;
+        if (enZoomed < page.marks().size() && page.openMarkMenu(enZoomed) && page.markMenu()) {
+            const auto mk = page.marks()[enZoomed].rect;
+            const auto pr = page.markMenu()->popupRect();
+            const auto corner = page.markMenu()->toSurface(gfx::Point{pr.x, pr.y});
+            check(std::fabs(corner.x - (mk.x + 4.f)) < 24.f && std::fabs(corner.y - (mk.bottom() + 2.f)) < 24.f,
+                  "page a 150 % : le menu de la marque s'ouvre sous elle");
+            page.markMenu()->close();
+        } else {
+            check(false, "page a 150 % : le menu de la marque de l'anglais");
+        }
+        // Le titre d'une colonne : ecrit plus grand (la police de la page a 150 %).
+        const auto fontOf = [](const Recorder& r, std::string_view part) {
+            for (std::size_t i = 0; i < r.texts.size() && i < r.fonts.size(); ++i)
+                if (r.texts[i].find(part) != std::string::npos) return r.fonts[i];
+            return 0;
+        };
+        check(zr.wrote("English"), "page a 150 % : l'en-tete dit toujours la langue");
+        check(fontOf(rec, "English") > 0 && fontOf(zr, "English") >= fontOf(rec, "English") * 14 / 10,
+              "page a 150 % : l'en-tete d'une colonne ecrit 1,5 fois plus grand");
+        page.setZoom(1.f);
+        page.layout();
+        check(!board.zoomIsland(), "page a 100 % : plus d'ilot");
+    }
     page.setPseudo(false);
     check(page.columns().size() == 2, "page : sans la pseudo-langue, deux colonnes");
 }
 
+// ---- 1.12.31 : LE ZOOM DE TOUTE LA PAGE ------------------------------------------------
+//  L'editeur de vues zoome comme le fait l'appli (son widget du haut Scaled) : la barre d'outils,
+//  l'explorateur d'objets, les calques, la bibliotheque, l'inspecteur, la barre d'etat grandissent ;
+//  la vue (le canevas) est un ILOT - elle garde son zoom, se dessine et recoit la souris a
+//  l'echelle de l'ecran. A 200 %, rien ne se chevauche ni ne sort de la page. Le panneau du bas
+//  declare son zoom (Scaled), et chaque panneau de l'editeur est couvert par celui de la page.
+namespace {
+gfx::Rect onScreen(const ui::Widget& w) { return w.toSurface(w.bounds()); }
+bool overlaps(const gfx::Rect& a, const gfx::Rect& b) {
+    const float x0 = std::max(a.x, b.x), y0 = std::max(a.y, b.y);
+    const float x1 = std::min(a.right(), b.right()), y1 = std::min(a.bottom(), b.bottom());
+    return x1 - x0 > 0.6f && y1 - y0 > 0.6f;
+}
+bool inside(const gfx::Rect& in, const gfx::Rect& out) {
+    return in.x >= out.x - 0.6f && in.y >= out.y - 0.6f && in.right() <= out.right() + 0.6f && in.bottom() <= out.bottom() + 0.6f;
+}
+// Le premier widget Native sous `w` (montre) : un document.
+const ui::Widget* firstNative(const ui::Widget& w) {
+    if (!w.visible()) return nullptr;
+    if (w.zoomSupport() == ui::ZoomSupport::Native) return &w;
+    for (const auto& c : w.children())
+        if (const auto* n = firstNative(*c)) return n;
+    return nullptr;
+}
+} // namespace
+
+void zoom11231() {
+    std::printf("1.12.31 : le zoom de toute la page - l'editeur de vues a 200 %%, la vue en ilot, le panneau du bas\n");
+    {
+        app::HmiBuildOutputPane out("hmi.sorties");
+        check(out.zoomSupport() == ui::ZoomSupport::Scaled, "panneau du bas : il declare son zoom (Scaled, tout le panneau)");
+        out.setZoom(1.5f);
+        out.setBounds({0, 600, 1600, 300});
+        out.layout();
+        near(out.zoom(), 1.5, "panneau du bas : 150 %", 0.01);
+        const auto table = onScreen(out.outputTable());
+        check(inside(table, {0, 600, 1600, 300}), "panneau du bas a 150 % : sa table reste dans le panneau");
+    }
+    Bench b;
+    auto& ed = *b.editor;
+    // Les panneaux de l'editeur : aucun n'a son propre zoom de document - celui de la page les couvre.
+    check(ed.palette().zoomSupport() != ui::ZoomSupport::Native && ed.objects().zoomSupport() != ui::ZoomSupport::Native
+              && ed.layers().zoomSupport() != ui::ZoomSupport::Native && ed.tools().zoomSupport() != ui::ZoomSupport::Native,
+          "editeur : la bibliotheque, l'explorateur d'objets, les calques, la barre d'outils suivent le zoom de la page");
+    check(ed.canvas().zoomSupport() == ui::ZoomSupport::Native, "editeur : la vue garde son zoom a elle (Native)");
+    const Id rect = b.place(Kind::Rectangle, 100, 100);
+    const float barBefore = onScreen(ed.tools()).h;
+    const float viewZoom = ed.canvas().zoom();
+    // La page a 200 %, comme la puce (MainAnalysisScreen::applyPageZoom).
+    ed.setZoomSupport(ui::ZoomSupport::Scaled);
+    ed.setZoom(2.f);
+    ed.layout();
+    near(ed.zoom(), 2.0, "page : 200 %", 0.01);
+    check(ed.canvas().zoomIsland(), "page a 200 % : la vue est un ilot (a l'echelle de l'ecran)");
+    near(ed.canvas().zoom(), viewZoom, "page a 200 % : la vue garde son zoom", 0.001);
+    near(ed.canvas().surfaceScale(), 1.0, "page a 200 % : la vue n'est pas agrandie par la page", 0.001);
+    near(onScreen(ed.tools()).h, barBefore * 2.f, "page a 200 % : la barre d'outils deux fois plus haute", 1.0);
+    near(ed.palette().surfaceScale(), 2.0, "page a 200 % : la bibliotheque a 200 %", 0.001);
+    near(ed.objects().surfaceScale(), 2.0, "page a 200 % : l'explorateur d'objets a 200 %", 0.001);
+    near(ed.layers().surfaceScale(), 2.0, "page a 200 % : les calques a 200 %", 0.001);
+    near(ed.properties().surfaceScale(), 2.0, "page a 200 % : l'inspecteur a 200 %", 0.001);
+    // Rien ne se chevauche, rien ne sort de la page (2000 x 1000 a l'ecran).
+    const gfx::Rect pageRect{0, 0, 2000, 1000};
+    struct Part { const char* name; gfx::Rect r; };
+    std::vector<Part> parts{{"la barre d'outils", onScreen(ed.tools())},
+                            {"la barre d'etat", onScreen(ed.statusBar())},
+                            {"la vue", onScreen(ed.canvas())},
+                            {"l'explorateur d'objets", onScreen(ed.objects())},
+                            {"les calques", onScreen(ed.layers())},
+                            {"la bibliotheque", onScreen(ed.palette())},
+                            {"l'inspecteur", onScreen(ed.inspector())}};
+    for (const auto& pt : parts) {
+        check(ed.toSurface(ed.bounds()).w > 1999.f, "page a 200 % : elle occupe toujours son cadre");
+        if (pt.r.w > 0.f && pt.r.h > 0.f) check(inside(pt.r, pageRect), std::string("page a 200 % : ") + pt.name + " reste dans la page");
+    }
+    for (std::size_t i = 0; i < parts.size(); ++i)
+        for (std::size_t j = i + 1; j < parts.size(); ++j)
+            if (parts[i].r.w > 0.f && parts[j].r.w > 0.f && parts[i].r.h > 0.f && parts[j].r.h > 0.f)
+                check(!overlaps(parts[i].r, parts[j].r),
+                      std::string("page a 200 % : ") + parts[i].name + " et " + parts[j].name + " ne se chevauchent pas");
+    // Les boutons de la barre : dans la barre (ceux qui n'y tiennent plus partent dans le menu >>).
+    {
+        const auto bar = ed.tools().bounds();
+        bool allIn = true;
+        for (int a = 0; a < 400; ++a) {
+            const auto r = ed.tools().rectOf(a);
+            if (r.w > 0.f && !inside(r, bar)) allIn = false;
+        }
+        check(allIn, "page a 200 % : chaque bouton montre de la barre y tient entier");
+    }
+    // La souris dans la vue : le clic de l'ecran arrive au bon endroit de la vue (un objet pose en 300, 200).
+    {
+        const gfx::Point at = ed.canvas().toSurface(b.screen(303, 197));
+        ed.canvas().setPlaceKind(Kind::Ellipse);
+        (void)ed.dispatch(ui::MouseDown{at, ui::MouseButton::Left, 1, {}});
+        (void)ed.dispatch(ui::MouseUp{at, ui::MouseButton::Left, {}});
+        const auto sel = ed.canvas().selection();
+        check(sel.size() == 1 && sel.front() != rect && b.v().object(sel.front()), "page a 200 % : un clic dans la vue y pose l'objet");
+        if (sel.size() == 1 && b.v().object(sel.front())) {
+            near(b.v().object(sel.front())->box().x, 300, "page a 200 % : pose au bon endroit de la vue (x)");
+            near(b.v().object(sel.front())->box().y, 200, "page a 200 % : pose au bon endroit de la vue (y)");
+        }
+    }
+    // Le clic droit dans la vue : son menu s'ouvre sous la souris (le menu est dans la page zoomee).
+    {
+        const gfx::Point at = ed.canvas().toSurface(b.screen(600, 400));
+        (void)ed.dispatch(ui::MouseDown{at, ui::MouseButton::Right, 1, {}});
+        (void)ed.dispatch(ui::MouseUp{at, ui::MouseButton::Right, {}});
+        auto* menu = ed.canvasMenu();
+        check(menu && menu->isOpen(), "page a 200 % : le clic droit dans la vue ouvre son menu");
+        if (menu && menu->isOpen()) {
+            const auto pr = menu->popupRect();
+            const auto corner = menu->toSurface(gfx::Point{pr.x, pr.y});
+            check(std::fabs(corner.x - at.x) < 24.f && std::fabs(corner.y - at.y) < 24.f,
+                  "page a 200 % : le menu de la vue s'ouvre sous la souris (et pas a deux fois sa place)");
+            menu->close();
+        }
+    }
+    // Le clic droit dans l'explorateur d'objets : son menu sous la souris aussi.
+    {
+        gfx::Rect row{};
+        if (ed.objects().rowRect(rect, row, 0)) {
+            const gfx::Point at = ed.objects().toSurface(gfx::Point{row.x + 30.f, row.y + row.h * 0.5f});
+            (void)ed.dispatch(ui::MouseDown{at, ui::MouseButton::Right, 1, {}});
+            (void)ed.dispatch(ui::MouseUp{at, ui::MouseButton::Right, {}});
+            auto* menu = ed.canvasMenu();
+            check(menu && menu->isOpen(), "page a 200 % : le clic droit dans l'explorateur d'objets ouvre le menu");
+            if (menu && menu->isOpen()) {
+                const auto pr = menu->popupRect();
+                const auto corner = menu->toSurface(gfx::Point{pr.x, pr.y});
+                check(std::fabs(corner.x - at.x) < 24.f && std::fabs(corner.y - at.y) < 24.f,
+                      "page a 200 % : le menu de l'explorateur s'ouvre sous la souris");
+                menu->close();
+            }
+        } else {
+            check(false, "page a 200 % : la ligne du rectangle dans l'explorateur d'objets");
+        }
+    }
+    // Le seul document de la page est la vue (rien d'autre n'echappe au zoom de la page).
+    check(firstNative(ed) == &ed.canvas(), "page a 200 % : le seul document a part est la vue");
+    // Retour a 100 % : plus d'ilot, la page est telle qu'avant.
+    ed.setZoom(1.f);
+    ed.layout();
+    check(!ed.canvas().zoomIsland(), "100 % : la vue n'est plus un ilot");
+    near(onScreen(ed.tools()).h, barBefore, "100 % : la barre d'outils a sa hauteur d'avant", 0.6);
+}
+
 int main(int argc, char** argv) {
+    // 1.12.31 : HMI_TEST_11231=1 - le zoom de toute la page (l'editeur de vues), seul.
+    if (const char* only = std::getenv("HMI_TEST_11231"); only && *only == '1') {
+        zoom11231();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.30 : HMI_TEST_11230=1 - les regles, les guides, les colonnes, les cotes ; les langues cote a cote, seuls.
     if (const char* only = std::getenv("HMI_TEST_11230"); only && *only == '1') {
         regles11230();
@@ -36513,6 +36718,7 @@ int main(int argc, char** argv) {
     enumsInspecteur1121();                  // 1.12.1 : les enumerations natives des proprietes et l'inspecteur
     regles11230();                          // 1.12.30 : les regles, les guides, la grille de colonnes, les cotes
     langues11230();                         // 1.12.30 : les langues cote a cote, la pseudo-langue
+    zoom11231();                            // 1.12.31 : le zoom de toute la page, la vue en ilot, le panneau du bas
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

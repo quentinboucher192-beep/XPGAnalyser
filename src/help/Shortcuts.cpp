@@ -118,12 +118,14 @@ const std::vector<Shortcut> kTable = {
      "Dans un menu : aller \xC3\xA0 l'entr\xC3\xA9" "e soulign\xC3\xA9" "e, \xC3\xA0 la premi\xC3\xA8re, \xC3\xA0 la derni\xC3\xA8re "
      "(\xE2\x86\x92 ouvre un sous-menu, \xE2\x86\x90 le ferme)",
      "1.12.18", ""},
-    // 1.12.30 : le zoom des pages (la puce du bandeau bas fait de meme).
+    // 1.12.30 : le zoom des pages (la puce du bandeau bas fait de meme). 1.12.31 : la page entiere,
+    // l'arbre et le panneau du bas, sur tous les claviers, garde d'une seance a l'autre.
     {Context::General, "Ctrl+plus / Ctrl+moins / Ctrl+0",
-     "Le zoom de la page : un cran de plus, un cran de moins, 100 % (la puce du bandeau bas fait de m\xC3\xAAme)",
+     "Le zoom de la page enti\xC3\xA8re : un cran de plus, un cran de moins, 100 % (la puce du bandeau bas fait de m\xC3\xAAme) ; "
+     "le clavier dans l'arbre du projet ou le panneau du bas : le leur. Gard\xC3\xA9 d'une s\xC3\xA9" "ance \xC3\xA0 l'autre",
      "1.12.30", ""},
     {Context::General, "Ctrl+molette",
-     "Le zoom de ce qui est sous la souris : la page, le texte, la vue, le grafcet",
+     "Le zoom de ce qui est sous la souris : la page, l'arbre du projet, le panneau du bas, le texte, la vue, le grafcet",
      "1.12.30", ""},
     // ---- HmiEditor
     {Context::HmiEditor, "Ctrl+C / Ctrl+V",

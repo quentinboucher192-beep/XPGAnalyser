@@ -142,7 +142,8 @@ private:
 
 // Lot 13 : la largeur d'un texte comme l'ecran l'ecrit - la police de
 // l'interface ("Sans"), ou une police ressource du projet. Pour Generer (les
-// textes qui debordent). `project` doit vivre pendant l'appel.
+// textes qui debordent). `project` doit vivre pendant l'appel. 1.12.31 : a l'echelle
+// du document, quel que soit le zoom de la page d'ou on la demande.
 [[nodiscard]] std::function<double(std::string_view, std::string_view, double)> hmiTextMeasure(const hmi::Project& project);
 
 // Le dossier du projet ouvert : les chemins relatifs des fichiers externes

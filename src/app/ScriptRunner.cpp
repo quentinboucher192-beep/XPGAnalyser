@@ -221,6 +221,10 @@ bool startsWith(std::string_view text, std::string_view prefix) {
 }
 
 gfx::Point centre(const gfx::Rect& r) { return {r.x + r.w * 0.5f, r.y + r.h * 0.5f}; }
+// 1.12.31 : le milieu d'un widget, d'un cadre de son repere, A L'ECRAN (une page zoomee, un ilot :
+// les clics du script partent de la surface, comme ceux de la souris).
+gfx::Point centreOf(const ui::Widget& w) { return w.toSurface(centre(w.bounds())); }
+gfx::Point centreIn(const ui::Widget& w, const gfx::Rect& r) { return w.toSurface(centre(r)); }
 
 // "3" : un rang ; "hmi.find.find" : un identifiant de widget (lot 12).
 bool isNumber(std::string_view s) {
@@ -423,10 +427,31 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  zoom-bilan                         1.12.30 : le zoom de la page ouverte au journal du script - ce qu'il vise (la page,
     //                                     un document), ses widgets zoomes, la part de la page qu'ils couvrent, et les plus
     //                                     grands morceaux qui ne se zooment pas
+    //                                     (1.12.31 : aussi l'arbre du projet, le panneau du bas, les documents a part)
+    //  zoom-page 150                      1.12.31 : le zoom de la page ouverte entiere (meme quand la puce vise son document)
+    //  zoom-reglages "fichier"            1.12.31 : le zoom garde de la session dans ce fichier (lu tout de suite, ecrit a
+    //                                     chaque changement) - deux sessions de suite font l'appli fermee puis rouverte ;
+    //                                     sans lui, une session rejouee garde le zoom en memoire (jamais les reglages
+    //                                     de l'utilisateur)
+    //  zoom-retenu                        1.12.31 : les zooms gardes (zoom.<identifiant> = valeur) au journal du script
     //  barre-theme "Nord"                 le theme, par sa cle ou son libelle (sans nom : ouvre le menu des themes recents)
     //  barre-clic journal|selection|erreurs|avertissements|simulation|cible|zoom|theme|enregistrement   le clic d'une pastille
+    if (cmd == "zoom-reglages") {     // 1.12.31 : avant l'ouverture du projet (les pages le relisent en s'ouvrant)
+        app_.useZoomSettingsFile(arg(1));
+        if (auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top())) screen->reloadRememberedZoom();
+        std::printf("[script] zoom : r\xC3\xA9glages %s\n", arg(1).c_str());
+        return Step::Next;
+    }
+    if (cmd == "zoom-retenu") {
+        auto& z = app_.zoomSettings();
+        const auto keys = z.keysWithPrefix("zoom.");
+        if (keys.empty()) std::printf("[script] zoom retenu : rien\n");
+        for (const auto& k : keys) std::printf("[script] zoom retenu : %s = %s\n", k.c_str(), z.getString(k).c_str());
+        std::fflush(stdout);
+        return Step::Next;
+    }
     if (cmd == "messages-journal" || cmd == "barre-bas" || cmd == "barre-compteurs" || cmd == "barre-zoom" || cmd == "barre-theme"
-        || cmd == "barre-clic" || cmd == "zoom-bilan") {
+        || cmd == "barre-clic" || cmd == "zoom-bilan" || cmd == "zoom-page") {
         auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
         if (!screen) { fail(cmd + " : pas d'\xC3\xA9" "cran d'analyse"); return Step::Next; }
         if (cmd == "messages-journal") {
@@ -455,6 +480,11 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             for (const auto& l : screen->zoomReport()) std::printf("[script] zoom : %s\n", l.c_str());
             std::fflush(stdout);
             return Step::Next;
+        }
+        if (cmd == "zoom-page") {
+            if (!screen->setOpenPageZoomPercent(std::atoi(arg(1).c_str())))
+                fail("zoom-page " + arg(1) + " : pas de page ouverte (ou pourcentage hors de 50 a 200)");
+            return Step::Yield;
         }
         if (cmd == "barre-theme") {
             if (arg(1).empty()) { (void)screen->clickStatusChip("theme"); return Step::Yield; }
@@ -1068,7 +1098,17 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         Key k{};
         KeyMods m;
         if (!parseKey(arg(1), k, m)) { fail("touche inconnue : " + arg(1)); return Step::Next; }
-        send(ui::KeyDown{k, m, false});
+        ui::KeyDown down{k, m, false};
+        // 1.12.31 : touche ctrl+6 dispo=- - la touche de la disposition (KeyDown::layout) : ce que rend la
+        // couche de la plateforme pour la touche 6/- d'un AZERTY (SDL dit 6, la disposition dit -).
+        for (std::size_t i = 2; i < w.size(); ++i)
+            if (w[i].rfind("dispo=", 0) == 0) {
+                Key layout{};
+                KeyMods ignored;
+                if (!parseKey(w[i].substr(6), layout, ignored)) { fail("touche de disposition inconnue : " + w[i]); return Step::Next; }
+                down.layout = layout;
+            }
+        send(down);
         send(ui::KeyUp{k, m});
         return Step::Yield;
     }
@@ -1764,7 +1804,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 if (t && shown(*t) && t->enabled() && t->text() == arg(1)) toggle = t;
             });
             if (toggle) {
-                click(centre(toggle->bounds()), MouseButton::Left, 1, {});
+                click(centreOf(*toggle), MouseButton::Left, 1, {});
                 return Step::Yield;
             }
         }
@@ -1821,7 +1861,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             }
         }
         if (!found) { fail("bouton introuvable : " + arg(1)); return Step::Next; }
-        click(centre(found->bounds()), MouseButton::Left, 1, {});
+        click(centreOf(*found), MouseButton::Left, 1, {});
         return Step::Yield;
     }
     // Lot API 2 : la barre du haut, a la vraie souris.
@@ -1884,7 +1924,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 for (std::size_t i = 0; i < menu->items().size(); ++i) {
                     const auto& label = menu->items()[i].label;
                     if (!menu->items()[i].separator && !menu->items()[i].heading && (label == want || startsWith(label, want))) {
-                        click(centre(menu->itemRect(i)), MouseButton::Left, 1, {});
+                        click(centreIn(*menu, menu->itemRect(i)), MouseButton::Left, 1, {});
                         return Step::Yield;
                     }
                 }
@@ -2056,7 +2096,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             for (auto* d : lists) if (d->id() == arg(1)) target = d;
         }
         if (!target) { fail("liste " + arg(1) + " introuvable"); return Step::Next; }
-        click(centre(target->bounds()), MouseButton::Left, 1, {});
+        click(centreOf(*target), MouseButton::Left, 1, {});
         return Step::Yield;
     }
     if (cmd == "choisir") {
@@ -2080,13 +2120,13 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                     const auto& kids = menu->items()[static_cast<std::size_t>(s)].children;
                     for (std::size_t j = 0; j < kids.size(); ++j)
                         if (!kids[j].separator && kids[j].label == arg(1)) {
-                            click(centre(menu->subItemRect(j)), MouseButton::Left, 1, {});
+                            click(centreIn(*menu, menu->subItemRect(j)), MouseButton::Left, 1, {});
                             return Step::Yield;
                         }
                 }
                 for (std::size_t i = 0; i < menu->items().size(); ++i)
                     if (!menu->items()[i].separator && menu->items()[i].label == arg(1)) {
-                        click(centre(menu->itemRect(i)), MouseButton::Left, 1, {});
+                        click(centreIn(*menu, menu->itemRect(i)), MouseButton::Left, 1, {});
                         return Step::Yield;
                     }
                 fail("pas dans le menu : " + arg(1));
@@ -2130,7 +2170,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         });
         if (!found) { fail("case introuvable : " + arg(1)); return Step::Next; }
         const auto r = found->bounds();
-        click({r.x + 9.f, r.y + r.h * 0.5f}, MouseButton::Left, 1, {});
+        click(found->toSurface(gfx::Point{r.x + 9.f, r.y + r.h * 0.5f}), MouseButton::Left, 1, {});   // 1.12.31 : a l'ecran
         return Step::Yield;
     }
     if (cmd == "champ") {
@@ -2148,7 +2188,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             for (auto* t : fields) if (t->id() == arg(1)) target = t;
         }
         if (!target) { fail("champ " + arg(1) + " introuvable"); return Step::Next; }
-        typeInto(centre(target->bounds()), arg(2));
+        typeInto(centreOf(*target), arg(2));
         return Step::Yield;
     }
     if (cmd == "code") {
@@ -2165,7 +2205,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         const auto n = static_cast<std::size_t>(std::max(1, std::atoi(arg(1).c_str())));
         if (n > fields.size()) { fail("champ " + arg(1) + " introuvable"); return Step::Next; }
         const auto& sec = doc->project.security;
-        typeInto(centre(fields[n - 1]->bounds()), hmi::dynamicCode(u->secret, hmi::wallEpoch(), sec.dynamicPeriodS, sec.dynamicDigits));
+        typeInto(centreOf(*fields[n - 1]), hmi::dynamicCode(u->secret, hmi::wallEpoch(), sec.dynamicPeriodS, sec.dynamicDigits));
         return Step::Yield;
     }
     if (cmd == "onglet") {
@@ -2238,7 +2278,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 const bool same = entry == "Fermer" ? item.label == entry : item.label.rfind(entry, 0) == 0;
                 if (item.separator || item.heading || !same) continue;
                 if (item.enabled) {
-                    click(centre(tabMenu->itemRect(i)), MouseButton::Left, 1, {});
+                    click(centreIn(*tabMenu, tabMenu->itemRect(i)), MouseButton::Left, 1, {});
                     return Step::Yield;
                 }
                 send(ui::KeyDown{Key::Escape, {}, false});      // grisee : le menu se referme
@@ -2531,7 +2571,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                     auto* b = dynamic_cast<ui::Button*>(&x);
                     if (b && b->id() == "hmiBuildProgress.sorties" && shown(*b) && b->enabled()) outputs = b;
                 });
-            if (outputs) click(centre(outputs->bounds()), MouseButton::Left, 1, {});
+            if (outputs) click(centreOf(*outputs), MouseButton::Left, 1, {});
             if (outputs || retries_ < 600) return Step::Retry;
         }
         if (!screen) {
@@ -3019,7 +3059,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (!target) { fail("bouton \xE2\x80\xA6 introuvable : " + arg(1)); return Step::Next; }
         if (target->bounds().w <= 0.f) return Step::Retry;     // le temps d'un dessin
         if (!target->enabled()) { fail("bouton \xE2\x80\xA6 inactif : " + arg(1)); return Step::Next; }
-        click(centre(target->bounds()), MouseButton::Left, 1, {});
+        click(centreOf(*target), MouseButton::Left, 1, {});
         return Step::Yield;
     }
     if (cmd == "presse-papiers-fichiers") {
@@ -3851,6 +3891,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             auto* grid = dynamic_cast<ui::PropertyGrid*>(&x);
             if (ok || !grid || !shown(*grid)) return;
             ok = grid->valueRect(arg(1), r);
+            if (ok) r = grid->toSurface(r);                           // 1.12.31 : a l'ecran (la page zoomee)
             if (!ok && grid->revealValue(arg(1))) exists = true;   // hors de vue : defiler
         });
         if (!ok && exists && retries_ < 3) return Step::Retry;     // le temps d'une mise en page
@@ -3948,6 +3989,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             ok = cmd == "propriete-retirer" ? ui::exprfield::clearRect(*grid, arg(1), r)
                : cmd == "propriete-carre"   ? grid->legendRect(arg(1), r)
                                             : grid->valueRect(arg(1), r);
+            if (ok) r = grid->toSurface(r);                           // 1.12.31 : a l'ecran (la page zoomee)
             if (!ok && grid->revealValue(arg(1))) exists = true;   // hors de vue : defiler
         });
         if (!ok && exists && retries_ < 3) return Step::Retry;
@@ -4041,10 +4083,10 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (cmd == "couleur-carre") click(palette->squarePoint(num(1) / 100.0, num(2) / 100.0), MouseButton::Left, 1, {});
         else if (cmd == "couleur-teinte") click(palette->huePoint(num(1)), MouseButton::Left, 1, {});
         else if (cmd == "couleur-alpha") click(palette->alphaPoint(num(1) / 100.0), MouseButton::Left, 1, {});
-        else if (cmd == "couleur-avant") click(centre(palette->beforeRect()), MouseButton::Left, 1, {});
-        else if (cmd == "couleur-ok") click(centre(palette->okRect()), MouseButton::Left, 1, {});
-        else if (cmd == "couleur-annuler") click(centre(palette->cancelRect()), MouseButton::Left, 1, {});
-        else if (cmd == "couleur-pipette") click(centre(palette->pipetteRect()), MouseButton::Left, 1, {});
+        else if (cmd == "couleur-avant") click(centreIn(*palette, palette->beforeRect()), MouseButton::Left, 1, {});
+        else if (cmd == "couleur-ok") click(centreIn(*palette, palette->okRect()), MouseButton::Left, 1, {});
+        else if (cmd == "couleur-annuler") click(centreIn(*palette, palette->cancelRect()), MouseButton::Left, 1, {});
+        else if (cmd == "couleur-pipette") click(centreIn(*palette, palette->pipetteRect()), MouseButton::Left, 1, {});
         else if (cmd == "couleur-viser") moveTo({num(1), num(2)}, {});
         else if (cmd == "couleur-prendre") click({num(1), num(2)}, MouseButton::Left, 1, {});
         else if (cmd == "couleur-echap") {
@@ -4054,7 +4096,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             const std::string c = arg(1);
             const F f = c == "R" ? F::R : c == "G" ? F::G : c == "B" ? F::B : c == "A" ? F::A
                       : c == "T" ? F::H : c == "S" ? F::S : c == "V" ? F::V : F::Hex;
-            click(centre(palette->fieldRect(f)), MouseButton::Left, 1, {});
+            click(centreIn(*palette, palette->fieldRect(f)), MouseButton::Left, 1, {});
             if (!arg(2).empty()) send(ui::TextInput{arg(2)});
         } else {
             fail("commande inconnue : " + cmd);
@@ -4229,7 +4271,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         }
         auto* box = tv->searchBox();
         if (!box || !shown(*box)) { fail("valeurs-chercher : pas de recherche ici"); return Step::Next; }
-        typeInto(centre(box->bounds()), arg(1));
+        typeInto(centreOf(*box), arg(1));
         return Step::Yield;
     }
     // 1.11.5 : les onglets Variables IHM et Variables API de la simulation (des arbres) -
@@ -4252,7 +4294,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             fail("expressions-chercher : l'onglet Expressions n'est pas montr\xC3\xA9");
             return Step::Next;
         }
-        typeInto(centre(box->bounds()), arg(1));
+        typeInto(centreOf(*box), arg(1));
         return Step::Yield;
     }
     if (cmd == "simvar") {
@@ -4267,7 +4309,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 fail("simvar : la recherche n'est pas montr\xC3\xA9" "e (l'onglet est-il ouvert ?)");
                 return Step::Next;
             }
-            typeInto(centre(box->bounds()), arg(3));
+            typeInto(centreOf(*box), arg(3));
             return Step::Yield;
         }
         if (what == "noeud") { tree.setOpen(arg(3), arg(4) != "fermer"); return Step::Next; }
@@ -4382,7 +4424,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         });
         if (!found) { fail("choix introuvable : " + arg(1)); return Step::Next; }
         const auto r = found->bounds();
-        click({r.x + 9.f, r.y + r.h * 0.5f}, MouseButton::Left, 1, {});
+        click(found->toSurface(gfx::Point{r.x + 9.f, r.y + r.h * 0.5f}), MouseButton::Left, 1, {});   // 1.12.31 : a l'ecran
         return Step::Yield;
     }
     // ---- 1.9 : la lecture cyclique a plusieurs requetes (IHM > Outil Modbus) ----
@@ -5318,7 +5360,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                     if (startsWith(t->label(i), arg(1)) && t->tabRect(i, r)) symTabs = t;
             });
             if (symTabs) {
-                click({r.x + r.w * 0.5f, r.y + r.h * 0.5f}, MouseButton::Left, 1, {});
+                click(centreIn(*symTabs, r), MouseButton::Left, 1, {});   // 1.12.31 : a l'ecran (la page zoomee)
                 return Step::Yield;
             }
         }
@@ -6941,7 +6983,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (pal.mode() != HmiPalette::Mode::Variables) {
             gfx::Rect tab;
             if (!pal.modeRect(HmiPalette::Mode::Variables, tab)) { fail("bibliotheque invisible"); return Step::Next; }
-            click(centre(tab), MouseButton::Left, 1, {});
+            click(centreIn(pal, tab), MouseButton::Left, 1, {});   // 1.12.31 : a l'ecran (la page zoomee)
             return Step::Retry;
         }
         gfx::Rect r;
@@ -6955,11 +6997,11 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             std::size_t at = 0;
             for (std::size_t i = 0; i < w.size(); ++i) if (w[i] == "glisser") at = i;
             const double x = at + 1 < w.size() ? std::atof(w[at + 1].c_str()) : 0, y = at + 2 < w.size() ? std::atof(w[at + 2].c_str()) : 0;
-            drag(centre(r), editor->canvas().viewport().toScreen(x, y), {});
+            drag(centreIn(pal, r), editor->canvas().toSurface(editor->canvas().viewport().toScreen(x, y)), {});
             return Step::Yield;
         }
-        if (has("survol")) moveTo(centre(r), {});
-        else click(centre(r), MouseButton::Left, 1, {});
+        if (has("survol")) moveTo(centreIn(pal, r), {});
+        else click(centreIn(pal, r), MouseButton::Left, 1, {});
         return Step::Yield;
     }
     if (cmd == "palette") {
@@ -6967,7 +7009,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (editor->palette().mode() != HmiPalette::Mode::Objects) {
             gfx::Rect tab;
             if (editor->palette().modeRect(HmiPalette::Mode::Objects, tab)) {
-                click(centre(tab), MouseButton::Left, 1, {});
+                click(centreIn(editor->palette(), tab), MouseButton::Left, 1, {});   // 1.12.31 : a l'ecran
                 return Step::Retry;
             }
         }
@@ -6980,8 +7022,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 fail("symbole absent de la bibliotheque : " + arg(1));
                 return Step::Next;
             }
-            if (has("survol")) moveTo(centre(r), {});
-            else click(centre(r), MouseButton::Left, 1, {});
+            if (has("survol")) moveTo(centreIn(editor->palette(), r), {});
+            else click(centreIn(editor->palette(), r), MouseButton::Left, 1, {});
             return Step::Yield;
         }
         for (auto k : hmi::kPlaceableKinds) {
@@ -6997,9 +7039,10 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             }
             // "etoile" : l'etoile de la tuile (ajouter / retirer des favoris) ;
             // "survol" (lot 8) : la souris sur la tuile, sans cliquer (F1 ensuite).
-            if (has("etoile")) click({r.x + r.w - 10.f, r.y + 10.f}, MouseButton::Left, 1, {});
-            else if (has("survol")) moveTo(centre(r), {});
-            else click(centre(r), MouseButton::Left, 1, {});
+            // 1.12.31 : a l'ecran (la page zoomee).
+            if (has("etoile")) click(editor->palette().toSurface(gfx::Point{r.x + r.w - 10.f, r.y + 10.f}), MouseButton::Left, 1, {});
+            else if (has("survol")) moveTo(centreIn(editor->palette(), r), {});
+            else click(centreIn(editor->palette(), r), MouseButton::Left, 1, {});
             return Step::Yield;
         }
         fail("genre inconnu : " + arg(1));
@@ -7246,8 +7289,10 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 if (l.name == arg(1)) ok = editor->layers().rowRect(l.id, r, part);
         }
         if (!ok) { fail(cmd + " introuvable ou cache : " + arg(1)); return Step::Next; }
-        click(centre(r), MouseButton::Left, 1, mods());
-        if (has("double")) click(centre(r), MouseButton::Left, 2, mods());
+        // 1.12.31 : a l'ecran (l'explorateur d'objets, les calques : dans la page zoomee).
+        const ui::Widget& list = cmd == "objet" ? static_cast<const ui::Widget&>(editor->objects()) : static_cast<const ui::Widget&>(editor->layers());
+        click(centreIn(list, r), MouseButton::Left, 1, mods());
+        if (has("double")) click(centreIn(list, r), MouseButton::Left, 2, mods());
         return Step::Yield;
     }
 

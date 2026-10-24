@@ -591,6 +591,9 @@ private:
 } // namespace
 
 HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id)) {
+    // 1.12.31 : LE ZOOM DU PANNEAU DU BAS - tout le panneau (sa barre, ses puces, sa recherche,
+    // ses onglets, ses tableaux, son pied) ; Ctrl + molette dessus, ou le clavier dedans.
+    setZoomSupport(ui::ZoomSupport::Scaled);
     auto tools = std::make_unique<HmiToolStrip>(this->id() + ".tools");
     // Sorties et Diagnostics : les gravites du build.
     tools->add(10, HmiGlyph::Check, "Les informations (le d\xC3\xA9roulement du build)", "Informations");

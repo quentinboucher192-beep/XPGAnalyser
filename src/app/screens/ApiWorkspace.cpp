@@ -985,19 +985,21 @@ bool MainAnalysisScreen::dropTreeDragOnTables(const ui::InputEvent& ev) {
         up = true;
     }
     if (!pos) return false;
-    if (explorer_->zoomFrame().contains(*pos)) {     // 1.12.30 : le cadre a l'ecran (l'arbre zoome seul)
+    // 1.12.30 : le cadre a l'ecran (1.12.31 : l'arbre, sa colonne, la page sont zoomes chacun).
+    if (explorer_->toSurface(explorer_->bounds()).contains(*pos)) {
         if (pane) pane->setDropHint(false);
         return false;
     }
     auto nodes = explorer_->draggedNodes();
     if (nodes.empty()) nodes.push_back(explorer_->dragSource());
     const auto vars = treeVariables(nodes);
-    const bool over = pane && !vars.empty() && pane->dropZone(*pos);
+    const gfx::Point inPane = pane ? pane->fromSurface(*pos) : *pos;     // 1.12.31 : dans le repere de la page
+    const bool over = pane && !vars.empty() && pane->dropZone(inPane);
     if (!up) {
         if (pane) {
             std::string label = vars.empty() ? std::string{} : vars.front().first;
             if (vars.size() > 1) label += " +" + std::to_string(vars.size() - 1);
-            pane->setDropHint(over, std::move(label), *pos);
+            pane->setDropHint(over, std::move(label), inPane);
         }
         return false;
     }

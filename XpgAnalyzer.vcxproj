@@ -1082,6 +1082,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiVertices.hpp" />
     <ClInclude Include="src\hmi\HmiViewPaths.hpp" />
     <ClInclude Include="src\platform\AtlasSymbols.hpp" />
+    <ClInclude Include="src\platform\KeyTranslate.hpp" />
     <ClInclude Include="src\platform\TextCensus.hpp" />
     <ClInclude Include="src\project\ActivationConditions.hpp" />
     <ClInclude Include="src\project\ApiArchive.hpp" />
@@ -1103,6 +1104,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\ui\widgets\CrashReport.hpp" />
     <ClInclude Include="src\app\ReportWindow.hpp" />
     <ClInclude Include="src\app\SvgRenderer.hpp" />
+    <ClInclude Include="src\app\ZoomMemory.hpp" />
     <ClInclude Include="src\help\Trails.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

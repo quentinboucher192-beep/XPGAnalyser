@@ -2510,7 +2510,7 @@ namespace ui {
                 } else if (d->button == MouseButton::Right && !lines_.empty()) {
                     // 1.12.18 (planche 18) : le menu de la ligne ; sans lui, sa condition (Lot API 8).
                     const auto line = lineAt(d->pos.y);
-                    if (breakpointMenuRequested->slotCount() > 0) breakpointMenuRequested->emit(line, d->pos);
+                    if (breakpointMenuRequested->slotCount() > 0) breakpointMenuRequested->emit(line, toSurface(d->pos));   // 1.12.31 : la surface
                     else breakpointConditionRequested->emit(line);
                 }
                 return EventResult::Consumed;
@@ -2881,8 +2881,18 @@ namespace ui {
             ctx.r.fillRect(boxRect.inset(3.f, 5.f), c.accent);
         }
 
+        // 1.12.31 : un libelle trop long pour la case (une barre etroite, une page zoomee) finit
+        // par des points de suspension, plutot que coupe au bord.
+        const float room = r.right() - (boxRect.right() + 6.f);
+        std::string shown = label_;
+        if (room > 0.f && ctx.r.measure(shown, ctx.theme.font.ui).width > room + 0.5f) {
+            const float dots = ctx.r.measure("\xE2\x80\xA6", ctx.theme.font.ui).width;
+            auto k = ctx.r.fitCharacters(shown, ctx.theme.font.ui, std::max(0.f, room - dots));
+            while (k > 0 && k < shown.size() && (static_cast<unsigned char>(shown[k]) & 0xC0) == 0x80) --k;
+            shown = shown.substr(0, k) + "\xE2\x80\xA6";
+        }
         ctx.r.drawText({ boxRect.right() + 6.f, r.y + (r.h - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f },
-            label_, ctx.theme.font.ui, enabled() ? c.text : c.textDisabled);
+            shown, ctx.theme.font.ui, enabled() ? c.text : c.textDisabled);
     }
 
     EventResult Checkbox::onEvent(const InputEvent& ev) {
@@ -3552,7 +3562,8 @@ namespace ui {
 
     void openContextMenuAt(Widget& target, gfx::Point at) {
         KeyboardMenuScope scope;
-        (void)target.topWidget().dispatch(MouseDown{ at, MouseButton::Right, 1, {} });
+        // 1.12.31 : `at` est dans le repere de `target` ; l'appui part du haut de l'arbre (la surface).
+        (void)target.topWidget().dispatch(MouseDown{ target.toSurface(at), MouseButton::Right, 1, {} });
     }
 
     PopupMenu::PopupMenu(std::string id) : Widget(std::move(id)) {
@@ -3849,6 +3860,21 @@ namespace ui {
             moveHot(0, 1);
         }
     }
+
+    void PopupMenu::openAtSurface(gfx::Point surfacePoint) {
+        const gfx::Size window = windowSurfaceSize();
+        gfx::Size limit{};
+        if (window.w > 0.f) {
+            const auto corner = fromSurface(gfx::Point{ window.w, window.h });
+            limit = { corner.x, corner.y };
+        } else {
+            const auto b = rootWidget()->bounds();
+            limit = { b.right() + 400.f, b.bottom() + 400.f };
+        }
+        openAt(fromSurface(surfacePoint), limit);
+    }
+
+    void PopupMenu::openInWindow(gfx::Point where) { openAtSurface(toSurface(where)); }
 
     void PopupMenu::openFromKeyboard(gfx::Point where, gfx::Size surface) {
         openAt(where, surface);

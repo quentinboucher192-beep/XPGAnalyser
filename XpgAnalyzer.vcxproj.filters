@@ -2854,6 +2854,9 @@
     <ClInclude Include="src\platform\AtlasSymbols.hpp">
       <Filter>platform</Filter>
     </ClInclude>
+    <ClInclude Include="src\platform\KeyTranslate.hpp">
+      <Filter>platform</Filter>
+    </ClInclude>
     <ClInclude Include="src\platform\TextCensus.hpp">
       <Filter>platform</Filter>
     </ClInclude>
@@ -2915,6 +2918,9 @@
       <Filter></Filter>
     </ClInclude>
     <ClInclude Include="src\app\SvgRenderer.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\ZoomMemory.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\help\Trails.hpp">

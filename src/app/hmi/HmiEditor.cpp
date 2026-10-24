@@ -94,11 +94,9 @@ constexpr std::array<const char*, 3> kFilterWords{"fx", "reperes", "nonvides"};
 void wireSymbolTabsMenu(ui::Widget& owner, HmiSymbolTabs& tabs, core::ConnectionScope& links) {
     auto* menu = &static_cast<ui::PopupMenu&>(owner.addChild(std::make_unique<ui::PopupMenu>(tabs.id() + ".menu")));
     HmiSymbolTabs* bar = &tabs;
-    links += tabs.menuRequested->connect([&owner, bar, menu](int t, gfx::Point at) {
+    links += tabs.menuRequested->connect([bar, menu](int t, gfx::Point at) {
         menu->setItems({ui::cmd::heading(bar->label(t), "sous-onglet"), ui::cmd::dispositionItem()});
-        const auto surface = ui::surfaceSize();
-        const auto b = owner.bounds();
-        menu->openAt(at, surface.w > 0 ? surface : gfx::Size{b.right(), b.bottom()});
+        menu->openAtSurface(at);     // 1.12.31 : `at` est dans la surface (la page peut etre zoomee)
     });
     links += menu->itemChosen->connect([](int id) {
         if (id == ui::cmd::kDispositionItem) ui::cmd::openDisposition();
@@ -845,9 +843,7 @@ bool HmiEditor::openLegendMenu(const std::string& grid, const std::string& categ
     };
     items.push_back(std::move(open));
     legendMenu_->setItems(std::move(items));
-    gfx::Size surface = ui::surfaceSize();
-    if (surface.w <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
-    legendMenu_->openAt(at, surface);
+    legendMenu_->openAtSurface(at);     // 1.12.31 : `at` est dans la surface (legendClicked)
     return true;
 }
 
@@ -2456,9 +2452,9 @@ void HmiEditor::openPaletteMenu(hmi::Kind kind, gfx::Point at) {
 }
 
 void HmiEditor::openMenuAt(ui::PopupMenu& menu, gfx::Point at) {
-    gfx::Size surface = ui::surfaceSize();
-    if (surface.w <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
-    menu.openAt(at, surface);
+    // 1.12.31 : `at` est dans la surface (la vue, ilot de la page zoomee ; l'explorateur, les
+    // calques, la bibliotheque) ; le menu, dans le repere de l'editeur.
+    menu.openAtSurface(at);
 }
 
 void HmiEditor::canvasMenuChosen(int a) {

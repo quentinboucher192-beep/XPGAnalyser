@@ -16,6 +16,9 @@ namespace app {
 
 std::function<double(std::string_view, std::string_view, double)> hmiTextMeasure(const hmi::Project& project) {
     return [&project](std::string_view text, std::string_view font, double size) -> double {
+        // 1.12.31 : la mesure du document (ses pixels), jamais celle d'une page zoomee - Generer
+        // lance depuis une page a 150 % dit les memes debordements qu'a 100 %.
+        const ui::MeasureZoomScope unit(1.f, true);
         if (!font.empty() && font != "Sans")
             if (const auto* res = project.resourceByName(font); res && res->data && res->kind() == hmi::MediaKind::Font) {
                 hmi::Rgba img;

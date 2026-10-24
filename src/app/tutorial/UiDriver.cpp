@@ -192,6 +192,8 @@ bool UiDriver::locates(std::string_view kind) {
            || kind == "ligne" || kind == "barre" || kind == "macro";
 }
 
+// 1.12.31 : le cadre rendu est A L'ECRAN (toSurface : une page zoomee, l'arbre zoome, un ilot) -
+// le calque du tutoriel l'encadre et le clique dans la surface.
 std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* why) const {
     auto miss = [&](std::string msg) -> std::optional<gfx::Rect> {
         if (why) *why = std::move(msg);
@@ -202,7 +204,8 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
         // Une zone nommee. "variantes" : sous la bibliotheque (tant que la
         // bibliotheque n'a pas ses cartes de variantes, la bibliotheque entiere).
         if (target == "variantes")
-            if (auto* editor = currentEditor(); editor && editor->palette().bounds().w > 0.f) return editor->palette().bounds();
+            if (auto* editor = currentEditor(); editor && editor->palette().bounds().w > 0.f)
+                return editor->palette().toSurface(editor->palette().bounds());   // 1.12.31 : a l'ecran (la page zoomee)
         // Tranche 5. "resultats-compiler" : les resultats de Compiler - 1.11.21 : l'onglet Diagnostics
         // du panneau du bas (id "hmi.sorties.diagnostics" ; avant, le tableau sous l'editeur des
         // scripts) : sa premiere ligne, sinon le tableau entier.
@@ -214,7 +217,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
                     const std::string_view id = w.id();
                     if (r || !t || !shown(w) || id.size() < 12 || id.substr(id.size() - 12) != ".diagnostics") return;
                     gfx::Rect row{};
-                    r = t->rowRect(0, row) ? row : t->bounds();
+                    r = t->toSurface(t->rowRect(0, row) ? row : t->bounds());   // 1.12.31 : a l'ecran
                 });
             return r ? r : miss("pas de r\xC3\xA9sultats de Compiler ici");
         }
@@ -228,13 +231,13 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
                     if (auto* g = dynamic_cast<ui::PropertyGrid*>(&w); !f && g) f = g->activeField();
                     if (f && f->suggestionsOpen()) {
                         const auto b = f->bounds(), eb = f->eventBounds();
-                        if (eb.bottom() > b.bottom() + 0.5f) r = gfx::Rect{eb.x, b.bottom() + 1.f, eb.w, eb.bottom() - b.bottom() - 1.f};
-                        else if (eb.y < b.y - 0.5f) r = gfx::Rect{eb.x, eb.y, eb.w, b.y - 1.f - eb.y};
+                        if (eb.bottom() > b.bottom() + 0.5f) r = f->toSurface(gfx::Rect{eb.x, b.bottom() + 1.f, eb.w, eb.bottom() - b.bottom() - 1.f});
+                        else if (eb.y < b.y - 0.5f) r = f->toSurface(gfx::Rect{eb.x, eb.y, eb.w, b.y - 1.f - eb.y});
                     } else if (auto* m = dynamic_cast<ui::MultiLineText*>(&w); m && m->completionOpen()) {
                         // Tranche 10 : la boite de sa liste (completionRect) ; pas encore dessinee :
                         // l'editeur et sa liste reunis, comme avant.
                         gfx::Rect box{};
-                        r = m->completionRect({}, box) ? box : m->eventBounds();
+                        r = m->toSurface(m->completionRect({}, box) ? box : m->eventBounds());
                     }
                 });
             return r ? r : miss("aide \xC3\xA0 la saisie ferm\xC3\xA9" "e");
@@ -254,7 +257,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             if (!editor->objects().alarmNode(id)) return miss("l'objet ne porte pas d'alarme : " + o->name);
             if (!quiet_ && !editor->objects().alarmsOpen(id)) editor->objects().setAlarmsOpen(id, true);
             gfx::Rect r{};
-            if (editor->objects().alarmRowRect(id, 0, r)) return r;
+            if (editor->objects().alarmRowRect(id, 0, r)) return editor->objects().toSurface(r);
             if (!quiet_) editor->objects().reveal(id);
             return miss("alarmes de l'objet hors de vue : " + o->name);
         }
@@ -279,7 +282,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             if (b && shown(*b) && b->enabled() && (prefix ? b->text().rfind(want, 0) == 0 : b->text() == want)) found = b;
         });
         if (!found) return miss("bouton introuvable : " + name);
-        return found->bounds();
+        return found->toSurface(found->bounds());     // 1.12.31 : a l'ecran (une page zoomee)
     }
     if (kind == "barre") {
         // Tranche 24 (decision 53, R111-12) : une partie de la barre du haut, par le nom de la
@@ -293,7 +296,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
         const auto part = help::screen::topBarPart(name);
         const auto r = bar->partRect(part);
         if (r.w <= 0.f || r.h <= 0.f) return miss("partie de la barre introuvable : " + name);
-        return r;
+        return bar->toSurface(r);
     }
     if (kind == "onglet") {
         // Un onglet de l'espace de travail, par le debut de son titre (comme la commande onglet).
@@ -338,7 +341,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
                 for (std::size_t c = 0; c < chips.size(); ++c) {
                     if (lower(chips[c].label).rfind(parts[part], 0) != 0) continue;
                     gfx::Rect r{};
-                    if (tree->chipRect(n, c, r)) return r;
+                    if (tree->chipRect(n, c, r)) return tree->toSurface(r);     // 1.12.31 : l'arbre zoome
                     return miss("bouton de l'arbre pas encore dessin\xC3\xA9 : " + name);
                 }
                 continue;
@@ -346,7 +349,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             if (lower(tree->model()->text(n)).rfind(parts[part], 0) != 0) continue;
             if (++part < parts.size()) continue;
             gfx::Rect r{};
-            if (tree->rowRect(n, r)) return r;
+            if (tree->rowRect(n, r)) return tree->toSurface(r);     // 1.12.31 : l'arbre zoome
             if (!quiet_) tree->ensureVisible(n);
             return miss("ligne de l'arbre hors de vue : " + name);
         }
@@ -370,7 +373,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             for (auto* t : fields) if (t->id() == name) found = t;
         }
         if (!found) return miss("champ introuvable : " + name);
-        return found->bounds();
+        return found->toSurface(found->bounds());
     }
     if (kind == "ligne") {
         // Tranche 6 : la ligne d'un tableau visible dont la premiere colonne dit `name`
@@ -385,7 +388,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             for (std::size_t i = 0; i < t->visibleRowCount() && !r; ++i) {
                 if (t->model()->cellText(t->viewRow(i), 0) != name) continue;
                 gfx::Rect rr{};
-                if (t->rowRect(i, rr)) r = rr;
+                if (t->rowRect(i, rr)) r = t->toSurface(rr);
                 else hidden = true;
             }
         });
@@ -402,7 +405,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             if (r || !tabs || !shown(*tabs)) return;
             for (std::size_t i = 0; i < tabs->tabCount() && !r; ++i) {
                 gfx::Rect rr{};
-                if (tabs->tab(i)->title.rfind(name, 0) == 0 && tabs->headerRect(i, rr)) r = rr;
+                if (tabs->tab(i)->title.rfind(name, 0) == 0 && tabs->headerRect(i, rr)) r = tabs->toSurface(rr);
             }
         });
         return r ? r : miss("sous-onglet introuvable : " + name);
@@ -415,7 +418,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
                 if (r) return;
                 if (auto* m = dynamic_cast<ui::PopupMenu*>(&w); m && m->isOpen()) {
                     for (std::size_t i = 0; i < m->items().size() && !r; ++i)
-                        if (!m->items()[i].separator && m->items()[i].label == name) r = m->itemRect(i);
+                        if (!m->items()[i].separator && m->items()[i].label == name) r = m->toSurface(m->itemRect(i));
                 } else if (auto* d = dynamic_cast<ui::DropDown*>(&w); d && d->isOpen()) {
                     const auto& items = d->items();
                     const auto box = d->popupRect();
@@ -423,7 +426,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
                     for (std::size_t i = 0; i < items.size() && i < rows && !r; ++i)
                         if (items[i].label == name && rows > 0) {
                             const float h = box.h / static_cast<float>(rows);
-                            r = gfx::Rect{box.x, box.y + static_cast<float>(i) * h, box.w, h};
+                            r = d->toSurface(gfx::Rect{box.x, box.y + static_cast<float>(i) * h, box.w, h});
                         }
                 }
             });
@@ -450,7 +453,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
         gfx::Rect at{};
         if (!ed->positionRect(static_cast<std::size_t>(line - 1), static_cast<std::uint32_t>(std::max(0, col - 1)), at))
             return miss("ligne pas en vue : " + name);
-        return gfx::Rect{at.x, at.y, std::max(2.f, at.w * 0.5f), at.h};
+        return ed->toSurface(gfx::Rect{at.x, at.y, std::max(2.f, at.w * 0.5f), at.h});
     }
     if (kind == "saisie") {
         // Tranche 5 : la ligne de l'aide a la saisie (la liste des membres apres "V[0].")
@@ -472,7 +475,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
         // `name` vient de MultiLineText::completionRect (d'apres le dernier dessin).
         if (!field && code) {
             gfx::Rect row{};
-            if (code->completionRect(name, row)) return row;
+            if (code->completionRect(name, row)) return code->toSurface(row);
             return miss("aide \xC3\xA0 la saisie sans " + name + " (ou pas encore dessin\xC3\xA9" "e)");
         }
         if (!field) return miss("aide \xC3\xA0 la saisie ferm\xC3\xA9" "e (" + name + ")");
@@ -496,7 +499,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
         const std::size_t sel = field->suggestionIndex();
         const std::size_t first = sel >= shownRows ? sel + 1 - shownRows : 0;
         if (index < first || index >= first + shownRows) return miss("ligne de l'aide hors de vue : " + name);
-        return gfx::Rect{eb.x + 2.f, boxY + 2.f + static_cast<float>(index - first) * rowH, eb.w - 4.f, rowH};
+        return field->toSurface(gfx::Rect{eb.x + 2.f, boxY + 2.f + static_cast<float>(index - first) * rowH, eb.w - 4.f, rowH});
     }
     if (kind == "outil") {
         std::optional<gfx::Rect> r;
@@ -506,7 +509,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             const int a = strip->actionByTip(name);
             if (a >= 0) {
                 const auto rr = strip->rectOf(a);
-                if (rr.w > 0.f) r = rr;
+                if (rr.w > 0.f) r = strip->toSurface(rr);
             }
         });
         return r ? r : miss("outil introuvable : " + name);
@@ -525,7 +528,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             if (n == ui::kInvalidNode) return;
             known = true;
             gfx::Rect rr{};
-            if (pane->tree().rowRect(n, rr)) r = rr;
+            if (pane->tree().rowRect(n, rr)) r = pane->tree().toSurface(rr);
             else if (!quiet_) pane->tree().ensureVisible(n);
         });
         if (r) return r;
@@ -540,7 +543,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             auto* grid = dynamic_cast<ui::PropertyGrid*>(&w);
             if (r || !grid || !shown(*grid)) return;
             gfx::Rect rr{};
-            if (grid->valueRect(name, rr) || grid->valueRect(driven, rr)) r = rr;
+            if (grid->valueRect(name, rr) || grid->valueRect(driven, rr)) r = grid->toSurface(rr);
             // hors de vue : defiler, l'image suivante la trouve
             else if (!quiet_ && !grid->revealValue(name)) (void)grid->revealValue(driven);
         });
@@ -556,10 +559,10 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
         if (pane && pane->visible()) {
             if (!parsePair(name, x, y)) {
                 gfx::Rect r{};
-                if (pane->canvas().objectRect(name, r)) return gfx::Rect{r.x, r.y, std::max(2.f, r.w), std::max(2.f, r.h)};
+                if (pane->canvas().objectRect(name, r)) return pane->canvas().toSurface(gfx::Rect{r.x, r.y, std::max(2.f, r.w), std::max(2.f, r.h)});
                 return miss("objet introuvable dans la vue en marche : " + name);
             }
-            const auto p = pane->canvas().viewport().toScreen(x, y);
+            const auto p = pane->canvas().toSurface(pane->canvas().viewport().toScreen(x, y));
             return gfx::Rect{p.x - 1.f, p.y - 1.f, 2.f, 2.f};
         }
     }
@@ -589,7 +592,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
                 const int line = !lines.empty() && lines[0].depth == 0 && !lines[0].alarm ? static_cast<int>(k) : static_cast<int>(k) + 1;
                 if (!quiet_ && !editor->objects().alarmsOpen(id)) editor->objects().setAlarmsOpen(id, true);
                 gfx::Rect r{};
-                if (editor->objects().alarmRowRect(id, line, r)) return r;
+                if (editor->objects().alarmRowRect(id, line, r)) return editor->objects().toSurface(r);
                 if (!quiet_) editor->objects().reveal(id);
                 return miss("alarme hors de vue : " + name);
             }
@@ -601,7 +604,7 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             if (lower(hmi::kindLabel(k)) != lower(name)) continue;
             if (!quiet_) lastKind_ = name;
             gfx::Rect r{};
-            if (editor->palette().tileRect(k, r)) return r;
+            if (editor->palette().tileRect(k, r)) return editor->palette().toSurface(r);
             if (!quiet_) editor->palette().revealKind(k);
             return miss("tuile cach\xC3\xA9" "e : " + name);
         }
@@ -617,12 +620,12 @@ std::optional<gfx::Rect> UiDriver::locate(std::string_view target, std::string* 
             const double ox = o.number("x"), oy = o.number("y");
             const auto a = editor->canvas().viewport().toScreen(ox, oy);
             const auto b = editor->canvas().viewport().toScreen(ox + o.number("w"), oy + o.number("h"));
-            return gfx::Rect{a.x, a.y, std::max(2.f, b.x - a.x), std::max(2.f, b.y - a.y)};
+            return editor->canvas().toSurface(gfx::Rect{a.x, a.y, std::max(2.f, b.x - a.x), std::max(2.f, b.y - a.y)});
         }
         return miss("objet introuvable dans la vue : " + name);
     }
     if (kind == "vue") {
-        const auto p = editor->canvas().viewport().toScreen(x, y);
+        const auto p = editor->canvas().toSurface(editor->canvas().viewport().toScreen(x, y));
         return gfx::Rect{p.x - 1.f, p.y - 1.f, 2.f, 2.f};
     }
     return miss("genre pas encore trouv\xC3\xA9 : " + std::string(kind));
