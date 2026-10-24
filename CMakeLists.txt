@@ -151,6 +151,12 @@ target_link_libraries(xpg_help PUBLIC xpg_import xpg_ui)
 xpg_sources(HMI_SOURCES hmi)
 add_library(xpg_hmi STATIC ${HMI_SOURCES})
 target_link_libraries(xpg_hmi PUBLIC xpg_import)
+# 1.12.31 : l'aide F1 (genere : des Mo de chaines). En -O3, GCC y prend une
+# dizaine de Go de memoire ; ce ne sont que des donnees : -O1 suffit (l'option
+# du fichier vient apres celles du type de construction, elle l'emporte).
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set_source_files_properties(src/hmi/HmiGuideText.cpp PROPERTIES COMPILE_OPTIONS "-O1")
+endif()
 # Lot 14 : sous Windows, les sockets (Modbus TCP, le serveur de demonstration)
 # et le registre (le poste d'exploitation qui demarre avec la session). Ceux
 # qui lient xpg_hmi (l'application, les essais) les recoivent aussi.
