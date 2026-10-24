@@ -153,22 +153,23 @@ Dès qu'un onglet est réduit ou caché, un **bouton à droite de la bande** (tr
 - **Retenue** : rouverte pendant la séance, une fenêtre revient là où tu l'as laissée, à la taille choisie.
 
 == zoom | Le zoom des pages
-: Chaque page se zoome : la puce du bandeau bas (−, le pourcentage, +), Ctrl + molette, Ctrl + plus, Ctrl + moins, Ctrl + 0. Le texte, la hauteur des lignes, les marges et les icônes grandissent ensemble ; chaque page garde le sien.
+: Chaque page se zoome tout entière : la puce du bandeau bas (−, le pourcentage, +), Ctrl + molette, Ctrl + plus, Ctrl + moins, Ctrl + 0. Le texte, les icônes, les hauteurs et les marges grandissent ensemble ; chaque page garde le sien, d'une séance à l'autre.
 @depuis 1.12.30
-@mots zoom, Zoom, zoomer, agrandir, Ctrl+molette, Ctrl+plus, Ctrl+moins, Ctrl+0, 100 %, puce du zoom, bandeau bas, lisibilité
+@mots zoom, Zoom, zoomer, agrandir, Ctrl+molette, Ctrl+plus, Ctrl+moins, Ctrl+0, 100 %, puce du zoom, bandeau bas, lisibilité, AZERTY, pavé numérique, arbre du projet, panneau du bas, Revenir à 100 %
 @voir onglets, raccourcis, editeur, regles-guides, langues-cote
 ### La puce du zoom
 En bas à droite, dans le bandeau bas : **−** et **+** changent le zoom d'un cran (50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200 %) ; un clic sur le pourcentage ouvre son menu : 50 % à 200 %, Zoom avant, Zoom arrière, **Revenir à 100 %**. La puce montre le zoom de la page ouverte ; grise, la page n'en a pas.
 ### Ce qui se zoome
-- les **tableaux et les listes** (variables, E/S, types, alarmes, recettes, références croisées, équipements, tables d'animation, Générer, Compiler…) : le texte, la hauteur des lignes, les marges, les icônes, les barres de défilement ;
-- les **arbres** : la bibliothèque, les natives ; Ctrl + molette sur l'explorateur du projet zoome l'explorateur seul ;
-- les **panneaux et les fiches** : Configuration, l'inspecteur de l'éditeur de vues, l'aide ;
-- les **pages de la simulation** : Vue d'ensemble, Forçages, Courbes, Journal, Expressions ;
-- les **documents** gardent leur propre zoom : un code, un grafcet, une vue dans l'éditeur, le rack, l'IHM en marche, les langues côte à côte - la puce suit celui que tu as cliqué en dernier.
+- **toute la page** : ses barres d'outils et de filtres, ses sous-onglets, ses tableaux, ses listes, ses arbres, ses fiches, ses panneaux et sa ligne d'état ; dans l'éditeur de vues, l'explorateur d'objets, les calques, la bibliothèque et l'inspecteur ;
+- l'**arbre du projet** (son filtre, ses puces, son rail compris) et le **panneau du bas** (Sorties, Console, Diagnostics) ont chacun le leur : Ctrl + molette dessus, ou Ctrl + plus, Ctrl + moins, Ctrl + 0 quand le clavier y est ; le bandeau bas dit le pourcentage ;
+- les **documents** gardent leur propre zoom et ne grandissent pas avec la page : un code, un grafcet, une vue dans l'éditeur, le rack, l'IHM en marche, les vues des langues côte à côte (leurs en-têtes, eux, grandissent) - la puce suit celui que tu as cliqué en dernier ; un clic sur une barre de la page la ramène à toute la page.
 ### Le même geste partout
 - **Ctrl + molette** sur une page : un cran pour toute la page ; sur un code, un grafcet, une vue : leur zoom à eux ;
-- **Ctrl + plus** (le + du pavé numérique, ou la touche =), **Ctrl + moins**, **Ctrl + 0** (100 %) ; dans un code, Ctrl + moins garde « Revenir où l'on était » (profil Visual Studio) : la molette ou la puce zooment ;
-- chaque page **garde son zoom** tant qu'elle est ouverte : ses tableaux, ses arbres et ses listes grandissent ensemble.
+- **Ctrl + plus** (la touche = avec ou sans Maj, le + du pavé numérique), **Ctrl + moins** (la touche − de la rangée des chiffres, sur un clavier AZERTY aussi, ou celle du pavé), **Ctrl + 0** (100 %) ; dans un code, Ctrl + moins garde « Revenir où l'on était » (profil Visual Studio) : la molette ou la puce zooment.
+### Gardé d'une séance à l'autre
+- le zoom de chaque page, celui de l'arbre du projet, du panneau du bas et de chaque code se gardent dans tes réglages : la page rouverte, le lendemain, revient à son zoom ;
+- **Revenir à 100 %** (Ctrl + 0, ou le menu de la puce) l'oublie ;
+- le zoom d'une vue dans l'éditeur, d'un grafcet, du rack ne se garde pas : ils s'ouvrent comme avant.
 > À 100 %, rien ne change : le zoom ne touche pas à la mise en page.
 
 == raccourcis | Raccourcis clavier
@@ -1616,7 +1617,7 @@ Pour chaque langue, combien de textes restent à traduire ; une traduction qui p
 Dans l'éditeur de vues, **Langues côte à côte** (le dernier bouton de la barre d'outils, ou le clic droit sur la vue) ; dans **Configuration › Langues**, **Côte à côte**. La page s'ouvre sur la vue de l'éditeur ; la liste en haut à gauche en montre une autre.
 ### Ce qu'elle montre
 - une colonne par langue, la langue du projet d'abord, puis la **pseudo-langue** ; **Par 2, Par 3, Par 4** en montre deux à quatre à la fois, les flèches (Maj + molette) font défiler les autres ;
-- toutes à la même échelle : **Ajuster** montre la vue entière, le zoom (la puce du bandeau bas, Ctrl + molette) l'agrandit, la molette la fait défiler ;
+- toutes à la même échelle : **Ajuster** montre la vue entière, le zoom (la puce du bandeau bas, Ctrl + molette sur les vues) l'agrandit, la molette la fait défiler ; un clic sur la barre du haut, et la puce zoome toute la page - la barre, les en-têtes des langues (voir « Le zoom des pages ») ;
 - l'en-tête de chaque langue dit combien de textes y débordent (en vert : aucun).
 ### Les débordements
 Un texte qui sort de sa boîte dans une langue - trop large, trop haut, le texte coupé d'une case à cocher : le contrôle de Générer - est **entouré de rouge**, une pastille « ! » à son coin ; son infobulle dit de combien. Un clic sur la marque : **Choisir l'objet dans l'éditeur**, **Aller à sa traduction** (Configuration › Langues, la fiche du texte), **Copier le message**.
