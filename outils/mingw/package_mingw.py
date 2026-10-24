@@ -8,7 +8,8 @@
 #    1. dist/staging : l'exe, SDL3.dll, pdfium.dll (1.12.30 : le moteur PDF de la
 #       visionneuse, charge a la demande), resources\ (les deux catalogues), libs\,
 #       maintenance\ (les six scripts, leur lib\ et leur config.ini), licences\,
-#       LISEZ-MOI.txt (la version mise) ;
+#       LISEZ-MOI.txt (la version mise) ; 1.12.31 : web\ (le moteur de l'IHM en
+#       WebAssembly, que la page web exportee embarque : l'IHM y tourne) ;
 #    2. manifeste.json : chaque fichier, sa taille, son SHA-256, son role, et les
 #       DLL que l'exe importe (lues dans sa table d'importation) - l'arret si
 #       l'une d'elles n'est ni du systeme ni livree ;
@@ -19,7 +20,7 @@
 #
 #    python3 outils/mingw/package_mingw.py --iscc /chemin/ISCC.exe
 #        [--exe build-mingw/XpgAnalyzer.exe] [--sdl third_party/SDL3/lib/x64/SDL3.dll]
-#        [--pdfium third_party/pdfium/win-x64/pdfium.dll]
+#        [--pdfium third_party/pdfium/win-x64/pdfium.dll] [--web third_party/web]
 #        [--sans-installateur]
 #  Wine : WINEPREFIX et WINEDEBUG sont pris dans l'environnement.
 # =============================================================================
@@ -36,6 +37,10 @@ import subprocess
 import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+# 1.12.31 : le moteur de l'IHM pour la page web en marche (third_party/web -> web\ a cote des exe) :
+# ce sans quoi la page ne demarre pas, puis le reste (la police et sa licence, la version).
+WEB_FILES = ["ihm-web.wasm.gz", "web_host.js", "amorce.js", "page_ihm.html"]
+WEB_EXTRAS = ["ihm-web.ttf", "ihm-web.ttf.LICENCE.txt", "VERSION.txt"]
 
 
 def ini(section, key, default=""):
@@ -165,6 +170,8 @@ def main():
     ap.add_argument("--sdl", default=os.path.join(ROOT, "third_party", "SDL3", "lib", "x64", "SDL3.dll"))
     # 1.12.30 : PDFium (outils/pdfium/obtenir_pdfium.py le pose la).
     ap.add_argument("--pdfium", default=os.path.join(ROOT, "third_party", "pdfium", "win-x64", "pdfium.dll"))
+    # 1.12.31 : le moteur de l'IHM pour la page web en marche (bash outils/web/construire_web.sh le pose la).
+    ap.add_argument("--web", default=os.path.join(ROOT, "third_party", "web"))
     ap.add_argument("--iscc", default="")
     ap.add_argument("--sans-installateur", action="store_true")
     a = ap.parse_args()
@@ -191,6 +198,14 @@ def main():
     if not os.path.isfile(a.pdfium):
         sys.exit(f"{a.pdfium} manque : python3 outils/pdfium/obtenir_pdfium.py (third_party/pdfium/ORIGINE.txt)")
     shutil.copy2(a.pdfium, os.path.join(st, "pdfium.dll"))
+    # 1.12.31 : web\ - la page web exportee embarque ce moteur (le .wasm compresse) : l'IHM y tourne.
+    for f in WEB_FILES:
+        if not os.path.isfile(os.path.join(a.web, f)):
+            sys.exit(f"{os.path.join(a.web, f)} manque : bash outils/web/construire_web.sh (le moteur de l'IHM pour la page web)")
+    os.makedirs(os.path.join(st, "web"))
+    for f in WEB_FILES + WEB_EXTRAS:
+        if os.path.isfile(os.path.join(a.web, f)):
+            shutil.copy2(os.path.join(a.web, f), os.path.join(st, "web", f))
     n_res = 0
     for f in ("schneider_library.txt", "plc_catalog.txt"):
         os.makedirs(os.path.join(st, "resources"), exist_ok=True)
@@ -246,7 +261,7 @@ def main():
         write_text(os.path.join(lic, "stb.LICENSE"), stb[i:].replace("*/", "").strip() + "\n", bom=False)
     with open(os.path.join(ROOT, "installateur", "LISEZ-MOI.txt"), encoding="utf-8-sig") as f:
         write_text(os.path.join(st, "LISEZ-MOI.txt"), f.read().replace("{VERSION}", version))
-    print(f"staging : {exe_nom}, {exe_ihm_nom}, SDL3.dll, pdfium.dll, 0 DLL du runtime (statique), {n_res} ressource(s), {n_libs} fichier(s) de bibliotheque, 6 scripts")
+    print(f"staging : {exe_nom}, {exe_ihm_nom}, SDL3.dll, pdfium.dll, web\\, 0 DLL du runtime (statique), {n_res} ressource(s), {n_libs} fichier(s) de bibliotheque, 6 scripts")
 
     # ---- 2. le manifeste ----
     dlls = sorted(set(imported_dlls(os.path.join(st, exe_nom))) | set(imported_dlls(os.path.join(st, exe_ihm_nom))), key=str.lower)
