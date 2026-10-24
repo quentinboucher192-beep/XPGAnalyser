@@ -59,13 +59,44 @@ struct MouseMove   { gfx::Point pos; gfx::Point delta; KeyMods mods; };
 struct MouseDown   { gfx::Point pos; MouseButton button; int clickCount; KeyMods mods; };
 struct MouseUp     { gfx::Point pos; MouseButton button; KeyMods mods; };
 struct MouseWheel  { gfx::Point pos; float dx, dy; KeyMods mods; };
-struct KeyDown     { Key key; KeyMods mods; bool repeat; };
+// 1.12.31 : `layout` - LA TOUCHE TELLE QUE LA DISPOSITION DU CLAVIER L'ECRIT, SANS
+// MAJ. SDL rend la rangee des chiffres d'un AZERTY en chiffres (son option
+// french_numbers) : la touche 6/- arrive en Num6, ce que veulent les raccourcis
+// des chiffres (Ctrl+1, les touches des vues). `layout` dit Minus pour cette
+// touche : le zoom et les editeurs s'en servent (commandKey, zoomKeyStep).
+// Unknown : la meme que `key`, ou rien d'utile (une lettre accentuee).
+struct KeyDown     { Key key; KeyMods mods; bool repeat; Key layout{Key::Unknown}; };
 struct KeyUp       { Key key; KeyMods mods; };
 struct TextInput   { std::string utf8; };
 
 // 1.12.18 : la touche du menu contextuel - Menu, ou Maj+F10.
 [[nodiscard]] inline bool isContextMenuKey(const KeyDown& k) noexcept {
     return k.key == Key::Menu || (k.key == Key::F10 && k.mods.shift && !k.mods.ctrl && !k.mods.alt);
+}
+
+// 1.12.31 : LA TOUCHE D'UN RACCOURCI AVEC CTRL. Le signe que la disposition ecrit
+// passe avant le chiffre que SDL en a fait : Ctrl + la touche 6/- d'un AZERTY
+// est Ctrl+- (Revenir dans un code, le zoom ailleurs), comme Ctrl+- d'un QWERTY.
+// Sans Ctrl, la touche reste celle de SDL (un chiffre pour les touches des vues).
+[[nodiscard]] inline Key commandKey(const KeyDown& k) noexcept {
+    if (k.mods.ctrl && (k.layout == Key::Minus || k.layout == Key::Plus)) return k.layout;
+    return k.key;
+}
+
+// 1.12.31 : LES TOUCHES DU ZOOM, sur tous les claviers. Ctrl + plus (la touche
+// = avec ou sans Maj, le + du pave numerique, le + d'un QWERTZ) : +1 ; Ctrl +
+// moins (la rangee des chiffres d'un AZERTY comprise, le - du pave) : -1 ;
+// Ctrl+0 (la rangee ou le pave) : 0, revenir a 100 % ; toute autre touche :
+// kNotZoomKey. Ctrl+Maj+moins n'est pas le zoom (Ctrl+_ d'un QWERTY, Ctrl+6 d'un
+// AZERTY), ni Ctrl+Maj+0 ; Alt (AltGr) non plus.
+inline constexpr int kNotZoomKey = -99;
+[[nodiscard]] inline int zoomKeyStep(const KeyDown& k) noexcept {
+    if (!k.mods.ctrl || k.mods.alt) return kNotZoomKey;
+    const Key c = commandKey(k);
+    if (c == Key::Plus) return 1;
+    if (c == Key::Minus) return k.mods.shift ? kNotZoomKey : -1;
+    if (k.key == Key::Num0 && !k.mods.shift && !k.repeat) return 0;
+    return kNotZoomKey;
 }
 struct FocusChange { bool gained; };
 struct WindowResize{ gfx::Size size; float dpiScale; };

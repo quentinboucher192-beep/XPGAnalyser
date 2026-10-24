@@ -29,6 +29,7 @@ namespace ui {
 
     class Widget;
     using WidgetPtr = std::unique_ptr<Widget>;
+    struct ZoomMap;     // 1.12.30 : ui/Zoom.hpp (la correspondance de deux reperes)
 
     // ---------------------------------------------------------------------------
     //  Platform services the widget layer needs but must not link against.
@@ -98,16 +99,24 @@ namespace ui {
     // surfaceSize() rend la taille de SA surface et non celle de la fenetre
     // principale : une liste ou un menu s'y ouvre du bon cote et s'y referme au
     // clic a cote. Les portees s'imbriquent ; la sortie rend la precedente.
+    //  1.12.31 : `zoom` vrai - la portee d'un widget zoome (son repere agrandi) : la
+    //  surface y est vue de ce repere, mais la FENETRE ne change pas (windowSurfaceSize).
     class SurfaceScope {
     public:
-        explicit SurfaceScope(gfx::Size size) noexcept;
+        explicit SurfaceScope(gfx::Size size, bool zoom = false) noexcept;
         ~SurfaceScope();
         SurfaceScope(const SurfaceScope&) = delete;
         SurfaceScope& operator=(const SurfaceScope&) = delete;
     private:
         gfx::Size previous_;
         bool      hadPrevious_;
+        gfx::Size previousWindow_{};
+        bool      hadPreviousWindow_{false};
+        bool      zoom_{false};
     };
+    //  1.12.31 : la fenetre du moment (la principale, ou celle d'un onglet detache), en
+    //  pixels de sa surface, quel que soit le zoom des widgets traverses ({0,0} : inconnue).
+    [[nodiscard]] gfx::Size windowSurfaceSize();
 
     // 1.12.30 : LA MESURE DU TEXTE PENDANT UNE MISE EN PAGE ZOOMEE. Un widget
     // zoome (ZoomSupport::Scaled) se met en page dans son repere agrandi :
@@ -115,9 +124,11 @@ namespace ui {
     // taille dessinee, ramenee a ce repere - la meme que celle du dessin
     // (ui/Zoom.hpp, ZoomRenderer). Les portees s'imbriquent (les zooms se
     // multiplient) ; la sortie rend la precedente.
+    //  1.12.31 : `absolute` vrai - le zoom de la mesure EST `factor` (un ilot, voir
+    //  Widget : il se mesure a l'echelle de la surface, quel que soit le zoom de sa page).
     class MeasureZoomScope {
     public:
-        explicit MeasureZoomScope(float factor) noexcept;
+        explicit MeasureZoomScope(float factor, bool absolute = false) noexcept;
         ~MeasureZoomScope();
         MeasureZoomScope(const MeasureZoomScope&) = delete;
         MeasureZoomScope& operator=(const MeasureZoomScope&) = delete;
@@ -276,6 +287,14 @@ namespace ui {
         //  A 100 %, rien ne change : ni repere, ni renderer.
         //  Ctrl + molette sur un widget Scaled (hors d'un widget Native) demande un
         //  cran (setZoomRequestHandler : l'appli zoome la page entiere).
+        //  1.12.31 : LES ILOTS. Un widget Native sous un widget zoome (une page zoomee :
+        //  le code, la vue, le grafcet, le rack qu'elle contient) n'en prend pas le
+        //  zoom : la base le met en page et le dessine a l'echelle de la surface - son
+        //  repere EST celui de la surface (ses bornes : son cadre vu de la surface,
+        //  arrondi au pixel), il se dessine avec le renderer de la surface, s'y mesure,
+        //  et ses evenements y arrivent. Seul son zoom a lui compte. Un signal qui donne
+        //  une position la donne dans la surface (toSurface) ; un menu s'y ouvre par
+        //  PopupMenu::openAtSurface.
         [[nodiscard]] ZoomSupport zoomSupport() const noexcept { return zoomSupport_; }
         [[nodiscard]] bool zoomable() const noexcept { return zoomSupport_ != ZoomSupport::None; }
         void setZoomSupport(ZoomSupport s);
@@ -292,6 +311,12 @@ namespace ui {
         [[nodiscard]] gfx::Rect  toSurface(const gfx::Rect& own) const noexcept;
         [[nodiscard]] gfx::Point fromSurface(gfx::Point surface) const noexcept;
         [[nodiscard]] float      surfaceScale() const noexcept;        // le produit des zooms (1 : aucun)
+        //  1.12.31 : la correspondance de ce repere vers celui du parent, et vers la
+        //  surface (les ilots compris : celui d'un ilot vers la surface est l'identite).
+        [[nodiscard]] ZoomMap    mapToParent() const noexcept;
+        [[nodiscard]] ZoomMap    mapToSurface() const noexcept;
+        //  1.12.31 : vrai - un ilot (un widget Native sous un widget zoome, voir plus haut).
+        [[nodiscard]] bool       zoomIsland() const noexcept { return islandNow(); }
         //  Un evenement venu de la surface (l'hote : une liste ouverte, un menu)
         //  pour ce widget, ramene au repere de son parent.
         EventResult dispatchFromSurface(const InputEvent& ev);
@@ -331,6 +356,13 @@ namespace ui {
         void setFocusedInternal(bool f);
         // 1.12.30 : le zoom. Vrai : un repere agrandi (Scaled, zoom different de 1).
         [[nodiscard]] bool scaledNow() const noexcept { return zoomSupport_ == ZoomSupport::Scaled && zoomFactor_ != 1.f; }
+        // 1.12.31 : un ilot - un widget Native sous un widget zoome : son repere est celui
+        // de la surface (islandS_, islandT_ : du repere du parent vers la surface).
+        [[nodiscard]] bool islandNow() const noexcept {
+            return zoomSupport_ == ZoomSupport::Native && (islandS_ != 1.f || islandT_.x != 0.f || islandT_.y != 0.f);
+        }
+        [[nodiscard]] gfx::Rect islandRect(const gfx::Rect& frame) const noexcept;   // un cadre du parent, dans la surface
+        void refreshIsland();                                                        // a la mise en page
         [[nodiscard]] gfx::Point toParentSpace(gfx::Point own) const noexcept;    // le repere du parent
         [[nodiscard]] gfx::Point fromParentSpace(gfx::Point outer) const noexcept;
         [[nodiscard]] gfx::Rect  outerEventBounds() const;                        // eventBounds(), dans le repere du parent
@@ -340,6 +372,8 @@ namespace ui {
         std::string             id_;
         gfx::Rect               frame_{};     // 1.12.30 : le cadre donne par le parent
         float                   zoomFactor_{ 1.f };
+        float                   islandS_{ 1.f };      // 1.12.31 : un ilot (voir islandNow)
+        gfx::Point              islandT_{};
         ZoomSupport             zoomSupport_{ ZoomSupport::None };
         gfx::Rect               bounds_{};
         gfx::Edges              padding_{};

@@ -2,6 +2,7 @@
 #include "HmiComm.hpp"
 #include "HmiActionKinds.hpp"
 #include "HmiObjectAlarms.hpp"
+#include "HmiRoles.hpp"          // 1.12.31 : les cases de role Formule
 
 #include "HmiHistory.hpp"
 #include "../domain/ProjectModel.hpp"
@@ -1621,6 +1622,8 @@ std::vector<std::string> projectPlcPaths(const Project& p) {
                 if (!pr.expr.empty()) take(pr.expr);
                 else if (pr.value.find('{') != std::string::npos) take(pr.value);
                 else if ((pr.key == "variable" || pr.key == "xVariable" || pr.key == "feedback") && !pr.value.empty()) take(pr.value);
+                // 1.12.31 : une case de role Formule tapee sans fx (sa valeur est la formule : une fin de course...)
+                else if (roles::roleOf(o.kind, pr.key).role == roles::Role::Formula && !pr.value.empty()) take(pr.value);
             }
             takeActions(o.actions);
         }

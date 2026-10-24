@@ -4,7 +4,8 @@
 //
 //  Sans ecran :
 //  1. La base commune (project/ProjectArchive) : le manifeste ecrit puis relu, le base64,
-//     les chemins refuses au deballage, ce que l'archive laisse (cache, exports, corbeille).
+//     les chemins refuses au deballage, ce que l'archive laisse (les artefacts du build, exports,
+//     corbeille) et ce qu'elle prend (1.12.31 : le cache de construction).
 //  2. L'archive .xihm d'un vrai projet (bac/Armoire_Gaz, copie) : exporter, relire, deballer
 //     dans un dossier neuf ; fichier par fichier (octets et dates) et compte par compte, le
 //     projet rouvert est identique. Un fichier externe lie hors du dossier vient avec, et le
@@ -19,14 +20,22 @@
 //     cliquables, les alarmes, les variables, les scripts, la fiche ; un nom piege echappe) et
 //     celle du programme (le dossier du programme) ; l'archive dans la page reconstruit le
 //     projet a l'identique.
-//  7. Un projet passe en argument (le projet de demonstration, en copie) : l'aller-retour, et sa page.
+//  2 bis. 1.12.31 : le cache de construction voyage - exporter, deballer ailleurs, ouvrir : le build
+//     est a jour, rien a regenerer (ses artefacts refaits au deballage, octet pour octet) ; une source
+//     modifiee apres le deballage, un artefact altere : regeneres ; un fichier externe relie a sa copie :
+//     ce seul element ; une archive d'avant (sans cache) : tout se regenere, comme avant.
+//  7. Un projet passe en argument (le projet de demonstration, en copie) : l'aller-retour, et sa page ;
+//     1.12.31 : un build complet d'abord, le build a jour apres le deballage, et ce que pese le cache
+//     (l'archive et la page, avec et sans lui, et si ses artefacts voyageaient aussi).
 #include "../src/app/HmiWebPage.hpp"
+#include "../src/app/hmi/HmiBuild.hpp"      // 1.12.31 : l'etat du build, tel que l'arbre le montre
 #include "../src/core/AtomicFile.hpp"
 #include "../src/core/Edition.hpp"
 #include "../src/export/ProgramBook.hpp"
 #include "../src/hmi/HmiArchive.hpp"
 #include "../src/hmi/HmiAssets.hpp"
 #include "../src/hmi/HmiHistory.hpp"
+#include "../src/hmi/HmiPipeline.hpp"       // 1.12.31 : le cache de construction
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/project/ApiArchive.hpp"
 #include "../src/project/ProjectArchive.hpp"
@@ -39,6 +48,9 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <memory>
+#include <optional>
+#include <set>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -53,9 +65,16 @@ int checks = 0;
 
 void check(bool ok, const std::string& what) {
     ++checks;
+    // 1.12.31 : ECHANGES_TEST_TOUT=1 dit aussi ce qui passe (les comptes du cache de construction, par exemple).
+    static const bool all = [] {
+        const char* e = std::getenv("ECHANGES_TEST_TOUT");
+        return e && *e == '1';
+    }();
     if (!ok) {
         ++failures;
         std::printf("ECHEC : %s\n", what.c_str());
+    } else if (all) {
+        std::printf("  ok : %s\n", what.c_str());
     }
 }
 
@@ -190,9 +209,16 @@ void baseCommune() {
           "les chemins qui sortiraient du dossier sont refuses (.., absolu, lecteur, \\, vide)");
 
     const pa::CollectOptions all{true, true}, lean{false, false};
-    check(pa::excluded(".xpg/build/build-cache.txt", all) && pa::excluded("exports/dossier.pdf", all) && pa::excluded("ihm/corbeille/0001-a.png", all)
+    check(pa::excluded(".xpg/build/ihm/08-vues/vue_12-Vue.txt", all) && pa::excluded(".xpg/build/ihm", all) && pa::excluded(".xpg/build/build.lock", all)
+              && pa::excluded(".xpg/build/build-cache.txt.bak", all) && pa::excluded(".xpg/build/build-cache.txt.tmp", all)
+              && pa::excluded("exports/dossier.pdf", all) && pa::excluded("ihm/corbeille/0001-a.png", all)
               && pa::excluded("ihm/vues/0001-a.vue.tmp", all) && pa::excluded("copie.xihm", all) && pa::excluded("sous/autre.XAPI", all),
-          "laisse : le cache, les exports, la corbeille, les temporaires, les archives");
+          "laisse : les artefacts du build, son verrou, la copie de secours du cache, les exports, la corbeille, les temporaires, les archives");
+    std::string why;
+    check(pa::excluded(".xpg/build/ihm/08-vues/vue_12-Vue.txt", all, &why) && why.find("refaits au d\xC3\xA9" "ballage") != std::string::npos,
+          "... et pourquoi : les artefacts, refaits au deballage (" + why + ")");
+    check(!pa::excluded(".xpg/build/build-cache.txt", all) && !pa::excluded(".xpg/build", all) && !pa::excluded(".xpg/build/build-cache.txt", lean),
+          "1.12.31 : prend le cache de construction (build-cache.txt), meme sans versions ni historique");
     check(!pa::excluded(".xpg/simulation/remanence.txt", all) && !pa::excluded("ihm/historique-edition/0003.txt", all)
               && !pa::excluded("versions/index.txt", all) && !pa::excluded("ihm/historique/mesures.csv", all)
               && !pa::excluded("project.lock", all) && !pa::excluded("src/MAST.XPG", all),
@@ -209,8 +235,11 @@ void archiveIhm(const fs::path& bac) {
     core::setEdition(core::Edition::Ihm);
     const fs::path src = scratch() / "ihm" / "Armoire_Gaz";
     copyFolder(bac, src);
-    // Ce que l'archive laisse : un cache, une corbeille, une archive posee dans le dossier.
+    // Ce que l'archive laisse : les artefacts et le verrou du build, une corbeille, une archive posee dans le
+    // dossier. 1.12.31 : le cache (build-cache.txt) vient avec.
     writeAll(src / ".xpg" / "build" / "build-cache.txt", "cache");
+    writeAll(src / ".xpg" / "build" / "build.lock", "verrou pid=4120\n");
+    writeAll(src / ".xpg" / "build" / "ihm" / "08-vues" / "vue_3-Vue_A.txt", "artefact\n");
     writeAll(src / ".xpg" / "simulation" / "remanence.txt", "remanence 1\nfin\n");
     writeAll(src / "ihm" / "corbeille" / "0099-vieux.png", "vieux");
     writeAll(src / "ihm" / "historique-edition" / "0003.txt", "historique des objets\nfin\n");
@@ -234,7 +263,7 @@ void archiveIhm(const fs::path& bac) {
     check(static_cast<bool>(hmi::exportProjectArchive(src.string(), xihm.string(), opt, &out)), "exporter l'archive .xihm");
     check(fs::exists(xihm) && out.archiveBytes == fs::file_size(xihm), "le fichier .xihm, de la taille annoncee");
     bool manifest = false, card = false, views = false, data = false, versions = false, sim = false, edits = false, ext = false,
-         cache = false, trash = false, exports = false, nested = false;
+         cache = false, artifacts = false, trash = false, exports = false, nested = false;
     for (const auto& e : out.entries) {
         card = card || e.path == "project.xpgproj";
         views = views || e.path.rfind("ihm/vues/", 0) == 0;
@@ -243,7 +272,8 @@ void archiveIhm(const fs::path& bac) {
         sim = sim || e.path == ".xpg/simulation/remanence.txt";
         edits = edits || e.path == "ihm/historique-edition/0003.txt";
         ext = ext || e.path.rfind("_externes/", 0) == 0;
-        cache = cache || e.path.rfind(".xpg/build/", 0) == 0;
+        cache = cache || e.path == ".xpg/build/build-cache.txt";
+        artifacts = artifacts || (e.path.rfind(".xpg/build/", 0) == 0 && e.path != ".xpg/build/build-cache.txt");
         trash = trash || e.path.rfind("ihm/corbeille/", 0) == 0;
         exports = exports || e.path.rfind("exports/", 0) == 0;
         nested = nested || e.path == "ancienne.xihm";
@@ -251,7 +281,8 @@ void archiveIhm(const fs::path& bac) {
     (void)manifest;
     check(card && views && data && versions && sim && edits, "l'archive prend la fiche, les vues, les donnees, les versions, la simulation, l'historique des objets");
     check(ext, "l'archive prend le fichier externe lie hors du dossier (_externes/)");
-    check(!cache && !trash && !exports && !nested, "l'archive laisse le cache, la corbeille, les exports et l'archive posee dedans");
+    check(cache, "1.12.31 : l'archive prend le cache de construction (build-cache.txt)");
+    check(!artifacts && !trash && !exports && !nested, "l'archive laisse les artefacts et le verrou du build, la corbeille, les exports et l'archive posee dedans");
     check(!out.skipped.empty(), "ce qu'elle laisse est dit (" + std::to_string(out.skipped.size()) + " ligne(s))");
 
     auto read = pa::readFile(xihm.string());
@@ -322,6 +353,243 @@ void archiveIhm(const fs::path& bac) {
         check(c && hmi::unpackProjectArchive(*c, dest3.string(), &in3) && in3.coherent(),
               "sans versions ni historique : se deballe, coherente (" + (in3.problems.empty() ? std::string{} : in3.problems.front()) + ")");
         check(!fs::exists(dest3 / "versions") && !fs::exists(dest3 / "ihm" / "historique"), "... et sans eux");
+    }
+}
+
+// ================================================ 2 bis. le cache de construction ==
+//  1.12.31 : L'ARCHIVE EMPORTE LE CACHE DE CONSTRUCTION. Comment il decide qu'il est valable : par
+//  EMPREINTES seulement (hmi::pipeline - le contenu, la configuration, l'interface de chaque element, celles
+//  de ses dependances, la version du generateur, et l'empreinte de chaque artefact, a un chemin relatif) ; ni
+//  les dates ni un chemin absolu. Deballe ailleurs, il vaut donc ce qu'il valait - et les artefacts, qui se
+//  deduisent du projet, sont refaits au deballage, chacun a l'empreinte que le cache a retenue.
+namespace pl = hmi::pipeline;
+
+pl::Report buildIn(const hmi::Project& p, const fs::path& folder, pl::Mode mode = pl::Mode::Start) {
+    pl::Options o;
+    o.buildFolder = pl::buildFolderOf(folder.string());
+    o.projectFolder = folder.string();
+    o.now = "2026-10-24 10:00:00";
+    pl::Request request;
+    request.mode = mode;
+    return pl::run(p, pl::ApiInfo{}, request, o);
+}
+
+// L'analyse de l'arbre et de Demarrer : le cache du disque, les artefacts du disque.
+pl::Analysis analysisOf(const hmi::Project& p, const fs::path& folder) {
+    const std::string bf = pl::buildFolderOf(folder.string());
+    return pl::analyse(pl::collect(p, pl::ApiInfo{}), pl::loadCache(bf), pl::diskArtifacts(bf));
+}
+
+// Les fichiers du build (sans le verrou ni la copie de secours) : chemin relatif -> contenu.
+std::map<std::string, std::string> buildFiles(const fs::path& folder) {
+    std::map<std::string, std::string> out;
+    const fs::path bf = pl::buildFolderOf(folder.string());
+    std::error_code ec;
+    for (fs::recursive_directory_iterator it(bf, ec), end; !ec && it != end; it.increment(ec)) {
+        if (!it->is_regular_file()) continue;
+        const std::string rel = fs::relative(it->path(), bf).generic_string();
+        if (rel == "build.lock" || (rel.size() > 4 && rel.compare(rel.size() - 4, 4, ".bak") == 0)) continue;
+        out[rel] = readAll(it->path());
+    }
+    return out;
+}
+
+std::string statusText(const pl::Analysis& a) {
+    std::size_t todo = 0;
+    std::string first;
+    for (std::size_t k = 0; k < a.items.size(); ++k)
+        if (a.items[k].status != pl::Status::UpToDate) {
+            if (todo++ == 0) first = a.elements[k].key + (a.items[k].reasons.empty() ? std::string{} : " (" + a.items[k].reasons.front() + ")");
+        }
+    return std::to_string(a.elements.size()) + " elements, " + std::to_string(todo) + " a refaire" + (first.empty() ? std::string{} : ", dont " + first)
+         + (a.fullReason.empty() ? std::string{} : " ; tout : " + a.fullReason);
+}
+
+void cacheDeConstruction(const fs::path& bac) {
+    std::printf("2 bis. le cache de construction : exporter, deballer ailleurs, le build est a jour\n");
+    core::setEdition(core::Edition::Ihm);
+    const fs::path src = scratch() / "cache" / "Armoire_Gaz";
+    copyFolder(bac, src);
+    auto proj = hmi::load(src.string());
+    check(static_cast<bool>(proj), "le projet du cache se relit");
+    if (!proj) return;
+    // Le build complet (Demarrer) du projet d'origine : son cache et ses artefacts sur le disque.
+    const auto first = buildIn(*proj, src);
+    const auto a0 = analysisOf(*proj, src);
+    check(first.generated > 0 && a0.upToDate(), "le projet d'origine construit : " + std::to_string(first.generated) + " element(s) generes, "
+                                                    + std::to_string(first.compiled) + " compiles ; a jour (" + statusText(a0) + ")");
+    const auto originBuild = buildFiles(src);
+
+    // ---- exporter : le cache vient, ses artefacts non (ils se refont au deballage)
+    hmi::ArchiveReport out;
+    auto zip = hmi::projectArchive(src.string(), hmi::ProjectArchiveOptions{}, &out);
+    check(static_cast<bool>(zip), "exporter le projet construit");
+    if (!zip) return;
+    bool cacheIn = false, artifactsIn = false, told = false;
+    for (const auto& e : out.entries) {
+        cacheIn = cacheIn || e.path == ".xpg/build/build-cache.txt";
+        artifactsIn = artifactsIn || (e.path.rfind(".xpg/build/", 0) == 0 && e.path != ".xpg/build/build-cache.txt");
+    }
+    for (const auto& sk : out.skipped) told = told || (sk.find(".xpg/build/") != std::string::npos && sk.find("refaits") != std::string::npos);
+    check(cacheIn && !artifactsIn && told, "l'archive prend build-cache.txt, laisse les artefacts, et le dit");
+    auto contents = pa::read(*zip);
+    check(contents && contents->intact(), "l'archive se relit, intacte");
+    if (!contents) return;
+
+    // ---- deballer ailleurs : les artefacts refaits, octet pour octet ceux du build d'origine
+    const fs::path dest = scratch() / "cache" / "ailleurs" / "Projets" / "Armoire_Gaz";
+    std::error_code ec;
+    fs::remove_all(dest.parent_path(), ec);
+    hmi::ArchiveReport in;
+    check(static_cast<bool>(hmi::unpackProjectArchive(*contents, dest.string(), &in)) && in.coherent(), "deballer dans un autre dossier");
+    check(in.buildCache && in.artifacts == originBuild.size() - 1 && in.stale == 0,
+          "le cache a suivi : " + std::to_string(in.artifacts) + " artefact(s) refaits (" + std::to_string(originBuild.size() - 1)
+              + " attendus), aucun element a refaire (" + std::to_string(in.stale) + ")");
+    const auto unpackedBuild = buildFiles(dest);
+    std::size_t differ = 0;
+    for (const auto& [rel, text] : originBuild) {
+        const auto it = unpackedBuild.find(rel);
+        if (it == unpackedBuild.end() || it->second != text) {
+            if (differ++ < 4) std::printf("  build : %s %s\n", rel.c_str(), it == unpackedBuild.end() ? "manque" : "differe");
+        }
+    }
+    check(differ == 0 && unpackedBuild.size() == originBuild.size(), "le dossier .xpg/build deballe : fichier par fichier, octet pour octet celui d'origine ("
+                                                                         + std::to_string(unpackedBuild.size()) + " fichiers)");
+
+    // ---- ouvrir : a jour, rien a regenerer ni a compiler (l'analyse, Demarrer, l'arbre de l'application)
+    auto reopened = hmi::load(dest.string());
+    check(static_cast<bool>(reopened), "le projet deballe se rouvre");
+    if (!reopened) return;
+    const auto a1 = analysisOf(*reopened, dest);
+    check(a1.upToDate() && a1.fullReason.empty(), "rouvert ailleurs : a jour (" + statusText(a1) + ")");
+    {
+        app::HmiBuildManager manager([&]() -> std::optional<app::HmiBuildSetup> {
+            app::HmiBuildSetup setup;
+            setup.project = std::make_shared<const hmi::Project>(*reopened);
+            setup.projectFolder = dest.string();
+            return setup;
+        });
+        manager.analyseNow();
+        (void)manager.poll();
+        manager.wait();
+        const auto st = manager.status();
+        check(st && st->upToDate() && st->headline().rfind("Projet \xC3\xA0 jour", 0) == 0,
+              "l'arbre et la barre d'etat : " + (st ? st->headline() : std::string("?")));
+    }
+    const auto r1 = buildIn(*reopened, dest);
+    check(r1.ok && r1.upToDate && r1.generated == 0 && r1.compiled == 0 && r1.tasks == 0,
+          "Demarrer : rien a generer ni a compiler (" + std::to_string(r1.generated) + " genere(s), " + std::to_string(r1.compiled) + " compile(s))");
+
+    // ---- une source modifiee apres le deballage : regeneree, elle seule (jamais un cache perime pris pour bon)
+    {
+        hmi::Id vid = hmi::kNoId;
+        for (auto& v : reopened->views) {
+            if (v.role != "vue") continue;
+            for (auto& o : v.objects)
+                if (const auto* t = o.find("text"); t && t->expr.empty()) {
+                    o.set("text", t->value + " (modifi\xC3\xA9)");
+                    vid = v.id;
+                    break;
+                }
+            if (vid != hmi::kNoId) break;
+        }
+        check(vid != hmi::kNoId && static_cast<bool>(hmi::save(*reopened, dest.string())), "une source modifiee apres le deballage (le texte d'un objet d'une vue)");
+        auto again = hmi::load(dest.string());
+        if (!again) return;
+        const auto a2 = analysisOf(*again, dest);
+        std::set<std::string> todo;
+        bool ofThatView = true;
+        for (std::size_t k = 0; k < a2.items.size(); ++k)
+            if (a2.items[k].status != pl::Status::UpToDate) {
+                todo.insert(a2.elements[k].key);
+                ofThatView = ofThatView && (a2.elements[k].id == vid || a2.elements[k].owner == vid);
+            }
+        check(!a2.upToDate() && !todo.empty() && ofThatView, "l'analyse le voit : " + std::to_string(todo.size()) + " element(s) de cette vue a refaire, rien d'autre ("
+                                                                 + statusText(a2) + ")");
+        const auto r2 = buildIn(*again, dest);
+        std::set<std::string> generated;
+        for (const auto& l : r2.log)
+            if (l.category == "G\xC3\xA9n\xC3\xA9ration" && !l.element.empty() && l.severity == pl::Severity::Information) generated.insert(l.element);
+        check(r2.ok && !generated.empty() && generated == todo, "Demarrer les regenere, et rien d'autre (" + std::to_string(generated.size()) + " genere(s))");
+        check(analysisOf(*again, dest).upToDate(), "puis a jour");
+    }
+    // ---- un artefact altere a la main, un autre supprime : leurs elements sont regeneres
+    {
+        auto again = hmi::load(dest.string());
+        if (!again) return;
+        const auto cache = pl::loadCache(pl::buildFolderOf(dest.string()));
+        std::vector<std::string> keys;
+        for (const auto& [key, en] : cache.entries)
+            if (!en.artifact.empty() && keys.size() < 2) {
+                const fs::path file = fs::path(pl::buildFolderOf(dest.string())) / en.artifact;
+                if (keys.empty()) writeAll(file, readAll(file) + "# retouche\n");
+                else fs::remove(file, ec);
+                keys.push_back(key);
+            }
+        const auto a3 = analysisOf(*again, dest);
+        const auto* i0 = keys.size() > 0 ? a3.item(keys[0]) : nullptr;
+        const auto* i1 = keys.size() > 1 ? a3.item(keys[1]) : nullptr;
+        check(i0 && i0->status == pl::Status::ArtifactMissing && i1 && i1->status == pl::Status::ArtifactMissing,
+              "un artefact retouche, un autre supprime : tous deux \"artefact absent ou altere\"");
+        const auto r3 = buildIn(*again, dest);
+        check(r3.ok && r3.generated >= 2 && analysisOf(*again, dest).upToDate(), "Demarrer les regenere, puis a jour");
+    }
+
+    // ---- un fichier externe lie hors du projet : relie a sa copie au deballage - ce seul element est a refaire
+    {
+        const fs::path withLink = scratch() / "cache" / "lien" / "Armoire_Gaz";
+        copyFolder(src, withLink);
+        const fs::path outside = scratch() / "cache" / "lien" / "Partage" / "consignes.csv";
+        writeAll(outside, "Nom;Valeur\nP1;7.5\n");
+        auto p = hmi::load(withLink.string());
+        if (!p) return;
+        auto f = hmi::linkExternal(*p, "consignes", hmi::ExternalKind::Csv, outside.string(), "", withLink.string());
+        p->assets.files.push_back(f);
+        check(static_cast<bool>(hmi::save(*p, withLink.string())), "un lien hors du dossier, enregistre");
+        auto p2 = hmi::load(withLink.string());
+        if (!p2) return;
+        (void)buildIn(*p2, withLink);
+        check(analysisOf(*p2, withLink).upToDate(), "construit : a jour");
+        auto z = hmi::projectArchive(withLink.string(), hmi::ProjectArchiveOptions{}, nullptr);
+        auto c2 = z ? pa::read(*z) : core::Result<pa::Contents>(core::fail(core::ErrorCode::InvalidArgument, "zip"));
+        fs::remove(outside, ec);
+        const fs::path d2 = scratch() / "cache" / "lien" / "out" / "Armoire_Gaz";
+        hmi::ArchiveReport in2;
+        const bool unpacked2 = c2 && static_cast<bool>(hmi::unpackProjectArchive(*c2, d2.string(), &in2));
+        check(unpacked2 && in2.buildCache && in2.stale == 1,
+              "deballe ailleurs, le lien relie a sa copie : un element a refaire (" + std::to_string(in2.stale) + "), dit");
+        auto p3 = hmi::load(d2.string());
+        if (p3) {
+            const auto a4 = analysisOf(*p3, d2);
+            std::size_t todo = 0;
+            std::string which;
+            for (std::size_t k = 0; k < a4.items.size(); ++k)
+                if (a4.items[k].status != pl::Status::UpToDate) { ++todo; which = a4.elements[k].key; }
+            check(todo == 1 && which == "externe:" + std::to_string(f.id), "l'analyse : ce seul element (" + which + "), le reste est a jour");
+        }
+    }
+
+    // ---- une archive d'avant (sans cache, comme la 1.12.30) : elle s'ouvre, et tout se regenere, comme avant
+    {
+        auto items = pa::collectFolder(src.string(), pa::CollectOptions{});
+        if (!items) return;
+        std::erase_if(*items, [](const pa::Item& it) { return it.path.rfind(".xpg/build/", 0) == 0; });
+        pa::Manifest m = contents->manifest;
+        m.tool = "IHM Studio 1.12.30";
+        auto old = pa::pack(m, *items);
+        auto c3 = old ? pa::read(*old) : core::Result<pa::Contents>(core::fail(core::ErrorCode::InvalidArgument, "pack"));
+        const fs::path d3 = scratch() / "cache" / "avant" / "Armoire_Gaz";
+        hmi::ArchiveReport in3;
+        check(c3 && hmi::unpackProjectArchive(*c3, d3.string(), &in3) && in3.coherent() && !in3.buildCache && in3.artifacts == 0,
+              "une archive sans cache (1.12.30) : deballee, coherente, pas de cache");
+        auto p4 = hmi::load(d3.string());
+        if (p4) {
+            const auto a5 = analysisOf(*p4, d3);
+            check(!a5.upToDate() && !a5.fullReason.empty(), "rouverte : tout est a refaire (" + a5.fullReason + ")");
+            const auto r5 = buildIn(*p4, d3);
+            check(r5.ok && r5.generated == a5.elements.size() && analysisOf(*p4, d3).upToDate(),
+                  "Demarrer regenere tout (" + std::to_string(r5.generated) + " / " + std::to_string(a5.elements.size()) + "), puis a jour");
+        }
     }
 }
 
@@ -439,6 +707,7 @@ void ancienneArchive(const fs::path& bac) {
     hmi::ArchiveReport in;
     check(static_cast<bool>(hmi::unpackProjectArchive(*c, dest.string(), &in)), "deballee dans un dossier neuf");
     check(in.coherent(), "coherente (" + (in.problems.empty() ? std::string{} : in.problems.front()) + ")");
+    check(!in.buildCache && in.artifacts == 0 && !fs::exists(dest / ".xpg" / "build"), "1.12.31 : pas de cache de construction (le premier build refera tout)");
     check(project::ProjectStore::isProjectFolder(dest.string()), "le dossier recoit sa fiche (project.xpgproj) : c'est un projet");
     auto m = project::ProjectStore::readManifest(dest.string());
     check(m && m->edition == "ihm" && m->name == "Armoire_Gaz", "la fiche : un projet IHM, au nom de l'archive");
@@ -525,6 +794,44 @@ void archiveApi(const fs::path& bac, const fs::path& libs) {
         for (const auto& n : r2.notes) said = said || n.find("page web") != std::string::npos;
         check(m2 && m2->webPage && m2->webFile.empty() && said,
               "deballe ailleurs : la page web reste a faire, a cote du nouveau dossier (le chemin de l'autre poste part, et c'est dit)");
+    }
+
+    // 1.12.31 : un dossier qui a aussi son IHM (un projet de la 1.11, ouvert par les deux), construite dans IHM Studio -
+    // le .xapi prend le cache de son build (pas ses artefacts) ; au deballage, API Studio les refait d'apres lui
+    // (ProjectExchange, comme ici) : IHM Studio trouve le projet a jour.
+    {
+        const fs::path built = scratch() / "api" / "cache" / "Armoire_Gaz";
+        copyFolder(bac, built);
+        core::setEdition(core::Edition::Ihm);
+        auto hp = hmi::load(built.string());
+        check(static_cast<bool>(hp), "1.12.31 : l'IHM du dossier se relit");
+        if (!hp) return;
+        (void)buildIn(*hp, built);
+        const bool builtOk = analysisOf(*hp, built).upToDate();
+        core::setEdition(core::Edition::Api);
+        pa::ApiOptions o3;
+        o3.macros = false;
+        pa::ApiReport out3;
+        auto zip3 = pa::apiArchive(built.string(), o3, &out3);
+        bool cacheIn = false, artifactsIn = false;
+        for (const auto& e : out3.manifest.entries) {
+            cacheIn = cacheIn || e.path == ".xpg/build/build-cache.txt";
+            artifactsIn = artifactsIn || (e.path.rfind(".xpg/build/", 0) == 0 && e.path != ".xpg/build/build-cache.txt");
+        }
+        check(builtOk && zip3 && cacheIn && !artifactsIn, "1.12.31 : son IHM construite, le .xapi prend le cache du build, pas ses artefacts");
+        if (!zip3) return;
+        auto back3 = pa::read(*zip3);
+        const fs::path dest3 = scratch() / "api" / "cache" / "out" / "Armoire_Gaz";
+        pa::ApiReport in3;
+        check(back3 && static_cast<bool>(pa::unpackApiArchive(*back3, dest3.string(), pa::UnpackOptions{}, &in3)), "1.12.31 : deballe dans API Studio");
+        pl::Restored rs;
+        if (auto hp3 = hmi::load(dest3.string())) rs = pl::restoreArtifacts(*hp3, {}, pl::buildFolderOf(dest3.string()));
+        core::setEdition(core::Edition::Ihm);
+        auto hp4 = hmi::load(dest3.string());
+        const auto a4 = hp4 ? analysisOf(*hp4, dest3) : pl::Analysis{};
+        check(rs.cache && rs.written > 0 && rs.stale == 0 && hp4 && a4.upToDate(),
+              "1.12.31 : ses artefacts refaits au deballage (" + std::to_string(rs.written) + ") : IHM Studio le trouve a jour (" + statusText(a4) + ")");
+        core::setEdition(core::Edition::Api);
     }
 }
 
@@ -743,9 +1050,23 @@ void pagesWeb(const fs::path& bac) {
 }
 
 // ====================================================== 6. un projet en argument ==
-void allerRetour(const fs::path& folder) {
-    std::printf("6. l'aller-retour d'un vrai projet : %s\n", folder.string().c_str());
+void allerRetour(const fs::path& given) {
+    std::printf("7. l'aller-retour d'un vrai projet : %s\n", given.string().c_str());
     core::setEdition(core::Edition::Ihm);
+    // 1.12.31 : une copie, construite d'abord (Demarrer) - son cache de construction est celui du jour.
+    const fs::path folder = scratch() / "demo" / "src" / given.filename();
+    copyFolder(given, folder);
+    {
+        auto p0 = hmi::load(folder.string());
+        check(static_cast<bool>(p0), "le projet se relit pour son build");
+        if (!p0) return;
+        const auto b0 = std::chrono::steady_clock::now();
+        const auto r0 = buildIn(*p0, folder);
+        const auto b1 = std::chrono::steady_clock::now();
+        const auto a0 = analysisOf(*p0, folder);
+        std::printf("   build : %zu elements, %zu generes, %zu compiles, %d erreur(s) en %lld ms ; %s\n", a0.elements.size(), r0.generated, r0.compiled,
+                    r0.errors, static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(b1 - b0).count()), statusText(a0).c_str());
+    }
     hmi::ArchiveReport out;
     hmi::ProjectArchiveOptions opt;
     const fs::path xihm = scratch() / "demo" / (folder.filename().string() + ".xihm");
@@ -763,6 +1084,19 @@ void allerRetour(const fs::path& folder) {
     const auto t2 = std::chrono::steady_clock::now();
     check(in.coherent(), "controle coherent (" + (in.problems.empty() ? std::string{} : in.problems.front()) + ")");
     check(sameFolders(folder, dest, "demo"), "fichier par fichier, octets et dates : identique");
+    // 1.12.31 : le build deballe en est au meme point que celui d'origine (a jour s'il l'etait).
+    {
+        auto po = hmi::load(folder.string());
+        auto pd = hmi::load(dest.string());
+        if (po && pd) {
+            const auto ao = analysisOf(*po, folder), ad = analysisOf(*pd, dest);
+            bool same = ao.items.size() == ad.items.size() && ao.fullReason == ad.fullReason;
+            for (std::size_t k = 0; same && k < ao.items.size(); ++k) same = ao.items[k].status == ad.items[k].status;
+            check(in.buildCache && in.stale == 0 && same, "le build deballe : au meme point que celui d'origine, element par element ("
+                                                              + std::to_string(in.artifacts) + " artefacts refaits ; " + statusText(ad) + ")");
+            check(!ao.upToDate() || ad.upToDate(), "construit a jour : rouvert a jour");
+        }
+    }
     std::size_t files = 0;
     std::uint64_t bytes = 0;
     for (const auto& e : out.entries) { ++files; bytes += e.bytes; }
@@ -803,6 +1137,53 @@ void allerRetour(const fs::path& folder) {
         hmi::ArchiveReport in2;
         check(static_cast<bool>(hmi::unpackProjectArchive(*c, dest2.string(), &in2)) && in2.coherent(), "importer depuis sa page : coherent");
         check(sameFolders(folder, dest2, "demo-page"), "importer depuis sa page : identique, fichier par fichier");
+        check(in2.buildCache && in2.stale == 0, "importer depuis sa page : le cache de construction a suivi");
+    }
+    // 1.12.31 : CE QUE PESE LE CACHE - l'archive et la page, sans lui (comme la 1.12.30), avec lui (build-cache.txt,
+    // ses artefacts refaits au deballage), et si ses artefacts voyageaient aussi ; avec et sans l'historique.
+    const auto b64 = [](std::size_t n) {
+        std::vector<std::uint8_t> zeros(n);
+        return pa::base64(zeros.data(), zeros.size()).size();
+    };
+    for (const bool lean : {false, true}) {
+        auto items = pa::collectFolder(folder.string(), pa::CollectOptions{!lean, !lean});
+        if (!items) continue;
+        pa::Manifest m = read->manifest;
+        auto with = pa::pack(m, *items);
+        std::uint64_t cacheRaw = 0;
+        for (const auto& it : *items)
+            if (it.path == ".xpg/build/build-cache.txt") cacheRaw = it.data->size();
+        auto noCache = *items;
+        std::erase_if(noCache, [](const pa::Item& it) { return it.path.rfind(".xpg/build/", 0) == 0; });
+        auto without = pa::pack(m, noCache);
+        auto all = *items;
+        std::uint64_t artifactsRaw = 0;
+        std::size_t artifacts = 0;
+        const fs::path bf = pl::buildFolderOf(folder.string());
+        for (fs::recursive_directory_iterator it(bf, ec), endIt; !ec && it != endIt; it.increment(ec)) {
+            if (!it->is_regular_file()) continue;
+            const std::string rel = ".xpg/build/" + fs::relative(it->path(), bf).generic_string();
+            if (rel == ".xpg/build/build-cache.txt" || rel.find(".bak") != std::string::npos || rel.find("build.lock") != std::string::npos) continue;
+            pa::Item a;
+            if (!pa::readItem(it->path().string(), a)) continue;
+            a.path = rel;
+            artifactsRaw += a.data->size();
+            ++artifacts;
+            all.push_back(std::move(a));
+        }
+        auto heavy = pa::pack(m, all);
+        if (!with || !without || !heavy) continue;
+        const std::size_t pageNo = html.size() - b64(archive.size()) + b64(without->size());
+        std::printf("   %s : cache build-cache.txt %s (brut) ; %zu artefacts %s (brut)\n", lean ? "sans versions ni historique" : "avec versions et historique",
+                    pa::sizeText(cacheRaw).c_str(), artifacts, pa::sizeText(artifactsRaw).c_str());
+        std::printf("     archive : sans cache %s ; avec le cache %s (+%s) ; si les artefacts voyageaient %s (+%s)\n", pa::sizeText(without->size()).c_str(),
+                    pa::sizeText(with->size()).c_str(), pa::sizeText(with->size() - without->size()).c_str(), pa::sizeText(heavy->size()).c_str(),
+                    pa::sizeText(heavy->size() - without->size()).c_str());
+        std::printf("     page web : sans cache %s ; avec le cache %s (+%s) ; si les artefacts voyageaient %s (+%s)\n", pa::sizeText(pageNo).c_str(),
+                    pa::sizeText(pageNo - b64(without->size()) + b64(with->size())).c_str(),
+                    pa::sizeText(b64(with->size()) - b64(without->size())).c_str(),
+                    pa::sizeText(pageNo - b64(without->size()) + b64(heavy->size())).c_str(),
+                    pa::sizeText(b64(heavy->size()) - b64(without->size())).c_str());
     }
     // 1.12.31 : sa page EN MARCHE (le moteur web : XPG_WEB_DIR, sinon web/ a cote du programme).
     if (const std::string web = app::webBundleFolder(); !web.empty()) {
@@ -832,6 +1213,7 @@ int main(int argc, char** argv) {
     baseCommune();
     if (fs::exists(bac / "project.xpgproj")) {
         archiveIhm(bac);
+        cacheDeConstruction(bac);         // 1.12.31 : le cache de construction voyage
         archivesRefusees();
         ancienneArchive(bac);
         archiveApi(bac, libs);

@@ -953,6 +953,12 @@ namespace ui {
         void setItems(std::vector<Item> items);
         // `surface` is the window size, used to keep the menu on screen.
         void openAt(gfx::Point where, gfx::Size surface);
+        // 1.12.31 : ouvert a un point de la SURFACE (celui que donne un signal : voir
+        // Widget.hpp) - ramene au repere du menu (une page zoomee), et garde dans la fenetre.
+        void openAtSurface(gfx::Point surfacePoint);
+        // 1.12.31 : ouvert a un point de son repere (celui du widget qui l'a pour enfant),
+        // garde dans la fenetre - meme dans une page zoomee (la fenetre vue de son repere).
+        void openInWindow(gfx::Point where);
         // 1.12.18 : ouvert au clavier (Maj+F10, la touche Menu) - la premiere
         // entree en surbrillance et les lettres soulignees d'emblee.
         void openFromKeyboard(gfx::Point where, gfx::Size surface);

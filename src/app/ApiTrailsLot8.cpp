@@ -48,7 +48,12 @@ struct MainAnalysisScreen::ApiTrails::Lot8::Kit {
         while (top->parent()) top = top->parent();
         return top == s.widgetRoot();
     }
-    static bool nodeRow(Screen& s, ui::NodeId node, Rect& r) { return s.explorer_ && node != ui::kInvalidNode && s.explorer_->rowRect(node, r); }
+    // 1.12.31 : les cadres que la bulle eclaire sont A L'ECRAN (l'arbre zoome, une page zoomee : toSurface).
+    static bool nodeRow(Screen& s, ui::NodeId node, Rect& r) {
+        if (!s.explorer_ || node == ui::kInvalidNode || !s.explorer_->rowRect(node, r)) return false;
+        r = s.explorer_->toSurface(r);
+        return true;
+    }
     // Un enfant d'un dossier de la racine (Simulation, IHM), par son genre ;
     // le dossier lui-meme sinon.
     static ui::NodeId childOf(Screen& s, ui::NodeId folder, NK kind) {
@@ -82,7 +87,7 @@ struct MainAnalysisScreen::ApiTrails::Lot8::Kit {
     static std::function<bool(Rect&)> bar(Screen& s, std::string part) {
         return [&s, part](Rect& r) {
             if (!s.topBar_) return false;
-            r = s.topBar_->partRect(part);
+            r = s.topBar_->toSurface(s.topBar_->partRect(part));
             return !r.empty();
         };
     }
@@ -92,7 +97,7 @@ struct MainAnalysisScreen::ApiTrails::Lot8::Kit {
             ui::Widget* root = s.widgetRoot();
             ui::Widget* w = root ? root->findById(id) : nullptr;
             if (!onScreen(s, w)) return false;
-            r = w->bounds();
+            r = w->toSurface(w->bounds());
             return !r.empty();
         };
     }

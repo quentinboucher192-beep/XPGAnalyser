@@ -3047,6 +3047,8 @@ void App::frame(double dt) {
     detached_.frame(time_);
     // 7. Lot API 8 : les filtres retenus, sur le disque une seconde apres le dernier changement.
     flushFilterMemory();
+    // 8. 1.12.31 : le zoom des pages, de meme.
+    flushZoomMemory();
 }
 
 
@@ -3405,5 +3407,28 @@ void App::flushFilterMemory() {
     (void)settings_.save();
 }
 // ---- fin Lot API 8 ----
+
+// ---- 1.12.31 : le zoom garde d'une seance a l'autre ----
+void App::zoomSettingsChanged() {
+    // Une session rejouee qui a son fichier (zoom-reglages) l'ecrit tout de suite : elle
+    // peut quitter a l'image suivante. Sans fichier, rien a ecrire (en memoire).
+    if (!options_.script.empty()) {
+        if (!scriptZoom_.path().empty()) (void)scriptZoom_.save();
+        return;
+    }
+    zoomDirty_ = true;
+    zoomDirtyAt_ = time_;
+}
+
+void App::useZoomSettingsFile(const std::string& path) {
+    if (options_.script.empty()) return;     // jamais les reglages de l'utilisateur
+    (void)scriptZoom_.load(path);            // absent : vide, cree au premier zoom
+}
+
+void App::flushZoomMemory() {
+    if (!zoomDirty_ || time_ - zoomDirtyAt_ < 1.0) return;
+    zoomDirty_ = false;
+    (void)settings_.save();
+}
 
 } // namespace app

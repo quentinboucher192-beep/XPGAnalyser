@@ -1051,6 +1051,7 @@ core::Status MainAnalysisScreen::buildUi() {
         column->addPane(std::move(centre), 0.68f, 200.f);
         auto outputs = std::make_unique<HmiBuildOutputPane>("hmi.sorties");
         bottomPanel_ = outputs.get();
+        outputs->setZoom(rememberedZoom(*outputs));     // 1.12.31 : son zoom, garde d'une seance a l'autre
         column->addPane(std::move(outputs), 0.32f, 120.f);
         upper_->addPane(std::move(column), 0.48f, 320.f);
 
@@ -1487,6 +1488,7 @@ void MainAnalysisScreen::onTabInserted(std::size_t at) {
         for (auto& [name, index] : *tabs)
             if (index >= from) ++index;
     if (viewTabIndex_ >= at && viewTabIndex_ + 1 < centre_->tabCount()) ++viewTabIndex_;
+    syncPageZoom();     // 1.12.31 : la page reprend son zoom retenu des son ouverture
 }
 
 // Un onglet passe de `from` a `to` (d'un groupe a l'autre, ou dans sa bande) :
@@ -3945,8 +3947,8 @@ ui::EventResult MainAnalysisScreen::HandleEvent(const InputEvent& ev) {
     if (const auto* d = std::get_if<MouseDown>(&ev)) noteZoomGesture(d->pos);
     else if (const auto* w = std::get_if<MouseWheel>(&ev); w && w->mods.ctrl) noteZoomGesture(w->pos);
     // Lot API 3 : l'appui dans l'arbre, le glisser qui en part, le lacher.
-    // 1.12.30 : zoomFrame - le cadre a l'ecran (l'arbre zoome seul a ses bornes dans son repere agrandi).
-    if (const auto* d = std::get_if<MouseDown>(&ev); d && explorer_ && explorer_->zoomFrame().contains(d->pos)) {
+    // 1.12.30 : le cadre a l'ecran (1.12.31 : l'arbre et sa colonne zoomes ont leurs bornes dans leur repere agrandi).
+    if (const auto* d = std::get_if<MouseDown>(&ev); d && explorer_ && explorer_->toSurface(explorer_->bounds()).contains(d->pos)) {
         treePress_ = true;
         treeDragged_ = false;
         deferredTreeNode_ = kInvalidNode;

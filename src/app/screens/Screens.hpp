@@ -303,6 +303,12 @@ public:
     //  1.12.30 : le zoom de la page ouverte d'un cran (+1, -1 ; 0 : 100 %) - la puce, ses
     //  crans, Ctrl+plus, Ctrl+moins, Ctrl+0. Faux : la page n'a pas de zoom.
     bool stepTabZoom(int step);
+    //  1.12.31 : le zoom de la page ouverte ENTIERE (50 a 200 %), meme quand la puce vise son
+    //  document (les sessions rejouees). Faux : pas de page.
+    bool setOpenPageZoomPercent(int percent);
+    //  1.12.31 : le zoom garde relu (une session rejouee qui change de fichier de reglages) :
+    //  l'arbre du projet, le panneau du bas, et chaque page comme a sa premiere vue.
+    void reloadRememberedZoom();
     //  Le widget zoomable vise par un geste (un clic, Ctrl + molette) au point `at` de la
     //  surface : la puce suit son zoom (un document, ou la page).
     void noteZoomGesture(gfx::Point at);
@@ -329,6 +335,14 @@ private:
     void syncPageZoom();
     void zoomRequested(ui::Widget& w, int step);
     bool zoomFromKeys(int step);
+    // 1.12.31 : la page entiere (son widget du haut) a ce zoom ; le zoom garde d'une
+    // seance a l'autre (app/ZoomMemory.hpp : celui d'une page, de l'arbre du projet, du
+    // panneau du bas, d'un code - par son identifiant) ; le zoom de l'arbre ou du panneau
+    // du bas, dit au bandeau (ils n'ont pas la puce : elle est celle des pages).
+    void applyPageZoom(ui::Widget& page, float zoom);
+    [[nodiscard]] float rememberedZoom(const ui::Widget& w) const;
+    void rememberZoom(const ui::Widget& w, float zoom);
+    void sayPanelZoom(const ui::Widget& w);
     [[nodiscard]] std::string describeStatusSelection(const std::string& key) const;
     // ---- fin Lot API 8 : le bandeau bas ----
 
@@ -541,6 +555,7 @@ private:
     ui::Widget*                       treeRail_{nullptr};
     ui::Widget*                       treeFoot_{nullptr};
     ui::Widget*                       treeChips_{nullptr};          // 1.11.23 : les puces de filtre
+    ui::Widget*                       treeColumn_{nullptr};         // 1.12.31 : la colonne de l'arbre (son zoom)
     std::string                       treeScope_{"tout"};
     bool                              treeFollow_{true};
     ui::Widget*                       treeFollowedPage_{nullptr};   // la derniere page suivie

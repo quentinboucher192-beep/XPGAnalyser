@@ -161,7 +161,7 @@ void wireSubTabMenu(TabControl& tabs, Widget& owner, core::ConnectionScope& link
     tabs.setRightClickSelects(true);
     auto chosen = std::make_shared<std::size_t>(0);
     TabControl* bar = &tabs;
-    links += tabs.contextMenuRequested->connect([bar, menu, entries, chosen, &owner](std::size_t i, gfx::Point at) {
+    links += tabs.contextMenuRequested->connect([bar, menu, entries, chosen](std::size_t i, gfx::Point at) {
         *chosen = i;
         std::vector<PopupMenu::Item> items;
         if (const auto* t = bar->tab(i)) items.push_back(heading(t->title, "sous-onglet"));
@@ -170,9 +170,7 @@ void wireSubTabMenu(TabControl& tabs, Widget& owner, core::ConnectionScope& link
         if (!items.empty() && !items.back().separator && !items.back().heading) items.push_back(separator());
         items.push_back(dispositionItem());
         menu->setItems(std::move(items));
-        const auto surface = surfaceSize();
-        const auto b = owner.bounds();
-        menu->openAt(at, surface.w > 0 ? surface : gfx::Size{b.x + b.w, b.y + b.h});
+        menu->openAtSurface(at);     // 1.12.31 : `at` est dans la surface (le menu, peut-etre dans une page zoomee)
         bar->markTab(i, menu);
     });
     links += menu->itemChosen->connect([run, chosen](int id) {

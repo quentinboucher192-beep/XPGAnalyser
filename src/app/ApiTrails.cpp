@@ -108,6 +108,7 @@ bool findTableRow(ui::Widget* root, std::string_view name, Rect& out) {
             for (std::size_t v = 0; v < t->visibleRowCount(); ++v) {
                 Rect r{};
                 if (!t->rowRect(v, r)) continue;              // hors de la zone visible : pas la peine de lire
+                r = t->toSurface(r);                          // 1.12.31 : a l'ecran (la page zoomee)
                 const auto row = t->viewRow(v);
                 for (std::size_t c = 0; c < cols; ++c)
                     if (cellNames(t->model()->cellText(row, c), name)) {
@@ -411,7 +412,12 @@ struct MainAnalysisScreen::ApiTrails::Kit {
             if (ProjectTreeModel::kindOf(s.treeModel_->childAt(root, k)) == kind) return s.treeModel_->childAt(root, k);
         return root;
     }
-    static bool nodeRow(Screen& s, ui::NodeId node, Rect& r) { return s.explorer_ && node != ui::kInvalidNode && s.explorer_->rowRect(node, r); }
+    // 1.12.31 : les cadres que la bulle eclaire sont A L'ECRAN (l'arbre zoome, une page zoomee : toSurface).
+    static bool nodeRow(Screen& s, ui::NodeId node, Rect& r) {
+        if (!s.explorer_ || node == ui::kInvalidNode || !s.explorer_->rowRect(node, r)) return false;
+        r = s.explorer_->toSurface(r);
+        return true;
+    }
     // Lot API 8 : l'arbre du projet - un outil sorti de l'arbre (Statistiques) :
     // son bouton dans la rangee sous le titre API.
     static std::function<bool(Rect&)> row(Screen& s, NK kind) {
@@ -422,7 +428,7 @@ struct MainAnalysisScreen::ApiTrails::Kit {
     }
     static bool barPart(Screen& s, std::string_view part, Rect& r) {
         if (!s.topBar_) return false;
-        r = s.topBar_->partRect(part);
+        r = s.topBar_->toSurface(s.topBar_->partRect(part));
         return !r.empty();
     }
     // La page de l'onglet de l'API de cette cle ; nulle : pas ouvert. Par sa cle
@@ -457,6 +463,7 @@ struct MainAnalysisScreen::ApiTrails::Kit {
         auto* f = frameOf(s, key, true);
         if (!f || !onScreen(s, f)) return false;
         r = f->tools().rectOf(action);
+        if (!r.empty()) r = f->tools().toSurface(r);
         return !r.empty();
     }
     static bool toolByTip(Screen& s, const std::string& key, std::string_view tip, Rect& r) {
@@ -465,11 +472,12 @@ struct MainAnalysisScreen::ApiTrails::Kit {
         const int a = f->tools().actionByTip(tip);
         if (a < 0) return false;
         r = f->tools().rectOf(a);
+        if (!r.empty()) r = f->tools().toSurface(r);
         return !r.empty();
     }
     static bool shownWidget(Screen& s, const ui::Widget* w, Rect& r) {
         if (!onScreen(s, w)) return false;
-        r = w->bounds();
+        r = w->toSurface(w->bounds());
         return !r.empty();
     }
     // Le premier widget de ce type montre dans `root` (en largeur d'abord).
@@ -779,7 +787,7 @@ std::vector<Step> MainAnalysisScreen::ApiTrails::Kit::discover(Screen& s) {
                           // Les cartes, telles que le tableau les a dessinees : de
                           // l'Automate (la premiere) aux Variables (la derniere) - une
                           // rangee de quatre, ou deux rangees de deux.
-                          const Rect all = unite(dash->partRect("configuration"), dash->partRect("variables"));
+                          const Rect all = dash->toSurface(unite(dash->partRect("configuration"), dash->partRect("variables")));
                           if (!all.empty()) {
                               r = all;
                               return true;
@@ -1245,7 +1253,9 @@ std::vector<Step> MainAnalysisScreen::ApiTrails::Kit::hmiTable(Screen& s, const 
                [&s, run](Rect& r) {
                    auto* sim = hmiSim(s);
                    if (!sim || !onScreen(s, sim) || run->buttonName.empty()) return false;
-                   return sim->canvas().objectRect(run->buttonName, r) && !r.empty();
+                   if (!sim->canvas().objectRect(run->buttonName, r) || r.empty()) return false;
+                   r = sim->canvas().toSurface(r);     // 1.12.31 : a l'ecran
+                   return true;
                },
                [run] {
                    run->hmiBefore.clear();

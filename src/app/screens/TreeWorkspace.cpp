@@ -180,7 +180,7 @@ protected:
         if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
             if (!bounds().contains(d->pos)) return ui::EventResult::Ignored;
             if (d->button == ui::MouseButton::Right && onContext) {   // 1.12.18 (planche 19) : le menu du vide de l'arbre
-                onContext(d->pos);
+                onContext(toSurface(d->pos));                         // 1.12.31 : dans la surface (l'arbre zoome)
                 return ui::EventResult::Consumed;
             }
             if (d->button != ui::MouseButton::Left) return ui::EventResult::Consumed;
@@ -383,6 +383,12 @@ private:
 ui::WidgetPtr MainAnalysisScreen::wrapExplorer(std::unique_ptr<ui::TreeView> tree) {
     using Side = ui::DockLayout::Side;
     auto column = std::make_unique<ui::DockLayout>("analysis.explorerColumn");
+    // 1.12.31 : LE ZOOM DE L'ARBRE DU PROJET - toute la colonne (le rail, le filtre, les puces,
+    // l'arbre, le pied), garde d'une seance a l'autre ; Ctrl + molette, ou Ctrl + plus,
+    // Ctrl + moins, Ctrl + 0 avec le clavier dans l'arbre.
+    column->setZoomSupport(ui::ZoomSupport::Scaled);
+    column->setZoom(rememberedZoom(*column));
+    treeColumn_ = column.get();
     // 2e partie : le rail a gauche (toute la hauteur), la sante du projet en pied.
     auto rail = std::make_unique<TreeRail>("analysis.treeRail");
     rail->onPick = [this](const std::string& key) {
@@ -903,8 +909,11 @@ bool MainAnalysisScreen::treeToolRect(ui::NodeId oldNode, gfx::Rect& out) const 
     if (!explorer_ || oldNode == ui::kInvalidNode) return false;
     for (const bool hmi : {false, true})
         for (std::size_t k = 0; k < ProjectTreeModel::toolCount(hmi); ++k)
-            if (ProjectTreeModel::toolNode(hmi, k) == oldNode)
-                return explorer_->chipRect(ProjectTreeModel::toolRowNode(hmi), k, out);
+            if (ProjectTreeModel::toolNode(hmi, k) == oldNode) {
+                if (!explorer_->chipRect(ProjectTreeModel::toolRowNode(hmi), k, out)) return false;
+                out = explorer_->toSurface(out);     // 1.12.31 : a l'ecran (l'arbre zoome)
+                return true;
+            }
     return false;
 }
 
@@ -1238,7 +1247,7 @@ void MainAnalysisScreen::treeHoverAction(ui::NodeId node, std::size_t action) {
             status_->setTransientMessage("Rien \xC3\xA0 d\xC3\xA9tacher : cette ligne n'ouvre pas d'onglet.", 4.0);
     } else {                                             // "..." : le menu du clic droit, sous la ligne
         gfx::Rect r;
-        if (explorer_->rowRect(node, r)) showExplorerMenu(node, {r.right() - 30.f, r.bottom()});
+        if (explorer_->rowRect(node, r)) showExplorerMenu(node, explorer_->toSurface(gfx::Point{r.right() - 30.f, r.bottom()}));   // 1.12.31 : a l'ecran
     }
 }
 
@@ -1248,7 +1257,7 @@ void MainAnalysisScreen::treeHeadAction(ui::NodeId node, std::size_t action) {
     const auto st = treeModel_->style(node);
     if (action + 1 >= st.headActions.size()) {                    // le dernier : Plus...
         gfx::Rect r;
-        if (explorer_->rowRect(node, r)) showExplorerMenu(node, {r.right() - 30.f, r.bottom()});
+        if (explorer_->rowRect(node, r)) showExplorerMenu(node, explorer_->toSurface(gfx::Point{r.right() - 30.f, r.bottom()}));   // 1.12.31 : a l'ecran
         return;
     }
     switch (ProjectTreeModel::kindOf(node)) {

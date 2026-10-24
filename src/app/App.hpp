@@ -123,6 +123,14 @@ public:
     [[nodiscard]] importer::ProjectImporter& importer() noexcept { return *importer_; }
     [[nodiscard]] const ui::Theme&       theme() const noexcept { return theme_; }
     [[nodiscard]] Settings&              settings() noexcept { return settings_; }
+    // ---- 1.12.31 : le zoom garde d'une seance a l'autre (app/ZoomMemory.hpp) ----
+    //  Les reglages ou il se garde : ceux de l'utilisateur, enregistres une seconde
+    //  apres le dernier changement (et a la sortie). Une session rejouee ne les lit ni
+    //  ne les ecrit : les siens, en memoire - ou dans un fichier (zoom-reglages), pour
+    //  qu'une session suivante les relise comme l'appli rouverte relit les siens.
+    [[nodiscard]] Settings& zoomSettings() noexcept { return options_.script.empty() ? settings_ : scriptZoom_; }
+    void zoomSettingsChanged();
+    void useZoomSettingsFile(const std::string& path);
     void setTheme(std::string_view name);
     // Lot API 6 : Affichage > Theme... - la galerie des neuf themes.
     void showThemeGallery();
@@ -482,6 +490,11 @@ private:
     double                                     filterDirtyAt_{0.0};
     std::shared_ptr<int>                       filterAlive_;               // les crochets ne survivent pas a App
     // ---- fin Lot API 8 ----
+    // ---- 1.12.31 : le zoom garde (zoomSettings) ----
+    Settings                                   scriptZoom_;                // une session rejouee : le sien
+    bool                                       zoomDirty_{false};
+    double                                     zoomDirtyAt_{0.0};
+    void                                       flushZoomMemory();          // chaque image
 
     double                                     time_{0.0};
     // Lot API 7 : les onglets detaches. Construit apres bus_ (il s'y abonne) ;

@@ -1078,10 +1078,15 @@ void rewriteNames(Object& o, const std::function<std::string(std::string_view, b
                    // une variable renommee la suit).
                    || p.key == "itemsFrom" || p.key == "rowsFrom"
                    // 1.12.12 (lot H) : la Lecture d'une video et sa variable de position.
-                   || p.key == "playing" || p.key == "positionVariable") {
+                   || p.key == "playing" || p.key == "positionVariable"
+                   // 1.12.31 : toute propriete de role Formule (la table des roles, HmiRoles.hpp) - les fins de course et
+                   // le declenchement d'un registre, les booleens A et B d'une vanne 3 voies, la boucle et les variables
+                   // d'un Reglage PID... : un parametre du symbole s'y remplace, un renommage les suit.
+                   || roles::roleOf(o.kind, p.key).role == roles::Role::Formula) {
             expr(p.value);
         } else if (p.key == "variables" || p.key == "references"
-                   || p.key == "values") {   // les plumes d'une courbe, les elements d'un graphique : a;b;c ; 1.12.5 : les valeurs ecrites d'un selecteur
+                   || p.key == "values"      // les plumes d'une courbe, les elements d'un graphique : a;b;c ; 1.12.5 : les valeurs ecrites d'un selecteur
+                   || roles::readsAsFormula(o.kind, p.key)) {   // 1.12.31 : toute liste de formules (Plumes : visibles si...)
             // 1.12.6 (lot C) : le decoupeur unique, morceaux tels qu'ecrits (une plume M['a;b'] reste entiere).
             std::string rebuilt;
             bool changed = false;

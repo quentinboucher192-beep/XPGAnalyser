@@ -1136,7 +1136,7 @@ ui::EventResult HmiObjectList::onEvent(const ui::InputEvent& ev) {
                 invalidate();
                 selectionChanged->emit(selection_);
             }
-            contextRequested->emit(id, m->pos);
+            contextRequested->emit(id, toSurface(m->pos));   // 1.12.31 : dans la surface (la page zoomee)
             return ui::EventResult::Consumed;
         }
         if (m->button != ui::MouseButton::Left) return ui::EventResult::Consumed;
@@ -1375,7 +1375,7 @@ ui::EventResult HmiLayerList::onEvent(const ui::InputEvent& ev) {
         const Id id = view_->layers[static_cast<std::size_t>(n - 1 - k)].id;
         grabFocus();
         // 1.12.18 (bug 3) : le clic droit ouvre le menu de ce calque, sans le rendre actif.
-        if (m->button == ui::MouseButton::Right) { contextRequested->emit(id, m->pos); return ui::EventResult::Consumed; }
+        if (m->button == ui::MouseButton::Right) { contextRequested->emit(id, toSurface(m->pos)); return ui::EventResult::Consumed; }   // 1.12.31 : la surface
         if (m->button != ui::MouseButton::Left) return ui::EventResult::Consumed;
         if (m->pos.x < b.x + 26) toggleVisible->emit(id);
         else if (m->pos.x < b.x + 50) toggleLocked->emit(id);
@@ -2004,7 +2004,7 @@ ui::EventResult HmiPalette::onEvent(const ui::InputEvent& ev) {
         if (!t) return ui::EventResult::Ignored;
         // 1.12.18 (bug 3) : le clic droit n'arme plus la pose, ne bascule plus l'etoile : le menu.
         if (m->button == ui::MouseButton::Right) {
-            if (t->symbol.empty()) contextRequested->emit(t->kind, m->pos);
+            if (t->symbol.empty()) contextRequested->emit(t->kind, toSurface(m->pos));   // 1.12.31 : dans la surface
             return ui::EventResult::Consumed;
         }
         if (m->button != ui::MouseButton::Left) return ui::EventResult::Consumed;

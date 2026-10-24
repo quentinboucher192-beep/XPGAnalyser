@@ -151,6 +151,12 @@ target_link_libraries(xpg_help PUBLIC xpg_import xpg_ui)
 xpg_sources(HMI_SOURCES hmi)
 add_library(xpg_hmi STATIC ${HMI_SOURCES})
 target_link_libraries(xpg_hmi PUBLIC xpg_import)
+# 1.12.31 : l'aide F1 (genere : des Mo de chaines). En -O3, GCC y prend une
+# dizaine de Go de memoire ; ce ne sont que des donnees : -O1 suffit (l'option
+# du fichier vient apres celles du type de construction, elle l'emporte).
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set_source_files_properties(src/hmi/HmiGuideText.cpp PROPERTIES COMPILE_OPTIONS "-O1")
+endif()
 # Lot 14 : sous Windows, les sockets (Modbus TCP, le serveur de demonstration)
 # et le registre (le poste d'exploitation qui demarre avec la session). Ceux
 # qui lient xpg_hmi (l'application, les essais) les recoivent aussi.
@@ -354,6 +360,13 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(fold_test              PRIVATE xpg_ui)
     xpg_target_link_libraries(layout_test            PRIVATE xpg_ui)
     xpg_target_link_libraries(zoom_test              PRIVATE xpg_ui)
+    # 1.12.31 : les touches du zoom sur tous les claviers (platform/KeyTranslate.hpp : les
+    # en-tetes de third_party/SDL3, les valeurs des touches, rien a lier) et le zoom garde
+    # d'une seance a l'autre (app/ZoomMemory.hpp sur app/Settings.cpp).
+    xpg_target_sources(zoom_test PRIVATE ${CMAKE_SOURCE_DIR}/src/app/Settings.cpp)
+    if(TARGET zoom_test)
+        target_include_directories(zoom_test PRIVATE ${CMAKE_SOURCE_DIR}/third_party/SDL3/include)
+    endif()
 
     # Lot 16 : ViewModels.cpp montre les types et les dossiers des variables IHM
     # (hmi::types, dans xpg_hmi) : les trois tests qui le compilent lient xpg_hmi.

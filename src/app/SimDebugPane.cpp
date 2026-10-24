@@ -2900,9 +2900,7 @@ void SimDebugPane::openMarginMenu(std::size_t line0, gfx::Point at) {
     items.push_back(std::move(all));
     marginMenu_->setItems(std::move(items));
     marginMenu_->setBounds(bounds());
-    gfx::Size surface = ui::surfaceSize();
-    if (surface.w <= 0.f || surface.h <= 0.f) surface = {bounds().right() + 400.f, bounds().bottom() + 400.f};
-    marginMenu_->openAt(at, surface);
+    marginMenu_->openAtSurface(at);     // 1.12.31 : `at` est dans la surface (la page peut etre zoomee)
 }
 
 } // namespace app

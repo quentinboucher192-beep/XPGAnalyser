@@ -13,6 +13,7 @@
 #include "../core/Version.hpp"
 #include "../export/ProgramBook.hpp"
 #include "../hmi/HmiArchive.hpp"
+#include "../hmi/HmiPipeline.hpp"    // 1.12.31 : les artefacts du cache de construction d'un dossier .xapi
 #include "../project/ApiArchive.hpp"
 #include "../project/ProjectArchive.hpp"
 #include "../project/SharedLibrary.hpp"
@@ -381,6 +382,7 @@ void unpackAndOpen(std::shared_ptr<pa::Contents> contents, const std::string& so
         std::vector<std::string> problems, notes;
         std::size_t              files{0};
         std::size_t              counts{0};
+        std::string              build;      // 1.12.31 : ce que dit le cache de construction deballe ("" : pas de cache)
     };
     auto out = std::make_shared<Out>();
     run("Ouverture de l'archive", [contents, folder, skipDamaged, api, out] {
@@ -402,6 +404,12 @@ void unpackAndOpen(std::shared_ptr<pa::Contents> contents, const std::string& so
                                      + " macro(s) ajout\xC3\xA9" "e(s) \xC3\xA0 ta biblioth\xC3\xA8que (elles n'y \xC3\xA9taient pas)");
             out->files = rep.unpacked.written.size();
             out->counts = rep.counts.size();
+            // 1.12.31 : un dossier qui a aussi son IHM (un projet de la 1.11, ouvert par les deux) - le cache de son build
+            // a suivi ; ses artefacts se refont ici, comme au deballage d'une .xihm : IHM Studio le trouvera a jour.
+            std::error_code ec;
+            if (contents->file(".xpg/build/build-cache.txt") && hmi::exists(folder)
+                && fs::is_regular_file(fs::path(hmi::pipeline::buildFolderOf(folder)) / "build-cache.txt", ec))
+                if (auto hp = hmi::load(folder)) (void)hmi::pipeline::restoreArtifacts(*hp, {}, hmi::pipeline::buildFolderOf(folder));
         } else {
             hmi::ArchiveReport rep;
             if (auto st = hmi::unpackProjectArchive(*contents, folder, &rep, skipDamaged); !st) {
@@ -413,6 +421,13 @@ void unpackAndOpen(std::shared_ptr<pa::Contents> contents, const std::string& so
             out->notes = rep.notes;
             out->files = rep.entries.size();
             out->counts = rep.counts.size();
+            // 1.12.31 : le cache de construction a suivi - le build reprend ou il en etait.
+            if (rep.buildCache)
+                out->build = rep.stale == 0
+                                 ? std::string(" Son cache de construction a suivi : le build reprend o\xC3\xB9 il en \xC3\xA9tait.")
+                                 : " Son cache de construction a suivi ; " + std::to_string(rep.stale)
+                                       + (rep.stale > 1 ? " \xC3\xA9l\xC3\xA9ments ont chang\xC3\xA9 depuis le dernier build : ils seront refaits."
+                                                        : " \xC3\xA9l\xC3\xA9ment a chang\xC3\xA9 depuis le dernier build : il sera refait.");
         }
     }, [out, folder, source](App& a) {
         if (!out->ok) {
@@ -429,10 +444,11 @@ void unpackAndOpen(std::shared_ptr<pa::Contents> contents, const std::string& so
             app->openProjectFolder(folder);
             if (out->problems.empty() && out->notes.empty()) {
                 say(*app, "Archive d\xC3\xA9" "ball\xC3\xA9" "e dans " + folder + " : " + std::to_string(out->files)
-                             + " fichiers intacts, le contr\xC3\xB4le retrouve chaque compte (" + std::to_string(out->counts) + ").", 12.0);
+                             + " fichiers intacts, le contr\xC3\xB4le retrouve chaque compte (" + std::to_string(out->counts) + ")." + out->build, 12.0);
                 return;
             }
-            std::string text = "Le projet est d\xC3\xA9" "ball\xC3\xA9 dans " + folder + " (" + std::to_string(out->files) + " fichiers) et ouvert.";
+            std::string text = "Le projet est d\xC3\xA9" "ball\xC3\xA9 dans " + folder + " (" + std::to_string(out->files) + " fichiers) et ouvert."
+                             + out->build;
             if (!out->problems.empty()) text += "\n\nCe que le contr\xC3\xB4le n'a pas retrouv\xC3\xA9 :" + listed(out->problems);
             if (!out->notes.empty()) text += "\n\n\xC3\x80 savoir :" + listed(out->notes);
             tell(*app, "Projet ouvert depuis l'archive", text, out->problems.empty() ? MessageDialog::Icon::Info : MessageDialog::Icon::Warning);
@@ -591,7 +607,11 @@ void askExportArchive(App& app) {
               "\xC3\xA0 l'identique dans IHM Studio : Projet \xE2\x80\xBA Ouvrir\xE2\x80\xA6, ou un double-clic sur le fichier.";
         const std::string title = api ? "Exporter en archive .xapi" : "Exporter en archive .xihm";
         auto dialog = std::make_unique<FormDialog>(
-            "dialog.exchangeArchive", title, text + " Ne sont pas pris : le cache de construction, exports/ et la corbeille.", std::move(fields),
+            "dialog.exchangeArchive", title,
+            text + (api ? std::string(" Ne sont pas pris : exports/ et la corbeille.")
+                        : std::string(" Le cache de construction vient avec : rouvert, le projet ne se r\xC3\xA9g\xC3\xA9n\xC3\xA8re pas. "
+                                      "Ne sont pas pris : exports/ et la corbeille.")),
+            std::move(fields),
             "Exporter");
         helpOn(app, *dialog, "archive-projet");
         dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {

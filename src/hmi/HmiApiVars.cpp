@@ -11,6 +11,7 @@
 #include "HmiComm.hpp"
 #include "HmiModel.hpp"
 #include "HmiObjectAlarms.hpp"
+#include "HmiRoles.hpp"          // 1.12.31 : les cases de role Formule
 #include "../domain/ProjectModel.hpp"
 #include "../project/MemberTree.hpp"
 
@@ -563,6 +564,8 @@ void collectUses(const Project& p, const std::function<bool(std::string_view)>& 
                 if (!pr.expr.empty()) take(pr.expr, u);
                 else if (pr.value.find('{') != std::string::npos) take(pr.value, u);
                 else if ((pr.key == "variable" || pr.key == "xVariable" || pr.key == "feedback") && !pr.value.empty()) take(pr.value, u);
+                // 1.12.31 : une case de role Formule tapee sans fx (sa valeur est la formule : une fin de course...)
+                else if (roles::roleOf(o.kind, pr.key).role == roles::Role::Formula && !pr.value.empty()) take(pr.value, u);
             }
             base.where = v.name + "/" + o.name;
             takeActions(o.actions, base);

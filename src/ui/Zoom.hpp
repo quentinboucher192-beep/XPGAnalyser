@@ -19,7 +19,10 @@
 //                  au-dela pour un zoom Native : de 10 a 800 %) ;
 //    zoomableAt    le widget qu'un geste vise : le widget Native le plus
 //                  profond sous la souris, sinon le widget Scaled le plus haut
-//                  (le zoom d'un panneau couvre ses tableaux).
+//                  (le zoom d'un panneau couvre ses tableaux) ;
+//    unzoomed      1.12.31 : le renderer de la surface, sous les ZoomRenderer (un
+//                  widget Native sous une page zoomee, un ILOT, s'y dessine a son
+//                  zoom a lui - voir Widget.hpp).
 // =============================================================================
 #pragma once
 
@@ -55,6 +58,7 @@ class ZoomRenderer final : public gfx::IRenderer {
 public:
     ZoomRenderer(gfx::IRenderer& inner, ZoomMap map) noexcept : r_(inner), m_(map) {}
     [[nodiscard]] const ZoomMap& map() const noexcept { return m_; }
+    [[nodiscard]] gfx::IRenderer& under() const noexcept { return r_; }   // 1.12.31 : le renderer de dessous
 
     void beginFrame(gfx::Color clear) override { r_.beginFrame(clear); }
     void endFrame() override { r_.endFrame(); }
@@ -95,6 +99,9 @@ private:
     int             offscreen_{0};   // un dessin hors de l'ecran en cours : pas d'echelle
 };
 
+// 1.12.31 : le renderer de la surface, sous les ZoomRenderer (un ilot s'y dessine).
+[[nodiscard]] gfx::IRenderer& unzoomed(gfx::IRenderer& r) noexcept;
+
 // LES CRANS. Le cran au-dessus (step > 0) ou au-dessous de `current`, dans
 // [lo, hi] ; `current` hors des crans : le plus proche dans ce sens.
 [[nodiscard]] const std::vector<float>& zoomSteps();
@@ -110,7 +117,8 @@ private:
 // d'onglet cachee suit le zoom de sa page) ; ceux qui sont sous un autre
 // Scaled sont couverts par lui.
 [[nodiscard]] std::vector<Widget*> scaledUnder(Widget& root);
-// Les widgets Native sous `root`, montres ; le plus grand d'abord.
+// Les widgets Native sous `root`, montres ; le plus grand d'abord (a l'ecran). 1.12.31 :
+// aussi sous un widget Scaled (une page zoomee) : ils y sont des ilots, a leur zoom.
 [[nodiscard]] std::vector<Widget*> nativesUnder(Widget& root);
 
 } // namespace ui

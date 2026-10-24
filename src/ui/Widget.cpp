@@ -22,24 +22,41 @@ namespace ui {
     void installPlatformServices(PlatformServices services) { g_services = std::move(services); }
 
     // Lot API 7 : la surface d'une fenetre detachee, le temps de son tour.
+    // 1.12.31 : et la fenetre elle-meme, que la portee d'un zoom ne change pas.
     namespace {
         bool      g_surfaceOverridden = false;
         gfx::Size g_surfaceOverride{};
+        bool      g_windowOverridden = false;
+        gfx::Size g_windowOverride{};
     } // namespace
 
-    SurfaceScope::SurfaceScope(gfx::Size size) noexcept
-        : previous_(g_surfaceOverride), hadPrevious_(g_surfaceOverridden) {
+    SurfaceScope::SurfaceScope(gfx::Size size, bool zoom) noexcept
+        : previous_(g_surfaceOverride), hadPrevious_(g_surfaceOverridden),
+          previousWindow_(g_windowOverride), hadPreviousWindow_(g_windowOverridden), zoom_(zoom) {
         g_surfaceOverride = size;
         g_surfaceOverridden = true;
+        if (!zoom_) {
+            g_windowOverride = size;
+            g_windowOverridden = true;
+        }
     }
 
     SurfaceScope::~SurfaceScope() {
         g_surfaceOverride = previous_;
         g_surfaceOverridden = hadPrevious_;
+        if (!zoom_) {
+            g_windowOverride = previousWindow_;
+            g_windowOverridden = hadPreviousWindow_;
+        }
     }
 
     gfx::Size surfaceSize() {
         if (g_surfaceOverridden) return g_surfaceOverride;
+        return g_services.surfaceSize ? g_services.surfaceSize() : gfx::Size{};
+    }
+
+    gfx::Size windowSurfaceSize() {
+        if (g_windowOverridden) return g_windowOverride;
         return g_services.surfaceSize ? g_services.surfaceSize() : gfx::Size{};
     }
 
@@ -59,7 +76,9 @@ namespace ui {
         }
     } // namespace
 
-    MeasureZoomScope::MeasureZoomScope(float factor) noexcept : previous_(g_measureZoom) { g_measureZoom = previous_ * factor; }
+    MeasureZoomScope::MeasureZoomScope(float factor, bool absolute) noexcept : previous_(g_measureZoom) {
+        g_measureZoom = absolute ? factor : previous_ * factor;
+    }
     MeasureZoomScope::~MeasureZoomScope() { g_measureZoom = previous_; }
     float measureZoom() noexcept { return g_measureZoom; }
 
@@ -141,21 +160,9 @@ namespace ui {
         }
         Widget::ZoomRequest g_zoomRequest;
 
-        // Le repere d'un widget vers celui de son parent (son zoom, s'il est Scaled).
-        ZoomMap ownToParent(const Widget& w) {
-            if (w.zoomSupport() != ZoomSupport::Scaled || w.zoom() == 1.f) return {};
-            const auto f = w.zoomFrame();
-            return ZoomMap::about({ f.x, f.y }, w.zoom());
-        }
-        // ... vers la surface (tous les parents zoomes compris).
-        ZoomMap ownToSurface(const Widget& w) {
-            ZoomMap m = ownToParent(w);
-            for (const Widget* p = w.parent(); p; p = p->parent()) {
-                const auto up = ownToParent(*p);
-                if (!up.identity()) m = ZoomMap::then(m, up);
-            }
-            return m;
-        }
+        // Le repere d'un widget vers la surface (tous les parents zoomes compris ; un
+        // ilot s'arrete a lui : son repere est la surface).
+        ZoomMap ownToSurface(const Widget& w) { return w.mapToSurface(); }
     } // namespace
 
     // ---------------------------------------------------------------- Widget ---
@@ -203,7 +210,8 @@ namespace ui {
         if (r.x == frame_.x && r.y == frame_.y && r.w == frame_.w && r.h == frame_.h) return;
         frame_ = r;
         // 1.12.30 : zoome, le widget se range dans un repere agrandi (le coin ne bouge pas).
-        bounds_ = scaledNow() ? gfx::Rect{ r.x, r.y, r.w / zoomFactor_, r.h / zoomFactor_ } : r;
+        // 1.12.31 : un ilot, dans celui de la surface.
+        bounds_ = scaledNow() ? gfx::Rect{ r.x, r.y, r.w / zoomFactor_, r.h / zoomFactor_ } : islandNow() ? islandRect(r) : r;
         dirtyLayout_ = true;
         invalidate();
     }
@@ -213,8 +221,45 @@ namespace ui {
         if (s == zoomSupport_) return;
         zoomSupport_ = s;
         if (s != ZoomSupport::Scaled) zoomFactor_ = 1.f;
-        bounds_ = scaledNow() ? gfx::Rect{ frame_.x, frame_.y, frame_.w / zoomFactor_, frame_.h / zoomFactor_ } : frame_;
+        if (s != ZoomSupport::Native) { islandS_ = 1.f; islandT_ = {}; }
+        bounds_ = scaledNow() ? gfx::Rect{ frame_.x, frame_.y, frame_.w / zoomFactor_, frame_.h / zoomFactor_ }
+                : islandNow() ? islandRect(frame_) : frame_;
         invalidateLayout();
+    }
+
+    // ---------------------------------------------------- 1.12.31 : les ilots ---
+    gfx::Rect Widget::islandRect(const gfx::Rect& r) const noexcept {
+        // Le cadre vu de la surface, ses bords sur des pixels entiers (un document net).
+        const float x0 = std::round(r.x * islandS_ + islandT_.x), y0 = std::round(r.y * islandS_ + islandT_.y);
+        const float x1 = std::round((r.x + r.w) * islandS_ + islandT_.x), y1 = std::round((r.y + r.h) * islandS_ + islandT_.y);
+        return { x0, y0, std::max(0.f, x1 - x0), std::max(0.f, y1 - y0) };
+    }
+
+    void Widget::refreshIsland() {
+        // Le repere du parent vers la surface : un parent zoome (la page) en fait un ilot.
+        const ZoomMap m = parent_ ? parent_->mapToSurface() : ZoomMap{};
+        if (m.s == islandS_ && m.t.x == islandT_.x && m.t.y == islandT_.y) return;
+        islandS_ = m.s;
+        islandT_ = m.t;
+        bounds_ = islandNow() ? islandRect(frame_) : frame_;
+        dirtyLayout_ = true;
+        invalidate();
+    }
+
+    ZoomMap Widget::mapToParent() const noexcept {
+        if (scaledNow()) return ZoomMap::about({ frame_.x, frame_.y }, zoomFactor_);
+        // Un ilot : du parent vers lui, p x islandS_ + islandT_ ; de lui vers le parent, l'inverse.
+        if (islandNow()) return { 1.f / islandS_, { -islandT_.x / islandS_, -islandT_.y / islandS_ } };
+        return {};
+    }
+
+    ZoomMap Widget::mapToSurface() const noexcept {
+        ZoomMap m;
+        for (const Widget* w = this; w; w = w->parent_) {
+            if (w->islandNow()) return m;          // le repere d'un ilot est la surface
+            if (w->scaledNow()) m = ZoomMap::then(m, w->mapToParent());
+        }
+        return m;
     }
 
     void Widget::setZoom(float zoom) {
@@ -228,19 +273,21 @@ namespace ui {
     }
 
     gfx::Point Widget::toParentSpace(gfx::Point own) const noexcept {
-        if (!scaledNow()) return own;
-        return { frame_.x + (own.x - frame_.x) * zoomFactor_, frame_.y + (own.y - frame_.y) * zoomFactor_ };
+        if (scaledNow()) return { frame_.x + (own.x - frame_.x) * zoomFactor_, frame_.y + (own.y - frame_.y) * zoomFactor_ };
+        if (islandNow()) return { (own.x - islandT_.x) / islandS_, (own.y - islandT_.y) / islandS_ };
+        return own;
     }
 
     gfx::Point Widget::fromParentSpace(gfx::Point outer) const noexcept {
-        if (!scaledNow()) return outer;
-        return { frame_.x + (outer.x - frame_.x) / zoomFactor_, frame_.y + (outer.y - frame_.y) / zoomFactor_ };
+        if (scaledNow()) return { frame_.x + (outer.x - frame_.x) / zoomFactor_, frame_.y + (outer.y - frame_.y) / zoomFactor_ };
+        if (islandNow()) return { outer.x * islandS_ + islandT_.x, outer.y * islandS_ + islandT_.y };
+        return outer;
     }
 
     gfx::Point Widget::toSurface(gfx::Point own) const noexcept {
-        gfx::Point p = own;
-        for (const Widget* w = this; w; w = w->parent_) p = w->toParentSpace(p);
-        return p;
+        // 1.12.31 : la correspondance composee (un ilot s'y arrete : son repere est la surface).
+        const auto m = mapToSurface();
+        return m.identity() ? own : m.toOuter(own);
     }
 
     gfx::Rect Widget::toSurface(const gfx::Rect& own) const noexcept {
@@ -250,26 +297,17 @@ namespace ui {
     }
 
     gfx::Point Widget::fromSurface(gfx::Point surface) const noexcept {
-        // Du haut vers ce widget : chaque repere a son tour.
-        std::vector<const Widget*> chain;
-        for (const Widget* w = this; w; w = w->parent_) chain.push_back(w);
-        gfx::Point p = surface;
-        for (auto it = chain.rbegin(); it != chain.rend(); ++it) p = (*it)->fromParentSpace(p);
-        return p;
+        const auto m = mapToSurface();
+        return m.identity() ? surface : m.toInner(surface);
     }
 
-    float Widget::surfaceScale() const noexcept {
-        float s = 1.f;
-        for (const Widget* w = this; w; w = w->parent_)
-            if (w->scaledNow()) s *= w->zoomFactor_;
-        return s;
-    }
+    float Widget::surfaceScale() const noexcept { return mapToSurface().s; }
 
     gfx::Rect Widget::outerEventBounds() const {
         const auto r = eventBounds();
-        if (!scaledNow()) return r;
-        const auto a = toParentSpace({ r.x, r.y });
-        return { a.x, a.y, r.w * zoomFactor_, r.h * zoomFactor_ };
+        if (!scaledNow() && !islandNow()) return r;
+        const auto a = toParentSpace({ r.x, r.y }), b = toParentSpace({ r.right(), r.bottom() });
+        return { a.x, a.y, b.x - a.x, b.y - a.y };
     }
 
     bool Widget::nativeZoomAt(gfx::Point own) const {
@@ -427,6 +465,8 @@ namespace ui {
 
     void Widget::layout() {
         if (visibility_ == Visibility::Collapsed) return;
+        // 1.12.31 : un widget Native suit le zoom de ses parents (un ilot, ou plus).
+        if (zoomSupport_ == ZoomSupport::Native) refreshIsland();
         if (scaledNow()) {
             // 1.12.30 : la mise en page dans le repere agrandi - le texte s'y mesure
             // comme il sera dessine, une liste s'y ouvre du bon cote.
@@ -434,7 +474,18 @@ namespace ui {
             // La surface du moment est dans le repere du parent (un parent zoome a pose la sienne).
             const auto surface = ui::surfaceSize();
             const auto inner = fromParentSpace({ surface.w, surface.h });
-            const SurfaceScope scope(surface.w > 0.f ? gfx::Size{ inner.x, inner.y } : surface);
+            const SurfaceScope scope(surface.w > 0.f ? gfx::Size{ inner.x, inner.y } : surface, true);
+            if (dirtyLayout_) {
+                onLayout();
+                dirtyLayout_ = false;
+            }
+            for (auto& c : children_) c->layout();
+            return;
+        }
+        if (islandNow()) {
+            // 1.12.31 : un ilot se met en page a l'echelle de la surface.
+            const MeasureZoomScope measure(1.f, true);
+            const SurfaceScope scope(windowSurfaceSize(), true);
             if (dirtyLayout_) {
                 onLayout();
                 dirtyLayout_ = false;
@@ -469,6 +520,28 @@ namespace ui {
             for (auto& c : children_) c->render(local);
             if (!requestsOverlayPass()) onPaintOverlay(local);
             ctx.r.popClip();
+            if (ctx.overlays && requestsOverlayPass()) ctx.overlays->push_back(this);
+            dirtyPaint_ = false;
+            return;
+        }
+
+        if (islandNow()) {
+            // 1.12.31 : UN ILOT se dessine avec le renderer de la surface (sous les
+            // ZoomRenderer de ses parents), dans son repere - celui de la surface.
+            gfx::IRenderer& base = unzoomed(ctx.r);
+            const auto a = fromParentSpace({ ctx.clip.x, ctx.clip.y });
+            const auto b = fromParentSpace({ ctx.clip.right(), ctx.clip.bottom() });
+            const float x0 = std::floor(a.x), y0 = std::floor(a.y);
+            const gfx::Rect outer{ x0, y0, std::max(0.f, std::ceil(b.x) - x0), std::max(0.f, std::ceil(b.y) - y0) };
+            const gfx::Rect clip = outer.intersect(bounds_);
+            if (clip.empty()) return;
+            const MeasureZoomScope measure(1.f, true);
+            PaintContext local{ base, ctx.theme, clip, ctx.time, ctx.overlays };
+            base.pushClip(clip);
+            onPaint(local);
+            for (auto& c : children_) c->render(local);
+            if (!requestsOverlayPass()) onPaintOverlay(local);
+            base.popClip();
             if (ctx.overlays && requestsOverlayPass()) ctx.overlays->push_back(this);
             dirtyPaint_ = false;
             return;
@@ -563,7 +636,15 @@ namespace ui {
             const MeasureZoomScope measure(zoomFactor_);
             const auto surface = ui::surfaceSize();
             const auto inner = fromParentSpace({ surface.w, surface.h });
-            const SurfaceScope scope(surface.w > 0.f ? gfx::Size{ inner.x, inner.y } : surface);
+            const SurfaceScope scope(surface.w > 0.f ? gfx::Size{ inner.x, inner.y } : surface, true);
+            return dispatchOwn(local, pointerPosition(local), inside);
+        }
+        if (islandNow()) {
+            // 1.12.31 : un ilot - l'evenement revient au repere de la surface.
+            const bool inside = !p || outerEventBounds().contains(*p);
+            const InputEvent local = p ? remapPointerImpl(ev, [this](gfx::Point q) { return fromParentSpace(q); }, islandS_) : ev;
+            const MeasureZoomScope measure(1.f, true);
+            const SurfaceScope scope(windowSurfaceSize(), true);
             return dispatchOwn(local, pointerPosition(local), inside);
         }
         return dispatchOwn(ev, p, !p || eventBounds().contains(*p));

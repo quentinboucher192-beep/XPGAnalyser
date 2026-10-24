@@ -369,9 +369,7 @@ bool HmiSimVarTree::openContextMenu(const std::string& path, gfx::Point at) {
         items.push_back(ui::cmd::item(ui::cmd::Id::ToutDeplier, MExpandAll));
         ctxPath_ = path;
         ctxMenu_->setItems(std::move(items));
-        auto* root = rootWidget();
-        const auto sb = root ? root->bounds() : bounds();
-        ctxMenu_->openAt(at, {sb.w, sb.h});
+        ctxMenu_->openInWindow(at);     // 1.12.31 : garde dans la fenetre (une page zoomee)
         return true;
     }
     ui::PopupMenu::Item head;
@@ -405,9 +403,7 @@ bool HmiSimVarTree::openContextMenu(const std::string& path, gfx::Point at) {
          "rien de forc\xC3\xA9");
     ctxPath_ = path;
     ctxMenu_->setItems(std::move(items));
-    auto* root = rootWidget();
-    const auto sb = root ? root->bounds() : bounds();
-    ctxMenu_->openAt(at, {sb.w, sb.h});
+    ctxMenu_->openInWindow(at);     // 1.12.31 : garde dans la fenetre (une page zoomee)
     return true;
 }
 
@@ -712,9 +708,7 @@ bool HmiSimVarTree::openMotionMenu(const std::string& path, gfx::Point at) {
     items.push_back(limits);
     motionPath_ = path;
     motionMenu_->setItems(std::move(items));
-    auto* root = rootWidget();
-    const auto sb = root ? root->bounds() : bounds();
-    motionMenu_->openAt(at, {sb.w, sb.h});
+    motionMenu_->openInWindow(at);     // 1.12.31 : garde dans la fenetre (une page zoomee)
     return true;
 }
 
