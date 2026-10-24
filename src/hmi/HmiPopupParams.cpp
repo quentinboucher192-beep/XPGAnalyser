@@ -12,6 +12,7 @@
 #include "HmiTypeForms.hpp"   // 1.12.19 : un argument rappel (sa forme)
 #include "HmiOverload.hpp"    // 1.12.19 : la forme rappel d'une fonction
 #include "HmiObjectAlarms.hpp"   // 1.12.11 (lot G) : une liaison du synoptique tapee sans = (renommer suit)
+#include "HmiRoles.hpp"          // 1.12.31 : toute propriete de role Formule tapee sans fx (renommer suit)
 
 #include <algorithm>
 #include <cctype>
@@ -384,7 +385,9 @@ std::size_t renameParam(Project& p, std::string_view viewName, std::string_view 
             if (pr.key == "variable" || pr.key == "target" || pr.key == "var") pr.value = renameRoot(pr.value, from, to);
             // 1.12.11 (lot G) : la liaison Equipement d'un symbole (Pompe), un Defaut, un Mouvement ou une Valeur du
             // synoptique tapes sans = (Pompe.Defaut) - lus comme des formules, ils suivent (avant : un nom perdu).
-            else if (pr.expr.empty() && (pr.key == "equipment" || ((pr.key == "fault" || pr.key == "moving" || pr.key == "value") && synopticLinkedKey(o, pr.key))))
+            // 1.12.31 : toute propriete de role Formule tapee sans fx (une fin de course Registre.FCO, une condition...).
+            else if (pr.expr.empty() && (pr.key == "equipment" || ((pr.key == "fault" || pr.key == "moving" || pr.key == "value") && synopticLinkedKey(o, pr.key))
+                                         || roles::readsAsFormula(o.kind, pr.key)))
                 pr.value = renameRoot(pr.value, from, to);
             else if (pr.value.find('{') != std::string::npos) pr.value = inTemplate(pr.value);
             changed = changed || !(before == pr);

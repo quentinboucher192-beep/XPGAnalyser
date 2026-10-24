@@ -7702,6 +7702,7 @@ Là où un type est attendu (`n := ` pour un INT, l'argument d'une fonction, `IF
 - **Une saisie refusée ne se perd pas** : une ligne rouge sous la case dit pourquoi (« n'est pas un nombre entier (INT) », « hors des bornes d'un INT ») avec **Reprendre « ce que tu avais tapé »** pour la corriger, et quand c'est possible **Ramener à 32767** ou **Remplacer par Debit_Entree**. La valeur d'avant reste ; Échap efface la ligne.
 @nouveau 1.12.23
 - **Le carré au bout de la case s'ouvre partout** : dans l'inspecteur comme dans les onglets Contenu (une plume, une case de tableau), Actions et Raccourcis, un clic sur le carré (C, fx, I, S…) dit d'où vient la valeur et ouvre le sélecteur des constantes, des variables IHM et des variables système. Une case qui n'attend qu'une formule (l'expression d'une plume, la condition d'une alarme) se lit en formule : `SPPV_TELUNA[0].SP`, `Pression > 10` ; `12.5` ou `TRUE` y restent des constantes.
+- **En marche, une case qui n'attend qu'une formule se calcule**, quel que soit l'objet : la fin de course d'un registre (`=FCO_RG1`), le déclenchement d'un clapet coupe-feu, les booléens A et B d'une vanne 3 voies, une condition. Dans un symbole, le paramètre qu'elle cite reçoit l'argument de l'instance ; renommer la variable ou le paramètre la suit.
 - **Les listes** s'écrivent entre parenthèses, séparées par des points-virgules : `(a;b;…)` ; les **intervalles** `a..b` (`0..100`).
 | Le type de la case | Tu écris | La case garde |
 | nombre entier (INT, DINT…) | `1 500`, `-12` | `1500`, `-12` (`12.7` est refusé) |

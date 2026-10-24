@@ -16017,6 +16017,11 @@ const std::vector<Topic>& topics() {
                          "variables syst\xC3\xA8me. Une case qui n'attend qu'une formule (l'expression d'une "
                          "plume, la condition d'une alarme) se lit en formule : `SPPV_TELUNA[0].SP`, "
                          "`Pression > 10` ; `12.5` ou `TRUE` y restent des constantes.", {}, "1.12.23"},
+             {K::Bullet, "**En marche, une case qui n'attend qu'une formule se calcule**, quel que soit "
+                         "l'objet : la fin de course d'un registre (`=FCO_RG1`), le d\xC3\xA9" "clenchement "
+                         "d'un clapet coupe-feu, les bool\xC3\xA9" "ens A et B d'une vanne 3 voies, une "
+                         "condition. Dans un symbole, le param\xC3\xA8tre qu'elle cite re\xC3\xA7oit "
+                         "l'argument de l'instance ; renommer la variable ou le param\xC3\xA8tre la suit.", {}, "1.12.19"},
              {K::Bullet, "**Les listes** s'\xC3\xA9" "crivent entre parenth\xC3\xA8ses, "
                          "s\xC3\xA9par\xC3\xA9" "es par des points-virgules : `(a;b;\xE2\x80\xA6)` ; les "
                          "**intervalles** `a..b` (`0..100`).", {}, "1.12.19"},
