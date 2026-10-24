@@ -8975,9 +8975,9 @@ Pour passer quelques vues, et ce dont elles ont besoin, d'un projet à l'autre :
 **Dossier Word** et **Dossier PDF** écrivent la documentation de l'IHM (voir « Le dossier de l'IHM »).
 
 == archive-projet | Le projet dans un seul fichier : l'archive .xihm
-: Projet › Exporter en archive .xihm… met tout le projet dans un seul fichier - les vues, les ressources de tout genre, les fichiers externes liés, les équipements, la simulation, l'historique des objets, les versions. Il se rouvre à l'identique : Projet › Ouvrir…, un double-clic sur le fichier, ou le fichier lâché sur la fenêtre.
+: Projet › Exporter en archive .xihm… met tout le projet dans un seul fichier - les vues, les ressources de tout genre, les fichiers externes liés, les équipements, la simulation, l'historique des objets, les versions, le cache de construction. Il se rouvre à l'identique, sans se régénérer : Projet › Ouvrir…, un double-clic sur le fichier, ou le fichier lâché sur la fenêtre.
 @depuis 1.12.30
-@mots archive, .xihm, xihm, Exporter en archive .xihm, Importer une archive, Ouvrir l'archive, Déballer et ouvrir, déballer, Déballer ce qui est intact, archive abîmée, version plus récente, manifeste, manifeste.txt, SHA-256, empreinte, transmettre un projet, envoyer un projet, IHM-Studio.exe, double-clic, _externes, .zip
+@mots archive, .xihm, xihm, Exporter en archive .xihm, Importer une archive, Ouvrir l'archive, Déballer et ouvrir, déballer, Déballer ce qui est intact, archive abîmée, version plus récente, manifeste, manifeste.txt, SHA-256, empreinte, transmettre un projet, envoyer un projet, IHM-Studio.exe, double-clic, _externes, .zip, cache de construction, build-cache.txt, .xpg/build, artefacts
 @voir echange, page-web, versions, dossiers
 @capture PNG_echanges_02_exporter_archive.png | Projet › Exporter en archive .xihm… : le fichier, les versions, l'historique de marche.
 @capture PNG_echanges_04_ouvrir_archive.png | Une archive à ouvrir : où la déballer (le dossier des projets, sous son nom), puis le projet s'ouvre.
@@ -8993,13 +8993,16 @@ Pour passer quelques vues, et ce dont elles ont besoin, d'un projet à l'autre :
 | L'historique des objets | qui a changé quoi, objet par objet |
 | Les versions | les versions du projet (au choix) |
 | L'historique de marche | alarmes, mesures, audit, mémoire des réglages PID (au choix) |
-Ne sont pas pris : le cache de construction, `exports/` et la corbeille. Son **manifeste** dit l'application qui l'a écrite et sa version, les comptes du projet (vues, objets, ressources, scripts, alarmes, versions…) et, pour chaque fichier, sa taille, sa date et son empreinte SHA-256.
+| Le cache de construction | ce que le dernier build a fait, élément par élément : rouvert, le projet ne se régénère pas |
+Ne sont pas pris : `exports/` et la corbeille ; du cache, ni ses artefacts (refaits au déballage, d'après lui) ni sa copie de secours. Son **manifeste** dit l'application qui l'a écrite et sa version, les comptes du projet (vues, objets, ressources, scripts, alarmes, versions…) et, pour chaque fichier, sa taille, sa date et son empreinte SHA-256.
 ### L'ouvrir
 **Projet › Ouvrir…** (un fichier `.xihm`), **Projet › Importer une archive…**, un **double-clic** sur le fichier (l'installation associe `.xihm` à IHM Studio : `IHM-Studio.exe chemin.xihm`), ou le fichier **lâché sur la fenêtre**. IHM Studio est déjà ouvert ? La demande lui passe, comme pour un projet. Puis :
 1. l'archive est relue, chaque fichier vérifié (sa taille, son empreinte) ;
 2. **où la déballer** : par défaut le dossier des projets, sous son nom (« Ligne_gaz (2) » s'il est pris) - un dossier neuf, ou vide ;
 3. le projet s'ouvre (le projet en mémoire, s'il est modifié, se demande d'abord), et le contrôle dit ce qu'il a retrouvé : chaque compte du manifeste, relu.
 Un fichier externe lié hors du projet revient dans le dossier `externes/` du projet, et le lien le suit - sauf si son fichier d'origine est là, intact : le lien d'origine reste.
+### Le build reprend où il en était
+Le **cache de construction** (`.xpg/build/build-cache.txt`) a suivi : ce qui était généré et compilé l'est encore, **Démarrer** ne régénère rien de plus qu'avant l'export. Ses artefacts (la forme générée de chaque élément) se refont au déballage, d'après lui, chacun à l'empreinte que le cache a retenue. Un élément qui a changé depuis le dernier build (modifié et enregistré après lui, ou un fichier externe relié à sa copie) n'a plus la même empreinte : il est refait au prochain build, jamais pris pour à jour. Une archive sans cache (écrite par une version d'avant) : le premier build refait tout, comme avant.
 ### Une archive abîmée, ou plus récente
 - **Abîmée** (une copie interrompue, un fichier altéré) : elle le dit, fichier par fichier ; **Déballer ce qui est intact** ouvre le projet sans eux, et ce qui manque est dit.
 - **Écrite par une version plus récente** d'IHM Studio : rien n'est déballé, mets IHM Studio à jour pour l'ouvrir.
@@ -9027,7 +9030,7 @@ Aucun lien vers Internet : elle se lit hors ligne, s'envoie par courriel, se ran
 ### À chaque enregistrement
 **Mettre à jour la page web à chaque enregistrement** (dans la fenêtre Exporter en page web) : à chaque Ctrl+S, la page se réécrit toute seule, au même endroit, sans ralentir l'enregistrement ; la barre d'état dit « Page web mise à jour ». Le choix est gardé dans la fiche du projet.
 ### La réimporter
-**Projet › Importer depuis une page web…** (ou **Projet › Ouvrir…** sur le `.html`, ou la page lâchée sur la fenêtre) : le projet que porte la page est déballé, où tu veux, puis il s'ouvre - à l'identique, comme une archive .xihm. Une page qu'une autre application a écrite est refusée : « cette page n'a pas été écrite par IHM Studio ni par API Studio ».
+**Projet › Importer depuis une page web…** (ou **Projet › Ouvrir…** sur le `.html`, ou la page lâchée sur la fenêtre) : le projet que porte la page est déballé, où tu veux, puis il s'ouvre - à l'identique, comme une archive .xihm, son cache de construction compris (il ne se régénère pas). Une page qu'une autre application a écrite est refusée : « cette page n'a pas été écrite par IHM Studio ni par API Studio ».
 
 == dossier | Le dossier de l'IHM
 : Un document Word ou PDF qui décrit l'IHM telle qu'elle est enregistrée : chaque vue avec sa vignette, les variables, les alarmes, les recettes, les utilisateurs, les scripts, les essais. Il se refait en un clic, toujours à jour.
@@ -9339,7 +9342,7 @@ Une modification faite dans le grafcet (le volet Code, un dialogue, l'outil Supp
 @capture PNG_echanges_03_exporter_xapi.png | Projet › Exporter en archive .xapi… : le fichier, les versions, l'historique, les macros.
 @capture PNG_echanges_07_page_web_api.png | La page web du programme : les tâches et l'ordre d'exécution, chaque section et son code.
 ### L'archive .xapi
-**Projet › Exporter en archive .xapi…** (ou le clic droit sur la racine de l'arbre) : la fiche du projet, les sections (ST, ladders, FBD, GRAFCET, gardés tels quels), les unités de programme, les DFB, les DDT, les variables, les tâches, la configuration, les tables d'animation, l'icône, les données, la disposition des grafcets (le fichier `.xpglayout` d'à côté) ; au choix, les **versions**, l'**historique** et les **macros** de la bibliothèque. Le manifeste compte les sections, les unités, les DFB, les DDT, les variables globales, les tâches, les modules, les tables et les versions, et garde l'empreinte SHA-256 de chaque fichier.
+**Projet › Exporter en archive .xapi…** (ou le clic droit sur la racine de l'arbre) : la fiche du projet, les sections (ST, ladders, FBD, GRAFCET, gardés tels quels), les unités de programme, les DFB, les DDT, les variables, les tâches, la configuration, les tables d'animation, l'icône, les données, la disposition des grafcets (le fichier `.xpglayout` d'à côté) ; au choix, les **versions**, l'**historique** et les **macros** de la bibliothèque. Le manifeste compte les sections, les unités, les DFB, les DDT, les variables globales, les tâches, les modules, les tables et les versions, et garde l'empreinte SHA-256 de chaque fichier. Ne sont pas pris : `exports/` et la corbeille. Le dossier a aussi une IHM (un projet de la 1.11) ? Le cache de son build (`.xpg/build/build-cache.txt`) vient avec et ses artefacts se refont au déballage : IHM Studio le trouve à jour, comme après une archive .xihm.
 ### L'ouvrir
 **Projet › Ouvrir…** sur un `.xapi`, **Projet › Importer une archive…**, un double-clic (`API-Studio.exe chemin.xapi`), ou le fichier lâché sur la fenêtre : où la déballer (par défaut le dossier des projets, sous son nom), puis le projet s'ouvre et chaque compte est relu. Une macro de l'archive qui manque à ta bibliothèque y est ajoutée ; une macro que tu as déjà n'est pas remplacée. Une archive abîmée, plus récente, ou d'un projet IHM (`.xihm`) : la raison est dite.
 ### La page web

@@ -209,6 +209,22 @@ using ArtifactCheck = std::function<bool(const std::string& relativePath, const 
 [[nodiscard]] ArtifactCheck diskArtifacts(const std::string& buildFolder);
 [[nodiscard]] Analysis analyse(std::vector<Element> elements, const Cache&, const ArtifactCheck&);
 
+// ---- 1.12.31 : les artefacts d'un cache deballe ----------------------------------
+//  L'ARCHIVE D'UN PROJET (.xihm, sa page web) EMPORTE LE CACHE (build-cache.txt), PAS
+//  LES ARTEFACTS : ils se deduisent du projet. Au deballage, l'artefact de chaque element
+//  que le cache dit genere est refait comme le build l'ecrit, puis pose SEULEMENT s'il a
+//  exactement l'empreinte que le cache a retenue, a son chemin (celui que le build lui
+//  donne : rien hors de `buildFolder`). Son texte porte les empreintes de l'element : un
+//  element qui a change depuis le build n'a pas le meme - il n'est pas pose, l'analyse
+//  le dit (artefact absent) et le build le regenere. Jamais un artefact faux pris pour bon.
+struct Restored {
+    bool        cache{false};  // un cache lisible (sinon : rien a refaire, le build refera tout)
+    std::size_t written{0};    // refaits, a l'empreinte du cache
+    std::size_t present{0};    // deja la, a l'empreinte du cache
+    std::size_t stale{0};      // l'element a change depuis le build : il sera regenere
+};
+[[nodiscard]] Restored restoreArtifacts(const Project&, const ApiInfo&, const std::string& buildFolder);
+
 // Ce que montrent l'arbre et l'editeur pour un element.
 struct Shown {
     State       state{State::NotGenerated};
