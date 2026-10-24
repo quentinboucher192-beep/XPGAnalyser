@@ -1,0 +1,15 @@
+# XpgAnalyzer - projet IHM (format 28)
+ihm format=28 prochain_id=60
+config nom="Essai web" description="Projet d'essai du moteur wasm" version="1.0.0" auteur="essai" cree="2026-10-24 00:00" modifie="2026-10-24 00:00" largeur=800 hauteur=480 orientation="Paysage" demarrage=1 cycle=100
+vue id=1 fichier="vues/0001-Accueil.vue"
+vue id=40 fichier="vues/0040-Detail.vue"
+vue id=50 fichier="vues/0050-Popup_Info.vue"
+variable id=10 nom="Compteur" type="INT" initiale="0" description="incremente a chaque cycle"
+variable id=11 nom="Consigne" type="REAL" initiale="20.0" description="une consigne de l'operateur (remanente : gardee par le navigateur)" remanente=1
+variable id=12 nom="Secondes" type="DINT" initiale="0" description="compte par le script detache"
+variable id=13 nom="Marche" type="BOOL" initiale="0" description="demarre le comptage detache"
+variable id=17 nom="Vitesse" type="INT" initiale="0" description="reglee par le curseur"
+script id=20 nom="Montee" langage=ST evenement=Cyclique periode=100 surveille="" fichier="scripts/0020-Montee.st" description="Compteur + 1 a chaque cycle"
+script id=21 nom="Chrono" langage=ST evenement=Demarrage periode=0 surveille="" fichier="scripts/0021-Chrono.st" description="compte les secondes, detache, avec WAIT" detache=1
+alarme id=30 nom="Seuil" condition="Compteur > 50" message="Compteur au-dessus de 50" priorite=2 categorie="Alarme" groupe="A" acquittement=1 delai=0 description="" consigne="Souffler"
+fin

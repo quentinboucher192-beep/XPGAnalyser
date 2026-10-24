@@ -770,6 +770,14 @@ if(XPG_BUILD_TESTS)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         add_test(NAME vcxproj COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/outils/verifier_vcxproj.py)
+        # ---- 1.12.31 : la page web EN MARCHE - le moteur de l'IHM compile en WebAssembly
+        # (outils/web/construire_web.sh -> third_party/web/ihm-web.wasm). web_moteur : sous Node
+        # (cycles, script, consigne, alarme, WAIT detache) ; web_page : la page dans Chromium
+        # (Playwright). Sautes (code 77) sans Node, sans Playwright ou sans le .wasm : ctest ne
+        # doit pas echouer sur une machine qui ne les a pas.
+        add_test(NAME web_moteur COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/outils/web/essais.py moteur)
+        add_test(NAME web_page COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/outils/web/essais.py page)
+        set_tests_properties(web_moteur web_page PROPERTIES SKIP_RETURN_CODE 77)
     endif()
     xpg_add_test(NAME searchfocus COMMAND searchfocus_test)                  # ---- Lot API 8 : finitions (Ctrl+F) ----
     xpg_add_test(NAME lot8tutorials COMMAND lot8tutorials_test)              # ---- Lot API 8 : didacticiels et aide ----

@@ -13,6 +13,7 @@
 #include <cctype>
 #include <charconv>
 #include <chrono>
+#include <cstdlib>
 #include <cstdio>
 #include <ctime>
 #include <limits>
@@ -106,8 +107,18 @@ std::optional<sim::Value> valueFrom(sim::Type t, const std::string& text) {
         case sim::Type::String: return sim::Value::text(text);
         case sim::Type::Real: {
             double d = 0;
+#ifdef XPG_WEB
+            // La libc++ wasm32-wasi d'ici n'a pas from_chars pour les flottants : strtod, avec
+            // les memes refus (vide, blanc devant, reste non lu).
+            const std::string z(text);
+            if (z.empty() || std::isspace(static_cast<unsigned char>(z.front())) != 0) return std::nullopt;
+            char* end = nullptr;
+            d = std::strtod(z.c_str(), &end);
+            if (end != z.c_str() + z.size()) return std::nullopt;
+#else
             const auto r = std::from_chars(text.data(), text.data() + text.size(), d);
             if (r.ec != std::errc{} || r.ptr != text.data() + text.size()) return std::nullopt;
+#endif
             return sim::Value::real(d);
         }
         default: {

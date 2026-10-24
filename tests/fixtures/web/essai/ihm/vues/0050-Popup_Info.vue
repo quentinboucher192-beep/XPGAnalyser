@@ -1,0 +1,33 @@
+# XpgAnalyzer - vue IHM (format 28)
+vue id=50 nom="Popup_Info" description="" largeur=360 hauteur=200 fond="#20242B" calque_actif=51 role=popup popup_titre=1 popup_libelle="Information" popup_modale=1 popup_deplacable=1 popup_fermer=1 popup_dehors=0 popup_position="centre"
+calque id=51 nom="Calque 1" visible=1 verrou=0
+objet id=52 type=Text nom="Info_Texte" calque=51 parent=0 verrou=0 cache=0
+prop cle=x valeur="20"
+prop cle=y valeur="30"
+prop cle=w valeur="320"
+prop cle=h valeur="40"
+prop cle=rot valeur="0"
+prop cle=visible valeur="TRUE"
+prop cle=opacity valeur="100"
+prop cle=text valeur="Compteur = {Compteur}"
+prop cle=fontSize valeur="22"
+prop cle=textColor valeur="#E6EAF0"
+prop cle=align valeur="gauche"
+objet id=53 type=Button nom="Fermer_Info" calque=51 parent=0 verrou=0 cache=0
+prop cle=x valeur="20"
+prop cle=y valeur="110"
+prop cle=w valeur="160"
+prop cle=h valeur="44"
+prop cle=rot valeur="0"
+prop cle=visible valeur="TRUE"
+prop cle=opacity valeur="100"
+prop cle=text valeur="Fermer"
+prop cle=fontSize valeur="18"
+prop cle=textColor valeur="#FFFFFF"
+prop cle=fill valeur="#2F6FD6"
+prop cle=stroke valeur="#1D4FA3"
+prop cle=strokeWidth valeur="1"
+prop cle=radius valeur="4"
+prop cle=confirmMode valeur="aucune"
+action objet=53 declencheur="Clic" operation="Fermer la popup"
+fin

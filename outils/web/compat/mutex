@@ -1,0 +1,97 @@
+// =============================================================================
+//  outils/web/compat/mutex - 1.12.31 : <mutex> pour la page web (wasm, un seul fil)
+// -----------------------------------------------------------------------------
+//  La libc++ wasm32-wasi d'ici est construite SANS fils (_LIBCPP_HAS_NO_THREADS) :
+//  <mutex> n'y definit ni std::mutex, ni lock_guard, ni unique_lock. La page web
+//  n'a qu'un fil (tout avance a chaque image) : un verrou n'y protege rien et ne
+//  bloque jamais. Ce fichier donne donc des verrous vides, assez pour que le code
+//  du moteur qui en pose (par prudence, pour le poste multi-fils) se compile et
+//  tourne tel quel sur la page.
+//
+//  Place en premier dans le chemin d'inclusion (-isystem) : il remplace le
+//  <mutex> de la libc++ pour NOTRE code seulement (la libc++ inclut <__mutex/...>
+//  directement, jamais <mutex>).
+// =============================================================================
+#ifndef XPG_WEB_COMPAT_MUTEX
+#define XPG_WEB_COMPAT_MUTEX
+
+namespace std {
+
+struct mutex {
+    constexpr mutex() noexcept = default;
+    mutex(const mutex&) = delete;
+    mutex& operator=(const mutex&) = delete;
+    void lock() noexcept {}
+    bool try_lock() noexcept { return true; }
+    void unlock() noexcept {}
+};
+
+struct recursive_mutex {
+    recursive_mutex() noexcept = default;
+    recursive_mutex(const recursive_mutex&) = delete;
+    recursive_mutex& operator=(const recursive_mutex&) = delete;
+    void lock() noexcept {}
+    bool try_lock() noexcept { return true; }
+    void unlock() noexcept {}
+};
+
+struct defer_lock_t { explicit defer_lock_t() = default; };
+struct try_to_lock_t { explicit try_to_lock_t() = default; };
+struct adopt_lock_t { explicit adopt_lock_t() = default; };
+inline constexpr defer_lock_t defer_lock{};
+inline constexpr try_to_lock_t try_to_lock{};
+inline constexpr adopt_lock_t adopt_lock{};
+
+template <class M>
+class lock_guard {
+public:
+    using mutex_type = M;
+    explicit lock_guard(M&) noexcept {}
+    lock_guard(M&, adopt_lock_t) noexcept {}
+    ~lock_guard() = default;
+    lock_guard(const lock_guard&) = delete;
+    lock_guard& operator=(const lock_guard&) = delete;
+};
+
+template <class... Ms>
+class scoped_lock {
+public:
+    explicit scoped_lock(Ms&...) noexcept {}
+    scoped_lock(adopt_lock_t, Ms&...) noexcept {}
+    ~scoped_lock() = default;
+    scoped_lock(const scoped_lock&) = delete;
+    scoped_lock& operator=(const scoped_lock&) = delete;
+};
+
+template <class M>
+class unique_lock {
+public:
+    using mutex_type = M;
+    unique_lock() noexcept = default;
+    explicit unique_lock(M& m) noexcept : m_(&m), owns_(true) {}
+    unique_lock(M& m, defer_lock_t) noexcept : m_(&m), owns_(false) {}
+    unique_lock(M& m, try_to_lock_t) noexcept : m_(&m), owns_(true) {}
+    unique_lock(M& m, adopt_lock_t) noexcept : m_(&m), owns_(true) {}
+    unique_lock(unique_lock&& o) noexcept : m_(o.m_), owns_(o.owns_) { o.m_ = nullptr; o.owns_ = false; }
+    unique_lock& operator=(unique_lock&& o) noexcept {
+        m_ = o.m_; owns_ = o.owns_; o.m_ = nullptr; o.owns_ = false; return *this;
+    }
+    ~unique_lock() = default;
+    unique_lock(const unique_lock&) = delete;
+    unique_lock& operator=(const unique_lock&) = delete;
+    void lock() noexcept { owns_ = true; }
+    bool try_lock() noexcept { owns_ = true; return true; }
+    void unlock() noexcept { owns_ = false; }
+    [[nodiscard]] bool owns_lock() const noexcept { return owns_; }
+    explicit operator bool() const noexcept { return owns_; }
+    [[nodiscard]] M* mutex() const noexcept { return m_; }
+    M* release() noexcept { M* r = m_; m_ = nullptr; owns_ = false; return r; }
+
+private:
+    M*   m_{nullptr};
+    bool owns_{false};
+};
+
+} // namespace std
+
+#endif

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="{{APPLICATION}}">
+{{ARCHIVE_MARKER}}
+<title>{{TITRE}} — {{APPLICATION}}</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#9aa7b4;--line:#2b3440;--accent:#5b93f0;--ok:#3fb950;--bad:#f85149;--warn:#d29922}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000;color:var(--ink);font:13px/1.4 "Segoe UI",Tahoma,"DejaVu Sans",Arial,sans-serif;overflow:hidden}
+#ihm{position:fixed;inset:0 0 30px 0;background:#000}
+#ihm canvas{width:100%;height:100%;display:block;outline:none;touch-action:none}
+#barre{position:fixed;left:0;right:0;bottom:0;height:30px;display:flex;align-items:center;gap:14px;padding:0 10px;
+background:var(--panel);border-top:1px solid var(--line);white-space:nowrap;overflow-x:auto;z-index:5}
+#barre .grp{display:flex;align-items:center;gap:6px}
+#barre .k{color:var(--muted)}
+#barre button{font:inherit;color:var(--ink);background:#0d1117;border:1px solid var(--line);border-radius:4px;padding:2px 8px}
+#barre button{cursor:pointer}
+#barre button:hover{border-color:var(--accent)}
+.pt{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.pt.ok{background:var(--ok)}.pt.bad{background:var(--bad)}.pt.sim{background:#a371f7}
+#equip{display:flex;gap:10px}
+#equip .e{display:flex;align-items:center;gap:5px}
+#equip .why{color:var(--bad);max-width:280px;overflow:hidden;text-overflow:ellipsis}
+#msg{color:var(--warn)}
+.ov{position:fixed;inset:0 0 30px 0;background:rgba(5,8,12,.82);display:flex;align-items:flex-start;justify-content:center;z-index:10;overflow:auto}
+.ov[hidden]{display:none}
+.ov .win{background:#fff;color:#1d2430;margin:24px;border-radius:8px;max-width:1100px;width:calc(100% - 48px);min-height:200px}
+.ov .wbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #d9dee6;position:sticky;top:0;background:#fff}
+.ov .wbar b{flex:1}
+.ov .wbar button{font:inherit;border:1px solid #c5ccd6;background:#f4f6f9;border-radius:4px;padding:3px 10px;cursor:pointer}
+.ov .wbody{padding:12px 16px}
+#etat{position:fixed;inset:0 0 30px 0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:15px;pointer-events:none;text-align:center;padding:0 24px}
+#etat[hidden]{display:none}
+#doc .wbody{padding:0}
+#doc-cadre{display:block;width:100%;height:calc(100vh - 120px);border:0;background:#fff}
+</style>
+</head>
+<body>
+<div id="ihm"><canvas id="ihm-canvas" aria-label="{{TITRE}} : l'IHM en marche"></canvas></div>
+<div id="etat">L'IHM démarre…</div>
+<div id="barre" role="toolbar" aria-label="Barre de l'IHM">
+  <span class="grp" title="L'IHM tourne dans la page : ses vues, ses variables IHM, ses scripts, ses alarmes. Les équipements (Modbus TCP) n'y sont pas reliés."><span class="k">Mode</span><span id="mode">Simulation</span></span>
+  <span id="equip"></span>
+  <span class="grp"><span class="k">Utilisateur</span><span id="user">—</span></span>
+  <span class="grp"><span class="k">Vue</span><span id="vue">—</span></span>
+  <span id="msg"></span>
+  <span style="flex:1"></span>
+  <span class="grp"><button type="button" data-doc="alarmes">Alarmes</button><button type="button" data-doc="variables">Variables</button><button type="button" data-doc="scripts">Scripts</button><button type="button" data-doc="fiche">Fiche</button></span>
+  {{DOWNLOAD_BUTTON}}
+</div>
+<div id="doc" class="ov" hidden><div class="win"><div class="wbar"><b id="doc-titre"></b><button type="button" id="doc-fermer">Fermer (Échap)</button></div><div class="wbody"><iframe id="doc-cadre" title="La documentation du projet"></iframe></div></div></div>
+{{DOC_BLOCK}}
+<script id="xpg-moteur" type="application/x-xpg-wasm" data-gzip="{{MOTEUR_GZIP}}">{{MOTEUR}}</script>
+<script id="xpg-police" type="application/x-xpg-font">{{POLICE}}</script>
+{{ARCHIVE_BLOCK}}
+<script>{{HOTE}}</script>
+<script>{{AMORCE}}</script>
+</body>
+</html>

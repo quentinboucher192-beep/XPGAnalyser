@@ -252,6 +252,11 @@ std::string_view externalStatusLabel(ExternalStatus s) noexcept {
 }
 
 std::string fileStamp(const std::string& path) {
+#ifdef XPG_WEB
+    // La page n'a pas de disque (ni clock_cast dans sa libc++ wasm) : pas d'horodatage de fichier.
+    (void)path;
+    return {};
+#else
     std::error_code ec;
     const auto ft = fs::last_write_time(path, ec);
     if (ec) return {};
@@ -267,6 +272,7 @@ std::string fileStamp(const std::string& path) {
     std::snprintf(b, sizeof b, "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
                   tm.tm_hour, tm.tm_min, tm.tm_sec);
     return b;
+#endif
 }
 
 std::string resolveExternalPath(const ExternalFile& f, const std::string& projectFolder) {

@@ -1104,6 +1104,10 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ReportWindow.hpp" />
     <ClInclude Include="src\app\SvgRenderer.hpp" />
     <ClInclude Include="src\help\Trails.hpp" />
+    <ClInclude Include="src\web\WebCanvas.hpp" />
+    <ClInclude Include="src\web\WebEngine.hpp" />
+    <ClInclude Include="src\web\WebFiber.hpp" />
+    <ClInclude Include="src\web\WebRenderer.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

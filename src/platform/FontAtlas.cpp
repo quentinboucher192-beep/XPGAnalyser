@@ -223,25 +223,34 @@ FontAtlas::FontAtlas(FontAtlas&&) noexcept = default;
 FontAtlas& FontAtlas::operator=(FontAtlas&&) noexcept = default;
 
 bool FontAtlas::load(const std::string& path, float pixelHeight) {
+    // Un fichier illisible : aucun octet, et loadFromMemory remet l'atlas a vide (comme avant).
+    std::ifstream in(path, std::ios::binary);
+    std::vector<std::uint8_t> bytes;
+    if (in) bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>{});
+    if (!loadFromMemory(bytes.data(), bytes.size(), pixelHeight)) return false;
+    path_ = path;
+    return true;
+}
+
+// 1.12.31 : charger une police DEPUIS DES OCTETS (la page web embarque son TTF ;
+// elle n'a pas de disque). Le reste est identique a load().
+bool FontAtlas::loadFromMemory(const std::uint8_t* data, std::size_t size, float pixelHeight) {
     ready_ = false;
     glyphs_.clear();
     pixels_.clear();
 
     if (pixelHeight < 4.f || pixelHeight > 256.f) return false;
-
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return false;
+    if (!data || size < 64) return false;
 
     auto face = std::make_unique<Face>();
-    face->data.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    if (face->data.size() < 64) return false;
+    face->data.assign(data, data + size);
 
     const int offset = stbtt_GetFontOffsetForIndex(face->data.data(), 0);
     if (offset < 0) return false;
     if (!stbtt_InitFont(&face->info, face->data.data(), offset)) return false;
 
     face_ = std::move(face);
-    path_ = path;
+    path_.clear();
     pixelHeight_ = pixelHeight;
     scale_ = stbtt_ScaleForPixelHeight(&face_->info, pixelHeight);
 

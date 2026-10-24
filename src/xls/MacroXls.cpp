@@ -17,7 +17,9 @@ namespace xls {
             if (ec) return {};
             const auto when = std::filesystem::last_write_time(path, ec);
             if (ec) return {};
-            return std::to_string(size) + "@" + std::to_string(when.time_since_epoch().count());
+            // static_cast : sur wasm32, le type de count() rend to_string ambigu (long vs long long).
+            return std::to_string(static_cast<unsigned long long>(size)) + "@"
+                 + std::to_string(static_cast<long long>(when.time_since_epoch().count()));
         }
     } // namespace
 

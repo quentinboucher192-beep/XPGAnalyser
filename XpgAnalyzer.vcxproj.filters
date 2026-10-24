@@ -54,6 +54,9 @@
     </Filter>
     <Filter Include="app\tutorial">
     </Filter>
+    <Filter Include="web">
+      <UniqueIdentifier>{efb28392-e1de-4ce4-81f9-6c6613bf4f36}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
@@ -2919,6 +2922,18 @@
     </ClInclude>
     <ClInclude Include="src\help\Trails.hpp">
       <Filter></Filter>
+    </ClInclude>
+    <ClInclude Include="src\web\WebCanvas.hpp">
+      <Filter>web</Filter>
+    </ClInclude>
+    <ClInclude Include="src\web\WebEngine.hpp">
+      <Filter>web</Filter>
+    </ClInclude>
+    <ClInclude Include="src\web\WebFiber.hpp">
+      <Filter>web</Filter>
+    </ClInclude>
+    <ClInclude Include="src\web\WebRenderer.hpp">
+      <Filter>web</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

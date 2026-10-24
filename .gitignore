@@ -21,3 +21,5 @@ __pycache__/
 # 1.12.30 : PDFium, pose par outils/pdfium/obtenir_pdfium.py (third_party/pdfium/ORIGINE.txt)
 /third_party/pdfium/win-x64/
 /third_party/pdfium/linux-x64/
+# 1.12.31 : le moteur de l'IHM en WebAssembly, fait par outils/web/construire_web.sh (livre avec l'application)
+/third_party/web/

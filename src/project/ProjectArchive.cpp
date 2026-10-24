@@ -49,6 +49,13 @@ bool startsWith(std::string_view s, std::string_view p) { return s.size() >= p.s
 bool endsWith(std::string_view s, std::string_view p) { return s.size() >= p.size() && s.compare(s.size() - p.size(), p.size(), p) == 0; }
 
 // ---- les dates -----------------------------------------------------------------------
+// 1.12.31 : la page web n'a pas de disque (elle ne lit que read(), une archive en
+// memoire) et sa libc++ wasm n'a pas std::chrono::clock_cast - les dates de fichiers
+// n'y servent pas.
+#ifdef XPG_WEB
+std::int64_t mtimeOf(const fs::path&) { return 0; }
+void setMtime(const fs::path&, std::int64_t) {}
+#else
 std::int64_t mtimeOf(const fs::path& p) {
     std::error_code ec;
     const auto ft = fs::last_write_time(p, ec);
@@ -63,6 +70,7 @@ void setMtime(const fs::path& p, std::int64_t t) {
     const auto sys = std::chrono::system_clock::from_time_t(static_cast<std::time_t>(t));
     fs::last_write_time(p, std::chrono::clock_cast<std::chrono::file_clock>(sys), ec);
 }
+#endif
 
 std::tm localOf(std::int64_t t) {
     std::tm tm{};
