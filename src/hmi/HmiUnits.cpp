@@ -3,6 +3,7 @@
 // =============================================================================
 #include "HmiUnits.hpp"
 #include "HmiTypeRegistry.hpp"   // typereg::isNumber
+#include "HmiTypes.hpp"          // types::membersOf (les membres herites)
 #include "../project/MemberTree.hpp"   // project::members::parseArray (l'element d'un ARRAY)
 
 #include <algorithm>
@@ -21,9 +22,22 @@ std::string fold(std::string_view s) {
         const unsigned char c = static_cast<unsigned char>(s[i]);
         if (c == 0xC2 && i + 1 < s.size()) {           // \xC2\xB0 (degre), \xC2\xB3 (exposant 3)...
             const unsigned char d = static_cast<unsigned char>(s[i + 1]);
-            if (d == 0xB0) { i += 2; continue; }        // le degre : ignore (degc == °c)
+            if (d == 0xB0 || d == 0xBA) { i += 2; continue; }   // le degre (et l'ordinal tape a sa place) : ignore (degc == °c)
+            if (d == 0xA0) { i += 2; continue; }                // l'espace insecable : un espace
             if (d == 0xB2) { out += '2'; i += 2; continue; }
             if (d == 0xB3) { out += '3'; i += 2; continue; }
+            // Le signe micro (la touche du clavier) : un u, comme on l'ecrit sans lui (um, us, uA). Avant, il
+            // etait jete : um devenait m, le metre, et une conversion se trompait d'un facteur un million.
+            if (d == 0xB5) { out += 'u'; i += 2; continue; }
+            // Tout autre caractere : garde tel quel - un symbole inconnu reste inconnu (Generer le dit) au lieu
+            // de se confondre avec une unite fournie.
+            out += s[i];
+            out += s[i + 1];
+            i += 2;
+            continue;
+        }
+        if (c == 0xCE && i + 1 < s.size() && static_cast<unsigned char>(s[i + 1]) == 0xBC) {   // le mu grec : un u aussi
+            out += 'u';
             i += 2;
             continue;
         }
@@ -195,6 +209,24 @@ std::string Catalog::familyLabel(std::string_view name) const {
     return std::string(name);
 }
 
+std::string Catalog::familyPhrase(std::string_view symbol) const {
+    const UnitDef* u = unit(symbol);
+    if (!u) return "une grandeur";
+    // Les familles fournies au masculin ; les autres fournies sont au feminin. Une famille du projet : on
+    // ne connait pas son genre - « une grandeur Angle ».
+    static const char* const kMasculine[] = {"debit", "debit_normalise", "temps", "courant", "pourcentage"};
+    static const char* const kFeminine[] = {"pression", "temperature", "longueur", "masse", "tension", "frequence"};
+    std::string label = familyLabel(u->family);
+    std::string low = label;
+    if (!low.empty()) low[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(low[0])));
+    const std::string f = fold(u->family);
+    for (const char* m : kMasculine)
+        if (f == m) return "un " + low;
+    for (const char* m : kFeminine)
+        if (f == m) return "une " + low;
+    return label.empty() ? std::string("une grandeur") : "une grandeur " + label;
+}
+
 std::string Catalog::unitLabel(std::string_view symbol) const {
     const UnitDef* u = unit(symbol);
     if (u) return u->label.empty() ? u->symbol : u->label;
@@ -291,14 +323,18 @@ std::string unitOfPath(const Project& project, std::string_view path) {
             ++i;
             const std::string member = word();
             if (member.empty()) break;
-            const HmiType* ht = project.hmiTypeByName(stripArray(type));
+            const std::string element = stripArray(type);
+            const HmiType* ht = project.hmiTypeByName(element);
             if (!ht || ht->kind != HmiTypeKind::Structure) return {};
+            // Les membres herites aussi (EXTENDS : la tranche du parent d'abord), comme typeOfPath.
+            const auto members = types::membersOf(project, element);
             const TypeMember* found = nullptr;
-            for (const auto& m : ht->members) {
-                std::string a, b;
+            std::string b;
+            for (char c : member) b += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            for (const auto& m : members) {
+                std::string a;
                 a.reserve(m.name.size());
                 for (char c : m.name) a += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-                for (char c : member) b += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
                 if (a == b) { found = &m; break; }
             }
             if (!found) return {};

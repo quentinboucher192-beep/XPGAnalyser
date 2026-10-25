@@ -58,6 +58,9 @@ public:
     [[nodiscard]] std::string       canonical(std::string_view symbol) const;
     [[nodiscard]] std::string       familyLabel(std::string_view name) const;    // "pression" -> "Pression"
     [[nodiscard]] std::string       unitLabel(std::string_view symbol) const;    // le libelle d'une unite
+    // La famille d'une unite pour un message, avec son article : "une pression", "un debit", "un temps" ;
+    // une famille du projet : "une grandeur Angle" ; une unite inconnue : "une grandeur".
+    [[nodiscard]] std::string       familyPhrase(std::string_view symbol) const;
 
     [[nodiscard]] const std::vector<UnitFamily>& families() const noexcept { return families_; }
     [[nodiscard]] const std::vector<UnitDef>&    units() const noexcept { return units_; }
@@ -87,7 +90,9 @@ private:
 
 // 1.13.0 (lot J6) : l'unite physique au bout d'un chemin de variable IHM ("Ligne.Pression", "Vannes[2]") ;
 // "" si aucune ou si le chemin ne se resout pas. L'unite d'un ARRAY porte sur l'element (un indice ne la
-// change pas). Sert au simulateur (EN / UNITE) via HmiRuntime::declaredUnit.
+// change pas ; son contenu n'est pas lu : "Vannes[0]" vaut pour toutes les cases). Un membre herite (EXTENDS)
+// garde son unite. Sert au simulateur (EN / UNITE, l'affectation convertie) via HmiRuntime::declaredUnit, et au
+// controle statique (exprcheck) : les deux lisent la meme unite.
 [[nodiscard]] std::string unitOfPath(const Project&, std::string_view path);
 
 } // namespace hmi::units
