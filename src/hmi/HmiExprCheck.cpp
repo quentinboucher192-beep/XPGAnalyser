@@ -32,6 +32,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <optional>
 #include <set>
 
 #include "HmiNames.hpp"   // 1.13.0 (lot J8) : les espaces de noms (Util.Moyenne, Gaz.T_Vanne)
@@ -85,6 +86,8 @@ struct Tok {
     double      num{0};
     bool        numKnown{false};
     T           litType{T::Unknown};    // un litteral type (T#5s, INT#3, BOOL#1)
+    // 1.13.0 : sa place dans le texte lu [at, end) - la correction d'un clic remplace le texte exact d'un operande.
+    std::size_t at{0}, end{0};
 };
 
 std::vector<Tok> lex(std::string_view s) {
@@ -106,12 +109,14 @@ std::vector<Tok> lex(std::string_view s) {
         if (c == '\'' || c == '"') {
             Tok t;
             t.k = Tok::K::Str;
+            t.at = i;
             std::size_t j = i + 1;
             while (j < n && s[j] != c) {
                 if (s[j] == '$' && j + 1 < n) { t.text += s[j + 1]; j += 2; continue; }
                 t.text += s[j++];
             }
             i = j < n ? j + 1 : n;
+            t.end = i;
             out.push_back(std::move(t));
             continue;
         }
@@ -127,6 +132,8 @@ std::vector<Tok> lex(std::string_view s) {
             }
             Tok t;
             t.k = Tok::K::Num;
+            t.at = i;
+            t.end = j;
             t.text = std::string(s.substr(i, j - i));
             std::string clean;
             for (char d : t.text) if (d != '_') clean += d;
@@ -159,6 +166,8 @@ std::vector<Tok> lex(std::string_view s) {
                 while (k < n && (identChar(s[k]) || s[k] == '.' || s[k] == ':' || (date && s[k] == '-'))) ++k;
                 Tok t;
                 t.k = Tok::K::Lit;
+                t.at = i;
+                t.end = k;
                 t.text = std::string(s.substr(i, k - i));
                 t.litType = (w == "T" || w == "TIME" || w == "LTIME") ? T::Time
                           : w == "BOOL"                                ? T::Bool
@@ -171,6 +180,8 @@ std::vector<Tok> lex(std::string_view s) {
             }
             Tok t;
             t.k = Tok::K::Ident;
+            t.at = i;
+            t.end = j;
             t.text = std::move(word);
             out.push_back(std::move(t));
             i = j;
@@ -182,10 +193,14 @@ std::vector<Tok> lex(std::string_view s) {
         for (const char* two : kTwo)
             if (s.substr(i, 2) == two) t.text = two;
         if (t.text.empty()) t.text = std::string(1, c);
+        t.at = i;
         i += t.text.size();
+        t.end = i;
         out.push_back(std::move(t));
     }
-    out.push_back(Tok{});
+    Tok last;
+    last.at = last.end = n;
+    out.push_back(std::move(last));
     return out;
 }
 
@@ -204,6 +219,13 @@ struct Val {
     // 1.13.0 (lot J6) : l'unite physique de la valeur ("bar") - celle du creneau lu (variable IHM, retour),
     // propagee a travers les calculs ; vide : aucune (un nombre nu, qui adopte l'unite de l'autre operande).
     std::string unit;
+    // 1.13.0 : lue telle quelle sur un chemin de variable IHM (Pression, Ligne.Vannes[2], entre parentheses au
+    // besoin) - la seule forme dont le moteur lit l'unite (EN la convertit, l'affectation aussi) ; un calcul, un
+    // appel, un signe : non. `unitFrom` : le chemin, tel qu'ecrit, qui lui donne son unite (PressionBasse dans
+    // PressionBasse * 2) ; [t0, t1) : ses jetons (le texte exact, pour la correction d'un clic).
+    bool        plain{false};
+    std::string unitFrom;
+    std::size_t t0{0}, t1{0};
 };
 
 // Les fonctions standard : nombre d'arguments (min, max ; -1 : sans limite).
@@ -282,16 +304,63 @@ std::vector<Tok> withNamespaces(const Context& ctx, std::vector<Tok> toks) {
     const auto runs = names::qualifiedRuns(ix, views, nullptr);
     for (auto it = runs.rbegin(); it != runs.rend(); ++it) {
         toks[it->first].text = it->text;
+        if (it->count > 1 && it->first + it->count - 1 < toks.size()) toks[it->first].end = toks[it->first + it->count - 1].end;   // 1.13.0
         if (it->count > 1)
             toks.erase(toks.begin() + static_cast<std::ptrdiff_t>(it->first + 1), toks.begin() + static_cast<std::ptrdiff_t>(it->first + it->count));
     }
     return toks;
 }
 
+// 1.13.0 : LE VERDICT D'UNITE D'UN PASSAGE DE VALEUR - la source `src` (son unite `su`, lue telle quelle sur un
+// chemin si `plain`, sinon tiree de `unitFrom`) vers une cible d'unite `tu` (`target` la nomme). Le moteur ne
+// convertit d'office qu'une affectation := dont la source est un chemin (il lit son unite, comme EN) ; un calcul,
+// un RETURN, un argument ne se convertissent pas : la compilation demande EN. Rien : pas d'unite des deux cotes,
+// la meme, ou un symbole inconnu (Generer le dit).
+std::optional<Problem> unitPassVerdict(const units::Catalog& cat, const std::string& tu, const std::string& su, const std::string& src,
+                                       bool plain, const std::string& unitFrom, UnitPass pass, const std::string& target, bool strict) {
+    if (tu.empty() || su.empty()) return std::nullopt;
+    const units::Rel rel = cat.relation(su, tu);
+    if (rel != units::Rel::SameFamily && rel != units::Rel::OtherFamily) return std::nullopt;
+    Problem pb;
+    pb.unit = true;
+    if (rel == units::Rel::OtherFamily) {
+        if (pass == UnitPass::Argument)
+            pb.message = "tu passes " + cat.familyPhrase(su) + " (" + su + ") " + "\xC3\xA0" + " " + target + ", qui attend " + cat.familyPhrase(tu) + " ("
+                       + tu + ") : deux familles diff\xC3\xA9rentes ne se convertissent pas";
+        else
+            pb.message = std::string(pass == UnitPass::Return ? "tu rends " : "tu affectes ") + cat.familyPhrase(su) + " " + "\xC3\xA0" + " "
+                       + cat.familyPhrase(tu) + " (" + su + " vers " + tu + ") : deux familles diff\xC3\xA9rentes ne se convertissent pas";
+        return pb;
+    }
+    if (pass == UnitPass::Assign && plain && !strict) {
+        pb.message = su + " converti en " + tu + " d'office (une info)";
+        pb.warning = true;                              // une info, pas une erreur : le projet demarre, le moteur convertit
+        return pb;
+    }
+    // Ce que la correction emballe dans EN : la source si elle est un chemin, sinon le chemin qui lui donne son unite.
+    const std::string what = plain ? src : unitFrom;
+    const std::string canon = cat.canonical(tu).empty() ? tu : cat.canonical(tu);
+    const std::string en = "EN(" + (what.empty() ? std::string("variable") : what) + ", '" + canon + "')";
+    if (pass == UnitPass::Assign && strict)
+        pb.message = tu + " exige une conversion explicite (option \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB) : \xC3\xA9" "cris " + en;
+    else if (pass == UnitPass::Assign)
+        pb.message = target + " est en " + tu + " et le calcul (" + src + ") en " + su
+                   + " : seule une variable ou un membre lu tel quel se convertit d'office ; \xC3\xA9" "cris " + en + " dans le calcul";
+    else if (pass == UnitPass::Return)
+        pb.message = target + " rend des " + tu + " et cette valeur est en " + su + " : un RETURN ne convertit pas, \xC3\xA9" "cris " + en;
+    else
+        pb.message = target + " attend des " + tu + " et " + src + " est en " + su + " : un argument ne se convertit pas, passe " + en;
+    if (!what.empty()) {
+        pb.fixFrom = what;
+        pb.fixTo = en;
+    }
+    return pb;
+}
+
 class Checker {
 public:
-    Checker(const Context& ctx, std::vector<Tok> toks)
-        : ctx_(ctx), toks_(std::move(toks)), cat_(ctx.project ? units::Catalog(ctx.project->config) : units::Catalog()) {}
+    Checker(const Context& ctx, std::vector<Tok> toks, std::string_view source = {})
+        : ctx_(ctx), toks_(std::move(toks)), src_(source), cat_(ctx.project ? units::Catalog(ctx.project->config) : units::Catalog()) {}
 
     Val run() { return orExpr(); }
     std::vector<Problem> problems;
@@ -307,32 +376,50 @@ private:
     const Context&   ctx_;
     std::vector<Tok> toks_;
     std::size_t      at_{0};
+    std::string_view src_;                                // 1.13.0 : le texte lu (les jetons y pointent)
     units::Catalog   cat_;                                // 1.13.0 (lot J6) : la bibliotheque des unites du projet
 
-    // 1.13.0 (lot J6) : le libelle d'une famille pour un message ("une pression", "une temperature").
-    std::string familyWord(std::string_view unit) const {
-        std::string f = cat_.familyLabel(cat_.familyOf(unit));
-        if (!f.empty()) f[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(f[0])));
-        return f.empty() ? std::string("une grandeur") : "une " + f;
+    // 1.13.0 : le texte exact d'une valeur, tel qu'ecrit (ses jetons) - la correction d'un clic le remplace ; a
+    // defaut, ce qu'on en montre.
+    std::string spanText(const Val& v) const {
+        if (v.t1 <= v.t0 || v.t1 > toks_.size()) return v.show;
+        const std::size_t from = toks_[v.t0].at, to = toks_[v.t1 - 1].end;
+        if (to <= from || to > src_.size()) return v.show;
+        return std::string(src_.substr(from, to - from));
     }
-    // 1.13.0 (lot J6) : LA REGLE DE + - ET DE LA COMPARAISON (meme unite exacte). Deux unites de meme
-    // famille mais differentes, ou de familles differentes : une erreur, avec la correction d'un clic
-    // (inserer EN sur l'operande de droite). Rend l'unite du resultat (celle qui reste) pour la suite.
+    // 1.13.0 : le chemin qui porte l'unite d'un resultat - celui de l'operande dont il garde l'unite.
+    static std::string unitSource(const std::string& unit, const Val& a, const Val& b) {
+        if (unit.empty()) return {};
+        if (unit == a.unit) return a.unitFrom;
+        if (unit == b.unit) return b.unitFrom;
+        return {};
+    }
+    // 1.13.0 (lot J6) : LA REGLE DE + - ET DE LA COMPARAISON (meme unite exacte ; MIN, MAX, LIMIT aussi). Deux
+    // unites de meme famille mais differentes, ou de familles differentes : une erreur, avec la correction d'un clic
+    // (inserer EN sur l'operande de droite - ou, dans un calcul, sur le chemin qui lui donne son unite : EN ne
+    // convertit qu'un chemin). Rend l'unite du resultat (celle qui reste) pour la suite.
     std::string unitAddCompare(const Val& a, const Val& b, const std::string& op, bool compare) {
+        (void)op;
         const units::Rel rel = cat_.relation(a.unit, b.unit);
         const char* verb = compare ? "ne se comparent pas" : "ne s'additionnent pas";
         if (rel == units::Rel::SameFamily) {
             const std::string target = cat_.canonical(a.unit);
-            Problem pb{a.unit + " et " + b.unit + " " + verb + " : convertis l'un des deux, par exemple EN(" + b.show
-                           + ", '" + target + "')", {}, {}};
-            pb.fixFrom = b.show;
-            pb.fixTo = "EN(" + b.show + ", '" + target + "')";
+            const std::string what = b.plain ? spanText(b) : b.unitFrom;
+            Problem pb{a.unit + " et " + b.unit + " " + verb + " : convertis l'un des deux, par exemple EN("
+                           + (what.empty() ? std::string("variable") : what) + ", '" + target + "')", {}, {}};
+            pb.unit = true;
+            if (!what.empty()) {
+                pb.fixFrom = what;
+                pb.fixTo = "EN(" + what + ", '" + target + "')";
+            }
             pushUnit(std::move(pb));
             return a.unit;
         }
         if (rel == units::Rel::OtherFamily) {
-            pushUnit(Problem{(compare ? "tu compares " : "tu additionnes ") + familyWord(a.unit) + " et " + familyWord(b.unit)
-                             + " (" + a.unit + " et " + b.unit + ") : deux familles diff\xC3\xA9rentes ne se m\xC3\xAAlent pas", {}, {}});
+            Problem pb{(compare ? "tu compares " : "tu additionnes ") + cat_.familyPhrase(a.unit) + " et " + cat_.familyPhrase(b.unit)
+                           + " (" + a.unit + " et " + b.unit + ") : deux familles diff\xC3\xA9rentes ne se m\xC3\xAAlent pas", {}, {}};
+            pb.unit = true;
+            pushUnit(std::move(pb));
             return {};
         }
         // None (une sans unite : le nu adopte l'autre), Same (ok), Unknown (Generer le dit) : l'unite qui reste.
@@ -341,6 +428,12 @@ private:
     void pushUnit(Problem pb) {
         for (const auto& p : problems) if (p.message == pb.message) return;
         problems.push_back(std::move(pb));
+    }
+    // 1.13.0 : une faute d'unite (EN mal employe) - une erreur, un script compris.
+    void unitProblem(std::string msg) {
+        Problem pb{std::move(msg), {}, {}};
+        pb.unit = true;
+        pushUnit(std::move(pb));
     }
 
     std::vector<std::set<std::string>> lambdaNames_;      // 1.12.19 : les parametres des LAMBDA ouvertes (en majuscules)
@@ -560,6 +653,8 @@ private:
                : (a.type == T::Num || b.type == T::Num)   ? T::Num
                                                           : T::Unknown;
         r.show = a.show + " " + op + " " + b.show;
+        r.t0 = a.t0;
+        r.t1 = b.t1;
         return r;
     }
 
@@ -605,6 +700,8 @@ private:
             Val r;
             r.type = T::Bool;
             r.show = a.show + " " + op + " " + b.show;
+            r.t0 = a.t0;
+            r.t1 = b.t1;
             a = r;
         }
         return a;
@@ -612,6 +709,8 @@ private:
     Val arith(const Val& a, const Val& b, const std::string& op) {
         Val r;
         r.show = a.show + " " + op + " " + b.show;
+        r.t0 = a.t0;
+        r.t1 = b.t1;
         wholeIn(a, "il ne se calcule pas (" + op + ")", op);   // 1.12.17
         wholeIn(b, "il ne se calcule pas (" + op + ")", op);
         // '+' met des textes bout a bout (le simulateur le fait) ; le reste non.
@@ -655,6 +754,7 @@ private:
             } else if (op == "MOD") {
                 r.unit = a.unit;
             }
+            r.unitFrom = unitSource(r.unit, a, b);     // 1.13.0 : le chemin qui porte cette unite
         }
         return r;
     }
@@ -663,6 +763,7 @@ private:
         Problem pb{a.unit + " " + op + " " + b.unit + " : l'unit\xC3\xA9 est perdue (" + a.show + " " + op + " " + b.show
                        + " donne un nombre nu)", {}, {}};
         pb.warning = true;
+        pb.unit = true;
         pushUnit(std::move(pb));
     }
     Val addExpr() {
@@ -691,9 +792,12 @@ private:
         return a;
     }
     Val unary() {
+        const std::size_t start = at_;                  // 1.13.0 : le signe fait partie du texte de la valeur
         if (isWord("NOT")) {
             next();
             Val a = unary();
+            a.plain = false;
+            a.t0 = start;
             if (textish(a)) problem("NOT ne s'applique pas \xC3\xA0 un texte (" + a.show + ") : compare-le d'abord (" + a.show + " = 'Marche')");
             wholeIn(a, "NOT ne s'y applique pas");             // 1.12.17
             a.whole.clear();
@@ -705,6 +809,8 @@ private:
         if (isOp("-") || isOp("+")) {
             const std::string op = next().text;
             Val a = unary();
+            a.plain = false;                            // -PressionBasse : un calcul, plus un chemin
+            a.t0 = start;
             if (textish(a)) problem("un texte n'a pas de signe (" + op + a.show + ") : convertis-le (STRING_TO_REAL)");
             wholeIn(a, "il n'a pas de signe", op);             // 1.12.17
             a.whole.clear();
@@ -715,7 +821,16 @@ private:
         return primary();
     }
 
+    // 1.13.0 : une valeur primaire et sa place (ses jetons) ; un chemin qui porte une unite dit lequel il est.
     Val primary() {
+        const std::size_t start = at_;
+        Val v = primaryValue();
+        v.t0 = start;
+        v.t1 = std::max(at_, start);
+        if (v.plain && !v.unit.empty() && v.unitFrom.empty()) v.unitFrom = spanText(v);
+        return v;
+    }
+    Val primaryValue() {
         const Tok t = peek();
         Val v;
         switch (t.k) {
@@ -848,32 +963,6 @@ private:
         return type;
     }
 
-    // 1.13.0 (lot J6) : l'unite du membre au bout d'un chemin (Ligne.Pression, Vannes[2]) ; "" si aucune ou
-    // incertaine. L'unite d'un ARRAY porte sur l'element : un indice ne la change pas.
-    std::string memberUnit(const std::string& rootType, const std::vector<Seg>& segs) const {
-        const Project* p = ctx_.project;
-        if (!p) return {};
-        std::string type = trimmed(rootType);
-        std::string unit;
-        for (const auto& sg : segs) {
-            if (sg.index) {
-                const auto shape = project::members::parseArray(type);
-                if (!shape.valid()) return {};
-                type = shape.element;                     // la case : l'element garde l'unite du membre
-                continue;
-            }
-            const HmiType* ht = p->hmiTypeByName(type);
-            if (!ht || ht->kind != HmiTypeKind::Structure) return {};
-            const TypeMember* found = nullptr;
-            for (const auto& m : ht->members)
-                if (up(m.name) == up(sg.member)) { found = &m; break; }
-            if (!found) return {};
-            type = trimmed(found->type);
-            unit = found->unit;
-        }
-        return unit;
-    }
-
     Val path(const std::string& root) {
         std::string text = root;
         std::vector<Seg> segs;
@@ -922,14 +1011,20 @@ private:
                 for (const auto& f : ctx_.view->functions) fn = fn || up(f.name) == up(root);
             if (fn) return v;
         }
-        if (const Variable* var = p ? p->variable(root) : nullptr) {
+        // 1.13.0 : un nom que le code declare lui-meme (une locale, un parametre) cache la variable IHM du meme nom.
+        const bool hidden = ctx_.hidden && ctx_.hidden(root);
+        if (const Variable* var = p && !hidden ? p->variable(root) : nullptr) {
             if (text == root) { typed(v, var->type); v.unit = var->unit; }       // 1.13.0 (J6) : l'unite de la variable
             else if (const auto ty = types::typeOfPath(*p, text); !ty.empty()) {
                 typed(v, ty);
-                v.unit = memberUnit(var->type, segs);                            // 1.13.0 (J6) : l'unite du membre lu
+                // 1.13.0 (J6) : l'unite du membre lu - la meme lecture que le moteur (units::unitOfPath) : un tableau
+                // de premier niveau garde l'unite de la variable, un membre herite (EXTENDS) la sienne.
+                v.unit = units::unitOfPath(*p, text);
             }
+            v.plain = true;                                                      // 1.13.0 : lue telle quelle
             return v;
         }
+        if (hidden) return v;                                                    // une locale : rien de connu ici
         // 1.9 : un parametre type de la vue - Moteur.Vitesse est REAL d'apres T_Moteur.
         // 1.11.13 : ou du symbole qui porte la popup (Vanne.POSITION dans Pop_Vanne de S_Vanne).
         if (p && ctx_.view) {
@@ -1132,8 +1227,26 @@ private:
         }
         return best;
     }
+    // 1.13.0 : passer un argument a un parametre qui porte une unite (VAR_INPUT Consigne : REAL [bar]) - le moteur
+    // ne convertit rien a l'appel : meme famille, EN ; familles differentes, un refus. Par position seulement (un
+    // appel nomme se juge ailleurs), et pour une seule surcharge possible.
+    void argumentUnits(const std::string& name, const HmiFunction& f, const std::vector<Val>& args) {
+        const auto sig = overload::signatureOf(f);
+        for (std::size_t k = 0; k < args.size() && k < sig.params.size(); ++k) {
+            const auto& prm = sig.params[k];
+            if (prm.mode == overload::Mode::Out || args[k].unit.empty()) continue;
+            std::string pu;
+            for (const auto& d : f.decls)
+                if (d.kind == DeclKind::Parameter && up(d.name) == up(prm.name)) { pu = trimmed(d.unit); break; }
+            if (pu.empty()) continue;
+            const std::string target = "le param\xC3\xA8tre " + prm.name + " de " + name;
+            if (auto pb = unitPassVerdict(cat_, pu, args[k].unit, spanText(args[k]), args[k].plain, args[k].unitFrom, UnitPass::Argument,
+                                          target, false))
+                pushUnit(std::move(*pb));
+        }
+    }
     void userCall(const std::string& name, const std::vector<const HmiFunction*>& fs, int n, Val& r,
-                  const std::vector<Val>& args = {}) {
+                  const std::vector<Val>& args = {}, bool named = false) {
         std::vector<const HmiFunction*> fitting;
         int lo = -1, hi = 0;
         for (const auto* f : fs) {
@@ -1163,6 +1276,7 @@ private:
             for (const auto* f : pool) if (f->returnUnit != ru) ru.clear();
             r.unit = ru;
         }
+        if (!named && pool.size() == 1 && !fitting.empty()) argumentUnits(name, *pool.front(), args);   // 1.13.0
         if (!anyResult) {
             problem(name + " ne rend pas de valeur : une expression ne peut appeler qu'une fonction qui rend quelque chose");
             return;
@@ -1186,9 +1300,11 @@ private:
             if (const auto fs = viewmembers::functions(*ctx_.view, name); !fs.empty()) symFn = fs.front();
         next();    // (
         std::vector<Val> args;
+        bool named = false;                       // 1.13.0 : F(a := 1.5) - les arguments ne vont pas par position
         if (!isOp(")"))
             for (;;) {
                 args.push_back(orExpr());
+                if (isOp(":=") || isOp("=>")) named = true;
                 if (isOp(",")) { next(); continue; }
                 break;
             }
@@ -1209,7 +1325,7 @@ private:
                 }
         };
         if (symFn) {
-            userCall(name, siblingsOf(symFn), n, r, args);
+            userCall(name, siblingsOf(symFn), n, r, args, named);
             lambdaCall(siblingsOf(symFn), name);                // 1.12.20 : dans une LAMBDA d'une fx
             return r;
         }
@@ -1225,17 +1341,24 @@ private:
                     const Val& val = args[0];
                     const std::string target = args[1].strKnown ? trimmed(args[1].str) : std::string{};
                     if (!args[1].strKnown)
-                        problem("EN veut l'unit\xC3\xA9 cible entre apostrophes : EN(" + val.show + ", 'bar')");
+                        unitProblem("EN veut l'unit\xC3\xA9 cible entre apostrophes : EN(" + val.show + ", 'bar')");
                     else if (val.unit.empty())
-                        problem("EN demande une valeur qui porte une unit\xC3\xA9 (" + val.show
-                                + " n'en a pas) : pose une unit\xC3\xA9 sur sa d\xC3\xA9" "claration, ou enl\xC3\xA8ve EN");
+                        unitProblem("EN demande une valeur qui porte une unit\xC3\xA9 (" + val.show
+                                    + " n'en a pas) : pose une unit\xC3\xA9 sur sa d\xC3\xA9" "claration, ou enl\xC3\xA8ve EN");
                     else if (!cat_.known(target))
-                        problem("unit\xC3\xA9 inconnue : '" + target + "' \xE2\x80\x94 choisis une unit\xC3\xA9 de la biblioth\xC3\xA8que");
+                        unitProblem("unit\xC3\xA9 inconnue : '" + target + "' \xE2\x80\x94 choisis une unit\xC3\xA9 de la biblioth\xC3\xA8que");
                     else if (cat_.relation(val.unit, target) == units::Rel::OtherFamily)
-                        problem("on ne convertit pas des " + val.unit + " en " + target + " : " + familyWord(val.unit)
-                                + " et " + familyWord(target) + " sont deux familles");
-                    else
+                        unitProblem("on ne convertit pas des " + val.unit + " en " + target + " : " + cat_.familyPhrase(val.unit)
+                                    + " et " + cat_.familyPhrase(target) + " sont deux familles");
+                    else {
+                        // 1.13.0 : le moteur lit l'unite de la valeur sur son chemin (la declaration) : EN ne convertit
+                        // qu'une variable ou un membre lu tel quel, pas un calcul, un appel ni un autre EN.
+                        if (!val.plain)
+                            unitProblem("EN convertit une variable ou un membre (Pression, Ligne.Vannes[2]), pas un calcul (" + val.show
+                                        + ") : \xC3\xA9" "cris EN(" + (val.unitFrom.empty() ? std::string("variable") : val.unitFrom) + ", '"
+                                        + cat_.canonical(target) + "')" + (val.unitFrom.empty() ? std::string{} : std::string(" dans le calcul")));
                         r.unit = cat_.canonical(target);        // la valeur convertie porte l'unite cible
+                    }
                 }
                 return r;
             }
@@ -1369,14 +1492,32 @@ private:
                 T common = n ? args[0].type : T::Unknown;
                 for (const auto& a : args) if (a.type != common) common = T::Unknown;
                 r.type = common == T::Time ? T::Time : common == T::Num ? T::Num : T::Unknown;
+                // 1.13.0 : ils comparent leurs arguments - la meme unite exacte, comme < et > (sinon EN) ; le
+                // resultat la garde (LIMIT(0.0, PressionBasse, 900.0) est en mbar).
+                if (r.type == T::Num && n >= 1) {
+                    Val acc = args[0];
+                    for (std::size_t k = 1; k < args.size(); ++k) {
+                        if (acc.unit.empty() && args[k].unit.empty()) continue;
+                        const std::string ru = unitAddCompare(acc, args[k], u, true);
+                        acc.unitFrom = unitSource(ru, acc, args[k]);
+                        acc.unit = ru;
+                    }
+                    r.unit = acc.unit;
+                    r.unitFrom = acc.unitFrom;
+                }
             } else if (u != "MUX") {
                 r.type = T::Num;
+                // 1.13.0 : la valeur absolue, l'oppose, l'arrondi gardent l'unite (ABS(PressionBasse) est en mbar).
+                if ((u == "ABS" || u == "NEG" || u == "TRUNC" || u == "ROUND") && n >= 1) {
+                    r.unit = args[0].unit;
+                    r.unitFrom = args[0].unitFrom;
+                }
             }
             return r;
         }
         if (const Project* p = ctx_.project)
             if (const auto fs = p->functionsNamed(name); !fs.empty()) {
-                userCall(name, fs, n, r, args);    // 1.11.20 : ses surcharges, tous leurs parametres
+                userCall(name, fs, n, r, args, named);    // 1.11.20 : ses surcharges, tous leurs parametres
                 lambdaCall(fs, name);              // 1.12.20 : dans une LAMBDA d'une fx
                 return r;
             }
@@ -1578,7 +1719,7 @@ std::vector<Problem> check(const Context& ctx, std::string_view written, Want wa
     bool callsRead = false;
     const auto calls = ctx.calls ? callcheck::checkExpression(callcheck::Context{ctx.project, ctx.view, nullptr, ctx.plc}, source, &callsRead)
                                  : std::vector<callcheck::Problem>{};
-    Checker c(ctx, withNamespaces(ctx, lex(source)));
+    Checker c(ctx, withNamespaces(ctx, lex(source)), source);
     c.callsChecked = callsRead || !ctx.calls;
     for (const auto& m : markers::find(written, markers::Mode::Expression))   // 1.11.1 (REP-10)
         if (const auto roots = scanRoots(m.content(written)); !roots.empty()) c.markerRoots.insert(up(roots.front()));
@@ -1650,11 +1791,13 @@ Shape shapeOf(const Context& ctx, std::string_view written) {
     if (trimmed(plain).empty()) return s;
     Context quiet = ctx;
     quiet.calls = false;                       // la forme seulement : les appels sont juges ailleurs
-    Checker c(quiet, withNamespaces(quiet, lex(plain)));
+    Checker c(quiet, withNamespaces(quiet, lex(plain)), plain);
     c.callsChecked = true;
     const Val v = c.run();
     s.single = v.type != T::Unknown;
     s.unit = v.unit;                            // 1.13.0 (lot J6) : l'unite physique de la valeur
+    s.plain = v.plain;                          // 1.13.0 : lue telle quelle sur un chemin (le moteur lit son unite)
+    s.unitFrom = v.unitFrom;
     if (!v.whole.empty()) {
         s.type = v.wholeType;
         s.what = v.whole;
@@ -1703,37 +1846,24 @@ std::vector<Problem> checkTarget(const Context& ctx, std::string_view target, Wa
     return out;
 }
 
-std::vector<Problem> assignmentUnit(const Context& ctx, std::string_view target, std::string_view source, bool strict) {
+std::vector<Problem> passUnit(const Context& ctx, std::string_view targetUnit, std::string_view source, UnitPass pass,
+                              std::string_view targetText, bool strict) {
     std::vector<Problem> out;
-    const std::string tu = shapeOf(ctx, target).unit;
-    const std::string su = shapeOf(ctx, source).unit;
-    if (tu.empty() || su.empty()) return out;          // une cible ou une source sans unite : rien a exiger
+    const std::string tu = trimmed(targetUnit);
+    if (tu.empty()) return out;                        // une cible sans unite : rien a exiger (elle recoit le nombre)
+    const Shape sh = shapeOf(ctx, source);
+    if (sh.unit.empty()) return out;                   // une source sans unite : le nu adopte celle de la cible
     static const Config kEmpty{};
     const units::Catalog cat(ctx.project ? ctx.project->config : kEmpty);
-    const units::Rel rel = cat.relation(su, tu);
-    const auto word = [&](const std::string& u) {
-        std::string f = cat.familyLabel(cat.familyOf(u));
-        if (!f.empty()) f[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(f[0])));
-        return f.empty() ? std::string("une grandeur") : "une " + f;
-    };
-    const std::string src = trimmed(source);
-    if (rel == units::Rel::SameFamily) {
-        if (strict) {
-            Problem pb{tu + " exige une conversion explicite (option \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB) : \xC3\xA9" "cris EN(" + src
-                           + ", '" + cat.canonical(tu) + "')", {}, {}};
-            pb.fixFrom = src;
-            pb.fixTo = "EN(" + src + ", '" + cat.canonical(tu) + "')";
-            out.push_back(std::move(pb));
-        } else {
-            Problem pb{su + " converti en " + tu + " d'office (une info)", {}, {}};
-            pb.warning = true;                          // une info, pas une erreur : le projet demarre
-            out.push_back(std::move(pb));
-        }
-    } else if (rel == units::Rel::OtherFamily) {
-        out.push_back(Problem{"tu affectes " + word(su) + " \xC3\xA0 " + word(tu) + " (" + su + " vers " + tu
-                              + ") : deux familles diff\xC3\xA9rentes ne se convertissent pas", {}, {}});
-    }
+    // Le texte de la source, sans ses reperes : celui que la correction d'un clic retrouve.
+    const std::string src = trimmed(markers::strip(source, markers::Mode::Expression));
+    if (auto pb = unitPassVerdict(cat, tu, sh.unit, src, sh.plain, sh.unitFrom, pass, std::string(targetText), strict))
+        out.push_back(std::move(*pb));
     return out;
+}
+
+std::vector<Problem> assignmentUnit(const Context& ctx, std::string_view target, std::string_view source, bool strict) {
+    return passUnit(ctx, shapeOf(ctx, target).unit, source, UnitPass::Assign, trimmed(target), strict);
 }
 
 std::vector<std::string> templateExpressions(std::string_view text) {

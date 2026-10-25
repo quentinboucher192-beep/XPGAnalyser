@@ -975,6 +975,27 @@ private:
         const std::size_t lastTok = b > a ? b - 1 : a;
         report(toks_[a].at, toks_[std::min(lastTok, toks_.size() - 1)].end(), sev, std::move(msg), std::move(name), std::move(sug));
     }
+    // 1.13.0 : un probleme d'exprcheck a sa place [a, b), avec sa correction d'un clic (inserer EN) s'il en porte une.
+    void reportProblem(std::size_t a, std::size_t b, Finding::Severity sev, const exprcheck::Problem& pb, const std::string& prefix = {}) {
+        const std::size_t before = out_.size();
+        reportTok(a, b, sev, prefix + pb.message);
+        if (out_.size() > before && !pb.fixFrom.empty()) {
+            out_.back().fixFrom = pb.fixFrom;
+            out_.back().fixTo = pb.fixTo;
+        }
+    }
+    // 1.13.0 : la gravite d'un probleme d'exprcheck dans un script - une faute d'unite est une erreur (comme dans une
+    // fx : bar + mbar ne demarre pas), sauf une info (l'unite perdue, une conversion d'office).
+    [[nodiscard]] static Finding::Severity unitSeverity(const exprcheck::Problem& pb, Finding::Severity otherwise) {
+        if (pb.unit) return pb.warning ? Finding::Severity::Warning : Finding::Severity::Error;
+        return otherwise;
+    }
+    // 1.13.0 : la position est-elle dans une fonction interne du script (FUNCTION ... END_FUNCTION) ?
+    [[nodiscard]] bool insideInternal(std::size_t at) const {
+        for (const auto& f : internal_)
+            if (at >= f.from && at < f.to) return true;
+        return false;
+    }
     [[nodiscard]] std::string textOf(std::size_t a, std::size_t b) const {
         if (b <= a || atEnd(a)) return {};
         const std::size_t from = toks_[a].at, to = toks_[std::min(b - 1, toks_.size() - 1)].end();
@@ -1630,8 +1651,9 @@ private:
         if (U == "WAIT_UNTIL")
             if (const auto args = argsOf(i + 1, close); !args.empty()) {
                 const auto [ca, cb] = args.front();
-                for (auto& m : typeProblems(ca, cb, exprcheck::Want::Bool))
-                    reportTok(ca, cb, m.find("est attendu") != std::string::npos ? S::Error : S::Warning, "WAIT_UNTIL : " + m);
+                for (auto& pb : typeProblems(ca, cb, exprcheck::Want::Bool))
+                    reportProblem(ca, cb, unitSeverity(pb, pb.message.find("est attendu") != std::string::npos ? S::Error : S::Warning), pb,
+                                  "WAIT_UNTIL : ");
             }
         const OldArity* old = info ? nullptr : oldArity(U);
         if (!info && !old && !sim::lib::oldListResizes(U)) return;
@@ -1960,24 +1982,30 @@ private:
     }
 
     // ------------------------------------------------------- les types ------
-    [[nodiscard]] exprcheck::Context typeContext() const {
+    // `at` : la place de l'expression dans le code (1.13.0) - les noms que le code y declare (une locale, un
+    // parametre, un compteur, une variable d'un FOR EACH ou d'une fonction interne) cachent la variable IHM du meme
+    // nom : ni son type ni son unite ne valent pour eux.
+    [[nodiscard]] exprcheck::Context typeContext(std::size_t at = 0) const {
         exprcheck::Context c;
         c.project = sc_.project;
         c.view = sc_.view;
         c.known = [](std::string_view) { return true; };    // les noms : dits ici, a leur place
         c.calls = false;                                     // 1.11.20 : les appels aussi (callcheck, une fois)
         c.script = true;                                     // 1.12.17 : ASCII_TO_STRING(tableau) y marche
+        c.hidden = [this, at](std::string_view n) {
+            return local(n) != nullptr || counter(n) || catchVar(n) || selfName(n) || dialectName(n, at);
+        };
         return c;
     }
     // Les problemes de type d'une expression [a, b) (pas les noms, membres ou
     // appels : dits a leur place).
-    std::vector<std::string> typeProblems(std::size_t a, std::size_t b, exprcheck::Want want) const {
-        std::vector<std::string> out;
+    std::vector<exprcheck::Problem> typeProblems(std::size_t a, std::size_t b, exprcheck::Want want) const {
+        std::vector<exprcheck::Problem> out;
         const std::string text = textOf(a, b);
         if (text.empty() || !Expression::compile(text).valid()) return out;
         std::set<std::string> members;
         if (sc_.project) for (const auto& pp : types::pathProblems(*sc_.project, text)) members.insert(pp.message);
-        for (const auto& pb : exprcheck::check(typeContext(), text, want)) {
+        for (const auto& pb : exprcheck::check(typeContext(atEnd(a) ? 0 : toks_[a].at), text, want)) {
             const auto& m = pb.message;
             if (!pb.unknownName.empty() || members.count(m) || m.rfind("fonction inconnue", 0) == 0 || m.find(" prend ") != std::string::npos
                 || m.find("ne rend pas de valeur") != std::string::npos || m.find("hors des bornes") != std::string::npos
@@ -1987,17 +2015,34 @@ private:
                 || m.find(" : une expression en lit une copie") != std::string::npos || m.find(" : une expression ne change rien") != std::string::npos
                 || m.find("un nom de fonction en texte n'est ni") != std::string::npos)      // 1.12.20 : dit a sa place
                 continue;
-            out.push_back(m);
+            out.push_back(pb);
         }
         return out;
     }
 
     void condition(std::size_t a, std::size_t b, const std::string& word) {
         walkNames(a, b);
-        for (auto& m : typeProblems(a, b, exprcheck::Want::Bool)) {
-            const bool expected = m.find("est attendu") != std::string::npos;
-            reportTok(a, b, expected ? Finding::Severity::Error : Finding::Severity::Warning, word + " : " + m);
+        for (auto& pb : typeProblems(a, b, exprcheck::Want::Bool)) {
+            const bool expected = pb.message.find("est attendu") != std::string::npos;
+            // 1.13.0 : IF Pression > PressionBasse - une faute d'unite est une erreur, avec sa correction d'un clic.
+            reportProblem(a, b, unitSeverity(pb, expected ? Finding::Severity::Error : Finding::Severity::Warning), pb, word + " : ");
         }
+    }
+    // 1.13.0 : les seules fautes d'unite d'une expression [a, b) (un appel seul sur sa ligne : ses arguments).
+    void unitProblems(std::size_t a, std::size_t b) {
+        const std::string text = textOf(a, b);
+        if (text.empty() || !Expression::compile(text).valid()) return;
+        for (const auto& pb : exprcheck::check(typeContext(atEnd(a) ? 0 : toks_[a].at), text, exprcheck::Want::Any))
+            if (pb.unit) reportProblem(a, b, unitSeverity(pb, Finding::Severity::Warning), pb);
+    }
+    // 1.13.0 : RETURN x (ou Fonction := x) dans une fonction IHM qui rend une unite - le moteur ne convertit pas.
+    void returnUnit(std::size_t a, std::size_t b) {
+        if (!sc_.function || b <= a || atEnd(a) || insideInternal(toks_[a].at)) return;
+        const std::string ru = sc_.function->returnUnit;
+        if (ru.empty()) return;
+        for (const auto& pb : exprcheck::passUnit(typeContext(toks_[a].at), ru, textOf(a, b), exprcheck::UnitPass::Return,
+                                                  "la fonction " + sc_.function->name))
+            reportProblem(a, b, unitSeverity(pb, Finding::Severity::Error), pb);
     }
 
     void assignment(std::size_t i, std::size_t j, std::size_t e) {
@@ -2015,7 +2060,8 @@ private:
         const Kind kind = kindOf(type);
         using W = exprcheck::Want;
         const W want = kind == Kind::Bool ? W::Bool : kind == Kind::Num ? W::Number : W::Any;
-        for (auto& m : typeProblems(j + 1, e, want)) {
+        for (auto& pb : typeProblems(j + 1, e, want)) {
+            const std::string& m = pb.message;
             if (m.rfind("un nombre est attendu", 0) == 0 || m.rfind("un bool\xC3\xA9" "en est attendu", 0) == 0) {
                 const std::string given = textOf(j + 1, e);
                 reportTok(j + 1, e, Finding::Severity::Error,
@@ -2024,14 +2070,18 @@ private:
                                                                         : " ; compare-le (" + given + " = 'Marche') ou \xC3\xA9" "cris TRUE ou FALSE"));
                 continue;
             }
-            reportTok(j + 1, e, Finding::Severity::Warning, m);
+            // 1.13.0 : Ecart := Pression - Temperature - une faute d'unite est une erreur, avec sa correction d'un clic.
+            reportProblem(j + 1, e, unitSeverity(pb, Finding::Severity::Warning), pb);
         }
-        // 1.13.0 (lot J6) : le verdict d'unite de l'affectation - meme famille : converti d'office (une info),
-        // ou EN exige si l'option « Unites strictes » ; familles differentes : un refus (une erreur).
-        {
+        // 1.13.0 (lot J6) : le verdict d'unite de l'affectation - meme famille : le moteur convertit d'office une
+        // variable ou un membre lu tel quel (une info), pas un calcul (une erreur : EN) ; EN exige partout si
+        // l'option « Unites strictes » ; familles differentes : un refus (une erreur). Fonction := x : comme RETURN.
+        if (selfName(toks_[i].text) && j == i + 1 && !insideInternal(toks_[i].at)) {
+            returnUnit(j + 1, e);
+        } else {
             const bool strict = sc_.project && sc_.project->config.strictUnits;
-            for (const auto& u : exprcheck::assignmentUnit(typeContext(), target, textOf(j + 1, e), strict))
-                reportTok(j + 1, e, u.warning ? Finding::Severity::Warning : Finding::Severity::Error, u.message);
+            for (const auto& u : exprcheck::assignmentUnit(typeContext(toks_[i].at), target, textOf(j + 1, e), strict))
+                reportProblem(j + 1, e, unitSeverity(u, Finding::Severity::Error), u);
         }
         // Un nombre ou un booleen dans un texte : evident quand c'est un litteral seul.
         if (kind == Kind::Text && e == j + 2 && !atEnd(j + 1)) {
@@ -2220,6 +2270,18 @@ private:
             i = isOp(after(close), ";") ? after(close) + 1 : after(close);
             return;
         }
+        // 1.13.0 : RETURN x dans une fonction IHM qui rend une unite - le verdict d'unite (le moteur ne convertit pas).
+        // La valeur est sur la ligne du RETURN (comme le parseur du moteur) ; ailleurs, rien ne change.
+        if (U == "RETURN" && sc_.function && !sc_.function->returnUnit.empty() && !atEnd(i + 1) && !isOp(i + 1, ";")
+            && body_.find('\n', t.end()) >= toks_[i + 1].at) {
+            const std::size_t e = statementEnd(i + 1);
+            if (e > i + 1) {
+                walkNames(i + 1, e);
+                returnUnit(i + 1, e);
+                i = e;
+                return;
+            }
+        }
         if (statementWords().count(U)) { ++i; return; }
         if (operatorWords().count(U)) {                       // NOT x; TRUE; : pas une cible
             const std::size_t e = statementEnd(i);
@@ -2238,6 +2300,7 @@ private:
         }
         if (j == i + 1 && isOp(j, "(")) {
             const std::size_t after = call(i, true);
+            unitProblems(i, after);                             // 1.13.0 : Regler(PressionBasse); - ses arguments
             const std::size_t e = statementEnd(after);
             walkNames(after, e);
             i = e;

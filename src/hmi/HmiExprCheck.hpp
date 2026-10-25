@@ -69,6 +69,10 @@ struct Context {
     // 1.12.17 : une expression d'un script (le simulateur ST) : ASCII_TO_STRING et STRING_TO_ASCII y
     // prennent un tableau entier (les cases d'une chaine) ; dans une fx, non.
     bool script{false};
+    // 1.13.0 : un nom que le code declare lui-meme (une locale, un parametre, un compteur, le nom de la
+    // fonction) : il cache la variable IHM du meme nom - ni son type ni son unite ne valent pour lui (le
+    // moteur lit la locale). Vide : aucun.
+    std::function<bool(std::string_view root)> hidden{};
 };
 
 struct Problem {
@@ -85,6 +89,9 @@ struct Problem {
     bool        whole{false};
     // 1.12.20 : la correction d'un clic (hmi::Issue::fixFrom) - 'Valider' -> Valider ; vide : aucune.
     std::string fixFrom{}, fixTo{};
+    // 1.13.0 : un verdict d'unite (bar + mbar, EN mal employe, une affectation de deux familles) - une erreur
+    // partout, un script compris (sauf `warning` : une info, l'unite perdue ou convertie d'office).
+    bool        unit{false};
 };
 
 // Les problemes d'une expression qui se lit (sinon : rien, la syntaxe est
@@ -102,15 +109,27 @@ struct Shape {
     std::string type;          // le type ecrit d'un conteneur ou d'une structure entiers
     std::string what, entire, pick;   // types::Whole
     std::string unit;          // 1.13.0 (lot J6) : l'unite physique de la valeur rendue ("bar") ; vide : aucune
+    // 1.13.0 : la valeur est lue telle quelle sur un chemin de variable IHM (Pression, Ligne.Vannes[2]) - la seule
+    // forme dont le moteur connait l'unite (EN la convertit, l'affectation aussi). Un calcul, un appel : non.
+    bool        plain{false};
+    std::string unitFrom;      // le chemin, tel qu'ecrit, qui donne son unite a la valeur (PressionBasse dans PressionBasse * 2)
     [[nodiscard]] bool whole() const noexcept { return !what.empty(); }
 };
 [[nodiscard]] Shape shapeOf(const Context&, std::string_view source);
-// 1.13.0 (lot J6) : LE VERDICT D'UNITE D'UNE AFFECTATION (:=, argument d'un parametre, RETURN). `target` et
-// `source` sont deux expressions (lvalue a gauche, valeur a droite). Meme famille, unites differentes :
-// conversion d'office - une info (sauf `strict`, l'option « Unites strictes », qui exige alors EN). Familles
-// differentes : un refus. Une cible ou une source sans unite : rien a dire (le nu s'adapte). Les problemes
-// portent leur correction d'un clic (inserer EN).
+// 1.13.0 (lot J6) : LE VERDICT D'UNITE D'UNE AFFECTATION :=. `target` et `source` sont deux expressions (lvalue a
+// gauche, valeur a droite). Meme famille, unites differentes : le moteur convertit d'office une source lue telle
+// quelle sur un chemin (Pression := PressionBasse) - une info ; un calcul (PressionBasse * 2.0) ne se convertit
+// pas : une erreur, convertis dedans avec EN. `strict` (l'option « Unites strictes ») : EN exige dans tous les cas.
+// Familles differentes : un refus. Une cible ou une source sans unite : rien a dire (le nu s'adapte). Les problemes
+// portent leur correction d'un clic (inserer EN) quand elle existe.
 [[nodiscard]] std::vector<Problem> assignmentUnit(const Context&, std::string_view target, std::string_view source, bool strict = false);
+// 1.13.0 : les autres passages d'une valeur vers une unite connue (`targetUnit`) - RETURN (ou l'affectation au nom
+// de la fonction) vers l'unite du retour, un argument vers celle de son parametre. Le moteur n'y convertit rien :
+// meme famille, une erreur (EN, avec sa correction d'un clic) ; familles differentes, un refus. `targetText` nomme
+// la cible dans le message (« la fonction Regler », « le parametre Consigne de Regler »).
+enum class UnitPass : std::uint8_t { Assign, Return, Argument };
+[[nodiscard]] std::vector<Problem> passUnit(const Context&, std::string_view targetUnit, std::string_view source, UnitPass pass,
+                                            std::string_view targetText = {}, bool strict = false);
 // Les expressions d'un texte a trous ("Vitesse : {Vitesse:0.0} km/h" -> Vitesse).
 [[nodiscard]] std::vector<std::string> templateExpressions(std::string_view text);
 // Ce que la propriete `key` attend (visible : Bool, fill : Color, x : Number).
