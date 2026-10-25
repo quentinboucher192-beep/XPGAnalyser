@@ -6756,6 +6756,78 @@ if (dernieres.size() > 100) dernieres.pop_front();
 @nouveau 1.12.7
 - **Les affectations** : une LIST dans un SET se range et perd ses doublons ; une LIST (ou un ARRAY) dans un RING garde ses N dernières valeurs ; un SET ou un RING dans une LIST en fait une LIST ordinaire. Une variable IHM peut être un SET ou un RING (Ensemble (SET), Tampon (RING) dans le sélecteur de types) : de taille variable, elle vit dans la mémoire de l'IHM (ni équipement, ni adresse).
 
+== unites-mesure | Les unités de mesure dans les types
+: Donne une unité physique (bar, mbar, degC, m3/h, %) à une variable ou à un membre : la compilation refuse bar + mbar, convertit d'office ce qui est compatible, et l'unité remonte jusqu'à l'affichage - sans rien changer pour qui n'en met pas.
+@mots unité, unités, unite, mesure, EN, UNITE, SANS_UNITE, famille, conversion, strictes
+@lieux types-ihm, variables-ihm, unites-formats
+@voir types-ihm, variables-ihm, unites-formats, retours-fonctions, operateurs, erreurs-scripts, reference
+### Poser une unité : entre crochets après un type numérique
+Dans la grille des membres d'un type (et des variables IHM, des paramètres), une colonne **Unité** à côté de **Type** : un clic ouvre le **sélecteur d'unités** (familles, recherche, récents). Vide = pas d'unité, comme avant. La colonne Type reste « REAL » ; l'aide à la saisie et le survol montrent la forme combinée **REAL [bar]**. Une unité ne va que sur un **type numérique** (REAL, INT… ; sur un ARRAY OF REAL, elle porte sur l'élément) : Générer refuse une unité sur un BOOL, un texte ou une structure.
+```ST
+TYPE T_Ligne :
+    Pression      : REAL [bar];
+    PressionBasse : REAL [mbar];
+    Debit         : REAL [m3/h];
+    Temperature   : REAL [degC];
+    Niveau        : REAL [%];
+    Vannes        : ARRAY[1..3] OF REAL [bar];   (* unité de l'élément *)
+END_TYPE
+```
+```C
+typedef struct {            /* le C n'a pas d'unité : un commentaire la rappelle */
+    float Pression;         /* [bar]  */
+    float PressionBasse;    /* [mbar] */
+    float Debit;            /* [m3/h] */
+} T_Ligne;
+```
+```C++
+struct T_Ligne {            // le C++ n'a pas d'unité native (pas de <units> standard)
+    float Pression;         // [bar]
+    float PressionBasse;    // [mbar]
+    float Debit;            // [m3/h]
+};
+```
+### Deux règles, voulues différentes
+L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) exigent la **même unité exacte** : bar et mbar ne s'additionnent pas, il faut convertir l'un des deux avec **EN(…)**. L'**affectation** (:=, passer un argument, RETURN) de la même famille **convertit d'office** (une info) ; l'option projet « Unités strictes » (Configuration › Unités et formats) exige alors EN(…) au lieu de convertir. Deux **familles différentes** (une pression et une température) : toujours refusé, et le message nomme les deux. Une valeur **sans unité** (un littéral 9.0, une variable nue) adopte l'unité de l'autre ; une cible sans unité reçoit le nombre tel quel.
+```ST
+Ecart := Pression - EN(PressionBasse, 'bar');   (* bar et mbar : convertis d'abord *)
+IF Pression > 9.0 THEN ... END_IF;              (* 9.0 pris en bar *)
+Pression := PressionBasse;                      (* mbar -> bar : converti d'office *)
+Pression := Temperature;                        (* REFUSÉ : pression <- température *)
+```
+```C
+ecart = pression - pb_mbar * 0.001f;            /* conversion à la main en C */
+if (pression > 9.0f) { /* ... */ }
+pression = pb_mbar * 0.001f;
+/* pression = temperature;  // deux grandeurs sans rapport */
+```
+```C++
+ecart = pression - pb_mbar * 0.001f;            // conversion à la main en C++
+if (pression > 9.0f) { /* ... */ }
+pression = pb_mbar * 0.001f;
+// pression = temperature;  // deux grandeurs sans rapport
+```
+### EN, UNITE, SANS_UNITE ; produit et division
+**EN(valeur, 'unité')** convertit vers une unité de la même famille (sinon « on ne convertit pas des bar en degC ») ; la température est affine (facteur ET décalage : + 273,15 vers les K). **UNITE(x)** rend le symbole ('bar'), **SANS_UNITE(x)** enlève l'unité (un nombre nu). Multiplier par un nombre garde l'unité ; diviser deux fois la même unité donne un rapport **sans unité** ; un autre produit ou division perd l'unité (une info - pas d'algèbre d'unités composées). Cas particuliers : **%** est une famille sans dimension (EN(x, 'ratio') = × 0,01) ; **Nm3/h** (débit normalisé) est une famille à part, non convertible vers m3/h.
+```ST
+Taux    := EN(Debit, 'm3/h') / EN(DebitMax, 'm3/h') * 100.0;   (* un % *)
+Texte   := TO_STRING(EN(Temperature, 'K'));                    (* degC -> K : + 273,15 *)
+Brut    := SANS_UNITE(Pression);                               (* un REAL nu *)
+Label   := UNITE(Pression);                                    (* 'bar' *)
+```
+```C
+taux  = (debit / debit_max) * 100.0f;      /* le % se calcule à la main en C */
+snprintf(buf, n, "%.1f", temperature + 273.15f);
+brut  = pression;                          /* pas d'unité à enlever en C */
+```
+```C++
+taux  = (debit / debit_max) * 100.0f;      // le % se calcule à la main en C++
+auto texte = std::format("{:.1f}", temperature + 273.15f);
+double brut = pression;                    // pas d'unité à enlever en C++
+```
+### L'unité remonte à l'affichage
+L'unité physique du créneau devient l'**unité d'affichage par défaut** : `{Pression:u}` écrit « 9.08 bar », l'afficheur, la jauge, le champ de saisie et la ligne « Unités et formats » la prennent sans qu'on la retape. Une ligne « Unités et formats » peut encore poser une autre unité d'affichage, mais **de la même famille** (sinon Générer le dit : converti en info, familles différentes en erreur).
+
 = Programmer › Scripts et fonctions
 
 == scripts | Scripts généraux et scripts de vue
