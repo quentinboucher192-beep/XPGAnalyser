@@ -709,9 +709,13 @@ const std::vector<Builtin>& snippets() {
         {"VAR_IN_OUT", "VAR_IN_OUT x : REAL", "Un param\xC3\xA8tre par r\xC3\xA9" "f\xC3\xA9rence : la fonction \xC3\xA9" "crit dans la variable donn\xC3\xA9" "e."},
         {"MAP_ITERATOR", "MAP_ITERATOR", "Un it\xC3\xA9rateur de MAP (MAP_BEGIN, MAP_NEXT, MAP_END, it.Key, it.Value)."},
         {"NULL", "NULL", "Le pointeur qui ne vise rien."},
-        // 1.12.1
-        {"TRY", "TRY\n    \nCATCH Erreur\n    \nEND_TRY", "Essayer : une erreur du bloc va au CATCH (son message dans Erreur) au lieu d'arr\xC3\xAAter le script."},
+        // 1.12.1 ; 1.13.0 : le modele passe de CATCH Erreur a CATCH e (un T_Erreur : e.Code, e.Message, e.Ligne)
+        {"TRY", "TRY\n    \nCATCH e\n    \nEND_TRY", "Essayer : une erreur du bloc va au CATCH au lieu d'arr\xC3\xAAter le script ; e.Code, e.Message, e.Ligne (e seul = e.Message)."},
         {"CONTINUE", "CONTINUE;", "Le tour suivant de la boucle."},
+        // 1.13.0 : lever ses erreurs, attendre une condition
+        {"LEVER", "LEVER('E_Code', 'message {valeur}')", "Lever une erreur \xC3\xA0 soi (un code, un message \xC3\xA0 trous comme IHM_JOURNAL) : un TRY la rattrape."},
+        {"RELEVER", "RELEVER;", "R\xC3\xA9\xC3\xA9mettre l'erreur attrap\xC3\xA9" "e vers le TRY du dessus (dans un CATCH) ; m\xC3\xAAme code, m\xC3\xAAme message."},
+        {"WAIT_UNTIL", "WAIT_UNTIL(condition, T#5s)", "Attendre qu'une condition devienne vraie (au plus le d\xC3\xA9lai) ; dans un script d\xC3\xA9tach\xC3\xA9."},
         // 1.12.19 : les rappels et les generiques
         {"CALLBACK", "CALLBACK (x : REAL) : BOOL", "Un rappel : une fonction ou une LAMBDA de cette forme, appel\xC3\xA9" "e plus tard (f(x)) ; NULL : aucune."},
         {"LAMBDA", "LAMBDA (x : REAL) : BOOL => x > 0.0", "Une fonction sans nom, \xC3\xA9" "crite sur place ; elle copie les locales qu'elle voit \xC3\xA0 sa cr\xC3\xA9" "ation."},

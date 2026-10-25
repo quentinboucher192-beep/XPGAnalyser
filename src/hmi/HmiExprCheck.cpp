@@ -1068,6 +1068,8 @@ private:
                         + " : une expression ne change rien ; fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB)");
             else if (u == "WAIT")                           // 1.12.26
                 problem("WAIT attend dans un script, pas dans une expression : une expression calcule sa valeur tout de suite");
+            else if (u == "WAIT_UNTIL")                     // 1.13.0
+                problem("WAIT_UNTIL attend dans un script d\xC3\xA9tach\xC3\xA9, pas dans une expression : une expression calcule sa valeur tout de suite");
             else if (sim::lib::changesFiles(u))             // 1.12.26 : FILE_WRITE, FILE_DELETE, DIR_CREATE...
                 problem(u + " change un fichier : une expression ne fait que lire ; fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9"
                             "cuter un script \xC2\xBB)");
