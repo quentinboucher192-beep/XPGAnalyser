@@ -1,4 +1,5 @@
 #include "HmiScriptPanes.hpp"
+#include "../../hmi/HmiNames.hpp"   // 1.13.0 (lot J8) : l'espace de noms d'un script general
 #include "../../ui/Commands.hpp"   // 1.12.18 : le menu d'un sous-onglet
 #include "../Disposition.hpp"
 #include "HmiAssist.hpp"
@@ -902,6 +903,27 @@ bool HmiScriptsPane::editCalculation(const std::string& name, int line) {
     return false;
 }
 
+bool HmiScriptsPane::setNamespace(Id id, const std::string& text, std::string* why) {
+    const Script* sc = doc_->project.script(id);
+    if (!sc || doc_->project.viewOfScript(id) != kNoId) {
+        if (why) *why = "seul un script g\xC3\xA9n\xC3\xA9ral prend un espace de noms";
+        return false;
+    }
+    std::string ns = text;
+    while (!ns.empty() && ns.back() == ' ') ns.pop_back();
+    while (!ns.empty() && ns.front() == ' ') ns.erase(ns.begin());
+    if (ns == "(racine)") ns.clear();
+    if (ns == sc->ns) return true;
+    hmi::Project trial = doc_->project;
+    if (!hmi::names::setItemNamespace(trial, hmi::names::ItemKind::Script, id, ns, why)) return false;
+    const std::string name = sc->name;
+    auto cmd = hmi::changeProject(doc_, "Espace de noms de " + name + " : " + (ns.empty() ? std::string("la racine") : ns),
+                                  [&](hmi::Project& p) { (void)hmi::names::setItemNamespace(p, hmi::names::ItemKind::Script, id, ns, nullptr); });
+    if (cmd) apply_(std::move(cmd));
+    say("Script " + hmi::qualifiedName(ns, name) + " : IHM_APPELER('" + hmi::qualifiedName(ns, name) + "') - Ctrl+Z l'annule");
+    return true;
+}
+
 void HmiScriptsPane::rebuildProperties() {
     using PG = ui::PropertyGrid;
     std::vector<PG::Category> cats;
@@ -972,6 +994,22 @@ void HmiScriptsPane::rebuildProperties() {
                                         if (cmd) apply_(std::move(cmd));
                                         return true;
                                     }));
+        // 1.13.0 (lot J8) : son espace de noms - la liste des espaces du projet, ou un nom tape (un nouvel espace).
+        {
+            std::vector<std::string> spaces{"(racine)"};
+            for (const auto& sp : hmi::names::projectSpaces(doc_->project)) spaces.push_back(sp.ns);
+            auto ns = prop("Espace de noms", sc->ns.empty() ? std::string("(racine)") : sc->ns, PG::ValueType::Enum, spaces,
+                           [this, id](std::string_view v) {
+                               std::string why;
+                               const bool ok = setNamespace(id, std::string(v), &why);
+                               if (!ok) say("Refus\xC3\xA9 : " + why, true);
+                               return ok;
+                           },
+                           "Range le script sous un pr\xC3\xA9" "fixe : IHM_APPELER('Gaz." + sc->name + "') l'appelle ; dans son espace, il "
+                           "nomme ses voisins sans pr\xC3\xA9" "fixe. (racine) : sans espace.");
+            ns.typeIn = true;
+            c.properties.push_back(std::move(ns));
+        }
     } else {
         c.properties.push_back(prop("\xC3\x89v\xC3\xA9nement", sc->event, PG::ValueType::ReadOnly, {}, nullptr));
     }

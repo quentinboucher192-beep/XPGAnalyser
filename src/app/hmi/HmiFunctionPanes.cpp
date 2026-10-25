@@ -18,6 +18,7 @@
 #include "../../ui/Theme.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 #include "HmiTypePicker.hpp"   // 1.11.19 (refonte, lot 6) : le retour, au selecteur de types
+#include "../../hmi/HmiNames.hpp"   // 1.13.0 (lot J8) : l'espace de noms d'une fonction
 
 #include <algorithm>
 #include <cctype>
@@ -656,6 +657,23 @@ void HmiFunctionsPane::rebuildProperties() {
             f->name + "() dans " + sv->name + " ; Instance." + f->name + "() dans sa vue ; Vue.Instance." + f->name + "() partout",
             PG::ValueType::ReadOnly));
     } else {
+    // 1.13.0 (lot J8) : son espace de noms - la liste des espaces du projet, ou un nom tape (un nouvel espace).
+    {
+        std::vector<std::string> spaces{"(racine)"};
+        for (const auto& sp : hmi::names::projectSpaces(doc_->project)) spaces.push_back(sp.ns);
+        auto ns = hmikit::prop("Espace de noms", f->ns.empty() ? std::string("(racine)") : f->ns, PG::ValueType::Enum,
+            [this, id](std::string_view v) {
+                std::string why;
+                const bool ok = setNamespace(id, std::string(v), &why);
+                if (!ok) say("Refus\xC3\xA9 : " + why, true);
+                return ok;
+            },
+            "Range la fonction sous un pr\xC3\xA9" "fixe : elle s'appelle alors Espace." + f->name + "(...) (Util." + f->name
+                + "(...)), ou " + f->name + "(...) sous USING Util; ; dans son espace, ses voisines l'appellent " + f->name
+                + "(...). (racine) : sans espace.", spaces);
+        ns.typeIn = true;
+        c.properties.push_back(std::move(ns));
+    }
     const auto callers = hmi::functionCallers(doc_->project, f->name);
     c.properties.push_back(hmikit::prop("Appel\xC3\xA9" "e par", callers.empty() ? std::string("(personne)") : hmikit::fewOf(callers, 3),
                                         PG::ValueType::ReadOnly));
@@ -1141,6 +1159,26 @@ bool HmiFunctionsPane::setDescription(Id id, const std::string& description) {
         if (auto* g = fnOf(p, id)) g->description = description;
     });
     if (cmd) apply_(std::move(cmd));
+    return true;
+}
+
+bool HmiFunctionsPane::setNamespace(Id id, const std::string& text, std::string* why) {
+    const auto* f = fnOf(doc_->project, id);
+    if (!f || !doc_->project.function(id)) {
+        if (why) *why = "seule une fonction IHM du projet prend un espace de noms (une fonction de vue suit sa vue)";
+        return false;
+    }
+    std::string ns = hmikit::trimmed(text);
+    if (ns == "(racine)") ns.clear();
+    if (ns == f->ns) return true;
+    hmi::Project trial = doc_->project;
+    if (!hmi::names::setItemNamespace(trial, hmi::names::ItemKind::Function, id, ns, why)) return false;
+    const std::string name = f->name;
+    auto cmd = hmi::changeProject(doc_, "Espace de noms de " + name + " : " + (ns.empty() ? std::string("la racine") : ns),
+                                  [&](hmi::Project& p) { (void)hmi::names::setItemNamespace(p, hmi::names::ItemKind::Function, id, ns, nullptr); });
+    if (cmd) apply_(std::move(cmd));
+    say("Fonction " + hmi::qualifiedName(ns, name) + " : ailleurs, elle s'appelle " + hmi::qualifiedName(ns, name)
+        + "(...) (ou " + name + "(...) sous USING " + (ns.empty() ? std::string("-") : ns) + ";) - Ctrl+Z l'annule");
     return true;
 }
 

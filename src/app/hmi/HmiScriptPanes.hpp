@@ -134,6 +134,8 @@ public:
     bool    setBody(hmi::Id, const std::string& body);
     bool    setTrigger(hmi::Id, const std::string& event, int periodMs, const std::string& watch);
     bool    setLanguage(hmi::Id, hmi::ScriptLang);
+    // 1.13.0 (lot J8) : l'espace de noms d'un script general ("" ou "(racine)" : la racine) - IHM_APPELER('Gaz.Horloge').
+    bool    setNamespace(hmi::Id, const std::string& ns, std::string* why = nullptr);
     hmi::Id addVariable(const std::string& name, const std::string& type, const std::string& initial,
                         const std::string& description, std::string* why = nullptr);
     bool    updateVariable(hmi::Id, const std::string& name, const std::string& type, const std::string& initial,

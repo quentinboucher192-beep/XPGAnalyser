@@ -966,6 +966,16 @@ private:
     // 1.11.2 (decision 174) : exporter des types IHM (kind 0, .xpgtypes), des fonctions IHM
     // (1, .xpgfonctions), des scripts generaux (2, .xpgscripts) ; "Importer..." ouvre tout paquet.
     void askHmiExportPrograms(int kind, std::uint64_t selected);
+    // 1.13.0 (lot J8) : les espaces de noms et les bibliotheques reliees (IHM > Espaces et bibliotheques) - les
+    // fenetres : Relier (le fichier, l'alias), Publier (l'espace, le nom, la version, le fichier), Mettre a jour (le
+    // diff de l'interface et ses ruptures), Localiser, Nouvel espace, Renommer l'espace, une definition en lecture seule.
+    void askHmiLinkLibrary();
+    void askHmiPublishLibrary(const std::string& space = {});
+    void askHmiUpdateLibrary(const std::string& name);
+    void askHmiLocateLibrary(const std::string& name);
+    void askHmiNewNamespace();
+    void askHmiRenameNamespace(const std::string& ns);
+    void showHmiDefinition(const std::string& fullName);
     // 1.11.2 (decision 188) : la fenetre d'import, sur `path` s'il est donne (un paquet lache sur l'appli), sinon
     // vide (Parcourir... dans la fenetre) ; `then` : une fois fermee (Importer ou Annuler) - le reste d'un depot.
     void askHmiImport(const std::string& path = {}, std::function<void()> then = {});

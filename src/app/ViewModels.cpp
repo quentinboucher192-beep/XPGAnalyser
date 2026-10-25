@@ -14,6 +14,8 @@
 #include "../hmi/HmiCommands.hpp"
 #include "../hmi/HmiPublicVars.hpp"
 #include "../hmi/HmiNatives.hpp"   // 1.12.0 : la branche Natives
+#include "../hmi/HmiNames.hpp"     // 1.13.0 (lot J8) : les espaces de noms
+#include "../hmi/HmiLibrary.hpp"   // 1.13.0 (lot J8) : les bibliotheques reliees
 #include "../hmi/HmiAlarmGroups.hpp"   // 1.11.1 (decision 108) : le groupe de l'IHM lie a celui d'un objet
 #include "hmi/HmiTreeData.hpp"
 #include "hmi/HmiObjectAlarmTree.hpp"   // 1.10 (chantier O) : les donnees seulement (pas de lien avec l'IHM)
@@ -1062,7 +1064,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         }
         case NodeKind::HmiRoles:      return hmi_ ? hmi_->project.security.roles.size() : 0;
         // lot 9 : + variables systeme, d'instances ; lot 16 : + types IHM ; 1.12.0 : + Natives ; 1.12.2 : - Variables employees
-        case NodeKind::HmiScripts:    return hmi_ ? 7 : 0;
+        // 1.13.0 (lot J8) : un 8e dossier, Bibliotheques, quand le projet emploie des espaces ou des bibliotheques.
+        case NodeKind::HmiScripts:    return hmi_ ? (hmi::names::active(hmi_->project) ? 8 : 7) : 0;
+        case NodeKind::HmiLibrariesFolder: return hmi_ ? hmi_->project.libraries.size() : 0;   // 1.13.0 (lot J8)
+        case NodeKind::HmiLibraryNode:     return 0;
         // ---- 1.12.0 : les natives (hmi::natives::tree) ----
         case NodeKind::NativesFolder:       return hmi_ ? 6 : 0;          // 1.12.17 : + De A a Z
         case NodeKind::NativesFunctions:    return hmi::natives::shelves().front().folders.size();
@@ -1572,8 +1577,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             static constexpr NodeKind folders[] = {NodeKind::HmiScriptsFolder, NodeKind::HmiFunctionsFolder, NodeKind::HmiTypesFolder,
                                                    NodeKind::HmiVariablesFolder,
                                                    NodeKind::HmiSysFolder, NodeKind::HmiInstFolder, NodeKind::NativesFolder};
+            // 1.13.0 (lot J8) : Bibliotheques, en dernier (les sept d'avant ne bougent pas).
+            if (k == std::size(folders) && hmi_ && hmi::names::active(hmi_->project)) return pack(NodeKind::HmiLibrariesFolder, 0);
             return k < std::size(folders) ? pack(folders[k], 0) : ui::kInvalidNode;
         }
+        case NodeKind::HmiLibrariesFolder:              // 1.13.0 (lot J8) : chaque bibliotheque reliee
+            return hmi_ && k < hmi_->project.libraries.size() ? pack(NodeKind::HmiLibraryNode, static_cast<Index>(k)) : ui::kInvalidNode;
         // ---- 1.12.0 : les natives ----
         case NodeKind::NativesFolder: {
             // 1.12.17 : les types d'abord (la maquette), puis les fonctions... et De A a Z.
@@ -1898,6 +1907,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case NK::HmiScripts: case NK::HmiAlarms: case NK::HmiRecipes: case NK::HmiUsers: case NK::HmiLanguages:
             case NK::HmiUnits: case NK::HmiComm: case NK::HmiReports: case NK::HmiAlarmGroup: case NK::HmiRoles:
             case NK::HmiScriptsFolder: case NK::HmiFunctionsFolder: case NK::HmiVariablesFolder: case NK::HmiTypesFolder:
+            case NK::HmiLibrariesFolder:                                   // 1.13.0 (lot J8)
             case NK::HmiVarFolder: case NK::HmiUsedFolder: case NK::HmiSysFolder: case NK::HmiSysDomain:
             case NK::HmiInstFolder: case NK::HmiInstViewInfo: case NK::HmiListFolder:
             case NK::HmiInstAlarmGroup: case NK::HmiInstAlarms:            // 1.11.1 (decision 108)
@@ -1953,7 +1963,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || (k >= NK::HmiCodeGroup && k <= NK::HmiSymbolOverloads)                            // 1.11.21 : le contenu d'un code
                 || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker   // 1.10.2 (chantier A)
                 || (k >= NK::HmiInstParam && k <= NK::HmiInstAlarmVar)                               // 1.11.1 (decision 108)
-                || ProjectTreeModel::isNativesKind(k);                                               // 1.12.0
+                || ProjectTreeModel::isNativesKind(k)                                                // 1.12.0
+                || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode;                          // 1.13.0 (lot J8)
         }
     } // namespace
 
@@ -2741,7 +2752,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiFunction: {
             const auto* f = hmi_ ? byId(hmi_->project.programs.functions, i) : nullptr;
             if (!f) return {};
-            return hmitree::signatureOf(*f) + (f->description.empty() ? std::string{} : "   // " + f->description);
+            // 1.13.0 (lot J8) : une fonction d'un espace, son espace en tete (Util.Moyenne(...)).
+            return (f->ns.empty() ? std::string{} : f->ns + ".") + hmitree::signatureOf(*f)
+                 + (f->description.empty() ? std::string{} : "   // " + f->description);
         }
         case NodeKind::HmiVariablesFolder:
             return "Variables IHM" + countTag(hmi_ ? hmi_->project.programs.variables.size() : 0u);
@@ -2750,11 +2763,21 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiTypeNode: {
             const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
             if (!ty) return {};
+            const std::string shown = hmi::fullName(*ty);         // 1.13.0 (lot J8) : Gaz.T_Vanne, son espace en tete
             if (ty->kind == hmi::HmiTypeKind::Enumeration)       // 1.10 (decision 15)
-                return ty->name + "  (\xC3\xA9num\xC3\xA9ration)";
-            const auto w = hmi::types::weightOf(hmi_->project, ty->name);
-            return ty->name + "  [" + std::to_string(ty->members.size()) + " membre" + (ty->members.size() > 1 ? "s" : "") + ", "
+                return shown + "  (\xC3\xA9num\xC3\xA9ration)";
+            const auto w = hmi::types::weightOf(hmi_->project, shown);
+            return shown + "  [" + std::to_string(ty->members.size()) + " membre" + (ty->members.size() > 1 ? "s" : "") + ", "
                  + std::to_string(w.words) + " mot" + (w.words > 1 ? "s" : "") + "]";
+        }
+        // ---- 1.13.0 (lot J8) : les bibliotheques reliees ----
+        case NodeKind::HmiLibrariesFolder:
+            return "Biblioth\xC3\xA8ques" + countTag(hmi_ ? hmi_->project.libraries.size() : 0u);
+        case NodeKind::HmiLibraryNode: {
+            if (!hmi_ || i >= hmi_->project.libraries.size()) return {};
+            const auto& l = hmi_->project.libraries[i];
+            const hmi::LoadedLibrary* ld = hmi_->project.loadedLibrary(l.name);
+            return l.name + " " + l.version + "  \xC2\xB7  " + std::string(hmi::biblio::stateLabel(ld ? ld->state : hmi::LibraryState::Missing));
         }
         // ---- 1.10 (chantier O, decision 14) : sous un objet, les operateurs de son symbole ----
         case NodeKind::HmiObjectOperators: {
@@ -3933,6 +3956,19 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             break;
         }
         case NodeKind::HmiTypesFolder:   s.icon = ui::Icon::DerivedType; break;
+        case NodeKind::HmiLibrariesFolder: s.icon = ui::Icon::Library; break;      // 1.13.0 (lot J8)
+        case NodeKind::HmiLibraryNode: {                                          // verrouillee ; la pastille dit son etat
+            s.icon = ui::Icon::Lock;
+            if (hmi_ && i < hmi_->project.libraries.size()) {
+                const hmi::LoadedLibrary* ld = hmi_->project.loadedLibrary(hmi_->project.libraries[i].name);
+                const auto st = ld ? ld->state : hmi::LibraryState::Missing;
+                s.iconTone = st == hmi::LibraryState::Linked ? ui::Tone::Ok
+                           : st == hmi::LibraryState::Newer ? ui::Tone::Info
+                           : st == hmi::LibraryState::Older ? ui::Tone::Warning : ui::Tone::Error;
+                s.fgTone = ui::Tone::Muted;
+            }
+            break;
+        }
         case NodeKind::HmiTypeNode:      s.icon = ui::Icon::DerivedType; s.iconTone = ui::Tone::Accent; break;
         // ---- 1.10 (chantier O, decision 15) : le texte affiche d'une valeur, toString / fromString ----
         case NodeKind::HmiTypeValues:
