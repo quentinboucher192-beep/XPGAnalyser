@@ -640,11 +640,15 @@ struct Declaration {
     // de la vue, plutot qu'une fois au demarrage (d'office quand son code lit un parametre de la
     // popup : hmi::viewmembers::computedAtOpen). Sans effet ailleurs.
     bool                     reopen{false};
+    // 1.13.0 (lot J6 : les unites) : l'unite physique d'un parametre, d'une variable ou d'une constante
+    //  numerique ("bar") ; vide : aucune. Un parametre VAR_INPUT p : REAL [bar] l'exige a l'appel. Place en
+    //  DERNIER pour ne pas decaler les initialisations positionnelles existantes de Declaration.
+    std::string              unit{};
     // La cle lue n'est pas la declaration : deux declarations egales le restent sans elle.
     bool operator==(const Declaration& o) const {
         return id == o.id && kind == o.kind && name == o.name && type == o.type && value == o.value && description == o.description
             && storage == o.storage && mode == o.mode && visibility == o.visibility && computed == o.computed && calc == o.calc
-            && locals == o.locals && reopen == o.reopen;
+            && locals == o.locals && reopen == o.reopen && unit == o.unit;   // 1.13.0 (J6)
     }
 };
 [[nodiscard]] std::string_view           declKindKey(DeclKind) noexcept;       // "constante", "variable", "parametre"
@@ -895,6 +899,10 @@ struct HmiFunction {
     // 1.13.0 (lot J4) : ses cas de test (la clef est l'id de la fonction - chaque surcharge
     // garde ses propres cas). Vide : la fonction s'ecrit comme avant (format 28 ou anterieur).
     std::vector<FunctionTest> tests{};
+    // 1.13.0 (lot J6 : les unites) : l'unite physique du retour ("m3/h") quand il est numerique ; vide :
+    //  aucune. Un appel la propage comme une variable de ce type. Place en DERNIER pour ne pas decaler les
+    //  initialisations positionnelles existantes (HmiFunction{id, nom, retour, corps, description}).
+    std::string returnUnit{};
     bool operator==(const HmiFunction&) const = default;
 };
 
@@ -1143,6 +1151,10 @@ struct Variable {
     // ecriture par seconde) et rendue au lancement suivant (hmi::retain : ihm/historique/
     // remanence_exploitation.txt). Distincte de la remanence de simulation (hmi::simdata).
     bool        retain{false};
+    // 1.13.0 (lot J6 : les unites) : son unite physique ("bar", "degC", "%") ; vide : aucune. Seulement sur
+    //  un type numerique (grisee sinon). La valeur initiale et les seuils se lisent dans cette unite, et elle
+    //  devient l'unite d'affichage par defaut. Un projet d'avant : champ absent, unite vide.
+    std::string unit{};
     [[nodiscard]] bool bound() const noexcept { return !equipment.empty(); }
     [[nodiscard]] bool scaled() const noexcept { return rawMax != rawMin; }
     bool operator==(const Variable&) const = default;
@@ -1165,6 +1177,10 @@ struct TypeMember {
     //  methodes du MEME type (ni sous-type, ni exterieur, ni script, ni Tableau, ni plumes). Il garde sa
     //  place Modbus (l'equipement le lit ; seul le code ST est contraint). Un projet d'avant est inchange.
     Visibility  visibility{Visibility::Public};
+    // 1.13.0 (lot J6 : les unites) : son unite physique ("bar", "degC", "%") ; vide : aucune (comme avant).
+    //  Seulement sur un type numerique (sur un ARRAY OF REAL : l'unite de l'element). Sert au controle des
+    //  calculs (bar + mbar refuse) et devient l'unite d'affichage par defaut. Un projet d'avant : champ absent.
+    std::string unit{};
     bool operator==(const TypeMember&) const = default;
 };
 // 1.10 (decision 15) : une valeur d'enumeration IHM
@@ -1222,6 +1238,28 @@ struct Programs {
     bool operator==(const Programs&) const = default;
 };
 
+// ---- 1.13.0 (lot J6) : LES UNITES DE MESURE -------------------------------------
+//  UNE FAMILLE (une dimension physique) rassemble des unites interchangeables - pression,
+//  temperature, debit, temps... Chacune a une unite de REFERENCE ; chaque unite se convertit
+//  vers la reference par une affine : valeur_reference = valeur * facteur + decalage (bar/mbar :
+//  facteur seul ; degC/K : facteur ET decalage). La bibliotheque fournie (hmi::units) donne les
+//  familles et unites courantes ; le projet en ajoute (UnitFamily, UnitDef, dans Config). Les
+//  unites fournies sont verrouillees ; celles du projet se modifient et se retirent.
+struct UnitFamily {
+    std::string name;             // l'identifiant : "pression" (minuscules, sans accent)
+    std::string reference;        // le symbole de l'unite de reference ("Pa")
+    std::string label;            // le libelle affiche ("Pression") ; vide : le nom
+    bool operator==(const UnitFamily&) const = default;
+};
+struct UnitDef {
+    std::string symbol;           // "bar"
+    std::string family;           // "pression"
+    double      factor{1.0};      // valeur_reference = valeur * factor + offset
+    double      offset{0.0};
+    std::string label;            // le libelle affiche ; vide : le symbole
+    bool operator==(const UnitDef&) const = default;
+};
+
 // -------------------------------------------------------------- projet ------
 struct Config {
     std::string name{"IHM"};
@@ -1269,6 +1307,13 @@ struct Config {
     // simulation (decoche : un echec n'est qu'un avertissement). Ecrits seulement s'ils changent.
     bool        runTestsOnBuild{true};
     bool        testFailBlocksStart{false};
+    // 1.13.0 (lot J6 : les unites) : la bibliotheque des unites du PROJET - les familles et les unites
+    //  ajoutees (ou une unite fournie modifiee, par meme symbole) ; vides : seulement les fournies. Et
+    //  l'option « Unites strictes » : une affectation de meme famille exige alors EN(...) au lieu de
+    //  convertir d'office. Ecrites seulement si elles changent (un projet d'avant reste identique).
+    std::vector<UnitFamily> unitFamilies{};
+    std::vector<UnitDef>    units{};
+    bool                    strictUnits{false};
     bool operator==(const Config&) const = default;
 };
 
