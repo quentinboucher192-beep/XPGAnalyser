@@ -1358,6 +1358,7 @@ bool assignsLambda(std::string_view s, std::string_view name) {
 // 1.12.20 : ce que fait une fonction (voir HmiScript.hpp).
 bool hmiFunctionActs(std::string_view name) {
     if (!isHmiFunction(name)) return false;
+    if (upper(name) == "IHM_POINT_ARRET") return false;   // 1.13.0 (lot J2) : il s'arrete, il n'agit pas
     const auto* f = natives::function(upper(name));
     return !(f && f->readOnlyIhm);
 }
@@ -1942,7 +1943,9 @@ bool isHmiFunction(std::string_view name) noexcept {
                                    // 1.12.20 : surveiller une variable
                                    "IHM_SUR_CHANGEMENT",
                                    // 1.12.26 : les scripts detaches
-                                   "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER"};
+                                   "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER",
+                                   // 1.13.0 (lot J2) : le debogueur (une native du dialecte ; hors simulation, rien)
+                                   "IHM_POINT_ARRET"};
     const std::string u = upper(name);
     for (const char* n : kNames) if (u == n) return true;
     return false;

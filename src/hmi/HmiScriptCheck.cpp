@@ -358,6 +358,7 @@ constexpr Arity kHmi[] = {
     {"IHM_APRES", 2, 2},           {"IHM_CHAQUE", 2, 2},         {"IHM_ANNULER", 1, 1},    // 1.12.19
     {"IHM_SUR_CHANGEMENT", 2, 2},                                                          // 1.12.20
     {"IHM_SCRIPT_ACTIF", 1, 1},    {"IHM_SCRIPT_ARRETER", 1, 1},                            // 1.12.26
+    {"IHM_POINT_ARRET", 0, 1},                                                             // 1.13.0 (lot J2)
 };
 
 std::string plural(int n, const char* one) { return std::to_string(n) + " " + one + (n > 1 ? "s" : ""); }
@@ -1565,11 +1566,11 @@ private:
         const auto* info = sim::lib::native(U);
         constantWritten(i, close, U, info);
         // 1.13.0 : WAIT_UNTIL(condition [, delai]) - la condition doit etre un BOOL.
-        if (U == "WAIT_UNTIL")
+        if (U == "WAIT_UNTIL" || U == "IHM_POINT_ARRET")      // 1.13.0 (lot J2) : IHM_POINT_ARRET(condition) aussi
             if (const auto args = argsOf(i + 1, close); !args.empty()) {
                 const auto [ca, cb] = args.front();
                 for (auto& m : typeProblems(ca, cb, exprcheck::Want::Bool))
-                    reportTok(ca, cb, m.find("est attendu") != std::string::npos ? S::Error : S::Warning, "WAIT_UNTIL : " + m);
+                    reportTok(ca, cb, m.find("est attendu") != std::string::npos ? S::Error : S::Warning, U + " : " + m);
             }
         const OldArity* old = info ? nullptr : oldArity(U);
         if (!info && !old && !sim::lib::oldListResizes(U)) return;
