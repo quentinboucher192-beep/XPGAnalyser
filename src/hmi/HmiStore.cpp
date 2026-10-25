@@ -214,6 +214,7 @@ std::string serializeDeclarations(const std::vector<Declaration>& decls) {
             if (r.ok && r.key.find("ihm:") != std::string::npos) s += field("type_cle", r.key);
         }
         if (!d.value.empty()) s += field("valeur", d.value);
+        if (!d.unit.empty()) s += field("unite", d.unit);         // 1.13.0 (lot J6) : son unite physique
         if (d.kind == DeclKind::Variable) s += fieldBare("stockage", storageKey(d.storage));
         if (d.kind == DeclKind::Parameter) s += fieldBare("mode", passModeKey(d.mode));
         s += fieldBare("visibilite", visibilityKey(d.visibility));
@@ -287,6 +288,7 @@ bool parseDeclaration(const Record& r, Declaration& d) {
     d.type = toStr(r.get("type"));
     d.typeKey = toStr(r.get("type_cle"));                 // 1.11.19 (lot 6) : suivi au chargement, puis vide
     d.value = toStr(r.get("valeur"));
+    d.unit = toStr(r.get("unite"));                               // 1.13.0 (lot J6)
     d.description = toStr(r.get("description"));
     d.storage = storageFromKey(toStr(r.get("stockage"))).value_or(Storage::Execution);
     d.mode = passModeFromKey(toStr(r.get("mode"))).value_or(PassMode::In);
@@ -469,6 +471,7 @@ std::string serializeView(const View& v) {
     // 1.12.16 : celles d'une vue ou d'une popup aussi ; une privee le dit (portee=privee).
     for (const auto& fn : v.functions) {
         s += "fonction_symbole" + fieldInt("id", fn.id) + field("nom", fn.name) + field("retour", fn.returnType)
+           + (fn.returnUnit.empty() ? std::string{} : field("unite_retour", fn.returnUnit))                  // 1.13.0 (lot J6)
            + (fn.isVirtual ? fieldBool("virtuelle", true) : std::string{})
            + (fn.visibility == Visibility::Private ? fieldBare("portee", "privee") : std::string{})
            + (fn.description.empty() ? std::string{} : field("description", fn.description)) + field("corps", fn.body) + "\n";
@@ -706,6 +709,7 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             fn.id = static_cast<Id>(toInt(r.get("id"), 0));
             fn.name = toStr(r.get("nom"));
             fn.returnType = toStr(r.get("retour"));
+            fn.returnUnit = toStr(r.get("unite_retour"));                     // 1.13.0 (lot J6)
             fn.isVirtual = toBool(r.get("virtuelle"), false);
             fn.visibility = toStr(r.get("portee")) == "privee" ? Visibility::Private : Visibility::Public;   // 1.12.16
             fn.description = toStr(r.get("description"));
@@ -961,8 +965,27 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         return !t.base.empty() || !t.interfaces.empty() || !t.methods.empty() || t.kind == HmiTypeKind::Interface
             || std::any_of(t.members.begin(), t.members.end(), [](const TypeMember& m) { return m.visibility == Visibility::Private; });
     });
-    // 31 : objets ; 30 : generiques d'une fonction ; 29 : tests unitaires ; sinon l'echelle d'avant (28 generiques de type...).
-    const int format = objects ? kFormatVersion : funcGenerics ? 30 : tests ? 29 : generics ? 28 : callbackTypes ? 27 : viewMembers ? 26
+    // 1.13.0 (lot J6) : le format 32 n'ajoute que les unites de mesure - une unite posee (membre, variable,
+    // declaration, retour de fonction), une bibliotheque d'unites du projet, ou l'option « Unites strictes ».
+    // Sans rien de tout cela, l'echelle d'avant (31 objets, 30 generiques...) : un projet sans unite s'ecrit
+    // comme avant et une IHM Studio d'avant l'ouvre (gate-down en escalier).
+    bool anyUnit = !p.config.unitFamilies.empty() || !p.config.units.empty() || p.config.strictUnits;
+    forEachDeclarations(p, [&](const std::vector<Declaration>& list) {
+        for (const auto& d : list) anyUnit = anyUnit || !d.unit.empty();
+    });
+    const auto fnReturnUnit = [](const std::vector<HmiFunction>& fns) {
+        return std::any_of(fns.begin(), fns.end(), [](const HmiFunction& f) { return !f.returnUnit.empty(); });
+    };
+    anyUnit = anyUnit || fnReturnUnit(p.programs.functions)
+           || std::any_of(p.views.begin(), p.views.end(), [&](const View& v) { return fnReturnUnit(v.functions); })
+           || std::any_of(p.programs.variables.begin(), p.programs.variables.end(), [](const Variable& v) { return !v.unit.empty(); });
+    for (const auto& ty : p.programs.types) {
+        anyUnit = anyUnit || fnReturnUnit(ty.methods)
+               || std::any_of(ty.members.begin(), ty.members.end(), [](const TypeMember& m) { return !m.unit.empty(); });
+    }
+    const bool units = anyUnit;
+    // 32 : unites ; 31 : objets ; 30 : generiques d'une fonction ; 29 : tests unitaires ; sinon l'echelle d'avant (28...).
+    const int format = units ? kFormatVersion : objects ? 31 : funcGenerics ? 30 : tests ? 29 : generics ? 28 : callbackTypes ? 27 : viewMembers ? 26
                      : tableGestures ? 25 : shortcuts ? 24 : declared ? 23 : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# IHM Studio - projet IHM (format " + std::to_string(format) + ")\n";
@@ -1046,7 +1069,8 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         for (const auto& m : ty.members)
             index += "membre" + field("nom", m.name) + field("type", m.type) + field("initiale", m.initial)
                    + field("description", m.description)
-                   + (m.visibility == Visibility::Private ? fieldBare("portee", "privee") : std::string{}) + "\n";   // 1.13.0 (lot J1)
+                   + (m.visibility == Visibility::Private ? fieldBare("portee", "privee") : std::string{})   // 1.13.0 (lot J1)
+                   + (m.unit.empty() ? std::string{} : field("unite", m.unit)) + "\n";                        // 1.13.0 (lot J6)
         for (const auto& v : ty.values)
             index += "valeur_enum" + field("nom", v.name) + fieldInt("valeur", v.value) + field("texte", v.text)
                    + field("description", v.description) + "\n";
@@ -1055,6 +1079,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         // privee le dit (portee=privee), une virtuelle (virtuelle=oui) ; ses generiques, declarations et cas suivent.
         for (const auto& fn : ty.methods) {
             index += "methode_type" + fieldInt("id", fn.id) + field("nom", fn.name) + field("retour", fn.returnType)
+                   + (fn.returnUnit.empty() ? std::string{} : field("unite_retour", fn.returnUnit))          // 1.13.0 (lot J6)
                    + (fn.isVirtual ? fieldBool("virtuelle", true) : std::string{})
                    + (fn.visibility == Visibility::Private ? fieldBare("portee", "privee") : std::string{})
                    + (fn.description.empty() ? std::string{} : field("description", fn.description)) + field("corps", fn.body) + "\n";
@@ -1074,6 +1099,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     for (const auto& var : p.programs.variables) {
         index += "variable" + fieldInt("id", var.id) + field("nom", var.name) + field("type", var.type)
                + field("initiale", var.initial) + field("description", var.description);
+        if (!var.unit.empty()) index += field("unite", var.unit);         // 1.13.0 (lot J6) : son unite physique
         if (!var.folder.empty()) index += field("dossier", var.folder);   // lot 16
         if (!var.packBools) index += fieldBool("bool_par_mot", false);
         if (var.retain) index += fieldBool("remanente", true);              // 1.11.16 : en exploitation
@@ -1118,6 +1144,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         const std::string file = scriptFileName(named);
         files.push_back({"fonctions/" + file, textBytes(f.body)});
         index += "fonction" + fieldInt("id", f.id) + field("nom", f.name) + field("retour", f.returnType)
+               + (f.returnUnit.empty() ? std::string{} : field("unite_retour", f.returnUnit))              // 1.13.0 (lot J6)
                + field("fichier", "fonctions/" + file) + field("description", f.description) + "\n";
         // 1.13.0 (format 30) : ses generiques (TEMPLATE <T>), sous la fonction et avant ses declarations.
         for (const auto& g : f.generics)
@@ -1238,6 +1265,17 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
             if (!value->empty()) index += field(name, *value);
         index += "\n";
     }
+    // 1.13.0 (lot J6) : la bibliotheque des unites du projet (les familles et unites ajoutees ou
+    // modifiees) et l'option « Unites strictes » - ecrites seulement si elles existent (un projet qui
+    // n'emploie que les unites fournies, et sans l'option, ne change pas et reste au format d'avant).
+    for (const auto& f : cfg.unitFamilies)
+        index += "famille_unite" + field("nom", f.name) + field("reference", f.reference)
+               + (f.label.empty() ? std::string{} : field("libelle", f.label)) + "\n";
+    for (const auto& u : cfg.units)
+        index += "unite_mesure" + field("symbole", u.symbol) + field("famille", u.family)
+               + fieldBare("facteur", formatNumber(u.factor)) + fieldBare("decalage", formatNumber(u.offset))
+               + (u.label.empty() ? std::string{} : field("libelle", u.label)) + "\n";
+    if (cfg.strictUnits) index += "unites_strictes" + fieldBool("actif", true) + "\n";
     // Lot 14 : la communication avec l'automate reel - seulement si elle change
     // (un projet qui reste sur le simulateur n'ecrit rien).
     {
@@ -1605,6 +1643,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             if (var.type.empty()) var.type = "INT";
             var.initial = toStr(r.get("initiale"));
             var.description = toStr(r.get("description"));
+            var.unit = toStr(r.get("unite"));                                 // 1.13.0 (lot J6)
             // Lot 15 : liee a un equipement.
             var.equipment = toStr(r.get("equipement"));
             var.address = toStr(r.get("adresse"));
@@ -1674,6 +1713,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             m.initial = toStr(r.get("initiale"));
             m.description = toStr(r.get("description"));
             m.visibility = toStr(r.get("portee")) == "privee" ? Visibility::Private : Visibility::Public;   // 1.13.0 (lot J1)
+            m.unit = toStr(r.get("unite"));                                                                 // 1.13.0 (lot J6)
             p.programs.types.back().members.push_back(std::move(m));
         } else if (r.word == "methode_type") {                        // 1.13.0 (lot J1) : une methode (comme fonction_symbole)
             if (p.programs.types.empty()) {
@@ -1684,6 +1724,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             fn.id = static_cast<Id>(toInt(r.get("id"), 0));
             fn.name = toStr(r.get("nom"));
             fn.returnType = toStr(r.get("retour"));
+            fn.returnUnit = toStr(r.get("unite_retour"));                     // 1.13.0 (lot J6)
             fn.isVirtual = toBool(r.get("virtuelle"), false);
             fn.visibility = toStr(r.get("portee")) == "privee" ? Visibility::Private : Visibility::Public;
             fn.description = toStr(r.get("description"));
@@ -1754,6 +1795,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             f.id = static_cast<Id>(toInt(r.get("id"), 0));
             f.name = toStr(r.get("nom"));
             f.returnType = toStr(r.get("retour"));
+            f.returnUnit = toStr(r.get("unite_retour"));                     // 1.13.0 (lot J6)
             f.description = toStr(r.get("description"));
             const std::string file = toStr(r.get("fichier"));
             if ((file.empty() || !read(file, f.body)) && report)
@@ -1827,6 +1869,24 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             d.lowAlarm = toStr(r.get("alarme_basse"));
             d.highAlarm = toStr(r.get("alarme_haute"));
             if (!d.path.empty()) p.displays.push_back(std::move(d));
+        } else if (r.word == "famille_unite") {                           // 1.13.0 (lot J6)
+            UnitFamily f;
+            f.name = toStr(r.get("nom"));
+            f.reference = toStr(r.get("reference"));
+            f.label = toStr(r.get("libelle"));
+            if (!f.name.empty()) p.config.unitFamilies.push_back(std::move(f));
+        } else if (r.word == "unite_mesure") {                            // 1.13.0 (lot J6)
+            UnitDef u;
+            u.symbol = toStr(r.get("symbole"));
+            u.family = toStr(r.get("famille"));
+            double d = 1.0;
+            u.factor = r.get("facteur") && parseNumber(toStr(r.get("facteur")), d) ? d : 1.0;
+            d = 0.0;
+            u.offset = r.get("decalage") && parseNumber(toStr(r.get("decalage")), d) ? d : 0.0;
+            u.label = toStr(r.get("libelle"));
+            if (!u.symbol.empty()) p.config.units.push_back(std::move(u));
+        } else if (r.word == "unites_strictes") {                         // 1.13.0 (lot J6)
+            p.config.strictUnits = toBool(r.get("actif"), true);
         } else if (r.word == "communication") {                           // lot 14
             auto& c = p.comm;
             const Communication def{};
