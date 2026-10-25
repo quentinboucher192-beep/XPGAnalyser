@@ -14523,6 +14523,10 @@ const std::vector<Topic>& topics() {
              {K::Code, "TYPE T_PompeDoublee EXTENDS T_Pompe\n    Secours : BOOL;\n    METHOD PUBLIC "
                          "OVERRIDE EnDefaut : BOOL\nEND_TYPE\n\n(* corps de EnDefaut red\xC3\xA9" "finie "
                          "*)\nEnDefaut := SUPER.EnDefaut() AND NOT Secours;", "ST"},
+             {K::Code, "typedef struct {                           /* heritage : la tranche parente "
+                         "d'abord */\n    T_Pompe base;                          /* les membres et la place "
+                         "de T_Pompe */\n    bool    Secours;\n} T_PompeDoublee;                          /* "
+                         "OVERRIDE et SUPER : voir le C++ */", "C"},
              {K::Code, "struct T_PompeDoublee : T_Pompe {\n    bool Secours = false;\n    bool EnDefaut() "
                          "const override { return T_Pompe::EnDefaut() && !Secours; }\n};", "C++"},
              {K::Paragraph, "Un `T_PompeDoublee` **passe l\xC3\xA0 o\xC3\xB9 un `T_Pompe` est attendu** (la "
@@ -14540,6 +14544,13 @@ const std::vector<Topic>& topics() {
              {K::Code, "TYPE I_Demarrable INTERFACE\n    METHOD Demarrer\n    METHOD EnDefaut : "
                          "BOOL\nEND_TYPE\n\nTYPE T_Vanne IMPLEMENTS I_Demarrable\n    Position : REAL;\n    "
                          "METHOD PUBLIC Demarrer\n    METHOD PUBLIC EnDefaut : BOOL\nEND_TYPE", "ST"},
+             {K::Code, "/* une interface = le contrat, des pointeurs de fonction */\ntypedef struct { void "
+                         "(*Demarrer)(void*); bool (*EnDefaut)(void*); } I_Demarrable;\ntypedef struct { "
+                         "float Position; } T_Vanne;   /* remplit I_Demarrable : voir le C++ */", "C"},
+             {K::Code, "struct I_Demarrable {                       // un contrat : des methodes pures\n   "
+                         " virtual void Demarrer() = 0;\n    virtual bool EnDefaut() = 0;\n    virtual "
+                         "~I_Demarrable() = default;\n};\nstruct T_Vanne : I_Demarrable {\n    float "
+                         "Position = 0;\n    void Demarrer() override;\n    bool EnDefaut() override;\n};", "C++"},
              {K::Heading, "La liste h\xC3\xA9t\xC3\xA9rog\xC3\xA8ne, et DYNAMIC_CAST pour redescendre", {}},
              {K::Paragraph, "Une interface ne s'emploie que par **REF_TO** (une instance a des "
                          "donn\xC3\xA9" "es, pas un contrat) : `v : I_Demarrable` est refus\xC3\xA9 "
@@ -14554,6 +14565,15 @@ const std::vector<Topic>& topics() {
                          "1; END_IF;\n    p := DYNAMIC_CAST<T_Pompe>(e^);         (* NULL si ce n'en est pas "
                          "une *)\n    IF p <> NULL THEN Debit_Total := Debit_Total + p^.Debit; "
                          "END_IF;\nEND_FOR;", "ST"},
+             {K::Code, "/* un tableau de references au contrat ; le type reel decide a l'execution "
+                         "*/\nI_Demarrable* equipements[] = { &pompe1.base, &vanne_entree };\nfor (int i = "
+                         "0; i < 2; ++i) {\n    equipements[i]->Demarrer(equipements[i]);\n    if "
+                         "(equipements[i]->EnDefaut(equipements[i])) ++defauts;\n    /* DYNAMIC_CAST : "
+                         "tester le type reel (tag) avant de lire Debit */\n}", "C"},
+             {K::Code, "std::vector<I_Demarrable*> equipements { &pompe1, &vanne_entree };\nfor (auto* e : "
+                         "equipements) {\n    e->Demarrer();\n    if (e->EnDefaut()) ++defauts;\n    if "
+                         "(auto* p = dynamic_cast<T_Pompe*>(e))   // nullptr si ce n'en est pas une\n        "
+                         "debit_total += p->Debit;\n}", "C++"},
              {K::Heading, "Ce que G\xC3\xA9n\xC3\xA9rer refuse", {}},
              {K::Bullet, "un membre ou une m\xC3\xA9thode **priv\xC3\xA9** lu de l'ext\xC3\xA9rieur ;", {}},
              {K::Bullet, "**OVERRIDE** sans VIRTUAL au parent, ou de signature diff\xC3\xA9rente, ou d'une "

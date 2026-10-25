@@ -6482,6 +6482,12 @@ END_TYPE
 (* corps de EnDefaut redéfinie *)
 EnDefaut := SUPER.EnDefaut() AND NOT Secours;
 ```
+```C
+typedef struct {                           /* heritage : la tranche parente d'abord */
+    T_Pompe base;                          /* les membres et la place de T_Pompe */
+    bool    Secours;
+} T_PompeDoublee;                          /* OVERRIDE et SUPER : voir le C++ */
+```
 ```C++
 struct T_PompeDoublee : T_Pompe {
     bool Secours = false;
@@ -6503,6 +6509,23 @@ TYPE T_Vanne IMPLEMENTS I_Demarrable
     METHOD PUBLIC EnDefaut : BOOL
 END_TYPE
 ```
+```C
+/* une interface = le contrat, des pointeurs de fonction */
+typedef struct { void (*Demarrer)(void*); bool (*EnDefaut)(void*); } I_Demarrable;
+typedef struct { float Position; } T_Vanne;   /* remplit I_Demarrable : voir le C++ */
+```
+```C++
+struct I_Demarrable {                       // un contrat : des methodes pures
+    virtual void Demarrer() = 0;
+    virtual bool EnDefaut() = 0;
+    virtual ~I_Demarrable() = default;
+};
+struct T_Vanne : I_Demarrable {
+    float Position = 0;
+    void Demarrer() override;
+    bool EnDefaut() override;
+};
+```
 ### La liste hétérogène, et DYNAMIC_CAST pour redescendre
 Une interface ne s'emploie que par **REF_TO** (une instance a des données, pas un contrat) : `v : I_Demarrable` est refusé (« emploie REF_TO I_Demarrable »). Une `LIST OF REF_TO I_Demarrable` tient des pompes et des vannes ; `e^.Demarrer()` part sur le **type réel** de la cible de la référence (le dispatch dynamique). `DYNAMIC_CAST<T_Pompe>(e^)` rend une référence si c'en est une, NULL sinon.
 ```ST
@@ -6515,6 +6538,24 @@ FOR EACH e IN Equipements DO
     p := DYNAMIC_CAST<T_Pompe>(e^);         (* NULL si ce n'en est pas une *)
     IF p <> NULL THEN Debit_Total := Debit_Total + p^.Debit; END_IF;
 END_FOR;
+```
+```C
+/* un tableau de references au contrat ; le type reel decide a l'execution */
+I_Demarrable* equipements[] = { &pompe1.base, &vanne_entree };
+for (int i = 0; i < 2; ++i) {
+    equipements[i]->Demarrer(equipements[i]);
+    if (equipements[i]->EnDefaut(equipements[i])) ++defauts;
+    /* DYNAMIC_CAST : tester le type reel (tag) avant de lire Debit */
+}
+```
+```C++
+std::vector<I_Demarrable*> equipements { &pompe1, &vanne_entree };
+for (auto* e : equipements) {
+    e->Demarrer();
+    if (e->EnDefaut()) ++defauts;
+    if (auto* p = dynamic_cast<T_Pompe*>(e))   // nullptr si ce n'en est pas une
+        debit_total += p->Debit;
+}
 ```
 ### Ce que Générer refuse
 - un membre ou une méthode **privé** lu de l'extérieur ;
