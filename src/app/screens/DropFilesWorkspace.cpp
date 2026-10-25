@@ -85,9 +85,9 @@ void MainAnalysisScreen::askDroppedFiles(std::vector<std::string> paths) {
     auto plan = std::make_shared<df::Plan>(df::analyse(paths, ctx));
     plan->projectName = dropProjectName(app_);
 
-    // 1.12.30 : UNE ARCHIVE DE PROJET (.xihm, .xapi) OU LA PAGE WEB D'UN PROJET : elle s'ouvre,
-    // comme Projet > Ouvrir... - le projet ouvert d'abord (ses modifications se demandent). Le
-    // reste du depot attend : il se lache a nouveau sur le projet qui s'ouvre.
+    // 1.12.30 : UNE ARCHIVE DE PROJET (.xihm, .xapi) : elle s'ouvre, comme Projet > Ouvrir... -
+    // le projet ouvert d'abord (ses modifications se demandent). Le reste du depot attend : il
+    // se lache a nouveau sur le projet qui s'ouvre.
     if (!plan->archives.empty()) {
         const std::string archive = plan->archives.front();
         if (paths.size() > 1 && status_)

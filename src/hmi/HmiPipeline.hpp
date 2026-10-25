@@ -210,7 +210,7 @@ using ArtifactCheck = std::function<bool(const std::string& relativePath, const 
 [[nodiscard]] Analysis analyse(std::vector<Element> elements, const Cache&, const ArtifactCheck&);
 
 // ---- 1.12.31 : les artefacts d'un cache deballe ----------------------------------
-//  L'ARCHIVE D'UN PROJET (.xihm, sa page web) EMPORTE LE CACHE (build-cache.txt), PAS
+//  L'ARCHIVE D'UN PROJET (.xihm) EMPORTE LE CACHE (build-cache.txt), PAS
 //  LES ARTEFACTS : ils se deduisent du projet. Au deballage, l'artefact de chaque element
 //  que le cache dit genere est refait comme le build l'ecrit, puis pose SEULEMENT s'il a
 //  exactement l'empreinte que le cache a retenue, a son chemin (celui que le build lui

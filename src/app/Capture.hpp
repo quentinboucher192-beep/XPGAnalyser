@@ -33,7 +33,7 @@ namespace app {
 // Lot 13 : une image RGBA en JPEG (qualite 1 a 100), en memoire - les vignettes
 // du dossier de l'IHM. Faux : l'encodeur a echoue.
 [[nodiscard]] bool encodeJpeg(const std::vector<std::uint8_t>& rgba, int w, int h, int quality, std::vector<std::uint8_t>& out);
-// 1.12.30 : une image RGBA en PNG, en memoire (sa transparence gardee) - les images de la page web.
+// 1.12.30 : une image RGBA en PNG, en memoire (sa transparence gardee) - les images de l'export SVG.
 [[nodiscard]] bool encodePng(const std::vector<std::uint8_t>& rgba, int w, int h, std::vector<std::uint8_t>& out);
 
 } // namespace app

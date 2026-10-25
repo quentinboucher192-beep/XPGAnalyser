@@ -29,7 +29,7 @@
 //  menu de ce noeud (treeKey) - ou disent pourquoi elles sont grisees.
 // =============================================================================
 #include "Screens.hpp"
-#include "../ProjectExchange.hpp"   // 1.12.30 : la racine du projet - archive, page web
+#include "../ProjectExchange.hpp"   // 1.12.30 : la racine du projet - archive
 #include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio - sans automate
 #include "../hmi/HmiNativesCards.hpp"   // 1.12.0 : ce qu'Inserer pose
 
@@ -2027,13 +2027,12 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         m.add("Ouvrir le dossier du projet", Icon::FolderOpen, [refused, folder] { refused("Ouvrir le dossier", dossiers::ouvrirDansLeSysteme(folder)); }, {},
               folder.empty() ? "le projet n'a pas encore de dossier" : "");
         m.add("Rechercher dans le projet", Icon::Search, [this] { focusTreeFilter(); }, "Ctrl+Maj+F");
-        // 1.12.30 : LES ECHANGES - tout le projet dans un seul fichier (.xihm, .xapi), l'appli en
-        // page web (.html, l'archive dedans), et l'inverse (app/ProjectExchange).
+        // 1.12.30 : LES ECHANGES - tout le projet dans un seul fichier (.xihm, .xapi) et
+        // l'inverse (app/ProjectExchange).
         m.separator();
         const std::string unsaved = folder.empty() ? "enregistre d'abord le projet en dossier" : none;
         m.add((core::hasApi() ? std::string("Exporter en archive .xapi") : std::string("Exporter en archive .xihm")) + kDots, Icon::Export,
               [this] { exchange::askExportArchive(app_); }, {}, unsaved);
-        m.add("Exporter en page web (.html)" + kDots, Icon::Globe, [this] { exchange::askExportWeb(app_); }, {}, unsaved);
         m.add("Importer une archive" + kDots, Icon::Import, [this] { app_.confirmReplace([this] { exchange::askImportArchive(app_); }); });
         break;
     }

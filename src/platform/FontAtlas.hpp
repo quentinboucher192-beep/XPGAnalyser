@@ -59,8 +59,7 @@ public:
     // arbitrary memory. The renderer therefore tries a fixed list of known
     // locations and never a path that arrived from a project file.
     [[nodiscard]] bool load(const std::string& path, float pixelHeight);
-    // 1.12.31 : charger depuis des octets deja en memoire (la page web embarque
-    // son TTF ; elle n'a pas de disque d'ou lire un fichier).
+    // 1.12.31 : charger depuis des octets deja en memoire (pas de fichier a lire).
     [[nodiscard]] bool loadFromMemory(const std::uint8_t* data, std::size_t size, float pixelHeight);
 
     [[nodiscard]] bool ready() const noexcept { return ready_; }

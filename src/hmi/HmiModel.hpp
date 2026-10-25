@@ -1265,7 +1265,7 @@ struct Config {
     // a taper dans chaque compteur, et a changer partout).
     std::string shifts;
     // 1.13.0 (lot J4) : les tests unitaires des fonctions - rejoues au Compiler/Demarrer (coche par
-    // defaut ; decochable pour un gros projet ou la page web) ; un echec empeche le demarrage de la
+    // defaut ; decochable pour un gros projet) ; un echec empeche le demarrage de la
     // simulation (decoche : un echec n'est qu'un avertissement). Ecrits seulement s'ils changent.
     bool        runTestsOnBuild{true};
     bool        testFailBlocksStart{false};

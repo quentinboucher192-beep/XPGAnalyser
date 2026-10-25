@@ -619,8 +619,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         return Step::Yield;
     }
     if (cmd == "attendre-projet") return app_.project() ? Step::Yield : Step::Retry;
-    // 1.12.30 : les echanges de projets (une archive, une page web) tournent sur un autre fil ;
-    // la page web dessine ses vues entre deux images. Les images continuent ; 120 s au plus.
+    // 1.12.30 : les echanges de projets (une archive) tournent sur un autre fil.
+    // Les images continuent ; 120 s au plus.
     if (cmd == "attendre-echanges") {
         const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
         if (realUntil_ < 0) realUntil_ = now + 120.0;

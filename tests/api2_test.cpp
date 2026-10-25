@@ -114,12 +114,11 @@ void testTopBar() {
     // 1.10.2 (CR) : + Journal interne (Aide). 1.11 (T3) : + Les expressions (Aide).
     // 1.11 (T2, decision 22) : Projet 14, Nouveau 8, Affichage 9, Aide 16 (dont 4 titres).
     // 1.12.3 : + Disposition... (Projet). 1.12.27 : + Nouvelle fenetre (Projet).
-    // 1.12.30 : + Exporter en archive .xapi..., Importer une archive..., Exporter en page web
-    // (.html)..., Importer depuis une page web... (Projet).
-    check(entries == 53, "les quatre menus : " + std::to_string(entries) + " entrees");
-    check(bar.reaches("project.exportArchive") && bar.reaches("project.importArchive") && bar.reaches("project.exportWeb")
-              && bar.reaches("project.importWeb"),
-          "1.12.30 : Projet > Exporter en archive, Importer une archive, Exporter en page web, Importer depuis une page web");
+    // 1.12.30 : + Exporter en archive .xapi..., Importer une archive... (Projet).
+    // 1.13.0 : - Exporter / Importer en page web (retires).
+    check(entries == 51, "les quatre menus : " + std::to_string(entries) + " entrees");
+    check(bar.reaches("project.exportArchive") && bar.reaches("project.importArchive"),
+          "1.12.30 : Projet > Exporter en archive, Importer une archive");
     check(bar.reaches("app.newWindow"), "1.12.27 : Projet > Nouvelle fenetre");
     check(bar.reaches("project.disposition"), "1.12.3 : Projet > Disposition...");
     check(bar.reaches("layout.tabs") && bar.reaches("layout.groups") && bar.reaches("layout.mosaic") && bar.reaches("layout.detach")

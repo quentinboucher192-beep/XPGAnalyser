@@ -226,12 +226,10 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     }
     sep(project_);
     // 1.12.30 : LES ECHANGES DE PROJETS - tout le projet dans un seul fichier (.xihm, .xapi),
-    // l'appli en page web (.html, l'archive dedans), et leurs imports (app/ProjectExchange).
+    // et leurs imports (app/ProjectExchange).
     e(project_, core::hasApi() ? "Exporter en archive .xapi\xE2\x80\xA6" : "Exporter en archive .xihm\xE2\x80\xA6", "", ui::Icon::Export,
       "project.exportArchive");
     e(project_, "Importer une archive\xE2\x80\xA6", "", ui::Icon::Import, "project.importArchive");
-    e(project_, "Exporter en page web (.html)\xE2\x80\xA6", "", ui::Icon::Globe, "project.exportWeb");
-    e(project_, "Importer depuis une page web\xE2\x80\xA6", "", ui::Icon::Import, "project.importWeb");
     sep(project_);
     e(project_, "Fermer le projet", "", ui::Icon::Close, "file.close");    // Lot API 8 : bandeau haut
     // 1.12.27 : un deuxieme projet a cote (copier de l'un a l'autre, glisser d'une fenetre a l'autre).

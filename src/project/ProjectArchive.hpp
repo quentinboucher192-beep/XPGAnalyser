@@ -28,17 +28,13 @@
 //
 //  CE QU'ELLE NE PREND PAS : les artefacts du build, son verrou et la copie de
 //  secours de son cache, ce qui sort du projet (exports/), la corbeille de l'IHM
-//  (ihm/corbeille/), les fichiers temporaires (.tmp, ~) - et les archives et les
-//  pages web d'archive posees dans le dossier (elles se contiendraient l'une
-//  l'autre). Au choix : les versions (versions/) et l'historique de marche
+//  (ihm/corbeille/), les fichiers temporaires (.tmp, ~) - et les archives posees
+//  dans le dossier (elles se contiendraient l'une l'autre). Au choix : les
+//  versions (versions/) et l'historique de marche
 //  (ihm/historique/ : alarmes, mesures, audit, memoire des reglages PID).
 //
 //  DEBALLER (ouvrir une archive) : dans un dossier neuf seulement ; un chemin qui
 //  sortirait du dossier (absolu, ..) est refuse ; chaque fichier reprend sa date.
-//
-//  UNE PAGE WEB PEUT PORTER L'ARCHIVE : en base64, dans un bloc
-//  <script type="application/x-xpg-archive">, annonce dans l'en-tete par
-//  <meta name="xpg-archive">. Ouvrir la page reconstruit le projet.
 //
 //  Ce fichier ne sait rien de l'IHM ni de l'automate : hmi/HmiArchive (les
 //  comptes de l'IHM, les fichiers externes relies) et project/ApiArchive (les
@@ -160,7 +156,6 @@ struct Contents {
     std::set<std::string>              damaged;      // le CRC du zip echoue
     std::vector<std::string>           problems;     // ce qui ne colle pas avec le manifeste
     std::uint64_t                      archiveBytes{0};
-    bool                               fromPage{false};   // l'archive d'une page web
     // Ecrite par une version plus recente (format) : elle ne se deballe pas.
     bool                               newer{false};
     [[nodiscard]] bool intact() const noexcept { return problems.empty() && damaged.empty(); }
@@ -189,25 +184,15 @@ struct Unpacked {
 // Un dossier neuf sous `parent` : "<nom>", sinon "<nom> (2)", "<nom> (3)"...
 [[nodiscard]] std::string freeFolder(const std::string& parent, std::string_view name);
 
-// ---- une page web qui porte l'archive -----------------------------------------
-// A mettre dans <head> : ce qui dit, sans lire toute la page, qu'elle porte une archive.
-[[nodiscard]] std::string pageHeadMarker(Kind);
-// Le bloc de l'archive (base64), a mettre dans <body>.
-[[nodiscard]] std::string pageArchiveBlock(const Bytes& zip, Kind, std::string_view fileName);
-// L'archive d'une page ; faux : pas d'archive, ou abimee (`why` le dit).
-[[nodiscard]] bool archiveFromPage(std::string_view html, Bytes& zip, std::optional<Kind>* kind = nullptr,
-                                   std::string* why = nullptr);
+// ---- base64 -------------------------------------------------------------------
+// L'export SVG (app/SvgRenderer) encode ses images en base64.
 [[nodiscard]] std::string base64(const std::uint8_t* data, std::size_t size);
-[[nodiscard]] bool        fromBase64(std::string_view text, Bytes& out);
 
 // ---- reconnaitre un fichier ---------------------------------------------------
 [[nodiscard]] bool archiveExtension(std::string_view path) noexcept;   // .xihm, .xapi
-[[nodiscard]] bool pageExtension(std::string_view path) noexcept;      // .html, .htm
 struct Sniff {
-    bool                archive{false};   // une archive de projet (ou une page qui en porte une)
-    bool                page{false};      // une page web
+    bool                archive{false};   // une archive de projet
     std::optional<Kind> kind;
-    std::string         why;              // pas une archive : pourquoi (une page sans archive...)
 };
 // Par l'extension et le debut du contenu ; ne lit pas toute l'archive.
 [[nodiscard]] Sniff sniff(const std::string& path);

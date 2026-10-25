@@ -120,13 +120,11 @@ struct Book {
 [[nodiscard]] std::vector<std::uint8_t> toXlsx(const Book&, const Options&);
 [[nodiscard]] std::vector<std::uint8_t> toPdf(const Book&, const Options&);
 
-// 1.12.30 : LE PROGRAMME EN PAGE WEB (un seul .html, export/HtmlPage.hpp) - la fiche, la configuration,
+// 1.12.30 : LE PROGRAMME EN HTML (un seul .html, export/HtmlPage.hpp) - la fiche, la configuration,
 // les taches et l'ordre d'execution, chaque section et son code (un schema : sa lecture en texte), les
-// unites, les DFB, les types derives, les variables ; l'archive .xapi du projet dedans (nulle : sans).
+// unites, les DFB, les types derives, les variables.
 struct HtmlExtras {
     std::vector<std::pair<std::string, std::string>> card;     // la fiche : etat, auteur, dates, commentaire...
-    const std::vector<std::uint8_t>*                 archive{nullptr};
-    std::string                                      archiveName;   // "Ligne_gaz.xapi"
 };
 [[nodiscard]] std::string toHtml(const Book&, const Options&, const domain::Project&, const HtmlExtras& = {});
 

@@ -188,7 +188,7 @@ endif()
 xpg_sources(APP_SOURCES app)
 add_library(xpg_app OBJECT ${APP_SOURCES})
 target_link_libraries(xpg_app PUBLIC xpg_ui xpg_import xpg_help xpg_hmi)
-# 1.12.30 : FontAtlas (sans SDL) mesure aussi les textes de la page web de l'IHM (app/SvgRenderer) :
+# 1.12.30 : FontAtlas (sans SDL) mesure aussi les textes de l'export SVG (app/SvgRenderer) :
 # il est dans xpg_app avec ou sans ecran (avant : avec SDL seulement, pour SdlRenderer).
 target_sources(xpg_app PRIVATE src/platform/FontAtlas.cpp)
 
@@ -660,9 +660,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(fileexplorer_test PRIVATE xpg_ui xpg_hmi)
     # ---- fin Lot API 8 : l'explorateur de fichiers ----
     # 1.12.30 : les echanges de projets - les archives .xihm et .xapi (aller-retour fichier par
-    # fichier et compte par compte, abimees, plus recentes, d'une autre application), les pages web
-    # (la page de l'IHM dessinee par le vrai dessin de l'appli : xpg_app, deja construit pour les
-    # deux applications, sans rien recompiler).
+    # fichier et compte par compte, abimees, plus recentes, d'une autre application). xpg_app est
+    # deja construit pour les deux applications : rien a recompiler.
     xpg_add_test_executable(echanges_test tests/echanges_test.cpp)
     xpg_target_link_libraries(echanges_test PRIVATE xpg_app)
     file(GLOB HMI_EDITOR_SOURCES CONFIGURE_DEPENDS
@@ -798,19 +797,11 @@ if(XPG_BUILD_TESTS)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         add_test(NAME vcxproj COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/outils/verifier_vcxproj.py)
-        # ---- 1.12.31 : la page web EN MARCHE - le moteur de l'IHM compile en WebAssembly
-        # (outils/web/construire_web.sh -> third_party/web/ihm-web.wasm). web_moteur : sous Node
-        # (cycles, script, consigne, alarme, WAIT detache) ; web_page : la page dans Chromium
-        # (Playwright). Sautes (code 77) sans Node, sans Playwright ou sans le .wasm : ctest ne
-        # doit pas echouer sur une machine qui ne les a pas.
-        add_test(NAME web_moteur COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/outils/web/essais.py moteur)
-        add_test(NAME web_page COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/outils/web/essais.py page)
-        set_tests_properties(web_moteur web_page PROPERTIES SKIP_RETURN_CODE 77)
     endif()
     xpg_add_test(NAME searchfocus COMMAND searchfocus_test)                  # ---- Lot API 8 : finitions (Ctrl+F) ----
     xpg_add_test(NAME lot8tutorials COMMAND lot8tutorials_test)              # ---- Lot API 8 : didacticiels et aide ----
     xpg_add_test(NAME topbar8 COMMAND topbar8_test)                          # ---- Lot API 8 : bandeau haut ----
-    xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi, .html
+    xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi
     xpg_add_test(NAME fileexplorer COMMAND fileexplorer_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # ---- Lot API 8 : l'explorateur de fichiers (2e partie : [MAST.XPG] [ihm]) ----
 
     # LES TESTS QUI LISENT libs/ NE SONT ENREGISTRES QUE SI libs/ EST LA.

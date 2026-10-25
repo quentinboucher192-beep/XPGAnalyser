@@ -74,10 +74,6 @@ namespace project {
         // "ihm" (IHM Studio : ihm/ seule) ; vide : un projet de la 1.11, qui a
         // les deux (chaque application n'y lit et n'y ecrit que sa moitie).
         std::string edition;
-        // 1.12.30 : LA PAGE WEB DU PROJET, refaite a chaque enregistrement (web = oui) :
-        // <dossier du projet>.html a cote du dossier, ou `webFile` s'il est donne.
-        bool        webPage{ false };
-        std::string webFile;
     };
 
     struct OpenResult {
@@ -98,8 +94,8 @@ namespace project {
         [[nodiscard]] static core::Status save(const domain::Project&, const Manifest&,
             const std::string& folder,
             const LockRecord & = {});
-        // 1.12.30 : le manifeste seul (project.xpgproj) - un reglage du projet change
-        // (la page web a chaque enregistrement), sans reecrire le reste du dossier.
+        // 1.12.30 : le manifeste seul (project.xpgproj) - un reglage du projet change,
+        // sans reecrire le reste du dossier.
         [[nodiscard]] static core::Status saveManifest(const domain::Project&, const Manifest&,
             const std::string& folder);
 

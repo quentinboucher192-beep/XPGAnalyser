@@ -232,8 +232,8 @@ bool FontAtlas::load(const std::string& path, float pixelHeight) {
     return true;
 }
 
-// 1.12.31 : charger une police DEPUIS DES OCTETS (la page web embarque son TTF ;
-// elle n'a pas de disque). Le reste est identique a load().
+// 1.12.31 : charger une police DEPUIS DES OCTETS deja en memoire. Le reste est
+// identique a load().
 bool FontAtlas::loadFromMemory(const std::uint8_t* data, std::size_t size, float pixelHeight) {
     ready_ = false;
     glyphs_.clear();

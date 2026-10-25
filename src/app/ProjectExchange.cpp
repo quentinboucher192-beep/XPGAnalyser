@@ -6,12 +6,10 @@
 #include "App.hpp"
 #include "BackgroundTasks.hpp"
 #include "Dossiers.hpp"
-#include "HmiWebPage.hpp"
 #include "screens/Screens.hpp"
 #include "../core/AtomicFile.hpp"
 #include "../core/Edition.hpp"
 #include "../core/Version.hpp"
-#include "../export/ProgramBook.hpp"
 #include "../hmi/HmiArchive.hpp"
 #include "../hmi/HmiPipeline.hpp"    // 1.12.31 : les artefacts du cache de construction d'un dossier .xapi
 #include "../project/ApiArchive.hpp"
@@ -80,11 +78,6 @@ std::string leafOf(const std::string& path) {
 
 std::string stemOf(const std::string& path) { return fs::path(path).stem().string(); }
 
-std::string lower(std::string s) {
-    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
-
 // Un chemin colle : sans ses guillemets ni ses espaces autour.
 std::string trimmed(std::string s) {
     while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '"' || s.back() == '\r' || s.back() == '\n')) s.pop_back();
@@ -104,20 +97,6 @@ std::uint64_t treeBytes(const fs::path& dir) {
         if (it->is_regular_file(e2)) total += static_cast<std::uint64_t>(it->file_size(e2));
     }
     return total;
-}
-
-// "23/10/2026 a 19:40" : la date d'une page.
-std::string frenchNow() {
-    const std::time_t t = std::time(nullptr);
-    std::tm tm{};
-#if defined(_WIN32)
-    localtime_s(&tm, &t);
-#else
-    localtime_r(&t, &tm);
-#endif
-    char b[64];
-    std::snprintf(b, sizeof b, "%02d/%02d/%04d \xC3\xA0 %02d:%02d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, tm.tm_hour, tm.tm_min);
-    return b;
 }
 
 std::string toolName() { return core::productName() + " " + XPG_ANALYZER_VERSION; }
@@ -193,173 +172,6 @@ void withSaved(App& app, const std::string& what, std::function<void()> next) {
             }
             then();
         });
-}
-
-// La page web du projet : celle qu'il a choisie, sinon <dossier>.html a cote du dossier.
-std::string besideFolder(const std::string& projectFolder) {
-    fs::path folder(projectFolder);
-    if (!folder.has_filename()) folder = folder.parent_path();
-    return (folder.parent_path() / (folder.filename().string() + ".html")).string();
-}
-
-std::string webTarget(App& app) {
-    if (!app.manifest().webFile.empty()) return app.manifest().webFile;
-    return besideFolder(app.projectFolder());
-}
-
-// ---- la page web : dessinee ici, ecrite a cote ---------------------------------------
-struct WebJob {
-    bool                                   api{false};
-    bool                                   quiet{false};      // a l'enregistrement : un mot dans la barre d'etat
-    bool                                   history{true};
-    std::string                            folder, path;
-    WebPageInfo                            info;
-    std::unique_ptr<HmiWebPageBuilder>     builder;           // l'IHM : ses vues se dessinent ici
-    std::shared_ptr<const domain::Project> plc;               // l'automate : une copie
-    exporter::book::Options                book;
-    int                                    task{0};
-};
-std::unique_ptr<WebJob>& webJob() {
-    static std::unique_ptr<WebJob> job;
-    return job;
-}
-// La page s'ecrit (sur l'autre fil) : une autre attend son tour (le meme fichier).
-bool& webWriting() {
-    static bool writing = false;
-    return writing;
-}
-bool& webAgain() {
-    static bool again = false;
-    return again;
-}
-
-void startWeb(App& app, const std::string& path, bool quiet, bool history) {
-    if (webJob() || webWriting()) {
-        webAgain() = true;                      // une page en cours : une autre, juste apres
-        return;
-    }
-    auto j = std::make_unique<WebJob>();
-    j->api = core::hasApi();
-    j->quiet = quiet;
-    j->history = history;
-    j->folder = app.projectFolder();
-    j->path = path;
-    j->info.application = toolName();
-    j->info.exportedAt = frenchNow();
-    j->info.manifest = app.manifest();
-    j->info.hasManifest = true;
-    j->info.archiveName = leafOf(j->folder) + std::string(pa::extension(ownKind()));
-    if (!j->api) {
-        const auto doc = app.hmi();
-        if (!doc) {
-            say(app, "La page web : ce projet n'a pas d'IHM.", 8.0);
-            return;
-        }
-        // 1.12.31 : le moteur de l'IHM (web/ a cote du programme) : la page sera en marche.
-        j->info.webFolder = webBundleFolder({}, &j->info.restWhy);
-        j->builder = std::make_unique<HmiWebPageBuilder>(doc->project, app.theme(), !j->info.webFolder.empty());
-    } else {
-        const auto plc = app.project();
-        if (!plc) return;
-        j->plc = std::make_shared<const domain::Project>(*plc);   // le fil lit la copie
-        j->book.exportedAt = j->info.exportedAt;
-        j->book.appName = core::productName();
-        j->book.appVersion = XPG_ANALYZER_VERSION;
-        j->book.projectName = app.manifest().name;
-    }
-    j->task = bgtasks::begin("Page web \xC2\xB7 les vues");
-    webJob() = std::move(j);
-}
-
-// Les vues dessinees : la suite (l'archive, la page, le fichier) a cote.
-void finishWeb() {
-    std::shared_ptr<WebJob> j(std::move(webJob()));
-    bgtasks::end(j->task);
-    webWriting() = true;
-    struct Out {
-        std::string   error;
-        std::uint64_t bytes{0};
-        WebPageStats  stats;
-    };
-    auto out = std::make_shared<Out>();
-    run("Page web", [j, out] {
-        out->error = "l'\xC3\xA9" "criture s'est interrompue";      // ce qui reste si rien ne la remplace
-        pa::Bytes zip;
-        if (!j->api) {
-            hmi::ProjectArchiveOptions o;
-            o.history = j->history;
-            o.tool = j->info.application;
-            auto z = hmi::projectArchive(j->folder, o, nullptr);
-            if (!z) {
-                out->error = errorText(z.error());
-                return;
-            }
-            zip = std::move(*z);
-        } else {
-            pa::ApiOptions o;
-            o.collect.history = j->history;
-            o.tool = j->info.application;
-            o.libraryRoot = project::SharedLibrary::defaultRoot();
-            auto z = pa::apiArchive(j->folder, o, nullptr);
-            if (!z) {
-                out->error = errorText(z.error());
-                return;
-            }
-            zip = std::move(*z);
-        }
-        j->info.archive = &zip;
-        std::string html;
-        if (!j->api) {
-            html = j->builder->page(j->info, &out->stats);
-        } else {
-            exporter::book::HtmlExtras extras;
-            const auto& m = j->info.manifest;
-            extras.card = {{"\xC3\x89tat", std::string(project::toString(m.state))},
-                           {"Version", m.version},
-                           {"Auteur", m.author},
-                           {"Cr\xC3\xA9\xC3\xA9", m.created},
-                           {"Modifi\xC3\xA9", m.modified},
-                           {"Commentaire", m.comment}};
-            extras.archive = &zip;
-            extras.archiveName = j->info.archiveName;
-            html = exporter::book::toHtml(exporter::book::build(*j->plc, j->book), j->book, *j->plc, extras);
-        }
-        j->info.archive = nullptr;
-        std::error_code ec;
-        fs::create_directories(fs::path(j->path).parent_path(), ec);
-        if (auto st = core::writeFileAtomic(fs::path(j->path), html, {false, false}); !st) {
-            out->error = errorText(st.error());
-            return;
-        }
-        out->error.clear();
-        out->bytes = html.size();
-    }, [j, out](App& app) {
-        webWriting() = false;
-        if (!out->error.empty()) {
-            report() = "page web impossible : " + out->error;
-            bgtasks::post({"echange:page", "Projet", "La page web ne s'est pas \xC3\xA9" "crite", out->error, "", "", "warning"});
-            say(app, "La page web ne s'est pas \xC3\xA9" "crite : " + out->error, 10.0);
-        } else {
-            report() = "page web ecrite : " + j->path + " (" + pa::sizeText(out->bytes) + ")"
-                     + (j->api ? std::string{} : out->stats.live ? std::string(", en marche") : ", au repos : " + out->stats.restWhy);
-            const std::string folder = fs::path(j->path).parent_path().string();
-            bgtasks::post({"echange:page", "Projet", "Page web \xC3\xA9" "crite : " + leafOf(j->path), j->path + " \xC2\xB7 " + pa::sizeText(out->bytes),
-                           "Ouvrir le dossier", "open.folder:" + folder, "ok"});
-            // 1.12.31 : l'IHM tourne dans la page (le moteur web livre) ; sinon, au repos : le dire.
-            const std::string state = j->api ? std::string{}
-                                    : out->stats.live ? std::string(", l'IHM y tourne")
-                                                      : ", au repos (" + out->stats.restWhy + ")";
-            if (j->quiet)
-                say(app, "Page web mise \xC3\xA0 jour : " + j->path + " (" + pa::sizeText(out->bytes) + ")" + state, 5.0);
-            else
-                say(app, "Page web \xC3\xA9" "crite : " + j->path + " (" + pa::sizeText(out->bytes) + ")" + state + " \xE2\x80\x94 elle s'ouvre dans un "
-                         "navigateur, et se r\xC3\xA9importe par Projet \xE2\x80\xBA Importer depuis une page web\xE2\x80\xA6", 12.0);
-        }
-        if (webAgain()) {
-            webAgain() = false;
-            if (!app.projectFolder().empty() && app.projectFolder() == j->folder) startWeb(app, webTarget(app), true, j->history);
-        }
-    });
 }
 
 // ---- deballer, puis ouvrir ------------------------------------------------------------
@@ -465,13 +277,11 @@ void askWhere(App& app, std::shared_ptr<pa::Contents> c, const std::string& sour
     std::string text = "\xC2\xAB " + (m.project.empty() ? name : m.project) + " \xC2\xBB : " + std::to_string(m.entries.size()) + " fichiers, "
                      + pa::sizeText(c->archiveBytes) + (m.created.empty() ? std::string{} : ", \xC3\xA9" "crite le " + m.created)
                      + (m.tool.empty() ? std::string{} : " par " + m.tool) + ".\n";
-    text += c->fromPage ? "Le projet que porte la page web devient un dossier de projet, ici (un dossier neuf, ou vide) ; "
-                        : "Elle devient un dossier de projet, ici (un dossier neuf, ou vide) ; ";
+    text += "Elle devient un dossier de projet, ici (un dossier neuf, ou vide) ; ";
     text += "puis le projet s'ouvre, et son contr\xC3\xB4le dit ce qu'il a retrouv\xC3\xA9.";
-    auto dialog = std::make_unique<FormDialog>(c->fromPage ? "dialog.webOpen" : "dialog.archiveOpen",
-                                               c->fromPage ? "Importer depuis une page web" : "Ouvrir l'archive", text, std::move(fields),
+    auto dialog = std::make_unique<FormDialog>("dialog.archiveOpen", "Ouvrir l'archive", text, std::move(fields),
                                                "D\xC3\xA9" "baller et ouvrir");
-    helpOn(app, *dialog, c->fromPage ? "page-web" : "archive-projet");
+    helpOn(app, *dialog, "archive-projet");
     dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
         field = 0;
         const std::string folder = v.empty() ? std::string{} : trimmed(v[0]);
@@ -536,29 +346,25 @@ void afterRead(App& app, const std::string& path, std::shared_ptr<pa::Contents> 
     askWhere(app, c, path, false);
 }
 
-// La question du fichier (Importer une archive, Importer depuis une page web).
-void askFile(App& app, bool page) {
+// La question du fichier (Importer une archive).
+void askFile(App& app) {
     const bool api = core::hasApi();
     const std::string root = dossiers::utf8De(App::projectsRoot());
     std::vector<FormDialog::Field> fields;
-    fields.push_back({page ? "Page web" : "Archive", "",
-                      page ? "C:\\Echanges\\Ligne_gaz.html" : (api ? "C:\\Echanges\\Ligne_gaz.xapi" : "C:\\Echanges\\Ligne_gaz.xihm"), false, {}});
-    const std::string text = page
-        ? "Une page web \xC3\xA9" "crite par " + core::productName() + " (Projet \xE2\x80\xBA Exporter en page web) porte le projet entier : il "
-          "redevient un dossier de projet, \xC3\xA0 l'identique, qui s'ouvre. Une page qu'une autre application a \xC3\xA9" "crite est refus\xC3\xA9" "e."
-        : std::string(api ? "Une archive de projet de l'automate (.xapi)" : "Une archive de projet IHM (.xihm, ou l'ancienne .zip de l'IHM)")
+    fields.push_back({"Archive", "", api ? "C:\\Echanges\\Ligne_gaz.xapi" : "C:\\Echanges\\Ligne_gaz.xihm", false, {}});
+    const std::string text =
+        std::string(api ? "Une archive de projet de l'automate (.xapi)" : "Une archive de projet IHM (.xihm, ou l'ancienne .zip de l'IHM)")
               + " : elle redevient un dossier de projet, \xC3\xA0 l'identique, qui s'ouvre. Chaque fichier est v\xC3\xA9rifi\xC3\xA9 (taille, empreinte) ; "
                 "une archive ab\xC3\xAEm\xC3\xA9" "e est dite, fichier par fichier.";
-    const std::string filters = page ? "Pages web (.html)|*.html;*.htm"
-                                     : (api ? "Archives API Studio (.xapi)|*.xapi" : "Archives IHM Studio (.xihm)|*.xihm;*.zip");
-    const std::string title = page ? "Importer depuis une page web" : "Importer une archive";
-    auto dialog = std::make_unique<FormDialog>(page ? "dialog.exchangeImportWeb" : "dialog.exchangeImport", title, text, std::move(fields), "Ouvrir");
-    helpOn(app, *dialog, page ? "page-web" : "archive-projet");
-    dialog->setValidator([page](const std::vector<std::string>& v, std::size_t& field) -> std::string {
+    const std::string filters = api ? "Archives API Studio (.xapi)|*.xapi" : "Archives IHM Studio (.xihm)|*.xihm;*.zip";
+    const std::string title = "Importer une archive";
+    auto dialog = std::make_unique<FormDialog>("dialog.exchangeImport", title, text, std::move(fields), "Ouvrir");
+    helpOn(app, *dialog, "archive-projet");
+    dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
         field = 0;
         const std::string path = v.empty() ? std::string{} : trimmed(v[0]);
         std::error_code ec;
-        if (path.empty()) return page ? "Choisis la page web." : "Choisis l'archive.";
+        if (path.empty()) return "Choisis l'archive.";
         if (!fs::is_regular_file(fs::path(path), ec)) return "Introuvable : " + path;
         return {};
     });
@@ -569,7 +375,7 @@ void askFile(App& app, bool page) {
         if (path.empty()) return;
         if (!openArchive(app, path))
             tell(app, "Pas une archive de projet",
-                 leafOf(path) + " n'est ni une archive de projet (.xihm, .xapi) ni la page web d'un projet.", MessageDialog::Icon::Warning);
+                 leafOf(path) + " n'est pas une archive de projet (.xihm, .xapi).", MessageDialog::Icon::Warning);
     });
 }
 
@@ -680,92 +486,16 @@ void askExportArchive(App& app) {
     });
 }
 
-void askExportWeb(App& app) {
-    const bool api = core::hasApi();
-    if (!ready(app, "la page web")) return;
-    withSaved(app, "La page web", [&app, api] {
-        const std::string folder = app.projectFolder();
-        const auto hBytes = treeBytes(fs::path(folder) / "ihm" / "historique");
-        const std::string yes = "Oui", no = "Non", joinOne = "Le joindre", leaveOne = "Le laisser";
-        std::vector<FormDialog::Field> fields;
-        fields.push_back({"Page web", webTarget(app), "", false, {}});
-        fields.push_back({"Mettre \xC3\xA0 jour la page web \xC3\xA0 chaque enregistrement", app.manifest().webPage ? yes : no, "", false, {yes, no}});
-        fields.push_back({hBytes > 0 ? "L'historique de marche, dans le projet de la page (" + pa::sizeText(hBytes) + ")"
-                                     : std::string("L'historique de marche, dans le projet de la page (vide)"),
-                          joinOne, "", false, {joinOne, leaveOne}});
-        const std::string text = api
-            ? "Le programme en page web : un seul fichier .html, qui s'ouvre dans n'importe quel navigateur, sans Internet - la fiche du "
-              "projet, la configuration, les t\xC3\xA2" "ches et l'ordre d'ex\xC3\xA9" "cution, chaque section et son code, les unit\xC3\xA9s, les blocs DFB, "
-              "les types d\xC3\xA9riv\xC3\xA9s, les variables. Le projet entier (.xapi) est dans la page : Projet \xE2\x80\xBA Importer depuis une page "
-              "web\xE2\x80\xA6 le reconstruit \xC3\xA0 l'identique."
-            // 1.12.31 : l'IHM tourne dans la page (le moteur web livre avec IHM Studio) ; sans lui, au repos.
-            : "L'IHM en page web : un seul fichier .html, qui s'ouvre dans un navigateur, sans Internet. L'IHM y tourne, avec le moteur et "
-              "le dessin d'IHM Studio : les vues s'animent, les scripts et les alarmes tournent, les boutons et les saisies r\xC3\xA9pondent (les "
-              "\xC3\xA9quipements n'y sont pas reli\xC3\xA9s). La barre du bas ouvre les alarmes, les variables, les scripts et la fiche du projet. "
-              "Le projet entier (.xihm) est dans la page : Projet \xE2\x80\xBA Importer depuis une page web\xE2\x80\xA6 le reconstruit \xC3\xA0 "
-              "l'identique." + [] {
-                  std::string why;
-                  return webBundleFolder({}, &why).empty() ? "\n\nLe moteur web d'IHM Studio manque (" + why + ") : la page sera au repos, ses vues "
-                                                             "dessin\xC3\xA9" "es sans valeurs."
-                                                           : std::string{};
-              }();
-        auto dialog = std::make_unique<FormDialog>(
-            "dialog.exchangeWeb", "Exporter en page web (.html)",
-            text + "\n\n\xC3\x80 chaque enregistrement (Oui) : la page se r\xC3\xA9\xC3\xA9" "crit toute seule, \xC3\xA0 cet endroit, sans ralentir "
-                   "l'enregistrement.",
-            std::move(fields), "\xC3\x89" "crire la page");
-        helpOn(app, *dialog, "page-web");
-        dialog->setValidator([](const std::vector<std::string>& v, std::size_t& field) -> std::string {
-            field = 0;
-            return v.empty() || trimmed(v[0]).empty() ? "O\xC3\xB9 \xC3\xA9" "crire la page ?" : std::string{};
-        });
-        app.menus().ShowDialog(
-            FormDialog::withBrowse(std::move(dialog), 0, ui::saveFile("Pages web (.html)|*.html", webTarget(app), "Exporter en page web")),
-            [&app, yes, joinOne](const menu::DialogResult& r) {
-                if (!r.accepted()) return;
-                const auto v = FormDialog::split(r.payload);
-                std::string path = v.empty() ? std::string{} : trimmed(v[0]);
-                if (path.empty()) return;
-                if (fs::path(path).extension().empty()) path += ".html";
-                const bool automatic = v.size() > 1 && v[1] == yes;
-                const bool history = v.size() < 3 || v[2] == joinOne;
-                // La case, gardee dans la fiche du projet ; le fichier, s'il n'est pas a cote du projet.
-                std::string file = path;
-                {
-                    std::error_code ec;
-                    const auto chosen = fs::weakly_canonical(fs::path(path), ec);
-                    const auto beside = fs::weakly_canonical(fs::path(besideFolder(app.projectFolder())), ec);
-                    if (lower(chosen.string()) == lower(beside.string())) file.clear();
-                }
-                if (automatic != app.manifest().webPage || (automatic && file != app.manifest().webFile))
-                    if (auto st = app.setWebPage(automatic, automatic ? file : std::string{}); !st)
-                        say(app, "Mettre \xC3\xA0 jour \xC3\xA0 chaque enregistrement : " + errorText(st.error()), 10.0);
-                startWeb(app, path, false, history);
-            });
-    });
-}
-
-void askImportArchive(App& app) { askFile(app, false); }
-void askImportWeb(App& app) { askFile(app, true); }
+void askImportArchive(App& app) { askFile(app); }
 
 // ============================================================================== ouvrir ==
 bool isArchive(const std::string& path) { return pa::sniff(path).archive; }
 
-bool isExchangeFile(const std::string& path) {
-    const auto s = pa::sniff(path);
-    return s.archive || s.page;
-}
+bool isExchangeFile(const std::string& path) { return pa::sniff(path).archive; }
 
 bool openArchive(App& app, const std::string& path) {
     const auto sn = pa::sniff(path);
-    if (!sn.archive) {
-        if (sn.page) {
-            report() = "page sans archive : " + sn.why;
-            tell(app, "Importer depuis une page web", leafOf(path) + " : " + sn.why + ".", MessageDialog::Icon::Warning);
-            return true;
-        }
-        return false;
-    }
+    if (!sn.archive) return false;
     struct Read {
         std::shared_ptr<pa::Contents> contents;
         std::string                   error;
@@ -782,11 +512,6 @@ bool openArchive(App& app, const std::string& path) {
 }
 
 // ============================================================================ la boucle ==
-void afterSave(App& app) {
-    if (!app.manifest().webPage || app.projectFolder().empty()) return;
-    startWeb(app, webTarget(app), true, true);
-}
-
 void poll(App& app) {
     auto& list = jobs();
     for (std::size_t i = 0; i < list.size();) {
@@ -800,15 +525,6 @@ void poll(App& app) {
         bgtasks::end(job->task);
         if (job->finish) job->finish(app);
     }
-    // La page web : ses vues, une par une, entre deux images (20 ms au plus par image).
-    if (auto& web = webJob()) {
-        bool drawn = true;
-        if (web->builder) {
-            drawn = web->builder->draw(20.0);
-            bgtasks::progress(web->task, web->builder->progress());
-        }
-        if (drawn) finishWeb();
-    }
 }
 
 void shutdown() {
@@ -816,13 +532,9 @@ void shutdown() {
         if (job->thread.joinable()) job->thread.join();
     for (auto& job : jobs()) bgtasks::end(job->task);
     jobs().clear();
-    if (webJob()) bgtasks::end(webJob()->task);
-    webJob().reset();
-    webWriting() = false;
-    webAgain() = false;
 }
 
-bool busy() { return !jobs().empty() || webJob() != nullptr; }
+bool busy() { return !jobs().empty(); }
 
 const std::string& lastReport() { return report(); }
 

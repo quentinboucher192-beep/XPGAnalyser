@@ -70,7 +70,7 @@ ui::Tone auditTone(const hmi::AuditEntry& e) {
     if (e.kind == "Connexion" || e.kind.rfind("D\xC3\xA9" "connexion", 0) == 0) return ui::Tone::Ok;
     return ui::Tone::Muted;
 }
-enum ExchangeAction : int { XExport = 1, XImport, XCheck, XWord, XPdf, XWeb };
+enum ExchangeAction : int { XExport = 1, XImport, XCheck, XWord, XPdf };
 
 // Lot 13 : la vignette de chaque vue et popup, dessinee hors de l'ecran (comme
 // l'editeur la montre) puis gardee en JPEG. Vide : le renderer ne sait pas.
@@ -449,9 +449,6 @@ HmiExchangePane::HmiExchangePane(std::string id, hmi::DocumentPtr doc, Apply app
                "Exporter");
     tools->add(XImport, HmiGlyph::Import, "Importer une archive (.xihm, .zip) : reconstruire l'IHM de ce projet, puis la contr\xC3\xB4ler",
                "Importer");
-    tools->add(XWeb, HmiGlyph::Language, "Exporter en page web (.html) : chaque vue dessin\xC3\xA9" "e, la navigation, les alarmes, "
-                                         "les variables, les scripts - et l'archive du projet dedans",
-               "Page web");
     tools->separator();
     tools->add(XCheck, HmiGlyph::Check, "Contr\xC3\xB4ler le projet tel qu'il est (comptes et G\xC3\xA9n\xC3\xA9rer)", "Contr\xC3\xB4ler");
     tools->separator();
@@ -499,7 +496,6 @@ HmiExchangePane::HmiExchangePane(std::string id, hmi::DocumentPtr doc, Apply app
         switch (a) {
             case XExport: if (hosts_.exportArchive) hosts_.exportArchive(); break;
             case XImport: if (hosts_.importArchive) hosts_.importArchive(); break;
-            case XWeb: if (hosts_.exportWeb) hosts_.exportWeb(); break;
             case XCheck: check(); break;
             case XWord: case XPdf: {
                 // Au prochain dessin : les vignettes se dessinent avec le renderer de l'ecran.
@@ -525,7 +521,7 @@ HmiExchangePane::HmiExchangePane(std::string id, hmi::DocumentPtr doc, Apply app
     });
     rebuildTables();
     status_->setMessage("Exporter : tout le projet dans une archive .xihm. Importer : reconstruire l'IHM depuis une archive, "
-                        "puis la contr\xC3\xB4ler. Page web : l'IHM dans un .html.");
+                        "puis la contr\xC3\xB4ler.");
 }
 
 void HmiExchangePane::say(std::string text, bool warning) {

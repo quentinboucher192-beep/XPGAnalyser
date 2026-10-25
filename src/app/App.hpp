@@ -186,10 +186,6 @@ public:
     //  Pose l'etat et l'ecrit dans le manifeste (LOCK : avec le verrou du mot de
     //  passe) - le reste du projet n'est pas reecrit.
     core::Status setProjectState(project::State state, const std::string& password = {});
-    // 1.12.30 : "Mettre a jour la page web a chaque enregistrement" (app/ProjectExchange) -
-    // ecrit dans le manifeste seul ; `file` vide : <dossier du projet>.html a cote du dossier.
-    // LOCK : refuse.
-    core::Status setWebPage(bool on, std::string file = {});
 
     // ---- lot 19 : annuler, retablir, l'historique --------------------------
     //  Ctrl+Z et Ctrl+Y partout (l'ecran les prend avant les widgets qui ne

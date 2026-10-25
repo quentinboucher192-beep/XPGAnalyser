@@ -406,7 +406,6 @@ public:
 
     struct Hosts {
         std::function<void()> exportArchive, importArchive;
-        std::function<void()> exportWeb;      // 1.12.30 : la page web (Projet > Exporter en page web)
         std::function<void(const hmi::Issue&)> openIssue;
         std::function<bool(const hmi::ExportRequest&, std::string*)> writeFile;     // lot 13 : le dossier
     };

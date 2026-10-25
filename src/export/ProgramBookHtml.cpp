@@ -1,5 +1,5 @@
 // =============================================================================
-//  export/ProgramBookHtml.cpp - 1.12.30 : le programme en page web (voir ProgramBook.hpp)
+//  export/ProgramBookHtml.cpp - 1.12.30 : le programme en HTML (voir ProgramBook.hpp)
 // -----------------------------------------------------------------------------
 //  Le meme modele que le PDF et le classeur (Book) : la fiche du projet, la
 //  configuration materielle, les taches et l'ordre d'execution, chaque section
@@ -78,8 +78,6 @@ std::string toHtml(const Book& b, const Options& o, const domain::Project& p, co
     page.title = b.project;
     page.subtitle = (b.version.empty() ? std::string{} : "version " + b.version + " \xC2\xB7 ") + (b.cpu.empty() ? std::string{} : b.cpu + " \xC2\xB7 ")
                   + "export\xC3\xA9" "e le " + b.exportedAt;
-    page.archive = x.archive;
-    page.archiveName = x.archiveName;
     page.first = "fiche";
 
     // ---- la fiche -------------------------------------------------------------

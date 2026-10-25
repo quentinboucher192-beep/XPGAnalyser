@@ -1,5 +1,5 @@
 // =============================================================================
-//  export/HtmlPage.hpp - 1.12.30 : une appli en page web, un seul fichier .html
+//  export/HtmlPage.hpp - 1.12.30 : le livre du programme en HTML, un seul fichier
 // -----------------------------------------------------------------------------
 //  LA PAGE QUI S'OUVRE PARTOUT : un seul fichier, aucun lien vers Internet (le
 //  style, les scripts, les images sont dedans), qui s'ouvre dans n'importe quel
@@ -10,10 +10,6 @@
 //  choisie. L'adresse suit (#vue), donc Precedent du navigateur revient. Un
 //  objet qui ouvre une vue ou une popup est cliquable (data-go, data-popup) ; une
 //  popup s'ouvre par-dessus.
-//
-//  L'ARCHIVE DU PROJET EST DEDANS (base64, project/ProjectArchive.hpp) : le
-//  bouton du haut la telecharge (.xihm, .xapi), et IHM Studio ou API Studio
-//  reconstruit le projet a l'identique depuis la page.
 //
 //  TOUT TEXTE ECRIT PASSE PAR escape() : un nom avec < ou & ne casse pas la
 //  page, et rien de ce que contient le projet ne s'y execute.
@@ -63,9 +59,6 @@ struct Page {
     std::string            first;         // la section montree a l'ouverture
     std::string            defs;          // des <defs> SVG communs (les images des vues)
     std::string            extraCss;
-    // L'archive du projet, portee par la page (nul : pas d'archive).
-    const std::vector<std::uint8_t>* archive{nullptr};
-    std::string            archiveName;   // "Ligne_gaz.xihm"
 };
 [[nodiscard]] std::string render(const Page&);
 

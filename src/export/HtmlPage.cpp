@@ -167,21 +167,6 @@ constexpr const char* kScript = R"JS(
       for (var r = 0; r < rows.length; r++) rows[r].style.display = rows[r].textContent.toLowerCase().indexOf(q) < 0 ? 'none' : '';
     });
   })(filters[f]);
-  var dl = document.getElementById('dl');
-  if (dl) dl.addEventListener('click', function(){
-    var s = document.getElementById('xpg-archive');
-    if (!s) return;
-    var bin = atob(s.textContent.replace(/\s+/g, ''));
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    var url = URL.createObjectURL(new Blob([bytes], {type: 'application/zip'}));
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = s.getAttribute('data-nom') || 'projet.zip';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 2000);
-  });
   route();
 })();
 )JS";
@@ -293,19 +278,11 @@ std::string render(const Page& p) {
     out += "<!doctype html>\n<html lang=\"fr\">\n<head>\n<meta charset=\"utf-8\">\n";
     out += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
     out += "<meta name=\"generator\" content=\"" + escape(p.application) + "\">\n";
-    if (p.archive) out += project::archive::pageHeadMarker(p.kind) + "\n";
     out += "<title>" + escape(p.title) + " \xE2\x80\x94 " + escape(p.application) + "</title>\n";
     out += "<style>" + std::string(kCss) + p.extraCss + "</style>\n</head>\n";
     out += "<body data-first=\"" + escape(p.first) + "\" data-genre=\"" + kindKey + "\">\n";
     out += "<header class=\"top\"><span class=\"app\">" + escape(p.application) + "</span><h1>" + escape(p.title) + "</h1>";
     out += "<span class=\"sub\">" + escape(p.subtitle) + "</span>";
-    if (p.archive) {
-        const std::string app(project::archive::application(p.kind));
-        out += "<span><button class=\"btn\" id=\"dl\" type=\"button\" title=\"Le projet entier, dans un seul fichier, \xC3\xA0 ouvrir avec "
-             + escape(app) + "\">T\xC3\xA9l\xC3\xA9" "charger le projet (" + escape(p.archiveName) + ", "
-             + escape(project::archive::sizeText(p.archive->size())) + ")</button><br><span class=\"hint\">Le rouvrir : " + escape(app)
-             + " \xE2\x80\xBA Projet \xE2\x80\xBA Importer depuis une page web\xE2\x80\xA6</span></span>";
-    }
     out += "</header>\n<div class=\"layout\">\n<nav class=\"side\"><input id=\"find\" type=\"search\" placeholder=\"Chercher dans le menu\xE2\x80\xA6\">\n";
     for (const auto& g : p.nav) {
         if (g.links.empty()) continue;
@@ -328,7 +305,6 @@ std::string render(const Page& p) {
     if (!p.defs.empty())
         out += "<svg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\"><defs>" + p.defs + "</defs></svg>\n";
     out += "<script>" + std::string(kScript) + "</script>\n";
-    if (p.archive) out += project::archive::pageArchiveBlock(*p.archive, p.kind, p.archiveName);
     out += "</body>\n</html>\n";
     return out;
 }

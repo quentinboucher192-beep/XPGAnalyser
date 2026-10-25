@@ -1,4 +1,4 @@
-// tests/echanges_test.cpp - 1.12.30 : les echanges de projets (archives .xihm, .xapi ; pages web .html).
+// tests/echanges_test.cpp - 1.12.30 : les echanges de projets (archives .xihm, .xapi).
 //
 //   echanges_test <bac/Armoire_Gaz> <libs/> [dossier d'un vrai projet IHM a passer aller-retour]
 //
@@ -12,26 +12,19 @@
 //     lien suit sa copie (ou ne change pas s'il est deja la, identique).
 //  3. Les archives abimees (un octet change, un fichier coupe, pas un zip), d'une version plus
 //     recente (format 3 ; un projet IHM de format 99), d'une autre application (.xapi dans
-//     IHM Studio), une extension inconnue, une page web sans archive.
+//     IHM Studio), une extension inconnue.
 //  4. L'ancienne archive .zip de l'IHM (1.x) : elle se relit, et s'ouvre en projet.
 //  5. L'archive .xapi (API Studio) du meme projet : le programme, la disposition des grafcets
 //     a cote du dossier, les macros de la bibliotheque (ajoutees si absentes) ; les comptes.
-//  6. Les pages web : la page de l'IHM (chaque vue et popup en SVG par le vrai dessin, les zones
-//     cliquables, les alarmes, les variables, les scripts, la fiche ; un nom piege echappe) et
-//     celle du programme (le dossier du programme) ; l'archive dans la page reconstruit le
-//     projet a l'identique.
 //  2 bis. 1.12.31 : le cache de construction voyage - exporter, deballer ailleurs, ouvrir : le build
 //     est a jour, rien a regenerer (ses artefacts refaits au deballage, octet pour octet) ; une source
 //     modifiee apres le deballage, un artefact altere : regeneres ; un fichier externe relie a sa copie :
 //     ce seul element ; une archive d'avant (sans cache) : tout se regenere, comme avant.
-//  7. Un projet passe en argument (le projet de demonstration, en copie) : l'aller-retour, et sa page ;
-//     1.12.31 : un build complet d'abord, le build a jour apres le deballage, et ce que pese le cache
-//     (l'archive et la page, avec et sans lui, et si ses artefacts voyageaient aussi).
-#include "../src/app/HmiWebPage.hpp"
+//  7. Un projet passe en argument (le projet de demonstration, en copie) : l'aller-retour ;
+//     1.12.31 : un build complet d'abord, le build a jour apres le deballage.
 #include "../src/app/hmi/HmiBuild.hpp"      // 1.12.31 : l'etat du build, tel que l'arbre le montre
 #include "../src/core/AtomicFile.hpp"
 #include "../src/core/Edition.hpp"
-#include "../src/export/ProgramBook.hpp"
 #include "../src/hmi/HmiArchive.hpp"
 #include "../src/hmi/HmiAssets.hpp"
 #include "../src/hmi/HmiHistory.hpp"
@@ -191,17 +184,11 @@ void baseCommune() {
               && back.entries[0].mtime == 1792781119 && back.entries[0].bytes == 42,
           "le manifeste : chaque fichier, sa date, son origine et son lien");
 
-    // Le base64, dans les deux sens (toutes les tailles modulo 3, et les retours a la ligne).
-    bool b64 = true;
-    for (std::size_t n = 0; n < 300; n += 7) {
-        pa::Bytes data(n);
-        for (std::size_t i = 0; i < n; ++i) data[i] = static_cast<std::uint8_t>((i * 37 + 11) & 0xFF);
-        pa::Bytes again;
-        b64 = b64 && pa::fromBase64(pa::base64(data.data(), data.size()), again) && again == data;
-    }
-    check(b64, "le base64 : aller-retour, toutes les tailles");
-    pa::Bytes junk;
-    check(!pa::fromBase64("QUJD$$", junk), "le base64 : un caractere etranger est refuse");
+    // Le base64 (project/ProjectArchive) : l'export SVG (app/SvgRenderer) s'en sert pour les images.
+    const std::uint8_t abc[] = {'A', 'B', 'C'};
+    const std::uint8_t ma[] = {'M', 'a'};
+    check(pa::base64(abc, 3) == "QUJD" && pa::base64(ma, 2) == "TWE=" && pa::base64(nullptr, 0).empty(),
+          "le base64 : des vecteurs connus (QUJD, TWE=, vide)");
 
     check(pa::safePath("ihm/vues/0003-Vue.vue") && pa::safePath("_externes/1-a.xlsx"), "les chemins sains passent");
     check(!pa::safePath("../dehors.txt") && !pa::safePath("ihm/../../x") && !pa::safePath("/etc/passwd") && !pa::safePath("C:/Windows/x")
@@ -682,13 +669,6 @@ void archivesRefusees() {
         writeAll(txt, "PK des notes");
         check(!pa::sniff(txt.string()).archive, "une extension inconnue (.txt) : pas une archive");
         check(pa::sniff(xihm.string()).archive && pa::sniff(xihm.string()).kind == pa::Kind::Ihm, ".xihm : une archive de projet IHM");
-        const fs::path page = scratch() / "page.html";
-        writeAll(page, "<!doctype html><html><head><title>x</title></head><body>rien</body></html>");
-        const auto s = pa::sniff(page.string());
-        check(s.page && !s.archive && s.why.find("pas \xC3\xA9t\xC3\xA9 \xC3\xA9" "crite") != std::string::npos,
-              "une page web sans archive : 'cette page n'a pas ete ecrite par IHM Studio'");
-        auto c = pa::readFile(page.string());
-        check(!c && c.error().context.find("ne porte pas d'archive") != std::string::npos, "... et elle ne s'importe pas");
     }
 }
 
@@ -770,32 +750,6 @@ void archiveApi(const fs::path& bac, const fs::path& libs) {
     auto again = project::ProjectStore::openModel(dest.string());
     check(again && again->project && !again->project->sections.empty(), "le projet deballe se rouvre (son programme)");
 
-    // La page web suit le dossier : un chemin absolu (celui du poste qui a ecrit l'archive) part
-    // au deballage ; "web = oui" reste - la page s'ecrira a cote du nouveau dossier.
-    {
-        const fs::path withWeb = scratch() / "api" / "web" / "Armoire_Gaz";
-        copyFolder(bac, withWeb);
-        std::string manifest = readAll(withWeb / "project.xpgproj");
-        manifest += "web = oui\nweb-fichier = D:\\Partage\\Ligne_gaz.html\n";
-        writeAll(withWeb / "project.xpgproj", manifest);
-        auto m = project::ProjectStore::readManifest(withWeb.string());
-        check(m && m->webPage && m->webFile == "D:\\Partage\\Ligne_gaz.html", "le manifeste garde la page web (web, web-fichier)");
-        pa::ApiOptions o2;
-        o2.macros = false;
-        auto zip = pa::apiArchive(withWeb.string(), o2, nullptr);
-        check(static_cast<bool>(zip), "l'archive du projet a page web");
-        if (!zip) return;
-        auto back = pa::read(*zip);
-        const fs::path out2 = scratch() / "api" / "web" / "out" / "Armoire_Gaz";
-        pa::ApiReport r2;
-        check(back && static_cast<bool>(pa::unpackApiArchive(*back, out2.string(), pa::UnpackOptions{}, &r2)), "deballer le projet a page web");
-        auto m2 = project::ProjectStore::readManifest(out2.string());
-        bool said = false;
-        for (const auto& n : r2.notes) said = said || n.find("page web") != std::string::npos;
-        check(m2 && m2->webPage && m2->webFile.empty() && said,
-              "deballe ailleurs : la page web reste a faire, a cote du nouveau dossier (le chemin de l'autre poste part, et c'est dit)");
-    }
-
     // 1.12.31 : un dossier qui a aussi son IHM (un projet de la 1.11, ouvert par les deux), construite dans IHM Studio -
     // le .xapi prend le cache de son build (pas ses artefacts) ; au deballage, API Studio les refait d'apres lui
     // (ProjectExchange, comme ici) : IHM Studio trouve le projet a jour.
@@ -833,220 +787,6 @@ void archiveApi(const fs::path& bac, const fs::path& libs) {
               "1.12.31 : ses artefacts refaits au deballage (" + std::to_string(rs.written) + ") : IHM Studio le trouve a jour (" + statusText(a4) + ")");
         core::setEdition(core::Edition::Api);
     }
-}
-
-// ============================================================= 6. les pages web ==
-std::size_t occurrences(const std::string& text, const std::string& what) {
-    std::size_t n = 0;
-    for (std::size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + what.size())) ++n;
-    return n;
-}
-
-// 1.12.31 : LA PAGE EN MARCHE - le moteur de l'IHM en WebAssembly (bash outils/web/construire_web.sh :
-// third_party/web, ou XPG_WEB_DIR). La page l'embarque : l'IHM y tourne. Sans lui : saute, et dit.
-void pageEnMarche(const hmi::Project& p, app::WebPageInfo info, const fs::path& bac, const fs::path& src) {
-    fs::path root = fs::absolute(bac).lexically_normal();
-    if (!root.has_filename()) root = root.parent_path();
-    const std::string web = app::webBundleFolder((root.parent_path().parent_path() / "third_party" / "web").string());
-    // Sans moteur : la page de la 1.12.30, qui dit pourquoi elle est au repos.
-    {
-        app::WebPageInfo rest = info;
-        rest.restWhy = "ihm-web.wasm.gz manque dans web";
-        app::WebPageStats st;
-        const std::string still = app::hmiWebPage(p, ui::Theme::light(), rest, &st);
-        check(!st.live && still.find("page au repos") != std::string::npos && still.find("ihm-web.wasm.gz manque dans web") != std::string::npos
-                  && occurrences(still, "<svg viewBox=") == st.views + st.popups && still.find("id=\"xpg-moteur\"") == std::string::npos,
-              "sans moteur web : la page au repos (celle de la 1.12.30), et elle dit pourquoi");
-        app::WebPageInfo empty = info;
-        empty.webFolder = (scratch() / "page" / "web-vide").string();
-        std::error_code ec;
-        fs::create_directories(fs::path(empty.webFolder), ec);
-        const std::string broken = app::hmiWebPage(p, ui::Theme::light(), empty, &st);
-        check(!st.live && st.restWhy.find("ihm-web.wasm.gz") != std::string::npos && occurrences(broken, "<svg viewBox=") > 0,
-              "un dossier web/ incomplet : la page au repos, ses vues dessinees, et le fichier qui manque est dit");
-    }
-    if (web.empty()) {
-        std::printf("   page en marche : moteur web absent (bash outils/web/construire_web.sh) - essai saute\n");
-        return;
-    }
-    info.webFolder = web;
-    app::WebPageStats st;
-    const auto t0 = std::chrono::steady_clock::now();
-    const std::string html = app::hmiWebPage(p, ui::Theme::light(), info, &st);
-    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
-    check(st.live && st.engineBytes > 100000 && html.find("id=\"xpg-moteur\"") != std::string::npos
-              && html.find("id=\"ihm-canvas\"") != std::string::npos && html.find("id=\"xpg-police\"") != std::string::npos,
-          "la page en marche embarque le moteur de l'IHM (" + pa::sizeText(st.engineBytes) + ") et sa police");
-    check(html.find("{{") == std::string::npos, "son gabarit est rempli : plus aucun {{...}}");
-    check(occurrences(html, "<svg viewBox=") == 0, "en marche, aucune vue dessinee d'avance : le moteur les dessine dans la page");
-    check(html.find("<script>alert") == std::string::npos && html.find("<b>gras</b>") == std::string::npos,
-          "rien du projet n'y est lu tel quel par le navigateur");
-    check(html.find("http://") == std::string::npos && html.find("https://") == std::string::npos && html.find("src=\"") == std::string::npos,
-          "en marche aussi : aucun lien vers Internet, rien a charger ailleurs");
-    // Sa documentation (les listes de la 1.12.30) : une page a part, en base64.
-    std::string docs;
-    if (const auto at = html.find("id=\"xpg-doc\">"); at != std::string::npos) {
-        const auto from = html.find('>', at) + 1, to = html.find("</script>", from);
-        pa::Bytes bytes;
-        if (to != std::string::npos && pa::fromBase64(std::string_view(html).substr(from, to - from), bytes)) docs.assign(bytes.begin(), bytes.end());
-    }
-    check(docs.find("id=\"alarmes\"") != std::string::npos && docs.find("id=\"variables\"") != std::string::npos
-              && docs.find("id=\"scripts\"") != std::string::npos && docs.find("id=\"fiche\"") != std::string::npos
-              && docs.find("&lt;b&gt;gras&lt;/b&gt;") != std::string::npos && docs.find("<b>gras</b>") == std::string::npos
-              && docs.find("id=\"xpg-archive\"") == std::string::npos,
-          "sa documentation : les alarmes, les variables, les scripts, la fiche (echappees, sans seconde archive)");
-    const fs::path page = scratch() / "page" / "Armoire_Gaz-en-marche.html";
-    writeAll(page, html);
-    const auto sn = pa::sniff(page.string());
-    check(sn.archive && sn.page && sn.kind == pa::Kind::Ihm, "la page en marche se reconnait : elle porte l'archive IHM");
-    auto c = pa::readFile(page.string());
-    check(c && c->fromPage && c->intact(), "l'archive de la page en marche se relit, intacte");
-    if (c) {
-        const fs::path dest = scratch() / "page" / "out-marche" / "Armoire_Gaz";
-        hmi::ArchiveReport in;
-        check(static_cast<bool>(hmi::unpackProjectArchive(*c, dest.string(), &in)) && in.coherent(),
-              "importer depuis la page en marche : le projet se reconstruit, coherent");
-        check(sameFolders(src, dest, "page-marche"), "fichier par fichier : identique");
-    }
-    std::printf("   page IHM en marche : %s en %lld ms (moteur %s, %s)\n", pa::sizeText(st.pageBytes).c_str(), static_cast<long long>(ms),
-                pa::sizeText(st.engineBytes).c_str(), web.c_str());
-}
-
-void pagesWeb(const fs::path& bac) {
-    std::printf("6. les pages web : la page de l'IHM, celle du programme, l'archive dedans\n");
-    core::setEdition(core::Edition::Ihm);
-    const fs::path src = scratch() / "page" / "Armoire_Gaz";
-    copyFolder(bac, src);
-    // Des noms pieges : une vue, une alarme, un script - rien ne doit s'executer ni casser la page.
-    {
-        auto p = hmi::load(src.string());
-        check(static_cast<bool>(p), "le projet de la page se relit");
-        if (!p) return;
-        for (auto& v : p->views)
-            if (v.role == "vue") { v.description = "<script>alert('vue')</script> & \"guillemets\""; break; }
-        if (!p->alarms.empty()) p->alarms.front().message = "Pression > 8 bar & <b>gras</b>";
-        hmi::Script sc;
-        sc.id = p->allocate();
-        sc.name = "Essai_Page";
-        sc.event = "Appel";
-        sc.body = "IF Niveau < 3 THEN (* </script><script>alert(1)</script> *)\n    Pompe := TRUE;\nEND_IF;\n";
-        p->programs.scripts.push_back(sc);
-        check(static_cast<bool>(hmi::save(*p, src.string())), "le projet aux noms pieges s'enregistre");
-    }
-    auto p = hmi::load(src.string());
-    if (!p) return;
-    hmi::ArchiveReport rep;
-    auto zip = hmi::projectArchive(src.string(), hmi::ProjectArchiveOptions{}, &rep);
-    check(static_cast<bool>(zip), "l'archive a mettre dans la page");
-    if (!zip) return;
-    app::WebPageInfo info;
-    info.application = "IHM Studio 1.12.30";
-    info.exportedAt = "23/10/2026 \xC3\xA0 20:00";
-    if (auto m = project::ProjectStore::readManifest(src.string())) {
-        info.manifest = *m;
-        info.hasManifest = true;
-    }
-    info.archive = &*zip;
-    info.archiveName = "Armoire_Gaz.xihm";
-    app::WebPageStats stats;
-    // Un tableau a colonnes dynamiques (1.12.13) : ses contenus - une formule, le numero de la ligne,
-    // un texte a trous - se dessinent au repos (un tiret), pas en formules.
-    for (auto& v : p->views)
-        if (v.role == "vue") {
-            auto t = hmi::makeObject(hmi::Kind::Table, p->allocate(), "Table_Essai", 30, 30, v.layers.empty() ? hmi::kNoId : v.layers.front().id);
-            t.set("dynColumns", "Voie\t{[#] - 1:0}\t\t\t44\tcentre\tR\t\t\t\nRep\xC3\xA8re\t=CONCAT('ZQ_XW_TABLE.S32A[', TO_STRING([#] - 1), ']')\t\t\t92\tgauche\tR\t\t\t");
-            v.objects.push_back(t);
-            break;
-        }
-    const std::string html = app::hmiWebPage(*p, ui::Theme::light(), info, &stats);
-    check(html.find("ZQ_XW_TABLE") == std::string::npos && html.find("[#]") == std::string::npos,
-          "un tableau a colonnes dynamiques se dessine au repos : ni formule ni [#]");
-    std::size_t shown = 0;
-    for (const auto& v : p->views) shown += (v.role == "vue" || v.role == "popup") ? 1 : 0;
-    check(stats.views + stats.popups == shown && occurrences(html, "<svg viewBox=") == shown,
-          "chaque vue et chaque popup est dessinee en SVG (" + std::to_string(shown) + ")");
-    check(stats.elements > 50 && html.find("<text ") != std::string::npos && html.find("<rect ") != std::string::npos,
-          "par le vrai dessin : des formes et des textes (" + std::to_string(stats.elements) + " elements)");
-    check(stats.hotspots > 0 && html.find("class=\"hot\" data-go=\"v") != std::string::npos,
-          "les boutons qui ouvrent une vue deviennent cliquables (" + std::to_string(stats.hotspots) + " zones)");
-    check(html.find("<nav class=\"side\">") != std::string::npos && html.find("<h3>Vues</h3>") != std::string::npos, "le menu des vues");
-    check(html.find("id=\"alarmes\"") != std::string::npos && html.find("id=\"variables\"") != std::string::npos
-              && html.find("id=\"scripts\"") != std::string::npos && html.find("id=\"fiche\"") != std::string::npos,
-          "les alarmes, les variables, les scripts, la fiche");
-    check(html.find("<script>alert") == std::string::npos && html.find("&lt;script&gt;alert(&#39;vue&#39;)&lt;/script&gt;") != std::string::npos
-              && html.find("&lt;b&gt;gras&lt;/b&gt;") != std::string::npos && html.find("&lt;/script&gt;&lt;script&gt;alert(1)") != std::string::npos,
-          "tout texte du projet est echappe (une description, un message, un commentaire de script)");
-    check(occurrences(html, "</script>") == 2, "deux blocs <script> seulement : le code de la page, l'archive");
-    check(html.find("http://") == std::string::npos && html.find("https://") == std::string::npos
-              && html.find("src=\"") == std::string::npos,
-          "aucun lien vers Internet, rien a charger ailleurs");
-    std::printf("   page IHM : %s (SVG %s, %zu image(s), archive %s)\n", pa::sizeText(stats.pageBytes).c_str(), pa::sizeText(stats.svgBytes).c_str(),
-                stats.images, pa::sizeText(zip->size()).c_str());
-    // L'archive de la page reconstruit le projet a l'identique.
-    const fs::path page = scratch() / "page" / "Armoire_Gaz.html";
-    writeAll(page, html);
-    const auto sn = pa::sniff(page.string());
-    check(sn.archive && sn.page && sn.kind == pa::Kind::Ihm, "la page se reconnait : une page qui porte une archive IHM");
-    auto c = pa::readFile(page.string());
-    check(c && c->fromPage && c->intact(), "l'archive de la page se relit, intacte");
-    if (c) {
-        const fs::path dest = scratch() / "page" / "out" / "Armoire_Gaz";
-        hmi::ArchiveReport in;
-        check(static_cast<bool>(hmi::unpackProjectArchive(*c, dest.string(), &in)) && in.coherent(),
-              "importer depuis la page : le projet se reconstruit, coherent");
-        check(sameFolders(src, dest, "page"), "fichier par fichier : identique a celui qui a ecrit la page");
-    }
-    // Une page dont l'archive a ete abimee (un caractere change dans le base64).
-    {
-        std::string bad = html;
-        const auto at = bad.find("id=\"xpg-archive\"");
-        const auto body = bad.find('>', at) + 200;
-        bad[body] = bad[body] == 'A' ? 'B' : 'A';
-        const fs::path badPage = scratch() / "page" / "abimee.html";
-        writeAll(badPage, bad);
-        auto r = pa::readFile(badPage.string());
-        check(!r && r.error().context.find("abim\xC3\xA9" "e") != std::string::npos, "une page a l'archive abimee : refusee, et c'est dit");
-    }
-    pageEnMarche(*p, info, bac, src);
-
-    // ---- la page du programme (API Studio) ----
-    core::setEdition(core::Edition::Api);
-    auto opened = project::ProjectStore::openModel(src.string());
-    check(opened && opened->project, "le programme du projet se relit");
-    if (!opened || !opened->project) return;
-    pa::ApiOptions ao;
-    ao.tool = "API Studio 1.12.30";
-    pa::ApiReport ar;
-    auto xapi = pa::apiArchive(src.string(), ao, &ar);
-    check(static_cast<bool>(xapi), "l'archive .xapi a mettre dans la page");
-    if (!xapi) return;
-    exporter::book::Options bo;
-    bo.exportedAt = "23/10/2026 \xC3\xA0 20:00";
-    bo.appName = "API Studio";
-    bo.appVersion = "1.12.30";
-    const auto book = exporter::book::build(*opened->project, bo);
-    exporter::book::HtmlExtras extras;
-    extras.card = {{"\xC3\x89tat", "DEV"}, {"Auteur", "<moi> & \"toi\""}};
-    extras.archive = &*xapi;
-    extras.archiveName = "Armoire_Gaz.xapi";
-    const std::string api = exporter::book::toHtml(book, bo, *opened->project, extras);
-    check(occurrences(api, "class=\"sec ") >= 6 + book.sections.size(), "la page du programme : la fiche, la configuration, les taches, chaque section ("
-                                                                       + std::to_string(book.sections.size()) + ")");
-    check(api.find("<pre class=\"code\">") != std::string::npos && api.find("class=\"k1\"") != std::string::npos, "le code des sections, colore");
-    check(api.find("&lt;moi&gt; &amp; &quot;toi&quot;") != std::string::npos && api.find("<moi>") == std::string::npos, "la fiche echappee");
-    const fs::path apiPage = scratch() / "page" / "Armoire_Gaz_api.html";
-    writeAll(apiPage, api);
-    auto ac = pa::readFile(apiPage.string());
-    check(ac && ac->intact() && ac->manifest.kind == pa::Kind::Api && pa::sniff(apiPage.string()).kind == pa::Kind::Api,
-          "la page du programme porte l'archive .xapi, intacte");
-    if (ac) {
-        const fs::path dest = scratch() / "page" / "out-api" / "Armoire_Gaz";
-        pa::ApiReport in;
-        check(static_cast<bool>(pa::unpackApiArchive(*ac, dest.string(), pa::UnpackOptions{}, &in)) && in.coherent(),
-              "importer depuis la page du programme : coherent (" + (in.problems.empty() ? std::string{} : in.problems.front()) + ")");
-        check(sameFolders(src, dest, "page-api"), "fichier par fichier : identique");
-    }
-    std::printf("   page API : %s (%zu sections)\n", pa::sizeText(api.size()).c_str(), book.sections.size());
 }
 
 // ====================================================== 6. un projet en argument ==
@@ -1106,100 +846,6 @@ void allerRetour(const fs::path& given) {
                 static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()));
     for (const auto& c : in.counts) std::printf("   %-28s %lld / %lld\n", c.section.c_str(), c.expected, c.found);
     for (const auto& s : out.skipped) std::printf("   laisse : %s\n", s.c_str());
-    // Sa page web : le temps qu'elle prend, sa taille ; et l'archive qu'elle porte, a l'identique.
-    auto p = hmi::load(folder.string());
-    check(static_cast<bool>(p), "le projet se relit pour sa page");
-    if (!p) return;
-    const auto zip = readAll(xihm);
-    const std::vector<std::uint8_t> archive(zip.begin(), zip.end());
-    app::WebPageInfo info;
-    info.application = "IHM Studio 1.12.30";
-    info.exportedAt = "23/10/2026 \xC3\xA0 20:00";
-    if (auto m = project::ProjectStore::readManifest(folder.string())) {
-        info.manifest = *m;
-        info.hasManifest = true;
-    }
-    info.archive = &archive;
-    info.archiveName = folder.filename().string() + ".xihm";
-    app::WebPageStats stats;
-    const auto t3 = std::chrono::steady_clock::now();
-    const std::string html = app::hmiWebPage(*p, ui::Theme::light(), info, &stats);
-    const auto t4 = std::chrono::steady_clock::now();
-    const fs::path page = scratch() / "demo" / (folder.filename().string() + ".html");
-    writeAll(page, html);
-    std::printf("   page : %s en %lld ms - %zu vue(s), %zu popup(s), %zu zone(s) cliquable(s), %zu element(s), %zu image(s), SVG %s\n",
-                pa::sizeText(html.size()).c_str(), static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count()),
-                stats.views, stats.popups, stats.hotspots, stats.elements, stats.images, pa::sizeText(stats.svgBytes).c_str());
-    auto c = pa::readFile(page.string());
-    check(c && c->intact(), "l'archive de sa page se relit, intacte");
-    if (c) {
-        const fs::path dest2 = scratch() / "demo" / "out-page" / folder.filename();
-        hmi::ArchiveReport in2;
-        check(static_cast<bool>(hmi::unpackProjectArchive(*c, dest2.string(), &in2)) && in2.coherent(), "importer depuis sa page : coherent");
-        check(sameFolders(folder, dest2, "demo-page"), "importer depuis sa page : identique, fichier par fichier");
-        check(in2.buildCache && in2.stale == 0, "importer depuis sa page : le cache de construction a suivi");
-    }
-    // 1.12.31 : CE QUE PESE LE CACHE - l'archive et la page, sans lui (comme la 1.12.30), avec lui (build-cache.txt,
-    // ses artefacts refaits au deballage), et si ses artefacts voyageaient aussi ; avec et sans l'historique.
-    const auto b64 = [](std::size_t n) {
-        std::vector<std::uint8_t> zeros(n);
-        return pa::base64(zeros.data(), zeros.size()).size();
-    };
-    for (const bool lean : {false, true}) {
-        auto items = pa::collectFolder(folder.string(), pa::CollectOptions{!lean, !lean});
-        if (!items) continue;
-        pa::Manifest m = read->manifest;
-        auto with = pa::pack(m, *items);
-        std::uint64_t cacheRaw = 0;
-        for (const auto& it : *items)
-            if (it.path == ".xpg/build/build-cache.txt") cacheRaw = it.data->size();
-        auto noCache = *items;
-        std::erase_if(noCache, [](const pa::Item& it) { return it.path.rfind(".xpg/build/", 0) == 0; });
-        auto without = pa::pack(m, noCache);
-        auto all = *items;
-        std::uint64_t artifactsRaw = 0;
-        std::size_t artifacts = 0;
-        const fs::path bf = pl::buildFolderOf(folder.string());
-        for (fs::recursive_directory_iterator it(bf, ec), endIt; !ec && it != endIt; it.increment(ec)) {
-            if (!it->is_regular_file()) continue;
-            const std::string rel = ".xpg/build/" + fs::relative(it->path(), bf).generic_string();
-            if (rel == ".xpg/build/build-cache.txt" || rel.find(".bak") != std::string::npos || rel.find("build.lock") != std::string::npos) continue;
-            pa::Item a;
-            if (!pa::readItem(it->path().string(), a)) continue;
-            a.path = rel;
-            artifactsRaw += a.data->size();
-            ++artifacts;
-            all.push_back(std::move(a));
-        }
-        auto heavy = pa::pack(m, all);
-        if (!with || !without || !heavy) continue;
-        const std::size_t pageNo = html.size() - b64(archive.size()) + b64(without->size());
-        std::printf("   %s : cache build-cache.txt %s (brut) ; %zu artefacts %s (brut)\n", lean ? "sans versions ni historique" : "avec versions et historique",
-                    pa::sizeText(cacheRaw).c_str(), artifacts, pa::sizeText(artifactsRaw).c_str());
-        std::printf("     archive : sans cache %s ; avec le cache %s (+%s) ; si les artefacts voyageaient %s (+%s)\n", pa::sizeText(without->size()).c_str(),
-                    pa::sizeText(with->size()).c_str(), pa::sizeText(with->size() - without->size()).c_str(), pa::sizeText(heavy->size()).c_str(),
-                    pa::sizeText(heavy->size() - without->size()).c_str());
-        std::printf("     page web : sans cache %s ; avec le cache %s (+%s) ; si les artefacts voyageaient %s (+%s)\n", pa::sizeText(pageNo).c_str(),
-                    pa::sizeText(pageNo - b64(without->size()) + b64(with->size())).c_str(),
-                    pa::sizeText(b64(with->size()) - b64(without->size())).c_str(),
-                    pa::sizeText(pageNo - b64(without->size()) + b64(heavy->size())).c_str(),
-                    pa::sizeText(b64(heavy->size()) - b64(without->size())).c_str());
-    }
-    // 1.12.31 : sa page EN MARCHE (le moteur web : XPG_WEB_DIR, sinon web/ a cote du programme).
-    if (const std::string web = app::webBundleFolder(); !web.empty()) {
-        info.webFolder = web;
-        app::WebPageStats live;
-        const auto t5 = std::chrono::steady_clock::now();
-        const std::string running = app::hmiWebPage(*p, ui::Theme::light(), info, &live);
-        const auto t6 = std::chrono::steady_clock::now();
-        const fs::path livePage = scratch() / "demo" / (folder.filename().string() + "-en-marche.html");
-        writeAll(livePage, running);
-        std::printf("   page en marche : %s en %lld ms (moteur %s) - %s\n", pa::sizeText(running.size()).c_str(),
-                    static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(t6 - t5).count()),
-                    pa::sizeText(live.engineBytes).c_str(), livePage.string().c_str());
-        auto lc = pa::readFile(livePage.string());
-        check(live.live && lc && lc->intact(), "sa page en marche porte l'archive, intacte");
-    }
 }
 
 } // namespace
@@ -1217,7 +863,6 @@ int main(int argc, char** argv) {
         archivesRefusees();
         ancienneArchive(bac);
         archiveApi(bac, libs);
-        pagesWeb(bac);
     } else {
         std::printf("ECHEC : %s n'est pas le projet d'essai (bac/Armoire_Gaz)\n", bac.string().c_str());
         ++failures;

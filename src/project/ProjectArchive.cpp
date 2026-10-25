@@ -51,13 +51,6 @@ bool startsWith(std::string_view s, std::string_view p) { return s.size() >= p.s
 bool endsWith(std::string_view s, std::string_view p) { return s.size() >= p.size() && s.compare(s.size() - p.size(), p.size(), p) == 0; }
 
 // ---- les dates -----------------------------------------------------------------------
-// 1.12.31 : la page web n'a pas de disque (elle ne lit que read(), une archive en
-// memoire) et sa libc++ wasm n'a pas std::chrono::clock_cast - les dates de fichiers
-// n'y servent pas.
-#ifdef XPG_WEB
-std::int64_t mtimeOf(const fs::path&) { return 0; }
-void setMtime(const fs::path&, std::int64_t) {}
-#else
 std::int64_t mtimeOf(const fs::path& p) {
     std::error_code ec;
     const auto ft = fs::last_write_time(p, ec);
@@ -72,7 +65,6 @@ void setMtime(const fs::path& p, std::int64_t t) {
     const auto sys = std::chrono::system_clock::from_time_t(static_cast<std::time_t>(t));
     fs::last_write_time(p, std::chrono::clock_cast<std::chrono::file_clock>(sys), ec);
 }
-#endif
 
 std::tm localOf(std::int64_t t) {
     std::tm tm{};
@@ -210,36 +202,8 @@ std::uint32_t crcOf(const Bytes& data) {
     return static_cast<std::uint32_t>(mz_crc32(MZ_CRC32_INIT, data.data(), data.size()));
 }
 
-std::string readHead(const std::string& path, std::size_t max) {
-    std::ifstream in(fs::path(path), std::ios::binary);
-    if (!in) return {};
-    std::string out(max, '\0');
-    in.read(out.data(), static_cast<std::streamsize>(max));
-    out.resize(static_cast<std::size_t>(std::max<std::streamsize>(0, in.gcount())));
-    return out;
-}
-
 // ---- base64 ---------------------------------------------------------------------
 constexpr char kAlphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-int valueOf(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-std::string attributeOf(std::string_view tag, std::string_view name) {
-    const std::string needle = std::string(name) + "=\"";
-    const auto at = tag.find(needle);
-    if (at == std::string_view::npos) return {};
-    const auto from = at + needle.size();
-    const auto to = tag.find('"', from);
-    if (to == std::string_view::npos) return {};
-    return std::string(tag.substr(from, to - from));
-}
 
 std::string cleanName(std::string_view name) {
     std::string out;
@@ -447,11 +411,6 @@ core::Result<std::vector<Item>> collectFolder(const std::string& folder, const C
             leave(rel, why, static_cast<std::uint64_t>(it->file_size(ec2)));
             continue;
         }
-        // Une page web qui porte une archive (la page de ce projet, posee dedans).
-        if (pageExtension(rel) && readHead(it->path().string(), 8192).find("name=\"xpg-archive\"") != std::string::npos) {
-            leave(rel, "une page web d'archive", static_cast<std::uint64_t>(it->file_size(ec2)));
-            continue;
-        }
         Item item;
         item.path = rel;
         if (!readItem(it->path().string(), item))
@@ -641,14 +600,6 @@ core::Result<Contents> readFile(const std::string& path) {
     if (path.empty() || !fs::is_regular_file(fs::path(path), ec))
         return core::fail(core::ErrorCode::FileNotFound, "fichier introuvable : " + path);
     if (!core::readFileAll(fs::path(path), raw)) return core::fail(core::ErrorCode::FileUnreadable, "lecture impossible : " + path);
-    if (pageExtension(path) || (raw.size() > 16 && raw.compare(0, 2, "PK") != 0 && raw.find("xpg-archive") != std::string::npos)) {
-        Bytes zip;
-        std::string why;
-        if (!archiveFromPage(raw, zip, nullptr, &why)) return core::fail(core::ErrorCode::FileUnreadable, why);
-        auto c = read(zip);
-        if (c) c->fromPage = true;
-        return c;
-    }
     return read(Bytes(raw.begin(), raw.end()));
 }
 
@@ -792,41 +743,10 @@ core::Status unpack(const Contents& c, const std::string& folder, const UnpackOp
             }
         }
     }
-    // 1.12.30 : LA PAGE WEB SUIT LE DOSSIER. Un chemin absolu ("web-fichier = D:\Partage\Ligne.html")
-    // vient du poste qui a ecrit l'archive : il part, la page s'ecrira a cote du nouveau dossier.
-    for (const auto& e : c.manifest.entries) {
-        if (e.path != "project.xpgproj" || e.origin != Origin::Folder) continue;
-        const fs::path file = root / "project.xpgproj";
-        std::string text;
-        if (!core::readFileAll(file, text) || text.find("web-fichier") == std::string::npos) break;
-        std::string kept, dropped;
-        std::size_t at = 0;
-        while (at < text.size()) {
-            const auto end = text.find('\n', at);
-            const std::string line = text.substr(at, end == std::string::npos ? std::string::npos : end + 1 - at);
-            at = end == std::string::npos ? text.size() : end + 1;
-            if (startsWith(line, "web-fichier")) {
-                std::string value = line.substr(std::min(line.size(), line.find('=') == std::string::npos ? line.size() : line.find('=') + 1));
-                while (!value.empty() && (value.back() == '\n' || value.back() == '\r' || value.back() == ' ')) value.pop_back();
-                while (!value.empty() && value.front() == ' ') value.erase(value.begin());
-                const bool absolute = !value.empty() && (value[0] == '/' || value[0] == '\\' || (value.size() > 2 && value[1] == ':'));
-                if (absolute) {
-                    dropped = value;
-                    continue;
-                }
-            }
-            kept += line;
-        }
-        if (!dropped.empty()) {
-            if (auto st = write(file, kept, e.mtime); !st) return st;
-            u.notes.push_back("la page web du projet s'\xC3\xA9" "crira \xC3\xA0 c\xC3\xB4t\xC3\xA9 de son nouveau dossier (plus dans " + dropped + ")");
-        }
-        break;
-    }
     return core::ok();
 }
 
-// ======================================================= une page qui la porte ==
+// ============================================================ base64 (l'export SVG) ==
 std::string base64(const std::uint8_t* d, std::size_t n) {
     std::string out;
     out.reserve((n + 2) / 3 * 4 + n / 90 + 4);
@@ -846,76 +766,10 @@ std::string base64(const std::uint8_t* d, std::size_t n) {
     return out;
 }
 
-bool fromBase64(std::string_view text, Bytes& out) {
-    out.clear();
-    out.reserve(text.size() / 4 * 3);
-    std::uint32_t acc = 0;
-    int bits = 0, pad = 0;
-    for (const char ch : text) {
-        if (ch == '=') { ++pad; continue; }
-        if (std::isspace(static_cast<unsigned char>(ch))) continue;
-        if (pad) return false;                       // des donnees apres le remplissage
-        const int v = valueOf(ch);
-        if (v < 0) return false;
-        acc = (acc << 6) | static_cast<std::uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out.push_back(static_cast<std::uint8_t>((acc >> bits) & 0xFF));
-        }
-    }
-    return pad <= 2;
-}
-
-std::string pageHeadMarker(Kind k) {
-    return "<meta name=\"xpg-archive\" content=\"" + std::string(key(k)) + "\">";
-}
-
-std::string pageArchiveBlock(const Bytes& zip, Kind k, std::string_view fileName) {
-    std::string name(fileName);
-    for (auto& c : name) if (c == '"' || c == '<' || c == '>' || c == '&') c = '_';
-    std::string out = "<script type=\"application/x-xpg-archive\" id=\"xpg-archive\" data-genre=\"" + std::string(key(k))
-                    + "\" data-nom=\"" + name + "\" data-octets=\"" + std::to_string(zip.size()) + "\" data-sha256=\""
-                    + digest(std::string_view(reinterpret_cast<const char*>(zip.data()), zip.size())) + "\">\n";
-    out += base64(zip.data(), zip.size());
-    out += "\n</script>\n";
-    return out;
-}
-
-bool archiveFromPage(std::string_view html, Bytes& zip, std::optional<Kind>* kind, std::string* why) {
-    const auto fail = [why](std::string text) {
-        if (why) *why = std::move(text);
-        return false;
-    };
-    const auto at = html.find("id=\"xpg-archive\"");
-    if (at == std::string_view::npos)
-        return fail("cette page n'a pas \xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio ni par API Studio : elle ne porte pas d'archive de projet");
-    const auto open = html.rfind("<script", at);
-    const auto close = html.find('>', at);
-    if (open == std::string_view::npos || close == std::string_view::npos) return fail("le bloc de l'archive de la page est abim\xC3\xA9");
-    const std::string_view tag = html.substr(open, close - open);
-    const auto end = html.find("</script>", close);
-    if (end == std::string_view::npos) return fail("l'archive de la page est coup\xC3\xA9" "e (la page est incompl\xC3\xA8te)");
-    if (!fromBase64(html.substr(close + 1, end - close - 1), zip)) return fail("l'archive de la page est abim\xC3\xA9" "e (base64 illisible)");
-    const std::string bytes = attributeOf(tag, "data-octets");
-    const std::string sha = attributeOf(tag, "data-sha256");
-    if (!bytes.empty() && std::strtoull(bytes.c_str(), nullptr, 10) != zip.size())
-        return fail("l'archive de la page est abim\xC3\xA9" "e (sa taille ne correspond pas)");
-    if (!sha.empty() && !sameDigest(sha, digest(std::string_view(reinterpret_cast<const char*>(zip.data()), zip.size()))))
-        return fail("l'archive de la page est abim\xC3\xA9" "e (son empreinte SHA-256 ne correspond pas)");
-    if (kind) *kind = kindFromKey(attributeOf(tag, "data-genre"));
-    return true;
-}
-
 // ==================================================================== reconnaitre ==
 bool archiveExtension(std::string_view path) noexcept {
     const std::string ext = extOf(path);
     return ext == ".xihm" || ext == ".xapi";
-}
-
-bool pageExtension(std::string_view path) noexcept {
-    const std::string ext = extOf(path);
-    return ext == ".html" || ext == ".htm";
 }
 
 Sniff sniff(const std::string& path) {
@@ -926,21 +780,6 @@ Sniff sniff(const std::string& path) {
     if (ext == ".xihm" || ext == ".xapi") {
         s.archive = true;
         s.kind = ext == ".xapi" ? Kind::Api : Kind::Ihm;
-        return s;
-    }
-    if (pageExtension(path)) {
-        s.page = true;
-        const std::string head = readHead(path, 65536);
-        const auto at = head.find("name=\"xpg-archive\"");
-        if (at == std::string::npos) {
-            s.why = "cette page n'a pas \xC3\xA9t\xC3\xA9 \xC3\xA9" "crite par IHM Studio ni par API Studio : elle ne porte pas d'archive de projet";
-            return s;
-        }
-        s.archive = true;
-        const auto tagEnd = head.find('>', at);
-        const auto tagStart = head.rfind('<', at);
-        if (tagEnd != std::string::npos && tagStart != std::string::npos)
-            s.kind = kindFromKey(attributeOf(std::string_view(head).substr(tagStart, tagEnd - tagStart), "content"));
         return s;
     }
     if (ext == ".zip") {

@@ -502,7 +502,6 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\DispositionPreview.cpp" />
     <ClCompile Include="src\app\EditionMigration.cpp" />
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
-    <ClCompile Include="src\app\HmiWebPage.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
     <ClCompile Include="src\app\ProjectExchange.cpp" />
     <ClCompile Include="src\app\SimCenterPerf.cpp" />
@@ -970,7 +969,6 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\DispositionPreview.hpp" />
     <ClInclude Include="src\app\EditionMigration.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
-    <ClInclude Include="src\app\HmiWebPage.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />
     <ClInclude Include="src\app\ProjectExchange.hpp" />
     <ClInclude Include="src\app\hmi\HmiApiVarsPane.hpp" />
@@ -1112,10 +1110,6 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\SvgRenderer.hpp" />
     <ClInclude Include="src\app\ZoomMemory.hpp" />
     <ClInclude Include="src\help\Trails.hpp" />
-    <ClInclude Include="src\web\WebCanvas.hpp" />
-    <ClInclude Include="src\web\WebEngine.hpp" />
-    <ClInclude Include="src\web\WebFiber.hpp" />
-    <ClInclude Include="src\web\WebRenderer.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

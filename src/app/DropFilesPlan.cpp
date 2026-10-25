@@ -3,7 +3,7 @@
 //  (voir l'en-tete). Rien n'est dessine ni modifie ici.
 // =============================================================================
 #include "DropFilesPlan.hpp"
-#include "../project/ProjectArchive.hpp"   // 1.12.30 : les archives de projet, les pages web
+#include "../project/ProjectArchive.hpp"   // 1.12.30 : les archives de projet
 
 #include "../domain/ProjectModel.hpp"
 #include "../hmi/HmiAssets.hpp"
@@ -813,7 +813,7 @@ Genre genreOf(const std::string& path) {
     std::error_code ec;
     if (fs::is_directory(path, ec)) return Genre::Folder;
     if (!fs::is_regular_file(path, ec)) return Genre::Missing;
-    // 1.12.30 : une archive de projet, ou une page web qui en porte une (son en-tete le dit).
+    // 1.12.30 : une archive de projet (son extension le dit).
     if (project::archive::sniff(path).archive) return Genre::Archive;
     const std::string ext = extOf(path);
     // Un classeur ou une image ne se lisent pas comme un export : pas la peine

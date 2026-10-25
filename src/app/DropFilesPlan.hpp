@@ -59,8 +59,8 @@ enum class Genre : std::uint8_t {
     Image, Sound, Video, Font,      // ce que les Ressources de l'IHM acceptent
     Pdf, Text, Json, Xml, Database, // documents et donnees
     Folder, Other, Missing,
-    // 1.12.30 : une archive de projet (.xihm, .xapi, l'ancienne .zip de l'IHM) ou la page web
-    // d'un projet (.html qui en porte une) : elle s'ouvre, comme Projet > Ouvrir...
+    // 1.12.30 : une archive de projet (.xihm, .xapi, l'ancienne .zip de l'IHM) :
+    // elle s'ouvre, comme Projet > Ouvrir...
     Archive,
 };
 [[nodiscard]] Genre genreOf(const std::string& path);
@@ -170,7 +170,7 @@ struct ProgramOption {
 struct Plan {
     std::string                projectName;
     std::vector<std::string>   programs, hardware;   // .XPG, .XHW (le premier de chaque sert)
-    std::vector<std::string>   archives;             // 1.12.30 : .xihm, .xapi, une page web de projet (une seule sert)
+    std::vector<std::string>   archives;             // 1.12.30 : .xihm, .xapi (une seule sert)
     std::vector<ProgramOption> programOptions;
     int                        programChoice{0};     // le rang dans programOptions
     std::vector<WorkbookPlan>  workbooks;

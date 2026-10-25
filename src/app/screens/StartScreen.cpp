@@ -937,7 +937,7 @@ void StartupScreen::openPath(const std::string& path) {
             openPath(p);                        // un dossier de projet parmi eux : lui
             return;
         }
-    // 1.12.30 : une archive de projet (.xihm, .xapi) ou une page web parmi eux : elle, seule.
+    // 1.12.30 : une archive de projet (.xihm, .xapi) parmi eux : elle, seule.
     if (parts.size() > 1)
         for (const auto& p : parts)
             if (exchange::isExchangeFile(p)) {
