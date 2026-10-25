@@ -1434,6 +1434,22 @@ ENUMS = [
      [("Auto", 0, "Automatique", "0"), ("Manuel", 1, "Manuel", "1"), ("Local", 2, "Local", "2"), ("Distant", 3, "Distant", "3")]),
 ]
 
+# ------------------------------------------------------------------ attente (1.13.0) --
+#  WAIT_UNTIL est une native (groupe attente du moteur) ; LEVER et RELEVER sont des
+#  instructions (INSTR). Note : WAIT (1.12.26) et les fonctions de fichiers ne sont pas
+#  encore dans ce catalogue - leurs fiches ont ete ajoutees a la main dans HmiNativesData.cpp.
+fn(name="WAIT_UNTIL", cat="script",
+   params=[("CONDITION", "BOOL", "ce qu'on attend (revu à chaque reprise)", False),
+           ("DELAI", "TIME, DINT", "l'attente maximale (T#2m) ; sans : indéfiniment", True)],
+   ret="BOOL",
+   short="Attend que CONDITION (un BOOL) devienne vraie, revue à chaque reprise de la tâche. Employé (IF, affectation), il rend TRUE devenu vrai, FALSE au délai ; seul en instruction, un délai dépassé lève E_ATTENTE. Demande un script détaché.",
+   st="Vanne_Entree := TRUE;\nWAIT_UNTIL(Niveau_Cuve >= Consigne, T#2m);\nVanne_Entree := FALSE;",
+   c="/* une boucle : tester la condition, WAIT, recommencer */",
+   cpp="while (!(Niveau_Cuve >= Consigne)) WAIT(T#20ms);   // WAIT_UNTIL demande un script détaché",
+   inc="None", incpp="None", expr=False,
+   notes=["Dans un script non détaché, l'IHM est figée : la condition ne changera pas - coche Détaché (l'attente est plafonnée à 10 s, comme WAIT).",
+          "Un délai dépassé lève E_ATTENTE quand WAIT_UNTIL est seul (une instruction) ; dans un IF ou une affectation, il rend FALSE sans erreur. Sans délai, il attend indéfiniment (IHM_SCRIPT_ARRETER l'arrête)."])
+
 # ---------------------------------------------------------------- operateurs, instructions --
 OPS = [
     # symbole, nom, phrase, exemple ST, C, C++, essai
@@ -1471,10 +1487,17 @@ INSTR = [
     # 1.12.1
     ("CONTINUE", "Continuer", "Passe au tour suivant de la boucle en cours (FOR, FOR EACH, WHILE, REPEAT).", "FOR i := 1 TO 5 DO\n    IF Tab[i] = 0 THEN CONTINUE; END_IF\n    Compteur := Compteur + 100 / Tab[i];\nEND_FOR",
      "for (i = 1; i <= 5; ++i) {\n    if (Tab[i] == 0) continue;\n    Compteur += 100 / Tab[i];\n}", "for (int i = 1; i <= 5; ++i) {\n    if (Tab[i] == 0) continue;\n    Compteur += 100 / Tab[i];\n}"),
-    ("TRY", "Essayer", "TRY ... CATCH Erreur ... END_TRY   (* une erreur du bloc va au CATCH, son message dans Erreur *)",
-     "TRY\n    Compteur := 100 / Compteur;\nCATCH Texte\n    Compteur := 0;\n    IHM_LOG(NIVEAU_LOG#WARNING, Texte);\nEND_TRY",
+    ("TRY", "Essayer", "TRY ... CATCH e ... END_TRY   (* une erreur du bloc va au CATCH ; e.Code, e.Message, e.Ligne, e seul = e.Message *)",
+     "TRY\n    Compteur := 100 / Compteur;\nCATCH e\n    Compteur := 0;\n    IHM_LOG(NIVEAU_LOG#WARNING, '{e.Code} : {e.Message}');\nEND_TRY",
      "/* pas d'équivalent en C : tester avant */\nif (Compteur != 0) Compteur = 100 / Compteur; else Compteur = 0;",
      "try {\n    Compteur = 100 / Compteur;   // une division entière par zéro ne lève rien en C++ : tester avant\n} catch (const std::exception& e) {\n    Compteur = 0;\n}"),
+    # 1.13.0 : lever ses erreurs
+    ("LEVER", "Lever", "LEVER('E_Code' [, 'message'])   (* lève une erreur à soi ; un TRY la rattrape, son CATCH lit .Code et .Message *)",
+     "IF Niveau < 0.0 OR Niveau > 100.0 THEN\n    LEVER('E_Niveau', 'niveau hors plage : {Niveau:0.0} %');\nEND_IF",
+     "/* pas d'équivalent direct : un code de retour, errno */", "throw std::runtime_error(\"niveau hors plage\");"),
+    ("RELEVER", "Relever", "RELEVER   (* dans un CATCH : réémet l'erreur attrapée vers le TRY du dessus, même code, même message *)",
+     "TRY\n    Charger_Recette(Nom);\nCATCH e\n    IHM_JOURNAL('échec : {e.Message}');\n    RELEVER;\nEND_TRY",
+     "/* propager le code de retour à l'appelant */", "throw;   // relance l'exception courante"),
     ("ASSERT", "Vérifier", "ASSERT(condition, 'message')   (* faux : le script s'arrête et le dit ; dans un TRY, son CATCH *)",
      "ASSERT(Niveau ENTRE 0 ET 100, 'niveau hors de 0..100');", "assert(Niveau >= 0.0f && Niveau <= 100.0f);   /* <assert.h> */", "assert(Niveau >= 0.0f && Niveau <= 100.0f);   // <cassert>"),
     ("RETURN", "Retour", "Quitte le script ou la fonction.", "IF NOT Marche THEN RETURN; END_IF", "if (!Marche) return;", "if (!Marche) return;"),
@@ -1594,4 +1617,9 @@ CONSTRUCTED = [
     ("TUPLE", "TUPLE(STRING, REAL)", "Des valeurs de types fixes, dans l'ordre : t.Item1, t.Item2... Un littéral : ('four', 850.0). Sans plan mémoire : "
      "une variable IHM de ce type vit dans l'IHM (pour un équipement, une structure IHM).",
      "struct { char nom[33]; float valeur; } t;", "std::tuple<STRING, REAL> t;", "VAR Mesure : TUPLE(STRING, REAL) := ('four', 850.0); END_VAR"),
+    # 1.13.0 : l'erreur attrapee par CATCH e (produite par le moteur ou un LEVER)
+    ("T_Erreur", "T_Erreur", "L'erreur attrapée par CATCH e : e.Code (le code, STRING), e.Message (le message, STRING), e.Ligne (la ligne, DINT) ; "
+     "e seul se lit comme e.Message. En lecture seule, le temps du CATCH ; produite par une erreur du moteur (E_DIVISION, E_CLE...) ou un LEVER.",
+     "struct { const char* Code; const char* Message; int32_t Ligne; } e;", "struct T_Erreur { std::string Code, Message; DINT Ligne; };",
+     "TRY\n    Debit := Mesures['debit'];\nCATCH e\n    IHM_LOG(WARNING, '{e.Code} (ligne {e.Ligne}) : {e.Message}');\nEND_TRY"),
 ]

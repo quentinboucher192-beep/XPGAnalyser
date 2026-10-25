@@ -6733,6 +6733,11 @@ Vanne_Entree = false;
 - **La Console** dit le départ (« démarré en arrière-plan »), la fin et sa durée, ou l'arrêt ; une erreur, à sa ligne, comme pour un autre script. L'arrêt de l'IHM arrête les scripts détachés, sans erreur.
 - Un script détaché garde ses variables (VAR) d'une attente à l'autre ; les fonctions qu'il appelle peuvent attendre aussi. Les scripts de vue (OnOpen, OnCycle, OnClose) ne se détachent pas : un OnOpen lance une séquence par `IHM_APPELER('Sequence')`.
 ! Un WAIT dans un script non détaché fige l'IHM pendant l'attente, et les écritures vers l'automate ne partent qu'après : pour une séquence, coche Détaché. Dans une expression (fx), WAIT est refusé.
+### Attendre une condition : WAIT_UNTIL
+`WAIT_UNTIL(condition [, délai])` attend que la **condition** (un BOOL) devienne vraie. Elle est **revérifiée à chaque reprise** de la tâche : dans un script détaché, l'IHM respire entre deux essais (les vues, la communication, les autres scripts avancent), donc la condition peut évoluer. Le **délai** (facultatif) est une durée (`T#2m`) ou un nombre de millisecondes ; sans lui, l'attente est sans fin (`IHM_SCRIPT_ARRETER` l'arrête).
+- **En instruction** (seule sur sa ligne) : un délai dépassé **lève `E_ATTENTE`** (« la condition n'est pas devenue vraie en 5 s »), que `TRY…CATCH` rattrape. Exemple d'une séquence de remplissage : `Vanne_Entree := TRUE; WAIT_UNTIL(Niveau_Cuve >= Consigne_Niveau, T#2m); Vanne_Entree := FALSE;`.
+- **Lue comme BOOL** (dans un `IF`, une affectation, un argument) : elle rend **TRUE** si la condition est devenue vraie, **FALSE** au délai, sans lever d'erreur : `IF WAIT_UNTIL(Pression_Etablie, T#10s) THEN Pompe := TRUE; ELSE IHM_LOG(ERROR, 'pression non établie'); END_IF`.
+! WAIT_UNTIL demande un script **détaché** : dans un script non détaché, l'IHM est figée pendant l'attente, donc la condition ne changera pas - Compiler l'avertit (coche Détaché), et l'attente est plafonnée à 10 s comme WAIT. La condition doit être une **pure lecture** : un appel qui écrit y est rejoué à chaque essai. Dans une expression (fx), WAIT_UNTIL est refusé. La fiche de WAIT_UNTIL (Natives › Scripts et temps) la montre en ST, C et C++.
 @nouveau 1.12.26
 ### Lire et écrire des fichiers, les ressources du projet
 Les natives du dossier **Fichiers** lisent et écrivent des fichiers texte (UTF-8), parcourent un dossier et lisent les ressources du projet. Un chemin relatif part du dossier **donnees/** du projet (`DIR_DATA()` le dit) ; un chemin complet (`C:/Donnees/recette.csv`) va où il dit.
@@ -6779,7 +6784,7 @@ f << heure << ';' << Niveau << ';' << Debit << '\n';
 == erreurs-scripts | Les erreurs des scripts, à leur place
 : Compiler et Générer lisent chaque script ST du projet comme il tournera : un nom qui n'existe pas, un membre inconnu, une fonction inconnue ou le mauvais nombre d'arguments, une écriture interdite, un type qui ne convient pas. Chaque faute a sa ligne et sa colonne ; l'éditeur de scripts les montre pendant que tu tapes, sans attendre Compiler.
 @depuis 1.10
-@mots n'existe pas, veux-tu dire, F7, Résultats de Compiler, FUNCTION, FOR EACH, fonction interne, fonction inconnue, prend, arguments, lecture seule, tu lui affectes, est attendu, n'est pas un tableau, n'a pas de membre, Diagnostics, colonne, souligné, soulignement, trait ondulé, constante
+@mots n'existe pas, veux-tu dire, F7, Résultats de Compiler, FUNCTION, FOR EACH, fonction interne, fonction inconnue, prend, arguments, lecture seule, tu lui affectes, est attendu, n'est pas un tableau, n'a pas de membre, Diagnostics, colonne, souligné, soulignement, trait ondulé, constante, LEVER, RELEVER, CATCH, TRY, T_Erreur, E_ATTENTE, E_DIVISION, E_CONVERSION, E_CLE, E_BORNE, E_ASSERT, E_MOTEUR
 @lieux scripts, compiler, fonctions
 @voir scripts, fonctions, variables-locales, verifier, variables-systeme, parametres-popups, types-ihm
 @capture PNG_1030_script_fautes_soulignees.png | Trois fautes tapées : soulignées dans le code, le numéro de leur ligne en rouge, et les Diagnostics du panneau du bas les disent à leur ligne et leur colonne, pendant la frappe.
@@ -6816,6 +6821,11 @@ Un nom est connu s'il est une **variable IHM**, une **variable de l'automate** (
 ### Le langage des scripts 1.10
 Compiler connaît ce que les scripts de l'IHM gagnent en 1.10 (le sujet des scripts de la 1.10 les décrit) : une **fonction interne** déclarée dans le script (`FUNCTION Moyenne(t : ARRAY[0..9] OF REAL) : REAL … END_FUNCTION`) s'appelle avant ou après sa déclaration, ses paramètres et ses variables sont connus **dans la fonction** ; les variables d'un `FOR EACH cle, valeur IN m DO … END_FOR` sont connues **dans la boucle** ; une variable déclarée `MAP[…] OF …`, `ARRAY[…] OF …`, `REF_TO …` ou `POINTER TO …`, `p^`, `NULL` et les fonctions `MAP_…`, `REF`, `ADR`, `SIZEOF`, `LOWER_BOUND`, `UPPER_BOUND` ne sont pas des noms inconnus. Un nom mal écrit reste dit : `Moyene(t)` → « fonction inconnue : Moyene : veux-tu dire Moyenne ? » ; `valeur` après le `END_FOR` → « valeur n'existe pas ». Les arguments, les types des références, des pointeurs et des MAP sont contrôlés avec ces constructions.
 > Un nom mal écrit est souvent un nom renommé ailleurs : « veux-tu dire » propose le nom connu le plus proche.
+### Lever ses propres erreurs
+Un `TRY … CATCH … END_TRY` rattrape une erreur du bloc au lieu d'arrêter le script. Tu peux **lever la tienne** avec `LEVER('E_Code', 'message')` : le **code** est un texte non vide (convention : préfixe `E_` en majuscules), le **message** interpole `{expr[:format]}` comme `IHM_JOURNAL`, **figé au moment du LEVER**. Dans un `TRY`, le CATCH la reçoit ; hors d'un `TRY`, le script s'arrête et la Console l'affiche (« E_Niveau : niveau hors plage : 3 % »).
+Le nom du `CATCH e` est un **T_Erreur en lecture seule** : `e.Code` (STRING), `e.Message` (STRING), `e.Ligne` (DINT) ; `e` tout court se lit comme `e.Message` (compatible avec le `CATCH Erreur` de la 1.12.1, qui recevait déjà le message). `RELEVER` (sans argument), dans un CATCH, réémet l'erreur courante - même code, même message, même ligne - vers le `TRY` englobant, ou arrête le script s'il n'y en a pas ; hors d'un CATCH, Compiler le refuse. Un exemple : `FUNCTION Verifier_Niveau(n : REAL) IF n < 0.0 OR n > 100.0 THEN LEVER('E_Niveau', 'niveau hors plage : {n:0.0} %'); END_IF; END_FUNCTION`, puis `TRY Verifier_Niveau(Niveau_Cuve); CATCH e IHM_LOG(WARNING, '{e.Code} (ligne {e.Ligne}) : {e.Message}'); END_TRY`. Les fiches LEVER, RELEVER et T_Erreur (Natives, onglet Types) les montrent en ST, C et C++.
+Les erreurs du moteur portent aussi un **code intégré**, lu dans `e.Code` : `E_DIVISION` (division par zéro), `E_BORNE` (hors des bornes d'un tableau), `E_CONVERSION` (DYNAMIC_CAST / STATIC_CAST refusé), `E_CLE` (clé absente d'une MAP), `E_ASSERT` (ASSERT faux), `E_ATTENTE` (WAIT_UNTIL en instruction, délai dépassé), `E_MOTEUR` (le reste). `e.Message` reste le message français existant.
+> `CATCH` et un nom **déjà déclaré** (une variable STRING) reçoit le message comme en 1.12.1 (pas de `.Code`) ; un nom **non déclaré** (le cas recommandé, `CATCH e`) est l'objet T_Erreur. `CATCH` sans nom reste permis quand on n'inspecte pas l'erreur.
 
 == dialecte-ihm | Le ST de l'IHM et celui de l'automate
 : Les scripts, les fonctions IHM et les opérateurs de l'IHM lisent un ST enrichi (fonctions internes, références, pointeurs, tableaux à N dimensions, MAP, FOR EACH, +=) ; le programme de l'automate garde le ST de Control Expert, sans rien de tout cela.
@@ -6829,6 +6839,7 @@ Compiler connaît ce que les scripts de l'IHM gagnent en 1.10 (le sujet des scri
 | `ARRAY[..]` à N dimensions en local | oui | (les déclarations de l'automate) |
 | `MAP[..] OF`, `FOR EACH`, `MAP_...` | oui | non |
 | `x += 1` | oui | non |
+| `LEVER`, `RELEVER`, `WAIT_UNTIL` | oui | non |
 > Un script ST copié vers le programme de l'automate doit s'en passer : Compiler le signale.
 
 == variables-locales | Variables locales : VAR et VAR_TEMP

@@ -14755,6 +14755,31 @@ const std::vector<Topic>& topics() {
                          "les \xC3\xA9" "critures vers l'automate ne partent qu'apr\xC3\xA8s : pour une "
                          "s\xC3\xA9quence, coche D\xC3\xA9tach\xC3\xA9. Dans une expression (fx), WAIT est "
                          "refus\xC3\xA9.", {}, "1.12.26"},
+             {K::Heading, "Attendre une condition : WAIT_UNTIL", {}},
+             {K::Paragraph, "`WAIT_UNTIL(condition [, d\xC3\xA9lai])` attend que la **condition** (un BOOL) "
+                         "devienne vraie. Elle est **rev\xC3\xA9rifi\xC3\xA9" "e \xC3\xA0 chaque reprise** "
+                         "de la t\xC3\xA2" "che : dans un script d\xC3\xA9tach\xC3\xA9, l'IHM respire entre "
+                         "deux essais (les vues, la communication, les autres scripts avancent), donc la "
+                         "condition peut \xC3\xA9voluer. Le **d\xC3\xA9lai** (facultatif) est une "
+                         "dur\xC3\xA9" "e (`T#2m`) ou un nombre de millisecondes ; sans lui, l'attente est "
+                         "sans fin (`IHM_SCRIPT_ARRETER` l'arr\xC3\xAAte).", {}},
+             {K::Bullet, "**En instruction** (seule sur sa ligne) : un d\xC3\xA9lai d\xC3\xA9pass\xC3\xA9 "
+                         "**l\xC3\xA8ve `E_ATTENTE`** (\xC2\xAB la condition n'est pas devenue vraie en 5 s "
+                         "\xC2\xBB), que `TRY\xE2\x80\xA6" "CATCH` rattrape. Exemple d'une s\xC3\xA9quence "
+                         "de remplissage : `Vanne_Entree := TRUE; WAIT_UNTIL(Niveau_Cuve >= Consigne_Niveau, "
+                         "T#2m); Vanne_Entree := FALSE;`.", {}},
+             {K::Bullet, "**Lue comme BOOL** (dans un `IF`, une affectation, un argument) : elle rend "
+                         "**TRUE** si la condition est devenue vraie, **FALSE** au d\xC3\xA9lai, sans lever "
+                         "d'erreur : `IF WAIT_UNTIL(Pression_Etablie, T#10s) THEN Pompe := TRUE; ELSE "
+                         "IHM_LOG(ERROR, 'pression non \xC3\xA9tablie'); END_IF`.", {}},
+             {K::Warning, "WAIT_UNTIL demande un script **d\xC3\xA9tach\xC3\xA9** : dans un script non "
+                         "d\xC3\xA9tach\xC3\xA9, l'IHM est fig\xC3\xA9" "e pendant l'attente, donc la "
+                         "condition ne changera pas - Compiler l'avertit (coche D\xC3\xA9tach\xC3\xA9), et "
+                         "l'attente est plafonn\xC3\xA9" "e \xC3\xA0 10 s comme WAIT. La condition doit "
+                         "\xC3\xAAtre une **pure lecture** : un appel qui \xC3\xA9" "crit y est "
+                         "rejou\xC3\xA9 \xC3\xA0 chaque essai. Dans une expression (fx), WAIT_UNTIL est "
+                         "refus\xC3\xA9. La fiche de WAIT_UNTIL (Natives \xE2\x80\xBA Scripts et temps) la "
+                         "montre en ST, C et C++.", {}},
              {K::Heading, "Lire et \xC3\xA9" "crire des fichiers, les ressources du projet", {}, "1.12.26"},
              {K::Paragraph, "Les natives du dossier **Fichiers** lisent et \xC3\xA9" "crivent des fichiers "
                          "texte (UTF-8), parcourent un dossier et lisent les ressources du projet. Un chemin "
@@ -14911,9 +14936,38 @@ const std::vector<Topic>& topics() {
                          "avec ces constructions.", {}},
              {K::Tip, "Un nom mal \xC3\xA9" "crit est souvent un nom renomm\xC3\xA9 ailleurs : \xC2\xAB "
                          "veux-tu dire \xC2\xBB propose le nom connu le plus proche.", {}},
+             {K::Heading, "Lever ses propres erreurs", {}},
+             {K::Paragraph, "Un `TRY \xE2\x80\xA6 CATCH \xE2\x80\xA6 END_TRY` rattrape une erreur du bloc au "
+                         "lieu d'arr\xC3\xAAter le script. Tu peux **lever la tienne** avec `LEVER('E_Code', "
+                         "'message')` : le **code** est un texte non vide (convention : pr\xC3\xA9" "fixe "
+                         "`E_` en majuscules), le **message** interpole `{expr[:format]}` comme "
+                         "`IHM_JOURNAL`, **fig\xC3\xA9 au moment du LEVER**. Dans un `TRY`, le CATCH la "
+                         "re\xC3\xA7oit ; hors d'un `TRY`, le script s'arr\xC3\xAAte et la Console l'affiche "
+                         "(\xC2\xAB E_Niveau : niveau hors plage : 3 % \xC2\xBB). Le nom du `CATCH e` est un "
+                         "**T_Erreur en lecture seule** : `e.Code` (STRING), `e.Message` (STRING), `e.Ligne` "
+                         "(DINT) ; `e` tout court se lit comme `e.Message` (compatible avec le `CATCH "
+                         "Erreur` de la 1.12.1, qui recevait d\xC3\xA9j\xC3\xA0 le message). `RELEVER` (sans "
+                         "argument), dans un CATCH, r\xC3\xA9\xC3\xA9met l'erreur courante - m\xC3\xAAme "
+                         "code, m\xC3\xAAme message, m\xC3\xAAme ligne - vers le `TRY` englobant, ou "
+                         "arr\xC3\xAAte le script s'il n'y en a pas ; hors d'un CATCH, Compiler le refuse. "
+                         "Un exemple : `FUNCTION Verifier_Niveau(n : REAL) IF n < 0.0 OR n > 100.0 THEN "
+                         "LEVER('E_Niveau', 'niveau hors plage : {n:0.0} %'); END_IF; END_FUNCTION`, puis "
+                         "`TRY Verifier_Niveau(Niveau_Cuve); CATCH e IHM_LOG(WARNING, '{e.Code} (ligne "
+                         "{e.Ligne}) : {e.Message}'); END_TRY`. Les fiches LEVER, RELEVER et T_Erreur "
+                         "(Natives, onglet Types) les montrent en ST, C et C++. Les erreurs du moteur "
+                         "portent aussi un **code int\xC3\xA9gr\xC3\xA9**, lu dans `e.Code` : `E_DIVISION` "
+                         "(division par z\xC3\xA9ro), `E_BORNE` (hors des bornes d'un tableau), "
+                         "`E_CONVERSION` (DYNAMIC_CAST / STATIC_CAST refus\xC3\xA9), `E_CLE` (cl\xC3\xA9 "
+                         "absente d'une MAP), `E_ASSERT` (ASSERT faux), `E_ATTENTE` (WAIT_UNTIL en "
+                         "instruction, d\xC3\xA9lai d\xC3\xA9pass\xC3\xA9), `E_MOTEUR` (le reste). "
+                         "`e.Message` reste le message fran\xC3\xA7" "ais existant.", {}},
+             {K::Tip, "`CATCH` et un nom **d\xC3\xA9j\xC3\xA0 d\xC3\xA9" "clar\xC3\xA9** (une variable "
+                         "STRING) re\xC3\xA7oit le message comme en 1.12.1 (pas de `.Code`) ; un nom **non "
+                         "d\xC3\xA9" "clar\xC3\xA9** (le cas recommand\xC3\xA9, `CATCH e`) est l'objet "
+                         "T_Erreur. `CATCH` sans nom reste permis quand on n'inspecte pas l'erreur.", {}},
          },
          {"scripts", "fonctions", "variables-locales", "verifier", "variables-systeme", "parametres-popups", "types-ihm"},
-         {"n'existe pas", "veux-tu dire", "F7", "R\xC3\xA9sultats de Compiler", "FUNCTION", "FOR EACH", "fonction interne", "fonction inconnue", "prend", "arguments", "lecture seule", "tu lui affectes", "est attendu", "n'est pas un tableau", "n'a pas de membre", "Diagnostics", "colonne", "soulign\xC3\xA9", "soulignement", "trait ondul\xC3\xA9", "constante"},
+         {"n'existe pas", "veux-tu dire", "F7", "R\xC3\xA9sultats de Compiler", "FUNCTION", "FOR EACH", "fonction interne", "fonction inconnue", "prend", "arguments", "lecture seule", "tu lui affectes", "est attendu", "n'est pas un tableau", "n'a pas de membre", "Diagnostics", "colonne", "soulign\xC3\xA9", "soulignement", "trait ondul\xC3\xA9", "constante", "LEVER", "RELEVER", "CATCH", "TRY", "T_Erreur", "E_ATTENTE", "E_DIVISION", "E_CONVERSION", "E_CLE", "E_BORNE", "E_ASSERT", "E_MOTEUR"},
          {"scripts", "compiler", "fonctions"},
          {{"PNG_1030_script_fautes_soulignees.png", "Trois fautes tap\xC3\xA9" "es : soulign\xC3\xA9" "es dans le code, le num\xC3\xA9ro de leur ligne en rouge, et les Diagnostics du panneau du bas les disent \xC3\xA0 leur ligne et leur colonne, pendant la frappe."}, {"PNG_1032_compiler_fautes_des_scripts.png", "Compiler : chaque faute des scripts, avec son script, sa ligne et sa colonne."}, {"PNG_1036_resultats_de_compiler_editeur.png", "Compiler (F7) dans l'\xC3\xA9" "diteur : les r\xC3\xA9sultats du script montr\xC3\xA9 aux Diagnostics du panneau du bas (Ligne, Col., Message) ; un double-clic y m\xC3\xA8ne."}},
          "",
@@ -14931,7 +14985,7 @@ const std::vector<Topic>& topics() {
                          "Control Expert)\n`REF_TO`, `POINTER TO`, `REF()`, `ADR()`, `^`, "
                          "`NULL`\toui\tnon\n`ARRAY[..]` \xC3\xA0 N dimensions en local\toui\t(les "
                          "d\xC3\xA9" "clarations de l'automate)\n`MAP[..] OF`, `FOR EACH`, "
-                         "`MAP_...`\toui\tnon\n`x += 1`\toui\tnon", {}},
+                         "`MAP_...`\toui\tnon\n`x += 1`\toui\tnon\n`LEVER`, `RELEVER`, `WAIT_UNTIL`\toui\tnon", {}},
              {K::Tip, "Un script ST copi\xC3\xA9 vers le programme de l'automate doit s'en passer : "
                          "Compiler le signale.", {}},
          },

@@ -306,6 +306,7 @@ std::vector<TypeShelf> buildTypeShelves() {
     const auto place = [](std::string_view name) -> int {
         if (name == "STRING[n]") return 1;
         if (name == "REF_TO" || name == "POINTER TO" || name == "MAP_ITERATOR") return 3;
+        if (name == "T_Erreur") return 3;   // 1.13.0 : l'erreur attrapee par CATCH (un objet du moteur, pas un conteneur)
         return 2;
     };
     // Les conteneurs dans l'ordre de " Lequel choisir ? " ; le reste dans celui du catalogue.
