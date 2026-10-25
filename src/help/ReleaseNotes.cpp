@@ -141,6 +141,10 @@ const std::vector<Note>& table() {
         note("1.13.0", "Projet", Kind::Changed,
          "Retire : l'export et l'import de l'IHM en page web (un navigateur ne peut pas dialoguer en Modbus). Les archives .xihm/.xapi et l'acces web en direct restent.",
          "page-web", ""),
+        // 1.13.0 (lot J2) : le debogueur des scripts IHM - la pause reelle, le pas a pas, la pile, les locales.
+        note("1.13.0", "Scripts", Kind::New,
+         "LE D\xC3\x89" "BOGUEUR DES SCRIPTS IHM : pose un point d'arr\xC3\xAAt dans la marge d'un script ou d'une fonction IHM (un clic \xC3\xA0 gauche des num\xC3\xA9ros de ligne) - en simulation, le script s'arr\xC3\xAAte vraiment dessus, au milieu de son ex\xC3\xA9" "cution, et l'IHM se fige en attendant. Simulation \xE2\x80\xBA IHM \xE2\x80\xBA D\xC3\xA9" "bogage montre o\xC3\xB9 et pourquoi, la pile des appels, tes variables locales (elles se d\xC3\xA9plient), les valeurs de la ligne et tes espions ; Continuer (F5), Suivant (F10), Entrer (F11) dans la fonction appel\xC3\xA9" "e, Sortir (Maj+F11). Une condition (P < 5.0) ne l'arr\xC3\xAAte que si elle est vraie, et un nom inconnu se dit tout de suite ; IHM_POINT_ARRET([condition]) est un point d'arr\xC3\xAAt \xC3\xA9" "crit dans le code. Suivant enjambe un WAIT : l'IHM respire pendant l'attente. Le poste d'exploitation ne s'arr\xC3\xAAte jamais, et les points ne sont pas enregistr\xC3\xA9s dans le projet.",
+         "deboguer-scripts", ""),
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
         // 1.12.31 (24/10/2026) : la page web en marche (le moteur de l'IHM en WebAssembly, sans les equipements),

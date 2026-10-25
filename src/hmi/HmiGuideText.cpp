@@ -14826,6 +14826,11 @@ const std::vector<Topic>& topics() {
                          "gravit\xC3\xA9, message en fran\xC3\xA7" "ais), ligne fautive marqu\xC3\xA9" "e ; "
                          "un clic sur un diagnostic m\xC3\xA8ne \xC3\xA0 sa ligne. Une saisie continue est "
                          "une seule annulation.", {}},
+             {K::Bullet, "**Poser un point d'arr\xC3\xAAt** : un clic dans la marge, \xC3\xA0 gauche des "
+                         "num\xC3\xA9ros de ligne (un rond rouge) ; en simulation, le script s'y "
+                         "arr\xC3\xAAte vraiment et Simulation \xE2\x80\xBA IHM \xE2\x80\xBA "
+                         "D\xC3\xA9" "bogage montre la pile et les locales (voir \xC2\xAB D\xC3\xA9" "boguer "
+                         "les scripts IHM \xC2\xBB).", {}},
              {K::Code, "IF Mode_Maintenance THEN\n    Message_Operateur := 'Maintenance en cours';\n    "
                          "IHM_JOURNAL('Passage en maintenance \xC3\xA0 {IHM_TEMPS():t}');\nELSE\n    "
                          "Message_Operateur := 'Production';\nEND_IF;", "ST", "1.10"},
@@ -14964,7 +14969,7 @@ const std::vector<Topic>& topics() {
                          "pendant la frappe : voir \xC2\xAB Les erreurs des scripts, \xC3\xA0 leur place "
                          "\xC2\xBB.", {}, "1.10"},
          },
-         {"variables-locales", "fonctions", "reference", "aide-saisie", "verifier", "dossiers", "parametres-popups", "erreurs-scripts", "fonctions-internes", "map-iterateurs", "dialecte-ihm", "operateurs"},
+         {"variables-locales", "fonctions", "reference", "aide-saisie", "verifier", "dossiers", "parametres-popups", "erreurs-scripts", "fonctions-internes", "map-iterateurs", "dialecte-ihm", "operateurs", "deboguer-scripts"},
          {},
          {"scripts", "scripts-vue"},
          {{"PNG_067_programmation_generale_scripts_st.png", "La programmation g\xC3\xA9n\xC3\xA9rale : scripts, propri\xC3\xA9t\xC3\xA9s, variables IHM et l'\xC3\xA9" "diteur."}, {"PNG_069_scripts_de_vue_erreur_ligne.png", "Les scripts d'une vue : une erreur marqu\xC3\xA9" "e \xC3\xA0 sa ligne."}},
@@ -15067,6 +15072,10 @@ const std::vector<Topic>& topics() {
                          "avec ces constructions.", {}},
              {K::Tip, "Un nom mal \xC3\xA9" "crit est souvent un nom renomm\xC3\xA9 ailleurs : \xC2\xAB "
                          "veux-tu dire \xC2\xBB propose le nom connu le plus proche.", {}},
+             {K::Tip, "Ces erreurs sont celles qui se voient \xC3\xA0 la lecture du code. **Une faute de "
+                         "logique** (le script tourne, mais ne fait pas ce que tu veux) se cherche avec le "
+                         "d\xC3\xA9" "bogueur : un point d'arr\xC3\xAAt, les locales, le pas \xC3\xA0 pas "
+                         "(voir \xC2\xAB D\xC3\xA9" "boguer les scripts IHM \xC2\xBB).", {}},
              {K::Heading, "Lever ses propres erreurs", {}},
              {K::Paragraph, "Un `TRY \xE2\x80\xA6 CATCH \xE2\x80\xA6 END_TRY` rattrape une erreur du bloc au "
                          "lieu d'arr\xC3\xAAter le script. Tu peux **lever la tienne** avec `LEVER('E_Code', "
@@ -15097,7 +15106,7 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9" "clar\xC3\xA9** (le cas recommand\xC3\xA9, `CATCH e`) est l'objet "
                          "T_Erreur. `CATCH` sans nom reste permis quand on n'inspecte pas l'erreur.", {}},
          },
-         {"scripts", "fonctions", "variables-locales", "verifier", "variables-systeme", "parametres-popups", "types-ihm"},
+         {"scripts", "fonctions", "variables-locales", "verifier", "variables-systeme", "parametres-popups", "types-ihm", "deboguer-scripts"},
          {"n'existe pas", "veux-tu dire", "F7", "R\xC3\xA9sultats de Compiler", "FUNCTION", "FOR EACH", "fonction interne", "fonction inconnue", "prend", "arguments", "lecture seule", "tu lui affectes", "est attendu", "n'est pas un tableau", "n'a pas de membre", "Diagnostics", "colonne", "soulign\xC3\xA9", "soulignement", "trait ondul\xC3\xA9", "constante", "LEVER", "RELEVER", "CATCH", "TRY", "T_Erreur", "E_ATTENTE", "E_DIVISION", "E_CONVERSION", "E_CLE", "E_BORNE", "E_ASSERT", "E_MOTEUR"},
          {"scripts", "compiler", "fonctions"},
          {{"PNG_1030_script_fautes_soulignees.png", "Trois fautes tap\xC3\xA9" "es : soulign\xC3\xA9" "es dans le code, le num\xC3\xA9ro de leur ligne en rouge, et les Diagnostics du panneau du bas les disent \xC3\xA0 leur ligne et leur colonne, pendant la frappe."}, {"PNG_1032_compiler_fautes_des_scripts.png", "Compiler : chaque faute des scripts, avec son script, sa ligne et sa colonne."}, {"PNG_1036_resultats_de_compiler_editeur.png", "Compiler (F7) dans l'\xC3\xA9" "diteur : les r\xC3\xA9sultats du script montr\xC3\xA9 aux Diagnostics du panneau du bas (Ligne, Col., Message) ; un double-clic y m\xC3\xA8ne."}},
@@ -15275,6 +15284,10 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9" "clarer des VAR : elles sont gard\xC3\xA9" "es d'un clic \xC3\xA0 "
                          "l'autre.", {}},
              {K::Bullet, "Les locales apparaissent dans les trous d'un `IHM_JOURNAL` : `{Maxi:0.0}`.", {}},
+             {K::Bullet, "Au **point d'arr\xC3\xAAt** (en simulation), tes VAR, VAR_TEMP et VAR_INPUT se "
+                         "lisent dans Simulation \xE2\x80\xBA IHM \xE2\x80\xBA D\xC3\xA9" "bogage, colonne "
+                         "Locales - les structures et les tableaux se d\xC3\xA9plient (voir \xC2\xAB "
+                         "D\xC3\xA9" "boguer les scripts IHM \xC2\xBB).", {}},
              {K::Heading, "L'aide \xC3\xA0 la saisie", {}},
              {K::Paragraph, "Les locales sont propos\xC3\xA9" "es **en t\xC3\xAAte** de la liste, avec leur "
                          "type et leur bloc ; dans un bloc de d\xC3\xA9" "claration, apr\xC3\xA8s `nom :`, "
@@ -15292,7 +15305,7 @@ const std::vector<Topic>& topics() {
                          "dimensions et tableaux fixes \xC2\xBB et \xC2\xAB MAP et it\xC3\xA9rateurs : FOR "
                          "EACH \xC2\xBB.", {}, "1.10"},
          },
-         {"scripts", "fonctions", "variables-ihm", "aide-saisie", "tableaux-n", "map-iterateurs"},
+         {"scripts", "fonctions", "variables-ihm", "aide-saisie", "tableaux-n", "map-iterateurs", "deboguer-scripts"},
          {"VAR", "VAR_TEMP", "END_VAR", "RETAIN", "CONSTANT", "Constantes", "Stockage", "Persistante", "Migrer", "calcul", "final", "Locales", "d\xC3\xA9" "ballage", "\xC3\xA9l\xC3\xA9ments", "nom qualifi\xC3\xA9"},
          {},
          {{"PNG_181_script_variables_locales_barre.png", "Un script cyclique avec ses VAR (gard\xC3\xA9" "es) et sa VAR_TEMP ; la barre d\xC3\xA9" "crit la locale sous le curseur."}, {"PNG_182_bloc_var_types_proposes.png", "Dans un bloc VAR, apr\xC3\xA8s \xC2\xAB nom : \xC2\xBB, les types propos\xC3\xA9s."}},
@@ -15421,6 +15434,13 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA0 chaque Compiler et D\xC3\xA9marrer, avec un verdict. L'onglet **Tests** "
                          "de la fonction les tient. Voir \xC2\xAB Les tests unitaires d'une fonction "
                          "\xC2\xBB.", {}},
+             {K::Heading, "D\xC3\xA9" "boguer une fonction", {}},
+             {K::Paragraph, "Un point d'arr\xC3\xAAt se pose aussi dans la marge du **corps d'une fonction** : "
+                         "la simulation s'y arr\xC3\xAAte \xC3\xA0 chaque appel depuis un script. Depuis le "
+                         "script, **Entrer** (F11) descend dans la fonction appel\xC3\xA9" "e sur la ligne, "
+                         "**Sortir** (Maj+F11) revient \xC3\xA0 l'appelant (voir \xC2\xAB D\xC3\xA9" "boguer "
+                         "les scripts IHM \xC2\xBB). Appel\xC3\xA9" "e par une expression de vue, elle ne "
+                         "s'arr\xC3\xAAte pas : elle doit rendre sa valeur tout de suite.", {}},
              {K::Heading, "Renommer, supprimer", {}},
              {K::Paragraph, "Renommer une fonction (propri\xC3\xA9t\xC3\xA9 Nom) renomme **tous ses appels** : "
                          "scripts, fonctions, actions, expressions, textes \xC3\xA0 trous, alarmes ; un seul "
@@ -15474,7 +15494,7 @@ const std::vector<Topic>& topics() {
                          "MAP). Voir \xC2\xAB Ce qu'une fonction rend \xC2\xBB et \xC2\xAB Copies, "
                          "r\xC3\xA9" "f\xC3\xA9rences et pointeurs \xC2\xBB.", {}, "1.10"},
          },
-         {"variables-locales", "scripts", "reference", "aide-saisie", "verifier", "retours-fonctions", "copies-references", "fonctions-internes"},
+         {"variables-locales", "scripts", "reference", "aide-saisie", "verifier", "retours-fonctions", "copies-references", "fonctions-internes", "deboguer-scripts"},
          {"VAR_INPUT", "VAR_IN_OUT", "VAR_OUTPUT", "surcharge", "surcharges", "signature"},
          {"fonctions"},
          {{"PNG_174_fonction_avec_retour_signature.png", "Une fonction avec retour : ses param\xC3\xA8tres (VAR_INPUT), sa VAR_TEMP, sa signature."}, {"PNG_177_essai_resultat.png", "L'essai de Moyenne_Pression(12, 20, 0.25) : 18.0."}, {"PNG_178_essai_procedure_journal_variable.png", "L'essai d'une proc\xC3\xA9" "dure : la ligne du journal et la variable IHM chang\xC3\xA9" "e."}, {"PNG_183_action_appelle_procedure.png", "Une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB qui appelle une proc\xC3\xA9" "dure."}},
@@ -15522,8 +15542,11 @@ const std::vector<Topic>& topics() {
              {K::Code, "long fact(long n) { return n <= 1 ? 1 : n * fact(n - 1); }", "C++"},
              {K::Tip, "Compiler (F7) v\xC3\xA9rifie les fonctions internes comme le reste du script : nom "
                          "inconnu, mauvais nombre ou type d'arguments, retour du mauvais type.", {}},
+             {K::Tip, "En simulation, un point d'arr\xC3\xAAt se pose aussi dans une fonction interne, et "
+                         "**Entrer** (F11) descend dans celle qu'appelle la ligne (voir \xC2\xAB "
+                         "D\xC3\xA9" "boguer les scripts IHM \xC2\xBB).", {}},
          },
-         {"copies-references", "tableaux-n", "map-iterateurs", "fonctions", "variables-locales", "scripts"},
+         {"copies-references", "tableaux-n", "map-iterateurs", "fonctions", "variables-locales", "scripts", "deboguer-scripts"},
          {"FUNCTION", "END_FUNCTION", "RETURN", "fonction interne", "VAR_INPUT", "VAR_IN_OUT", "VAR_OUTPUT"},
          {"scripts", "fonctions"},
          {},
@@ -16091,8 +16114,12 @@ const std::vector<Topic>& topics() {
                          "g\xC3\xA9n\xC3\xA9ral (d\xC3\xA9tach\xC3\xA9 : il part en "
                          "arri\xC3\xA8re-plan)\nIHM_SCRIPT_ACTIF('Script')\tBOOL\tvrai si ce script "
                          "d\xC3\xA9tach\xC3\xA9 tourne\nIHM_SCRIPT_ARRETER('Script')\tBOOL\tarr\xC3\xAAte un "
-                         "script d\xC3\xA9tach\xC3\xA9 qui tourne\nIHM_SON('bip.wav')\tBOOL\tjoue un son des "
-                         "ressources (WAV, MP3, OGG)\nIHM_VUE()\tSTRING\tle nom de la vue "
+                         "script d\xC3\xA9tach\xC3\xA9 qui tourne\nIHM_POINT_ARRET([condition])\tBOOL\tun "
+                         "point d'arr\xC3\xAAt \xC3\xA9" "crit dans le code : en simulation, le script "
+                         "s'arr\xC3\xAAte ici (avec un BOOL : seulement s'il est vrai) ; hors simulation, "
+                         "rien - voir \xC2\xAB D\xC3\xA9" "boguer les scripts IHM "
+                         "\xC2\xBB\nIHM_SON('bip.wav')\tBOOL\tjoue un son des ressources (WAV, MP3, "
+                         "OGG)\nIHM_VUE()\tSTRING\tle nom de la vue "
                          "affich\xC3\xA9" "e\nIHM_TEMPS()\tTIME\tle temps \xC3\xA9" "coul\xC3\xA9 depuis le "
                          "lancement de l'IHM\nIHM_UTILISATEUR(), IHM_NOM_UTILISATEUR(), "
                          "IHM_GROUPE()\tSTRING\tl'identifiant, le nom, le groupe de l'utilisateur "
@@ -16163,8 +16190,8 @@ const std::vector<Topic>& topics() {
                          "IHM_EQUIPEMENT_PING) s'emploient aussi dans une expression ou un texte \xC3\xA0 "
                          "trous : `{IHM_NOM_UTILISATEUR()}`.", {}},
          },
-         {"scripts", "fonctions", "actions", "navigation-marche", "equipements", "variables-esclaves"},
-         {"IHM_NAVIGUER", "IHM_POPUP", "IHM_FERMER_POPUP", "IHM_JOURNAL", "IHM_LOG", "NIVEAU_LOG", "IHM_APPELER", "IHM_SON", "IHM_VUE", "IHM_TEMPS", "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME", "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE", "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_APRES", "IHM_CHAQUE", "IHM_SUR_CHANGEMENT", "IHM_ANNULER", "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER", "WAIT"},
+         {"scripts", "fonctions", "actions", "navigation-marche", "equipements", "variables-esclaves", "deboguer-scripts"},
+         {"IHM_NAVIGUER", "IHM_POPUP", "IHM_FERMER_POPUP", "IHM_JOURNAL", "IHM_LOG", "NIVEAU_LOG", "IHM_APPELER", "IHM_SON", "IHM_VUE", "IHM_TEMPS", "IHM_UTILISATEUR", "IHM_NOM_UTILISATEUR", "IHM_GROUPE", "IHM_NIVEAU", "IHM_DECONNECTER", "IHM_PARAMETRES_SYSTEME", "IHM_METTRE_DE_COTE", "IHM_REMETTRE", "IHM_FAIRE_TAIRE", "IHM_EXPORTER", "IHM_PRECEDENTE", "IHM_SUIVANTE", "IHM_ACCUEIL", "IHM_MENU_CONNEXION", "IHM_LANGUE", "IHM_THEME", "IHM_EQUIPEMENT_OK", "IHM_EQUIPEMENT_PING", "IHM_GIF_JOUER", "IHM_GIF_PAUSE", "IHM_GIF_ARRETER", "IHM_GIF_REJOUER", "IHM_APRES", "IHM_CHAQUE", "IHM_SUR_CHANGEMENT", "IHM_ANNULER", "IHM_SCRIPT_ACTIF", "IHM_SCRIPT_ARRETER", "WAIT", "IHM_POINT_ARRET"},
          {},
          {{"PNG_133_st_fonction_ihm_signature_et_vues.png", "IHM_NAVIGUER : sa signature, et les vues propos\xC3\xA9" "es entre les guillemets."}, {"PNG_191_aide_reference_ihm.png", "F1 sur IHM_JOURNAL, dans un script : la r\xC3\xA9" "f\xC3\xA9rence des fonctions IHM_."}},
          "",
@@ -18170,6 +18197,11 @@ const std::vector<Topic>& topics() {
                          "\xC2\xBB). Double clic sur un nom : le forcer ; clic droit : Forcer, "
                          "Rel\xC3\xA2" "cher, Suivre sur la courbe, Ajouter aux expressions, Copier la "
                          "valeur, Copier le rapport ;", {}, "1.12.27"},
+             {K::Bullet, "**D\xC3\xA9" "bogage** : le d\xC3\xA9" "bogueur des **scripts IHM** - les points "
+                         "d'arr\xC3\xAAt pos\xC3\xA9s dans la marge des scripts et des fonctions, la pause "
+                         "au milieu du script, le pas \xC3\xA0 pas (Continuer F5, Suivant F10, Entrer F11, "
+                         "Sortir Maj+F11), la pile, les locales, les espions (voir \xC2\xAB "
+                         "D\xC3\xA9" "boguer les scripts IHM \xC2\xBB) ;", {}},
              {K::Bullet, "**Esclaves simul\xC3\xA9s** (l'ancien onglet Jumeaux) : les esclaves rang\xC3\xA9s "
                          "par groupe - li\xC3\xA9 pr\xC3\xAAt, li\xC3\xA9 lu par l'IHM, seulement "
                          "simul\xC3\xA9 - et les valeurs simul\xC3\xA9" "es des esclaves (animer, la zone de "
@@ -18199,7 +18231,7 @@ const std::vector<Topic>& topics() {
                          "\xE2\x80\xBA **Page Simulation**) ouvre la page Simulation de Param\xC3\xA8tres "
                          "syst\xC3\xA8me.", {}},
          },
-         {"verifier", "securite", "scripts", "valeurs-simulees", "lectures-simulees", "esclaves-lies", "page-simulation", "simulation-api-ihm", "simulation-zoom"},
+         {"verifier", "securite", "scripts", "valeurs-simulees", "lectures-simulees", "esclaves-lies", "page-simulation", "simulation-api-ihm", "simulation-zoom", "deboguer-scripts"},
          {"Vider le journal", "vider le journal", "Journal vid\xC3\xA9", "clic droit sur la barre", "barre du simulateur", "Tout acquitter", "Mesures \xC3\xA0 z\xC3\xA9ro", "Exporter les mesures", "Page Simulation", "Ctrl+Alt+S", "D\xC3\xA9" "connecter", "Vue de d\xC3\xA9marrage", "Forcer", "Tout rel\xC3\xA2" "cher"},
          {"simulation"},
          {{"PNG_185_simulation_fonction_expression_locales.png", "En marche : une expression qui appelle une fonction, le journal d'une proc\xC3\xA9" "dure et d'un script \xC3\xA0 variables locales."}, {"PNG_495_simulation_jumeaux.png", "L'onglet Esclaves simul\xC3\xA9s (alors appel\xC3\xA9 Jumeaux) en marche : la vue Vue_Equipements lit les esclaves simul\xC3\xA9s - la tension al\xC3\xA9" "atoire, le courant (sinus, au-dessus de son seuil : jaune), la puissance en rampe, la fr\xC3\xA9quence forc\xC3\xA9" "e \xC3\xA0 51,00 Hz, le poids de la balance B."}, {"PNG_496_simulation_zone_tiree.png", "La zone du courant tir\xC3\xA9" "e dans l'onglet Esclaves simul\xC3\xA9s, puis le courant forc\xC3\xA9 : la courbe de la vue suit, et les marque d'un trait (la zone tir\xC3\xA9" "e, le for\xC3\xA7" "age)."}},
@@ -18601,6 +18633,159 @@ const std::vector<Topic>& topics() {
          {"fonctions", "essais", "simulation", "verifier", "retours-fonctions", "erreurs-scripts", "configuration"},
          {"test unitaire", "tests", "cas de test", "cas", "tol\xC3\xA9rance", "poser avant", "v\xC3\xA9rifier apr\xC3\xA8s", "Lancer les tests", "Nouveau cas", "verdict", "Rapport des tests"},
          {"fonctions"},
+         {},
+         "",
+         {},
+         "",
+         {}},
+        // ---- Tester et livrer  Tester / deboguer-scripts
+        {"deboguer-scripts", "D\xC3\xA9" "boguer les scripts IHM : points d'arr\xC3\xAAt, pas \xC3\xA0 pas, pile et locales", "Tester et livrer \xE2\x80\xBA Tester",
+         "Pose un point d'arr\xC3\xAAt dans la marge d'un script IHM : en simulation, le moteur "
+         "s'arr\xC3\xAAte vraiment dessus, au milieu du script. Tu vois la pile des appels, tes variables "
+         "locales, les valeurs de la ligne et tes espions, puis tu avances pas \xC3\xA0 pas - Entrer, "
+         "Sortir, Suivant.",
+         {
+             {K::Heading, "Poser un point d'arr\xC3\xAAt", {}},
+             {K::Bullet, "Un **clic dans la marge** de l'\xC3\xA9" "diteur, \xC3\xA0 gauche des "
+                         "num\xC3\xA9ros de ligne - un script g\xC3\xA9n\xC3\xA9ral (Programmation "
+                         "g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Scripts), un script de vue (OnOpen, OnCycle, "
+                         "OnClose) ou une fonction IHM : un **rond rouge**. Un nouveau clic l'enl\xC3\xA8ve "
+                         "; **Maj+clic** le d\xC3\xA9sactive (un anneau) ; **F9** pose ou enl\xC3\xA8ve "
+                         "celui de la ligne du curseur.", {}},
+             {K::Bullet, "Le **clic droit** dans la marge : Point d'arr\xC3\xAAt, **Condition\xE2\x80\xA6**, "
+                         "D\xC3\xA9sactiver, Retirer les points de ce code.", {}},
+             {K::Bullet, "Une ligne sans instruction (un commentaire, une ligne vide) : le point se "
+                         "**d\xC3\xA9" "cale** sur l'instruction suivante, et le dit - \xC2\xAB "
+                         "d\xC3\xA9" "cal\xC3\xA9 \xC3\xA0 la ligne 15 : la ligne 14 n'a pas d'instruction "
+                         "\xC2\xBB.", {}},
+             {K::Bullet, "Dans Simulation \xE2\x80\xBA IHM \xE2\x80\xBA **D\xC3\xA9" "bogage**, le champ "
+                         "\xC2\xAB + Point d'arr\xC3\xAAt \xC2\xBB : `Statistiques_Pression 14`, "
+                         "`Statistiques_Pression 14 si P < 5`, `Vue_A.OnCycle 3`, `Moyenne_Pression 5`.", {}},
+             {K::Bullet, "Un point suit son **code**, pas son texte : taper au-dessus le garde sur sa ligne. "
+                         "Un script C ou C++ n'est pas ex\xC3\xA9" "cut\xC3\xA9 en simulation : sa marge "
+                         "refuse le point.", {}},
+             {K::Code, "(* Statistiques_Pression : un point sur la ligne IF P < Mini *)\nP := "
+                         "Armoires[0].ana.PT1.mes;\nTours := Tours + 1;\nIF P < Mini THEN          (* le "
+                         "moteur s'arr\xC3\xAAte AVANT cette instruction *)\n    Mini := P;\nEND_IF;", "ST"},
+             {K::Code, "/* Un script C n'est pas ex\xC3\xA9" "cut\xC3\xA9 en simulation : pas de point "
+                         "d'arr\xC3\xAAt (\xC3\xA9" "cris-le en ST pour le d\xC3\xA9" "boguer). */\np = "
+                         "Armoires[0].ana.PT1.mes;\ntours = tours + 1;\nif (p < mini) mini = p;", "C"},
+             {K::Code, "// Un script C++ n'est pas ex\xC3\xA9" "cut\xC3\xA9 en simulation : pas de point "
+                         "d'arr\xC3\xAAt (\xC3\xA9" "cris-le en ST pour le d\xC3\xA9" "boguer).\np = "
+                         "Armoires[0].ana.PT1.mes;\n++tours;\nif (p < mini) mini = p;", "C++"},
+             {K::Heading, "La pause est r\xC3\xA9" "elle", {}},
+             {K::Paragraph, "Le script s'arr\xC3\xAAte **au milieu de son ex\xC3\xA9" "cution**, avant la ligne "
+                         "du point : rien de cette ligne n'est fait, rien n'est \xC3\xA9" "crit tant que tu "
+                         "ne continues pas. L'IHM se fige - la pastille de la barre dit **IHM : en pause "
+                         "(d\xC3\xA9" "bogage)**, en orange - : le prochain cycle IHM attend la reprise, les "
+                         "clics dans la vue sont ignor\xC3\xA9s, l'\xC3\xA9" "cran garde la derni\xC3\xA8re "
+                         "image. Les \xC3\xA9" "critures de ce cycle vers l'automate ne sont pas encore "
+                         "parties.", {}},
+             {K::Tip, "Sans point arm\xC3\xA9 ni pas demand\xC3\xA9, rien ne change : les scripts "
+                         "tournent comme avant, au m\xC3\xAAme co\xC3\xBBt.", {}},
+             {K::Heading, "Le sous-onglet D\xC3\xA9" "bogage", {}},
+             {K::Paragraph, "Simulation \xE2\x80\xBA IHM \xE2\x80\xBA **D\xC3\xA9" "bogage** :", {}},
+             {K::Table, "Partie\tCe qu'elle montre\nLa barre\tContinuer (F5), Suivant (F10), Entrer (F11), "
+                         "Sortir (Maj+F11), Pause ; Tout retirer\nL'\xC3\xA9tat\t\xC2\xAB En pause au point "
+                         "2 : script Statistiques_Pression, ligne 14, cycle IHM 1 243 - P = 3.2 "
+                         "\xC2\xBB\nPoints d'arr\xC3\xAAt\tla case (actif), o\xC3\xB9, la condition "
+                         "(modifiable sur place, double clic), les passages, ce qu'en dit le "
+                         "moteur\nEspions\tune expression, sa valeur maintenant (en pause : dans la "
+                         "port\xC3\xA9" "e de la ligne d'arr\xC3\xAAt, locales comprises)\nPile\tde la ligne "
+                         "d'arr\xC3\xAAt (en haut) au contexte (en bas : le cycle IHM, le clic qui l'a "
+                         "lanc\xC3\xA9, le script d\xC3\xA9tach\xC3\xA9) ; un clic montre ce niveau, un "
+                         "double clic ouvre son code\nCode\tle code du niveau choisi, en lecture seule, la "
+                         "ligne surlign\xC3\xA9" "e, les valeurs de la ligne \xC3\xA0 droite ; sa marge pose "
+                         "des points aussi\nLocales\tVAR, VAR_TEMP, param\xC3\xA8tres, compteurs de boucle "
+                         "du niveau choisi ; une structure, un tableau, une liste, une MAP se d\xC3\xA9plient", {}},
+             {K::Paragraph, "La **Console** du panneau du bas dit chaque arr\xC3\xAAt (\xC2\xAB "
+                         "arr\xC3\xAAt\xC3\xA9 au point 1 (script Statistiques_Pression, ligne 10) "
+                         "\xC2\xBB), chaque pas, chaque reprise, avec leur source ; un double clic "
+                         "m\xC3\xA8ne au code.", {}},
+             {K::Heading, "La condition d'un point", {}},
+             {K::Paragraph, "Du ST, **dans la port\xC3\xA9" "e du code** : ses locales (VAR, param\xC3\xA8tres, "
+                         "compteurs) et les variables IHM. Elle est lue quand tu la poses : un nom inconnu "
+                         "se dit tout de suite - \xC2\xAB condition invalide : Presion n'est pas "
+                         "d\xC3\xA9" "clar\xC3\xA9" "e ici ; il ne s'arr\xC3\xAAtera pas \xC2\xBB - et le "
+                         "rond passe en gris. Elle est essay\xC3\xA9" "e \xC3\xA0 chaque passage : il ne "
+                         "s'arr\xC3\xAAte que si elle est vraie ; une erreur \xC3\xA0 ce moment (un indice "
+                         "hors des bornes pour cette instance) d\xC3\xA9sarme le point, et le dit.", {}},
+             {K::Code, "P < 5.0 OR Tours MOD 100 = 0", "ST"},
+             {K::Code, "/* La condition d'un point s'\xC3\xA9" "crit en ST, quelle que soit la notation du "
+                         "code. */", "C"},
+             {K::Code, "// La condition d'un point s'\xC3\xA9" "crit en ST, quelle que soit la notation du "
+                         "code.", "C++"},
+             {K::Heading, "Le pas \xC3\xA0 pas", {}},
+             {K::Table, "Bouton\tTouche\tCe qu'il fait\nSuivant\tF10\tla ligne suivante de ce code : un "
+                         "appel s'ex\xC3\xA9" "cute d'un trait\nEntrer\tF11\tdescend dans la fonction "
+                         "appel\xC3\xA9" "e sur la ligne (une fonction IHM, une fonction interne) ; sur une "
+                         "native, comme Suivant\nSortir\tMaj+F11\tjusqu'au retour dans le code qui l'a "
+                         "appel\xC3\xA9" "e\nContinuer\tF5\tjusqu'au prochain point "
+                         "d'arr\xC3\xAAt\nPause\t-\ts'arr\xC3\xAAte \xC3\xA0 la prochaine ligne d'un script "
+                         "qui tourne", {}},
+             {K::Code, "(* \xC2\xAB Entrer \xC2\xBB (F11) sur cette ligne descend dans le corps de "
+                         "Moyenne_Pression *)\nIF Moyenne_Pression(P, Armoires[1].ana.PT1.mes) > 30.0 THEN\n "
+                         "   Tracer_Evenement('Moyenne haute', 2);\nEND_IF;", "ST"},
+             {K::Code, "/* le m\xC3\xAAme appel en C : Entrer n'existe qu'en simulation, pour le ST */\nif "
+                         "(Moyenne_Pression(p, Armoires[1].ana.PT1.mes) > 30.0f) Tracer_Evenement(\"Moyenne "
+                         "haute\", 2);", "C"},
+             {K::Code, "// le m\xC3\xAAme appel en C++ : Entrer n'existe qu'en simulation, pour le ST\nif "
+                         "(Moyenne_Pression(p, Armoires[1].ana.PT1.mes) > 30.0f) Tracer_Evenement(\"Moyenne "
+                         "haute\", 2);", "C++"},
+             {K::Paragraph, "Dans la fonction, la pile devient \xC2\xAB script Statistiques_Pression "
+                         "\xE2\x80\xBA fonction Moyenne_Pression \xC2\xBB et les locales montr\xC3\xA9" "es "
+                         "sont les siennes (A, B, Poids_A, Somme) ; Sortir revient dans le script, "
+                         "apr\xC3\xA8s l'appel.", {}},
+             {K::Heading, "IHM_POINT_ARRET : un point d'arr\xC3\xAAt \xC3\xA9" "crit dans le code", {}},
+             {K::Paragraph, "`IHM_POINT_ARRET` sans argument s'arr\xC3\xAAte \xC3\xA0 chaque passage ; avec un "
+                         "BOOL, seulement s'il est vrai. Pratique dans une boucle ou un script "
+                         "d\xC3\xA9tach\xC3\xA9. Hors simulation (le poste d'exploitation), il ne fait rien "
+                         "; dans une expression (fx), il est refus\xC3\xA9, comme WAIT.", {}},
+             {K::Code, "FOR f := 1 TO Fours.High DO\n    IHM_POINT_ARRET(Fours[f].Temperature > 900.0);   "
+                         "(* s'arr\xC3\xAAte au 1er four trop chaud *)\n    IF Fours[f].Temperature > "
+                         "Fours[f].Consigne + 20.0 THEN\n        Fours[f].Vannes[1].Position := 0;\n    "
+                         "END_IF;\nEND_FOR;", "ST"},
+             {K::Code, "for (f = 1; f <= Fours_High; f++) {\n    IHM_POINT_ARRET(Fours[f].Temperature > "
+                         "900.0f);   /* sans effet \xC3\xA0 la cible */\n    if (Fours[f].Temperature > "
+                         "Fours[f].Consigne + 20.0f) Fours[f].Vannes[1].Position = 0;\n}", "C"},
+             {K::Code, "for (int f = 1; f <= Fours.High; ++f) {\n    IHM_POINT_ARRET(Fours[f].Temperature "
+                         "> 900.0f);   // sans effet \xC3\xA0 la cible\n    if (Fours[f].Temperature > "
+                         "Fours[f].Consigne + 20.0f) Fours[f].Vannes[1].Position = 0;\n}", "C++"},
+             {K::Heading, "Un script d\xC3\xA9tach\xC3\xA9, arr\xC3\xAAt\xC3\xA9 dans sa boucle d'attente", {}},
+             {K::Paragraph, "\xC2\xAB Suivant \xC2\xBB enjambe le WAIT : l'IHM respire pendant l'attente (elle "
+                         "n'est pas fig\xC3\xA9" "e), puis le moteur se r\xC3\xA9" "arr\xC3\xAAte \xC3\xA0 "
+                         "la ligne d'apr\xC3\xA8s.", {}},
+             {K::Code, "(* Script d\xC3\xA9tach\xC3\xA9, d\xC3\xA9" "clencheur Appel\xC3\xA9 "
+                         "*)\nVanne_Entree := TRUE;\nWHILE Niveau < Consigne_Niveau DO\n    IHM_POINT_ARRET; "
+                         "       (* s'arr\xC3\xAAte \xC3\xA0 chaque tour *)\n    "
+                         "WAIT(T#500ms);\nEND_WHILE;\nVanne_Entree := FALSE;", "ST"},
+             {K::Code, "/* Script d\xC3\xA9tach\xC3\xA9 : la m\xC3\xAAme boucle (IHM_POINT_ARRET sans "
+                         "effet \xC3\xA0 la cible) */\nVanne_Entree = 1;\nwhile (Niveau < Consigne_Niveau) { "
+                         "IHM_POINT_ARRET(); WAIT(500); }\nVanne_Entree = 0;", "C"},
+             {K::Code, "// Script d\xC3\xA9tach\xC3\xA9 : la m\xC3\xAAme boucle (IHM_POINT_ARRET sans "
+                         "effet \xC3\xA0 la cible)\nVanne_Entree = true;\nwhile (Niveau < Consigne_Niveau) { "
+                         "IHM_POINT_ARRET(); WAIT(500ms); }\nVanne_Entree = false;", "C++"},
+             {K::Heading, "Ce qui ne s'arr\xC3\xAAte pas", {}},
+             {K::Bullet, "Une fonction appel\xC3\xA9" "e par une **expression** de vue (fx) : elle doit "
+                         "rendre sa valeur tout de suite (comme pour WAIT) ; le point le dit - \xC2\xAB "
+                         "appel\xC3\xA9" "e par une expression : pas d'arr\xC3\xAAt \xC2\xBB.", {}},
+             {K::Bullet, "Un rappel lanc\xC3\xA9 par un minuteur (IHM_APRES, IHM_CHAQUE) ou une surveillance "
+                         "(IHM_SUR_CHANGEMENT) : \xC2\xAB hors d'un script lanc\xC3\xA9 par l'IHM \xC2\xBB.", {}},
+             {K::Bullet, "Le **poste d'exploitation** : jamais.", {}},
+             {K::Heading, "Modifier pendant la pause, o\xC3\xB9 vivent les points", {}},
+             {K::Paragraph, "En pause, tu peux forcer une variable IHM (Variables IHM) et suivre des espions. "
+                         "Si tu changes le **code** du script arr\xC3\xAAt\xC3\xA9, il ne peut pas reprendre "
+                         "au milieu d'une ligne qui n'existe plus : \xC2\xAB le script a chang\xC3\xA9 "
+                         "pendant la pause : il reprendra au prochain cycle \xC2\xBB. Arr\xC3\xAAter la "
+                         "simulation pendant la pause arr\xC3\xAAte le script sans erreur. Les points "
+                         "d'arr\xC3\xAAt ne sont **pas dans le projet** : ils restent pour la "
+                         "s\xC3\xA9" "ance - fermer le sous-onglet ou arr\xC3\xAAter la simulation ne les "
+                         "enl\xC3\xA8ve pas ; ouvrir un autre projet, si. Un projet ne change pas d'un octet "
+                         "quand tu d\xC3\xA9" "bogues.", {}},
+         },
+         {"scripts", "fonctions", "fonctions-internes", "simulation", "variables-locales", "erreurs-scripts", "reference", "tests-fonctions"},
+         {"point d'arr\xC3\xAAt", "points d'arr\xC3\xAAt", "d\xC3\xA9" "bogueur", "d\xC3\xA9" "boguer", "pas \xC3\xA0 pas", "Entrer", "Sortir", "Suivant", "Continuer", "pile d'appels", "locales", "rond rouge", "marge", "Condition\xE2\x80\xA6", "IHM en pause"},
+         {"scripts", "fonctions", "simulation"},
          {},
          "",
          {},
