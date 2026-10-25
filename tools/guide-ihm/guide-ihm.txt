@@ -6425,6 +6425,106 @@ Un objet (une instance de symbole), un symbole et un type IHM ont un nœud **Op�
 | un résultat jamais donné | une conversion sans `TO_REAL :=` | l'opérateur ne donne jamais son résultat (avertissement) |
 > En C++, un opérateur d'un type est une fonction `operator+` ; en C, une fonction nommée (`t_vecteur_ajouter`). En ST de l'IHM, c'est un script : `a + b` l'appelle.
 
+== objets-types | Les types objets : méthodes, privé, héritage, interfaces
+: Un type IHM n'est plus seulement des données : il porte des méthodes qui voient ses membres par SELF, cache ce qui est interne (PRIVATE), hérite d'un autre type (EXTENDS) et respecte des contrats (INTERFACE). On traite ainsi une liste hétérogène de pompes et de vannes par un contrat commun.
+@mots méthode, méthodes, METHOD, SELF, THIS, privé, PRIVATE, PUBLIC, visibilité, cadenas, héritage, EXTENDS, hérite, VIRTUAL, virtuelle, OVERRIDE, redéfinir, SUPER, interface, INTERFACE, IMPLEMENTS, implémente, contrat, REF_TO, dispatch, type réel, DYNAMIC_CAST, descendre, redéfinissable
+@lieux types-ihm
+@voir types-ihm, operateurs, enum-types, rappels, symboles, parcours-symbole, scripts, erreurs-scripts
+### Une méthode : SELF et les membres par leur nom
+Dans l'onglet Types IHM, sous la grille des membres (à côté des Opérateurs), la section **Méthodes** : **Ajouter une méthode…** ouvre un dialogue (nom, retour facultatif, paramètres, **Public**/**Privé**, case **Redéfinissable (virtuelle)**), puis un éditeur de script. Une méthode voit **SELF** (l'instance ; **THIS** vaut SELF), les membres par leur nom (ou `SELF.X` pour lever une ambiguïté avec une locale), ses paramètres et les autres méthodes du type.
+Une méthode **procédure** n'a pas de retour (`Pompe1.Demarrer()`) ; une méthode **fonction** rend sa valeur par son nom (`EnDefaut := …`) ou par RETURN.
+```ST
+TYPE T_Pompe
+    Nom     : STRING;
+    Debit   : REAL;
+    Marche  : BOOL;
+    PRIVATE Heures : REAL := 0.0;   (* vu des seules méthodes de T_Pompe *)
+
+    METHOD PUBLIC Demarrer                 (* une procédure *)
+    METHOD PUBLIC VIRTUAL EnDefaut : BOOL  (* redéfinissable par un sous-type *)
+    METHOD PRIVATE Journal
+END_TYPE
+
+(* corps de Demarrer : SELF est l'instance *)
+IF SELF.Heures > 8000.0 THEN Journal(); END_IF;
+Marche := TRUE;                            (* écrit SELF.Marche *)
+
+(* corps de EnDefaut : BOOL — rend par son nom *)
+EnDefaut := Marche AND Debit < 1.0;
+```
+```C
+typedef struct {                           /* un type objet se lit comme une classe */
+    const char* Nom; float Debit; bool Marche;
+    /* private: */ float Heures;
+} T_Pompe;                                  /* méthodes : voir le C++ */
+```
+```C++
+struct T_Pompe {
+    std::string Nom; float Debit = 0; bool Marche = false;
+    void Demarrer();                        // SELF, c'est this
+    virtual bool EnDefaut() const { return Marche && Debit < 1.0f; }
+private:
+    float Heures = 0.0f;
+    void Journal();
+};
+```
+### Appeler une méthode, partout où l'on tient l'instance
+`Pompe1.Demarrer()`, `Pompes[3].EnDefaut()`, `Fours[f].Vanne_Entree.Debit_Reel()` : sur une variable, une case de tableau, un membre composé. Mêmes règles que les fonctions IHM (arguments dans l'ordre ou nommés `a := …`).
+Un membre ou une méthode **privé** ne se lit et ne s'appelle **que depuis une méthode du même type** ; ailleurs, Générer le refuse : « `Heures` est privé dans T_Pompe ». La privacité ne touche pas la place Modbus : un membre privé d'une structure liée garde son adresse ; seul le code ST est contraint.
+### Héritage : EXTENDS, VIRTUAL, OVERRIDE, SUPER
+En en-tête du type, le champ **Hérite de… (EXTENDS)** choisit un **parent** (une structure). Le sous-type a tous les membres du parent (la place Modbus du parent d'abord), puis les siens, et hérite de ses méthodes. Une méthode **VIRTUAL** du parent se redéfinit par une méthode **OVERRIDE** de même signature ; **SUPER.Méthode()** rappelle le corps du parent.
+```ST
+TYPE T_PompeDoublee EXTENDS T_Pompe
+    Secours : BOOL;
+    METHOD PUBLIC OVERRIDE EnDefaut : BOOL
+END_TYPE
+
+(* corps de EnDefaut redéfinie *)
+EnDefaut := SUPER.EnDefaut() AND NOT Secours;
+```
+```C++
+struct T_PompeDoublee : T_Pompe {
+    bool Secours = false;
+    bool EnDefaut() const override { return T_Pompe::EnDefaut() && !Secours; }
+};
+```
+Un `T_PompeDoublee` **passe là où un `T_Pompe` est attendu** (la montée) ; `T_Pompe := T_PompeDoublee` copie la tranche parente. L'inverse (descendre) demande DYNAMIC_CAST.
+### Interface : un contrat que plusieurs types respectent
+Le menu **Nouveau type ▾** gagne une entrée **Interface…** (le quatrième genre, après structure, énumération, rappel). Une interface n'a ni membre ni corps : des **signatures**. Un type l'**implémente** (champ **Implémente… (IMPLEMENTS)**, plusieurs possibles) ; Générer vérifie qu'il a chaque signature, et nomme ce qui manque : « T_Vanne déclare I_Demarrable mais n'a pas EnDefaut() : BOOL ».
+```ST
+TYPE I_Demarrable INTERFACE
+    METHOD Demarrer
+    METHOD EnDefaut : BOOL
+END_TYPE
+
+TYPE T_Vanne IMPLEMENTS I_Demarrable
+    Position : REAL;
+    METHOD PUBLIC Demarrer
+    METHOD PUBLIC EnDefaut : BOOL
+END_TYPE
+```
+### La liste hétérogène, et DYNAMIC_CAST pour redescendre
+Une interface ne s'emploie que par **REF_TO** (une instance a des données, pas un contrat) : `v : I_Demarrable` est refusé (« emploie REF_TO I_Demarrable »). Une `LIST OF REF_TO I_Demarrable` tient des pompes et des vannes ; `e^.Demarrer()` part sur le **type réel** de la cible de la référence (le dispatch dynamique). `DYNAMIC_CAST<T_Pompe>(e^)` rend une référence si c'en est une, NULL sinon.
+```ST
+VAR Equipements : LIST OF REF_TO I_Demarrable; END_VAR
+LIST_ADD(Equipements, REF(Pompe1));
+LIST_ADD(Equipements, REF(Vanne_Entree));
+FOR EACH e IN Equipements DO
+    e^.Demarrer();
+    IF e^.EnDefaut() THEN Defauts := Defauts + 1; END_IF;
+    p := DYNAMIC_CAST<T_Pompe>(e^);         (* NULL si ce n'en est pas une *)
+    IF p <> NULL THEN Debit_Total := Debit_Total + p^.Debit; END_IF;
+END_FOR;
+```
+### Ce que Générer refuse
+- un membre ou une méthode **privé** lu de l'extérieur ;
+- **OVERRIDE** sans VIRTUAL au parent, ou de signature différente, ou d'une méthode inexistante ;
+- une **interface non satisfaite** (la méthode manquante est nommée) ;
+- **EXTENDS** hors structure, ou un **cycle** d'héritage ;
+- une **interface employée comme donnée** (sans REF_TO) ;
+- une **méthode d'un type inconnu**.
+> Un opérateur (a, b, Resultat) et une méthode (SELF) coexistent : un opérateur peut appeler une méthode. Les méthodes de type reprennent le mécanisme virtuel/SUPER des fonctions de symbole.
+
 == tableaux-ihm | Les tableaux et leurs propriétés
 : Une variable IHM peut être un tableau à une ou deux dimensions, aux bornes libres (ARRAY[0..9] OF REAL, ARRAY[1..4] OF T_Four, ARRAY[0..3, 0..9] OF INT). Ses propriétés publiques - Length, Low, High, Rows, Columns, Bytes, Words... - se lisent partout : scripts, expressions, textes à trous.
 @mots ARRAY, tableau, tableaux, Length, Size, MaxSize, Low, High, Low2, High2, Rows, Columns, Dimensions, Bytes, Words, ElementBytes, hors bornes, indice

@@ -14468,6 +14468,113 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.10"},
+        // ---- Programmer  Variables et types / objets-types
+        {"objets-types", "Les types objets : m\xC3\xA9thodes, priv\xC3\xA9, h\xC3\xA9ritage, interfaces", "Programmer \xE2\x80\xBA Variables et types",
+         "Un type IHM n'est plus seulement des donn\xC3\xA9" "es : il porte des m\xC3\xA9thodes qui voient "
+         "ses membres par SELF, cache ce qui est interne (PRIVATE), h\xC3\xA9rite d'un autre type (EXTENDS) "
+         "et respecte des contrats (INTERFACE). On traite ainsi une liste h\xC3\xA9t\xC3\xA9rog\xC3\xA8ne de "
+         "pompes et de vannes par un contrat commun.",
+         {
+             {K::Heading, "Une m\xC3\xA9thode : SELF et les membres par leur nom", {}},
+             {K::Paragraph, "Dans l'onglet Types IHM, sous la grille des membres (\xC3\xA0 c\xC3\xB4t\xC3\xA9 "
+                         "des Op\xC3\xA9rateurs), la section **M\xC3\xA9thodes** : **Ajouter une "
+                         "m\xC3\xA9thode\xE2\x80\xA6** ouvre un dialogue (nom, retour facultatif, "
+                         "param\xC3\xA8tres, **Public**/**Priv\xC3\xA9**, case **Red\xC3\xA9" "finissable "
+                         "(virtuelle)**), puis un \xC3\xA9" "diteur de script. Une m\xC3\xA9thode voit "
+                         "**SELF** (l'instance ; **THIS** vaut SELF), les membres par leur nom (ou `SELF.X` "
+                         "pour lever une ambigu\xC3\xAFt\xC3\xA9 avec une locale), ses param\xC3\xA8tres et "
+                         "les autres m\xC3\xA9thodes du type. Une m\xC3\xA9thode **proc\xC3\xA9" "dure** n'a "
+                         "pas de retour (`Pompe1.Demarrer()`) ; une m\xC3\xA9thode **fonction** rend sa "
+                         "valeur par son nom (`EnDefaut := \xE2\x80\xA6`) ou par RETURN.", {}},
+             {K::Code, "TYPE T_Pompe\n    Nom     : STRING;\n    Debit   : REAL;\n    Marche  : BOOL;\n    "
+                         "PRIVATE Heures : REAL := 0.0;   (* vu des seules m\xC3\xA9thodes de T_Pompe *)\n\n "
+                         "   METHOD PUBLIC Demarrer                 (* une proc\xC3\xA9" "dure *)\n    "
+                         "METHOD PUBLIC VIRTUAL EnDefaut : BOOL  (* red\xC3\xA9" "finissable par un "
+                         "sous-type *)\n    METHOD PRIVATE Journal\nEND_TYPE\n\n(* corps de Demarrer : SELF "
+                         "est l'instance *)\nIF SELF.Heures > 8000.0 THEN Journal(); END_IF;\nMarche := "
+                         "TRUE;                            (* \xC3\xA9" "crit SELF.Marche *)\n\n(* corps de "
+                         "EnDefaut : BOOL \xE2\x80\x94 rend par son nom *)\nEnDefaut := Marche AND Debit < "
+                         "1.0;", "ST"},
+             {K::Code, "typedef struct {                           /* un type objet se lit comme une "
+                         "classe */\n    const char* Nom; float Debit; bool Marche;\n    /* private: */ "
+                         "float Heures;\n} T_Pompe;                                  /* m\xC3\xA9thodes : "
+                         "voir le C++ */", "C"},
+             {K::Code, "struct T_Pompe {\n    std::string Nom; float Debit = 0; bool Marche = false;\n    "
+                         "void Demarrer();                        // SELF, c'est this\n    virtual bool "
+                         "EnDefaut() const { return Marche && Debit < 1.0f; }\nprivate:\n    float Heures = "
+                         "0.0f;\n    void Journal();\n};", "C++"},
+             {K::Heading, "Appeler une m\xC3\xA9thode, partout o\xC3\xB9 l'on tient l'instance", {}},
+             {K::Paragraph, "`Pompe1.Demarrer()`, `Pompes[3].EnDefaut()`, `Fours[f].Vanne_Entree.Debit_Reel()` "
+                         ": sur une variable, une case de tableau, un membre compos\xC3\xA9. M\xC3\xAAmes "
+                         "r\xC3\xA8gles que les fonctions IHM (arguments dans l'ordre ou nomm\xC3\xA9s `a := "
+                         "\xE2\x80\xA6`). Un membre ou une m\xC3\xA9thode **priv\xC3\xA9** ne se lit et ne "
+                         "s'appelle **que depuis une m\xC3\xA9thode du m\xC3\xAAme type** ; ailleurs, "
+                         "G\xC3\xA9n\xC3\xA9rer le refuse : \xC2\xAB `Heures` est priv\xC3\xA9 dans T_Pompe "
+                         "\xC2\xBB. La privacit\xC3\xA9 ne touche pas la place Modbus : un membre "
+                         "priv\xC3\xA9 d'une structure li\xC3\xA9" "e garde son adresse ; seul le code ST "
+                         "est contraint.", {}},
+             {K::Heading, "H\xC3\xA9ritage : EXTENDS, VIRTUAL, OVERRIDE, SUPER", {}},
+             {K::Paragraph, "En en-t\xC3\xAAte du type, le champ **H\xC3\xA9rite de\xE2\x80\xA6 (EXTENDS)** "
+                         "choisit un **parent** (une structure). Le sous-type a tous les membres du parent "
+                         "(la place Modbus du parent d'abord), puis les siens, et h\xC3\xA9rite de ses "
+                         "m\xC3\xA9thodes. Une m\xC3\xA9thode **VIRTUAL** du parent se red\xC3\xA9" "finit "
+                         "par une m\xC3\xA9thode **OVERRIDE** de m\xC3\xAAme signature ; "
+                         "**SUPER.M\xC3\xA9thode()** rappelle le corps du parent.", {}},
+             {K::Code, "TYPE T_PompeDoublee EXTENDS T_Pompe\n    Secours : BOOL;\n    METHOD PUBLIC "
+                         "OVERRIDE EnDefaut : BOOL\nEND_TYPE\n\n(* corps de EnDefaut red\xC3\xA9" "finie "
+                         "*)\nEnDefaut := SUPER.EnDefaut() AND NOT Secours;", "ST"},
+             {K::Code, "struct T_PompeDoublee : T_Pompe {\n    bool Secours = false;\n    bool EnDefaut() "
+                         "const override { return T_Pompe::EnDefaut() && !Secours; }\n};", "C++"},
+             {K::Paragraph, "Un `T_PompeDoublee` **passe l\xC3\xA0 o\xC3\xB9 un `T_Pompe` est attendu** (la "
+                         "mont\xC3\xA9" "e) ; `T_Pompe := T_PompeDoublee` copie la tranche parente. "
+                         "L'inverse (descendre) demande DYNAMIC_CAST.", {}},
+             {K::Heading, "Interface : un contrat que plusieurs types respectent", {}},
+             {K::Paragraph, "Le menu **Nouveau type \xE2\x96\xBE** gagne une entr\xC3\xA9" "e "
+                         "**Interface\xE2\x80\xA6** (le quatri\xC3\xA8me genre, apr\xC3\xA8s structure, "
+                         "\xC3\xA9num\xC3\xA9ration, rappel). Une interface n'a ni membre ni corps : des "
+                         "**signatures**. Un type l'**impl\xC3\xA9mente** (champ "
+                         "**Impl\xC3\xA9mente\xE2\x80\xA6 (IMPLEMENTS)**, plusieurs possibles) ; "
+                         "G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie qu'il a chaque signature, et nomme ce qui "
+                         "manque : \xC2\xAB T_Vanne d\xC3\xA9" "clare I_Demarrable mais n'a pas EnDefaut() : "
+                         "BOOL \xC2\xBB.", {}},
+             {K::Code, "TYPE I_Demarrable INTERFACE\n    METHOD Demarrer\n    METHOD EnDefaut : "
+                         "BOOL\nEND_TYPE\n\nTYPE T_Vanne IMPLEMENTS I_Demarrable\n    Position : REAL;\n    "
+                         "METHOD PUBLIC Demarrer\n    METHOD PUBLIC EnDefaut : BOOL\nEND_TYPE", "ST"},
+             {K::Heading, "La liste h\xC3\xA9t\xC3\xA9rog\xC3\xA8ne, et DYNAMIC_CAST pour redescendre", {}},
+             {K::Paragraph, "Une interface ne s'emploie que par **REF_TO** (une instance a des "
+                         "donn\xC3\xA9" "es, pas un contrat) : `v : I_Demarrable` est refus\xC3\xA9 "
+                         "(\xC2\xAB emploie REF_TO I_Demarrable \xC2\xBB). Une `LIST OF REF_TO I_Demarrable` "
+                         "tient des pompes et des vannes ; `e^.Demarrer()` part sur le **type "
+                         "r\xC3\xA9" "el** de la cible de la r\xC3\xA9" "f\xC3\xA9rence (le dispatch "
+                         "dynamique). `DYNAMIC_CAST<T_Pompe>(e^)` rend une r\xC3\xA9" "f\xC3\xA9rence si "
+                         "c'en est une, NULL sinon.", {}},
+             {K::Code, "VAR Equipements : LIST OF REF_TO I_Demarrable; END_VAR\nLIST_ADD(Equipements, "
+                         "REF(Pompe1));\nLIST_ADD(Equipements, REF(Vanne_Entree));\nFOR EACH e IN "
+                         "Equipements DO\n    e^.Demarrer();\n    IF e^.EnDefaut() THEN Defauts := Defauts + "
+                         "1; END_IF;\n    p := DYNAMIC_CAST<T_Pompe>(e^);         (* NULL si ce n'en est pas "
+                         "une *)\n    IF p <> NULL THEN Debit_Total := Debit_Total + p^.Debit; "
+                         "END_IF;\nEND_FOR;", "ST"},
+             {K::Heading, "Ce que G\xC3\xA9n\xC3\xA9rer refuse", {}},
+             {K::Bullet, "un membre ou une m\xC3\xA9thode **priv\xC3\xA9** lu de l'ext\xC3\xA9rieur ;", {}},
+             {K::Bullet, "**OVERRIDE** sans VIRTUAL au parent, ou de signature diff\xC3\xA9rente, ou d'une "
+                         "m\xC3\xA9thode inexistante ;", {}},
+             {K::Bullet, "une **interface non satisfaite** (la m\xC3\xA9thode manquante est "
+                         "nomm\xC3\xA9" "e) ;", {}},
+             {K::Bullet, "**EXTENDS** hors structure, ou un **cycle** d'h\xC3\xA9ritage ;", {}},
+             {K::Bullet, "une **interface employ\xC3\xA9" "e comme donn\xC3\xA9" "e** (sans REF_TO) ;", {}},
+             {K::Bullet, "une **m\xC3\xA9thode d'un type inconnu**.", {}},
+             {K::Tip, "Un op\xC3\xA9rateur (a, b, Resultat) et une m\xC3\xA9thode (SELF) coexistent : un "
+                         "op\xC3\xA9rateur peut appeler une m\xC3\xA9thode. Les m\xC3\xA9thodes de type "
+                         "reprennent le m\xC3\xA9" "canisme virtuel/SUPER des fonctions de symbole.", {}},
+         },
+         {"types-ihm", "operateurs", "enum-types", "rappels", "symboles", "parcours-symbole", "scripts", "erreurs-scripts"},
+         {"m\xC3\xA9thode", "m\xC3\xA9thodes", "METHOD", "SELF", "THIS", "priv\xC3\xA9", "PRIVATE", "PUBLIC", "visibilit\xC3\xA9", "cadenas", "h\xC3\xA9ritage", "EXTENDS", "h\xC3\xA9rite", "VIRTUAL", "virtuelle", "OVERRIDE", "red\xC3\xA9" "finir", "SUPER", "interface", "INTERFACE", "IMPLEMENTS", "impl\xC3\xA9mente", "contrat", "REF_TO", "dispatch", "type r\xC3\xA9" "el", "DYNAMIC_CAST", "descendre", "red\xC3\xA9" "finissable"},
+         {"types-ihm"},
+         {},
+         "",
+         {},
+         "",
+         {}},
         // ---- Programmer  Variables et types / tableaux-ihm
         {"tableaux-ihm", "Les tableaux et leurs propri\xC3\xA9t\xC3\xA9s", "Programmer \xE2\x80\xBA Variables et types",
          "Une variable IHM peut \xC3\xAAtre un tableau \xC3\xA0 une ou deux dimensions, aux bornes libres "
