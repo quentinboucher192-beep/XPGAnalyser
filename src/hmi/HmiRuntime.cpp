@@ -17,6 +17,7 @@
 #include "HmiScript.hpp"
 #include "HmiDecl.hpp"        // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiCalc.hpp"        // 1.12.7 : les valeurs calculees au demarrage
+#include "HmiMethods.hpp"     // 1.13.0 (lot J1) : les methodes des types IHM (S2) a l'execution (S1)
 #include "HmiOperators.hpp"   // 1.10 (integration) : les operateurs du projet (S2) a l'execution (S1)
 #include "HmiRoles.hpp"       // 1.12.6 (lot B) : le lecteur du role, l'ecriture vers le type
 #include "HmiEnums.hpp"       // 1.10 (decision 15) : les enumerations IHM dans les scripts (S1)
@@ -748,6 +749,31 @@ public:
         out.function = std::move(c.function);
         out.owner = std::move(c.owner);
         return true;
+    }
+    // 1.13.0 (lot J1) : une methode d'un type IHM (chemin.Methode(args)) - S2 (hmi::resolveMethod) la
+    // trouve sur le type reel de l'objet, S1 (l'interpreteur) l'appelle, SELF en VAR_IN_OUT.
+    bool findMethod(std::string_view ownerType, std::string_view method, sim::OperatorSource& out) override {
+        hmi::MethodCall c;
+        if (!rt_.project_ || !hmi::resolveMethod(*rt_.project_, ownerType, method, c)) return false;
+        out.key = std::move(c.key);
+        out.function = std::move(c.function);
+        out.owner = std::move(c.owner);
+        return true;
+    }
+    // 1.13.0 (lot J1) : SUPER.M(...) emis comme METHODE_<parent>_M - l'interpreteur le resout ici.
+    bool findMethodByInternal(std::string_view internalName, sim::OperatorSource& out) override {
+        hmi::MethodCall c;
+        if (!rt_.project_ || !hmi::resolveMethodInternal(*rt_.project_, internalName, c)) return false;
+        out.key = std::move(c.key);
+        out.function = std::move(c.function);
+        out.owner = std::move(c.owner);
+        return true;
+    }
+    // 1.13.0 (lot J1) : la montee - un sous-type vers un parent, un type vers une interface implementee
+    // (pour DYNAMIC_CAST<to>(objet)). Le meme type va toujours.
+    bool typeConvertsTo(std::string_view from, std::string_view to) override {
+        if (!rt_.project_) return false;
+        return hmi::isA(*rt_.project_, from, to) || hmi::implementsInterface(*rt_.project_, from, to);
     }
     // Une fonction IHM du projet qui emploie les types riches (VAR_IN_OUT, REF_TO,
     // POINTER TO, ARRAY, MAP, structure) tourne dans le dialecte, appelee du

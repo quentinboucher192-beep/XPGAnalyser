@@ -40,13 +40,13 @@
 namespace hmi {
 
 // ---------------------------------------------------- noms et texte interne ---
-// Le nom interne stable de la methode `m` du type `typeName` : "METHODE_T_POMPE_DEMARRER".
-[[nodiscard]] std::string methodFunctionName(std::string_view typeName, const HmiFunction& m);
-// La FUNCTION complete que l'interpreteur appelle : VAR_IN_OUT SELF en tete, le
-// corps avec ses membres prefixes de SELF., THIS -> SELF, SUPER.M(...) resolu vers
-// la methode du parent. `selfType` : le type porteur reel (le sous-type lors d'un
-// appel virtuel) - la tranche parente passe la ou le parent est attendu.
-[[nodiscard]] std::string methodFunctionText(const Project&, std::string_view selfType, const HmiFunction& m);
+// Le nom interne stable de la methode `m` du type `ownerType` : "METHODE_T_POMPE_DEMARRER". Ce nom est
+// celui du type qui DEFINIT la methode : un SUPER l'emploie, et un sous-type reutilise la meme fonction.
+[[nodiscard]] std::string methodFunctionName(std::string_view ownerType, const HmiFunction& m);
+// La FUNCTION complete que l'interpreteur appelle : VAR_IN_OUT SELF en tete (de type `ownerType`, celui
+// qui definit la methode), le corps avec ses membres prefixes de SELF., THIS -> SELF, SUPER.M(...) resolu
+// vers METHODE_<parent>_M(SELF). Un sous-type passe la ou le parent est attendu (montee du VAR_IN_OUT).
+[[nodiscard]] std::string methodFunctionText(const Project&, std::string_view ownerType, const HmiFunction& m);
 // La signature lisible : "T_Pompe.Demarrer()", "T_Pompe.EnDefaut() : BOOL".
 [[nodiscard]] std::string methodSignature(std::string_view typeName, const HmiFunction& m);
 
@@ -100,6 +100,9 @@ struct MethodCall {
 // La methode `method` (sans casse) de `selfType` (ou d'un de ses parents) : vrai et
 // `out`. Faux : aucune (ou `selfType` n'est pas un type a methodes).
 [[nodiscard]] bool resolveMethod(const Project&, std::string_view selfType, std::string_view method, MethodCall& out);
+// La methode d'un NOM INTERNE (METHODE_T_POMPE_DEMARRER) : ce que SUPER emet dans un corps. Vrai et
+// `out` (la fonction du type qui la definit) ; faux : aucune.
+[[nodiscard]] bool resolveMethodInternal(const Project&, std::string_view internalName, MethodCall& out);
 
 // --------------------------------------------------------------- l'edition ---
 // Les noms que le corps d'une methode connait, avec leurs types : SELF (et THIS),

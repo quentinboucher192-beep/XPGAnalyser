@@ -100,6 +100,8 @@ std::string methodSignature(std::string_view typeName, const HmiFunction& m) {
 
 // Le corps reecrit : membres prefixes de SELF., THIS -> SELF, le nom de la methode
 // (le retour) -> le nom interne, SUPER.M(...) -> METHODE_<Parent>_M(SELF[, ...]).
+// `selfType` : le type de SELF (ses membres) ; `definingOwner` : le type qui definit la methode
+// (son parent sert a SUPER).
 static std::string rewriteBody(const Project& p, std::string_view ownerType, const HmiFunction& m,
                                std::string_view internal) {
     const std::string body = markers::strip(m.body);
@@ -111,7 +113,7 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
     for (const auto& d : m.decls) shadow.insert(upperOf(d.name));
     const std::string ret = upperOf(m.name);
 
-    // Le type parent (pour SUPER) et son nom reel.
+    // Le type parent (pour SUPER) : celui du type qui DEFINIT la methode.
     const HmiType* self = p.hmiTypeByName(ownerType);
     const std::string parentName = self ? self->base : std::string{};
 
@@ -175,7 +177,8 @@ std::string methodFunctionText(const Project& p, std::string_view ownerType, con
     HmiFunction m2 = m;
     m2.body = rewriteBody(p, ownerType, m, internal);
     std::string head = "FUNCTION " + internal + (m.returnType.empty() ? std::string{} : " : " + displayType(m.returnType));
-    // SELF, en VAR_IN_OUT : une methode qui ecrit un membre le modifie pour de bon.
+    // SELF, en VAR_IN_OUT : une methode qui ecrit un membre le modifie pour de bon. SELF a le type qui
+    // DEFINIT la methode ; un sous-type passe la ou ce parent est attendu (montee du VAR_IN_OUT).
     std::string self = "VAR_IN_OUT\n    SELF : " + std::string(trimmed(ownerType)) + ";\nEND_VAR\n";
     std::string body = decl::codeOf(m2);
     if (!body.empty() && body.back() != '\n') body += '\n';
@@ -301,12 +304,30 @@ bool resolveMethod(const Project& p, std::string_view selfType, std::string_view
     const HmiType* owner = nullptr;
     const HmiFunction* m = effectiveMethod(p, selfType, method, &owner);
     if (!m || !owner) return false;
+    // SELF a le type qui DEFINIT la methode (owner) ; l'objet reel (un sous-type) passe la ou owner est
+    // attendu (montee du VAR_IN_OUT). Une seule fonction par (owner, methode) : un SUPER la retrouve.
     out.selfType = owner->name;
     out.isVirtual = m->isVirtual;
     out.function = methodFunctionText(p, owner->name, *m);
     out.owner = "type " + owner->name + ", m\xC3\xA9thode " + m->name;
-    out.key = "methode|" + upperOf(owner->name) + "|" + upperOf(m->name) + "|" + std::to_string(std::hash<std::string>{}(out.function));
+    out.key = "methode|" + upperOf(owner->name) + "|" + upperOf(m->name) + "|"
+            + std::to_string(std::hash<std::string>{}(out.function));
     return true;
+}
+
+bool resolveMethodInternal(const Project& p, std::string_view internalName, MethodCall& out) {
+    for (const auto& t : p.programs.types)
+        for (const auto& m : t.methods)
+            if (methodFunctionName(t.name, m) == internalName) {
+                out.selfType = t.name;
+                out.isVirtual = m.isVirtual;
+                out.function = methodFunctionText(p, t.name, m);
+                out.owner = "type " + t.name + ", m\xC3\xA9thode " + m.name;
+                out.key = "methode|" + upperOf(t.name) + "|" + upperOf(m.name) + "|"
+                        + std::to_string(std::hash<std::string>{}(out.function));
+                return true;
+            }
+    return false;
 }
 
 // --------------------------------------------------------------- l'edition ---

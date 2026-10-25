@@ -205,6 +205,28 @@ public:
         (void)op; (void)left; (void)right; (void)out;
         return false;
     }
+    // 1.13.0 (lot J1) : UNE METHODE D'UN TYPE IHM - chemin.Methode(args). `ownerType` : le type REEL
+    // de l'objet (le sous-type, lors d'un appel virtuel via REF_TO) ; `method` : le nom appele. Vrai et
+    // `out` (la FUNCTION sous forme de texte, VAR_IN_OUT SELF en tete, comme un operateur) ; faux :
+    // `method` n'est pas une methode de ce type. Jamais appele pour le ST de l'automate (aucun type IHM).
+    virtual bool findMethod(std::string_view ownerType, std::string_view method, OperatorSource& out) {
+        (void)ownerType; (void)method; (void)out;
+        return false;
+    }
+    // 1.13.0 (lot J1) : SUPER - dans un corps de methode, SUPER.M(...) est emis comme un appel du nom
+    // interne de la methode du parent (METHODE_T_POMPE_DEMARRER) ; l'interpreteur le resout ici. Vrai et
+    // `out` (la fonction, VAR_IN_OUT SELF) ; faux : pas un nom interne de methode.
+    virtual bool findMethodByInternal(std::string_view internalName, OperatorSource& out) {
+        (void)internalName; (void)out;
+        return false;
+    }
+    // 1.13.0 (lot J1) : le type `from` va-t-il dans `to` par une MONTEE (meme type, un sous-type vers
+    // un parent EXTENDS, un type vers une interface qu'il implemente) ? Pour DYNAMIC_CAST<to>(objet) :
+    // vrai -> une reference vers l'objet ; faux -> NULL. Par defaut : seulement le meme nom.
+    virtual bool typeConvertsTo(std::string_view from, std::string_view to) {
+        (void)from; (void)to;
+        return false;
+    }
     // Le nom canonique d'une variable de l'environnement (un parametre de vue
     // -> son chemin) : une reference le garde, pour viser la meme chose ailleurs.
     virtual std::string canonicalName(std::string_view name) { return std::string(name); }

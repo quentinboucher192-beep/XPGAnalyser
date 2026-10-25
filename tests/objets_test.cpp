@@ -13,9 +13,11 @@
 // =============================================================================
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiMethods.hpp"
+#include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/hmi/HmiTypes.hpp"
 #include "../src/hmi/HmiTypeRegistry.hpp"
+#include "../src/sim/Interpreter.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -322,8 +324,9 @@ void modeleHelpers() {
     check(resolveMethod(p, "T_PompeDoublee", "EnDefaut", mc) && mc.selfType == "T_PompeDoublee" && !mc.function.empty(),
           "resolveMethod(T_PompeDoublee, EnDefaut) trouve l'OVERRIDE");
     MethodCall mc2;
-    check(resolveMethod(p, "T_PompeDoublee", "Demarrer", mc2) && mc2.selfType == "T_Pompe",
-          "resolveMethod(T_PompeDoublee, Demarrer) remonte a T_Pompe");
+    check(resolveMethod(p, "T_PompeDoublee", "Demarrer", mc2) && mc2.selfType == "T_Pompe"
+              && mc2.function.find("SUPER") == std::string::npos,
+          "resolveMethod(T_PompeDoublee, Demarrer) resout l'heritee (SELF : T_Pompe, le definisseur)");
     check(!resolveMethod(p, "T_Pompe", "Inexistante", mc2), "resolveMethod echoue sur une methode inconnue");
 
     // interfaceMisses : conforme vs manquant (nomme).
@@ -355,4 +358,156 @@ void modeleHelpers() {
 }
 
 void controle() {}
-void moteur() {}
+
+// =============================================================================
+//  4) LE MOTEUR : une methode tourne en simulation (SELF, procedure/fonction,
+//     appel sur variable/case/membre compose), l'heritage, le dispatch virtuel.
+// =============================================================================
+namespace {
+std::string shown(const sim::Value& v) { return v.type() == sim::Type::String ? v.asString() : v.display(); }
+
+// Un projet, un script "Essai", et ce qu'il laisse dans la variable `readVar` (ou "#").
+std::string run(Project& p, const std::string& scriptBody, std::string* err = nullptr, const std::string& readVar = "R") {
+    Script s;
+    s.id = p.allocate();
+    s.name = "Essai";
+    s.event = "Appel";
+    s.body = scriptBody;
+    p.programs.scripts.push_back(s);
+    View v = makeView(p, "Vue_Essai");
+    p.views.push_back(v);
+    p.config.startView = p.views.back().id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    std::string e;
+    const bool ok = rt.callScript("Essai", 0.2, &e);
+    if (err) *err = ok ? std::string{} : e;
+    sim::Value out;
+    return rt.environment().read(readVar, out) ? shown(out) : std::string("#");
+}
+
+// Un projet "compteur" : T_Compteur { N : INT } avec Incr() (procedure, ecrit SELF.N)
+// et Double() : INT (fonction, lit SELF.N).
+Project counterProject() {
+    Project p;
+    HmiType& c = addType(p, "T_Compteur");
+    c.members.push_back(member("N", "INT"));
+    c.methods.push_back(method(p, "Incr", {}, "N := N + 1;"));
+    c.methods.push_back(method(p, "Double", "INT", "Double := SELF.N * 2;"));
+    return p;
+}
+
+// T_Forme { Cote } VIRTUAL Aire():REAL = Cote*Cote ; T_Cube EXTENDS T_Forme OVERRIDE Aire = SUPER*6.
+Project formeCubeProject() {
+    Project p;
+    HmiType& f = addType(p, "T_Forme");
+    f.members.push_back(member("Cote", "REAL"));
+    f.methods.push_back(method(p, "Aire", "REAL", "Aire := SELF.Cote * SELF.Cote;", Visibility::Public, true));
+    HmiType& cube = addType(p, "T_Cube");
+    cube.base = "T_Forme";
+    cube.methods.push_back(method(p, "Aire", "REAL", "Aire := SUPER.Aire() * 6.0;", Visibility::Public, false));
+    return p;
+}
+} // namespace
+
+void moteur() {
+    std::printf("-- moteur : SELF, procedure/fonction, variable/case/membre, heritage, dispatch\n");
+    std::string err;
+
+    // 1) procedure qui ecrit SELF, sur une variable ; 2) fonction qui lit SELF.
+    {
+        Project p = counterProject();
+        addVar(p, "c", "T_Compteur");
+        addVar(p, "R", "INT");
+        const std::string r = run(p, "c.Incr();\nc.Incr();\nc.Incr();\nR := c.N;", &err);
+        check(r == "3", "une procedure ecrit SELF (c.Incr() x3 -> c.N = 3) [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+    {
+        Project p = counterProject();
+        addVar(p, "c", "T_Compteur", "");
+        addVar(p, "R", "INT");
+        const std::string r = run(p, "c.Incr();\nc.Incr();\nR := c.Double();", &err);
+        check(r == "4", "une fonction lit SELF (c.Double() = 2*N = 4) [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+
+    // 3) appel sur une case de tableau.
+    {
+        Project p = counterProject();
+        addVar(p, "T", "ARRAY[0..2] OF T_Compteur");
+        addVar(p, "R", "INT");
+        const std::string r = run(p, "T[1].Incr();\nT[1].Incr();\nR := T[1].N;", &err);
+        check(r == "2", "appel sur une case de tableau (T[1].Incr() x2 -> 2) [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+
+    // 4) appel sur un membre compose.
+    {
+        Project p = counterProject();
+        HmiType& box = addType(p, "T_Boite");
+        box.members.push_back(member("Compteur", "T_Compteur"));
+        addVar(p, "b", "T_Boite");
+        addVar(p, "R", "INT");
+        const std::string r = run(p, "b.Compteur.Incr();\nb.Compteur.Incr();\nR := b.Compteur.N;", &err);
+        check(r == "2", "appel sur un membre compose (b.Compteur.Incr() x2 -> 2) [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+
+    // 5) EXTENDS : la methode heritee tourne sur le sous-type ; SELF voit les membres du parent.
+    {
+        Project p = counterProject();
+        HmiType& d = addType(p, "T_CompteurNomme");
+        d.base = "T_Compteur";
+        d.members.push_back(member("Nom", "STRING"));
+        addVar(p, "d", "T_CompteurNomme");
+        addVar(p, "R", "INT");
+        const std::string r = run(p, "d.Incr();\nd.Incr();\nd.Incr();\nR := d.Double();", &err);
+        check(r == "6", "methode heritee sur un sous-type (d.Incr() x3, d.Double() = 6) [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+
+    // 6) OVERRIDE + SUPER + dispatch virtuel a travers une REF_TO (le scenario documente :
+    //    une liste heterogene de REF_TO, chaque e^.Aire() part sur le type REEL).
+    {
+        Project p = formeCubeProject();
+        addVar(p, "carre", "T_Forme", "");
+        addVar(p, "cube", "T_Cube", "");
+        addVar(p, "L", "LIST OF REF_TO T_Forme");
+        addVar(p, "R", "REAL");
+        // carre.Cote=2 -> Aire=4 ; cube.Cote=2 -> Aire = SUPER(4)*6 = 24 ; total 28.
+        const std::string body =
+            "carre.Cote := 2.0;\ncube.Cote := 2.0;\n"
+            "LIST_ADD(L, REF(carre));\nLIST_ADD(L, REF(cube));\n"
+            "R := 0.0;\nFOR EACH e IN L DO\n  R := R + e^.Aire();\nEND_FOR;";
+        const std::string r = run(p, body, &err);
+        check(r == "28", "dispatch virtuel + SUPER sur une liste heterogene : 4 (carre) + 24 (cube) = 28 ["
+              + r + (err.empty() ? "" : " err=" + err) + "]");
+        // le carre seul (type reel T_Forme) : la virtuelle de base.
+        Project p1 = formeCubeProject();
+        addVar(p1, "carre", "T_Forme", "");
+        addVar(p1, "L", "LIST OF REF_TO T_Forme");
+        addVar(p1, "R", "REAL");
+        const std::string r1 = run(p1, "carre.Cote := 3.0;\nLIST_ADD(L, REF(carre));\nR := L[0]^.Aire();", &err);
+        check(r1 == "9", "dispatch : un T_Forme donne sa virtuelle Aire = 9 [" + r1 + (err.empty() ? "" : " err=" + err) + "]");
+    }
+
+    // 7) DYNAMIC_CAST<T>(e^) : rend une reference si le type reel va, NULL sinon.
+    {
+        Project p = formeCubeProject();
+        addVar(p, "cube", "T_Cube", "");
+        addVar(p, "carre", "T_Forme", "");
+        addVar(p, "L", "LIST OF REF_TO T_Forme");
+        addVar(p, "R", "REAL");
+        // cube^ EST un T_Cube : DYNAMIC_CAST<T_Cube> reussit ; carre^ n'en est pas un : NULL.
+        const std::string body =
+            "cube.Cote := 5.0;\ncarre.Cote := 1.0;\n"
+            "LIST_ADD(L, REF(cube));\nLIST_ADD(L, REF(carre));\n"
+            "R := 0.0;\n"
+            "VAR c : REF_TO T_Cube; END_VAR\n"
+            "FOR EACH e IN L DO\n"
+            "  c := DYNAMIC_CAST<T_Cube>(e^);\n"
+            "  IF c <> NULL THEN R := R + c^.Cote; END_IF;\n"
+            "END_FOR;";
+        const std::string r = run(p, body, &err);
+        check(r == "5", "DYNAMIC_CAST<T_Cube> : seul le cube passe (Cote 5), le carre donne NULL ["
+              + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+}

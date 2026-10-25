@@ -348,6 +348,8 @@ struct Walker {
         a.path = path;
         a.spec = s;
         a.typeName = ty->name;
+        // 1.13.0 (lot J1) : l'heritage - la structure entiere (la tranche du parent d'abord), pour la place Modbus.
+        const auto allMems = membersOf(p, ty->name);
         // 1.12.10 (lot F) : LA VALEUR INITIALE D'UNE STRUCTURE, (Marche := TRUE, Consigne := 12.5) - les membres
         // nommes la prennent, les autres gardent celle du type. Ce qui ne s'applique pas (un membre inconnu, un
         // texte pour un REAL) se dit (notes) et garde la valeur du type. "0" (la valeur d'une variable neuve) : rien.
@@ -359,14 +361,14 @@ struct Walker {
                 given.clear();
             }
             for (const auto& [name, value] : given) {
-                const bool member = std::any_of(ty->members.begin(), ty->members.end(), [&](const TypeMember& m) { return sameText(m.name, name); });
+                const bool member = std::any_of(allMems.begin(), allMems.end(), [&](const TypeMember& m) { return sameText(m.name, name); });
                 if (member) continue;
                 std::string names;
-                for (std::size_t i = 0; i < ty->members.size() && i < 6; ++i) names += (i ? ", " : "") + ty->members[i].name;
+                for (std::size_t i = 0; i < allMems.size() && i < 6; ++i) names += (i ? ", " : "") + allMems[i].name;
                 note(path + " : membre inconnu \xC2\xAB " + name + " \xC2\xBB (" + ty->name + " : " + names + ")");
             }
         }
-        for (const auto& m : ty->members) {
+        for (const auto& m : allMems) {
             if (!out.error.empty()) break;
             std::string init = m.initial;
             for (const auto& [name, value] : given) {
@@ -660,8 +662,6 @@ std::string cycleOf(const Project& p, std::string_view typeName) {
             }
         if (path.size() > 64) return;
         path.push_back(ty.name);
-        // 1.13.0 (lot J1) : un cycle d'heritage (T_A EXTENDS T_B EXTENDS T_A) - le parent d'abord.
-        if (const HmiType* base = ty.base.empty() ? nullptr : p.hmiTypeByName(ty.base)) visit(*base);
         for (const auto& m : ty.members) {
             // 1.12.4 : un membre objet (LIST OF T_Noeud) : les types qu'il nomme.
             for (const HmiType* sub : namedTypesOf(p, m.type)) visit(*sub);
