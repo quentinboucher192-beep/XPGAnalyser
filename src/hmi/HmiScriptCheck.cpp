@@ -1964,6 +1964,13 @@ private:
             }
             reportTok(j + 1, e, Finding::Severity::Warning, m);
         }
+        // 1.13.0 (lot J6) : le verdict d'unite de l'affectation - meme famille : converti d'office (une info),
+        // ou EN exige si l'option « Unites strictes » ; familles differentes : un refus (une erreur).
+        {
+            const bool strict = sc_.project && sc_.project->config.strictUnits;
+            for (const auto& u : exprcheck::assignmentUnit(typeContext(), target, textOf(j + 1, e), strict))
+                reportTok(j + 1, e, u.warning ? Finding::Severity::Warning : Finding::Severity::Error, u.message);
+        }
         // Un nombre ou un booleen dans un texte : evident quand c'est un litteral seul.
         if (kind == Kind::Text && e == j + 2 && !atEnd(j + 1)) {
             const Tok& v = toks_[j + 1];

@@ -42,6 +42,7 @@
 #include "HmiDisplay.hpp"      // lot 13
 #include "HmiMethods.hpp"      // 1.13.0 (lot J1) : les controles des objets (EXTENDS, OVERRIDE, interfaces)
 #include "HmiTypes.hpp"        // lot 16
+#include "HmiUnits.hpp"        // 1.13.0 (lot J6) : les unites de mesure (type numerique, symbole connu)
 #include "HmiTypeForms.hpp"    // 1.12.2 : la valeur initiale d'une variable objet
 #include "HmiRanges.hpp"       // 1.12.10 (lot F) : la plage et les seuils de la variable
 #include "HmiEnums.hpp"        // 1.10 (S1) : knownType connait les enumerations
@@ -468,6 +469,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                     if (assignsLambda(text, n)) lambdaHeld.insert(upperCopy(n));
             });
     }
+    const units::Catalog unitCat(p.config);   // 1.13.0 (lot J6) : la bibliotheque des unites (fournies + projet)
     for (const auto& var : p.programs.variables) {
         const std::string key = [&] { std::string u = var.name; for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c))); return u; }();
         if (!isIdentifier(var.name)) add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, "nom invalide : '" + var.name + "'");
@@ -520,6 +522,13 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
             add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, var.name + " : " + why);
         if (!var.bound() && !var.places.empty())
             add(out, S::Info, "Variable IHM", kNoId, kNoId, var.name, var.name + " : des adresses de membres, mais la variable n'est li\xC3\xA9" "e \xC3\xA0 aucun \xC3\xA9quipement");
+        // 1.13.0 (lot J6) : une unite ne va que sur un nombre, et son symbole doit etre connu.
+        if (!var.unit.empty()) {
+            if (!units::typeTakesUnit(var.type))
+                add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, var.name + " : une unit\xC3\xA9 ne va que sur un nombre (ici " + var.type + ")");
+            else if (!unitCat.known(var.unit))
+                add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, var.name + " : unit\xC3\xA9 inconnue '" + var.unit + "'");
+        }
     }
     // Lot 16 : les types IHM - noms, membres, types des membres, cycles.
     std::set<std::string> typeNames;
@@ -564,6 +573,13 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                     const auto e = Expression::compile(m.initial);
                     if (!e.valid()) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : valeur initiale " + m.initial + " : " + e.error());
                 }
+            }
+            // 1.13.0 (lot J6) : une unite ne va que sur un nombre (sur un ARRAY OF REAL : l'element), symbole connu.
+            if (!m.unit.empty()) {
+                if (!units::typeTakesUnit(m.type))
+                    add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : une unit\xC3\xA9 ne va que sur un nombre (ici " + m.type + ")");
+                else if (!unitCat.known(m.unit))
+                    add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : unit\xC3\xA9 inconnue '" + m.unit + "'");
             }
         }
         if (const auto cycle = types::cycleOf(p, ty.name); !cycle.empty())
