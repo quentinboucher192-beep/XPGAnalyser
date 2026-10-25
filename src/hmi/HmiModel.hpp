@@ -852,6 +852,11 @@ struct HmiFunction {
     // 1.12.16 : une fonction d'une vue (ou d'une popup) : publique, elle s'appelle d'ailleurs par
     // Vue.Fonction(...) ; privee, de la vue seulement. Sans effet sur une fonction du projet ou d'un symbole.
     Visibility  visibility{Visibility::Public};
+    // 1.13.0 (lot generiques) : ses types generiques (TEMPLATE <T : ANY_NUM, U>) - comme HmiType::generics et
+    //  View::generics. Vide : une fonction ordinaire (compatibilite totale). Un parametre, le retour ou une locale
+    //  peut etre de type T ; a l'appel, T se deduit des arguments (ou se donne : Max<INT>(...)), et le moteur le
+    //  verifie contre sa contrainte. Une fonction de projet, de vue, de popup ou de symbole peut en porter.
+    std::vector<GenericParam> generics{};
     bool operator==(const HmiFunction&) const = default;
 };
 

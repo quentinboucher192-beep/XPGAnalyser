@@ -425,12 +425,16 @@ std::string serializeView(const View& v) {
     for (const auto& o : v.operators) s += serializeOperator("operateur_symbole", o);   // 1.10
     // 1.11.10 : les fonctions d'un symbole, leur corps sur la ligne (une version plus ancienne les ignore).
     // 1.12.16 : celles d'une vue ou d'une popup aussi ; une privee le dit (portee=privee).
-    for (const auto& fn : v.functions)
+    for (const auto& fn : v.functions) {
         s += "fonction_symbole" + fieldInt("id", fn.id) + field("nom", fn.name) + field("retour", fn.returnType)
            + (fn.isVirtual ? fieldBool("virtuelle", true) : std::string{})
            + (fn.visibility == Visibility::Private ? fieldBare("portee", "privee") : std::string{})
-           + (fn.description.empty() ? std::string{} : field("description", fn.description)) + field("corps", fn.body) + "\n"
-           + serializeDeclarations(fn.decls);                                     // 1.11.18 (lot 3)
+           + (fn.description.empty() ? std::string{} : field("description", fn.description)) + field("corps", fn.body) + "\n";
+        // 1.13.0 (format 30) : ses generiques (TEMPLATE <T>), sous la fonction et avant ses declarations.
+        for (const auto& g : fn.generics)
+            s += "generique" + field("nom", g.name) + (g.constraint.empty() ? std::string{} : field("contrainte", g.constraint)) + "\n";
+        s += serializeDeclarations(fn.decls);                                     // 1.11.18 (lot 3)
+    }
     // 1.12.16 : les constantes de la vue, sur les lignes "declaration" qui suivent leur porteur.
     if (!v.constants.empty()) s += "constantes_vue\n" + serializeDeclarations(v.constants);
     s += "grille" + fieldBool("visible", v.grid.visible) + fieldInt("pas", v.grid.step)
@@ -538,6 +542,9 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
     int fileFormat = kFormatVersion;     // "# IHM Studio - vue IHM (format 6)" : l'en-tete le dit (avant la 1.12.20 : "# XpgAnalyzer - ...")
     Object* current = nullptr;
     std::vector<Declaration>* holder = nullptr;   // 1.11.18 (lot 3) : le porteur des lignes "declaration" qui suivent
+    // 1.13.0 : le porteur des lignes "generique" qui suivent - la vue (ou le symbole) elle-meme, puis une de ses
+    //  fonctions (fonction_symbole) ; comme `holder` pour les declarations.
+    std::vector<GenericParam>* genericsHolder = &v.generics;
     std::size_t lineNo = 0;
     std::size_t pos = 0;
     auto warn = [&](std::string w) { if (report) report->warnings.push_back(std::move(w)); };
@@ -562,7 +569,8 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
         if (!parseRecord(line, r, error))
             return core::fail(core::ErrorCode::XmlMalformed,
                               "ligne " + std::to_string(lineNo) + " : " + error);
-        if (r.word != "declaration" && r.word != "locale") holder = nullptr;
+        // 1.13.0 : une ligne "generique" ne coupe pas la suite des "declaration" d'une fonction (elles se suivent).
+        if (r.word != "declaration" && r.word != "locale" && r.word != "generique") holder = nullptr;
         if (r.word == "declaration") {                                // 1.11.18 (lot 3)
             Declaration d;
             if (!holder || !parseDeclaration(r, d)) { warn("ligne " + std::to_string(lineNo) + " : " + declarationIgnored(holder)); continue; }
@@ -608,11 +616,11 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             if (const auto* m = r.get("mode"); m && !m->empty()) prm.mode = params::paramModeFrom(*m);
             if (prm.name.empty()) { warn("ligne " + std::to_string(lineNo) + " : param\xC3\xA8tre sans nom"); continue; }
             v.params.push_back(std::move(prm));
-        } else if (r.word == "generique") {                           // 1.12.20 (lot G)
+        } else if (r.word == "generique") {                           // 1.12.20 (lot G) ; 1.13.0 : ou d'une fonction
             GenericParam g;
             g.name = toStr(r.get("nom"));
             g.constraint = toStr(r.get("contrainte"));
-            if (!g.name.empty()) v.generics.push_back(std::move(g));
+            if (!g.name.empty() && genericsHolder) genericsHolder->push_back(std::move(g));
         } else if (r.word == "alarme_symbole") {                      // 1.9
             AlarmDef a;
             a.id = static_cast<Id>(toInt(r.get("id"), 0));
@@ -646,8 +654,10 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             if (fn.name.empty()) { warn("ligne " + std::to_string(lineNo) + " : fonction de symbole sans nom"); continue; }
             v.functions.push_back(std::move(fn));
             holder = &v.functions.back().decls;
+            genericsHolder = &v.functions.back().generics;            // 1.13.0 : ses generiques suivent
         } else if (r.word == "constantes_vue") {                      // 1.12.16 : les constantes de la vue suivent
             holder = &v.constants;
+            genericsHolder = nullptr;
         } else if (r.word == "redefinition") {                        // 1.11.10
             if (!current) { warn("ligne " + std::to_string(lineNo) + " : red\xC3\xA9" "finition hors d'un objet"); continue; }
             FunctionOverride fo;
@@ -871,8 +881,15 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     // 1.12.20 (lot G) : le format 28 n'ajoute que les generiques (une structure, un symbole, une popup) ; sans eux, 27...
     const bool generics = std::any_of(p.programs.types.begin(), p.programs.types.end(), [](const HmiType& t) { return !t.generics.empty(); })
                        || std::any_of(p.views.begin(), p.views.end(), [](const View& v) { return !v.generics.empty(); });
-    const int format = generics ? kFormatVersion : callbackTypes ? 27 : viewMembers ? 26 : tableGestures ? 25 : shortcuts ? 24 : declared ? 23
-                     : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
+    // 1.13.0 : le format 30 n'ajoute que les generiques d'une fonction (TEMPLATE <T>) - les sous-enregistrements
+    // generique sous une fonction ou une fonction_symbole ; sans eux, 28 (ou moins) : une 1.12.x ouvre le projet inchange.
+    const auto fnGeneric = [](const std::vector<HmiFunction>& fns) {
+        return std::any_of(fns.begin(), fns.end(), [](const HmiFunction& f) { return !f.generics.empty(); });
+    };
+    const bool funcGenerics = fnGeneric(p.programs.functions)
+                           || std::any_of(p.views.begin(), p.views.end(), [&](const View& v) { return fnGeneric(v.functions); });
+    const int format = funcGenerics ? kFormatVersion : generics ? 28 : callbackTypes ? 27 : viewMembers ? 26 : tableGestures ? 25 : shortcuts ? 24
+                     : declared ? 23 : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# IHM Studio - projet IHM (format " + std::to_string(format) + ")\n";
     index += "ihm" + fieldInt("format", format) + fieldInt("prochain_id", p.nextId) + "\n";
@@ -1007,8 +1024,11 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         const std::string file = scriptFileName(named);
         files.push_back({"fonctions/" + file, textBytes(f.body)});
         index += "fonction" + fieldInt("id", f.id) + field("nom", f.name) + field("retour", f.returnType)
-               + field("fichier", "fonctions/" + file) + field("description", f.description) + "\n"
-               + serializeDeclarations(f.decls);                                            // 1.11.18 (lot 3)
+               + field("fichier", "fonctions/" + file) + field("description", f.description) + "\n";
+        // 1.13.0 (format 30) : ses generiques (TEMPLATE <T>), sous la fonction et avant ses declarations.
+        for (const auto& g : f.generics)
+            index += "generique" + field("nom", g.name) + (g.constraint.empty() ? std::string{} : field("contrainte", g.constraint)) + "\n";
+        index += serializeDeclarations(f.decls);                                            // 1.11.18 (lot 3)
     }
     // Lot 4 : alarmes, recettes, securite, historiques.
     for (const auto& a : p.alarms)
@@ -1342,6 +1362,8 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     std::vector<std::pair<Id, std::string>> files;
     std::map<Id, std::string> viewFolders;                          // lot 21 : le dossier de chaque vue (l'index le dit)
     std::vector<Declaration>* holder = nullptr;                     // 1.11.18 (lot 3) : le porteur des lignes "declaration"
+    // 1.12.20 : le porteur des lignes "generique" - le dernier type IHM ; 1.13.0 : ou la derniere fonction du projet.
+    std::vector<GenericParam>* genericsHolder = nullptr;
     while (pos <= index.size()) {
         const std::size_t eol = index.find('\n', pos);
         std::string_view line(index.data() + pos, (eol == std::string::npos ? index.size() : eol) - pos);
@@ -1355,7 +1377,8 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
         std::string error;
         if (!parseRecord(line, r, error))
             return core::fail(core::ErrorCode::XmlMalformed, "ihm.txt ligne " + std::to_string(lineNo) + " : " + error);
-        if (r.word != "declaration" && r.word != "locale") holder = nullptr;
+        // 1.13.0 : une ligne "generique" ne coupe pas la suite des "declaration" d'une fonction.
+        if (r.word != "declaration" && r.word != "locale" && r.word != "generique") holder = nullptr;
         if (r.word == "declaration") {                                 // 1.11.18 (lot 3)
             Declaration d;
             if (!holder || !parseDeclaration(r, d)) {
@@ -1512,6 +1535,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             ty.description = toStr(r.get("description"));
             ty.folder = toStr(r.get("dossier"));                    // lot 21
             p.programs.types.push_back(std::move(ty));
+            genericsHolder = &p.programs.types.back().generics;     // 1.12.20 : ses generiques suivent
         } else if (r.word == "membre") {
             if (p.programs.types.empty()) {
                 if (report) report->warnings.push_back("membre sans type IHM : ignor\xC3\xA9");
@@ -1531,11 +1555,11 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             }
             p.programs.types.back().kind = typeKindFromKey(toStr(r.get("genre")));
             p.programs.types.back().signature = toStr(r.get("signature"));      // 1.12.20 : un type rappel
-        } else if (r.word == "generique") {                           // 1.12.20 (lot G) : un generique du dernier type
+        } else if (r.word == "generique") {                           // 1.12.20 (lot G) : d'un type ; 1.13.0 : ou d'une fonction
             GenericParam g;
             g.name = toStr(r.get("nom"));
             g.constraint = toStr(r.get("contrainte"));
-            if (!p.programs.types.empty() && !g.name.empty()) p.programs.types.back().generics.push_back(std::move(g));
+            if (!g.name.empty() && genericsHolder) genericsHolder->push_back(std::move(g));
         } else if (r.word == "valeur_enum") {                         // 1.10 (E) : une valeur d'enumeration
             if (p.programs.types.empty()) {
                 if (report) report->warnings.push_back("valeur d'\xC3\xA9num\xC3\xA9ration sans type IHM : ignor\xC3\xA9" "e");
@@ -1591,6 +1615,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
                 report->warnings.push_back("fonction '" + f.name + "' : fichier " + file + " absent");
             p.programs.functions.push_back(std::move(f));
             holder = &p.programs.functions.back().decls;
+            genericsHolder = &p.programs.functions.back().generics;   // 1.13.0 : ses generiques suivent
         } else if (r.word == "alarme") {
             AlarmDef a;
             a.id = static_cast<Id>(toInt(r.get("id"), 0));
