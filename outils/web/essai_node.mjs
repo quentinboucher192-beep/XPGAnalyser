@@ -121,6 +121,12 @@ for (let i = 0; i < 20; i++) { t += 0.1; ex.xpg_tick(t); }
 const after = parseInt(read('Compteur'), 10) || 0;
 check(after > before, 'le script cyclique fait monter Compteur (' + before + ' -> ' + after + ')');
 
+// 1.13.0 (lot J3) : JSON et std::regex tournent DANS la page (le script Donnees, cyclique).
+check(read('Gaz') === 'Helium', 'JSON_LIRE dans la page : Gaz = ' + read('Gaz') + ' (attendu Helium)');
+check(parseFloat(read('Pression').replace(',', '.')) === 7.5, 'JSON_NOMBRE dans la page : Pression = ' + read('Pression') + ' (attendu 7.5)');
+// Un motif invalide leve E_REGEX, rattrape par TRY : la page ne plante pas (std::regex sans exceptions en WASM).
+check(read('CodeErr') === 'E_REGEX', 'un regex invalide leve E_REGEX, rattrape, sans planter la page (CodeErr = ' + read('CodeErr') + ')');
+
 check(write('Consigne', '25,5') === 1, 'une consigne se saisit (Consigne := 25,5)');
 check(read('Consigne') === '25.5', 'la consigne se relit (' + read('Consigne') + ')');
 

@@ -9,7 +9,12 @@ variable id=11 nom="Consigne" type="REAL" initiale="20.0" description="une consi
 variable id=12 nom="Secondes" type="DINT" initiale="0" description="compte par le script detache"
 variable id=13 nom="Marche" type="BOOL" initiale="0" description="demarre le comptage detache"
 variable id=17 nom="Vitesse" type="INT" initiale="0" description="reglee par le curseur"
+variable id=14 nom="Gaz" type="STRING" initiale="" description="lu d'un JSON par le script Donnees (1.13.0)"
+variable id=15 nom="Pression" type="REAL" initiale="0.0" description="lue d'un JSON par le script Donnees (1.13.0)"
+variable id=16 nom="RegexOk" type="BOOL" initiale="0" description="un regex teste par le script Donnees (1.13.0)"
+variable id=18 nom="CodeErr" type="STRING" initiale="" description="le code d'une erreur regex rattrapee (1.13.0)"
 script id=20 nom="Montee" langage=ST evenement=Cyclique periode=100 surveille="" fichier="scripts/0020-Montee.st" description="Compteur + 1 a chaque cycle"
+script id=24 nom="Donnees" langage=ST evenement=Cyclique periode=100 surveille="" fichier="scripts/0024-Donnees.st" description="JSON et regex dans la page (1.13.0, lot J3)"
 script id=21 nom="Chrono" langage=ST evenement=Demarrage periode=0 surveille="" fichier="scripts/0021-Chrono.st" description="compte les secondes, detache, avec WAIT" detache=1
 alarme id=30 nom="Seuil" condition="Compteur > 50" message="Compteur au-dessus de 50" priorite=2 categorie="Alarme" groupe="A" acquittement=1 delai=0 description="" consigne="Souffler"
 fin

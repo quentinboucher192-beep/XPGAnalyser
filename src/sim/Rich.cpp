@@ -13,6 +13,12 @@ std::string upperOf(std::string_view s) {
     for (auto& c : out) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     return out;
 }
+// 1.13.0 : le genre JSON d'une valeur simple, pour les messages d'erreur ANY -> concret.
+std::string jsonScalarWord(Type t) {
+    if (t == Type::String) return "un texte";
+    if (t == Type::Bool) return "un bool\xC3\xA9" "en";
+    return "un nombre";
+}
 } // namespace
 
 std::string TypeDesc::text() const {
@@ -50,8 +56,18 @@ std::string TypeDesc::text() const {
             if (element) s += " : " + element->text();
             return s;
         }
+        case Kind::Any: return "ANY";             // 1.13.0 : une valeur JSON / dynamique
     }
     return "?";
+}
+
+TypeRef anyType() {
+    static const TypeRef t = [] {
+        auto d = std::make_shared<TypeDesc>();
+        d->kind = TypeDesc::Kind::Any;
+        return TypeRef(d);
+    }();
+    return t;
 }
 
 TypeRef callbackType(std::vector<std::pair<std::string, TypeRef>> params, TypeRef result) {
@@ -101,6 +117,7 @@ bool TypeDesc::dynamic() const noexcept {
     switch (kind) {
         case Kind::Map:
         case Kind::List:
+        case Kind::Any:                        // 1.13.0 : une valeur JSON vit dans la memoire de l'IHM (pas de place Modbus)
         case Kind::Callback: return true;      // 1.12.19 : un rappel vit dans la memoire de l'IHM
         case Kind::Array: return element && element->dynamic();
         case Kind::Struct:
@@ -213,6 +230,7 @@ bool sameType(const TypeDesc& a, const TypeDesc& b) noexcept {
                 if (!a.members[i].second || !b.members[i].second || !sameType(*a.members[i].second, *b.members[i].second)) return false;
             return true;
         case TypeDesc::Kind::Callback: return callbackFits(a, b);      // 1.12.19 : la meme signature
+        case TypeDesc::Kind::Any: return true;                         // 1.13.0 : toute valeur dynamique en vaut une autre
     }
     return false;
 }
@@ -234,6 +252,7 @@ ObjRef makeObj(const TypeRef& type) {
             o->items.reserve(type->members.size());
             for (const auto& m : type->members) o->items.push_back(makeObj(m.second));
             break;
+        case TypeDesc::Kind::Any: o->bound = true; break;   // 1.13.0 : une boite ANY neuve est JSON null (bound, sans charge)
         default: break;                  // une liste nait vide
     }
     return o;
@@ -266,6 +285,44 @@ bool assignObj(Obj& into, const Obj& from, std::string* why) {
         return false;
     }
     const auto& t = *into.type;
+    // 1.13.0 : une case ANY (une boite JSON) accepte toute valeur et en porte une copie (son vrai type).
+    if (t.kind == TypeDesc::Kind::Any) {
+        into.textKeys.clear();
+        into.intKeys.clear();
+        into.items.clear();
+        if (from.type->kind == TypeDesc::Kind::Any) {
+            into.bound = from.bound;
+            if (!from.items.empty() && from.items.front()) into.items.push_back(deepCopy(*from.items.front()));
+        } else {
+            into.bound = true;
+            into.items.push_back(deepCopy(from));
+        }
+        return true;
+    }
+    // 1.13.0 : une valeur ANY (JSON) vers une case concrete : conversion controlee a l'execution (DYNAMIC_CAST).
+    if (from.type->kind == TypeDesc::Kind::Any) {
+        const Obj* payload = from.items.empty() ? nullptr : from.items.front().get();
+        if (!payload || !payload->type) {
+            if (why) *why = std::string("la valeur JSON est ") + (from.bound ? "nulle" : "absente") + " : elle ne va pas dans un " + t.text();
+            return false;
+        }
+        if (t.kind == TypeDesc::Kind::Scalar) {
+            if (payload->type->kind != TypeDesc::Kind::Scalar) {
+                if (why) *why = "la valeur JSON est " + payload->type->text() + ", pas une valeur simple";
+                return false;
+            }
+            const Type want = t.scalar, got = payload->value.type();
+            const bool wText = want == Type::String, gText = got == Type::String;
+            const bool wBool = want == Type::Bool, gBool = got == Type::Bool;
+            if (wText != gText || wBool != gBool) {
+                if (why) *why = "la valeur JSON est " + jsonScalarWord(got) + ", pas " + jsonScalarWord(want);
+                return false;
+            }
+            into.value.assignFrom(payload->value);
+            return true;
+        }
+        return assignObj(into, *payload, why);
+    }
     if (t.kind == TypeDesc::Kind::Scalar) {
         if (from.type->kind != TypeDesc::Kind::Scalar) {
             if (why) *why = "un " + from.type->text() + " ne va pas dans un " + t.text();
@@ -346,6 +403,12 @@ bool deepEquals(const Obj& a, const Obj& b) {
             if (a.bound != b.bound) return false;
             if (!a.bound) return true;
             return a.lambda ? a.lambda == b.lambda : !b.lambda && upperOf(a.callee) == upperOf(b.callee);
+        case TypeDesc::Kind::Any: {                           // 1.13.0 : meme etat (null / absent) et meme charge
+            const bool an = a.items.empty(), bn = b.items.empty();
+            if (an != bn) return false;
+            if (an) return a.bound == b.bound;                // deux « vides » : null == null, absent == absent
+            return a.items.front() && b.items.front() && deepEquals(*a.items.front(), *b.items.front());
+        }
         default: return false;
     }
 }
@@ -404,6 +467,9 @@ std::string display(const Obj& o) {
             if (!o.bound) return "NULL";
             if (o.lambda) return "\xCE\xBB " + (o.lambdaWhere.empty() ? std::string("LAMBDA") : o.lambdaWhere);
             return "\xE2\x86\x92 " + o.callee;
+        case TypeDesc::Kind::Any:                            // 1.13.0 : une valeur JSON (sa charge, ou null / absent)
+            if (o.items.empty()) return o.bound ? "null" : "(absent)";
+            return o.items.front() ? display(*o.items.front()) : std::string("null");
     }
     return "?";
 }
@@ -486,6 +552,9 @@ bool literalText(const Obj& o, std::string& out) {
             out = s + ")";
             return true;
         }
+        case TypeDesc::Kind::Any:                 // 1.13.0 : une valeur JSON s'ecrit comme sa charge (null / absent : non)
+            if (o.items.empty() || !o.items.front()) return false;
+            return literalText(*o.items.front(), out);
         default: return false;
     }
 }

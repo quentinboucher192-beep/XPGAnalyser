@@ -612,6 +612,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(erreurs_test PRIVATE xpg_hmi)
     xpg_add_test_executable(generiques_test tests/generiques_test.cpp)        # 1.13.0 : les fonctions generiques (TEMPLATE <T>)
     xpg_target_link_libraries(generiques_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(donnees_test tests/donnees_test.cpp)              # 1.13.0 (lot J3) : JSON et expressions regulieres, le type ANY
+    xpg_target_link_libraries(donnees_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_natives1127_test tests/hmi_natives1127_test.cpp)   # 1.12.7 : conteneurs, std::numeric, templates, <bit>
     xpg_target_link_libraries(hmi_natives1127_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_setring_test tests/hmi_setring_test.cpp)      # 1.12.7 : SET OF T et RING[N] OF T

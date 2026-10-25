@@ -999,7 +999,8 @@ bool richLocalType(std::string_view type, const std::function<bool(std::string_v
     while (!u.empty() && std::isspace(static_cast<unsigned char>(u.back()))) u.pop_back();
     if (u.empty()) return false;
     // 1.12.2 : LIST OF T, VECTOR OF T, TUPLE(T1, T2...) ; 1.12.19 : CALLBACK (x : REAL) : BOOL.
-    for (std::string_view p : {"ARRAY", "MAP", "REF_TO", "REFERENCE", "POINTER", "STRING", "LIST", "VECTOR", "TUPLE", "CALLBACK"})
+    // 1.13.0 : ANY - une valeur JSON / dynamique (ANY_NUM, ANY_STRUCT... restent des contraintes de TEMPLATE).
+    for (std::string_view p : {"ARRAY", "MAP", "REF_TO", "REFERENCE", "POINTER", "STRING", "LIST", "VECTOR", "TUPLE", "CALLBACK", "ANY"})
         if (u.rfind(p, 0) == 0 && (u.size() == p.size() || !identChar(u[p.size()]))) return true;
     // 1.12.7 : SET OF T, RING[N] OF T (un type IHM nomme SET ou RING reste un nom).
     for (std::string_view p : {"SET", "RING"})
