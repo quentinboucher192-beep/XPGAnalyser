@@ -399,6 +399,43 @@ std::string localDetail(const hmi::LocalVar& l) {
     return l.type + "  \xC2\xB7  " + localSection(l) + (l.initial.empty() ? std::string{} : "  \xC2\xB7  := " + l.initial);
 }
 
+// 1.13.0 : le type `type` nomme-t-il le generique `name` (T, LIST OF T, T_Mesure<T>... - un mot entier) ?
+bool typeNamesGeneric(std::string_view type, const std::string& name) {
+    const std::string u = upper(type), n = upper(name);
+    std::size_t i = 0;
+    while ((i = u.find(n, i)) != std::string::npos) {
+        const bool lb = i == 0 || !(std::isalnum(static_cast<unsigned char>(u[i - 1])) || u[i - 1] == '_');
+        const std::size_t e = i + n.size();
+        const bool rb = e >= u.size() || !(std::isalnum(static_cast<unsigned char>(u[e])) || u[e] == '_');
+        if (lb && rb) return true;
+        i = e;
+    }
+    return false;
+}
+bool typeMentionsAnyGeneric(std::string_view type, const std::vector<hmi::GenericParam>& gens) {
+    for (const auto& g : gens) if (typeNamesGeneric(type, g.name)) return true;
+    return false;
+}
+// 1.13.0 : ce que la fonction rend, pour la liste : "selon T" si le retour est generique, sinon le type ecrit.
+std::string functionReturnLabel(const hmi::HmiFunction& f) {
+    if (f.returnType.empty()) return "sans retour";
+    if (typeMentionsAnyGeneric(f.returnType, f.generics)) return "selon " + f.returnType;
+    return f.returnType;
+}
+// 1.13.0 : l'indice de deduction "T . deduit de a" (le premier parametre qui porte chaque generique).
+std::string genericHint(const hmi::HmiFunction& f) {
+    if (f.generics.empty()) return {};
+    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(f), true);
+    std::string out;
+    for (const auto& g : f.generics) {
+        std::string where;
+        for (const auto* in : parts.parameters())
+            if (typeNamesGeneric(in->type, g.name)) { where = in->name; break; }
+        out += (out.empty() ? "" : ", ") + g.name + (where.empty() ? " \xC2\xB7 donn\xC3\xA9" : " \xC2\xB7 d\xC3\xA9" "duit de " + where);
+    }
+    return out;
+}
+
 // Une fonction du projet : "Moyenne(a, b)" s'insere avec le curseur entre
 // les parentheses (apres elles si elle n'a pas de parametre).
 Item userFunctionItem(const hmi::HmiFunction& f, int rank) {
@@ -411,7 +448,8 @@ Item userFunctionItem(const hmi::HmiFunction& f, int rank) {
         while (cut > 0 && (static_cast<unsigned char>(about[cut]) & 0xC0) == 0x80) --cut;   // pas au milieu d'un caractere
         about = about.substr(0, cut) + "...";
     }
-    it.detail = "fonction du projet  \xC2\xB7  " + (f.returnType.empty() ? std::string("sans retour") : f.returnType)
+    it.detail = "fonction du projet  \xC2\xB7  " + functionReturnLabel(f)
+              + (f.generics.empty() ? std::string{} : "  \xC2\xB7  " + genericHint(f))
               + (about.empty() ? std::string{} : "  \xC2\xB7  " + about);
     it.kind = Kind::UserFunction;
     it.rank = rank;
@@ -437,7 +475,8 @@ std::string viewConstantDetail(const hmi::Project& hp, const hmi::View& v, const
 // Une fonction de la vue, prete pour la liste (son appel, le curseur dans les parentheses).
 Item viewFunctionItem(const hmi::View& v, const hmi::HmiFunction& f, int rank) {
     Item it = userFunctionItem(f, rank);
-    it.detail = "fonction de " + v.name + "  \xC2\xB7  " + (f.returnType.empty() ? std::string("sans retour") : f.returnType)
+    it.detail = "fonction de " + v.name + "  \xC2\xB7  " + functionReturnLabel(f)
+              + (f.generics.empty() ? std::string{} : "  \xC2\xB7  " + genericHint(f))
               + (f.visibility == hmi::Visibility::Private ? "  \xC2\xB7  priv\xC3\xA9" "e" : "");
     return it;
 }
@@ -2145,7 +2184,7 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                     if (r < 0) continue;
                     Item it = userFunctionItem(f, r);
                     const bool over = inst && f.isVirtual && hmi::functionOverride(*inst, f.name);
-                    it.detail = "fonction de " + sym->name + "  \xC2\xB7  " + (f.returnType.empty() ? std::string("sans retour") : f.returnType)
+                    it.detail = "fonction de " + sym->name + "  \xC2\xB7  " + functionReturnLabel(f) + (f.generics.empty() ? std::string{} : "  \xC2\xB7  " + genericHint(f))
                               + (over ? "  \xC2\xB7  red\xC3\xA9" "finie ici" : f.isVirtual ? "  \xC2\xB7  virtuelle" : "");
                     push(std::move(it));
                 }
@@ -2365,7 +2404,7 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                     const int r = matchRank(f.name, needle);
                     if (r < 0) continue;
                     Item it = userFunctionItem(f, r * 2);
-                    it.detail = "fonction de " + sym->name + "  \xC2\xB7  " + (f.returnType.empty() ? std::string("sans retour") : f.returnType)
+                    it.detail = "fonction de " + sym->name + "  \xC2\xB7  " + functionReturnLabel(f) + (f.generics.empty() ? std::string{} : "  \xC2\xB7  " + genericHint(f))
                               + (f.isVirtual ? "  \xC2\xB7  virtuelle" : "");
                     push(std::move(it));
                 }

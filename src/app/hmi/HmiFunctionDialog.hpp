@@ -54,6 +54,7 @@ public:
         std::string name, returnType, description;   // returnType vide : une procedure
         bool        pub{true};                        // une vue ou une popup : publique
         bool        isVirtual{false};                 // un symbole : virtuelle
+        std::string generics;                         // 1.13.0 : TEMPLATE <T> (texte : "T", "T : ANY_NUM, K") ; vide : ordinaire
     };
     enum class Owner : std::uint8_t { Project, View, Popup, Symbol };
 
@@ -74,11 +75,14 @@ public:
     [[nodiscard]] const Answer& answer() const noexcept { return answer_; }
     [[nodiscard]] std::string nameProblem() const;  // vide : le nom va
     [[nodiscard]] std::string nameNote() const;     // sous le nom : la regle, ou la surcharge
+    [[nodiscard]] std::string genericsProblem() const;  // vide : la case Generiques va
+    [[nodiscard]] std::string genericsNote() const;     // sous Generiques : ce que c'est
     [[nodiscard]] std::string returnNote() const;   // sous le retour : ce qu'elle rend
     [[nodiscard]] std::string declaration() const;  // FUNCTION Fonction : REAL
     [[nodiscard]] std::string calls() const;        // dans la vue : Fonction()  -  ailleurs : Vue.Fonction()
     [[nodiscard]] std::string explanation() const;
-    [[nodiscard]] bool canConfirm() const { return nameProblem().empty(); }
+    [[nodiscard]] bool canConfirm() const { return nameProblem().empty() && genericsProblem().empty(); }
+    void setGenerics(const std::string& text);     // comme la souris (scripts, essais)
     bool confirm();
     void cancel();
 
@@ -104,6 +108,7 @@ private:
     std::shared_ptr<int> alive_ = std::make_shared<int>(0);
     Body*            body_{nullptr};
     ui::InputText*   nameField_{nullptr};
+    ui::InputText*   genericsField_{nullptr};   // 1.13.0 : TEMPLATE <T>
     ui::InputText*   descField_{nullptr};
     TypeField*       returnField_{nullptr};
     ui::RadioButton* publicRadio_{nullptr};

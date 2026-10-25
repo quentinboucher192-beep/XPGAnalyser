@@ -3356,6 +3356,7 @@ void MainAnalysisScreen::askHmiNewFunction(std::uint64_t symbolView) {
         }
         if (symbolView && !a.pub) (void)pane->setFunctionVisibility(made, false);
         if (symbolView && a.isVirtual) (void)pane->setVirtual(made, true);
+        if (!a.generics.empty()) (void)pane->setGenerics(made, a.generics);   // 1.13.0 : TEMPLATE <T>
     });
 }
 

@@ -62,6 +62,7 @@ public:
     [[nodiscard]] hmi::Id symbol() const noexcept { return symbol_; }
     bool setFunctionVisibility(hmi::Id function, bool pub);   // 1.12.16 : une fonction de vue, publique ou privee
     bool setVirtual(hmi::Id, bool on);
+    bool setGenerics(hmi::Id, const std::string& text);   // 1.13.0 : TEMPLATE <T> ; ses emplois suivent
 
     void refresh();
     [[nodiscard]] hmi::Id selectedFunction() const;

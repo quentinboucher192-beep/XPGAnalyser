@@ -7,6 +7,7 @@
 #include "HmiPaneKit.hpp"
 #include "HmiScriptPanes.hpp"    // 1.10 : placedScriptDiagnostics, squigglesOf
 #include "../../hmi/HmiDecl.hpp"        // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
+#include "../../hmi/HmiGenericEdit.hpp"   // 1.13.0 : changer les generiques d'une fonction fait suivre ses emplois
 #include "../../hmi/HmiScript.hpp"
 #include "../../hmi/HmiScriptCheck110.hpp"   // 1.10 (S1) : un type de retour riche (structure, enumeration, ARRAY, MAP...)
 #include "../../domain/ProjectModel.hpp"
@@ -27,9 +28,15 @@
 namespace {
 // 1.10 (S1) : le type de retour d'une fonction IHM : elementaire, ou riche (ARRAY a N
 // dimensions, MAP, REF_TO, POINTER TO, une structure ou une enumeration du projet).
-bool returnTypeAllowed(const hmi::Project& p, std::string_view t) {
-    return hmi::localTypeSupported(t)
-        || hmi::richLocalType(t, [&p](std::string_view n) { return hmi::lang110::knownHmiType(&p, n); });
+bool returnTypeAllowed(const hmi::Project& p, std::string_view t, const std::vector<hmi::GenericParam>& generics = {}) {
+    const auto known = [&p](std::string_view n) { return hmi::lang110::knownHmiType(&p, n); };
+    if (hmi::localTypeSupported(t) || hmi::richLocalType(t, known)) return true;
+    // 1.13.0 : un retour de type T (ou LIST OF T...) est permis si T est un generique de la fonction (un type de sa contrainte).
+    if (generics.empty()) return false;
+    std::vector<std::string> samples;
+    for (const auto& g : generics) samples.push_back(hmi::genericSample(g.constraint));
+    const std::string concrete = hmi::substituteGenerics(t, generics, samples);
+    return concrete != std::string(t) && (hmi::localTypeSupported(concrete) || hmi::richLocalType(concrete, known));
 }
 hmi::TypeKnown knownTypeOf(const hmi::Project& p) {
     return [&p](std::string_view n) { return hmi::lang110::knownHmiType(&p, n); };
@@ -111,6 +118,14 @@ std::string trialText(const sim::Value& v) {
     }
     if (v.type() == sim::Type::String) return "'" + v.asString() + "'";
     return hmi::formatValue(v);
+}
+
+// 1.13.0 : le nom d'une fonction generique dans l'arbre et les listes : Max<T> (chevrons), comme un type T_Mesure<T>.
+std::string functionLabel(const hmi::HmiFunction& f) {
+    if (f.generics.empty()) return f.name;
+    std::string names;
+    for (const auto& g : f.generics) names += (names.empty() ? "" : ", ") + g.name;
+    return f.name + "<" + names + ">";
 }
 
 std::string parameterList(const hmi::HmiFunction& f) {
@@ -471,7 +486,7 @@ void HmiFunctionsPane::refresh() {
         order_.push_back(f.id);
         withReturn += !f.returnType.empty();
         states.push_back(stateOf(hmi::checkFunction(f, knownTypeOf(doc_->project))));   // 1.10 : types IHM
-        rows.push_back({f.name, f.returnType.empty() ? std::string("-") : f.returnType, parameterList(f),
+        rows.push_back({functionLabel(f), f.returnType.empty() ? std::string("-") : f.returnType, parameterList(f),
                         std::to_string(lineCount(f.body)), states.back(), f.description});
     }
     functionModel_ = std::make_shared<Rows>(
@@ -595,6 +610,11 @@ void HmiFunctionsPane::rebuildProperties() {
         "\xC3\xA0 son nom : Moyenne := ... ;", types));
     // 1.12.14 : la case ouvre le selecteur de types (les types imbriques aussi), plus la liste.
     if (typepicker::available()) c.properties.back().dialog = [this, id] { (void)setReturnType(id, typepicker::kChoose); };
+    // 1.13.0 : les generiques de la fonction (TEMPLATE <T>) - comme une structure ou un symbole.
+    c.properties.push_back(hmikit::prop("G\xC3\xA9n\xC3\xA9riques", hmi::genericsText(f->generics), PG::ValueType::Text,
+        [this, id](std::string_view v) { return setGenerics(id, std::string(v)); },
+        "TEMPLATE <T> : vide, une fonction ordinaire ; T (ou T : ANY_NUM, ou K, V) : un param\xC3\xA8tre, le retour ou une "
+        "locale peut \xC3\xAAtre de type T. \xC3\x80 l'appel, T se d\xC3\xA9" "duit des arguments (Max(a, b)), ou se donne (Max<INT>(...))."));
     c.properties.push_back(hmikit::prop("Description", f->description, PG::ValueType::Text,
         [this, id](std::string_view v) { return setDescription(id, std::string(v)); }));
     c.properties.push_back(hmikit::prop("Signature", hmi::functionSignature(*f), PG::ValueType::ReadOnly));
@@ -1059,6 +1079,13 @@ bool HmiFunctionsPane::setReturnType(Id id, const std::string& type, std::string
         spec.current = f->returnType.empty() ? std::string("Aucun") : f->returnType;
         spec.use = hmi::typereg::UseReturn;
         spec.doc = doc_;
+        // 1.13.0 : les generiques de la fonction (et ceux du symbole hote) en tete du selecteur (puce Generiques).
+        spec.generics = f->generics;
+        if (!spec.generics.empty()) {
+            std::string names;
+            for (const auto& g : spec.generics) names += (names.empty() ? "" : ", ") + g.name;
+            spec.genericsOf = f->name + "<" + names + ">";
+        }
         const std::weak_ptr<int> alive = alive_;
         typepicker::ask(std::move(spec), [this, id, alive](const HmiTypePicker::Answer& a) {
             if (alive.expired() || a.type.empty()) return;
@@ -1069,7 +1096,7 @@ bool HmiFunctionsPane::setReturnType(Id id, const std::string& type, std::string
         return false;
     }
     const std::string t = isNoReturn(type) ? std::string{} : type;
-    if (!t.empty() && !returnTypeAllowed(doc_->project, t)) {
+    if (!t.empty() && !returnTypeAllowed(doc_->project, t, f->generics)) {
         if (why) *why = "type de retour non pris en charge : " + t;
         return false;
     }
@@ -1078,6 +1105,31 @@ bool HmiFunctionsPane::setReturnType(Id id, const std::string& type, std::string
         if (auto* g = fnOf(p, id)) g->returnType = t;
     });
     if (cmd) apply_(std::move(cmd));
+    return true;
+}
+
+// 1.13.0 : les generiques de la fonction (TEMPLATE <T>) changent ; ses parametres, son retour, ses locales et les
+//  types donnes a ses appels suivent (HmiGenericEdit::applyToFunction). Un seul Ctrl+Z.
+bool HmiFunctionsPane::setGenerics(Id id, const std::string& text) {
+    const auto* f = fnOf(doc_->project, id);
+    if (!f) return false;
+    std::vector<hmi::GenericParam> after;
+    std::string why;
+    if (!hmi::parseGenerics(text, after, &why)) {
+        say("G\xC3\xA9n\xC3\xA9riques refus\xC3\xA9s : " + why, true);
+        return false;
+    }
+    if (after == f->generics) return true;
+    const std::string fname = f->name;
+    hmi::generics::Report report;
+    auto cmd = hmi::changeProject(doc_, "G\xC3\xA9n\xC3\xA9riques de " + fname, [&](hmi::Project& p) {
+        report = hmi::generics::applyToFunction(p, id, after);
+    });
+    if (cmd) apply_(std::move(cmd));
+    const std::string what = after.empty() ? fname + " : fonction ordinaire (plus de g\xC3\xA9n\xC3\xA9riques)"
+                                           : fname + " g\xC3\xA9n\xC3\xA9rique : " + hmi::genericsText(after);
+    say(what + (report.where.empty() ? std::string{} : " ; " + std::to_string(report.where.size()) + " emploi(s) suivent")
+        + ". Ctrl+Z reprend tout.");
     return true;
 }
 

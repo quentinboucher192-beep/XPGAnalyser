@@ -110,7 +110,7 @@ protected:
         float h = 44.f + 14.f + static_cast<float>(lines.size()) * 21.f + 14.f;   // titre, texte
         const bool scope = d_.owner_ == Owner::View || d_.owner_ == Owner::Popup;
         const bool virt = d_.owner_ == Owner::Symbol;
-        h += 3.f * (kFieldH + kNoteH + 6.f);                                      // nom, retour, description
+        h += 4.f * (kFieldH + kNoteH + 6.f);                                      // nom, generiques, retour, description
         if (scope || virt) h += 26.f + kNoteH + 6.f;
         h += 12.f + 70.f + 8.f + 20.f + 56.f;                                      // l'apercu, la note, les boutons
         h = std::min(h, r.h - 40.f);
@@ -121,6 +121,9 @@ protected:
         y += static_cast<float>(explanation_.size()) * 21.f + 14.f;
         nameY_ = y;
         if (d_.nameField_) d_.nameField_->setBounds({fieldX, y, fieldW, kFieldH});
+        y += kFieldH + kNoteH + 6.f;
+        genericsY_ = y;
+        if (d_.genericsField_) d_.genericsField_->setBounds({fieldX, y, fieldW, kFieldH});
         y += kFieldH + kNoteH + 6.f;
         returnY_ = y;
         if (d_.returnField_) d_.returnField_->setBounds({fieldX, y, fieldW, kFieldH});
@@ -173,6 +176,9 @@ protected:
         const std::string problem = d_.nameProblem();
         note(nameY_, problem.empty() ? d_.nameNote() : problem,
              !problem.empty() ? c.error : (d_.sameName() > 0 ? c.warning : c.textMuted));
+        label(genericsY_, "G\xC3\xA9n\xC3\xA9riques");
+        const std::string gprob = d_.genericsProblem();
+        note(genericsY_, gprob.empty() ? d_.genericsNote() : gprob, gprob.empty() ? c.textMuted : c.error);
         label(returnY_, "Retour");
         note(returnY_, d_.returnNote(), c.textMuted);
         if (scopeY_ >= 0.f) {
@@ -203,7 +209,7 @@ private:
     [[nodiscard]] static gfx::FontId gfxFont() { return gfx::FontId{16}; }
     HmiNewFunctionDialog& d_;
     std::vector<std::string> explanation_;
-    float textY_{0}, nameY_{0}, returnY_{0}, scopeY_{-1}, descY_{0}, previewY_{0};
+    float textY_{0}, nameY_{0}, genericsY_{0}, returnY_{0}, scopeY_{-1}, descY_{0}, previewY_{0};
 };
 
 // ======================================================================= ======
@@ -301,10 +307,34 @@ std::string HmiNewFunctionDialog::returnNote() const {
     return "Elle rend un " + answer_.returnType + " : elle sert aussi dans une expression.";
 }
 
+std::string HmiNewFunctionDialog::genericsProblem() const {
+    if (trimmed(answer_.generics).empty()) return {};
+    std::vector<hmi::GenericParam> g;
+    std::string why;
+    return hmi::parseGenerics(answer_.generics, g, &why) ? std::string{} : why;
+}
+
+std::string HmiNewFunctionDialog::genericsNote() const {
+    if (trimmed(answer_.generics).empty())
+        return "Vide : une fonction ordinaire. T (ou T : ANY_NUM, ou K, V) : un param\xC3\xA8tre, le retour ou une locale peut \xC3\xAAtre de type T.";
+    std::vector<hmi::GenericParam> g;
+    (void)hmi::parseGenerics(answer_.generics, g, nullptr);
+    std::string names;
+    for (const auto& p : g) names += (names.empty() ? "" : ", ") + p.name;
+    return "T se d\xC3\xA9" "duit des arguments (" + trimmed(answer_.name) + (names.empty() ? std::string("<\xE2\x80\xA6>") : "<" + names + ">")
+         + "), ou se donne : " + trimmed(answer_.name) + "<INT>(...).";
+}
+
 std::string HmiNewFunctionDialog::declaration() const {
     const std::string n = trimmed(answer_.name).empty() ? std::string("?") : trimmed(answer_.name);
-    if (answer_.returnType.empty()) return "FUNCTION " + n + "        (* une proc\xC3\xA9" "dure *)";
-    return "FUNCTION " + n + " : " + answer_.returnType;
+    // 1.13.0 : une fonction generique porte son TEMPLATE <...> devant FUNCTION.
+    std::string head;
+    if (!trimmed(answer_.generics).empty()) {
+        std::vector<hmi::GenericParam> g;
+        if (hmi::parseGenerics(answer_.generics, g, nullptr)) head = "TEMPLATE <" + hmi::genericsText(g) + "> ";
+    }
+    if (answer_.returnType.empty()) return head + "FUNCTION " + n + "        (* une proc\xC3\xA9" "dure *)";
+    return head + "FUNCTION " + n + " : " + answer_.returnType;
 }
 
 std::string HmiNewFunctionDialog::calls() const {
@@ -328,6 +358,7 @@ std::string HmiNewFunctionDialog::calls() const {
 void HmiNewFunctionDialog::refresh() {
     syncing_ = true;
     if (nameField_ && nameField_->text() != answer_.name) nameField_->setText(answer_.name);
+    if (genericsField_ && genericsField_->text() != answer_.generics) genericsField_->setText(answer_.generics);
     if (descField_ && descField_->text() != answer_.description) descField_->setText(answer_.description);
     if (returnField_) returnField_->setText(answer_.returnType.empty() ? std::string("Aucun") : answer_.returnType);
     if (scope_) scope_->setValue(answer_.pub ? 0 : 1);
@@ -363,6 +394,10 @@ void HmiNewFunctionDialog::setVirtual(bool on) {
     answer_.isVirtual = on;
     refresh();
 }
+void HmiNewFunctionDialog::setGenerics(const std::string& text) {
+    answer_.generics = text;
+    refresh();
+}
 
 // Le selecteur de types (comme la case Type d'une variable) : les types d'un retour, Aucun compris ;
 // d'un symbole ou d'une popup generique, ses T et K.
@@ -373,12 +408,25 @@ void HmiNewFunctionDialog::chooseReturn() {
     spec.current = answer_.returnType.empty() ? std::string("Aucun") : answer_.returnType;
     spec.use = hmi::typereg::UseReturn;
     spec.doc = spec_.doc;
+    // 1.13.0 : les generiques DE LA FONCTION en tete du selecteur (puce Generiques), plus ceux du symbole hote.
+    const auto label = [](const std::string& of, const std::vector<hmi::GenericParam>& gens) {
+        std::string names;
+        for (const auto& g : gens) names += (names.empty() ? "" : ", ") + g.name;
+        return of + "<" + names + ">";
+    };
+    std::vector<hmi::GenericParam> own;
+    (void)hmi::parseGenerics(answer_.generics, own, nullptr);
+    std::vector<hmi::GenericParam> gen = own;
+    std::string ofLabel = own.empty() ? std::string{} : label(trimmed(answer_.name), own);
     if (const hmi::View* v = spec_.doc && spec_.owner != hmi::kNoId ? spec_.doc->project.view(spec_.owner) : nullptr;
         v && !v->generics.empty()) {
-        spec.generics = v->generics;
-        std::string names;
-        for (const auto& g : v->generics) names += (names.empty() ? "" : ", ") + g.name;
-        spec.genericsOf = v->name + "<" + names + ">";
+        for (const auto& g : v->generics)
+            if (std::none_of(gen.begin(), gen.end(), [&](const hmi::GenericParam& x) { return x.name == g.name; })) gen.push_back(g);
+        if (ofLabel.empty()) ofLabel = label(v->name, v->generics);   // la fonction n'a pas les siens : le symbole hote
+    }
+    if (!gen.empty()) {
+        spec.generics = gen;
+        spec.genericsOf = ofLabel;
     }
     const std::weak_ptr<int> alive = alive_;
     typepicker::ask(std::move(spec), [this, alive](const HmiTypePicker::Answer& a) {
@@ -406,7 +454,7 @@ bool HmiNewFunctionDialog::confirm() {
 void HmiNewFunctionDialog::cancel() { finish(false); }
 
 std::string HmiNewFunctionDialog::encode(const Answer& a) {
-    return core::joinFields({trimmed(a.name), a.returnType, a.description, a.pub ? "1" : "0", a.isVirtual ? "1" : "0"});
+    return core::joinFields({trimmed(a.name), a.returnType, a.description, a.pub ? "1" : "0", a.isVirtual ? "1" : "0", a.generics});
 }
 
 bool HmiNewFunctionDialog::parse(const std::string& payload, Answer& out) {
@@ -417,6 +465,7 @@ bool HmiNewFunctionDialog::parse(const std::string& payload, Answer& out) {
     out.description = v[2];
     out.pub = v[3] != "0";
     out.isVirtual = v[4] == "1";
+    out.generics = v.size() > 5 ? v[5] : std::string{};   // 1.13.0 : TEMPLATE <T> (absent d'un ancien payload : aucun)
     return true;
 }
 
@@ -442,6 +491,19 @@ core::Status HmiNewFunctionDialog::buildUi() {
         links_ += nameField_->editingDone->connect([this](const std::string&) {
             // Entree seulement (le champ perd aussi le focus quand on clique ailleurs) : voir FormDialog
             if (!syncing_ && nameField_->focused()) (void)confirm();
+        });
+    }
+    {
+        // 1.13.0 : la case Generiques (TEMPLATE <T>), au-dessus du Retour.
+        auto f = std::make_unique<ui::InputText>(base + ".generics");
+        f->setPlaceholder("vide, ou T, T : ANY_NUM, K\xE2\x80\xA6");
+        f->setText(answer_.generics);
+        genericsField_ = &static_cast<ui::InputText&>(body->addChild(std::move(f)));
+        links_ += genericsField_->textChanged->connect([this](const std::string& t) {
+            if (!syncing_) setGenerics(t);
+        });
+        links_ += genericsField_->editingDone->connect([this](const std::string&) {
+            if (!syncing_ && genericsField_->focused()) (void)confirm();
         });
     }
     {
