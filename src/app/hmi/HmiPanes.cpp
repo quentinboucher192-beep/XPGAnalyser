@@ -282,6 +282,7 @@ HmiConfigPane::HmiConfigPane(std::string id, hmi::DocumentPtr doc, Apply apply,
         if (!issue.category.empty()) useActivated->emit(issue);
     });
     links_ += doc_->changed->connect([this](Id) { dirty_ = true; invalidateLayout(); });
+    links_ += testruns::changed()->connect([this] { dirty_ = true; invalidateLayout(); });   // 1.13.0 (lot J4b) : le bilan des tests
 }
 
 void HmiConfigPane::setPlc(std::shared_ptr<const domain::Project> plc, const importer::AnalysisReport* report) {
@@ -294,6 +295,19 @@ void HmiConfigPane::setPlc(std::shared_ptr<const domain::Project> plc, const imp
 void HmiConfigPane::refresh() {
     dirty_ = true;
     invalidateLayout();
+}
+
+// 1.13.0 (lot J4b) : " Rapport des tests... " - tous les cas rejoues, les verdicts au panneau du bas, le rapport dans exports/.
+bool HmiConfigPane::exportTestsReport(hmi::ExportFormat format, std::string* where) {
+    TestCampaign c;
+    std::string path;
+    const bool ok = exportTestReport(doc_->project, testHosts_.plc ? testHosts_.plc() : nullptr, format, testHosts_.exportFile, &path, &c);
+    if (testHosts_.output) testHosts_.output(c.lines);
+    message_ = ok ? "Rapport des tests \xC3\xA9" "crit : " + path + " (" + c.tally.text() + ")"
+                  : "Rapport des tests impossible \xC3\xA0 \xC3\xA9" "crire" + (path.empty() ? std::string{} : " : " + path);
+    if (!ok) ui::PropertyGrid::refuse(message_);
+    if (where) *where = path;
+    return ok;
 }
 
 void HmiConfigPane::ensureBuilt() {
@@ -419,6 +433,28 @@ void HmiConfigPane::rebuild() {
                                     }),
                                     "Coch\xC3\xA9, un cas en \xC3\xA9" "chec emp\xC3\xAA" "che de d\xC3\xA9marrer la simulation ; sinon, un \xC3\xA9" "chec "
                                     "n'est qu'un avertissement."));
+    // 1.13.0 (lot J4b) : le bilan, et le rapport de toute la campagne (les cas rejoues d'abord).
+    {
+        const auto tally = testruns::tally(p);
+        tests.properties.push_back(prop("Cas des fonctions", tally.text(), P::ValueType::ReadOnly, {},
+                                        "Les derniers verdicts (Lancer les tests, Compiler) ; \xC2\xAB \xC3\xA0 jouer \xC2\xBB : pas encore jou\xC3\xA9, ou chang\xC3\xA9 depuis."));
+        if (testHosts_.exportFile) {
+            auto pr = prop("Rapport des tests\xE2\x80\xA6", "choisis le format", P::ValueType::Enum,
+                           [this](std::string_view v) {
+                               const auto format = v.rfind("PDF", 0) == 0 ? hmi::ExportFormat::Pdf
+                                                 : v.rfind("CSV", 0) == 0 ? hmi::ExportFormat::Csv : hmi::ExportFormat::Excel;
+                               std::string where;
+                               (void)exportTestsReport(format, &where);
+                               dirty_ = true;          // la case revient a " choisis le format "
+                               invalidateLayout();
+                               return true;
+                           },
+                           "Tous les cas de toutes les fonctions rejou\xC3\xA9s, puis le rapport (Fonction, Cas, Verdict, D\xC3\xA9tail) dans exports/. "
+                           "Ce n'est pas un proc\xC3\xA8s-verbal de r\xC3\xA9" "ception (pas de visa).",
+                           {"Excel\xE2\x80\xA6", "PDF\xE2\x80\xA6", "CSV\xE2\x80\xA6"});
+            tests.properties.push_back(std::move(pr));
+        }
+    }
     cats.push_back(std::move(tests));
 
     // Lot 13 : Generer plus exigeant - la case, et les seuils (0 : pas de controle).

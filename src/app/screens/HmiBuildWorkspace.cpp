@@ -24,6 +24,7 @@
 #include "../hmi/HmiEditor.hpp"
 #include "../hmi/HmiFunctionPanes.hpp"
 #include "../hmi/HmiLive.hpp"               // 1.11.21 : les diagnostics en direct
+#include "../hmi/HmiObjectAlarmPanes.hpp"   // 1.13.0 (lot J4b) : HmiSymbolTabs (un cas de test d'un symbole)
 #include "../hmi/HmiOperatorPanes.hpp"        // 1.11.17 : Compiler les operateurs (le build du porteur)
 #include "../hmi/HmiPanels.hpp"
 #include "../hmi/HmiScriptPanes.hpp"
@@ -100,6 +101,8 @@ void MainAnalysisScreen::ensureHmiBuild() {
                                              6.0, StatusBar::Severity::Success);
         }
         hmiBuildStartedAt_ = -1.0;
+        // 1.13.0 (lot J4b) : les tests unitaires rejoues apres un build reussi (Compiler, Demarrer).
+        hmiTestsBlockStart_ = replayHmiTests(*rep, done->request.mode);
         auto then = std::move(hmiBuildThen_);
         hmiBuildThen_ = nullptr;
         if (then) then(*rep);
@@ -168,10 +171,46 @@ void MainAnalysisScreen::startHmiBuild(const std::string& source) {
         if (r.locked) why = "un autre build tourne sur ce projet";
         else if (r.cancelled) why = "build annul\xC3\xA9";
         else if (!r.ok) why = plural(r.errors, "erreur bloquante", "erreurs bloquantes");
+        // 1.13.0 (lot J4b) : " Un test en echec empeche le demarrage " (Configuration) - un cas rouge l'arrete.
+        if (r.ok && hmiTestsBlockStart_) {
+            sim->buildDone(false, "un test des fonctions en \xC3\xA9" "chec (panneau du bas, Sorties : Tests)");
+            return;
+        }
         sim->buildDone(r.ok, why);
     });
     if (!launched)
         if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) sim->buildDone(false, "le build n'a pas pu partir (aucun projet IHM ?)");
+}
+
+// ---- 1.13.0 (lot J4b) : LE REJEU DES TESTS UNITAIRES ---------------------------------------
+//  Au Compiler (Generer et compiler, Regenerer et compiler) et au Demarrer, apres la verification du code (un
+//  build reussi), si Configuration le veut (Rejouer les tests au Compiler/Demarrer, coche d'office) : tous les
+//  cas actifs, chacun sur son banc (rien du projet ni de la simulation n'est touche) ; leurs verdicts aux Sorties
+//  (categorie Tests ; le panneau s'ouvre a un echec). Un echec est un avertissement ; au Demarrer, avec " Un test
+//  en echec empeche le demarrage ", il bloque (vrai).
+bool MainAnalysisScreen::replayHmiTests(const pl::Report& rep, pl::Mode mode) {
+    const auto doc = app_.hmi();
+    if (!doc || !rep.ok || rep.cancelled || rep.locked) return false;
+    const auto& cfg = doc->project.config;
+    if (!cfg.runTestsOnBuild) return false;
+    if (mode != pl::Mode::Compile && mode != pl::Mode::GenerateCompile && mode != pl::Mode::RegenerateCompile && mode != pl::Mode::Start) return false;
+    if (testruns::tally(doc->project).cases == 0) return false;
+    auto* plc = app_.simulation().attached() ? app_.simulationRuntime() : nullptr;
+    const auto campaign = runAllTests(doc->project, plc);
+    const bool blocks = mode == pl::Mode::Start && cfg.testFailBlocksStart && campaign.failed();
+    if (auto* out = hmiBuildOutput(campaign.failed())) {
+        out->say(campaign.failed() ? (blocks ? pl::Severity::Critical : pl::Severity::Warning) : pl::Severity::Success, "Tests",
+                 campaign.summary() + (blocks ? " \xE2\x80\x94 la simulation ne d\xC3\xA9marre pas (Configuration : un test en \xC3\xA9" "chec "
+                                                "emp\xC3\xAA" "che le d\xC3\xA9marrage)"
+                                              : std::string{}));
+        for (const auto& l : campaign.lines) out->say(l.severity, "Tests", l.text, l.element);
+        if (campaign.failed()) out->showTab(HmiBuildOutputPane::kSorties);
+    }
+    if (status_ && campaign.failed())
+        status_->setTransientMessage(campaign.summary() + " (panneau du bas, Sorties : un double-clic m\xC3\xA8ne au cas)", 10.0,
+                                     blocks ? StatusBar::Severity::Error : StatusBar::Severity::Warning);
+    if (explorer_) explorer_->invalidate();
+    return blocks;
 }
 
 // ---- 1.11.21 : les diagnostics en direct (hmi/HmiLive.hpp) ----
@@ -220,6 +259,7 @@ void MainAnalysisScreen::tickHmiBuild() {
                 if (!sf->hosts().build) {   // les fonctions d'un symbole : la barre de build aussi
                     HmiFunctionsPane::Hosts h = sf->hosts();
                     wireHmiBuildHosts(h);
+                    wireHmiTestHosts(h);                  // 1.13.0 (lot J4b) : les tests unitaires
                     sf->setHosts(std::move(h));
                 }
                 sf->refreshBuildState();
@@ -612,6 +652,27 @@ void MainAnalysisScreen::openHmiElement(const std::string& key) {
     else if (kind == "script-vue") openHmiScripts(p.viewOfScript(static_cast<hmi::Id>(id)), id, 0);
     else if (kind == "script") openHmiScripts(0, id, 0);
     else if (kind == "fonction") openHmiFunctions(id, 0);
+    else if (kind == "cas-test") {               // 1.13.0 (lot J4b) : un verdict - sa fonction, l'onglet Tests, le cas
+        const auto owner = ownerOfTest(p, static_cast<hmi::Id>(id));
+        if (!owner) return;
+        HmiFunctionsPane* pane = nullptr;
+        if (owner->view == hmi::kNoId) {
+            openHmiFunctions(owner->function, 0);
+            pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
+        } else {
+            openHmiView(owner->view);
+            if (auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(owner->view)))) {
+                if (editor->symbolTabs() && editor->symbolFunctions()) {
+                    editor->symbolTabs()->setCurrent(HmiSymbolTabs::Functions);
+                    pane = editor->symbolFunctions();
+                } else if (editor->viewTabs() && editor->viewFunctions()) {
+                    editor->viewTabs()->setCurrent(HmiSymbolTabs::Functions);
+                    pane = editor->viewFunctions();
+                }
+            }
+        }
+        if (pane) (void)pane->showTestCase(static_cast<hmi::Id>(id));
+    }
     else if (kind == "fonction-symbole") {
         for (const auto& v : p.views)
             for (const auto& f : v.functions)

@@ -18,6 +18,7 @@
 #include "../hmi/HmiLibrary.hpp"   // 1.13.0 (lot J8) : les bibliotheques reliees
 #include "../hmi/HmiAlarmGroups.hpp"   // 1.11.1 (decision 108) : le groupe de l'IHM lie a celui d'un objet
 #include "hmi/HmiTreeData.hpp"
+#include "hmi/HmiTestRuns.hpp"           // 1.13.0 (lot J4b) : les verdicts des tests (app::testruns)
 #include "hmi/HmiObjectAlarmTree.hpp"   // 1.10 (chantier O) : les donnees seulement (pas de lien avec l'IHM)
 #include "../hmi/HmiBuildState.hpp"   // 1.11 (chantier T3, C4) : compilable / generable
 
@@ -2833,7 +2834,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             const auto* o = outlineOf(static_cast<std::uint32_t>(subOf(n) >> 8), i);
             if (o)
                 for (const auto& g : o->groups)
-                    if (static_cast<std::uint64_t>(g.kind) == (subOf(n) & 0xFF)) return hmitree::outlineTitle(g);
+                    if (static_cast<std::uint64_t>(g.kind) == (subOf(n) & 0xFF))
+                        return g.kind == hmitree::OutlineKind::Tests ? g.label : hmitree::outlineTitle(g);   // 1.13.0 : " Tests . 3 cas . ... "
             return {};
         }
         case NodeKind::HmiCodeEntry:
@@ -3286,6 +3288,11 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case hmitree::OutlineKind::Constants:  tint(ui::Tone::Family3); break;
             case hmitree::OutlineKind::Variables:  tint(ui::Tone::Family2); break;
             case hmitree::OutlineKind::Functions:  tint(ui::Tone::Family1); break;
+            case hmitree::OutlineKind::Tests:      break;   // 1.13.0 (lot J4b) : la teinte dit le verdict (style)
+            }
+            if (group == hmitree::OutlineKind::Tests) {
+                if (const auto at = t.find("   \xE2\x80\x94 "); at != std::string::npos) muteAt(at, false);   // " poids 25 %   - reussi "
+                break;
             }
             if (group == hmitree::OutlineKind::Functions) muteAt(t.find('('), true);
             else if (const auto colon = t.find(" :"); colon != std::string::npos) muteAt(colon, false);   // ": REAL = 80.0   // ..."
@@ -3915,6 +3922,14 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiCodeGroup:
             s.icon = ui::Icon::Folder;
             s.fgTone = ui::Tone::Muted;
+            // 1.13.0 (lot J4b) : le groupe Tests - vert si tout passe, rouge a un echec.
+            if ((subOf(n) & 0xFF) == static_cast<std::uint64_t>(hmitree::OutlineKind::Tests)) {
+                const std::string t = text(n);
+                const bool red = t.find("\xC3\xA9" "chec") != std::string::npos || t.find("erreur") != std::string::npos;
+                s.icon = red ? ui::Icon::Error : ui::Icon::Ok;
+                s.iconTone = red ? ui::Tone::Error : t.find("\xC3\xA0 jouer") != std::string::npos ? ui::Tone::Muted : ui::Tone::Ok;
+                if (red) s.fgTone = ui::Tone::Error;
+            }
             break;
         case NodeKind::HmiCodeEntry:
         case NodeKind::HmiCodeInner: {
@@ -3924,6 +3939,17 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                    : group == hmitree::OutlineKind::Constants ? ui::Icon::Constant
                                                               : ui::Icon::Variable;
             if (group == hmitree::OutlineKind::Parameters) s.iconTone = ui::Tone::Accent;
+            if (group == hmitree::OutlineKind::Tests) {               // 1.13.0 (lot J4b) : la pastille du verdict
+                const auto v = testVerdictOf(n);
+                s.icon = v == static_cast<int>(hmi::Verdict::Passed) ? ui::Icon::Ok
+                       : v == static_cast<int>(hmi::Verdict::Failed) ? ui::Icon::Error
+                       : v == static_cast<int>(hmi::Verdict::Error)  ? ui::Icon::Warning
+                                                                     : ui::Icon::Info;
+                s.iconTone = v == static_cast<int>(hmi::Verdict::Passed) ? ui::Tone::Ok
+                           : v == static_cast<int>(hmi::Verdict::Failed) ? ui::Tone::Error
+                           : v == static_cast<int>(hmi::Verdict::Error)  ? ui::Tone::Warning
+                                                                         : ui::Tone::Muted;
+            }
             break;
         }
         case NodeKind::HmiFunction:
@@ -3931,6 +3957,14 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             s.iconTone = ui::Tone::Accent;
             if (const auto* f = hmi_ ? byId(hmi_->project.programs.functions, i) : nullptr; f && project_)
                 codeIconStyle(s, project::codeicons::iconOf(*project_, core::codeicons::keyOf(core::codeicons::Kind::HmiFunction, {}, f->name)));
+            // 1.13.0 (lot J4b) : un cas en echec (ou en erreur) - une pastille rouge.
+            if (const auto* f = hmi_ ? byId(hmi_->project.programs.functions, i) : nullptr; f && !f->tests.empty()) {
+                const auto t = testruns::tally(*f);
+                if (t.red()) {
+                    s.badge = std::to_string(t.failed + t.errors) + (t.failed + t.errors > 1 ? " tests rouges" : " test rouge");
+                    s.badgeTone = ui::Tone::Error;
+                }
+            }
             break;
         case NodeKind::HmiVariablesFolder: s.icon = ui::Icon::Screen; break;
         case NodeKind::HmiUsedFolder:    s.icon = ui::Icon::Variable; break;
@@ -4176,9 +4210,48 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
     }
     // ---- fin Lot API 8 ----
 
+    // ---- 1.13.0 (lot J4b) : le groupe Tests d'une fonction - " Tests . 3 cas . 2 reussis, 1 echec ", un cas par
+    //  ligne avec son dernier verdict (app::testruns : tant que ni le cas ni la fonction n'ont change) ----
+    namespace {
+    std::optional<hmitree::OutlineGroup> testsGroupOf(const hmi::HmiFunction& f) {
+        if (f.tests.empty()) return std::nullopt;
+        hmitree::OutlineGroup g;
+        g.kind = hmitree::OutlineKind::Tests;
+        g.label = "Tests \xC2\xB7 " + testruns::tally(f).text();
+        for (const auto& t : f.tests) {
+            hmitree::OutlineItem it;
+            const auto* r = testruns::last(f, t);
+            const std::string verdict = !t.enabled ? std::string("inactif") : r ? std::string(hmi::verdictLabel(r->verdict)) : std::string("\xC3\xA0 jouer");
+            it.label = (t.name.empty() ? std::string("(sans nom)") : t.name) + "   \xE2\x80\x94 " + verdict;
+            it.name = t.name;
+            it.tip = r ? r->detail : std::string{};
+            it.line = 0;
+            it.verdict = !t.enabled ? static_cast<int>(hmi::Verdict::Skipped) : r ? static_cast<int>(r->verdict) : -1;
+            g.items.push_back(std::move(it));
+        }
+        return g;
+    }
+    } // namespace
+
+    int ProjectTreeModel::testVerdictOf(ui::NodeId n) const {
+        if (kindOf(n) != NodeKind::HmiCodeEntry) return -1;
+        const auto sub = subOf(n);
+        if (((sub >> 16) & 0xFF) != static_cast<std::uint64_t>(hmitree::OutlineKind::Tests)) return -1;
+        const auto* o = outlineOf(static_cast<std::uint32_t>(sub >> 24), indexOf(n));
+        if (!o) return -1;
+        for (const auto& g : o->groups)
+            if (g.kind == hmitree::OutlineKind::Tests && (sub & 0xFFFF) < g.items.size()) return g.items[sub & 0xFFFF].verdict;
+        return -1;
+    }
+
     // ---- 1.11.21 : le contenu deplie des codes ----
     const ProjectTreeModel::CodeOutline* ProjectTreeModel::outlineOf(std::uint32_t codeKind, std::uint64_t id) const {
         if (!hmi_ || codeKind == 0) return nullptr;
+        // 1.13.0 (lot J4b) : un verdict garde change le groupe Tests d'une fonction.
+        if (outlinesTests_ != testruns::revision()) {
+            outlines_.clear();
+            outlinesTests_ = testruns::revision();
+        }
         const std::uint64_t key = (static_cast<std::uint64_t>(codeKind) << 32) | id;
         if (const auto it = outlines_.find(key); it != outlines_.end()) return it->second.get();
         auto o = std::make_shared<CodeOutline>();
@@ -4186,9 +4259,15 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         if (codeKind == kCodeScript || codeKind == kCodeViewScript) {
             if (const auto* s = anyScriptById(p, id)) o->groups = hmitree::outlineOf(*s);
         } else if (codeKind == kCodeFunction) {
-            if (const auto* f = byId(p.programs.functions, id)) o->groups = hmitree::outlineOf(*f);
+            if (const auto* f = byId(p.programs.functions, id)) {
+                o->groups = hmitree::outlineOf(*f);
+                if (auto g = testsGroupOf(*f)) o->groups.push_back(std::move(*g));   // 1.13.0 (lot J4b)
+            }
         } else if (codeKind == kCodeSymbolFunction) {
-            if (const auto* f = symbolFunctionById(p, id)) o->groups = hmitree::outlineOf(*f);
+            if (const auto* f = symbolFunctionById(p, id)) {
+                o->groups = hmitree::outlineOf(*f);
+                if (auto g = testsGroupOf(*f)) o->groups.push_back(std::move(*g));   // 1.13.0 (lot J4b)
+            }
         }
         const auto* raw = o.get();
         outlines_[key] = std::move(o);
@@ -4256,6 +4335,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 usedDirty_ = true;
                 alarmCache_.clear();           // 1.10 : les alarmes des objets aussi
                 outlines_.clear();             // 1.11.21 : le contenu des codes
+                childrenReady->emit(hmiFolderNode());
+            });
+        // 1.13.0 (lot J4b) : un verdict garde (Lancer les tests, Compiler) - le groupe Tests des fonctions suit.
+        if (hmi_)
+            hmiLinks_ += testruns::changed()->connect([this] {
+                outlines_.clear();
                 childrenReady->emit(hmiFolderNode());
             });
         modelReset->emit();

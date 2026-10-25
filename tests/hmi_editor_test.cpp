@@ -68,6 +68,7 @@
 #include <set>
 #include "../src/app/hmi/HmiFunctionPanes.hpp"
 #include "../src/app/hmi/HmiLibraryPanes.hpp"   // 1.13.0 (lot J8)
+#include "../src/app/hmi/HmiFunctionTestsPage.hpp"   // 1.13.0 (lot J4b) : l'onglet Tests
 #include "../src/app/hmi/HmiSymbolPopupsPane.hpp"   // 1.11.10 : les popups d'un symbole
 #include "../src/app/hmi/HmiHelpPane.hpp"
 #include "../src/help/Novelties.hpp"                // 1.10 (chantier P) : le registre des nouveautes
@@ -30136,7 +30137,7 @@ void onglets1118() {
     const auto* f = doc->project.function(carre);
     check(f && f->body.find("VAR") == std::string::npos && f->decls.size() == 2 && f->decls[0].name == "Entree" && f->decls[1].name == "Resultat",
           "une nouvelle fonction : son param\xC3\xA8tre et sa locale dans ses onglets, pas de VAR dans son code");
-    check(fp.codeTabs().tabCount() == 4 && fp.codeTabs().tab(1)->title == "Param\xC3\xA8tres" && fp.codeTabs().tab(2)->title == "Locales"
+    check(fp.codeTabs().tabCount() == 5 && fp.codeTabs().tab(1)->title == "Param\xC3\xA8tres" && fp.codeTabs().tab(2)->title == "Locales"
               && fp.parametersGrid().count() == 1 && fp.localsGrid().count() == 1,
           "l'\xC3\xA9" "diteur d'une fonction : Code, Param\xC3\xA8tres (1), Locales (1), Constantes");
     check(fp.diagnostics().empty(), "le mod\xC3\xA8le se v\xC3\xA9rifie sans faute");
@@ -36351,7 +36352,296 @@ void bibliotheques113() {
     fs::remove_all(work, ec);
 }
 
+
+// ------------------------------------------------ 1.13.0 (lot J4b) : l'interface des tests unitaires --
+// L'onglet Tests d'une fonction (les cas, le detail, les poses et les verifs), " Nouveau cas... ", lancer
+// (un cas, la fonction, le volet), les verdicts (le panneau du bas, l'element qui mene au cas), l'arbre (le
+// groupe Tests, la pastille rouge), le rapport (la fonction, la Configuration) et Ctrl+Z - sans SDL.
+namespace {
+hmi::Declaration testParam(hmi::Project& p, const char* name, const char* type, const char* def = "") {
+    hmi::Declaration d;
+    d.id = p.allocate();
+    d.kind = hmi::DeclKind::Parameter;
+    d.name = name;
+    d.type = type;
+    d.value = def;
+    return d;
+}
+} // namespace
+
+void testsUnitaires113() {
+    std::printf("1.13.0 (lot J4b) : les tests unitaires des fonctions - l'onglet Tests, Nouveau cas, lancer, les verdicts, l'arbre\n");
+    Bench bench;   // les mesures de texte sans ecran
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    auto& p = doc->project;
+    Variable clics;
+    clics.id = p.allocate();
+    clics.name = "Compteur_Clics";
+    clics.type = "INT";
+    clics.initial = "5";
+    p.programs.variables.push_back(clics);
+    HmiFunction moy = makeFunction(p, "Moyenne_Pression", "REAL", "Moyenne_Pression := A * Poids_A + B * (1.0 - Poids_A);");
+    moy.decls = {testParam(p, "A", "REAL"), testParam(p, "B", "REAL"), testParam(p, "Poids_A", "REAL", "0.5")};
+    p.programs.functions.push_back(moy);
+    HmiFunction tracer = makeFunction(p, "Tracer", "", "Compteur_Clics := Compteur_Clics + 1;\nIHM_JOURNAL('[ALERTE] ' + Quoi);");
+    tracer.decls = {testParam(p, "Quoi", "STRING")};
+    p.programs.functions.push_back(tracer);
+    const Id fm = moy.id, ft = tracer.id;
+
+    app::HmiFunctionsPane fns("tu.fonctions", doc, apply);
+    std::vector<app::TestLine> lines;
+    std::vector<std::pair<Id, Id>> askedCase;
+    std::vector<hmi::ExportRequest> written;
+    {
+        app::HmiFunctionsPane::Hosts h;
+        h.testOutput = [&](const std::vector<app::TestLine>& l) { lines.insert(lines.end(), l.begin(), l.end()); };
+        h.newTestCase = [&](Id view, Id function) { askedCase.emplace_back(view, function); };
+        h.exportFile = [&](const hmi::ExportRequest& rq, std::string* where) {
+            written.push_back(rq);
+            if (where) *where = "exports/" + rq.fileName;
+            return true;
+        };
+        fns.setHosts(std::move(h));
+    }
+    fns.setBounds({0, 0, 1500, 900});
+    fns.layout();
+    fns.selectFunction(fm);
+    check(fns.codeTabs().tabCount() == 5 && fns.codeTabs().tab(app::HmiFunctionsPane::CodeTabTests)->title == "Tests",
+          "l'\xC3\xA9" "diteur d'une fonction : Code, Param\xC3\xA8tres, Locales, Constantes, Tests");
+    fns.showCodeTab(app::HmiFunctionsPane::CodeTabTests);
+    auto& page = fns.testsPage();
+    page.setBounds({0, 0, 1200, 700});
+    page.layout();
+    check(page.function() == fm && page.caseCount() == 0 && page.cases().model()->rowCount() == 0, "l'onglet Tests : Moyenne_Pression, aucun cas");
+    check(page.cases().model()->headerText(0) == "Cas" && page.cases().model()->headerText(4) == "Verdict", "les colonnes : Cas ... Verdict");
+
+    // ---- " Nouveau cas... " : la barre demande la fenetre a l'hote ----
+    page.tools().triggered->emit(app::HmiFunctionTestsPage::TNew);
+    check(askedCase.size() == 1 && askedCase[0].first == kNoId && askedCase[0].second == fm, "Nouveau cas\xE2\x80\xA6 : la fen\xC3\xAA" "tre, pour Moyenne_Pression");
+    menu::MenuManager mm{menu::MenuFactory{}};
+    app::HmiNewTestCaseDialog::Answer got;
+    bool accepted = false;
+    {
+        app::HmiNewTestCaseDialog::Spec spec;
+        spec.doc = doc;
+        spec.function = fm;
+        mm.ShowDialog(std::make_unique<app::HmiNewTestCaseDialog>(std::move(spec)), [&](const menu::DialogResult& r) {
+            accepted = r.accepted() && app::HmiNewTestCaseDialog::parse(r.payload, got);
+        });
+        mm.applyPending();
+    }
+    auto* nc = dynamic_cast<app::HmiNewTestCaseDialog*>(mm.top());
+    check(nc && nc->title() == "Nouveau cas de test \xE2\x80\x94 Moyenne_Pression", "la fen\xC3\xAA" "tre : Nouveau cas de test \xE2\x80\x94 Moyenne_Pression");
+    if (nc) {
+        const auto labels = nc->parameterLabels();
+        check(labels.size() == 3 && labels[0] == "A : REAL" && labels[2].find("Poids_A : REAL") == 0 && labels[2].find("d\xC3\xA9" "faut 0.5") != std::string::npos,
+              "une case par param\xC3\xA8tre : A : REAL ... Poids_A : REAL (d\xC3\xA9" "faut 0.5)");
+        check(nc->answer().name == "cas 1" && nc->toleranceUsable() && nc->expectedUsable(), "un nom libre (cas 1) ; un retour REAL : attendu et tol\xC3\xA9rance");
+        nc->setName("moyenne simple");
+        nc->setArgument(0, "12,0");
+        nc->setArgument(1, "20");
+        check(nc->preview() == "Moyenne_Pression(12.0, 20, 0.5)", "l'aper\xC3\xA7u de l'appel : " + nc->preview());
+        nc->setArgument(1, "abc");
+        check(!nc->argumentProblem(1).empty() && !nc->canConfirm(), "un argument illisible (abc pour un REAL) : Cr\xC3\xA9" "er gris\xC3\xA9 (" + nc->argumentProblem(1) + ")");
+        nc->setArgument(1, "20,0");
+        nc->setExpected("16");
+        nc->setTolerance("beaucoup");
+        check(!nc->toleranceProblem().empty() && !nc->canConfirm(), "une tol\xC3\xA9rance qui n'est pas un nombre : refus\xC3\xA9" "e");
+        nc->setTolerance("");
+        check(nc->confirm(), "Cr\xC3\xA9" "er le cas");
+        mm.applyPending();
+    }
+    check(accepted && got.name == "moyenne simple" && got.arguments.size() == 3 && got.arguments[0] == "12,0" && got.expected == "16",
+          "la r\xC3\xA9ponse : le nom, les arguments, l'attendu");
+    const std::size_t before = stack.done().size();
+    const Id c1 = page.addCase(got);
+    check(c1 != kNoId && page.caseCount() == 1 && stack.done().size() == before + 1 && page.selectedCase() == c1, "le cas pos\xC3\xA9 (une commande), choisi");
+    check(doc->project.function(fm)->tests[0].arguments == std::vector<std::string>{"12.0", "20.0"} && doc->project.function(fm)->tests[0].expected == "16",
+          "gard\xC3\xA9 lu, comme toute case : 12,0 devient 12.0 (Poids_A vide : son d\xC3\xA9" "faut)");
+    std::string why;
+    check(page.addCase(got, &why) == kNoId && why.find("existe") != std::string::npos, "deux cas du m\xC3\xAAme nom : refus\xC3\xA9 (" + why + ")");
+    app::HmiFunctionTestsPage::NewCase second;
+    second.name = "poids 25 %";
+    second.arguments = {"12.0", "20.0", "0.25"};
+    second.expected = "18.0";
+    second.tolerance = "0.001";
+    const Id c2 = page.addCase(second, &why);
+    check(c2 != kNoId && page.caseCount() == 2, "un second cas : poids 25 % [" + why + "]");
+    check(!page.setArgument(c2, 0, "abc", &why) && !why.empty(), "un argument illisible : refus\xC3\xA9 (" + why + ")");
+    check(!page.setField(c2, app::HmiFunctionTestsPage::Field::Tolerance, "-1", &why), "une tol\xC3\xA9rance n\xC3\xA9gative : refus\xC3\xA9" "e");
+    check(page.cases().model()->cellText(1, 1) == "12.0 ; 20.0 ; 0.25" && page.cases().model()->cellText(1, 2) == "18.0"
+              && page.cases().model()->cellText(1, 3) == "0.001" && page.cases().model()->cellText(1, 4) == "\xC3\xA0 jouer",
+          "la ligne : arguments, attendu, tol\xC3\xA9rance, \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
+
+    // ---- lancer : la fonction, puis un cas ----
+    lines.clear();
+    check(page.runAll() == 2, "Lancer tout : 2 r\xC3\xA9ussis");
+    check(lines.size() == 3 && lines[0].text.find("Tests de Moyenne_Pression : 2 cas") == 0 && lines[1].element == app::testElement(c1)
+              && lines[1].severity == hmi::pipeline::Severity::Success && lines[2].text.find("poids 25 % : r\xC3\xA9ussi (18.0)") != std::string::npos,
+          "les verdicts au panneau du bas : le bilan, puis un par cas (" + (lines.size() > 2 ? lines[2].text : std::string("?")) + ")");
+    check(page.cases().model()->cellText(0, 4) == "r\xC3\xA9ussi" && page.cases().model()->cellStyle(0, 4).fgTone == ui::Tone::Ok,
+          "la pastille : r\xC3\xA9ussi, en vert");
+    check(page.setField(c2, app::HmiFunctionTestsPage::Field::Expected, "17,5", &why) && page.cases().model()->cellText(1, 4) == "\xC3\xA0 jouer"
+              && page.cases().model()->cellText(1, 2) == "17.5",
+          "l'attendu chang\xC3\xA9 (17,5) : le verdict est \xC3\xA0 rejouer");
+    lines.clear();
+    page.selectCase(c2);
+    page.tools().triggered->emit(app::HmiFunctionTestsPage::TRun);
+    const auto* r2 = page.lastResult(c2);
+    check(r2 && r2->verdict == hmi::Verdict::Failed && page.cases().model()->cellText(1, 4) == "\xC3\xA9" "chec"
+              && page.cases().model()->cellStyle(1, 4).fgTone == ui::Tone::Error && r2->detail.find("obtenu 18.0") != std::string::npos,
+          "Lancer ce cas : \xC3\xA9" "chec, en rouge (" + (r2 ? r2->detail : std::string("?")) + ")");
+    check(lines.size() == 2 && lines[1].severity == hmi::pipeline::Severity::Warning && lines[1].element == app::testElement(c2),
+          "un \xC3\xA9" "chec : un avertissement aux Sorties, qui m\xC3\xA8ne au cas");
+    check(fns.codeTabs().tab(app::HmiFunctionsPane::CodeTabTests)->badge == "2"
+              && fns.codeTabs().tab(app::HmiFunctionsPane::CodeTabTests)->badgeTone == ui::Tone::Error,
+          "le titre de l'onglet : 2 cas, la pastille rouge");
+    {
+        std::string last;
+        for (const auto& c : page.properties().categories())
+            if (c.name == "Derni\xC3\xA8re ex\xC3\xA9" "cution")
+                for (const auto& pr : c.properties) last += pr.name + "=" + pr.value + ";";
+        check(last.find("Verdict=\xC3\xA9" "chec") != std::string::npos && last.find("Appel=Moyenne_Pression(12.0, 20.0, 0.25)") != std::string::npos,
+              "le d\xC3\xA9tail : la derni\xC3\xA8re ex\xC3\xA9" "cution, son appel [" + last + "]");
+    }
+
+    // ---- l'arbre : le groupe Tests sous la fonction, la pastille rouge ----
+    {
+        auto plc = std::make_shared<domain::Project>();
+        app::ProjectTreeModel tree(plc);
+        tree.setHmi(doc);
+        using NK = app::ProjectTreeModel::NodeKind;
+        const auto prog = tree.childAt(tree.hmiFolderNode(), 8);
+        ui::NodeId folder = ui::kInvalidNode, fnode = ui::kInvalidNode;
+        for (std::size_t k = 0; k < tree.childCount(prog); ++k)
+            if (app::ProjectTreeModel::kindOf(tree.childAt(prog, k)) == NK::HmiFunctionsFolder) folder = tree.childAt(prog, k);
+        for (std::size_t k = 0; folder != ui::kInvalidNode && k < tree.childCount(folder); ++k)
+            if (tree.text(tree.childAt(folder, k)).rfind("Moyenne_Pression", 0) == 0) fnode = tree.childAt(folder, k);
+        check(fnode != ui::kInvalidNode && app::ProjectTreeModel::kindOf(fnode) == NK::HmiFunction, "l'arbre : Fonctions > Moyenne_Pression");
+        ui::NodeId group = ui::kInvalidNode;
+        for (std::size_t k = 0; fnode != ui::kInvalidNode && k < tree.childCount(fnode); ++k)
+            if (tree.text(tree.childAt(fnode, k)).rfind("Tests", 0) == 0) group = tree.childAt(fnode, k);
+        check(group != ui::kInvalidNode && tree.text(group).find("2 cas") != std::string::npos && tree.text(group).find("1 \xC3\xA9" "chec") != std::string::npos
+                  && tree.style(group).iconTone == ui::Tone::Error,
+              "le groupe Tests : " + (group != ui::kInvalidNode ? tree.text(group) : std::string("?")));
+        if (group != ui::kInvalidNode && tree.childCount(group) == 2) {
+            const auto e1 = tree.childAt(group, 0), e2 = tree.childAt(group, 1);
+            check(tree.text(e1).rfind("moyenne simple", 0) == 0 && tree.testVerdictOf(e1) == static_cast<int>(hmi::Verdict::Passed)
+                      && tree.testVerdictOf(e2) == static_cast<int>(hmi::Verdict::Failed) && tree.style(e2).iconTone == ui::Tone::Error,
+                  "un cas par ligne, sa pastille : r\xC3\xA9ussi (vert), \xC3\xA9" "chec (rouge)");
+            app::ProjectTreeModel::CodeTarget t;
+            check(tree.codeTargetOf(e2, t) && t.group == static_cast<int>(app::hmitree::OutlineKind::Tests) && t.name == "poids 25 %" && t.id == fm,
+                  "un clic sur un cas : sa fonction, le groupe Tests, son nom");
+        } else {
+            check(false, "le groupe Tests a deux cas");
+        }
+        check(fnode != ui::kInvalidNode && tree.style(fnode).badge.find("test rouge") != std::string::npos && tree.style(fnode).badgeTone == ui::Tone::Error,
+              "la fonction a un cas rouge : sa pastille");
+    }
+
+    // ---- une procedure : poser avant, verifier apres ----
+    fns.selectFunction(ft);
+    check(page.function() == ft, "l'onglet suit la fonction choisie : Tracer");
+    app::HmiFunctionTestsPage::NewCase alert;
+    alert.name = "alerte compte le clic";
+    alert.arguments = {"Porte A ouverte"};
+    const Id c3 = page.addCase(alert, &why);
+    check(c3 != kNoId && doc->project.function(ft)->tests[0].arguments == std::vector<std::string>{"'Porte A ouverte'"},
+          "un cas pour Tracer (sans retour) : Porte A ouverte devient 'Porte A ouverte' (un STRING)");
+    check(!page.setField(c3, app::HmiFunctionTestsPage::Field::Expected, "3", &why) && why.find("pas de retour") != std::string::npos,
+          "un attendu sur une proc\xC3\xA9" "dure : refus\xC3\xA9 (" + why + ")");
+    check(!page.addGiven(c3, "Inconnue", "1", &why) && why.find("inconnue") != std::string::npos, "poser une variable inconnue : refus\xC3\xA9 (" + why + ")");
+    check(page.addGiven(c3, "Compteur_Clics", "0", &why) && page.addCheck(c3, "Compteur_Clics", "1", {}, &why)
+              && page.addCheck(c3, "JOURNAL", "[ALERTE] Porte A ouverte", {}, &why),
+          "Poser avant : Compteur_Clics := 0 ; V\xC3\xA9rifier apr\xC3\xA8s : Compteur_Clics = 1, le JOURNAL [" + why + "]");
+    check(page.givens().model()->rowCount() == 1 && page.checks().model()->rowCount() == 2 && page.givens().model()->cellText(0, 0) == "Compteur_Clics",
+          "les deux petites tables : 1 pose, 2 v\xC3\xA9rifs");
+    check(page.givens().model()->setCellText(0, 1, "1") && doc->project.function(ft)->tests[0].givens[0].value == "1", "une pose se change dans sa case");
+    check(!page.runCase(c3) && page.lastResult(c3) && page.lastResult(c3)->verdict == hmi::Verdict::Failed, "pos\xC3\xA9 \xC3\xA0 1 : la v\xC3\xA9rif (= 1) \xC3\xA9" "choue (2)");
+    (void)stack.undo();
+    check(doc->project.function(ft)->tests[0].givens[0].value == "0" && page.runCase(c3), "Ctrl+Z : la pose revient \xC3\xA0 0 ; le cas r\xC3\xA9ussit");
+
+    // ---- Lancer les tests (le volet) ; la barre ----
+    lines.clear();
+    check(fns.runTests() == 2 && fns.lastCampaign().tally.cases == 3 && fns.lastCampaign().failed(), "Lancer les tests : 3 cas, 2 r\xC3\xA9ussis, un \xC3\xA9" "chec");
+    check(fns.lastMessage().find("3 cas") != std::string::npos && lines.size() == 5, "le bilan dans la barre ; les verdicts au panneau du bas (" + fns.lastMessage() + ")");
+
+    // ---- le panneau du bas : un double-clic sur un verdict mene au cas ----
+    {
+        app::HmiBuildOutputPane out("tu.bas");
+        for (const auto& l : lines) out.say(l.severity, "Tests", l.text, l.element);
+        std::string opened;
+        core::ConnectionScope links;
+        links += out.elementActivated->connect([&](const std::string& k) { opened = k; });
+        const auto& m = out.outputTable().model();
+        for (std::size_t r = 0; m && r < m->rowCount(); ++r)
+            if (m->cellText(r, 3).find("poids 25 %") != std::string::npos) out.outputTable().activated->emit(static_cast<ui::RowIndex>(r));
+        check(opened == app::testElement(c2) && app::testOfElement(opened) == c2, "le double-clic sur un verdict : cas-test:" + std::to_string(c2));
+        const auto owner = app::ownerOfTest(doc->project, c2);
+        check(owner && owner->view == kNoId && owner->function == fm, "le cas, sa fonction (du projet)");
+        check(fns.showTestCase(c2) && fns.selectedFunction() == fm && fns.currentCodeTab() == app::HmiFunctionsPane::CodeTabTests && page.selectedCase() == c2,
+              "y aller : Moyenne_Pression, l'onglet Tests, le cas choisi");
+    }
+
+    // ---- dupliquer, supprimer, Ctrl+Z ----
+    const Id c4 = page.duplicateCase(c2, &why);
+    check(c4 != kNoId && page.caseCount() == 3 && doc->project.function(fm)->tests[2].name == "poids 25 % (copie)", "Dupliquer : poids 25 % (copie), juste apr\xC3\xA8s");
+    check(page.removeCase(c4, &why) && page.caseCount() == 2, "Supprimer le cas");
+    (void)stack.undo();
+    check(page.caseCount() == 3, "Ctrl+Z : il revient");
+    (void)stack.undo();
+    check(page.caseCount() == 2, "Ctrl+Z : la copie s'en va");
+
+    // ---- le rapport : la fonction, puis toute la campagne (Configuration) ----
+    written.clear();
+    check(page.exportReport(hmi::ExportFormat::Excel) && written.size() == 1 && written[0].format == "Excel" && written[0].data && !written[0].data->empty()
+              && written[0].fileName.find("tests_Moyenne_Pression") == 0,
+          "Rapport Excel de la fonction : exports/" + (written.empty() ? std::string("?") : written[0].fileName));
+    {
+        app::HmiConfigPane cfg("tu.config", doc, apply, std::make_shared<domain::Project>(), nullptr);
+        std::vector<app::TestLine> cfgLines;
+        app::HmiConfigPane::TestHosts th;
+        th.exportFile = [&](const hmi::ExportRequest& rq, std::string* where) {
+            written.push_back(rq);
+            if (where) *where = "exports/" + rq.fileName;
+            return true;
+        };
+        th.output = [&](const std::vector<app::TestLine>& l) { cfgLines.insert(cfgLines.end(), l.begin(), l.end()); };
+        cfg.setTestHosts(std::move(th));
+        cfg.setBounds({0, 0, 1200, 800});
+        cfg.layout();
+        cfg.ensureBuilt();
+        std::string tally, report;
+        for (const auto& c : cfg.properties().categories())
+            if (c.name == "Tests des fonctions")
+                for (const auto& pr : c.properties) {
+                    if (pr.name == "Cas des fonctions") tally = pr.value;
+                    if (pr.name == "Rapport des tests\xE2\x80\xA6") report = pr.value;
+                }
+        check(tally.find("3 cas") == 0 && !report.empty(), "Configuration : le bilan des tests (" + tally + "), Rapport des tests\xE2\x80\xA6");
+        std::string where;
+        check(cfg.exportTestsReport(hmi::ExportFormat::Pdf, &where) && written.back().format == "PDF" && written.back().rows >= 5 && cfgLines.size() == 5,
+              "Rapport des tests (PDF) : toute la campagne rejou\xC3\xA9" "e, " + where);
+    }
+
+    // ---- Generer : un cas fautif, en rouge ----
+    for (auto& f : doc->project.programs.functions)
+        if (f.id == fm) f.tests[1].arguments = {"1", "2", "3", "4"};
+    page.refresh();
+    check(!page.faultsOf(c2).empty() && page.cases().model()->cellStyle(1, 0).fgTone == ui::Tone::Error,
+          "trop d'arguments (G\xC3\xA9n\xC3\xA9rer le dit) : le nom du cas en rouge (" + page.faultsOf(c2) + ")");
+    app::testruns::forget();
+}
+
 int main(int argc, char** argv) {
+    // 1.13.0 (lot J4b) : HMI_TEST_J46=1 - l'interface des tests unitaires, seule.
+    if (const char* only = std::getenv("HMI_TEST_J46"); only && *only == '1') {
+        testsUnitaires113();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.13.0 (lot J8) : HMI_TEST_J8=1 - les espaces de noms et les bibliotheques, seuls.
     if (const char* only = std::getenv("HMI_TEST_J8"); only && *only == '1') {
         bibliotheques113();
@@ -36884,6 +37174,7 @@ int main(int argc, char** argv) {
     langues11230();                         // 1.12.30 : les langues cote a cote, la pseudo-langue
     zoom11231();                            // 1.12.31 : le zoom de toute la page, la vue en ilot, le panneau du bas
     bibliotheques113();                     // 1.13.0 (lot J8) : espaces de noms et bibliotheques - le volet, l'arbre
+    testsUnitaires113();                    // 1.13.0 (lot J4b) : les tests unitaires - l'onglet Tests, les verdicts, l'arbre
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

@@ -54,6 +54,7 @@ class MacrosPane;   // lot macros 1 : l'onglet Macros
 class HmiBuildManager;      // 1.11.13 : la generation incrementale de l'IHM (hmi/HmiBuild.hpp)
 class HmiBuildOutputPane;   // 1.11.13 : ses sorties (hmi/HmiBuildPanes.hpp) ; 1.11.14 : le panneau du bas
 class HmiLiveSource;        // 1.11.21 : un volet de code montre (hmi/HmiLive.hpp)
+struct TestLine;            // 1.13.0 (lot J4b) : une ligne d'un verdict de test (hmi/HmiFunctionTestsPage.hpp)
 struct ConsoleEntry;        // 1.11.14 : une ligne de la Console (hmi/HmiConsole.hpp)
 class MacroEditorView;         // lot API 6 : le mode Modifier d'une macro
 class TopBar;       // lot API 2 : la barre du haut
@@ -845,6 +846,19 @@ private:
         hosts.buildOutputs = [this] { (void)hmiBuildOutput(true); };
         hosts.showDiagnostics = [this] { showHmiBuildOutputs(1); };     // 1.11.21 : la barre d'un volet de code
     }
+    // 1.13.0 (lot J4b) : les tests unitaires d'un volet Fonctions - les verdicts aux Sorties (categorie Tests),
+    // la fenetre " Nouveau cas ", le rapport dans exports/.
+    template <class Hosts> void wireHmiTestHosts(Hosts& hosts) {
+        hosts.testOutput = [this](const auto& lines) { showHmiTestLines(lines); };
+        hosts.newTestCase = [this](std::uint32_t view, std::uint32_t function) { askHmiNewTestCase(view, function); };
+        hosts.exportFile = [this](const auto& rq, std::string* where) { return writeHmiExport(rq, where); };
+    }
+    void showHmiTestLines(const std::vector<TestLine>& lines);
+    void askHmiNewTestCase(std::uint32_t view, std::uint32_t function);
+    // 1.13.0 (lot J4b) : le rejeu des tests au Compiler / Demarrer (Configuration : Rejouer les tests...) - vrai : un
+    // echec bloque le demarrage (Un test en echec empeche le demarrage).
+    bool replayHmiTests(const hmi::pipeline::Report& report, hmi::pipeline::Mode mode);
+    bool hmiTestsBlockStart_{false};
     void runHmiBuildFor(hmi::pipeline::Mode mode, const std::string& key);
     void openHmiDiagnostic(const hmi::pipeline::Diagnostic& d);
     void openHmiElement(const std::string& key);

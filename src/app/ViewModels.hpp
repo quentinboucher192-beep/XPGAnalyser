@@ -511,6 +511,9 @@ namespace app {
             int           line{0};
         };
         [[nodiscard]] bool codeTargetOf(ui::NodeId, CodeTarget& out) const;
+        // 1.13.0 (lot J4b) : un cas de test sous une fonction (le groupe Tests) - son dernier verdict (hmi::Verdict,
+        // en entier) ; -1 : a jouer, ou pas un cas.
+        [[nodiscard]] int testVerdictOf(ui::NodeId) const;
         // Lot 16 : le dossier de variables IHM d'un noeud ("Ligne/Convoyeur") ; vide sinon.
         [[nodiscard]] std::string   hmiFolderOf(ui::NodeId) const;
         // Lot 21 : le texte d'un dossier d'une liste IHM ("Armoires  [3]").
@@ -805,6 +808,7 @@ namespace app {
         // oublie quand le document change (pas a chaque dessin).
         struct CodeOutline;
         mutable std::map<std::uint64_t, std::shared_ptr<const CodeOutline>> outlines_;
+        mutable std::uint64_t outlinesTests_{0};   // 1.13.0 (lot J4b) : la revision des verdicts (app::testruns) qu'ils montrent
         [[nodiscard]] const CodeOutline* outlineOf(std::uint32_t codeKind, std::uint64_t id) const;
         // 1.10 (chantier O) : les alarmes des objets, gardees par (vue, objet) et
         // oubliees quand le document change.

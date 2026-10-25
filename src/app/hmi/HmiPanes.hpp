@@ -20,6 +20,7 @@
 #include "HmiApiVarsPane.hpp"          // 1.11.1 (API-V) : les variables de l'automate en arbre
 #include "HmiPanels.hpp"
 #include "HmiFolderTable.hpp"          // lot 21 : les listes rangees en dossiers
+#include "HmiFunctionTestsPage.hpp"    // 1.13.0 (lot J4b) : le rapport des tests (Configuration)
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiApiVars.hpp"     // 1.11.1 (API-M) : le modele
 #include "../../hmi/HmiCheck.hpp"
@@ -85,6 +86,15 @@ public:
     [[nodiscard]] hmi::Issue issueOfUse(const std::string& path, std::size_t index) const;
     // Le dernier message de l'arbre (« API.X copie »...).
     [[nodiscard]] const std::string& lastMessage() const noexcept { return message_; }
+    // 1.13.0 (lot J4b) : " Rapport des tests... " (Tests des fonctions) - tous les cas rejoues, le rapport ecrit
+    // dans exports/ (par l'hote) ; les verdicts au panneau du bas. Faux : rien ecrit (`where` dit pourquoi).
+    struct TestHosts {
+        std::function<bool(const hmi::ExportRequest&, std::string*)> exportFile;
+        std::function<sim::Environment*()>                           plc;
+        std::function<void(const std::vector<TestLine>&)>            output;
+    };
+    void setTestHosts(TestHosts h) { testHosts_ = std::move(h); dirty_ = true; invalidateLayout(); }
+    bool exportTestsReport(hmi::ExportFormat format, std::string* where = nullptr);
 protected:
     void onLayout() override;
 private:
@@ -106,6 +116,7 @@ private:
     // 1.12.0 : IHM Studio - le panneau des variables du programme, garde hors de l'ecran.
     ui::WidgetPtr unshownVars_;
     std::string       message_;
+    TestHosts         testHosts_;                 // 1.13.0 (lot J4b)
     core::ConnectionScope links_;
     bool dirty_{true};
 };

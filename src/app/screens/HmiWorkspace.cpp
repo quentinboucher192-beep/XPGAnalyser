@@ -55,6 +55,7 @@
 #include "../hmi/HmiDuplicateDialog.hpp"            // 1.10.2 (chantier D) : "Dupliquer..."
 #include "../hmi/HmiAddressDialog.hpp"              // 1.12.18 : l'adresse dans toutes les cases
 #include "../hmi/HmiFunctionDialog.hpp"   // 1.12.24 : Nouvelle fonction
+#include "../hmi/HmiFunctionTestsPage.hpp"   // 1.13.0 (lot J4b) : Nouveau cas, les verdicts
 #include "../hmi/HmiFunctionPanes.hpp"
 #include "../hmi/HmiHelpPane.hpp"
 #include "../hmi/HmiTutorial.hpp"
@@ -1091,6 +1092,12 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             });
         // 1.11.1 (API-V) : un emploi d'une variable de l'automate choisi dans l'arbre - y aller.
         hmiLinks_ += pane->useActivated->connect([this](const hmi::Issue& i) { openHmiIssue(i); });
+        // 1.13.0 (lot J4b) : " Rapport des tests... " - les verdicts aux Sorties, le rapport dans exports/.
+        HmiConfigPane::TestHosts th;
+        th.exportFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeHmiExport(rq, where); };
+        th.plc = [this]() -> ::sim::Environment* { return app_.simulation().attached() ? app_.simulationRuntime() : nullptr; };
+        th.output = [this](const std::vector<TestLine>& lines) { showHmiTestLines(lines); };
+        pane->setTestHosts(std::move(th));
         page = std::move(pane);
         title = "IHM \xC2\xB7 Configuration";
         icon = Icon::Settings;
@@ -1544,6 +1551,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         hosts.exportItems = [this](hmi::Id f) { askHmiExportPrograms(1, f); };   // 1.11.2 (decision 174)
         hosts.importAny = [this] { askHmiImport(); };
         wireHmiBuildHosts(hosts);   // 1.11.13
+        wireHmiTestHosts(hosts);    // 1.13.0 (lot J4b) : les tests unitaires
         pane->setHosts(std::move(hosts));
         wireAssist(*pane, app_, [this] { return dynamic_cast<HmiSimulationPane*>(hmiTab("simulation")); });
         page = std::move(pane);
@@ -2931,6 +2939,11 @@ void MainAnalysisScreen::openHmiIssue(const hmi::Issue& issue) {
     auto doc = app_.hmi();
     if (!doc) return;
     if (openHmiSupervisionIssue(issue)) return;
+    // 1.13.0 (lot J4b) : un constat d'un cas de test (Generer : checkFunctionTests) - le cas, dans l'onglet Tests.
+    if (issue.category == "Test" && issue.item != hmi::kNoId) {
+        openHmiElement(testElement(issue.item));
+        return;
+    }
     // 1.10 (decision 14 ; integration I2) : un constat d'un operateur (Compiler) - le
     // type (Types IHM, sa section Operateurs) ou le symbole (son sous-onglet
     // Operateurs), l'operateur choisi, son script a la ligne.
@@ -3309,6 +3322,24 @@ void MainAnalysisScreen::openHmiCodeTarget(const ProjectTreeModel::CodeTarget& t
         }
     }
     if (!pane) return;
+    // 1.13.0 (lot J4b) : le groupe Tests - l'onglet Tests ; un cas - sa ligne choisie.
+    if (t.group == static_cast<int>(OK::Tests)) {
+        pane->showCodeTab(HmiFunctionsPane::CodeTabTests);
+        const auto doc = app_.hmi();
+        const hmi::HmiFunction* f = nullptr;
+        if (doc) {
+            for (const auto& g : doc->project.programs.functions)
+                if (g.id == asId(t.id)) f = &g;
+            if (!f)
+                for (const auto& v : doc->project.views)
+                    for (const auto& g : v.functions)
+                        if (g.id == asId(t.id)) f = &g;
+        }
+        if (f && !t.name.empty())
+            for (const auto& c : f->tests)
+                if (c.name == t.name) pane->testsPage().selectCase(c.id);
+        return;
+    }
     if (declaration) {
         if (!pane->showDeclaration(t.name) && t.line > 0) pane->goTo(asId(t.id), t.line);
     } else if (t.group == static_cast<int>(OK::Parameters)) pane->showCodeTab(HmiFunctionsPane::CodeTabParameters);
@@ -3383,6 +3414,43 @@ void MainAnalysisScreen::askHmiNewFunction(std::uint64_t symbolView) {
         if (symbolView && !a.pub) (void)pane->setFunctionVisibility(made, false);
         if (symbolView && a.isVirtual) (void)pane->setVirtual(made, true);
         if (!a.generics.empty()) (void)pane->setGenerics(made, a.generics);   // 1.13.0 : TEMPLATE <T>
+    });
+}
+
+// ---- 1.13.0 (lot J4b) : les tests unitaires des fonctions -------------------------------
+// Les verdicts aux Sorties du panneau du bas (categorie Tests) : chaque ligne nomme son cas (un double-clic y mene).
+void MainAnalysisScreen::showHmiTestLines(const std::vector<TestLine>& lines) {
+    if (lines.empty() || !hmiBuildOutput(true) || !bottomPanel_) return;
+    for (const auto& l : lines) bottomPanel_->say(l.severity, "Tests", l.text, l.element);
+    bottomPanel_->showTab(HmiBuildOutputPane::kSorties);
+    if (explorer_) explorer_->invalidate();
+}
+
+// " Nouveau cas... " : la fenetre, puis le cas pose dans l'onglet Tests de la fonction (une commande, Ctrl+Z).
+void MainAnalysisScreen::askHmiNewTestCase(std::uint32_t view, std::uint32_t function) {
+    auto doc = app_.hmi();
+    if (!doc) return;
+    HmiNewTestCaseDialog::Spec spec;
+    spec.doc = doc;
+    spec.view = view;
+    spec.function = function;
+    app_.menus().ShowDialog(std::make_unique<HmiNewTestCaseDialog>(std::move(spec)), [this, view, function](const menu::DialogResult& r) {
+        if (!r.accepted()) return;
+        HmiNewTestCaseDialog::Answer a;
+        if (!HmiNewTestCaseDialog::parse(r.payload, a)) return;
+        HmiFunctionsPane* pane = nullptr;
+        if (view != hmi::kNoId) {
+            auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(view)));
+            pane = editor ? (editor->symbolFunctions() ? editor->symbolFunctions() : editor->viewFunctions()) : nullptr;
+        } else {
+            pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
+        }
+        if (!pane) return;
+        pane->selectFunction(function);
+        pane->showCodeTab(HmiFunctionsPane::CodeTabTests);
+        std::string why;
+        if (pane->testsPage().addCase(a, &why) == hmi::kNoId && status_)
+            status_->setTransientMessage("Cas refus\xC3\xA9 : " + why, 8.0, ui::StatusBar::Severity::Warning);
     });
 }
 

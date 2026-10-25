@@ -578,8 +578,10 @@ struct OutlineItem {
     int                      line{0};    // sa ligne dans le code (une fonction interne : sa premiere ; une
                                          // declaration du modele : 1, ses onglets la montrent)
     std::vector<OutlineItem> children;   // une fonction interne : ses parametres, puis ses locales
+    int                      verdict{-1};   // 1.13.0 (lot J4b) : un cas de test - son dernier verdict (hmi::Verdict) ; -1 : a jouer
 };
-enum class OutlineKind : std::uint8_t { Parameters = 0, Constants = 1, Variables = 2, Functions = 3 };
+// 1.13.0 (lot J4b) : Tests - le groupe des cas de test d'une fonction (son titre dit le bilan), ajoute par l'arbre.
+enum class OutlineKind : std::uint8_t { Parameters = 0, Constants = 1, Variables = 2, Functions = 3, Tests = 4 };
 struct OutlineGroup {
     OutlineKind              kind{OutlineKind::Variables};
     std::string              label;      // "Param\xC3\xA8tres", "Constantes", "Variables", "Variables locales", "Fonctions internes"

@@ -1174,11 +1174,16 @@ std::vector<pl::Diagnostic> HmiBuildOutputPane::shownDiagnostics() const {
 }
 
 void HmiBuildOutputPane::say(pl::Severity severity, std::string category, std::string message) {
+    say(severity, std::move(category), std::move(message), {});
+}
+
+void HmiBuildOutputPane::say(pl::Severity severity, std::string category, std::string message, std::string element) {
     Line x;
     x.time = clockNow();
     x.severity = severity;
     x.category = std::move(category);
     x.message = std::move(message);
+    x.element = std::move(element);
     lines_.push_back(std::move(x));
     rebuild();
 }
