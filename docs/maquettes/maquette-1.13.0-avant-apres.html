@@ -4,541 +4,630 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>IHM Studio 1.13.0</title>
-<meta name="description" content="Maquette interactive avant/apres des concepts de programmation de la 1.13.0 d'IHM Studio.">
+<meta name="description" content="Maquette interactive : les ecrans d'IHM Studio en 1.13.0, avant/apres, dans la fenetre complete.">
 <style>
   :root{
-    --bg:#15151b; --surface:#1f1f29; --surface2:#272733; --surface3:#2f2f3c;
-    --border:#34343f; --border2:#454554;
-    --ink:#e9e9f2; --ink2:#c4c4d2; --muted:#9191a3; --faint:#6d6d80;
-    --accent:#a78bfa; --accent-d:#8b5cf6; --accent-bg:#2a2340;
-    --gold:#e3b23c; --gold-bg:#352c16;
-    --green:#4ade80; --red:#f87171; --blue:#79b8ff; --cyan:#6fd3c7; --orange:#f0a673;
-    --kw:#c792ea; --ty:#82aaff; --cm:#6b7a6b; --st:#e5c07b; --fn:#6fd3c7; --num:#f0a673; --op:#89ddff;
-    --avant:#8a8a9c; --avant-bg:#22222b;
-    --radius:12px; --radius-s:8px;
-    --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono","Cascadia Code",Consolas,monospace;
+    --bg:#0f0f14; --win:#1a1a22; --surface:#1f1f29; --surface2:#262631; --surface3:#2f2f3c;
+    --border:#30303b; --border2:#40404e; --rail:#17171e;
+    --ink:#e9e9f2; --ink2:#c2c2d0; --muted:#8f8fa1; --faint:#656577;
+    --accent:#a78bfa; --accent-d:#8b5cf6; --accent-bg:#2a2340; --accent-br:#3d3360;
+    --teal:#4fd6c4; --teal-bg:#17302e;
+    --gold:#e3b23c; --gold-bg:#312913;
+    --green:#4ade80; --red:#f87171; --blue:#79b8ff; --orange:#f0a673;
+    --kw:#c792ea; --ty:#82aaff; --cm:#6a7a6a; --st:#e5c07b; --fn:#5fd0c4; --num:#f0a673; --op:#89ddff; --pr:#a78bfa;
+    --run:#39d98a;
+    --mono:ui-monospace,"JetBrains Mono","Cascadia Code","SFMono-Regular",Consolas,monospace;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
   *{box-sizing:border-box}
   html,body{margin:0}
-  body{
-    background:var(--bg); color:var(--ink); font-family:var(--sans);
-    font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
-    padding:0 16px 64px;
-  }
-  .wrap{max-width:1180px; margin:0 auto}
+  body{background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:14px; padding:0 16px 56px;}
+  .page{max-width:1240px; margin:0 auto}
 
-  /* ---- bandeau ---- */
-  header.top{
-    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
-    padding:20px 0 16px; border-bottom:1px solid var(--border); margin-bottom:22px;
-  }
-  .logo{display:flex; align-items:center; gap:11px}
-  .logo .mark{
-    width:34px; height:34px; border-radius:9px;
-    background:linear-gradient(135deg,var(--accent),var(--accent-d));
-    display:grid; place-items:center; font-weight:800; color:#1a1430; font-size:15px;
-    box-shadow:0 2px 14px rgba(139,92,246,.35);
-  }
-  .logo h1{font-size:17px; margin:0; font-weight:700; letter-spacing:.2px}
-  .logo .sub{color:var(--muted); font-size:12.5px; font-weight:500}
-  .ver{
-    font-family:var(--mono); font-size:12px; color:var(--gold);
-    border:1px solid var(--gold-bg); background:var(--gold-bg); padding:3px 9px; border-radius:999px;
-  }
-  .spacer{flex:1 1 auto}
-
-  /* ---- bascule avant/apres ---- */
-  .seg{display:inline-flex; background:var(--surface2); border:1px solid var(--border2); border-radius:999px; padding:3px}
-  .seg button{
-    border:0; background:transparent; color:var(--muted); font-family:var(--sans);
-    font-size:13px; font-weight:600; padding:7px 15px; border-radius:999px; cursor:pointer;
-    transition:background .15s,color .15s; white-space:nowrap;
-  }
+  /* ---- entete du document ---- */
+  header.doc{display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:18px 2px 14px}
+  .brand{display:flex; align-items:center; gap:10px}
+  .brand .mk{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-d));display:grid;place-items:center;font-weight:800;color:#180f30;font-size:13px}
+  .brand h1{font-size:16px;margin:0;font-weight:700}
+  .brand .s{color:var(--muted);font-size:12px}
+  .vpill{font-family:var(--mono);font-size:11px;color:var(--gold);background:var(--gold-bg);border:1px solid #4a3c18;padding:3px 9px;border-radius:999px}
+  .sp{flex:1}
+  .seg{display:inline-flex;background:var(--surface2);border:1px solid var(--border2);border-radius:999px;padding:3px}
+  .seg button{border:0;background:transparent;color:var(--muted);font:600 13px var(--sans);padding:7px 16px;border-radius:999px;cursor:pointer;transition:.15s}
   .seg button:hover{color:var(--ink2)}
-  .seg button[aria-pressed="true"]{color:var(--ink); background:var(--surface3)}
-  .seg button.sv[aria-pressed="true"]{background:var(--accent-bg); color:#d7c9ff; box-shadow:inset 0 0 0 1px var(--accent-d)}
+  .seg button[aria-pressed="true"]{color:#ece6ff;background:var(--accent-bg);box-shadow:inset 0 0 0 1px var(--accent-d)}
+  .seg.g button[aria-pressed="true"]{color:var(--ink);background:var(--surface3);box-shadow:none}
+  .toolrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 2px 8px}
+  .hint{color:var(--muted);font-size:12.5px;margin:0 2px 14px;max-width:80ch;line-height:1.5}
+  .hint b{color:var(--ink2)}
+  label.chk{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:12.5px;cursor:pointer;user-select:none}
+  label.chk input{accent-color:var(--accent-d)}
 
-  .intro{color:var(--ink2); max-width:70ch; margin:2px 0 22px; font-size:14.5px}
-  .intro b{color:var(--ink)}
+  /* ---- selecteur de concept ---- */
+  .concepts{display:flex;gap:6px;flex-wrap:wrap;margin:0 2px 12px}
+  .concepts button{border:1px solid var(--border);background:var(--surface);color:var(--ink2);font:600 12.5px var(--sans);padding:7px 11px;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+  .concepts button .sw{width:8px;height:8px;border-radius:3px}
+  .concepts button:hover{background:var(--surface2);color:var(--ink)}
+  .concepts button[aria-current="true"]{background:var(--accent-bg);border-color:var(--accent-br);color:#ece6ff}
+  .concepts button .tag{font:700 10px var(--mono);color:var(--gold)}
 
-  /* ---- disposition ---- */
-  .app{display:grid; grid-template-columns:234px 1fr; gap:22px; align-items:start}
-  nav.rail{
-    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
-    padding:8px; position:sticky; top:14px;
-  }
-  nav.rail .grp{color:var(--faint); font-size:11px; font-weight:700; letter-spacing:.9px;
-    text-transform:uppercase; padding:10px 10px 6px}
-  nav.rail button{
-    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
-    border:0; background:transparent; color:var(--ink2); font-family:var(--sans);
-    font-size:13.5px; font-weight:500; padding:9px 10px; border-radius:var(--radius-s); cursor:pointer;
-  }
-  nav.rail button .sw{width:9px; height:9px; border-radius:3px; flex:0 0 auto}
-  nav.rail button .n{flex:1 1 auto}
-  nav.rail button .tag{font-size:10px; color:var(--gold); font-weight:700; font-family:var(--mono)}
-  nav.rail button:hover{background:var(--surface2); color:var(--ink)}
-  nav.rail button[aria-current="true"]{background:var(--accent-bg); color:#e3d9ff}
-  nav.rail button[aria-current="true"] .n{font-weight:600}
+  .changeline{display:flex;gap:9px;align-items:baseline;margin:0 2px 12px;font-size:13px;color:var(--ink2);background:var(--accent-bg);border:1px solid var(--accent-br);border-radius:9px;padding:9px 13px}
+  .changeline .b{color:var(--accent);font-weight:700;white-space:nowrap}
 
-  main{min-width:0}
-  .topic-head{margin:2px 0 18px}
-  .topic-head h2{margin:0 0 8px; font-size:22px; font-weight:750; letter-spacing:.2px}
-  .why{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px}
-  .why .card{border:1px solid var(--border); border-radius:var(--radius-s); padding:11px 13px; font-size:13px}
-  .why .card .lbl{font-size:10.5px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; margin-bottom:4px}
-  .why .pb{background:var(--avant-bg)}
-  .why .pb .lbl{color:var(--avant)}
-  .why .rp{background:var(--accent-bg); border-color:#3d3360}
-  .why .rp .lbl{color:var(--accent)}
-  .why .card p{margin:0; color:var(--ink2)}
+  /* ---- fenetre de l'appli ---- */
+  .frame{overflow-x:auto;border-radius:12px}
+  .win{min-width:960px;background:var(--win);border:1px solid var(--border2);border-radius:12px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  .titlebar{display:flex;align-items:center;gap:9px;background:#13131a;padding:8px 12px;border-bottom:1px solid var(--border)}
+  .titlebar .dots{display:flex;gap:6px;margin-right:6px}
+  .titlebar .dots i{width:11px;height:11px;border-radius:50%;display:block}
+  .titlebar .dots i:nth-child(1){background:#ff5f57}.titlebar .dots i:nth-child(2){background:#febc2e}.titlebar .dots i:nth-child(3){background:#28c840}
+  .titlebar .ico{width:16px;height:16px;border-radius:4px;background:linear-gradient(135deg,var(--accent),var(--accent-d))}
+  .titlebar .tt{font-size:12.5px;color:var(--ink2)}
+  .titlebar .tt b{color:var(--ink)}
 
-  /* ---- paire avant/apres ---- */
-  .pair{display:grid; grid-template-columns:1fr 1fr; gap:16px}
-  .pair.one{grid-template-columns:1fr}
-  .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; min-width:0}
-  .panel.hidden{display:none}
-  .panel .ph{
-    display:flex; align-items:center; gap:9px; padding:10px 14px; border-bottom:1px solid var(--border);
-    font-size:12.5px; font-weight:700; letter-spacing:.3px;
-  }
-  .panel .ph .dot{width:8px; height:8px; border-radius:50%}
-  .panel.avant .ph{background:var(--avant-bg); color:var(--avant)}
-  .panel.avant .ph .dot{background:var(--avant)}
-  .panel.apres .ph{background:linear-gradient(90deg,var(--accent-bg),transparent); color:#d7c9ff}
-  .panel.apres .ph .dot{background:var(--accent)}
-  .panel .ph .badge{margin-left:auto; font-family:var(--mono); font-size:10.5px; color:var(--gold);
-    background:var(--gold-bg); border-radius:999px; padding:2px 8px}
-  .panel .body{padding:0}
+  .toolbar{display:flex;align-items:center;gap:8px;padding:7px 12px;background:#15151c;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .tb{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--ink2);background:var(--surface2);border:1px solid var(--border2);padding:6px 11px;border-radius:7px}
+  .tb.run{color:#06210f;background:var(--run);border-color:var(--run)}
+  .tb.ghost{background:transparent}
+  .pastille{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);margin-left:2px}
+  .pastille .led{width:9px;height:9px;border-radius:50%;background:#5a5a68}
+  .pastille.on .led{background:var(--run);box-shadow:0 0 8px var(--run)}
+  .pastille.on{color:var(--ink2)}
+  .toolbar .sp{flex:1}
 
-  /* ---- fragment d'editeur ---- */
-  .ed{font-family:var(--mono); font-size:12.5px; line-height:1.72}
-  .ed .code{padding:14px 15px; overflow-x:auto; white-space:pre; color:var(--ink)}
-  .ed .code .ln{color:var(--faint); user-select:none; display:inline-block; width:1.6em; text-align:right; margin-right:14px}
-  .kw{color:var(--kw)} .ty{color:var(--ty)} .cm{color:var(--cm)} .st{color:var(--st)}
-  .fn{color:var(--fn)} .num{color:var(--num)} .op{color:var(--op)} .pr{color:var(--accent)}
-  .code .bp{background:var(--accent-bg); display:block; margin:0 -15px; padding:0 15px 0 0;
-    box-shadow:inset 3px 0 0 var(--accent)}
-  .code .paused{background:var(--gold-bg); display:block; margin:0 -15px; padding:0 15px 0 0;
-    box-shadow:inset 3px 0 0 var(--gold)}
+  .body{display:grid;grid-template-columns:232px 1fr 248px;min-height:470px}
+  /* explorateur */
+  .rail{background:var(--rail);border-right:1px solid var(--border);padding:8px 6px;overflow:auto;font-size:12.5px}
+  .rail .search{display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border2);border-radius:7px;padding:6px 9px;color:var(--faint);margin:2px 4px 8px;font-size:12px}
+  .dom{color:var(--faint);font:700 10.5px var(--sans);letter-spacing:.8px;text-transform:uppercase;padding:9px 8px 3px;display:flex;align-items:center;gap:6px}
+  .nd{display:flex;align-items:center;gap:7px;padding:4px 8px;border-radius:6px;color:var(--ink2);cursor:default;white-space:nowrap}
+  .nd .tw{width:10px;color:var(--faint);font-size:10px}
+  .nd .ic{width:13px;text-align:center}
+  .nd.sel{background:var(--accent-bg);color:#ece6ff}
+  .nd.l2{padding-left:22px}.nd.l3{padding-left:38px}
+  .nd .mth{color:var(--accent)} .nd .typ{color:var(--ty)} .nd .vw{color:var(--teal)}
+  .nd .lock{color:var(--gold);font-size:10px}
+  .nd .warn{color:var(--red);font-size:11px;margin-left:auto}
+  .nd .ok{color:var(--green);font-size:11px;margin-left:auto}
+  .nd.strike{color:var(--faint);text-decoration:line-through;opacity:.6}
+  .esp{color:#ece6ff;background:var(--accent-bg);border:1px solid var(--accent-br);border-radius:5px;padding:1px 6px;font-size:11.5px}
+  .libimp{color:var(--gold);background:var(--gold-bg);border:1px solid #4a3c18;border-radius:5px;padding:1px 6px;font-size:11.5px}
 
-  /* petites "vues" d'interface */
-  .ui{padding:13px 15px; display:flex; flex-direction:column; gap:9px}
-  .tree{font-size:12.5px; font-family:var(--mono)}
-  .tree .row{display:flex; align-items:center; gap:8px; padding:3px 0; color:var(--ink2)}
-  .tree .row .ic{width:13px; color:var(--faint)}
-  .tree .l1{padding-left:0} .tree .l2{padding-left:18px} .tree .l3{padding-left:36px}
-  .tree .m{color:var(--accent)} .tree .t{color:var(--ty)} .tree .lock{color:var(--gold)}
-  .chip{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;
-    padding:3px 9px; border-radius:999px; border:1px solid var(--border2); color:var(--ink2); background:var(--surface2)}
-  .chip.v{color:#d7c9ff; border-color:#3d3360; background:var(--accent-bg)}
-  .chip.g{color:var(--gold); border-color:var(--gold-bg); background:var(--gold-bg)}
-  .row-tabs{display:flex; gap:4px; flex-wrap:wrap; margin-bottom:2px}
-  .tab{font-size:12px; padding:5px 10px; border-radius:7px 7px 0 0; color:var(--muted); background:var(--surface2); border:1px solid var(--border); border-bottom:0}
-  .tab.act{color:var(--ink); background:var(--surface3); color:#d7c9ff}
-  .kv{display:grid; grid-template-columns:auto 1fr; gap:3px 14px; font-family:var(--mono); font-size:12px}
-  .kv .k{color:var(--muted)} .kv .vv{color:var(--ink)}
-  .verdict{display:flex; align-items:center; gap:8px; font-size:12.5px; font-family:var(--mono); padding:4px 0}
-  .verdict .st-ok{color:var(--green); font-weight:700}
-  .verdict .st-ko{color:var(--red); font-weight:700}
-  .bar{display:flex; gap:7px; flex-wrap:wrap; align-items:center}
-  .btn{font-size:12px; font-weight:600; padding:6px 11px; border-radius:7px; border:1px solid var(--border2); background:var(--surface2); color:var(--ink2)}
-  .btn.p{background:var(--accent-d); border-color:var(--accent-d); color:#fff}
-  .btn.ghost{background:transparent}
-  .menu{font-size:13px; font-family:var(--sans)}
-  .menu .mi{display:flex; align-items:center; gap:10px; padding:7px 9px; border-radius:7px; color:var(--ink2)}
-  .menu .mi:hover{background:var(--surface2)}
-  .menu .mi .k{margin-left:auto; color:var(--faint); font-family:var(--mono); font-size:11px}
-  .menu .mi.gone{color:var(--faint); text-decoration:line-through; opacity:.6}
-  .menu .mi .ic{width:16px; text-align:center; color:var(--muted)}
-  .menu .sep{height:1px; background:var(--border); margin:5px 2px}
-  .note{color:var(--muted); font-size:12px; padding:2px 2px 0}
-  .strike{color:var(--faint); text-decoration:line-through}
+  /* zone centrale */
+  .center{display:flex;flex-direction:column;min-width:0;background:var(--surface)}
+  .subtabs{display:flex;gap:2px;padding:7px 10px 0;background:#15151c;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .subtab{font-size:12px;padding:6px 12px;border-radius:7px 7px 0 0;color:var(--muted);background:transparent;border:1px solid transparent;border-bottom:0;white-space:nowrap}
+  .subtab.act{color:#ece6ff;background:var(--surface);border-color:var(--border)}
+  .subtab .nw{width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:5px;vertical-align:middle}
+  .main{flex:1;overflow:auto;padding:0}
+  .crumbs{padding:8px 14px;color:var(--muted);font-size:12px;border-bottom:1px solid var(--border)}
+  .crumbs b{color:var(--ink2)}
 
-  /* ---- resume ---- */
-  .summary{margin-top:26px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); padding:16px 18px}
-  .summary h3{margin:0 0 12px; font-size:14px; color:var(--muted); font-weight:700; letter-spacing:.4px; text-transform:uppercase}
-  .summary ul{margin:0; padding:0; list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:8px 22px}
-  .summary li{display:flex; gap:9px; align-items:baseline; font-size:13.5px; color:var(--ink2)}
-  .summary li .d{width:7px; height:7px; border-radius:2px; flex:0 0 auto; margin-top:6px}
-  .summary li b{color:var(--ink); font-weight:650}
-  footer{color:var(--faint); font-size:12px; text-align:center; margin-top:30px}
+  /* inspecteur */
+  .insp{background:var(--rail);border-left:1px solid var(--border);padding:10px;overflow:auto;font-size:12.5px}
+  .insp h4{margin:2px 2px 8px;font:700 11px var(--sans);letter-spacing:.7px;text-transform:uppercase;color:var(--faint)}
+  .fld{margin-bottom:9px}
+  .fld .k{color:var(--muted);font-size:11.5px;margin-bottom:3px}
+  .fld .v{background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:6px 8px;font:12px var(--mono);color:var(--ink)}
+  .fld .v.hl{border-color:var(--accent-d);box-shadow:0 0 0 2px var(--accent-bg)}
 
-  @media (max-width:860px){
-    .app{grid-template-columns:1fr}
-    nav.rail{position:static; display:flex; flex-wrap:wrap; gap:4px}
-    nav.rail .grp{display:none}
-    nav.rail button{width:auto}
-    .pair{grid-template-columns:1fr}
-    .why{grid-template-columns:1fr}
-    .summary ul{grid-template-columns:1fr}
-  }
-  @media (prefers-color-scheme:light){
-    :root:not([data-theme="dark"]){
-      --bg:#f3f3f7; --surface:#fff; --surface2:#f0f0f6; --surface3:#e8e6f5;
-      --border:#e2e2ec; --border2:#d3d3e0;
-      --ink:#1c1c28; --ink2:#3a3a4c; --muted:#6b6b7d; --faint:#9a9aae;
-      --accent-bg:#efe9ff; --gold:#9a7415; --gold-bg:#faf1d6; --avant:#7a7a8c; --avant-bg:#eeeef3;
-      --cm:#7a8a7a;
-    }
+  /* panneau du bas */
+  .bottom{border-top:1px solid var(--border);background:#15151c}
+  .btabs{display:flex;gap:2px;padding:6px 10px 0}
+  .btab{font-size:12px;padding:6px 12px;border-radius:7px 7px 0 0;color:var(--muted)}
+  .btab.act{color:#ece6ff;background:var(--surface);border:1px solid var(--border);border-bottom:0}
+  .btab .nw{width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:5px}
+  .bpane{background:var(--surface);border-top:1px solid var(--border);padding:11px 14px;min-height:92px;font-size:12.5px}
+
+  /* editeur de code */
+  .code{font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:12px 10px;overflow-x:auto}
+  .code .g{color:var(--faint);display:inline-block;width:2.4em;text-align:right;padding-right:12px;user-select:none;border-right:1px solid var(--border);margin-right:12px}
+  .code .bpx .g{color:var(--red)} .code .bpx .g::after{content:" \25CF";color:var(--red)}
+  .code .brk{background:rgba(248,113,113,.10);display:block;margin:0 -10px;padding:0 10px}
+  .code .pau{background:rgba(227,178,60,.14);display:block;margin:0 -10px;padding:0 10px;box-shadow:inset 3px 0 0 var(--gold)}
+  .kw{color:var(--kw)}.ty{color:var(--ty)}.cm{color:var(--cm)}.st{color:var(--st)}.fn{color:var(--fn)}.num{color:var(--num)}.op{color:var(--op)}.pr{color:var(--pr);font-weight:600}
+
+  /* grille */
+  table.grid{border-collapse:collapse;width:100%;font-size:12.5px}
+  table.grid th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px;padding:8px 12px;border-bottom:1px solid var(--border);background:#15151c;position:sticky;top:0}
+  table.grid td{padding:7px 12px;border-bottom:1px solid var(--border);font-family:var(--mono);color:var(--ink2)}
+  table.grid td.t{color:var(--ty)} table.grid td.u{color:var(--gold);font-weight:600}
+  table.grid tr.nw td{background:rgba(167,139,250,.07)}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;border:1px solid var(--border2);background:var(--surface2);color:var(--ink2)}
+  .pill.v{color:#ece6ff;background:var(--accent-bg);border-color:var(--accent-br)}
+  .pill.ok{color:var(--green);border-color:#1f4030;background:#14271c}
+  .pill.ko{color:var(--red);border-color:#43232a;background:#2a1619}
+  .pill.g{color:var(--gold);background:var(--gold-bg);border-color:#4a3c18}
+  .btnrow{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .mini{font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--surface2);color:var(--ink2)}
+  .mini.p{background:var(--accent-d);border-color:var(--accent-d);color:#fff}
+  .verd{display:flex;align-items:center;gap:8px;font:12.5px var(--mono);padding:3px 0}
+  .verd .o{color:var(--green);font-weight:700}.verd .x{color:var(--red);font-weight:700}
+  .logln{font:12px var(--mono);color:var(--muted);padding:1px 0}
+  .logln .e{color:var(--red)} .logln .w{color:var(--gold)} .logln .ok{color:var(--green)}
+  .kvm{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font:12px var(--mono)}
+  .kvm .k{color:var(--muted)} .kvm .vv{color:var(--ink)}
+
+  /* surlignage des changements */
+  .nw-ring{position:relative;outline:2px solid var(--accent-d);outline-offset:1px;border-radius:6px}
+  body:not(.hl) .nw-ring{outline:none}
+  .nwtag{display:inline-block;font:700 9.5px var(--mono);color:#180f30;background:var(--accent);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle}
+  body:not(.hl) .nwtag{display:none}
+
+  /* popover aide a la saisie */
+  .aide{margin:10px 12px;max-width:340px;background:var(--surface2);border:1px solid var(--accent-br);border-radius:8px;overflow:hidden;font-size:12px}
+  .aide .ah{padding:6px 10px;background:var(--accent-bg);color:#ece6ff;font-weight:600;font-size:11.5px}
+  .aide .ai{display:flex;gap:9px;padding:5px 10px;font-family:var(--mono);color:var(--ink2);border-top:1px solid var(--border)}
+  .aide .ai .ty{color:var(--ty)} .aide .ai .mu{color:var(--muted);margin-left:auto}
+
+  /* synoptique (canevas) */
+  .canvas{padding:16px;display:flex;justify-content:center}
+  .foot{color:var(--faint);font-size:12px;text-align:center;margin-top:22px}
+  .foot b{color:var(--muted)}
+
+  @media (max-width:720px){
+    .win{min-width:860px}
+    .concepts button .tag{display:none}
   }
 </style>
 </head>
-<body>
-<div class="wrap">
+<body class="hl">
+<div class="page">
 
-  <header class="top">
-    <div class="logo">
-      <div class="mark">IS</div>
-      <div>
-        <h1>IHM Studio <span class="ver">1.13.0 · apercu</span></h1>
-        <div class="sub">La programmation des scripts, avant / apres</div>
-      </div>
+  <header class="doc">
+    <div class="brand"><div class="mk">IS</div>
+      <div><h1>IHM Studio</h1><div class="s">Les ecrans en <b style="color:var(--ink)">1.13.0</b>, avant / apres</div></div>
     </div>
-    <div class="spacer"></div>
-    <div class="seg" id="viewseg" role="group" aria-label="Affichage">
-      <button class="sv" data-view="both" aria-pressed="true">Cote a cote</button>
-      <button data-view="avant" aria-pressed="false">Avant</button>
-      <button data-view="apres" aria-pressed="false">Apres</button>
+    <span class="vpill">1.13.0 · apercu</span>
+    <div class="sp"></div>
+    <div class="seg" id="etat" role="group" aria-label="Etat">
+      <button data-e="avant" aria-pressed="false">Avant 1.12.31</button>
+      <button data-e="apres" aria-pressed="true">Apres 1.13.0</button>
     </div>
   </header>
 
-  <p class="intro">La <b>1.13.0</b> ajoute a l'editeur de scripts les concepts de programmation qui manquaient encore.
-  Choisis un sujet a gauche&nbsp;: tu vois l'IHM <b>telle qu'elle est en 1.12.31</b> et <b>telle qu'elle devient en 1.13.0</b>.
-  Les grafcets ne sont pas dans ce lot.</p>
+  <p class="hint">Voici la <b>fenetre d'IHM Studio</b> telle qu'elle est aujourd'hui et telle qu'elle devient en 1.13.0 : le meme explorateur, le meme canevas, le meme inspecteur, le meme panneau du bas. Choisis un sujet, puis bascule <b>Avant / Apres</b> : ce qui change s'entoure de violet. Les <b>vues</b> (synoptiques) ne changent pas graphiquement ; ce qui change, c'est la puissance de leurs <b>scripts et types</b>.</p>
 
-  <div class="app">
-    <nav class="rail" id="rail" aria-label="Sujets"></nav>
-    <main>
-      <div class="topic-head">
-        <h2 id="t-title"></h2>
-        <div class="why">
-          <div class="card pb"><div class="lbl">Le manque (1.12.31)</div><p id="t-pb"></p></div>
-          <div class="card rp"><div class="lbl">La reponse (1.13.0)</div><p id="t-rp"></p></div>
+  <div class="concepts" id="concepts"></div>
+
+  <div class="toolrow">
+    <label class="chk"><input type="checkbox" id="hltog" checked> Surligner les changements</label>
+  </div>
+
+  <div class="changeline"><span class="b" id="cl-b"></span><span id="cl-t"></span></div>
+
+  <div class="frame">
+    <div class="win">
+      <div class="titlebar">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="ico"></div>
+        <div class="tt"><b>Station_de_pompage.xihm</b> — IHM Studio</div>
+      </div>
+      <div class="toolbar" id="toolbar"></div>
+      <div class="body">
+        <aside class="rail" id="rail"></aside>
+        <div class="center">
+          <div class="subtabs" id="subtabs"></div>
+          <div class="main" id="main"></div>
+          <div class="bottom">
+            <div class="btabs" id="btabs"></div>
+            <div class="bpane" id="bpane"></div>
+          </div>
         </div>
+        <aside class="insp" id="insp"></aside>
       </div>
-      <div class="pair" id="pair">
-        <section class="panel avant" id="p-avant">
-          <div class="ph"><span class="dot"></span>Avant — 1.12.31</div>
-          <div class="body" id="b-avant"></div>
-        </section>
-        <section class="panel apres" id="p-apres">
-          <div class="ph"><span class="dot"></span>Apres — 1.13.0 <span class="badge">nouveau</span></div>
-          <div class="body" id="b-apres"></div>
-        </section>
-      </div>
-      <p class="note" id="t-note"></p>
-    </main>
+    </div>
   </div>
 
-  <div class="summary">
-    <h3>Ce que la 1.13.0 apporte</h3>
-    <ul id="sum"></ul>
-  </div>
-
-  <footer>Maquette interactive — IHM Studio 1.13.0. Non contractuel, pour decider de l'organisation des ecrans.</footer>
+  <p class="foot">Maquette interactive, non contractuelle — pour valider l'organisation des ecrans de la <b>1.13.0</b>. Les grafcets ne sont pas dans ce lot.</p>
 </div>
 
 <script>
-const TOPICS = [
-  {
-    id:"objets", label:"Objets", tag:"J1", sw:"#a78bfa",
-    title:"Les objets : methodes, prive, heritage, interface",
-    pb:"Un type IHM n'est qu'un sac de membres. Le comportement (demarrer, arreter, calculer) vit ailleurs, dans des fonctions libres ou des bouts de script recopies.",
-    rp:"Le type porte ses methodes, cache son interieur (prive), herite d'un autre type et respecte une interface. Le dispatch choisit la bonne methode a l'execution.",
-    note:"Compatible avec les types existants : un type sans methode reste exactement comme avant.",
-    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="cm">// Type IHM "Moteur" (1.12.31) : seulement des membres</span>
-<span class="ln">2</span><span class="kw">TYPE</span> <span class="ty">Moteur</span>
-<span class="ln">3</span>  Vitesse   : <span class="ty">REAL</span>
-<span class="ln">4</span>  Marche    : <span class="ty">BOOL</span>
-<span class="ln">5</span>  Defaut    : <span class="ty">BOOL</span>
-<span class="ln">6</span><span class="kw">END_TYPE</span>
-<span class="ln">7</span>
-<span class="ln">8</span><span class="cm">// le comportement est dehors, a recopier partout</span>
-<span class="ln">9</span><span class="kw">FONCTION</span> <span class="fn">DemarrerMoteur</span>(m : <span class="ty">Moteur</span>) ...</div></div>`,
-    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="cm">// Type "Moteur" (1.13.0) : membres + methodes + heritage</span>
-<span class="ln">2</span><span class="kw">TYPE</span> <span class="ty">Moteur</span> <span class="kw">HERITE DE</span> <span class="ty">Equipement</span> <span class="kw">REALISE</span> <span class="ty">IDemarrable</span>
-<span class="ln">3</span>  Vitesse   : <span class="ty">REAL</span> <span class="pr">PUBLIC</span>
-<span class="ln">4</span>  _consigne : <span class="ty">REAL</span> <span class="pr">PRIVE</span>   <span class="cm">// cache</span>
-<span class="ln">5</span>  <span class="kw">METHODE</span> <span class="fn">Demarrer</span>()
-<span class="ln">6</span>  <span class="kw">METHODE</span> <span class="fn">Arreter</span>()
-<span class="ln">7</span>  <span class="kw">METHODE</span> <span class="fn">_calcul</span>() <span class="pr">PRIVE</span>
-<span class="ln">8</span><span class="kw">END_TYPE</span>
-<span class="ln">9</span>
-<span class="ln">10</span>m<span class="op">.</span><span class="fn">Demarrer</span>()      <span class="cm">// le dispatch choisit la bonne</span></div></div>`
-  },
-  {
-    id:"debogueur", label:"Debogueur", tag:"J2", sw:"#79b8ff",
-    title:"Le debogueur des scripts IHM",
-    pb:"Pour comprendre pourquoi une fonction se trompe, on seme des IHM_LOG(...) un peu partout, on relance, on lit la console, on recommence.",
-    rp:"Un vrai debogueur : point d'arret, execution en pause sur la ligne, pas a pas (entrer / sortir / enjamber), pile d'appels et valeurs des variables locales en direct.",
-    note:"Le meme debogueur sert deja aux scripts API ; la 1.13.0 l'amene aux scripts IHM.",
-    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">FONCTION</span> <span class="fn">RegulePID</span>(c : <span class="ty">REAL</span>) : <span class="ty">REAL</span>
-<span class="ln">2</span>  <span class="fn">IHM_LOG</span>(<span class="st">"c="</span> <span class="op">+</span> <span class="fn">STR</span>(c))      <span class="cm">// trace a la main</span>
-<span class="ln">3</span>  erreur <span class="op">:=</span> c <span class="op">-</span> mesure
-<span class="ln">4</span>  <span class="fn">IHM_LOG</span>(<span class="st">"err="</span> <span class="op">+</span> <span class="fn">STR</span>(erreur))
-<span class="ln">5</span>  integ <span class="op">:=</span> integ <span class="op">+</span> erreur
-<span class="ln">6</span>  <span class="fn">IHM_LOG</span>(<span class="st">"integ="</span> <span class="op">+</span> <span class="fn">STR</span>(integ))
-<span class="ln">7</span>  <span class="kw">RETOURNE</span> kp<span class="op">*</span>erreur <span class="op">+</span> ki<span class="op">*</span>integ</div></div>`,
-    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">FONCTION</span> <span class="fn">RegulePID</span>(c : <span class="ty">REAL</span>) : <span class="ty">REAL</span>
-<span class="ln">2</span><span class="bp">  erreur <span class="op">:=</span> c <span class="op">-</span> mesure            <span class="cm">&#9679; point d'arret</span></span>
-<span class="ln">3</span><span class="paused">  integ  <span class="op">:=</span> integ <span class="op">+</span> erreur        <span class="cm">&#9654; en pause ici</span></span>
-<span class="ln">4</span>  <span class="kw">RETOURNE</span> kp<span class="op">*</span>erreur <span class="op">+</span> ki<span class="op">*</span>integ</div></div>
-<div class="ui" style="border-top:1px solid var(--border)">
-  <div class="bar"><span class="btn p">&#9654; Continuer</span><span class="btn">Pas a pas</span><span class="btn">Entrer</span><span class="btn">Sortir</span></div>
-  <div class="row-tabs"><span class="tab act">Variables locales</span><span class="tab">Pile d'appels</span></div>
-  <div class="kv"><span class="k">c</span><span class="vv">42.0</span><span class="k">mesure</span><span class="vv">39.4</span><span class="k">erreur</span><span class="vv">2.6</span><span class="k">integ</span><span class="vv">11.8</span><span class="k">kp / ki</span><span class="vv">1.5 / 0.2</span></div>
-</div>`
-  },
-  {
-    id:"donnees", label:"Donnees (JSON, regex)", tag:"J3", sw:"#6fd3c7",
-    title:"Donnees dans les scripts : JSON, regex, type ANY",
-    pb:"Lire un message JSON ou extraire un nombre d'un texte se fait a la main, caractere par caractere, avec des decoupes fragiles.",
-    rp:"JSON_LIRE / JSON_ECRIRE, les expressions regulieres (REGEX_TROUVE, REGEX_REMPLACE) et un type ANY pour tenir une valeur de forme inconnue.",
-    note:"Tout est local : aucune requete reseau. C'est du traitement de donnees deja presentes.",
-    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="cm">// Extraire la valeur d'un capteur d'un texte (1.12.31)</span>
-<span class="ln">2</span>i <span class="op">:=</span> <span class="fn">INDEX_DE</span>(txt, <span class="st">"valeur"</span>)
-<span class="ln">3</span>j <span class="op">:=</span> <span class="fn">INDEX_DE_DEPUIS</span>(txt, <span class="st">":"</span>, i)
-<span class="ln">4</span>k <span class="op">:=</span> <span class="fn">INDEX_DE_DEPUIS</span>(txt, <span class="st">","</span>, j)
-<span class="ln">5</span>brut <span class="op">:=</span> <span class="fn">SOUS_CHAINE</span>(txt, j<span class="op">+</span><span class="num">1</span>, k)
-<span class="ln">6</span>v <span class="op">:=</span> <span class="fn">VERS_REEL</span>(<span class="fn">NETTOYER</span>(brut)) <span class="cm">// fragile</span></div></div>`,
-    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="cm">// 1.13.0 : JSON et regex, directement</span>
-<span class="ln">2</span>d : <span class="ty">ANY</span> <span class="op">:=</span> <span class="fn">JSON_LIRE</span>(txt)
-<span class="ln">3</span>v <span class="op">:=</span> d[<span class="st">'capteurs'</span>][<span class="num">0</span>]<span class="op">.</span>valeur       <span class="cm">// REAL</span>
-<span class="ln">4</span>nom <span class="op">:=</span> d[<span class="st">'capteurs'</span>][<span class="num">0</span>]<span class="op">.</span>nom
-<span class="ln">5</span>
-<span class="ln">6</span><span class="cm">// tous les nombres d'une chaine</span>
-<span class="ln">7</span>nbs <span class="op">:=</span> <span class="fn">REGEX_TROUVE_TOUT</span>(s, <span class="st">'[0-9]+\\.[0-9]+'</span>)
-<span class="ln">8</span>ok  <span class="op">:=</span> <span class="fn">REGEX_CORRESPOND</span>(ref, <span class="st">'^M[0-9]{3}$'</span>)</div></div>`
-  },
-  {
-    id:"tests", label:"Tests unitaires", tag:"J4", sw:"#4ade80",
-    title:"Tests unitaires des fonctions IHM",
-    pb:"Pour verifier qu'une fonction est juste, on lance l'IHM entiere, on simule, on regarde a l'oeil. Rien ne garde la trace de ce qui doit marcher.",
-    rp:"Chaque fonction a un sous-onglet Tests : des cas (poser les entrees, appeler, verifier la sortie), des verdicts vert/rouge, un rapport, rejoues a chaque Generer.",
-    note:"Les cas sont enregistres dans le projet : un changement qui casse un cas se voit tout de suite.",
-    avant:`<div class="ui">
-  <div class="note" style="padding-top:2px">Fonction <span style="font-family:var(--mono);color:var(--fn)">Borne(x, min, max)</span> — pour la tester&nbsp;:</div>
-  <div class="tree">
-    <div class="row l1"><span class="ic">&#9662;</span> Lancer la simulation</div>
-    <div class="row l2"><span class="ic">&#8227;</span> ouvrir une vue qui l'appelle</div>
-    <div class="row l2"><span class="ic">&#8227;</span> forcer des valeurs a la main</div>
-    <div class="row l2"><span class="ic">&#8227;</span> regarder le resultat a l'oeil</div>
-    <div class="row l2" style="color:var(--faint)"><span class="ic">&#8227;</span> rien n'est garde</div>
-  </div>
-</div>`,
-    apres:`<div class="ui">
-  <div class="row-tabs"><span class="tab">Code</span><span class="tab">Declarations</span><span class="tab act">Tests</span></div>
-  <div class="note" style="padding:2px 0 4px">Fonction <span style="font-family:var(--mono);color:var(--fn)">Borne(x, min, max)</span></div>
-  <div class="kv" style="margin-bottom:4px">
-    <span class="k">Cas 1 — milieu</span><span class="vv">Borne(5, 0, 10) =&gt; 5</span>
-    <span class="k">Cas 2 — sous le bas</span><span class="vv">Borne(-3, 0, 10) =&gt; 0</span>
-    <span class="k">Cas 3 — au-dessus</span><span class="vv">Borne(42, 0, 10) =&gt; 10</span>
-  </div>
-  <div class="verdict"><span class="st-ok">&#10003;</span> Cas 1 &mdash; attendu 5, obtenu 5</div>
-  <div class="verdict"><span class="st-ok">&#10003;</span> Cas 2 &mdash; attendu 0, obtenu 0</div>
-  <div class="verdict"><span class="st-ko">&#10007;</span> Cas 3 &mdash; attendu 10, obtenu 42</div>
-  <div class="bar" style="margin-top:6px"><span class="btn p">Lancer les tests</span><span class="btn">Nouveau cas…</span><span class="chip g">2 / 3 verts</span></div>
-</div>`
-  },
-  {
-    id:"erreurs", label:"Erreurs + WAIT_UNTIL", tag:"J5", sw:"#f0a673",
-    title:"Lever ses erreurs + attendre une condition",
-    pb:"On ne peut pas declencher proprement sa propre erreur, ni connaitre son code ou sa ligne. Attendre qu'une condition devienne vraie se fait par des boucles d'attente maladroites.",
-    rp:"LEVER un code d'erreur nomme ; CATCH recoit un objet Caught { code, message, ligne }. WAIT_UNTIL(condition, delai) attend proprement, avec expiration.",
-    note:"Codes partages : E_BORNE, E_DIVISION, E_CONVERSION, E_CLE, E_ASSERT, E_ATTENTE…",
-    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">TRY</span>
-<span class="ln">2</span>  <span class="kw">IF</span> x <span class="op">&lt;</span> <span class="num">0</span> <span class="kw">THEN</span>
-<span class="ln">3</span>    <span class="cm">// pas de maniere propre de lever</span>
-<span class="ln">4</span>    erreur <span class="op">:=</span> <span class="st">"x negatif"</span>  <span class="cm">// juste un texte</span>
-<span class="ln">5</span>  <span class="kw">END_IF</span>
-<span class="ln">6</span><span class="kw">CATCH</span>
-<span class="ln">7</span>  <span class="cm">// on ne sait ni le code ni la ligne</span>
-<span class="ln">8</span><span class="kw">END_TRY</span>
-<span class="ln">9</span>
-<span class="ln">10</span><span class="cm">// attendre : boucle d'attente a la main</span>
-<span class="ln">11</span><span class="kw">WHILE</span> <span class="kw">NOT</span> pret <span class="kw">DO</span> <span class="fn">RIEN</span>() <span class="kw">END_WHILE</span></div></div>`,
-    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">TRY</span>
-<span class="ln">2</span>  <span class="kw">IF</span> x <span class="op">&lt;</span> <span class="num">0</span> <span class="kw">THEN</span>
-<span class="ln">3</span>    <span class="kw">LEVER</span> <span class="pr">E_BORNE</span> <span class="st">"x doit etre positif"</span>
-<span class="ln">4</span>  <span class="kw">END_IF</span>
-<span class="ln">5</span><span class="kw">CATCH</span> e
-<span class="ln">6</span>  <span class="fn">IHM_LOG</span>(e<span class="op">.</span>code <span class="op">+</span> <span class="st">" ligne "</span> <span class="op">+</span> <span class="fn">STR</span>(e<span class="op">.</span>ligne))
-<span class="ln">7</span>  <span class="cm">// e = Caught{ code, message, ligne }</span>
-<span class="ln">8</span><span class="kw">END_TRY</span>
-<span class="ln">9</span>
-<span class="ln">10</span><span class="cm">// attendre proprement, avec expiration</span>
-<span class="ln">11</span><span class="kw">WAIT_UNTIL</span>(pret, <span class="num">5000</span>)   <span class="cm">// 5 s max</span></div></div>`
-  },
-  {
-    id:"unites", label:"Unites de mesure", tag:"J6", sw:"#e3b23c",
-    title:"Unites de mesure dans les types",
-    pb:"Une vitesse, une pression, une duree sont toutes des REAL. Rien n'empeche d'additionner des mm et des secondes, ni de prendre des bars pour des pascals.",
-    rp:"Une variable ou un membre porte son unite : REAL [tr/min], REAL [N.m]. Les conversions sont verifiees, et melanger deux unites incompatibles est signale a Generer.",
-    note:"L'unite est une annotation : elle n'alourdit pas l'execution, elle protege a la verification.",
-    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">TYPE</span> <span class="ty">Pompe</span>
-<span class="ln">2</span>  Debit    : <span class="ty">REAL</span>   <span class="cm">// en m3/h ? en L/min ?</span>
-<span class="ln">3</span>  Pression : <span class="ty">REAL</span>   <span class="cm">// en bar ? en Pa ?</span>
-<span class="ln">4</span>  Duree    : <span class="ty">REAL</span>   <span class="cm">// s ? ms ?</span>
-<span class="ln">5</span><span class="kw">END_TYPE</span>
-<span class="ln">6</span>
-<span class="ln">7</span><span class="cm">// accepte, mais n'a aucun sens :</span>
-<span class="ln">8</span>x <span class="op">:=</span> p<span class="op">.</span>Debit <span class="op">+</span> p<span class="op">.</span>Duree</div></div>`,
-    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">TYPE</span> <span class="ty">Pompe</span>
-<span class="ln">2</span>  Debit    : <span class="ty">REAL</span> <span class="pr">[m3/h]</span>
-<span class="ln">3</span>  Pression : <span class="ty">REAL</span> <span class="pr">[bar]</span>
-<span class="ln">4</span>  Duree    : <span class="ty">REAL</span> <span class="pr">[s]</span>
-<span class="ln">5</span><span class="kw">END_TYPE</span>
-<span class="ln">6</span>
-<span class="ln">7</span><span class="cm">// signale a Generer : unites incompatibles</span>
-<span class="ln">8</span>x <span class="op">:=</span> p<span class="op">.</span>Debit <span class="op">+</span> p<span class="op">.</span>Duree   <span class="cm">&#9888; m3/h + s</span>
-<span class="ln">9</span>v <span class="op">:=</span> <span class="fn">EN</span>(p<span class="op">.</span>Pression, <span class="pr">[Pa]</span>)  <span class="cm">// conversion sure</span></div></div>`
-  },
-  {
-    id:"generiques", label:"Fonctions generiques", tag:"J7", sw:"#c792ea",
-    title:"Fonctions generiques (TEMPLATE) partout",
-    pb:"Une fonction par type : Max_Int, Max_Real, Max_Duree… On recopie la meme logique, et un oubli derive d'une version a l'autre.",
-    rp:"Une seule fonction generique Max&lt;T&gt;(a, b) : T, utilisable dans les fonctions IHM, internes et de symbole. Le type T est deduit a l'appel.",
-    note:"Les structures, symboles et popups generiques existaient deja ; la 1.13.0 complete les fonctions.",
-    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">FONCTION</span> <span class="fn">Max_Int</span>(a:<span class="ty">INT</span>, b:<span class="ty">INT</span>):<span class="ty">INT</span>
-<span class="ln">2</span>  <span class="kw">RETOURNE</span> <span class="kw">IF</span> a<span class="op">&gt;</span>b <span class="kw">THEN</span> a <span class="kw">ELSE</span> b
-<span class="ln">3</span>
-<span class="ln">4</span><span class="kw">FONCTION</span> <span class="fn">Max_Real</span>(a:<span class="ty">REAL</span>, b:<span class="ty">REAL</span>):<span class="ty">REAL</span>
-<span class="ln">5</span>  <span class="kw">RETOURNE</span> <span class="kw">IF</span> a<span class="op">&gt;</span>b <span class="kw">THEN</span> a <span class="kw">ELSE</span> b
-<span class="ln">6</span>
-<span class="ln">7</span><span class="kw">FONCTION</span> <span class="fn">Max_Duree</span>(a:<span class="ty">TIME</span>, b:<span class="ty">TIME</span>) ...
-<span class="ln">8</span>  <span class="cm">// ... encore et encore</span></div></div>`,
-    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="cm">// 1.13.0 : une seule, pour tous les types</span>
-<span class="ln">2</span><span class="kw">FONCTION</span> <span class="fn">Max</span><span class="op">&lt;</span><span class="pr">T</span><span class="op">&gt;</span>(a : <span class="pr">T</span>, b : <span class="pr">T</span>) : <span class="pr">T</span>
-<span class="ln">3</span>  <span class="kw">RETOURNE</span> <span class="kw">IF</span> a <span class="op">&gt;</span> b <span class="kw">THEN</span> a <span class="kw">ELSE</span> b
-<span class="ln">4</span><span class="kw">END_FONCTION</span>
-<span class="ln">5</span>
-<span class="ln">6</span>i <span class="op">:=</span> <span class="fn">Max</span>(<span class="num">3</span>, <span class="num">7</span>)              <span class="cm">// T = INT</span>
-<span class="ln">7</span>r <span class="op">:=</span> <span class="fn">Max</span>(<span class="num">1.5</span>, v)            <span class="cm">// T = REAL</span>
-<span class="ln">8</span>d <span class="op">:=</span> <span class="fn">Max</span>(t1, t2)            <span class="cm">// T = TIME</span></div></div>`
-  },
-  {
-    id:"biblio", label:"Bibliotheques / espaces", tag:"J8", sw:"#89ddff",
-    title:"Bibliotheques et espaces de noms",
-    pb:"Tout vit dans un seul sac. Deux projets ont chacun leur Pompe, impossibles a reunir sans conflit. Rien ne se partage proprement d'un projet a l'autre.",
-    rp:"Des espaces de noms (ESPACE Hydraulique { … }) et des bibliotheques reutilisables : Hydraulique.Pompe, importees d'un projet a l'autre sans telescopage.",
-    note:"Un meme nom peut exister dans deux espaces sans se gener ; l'appel est qualifie.",
-    avant:`<div class="ui"><div class="tree">
-  <div class="row l1"><span class="ic">&#9662;</span> Types</div>
-  <div class="row l2"><span class="ic t">&#9644;</span> Pompe</div>
-  <div class="row l2"><span class="ic t">&#9644;</span> Vanne</div>
-  <div class="row l2"><span class="ic t">&#9644;</span> Pompe <span style="color:var(--red)">&#9888; deja pris</span></div>
-  <div class="row l1"><span class="ic">&#9662;</span> Fonctions</div>
-  <div class="row l2"><span class="ic m">&#402;</span> Reguler</div>
-  <div class="row l2"><span class="ic m">&#402;</span> Reguler <span style="color:var(--red)">&#9888; conflit</span></div>
-</div>
-<div class="note">Un seul espace : les noms se telescopent.</div></div>`,
-    apres:`<div class="ui"><div class="tree">
-  <div class="row l1"><span class="ic">&#9662;</span> <span class="chip v">ESPACE Hydraulique</span></div>
-  <div class="row l2"><span class="ic t">&#9644;</span> Pompe</div>
-  <div class="row l2"><span class="ic m">&#402;</span> Reguler</div>
-  <div class="row l1"><span class="ic">&#9662;</span> <span class="chip v">ESPACE Ventilation</span></div>
-  <div class="row l2"><span class="ic t">&#9644;</span> Pompe <span style="color:var(--green)">&#10003; distinct</span></div>
-  <div class="row l2"><span class="ic m">&#402;</span> Reguler</div>
-  <div class="row l1"><span class="ic">&#9662;</span> <span class="chip g">Bibliotheque PID (importee)</span></div>
-</div>
-<div class="ed" style="margin-top:4px"><div class="code" style="padding:8px 2px"><span class="ty">Hydraulique</span><span class="op">.</span><span class="ty">Pompe</span>   p
-p<span class="op">.</span><span class="fn">Reguler</span>()      <span class="cm">// appel qualifie, sans ambiguite</span></div></div></div>`
-  },
-  {
-    id:"echanges", label:"Echanges (retrait web)", tag:"retire", sw:"#f87171",
-    title:"Echanges : l'export/import en page web retire",
-    pb:"Le menu Echanges proposait d'exporter l'IHM en page web (.html) et de la reimporter. Mais un navigateur ne peut pas dialoguer en Modbus : la page etait un ecran mort.",
-    rp:"On retire completement l'export/import en page web. Restent les archives .xihm/.xapi (le vrai transport d'un projet) et l'acces web en direct (le PC fait le Modbus, le navigateur voit l'image).",
-    note:"Le serveur web en direct (Acces web) et le livre du programme en HTML ne changent pas.",
-    avant:`<div class="ui"><div class="note" style="padding-bottom:4px">Menu <b>Echanges</b> (1.12.31)</div>
-<div class="menu">
-  <div class="mi"><span class="ic">&#128230;</span> Exporter une archive (.xihm)… <span class="k">Ctrl+E</span></div>
-  <div class="mi"><span class="ic">&#128229;</span> Importer une archive…</div>
-  <div class="sep"></div>
-  <div class="mi"><span class="ic">&#127760;</span> Exporter en page web (.html)…</div>
-  <div class="mi"><span class="ic">&#127760;</span> Importer depuis une page web…</div>
-  <div class="mi"><span class="ic">&#9881;</span> Mettre a jour la page web a chaque enregistrement</div>
-  <div class="sep"></div>
-  <div class="mi"><span class="ic">&#128421;</span> Acces web en direct…</div>
-</div></div>`,
-    apres:`<div class="ui"><div class="note" style="padding-bottom:4px">Menu <b>Echanges</b> (1.13.0)</div>
-<div class="menu">
-  <div class="mi"><span class="ic">&#128230;</span> Exporter une archive (.xihm)… <span class="k">Ctrl+E</span></div>
-  <div class="mi"><span class="ic">&#128229;</span> Importer une archive…</div>
-  <div class="sep"></div>
-  <div class="mi gone"><span class="ic">&#127760;</span> Exporter en page web (.html)…</div>
-  <div class="mi gone"><span class="ic">&#127760;</span> Importer depuis une page web…</div>
-  <div class="mi gone"><span class="ic">&#9881;</span> Mettre a jour la page web a chaque enregistrement</div>
-  <div class="sep"></div>
-  <div class="mi"><span class="ic">&#128421;</span> Acces web en direct… <span class="chip" style="margin-left:auto">conserve</span></div>
-</div>
-<div class="note">La page web runnable et son moteur WebAssembly sont retires du code et des paquets.</div></div>`
+/* ---------- briques ---------- */
+const esc = s => s;
+function codeEditor(rows){ // rows: {t:html, cls?:'brk'|'pau', bp?:true}
+  let n=0, out='';
+  for(const r of rows){ n++;
+    const cls = r.cls?(' '+r.cls):''; const bpx = r.bp?' bpx':'';
+    out += `<span class="ln${cls}${bpx}"><span class="g">${n}</span>${r.t}\n</span>`;
   }
-];
-
-const rail = document.getElementById('rail');
-const grpLabel = document.createElement('div'); grpLabel.className='grp'; grpLabel.textContent='Concepts 1.13.0';
-rail.appendChild(grpLabel);
-TOPICS.forEach((t,idx)=>{
-  const b=document.createElement('button');
-  b.innerHTML=`<span class="sw" style="background:${t.sw}"></span><span class="n">${t.label}</span><span class="tag">${t.tag}</span>`;
-  b.onclick=()=>select(idx);
-  t._btn=b; rail.appendChild(b);
-});
-
-let view='both';
-const seg=document.getElementById('viewseg');
-seg.querySelectorAll('button').forEach(btn=>{
-  btn.onclick=()=>{
-    view=btn.dataset.view;
-    seg.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===btn?'true':'false'));
-    applyView();
-  };
-});
-function applyView(){
-  const pa=document.getElementById('p-avant'), pr=document.getElementById('p-apres');
-  const pair=document.getElementById('pair');
-  pa.classList.toggle('hidden', view==='apres');
-  pr.classList.toggle('hidden', view==='avant');
-  pair.classList.toggle('one', view!=='both');
+  return `<div class="code">${out}</div>`;
+}
+function grid(head, rows){ // rows: array of {cells:[{v,cls?}], nw?}
+  let h = head.map(x=>`<th>${x}</th>`).join('');
+  let b = rows.map(r=>`<tr class="${r.nw?'nw':''}">`+r.cells.map(c=>`<td class="${c.cls||''}">${c.v}</td>`).join('')+`</tr>`).join('');
+  return `<table class="grid"><thead><tr>${h}</tr></thead><tbody>${b}</tbody></table>`;
 }
 
-let cur=-1;
-function select(idx){
-  if(idx===cur) return; cur=idx;
-  const t=TOPICS[idx];
-  TOPICS.forEach(x=>x._btn.setAttribute('aria-current', x===t?'true':'false'));
-  document.getElementById('t-title').textContent=t.title;
-  document.getElementById('t-pb').textContent=t.pb;
-  document.getElementById('t-rp').textContent=t.rp;
-  document.getElementById('t-note').textContent=t.note;
-  document.getElementById('b-avant').innerHTML=t.avant;
-  document.getElementById('b-apres').innerHTML=t.apres;
-  applyView();
+/* ---------- explorateur ---------- */
+const PROJ = [
+  {dom:'Configuration', items:[{id:'glob', t:'Globales', ic:'&#9776;'}]},
+  {dom:'Vues', items:[{id:'syn', t:'Synoptique', ic:'&#9638;', c:'vw'},{id:'vpid', t:'Vue_PID', ic:'&#9638;', c:'vw'},{id:'vdem', t:'Demarrage', ic:'&#9638;', c:'vw'}]},
+  {dom:'Popups', items:[{id:'psc', t:'Saisie_consigne', ic:'&#9634;'}]},
+  {dom:'Symboles', items:[{id:'smot', t:'Moteur_sym', ic:'&#9671;'},{id:'svan', t:'Vanne_sym', ic:'&#9671;'}]},
+  {dom:'Types IHM', key:'types'},
+  {dom:'Programmation generale', key:'prog'},
+  {dom:'Variables IHM', items:[{id:'vars', t:'Globales (62)', ic:'&#9783;'}]},
+  {dom:'Equipements', items:[{id:'eqp', t:'Automate_M580', ic:'&#9635;'}]},
+  {dom:'Bibliotheque', key:'bib'},
+  {dom:'Simulation', items:[{id:'sim', t:'En marche', ic:'&#9654;'}]},
+];
+function railHTML(concept, etat){
+  const sel = concept.sel || '';
+  let out = `<div class="search">&#128269; Rechercher…</div>`;
+  for(const d of PROJ){
+    out += `<div class="dom">&#9662; ${d.dom}</div>`;
+    if(d.key==='types'){
+      if(concept.id==='biblio' && etat==='apres'){
+        out += nd(2,'typ','&#9671;','<span class="esp">ESPACE Hydraulique</span>');
+        out += nd(3,'typ','&#9644;','Pompe');
+        out += nd(3,'typ','&#9644;','Vanne');
+        out += nd(2,'typ','&#9671;','<span class="esp">ESPACE Ventilation</span>');
+        out += nd(3,'typ','&#9644;','<span class="vw">Pompe</span> <span class="ok">&#10003;</span>');
+      } else if(concept.id==='generiques'){
+        out += nd(2,'typ','&#9644;','Moteur'); out += nd(2,'typ','&#9644;','Pompe');
+      } else {
+        const selMot = concept.id==='objets';
+        out += nd(2,'typ','&#9644;','Moteur', selMot&&concept.sel==='mot'?'sel':'', selMot?'&#9662;':'&#9656;');
+        if(selMot && etat==='apres'){
+          out += nd(3,'mth','&#402;','Demarrer()');
+          out += nd(3,'mth','&#402;','Arreter()');
+          out += nd(3,'mth','&#402;','_calcul() <span class="lock">&#128274;</span>');
+        }
+        out += nd(2,'typ','&#9644;','Pompe'); out += nd(2,'typ','&#9644;','Equipement');
+      }
+    } else if(d.key==='prog'){
+      if(concept.id==='biblio' && etat==='apres'){
+        out += nd(2,'mth','&#402;','<span class="esp">ESPACE Regulation</span>'); out += nd(3,'mth','&#402;','Reguler');
+        out += `<div class="nd l2"><span class="libimp">Bibliotheque PID (importee)</span></div>`;
+      } else if(concept.id==='biblio' && etat==='avant'){
+        out += nd(2,'mth','&#402;','Reguler'); out += nd(2,'mth','&#402;','Reguler <span class="warn">&#9888; conflit</span>');
+      } else if(concept.id==='generiques'){
+        if(etat==='avant'){ out+=nd(2,'mth','&#402;','Max_Int'); out+=nd(2,'mth','&#402;','Max_Real'); out+=nd(2,'mth','&#402;','Max_Duree',concept.sel==='max'?'sel':''); }
+        else { out+=nd(2,'mth','&#402;','Max&lt;T&gt;',concept.sel==='max'?'sel':''); out+=nd(2,'mth','&#402;','Borne&lt;T&gt;'); }
+      } else {
+        for(const f of [['init','Init'],['cyc','Cycle'],['rpid','RegulePID'],['lire','LireCapteurs'],['bor','Borne'],['val','Valider']]){
+          out += nd(2,'mth','&#402;',f[1], concept.sel===f[0]?'sel':'');
+        }
+      }
+    } else if(d.key==='bib'){
+      if(concept.id==='biblio' && etat==='apres'){
+        out += `<div class="nd l2"><span class="tw"></span><span class="libimp">PID (importee)</span></div>`;
+      } else {
+        out += nd(2, '', '&#9638;', 'Objets IHM');
+      }
+    } else if(d.items){
+      for(const it of d.items){
+        out += nd(2, it.c||'', it.ic, it.t, concept.sel===it.id?'sel':'');
+      }
+    }
+  }
+  return out;
+}
+function nd(lvl, cls, ic, txt, extra='', tw='&#9656;'){
+  const twh = lvl===2 ? `<span class="tw">${tw}</span>` : (lvl===3?`<span class="tw"></span>`:'');
+  return `<div class="nd l${lvl} ${extra}">${twh}<span class="ic ${cls}">${ic}</span><span>${txt}</span></div>`;
 }
 
-// resume
-const sum=document.getElementById('sum');
-const SUM=[
-  ["Objets","methodes, prive, heritage, interface","#a78bfa"],
-  ["Debogueur IHM","points d'arret, pas a pas, variables","#79b8ff"],
-  ["Donnees","JSON, regex, type ANY — tout local","#6fd3c7"],
-  ["Tests unitaires","cas, verdicts, rejoues a chaque Generer","#4ade80"],
-  ["Erreurs","LEVER, Caught{code,message,ligne}, WAIT_UNTIL","#f0a673"],
-  ["Unites","REAL [tr/min], melanges signales","#e3b23c"],
-  ["Generiques","Max&lt;T&gt; partout, T deduit","#c792ea"],
-  ["Bibliotheques","espaces de noms, reutilisables","#89ddff"],
-  ["Page web retiree","un navigateur ne fait pas de Modbus","#f87171"],
-];
-SUM.forEach(([a,b,c])=>{
-  const li=document.createElement('li');
-  li.innerHTML=`<span class="d" style="background:${c}"></span><span><b>${a}</b> — ${b}</span>`;
-  sum.appendChild(li);
-});
+/* ---------- toolbar / sous-onglets / panneau bas ---------- */
+function toolbarHTML(mode){
+  const run = mode==='sim';
+  return `<span class="tb ghost">&#9776; Fichier</span><span class="tb ghost">Echanges</span><span class="tb ghost">Disposition</span>
+    <span class="sp"></span>
+    <span class="tb">&#128295; Compiler</span>
+    <span class="tb ${run?'run':''}">${run?'&#9632; Arreter':'&#9654; Simuler'}</span>
+    <span class="pastille ${run?'on':''}"><span class="led"></span>${run?'IHM en marche':'arretee'}</span>`;
+}
+function subtabsHTML(tabs){ return tabs.map(t=>`<span class="subtab ${t.a?'act':''} ${t.nw?'nw-ring':''}">${t.t}${t.nw?'<span class="nw"></span>':''}</span>`).join(''); }
+function btabsHTML(tabs){ return tabs.map(t=>`<span class="btab ${t.a?'act':''} ${t.nw?'nw-ring':''}">${t.t}${t.nw?'<span class="nw"></span>':''}</span>`).join(''); }
 
-select(0);
+/* ---------- synoptique ---------- */
+const SYNO = `<div class="canvas"><svg width="560" height="340" viewBox="0 0 560 340" font-family="system-ui" font-size="12">
+  <rect x="0" y="0" width="560" height="340" rx="8" fill="#12161c"/>
+  <text x="18" y="28" fill="#c2c2d0" font-size="14" font-weight="700">Station de pompage — vue Synoptique</text>
+  <!-- cuve -->
+  <rect x="60" y="70" width="90" height="170" rx="6" fill="#182633" stroke="#2f4a5e"/>
+  <rect x="62" y="150" width="86" height="88" rx="4" fill="#1f6fb2"/>
+  <rect x="62" y="150" width="86" height="10" fill="#3b8fd6"/>
+  <text x="105" y="258" fill="#9fb4c6" text-anchor="middle">Cuve 1</text>
+  <text x="105" y="128" fill="#e9e9f2" text-anchor="middle" font-size="16" font-weight="700">64 %</text>
+  <!-- tuyau -->
+  <rect x="150" y="196" width="120" height="12" fill="#2f4a5e"/>
+  <!-- pompe -->
+  <circle cx="300" cy="202" r="30" fill="#17302e" stroke="#3b7d72"/>
+  <path d="M300 182 L300 202 L318 212" stroke="#4fd6c4" stroke-width="3" fill="none"/>
+  <circle cx="300" cy="202" r="5" fill="#4fd6c4"/>
+  <text x="300" y="250" fill="#9fb4c6" text-anchor="middle">Pompe P1</text>
+  <rect x="278" y="158" width="44" height="18" rx="9" fill="#14271c" stroke="#1f4030"/>
+  <text x="300" y="171" fill="#4ade80" text-anchor="middle" font-size="11" font-weight="700">MARCHE</text>
+  <!-- tuyau 2 -->
+  <rect x="330" y="196" width="90" height="12" fill="#2f4a5e"/>
+  <!-- jauge pression -->
+  <circle cx="460" cy="150" r="42" fill="#15151c" stroke="#30303b"/>
+  <path d="M428 168 A42 42 0 0 1 492 168" fill="none" stroke="#2f4a5e" stroke-width="6"/>
+  <path d="M428 168 A42 42 0 0 1 470 110" fill="none" stroke="#e3b23c" stroke-width="6"/>
+  <line x1="460" y1="150" x2="484" y2="128" stroke="#f0a673" stroke-width="3"/>
+  <text x="460" y="150" fill="#e9e9f2" text-anchor="middle" font-size="13" font-weight="700">4.2</text>
+  <text x="460" y="205" fill="#9fb4c6" text-anchor="middle">Pression (bar)</text>
+  <!-- boutons -->
+  <rect x="60" y="280" width="110" height="34" rx="7" fill="#1f6fb2"/>
+  <text x="115" y="302" fill="#fff" text-anchor="middle" font-weight="600">Demarrer</text>
+  <rect x="180" y="280" width="110" height="34" rx="7" fill="#2a2330" stroke="#40404e"/>
+  <text x="235" y="302" fill="#c2c2d0" text-anchor="middle" font-weight="600">Arreter</text>
+</svg></div>`;
+
+/* ---------- les concepts (ecrans complets) ---------- */
+function P(rows){ return codeEditor(rows); }
+const C = [
+ { id:'vue', label:'La vue (l\'editeur)', tag:'', sw:'#4fd6c4', sel:'syn',
+   bq:'Les vues ne changent pas.', bt:'Le synoptique, l\'explorateur, l\'inspecteur et le panneau du bas restent comme en 1.12.31. Ce qui gagne en puissance, c\'est la programmation : les 9 sujets suivants.',
+   both:true, mode:'sim',
+   sub:[{t:'Contenu',a:1},{t:'Calques'},{t:'Parametres'},{t:'Variables'},{t:'Types'},{t:'Equipements'}],
+   main:SYNO,
+   insp:[['Objet','Pompe P1'],['Type','Symbole Moteur_sym'],['Etat (fx)','P1.Marche'],['Couleur si','P1.Defaut → rouge']],
+   bt2:[{t:'Sorties',a:1},{t:'Console'},{t:'Diagnostics'},{t:'Essai'}],
+   bp:`<div class="logln"><span class="ok">&#10003;</span> Compilation : 0 erreur, 0 avertissement — 3 vues, 1 popup, 2 symboles.</div><div class="logln">Simulation demarree — l'IHM tourne, les variables sont rafraichies.</div>`
+ },
+ { id:'objets', label:'Objets', tag:'J1', sw:'#a78bfa', sel:'mot',
+   bq:'Un type = un sac de membres.', bt:'Le type porte ses methodes, cache son interieur (prive), herite et realise une interface. L\'ecran Types IHM gagne les sous-onglets Methodes et Heritage, et l\'arbre montre les methodes (violet) sous le type.',
+   mode:'edit',
+   subA:[{t:'Membres',a:1}], subP:[{t:'Membres',a:1},{t:'Methodes',nw:1},{t:'Heritage',nw:1}],
+   crumbs:'Types IHM › <b>Moteur</b>',
+   mainA: grid(['Membre','Type','Visibilite'],[
+     {cells:[{v:'Vitesse'},{v:'REAL',cls:'t'},{v:'—'}]},
+     {cells:[{v:'Marche'},{v:'BOOL',cls:'t'},{v:'—'}]},
+     {cells:[{v:'Defaut'},{v:'BOOL',cls:'t'},{v:'—'}]},
+   ]),
+   mainP: `<div class="crumbs nw-ring" style="margin:10px 12px 0;border-radius:6px">Moteur <span class="pill v">HERITE DE Equipement</span> <span class="pill v">REALISE IDemarrable</span><span class="nwtag">nouveau</span></div>`+
+     grid(['Membre','Type','Visibilite'],[
+     {cells:[{v:'Vitesse'},{v:'REAL',cls:'t'},{v:'PUBLIC'}]},
+     {cells:[{v:'_consigne'},{v:'REAL',cls:'t'},{v:'PRIVE &#128274;',cls:'u'}],nw:1},
+   ])+`<div style="padding:10px 14px"><div class="pill v">&#402; Demarrer()</div> <div class="pill v">&#402; Arreter()</div> <div class="pill v">&#402; _calcul() &#128274;</div></div>`,
+   inspA:[['Type','Moteur'],['Membres','3'],['Herite de','—'],['Methodes','—']],
+   inspP:[['Type','Moteur'],['Herite de','Equipement','hl'],['Realise','IDemarrable','hl'],['Methode','Demarrer() : VIDE','hl'],['Visibilite','_consigne : PRIVE','hl']],
+   bt2:[{t:'Sorties',a:1},{t:'Diagnostics'}],
+   bpA:`<div class="logln">Type Moteur : 3 membres.</div>`,
+   bpP:`<div class="logln"><span class="ok">&#10003;</span> Type Moteur : 3 membres, 3 methodes, herite de Equipement, realise IDemarrable. Dispatch verifie.</div>`
+ },
+ { id:'debogueur', label:'Debogueur', tag:'J2', sw:'#79b8ff', sel:'rpid', mode:'sim',
+   bq:'Comprendre = semer des IHM_LOG.', bt:'Un vrai debogueur : point d\'arret dans la marge, execution en pause sur la ligne, et un onglet Debogueur en bas avec la pile d\'appels et les variables locales. Pas a pas / Entrer / Sortir / Continuer.',
+   sub:[{t:'Code',a:1},{t:'Declarations'}],
+   crumbs:'Programmation generale › <b>RegulePID</b>',
+   mainA:P([
+     {t:'<span class="kw">FONCTION</span> <span class="fn">RegulePID</span>(c : <span class="ty">REAL</span>) : <span class="ty">REAL</span>'},
+     {t:'  <span class="fn">IHM_LOG</span>(<span class="st">"c="</span> <span class="op">+</span> <span class="fn">STR</span>(c))      <span class="cm">// trace a la main</span>'},
+     {t:'  erreur <span class="op">:=</span> c <span class="op">-</span> mesure'},
+     {t:'  <span class="fn">IHM_LOG</span>(<span class="st">"err="</span> <span class="op">+</span> <span class="fn">STR</span>(erreur))'},
+     {t:'  integ <span class="op">:=</span> integ <span class="op">+</span> erreur'},
+     {t:'  <span class="kw">RETOURNE</span> kp<span class="op">*</span>erreur <span class="op">+</span> ki<span class="op">*</span>integ'},
+   ]),
+   mainP:P([
+     {t:'<span class="kw">FONCTION</span> <span class="fn">RegulePID</span>(c : <span class="ty">REAL</span>) : <span class="ty">REAL</span>'},
+     {t:'  erreur <span class="op">:=</span> c <span class="op">-</span> mesure', cls:'brk', bp:1},
+     {t:'  integ  <span class="op">:=</span> integ <span class="op">+</span> erreur', cls:'pau'},
+     {t:'  <span class="kw">RETOURNE</span> kp<span class="op">*</span>erreur <span class="op">+</span> ki<span class="op">*</span>integ'},
+   ]),
+   inspA:[['Fonction','RegulePID'],['Entrees','c : REAL'],['Retour','REAL']],
+   inspP:[['En pause','ligne 3','hl'],['Prochaine','integ := …'],['c','42.0'],['mesure','39.4'],['erreur','2.6']],
+   bt2A:[{t:'Sorties'},{t:'Console',a:1},{t:'Diagnostics'}],
+   bt2P:[{t:'Sorties'},{t:'Console'},{t:'Debogueur',a:1,nw:1}],
+   bpA:`<div class="logln">c=42.0</div><div class="logln">err=2.6</div><div class="logln">integ=11.8</div><div class="logln" style="color:var(--faint)">… a relire a chaque passage</div>`,
+   bpP:`<div class="btnrow" style="margin-bottom:9px"><span class="mini p">&#9654; Continuer</span><span class="mini">Pas a pas</span><span class="mini">Entrer</span><span class="mini">Sortir</span></div>
+     <div style="display:flex;gap:26px;flex-wrap:wrap"><div><div class="k" style="color:var(--muted);font-size:11px;margin-bottom:4px">PILE D'APPELS</div><div class="logln">RegulePID (ligne 3)</div><div class="logln">Cycle (ligne 12)</div></div>
+     <div><div class="k" style="color:var(--muted);font-size:11px;margin-bottom:4px">VARIABLES LOCALES</div><div class="kvm"><span class="k">c</span><span class="vv">42.0</span><span class="k">mesure</span><span class="vv">39.4</span><span class="k">erreur</span><span class="vv">2.6</span><span class="k">integ</span><span class="vv">11.8</span></div></div></div>`
+ },
+ { id:'donnees', label:'Donnees', tag:'J3', sw:'#5fd0c4', sel:'lire', mode:'edit',
+   bq:'Lire du JSON = decouper a la main.', bt:'JSON_LIRE / JSON_ECRIRE, les expressions regulieres et le type ANY. L\'aide a la saisie suit les membres du JSON. Tout est local : aucune requete reseau.',
+   sub:[{t:'Code',a:1},{t:'Declarations'}],
+   crumbs:'Programmation generale › <b>LireCapteurs</b>',
+   mainA:P([
+     {t:'<span class="cm">// extraire une valeur d\'un texte</span>'},
+     {t:'i <span class="op">:=</span> <span class="fn">INDEX_DE</span>(txt, <span class="st">"valeur"</span>)'},
+     {t:'j <span class="op">:=</span> <span class="fn">INDEX_DE_DEPUIS</span>(txt, <span class="st">":"</span>, i)'},
+     {t:'k <span class="op">:=</span> <span class="fn">INDEX_DE_DEPUIS</span>(txt, <span class="st">","</span>, j)'},
+     {t:'brut <span class="op">:=</span> <span class="fn">SOUS_CHAINE</span>(txt, j<span class="op">+</span><span class="num">1</span>, k)'},
+     {t:'v <span class="op">:=</span> <span class="fn">VERS_REEL</span>(<span class="fn">NETTOYER</span>(brut))   <span class="cm">// fragile</span>'},
+   ]),
+   mainP:P([
+     {t:'<span class="cm">// JSON et regex, directement</span>'},
+     {t:'d : <span class="ty">ANY</span> <span class="op">:=</span> <span class="fn">JSON_LIRE</span>(txt)'},
+     {t:'v <span class="op">:=</span> d[<span class="st">\'capteurs\'</span>][<span class="num">0</span>]<span class="op">.</span>valeur'},
+     {t:'ok <span class="op">:=</span> <span class="fn">REGEX_CORRESPOND</span>(ref, <span class="st">\'^M[0-9]{3}$\'</span>)'},
+   ])+`<div class="aide nw-ring"><div class="ah">Aide a la saisie — d['capteurs'][0]. <span class="nwtag">nouveau</span></div>
+     <div class="ai">.valeur <span class="ty">REAL</span></div><div class="ai">.nom <span class="ty">STRING</span></div><div class="ai">.unite <span class="ty">STRING</span></div><div class="ai">.alarme <span class="ty">BOOL</span></div></div>`,
+   inspA:[['Fonction','LireCapteurs'],['Natives','chaine'],['Retour','REAL']],
+   inspP:[['Fonction','LireCapteurs'],['Natives','JSON_LIRE','hl'],['','REGEX_CORRESPOND','hl'],['Type','ANY','hl']],
+   bt2:[{t:'Sorties',a:1},{t:'Diagnostics'}],
+   bpA:`<div class="logln">Compilation OK — decoupage manuel.</div>`,
+   bpP:`<div class="logln"><span class="ok">&#10003;</span> JSON_LIRE, REGEX_CORRESPOND reconnues ; d est de type ANY, d['capteurs'][0].valeur est un REAL.</div>`
+ },
+ { id:'tests', label:'Tests unitaires', tag:'J4', sw:'#4ade80', sel:'bor', mode:'edit',
+   bq:'Tester = lancer toute l\'IHM.', bt:'Chaque fonction gagne un sous-onglet Tests (poser les entrees, appeler, verifier). Les verdicts (vert/rouge) s\'affichent dans le panneau Essai, rejoues a chaque Compiler.',
+   subA:[{t:'Code',a:1},{t:'Declarations'}], subP:[{t:'Code',a:1},{t:'Declarations'},{t:'Tests',nw:1}],
+   crumbs:'Programmation generale › <b>Borne</b>',
+   mainA:P([
+     {t:'<span class="kw">FONCTION</span> <span class="fn">Borne</span>(x, min, max : <span class="ty">REAL</span>) : <span class="ty">REAL</span>'},
+     {t:'  <span class="kw">IF</span> x <span class="op">&lt;</span> min <span class="kw">THEN</span> <span class="kw">RETOURNE</span> min'},
+     {t:'  <span class="kw">IF</span> x <span class="op">&gt;</span> max <span class="kw">THEN</span> <span class="kw">RETOURNE</span> max'},
+     {t:'  <span class="kw">RETOURNE</span> x'},
+   ]),
+   mainP:`<div style="padding:12px 14px"><div class="btnrow" style="margin-bottom:10px"><span class="pill v">Sous-onglet Tests</span><span class="mini">Nouveau cas…</span></div>`+
+     grid(['Cas','Poser','Appel','Attendu'],[
+       {cells:[{v:'milieu'},{v:'—'},{v:'Borne(5,0,10)'},{v:'5'}]},
+       {cells:[{v:'sous le bas'},{v:'—'},{v:'Borne(-3,0,10)'},{v:'0'}]},
+       {cells:[{v:'au-dessus'},{v:'—'},{v:'Borne(42,0,10)'},{v:'10'}]},
+     ])+`</div>`,
+   inspA:[['Fonction','Borne'],['Entrees','x, min, max'],['Tests','—']],
+   inspP:[['Fonction','Borne'],['Cas de test','3','hl'],['Verts','2 / 3','hl'],['Rejoue','a chaque Compiler','hl']],
+   bt2A:[{t:'Sorties',a:1},{t:'Essai'}],
+   bt2P:[{t:'Sorties'},{t:'Essai',a:1,nw:1}],
+   bpA:`<div class="logln">Aucun test enregistre pour Borne.</div>`,
+   bpP:`<div class="verd"><span class="o">&#10003;</span> Cas "milieu" — attendu 5, obtenu 5</div><div class="verd"><span class="o">&#10003;</span> Cas "sous le bas" — attendu 0, obtenu 0</div><div class="verd"><span class="x">&#10007;</span> Cas "au-dessus" — attendu 10, obtenu 42</div><div class="btnrow" style="margin-top:7px"><span class="pill ko">2 / 3 verts</span><span class="mini p">Relancer</span></div>`
+ },
+ { id:'erreurs', label:'Erreurs + WAIT_UNTIL', tag:'J5', sw:'#f0a673', sel:'val', mode:'edit',
+   bq:'L\'erreur n\'est qu\'un texte.', bt:'LEVER un code d\'erreur nomme ; CATCH recoit un objet Caught { code, message, ligne }. WAIT_UNTIL(condition, delai) attend proprement, avec expiration. Les codes sont partages (E_BORNE, E_DIVISION…).',
+   sub:[{t:'Code',a:1},{t:'Declarations'}],
+   crumbs:'Programmation generale › <b>Valider</b>',
+   mainA:P([
+     {t:'<span class="kw">TRY</span>'},
+     {t:'  <span class="kw">IF</span> x <span class="op">&lt;</span> <span class="num">0</span> <span class="kw">THEN</span>'},
+     {t:'    erreur <span class="op">:=</span> <span class="st">"x negatif"</span>   <span class="cm">// juste un texte</span>'},
+     {t:'  <span class="kw">END_IF</span>'},
+     {t:'<span class="kw">CATCH</span>'},
+     {t:'  <span class="cm">// ni code ni ligne</span>'},
+     {t:'<span class="kw">END_TRY</span>'},
+     {t:'<span class="kw">WHILE</span> <span class="kw">NOT</span> pret <span class="kw">DO</span> <span class="fn">RIEN</span>() <span class="kw">END_WHILE</span>'},
+   ]),
+   mainP:P([
+     {t:'<span class="kw">TRY</span>'},
+     {t:'  <span class="kw">IF</span> x <span class="op">&lt;</span> <span class="num">0</span> <span class="kw">THEN</span>'},
+     {t:'    <span class="kw">LEVER</span> <span class="pr">E_BORNE</span> <span class="st">"x doit etre positif"</span>'},
+     {t:'  <span class="kw">END_IF</span>'},
+     {t:'<span class="kw">CATCH</span> e'},
+     {t:'  <span class="fn">IHM_LOG</span>(e<span class="op">.</span>code <span class="op">+</span> <span class="st">" ligne "</span> <span class="op">+</span> <span class="fn">STR</span>(e<span class="op">.</span>ligne))'},
+     {t:'<span class="kw">END_TRY</span>'},
+     {t:'<span class="kw">WAIT_UNTIL</span>(pret, <span class="num">5000</span>)   <span class="cm">// 5 s max</span>'},
+   ]),
+   inspA:[['Fonction','Valider'],['Attrape','texte seul'],['Attente','boucle']],
+   inspP:[['Leve','E_BORNE','hl'],['Caught','code / message / ligne','hl'],['Attente','WAIT_UNTIL(…, 5000)','hl']],
+   bt2:[{t:'Sorties'},{t:'Diagnostics',a:1}],
+   bpA:`<div class="logln">L'erreur est une chaine ; on ne sait ni d'ou elle vient ni pourquoi.</div>`,
+   bpP:`<div class="logln"><span class="w">&#9888;</span> Caught { code: <b>E_BORNE</b>, message: "x doit etre positif", ligne: 3 }</div><div class="logln">WAIT_UNTIL : condition atteinte en 240 ms (max 5000).</div>`
+ },
+ { id:'unites', label:'Unites de mesure', tag:'J6', sw:'#e3b23c', sel:'vars', mode:'edit',
+   bq:'Tout est REAL, sans unite.', bt:'Une variable ou un membre porte son unite (REAL [tr/min], [bar], [s]). L\'ecran Variables IHM gagne une colonne Unite, et Compiler signale les melanges incompatibles dans Diagnostics.',
+   sub:[{t:'Variables',a:1}],
+   crumbs:'Variables IHM › <b>Globales</b>',
+   mainA: grid(['Variable','Type','Adresse'],[
+     {cells:[{v:'Debit'},{v:'REAL',cls:'t'},{v:'%MD120'}]},
+     {cells:[{v:'Pression'},{v:'REAL',cls:'t'},{v:'%MD122'}]},
+     {cells:[{v:'Duree_cycle'},{v:'REAL',cls:'t'},{v:'%MD124'}]},
+     {cells:[{v:'Vitesse_P1'},{v:'REAL',cls:'t'},{v:'%MD126'}]},
+   ]),
+   mainP: grid(['Variable','Type','Unite','Adresse'],[
+     {cells:[{v:'Debit'},{v:'REAL',cls:'t'},{v:'m3/h',cls:'u'},{v:'%MD120'}],nw:1},
+     {cells:[{v:'Pression'},{v:'REAL',cls:'t'},{v:'bar',cls:'u'},{v:'%MD122'}],nw:1},
+     {cells:[{v:'Duree_cycle'},{v:'REAL',cls:'t'},{v:'s',cls:'u'},{v:'%MD124'}],nw:1},
+     {cells:[{v:'Vitesse_P1'},{v:'REAL',cls:'t'},{v:'tr/min',cls:'u'},{v:'%MD126'}],nw:1},
+   ]),
+   inspA:[['Variable','Debit'],['Type','REAL'],['Unite','—']],
+   inspP:[['Variable','Debit'],['Type','REAL'],['Unite','m3/h','hl'],['Conversion','EN(p, [Pa]) sure','hl']],
+   bt2:[{t:'Sorties'},{t:'Diagnostics',a:1}],
+   bpA:`<div class="logln">x := Debit + Duree_cycle  — accepte (aucun sens).</div>`,
+   bpP:`<div class="logln"><span class="e">&#9888;</span> Ligne 14 : unites incompatibles — <b>m3/h + s</b> (Debit + Duree_cycle). Corrige ou convertis avec EN(…).</div>`
+ },
+ { id:'generiques', label:'Fonctions generiques', tag:'J7', sw:'#c792ea', sel:'max', mode:'edit',
+   bq:'Une fonction par type.', bt:'Une seule fonction generique Max&lt;T&gt;, utilisable dans les fonctions IHM, internes et de symbole. T est deduit a l\'appel. Dans l\'arbre, trois Max_* deviennent un seul Max&lt;T&gt;.',
+   sub:[{t:'Code',a:1},{t:'Declarations'}],
+   crumbs:'Programmation generale › <b>Max&lt;T&gt;</b>',
+   mainA:P([
+     {t:'<span class="kw">FONCTION</span> <span class="fn">Max_Int</span>(a, b : <span class="ty">INT</span>) : <span class="ty">INT</span>'},
+     {t:'  <span class="kw">RETOURNE</span> <span class="kw">IF</span> a<span class="op">&gt;</span>b <span class="kw">THEN</span> a <span class="kw">ELSE</span> b'},
+     {t:''},
+     {t:'<span class="kw">FONCTION</span> <span class="fn">Max_Real</span>(a, b : <span class="ty">REAL</span>) : <span class="ty">REAL</span>'},
+     {t:'  <span class="cm">// … et encore Max_Duree, Max_…</span>'},
+   ]),
+   mainP:P([
+     {t:'<span class="cm">// une seule, pour tous les types</span>'},
+     {t:'<span class="kw">FONCTION</span> <span class="fn">Max</span><span class="op">&lt;</span><span class="pr">T</span><span class="op">&gt;</span>(a : <span class="pr">T</span>, b : <span class="pr">T</span>) : <span class="pr">T</span>'},
+     {t:'  <span class="kw">RETOURNE</span> <span class="kw">IF</span> a <span class="op">&gt;</span> b <span class="kw">THEN</span> a <span class="kw">ELSE</span> b'},
+     {t:'<span class="kw">END_FONCTION</span>'},
+     {t:''},
+     {t:'i <span class="op">:=</span> <span class="fn">Max</span>(<span class="num">3</span>, <span class="num">7</span>)      <span class="cm">// T = INT</span>'},
+     {t:'r <span class="op">:=</span> <span class="fn">Max</span>(<span class="num">1.5</span>, v)    <span class="cm">// T = REAL</span>'},
+   ]),
+   inspA:[['Fonctions','Max_Int, Max_Real, …'],['Repetition','une par type']],
+   inspP:[['Fonction','Max&lt;T&gt;','hl'],['Parametre','T (ANY)','hl'],['Appel','T deduit','hl'],['Utilisable','IHM / interne / symbole']],
+   bt2:[{t:'Sorties',a:1},{t:'Diagnostics'}],
+   bpA:`<div class="logln">3 fonctions a maintenir en parallele.</div>`,
+   bpP:`<div class="logln"><span class="ok">&#10003;</span> Max&lt;T&gt; : T deduit a chaque appel (INT, REAL, TIME…). Une seule definition.</div>`
+ },
+ { id:'biblio', label:'Bibliotheques', tag:'J8', sw:'#89ddff', sel:'', mode:'edit',
+   bq:'Tout dans un seul sac.', bt:'Des espaces de noms (ESPACE Hydraulique { … }) et des bibliotheques reutilisables. Regarde l\'explorateur a gauche : les noms ne se telescopent plus (Pompe existe dans deux espaces), et une bibliotheque PID est importee.',
+   sub:[{t:'Contenu',a:1}],
+   crumbs:'Espaces de noms',
+   mainA:`<div style="padding:16px 14px"><div class="pill ko" style="margin-bottom:10px">&#9888; Conflit de noms</div><div class="code" style="padding:0">Types<span class="op"> :</span> Pompe, Vanne, <span style="color:var(--red)">Pompe (deja pris)</span>
+Fonctions<span class="op"> :</span> Reguler, <span style="color:var(--red)">Reguler (conflit)</span></div><p style="color:var(--muted);font-size:12.5px">Un seul espace : deux modules ne peuvent pas avoir chacun leur Pompe.</p></div>`,
+   mainP:`<div style="padding:16px 14px"><div class="pill v" style="margin-bottom:10px">Espaces de noms</div>
+     <div class="code" style="padding:0"><span class="kw">ESPACE</span> <span class="ty">Hydraulique</span> { <span class="ty">Pompe</span>, <span class="ty">Vanne</span>, <span class="fn">Reguler</span> }
+<span class="kw">ESPACE</span> <span class="ty">Ventilation</span> { <span class="ty">Pompe</span>, <span class="fn">Reguler</span> }   <span class="cm">// distinct</span>
+
+<span class="ty">Hydraulique</span><span class="op">.</span><span class="ty">Pompe</span>  p
+p<span class="op">.</span><span class="fn">Reguler</span>()        <span class="cm">// appel qualifie, sans ambiguite</span></div>
+     <p style="color:var(--muted);font-size:12.5px">La bibliotheque PID est importee d'un autre projet.</p></div>`,
+   inspA:[['Portee','un seul espace'],['Conflits','2']],
+   inspP:[['Espace','Hydraulique','hl'],['Autre','Ventilation','hl'],['Importe','Bibliotheque PID','hl'],['Appel','qualifie']],
+   bt2:[{t:'Sorties',a:1},{t:'Diagnostics'}],
+   bpA:`<div class="logln"><span class="e">&#9888;</span> 2 conflits de noms (Pompe, Reguler).</div>`,
+   bpP:`<div class="logln"><span class="ok">&#10003;</span> 2 espaces de noms, 1 bibliotheque importee — aucun conflit.</div>`
+ },
+ { id:'echanges', label:'Echanges (retrait web)', tag:'retire', sw:'#f87171', sel:'syn', mode:'edit',
+   bq:'La page web ne peut pas faire de Modbus.', bt:'Le menu Echanges ne propose plus l\'export/import de l\'IHM en page web (un navigateur ne dialogue pas en Modbus). Restent les archives .xihm/.xapi et l\'acces web en direct (le PC fait le Modbus, le navigateur voit l\'image).',
+   sub:[{t:'Contenu',a:1}],
+   crumbs:'Menu <b>Echanges</b>',
+   mainA:`<div style="padding:16px"><div style="max-width:420px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;overflow:hidden">
+     <div style="padding:8px 12px;color:var(--muted);font-size:11px;border-bottom:1px solid var(--border)">ECHANGES</div>
+     ${mi('&#128230;','Exporter une archive (.xihm)…','Ctrl+E')}${mi('&#128229;','Importer une archive…')}
+     <div style="height:1px;background:var(--border);margin:4px 8px"></div>
+     ${mi('&#127760;','Exporter en page web (.html)…')}${mi('&#127760;','Importer depuis une page web…')}${mi('&#9881;','Mettre a jour la page web a chaque enregistrement')}
+     <div style="height:1px;background:var(--border);margin:4px 8px"></div>${mi('&#128421;','Acces web en direct…')}</div></div>`,
+   mainP:`<div style="padding:16px"><div class="nw-ring" style="max-width:420px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;overflow:hidden">
+     <div style="padding:8px 12px;color:var(--muted);font-size:11px;border-bottom:1px solid var(--border)">ECHANGES <span class="nwtag">change</span></div>
+     ${mi('&#128230;','Exporter une archive (.xihm)…','Ctrl+E')}${mi('&#128229;','Importer une archive…')}
+     <div style="height:1px;background:var(--border);margin:4px 8px"></div>
+     ${mig('&#127760;','Exporter en page web (.html)…')}${mig('&#127760;','Importer depuis une page web…')}${mig('&#9881;','Mettre a jour la page web a chaque enregistrement')}
+     <div style="height:1px;background:var(--border);margin:4px 8px"></div>${mi('&#128421;','Acces web en direct…','<span class="pill" style="font-size:10px">conserve</span>')}</div></div>`,
+   inspA:[['Echanges','archives + page web'],['Page web','export + import']],
+   inspP:[['Echanges','archives seules','hl'],['Page web','retiree','hl'],['Acces web direct','conserve'],['Livre HTML','conserve']],
+   bt2:[{t:'Sorties',a:1}],
+   bpA:`<div class="logln">Export page web : moteur WebAssembly embarque (ecran mort, pas de Modbus).</div>`,
+   bpP:`<div class="logln"><span class="ok">&#10003;</span> Export/import page web retire du code et des paquets. Archives et acces web direct inchanges.</div>`
+ },
+];
+function mi(ic,txt,k=''){ return `<div style="display:flex;align-items:center;gap:11px;padding:8px 12px;color:var(--ink2);font-size:13px">${ic} <span>${txt}</span>${k?`<span style="margin-left:auto;color:var(--faint);font:11px var(--mono)">${k}</span>`:''}</div>`; }
+function mig(ic,txt){ return `<div style="display:flex;align-items:center;gap:11px;padding:8px 12px;color:var(--faint);font-size:13px;text-decoration:line-through;opacity:.55">${ic} <span>${txt}</span></div>`; }
+
+/* ---------- rendu ---------- */
+let cur=0, etat='apres';
+function pick(o,base){ return o[base+(etat==='apres'?'P':'A')] !== undefined ? o[base+(etat==='apres'?'P':'A')] : o[base]; }
+function insp(fields){ return `<h4>Inspecteur</h4>`+fields.map(f=>`<div class="fld"><div class="k">${f[0]}</div><div class="v ${f[2]?'hl nw-ring':''}">${f[1]}</div></div>`).join(''); }
+
+function render(){
+  const c=C[cur];
+  document.getElementById('toolbar').innerHTML=toolbarHTML(c.mode);
+  document.getElementById('rail').innerHTML=railHTML(c, etat);
+  const sub = pick(c,'sub'); document.getElementById('subtabs').innerHTML = subtabsHTML(sub||[]);
+  let mainHTML = c.both ? c.main : pick(c,'main');
+  if(c.crumbs) mainHTML = `<div class="crumbs">${c.crumbs}</div>`+mainHTML;
+  document.getElementById('main').innerHTML = mainHTML;
+  document.getElementById('insp').innerHTML = insp(c.both ? c.insp : pick(c,'insp'));
+  document.getElementById('btabs').innerHTML = btabsHTML(pick(c,'bt2')||[]);
+  document.getElementById('bpane').innerHTML = c.both ? c.bp : pick(c,'bp');
+  // bandeau
+  if(etat==='avant'){
+    document.getElementById('cl-b').textContent = "Aujourd'hui :";
+    document.getElementById('cl-t').textContent = c.bq;
+  } else {
+    document.getElementById('cl-b').textContent = 'En 1.13.0 :';
+    document.getElementById('cl-t').textContent = c.bt;
+  }
+}
+
+// concept chips
+const cc=document.getElementById('concepts');
+C.forEach((c,i)=>{ const b=document.createElement('button');
+  b.innerHTML=`<span class="sw" style="background:${c.sw}"></span>${c.label}${c.tag?`<span class="tag">${c.tag}</span>`:''}`;
+  b.onclick=()=>{cur=i; sync(); render();}; c._b=b; cc.appendChild(b);
+});
+function sync(){ C.forEach((c,i)=>c._b.setAttribute('aria-current', i===cur?'true':'false')); }
+
+document.getElementById('etat').querySelectorAll('button').forEach(b=>{
+  b.onclick=()=>{ etat=b.dataset.e; document.querySelectorAll('#etat button').forEach(x=>x.setAttribute('aria-pressed', x===b?'true':'false')); render(); };
+});
+document.getElementById('hltog').addEventListener('change', e=>{ document.body.classList.toggle('hl', e.target.checked); });
+
+sync(); render();
 </script>
 </body>
 </html>
