@@ -123,6 +123,7 @@ void HmiTitledPanel::onLayout() {
     const auto b = bounds();
     float y = b.y + kTitle;
     for (auto& r : rows_) {
+        if (r.w->visibility() == ui::Visibility::Collapsed) continue;   // 1.13.0 : sans place
         r.w->setBounds({b.x + 4, y + 2, b.w - 8, r.h - 4});
         y += r.h;
     }

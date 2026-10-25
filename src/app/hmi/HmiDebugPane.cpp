@@ -19,6 +19,8 @@ namespace {
 
 constexpr float kBand = 36.f;        // la barre des boutons
 constexpr float kState = 26.f;       // l'etat en clair
+constexpr float kState2 = 42.f;      // ... sur deux lignes, dans le volet etroit
+constexpr float kNarrow = 760.f;     // plus etroit (le panneau de droite de la simulation) : le volet en lignes
 
 std::string trimmed(std::string_view s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
@@ -244,7 +246,8 @@ HmiDebugPane::HmiDebugPane(std::string id, hmi::DocumentPtr doc, std::function<h
         wTable->setSelectionMode(ui::SelectionMode::Single);
         watchTable_ = &static_cast<ui::TableView&>(wPanel->setBody(std::move(wTable)));
         left->addPane(std::move(wPanel), 0.45f, 90.f);
-        split->addPane(std::move(left), 0.34f, 220.f);
+        leftSplit_ = left.get();
+        split->addPane(std::move(left), 0.34f, 120.f);
     }
     // Au centre : la pile, le code.
     {
@@ -263,7 +266,8 @@ HmiDebugPane::HmiDebugPane(std::string id, hmi::DocumentPtr doc, std::function<h
         code_ = &static_cast<ui::MultiLineText&>(cPanel->setBody(std::move(ed)));
         codePanel_ = cPanel.get();
         center->addPane(std::move(cPanel), 0.68f, 120.f);
-        split->addPane(std::move(center), 0.40f, 240.f);
+        centerSplit_ = center.get();
+        split->addPane(std::move(center), 0.40f, 200.f);
     }
     // A droite : les locales.
     {
@@ -272,7 +276,7 @@ HmiDebugPane::HmiDebugPane(std::string id, hmi::DocumentPtr doc, std::function<h
         lt->setColumns({{"Nom", 130.f}, {"Type", 90.f}, {"Valeur", 150.f}});
         lt->setSelectionMode(ui::SelectionMode::Single);
         localsTable_ = &static_cast<ui::TableView&>(lPanel->setBody(std::move(lt)));
-        split->addPane(std::move(lPanel), 0.26f, 180.f);
+        split->addPane(std::move(lPanel), 0.26f, 100.f);
     }
     split_ = &static_cast<ui::Splitter&>(addChild(std::move(split)));
 
@@ -341,6 +345,8 @@ std::string HmiDebugPane::codeText(Id script, Id function) const {
 void HmiDebugPane::say(const std::string& text, bool warning) {
     message_ = text;
     messageWarn_ = warning;
+    const auto* rt = runtime();
+    messageRev_ = rt ? rt->debugRevision() : 0;
     invalidate();
 }
 
@@ -354,6 +360,9 @@ gfx::Rect HmiDebugPane::buttonRect(int action) const {
 void HmiDebugPane::runAction(int action) {
     auto* rt = runtime();
     auto& s = HmiDebugSession::instance();
+    // Continuer, un pas : la pause suivante peut venir avant le retour (le script reprend tout de suite) - ce qui est
+    // dit ici date d'avant elle, son etat passera devant.
+    const std::uint64_t before = rt ? rt->debugRevision() : 0;
     switch (action) {
         case AContinue:
             if (rt && rt->debugContinue()) say("Continu\xC3\xA9 : le script reprend jusqu'au prochain point d'arr\xC3\xAAt.");
@@ -397,6 +406,7 @@ void HmiDebugPane::runAction(int action) {
         }
         default: break;
     }
+    if (action == AContinue || action == AStepOver || action == AStepInto || action == AStepOut) messageRev_ = before;
     seen_.clear();
     refresh(nextWatch_);
 }
@@ -547,6 +557,8 @@ void HmiDebugPane::rebuild() {
     auto& s = HmiDebugSession::instance();
     const bool live = rt && rt->running();
     const bool paused = rt && rt->paused() && rt->debugHit();
+    // Une nouvelle pause : son etat passe devant ce qui a ete dit avant (« Continue : ... », « Point d'arret pose »).
+    if (paused && rt->debugRevision() != messageRev_) message_.clear();
     // L'etat en clair.
     std::size_t armed = 0;
     for (const auto& b : s.breakpoints()) armed += b.enabled && b.note.find("il ne s'arr\xC3\xAA") == std::string::npos;
@@ -568,7 +580,9 @@ void HmiDebugPane::rebuild() {
             values += (values.empty() ? "" : ", ") + n + " = " + v;
         }
         if (!values.empty()) state_ += " - " + values;
-        state_ += " (" + h.context + " ; le cycle IHM attend la reprise)";
+        // Le contexte, s'il dit plus que le cycle (« clic sur Bouton_Purge », un script detache) ; puis l'attente.
+        const bool plainCycle = h.context.empty() || h.context == "cycle IHM" || h.context == "IHM";
+        state_ += " (" + (plainCycle ? std::string{} : h.context + " ; ") + "le cycle IHM attend la reprise)";
     } else if (rt->stepping()) {
         state_ = "Le pas continue : le script attend (un WAIT) - il s'arr\xC3\xAAtera \xC3\xA0 sa prochaine ligne, l'IHM respire en attendant.";
     } else if (rt->pauseAsked()) {
@@ -708,8 +722,23 @@ void HmiDebugPane::readWatches() {
 // ------------------------------------------------------------------ dessin ---
 void HmiDebugPane::onLayout() {
     const auto b = bounds();
+    // Etroit (le panneau de droite de la simulation, ~570 px a 1920) : trois colonnes ne tiennent pas. En lignes :
+    // la pile et le code en haut, les locales dessous (toute la largeur : nom, type, valeur), puis les points et les
+    // espions cote a cote ; l'etat en clair sur deux lignes. Large : les trois colonnes.
+    const bool narrow = b.w < kNarrow;
+    if (narrow != narrow_) {
+        narrow_ = narrow;
+        split_->setOrientation(narrow ? ui::Orientation::Vertical : ui::Orientation::Horizontal);
+        split_->setOrder(narrow ? std::vector<std::size_t>{1, 2, 0} : std::vector<std::size_t>{});
+        split_->setRatios(narrow ? std::vector<float>{0.25f, 0.52f, 0.23f} : std::vector<float>{0.34f, 0.40f, 0.26f});
+        centerSplit_->setRatios(narrow ? std::vector<float>{0.42f, 0.58f} : std::vector<float>{0.32f, 0.68f});
+        leftSplit_->setOrientation(narrow ? ui::Orientation::Horizontal : ui::Orientation::Vertical);
+        // Etroit : pas de place pour « Retirer le point choisi » - Suppr dans le tableau, la marge, Tout retirer.
+        removeBtn_->setVisibility(narrow ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+    }
+    const float stateH = narrow_ ? kState2 : kState;
     band_ = {b.x, b.y, b.w, kBand};
-    stateBand_ = {b.x, b.y + kBand, b.w, kState};
+    stateBand_ = {b.x, b.y + kBand, b.w, stateH};
     float x = b.x + 8.f;
     for (auto* btn : buttons_) {
         const float w = std::max(70.f, btn->sizeHint().preferred.w);
@@ -718,7 +747,7 @@ void HmiDebugPane::onLayout() {
     }
     const float cw = std::max(90.f, clearBtn_->sizeHint().preferred.w);
     clearBtn_->setBounds({std::max(x, b.x + b.w - 8.f - cw), b.y + 5.f, cw, 26.f});
-    split_->setBounds({b.x, b.y + kBand + kState, b.w, std::max(0.f, b.h - kBand - kState)});
+    split_->setBounds({b.x, b.y + kBand + stateH, b.w, std::max(0.f, b.h - kBand - stateH)});
 }
 
 void HmiDebugPane::onPaint(const ui::PaintContext& ctx) {
@@ -736,22 +765,46 @@ void HmiDebugPane::onPaint(const ui::PaintContext& ctx) {
         text = message_;
         color = messageWarn_ ? c.warning : c.text;
     }
-    // Le texte tient dans la bande : coupe a la largeur (une ellipse).
-    std::string shown = text;
+    // Le texte tient dans la bande : coupe a la largeur (une ellipse) ; etroit, d'abord a un espace (deux lignes).
     const float room = stateBand_.w - 20.f;
-    if (room > 40.f && ctx.r.measure(shown, font).width > room) {
-        while (!shown.empty() && ctx.r.measure(shown + "\xE2\x80\xA6", font).width > room) {
-            shown.pop_back();
-            while (!shown.empty() && (static_cast<unsigned char>(shown.back()) & 0xC0) == 0x80) shown.pop_back();
+    const auto fit = [&](std::string t) {
+        if (room <= 40.f || ctx.r.measure(t, font).width <= room) return t;
+        while (!t.empty() && ctx.r.measure(t + "\xE2\x80\xA6", font).width > room) {
+            t.pop_back();
+            while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();
         }
-        shown += "\xE2\x80\xA6";
+        return t + "\xE2\x80\xA6";
+    };
+    std::string first = text, second;
+    if (narrow_ && room > 40.f && ctx.r.measure(text, font).width > room) {
+        std::size_t cut = std::string::npos;
+        for (std::size_t at = text.find(' '); at != std::string::npos; at = text.find(' ', at + 1)) {
+            if (ctx.r.measure(text.substr(0, at), font).width > room) break;
+            cut = at;
+        }
+        if (cut != std::string::npos) {
+            first = text.substr(0, cut);
+            second = text.substr(cut + 1);
+        }
     }
-    ctx.r.drawText({stateBand_.x + 10.f, stateBand_.y + (kState - lh) / 2.f}, shown, font, color);
+    if (second.empty()) {
+        ctx.r.drawText({stateBand_.x + 10.f, stateBand_.y + (stateBand_.h - lh) / 2.f}, fit(first), font, color);
+    } else {
+        const float top = stateBand_.y + (stateBand_.h - 2.f * lh) / 2.f;
+        ctx.r.drawText({stateBand_.x + 10.f, top}, first, font, color);
+        ctx.r.drawText({stateBand_.x + 10.f, top + lh}, fit(second), font, color);
+    }
 }
 
 ui::EventResult HmiDebugPane::onEvent(const ui::InputEvent& ev) {
-    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && !k->repeat && !k->mods.ctrl && !k->mods.alt)
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && !k->repeat && !k->mods.ctrl && !k->mods.alt) {
         if (debugKey(k->key, k->mods.shift)) return ui::EventResult::Consumed;
+        // Suppr dans le tableau des points : retirer le point choisi.
+        if (k->key == ui::Key::Delete && !k->mods.shift && bpTable_->focused() && !bpTable_->selectedModelRows().empty()) {
+            runAction(ARemoveBreakpoint);
+            return ui::EventResult::Consumed;
+        }
+    }
     if (std::get_if<ui::MouseDown>(&ev) && !message_.empty()) {
         message_.clear();                      // un geste : le message d'avant s'efface, l'etat revient
         invalidate();

@@ -347,7 +347,15 @@ void HmiBreakpointMargin::attach(ui::Widget& owner, ui::MultiLineText& editor, T
         auto& session = HmiDebugSession::instance();
         const auto code = target_ ? target_() : HmiDebugTarget{};
         if (const auto id = session.at(code, static_cast<std::uint32_t>(line0 + 1)))
-            if (const auto* b = session.find(id)) (void)session.setEnabled(id, !b->enabled);
+            if (const auto* b = session.find(id)) {
+                const bool on = !b->enabled;
+                (void)session.setEnabled(id, on);
+                if (say_)
+                    say_(std::string(on ? "Point d'arr\xC3\xAAt r\xC3\xA9" "activ\xC3\xA9 ligne " : "Point d'arr\xC3\xAAt d\xC3\xA9" "sactiv\xC3\xA9 ligne ")
+                             + std::to_string(line0 + 1) + (on ? std::string(" : la simulation s'y arr\xC3\xAAtera.")
+                                                               : std::string(" : il reste, sans arr\xC3\xAAter (Maj+clic : le r\xC3\xA9" "activer).")),
+                         false);
+            }
         refresh();
     });
     links_ += editor.breakpointMenuRequested->connect([this](std::size_t line0, gfx::Point at) { openMenu(line0, at); });
@@ -413,7 +421,10 @@ void HmiBreakpointMargin::refresh() {
     shown_ = sig;
     editor_->setBreakpoints(std::move(marks));
     editor_->setExecutionLine(exec);
-    if (exec != std::string::npos) editor_->scrollToLine(exec);
+    // La ligne en pause deja en vue : rien ne bouge ; sinon, en vue avec quelques lignes de contexte au-dessus
+    // (pres du debut : depuis la premiere ligne).
+    if (gfx::Rect seen{}; exec != std::string::npos && !editor_->positionRect(exec, 0, seen))
+        editor_->scrollToLine(exec > 8 ? exec - 4 : 0);
     if (owner_) owner_->invalidate();
 }
 

@@ -16,6 +16,9 @@
 //     les valeurs de la ligne a droite ; sa marge pose des points aussi).
 //   * A DROITE : LES LOCALES du niveau choisi (VAR, VAR_TEMP, parametres,
 //     compteurs de boucle), qui se deplient (structures, tableaux, listes).
+//   * ETROIT (le panneau de droite de la simulation, ~570 px) : en lignes - la
+//     pile et le code, les locales sur toute la largeur, puis les points et les
+//     espions cote a cote ; l'etat en clair sur deux lignes.
 //
 //  Les points sont a la seance (HmiDebugSession) : fermer l'onglet ne les
 //  enleve pas. Le moteur est celui de la simulation (hmi::Runtime).
@@ -108,6 +111,8 @@ private:
     ui::Button*                      clearBtn_{nullptr};
     ui::Button*                      removeBtn_{nullptr};
     ui::Splitter*                    split_{nullptr};
+    ui::Splitter*                    leftSplit_{nullptr};  // les points, les espions
+    ui::Splitter*                    centerSplit_{nullptr}; // la pile, le code
     ui::TableView*                   bpTable_{nullptr};
     ui::TableView*                   watchTable_{nullptr};
     ui::TableView*                   stackTable_{nullptr};
@@ -125,6 +130,8 @@ private:
     std::string                      state_;
     std::string                      message_;
     bool                             messageWarn_{false};
+    std::uint64_t                    messageRev_{0};     // la revision du moteur quand il a ete dit
+    bool                             narrow_{false};     // le volet etroit (le panneau de droite) : en lignes
     std::string                      seen_;              // ce que l'ecran montre deja (une signature)
     double                           nextWatch_{0.0};
     std::vector<std::string>         watches_;

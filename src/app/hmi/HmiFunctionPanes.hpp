@@ -164,6 +164,8 @@ public:
 
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
+    // 1.13.0 (lot J2) : la marge des points d'arret (le menu du clic droit, la condition : les scripts de seance).
+    [[nodiscard]] HmiBreakpointMargin& breakpointMargin() noexcept { return margin_; }
     [[nodiscard]] ui::TableView&     functionTable() noexcept { return *functions_; }
     // ---- 1.11.21 : HmiLiveSource (les diagnostics de la fonction montree, au panneau du bas) ----
     [[nodiscard]] std::uint64_t liveRevision() const noexcept override { return liveRev_; }

@@ -9222,11 +9222,12 @@ Simulation › IHM › **Débogage** :
 | Partie | Ce qu'elle montre |
 | La barre | Continuer (F5), Suivant (F10), Entrer (F11), Sortir (Maj+F11), Pause ; Tout retirer |
 | L'état | « En pause au point 2 : script Statistiques_Pression, ligne 14, cycle IHM 1 243 - P = 3.2 » |
-| Points d'arrêt | la case (actif), où, la condition (modifiable sur place, double clic), les passages, ce qu'en dit le moteur |
+| Points d'arrêt | la case (actif), où, la condition (modifiable sur place, double clic), les passages, ce qu'en dit le moteur ; Suppr retire le point choisi |
 | Espions | une expression, sa valeur maintenant (en pause : dans la portée de la ligne d'arrêt, locales comprises) |
 | Pile | de la ligne d'arrêt (en haut) au contexte (en bas : le cycle IHM, le clic qui l'a lancé, le script détaché) ; un clic montre ce niveau, un double clic ouvre son code |
 | Code | le code du niveau choisi, en lecture seule, la ligne surlignée, les valeurs de la ligne à droite ; sa marge pose des points aussi |
 | Locales | VAR, VAR_TEMP, paramètres, compteurs de boucle du niveau choisi ; une structure, un tableau, une liste, une MAP se déplient |
+Dans le panneau de droite, étroit, le sous-onglet se range en lignes : la pile et le code, les locales, puis les points et les espions côte à côte. Élargis le panneau : les trois colonnes reviennent.
 La **Console** du panneau du bas dit chaque arrêt (« arrêté au point 1 (script Statistiques_Pression, ligne 10) »), chaque pas, chaque reprise, avec leur source ; un double clic mène au code.
 ### La condition d'un point
 Du ST, **dans la portée du code** : ses locales (VAR, paramètres, compteurs) et les variables IHM. Elle est lue quand tu la poses : un nom inconnu se dit tout de suite - « condition invalide : Presion n'est pas déclarée ici ; il ne s'arrêtera pas » - et le rond passe en gris. Elle est essayée à chaque passage : il ne s'arrête que si elle est vraie ; une erreur à ce moment (un indice hors des bornes pour cette instance) désarme le point, et le dit.

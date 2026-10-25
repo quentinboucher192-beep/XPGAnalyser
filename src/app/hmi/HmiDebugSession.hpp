@@ -123,8 +123,9 @@ private:
     core::ConnectionScope links_;
 };
 
-// Le dialogue de la condition d'un point (pose au besoin) : le champ, l'apercu en direct (« Maintenant, c'est
-// vrai (P = 3.2) », « Sans condition : il s'arretera a chaque passage »).
+// Le dialogue de la condition d'un point (pose au besoin) : le champ (lu a la frappe : une condition qui ne se lit
+// pas se dit), l'apercu de la condition d'avant ; apres Valider, l'apercu de la nouvelle (« Maintenant, c'est vrai
+// (P = 3.2) », « Sans condition : il s'arretera a chaque passage »).
 void askBreakpointCondition(HmiDebugTarget code, std::uint32_t line, const std::function<void(const std::string&, bool)>& say,
                             const std::string& lineText = {});
 // L'apercu d'une condition dans la simulation qui tourne (en pause : dans la portee de la ligne d'arret).

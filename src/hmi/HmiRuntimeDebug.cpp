@@ -512,10 +512,16 @@ std::vector<DebugFrame> Runtime::debugStack(const std::vector<sim::LineProbe::Fr
                         d.locals.push_back(std::move(x));
                         seen.insert(it->first);
                     }
+                const HmiFunction* hf = project_ ? functionById(*project_, function) : nullptr;
                 for (const auto& [name, v] : *frame) {
                     if (seen.count(name)) continue;
                     DebugLocal x;
                     x.name = name;
+                    // Le resultat (Moyenne_Pression := ...) : le nom tel qu'ecrit, son type.
+                    if (hf && name == upperText(hf->name)) {
+                        x.name = hf->name;
+                        x.type = hf->returnType;
+                    }
                     x.value = shown(v);
                     d.locals.push_back(std::move(x));
                 }

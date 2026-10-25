@@ -234,6 +234,8 @@ public:
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] const std::string& buildStateText() const noexcept { return buildStateText_; }   // 1.11.13
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
+    // 1.13.0 (lot J2) : la marge des points d'arret (le menu du clic droit, la condition : les scripts de seance).
+    [[nodiscard]] HmiBreakpointMargin& breakpointMargin() noexcept { return margin_; }
     [[nodiscard]] ui::TableView&     scriptTable() noexcept { return *scripts_; }
     [[nodiscard]] ui::TableView&     variableTable() noexcept { return *variables_; }
     // 1.11.21 : plus de bandeau Diagnostics sous l'editeur (HmiLive.hpp) - ce qu'il listait :
