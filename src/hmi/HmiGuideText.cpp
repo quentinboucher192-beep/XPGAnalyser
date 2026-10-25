@@ -15187,6 +15187,28 @@ const std::vector<Topic>& topics() {
                          "**port\xC3\xA9" "e** (publique : Vue.Nom(\xE2\x80\xA6) ailleurs) ; d'un symbole, "
                          "**virtuelle**. Un aper\xC3\xA7u montre ce qui s'\xC3\xA9" "crira et comment elle "
                          "s'appellera ; un nom d\xC3\xA9j\xC3\xA0 pris est une surcharge, dite sous le nom.", {}, "1.12.24"},
+             {K::Heading, "Une fonction g\xC3\xA9n\xC3\xA9rique (TEMPLATE)", {}},
+             {K::Paragraph, "Une fonction peut porter ses propres types g\xC3\xA9n\xC3\xA9riques, comme une "
+                         "structure : une propri\xC3\xA9t\xC3\xA9 **G\xC3\xA9n\xC3\xA9riques** (`T`, `T : "
+                         "ANY_NUM`, `K, V`) dans son inspecteur (cat\xC3\xA9gorie Fonction), et le "
+                         "m\xC3\xAAme champ dans **Nouvelle fonction**, au-dessus du Retour. Un "
+                         "param\xC3\xA8tre, le retour ou une locale est alors de type **T** (le "
+                         "s\xC3\xA9lecteur de types met T et K en t\xC3\xAAte, puce "
+                         "**G\xC3\xA9n\xC3\xA9riques**). \xC3\x80 l'appel, **T se d\xC3\xA9" "duit des "
+                         "arguments** (`Max(P_A, P_B)` : REAL ; 1 et 2.5 : REAL l'emporte), ou **se donne** "
+                         "entre chevrons (`Max<INT>(Rang, 0)`) ; sa **contrainte** (ANY_NUM, "
+                         "ANY_MAGNITUDE\xE2\x80\xA6) refuse un type hors r\xC3\xA8gle (\xC2\xAB T = STRING "
+                         "n'est pas un ANY_NUM \xC2\xBB). L'arbre la montre `Max<T>`, l'aide \xC3\xA0 la "
+                         "saisie propose sa forme `Max(a : T; b : T) : T` avec l'indice \xC2\xAB T \xC2\xB7 "
+                         "d\xC3\xA9" "duit de a \xC2\xBB, le filtre **Rend** la classe sous \xC2\xAB selon T "
+                         "\xC2\xBB, et **G\xC3\xA9n\xC3\xA9rer** \xC3\xA9" "crit `template <typename T> T "
+                         "Max(T a, T b);` en C++ (un commentaire en C). Une fonction de vue, de popup ou de "
+                         "symbole peut en porter de m\xC3\xAAme ; une fonction de symbole peut \xC3\xAAtre "
+                         "**virtuelle ET g\xC3\xA9n\xC3\xA9rique** (une red\xC3\xA9" "finition d'instance "
+                         "garde la m\xC3\xAAme forme). Changer ses g\xC3\xA9n\xC3\xA9riques fait suivre ses "
+                         "param\xC3\xA8tres, son retour et les types donn\xC3\xA9s \xC3\xA0 ses appels "
+                         "(Ctrl+Z reprend tout). D\xC3\xA9" "duction, conteneurs et ordre sup\xC3\xA9rieur : "
+                         "rappels.", {}},
              {K::Heading, "Les onglets de la fonction (1.11.18)", {}, "1.11.18"},
              {K::Paragraph, "\xC3\x80 c\xC3\xB4t\xC3\xA9 du Code : **Param\xC3\xA8tres** (Nom, Type, Mode, "
                          "D\xC3\xA9" "faut, Documentation - l'ordre est la signature : Alt+Haut et Alt+Bas "
@@ -15685,6 +15707,19 @@ const std::vector<Topic>& topics() {
                          "natives : ANY, ANY_NUM, ANY_INT, ANY_REAL, ANY_BIT, ANY_STRING\xE2\x80\xA6 ; un "
                          "type qui n'y entre pas est refus\xC3\xA9 (\xC2\xAB STRING n'est pas un ANY_NUM "
                          "\xC2\xBB).", {}, "1.12.19"},
+             {K::Bullet, "**T se d\xC3\xA9" "duit \xC3\xA0 travers un conteneur et une structure "
+                         "g\xC3\xA9n\xC3\xA9rique** : `LIST OF T`, `ARRAY[0..9] OF T`, `MAP[K] OF T`, "
+                         "`T_Mesure<T>` (`FUNCTION Valeur_De(m : T_Mesure<T>) : T`) ; un param\xC3\xA8tre "
+                         "**rappel** porte T (`CALLBACK (x : T) : BOOL`), la LAMBDA pass\xC3\xA9" "e le "
+                         "fixe. Un T qui n'est dans aucun param\xC3\xA8tre se donne, sinon \xC2\xAB le type "
+                         "T ne se d\xC3\xA9" "duit pas des arguments \xE2\x80\x94 donne-le : Nom<REAL>() "
+                         "\xC2\xBB.", {}, "1.12.19"},
+             {K::Bullet, "**Depuis l'\xC3\xA9" "diteur d\xC3\xA9" "di\xC3\xA9**, et non plus seulement "
+                         "\xC3\xA0 la main dans un script : le sous-onglet **Fonctions** (Programmation "
+                         "g\xC3\xA9n\xC3\xA9rale, ou les Fonctions d'une vue, d'une popup, d'un symbole) a "
+                         "une propri\xC3\xA9t\xC3\xA9 **G\xC3\xA9n\xC3\xA9riques**, et la modale **Nouvelle "
+                         "fonction** le m\xC3\xAAme champ ; l'arbre la montre `Max<T>`, l'aide \xC3\xA0 la "
+                         "saisie donne \xC2\xAB T \xC2\xB7 d\xC3\xA9" "duit de a \xC2\xBB (voir fonctions).", {}, "1.12.19"},
              {K::Bullet, "Les scripts C et C++ de l'IHM sont v\xC3\xA9rifi\xC3\xA9s, pas "
                          "ex\xC3\xA9" "cut\xC3\xA9s : un pointeur de fonction, `std::function`, une lambda "
                          "et un `template` y suivent leur langage.", {}, "1.12.19"},
