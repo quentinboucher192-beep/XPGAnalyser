@@ -90,6 +90,23 @@ std::string joinShapes(const std::vector<Signature>& c, const std::vector<int>& 
 
 bool elementary(std::string_view t) { return tr::numericOf(t).family != tr::Family::None; }
 
+// 1.13.0 : le texte `type` nomme-t-il un des generiques de la fonction (T, LIST OF T, T_Mesure<T>, CALLBACK (x : T)...) ?
+//  Comme sim::mentionsTypeParam : un mot entier qui est le nom d'un generique.
+bool mentionsGeneric(std::string_view type, const std::vector<GenericParam>& generics) {
+    if (generics.empty()) return false;
+    std::size_t i = 0;
+    while (i < type.size()) {
+        if (!(std::isalpha(static_cast<unsigned char>(type[i])) || type[i] == '_')) { ++i; continue; }
+        std::size_t j = i;
+        while (j < type.size() && (std::isalnum(static_cast<unsigned char>(type[j])) || type[j] == '_')) ++j;
+        const std::string_view word = type.substr(i, j - i);
+        for (const auto& g : generics)
+            if (sameName(word, g.name)) return true;
+        i = j;
+    }
+    return false;
+}
+
 } // namespace
 
 std::string_view modeWord(Mode m) noexcept {
@@ -296,14 +313,16 @@ Choice choose(const std::vector<Signature>& candidates, const std::vector<Arg>& 
 Signature signatureOf(const HmiFunction& f) {
     Signature s;
     s.name = f.name;
-    s.result = f.returnType;
+    // 1.13.0 : une fonction generique (TEMPLATE <T>) - un parametre ou un retour de type T se voit a l'appel (le
+    //  moteur deduit T, et le refuse s'il ne va pas) : pas de type ecrit a comparer ici (comme sim::Function).
+    s.result = mentionsGeneric(f.returnType, f.generics) ? std::string{} : f.returnType;
     s.key = "#" + std::to_string(f.id);
     // Tous les types sont lus (une structure IHM, un tableau) : la forme seule compte ici.
     const auto parts = splitDeclarations(decl::codeOf(f), true, [](std::string_view) { return true; });
     for (const auto* l : parts.parameters()) {
         Param p;
         p.name = l->name;
-        p.type = l->type;
+        p.type = mentionsGeneric(l->type, f.generics) ? std::string{} : l->type;
         p.mode = l->section == LocalVar::Section::InOut ? Mode::InOut : l->section == LocalVar::Section::Output ? Mode::Out : Mode::In;
         p.optional = p.mode == Mode::Out || (p.mode == Mode::In && !l->initial.empty());
         s.params.push_back(std::move(p));

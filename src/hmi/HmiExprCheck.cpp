@@ -977,7 +977,26 @@ private:
     // 1.11.20 : un appel d'une fonction de l'utilisateur (ses surcharges) : le nombre d'arguments
     // (E/S et sorties comptees) - sauf si le controle des appels l'a juge - et le type rendu (celui
     // de la surcharge qui prend ce nombre ; plusieurs : leur type commun).
-    void userCall(const std::string& name, const std::vector<const HmiFunction*>& fs, int n, Val& r) {
+    // 1.13.0 : une fonction generique rend son T DEDUIT a l'appel - le type coarse de l'argument qui porte le generique
+    //  du retour (Max(a : T; b : T) : T, appelee sur des REAL -> Num). Un retour compose (LIST OF T) reste Unknown.
+    T deducedGenericReturn(const HmiFunction& f, const std::vector<Val>& args) {
+        if (f.generics.empty()) return T::Unknown;
+        const std::string ret = up(trimmed(f.returnType));
+        const GenericParam* g = nullptr;
+        for (const auto& gp : f.generics) if (ret == up(gp.name)) g = &gp;
+        if (!g) return T::Unknown;
+        const auto parts = splitDeclarations(decl::codeOf(f), true);
+        T best = T::Unknown;
+        std::size_t k = 0;
+        for (const auto* in : parts.parameters()) {
+            if (k < args.size() && up(trimmed(in->type)) == up(g->name) && args[k].type != T::Unknown)
+                best = best == T::Unknown ? args[k].type : (best == args[k].type ? best : T::Unknown);
+            ++k;
+        }
+        return best;
+    }
+    void userCall(const std::string& name, const std::vector<const HmiFunction*>& fs, int n, Val& r,
+                  const std::vector<Val>& args = {}) {
         std::vector<const HmiFunction*> fitting;
         int lo = -1, hi = 0;
         for (const auto* f : fs) {
@@ -997,6 +1016,9 @@ private:
         bool anyResult = false;
         for (const auto* f : pool) anyResult = anyResult || !trimmed(f->returnType).empty();
         r.type = rt.empty() ? T::Unknown : typeOfName(rt);
+        // 1.13.0 : un retour generique (la lettre T) : le type deduit des arguments, pas Unknown.
+        if (r.type == T::Unknown && pool.size() == 1 && !pool.front()->generics.empty())
+            r.type = deducedGenericReturn(*pool.front(), args);
         if (!anyResult) {
             problem(name + " ne rend pas de valeur : une expression ne peut appeler qu'une fonction qui rend quelque chose");
             return;
@@ -1043,7 +1065,7 @@ private:
                 }
         };
         if (symFn) {
-            userCall(name, siblingsOf(symFn), n, r);
+            userCall(name, siblingsOf(symFn), n, r, args);
             lambdaCall(siblingsOf(symFn), name);                // 1.12.20 : dans une LAMBDA d'une fx
             return r;
         }
@@ -1175,7 +1197,7 @@ private:
         }
         if (const Project* p = ctx_.project)
             if (const auto fs = p->functionsNamed(name); !fs.empty()) {
-                userCall(name, fs, n, r);          // 1.11.20 : ses surcharges, tous leurs parametres
+                userCall(name, fs, n, r, args);    // 1.11.20 : ses surcharges, tous leurs parametres
                 lambdaCall(fs, name);              // 1.12.20 : dans une LAMBDA d'une fx
                 return r;
             }

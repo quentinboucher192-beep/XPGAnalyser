@@ -672,6 +672,18 @@ std::string projectHeader(const Project& p, ScriptLang lang, const View* view) {
         comment(view ? "Les fonctions IHM, et celles de " + view->name : std::string("Les fonctions IHM"));
     }
     for (const HmiFunction* f : fns) {
+        // 1.13.0 : une fonction generique (TEMPLATE <T>) - en C++, un template ; en C, un commentaire (pas de prototype
+        //  unique, comme une structure generique), chacun appelant la version du type voulu.
+        if (!f->generics.empty() && !cpp) {
+            std::string names, constraints;
+            for (const auto& g : f->generics) {
+                names += (names.empty() ? "" : ", ") + g.name;
+                if (!g.constraint.empty()) constraints += (constraints.empty() ? "" : ", ") + g.name + " : " + g.constraint;
+            }
+            comment(f->name + "<" + names + "> : fonction g\xC3\xA9n\xC3\xA9rique (template <" + names + ">)"
+                    + (constraints.empty() ? std::string{} : " \xE2\x80\x94 " + constraints) + " - pas de prototype C unique");
+            continue;
+        }
         std::string params;
         bool ok = true;
         for (const auto& d : f->decls) {
@@ -688,6 +700,15 @@ std::string projectHeader(const Project& p, ScriptLang lang, const View* view) {
         if (!ok || ret.empty()) {
             comment(f->name + " : un param\xC3\xA8tre ou un retour sans \xC3\xA9quivalent en C (une liste, une MAP)");
             continue;
+        }
+        // 1.13.0 : en C++, le template devant le prototype (template <typename T> T Max(T a, T b);).
+        if (!f->generics.empty()) {
+            std::string tpl, constraints;
+            for (const auto& g : f->generics) {
+                tpl += (tpl.empty() ? "" : ", ") + std::string("typename ") + g.name;
+                if (!g.constraint.empty()) constraints += (constraints.empty() ? "" : ", ") + g.name + " : " + g.constraint;
+            }
+            line("template <" + tpl + ">" + (constraints.empty() ? std::string{} : "   // " + constraints));
         }
         line(ret + " " + f->name + "(" + (params.empty() && !cpp ? std::string("void") : params) + ");");
     }
@@ -1753,17 +1774,28 @@ std::vector<Declaration> functionTemplateDecls(std::string_view returnType) {
 std::string functionText(const HmiFunction& f) {
     // 1.11.1 (REP) : le corps sans les $ de ses reperes (ce texte ne sert qu'a l'analyse ; les lignes restent).
     // 1.11.18 (lot 3) : ses declarations du modele reconstruites sur la ligne 1 (decl::codeOf).
-    return "FUNCTION " + f.name + (f.returnType.empty() ? std::string{} : " : " + f.returnType) + " " + markers::strip(decl::codeOf(f))
-         + "\nEND_FUNCTION\n";
+    // 1.13.0 : une fonction generique porte son TEMPLATE <T : ANY_NUM, U> devant FUNCTION - le moteur la lit alors
+    //  comme generique (il deduit T a l'appel, le verifie contre sa contrainte) ; genericsText reprend sa case.
+    const std::string tmpl = f.generics.empty() ? std::string{} : "TEMPLATE <" + genericsText(f.generics) + "> ";
+    return tmpl + "FUNCTION " + f.name + (f.returnType.empty() ? std::string{} : " : " + f.returnType) + " "
+         + markers::strip(decl::codeOf(f)) + "\nEND_FUNCTION\n";
 }
 
 std::string functionSignature(const HmiFunction& f) {
+    // 1.13.0 : une fonction generique montre ses types entre chevrons, Max<T>(a : T; b : T) : T (comme un type T_Mesure<T>).
+    std::string angles;
+    if (!f.generics.empty()) {
+        std::string names;
+        for (const auto& g : f.generics) names += (names.empty() ? "" : ", ") + g.name;
+        angles = "<" + names + ">";
+    }
     // 1.10 : une fonction aux types riches (VAR_IN_OUT, REF_TO, ARRAY...) : la signature du dialecte.
     if (auto fn = sim::parseFunction(functionText(f), f.name); fn && !sim::functionIsSimple(**fn)) {
         std::string sig = sim::functionSignature(**fn);
+        if (!angles.empty() && sig.rfind(f.name, 0) == 0) sig.insert(f.name.size(), angles);
         return sig;
     }
-    std::string s = f.name + "(";
+    std::string s = f.name + angles + "(";
     const auto parts = splitDeclarations(decl::codeOf(f), true);       // 1.11.18 (lot 3) : ses parametres du modele aussi
     bool first = true;
     for (const auto* in : parts.parameters()) {                        // 1.11.20 : E/S et sorties comprises
@@ -1780,11 +1812,23 @@ std::string functionSignature(const HmiFunction& f) {
 
 std::vector<ScriptDiagnostic> checkFunction(const HmiFunction& source, const TypeKnown& knownType) {
     using E = ScriptDiagnostic::Severity;
+    // 1.13.0 : les generiques de la fonction (TEMPLATE <T>) elargissent les types permis a ses parametres, ses locales
+    //  et son retour - un type T (ou LIST OF T, T_Mesure<T>...) vaut son exemple dans la contrainte (T -> REAL), puis le
+    //  type permis d'avant decide. Sans generiques : knownType tel quel (comportement d'avant).
+    TypeKnown known = knownType;
+    if (!source.generics.empty())
+        known = [knownType, gens = source.generics](std::string_view t) -> bool {
+            if (knownType && knownType(t)) return true;
+            std::vector<std::string> samples;
+            for (const auto& g : gens) samples.push_back(genericSample(g.constraint));
+            const std::string concrete = substituteGenerics(t, gens, samples);
+            return concrete != std::string(t) && (localTypeSupported(concrete) || richLocalType(concrete, knownType));
+        };
     // 1.11.18 (refonte, lot 3) : ses declarations du modele d'abord ; le code se lit avec
     // celles qui sont justes, reconstruites sur sa ligne 1 (les lignes ne bougent pas).
     if (!source.decls.empty()) {
         std::vector<Declaration> valid;
-        auto out = decl::checkDeclarations(source.decls, decl::Role::Function, source.body, knownType, nullptr, &valid);
+        auto out = decl::checkDeclarations(source.decls, decl::Role::Function, source.body, known, nullptr, &valid);
         valid.erase(std::remove_if(valid.begin(), valid.end(), [&](const Declaration& d) {
                         if (upper(d.name) != upper(source.name)) return false;
                         out.push_back({E::Error, 0, "d\xC3\xA9" "claration \xC2\xAB " + d.name
@@ -1802,9 +1846,16 @@ std::vector<ScriptDiagnostic> checkFunction(const HmiFunction& source, const Typ
     HmiFunction f = source;                // 1.11.1 (REP) : le corps sans les $ de ses reperes (les lignes restent)
     f.body = markers::strip(source.body);
     std::vector<ScriptDiagnostic> out;
+    // 1.13.0 : la case Generiques relue (un nom illisible, deux fois le meme, une contrainte qui n'est pas un ANY_*).
+    if (!f.generics.empty()) {
+        std::string why;
+        std::vector<GenericParam> round;
+        if (!parseGenerics(genericsText(f.generics), round, &why))
+            out.push_back({E::Error, 0, "G\xC3\xA9n\xC3\xA9riques : " + why});
+    }
     // 1.10 : un type de retour riche (ARRAY, MAP, REF_TO, POINTER TO, un type IHM
-    // connu) est permis ; un nom inconnu reste refuse, comme en 1.9.
-    if (!f.returnType.empty() && !localTypeSupported(f.returnType) && !richLocalType(f.returnType, knownType)) {
+    // connu) est permis ; un nom inconnu reste refuse, comme en 1.9. 1.13.0 : ou un type T de la fonction.
+    if (!f.returnType.empty() && !localTypeSupported(f.returnType) && !richLocalType(f.returnType, known)) {
         out.push_back({E::Error, 0, "type de retour non pris en charge : " + f.returnType});
         return out;
     }
