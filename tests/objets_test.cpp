@@ -11,6 +11,7 @@
 //
 //  OBJ_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
+#include "../src/hmi/HmiCheck.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiMethods.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
@@ -357,7 +358,118 @@ void modeleHelpers() {
     }
 }
 
-void controle() {}
+// =============================================================================
+//  3) LE CONTROLE (Generer) : ce qui refuse une mauvaise definition de type.
+// =============================================================================
+namespace {
+std::vector<Issue> generOf(const Project& p) {
+    return generate(p, [](std::string_view) { return false; });
+}
+bool hasError(const std::vector<Issue>& is, const std::string& needle) {
+    for (const auto& i : is)
+        if (i.severity == Issue::Severity::Error && i.message.find(needle) != std::string::npos) return true;
+    return false;
+}
+} // namespace
+
+void controle() {
+    std::printf("-- controle Generer : EXTENDS, OVERRIDE/VIRTUAL, interfaces, noms\n");
+
+    // EXTENDS hors structure : heriter d'une enumeration.
+    {
+        Project p;
+        HmiType& e = addType(p, "T_Mode", HmiTypeKind::Enumeration);
+        HmiEnumValue v; v.name = "Auto"; e.values.push_back(v);
+        HmiType& t = addType(p, "T_X");
+        t.base = "T_Mode";
+        t.members.push_back(member("a", "INT"));
+        check(hasError(generOf(p), "ne peut h\xC3\xA9riter que d'une structure"), "EXTENDS hors structure refuse");
+    }
+    // EXTENDS parent inconnu (veux-tu dire ?).
+    {
+        Project p;
+        addType(p, "T_Pompe").members.push_back(member("a", "INT"));
+        HmiType& t = addType(p, "T_X");
+        t.base = "T_Pompes";                                   // faute de frappe
+        t.members.push_back(member("b", "INT"));
+        check(hasError(generOf(p), "type inconnu") && hasError(generOf(p), "veux-tu dire T_Pompe"),
+              "EXTENDS d'un parent inconnu : refuse, veux-tu dire ?");
+    }
+    // Cycle d'heritage.
+    {
+        Project p;
+        HmiType& a = addType(p, "T_A"); a.base = "T_B"; a.members.push_back(member("x", "INT"));
+        HmiType& b = addType(p, "T_B"); b.base = "T_A"; b.members.push_back(member("y", "INT"));
+        check(hasError(generOf(p), "h\xC3\xA9rite de lui-m\xC3\xAAme"), "cycle d'heritage refuse");
+    }
+    // OVERRIDE sans VIRTUAL au parent.
+    {
+        Project p;
+        HmiType& base = addType(p, "T_Base");
+        base.members.push_back(member("v", "INT"));
+        base.methods.push_back(method(p, "M", "INT", "M := 1;", Visibility::Public, false));   // pas virtuelle
+        HmiType& sub = addType(p, "T_Sub");
+        sub.base = "T_Base";
+        sub.methods.push_back(method(p, "M", "INT", "M := 2;"));
+        check(hasError(generOf(p), "qui n'est pas virtuelle"), "OVERRIDE sans VIRTUAL refuse");
+    }
+    // OVERRIDE de signature differente.
+    {
+        Project p;
+        HmiType& base = addType(p, "T_Base");
+        base.members.push_back(member("v", "INT"));
+        base.methods.push_back(method(p, "M", "INT", "M := 1;", Visibility::Public, true));    // virtuelle : INT
+        HmiType& sub = addType(p, "T_Sub");
+        sub.base = "T_Base";
+        sub.methods.push_back(method(p, "M", "REAL", "M := 2.0;"));                            // retour REAL
+        check(hasError(generOf(p), "change sa signature"), "OVERRIDE de signature differente refuse");
+    }
+    // Une methode privee ne peut pas etre virtuelle.
+    {
+        Project p;
+        HmiType& t = addType(p, "T_X");
+        t.members.push_back(member("v", "INT"));
+        t.methods.push_back(method(p, "Secret", {}, "v := 0;", Visibility::Private, true));
+        check(hasError(generOf(p), "ne peut pas \xC3\xAatre virtuelle"), "methode privee virtuelle refusee");
+    }
+    // Interface non satisfaite : la methode manquante est NOMMEE.
+    {
+        Project p;
+        HmiType& iface = addType(p, "I_Demarrable", HmiTypeKind::Interface);
+        iface.methods.push_back(method(p, "Demarrer", {}, {}));
+        iface.methods.push_back(method(p, "EnDefaut", "BOOL", {}));
+        HmiType& t = addType(p, "T_Vanne");
+        t.interfaces = {"I_Demarrable"};
+        t.members.push_back(member("Position", "REAL"));
+        t.methods.push_back(method(p, "Demarrer", {}, "Position := 100.0;"));   // EnDefaut manque
+        const auto is = generOf(p);
+        check(hasError(is, "EnDefaut") && hasError(is, "I_Demarrable"), "interface non satisfaite : EnDefaut nommee");
+    }
+    // Un membre et une methode ne partagent pas le nom.
+    {
+        Project p;
+        HmiType& t = addType(p, "T_X");
+        t.members.push_back(member("Etat", "INT"));
+        t.methods.push_back(method(p, "Etat", "INT", "Etat := 0;"));
+        check(hasError(generOf(p), "la fois un membre et une m\xC3\xA9thode"), "membre et methode de meme nom refuses");
+    }
+    // Une interface ne porte pas de membre.
+    {
+        Project p;
+        HmiType& iface = addType(p, "I_X", HmiTypeKind::Interface);
+        iface.members.push_back(member("a", "INT"));
+        iface.methods.push_back(method(p, "M", {}, {}));
+        check(hasError(generOf(p), "ne porte pas de membre"), "une interface avec un membre refusee");
+    }
+    // Une interface comme donnee directe (membre sans REF_TO).
+    {
+        Project p;
+        addType(p, "I_D", HmiTypeKind::Interface).methods.push_back(method(p, "M", {}, {}));
+        HmiType& t = addType(p, "T_X");
+        t.members.push_back(member("ref", "I_D"));       // sans REF_TO
+        check(hasError(generOf(p), "REF_TO I_D"), "interface comme donnee directe refusee (emploie REF_TO)");
+    }
+}
 
 // =============================================================================
 //  4) LE MOTEUR : une methode tourne en simulation (SELF, procedure/fonction,

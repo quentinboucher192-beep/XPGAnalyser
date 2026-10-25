@@ -40,6 +40,7 @@
 #include "HmiChoiceLists.hpp"  // 1.12.7 (lot D) : les colonnes choisies d'une source
 #include "HmiTable.hpp"         // 1.12.13 : le Tableau, un mode a la fois
 #include "HmiDisplay.hpp"      // lot 13
+#include "HmiMethods.hpp"      // 1.13.0 (lot J1) : les controles des objets (EXTENDS, OVERRIDE, interfaces)
 #include "HmiTypes.hpp"        // lot 16
 #include "HmiTypeForms.hpp"    // 1.12.2 : la valeur initiale d'une variable objet
 #include "HmiRanges.hpp"       // 1.12.10 (lot F) : la plage et les seuils de la variable
@@ -567,6 +568,32 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         }
         if (const auto cycle = types::cycleOf(p, ty.name); !cycle.empty())
             add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " se contient lui-m\xC3\xAAme : " + cycle);
+        // 1.13.0 (lot J1) : l'heritage, les methodes, les interfaces.
+        // EXTENDS : parent connu, entre structures, sans cycle (extendsProblem).
+        if (const std::string ex = extendsProblem(p, ty); !ex.empty())
+            add(out, S::Error, cat, kNoId, kNoId, ty.name, ex);
+        // Une interface ne porte ni membre ni donnee (seulement des signatures) ; elle n'herite pas.
+        if (ty.kind == HmiTypeKind::Interface && !ty.members.empty())
+            add(out, S::Error, cat, kNoId, kNoId, ty.name,
+                ty.name + " : une interface ne porte pas de membre (seulement des signatures de m\xC3\xA9thodes)");
+        // Les methodes : nom valide / en double, OVERRIDE vs VIRTUAL et meme signature, privee non virtuelle,
+        // retour et parametres lisibles (methodProblem) ; une methode ne partage pas le nom d'un membre.
+        std::set<std::string> methodSeen;
+        for (const auto& m : ty.methods) {
+            if (isIdentifier(m.name) && !methodSeen.insert(upperText(m.name)).second)
+                add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : m\xC3\xA9thode en double " + m.name);
+            for (const auto& mem : ty.members)
+                if (sameTypeName(mem.name, m.name)) {
+                    add(out, S::Error, cat, kNoId, kNoId, ty.name,
+                        ty.name + " : " + m.name + " est \xC3\xA0 la fois un membre et une m\xC3\xA9thode");
+                    break;
+                }
+            if (const std::string mp = methodProblem(p, ty, m); !mp.empty())
+                add(out, S::Error, cat, kNoId, kNoId, ty.name, mp);
+        }
+        // IMPLEMENTS : chaque interface declaree est satisfaite (chaque signature presente, nommee si manquante).
+        for (const auto& miss : interfaceMisses(p, ty))
+            add(out, S::Error, cat, kNoId, kNoId, ty.name, miss);
     }
     // 1.12.7 : Reglages.Seuils - la constante d'un script general, lue d'ailleurs : publique, existante,
     // jamais ecrite. `report` recoit le message et sa ligne.
