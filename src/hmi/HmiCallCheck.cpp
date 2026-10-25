@@ -6,6 +6,7 @@
 
 #include "HmiEnums.hpp"
 #include "HmiModel.hpp"
+#include "HmiNames.hpp"     // 1.13.0 (lot J8) : les types ecrits en noms complets (T_Vanne = Gaz.T_Vanne)
 #include "HmiOverload.hpp"
 #include "HmiSymbols.hpp"
 #include "HmiTypes.hpp"
@@ -52,6 +53,22 @@ std::string memberOf(const Project& p, const std::string& type, const std::strin
     for (const auto& m : types::membersOf(p, type))
         if (same(m.name, member)) return m.type;
     return {};
+}
+
+// 1.13.0 (lot J8) : la signature d'une fonction du projet, ses types en noms complets (vus de son espace) - un
+// parametre T_Vanne d'une fonction de Gaz et un argument Gaz.T_Vanne sont le meme type.
+overload::Signature canonicalSignature(const Project* p, const HmiFunction& f) {
+    auto sig = overload::signatureOf(f);
+    if (!p || !names::active(*p)) return sig;
+    for (auto& prm : sig.params) prm.type = names::canonicalType(*p, prm.type, f.ns);
+    sig.result = names::canonicalType(*p, sig.result, f.ns);
+    return sig;
+}
+std::vector<overload::Arg> canonicalArgs(const Context& c, std::vector<overload::Arg> args) {
+    if (!c.project || !names::active(*c.project)) return args;
+    const std::string own = c.function ? c.function->ns : c.ns;
+    for (auto& a : args) a.type = names::canonicalType(*c.project, a.type, own);
+    return args;
 }
 
 // Les types des noms, pour sim::callSites (rien n'y est lu ni ecrit).
@@ -106,8 +123,8 @@ public:
         if (fs.empty()) return {};
         if (fs.size() == 1) return fs.front()->returnType;
         std::vector<overload::Signature> sigs;
-        for (const auto* f : fs) sigs.push_back(overload::signatureOf(*f));
-        const auto c = overload::choose(sigs, overload::argsOf(args));
+        for (const auto* f : fs) sigs.push_back(canonicalSignature(c_.project, *f));
+        const auto c = overload::choose(sigs, canonicalArgs(c_, overload::argsOf(args)));
         return c.chosen >= 0 ? sigs[static_cast<std::size_t>(c.chosen)].result : std::string{};
     }
 
@@ -190,9 +207,9 @@ std::vector<Problem> judge(const Context& c, std::string_view code, const std::v
         for (const auto& f : inner)
             if (f.get() != self && same(sim::functionName(*f), site.callee)) sigs.push_back(overload::signatureOf(*f));
         if (sigs.empty())
-            for (const auto* f : candidates(c, site.callee)) sigs.push_back(overload::signatureOf(*f));
+            for (const auto* f : candidates(c, site.callee)) sigs.push_back(canonicalSignature(c.project, *f));   // 1.13.0 (lot J8)
         if (sigs.empty()) continue;
-        const auto args = overload::argsOf(site.args);
+        const auto args = canonicalArgs(c, overload::argsOf(site.args));
         const auto choice = overload::choose(sigs, args);
         if (choice.chosen >= 0) {
             // 1.11.21 : la surcharge prise - ses arguments aux conversions interdites (une seule
@@ -237,6 +254,9 @@ std::vector<const HmiFunction*> candidates(const Context& c, std::string_view ca
         return c.project->functionsNamed(segs.front());
     }
     if (segs.size() == 2 && same(segs.front(), kSuperName)) return sym ? symbolFunctions(*sym, segs.back()) : std::vector<const HmiFunction*>{};
+    // 1.13.0 (lot J8) : Util.Max - les fonctions (et surcharges) d'un espace de noms.
+    if (c.project->isNamespace(callee.substr(0, callee.rfind('.'))))
+        if (auto fs = c.project->functionsNamed(callee); !fs.empty()) return fs;
     // Vanne_3.Ouvrir : une instance de la vue (ou du symbole), des instances imbriquees.
     if (const View* here = sym ? sym : c.view) {
         const View* s = nullptr;

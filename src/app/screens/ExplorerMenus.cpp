@@ -51,6 +51,7 @@
 #include "../hmi/HmiScriptPanes.hpp"       // 1.12.18 : Dupliquer un script, une variable, un type
 #include "../hmi/HmiSupervisionPanes.hpp"  // 1.12.18 : alarmes, recettes, utilisateurs
 #include "../hmi/HmiVariablePanes.hpp"
+#include "../hmi/HmiLibraryPanes.hpp"      // 1.13.0 (lot J8) : Delier une bibliotheque
 #include "../Dossiers.hpp"                 // 1.12.18 : Ouvrir le dossier du projet
 #include "../HistoryPanel.hpp"             // 1.12.18 (planche 21) : le menu d'une action de l'historique
 #include "../MacrosPane.hpp"               // 1.12.18 (planche 21) : le meme menu de macro que le volet
@@ -1635,7 +1636,38 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         m.add("+ Script ST" + kDots, Icon::Code, [this] { askHmiNewScript(hmi::ScriptLang::ST); });
         m.add("+ Fonction" + kDots, Icon::Code, [this] { askHmiNewFunction(); });
         m.add("+ Variable IHM" + kDots, Icon::Variable, [this] { askHmiVariable(0); });
+        // 1.13.0 (lot J8) : les espaces de noms et les bibliotheques reliees.
+        m.separator();
+        m.add("Relier une biblioth\xC3\xA8que" + kDots, Icon::Library, [this] { askHmiLinkLibrary(); });
+        m.add("Publier une biblioth\xC3\xA8que" + kDots, Icon::Export, [this] { askHmiPublishLibrary(); });
+        m.add("Espaces et biblioth\xC3\xA8ques", Icon::Library, [this] { openHmiPane("bibliotheques"); });
         break;
+    // ---- 1.13.0 (lot J8) : Bibliotheques, et chaque bibliotheque reliee (verrouillee) ----
+    case NK::HmiLibrariesFolder:
+        m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        m.separator();
+        m.add("Relier une biblioth\xC3\xA8que" + kDots, Icon::Library, [this] { askHmiLinkLibrary(); });
+        m.add("Publier une biblioth\xC3\xA8que" + kDots, Icon::Export, [this] { askHmiPublishLibrary(); });
+        m.add("Nouvel espace" + kDots, Icon::Folder, [this] { askHmiNewNamespace(); });
+        break;
+    case NK::HmiLibraryNode: {
+        std::string lib;
+        if (hmiDoc && ProjectTreeModel::indexOf(node) < hmiDoc->project.libraries.size())
+            lib = hmiDoc->project.libraries[ProjectTreeModel::indexOf(node)].name;
+        const std::string none = lib.empty() ? "biblioth\xC3\xA8que introuvable" : std::string{};
+        m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        m.separator();
+        m.add("Mettre \xC3\xA0 jour" + kDots, Icon::Refresh, [this, lib] { askHmiUpdateLibrary(lib); }, {}, none);
+        m.add("Localiser" + kDots, Icon::Search, [this, lib] { askHmiLocateLibrary(lib); }, {}, none);
+        m.separator();
+        addRemove("D\xC3\xA9lier", [this, lib, refused] {
+            openHmiPane("bibliotheques");
+            std::string why;
+            auto* pane = dynamic_cast<HmiLibrariesPane*>(hmiTab("bibliotheques"));
+            if (!pane || !pane->unlink(lib, &why)) refused("D\xC3\xA9lier", why.empty() ? "biblioth\xC3\xA8que introuvable" : why);
+        });
+        break;
+    }
     case NK::HmiScriptsFolder: {
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
         m.separator();

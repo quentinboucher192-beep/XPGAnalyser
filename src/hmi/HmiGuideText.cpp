@@ -14063,7 +14063,7 @@ const std::vector<Topic>& topics() {
                          "T_Cuve`, en valeur initiale comme dans un script. Un membre inconnu ou une valeur "
                          "du mauvais type est refus\xC3\xA9 \xC3\xA0 la saisie, et la raison nomme le membre.", {}, "1.12.14"},
          },
-         {"variables-ihm", "tableaux-ihm", "variables-liees", "dossiers", "parametres-popups", "operateurs", "types-excel", "enum-scripts"},
+         {"variables-ihm", "tableaux-ihm", "variables-liees", "dossiers", "parametres-popups", "operateurs", "types-excel", "enum-scripts", "biblio-espaces"},
          {"type IHM", "types IHM", "structure", "T_Four", "membre", "membres", "DDT", "STRUCT", "d\xC3\xA9" "calage", "registre des types", "s\xC3\xA9lecteur de types", "Choisir un type", "conversion", "cl\xC3\xA9 de type"},
          {"types-ihm"},
          {{"PNG_430_types_ihm_structure.png", "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Types IHM : T_Vanne et T_Four ; les membres de T_Four, leur type, leur valeur initiale, leur d\xC3\xA9" "calage et leur taille dans une liaison Modbus."}, {"PNG_441_arbre_types_et_dossiers.png", "L'arbre du projet : les types IHM (leurs membres, leurs mots) et les dossiers des variables IHM."}},
@@ -15562,7 +15562,7 @@ const std::vector<Topic>& topics() {
                          "MAP). Voir \xC2\xAB Ce qu'une fonction rend \xC2\xBB et \xC2\xAB Copies, "
                          "r\xC3\xA9" "f\xC3\xA9rences et pointeurs \xC2\xBB.", {}, "1.10"},
          },
-         {"variables-locales", "scripts", "reference", "aide-saisie", "verifier", "retours-fonctions", "copies-references", "fonctions-internes"},
+         {"variables-locales", "scripts", "reference", "aide-saisie", "verifier", "retours-fonctions", "copies-references", "fonctions-internes", "biblio-espaces"},
          {"VAR_INPUT", "VAR_IN_OUT", "VAR_OUTPUT", "surcharge", "surcharges", "signature"},
          {"fonctions"},
          {{"PNG_174_fonction_avec_retour_signature.png", "Une fonction avec retour : ses param\xC3\xA8tres (VAR_INPUT), sa VAR_TEMP, sa signature."}, {"PNG_177_essai_resultat.png", "L'essai de Moyenne_Pression(12, 20, 0.25) : 18.0."}, {"PNG_178_essai_procedure_journal_variable.png", "L'essai d'une proc\xC3\xA9" "dure : la ligne du journal et la variable IHM chang\xC3\xA9" "e."}, {"PNG_183_action_appelle_procedure.png", "Une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB qui appelle une proc\xC3\xA9" "dure."}},
@@ -16153,6 +16153,98 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.12.19"},
+        // ---- Programmer  Scripts et fonctions / biblio-espaces
+        {"biblio-espaces", "Espaces de noms et biblioth\xC3\xA8ques", "Programmer \xE2\x80\xBA Scripts et fonctions",
+         "Range tes types, tes fonctions et tes scripts g\xC3\xA9n\xC3\xA9raux dans des espaces de noms "
+         "(Gaz, Gaz.Vannes) : deux noms pareils ne se g\xC3\xAAnent plus. Publie un espace en "
+         "biblioth\xC3\xA8que versionn\xC3\xA9" "e (.xpgbib) et relie-la \xC3\xA0 d'autres projets : son "
+         "code reste dans le fichier, en lecture seule.",
+         {
+             {K::Heading, "Ranger dans un espace", {}},
+             {K::Paragraph, "L'inspecteur d'un **type IHM**, d'une **fonction IHM** du projet et d'un **script "
+                         "g\xC3\xA9n\xC3\xA9ral** a une propri\xC3\xA9t\xC3\xA9 **Espace de noms** : choisis "
+                         "un espace, ou tape un nom neuf (`Gaz`, `Gaz.Vannes` : des noms "
+                         "s\xC3\xA9par\xC3\xA9s par des points). Le nom complet devient `Gaz.T_Vanne`, "
+                         "`Util.Moyenne`, et l'arbre le montre ainsi. Changer d'espace fait suivre les noms "
+                         "complets qui le d\xC3\xA9signaient (le code, les types des variables et des "
+                         "membres) ; un nom court \xC3\xA9" "crit ailleurs, Compiler le signale et le "
+                         "corrige d'un clic. Une fonction emm\xC3\xA8ne ses surcharges ; Ctrl+Z reprend tout.", {}},
+             {K::Bullet, "**Espaces et biblioth\xC3\xA8ques** (Programmation g\xC3\xA9n\xC3\xA9rale "
+                         "\xE2\x80\xBA Biblioth\xC3\xA8ques, ou clic droit sur Programmation "
+                         "g\xC3\xA9n\xC3\xA9rale) liste les espaces du projet et ce qu'ils rangent. "
+                         "**Espace** en cr\xC3\xA9" "e un vide ; **Renommer** renomme l'espace et tous les "
+                         "emplois de ses noms ; **Retirer** enl\xC3\xA8ve un espace vide.", {}},
+             {K::Bullet, "Un espace ne porte pas le nom d'une variable, d'un type, d'une fonction ou d'un "
+                         "script du projet : G\xC3\xA9n\xC3\xA9rer le refuse.", {}},
+             {K::Bullet, "Un projet sans espace ni biblioth\xC3\xA8que s'enregistre comme avant.", {}},
+             {K::Heading, "Appeler : le nom complet, ou USING", {}},
+             {K::Paragraph, "\xC3\x89" "cris le nom complet (`Util.Moyenne(a, b)`, `V1 : Gaz.T_Vanne`), ou mets "
+                         "**USING Gaz;** en t\xC3\xAAte du script pour employer les noms courts de Gaz. Un "
+                         "script ou une fonction d'un espace voit aussi, sans USING, les noms de son espace "
+                         "et des espaces qui le contiennent. Un script s'appelle aussi par son nom complet : "
+                         "`IHM_APPELER('Gaz.Horloge')`.", {}},
+             {K::Code, "USING Gaz;                                  (* les noms courts de Gaz "
+                         "*)\nVAR_TEMP\n    V1 : T_Vanne;                           (* Gaz.T_Vanne "
+                         "*)\nEND_VAR\nV1.Position := Util.Moyenne(12.0, 20.0);    (* un autre espace : son "
+                         "nom complet *)\nIF EnDefaut(V1) THEN                        (* Gaz.EnDefaut *)\n   "
+                         " IHM_APPELER('Gaz.Horloge');\nEND_IF;", "ST"},
+             {K::Code, "/* le C n'a pas d'espaces : le nom de l'espace en prefixe */\nGaz_T_Vanne "
+                         "V1;\n\nV1.Position = Util_Moyenne(12.0f, 20.0f);\nif (Gaz_EnDefaut(&V1)) {\n    "
+                         "Gaz_Horloge();\n}", "C"},
+             {K::Code, "using namespace Gaz;                        // les noms courts de Gaz\nT_Vanne V1; "
+                         "                                // Gaz::T_Vanne\n\nV1.Position = "
+                         "Util::Moyenne(12.0f, 20.0f);  // un autre espace : son nom complet\nif "
+                         "(EnDefaut(V1)) {                         // Gaz::EnDefaut\n    Horloge();\n}", "C++"},
+             {K::Paragraph, "Compiler et G\xC3\xA9n\xC3\xA9rer disent, \xC3\xA0 sa ligne :", {}},
+             {K::Bullet, "un **USING** d'un espace qui n'existe pas (avec le plus proche), ou qui ne sert "
+                         "pas (un avertissement) ;", {}},
+             {K::Bullet, "un nom court **ambigu** entre deux USING (`Borne` dans Gaz et dans Util) : "
+                         "qualifie-le ;", {}},
+             {K::Bullet, "un nom court d'un autre espace sans USING : \xC2\xAB Moyenne est dans l'espace "
+                         "Util : \xC3\xA9" "cris Util.Moyenne \xC2\xBB, corrig\xC3\xA9 d'un clic.", {}},
+             {K::Paragraph, "L'aide \xC3\xA0 la saisie, apr\xC3\xA8s `Gaz.`, propose les sous-espaces, les "
+                         "types, les fonctions (avec leur signature) et les scripts de Gaz.", {}},
+             {K::Heading, "Publier une biblioth\xC3\xA8que", {}},
+             {K::Paragraph, "**Publier une biblioth\xC3\xA8que\xE2\x80\xA6** \xC3\xA9" "crit un espace (et ses "
+                         "sous-espaces) dans un fichier **.xpgbib** : ses types, ses fonctions et ses "
+                         "scripts g\xC3\xA9n\xC3\xA9raux, avec un nom et une version (`1.4.0`). Choisis "
+                         "**correctif**, **mineur** ou **majeur** (1.4.1, 1.5.0, 2.0.0), ou une autre "
+                         "version ; le fichier va dans **libs/** du projet (`libs/Gaz-1.4.0.xpgbib`). Ce qui "
+                         "ne voyage pas (une variable IHM employ\xC3\xA9" "e, par exemple) est dit "
+                         "apr\xC3\xA8s la publication. Le projet ne change pas.", {}},
+             {K::Heading, "Relier, mettre \xC3\xA0 jour, d\xC3\xA9lier", {}},
+             {K::Paragraph, "**Relier une biblioth\xC3\xA8que\xE2\x80\xA6** choisit un fichier .xpgbib (le "
+                         "bouton \xE2\x80\xA6 ouvre l'explorateur), puis dit ce qu'il apporte. Le projet "
+                         "garde le lien : le nom, la version, le chemin et l'**interface** (les types et les "
+                         "signatures). Le code reste dans le fichier. Si le projet a d\xC3\xA9j\xC3\xA0 un "
+                         "espace de ce nom, relie-la sous un autre nom. Ses \xC3\xA9l\xC3\xA9ments se lisent "
+                         "sous son nom (`Gaz.T_Vanne`), avec un cadenas : en lecture seule.", {}},
+             {K::Table, "L'\xC3\xA9tat\tCe qu'il veut dire\nreli\xC3\xA9" "e\tle fichier a la version du "
+                         "lien\nplus r\xC3\xA9" "cente disponible\tle fichier est plus r\xC3\xA9" "cent et "
+                         "compatible : Mettre \xC3\xA0 jour\nplus ancienne\tle fichier est plus ancien que "
+                         "le lien : un avertissement\nincompatible\tune autre version majeure, ou sous le "
+                         "plancher : G\xC3\xA9n\xC3\xA9rer le refuse\nintrouvable\tle fichier n'est plus "
+                         "l\xC3\xA0 : G\xC3\xA9n\xC3\xA9rer le refuse, Localiser\xE2\x80\xA6 le retrouve ; "
+                         "d'ici l\xC3\xA0, le projet v\xC3\xA9rifie ses appels avec l'interface "
+                         "gard\xC3\xA9" "e", {}},
+             {K::Bullet, "**Mettre \xC3\xA0 jour\xE2\x80\xA6** montre le diff de l'interface : les ajouts, "
+                         "les retraits, les signatures chang\xC3\xA9" "es, et pour chaque rupture l'endroit "
+                         "du projet qui l'emploie. **Appliquer** est une seule commande (Ctrl+Z la "
+                         "d\xC3\xA9" "fait) ; Annuler ne change rien.", {}},
+             {K::Bullet, "**Localiser\xE2\x80\xA6** retrouve un fichier qui a boug\xC3\xA9 ; **Relire** "
+                         "relit les fichiers sur le disque ; **D\xC3\xA9lier** retire le lien (Ctrl+Z le "
+                         "remet).", {}},
+             {K::Tip, "Range tes biblioth\xC3\xA8ques dans **libs/** du projet : elles voyagent avec lui. "
+                         "Un chemin absolu est signal\xC3\xA9.", {}},
+         },
+         {"types-ihm", "fonctions", "scripts", "reference", "aide-saisie", "verifier"},
+         {"USING", "espace de noms", "espaces de noms", "xpgbib", "biblioth\xC3\xA8que reli\xC3\xA9" "e", "Relier une biblioth\xC3\xA8que", "Publier une biblioth\xC3\xA8que", "D\xC3\xA9lier"},
+         {"bibliotheques"},
+         {},
+         "",
+         {},
+         "",
+         {}},
         // ---- Programmer  Scripts et fonctions / reference
         {"reference", "R\xC3\xA9" "f\xC3\xA9rence : les fonctions IHM_", "Programmer \xE2\x80\xBA Scripts et fonctions",
          "Les fonctions IHM_ agissent sur l'IHM depuis un script : naviguer, ouvrir et g\xC3\xA9rer les "

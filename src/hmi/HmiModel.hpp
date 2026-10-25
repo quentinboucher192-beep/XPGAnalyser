@@ -831,6 +831,10 @@ struct Script {
     // 1.12.26 : DETACHE (un script general) : il tourne en arriere-plan - WAIT n'attend que lui, l'IHM continue ; une
     // instance a la fois (relance pendant qu'il tourne : rien). Sinon il tourne d'un trait, et WAIT bloque l'IHM.
     bool        detached{false};
+    // 1.13.0 (lot J8 : les espaces de noms) : son espace de noms ("Gaz", "Gaz.Ligne") ; vide : la racine (comme
+    //  avant). Son nom complet devient Gaz.Horloge (IHM_APPELER('Gaz.Horloge')) ; dans son espace, il nomme ses
+    //  voisins sans prefixe. Un script de vue n'en a pas. Place en DERNIER (les initialisations positionnelles).
+    std::string ns{};
     bool operator==(const Script&) const = default;
 };
 inline constexpr std::string_view kViewEvents[] = {"OnOpen", "OnCycle", "OnClose"};
@@ -903,6 +907,10 @@ struct HmiFunction {
     //  aucune. Un appel la propage comme une variable de ce type. Place en DERNIER pour ne pas decaler les
     //  initialisations positionnelles existantes (HmiFunction{id, nom, retour, corps, description}).
     std::string returnUnit{};
+    // 1.13.0 (lot J8 : les espaces de noms) : son espace de noms ("Util") ; vide : la racine (comme avant). Son nom
+    //  complet devient Util.Moyenne ; ailleurs on l'appelle Util.Moyenne(...) ou, sous USING Util;, Moyenne(...).
+    //  Une fonction de vue, de symbole ou une methode n'en a pas (l'espace est celui de son porteur).
+    std::string ns{};
     bool operator==(const HmiFunction&) const = default;
 };
 
@@ -1224,6 +1232,9 @@ struct HmiType {
     std::string              base{};
     std::vector<std::string> interfaces{};
     std::vector<HmiFunction> methods{};
+    // 1.13.0 (lot J8 : les espaces de noms) : son espace de noms ("Gaz") ; vide : la racine (comme avant). Son nom
+    //  complet devient Gaz.T_Vanne (une variable de type Gaz.T_Vanne) ; l'identifiant (ihm:615) ne change pas.
+    std::string ns{};
     bool operator==(const HmiType&) const = default;
 };
 
@@ -2078,6 +2089,77 @@ struct EquipmentLink {
     bool operator==(const EquipmentLink&) const = default;
 };
 
+// ---- 1.13.0 (lot J8) : LES BIBLIOTHEQUES RELIEES -------------------------------------
+//  UNE BIBLIOTHEQUE EST DU CODE PARTAGE, RELIE ET NON COPIE : un fichier .xpgbib (HmiLibrary.hpp) qui
+//  porte des types, des fonctions et des scripts sous son espace de noms de tete (Gaz publie Gaz.T_Vanne,
+//  Gaz.EnDefaut). Le projet n'en garde que le LIEN (nom, version, plancher, chemin) et un petit CACHE DE
+//  SON INTERFACE (noms, membres, signatures) : le projet reste verifiable si le fichier manque, et un
+//  diff de projet reste court. Le contenu, lu a l'ouverture, vit a part (Project::libraryCache), en
+//  lecture seule : il s'emploie, il ne s'edite pas.
+struct LibraryTypeSig {               // un type de l'interface : "T_Vanne", ses membres "Position:REAL,Defaut:BOOL"
+    std::string name;                 // relatif a la bibliotheque ("T_Vanne", "Sous.T_X")
+    std::string members{};            // "Position:REAL,Defaut:BOOL" (une enumeration : ses valeurs "Arret,Auto")
+    std::string kind{};               // "" : une structure ; "enumeration", "interface", "rappel"
+    bool operator==(const LibraryTypeSig&) const = default;
+};
+struct LibraryFunctionSig {           // une fonction de l'interface : "EnDefaut", "(v : T_Vanne) : BOOL"
+    std::string name;                 // relatif a la bibliotheque
+    std::string signature{};          // "(v : T_Vanne; seuil : REAL) : BOOL" ; sans retour : "(x : INT)"
+    bool operator==(const LibraryFunctionSig&) const = default;
+};
+struct Library {
+    std::string name;                 // son espace de noms dans ce projet (l'alias si reliee sous un autre nom)
+    std::string published{};          // son nom publie, quand il differe (Relier sous le nom...) ; vide : name
+    std::string version;              // la version reliee ("1.4.0" : figee par Mettre a jour)
+    std::string compat{};             // le plancher demande ("1.2.0") : meme majeur, mineur >= ; vide : version
+    std::string path;                 // relatif au projet de preference ("libs/Gaz-1.4.0.xpgbib"), ou absolu
+    std::vector<LibraryTypeSig>     types{};       // le cache de l'interface (verifier sans le fichier)
+    std::vector<LibraryFunctionSig> functions{};
+    std::vector<std::string>        scripts{};     // les scripts appelables (IHM_APPELER('Gaz.Horloge'))
+    [[nodiscard]] const std::string& publishedName() const noexcept { return published.empty() ? name : published; }
+    bool operator==(const Library&) const = default;
+};
+// Ce qu'on a trouve sur le disque a l'ouverture (HmiLibrary.hpp : biblio::resolve).
+enum class LibraryState : std::uint8_t {
+    Linked,          // trouvee, a la version reliee
+    Newer,           // trouvee plus recente, compatible (meme majeur) : reliee ; Mettre a jour fige la version
+    Older,           // trouvee plus ancienne que le plancher (meme majeur) : averti, un symbole recent manquera
+    Incompatible,    // majeur different (2.0 pour une 1.x demandee) : refusee ; le cache garde l'interface
+    Missing,         // introuvable : Localiser... ; le cache garde l'interface
+    Unreadable,      // trouvee mais illisible (pas une bibliotheque, version plus recente de l'outil)
+};
+struct LoadedLibrary {
+    std::string  name;                // = Library::name (son espace dans ce projet)
+    LibraryState state{LibraryState::Missing};
+    std::string  foundVersion{};      // la version du fichier trouve
+    std::string  foundPath{};         // son chemin absolu
+    std::string  message{};           // ce qu'on dit de l'etat (une phrase)
+    bool         fromCache{true};     // le contenu vient du cache d'interface (types et signatures, sans corps)
+    Programs     content{};           // ses types, fonctions et scripts (ns = name ou name.sous), en lecture seule
+};
+//  Le contenu lu, partage entre les copies du projet (une commande annulable copie le projet : le contenu
+//  reste le meme) ; jamais compare (il se refait au chargement). Vide : aucune bibliotheque resolue.
+struct LibraryCache {
+    std::shared_ptr<const std::vector<LoadedLibrary>> loaded{};
+    bool operator==(const LibraryCache&) const noexcept { return true; }
+};
+// Les identifiants du contenu d'une bibliotheque : une plage a part (bit 30), jamais allouee par le projet.
+inline constexpr Id kLibraryIdBase = 0x40000000u;
+[[nodiscard]] inline bool isLibraryId(Id id) noexcept { return id >= kLibraryIdBase && id < 0x80000000u; }
+
+// ---- 1.13.0 (lot J8) : LES NOMS QUALIFIES ---------------------------------------------
+//  Un espace de noms est un PREFIXE de nom : le nom complet d'un type, d'une fonction, d'un script est
+//  ns.nom (Gaz.T_Vanne) ; sans espace, son nom (comme avant). Le reste (USING, la regle de resolution,
+//  le renommage d'un espace) : HmiNames.hpp.
+[[nodiscard]] std::string qualifiedName(std::string_view ns, std::string_view name);
+// "Gaz.Ligne.T_X" -> ("Gaz.Ligne", "T_X") ; "T_X" -> ("", "T_X").
+[[nodiscard]] std::pair<std::string, std::string> splitQualified(std::string_view full);
+[[nodiscard]] inline std::string fullName(const HmiType& t) { return qualifiedName(t.ns, t.name); }
+[[nodiscard]] inline std::string fullName(const HmiFunction& f) { return qualifiedName(f.ns, f.name); }
+[[nodiscard]] inline std::string fullName(const Script& s) { return qualifiedName(s.ns, s.name); }
+// Un nom d'espace : des identifiants separes par des points (Gaz, Gaz.Ligne).
+[[nodiscard]] bool isNamespaceName(std::string_view) noexcept;
+
 struct Project {
     Config            config;
     std::vector<View> views;
@@ -2110,6 +2192,10 @@ struct Project {
     // 1.12.11 (lot G) : la liaison Equipement des symboles du synoptique, par type de structure -
     // le membre choisi pour un role (HmiEquipmentLink.hpp) ; vide : les noms proposes.
     std::vector<EquipmentLink> equipmentLinks{};
+    // 1.13.0 (lot J8) : les bibliotheques reliees (le lien et le cache de leur interface) ; leur contenu lu :
+    // libraryCache (biblio::resolve, a l'ouverture). Vide : aucune (un projet d'avant).
+    std::vector<Library> libraries{};
+    LibraryCache         libraryCache{};
     Id                nextId{1};
 
     [[nodiscard]] Id           allocate() noexcept { return nextId++; }
@@ -2168,6 +2254,25 @@ struct Project {
     [[nodiscard]] const Equipment*    equipment(Id) const noexcept;
     [[nodiscard]] const Equipment*    equipmentByName(std::string_view) const noexcept;   // sans casse
     [[nodiscard]] Stats        statistics() const;
+
+    // ---- 1.13.0 (lot J8) : les espaces de noms et les bibliotheques ----
+    //  LES RECHERCHES PAR NOM (hmiTypeByName, functionByName, functionsNamed, functionByKey, generalScript)
+    //  lisent un nom complet (Gaz.T_Vanne : l'item de l'espace Gaz) ou un nom court (T_Vanne : celui de la
+    //  racine ; a defaut, le seul de ce nom dans un espace - un nom court qui en designe plusieurs ne trouve
+    //  rien). Elles voient aussi le contenu des bibliotheques reliees (lecture seule). Les versions qui
+    //  modifient (hmiType(Id), function(Id) non const) ne voient que le projet : une bibliotheque ne s'edite pas.
+    [[nodiscard]] const Library*       libraryByName(std::string_view) const noexcept;   // sans casse
+    [[nodiscard]] const LoadedLibrary* loadedLibrary(std::string_view) const noexcept;   // son contenu lu ; nul : non resolue
+    // Les espaces declares : ceux des types, fonctions et scripts du projet, les bibliotheques reliees (et
+    // leurs sous-espaces), les espaces vides gardes (listFolders["espaces"]) - tries, chacun une fois.
+    [[nodiscard]] std::vector<std::string> namespaces() const;
+    [[nodiscard]] bool isNamespace(std::string_view) const;   // sans casse ; "Gaz" et "Gaz.Ligne"
+    // Le contenu des bibliotheques reliees (chaque item : son espace complet), dans l'ordre des liens.
+    void forEachLibraryType(const std::function<void(const HmiType&, const LoadedLibrary&)>&) const;
+    void forEachLibraryFunction(const std::function<void(const HmiFunction&, const LoadedLibrary&)>&) const;
+    void forEachLibraryScript(const std::function<void(const Script&, const LoadedLibrary&)>&) const;
+    // L'item vient-il d'une bibliotheque (lecture seule) ? Laquelle (nul : du projet).
+    [[nodiscard]] const LoadedLibrary* libraryOf(Id) const noexcept;
 
     // 1.12.20 (lot G) : les instances des structures generiques (T_Mesure<REAL>), faites a la demande par hmiTypeByName -
     // (le generique d'ou elle vient, l'instance), refaite si le generique change. Une copie du projet repart sans elles ;

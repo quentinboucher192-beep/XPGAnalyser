@@ -23,6 +23,7 @@
 #include "../../project/EditCommands.hpp"
 #include "../../ui/widgets/ColorPalette.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
+#include "../../hmi/HmiNames.hpp"          // 1.13.0 (lot J8) : Gaz. - les items d'un espace de noms
 #include "HmiFunctionPicker.hpp"                // 1.12.16 : Choisir une fonction...
 
 #include <algorithm>
@@ -2109,6 +2110,55 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
             break;
         }
         case Context::Member: {
+            // 1.13.0 (lot J8) : Gaz. - un espace de noms : ses sous-espaces, ses types, ses fonctions (avec leur
+            // signature), ses scripts ; d'une bibliotheque reliee, la provenance le dit (lecture seule).
+            if (hp.isNamespace(where.path)) {
+                const hmi::names::Index ix(hp);
+                const std::string ns = ix.spelled(where.path);
+                int i = 0;
+                for (const auto& sub : ix.childSpaces(ns)) {
+                    if (const int r = matchRank(sub, needle); r >= 0) {
+                        Item it;
+                        it.text = sub;
+                        it.detail = "espace de noms " + ns + "." + sub;
+                        it.kind = Kind::Type;
+                        it.rank = r * 100 + i++;
+                        it.insert = sub + ".";
+                        it.chain = true;
+                        push(std::move(it));
+                    }
+                }
+                for (const auto& name : ix.itemsOf(ns)) {
+                    const int r = matchRank(name, needle);
+                    if (r < 0) continue;
+                    const std::string full = hmi::qualifiedName(ns, name);
+                    const std::string lib = ix.libraryOf(full);
+                    const std::string from = lib.empty() ? "espace " + ns : "biblioth\xC3\xA8que " + lib + " - lecture seule";
+                    Item it;
+                    it.text = name;
+                    it.rank = r * 100 + i++;
+                    switch (ix.kindIn(ns, name)) {
+                        case hmi::names::ItemKind::Function: {
+                            const auto* f = hp.functionByName(full);
+                            it.detail = (f ? hmi::functionSignature(*f) : name + "()") + kDot + from;
+                            it.kind = Kind::UserFunction;
+                            it.insert = name + "()";
+                            it.caret = name.size() + 1;
+                            break;
+                        }
+                        case hmi::names::ItemKind::Script:
+                            it.detail = "script" + kDot + from + kDot + "IHM_APPELER('" + full + "')";
+                            it.kind = Kind::Script;
+                            break;
+                        default:
+                            it.detail = "type" + kDot + from;
+                            it.kind = Kind::Type;
+                            break;
+                    }
+                    push(std::move(it));
+                }
+                break;
+            }
             // 1.11.1 (API-V) : API. - les unites et les globales ; API.<Unite>. - ses
             // variables (Publiques, Privees, E/S) ; API.<instance>. - ses membres.
             // Chacune avec son type et son acces (L/E, L, sans adresse), dans

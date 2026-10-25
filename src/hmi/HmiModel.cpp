@@ -26,6 +26,31 @@ bool iequals(std::string_view a, std::string_view b) noexcept {
     return true;
 }
 
+
+// 1.13.0 (lot J8) : LA RECHERCHE D'UN ITEM PAR NOM (types, fonctions, scripts). Un nom complet (Gaz.T_Vanne) :
+// l'item de cet espace. Un nom court : celui de la racine ; a defaut, le SEUL de ce nom dans un espace
+// (projet et bibliotheques) - deux espaces qui le definissent : rien (ambigu, a qualifier).
+template <typename T>
+const T* lookupByName(const Project&, std::string_view name, const std::vector<T>& own,
+                      const std::function<void(const std::function<void(const T&)>&)>& libraries) {
+    const bool dotted = name.find('.') != std::string_view::npos;
+    for (const auto& x : own)
+        if (dotted ? iequals(qualifiedName(x.ns, x.name), name) : (x.ns.empty() && iequals(x.name, name))) return &x;
+    const T* hit = nullptr;
+    if (dotted) {
+        if (libraries) libraries([&](const T& x) { if (!hit && iequals(qualifiedName(x.ns, x.name), name)) hit = &x; });
+        return hit;
+    }
+    int count = 0;
+    const auto take = [&](const T& x) {
+        if (x.ns.empty() || !iequals(x.name, name)) return;
+        if (!hit) hit = &x;
+        ++count;
+    };
+    for (const auto& x : own) take(x);
+    if (libraries) libraries(take);
+    return count == 1 ? hit : nullptr;
+}
 } // namespace
 
 bool kindTakesText(Kind k) noexcept {
@@ -2235,10 +2260,17 @@ Script* Project::script(Id id) noexcept {
     for (auto& v : views) for (auto& s : v.scripts) if (s.id == id) return &s;
     return nullptr;
 }
-const Script* Project::script(Id id) const noexcept { return const_cast<Project*>(this)->script(id); }
+const Script* Project::script(Id id) const noexcept {
+    if (const Script* s = const_cast<Project*>(this)->script(id)) return s;
+    // 1.13.0 (lot J8) : un script d'une bibliotheque reliee (lecture seule).
+    const Script* found = nullptr;
+    if (isLibraryId(id)) forEachLibraryScript([&](const Script& sc, const LoadedLibrary&) { if (!found && sc.id == id) found = &sc; });
+    return found;
+}
 const Script* Project::generalScript(std::string_view name) const noexcept {
-    for (const auto& s : programs.scripts) if (iequals(s.name, name)) return &s;
-    return nullptr;
+    // 1.13.0 (lot J8) : un nom complet (Gaz.Horloge) ou court (la racine ; a defaut, le seul de ce nom).
+    return lookupByName<Script>(*this, name, programs.scripts,
+                                [&](const std::function<void(const Script&)>& f) { forEachLibraryScript([&](const Script& s, const LoadedLibrary&) { f(s); }); });
 }
 const Variable* Project::variable(std::string_view name) const noexcept {
     for (const auto& v : programs.variables) if (iequals(v.name, name)) return &v;
@@ -2253,21 +2285,29 @@ HmiType* Project::hmiType(Id id) noexcept {
     for (auto& ty : programs.types) if (ty.id == id) return &ty;
     return nullptr;
 }
-const HmiType* Project::hmiType(Id id) const noexcept { return const_cast<Project*>(this)->hmiType(id); }
+const HmiType* Project::hmiType(Id id) const noexcept {
+    if (const HmiType* t = const_cast<Project*>(this)->hmiType(id)) return t;
+    const HmiType* found = nullptr;                 // 1.13.0 (lot J8) : un type d'une bibliotheque (lecture seule)
+    if (isLibraryId(id)) forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { if (!found && t.id == id) found = &t; });
+    return found;
+}
 const HmiType* Project::hmiTypeByName(std::string_view name) const noexcept {
-    for (const auto& ty : programs.types) if (iequals(ty.name, name)) return &ty;
+    // 1.13.0 (lot J8) : un nom complet (Gaz.T_Vanne) ou court (la racine ; a defaut, le seul de ce nom), et le
+    // contenu des bibliotheques reliees.
+    const auto libraryTypes = [&](const std::function<void(const HmiType&)>& f) {
+        forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { f(t); });
+    };
+    if (const HmiType* t = lookupByName<HmiType>(*this, name, programs.types, libraryTypes)) return t;
     // 1.12.20 (lot G) : T_Mesure<REAL> - l'instance de la structure generique T_Mesure<T>, ses membres de type T en REAL.
     std::string base;
     std::vector<std::string> args;
     if (!splitGenericName(name, base, args)) return nullptr;
-    const HmiType* g = nullptr;
-    for (const auto& ty : programs.types)
-        if (iequals(ty.name, base)) g = &ty;
+    const HmiType* g = lookupByName<HmiType>(*this, base, programs.types, libraryTypes);
     if (!g || g->kind != HmiTypeKind::Structure || g->generics.empty() || g->generics.size() != args.size()) return nullptr;
     std::string shown = g->name + "<";
     for (std::size_t k = 0; k < args.size(); ++k) shown += (k ? ", " : "") + args[k];
     shown += ">";
-    std::string key = shown;
+    std::string key = qualifiedName(g->ns, shown);   // 1.13.0 (lot J8) : l'instance garde l'espace de son generique
     for (auto& c : key) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     const std::lock_guard<std::mutex> hold(genericInstances.lock);
     auto& slot = genericInstances.made[key];
@@ -2389,7 +2429,7 @@ bool splitGenericName(std::string_view name, std::string& base, std::vector<std:
     const auto lt = t.find('<');
     if (lt == std::string::npos || t.back() != '>') return false;
     base = trimmedText(std::string_view(t).substr(0, lt));
-    if (!genericIdentifier(base)) return false;
+    if (!genericIdentifier(base) && !isNamespaceName(base)) return false;   // 1.13.0 (lot J8) : Gaz.T_Mesure<REAL>
     int depth = 0;
     std::string cur;
     for (std::size_t k = lt + 1; k + 1 < t.size(); ++k) {
@@ -2439,14 +2479,38 @@ HmiFunction* Project::function(Id id) noexcept {
     for (auto& f : programs.functions) if (f.id == id) return &f;
     return nullptr;
 }
-const HmiFunction* Project::function(Id id) const noexcept { return const_cast<Project*>(this)->function(id); }
+const HmiFunction* Project::function(Id id) const noexcept {
+    if (const HmiFunction* f = const_cast<Project*>(this)->function(id)) return f;
+    const HmiFunction* found = nullptr;             // 1.13.0 (lot J8) : une fonction d'une bibliotheque (lecture seule)
+    if (isLibraryId(id)) forEachLibraryFunction([&](const HmiFunction& f, const LoadedLibrary&) { if (!found && f.id == id) found = &f; });
+    return found;
+}
 const HmiFunction* Project::functionByName(std::string_view name) const noexcept {
-    for (const auto& f : programs.functions) if (iequals(f.name, name)) return &f;
-    return nullptr;
+    const auto fs = functionsNamed(name);
+    return fs.empty() ? nullptr : fs.front();
 }
 std::vector<const HmiFunction*> Project::functionsNamed(std::string_view name) const {
+    // 1.13.0 (lot J8) : un nom complet (Util.Moyenne) ou court - la racine ; a defaut, les fonctions de ce nom
+    // d'UN SEUL espace (des surcharges) ; un nom court que deux espaces definissent ne trouve rien (ambigu).
     std::vector<const HmiFunction*> out;
-    for (const auto& f : programs.functions) if (iequals(f.name, name)) out.push_back(&f);
+    const bool dotted = name.find('.') != std::string_view::npos;
+    for (const auto& f : programs.functions)
+        if (dotted ? iequals(fullName(f), name) : (f.ns.empty() && iequals(f.name, name))) out.push_back(&f);
+    forEachLibraryFunction([&](const HmiFunction& f, const LoadedLibrary&) {
+        if (dotted && iequals(fullName(f), name)) out.push_back(&f);
+    });
+    if (!out.empty() || dotted) return out;
+    std::string space;
+    bool ambiguous = false;
+    const auto take = [&](const HmiFunction& f) {
+        if (f.ns.empty() || !iequals(f.name, name)) return;
+        if (out.empty()) space = f.ns;
+        else if (!iequals(space, f.ns)) ambiguous = true;
+        out.push_back(&f);
+    };
+    for (const auto& f : programs.functions) take(f);
+    forEachLibraryFunction([&](const HmiFunction& f, const LoadedLibrary&) { take(f); });
+    if (ambiguous) out.clear();
     return out;
 }
 const HmiFunction* Project::functionByKey(std::string_view key) const noexcept {
@@ -2458,7 +2522,9 @@ const HmiFunction* Project::functionByKey(std::string_view key) const noexcept {
         id = id * 10 + static_cast<Id>(c - '0');
     }
     const HmiFunction* f = function(id);
-    return f && iequals(f->name, key.substr(0, hash)) ? f : nullptr;
+    // 1.13.0 (lot J8) : la cle d'une surcharge d'un espace - Util.Max#615 (ou Max#615 sous USING).
+    const std::string_view named = key.substr(0, hash);
+    return f && (named.find('.') != std::string_view::npos ? iequals(fullName(*f), named) : iequals(f->name, named)) ? f : nullptr;
 }
 Id Project::viewOfScript(Id id) const noexcept {
     for (const auto& v : views) for (const auto& s : v.scripts) if (s.id == id) return v.id;
@@ -2977,6 +3043,119 @@ View makeView(Project& p, std::string name) {
     v.layers.push_back(l);
     v.activeLayer = l.id;
     return v;
+}
+
+
+// ---- 1.13.0 (lot J8) : les noms qualifies, les espaces, les bibliotheques ----------------
+std::string qualifiedName(std::string_view ns, std::string_view name) {
+    if (ns.empty()) return std::string(name);
+    std::string out;
+    out.reserve(ns.size() + 1 + name.size());
+    out.append(ns);
+    out += '.';
+    out.append(name);
+    return out;
+}
+
+std::pair<std::string, std::string> splitQualified(std::string_view full) {
+    // Le dernier point hors des chevrons d'un generique (Gaz.T_Mesure<Util.T_X> : Gaz / T_Mesure<Util.T_X>).
+    int depth = 0;
+    std::size_t cut = std::string_view::npos;
+    for (std::size_t i = 0; i < full.size(); ++i) {
+        if (full[i] == '<') ++depth;
+        else if (full[i] == '>') --depth;
+        else if (full[i] == '.' && depth == 0) cut = i;
+    }
+    if (cut == std::string_view::npos) return {std::string{}, std::string(full)};
+    return {std::string(full.substr(0, cut)), std::string(full.substr(cut + 1))};
+}
+
+bool isNamespaceName(std::string_view s) noexcept {
+    if (s.empty()) return false;
+    std::size_t start = 0;
+    while (start <= s.size()) {
+        const auto dot = s.find('.', start);
+        const std::string_view seg = s.substr(start, dot == std::string_view::npos ? std::string_view::npos : dot - start);
+        if (!isIdentifier(seg)) return false;
+        if (dot == std::string_view::npos) break;
+        start = dot + 1;
+    }
+    return true;
+}
+
+const Library* Project::libraryByName(std::string_view name) const noexcept {
+    for (const auto& l : libraries) if (iequals(l.name, name)) return &l;
+    return nullptr;
+}
+
+const LoadedLibrary* Project::loadedLibrary(std::string_view name) const noexcept {
+    if (!libraryCache.loaded) return nullptr;
+    for (const auto& l : *libraryCache.loaded) if (iequals(l.name, name)) return &l;
+    return nullptr;
+}
+
+void Project::forEachLibraryType(const std::function<void(const HmiType&, const LoadedLibrary&)>& f) const {
+    if (!libraryCache.loaded) return;
+    for (const auto& l : *libraryCache.loaded)
+        for (const auto& t : l.content.types) f(t, l);
+}
+
+void Project::forEachLibraryFunction(const std::function<void(const HmiFunction&, const LoadedLibrary&)>& f) const {
+    if (!libraryCache.loaded) return;
+    for (const auto& l : *libraryCache.loaded)
+        for (const auto& fn : l.content.functions) f(fn, l);
+}
+
+void Project::forEachLibraryScript(const std::function<void(const Script&, const LoadedLibrary&)>& f) const {
+    if (!libraryCache.loaded) return;
+    for (const auto& l : *libraryCache.loaded)
+        for (const auto& s : l.content.scripts) f(s, l);
+}
+
+const LoadedLibrary* Project::libraryOf(Id id) const noexcept {
+    if (!isLibraryId(id) || !libraryCache.loaded) return nullptr;
+    for (const auto& l : *libraryCache.loaded) {
+        for (const auto& t : l.content.types) if (t.id == id) return &l;
+        for (const auto& f : l.content.functions) if (f.id == id) return &l;
+        for (const auto& s : l.content.scripts) if (s.id == id) return &l;
+    }
+    return nullptr;
+}
+
+std::vector<std::string> Project::namespaces() const {
+    std::vector<std::string> out;
+    const auto add = [&](std::string_view ns) {
+        // "Gaz.Ligne" declare aussi "Gaz" (le chemin le plus long d'abord se resout contre l'ensemble).
+        std::string_view rest = ns;
+        while (!rest.empty()) {
+            if (std::none_of(out.begin(), out.end(), [&](const std::string& o) { return iequals(o, rest); })) out.emplace_back(rest);
+            const auto dot = rest.rfind('.');
+            if (dot == std::string_view::npos) break;
+            rest = rest.substr(0, dot);
+        }
+    };
+    for (const auto& t : programs.types) if (!t.ns.empty()) add(t.ns);
+    for (const auto& f : programs.functions) if (!f.ns.empty()) add(f.ns);
+    for (const auto& s : programs.scripts) if (!s.ns.empty()) add(s.ns);
+    for (const auto& l : libraries) if (!l.name.empty()) add(l.name);
+    forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { if (!t.ns.empty()) add(t.ns); });
+    forEachLibraryFunction([&](const HmiFunction& f, const LoadedLibrary&) { if (!f.ns.empty()) add(f.ns); });
+    forEachLibraryScript([&](const Script& s, const LoadedLibrary&) { if (!s.ns.empty()) add(s.ns); });
+    if (const auto it = listFolders.find("espaces"); it != listFolders.end())
+        for (const auto& e : it->second) if (isNamespaceName(e)) add(e);
+    std::sort(out.begin(), out.end(), [](const std::string& a, const std::string& b) {
+        std::string x = a, y = b;
+        for (auto& c : x) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (auto& c : y) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return x < y;
+    });
+    return out;
+}
+
+bool Project::isNamespace(std::string_view name) const {
+    if (!isNamespaceName(name)) return false;
+    const auto all = namespaces();
+    return std::any_of(all.begin(), all.end(), [&](const std::string& n) { return iequals(n, name); });
 }
 
 } // namespace hmi

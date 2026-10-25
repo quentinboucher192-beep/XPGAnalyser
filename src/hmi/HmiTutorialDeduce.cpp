@@ -1210,6 +1210,9 @@ constexpr TopicPlace kTopicPlaces[] = {
     // 1.12.30 : les echanges de projets (Projet > Exporter en archive) - la racine du projet, comme
     // l'etat du projet (son clic droit les a aussi).
     {"archive-projet", "arbre:IHM"}, {"page-web", "arbre:IHM"}, {"echanges-api", "arbre:API"},
+    // 1.13.0 (lot J8) : les espaces de noms et les bibliotheques - Programmation generale (son clic droit : Relier,
+    // Publier, Espaces et bibliotheques) ; son dossier Bibliotheques n'existe qu'une fois un espace ou un lien pose.
+    {"biblio-espaces", "arbre:IHM/Programmation"},
     // Tranche 20 (R111-1, decision 36 du chef : 17 tutoriels de Demarrer et de L'automate sans geste, une bulle seule) :
     // les 21 pages de l'aide generale (help::center::apiPageGroups, sujets "api-<ancre>") ont leur endroit, d'apres la
     // table de F1 (help/F1Table.cpp, T2) quand elle les cite : l'onglet de l'API ou de la simulation que F1 y ouvre, par

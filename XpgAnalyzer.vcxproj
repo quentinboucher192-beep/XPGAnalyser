@@ -526,6 +526,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiInitModel.cpp" />
     <ClCompile Include="src\app\hmi\HmiItemDuplicateDialog.cpp" />
     <ClCompile Include="src\app\hmi\HmiLanguageCompare.cpp" />
+    <ClCompile Include="src\app\hmi\HmiLibraryPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiNativesCards.cpp" />
     <ClCompile Include="src\app\hmi\HmiNativesPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiObjectAlarmPanes.cpp" />
@@ -543,6 +544,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\screens\HelpCenterScreen.cpp" />
     <ClCompile Include="src\app\screens\HmiBuildWorkspace.cpp" />
     <ClCompile Include="src\app\screens\HmiExprScreen.cpp" />
+    <ClCompile Include="src\app\screens\HmiLibraryWorkspace.cpp" />
     <ClCompile Include="src\app\tutorial\TutorialApp.cpp" />
     <ClCompile Include="src\app\tutorial\TutorialOverlay.cpp" />
     <ClCompile Include="src\app\tutorial\TutorialStageApp.cpp" />
@@ -583,12 +585,14 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiExprBench.cpp" />
     <ClCompile Include="src\hmi\HmiExprGuide.cpp" />
     <ClCompile Include="src\hmi\HmiFunctionTests.cpp" />
+    <ClCompile Include="src\hmi\HmiLibrary.cpp" />
     <ClCompile Include="src\hmi\HmiLiveGeometry.cpp" />
     <ClCompile Include="src\hmi\HmiLog.cpp" />
     <ClCompile Include="src\hmi\HmiMarkers.cpp" />
     <ClCompile Include="src\hmi\HmiMethods.cpp" />
     <ClCompile Include="src\hmi\HmiMigrate.cpp" />
     <ClCompile Include="src\hmi\HmiModbusCyclic.cpp" />
+    <ClCompile Include="src\hmi\HmiNames.cpp" />
     <ClCompile Include="src\hmi\HmiNatives.cpp" />
     <ClCompile Include="src\hmi\HmiNativesData.cpp" />
     <ClCompile Include="src\hmi\HmiNativesShelf.cpp" />
@@ -989,6 +993,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiInitModel.hpp" />
     <ClInclude Include="src\app\hmi\HmiItemDuplicateDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiLanguageCompare.hpp" />
+    <ClInclude Include="src\app\hmi\HmiLibraryPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiLive.hpp" />
     <ClInclude Include="src\app\hmi\HmiNativesCards.hpp" />
     <ClInclude Include="src\app\hmi\HmiNativesPane.hpp" />
@@ -1052,12 +1057,14 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiExprGuide.hpp" />
     <ClInclude Include="src\hmi\HmiFunctionTests.hpp" />
     <ClInclude Include="src\hmi\HmiKeys.hpp" />
+    <ClInclude Include="src\hmi\HmiLibrary.hpp" />
     <ClInclude Include="src\hmi\HmiLiveGeometry.hpp" />
     <ClInclude Include="src\hmi\HmiLog.hpp" />
     <ClInclude Include="src\hmi\HmiMarkers.hpp" />
     <ClInclude Include="src\hmi\HmiMethods.hpp" />
     <ClInclude Include="src\hmi\HmiMigrate.hpp" />
     <ClInclude Include="src\hmi\HmiModbusCyclic.hpp" />
+    <ClInclude Include="src\hmi\HmiNames.hpp" />
     <ClInclude Include="src\hmi\HmiNatives.hpp" />
     <ClInclude Include="src\hmi\HmiObjectAlarms.hpp" />
     <ClInclude Include="src\hmi\HmiOperators.hpp" />

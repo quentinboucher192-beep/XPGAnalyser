@@ -1643,7 +1643,13 @@ private:
             return tupleType(std::move(items));
         }
         if (peek().kind != Tok::Identifier) return error("expected a type");
-        const std::string name = advance().raw;
+        std::string name = advance().raw;
+        // 1.13.0 (lot J8, dialecte IHM seulement) : le type d'un espace de noms, Gaz.T_Vanne - un seul nom complet,
+        // que l'environnement resout (structMembers). L'automate (sans dialecte) n'en voit jamais.
+        while (dialect_ && atPunct(".") && peek(1).kind == Tok::Identifier) {
+            advance();
+            name += "." + advance().raw;
+        }
         const std::string up = upperOf(name);
         // 1.13.0 (dialecte IHM) : ANY - une valeur JSON / dynamique (composable : MAP[STRING] OF ANY, LIST OF ANY).
         // ANY_NUM, ANY_STRUCT... restent des contraintes de TEMPLATE (lot generiques), lues ailleurs.

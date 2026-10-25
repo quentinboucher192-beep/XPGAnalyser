@@ -1,4 +1,5 @@
 #include "HmiStore.hpp"
+#include "HmiLibrary.hpp"   // 1.13.0 (lot J8) : les bibliotheques reliees (le cache, la resolution)
 #include "HmiKeys.hpp"            // 1.11.23 : la touche d'un raccourci
 #include "HmiEnums.hpp"            // 1.10 (E) : les enumerations IHM
 #include "HmiPopupParams.hpp"
@@ -984,8 +985,15 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                || std::any_of(ty.members.begin(), ty.members.end(), [](const TypeMember& m) { return !m.unit.empty(); });
     }
     const bool units = anyUnit;
-    // 32 : unites ; 31 : objets ; 30 : generiques d'une fonction ; 29 : tests unitaires ; sinon l'echelle d'avant (28...).
-    const int format = units ? kFormatVersion : objects ? 31 : funcGenerics ? 30 : tests ? 29 : generics ? 28 : callbackTypes ? 27 : viewMembers ? 26
+    // 1.13.0 (lot J8) : le format 33 n'ajoute que les espaces de noms et les bibliotheques - un espace pose (espace=
+    // sur un type, une fonction, un script), un espace vide garde, une bibliotheque reliee. Sans rien de tout cela,
+    // l'echelle d'avant (32 unites, 31 objets...) : un projet sans espace s'ecrit comme avant (gate-down en escalier).
+    const auto spaced = [](const auto& items) { return std::any_of(items.begin(), items.end(), [](const auto& x) { return !x.ns.empty(); }); };
+    const bool spaces = !p.libraries.empty() || spaced(p.programs.types) || spaced(p.programs.functions) || spaced(p.programs.scripts)
+                     || (p.listFolders.count("espaces") && !p.listFolders.at("espaces").empty());
+    // 33 : espaces et bibliotheques ; 32 : unites ; 31 : objets ; 30 : generiques d'une fonction ; 29 : tests unitaires ;
+    // sinon l'echelle d'avant (28...).
+    const int format = spaces ? kFormatVersion : units ? 32 : objects ? 31 : funcGenerics ? 30 : tests ? 29 : generics ? 28 : callbackTypes ? 27 : viewMembers ? 26
                      : tableGestures ? 25 : shortcuts ? 24 : declared ? 23 : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# IHM Studio - projet IHM (format " + std::to_string(format) + ")\n";
@@ -1056,6 +1064,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     for (const auto& ty : p.programs.types) {
         index += "type_ihm" + fieldInt("id", ty.id) + field("nom", ty.name) + field("description", ty.description)
                + (ty.folder.empty() ? std::string{} : field("dossier", ty.folder))   // lot 21
+               + (ty.ns.empty() ? std::string{} : field("espace", ty.ns))           // 1.13.0 (lot J8, format 33)
                // 1.13.0 (lot J1, format 31) : le parent (EXTENDS) et les interfaces (IMPLEMENTS, jointes par ';').
                + (ty.base.empty() ? std::string{} : field("herite", ty.base))
                + (ty.interfaces.empty() ? std::string{} : field("implemente", joinSemicolon(ty.interfaces))) + "\n";
@@ -1134,6 +1143,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                + field("surveille", sc.watch) + field("fichier", "scripts/" + file) + field("description", sc.description)
                + (sc.folder.empty() ? std::string{} : field("dossier", sc.folder))           // lot 21
                + (sc.detached ? fieldBool("detache", true) : std::string{})                  // 1.12.26
+               + (sc.ns.empty() ? std::string{} : field("espace", sc.ns))                    // 1.13.0 (lot J8)
                + "\n" + serializeDeclarations(sc.decls);                                    // 1.11.18 (lot 3)
     }
     // Lot 7 : les fonctions IHM, chacune dans son fichier (ihm/fonctions/).
@@ -1145,7 +1155,8 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         files.push_back({"fonctions/" + file, textBytes(f.body)});
         index += "fonction" + fieldInt("id", f.id) + field("nom", f.name) + field("retour", f.returnType)
                + (f.returnUnit.empty() ? std::string{} : field("unite_retour", f.returnUnit))              // 1.13.0 (lot J6)
-               + field("fichier", "fonctions/" + file) + field("description", f.description) + "\n";
+               + field("fichier", "fonctions/" + file) + field("description", f.description)
+               + (f.ns.empty() ? std::string{} : field("espace", f.ns)) + "\n";                // 1.13.0 (lot J8)
         // 1.13.0 (format 30) : ses generiques (TEMPLATE <T>), sous la fonction et avant ses declarations.
         for (const auto& g : f.generics)
             index += "generique" + field("nom", g.name) + (g.constraint.empty() ? std::string{} : field("contrainte", g.constraint)) + "\n";
@@ -1276,6 +1287,19 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                + fieldBare("facteur", formatNumber(u.factor)) + fieldBare("decalage", formatNumber(u.offset))
                + (u.label.empty() ? std::string{} : field("libelle", u.label)) + "\n";
     if (cfg.strictUnits) index += "unites_strictes" + fieldBool("actif", true) + "\n";
+    // 1.13.0 (lot J8, format 33) : les bibliotheques reliees - le LIEN (nom, version, plancher, chemin) et le cache
+    // de leur interface (bib_type, bib_fonction, bib_script), pour verifier le projet meme si le fichier manque. Le
+    // code d'une bibliotheque n'est jamais recopie ici.
+    for (const auto& lib : p.libraries) {
+        index += "bibliotheque" + field("nom", lib.name) + field("version", lib.version)
+               + (lib.compat.empty() ? std::string{} : field("compat", lib.compat)) + field("chemin", lib.path)
+               + (lib.published.empty() ? std::string{} : field("publiee", lib.published)) + "\n";
+        for (const auto& t : lib.types)
+            index += "bib_type" + field("nom", t.name) + field("membres", t.members)
+                   + (t.kind.empty() ? std::string{} : fieldBare("genre", t.kind)) + "\n";
+        for (const auto& f : lib.functions) index += "bib_fonction" + field("nom", f.name) + field("signature", f.signature) + "\n";
+        for (const auto& sc : lib.scripts) index += "bib_script" + field("nom", sc) + "\n";
+    }
     // Lot 14 : la communication avec l'automate reel - seulement si elle change
     // (un projet qui reste sur le simulateur n'ecrit rien).
     {
@@ -1692,6 +1716,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             ty.name = toStr(r.get("nom"));
             ty.description = toStr(r.get("description"));
             ty.folder = toStr(r.get("dossier"));                    // lot 21
+            ty.ns = toStr(r.get("espace"));                         // 1.13.0 (lot J8) : son espace de noms
             ty.base = toStr(r.get("herite"));                       // 1.13.0 (lot J1) : son parent (EXTENDS)
             if (const std::string impl = toStr(r.get("implemente")); !impl.empty())   // 1.13.0 : ses interfaces
                 for (std::size_t from = 0, semi; from <= impl.size(); from = semi + 1) {
@@ -1785,6 +1810,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             sc.description = toStr(r.get("description"));
             sc.folder = toStr(r.get("dossier"));                    // lot 21
             sc.detached = toBool(r.get("detache"), false);          // 1.12.26
+            sc.ns = toStr(r.get("espace"));                         // 1.13.0 (lot J8)
             const std::string file = toStr(r.get("fichier"));
             if ((file.empty() || !read(file, sc.body)) && report)
                 report->warnings.push_back("script '" + sc.name + "' : fichier " + file + " absent");
@@ -1797,6 +1823,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             f.returnType = toStr(r.get("retour"));
             f.returnUnit = toStr(r.get("unite_retour"));                     // 1.13.0 (lot J6)
             f.description = toStr(r.get("description"));
+            f.ns = toStr(r.get("espace"));                                   // 1.13.0 (lot J8)
             const std::string file = toStr(r.get("fichier"));
             if ((file.empty() || !read(file, f.body)) && report)
                 report->warnings.push_back("fonction '" + f.name + "' : fichier " + file + " absent");
@@ -1887,6 +1914,23 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             if (!u.symbol.empty()) p.config.units.push_back(std::move(u));
         } else if (r.word == "unites_strictes") {                         // 1.13.0 (lot J6)
             p.config.strictUnits = toBool(r.get("actif"), true);
+        } else if (r.word == "bibliotheque") {                            // 1.13.0 (lot J8) : un lien
+            Library lib;
+            lib.name = toStr(r.get("nom"));
+            lib.version = toStr(r.get("version"));
+            lib.compat = toStr(r.get("compat"));
+            lib.path = toStr(r.get("chemin"));
+            lib.published = toStr(r.get("publiee"));
+            if (!lib.name.empty()) p.libraries.push_back(std::move(lib));
+        } else if (r.word == "bib_type" || r.word == "bib_fonction" || r.word == "bib_script") {   // 1.13.0 (lot J8) : son interface
+            if (p.libraries.empty()) {
+                if (report) report->warnings.push_back(r.word + " sans biblioth\xC3\xA8que : ignor\xC3\xA9");
+                continue;
+            }
+            auto& lib = p.libraries.back();
+            if (r.word == "bib_type") lib.types.push_back({toStr(r.get("nom")), toStr(r.get("membres")), toStr(r.get("genre"))});
+            else if (r.word == "bib_fonction") lib.functions.push_back({toStr(r.get("nom")), toStr(r.get("signature"))});
+            else lib.scripts.push_back(toStr(r.get("nom")));
         } else if (r.word == "communication") {                           // lot 14
             auto& c = p.comm;
             const Communication def{};
@@ -2392,16 +2436,23 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
         report->warnings.push_back("vue de d\xC3\xA9marrage " + std::to_string(p.config.startView) + " introuvable");
     for (const auto& u : p.security.users)
         if (!p.group(u.group) && report) report->warnings.push_back("utilisateur '" + u.login + "' : groupe introuvable");
+    // 1.13.0 (lot J8) : les bibliotheques reliees, depuis le cache de leur interface (sans disque ici ; load() les
+    // cherche ensuite sur le disque, a cote du projet).
+    biblio::useCache(p);
     return p;
 }
 
 core::Result<Project> load(const std::string& projectFolder, LoadReport* report) {
     const fs::path root = fs::path(projectFolder) / "ihm";
-    return parseProject([&root](const std::string& path, std::string& content) {
+    auto p = parseProject([&root](const std::string& path, std::string& content) {
         bool ok = false;
         content = readAll(root / path, ok);
         return ok;
     }, report);
+    // 1.13.0 (lot J8) : chaque bibliotheque reliee, cherchee (relatif au projet, dossiers partages, absolu), lue et
+    // comparee a la version demandee - toujours re-resolue a l'ouverture (le cache ne sert que si le fichier manque).
+    if (p) biblio::resolve(*p, projectFolder);
+    return p;
 }
 
 } // namespace hmi

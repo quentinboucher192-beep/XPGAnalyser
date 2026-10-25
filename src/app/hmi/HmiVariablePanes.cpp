@@ -24,6 +24,7 @@
 #include "../../core/AtomicFile.hpp"   // 1.11.16 : exporter les valeurs remanentes
 #include "../../ui/Theme.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
+#include "../../hmi/HmiNames.hpp"          // 1.13.0 (lot J8) : l'espace de noms d'un type
 #include "HmiTypePicker.hpp"                // 1.11.19 (refonte, lot 6) : "Choisir un type..."
 #include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement suit le type et ses membres
 #include "../../hmi/HmiRoles.hpp"           // 1.12.14 : les types d'un tuple
@@ -3885,14 +3886,23 @@ bool HmiTypesPane::renameType(Id id, const std::string& raw, std::string* why) {
     const std::string name = trimmed(raw);
     if (!hmi::isIdentifier(name)) return fail(why, "nom invalide : lettres, chiffres et _");
     if (ty::isElementary(name)) return fail(why, name + " est un type \xC3\xA9l\xC3\xA9mentaire");
-    if (const auto* o = doc_->project.hmiTypeByName(name); o && o->id != id) return fail(why, "le type " + name + " existe d\xC3\xA9j\xC3\xA0");
+    // 1.13.0 (lot J8) : unique dans SON espace (Gaz.T_Vanne et Util.T_Vanne sont deux types).
+    if (const auto* o = doc_->project.hmiTypeByName(hmi::qualifiedName(t->ns, name)); o && o->id != id && o->ns == t->ns)
+        return fail(why, "le type " + hmi::qualifiedName(t->ns, name) + " existe d\xC3\xA9j\xC3\xA0");
     if (t->name == name) return true;
     const std::string before = t->name;
+    const std::string beforeFull = hmi::fullName(*t), afterFull = hmi::qualifiedName(t->ns, name);
     // Les variables et les membres qui l'emploient suivent.
     const auto rename = [&](std::string& type) {
         ty::Spec s;
         const bool generic = type.find('<') != std::string::npos;      // 1.12.20 (lot G) : T_Mesure<REAL>, T_Paire<T_Four, INT>
         if (ty::parseSpec(type, s) && !generic) {
+            // 1.13.0 (lot J8) : son nom complet (Gaz.T_Vanne) suit aussi.
+            if (!beforeFull.empty() && beforeFull != before && sameText(s.element, beforeFull)) {
+                s.element = afterFull;
+                type = ty::specText(s);
+                return;
+            }
             if (!sameText(s.element, before)) return;
             s.element = name;
             type = ty::specText(s);
@@ -3905,9 +3915,12 @@ bool HmiTypesPane::renameType(Id id, const std::string& raw, std::string* why) {
         for (std::size_t i = 0; i < type.size();) {
             if (std::isalpha(static_cast<unsigned char>(type[i])) || type[i] == '_') {
                 std::size_t j = i;
-                while (j < type.size() && (std::isalnum(static_cast<unsigned char>(type[j])) || type[j] == '_')) ++j;
+                // 1.13.0 (lot J8) : un nom complet (Gaz.T_Vanne) se lit d'un bloc.
+                while (j < type.size() && (std::isalnum(static_cast<unsigned char>(type[j])) || type[j] == '_'
+                                           || (type[j] == '.' && j + 1 < type.size() && (std::isalpha(static_cast<unsigned char>(type[j + 1])) || type[j + 1] == '_'))))
+                    ++j;
                 const std::string word = type.substr(i, j - i);
-                out += sameText(word, before) ? name : word;
+                out += sameText(word, beforeFull) ? afterFull : sameText(word, before) ? name : word;
                 i = j;
             } else {
                 out += type[i++];
@@ -3974,6 +3987,22 @@ bool HmiTypesPane::setTypeDescription(Id id, const std::string& text) {
         t.description = text;
         return true;
     }, nullptr);
+}
+
+bool HmiTypesPane::setTypeNamespace(Id id, const std::string& text, std::string* why) {
+    const auto* t = doc_->project.hmiType(id);
+    if (!t) return fail(why, "type introuvable");
+    std::string ns = trimmed(text);
+    if (ns == "(racine)") ns.clear();
+    if (ns == t->ns) return true;
+    hmi::Project trial = doc_->project;
+    if (!hmi::names::setItemNamespace(trial, hmi::names::ItemKind::Type, id, ns, why)) return false;
+    const std::string before = hmi::fullName(*t), after = hmi::qualifiedName(ns, t->name);
+    apply_(hmi::changeProject(doc_, "Espace de noms de " + t->name + " : " + (ns.empty() ? std::string("la racine") : ns),
+                              [&](hmi::Project& p) { (void)hmi::names::setItemNamespace(p, hmi::names::ItemKind::Type, id, ns, nullptr); }));
+    say("Type " + before + " \xE2\x86\x92 " + after + " (les variables et les membres qui le nommaient en entier suivent ; Ctrl+Z l'annule)");
+    refresh();
+    return true;
 }
 
 bool HmiTypesPane::deleteType(Id id, std::string* why) {
@@ -4099,6 +4128,21 @@ void HmiTypesPane::rebuildProperties() {
         }, {}, "Renommer : les variables, les param\xC3\xA8tres et les locales de ce type suivent."));
         c.properties.push_back(prop("Description", t->description, PG::ValueType::Text,
                                     [this, id](std::string_view text) { return setTypeDescription(id, std::string(text)); }));
+        // 1.13.0 (lot J8) : son espace de noms - la liste des espaces du projet, ou un nom tape (un nouvel espace).
+        {
+            std::vector<std::string> spaces{"(racine)"};
+            for (const auto& sp : hmi::names::projectSpaces(p)) spaces.push_back(sp.ns);
+            auto ns = prop("Espace de noms", t->ns.empty() ? std::string("(racine)") : t->ns, PG::ValueType::Enum, [this, id](std::string_view text) {
+                std::string why;
+                const bool ok = setTypeNamespace(id, std::string(text), &why);
+                if (!ok) say("Refus\xC3\xA9 : " + why, true);
+                return ok;
+            }, spaces, "Range le type sous un pr\xC3\xA9" "fixe : son nom complet devient Espace." + t->name
+                         + " (Gaz." + t->name + "). Dans son espace, ses voisins le nomment " + t->name + " ; ailleurs Gaz." + t->name
+                         + ", ou USING Gaz; en t\xC3\xAAte d'un script. (racine) : sans espace.");
+            ns.typeIn = true;
+            c.properties.push_back(std::move(ns));
+        }
         c.properties.push_back(prop("Signature", t->signature, PG::ValueType::Text, [this, id](std::string_view text) {
             std::string why;
             const bool ok = setCallbackSignature(id, std::string(text), &why);
@@ -4129,6 +4173,21 @@ void HmiTypesPane::rebuildProperties() {
         }, {}, "Renommer : les variables et les litt\xC3\xA9raux T_ANCIEN#x des scripts suivent."));
         c.properties.push_back(prop("Description", t->description, PG::ValueType::Text,
                                     [this, id](std::string_view text) { return setTypeDescription(id, std::string(text)); }));
+        // 1.13.0 (lot J8) : son espace de noms - la liste des espaces du projet, ou un nom tape (un nouvel espace).
+        {
+            std::vector<std::string> spaces{"(racine)"};
+            for (const auto& sp : hmi::names::projectSpaces(p)) spaces.push_back(sp.ns);
+            auto ns = prop("Espace de noms", t->ns.empty() ? std::string("(racine)") : t->ns, PG::ValueType::Enum, [this, id](std::string_view text) {
+                std::string why;
+                const bool ok = setTypeNamespace(id, std::string(text), &why);
+                if (!ok) say("Refus\xC3\xA9 : " + why, true);
+                return ok;
+            }, spaces, "Range le type sous un pr\xC3\xA9" "fixe : son nom complet devient Espace." + t->name
+                         + " (Gaz." + t->name + "). Dans son espace, ses voisins le nomment " + t->name + " ; ailleurs Gaz." + t->name
+                         + ", ou USING Gaz; en t\xC3\xAAte d'un script. (racine) : sans espace.");
+            ns.typeIn = true;
+            c.properties.push_back(std::move(ns));
+        }
         c.properties.push_back(prop("Genre", "\xC3\xA9num\xC3\xA9ration \xC2\xB7 DINT", PG::ValueType::ReadOnly, {}, {},
                                     "Une variable de ce type vaut un DINT : le nombre de sa valeur. Dans les scripts : " + t->name + "#Valeur, CASE, FOR EACH v IN "
                                         + t->name + "."));
@@ -4186,6 +4245,21 @@ void HmiTypesPane::rebuildProperties() {
         }, {}, "Renommer un type : les variables et les membres qui l'emploient suivent."));
         c.properties.push_back(prop("Description", t->description, PG::ValueType::Text,
                                     [this, id](std::string_view text) { return setTypeDescription(id, std::string(text)); }));
+        // 1.13.0 (lot J8) : son espace de noms - la liste des espaces du projet, ou un nom tape (un nouvel espace).
+        {
+            std::vector<std::string> spaces{"(racine)"};
+            for (const auto& sp : hmi::names::projectSpaces(p)) spaces.push_back(sp.ns);
+            auto ns = prop("Espace de noms", t->ns.empty() ? std::string("(racine)") : t->ns, PG::ValueType::Enum, [this, id](std::string_view text) {
+                std::string why;
+                const bool ok = setTypeNamespace(id, std::string(text), &why);
+                if (!ok) say("Refus\xC3\xA9 : " + why, true);
+                return ok;
+            }, spaces, "Range le type sous un pr\xC3\xA9" "fixe : son nom complet devient Espace." + t->name
+                         + " (Gaz." + t->name + "). Dans son espace, ses voisins le nomment " + t->name + " ; ailleurs Gaz." + t->name
+                         + ", ou USING Gaz; en t\xC3\xAAte d'un script. (racine) : sans espace.");
+            ns.typeIn = true;
+            c.properties.push_back(std::move(ns));
+        }
         // 1.12.20 (lot G) : une structure generique - ses generiques ; ses membres peuvent etre de type T, une variable
         // s'ecrit T_Mesure<REAL>.
         c.properties.push_back(prop("G\xC3\xA9n\xC3\xA9riques", hmi::genericsText(t->generics), PG::ValueType::Text, [this, id](std::string_view text) {

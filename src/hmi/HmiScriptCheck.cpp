@@ -28,6 +28,7 @@
 #include "../sim/DialectLib.hpp"   // 1.12.7 : les natives des conteneurs, std::numeric, <bit>, les templates
 #include "HmiOverload.hpp"      // 1.11.20 : les signatures (E/S, sorties) et les surcharges
 #include "HmiTable.hpp"         // 1.12.13 : les parametres qu'un geste sur un tableau passe a ses actions
+#include "HmiNames.hpp"         // 1.13.0 (lot J8) : les espaces de noms (USING, Gaz.T_Vanne, Util.Moyenne)
 
 // 1.10 (decisions 13 et 13 bis) : le dialecte IHM du chantier S1 - ses
 // fonctions internes, ses noms et ses constats (hmi::lang110::analyze ; voir
@@ -464,7 +465,11 @@ std::set<std::string> constantNames(std::string_view code) {
 
 class Walker {
 public:
-    Walker(const Scope& sc, std::string_view code) : sc_(sc) {
+    Walker(const Scope& sc, std::string_view raw) : sc_(sc) {
+        // 1.13.0 (lot J8) : les directives USING - lues (les espaces importes), puis blanchies (les colonnes restent).
+        for (const auto& u : names::usings(raw)) imports_.push_back(u.ns);
+        const std::string cleaned = names::blankUsings(raw);
+        const std::string_view code = cleaned;
 #ifdef XPG_HMI_LANG110
         // Le dialecte IHM (S1) : le 3e argument est `knownType` (integration 1.10) - une
         // locale typee par une structure IHM du projet est permise.
@@ -477,6 +482,7 @@ public:
         constants_ = constantNames(code);
         body_ = parts_.body;
         toks_ = lex(body_);
+        mergeNamespaces();              // 1.13.0 (lot J8) : Gaz . T_Vanne -> un seul nom ; un nom court de l'espace -> complet
         foldLambdas();                  // 1.12.20 : une LAMBDA - ses parametres et ses types ne sont pas des variables
         lineStarts_.push_back(0);
         for (std::size_t i = 0; i < body_.size(); ++i)
@@ -565,6 +571,59 @@ public:
     // `$Vanne$` qui n'est pas une variable n'a pas de "veux-tu dire ... ?" (une fausse piste).
     std::set<std::string> markerRoots;
 
+    // 1.13.0 (lot J8) : LES ESPACES DE NOMS, LUS AVANT TOUT. Gaz . T_Vanne (trois jetons) devient un seul nom complet
+    // (Gaz.T_Vanne) quand Gaz est un espace declare qui a T_Vanne (la regle du plus long chemin) ; un nom court que
+    // l'espace de l'item ou un USING designe (Borne -> Util.Borne) prend son nom complet, a sa place (les colonnes
+    // restent celles du texte). Le reste du controle voit alors des noms complets, comme le moteur.
+    void mergeNamespaces() {
+        if (!sc_.project || toks_.empty() || !names::active(*sc_.project)) return;
+        const names::Index ix(*sc_.project);
+        names::Scope bare;
+        bare.own = ownNamespace();
+        bare.imports = imports_;
+        for (const auto& l : parts_.locals) bare.hidden.insert(up(l.name));
+        if (sc_.function) bare.hidden.insert(up(sc_.function->name));
+        std::vector<names::TokenView> views;
+        views.reserve(toks_.size());
+        for (const auto& t : toks_) views.push_back({t.text, t.k == Tok::K::Ident, t.k == Tok::K::Op && t.text == "."});
+        const auto runs = names::qualifiedRuns(ix, views, bare.own.empty() && bare.imports.empty() ? nullptr : &bare);
+        for (auto it = runs.rbegin(); it != runs.rend(); ++it) {
+            Tok& first = toks_[it->first];
+            const std::size_t end = toks_[it->first + it->count - 1].end();
+            first.text = it->text;
+            first.len = end - first.at;
+            if (it->count > 1)
+                toks_.erase(toks_.begin() + static_cast<std::ptrdiff_t>(it->first + 1), toks_.begin() + static_cast<std::ptrdiff_t>(it->first + it->count));
+        }
+    }
+    // L'espace de l'item controle : celui du script (Scope::ns), sinon celui de la fonction.
+    [[nodiscard]] std::string ownNamespace() const {
+        if (!sc_.ns.empty()) return sc_.ns;
+        return sc_.function ? sc_.function->ns : std::string{};
+    }
+    [[nodiscard]] const std::vector<std::string>& imports() const noexcept { return imports_; }
+    // 1.13.0 (lot J8) : un nom court connu autrement qu'un item d'un espace (une locale, une variable, une fonction
+    // standard ou IHM, une native, l'automate...) - names::check ne le dit pas " d'un autre espace ".
+    [[nodiscard]] bool knownOtherwise(std::string_view n) const {
+        const std::string U = up(n);
+        if (local(n) || param(n) || counter(n) || selfName(n) || catchVar(n) || viewConstant(n) || viewFunctionHere(n)) return true;
+        if (internalFunction(std::string(n)) || isStandardFunction(U) || isHmiFunction(U) || natives::isOwnFunction(U) || sim::lib::native(U)
+            || dialectFunctions().count(U) || conversion(U))
+            return true;
+        const Project* p = sc_.project;
+        if (p && (p->variable(n) || pub::isSysRoot(n) || pub::viewNamed(*p, n) || p->generalScript(n))) {
+            // une variable, une vue, SYS : pas un item d'un espace (une fonction de la racine non plus)
+            return true;
+        }
+        if (p) {
+            for (const auto& f : p->programs.functions) if (f.ns.empty() && up(f.name) == U) return true;
+            for (const auto& t : p->programs.types) if (t.ns.empty() && up(t.name) == U) return true;
+            for (const auto* e : enumerations(*p))
+                if (enumValueByName(*e, n)) return true;
+        }
+        return sc_.plcKnown && sc_.plcKnown(n);
+    }
+
     std::vector<Finding> run() {
         // 1.12.7 : SET OF T_Lot - un SET range des valeurs simples (une structure, une liste ne se rangent pas) ;
         // RING[N] OF T - sa capacite (le moteur le dit aussi au demarrage).
@@ -618,6 +677,7 @@ public:
 
 private:
     const Scope&          sc_;
+    std::vector<std::string> imports_;          // 1.13.0 (lot J8) : les espaces importes (USING), tels qu'ecrits
     ScriptParts           parts_;
     std::string           body_;
     std::vector<Tok>      toks_;
@@ -1239,6 +1299,8 @@ private:
         // L'automate : ses membres et ses indices constants.
         if (sc_.plcKnown && sc_.plcKnown(root.text)) return plcPath(i, j, segs);
         if (!sc_.plcKnown) return {};           // l'automate n'est pas connu : rien a dire
+        // 1.13.0 (lot J8) : un espace de noms (Gaz.Inconnu) - names::check dit ce qui lui manque, avec le plus proche.
+        if (sc_.project && sc_.project->isNamespace(root.text)) return {};
         // Personne ne connait ce nom.
         const bool marker = markerRoots.count(up(root.text)) != 0;   // 1.11.1 (REP-10)
         const std::string near = marker ? std::string{} : closestName(root.text);
@@ -2219,13 +2281,43 @@ std::vector<Finding> check(const Scope& scope, std::string_view source) {
     // 1.11.20 : les appels des fonctions de l'utilisateur, lus par le simulateur et juges par la
     // regle du moteur (E/S et sorties comptees, references, surcharges).
     bool callsRead = false;
-    const auto calls = callcheck::checkCode(callcheck::Context{scope.project, scope.view, scope.function, scope.plc}, code, &callsRead);
+    const std::string unused = names::blankUsings(code);         // 1.13.0 (lot J8) : USING ne va pas au simulateur
+    const auto calls = callcheck::checkCode(callcheck::Context{scope.project, scope.view, scope.function, scope.plc, scope.ns}, unused, &callsRead);
     Walker w(scope, code);
     w.setCallsChecked(callsRead);
     for (const auto& m : markers::find(source))   // 1.11.1 (REP-10)
         if (const auto roots = scanRoots(m.content(source)); !roots.empty()) w.markerRoots.insert(up(roots.front()));
     auto out = w.run();
     bool added = false;
+    // 1.13.0 (lot J8) : les espaces de noms - USING inconnu ou inutile, nom ambigu sous USING, nom d'un autre espace
+    // sans USING, Gaz.Inconnu (avec la correction d'un clic).
+    if (scope.project && (names::active(*scope.project) || names::mentionsUsing(code))) {
+        const names::Index ix(*scope.project);
+        std::vector<std::string> hidden;
+        if (scope.function) hidden.push_back(scope.function->name);
+        for (const auto& nf : names::check(ix, code, w.ownNamespace(), hidden, scope.function != nullptr, true,
+                                           [&w](std::string_view n) { return w.knownOtherwise(n); })) {
+            Finding f;
+            f.severity = nf.warning ? Finding::Severity::Warning : Finding::Severity::Error;
+            f.line = nf.line;
+            f.column = nf.column;
+            f.length = nf.length;
+            f.message = nf.message;
+            f.name = nf.name;
+            f.suggestion = nf.suggestion;
+            f.fixFrom = nf.fixFrom;
+            f.fixTo = nf.fixTo;
+            // un nom deja dit par le controle (le meme endroit) : une fois
+            const bool twice = std::any_of(out.begin(), out.end(), [&](const Finding& o) {
+                return o.line == f.line && o.column == f.column && o.name == f.name && !f.name.empty();
+            });
+            if (twice)
+                out.erase(std::remove_if(out.begin(), out.end(), [&](const Finding& o) { return o.line == f.line && o.column == f.column && o.name == f.name; }),
+                          out.end());
+            out.push_back(std::move(f));
+            added = true;
+        }
+    }
     for (const auto& c : calls) {
         Finding f;
         f.severity = c.error ? Finding::Severity::Error : Finding::Severity::Warning;
@@ -2367,7 +2459,9 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
     };
     for (const auto& sc : p.programs.scripts) {
         if (sc.lang != ScriptLang::ST || (focus && !focus->scripts.count(sc.id))) continue;
-        for (const auto& f : check(scopeFor(nullptr, nullptr), sc.body, sc.decls, decl::Role::Script)) {
+        Scope own = scopeFor(nullptr, nullptr);
+        own.ns = sc.ns;                                           // 1.13.0 (lot J8) : il voit son espace sans prefixe
+        for (const auto& f : check(own, sc.body, sc.decls, decl::Role::Script)) {
             Issue i;
             i.category = "Script";
             i.property = sc.name;

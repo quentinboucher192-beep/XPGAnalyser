@@ -41,6 +41,7 @@
 #include "../../hmi/HmiBuildState.hpp"  // 1.11 (chantier T3, C4) : les icones compilable / generable
 #include "../../hmi/HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele
 #include "../hmi/HmiDesignPanes.hpp"
+#include "../hmi/HmiLibraryPanes.hpp"   // 1.13.0 (lot J8) : IHM > Espaces et bibliotheques
 #include "../hmi/HmiEditHistoryDialog.hpp"   // 1.12.26 : la fenetre Historique des objets
 #include "../hmi/HmiItemsDialog.hpp"   // 1.12.7 : le tableau des elements
 #include "../../core/FieldCodec.hpp"
@@ -401,7 +402,8 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || (k >= NK::HmiCodeGroup && k <= NK::HmiSymbolOverloads)         // 1.11.21 : le contenu d'un code, les surcharges
         || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker
         || k == NK::VersionsFolder || k == NK::VersionItem                            // lot 21 : les versions
-        || ProjectTreeModel::isNativesKind(k);                                         // 1.12.0 : les natives
+        || ProjectTreeModel::isNativesKind(k)                                          // 1.12.0 : les natives
+        || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode;                     // 1.13.0 (lot J8) : les bibliotheques
 }
 
 ui::Widget* MainAnalysisScreen::hmiTab(const std::string& key) const {
@@ -864,6 +866,16 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
             break;
         case NK::HmiFunctionsFolder:
             openHmiPane("fonctions");
+            break;
+        case NK::HmiLibrariesFolder:                      // 1.13.0 (lot J8) : la page des espaces et des bibliotheques
+        case NK::HmiLibraryNode:
+            openHmiPane("bibliotheques");
+            if (ProjectTreeModel::kindOf(n) == NK::HmiLibraryNode)
+                if (auto* pane = dynamic_cast<HmiLibrariesPane*>(hmiTab("bibliotheques")); pane && app_.hmi()) {
+                    const auto doc = app_.hmi();
+                    const auto at = static_cast<std::size_t>(ProjectTreeModel::indexOf(n));
+                    if (at < doc->project.libraries.size()) pane->selectLibrary(doc->project.libraries[at].name);
+                }
             break;
         case NK::HmiFunction:
         case NK::HmiOverloads:             // 1.11.21 : les surcharges d'un nom - la premiere
@@ -1537,6 +1549,21 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         page = std::move(pane);
         title = "IHM \xC2\xB7 Fonctions";
         icon = Icon::FunctionBlock;
+    } else if (key == "bibliotheques") {
+        // 1.13.0 (lot J8) : les espaces de noms du projet et les bibliotheques reliees.
+        auto pane = std::make_unique<HmiLibrariesPane>("hmi.libraries", doc, apply);
+        HmiLibrariesPane::Hosts hosts;
+        hosts.askLink = [this] { askHmiLinkLibrary(); };
+        hosts.askPublish = [this] { askHmiPublishLibrary(); };
+        hosts.askUpdate = [this](const std::string& n) { askHmiUpdateLibrary(n); };
+        hosts.askLocate = [this](const std::string& n) { askHmiLocateLibrary(n); };
+        hosts.askNewNamespace = [this] { askHmiNewNamespace(); };
+        hosts.askRenameNamespace = [this](const std::string& ns) { askHmiRenameNamespace(ns); };
+        hosts.openDefinition = [this](const std::string& full) { showHmiDefinition(full); };
+        pane->setHosts(std::move(hosts));
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 Espaces et biblioth\xC3\xA8ques";
+        icon = Icon::Library;
     } else if (key == "styles") {
         // Lot 12 : les styles nommes.
         page = std::make_unique<HmiStylesPane>("hmi.styles", doc, apply);
@@ -3640,6 +3667,8 @@ std::string placeOfNode(NK kind) {
             return "variables-instances";
         case NK::HmiFunctionsFolder: case NK::HmiFunction:
             return "fonctions";
+        case NK::HmiLibrariesFolder: case NK::HmiLibraryNode:    // 1.13.0 (lot J8)
+            return "bibliotheques";
         case NK::HmiAlarms: case NK::HmiAlarmGroup: case NK::HmiAlarm:
             return "alarmes";
         case NK::HmiRecipes: case NK::HmiRecipe: case NK::HmiRecord:

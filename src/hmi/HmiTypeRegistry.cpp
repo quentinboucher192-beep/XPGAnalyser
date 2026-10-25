@@ -172,6 +172,11 @@ private:
         const std::size_t a = i_;
         if (i_ < s_.size() && identStart(s_[i_]))
             while (i_ < s_.size() && identChar(s_[i_])) ++i_;
+        // 1.13.0 (lot J8) : un nom d'un espace - Gaz.T_Vanne, Gaz.Ligne.T_X (un seul nom complet).
+        while (i_ > a && i_ + 1 < s_.size() && s_[i_] == '.' && identStart(s_[i_ + 1])) {
+            ++i_;
+            while (i_ < s_.size() && identChar(s_[i_])) ++i_;
+        }
         return std::string(s_.substr(a, i_ - a));
     }
     bool atWord(std::string_view upper) {
@@ -713,16 +718,28 @@ Registry::Registry() {
 
 std::shared_ptr<const Registry> Registry::build(const Project& p, const params::PlcTypes* plc) {
     auto r = std::make_shared<Registry>();
-    for (const auto& t : p.programs.types) {
-        if (t.name.empty() || r->byName(t.name)) continue;          // un nom de base, ou en double : le premier
+    // 1.13.0 (lot J8) : les types du projet, puis ceux des bibliotheques reliees (lecture seule) - chacun sous son nom
+    // complet (Gaz.T_Vanne) ; la cle d'un type de projet ne change pas (ihm:615), un type de bibliotheque : bib:Gaz.T_Vanne.
+    std::vector<std::pair<const HmiType*, const LoadedLibrary*>> all;
+    for (const auto& t : p.programs.types) all.emplace_back(&t, nullptr);
+    p.forEachLibraryType([&](const HmiType& t, const LoadedLibrary& l) { all.emplace_back(&t, &l); });
+    for (const auto& [tp, lib] : all) {
+        const HmiType& t = *tp;
+        const std::string full = fullName(t);
+        if (t.name.empty() || r->byExactName(full)) continue;       // un nom de base, ou en double : le premier
         Entry e;
-        e.key = "ihm:" + std::to_string(t.id);
-        e.name = t.name;
+        e.key = lib ? "bib:" + full : "ihm:" + std::to_string(t.id);
+        e.name = full;
+        e.ns = t.ns;
+        e.readOnly = lib != nullptr;
         e.id = t.id;
         const bool en = t.kind == HmiTypeKind::Enumeration;
         const bool cb = t.kind == HmiTypeKind::Callback;             // 1.12.20 : un type rappel nomme (T_Filtre)
         e.category = en ? Category::Enumeration : cb ? Category::Callback : Category::Structure;
         e.provenance = en ? "Projet \xC2\xB7 \xC3\x89num\xC3\xA9rations" : cb ? "Projet \xC2\xB7 Rappels" : "Projet \xC2\xB7 Types IHM";
+        // 1.13.0 (lot J8) : sa provenance dit son espace, ou sa bibliotheque et sa version.
+        if (lib) e.provenance = "Biblioth\xC3\xA8que " + lib->name + (lib->foundVersion.empty() ? std::string{} : " " + lib->foundVersion);
+        else if (!t.ns.empty()) e.provenance = "Espace " + t.ns;
         e.doc = !t.description.empty() ? t.description
                                       : (en ? "Une \xC3\xA9num\xC3\xA9ration du projet."
                                          : cb ? "Un rappel du projet : " + t.signature + "."
@@ -733,10 +750,10 @@ std::shared_ptr<const Registry> Registry::build(const Project& p, const params::
         // le registre (et donc l'objet construit, la place Modbus) voit la structure entiere.
         if (!t.base.empty()) {
             std::vector<const HmiType*> chain;              // [parent, grand-parent, ... racine]
-            std::set<std::string> seen{upperOf(t.name)};
+            std::set<std::string> seen{upperOf(full)};
             for (std::string b = t.base; !b.empty();) {
                 const HmiType* bt = p.hmiTypeByName(b);
-                if (!bt || !seen.insert(upperOf(bt->name)).second) break;
+                if (!bt || !seen.insert(upperOf(fullName(*bt))).second) break;
                 chain.push_back(bt);
                 b = bt->base;
             }
@@ -771,6 +788,12 @@ const Entry* Registry::byKey(std::string_view key) const noexcept {
     return nullptr;
 }
 
+const Entry* Registry::byExactName(std::string_view name) const noexcept {
+    for (const auto& e : entries_)
+        if (sameText(e.name, name)) return &e;
+    return nullptr;
+}
+
 const Entry* Registry::byName(std::string_view name) const noexcept {
     std::string_view n = name;
     while (!n.empty() && std::isspace(static_cast<unsigned char>(n.front()))) n.remove_prefix(1);
@@ -782,6 +805,17 @@ const Entry* Registry::byName(std::string_view name) const noexcept {
     if (sameText(n, "DT")) n = "DATE_AND_TIME";
     for (const auto& e : entries_)
         if (sameText(e.name, n)) return &e;
+    // 1.13.0 (lot J8) : un nom court d'un espace (T_Vanne pour Gaz.T_Vanne) - s'il n'y en a qu'un de ce nom.
+    if (n.find('.') == std::string_view::npos) {
+        const Entry* hit = nullptr;
+        int count = 0;
+        for (const auto& e : entries_)
+            if (!e.ns.empty() && e.name.size() > e.ns.size() + 1 && sameText(std::string_view(e.name).substr(e.ns.size() + 1), n)) {
+                hit = &e;
+                ++count;
+            }
+        if (count == 1) return hit;
+    }
     return nullptr;
 }
 

@@ -67,6 +67,7 @@
 #include "../src/app/hmi/HmiDuplicateDialog.hpp"   // 1.10.2 (chantier D)
 #include <set>
 #include "../src/app/hmi/HmiFunctionPanes.hpp"
+#include "../src/app/hmi/HmiLibraryPanes.hpp"   // 1.13.0 (lot J8)
 #include "../src/app/hmi/HmiSymbolPopupsPane.hpp"   // 1.11.10 : les popups d'un symbole
 #include "../src/app/hmi/HmiHelpPane.hpp"
 #include "../src/help/Novelties.hpp"                // 1.10 (chantier P) : le registre des nouveautes
@@ -18715,7 +18716,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 430,   // 1.13.0 : + 2 (page web retiree, unites de mesure) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 431,   // 1.13.0 : + 3 (page web retiree ; lot J6 : les unites ; lot J8 : espaces et bibliotheques) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18861,7 +18862,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 228, "centre : L'IHM a les 228 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure)");
+    check(ix.count(hc::Chapter::Hmi) == 229, "centre : L'IHM a les 229 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 65, "centre : 11 expressions, 65 notes (1.13.0)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -36193,7 +36194,170 @@ void zoom11231() {
     near(onScreen(ed.tools()).h, barBefore, "100 % : la barre d'outils a sa hauteur d'avant", 0.6);
 }
 
+// ------------------------------------------------ 1.13.0 (lot J8) : espaces de noms et bibliotheques --
+// Le volet IHM > Espaces et bibliotheques (publier, relier, l'etat, Mettre a jour, Localiser, Delier, les
+// espaces vides), le 8e dossier de Programmation generale, l'inspecteur (Espace de noms), l'aide a la
+// saisie apres Gaz. - sans SDL, comme le reste de ce fichier.
+void bibliotheques113() {
+    std::printf("1.13.0 (lot J8) : espaces de noms et biblioth\xC3\xA8ques - le volet, l'arbre, l'inspecteur, l'aide \xC3\xA0 la saisie\n");
+    namespace fs = std::filesystem;
+    using NK = app::ProjectTreeModel::NodeKind;
+    const fs::path work = fs::temp_directory_path() / "hmi_editor_bibliotheques";
+    std::error_code ec;
+    fs::remove_all(work, ec);
+    fs::create_directories(work / "libs", ec);
+    app::setHmiProjectFolder(work.string());
+    std::string why;
+
+    // ---- la source : l'espace Gaz (un type, une fonction), publie en 1.4.0 ----
+    auto src = std::make_shared<Document>();
+    core::CommandStack srcStack;
+    auto& s = src->project;
+    HmiType vanne;
+    vanne.id = s.allocate();
+    vanne.name = "T_Vanne";
+    vanne.ns = "Gaz";
+    TypeMember pos;
+    pos.name = "Position";
+    pos.type = "REAL";
+    vanne.members.push_back(pos);
+    s.programs.types.push_back(vanne);
+    HmiFunction defaut = makeFunction(s, "EnDefaut", "BOOL", "VAR_INPUT v : T_Vanne; END_VAR\nEnDefaut := v.Position < 1.0;");
+    defaut.ns = "Gaz";
+    s.programs.functions.push_back(defaut);
+    app::HmiLibrariesPane pub("bib.source", src, [&](core::CommandPtr c) { (void)srcStack.push(std::move(c)); });
+    pub.setBounds({0, 0, 1400, 800});
+    pub.layout();
+    check(cellOf(pub.spaces(), "Gaz", 1) == "1" && cellOf(pub.spaces(), "Gaz", 2) == "1", "le volet : l'espace Gaz, 1 type et 1 fonction");
+    hmi::biblio::PublishSpec spec;
+    spec.name = "Gaz";
+    spec.version = "1.4.0";
+    const std::string file14 = (work / "libs" / "Gaz-1.4.0.xpgbib").string();
+    check(pub.publish(spec, file14, &why) && fs::exists(file14), "Publier : libs/Gaz-1.4.0.xpgbib [" + why + "]");
+    check(!srcStack.canUndo() && pub.message().find("1.4.0") != std::string::npos, "Publier ne change pas le projet ; la ligne d'\xC3\xA9tat le dit");
+
+    // ---- le projet qui la relie ----
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    auto& p = doc->project;
+    p.programs.functions.push_back(makeFunction(p, "Moyenne", "REAL", "VAR_INPUT a : REAL; b : REAL; END_VAR\nMoyenne := (a + b) / 2.0;"));
+    const Id moy = p.programs.functions.back().id;
+    auto plc = std::make_shared<domain::Project>();
+    app::ProjectTreeModel tree(plc);
+    tree.setHmi(doc);
+    const auto prog = tree.childAt(tree.hmiFolderNode(), 8);
+    check(tree.childCount(prog) == 7, "sans espace ni biblioth\xC3\xA8que : Programmation g\xC3\xA9n\xC3\xA9rale garde ses sept dossiers");
+
+    app::HmiLibrariesPane pane("bib", doc, apply);
+    pane.setBounds({0, 0, 1400, 800});
+    pane.layout();
+    check(pane.libraries().model() && pane.libraries().model()->rowCount() == 0, "le volet : aucune biblioth\xC3\xA8que reli\xC3\xA9" "e");
+    check(pane.link(file14, {}, &why), "Relier libs/Gaz-1.4.0.xpgbib [" + why + "]");
+    check(p.libraries.size() == 1 && p.libraries[0].name == "Gaz" && p.libraries[0].version == "1.4.0"
+              && p.libraries[0].path.rfind("libs", 0) == 0 && stack.canUndo(),
+          "le lien : Gaz 1.4.0, son chemin relatif au projet, une commande [" + (p.libraries.empty() ? std::string("?") : p.libraries[0].path) + "]");
+    check(cellOf(pane.libraries(), "Gaz", 1) == "1.4.0" && cellOf(pane.libraries(), "Gaz", 2) == "reli\xC3\xA9" "e",
+          "la ligne : Gaz, 1.4.0, reli\xC3\xA9" "e (" + cellOf(pane.libraries(), "Gaz", 2) + ")");
+    check(pane.selectedLibrary() == "Gaz", "la biblioth\xC3\xA8que reli\xC3\xA9" "e est choisie");
+    std::string face;
+    for (const auto& c : pane.properties().categories())
+        if (c.name == "Son interface")
+            for (const auto& pr : c.properties) face += pr.name + "=" + pr.value + ";";
+    check(face.find("Gaz.T_Vanne=") != std::string::npos && face.find("Gaz.EnDefaut=") != std::string::npos && face.find("BOOL") != std::string::npos,
+          "la fiche : son interface, Gaz.T_Vanne et Gaz.EnDefaut(...) : BOOL [" + face + "]");
+    check(p.hmiTypeByName("Gaz.T_Vanne") && p.functionByName("Gaz.EnDefaut"), "le projet voit Gaz.T_Vanne et Gaz.EnDefaut");
+    {
+        const hmi::Project& cp = p;
+        const HmiType* lt = cp.hmiTypeByName("Gaz.T_Vanne");
+        check(lt && hmi::isLibraryId(lt->id) && cp.hmiType(lt->id) == lt && p.hmiType(lt->id) == nullptr,
+              "un type de la biblioth\xC3\xA8que : un identifiant r\xC3\xA9serv\xC3\xA9, lisible, pas modifiable (lecture seule)");
+    }
+
+    // ---- l'arbre : le 8e dossier, Bibliotheques ----
+    check(tree.childCount(prog) == 8, "une biblioth\xC3\xA8que reli\xC3\xA9" "e : un 8e dossier sous Programmation g\xC3\xA9n\xC3\xA9rale");
+    const auto libs = tree.childAt(prog, 7);
+    check(app::ProjectTreeModel::kindOf(libs) == NK::HmiLibrariesFolder && tree.childCount(libs) == 1 && tree.counterOf(libs) == "1"
+              && tree.text(libs).rfind("Biblioth\xC3\xA8ques", 0) == 0,
+          "Biblioth\xC3\xA8ques [1] : " + tree.text(libs) + " [" + tree.counterOf(libs) + "]");
+    const auto node = tree.childAt(libs, 0);
+    check(app::ProjectTreeModel::kindOf(node) == NK::HmiLibraryNode && tree.text(node).rfind("Gaz 1.4.0", 0) == 0
+              && tree.text(node).find("reli\xC3\xA9" "e") != std::string::npos,
+          "la biblioth\xC3\xA8que : " + tree.text(node));
+
+    // ---- l'aide a la saisie apres Gaz. ----
+    bool sawType = false, sawFn = false;
+    for (const auto& it : app::assist::suggest(p, nullptr, "x := Gaz.", "")) {
+        if (it.text == "T_Vanne") sawType = true;
+        if (it.text == "EnDefaut" && it.insert == "EnDefaut()" && it.detail.find("lecture seule") != std::string::npos) sawFn = true;
+    }
+    check(sawType && sawFn, "Gaz. : le type T_Vanne et la fonction EnDefaut() (biblioth\xC3\xA8que, lecture seule)");
+
+    // ---- l'inspecteur : l'Espace de noms d'une fonction ----
+    app::HmiFunctionsPane fns("bib.fonctions", doc, apply);
+    fns.setBounds({0, 0, 1400, 800});
+    fns.layout();
+    fns.selectFunction(moy);
+    std::string nsValue = "?";
+    for (const auto& c : fns.properties().categories())
+        for (const auto& pr : c.properties)
+            if (pr.name == "Espace de noms") nsValue = pr.value;
+    check(nsValue == "(racine)", "l'inspecteur d'une fonction : Espace de noms (racine) [" + nsValue + "]");
+    check(!fns.setNamespace(moy, "Gaz", &why) && why.find("lecture seule") != std::string::npos,
+          "ranger Moyenne dans Gaz, une biblioth\xC3\xA8que reli\xC3\xA9" "e : refus\xC3\xA9 [" + why + "]");
+    check(fns.setNamespace(moy, "Util", &why) && p.function(moy) && p.function(moy)->ns == "Util", "ranger Moyenne dans Util [" + why + "]");
+    check(cellOf(pane.spaces(), "Util", 2) == "1", "le volet des espaces : Util, 1 fonction");
+    (void)stack.undo();
+    check(p.function(moy) && p.function(moy)->ns.empty(), "Ctrl+Z : Moyenne revient \xC3\xA0 la racine");
+
+    // ---- les espaces vides ----
+    check(pane.addNamespace("Outils", &why) && cellOf(pane.spaces(), "Outils", 4).rfind("vide", 0) == 0 && pane.selectedNamespace() == "Outils",
+          "Nouvel espace Outils : vide, gard\xC3\xA9 [" + why + "]");
+    check(!pane.addNamespace("Moyenne", &why) && !why.empty(), "un espace ne prend pas le nom d'une fonction du projet [" + why + "]");
+    check(pane.renameNamespace("Outils", "Aides", &why) && !cellOf(pane.spaces(), "Aides", 0).empty() && cellOf(pane.spaces(), "Outils", 0).empty(),
+          "Renommer l'espace Outils en Aides [" + why + "]");
+    check(pane.removeNamespace("Aides", &why) && cellOf(pane.spaces(), "Aides", 0).empty(), "Retirer l'espace vide Aides [" + why + "]");
+
+    // ---- le fichier bouge : introuvable, puis Localiser ----
+    const fs::path moved = work / "ailleurs" / "Gaz-1.4.0.xpgbib";
+    fs::create_directories(moved.parent_path(), ec);
+    fs::rename(file14, moved, ec);
+    pane.reload();
+    check(cellOf(pane.libraries(), "Gaz", 2) == "introuvable", "le fichier d\xC3\xA9plac\xC3\xA9 : introuvable (" + cellOf(pane.libraries(), "Gaz", 2) + ")");
+    check(tree.text(node).find("introuvable") != std::string::npos, "l'arbre le dit aussi : " + tree.text(node));
+    check(p.hmiTypeByName("Gaz.T_Vanne") != nullptr, "introuvable : le projet garde son interface (Gaz.T_Vanne se lit encore)");
+    check(pane.relocate("Gaz", moved.string(), &why) && cellOf(pane.libraries(), "Gaz", 2) == "reli\xC3\xA9" "e"
+              && p.libraries[0].path.find("ailleurs") != std::string::npos,
+          "Localiser... : retrouv\xC3\xA9" "e, reli\xC3\xA9" "e [" + why + "]");
+
+    // ---- une version plus recente : Mettre a jour ----
+    s.programs.functions.push_back(makeFunction(s, "Ferme", "BOOL", "VAR_INPUT v : T_Vanne; END_VAR\nFerme := v.Position <= 0.0;"));
+    s.programs.functions.back().ns = "Gaz";
+    spec.version = "1.5.0";
+    const std::string file15 = (work / "libs" / "Gaz-1.5.0.xpgbib").string();
+    check(pub.publish(spec, file15, &why), "Publier Gaz 1.5.0 (une fonction de plus) [" + why + "]");
+    check(pane.update("Gaz", file15, &why) && p.libraries[0].version == "1.5.0" && p.libraries[0].functions.size() == 2 && p.functionByName("Gaz.Ferme"),
+          "Mettre \xC3\xA0 jour : Gaz 1.5.0, sa nouvelle fonction Ferme [" + why + "]");
+    (void)stack.undo();
+    check(p.libraries.size() == 1 && p.libraries[0].version == "1.4.0", "Ctrl+Z : la mise \xC3\xA0 jour d\xC3\xA9" "faite (1.4.0)");
+
+    // ---- Delier, puis Ctrl+Z ----
+    check(pane.unlink("Gaz", &why) && p.libraries.empty() && pane.libraries().model()->rowCount() == 0, "D\xC3\xA9lier [" + why + "]");
+    check(tree.childCount(prog) == 7 && !p.hmiTypeByName("Gaz.T_Vanne"), "d\xC3\xA9li\xC3\xA9" "e : plus de dossier Biblioth\xC3\xA8ques, plus de Gaz.T_Vanne");
+    (void)stack.undo();
+    check(p.libraries.size() == 1 && tree.childCount(prog) == 8 && p.hmiTypeByName("Gaz.T_Vanne"), "Ctrl+Z : la biblioth\xC3\xA8que revient");
+
+    app::setHmiProjectFolder({});
+    fs::remove_all(work, ec);
+}
+
 int main(int argc, char** argv) {
+    // 1.13.0 (lot J8) : HMI_TEST_J8=1 - les espaces de noms et les bibliotheques, seuls.
+    if (const char* only = std::getenv("HMI_TEST_J8"); only && *only == '1') {
+        bibliotheques113();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.12.31 : HMI_TEST_11231=1 - le zoom de toute la page (l'editeur de vues), seul.
     if (const char* only = std::getenv("HMI_TEST_11231"); only && *only == '1') {
         zoom11231();
@@ -36719,6 +36883,7 @@ int main(int argc, char** argv) {
     regles11230();                          // 1.12.30 : les regles, les guides, la grille de colonnes, les cotes
     langues11230();                         // 1.12.30 : les langues cote a cote, la pseudo-langue
     zoom11231();                            // 1.12.31 : le zoom de toute la page, la vue en ilot, le panneau du bas
+    bibliotheques113();                     // 1.13.0 (lot J8) : espaces de noms et bibliotheques - le volet, l'arbre
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

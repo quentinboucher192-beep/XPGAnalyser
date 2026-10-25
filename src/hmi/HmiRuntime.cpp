@@ -19,6 +19,7 @@
 #include "HmiCalc.hpp"        // 1.12.7 : les valeurs calculees au demarrage
 #include "HmiMethods.hpp"     // 1.13.0 (lot J1) : les methodes des types IHM (S2) a l'execution (S1)
 #include "HmiUnits.hpp"       // 1.13.0 (lot J6) : les unites de mesure (EN / UNITE : declaredUnit, convertUnit)
+#include "HmiNames.hpp"       // 1.13.0 (lot J8) : les espaces de noms - le code qualifie avant le moteur
 #include "HmiOperators.hpp"   // 1.10 (integration) : les operateurs du projet (S2) a l'execution (S1)
 #include "HmiRoles.hpp"       // 1.12.6 (lot B) : le lecteur du role, l'ecriture vers le type
 #include "HmiEnums.hpp"       // 1.10 (decision 15) : les enumerations IHM dans les scripts (S1)
@@ -803,7 +804,12 @@ public:
         if (!f && rt_.project_) f = rt_.project_->functionByKey(name);                      // 1.11.20 : "Nom#id" aussi
         if (!f) f = symbolCall(name);                     // 1.11.10 : une fonction d'instance aux types riches
         if (!f) return nullptr;
-        const std::string text = functionText(*f);
+        // 1.13.0 (lot J8) : une fonction d'une bibliotheque non chargee (son interface seule) : callFunction le dit.
+        if (const LoadedLibrary* lib = rt_.project_ ? rt_.project_->libraryOf(f->id) : nullptr; lib && lib->fromCache) return nullptr;
+        // 1.13.0 (lot J8) : une fonction d'un espace (ou qui importe des espaces) : ses noms courts qualifies.
+        const std::string text = (!f->ns.empty() || names::mentionsUsing(f->body)) && rt_.project_
+                                     ? names::qualify(*rt_.project_, functionText(*f), f->ns, {f->name}, true)
+                                     : functionText(*f);
         if (const auto it = richFunctions_.find(text); it != richFunctions_.end()) return it->second;
         std::shared_ptr<const sim::Function> fn;
         if (auto parsed = sim::parseFunction(text, "fonction " + f->name); parsed && !sim::functionIsSimple(**parsed)) fn = *parsed;
@@ -821,6 +827,8 @@ public:
                 if (auto fs = symbolFunctionsAt(*rt_.project_, *to); !fs.empty()) return fs;
             return rt_.project_->functionsNamed(name);
         }
+        // 1.13.0 (lot J8) : Util.Max - les fonctions (et surcharges) d'un espace de noms.
+        if (auto fs = rt_.project_->functionsNamed(name); !fs.empty()) return fs;
         const std::string r = resolved(name);
         return symbolFunctionsAt(*rt_.project_, r.empty() ? std::string(name) : r);
     }
@@ -842,13 +850,25 @@ public:
         return false;
     }
     int overloads(std::string_view name) override { return static_cast<int>(named(name).size()); }
+    // 1.13.0 (lot J8) : la signature d'une fonction du projet, ses types en noms complets (vus de son espace).
+    overload::Signature signatureIn(const HmiFunction& f) const {
+        auto sig = overload::signatureOf(f);
+        if (!rt_.project_ || f.ns.empty()) return sig;
+        for (auto& prm : sig.params) prm.type = names::canonicalType(*rt_.project_, prm.type, f.ns);
+        sig.result = names::canonicalType(*rt_.project_, sig.result, f.ns);
+        return sig;
+    }
     bool chooseOverload(std::string_view name, const std::vector<sim::ArgShape>& args, std::string& key, std::string& why) override {
         const auto fs = named(name);
         if (fs.empty()) return false;
         std::vector<overload::Signature> sigs;
-        for (const auto* f : fs) sigs.push_back(overload::signatureOf(*f));
+        for (const auto* f : fs) sigs.push_back(signatureIn(*f));
         int k = -1;
-        if (!decide(sigs, args, k, why)) return false;
+        // 1.13.0 (lot J8) : les types des arguments en noms complets aussi (T_Vanne ecrit court = Gaz.T_Vanne).
+        std::vector<sim::ArgShape> shapes = args;
+        if (rt_.project_ && names::active(*rt_.project_))
+            for (auto& a : shapes) a.type = names::canonicalType(*rt_.project_, a.type);
+        if (!decide(sigs, shapes, k, why)) return false;
         key = std::string(name) + sigs[static_cast<std::size_t>(k)].key;       // "Convertir#615", "Vue.Vanne_3.Ouvrir#702"
         return true;
     }
@@ -869,7 +889,7 @@ public:
         }
         if (fs.size() == 1) return fs.front()->returnType;
         std::vector<overload::Signature> sigs;
-        for (const auto* f : fs) sigs.push_back(overload::signatureOf(*f));
+        for (const auto* f : fs) sigs.push_back(signatureIn(*f));
         const auto c = overload::choose(sigs, overload::argsOf(args));
         return c.chosen >= 0 ? sigs[static_cast<std::size_t>(c.chosen)].result : std::string{};
     }
@@ -1971,7 +1991,8 @@ const Runtime::Prepared& Runtime::prepare(const std::string& code, const std::st
     // 1.11.1 (REP) : le code se lit sans les $ de ses reperes, comme une expression (les
     // chaines ST et les commentaires gardent les leurs ; les lignes ne bougent pas). La cle
     // du cache reste le texte enregistre.
-    const std::string st = markers::strip(code);
+    // 1.13.0 (lot J8) : les directives USING ne vont jamais au moteur (blanchies : les lignes restent).
+    const std::string st = names::blankUsings(markers::strip(code));
     // 1.10 : une locale peut etre d'un type IHM du projet (structure).
     auto parts = splitDeclarations(st, function, [this](std::string_view type) {
         return project_ && types::knownTypeName(*project_, type);   // 1.12.20 : un rappel nomme aussi
@@ -2232,7 +2253,7 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
                            sim::Value& result, std::vector<std::pair<std::string, sim::Value>>* outputs) {
     // Lot 8 : une fonction ne voit pas les parametres de la vue qui l'appelle.
     AliasGuard aliasGuard(env_->aliases, nullptr);
-    const std::string source = "fonction " + f.name;
+    const std::string source = "fonction " + fullName(f);       // 1.13.0 (lot J8) : Util.Moyenne
     const sim::Type rt = typereg::simTypeOf(f.returnType);
     result = f.returnType.empty() ? sim::Value::boolean(true) : sim::Value::defaultOf(rt);
     // Une faute dans une fonction : l'appel echoue (l'instruction qui
@@ -2254,8 +2275,17 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
         return false;
     };
     if (depth_ >= kMaxDepth) return fail("appel circulaire (plus de " + std::to_string(kMaxDepth) + " niveaux)");
+    // 1.13.0 (lot J8) : une fonction d'une bibliotheque qui n'est pas chargee (introuvable, incompatible) : le projet
+    // garde son interface (pour verifier), pas son code - l'appel echoue en le disant.
+    if (const LoadedLibrary* lib = project_ ? project_->libraryOf(f.id) : nullptr; lib && lib->fromCache)
+        return fail("la biblioth\xC3\xA8que " + lib->name + " n'est pas charg\xC3\xA9" "e (" + lib->message + ") : " + fullName(f)
+                    + " n'a pas de code ici");
     std::string composed;                                            // 1.11.18 (lot 3) : ses declarations du modele
-    const Prepared& prep = prepare(decl::codeOf(f, composed), source, true);
+    const std::string& code = decl::codeOf(f, composed);
+    // 1.13.0 (lot J8) : une fonction d'un espace, ou qui importe des espaces (USING) : ses noms courts ecrits en
+    // entier avant le moteur (Borne -> Util.Borne). Sans espace : le code tel quel.
+    const bool spaced = project_ && (!f.ns.empty() || names::mentionsUsing(f.body));
+    const Prepared& prep = prepare(spaced ? names::qualify(*project_, code, f.ns, {f.name}, true) : code, source, true);
     if (!prep.program) return fail(prep.error);
     Env::Frame frame;
     // Les parametres : dans l'ordre (Moyenne(1, 2)) ou par leur nom (Moyenne(b := 2, a := 1)).
@@ -2384,7 +2414,10 @@ bool Runtime::runScriptHere(const Script& sc, const std::string& source, double 
     origin_.view = project_ ? project_->viewOfScript(sc.id) : kNoId;
     origin_.name = origin_.view != kNoId ? source : sc.name;
     std::string composed;                                            // 1.11.18 (lot 3) : ses declarations du modele
-    const bool ok = runStatements(decl::codeOf(sc, composed), source, now, why, sc.id);
+    const std::string& code = decl::codeOf(sc, composed);
+    // 1.13.0 (lot J8) : un script d'un espace, ou qui importe des espaces (USING) : ses noms courts en entier.
+    const bool spaced = project_ && (!sc.ns.empty() || names::mentionsUsing(sc.body));
+    const bool ok = runStatements(spaced ? names::qualify(*project_, code, sc.ns, {}, false) : code, source, now, why, sc.id);
     origin_ = callerOrigin;
     if (!ok) XPG_TRACE(Script, "erreur du script %s : %s", source.c_str(), why->empty() ? "(raison inconnue)" : why->c_str());
     auto& sp = perf_.scripts[sc.id];
@@ -2412,7 +2445,7 @@ bool Runtime::callScript(std::string_view name, double now, std::string* error) 
         return false;
     }
     AliasGuard guard(env_->aliases, nullptr);
-    return runScript(*sc, "script " + sc->name, now, error);
+    return runScript(*sc, "script " + fullName(*sc), now, error);   // 1.13.0 (lot J8) : Gaz.Horloge
 }
 
 // ---- 1.12.7 : LES VALEURS CALCULEES AU DEMARRAGE (HmiCalc.hpp) ----------------------------

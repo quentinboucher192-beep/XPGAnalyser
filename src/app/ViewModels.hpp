@@ -352,6 +352,10 @@ namespace app {
             NativesConvSource, NativesConversion, NativesTypes, NativesType, NativesOperators, NativesOperator,
             NativesInstructions, NativesInstruction, NativesEnums, NativesEnum, NativesEnumValue,
             NativesTypeShelf, NativesEnumShelf, NativesIndex, NativesIndexEntry,
+            // 1.13.0 (lot J8) : Programmation generale > Bibliotheques (le 8e dossier, seulement quand le projet
+            // emploie des espaces de noms ou relie une bibliotheque) : HmiLibraryNode, index = rang du lien.
+            // A LA FIN, toujours.
+            HmiLibrariesFolder, HmiLibraryNode,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).

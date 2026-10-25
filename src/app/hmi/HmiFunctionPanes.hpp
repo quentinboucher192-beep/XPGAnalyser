@@ -63,6 +63,8 @@ public:
     bool setFunctionVisibility(hmi::Id function, bool pub);   // 1.12.16 : une fonction de vue, publique ou privee
     bool setVirtual(hmi::Id, bool on);
     bool setGenerics(hmi::Id, const std::string& text);   // 1.13.0 : TEMPLATE <T> ; ses emplois suivent
+    // 1.13.0 (lot J8) : l'espace de noms d'une fonction IHM du projet ("" ou "(racine)" : la racine) - ses surcharges suivent.
+    bool setNamespace(hmi::Id, const std::string& ns, std::string* why = nullptr);
 
     void refresh();
     [[nodiscard]] hmi::Id selectedFunction() const;
