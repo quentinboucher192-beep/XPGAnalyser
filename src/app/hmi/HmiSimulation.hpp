@@ -50,6 +50,7 @@ namespace sim { class Runtime; class Environment; }
 namespace app {
 
 class EquipmentHost;
+class HmiDebugPane;    // 1.13.0 (lot J2) : Simulation > Debogage
 class HmiTwinValues;
 class HmiSimVarTree;   // 1.11.5 : les variables IHM et API en arbre
 class TwinValuesController;
@@ -166,6 +167,10 @@ struct HmiSimulationHost {
     //  vue et l'objet du projet dans l'editeur. Nuls : pas d'entree.
     std::function<bool(const std::string& path, std::string* why)> follow;
     std::function<void(hmi::Id view, hmi::Id object)>               goToObject;
+    // ---- 1.13.0 (lot J2) : LE DEBOGUEUR DES SCRIPTS IHM ----
+    //  goToCode : le script (ou la fonction) dans son editeur, le curseur a la ligne (1 = la premiere) -
+    //  le double clic sur un point d'arret, sur un niveau de la pile. Nul : pas de lien.
+    std::function<void(hmi::Id script, hmi::Id function, int line)> goToCode;
 };
 
 // Une vue a dessiner : evaluee, avec l'etat de sa transition.
@@ -575,7 +580,12 @@ public:
     // 1.11.5 : Variables API apres Variables IHM (les deux en arbre, avec la recherche et le forcage).
     // 1.11.24 : plus d'onglets Journal, Alarmes ni Recettes (la Console du panneau du bas les dit).
     // 1.12.27 : Pourquoi ? avant Popups (le dernier).
-    enum Tab : std::size_t { TabValues = 0, TabVariables = 1, TabApiVariables = 2, TabPerf = 3, TabTwins = 4, TabWhy = 5 };
+    // 1.13.0 (lot J2) : Debogage apres Pourquoi ? (Popups reste le dernier).
+    enum Tab : std::size_t { TabValues = 0, TabVariables = 1, TabApiVariables = 2, TabPerf = 3, TabTwins = 4, TabWhy = 5, TabDebug = 6 };
+    // 1.13.0 (lot J2) : LE DEBOGUEUR DES SCRIPTS IHM - le sous-onglet Debogage (HmiDebugPane), les points d'arret de
+    // la seance (HmiDebugSession) donnes au moteur, ce qu'il en dit rapporte a chaque image.
+    [[nodiscard]] HmiDebugPane& debugPane() noexcept { return *debugPane_; }
+    void debugSync();
     // 1.12.27 : « POURQUOI ? » - l'onglet qui dit ce que montre un objet de la vue en marche et
     // pourquoi : chaque propriete calculee, sa formule, la valeur de chaque terme, l'etat retenu
     // (« allume : #2ECC71 », « etat 3 sur 3 : 2 = Defaut »). Le clic droit sur l'objet > Pourquoi ?
@@ -919,6 +929,9 @@ private:
     bool                             whyGone_{false};
     ui::TableView*                   whyTable_{nullptr};
     ui::Widget*                      whyPage_{nullptr};
+    HmiDebugPane*                    debugPane_{nullptr};          // 1.13.0 (lot J2)
+    std::uint64_t                    debugPushed_{0};              // la revision des points donnee au moteur
+    std::uint64_t                    debugSeen_{~std::uint64_t{0}};  // ... et celle du moteur deja rapportee
     std::shared_ptr<ui::ITableModel> whyModel_;
     core::ConnectionScope links_;
 };

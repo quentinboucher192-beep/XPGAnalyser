@@ -508,6 +508,11 @@ public:
     // 1.12.19 : TEMPLATE <T : ANY_NUM, U> FUNCTION ... - ses types generiques et leur contrainte ("" : aucune) ;
     // T est deduit des arguments a l'appel (ou donne : Limiter<INT>(...)).
     std::vector<std::pair<std::string, std::string>> typeParams;
+    // 1.13.0 (le debogueur IHM) : lue seule (parseFunction : une fonction IHM du projet, un operateur, une
+    // methode) - ses lignes sont celles de son texte, pas du script qui l'appelle ; ses lignes marquees d'un
+    // point d'arret (setBreakLines ; vide : aucune).
+    bool                                standalone{false};
+    mutable std::vector<std::uint8_t>   breakLines;
 };
 
 class Program {
@@ -759,6 +764,14 @@ private:
                 s->value = *next;
             }
         } else {
+            // 1.13.0 (dialecte IHM, le debogueur) : IHM_POINT_ARRET; seul, sans parentheses - un appel sans argument.
+            if (dialect_ && (*lhs)->kind == Expr::Kind::Reference && upperOf((*lhs)->name) == "IHM_POINT_ARRET") {
+                auto call = std::make_shared<Expr>();
+                call->kind = Expr::Kind::Call;
+                call->lhs = *lhs;
+                call->line = (*lhs)->line;
+                *lhs = call;
+            }
             if ((*lhs)->kind != Expr::Kind::Call)
                 return error("expected ':=' or a call");
             s->kind  = Stmt::Kind::Call;
@@ -2414,9 +2427,20 @@ const std::vector<std::uint8_t>& noBreakLines() {
 // (readCallerLocal). Un par fil ; un appel en fait d'autres : chacun remet le precedent.
 class Runner;
 thread_local Runner* t_caller = nullptr;
+// 1.13.0 (le debogueur IHM) : les executions qui attendent un appel de l'environnement sur ce fil, de
+// la plus ancienne a la plus recente - la pile d'un point d'arret atteint dans une fonction IHM simple
+// (elle tourne dans sa propre execution, appelee par le script).
+thread_local std::vector<Runner*> t_chain;
+struct ChainScope {
+    explicit ChainScope(Runner* r) { t_chain.push_back(r); }
+    ~ChainScope() { t_chain.pop_back(); }
+    ChainScope(const ChainScope&) = delete;
+    ChainScope& operator=(const ChainScope&) = delete;
+};
 struct CallerScope {
-    Runner* outer;
-    explicit CallerScope(Runner* r) noexcept : outer(t_caller) { t_caller = r; }
+    Runner*    outer;
+    ChainScope chain;
+    explicit CallerScope(Runner* r) : outer(t_caller), chain(r) { t_caller = r; }
     ~CallerScope() { t_caller = outer; }
     CallerScope(const CallerScope&) = delete;
     CallerScope& operator=(const CallerScope&) = delete;
@@ -2523,6 +2547,25 @@ public:
             }
             if (name.empty()) continue;
             if (std::any_of(out.begin(), out.end(), [&](const auto& kv) { return kv.first == name; })) continue;
+            // 1.13.0 (le debogueur IHM) : dans le dialecte, une locale (P, Fours[f].T) se lit dans ses cadres.
+            if (dialect_ && expr && needsLocate(*expr)) {
+                auto r = rich(*expr);
+                std::string shown;
+                if (r && !r->o) shown = r->v.display();
+                else if (r && r->o) {
+                    if (!literalText(*r->o, shown)) shown.clear();
+                }
+                out.emplace_back(name, shown);
+                continue;
+            }
+            if (dialect_ && !expr)
+                if (const Place* p = findLocal(name); p && p->obj) {
+                    std::string shown;
+                    if (p->obj->type && p->obj->type->kind == TypeDesc::Kind::Scalar) shown = p->obj->value.display();
+                    else if (!literalText(*p->obj, shown)) shown.clear();
+                    out.emplace_back(name, shown);
+                    continue;
+                }
             Value v;
             out.emplace_back(name, env_.read(name, v) ? v.display() : std::string{});
         }
@@ -2559,17 +2602,56 @@ private:
     }
 
     // Lot API 8 : une ligne marquee d'un point d'arret est atteinte.
-    void reachLine(std::uint32_t line) {
+    // 1.13.0 : ou le pas a pas (RunLimits::stepAll), ou IHM_POINT_ARRET (`code` : Environment::debugBreak).
+    void reachLine(std::uint32_t line, bool code = false) {
         class Probe final : public LineProbe {
         public:
             Probe(Runner& runner, std::uint32_t at) : runner_(runner), at_(at) {}
             std::vector<std::pair<std::string, std::string>> lineValues() override { return runner_.valuesOnLine(at_); }
+            std::vector<Frame> frames() override { return runner_.framesNow(at_); }
+            core::Result<Value> evaluate(const Expression& e) override { return runner_.evaluateHere(e); }
+            void stop() override { runner_.aborted_ = true; }
         private:
             Runner&       runner_;
             std::uint32_t at_;
         } probe(*this, line);
-        env_.breakpointReached(program_ ? program_->tag : 0, line, probe);
+        if (code) env_.debugBreak(program_ ? program_->tag : 0, line, probe);
+        else env_.breakpointReached(program_ ? program_->tag : 0, line, probe);
     }
+
+public:
+    // ---- 1.13.0 : le debogueur des scripts IHM ----
+    // Les cadres de cette execution, du corps a la ligne `at` (le dernier cadre) ; une execution qui
+    // attend un appel (callerFrames) : `at` 0, le dernier cadre a la ligne de l'appel.
+    std::vector<LineProbe::Frame> framesNow(std::uint32_t at) {
+        std::vector<LineProbe::Frame> out;
+        const bool was = probing_;
+        probing_ = true;
+        for (std::size_t k = 0; k < frames_.size(); ++k) {
+            const Frame& f = frames_[k];
+            LineProbe::Frame x;
+            x.tag = program_ ? program_->tag : 0;
+            if (f.fn) {
+                x.function = f.fn->name;
+                x.code = f.fn;
+                x.standalone = f.fn->standalone;
+            } else {
+                x.code = program_;
+            }
+            // Sa ligne : celle de l'appel du cadre suivant ; le dernier, la ligne atteinte (ou en cours).
+            x.line = k + 1 < frames_.size() ? frames_[k + 1].callLine : (at ? at : line_);
+            x.locals = localsOf(f);
+            out.push_back(std::move(x));
+        }
+        probing_ = was;
+        return out;
+    }
+    // La condition d'un point d'arret, dans la portee de la ligne : rien n'est ecrit ni dit.
+    core::Result<Value> evaluateHere(const Expression& e) {
+        if (!e.root) return core::fail(core::ErrorCode::InvalidArgument, "empty expression");
+        return evaluateQuietly(*e.root);
+    }
+private:
 
     [[nodiscard]] bool budgetExhausted(std::uint32_t line) {
         // 1.12.26 : un script detache rend la main (sa tranche de temps) ; arrete pendant ce temps : sans erreur.
@@ -2927,7 +3009,13 @@ private:
         // une fois par entree dans sa ligne - pas pour chaque instruction de
         // `a := 1; b := 2;`, ni pour le corps d'un IF ecrit sur la meme ligne.
         if (limits_.trace) limits_.trace->line = s.line;
-        if (!breaks_->empty() && s.line != context && s.line < breaks_->size() && (*breaks_)[s.line] != 0) reachLine(s.line);
+        line_ = s.line;                                     // 1.13.0 : la ligne en cours (la pile du debogueur)
+        if (s.line != context) {
+            // 1.13.0 : le pas a pas du debogueur IHM - chaque ligne nouvelle, marquee ou non.
+            if (limits_.stepAll && *limits_.stepAll) reachLine(s.line);
+            else if (!breaks_->empty() && s.line < breaks_->size() && (*breaks_)[s.line] != 0) reachLine(s.line);
+            if (aborted_) return {Flow::Kind::Aborted};     // 1.13.0 : arrete pendant la pause (LineProbe::stop)
+        }
 
         switch (s.kind) {
             case Stmt::Kind::Assign: {
@@ -3096,6 +3184,7 @@ private:
         obj->items[1]->value = Value::text(errorMessage(c));
         obj->items[2]->value = Value::integer(Type::DInt, static_cast<std::int64_t>(c.line));
         frames_.back().scopes.back().names[upperOf(name)] = Place{obj, {}, /*constant*/true, false};
+        frames_.back().scopes.back().spelled[upperOf(name)] = name;            // 1.13.0 : le debogueur
     }
 
     // 1.12.1 : TRY ... CATCH [Erreur] ... END_TRY. Le corps s'execute ; une erreur (fail) y
@@ -3311,12 +3400,14 @@ public:
 private:
     struct Scope {
         std::map<std::string, Place, std::less<>> names;      // en majuscules
+        std::map<std::string, std::string>         spelled;    // 1.13.0 : le nom tel qu'ecrit (FOR EACH k, v ; CATCH e)
     };
     struct Frame {
         const Function*    fn{nullptr};
         std::vector<Scope> scopes;          // [0] : parametres et locales ; puis les FOR EACH
         bool               seesScript{true};
         ObjRef             result;          // la valeur rendue
+        std::uint32_t      callLine{0};     // 1.13.0 : la ligne de l'appel, dans le cadre d'en dessous
     };
     // Un argument prepare : sa valeur, ou l'emplacement qu'il designe.
     struct Bound {
@@ -3324,6 +3415,100 @@ private:
         Place place;
         bool  isPlace{false};
     };
+    // ---- 1.13.0 : le debogueur des scripts IHM - les locales d'un cadre, montrees ----
+    // Le nom d'une locale tel que declare (les cles sont en majuscules).
+    std::string spelling(const Frame& f, const std::string& key) const {
+        const auto from = [&](const std::vector<VarDecl>& decls) -> const std::string* {
+            for (const auto& d : decls)
+                if (upperOf(d.name) == key) return &d.name;
+            return nullptr;
+        };
+        if (f.fn) {
+            if (const auto* n = from(f.fn->params)) return *n;
+            if (const auto* n = from(f.fn->locals)) return *n;
+            if (upperOf(f.fn->name) == key) return f.fn->name;
+        } else if (program_) {
+            if (const auto* n = from(program_->locals)) return *n;
+        }
+        for (const auto& s : f.scopes)
+            if (const auto it = s.spelled.find(key); it != s.spelled.end()) return it->second;
+        return key;
+    }
+    // Une valeur montree : ses cases sur `depth` niveaux, au plus kMaxCells chacune.
+    LineProbe::Local describe(std::string name, const ObjRef& obj, int depth) {
+        constexpr std::size_t kMaxCells = 64;
+        constexpr std::size_t kMaxText = 160;
+        LineProbe::Local l;
+        l.name = std::move(name);
+        if (!obj) return l;
+        l.type = obj->type ? obj->type->text() : std::string{};
+        const TypeDesc* t = obj->type.get();
+        if (!t || t->kind == TypeDesc::Kind::Scalar) {
+            l.value = obj->value.type() == Type::String ? "'" + obj->value.asString() + "'" : obj->value.display();
+            return l;
+        }
+        std::string text;
+        if (!literalText(*obj, text)) text = display(*obj);
+        if (text.size() > kMaxText) text = text.substr(0, kMaxText) + "\xE2\x80\xA6";
+        l.value = std::move(text);
+        if (depth <= 0) return l;
+        const auto add = [&](std::string n, const ObjRef& o) {
+            if (l.children.size() < kMaxCells) l.children.push_back(describe(std::move(n), o, depth - 1));
+        };
+        switch (t->kind) {
+            case TypeDesc::Kind::Struct:
+            case TypeDesc::Kind::Tuple:
+                for (std::size_t k = 0; k < t->members.size() && k < obj->items.size(); ++k) add(t->members[k].first, obj->items[k]);
+                break;
+            case TypeDesc::Kind::Array: {
+                const std::int64_t low = t->bounds.empty() ? 0 : t->bounds.front().first;
+                const bool flat = t->bounds.size() <= 1;
+                for (std::size_t k = 0; k < obj->items.size(); ++k)
+                    add(flat ? "[" + std::to_string(low + static_cast<std::int64_t>(k)) + "]" : "[#" + std::to_string(k) + "]", obj->items[k]);
+                break;
+            }
+            case TypeDesc::Kind::List:
+                for (std::size_t k = 0; k < obj->items.size(); ++k) add("[" + std::to_string(k) + "]", obj->items[k]);
+                break;
+            case TypeDesc::Kind::Map:
+                for (const auto& [key, o] : obj->textKeys) add("['" + key + "']", o);
+                for (const auto& [key, o] : obj->intKeys) add("[" + std::to_string(key) + "]", o);
+                break;
+            case TypeDesc::Kind::Any:
+                if (!obj->items.empty()) {
+                    auto inner = describe(l.name, obj->items.front(), depth);
+                    l.children = std::move(inner.children);
+                }
+                break;
+            default:
+                break;
+        }
+        return l;
+    }
+    std::vector<LineProbe::Local> localsOf(const Frame& f) {
+        std::vector<LineProbe::Local> out;
+        std::set<std::string> seen;
+        for (const auto& s : f.scopes)
+            for (const auto& [key, place] : s.names) {
+                if (!seen.insert(key).second) continue;
+                std::string shown = spelling(f, key);
+                LineProbe::Local l;
+                if (place.obj) {
+                    l = describe(std::move(shown), place.obj, 3);
+                } else {
+                    l.name = std::move(shown);
+                    Value v;
+                    if (!place.name.empty() && env_.read(place.name, v)) l.value = v.type() == Type::String ? "'" + v.asString() + "'" : v.display();
+                    l.type = place.name.empty() ? std::string{} : env_.declaredType(place.name);
+                    if (!place.name.empty() && upperOf(place.name) != key) l.type += (l.type.empty() ? "" : " ") + std::string("\xE2\x86\x92 ") + place.name;
+                }
+                if (f.fn)
+                    for (const auto& p : f.fn->params)
+                        if (upperOf(p.name) == key) l.parameter = true;
+                out.push_back(std::move(l));
+            }
+        return out;
+    }
 
     core::Err<core::Error> dialectError(std::string message) const {
         return core::fail(core::ErrorCode::InvalidArgument, std::move(message));
@@ -4985,7 +5170,12 @@ private:
             values.emplace_back(std::string{}, a.v);
         }
         Value result;
-        if (!env_.call(key, key, values, result)) return dialectError("l'appel de " + cb.callee + " a \xC3\xA9" "chou\xC3\xA9");
+        bool called = false;
+        {
+            const ChainScope chain(this);                       // 1.13.0 : la pile du debogueur IHM
+            called = env_.call(key, key, values, result);
+        }
+        if (!called) return dialectError("l'appel de " + cb.callee + " a \xC3\xA9" "chou\xC3\xA9");
         return RV{result, nullptr};
     }
 
@@ -5386,6 +5576,7 @@ private:
         Frame frame;
         frame.fn = &f;
         frame.seesScript = !isolated;
+        frame.callLine = line;                  // 1.13.0 : la pile du debogueur IHM
         frame.scopes.emplace_back();
         auto& names = frame.scopes.back().names;
         // 1.12.19 : une LAMBDA voit les locales copiees a sa creation (ses parametres passent devant).
@@ -5476,7 +5667,14 @@ private:
             calleeLabel_ = f.name;
         }
         Flow flow{};
+        // 1.13.0 (le debogueur IHM) : une fonction lue seule a ses lignes a elle - ses points d'arret, pas
+        // ceux du script qui l'appelle ; la ligne de l'appel revient apres.
+        const std::vector<std::uint8_t>* savedBreaks = breaks_;
+        const std::uint32_t savedAt = line_;
+        if (f.standalone) breaks_ = &f.breakLines;
         if (ok) flow = sequence(f.body, f.line);
+        breaks_ = savedBreaks;
+        line_ = savedAt;
         if (isolated) {
             env_.leaveFunction(f.name);
             calleeLabel_ = savedLabel;
@@ -5659,9 +5857,11 @@ private:
             if (two) {
                 scope.names[upperOf(s.loopVariable)] = std::move(key);
                 scope.names[upperOf(s.loopValue)] = std::move(value);
+                scope.spelled[upperOf(s.loopValue)] = s.loopValue;          // 1.13.0 : le debogueur les montre ainsi
             } else {
                 scope.names[upperOf(s.loopVariable)] = std::move(value);
             }
+            scope.spelled[upperOf(s.loopVariable)] = s.loopVariable;
             lastFlow_ = sequence(s.body, s.line);
             frames_.back().scopes.pop_back();
             if (lastFlow_.kind == Flow::Kind::Exit) return 1;
@@ -7084,6 +7284,7 @@ private:
         if (info->group == "unites") return std::optional<core::Result<RV>>(unitesNative(u, e));                     // 1.13.0 (lot J6)
         if (info->group == "attente")                                                                                // 1.12.26
             return std::optional<core::Result<RV>>(u == "WAIT_UNTIL" ? waitUntilNative(e) : waitNative(u, e));       // 1.13.0
+        if (info->group == "debogage") return std::optional<core::Result<RV>>(debugNative(e));                        // 1.13.0
         return std::optional<core::Result<RV>>(listNative(u, *info, e));
     }
 
@@ -8966,6 +9167,24 @@ private:
         }
     }
 
+    // ---- 1.13.0 : IHM_POINT_ARRET([condition]) - un point d'arret ecrit dans le code. Sans argument : il
+    // s'arrete a chaque passage ; avec un BOOL : seulement s'il est vrai. L'environnement decide (debugBreak) :
+    // la simulation de l'IHM s'y arrete, le poste et la page web n'en font rien. Rend la condition (TRUE seul).
+    core::Result<RV> debugNative(const Expr& e) {
+        bool stop = true;
+        if (!e.arguments.empty()) {
+            auto c = rich(*e.arguments[0].second);
+            if (!c) return c;
+            if (c->o || c->v.type() != Type::Bool)
+                return dialectError("IHM_POINT_ARRET : la condition doit \xC3\xAAtre un BOOL, pas "
+                                    + (c->o ? "un " + typeNameOf(*c) : std::string(toString(c->v.type()))));
+            stop = c->v.isTruthy();
+        }
+        if (stop && !probing_) reachLine(line_, /*code*/ true);
+        if (aborted_) return core::fail(core::ErrorCode::InvalidArgument, "arr\xC3\xAAt\xC3\xA9 pendant IHM_POINT_ARRET");
+        return RV{Value::boolean(stop), nullptr};
+    }
+
     // 1.13.0 : un WAIT_UNTIL dont le delai est depasse : FALSE quand sa valeur est employee,
     // sinon (seul en instruction) l'erreur E_ATTENTE (rattrapable par TRY).
     core::Result<RV> timedOut(bool ignored, std::int64_t delayMs, std::uint32_t line) {
@@ -9415,7 +9634,12 @@ private:
             return dialectError(u + " : " + name + " n'est pas une fonction du projet \xE2\x80\x94 OP : TRANSFORMATION#Carre\xE2\x80\xA6 ou le nom d'une fonction IHM du projet \xC3\xA0 un param\xC3\xA8tre");
         if (x.o) return dialectError(u + " : " + name + " prend une valeur simple, pas un " + typeNameOf(x));
         Value result;
-        if (!env_.call(key, key, {{std::string{}, x.v}}, result)) return dialectError(u + " : l'appel de " + name + " a \xC3\xA9" "chou\xC3\xA9");
+        bool called = false;
+        {
+            const ChainScope chain(this);                       // 1.13.0 : la pile du debogueur IHM
+            called = env_.call(key, key, {{std::string{}, x.v}}, result);
+        }
+        if (!called) return dialectError(u + " : l'appel de " + name + " a \xC3\xA9" "chou\xC3\xA9");
         return RV{result, nullptr};
     }
 
@@ -9476,6 +9700,7 @@ private:
     // lecture au passage (probing_) ne dit rien et n'ecrit rien.
     const Program*                   program_{nullptr};
     const std::vector<std::uint8_t>* breaks_{&noBreakLines()};
+    std::uint32_t                    line_{0};        // 1.13.0 : la ligne de l'instruction en cours
     bool                             probing_{false};
     int                              quiet_{0};       // 1.12.1 : a ?? b, le cote a en cours
     // 1.12.1 : TRY ... CATCH - la profondeur, l'erreur gardee (la premiere).
@@ -9528,6 +9753,7 @@ core::Result<std::shared_ptr<const Function>> parseFunction(std::string_view tex
     Parser parser(std::move(*tokens), std::move(name), true);
     auto f = parser.soleFunction();
     if (!f) return core::Err<core::Error>(f.error());
+    (*f)->standalone = true;                    // 1.13.0 : ses lignes sont les siennes (le debogueur IHM)
     return std::shared_ptr<const Function>(*f);
 }
 
@@ -9655,6 +9881,68 @@ void setBreakLines(Program& program, const std::vector<std::uint32_t>& lines) {
     }
     program.breakLines.assign(static_cast<std::size_t>(*std::max_element(lines.begin(), lines.end())) + 1, 0);
     for (const auto l : lines) program.breakLines[l] = 1;
+}
+
+// ---- 1.13.0 : le debogueur des scripts IHM ----
+core::Result<Value> LineProbe::evaluate(const Expression& expression) {
+    (void)expression;
+    return core::fail(core::ErrorCode::NotImplemented, "pas de condition ici");
+}
+
+namespace {
+void functionLinesOf(const Function& f, std::vector<std::uint32_t>& out) { statementLinesOf(f.body, out); }
+void sortedUnique(std::vector<std::uint32_t>& v) {
+    std::sort(v.begin(), v.end());
+    v.erase(std::unique(v.begin(), v.end()), v.end());
+}
+} // namespace
+
+std::vector<std::uint32_t> codeStatementLines(const Program& program) {
+    std::vector<std::uint32_t> out;
+    statementLinesOf(program.body, out);
+    for (const auto& f : program.functions)
+        if (f) functionLinesOf(*f, out);
+    sortedUnique(out);
+    return out;
+}
+
+std::vector<std::uint32_t> statementLines(const Function& f) {
+    std::vector<std::uint32_t> out;
+    functionLinesOf(f, out);
+    sortedUnique(out);
+    return out;
+}
+
+void setBreakLines(const Function& f, const std::vector<std::uint32_t>& lines) {
+    f.breakLines.clear();
+    if (lines.empty()) {
+        f.breakLines.shrink_to_fit();
+        return;
+    }
+    f.breakLines.assign(static_cast<std::size_t>(*std::max_element(lines.begin(), lines.end())) + 1, 0);
+    for (const auto l : lines) f.breakLines[l] = 1;
+}
+
+std::vector<LineProbe::Frame> callerFrames() {
+    std::vector<LineProbe::Frame> out;
+    for (Runner* r : t_chain) {
+        if (!r) continue;
+        auto frames = r->framesNow(0);
+        for (auto& f : frames) out.push_back(std::move(f));
+    }
+    return out;
+}
+
+core::Result<std::shared_ptr<const Expression>> parseExpression(std::string_view source, const ParseOptions& options) {
+    Lexer lexer(source, "condition", options.hmiDialect);
+    auto tokens = lexer.run();
+    if (!tokens) return core::Err<core::Error>(tokens.error());
+    Parser parser(std::move(*tokens), "condition", options.hmiDialect);
+    auto root = parser.soleExpression();
+    if (!root) return core::Err<core::Error>(root.error());
+    auto out = std::make_shared<Expression>();
+    out->root = *root;
+    return std::shared_ptr<const Expression>(std::move(out));
 }
 
 core::Result<std::shared_ptr<const Expression>> parseExpression(std::string_view source) {

@@ -3443,7 +3443,7 @@ void simulation_supervision() {
     {
         std::string titles;
         for (std::size_t i = 0; i < pane.tabs().tabCount(); ++i) titles += (titles.empty() ? "" : " | ") + pane.tabs().tab(i)->title;
-        check(titles == "Expressions | Variables IHM | Variables API | Performances | Esclaves simul\xC3\xA9s | Pourquoi ? | Popups",   // 1.12.27
+        check(titles == "Expressions | Variables IHM | Variables API | Performances | Esclaves simul\xC3\xA9s | Pourquoi ? | D\xC3\xA9" "bogage | Popups",   // 1.12.27 ; 1.13.0 (lot J2) : Debogage
               "1.11.24 : les onglets de la simulation, sans Journal, Alarmes ni Recettes : " + titles);
     }
     // Deconnexion : 1.10.3 - le bouton a quitte la barre ; le clic droit sur la barre
@@ -3950,7 +3950,7 @@ void apercuDisposition1124() {
         check(titles(bas) == "Sorties,Console*+,Diagnostics", "en simulation : la Console, devant, li\xC3\xA9r\xC3\xA9" "e (" + titles(bas) + ")");
         check(cote && centre && cote->x > centre->x && titles(cote) == "Simulation \xC2\xB7 IHM*+" && dp::sketchBox(sim, "sim"),
               "la simulation c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, avec son panneau de droite (" + titles(cote) + ")");
-        check(titles(dp::sketchBox(sim, "sim")) == "Expressions,Variables IHM*,Performances+,Esclaves simul\xC3\xA9s,Pourquoi ?,Popups",
+        check(titles(dp::sketchBox(sim, "sim")) == "Expressions,Variables IHM*,Performances+,Esclaves simul\xC3\xA9s,Pourquoi ?,D\xC3\xA9" "bogage,Popups",
               "... ses onglets : Variables IHM devant, Performances seulement en simulation (" + titles(dp::sketchBox(sim, "sim")) + ")");
     }
     {
@@ -18716,7 +18716,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 431,   // 1.13.0 : + 3 (page web retiree ; lot J6 : les unites ; lot J8 : espaces et bibliotheques) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 432,   // 1.13.0 : + 4 (page web retiree ; lot J6 : les unites ; lot J8 : espaces et bibliotheques ; lot J2 : le debogueur des scripts IHM) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18862,7 +18862,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 229, "centre : L'IHM a les 229 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces)");
+    check(ix.count(hc::Chapter::Hmi) == 230, "centre : L'IHM a les 230 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 65, "centre : 11 expressions, 65 notes (1.13.0)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).

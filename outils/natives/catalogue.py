@@ -1458,6 +1458,19 @@ fn(name="WAIT_UNTIL", cat="script",
    inc="None", incpp="None", expr=False,
    notes=["Dans un script non détaché, l'IHM est figée : la condition ne changera pas - coche Détaché (l'attente est plafonnée à 10 s, comme WAIT).",
           "Un délai dépassé lève E_ATTENTE quand WAIT_UNTIL est seul (une instruction) ; dans un IF ou une affectation, il rend FALSE sans erreur. Sans délai, il attend indéfiniment (IHM_SCRIPT_ARRETER l'arrête)."])
+# 1.13.0 (lot J2) : le debogueur des scripts IHM. IHM_POINT_ARRET est une native du dialecte (groupe debogage du
+#  moteur) ; sa fiche a ete ajoutee a la main dans HmiNativesData.cpp (comme WAIT), reportee ici pour la reconciliation.
+fn(name="IHM_POINT_ARRET", cat="script",
+   params=[("CONDITION", "BOOL", "s'arrêter seulement si elle est vraie ; sans : à chaque passage", True)],
+   ret="BOOL",
+   short="Un point d'arrêt écrit dans le code : en simulation, le script s'arrête ici et le volet Débogage montre la pile, les locales et les valeurs de la ligne ; avec un BOOL, seulement s'il est vrai. Hors simulation (le poste d'exploitation), il ne fait rien.",
+   st="IHM_POINT_ARRET(Fours[f].Temperature > 900.0);   (* s'arrête au 1er four trop chaud *)",
+   c="IHM_POINT_ARRET(Fours[f].Temperature > 900.0);   /* sans effet à la cible */",
+   cpp="IHM_POINT_ARRET(Fours[f].Temperature > 900.0);   // sans effet à la cible",
+   inc="Same", incpp="Same", expr=False, essai=("BOOL", "IHM_POINT_ARRET(FALSE)", "FALSE", "VAR x : INT; END_VAR"),
+   notes=["Sans argument, il s'arrête à chaque passage : pratique dans une boucle ou dans un script détaché.",
+          "Dans une expression (fx), il est refusé, comme WAIT : une expression calcule sa valeur tout de suite.",
+          "Un point posé dans la marge de l'éditeur (un clic à gauche des numéros de ligne) fait la même chose sans changer le code."])
 
 # ------------------------------------------------------------------ 1.13.0 (lot J3) : JSON --
 #  Le type ANY porte une valeur JSON / dynamique. Lis le texte avec FILE_READ / RESOURCE_READ, puis JSON_LIRE.

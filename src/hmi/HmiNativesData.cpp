@@ -1016,6 +1016,13 @@ const std::vector<Function>& functions() {
          "/* une boucle : tester la condition, WAIT, recommencer */",
          "while (!(Niveau_Cuve >= Consigne)) WAIT(T#20ms);   // WAIT_UNTIL demande un script d\xC3\xA9tach\xC3\xA9",
          Avail::None, Avail::None, false, false, {"BOOL", "WAIT_UNTIL(TRUE, T#5ms)", "TRUE", "VAR x : INT; END_VAR"}, {"Dans un script non d\xC3\xA9tach\xC3\xA9, l'IHM est fig\xC3\xA9" "e : la condition ne changera pas - coche D\xC3\xA9tach\xC3\xA9 (l'attente est plafonn\xC3\xA9" "e \xC3\xA0 10 s, comme WAIT).", "Un d\xC3\xA9lai d\xC3\xA9pass\xC3\xA9 l\xC3\xA8ve E_ATTENTE quand WAIT_UNTIL est seul (une instruction) ; dans un IF ou une affectation, il rend FALSE sans erreur. Sans d\xC3\xA9lai, il attend ind\xC3\xA9" "finiment (IHM_SCRIPT_ARRETER l'arr\xC3\xAAte)."}},
+        // ---- 1.13.0 (lot J2) : le debogueur des scripts IHM - un point d'arret ecrit dans le code
+        {"IHM_POINT_ARRET", "script", {{"CONDITION", "BOOL", "s'arr\xC3\xAAter seulement si elle est vraie ; sans : \xC3\xA0 chaque passage", true}}, "BOOL",
+         "Un point d'arr\xC3\xAAt \xC3\xA9" "crit dans le code : en simulation, le script s'arr\xC3\xAAte ici et le volet D\xC3\xA9" "bogage montre la pile, les locales et les valeurs de la ligne ; avec un BOOL, seulement s'il est vrai. Hors simulation (le poste d'exploitation), il ne fait rien.",
+         "IHM_POINT_ARRET(Fours[f].Temperature > 900.0);   (* s'arr\xC3\xAAte au 1er four trop chaud *)",
+         "IHM_POINT_ARRET(Fours[f].Temperature > 900.0);   /* sans effet \xC3\xA0 la cible */",
+         "IHM_POINT_ARRET(Fours[f].Temperature > 900.0);   // sans effet \xC3\xA0 la cible",
+         Avail::Same, Avail::Same, false, false, {"BOOL", "IHM_POINT_ARRET(FALSE)", "FALSE", "VAR x : INT; END_VAR"}, {"Sans argument, il s'arr\xC3\xAAte \xC3\xA0 chaque passage : pratique dans une boucle ou dans un script d\xC3\xA9tach\xC3\xA9.", "Dans une expression (fx), il est refus\xC3\xA9, comme WAIT : une expression calcule sa valeur tout de suite.", "Un point pos\xC3\xA9 dans la marge de l'\xC3\xA9" "diteur (un clic \xC3\xA0 gauche des num\xC3\xA9ros de ligne) fait la m\xC3\xAAme chose sans changer le code."}},
         {"IHM_SCRIPT_ACTIF", "script", {{"SCRIPT", "STRING", "un script g\xC3\xA9n\xC3\xA9ral d\xC3\xA9tach\xC3\xA9", false}}, "BOOL", "Vrai si ce script d\xC3\xA9tach\xC3\xA9 tourne (il calcule, ou il attend dans un WAIT).",
          "Occupe := IHM_SCRIPT_ACTIF('Sequence_Remplissage');",
          "occupe = IHM_SCRIPT_ACTIF(\"Sequence_Remplissage\");",

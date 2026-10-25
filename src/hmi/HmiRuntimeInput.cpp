@@ -99,6 +99,7 @@ Id Runtime::keyOwner(const keys::Chord& c) const {
 }
 
 bool Runtime::keyDown(const keys::Chord& chord, double now, bool repeat, bool typing) {
+    if (paused_) return false;                   // 1.13.0 : en pause (le debogueur), l'IHM est figee
     composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     keyModifiers(chord.ctrl, chord.shift, chord.alt);

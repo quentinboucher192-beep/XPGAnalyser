@@ -629,7 +629,10 @@ public:
         return TextTemplate::compile(std::string(text)).render(*this);
     }
     // 1.13.0 : WAIT_UNTIL - le script tourne-t-il detache (une tache) ? son heure (now_) pour le delai.
-    bool   detachedTask() override { return rt_.currentTask_ != nullptr; }
+    bool   detachedTask() override { return rt_.currentTask_ != nullptr && rt_.taskIsDetached(rt_.currentTask_); }
+    // 1.13.0 : le debogueur des scripts IHM - un point d'arret atteint, IHM_POINT_ARRET.
+    void breakpointReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe& probe) override { rt_.debugReached(tag, line, probe, false); }
+    void debugBreak(std::uint32_t tag, std::uint32_t line, sim::LineProbe& probe) override { rt_.debugReached(tag, line, probe, true); }
     double scriptNow() override { return rt_.now_; }
 
     // ---- 1.10 : le dialecte IHM ----
@@ -810,10 +813,14 @@ public:
         const std::string text = (!f->ns.empty() || names::mentionsUsing(f->body)) && rt_.project_
                                      ? names::qualify(*rt_.project_, functionText(*f), f->ns, {f->name}, true)
                                      : functionText(*f);
-        if (const auto it = richFunctions_.find(text); it != richFunctions_.end()) return it->second;
+        if (const auto it = richFunctions_.find(text); it != richFunctions_.end()) {
+            if (it->second) rt_.markRichFunction(*it->second, f->id);      // 1.13.0 : ses points d'arret
+            return it->second;
+        }
         std::shared_ptr<const sim::Function> fn;
         if (auto parsed = sim::parseFunction(text, "fonction " + f->name); parsed && !sim::functionIsSimple(**parsed)) fn = *parsed;
         richFunctions_[text] = fn;
+        if (fn) rt_.markRichFunction(*fn, f->id);
         return fn;
     }
     // ---- 1.11.20 : les surcharges (la regle de hmi::overload, celle du controle) ----
@@ -1214,6 +1221,7 @@ struct Runtime::ExecState {
     std::vector<const Scope*>    savedAliases;
     int                          callerLocals{0};
     std::vector<sim::Diagnostic> diagnostics;
+    std::vector<DebugExec>       debugExec;       // 1.13.0 : les executions en cours (le debogueur)
 };
 
 struct Runtime::TaskState {
@@ -1228,6 +1236,12 @@ struct Runtime::TaskState {
     std::int64_t                sliceStart{0};        // steady_clock (ns) : le debut de sa tranche
     ExecState                   state;                // son contexte, quand il n'a pas la main
     std::unique_ptr<ScriptTask> task;
+    // 1.13.0 (le debogueur) : un script NON detache peut tourner dans une tache (il peut s'arreter au milieu) ;
+    // il garde alors le contexte de qui l'a lance (la vue, le geste, le cycle) et ses limites d'avant.
+    bool                         detached{true};
+    std::string                  context;             // ce qui l'a lance : "cycle IHM", "Clic sur Vue_A.Btn" (la pile)
+    std::string                  why;                 // sa faute (un script non detache fini d'un trait)
+    std::shared_ptr<const Scope> keepScope;           // les parametres de la vue, gardes en vie pendant la pause
 };
 
 void Runtime::exchange(ExecState& s) {
@@ -1249,6 +1263,7 @@ void Runtime::exchange(ExecState& s) {
     std::swap(env_->savedAliases_, s.savedAliases);
     std::swap(env_->callerLocals, s.callerLocals);
     std::swap(env_->diagnostics, s.diagnostics);
+    std::swap(debugExec_, s.debugExec);              // 1.13.0
 }
 
 namespace {
@@ -1328,6 +1343,19 @@ void Runtime::finishTasks() {
             ++it;
             continue;
         }
+        // 1.13.0 (le debogueur) : le pas en cours finit avec son script ; un script non detache (une tache de
+        // debogage) finit sans rien dire, comme avant.
+        if (step_ && step_->task == &t) {
+            step_.reset();
+            stepAll_ = pauseAsked_;
+            ++debugRev_;
+            logAt(LogLevel::Info, "D\xC3\xA9" "bogage", t.source, t.name + " est fini : l'IHM continue");
+        }
+        if (paused_ == &t) clearDebugState();
+        if (!t.detached) {
+            it = tasks_.erase(it);
+            continue;
+        }
         const std::string took = secondsText(std::max(0.0, now_ - t.startedAt));
         if (t.stopAsked) logAt(LogLevel::Warning, "Script", t.source, t.name + " : arr\xC3\xAAt\xC3\xA9 (IHM_SCRIPT_ARRETER) apr\xC3\xA8s " + took);
         else if (t.ok) logAt(LogLevel::Info, "Script", t.source, t.name + " : termin\xC3\xA9 (d\xC3\xA9tach\xC3\xA9, " + took + ")");
@@ -1348,7 +1376,7 @@ void Runtime::stopTasks() {
 
 bool Runtime::taskSlice() {
     TaskState* t = currentTask_;
-    if (!t) return true;
+    if (!t || !t->detached) return true;
     if (t->task->cancelled()) return false;
     if (steadyNs() - t->sliceStart < kSliceNs) return true;
     t->wakeAt = 0;                                                    // la suite a la reprise suivante (l'IHM respire)
@@ -1356,7 +1384,7 @@ bool Runtime::taskSlice() {
 }
 
 void Runtime::taskLimits(sim::RunLimits& limits) {
-    if (!currentTask_) return;
+    if (!currentTask_ || !currentTask_->detached) return;      // 1.13.0 : une tache de debogage garde les limites d'avant
     // Une tache rend la main toutes les 8 ms : une boucle longue (WHILE TRUE ... WAIT ...) n'est plus une faute.
     limits.maxIterationsPerLoop = std::numeric_limits<std::uint32_t>::max();
     limits.maxStatementsPerScan = std::numeric_limits<std::uint32_t>::max();
@@ -1368,7 +1396,7 @@ bool Runtime::waitScript(std::int64_t ms, std::string& why) {
         why = "une fonction appel\xC3\xA9" "e par une expression n'attend pas";
         return false;
     }
-    if (TaskState* t = currentTask_) {
+    if (TaskState* t = currentTask_; t && t->detached) {      // 1.13.0 : un script non detache (debogue) bloque comme avant
         if (t->task->cancelled()) {
             why.clear();
             return false;
@@ -1417,6 +1445,95 @@ bool Runtime::stopScript(std::string_view name) {
             any = true;
         }
     return any;
+}
+
+// ---- 1.13.0 : LE DEBOGUEUR DES SCRIPTS IHM - ses taches (HmiRuntimeDebug.cpp pour le reste) ----------------------
+bool Runtime::taskIsDetached(const TaskState* t) const noexcept { return t && t->detached; }
+bool Runtime::taskIsCancelled(const TaskState* t) const noexcept { return t && t->task && t->task->cancelled(); }
+std::string Runtime::taskName(const TaskState* t) const { return t ? t->name : std::string{}; }
+std::string Runtime::taskContext(const TaskState* t) const {
+    if (!t) return inCycle_ ? std::string("cycle IHM") : std::string("IHM");
+    if (t->detached) return "script d\xC3\xA9tach\xC3\xA9 " + t->name;
+    return t->context.empty() ? std::string("appel du script") : t->context;
+}
+void Runtime::cancelTask(TaskState* t) noexcept {
+    if (t && t->task) t->task->cancel();
+}
+
+bool Runtime::pauseTask(TaskState* t) {
+    if (!t || !t->task) return false;
+    t->wakeAt = 0;
+    return t->task->yield();
+}
+
+void Runtime::resumePaused(TaskState* t) {
+    if (!t) return;
+    if (currentTask_) return;                          // jamais depuis une tache : le fil de l'IHM le fera
+    resumeTask(*t);
+    finishTasks();
+}
+
+void Runtime::withTaskState(TaskState* t, const std::function<void()>& run) {
+    if (!t) {
+        run();
+        return;
+    }
+    exchange(t->state);
+    run();
+    exchange(t->state);
+}
+
+// Un script NON detache que le debogueur peut arreter : il tourne dans une tache, tout de suite et d'un trait s'il ne
+// s'arrete pas (le resultat est le meme qu'avant). Il part du contexte de qui le lance - la vue et ses parametres, le
+// geste, le cycle - comme s'il tournait ici.
+bool Runtime::startDebugTask(const Script& sc, const std::string& source, double now, std::string* error) {
+    (void)now;
+    if (tasks_.size() >= kMaxTasks) return runScriptHere(sc, source, now, error);
+    auto t = std::make_unique<TaskState>();
+    TaskState* raw = t.get();
+    raw->script = sc.id;
+    raw->name = sc.name;
+    raw->source = source;
+    raw->copy = sc;
+    raw->startedAt = now_;
+    raw->detached = false;
+    // Ce qui le lance (le bas de la pile du debogueur).
+    if (gesture_ > 0 && !gestureWhere_.empty()) raw->context = (gestureVerb_.empty() ? std::string("Action sur") : gestureVerb_) + " " + gestureWhere_;
+    else if (inCycle_) raw->context = "cycle IHM";
+    else if (!source_.empty()) raw->context = "appel\xC3\xA9 par " + source_;
+    ExecState& st = raw->state;
+    st.source = source_;
+    st.origin = origin_;
+    st.depth = depth_;
+    st.readOnly = readOnly_;
+    st.gesture = gesture_;
+    st.gestureWhere = gestureWhere_;
+    st.gestureVerb = gestureVerb_;
+    st.exportAsk = exportAsk_;
+    st.inCycle = inCycle_;
+    st.actionOrigin = actionOrigin_;
+    st.aliases = env_->aliases;
+    // Les parametres de la vue : gardes en vie tant que la tache les lit (la popup peut se fermer pendant la pause).
+    for (const auto& slot : slots_)
+        if (slot.scope && slot.scope.get() == env_->aliases) raw->keepScope = slot.scope;
+    if (!raw->keepScope && currentScope_ && currentScope_.get() == env_->aliases) raw->keepScope = currentScope_;
+    if (!raw->keepScope && gestureScope_ && gestureScope_.get() == env_->aliases) raw->keepScope = gestureScope_;
+    raw->task = std::make_unique<ScriptTask>([this, raw](ScriptTask&) {
+        registerChoiceResolver(raw, [this](const Object& o, std::string_view src, std::vector<Choice>& out) { return resolveChoices(src, out, &o); });
+        raw->ok = runScriptHere(raw->copy, raw->source, now_, &raw->why);
+        unregisterChoiceResolver(raw);
+    });
+    tasks_.push_back(std::move(t));
+    resumeTask(*raw);
+    if (raw->task->finished()) {
+        // Fini d'un trait : comme avant - sa faute, et la cause premiere d'un enchainement coupe.
+        const bool ok = raw->ok;
+        if (!ok && error) *error = raw->why;
+        if (!raw->state.abort.empty() && abort_.empty() && depth_ > 0) abort_ = raw->state.abort;
+        finishTasks();
+        return ok;
+    }
+    return true;                                       // en pause (ou arrete) : il reprendra
 }
 
 Runtime::~Runtime() {
@@ -2053,7 +2170,11 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     const sim::ExecTrace callerTrace = trace_;
     trace_ = {};
     limits.trace = &trace_;
+    // 1.13.0 : le debogueur - le numero de ce code, ses lignes marquees, le pas a pas.
+    prepareDebug(*program, scriptId, kNoId, limits);
+    debugExec_.push_back(DebugExec{sim::programTag(*program), nullptr, nullptr});
     const auto result = sim::execute(*program, *env_, limits);
+    if (!debugExec_.empty()) debugExec_.pop_back();
     trace_ = callerTrace;
     env_->frames.pop_back();
     source_ = previous;
@@ -2212,6 +2333,7 @@ void Runtime::fireCallback(const sim::ObjRef& callback, const std::vector<sim::V
     limits.maxIterationsPerLoop = 100000;
     limits.maxStatementsPerScan = 200000;
     taskLimits(limits);                                       // 1.12.26
+    if (debugOn_) limits.stepAll = &stepAll_;                 // 1.13.0 : le pas a pas suit le rappel
     const sim::ExecTrace callerTrace = trace_;
     trace_ = {};
     limits.trace = &trace_;
@@ -2346,7 +2468,11 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     taskLimits(limits);                                       // 1.12.26 : appelee par un script detache
     limits.trace = &trace_;
     if (!f.returnType.empty()) limits.returnTo = f.name;      // 1.12.16 : RETURN valeur ;
+    // 1.13.0 : le debogueur - le numero de ce code, ses lignes marquees, ses locales (le cadre du moteur).
+    prepareDebug(*prep.program, kNoId, f.id, limits);
+    debugExec_.push_back(DebugExec{sim::programTag(*prep.program), &frame, &prep.locals});
     const auto run = sim::execute(*prep.program, *env_, limits);
+    if (!debugExec_.empty()) debugExec_.pop_back();
     --depth_;
     trace_ = callerTrace;
     source_ = previous;
@@ -2354,6 +2480,8 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     auto mine = std::move(env_->diagnostics);
     env_->diagnostics = std::move(saved);
     ++runs_[f.id];
+    // 1.13.0 : arretee pendant une pause (la simulation s'arrete) : sans erreur, l'appelant s'arrete aussi.
+    if (currentTask_ && currentTask_->task->cancelled()) return false;
     std::string why = initWhy;
     failLine = -1;
     for (const auto& d : mine)
@@ -2374,6 +2502,9 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
 // 1.12.26 : un script DETACHE tourne en arriere-plan (sa tache, a tour de role avec l'IHM) ; les autres, ici.
 bool Runtime::runScript(const Script& sc, const std::string& source, double now, std::string* error) {
     if (sc.detached && sc.lang == ScriptLang::ST && running_) return startDetached(sc, source, now, error);
+    // 1.13.0 : le debogueur - un point arme, un pas ou une pause demandes, IHM_POINT_ARRET dans le projet : le script
+    // tourne sur un fil a lui, pour pouvoir s'arreter au milieu. Sinon (et dans une tache deja), ici, comme avant.
+    if (sc.lang == ScriptLang::ST && running_ && !currentTask_ && debugWanted()) return startDebugTask(sc, source, now, error);
     return runScriptHere(sc, source, now, error);
 }
 
@@ -3665,6 +3796,16 @@ void Runtime::start(double now) {
     static int sessions = 0;
     session_ = ++sessions;
     stopTasks();                        // 1.12.26 : aucune tache d'avant ne survit
+    // 1.13.0 : le debogueur - ni pause ni pas d'avant ; les passages repartent de zero, les points se relisent
+    // sur le projet de ce demarrage.
+    clearDebugState();
+    if (debugOn_) {
+        for (auto& bp : breakpoints_) bp.hits = 0;
+        debugSaid_.clear();
+        codeBreaksAt_ = -1e9;
+        resolveBreakpoints();
+        debugTick(now);
+    }
     // 1.12.2 : les sources d'elements (itemsFrom) se lisent dans ce moteur tant qu'il tourne.
     registerChoiceResolver(this, [this](const Object& o, std::string_view source, std::vector<Choice>& out) { return resolveChoices(source, out, &o); });
     composed_.clear(); boundCalls_.clear();
@@ -4121,6 +4262,7 @@ bool Runtime::runFunction(Id id, const std::vector<std::pair<std::string, sim::V
 
 void Runtime::stop(double now, const std::string& why) {
     stopTasks();                                     // 1.12.26 : les scripts detaches s'arretent avec l'IHM
+    clearDebugState();                               // 1.13.0 : une pause, un pas en cours : finis
     unregisterChoiceResolver(this);                  // 1.12.2
     if (!running_) return;
     now_ = std::max(now_, now);
@@ -4147,6 +4289,7 @@ void Runtime::stop(double now, const std::string& why) {
 }
 
 void Runtime::press(Id object, double now) {
+    if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
     composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     lastActivity_ = now;
@@ -4164,6 +4307,7 @@ void Runtime::press(Id object, double now) {
 }
 
 void Runtime::release(Id object, double now, bool inside) {
+    if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
     composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     const bool wasPressed = running_ && pressed_ == object && object != kNoId;
@@ -4242,6 +4386,7 @@ void Runtime::release(Id object, double now, bool inside) {
 }
 
 void Runtime::doubleClick(Id object, double now) {
+    if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
     composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     const auto* v = shownViewOf(object);
@@ -4381,6 +4526,9 @@ void Runtime::cycle(double now) {
 
 void Runtime::tick(double now) {
     if (!running_ || !project_) return;
+    // 1.13.0 : EN PAUSE dans un script (le debogueur), l'IHM est figee : le prochain cycle attend la reprise.
+    if (paused_) return;
+    debugTick(now);
     composed_.clear(); boundCalls_.clear();                  // le projet a pu changer depuis le dernier appel
     jokerViews_.clear();                                     // 1.12.7 (lot E) : et ses jokers
     linkViews_.clear();                                      // 1.12.11 (lot G) : et ses liaisons Equipement
@@ -5732,6 +5880,7 @@ void Runtime::formMessage(Id object, std::string message, bool error, double now
 }
 
 void Runtime::objectPart(Id object, std::string_view part, double now) {
+    if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
     composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     lastActivity_ = now;
@@ -5897,6 +6046,7 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
 }
 
 void Runtime::typeText(std::string_view text, double now) {
+    if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
     now_ = std::max(now_, now);
     lastActivity_ = now;
     if (prompt_) { promptTypeText(text); return; }             // 1.11.7 : le clavier d'une action est modal
@@ -5936,6 +6086,7 @@ void Runtime::typeText(std::string_view text, double now) {
 }
 
 void Runtime::typeKey(EditKey k, double now) {
+    if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
     now_ = std::max(now_, now);
     lastActivity_ = now;
     if (prompt_) { promptTypeKey(k, now); return; }            // 1.11.7 : le clavier d'une action est modal

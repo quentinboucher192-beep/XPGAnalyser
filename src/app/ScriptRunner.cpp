@@ -37,6 +37,7 @@
 #include "hmi/HmiTemplateGallery.hpp"      // lot 20 : la galerie des modeles
 #include "hmi/HmiQualityPanes.hpp"
 #include "hmi/HmiSimulation.hpp"
+#include "hmi/HmiDebugPane.hpp"            // 1.13.0 (lot J2) : ihm-debogage, ihm-point-arret...
 #include "hmi/HmiScriptPanes.hpp"         // 1.11.16 : ihm-curseur
 #include "hmi/HmiFunctionPanes.hpp"       // 1.11.17 : volet-message (le volet des fonctions)
 #include "hmi/HmiOperatorPanes.hpp"       // 1.11.17 : volet-message (le volet des operateurs)
@@ -6204,6 +6205,71 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         const auto fit = hmi::screenFitFrom(arg(1));
         if (!fit) { fail("mise \xC3\xA0 l'\xC3\xA9" "chelle inconnue : " + arg(1) + " (remplir, proportions, reelle)"); return Step::Next; }
         pane->setScreenFit(*fit);
+        return Step::Yield;
+    }
+    // 1.13.0 (lot J2) : LE DEBOGUEUR DES SCRIPTS IHM (l'onglet courant : la simulation IHM).
+    //   ihm-debogage                             le sous-onglet Debogage au premier plan
+    //   ihm-point-arret "Statistiques_Pression 14 si P < 5"   un point tape, comme le champ + Point d'arret
+    //   ihm-debogage-geste suivant               continuer, suivant, entrer, sortir, pause, tout-retirer
+    //   ihm-debogage-niveau 1                    le niveau de la pile montre (0 = la ligne d'arret)
+    //   ihm-debogage-espion "P * 2.0"            un espion de plus
+    //   ihm-debogage-etat "En pause"             l'etat en clair contient ce texte - attendu au plus 1 200 images (sinon : echec)
+    //   ihm-marge 7 menu                         l'editeur montre (script ou fonction IHM) : le menu du clic droit de
+    //   ihm-marge 7 condition                    la marge a la ligne 7 ; le dialogue Condition... ; un clic (poser, enlever)
+    //   ihm-marge 7 clic [maj]                   (Maj+clic : l'activer, le desactiver)
+    if (cmd == "ihm-marge") {
+        HmiBreakpointMargin* margin = nullptr;
+        ui::MultiLineText* editor = nullptr;
+        if (auto* page = currentPage())
+            walk(*page, [&](ui::Widget& x) {
+                if (margin || !shown(x)) return;
+                if (auto* sp = dynamic_cast<HmiScriptsPane*>(&x)) { margin = &sp->breakpointMargin(); editor = &sp->editor(); }
+                else if (auto* fp = dynamic_cast<HmiFunctionsPane*>(&x)) { margin = &fp->breakpointMargin(); editor = &fp->editor(); }
+            });
+        const auto line = static_cast<std::size_t>(std::strtoul(arg(1).c_str(), nullptr, 10));
+        if (!margin || !editor) { fail(cmd + " : l'onglet courant ne montre ni script ni fonction IHM"); return Step::Next; }
+        if (line == 0) { fail(cmd + " : une ligne (1 = la premiere), pas " + arg(1)); return Step::Next; }
+        const std::string what = lower(arg(2));
+        gfx::Point at{};
+        if (what == "condition") {
+            margin->askCondition(static_cast<std::uint32_t>(line));
+        } else if (!editor->breakpointMarginPoint(line - 1, at)) {
+            fail(cmd + " : la ligne " + arg(1) + " n'est pas en vue");
+        } else if (what == "menu") {
+            margin->openMenu(line - 1, at);
+        } else {
+            clientClick(at, MouseButton::Left, 1, mods());   // ihm-marge 7 clic maj : activer, desactiver
+        }
+        return Step::Yield;
+    }
+    if (cmd == "ihm-debogage" || cmd == "ihm-point-arret" || cmd == "ihm-debogage-geste" || cmd == "ihm-debogage-niveau"
+        || cmd == "ihm-debogage-espion" || cmd == "ihm-debogage-etat") {
+        auto* pane = dynamic_cast<HmiSimulationPane*>(currentPage());
+        if (!pane) { fail("l'onglet courant n'est pas la simulation IHM (" + cmd + ")"); return Step::Next; }
+        auto& dbg = pane->debugPane();
+        pane->debugSync();
+        if (cmd == "ihm-debogage") {
+            pane->tabs().setCurrentIndex(HmiSimulationPane::TabDebug);
+        } else if (cmd == "ihm-point-arret") {
+            std::string why;
+            if (!dbg.addBreakpointText(arg(1), &why)) fail("ihm-point-arret : " + why);
+        } else if (cmd == "ihm-debogage-geste") {
+            const std::string g = lower(arg(1));
+            const int a = g == "continuer" ? HmiDebugPane::AContinue : g == "suivant" ? HmiDebugPane::AStepOver
+                        : g == "entrer" ? HmiDebugPane::AStepInto : g == "sortir" ? HmiDebugPane::AStepOut
+                        : g == "pause" ? HmiDebugPane::APause : g == "tout-retirer" ? HmiDebugPane::AClearBreakpoints : 0;
+            if (!a) fail("ihm-debogage-geste : continuer, suivant, entrer, sortir, pause ou tout-retirer, pas " + arg(1));
+            else dbg.runAction(a);
+        } else if (cmd == "ihm-debogage-niveau") {
+            if (!dbg.chooseLevel(static_cast<std::size_t>(std::strtoul(arg(1).c_str(), nullptr, 10)))) fail("ihm-debogage-niveau : pas en pause, ou pas de tel niveau");
+        } else if (cmd == "ihm-debogage-espion") {
+            if (!dbg.addWatch(arg(1))) fail("ihm-debogage-espion : vide, ou deja la");
+        } else if (dbg.stateLine().find(arg(1)) == std::string::npos) {
+            // L'arret vient au rythme de l'IHM (un script cyclique, une machine chargee) : on l'attend un peu.
+            if (retries_ < 1200) return Step::Retry;
+            fail("ihm-debogage-etat : \"" + arg(1) + "\" absent de : " + dbg.stateLine());
+        }
+        pane->debugSync();
         return Step::Yield;
     }
     if (cmd == "sim-clic" || cmd == "sim-appui" || cmd == "sim-relache") {

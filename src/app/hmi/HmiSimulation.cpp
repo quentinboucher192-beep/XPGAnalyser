@@ -1,4 +1,5 @@
 #include "HmiSimulation.hpp"
+#include "HmiDebugPane.hpp"          // 1.13.0 (lot J2) : Simulation > Debogage
 #include "../Disposition.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - la simulation de l'IHM seule
 #include "../../core/AtomicFile.hpp"   // 1.11.15 : l'instantane de la simulation, ecrit d'un bloc
@@ -463,7 +464,7 @@ protected:
         const auto b = bounds();
         const gfx::Rect box{b.x, b.y + (b.h - 24.f) / 2.f, b.w, 24.f};
         const gfx::Color tone = tone_ == "running" ? c.ok : tone_ == "paused" ? c.info : tone_ == "halted" ? c.error
-                              : tone_ == "stopped" ? c.warning : c.textMuted;
+                              : tone_ == "stopped" || tone_ == "debug" ? c.warning : c.textMuted;   // 1.13.0 : debug, en pause dans un script
         ctx.r.fillRoundedRect(box, tone_.empty() ? c.border : tone.withAlpha(90), 12.f);
         ctx.r.fillRoundedRect({box.x + 1.f, box.y + 1.f, box.w - 2.f, box.h - 2.f}, c.panelBg, 11.f);
         float x = box.x + 9.f;
@@ -3183,6 +3184,15 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         whyModel_ = std::make_shared<WhyRows>();
         whyTable_->setModel(whyModel_);
     }
+    {
+        // 1.13.0 (lot J2) : Debogage - les points d'arret des scripts IHM, la pause, le pas a pas, la pile, les locales.
+        auto page = std::make_unique<HmiDebugPane>(base + ".debogage", doc_, [this]() -> hmi::Runtime* { return &runtime_; });
+        page->goTo = [this](hmi::Id script, hmi::Id function, int line) {
+            if (host_.goToCode) host_.goToCode(script, function, line);
+        };
+        debugPane_ = page.get();
+        tabs->addTab(ui::TabControl::Tab{"D\xC3\xA9" "bogage", ui::Icon::Breakpoint, false, false}, std::move(page));
+    }
     // 1.9 : les popups ouvertes et les copies de leurs parametres (HmiParamPanes) - le dernier onglet.
     tabs->addTab(ui::TabControl::Tab{"Popups", ui::Icon::Document, false, false}, hmiparams::makePopupsTab(base + ".popups"));
     tabs->setCurrentIndex(0);
@@ -3295,6 +3305,10 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     hooks.simSlaveCommand = host_.simSlaveCommand;
     hooks.journaled = host_.console;             // 1.11.14 : la Console du panneau du bas
     runtime_.setHooks(std::move(hooks));
+    // 1.13.0 (lot J2) : le debogueur des scripts IHM (la simulation de l'editeur ; le poste ne s'arrete jamais).
+    runtime_.setDebugger(true);
+    HmiDebugSession::instance().bindProject(&doc_->project);
+    HmiDebugSession::instance().setRuntime(&runtime_);
 
     links_ += doc_->changed->connect([this](Id) {
         bound_ = false;
@@ -3621,6 +3635,11 @@ ui::EventResult HmiSimulationPane::onEvent(const ui::InputEvent& ev) {
         run("hmi.simpage");
         return ui::EventResult::Consumed;
     }
+    // 1.13.0 (lot J2) : en pause dans un script, F5 (Continuer), F10 (Suivant), F11 (Entrer), Maj+F11 (Sortir).
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && !k->repeat && !k->mods.ctrl && !k->mods.alt && !station_ && debugPane_
+        && runtime_.paused() && (k->key == ui::Key::F5 || k->key == ui::Key::F10 || k->key == ui::Key::F11)
+        && debugPane_->debugKey(k->key, k->mods.shift))
+        return ui::EventResult::Consumed;
     if (const auto* k = std::get_if<ui::KeyDown>(&ev);
         k && k->key == ui::Key::F11 && k->mods.none() && !k->repeat && !station_ && host_.fullScreenWindow) {
         setFullScreen(!fullScreen_);
@@ -3666,6 +3685,7 @@ bool HmiSimulationPane::applyRecipe(const std::string& recipe, const std::string
 HmiSimulationPane::~HmiSimulationPane() {
     auto& panes = simPanes();
     panes.erase(std::remove(panes.begin(), panes.end(), this), panes.end());
+    if (HmiDebugSession::instance().runtime() == &runtime_) HmiDebugSession::instance().setRuntime(nullptr);   // 1.13.0 (lot J2)
     // 1.9 finale : en quittant l'application pendant la marche, l'automate (simule
     // ou relie) et les liaisons des equipements peuvent etre deja detruits ;
     // Runtime::stop les quitte (unfollowAll) : l'IHM s'arrete sans eux.
@@ -4387,11 +4407,13 @@ void HmiSimulationPane::refreshBar() {
     std::string viewsKey;
     for (const auto& v : doc_->project.views)
         if (!hmi::isTemplateRole(v.role) && v.role != "popup" && v.role != "symbole") viewsKey += v.name + '\n';
-    const std::string key = std::to_string(started_) + tone + plcStateText() + "|" + std::to_string(zoom) + (canvas_ && canvas_->displayZoom() > 0.f ? "z" : "f")
+    const bool debugPaused = started_ && runtime_.paused();     // 1.13.0 (lot J2) : en pause dans un script
+    const std::string key = std::to_string(started_) + (debugPaused ? "d" : "") + tone + plcStateText() + "|" + std::to_string(zoom) + (canvas_ && canvas_->displayZoom() > 0.f ? "z" : "f")
                             + "|" + user + "|" + std::to_string(current) + "|" + viewsKey;
     if (key == barState_) return;
     barState_ = key;
-    static_cast<StateChip*>(hmiChip_)->set(started_ ? "IHM : en marche" : "IHM : arr\xC3\xAAt\xC3\xA9" "e", started_ ? "running" : "stopped");
+    static_cast<StateChip*>(hmiChip_)->set(debugPaused ? "IHM : en pause (d\xC3\xA9" "bogage)" : started_ ? "IHM : en marche" : "IHM : arr\xC3\xAAt\xC3\xA9" "e",
+                                           debugPaused ? "debug" : started_ ? "running" : "stopped");
     static_cast<StateChip*>(plcChip_)->set("API : " + plcStateText(), tone == "off" ? "stopped" : tone);
     // La valeur seule (la barre reste courte) ; ajustee : le dit l'infobulle.
     static_cast<StateChip*>(zoomChip_)->set(std::to_string(zoom) + " %", {});
@@ -4677,7 +4699,26 @@ void HmiSimulationPane::refreshAt(double now) {
     refreshPane();
 }
 
+// 1.13.0 (lot J2) : les points de la seance donnes au moteur (s'ils ont change), ce qu'il en dit rapporte (passages,
+// lignes, notes, la pause), le sous-onglet Debogage tenu a jour.
+void HmiSimulationPane::debugSync() {
+    if (station_) return;
+    auto& s = HmiDebugSession::instance();
+    s.bindProject(&doc_->project);
+    if (s.runtime() != &runtime_) s.setRuntime(&runtime_);
+    if (s.revision() != debugPushed_) {
+        debugPushed_ = s.revision();
+        runtime_.setBreakpoints(s.breakpoints());
+    }
+    if (runtime_.debugRevision() != debugSeen_) {
+        debugSeen_ = runtime_.debugRevision();
+        s.pullFrom(runtime_);
+    }
+    if (debugPane_) debugPane_->refresh(now_);
+}
+
 void HmiSimulationPane::refreshPane() {
+    debugSync();                                   // 1.13.0 (lot J2) : le debogueur, a chaque image
     // Lot 13 : un essai demande - l'IHM redemarre, et il part maintenant.
     if (pendingScenario_) {
         const auto [id, pace] = *pendingScenario_;
@@ -5645,6 +5686,9 @@ void HmiSimulationPane::updateTables() {
 void HmiSimulationPane::setStationMode(bool on) {
     if (on && fullScreen_) setFullScreen(false);
     station_ = on;
+    // 1.13.0 (lot J2) : le poste d'exploitation ne s'arrete jamais sur un point d'arret (IHM_POINT_ARRET n'y fait rien).
+    runtime_.setDebugger(!on);
+    if (on && HmiDebugSession::instance().runtime() == &runtime_) HmiDebugSession::instance().setRuntime(nullptr);
     const auto shown = on ? ui::Visibility::Collapsed : ui::Visibility::Visible;
     bar_->setVisibility(shown);
     status_->setVisibility(shown);

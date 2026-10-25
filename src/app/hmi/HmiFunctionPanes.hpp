@@ -29,6 +29,7 @@
 #include "../../hmi/HmiPipeline.hpp"   // 1.11.13 : les commandes du build
 
 #include "HmiAssist.hpp"
+#include "HmiDebugSession.hpp"             // 1.13.0 (lot J2) : la marge des points d'arret
 #include "HmiDeclGrid.hpp"             // 1.11.18 (refonte, lot 5) : les onglets Parametres, Locales, Constantes
 #include "HmiPanels.hpp"
 #include "HmiLive.hpp"                  // 1.11.21 : les diagnostics en direct (le panneau du bas)
@@ -165,6 +166,8 @@ public:
 
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
+    // 1.13.0 (lot J2) : la marge des points d'arret (le menu du clic droit, la condition : les scripts de seance).
+    [[nodiscard]] HmiBreakpointMargin& breakpointMargin() noexcept { return margin_; }
     [[nodiscard]] ui::TableView&     functionTable() noexcept { return *functions_; }
     // ---- 1.11.21 : HmiLiveSource (les diagnostics de la fonction montree, au panneau du bas) ----
     [[nodiscard]] std::uint64_t liveRevision() const noexcept override { return liveRev_; }
@@ -227,6 +230,7 @@ private:
     bool               syncing_{false};
     hmi::Id            shownId_{hmi::kNoId};   // 1.12.2 : le document montre (annuler : le meme, la vue gardee)
     std::shared_ptr<int>  alive_{std::make_shared<int>(0)};   // 1.11.19 : le selecteur de types repond apres coup
+    HmiBreakpointMargin margin_;               // 1.13.0 (lot J2) : les points d'arret du debogueur
     core::ConnectionScope links_;
 };
 

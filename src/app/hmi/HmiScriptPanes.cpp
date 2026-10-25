@@ -594,6 +594,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     links_ += editor_->caretSymbolChanged->connect([this](const std::string&) { updateSymbolLine(); });
     links_ += editor_->textChanged->connect([this](const std::string& text) {
         if (syncing_) return;
+        margin_.edited();                  // 1.13.0 (lot J2) : les points d'arret suivent leurs lignes
         const Id sel = selectedScript();
         if (sel) (void)setBody(sel, text);
         else if (!general() && selectedRow_ >= 0 && static_cast<std::size_t>(selectedRow_) < eventOrder_.size()) {
@@ -616,6 +617,13 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         }
         updateDiagnostics();
     });
+    // 1.13.0 (lot J2) : LA MARGE DES POINTS D'ARRET - un clic a gauche des numeros pose un rond rouge ; la
+    // simulation de l'IHM s'y arretera (le sous-onglet Debogage). Un script C ou C++ n'en prend pas.
+    HmiDebugSession::instance().bindProject(&doc_->project);
+    margin_.attach(*this, *editor_, [this] {
+        const auto* sc = current();
+        return sc ? HmiDebugTarget{sc->id, hmi::kNoId} : HmiDebugTarget{};
+    }, [this](const std::string& t, bool warning) { say(t, warning); });
     if (folders_) {
         links_ += folders_->message->connect([this](const std::string& text) { say(text); });
         links_ += folders_->relayout->connect([this] { refresh(); });
@@ -821,6 +829,7 @@ void HmiScriptsPane::showSelected() {
         else editor_->setText(body);
     }
     shownId_ = sc ? sc->id : hmi::kNoId;
+    margin_.reset();                       // 1.13.0 (lot J2) : les points de ce script, la frappe repart d'ici
     editor_->setLanguage(languageOf(sc ? sc->lang : ScriptLang::ST));
     const bool editable = sc || !selectedEvent().empty();
     editor_->setReadOnly(!editable);
@@ -1306,6 +1315,20 @@ void HmiScriptsPane::updateSymbolLine() {
     gfx::Color accent{0, 0, 0, 0};
     if (!d.found) accent = gfx::Color{232, 196, 111, 255};                 // ambre : le nom ne se resout pas
     std::string value;
+    // 1.13.0 (lot J2) : en pause dans CE script (le debogueur), la valeur du nom a l'instant de la pause - ses locales
+    // comprises, lues dans la portee de la ligne d'arret.
+    if (const auto* sc = current()) {
+        auto& session = HmiDebugSession::instance();
+        HmiDebugTarget pausedCode;
+        std::uint32_t pausedLine = 0;
+        if (session.runtime() && session.pausedAt(pausedCode, pausedLine) && pausedCode.script == sc->id
+            && session.runtime()->debugEvaluate(symbol, value)) {
+            symbolBar_->setMessage(line + "   = " + value + "   (en pause, ligne " + std::to_string(pausedLine) + ")",
+                                   gfx::Color{241, 160, 60, 255});
+            return;
+        }
+        value.clear();
+    }
     if (d.found && assist_.live && assist_.live(symbol, value)) {
         line += "   = " + value;
         accent = gfx::Color{127, 208, 138, 255};                           // vert : la valeur du moment

@@ -169,6 +169,9 @@
     <ClCompile Include="src\xls\Workbook.cpp">
       <Filter>xls</Filter>
     </ClCompile>
+    <ClCompile Include="src\sim\DebugShared.cpp">
+      <Filter>sim</Filter>
+    </ClCompile>
     <ClCompile Include="src\sim\DialectLib.cpp">
     <ClCompile Include="src\sim\Json.cpp">
       <Filter>sim</Filter>
@@ -1162,6 +1165,12 @@
     <ClCompile Include="src\app\hmi\HmiCyclicWidgets.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiDebugPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiDebugSession.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiDeclGrid.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1459,6 +1468,9 @@
     <ClCompile Include="src\hmi\HmiRoles.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeDebug.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiRuntimeDocs.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1692,6 +1704,9 @@
     </ClInclude>
     <ClInclude Include="src\xls\XlsmSource.hpp">
       <Filter>xls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sim\DebugShared.hpp">
+      <Filter>sim</Filter>
     </ClInclude>
     <ClInclude Include="src\sim\DialectLib.hpp">
     <ClInclude Include="src\sim\Json.hpp">
@@ -2549,6 +2564,12 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiCyclicPage.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiDebugPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiDebugSession.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiDeclGrid.hpp">

@@ -720,6 +720,9 @@ const std::vector<NativeInfo>& natives() {
         {"WAIT", 1, 1, false, false, false, false, "attente", "WAIT(DUREE) : BOOL", "Attend DUREE (T#500ms, ou des millisecondes) avant l'instruction suivante. Un script d\xC3\xA9tach\xC3\xA9 attend seul, l'IHM continue ; un autre bloque l'IHM pendant l'attente (10 s au plus)."},
         // ---- 1.13.0 : attendre qu'une condition devienne vraie (revue a chaque reprise de la tache detachee)
         {"WAIT_UNTIL", 1, 2, false, false, false, false, "attente", "WAIT_UNTIL(CONDITION [, DELAI]) : BOOL", "Attend que CONDITION (un BOOL) devienne vraie, revue \xC3\xA0 chaque reprise ; au plus DELAI (T#2m). Seul en instruction, un d\xC3\xA9lai d\xC3\xA9pass\xC3\xA9 l\xC3\xA8ve E_ATTENTE ; employ\xC3\xA9 (IF...), il rend TRUE devenu vrai, FALSE au d\xC3\xA9lai. Demande un script d\xC3\xA9tach\xC3\xA9."},
+        // ---- 1.13.0 : le debogueur des scripts IHM - un point d'arret ecrit dans le code (la simulation de l'IHM s'y
+        // arrete ; le poste et la page web n'en font rien)
+        {"IHM_POINT_ARRET", 0, 1, false, false, false, false, "debogage", "IHM_POINT_ARRET([CONDITION]) : BOOL", "Un point d'arr\xC3\xAAt \xC3\xA9" "crit dans le code : en simulation, le script s'arr\xC3\xAAte ici (sans argument : \xC3\xA0 chaque passage ; avec un BOOL : seulement s'il est vrai). Hors simulation, il ne fait rien."},
         // ---- 1.12.26 : les fichiers et les ressources du projet (<filesystem>, <fstream>). Un chemin relatif part
         // du dossier donnees/ du projet ; un echec ne coupe pas le script : FALSE, '' ou -1, et FILE_ERROR() dit pourquoi.
         {"FILE_READ", 1, 1, false, false, false, false, "fichiers", "FILE_READ(CHEMIN) : STRING", "Tout le texte d'un fichier ; '' s'il manque (FILE_ERROR() dit pourquoi)."},
