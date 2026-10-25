@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IHM Studio 1.13.0</title>
+<meta name="description" content="Maquette interactive avant/apres des concepts de programmation de la 1.13.0 d'IHM Studio.">
+<style>
+  :root{
+    --bg:#15151b; --surface:#1f1f29; --surface2:#272733; --surface3:#2f2f3c;
+    --border:#34343f; --border2:#454554;
+    --ink:#e9e9f2; --ink2:#c4c4d2; --muted:#9191a3; --faint:#6d6d80;
+    --accent:#a78bfa; --accent-d:#8b5cf6; --accent-bg:#2a2340;
+    --gold:#e3b23c; --gold-bg:#352c16;
+    --green:#4ade80; --red:#f87171; --blue:#79b8ff; --cyan:#6fd3c7; --orange:#f0a673;
+    --kw:#c792ea; --ty:#82aaff; --cm:#6b7a6b; --st:#e5c07b; --fn:#6fd3c7; --num:#f0a673; --op:#89ddff;
+    --avant:#8a8a9c; --avant-bg:#22222b;
+    --radius:12px; --radius-s:8px;
+    --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono","Cascadia Code",Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+    padding:0 16px 64px;
+  }
+  .wrap{max-width:1180px; margin:0 auto}
+
+  /* ---- bandeau ---- */
+  header.top{
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    padding:20px 0 16px; border-bottom:1px solid var(--border); margin-bottom:22px;
+  }
+  .logo{display:flex; align-items:center; gap:11px}
+  .logo .mark{
+    width:34px; height:34px; border-radius:9px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-d));
+    display:grid; place-items:center; font-weight:800; color:#1a1430; font-size:15px;
+    box-shadow:0 2px 14px rgba(139,92,246,.35);
+  }
+  .logo h1{font-size:17px; margin:0; font-weight:700; letter-spacing:.2px}
+  .logo .sub{color:var(--muted); font-size:12.5px; font-weight:500}
+  .ver{
+    font-family:var(--mono); font-size:12px; color:var(--gold);
+    border:1px solid var(--gold-bg); background:var(--gold-bg); padding:3px 9px; border-radius:999px;
+  }
+  .spacer{flex:1 1 auto}
+
+  /* ---- bascule avant/apres ---- */
+  .seg{display:inline-flex; background:var(--surface2); border:1px solid var(--border2); border-radius:999px; padding:3px}
+  .seg button{
+    border:0; background:transparent; color:var(--muted); font-family:var(--sans);
+    font-size:13px; font-weight:600; padding:7px 15px; border-radius:999px; cursor:pointer;
+    transition:background .15s,color .15s; white-space:nowrap;
+  }
+  .seg button:hover{color:var(--ink2)}
+  .seg button[aria-pressed="true"]{color:var(--ink); background:var(--surface3)}
+  .seg button.sv[aria-pressed="true"]{background:var(--accent-bg); color:#d7c9ff; box-shadow:inset 0 0 0 1px var(--accent-d)}
+
+  .intro{color:var(--ink2); max-width:70ch; margin:2px 0 22px; font-size:14.5px}
+  .intro b{color:var(--ink)}
+
+  /* ---- disposition ---- */
+  .app{display:grid; grid-template-columns:234px 1fr; gap:22px; align-items:start}
+  nav.rail{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:8px; position:sticky; top:14px;
+  }
+  nav.rail .grp{color:var(--faint); font-size:11px; font-weight:700; letter-spacing:.9px;
+    text-transform:uppercase; padding:10px 10px 6px}
+  nav.rail button{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    border:0; background:transparent; color:var(--ink2); font-family:var(--sans);
+    font-size:13.5px; font-weight:500; padding:9px 10px; border-radius:var(--radius-s); cursor:pointer;
+  }
+  nav.rail button .sw{width:9px; height:9px; border-radius:3px; flex:0 0 auto}
+  nav.rail button .n{flex:1 1 auto}
+  nav.rail button .tag{font-size:10px; color:var(--gold); font-weight:700; font-family:var(--mono)}
+  nav.rail button:hover{background:var(--surface2); color:var(--ink)}
+  nav.rail button[aria-current="true"]{background:var(--accent-bg); color:#e3d9ff}
+  nav.rail button[aria-current="true"] .n{font-weight:600}
+
+  main{min-width:0}
+  .topic-head{margin:2px 0 18px}
+  .topic-head h2{margin:0 0 8px; font-size:22px; font-weight:750; letter-spacing:.2px}
+  .why{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px}
+  .why .card{border:1px solid var(--border); border-radius:var(--radius-s); padding:11px 13px; font-size:13px}
+  .why .card .lbl{font-size:10.5px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; margin-bottom:4px}
+  .why .pb{background:var(--avant-bg)}
+  .why .pb .lbl{color:var(--avant)}
+  .why .rp{background:var(--accent-bg); border-color:#3d3360}
+  .why .rp .lbl{color:var(--accent)}
+  .why .card p{margin:0; color:var(--ink2)}
+
+  /* ---- paire avant/apres ---- */
+  .pair{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  .pair.one{grid-template-columns:1fr}
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; min-width:0}
+  .panel.hidden{display:none}
+  .panel .ph{
+    display:flex; align-items:center; gap:9px; padding:10px 14px; border-bottom:1px solid var(--border);
+    font-size:12.5px; font-weight:700; letter-spacing:.3px;
+  }
+  .panel .ph .dot{width:8px; height:8px; border-radius:50%}
+  .panel.avant .ph{background:var(--avant-bg); color:var(--avant)}
+  .panel.avant .ph .dot{background:var(--avant)}
+  .panel.apres .ph{background:linear-gradient(90deg,var(--accent-bg),transparent); color:#d7c9ff}
+  .panel.apres .ph .dot{background:var(--accent)}
+  .panel .ph .badge{margin-left:auto; font-family:var(--mono); font-size:10.5px; color:var(--gold);
+    background:var(--gold-bg); border-radius:999px; padding:2px 8px}
+  .panel .body{padding:0}
+
+  /* ---- fragment d'editeur ---- */
+  .ed{font-family:var(--mono); font-size:12.5px; line-height:1.72}
+  .ed .code{padding:14px 15px; overflow-x:auto; white-space:pre; color:var(--ink)}
+  .ed .code .ln{color:var(--faint); user-select:none; display:inline-block; width:1.6em; text-align:right; margin-right:14px}
+  .kw{color:var(--kw)} .ty{color:var(--ty)} .cm{color:var(--cm)} .st{color:var(--st)}
+  .fn{color:var(--fn)} .num{color:var(--num)} .op{color:var(--op)} .pr{color:var(--accent)}
+  .code .bp{background:var(--accent-bg); display:block; margin:0 -15px; padding:0 15px 0 0;
+    box-shadow:inset 3px 0 0 var(--accent)}
+  .code .paused{background:var(--gold-bg); display:block; margin:0 -15px; padding:0 15px 0 0;
+    box-shadow:inset 3px 0 0 var(--gold)}
+
+  /* petites "vues" d'interface */
+  .ui{padding:13px 15px; display:flex; flex-direction:column; gap:9px}
+  .tree{font-size:12.5px; font-family:var(--mono)}
+  .tree .row{display:flex; align-items:center; gap:8px; padding:3px 0; color:var(--ink2)}
+  .tree .row .ic{width:13px; color:var(--faint)}
+  .tree .l1{padding-left:0} .tree .l2{padding-left:18px} .tree .l3{padding-left:36px}
+  .tree .m{color:var(--accent)} .tree .t{color:var(--ty)} .tree .lock{color:var(--gold)}
+  .chip{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;
+    padding:3px 9px; border-radius:999px; border:1px solid var(--border2); color:var(--ink2); background:var(--surface2)}
+  .chip.v{color:#d7c9ff; border-color:#3d3360; background:var(--accent-bg)}
+  .chip.g{color:var(--gold); border-color:var(--gold-bg); background:var(--gold-bg)}
+  .row-tabs{display:flex; gap:4px; flex-wrap:wrap; margin-bottom:2px}
+  .tab{font-size:12px; padding:5px 10px; border-radius:7px 7px 0 0; color:var(--muted); background:var(--surface2); border:1px solid var(--border); border-bottom:0}
+  .tab.act{color:var(--ink); background:var(--surface3); color:#d7c9ff}
+  .kv{display:grid; grid-template-columns:auto 1fr; gap:3px 14px; font-family:var(--mono); font-size:12px}
+  .kv .k{color:var(--muted)} .kv .vv{color:var(--ink)}
+  .verdict{display:flex; align-items:center; gap:8px; font-size:12.5px; font-family:var(--mono); padding:4px 0}
+  .verdict .st-ok{color:var(--green); font-weight:700}
+  .verdict .st-ko{color:var(--red); font-weight:700}
+  .bar{display:flex; gap:7px; flex-wrap:wrap; align-items:center}
+  .btn{font-size:12px; font-weight:600; padding:6px 11px; border-radius:7px; border:1px solid var(--border2); background:var(--surface2); color:var(--ink2)}
+  .btn.p{background:var(--accent-d); border-color:var(--accent-d); color:#fff}
+  .btn.ghost{background:transparent}
+  .menu{font-size:13px; font-family:var(--sans)}
+  .menu .mi{display:flex; align-items:center; gap:10px; padding:7px 9px; border-radius:7px; color:var(--ink2)}
+  .menu .mi:hover{background:var(--surface2)}
+  .menu .mi .k{margin-left:auto; color:var(--faint); font-family:var(--mono); font-size:11px}
+  .menu .mi.gone{color:var(--faint); text-decoration:line-through; opacity:.6}
+  .menu .mi .ic{width:16px; text-align:center; color:var(--muted)}
+  .menu .sep{height:1px; background:var(--border); margin:5px 2px}
+  .note{color:var(--muted); font-size:12px; padding:2px 2px 0}
+  .strike{color:var(--faint); text-decoration:line-through}
+
+  /* ---- resume ---- */
+  .summary{margin-top:26px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); padding:16px 18px}
+  .summary h3{margin:0 0 12px; font-size:14px; color:var(--muted); font-weight:700; letter-spacing:.4px; text-transform:uppercase}
+  .summary ul{margin:0; padding:0; list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:8px 22px}
+  .summary li{display:flex; gap:9px; align-items:baseline; font-size:13.5px; color:var(--ink2)}
+  .summary li .d{width:7px; height:7px; border-radius:2px; flex:0 0 auto; margin-top:6px}
+  .summary li b{color:var(--ink); font-weight:650}
+  footer{color:var(--faint); font-size:12px; text-align:center; margin-top:30px}
+
+  @media (max-width:860px){
+    .app{grid-template-columns:1fr}
+    nav.rail{position:static; display:flex; flex-wrap:wrap; gap:4px}
+    nav.rail .grp{display:none}
+    nav.rail button{width:auto}
+    .pair{grid-template-columns:1fr}
+    .why{grid-template-columns:1fr}
+    .summary ul{grid-template-columns:1fr}
+  }
+  @media (prefers-color-scheme:light){
+    :root:not([data-theme="dark"]){
+      --bg:#f3f3f7; --surface:#fff; --surface2:#f0f0f6; --surface3:#e8e6f5;
+      --border:#e2e2ec; --border2:#d3d3e0;
+      --ink:#1c1c28; --ink2:#3a3a4c; --muted:#6b6b7d; --faint:#9a9aae;
+      --accent-bg:#efe9ff; --gold:#9a7415; --gold-bg:#faf1d6; --avant:#7a7a8c; --avant-bg:#eeeef3;
+      --cm:#7a8a7a;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="logo">
+      <div class="mark">IS</div>
+      <div>
+        <h1>IHM Studio <span class="ver">1.13.0 · apercu</span></h1>
+        <div class="sub">La programmation des scripts, avant / apres</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="seg" id="viewseg" role="group" aria-label="Affichage">
+      <button class="sv" data-view="both" aria-pressed="true">Cote a cote</button>
+      <button data-view="avant" aria-pressed="false">Avant</button>
+      <button data-view="apres" aria-pressed="false">Apres</button>
+    </div>
+  </header>
+
+  <p class="intro">La <b>1.13.0</b> ajoute a l'editeur de scripts les concepts de programmation qui manquaient encore.
+  Choisis un sujet a gauche&nbsp;: tu vois l'IHM <b>telle qu'elle est en 1.12.31</b> et <b>telle qu'elle devient en 1.13.0</b>.
+  Les grafcets ne sont pas dans ce lot.</p>
+
+  <div class="app">
+    <nav class="rail" id="rail" aria-label="Sujets"></nav>
+    <main>
+      <div class="topic-head">
+        <h2 id="t-title"></h2>
+        <div class="why">
+          <div class="card pb"><div class="lbl">Le manque (1.12.31)</div><p id="t-pb"></p></div>
+          <div class="card rp"><div class="lbl">La reponse (1.13.0)</div><p id="t-rp"></p></div>
+        </div>
+      </div>
+      <div class="pair" id="pair">
+        <section class="panel avant" id="p-avant">
+          <div class="ph"><span class="dot"></span>Avant — 1.12.31</div>
+          <div class="body" id="b-avant"></div>
+        </section>
+        <section class="panel apres" id="p-apres">
+          <div class="ph"><span class="dot"></span>Apres — 1.13.0 <span class="badge">nouveau</span></div>
+          <div class="body" id="b-apres"></div>
+        </section>
+      </div>
+      <p class="note" id="t-note"></p>
+    </main>
+  </div>
+
+  <div class="summary">
+    <h3>Ce que la 1.13.0 apporte</h3>
+    <ul id="sum"></ul>
+  </div>
+
+  <footer>Maquette interactive — IHM Studio 1.13.0. Non contractuel, pour decider de l'organisation des ecrans.</footer>
+</div>
+
+<script>
+const TOPICS = [
+  {
+    id:"objets", label:"Objets", tag:"J1", sw:"#a78bfa",
+    title:"Les objets : methodes, prive, heritage, interface",
+    pb:"Un type IHM n'est qu'un sac de membres. Le comportement (demarrer, arreter, calculer) vit ailleurs, dans des fonctions libres ou des bouts de script recopies.",
+    rp:"Le type porte ses methodes, cache son interieur (prive), herite d'un autre type et respecte une interface. Le dispatch choisit la bonne methode a l'execution.",
+    note:"Compatible avec les types existants : un type sans methode reste exactement comme avant.",
+    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="cm">// Type IHM "Moteur" (1.12.31) : seulement des membres</span>
+<span class="ln">2</span><span class="kw">TYPE</span> <span class="ty">Moteur</span>
+<span class="ln">3</span>  Vitesse   : <span class="ty">REAL</span>
+<span class="ln">4</span>  Marche    : <span class="ty">BOOL</span>
+<span class="ln">5</span>  Defaut    : <span class="ty">BOOL</span>
+<span class="ln">6</span><span class="kw">END_TYPE</span>
+<span class="ln">7</span>
+<span class="ln">8</span><span class="cm">// le comportement est dehors, a recopier partout</span>
+<span class="ln">9</span><span class="kw">FONCTION</span> <span class="fn">DemarrerMoteur</span>(m : <span class="ty">Moteur</span>) ...</div></div>`,
+    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="cm">// Type "Moteur" (1.13.0) : membres + methodes + heritage</span>
+<span class="ln">2</span><span class="kw">TYPE</span> <span class="ty">Moteur</span> <span class="kw">HERITE DE</span> <span class="ty">Equipement</span> <span class="kw">REALISE</span> <span class="ty">IDemarrable</span>
+<span class="ln">3</span>  Vitesse   : <span class="ty">REAL</span> <span class="pr">PUBLIC</span>
+<span class="ln">4</span>  _consigne : <span class="ty">REAL</span> <span class="pr">PRIVE</span>   <span class="cm">// cache</span>
+<span class="ln">5</span>  <span class="kw">METHODE</span> <span class="fn">Demarrer</span>()
+<span class="ln">6</span>  <span class="kw">METHODE</span> <span class="fn">Arreter</span>()
+<span class="ln">7</span>  <span class="kw">METHODE</span> <span class="fn">_calcul</span>() <span class="pr">PRIVE</span>
+<span class="ln">8</span><span class="kw">END_TYPE</span>
+<span class="ln">9</span>
+<span class="ln">10</span>m<span class="op">.</span><span class="fn">Demarrer</span>()      <span class="cm">// le dispatch choisit la bonne</span></div></div>`
+  },
+  {
+    id:"debogueur", label:"Debogueur", tag:"J2", sw:"#79b8ff",
+    title:"Le debogueur des scripts IHM",
+    pb:"Pour comprendre pourquoi une fonction se trompe, on seme des IHM_LOG(...) un peu partout, on relance, on lit la console, on recommence.",
+    rp:"Un vrai debogueur : point d'arret, execution en pause sur la ligne, pas a pas (entrer / sortir / enjamber), pile d'appels et valeurs des variables locales en direct.",
+    note:"Le meme debogueur sert deja aux scripts API ; la 1.13.0 l'amene aux scripts IHM.",
+    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">FONCTION</span> <span class="fn">RegulePID</span>(c : <span class="ty">REAL</span>) : <span class="ty">REAL</span>
+<span class="ln">2</span>  <span class="fn">IHM_LOG</span>(<span class="st">"c="</span> <span class="op">+</span> <span class="fn">STR</span>(c))      <span class="cm">// trace a la main</span>
+<span class="ln">3</span>  erreur <span class="op">:=</span> c <span class="op">-</span> mesure
+<span class="ln">4</span>  <span class="fn">IHM_LOG</span>(<span class="st">"err="</span> <span class="op">+</span> <span class="fn">STR</span>(erreur))
+<span class="ln">5</span>  integ <span class="op">:=</span> integ <span class="op">+</span> erreur
+<span class="ln">6</span>  <span class="fn">IHM_LOG</span>(<span class="st">"integ="</span> <span class="op">+</span> <span class="fn">STR</span>(integ))
+<span class="ln">7</span>  <span class="kw">RETOURNE</span> kp<span class="op">*</span>erreur <span class="op">+</span> ki<span class="op">*</span>integ</div></div>`,
+    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">FONCTION</span> <span class="fn">RegulePID</span>(c : <span class="ty">REAL</span>) : <span class="ty">REAL</span>
+<span class="ln">2</span><span class="bp">  erreur <span class="op">:=</span> c <span class="op">-</span> mesure            <span class="cm">&#9679; point d'arret</span></span>
+<span class="ln">3</span><span class="paused">  integ  <span class="op">:=</span> integ <span class="op">+</span> erreur        <span class="cm">&#9654; en pause ici</span></span>
+<span class="ln">4</span>  <span class="kw">RETOURNE</span> kp<span class="op">*</span>erreur <span class="op">+</span> ki<span class="op">*</span>integ</div></div>
+<div class="ui" style="border-top:1px solid var(--border)">
+  <div class="bar"><span class="btn p">&#9654; Continuer</span><span class="btn">Pas a pas</span><span class="btn">Entrer</span><span class="btn">Sortir</span></div>
+  <div class="row-tabs"><span class="tab act">Variables locales</span><span class="tab">Pile d'appels</span></div>
+  <div class="kv"><span class="k">c</span><span class="vv">42.0</span><span class="k">mesure</span><span class="vv">39.4</span><span class="k">erreur</span><span class="vv">2.6</span><span class="k">integ</span><span class="vv">11.8</span><span class="k">kp / ki</span><span class="vv">1.5 / 0.2</span></div>
+</div>`
+  },
+  {
+    id:"donnees", label:"Donnees (JSON, regex)", tag:"J3", sw:"#6fd3c7",
+    title:"Donnees dans les scripts : JSON, regex, type ANY",
+    pb:"Lire un message JSON ou extraire un nombre d'un texte se fait a la main, caractere par caractere, avec des decoupes fragiles.",
+    rp:"JSON_LIRE / JSON_ECRIRE, les expressions regulieres (REGEX_TROUVE, REGEX_REMPLACE) et un type ANY pour tenir une valeur de forme inconnue.",
+    note:"Tout est local : aucune requete reseau. C'est du traitement de donnees deja presentes.",
+    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="cm">// Extraire la valeur d'un capteur d'un texte (1.12.31)</span>
+<span class="ln">2</span>i <span class="op">:=</span> <span class="fn">INDEX_DE</span>(txt, <span class="st">"valeur"</span>)
+<span class="ln">3</span>j <span class="op">:=</span> <span class="fn">INDEX_DE_DEPUIS</span>(txt, <span class="st">":"</span>, i)
+<span class="ln">4</span>k <span class="op">:=</span> <span class="fn">INDEX_DE_DEPUIS</span>(txt, <span class="st">","</span>, j)
+<span class="ln">5</span>brut <span class="op">:=</span> <span class="fn">SOUS_CHAINE</span>(txt, j<span class="op">+</span><span class="num">1</span>, k)
+<span class="ln">6</span>v <span class="op">:=</span> <span class="fn">VERS_REEL</span>(<span class="fn">NETTOYER</span>(brut)) <span class="cm">// fragile</span></div></div>`,
+    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="cm">// 1.13.0 : JSON et regex, directement</span>
+<span class="ln">2</span>d : <span class="ty">ANY</span> <span class="op">:=</span> <span class="fn">JSON_LIRE</span>(txt)
+<span class="ln">3</span>v <span class="op">:=</span> d[<span class="st">'capteurs'</span>][<span class="num">0</span>]<span class="op">.</span>valeur       <span class="cm">// REAL</span>
+<span class="ln">4</span>nom <span class="op">:=</span> d[<span class="st">'capteurs'</span>][<span class="num">0</span>]<span class="op">.</span>nom
+<span class="ln">5</span>
+<span class="ln">6</span><span class="cm">// tous les nombres d'une chaine</span>
+<span class="ln">7</span>nbs <span class="op">:=</span> <span class="fn">REGEX_TROUVE_TOUT</span>(s, <span class="st">'[0-9]+\\.[0-9]+'</span>)
+<span class="ln">8</span>ok  <span class="op">:=</span> <span class="fn">REGEX_CORRESPOND</span>(ref, <span class="st">'^M[0-9]{3}$'</span>)</div></div>`
+  },
+  {
+    id:"tests", label:"Tests unitaires", tag:"J4", sw:"#4ade80",
+    title:"Tests unitaires des fonctions IHM",
+    pb:"Pour verifier qu'une fonction est juste, on lance l'IHM entiere, on simule, on regarde a l'oeil. Rien ne garde la trace de ce qui doit marcher.",
+    rp:"Chaque fonction a un sous-onglet Tests : des cas (poser les entrees, appeler, verifier la sortie), des verdicts vert/rouge, un rapport, rejoues a chaque Generer.",
+    note:"Les cas sont enregistres dans le projet : un changement qui casse un cas se voit tout de suite.",
+    avant:`<div class="ui">
+  <div class="note" style="padding-top:2px">Fonction <span style="font-family:var(--mono);color:var(--fn)">Borne(x, min, max)</span> — pour la tester&nbsp;:</div>
+  <div class="tree">
+    <div class="row l1"><span class="ic">&#9662;</span> Lancer la simulation</div>
+    <div class="row l2"><span class="ic">&#8227;</span> ouvrir une vue qui l'appelle</div>
+    <div class="row l2"><span class="ic">&#8227;</span> forcer des valeurs a la main</div>
+    <div class="row l2"><span class="ic">&#8227;</span> regarder le resultat a l'oeil</div>
+    <div class="row l2" style="color:var(--faint)"><span class="ic">&#8227;</span> rien n'est garde</div>
+  </div>
+</div>`,
+    apres:`<div class="ui">
+  <div class="row-tabs"><span class="tab">Code</span><span class="tab">Declarations</span><span class="tab act">Tests</span></div>
+  <div class="note" style="padding:2px 0 4px">Fonction <span style="font-family:var(--mono);color:var(--fn)">Borne(x, min, max)</span></div>
+  <div class="kv" style="margin-bottom:4px">
+    <span class="k">Cas 1 — milieu</span><span class="vv">Borne(5, 0, 10) =&gt; 5</span>
+    <span class="k">Cas 2 — sous le bas</span><span class="vv">Borne(-3, 0, 10) =&gt; 0</span>
+    <span class="k">Cas 3 — au-dessus</span><span class="vv">Borne(42, 0, 10) =&gt; 10</span>
+  </div>
+  <div class="verdict"><span class="st-ok">&#10003;</span> Cas 1 &mdash; attendu 5, obtenu 5</div>
+  <div class="verdict"><span class="st-ok">&#10003;</span> Cas 2 &mdash; attendu 0, obtenu 0</div>
+  <div class="verdict"><span class="st-ko">&#10007;</span> Cas 3 &mdash; attendu 10, obtenu 42</div>
+  <div class="bar" style="margin-top:6px"><span class="btn p">Lancer les tests</span><span class="btn">Nouveau cas…</span><span class="chip g">2 / 3 verts</span></div>
+</div>`
+  },
+  {
+    id:"erreurs", label:"Erreurs + WAIT_UNTIL", tag:"J5", sw:"#f0a673",
+    title:"Lever ses erreurs + attendre une condition",
+    pb:"On ne peut pas declencher proprement sa propre erreur, ni connaitre son code ou sa ligne. Attendre qu'une condition devienne vraie se fait par des boucles d'attente maladroites.",
+    rp:"LEVER un code d'erreur nomme ; CATCH recoit un objet Caught { code, message, ligne }. WAIT_UNTIL(condition, delai) attend proprement, avec expiration.",
+    note:"Codes partages : E_BORNE, E_DIVISION, E_CONVERSION, E_CLE, E_ASSERT, E_ATTENTE…",
+    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">TRY</span>
+<span class="ln">2</span>  <span class="kw">IF</span> x <span class="op">&lt;</span> <span class="num">0</span> <span class="kw">THEN</span>
+<span class="ln">3</span>    <span class="cm">// pas de maniere propre de lever</span>
+<span class="ln">4</span>    erreur <span class="op">:=</span> <span class="st">"x negatif"</span>  <span class="cm">// juste un texte</span>
+<span class="ln">5</span>  <span class="kw">END_IF</span>
+<span class="ln">6</span><span class="kw">CATCH</span>
+<span class="ln">7</span>  <span class="cm">// on ne sait ni le code ni la ligne</span>
+<span class="ln">8</span><span class="kw">END_TRY</span>
+<span class="ln">9</span>
+<span class="ln">10</span><span class="cm">// attendre : boucle d'attente a la main</span>
+<span class="ln">11</span><span class="kw">WHILE</span> <span class="kw">NOT</span> pret <span class="kw">DO</span> <span class="fn">RIEN</span>() <span class="kw">END_WHILE</span></div></div>`,
+    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">TRY</span>
+<span class="ln">2</span>  <span class="kw">IF</span> x <span class="op">&lt;</span> <span class="num">0</span> <span class="kw">THEN</span>
+<span class="ln">3</span>    <span class="kw">LEVER</span> <span class="pr">E_BORNE</span> <span class="st">"x doit etre positif"</span>
+<span class="ln">4</span>  <span class="kw">END_IF</span>
+<span class="ln">5</span><span class="kw">CATCH</span> e
+<span class="ln">6</span>  <span class="fn">IHM_LOG</span>(e<span class="op">.</span>code <span class="op">+</span> <span class="st">" ligne "</span> <span class="op">+</span> <span class="fn">STR</span>(e<span class="op">.</span>ligne))
+<span class="ln">7</span>  <span class="cm">// e = Caught{ code, message, ligne }</span>
+<span class="ln">8</span><span class="kw">END_TRY</span>
+<span class="ln">9</span>
+<span class="ln">10</span><span class="cm">// attendre proprement, avec expiration</span>
+<span class="ln">11</span><span class="kw">WAIT_UNTIL</span>(pret, <span class="num">5000</span>)   <span class="cm">// 5 s max</span></div></div>`
+  },
+  {
+    id:"unites", label:"Unites de mesure", tag:"J6", sw:"#e3b23c",
+    title:"Unites de mesure dans les types",
+    pb:"Une vitesse, une pression, une duree sont toutes des REAL. Rien n'empeche d'additionner des mm et des secondes, ni de prendre des bars pour des pascals.",
+    rp:"Une variable ou un membre porte son unite : REAL [tr/min], REAL [N.m]. Les conversions sont verifiees, et melanger deux unites incompatibles est signale a Generer.",
+    note:"L'unite est une annotation : elle n'alourdit pas l'execution, elle protege a la verification.",
+    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">TYPE</span> <span class="ty">Pompe</span>
+<span class="ln">2</span>  Debit    : <span class="ty">REAL</span>   <span class="cm">// en m3/h ? en L/min ?</span>
+<span class="ln">3</span>  Pression : <span class="ty">REAL</span>   <span class="cm">// en bar ? en Pa ?</span>
+<span class="ln">4</span>  Duree    : <span class="ty">REAL</span>   <span class="cm">// s ? ms ?</span>
+<span class="ln">5</span><span class="kw">END_TYPE</span>
+<span class="ln">6</span>
+<span class="ln">7</span><span class="cm">// accepte, mais n'a aucun sens :</span>
+<span class="ln">8</span>x <span class="op">:=</span> p<span class="op">.</span>Debit <span class="op">+</span> p<span class="op">.</span>Duree</div></div>`,
+    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">TYPE</span> <span class="ty">Pompe</span>
+<span class="ln">2</span>  Debit    : <span class="ty">REAL</span> <span class="pr">[m3/h]</span>
+<span class="ln">3</span>  Pression : <span class="ty">REAL</span> <span class="pr">[bar]</span>
+<span class="ln">4</span>  Duree    : <span class="ty">REAL</span> <span class="pr">[s]</span>
+<span class="ln">5</span><span class="kw">END_TYPE</span>
+<span class="ln">6</span>
+<span class="ln">7</span><span class="cm">// signale a Generer : unites incompatibles</span>
+<span class="ln">8</span>x <span class="op">:=</span> p<span class="op">.</span>Debit <span class="op">+</span> p<span class="op">.</span>Duree   <span class="cm">&#9888; m3/h + s</span>
+<span class="ln">9</span>v <span class="op">:=</span> <span class="fn">EN</span>(p<span class="op">.</span>Pression, <span class="pr">[Pa]</span>)  <span class="cm">// conversion sure</span></div></div>`
+  },
+  {
+    id:"generiques", label:"Fonctions generiques", tag:"J7", sw:"#c792ea",
+    title:"Fonctions generiques (TEMPLATE) partout",
+    pb:"Une fonction par type : Max_Int, Max_Real, Max_Duree… On recopie la meme logique, et un oubli derive d'une version a l'autre.",
+    rp:"Une seule fonction generique Max&lt;T&gt;(a, b) : T, utilisable dans les fonctions IHM, internes et de symbole. Le type T est deduit a l'appel.",
+    note:"Les structures, symboles et popups generiques existaient deja ; la 1.13.0 complete les fonctions.",
+    avant:`<div class="ed"><div class="code"><span class="ln">1</span><span class="kw">FONCTION</span> <span class="fn">Max_Int</span>(a:<span class="ty">INT</span>, b:<span class="ty">INT</span>):<span class="ty">INT</span>
+<span class="ln">2</span>  <span class="kw">RETOURNE</span> <span class="kw">IF</span> a<span class="op">&gt;</span>b <span class="kw">THEN</span> a <span class="kw">ELSE</span> b
+<span class="ln">3</span>
+<span class="ln">4</span><span class="kw">FONCTION</span> <span class="fn">Max_Real</span>(a:<span class="ty">REAL</span>, b:<span class="ty">REAL</span>):<span class="ty">REAL</span>
+<span class="ln">5</span>  <span class="kw">RETOURNE</span> <span class="kw">IF</span> a<span class="op">&gt;</span>b <span class="kw">THEN</span> a <span class="kw">ELSE</span> b
+<span class="ln">6</span>
+<span class="ln">7</span><span class="kw">FONCTION</span> <span class="fn">Max_Duree</span>(a:<span class="ty">TIME</span>, b:<span class="ty">TIME</span>) ...
+<span class="ln">8</span>  <span class="cm">// ... encore et encore</span></div></div>`,
+    apres:`<div class="ed"><div class="code"><span class="ln">1</span><span class="cm">// 1.13.0 : une seule, pour tous les types</span>
+<span class="ln">2</span><span class="kw">FONCTION</span> <span class="fn">Max</span><span class="op">&lt;</span><span class="pr">T</span><span class="op">&gt;</span>(a : <span class="pr">T</span>, b : <span class="pr">T</span>) : <span class="pr">T</span>
+<span class="ln">3</span>  <span class="kw">RETOURNE</span> <span class="kw">IF</span> a <span class="op">&gt;</span> b <span class="kw">THEN</span> a <span class="kw">ELSE</span> b
+<span class="ln">4</span><span class="kw">END_FONCTION</span>
+<span class="ln">5</span>
+<span class="ln">6</span>i <span class="op">:=</span> <span class="fn">Max</span>(<span class="num">3</span>, <span class="num">7</span>)              <span class="cm">// T = INT</span>
+<span class="ln">7</span>r <span class="op">:=</span> <span class="fn">Max</span>(<span class="num">1.5</span>, v)            <span class="cm">// T = REAL</span>
+<span class="ln">8</span>d <span class="op">:=</span> <span class="fn">Max</span>(t1, t2)            <span class="cm">// T = TIME</span></div></div>`
+  },
+  {
+    id:"biblio", label:"Bibliotheques / espaces", tag:"J8", sw:"#89ddff",
+    title:"Bibliotheques et espaces de noms",
+    pb:"Tout vit dans un seul sac. Deux projets ont chacun leur Pompe, impossibles a reunir sans conflit. Rien ne se partage proprement d'un projet a l'autre.",
+    rp:"Des espaces de noms (ESPACE Hydraulique { … }) et des bibliotheques reutilisables : Hydraulique.Pompe, importees d'un projet a l'autre sans telescopage.",
+    note:"Un meme nom peut exister dans deux espaces sans se gener ; l'appel est qualifie.",
+    avant:`<div class="ui"><div class="tree">
+  <div class="row l1"><span class="ic">&#9662;</span> Types</div>
+  <div class="row l2"><span class="ic t">&#9644;</span> Pompe</div>
+  <div class="row l2"><span class="ic t">&#9644;</span> Vanne</div>
+  <div class="row l2"><span class="ic t">&#9644;</span> Pompe <span style="color:var(--red)">&#9888; deja pris</span></div>
+  <div class="row l1"><span class="ic">&#9662;</span> Fonctions</div>
+  <div class="row l2"><span class="ic m">&#402;</span> Reguler</div>
+  <div class="row l2"><span class="ic m">&#402;</span> Reguler <span style="color:var(--red)">&#9888; conflit</span></div>
+</div>
+<div class="note">Un seul espace : les noms se telescopent.</div></div>`,
+    apres:`<div class="ui"><div class="tree">
+  <div class="row l1"><span class="ic">&#9662;</span> <span class="chip v">ESPACE Hydraulique</span></div>
+  <div class="row l2"><span class="ic t">&#9644;</span> Pompe</div>
+  <div class="row l2"><span class="ic m">&#402;</span> Reguler</div>
+  <div class="row l1"><span class="ic">&#9662;</span> <span class="chip v">ESPACE Ventilation</span></div>
+  <div class="row l2"><span class="ic t">&#9644;</span> Pompe <span style="color:var(--green)">&#10003; distinct</span></div>
+  <div class="row l2"><span class="ic m">&#402;</span> Reguler</div>
+  <div class="row l1"><span class="ic">&#9662;</span> <span class="chip g">Bibliotheque PID (importee)</span></div>
+</div>
+<div class="ed" style="margin-top:4px"><div class="code" style="padding:8px 2px"><span class="ty">Hydraulique</span><span class="op">.</span><span class="ty">Pompe</span>   p
+p<span class="op">.</span><span class="fn">Reguler</span>()      <span class="cm">// appel qualifie, sans ambiguite</span></div></div></div>`
+  },
+  {
+    id:"echanges", label:"Echanges (retrait web)", tag:"retire", sw:"#f87171",
+    title:"Echanges : l'export/import en page web retire",
+    pb:"Le menu Echanges proposait d'exporter l'IHM en page web (.html) et de la reimporter. Mais un navigateur ne peut pas dialoguer en Modbus : la page etait un ecran mort.",
+    rp:"On retire completement l'export/import en page web. Restent les archives .xihm/.xapi (le vrai transport d'un projet) et l'acces web en direct (le PC fait le Modbus, le navigateur voit l'image).",
+    note:"Le serveur web en direct (Acces web) et le livre du programme en HTML ne changent pas.",
+    avant:`<div class="ui"><div class="note" style="padding-bottom:4px">Menu <b>Echanges</b> (1.12.31)</div>
+<div class="menu">
+  <div class="mi"><span class="ic">&#128230;</span> Exporter une archive (.xihm)… <span class="k">Ctrl+E</span></div>
+  <div class="mi"><span class="ic">&#128229;</span> Importer une archive…</div>
+  <div class="sep"></div>
+  <div class="mi"><span class="ic">&#127760;</span> Exporter en page web (.html)…</div>
+  <div class="mi"><span class="ic">&#127760;</span> Importer depuis une page web…</div>
+  <div class="mi"><span class="ic">&#9881;</span> Mettre a jour la page web a chaque enregistrement</div>
+  <div class="sep"></div>
+  <div class="mi"><span class="ic">&#128421;</span> Acces web en direct…</div>
+</div></div>`,
+    apres:`<div class="ui"><div class="note" style="padding-bottom:4px">Menu <b>Echanges</b> (1.13.0)</div>
+<div class="menu">
+  <div class="mi"><span class="ic">&#128230;</span> Exporter une archive (.xihm)… <span class="k">Ctrl+E</span></div>
+  <div class="mi"><span class="ic">&#128229;</span> Importer une archive…</div>
+  <div class="sep"></div>
+  <div class="mi gone"><span class="ic">&#127760;</span> Exporter en page web (.html)…</div>
+  <div class="mi gone"><span class="ic">&#127760;</span> Importer depuis une page web…</div>
+  <div class="mi gone"><span class="ic">&#9881;</span> Mettre a jour la page web a chaque enregistrement</div>
+  <div class="sep"></div>
+  <div class="mi"><span class="ic">&#128421;</span> Acces web en direct… <span class="chip" style="margin-left:auto">conserve</span></div>
+</div>
+<div class="note">La page web runnable et son moteur WebAssembly sont retires du code et des paquets.</div></div>`
+  }
+];
+
+const rail = document.getElementById('rail');
+const grpLabel = document.createElement('div'); grpLabel.className='grp'; grpLabel.textContent='Concepts 1.13.0';
+rail.appendChild(grpLabel);
+TOPICS.forEach((t,idx)=>{
+  const b=document.createElement('button');
+  b.innerHTML=`<span class="sw" style="background:${t.sw}"></span><span class="n">${t.label}</span><span class="tag">${t.tag}</span>`;
+  b.onclick=()=>select(idx);
+  t._btn=b; rail.appendChild(b);
+});
+
+let view='both';
+const seg=document.getElementById('viewseg');
+seg.querySelectorAll('button').forEach(btn=>{
+  btn.onclick=()=>{
+    view=btn.dataset.view;
+    seg.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===btn?'true':'false'));
+    applyView();
+  };
+});
+function applyView(){
+  const pa=document.getElementById('p-avant'), pr=document.getElementById('p-apres');
+  const pair=document.getElementById('pair');
+  pa.classList.toggle('hidden', view==='apres');
+  pr.classList.toggle('hidden', view==='avant');
+  pair.classList.toggle('one', view!=='both');
+}
+
+let cur=-1;
+function select(idx){
+  if(idx===cur) return; cur=idx;
+  const t=TOPICS[idx];
+  TOPICS.forEach(x=>x._btn.setAttribute('aria-current', x===t?'true':'false'));
+  document.getElementById('t-title').textContent=t.title;
+  document.getElementById('t-pb').textContent=t.pb;
+  document.getElementById('t-rp').textContent=t.rp;
+  document.getElementById('t-note').textContent=t.note;
+  document.getElementById('b-avant').innerHTML=t.avant;
+  document.getElementById('b-apres').innerHTML=t.apres;
+  applyView();
+}
+
+// resume
+const sum=document.getElementById('sum');
+const SUM=[
+  ["Objets","methodes, prive, heritage, interface","#a78bfa"],
+  ["Debogueur IHM","points d'arret, pas a pas, variables","#79b8ff"],
+  ["Donnees","JSON, regex, type ANY — tout local","#6fd3c7"],
+  ["Tests unitaires","cas, verdicts, rejoues a chaque Generer","#4ade80"],
+  ["Erreurs","LEVER, Caught{code,message,ligne}, WAIT_UNTIL","#f0a673"],
+  ["Unites","REAL [tr/min], melanges signales","#e3b23c"],
+  ["Generiques","Max&lt;T&gt; partout, T deduit","#c792ea"],
+  ["Bibliotheques","espaces de noms, reutilisables","#89ddff"],
+  ["Page web retiree","un navigateur ne fait pas de Modbus","#f87171"],
+];
+SUM.forEach(([a,b,c])=>{
+  const li=document.createElement('li');
+  li.innerHTML=`<span class="d" style="background:${c}"></span><span><b>${a}</b> — ${b}</span>`;
+  sum.appendChild(li);
+});
+
+select(0);
+</script>
+</body>
+</html>
