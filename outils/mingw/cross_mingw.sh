@@ -7,9 +7,7 @@
 #
 #    outils/mingw/cross_mingw.sh            -> build-mingw/API-Studio.exe,
 #                                              build-mingw/IHM-Studio.exe (+ SDL3.dll ;
-#                                              1.12.30 : + pdfium.dll, s'il est dans third_party/pdfium ;
-#                                              1.12.31 : + web/, le moteur de l'IHM pour la page web
-#                                              en marche, s'il est dans third_party/web)
+#                                              1.12.30 : + pdfium.dll, s'il est dans third_party/pdfium)
 #    JOBS=2 outils/mingw/cross_mingw.sh     -> moins de compilations a la fois
 #
 #  Le runtime C++ est lie dans l'exe (-static) : a cote, seulement SDL3.dll.
@@ -44,16 +42,6 @@ if [ -f third_party/pdfium/win-x64/pdfium.dll ]; then
     cp -f third_party/pdfium/win-x64/pdfium.dll "$OUT/pdfium.dll"
 else
     echo "attention : third_party/pdfium/win-x64/pdfium.dll manque (python3 outils/pdfium/obtenir_pdfium.py) : la visionneuse dira que le lecteur PDF est absent"
-fi
-# 1.12.31 : le moteur de l'IHM en WebAssembly (bash outils/web/construire_web.sh) : web/ a cote des exe.
-# La page web exportee l'embarque et l'IHM y tourne ; sans lui, elle reste au repos (celle de la 1.12.30).
-if [ -f third_party/web/ihm-web.wasm.gz ]; then
-    mkdir -p "$OUT/web"
-    for f in ihm-web.wasm.gz web_host.js amorce.js page_ihm.html ihm-web.ttf ihm-web.ttf.LICENCE.txt VERSION.txt; do
-        [ -f "third_party/web/$f" ] && cp -f "third_party/web/$f" "$OUT/web/$f"
-    done
-else
-    echo "attention : third_party/web/ihm-web.wasm.gz manque (bash outils/web/construire_web.sh) : la page web restera au repos"
 fi
 rm -f "$OUT/XpgAnalyzer.exe" "$OUT/xpg_analyzer.exe"     # la 1.11 : un seul exe
 rm -f "$OUT/XpgAnalyzer-API.exe" "$OUT/XpgAnalyzer-IHM.exe"     # 1.12.0 a 1.12.19 : les anciens noms

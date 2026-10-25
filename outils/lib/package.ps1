@@ -7,8 +7,7 @@
 #   3. les tests (test_build.ps1) ;
 #   4. le dossier a livrer, dist\staging : l'exe, SDL3.dll, pdfium.dll (1.12.30), le runtime Visual C++
 #      (deploiement local : un PC vierge n'a rien a installer), resources\,
-#      libs\, maintenance\ (repair, verify...), licences\, LISEZ-MOI.txt ; 1.12.31 : web\ (le
-#      moteur de l'IHM en WebAssembly, que la page web exportee embarque : l'IHM y tourne) ;
+#      libs\, maintenance\ (repair, verify...), licences\, LISEZ-MOI.txt ;
 #   5. manifeste.json : chaque fichier, sa taille, son SHA-256, son role, et
 #      les DLL dont l'exe a besoin (repair.bat et verify s'en servent) ;
 #   6. l'installateur (build_installer.ps1) : XPGAnalyser-Setup-<version>.exe a la racine
@@ -28,7 +27,6 @@ package.bat [options]
   /sans-installateur   s'arrête au dossier dist\staging (sans Inno Setup)
   /exe:<fichier>       empaquette cet exe au lieu de compiler (avec /sdl:<SDL3.dll>)
   /pdfium:<fichier>    le pdfium.dll à livrer (par défaut third_party\pdfium\win-x64\pdfium.dll)
-  /web:<dossier>       le moteur de l'IHM pour la page web (par défaut third_party\web)
   /chaine:msvc|mingw   la chaîne qui a compilé l'exe (msvc par défaut : runtime VC++ livré)
 '@
 $X = Initialize-Xpg -Nom 'package' -Titre 'XPGAnalyser - compilation, tests et installateur' -Arguments $Arguments -Usage $usage
@@ -168,18 +166,6 @@ try {
     if (-not $pdfium) { $pdfium = Join-Path $racine 'third_party\pdfium\win-x64\pdfium.dll' }
     if (-not (Test-Path -LiteralPath $pdfium)) { Stop-Xpg -Code 1 -Message "pdfium.dll introuvable : $pdfium" -Conseil 'python outils\pdfium\obtenir_pdfium.py le pose (third_party\pdfium\ORIGINE.txt).' }
     Copy-Item -LiteralPath $pdfium -Destination (Join-Path $st 'pdfium.dll') -Force
-    # 1.12.31 : web\ - le moteur de l'IHM en WebAssembly (bash outils/web/construire_web.sh le pose dans
-    # third_party\web) : la page web exportee l'embarque, l'IHM y tourne. Sans lui, elle resterait au repos.
-    $web = Get-XpgOption -Noms @('web')
-    if (-not $web) { $web = Join-Path $racine 'third_party\web' }
-    foreach ($f in @('ihm-web.wasm.gz', 'web_host.js', 'amorce.js', 'page_ihm.html')) {
-        if (-not (Test-Path -LiteralPath (Join-Path $web $f))) { Stop-Xpg -Code 1 -Message "Le moteur web de l'IHM manque : $(Join-Path $web $f)" -Conseil 'bash outils/web/construire_web.sh le pose dans third_party\web (sous Linux ou WSL, avec la chaîne wasm).' }
-    }
-    New-Item -ItemType Directory -Path (Join-Path $st 'web') -Force | Out-Null
-    foreach ($f in @('ihm-web.wasm.gz', 'web_host.js', 'amorce.js', 'page_ihm.html', 'ihm-web.ttf', 'ihm-web.ttf.LICENCE.txt', 'VERSION.txt')) {
-        $s = Join-Path $web $f
-        if (Test-Path -LiteralPath $s) { Copy-Item -LiteralPath $s -Destination (Join-Path $st "web\$f") -Force }
-    }
     $runtime = @()
     if ($chaine -eq 'msvc') {
         $msvc = Get-XpgChaineMsvc
@@ -249,7 +235,7 @@ anciens_dossiers = $(Get-XpgConfig -Section 'Installateur' -Cle 'anciens_dossier
         $t = [System.IO.File]::ReadAllText($lisez, [System.Text.Encoding]::UTF8).Replace('{VERSION}', $version)
         Write-XpgTexte -Chemin (Join-Path $st 'LISEZ-MOI.txt') -Texte (($t -replace "`r?`n", "`n") -replace "`n", "`r`n")
     }
-    Complete-XpgEtape -Statut OK -Detail ("exe, SDL3.dll, pdfium.dll, web\, {0} DLL du runtime, {1} ressource(s), {2} fichier(s) de bibliothèque, 6 scripts de maintenance" -f $runtime.Count, $nRes, $nLibs)
+    Complete-XpgEtape -Statut OK -Detail ("exe, SDL3.dll, pdfium.dll, {0} DLL du runtime, {1} ressource(s), {2} fichier(s) de bibliothèque, 6 scripts de maintenance" -f $runtime.Count, $nRes, $nLibs)
 
     # ---- le manifeste ------------------------------------------------------------------------
     Start-XpgEtape 'Le manifeste (tailles et SHA-256)' | Out-Null
