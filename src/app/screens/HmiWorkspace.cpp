@@ -56,6 +56,7 @@
 #include "../hmi/HmiAddressDialog.hpp"              // 1.12.18 : l'adresse dans toutes les cases
 #include "../hmi/HmiFunctionDialog.hpp"   // 1.12.24 : Nouvelle fonction
 #include "../hmi/HmiFunctionTestsPage.hpp"   // 1.13.0 (lot J4b) : Nouveau cas, les verdicts
+#include "../hmi/HmiUnitPanes.hpp"           // 1.13.0 (lot J6b) : le selecteur d'unites, Configuration > Unites de mesure
 #include "../hmi/HmiFunctionPanes.hpp"
 #include "../hmi/HmiHelpPane.hpp"
 #include "../hmi/HmiTutorial.hpp"
@@ -390,6 +391,7 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || k == NK::HmiSymbolsFolder                                 // lot 10 : les symboles
         || k == NK::HmiStyles || k == NK::HmiFind                    // lot 12 : les styles, rechercher
         || k == NK::HmiTests || k == NK::HmiLanguages || k == NK::HmiUnits    // lot 13 : essais, langues, unites
+        || k == NK::HmiMeasureUnits                                          // 1.13.0 (lot J6b) : les unites de mesure
         || k == NK::HmiComm || k == NK::HmiStation                    // lot 14 : la communication, le poste,
         || k == NK::HmiNotify || k == NK::HmiReports || k == NK::HmiWeb    // les notifications, les rapports, le web
         || k == NK::HmiModbusTool                                            // lot 15 : l'outil Modbus
@@ -482,6 +484,20 @@ void MainAnalysisScreen::bindHmi() {
     });
     // 1.11.19 (refonte, lot 6) : le selecteur de types, demande par une grille ou un volet.
     typepicker::setHost([this](HmiTypePicker::Spec spec, typepicker::Done done) { askHmiType(std::move(spec), std::move(done)); });
+    // 1.13.0 (lot J6b) : le selecteur d'unites - " Gerer les unites... " mene a Configuration > Unites de mesure.
+    unitpicker::setHost([this](HmiUnitPicker::Spec spec, unitpicker::Done done) {
+        if (!spec.doc) spec.doc = app_.hmi();
+        app_.menus().ShowDialog(std::make_unique<HmiUnitPicker>(std::move(spec)), [this, done = std::move(done)](const menu::DialogResult& r) {
+            if (!r.accepted()) return;
+            HmiUnitPicker::Answer a;
+            if (!HmiUnitPicker::parse(r.payload, a)) return;
+            if (a.manage) {
+                openHmiPane("unites-mesure");
+                return;
+            }
+            if (done) done(a);
+        });
+    });
     // 1.12.16 : "Choisir une fonction..." - la derniere ligne des listes d'aide a la saisie, Ctrl+I.
     functionpicker::setHost([this](HmiFunctionPicker::Spec spec, functionpicker::Done done) {
         app_.menus().ShowDialog(std::make_unique<HmiFunctionPicker>(std::move(spec)), [this, done = std::move(done)](const menu::DialogResult& r) {
@@ -643,6 +659,7 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::HmiTests:         openHmiPane("essais"); break;       // lot 13
         case NK::HmiLanguages:     openHmiPane("langues"); break;
         case NK::HmiUnits:         openHmiPane("unites"); break;
+        case NK::HmiMeasureUnits:  openHmiPane("unites-mesure"); break;   // 1.13.0 (lot J6b)
         case NK::HmiComm:          openHmiPane("communication"); break;   // lot 14
         case NK::HmiStation:       openHmiPane("poste"); break;
         case NK::HmiNotify:        openHmiPane("notifications"); break;
@@ -1645,6 +1662,11 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         page = std::move(pane);
         title = "IHM \xC2\xB7 Unit\xC3\xA9s et formats";
         icon = Icon::Variable;
+    } else if (key == "unites-mesure") {
+        // 1.13.0 (lot J6b) : Configuration > Unites de mesure - les familles et les unites du projet, Unites strictes.
+        page = std::make_unique<HmiMeasureUnitsPane>("hmi.measureUnits", doc, apply);
+        title = "IHM \xC2\xB7 Unit\xC3\xA9s de mesure";
+        icon = Icon::Constant;
     } else if (key == "communication") {
         // Lot 14 : Configuration > Communication - l'automate reel (Modbus TCP), le
         // plan d'adressage, Tester, le serveur de demonstration.
@@ -3187,6 +3209,9 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
     fields.push_back({"Type \xC3\xA9" "crit (facultatif)", simpleElement ? std::string{} : (var ? var->type : std::string{}),
                       "LIST OF TUPLE(STRING, REAL) ; il remplace les choix", false, {}});
     fields.push_back({"Dossier", var && !var->folder.empty() ? var->folder : std::string("(racine)"), "", false, folders});
+    // 1.13.0 (lot J6b) : l'unite physique (un nombre seulement) - Ctrl+Espace propose les unites, puis le selecteur.
+    fields.push_back({"Unit\xC3\xA9", var ? var->unit : std::string{}, "bar, degC, m3/h, % (vide : sans unit\xC3\xA9)", false, {}});
+    constexpr std::size_t kUnitField = 8;
     auto dialog = std::make_unique<FormDialog>(var ? "dialog.hmiEditVariable" : "dialog.hmiNewVariable",
         var ? "Modifier " + var->name : std::string("Nouvelle variable IHM"),
         "Une variable IHM : la vue courante, un compteur de clics, un choix d'op\xC3\xA9rateur, ou la valeur d'un \xC3\xA9quipement "
@@ -3195,7 +3220,17 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
         "un dictionnaire, un tuple (dans la m\xC3\xA9moire de l'IHM : sans \xC3\xA9quipement ni adresse). Ctrl+Z reprend.",
         std::move(fields), var ? "Enregistrer" : "Cr\xC3\xA9" "er");
     const ShapeFields at{4, 5, 6, 2, 1, &doc->project};
-    dialog->setRules(shapeRules(at));
+    // 1.13.0 (lot J6b) : la case Unite suit le type - grisee sur un type qui n'est pas un nombre, la raison dessous.
+    dialog->setRules(shapeRules(at, [doc, at](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& st) {
+        if (v.size() <= kUnitField || st.size() <= kUnitField || v.size() < 2) return;
+        const std::string type = shapedTypeOf(v, at, v[1]);
+        const bool numeric = unitui::usable(type);
+        st[kUnitField].enabled = numeric || !trimmedText(v[kUnitField]).empty();
+        st[kUnitField].hint = numeric ? std::string{} : std::string("seulement pour un nombre (REAL, INT\xE2\x80\xA6)");
+        st[kUnitField].error = unitui::problem(doc->project, type, v[kUnitField]);
+    }));
+    dialog->setFieldAssist(kUnitField, unitui::fieldAssist([doc]() -> const hmi::Project* { return &doc->project; },
+                                                           var ? "Unit\xC3\xA9 de " + var->name : std::string("Unit\xC3\xA9 de la variable"), {}));
     // 1.12.19 (U4, la regle des cases) : ce qui ne va pas se dit sous le champ, la fenetre reste (avant : elle se
     // fermait, et « Variable refusee » allait dans la barre d'etat - la saisie etait perdue).
     dialog->setValidator([doc, variableId, at](const std::vector<std::string>& v, std::size_t& field) -> std::string {
@@ -3203,6 +3238,11 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
         int bad = 0;
         const std::string why = variableProblem(doc->project, asId(variableId), v[0], shapedTypeOf(v, at, v[1]), v[2], &bad);
         field = bad == 1 ? (v.size() > at.written && !v[at.written].empty() ? at.written : 1) : static_cast<std::size_t>(bad);
+        if (why.empty() && v.size() > kUnitField)   // 1.13.0 (lot J6b) : l'unite (un nombre seulement, un symbole connu)
+            if (std::string u = unitui::problem(doc->project, shapedTypeOf(v, at, v[1]), v[kUnitField]); !u.empty()) {
+                field = kUnitField;
+                return u;
+            }
         return why;
     });
     app_.menus().ShowDialog(std::move(dialog), [this, variableId, at](const menu::DialogResult& r) {
@@ -3213,6 +3253,9 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
         const std::string type = shapedTypeOf(v, at, v[1]);
         const std::string initial = v.size() > 2 ? v[2] : std::string{}, description = v.size() > 3 ? v[3] : std::string{};
         const std::string folder = v.size() > 7 && v[7] != "(racine)" ? v[7] : std::string{};
+        const std::string unit = v.size() > kUnitField ? trimmedText(v[kUnitField]) : std::string{};   // 1.13.0 (lot J6b)
+        // UN SEUL CTRL+Z : la variable, son dossier, son unite.
+        core::CommandGroupScope group(variableId == 0 ? "Nouvelle variable " + v[0] : "Modifier " + v[0]);
         std::string why;
         const hmi::Id made = variableId == 0 ? pane->addVariable(v[0], type, initial, description, &why) : asId(variableId);
         const bool ok = variableId == 0 ? made != hmi::kNoId : pane->updateVariable(asId(variableId), v[0], type, initial, description, &why);
@@ -3220,7 +3263,10 @@ void MainAnalysisScreen::askHmiVariable(std::uint64_t variableId) {
             status_->setTransientMessage("Variable refus\xC3\xA9" "e : " + why, 8.0);
             return;
         }
-        if (auto* vars = pane->variablesPane()) (void)vars->setFolder(made, folder);
+        if (auto* vars = pane->variablesPane()) {
+            (void)vars->setFolder(made, folder);
+            if (!vars->setUnit(made, unit, &why)) status_->setTransientMessage("Unit\xC3\xA9 refus\xC3\xA9" "e : " + why, 8.0);
+        }
     });
 }
 
@@ -3414,6 +3460,7 @@ void MainAnalysisScreen::askHmiNewFunction(std::uint64_t symbolView) {
         if (symbolView && !a.pub) (void)pane->setFunctionVisibility(made, false);
         if (symbolView && a.isVirtual) (void)pane->setVirtual(made, true);
         if (!a.generics.empty()) (void)pane->setGenerics(made, a.generics);   // 1.13.0 : TEMPLATE <T>
+        if (!a.returnUnit.empty()) (void)pane->setReturnUnit(made, a.returnUnit);   // 1.13.0 (lot J6b) : l'unite du retour
     });
 }
 
@@ -3705,6 +3752,7 @@ std::string placeOfNode(NK kind) {
         case NK::HmiTests:         return "essais";     // lot 13
         case NK::HmiLanguages:     return "langues";
         case NK::HmiUnits:         return "unites";
+        case NK::HmiMeasureUnits:  return "unites-mesure";   // 1.13.0 (lot J6b)
         case NK::HmiComm:          return "communication";   // lot 14
         case NK::HmiStation:       return "poste";
         case NK::HmiNotify:        return "notifications";

@@ -529,6 +529,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiLibraryPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiFunctionTestsPage.cpp" />
     <ClCompile Include="src\app\hmi\HmiTestRuns.cpp" />
+    <ClCompile Include="src\app\hmi\HmiUnitPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiNativesCards.cpp" />
     <ClCompile Include="src\app\hmi\HmiNativesPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiObjectAlarmPanes.cpp" />
@@ -998,6 +999,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiLibraryPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiFunctionTestsPage.hpp" />
     <ClInclude Include="src\app\hmi\HmiTestRuns.hpp" />
+    <ClInclude Include="src\app\hmi\HmiUnitPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiLive.hpp" />
     <ClInclude Include="src\app\hmi\HmiNativesCards.hpp" />
     <ClInclude Include="src\app\hmi\HmiNativesPane.hpp" />

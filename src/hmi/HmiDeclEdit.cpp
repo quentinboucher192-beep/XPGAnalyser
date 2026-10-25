@@ -12,6 +12,7 @@
 #include "HmiSymbols.hpp"     // replacePath, symbolOf, symbolFunction
 #include "HmiTypeRegistry.hpp" // 1.11.19 (refonte, lot 6) : les types proposes, lus, remis en forme
 #include "HmiTypes.hpp"
+#include "HmiUnits.hpp"       // 1.13.0 (lot J6b) : la case Unite (le catalogue, un type numerique)
 
 #include <algorithm>
 #include <cctype>
@@ -328,14 +329,15 @@ std::vector<Column> columnsOf(Tab t, decl::Role role) {
     // 1.12.2 : plus de colonne Public / Prive - elle ne faisait rien (une declaration n'est vue
     // que de son code tant que les noms qualifies Script.Variable n'existent pas) et laissait
     // croire le contraire. La visibilite reste dans le modele et le fichier, pour ce jour-la.
+    // 1.13.0 (lot J6b) : l'Unite suit le Type (REAL | bar).
     switch (t) {
         case Tab::Constants:
-            return {Column::Name, Column::Type, Column::Value, Column::Description};
+            return {Column::Name, Column::Type, Column::Unit, Column::Value, Column::Description};
         case Tab::Variables:
-            if (script) return {Column::Name, Column::Type, Column::Value, Column::Storage, Column::Description};
-            return {Column::Name, Column::Type, Column::Value, Column::Description};
+            if (script) return {Column::Name, Column::Type, Column::Unit, Column::Value, Column::Storage, Column::Description};
+            return {Column::Name, Column::Type, Column::Unit, Column::Value, Column::Description};
         case Tab::Parameters:
-            return {Column::Name, Column::Type, Column::Mode, Column::Value, Column::Description};
+            return {Column::Name, Column::Type, Column::Unit, Column::Mode, Column::Value, Column::Description};
     }
     return {};
 }
@@ -350,6 +352,7 @@ std::string columnTitle(Column c, Tab t) {
         case Column::Mode:        return "Mode";
         case Column::Visibility:  return "Visibilit\xC3\xA9";
         case Column::Description: return "Documentation";
+        case Column::Unit:        return "Unit\xC3\xA9";   // 1.13.0 (lot J6b)
     }
     return {};
 }
@@ -363,6 +366,7 @@ std::string cellText(const Declaration& d, Column c) {
         case Column::Mode:        return std::string(modeLabel(d.mode));
         case Column::Visibility:  return std::string(visibilityLabel(d.visibility));
         case Column::Description: return d.description;
+        case Column::Unit:        return d.unit;           // 1.13.0 (lot J6b)
     }
     return {};
 }
@@ -832,6 +836,27 @@ bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::s
                     *note = "valeur " + old + " " + (d.value.empty() ? std::string("retir\xC3\xA9" "e") : "remplac\xC3\xA9" "e par " + d.value)
                           + " : " + bad;
             }
+            // 1.13.0 (lot J6b) : un type qui ne prend pas d'unite (BOOL, STRING, une structure) la retire.
+            if (!d.unit.empty() && !units::typeTakesUnit(d.type)) {
+                const std::string old = d.unit;
+                d.unit.clear();
+                if (note) *note += (note->empty() ? std::string{} : " ; ") + "unit\xC3\xA9 " + old + " retir\xC3\xA9" "e : un " + d.type + " n'en prend pas";
+            }
+            return true;
+        }
+        case Column::Unit: {                 // 1.13.0 (lot J6b) : l'unite physique (vide : sans unite)
+            if (v.empty()) {
+                d.unit.clear();
+                return true;
+            }
+            if (!units::typeTakesUnit(d.type))
+                return fail(why, "une unit\xC3\xA9 ne va que sur un nombre (ici " + d.type + ")");
+            const units::Catalog cat(p.config);
+            const std::string sym = cat.canonical(v);
+            if (sym.empty())
+                return fail(why, "unit\xC3\xA9 inconnue " + quoted(v) + " : choisis-la dans la liste (Ctrl+Espace) ou ajoute-la dans "
+                                 "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure");
+            d.unit = sym;
             return true;
         }
         case Column::Value: {

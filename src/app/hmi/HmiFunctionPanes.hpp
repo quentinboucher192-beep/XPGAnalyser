@@ -85,6 +85,10 @@ public:
     // 1.12.18 (planche 19) : la copie juste apres elle (Moyenne_copie) ; son corps suit (Moyenne := ... -> Moyenne_copie := ...).
     hmi::Id duplicateFunction(hmi::Id, std::string* why = nullptr);
     bool    setReturnType(hmi::Id, const std::string& type, std::string* why = nullptr);
+    // 1.13.0 (lot J6b) : l'unite du retour (Rend : REAL [m3/h]) - un retour numerique seulement ; vide : sans
+    // unite. Changer le retour pour un type qui n'en prend pas la retire. pickReturnUnit : le selecteur d'unites.
+    bool    setReturnUnit(hmi::Id, const std::string& unit, std::string* why = nullptr);
+    void    pickReturnUnit(hmi::Id);
     bool    setDescription(hmi::Id, const std::string& description);
     bool    setBody(hmi::Id, const std::string& body);
     bool    deleteFunction(hmi::Id);

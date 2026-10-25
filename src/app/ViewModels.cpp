@@ -16,6 +16,7 @@
 #include "../hmi/HmiNatives.hpp"   // 1.12.0 : la branche Natives
 #include "../hmi/HmiNames.hpp"     // 1.13.0 (lot J8) : les espaces de noms
 #include "../hmi/HmiLibrary.hpp"   // 1.13.0 (lot J8) : les bibliotheques reliees
+#include "../hmi/HmiUnits.hpp"     // 1.13.0 (lot J6b) : Configuration > Unites de mesure (le compte)
 #include "../hmi/HmiAlarmGroups.hpp"   // 1.11.1 (decision 108) : le groupe de l'IHM lie a celui d'un objet
 #include "hmi/HmiTreeData.hpp"
 #include "hmi/HmiTestRuns.hpp"           // 1.13.0 (lot J4b) : les verdicts des tests (app::testruns)
@@ -889,7 +890,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiFolder:           return hmi_ ? 13 : 0;
         case NodeKind::HmiSymbolsFolder:
             return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Symbols, {}).size() : 0;   // lot 21 : ses dossiers
-        case NodeKind::HmiConfig:           return hmi_ ? 11 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web
+        case NodeKind::HmiConfig:           return hmi_ ? 12 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web ; 1.13.0 : + Unites de mesure
         case NodeKind::HmiViews:            return hmi_ ? 3 : 0;   // lot 8 : Modeles, Vues, Popups
         case NodeKind::HmiViewFolder:
             if (!hmi_) return 0;
@@ -1369,7 +1370,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                                                NodeKind::HmiComm,                                 // lot 14 : Communication,
                                                NodeKind::HmiStation,                              // Poste d'exploitation,
                                                NodeKind::HmiNotify, NodeKind::HmiReports,         // Notifications, Rapports,
-                                               NodeKind::HmiWeb};                                 // Acces web
+                                               NodeKind::HmiWeb,                                  // Acces web
+                                               NodeKind::HmiMeasureUnits};                        // 1.13.0 (lot J6b) : Unites de mesure
             return k < std::size(sub) ? pack(sub[k], 0) : ui::kInvalidNode;
         }
         case NodeKind::HmiViews:
@@ -1907,6 +1909,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case NK::HmiViewFolder: case NK::HmiTemplateFolder: case NK::HmiViewPart: case NK::HmiStyles: case NK::HmiTests:
             case NK::HmiScripts: case NK::HmiAlarms: case NK::HmiRecipes: case NK::HmiUsers: case NK::HmiLanguages:
             case NK::HmiUnits: case NK::HmiComm: case NK::HmiReports: case NK::HmiAlarmGroup: case NK::HmiRoles:
+            case NK::HmiMeasureUnits:                                      // 1.13.0 (lot J6b)
             case NK::HmiScriptsFolder: case NK::HmiFunctionsFolder: case NK::HmiVariablesFolder: case NK::HmiTypesFolder:
             case NK::HmiLibrariesFolder:                                   // 1.13.0 (lot J8)
             case NK::HmiVarFolder: case NK::HmiUsedFolder: case NK::HmiSysFolder: case NK::HmiSysDomain:
@@ -1965,7 +1968,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker   // 1.10.2 (chantier A)
                 || (k >= NK::HmiInstParam && k <= NK::HmiInstAlarmVar)                               // 1.11.1 (decision 108)
                 || ProjectTreeModel::isNativesKind(k)                                                // 1.12.0
-                || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode;                          // 1.13.0 (lot J8)
+                || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode                           // 1.13.0 (lot J8)
+                || k == NK::HmiMeasureUnits;                                                         // 1.13.0 (lot J6b)
         }
     } // namespace
 
@@ -2591,6 +2595,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiHistory:       return "Historiques";
         case NodeKind::HmiLanguages:     return "Langues  [" + std::to_string(hmi_ ? hmi_->project.languages.list.size() : 1u) + "]";   // lot 13
         case NodeKind::HmiUnits:         return "Unit\xC3\xA9s et formats  [" + std::to_string(hmi_ ? hmi_->project.displays.size() : 0u) + "]";
+        case NodeKind::HmiMeasureUnits:  return "Unit\xC3\xA9s de mesure  [" + std::to_string(hmi_ ? hmi::units::Catalog(hmi_->project.config).units().size() : 0u) + "]";   // 1.13.0 (lot J6b)
         case NodeKind::HmiComm:                                                                                      // lot 14 ; lot 15 : les equipements
             return "\xC3\x89quipements  [" + std::to_string(hmi_ ? hmi_->project.equipments.size() + (hmi_->project.comm.modbus() ? 1u : 0u) : 0u) + "]";
         case NodeKind::HmiModbusTool:    return "Outil Modbus";                                                      // lot 15
@@ -3783,6 +3788,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiUnits:
             s.icon = ui::Icon::Variable;
             if (hmi_ && !hmi_->project.displays.empty()) s.iconTone = ui::Tone::Ok;
+            break;
+        case NodeKind::HmiMeasureUnits:                                            // 1.13.0 (lot J6b) : vert, des unites du projet
+            s.icon = ui::Icon::Constant;
+            if (hmi_ && (!hmi_->project.config.units.empty() || hmi_->project.config.strictUnits)) s.iconTone = ui::Tone::Ok;
             break;
         case NodeKind::HmiComm:                                                    // lot 14 : vert relie a un automate reel ou a des equipements
             s.icon = ui::Icon::Network;

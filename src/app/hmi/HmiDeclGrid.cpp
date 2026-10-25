@@ -8,6 +8,7 @@
 #include "HmiIcons.hpp"
 #include "HmiInitModel.hpp"    // 1.12.19 (U3) : iv::zeroOf, l'invite d'une case vide
 #include "HmiTypePicker.hpp"
+#include "HmiUnitPanes.hpp"    // 1.13.0 (lot J6b) : la case Unite (le selecteur d'unites, l'aide a la saisie)
 #include "../../hmi/HmiRoles.hpp"      // 1.12.19 (U3) : defaultInvite
 #include "../../hmi/HmiCalc.hpp"       // 1.12.7 : les valeurs calculees au demarrage
 #include "../../hmi/HmiMigrate.hpp"
@@ -105,6 +106,7 @@ public:
     const hmi::Project*      project{nullptr};    // 1.12.19 (U3) : la valeur nulle d'un type (l'invite)
     std::function<void(std::size_t)>                                askFreeType;
     std::function<void(std::size_t)>                                askPickType;
+    std::function<void(std::size_t)>                                askPickUnit;   // 1.13.0 (lot J6b)
 
     [[nodiscard]] std::size_t rowCount() const override { return rows.size(); }
     [[nodiscard]] std::size_t columnCount() const override { return columns.size(); }
@@ -153,6 +155,15 @@ public:
             case de::Column::Storage:
                 if (row.d.storage == hmi::Storage::Persistent) s.fgTone = ui::Tone::Accent;
                 break;
+            case de::Column::Unit:            // 1.13.0 (lot J6b) : grisee sur un type qui n'en prend pas
+                s.monospace = true;
+                if (!unitui::usable(row.d.type)) {
+                    s.fgTone = ui::Tone::Muted;
+                    if (row.d.unit.empty()) s.placeholder = "\xE2\x80\x94";
+                } else if (row.d.unit.empty()) {
+                    s.placeholder = "sans";
+                }
+                break;
             default: break;
         }
         return s;
@@ -199,9 +210,16 @@ public:
         }
     }
     // 1.12.14 : la case Type ouvre le selecteur de types (il compose aussi les types imbriques) ; sans
-    // hote (un essai), la liste et « Autre type... ».
+    // hote (un essai), la liste et " Autre type... ". 1.13.0 (lot J6b) : la case Unite, le selecteur
+    // d'unites (sans hote : un champ, Ctrl+Espace propose les unites).
     bool editInDialog(ui::RowIndex r, std::size_t c) override {
-        if (r >= rows.size() || c >= columns.size() || columns[c] == kUses || !askPickType || !typepicker::available()) return false;
+        if (r >= rows.size() || c >= columns.size() || columns[c] == kUses) return false;
+        if (static_cast<de::Column>(columns[c]) == de::Column::Unit) {
+            if (!askPickUnit || !unitpicker::available()) return false;
+            askPickUnit(r);
+            return true;
+        }
+        if (!askPickType || !typepicker::available()) return false;
         if (static_cast<de::Column>(columns[c]) != de::Column::Type) return false;
         askPickType(r);
         return true;
@@ -222,7 +240,7 @@ public:
     [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override {
         if (r >= rows.size()) return {};
         const auto& row = rows[r];
-        std::string tip = row.d.name + " : " + row.d.type;
+        std::string tip = row.d.name + " : " + hmi::units::withUnit(row.d.type, row.d.unit);   // 1.13.0 (lot J6b) : REAL [bar]
         if (row.d.computed) {
             // 1.12.7 : calculee au demarrage - son code, ses locales, ce qu'elle vaut.
             tip += "  (\xC6\x92x calcul\xC3\xA9" "e au d\xC3\xA9marrage)\n" + row.d.calc;
@@ -302,10 +320,21 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
         (void)table_->beginCellEdit(static_cast<ui::RowIndex>(row), static_cast<std::size_t>(c));
     };
     rows_->askPickType = [this](std::size_t row) { pickType(row); };
+    rows_->askPickUnit = [this](std::size_t row) { pickUnit(row); };   // 1.13.0 (lot J6b)
     table_->setModel(rows_);
     // 1.12.19 (U3, la regle des cases) : Ctrl+Espace dans une case Valeur - les variables, les fonctions, les
     // declarations voisines (comme une case fx de l'inspecteur).
-    table_->setCellAssist([this](ui::RowIndex, std::size_t col) -> ui::InputText::Assist {
+    table_->setCellAssist([this](ui::RowIndex r, std::size_t col) -> ui::InputText::Assist {
+        // 1.13.0 (lot J6b) : la case Unite - les unites du catalogue, puis " Choisir une unite... ".
+        if (col < rows_->columns.size() && rows_->columns[col] != kUses && doc_ && r < rows_->rows.size()
+            && static_cast<de::Column>(rows_->columns[col]) == de::Column::Unit) {
+            const Id did = rows_->rows[r].d.id;
+            return unitui::fieldAssist([doc = doc_]() -> const hmi::Project* { return doc ? &doc->project : nullptr; },
+                                       "Unit\xC3\xA9 de " + rows_->rows[r].d.name, rows_->rows[r].d.type,
+                                       [this, did, alive = std::weak_ptr<int>(alive_)](const std::string& unit) {
+                                           if (!alive.expired()) (void)setUnitOf(did, unit);
+                                       });
+        }
         if (col >= rows_->columns.size() || rows_->columns[col] == kUses
             || static_cast<de::Column>(rows_->columns[col]) != de::Column::Value || !doc_)
             return {};
@@ -514,6 +543,7 @@ void HmiDeclGrid::rebuildColumns() {
             case de::Column::Mode:        w = 120.f; break;
             case de::Column::Visibility:  w = 92.f; break;
             case de::Column::Description: w = 320.f; break;
+            case de::Column::Unit:        w = 80.f; break;    // 1.13.0 (lot J6b)
         }
         view.push_back({de::columnTitle(c, tab_), w, 50.f, true, !order});
     }
@@ -1149,6 +1179,39 @@ bool HmiDeclGrid::setTypeOf(hmi::Id declaration, const std::string& type) {
     return false;
 }
 
+// 1.13.0 (lot J6b) : " Choisir une unite... " - le selecteur d'unites (par son hote) ; l'unite choisie va a
+// la declaration (retrouvee par son identifiant : la grille a pu changer entre-temps). Sans unite : vide.
+void HmiDeclGrid::pickUnit(std::size_t row) {
+    if (row >= rows_->rows.size() || !usable()) return;
+    if (!unitpicker::available()) {
+        say("Le s\xC3\xA9lecteur d'unit\xC3\xA9s n'est pas ouvert ici : tape le symbole (Ctrl+Espace les propose).", true);
+        return;
+    }
+    const auto& d = rows_->rows[row].d;
+    HmiUnitPicker::Spec spec;
+    spec.field = "Unit\xC3\xA9 de " + d.name;
+    spec.current = d.unit;
+    spec.type = d.type;
+    spec.doc = doc_;
+    spec.recents = unitpicker::recents();
+    const std::weak_ptr<int> alive = alive_;
+    const hmi::Id id = d.id;
+    unitpicker::ask(std::move(spec), [this, alive, id](const HmiUnitPicker::Answer& a) {
+        if (alive.expired() || a.manage) return;
+        (void)setUnitOf(id, a.unit);
+    });
+}
+
+bool HmiDeclGrid::setUnitOf(hmi::Id declaration, const std::string& unit) {
+    for (std::size_t i = 0; i < rows_->rows.size(); ++i)
+        if (rows_->rows[i].d.id == declaration) {
+            if (rows_->rows[i].d.unit == unit) return true;
+            return setCell(i, de::Column::Unit, unit);
+        }
+    say("Cette d\xC3\xA9" "claration n'est plus dans l'onglet : son unit\xC3\xA9 n'a pas chang\xC3\xA9.", true);
+    return false;
+}
+
 paste::Target HmiDeclGrid::pasteTarget(const ui::TableView::PasteRequest& rq) {
     paste::Target tg;
     switch (tab_) {
@@ -1193,6 +1256,7 @@ paste::Target HmiDeclGrid::pasteTarget(const ui::TableView::PasteRequest& rq) {
             case de::Column::Visibility:  return {"Visibility", "Port\xC3\xA9" "e", "Scope", "Acc\xC3\xA8s", "Access"};
             case de::Column::Description:
                 return {"Description", "Commentaire", "Comment", "Doc", "Libell\xC3\xA9", "Label", "Remarque"};
+            case de::Column::Unit:        return {"Unit", "Unite", "Unit\xC3\xA9 physique", "Grandeur"};   // 1.13.0 (lot J6b)
         }
         return {};
     };

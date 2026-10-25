@@ -18,6 +18,8 @@
 #include "../../ui/Theme.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 #include "HmiTypePicker.hpp"   // 1.11.19 (refonte, lot 6) : le retour, au selecteur de types
+#include "HmiUnitPanes.hpp"    // 1.13.0 (lot J6b) : l'unite du retour (le selecteur d'unites)
+#include "../../hmi/HmiUnits.hpp"
 #include "../../hmi/HmiNames.hpp"   // 1.13.0 (lot J8) : l'espace de noms d'une fonction
 
 #include <algorithm>
@@ -687,6 +689,16 @@ void HmiFunctionsPane::rebuildProperties() {
         "\xC3\xA0 son nom : Moyenne := ... ;", types));
     // 1.12.14 : la case ouvre le selecteur de types (les types imbriques aussi), plus la liste.
     if (typepicker::available()) c.properties.back().dialog = [this, id] { (void)setReturnType(id, typepicker::kChoose); };
+    // 1.13.0 (lot J6b) : l'unite du retour (un retour numerique) - la case ouvre le selecteur d'unites.
+    if ((!f->returnType.empty() && hmi::units::typeTakesUnit(f->returnType)) || !f->returnUnit.empty()) {
+        auto pu = hmikit::prop("Unit\xC3\xA9 du retour", f->returnUnit, PG::ValueType::Text,
+            [this, id](std::string_view v) { return setReturnUnit(id, std::string(v)); },
+            "L'unit\xC3\xA9 physique de ce que rend la fonction (Rend : REAL [m3/h]) : un appel la propage comme une variable "
+            "de ce type ; vide : sans unit\xC3\xA9.");
+        pu.placeholder = "sans";
+        if (unitpicker::available()) pu.dialog = [this, id] { pickReturnUnit(id); };
+        c.properties.push_back(std::move(pu));
+    }
     // 1.13.0 : les generiques de la fonction (TEMPLATE <T>) - comme une structure ou un symbole.
     c.properties.push_back(hmikit::prop("G\xC3\xA9n\xC3\xA9riques", hmi::genericsText(f->generics), PG::ValueType::Text,
         [this, id](std::string_view v) { return setGenerics(id, std::string(v)); },
@@ -1196,11 +1208,59 @@ bool HmiFunctionsPane::setReturnType(Id id, const std::string& type, std::string
         return false;
     }
     if (t == f->returnType) return true;
-    auto cmd = hmi::changeProject(doc_, "Retour de " + f->name, [&](hmi::Project& p) {
-        if (auto* g = fnOf(p, id)) g->returnType = t;
+    // 1.13.0 (lot J6b) : un retour qui ne prend pas d'unite (BOOL, STRING, aucun) la retire.
+    const std::string lostUnit = !f->returnUnit.empty() && (t.empty() || !hmi::units::typeTakesUnit(t)) ? f->returnUnit : std::string{};
+    const std::string fname = f->name;
+    auto cmd = hmi::changeProject(doc_, "Retour de " + fname, [&](hmi::Project& p) {
+        if (auto* g = fnOf(p, id)) {
+            g->returnType = t;
+            if (!lostUnit.empty()) g->returnUnit.clear();
+        }
     });
     if (cmd) apply_(std::move(cmd));
+    if (!lostUnit.empty()) say(fname + " : unit\xC3\xA9 du retour " + lostUnit + " retir\xC3\xA9" "e (Ctrl+Z la rend)");
     return true;
+}
+
+// 1.13.0 (lot J6b) : L'UNITE DU RETOUR (Rend : REAL [m3/h]) - un retour numerique seulement ; vide : sans unite.
+bool HmiFunctionsPane::setReturnUnit(Id id, const std::string& unit, std::string* why) {
+    const auto* f = fnOf(doc_->project, id);
+    if (!f) {
+        if (why) *why = "fonction introuvable";
+        return false;
+    }
+    std::string canon;
+    if (const std::string bad = unitui::problem(doc_->project, f->returnType.empty() ? std::string("(aucun)") : f->returnType, unit, &canon);
+        !bad.empty()) {
+        if (why) *why = bad;
+        say("Unit\xC3\xA9 refus\xC3\xA9" "e : " + bad, true);
+        return false;
+    }
+    if (canon == f->returnUnit) return true;
+    const std::string fname = f->name, type = f->returnType;
+    auto cmd = hmi::changeProject(doc_, "Unit\xC3\xA9 du retour de " + fname, [&](hmi::Project& p) {
+        if (auto* g = fnOf(p, id)) g->returnUnit = canon;
+    });
+    if (cmd) apply_(std::move(cmd));
+    say(fname + (canon.empty() ? std::string(" : retour sans unit\xC3\xA9") : " rend un " + hmi::units::withUnit(type, canon)) + " (Ctrl+Z).");
+    return true;
+}
+
+void HmiFunctionsPane::pickReturnUnit(Id id) {
+    const auto* f = fnOf(doc_->project, id);
+    if (!f || !unitpicker::available()) return;
+    HmiUnitPicker::Spec spec;
+    spec.field = "Unit\xC3\xA9 du retour de " + f->name;
+    spec.current = f->returnUnit;
+    spec.type = f->returnType;
+    spec.doc = doc_;
+    spec.recents = unitpicker::recents();
+    const std::weak_ptr<int> alive = alive_;
+    unitpicker::ask(std::move(spec), [this, id, alive](const HmiUnitPicker::Answer& a) {
+        if (alive.expired() || a.manage) return;
+        (void)setReturnUnit(id, a.unit);
+        rebuildProperties();
+    });
 }
 
 // 1.13.0 : les generiques de la fonction (TEMPLATE <T>) changent ; ses parametres, son retour, ses locales et les

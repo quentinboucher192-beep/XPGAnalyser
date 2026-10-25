@@ -17,7 +17,7 @@
 //
 //    +------------------------------ outils -------------------------------+
 //    | Dossier [v]  Rechercher...   [x] deplier  [ ] seulement les liees     |
-//    | Nom | Type | Initiale | Equipement | Adresse | Acces | Place | Qualite| grille
+//    | Nom | Type | Unite | Initiale | Equipement | Adresse | Acces | Place | Qualite| grille
 //    +------------------------------ etat ---------------------------------+
 //
 //  TYPES IHM : les structures (un tableau des types, un tableau de leurs
@@ -68,6 +68,11 @@ public:
     bool setName(hmi::Id, const std::string& name, std::string* why = nullptr);
     bool setType(hmi::Id, const std::string& type, std::string* why = nullptr);
     bool setInitial(hmi::Id, const std::string& initial, std::string* why = nullptr);
+    // 1.13.0 (lot J6b) : L'UNITE PHYSIQUE (la colonne Unite, apres le Type) - vide : sans unite ; sinon un
+    // symbole du catalogue (degc -> degC), seulement sur un type numerique (refuse sinon, et pourquoi).
+    // Un type change qui n'en prend plus la retire. pickUnit : le selecteur d'unites (par son hote).
+    bool setUnit(hmi::Id, const std::string& unit, std::string* why = nullptr);
+    void pickUnit(hmi::Id);
     bool setDescription(hmi::Id, const std::string& text);
     bool setFolder(hmi::Id, const std::string& folder, std::string* why = nullptr);
     // "" : delier. Lier sans adresse : la prochaine libre de l'equipement.
@@ -321,6 +326,9 @@ public:
     bool removeMember(hmi::Id, std::size_t index);
     bool moveMember(hmi::Id, std::size_t index, int delta);
     bool duplicateMember(hmi::Id, std::size_t index);   // 1.12.18 : la copie juste apres (Niveau_copie)
+    // 1.13.0 (lot J6b) : la colonne Unite d'un membre (apres le Type) - setMember la controle (un nombre seulement,
+    // un symbole du catalogue) ; pickMemberUnit : le selecteur d'unites (par son hote).
+    void pickMemberUnit(hmi::Id type, std::size_t index);
 
     [[nodiscard]] hmi::Id selectedType() const;
     [[nodiscard]] int     selectedMember() const;
@@ -339,7 +347,7 @@ public:
     // ---- 1.10 (chantier O) : les membres <-> Excel ----
     //  Ctrl+C (et le clic droit, et l'outil Copier) : les membres choisis en
     //  tableau, avec une ligne de titres (Nom, Type, Valeur initiale,
-    //  Description, Decalage, Taille). Ctrl+V : un tableau d'Excel, avec ou
+    //  Description, Decalage, Taille ; 1.13.0 : Unite). Ctrl+V : un tableau d'Excel, avec ou
     //  sans titres (sans : Nom, Type, Valeur initiale, Description, dans cet
     //  ordre ; les autres colonnes ignorees) -> un APERCU sous la table (ajoutes,
     //  remplaces, refuses et pourquoi : nom invalide, nom en double, type

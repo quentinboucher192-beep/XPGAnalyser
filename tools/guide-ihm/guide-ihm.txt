@@ -1642,6 +1642,7 @@ Configuration › **Unités et formats** : la variable (IHM ou de l'automate), s
 - **Ajouter** demande la variable, l'unité, le format ;
 - **Proposer** relit les vues : chaque variable montrée avec une unité par un objet devient une ligne, avec l'unité et le format de cet objet. Une seule ligne par variable : `Armoires[0].ana.PT1.mes` et `Armoires[1].ana.PT1.mes` donnent `Armoires[].ana.PT1.mes` ; dans une popup qui déclare `Armoire := Armoires[0]`, `Armoire.ana.PT1.mes` est la même variable ;
 - **Retirer** : ses objets reprennent les leurs ; Ctrl+Z rend tout.
+Une variable qui a une **unité physique** (la colonne Unité des Variables IHM ou de son type, voir « Les unités de mesure dans les types ») la montre d'office : sa ligne laisse la case Unité vide, en gris, tant que tu n'en tapes pas une autre.
 ### Où elles sont reprises
 - les objets qui montrent **une** variable et ont une unité ou un format : afficheur numérique, champ de saisie, jauge, bargraphe, cadran, thermomètre, cuve, silo, trémie, bouteille, curseur, potentiomètre, instrument ISA ;
 - chaque ligne d'un **tableau de variables** dont l'unité (ou le format, colonne Formats) est vide ;
@@ -6758,11 +6759,16 @@ if (dernieres.size() > 100) dernieres.pop_front();
 
 == unites-mesure | Les unités de mesure dans les types
 : Donne une unité physique (bar, mbar, degC, m3/h, %) à une variable ou à un membre : la compilation refuse bar + mbar, convertit d'office ce qui est compatible, et l'unité remonte jusqu'à l'affichage - sans rien changer pour qui n'en met pas.
-@mots unité, unités, unite, mesure, EN, UNITE, SANS_UNITE, famille, conversion, strictes
-@lieux types-ihm, variables-ihm, unites-formats
+@mots unité, unités, unite, mesure, EN, UNITE, SANS_UNITE, famille, conversion, strictes, Unités strictes, Choisir une unité, sélecteur d'unités, Unités de mesure
+@lieux unites-mesure, types-ihm, variables-ihm, unites-formats
 @voir types-ihm, variables-ihm, unites-formats, retours-fonctions, operateurs, erreurs-scripts, reference
-### Poser une unité : entre crochets après un type numérique
-Dans la grille des membres d'un type (et des variables IHM, des paramètres), une colonne **Unité** à côté de **Type** : un clic ouvre le **sélecteur d'unités** (familles, recherche, récents). Vide = pas d'unité, comme avant. La colonne Type reste « REAL » ; l'aide à la saisie et le survol montrent la forme combinée **REAL [bar]**. Une unité ne va que sur un **type numérique** (REAL, INT… ; sur un ARRAY OF REAL, elle porte sur l'élément) : Générer refuse une unité sur un BOOL, un texte ou une structure.
+### Poser une unité : la colonne Unité
+Une colonne **Unité**, juste après **Type**, dans la grille des **Variables IHM**, dans celle des **membres d'un type** et dans les onglets **Paramètres**, **Locales** et **Constantes** d'une fonction ; l'**Unité du retour** est dans la fiche de la fonction. Les fenêtres **Nouvelle variable** et **Nouvelle fonction** ont la même case. Vide = pas d'unité, comme avant.
+- **Taper** le symbole, sans souci de la casse : `BAR` devient `bar`, `m3h` devient `m3/h`. Un symbole inconnu est refusé, la raison sous la case.
+- **Ctrl+Espace** propose les unités dont le symbole, le nom ou la famille contient ce que tu tapes (`temp` : K, degC, degF) ; la dernière ligne, **Choisir une unité…**, ouvre le sélecteur. Un double-clic sur la case l'ouvre aussi.
+- Une unité ne va que sur un **type numérique** (REAL, INT… ; sur un ARRAY OF REAL, elle porte sur l'élément) : la case d'un BOOL, d'un texte ou d'une structure est grisée. Si le type devient non numérique, l'unité est retirée et la barre le dit. Générer refuse aussi une unité sur un BOOL, un texte ou une structure.
+- La ligne d'un membre (`Ligne1.Debit`) montre en gris l'unité qui vient de son type. Le survol d'une déclaration montre la forme combinée **REAL [bar]**.
+- **Copier, coller depuis Excel** : la colonne Unité vient avec ; une unité inconnue refuse sa ligne. Chaque geste se reprend par Ctrl+Z.
 ```ST
 TYPE T_Ligne :
     Pression      : REAL [bar];
@@ -6787,8 +6793,16 @@ struct T_Ligne {            // le C++ n'a pas d'unité native (pas de <units> st
     float Debit;            // [m3/h]
 };
 ```
+### Le sélecteur d'unités
+**Choisir une unité — Unité de Pression** : la recherche (symbole, nom ou famille, sans casse ni accents : `fahr` trouve degF), la liste **Famille** (Toutes les familles, Récentes, puis chaque famille) et le tableau Unité, Nom, Famille, Conversion (« 1 mbar = 100 Pa »). L'unité actuelle est choisie d'office ; la ligne du bas dit l'unité choisie. **Choisir** (ou Entrée, ou un double-clic), **Sans unité** (vide la case), **Annuler**, et **Gérer les unités…**, qui ouvre Configuration › Unités de mesure. Sur un type non numérique, il le dit.
+### Configuration › Unités de mesure
+Dans l'arbre, sous Configuration : la bibliothèque des unités du projet.
+- À gauche, les **familles** (Famille, Référence, Unités, Provenance) ; à droite, les **unités** de la famille choisie (Unité, Nom, Conversion, Provenance, Emplois), et dessous la fiche de ce qui est choisi.
+- Les unités et familles **fournies** sont verrouillées (un cadenas). **+ Famille** crée une famille du projet : son nom (des minuscules, des chiffres et _), son unité de référence (créée avec elle) et son libellé. **+ Unité** ajoute une unité à la famille choisie : son symbole, son facteur et son décalage vers la référence (valeur de référence = valeur × facteur + décalage). La fiche modifie le nom, le facteur et le décalage d'une unité du projet ; la référence garde facteur 1 et décalage 0.
+- **Retirer** : une unité du projet que rien n'emploie (la colonne Emplois dit où elle sert), ou une famille du projet dont aucune unité n'est employée. Une unité fournie ne se retire pas.
+- La case **Unités strictes : une affectation de même famille exige EN(…)** (voir plus bas). Chaque geste se reprend par Ctrl+Z.
 ### Deux règles, voulues différentes
-L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) exigent la **même unité exacte** : bar et mbar ne s'additionnent pas, il faut convertir l'un des deux avec **EN(…)**. L'**affectation** (:=, passer un argument, RETURN) de la même famille **convertit d'office** (une info) ; l'option projet « Unités strictes » (Configuration › Unités et formats) exige alors EN(…) au lieu de convertir. Deux **familles différentes** (une pression et une température) : toujours refusé, et le message nomme les deux. Une valeur **sans unité** (un littéral 9.0, une variable nue) adopte l'unité de l'autre ; une cible sans unité reçoit le nombre tel quel.
+L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) exigent la **même unité exacte** : bar et mbar ne s'additionnent pas, il faut convertir l'un des deux avec **EN(…)**. L'**affectation** (:=, passer un argument, RETURN) de la même famille **convertit d'office** (une info) ; la case « Unités strictes » (Configuration › Unités de mesure) exige alors EN(…) au lieu de convertir. Deux **familles différentes** (une pression et une température) : toujours refusé, et le message nomme les deux. Une valeur **sans unité** (un littéral 9.0, une variable nue) adopte l'unité de l'autre ; une cible sans unité reçoit le nombre tel quel.
 ```ST
 Ecart := Pression - EN(PressionBasse, 'bar');   (* bar et mbar : convertis d'abord *)
 IF Pression > 9.0 THEN ... END_IF;              (* 9.0 pris en bar *)
@@ -6826,7 +6840,8 @@ auto texte = std::format("{:.1f}", temperature + 273.15f);
 double brut = pression;                    // pas d'unité à enlever en C++
 ```
 ### L'unité remonte à l'affichage
-L'unité physique du créneau devient l'**unité d'affichage par défaut** : `{Pression:u}` écrit « 9.08 bar », l'afficheur, la jauge, le champ de saisie et la ligne « Unités et formats » la prennent sans qu'on la retape. Une ligne « Unités et formats » peut encore poser une autre unité d'affichage, mais **de la même famille** (sinon Générer le dit : converti en info, familles différentes en erreur).
+En marche, l'unité physique d'une variable devient son **unité d'affichage par défaut**, écrite comme on la lit (degC : °C, m3/h : m³/h). L'afficheur, le champ de saisie, la jauge, le cadran… qui montrent la variable et laissent leur unité vide la prennent, comme chaque ligne d'un tableau de variables ; `{Pression:u}` écrit « 9.08 bar », dans un texte comme dans le message d'une alarme. Un objet qui décoche **Format de la variable** garde la sienne.
+Dans Configuration › Unités et formats, la case Unité d'une ligne vide montre cette unité en gris. Une unité tapée sur la ligne ou sur l'objet l'emporte, mais ce n'est qu'un **libellé** : la valeur n'est pas convertie. Pour montrer des mbar d'une variable en bar, mets `EN(Pression, 'mbar')` dans la valeur de l'objet et tape mbar dans son unité.
 
 = Programmer › Scripts et fonctions
 

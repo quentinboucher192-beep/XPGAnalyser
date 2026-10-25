@@ -20,6 +20,7 @@
 #include "HmiDisplay.hpp"
 #include "HmiMarkers.hpp"   // 1.12.5 : un chemin sans ses reperes
 #include "HmiRanges.hpp"    // 1.12.10 (lot F) : la variable dont un objet prend la plage
+#include "HmiUnits.hpp"     // 1.13.0 (lot J6b) : l'unite physique, unite d'affichage par defaut
 
 #include "HmiExpr.hpp"
 #include "HmiLanguages.hpp"
@@ -248,9 +249,27 @@ DisplayOptions projectDisplay(const Project& p) {
     return o;
 }
 
+namespace {
+// 1.13.0 (lot J6b) : une variable ou un membre de type porte une unite physique (la vue preparee la montre).
+bool anyPhysicalUnit(const Project& p) {
+    for (const auto& v : p.programs.variables)
+        if (!v.unit.empty()) return true;
+    const auto members = [](const HmiType& t) {
+        for (const auto& m : t.members)
+            if (!m.unit.empty()) return true;
+        return false;
+    };
+    for (const auto& t : p.programs.types)
+        if (members(t)) return true;
+    bool found = false;
+    p.forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { found = found || members(t); });
+    return found;
+}
+} // namespace
+
 bool plainDisplay(const Project& p, const DisplayOptions& o) {
     return !isTranslated(p.languages, o.language) && o.textScale == 100 && o.colorMode != "daltonien" && !o.symbols && o.theme != "jour"
-        && p.displays.empty();
+        && p.displays.empty() && !anyPhysicalUnit(p);
 }
 
 // ================================================================ unites =====
@@ -267,6 +286,24 @@ const VariableDisplay* displayOf(const Project& p, std::string_view path, const 
         if (genericPath(d.path) == generic) return &d;
     if (const std::string via = throughParam(wanted, in); !via.empty()) return displayOf(p, via);
     return nullptr;
+}
+
+std::string unitLabel(std::string_view symbol) {
+    const std::string s = trim(symbol);
+    if (s == "degC") return "\xC2\xB0" "C";
+    if (s == "degF") return "\xC2\xB0" "F";
+    if (s == "m3/h") return "m\xC2\xB3/h";
+    if (s == "m3/s") return "m\xC2\xB3/s";
+    if (s == "Nm3/h") return "Nm\xC2\xB3/h";
+    return s;
+}
+
+std::string physicalDisplayUnit(const Project& p, std::string_view path, const View* in) {
+    // Un chemin seul (Pression, Ligne1.Debit, Vannes[2]) ; une expression n'a pas d'unite a montrer.
+    std::string wanted = trim(markers::strip(path, markers::Mode::Expression));
+    if (wanted.empty() || !plainPath(wanted)) return {};
+    if (const std::string via = throughParam(wanted, in); !via.empty()) wanted = via;
+    return unitLabel(units::unitOfPath(p, wanted));
 }
 
 std::string displayRowPath(std::string_view path, const View* in) {
@@ -304,7 +341,11 @@ std::string effectiveFormat(const Project& p, const Object& o, std::string_view 
 std::string effectiveUnit(const Project& p, const Object& o) {
     if (followsVariableFormat(o))
         if (const auto* d = displayOf(p, displayVariableOf(o)); d && !trim(d->unit).empty()) return trim(d->unit);
-    return o.text("unit");
+    const std::string own = o.text("unit");
+    // 1.13.0 (lot J6b) : sans unite a lui ni ligne Unites et formats, l'unite physique de sa variable.
+    if (trim(own).empty() && followsVariableFormat(o))
+        if (std::string physical = physicalDisplayUnit(p, displayVariableOf(o)); !physical.empty()) return physical;
+    return own;
 }
 
 std::string rowFormat(const Project* p, const Object& o, std::size_t row) {
@@ -344,7 +385,12 @@ std::string formatTemplate(std::string_view text, const Project& p, const View* 
         const VariableDisplay* d = plainPath(expr) ? displayOf(p, expr, in) : nullptr;
         if (format.empty() && d && !trim(d->format).empty()) format = trim(d->format);
         out += '{' + expr + (format.empty() ? std::string{} : ":" + format) + '}';
-        if (withUnit && d && !trim(d->unit).empty()) out += " " + trim(d->unit);
+        if (withUnit) {
+            // 1.13.0 (lot J6b) : sans ligne Unites et formats (ou sans unite), l'unite physique de la variable.
+            std::string unit = d ? trim(d->unit) : std::string{};
+            if (unit.empty()) unit = physicalDisplayUnit(p, expr, in);
+            if (!unit.empty()) out += " " + unit;
+        }
         i = close + 1;
     }
     return out;
@@ -479,9 +525,13 @@ View displayView(const View& v, const Project& p, const DisplayOptions& o) {
     View out = isTranslated(p.languages, o.language) ? translatedView(v, p.languages, o.language) : v;
     const bool colors = o.colorMode == "daltonien" || o.theme == "jour";
     const double scale = std::clamp(o.textScale, 50, 300) / 100.0;
+    // 1.13.0 (lot J6b) : l'unite physique des variables (Variables IHM, membres d'un type) est l'unite
+    // d'affichage par defaut : elle remplit l'unite laissee vide d'un objet qui suit sa variable.
+    const bool physical = anyPhysicalUnit(p);
+    const bool anyDisplay = !p.displays.empty() || physical;
     for (auto& obj : out.objects) {
         // L'unite et le format de la variable montree.
-        if (!p.displays.empty()) {
+        if (anyDisplay) {
             if (obj.kind == Kind::VariableTable && followsVariableFormat(obj)) {
                 const auto vars = splitSemicolons(obj.text("variables"));
                 auto units = splitSemicolons(obj.text("units"));
@@ -491,24 +541,30 @@ View displayView(const View& v, const Project& p, const DisplayOptions& o) {
                 bool changed = false;
                 for (std::size_t k = 0; k < vars.size(); ++k) {
                     const auto* d = displayOf(p, vars[k], &v);
-                    if (!d) continue;
-                    if (trim(units[k]).empty() && !trim(d->unit).empty()) { units[k] = trim(d->unit); changed = true; }
-                    if (trim(formats[k]).empty() && !trim(d->format).empty()) { formats[k] = trim(d->format); changed = true; }
+                    if (trim(units[k]).empty()) {
+                        std::string unit = d ? trim(d->unit) : std::string{};
+                        if (unit.empty() && physical) unit = physicalDisplayUnit(p, vars[k], &v);
+                        if (!unit.empty()) { units[k] = unit; changed = true; }
+                    }
+                    if (d && trim(formats[k]).empty() && !trim(d->format).empty()) { formats[k] = trim(d->format); changed = true; }
                 }
                 if (changed) {
                     obj.set("units", joinSemicolons(units));
                     obj.set("formats", joinSemicolons(formats));
                 }
             } else if (!multiVariable(obj.kind) && followsVariableFormat(obj) && (obj.find("unit") || obj.find("format"))) {
-                if (const auto* d = displayOf(p, displayVariableOf(obj), &v)) {
+                const std::string shown = displayVariableOf(obj);
+                if (const auto* d = displayOf(p, shown, &v)) {
                     if (auto* u = obj.find("unit"); u && u->expr.empty() && !trim(d->unit).empty()) u->value = trim(d->unit);
                     if (auto* f = obj.find("format"); f && f->expr.empty() && !trim(d->format).empty()) f->value = trim(d->format);
                 }
+                if (auto* u = obj.find("unit"); physical && u && u->expr.empty() && trim(u->value).empty())
+                    u->value = physicalDisplayUnit(p, shown, &v);
             }
         }
         for (auto& prop : obj.props) {
             // Les trous des textes : le format de leur variable ({X:u} : et son unite).
-            if (!p.displays.empty() && prop.expr.empty() && isTranslatableKey(prop.key) && prop.value.find('{') != std::string::npos
+            if (anyDisplay && prop.expr.empty() && isTranslatableKey(prop.key) && prop.value.find('{') != std::string::npos
                 && obj.kind != Kind::QrCode)
                 prop.value = formatTemplate(prop.value, p, &v);
             // La taille des textes.

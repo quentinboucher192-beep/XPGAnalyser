@@ -45,7 +45,7 @@ struct DisplayOptions {
 // Les reglages du projet (Configuration), sans langue choisie : la premiere.
 [[nodiscard]] DisplayOptions projectDisplay(const Project&);
 // Vrai : la vue preparee ne differe pas de la vue (une langue, 100 %, couleurs
-// normales, sans symboles, nuit, aucune unite de variable).
+// normales, sans symboles, nuit, aucune ligne Unites et formats ni unite physique).
 [[nodiscard]] bool plainDisplay(const Project&, const DisplayOptions&);
 
 // ---- les unites et les formats --------------------------------------------------------
@@ -67,7 +67,14 @@ struct DisplayOptions {
 // Le format (l'unite) qu'un objet montre : celui de sa variable s'il le suit et
 // qu'il y en a un ; sinon le sien (`fallback` s'il n'en a pas).
 [[nodiscard]] std::string effectiveFormat(const Project&, const Object&, std::string_view fallback = {});
+// Sans unite a lui ni ligne Unites et formats, l'objet qui suit sa variable prend son unite physique.
 [[nodiscard]] std::string effectiveUnit(const Project&, const Object&);
+// 1.13.0 (lot J6b) : l'unite physique d'une variable (Variables IHM, membres d'un type : unitOfPath), comme
+// l'operateur la lit - l'unite d'affichage par defaut quand aucune ligne Unites et formats n'en pose une.
+// "" : aucune, ou une expression. `in` : un parametre de la vue se lit comme ce qu'il designe.
+[[nodiscard]] std::string physicalDisplayUnit(const Project&, std::string_view path, const View* in = nullptr);
+// Le symbole tel qu'on l'affiche : degC -> le degre C, m3/h et Nm3/h -> le 3 en exposant ; le reste tel quel.
+[[nodiscard]] std::string unitLabel(std::string_view symbol);
 // Tableau de variables : le format de la ligne `row` ("formats" au meme rang,
 // sinon celui de sa variable, sinon celui de l'objet).
 [[nodiscard]] std::string rowFormat(const Project*, const Object&, std::size_t row);

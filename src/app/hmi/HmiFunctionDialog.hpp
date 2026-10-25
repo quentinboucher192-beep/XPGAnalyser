@@ -14,6 +14,8 @@
 //    |               lettres, chiffres, _                                   |
 //    |  Retour       [Aucun                         Choisir un type...]     |
 //    |               une procedure : appelee seule sur sa ligne             |
+//    |  Unite        [sans                         Choisir une unite...]    |
+//    |               (1.13.0) l'unite du retour : un nombre seulement       |
 //    |  Portee       (o) Publique   ( ) Privee                              |
 //    |  Description  [________________________________________]            |
 //    |  +-- Elle s'ecrira ---------------------------------------------+   |
@@ -55,6 +57,7 @@ public:
         bool        pub{true};                        // une vue ou une popup : publique
         bool        isVirtual{false};                 // un symbole : virtuelle
         std::string generics;                         // 1.13.0 : TEMPLATE <T> (texte : "T", "T : ANY_NUM, K") ; vide : ordinaire
+        std::string returnUnit;                       // 1.13.0 (lot J6b) : l'unite du retour (bar) ; vide : sans
     };
     enum class Owner : std::uint8_t { Project, View, Popup, Symbol };
 
@@ -81,8 +84,15 @@ public:
     [[nodiscard]] std::string declaration() const;  // FUNCTION Fonction : REAL
     [[nodiscard]] std::string calls() const;        // dans la vue : Fonction()  -  ailleurs : Vue.Fonction()
     [[nodiscard]] std::string explanation() const;
-    [[nodiscard]] bool canConfirm() const { return nameProblem().empty() && genericsProblem().empty(); }
+    [[nodiscard]] bool canConfirm() const { return nameProblem().empty() && genericsProblem().empty() && unitProblem().empty(); }
     void setGenerics(const std::string& text);     // comme la souris (scripts, essais)
+    // 1.13.0 (lot J6b) : L'UNITE DU RETOUR - seulement pour un retour numerique (grisee sinon, et retiree quand le
+    // retour change) ; la case ouvre le selecteur d'unites. Un symbole inconnu : Creer grise, la raison dessous.
+    void setReturnUnit(const std::string& unit);
+    void chooseReturnUnit();
+    [[nodiscard]] bool unitUsable() const;
+    [[nodiscard]] std::string unitProblem() const;  // vide : l'unite va
+    [[nodiscard]] std::string unitNote() const;
     bool confirm();
     void cancel();
 
@@ -111,6 +121,7 @@ private:
     ui::InputText*   genericsField_{nullptr};   // 1.13.0 : TEMPLATE <T>
     ui::InputText*   descField_{nullptr};
     TypeField*       returnField_{nullptr};
+    TypeField*       unitField_{nullptr};       // 1.13.0 (lot J6b) : l'unite du retour
     ui::RadioButton* publicRadio_{nullptr};
     ui::RadioButton* privateRadio_{nullptr};
     ui::Checkbox*    virtualBox_{nullptr};

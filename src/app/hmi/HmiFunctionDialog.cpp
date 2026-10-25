@@ -1,6 +1,7 @@
 // app/hmi/HmiFunctionDialog.cpp - 1.12.24 : "Nouvelle fonction" (voir l'en-tete).
 #include "HmiFunctionDialog.hpp"
 #include "HmiTypePicker.hpp"
+#include "HmiUnitPanes.hpp"     // 1.13.0 (lot J6b) : l'unite du retour (le selecteur d'unites)
 #include "../../ui/DialogFrame.hpp"
 
 #include "../../core/FieldCodec.hpp"
@@ -72,15 +73,17 @@ std::vector<std::string> wrapped(const std::string& s, gfx::FontId f, float w) {
 //  bouton - le selecteur de types. Un Button : les scripts la designent par ce qu'elle montre.
 class HmiNewFunctionDialog::TypeField final : public ui::Button {
 public:
-    explicit TypeField(std::string id) : ui::Button("Aucun", std::move(id)) {}
+    // 1.13.0 (lot J6b) : la meme case pour l'unite du retour (" sans ", " Choisir une unite... ").
+    explicit TypeField(std::string id, std::string none = "Aucun", std::string action = "Choisir un type\xE2\x80\xA6")
+        : ui::Button(none, std::move(id)), none_(std::move(none)), action_(std::move(action)) {}
 protected:
     void onPaint(const ui::PaintContext& ctx) override {
         const auto b = bounds();
         const auto& c = ctx.theme.color;
-        ctx.r.fillRect(b, c.inputBg);
+        ctx.r.fillRect(b, enabled() ? c.inputBg : c.panelBg);
         ctx.r.strokeRect(b, focused() ? c.accent : c.border, focused() ? 2.f : 1.f);
-        const bool none = text() == "Aucun";
-        const std::string action = "Choisir un type\xE2\x80\xA6";
+        const bool none = text() == none_;
+        const std::string& action = action_;
         const float aw = ui::measureWidth(action, ctx.theme.font.ui) + 26.f;
         const float ty = b.y + (b.h - ctx.r.lineHeight(ctx.theme.font.mono)) * 0.5f;
         ctx.r.pushClip({b.x + 1.f, b.y, b.w - aw - 8.f, b.h});
@@ -92,6 +95,8 @@ protected:
         ctx.r.drawText({ax + 10.f, b.y + (b.h - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f}, action, ctx.theme.font.ui,
                        enabled() ? c.accent : c.textDisabled);
     }
+private:
+    std::string none_, action_;
 };
 
 // ------------------------------------------------------------------ Body ---
@@ -110,7 +115,7 @@ protected:
         float h = 44.f + 14.f + static_cast<float>(lines.size()) * 21.f + 14.f;   // titre, texte
         const bool scope = d_.owner_ == Owner::View || d_.owner_ == Owner::Popup;
         const bool virt = d_.owner_ == Owner::Symbol;
-        h += 4.f * (kFieldH + kNoteH + 6.f);                                      // nom, generiques, retour, description
+        h += 5.f * (kFieldH + kNoteH + 6.f);                                      // nom, generiques, retour, unite, description
         if (scope || virt) h += 26.f + kNoteH + 6.f;
         h += 12.f + 70.f + 8.f + 20.f + 56.f;                                      // l'apercu, la note, les boutons
         h = std::min(h, r.h - 40.f);
@@ -127,6 +132,9 @@ protected:
         y += kFieldH + kNoteH + 6.f;
         returnY_ = y;
         if (d_.returnField_) d_.returnField_->setBounds({fieldX, y, fieldW, kFieldH});
+        y += kFieldH + kNoteH + 6.f;
+        unitY_ = y;                                                               // 1.13.0 (lot J6b)
+        if (d_.unitField_) d_.unitField_->setBounds({fieldX, y, fieldW, kFieldH});
         y += kFieldH + kNoteH + 6.f;
         scopeY_ = -1.f;
         if (scope) {
@@ -181,6 +189,9 @@ protected:
         note(genericsY_, gprob.empty() ? d_.genericsNote() : gprob, gprob.empty() ? c.textMuted : c.error);
         label(returnY_, "Retour");
         note(returnY_, d_.returnNote(), c.textMuted);
+        label(unitY_, "Unit\xC3\xA9");                                   // 1.13.0 (lot J6b)
+        const std::string uprob = d_.unitProblem();
+        note(unitY_, uprob.empty() ? d_.unitNote() : uprob, uprob.empty() ? c.textMuted : c.error);
         if (scopeY_ >= 0.f) {
             const bool virt = d_.owner_ == Owner::Symbol;
             ctx.r.drawText({left, scopeY_ + (26.f - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f}, virt ? "Red\xC3\xA9" "finir" : "Port\xC3\xA9" "e",
@@ -209,7 +220,7 @@ private:
     [[nodiscard]] static gfx::FontId gfxFont() { return gfx::FontId{16}; }
     HmiNewFunctionDialog& d_;
     std::vector<std::string> explanation_;
-    float textY_{0}, nameY_{0}, genericsY_{0}, returnY_{0}, scopeY_{-1}, descY_{0}, previewY_{0};
+    float textY_{0}, nameY_{0}, genericsY_{0}, returnY_{0}, unitY_{0}, scopeY_{-1}, descY_{0}, previewY_{0};
 };
 
 // ======================================================================= ======
@@ -334,7 +345,7 @@ std::string HmiNewFunctionDialog::declaration() const {
         if (hmi::parseGenerics(answer_.generics, g, nullptr)) head = "TEMPLATE <" + hmi::genericsText(g) + "> ";
     }
     if (answer_.returnType.empty()) return head + "FUNCTION " + n + "        (* une proc\xC3\xA9" "dure *)";
-    return head + "FUNCTION " + n + " : " + answer_.returnType;
+    return head + "FUNCTION " + n + " : " + hmi::units::withUnit(answer_.returnType, answer_.returnUnit);   // 1.13.0 : REAL [bar]
 }
 
 std::string HmiNewFunctionDialog::calls() const {
@@ -361,12 +372,16 @@ void HmiNewFunctionDialog::refresh() {
     if (genericsField_ && genericsField_->text() != answer_.generics) genericsField_->setText(answer_.generics);
     if (descField_ && descField_->text() != answer_.description) descField_->setText(answer_.description);
     if (returnField_) returnField_->setText(answer_.returnType.empty() ? std::string("Aucun") : answer_.returnType);
+    if (unitField_) {                                                    // 1.13.0 (lot J6b)
+        unitField_->setText(answer_.returnUnit.empty() ? std::string("sans") : answer_.returnUnit);
+        unitField_->setEnabled(unitUsable());
+    }
     if (scope_) scope_->setValue(answer_.pub ? 0 : 1);
     if (virtualBox_) virtualBox_->setState(answer_.isVirtual ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
     syncing_ = false;
     if (ok_) {
         ok_->setEnabled(canConfirm());
-        ok_->setTooltip(canConfirm() ? std::string{} : nameProblem());
+        ok_->setTooltip(canConfirm() ? std::string{} : !nameProblem().empty() ? nameProblem() : !genericsProblem().empty() ? genericsProblem() : unitProblem());
     }
     if (body_) {
         body_->invalidateLayout();
@@ -384,7 +399,48 @@ void HmiNewFunctionDialog::setDescription(const std::string& text) {
 }
 void HmiNewFunctionDialog::setReturnType(const std::string& type) {
     answer_.returnType = noReturn(type) ? std::string{} : trimmed(type);
+    if (!unitUsable()) answer_.returnUnit.clear();   // 1.13.0 (lot J6b) : un retour non numerique n'a pas d'unite
     refresh();
+}
+
+// ---- 1.13.0 (lot J6b) : l'unite du retour ----
+bool HmiNewFunctionDialog::unitUsable() const { return !answer_.returnType.empty() && unitui::usable(answer_.returnType); }
+
+void HmiNewFunctionDialog::setReturnUnit(const std::string& unit) {
+    std::string canon;
+    const std::string t = trimmed(unit);
+    answer_.returnUnit = spec_.doc && unitui::problem(spec_.doc->project, answer_.returnType, t, &canon).empty() ? canon : t;
+    refresh();
+}
+
+std::string HmiNewFunctionDialog::unitProblem() const {
+    if (answer_.returnUnit.empty()) return {};
+    static const hmi::Project kEmpty;
+    return unitui::problem(spec_.doc ? spec_.doc->project : kEmpty, answer_.returnType.empty() ? std::string("(aucun)") : answer_.returnType,
+                           answer_.returnUnit);
+}
+
+std::string HmiNewFunctionDialog::unitNote() const {
+    if (!unitUsable()) return "Seulement pour un retour num\xC3\xA9rique (REAL, INT\xE2\x80\xA6).";
+    if (answer_.returnUnit.empty()) return "Sans unit\xC3\xA9 (comme avant) ; un appel la propage comme une variable de ce type.";
+    static const hmi::Project kEmpty;
+    return "Elle rend un " + hmi::units::withUnit(answer_.returnType, answer_.returnUnit) + " \xE2\x80\x94 "
+         + unitui::describe(spec_.doc ? spec_.doc->project : kEmpty, answer_.returnUnit);
+}
+
+void HmiNewFunctionDialog::chooseReturnUnit() {
+    if (!unitUsable() || !unitpicker::available()) return;
+    HmiUnitPicker::Spec spec;
+    spec.field = "Unit\xC3\xA9 du retour de " + (trimmed(answer_.name).empty() ? std::string("la fonction") : trimmed(answer_.name));
+    spec.current = answer_.returnUnit;
+    spec.type = answer_.returnType;
+    spec.doc = spec_.doc;
+    spec.recents = unitpicker::recents();
+    const std::weak_ptr<int> alive = alive_;
+    unitpicker::ask(std::move(spec), [this, alive](const HmiUnitPicker::Answer& a) {
+        if (alive.expired() || a.manage) return;
+        setReturnUnit(a.unit);
+    });
 }
 void HmiNewFunctionDialog::setPublic(bool on) {
     answer_.pub = on;
@@ -454,7 +510,7 @@ bool HmiNewFunctionDialog::confirm() {
 void HmiNewFunctionDialog::cancel() { finish(false); }
 
 std::string HmiNewFunctionDialog::encode(const Answer& a) {
-    return core::joinFields({trimmed(a.name), a.returnType, a.description, a.pub ? "1" : "0", a.isVirtual ? "1" : "0", a.generics});
+    return core::joinFields({trimmed(a.name), a.returnType, a.description, a.pub ? "1" : "0", a.isVirtual ? "1" : "0", a.generics, a.returnUnit});
 }
 
 bool HmiNewFunctionDialog::parse(const std::string& payload, Answer& out) {
@@ -466,6 +522,7 @@ bool HmiNewFunctionDialog::parse(const std::string& payload, Answer& out) {
     out.pub = v[3] != "0";
     out.isVirtual = v[4] == "1";
     out.generics = v.size() > 5 ? v[5] : std::string{};   // 1.13.0 : TEMPLATE <T> (absent d'un ancien payload : aucun)
+    out.returnUnit = v.size() > 6 ? v[6] : std::string{}; // 1.13.0 (lot J6b) : l'unite du retour
     return true;
 }
 
@@ -510,6 +567,12 @@ core::Status HmiNewFunctionDialog::buildUi() {
         auto t = std::make_unique<TypeField>(base + ".return");
         returnField_ = &static_cast<TypeField&>(body->addChild(std::move(t)));
         links_ += returnField_->clicked->connect([this] { chooseReturn(); });
+    }
+    {
+        // 1.13.0 (lot J6b) : l'unite du retour - la case ouvre le selecteur d'unites.
+        auto u = std::make_unique<TypeField>(base + ".unit", "sans", "Choisir une unit\xC3\xA9\xE2\x80\xA6");
+        unitField_ = &static_cast<TypeField&>(body->addChild(std::move(u)));
+        links_ += unitField_->clicked->connect([this] { chooseReturnUnit(); });
     }
     if (owner_ == Owner::View || owner_ == Owner::Popup) {
         scope_ = std::make_shared<ui::RadioGroup>();

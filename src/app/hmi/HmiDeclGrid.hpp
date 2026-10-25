@@ -8,9 +8,9 @@
 //  scripts, des fonctions et des operateurs la posent a cote de l'onglet Code :
 //
 //    +-- [+ Ajouter] [- Supprimer] [Dupliquer] [^] [v] [Utilisations] [Rechercher] --+
-//    | Nom        | Type  | Initiale | Stockage  | Visibilite | Utilisations | Doc.  |
-//    | Compteur   | INT   | 0        | Conservee | Public     |            3 | ...   |
-//    | Seuil      | REAL  | 12.5     | Execution | Prive      |            0 | ...   |
+//    | Nom        | Type  | Unite | Initiale | Stockage  | Utilisations | Doc.  |
+//    | Compteur   | INT   |       | 0        | Conservee |            3 | ...   |
+//    | Seuil      | REAL  | bar   | 12.5     | Execution |            0 | ...   |
 //    +-- Stockage : Execution (remise a chaque execution) . Conservee . Persistante --+
 //
 //  ECRIRE DANS LA CASE : double-clic, F2 ou Entree ; le Type, le Stockage, le Mode
@@ -103,6 +103,11 @@ public:
     // la grille a pu changer entre-temps). Sans hote : la barre le dit.
     void pickType(std::size_t row);
     bool setTypeOf(hmi::Id declaration, const std::string& type);
+    // 1.13.0 (lot J6b) : LA CASE UNITE - " Choisir une unite... " ouvre le selecteur d'unites (par son hote,
+    // app::unitpicker) ; l'unite choisie va a la declaration (vide : sans unite). La case se tape aussi
+    // (Ctrl+Espace propose les unites) ; une unite inconnue, ou sur un type non numerique, est refusee.
+    void pickUnit(std::size_t row);
+    bool setUnitOf(hmi::Id declaration, const std::string& unit);
     [[nodiscard]] std::vector<std::size_t> selectedRows() const;
     [[nodiscard]] std::string rowName(std::size_t row) const;   // 1.12.7 : le nom de la declaration de la ligne
     void selectRows(const std::vector<std::size_t>& rows);
