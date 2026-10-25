@@ -700,6 +700,8 @@ const std::vector<NativeInfo>& natives() {
         {"EXCHANGE", 2, 2, true, false, false, false, "utility", "EXCHANGE(X, NOUVELLE) : comme X", "\xC3\x89" "crit NOUVELLE dans X et rend l'ancienne valeur de X : un changement d'\xC3\xA9tat, un front."},
         // ---- 1.12.26 : attendre dans un script (un script detache attend seul ; un autre bloque l'IHM, 10 s au plus)
         {"WAIT", 1, 1, false, false, false, false, "attente", "WAIT(DUREE) : BOOL", "Attend DUREE (T#500ms, ou des millisecondes) avant l'instruction suivante. Un script d\xC3\xA9tach\xC3\xA9 attend seul, l'IHM continue ; un autre bloque l'IHM pendant l'attente (10 s au plus)."},
+        // ---- 1.13.0 : attendre qu'une condition devienne vraie (revue a chaque reprise de la tache detachee)
+        {"WAIT_UNTIL", 1, 2, false, false, false, false, "attente", "WAIT_UNTIL(CONDITION [, DELAI]) : BOOL", "Attend que CONDITION (un BOOL) devienne vraie, revue \xC3\xA0 chaque reprise ; au plus DELAI (T#2m). Seul en instruction, un d\xC3\xA9lai d\xC3\xA9pass\xC3\xA9 l\xC3\xA8ve E_ATTENTE ; employ\xC3\xA9 (IF...), il rend TRUE devenu vrai, FALSE au d\xC3\xA9lai. Demande un script d\xC3\xA9tach\xC3\xA9."},
         // ---- 1.12.26 : les fichiers et les ressources du projet (<filesystem>, <fstream>). Un chemin relatif part
         // du dossier donnees/ du projet ; un echec ne coupe pas le script : FALSE, '' ou -1, et FILE_ERROR() dit pourquoi.
         {"FILE_READ", 1, 1, false, false, false, false, "fichiers", "FILE_READ(CHEMIN) : STRING", "Tout le texte d'un fichier ; '' s'il manque (FILE_ERROR() dit pourquoi)."},

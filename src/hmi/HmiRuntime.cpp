@@ -603,6 +603,28 @@ public:
     }
     void report(sim::Diagnostic d) override { diagnostics.push_back(std::move(d)); }
     std::string caughtMessage(std::string_view m) override { return frenchSimMessage(m); }   // 1.12.1 : CATCH Erreur
+    // 1.13.0 : le code stable d'une erreur du moteur, lu par CATCH e dans e.Code. Le message est brut
+    // (avant frenchSimMessage) : "division by zero" est anglais, les erreurs du dialecte deja francaises.
+    std::string caughtCode(std::string_view m) override {
+        const auto has = [&](std::string_view s) { return m.find(s) != std::string_view::npos; };
+        const auto starts = [&](std::string_view s) { return m.rfind(s, 0) == 0; };
+        if (has("division by zero") || has("modulo by zero")) return "E_DIVISION";
+        if (starts("DYNAMIC_CAST") || starts("STATIC_CAST")) return "E_CONVERSION";
+        if (has("hors des bornes")) return "E_BORNE";
+        if (has("absente"))                                                       // cle absente de la MAP, MAP_GET : cle absente
+            return "E_CLE";
+        if (starts("ASSERT ") || starts("ASSERT:")) return "E_ASSERT";
+        return "E_MOTEUR";
+    }
+    // 1.13.0 : les trous {expr[:format]} du message d'un LEVER, remplis comme IHM_JOURNAL (lit aussi
+    // les locales du script qui leve - sim::readCallerLocal) ; figes au moment du LEVER.
+    std::string interpolateMessage(std::string_view text) override {
+        const CallerLocals locals(*this);
+        return TextTemplate::compile(std::string(text)).render(*this);
+    }
+    // 1.13.0 : WAIT_UNTIL - le script tourne-t-il detache (une tache) ? son heure (now_) pour le delai.
+    bool   detachedTask() override { return rt_.currentTask_ != nullptr; }
+    double scriptNow() override { return rt_.now_; }
 
     // ---- 1.10 : le dialecte IHM ----
     // Le type d'une variable IHM composee ("T_Four", "ARRAY[0..9] OF REAL") : une

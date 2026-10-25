@@ -461,6 +461,9 @@ struct Stmt {
         ForEach,              // 1.10 (dialecte IHM) : FOR EACH k, v IN m DO ... END_FOR
         // 1.12.1 (dialecte IHM) : CONTINUE ; TRY body CATCH [loopVariable] elseBody END_TRY.
         Continue, Try,
+        // 1.13.0 (dialecte IHM) : LEVER('Code' [, 'message']) (`value` : code, `condition` : message) ;
+        // RELEVER (reemet l'erreur du CATCH courant).
+        Raise, Rethrow,
     };
     Kind          kind{Kind::Assign};
     ExprPtr       target, value, condition;
@@ -688,6 +691,17 @@ private:
             return s;
         }
         if (dialect_ && atWord("TRY") && !(peek(1).kind == Tok::Punct && (peek(1).text == ":=" || peek(1).text == "("))) return tryStatement();
+        // 1.13.0 (dialecte IHM) : LEVER('Code' [, 'message']) leve une erreur a soi ; RELEVER reemet
+        // l'erreur du CATCH courant. LEVER prend des parentheses (sinon : un nom ordinaire) ; RELEVER
+        // aucune (RELEVER := x ou RELEVER(...) : un nom ordinaire, comme CONTINUE/TRY).
+        if (dialect_ && atWord("LEVER") && peek(1).kind == Tok::Punct && peek(1).text == "(") return raiseStatement();
+        if (dialect_ && atWord("RELEVER") && !(peek(1).kind == Tok::Punct && (peek(1).text == ":=" || peek(1).text == "("))) {
+            auto s = std::make_shared<Stmt>();
+            s->kind = Stmt::Kind::Rethrow;
+            s->line = advance().line;
+            accept(";");
+            return s;
+        }
         if (atKeyword("EXIT")) {
             auto s = std::make_shared<Stmt>();
             s->kind = Stmt::Kind::Exit;
@@ -841,6 +855,27 @@ private:
             s->elseBody = *handler;
         }
         if (!acceptWord("END_TRY")) return error("expected END_TRY");
+        accept(";");
+        return s;
+    }
+
+    // 1.13.0 (dialecte IHM) : LEVER('E_Code' [, 'message {trou}']) - leve une erreur a soi, d'un code
+    // et d'un message (optionnel). Le code et le message sont des expressions (lues a l'execution) ;
+    // `value` porte le code, `condition` le message (nul : aucun).
+    core::Result<StmtPtr> raiseStatement() {
+        auto s = std::make_shared<Stmt>();
+        s->kind = Stmt::Kind::Raise;
+        s->line = advance().line;                       // LEVER
+        if (!accept("(")) return error("expected '(' after LEVER");
+        auto code = expression();
+        if (!code) return core::Err<core::Error>(code.error());
+        s->value = *code;
+        if (accept(",")) {
+            auto msg = expression();
+            if (!msg) return core::Err<core::Error>(msg.error());
+            s->condition = *msg;
+        }
+        if (!accept(")")) return error("expected ')' to close LEVER");
         accept(";");
         return s;
     }
@@ -2504,7 +2539,7 @@ private:
         // boucle sans fin, un cycle trop long : ceux-la arretent tout, comme avant.
         if (catching_ > 0 && !caught_.any && message.find(" loop ran more than ") == std::string::npos
             && message.find("the scan exceeded") == std::string::npos) {
-            caught_ = Caught{true, std::move(message), line};
+            caught_ = Caught{true, {}, std::move(message), line};   // 1.13.0 : code vide (erreur moteur)
             aborted_ = true;
             return;
         }
@@ -2940,7 +2975,11 @@ private:
             }
             case Stmt::Kind::Call: {
                 if (dialect_) {                      // 1.12.19 : un appel seul rend ce qu'il veut (une liste...) : c'est ignore
+                    // 1.13.0 : WAIT_UNTIL(...) seul en instruction - sa valeur est ignoree : un delai
+                    // depasse LEVE E_ATTENTE (contre FALSE quand la valeur est employee).
+                    if (isNamedCall(*s.value, "WAIT_UNTIL")) waitUntilIgnored_ = true;
                     auto r = rich(*s.value);
+                    waitUntilIgnored_ = false;
                     if (!r && !aborted_) fail(s.line, r.error().message());
                     return aborted_ ? Flow{Flow::Kind::Aborted} : Flow{};
                 }
@@ -3011,12 +3050,47 @@ private:
             case Stmt::Kind::ForEach: return forEach(s);          // 1.10
             case Stmt::Kind::Continue: return {Flow::Kind::Continue};   // 1.12.1
             case Stmt::Kind::Try: return tryBlock(s);                  // 1.12.1
+            case Stmt::Kind::Raise:   return raiseStmt(s);             // 1.13.0
+            case Stmt::Kind::Rethrow: return rethrowStmt(s);          // 1.13.0
         }
         return {};
     }
 
+    // 1.13.0 : une erreur gardee par TRY. `code` vide : une erreur du moteur (traduite en E_* par
+    // l'environnement au moment du CATCH) ; non vide : un LEVER (ou E_ATTENTE) au message deja final.
+    struct Caught { bool any{false}; std::string code; std::string message; std::uint32_t line{0}; };
+
+    // 1.13.0 : le code et le message (final, trous remplis) d'une erreur telle que CATCH e la lit :
+    // un LEVER (ou E_ATTENTE) garde les siens ; une erreur du moteur recoit son code E_* et son
+    // message francais de l'environnement (caughtCode, caughtMessage).
+    std::string errorCode(const Caught& c) { return c.code.empty() ? env_.caughtCode(c.message) : c.code; }
+    std::string errorMessage(const Caught& c) { return c.code.empty() ? env_.caughtMessage(c.message) : c.message; }
+
+    // 1.13.0 : le type natif T_Erreur (Code STRING, Message STRING, Ligne DINT), en lecture seule.
+    static const TypeRef& errorType() {
+        static const TypeRef t = [] {
+            auto d = std::make_shared<TypeDesc>();
+            d->kind = TypeDesc::Kind::Struct;
+            d->name = "T_Erreur";
+            d->members = {{"Code", scalarType(Type::String)}, {"Message", scalarType(Type::String)},
+                          {"Ligne", scalarType(Type::DInt)}};
+            return TypeRef(d);
+        }();
+        return t;
+    }
+    // 1.13.0 : lie `name` (non declare) a un T_Erreur en lecture seule dans la portee du CATCH.
+    void bindError(const std::string& name, const Caught& c) {
+        auto obj = makeObj(errorType());
+        obj->items[0]->value = Value::text(errorCode(c));
+        obj->items[1]->value = Value::text(errorMessage(c));
+        obj->items[2]->value = Value::integer(Type::DInt, static_cast<std::int64_t>(c.line));
+        frames_.back().scopes.back().names[upperOf(name)] = Place{obj, {}, /*constant*/true, false};
+    }
+
     // 1.12.1 : TRY ... CATCH [Erreur] ... END_TRY. Le corps s'execute ; une erreur (fail) y
     // est gardee au lieu d'arreter le script : le CATCH s'execute, le message dans Erreur.
+    // 1.13.0 : CATCH e (un nom non declare) lie e a un T_Erreur (e.Code, e.Message, e.Ligne ;
+    // e seul = e.Message) ; un nom deja declare (STRING) recoit le message comme en 1.12.1.
     Flow tryBlock(const Stmt& s) {
         const Caught outer = caught_;
         caught_ = {};
@@ -3027,9 +3101,76 @@ private:
         caught_ = outer;
         if (!got.any) return flow;                       // rien : Normal, EXIT, RETURN, CONTINUE...
         aborted_ = false;
-        if (!s.loopVariable.empty() && !assignName(s.loopVariable, Value::text(env_.caughtMessage(got.message)), s.line))
+        // 1.13.0 : un nom deja declare (une locale, ou une variable du projet) recoit le message comme
+        // en 1.12.1 (CATCH Erreur) ; un nom NON declare (le cas recommande, CATCH e) devient le T_Erreur.
+        const bool declared = !s.loopVariable.empty() && (findLocal(s.loopVariable) != nullptr || env_.exists(s.loopVariable));
+        if (!s.loopVariable.empty() && declared
+            && !assignName(s.loopVariable, Value::text(errorMessage(got)), s.line))
             return {Flow::Kind::Aborted};
-        return sequence(s.elseBody, s.line);
+        if (!s.loopVariable.empty() && !declared) bindError(s.loopVariable, got);
+        handling_.push_back(got);                        // 1.13.0 : RELEVER reemet cette erreur
+        const Flow out = sequence(s.elseBody, s.line);
+        handling_.pop_back();
+        if (!s.loopVariable.empty() && !declared)
+            frames_.back().scopes.back().names.erase(upperOf(s.loopVariable));   // e ne vit que le handler
+        return out;
+    }
+
+    // 1.13.0 : un appel nomme (WAIT_UNTIL(...)) ecrit tel quel, au premier plan de l'expression.
+    static bool isNamedCall(const Expr& e, std::string_view upperName) {
+        return e.kind == Expr::Kind::Call && e.lhs && e.lhs->kind == Expr::Kind::Reference
+               && upperOf(e.lhs->name) == upperName;
+    }
+
+    // 1.13.0 : LEVER('E_Code' [, 'message']) - leve une erreur a soi. Dans un TRY : gardee pour son
+    // CATCH (comme une erreur du moteur) ; hors d'un TRY : le script s'arrete, la Console la montre.
+    Flow raiseStmt(const Stmt& s) {
+        auto codeV = evaluate(*s.value);
+        if (!codeV) { if (!aborted_) fail(s.line, codeV.error().message()); return {Flow::Kind::Aborted}; }
+        if (codeV->type() != Type::String)
+            return failAt(s.line, "LEVER : le code est un texte (ex. 'E_Niveau'), pas " + std::string(toString(codeV->type())));
+        std::string code = codeV->asString();
+        if (code.empty()) return failAt(s.line, "LEVER : le code ne doit pas \xC3\xAAtre vide (ex. 'E_Niveau')");
+        std::string message;
+        if (s.condition) {
+            auto msgV = evaluate(*s.condition);
+            if (!msgV) { if (!aborted_) fail(s.line, msgV.error().message()); return {Flow::Kind::Aborted}; }
+            if (msgV->type() != Type::String)
+                return failAt(s.line, "LEVER : le message est un texte, pas " + std::string(toString(msgV->type())));
+            // Les trous {expr[:format]} remplis ici, comme IHM_JOURNAL : le texte final est fige.
+            const CallerScope caller(this);
+            message = env_.interpolateMessage(msgV->asString());
+        }
+        return raise(Caught{true, std::move(code), std::move(message), s.line});
+    }
+
+    // 1.13.0 : RELEVER - reemet l'erreur du CATCH courant (meme code, meme message, meme ligne) vers
+    // le TRY englobant, ou arrete le script si aucun. Hors d'un CATCH : refuse (le controle le dit).
+    Flow rethrowStmt(const Stmt& s) {
+        if (handling_.empty())
+            return failAt(s.line, "RELEVER n'est permis que dans un CATCH");
+        return raise(handling_.back());
+    }
+
+    // 1.13.0 : garde l'erreur pour le TRY englobant (son CATCH), ou - aucun - l'ecrit a la Console et
+    // arrete le script, avec son code en tete (E_Niveau : niveau hors plage...).
+    Flow raise(Caught c) {
+        if (catching_ > 0 && !caught_.any) {
+            caught_ = std::move(c);
+            aborted_ = true;
+            return {Flow::Kind::Aborted};
+        }
+        std::string shown = c.code.empty() ? errorMessage(c) : c.code + (c.message.empty() ? "" : " : " + c.message);
+        env_.report(Diagnostic{Diagnostic::Severity::Error, std::move(shown), c.line, section_});
+        aborted_ = true;
+        return {Flow::Kind::Aborted};
+    }
+
+    // 1.13.0 : une erreur du dialecte signalee a une ligne (LEVER mal forme, RELEVER hors CATCH) :
+    // comme fail, elle est gardee par un TRY ou arrete le script.
+    Flow failAt(std::uint32_t line, std::string message) {
+        fail(line, std::move(message));
+        return {Flow::Kind::Aborted};
     }
 
     Flow sequence(const std::vector<StmtPtr>& body, std::uint32_t parentLine) {
@@ -3847,8 +3988,14 @@ private:
     }
 
     // ---- lire et ecrire un emplacement ------------------------------------
+    // 1.13.0 : e seul (un T_Erreur) se lit comme e.Message - compatible avec le CATCH Erreur de
+    // la 1.12.1, qui recevait deja le message.
+    static bool isErrorObj(const ObjRef& o) {
+        return o && o->type && o->type->kind == TypeDesc::Kind::Struct && o->type->name == "T_Erreur";
+    }
     core::Result<RV> readPlace(const Place& p) {
         if (p.obj) {
+            if (isErrorObj(p.obj) && p.obj->items.size() > 1) return RV{p.obj->items[1]->value, nullptr};
             if (p.obj->type && p.obj->type->kind == TypeDesc::Kind::Scalar) return RV{p.obj->value, nullptr};
             return RV{{}, p.obj};
         }
@@ -3945,7 +4092,9 @@ private:
             return false;
         }
         if (p.constant) {
-            if (why) *why = "une constante ne s'\xC3\xA9" "crit pas";
+            if (why) *why = isErrorObj(p.obj)       // 1.13.0 : e := ... (le T_Erreur entier)
+                                ? "l'erreur attrap\xC3\xA9" "e est en lecture seule (Code, Message, Ligne)"
+                                : "une constante ne s'\xC3\xA9" "crit pas";
             return false;
         }
         if (p.obj) return store(*p.obj, v, why);
@@ -4057,6 +4206,8 @@ private:
                         if (upperOf(type.members[k].first) == m) return Place{p.obj->items[k], {}, p.constant, p.temp};
                     if (type.kind == TypeDesc::Kind::Tuple)
                         return dialectError("un " + type.text() + " a Item1 \xC3\xA0 Item" + std::to_string(type.members.size()) + ", pas '" + e.name + "'");
+                    if (type.name == "T_Erreur")            // 1.13.0 : l'erreur attrapee
+                        return dialectError("T_Erreur n'a que Code, Message et Ligne, pas '" + e.name + "'");
                     return dialectError(type.name + " n'a pas de membre '" + e.name + "'");
                 }
                 // 1.12.2 : une liste, un vecteur - L.First, L.Last (le premier, le dernier element).
@@ -6781,7 +6932,8 @@ private:
             return std::optional<core::Result<RV>>(valueNative(u, e));
         if (info->group == "utility") return std::optional<core::Result<RV>>(utilityNative(u, e));                    // 1.12.16
         if (info->group == "fichiers") return std::optional<core::Result<RV>>(fileNative(u, e));                     // 1.12.26
-        if (info->group == "attente") return std::optional<core::Result<RV>>(waitNative(u, e));                      // 1.12.26
+        if (info->group == "attente")                                                                                // 1.12.26
+            return std::optional<core::Result<RV>>(u == "WAIT_UNTIL" ? waitUntilNative(e) : waitNative(u, e));       // 1.13.0
         return std::optional<core::Result<RV>>(listNative(u, *info, e));
     }
 
@@ -8570,6 +8722,88 @@ private:
         return dialectError(u + " : " + why);
     }
 
+    // ---- 1.13.0 : WAIT_UNTIL(condition [, delai]) - attend que la condition (un BOOL, revue a chaque
+    // reprise) devienne vraie. Employe (IF, affectation, argument) : rend TRUE devenue vraie, FALSE au
+    // delai, sans erreur. Seul en instruction : un delai depasse LEVE E_ATTENTE (rattrapable par TRY).
+    // Sans delai : attend indefiniment (IHM_SCRIPT_ARRETER l'arrete). Reutilise le point d'attente de
+    // WAIT (env_.wait) : une tache detachee rend la main entre deux essais, l'IHM respire.
+    core::Result<RV> waitUntilNative(const Expr& e) {
+        const bool ignored = waitUntilIgnored_;         // sa valeur est-elle employee ?
+        waitUntilIgnored_ = false;
+        const Expr& condExpr = *e.arguments[0].second;
+        // Le delai (facultatif) : un TIME ou un nombre de millisecondes >= 0 ; absent : -1 (sans fin).
+        std::int64_t delayMs = -1;
+        if (e.arguments.size() > 1) {
+            auto d = rich(*e.arguments[1].second);
+            if (!d) return d;
+            const Type t = d->o ? Type::Unknown : d->v.type();
+            if (t == Type::Time) delayMs = d->v.asInteger();
+            else if (isNumeric(t) && t != Type::Bool) delayMs = static_cast<std::int64_t>(std::llround(d->v.asReal()));
+            else return dialectError("WAIT_UNTIL : le d\xC3\xA9lai est une dur\xC3\xA9" "e (T#2m, ou des millisecondes), pas "
+                                     + (d->o ? "un " + typeNameOf(*d) : d->v.display()));
+            if (delayMs < 0) delayMs = 0;
+        }
+        // La condition, revue a chaque tour.
+        const auto evalCond = [&]() -> core::Result<bool> {
+            auto c = rich(condExpr);
+            if (!c) return core::Err<core::Error>(c.error());
+            if (c->o || c->v.type() != Type::Bool)
+                return dialectError("WAIT_UNTIL : la condition doit \xC3\xAAtre un BOOL, pas "
+                                    + (c->o ? "un " + typeNameOf(*c) : std::string(toString(c->v.type()))));
+            return c->v.isTruthy();
+        };
+        const bool detached = env_.detachedTask();
+        const double start = env_.scriptNow();
+        constexpr std::int64_t kPollMs = 20;             // le pas entre deux essais d'une tache detachee
+        constexpr std::int64_t kBlockingCapMs = 10'000;  // non detache : plafonne a 10 s, comme WAIT
+        for (;;) {
+            auto ok = evalCond();
+            if (!ok) return core::Err<core::Error>(ok.error());
+            if (*ok) return RV{Value::boolean(true), nullptr};
+            if (!detached) {
+                // Non detache : l'IHM est figee, la condition ne bougera pas - on attend une fois
+                // (plafonnee a 10 s comme WAIT), on reessaie, puis c'est le delai.
+                std::int64_t waitMs = delayMs < 0 ? kBlockingCapMs : std::min<std::int64_t>(delayMs, kBlockingCapMs);
+                if (waitMs > 0) {
+                    std::string why;
+                    if (!env_.wait(waitMs, why)) {
+                        if (why.empty()) { aborted_ = true; return core::fail(core::ErrorCode::InvalidArgument, "arr\xC3\xAAt\xC3\xA9 pendant WAIT_UNTIL"); }
+                        return dialectError("WAIT_UNTIL : " + why);
+                    }
+                    auto again = evalCond();
+                    if (!again) return core::Err<core::Error>(again.error());
+                    if (*again) return RV{Value::boolean(true), nullptr};
+                }
+                return timedOut(ignored, delayMs, e.line);
+            }
+            // Detache : le delai se mesure sur l'heure du script (now_), qui avance entre deux reprises.
+            if (delayMs >= 0 && (env_.scriptNow() - start) * 1000.0 >= static_cast<double>(delayMs))
+                return timedOut(ignored, delayMs, e.line);
+            std::string why;
+            if (!env_.wait(kPollMs, why)) {
+                if (why.empty()) { aborted_ = true; return core::fail(core::ErrorCode::InvalidArgument, "arr\xC3\xAAt\xC3\xA9 pendant WAIT_UNTIL"); }
+                return dialectError("WAIT_UNTIL : " + why);
+            }
+        }
+    }
+
+    // 1.13.0 : un WAIT_UNTIL dont le delai est depasse : FALSE quand sa valeur est employee,
+    // sinon (seul en instruction) l'erreur E_ATTENTE (rattrapable par TRY).
+    core::Result<RV> timedOut(bool ignored, std::int64_t delayMs, std::uint32_t line) {
+        if (!ignored) return RV{Value::boolean(false), nullptr};
+        const std::string msg = "la condition n'est pas devenue vraie en " + delayText(delayMs);
+        raise(Caught{true, "E_ATTENTE", msg, line});
+        return core::fail(core::ErrorCode::InvalidArgument, "E_ATTENTE");
+    }
+
+    // 1.13.0 : un delai pour un message (T#2m -> "2 min", 5000 -> "5 s", 500 -> "500 ms").
+    static std::string delayText(std::int64_t ms) {
+        if (ms <= 0) return "0 ms";
+        if (ms % 60000 == 0) return std::to_string(ms / 60000) + " min";
+        if (ms % 1000 == 0) return std::to_string(ms / 1000) + " s";
+        return std::to_string(ms) + " ms";
+    }
+
     core::Result<RV> fileNative(const std::string& u, const Expr& e) {
         std::vector<std::string> a;
         for (std::size_t k = 0; k < e.arguments.size(); ++k) {
@@ -8787,9 +9021,13 @@ private:
     bool                             probing_{false};
     int                              quiet_{0};       // 1.12.1 : a ?? b, le cote a en cours
     // 1.12.1 : TRY ... CATCH - la profondeur, l'erreur gardee (la premiere).
-    struct Caught { bool any{false}; std::string message; std::uint32_t line{0}; };
     int                              catching_{0};
     Caught                           caught_{};
+    // 1.13.0 : les erreurs des CATCH en cours (empilees) - RELEVER reemet celle du dessus.
+    std::vector<Caught>              handling_;
+    // 1.13.0 : WAIT_UNTIL seul en instruction (sa valeur est ignoree) : un delai depasse LEVE
+    // E_ATTENTE ; employe (IF, affectation, argument) : il rend FALSE sans erreur.
+    bool                             waitUntilIgnored_{false};
 };
 
 } // namespace

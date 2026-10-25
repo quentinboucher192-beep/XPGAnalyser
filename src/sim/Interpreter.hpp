@@ -92,6 +92,19 @@ public:
     // 1.12.1 : le message d'une erreur gardee par TRY ... CATCH Erreur, tel que le lit
     // l'utilisateur (l'IHM : en francais) ; par defaut, tel quel.
     [[nodiscard]] virtual std::string caughtMessage(std::string_view message) { return std::string(message); }
+    // 1.13.0 : le CODE stable d'une erreur du moteur (E_DIVISION, E_BORNE, E_CONVERSION, E_CLE,
+    // E_ASSERT, E_MOTEUR...), lu par CATCH e dans e.Code. L'argument est le message anglais du
+    // moteur (avant frenchSimMessage) ; vide par defaut (pas de code pour une erreur attrapee).
+    [[nodiscard]] virtual std::string caughtCode(std::string_view engineMessage) { (void)engineMessage; return {}; }
+    // 1.13.0 : le texte d'un message de LEVER, ses trous {expr[:format]} remplis comme IHM_JOURNAL
+    // (au moment du LEVER : les valeurs sont figees). Par defaut, le texte tel quel (pas de trous).
+    [[nodiscard]] virtual std::string interpolateMessage(std::string_view text) { return std::string(text); }
+    // 1.13.0 : WAIT_UNTIL - le script tourne-t-il detache (une tache qui rend la main) ? Faux :
+    // il bloque l'IHM, l'attente est plafonnee (comme WAIT). Par defaut : non detache.
+    [[nodiscard]] virtual bool detachedTask() { return false; }
+    // 1.13.0 : WAIT_UNTIL - l'heure du script en secondes (now_ de l'IHM), pour mesurer le delai
+    // ecoule entre deux reprises d'une tache detachee. Par defaut : 0 (pas de temps ici).
+    [[nodiscard]] virtual double scriptNow() { return 0.0; }
 
     // Lot API 7 : UNE FONCTION QUE LE SIMULATEUR NE CONNAIT PAS. Vrai : l'appel
     // rend 0 et le cycle continue (l'environnement le note, pour le dire) ;
