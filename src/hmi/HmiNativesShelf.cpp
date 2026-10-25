@@ -73,6 +73,9 @@ const ShelfDef kShelves[] = {
     {"fichiers/dossiers", "Dossiers", "Cr\xC3\xA9" "er, lister, supprimer un dossier ; le dossier donnees/ du projet.", false},
     {"fichiers/chemins", "Chemins", "Assembler un chemin ; le nom, l'extension, le dossier d'un chemin.", false},
     {"fichiers/ressources", "Ressources du projet", "Lire une ressource texte du projet, la liste des ressources, en tirer une copie.", false},
+    {"donnees", "Donn\xC3\xA9" "es (JSON, regex)", "Lire et \xC3\xA9" "crire du JSON, fouiller un texte au motif (expressions r\xC3\xA9guli\xC3\xA8res) \xE2\x80\x94 tout en local.", false},
+    {"donnees/json", "JSON", "Lire (JSON_LIRE), \xC3\xA9" "crire (JSON_ECRIRE), acc\xC3\xA9" "der et interroger une valeur JSON ; le type ANY.", false},
+    {"donnees/regex", "Expressions r\xC3\xA9guli\xC3\xA8res", "Tester, trouver, remplacer, d\xC3\xA9" "couper au motif (grammaire ECMAScript).", false},
     {"ihm", "L'IHM (IHM_)", "Ce que l'IHM fait en marche : naviguer, ouvrir une popup, les utilisateurs, les alarmes\xE2\x80\xA6", false},
     {"ihm/nav", "Navigation et vues", "Afficher une vue, revenir, l'accueil, le nom de la vue montr\xC3\xA9" "e.", false},
     {"ihm/popup", "Popups", "Ouvrir, remplacer, centrer, fermer une popup.", false},
@@ -129,6 +132,8 @@ const std::vector<Rule>& rules() {
         {"fichiers", "fichiers/dossiers", {"DIR_"}},
         {"fichiers", "fichiers/chemins", {"PATH_"}},
         {"fichiers", "fichiers/ressources", {}},
+        {"json", "donnees/json", {}},                   // 1.13.0 (lot J3)
+        {"regex", "donnees/regex", {}},
         {"nav", "ihm/nav", {}},
         {"popup", "ihm/popup", {}},
         {"user", "ihm/user", {}},

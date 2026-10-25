@@ -157,8 +157,9 @@ void usages() {
           "variable IHM : les types de kVariableTypes - " + joined(r.names(tr::UseVariable)));
     // kLocalTypes (HmiScript.hpp)
     // 1.12.1 : + CHAR, WSTRING, DATE, TIME_OF_DAY, DATE_AND_TIME.
+    // 1.13.0 (lot J3) : + ANY (une valeur JSON / dynamique : VAR, locale, parametre d'un code ; composable LIST OF ANY).
     check(asSet(r.names(tr::UseDeclaration)) == asSet({"BOOL", "INT", "DINT", "UINT", "UDINT", "SINT", "USINT", "REAL", "LREAL", "WORD", "DWORD",
-                                                       "BYTE", "TIME", "STRING", "CHAR", "WSTRING", "DATE", "TIME_OF_DAY", "DATE_AND_TIME"}),
+                                                       "BYTE", "TIME", "STRING", "CHAR", "WSTRING", "DATE", "TIME_OF_DAY", "DATE_AND_TIME", "ANY"}),
           "declaration : les types de kLocalTypes - " + joined(r.names(tr::UseDeclaration)));
     // richLocalType acceptait aussi LINT et ULINT (sans les proposer)
     check(r.resolve("LINT", tr::UseDeclaration).ok && r.resolve("ulint", tr::UseDeclaration).ok
@@ -180,9 +181,12 @@ void usages() {
     check(!ret.empty() && ret.back() == "Aucun", "retour : Aucun propose");
     ret.pop_back();
     check(asSet(ret) == asSet(r.names(tr::UseDeclaration)), "retour : les types d'une declaration");
-    check(!r.resolve("ANY", tr::UseDeclaration).ok && r.resolve("ANY", tr::UseParameter).ok && !r.resolve("Aucun", tr::UseDeclaration).ok
-              && r.resolve("aucun", tr::UseReturn).ok,
-          "ANY : un parametre seulement ; Aucun : un retour seulement");
+    // 1.13.0 (lot J3) : ANY est une declaration, un parametre et un retour (une valeur JSON / dynamique), mais pas
+    // une variable IHM Modbus (dynamic(), comme LIST / MAP) ni un operande scalaire ; Aucun reste un retour seulement.
+    check(r.resolve("ANY", tr::UseDeclaration).ok && r.resolve("ANY", tr::UseParameter).ok && r.resolve("ANY", tr::UseReturn).ok
+              && !r.resolve("ANY", tr::UseVariable).ok && !r.resolve("ANY", tr::UseOperand).ok
+              && !r.resolve("Aucun", tr::UseDeclaration).ok && r.resolve("aucun", tr::UseReturn).ok,
+          "ANY : declaration, parametre et retour (pas variable Modbus ni operande) ; Aucun : un retour seulement");
     // l'ordre : celui de la norme, le meme partout
     const auto all = r.names(tr::UseAll, false);
     check(joined(all) == "BOOL SINT INT DINT LINT USINT UINT UDINT ULINT BYTE WORD DWORD LWORD REAL LREAL STRING TIME CHAR WSTRING DATE TIME_OF_DAY "
@@ -253,7 +257,8 @@ void registre() {
           "un DDT : api:T_ANA, un parametre de popup seulement");
     // les listes : la base proposee, puis les types du projet
     const auto decl = r->names(tr::UseDeclaration);
-    check(decl.size() == 21 && decl[19] == "T_Four" && decl[20] == "E_Mode", "declaration : la base, puis T_Four et E_Mode - " + joined(decl));
+    // 1.13.0 (lot J3) : + ANY, apres les types de base (index 19), avant les types du projet.
+    check(decl.size() == 22 && decl[19] == "ANY" && decl[20] == "T_Four" && decl[21] == "E_Mode", "declaration : la base, ANY, puis T_Four et E_Mode - " + joined(decl));
     const auto prm = r->names(tr::UseParameter);
     check(prm.size() == 16 && prm[12] == "T_Four" && prm[14] == "T_ANA" && prm[15] == "T_ARMOIRE",
           "parametre : la base, ANY, les types IHM, puis les DDT - " + joined(prm));

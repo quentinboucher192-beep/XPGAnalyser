@@ -14818,6 +14818,10 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9placent ni ne se suppriment par un script. Dans une expression (fx), les "
                          "natives de fichiers lisent seulement : `{RESOURCE_READ('consignes.txt')}` dans un "
                          "texte.", {}, "1.12.26"},
+             {K::Bullet, "**Puis les donn\xC3\xA9" "es** : un `.json` lu se parse avec `JSON_LIRE` (une "
+                         "valeur ANY, lue par cl\xC3\xA9 et par indice) ; une trame texte se fouille au "
+                         "motif avec les `REGEX_` \xE2\x80\x94 voir \xC2\xAB JSON et expressions "
+                         "r\xC3\xA9guli\xC3\xA8res dans les scripts \xC2\xBB.", {}, "1.12.26"},
              {K::Heading, "Le langage des scripts (1.10)", {}, "1.10"},
              {K::Bullet, "Un script d\xC3\xA9" "clare ses **fonctions internes** (FUNCTION ... "
                          "END_FUNCTION), passe ses param\xC3\xA8tres par valeur, par "
@@ -15483,6 +15487,114 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.10"},
+        // ---- Programmer  Scripts et fonctions / donnees-scripts
+        {"donnees-scripts", "JSON et expressions r\xC3\xA9guli\xC3\xA8res dans les scripts", "Programmer \xE2\x80\xBA Scripts et fonctions",
+         "Tes scripts lisent et \xC3\xA9" "crivent du JSON, et fouillent un texte au motif, directement "
+         "\xE2\x80\x94 tout en local, sans r\xC3\xA9seau. Un fichier ou une ressource JSON se lit en une "
+         "valeur **ANY** (`JSON_LIRE`), s'interroge par cl\xC3\xA9 et par indice ; une trame texte se "
+         "d\xC3\xA9" "coupe au motif (`REGEX_`).",
+         {
+             {K::Heading, "Le type ANY : une valeur dynamique", {}},
+             {K::Paragraph, "Une case **ANY** porte n'importe quoi \xC3\xA0 l'ex\xC3\xA9" "cution : un texte, "
+                         "un nombre, un bool\xC3\xA9" "en, un objet, un tableau, ou nul. C'est le type d'une "
+                         "**valeur JSON**. Un objet JSON devient une `MAP[STRING] OF ANY`, un tableau une "
+                         "`LIST OF ANY` ; on les lit par cl\xC3\xA9 (`v['gaz']`), par indice (`v[0]`) et "
+                         "`.Count`, comme une MAP et une liste. Une case ANY n'a pas d'adresse sur un "
+                         "\xC3\xA9quipement : elle vit en m\xC3\xA9moire de script ou dans une variable IHM "
+                         "non li\xC3\xA9" "e (comme une LIST, une MAP).", {}},
+             {K::Heading, "Lire un JSON", {}},
+             {K::Paragraph, "Lis le texte avec `FILE_READ` (un fichier) ou `RESOURCE_READ` (une ressource du "
+                         "projet), puis `JSON_LIRE` ; les accesseurs s\xC3\xBBrs rendent la valeur ou un "
+                         "d\xC3\xA9" "faut.", {}},
+             {K::Code, "VAR\n    Recettes : LIST OF ANY;\n    i        : DINT;\nEND_VAR\nRecettes := "
+                         "JSON_LIRE(FILE_READ('recettes_gaz.json'));   (* un tableau JSON *)\nFOR i := 0 TO "
+                         "Recettes.Count - 1 DO\n    IF JSON_BOOL(Recettes[i]['actif'], FALSE) THEN\n        "
+                         "Consigne_Pression := JSON_NOMBRE(Recettes[i]['pression']);   (* ANY -> REAL *)\n   "
+                         "     Nom_Gaz           := JSON_TEXTE(Recettes[i]['gaz'], '?');\n    "
+                         "END_IF;\nEND_FOR;", "ST"},
+             {K::Code, "/* un analyseur JSON de la cible (cJSON) */\ncJSON *recettes = cJSON_Parse(texte), "
+                         "*it;\ncJSON_ArrayForEach(it, recettes)\n    if "
+                         "(cJSON_IsTrue(cJSON_GetObjectItem(it, \"actif\")))\n        Consigne_Pression = "
+                         "cJSON_GetObjectItem(it, \"pression\")->valuedouble;", "C"},
+             {K::Code, "// <nlohmann/json.hpp>\nauto recettes = nlohmann::json::parse(texte);\nfor (auto& "
+                         "it : recettes)\n    if (it.value(\"actif\", false))\n        Consigne_Pression = "
+                         "it.value(\"pression\", 0.0);", "C++"},
+             {K::Bullet, "`JSON_NOMBRE`, `JSON_ENTIER`, `JSON_TEXTE`, `JSON_BOOL` prennent un "
+                         "**d\xC3\xA9" "faut** facultatif : avec lui, une valeur absente ou du mauvais genre "
+                         "rend le d\xC3\xA9" "faut, sans erreur ; sans lui, elle l\xC3\xA8ve `E_JSON`, "
+                         "rattrapable par TRY \xE2\x80\xA6 CATCH.", {}},
+             {K::Bullet, "Une **cl\xC3\xA9 absente** rend `JSON_Absent` (pas d'erreur) ; `JSON_A(obj, "
+                         "'cl\xC3\xA9')` teste sa pr\xC3\xA9sence, `JSON_TYPE(v)` donne son genre "
+                         "(`JSON_Objet`, `JSON_Liste`, `JSON_Texte`, `JSON_Nombre`, `JSON_Bool`, `JSON_Nul`, "
+                         "`JSON_Absent`), `JSON_CLES(obj)` la liste des cl\xC3\xA9s.", {}},
+             {K::Heading, "Construire et \xC3\xA9" "crire un JSON", {}},
+             {K::Paragraph, "On construit avec les litt\xC3\xA9raux du dialecte (`[..]`, `['cl\xC3\xA9' := "
+                         "..]`) : pas de nouvelle syntaxe. `JSON_ECRIRE` accepte une valeur ANY, une MAP / "
+                         "LIST / TUPLE, une structure IHM (ses membres) ou un scalaire.", {}},
+             {K::Code, "VAR Etat : MAP[STRING] OF ANY; END_VAR\nEtat['armoire']  := 'A';\nEtat['pression'] "
+                         ":= Mesure_Pression;         (* un REAL dans une case ANY *)\nEtat['alarmes']  := "
+                         "[Al_Haute, Al_Basse];    (* une liste -> tableau JSON "
+                         "*)\nFILE_WRITE('etat_armoire.json', JSON_ECRIRE(Etat, TRUE));   (* TRUE : "
+                         "indent\xC3\xA9 *)", "ST"},
+             {K::Code, "/* composer l'objet, puis l'ecrire (cJSON) */\ncJSON *etat = "
+                         "cJSON_CreateObject();\ncJSON_AddStringToObject(etat, \"armoire\", "
+                         "\"A\");\ncJSON_AddNumberToObject(etat, \"pression\", Mesure_Pression);\nchar "
+                         "*texte = cJSON_Print(etat);   /* puis fopen / fwrite */", "C"},
+             {K::Code, "nlohmann::json etat;\netat[\"armoire\"]  = \"A\";\netat[\"pression\"] = "
+                         "Mesure_Pression;\netat[\"alarmes\"]  = {Al_Haute, "
+                         "Al_Basse};\nstd::ofstream(\"etat_armoire.json\") << etat.dump(2);", "C++"},
+             {K::Tip, "`JSON_OBJET()` et `JSON_LISTE()` rendent un objet ou un tableau vide \xC3\xA0 "
+                         "remplir ; un REAL infini ou NAN, une r\xC3\xA9" "f\xC3\xA9rence, un rappel ne se "
+                         "mettent pas en JSON (le message le dit).", {}},
+             {K::Heading, "Fouiller un texte au motif (REGEX_)", {}},
+             {K::Paragraph, "La grammaire est **ECMAScript** (comme JavaScript), sensible \xC3\xA0 la casse. "
+                         "`REGEX_TESTE` cherche partout ; `^` et `$` exigent tout le texte. `REGEX_TROUVE` "
+                         "rend la correspondance enti\xC3\xA8re (groupe 0) ou un groupe captur\xC3\xA9 ; "
+                         "`REGEX_REMPLACE` remplace tout (`$1`\xE2\x80\xA6`$9` rappellent un groupe) ; "
+                         "`REGEX_DECOUPE` coupe au motif.", {}},
+             {K::Code, "VAR Trame : STRING := 'PRES=7.5bar;DEBIT=12.3'; END_VAR\nIF REGEX_TESTE(Trame, "
+                         "'PRES=([0-9.]+)bar') THEN\n    Pression := TO_REAL(REGEX_TROUVE(Trame, "
+                         "'PRES=([0-9.]+)bar', 1));   (* groupe 1 *)\nEND_IF;\nNom := REGEX_REMPLACE(Saisie, "
+                         "'[^A-Za-z0-9_]', '_');   (* nettoyer un nom *)", "ST"},
+             {K::Code, "/* <regex.h> : regcomp / regexec */\nregex_t re; regcomp(&re, "
+                         "\"PRES=([0-9.]+)bar\", REG_EXTENDED);\nregmatch_t m[2];\nif (regexec(&re, trame, "
+                         "2, m, 0) == 0) { /* m[1] : le groupe 1 */ }", "C"},
+             {K::Code, "std::smatch m;\nif (std::regex_search(trame, m, "
+                         "std::regex(\"PRES=([0-9.]+)bar\")))\n    Pression = std::stod(m[1].str());\nNom = "
+                         "std::regex_replace(Saisie, std::regex(\"[^A-Za-z0-9_]\"), \"_\");", "C++"},
+             {K::Bullet, "En **ST**, `$` est le caract\xC3\xA8re d'\xC3\xA9" "chappement d'une cha\xC3\xAEne "
+                         ": \xC3\xA9" "cris l'ancre `$` comme `$$` (`'^[0-9]{13}$$'` pour un EAN-13 "
+                         "complet), ou emploie le dialecte C / C++, o\xC3\xB9 `$` est ordinaire.", {}},
+             {K::Bullet, "`\\w`, `\\d`, `\\s` travaillent sur les octets UTF-8 : pour les lettres "
+                         "accentu\xC3\xA9" "es (H\xC3\xA9lium), \xC3\xA9" "cris des classes explicites. "
+                         "`REGEX_VALIDE(motif)` teste un motif saisi avant de l'employer ; un motif invalide "
+                         "l\xC3\xA8ve `E_REGEX`.", {}},
+             {K::Heading, "G\xC3\xA9rer une erreur de donn\xC3\xA9" "es", {}},
+             {K::Paragraph, "`JSON_LIRE` sur un texte mal form\xC3\xA9, ou un accesseur de mauvais type sans "
+                         "d\xC3\xA9" "faut, l\xC3\xA8ve une erreur claire et **rattrapable** (`e.Code` = "
+                         "`E_JSON`, `e.Message` cite la position). Un motif invalide l\xC3\xA8ve `E_REGEX`.", {}},
+             {K::Code, "TRY\n    Params := JSON_LIRE(FILE_READ('parametres.json'));\nCATCH e\n    "
+                         "IHM_LOG(WARNING, CONCAT('Param\xC3\xA8tres illisibles : ', e.Message));\n    "
+                         "Params := JSON_LIRE('{}');   (* un objet vide, on repart proprement *)\nEND_TRY;", "ST"},
+             {K::Code, "/* en C, pas d'exception : on verifie le resultat de l'analyse */\ncJSON *params = "
+                         "cJSON_Parse(texte);\nif (!params) { ihm_log(\"Parametres illisibles\"); params = "
+                         "cJSON_CreateObject(); }", "C"},
+             {K::Code, "try {\n    params = nlohmann::json::parse(texte);\n} catch (const std::exception& "
+                         "e) {\n    ihm_log(std::string(\"Parametres illisibles : \") + e.what());\n    "
+                         "params = nlohmann::json::object();\n}", "C++"},
+             {K::Tip, "Dans une expression de champ (fx), les natives JSON_ et REGEX_ se lisent (lecture "
+                         "seule) : `{JSON_TEXTE(JSON_LIRE(RESOURCE_READ('ui.json'))['titre'])}`. Sur la page "
+                         "web, `FILE_READ` reste bloqu\xC3\xA9, mais `RESOURCE_READ` marche : le JSON et le "
+                         "regex tournent enti\xC3\xA8rement dans la page.", {}},
+         },
+         {"scripts", "erreurs-scripts", "enum-scripts", "champs-expressions", "fonctions", "map-iterateurs"},
+         {"JSON", "JSON_LIRE", "JSON_ECRIRE", "JSON_NOMBRE", "JSON_TEXTE", "JSON_BOOL", "JSON_ENTIER", "JSON_TYPE", "JSON_A", "JSON_CLES", "ANY", "REGEX", "REGEX_TESTE", "REGEX_TROUVE", "REGEX_REMPLACE", "REGEX_DECOUPE", "REGEX_VALIDE", "motif", "expression r\xC3\xA9guli\xC3\xA8re", "expression reguliere"},
+         {"scripts", "fonctions"},
+         {},
+         "",
+         {},
+         "",
+         {}},
         // ---- Programmer  Scripts et fonctions / enum-scripts
         {"enum-scripts", "Les \xC3\xA9num\xC3\xA9rations dans les scripts et les fonctions", "Programmer \xE2\x80\xBA Scripts et fonctions",
          "Une \xC3\xA9num\xC3\xA9ration IHM (T_MODE : Arret, Auto, Manu, Defaut) s'emploie dans les scripts "
@@ -15536,6 +15648,14 @@ const std::vector<Topic>& topics() {
                          "op\xC3\xA9rateurs \xC2\xBB).", {}},
              {K::Bullet, "Les conversions de base s'\xC3\xA9" "crivent aussi sans pr\xC3\xA9" "fixe : "
                          "`TO_REAL(5)`, `TO_STRING(3.5)`, `TO_DINT('12')`.", {}},
+             {K::Heading, "Les \xC3\xA9num\xC3\xA9rations natives", {}},
+             {K::Paragraph, "Certaines fonctions rendent ou prennent une **\xC3\xA9num\xC3\xA9ration native** : "
+                         "`COMPARAISON#Superieur`, `OPERATION#Somme` (les fonctions de listes), et "
+                         "`JSON_Type` que rend `JSON_TYPE(v)` \xE2\x80\x94 ses valeurs portent le "
+                         "pr\xC3\xA9" "fixe `JSON_`, donc s'\xC3\xA9" "crivent nues : `IF JSON_TYPE(v) = "
+                         "JSON_Objet THEN \xE2\x80\xA6`. Les genres : `JSON_Objet`, `JSON_Liste`, "
+                         "`JSON_Texte`, `JSON_Nombre`, `JSON_Bool`, `JSON_Nul`, `JSON_Absent` (voir \xC2\xAB "
+                         "JSON et expressions r\xC3\xA9guli\xC3\xA8res dans les scripts \xC2\xBB).", {}},
              {K::Heading, "Pointeurs, r\xC3\xA9" "f\xC3\xA9rences, tableaux", {}},
              {K::Code, "FUNCTION Libelle(p : POINTER TO T_MODE) : STRING\n    Libelle := "
                          "TO_STRING(p^);\nEND_FUNCTION\n\nFUNCTION Forcer(VAR_IN_OUT m : T_MODE)\n    m := "
@@ -16236,8 +16356,16 @@ const std::vector<Topic>& topics() {
                          "et `FUNCTION \xE2\x80\xA6 END_FUNCTION` ;", {}},
              {K::Bullet, "apr\xC3\xA8s `x :` dans une d\xC3\xA9" "claration : les types `MAP[STRING] OF "
                          "\xE2\x80\xA6`, `ARRAY[0..\xE2\x80\xA6] OF \xE2\x80\xA6`, `REF_TO \xE2\x80\xA6`, "
-                         "`REFERENCE TO \xE2\x80\xA6`, `POINTER TO \xE2\x80\xA6` ;", {}},
+                         "`REFERENCE TO \xE2\x80\xA6`, `POINTER TO \xE2\x80\xA6`, et **ANY** (une valeur "
+                         "JSON / dynamique : `LIST OF ANY`, `MAP[STRING] OF ANY`) ;", {}},
              {K::Bullet, "apr\xC3\xA8s `t.` (un tableau) : `Length`.", {}},
+             {K::Bullet, "les familles **JSON_** et **REGEX_** (voir \xC2\xAB JSON et expressions "
+                         "r\xC3\xA9guli\xC3\xA8res dans les scripts \xC2\xBB) ; apr\xC3\xA8s une valeur "
+                         "**ANY**, l'aide propose `['cl\xC3\xA9']`, `[i]`, `.Count` et les accesseurs "
+                         "`JSON_NOMBRE`, `JSON_TEXTE`, `JSON_BOOL`, `JSON_ENTIER` (les cl\xC3\xA9s exactes "
+                         "restent inconnues, donc pas de membres devin\xC3\xA9s). Les natives JSON_ et "
+                         "REGEX_ se lisent aussi dans une case fx (lecture seule) : "
+                         "`{JSON_TEXTE(JSON_LIRE(RESOURCE_READ('ui.json'))['titre'])}`.", {}},
              {K::Paragraph, "Ces mots ne sont propos\xC3\xA9s que dans les scripts de l'IHM, pas dans les "
                          "champs ni dans le programme de l'automate.", {}},
          },

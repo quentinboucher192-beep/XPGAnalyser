@@ -5100,8 +5100,8 @@ void lot7_aide_saisie() {
     check(!items.empty() && items[0].text == "REAL" && items[0].kind == K::Type && items[0].insert == "REAL;",
           "RE : REAL; (le point-virgule avec)");
     items = as::suggest(p, nullptr, "VAR_INPUT\n  x : ", "");
-    check(items.size() == 19 && items.size() == hmi::typereg::baseRegistry().names(hmi::typereg::UseDeclaration).size(),
-          "les 19 types d'une locale (1.11.19 : ceux du registre ; 1.12.1 : + CHAR, WSTRING, DATE, TIME_OF_DAY, DATE_AND_TIME)");
+    check(items.size() == 20 && items.size() == hmi::typereg::baseRegistry().names(hmi::typereg::UseDeclaration).size(),
+          "les 20 types d'une locale (1.11.19 : ceux du registre ; 1.12.1 : + CHAR, WSTRING, DATE, TIME_OF_DAY, DATE_AND_TIME ; 1.13.0 : + ANY)");
     // Les fonctions du projet.
     items = as::suggest(p, nullptr, "x := ", "Moy");
     const auto moy = std::find_if(items.begin(), items.end(), [](const as::Item& it) { return it.text == "Moyenne"; });
@@ -18861,7 +18861,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 224, "centre : L'IHM a les 224 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web)");
+    check(ix.count(hc::Chapter::Hmi) == 225, "centre : L'IHM a les 225 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 : donnees-scripts, JSON et expressions regulieres)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 64, "centre : 11 expressions, 64 notes (1.12.31)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -30613,7 +30613,7 @@ void selecteurTypes1119() {
     };
     const auto has = [](const std::vector<std::string>& v, const std::string& x) { return std::find(v.begin(), v.end(), x) != v.end(); };
 
-    // ---- une declaration : la base, LINT (permis sans etre propose), les types du projet ; ni ANY, ni Aucun, ni DDT ----
+    // ---- une declaration : la base, LINT (permis sans etre propose), ANY (1.13.0), les types du projet ; ni Aucun, ni DDT ----
     app::HmiTypePicker::Spec spec;
     spec.field = "Type de Mini";
     spec.current = "REAL";
@@ -30625,10 +30625,10 @@ void selecteurTypes1119() {
     check(picker != nullptr, "le s\xC3\xA9lecteur s'ouvre");
     if (!picker) return;
     auto shown = picker->shownNames();
-    check(has(shown, "BOOL") && has(shown, "LINT") && has(shown, "T_Four") && has(shown, "E_Mode") && !has(shown, "ANY")
-              && !has(shown, "Aucun") && !has(shown, "T_ANA") && has(shown, "CALLBACK (x : REAL) : BOOL") && shown.size() == 29,
-          "une d\xC3\xA9" "claration : 21 types de base (LINT, ULINT compris ; 1.12.1 : les dates, CHAR, WSTRING), T_Four, E_Mode, les 6 formes "
-          "de rappel (1.12.19) ; ni ANY, ni Aucun, ni DDT ("
+    check(has(shown, "BOOL") && has(shown, "LINT") && has(shown, "T_Four") && has(shown, "E_Mode") && has(shown, "ANY")
+              && !has(shown, "Aucun") && !has(shown, "T_ANA") && has(shown, "CALLBACK (x : REAL) : BOOL") && shown.size() == 30,
+          "une d\xC3\xA9" "claration : 21 types de base (LINT, ULINT compris ; 1.12.1 : les dates, CHAR, WSTRING), ANY (1.13.0), T_Four, E_Mode, "
+          "les 6 formes de rappel (1.12.19) ; ni Aucun, ni DDT ("
               + std::to_string(shown.size()) + ")");
     check(picker->result() == "REAL" && picker->resultProblem().empty(), "le type actuel, choisi d'office : REAL");
     // 1.11.19 (Wine) : choisi avant la mise en page, il doit se voir une fois la liste placee
@@ -31095,8 +31095,8 @@ void natives1217() {
     check(app::ProjectTreeModel::kindOf(root) == NK::NativesFolder, "rangement : le dossier Natives");
     same_text(names(root), "Types | Fonctions | Op\xC3\xA9rateurs | Instructions | \xC3\x89num\xC3\xA9rations | De A \xC3\xA0 Z", "rangement : l'ordre de la maquette");
     same_text(names(tree.nativeNodeOf("fonctions")),
-              "Nombres | Textes | Dates et heures | Couleurs | Conteneurs | Conversions | Fichiers | L'IHM (IHM_) | R\xC3\xA9" "f\xC3\xA9rences et \xC3\xA9" "changes",
-              "rangement : les 9 th\xC3\xA8mes (1.12.26 : Fichiers)");
+              "Nombres | Textes | Dates et heures | Couleurs | Conteneurs | Conversions | Fichiers | Donn\xC3\xA9" "es (JSON, regex) | L'IHM (IHM_) | R\xC3\xA9" "f\xC3\xA9rences et \xC3\xA9" "changes",
+              "rangement : les 10 th\xC3\xA8mes (1.12.26 : Fichiers ; 1.13.0 : Donn\xC3\xA9" "es)");
     same_text(names(tree.nativeNodeOf("types")), "Nombres et bits | Textes, dur\xC3\xA9" "es et dates | Conteneurs | R\xC3\xA9" "f\xC3\xA9rences | G\xC3\xA9n\xC3\xA9riques",
               "rangement : les 5 dossiers des types");
     // Une fonction : son noeud est dans son dossier, le chemin de sa fiche le dit.
