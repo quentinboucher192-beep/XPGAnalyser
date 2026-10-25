@@ -582,6 +582,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiEquipmentLink.cpp" />
     <ClCompile Include="src\hmi\HmiExprBench.cpp" />
     <ClCompile Include="src\hmi\HmiExprGuide.cpp" />
+    <ClCompile Include="src\hmi\HmiFunctionTests.cpp" />
     <ClCompile Include="src\hmi\HmiLiveGeometry.cpp" />
     <ClCompile Include="src\hmi\HmiLog.cpp" />
     <ClCompile Include="src\hmi\HmiMarkers.cpp" />
@@ -1047,6 +1048,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiEquipmentLink.hpp" />
     <ClInclude Include="src\hmi\HmiExprBench.hpp" />
     <ClInclude Include="src\hmi\HmiExprGuide.hpp" />
+    <ClInclude Include="src\hmi\HmiFunctionTests.hpp" />
     <ClInclude Include="src\hmi\HmiKeys.hpp" />
     <ClInclude Include="src\hmi\HmiLiveGeometry.hpp" />
     <ClInclude Include="src\hmi\HmiLog.hpp" />

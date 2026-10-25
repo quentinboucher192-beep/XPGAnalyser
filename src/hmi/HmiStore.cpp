@@ -226,6 +226,42 @@ std::string serializeDeclarations(const std::vector<Declaration>& decls) {
     }
     return s;
 }
+// 1.13.0 (lot J4) : les cas de test d'une fonction, sur les lignes "cas_test" / "arg" / "pose"
+// / "verif" qui suivent leur porteur (fonction, fonction_symbole), comme les lignes "declaration".
+// Un argument par ligne (meme vide) : l'ordre est celui des parametres, sans collision avec les
+// virgules d'un litteral de structure.
+std::string serializeFunctionTests(const std::vector<FunctionTest>& tests) {
+    std::string s;
+    for (const auto& t : tests) {
+        s += "cas_test" + fieldInt("id", t.id) + field("nom", t.name);
+        if (!t.expected.empty()) s += field("attendu", t.expected);
+        if (!t.tolerance.empty()) s += field("tolerance", t.tolerance);
+        if (!t.errorCode.empty()) s += field("code_erreur", t.errorCode);
+        if (!t.description.empty()) s += field("description", t.description);
+        s += fieldBare("actif", t.enabled ? "oui" : "non") + "\n";
+        for (const auto& a : t.arguments) s += "arg" + fieldInt("cas", t.id) + field("texte", a) + "\n";
+        for (const auto& g : t.givens)
+            s += "pose" + fieldInt("cas", t.id) + field("cible", g.target) + field("valeur", g.value) + "\n";
+        for (const auto& c : t.checks) {
+            s += "verif" + fieldInt("cas", t.id) + field("cible", c.target) + field("attendu", c.expected);
+            if (!c.tolerance.empty()) s += field("tolerance", c.tolerance);
+            s += "\n";
+        }
+    }
+    return s;
+}
+// 1.13.0 : une ligne "cas_test" ; faux : sans nom.
+bool parseFunctionTest(const Record& r, FunctionTest& t) {
+    t.id = static_cast<Id>(toInt(r.get("id"), 0));
+    t.name = toStr(r.get("nom"));
+    t.expected = toStr(r.get("attendu"));
+    t.tolerance = toStr(r.get("tolerance"));
+    t.errorCode = toStr(r.get("code_erreur"));
+    t.description = toStr(r.get("description"));
+    t.enabled = toStr(r.get("actif")) != "non";
+    return !t.name.empty();
+}
+
 // 1.12.7 : une ligne "locale" (la locale d'un calcul) ; faux : sans nom.
 bool parseLocal(const Record& r, Declaration& l) {
     l.kind = DeclKind::Variable;
@@ -430,7 +466,8 @@ std::string serializeView(const View& v) {
            + (fn.isVirtual ? fieldBool("virtuelle", true) : std::string{})
            + (fn.visibility == Visibility::Private ? fieldBare("portee", "privee") : std::string{})
            + (fn.description.empty() ? std::string{} : field("description", fn.description)) + field("corps", fn.body) + "\n"
-           + serializeDeclarations(fn.decls);                                     // 1.11.18 (lot 3)
+           + serializeDeclarations(fn.decls)                                      // 1.11.18 (lot 3)
+           + serializeFunctionTests(fn.tests);                                    // 1.13.0 (lot J4)
     // 1.12.16 : les constantes de la vue, sur les lignes "declaration" qui suivent leur porteur.
     if (!v.constants.empty()) s += "constantes_vue\n" + serializeDeclarations(v.constants);
     s += "grille" + fieldBool("visible", v.grid.visible) + fieldInt("pas", v.grid.step)
@@ -538,6 +575,8 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
     int fileFormat = kFormatVersion;     // "# IHM Studio - vue IHM (format 6)" : l'en-tete le dit (avant la 1.12.20 : "# XpgAnalyzer - ...")
     Object* current = nullptr;
     std::vector<Declaration>* holder = nullptr;   // 1.11.18 (lot 3) : le porteur des lignes "declaration" qui suivent
+    std::vector<FunctionTest>* testHolder = nullptr;   // 1.13.0 (lot J4) : le porteur des cas_test / arg / pose / verif
+    FunctionTest* currentTest = nullptr;
     std::size_t lineNo = 0;
     std::size_t pos = 0;
     auto warn = [&](std::string w) { if (report) report->warnings.push_back(std::move(w)); };
@@ -563,6 +602,9 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             return core::fail(core::ErrorCode::XmlMalformed,
                               "ligne " + std::to_string(lineNo) + " : " + error);
         if (r.word != "declaration" && r.word != "locale") holder = nullptr;
+        // 1.13.0 (lot J4) : les lignes de test suivent leur fonction, apres ses declarations.
+        if (r.word != "declaration" && r.word != "locale" && r.word != "cas_test"
+            && r.word != "arg" && r.word != "pose" && r.word != "verif") { testHolder = nullptr; currentTest = nullptr; }
         if (r.word == "declaration") {                                // 1.11.18 (lot 3)
             Declaration d;
             if (!holder || !parseDeclaration(r, d)) { warn("ligne " + std::to_string(lineNo) + " : " + declarationIgnored(holder)); continue; }
@@ -571,6 +613,16 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             Declaration l;
             if (!holder || holder->empty() || !parseLocal(r, l)) { warn("ligne " + std::to_string(lineNo) + " : locale hors d'un calcul : ignor\xC3\xA9" "e"); continue; }
             holder->back().locals.push_back(std::move(l));
+        } else if (r.word == "cas_test") {                            // 1.13.0 (lot J4)
+            FunctionTest t;
+            if (!testHolder || !parseFunctionTest(r, t)) { warn("ligne " + std::to_string(lineNo) + " : cas de test sans nom ou hors d'une fonction : ignor\xC3\xA9"); currentTest = nullptr; continue; }
+            testHolder->push_back(std::move(t));
+            currentTest = &testHolder->back();
+        } else if (r.word == "arg" || r.word == "pose" || r.word == "verif") {
+            if (!currentTest) { warn("ligne " + std::to_string(lineNo) + " : ligne de test hors d'un cas : ignor\xC3\xA9" "e"); continue; }
+            if (r.word == "arg") currentTest->arguments.push_back(toStr(r.get("texte")));
+            else if (r.word == "pose") currentTest->givens.push_back({toStr(r.get("cible")), toStr(r.get("valeur"))});
+            else currentTest->checks.push_back({toStr(r.get("cible")), toStr(r.get("attendu")), toStr(r.get("tolerance"))});
         } else if (r.word == "vue") {
             sawView = true;
             v.id = static_cast<Id>(toInt(r.get("id"), 0));
@@ -646,6 +698,7 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             if (fn.name.empty()) { warn("ligne " + std::to_string(lineNo) + " : fonction de symbole sans nom"); continue; }
             v.functions.push_back(std::move(fn));
             holder = &v.functions.back().decls;
+            testHolder = &v.functions.back().tests;                    // 1.13.0 (lot J4) : ses cas suivent
         } else if (r.word == "constantes_vue") {                      // 1.12.16 : les constantes de la vue suivent
             holder = &v.constants;
         } else if (r.word == "redefinition") {                        // 1.11.10
@@ -871,7 +924,14 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     // 1.12.20 (lot G) : le format 28 n'ajoute que les generiques (une structure, un symbole, une popup) ; sans eux, 27...
     const bool generics = std::any_of(p.programs.types.begin(), p.programs.types.end(), [](const HmiType& t) { return !t.generics.empty(); })
                        || std::any_of(p.views.begin(), p.views.end(), [](const View& v) { return !v.generics.empty(); });
-    const int format = generics ? kFormatVersion : callbackTypes ? 27 : viewMembers ? 26 : tableGestures ? 25 : shortcuts ? 24 : declared ? 23
+    // 1.13.0 (lot J4) : le format 29 n'ajoute que les tests unitaires (cas_test...) ; un projet dont
+    // aucune fonction n'a de cas s'ecrit encore au format 28 (ou 27...) : la 1.12.31 l'ouvre.
+    const auto hasTest = [](const std::vector<HmiFunction>& fns) {
+        return std::any_of(fns.begin(), fns.end(), [](const HmiFunction& f) { return !f.tests.empty(); });
+    };
+    const bool tests = hasTest(p.programs.functions)
+                    || std::any_of(p.views.begin(), p.views.end(), [&](const View& v) { return hasTest(v.functions); });
+    const int format = tests ? kFormatVersion : generics ? 28 : callbackTypes ? 27 : viewMembers ? 26 : tableGestures ? 25 : shortcuts ? 24 : declared ? 23
                      : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# IHM Studio - projet IHM (format " + std::to_string(format) + ")\n";
@@ -895,7 +955,10 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
            + (cfg.statusSymbols ? fieldBool("symboles", true) : std::string{})
            + (cfg.theme != "nuit" ? field("theme", cfg.theme) : std::string{})
            // 1.12.7 (lot D) : le calendrier des postes, ecrit seulement s'il existe.
-           + (!cfg.shifts.empty() ? field("postes", cfg.shifts) : std::string{}) + "\n";
+           + (!cfg.shifts.empty() ? field("postes", cfg.shifts) : std::string{})
+           // 1.13.0 (lot J4) : les tests des fonctions - ecrits seulement s'ils changent.
+           + (!cfg.runTestsOnBuild ? fieldBool("tests_au_build", false) : std::string{})
+           + (cfg.testFailBlocksStart ? fieldBool("echec_bloque", true) : std::string{}) + "\n";
     for (const auto& v : p.views) {
         const std::string name = viewFileName(v);
         std::string text = serializeView(v);
@@ -1008,7 +1071,8 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         files.push_back({"fonctions/" + file, textBytes(f.body)});
         index += "fonction" + fieldInt("id", f.id) + field("nom", f.name) + field("retour", f.returnType)
                + field("fichier", "fonctions/" + file) + field("description", f.description) + "\n"
-               + serializeDeclarations(f.decls);                                            // 1.11.18 (lot 3)
+               + serializeDeclarations(f.decls)                                             // 1.11.18 (lot 3)
+               + serializeFunctionTests(f.tests);                                           // 1.13.0 (lot J4)
     }
     // Lot 4 : alarmes, recettes, securite, historiques.
     for (const auto& a : p.alarms)
@@ -1342,6 +1406,8 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     std::vector<std::pair<Id, std::string>> files;
     std::map<Id, std::string> viewFolders;                          // lot 21 : le dossier de chaque vue (l'index le dit)
     std::vector<Declaration>* holder = nullptr;                     // 1.11.18 (lot 3) : le porteur des lignes "declaration"
+    std::vector<FunctionTest>* testHolder = nullptr;                // 1.13.0 (lot J4) : le porteur des cas_test / arg / pose / verif
+    FunctionTest* currentTest = nullptr;
     while (pos <= index.size()) {
         const std::size_t eol = index.find('\n', pos);
         std::string_view line(index.data() + pos, (eol == std::string::npos ? index.size() : eol) - pos);
@@ -1356,6 +1422,9 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
         if (!parseRecord(line, r, error))
             return core::fail(core::ErrorCode::XmlMalformed, "ihm.txt ligne " + std::to_string(lineNo) + " : " + error);
         if (r.word != "declaration" && r.word != "locale") holder = nullptr;
+        // 1.13.0 (lot J4) : les lignes de test suivent leur fonction, apres ses declarations.
+        if (r.word != "declaration" && r.word != "locale" && r.word != "cas_test"
+            && r.word != "arg" && r.word != "pose" && r.word != "verif") { testHolder = nullptr; currentTest = nullptr; }
         if (r.word == "declaration") {                                 // 1.11.18 (lot 3)
             Declaration d;
             if (!holder || !parseDeclaration(r, d)) {
@@ -1370,6 +1439,23 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
                 continue;
             }
             holder->back().locals.push_back(std::move(l));
+        } else if (r.word == "cas_test") {                             // 1.13.0 (lot J4)
+            FunctionTest t;
+            if (!testHolder || !parseFunctionTest(r, t)) {
+                if (report) report->warnings.push_back("ihm.txt ligne " + std::to_string(lineNo) + " : cas de test sans nom ou hors d'une fonction : ignor\xC3\xA9");
+                currentTest = nullptr;
+                continue;
+            }
+            testHolder->push_back(std::move(t));
+            currentTest = &testHolder->back();
+        } else if (r.word == "arg" || r.word == "pose" || r.word == "verif") {
+            if (!currentTest) {
+                if (report) report->warnings.push_back("ihm.txt ligne " + std::to_string(lineNo) + " : ligne de test hors d'un cas : ignor\xC3\xA9" "e");
+                continue;
+            }
+            if (r.word == "arg") currentTest->arguments.push_back(toStr(r.get("texte")));
+            else if (r.word == "pose") currentTest->givens.push_back({toStr(r.get("cible")), toStr(r.get("valeur"))});
+            else currentTest->checks.push_back({toStr(r.get("cible")), toStr(r.get("attendu")), toStr(r.get("tolerance"))});
         } else if (r.word == "ihm") {
             const auto format = toInt(r.get("format"), kFormatVersion);
             if (format > kFormatVersion)
@@ -1404,6 +1490,8 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             p.config.statusSymbols = toBool(r.get("symboles"), false);
             p.config.theme = r.get("theme") ? toStr(r.get("theme")) : std::string("nuit");
             p.config.shifts = r.get("postes") ? toStr(r.get("postes")) : std::string{};   // 1.12.7 (lot D)
+            p.config.runTestsOnBuild = toBool(r.get("tests_au_build"), true);             // 1.13.0 (lot J4)
+            p.config.testFailBlocksStart = toBool(r.get("echec_bloque"), false);
         } else if (r.word == "vue") {
             files.emplace_back(static_cast<Id>(toInt(r.get("id"), 0)), toStr(r.get("fichier")));
             if (const auto* d = r.get("dossier")) viewFolders[static_cast<Id>(toInt(r.get("id"), 0))] = *d;   // lot 21
@@ -1591,6 +1679,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
                 report->warnings.push_back("fonction '" + f.name + "' : fichier " + file + " absent");
             p.programs.functions.push_back(std::move(f));
             holder = &p.programs.functions.back().decls;
+            testHolder = &p.programs.functions.back().tests;          // 1.13.0 (lot J4) : ses cas suivent
         } else if (r.word == "alarme") {
             AlarmDef a;
             a.id = static_cast<Id>(toInt(r.get("id"), 0));
@@ -2137,6 +2226,13 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     forEachDeclarations(static_cast<const Project&>(p), [&](const std::vector<Declaration>& list) {
         for (const auto& d : list) highest = std::max(highest, d.id);
     });
+    // 1.13.0 (lot J4) : les cas de test des fonctions (du projet, des vues et des symboles).
+    const auto testIds = [&](const std::vector<HmiFunction>& fns) {
+        for (const auto& f : fns)
+            for (const auto& t : f.tests) highest = std::max(highest, t.id);
+    };
+    testIds(p.programs.functions);
+    for (const auto& v : p.views) testIds(v.functions);
     // Un index edite a la main ne doit pas faire reattribuer un identifiant
     // deja pris : le compteur repart au-dessus du plus grand vu.
     if (p.nextId <= highest) p.nextId = highest + 1;

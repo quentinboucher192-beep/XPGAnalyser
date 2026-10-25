@@ -44,7 +44,7 @@ struct LoadReport {
 // refuse un format plus recent au lieu de le relire en perdant ce qu'il ne
 // connait pas - et de l'effacer au premier enregistrement.
 // 4 : alarmes, recettes, utilisateurs et securite, reglages des historiques.
-inline constexpr int kFormatVersion = 28;   // 5 : lot 6 (roles des vues, heritage, en-tete, pied) ; 6 : lot 7 (fonctions IHM) ;
+inline constexpr int kFormatVersion = 29;   // 5 : lot 6 (roles des vues, heritage, en-tete, pied) ; 6 : lot 7 (fonctions IHM) ;
                                            // 7 : lot 8 (popups, parametres de vue, champ de saisie, objets utilisateurs) ;
                                            // 8 : lot 9 (23 commandes et afficheurs, confirmation des boutons) - un
                                            //     outil du lot 8 les lirait comme des rectangles : il refuse ;
@@ -103,6 +103,10 @@ inline constexpr int kFormatVersion = 28;   // 5 : lot 6 (roles des vues, herita
                                            // 28 : 1.12.20, lot G (les generiques : generique nom=T contrainte=...
                                            //     apres un type IHM, un symbole, une popup) - une 1.12.19 refuse ;
                                            //     un projet sans eux s'ecrit au format 27 (ou 26...)
+                                           // 29 : 1.13.0, lot J4 (les tests unitaires des fonctions : cas_test / arg /
+                                           //     pose / verif apres une fonction, comme les lignes declaration) - une
+                                           //     1.12.31 refuse (elle perdrait les cas) ; un projet dont aucune fonction
+                                           //     n'a de cas s'ecrit au format 28 (ou 27...)
 
 // "2026-09-21 14:05" : l'horodatage des dates de creation et de modification.
 [[nodiscard]] std::string   nowStamp();
