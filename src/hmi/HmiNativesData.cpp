@@ -27,6 +27,7 @@ const std::vector<Category>& categories() {
         {"fichiers", "Fichiers et ressources", "Lire et \xC3\xA9" "crire des fichiers (le dossier donnees/ du projet), parcourir un dossier, assembler un chemin ; lire les ressources du projet (<filesystem>, <fstream>).", "Biblioth\xC3\xA8ques"},
         {"json", "JSON", "Lire et \xC3\xA9" "crire du JSON (JSON_LIRE, JSON_ECRIRE), acc\xC3\xA9" "der par cl\xC3\xA9 ['cl\xC3\xA9'] ou indice [i], lire s\xC3\xBBrement (JSON_NOMBRE / TEXTE / BOOL / ENTIER), interroger (JSON_TYPE / A / CLES). Le type ANY porte une valeur JSON / dynamique. Tout en local.", "Biblioth\xC3\xA8ques"},
         {"regex", "Expressions r\xC3\xA9guli\xC3\xA8res", "Chercher, extraire, remplacer, d\xC3\xA9" "couper un texte au motif (grammaire ECMAScript, comme JavaScript) : REGEX_TESTE, REGEX_TROUVE, REGEX_REMPLACE, REGEX_DECOUPE\xE2\x80\xA6 (<regex>).", "Biblioth\xC3\xA8ques"},
+        {"unites", "Unit\xC3\xA9s de mesure", "Donner une unite physique a une variable ou a un membre (bar, degC, m3/h, %) : EN convertit, UNITE lit le symbole, SANS_UNITE l'enleve. Le controle refuse bar + mbar et convertit d'office ce qui est compatible.", "Le dialecte de l'IHM"},
         {"nav", "Navigation et vues", "Changer de vue, revenir, l'accueil.", "Fonctions IHM_"},
         {"popup", "Popups", "Ouvrir, remplacer, centrer, fermer une popup.", "Fonctions IHM_"},
         {"journal", "Journal et Console", "\xC3\x89" "crire une ligne dans le journal ou la Console.", "Fonctions IHM_"},
@@ -1720,6 +1721,27 @@ const std::vector<Function>& functions() {
          "regcomp(&re, motif, REG_EXTENDED) == 0;",
          "try { std::regex r(motif); } catch (...) { /* invalide */ }",
          Avail::None, Avail::Equivalent, true, false, {"BOOL", "REGEX_VALIDE('[0-9]+')", "TRUE", ""}, {}},
+        // ---- 1.13.0 (lot J6) : les unites de mesure (dialecte IHM)
+        {"EN", "unites", {{"X", "REAL", "une valeur num\xC3\xA9rique qui porte une unit\xC3\xA9", false},
+                          {"UNITE", "STRING", "l'unit\xC3\xA9 cible, de la m\xC3\xAAme famille, entre apostrophes", false}}, "REAL",
+         "Convertit X vers l'unit\xC3\xA9 cible (m\xC3\xAAme famille obligatoire) : EN(PressionBasse, 'bar') donne les mbar en bar. "
+         "La temp\xC3\xA9rature est affine (facteur ET d\xC3\xA9" "calage). Une valeur sans unit\xC3\xA9, ou une autre famille : refus\xC3\xA9 \xC3\xA0 G\xC3\xA9n\xC3\xA9rer.",
+         "Ecart := Pression - EN(PressionBasse, 'bar');   (* bar \xE2\x80\xA6 *)",
+         "/* conversion a la main : pb_bar = pb_mbar * 0.001f */",
+         "/* conversion a la main selon l'unite de la mesure */",
+         Avail::None, Avail::None, true, false, {}, {"EN est la conversion explicite partout o\xC3\xB9 une r\xC3\xA8gle refuse (l'addition, la comparaison, une affectation en mode strict)."}},
+        {"UNITE", "unites", {{"X", "REAL", "une valeur", false}}, "STRING",
+         "Le symbole de l'unit\xC3\xA9 de X ('bar') ; '' si X n'en porte pas. L'unit\xC3\xA9 vient de la d\xC3\xA9" "claration (le cr\xC3\xA9neau), pas de la valeur.",
+         "Txt := UNITE(Pression);   (* 'bar' \xE2\x80\xA6 *)",
+         "/* aucune : l'unite n'existe pas en C */",
+         "/* aucune : l'unite n'existe pas en C++ */",
+         Avail::None, Avail::None, true, false, {}, {}},
+        {"SANS_UNITE", "unites", {{"X", "REAL", "une valeur num\xC3\xA9rique", false}}, "REAL",
+         "Enl\xC3\xA8ve l'unit\xC3\xA9 de X : le m\xC3\xAAme nombre, nu (un REAL sans unit\xC3\xA9), pour un calcul libre ou une sortie brute.",
+         "Brut := SANS_UNITE(Pression);   (* un REAL nu \xE2\x80\xA6 *)",
+         "Brut = Pression;   /* l'unite n'existe pas en C */",
+         "Brut = Pression;   /* l'unite n'existe pas en C++ */",
+         Avail::None, Avail::None, true, false, {"REAL", "SANS_UNITE(7.5)", "7.5", ""}, {}},
     };
     return k;
 }

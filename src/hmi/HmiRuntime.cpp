@@ -18,6 +18,7 @@
 #include "HmiDecl.hpp"        // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiCalc.hpp"        // 1.12.7 : les valeurs calculees au demarrage
 #include "HmiMethods.hpp"     // 1.13.0 (lot J1) : les methodes des types IHM (S2) a l'execution (S1)
+#include "HmiUnits.hpp"       // 1.13.0 (lot J6) : les unites de mesure (EN / UNITE : declaredUnit, convertUnit)
 #include "HmiOperators.hpp"   // 1.10 (integration) : les operateurs du projet (S2) a l'execution (S1)
 #include "HmiRoles.hpp"       // 1.12.6 (lot B) : le lecteur du role, l'ecriture vers le type
 #include "HmiEnums.hpp"       // 1.10 (decision 15) : les enumerations IHM dans les scripts (S1)
@@ -657,6 +658,22 @@ public:
                     if (const auto* sym = symbolOf(*rt_.project_, *o)) return sym->name;
         }
         return {};
+    }
+    // 1.13.0 (lot J6) : l'unite physique declaree d'un nom (EN / UNITE). Une variable IHM, ou un membre
+    // d'une structure (l'unite du membre). Une locale ou un parametre d'une fonction : pas resolu ici.
+    std::string declaredUnit(std::string_view n) override {
+        if (!rt_.project_) return {};
+        const std::string r = resolved(n);
+        if (r.empty()) return {};
+        if (const Variable* var = rt_.project_->variable(r)) return var->unit;
+        return units::unitOfPath(*rt_.project_, r);
+    }
+    // 1.13.0 (lot J6) : la conversion d'une unite vers une autre (meme famille), par la bibliotheque du projet.
+    bool convertUnit(std::string_view from, std::string_view to, double& value) override {
+        if (!rt_.project_) return false;
+        const units::Catalog cat(rt_.project_->config);
+        if (const auto aff = cat.convert(from, to)) { value = aff->apply(value); return true; }
+        return false;
     }
     // 1.12.6 (lot B) : les valeurs d'une enumeration du projet (le lecteur montre leur texte, une
     // commande ecrit par leur nom).

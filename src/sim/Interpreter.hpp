@@ -129,6 +129,20 @@ public:
         (void)name;
         return {};
     }
+    // 1.13.0 (lot J6 : les unites) : l'unite physique declaree d'un nom ("bar") ; vide : aucune. L'unite vit
+    // sur la declaration, pas sur sim::Value : ce crochet (servi par l'IHM) la donne a EN et UNITE. Rien hors
+    // dialecte IHM (l'automate ne connait pas les unites).
+    virtual std::string declaredUnit(std::string_view name) {
+        (void)name;
+        return {};
+    }
+    // 1.13.0 (lot J6) : convertit `value` de l'unite `from` vers `to` (meme famille). Vrai : `value` mis a
+    // jour ; faux : pas convertible (inconnue, autre famille) - la valeur reste telle quelle. Servi par l'IHM
+    // (hmi::units) ; l'interpreteur reste ignorant de la bibliotheque des unites (couche au-dessus).
+    virtual bool convertUnit(std::string_view from, std::string_view to, double& value) {
+        (void)from; (void)to; (void)value;
+        return false;
+    }
     // Les membres d'un type structure (IHM ou DDT), dans l'ordre : (nom, type ecrit).
     virtual bool structMembers(std::string_view typeName, std::vector<std::pair<std::string, std::string>>& out) {
         (void)typeName; (void)out;
