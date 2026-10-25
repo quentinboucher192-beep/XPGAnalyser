@@ -161,6 +161,12 @@ std::string fieldBare(std::string_view key, std::string_view value) {
 }
 std::string fieldInt(std::string_view key, long long v) { return fieldBare(key, std::to_string(v)); }
 std::string fieldBool(std::string_view key, bool v) { return fieldBare(key, v ? "1" : "0"); }
+// 1.13.0 (lot J1) : les interfaces d'un type (des identifiants, sans ';') jointes pour une seule case.
+std::string joinSemicolon(const std::vector<std::string>& v) {
+    std::string out;
+    for (const auto& s : v) out += (out.empty() ? "" : ";") + s;
+    return out;
+}
 
 std::string todayStamp() {
     const auto now = std::chrono::system_clock::now();
@@ -948,8 +954,15 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     };
     const bool tests = hasTest(p.programs.functions)
                     || std::any_of(p.views.begin(), p.views.end(), [&](const View& v) { return hasTest(v.functions); });
-    // 30 : generiques d'une fonction ; 29 : tests unitaires ; sinon l'echelle d'avant (28 generiques de type...).
-    const int format = funcGenerics ? kFormatVersion : tests ? 29 : generics ? 28 : callbackTypes ? 27 : viewMembers ? 26
+    // 1.13.0 (lot J1) : le format 31 n'ajoute que les objets - une methode d'un type, un heritage (base), une
+    // interface implementee, un genre Interface, ou un membre prive. Sans eux, l'echelle d'avant (30 generiques
+    // de fonction...) : un type qui n'emploie rien de tout cela s'ecrit comme avant, une 1.13.0 d'avant l'ouvre.
+    const bool objects = std::any_of(p.programs.types.begin(), p.programs.types.end(), [](const HmiType& t) {
+        return !t.base.empty() || !t.interfaces.empty() || !t.methods.empty() || t.kind == HmiTypeKind::Interface
+            || std::any_of(t.members.begin(), t.members.end(), [](const TypeMember& m) { return m.visibility == Visibility::Private; });
+    });
+    // 31 : objets ; 30 : generiques d'une fonction ; 29 : tests unitaires ; sinon l'echelle d'avant (28 generiques de type...).
+    const int format = objects ? kFormatVersion : funcGenerics ? 30 : tests ? 29 : generics ? 28 : callbackTypes ? 27 : viewMembers ? 26
                      : tableGestures ? 25 : shortcuts ? 24 : declared ? 23 : (p.alarmGroups.empty() && p.alarmGroupLinks.empty()) ? 21 : 22;
     std::string index;
     index += "# IHM Studio - projet IHM (format " + std::to_string(format) + ")\n";
@@ -1019,8 +1032,12 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     // Lot 16 (format 15) : les types IHM (chacun suivi de ses membres) et les dossiers.
     for (const auto& ty : p.programs.types) {
         index += "type_ihm" + fieldInt("id", ty.id) + field("nom", ty.name) + field("description", ty.description)
-               + (ty.folder.empty() ? std::string{} : field("dossier", ty.folder)) + "\n";   // lot 21
+               + (ty.folder.empty() ? std::string{} : field("dossier", ty.folder))   // lot 21
+               // 1.13.0 (lot J1, format 31) : le parent (EXTENDS) et les interfaces (IMPLEMENTS, jointes par ';').
+               + (ty.base.empty() ? std::string{} : field("herite", ty.base))
+               + (ty.interfaces.empty() ? std::string{} : field("implemente", joinSemicolon(ty.interfaces))) + "\n";
         // 1.10 (decision 15, chantier E) : une enumeration le dit (type_genre), puis ses valeurs.
+        // 1.13.0 (lot J1) : une interface aussi (genre=interface) : ses signatures suivent (methode_type a corps vide).
         if (ty.kind != HmiTypeKind::Structure)
             index += "type_genre" + fieldBare("genre", typeKindKey(ty.kind))
                    + (ty.kind == HmiTypeKind::Callback ? field("signature", ty.signature) : std::string{}) + "\n";   // 1.12.20
@@ -1028,11 +1045,24 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
             index += "generique" + field("nom", g.name) + (g.constraint.empty() ? std::string{} : field("contrainte", g.constraint)) + "\n";
         for (const auto& m : ty.members)
             index += "membre" + field("nom", m.name) + field("type", m.type) + field("initiale", m.initial)
-                   + field("description", m.description) + "\n";
+                   + field("description", m.description)
+                   + (m.visibility == Visibility::Private ? fieldBare("portee", "privee") : std::string{}) + "\n";   // 1.13.0 (lot J1)
         for (const auto& v : ty.values)
             index += "valeur_enum" + field("nom", v.name) + fieldInt("valeur", v.value) + field("texte", v.text)
                    + field("description", v.description) + "\n";
         for (const auto& o : ty.operators) index += serializeOperator("operateur_type", o);   // 1.10
+        // 1.13.0 (lot J1, format 31) : les methodes du type, leur corps sur la ligne (comme fonction_symbole) ; une
+        // privee le dit (portee=privee), une virtuelle (virtuelle=oui) ; ses generiques, declarations et cas suivent.
+        for (const auto& fn : ty.methods) {
+            index += "methode_type" + fieldInt("id", fn.id) + field("nom", fn.name) + field("retour", fn.returnType)
+                   + (fn.isVirtual ? fieldBool("virtuelle", true) : std::string{})
+                   + (fn.visibility == Visibility::Private ? fieldBare("portee", "privee") : std::string{})
+                   + (fn.description.empty() ? std::string{} : field("description", fn.description)) + field("corps", fn.body) + "\n";
+            for (const auto& g : fn.generics)
+                index += "generique" + field("nom", g.name) + (g.constraint.empty() ? std::string{} : field("contrainte", g.constraint)) + "\n";
+            index += serializeDeclarations(fn.decls);
+            index += serializeFunctionTests(fn.tests);
+        }
     }
     for (const auto& f : p.programs.folders) index += "dossier_variables" + field("nom", f) + "\n";
     // 1.12.11 (lot G) : la liaison Equipement choisie par type de structure (aucune : rien d'ecrit).
@@ -1623,6 +1653,13 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             ty.name = toStr(r.get("nom"));
             ty.description = toStr(r.get("description"));
             ty.folder = toStr(r.get("dossier"));                    // lot 21
+            ty.base = toStr(r.get("herite"));                       // 1.13.0 (lot J1) : son parent (EXTENDS)
+            if (const std::string impl = toStr(r.get("implemente")); !impl.empty())   // 1.13.0 : ses interfaces
+                for (std::size_t from = 0, semi; from <= impl.size(); from = semi + 1) {
+                    semi = impl.find(';', from);
+                    if (semi == std::string::npos) semi = impl.size();
+                    if (semi > from) ty.interfaces.push_back(impl.substr(from, semi - from));
+                }
             p.programs.types.push_back(std::move(ty));
             genericsHolder = &p.programs.types.back().generics;     // 1.12.20 : ses generiques suivent
         } else if (r.word == "membre") {
@@ -1636,7 +1673,26 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             if (m.type.empty()) m.type = "INT";
             m.initial = toStr(r.get("initiale"));
             m.description = toStr(r.get("description"));
+            m.visibility = toStr(r.get("portee")) == "privee" ? Visibility::Private : Visibility::Public;   // 1.13.0 (lot J1)
             p.programs.types.back().members.push_back(std::move(m));
+        } else if (r.word == "methode_type") {                        // 1.13.0 (lot J1) : une methode (comme fonction_symbole)
+            if (p.programs.types.empty()) {
+                if (report) report->warnings.push_back("m\xC3\xA9thode sans type IHM : ignor\xC3\xA9" "e");
+                continue;
+            }
+            HmiFunction fn;
+            fn.id = static_cast<Id>(toInt(r.get("id"), 0));
+            fn.name = toStr(r.get("nom"));
+            fn.returnType = toStr(r.get("retour"));
+            fn.isVirtual = toBool(r.get("virtuelle"), false);
+            fn.visibility = toStr(r.get("portee")) == "privee" ? Visibility::Private : Visibility::Public;
+            fn.description = toStr(r.get("description"));
+            fn.body = toStr(r.get("corps"));
+            if (fn.name.empty()) { if (report) report->warnings.push_back("m\xC3\xA9thode sans nom : ignor\xC3\xA9" "e"); continue; }
+            p.programs.types.back().methods.push_back(std::move(fn));
+            holder = &p.programs.types.back().methods.back().decls;
+            genericsHolder = &p.programs.types.back().methods.back().generics;
+            testHolder = &p.programs.types.back().methods.back().tests;
         } else if (r.word == "type_genre") {                          // 1.10 (E) : une enumeration
             if (p.programs.types.empty()) {
                 if (report) report->warnings.push_back("genre de type sans type IHM : ignor\xC3\xA9");

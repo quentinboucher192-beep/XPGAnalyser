@@ -1387,6 +1387,9 @@
     <ClCompile Include="src\hmi\HmiMarkers.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiMethods.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiMigrate.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2768,6 +2771,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiMarkers.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiMethods.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiMigrate.hpp">

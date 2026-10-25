@@ -1161,6 +1161,10 @@ struct TypeMember {
     std::string type{"INT"};
     std::string initial{};         // vide : 0, FALSE, '' (ou celles du type)
     std::string description{};
+    // 1.13.0 (lot J1 : les objets) : PUBLIC (defaut) ou PRIVE - un membre prive n'est lu/ecrit que des
+    //  methodes du MEME type (ni sous-type, ni exterieur, ni script, ni Tableau, ni plumes). Il garde sa
+    //  place Modbus (l'equipement le lit ; seul le code ST est contraint). Un projet d'avant est inchange.
+    Visibility  visibility{Visibility::Public};
     bool operator==(const TypeMember&) const = default;
 };
 // 1.10 (decision 15) : une valeur d'enumeration IHM
@@ -1178,7 +1182,8 @@ struct HmiEnumValue {
     bool operator==(const HmiEnumValue&) const = default;
 };
 // 1.12.20 : Callback - un type rappel nomme (T_Filtre) : sa signature, pas de membres.
-enum class HmiTypeKind : std::uint8_t { Structure, Enumeration, Callback };
+// 1.13.0 (lot J1) : Interface - un contrat (I_Demarrable) : des signatures de methodes, pas de membre ni de corps.
+enum class HmiTypeKind : std::uint8_t { Structure, Enumeration, Callback, Interface };
 struct HmiType {
     Id          id{kNoId};
     std::string name;
@@ -1192,6 +1197,17 @@ struct HmiType {
     std::string signature{};
     // 1.12.20 (lot G) : une structure generique (T_Mesure<T>) : ses generiques ; ses membres peuvent etre de type T.
     std::vector<GenericParam> generics{};
+    // 1.13.0 (lot J1 : les objets) : un type devient un vrai objet.
+    //  base      : le type parent (EXTENDS) - seulement entre STRUCTURES ; vide : aucun. Le sous-type a tous
+    //              les membres et methodes du parent (place Modbus du parent d'abord), et peut en ajouter.
+    //  interfaces: les interfaces implementees (IMPLEMENTS, plusieurs) ; Generer verifie la conformite.
+    //  methods   : ses methodes (une HmiFunction portee par le type, comme View::functions pour un symbole).
+    //              Chacune voit SELF (l'instance, en VAR_IN_OUT ; THIS en est l'alias) et les membres par leur
+    //              nom ; virtuelle (HmiFunction::isVirtual) : redefinissable par un sous-type (OVERRIDE/SUPER).
+    //              Une INTERFACE porte ici ses signatures (corps vide, pas de membre, pas de donnee).
+    std::string              base{};
+    std::vector<std::string> interfaces{};
+    std::vector<HmiFunction> methods{};
     bool operator==(const HmiType&) const = default;
 };
 

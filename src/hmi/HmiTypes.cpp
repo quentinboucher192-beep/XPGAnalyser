@@ -579,6 +579,12 @@ bool validMemberType(const Project& p, std::string_view type, std::string* why, 
                 return validMemberType(p, concrete, why, owner);
         }
     if (!validType(p, type, why)) return false;
+    // 1.13.0 (lot J1) : une interface ne s'emploie que par REF_TO (c'est un contrat, pas une donnee) -
+    // ni directement (v : I_Demarrable), ni dans un conteneur sans REF_TO (LIST OF I_Demarrable).
+    if (upperOf(std::string(type)).find("REF_TO") == std::string::npos)
+        for (const HmiType* t : namedTypesOf(p, type))
+            if (t->kind == HmiTypeKind::Interface)
+                return fail(why, "emploie REF_TO " + t->name + " : une interface est un contrat, pas une donn\xC3\xA9" "e directe");
     // 1.12.4 : un membre objet peut tout contenir, sauf le type qui le porte (T_Noeud.Enfants :
     // LIST OF T_Noeud) - ni directement, ni par un autre type.
     if (!owner.empty() && isRich(type))
@@ -605,7 +611,9 @@ bool isRich(std::string_view type) {
 bool knownTypeName(const Project& p, std::string_view type) {
     if (!membersOf(p, type).empty()) return true;
     const HmiType* ty = p.hmiTypeByName(trimmed(type));
-    return ty && (ty->kind == HmiTypeKind::Enumeration || ty->kind == HmiTypeKind::Callback);
+    // 1.13.0 (lot J1) : une interface est un nom de type connu (elle ne s'emploie que par REF_TO).
+    return ty && (ty->kind == HmiTypeKind::Enumeration || ty->kind == HmiTypeKind::Callback
+               || ty->kind == HmiTypeKind::Interface);
 }
 
 std::string callbackForm(const Project* p, std::string_view type) {
@@ -652,6 +660,8 @@ std::string cycleOf(const Project& p, std::string_view typeName) {
             }
         if (path.size() > 64) return;
         path.push_back(ty.name);
+        // 1.13.0 (lot J1) : un cycle d'heritage (T_A EXTENDS T_B EXTENDS T_A) - le parent d'abord.
+        if (const HmiType* base = ty.base.empty() ? nullptr : p.hmiTypeByName(ty.base)) visit(*base);
         for (const auto& m : ty.members) {
             // 1.12.4 : un membre objet (LIST OF T_Noeud) : les types qu'il nomme.
             for (const HmiType* sub : namedTypesOf(p, m.type)) visit(*sub);
@@ -1412,7 +1422,9 @@ TypeStep stepMember(const Project& p, std::string_view type, std::string_view me
     }
     const auto* ty = p.hmiTypeByName(t);
     if (!ty) return st;
-    for (const auto& mm : ty->members)
+    // 1.13.0 (lot J1) : les membres herites (parent d'abord) comptent aussi.
+    const auto inherited = membersOf(p, t);
+    for (const auto& mm : inherited)
         if (sameText(mm.name, member)) {
             st.type = normalized(mm.type);
             return st;
@@ -1422,7 +1434,7 @@ TypeStep stepMember(const Project& p, std::string_view type, std::string_view me
         return st;
     }
     std::string list;
-    for (const auto& mm : ty->members) list += (list.empty() ? "" : ", ") + mm.name;
+    for (const auto& mm : inherited) list += (list.empty() ? "" : ", ") + mm.name;
     st.why = "(" + ty->name + ") n'a pas de membre " + std::string(member) + (list.empty() ? std::string{} : " (membres : " + list + ")");
     return st;
 }
@@ -1513,7 +1525,23 @@ std::vector<TypeMember> membersOf(const Project& p, std::string_view typeName) {
     Spec s;
     if (!parseSpec(typeName, s) || s.array()) return {};
     const auto* ty = p.hmiTypeByName(s.element);
-    return ty ? ty->members : std::vector<TypeMember>{};
+    if (!ty) return {};
+    // 1.13.0 (lot J1) : l'heritage - la tranche du parent D'ABORD (la racine en tete), puis les siens.
+    // La chaine de base (du parent vers la racine), avec un garde-fou contre un cycle.
+    if (ty->base.empty()) return ty->members;
+    std::vector<const HmiType*> ancestors;      // [parent, grand-parent, ... racine]
+    std::set<std::string> seen{upperOf(ty->name)};
+    for (std::string base = ty->base; !base.empty();) {
+        const HmiType* b = p.hmiTypeByName(base);
+        if (!b || !seen.insert(upperOf(b->name)).second) break;
+        ancestors.push_back(b);
+        base = b->base;
+    }
+    std::vector<TypeMember> out;
+    for (auto it = ancestors.rbegin(); it != ancestors.rend(); ++it)   // racine d'abord
+        out.insert(out.end(), (*it)->members.begin(), (*it)->members.end());
+    out.insert(out.end(), ty->members.begin(), ty->members.end());
+    return out;
 }
 
 // 1.12.17 : un conteneur, une structure - ce qui n'est pas une valeur seule (la forme la plus exterieure

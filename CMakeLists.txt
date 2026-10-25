@@ -614,6 +614,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(generiques_test PRIVATE xpg_hmi)
     xpg_add_test_executable(tests_unitaires_test tests/tests_unitaires_test.cpp)   # 1.13.0 (lot J4) : les tests unitaires des fonctions
     xpg_target_link_libraries(tests_unitaires_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(objets_test tests/objets_test.cpp)                # 1.13.0 (lot J1) : methodes, membres prives, heritage, interfaces
+    xpg_target_link_libraries(objets_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_natives1127_test tests/hmi_natives1127_test.cpp)   # 1.12.7 : conteneurs, std::numeric, templates, <bit>
     xpg_target_link_libraries(hmi_natives1127_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_setring_test tests/hmi_setring_test.cpp)      # 1.12.7 : SET OF T et RING[N] OF T
@@ -773,6 +775,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME erreurs      COMMAND erreurs_test)                     # ---- 1.13.0 : LEVER, RELEVER, WAIT_UNTIL ----
     xpg_add_test(NAME generiques   COMMAND generiques_test)                  # ---- 1.13.0 : les fonctions generiques (TEMPLATE) ----
     xpg_add_test(NAME testsunitaires COMMAND tests_unitaires_test)           # ---- 1.13.0 (lot J4) : les tests unitaires des fonctions ----
+    xpg_add_test(NAME objets       COMMAND objets_test)                      # ---- 1.13.0 (lot J1) : methodes, prive, heritage, interfaces ----
     xpg_add_test(NAME hminatives1127 COMMAND hmi_natives1127_test)           # ---- 1.12.7 : les natives des conteneurs, std::numeric, templates, <bit> ----
     xpg_add_test(NAME hmisetring   COMMAND hmi_setring_test)                 # ---- 1.12.7 : SET OF T et RING[N] OF T ----
     xpg_add_test(NAME hminatives1216 COMMAND hmi_natives1216_test)           # ---- 1.12.16 : les 39 natives std:: ----
