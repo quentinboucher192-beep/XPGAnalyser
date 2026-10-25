@@ -5611,6 +5611,13 @@ private:
                 value = *v;
             }
         }
+        // 1.13.0 (lot J6) : L'AFFECTATION CONVERTIT D'OFFICE une valeur lue telle quelle sur un chemin qui porte une
+        // unite (Pression := PressionBasse) vers celle de la cible, de la meme famille (mbar -> bar, degC -> K) - ce que
+        // le controle dit en info. Un calcul (PressionBasse * 2.0) n'a pas d'unite ici : le controle exige EN. Hors du
+        // dialecte de l'IHM (l'automate), l'environnement ne connait aucune unite : rien ne change.
+        std::string sourceUnit;
+        if (s.compound.empty() && !value.o && isNumeric(value.v.type()) && value.v.type() != Type::Bool && value.v.type() != Type::Time)
+            sourceUnit = declaredUnitOf(*s.value);
         // Un objet rendu par la valeur meme (b := a) : copie, pour que a et b restent deux.
         auto storeInto = [&](const Expr& target) {
             auto place = locate(target, true);
@@ -5623,6 +5630,17 @@ private:
                 return false;
             }
             std::string why;
+            if (!sourceUnit.empty())
+                if (const std::string targetUnit = declaredUnitOf(target); !targetUnit.empty() && targetUnit != sourceUnit) {
+                    double converted = value.v.asReal();
+                    if (env_.convertUnit(sourceUnit, targetUnit, converted)) {
+                        if (!writePlace(*place, RV{Value::real(converted), nullptr}, &why)) {
+                            fail(s.line, why);
+                            return false;
+                        }
+                        return true;
+                    }
+                }
             if (!writePlace(*place, value, &why)) {
                 fail(s.line, why);
                 return false;
@@ -9192,16 +9210,43 @@ private:
     }
 
     // ======== 1.13.0 (lot J6) : les unites de mesure (EN, UNITE, SANS_UNITE) ======
-    //  L'unite vit sur la DECLARATION, pas sur sim::Value : on la demande a l'IHM (declaredUnit) par le nom
-    //  pointe de l'argument. EN convertit par convertUnit (l'IHM porte la bibliotheque) ; sans unite source,
-    //  la valeur reste telle quelle (Generer a deja prevenu). Hors dialecte IHM, les crochets rendent vide :
-    //  EN/UNITE/SANS_UNITE n'y resolvent rien.
+    //  L'unite vit sur la DECLARATION, pas sur sim::Value : on la demande a l'IHM (declaredUnit) par le chemin
+    //  de l'argument (unitPath). EN convertit par convertUnit (l'IHM porte la bibliotheque) ; sans unite source,
+    //  la valeur reste telle quelle (Generer a deja prevenu). L'affectation d'un chemin s'en sert aussi
+    //  (assignRich). Hors dialecte IHM, les crochets rendent vide : EN/UNITE/SANS_UNITE n'y resolvent rien.
+    //
+    // 1.13.0 : LE CHEMIN DONT L'IHM DONNE L'UNITE - une variable, un .membre, une [case] (son contenu n'est pas lu :
+    //  "Vannes[0]" vaut pour toutes les cases, comme units::unitOfPath), la forme que le controle accepte dans EN et
+    //  qu'il dit convertie d'office a l'affectation. Vide : autre chose (un calcul, un appel, p^), ou un nom local - une
+    //  locale, un parametre, une variable de FOR EACH n'ont pas d'unite, meme s'ils portent le nom d'une variable IHM
+    //  qui en a une (le controle les cache de meme).
+    std::string unitPath(const Expr& e) {
+        switch (e.kind) {
+            case Expr::Kind::Reference:
+                return findLocal(e.name) ? std::string{} : e.name;
+            case Expr::Kind::Member:
+            case Expr::Kind::Index: {
+                if (!e.lhs) return {};
+                const std::string base = unitPath(*e.lhs);
+                if (base.empty()) return {};
+                return e.kind == Expr::Kind::Member ? base + "." + e.name : base + "[0]";
+            }
+            default:
+                return {};
+        }
+    }
+    // L'unite declaree de ce que designe `e` ("bar") ; vide : aucune, ou pas un chemin.
+    std::string declaredUnitOf(const Expr& e) {
+        const std::string path = unitPath(e);
+        return path.empty() ? std::string{} : env_.declaredUnit(path);
+    }
+
     core::Result<RV> unitesNative(const std::string& u, const Expr& e) {
         const Expr& a0 = *e.arguments[0].second;
         auto v = rich(a0);
         if (!v) return v;
         if (v->o) return dialectError(u + " : une valeur simple est attendue, pas " + typeNameOf(*v));
-        if (u == "UNITE") return RV{Value::text(env_.declaredUnit(dottedName(a0))), nullptr};
+        if (u == "UNITE") return RV{Value::text(declaredUnitOf(a0)), nullptr};
         if (u == "SANS_UNITE") return RV{Value::real(v->v.asReal()), nullptr};
         // EN(x, 'cible') : convertit de l'unite declaree de x vers la cible.
         auto tgt = rich(*e.arguments[1].second);
@@ -9212,7 +9257,7 @@ private:
         while (!target.empty() && std::isspace(static_cast<unsigned char>(target.front()))) target.erase(0, 1);
         while (!target.empty() && std::isspace(static_cast<unsigned char>(target.back()))) target.pop_back();
         double value = v->v.asReal();
-        const std::string from = env_.declaredUnit(dottedName(a0));
+        const std::string from = declaredUnitOf(a0);                 // 1.13.0 : Ligne.Vannes[2] aussi ; pas une locale
         if (!from.empty()) env_.convertUnit(from, target, value);   // sinon : la valeur reste telle quelle
         return RV{Value::real(value), nullptr};
     }

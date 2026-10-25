@@ -314,6 +314,10 @@ public:
     // locales du code qui l'appelle (VAR, VAR_TEMP, parametres : sim::readCallerLocal).
     // Avant, '{Mini:0.0}' dans un script qui declare Mini rendait ###.
     int callerLocals{0};
+    // 1.13.0 (lot J6) : le projet porte-t-il une unite quelque part (-1 : pas encore regarde, remis a chaque
+    // demarrage) ? Sans unite, declaredUnit rend vide tout de suite : l'affectation d'un chemin, que le moteur
+    // regarde a chaque fois, ne coute rien a un projet qui n'en met pas.
+    int anyUnit{-1};
     struct CallerLocals {
         Env& env;
         explicit CallerLocals(Env& e) : env(e) { ++env.callerLocals; }
@@ -660,10 +664,21 @@ public:
         }
         return {};
     }
-    // 1.13.0 (lot J6) : l'unite physique declaree d'un nom (EN / UNITE). Une variable IHM, ou un membre
-    // d'une structure (l'unite du membre). Une locale ou un parametre d'une fonction : pas resolu ici.
+    // 1.13.0 (lot J6) : l'unite physique declaree d'un chemin (EN / UNITE, l'affectation convertie d'office). Une
+    // variable IHM, un membre d'une structure (herite compris), une case d'un tableau ("Vannes[0]" : l'unite de
+    // l'element). Une locale ou un parametre d'une fonction n'arrive jamais ici : l'interpreteur ne demande que les
+    // chemins qui ne partent pas d'un nom local (Interpreter::unitPath).
     std::string declaredUnit(std::string_view n) override {
         if (!rt_.project_) return {};
+        if (anyUnit < 0) {
+            const Project& p = *rt_.project_;
+            bool any = !p.libraries.empty();                 // une bibliotheque reliee : ses types peuvent en porter
+            for (const auto& v : p.programs.variables) any = any || !v.unit.empty();
+            for (const auto& t : p.programs.types)
+                for (const auto& m : t.members) any = any || !m.unit.empty();
+            anyUnit = any ? 1 : 0;
+        }
+        if (anyUnit == 0) return {};
         const std::string r = resolved(n);
         if (r.empty()) return {};
         if (const Variable* var = rt_.project_->variable(r)) return var->unit;
@@ -3665,6 +3680,7 @@ void Runtime::start(double now) {
     static int sessions = 0;
     session_ = ++sessions;
     stopTasks();                        // 1.12.26 : aucune tache d'avant ne survit
+    env_->anyUnit = -1;                 // 1.13.0 (lot J6) : les unites du projet se relisent a chaque demarrage
     // 1.12.2 : les sources d'elements (itemsFrom) se lisent dans ce moteur tant qu'il tourne.
     registerChoiceResolver(this, [this](const Object& o, std::string_view source, std::vector<Choice>& out) { return resolveChoices(source, out, &o); });
     composed_.clear(); boundCalls_.clear();
