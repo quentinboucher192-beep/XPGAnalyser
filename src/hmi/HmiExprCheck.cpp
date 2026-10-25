@@ -34,6 +34,8 @@
 #include <cstdlib>
 #include <set>
 
+#include "HmiNames.hpp"   // 1.13.0 (lot J8) : les espaces de noms (Util.Moyenne, Gaz.T_Vanne)
+
 namespace hmi::exprcheck {
 
 namespace {
@@ -267,6 +269,23 @@ std::string closestAmong(std::string_view name, const std::vector<std::string>& 
         }
     }
     return best;
+}
+
+// 1.13.0 (lot J8) : LES ESPACES DE NOMS, LUS AVANT TOUT - Util . Moyenne (trois jetons) devient un seul nom complet
+// quand Util est un espace declare qui a Moyenne (la regle du plus long chemin, celle du moteur et des scripts).
+std::vector<Tok> withNamespaces(const Context& ctx, std::vector<Tok> toks) {
+    if (!ctx.project || toks.empty() || !names::active(*ctx.project)) return toks;
+    const names::Index ix(*ctx.project);
+    std::vector<names::TokenView> views;
+    views.reserve(toks.size());
+    for (const auto& t : toks) views.push_back({t.text, t.k == Tok::K::Ident, t.k == Tok::K::Op && t.text == "."});
+    const auto runs = names::qualifiedRuns(ix, views, nullptr);
+    for (auto it = runs.rbegin(); it != runs.rend(); ++it) {
+        toks[it->first].text = it->text;
+        if (it->count > 1)
+            toks.erase(toks.begin() + static_cast<std::ptrdiff_t>(it->first + 1), toks.begin() + static_cast<std::ptrdiff_t>(it->first + it->count));
+    }
+    return toks;
 }
 
 class Checker {
@@ -1003,6 +1022,25 @@ private:
             problems.push_back(std::move(pb));
             return v;
         }
+        // 1.13.0 (lot J8) : Gaz.Inconnu - un espace de noms qui n'a pas ce nom (avec le plus proche de l'espace).
+        if (p && !segs.empty() && !segs.front().index && p->isNamespace(root)) {
+            const names::Index ix(*p);
+            std::vector<std::string> pool = ix.itemsOf(root);
+            for (const auto& sub : ix.childSpaces(root)) pool.push_back(sub);
+            Problem pb;
+            pb.unknownName = root + "." + segs.front().member;
+            const std::string near = closestAmong(segs.front().member, pool);
+            if (!near.empty()) {
+                pb.suggestion = ix.spelled(root) + "." + near;
+                pb.fixFrom = root + "." + segs.front().member;
+                pb.fixTo = pb.suggestion;
+            }
+            pb.message = ix.spelled(root) + " est un espace de noms : il n'a pas de " + segs.front().member
+                       + (near.empty() ? std::string(" (ni type, ni fonction, ni script)") : " : veux-tu dire " + pb.suggestion + " ?");
+            for (const auto& q : problems) if (q.message == pb.message) return v;
+            problems.push_back(std::move(pb));
+            return v;
+        }
         if (ctx_.known && !ctx_.known(root)) {
             Problem pb;
             pb.unknownName = root;
@@ -1540,7 +1578,7 @@ std::vector<Problem> check(const Context& ctx, std::string_view written, Want wa
     bool callsRead = false;
     const auto calls = ctx.calls ? callcheck::checkExpression(callcheck::Context{ctx.project, ctx.view, nullptr, ctx.plc}, source, &callsRead)
                                  : std::vector<callcheck::Problem>{};
-    Checker c(ctx, lex(source));
+    Checker c(ctx, withNamespaces(ctx, lex(source)));
     c.callsChecked = callsRead || !ctx.calls;
     for (const auto& m : markers::find(written, markers::Mode::Expression))   // 1.11.1 (REP-10)
         if (const auto roots = scanRoots(m.content(written)); !roots.empty()) c.markerRoots.insert(up(roots.front()));
@@ -1612,7 +1650,7 @@ Shape shapeOf(const Context& ctx, std::string_view written) {
     if (trimmed(plain).empty()) return s;
     Context quiet = ctx;
     quiet.calls = false;                       // la forme seulement : les appels sont juges ailleurs
-    Checker c(quiet, lex(plain));
+    Checker c(quiet, withNamespaces(quiet, lex(plain)));
     c.callsChecked = true;
     const Val v = c.run();
     s.single = v.type != T::Unknown;

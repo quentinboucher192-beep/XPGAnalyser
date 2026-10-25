@@ -68,6 +68,9 @@ struct Scope {
     std::function<bool(std::string_view root)> plcKnown{};
     std::vector<std::string> candidates{};  // des noms en plus pour "veux-tu dire"
     exprcheck::PlcPaths      plc{};         // les membres des chemins de l'automate
+    // 1.13.0 (lot J8) : l'espace de noms de l'item controle (un script general ; une fonction : function->ns) - il
+    // nomme ses voisins sans prefixe. Vide : la racine.
+    std::string              ns{};
 };
 
 // Les fautes d'un code ST, dans l'ordre du texte (avec celles de dialectFindings).

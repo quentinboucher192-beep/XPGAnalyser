@@ -41,6 +41,7 @@ struct Context {
     const View*         view{nullptr};       // une vue, une popup, un symbole : ses parametres, ses instances, ses fonctions
     const HmiFunction*  function{nullptr};   // le corps d'une fonction (du projet ou d'un symbole) : ses parametres
     exprcheck::PlcPaths plc{};               // les variables de l'automate (vide : inconnues)
+    std::string         ns{};                // 1.13.0 (lot J8) : l'espace du code controle (un script ; une fonction : function->ns)
 };
 
 struct Problem {

@@ -43,6 +43,8 @@
 #include "HmiMethods.hpp"      // 1.13.0 (lot J1) : les controles des objets (EXTENDS, OVERRIDE, interfaces)
 #include "HmiTypes.hpp"        // lot 16
 #include "HmiUnits.hpp"        // 1.13.0 (lot J6) : les unites de mesure (type numerique, symbole connu)
+#include "HmiNames.hpp"        // 1.13.0 (lot J8) : les espaces de noms
+#include "HmiLibrary.hpp"      // 1.13.0 (lot J8) : les bibliotheques reliees
 #include "HmiTypeForms.hpp"    // 1.12.2 : la valeur initiale d'une variable objet
 #include "HmiRanges.hpp"       // 1.12.10 (lot F) : la plage et les seuils de la variable
 #include "HmiEnums.hpp"        // 1.10 (S1) : knownType connait les enumerations
@@ -320,6 +322,7 @@ bool known(const Project& p, const NameExists& plc, std::string_view name, const
     // est verifie a part (qualifiedUses : publique, existante, lue seulement).
     return p.variable(name) || isHmiFunction(name) || pub::isSysRoot(name) || pub::viewNamed(p, name) || enumValue() || !plc
         || p.generalScript(name) != nullptr
+        || p.isNamespace(name)                         // 1.13.0 (lot J8) : Gaz.T_Vanne - le chemin entier : names::check
         || !p.functionsNamed(name).empty()             // 1.12.20 : une fonction passee en rappel (LIST_ANY(L, Tres_Grand))
         || plc(name) || (core::hasApi() && upperText(name) == "API");
 }
@@ -451,6 +454,44 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
 }
 } // namespace
 
+// 1.13.0 (lot J8) : LES ESPACES DE NOMS ET LES BIBLIOTHEQUES. Un espace se nomme comme un identifiant (Gaz,
+// Gaz.Ligne) ; son nom est RESERVE (ni variable IHM, ni vue, ni item de la racine du meme nom) ; une bibliotheque
+// reliee est trouvee, compatible, et ne recouvre pas un espace du projet ; un item du projet ne prend pas le nom
+// complet d'un item de bibliotheque.
+void checkNamespaces(const Project& p, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    if (!names::active(p)) return;
+    std::set<std::string> said;
+    const auto spaceOf = [&](const std::string& ns, const std::string& category, const std::string& who, Id script, Id item) {
+        if (ns.empty()) return;
+        if (!isNamespaceName(ns)) {
+            add(out, S::Error, category, kNoId, kNoId, who,
+                who + " : espace de noms illisible Â« " + ns + " Â» (des identifiants sÃ©parÃ©s par des points : Gaz, Gaz.Ligne)", script);
+            out.back().item = item;
+            return;
+        }
+        if (const std::string clash = names::reservedClash(p, ns); !clash.empty() && said.insert(upperText(ns.substr(0, ns.find('.')))).second) {
+            add(out, S::Error, "Espace de noms", kNoId, kNoId, ns, clash + " : renomme l'un des deux (un espace de noms est un nom rÃ©servÃ©)");
+        }
+    };
+    for (const auto& t : p.programs.types) spaceOf(t.ns, "Type IHM", t.name, kNoId, t.id);
+    for (const auto& f : p.programs.functions) spaceOf(f.ns, "Fonction", f.name, kNoId, f.id);
+    for (const auto& sc : p.programs.scripts) spaceOf(sc.ns, "Script", sc.name, sc.id, kNoId);
+    if (const auto it = p.listFolders.find("espaces"); it != p.listFolders.end())
+        for (const auto& e : it->second) spaceOf(e, "Espace de noms", e, kNoId, kNoId);
+    // Un item du projet qui prend le nom complet d'un item d'une bibliotheque reliee.
+    for (const auto& t : p.programs.types) {
+        if (t.ns.empty()) continue;
+        bool clash = false;
+        p.forEachLibraryType([&](const HmiType& lt, const LoadedLibrary&) { clash = clash || upperText(fullName(lt)) == upperText(fullName(t)); });
+        if (clash) add(out, S::Error, "Type IHM", kNoId, kNoId, t.name, fullName(t) + " existe dÃ©jÃ  dans une bibliothÃ¨que reliÃ©" "e : renomme-le");
+    }
+    // Les liens : introuvable, incompatible, plus ancienne, plus recente, collision, chemin absolu.
+    for (const auto& li : biblio::linkIssues(p)) {
+        add(out, li.error ? S::Error : S::Warning, "BibliothÃ¨que", kNoId, kNoId, li.library, li.message);
+    }
+}
+
 // La programmation generale, les scripts de vue, les actions, et les
 // references circulaires entre eux.
 void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
@@ -536,7 +577,8 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         const std::string cat = "Type IHM";
         if (!isIdentifier(ty.name)) add(out, S::Error, cat, kNoId, kNoId, ty.name, "nom de type invalide : '" + ty.name + "'");
         else if (types::isElementary(ty.name)) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : le nom d'un type \xC3\xA9l\xC3\xA9mentaire");
-        else if (!typeNames.insert(upperText(ty.name)).second) add(out, S::Error, cat, kNoId, kNoId, ty.name, "type IHM en double : " + ty.name);
+        else if (!typeNames.insert(upperText(fullName(ty))).second)   // 1.13.0 (lot J8) : par son nom complet (Gaz.T_Vanne)
+            add(out, S::Error, cat, kNoId, kNoId, ty.name, "type IHM en double : " + fullName(ty));
         // 1.12.13 : une enumeration n'a pas de membres (ses valeurs) - pas d'avertissement.
         if (ty.members.empty() && ty.kind == HmiTypeKind::Structure) add(out, S::Warning, cat, kNoId, kNoId, ty.name, ty.name + " : aucun membre");
         // 1.12.20 : un type rappel - sa signature (CALLBACK (x : REAL) : BOOL) se lit.
@@ -696,7 +738,8 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
     std::set<std::string> scriptNamesSeen;
     for (const auto& sc : p.programs.scripts) {
         if (!isIdentifier(sc.name)) add(out, S::Error, "Script", kNoId, kNoId, sc.name, "nom invalide : '" + sc.name + "'", sc.id);
-        else if (!scriptNamesSeen.insert(sc.name).second) add(out, S::Error, "Script", kNoId, kNoId, sc.name, "script en double : " + sc.name, sc.id);
+        else if (!scriptNamesSeen.insert(upperText(fullName(sc))).second)   // 1.13.0 (lot J8) : par son nom complet
+            add(out, S::Error, "Script", kNoId, kNoId, sc.name, "script en double : " + fullName(sc), sc.id);
         if (std::find(std::begin(kGeneralEvents), std::end(kGeneralEvents), sc.event) == std::end(kGeneralEvents))
             add(out, S::Error, "Script", kNoId, kNoId, sc.name, "d\xC3\xA9" "clencheur inconnu : " + sc.event, sc.id);
         if (sc.event == "Cyclique" && sc.periodMs < 10)
@@ -4973,6 +5016,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
         }
     }
     checkPrograms(p, plcHasName, out);
+    checkNamespaces(p, out);            // 1.13.0 (lot J8) : les espaces de noms et les bibliotheques reliees
     checkSupervision(p, plcHasName, out);
     checkLot6(p, plcHasName, out);
     checkLot8(p, plcHasName, out);
