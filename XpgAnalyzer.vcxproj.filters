@@ -1375,6 +1375,9 @@
     <ClCompile Include="src\hmi\HmiExprGuide.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiFunctionTests.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiLiveGeometry.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2750,6 +2753,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiExprGuide.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiFunctionTests.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiKeys.hpp">

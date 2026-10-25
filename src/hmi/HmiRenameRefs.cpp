@@ -439,6 +439,31 @@ std::size_t renameObjectReferences(Project& p, const std::string& view, const st
         }
         if (changed) note("Essais / " + sc.name);
     }
+    // 1.13.0 (lot J4) : les cas de test des fonctions - arguments, attendus, poses et verifs qui citent
+    // la variable (la cible speciale JOURNAL ne se renomme pas). Les cas la designent par l'id de leur
+    // fonction, pas par son nom : renommer la fonction ne les touche pas (seule une variable le fait ici).
+    const auto renameTests = [&](std::vector<HmiFunction>& fns, const std::string& ownerLabel) {
+        for (auto& fn : fns) {
+            bool changed = false;
+            for (auto& t : fn.tests) {
+                for (auto& a : t.arguments)
+                    if (const std::string v = through("variable", a, f); v != a) { a = v; changed = true; }
+                if (const std::string e = through("variable", t.expected, f); e != t.expected) { t.expected = e; changed = true; }
+                for (auto& g : t.givens) {
+                    const std::string tg = through("variable", g.target, f), v = through("variable", g.value, f);
+                    if (tg != g.target || v != g.value) { g.target = tg; g.value = v; changed = true; }
+                }
+                for (auto& c : t.checks) {
+                    if (sameText(trimmed(c.target), "JOURNAL")) continue;
+                    const std::string tg = through("variable", c.target, f), e = through("variable", c.expected, f);
+                    if (tg != c.target || e != c.expected) { c.target = tg; c.expected = e; changed = true; }
+                }
+            }
+            if (changed) note(ownerLabel + " / tests de " + fn.name);
+        }
+    };
+    renameTests(p.programs.functions, "Fonctions");
+    for (auto& v : p.views) renameTests(v.functions, v.name);
     // Les traductions sont rangees sous leur texte d'origine : un texte a
     // trous qui change de trou change de cle.
     std::map<std::string, std::map<std::string, std::string>> texts;

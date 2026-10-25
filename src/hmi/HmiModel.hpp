@@ -833,6 +833,41 @@ inline constexpr std::string_view kViewEvents[] = {"OnOpen", "OnCycle", "OnClose
 inline constexpr std::string_view kGeneralEvents[] = {"Demarrage", "Cyclique", "Changement", "Appel"};
 [[nodiscard]] std::string_view eventLabel(std::string_view event) noexcept;   // "Demarrage", "Sur changement"... (accentues)
 
+// ---- 1.13.0 (lot J4) : les tests unitaires d'une fonction IHM ----------------------
+//  UN CAS DE TEST EPINGLE A UNE FONCTION : un nom, une liste d'arguments (un
+//  par parametre, dans l'ordre de l'onglet Parametres - vide : la valeur par
+//  defaut), un resultat attendu (vide : une procedure, rien a comparer), une
+//  tolerance (sur un retour REAL/LREAL seulement), des poses (valeurs mises sur
+//  des variables IHM avant l'appel) et des verifs (post-conditions). Rejoue sur
+//  un banc sans ecran (HmiFunctionTests.hpp), il recoit un verdict (reussi,
+//  echec, erreur). C'est AUTRE CHOSE que les essais de reception (TestScenario),
+//  qui rejouent l'operateur sur l'IHM en marche : ici on teste une FONCTION
+//  seule. Les cas sont des DONNEES rangees a cote de la fonction, pas du ST.
+struct FunctionTestGiven {        // une pose : une variable IHM (ou un membre, une case) mise avant l'appel
+    std::string target;           // le chemin de la cible (Compteur_Clics, Four1.Vannes[1].Position)
+    std::string value;            // la valeur, lue comme toute case (la regle des cases, 1.12.19)
+    bool operator==(const FunctionTestGiven&) const = default;
+};
+struct FunctionTestCheck {        // une verif : une post-condition lue apres l'appel
+    std::string target;           // une variable IHM, ou la cible speciale JOURNAL
+    std::string expected;         // la valeur attendue (JOURNAL : un texte que le journal doit contenir)
+    std::string tolerance;        // sur un REAL seulement (vide : egalite exacte)
+    bool operator==(const FunctionTestCheck&) const = default;
+};
+struct FunctionTest {
+    Id          id{kNoId};
+    std::string name;
+    std::vector<std::string> arguments;   // un par parametre, dans l'ordre ("" : la valeur par defaut)
+    std::string expected;                 // le retour attendu ("" : une procedure, ou un cas erreur)
+    std::string tolerance;                // |obtenu - attendu| <= tolerance (REAL/LREAL ; vide : exact)
+    std::string errorCode;                // non vide : le cas attend cette erreur levee (E_Niveau...)
+    std::vector<FunctionTestGiven> givens;
+    std::vector<FunctionTestCheck> checks;
+    bool        enabled{true};
+    std::string description;
+    bool operator==(const FunctionTest&) const = default;
+};
+
 // ---- lot 7 : les fonctions IHM ---------------------------------------------------
 //  UNE FONCTION IHM : un nom, un type de retour (vide : sans retour, une
 //  procedure), un corps ST qui declare ses parametres (VAR_INPUT) et ses
@@ -857,6 +892,9 @@ struct HmiFunction {
     //  peut etre de type T ; a l'appel, T se deduit des arguments (ou se donne : Max<INT>(...)), et le moteur le
     //  verifie contre sa contrainte. Une fonction de projet, de vue, de popup ou de symbole peut en porter.
     std::vector<GenericParam> generics{};
+    // 1.13.0 (lot J4) : ses cas de test (la clef est l'id de la fonction - chaque surcharge
+    // garde ses propres cas). Vide : la fonction s'ecrit comme avant (format 28 ou anterieur).
+    std::vector<FunctionTest> tests{};
     bool operator==(const HmiFunction&) const = default;
 };
 
@@ -1210,6 +1248,11 @@ struct Config {
     // compteur de production dont les debuts de poste disent « calendrier » le suit (avant : une liste
     // a taper dans chaque compteur, et a changer partout).
     std::string shifts;
+    // 1.13.0 (lot J4) : les tests unitaires des fonctions - rejoues au Compiler/Demarrer (coche par
+    // defaut ; decochable pour un gros projet ou la page web) ; un echec empeche le demarrage de la
+    // simulation (decoche : un echec n'est qu'un avertissement). Ecrits seulement s'ils changent.
+    bool        runTestsOnBuild{true};
+    bool        testFailBlocksStart{false};
     bool operator==(const Config&) const = default;
 };
 

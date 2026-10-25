@@ -1003,6 +1003,7 @@ Id HmiFunctionsPane::duplicateFunction(Id id, std::string* why) {
         x.name = name;
         x.body = hmi::renameCalls(x.body, copy.name, name, /*bare*/ true);
         for (auto& d : x.decls) d.id = p.allocate();
+        for (auto& t : x.tests) t.id = p.allocate();   // 1.13.0 (lot J4) : la copie emporte ses cas (ids neufs)
         made = x.id;
         auto at = l->end();
         for (auto it = l->begin(); it != l->end(); ++it)

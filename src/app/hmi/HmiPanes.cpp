@@ -403,6 +403,24 @@ void HmiConfigPane::rebuild() {
                                   "partout."));
     cats.push_back(std::move(run));
 
+    // 1.13.0 (lot J4) : les tests unitaires des fonctions - rejoues au Compiler/Demarrer, bloquants ou non.
+    P::Category tests;
+    tests.name = "Tests des fonctions";
+    tests.properties.push_back(prop("Rejouer les tests au Compiler/D\xC3\xA9marrer", cfg.runTestsOnBuild ? "TRUE" : "FALSE", P::ValueType::Boolean,
+                                    commitCfg("Rejouer les tests au build", [](hmi::Project& pp, const std::string& v) {
+                                        pp.config.runTestsOnBuild = hmi::parseBool(v, true);
+                                    }),
+                                    "Les cas actifs des fonctions se rejouent tout seuls \xC3\xA0 chaque Compiler et au D\xC3\xA9marrer de la "
+                                    "simulation, apr\xC3\xA8s la v\xC3\xA9rification du code. D\xC3\xA9" "coche pour un gros projet ou la page web : "
+                                    "lance-les alors \xC3\xA0 la main (Lancer les tests)."));
+    tests.properties.push_back(prop("Un test en \xC3\xA9" "chec emp\xC3\xAA" "che le d\xC3\xA9marrage", cfg.testFailBlocksStart ? "TRUE" : "FALSE", P::ValueType::Boolean,
+                                    commitCfg("\xC3\x89" "chec bloquant", [](hmi::Project& pp, const std::string& v) {
+                                        pp.config.testFailBlocksStart = hmi::parseBool(v, false);
+                                    }),
+                                    "Coch\xC3\xA9, un cas en \xC3\xA9" "chec emp\xC3\xAA" "che de d\xC3\xA9marrer la simulation ; sinon, un \xC3\xA9" "chec "
+                                    "n'est qu'un avertissement."));
+    cats.push_back(std::move(tests));
+
     // Lot 13 : Generer plus exigeant - la case, et les seuils (0 : pas de controle).
     P::Category quality;
     quality.name = "Qualit\xC3\xA9 (G\xC3\xA9n\xC3\xA9rer)";

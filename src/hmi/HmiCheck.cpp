@@ -49,6 +49,7 @@
 #include "HmiLanguages.hpp"    // lot 13
 #include "HmiQuality.hpp"      // lot 13
 #include "HmiScenarios.hpp"    // lot 13
+#include "HmiFunctionTests.hpp"   // 1.13.0 (lot J4) : les controles des cas de test
 #include "HmiSignature.hpp"    // lot 13
 #include "HmiComm.hpp"         // lot 14
 #include "HmiEquipment.hpp"    // lot 15
@@ -4950,6 +4951,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkDisplay(p, plcHasName, out);   // lot 13 : les unites, l'affichage
     for (auto& i : ranges::check(p, plcHasName)) out.push_back(std::move(i));   // 1.12.10 (lot F) : les plages et les seuils
     checkScenarios(p, out);             // lot 13 : les essais de reception
+    checkFunctionTests(p, out);         // 1.13.0 (lot J4) : les cas de test des fonctions
     checkComm(p, plcHasName, options.plan, options.plcScalar, options.plcPaths.api.get(), out);   // lot 14 : la communication
     checkStation(p, out);                                             // lot 14 : le poste d'exploitation
     checkNotify(p, out);                                              // lot 14 : les notifications

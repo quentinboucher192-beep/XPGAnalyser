@@ -15284,6 +15284,12 @@ const std::vector<Topic>& topics() {
                          "r\xC3\xA9sultat, les param\xC3\xA8tres rendus (E/S, sorties), les lignes "
                          "\xC3\xA9" "crites au journal et les variables IHM chang\xC3\xA9" "es. Le projet "
                          "n'est pas modifi\xC3\xA9.", {}},
+             {K::Heading, "Tester une fonction", {}},
+             {K::Paragraph, "L'**Essai** est un appel ponctuel ; un **test** est un cas gard\xC3\xA9 "
+                         "(arguments, r\xC3\xA9sultat attendu, tol\xC3\xA9rance) et rejou\xC3\xA9 tout seul "
+                         "\xC3\xA0 chaque Compiler et D\xC3\xA9marrer, avec un verdict. L'onglet **Tests** "
+                         "de la fonction les tient. Voir \xC2\xAB Les tests unitaires d'une fonction "
+                         "\xC2\xBB.", {}},
              {K::Heading, "Renommer, supprimer", {}},
              {K::Paragraph, "Renommer une fonction (propri\xC3\xA9t\xC3\xA9 Nom) renomme **tous ses appels** : "
                          "scripts, fonctions, actions, expressions, textes \xC3\xA0 trous, alarmes ; un seul "
@@ -18260,6 +18266,93 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Tester et livrer  Tester / tests-fonctions
+        {"tests-fonctions", "Les tests unitaires d'une fonction", "Tester et livrer \xE2\x80\xBA Tester",
+         "Un test v\xC3\xA9rifie qu'une fonction IHM rend bien ce qu'on attend : des cas (arguments, "
+         "r\xC3\xA9sultat attendu, tol\xC3\xA9rance), rejou\xC3\xA9s tout seuls \xC3\xA0 chaque Compiler et "
+         "D\xC3\xA9marrer, avec un verdict par cas et le d\xC3\xA9tail d'un \xC3\xA9" "chec. C'est autre "
+         "chose que les essais de r\xC3\xA9" "ception, qui rejouent l'op\xC3\xA9rateur sur l'IHM en marche : "
+         "ici on teste une fonction seule.",
+         {
+             {K::Heading, "\xC3\x89" "crire un cas", {}},
+             {K::Paragraph, "Dans l'\xC3\xA9" "diteur d'une fonction, l'onglet **Tests** (\xC3\xA0 "
+                         "c\xC3\xB4t\xC3\xA9 de Code, Param\xC3\xA8tres, Locales, Constantes) montre la "
+                         "grille des cas. **Nouveau cas** : un nom, puis la grille des **arguments** "
+                         "pr\xC3\xA9-remplie d'apr\xC3\xA8s la signature (un par param\xC3\xA8tre, dans "
+                         "l'ordre), et un **r\xC3\xA9sultat attendu**. Chaque argument se saisit comme toute "
+                         "case de valeur : `2,5` devient `2.5`, `VRAI` devient `TRUE`, `Azote` devient "
+                         "`'Azote'`, `=formule` est une expression. Un param\xC3\xA8tre laiss\xC3\xA9 vide "
+                         "prend sa valeur par d\xC3\xA9" "faut. Exemple, le cas \xC2\xAB moyenne simple "
+                         "\xC2\xBB de Moyenne_Pression :", {}},
+             {K::Table, "Champ\tValeur\nA\t12.0\nB\t20.0\nPoids_A\t*(vide : la valeur par d\xC3\xA9" "faut, "
+                         "0.5)*\nAttendu\t16.0\nVerdict\tr\xC3\xA9ussi", {}},
+             {K::Heading, "Poser des valeurs, v\xC3\xA9rifier apr\xC3\xA8s", {}},
+             {K::Paragraph, "Une proc\xC3\xA9" "dure (sans retour), ou une fonction qui lit ou \xC3\xA9" "crit "
+                         "des variables, se teste par **Poser avant** (des variables mises avant l'appel) et "
+                         "**V\xC3\xA9rifier apr\xC3\xA8s** (des post-conditions lues apr\xC3\xA8s). La cible "
+                         "sp\xC3\xA9" "ciale **JOURNAL** v\xC3\xA9rifie que la fonction a \xC3\xA9" "crit un "
+                         "texte (IHM_JOURNAL). Exemple, le cas \xC2\xAB alerte compte le clic \xC2\xBB de la "
+                         "proc\xC3\xA9" "dure Tracer_Evenement :", {}},
+             {K::Table, "Bloc\tContenu\nPoser avant\t`Compteur_Clics := 0`\nArguments\t`Quoi := 'Porte A "
+                         "ouverte'` , `Niveau := 2`\nV\xC3\xA9rifier apr\xC3\xA8s\t`Compteur_Clics = 1` ; "
+                         "`JOURNAL contient '[ALERTE] Porte A ouverte'`\nVerdict\tr\xC3\xA9ussi", {}},
+             {K::Heading, "La tol\xC3\xA9rance (REAL)", {}},
+             {K::Paragraph, "La tol\xC3\xA9rance ne sert qu'\xC3\xA0 un retour **REAL** ou **LREAL** : le cas "
+                         "r\xC3\xA9ussit si `|obtenu - attendu| <= tol\xC3\xA9rance`. Vide, c'est "
+                         "l'\xC3\xA9galit\xC3\xA9 stricte. Tout autre type (INT, BOOL, STRING, \xC3\xA9num, "
+                         "structure, tableau, MAP) se compare en \xC3\xA9galit\xC3\xA9 exacte : la "
+                         "tol\xC3\xA9rance est gris\xC3\xA9" "e.", {}},
+             {K::Heading, "Quand ils se rejouent", {}},
+             {K::Paragraph, "Les cas actifs se rejouent **tout seuls** apr\xC3\xA8s la v\xC3\xA9rification du "
+                         "code, \xC3\xA0 chaque **Compiler** et au **D\xC3\xA9marrer** de la simulation. "
+                         "**Lancer les tests** (la barre du volet Fonctions) les joue tous \xC3\xA0 la main "
+                         "; **Lancer ce cas** et un double-clic sur une ligne en jouent un. Dans "
+                         "Configuration : **Rejouer les tests des fonctions au Compiler/D\xC3\xA9marrer** "
+                         "(coch\xC3\xA9 ; d\xC3\xA9" "coche-le pour un gros projet ou la page web) et **Un "
+                         "test en \xC3\xA9" "chec emp\xC3\xAA" "che le d\xC3\xA9marrage de la simulation** "
+                         "(d\xC3\xA9" "coch\xC3\xA9 : un \xC3\xA9" "chec n'est alors qu'un avertissement).", {}},
+             {K::Heading, "Le verdict et le d\xC3\xA9tail", {}},
+             {K::Paragraph, "Le m\xC3\xAAme vocabulaire que les essais :", {}},
+             {K::Table, "Verdict\tCe qu'il dit\nr\xC3\xA9ussi\tle retour tient dans la tol\xC3\xA9rance et "
+                         "toutes les v\xC3\xA9rifs passent\n\xC3\xA9" "chec\tune valeur fausse : le "
+                         "d\xC3\xA9tail dit l'attendu et l'obtenu\nerreur\tla fonction s'arr\xC3\xAAte "
+                         "(division par z\xC3\xA9ro, hors bornes) alors qu'aucune erreur n'\xC3\xA9tait "
+                         "attendue\nnon jou\xC3\xA9\tle cas est inactif", {}},
+             {K::Paragraph, "Les r\xC3\xA9sultats partent aux **Sorties** du panneau du bas, cat\xC3\xA9gorie "
+                         "**Tests** (un clic sur une ligne ouvre la fonction sur son onglet Tests) ; la "
+                         "barre d'\xC3\xA9tat du volet compte \xC2\xAB 7 cas \xC2\xB7 6 r\xC3\xA9ussis, 1 "
+                         "\xC3\xA9" "chec \xC2\xBB ; l'arbre porte un n\xC5\x93ud **Tests** sous la "
+                         "fonction, une pastille rouge si un cas \xC3\xA9" "choue.", {}},
+             {K::Heading, "Attendre une erreur", {}},
+             {K::Paragraph, "Un cas peut **attendre une erreur** : il r\xC3\xA9ussit si la fonction l\xC3\xA8ve "
+                         "bien le code attendu (`E_Niveau`), \xC3\xA9" "choue sinon. Le code se lit sur "
+                         "l'erreur lev\xC3\xA9" "e par LEVER (voir \xC2\xAB Les erreurs des scripts "
+                         "\xC2\xBB). Exemple : `Niveau := 130.0`, Attendu : *l\xC3\xA8ve l'erreur* "
+                         "`E_Niveau` ; la fonction l\xC3\xA8ve bien `E_Niveau : \xC2\xAB niveau hors plage: "
+                         "130 \xC2\xBB`, donc verdict **r\xC3\xA9ussi**. Un cas normal dont la fonction "
+                         "l\xC3\xA8ve une erreur a le verdict **erreur**.", {}},
+             {K::Heading, "Le rapport", {}},
+             {K::Paragraph, "**Rapport des tests** (CSV, Excel ou PDF, dossier `exports/`) : une fonction (Cas, "
+                         "Arguments, Attendu, Verdict, D\xC3\xA9tail, Dur\xC3\xA9" "e) ou toute la campagne, "
+                         "avec le bilan en sous-titre. Ce n'est pas un proc\xC3\xA8s-verbal de "
+                         "r\xC3\xA9" "ception : il ne porte pas de visa.", {}},
+             {K::Heading, "G\xC3\xA9n\xC3\xA9rer", {}},
+             {K::Paragraph, "Sans jouer, G\xC3\xA9n\xC3\xA9rer signale et souligne la case fautive : un mauvais "
+                         "nombre d'arguments (la signature a chang\xC3\xA9), un argument, un attendu, une "
+                         "pose ou une v\xC3\xA9rif illisible, une pose ou une v\xC3\xA9rif sur une variable "
+                         "inconnue, une tol\xC3\xA9rance non num\xC3\xA9rique, un cas sans nom, deux cas du "
+                         "m\xC3\xAAme nom, un attendu sur une proc\xC3\xA9" "dure.", {}},
+             {K::Tip, "Pose tes entr\xC3\xA9" "es : une fonction qui lit l'heure ou un tirage non "
+                         "pos\xC3\xA9 donnera un verdict instable.", {}},
+         },
+         {"fonctions", "essais", "simulation", "verifier", "retours-fonctions", "erreurs-scripts", "configuration"},
+         {"test unitaire", "tests", "cas de test", "cas", "tol\xC3\xA9rance", "poser avant", "v\xC3\xA9rifier apr\xC3\xA8s", "Lancer les tests", "Nouveau cas", "verdict", "Rapport des tests"},
+         {"fonctions"},
+         {},
+         "",
+         {},
+         "",
+         {}},
         // ---- Tester et livrer  Tester / essais
         {"essais", "Les essais de r\xC3\xA9" "ception", "Tester et livrer \xE2\x80\xBA Tester",
          "Un essai rejoue sur l'IHM en marche ce que ferait l'op\xC3\xA9rateur - ouvrir une vue, cliquer, "
@@ -18267,6 +18360,10 @@ const std::vector<Topic>& topics() {
          "pas re\xC3\xA7oit son verdict ; le rapport s'exporte en PDF ou en Excel, avec le visa de qui l'a "
          "jou\xC3\xA9.",
          {
+             {K::Paragraph, "Les essais de r\xC3\xA9" "ception testent l'**op\xC3\xA9rateur sur l'IHM en "
+                         "marche** ; pour v\xC3\xA9rifier une **fonction seule** (ses arguments, son "
+                         "retour), ce sont les **tests unitaires** (voir \xC2\xAB Les tests unitaires d'une "
+                         "fonction \xC2\xBB).", {}},
              {K::Heading, "\xC3\x89" "crire un essai", {}},
              {K::Paragraph, "IHM \xE2\x80\xBA **Essais**, **Nouvel essai** : un nom, une description (l'objet "
                          "de l'essai), et un premier pas qui ouvre la vue de d\xC3\xA9marrage. **Ajouter un "
@@ -18378,6 +18475,11 @@ const std::vector<Topic>& topics() {
                          "cr\xC3\xA9" "ation et de modification ;", {}},
              {K::Bullet, "**\xC3\x89" "cran** : r\xC3\xA9solution, orientation, vue de d\xC3\xA9marrage, "
                          "cycle IHM ;", {}},
+             {K::Bullet, "**Tests des fonctions** (sous le cycle) : **Rejouer les tests des fonctions au "
+                         "Compiler/D\xC3\xA9marrer** (coch\xC3\xA9) et **Un test en \xC3\xA9" "chec "
+                         "emp\xC3\xAA" "che le d\xC3\xA9marrage de la simulation** "
+                         "(d\xC3\xA9" "coch\xC3\xA9), plus le bouton **Rapport des tests\xE2\x80\xA6** (CSV "
+                         "/ Excel / PDF) ; voir \xC2\xAB Les tests unitaires d'une fonction \xC2\xBB ;", {}},
              {K::Bullet, "**Statistiques** : vues, objets, animations, scripts, poids du projet ;", {}},
              {K::Bullet, "**Variables du programme** : les variables de l'automate en arbre (les Globales, "
                          "puis chaque unit\xC3\xA9 de programme : Publiques, Priv\xC3\xA9" "es, E/S ; les "
@@ -18391,7 +18493,7 @@ const std::vector<Topic>& topics() {
                          "double-clic copie le nom) ; voir \xC2\xAB API. : les variables de l'automate "
                          "\xC2\xBB.", {}},
          },
-         {"vues", "variables-ihm", "variables-api", "alarmes", "recettes", "securite", "historiques"},
+         {"vues", "variables-ihm", "variables-api", "alarmes", "recettes", "securite", "historiques", "tests-fonctions"},
          {},
          {"config"},
          {{"PNG_003_configuration.png", "La configuration : identit\xC3\xA9, r\xC3\xA9solution, statistiques et variables du programme."}, {"PNG_090_configuration_cycle_statistiques.png", "Le cycle IHM et les statistiques."}},

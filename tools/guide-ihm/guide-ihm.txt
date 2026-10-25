@@ -7026,6 +7026,8 @@ Tracer_Evenement("Porte A ouverte", 2);                     // sans retour : voi
 Une fonction peut en appeler une autre, et s'appeler elle-même (8 niveaux au plus).
 ### Essayer une fonction
 **Essayer** (ou double-clic sur la fonction) demande ses arguments en ST (`2.5`, `TRUE`, `'texte'`, `T#5s`, une expression) et l'exécute sur un banc : les variables IHM à leur valeur initiale, les variables de l'automate lues dans la simulation de l'API quand elle est chargée, même arrêtée (sans jamais y écrire ; la dernière ligne dit son état). Le résultat va aux **Sorties** du panneau du bas (catégorie Essai, 1.11.21 : plus de bandeau ESSAI) : l'appel, le résultat, les paramètres rendus (E/S, sorties), les lignes écrites au journal et les variables IHM changées. Le projet n'est pas modifié.
+### Tester une fonction
+L'**Essai** est un appel ponctuel ; un **test** est un cas gardé (arguments, résultat attendu, tolérance) et rejoué tout seul à chaque Compiler et Démarrer, avec un verdict. L'onglet **Tests** de la fonction les tient. Voir « Les tests unitaires d'une fonction ».
 ### Renommer, supprimer
 Renommer une fonction (propriété Nom) renomme **tous ses appels** : scripts, fonctions, actions, expressions, textes à trous, alarmes ; un seul Ctrl+Z reprend le tout. La propriété **Appelée par** dit qui l'utilise ; supprimer une fonction le rappelle avant de confirmer.
 ! Générer refuse un nom qui commence par IHM_, deux fonctions de même nom et de même forme, un nom déjà porté par une variable IHM, une variable inconnue dans son corps ; il avertit d'un appel récursif et d'un nom qui existe aussi dans l'automate.
@@ -8878,8 +8880,49 @@ Compiler ne lit plus seulement la syntaxe des scripts : il dit aussi les noms in
 
 1.12.12 : Générer dit, en information, qu'une vidéo MP4, WMV, MOV ou WEBM ne se décode que sous Windows ; en avertissement, une horloge liée à ce qui n'est pas une heure, un fuseau illisible, la source d'un texte défilant qui n'est pas une liste de textes, un départ sur condition sans condition.
 
+== tests-fonctions | Les tests unitaires d'une fonction
+: Un test vérifie qu'une fonction IHM rend bien ce qu'on attend : des cas (arguments, résultat attendu, tolérance), rejoués tout seuls à chaque Compiler et Démarrer, avec un verdict par cas et le détail d'un échec. C'est autre chose que les essais de réception, qui rejouent l'opérateur sur l'IHM en marche : ici on teste une fonction seule.
+@mots test unitaire, tests, cas de test, cas, tolérance, poser avant, vérifier après, Lancer les tests, Nouveau cas, verdict, Rapport des tests
+@lieux fonctions
+@voir fonctions, essais, simulation, verifier, retours-fonctions, erreurs-scripts, configuration
+### Écrire un cas
+Dans l'éditeur d'une fonction, l'onglet **Tests** (à côté de Code, Paramètres, Locales, Constantes) montre la grille des cas. **Nouveau cas** : un nom, puis la grille des **arguments** pré-remplie d'après la signature (un par paramètre, dans l'ordre), et un **résultat attendu**. Chaque argument se saisit comme toute case de valeur : `2,5` devient `2.5`, `VRAI` devient `TRUE`, `Azote` devient `'Azote'`, `=formule` est une expression. Un paramètre laissé vide prend sa valeur par défaut. Exemple, le cas « moyenne simple » de Moyenne_Pression :
+| Champ | Valeur |
+| A | 12.0 |
+| B | 20.0 |
+| Poids_A | *(vide : la valeur par défaut, 0.5)* |
+| Attendu | 16.0 |
+| Verdict | réussi |
+### Poser des valeurs, vérifier après
+Une procédure (sans retour), ou une fonction qui lit ou écrit des variables, se teste par **Poser avant** (des variables mises avant l'appel) et **Vérifier après** (des post-conditions lues après). La cible spéciale **JOURNAL** vérifie que la fonction a écrit un texte (IHM_JOURNAL). Exemple, le cas « alerte compte le clic » de la procédure Tracer_Evenement :
+| Bloc | Contenu |
+| Poser avant | `Compteur_Clics := 0` |
+| Arguments | `Quoi := 'Porte A ouverte'` , `Niveau := 2` |
+| Vérifier après | `Compteur_Clics = 1` ; `JOURNAL contient '[ALERTE] Porte A ouverte'` |
+| Verdict | réussi |
+### La tolérance (REAL)
+La tolérance ne sert qu'à un retour **REAL** ou **LREAL** : le cas réussit si `|obtenu - attendu| <= tolérance`. Vide, c'est l'égalité stricte. Tout autre type (INT, BOOL, STRING, énum, structure, tableau, MAP) se compare en égalité exacte : la tolérance est grisée.
+### Quand ils se rejouent
+Les cas actifs se rejouent **tout seuls** après la vérification du code, à chaque **Compiler** et au **Démarrer** de la simulation. **Lancer les tests** (la barre du volet Fonctions) les joue tous à la main ; **Lancer ce cas** et un double-clic sur une ligne en jouent un. Dans Configuration : **Rejouer les tests des fonctions au Compiler/Démarrer** (coché ; décoche-le pour un gros projet ou la page web) et **Un test en échec empêche le démarrage de la simulation** (décoché : un échec n'est alors qu'un avertissement).
+### Le verdict et le détail
+Le même vocabulaire que les essais :
+| Verdict | Ce qu'il dit |
+| réussi | le retour tient dans la tolérance et toutes les vérifs passent |
+| échec | une valeur fausse : le détail dit l'attendu et l'obtenu |
+| erreur | la fonction s'arrête (division par zéro, hors bornes) alors qu'aucune erreur n'était attendue |
+| non joué | le cas est inactif |
+Les résultats partent aux **Sorties** du panneau du bas, catégorie **Tests** (un clic sur une ligne ouvre la fonction sur son onglet Tests) ; la barre d'état du volet compte « 7 cas · 6 réussis, 1 échec » ; l'arbre porte un nœud **Tests** sous la fonction, une pastille rouge si un cas échoue.
+### Attendre une erreur
+Un cas peut **attendre une erreur** : il réussit si la fonction lève bien le code attendu (`E_Niveau`), échoue sinon. Le code se lit sur l'erreur levée par LEVER (voir « Les erreurs des scripts »). Exemple : `Niveau := 130.0`, Attendu : *lève l'erreur* `E_Niveau` ; la fonction lève bien `E_Niveau : « niveau hors plage: 130 »`, donc verdict **réussi**. Un cas normal dont la fonction lève une erreur a le verdict **erreur**.
+### Le rapport
+**Rapport des tests** (CSV, Excel ou PDF, dossier `exports/`) : une fonction (Cas, Arguments, Attendu, Verdict, Détail, Durée) ou toute la campagne, avec le bilan en sous-titre. Ce n'est pas un procès-verbal de réception : il ne porte pas de visa.
+### Générer
+Sans jouer, Générer signale et souligne la case fautive : un mauvais nombre d'arguments (la signature a changé), un argument, un attendu, une pose ou une vérif illisible, une pose ou une vérif sur une variable inconnue, une tolérance non numérique, un cas sans nom, deux cas du même nom, un attendu sur une procédure.
+> Pose tes entrées : une fonction qui lit l'heure ou un tirage non posé donnera un verdict instable.
+
 == essais | Les essais de réception
 : Un essai rejoue sur l'IHM en marche ce que ferait l'opérateur - ouvrir une vue, cliquer, saisir, se connecter, signer, acquitter - et vérifie ce qui doit en résulter. Chaque pas reçoit son verdict ; le rapport s'exporte en PDF ou en Excel, avec le visa de qui l'a joué.
+Les essais de réception testent l'**opérateur sur l'IHM en marche** ; pour vérifier une **fonction seule** (ses arguments, son retour), ce sont les **tests unitaires** (voir « Les tests unitaires d'une fonction »).
 @mots essai, essais, réception, recette usine, scénario, verdict, rapport d'essai, FAT, SAT
 @lieux essais
 @voir simulation, signature, securite, verifier, performances
@@ -8943,11 +8986,12 @@ Deux boutons de la barre : **recommencer le relevé**, et l'**exporter en CSV** 
 == configuration | Configuration de l'IHM
 : La configuration donne l'identité de l'IHM, sa résolution, sa vue de démarrage et son cycle, et montre ses statistiques et les variables du programme.
 @lieux config
-@voir vues, variables-ihm, variables-api, alarmes, recettes, securite, historiques
+@voir vues, variables-ihm, variables-api, alarmes, recettes, securite, historiques, tests-fonctions
 @capture PNG_003_configuration.png | La configuration : identité, résolution, statistiques et variables du programme.
 @capture PNG_090_configuration_cycle_statistiques.png | Le cycle IHM et les statistiques.
 - **Identité** : nom, description, version, auteur, dates de création et de modification ;
 - **Écran** : résolution, orientation, vue de démarrage, cycle IHM ;
+- **Tests des fonctions** (sous le cycle) : **Rejouer les tests des fonctions au Compiler/Démarrer** (coché) et **Un test en échec empêche le démarrage de la simulation** (décoché), plus le bouton **Rapport des tests…** (CSV / Excel / PDF) ; voir « Les tests unitaires d'une fonction » ;
 - **Statistiques** : vues, objets, animations, scripts, poids du projet ;
 - **Variables du programme** : les variables de l'automate en arbre (les Globales, puis chaque unité de programme : Publiques, Privées, E/S ; les instances de DDT et de DFB dépliables), avec le cadenas, le type, la portée, la colonne **Accessible**, combien de fois l'IHM les utilise (un clic sur la case mène à chaque endroit), la référence (%MW...) et la taille ; filtres Toutes, Employées par l'IHM, Accessibles en écriture, Sans adresse ; le double-clic, le clic droit ou glisser mettent le nom `API.…` d'une variable dans le script de l'IHM à l'écran (sans script, le double-clic copie le nom) ; voir « API. : les variables de l'automate ».
 

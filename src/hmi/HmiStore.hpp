@@ -103,8 +103,10 @@ inline constexpr int kFormatVersion = 30;   // 5 : lot 6 (roles des vues, herita
                                            // 28 : 1.12.20, lot G (les generiques : generique nom=T contrainte=...
                                            //     apres un type IHM, un symbole, une popup) - une 1.12.19 refuse ;
                                            //     un projet sans eux s'ecrit au format 27 (ou 26...)
-                                           // 29 : reserve pour un autre lot de la 1.13.0 (pas de fonctionnalite
-                                           //     ici : un cran laisse libre a la fusion)
+                                           // 29 : 1.13.0, lot J4 (les tests unitaires des fonctions : cas_test / arg /
+                                           //     pose / verif apres une fonction, comme les lignes declaration) - une
+                                           //     1.12.31 refuse (elle perdrait les cas) ; un projet dont aucune fonction
+                                           //     n'a de cas s'ecrit au format 28 (ou 27...)
                                            // 30 : 1.13.0 (les generiques d'une fonction : generique nom=T
                                            //     contrainte=... apres une fonction ou une fonction_symbole) -
                                            //     une 1.12.x refuse ; un projet dont aucune fonction n'est
