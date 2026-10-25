@@ -772,6 +772,10 @@ const std::vector<NativeInfo>& natives() {
         {"REGEX_REMPLACE", 3, 3, false, false, false, false, "regex", "REGEX_REMPLACE(TEXTE, MOTIF, REMPLACEMENT) : STRING", "Remplace toutes les correspondances ($1\xE2\x80\xA6$9 rappellent un groupe captur\xC3\xA9)."},
         {"REGEX_DECOUPE", 2, 2, false, false, false, false, "regex", "REGEX_DECOUPE(TEXTE, MOTIF) : LIST OF STRING", "Coupe TEXTE \xC3\xA0 chaque correspondance du MOTIF : une LIST OF STRING (REGEX_DECOUPE(ligne, ';'))."},
         {"REGEX_VALIDE", 1, 1, false, false, false, false, "regex", "REGEX_VALIDE(MOTIF) : BOOL", "Vrai si le MOTIF est une expression r\xC3\xA9guli\xC3\xA8re valide (\xC3\xA0 tester avant d'employer un motif saisi)."},
+        // ---- 1.13.0 (lot J6) : les unites de mesure (dialecte IHM seulement ; la section automate ne les resout pas)
+        {"EN", 2, 2, false, false, false, false, "unites", "EN(x, 'unit\xC3\xA9') : REAL", "Convertit x vers l'unit\xC3\xA9 cible, de la m\xC3\xAAme famille (EN(PressionBasse, 'bar')). Une valeur sans unit\xC3\xA9, ou une autre famille : refus\xC3\xA9 \xC3\xA0 G\xC3\xA9n\xC3\xA9rer."},
+        {"UNITE", 1, 1, false, false, false, false, "unites", "UNITE(x) : STRING", "Le symbole de l'unit\xC3\xA9 de x ('bar') ; '' si x n'en a pas."},
+        {"SANS_UNITE", 1, 1, false, false, false, false, "unites", "SANS_UNITE(x) : REAL", "Enl\xC3\xA8ve l'unit\xC3\xA9 : le m\xC3\xAAme nombre, nu (un REAL sans unit\xC3\xA9)."},
     };
     return k;
 }

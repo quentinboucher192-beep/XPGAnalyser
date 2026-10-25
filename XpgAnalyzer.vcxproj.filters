@@ -1510,6 +1510,9 @@
     <ClCompile Include="src\hmi\HmiTypeRegistry.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiUnits.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiVarMotion.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -2852,6 +2855,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTypeRegistry.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiUnits.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiVarMotion.hpp">

@@ -34,6 +34,8 @@ CATS = [
     # 1.13.0 (lot J3) : JSON et expressions regulieres (local, du calcul en memoire)
     ("json", "JSON", "Lire et écrire du JSON (JSON_LIRE, JSON_ECRIRE), accéder par clé ['clé'] ou indice [i], lire sûrement (JSON_NOMBRE / TEXTE / BOOL / ENTIER), interroger (JSON_TYPE / A / CLES). Le type ANY porte une valeur JSON / dynamique. Tout en local.", "Bibliothèques"),
     ("regex", "Expressions régulières", "Chercher, extraire, remplacer, découper un texte au motif (grammaire ECMAScript, comme JavaScript) : REGEX_TESTE, REGEX_TROUVE, REGEX_REMPLACE, REGEX_DECOUPE… (<regex>).", "Bibliothèques"),
+    # 1.13.0 (lot J6) : les unites de mesure dans les types
+    ("unites", "Unités de mesure", "Donner une unité physique à une variable ou à un membre (bar, degC, m3/h, %) : EN convertit, UNITE lit le symbole, SANS_UNITE l'enlève. Le contrôle refuse bar + mbar et convertit d'office ce qui est compatible.", "Le dialecte de l'IHM"),
     ("nav", "Navigation et vues", "Changer de vue, revenir, l'accueil.", "Fonctions IHM_"),
     ("popup", "Popups", "Ouvrir, remplacer, centrer, fermer une popup.", "Fonctions IHM_"),
     ("journal", "Journal et Console", "Écrire une ligne dans le journal ou la Console.", "Fonctions IHM_"),
@@ -1541,6 +1543,22 @@ fn(name="REGEX_VALIDE", cat="regex", params=[("MOTIF", "STRING", "le motif à te
    short="Vrai si le MOTIF est une expression régulière valide (à tester avant d'employer un motif saisi).",
    st="IF REGEX_VALIDE(Saisie) THEN ... END_IF", c="regcomp(&re, motif, REG_EXTENDED) == 0;", cpp="try { std::regex r(motif); } catch (...) { /* invalide */ }",
    inc="None", incpp="Equivalent", essai=("BOOL", "REGEX_VALIDE('[0-9]+')", "TRUE"))
+# ------------------------------------------------------------------ unites de mesure (lot J6) --
+#  EN / UNITE / SANS_UNITE : edite A LA MAIN dans HmiNativesData.cpp (ne PAS relancer generer.py) ;
+#  ce miroir sert la reconciliation future. L'unite vit sur la declaration (le creneau), pas sur la valeur.
+fn(name="EN", cat="unites", params=[("X", "REAL", "une valeur numérique qui porte une unité", False),
+                                     ("UNITE", "STRING", "l'unité cible, de la même famille, entre apostrophes", False)], ret="REAL",
+   short="Convertit X vers l'unité cible (même famille obligatoire) : EN(PressionBasse, 'bar') donne les mbar en bar. La température est affine (facteur ET décalage). Une valeur sans unité, ou une autre famille : refusé à Générer.",
+   st="Ecart := Pression - EN(PressionBasse, 'bar');   (* bar … *)", c="/* conversion a la main : pb_bar = pb_mbar * 0.001f */", cpp="/* conversion a la main selon l'unite de la mesure */",
+   inc="None", incpp="None", notes=["EN est la conversion explicite partout où une règle refuse (l'addition, la comparaison, une affectation en mode strict)."])
+fn(name="UNITE", cat="unites", params=[("X", "REAL", "une valeur", False)], ret="STRING",
+   short="Le symbole de l'unité de X ('bar') ; '' si X n'en porte pas. L'unité vient de la déclaration (le créneau), pas de la valeur.",
+   st="Txt := UNITE(Pression);   (* 'bar' … *)", c="/* aucune : l'unite n'existe pas en C */", cpp="/* aucune : l'unite n'existe pas en C++ */",
+   inc="None", incpp="None")
+fn(name="SANS_UNITE", cat="unites", params=[("X", "REAL", "une valeur numérique", False)], ret="REAL",
+   short="Enlève l'unité de X : le même nombre, nu (un REAL sans unité), pour un calcul libre ou une sortie brute.",
+   st="Brut := SANS_UNITE(Pression);   (* un REAL nu … *)", c="Brut = Pression;   /* l'unite n'existe pas en C */", cpp="Brut = Pression;   /* l'unite n'existe pas en C++ */",
+   inc="None", incpp="None", essai=("REAL", "SANS_UNITE(7.5)", "7.5"))
 
 # ---------------------------------------------------------------- operateurs, instructions --
 OPS = [

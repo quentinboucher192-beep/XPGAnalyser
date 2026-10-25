@@ -7075,6 +7075,7 @@ private:
         if (info->group == "fichiers") return std::optional<core::Result<RV>>(fileNative(u, e));                     // 1.12.26
         if (info->group == "json") return std::optional<core::Result<RV>>(jsonNative(u, e));                         // 1.13.0
         if (info->group == "regex") return std::optional<core::Result<RV>>(regexNative(u, e));                       // 1.13.0
+        if (info->group == "unites") return std::optional<core::Result<RV>>(unitesNative(u, e));                     // 1.13.0 (lot J6)
         if (info->group == "attente")                                                                                // 1.12.26
             return std::optional<core::Result<RV>>(u == "WAIT_UNTIL" ? waitUntilNative(e) : waitNative(u, e));       // 1.13.0
         return std::optional<core::Result<RV>>(listNative(u, *info, e));
@@ -9182,6 +9183,32 @@ private:
         }
         const std::string want = (u == "JSON_NOMBRE" || u == "JSON_ENTIER") ? "un nombre" : wantText ? "un texte" : "un bool\xC3\xA9" "en";
         return dialectError("la valeur JSON est " + jsonPayloadWord(jv) + ", pas " + want + " \xE2\x80\x94 ajoute un d\xC3\xA9" "faut (" + u + "(v, \xE2\x80\xA6)) pour l'\xC3\xA9viter");
+    }
+
+    // ======== 1.13.0 (lot J6) : les unites de mesure (EN, UNITE, SANS_UNITE) ======
+    //  L'unite vit sur la DECLARATION, pas sur sim::Value : on la demande a l'IHM (declaredUnit) par le nom
+    //  pointe de l'argument. EN convertit par convertUnit (l'IHM porte la bibliotheque) ; sans unite source,
+    //  la valeur reste telle quelle (Generer a deja prevenu). Hors dialecte IHM, les crochets rendent vide :
+    //  EN/UNITE/SANS_UNITE n'y resolvent rien.
+    core::Result<RV> unitesNative(const std::string& u, const Expr& e) {
+        const Expr& a0 = *e.arguments[0].second;
+        auto v = rich(a0);
+        if (!v) return v;
+        if (v->o) return dialectError(u + " : une valeur simple est attendue, pas " + typeNameOf(*v));
+        if (u == "UNITE") return RV{Value::text(env_.declaredUnit(dottedName(a0))), nullptr};
+        if (u == "SANS_UNITE") return RV{Value::real(v->v.asReal()), nullptr};
+        // EN(x, 'cible') : convertit de l'unite declaree de x vers la cible.
+        auto tgt = rich(*e.arguments[1].second);
+        if (!tgt) return tgt;
+        if (tgt->o || tgt->v.type() != Type::String)
+            return dialectError("EN : l'unit\xC3\xA9 cible est un texte entre apostrophes, par exemple EN(x, 'bar')");
+        std::string target = tgt->v.asString();
+        while (!target.empty() && std::isspace(static_cast<unsigned char>(target.front()))) target.erase(0, 1);
+        while (!target.empty() && std::isspace(static_cast<unsigned char>(target.back()))) target.pop_back();
+        double value = v->v.asReal();
+        const std::string from = env_.declaredUnit(dottedName(a0));
+        if (!from.empty()) env_.convertUnit(from, target, value);   // sinon : la valeur reste telle quelle
+        return RV{Value::real(value), nullptr};
     }
 
     // ======== 1.13.0 : expressions regulieres (<regex>, grammaire ECMAScript) =====

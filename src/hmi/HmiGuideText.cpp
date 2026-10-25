@@ -14778,6 +14778,94 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.10"},
+        // ---- Programmer  Variables et types / unites-mesure
+        {"unites-mesure", "Les unit\xC3\xA9s de mesure dans les types", "Programmer \xE2\x80\xBA Variables et types",
+         "Donne une unit\xC3\xA9 physique (bar, mbar, degC, m3/h, %) \xC3\xA0 une variable ou \xC3\xA0 un "
+         "membre : la compilation refuse bar + mbar, convertit d'office ce qui est compatible, et "
+         "l'unit\xC3\xA9 remonte jusqu'\xC3\xA0 l'affichage - sans rien changer pour qui n'en met pas.",
+         {
+             {K::Heading, "Poser une unit\xC3\xA9 : entre crochets apr\xC3\xA8s un type num\xC3\xA9rique", {}},
+             {K::Paragraph, "Dans la grille des membres d'un type (et des variables IHM, des "
+                         "param\xC3\xA8tres), une colonne **Unit\xC3\xA9** \xC3\xA0 c\xC3\xB4t\xC3\xA9 de "
+                         "**Type** : un clic ouvre le **s\xC3\xA9lecteur d'unit\xC3\xA9s** (familles, "
+                         "recherche, r\xC3\xA9" "cents). Vide = pas d'unit\xC3\xA9, comme avant. La colonne "
+                         "Type reste \xC2\xAB REAL \xC2\xBB ; l'aide \xC3\xA0 la saisie et le survol "
+                         "montrent la forme combin\xC3\xA9" "e **REAL [bar]**. Une unit\xC3\xA9 ne va que "
+                         "sur un **type num\xC3\xA9rique** (REAL, INT\xE2\x80\xA6 ; sur un ARRAY OF REAL, "
+                         "elle porte sur l'\xC3\xA9l\xC3\xA9ment) : G\xC3\xA9n\xC3\xA9rer refuse une "
+                         "unit\xC3\xA9 sur un BOOL, un texte ou une structure.", {}},
+             {K::Code, "TYPE T_Ligne :\n    Pression      : REAL [bar];\n    PressionBasse : REAL "
+                         "[mbar];\n    Debit         : REAL [m3/h];\n    Temperature   : REAL [degC];\n    "
+                         "Niveau        : REAL [%];\n    Vannes        : ARRAY[1..3] OF REAL [bar];   (* "
+                         "unit\xC3\xA9 de l'\xC3\xA9l\xC3\xA9ment *)\nEND_TYPE", "ST"},
+             {K::Code, "typedef struct {            /* le C n'a pas d'unit\xC3\xA9 : un commentaire la "
+                         "rappelle */\n    float Pression;         /* [bar]  */\n    float PressionBasse;    "
+                         "/* [mbar] */\n    float Debit;            /* [m3/h] */\n} T_Ligne;", "C"},
+             {K::Code, "struct T_Ligne {            // le C++ n'a pas d'unit\xC3\xA9 native (pas de "
+                         "<units> standard)\n    float Pression;         // [bar]\n    float PressionBasse;  "
+                         "  // [mbar]\n    float Debit;            // [m3/h]\n};", "C++"},
+             {K::Heading, "Deux r\xC3\xA8gles, voulues diff\xC3\xA9rentes", {}},
+             {K::Paragraph, "L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) "
+                         "exigent la **m\xC3\xAAme unit\xC3\xA9 exacte** : bar et mbar ne s'additionnent "
+                         "pas, il faut convertir l'un des deux avec **EN(\xE2\x80\xA6)**. L'**affectation** "
+                         "(:=, passer un argument, RETURN) de la m\xC3\xAAme famille **convertit d'office** "
+                         "(une info) ; l'option projet \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB "
+                         "(Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats) exige alors EN(\xE2\x80\xA6) "
+                         "au lieu de convertir. Deux **familles diff\xC3\xA9rentes** (une pression et une "
+                         "temp\xC3\xA9rature) : toujours refus\xC3\xA9, et le message nomme les deux. Une "
+                         "valeur **sans unit\xC3\xA9** (un litt\xC3\xA9ral 9.0, une variable nue) adopte "
+                         "l'unit\xC3\xA9 de l'autre ; une cible sans unit\xC3\xA9 re\xC3\xA7oit le nombre "
+                         "tel quel.", {}},
+             {K::Code, "Ecart := Pression - EN(PressionBasse, 'bar');   (* bar et mbar : convertis d'abord "
+                         "*)\nIF Pression > 9.0 THEN ... END_IF;              (* 9.0 pris en bar "
+                         "*)\nPression := PressionBasse;                      (* mbar -> bar : converti "
+                         "d'office *)\nPression := Temperature;                        (* REFUS\xC3\x89 : "
+                         "pression <- temp\xC3\xA9rature *)", "ST"},
+             {K::Code, "ecart = pression - pb_mbar * 0.001f;            /* conversion \xC3\xA0 la main en "
+                         "C */\nif (pression > 9.0f) { /* ... */ }\npression = pb_mbar * 0.001f;\n/* "
+                         "pression = temperature;  // deux grandeurs sans rapport */", "C"},
+             {K::Code, "ecart = pression - pb_mbar * 0.001f;            // conversion \xC3\xA0 la main en "
+                         "C++\nif (pression > 9.0f) { /* ... */ }\npression = pb_mbar * 0.001f;\n// pression "
+                         "= temperature;  // deux grandeurs sans rapport", "C++"},
+             {K::Heading, "EN, UNITE, SANS_UNITE ; produit et division", {}},
+             {K::Paragraph, "**EN(valeur, 'unit\xC3\xA9')** convertit vers une unit\xC3\xA9 de la m\xC3\xAAme "
+                         "famille (sinon \xC2\xAB on ne convertit pas des bar en degC \xC2\xBB) ; la "
+                         "temp\xC3\xA9rature est affine (facteur ET d\xC3\xA9" "calage : + 273,15 vers les "
+                         "K). **UNITE(x)** rend le symbole ('bar'), **SANS_UNITE(x)** enl\xC3\xA8ve "
+                         "l'unit\xC3\xA9 (un nombre nu). Multiplier par un nombre garde l'unit\xC3\xA9 ; "
+                         "diviser deux fois la m\xC3\xAAme unit\xC3\xA9 donne un rapport **sans "
+                         "unit\xC3\xA9** ; un autre produit ou division perd l'unit\xC3\xA9 (une info - pas "
+                         "d'alg\xC3\xA8" "bre d'unit\xC3\xA9s compos\xC3\xA9" "es). Cas particuliers : **%** "
+                         "est une famille sans dimension (EN(x, 'ratio') = \xC3\x97 0,01) ; **Nm3/h** "
+                         "(d\xC3\xA9" "bit normalis\xC3\xA9) est une famille \xC3\xA0 part, non convertible "
+                         "vers m3/h.", {}},
+             {K::Code, "Taux    := EN(Debit, 'm3/h') / EN(DebitMax, 'm3/h') * 100.0;   (* un % *)\nTexte   "
+                         ":= TO_STRING(EN(Temperature, 'K'));                    (* degC -> K : + 273,15 "
+                         "*)\nBrut    := SANS_UNITE(Pression);                               (* un REAL nu "
+                         "*)\nLabel   := UNITE(Pression);                                    (* 'bar' *)", "ST"},
+             {K::Code, "taux  = (debit / debit_max) * 100.0f;      /* le % se calcule \xC3\xA0 la main en "
+                         "C */\nsnprintf(buf, n, \"%.1f\", temperature + 273.15f);\nbrut  = pression;        "
+                         "                  /* pas d'unit\xC3\xA9 \xC3\xA0 enlever en C */", "C"},
+             {K::Code, "taux  = (debit / debit_max) * 100.0f;      // le % se calcule \xC3\xA0 la main en "
+                         "C++\nauto texte = std::format(\"{:.1f}\", temperature + 273.15f);\ndouble brut = "
+                         "pression;                    // pas d'unit\xC3\xA9 \xC3\xA0 enlever en C++", "C++"},
+             {K::Heading, "L'unit\xC3\xA9 remonte \xC3\xA0 l'affichage", {}},
+             {K::Paragraph, "L'unit\xC3\xA9 physique du cr\xC3\xA9neau devient l'**unit\xC3\xA9 d'affichage par "
+                         "d\xC3\xA9" "faut** : `{Pression:u}` \xC3\xA9" "crit \xC2\xAB 9.08 bar \xC2\xBB, "
+                         "l'afficheur, la jauge, le champ de saisie et la ligne \xC2\xAB Unit\xC3\xA9s et "
+                         "formats \xC2\xBB la prennent sans qu'on la retape. Une ligne \xC2\xAB "
+                         "Unit\xC3\xA9s et formats \xC2\xBB peut encore poser une autre unit\xC3\xA9 "
+                         "d'affichage, mais **de la m\xC3\xAAme famille** (sinon G\xC3\xA9n\xC3\xA9rer le "
+                         "dit : converti en info, familles diff\xC3\xA9rentes en erreur).", {}},
+         },
+         {"types-ihm", "variables-ihm", "unites-formats", "retours-fonctions", "operateurs", "erreurs-scripts", "reference"},
+         {"unit\xC3\xA9", "unit\xC3\xA9s", "unite", "mesure", "EN", "UNITE", "SANS_UNITE", "famille", "conversion", "strictes"},
+         {"types-ihm", "variables-ihm", "unites-formats"},
+         {},
+         "",
+         {},
+         "",
+         {}},
         // ---- Programmer  Scripts et fonctions / scripts
         {"scripts", "Scripts g\xC3\xA9n\xC3\xA9raux et scripts de vue", "Programmer \xE2\x80\xBA Scripts et fonctions",
          "Les scripts ST s'ex\xC3\xA9" "cutent dans la simulation : au d\xC3\xA9marrage, cycliquement, sur "

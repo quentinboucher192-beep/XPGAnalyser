@@ -25,6 +25,7 @@
 #include "HmiTypes.hpp"
 #include "../project/MemberTree.hpp"
 #include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : un type est-il un nombre ?
+#include "HmiUnits.hpp"   // 1.13.0 (lot J6) : les unites de mesure (familles, conversions, verdict)
 
 #include <algorithm>
 #include <cctype>
@@ -198,6 +199,9 @@ struct Val {
     // 1.12.17 : un tableau, une liste, une MAP, une structure lus entiers (TABLEAU, pas TABLEAU[0]) : ce que
     // c'est (types::Whole) et leur type ecrit ; vide : une valeur seule, ou rien de connu.
     std::string whole, entire, pick, wholeType;
+    // 1.13.0 (lot J6) : l'unite physique de la valeur ("bar") - celle du creneau lu (variable IHM, retour),
+    // propagee a travers les calculs ; vide : aucune (un nombre nu, qui adopte l'unite de l'autre operande).
+    std::string unit;
 };
 
 // Les fonctions standard : nombre d'arguments (min, max ; -1 : sans limite).
@@ -267,7 +271,8 @@ std::string closestAmong(std::string_view name, const std::vector<std::string>& 
 
 class Checker {
 public:
-    Checker(const Context& ctx, std::vector<Tok> toks) : ctx_(ctx), toks_(std::move(toks)) {}
+    Checker(const Context& ctx, std::vector<Tok> toks)
+        : ctx_(ctx), toks_(std::move(toks)), cat_(ctx.project ? units::Catalog(ctx.project->config) : units::Catalog()) {}
 
     Val run() { return orExpr(); }
     std::vector<Problem> problems;
@@ -283,6 +288,41 @@ private:
     const Context&   ctx_;
     std::vector<Tok> toks_;
     std::size_t      at_{0};
+    units::Catalog   cat_;                                // 1.13.0 (lot J6) : la bibliotheque des unites du projet
+
+    // 1.13.0 (lot J6) : le libelle d'une famille pour un message ("une pression", "une temperature").
+    std::string familyWord(std::string_view unit) const {
+        std::string f = cat_.familyLabel(cat_.familyOf(unit));
+        if (!f.empty()) f[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(f[0])));
+        return f.empty() ? std::string("une grandeur") : "une " + f;
+    }
+    // 1.13.0 (lot J6) : LA REGLE DE + - ET DE LA COMPARAISON (meme unite exacte). Deux unites de meme
+    // famille mais differentes, ou de familles differentes : une erreur, avec la correction d'un clic
+    // (inserer EN sur l'operande de droite). Rend l'unite du resultat (celle qui reste) pour la suite.
+    std::string unitAddCompare(const Val& a, const Val& b, const std::string& op, bool compare) {
+        const units::Rel rel = cat_.relation(a.unit, b.unit);
+        const char* verb = compare ? "ne se comparent pas" : "ne s'additionnent pas";
+        if (rel == units::Rel::SameFamily) {
+            const std::string target = cat_.canonical(a.unit);
+            Problem pb{a.unit + " et " + b.unit + " " + verb + " : convertis l'un des deux, par exemple EN(" + b.show
+                           + ", '" + target + "')", {}, {}};
+            pb.fixFrom = b.show;
+            pb.fixTo = "EN(" + b.show + ", '" + target + "')";
+            pushUnit(std::move(pb));
+            return a.unit;
+        }
+        if (rel == units::Rel::OtherFamily) {
+            pushUnit(Problem{(compare ? "tu compares " : "tu additionnes ") + familyWord(a.unit) + " et " + familyWord(b.unit)
+                             + " (" + a.unit + " et " + b.unit + ") : deux familles diff\xC3\xA9rentes ne se m\xC3\xAAlent pas", {}, {}});
+            return {};
+        }
+        // None (une sans unite : le nu adopte l'autre), Same (ok), Unknown (Generer le dit) : l'unite qui reste.
+        return a.unit.empty() ? b.unit : a.unit;
+    }
+    void pushUnit(Problem pb) {
+        for (const auto& p : problems) if (p.message == pb.message) return;
+        problems.push_back(std::move(pb));
+    }
 
     std::vector<std::set<std::string>> lambdaNames_;      // 1.12.19 : les parametres des LAMBDA ouvertes (en majuscules)
     int lambdaBody_{0};                                   // 1.12.20 : dans le corps d'une LAMBDA (une expression ne modifie rien)
@@ -540,6 +580,9 @@ private:
                 problem("tu compares " + typeWord(a.type) + " (" + a.show + ") \xC3\xA0 " + typeWord(b.type) + " (" + b.show
                         + "), ils ne se comparent pas" + hint);
             }
+            // 1.13.0 (lot J6) : comparer deux nombres exige la meme unite exacte (meme regle que + et -).
+            if (a.type == T::Num && b.type == T::Num && (!a.unit.empty() || !b.unit.empty()))
+                unitAddCompare(a, b, op, true);
             Val r;
             r.type = T::Bool;
             r.show = a.show + " " + op + " " + b.show;
@@ -574,7 +617,34 @@ private:
             else if (op == "**") r.num = std::pow(a.num, b.num);
             else r.numKnown = false;
         }
+        // 1.13.0 (lot J6) : les deux regles d'unite. + et - : meme unite exacte (sinon EN). Produit/division :
+        // x par un nombre nu garde l'unite ; a / b de la meme unite donne un rapport SANS unite ; un autre
+        // produit/division perd l'unite (une info, pas d'algebre d'unites composees type « bar.m »).
+        if (r.type == T::Num && (!a.unit.empty() || !b.unit.empty())) {
+            if (op == "+" || op == "-") {
+                r.unit = unitAddCompare(a, b, op, false);
+            } else if (op == "*") {
+                if (a.unit.empty() || b.unit.empty()) r.unit = a.unit.empty() ? b.unit : a.unit;   // x par un nombre nu
+                else unitLost(a, b, op);                                                             // bar x m3/h : perdue
+            } else if (op == "/") {
+                if (!a.unit.empty() && !b.unit.empty()) {
+                    const units::Rel rel = cat_.relation(a.unit, b.unit);
+                    if (rel != units::Rel::Same && rel != units::Rel::SameFamily) unitLost(a, b, op);   // rapport de deux memes : SANS unite
+                } else {
+                    r.unit = a.unit;                                                                 // unite / nombre : garde l'unite
+                }
+            } else if (op == "MOD") {
+                r.unit = a.unit;
+            }
+        }
         return r;
+    }
+    // 1.13.0 (lot J6) : un produit/division sans regle simple perd l'unite - une info (warning), pas une erreur.
+    void unitLost(const Val& a, const Val& b, const std::string& op) {
+        Problem pb{a.unit + " " + op + " " + b.unit + " : l'unit\xC3\xA9 est perdue (" + a.show + " " + op + " " + b.show
+                       + " donne un nombre nu)", {}, {}};
+        pb.warning = true;
+        pushUnit(std::move(pb));
     }
     Val addExpr() {
         Val a = mulExpr();
@@ -759,6 +829,32 @@ private:
         return type;
     }
 
+    // 1.13.0 (lot J6) : l'unite du membre au bout d'un chemin (Ligne.Pression, Vannes[2]) ; "" si aucune ou
+    // incertaine. L'unite d'un ARRAY porte sur l'element : un indice ne la change pas.
+    std::string memberUnit(const std::string& rootType, const std::vector<Seg>& segs) const {
+        const Project* p = ctx_.project;
+        if (!p) return {};
+        std::string type = trimmed(rootType);
+        std::string unit;
+        for (const auto& sg : segs) {
+            if (sg.index) {
+                const auto shape = project::members::parseArray(type);
+                if (!shape.valid()) return {};
+                type = shape.element;                     // la case : l'element garde l'unite du membre
+                continue;
+            }
+            const HmiType* ht = p->hmiTypeByName(type);
+            if (!ht || ht->kind != HmiTypeKind::Structure) return {};
+            const TypeMember* found = nullptr;
+            for (const auto& m : ht->members)
+                if (up(m.name) == up(sg.member)) { found = &m; break; }
+            if (!found) return {};
+            type = trimmed(found->type);
+            unit = found->unit;
+        }
+        return unit;
+    }
+
     Val path(const std::string& root) {
         std::string text = root;
         std::vector<Seg> segs;
@@ -808,8 +904,11 @@ private:
             if (fn) return v;
         }
         if (const Variable* var = p ? p->variable(root) : nullptr) {
-            if (text == root) typed(v, var->type);
-            else if (const auto ty = types::typeOfPath(*p, text); !ty.empty()) typed(v, ty);
+            if (text == root) { typed(v, var->type); v.unit = var->unit; }       // 1.13.0 (J6) : l'unite de la variable
+            else if (const auto ty = types::typeOfPath(*p, text); !ty.empty()) {
+                typed(v, ty);
+                v.unit = memberUnit(var->type, segs);                            // 1.13.0 (J6) : l'unite du membre lu
+            }
             return v;
         }
         // 1.9 : un parametre type de la vue - Moteur.Vitesse est REAL d'apres T_Moteur.
@@ -1019,6 +1118,13 @@ private:
         // 1.13.0 : un retour generique (la lettre T) : le type deduit des arguments, pas Unknown.
         if (r.type == T::Unknown && pool.size() == 1 && !pool.front()->generics.empty())
             r.type = deducedGenericReturn(*pool.front(), args);
+        // 1.13.0 (lot J6) : l'unite du retour se propage comme une variable de ce type (toutes les surcharges
+        // qui conviennent doivent s'accorder, sinon pas d'unite).
+        if (r.type == T::Num) {
+            std::string ru = pool.front()->returnUnit;
+            for (const auto* f : pool) if (f->returnUnit != ru) ru.clear();
+            r.unit = ru;
+        }
         if (!anyResult) {
             problem(name + " ne rend pas de valeur : une expression ne peut appeler qu'une fonction qui rend quelque chose");
             return;
@@ -1067,6 +1173,41 @@ private:
         if (symFn) {
             userCall(name, siblingsOf(symFn), n, r, args);
             lambdaCall(siblingsOf(symFn), name);                // 1.12.20 : dans une LAMBDA d'une fx
+            return r;
+        }
+        // 1.13.0 (lot J6) : EN, UNITE, SANS_UNITE - les natives d'unite du dialecte. Une fonction du projet
+        // de meme nom passe avant (comme les autres natives).
+        if ((u == "EN" || u == "UNITE" || u == "SANS_UNITE") && !(ctx_.project && !ctx_.project->functionsNamed(name).empty())) {
+            singleArgs(0, args.size());
+            if (u == "EN") {
+                r.type = T::Num;
+                if (n != 2) {
+                    problem("EN prend 2 arguments (la valeur, puis l'unit\xC3\xA9 cible entre apostrophes) : EN(valeur, 'bar')");
+                } else {
+                    const Val& val = args[0];
+                    const std::string target = args[1].strKnown ? trimmed(args[1].str) : std::string{};
+                    if (!args[1].strKnown)
+                        problem("EN veut l'unit\xC3\xA9 cible entre apostrophes : EN(" + val.show + ", 'bar')");
+                    else if (val.unit.empty())
+                        problem("EN demande une valeur qui porte une unit\xC3\xA9 (" + val.show
+                                + " n'en a pas) : pose une unit\xC3\xA9 sur sa d\xC3\xA9" "claration, ou enl\xC3\xA8ve EN");
+                    else if (!cat_.known(target))
+                        problem("unit\xC3\xA9 inconnue : '" + target + "' \xE2\x80\x94 choisis une unit\xC3\xA9 de la biblioth\xC3\xA8que");
+                    else if (cat_.relation(val.unit, target) == units::Rel::OtherFamily)
+                        problem("on ne convertit pas des " + val.unit + " en " + target + " : " + familyWord(val.unit)
+                                + " et " + familyWord(target) + " sont deux familles");
+                    else
+                        r.unit = cat_.canonical(target);        // la valeur convertie porte l'unite cible
+                }
+                return r;
+            }
+            if (u == "UNITE") {
+                r.type = T::Text;
+                if (n != 1) problem("UNITE prend 1 argument : UNITE(valeur)");
+                return r;                                        // le symbole de l'unite : un STRING (sans unite)
+            }
+            r.type = T::Num;                                     // SANS_UNITE : un nombre nu
+            if (n != 1) problem("SANS_UNITE prend 1 argument : SANS_UNITE(valeur)");
             return r;
         }
         // 1.12.0 : les couleurs (RGB, COULEUR_...) et l'aleatoire (RANDOM...) : des textes de couleur
@@ -1475,6 +1616,7 @@ Shape shapeOf(const Context& ctx, std::string_view written) {
     c.callsChecked = true;
     const Val v = c.run();
     s.single = v.type != T::Unknown;
+    s.unit = v.unit;                            // 1.13.0 (lot J6) : l'unite physique de la valeur
     if (!v.whole.empty()) {
         s.type = v.wholeType;
         s.what = v.whole;
@@ -1520,6 +1662,39 @@ std::vector<Problem> checkTarget(const Context& ctx, std::string_view target, Wa
             out.push_back(std::move(pb));
         }
     for (auto& p : check(ctx, t, Want::Any)) out.push_back(std::move(p));
+    return out;
+}
+
+std::vector<Problem> assignmentUnit(const Context& ctx, std::string_view target, std::string_view source, bool strict) {
+    std::vector<Problem> out;
+    const std::string tu = shapeOf(ctx, target).unit;
+    const std::string su = shapeOf(ctx, source).unit;
+    if (tu.empty() || su.empty()) return out;          // une cible ou une source sans unite : rien a exiger
+    static const Config kEmpty{};
+    const units::Catalog cat(ctx.project ? ctx.project->config : kEmpty);
+    const units::Rel rel = cat.relation(su, tu);
+    const auto word = [&](const std::string& u) {
+        std::string f = cat.familyLabel(cat.familyOf(u));
+        if (!f.empty()) f[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(f[0])));
+        return f.empty() ? std::string("une grandeur") : "une " + f;
+    };
+    const std::string src = trimmed(source);
+    if (rel == units::Rel::SameFamily) {
+        if (strict) {
+            Problem pb{tu + " exige une conversion explicite (option \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB) : \xC3\xA9" "cris EN(" + src
+                           + ", '" + cat.canonical(tu) + "')", {}, {}};
+            pb.fixFrom = src;
+            pb.fixTo = "EN(" + src + ", '" + cat.canonical(tu) + "')";
+            out.push_back(std::move(pb));
+        } else {
+            Problem pb{su + " converti en " + tu + " d'office (une info)", {}, {}};
+            pb.warning = true;                          // une info, pas une erreur : le projet demarre
+            out.push_back(std::move(pb));
+        }
+    } else if (rel == units::Rel::OtherFamily) {
+        out.push_back(Problem{"tu affectes " + word(su) + " \xC3\xA0 " + word(tu) + " (" + su + " vers " + tu
+                              + ") : deux familles diff\xC3\xA9rentes ne se convertissent pas", {}, {}});
+    }
     return out;
 }
 

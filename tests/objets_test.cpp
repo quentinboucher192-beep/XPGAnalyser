@@ -205,13 +205,13 @@ void serialisation() {
     const std::string plainIdx = indexText(serializeProject(plain));
     check(plainIdx.find("(format 31)") == std::string::npos, "un type ordinaire NE monte PAS au format 31 (repli)");
 
-    // Refus d'un format trop recent (32).
+    // Refus d'un format trop recent (33 : au-dela du courant - 32 est valide depuis le lot J6 unites).
     auto tooNew = parseProject([](const std::string& path, std::string& content) {
         if (path != "ihm.txt") return false;
-        content = "# IHM Studio - projet IHM (format 32)\nihm format=32 prochain_id=1\n";
+        content = "# IHM Studio - projet IHM (format 33)\nihm format=33 prochain_id=1\n";
         return true;
     });
-    check(!tooNew, "un format 32 (plus recent) est refuse proprement");
+    check(!tooNew, "un format 33 (plus recent) est refuse proprement");
 }
 
 } // namespace

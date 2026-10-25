@@ -101,9 +101,16 @@ struct Shape {
     bool        single{false};
     std::string type;          // le type ecrit d'un conteneur ou d'une structure entiers
     std::string what, entire, pick;   // types::Whole
+    std::string unit;          // 1.13.0 (lot J6) : l'unite physique de la valeur rendue ("bar") ; vide : aucune
     [[nodiscard]] bool whole() const noexcept { return !what.empty(); }
 };
 [[nodiscard]] Shape shapeOf(const Context&, std::string_view source);
+// 1.13.0 (lot J6) : LE VERDICT D'UNITE D'UNE AFFECTATION (:=, argument d'un parametre, RETURN). `target` et
+// `source` sont deux expressions (lvalue a gauche, valeur a droite). Meme famille, unites differentes :
+// conversion d'office - une info (sauf `strict`, l'option « Unites strictes », qui exige alors EN). Familles
+// differentes : un refus. Une cible ou une source sans unite : rien a dire (le nu s'adapte). Les problemes
+// portent leur correction d'un clic (inserer EN).
+[[nodiscard]] std::vector<Problem> assignmentUnit(const Context&, std::string_view target, std::string_view source, bool strict = false);
 // Les expressions d'un texte a trous ("Vitesse : {Vitesse:0.0} km/h" -> Vitesse).
 [[nodiscard]] std::vector<std::string> templateExpressions(std::string_view text);
 // Ce que la propriete `key` attend (visible : Bool, fill : Color, x : Number).

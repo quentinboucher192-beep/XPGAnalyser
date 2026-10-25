@@ -45,6 +45,7 @@ const ShelfDef kShelves[] = {
     {"nombres/constantes", "Constantes et limites", "\xCF\x80 et ses cousines ; les bornes et les caract\xC3\xA9ristiques de chaque type.", false},
     {"nombres/aleatoire", "Al\xC3\xA9" "atoire", "Des nombres au hasard, une suite qui rejoue, une loi normale.", false},
     {"nombres/bits", "Bits et octets", "D\xC3\xA9" "caler, tourner, compter, tester, poser un bit ; retourner les octets.", false},
+    {"nombres/unites", "Unit\xC3\xA9s de mesure", "Convertir une unite (EN), lire son symbole (UNITE), l'enlever (SANS_UNITE).", false},   // 1.13.0 (lot J6)
     {"textes", "Textes", "Couper, chercher, remplacer, composer un texte, changer la casse.", false},
     {"dates", "Dates et heures", "L'heure du poste, les parties d'une date, ajouter des jours, \xC3\xA9" "crire une date.", false},
     {"couleurs", "Couleurs", "Composer une couleur, la m\xC3\xA9langer, l'\xC3\xA9" "claircir, lire ses composantes.", false},
@@ -105,6 +106,7 @@ const std::vector<Rule>& rules() {
         {"numbers", "nombres/constantes", {}},
         {"alea", "nombres/aleatoire", {}},
         {"bits", "nombres/bits", {}},
+        {"unites", "nombres/unites", {}},                 // 1.13.0 (lot J6) : EN, UNITE, SANS_UNITE
         {"texte", "textes", {}},
         {"date", "dates", {}},
         {"couleur", "couleurs", {}},
