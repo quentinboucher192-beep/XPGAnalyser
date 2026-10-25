@@ -122,6 +122,12 @@ public:
     virtual void breakpointReached(std::uint32_t tag, std::uint32_t line, LineProbe& probe) {
         (void)tag; (void)line; (void)probe;
     }
+    // 1.13.0 (le debogueur des scripts IHM) : IHM_POINT_ARRET([condition]) vient d'etre execute -
+    // un point d'arret ecrit dans le code (le dialecte IHM seulement) ; `tag`, `line`, `probe` comme
+    // breakpointReached. Par defaut : rien (le poste, la page web, l'automate).
+    virtual void debugBreak(std::uint32_t tag, std::uint32_t line, LineProbe& probe) {
+        (void)tag; (void)line; (void)probe;
+    }
 
     // ---- 1.10 : le dialecte IHM (jamais appele pour le ST de l'automate) ----
     // Le type declare d'un nom ("REAL", "T_FOUR", "ARRAY[0..9] OF REAL") ; vide : inconnu.
@@ -290,6 +296,8 @@ public:
     }
 };
 
+class Expression;   // lot API 8 : une expression seule (plus bas)
+
 // Lot API 8 : les variables d'une ligne, lues au passage (point d'arret) : le nom
 // tel que le code l'ecrit, indices evalues ("Armoires[2].etat"), et sa valeur
 // (vide : pas de valeur a lui - une structure, un tableau, un nom inconnu).
@@ -297,6 +305,35 @@ class LineProbe {
 public:
     virtual ~LineProbe() = default;
     [[nodiscard]] virtual std::vector<std::pair<std::string, std::string>> lineValues() = 0;
+
+    // ---- 1.13.0 : le debogueur des scripts IHM (le dialecte) ; l'automate ne s'en sert pas ----
+    // Une variable locale vue au passage : son nom tel que declare, son type ecrit, sa valeur (un
+    // litteral : 3.2, 'texte', [1, 2], {Temp: 20.5}) ; une structure, un tableau, une liste, une MAP :
+    // leurs cases (`children`, au plus quelques dizaines, sur quelques niveaux).
+    struct Local {
+        std::string        name, type, value;
+        bool               parameter{false};
+        std::vector<Local> children;
+    };
+    // Un cadre de la pile du dialecte : le corps du programme (`function` vide), une fonction interne
+    // du script, une fonction lue seule (une fonction IHM du projet, un operateur, une methode :
+    // `standalone`), une LAMBDA. `code` : ce qui s'execute (le Program du corps, la Function) ;
+    // `tag` : le numero du programme (setProgramTag) ; `line` : sa ligne en cours.
+    struct Frame {
+        std::string        function;
+        const void*        code{nullptr};
+        bool               standalone{false};
+        std::uint32_t      tag{0};
+        std::uint32_t      line{0};
+        std::vector<Local> locals;
+    };
+    // Les cadres de cette execution, du corps (le premier) a la ligne atteinte (le dernier).
+    [[nodiscard]] virtual std::vector<Frame> frames() { return {}; }
+    // Une expression (la condition d'un point d'arret) dans la portee de la ligne : ses locales se
+    // lisent ; rien n'est ecrit, rien n'est dit au journal. Par defaut : refusee.
+    [[nodiscard]] virtual core::Result<Value> evaluate(const Expression& expression);
+    // Arreter cette execution ici, sans erreur (la simulation s'arrete pendant une pause).
+    virtual void stop() {}
 };
 
 class Program;   // a parsed section
@@ -399,6 +436,19 @@ void                                   setProgramTag(Program&, std::uint32_t tag
 // alors qu'un vecteur vide par instruction - le cout d'une section sans point
 // d'arret est nul).
 void setBreakLines(Program&, const std::vector<std::uint32_t>& lines);
+// ---- 1.13.0 : le debogueur des scripts IHM ----
+// Les lignes d'instruction d'un code du dialecte, son corps ET ses fonctions internes (triees, sans
+// doublon) : la marge de l'editeur sait ou un point peut se poser.
+[[nodiscard]] std::vector<std::uint32_t> codeStatementLines(const Program&);
+// ... celles d'une fonction lue seule (parseFunction : une fonction IHM du projet).
+[[nodiscard]] std::vector<std::uint32_t> statementLines(const Function&);
+// Les lignes marquees d'une fonction lue seule (une fonction IHM aux types riches, qui tourne dans
+// le script qui l'appelle) ; vide : aucune.
+void setBreakLines(const Function&, const std::vector<std::uint32_t>& lines);
+// Les cadres des executions qui en attendent une autre sur ce fil (un script qui appelle une
+// fonction IHM simple : elle tourne dans sa propre execution), de la plus ancienne a la plus
+// recente - sans celle qui atteint la ligne (LineProbe::frames).
+[[nodiscard]] std::vector<LineProbe::Frame> callerFrames();
 
 // Lot API 8 : UNE EXPRESSION SEULE (la condition d'un point d'arret :
 // "Armoires[0].etat = 3"), lue une fois et evaluee a chaque passage. L'evaluation
@@ -406,6 +456,9 @@ void setBreakLines(Program&, const std::vector<std::uint32_t>& lines);
 // valeur, pas en halte du cycle.
 class Expression;
 [[nodiscard]] core::Result<std::shared_ptr<const Expression>> parseExpression(std::string_view source);
+// 1.13.0 : ... lue dans le dialecte IHM (la condition d'un point d'arret d'un script IHM : L.Count,
+// M['cle'], a ?? b).
+[[nodiscard]] core::Result<std::shared_ptr<const Expression>> parseExpression(std::string_view source, const ParseOptions& options);
 [[nodiscard]] core::Result<Value> evaluate(const Expression&, Environment&);
 // 1.11.20 : les appels d'une expression seule (voir callSites d'une section).
 [[nodiscard]] std::vector<CallSite> callSites(const Expression&, Environment& typing);
@@ -442,6 +495,10 @@ struct RunLimits {
     // RETURN valeur ; ecrit cette variable (le nom de la fonction) et rend la main. Vide : RETURN
     // valeur n'est permis que dans une FUNCTION du dialecte.
     std::string    returnTo{};
+    // 1.13.0 (le debogueur des scripts IHM) : LE PAS A PAS - tant que *stepAll est vrai, chaque ligne
+    // nouvelle appelle Environment::breakpointReached, marquee ou non. Nul (le defaut, l'automate) :
+    // les lignes marquees seules.
+    const bool*    stepAll{nullptr};
 };
 
 // Lot API 7 : une horloge monotone, en microsecondes (le budget du cycle).

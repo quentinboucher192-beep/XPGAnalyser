@@ -19,6 +19,7 @@
 //  nouveau part de sa valeur initiale, ce qui a disparu est oublie.
 // =============================================================================
 #include "Runtime.hpp"
+#include "DebugShared.hpp"   // 1.13.0 : les messages partages avec le debogueur IHM
 
 #include <algorithm>
 #include <cctype>
@@ -40,34 +41,11 @@ std::string_view trimmed(std::string_view s) {
     return s;
 }
 
-void addNote(Breakpoint& bp, const std::string& note) {
-    bp.note = bp.note.empty() ? note : bp.note + " ; " + note;
-}
+void addNote(Breakpoint& bp, const std::string& note) { debug::addNote(bp.note, note); }
 
-// Ce que dit le moteur d'une condition qui ne va pas, en francais.
-std::string conditionProblem(const core::Error& e) {
-    const std::string& m = e.context;
-    if (m.size() > 2 && m.front() == '\'') {
-        if (const auto close = m.find('\'', 1); close != std::string::npos) {
-            const auto name = m.substr(1, close - 1);
-            const std::string_view rest = std::string_view(m).substr(close + 1);
-            if (rest == " is not declared") return name + " n'est pas d\xC3\xA9" "clar\xC3\xA9" "e ici";
-            if (rest.rfind(" is not a function", 0) == 0)
-                return name + " n'est pas une fonction que le simulateur conna\xC3\xAEt";
-        }
-    }
-    if (m.rfind("line ", 0) == 0) {
-        std::string found;
-        if (const auto f = m.rfind("(found '"); f != std::string::npos && m.size() >= f + 10)
-            found = m.substr(f + 8, m.size() - f - 10);
-        return found.empty() ? std::string("elle ne se lit pas")
-                             : "elle ne se lit pas (pr\xC3\xA8s de \xC2\xAB " + found + " \xC2\xBB)";
-    }
-    if (m == "division by zero" || m == "modulo by zero") return "division par z\xC3\xA9ro";
-    if (e.code == core::ErrorCode::NotImplemented)
-        return "\xC2\xAB " + m + " \xC2\xBB : une condition n'appelle ni bloc ni fonction inconnue";
-    return m.empty() ? e.message() : m;
-}
+// Ce que dit le moteur d'une condition qui ne va pas, en francais (1.13.0 : DebugShared, partage
+// avec le debogueur des scripts IHM - les memes mots).
+std::string conditionProblem(const core::Error& e) { return debug::conditionProblem(e); }
 
 // L'empreinte : chaque morceau du programme, dans l'ordre, melange a la suite.
 class Fingerprint {
@@ -124,20 +102,18 @@ void Runtime::resolveBreakpoints() {
         }
         const auto lines = statementLines(*tagPrograms_[tag]);
         const auto want = std::max<std::uint32_t>(1, bp.line);
-        const auto at = std::lower_bound(lines.begin(), lines.end(), want);
-        if (at == lines.end()) {
-            bp.note = "aucune instruction \xC3\xA0 partir de la ligne " + std::to_string(want) + " : il ne s'arr\xC3\xAAtera pas";
+        const auto at = debug::effectiveLine(lines, want);
+        if (at == 0) {
+            bp.note = debug::noStatementNote(want);
             continue;
         }
-        bp.effectiveLine = *at;
+        bp.effectiveLine = at;
         info.tag = tag;
-        if (*at != bp.line)
-            bp.note = "d\xC3\xA9" "cal\xC3\xA9 \xC3\xA0 la ligne " + std::to_string(*at) + " : la ligne " + std::to_string(bp.line)
-                      + " n'a pas d'instruction";
+        if (at != bp.line) bp.note = debug::shiftedNote(at, bp.line);
         if (!trimmed(bp.condition).empty()) {
             auto parsed = parseExpression(bp.condition);
             if (!parsed) {
-                addNote(bp, "condition invalide : " + conditionProblem(parsed.error()) + " ; il ne s'arr\xC3\xAAtera pas");
+                addNote(bp, debug::invalidCondition(conditionProblem(parsed.error())));
                 continue;
             }
             info.condition = *parsed;
@@ -151,7 +127,7 @@ void Runtime::resolveBreakpoints() {
                 scopePrefix_ = saved;
                 if (!tried) {
                     info.condition.reset();
-                    addNote(bp, "condition invalide : " + conditionProblem(tried.error()) + " ; il ne s'arr\xC3\xAAtera pas");
+                    addNote(bp, debug::invalidCondition(conditionProblem(tried.error())));
                     continue;
                 }
             }
@@ -254,7 +230,7 @@ void Runtime::breakpointReached(std::uint32_t tag, std::uint32_t line, LineProbe
                 // il ne s'arretera plus, et le dit.
                 info.armed = false;
                 info.condition.reset();
-                addNote(bp, "condition invalide : " + conditionProblem(v.error()) + " ; il ne s'arr\xC3\xAAtera pas");
+                addNote(bp, debug::invalidCondition(conditionProblem(v.error())));
                 changedMarks = true;
                 continue;
             }
