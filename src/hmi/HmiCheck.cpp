@@ -466,12 +466,12 @@ void checkNamespaces(const Project& p, std::vector<Issue>& out) {
         if (ns.empty()) return;
         if (!isNamespaceName(ns)) {
             add(out, S::Error, category, kNoId, kNoId, who,
-                who + " : espace de noms illisible Â« " + ns + " Â» (des identifiants sÃ©parÃ©s par des points : Gaz, Gaz.Ligne)", script);
+                who + " : espace de noms illisible \xC2\xAB " + ns + " \xC2\xBB (des identifiants s\xC3\xA9par\xC3\xA9s par des points : Gaz, Gaz.Ligne)", script);
             out.back().item = item;
             return;
         }
         if (const std::string clash = names::reservedClash(p, ns); !clash.empty() && said.insert(upperText(ns.substr(0, ns.find('.')))).second) {
-            add(out, S::Error, "Espace de noms", kNoId, kNoId, ns, clash + " : renomme l'un des deux (un espace de noms est un nom rÃ©servÃ©)");
+            add(out, S::Error, "Espace de noms", kNoId, kNoId, ns, clash + " : renomme l'un des deux (un espace de noms est un nom r\xC3\xA9serv\xC3\xA9)");
         }
     };
     for (const auto& t : p.programs.types) spaceOf(t.ns, "Type IHM", t.name, kNoId, t.id);
@@ -484,11 +484,11 @@ void checkNamespaces(const Project& p, std::vector<Issue>& out) {
         if (t.ns.empty()) continue;
         bool clash = false;
         p.forEachLibraryType([&](const HmiType& lt, const LoadedLibrary&) { clash = clash || upperText(fullName(lt)) == upperText(fullName(t)); });
-        if (clash) add(out, S::Error, "Type IHM", kNoId, kNoId, t.name, fullName(t) + " existe dÃ©jÃ  dans une bibliothÃ¨que reliÃ©" "e : renomme-le");
+        if (clash) add(out, S::Error, "Type IHM", kNoId, kNoId, t.name, fullName(t) + " existe d\xC3\xA9j\xC3\xA0 dans une biblioth\xC3\xA8que reli\xC3\xA9" "e : renomme-le");
     }
     // Les liens : introuvable, incompatible, plus ancienne, plus recente, collision, chemin absolu.
     for (const auto& li : biblio::linkIssues(p)) {
-        add(out, li.error ? S::Error : S::Warning, "BibliothÃ¨que", kNoId, kNoId, li.library, li.message);
+        add(out, li.error ? S::Error : S::Warning, "Biblioth\xC3\xA8que", kNoId, kNoId, li.library, li.message);
     }
 }
 

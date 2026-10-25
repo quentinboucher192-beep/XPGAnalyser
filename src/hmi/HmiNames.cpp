@@ -34,7 +34,7 @@ std::string parentOf(std::string_view ns) {
     return dot == std::string_view::npos ? std::string{} : std::string(ns.substr(0, dot));
 }
 
-// Une distance d'edition courte (le nom le plus proche, pour « veux-tu dire »).
+// Une distance d'edition courte (le nom le plus proche, pour " veux-tu dire ").
 std::size_t distance(std::string_view a, std::string_view b) {
     const std::string x = upperOf(a), y = upperOf(b);
     std::vector<std::size_t> prev(y.size() + 1), cur(y.size() + 1);
@@ -433,7 +433,7 @@ std::string canonicalType(const Project& p, std::string_view type, std::string_v
         while (j < type.size() && (identChar(type[j]) || (type[j] == '.' && j + 1 < type.size() && identStart(type[j + 1])))) ++j;
         const std::string word(type.substr(i, j - i));
         i = j;
-        // Un mot suivi de « : » nomme le parametre d'un rappel (CALLBACK (t : T) : BOOL) : tel quel.
+        // Un mot suivi de " : " nomme le parametre d'un rappel (CALLBACK (t : T) : BOOL) : tel quel.
         std::size_t c = j;
         while (c < type.size() && type[c] == ' ') ++c;
         if (c < type.size() && type[c] == ':' && (c + 1 >= type.size() || type[c + 1] != '=')) { out += word; continue; }
@@ -592,10 +592,10 @@ std::vector<Finding> check(const Index& ix, std::string_view code, std::string_v
                 std::string list;
                 for (std::size_t k = 0; k < r.ambiguous.size(); ++k)
                     list += (k == 0 ? "" : k + 1 == r.ambiguous.size() ? " et " : ", ") + r.ambiguous[k];
-                f.message = std::string(word) + " n'existe pas ici : " + list + " existent - Ã©" "cris le nom complet";
+                f.message = std::string(word) + " n'existe pas ici : " + list + " existent - \xC3\xA9" "cris le nom complet";
             } else {
-                f.message = std::string(word) + " est dans l'espace " + ns + " : Ã©" "cris " + r.hint
-                          + (allowUsing ? " (ou mets USING " + ns + "; en tÃªte)" : std::string{});
+                f.message = std::string(word) + " est dans l'espace " + ns + " : \xC3\xA9" "cris " + r.hint
+                          + (allowUsing ? " (ou mets USING " + ns + "; en t\xC3\xAAte)" : std::string{});
             }
             f.fixFrom = std::string(word);
             f.fixTo = r.hint;
@@ -822,11 +822,11 @@ bool setItemNamespace(Project& p, ItemKind kind, Id id, std::string_view nsIn, s
     while (!ns.empty() && std::isspace(uc(ns.back()))) ns.pop_back();
     if (ns == "(racine)") ns.clear();
     if (!ns.empty() && !isNamespaceName(ns))
-        return fail("Â« " + ns + " Â» : un espace de noms s'Ã©" "crit en lettres, chiffres et _ (Gaz, Gaz.Ligne)");
+        return fail("\xC2\xAB " + ns + " \xC2\xBB : un espace de noms s'\xC3\xA9" "crit en lettres, chiffres et _ (Gaz, Gaz.Ligne)");
     // Une bibliotheque reliee (et ses sous-espaces) est en lecture seule : on n'y ajoute rien.
     for (const auto& lib : p.libraries)
         if (!ns.empty() && (same(ns, lib.name) || (ns.size() > lib.name.size() && same(ns.substr(0, lib.name.size()), lib.name) && ns[lib.name.size()] == '.')))
-            return fail("l'espace " + lib.name + " est une bibliothÃ¨que reliÃ©" "e : elle est en lecture seule (choisis un autre espace)");
+            return fail("l'espace " + lib.name + " est une biblioth\xC3\xA8que reli\xC3\xA9" "e : elle est en lecture seule (choisis un autre espace)");
     if (!ns.empty())
         if (const std::string clash = reservedClash(p, ns); !clash.empty()) return fail(clash);
     std::string name;
@@ -836,17 +836,25 @@ bool setItemNamespace(Project& p, ItemKind kind, Id id, std::string_view nsIn, s
         case ItemKind::Script: if (const Script* s = p.script(id); s && !isLibraryId(id) && p.viewOfScript(id) == kNoId) name = s->name; break;
         case ItemKind::None: break;
     }
-    if (name.empty()) return fail("cet Ã©lÃ©ment ne prend pas d'espace de noms (une bibliothÃ¨que, un script de vue)");
+    if (name.empty()) return fail("cet \xC3\xA9l\xC3\xA9ment ne prend pas d'espace de noms (une biblioth\xC3\xA8que, un script de vue)");
     const std::string full = qualifiedName(ns, name);
     // Le nom complet doit rester libre parmi les items du meme genre (une fonction : ses surcharges la suivent).
     const auto taken = [&](const auto& list) {
         return std::any_of(list.begin(), list.end(), [&](const auto& x) { return x.id != id && same(qualifiedName(x.ns, x.name), full); });
     };
-    if (kind == ItemKind::Type && taken(p.programs.types)) return fail("le type " + full + " existe dÃ©jÃ ");
-    if (kind == ItemKind::Script && taken(p.programs.scripts)) return fail("le script " + full + " existe dÃ©jÃ ");
+    if (kind == ItemKind::Type && taken(p.programs.types)) return fail("le type " + full + " existe d\xC3\xA9j\xC3\xA0");
+    if (kind == ItemKind::Script && taken(p.programs.scripts)) return fail("le script " + full + " existe d\xC3\xA9j\xC3\xA0");
     bool libraryClash = false;
     if (kind == ItemKind::Type) p.forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { libraryClash = libraryClash || same(fullName(t), full); });
-    if (libraryClash) return fail(full + " existe dÃ©jÃ  dans une bibliothÃ¨que reliÃ©" "e");
+    if (libraryClash) return fail(full + " existe d\xC3\xA9j\xC3\xA0 dans une biblioth\xC3\xA8que reli\xC3\xA9" "e");
+    // Le nom complet d'avant (Gaz.EnDefaut) : le code qui l'ecrivait en entier suit (plus bas).
+    std::string beforeFull;
+    switch (kind) {
+        case ItemKind::Type: if (const HmiType* t = p.hmiType(id)) beforeFull = fullName(*t); break;
+        case ItemKind::Function: if (const HmiFunction* f = p.function(id)) beforeFull = qualifiedName(f->ns, f->name); break;
+        case ItemKind::Script: if (const Script* s = p.script(id)) beforeFull = qualifiedName(s->ns, s->name); break;
+        case ItemKind::None: break;
+    }
     switch (kind) {
         case ItemKind::Type:
             if (HmiType* t = p.hmiType(id)) {
@@ -886,6 +894,29 @@ bool setItemNamespace(Project& p, ItemKind kind, Id id, std::string_view nsIn, s
             if (Script* s = p.script(id)) s->ns = ns;
             break;
         case ItemKind::None: break;
+    }
+    // Le code qui l'ecrivait par son nom complet suit : Gaz.EnDefaut(v) devient Util.EnDefaut(v) (ou EnDefaut(v) a la
+    // racine), IHM_APPELER('Gaz.Horloge') aussi. Un nom court ecrit ailleurs reste : Compiler le signale et le corrige.
+    if (beforeFull.find('.') != std::string::npos && !same(beforeFull, full)) {
+        forEachCode(p, [&](std::string& text, CodeForm, const CodeSite&) {
+            if (text.empty()) return;
+            std::string out;
+            out.reserve(text.size());
+            std::size_t i = 0;
+            while (i < text.size()) {
+                if (!identStart(text[i]) || (i > 0 && (identChar(text[i - 1]) || text[i - 1] == '.'))) { out += text[i++]; continue; }
+                std::size_t j = i;
+                while (j < text.size() && (identChar(text[j]) || (text[j] == '.' && j + 1 < text.size() && identStart(text[j + 1])))) ++j;
+                const std::string word = text.substr(i, j - i);
+                // Gaz.EnDefaut, ou Gaz.T_Vanne.Position (un membre derriere) : la tete seule change.
+                if (same(word, beforeFull)) out += full;
+                else if (word.size() > beforeFull.size() && word[beforeFull.size()] == '.' && same(word.substr(0, beforeFull.size()), beforeFull))
+                    out += full + word.substr(beforeFull.size());
+                else out += word;
+                i = j;
+            }
+            text = std::move(out);
+        });
     }
     return true;
 }

@@ -24,7 +24,7 @@
 //       ou un type qui porte le nom d'un espace.
 //
 //  AMBIGUITE : deux espaces importes qui definissent le meme nom - l'emploi nu est
-//  refuse a sa ligne (« ambigu entre Gaz.Borne et Util.Borne - qualifie-le »), avec la
+//  refuse a sa ligne (" ambigu entre Gaz.Borne et Util.Borne - qualifie-le "), avec la
 //  correction d'un clic qui insere le prefixe.
 //
 //  Les fonctions de ce module ne lisent que le modele : elles servent au moteur
@@ -148,13 +148,13 @@ struct Finding {
     std::string suggestion;       // le nom propose
     std::string fixFrom, fixTo;   // la correction d'un clic (remplacer sur la ligne) ; vide : aucune
 };
-//  - USING d'un espace inconnu (avec le plus proche) ; USING inutile (avertissement, « Retire le USING ») ;
-//  - un nom nu ambigu sous USING (« Qualifie en Gaz.Max ») ;
-//  - un nom nu d'un autre espace, sans USING (« Qualifie en Util.Moyenne ») ;
+//  - USING d'un espace inconnu (avec le plus proche) ; USING inutile (avertissement, " Retire le USING ") ;
+//  - un nom nu ambigu sous USING (" Qualifie en Gaz.Max ") ;
+//  - un nom nu d'un autre espace, sans USING (" Qualifie en Util.Moyenne ") ;
 //  - Gaz.Inconnu : l'espace n'a pas ce nom (avec le plus proche de l'espace).
 //  `knownElsewhere` : ce nom court est-il connu autrement (une fonction standard, une native, une variable de
 //  l'automate, une locale...) ? Fourni, un nom court d'un espace ni le sien ni importe, que rien d'autre ne
-//  connait, est refuse (« Moyenne est dans l'espace Util : ecris Util.Moyenne ») ; vide : rien n'est dit.
+//  connait, est refuse (" Moyenne est dans l'espace Util : ecris Util.Moyenne ") ; vide : rien n'est dit.
 [[nodiscard]] std::vector<Finding> check(const Index&, std::string_view code, std::string_view own,
                                          const std::vector<std::string>& hidden = {}, bool function = false,
                                          bool allowUsing = true,

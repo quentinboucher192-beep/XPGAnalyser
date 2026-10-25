@@ -603,7 +603,7 @@ public:
     }
     [[nodiscard]] const std::vector<std::string>& imports() const noexcept { return imports_; }
     // 1.13.0 (lot J8) : un nom court connu autrement qu'un item d'un espace (une locale, une variable, une fonction
-    // standard ou IHM, une native, l'automate...) - names::check ne le dit pas « d'un autre espace ».
+    // standard ou IHM, une native, l'automate...) - names::check ne le dit pas " d'un autre espace ".
     [[nodiscard]] bool knownOtherwise(std::string_view n) const {
         const std::string U = up(n);
         if (local(n) || param(n) || counter(n) || selfName(n) || catchVar(n) || viewConstant(n) || viewFunctionHere(n)) return true;

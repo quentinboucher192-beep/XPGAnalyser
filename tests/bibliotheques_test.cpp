@@ -301,6 +301,29 @@ void resolveur() {
         addVar(c, "Gaz", "INT");
         check(!names::reservedClash(c, "Gaz").empty(), "reservedClash : une variable Gaz");
     }
+    {
+        // Changer l'espace d'un item (l'inspecteur) : les noms complets du code le suivent, un nom court reste.
+        Project m = buildProject();
+        addVar(m, "V1", "Gaz.T_Vanne");
+        addScript(m, "Horloge", "R := 1.0;", "Gaz");
+        Script& s = addScript(m, "S", "R := TO_REAL(Gaz.EnDefaut(V1));\nIHM_APPELER('Gaz.Horloge');\nR := Util.Moyenne(1.0, 3.0);\nR := Moyenne(1.0, 3.0);");
+        const Id sid = s.id;
+        const HmiFunction* f = m.functionByName("Util.Moyenne");
+        std::string why;
+        check(f && names::setItemNamespace(m, names::ItemKind::Function, f->id, "Calc", &why), "setItemNamespace : Util.Moyenne -> Calc [" + why + "]");
+        const Script* after = m.script(sid);
+        check(after && after->body.find("R := Calc.Moyenne(1.0, 3.0);") != std::string::npos && after->body.find("R := Moyenne(1.0, 3.0);") != std::string::npos,
+              "le code suit : Util.Moyenne devient Calc.Moyenne, le nom court reste [" + (after ? after->body : std::string("?")) + "]");
+        const Script* clock = m.generalScript("Gaz.Horloge");
+        check(clock && names::setItemNamespace(m, names::ItemKind::Script, clock->id, "", &why)
+                  && m.script(sid)->body.find("IHM_APPELER('Horloge')") != std::string::npos,
+              "un script vers la racine : IHM_APPELER('Gaz.Horloge') devient 'Horloge'");
+        const HmiType* t = m.hmiTypeByName("Gaz.T_Vanne");
+        check(t && names::setItemNamespace(m, names::ItemKind::Type, t->id, "Eau", &why) && m.programs.variables.back().type == "Eau.T_Vanne",
+              "un type : la variable V1 suit (Eau.T_Vanne)");
+        check(!names::setItemNamespace(m, names::ItemKind::Function, m.functionByName("Gaz.EnDefaut")->id, "R", &why) && !why.empty(),
+              "un espace qui porte le nom d'une variable : refuse [" + why + "]");
+    }
 }
 
 // =============================================================================
