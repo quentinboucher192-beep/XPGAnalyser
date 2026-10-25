@@ -299,6 +299,9 @@ void disque() {
     Project p = bench();
     HmiFunction* moy = const_cast<HmiFunction*>(p.functionByName("Moyenne_Pression"));
     HmiFunction* tr = const_cast<HmiFunction*>(p.functionByName("Tracer_Evenement"));
+    // 1.13.0 (lot J8) : l'identifiant garde a part - addFunction plus bas peut deplacer le vecteur des fonctions
+    // (le pointeur `tr` ne vaut plus rien apres).
+    const Id trId = tr ? tr->id : kNoId;
     // Moyenne_Pression recoit deux cas ; une procedure un cas avec pose et verif.
     {
         FunctionTest a = caseOf(p, moy->id, "poids 25");
@@ -350,9 +353,10 @@ void disque() {
             check(three->tests.size() == 2 && two->tests.size() == 1, "la surcharge a 3 parametres a 2 cas, celle a 2 en a 1");
             check(three->tests[0].name == "poids 25" && three->tests[0].tolerance == "0.001"
                       && three->tests[0].arguments.size() == 3, "le cas poids 25 : nom, tolerance, trois arguments");
-            check(back.value().function(tr->id)->tests[0].givens.size() == 1
-                      && back.value().function(tr->id)->tests[0].checks.size() == 2
-                      && back.value().function(tr->id)->tests[0].enabled == false,
+            const HmiFunction* trBack = back.value().function(trId);
+            check(trBack && !trBack->tests.empty() && trBack->tests[0].givens.size() == 1
+                      && trBack->tests[0].checks.size() == 2
+                      && trBack->tests[0].enabled == false,
                   "la procedure : une pose, deux verifs, cas inactif relu tel quel");
         }
         check(back.value().nextId > moy2.tests[0].id, "le compteur passe au-dessus des identifiants de cas");
@@ -366,17 +370,17 @@ void disque() {
         check(pindex.find("ihm format=29") == std::string::npos && pindex.find("cas_test") == std::string::npos,
               "sans cas : le format redescend sous 29, sans ligne cas_test");
     }
-    // Refus d'un format plus recent (33 : au-dela du format courant - 32 est valide depuis le lot J6 unites).
+    // Refus d'un format plus recent (34 : au-dela du format courant - 33 est valide depuis le lot J8 espaces de noms).
     {
         auto newer = files;
         std::string text = fileText(files, "ihm.txt");
         const auto at = text.find("ihm format=29");
-        text.replace(at, 13, "ihm format=33");
+        text.replace(at, 13, "ihm format=34");
         for (auto& f : newer)
             if (f.path == "ihm.txt") f.data = std::make_shared<const Bytes>(text.begin(), text.end());
         const auto refused = parseProject(readerOf(newer));
-        check(!refused.has_value() && refused.error().context.find("33") != std::string::npos,
-              "un projet au format 33 : refuse proprement, et dit pourquoi");
+        check(!refused.has_value() && refused.error().context.find("34") != std::string::npos,
+              "un projet au format 34 : refuse proprement, et dit pourquoi");
     }
     // Les deux cases de Configuration survivent a l'aller-retour.
     {

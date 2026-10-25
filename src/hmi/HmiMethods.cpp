@@ -9,6 +9,7 @@
 #include "HmiDecl.hpp"       // 1.11.18 : les declarations du modele, reconstruites (decl::codeOf)
 #include "HmiEnums.hpp"      // typeKindLabel
 #include "HmiMarkers.hpp"    // 1.11.1 : le corps sans les $ des reperes
+#include "HmiNames.hpp"      // 1.13.0 (lot J8) : une methode voit les noms de l'espace de son type
 #include "HmiScript.hpp"
 #include "HmiTypes.hpp"
 #include "HmiTypeRegistry.hpp"
@@ -153,7 +154,7 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
                     const HmiType* owner = nullptr;
                     const HmiFunction* pm = effectiveMethod(p, parentName, mname, &owner);
                     if (pm && owner) {
-                        out += methodFunctionName(owner->name, *pm) + "(SELF";
+                        out += methodFunctionName(fullName(*owner), *pm) + "(SELF";   // 1.13.0 (lot J8) : Gaz.T_Pompe
                         std::size_t after = paren + 1;
                         while (after < body.size() && (body[after] == ' ' || body[after] == '\t')) ++after;
                         out += (after < body.size() && body[after] == ')') ? "" : ", ";
@@ -243,8 +244,11 @@ const HmiFunction* effectiveMethod(const Project& p, std::string_view typeName, 
 // ------------------------------------------------------------- predicats ----
 bool isA(const Project& p, std::string_view sub, std::string_view base) {
     if (sameName(sub, base)) return true;
+    // 1.13.0 (lot J8) : un meme type ecrit court ou complet (T_Pompe, Gaz.T_Pompe).
+    const HmiType* target = p.hmiTypeByName(trimmed(base));
+    if (const HmiType* self = p.hmiTypeByName(trimmed(sub)); self && self == target) return true;
     for (const HmiType* b : baseChain(p, sub))
-        if (sameName(b->name, base)) return true;
+        if (sameName(b->name, base) || sameName(fullName(*b), base) || (target && b == target)) return true;
     return false;
 }
 
@@ -256,9 +260,10 @@ bool isInterface(const Project& p, std::string_view name) {
 bool implementsInterface(const Project& p, std::string_view type, std::string_view iface) {
     const HmiType* ty = p.hmiTypeByName(type);
     if (!ty) return false;
+    const HmiType* wanted = p.hmiTypeByName(trimmed(iface));     // 1.13.0 (lot J8) : court ou complet
     const auto has = [&](const HmiType& t) {
         for (const auto& i : t.interfaces)
-            if (sameName(i, iface)) return true;
+            if (sameName(i, iface) || (wanted && p.hmiTypeByName(trimmed(i)) == wanted)) return true;
         return false;
     };
     if (has(*ty)) return true;
@@ -306,28 +311,41 @@ bool resolveMethod(const Project& p, std::string_view selfType, std::string_view
     if (!m || !owner) return false;
     // SELF a le type qui DEFINIT la methode (owner) ; l'objet reel (un sous-type) passe la ou owner est
     // attendu (montee du VAR_IN_OUT). Une seule fonction par (owner, methode) : un SUPER la retrouve.
-    out.selfType = owner->name;
+    // 1.13.0 (lot J8) : le nom complet du type (Gaz.T_Pompe) - SELF et le nom interne ; une methode d'un type d'un
+    // espace voit les noms de cet espace sans prefixe (son corps qualifie avant le moteur).
+    const std::string ownerName = fullName(*owner);
+    out.selfType = ownerName;
     out.isVirtual = m->isVirtual;
-    out.function = methodFunctionText(p, owner->name, *m);
-    out.owner = "type " + owner->name + ", m\xC3\xA9thode " + m->name;
-    out.key = "methode|" + upperOf(owner->name) + "|" + upperOf(m->name) + "|"
+    out.function = methodFunctionText(p, ownerName, *m);
+    if (!owner->ns.empty() || names::mentionsUsing(m->body)) out.function = names::qualify(p, out.function, owner->ns, {"SELF"}, true);
+    out.owner = "type " + ownerName + ", m\xC3\xA9thode " + m->name;
+    out.key = "methode|" + upperOf(ownerName) + "|" + upperOf(m->name) + "|"
             + std::to_string(std::hash<std::string>{}(out.function));
     return true;
 }
 
 bool resolveMethodInternal(const Project& p, std::string_view internalName, MethodCall& out) {
-    for (const auto& t : p.programs.types)
+    // 1.13.0 (lot J8) : les types du projet et ceux des bibliotheques reliees, par leur nom complet.
+    const auto tryType = [&](const HmiType& t) {
+        const std::string tn = fullName(t);
         for (const auto& m : t.methods)
-            if (methodFunctionName(t.name, m) == internalName) {
-                out.selfType = t.name;
+            if (methodFunctionName(tn, m) == internalName) {
+                out.selfType = tn;
                 out.isVirtual = m.isVirtual;
-                out.function = methodFunctionText(p, t.name, m);
-                out.owner = "type " + t.name + ", m\xC3\xA9thode " + m.name;
-                out.key = "methode|" + upperOf(t.name) + "|" + upperOf(m.name) + "|"
+                out.function = methodFunctionText(p, tn, m);
+                if (!t.ns.empty() || names::mentionsUsing(m.body)) out.function = names::qualify(p, out.function, t.ns, {"SELF"}, true);
+                out.owner = "type " + tn + ", m\xC3\xA9thode " + m.name;
+                out.key = "methode|" + upperOf(tn) + "|" + upperOf(m.name) + "|"
                         + std::to_string(std::hash<std::string>{}(out.function));
                 return true;
             }
-    return false;
+        return false;
+    };
+    for (const auto& t : p.programs.types)
+        if (tryType(t)) return true;
+    bool found = false;
+    p.forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { if (!found) found = tryType(t); });
+    return found;
 }
 
 // --------------------------------------------------------------- l'edition ---

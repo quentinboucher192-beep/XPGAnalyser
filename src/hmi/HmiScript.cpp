@@ -1,4 +1,5 @@
 #include "HmiScript.hpp"
+#include "HmiNames.hpp"   // 1.13.0 (lot J8) : les directives USING
 #include "../sim/DialectLib.hpp"   // 1.12.7 : les templates (NUMERIC_LIMITS<T>, NUMBERS) ne sont pas des variables
 
 #include "../sim/Interpreter.hpp"
@@ -524,7 +525,8 @@ std::vector<ScriptDiagnostic> checkScript(ScriptLang lang, std::string_view code
     // 1.11.1 (REP) : un script ST se lit sans les $ de ses reperes, comme une expression
     // (les chaines ST, (* *) et // gardent les leurs) ; les lignes ne bougent pas. Le C et
     // le C++ ne sont pas compiles : checkC ne lit pas les $ (rien n'est retire).
-    const std::string st = lang == ScriptLang::ST ? markers::strip(code) : std::string{};
+    // 1.13.0 (lot J8) : ses directives USING (blanchies : les lignes et les colonnes restent).
+    const std::string st = lang == ScriptLang::ST ? names::blankUsings(markers::strip(code)) : std::string{};
     const std::string_view body = lang == ScriptLang::ST ? std::string_view(st) : code;
     if (lang != ScriptLang::ST) {
         out = checkC(body, lang);
@@ -748,7 +750,8 @@ std::vector<ScriptDiagnostic> checkScript(const Script& sc, const TypeKnown& kno
 }
 
 std::vector<NameUse> scriptNames(std::string_view source) {
-    const std::string code = markers::strip(source);   // 1.11.1 (REP) : les $ des reperes, transparents
+    // 1.11.1 (REP) : les $ des reperes, transparents ; 1.13.0 (lot J8) : les directives USING ne nomment rien.
+    const std::string code = names::blankUsings(markers::strip(source));
     // Lot 7 : ce que les blocs de declaration nomment n'est pas lu ailleurs, et
     // une variable locale n'est ni IHM ni de l'automate. 1.10 : une locale de
     // type riche (MAP, ARRAY, REF_TO, un type IHM) reste une locale ; les
@@ -1014,6 +1017,13 @@ bool richLocalType(std::string_view type, const std::function<bool(std::string_v
     if (std::string base; u.find('<') != std::string::npos) {
         std::vector<std::string> args;
         if (splitGenericName(type, base, args)) return knownType && knownType(type);
+    }
+    // 1.13.0 (lot J8) : Gaz.T_Vanne - le type d'un espace de noms (son nom complet).
+    if (u.find('.') != std::string::npos) {
+        std::string t(type);
+        while (!t.empty() && std::isspace(static_cast<unsigned char>(t.back()))) t.pop_back();
+        while (!t.empty() && std::isspace(static_cast<unsigned char>(t.front()))) t.erase(t.begin());
+        return isNamespaceName(t) && knownType && knownType(t);
     }
     for (const char c : u) if (!identChar(c)) return false;
     return knownType && knownType(type);
@@ -1778,6 +1788,14 @@ std::string functionText(const HmiFunction& f) {
     // 1.13.0 : une fonction generique porte son TEMPLATE <T : ANY_NUM, U> devant FUNCTION - le moteur la lit alors
     //  comme generique (il deduit T a l'appel, le verifie contre sa contrainte) ; genericsText reprend sa case.
     const std::string tmpl = f.generics.empty() ? std::string{} : "TEMPLATE <" + genericsText(f.generics) + "> ";
+    // 1.13.0 (lot J8) : ses directives USING ne vont pas au moteur (blanchies : les lignes restent ; le moteur
+    //  recoit les noms deja qualifies - names::qualify, au lancement).
+    if (names::mentionsUsing(f.body)) {
+        HmiFunction g = f;
+        g.body = names::blankUsings(f.body);
+        return tmpl + "FUNCTION " + f.name + (f.returnType.empty() ? std::string{} : " : " + f.returnType) + " "
+             + markers::strip(decl::codeOf(g)) + "\nEND_FUNCTION\n";
+    }
     return tmpl + "FUNCTION " + f.name + (f.returnType.empty() ? std::string{} : " : " + f.returnType) + " "
          + markers::strip(decl::codeOf(f)) + "\nEND_FUNCTION\n";
 }

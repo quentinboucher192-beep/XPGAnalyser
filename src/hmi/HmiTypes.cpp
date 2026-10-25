@@ -53,6 +53,7 @@ bool identifier(std::string_view s) {
 // 1.12.20 (lot G) : un nom de type - un identifiant, ou l'instance d'une structure generique (T_Mesure<REAL>).
 bool typeWord(std::string_view s) {
     if (identifier(s)) return true;
+    if (isNamespaceName(s)) return true;            // 1.13.0 (lot J8) : Gaz.T_Vanne, le type d'un espace de noms
     std::string base;
     std::vector<std::string> args;
     return splitGenericName(s, base, args);
@@ -69,7 +70,10 @@ std::vector<const HmiType*> namedTypesOf(const Project& p, std::string_view type
             continue;
         }
         std::size_t j = i;
-        while (j < type.size() && (std::isalnum(static_cast<unsigned char>(type[j])) || type[j] == '_')) ++j;
+        // 1.13.0 (lot J8) : un nom d'un espace (Gaz.T_Vanne) se lit d'un bloc.
+        while (j < type.size() && (std::isalnum(static_cast<unsigned char>(type[j])) || type[j] == '_'
+                                   || (type[j] == '.' && j + 1 < type.size() && (std::isalpha(static_cast<unsigned char>(type[j + 1])) || type[j + 1] == '_'))))
+            ++j;
         if (const HmiType* t = p.hmiTypeByName(type.substr(i, j - i)); t && std::find(out.begin(), out.end(), t) == out.end())
             out.push_back(t);
         i = j;
@@ -621,7 +625,7 @@ bool knownTypeName(const Project& p, std::string_view type) {
 std::string callbackForm(const Project* p, std::string_view type) {
     const std::string t = trimmed(type);
     if (upperOf(t).rfind("CALLBACK", 0) == 0) return t;
-    if (p && identifier(t))
+    if (p && (identifier(t) || isNamespaceName(t)))         // 1.13.0 (lot J8) : Gaz.T_Filtre aussi
         if (const HmiType* ty = p->hmiTypeByName(t); ty && ty->kind == HmiTypeKind::Callback) return trimmed(ty->signature);
     return {};
 }

@@ -113,6 +113,10 @@ struct Entry {
     std::vector<std::pair<std::string, std::string>> members{};   // une structure, un DDT : (nom, type)
     std::vector<std::string> values{};                            // une enumeration : ses valeurs
     std::vector<std::pair<std::string, std::string>> generics{};  // 1.12.20 (lot G) : une structure generique : (T, ANY_NUM)
+    // 1.13.0 (lot J8) : son espace de noms ("Gaz" ; vide : la racine) - `name` est alors le nom complet (Gaz.T_Vanne) ;
+    // un type de projet garde sa cle (ihm:615), un type de bibliotheque a la sienne (bib:Gaz.T_Vanne), en lecture seule.
+    std::string ns{};
+    bool        readOnly{false};
     [[nodiscard]] bool usable(unsigned use) const noexcept { return (uses & use) != 0; }
 };
 
@@ -144,6 +148,8 @@ public:
     [[nodiscard]] const std::vector<Entry>& entries() const noexcept { return entries_; }
     [[nodiscard]] const Entry* byKey(std::string_view key) const noexcept;
     [[nodiscard]] const Entry* byName(std::string_view name) const noexcept;   // sans casse ; STRING[n] : STRING
+    // 1.13.0 (lot J8) : le nom tel quel (sans le repli d'un nom court sur le seul type de ce nom d'un espace).
+    [[nodiscard]] const Entry* byExactName(std::string_view name) const noexcept;
     // Les entrees permises pour cet usage, dans l'ordre du registre ; `proposedOnly` : celles
     // qu'une liste propose d'office.
     [[nodiscard]] std::vector<const Entry*> usable(unsigned use, bool proposedOnly = false) const;

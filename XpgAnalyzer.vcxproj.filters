@@ -1375,6 +1375,9 @@
     <ClCompile Include="src\hmi\HmiFunctionTests.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiLibrary.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiLiveGeometry.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1391,6 +1394,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiModbusCyclic.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiNames.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiNatives.cpp">
@@ -2764,6 +2770,9 @@
     <ClInclude Include="src\hmi\HmiKeys.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiLibrary.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiLiveGeometry.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
@@ -2780,6 +2789,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiModbusCyclic.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiNames.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiNatives.hpp">
