@@ -366,17 +366,17 @@ void disque() {
         check(pindex.find("ihm format=29") == std::string::npos && pindex.find("cas_test") == std::string::npos,
               "sans cas : le format redescend sous 29, sans ligne cas_test");
     }
-    // Refus d'un format plus recent (32 : au-dela du format courant - 31 est valide depuis le lot J1 objets).
+    // Refus d'un format plus recent (33 : au-dela du format courant - 32 est valide depuis le lot J6 unites).
     {
         auto newer = files;
         std::string text = fileText(files, "ihm.txt");
         const auto at = text.find("ihm format=29");
-        text.replace(at, 13, "ihm format=32");
+        text.replace(at, 13, "ihm format=33");
         for (auto& f : newer)
             if (f.path == "ihm.txt") f.data = std::make_shared<const Bytes>(text.begin(), text.end());
         const auto refused = parseProject(readerOf(newer));
-        check(!refused.has_value() && refused.error().context.find("32") != std::string::npos,
-              "un projet au format 32 : refuse proprement, et dit pourquoi");
+        check(!refused.has_value() && refused.error().context.find("33") != std::string::npos,
+              "un projet au format 33 : refuse proprement, et dit pourquoi");
     }
     // Les deux cases de Configuration survivent a l'aller-retour.
     {
