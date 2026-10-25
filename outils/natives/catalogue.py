@@ -31,6 +31,9 @@ CATS = [
     ("limits", "std::numeric_limits", "Les bornes et les caractéristiques de chaque type numérique : NUMERIC_LIMITS<T>.MEMBRE.", "Bibliothèques"),
     ("numbers", "std::numbers", "Les constantes mathématiques : NUMBERS.PI, NUMBERS<REAL>.E…", "Bibliothèques"),
     ("utility", "std::utility", "Échanger deux variables ; écrire en gardant l'ancienne valeur.", "Bibliothèques"),   # 1.12.16
+    # 1.13.0 (lot J3) : JSON et expressions regulieres (local, du calcul en memoire)
+    ("json", "JSON", "Lire et écrire du JSON (JSON_LIRE, JSON_ECRIRE), accéder par clé ['clé'] ou indice [i], lire sûrement (JSON_NOMBRE / TEXTE / BOOL / ENTIER), interroger (JSON_TYPE / A / CLES). Le type ANY porte une valeur JSON / dynamique. Tout en local.", "Bibliothèques"),
+    ("regex", "Expressions régulières", "Chercher, extraire, remplacer, découper un texte au motif (grammaire ECMAScript, comme JavaScript) : REGEX_TESTE, REGEX_TROUVE, REGEX_REMPLACE, REGEX_DECOUPE… (<regex>).", "Bibliothèques"),
     ("nav", "Navigation et vues", "Changer de vue, revenir, l'accueil.", "Fonctions IHM_"),
     ("popup", "Popups", "Ouvrir, remplacer, centrer, fermer une popup.", "Fonctions IHM_"),
     ("journal", "Journal et Console", "Écrire une ligne dans le journal ou la Console.", "Fonctions IHM_"),
@@ -1432,6 +1435,10 @@ ENUMS = [
      [("Arret", 0, "À l'arrêt", "0"), ("Marche", 1, "En marche", "1"), ("Defaut", 2, "En défaut", "2"), ("Maintenance", 3, "En maintenance", "3")]),
     ("MODE_MARCHE", "Le mode de marche d'un équipement (à donner à ses variables).", "", -1,
      [("Auto", 0, "Automatique", "0"), ("Manuel", 1, "Manuel", "1"), ("Local", 2, "Local", "2"), ("Distant", 3, "Distant", "3")]),
+    # 1.13.0 (lot J3) : le genre d'une valeur JSON, rendu par JSON_TYPE. Valeurs nues (JSON_TYPE(v) = JSON_Objet).
+    ("JSON_Type", "Le genre d'une valeur JSON, rendu par JSON_TYPE(v). Les valeurs portent le préfixe JSON_ : elles s'écrivent nues (JSON_TYPE(v) = JSON_Objet).", "JSON_TYPE", -1,
+     [("JSON_Objet", 0, "Un objet { }", "JSON_Objet"), ("JSON_Liste", 1, "Un tableau [ ]", "JSON_Liste"), ("JSON_Texte", 2, "Un texte", "JSON_Texte"),
+      ("JSON_Nombre", 3, "Un nombre", "JSON_Nombre"), ("JSON_Bool", 4, "TRUE ou FALSE", "JSON_Bool"), ("JSON_Nul", 5, "Un null", "JSON_Nul"), ("JSON_Absent", 6, "Une clé qui manque", "JSON_Absent")]),
 ]
 
 # ------------------------------------------------------------------ attente (1.13.0) --
@@ -1449,6 +1456,91 @@ fn(name="WAIT_UNTIL", cat="script",
    inc="None", incpp="None", expr=False,
    notes=["Dans un script non détaché, l'IHM est figée : la condition ne changera pas - coche Détaché (l'attente est plafonnée à 10 s, comme WAIT).",
           "Un délai dépassé lève E_ATTENTE quand WAIT_UNTIL est seul (une instruction) ; dans un IF ou une affectation, il rend FALSE sans erreur. Sans délai, il attend indéfiniment (IHM_SCRIPT_ARRETER l'arrête)."])
+
+# ------------------------------------------------------------------ 1.13.0 (lot J3) : JSON --
+#  Le type ANY porte une valeur JSON / dynamique. Lis le texte avec FILE_READ / RESOURCE_READ, puis JSON_LIRE.
+fn(name="JSON_LIRE", cat="json", params=[("TEXTE", "STRING", "un texte JSON (d'un FILE_READ, d'une ressource…)", False)], ret="ANY",
+   short="Analyse un texte JSON : un objet devient une MAP[STRING] OF ANY, un tableau une LIST OF ANY. Un texte mal formé lève E_JSON (la position citée), rattrapable par TRY…CATCH.",
+   st="Recettes := JSON_LIRE(FILE_READ('recettes.json'));", c="/* un analyseur JSON : cJSON, jsmn… */", cpp="auto j = nlohmann::json::parse(texte);",
+   inc="None", incpp="None", essai=("STRING", "JSON_TEXTE(JSON_LIRE('{\"gaz\":\"A\"}')['gaz'])", "A"),
+   notes=["Lis le texte avec FILE_READ ou RESOURCE_READ, puis JSON_LIRE. Sur la page web, FILE_READ est bloqué mais RESOURCE_READ marche : le JSON tourne en entier dans la page."])
+fn(name="JSON_ECRIRE", cat="json", params=[("VALEUR", "ANY", "ANY, MAP, LIST, SET, ARRAY, TUPLE, une structure, un scalaire", False), ("INDENTE", "BOOL", "deux espaces par niveau (sinon compact)", True)], ret="STRING",
+   short="Écrit une valeur en JSON. Une structure IHM donne un objet (ses membres) ; un REAL infini ou NAN, une référence, un rappel sont refusés.",
+   st="FILE_WRITE('etat.json', JSON_ECRIRE(Etat, TRUE));", c="/* nlohmann::json ou autre : j.dump() */", cpp="std::string s = j.dump(2);",
+   inc="None", incpp="None", essai=("STRING", "JSON_ECRIRE(JSON_LIRE('[1,2]'))", "[1,2]"))
+fn(name="JSON_NOMBRE", cat="json", params=[("V", "ANY", "une valeur JSON", False), ("DEFAUT", "REAL", "rendu si V manque ou n'est pas un nombre", True)], ret="REAL",
+   short="Le nombre porté par une valeur JSON. Avec DEFAUT : rendu si la valeur manque ou n'est pas un nombre ; sans lui, un mauvais genre lève E_JSON.",
+   st="Pression := JSON_NOMBRE(Config['pression'], 9.5);", c="double p = json_number(v);", cpp="double p = v.is_number() ? v.get<double>() : 9.5;",
+   inc="None", incpp="None", essai=("REAL", "JSON_NOMBRE(JSON_LIRE('7.5'))", "7.5"))
+fn(name="JSON_ENTIER", cat="json", params=[("V", "ANY", "une valeur JSON", False), ("DEFAUT", "DINT", "rendu si V manque ou n'est pas un nombre", True)], ret="DINT",
+   short="L'entier porté par une valeur JSON (un réel est tronqué). DEFAUT si elle manque ou n'est pas un nombre ; sans lui, E_JSON.",
+   st="N := JSON_ENTIER(Config['repetitions'], 1);", c="int n = json_int(v);", cpp="int n = v.is_number() ? v.get<int>() : 1;",
+   inc="None", incpp="None", essai=("DINT", "JSON_ENTIER(JSON_LIRE('42'))", "42"))
+fn(name="JSON_TEXTE", cat="json", params=[("V", "ANY", "une valeur JSON", False), ("DEFAUT", "STRING", "rendu si V manque ou n'est pas un texte", True)], ret="STRING",
+   short="Le texte porté par une valeur JSON. DEFAUT si elle manque ou n'est pas un texte ; sans lui, E_JSON.",
+   st="Nom := JSON_TEXTE(Config['gaz'], 'inconnu');", c="const char* s = json_string(v);", cpp="std::string s = v.is_string() ? v.get<std::string>() : \"inconnu\";",
+   inc="None", incpp="None", essai=("STRING", "JSON_TEXTE(JSON_LIRE('\"ok\"'))", "ok"))
+fn(name="JSON_BOOL", cat="json", params=[("V", "ANY", "une valeur JSON", False), ("DEFAUT", "BOOL", "rendu si V manque ou n'est pas un booléen", True)], ret="BOOL",
+   short="Le booléen porté par une valeur JSON. DEFAUT si elle manque ou n'est pas un booléen ; sans lui, E_JSON.",
+   st="Actif := JSON_BOOL(Config['actif'], FALSE);", c="bool b = json_bool(v);", cpp="bool b = v.is_boolean() ? v.get<bool>() : false;",
+   inc="None", incpp="None", essai=("BOOL", "JSON_BOOL(JSON_LIRE('true'))", "TRUE"))
+fn(name="JSON_TYPE", cat="json", params=[("V", "ANY", "une valeur JSON", False)], ret="JSON_Type",
+   short="Le genre d'une valeur JSON : JSON_Objet, JSON_Liste, JSON_Texte, JSON_Nombre, JSON_Bool, JSON_Nul, JSON_Absent (une clé qui manque).",
+   st="IF JSON_TYPE(Config['seuils']) = JSON_Objet THEN ... END_IF", c="switch (json_type(v)) { /* ... */ }", cpp="if (v.is_object()) { /* ... */ }",
+   inc="None", incpp="None", essai=("BOOL", "JSON_TYPE(JSON_LIRE('{}')) = JSON_Objet", "TRUE"))
+fn(name="JSON_A", cat="json", params=[("OBJET", "ANY", "un objet JSON", False), ("CLE", "STRING", "la clé cherchée", False)], ret="BOOL",
+   short="Vrai si l'objet JSON a cette clé.",
+   st="IF JSON_A(Config, 'version') THEN ... END_IF", c="bool has = json_has(o, \"version\");", cpp="bool has = o.contains(\"version\");",
+   inc="None", incpp="None", essai=("BOOL", "JSON_A(JSON_LIRE('{\"v\":1}'), 'v')", "TRUE"))
+fn(name="JSON_EST_NUL", cat="json", params=[("V", "ANY", "une valeur JSON", False)], ret="BOOL",
+   short="Vrai si la valeur JSON est un null (ou une clé absente).",
+   st="IF JSON_EST_NUL(Config['limite']) THEN ... END_IF", c="bool n = json_is_null(v);", cpp="bool n = v.is_null();",
+   inc="None", incpp="None", essai=("BOOL", "JSON_EST_NUL(JSON_LIRE('null'))", "TRUE"))
+fn(name="JSON_CLES", cat="json", params=[("OBJET", "ANY", "un objet JSON", False)], ret="LIST OF STRING",
+   short="Les clés d'un objet JSON, rangées : une LIST OF STRING.",
+   st="FOR EACH k IN JSON_CLES(Config) DO ... END_FOR;", c="/* parcourir les cles de l'objet */", cpp="for (auto& [k, v] : o.items()) { /* ... */ }",
+   inc="None", incpp="None", essai=("STRING", "JOIN(JSON_CLES(JSON_LIRE('{\"a\":1,\"b\":2}')), ',')", "a,b"))
+fn(name="JSON_OBJET", cat="json", params=[], ret="ANY",
+   short="Un objet JSON vide (MAP[STRING] OF ANY) à remplir avec o['clé'] := … ou MAP_SET.",
+   st="VAR o : ANY; END_VAR\no := JSON_OBJET();\no['gaz'] := 'A';", c="/* json_object() */", cpp="nlohmann::json o = nlohmann::json::object();",
+   inc="None", incpp="None", essai=("STRING", "JSON_ECRIRE(JSON_OBJET())", "{}"))
+fn(name="JSON_LISTE", cat="json", params=[], ret="ANY",
+   short="Un tableau JSON vide (LIST OF ANY) à remplir avec LIST_ADD.",
+   st="VAR t : ANY; END_VAR\nt := JSON_LISTE();\nLIST_ADD(t, 1);", c="/* json_array() */", cpp="nlohmann::json t = nlohmann::json::array();",
+   inc="None", incpp="None", essai=("STRING", "JSON_ECRIRE(JSON_LISTE())", "[]"))
+
+# ------------------------------------------------------- 1.13.0 (lot J3) : expressions regulieres --
+#  Grammaire ECMAScript (std::regex). En ST, $ est le caractere d'echappement : l'ancre $ s'ecrit $$.
+fn(name="REGEX_TESTE", cat="regex", params=[("TEXTE", "STRING", "le texte fouillé", False), ("MOTIF", "STRING", "le motif (ECMAScript)", False)], ret="BOOL",
+   short="Vrai si le MOTIF se trouve quelque part dans TEXTE. ^ et $ pour exiger tout le texte (en ST, $ s'écrit $$). Un motif invalide lève E_REGEX.",
+   st="IF REGEX_TESTE(Code, '^[0-9]{13}$$') THEN ... END_IF", c="regexec(&re, s, 0, NULL, 0) == 0;", cpp="std::regex_search(s, std::regex(motif));",
+   inc="None", incpp="Equivalent", essai=("BOOL", "REGEX_TESTE('PRES=7.5bar', 'PRES=[0-9.]+bar')", "TRUE"),
+   notes=["Grammaire ECMAScript (comme JavaScript), sensible à la casse. \\w \\d \\s travaillent sur les octets UTF-8 : pour les accents (Hélium), écris des classes explicites.",
+          "En ST, $ est le caractère d'échappement : écris l'ancre $ comme $$ (ou emploie le dialecte C / C++)."])
+fn(name="REGEX_TROUVE", cat="regex", params=[("TEXTE", "STRING", "le texte fouillé", False), ("MOTIF", "STRING", "le motif (ECMAScript)", False), ("GROUPE", "DINT", "0 = tout ; 1…9 : un groupe capturé", True)], ret="STRING",
+   short="La 1re correspondance (groupe 0 = tout ; 1…9 : un groupe entre parenthèses) ; '' si rien.",
+   st="Pression := TO_REAL(REGEX_TROUVE(Trame, 'PRES=([0-9.]+)bar', 1));", c="regexec avec des groupes (regmatch_t).", cpp="std::smatch m; std::regex_search(s, m, re); m[1].str();",
+   inc="None", incpp="Equivalent", essai=("STRING", "REGEX_TROUVE('PRES=7.5bar', 'PRES=([0-9.]+)bar', 1)", "7.5"))
+fn(name="REGEX_TROUVE_TOUT", cat="regex", params=[("TEXTE", "STRING", "le texte fouillé", False), ("MOTIF", "STRING", "le motif (ECMAScript)", False)], ret="LIST OF STRING",
+   short="Toutes les correspondances entières, dans l'ordre : une LIST OF STRING.",
+   st="Nombres := REGEX_TROUVE_TOUT(Ligne, '[0-9]+');", c="/* boucle sur regexec */", cpp="std::sregex_iterator(s.begin(), s.end(), re);",
+   inc="None", incpp="Equivalent", essai=("STRING", "JOIN(REGEX_TROUVE_TOUT('a1b22', '[0-9]+'), ',')", "1,22"))
+fn(name="REGEX_GROUPES", cat="regex", params=[("TEXTE", "STRING", "le texte fouillé", False), ("MOTIF", "STRING", "le motif (ECMAScript)", False)], ret="LIST OF STRING",
+   short="Les groupes capturés de la 1re correspondance (le groupe 1, puis 2…) : une LIST OF STRING.",
+   st="Champs := REGEX_GROUPES(Trame, '([0-9]+):([0-9]+)');", c="/* regmatch_t[1..] */", cpp="std::smatch m; std::regex_search(s, m, re);",
+   inc="None", incpp="Equivalent", essai=("STRING", "JOIN(REGEX_GROUPES('12-34', '([0-9]+)-([0-9]+)'), ',')", "12,34"))
+fn(name="REGEX_REMPLACE", cat="regex", params=[("TEXTE", "STRING", "le texte", False), ("MOTIF", "STRING", "le motif (ECMAScript)", False), ("REMPLACEMENT", "STRING", "$1…$9 rappellent un groupe", False)], ret="STRING",
+   short="Remplace toutes les correspondances du motif ($1…$9 rappellent un groupe capturé).",
+   st="Nom := REGEX_REMPLACE(Saisie, '[^A-Za-z0-9_]', '_');", c="/* pas de remplacement standard en C */", cpp="std::regex_replace(s, re, remplacement);",
+   inc="None", incpp="Equivalent", essai=("STRING", "REGEX_REMPLACE('a b', ' ', '_')", "a_b"))
+fn(name="REGEX_DECOUPE", cat="regex", params=[("TEXTE", "STRING", "le texte", False), ("MOTIF", "STRING", "le motif (ECMAScript)", False)], ret="LIST OF STRING",
+   short="Coupe TEXTE à chaque correspondance du MOTIF : une LIST OF STRING.",
+   st="Champs := REGEX_DECOUPE(Ligne, ';');", c="/* strtok, ou une boucle */", cpp="std::sregex_token_iterator(s.begin(), s.end(), re, -1);",
+   inc="None", incpp="Equivalent", essai=("STRING", "JOIN(REGEX_DECOUPE('a;b;c', ';'), '|')", "a|b|c"))
+fn(name="REGEX_VALIDE", cat="regex", params=[("MOTIF", "STRING", "le motif à tester", False)], ret="BOOL",
+   short="Vrai si le MOTIF est une expression régulière valide (à tester avant d'employer un motif saisi).",
+   st="IF REGEX_VALIDE(Saisie) THEN ... END_IF", c="regcomp(&re, motif, REG_EXTENDED) == 0;", cpp="try { std::regex r(motif); } catch (...) { /* invalide */ }",
+   inc="None", incpp="Equivalent", essai=("BOOL", "REGEX_VALIDE('[0-9]+')", "TRUE"))
 
 # ---------------------------------------------------------------- operateurs, instructions --
 OPS = [

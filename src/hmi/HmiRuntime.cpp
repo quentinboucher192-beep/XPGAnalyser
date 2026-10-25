@@ -608,6 +608,9 @@ public:
     std::string caughtCode(std::string_view m) override {
         const auto has = [&](std::string_view s) { return m.find(s) != std::string_view::npos; };
         const auto starts = [&](std::string_view s) { return m.rfind(s, 0) == 0; };
+        // 1.13.0 (lot donnees) : avant « absente » (E_CLE), car une valeur JSON absente reste une erreur JSON.
+        if (starts("REGEX") || has("motif invalide")) return "E_REGEX";
+        if (has("JSON")) return "E_JSON";
         if (has("division by zero") || has("modulo by zero")) return "E_DIVISION";
         if (starts("DYNAMIC_CAST") || starts("STATIC_CAST")) return "E_CONVERSION";
         if (has("hors des bornes")) return "E_BORNE";

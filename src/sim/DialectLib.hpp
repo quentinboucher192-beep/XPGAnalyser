@@ -125,9 +125,12 @@ struct EnumInfo {
     std::vector<std::string_view> values;     // dans l'ordre : leur rang est leur nombre
     std::string_view summary;
 };
-[[nodiscard]] const std::vector<EnumInfo>& dialectEnums();       // COMPARAISON, OPERATION, TRANSFORMATION
+[[nodiscard]] const std::vector<EnumInfo>& dialectEnums();       // COMPARAISON, OPERATION, TRANSFORMATION, JSON_Type
 // "COMPARAISON#Superieur" (sans casse, espaces autour admis) : 4. Faux : pas une de ces valeurs.
 bool dialectEnumValue(std::string_view literal, std::int64_t& out) noexcept;
+// 1.13.0 : un nom nu de valeur JSON_Type (JSON_Objet ... JSON_Absent) : son rang (0..6). Faux sinon.
+// Ces valeurs portent deja le prefixe « JSON_ » : elles s'ecrivent nues (JSON_TYPE(v) = JSON_Objet).
+bool jsonTypeValue(std::string_view name, std::int64_t& out) noexcept;
 
 // --------------------------------------------------------- les natives de la 1.12.7 ---
 struct NativeInfo {

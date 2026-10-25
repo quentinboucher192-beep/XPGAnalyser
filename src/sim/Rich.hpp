@@ -59,7 +59,8 @@ using TypeRef = std::shared_ptr<const TypeDesc>;
 
 struct TypeDesc {
     enum class Kind : std::uint8_t { Scalar, Array, Struct, Map, Ref, Pointer, Iterator, List, Tuple,
-                                     Callback /* 1.12.19 : members = parametres, element = retour (nul : aucun) */ };
+                                     Callback, /* 1.12.19 : members = parametres, element = retour (nul : aucun) */
+                                     Any /* 1.13.0 : une valeur JSON / dynamique - voir anyType() */ };
     Kind        kind{Kind::Scalar};
     Type        scalar{Type::Unknown};                              // Scalar
     std::vector<std::pair<std::int64_t, std::int64_t>> bounds;      // Array : [bas, haut] par dimension
@@ -96,6 +97,15 @@ struct TypeDesc {
 inline constexpr std::int64_t kRingMax = 100000;
 
 [[nodiscard]] TypeRef scalarType(Type t, std::string_view name = {});
+// 1.13.0 : ANY - une valeur JSON / dynamique. C'est un joker de compilation (le type statique) : a
+// l'execution, un Obj de Kind::Any est une BOITE qui porte une valeur de son vrai type -
+//   - items vide : pas de charge. `bound` vrai : JSON null ; `bound` faux : JSON absent (une cle qui manque) ;
+//   - items a un element : la charge concrete (un scalaire STRING/LREAL/LINT/BOOL, une MAP[STRING] OF ANY,
+//     une LIST OF ANY, un ARRAY, une structure...). Jamais une boite dans une boite.
+// Un objet JSON est une MAP[STRING] OF ANY, un tableau une LIST OF ANY : leurs cases sont des boites ANY.
+// Reserve au dialecte IHM (hmiDialect), jamais au ST de l'automate, comme LIST / MAP. Pas de place Modbus
+// (dynamic() est vrai) : en memoire de script / de l'IHM seulement.
+[[nodiscard]] TypeRef anyType();
 // Meme forme : memes dimensions et bornes, meme element, meme structure (par son nom).
 [[nodiscard]] bool sameType(const TypeDesc& a, const TypeDesc& b) noexcept;
 

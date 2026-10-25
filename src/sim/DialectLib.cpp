@@ -175,7 +175,8 @@ std::string_view cTypeName(std::string_view type) noexcept {
 
 bool elementaryTypeName(std::string_view name) noexcept {
     static constexpr std::string_view kOthers[] = {"STRING", "WSTRING", "CHAR", "WCHAR", "TIME", "LTIME", "DATE", "LDATE", "DT", "LDT",
-                                                   "TOD", "LTOD", "DATE_AND_TIME", "TIME_OF_DAY", "ARRAY", "LIST", "VECTOR", "MAP", "TUPLE"};
+                                                   "TOD", "LTOD", "DATE_AND_TIME", "TIME_OF_DAY", "ARRAY", "LIST", "VECTOR", "MAP", "TUPLE",
+                                                   "ANY"};   // 1.13.0 : ANY - une valeur JSON / dynamique (MAP[STRING] OF ANY, LIST OF ANY)
     if (typeRow(name)) return true;
     const std::string u = upper(trimmed(name));
     for (const auto o : kOthers)
@@ -536,8 +537,25 @@ const std::vector<EnumInfo>& dialectEnums() {
          "L'op\xC3\xA9ration des fonctions de std::numeric (ACCUMULATE, REDUCE, PARTIAL_SUM, les SCAN\xE2\x80\xA6)."},
         {"TRANSFORMATION", {"Identite", "Abs", "Carre", "Racine", "Neg", "Inverse"},
          "La transformation de chaque \xC3\xA9l\xC3\xA9ment (TRANSFORM_REDUCE, TRANSFORM_INCLUSIVE_SCAN, TRANSFORM_EXCLUSIVE_SCAN)."},
+        // 1.13.0 : le genre d'une valeur JSON, rendu par JSON_TYPE(v).
+        {"JSON_Type", {"JSON_Objet", "JSON_Liste", "JSON_Texte", "JSON_Nombre", "JSON_Bool", "JSON_Nul", "JSON_Absent"},
+         "Le genre d'une valeur JSON (JSON_TYPE) : JSON_Objet, JSON_Liste, JSON_Texte, JSON_Nombre, JSON_Bool, JSON_Nul (un null), JSON_Absent (une cl\xC3\xA9 qui manque)."},
     };
     return k;
+}
+
+bool jsonTypeValue(std::string_view name, std::int64_t& out) noexcept {
+    const std::string n = upper(trimmed(name));
+    for (const auto& en : dialectEnums()) {
+        if (en.name != "JSON_Type") continue;
+        for (std::size_t k = 0; k < en.values.size(); ++k)
+            if (upper(en.values[k]) == n) {
+                out = static_cast<std::int64_t>(k);
+                return true;
+            }
+        return false;
+    }
+    return false;
 }
 
 bool dialectEnumValue(std::string_view literal, std::int64_t& out) noexcept {
@@ -733,6 +751,27 @@ const std::vector<NativeInfo>& natives() {
         {"RESOURCE_SIZE", 1, 1, false, false, false, false, "fichiers", "RESOURCE_SIZE(NOM) : LINT", "Sa taille en octets ; -1 si le projet ne l'a pas."},
         {"RESOURCE_LIST", 0, 1, false, false, false, false, "fichiers", "RESOURCE_LIST([DOSSIER]) : LIST OF STRING", "Les noms des ressources du projet, rang\xC3\xA9s ; DOSSIER : celles d'un dossier de la liste des ressources."},
         {"RESOURCE_EXTRACT", 2, 2, false, false, false, false, "fichiers", "RESOURCE_EXTRACT(NOM, CHEMIN) : BOOL", "Copie une ressource du projet dans un fichier (pour un autre programme, un mod\xC3\xA8le \xC3\xA0 remplir)."},
+        // ---- 1.13.0 : JSON (local, du calcul en m\xC3\xA9moire ; lis le texte avec FILE_READ / RESOURCE_READ, puis JSON_LIRE)
+        {"JSON_LIRE", 1, 1, false, false, false, false, "json", "JSON_LIRE(TEXTE) : ANY", "Analyse un texte JSON : un objet devient une MAP[STRING] OF ANY, un tableau une LIST OF ANY ; un texte mal form\xC3\xA9 l\xC3\xA8ve E_JSON (la position cit\xC3\xA9" "e), que TRY\xE2\x80\xA6" "CATCH rattrape."},
+        {"JSON_ECRIRE", 1, 2, false, false, false, false, "json", "JSON_ECRIRE(VALEUR [, INDENTE]) : STRING", "\xC3\x89" "crit une valeur en JSON : une valeur ANY, une MAP / LIST / SET / ARRAY / TUPLE, une structure IHM (ses membres), ou un scalaire. INDENTE \xC3\xA0 TRUE : deux espaces par niveau ; sinon compact."},
+        {"JSON_NOMBRE", 1, 2, false, false, false, false, "json", "JSON_NOMBRE(ANY [, DEFAUT]) : REAL", "Le nombre port\xC3\xA9 par une valeur JSON. Avec DEFAUT : rendu si la valeur manque ou n'est pas un nombre ; sans lui, un mauvais genre l\xC3\xA8ve E_JSON."},
+        {"JSON_ENTIER", 1, 2, false, false, false, false, "json", "JSON_ENTIER(ANY [, DEFAUT]) : DINT", "L'entier port\xC3\xA9 par une valeur JSON (un r\xC3\xA9" "el est tronqu\xC3\xA9). DEFAUT si elle manque ou n'est pas un nombre ; sans lui, E_JSON."},
+        {"JSON_TEXTE", 1, 2, false, false, false, false, "json", "JSON_TEXTE(ANY [, DEFAUT]) : STRING", "Le texte port\xC3\xA9 par une valeur JSON. DEFAUT si elle manque ou n'est pas un texte ; sans lui, E_JSON."},
+        {"JSON_BOOL", 1, 2, false, false, false, false, "json", "JSON_BOOL(ANY [, DEFAUT]) : BOOL", "Le bool\xC3\xA9" "en port\xC3\xA9 par une valeur JSON. DEFAUT si elle manque ou n'est pas un bool\xC3\xA9" "en ; sans lui, E_JSON."},
+        {"JSON_TYPE", 1, 1, false, false, false, false, "json", "JSON_TYPE(ANY) : JSON_Type", "Le genre d'une valeur JSON : JSON_Objet, JSON_Liste, JSON_Texte, JSON_Nombre, JSON_Bool, JSON_Nul, JSON_Absent (une cl\xC3\xA9 qui manque)."},
+        {"JSON_A", 2, 2, false, false, false, false, "json", "JSON_A(OBJET, CLE) : BOOL", "Vrai si l'objet JSON a cette cl\xC3\xA9 (JSON_A(Config, 'version'))."},
+        {"JSON_EST_NUL", 1, 1, false, false, false, false, "json", "JSON_EST_NUL(ANY) : BOOL", "Vrai si la valeur JSON est un null (ou une cl\xC3\xA9 absente)."},
+        {"JSON_CLES", 1, 1, false, false, false, false, "json", "JSON_CLES(OBJET) : LIST OF STRING", "Les cl\xC3\xA9s d'un objet JSON, rang\xC3\xA9" "es : une LIST OF STRING."},
+        {"JSON_OBJET", 0, 0, false, false, false, false, "json", "JSON_OBJET() : ANY", "Un objet JSON vide (MAP[STRING] OF ANY) \xC3\xA0 remplir avec MAP_SET ou o['cl\xC3\xA9'] := \xE2\x80\xA6"},
+        {"JSON_LISTE", 0, 0, false, false, false, false, "json", "JSON_LISTE() : ANY", "Un tableau JSON vide (LIST OF ANY) \xC3\xA0 remplir avec LIST_ADD."},
+        // ---- 1.13.0 : expressions r\xC3\xA9guli\xC3\xA8res (grammaire ECMAScript, comme JavaScript ; \\w \\d \\s sur les octets UTF-8)
+        {"REGEX_TESTE", 2, 2, false, false, false, false, "regex", "REGEX_TESTE(TEXTE, MOTIF) : BOOL", "Vrai si le MOTIF se trouve quelque part dans TEXTE. ^ et $ pour exiger tout le texte. Un motif invalide l\xC3\xA8ve E_REGEX."},
+        {"REGEX_TROUVE", 2, 3, false, false, false, false, "regex", "REGEX_TROUVE(TEXTE, MOTIF [, GROUPE]) : STRING", "La 1re correspondance (GROUPE 0 = tout ; 1\xE2\x80\xA6" "9 : un groupe captur\xC3\xA9) ; '' si rien. Un motif invalide l\xC3\xA8ve E_REGEX."},
+        {"REGEX_TROUVE_TOUT", 2, 2, false, false, false, false, "regex", "REGEX_TROUVE_TOUT(TEXTE, MOTIF) : LIST OF STRING", "Toutes les correspondances enti\xC3\xA8res, dans l'ordre : une LIST OF STRING."},
+        {"REGEX_GROUPES", 2, 2, false, false, false, false, "regex", "REGEX_GROUPES(TEXTE, MOTIF) : LIST OF STRING", "Les groupes captur\xC3\xA9s de la 1re correspondance (le groupe 1, puis 2\xE2\x80\xA6) : une LIST OF STRING."},
+        {"REGEX_REMPLACE", 3, 3, false, false, false, false, "regex", "REGEX_REMPLACE(TEXTE, MOTIF, REMPLACEMENT) : STRING", "Remplace toutes les correspondances ($1\xE2\x80\xA6$9 rappellent un groupe captur\xC3\xA9)."},
+        {"REGEX_DECOUPE", 2, 2, false, false, false, false, "regex", "REGEX_DECOUPE(TEXTE, MOTIF) : LIST OF STRING", "Coupe TEXTE \xC3\xA0 chaque correspondance du MOTIF : une LIST OF STRING (REGEX_DECOUPE(ligne, ';'))."},
+        {"REGEX_VALIDE", 1, 1, false, false, false, false, "regex", "REGEX_VALIDE(MOTIF) : BOOL", "Vrai si le MOTIF est une expression r\xC3\xA9guli\xC3\xA8re valide (\xC3\xA0 tester avant d'employer un motif saisi)."},
     };
     return k;
 }

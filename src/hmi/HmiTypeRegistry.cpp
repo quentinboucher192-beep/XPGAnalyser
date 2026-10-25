@@ -666,9 +666,15 @@ Registry::Registry() {
     any.name = "ANY";
     any.category = Category::Generic;
     any.provenance = "IHM Studio";
-    any.doc = "N'importe quel type : le param\xC3\xA8tre prend ce qu'on lui donne.";
-    any.uses = UseParameter;
-    any.proposed = UseParameter;
+    // 1.13.0 (lot J3) : ANY porte une valeur JSON / dynamique - composable (MAP[STRING] OF ANY, LIST OF ANY,
+    // ARRAY OF ANY). Usable comme une declaration (VAR, locale, constante, parametre d'un code), un parametre
+    // de popup / symbole, un retour de fonction. PAS UseVariable ni UseOperand : une case ANY n'a pas d'adresse
+    // Modbus (elle est dynamic(), comme LIST / MAP) - elle vit en memoire de script / de l'IHM, jamais sur un
+    // equipement, et un objet / tableau dynamique n'est pas un operande scalaire.
+    any.doc = "ANY \xE2\x80\x94 une valeur JSON / dynamique : la case accepte tout (texte, nombre, bool, objet, tableau, nul) et "
+              "se lit avec les JSON_ (JSON_NOMBRE, JSON_TEXTE\xE2\x80\xA6), l'acc\xC3\xA8s ['cl\xC3\xA9'], [i]. Aussi le param\xC3\xA8tre \xC2\xAB n'importe quel type \xC2\xBB.";
+    any.uses = UseDeclaration | UseParameter | UseReturn;
+    any.proposed = UseDeclaration | UseParameter | UseReturn;
     entries_.push_back(std::move(any));
     Entry none;
     none.key = "void";

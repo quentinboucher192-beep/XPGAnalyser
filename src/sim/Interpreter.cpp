@@ -1,5 +1,6 @@
 #include "Interpreter.hpp"
 #include "DialectLib.hpp"   // 1.12.7 : templates, enumerations natives, natives des conteneurs
+#include "Json.hpp"         // 1.13.0 : JSON_LIRE / JSON_ECRIRE
 
 #include <algorithm>
 #include <cctype>
@@ -11,6 +12,7 @@
 #include <functional>
 #include <limits>
 #include <map>
+#include <regex>            // 1.13.0 : REGEX_* (grammaire ECMAScript)
 #include <set>
 #include <optional>
 #include <unordered_map>
@@ -1643,6 +1645,9 @@ private:
         if (peek().kind != Tok::Identifier) return error("expected a type");
         const std::string name = advance().raw;
         const std::string up = upperOf(name);
+        // 1.13.0 (dialecte IHM) : ANY - une valeur JSON / dynamique (composable : MAP[STRING] OF ANY, LIST OF ANY).
+        // ANY_NUM, ANY_STRUCT... restent des contraintes de TEMPLATE (lot generiques), lues ailleurs.
+        if (dialect_ && up == "ANY") return anyType();
         // STRING[20] : la longueur est acceptee (et ignoree).
         if (up == "STRING" && accept("[")) {
             if (peek().kind == Tok::Number) advance();
@@ -3338,6 +3343,7 @@ private:
         switch (t->kind) {
             case TypeDesc::Kind::Scalar:
             case TypeDesc::Kind::Iterator:
+            case TypeDesc::Kind::Any:             // 1.13.0 : une valeur JSON / dynamique, deja resolue
                 return t;
             case TypeDesc::Kind::Struct: {
                 if (!t->members.empty()) return t;
@@ -3702,11 +3708,72 @@ private:
     }
 
     // Ecrire une valeur dans un objet (copie).
+    // 1.13.0 : MAP[STRING] OF ANY (ou a cle entiere), le type d'un objet JSON.
+    static TypeRef mapAnyType(Type key) {
+        auto d = std::make_shared<TypeDesc>();
+        d->kind = TypeDesc::Kind::Map;
+        d->key = key == Type::Unknown ? Type::String : key;
+        d->element = anyType();
+        return d;
+    }
+    // 1.13.0 : ranger une valeur dans une case ANY (une boite JSON). Un litteral [..]/['cle':=..]/(..) prend
+    // sa forme JSON (LIST OF ANY / MAP[STRING] OF ANY, cases en boites ANY) ; un scalaire ou une valeur
+    // concrete est copie tel quel ; une autre valeur ANY est recopiee. La boite garde son type ANY.
+    bool storeIntoAny(Obj& box, const RV& v, std::string* why) {
+        box.textKeys.clear();
+        box.intKeys.clear();
+        if (!v.o) {                               // un scalaire
+            box.bound = true;
+            auto payload = makeObj(scalarType(v.v.type()));
+            payload->value = v.v;
+            box.items.assign(1, payload);
+            return true;
+        }
+        const Obj& from = *v.o;
+        if (from.type && from.type->kind == TypeDesc::Kind::Any)      // une autre valeur ANY (JSON)
+            return assignObj(box, from, why);
+        if (from.type && from.type->literal
+            && (from.type->kind == TypeDesc::Kind::List || from.type->kind == TypeDesc::Kind::Map
+                || from.type->kind == TypeDesc::Kind::Tuple)) {
+            auto holder = makeObj(from.type->kind == TypeDesc::Kind::Map ? mapAnyType(from.type->key) : listType(anyType()));
+            if (!store(*holder, v, why)) return false;    // fromSequence remplit des boites ANY
+            box.bound = true;
+            box.items.assign(1, holder);
+            return true;
+        }
+        box.bound = true;                         // une valeur concrete (MAP/LIST/ARRAY/structure, un scalaire objet)
+        box.items.assign(1, deepCopy(from));
+        return true;
+    }
+    // 1.13.0 : une boite ANY « absente » (une cle de JSON qui manque : JSON_Absent).
+    static ObjRef jsonAbsent() {
+        auto o = makeObj(anyType());
+        o->bound = false;
+        return o;
+    }
+    // 1.13.0 : le genre d'une valeur JSON, pour un message.
+    static std::string jsonKindWord(const Obj& box) {
+        if (box.type && box.type->kind == TypeDesc::Kind::Any && !box.items.empty() && box.items.front() && box.items.front()->type) {
+            const auto& p = *box.items.front();
+            switch (p.type->kind) {
+                case TypeDesc::Kind::Map: return "un objet";
+                case TypeDesc::Kind::List: return "un tableau";
+                case TypeDesc::Kind::Scalar:
+                    return p.value.type() == Type::String ? "un texte"
+                         : p.value.type() == Type::Bool ? "un bool\xC3\xA9" "en" : "un nombre";
+                default: return "une valeur";
+            }
+        }
+        return box.type && box.type->kind == TypeDesc::Kind::Any && box.bound ? "nulle (null)" : "absente";
+    }
+
     bool store(Obj& into, const RV& v, std::string* why) {
         if (!into.type) {
             if (why) *why = "variable sans type";
             return false;
         }
+        // 1.13.0 : une case ANY (une boite JSON) accepte toute valeur (litteral, scalaire, conteneur, ANY).
+        if (into.type->kind == TypeDesc::Kind::Any) return storeIntoAny(into, v, why);
         // 1.12.19 : un rappel recoit aussi le nom d'une fonction en texte ('Carre') - la maquette (decision 6).
         if (!v.o && into.type->kind == TypeDesc::Kind::Callback) return storeCallback(into, v, why);
         if (!v.o) {
@@ -4199,6 +4266,12 @@ private:
                     if (!t->obj) return Place{nullptr, t->name + "." + e.name, false, false};
                     p = *t;
                 }
+                // 1.13.0 : un membre (.Count, .First...) sur une valeur ANY ouvre sa boite JSON (un objet, un tableau).
+                if (p.obj->type && p.obj->type->kind == TypeDesc::Kind::Any) {
+                    if (p.obj->items.empty() || !p.obj->items.front())
+                        return dialectError("la valeur JSON est " + jsonKindWord(*p.obj) + " : '" + e.name + "' attend un objet ou un tableau");
+                    p = Place{p.obj->items.front(), {}, p.constant, p.temp};
+                }
                 const auto& type = *p.obj->type;
                 const std::string m = upperOf(e.name);
                 if (type.kind == TypeDesc::Kind::Struct || type.kind == TypeDesc::Kind::Tuple) {
@@ -4311,6 +4384,16 @@ private:
                     }
                     p = *t;
                 }
+                // 1.13.0 : [cle] / [i] sur une valeur ANY ouvre sa boite JSON (un objet, un tableau).
+                bool jsonBase = false;
+                if (p.obj->type && p.obj->type->kind == TypeDesc::Kind::Any) {
+                    if (p.obj->items.empty() || !p.obj->items.front()) {
+                        if (create) return dialectError("la valeur JSON est " + jsonKindWord(*p.obj) + " : pas un objet ni un tableau o\xC3\xB9 \xC3\xA9" "crire");
+                        return Place{jsonAbsent(), {}, true, true};     // lire dans un null / un absent : JSON_Absent
+                    }
+                    p = Place{p.obj->items.front(), {}, p.constant, p.temp};
+                    jsonBase = true;
+                }
                 const auto& type = *p.obj->type;
                 if (type.kind == TypeDesc::Kind::Array) {
                     std::vector<std::int64_t> idx;
@@ -4337,6 +4420,7 @@ private:
                         entry = it->second;
                     }
                     if (!entry) {
+                        if (jsonBase && !create) return Place{jsonAbsent(), {}, true, true};   // 1.13.0 : cle JSON absente -> JSON_Absent
                         if (!create)
                             return dialectError("cl\xC3\xA9 absente de la MAP : " + keyText(*isText, text, integer)
                                                 + " (MAP_HAS(m, cl\xC3\xA9) pour tester, MAP_GET(m, cl\xC3\xA9, d\xC3\xA9" "faut) pour une valeur par d\xC3\xA9" "faut)");
@@ -4474,6 +4558,9 @@ private:
                 // 1.12.7 : COMPARAISON#Superieur, OPERATION#Somme, TRANSFORMATION#Carre (si l'environnement ne
                 // les a pas lues : le rang de la valeur, un DINT).
                 if (std::int64_t n = 0; e.kind == Expr::Kind::Reference && lib::dialectEnumValue(*name, n))
+                    return RV{Value::integer(Type::DInt, n), nullptr};
+                // 1.13.0 : JSON_Objet ... JSON_Absent (nus) : le rang de la valeur JSON_Type (un DINT).
+                if (std::int64_t n = 0; e.kind == Expr::Kind::Reference && lib::jsonTypeValue(*name, n))
                     return RV{Value::integer(Type::DInt, n), nullptr};
                 if (!env_.exists(*name)) {
                     auto obj = materialize(*name);
@@ -6932,6 +7019,8 @@ private:
             return std::optional<core::Result<RV>>(valueNative(u, e));
         if (info->group == "utility") return std::optional<core::Result<RV>>(utilityNative(u, e));                    // 1.12.16
         if (info->group == "fichiers") return std::optional<core::Result<RV>>(fileNative(u, e));                     // 1.12.26
+        if (info->group == "json") return std::optional<core::Result<RV>>(jsonNative(u, e));                         // 1.13.0
+        if (info->group == "regex") return std::optional<core::Result<RV>>(regexNative(u, e));                       // 1.13.0
         if (info->group == "attente")                                                                                // 1.12.26
             return std::optional<core::Result<RV>>(u == "WAIT_UNTIL" ? waitUntilNative(e) : waitNative(u, e));       // 1.13.0
         return std::optional<core::Result<RV>>(listNative(u, *info, e));
@@ -8884,6 +8973,259 @@ private:
         return RV{Value::boolean(ok && r.number != 0), nullptr};
     }
 
+    // ======== 1.13.0 : JSON (lire, ecrire, acceder) - voir Json.cpp ==========
+    // La valeur JSON portee par un argument : la charge d'une boite ANY, ou l'objet / le scalaire tel quel.
+    // `scratch` porte un scalaire concret. jv.obj est nullptr pour un null / un absent (flags).
+    struct JsonView { const Obj* obj{nullptr}; bool isNull{false}; bool isAbsent{false}; };
+    JsonView jsonView(const ObjArg& a, Obj& scratch) {
+        JsonView jv;
+        if (a.isScalar) {
+            scratch.type = scalarType(a.scalar.type());
+            scratch.value = a.scalar;
+            jv.obj = &scratch;
+            return jv;
+        }
+        const Obj* o = a.obj.get();
+        if (o && o->type && o->type->kind == TypeDesc::Kind::Any) {
+            if (o->items.empty() || !o->items.front()) { (o->bound ? jv.isNull : jv.isAbsent) = true; return jv; }
+            jv.obj = o->items.front().get();
+            return jv;
+        }
+        jv.obj = o;
+        return jv;
+    }
+    static bool jsonIsNumber(const Obj* o) {
+        return o && o->type && o->type->kind == TypeDesc::Kind::Scalar && isNumeric(o->value.type())
+               && o->value.type() != Type::Time && !isDateType(o->value.type());
+    }
+    static std::string jsonPayloadWord(const JsonView& jv) {
+        if (jv.isAbsent) return "absente";
+        if (jv.isNull || !jv.obj || !jv.obj->type) return "nulle (null)";
+        switch (jv.obj->type->kind) {
+            case TypeDesc::Kind::Map: case TypeDesc::Kind::Struct: return "un objet";
+            case TypeDesc::Kind::List: case TypeDesc::Kind::Array: case TypeDesc::Kind::Tuple: return "un tableau";
+            case TypeDesc::Kind::Scalar:
+                return jv.obj->value.type() == Type::String ? "un texte"
+                     : jv.obj->value.type() == Type::Bool ? "un bool\xC3\xA9" "en" : "un nombre";
+            default: return "une valeur";
+        }
+    }
+    core::Result<RV> jsonNative(const std::string& u, const Expr& e) {
+        const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
+        if (u == "JSON_OBJET") return RV{{}, makeObj(mapAnyType(Type::String))};
+        if (u == "JSON_LISTE") return RV{{}, makeObj(listType(anyType()))};
+        if (u == "JSON_LIRE") {
+            auto v = rich(arg(0));
+            if (!v) return v;
+            if (v->o || v->v.type() != Type::String)
+                return dialectError("JSON_LIRE : un texte JSON est attendu, pas " + (v->o ? "un " + typeNameOf(*v) : v->v.display()));
+            JsonStatus st;
+            auto obj = parseJson(v->v.asString(), st);
+            if (!obj) return dialectError(st.message);                   // E_JSON (« JSON mal forme (position ...) »)
+            return RV{{}, obj};
+        }
+        if (u == "JSON_ECRIRE") {
+            auto a = objArg(arg(0));
+            if (!a) return core::Err<core::Error>(a.error());
+            bool indent = false;
+            if (e.arguments.size() > 1) {
+                auto ind = boolArg(u, arg(1));
+                if (!ind) return core::Err<core::Error>(ind.error());
+                indent = *ind;
+            }
+            Obj scratch;
+            const Obj* value = nullptr;
+            if (a->isScalar) { scratch.type = scalarType(a->scalar.type()); scratch.value = a->scalar; value = &scratch; }
+            else value = a->obj.get();
+            if (!value || !value->type) return dialectError("JSON_ECRIRE : il n'y a rien \xC3\xA0 \xC3\xA9" "crire");
+            std::string out;
+            JsonStatus st;
+            if (!writeJson(*value, indent, out, st)) return dialectError("JSON_ECRIRE : " + st.message);
+            return RV{Value::text(std::move(out)), nullptr};
+        }
+        auto a = objArg(arg(0));
+        if (!a) return core::Err<core::Error>(a.error());
+        Obj scratch;
+        JsonView jv = jsonView(*a, scratch);
+        if (u == "JSON_TYPE") {
+            std::int64_t rank = 5;                                       // JSON_Nul par defaut
+            if (jv.isAbsent) rank = 6;                                   // JSON_Absent
+            else if (jv.isNull || !jv.obj || !jv.obj->type) rank = 5;    // JSON_Nul
+            else switch (jv.obj->type->kind) {
+                case TypeDesc::Kind::Map: case TypeDesc::Kind::Struct: rank = 0; break;                              // JSON_Objet
+                case TypeDesc::Kind::List: case TypeDesc::Kind::Array: case TypeDesc::Kind::Tuple: rank = 1; break;  // JSON_Liste
+                case TypeDesc::Kind::Scalar:
+                    rank = jv.obj->value.type() == Type::String ? 2 : jv.obj->value.type() == Type::Bool ? 4 : jsonIsNumber(jv.obj) ? 3 : 2;
+                    break;
+                default: rank = 5; break;
+            }
+            return RV{Value::integer(Type::DInt, rank), nullptr};
+        }
+        if (u == "JSON_EST_NUL") return RV{Value::boolean(jv.isNull || jv.isAbsent), nullptr};
+        if (u == "JSON_A") {
+            auto key = rich(arg(1));
+            if (!key) return key;
+            if (key->o || key->v.type() != Type::String)
+                return dialectError("JSON_A : la cl\xC3\xA9 est un texte, pas " + (key->o ? "un " + typeNameOf(*key) : key->v.display()));
+            const bool has = jv.obj && jv.obj->type && jv.obj->type->kind == TypeDesc::Kind::Map
+                             && jv.obj->textKeys.count(key->v.asString()) > 0;
+            return RV{Value::boolean(has), nullptr};
+        }
+        if (u == "JSON_CLES") {
+            auto out = makeObj(listType(scalarType(Type::String)));
+            if (jv.obj && jv.obj->type && jv.obj->type->kind == TypeDesc::Kind::Map) {
+                for (const auto& [k, val] : jv.obj->textKeys) { (void)val; auto it = makeObj(scalarType(Type::String)); it->value = Value::text(k); out->items.push_back(it); }
+                for (const auto& [k, val] : jv.obj->intKeys) { (void)val; auto it = makeObj(scalarType(Type::String)); it->value = Value::text(std::to_string(k)); out->items.push_back(it); }
+            }
+            return RV{{}, out};
+        }
+        // JSON_NOMBRE / JSON_ENTIER / JSON_TEXTE / JSON_BOOL : la valeur si elle est du bon genre, sinon le defaut, sinon E_JSON.
+        const bool hasDefault = e.arguments.size() > 1;
+        const bool wantText = u == "JSON_TEXTE", wantBool = u == "JSON_BOOL";
+        const bool matches = jv.obj && jv.obj->type && jv.obj->type->kind == TypeDesc::Kind::Scalar
+            && (wantText ? jv.obj->value.type() == Type::String : wantBool ? jv.obj->value.type() == Type::Bool : jsonIsNumber(jv.obj));
+        const auto deliver = [&](const Value& val) -> core::Result<RV> {
+            if (u == "JSON_NOMBRE") return RV{Value::real(val.asReal()), nullptr};
+            if (u == "JSON_ENTIER") return RV{Value::integer(Type::DInt, val.type() == Type::Real ? static_cast<std::int64_t>(val.asReal()) : val.asInteger()), nullptr};
+            if (u == "JSON_TEXTE") return RV{val.type() == Type::String ? val : Value::text(val.display()), nullptr};
+            return RV{Value::boolean(val.isTruthy()), nullptr};          // JSON_BOOL
+        };
+        if (matches) return deliver(jv.obj->value);
+        if (hasDefault) {
+            auto d = rich(arg(1));
+            if (!d) return d;
+            if (d->o) return dialectError(u + " : le d\xC3\xA9" "faut est une valeur simple, pas un " + typeNameOf(*d));
+            return deliver(d->v);
+        }
+        const std::string want = (u == "JSON_NOMBRE" || u == "JSON_ENTIER") ? "un nombre" : wantText ? "un texte" : "un bool\xC3\xA9" "en";
+        return dialectError("la valeur JSON est " + jsonPayloadWord(jv) + ", pas " + want + " \xE2\x80\x94 ajoute un d\xC3\xA9" "faut (" + u + "(v, \xE2\x80\xA6)) pour l'\xC3\xA9viter");
+    }
+
+    // ======== 1.13.0 : expressions regulieres (<regex>, grammaire ECMAScript) =====
+    // Valide un motif SANS construire std::regex (la libc++ wasm est sans exceptions : un motif invalide y
+    // ferait planter la page). Conservateur : rejette ce que std::regex rejette (parentheses / crochets non
+    // fermes, \\ final, quantificateur sans rien a repeter), accepte les motifs courants.
+    static bool regexValidate(const std::string& p, std::string& why) {
+        if (p.size() > 2000) { why = "motif trop long (plus de 2000 caract\xC3\xA8res)"; return false; }
+        int paren = 0;
+        bool inClass = false;
+        std::size_t classStart = 0;
+        for (std::size_t i = 0; i < p.size(); ++i) {
+            const char c = p[i];
+            if (c == '\\') {
+                if (i + 1 >= p.size()) { why = "un \\ final sans caract\xC3\xA8re \xC3\xA0 \xC3\xA9" "chapper (position " + std::to_string(i) + ")"; return false; }
+                ++i;                                       // saute le caractere echappe
+                continue;
+            }
+            if (inClass) {
+                if (c == ']' && i != classStart) inClass = false;        // [] : un ] en 1re position reste dans la classe
+                continue;
+            }
+            if (c == '[') { inClass = true; classStart = i + 1; continue; }
+            if (c == '(') { ++paren; continue; }
+            if (c == ')') {
+                if (paren == 0) { why = "parenth\xC3\xA8se fermante ')' sans ouvrante (position " + std::to_string(i) + ")"; return false; }
+                --paren;
+                continue;
+            }
+            if (c == '*' || c == '+' || c == '?') {
+                const char prev = i == 0 ? '\0' : p[i - 1];
+                // '?' juste apres '(' : un modificateur de groupe ((?:…), (?=…), (?!…)), pas un quantificateur.
+                const bool groupModifier = c == '?' && prev == '(';
+                if (!groupModifier && (prev == '\0' || prev == '(' || prev == '|'))
+                    { why = "rien \xC3\xA0 r\xC3\xA9p\xC3\xA9ter avant '" + std::string(1, c) + "' (position " + std::to_string(i) + ")"; return false; }
+                if ((prev == '*' || prev == '+' || prev == '?') && c != '?')
+                    { why = "quantificateur en double (position " + std::to_string(i) + ")"; return false; }
+            }
+        }
+        if (inClass) { why = "une classe '[' n'est pas ferm\xC3\xA9" "e (il manque ])"; return false; }
+        if (paren != 0) { why = "une parenth\xC3\xA8se '(' n'est pas ferm\xC3\xA9" "e (il manque " + std::to_string(paren) + " fois ')')"; return false; }
+        return true;
+    }
+    const std::regex* regexCompile(const std::string& pattern, std::string& why) {
+        if (const auto it = regexCache_.find(pattern); it != regexCache_.end()) return &it->second;
+        if (!regexValidate(pattern, why)) return nullptr;                // WASM-safe : pas de construction d'un motif invalide
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
+        try {
+            auto [it, ok] = regexCache_.emplace(pattern, std::regex(pattern, std::regex::ECMAScript));
+            (void)ok;
+            return &it->second;
+        } catch (const std::exception& ex) {
+            why = std::string("motif invalide : ") + ex.what();
+            return nullptr;
+        }
+#else
+        auto [it, ok] = regexCache_.emplace(pattern, std::regex(pattern, std::regex::ECMAScript));
+        (void)ok;
+        return &it->second;
+#endif
+    }
+    core::Result<RV> regexNative(const std::string& u, const Expr& e) {
+        const auto arg = [&](std::size_t k) -> const Expr& { return *e.arguments[k].second; };
+        const auto text = [&](std::size_t k, const char* what) -> core::Result<std::string> {
+            auto v = rich(arg(k));
+            if (!v) return core::Err<core::Error>(v.error());
+            if (v->o || v->v.type() != Type::String)
+                return dialectError(u + " : " + what + " est un texte, pas " + (v->o ? "un " + typeNameOf(*v) : v->v.display()));
+            return v->v.asString();
+        };
+        if (u == "REGEX_VALIDE") {
+            auto pat = text(0, "le motif");
+            if (!pat) return core::Err<core::Error>(pat.error());
+            std::string why;
+            return RV{Value::boolean(regexValidate(*pat, why)), nullptr};
+        }
+        auto subject = text(0, "le texte");
+        if (!subject) return core::Err<core::Error>(subject.error());
+        auto pat = text(1, "le motif");
+        if (!pat) return core::Err<core::Error>(pat.error());
+        std::string why;
+        const std::regex* re = regexCompile(*pat, why);
+        if (!re) return dialectError("REGEX : motif invalide \xE2\x80\x94 " + why);   // E_REGEX
+        const std::string& s = *subject;
+        const auto strList = [&](std::vector<std::string> items) {
+            auto out = makeObj(listType(scalarType(Type::String)));
+            for (auto& x : items) { auto it = makeObj(scalarType(Type::String)); it->value = Value::text(std::move(x)); out->items.push_back(it); }
+            return core::Result<RV>(RV{{}, out});
+        };
+        if (u == "REGEX_TESTE") return RV{Value::boolean(std::regex_search(s, *re)), nullptr};
+        if (u == "REGEX_REMPLACE") {
+            auto rep = text(2, "le remplacement");
+            if (!rep) return core::Err<core::Error>(rep.error());
+            return RV{Value::text(std::regex_replace(s, *re, *rep)), nullptr};
+        }
+        if (u == "REGEX_TROUVE") {
+            int group = 0;
+            if (e.arguments.size() > 2) {
+                auto g = intArg(u, arg(2), "le groupe");
+                if (!g) return core::Err<core::Error>(g.error());
+                group = static_cast<int>(*g);
+            }
+            std::smatch m;
+            if (!std::regex_search(s, m, *re)) return RV{Value::text(std::string{}), nullptr};
+            if (group < 0 || static_cast<std::size_t>(group) >= m.size()) return RV{Value::text(std::string{}), nullptr};
+            return RV{Value::text(m[static_cast<std::size_t>(group)].str()), nullptr};
+        }
+        if (u == "REGEX_TROUVE_TOUT") {
+            std::vector<std::string> all;
+            for (auto it = std::sregex_iterator(s.begin(), s.end(), *re); it != std::sregex_iterator(); ++it) all.push_back(it->str());
+            return strList(std::move(all));
+        }
+        if (u == "REGEX_GROUPES") {
+            std::vector<std::string> groups;
+            std::smatch m;
+            if (std::regex_search(s, m, *re))
+                for (std::size_t k = 1; k < m.size(); ++k) groups.push_back(m[k].str());
+            return strList(std::move(groups));
+        }
+        if (u == "REGEX_DECOUPE") {
+            std::vector<std::string> parts;
+            for (std::sregex_token_iterator it(s.begin(), s.end(), *re, -1), end; it != end; ++it) parts.push_back(*it);
+            return strList(std::move(parts));
+        }
+        return dialectError(u + " : fonction regex inconnue");
+    }
+
     // ---- LIST_TRANSFORM(SOURCE, DESTINATION, OP) : DESTINATION videe, puis un resultat par element ; rend leur nombre.
     // OP : une TRANSFORMATION (TRANSFORMATION#Carre...), ou le nom d'une fonction (du script, du projet) a un parametre.
     core::Result<RV> transformList(const std::string& u, const ObjArg& src, const Expr& destination, const Expr& opx, std::uint32_t line) {
@@ -9028,6 +9370,8 @@ private:
     // 1.13.0 : WAIT_UNTIL seul en instruction (sa valeur est ignoree) : un delai depasse LEVE
     // E_ATTENTE ; employe (IF, affectation, argument) : il rend FALSE sans erreur.
     bool                             waitUntilIgnored_{false};
+    // 1.13.0 : les motifs regex deja compiles (std::regex est lent : on les garde par chaine).
+    std::map<std::string, std::regex> regexCache_;
 };
 
 } // namespace

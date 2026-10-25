@@ -6775,6 +6775,7 @@ f << heure << ';' << Niveau << ';' << Debit << '\n';
 ```
 - **Un échec ne coupe pas le script** : la fonction rend FALSE, '' ou -1, `FILE_ERROR()` dit pourquoi (un fichier introuvable, ouvert par un autre programme, un disque plein), et la Console le dit une fois.
 - **Les fichiers du projet** (ihm/, project.xpgproj) ne s'écrivent, ne se déplacent ni ne se suppriment par un script. Dans une expression (fx), les natives de fichiers lisent seulement : `{RESOURCE_READ('consignes.txt')}` dans un texte.
+- **Puis les données** : un `.json` lu se parse avec `JSON_LIRE` (une valeur ANY, lue par clé et par indice) ; une trame texte se fouille au motif avec les `REGEX_` — voir « JSON et expressions régulières dans les scripts ».
 @nouveau 1.10
 ### Le langage des scripts (1.10)
 - Un script déclare ses **fonctions internes** (FUNCTION ... END_FUNCTION), passe ses paramètres par valeur, par **référence** ou par **pointeur**, emploie des tableaux à N dimensions, des **MAP** parcourues par FOR EACH et des **énumérations** : voir « Les fonctions internes d'un script », « MAP et itérateurs : FOR EACH », « Le ST de l'IHM et celui de l'automate ».
@@ -7199,6 +7200,116 @@ borner(&debit, 120.0f);
 - **Membres et cases** : `p^.Debit`, `p^[3]`, et pour une référence `r.Debit` (suivie toute seule).
 > Pas d'arithmétique de pointeurs : pour parcourir un tableau, prends ses cases (`t[i]`) ou FOR EACH.
 
+== donnees-scripts | JSON et expressions régulières dans les scripts
+: Tes scripts lisent et écrivent du JSON, et fouillent un texte au motif, directement — tout en local, sans réseau. Un fichier ou une ressource JSON se lit en une valeur **ANY** (`JSON_LIRE`), s'interroge par clé et par indice ; une trame texte se découpe au motif (`REGEX_`).
+@mots JSON, JSON_LIRE, JSON_ECRIRE, JSON_NOMBRE, JSON_TEXTE, JSON_BOOL, JSON_ENTIER, JSON_TYPE, JSON_A, JSON_CLES, ANY, REGEX, REGEX_TESTE, REGEX_TROUVE, REGEX_REMPLACE, REGEX_DECOUPE, REGEX_VALIDE, motif, expression régulière, expression reguliere
+@lieux scripts, fonctions
+@voir scripts, erreurs-scripts, enum-scripts, champs-expressions, fonctions, map-iterateurs
+### Le type ANY : une valeur dynamique
+Une case **ANY** porte n'importe quoi à l'exécution : un texte, un nombre, un booléen, un objet, un tableau, ou nul. C'est le type d'une **valeur JSON**. Un objet JSON devient une `MAP[STRING] OF ANY`, un tableau une `LIST OF ANY` ; on les lit par clé (`v['gaz']`), par indice (`v[0]`) et `.Count`, comme une MAP et une liste. Une case ANY n'a pas d'adresse sur un équipement : elle vit en mémoire de script ou dans une variable IHM non liée (comme une LIST, une MAP).
+### Lire un JSON
+Lis le texte avec `FILE_READ` (un fichier) ou `RESOURCE_READ` (une ressource du projet), puis `JSON_LIRE` ; les accesseurs sûrs rendent la valeur ou un défaut.
+```ST
+VAR
+    Recettes : LIST OF ANY;
+    i        : DINT;
+END_VAR
+Recettes := JSON_LIRE(FILE_READ('recettes_gaz.json'));   (* un tableau JSON *)
+FOR i := 0 TO Recettes.Count - 1 DO
+    IF JSON_BOOL(Recettes[i]['actif'], FALSE) THEN
+        Consigne_Pression := JSON_NOMBRE(Recettes[i]['pression']);   (* ANY -> REAL *)
+        Nom_Gaz           := JSON_TEXTE(Recettes[i]['gaz'], '?');
+    END_IF;
+END_FOR;
+```
+```C
+/* un analyseur JSON de la cible (cJSON) */
+cJSON *recettes = cJSON_Parse(texte), *it;
+cJSON_ArrayForEach(it, recettes)
+    if (cJSON_IsTrue(cJSON_GetObjectItem(it, "actif")))
+        Consigne_Pression = cJSON_GetObjectItem(it, "pression")->valuedouble;
+```
+```C++
+// <nlohmann/json.hpp>
+auto recettes = nlohmann::json::parse(texte);
+for (auto& it : recettes)
+    if (it.value("actif", false))
+        Consigne_Pression = it.value("pression", 0.0);
+```
+- `JSON_NOMBRE`, `JSON_ENTIER`, `JSON_TEXTE`, `JSON_BOOL` prennent un **défaut** facultatif : avec lui, une valeur absente ou du mauvais genre rend le défaut, sans erreur ; sans lui, elle lève `E_JSON`, rattrapable par TRY … CATCH.
+- Une **clé absente** rend `JSON_Absent` (pas d'erreur) ; `JSON_A(obj, 'clé')` teste sa présence, `JSON_TYPE(v)` donne son genre (`JSON_Objet`, `JSON_Liste`, `JSON_Texte`, `JSON_Nombre`, `JSON_Bool`, `JSON_Nul`, `JSON_Absent`), `JSON_CLES(obj)` la liste des clés.
+### Construire et écrire un JSON
+On construit avec les littéraux du dialecte (`[..]`, `['clé' := ..]`) : pas de nouvelle syntaxe. `JSON_ECRIRE` accepte une valeur ANY, une MAP / LIST / TUPLE, une structure IHM (ses membres) ou un scalaire.
+```ST
+VAR Etat : MAP[STRING] OF ANY; END_VAR
+Etat['armoire']  := 'A';
+Etat['pression'] := Mesure_Pression;         (* un REAL dans une case ANY *)
+Etat['alarmes']  := [Al_Haute, Al_Basse];    (* une liste -> tableau JSON *)
+FILE_WRITE('etat_armoire.json', JSON_ECRIRE(Etat, TRUE));   (* TRUE : indenté *)
+```
+```C
+/* composer l'objet, puis l'ecrire (cJSON) */
+cJSON *etat = cJSON_CreateObject();
+cJSON_AddStringToObject(etat, "armoire", "A");
+cJSON_AddNumberToObject(etat, "pression", Mesure_Pression);
+char *texte = cJSON_Print(etat);   /* puis fopen / fwrite */
+```
+```C++
+nlohmann::json etat;
+etat["armoire"]  = "A";
+etat["pression"] = Mesure_Pression;
+etat["alarmes"]  = {Al_Haute, Al_Basse};
+std::ofstream("etat_armoire.json") << etat.dump(2);
+```
+> `JSON_OBJET()` et `JSON_LISTE()` rendent un objet ou un tableau vide à remplir ; un REAL infini ou NAN, une référence, un rappel ne se mettent pas en JSON (le message le dit).
+### Fouiller un texte au motif (REGEX_)
+La grammaire est **ECMAScript** (comme JavaScript), sensible à la casse. `REGEX_TESTE` cherche partout ; `^` et `$` exigent tout le texte. `REGEX_TROUVE` rend la correspondance entière (groupe 0) ou un groupe capturé ; `REGEX_REMPLACE` remplace tout (`$1`…`$9` rappellent un groupe) ; `REGEX_DECOUPE` coupe au motif.
+```ST
+VAR Trame : STRING := 'PRES=7.5bar;DEBIT=12.3'; END_VAR
+IF REGEX_TESTE(Trame, 'PRES=([0-9.]+)bar') THEN
+    Pression := TO_REAL(REGEX_TROUVE(Trame, 'PRES=([0-9.]+)bar', 1));   (* groupe 1 *)
+END_IF;
+Nom := REGEX_REMPLACE(Saisie, '[^A-Za-z0-9_]', '_');   (* nettoyer un nom *)
+```
+```C
+/* <regex.h> : regcomp / regexec */
+regex_t re; regcomp(&re, "PRES=([0-9.]+)bar", REG_EXTENDED);
+regmatch_t m[2];
+if (regexec(&re, trame, 2, m, 0) == 0) { /* m[1] : le groupe 1 */ }
+```
+```C++
+std::smatch m;
+if (std::regex_search(trame, m, std::regex("PRES=([0-9.]+)bar")))
+    Pression = std::stod(m[1].str());
+Nom = std::regex_replace(Saisie, std::regex("[^A-Za-z0-9_]"), "_");
+```
+- En **ST**, `$` est le caractère d'échappement d'une chaîne : écris l'ancre `$` comme `$$` (`'^[0-9]{13}$$'` pour un EAN-13 complet), ou emploie le dialecte C / C++, où `$` est ordinaire.
+- `\w`, `\d`, `\s` travaillent sur les octets UTF-8 : pour les lettres accentuées (Hélium), écris des classes explicites. `REGEX_VALIDE(motif)` teste un motif saisi avant de l'employer ; un motif invalide lève `E_REGEX`.
+### Gérer une erreur de données
+`JSON_LIRE` sur un texte mal formé, ou un accesseur de mauvais type sans défaut, lève une erreur claire et **rattrapable** (`e.Code` = `E_JSON`, `e.Message` cite la position). Un motif invalide lève `E_REGEX`.
+```ST
+TRY
+    Params := JSON_LIRE(FILE_READ('parametres.json'));
+CATCH e
+    IHM_LOG(WARNING, CONCAT('Paramètres illisibles : ', e.Message));
+    Params := JSON_LIRE('{}');   (* un objet vide, on repart proprement *)
+END_TRY;
+```
+```C
+/* en C, pas d'exception : on verifie le resultat de l'analyse */
+cJSON *params = cJSON_Parse(texte);
+if (!params) { ihm_log("Parametres illisibles"); params = cJSON_CreateObject(); }
+```
+```C++
+try {
+    params = nlohmann::json::parse(texte);
+} catch (const std::exception& e) {
+    ihm_log(std::string("Parametres illisibles : ") + e.what());
+    params = nlohmann::json::object();
+}
+```
+> Dans une expression de champ (fx), les natives JSON_ et REGEX_ se lisent (lecture seule) : `{JSON_TEXTE(JSON_LIRE(RESOURCE_READ('ui.json'))['titre'])}`. Sur la page web, `FILE_READ` reste bloqué, mais `RESOURCE_READ` marche : le JSON et le regex tournent entièrement dans la page.
+
 == enum-scripts | Les énumérations dans les scripts et les fonctions
 : Une énumération IHM (T_MODE : Arret, Auto, Manu, Defaut) s'emploie dans les scripts et les fonctions : le littéral T_MODE#Auto, les comparaisons, CASE sur ses valeurs, FOR EACH v IN T_MODE, en variable, en paramètre, en retour, en case de tableau, en clé de MAP ; TO_DINT(m) donne son nombre, TO_T_MODE(2) l'inverse (contrôlé), TO_STRING(m) et TO_T_MODE('texte') passent par son toString et son fromString.
 @depuis 1.10
@@ -7273,6 +7384,8 @@ for (T_MODE v : {T_MODE::Arret, T_MODE::Auto, T_MODE::Manu, T_MODE::Defaut}) jou
 | `TO_UPPER(s)`, `TO_LOWER(s)` | le texte en MAJUSCULES, en minuscules (pour comparer sans casse) | `std::toupper` |
 - toString et fromString sont deux **opérateurs** du type, préremplis à sa création et modifiables comme tout script (voir « Les opérateurs »).
 - Les conversions de base s'écrivent aussi sans préfixe : `TO_REAL(5)`, `TO_STRING(3.5)`, `TO_DINT('12')`.
+### Les énumérations natives
+Certaines fonctions rendent ou prennent une **énumération native** : `COMPARAISON#Superieur`, `OPERATION#Somme` (les fonctions de listes), et `JSON_Type` que rend `JSON_TYPE(v)` — ses valeurs portent le préfixe `JSON_`, donc s'écrivent nues : `IF JSON_TYPE(v) = JSON_Objet THEN …`. Les genres : `JSON_Objet`, `JSON_Liste`, `JSON_Texte`, `JSON_Nombre`, `JSON_Bool`, `JSON_Nul`, `JSON_Absent` (voir « JSON et expressions régulières dans les scripts »).
 ### Pointeurs, références, tableaux
 ```ST
 FUNCTION Libelle(p : POINTER TO T_MODE) : STRING
@@ -7775,8 +7888,9 @@ Dans l'éditeur de scripts de l'IHM, l'aide à la saisie connaît aussi les nouv
 - les **fonctions internes du script** (`FUNCTION Moyenne(t : ARRAY[0..9] OF REAL) : REAL … END_FUNCTION`), déclarées plus haut ou plus bas, avec leur signature ; le choix insère `Moyenne()` et place le curseur entre les parenthèses ;
 - les fonctions des dictionnaires `MAP_HAS`, `MAP_REMOVE`, `MAP_SIZE`, `MAP_BEGIN`, `MAP_NEXT`, et `ADR`, `SIZEOF`, `NULL` ;
 - les modèles `FOR EACH cle, valeur IN … DO … END_FOR` et `FUNCTION … END_FUNCTION` ;
-- après `x :` dans une déclaration : les types `MAP[STRING] OF …`, `ARRAY[0..…] OF …`, `REF_TO …`, `REFERENCE TO …`, `POINTER TO …` ;
+- après `x :` dans une déclaration : les types `MAP[STRING] OF …`, `ARRAY[0..…] OF …`, `REF_TO …`, `REFERENCE TO …`, `POINTER TO …`, et **ANY** (une valeur JSON / dynamique : `LIST OF ANY`, `MAP[STRING] OF ANY`) ;
 - après `t.` (un tableau) : `Length`.
+- les familles **JSON_** et **REGEX_** (voir « JSON et expressions régulières dans les scripts ») ; après une valeur **ANY**, l'aide propose `['clé']`, `[i]`, `.Count` et les accesseurs `JSON_NOMBRE`, `JSON_TEXTE`, `JSON_BOOL`, `JSON_ENTIER` (les clés exactes restent inconnues, donc pas de membres devinés). Les natives JSON_ et REGEX_ se lisent aussi dans une case fx (lecture seule) : `{JSON_TEXTE(JSON_LIRE(RESOURCE_READ('ui.json'))['titre'])}`.
 Ces mots ne sont proposés que dans les scripts de l'IHM, pas dans les champs ni dans le programme de l'automate.
 
 = Programmer › Variables système et d'instances

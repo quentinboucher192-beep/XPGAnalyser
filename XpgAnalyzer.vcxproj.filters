@@ -173,6 +173,9 @@
       <Filter>xls</Filter>
     </ClCompile>
     <ClCompile Include="src\sim\DialectLib.cpp">
+    <ClCompile Include="src\sim\Json.cpp">
+      <Filter>sim</Filter>
+    </ClCompile>
       <Filter>sim</Filter>
     </ClCompile>
     <ClCompile Include="src\sim\Interpreter.cpp">
@@ -1679,6 +1682,9 @@
       <Filter>xls</Filter>
     </ClInclude>
     <ClInclude Include="src\sim\DialectLib.hpp">
+    <ClInclude Include="src\sim\Json.hpp">
+      <Filter>sim</Filter>
+    </ClInclude>
       <Filter>sim</Filter>
     </ClInclude>
     <ClInclude Include="src\sim\Interpreter.hpp">

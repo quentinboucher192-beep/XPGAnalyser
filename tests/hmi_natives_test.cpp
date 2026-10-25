@@ -598,7 +598,7 @@ void rangement1217() {
     check(homeBad == 0, "homeOf : le dossier qui la garde");
     check(mixed == 0, "un dossier a sous-dossiers ne garde aucune fonction (" + std::to_string(mixed) + ")");
     check(empty == 0, "aucun dossier vide");
-    check(nt::shelves().front().folders.size() == 9, "neuf themes (1.12.26 : Fichiers)");
+    check(nt::shelves().front().folders.size() == 10, "dix themes (1.13.0 : Donnees - JSON et expressions regulieres)");
     check(nt::shelves().front().total == nt::functions().size() + nt::conversions().size(), "Fonctions : toutes, X_TO_Y compris");
     std::size_t over = 0;
     for (const auto& s : nt::shelves())
