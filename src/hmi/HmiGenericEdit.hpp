@@ -59,5 +59,9 @@ Report applyToType(Project&, Id typeId, const std::vector<GenericParam>& after);
 // La vue `viewId` (un symbole, une popup) prend `after` ; ses parametres, ses declarations, ses instances et ses
 // ouvertures suivent.
 Report applyToView(Project&, Id viewId, const std::vector<GenericParam>& after);
+// 1.13.0 : la fonction `fnId` (du projet, ou d'une vue / popup / symbole) prend `after` ; ses parametres, son retour,
+// ses locales et son corps suivent (renommage T -> U ; un retire prend le type que lui donnaient ses appels), et les
+// types donnes a ses appels (Max<REAL>(...)) sont reecrits, retires ou ajoutes partout dans le code.
+Report applyToFunction(Project&, Id fnId, const std::vector<GenericParam>& after);
 
 } // namespace hmi::generics

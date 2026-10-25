@@ -399,4 +399,53 @@ Report applyToView(Project& p, Id viewId, const std::vector<GenericParam>& after
     return r;
 }
 
+Report applyToFunction(Project& p, Id fnId, const std::vector<GenericParam>& after) {
+    Report r;
+    HmiFunction* fn = nullptr;
+    std::string owner;
+    for (auto& f : p.programs.functions)
+        if (f.id == fnId) { fn = &f; owner = "Fonction " + f.name; }
+    if (!fn)
+        for (auto& v : p.views)
+            for (auto& f : v.functions)
+                if (f.id == fnId) { fn = &f; owner = v.name + " / fonction " + f.name; }
+    if (!fn) return r;
+    const std::vector<GenericParam> before = fn->generics;
+    const std::string name = fn->name;
+    const Mapping m = compare(before, after);
+    // 1. Dans ses parametres, son retour, ses locales et son corps : un generique renomme suit ; un retire prend
+    //    le type que lui donnaient ses appels (le plus frequent ; aucun : un type de sa contrainte).
+    std::vector<std::pair<std::string, std::string>> words(m.renamed.begin(), m.renamed.end());
+    for (const int o : m.removed) {
+        const GenericParam& g = before[static_cast<std::size_t>(o)];
+        const Tally tally = bindingsOf(p, name, before.size(), static_cast<std::size_t>(o));
+        std::string with = tally.best();
+        const bool given = !with.empty();
+        if (!given) with = genericSample(g.constraint);
+        words.emplace_back(g.name, with);
+        const bool used = std::any_of(fn->decls.begin(), fn->decls.end(), [&](const Declaration& d) { return mentions(d.type, g.name); })
+                       || mentions(fn->returnType, g.name) || mentions(fn->body, g.name);
+        if (!used) continue;
+        r.fixed.push_back(g.name + " devient " + with + " dans " + owner
+                          + (!given ? std::string(" (aucun appel ne le donnait : un type de sa contrainte)")
+                             : tally.agree() ? std::string(" (le type que lui donnaient ses appels)")
+                                             : std::string(" (le plus fr\xC3\xA9quent de ses appels ; les autres ont maintenant ") + with + ")"));
+    }
+    fn->generics = after;
+    for (auto& d : fn->decls) d.type = substituteWords(d.type, words);
+    fn->returnType = substituteWords(fn->returnType, words);
+    fn->body = substituteWords(fn->body, words);
+    // 2. Les types donnes a ses appels Max<REAL>(...), partout dans le code (retires, ajoutes, renommes de place).
+    if (!m.keepsUses())
+        forEachCode(p, [&](std::string& text, CodeForm, const CodeSite& site) {
+            if (text.find('<') == std::string::npos) return;
+            std::string next = retype(text, name, before, after, false);
+            if (next == text) return;
+            text = std::move(next);
+            r.where.push_back(site.where);
+        });
+    unique(r.where);
+    return r;
+}
+
 } // namespace hmi::generics
