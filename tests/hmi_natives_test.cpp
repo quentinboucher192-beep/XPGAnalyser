@@ -622,7 +622,7 @@ void rangement1217() {
     // Les types
     std::size_t types = 0;
     for (const auto& s : nt::typeShelves()) types += s.entries.size();
-    check(nt::typeShelves().size() == 5 && types == 41, "les types : 5 dossiers, 41 fiches (" + std::to_string(types) + ")");
+    check(nt::typeShelves().size() == 5 && types == 42, "les types : 5 dossiers, 42 fiches (" + std::to_string(types) + ")");   // 1.13.0 : + T_Erreur
     check(nt::typeShelves()[2].entries.size() == 7 && nt::typeGuides().size() == 7, "Conteneurs : 7, chacun sa fiche");
     for (const auto& g : nt::typeGuides()) {
         check(!g.lead.empty() && !g.declare.empty() && !g.access.empty() && !g.lives.empty() && !g.cpp.empty() && nt::shelf(g.shelf),

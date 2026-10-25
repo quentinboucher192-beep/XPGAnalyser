@@ -608,6 +608,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_reperes_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_natives_test tests/hmi_natives_test.cpp)      # 1.12.0 : les natives de l'IHM, chaque exemple execute
     xpg_target_link_libraries(hmi_natives_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(erreurs_test tests/erreurs_test.cpp)              # 1.13.0 : LEVER, RELEVER, CATCH e, codes E_*, WAIT_UNTIL
+    xpg_target_link_libraries(erreurs_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_natives1127_test tests/hmi_natives1127_test.cpp)   # 1.12.7 : conteneurs, std::numeric, templates, <bit>
     xpg_target_link_libraries(hmi_natives1127_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_setring_test tests/hmi_setring_test.cpp)      # 1.12.7 : SET OF T et RING[N] OF T
@@ -764,6 +766,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmitypes     COMMAND hmi_types_test)                   # ---- 1.11.19 : le registre des types (lot 6) ----
     xpg_add_test(NAME hmireperes   COMMAND hmi_reperes_test)                 # ---- 1.11.24 : les reperes dans les symboles ----
     xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
+    xpg_add_test(NAME erreurs      COMMAND erreurs_test)                     # ---- 1.13.0 : LEVER, RELEVER, WAIT_UNTIL ----
     xpg_add_test(NAME hminatives1127 COMMAND hmi_natives1127_test)           # ---- 1.12.7 : les natives des conteneurs, std::numeric, templates, <bit> ----
     xpg_add_test(NAME hmisetring   COMMAND hmi_setring_test)                 # ---- 1.12.7 : SET OF T et RING[N] OF T ----
     xpg_add_test(NAME hminatives1216 COMMAND hmi_natives1216_test)           # ---- 1.12.16 : les 39 natives std:: ----
