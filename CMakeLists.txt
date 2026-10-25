@@ -610,6 +610,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_natives_test PRIVATE xpg_hmi)
     xpg_add_test_executable(erreurs_test tests/erreurs_test.cpp)              # 1.13.0 : LEVER, RELEVER, CATCH e, codes E_*, WAIT_UNTIL
     xpg_target_link_libraries(erreurs_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(tests_unitaires_test tests/tests_unitaires_test.cpp)   # 1.13.0 (lot J4) : les tests unitaires des fonctions
+    xpg_target_link_libraries(tests_unitaires_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_natives1127_test tests/hmi_natives1127_test.cpp)   # 1.12.7 : conteneurs, std::numeric, templates, <bit>
     xpg_target_link_libraries(hmi_natives1127_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_setring_test tests/hmi_setring_test.cpp)      # 1.12.7 : SET OF T et RING[N] OF T
