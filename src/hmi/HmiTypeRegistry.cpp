@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <set>
 #include <string>
 #include <utility>
 
@@ -728,6 +729,20 @@ std::shared_ptr<const Registry> Registry::build(const Project& p, const params::
                                               : "Une structure du projet.");
         e.uses = cb ? V | D | P | R : V | D | P | R | O;
         e.proposed = e.uses;
+        // 1.13.0 (lot J1) : l'heritage - les membres du parent D'ABORD (la racine en tete), puis les siens ;
+        // le registre (et donc l'objet construit, la place Modbus) voit la structure entiere.
+        if (!t.base.empty()) {
+            std::vector<const HmiType*> chain;              // [parent, grand-parent, ... racine]
+            std::set<std::string> seen{upperOf(t.name)};
+            for (std::string b = t.base; !b.empty();) {
+                const HmiType* bt = p.hmiTypeByName(b);
+                if (!bt || !seen.insert(upperOf(bt->name)).second) break;
+                chain.push_back(bt);
+                b = bt->base;
+            }
+            for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+                for (const auto& m : (*it)->members) e.members.emplace_back(m.name, m.type);
+        }
         for (const auto& m : t.members) e.members.emplace_back(m.name, m.type);
         for (const auto& v : t.values) e.values.push_back(v.name);
         for (const auto& g : t.generics) e.generics.emplace_back(g.name, g.constraint);   // 1.12.20 (lot G)

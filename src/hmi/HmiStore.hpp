@@ -44,7 +44,7 @@ struct LoadReport {
 // refuse un format plus recent au lieu de le relire en perdant ce qu'il ne
 // connait pas - et de l'effacer au premier enregistrement.
 // 4 : alarmes, recettes, utilisateurs et securite, reglages des historiques.
-inline constexpr int kFormatVersion = 30;   // 5 : lot 6 (roles des vues, heritage, en-tete, pied) ; 6 : lot 7 (fonctions IHM) ;
+inline constexpr int kFormatVersion = 31;   // 5 : lot 6 (roles des vues, heritage, en-tete, pied) ; 6 : lot 7 (fonctions IHM) ;
                                            // 7 : lot 8 (popups, parametres de vue, champ de saisie, objets utilisateurs) ;
                                            // 8 : lot 9 (23 commandes et afficheurs, confirmation des boutons) - un
                                            //     outil du lot 8 les lirait comme des rectangles : il refuse ;
@@ -111,6 +111,14 @@ inline constexpr int kFormatVersion = 30;   // 5 : lot 6 (roles des vues, herita
                                            //     contrainte=... apres une fonction ou une fonction_symbole) -
                                            //     une 1.12.x refuse ; un projet dont aucune fonction n'est
                                            //     generique s'ecrit encore au format 28 (ou moins)
+                                           // 31 : 1.13.0, lot J1 (les objets : les methodes d'un type -
+                                           //     methode_type ; l'heritage - type_ihm herite=... ; les
+                                           //     interfaces - type_genre genre=interface et type_ihm
+                                           //     implemente=... ; la visibilite d'un membre - membre
+                                           //     portee=privee) - une IHM Studio d'avant refuse (elle
+                                           //     perdrait methodes, heritage et interfaces) ; un type sans
+                                           //     methode, sans base, sans interface et sans membre prive
+                                           //     s'ecrit au format d'avant (30 ou moins)
 
 // "2026-09-21 14:05" : l'horodatage des dates de creation et de modification.
 [[nodiscard]] std::string   nowStamp();

@@ -3801,7 +3801,10 @@ private:
         // Une reference et un pointeur de meme cible s'echangent (REF_TO T := ADR(x)).
         if ((into.type->kind == TypeDesc::Kind::Ref || into.type->kind == TypeDesc::Kind::Pointer) && v.o->type
             && (v.o->type->kind == TypeDesc::Kind::Ref || v.o->type->kind == TypeDesc::Kind::Pointer)) {
-            if (into.type->element && v.o->type->element && !compatibleTarget(*into.type->element, *v.o->type->element)) {
+            // 1.13.0 (lot J1) : la MONTEE - une REF_TO sous-type va dans une REF_TO parent, et une REF_TO d'un
+            // type va dans une REF_TO d'une interface qu'il implemente (une liste heterogene par le contrat).
+            if (into.type->element && v.o->type->element && !compatibleTarget(*into.type->element, *v.o->type->element)
+                && !env_.typeConvertsTo(v.o->type->element->text(), into.type->element->text())) {
                 if (why) *why = "un " + v.o->type->text() + " ne va pas dans un " + into.type->text();
                 return false;
             }
@@ -4601,6 +4604,37 @@ private:
         return cache;
     }
 
+    // 1.13.0 (lot J1) : l'appel d'une methode d'un type IHM, chemin.Methode(args). Nul : ce n'est pas
+    // une methode (l'appelant continue avec les autres resolutions). SELF (l'objet) est passe en premier
+    // argument, en VAR_IN_OUT : une methode qui ecrit un membre le modifie pour de bon. Le type REEL de
+    // l'objet (celui de l'objet evalue : a travers une REF_TO, la cible) choisit la methode - c'est le
+    // dispatch virtuel, sans tag cache.
+    std::optional<core::Result<RV>> callMethod(const Expr& e) {
+        const Expr& obj = *e.lhs->lhs;
+        const std::string& method = e.lhs->name;
+        auto ov = rich(obj);
+        if (!ov || !ov->o || !ov->o->type) return std::nullopt;     // pas un objet : pas une methode
+        const std::string realType = ov->o->type->text();
+        if (realType.empty()) return std::nullopt;
+        OperatorSource src;
+        if (!env_.findMethod(realType, method, src)) return std::nullopt;
+        std::shared_ptr<const Function> f;
+        if (const auto it = operatorCache().find(src.key); it != operatorCache().end()) f = it->second;
+        else {
+            auto parsed = parseFunction(src.function, src.owner);
+            if (!parsed) return std::optional<core::Result<RV>>(dialectError(src.owner + " : " + parsed.error().message()));
+            operatorCache()[src.key] = *parsed;
+            f = *parsed;
+        }
+        // Synthetiser l'appel : SELF (l'objet) devant, puis les arguments donnes.
+        Expr call2 = e;
+        call2.lhs = nullptr;
+        call2.arguments.clear();
+        call2.arguments.emplace_back(std::string{}, e.lhs->lhs);
+        for (const auto& a : e.arguments) call2.arguments.push_back(a);
+        return std::optional<core::Result<RV>>(callDeclared(*f, call2, true));
+    }
+
     // 1.12.1 : low <= x <= high (ENTRE ... ET, une plage de IN).
     core::Result<RV> between(const Expr& e, const RV& x) {
         auto low = rich(*e.rhs);
@@ -5126,6 +5160,10 @@ private:
                 if (auto r = chosen(*q)) return std::move(*r);
                 if (auto f = env_.dialectFunction(*q)) return callDeclared(*f, e, true);
             }
+        // 1.13.0 (lot J1) : chemin.Methode(args) - une methode d'un type IHM, resolue sur le type reel
+        // de l'objet (le sous-type, a travers une REF_TO). Apres les fonctions de symbole (ci-dessus).
+        if (callee.empty() && e.lhs && e.lhs->kind == Expr::Kind::Member && e.lhs->lhs)
+            if (auto r = callMethod(e)) return std::move(*r);
         if (!callee.empty()) {
             // 1.11.20 : des fonctions internes du meme nom (des surcharges) : la sienne.
             const auto inner = findFunctions(callee);
@@ -5136,6 +5174,19 @@ private:
                 return callDeclared(*inner[static_cast<std::size_t>(k)], e, false);
             }
             if (inner.size() == 1) return callDeclared(*inner.front(), e, false);
+            // 1.13.0 (lot J1) : SUPER.M(...) a ete emis comme METHODE_<parent>_M(SELF, ...) ; on le resout.
+            if (u.rfind("METHODE_", 0) == 0)
+                if (OperatorSource src; env_.findMethodByInternal(callee, src)) {
+                    std::shared_ptr<const Function> f;
+                    if (const auto it = operatorCache().find(src.key); it != operatorCache().end()) f = it->second;
+                    else {
+                        auto parsed = parseFunction(src.function, src.owner);
+                        if (!parsed) return dialectError(src.owner + " : " + parsed.error().message());
+                        operatorCache()[src.key] = *parsed;
+                        f = *parsed;
+                    }
+                    return callDeclared(*f, e, true);
+                }
             if (auto mine = natives1220(callee, e)) return std::move(*mine);          // 1.12.20 : les dernieres natives a rappel
             if (auto mine = natives1219(callee, e)) return std::move(*mine);          // 1.12.19 : les natives a rappel
             if (auto mine = natives1127(callee, e)) return std::move(*mine);          // 1.12.7
@@ -5342,11 +5393,14 @@ private:
             if (param.mode == VarDecl::Mode::InOut) {
                 if (!isGiven || !b || !b->isPlace)
                     return dialectError(f.name + " : le param\xC3\xA8tre VAR_IN_OUT '" + param.name + "' attend une variable");
-                // Le type : le meme (ou un nombre pour un nombre).
+                // Le type : le meme (ou un nombre pour un nombre). 1.13.0 (lot J1) : la MONTEE - un sous-type
+                // passe la ou son parent est attendu (SELF d'une methode heritee, SUPER) ; sa tranche parente
+                // est en tete, les champs du parent s'alignent.
                 if (b->place.obj && param.type && b->place.obj->type) {
                     auto want = resolve(param.type);
                     if (!want) return core::Err<core::Error>(want.error());
-                    if (!compatibleTarget(**want, *b->place.obj->type))
+                    if (!compatibleTarget(**want, *b->place.obj->type)
+                        && !env_.typeConvertsTo(b->place.obj->type->text(), (*want)->text()))
                         return dialectError(f.name + " : '" + param.name + "' attend un " + (*want)->text() + ", pas un "
                                             + b->place.obj->type->text());
                 }
@@ -8174,6 +8228,35 @@ private:
         if (!rt) return notAType(rt.error().message());
         const TypeDesc& target = **rt;
         std::string tname = upperOf(target.name);
+        // 1.13.0 (lot J1) : DYNAMIC_CAST<T>(objet) vers un type IHM ou une interface - une MONTEE/DESCENTE
+        // sur une reference : si le type REEL de l'objet va dans T (sous-type ou interface implementee),
+        // rend une reference PERSISTANTE vers lui (comme REF, par son emplacement) ; sinon NULL. STATIC_CAST
+        // lie toujours (comme un cast non verifie).
+        if (target.kind == TypeDesc::Kind::Struct && !target.name.empty()) {
+            const Expr& a = *e.arguments[0].second;
+            if (isDesignator(a)) {
+                auto where = locate(a, false);
+                if (!where) return core::Result<RV>(core::Err<core::Error>(where.error()));
+                std::string realType;
+                if (where->obj && where->obj->type) realType = where->obj->type->text();
+                else if (!where->name.empty()) realType = env_.declaredType(env_.canonicalName(where->name));
+                if (!realType.empty()) {
+                    const bool ok = !checked || env_.typeConvertsTo(realType, target.name) || upperOf(realType) == tname;
+                    auto refT = std::make_shared<TypeDesc>();
+                    refT->kind = TypeDesc::Kind::Ref;
+                    refT->element = *rt;
+                    auto o = std::make_shared<Obj>();
+                    o->type = refT;
+                    o->bound = ok;
+                    if (ok) {
+                        if (where->obj) o->target = where->obj;
+                        else o->targetName = env_.canonicalName(where->name);
+                    }
+                    return RV{{}, o};
+                }
+            }
+            // un objet litteral/temporaire ne se caste pas ainsi : on continue vers l'erreur ci-dessous.
+        }
         if (target.kind != TypeDesc::Kind::Scalar || target.scalar == Type::String || target.scalar == Type::Time || isDateType(target.scalar))
             return dialectError(head + " : " + std::string(lib::templateInfo(u)->want));
         std::vector<std::pair<std::string, std::int64_t>> values;
