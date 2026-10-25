@@ -7449,7 +7449,7 @@ try {
     params = nlohmann::json::object();
 }
 ```
-> Dans une expression de champ (fx), les natives JSON_ et REGEX_ se lisent (lecture seule) : `{JSON_TEXTE(JSON_LIRE(RESOURCE_READ('ui.json'))['titre'])}`. Sur la page web, `FILE_READ` reste bloqué, mais `RESOURCE_READ` marche : le JSON et le regex tournent entièrement dans la page.
+> Dans une expression de champ (fx), les natives JSON_ et REGEX_ se lisent (lecture seule) : `{JSON_TEXTE(JSON_LIRE(RESOURCE_READ('ui.json'))['titre'])}`.
 
 == enum-scripts | Les énumérations dans les scripts et les fonctions
 : Une énumération IHM (T_MODE : Arret, Auto, Manu, Defaut) s'emploie dans les scripts et les fonctions : le littéral T_MODE#Auto, les comparaisons, CASE sur ses valeurs, FOR EACH v IN T_MODE, en variable, en paramètre, en retour, en case de tableau, en clé de MAP ; TO_DINT(m) donne son nombre, TO_T_MODE(2) l'inverse (contrôlé), TO_STRING(m) et TO_T_MODE('texte') passent par son toString et son fromString.
@@ -9158,7 +9158,7 @@ Une procédure (sans retour), ou une fonction qui lit ou écrit des variables, s
 ### La tolérance (REAL)
 La tolérance ne sert qu'à un retour **REAL** ou **LREAL** : le cas réussit si `|obtenu - attendu| <= tolérance`. Vide, c'est l'égalité stricte. Tout autre type (INT, BOOL, STRING, énum, structure, tableau, MAP) se compare en égalité exacte : la tolérance est grisée.
 ### Quand ils se rejouent
-Les cas actifs se rejouent **tout seuls** après la vérification du code, à chaque **Compiler** et au **Démarrer** de la simulation. **Lancer les tests** (la barre du volet Fonctions) les joue tous à la main ; **Lancer ce cas** et un double-clic sur une ligne en jouent un. Dans Configuration : **Rejouer les tests des fonctions au Compiler/Démarrer** (coché ; décoche-le pour un gros projet ou la page web) et **Un test en échec empêche le démarrage de la simulation** (décoché : un échec n'est alors qu'un avertissement).
+Les cas actifs se rejouent **tout seuls** après la vérification du code, à chaque **Compiler** et au **Démarrer** de la simulation. **Lancer les tests** (la barre du volet Fonctions) les joue tous à la main ; **Lancer ce cas** et un double-clic sur une ligne en jouent un. Dans Configuration : **Rejouer les tests des fonctions au Compiler/Démarrer** (coché ; décoche-le pour un gros projet) et **Un test en échec empêche le démarrage de la simulation** (décoché : un échec n'est alors qu'un avertissement).
 ### Le verdict et le détail
 Le même vocabulaire que les essais :
 | Verdict | Ce qu'il dit |
@@ -9275,7 +9275,7 @@ Le bouton **Déverrouiller** de la barre d'outils (ou Projet › Déverrouiller 
 > Le verrou n'est pas un chiffrement : les fichiers restent lisibles sur le disque. Il empêche de modifier par erreur un projet livré.
 
 == echange | Exporter / Importer
-: L'IHM entière (vues, scripts, fonctions, ressources, réglages, historiques) se contrôle ici, et s'importe à l'identique depuis une archive ; le projet entier s'exporte dans une archive .xihm, ou en page web.
+: L'IHM entière (vues, scripts, fonctions, ressources, réglages, historiques) se contrôle ici, et s'importe à l'identique depuis une archive ; le projet entier s'exporte dans une archive .xihm.
 @lieux echange
 @voir configuration, verifier, paquets-de-vues, archive-projet, page-web
 @capture PNG_122_exporter_archive_dialogue.png | Exporter l'IHM dans une archive.
@@ -9288,9 +9288,6 @@ Depuis la 1.12.30, c'est l'archive `.xihm` du **projet entier** - ressources, fi
 **Importer** vérifie l'archive (une archive retouchée ou abîmée est refusée, et la raison est dite), contrôle les variables du programme, puis reconstruit l'IHM ; un seul Ctrl+Z revient en arrière.
 @nouveau 1.12.30
 Il lit une archive `.xihm` comme l'ancienne `.zip` de l'IHM : seule son IHM est reprise, dans le projet ouvert. Pour ouvrir une archive comme un projet à part, avec tout ce qu'elle contient : **Projet › Ouvrir…**.
-@nouveau 1.12.30
-### La page web
-**Page web** écrit l'IHM dans un seul fichier `.html`, qui s'ouvre dans un navigateur (voir « L'IHM en page web : un seul .html »).
 ### Quelques vues seulement
 Pour passer quelques vues, et ce dont elles ont besoin, d'un projet à l'autre : IHM › Vues, **Exporter les vues…** et **Importer des vues…** (voir « Exporter et importer des vues »).
 ### Le dossier de l'IHM
@@ -9332,43 +9329,17 @@ Le **cache de construction** (`.xpg/build/build-cache.txt`) a suivi : ce qui ét
 - **L'archive d'un projet de l'automate** (`.xapi`) : elle s'ouvre avec API Studio. Un fichier qui n'est pas une archive : la raison est dite.
 > L'ancienne archive `.zip` de l'IHM (jusqu'à la 1.12.29) s'ouvre toujours.
 
-== page-web | L'IHM en page web : un seul .html
-: Projet › Exporter en page web (.html)… écrit l'IHM dans un seul fichier, qui s'ouvre dans un navigateur, sans Internet : l'IHM y tourne, avec le moteur et le dessin d'IHM Studio - ses vues s'animent, ses scripts et ses alarmes tournent, ses boutons et ses saisies répondent. Le projet entier est dans la page : Projet › Importer depuis une page web… le reconstruit à l'identique.
+== page-web | L'IHM en page web : retirée en 1.13.0
+: L'export et l'import de l'IHM (et du programme) en page web sont retirés en 1.13.0. Un navigateur ne peut pas dialoguer en Modbus : une IHM qui tournerait dans une page resterait de toute façon coupée de ses équipements. Pour diffuser l'IHM en marche, utilise l'accès web en direct (le PC fait le Modbus, la page n'en reçoit que l'image) ; pour transmettre un projet entier, l'archive .xihm ou .xapi.
 @depuis 1.12.30
-@mots page web, HTML, .html, navigateur, Exporter en page web, Importer depuis une page web, Mettre à jour la page web à chaque enregistrement, hors ligne, sans Internet, SVG, WebAssembly, wasm, page en marche, page au repos, ihm-web.wasm.gz, Télécharger le projet, cette page n'a pas été écrite par IHM Studio
+@mots page web, HTML, .html, retiré, retrait, 1.13.0, navigateur, Modbus, accès web, archive, .xihm, .xapi
 @voir archive-projet, echange, dossier, simulation
-@capture PNG_echanges_05_page_web_ihm.png | La page web de l'IHM dans un navigateur : le menu des vues, la vue de démarrage dessinée, ses boutons cliquables.
-@capture PNG_echanges_06_page_web_navigation.png | Un clic sur un bouton de navigation : sa vue s'ouvre ; Précédent revient.
-### L'écrire
-**Projet › Exporter en page web (.html)…** (ou le clic droit sur la racine de l'arbre du projet, ou IHM › Exporter / Importer, **Page web**) : par défaut `<dossier du projet>.html`, à côté du dossier du projet. La page s'écrit à côté, l'application ne se fige pas ; la cloche dit où est la page, la barre d'état dit « l'IHM y tourne ».
-@nouveau 1.12.31
-### Dans le navigateur : l'IHM en marche
-Le moteur de l'IHM d'IHM Studio, compilé pour le navigateur (WebAssembly), est dans la page avec le projet : il le fait tourner comme la simulation d'IHM Studio, et dessine chaque vue avec le même dessin.
-| Dans la page | Ce qui se passe |
-| Les vues et les popups | dessinées comme dans IHM Studio, animées par les valeurs ; la vue de démarrage s'ouvre d'abord, à la taille de la fenêtre (le réglage d'affichage du poste) |
-| La navigation | un bouton qui ouvre une vue ou une popup, Précédent, Fermer la popup ; une popup se déplace par son titre |
-| Les saisies | un clic sur un bouton, un interrupteur, une liste déroulante, des boutons radio ; un curseur se glisse ; un champ de saisie se tape au clavier (Entrée valide) |
-| Les scripts | cycliques, sur événement, au démarrage ; un script détaché attend sur WAIT sans figer la page ; les fonctions IHM |
-| Les alarmes | elles apparaissent et disparaissent avec leur condition, dans le bandeau et les listes d'alarmes des vues ; elles s'acquittent |
-| Les utilisateurs | l'utilisateur de départ ; **Changer d'utilisateur** ouvre le menu de connexion du poste (le compte, le mot de passe ou le code) ; une commande à signer ouvre le panneau de signature ; le menu Paramètres système s'ouvre comme sur le poste |
-| Les variables IHM | leur valeur initiale, puis ce que les scripts et les saisies y écrivent ; une variable **Rémanente** est gardée par le navigateur et revient à l'ouverture suivante de la page, comme sur le poste d'exploitation |
-La barre du bas : le mode, les équipements, l'utilisateur connecté, la vue ouverte ; **Alarmes**, **Variables**, **Scripts**, **Fiche** ouvrent la documentation du projet (les listes, le code coloré, la fiche) ; **Limites** dit ce que la page ne fait pas ; **Télécharger le projet** enregistre l'archive .xihm que porte la page.
-@nouveau 1.12.31
-### Ce que la page ne fait pas
-Un navigateur ne laisse pas une page ouvrir une connexion réseau à un appareil, ni toucher au PC. Dans la page :
-- **les équipements** (Modbus TCP) ne sont pas reliés : une variable liée à un équipement garde sa valeur initiale, et la barre du bas le dit. Pour piloter les vrais appareils, ouvre le projet dans IHM Studio ou en poste d'exploitation ;
-- pas de ping ni de recherche d'adresses IP, pas de port série, pas de courriel ni de SMS, pas de vidéo décodée par Windows (MP4, WMV), pas de lecteur PDF, pas de serveur web intégré ;
-- pas de clavier virtuel à l'écran : tu tapes au clavier du poste ; pas de fenêtre Réglage PID, ni de page Simulation dans Paramètres système ;
-- dans un onglet caché ou une fenêtre réduite, le navigateur ralentit la page : l'IHM y tourne au ralenti, ses scripts cycliques et ses alarmes aussi. Garde la page affichée.
-> Il faut un navigateur récent (Edge, Chrome, Firefox, Safari de 2023 ou plus) : la page le dit sinon.
-@nouveau 1.12.31
-### Le moteur web, livré avec IHM Studio
-Le moteur est dans le dossier `web` à côté d'IHM-Studio.exe (livré par l'installateur). S'il manque, la page s'écrit quand même, **au repos** - les vues dessinées sans valeurs, les boutons de navigation cliquables, les listes du projet -, et elle le dit, comme la barre d'état.
-### À chaque enregistrement
-**Mettre à jour la page web à chaque enregistrement** (dans la fenêtre Exporter en page web) : à chaque Ctrl+S, la page se réécrit toute seule, au même endroit, sans ralentir l'enregistrement ; la barre d'état dit « Page web mise à jour ». Le choix est gardé dans la fiche du projet.
-### La réimporter
-@nouveau 1.12.31
-**Projet › Importer depuis une page web…** (ou **Projet › Ouvrir…** sur le `.html`, ou la page lâchée sur la fenêtre) : le projet que porte la page est déballé, où tu veux, puis il s'ouvre - à l'identique, comme une archive .xihm, son cache de construction compris (il ne se régénère pas). Une page qu'une autre application a écrite est refusée : « cette page n'a pas été écrite par IHM Studio ni par API Studio ».
+### Retiré en 1.13.0
+Jusqu'à la 1.12.x, **Projet › Exporter en page web (.html)…** écrivait l'IHM (ou le programme) dans un seul fichier `.html`, l'archive du projet dedans, et **Projet › Importer depuis une page web…** la relisait. C'est retiré : un navigateur ne laisse pas une page ouvrir une connexion Modbus à un appareil, donc l'IHM d'une page restait coupée de ses équipements.
+### À la place
+- **L'accès web en direct** diffuse l'IHM pendant qu'elle tourne sur le PC : c'est le PC qui parle Modbus aux équipements, et la page n'en reçoit que l'image (en JPEG).
+- **L'archive .xihm / .xapi** (Projet › Exporter en archive…) transmet le projet entier dans un seul fichier, qui se rouvre à l'identique (voir « Le projet dans un seul fichier : l'archive .xihm »).
+- **Le dossier Word ou PDF** (IHM › Exporter / Importer) documente l'IHM telle qu'elle est enregistrée (voir « Le dossier de l'IHM »).
 
 == dossier | Le dossier de l'IHM
 : Un document Word ou PDF qui décrit l'IHM telle qu'elle est enregistrée : chaque vue avec sa vignette, les variables, les alarmes, les recettes, les utilisateurs, les scripts, les essais. Il se refait en un clic, toujours à jour.
@@ -9672,17 +9643,14 @@ Une modification faite dans le grafcet (le volet Code, un dialogue, l'outil Supp
 ### Supprimer, modifier : ce qui va changer dans le programme
 **Supprimer une transition** (outil Supprimer ou Suppr) retire ses deux appels Builder et sa réceptivité ; les transitions suivantes descendent d'un numéro (T5 devient T4). La confirmation dit aussi ce que la suppression laisse au grafcet : « X3 n'aura plus de transition de sortie », « X5 ne sera plus atteinte ». **Supprimer une action** retire ses appels Builder, sa condition et son bloc IF … END_IF ; les actions suivantes descendent d'un numéro, y compris dans les réceptivités (FIN(A5) devient FIN(A4)) et dans les autres sections de l'unité (SFC_DEBUG). Si une réceptivité ou une autre section emploie l'action (FIN(A2), Acts_…[2].Started…), la suppression est **refusée** et le message dit où : change d'abord ces lignes. **Modifier une action** (double-clic sur l'action) : son genre (continue, à l'activation, retardée, limitée…, avec son code K du moteur), sa durée, son nom (8 caractères au plus : le moteur jette un nom plus long), son étape. Seuls les champs changés sont réécrits. Avant d'appliquer, quand plusieurs lignes bougent, la fenêtre **Ce qui va changer dans le programme** les liste : la section, le numéro de ligne, le texte d'avant et celui d'après. Ctrl+Z défait tout d'un coup. Insérer ou supprimer une étape, une transition, une action renumérote aussi les autres sections de l'unité qui nomment ses tableaux (SFC_DEBUG lit Steps_…, Acts_…) : elles continuent de désigner le même élément.
 
-== echanges-api | Le projet de l'automate dans un seul fichier (.xapi) et en page web
-: API Studio met tout le projet de l'automate dans un seul fichier .xapi - le programme, les ladders et les GRAFCET gardés tels quels, la configuration, les versions, les macros -, et l'écrit en page web (.html) : le programme lisible dans un navigateur, avec le projet dedans. Les deux se rouvrent à l'identique.
+== echanges-api | Le projet de l'automate dans un seul fichier (.xapi)
+: API Studio met tout le projet de l'automate dans un seul fichier .xapi - le programme, les ladders et les GRAFCET gardés tels quels, la configuration, les versions, les macros. Il se rouvre à l'identique.
 @depuis 1.12.30
-@mots archive, .xapi, xapi, Exporter en archive .xapi, Importer une archive, page web, HTML, .html, Exporter en page web, Importer depuis une page web, Mettre à jour la page web à chaque enregistrement, API-Studio.exe, manifeste, SHA-256, macros, .xpglayout
+@mots archive, .xapi, xapi, Exporter en archive .xapi, Importer une archive, Ouvrir l'archive, API-Studio.exe, manifeste, SHA-256, macros, .xpglayout
 @voir archive-projet, page-web, grafcet
 @capture PNG_echanges_03_exporter_xapi.png | Projet › Exporter en archive .xapi… : le fichier, les versions, l'historique, les macros.
-@capture PNG_echanges_07_page_web_api.png | La page web du programme : les tâches et l'ordre d'exécution, chaque section et son code.
 ### L'archive .xapi
 @nouveau 1.12.31
 **Projet › Exporter en archive .xapi…** (ou le clic droit sur la racine de l'arbre) : la fiche du projet, les sections (ST, ladders, FBD, GRAFCET, gardés tels quels), les unités de programme, les DFB, les DDT, les variables, les tâches, la configuration, les tables d'animation, l'icône, les données, la disposition des grafcets (le fichier `.xpglayout` d'à côté) ; au choix, les **versions**, l'**historique** et les **macros** de la bibliothèque. Le manifeste compte les sections, les unités, les DFB, les DDT, les variables globales, les tâches, les modules, les tables et les versions, et garde l'empreinte SHA-256 de chaque fichier. Ne sont pas pris : `exports/` et la corbeille. Le dossier a aussi une IHM (un projet de la 1.11) ? Le cache de son build (`.xpg/build/build-cache.txt`) vient avec et ses artefacts se refont au déballage : IHM Studio le trouve à jour, comme après une archive .xihm.
 ### L'ouvrir
 **Projet › Ouvrir…** sur un `.xapi`, **Projet › Importer une archive…**, un double-clic (`API-Studio.exe chemin.xapi`), ou le fichier lâché sur la fenêtre : où la déballer (par défaut le dossier des projets, sous son nom), puis le projet s'ouvre et chaque compte est relu. Une macro de l'archive qui manque à ta bibliothèque y est ajoutée ; une macro que tu as déjà n'est pas remplacée. Une archive abîmée, plus récente, ou d'un projet IHM (`.xihm`) : la raison est dite.
-### La page web
-**Projet › Exporter en page web (.html)…** : un seul fichier, sans Internet - la fiche, la configuration, les tâches et l'ordre d'exécution, chaque section et son code (un ladder, un FBD ou un GRAFCET : sa lecture en texte), les unités, les DFB, les types dérivés, les variables, avec un filtre sur les tableaux. **Mettre à jour la page web à chaque enregistrement** la réécrit à chaque Ctrl+S. **Projet › Importer depuis une page web…** (ou Ouvrir… sur le `.html`) reconstruit le projet qu'elle porte.

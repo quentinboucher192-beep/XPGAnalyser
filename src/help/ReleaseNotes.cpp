@@ -35,6 +35,7 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
+    {"1.13.0", "25/10/2026", "\xC3\xA0 venir"},
     {"1.12.31", "24/10/2026", "livr\xC3\xA9" "e le 24/10 dans la journ\xC3\xA9" "e"},
     {"1.12.30", "24/10/2026", "livr\xC3\xA9" "e le 24/10 dans la nuit"},
     {"1.12.29", "23/10/2026", "livr\xC3\xA9" "e le 23/10 en fin de journ\xC3\xA9" "e"},
@@ -135,6 +136,11 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.13.0 : l'export et l'import de l'IHM et du programme en page web, retires (un
+        // navigateur ne dialogue pas en Modbus) ; les archives et l'acces web en direct restent.
+        note("1.13.0", "Projet", Kind::Changed,
+         "Retire : l'export et l'import de l'IHM en page web (un navigateur ne peut pas dialoguer en Modbus). Les archives .xihm/.xapi et l'acces web en direct restent.",
+         "page-web", ""),
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
         // 1.12.31 (24/10/2026) : la page web en marche (le moteur de l'IHM en WebAssembly, sans les equipements),
