@@ -24,6 +24,7 @@
 #include "../../hmi/HmiPipeline.hpp"   // 1.11.13 : les commandes du build
 
 #include "HmiAssist.hpp"
+#include "HmiDebugSession.hpp"             // 1.13.0 (lot J2) : la marge des points d'arret
 #include "HmiDeclGrid.hpp"             // 1.11.18 (refonte, lot 5) : les onglets Constantes, Variables
 #include "HmiPanels.hpp"
 #include "HmiVariablePanes.hpp"
@@ -310,6 +311,7 @@ private:
     std::string       message_;
     bool              syncing_{false};
     hmi::Id            shownId_{hmi::kNoId};   // 1.12.2 : le document montre (annuler : le meme, la vue gardee)
+    HmiBreakpointMargin margin_;               // 1.13.0 (lot J2) : les points d'arret du debogueur
     core::ConnectionScope links_;
     std::shared_ptr<char> alive_ = std::make_shared<char>(0);   // 1.11.3 : les reponses de l'explorateur et des dialogues
 };

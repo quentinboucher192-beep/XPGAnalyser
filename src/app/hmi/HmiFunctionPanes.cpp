@@ -354,9 +354,17 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     links_ += editor_->caretSymbolChanged->connect([this](const std::string&) { updateSymbolLine(); });
     links_ += editor_->textChanged->connect([this](const std::string& text) {
         if (syncing_) return;
+        margin_.edited();                  // 1.13.0 (lot J2) : les points d'arret suivent leurs lignes
         if (const Id sel = selectedFunction()) (void)setBody(sel, text);
         updateDiagnostics();
     });
+    // 1.13.0 (lot J2) : LA MARGE DES POINTS D'ARRET - un point dans le corps d'une fonction l'arrete a chaque appel
+    // (depuis un script ; pas depuis une expression de vue, qui doit rendre sa valeur tout de suite).
+    HmiDebugSession::instance().bindProject(&doc_->project);
+    margin_.attach(*this, *editor_, [this] {
+        const auto* f = current();
+        return f ? HmiDebugTarget{hmi::kNoId, f->id} : HmiDebugTarget{};
+    }, [this](const std::string& t, bool warning) { say(t, warning); });
     // 1.11.18 (lot 5) : les grilles parlent dans la barre du volet ; leurs utilisations menent au code.
     links_ += codeTabs_->message->connect([this](const std::string& t, bool warning) { say(t, warning); });
     links_ += codeTabs_->usesRequested->connect([this](const std::string& name) { (void)goToNextUse(name); });
@@ -534,6 +542,7 @@ void HmiFunctionsPane::showSelected() {
         else editor_->setText(body);
     }
     shownId_ = f ? f->id : hmi::kNoId;
+    margin_.reset();                       // 1.13.0 (lot J2) : les points de cette fonction
     editor_->setReadOnly(f == nullptr);
     syncing_ = false;
     std::string title = "\xC3\x89" "DITEUR";

@@ -1209,6 +1209,23 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         // 1.12.18 (planche 16) : les menus du clic droit - suivre dans Simulation > Courbes, l'objet
         // dans l'editeur (la vue qui le porte : la vue, son modele, un en-tete).
         host.follow = [this](const std::string& path, std::string* why) { return addSimTrend(path, why); };
+        // 1.13.0 (lot J2) : le debogueur - un point d'arret, un niveau de la pile : le code a sa ligne.
+        host.goToCode = [this](hmi::Id script, hmi::Id function, int line) {
+            auto hmiDoc = app_.hmi();
+            if (!hmiDoc) return;
+            hmi::Issue issue;
+            issue.line = line;
+            if (script != hmi::kNoId) {
+                issue.script = script;
+            } else {
+                issue.category = "Fonction";
+                issue.item = function;
+                for (const auto& v : hmiDoc->project.views)
+                    for (const auto& f : v.functions)
+                        if (f.id == function) issue.view = v.id;
+            }
+            openHmiIssue(issue);
+        };
         host.goToObject = [this](hmi::Id view, hmi::Id object) {
             auto hmiDoc = app_.hmi();
             if (!hmiDoc) return;

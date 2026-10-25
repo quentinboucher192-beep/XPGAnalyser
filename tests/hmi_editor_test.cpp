@@ -3442,7 +3442,7 @@ void simulation_supervision() {
     {
         std::string titles;
         for (std::size_t i = 0; i < pane.tabs().tabCount(); ++i) titles += (titles.empty() ? "" : " | ") + pane.tabs().tab(i)->title;
-        check(titles == "Expressions | Variables IHM | Variables API | Performances | Esclaves simul\xC3\xA9s | Pourquoi ? | Popups",   // 1.12.27
+        check(titles == "Expressions | Variables IHM | Variables API | Performances | Esclaves simul\xC3\xA9s | Pourquoi ? | D\xC3\xA9" "bogage | Popups",   // 1.12.27 ; 1.13.0 (lot J2) : Debogage
               "1.11.24 : les onglets de la simulation, sans Journal, Alarmes ni Recettes : " + titles);
     }
     // Deconnexion : 1.10.3 - le bouton a quitte la barre ; le clic droit sur la barre
@@ -3949,7 +3949,7 @@ void apercuDisposition1124() {
         check(titles(bas) == "Sorties,Console*+,Diagnostics", "en simulation : la Console, devant, li\xC3\xA9r\xC3\xA9" "e (" + titles(bas) + ")");
         check(cote && centre && cote->x > centre->x && titles(cote) == "Simulation \xC2\xB7 IHM*+" && dp::sketchBox(sim, "sim"),
               "la simulation c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, avec son panneau de droite (" + titles(cote) + ")");
-        check(titles(dp::sketchBox(sim, "sim")) == "Expressions,Variables IHM*,Performances+,Esclaves simul\xC3\xA9s,Pourquoi ?,Popups",
+        check(titles(dp::sketchBox(sim, "sim")) == "Expressions,Variables IHM*,Performances+,Esclaves simul\xC3\xA9s,Pourquoi ?,D\xC3\xA9" "bogage,Popups",
               "... ses onglets : Variables IHM devant, Performances seulement en simulation (" + titles(dp::sketchBox(sim, "sim")) + ")");
     }
     {

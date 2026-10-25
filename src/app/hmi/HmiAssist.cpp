@@ -245,6 +245,10 @@ std::vector<Function> makeFunctions() {
         // 1.12.26 : les scripts detaches
         {"IHM_SCRIPT_ACTIF", {"script : STRING"}, "BOOL", "vrai si ce script d\xC3\xA9tach\xC3\xA9 tourne (il attend, ou calcule)", "IHM_SCRIPT_ACTIF('|')", false},
         {"IHM_SCRIPT_ARRETER", {"script : STRING"}, "BOOL", "arr\xC3\xAAte un script d\xC3\xA9tach\xC3\xA9 qui tourne (FALSE : il ne tournait pas)", "IHM_SCRIPT_ARRETER('|')", true},
+        // 1.13.0 (lot J2) : le debogueur
+        {"IHM_POINT_ARRET", {"condition : BOOL (facultatif)"}, "BOOL",
+         "en simulation, le script s'arr\xC3\xAAte ici (le volet D\xC3\xA9" "bogage) ; avec une condition, seulement si elle est vraie",
+         "IHM_POINT_ARRET(|)", false},
         {"IHM_SON", {"son : STRING"}, "BOOL", "joue un son des ressources (WAV, MP3, OGG)", "IHM_SON('|')", true},
         {"IHM_VUE", {}, "STRING", "le nom de la vue affich\xC3\xA9" "e", "IHM_VUE()|", false},
         {"IHM_TEMPS", {}, "TIME", "le temps \xC3\xA9" "coul\xC3\xA9 depuis le lancement de l'IHM", "IHM_TEMPS()|", false},

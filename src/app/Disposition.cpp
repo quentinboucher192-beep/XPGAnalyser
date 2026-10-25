@@ -76,6 +76,7 @@ Catalog build(bool api, bool ihm) {
         tab("sim.performances", "Performances", "sim");
         tab("sim.esclaves", "Esclaves simul\xC3\xA9s", "sim");
         tab("sim.pourquoi", "Pourquoi ?", "sim");   // 1.12.27
+        tab("sim.debogage", "D\xC3\xA9" "bogage", "sim");   // 1.13.0 (lot J2) : le debogueur des scripts IHM
         tab("sim.popups", "Popups", "sim");
 
         c.groups.push_back({"prog", "Programmation g\xC3\xA9n\xC3\xA9rale", true});
