@@ -30,6 +30,8 @@
 #include "../../hmi/HmiRoles.hpp"           // 1.12.14 : les types d'un tuple
 #include "../../hmi/HmiRuntime.hpp"         // 1.12.14 : la valeur initiale deballee (Runtime::valueObject)
 #include "HmiUnfold.hpp"                    // 1.12.14 : la valeur d'une partie, d'une propriete
+#include "HmiUnitPanes.hpp"                 // 1.13.0 (lot J6b) : la colonne Unite, le selecteur d'unites
+#include "../../hmi/HmiUnits.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -124,7 +126,8 @@ std::string formulaHint(const std::string& formula) {
 }
 
 constexpr int kMenuBase = -1000;
-enum Col : std::size_t { CName, CType, CInitial, CRetain, CEquipment, CAddress, CAccess, CPlace, CQuality, CCount };   // 1.11.16 : CRetain, apres Initiale
+// 1.11.16 : CRetain, apres Initiale. 1.13.0 (lot J6b) : CUnit, apres le Type (l'unite physique).
+enum Col : std::size_t { CName, CType, CUnit, CInitial, CRetain, CEquipment, CAddress, CAccess, CPlace, CQuality, CCount };
 
 const std::string kDash = "\xE2\x80\x94";
 const std::string kRW = "lecture, \xC3\xA9" "criture";
@@ -409,7 +412,7 @@ public:
     [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
     [[nodiscard]] std::size_t columnCount() const override { return CCount; }
     [[nodiscard]] std::string headerText(std::size_t c) const override {
-        static const char* h[] = {"Nom", "Type", "Initiale", "R\xC3\xA9manente", "\xC3\x89quipement", "Adresse", "Acc\xC3\xA8s", "Place Modbus", "Qualit\xC3\xA9 (en marche)"};
+        static const char* h[] = {"Nom", "Type", "Unit\xC3\xA9", "Initiale", "R\xC3\xA9manente", "\xC3\x89quipement", "Adresse", "Acc\xC3\xA8s", "Place Modbus", "Qualit\xC3\xA9 (en marche)"};
         return c < CCount ? h[c] : std::string{};
     }
     [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
@@ -465,6 +468,12 @@ public:
         if (c == CAddress && row.kind == Row::Kind::Member && row.cells.size() > c && row.cells[c].find('\xE2') != std::string::npos)
             st.fgTone = ui::Tone::Warning;           // une adresse corrigee (le crayon)
         if (c == CQuality) st.fgTone = tone(row.tone);
+        // 1.13.0 (lot J6b) : l'unite - en chasse fixe ; celle d'un membre (venue de son type) en gris.
+        if (c == CUnit) {
+            st.monospace = true;
+            if (row.kind != Row::Kind::Variable) st.fgTone = ui::Tone::Muted;
+            else if (row.cells.size() > c && row.cells[c].empty()) st.placeholder = hmi::units::typeTakesUnit(row.type) ? "sans" : "\xE2\x80\x94";
+        }
         if (row.kind == Row::Kind::Detail && (c == CPlace || c == CAccess)) st.fgTone = ui::Tone::Muted;   // 1.12.14
         // 1.11.16 : Remanente - oui en vert, non en gris ; liee mais cochee : l'avertissement.
         if (c == CRetain && row.kind == Row::Kind::Variable && row.cells.size() > c)
@@ -707,7 +716,9 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     };
     table->onContextMenu = [this](gfx::Point at) { openContextMenu(at); };     // 1.10 (chantier O)
     // ---- fin Lot API 8 ----
-    table->setColumns({{"Nom", 240.f, 80.f, true, false}, {"Type", 175.f, 60.f, true, false}, {"Initiale", 80.f, 40.f, true, false},
+    table->setColumns({{"Nom", 240.f, 80.f, true, false}, {"Type", 175.f, 60.f, true, false},
+                       {"Unit\xC3\xA9", 70.f, 40.f, true, false},   // 1.13.0 (lot J6b) : l'unite physique (bar, degC, %)
+                       {"Initiale", 80.f, 40.f, true, false},
                        {"R\xC3\xA9manente", 92.f, 50.f, true, false},   // 1.11.16 : la remanence d'exploitation (pres de la valeur initiale)
                        {"\xC3\x89quipement", 140.f, 60.f, true, false}, {"Adresse", 86.f, 50.f, true, false}, {"Acc\xC3\xA8s", 112.f, 50.f, true, false},
                        {"Place Modbus", 180.f, 60.f, true, false, true, ui::Align::Start, 0, false},
@@ -724,6 +735,20 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
             if (passes(v, static_cast<int>(col))) emit(cellOf(v, col));
     });
     table_ = &static_cast<ui::TableView&>(split->addPane(std::move(table), 0.76f, 400.f));
+    // 1.13.0 (lot J6b) : la case Unite tapee - Ctrl+Espace propose les unites, puis " Choisir une unite... ".
+    table_->setCellAssist([this](ui::RowIndex r, std::size_t col) -> ui::InputText::Assist {
+        if (col != CUnit || r >= rows_.size() || rows_[r].kind != Row::Kind::Variable) return {};
+        const auto* v = doc_->project.variableById(rows_[r].var);
+        if (!v) return {};
+        const Id id = v->id;
+        return unitui::fieldAssist([doc = doc_]() -> const hmi::Project* { return doc ? &doc->project : nullptr; },
+                                   "Unit\xC3\xA9 de " + v->name, v->type,
+                                   [this, id, alive = std::weak_ptr<int>(alive_)](const std::string& unit) {
+                                       if (alive.expired()) return;
+                                       std::string w;
+                                       if (!setUnit(id, unit, &w)) say("Unit\xC3\xA9 refus\xC3\xA9" "e : " + w, true);
+                                   });
+    });
     // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
     tools_->bindListKeys(*table_, {VDelete, VDuplicate, VAdd});
     auto grid = std::make_unique<ui::PropertyGrid>(base + ".props");
@@ -950,6 +975,7 @@ std::string HmiVariablesPane::cellOf(const hmi::Variable& v, std::size_t column)
     switch (column) {
         case CName: return v.name;
         case CType: return v.type;
+        case CUnit: return v.unit;   // 1.13.0 (lot J6b)
         case CInitial: {
             if (const auto* e = hmi::findEnumeration(doc_->project, v.type)) return enumInitialText(*e, v.initial);   // 1.10 (chantier U)
             ty::Spec spec;
@@ -1448,6 +1474,18 @@ void HmiVariablesPane::refresh() {
         rows_.push_back(std::move(r));
         emitFolder(filterFolder_, 1);
     }
+    // 1.13.0 (lot J6b) : LA CASE UNITE de chaque ligne, a sa place (apres le Type) - une variable : la sienne ;
+    // un membre, une case : celle de son membre dans le type (en gris : elle se change dans le type).
+    for (auto& row : rows_) {
+        if (row.cells.size() < CUnit) continue;
+        std::string unit;
+        if (row.kind == Row::Kind::Variable) {
+            if (const auto* v = p.variableById(row.var)) unit = v->unit;
+        } else if (row.kind == Row::Kind::Member) {
+            unit = hmi::units::unitOfPath(p, row.key);
+        }
+        row.cells.insert(row.cells.begin() + static_cast<std::ptrdiff_t>(CUnit), std::move(unit));
+    }
     // Lot recherche : "37 sur 251" - les variables que gardent les filtres.
     {
         std::size_t kept = 0;
@@ -1461,6 +1499,11 @@ void HmiVariablesPane::refresh() {
             [this](std::size_t r, std::size_t c, const std::string& text) { return commitCell(r, c, text); });
         // 1.12.14 : la case Type d'une variable ouvre le selecteur de types.
         vm->setDialog([this](std::size_t r, std::size_t c) {
+            // 1.13.0 (lot J6b) : la case Unite d'une variable ouvre le selecteur d'unites (sans hote : un champ).
+            if (c == CUnit && r < rows_.size() && rows_[r].kind == Row::Kind::Variable && unitpicker::available()) {
+                pickUnit(rows_[r].var);
+                return true;
+            }
             if (c != CType || r >= rows_.size() || rows_[r].kind != Row::Kind::Variable) return false;
             const auto* v = doc_->project.variableById(rows_[r].var);
             if (!v) return false;
@@ -1506,6 +1549,7 @@ bool HmiVariablesPane::cellEditable(std::size_t row, std::size_t col) const {
             // ni remanence ; sa valeur initiale est un litteral.
             const bool rich = ty::isRich(v->type);
             if (col == CName || col == CType) return true;
+            if (col == CUnit) return hmi::units::typeTakesUnit(v->type) || !v->unit.empty();   // 1.13.0 (lot J6b)
             if (col == CEquipment) return !rich;
             if (col == CInitial) {
                 if (rich) return true;
@@ -1569,6 +1613,7 @@ bool HmiVariablesPane::commitCell(std::size_t row, std::size_t col, const std::s
                     ok = setName(r.var, text, &why);
                     break;
                 case CType: ok = setType(r.var, text, &why); break;
+                case CUnit: ok = setUnit(r.var, text, &why); break;   // 1.13.0 (lot J6b)
                 case CInitial: ok = setInitial(r.var, text, &why); break;
                 case CEquipment: ok = setEquipment(r.var, text, &why); break;
                 case CAddress: ok = setAddress(r.var, text, &why); break;
@@ -1818,6 +1863,7 @@ bool HmiVariablesPane::setType(Id id, const std::string& raw, std::string* why) 
             x.type = name;
             x.initial = first;
             if (x.scaled()) x.rawMin = x.rawMax = x.engMin = x.engMax = 0;
+            x.unit.clear();                       // 1.13.0 (lot J6b) : une enumeration n'a jamais d'unite
         });
         say(v->name + " : " + name + " (\xC3\xA9num\xC3\xA9ration, un DINT) \xC2\xB7 valeur initiale " + (first.empty() ? std::string("vide") : first));
         return true;
@@ -1843,6 +1889,7 @@ bool HmiVariablesPane::setType(Id id, const std::string& raw, std::string* why) 
             x.internal.clear();
             x.compact = false;
             x.retain = false;
+            x.unit.clear();                       // 1.13.0 (lot J6b) : un objet ne prend pas d'unite
         });
         std::string text = name + " : " + type + " \xC2\xB7 " + std::string(hmi::typeform::summary(hmi::typeform::decompose(type).form));
         if (wasBound) text += " \xC2\xB7 d\xC3\xA9li\xC3\xA9" "e de " + was + " : " + ty::unbindableReason(type);
@@ -1856,15 +1903,54 @@ bool HmiVariablesPane::setType(Id id, const std::string& raw, std::string* why) 
     }
     if (v->type == type) return true;
     const bool wasComposite = ty::isComposite(v->type);
+    // 1.13.0 (lot J6b) : un type qui ne prend pas d'unite (BOOL, STRING, une structure) la retire, et le dit.
+    const std::string lostUnit = !v->unit.empty() && !hmi::units::typeTakesUnit(type) ? v->unit : std::string{};
     change(id, "Type de " + v->name + " : " + type, [&](hmi::Variable& x) {
         x.type = type;
         // Une valeur initiale qui ne va plus : celle du type.
         if (!validInitial(doc_->project, type, x.initial, nullptr) || (ty::isComposite(type) != wasComposite))
             x.initial = ty::isComposite(type) ? std::string{} : (type == "BOOL" ? "FALSE" : type == "STRING" ? "''" : "0");
         if (ty::isComposite(type) && x.scaled()) x.rawMin = x.rawMax = x.engMin = x.engMax = 0;
+        if (!lostUnit.empty()) x.unit.clear();
     });
-    say(v->name + " : " + ty::summary(doc_->project, type, v->packBools));
+    say(v->name + " : " + ty::summary(doc_->project, type, v->packBools)
+        + (lostUnit.empty() ? std::string{} : " \xC2\xB7 unit\xC3\xA9 " + lostUnit + " retir\xC3\xA9" "e (un " + type + " n'en prend pas)"));
     return true;
+}
+
+// 1.13.0 (lot J6b) : l'unite physique d'une variable (la case Unite, la grille, le collage d'Excel).
+bool HmiVariablesPane::setUnit(Id id, const std::string& raw, std::string* why) {
+    const auto* v = doc_->project.variableById(id);
+    if (!v) return fail(why, "variable introuvable");
+    std::string unit;
+    if (const std::string bad = unitui::problem(doc_->project, v->type, raw, &unit); !bad.empty()) return fail(why, bad);
+    if (unit == v->unit) return true;
+    const std::string name = v->name, type = v->type;
+    change(id, "Unit\xC3\xA9 de " + name + (unit.empty() ? std::string(" : sans") : " : " + unit), [&](hmi::Variable& x) { x.unit = unit; });
+    say(unit.empty() ? name + " : sans unit\xC3\xA9 (Ctrl+Z la rend)"
+                     : name + " : " + hmi::units::withUnit(type, unit) + " \xE2\x80\x94 " + unitui::describe(doc_->project, unit) + " (Ctrl+Z)");
+    return true;
+}
+
+void HmiVariablesPane::pickUnit(Id id) {
+    const auto* v = doc_->project.variableById(id);
+    if (!v) return;
+    if (!unitpicker::available()) {
+        say("Le s\xC3\xA9lecteur d'unit\xC3\xA9s n'est pas ouvert ici : tape le symbole dans la case (Ctrl+Espace les propose).", true);
+        return;
+    }
+    HmiUnitPicker::Spec spec;
+    spec.field = "Unit\xC3\xA9 de " + v->name;
+    spec.current = v->unit;
+    spec.type = v->type;
+    spec.doc = doc_;
+    spec.recents = unitpicker::recents();
+    const std::weak_ptr<int> alive = alive_;
+    unitpicker::ask(std::move(spec), [this, id, alive](const HmiUnitPicker::Answer& a) {
+        if (alive.expired() || a.manage) return;
+        std::string w;
+        if (!setUnit(id, a.unit, &w)) say("Unit\xC3\xA9 refus\xC3\xA9" "e : " + w, true);
+    });
 }
 
 bool HmiVariablesPane::setInitial(Id id, const std::string& raw, std::string* why) {
@@ -2013,6 +2099,8 @@ paste::Target HmiVariablesPane::pasteTarget(const ui::TableView::PasteRequest& r
     t.columns.push_back(col("Nom", {"Name", "Variable", "Mnemonique", "Symbole", "Tag", "Identifiant"}, CName, nullptr, true));
     t.columns.push_back(col("Type", {"Type de donnee", "DataType", "Data type"}, CType,
                             [this, idOf](const std::string& k, const std::string& v, std::string* why) { return setType(idOf(k), v, why); }));
+    t.columns.push_back(col("Unit\xC3\xA9", {"Unite", "Unit", "Unite physique", "Grandeur"}, CUnit,   // 1.13.0 (lot J6b)
+                            [this, idOf](const std::string& k, const std::string& v, std::string* why) { return setUnit(idOf(k), v, why); }));
     t.columns.push_back(col("Initiale", {"Valeur initiale", "Initial", "Init", "Initial value", "Valeur par defaut", "Defaut"}, CInitial,
                             [this, idOf](const std::string& k, const std::string& v, std::string* why) { return setInitial(idOf(k), v, why); }));
     t.columns.push_back(col("\xC3\x89quipement", {"Equipment", "Esclave", "Automate", "Liaison", "Device"}, CEquipment,
@@ -2676,6 +2764,9 @@ void HmiVariablesPane::rebuildProperties() {
         c.name = "Membre";
         c.properties.push_back(prop("Chemin", row.key));
         c.properties.push_back(prop("Type", row.type));
+        // 1.13.0 (lot J6b) : l'unite du membre vient de son type (elle se change dans Types IHM).
+        if (const std::string unit = hmi::units::unitOfPath(p, row.key); !unit.empty())
+            c.properties.push_back(prop("Unit\xC3\xA9", unit + " (du type)"));
         c.properties.push_back(prop("Variable", v->name + " (" + v->type + ")"));
         if (v->bound()) {
             // 1.11.8 : interne (garde dans l'IHM) ou attribue a l'equipement de la structure.
@@ -2761,6 +2852,19 @@ void HmiVariablesPane::rebuildProperties() {
             if (!ok) say("Refus\xC3\xA9 : " + why, true);
             return ok;
         }, {}, "INT, REAL, BOOL... ; un type IHM (T_Four) ; un tableau : ARRAY[0..9] OF REAL, ARRAY[0..3, 0..9] OF INT, ARRAY[1..4] OF T_Four."));
+        // 1.13.0 (lot J6b) : l'unite physique (un nombre seulement) - la case s'ouvre sur le selecteur d'unites.
+        if (hmi::units::typeTakesUnit(v->type) || !v->unit.empty()) {
+            auto pu = prop("Unit\xC3\xA9", v->unit, PG::ValueType::Text, [this, id](std::string_view text) {
+                std::string why;
+                const bool ok = setUnit(id, std::string(text), &why);
+                if (!ok) say("Refus\xC3\xA9 : " + why, true);
+                return ok;
+            }, {}, "L'unit\xC3\xA9 physique (bar, degC, m3/h, %) : Compiler refuse bar + mbar et convertit une affectation de m\xC3\xAA" "me "
+                   "famille ; vide : sans unit\xC3\xA9. La valeur initiale se lit dans cette unit\xC3\xA9.");
+            pu.placeholder = "sans";
+            if (unitpicker::available()) pu.dialog = [this, id] { pickUnit(id); };
+            c.properties.push_back(std::move(pu));
+        }
         std::vector<std::string> folders{"(racine)"};
         for (const auto& f : ty::allFolders(p)) folders.push_back(f);
         c.properties.push_back(prop("Dossier", v->folder.empty() ? std::string("(racine)") : v->folder, PG::ValueType::Enum, [this, id](std::string_view text) {
@@ -3060,7 +3164,7 @@ void HmiVariablesPane::openContextMenu(gfx::Point at) {
         std::string right = r.type;
         if (r.kind == Row::Kind::Folder) right = "dossier";
         if (v && r.kind == Row::Kind::Variable && v->bound()) right += " \xC2\xB7 " + v->equipment;
-        if (r.cells.size() > 5 && !r.cells[5].empty() && r.cells[5].front() == '%') right += " \xC2\xB7 " + r.cells[5];
+        if (r.cells.size() > CAddress && !r.cells[CAddress].empty() && r.cells[CAddress].front() == '%') right += " \xC2\xB7 " + r.cells[CAddress];
         items.push_back(cmd::heading(r.key, right));
     } else if (any) {
         items.push_back(cmd::heading(std::to_string(sel.size()) + " lignes"));
@@ -3367,7 +3471,8 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         auto panel = std::make_unique<HmiTitledPanel>(base + ".membersPanel", "MEMBRES");
         membersPanel_ = panel.get();                                        // 1.10 (chantier U)
         auto table = std::make_unique<MemberTable>(base + ".members");     // 1.10 : Ctrl+C, le clic droit
-        table->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Initiale", 90.f, 40.f, true, false},
+        table->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Unit\xC3\xA9", 70.f, 40.f, true, false},
+                           {"Initiale", 90.f, 40.f, true, false},
                            {"D\xC3\xA9" "calage", 90.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false}, {"Description", 240.f, 60.f, true, false}});
         table->setSelectionMode(ui::SelectionMode::Extended);           // 1.10 : plusieurs membres a copier
         table->onCopy = [this] {
@@ -3376,6 +3481,24 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         };
         table->onContextMenu = [this](gfx::Point at) { openMemberMenu(at); };
         table->setPasteHandler([this](const ui::TableView::PasteRequest& rq) { (void)pasteMembers(rq.text); });
+        // 1.13.0 (lot J6b) : la case Unite tapee - Ctrl+Espace propose les unites, puis " Choisir une unite... ".
+        table->setCellAssist([this](ui::RowIndex r, std::size_t col) -> ui::InputText::Assist {
+            const auto* t = doc_->project.hmiType(current_);
+            if (col != 2 || !t || r >= t->members.size() || callbackPage_) return {};
+            const Id tid = t->id;
+            const std::size_t index = r;
+            return unitui::fieldAssist([doc = doc_]() -> const hmi::Project* { return doc ? &doc->project : nullptr; },
+                                       "Unit\xC3\xA9 de " + t->name + "." + t->members[r].name, t->members[r].type,
+                                       [this, tid, index, alive = std::weak_ptr<int>(alive_)](const std::string& unit) {
+                                           if (alive.expired()) return;
+                                           const auto* t2 = doc_->project.hmiType(tid);
+                                           if (!t2 || index >= t2->members.size()) return;
+                                           hmi::TypeMember m2 = t2->members[index];
+                                           m2.unit = unit;
+                                           std::string w;
+                                           if (!setMember(tid, index, m2, &w)) say("Unit\xC3\xA9 refus\xC3\xA9" "e : " + w, true);
+                                       });
+        });
         members_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         // 1.10 (chantier S2) : sous les membres, la section Operateurs du type.
         auto mid = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".mid");
@@ -3621,7 +3744,8 @@ void HmiTypesPane::refreshMembers() {
         if (cb)
             members_->setColumns({{"Rappel", 150.f, 60.f, true, false}, {"Forme", 280.f, 60.f, true, false}, {"Note", 340.f, 60.f, true, false}});
         else
-            members_->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Initiale", 90.f, 40.f, true, false},
+            members_->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Unit\xC3\xA9", 70.f, 40.f, true, false},
+                           {"Initiale", 90.f, 40.f, true, false},
                                   {"D\xC3\xA9" "calage", 90.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false},
                                   {"Description", 240.f, 60.f, true, false}});
         if (membersPanel_) static_cast<HmiTitledPanel*>(membersPanel_)->setTitle(cb ? "RAPPEL" : "MEMBRES");
@@ -3658,19 +3782,30 @@ void HmiTypesPane::refreshMembers() {
                     size = "objet (IHM)";
                 }
             }
-            rows.push_back({m.name, m.type, hmi::shownCell(m.initial), offset, size, m.description});   // 1.12.19 (U3)
+            rows.push_back({m.name, m.type, m.unit, hmi::shownCell(m.initial), offset, size, m.description});   // 1.12.19 (U3) ; 1.13.0 : l'unite
         }
     }
     const Id tid = current_;
+    // 1.13.0 (lot J6b) : la colonne Unite (2), apres le Type ; grisee sur un membre qui n'est pas un nombre.
+    std::vector<bool> numeric;
+    if (t)
+        for (const auto& m : t->members) numeric.push_back(hmi::units::typeTakesUnit(m.type) || !m.unit.empty());
     memberModel_ = std::make_shared<Rows>(
-        std::vector<std::string>{"Membre", "Type", "Initiale", "D\xC3\xA9" "calage", "Taille", "Description"}, std::move(rows),
-        [](ui::RowIndex, std::size_t c) {
+        std::vector<std::string>{"Membre", "Type", "Unit\xC3\xA9", "Initiale", "D\xC3\xA9" "calage", "Taille", "Description"}, std::move(rows),
+        [numeric](ui::RowIndex r, std::size_t c) {
             ui::CellStyle st;
             if (c == 0) st.bold = true;
-            if (c == 3 || c == 4) st.fgTone = ui::Tone::Muted;
+            if (c == 2) {
+                st.monospace = true;
+                if (r < numeric.size() && !numeric[r]) {
+                    st.fgTone = ui::Tone::Muted;
+                    st.placeholder = "\xE2\x80\x94";
+                }
+            }
+            if (c == 4 || c == 5) st.fgTone = ui::Tone::Muted;
             return st;
         },
-        [](std::size_t, std::size_t c) { return c == 0 || c == 1 || c == 2 || c == 5; },
+        [numeric](std::size_t r, std::size_t c) { return c == 0 || c == 1 || c == 3 || c == 6 || (c == 2 && r < numeric.size() && numeric[r]); },
         [this, tid](std::size_t, std::size_t c) {
             if (c != 1) return std::vector<std::string>{};
             const auto* t2 = doc_->project.hmiType(tid);
@@ -3680,6 +3815,11 @@ void HmiTypesPane::refreshMembers() {
     // 1.12.14 : la case Type d'un membre ouvre le selecteur de types (les types imbriques aussi).
     static_cast<Rows&>(*memberModel_).setDialog([this, tid](std::size_t r, std::size_t c) {
         const auto* t2 = doc_->project.hmiType(tid);
+        // 1.13.0 (lot J6b) : la case Unite d'un membre ouvre le selecteur d'unites (sans hote : un champ).
+        if (c == 2 && t2 && r < t2->members.size() && unitpicker::available()) {
+            pickMemberUnit(tid, r);
+            return true;
+        }
         if (c != 1 || !t2 || r >= t2->members.size()) return false;
         const std::weak_ptr<int> alive = alive_;
         return askTypeIn(doc_, "Type de " + t2->name + "." + t2->members[r].name, t2->members[r].type,
@@ -3764,8 +3904,9 @@ bool HmiTypesPane::commitMemberCell(std::size_t row, std::size_t col, const std:
     const Id tid = t->id;
     if (col == 0) m.name = trimmed(text);
     else if (col == 1) m.type = ty::normalized(text);
-    else if (col == 2) m.initial = trimmed(text);
-    else if (col == 5) m.description = text;
+    else if (col == 2) m.unit = trimmed(text);           // 1.13.0 (lot J6b) : l'unite (validee par setMember)
+    else if (col == 3) m.initial = trimmed(text);
+    else if (col == 6) m.description = text;
     else return false;
     std::string why;
     const bool ok = setMember(tid, row, m, &why);
@@ -4061,6 +4202,22 @@ bool HmiTypesPane::addMember(Id id, const std::string& raw, const std::string& t
 bool HmiTypesPane::setMember(Id id, std::size_t index, const hmi::TypeMember& typed, std::string* why) {
     if (!hmi::isIdentifier(typed.name)) return fail(why, "nom de membre invalide : lettres, chiffres et _");
     hmi::TypeMember m = typed;
+    // 1.13.0 (lot J6b) : L'UNITE - un type change qui n'en prend plus la retire (et le dit) ; une unite posee
+    // se controle (un nombre seulement, un symbole du catalogue : degc -> degC).
+    std::string unitNote;
+    if (const auto* t0 = doc_->project.hmiType(id); t0 && index < t0->members.size()) {
+        const auto& before = t0->members[index];
+        if (!m.unit.empty() && m.unit == before.unit && m.type != before.type && !hmi::units::typeTakesUnit(m.type)) {
+            unitNote = "unit\xC3\xA9 " + m.unit + " retir\xC3\xA9" "e (un " + m.type + " n'en prend pas)";
+            m.unit.clear();
+        }
+    }
+    {
+        std::string unit;
+        if (const std::string bad = unitui::problem(doc_->project, m.type, m.unit, &unit); !bad.empty()) return fail(why, bad);
+        m.unit = unit;
+    }
+
     if (!typedInitial(doc_->project, m.type, m.initial, why)) return false;    // 1.12.19 : la regle des cases
     if (!m.initial.empty()) {
         if (ty::isRich(m.type)) {
@@ -4070,7 +4227,7 @@ bool HmiTypesPane::setMember(Id id, std::size_t index, const hmi::TypeMember& ty
             return fail(why, "valeur initiale illisible : " + e.error());
         }
     }
-    return change(id, "Membre " + m.name, [&](hmi::HmiType& t, std::string* w) {
+    const bool ok = change(id, "Membre " + m.name, [&](hmi::HmiType& t, std::string* w) {
         if (index >= t.members.size()) return fail(w, "membre introuvable");
         for (std::size_t i = 0; i < t.members.size(); ++i)
             if (i != index && sameText(t.members[i].name, m.name)) return fail(w, "le membre " + m.name + " existe d\xC3\xA9j\xC3\xA0");
@@ -4078,6 +4235,37 @@ bool HmiTypesPane::setMember(Id id, std::size_t index, const hmi::TypeMember& ty
         t.members[index] = m;
         return true;
     }, why);
+    if (ok && !unitNote.empty()) say(m.name + " : " + unitNote + " (Ctrl+Z la rend)");
+    return ok;
+}
+
+// 1.13.0 (lot J6b) : " Choisir une unite... " sur un membre - le selecteur d'unites (par son hote).
+void HmiTypesPane::pickMemberUnit(Id type, std::size_t index) {
+    const auto* t = doc_->project.hmiType(type);
+    if (!t || index >= t->members.size()) return;
+    if (!unitpicker::available()) {
+        say("Le s\xC3\xA9lecteur d'unit\xC3\xA9s n'est pas ouvert ici : tape le symbole dans la case (Ctrl+Espace les propose).", true);
+        return;
+    }
+    const auto& m = t->members[index];
+    HmiUnitPicker::Spec spec;
+    spec.field = "Unit\xC3\xA9 de " + t->name + "." + m.name;
+    spec.current = m.unit;
+    spec.type = m.type;
+    spec.doc = doc_;
+    spec.recents = unitpicker::recents();
+    const std::weak_ptr<int> alive = alive_;
+    const std::string name = m.name;
+    unitpicker::ask(std::move(spec), [this, type, index, name, alive](const HmiUnitPicker::Answer& a) {
+        if (alive.expired() || a.manage) return;
+        const auto* t2 = doc_->project.hmiType(type);
+        if (!t2 || index >= t2->members.size() || !sameText(t2->members[index].name, name)) return;
+        hmi::TypeMember m2 = t2->members[index];
+        if (m2.unit == a.unit) return;
+        m2.unit = a.unit;
+        std::string why;
+        if (!setMember(type, index, m2, &why)) say("Unit\xC3\xA9 refus\xC3\xA9" "e : " + why, true);
+    });
 }
 
 bool HmiTypesPane::removeMember(Id id, std::size_t index) {
@@ -4311,6 +4499,16 @@ void HmiTypesPane::rebuildProperties() {
             const std::string s = ty::normalized(text);
             return edit([s](hmi::TypeMember& x) { x.type = s; })(text);
         }, {}, "INT, REAL, BOOL, STRING... ; un autre type IHM (T_Vanne) ; un tableau : ARRAY[1..3] OF T_Vanne."));
+        // 1.13.0 (lot J6b) : l'unite du membre (un nombre seulement) - la case ouvre le selecteur d'unites.
+        if (hmi::units::typeTakesUnit(m.type) || !m.unit.empty()) {
+            auto pu = prop("Unit\xC3\xA9", m.unit, PG::ValueType::Text, [edit](std::string_view text) {
+                const std::string s = trimmed(std::string(text));
+                return edit([s](hmi::TypeMember& x) { x.unit = s; })(text);
+            }, {}, "L'unit\xC3\xA9 physique du membre (REAL [bar]) : chaque variable du type la porte ; vide : sans unit\xC3\xA9.");
+            pu.placeholder = "sans";
+            if (unitpicker::available()) pu.dialog = [this, id, index] { pickMemberUnit(id, index); };
+            c.properties.push_back(std::move(pu));
+        }
         c.properties.push_back(prop("Initiale", hmi::shownCell(m.initial), PG::ValueType::Text, [edit](std::string_view text) {   // 1.12.19 (U3)
             const std::string s(text);
             return edit([s](hmi::TypeMember& x) { x.initial = s; })(text);
@@ -4401,7 +4599,7 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
         return plan;
     }
     // Les colonnes : par leurs titres (une colonne Nom ou Membre), sinon par leur place.
-    enum Field : int { FUnknown = -1, FName, FType, FInitial, FDescription, FComputed };
+    enum Field : int { FUnknown = -1, FName, FType, FInitial, FDescription, FComputed, FUnit };   // 1.13.0 (lot J6b) : FUnit
     const auto fieldOf = [](const std::string& title) -> int {
         const auto n = paste::normalizedTitle(title);
         if (n == "nom" || n == "membre" || n == "name" || n == "member" || n == "champ" || n == "field") return FName;
@@ -4410,6 +4608,7 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
             return FInitial;
         if (n == "description" || n == "commentaire" || n == "comment" || n == "libelle") return FDescription;
         if (n == "decalage" || n == "taille" || n == "offset" || n == "size") return FComputed;
+        if (n == "unite" || n == "unit" || n == "unitephysique" || n == "grandeur") return FUnit;   // 1.13.0 (lot J6b)
         return FUnknown;
     };
     std::vector<int> cols;
@@ -4436,14 +4635,15 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
     std::set<std::string> seen;                // les noms deja colles (majuscules)
     for (std::size_t li = first; li < grid.size(); ++li) {
         const auto& row = grid[li];
-        std::string name, type, initial, description;
-        bool hasType = false, hasInitial = false, hasDescription = false;
+        std::string name, type, initial, description, unit;
+        bool hasType = false, hasInitial = false, hasDescription = false, hasUnit = false;
         for (std::size_t c = 0; c < row.size() && c < cols.size(); ++c) {
             switch (cols[c]) {
                 case FName: name = trimmed(row[c]); break;
                 case FType: type = trimmed(row[c]); hasType = !type.empty(); break;
                 case FInitial: initial = trimmed(row[c]); hasInitial = !initial.empty(); break;
                 case FDescription: description = row[c]; hasDescription = !trimmed(row[c]).empty(); break;
+                case FUnit: unit = trimmed(row[c]); hasUnit = true; break;   // 1.13.0 (lot J6b) : une case vide retire l'unite
                 default: break;
             }
         }
@@ -4487,6 +4687,16 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
         if (hasInitial) m.initial = initial;
         if (hasDescription) m.description = description;
         std::string why;
+        if (hasUnit) {                                  // 1.13.0 (lot J6b) : l'unite, sur un nombre, connue
+            std::string canon;
+            if (const std::string bad = unitui::problem(trial, m.type, unit, &canon); !bad.empty()) {
+                plan.refused.push_back({line, name, bad});
+                continue;
+            }
+            m.unit = canon;
+        } else if (!m.unit.empty() && !hmi::units::typeTakesUnit(m.type)) {
+            m.unit.clear();
+        }
         if (hasInitial && (!typedInitial(trial, m.type, m.initial, &why) || !validInitial(trial, m.type, m.initial, &why))) {
             plan.refused.push_back({line, name, why});
             continue;
@@ -4537,12 +4747,14 @@ std::string HmiTypesPane::copyMembersText() const {
         }
         return out + "\"";
     };
-    std::string out = "Nom\tType\tValeur initiale\tDescription\tD\xC3\xA9" "calage\tTaille\r\n";
+    // 1.13.0 (lot J6b) : l'Unite au bout (un tableau d'avant, sans elle, se recolle tel quel).
+    std::string out = "Nom\tType\tValeur initiale\tDescription\tD\xC3\xA9" "calage\tTaille\tUnit\xC3\xA9\r\n";
     for (const auto r : rows) {
         const auto& m = t->members[r];
-        const std::string offset = memberModel_ ? memberModel_->cellText(static_cast<ui::RowIndex>(r), 3) : std::string{};
-        const std::string size = memberModel_ ? memberModel_->cellText(static_cast<ui::RowIndex>(r), 4) : std::string{};
-        out += cell(m.name) + "\t" + cell(m.type) + "\t" + cell(m.initial) + "\t" + cell(m.description) + "\t" + cell(offset) + "\t" + cell(size) + "\r\n";
+        const std::string offset = memberModel_ ? memberModel_->cellText(static_cast<ui::RowIndex>(r), 4) : std::string{};
+        const std::string size = memberModel_ ? memberModel_->cellText(static_cast<ui::RowIndex>(r), 5) : std::string{};
+        out += cell(m.name) + "\t" + cell(m.type) + "\t" + cell(m.initial) + "\t" + cell(m.description) + "\t" + cell(offset) + "\t" + cell(size)
+             + "\t" + cell(m.unit) + "\r\n";
     }
     return out;
 }

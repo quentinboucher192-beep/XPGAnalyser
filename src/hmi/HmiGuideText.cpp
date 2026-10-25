@@ -3490,6 +3490,10 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9" "clare `Armoire := Armoires[0]`, `Armoire.ana.PT1.mes` est la "
                          "m\xC3\xAAme variable ;", {}},
              {K::Bullet, "**Retirer** : ses objets reprennent les leurs ; Ctrl+Z rend tout.", {}},
+             {K::Paragraph, "Une variable qui a une **unit\xC3\xA9 physique** (la colonne Unit\xC3\xA9 des "
+                         "Variables IHM ou de son type, voir \xC2\xAB Les unit\xC3\xA9s de mesure dans les "
+                         "types \xC2\xBB) la montre d'office : sa ligne laisse la case Unit\xC3\xA9 vide, en "
+                         "gris, tant que tu n'en tapes pas une autre.", {}},
              {K::Heading, "O\xC3\xB9 elles sont reprises", {}},
              {K::Bullet, "les objets qui montrent **une** variable et ont une unit\xC3\xA9 ou un format : "
                          "afficheur num\xC3\xA9rique, champ de saisie, jauge, bargraphe, cadran, "
@@ -14784,16 +14788,30 @@ const std::vector<Topic>& topics() {
          "membre : la compilation refuse bar + mbar, convertit d'office ce qui est compatible, et "
          "l'unit\xC3\xA9 remonte jusqu'\xC3\xA0 l'affichage - sans rien changer pour qui n'en met pas.",
          {
-             {K::Heading, "Poser une unit\xC3\xA9 : entre crochets apr\xC3\xA8s un type num\xC3\xA9rique", {}},
-             {K::Paragraph, "Dans la grille des membres d'un type (et des variables IHM, des "
-                         "param\xC3\xA8tres), une colonne **Unit\xC3\xA9** \xC3\xA0 c\xC3\xB4t\xC3\xA9 de "
-                         "**Type** : un clic ouvre le **s\xC3\xA9lecteur d'unit\xC3\xA9s** (familles, "
-                         "recherche, r\xC3\xA9" "cents). Vide = pas d'unit\xC3\xA9, comme avant. La colonne "
-                         "Type reste \xC2\xAB REAL \xC2\xBB ; l'aide \xC3\xA0 la saisie et le survol "
-                         "montrent la forme combin\xC3\xA9" "e **REAL [bar]**. Une unit\xC3\xA9 ne va que "
-                         "sur un **type num\xC3\xA9rique** (REAL, INT\xE2\x80\xA6 ; sur un ARRAY OF REAL, "
-                         "elle porte sur l'\xC3\xA9l\xC3\xA9ment) : G\xC3\xA9n\xC3\xA9rer refuse une "
-                         "unit\xC3\xA9 sur un BOOL, un texte ou une structure.", {}},
+             {K::Heading, "Poser une unit\xC3\xA9 : la colonne Unit\xC3\xA9", {}},
+             {K::Paragraph, "Une colonne **Unit\xC3\xA9**, juste apr\xC3\xA8s **Type**, dans la grille des "
+                         "**Variables IHM**, dans celle des **membres d'un type** et dans les onglets "
+                         "**Param\xC3\xA8tres**, **Locales** et **Constantes** d'une fonction ; "
+                         "l'**Unit\xC3\xA9 du retour** est dans la fiche de la fonction. Les fen\xC3\xAAtres "
+                         "**Nouvelle variable** et **Nouvelle fonction** ont la m\xC3\xAAme case. Vide = pas "
+                         "d'unit\xC3\xA9, comme avant.", {}},
+             {K::Bullet, "**Taper** le symbole, sans souci de la casse : `BAR` devient `bar`, `m3h` devient "
+                         "`m3/h`. Un symbole inconnu est refus\xC3\xA9, la raison sous la case.", {}},
+             {K::Bullet, "**Ctrl+Espace** propose les unit\xC3\xA9s dont le symbole, le nom ou la famille "
+                         "contient ce que tu tapes (`temp` : K, degC, degF) ; la derni\xC3\xA8re ligne, "
+                         "**Choisir une unit\xC3\xA9\xE2\x80\xA6**, ouvre le s\xC3\xA9lecteur. Un "
+                         "double-clic sur la case l'ouvre aussi.", {}},
+             {K::Bullet, "Une unit\xC3\xA9 ne va que sur un **type num\xC3\xA9rique** (REAL, INT\xE2\x80\xA6 "
+                         "; sur un ARRAY OF REAL, elle porte sur l'\xC3\xA9l\xC3\xA9ment) : la case d'un "
+                         "BOOL, d'un texte ou d'une structure est gris\xC3\xA9" "e. Si le type devient non "
+                         "num\xC3\xA9rique, l'unit\xC3\xA9 est retir\xC3\xA9" "e et la barre le dit. "
+                         "G\xC3\xA9n\xC3\xA9rer refuse aussi une unit\xC3\xA9 sur un BOOL, un texte ou une "
+                         "structure.", {}},
+             {K::Bullet, "La ligne d'un membre (`Ligne1.Debit`) montre en gris l'unit\xC3\xA9 qui vient de "
+                         "son type. Le survol d'une d\xC3\xA9" "claration montre la forme combin\xC3\xA9" "e "
+                         "**REAL [bar]**.", {}},
+             {K::Bullet, "**Copier, coller depuis Excel** : la colonne Unit\xC3\xA9 vient avec ; une "
+                         "unit\xC3\xA9 inconnue refuse sa ligne. Chaque geste se reprend par Ctrl+Z.", {}},
              {K::Code, "TYPE T_Ligne :\n    Pression      : REAL [bar];\n    PressionBasse : REAL "
                          "[mbar];\n    Debit         : REAL [m3/h];\n    Temperature   : REAL [degC];\n    "
                          "Niveau        : REAL [%];\n    Vannes        : ARRAY[1..3] OF REAL [bar];   (* "
@@ -14804,14 +14822,45 @@ const std::vector<Topic>& topics() {
              {K::Code, "struct T_Ligne {            // le C++ n'a pas d'unit\xC3\xA9 native (pas de "
                          "<units> standard)\n    float Pression;         // [bar]\n    float PressionBasse;  "
                          "  // [mbar]\n    float Debit;            // [m3/h]\n};", "C++"},
+             {K::Heading, "Le s\xC3\xA9lecteur d'unit\xC3\xA9s", {}},
+             {K::Paragraph, "**Choisir une unit\xC3\xA9 \xE2\x80\x94 Unit\xC3\xA9 de Pression** : la recherche "
+                         "(symbole, nom ou famille, sans casse ni accents : `fahr` trouve degF), la liste "
+                         "**Famille** (Toutes les familles, R\xC3\xA9" "centes, puis chaque famille) et le "
+                         "tableau Unit\xC3\xA9, Nom, Famille, Conversion (\xC2\xAB 1 mbar = 100 Pa "
+                         "\xC2\xBB). L'unit\xC3\xA9 actuelle est choisie d'office ; la ligne du bas dit "
+                         "l'unit\xC3\xA9 choisie. **Choisir** (ou Entr\xC3\xA9" "e, ou un double-clic), "
+                         "**Sans unit\xC3\xA9** (vide la case), **Annuler**, et **G\xC3\xA9rer les "
+                         "unit\xC3\xA9s\xE2\x80\xA6**, qui ouvre Configuration \xE2\x80\xBA Unit\xC3\xA9s de "
+                         "mesure. Sur un type non num\xC3\xA9rique, il le dit.", {}},
+             {K::Heading, "Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure", {}},
+             {K::Paragraph, "Dans l'arbre, sous Configuration : la biblioth\xC3\xA8que des unit\xC3\xA9s du "
+                         "projet.", {}},
+             {K::Bullet, "\xC3\x80 gauche, les **familles** (Famille, R\xC3\xA9" "f\xC3\xA9rence, "
+                         "Unit\xC3\xA9s, Provenance) ; \xC3\xA0 droite, les **unit\xC3\xA9s** de la famille "
+                         "choisie (Unit\xC3\xA9, Nom, Conversion, Provenance, Emplois), et dessous la fiche "
+                         "de ce qui est choisi.", {}},
+             {K::Bullet, "Les unit\xC3\xA9s et familles **fournies** sont verrouill\xC3\xA9" "es (un "
+                         "cadenas). **+ Famille** cr\xC3\xA9" "e une famille du projet : son nom (des "
+                         "minuscules, des chiffres et _), son unit\xC3\xA9 de r\xC3\xA9" "f\xC3\xA9rence "
+                         "(cr\xC3\xA9\xC3\xA9" "e avec elle) et son libell\xC3\xA9. **+ Unit\xC3\xA9** "
+                         "ajoute une unit\xC3\xA9 \xC3\xA0 la famille choisie : son symbole, son facteur et "
+                         "son d\xC3\xA9" "calage vers la r\xC3\xA9" "f\xC3\xA9rence (valeur de "
+                         "r\xC3\xA9" "f\xC3\xA9rence = valeur \xC3\x97 facteur + d\xC3\xA9" "calage). La "
+                         "fiche modifie le nom, le facteur et le d\xC3\xA9" "calage d'une unit\xC3\xA9 du "
+                         "projet ; la r\xC3\xA9" "f\xC3\xA9rence garde facteur 1 et d\xC3\xA9" "calage 0.", {}},
+             {K::Bullet, "**Retirer** : une unit\xC3\xA9 du projet que rien n'emploie (la colonne Emplois "
+                         "dit o\xC3\xB9 elle sert), ou une famille du projet dont aucune unit\xC3\xA9 n'est "
+                         "employ\xC3\xA9" "e. Une unit\xC3\xA9 fournie ne se retire pas.", {}},
+             {K::Bullet, "La case **Unit\xC3\xA9s strictes : une affectation de m\xC3\xAAme famille exige "
+                         "EN(\xE2\x80\xA6)** (voir plus bas). Chaque geste se reprend par Ctrl+Z.", {}},
              {K::Heading, "Deux r\xC3\xA8gles, voulues diff\xC3\xA9rentes", {}},
              {K::Paragraph, "L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) "
                          "exigent la **m\xC3\xAAme unit\xC3\xA9 exacte** : bar et mbar ne s'additionnent "
                          "pas, il faut convertir l'un des deux avec **EN(\xE2\x80\xA6)**. L'**affectation** "
                          "(:=, passer un argument, RETURN) de la m\xC3\xAAme famille **convertit d'office** "
-                         "(une info) ; l'option projet \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB "
-                         "(Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats) exige alors EN(\xE2\x80\xA6) "
-                         "au lieu de convertir. Deux **familles diff\xC3\xA9rentes** (une pression et une "
+                         "(une info) ; la case \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB (Configuration "
+                         "\xE2\x80\xBA Unit\xC3\xA9s de mesure) exige alors EN(\xE2\x80\xA6) au lieu de "
+                         "convertir. Deux **familles diff\xC3\xA9rentes** (une pression et une "
                          "temp\xC3\xA9rature) : toujours refus\xC3\xA9, et le message nomme les deux. Une "
                          "valeur **sans unit\xC3\xA9** (un litt\xC3\xA9ral 9.0, une variable nue) adopte "
                          "l'unit\xC3\xA9 de l'autre ; une cible sans unit\xC3\xA9 re\xC3\xA7oit le nombre "
@@ -14850,17 +14899,23 @@ const std::vector<Topic>& topics() {
                          "C++\nauto texte = std::format(\"{:.1f}\", temperature + 273.15f);\ndouble brut = "
                          "pression;                    // pas d'unit\xC3\xA9 \xC3\xA0 enlever en C++", "C++"},
              {K::Heading, "L'unit\xC3\xA9 remonte \xC3\xA0 l'affichage", {}},
-             {K::Paragraph, "L'unit\xC3\xA9 physique du cr\xC3\xA9neau devient l'**unit\xC3\xA9 d'affichage par "
-                         "d\xC3\xA9" "faut** : `{Pression:u}` \xC3\xA9" "crit \xC2\xAB 9.08 bar \xC2\xBB, "
-                         "l'afficheur, la jauge, le champ de saisie et la ligne \xC2\xAB Unit\xC3\xA9s et "
-                         "formats \xC2\xBB la prennent sans qu'on la retape. Une ligne \xC2\xAB "
-                         "Unit\xC3\xA9s et formats \xC2\xBB peut encore poser une autre unit\xC3\xA9 "
-                         "d'affichage, mais **de la m\xC3\xAAme famille** (sinon G\xC3\xA9n\xC3\xA9rer le "
-                         "dit : converti en info, familles diff\xC3\xA9rentes en erreur).", {}},
+             {K::Paragraph, "En marche, l'unit\xC3\xA9 physique d'une variable devient son **unit\xC3\xA9 "
+                         "d'affichage par d\xC3\xA9" "faut**, \xC3\xA9" "crite comme on la lit (degC : "
+                         "\xC2\xB0" "C, m3/h : m\xC2\xB3/h). L'afficheur, le champ de saisie, la jauge, le "
+                         "cadran\xE2\x80\xA6 qui montrent la variable et laissent leur unit\xC3\xA9 vide la "
+                         "prennent, comme chaque ligne d'un tableau de variables ; `{Pression:u}` "
+                         "\xC3\xA9" "crit \xC2\xAB 9.08 bar \xC2\xBB, dans un texte comme dans le message "
+                         "d'une alarme. Un objet qui d\xC3\xA9" "coche **Format de la variable** garde la "
+                         "sienne. Dans Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats, la case "
+                         "Unit\xC3\xA9 d'une ligne vide montre cette unit\xC3\xA9 en gris. Une unit\xC3\xA9 "
+                         "tap\xC3\xA9" "e sur la ligne ou sur l'objet l'emporte, mais ce n'est qu'un "
+                         "**libell\xC3\xA9** : la valeur n'est pas convertie. Pour montrer des mbar d'une "
+                         "variable en bar, mets `EN(Pression, 'mbar')` dans la valeur de l'objet et tape "
+                         "mbar dans son unit\xC3\xA9.", {}},
          },
          {"types-ihm", "variables-ihm", "unites-formats", "retours-fonctions", "operateurs", "erreurs-scripts", "reference"},
-         {"unit\xC3\xA9", "unit\xC3\xA9s", "unite", "mesure", "EN", "UNITE", "SANS_UNITE", "famille", "conversion", "strictes"},
-         {"types-ihm", "variables-ihm", "unites-formats"},
+         {"unit\xC3\xA9", "unit\xC3\xA9s", "unite", "mesure", "EN", "UNITE", "SANS_UNITE", "famille", "conversion", "strictes", "Unit\xC3\xA9s strictes", "Choisir une unit\xC3\xA9", "s\xC3\xA9lecteur d'unit\xC3\xA9s", "Unit\xC3\xA9s de mesure"},
+         {"unites-mesure", "types-ihm", "variables-ihm", "unites-formats"},
          {},
          "",
          {},
@@ -18739,24 +18794,46 @@ const std::vector<Topic>& topics() {
          "chose que les essais de r\xC3\xA9" "ception, qui rejouent l'op\xC3\xA9rateur sur l'IHM en marche : "
          "ici on teste une fonction seule.",
          {
+             {K::Heading, "L'onglet Tests", {}},
+             {K::Paragraph, "Dans l'\xC3\xA9" "diteur d'une fonction (du projet, d'une vue, d'une popup ou d'un "
+                         "symbole), l'onglet **Tests**, apr\xC3\xA8s Code, Param\xC3\xA8tres, Locales et "
+                         "Constantes ; son titre compte les cas, en rouge si l'un \xC3\xA9" "choue. En haut, "
+                         "la barre : **Nouveau cas\xE2\x80\xA6**, **Dupliquer**, **Supprimer**, **Lancer ce "
+                         "cas**, **Lancer tout**, **Rapport Excel**, **Rapport PDF**. Dessous, la liste des "
+                         "cas : Cas, Arguments, Attendu, Tol\xC3\xA9rance, Verdict, D\xC3\xA9tail. En bas "
+                         "\xC3\xA0 gauche, la fiche du cas choisi (**Le cas** : nom, description, actif, "
+                         "attendu, tol\xC3\xA9rance, erreur attendue ; **Arguments** : une case par "
+                         "param\xC3\xA8tre ; **Derni\xC3\xA8re ex\xC3\xA9" "cution** : l'appel, le verdict, "
+                         "l'obtenu, le d\xC3\xA9tail) ; \xC3\xA0 droite, **Poser avant l'appel** et "
+                         "**V\xC3\xA9rifier apr\xC3\xA8s l'appel**.", {}},
              {K::Heading, "\xC3\x89" "crire un cas", {}},
-             {K::Paragraph, "Dans l'\xC3\xA9" "diteur d'une fonction, l'onglet **Tests** (\xC3\xA0 "
-                         "c\xC3\xB4t\xC3\xA9 de Code, Param\xC3\xA8tres, Locales, Constantes) montre la "
-                         "grille des cas. **Nouveau cas** : un nom, puis la grille des **arguments** "
-                         "pr\xC3\xA9-remplie d'apr\xC3\xA8s la signature (un par param\xC3\xA8tre, dans "
-                         "l'ordre), et un **r\xC3\xA9sultat attendu**. Chaque argument se saisit comme toute "
+             {K::Paragraph, "**Nouveau cas\xE2\x80\xA6** ouvre la fen\xC3\xAAtre **Nouveau cas de test "
+                         "\xE2\x80\x94 Moyenne_Pression** : un nom, une description, une case par "
+                         "param\xC3\xA8tre (son type, sa valeur par d\xC3\xA9" "faut), le r\xC3\xA9sultat "
+                         "attendu et la tol\xC3\xA9rance ; l'aper\xC3\xA7u montre l'appel, \xC2\xAB "
+                         "Moyenne_Pression(12.0, 20, 0.5) \xC2\xBB. **Cr\xC3\xA9" "er le cas** reste "
+                         "gris\xC3\xA9 tant qu'une case ne se lit pas. Chaque argument se saisit comme toute "
                          "case de valeur : `2,5` devient `2.5`, `VRAI` devient `TRUE`, `Azote` devient "
                          "`'Azote'`, `=formule` est une expression. Un param\xC3\xA8tre laiss\xC3\xA9 vide "
                          "prend sa valeur par d\xC3\xA9" "faut. Exemple, le cas \xC2\xAB moyenne simple "
                          "\xC2\xBB de Moyenne_Pression :", {}},
              {K::Table, "Champ\tValeur\nA\t12.0\nB\t20.0\nPoids_A\t*(vide : la valeur par d\xC3\xA9" "faut, "
                          "0.5)*\nAttendu\t16.0\nVerdict\tr\xC3\xA9ussi", {}},
+             {K::Paragraph, "Tout se modifie ensuite dans la liste ou la fiche, et chaque geste se reprend par "
+                         "Ctrl+Z. Sont refus\xC3\xA9s, la raison dans la barre : un nom vide ou "
+                         "d\xC3\xA9j\xC3\xA0 pris, un argument qui ne se lit pas dans le type de son "
+                         "param\xC3\xA8tre (`abc` pour un REAL), une tol\xC3\xA9rance qui n'est pas un "
+                         "nombre positif, un attendu sur une proc\xC3\xA9" "dure. **Dupliquer** met la copie "
+                         "juste apr\xC3\xA8s (\xC2\xAB poids 25 % (copie) \xC2\xBB).", {}},
              {K::Heading, "Poser des valeurs, v\xC3\xA9rifier apr\xC3\xA8s", {}},
              {K::Paragraph, "Une proc\xC3\xA9" "dure (sans retour), ou une fonction qui lit ou \xC3\xA9" "crit "
-                         "des variables, se teste par **Poser avant** (des variables mises avant l'appel) et "
-                         "**V\xC3\xA9rifier apr\xC3\xA8s** (des post-conditions lues apr\xC3\xA8s). La cible "
-                         "sp\xC3\xA9" "ciale **JOURNAL** v\xC3\xA9rifie que la fonction a \xC3\xA9" "crit un "
-                         "texte (IHM_JOURNAL). Exemple, le cas \xC2\xAB alerte compte le clic \xC2\xBB de la "
+                         "des variables, se teste par **Poser avant l'appel** (Variable, Valeur : des "
+                         "variables mises avant l'appel) et **V\xC3\xA9rifier apr\xC3\xA8s l'appel** (Cible, "
+                         "Attendu, Tol\xC3\xA9rance : des post-conditions lues apr\xC3\xA8s) ; **+** et "
+                         "**\xE2\x88\x92** ajoutent et retirent une ligne. Une pose ou une v\xC3\xA9rif sur "
+                         "une variable inconnue est refus\xC3\xA9" "e. La cible sp\xC3\xA9" "ciale "
+                         "**JOURNAL** v\xC3\xA9rifie que la fonction a \xC3\xA9" "crit un texte "
+                         "(IHM_JOURNAL). Exemple, le cas \xC2\xAB alerte compte le clic \xC2\xBB de la "
                          "proc\xC3\xA9" "dure Tracer_Evenement :", {}},
              {K::Table, "Bloc\tContenu\nPoser avant\t`Compteur_Clics := 0`\nArguments\t`Quoi := 'Porte A "
                          "ouverte'` , `Niveau := 2`\nV\xC3\xA9rifier apr\xC3\xA8s\t`Compteur_Clics = 1` ; "
@@ -18768,50 +18845,64 @@ const std::vector<Topic>& topics() {
                          "structure, tableau, MAP) se compare en \xC3\xA9galit\xC3\xA9 exacte : la "
                          "tol\xC3\xA9rance est gris\xC3\xA9" "e.", {}},
              {K::Heading, "Quand ils se rejouent", {}},
-             {K::Paragraph, "Les cas actifs se rejouent **tout seuls** apr\xC3\xA8s la v\xC3\xA9rification du "
-                         "code, \xC3\xA0 chaque **Compiler** et au **D\xC3\xA9marrer** de la simulation. "
-                         "**Lancer les tests** (la barre du volet Fonctions) les joue tous \xC3\xA0 la main "
-                         "; **Lancer ce cas** et un double-clic sur une ligne en jouent un. Dans "
-                         "Configuration : **Rejouer les tests des fonctions au Compiler/D\xC3\xA9marrer** "
-                         "(coch\xC3\xA9 ; d\xC3\xA9" "coche-le pour un gros projet) et **Un test en "
-                         "\xC3\xA9" "chec emp\xC3\xAA" "che le d\xC3\xA9marrage de la simulation** "
-                         "(d\xC3\xA9" "coch\xC3\xA9 : un \xC3\xA9" "chec n'est alors qu'un avertissement).", {}},
+             {K::Paragraph, "**Lancer ce cas** (ou un double-clic sur sa ligne) joue le cas choisi, **Lancer "
+                         "tout** les cas de la fonction, **Lancer les tests** (la barre du volet Fonctions) "
+                         "ceux de toutes les fonctions du volet. Chaque cas tourne sur un banc : ni le "
+                         "projet ni la simulation ne sont touch\xC3\xA9s. Les cas actifs se rejouent aussi "
+                         "**tout seuls** apr\xC3\xA8s un build r\xC3\xA9ussi, \xC3\xA0 chaque **Compiler** "
+                         "et au **D\xC3\xA9marrer** de la simulation. Dans Configuration, **Tests des "
+                         "fonctions** : **Rejouer les tests au Compiler/D\xC3\xA9marrer** (coch\xC3\xA9 ; "
+                         "d\xC3\xA9" "coche-le pour un gros projet) et **Un test en \xC3\xA9" "chec "
+                         "emp\xC3\xAA" "che le d\xC3\xA9marrage** (d\xC3\xA9" "coch\xC3\xA9 : un "
+                         "\xC3\xA9" "chec n'est alors qu'un avertissement ; coch\xC3\xA9, la simulation ne "
+                         "d\xC3\xA9marre pas et la barre le dit).", {}},
              {K::Heading, "Le verdict et le d\xC3\xA9tail", {}},
              {K::Paragraph, "Le m\xC3\xAAme vocabulaire que les essais :", {}},
              {K::Table, "Verdict\tCe qu'il dit\nr\xC3\xA9ussi\tle retour tient dans la tol\xC3\xA9rance et "
                          "toutes les v\xC3\xA9rifs passent\n\xC3\xA9" "chec\tune valeur fausse : le "
                          "d\xC3\xA9tail dit l'attendu et l'obtenu\nerreur\tla fonction s'arr\xC3\xAAte "
                          "(division par z\xC3\xA9ro, hors bornes) alors qu'aucune erreur n'\xC3\xA9tait "
-                         "attendue\nnon jou\xC3\xA9\tle cas est inactif", {}},
-             {K::Paragraph, "Les r\xC3\xA9sultats partent aux **Sorties** du panneau du bas, cat\xC3\xA9gorie "
-                         "**Tests** (un clic sur une ligne ouvre la fonction sur son onglet Tests) ; la "
-                         "barre d'\xC3\xA9tat du volet compte \xC2\xAB 7 cas \xC2\xB7 6 r\xC3\xA9ussis, 1 "
-                         "\xC3\xA9" "chec \xC2\xBB ; l'arbre porte un n\xC5\x93ud **Tests** sous la "
-                         "fonction, une pastille rouge si un cas \xC3\xA9" "choue.", {}},
+                         "attendue\nnon jou\xC3\xA9\tle cas est inactif\n\xC3\xA0 jouer\tpas encore "
+                         "jou\xC3\xA9, ou le cas (ou la fonction) a chang\xC3\xA9 depuis", {}},
+             {K::Paragraph, "Le verdict est une pastille verte ou rouge dans la colonne Verdict. Les "
+                         "r\xC3\xA9sultats partent aussi aux **Sorties** du panneau du bas, cat\xC3\xA9gorie "
+                         "**Tests** : le bilan, puis une ligne par cas ; un double-clic sur une ligne ouvre "
+                         "la fonction sur son onglet Tests, le cas choisi. La barre d'\xC3\xA9tat du volet "
+                         "Fonctions compte \xC2\xAB tests : 7 cas \xC2\xB7 6 r\xC3\xA9ussis, 1 "
+                         "\xC3\xA9" "chec \xC2\xBB. Dans l'arbre, sous la fonction, le groupe **Tests** "
+                         "(\xC2\xAB Tests \xC2\xB7 2 cas \xC2\xB7 1 r\xC3\xA9ussi, 1 \xC3\xA9" "chec "
+                         "\xC2\xBB) a une ligne par cas avec sa pastille ; la fonction porte \xC2\xAB 1 test "
+                         "rouge \xC2\xBB quand un cas \xC3\xA9" "choue. Un clic sur un cas de l'arbre ouvre "
+                         "l'onglet Tests sur lui.", {}},
              {K::Heading, "Attendre une erreur", {}},
-             {K::Paragraph, "Un cas peut **attendre une erreur** : il r\xC3\xA9ussit si la fonction l\xC3\xA8ve "
-                         "bien le code attendu (`E_Niveau`), \xC3\xA9" "choue sinon. Le code se lit sur "
-                         "l'erreur lev\xC3\xA9" "e par LEVER (voir \xC2\xAB Les erreurs des scripts "
-                         "\xC2\xBB). Exemple : `Niveau := 130.0`, Attendu : *l\xC3\xA8ve l'erreur* "
-                         "`E_Niveau` ; la fonction l\xC3\xA8ve bien `E_Niveau : \xC2\xAB niveau hors plage: "
-                         "130 \xC2\xBB`, donc verdict **r\xC3\xA9ussi**. Un cas normal dont la fonction "
-                         "l\xC3\xA8ve une erreur a le verdict **erreur**.", {}},
+             {K::Paragraph, "Un cas peut **attendre une erreur** (la case **Erreur attendue** de sa fiche) : il "
+                         "r\xC3\xA9ussit si la fonction l\xC3\xA8ve bien le code attendu (`E_Niveau`), "
+                         "\xC3\xA9" "choue sinon. Le code se lit sur l'erreur lev\xC3\xA9" "e par LEVER "
+                         "(voir \xC2\xAB Les erreurs des scripts \xC2\xBB). Exemple : `Niveau := 130.0`, "
+                         "Erreur attendue : `E_Niveau` ; la fonction l\xC3\xA8ve bien `E_Niveau : \xC2\xAB "
+                         "niveau hors plage: 130 \xC2\xBB`, donc verdict **r\xC3\xA9ussi**. Un cas normal "
+                         "dont la fonction l\xC3\xA8ve une erreur a le verdict **erreur**.", {}},
              {K::Heading, "Le rapport", {}},
-             {K::Paragraph, "**Rapport des tests** (CSV, Excel ou PDF, dossier `exports/`) : une fonction (Cas, "
-                         "Arguments, Attendu, Verdict, D\xC3\xA9tail, Dur\xC3\xA9" "e) ou toute la campagne, "
-                         "avec le bilan en sous-titre. Ce n'est pas un proc\xC3\xA8s-verbal de "
-                         "r\xC3\xA9" "ception : il ne porte pas de visa.", {}},
+             {K::Paragraph, "**Rapport Excel** ou **Rapport PDF** (la barre de l'onglet) : les cas de la "
+                         "fonction, rejou\xC3\xA9s d'abord (Cas, Arguments, Attendu, Verdict, D\xC3\xA9tail, "
+                         "Dur\xC3\xA9" "e). **Rapport des tests\xE2\x80\xA6** (Configuration, Tests des "
+                         "fonctions : Excel, PDF ou CSV) : toute la campagne, chaque cas de chaque fonction "
+                         "rejou\xC3\xA9 (Fonction, Cas, Verdict, D\xC3\xA9tail), avec le bilan en "
+                         "sous-titre. Les deux vont dans le dossier `exports/`. Ce n'est pas un "
+                         "proc\xC3\xA8s-verbal de r\xC3\xA9" "ception : il ne porte pas de visa.", {}},
              {K::Heading, "G\xC3\xA9n\xC3\xA9rer", {}},
-             {K::Paragraph, "Sans jouer, G\xC3\xA9n\xC3\xA9rer signale et souligne la case fautive : un mauvais "
-                         "nombre d'arguments (la signature a chang\xC3\xA9), un argument, un attendu, une "
-                         "pose ou une v\xC3\xA9rif illisible, une pose ou une v\xC3\xA9rif sur une variable "
+             {K::Paragraph, "Sans jouer, G\xC3\xA9n\xC3\xA9rer signale la case fautive : un mauvais nombre "
+                         "d'arguments (la signature a chang\xC3\xA9), un argument, un attendu, une pose ou "
+                         "une v\xC3\xA9rif illisible, une pose ou une v\xC3\xA9rif sur une variable "
                          "inconnue, une tol\xC3\xA9rance non num\xC3\xA9rique, un cas sans nom, deux cas du "
-                         "m\xC3\xAAme nom, un attendu sur une proc\xC3\xA9" "dure.", {}},
+                         "m\xC3\xAAme nom, un attendu sur une proc\xC3\xA9" "dure. Dans l'onglet Tests, le "
+                         "nom du cas fautif est en rouge et sa fiche dit pourquoi (**G\xC3\xA9n\xC3\xA9rer "
+                         "dit**) ; un double-clic sur le diagnostic m\xC3\xA8ne au cas.", {}},
              {K::Tip, "Pose tes entr\xC3\xA9" "es : une fonction qui lit l'heure ou un tirage non "
                          "pos\xC3\xA9 donnera un verdict instable.", {}},
          },
          {"fonctions", "essais", "simulation", "verifier", "retours-fonctions", "erreurs-scripts", "configuration"},
-         {"test unitaire", "tests", "cas de test", "cas", "tol\xC3\xA9rance", "poser avant", "v\xC3\xA9rifier apr\xC3\xA8s", "Lancer les tests", "Nouveau cas", "verdict", "Rapport des tests"},
+         {"test unitaire", "tests", "cas de test", "cas", "tol\xC3\xA9rance", "poser avant", "v\xC3\xA9rifier apr\xC3\xA8s", "Lancer les tests", "Lancer ce cas", "Lancer tout", "Nouveau cas", "verdict", "\xC3\xA0 jouer", "Rapport des tests"},
          {"fonctions"},
          {},
          "",
@@ -19096,11 +19187,12 @@ const std::vector<Topic>& topics() {
                          "cr\xC3\xA9" "ation et de modification ;", {}},
              {K::Bullet, "**\xC3\x89" "cran** : r\xC3\xA9solution, orientation, vue de d\xC3\xA9marrage, "
                          "cycle IHM ;", {}},
-             {K::Bullet, "**Tests des fonctions** (sous le cycle) : **Rejouer les tests des fonctions au "
-                         "Compiler/D\xC3\xA9marrer** (coch\xC3\xA9) et **Un test en \xC3\xA9" "chec "
-                         "emp\xC3\xAA" "che le d\xC3\xA9marrage de la simulation** "
-                         "(d\xC3\xA9" "coch\xC3\xA9), plus le bouton **Rapport des tests\xE2\x80\xA6** (CSV "
-                         "/ Excel / PDF) ; voir \xC2\xAB Les tests unitaires d'une fonction \xC2\xBB ;", {}},
+             {K::Bullet, "**Tests des fonctions** (sous Ex\xC3\xA9" "cution) : **Rejouer les tests au "
+                         "Compiler/D\xC3\xA9marrer** (coch\xC3\xA9), **Un test en \xC3\xA9" "chec "
+                         "emp\xC3\xAA" "che le d\xC3\xA9marrage** (d\xC3\xA9" "coch\xC3\xA9), le bilan **Cas "
+                         "des fonctions** (\xC2\xAB 3 cas \xC2\xB7 2 r\xC3\xA9ussis, 1 \xC3\xA9" "chec "
+                         "\xC2\xBB) et **Rapport des tests\xE2\x80\xA6** (Excel, PDF ou CSV) ; voir \xC2\xAB "
+                         "Les tests unitaires d'une fonction \xC2\xBB ;", {}},
              {K::Bullet, "**Statistiques** : vues, objets, animations, scripts, poids du projet ;", {}},
              {K::Bullet, "**Variables du programme** : les variables de l'automate en arbre (les Globales, "
                          "puis chaque unit\xC3\xA9 de programme : Publiques, Priv\xC3\xA9" "es, E/S ; les "

@@ -18,6 +18,8 @@
 #include "../../ui/Theme.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 #include "HmiTypePicker.hpp"   // 1.11.19 (refonte, lot 6) : le retour, au selecteur de types
+#include "HmiUnitPanes.hpp"    // 1.13.0 (lot J6b) : l'unite du retour (le selecteur d'unites)
+#include "../../hmi/HmiUnits.hpp"
 #include "../../hmi/HmiNames.hpp"   // 1.13.0 (lot J8) : l'espace de noms d'une fonction
 
 #include <algorithm>
@@ -74,7 +76,8 @@ protected:
 
 enum ToolAction : int { TNew = 1, TDelete, TTry, TCompile, TExport, TImport,   // 1.11.2 : TExport, TImport (decision 174)
                         TBuildGen, TBuildRegen, TBuildGenComp, TBuildState,     // 1.11.13 : la generation incrementale
-                        TOverload };                                             // 1.11.22 : une surcharge de la fonction choisie
+                        TOverload,                                               // 1.11.22 : une surcharge de la fonction choisie
+                        TRunTests };                                             // 1.13.0 (lot J4b) : les tests unitaires du volet
 
 // 1.11.18 (refonte, lot 5) : "Aucun" (une procedure) ; "(aucun)", VOID et le vide se relisent aussi.
 constexpr const char* kNoReturn = "Aucun";
@@ -224,6 +227,11 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(TDelete, HmiGlyph::Delete, "Supprimer la fonction (Ctrl+Z la rend)", "Supprimer");
     tools->separator();
     tools->add(TTry, HmiGlyph::Play, "Essayer la fonction : des arguments, le r\xC3\xA9sultat (sans toucher le projet)", "Essayer");
+    // 1.13.0 (lot J4b) : les tests unitaires - tous les cas de toutes les fonctions du volet, sur un banc chacun.
+    tools->add(TRunTests, HmiGlyph::Check,
+               "Lancer les tests : tous les cas de toutes les fonctions (onglet Tests), sans toucher le projet ; les verdicts au panneau du "
+               "bas (Sorties, cat\xC3\xA9gorie Tests)",
+               "Lancer les tests");
     // 1.11.17 (refonte, lot 1) : la fonction actuelle, elle seule ; le projet : IHM > Compiler.
     tools->add(TCompile, HmiGlyph::Code,
                "Compiler la fonction actuelle (F7) : elle seule, avec la signature de ce qu'elle appelle ; ses fautes ici et dans les "
@@ -254,6 +262,10 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
         if (a != TBuildState) tools_->setEnabledWhen(a, [this] { return selectedFunction() != kNoId; });
     }
     tools_->setVisibleWhen(TTry, [this] { return symbol_ == kNoId; });
+    tools_->setEnabledWhen(TRunTests, [this] {   // 1.13.0 (lot J4b) : au moins un cas dans le volet
+        const auto* l = listOf(doc_->project);
+        return l && std::any_of(l->begin(), l->end(), [](const hmi::HmiFunction& f) { return !f.tests.empty(); });
+    });
     tools_->setEnabledWhen(TOverload, [this] { const auto* f = current(); return f && !f->isVirtual; });   // 1.11.22   // 1.11.10 : une fonction de symbole s'essaie en marche
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
@@ -301,6 +313,12 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
             base + ".codeTabs", doc_, apply_, std::move(area),
             std::vector{hmi::decledit::Tab::Parameters, hmi::decledit::Tab::Variables, hmi::decledit::Tab::Constants}, banner_)));
         editorPanel_ = panel.get();
+        // 1.13.0 (lot J4b) : le 5e onglet, Tests - les cas de la fonction, leurs verdicts.
+        {
+            auto page = std::make_unique<HmiFunctionTestsPage>(base + ".tests", doc_, apply_);
+            testsPage_ = page.get();
+            (void)codeTabs_->addTab({"Tests", ui::Icon::Ok}, std::move(page));
+        }
         // 1.11.21 : l'editeur prend toute la hauteur - ses fautes vont au panneau du bas
         // (Diagnostics, l'etape Saisie ; HmiLive.hpp), soulignees dans le code.
         right->addPane(std::move(panel), 1.f, 120.f);
@@ -336,6 +354,7 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
                 else (void)tryFunction(sel, {});
                 break;
             case TCompile: (void)compileCurrent(); break;   // 1.11.17 : la fonction actuelle (ici, et son build)
+            case TRunTests: (void)runTests(); break;          // 1.13.0 (lot J4b)
             case TBuildGen: if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::Generate, buildKey()); break;
             case TBuildRegen: if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::Regenerate, buildKey()); break;
             case TBuildGenComp: if (hosts_.build && selectedFunction() != kNoId) hosts_.build(hmi::pipeline::Mode::GenerateCompile, buildKey()); break;
@@ -371,6 +390,10 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     links_ += codeTabs_->usesRequested->connect([this](const std::string& name) { (void)goToNextUse(name); });
     links_ += codeTabs_->useRequested->connect([this](const std::string& name, int k) { (void)goToNextUse(name, k); });   // 1.12.18
     links_ += codeTabs_->migrateRequested->connect([this] { (void)migrateCurrent(); });
+    // 1.13.0 (lot J4b) : l'onglet Tests parle dans la barre du volet ; son titre compte les cas (rouge : un echec).
+    links_ += testsPage_->message->connect([this](const std::string& t, bool warning) { say(t, warning); });
+    links_ += testsPage_->countsChanged->connect([this] { refreshTestsTab(); });
+    links_ += testruns::changed()->connect([this] { refresh(); });   // un verdict garde : la barre recompte
     links_ += doc_->changed->connect([this](Id) { refresh(); });
     refresh();
     if (!order_.empty()) {
@@ -530,6 +553,12 @@ void HmiFunctionsPane::refresh() {
     else
         countsText_ = std::to_string(n) + " fonction(s) IHM  \xC2\xB7  " + std::to_string(withReturn) + " avec retour, "
                     + std::to_string(n - withReturn) + " sans  \xC2\xB7  appel : Nom(a, b) dans un script, une action ou une expression de vue";
+    // 1.13.0 (lot J4b) : les tests unitaires du volet - " 24 cas . 22 reussis, 1 echec, 1 erreur ".
+    if (list) {
+        testruns::Tally tally;
+        for (const auto& f : *list) tally += testruns::tally(f);
+        if (tally.cases) countsText_ += "  \xC2\xB7  tests : " + tally.text();
+    }
     showStatus();
     invalidate();
 }
@@ -552,6 +581,55 @@ void HmiFunctionsPane::showSelected() {
     rebuildProperties();
     updateDiagnostics();
     codeTabs_->setPlace(currentPlace(), "Choisis une fonction.");   // 1.11.18 (lot 5) : ses onglets
+    if (testsPage_) testsPage_->setFunction(symbol_, f ? f->id : kNoId);   // 1.13.0 (lot J4b)
+    refreshTestsTab();
+}
+
+// ---- 1.13.0 (lot J4b) : les tests unitaires ----
+void HmiFunctionsPane::setHosts(Hosts h) {
+    hosts_ = std::move(h);
+    if (!testsPage_) return;
+    HmiFunctionTestsPage::Hosts th;
+    th.newCase = hosts_.newTestCase;
+    th.plc = hosts_.plc;
+    th.output = hosts_.testOutput;
+    th.exportFile = hosts_.exportFile;
+    testsPage_->setHosts(std::move(th));
+}
+
+void HmiFunctionsPane::refreshTestsTab() {
+    if (!codeTabs_ || !testsPage_ || codeTabs_->tabCount() <= CodeTabTests) return;
+    const std::size_t n = testsPage_->caseCount();
+    codeTabs_->setTabBadge(CodeTabTests, n ? std::to_string(n) : std::string{}, testsPage_->badgeTone());
+}
+
+bool HmiFunctionsPane::showTestCase(Id test) {
+    const auto* l = listOf(doc_->project);
+    if (!l) return false;
+    for (const auto& f : *l)
+        for (const auto& t : f.tests)
+            if (t.id == test) {
+                selectFunction(f.id);
+                showCodeTab(CodeTabTests);
+                testsPage_->selectCase(test);
+                return true;
+            }
+    return false;
+}
+
+std::size_t HmiFunctionsPane::runTests() {
+    const auto* l = listOf(doc_->project);
+    const auto* sv = symbolView();
+    if (!l || std::none_of(l->begin(), l->end(), [](const hmi::HmiFunction& f) { return !f.tests.empty(); })) {
+        say("Aucun cas \xC3\xA0 lancer : l'onglet Tests d'une fonction, \xC2\xAB Nouveau cas\xE2\x80\xA6 \xC2\xBB.", true);
+        return 0;
+    }
+    campaign_ = runTestsOf(doc_->project, *l, symbol_, sv ? sv->name : std::string{}, hosts_.plc ? hosts_.plc() : nullptr);
+    if (hosts_.testOutput) hosts_.testOutput(campaign_.lines);
+    say(campaign_.summary() + (hosts_.testOutput ? std::string("  \xC2\xB7  le d\xC3\xA9tail au panneau du bas (Sorties)") : std::string{}),
+        campaign_.failed());
+    refresh();
+    return campaign_.tally.passed;
 }
 
 // ---- 1.11.18 (refonte des scripts, lot 5) : les onglets de la fonction ----
@@ -620,6 +698,16 @@ void HmiFunctionsPane::rebuildProperties() {
         "\xC3\xA0 son nom : Moyenne := ... ;", types));
     // 1.12.14 : la case ouvre le selecteur de types (les types imbriques aussi), plus la liste.
     if (typepicker::available()) c.properties.back().dialog = [this, id] { (void)setReturnType(id, typepicker::kChoose); };
+    // 1.13.0 (lot J6b) : l'unite du retour (un retour numerique) - la case ouvre le selecteur d'unites.
+    if ((!f->returnType.empty() && hmi::units::typeTakesUnit(f->returnType)) || !f->returnUnit.empty()) {
+        auto pu = hmikit::prop("Unit\xC3\xA9 du retour", f->returnUnit, PG::ValueType::Text,
+            [this, id](std::string_view v) { return setReturnUnit(id, std::string(v)); },
+            "L'unit\xC3\xA9 physique de ce que rend la fonction (Rend : REAL [m3/h]) : un appel la propage comme une variable "
+            "de ce type ; vide : sans unit\xC3\xA9.");
+        pu.placeholder = "sans";
+        if (unitpicker::available()) pu.dialog = [this, id] { pickReturnUnit(id); };
+        c.properties.push_back(std::move(pu));
+    }
     // 1.13.0 : les generiques de la fonction (TEMPLATE <T>) - comme une structure ou un symbole.
     c.properties.push_back(hmikit::prop("G\xC3\xA9n\xC3\xA9riques", hmi::genericsText(f->generics), PG::ValueType::Text,
         [this, id](std::string_view v) { return setGenerics(id, std::string(v)); },
@@ -1129,11 +1217,59 @@ bool HmiFunctionsPane::setReturnType(Id id, const std::string& type, std::string
         return false;
     }
     if (t == f->returnType) return true;
-    auto cmd = hmi::changeProject(doc_, "Retour de " + f->name, [&](hmi::Project& p) {
-        if (auto* g = fnOf(p, id)) g->returnType = t;
+    // 1.13.0 (lot J6b) : un retour qui ne prend pas d'unite (BOOL, STRING, aucun) la retire.
+    const std::string lostUnit = !f->returnUnit.empty() && (t.empty() || !hmi::units::typeTakesUnit(t)) ? f->returnUnit : std::string{};
+    const std::string fname = f->name;
+    auto cmd = hmi::changeProject(doc_, "Retour de " + fname, [&](hmi::Project& p) {
+        if (auto* g = fnOf(p, id)) {
+            g->returnType = t;
+            if (!lostUnit.empty()) g->returnUnit.clear();
+        }
     });
     if (cmd) apply_(std::move(cmd));
+    if (!lostUnit.empty()) say(fname + " : unit\xC3\xA9 du retour " + lostUnit + " retir\xC3\xA9" "e (Ctrl+Z la rend)");
     return true;
+}
+
+// 1.13.0 (lot J6b) : L'UNITE DU RETOUR (Rend : REAL [m3/h]) - un retour numerique seulement ; vide : sans unite.
+bool HmiFunctionsPane::setReturnUnit(Id id, const std::string& unit, std::string* why) {
+    const auto* f = fnOf(doc_->project, id);
+    if (!f) {
+        if (why) *why = "fonction introuvable";
+        return false;
+    }
+    std::string canon;
+    if (const std::string bad = unitui::problem(doc_->project, f->returnType.empty() ? std::string("(aucun)") : f->returnType, unit, &canon);
+        !bad.empty()) {
+        if (why) *why = bad;
+        say("Unit\xC3\xA9 refus\xC3\xA9" "e : " + bad, true);
+        return false;
+    }
+    if (canon == f->returnUnit) return true;
+    const std::string fname = f->name, type = f->returnType;
+    auto cmd = hmi::changeProject(doc_, "Unit\xC3\xA9 du retour de " + fname, [&](hmi::Project& p) {
+        if (auto* g = fnOf(p, id)) g->returnUnit = canon;
+    });
+    if (cmd) apply_(std::move(cmd));
+    say(fname + (canon.empty() ? std::string(" : retour sans unit\xC3\xA9") : " rend un " + hmi::units::withUnit(type, canon)) + " (Ctrl+Z).");
+    return true;
+}
+
+void HmiFunctionsPane::pickReturnUnit(Id id) {
+    const auto* f = fnOf(doc_->project, id);
+    if (!f || !unitpicker::available()) return;
+    HmiUnitPicker::Spec spec;
+    spec.field = "Unit\xC3\xA9 du retour de " + f->name;
+    spec.current = f->returnUnit;
+    spec.type = f->returnType;
+    spec.doc = doc_;
+    spec.recents = unitpicker::recents();
+    const std::weak_ptr<int> alive = alive_;
+    unitpicker::ask(std::move(spec), [this, id, alive](const HmiUnitPicker::Answer& a) {
+        if (alive.expired() || a.manage) return;
+        (void)setReturnUnit(id, a.unit);
+        rebuildProperties();
+    });
 }
 
 // 1.13.0 : les generiques de la fonction (TEMPLATE <T>) changent ; ses parametres, son retour, ses locales et les

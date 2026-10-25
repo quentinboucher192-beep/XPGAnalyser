@@ -1,5 +1,6 @@
 // Configuration > Langues, Configuration > Unites et formats (lot 13).
 #include "HmiDisplayPanes.hpp"
+#include "../../hmi/HmiUnits.hpp"   // 1.13.0 (lot J6b) : l'unite physique de la variable (unitOfPath)
 #include "../../hmi/HmiRoles.hpp"   // 1.12.19 : l'invite d'une case vide (defaultInvite)
 #include "../../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 #include "../ExportTarget.hpp"
@@ -754,6 +755,15 @@ void HmiUnitsPane::refresh() {
         const auto uses = hmi::displayUses(p, d);
         std::vector<std::string> row{d.path, d.unit, d.format.empty() ? std::string("(de l'objet)") : d.format};
         std::vector<bool> grey(11, false);
+        // 1.13.0 (lot J6b) : une ligne sans unite d'affichage - l'unite physique de la variable, en gris : c'est
+        // celle que les objets montrent (hmi::physicalDisplayUnit), tant qu'on n'en tape pas une autre.
+        hmi::VariableDisplay shown = d;
+        if (hmikit::trimmed(d.unit).empty())
+            if (const std::string physical = hmi::physicalDisplayUnit(p, d.path); !physical.empty()) {
+                row[1] = hmi::roles::defaultInvite(physical, "unit\xC3\xA9 physique");
+                grey[1] = true;
+                shown.unit = physical;
+            }
         for (std::size_t k = 0; k < 6; ++k) {
             const std::string own = hmi::ranges::field(d, hmi::ranges::kKeys[k]);
             if (own.empty() && k < 2) {
@@ -767,7 +777,7 @@ void HmiUnitsPane::refresh() {
             }
             row.push_back(own);
         }
-        row.push_back(hmi::displaySample(d));
+        row.push_back(hmi::displaySample(shown));
         row.push_back(uses.empty() ? std::string("(aucun objet)") : std::to_string(uses.size()) + " : " + fewOf(uses, 3));
         rows.push_back(std::move(row));
         unused.push_back(uses.empty());
@@ -825,13 +835,26 @@ void HmiUnitsPane::rebuildProperties() {
                                 std::string(core::hasApi() ? "Une variable IHM ou de l'automate. " : "Une variable IHM. ")   // 1.12.2
                                     + "Armoires[].ana.PT1.mes vaut pour chaque case du tableau ; "
                                       "un chemin exact (Armoires[2].ana.PT1.mes) l'emporte."));
-    c.properties.push_back(prop("Unit\xC3\xA9", d->unit, PG::ValueType::Text, commit("unite"),
-                                "bar, \xC2\xB0" "C, %, m\xC2\xB3/h... Vide : chaque objet garde la sienne."));
+    {
+        // 1.13.0 (lot J6b) : vide, l'unite physique de la variable (en gris), sinon chaque objet garde la sienne.
+        const std::string physical = hmi::physicalDisplayUnit(p, d->path);
+        auto unitProp = prop("Unit\xC3\xA9", d->unit, PG::ValueType::Text, commit("unite"),
+                             physical.empty() ? std::string("bar, \xC2\xB0" "C, %, m\xC2\xB3/h... Vide : chaque objet garde la sienne.")
+                                              : "Vide : l'unit\xC3\xA9 physique de la variable (" + physical
+                                                    + "), prise par les objets qui n'en ont pas. Une autre unit\xC3\xA9 ici n'est qu'un libell\xC3\xA9 : "
+                                                      "la valeur n'est pas convertie (EN(...) dans l'expression de l'objet).");
+        if (!physical.empty()) unitProp.placeholder = physical;
+        c.properties.push_back(std::move(unitProp));
+    }
     c.properties.push_back(prop("Format", d->format, PG::ValueType::Enum, commit("format"),
                                 "0 : entier ; 0.0, 0.00 : une, deux d\xC3\xA9" "cimales ; 000 : trois chiffres au moins ; 0.0% : en pour cent. "
                                 "Vide : chaque objet garde le sien.",
                                 {"", "0", "0.0", "0.00", "0.000", "000", "0.0%"}));
-    c.properties.push_back(prop("Exemple", hmi::displaySample(*d), PG::ValueType::ReadOnly));
+    {
+        hmi::VariableDisplay shown = *d;
+        if (hmikit::trimmed(shown.unit).empty()) shown.unit = hmi::physicalDisplayUnit(p, d->path);
+        c.properties.push_back(prop("Exemple", hmi::displaySample(shown), PG::ValueType::ReadOnly));
+    }
     // 1.12.10 (lot F) : la plage et les seuils de la variable, repris par les objets qui laissent les leurs vides.
     {
         PG::Category r;
@@ -873,12 +896,17 @@ bool HmiUnitsPane::addDisplay(const std::string& rawPath, const std::string& uni
         if (same(d.path, path)) return fail(path + " a d\xC3\xA9j\xC3\xA0 sa ligne");
     const std::string f = trimmed(format);
     if (!f.empty() && !hmi::looksLikeFormat(f)) return fail("format \xC2\xAB " + f + " \xC2\xBB illisible (0, 0.0, 0.00, 000, 0.0%)");
-    auto cmd = hmi::changeProject(doc_, "Unit\xC3\xA9 de " + path, [&](hmi::Project& pr) { pr.displays.push_back({path, trimmed(unit), f}); });
+    // 1.13.0 (lot J6b) : sans unite tapee, la ligne la laisse vide - les objets montrent l'unite physique de la
+    // variable (bar, degC lu \xC2\xB0C), et suivront si elle change ; le message le dit.
+    const std::string typed = trimmed(unit);
+    const std::string physical = typed.empty() ? hmi::physicalDisplayUnit(doc_->project, path) : std::string{};
+    auto cmd = hmi::changeProject(doc_, "Unit\xC3\xA9 de " + path, [&](hmi::Project& pr) { pr.displays.push_back({path, typed, f}); });
     if (!cmd) return fail("non ajout\xC3\xA9" "e");
     apply_(std::move(cmd));
     refresh();
     selectDisplay(path);
-    say(path + " : " + hmi::displaySample({path, trimmed(unit), f}) + " partout o\xC3\xB9 elle s'affiche.");
+    say(path + " : " + hmi::displaySample({path, typed.empty() ? physical : typed, f}) + " partout o\xC3\xB9 elle s'affiche"
+        + (physical.empty() ? std::string(".") : " (l'unit\xC3\xA9 vient de la variable : " + physical + ")."));
     return true;
 }
 

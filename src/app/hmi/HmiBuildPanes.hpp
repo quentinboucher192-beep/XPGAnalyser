@@ -107,6 +107,8 @@ public:
     void addReport(const hmi::pipeline::Report& report, const hmi::pipeline::Request& request, double seconds);
     // Une ligne dite par l'ecran (un demarrage refuse, un verrou).
     void say(hmi::pipeline::Severity severity, std::string category, std::string message);
+    // 1.13.0 (lot J4b) : ... qui nomme un element (un double-clic y mene : "cas-test:900", "fonction:152").
+    void say(hmi::pipeline::Severity severity, std::string category, std::string message, std::string element);
     // 1.11.14 : la simulation demarre ou s'arrete - une ligne des Sorties.
     void simulationEvent(bool started, int session, const std::string& detail = {});
     // Ce que montre l'onglet : Sorties, ses lignes ; Console, les siennes (Diagnostics : rien).

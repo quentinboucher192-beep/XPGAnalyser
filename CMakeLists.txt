@@ -370,7 +370,8 @@ if(XPG_BUILD_TESTS)
 
     # Lot 16 : ViewModels.cpp montre les types et les dossiers des variables IHM
     # (hmi::types, dans xpg_hmi) : les trois tests qui le compilent lient xpg_hmi.
-    xpg_add_test_executable(viewmodel_test tests/viewmodel_test.cpp src/app/ViewModels.cpp)
+    # 1.13.0 (lot J4b) : l'arbre montre les verdicts des tests unitaires (app::testruns).
+    xpg_add_test_executable(viewmodel_test tests/viewmodel_test.cpp src/app/ViewModels.cpp src/app/hmi/HmiTestRuns.cpp)
     xpg_target_link_libraries(viewmodel_test PRIVATE xpg_hmi xpg_import xpg_ui)
 
     xpg_add_test_executable(settings_test tests/settings_test.cpp src/app/Settings.cpp)

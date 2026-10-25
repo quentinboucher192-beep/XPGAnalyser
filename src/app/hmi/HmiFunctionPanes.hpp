@@ -31,6 +31,7 @@
 #include "HmiAssist.hpp"
 #include "HmiDebugSession.hpp"             // 1.13.0 (lot J2) : la marge des points d'arret
 #include "HmiDeclGrid.hpp"             // 1.11.18 (refonte, lot 5) : les onglets Parametres, Locales, Constantes
+#include "HmiFunctionTestsPage.hpp"    // 1.13.0 (lot J4b) : l'onglet Tests (les tests unitaires de la fonction)
 #include "HmiPanels.hpp"
 #include "HmiLive.hpp"                  // 1.11.21 : les diagnostics en direct (le panneau du bas)
 #include "../../core/Command.hpp"
@@ -85,6 +86,10 @@ public:
     // 1.12.18 (planche 19) : la copie juste apres elle (Moyenne_copie) ; son corps suit (Moyenne := ... -> Moyenne_copie := ...).
     hmi::Id duplicateFunction(hmi::Id, std::string* why = nullptr);
     bool    setReturnType(hmi::Id, const std::string& type, std::string* why = nullptr);
+    // 1.13.0 (lot J6b) : l'unite du retour (Rend : REAL [m3/h]) - un retour numerique seulement ; vide : sans
+    // unite. Changer le retour pour un type qui n'en prend pas la retire. pickReturnUnit : le selecteur d'unites.
+    bool    setReturnUnit(hmi::Id, const std::string& unit, std::string* why = nullptr);
+    void    pickReturnUnit(hmi::Id);
     bool    setDescription(hmi::Id, const std::string& description);
     bool    setBody(hmi::Id, const std::string& body);
     bool    deleteFunction(hmi::Id);
@@ -135,8 +140,14 @@ public:
         // 1.11.21 : le resultat d'Essayer, aux Sorties du panneau du bas (plus de bandeau ESSAI) :
         // ses lignes (gravite, texte), dans l'ordre. Sans hote : la barre du volet seule.
         std::function<void(const std::vector<std::pair<hmi::pipeline::Severity, std::string>>&)> trialOutput;
+        // 1.13.0 (lot J4b) : LES TESTS UNITAIRES - leurs verdicts aux Sorties du panneau du bas (categorie Tests ;
+        // l'element de chaque ligne, cas-test:N, y mene), la fenetre " Nouveau cas " (la vue kNoId : le projet),
+        // et l'ecriture du rapport dans exports/.
+        std::function<void(const std::vector<TestLine>&)>                  testOutput;
+        std::function<void(hmi::Id view, hmi::Id function)>                newTestCase;
+        std::function<bool(const hmi::ExportRequest&, std::string*)>       exportFile;
     };
-    void setHosts(Hosts h) { hosts_ = std::move(h); }
+    void setHosts(Hosts h);
     [[nodiscard]] const Hosts& hosts() const noexcept { return hosts_; }   // 1.11.13 : les completer (l'ecran)
     [[nodiscard]] std::string buildKey() const;   // 1.11.13
     void refreshBuildState();
@@ -151,7 +162,8 @@ public:
     //  Code, Parametres (l'ordre est la signature), Locales, Constantes : ses declarations
     //  du modele (HmiDeclGrid). Une nouvelle fonction y recoit son parametre d'exemple et
     //  sa locale Resultat (plus de bloc VAR dans son code). Le bandeau de l'ancien format.
-    enum CodeTab : std::size_t { CodeTabCode = 0, CodeTabParameters = 1, CodeTabLocals = 2, CodeTabConstants = 3 };
+    // 1.13.0 (lot J4b) : CodeTabTests - le 5e onglet, les tests unitaires de la fonction (HmiFunctionTestsPage).
+    enum CodeTab : std::size_t { CodeTabCode = 0, CodeTabParameters = 1, CodeTabLocals = 2, CodeTabConstants = 3, CodeTabTests = 4 };
     void showCodeTab(std::size_t tab);
     [[nodiscard]] std::size_t currentCodeTab() const noexcept;
     [[nodiscard]] HmiCodeTabs&   codeTabs() noexcept { return *codeTabs_; }
@@ -159,6 +171,14 @@ public:
     [[nodiscard]] HmiDeclGrid&   localsGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Variables); }
     [[nodiscard]] HmiDeclGrid&   constantsGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Constants); }
     [[nodiscard]] HmiDeclBanner& declBanner() noexcept { return *banner_; }
+    // ---- 1.13.0 (lot J4b) : LES TESTS UNITAIRES ----
+    //  L'onglet Tests de la fonction montree ; montrer un cas (sa fonction choisie, l'onglet ouvert, la ligne
+    //  choisie) ; " Lancer les tests " de la barre : tous les cas de toutes les fonctions du volet (le projet, ou
+    //  la vue), leurs verdicts au panneau du bas. Rend le nombre de cas reussis.
+    [[nodiscard]] HmiFunctionTestsPage& testsPage() noexcept { return *testsPage_; }
+    bool showTestCase(hmi::Id test);
+    std::size_t runTests();
+    [[nodiscard]] const TestCampaign& lastCampaign() const noexcept { return campaign_; }
     [[nodiscard]] std::optional<hmi::decledit::Place> currentPlace() const;
     bool migrateCurrent();
     bool goToNextUse(const std::string& name, int which = -1);   // 1.12.18 : which >= 0 - celle de ce rang
@@ -214,6 +234,9 @@ private:
     ui::PropertyGrid*  props_{nullptr};
     HmiTitledPanel*    editorPanel_{nullptr};
     HmiCodeTabs*       codeTabs_{nullptr};         // 1.11.18 (lot 5) : Code | Parametres | Locales | Constantes
+    HmiFunctionTestsPage* testsPage_{nullptr};     // 1.13.0 (lot J4b) : ... | Tests
+    TestCampaign       campaign_;                  // 1.13.0 (lot J4b) : le dernier " Lancer les tests " du volet
+    void refreshTestsTab();
     HmiDeclBanner*     banner_{nullptr};
     ui::MultiLineText* editor_{nullptr};
     ui::StatusBar*     symbolBar_{nullptr};

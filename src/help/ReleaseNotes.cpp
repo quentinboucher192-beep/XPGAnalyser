@@ -141,9 +141,10 @@ const std::vector<Note>& table() {
         note("1.13.0", "Projet", Kind::Changed,
          "Retire : l'export et l'import de l'IHM en page web (un navigateur ne peut pas dialoguer en Modbus). Les archives .xihm/.xapi et l'acces web en direct restent.",
          "page-web", ""),
-        // 1.13.0 (lot J6) : les unites de mesure dans les types (moteur, controle, natives EN/UNITE/SANS_UNITE).
+        // 1.13.0 (lot J6) : les unites de mesure dans les types (moteur, controle, natives EN/UNITE/SANS_UNITE) ;
+        // (lot J6b) l'interface : la colonne Unite, le selecteur, Configuration > Unites de mesure, l'affichage.
         note("1.13.0", "Types", Kind::New,
-         "LES UNIT\xC3\x89S DE MESURE DANS LES TYPES : donne une unit\xC3\xA9 physique \xC3\xA0 une variable ou \xC3\xA0 un membre de type (bar, mbar, degC, m3/h, %\xE2\x80\xA6). La compilation refuse d'additionner ou de comparer des bar et des mbar et te propose la conversion d'un clic ; l'affectation convertit d'office ce qui est compatible (coche Unit\xC3\xA9s strictes pour exiger EN \xC3\xA0 la place). EN(x, 'unit\xC3\xA9') convertit, UNITE(x) donne le symbole, SANS_UNITE(x) l'enl\xC3\xA8ve. Une unit\xC3\xA9 ne se pose que sur un nombre ; sans unit\xC3\xA9, rien ne change.",
+         "LES UNIT\xC3\x89S DE MESURE DANS LES TYPES : donne une unit\xC3\xA9 physique \xC3\xA0 une variable ou \xC3\xA0 un membre de type (bar, mbar, degC, m3/h, %\xE2\x80\xA6) dans sa colonne Unit\xC3\xA9, tap\xC3\xA9" "e ou choisie dans le s\xC3\xA9lecteur d'unit\xC3\xA9s ; Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure ajoute les tiennes. La compilation refuse d'additionner ou de comparer des bar et des mbar et te propose la conversion d'un clic ; l'affectation convertit d'office ce qui est compatible (coche Unit\xC3\xA9s strictes pour exiger EN \xC3\xA0 la place). EN(x, 'unit\xC3\xA9') convertit, UNITE(x) donne le symbole, SANS_UNITE(x) l'enl\xC3\xA8ve. En marche, un afficheur qui laisse son unit\xC3\xA9 vide montre celle de sa variable. Une unit\xC3\xA9 ne se pose que sur un nombre ; sans unit\xC3\xA9, rien ne change.",
          "unites-mesure", ""),
         // 1.13.0 (lot J8) : les espaces de noms et les bibliotheques reliees (.xpgbib).
         note("1.13.0", "Scripts", Kind::New,

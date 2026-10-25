@@ -72,11 +72,16 @@ enum class Tab : std::uint8_t { Constants, Variables, Parameters };
 // Les lignes d'un onglet : les indices dans `decls` des declarations de son genre, dans l'ordre.
 [[nodiscard]] std::vector<std::size_t> rowsOf(const std::vector<Declaration>&, Tab);
 
-enum class Column : std::uint8_t { Name, Type, Value, Storage, Mode, Visibility, Description };
+// 1.13.0 (lot J6b) : Unit (l'unite physique, Declaration::unit) - ajoutee A LA FIN de l'enumeration
+// (les valeurs existantes ne bougent pas) ; dans la grille, elle suit le Type.
+enum class Column : std::uint8_t { Name, Type, Value, Storage, Mode, Visibility, Description, Unit };
 // Les colonnes d'un onglet, dans l'ordre de la grille (sans les colonnes calculees).
 [[nodiscard]] std::vector<Column> columnsOf(Tab, decl::Role);
-// "Nom", "Type", "Valeur" (une constante) / "Initiale" (une variable) / "Defaut" (un
+// "Nom", "Type", "Unite", "Valeur" (une constante) / "Initiale" (une variable) / "Defaut" (un
 // parametre), "Stockage", "Mode", "Visibilite", "Documentation" (accentues).
+// 1.13.0 (lot J6b) : la case Unite - vide : sans unite ; sinon un symbole du catalogue (fournies +
+// projet, sans casse : degc -> degC), et seulement sur un type numerique (un ARRAY OF REAL : l'element).
+// Un type change qui ne prend plus d'unite la retire (`note` le dit).
 [[nodiscard]] std::string columnTitle(Column, Tab);
 // Le texte d'une case (ce que la grille montre et que Ctrl+C copie).
 [[nodiscard]] std::string cellText(const Declaration&, Column);

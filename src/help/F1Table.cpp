@@ -27,6 +27,7 @@ const std::vector<Place>& places() {
         {Kind::HmiPlace, "essais", "Essais de r\xC3\xA9" "ception", "essais", "help.hmi"},
         {Kind::HmiPlace, "langues", "Langues", "langues", "help.hmi"},
         {Kind::HmiPlace, "unites", "Unit\xC3\xA9s", "unites-formats", "help.hmi"},
+        {Kind::HmiPlace, "unites-mesure", "Unit\xC3\xA9s de mesure", "unites-mesure", "help.hmi"},   // 1.13.0 (lot J6b)
         {Kind::HmiPlace, "variables", "Variables IHM", "variables-ihm", "help.hmi"},
         {Kind::HmiPlace, "types-ihm", "Types IHM", "types-ihm", "help.hmi"},
         {Kind::HmiPlace, "variables-systeme", "Variables syst\xC3\xA8me", "variables-systeme", "help.hmi"},
