@@ -145,6 +145,10 @@ const std::vector<Note>& table() {
         note("1.13.0", "Types", Kind::New,
          "LES UNIT\xC3\x89S DE MESURE DANS LES TYPES : donne une unit\xC3\xA9 physique \xC3\xA0 une variable ou \xC3\xA0 un membre de type (bar, mbar, degC, m3/h, %\xE2\x80\xA6). La compilation refuse d'additionner ou de comparer des bar et des mbar et te propose la conversion d'un clic ; l'affectation convertit d'office ce qui est compatible (coche Unit\xC3\xA9s strictes pour exiger EN \xC3\xA0 la place). EN(x, 'unit\xC3\xA9') convertit, UNITE(x) donne le symbole, SANS_UNITE(x) l'enl\xC3\xA8ve. Une unit\xC3\xA9 ne se pose que sur un nombre ; sans unit\xC3\xA9, rien ne change.",
          "unites-mesure", ""),
+        // 1.13.0 (lot J8) : les espaces de noms et les bibliotheques reliees (.xpgbib).
+        note("1.13.0", "Scripts", Kind::New,
+         "LES ESPACES DE NOMS ET LES BIBLIOTH\xC3\x88QUES : range tes types, tes fonctions et tes scripts g\xC3\xA9n\xC3\xA9raux dans un espace (propri\xC3\xA9t\xC3\xA9 Espace de noms : Gaz, Gaz.Vannes) et appelle-les par leur nom complet (Gaz.T_Vanne, Util.Moyenne(a, b)) ou par leur nom court apr\xC3\xA8s USING Gaz; - deux noms pareils ne se g\xC3\xAAnent plus. Publie un espace en biblioth\xC3\xA8que versionn\xC3\xA9" "e (.xpgbib) et relie-la \xC3\xA0 un autre projet : son code reste dans le fichier, en lecture seule, et Mettre \xC3\xA0 jour te montre ce qui change avant d'appliquer. Un projet sans espace s'enregistre comme avant.",
+         "biblio-espaces", ""),
         // 1.11.16 (09/10/2026 dans la nuit) : la remanence d'exploitation par variable, la robustesse
         // (lot 4 de la specification du 08/10).
         // 1.12.31 (24/10/2026) : la page web en marche (le moteur de l'IHM en WebAssembly, sans les equipements),

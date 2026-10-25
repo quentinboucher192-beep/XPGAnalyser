@@ -5946,7 +5946,7 @@ La fenêtre lit les variables à chaque image pendant que la simulation de l'IHM
 : Un type IHM regroupe des membres sous un nom, comme un DDT de l'automate : T_Four (Temperature, Consigne, Marche, Defaut, Vannes, Heures). Une variable de ce type a tous ces membres ; un membre peut être lui-même une structure ou un tableau de structures.
 @mots type IHM, types IHM, structure, T_Four, membre, membres, DDT, STRUCT, décalage, registre des types, sélecteur de types, Choisir un type, conversion, clé de type
 @lieux types-ihm
-@voir variables-ihm, tableaux-ihm, variables-liees, dossiers, parametres-popups, operateurs, types-excel, enum-scripts
+@voir variables-ihm, tableaux-ihm, variables-liees, dossiers, parametres-popups, operateurs, types-excel, enum-scripts, biblio-espaces
 @capture PNG_430_types_ihm_structure.png | Programmation générale › Types IHM : T_Vanne et T_Four ; les membres de T_Four, leur type, leur valeur initiale, leur décalage et leur taille dans une liaison Modbus.
 @capture PNG_441_arbre_types_et_dossiers.png | L'arbre du projet : les types IHM (leurs membres, leurs mots) et les dossiers des variables IHM.
 ### Créer un type
@@ -7157,7 +7157,7 @@ Une locale de script peut être un tableau à N dimensions (`ARRAY[0..3, 0..9] O
 : Une fonction IHM a un nom, des paramètres et, si elle en a un, un type de retour ; elle s'appelle comme une fonction de l'automate, depuis un script, une action ou une expression de vue.
 @mots VAR_INPUT, VAR_IN_OUT, VAR_OUTPUT, surcharge, surcharges, signature
 @lieux fonctions
-@voir variables-locales, scripts, reference, aide-saisie, verifier, retours-fonctions, copies-references, fonctions-internes
+@voir variables-locales, scripts, reference, aide-saisie, verifier, retours-fonctions, copies-references, fonctions-internes, biblio-espaces
 @capture PNG_174_fonction_avec_retour_signature.png | Une fonction avec retour : ses paramètres (VAR_INPUT), sa VAR_TEMP, sa signature.
 @capture PNG_177_essai_resultat.png | L'essai de Moyenne_Pression(12, 20, 0.25) : 18.0.
 @capture PNG_178_essai_procedure_journal_variable.png | L'essai d'une procédure : la ligne du journal et la variable IHM changée.
@@ -7888,6 +7888,65 @@ mode = static_cast<T_MODE>(code_lu);
 if (!std::in_range<std::int16_t>(valeur_lue)) throw std::bad_cast();
 consigne = static_cast<std::int16_t>(valeur_lue);
 ```
+
+== biblio-espaces | Espaces de noms et bibliothèques
+: Range tes types, tes fonctions et tes scripts généraux dans des espaces de noms (Gaz, Gaz.Vannes) : deux noms pareils ne se gênent plus. Publie un espace en bibliothèque versionnée (.xpgbib) et relie-la à d'autres projets : son code reste dans le fichier, en lecture seule.
+@mots USING, espace de noms, espaces de noms, xpgbib, bibliothèque reliée, Relier une bibliothèque, Publier une bibliothèque, Délier
+@lieux bibliotheques
+@voir types-ihm, fonctions, scripts, reference, aide-saisie, verifier
+### Ranger dans un espace
+L'inspecteur d'un **type IHM**, d'une **fonction IHM** du projet et d'un **script général** a une propriété **Espace de noms** : choisis un espace, ou tape un nom neuf (`Gaz`, `Gaz.Vannes` : des noms séparés par des points). Le nom complet devient `Gaz.T_Vanne`, `Util.Moyenne`, et l'arbre le montre ainsi. Changer d'espace fait suivre les noms complets qui le désignaient (le code, les types des variables et des membres) ; un nom court écrit ailleurs, Compiler le signale et le corrige d'un clic. Une fonction emmène ses surcharges ; Ctrl+Z reprend tout.
+- **Espaces et bibliothèques** (Programmation générale › Bibliothèques, ou clic droit sur Programmation générale) liste les espaces du projet et ce qu'ils rangent. **Espace** en crée un vide ; **Renommer** renomme l'espace et tous les emplois de ses noms ; **Retirer** enlève un espace vide.
+- Un espace ne porte pas le nom d'une variable, d'un type, d'une fonction ou d'un script du projet : Générer le refuse.
+- Un projet sans espace ni bibliothèque s'enregistre comme avant.
+### Appeler : le nom complet, ou USING
+Écris le nom complet (`Util.Moyenne(a, b)`, `V1 : Gaz.T_Vanne`), ou mets **USING Gaz;** en tête du script pour employer les noms courts de Gaz. Un script ou une fonction d'un espace voit aussi, sans USING, les noms de son espace et des espaces qui le contiennent. Un script s'appelle aussi par son nom complet : `IHM_APPELER('Gaz.Horloge')`.
+```ST
+USING Gaz;                                  (* les noms courts de Gaz *)
+VAR_TEMP
+    V1 : T_Vanne;                           (* Gaz.T_Vanne *)
+END_VAR
+V1.Position := Util.Moyenne(12.0, 20.0);    (* un autre espace : son nom complet *)
+IF EnDefaut(V1) THEN                        (* Gaz.EnDefaut *)
+    IHM_APPELER('Gaz.Horloge');
+END_IF;
+```
+```C
+/* le C n'a pas d'espaces : le nom de l'espace en prefixe */
+Gaz_T_Vanne V1;
+
+V1.Position = Util_Moyenne(12.0f, 20.0f);
+if (Gaz_EnDefaut(&V1)) {
+    Gaz_Horloge();
+}
+```
+```C++
+using namespace Gaz;                        // les noms courts de Gaz
+T_Vanne V1;                                 // Gaz::T_Vanne
+
+V1.Position = Util::Moyenne(12.0f, 20.0f);  // un autre espace : son nom complet
+if (EnDefaut(V1)) {                         // Gaz::EnDefaut
+    Horloge();
+}
+```
+Compiler et Générer disent, à sa ligne :
+- un **USING** d'un espace qui n'existe pas (avec le plus proche), ou qui ne sert pas (un avertissement) ;
+- un nom court **ambigu** entre deux USING (`Borne` dans Gaz et dans Util) : qualifie-le ;
+- un nom court d'un autre espace sans USING : « Moyenne est dans l'espace Util : écris Util.Moyenne », corrigé d'un clic.
+L'aide à la saisie, après `Gaz.`, propose les sous-espaces, les types, les fonctions (avec leur signature) et les scripts de Gaz.
+### Publier une bibliothèque
+**Publier une bibliothèque…** écrit un espace (et ses sous-espaces) dans un fichier **.xpgbib** : ses types, ses fonctions et ses scripts généraux, avec un nom et une version (`1.4.0`). Choisis **correctif**, **mineur** ou **majeur** (1.4.1, 1.5.0, 2.0.0), ou une autre version ; le fichier va dans **libs/** du projet (`libs/Gaz-1.4.0.xpgbib`). Ce qui ne voyage pas (une variable IHM employée, par exemple) est dit après la publication. Le projet ne change pas.
+### Relier, mettre à jour, délier
+**Relier une bibliothèque…** choisit un fichier .xpgbib (le bouton … ouvre l'explorateur), puis dit ce qu'il apporte. Le projet garde le lien : le nom, la version, le chemin et l'**interface** (les types et les signatures). Le code reste dans le fichier. Si le projet a déjà un espace de ce nom, relie-la sous un autre nom. Ses éléments se lisent sous son nom (`Gaz.T_Vanne`), avec un cadenas : en lecture seule.
+| L'état | Ce qu'il veut dire |
+| reliée | le fichier a la version du lien |
+| plus récente disponible | le fichier est plus récent et compatible : Mettre à jour |
+| plus ancienne | le fichier est plus ancien que le lien : un avertissement |
+| incompatible | une autre version majeure, ou sous le plancher : Générer le refuse |
+| introuvable | le fichier n'est plus là : Générer le refuse, Localiser… le retrouve ; d'ici là, le projet vérifie ses appels avec l'interface gardée |
+- **Mettre à jour…** montre le diff de l'interface : les ajouts, les retraits, les signatures changées, et pour chaque rupture l'endroit du projet qui l'emploie. **Appliquer** est une seule commande (Ctrl+Z la défait) ; Annuler ne change rien.
+- **Localiser…** retrouve un fichier qui a bougé ; **Relire** relit les fichiers sur le disque ; **Délier** retire le lien (Ctrl+Z le remet).
+> Range tes bibliothèques dans **libs/** du projet : elles voyagent avec lui. Un chemin absolu est signalé.
 
 == reference | Référence : les fonctions IHM_
 : Les fonctions IHM_ agissent sur l'IHM depuis un script : naviguer, ouvrir et gérer les popups, écrire au journal, appeler un script, jouer un son, mettre une alarme de côté, exporter, lire la vue courante, le temps de marche et l'utilisateur connecté.
