@@ -3860,6 +3860,8 @@ private:
             return false;
         }
         // 1.13.0 : une case ANY (une boite JSON) accepte toute valeur (litteral, scalaire, conteneur, ANY).
+        // x := x (ou L[w] := L[r] avec w = r) : la meme case, rien a faire (la vider d'abord la perdait).
+        if (v.o && &into == v.o.get()) return true;
         if (into.type->kind == TypeDesc::Kind::Any) return storeIntoAny(into, v, why);
         // 1.12.19 : un rappel recoit aussi le nom d'une fonction en texte ('Carre') - la maquette (decision 6).
         if (!v.o && into.type->kind == TypeDesc::Kind::Callback) return storeCallback(into, v, why);
@@ -4510,7 +4512,10 @@ private:
                         entry = it->second;
                     }
                     if (!entry) {
-                        if (jsonBase && !create) return Place{jsonAbsent(), {}, true, true};   // 1.13.0 : cle JSON absente -> JSON_Absent
+                        // 1.13.0 : cle JSON absente -> JSON_Absent - dans une boite ANY, et aussi dans une MAP[STRING] OF ANY
+                        // (l'objet JSON tel que JSON_LIRE le rend, ou range dans une variable de ce type).
+                        const bool jsonMap = jsonBase || (type.element && type.element->kind == TypeDesc::Kind::Any);
+                        if (jsonMap && !create) return Place{jsonAbsent(), {}, true, true};
                         if (!create)
                             return dialectError("cl\xC3\xA9 absente de la MAP : " + keyText(*isText, text, integer)
                                                 + " (MAP_HAS(m, cl\xC3\xA9) pour tester, MAP_GET(m, cl\xC3\xA9, d\xC3\xA9" "faut) pour une valeur par d\xC3\xA9" "faut)");
@@ -9337,12 +9342,49 @@ private:
         if (paren != 0) { why = "une parenth\xC3\xA8se '(' n'est pas ferm\xC3\xA9" "e (il manque " + std::to_string(paren) + " fois ')')"; return false; }
         return true;
     }
+    // 1.13.0 : les drapeaux du motif. Sous libstdc++ (MinGW, Linux), l'executeur par defaut parcourt le texte
+    // en profondeur, une trame de pile par caractere : `.*` sur quelques milliers de caracteres debordait la
+    // pile (plantage), et (\w+\s?)*$ prenait un temps exponentiel (l'IHM figee). Le mode polynomial (un
+    // automate en largeur) n'a ni l'un ni l'autre ; il refuse les references arriere (\1).
+    static std::regex::flag_type regexFlags() {
+#ifdef __GLIBCXX__
+        return std::regex::ECMAScript | std::regex_constants::__polynomial;
+#else
+        return std::regex::ECMAScript;
+#endif
+    }
+    // Une reference arriere (\1 a \9, hors d'une classe [...]) : refusee la ou le mode polynomial s'applique.
+    static bool regexBackReference(const std::string& p) {
+        bool inClass = false;
+        for (std::size_t i = 0; i < p.size(); ++i) {
+            if (p[i] == '\\') {
+                if (!inClass && i + 1 < p.size() && p[i + 1] >= '1' && p[i + 1] <= '9') return true;
+                ++i;
+                continue;
+            }
+            if (p[i] == '[') inClass = true;
+            else if (p[i] == ']') inClass = false;
+        }
+        return false;
+    }
+    // Le texte le plus long qu'une expression reguliere parcourt (au-dela : E_REGEX, plutot qu'un plantage ou
+    // une IHM figee).
+    static constexpr std::size_t kRegexMaxText = std::size_t{1} << 20;    // 1 Mo
     const std::regex* regexCompile(const std::string& pattern, std::string& why) {
         if (const auto it = regexCache_.find(pattern); it != regexCache_.end()) return &it->second;
         if (!regexValidate(pattern, why)) return nullptr;                // WASM-safe : pas de construction d'un motif invalide
+#ifdef __GLIBCXX__
+        if (regexBackReference(pattern)) {
+            why = "les r\xC3\xA9" "f\xC3\xA9rences arri\xC3\xA8re (\\1, \\2...) ne sont pas prises en charge";
+            return nullptr;
+        }
+#endif
+        // 1.13.0 : un cache borne - une tache detachee qui compose ses motifs (CONCAT('^ID=', ...)) ne le fait plus
+        // grossir sans fin. Le pointeur rendu ne sert que pendant la native en cours : vider ici est sur.
+        if (regexCache_.size() >= 64) regexCache_.clear();
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
         try {
-            auto [it, ok] = regexCache_.emplace(pattern, std::regex(pattern, std::regex::ECMAScript));
+            auto [it, ok] = regexCache_.emplace(pattern, std::regex(pattern, regexFlags()));
             (void)ok;
             return &it->second;
         } catch (const std::exception& ex) {
@@ -9350,7 +9392,7 @@ private:
             return nullptr;
         }
 #else
-        auto [it, ok] = regexCache_.emplace(pattern, std::regex(pattern, std::regex::ECMAScript));
+        auto [it, ok] = regexCache_.emplace(pattern, std::regex(pattern, regexFlags()));
         (void)ok;
         return &it->second;
 #endif
@@ -9368,34 +9410,61 @@ private:
             auto pat = text(0, "le motif");
             if (!pat) return core::Err<core::Error>(pat.error());
             std::string why;
+            // 1.13.0 : par le meme chemin que l'emploi (std::regex construit) : TRUE seulement si REGEX_TROUVE l'accepte
+            // ((?<=...), (?<nom>...), a{3,1}, [z-a] : FALSE). Sans exceptions (la page web) : le controle de syntaxe seul.
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
+            return RV{Value::boolean(regexCompile(*pat, why) != nullptr), nullptr};
+#else
             return RV{Value::boolean(regexValidate(*pat, why)), nullptr};
+#endif
         }
         auto subject = text(0, "le texte");
         if (!subject) return core::Err<core::Error>(subject.error());
         auto pat = text(1, "le motif");
         if (!pat) return core::Err<core::Error>(pat.error());
+        // Le remplacement et le groupe se lisent AVANT de compiler : leur code peut appeler une autre REGEX_, qui
+        // viderait le cache (le motif compile ne doit pas bouger pendant la recherche).
+        std::string replacement;
+        if (u == "REGEX_REMPLACE") {
+            auto rep = text(2, "le remplacement");
+            if (!rep) return core::Err<core::Error>(rep.error());
+            replacement = std::move(*rep);
+        }
+        int group = 0;
+        if (u == "REGEX_TROUVE" && e.arguments.size() > 2) {
+            auto g = intArg(u, arg(2), "le groupe");
+            if (!g) return core::Err<core::Error>(g.error());
+            group = static_cast<int>(*g);
+        }
         std::string why;
         const std::regex* re = regexCompile(*pat, why);
         if (!re) return dialectError("REGEX : motif invalide \xE2\x80\x94 " + why);   // E_REGEX
         const std::string& s = *subject;
+        if (s.size() > kRegexMaxText)
+            return dialectError("REGEX : texte trop long (" + std::to_string(s.size() / 1024) + " Ko, 1024 Ko au plus) \xE2\x80\x94 traite-le par morceaux (ligne par ligne)");
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
+        // Une recherche que la bibliotheque abandonne (trop complexe, pile) : E_REGEX, pas un plantage.
+        try {
+            return regexRun(u, *re, s, replacement, group);
+        } catch (const std::regex_error& ex) {
+            return dialectError(std::string("REGEX : recherche abandonn\xC3\xA9" "e (motif trop complexe pour ce texte) \xE2\x80\x94 ") + ex.what());
+        }
+#else
+        return regexRun(u, *re, s, replacement, group);
+#endif
+    }
+    // La recherche elle-meme (le motif compile, le texte borne).
+    core::Result<RV> regexRun(const std::string& u, const std::regex& reRef, const std::string& s, const std::string& replacement,
+                              int group) {
+        const std::regex* re = &reRef;
         const auto strList = [&](std::vector<std::string> items) {
             auto out = makeObj(listType(scalarType(Type::String)));
             for (auto& x : items) { auto it = makeObj(scalarType(Type::String)); it->value = Value::text(std::move(x)); out->items.push_back(it); }
             return core::Result<RV>(RV{{}, out});
         };
         if (u == "REGEX_TESTE") return RV{Value::boolean(std::regex_search(s, *re)), nullptr};
-        if (u == "REGEX_REMPLACE") {
-            auto rep = text(2, "le remplacement");
-            if (!rep) return core::Err<core::Error>(rep.error());
-            return RV{Value::text(std::regex_replace(s, *re, *rep)), nullptr};
-        }
+        if (u == "REGEX_REMPLACE") return RV{Value::text(std::regex_replace(s, *re, replacement)), nullptr};
         if (u == "REGEX_TROUVE") {
-            int group = 0;
-            if (e.arguments.size() > 2) {
-                auto g = intArg(u, arg(2), "le groupe");
-                if (!g) return core::Err<core::Error>(g.error());
-                group = static_cast<int>(*g);
-            }
             std::smatch m;
             if (!std::regex_search(s, m, *re)) return RV{Value::text(std::string{}), nullptr};
             if (group < 0 || static_cast<std::size_t>(group) >= m.size()) return RV{Value::text(std::string{}), nullptr};

@@ -14,6 +14,7 @@
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/sim/Interpreter.hpp"     // le ST de l'automate (sans le dialecte)
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -288,6 +289,78 @@ void automateInchange() {
     check(parses("x := 1 + 2;", true) && parses("x := 1 + 2;", false), "une affectation ST ordinaire : lue par le dialecte ET l'automate");
 }
 
+// ---- la relecture de la 1.13.0 (groupe B, les donnees) ------------------------
+//  Chaque essai suit le scenario d'un defaut confirme : il echouait avant la correction.
+// Le moteur seul (le dialecte), un texte T donne : R lu apres.
+std::string engine(const std::string& src, const std::string& text, std::string* diags = nullptr) {
+    auto program = sim::parse(src, "essai", sim::ParseOptions{true});
+    if (!program) return "illisible : " + program.error().message();
+    MapEnv env;
+    env.vars["T"] = sim::Value::text(text);
+    env.vars["R"] = sim::Value::text(std::string{});
+    (void)sim::execute(**program, env);
+    if (diags) {
+        diags->clear();
+        for (const auto& d : env.diags) *diags += d.message;
+    }
+    sim::Value r;
+    return env.read("R", r) ? shown(r) : std::string("#");
+}
+
+void relecture() {
+    std::printf("-- relecture 1.13.0 : donnees (cle JSON absente, ANY, regex longues, REGEX_VALIDE)\n");
+    std::string err;
+
+    // n26 : une cle absente dans une MAP[STRING] OF ANY (l'objet JSON range, ou lu directement) : JSON_Absent.
+    check(run("REAL", "VAR Params : MAP[STRING] OF ANY; END_VAR\nParams := JSON_LIRE('{\"a\":1}');\nR := JSON_NOMBRE(Params['seuil'], 80.0);", &err) == "80",
+          "n26 : MAP[STRING] OF ANY, cle absente : JSON_NOMBRE(..., 80.0) = 80, pas E_CLE (" + err + ")");
+    check(run("REAL", "R := JSON_NOMBRE(JSON_LIRE('{\"a\":1}')['manque'], 80.0);", &err) == "80",
+          "n26 : JSON_LIRE(t)['manque'] : le defaut sert (" + err + ")");
+    check(run("STRING", "VAR m : MAP[STRING] OF REAL; END_VAR\nTRY\n    R := REAL_TO_STRING(m['absente']);\nCATCH e\n    R := e.Code;\nEND_TRY") == "E_CLE",
+          "n26 : une MAP ordinaire (MAP[STRING] OF REAL) garde E_CLE sur une cle absente");
+
+    // n30 : une case ANY affectee a elle-meme garde sa valeur (x := x, L[w] := L[r] avec w = r).
+    check(run("REAL", "VAR x : ANY; END_VAR\nx := JSON_LIRE('{\"a\":5}');\nx := x;\nR := JSON_NOMBRE(x['a'], -1.0);", &err) == "5",
+          "n30 : x := x (x : ANY) garde la valeur (" + err + ")");
+    check(run("REAL", "VAR L : LIST OF ANY; w : DINT; END_VAR\nL := JSON_LIRE('[1,2,3]');\nw := 0;\nL[w] := L[0];\nR := JSON_NOMBRE(L[0], -1.0);", &err) == "1",
+          "n30 : L[w] := L[r] avec w = r (LIST OF ANY) garde la valeur (" + err + ")");
+    check(run("DINT", "VAR m : MAP[STRING] OF REAL; END_VAR\nm['a'] := 1.0;\nm := m;\nR := m.Count;", &err) == "1",
+          "n30 : m := m (une MAP) garde ses entrees (" + err + ")");
+
+    // n29 : un long texte ne fait plus deborder la pile ; un motif exponentiel ne fige plus ; au-dela de 1 Mo : E_REGEX.
+    {
+        const std::string big = "\"m\":[" + std::string(300000, 'x') + "]";
+        std::string d;
+        const std::string r = engine("R := REGEX_TROUVE(T, '\"m\":\\[(.*)\\]', 1);", big, &d);
+        check(r.size() == 300000 && r.find_first_not_of('x') == std::string::npos,
+              "n29 : REGEX_TROUVE sur 300 Ko (.*) : pas de debordement de pile [" + std::to_string(r.size()) + d.substr(0, 80) + "]");
+        const auto t0 = std::chrono::steady_clock::now();
+        const std::string e = engine("IF REGEX_TESTE(T, '^(\\w+\\s?)*$$') THEN R := 'oui'; ELSE R := 'non'; END_IF;", std::string(28, 'a') + "!", &d);
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+        check(e == "non" && ms < 2000, "n29 : (\\w+\\s?)*$ sur 28 lettres et '!' : rendu en " + std::to_string(ms) + " ms [" + e + d + "]");
+        (void)engine("R := REGEX_TROUVE(T, 'x');", std::string((1u << 20) + 10, 'x'), &d);
+        check(d.find("texte trop long") != std::string::npos, "n29 : un texte de plus de 1 Mo : E_REGEX, texte trop long (" + d.substr(0, 80) + ")");
+#ifdef __GLIBCXX__
+        check(run("STRING", "TRY\n    R := REGEX_TROUVE('abab', '(ab)\\1');\nCATCH e\n    R := e.Code;\nEND_TRY") == "E_REGEX",
+              "n29 : une reference arriere (\\1) : E_REGEX (le mode sans retour arriere ne la prend pas)");
+#endif
+    }
+
+    // n46 : REGEX_VALIDE dit FALSE pour un motif que REGEX_TROUVE refuserait.
+    check(run("STRING", "IF REGEX_VALIDE('(?<=PRES=)[0-9.]+') THEN R := 'oui'; ELSE R := 'non'; END_IF;") == "non",
+          "n46 : REGEX_VALIDE('(?<=PRES=)...') (lookbehind) = FALSE");
+    check(run("STRING", "IF REGEX_VALIDE('a{3,1}') THEN R := 'oui'; ELSE R := 'non'; END_IF;") == "non",
+          "n46 : REGEX_VALIDE('a{3,1}') = FALSE");
+    check(run("STRING", "IF REGEX_VALIDE('PRES=([0-9.]+)bar') THEN R := 'oui'; ELSE R := 'non'; END_IF;") == "oui",
+          "n46 : REGEX_VALIDE d'un motif correct = TRUE");
+
+    // n52 : beaucoup de motifs differents (le cache est borne, puis vide) : les resultats restent justes.
+    check(run("DINT", "VAR i : DINT; END_VAR\nR := 0;\nFOR i := 0 TO 199 DO\n"
+                      "    IF REGEX_TESTE(CONCAT('ID=', DINT_TO_STRING(i), ';'), CONCAT('^ID=', DINT_TO_STRING(i), ';')) THEN R := R + 1; END_IF;\nEND_FOR;\n"
+                      "IF REGEX_TESTE('ID=0;', '^ID=0;') THEN R := R + 1; END_IF;", &err) == "201",
+          "n52 : 200 motifs differents puis le premier : 201 correspondances (le cache borne se vide sans rien casser) " + err);
+}
+
 } // namespace
 
 int main() {
@@ -300,6 +373,7 @@ int main() {
     regex();
     regexErreur();
     automateInchange();
+    relecture();
     std::printf("=== %d verifications, %d echec(s) ===\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
