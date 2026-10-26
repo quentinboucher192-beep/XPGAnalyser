@@ -254,8 +254,10 @@ struct TypeStep {
 [[nodiscard]] TypeStep stepIndex(const Project&, std::string_view type);
 [[nodiscard]] TypeStep stepMember(const Project&, std::string_view type, std::string_view member);
 // 1.13.0 : un membre ou une methode PRIVE de `typeName` (ou d'un de ses parents), lu de l'exterieur de ses methodes :
-// le message ("Heures est prive dans T_Pompe : seules ses methodes le lisent et l'ecrivent") ; vide : permis.
-[[nodiscard]] std::string privateMemberUse(const Project&, std::string_view typeName, std::string_view member);
+// le message ("Heures est prive dans T_Pompe : seules ses methodes le lisent et l'ecrivent") ; vide : permis. `owner`
+// (facultatif) recoit le type qui le DECLARE, par son nom complet (le moteur le permet dans ses methodes).
+[[nodiscard]] std::string privateMemberUse(const Project&, std::string_view typeName, std::string_view member,
+                                           std::string* owner = nullptr);
 // 1.12.14 : LES PROPRIETES PUBLIQUES d'un type a taille, celles qu'un point lit (Cuves.Count, Cuves.First,
 // T.Length) - les memes que stepMember et le moteur, dans l'ordre ou on les montre : le nom, son type
 // (DINT, BOOL, ou celui de l'element pour First et Last), ses autres noms, ce qu'elle dit. Vide : ni

@@ -200,6 +200,9 @@ struct CodeSite {
     const HmiFunction* own{nullptr};    // le corps d'une fonction IHM : son nom y est aussi son retour
     // 1.13.0 : le corps d'une methode - son type (ses membres et ses methodes s'y lisent par leur nom nu).
     const HmiType*     ownerType{nullptr};
+    // 1.13.0 : le corps lui-meme de cette methode (pas ses declarations) - ses noms nus qui visent SELF ne sont ni des
+    // appels ni des valeurs d'une fonction du projet (methodSelfWords).
+    const HmiFunction* method{nullptr};
     std::string        where;           // "script Calcul", "Vue_A/Btn (action)", "fonction Pompe.Ouvrir"...
     std::string        group{};         // "Appelee par" ne cite un groupe qu'une fois ; "" : `where`
     // 1.13.0 : l'espace de noms du code (un script, une fonction, une methode d'un type de Gaz) : un nom court y vise

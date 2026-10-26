@@ -712,6 +712,9 @@ private:
     struct DialectName { std::string name, upper; std::size_t from{0}, to{0}; };
     std::vector<DialectName> dialectNames_;
     std::vector<DialectName> setLoopVars_;      // 1.12.7 : les variables d'un FOR EACH sur un SET (lues, jamais ecrites)
+    // 1.13.0 : la variable d'un FOR EACH x IN L et le type d'un element de L, sur sa boucle (le prive de ses membres).
+    struct EachVar { std::string upper; std::size_t from{0}, to{0}; std::string type; };
+    std::vector<EachVar> eachVars_;
     struct InternalFunction { std::string name; std::size_t from{0}, to{0}; };
     std::vector<InternalFunction> internal_;
     std::set<std::string>    typeWords_;         // les mots des types (en-tetes, declarations), en majuscules
@@ -834,6 +837,11 @@ private:
             if (isWord(in, "IN") && in > f + 2 && t[in - 1].k == Tok::K::Ident && isIdent(in + 1) && isWord(in + 2, "DO")
                 && setText(typeOfName(t[in + 1].text)))
                 setLoopVars_.push_back({t[in - 1].text, up(t[in - 1].text), from, to});
+            // 1.13.0 : FOR EACH p IN Pompes (une seule variable, une liste, un tableau nomme) - p a le type d'un element.
+            if (sc_.project && isWord(in, "IN") && in == f + 3 && t[f + 2].k == Tok::K::Ident && isIdent(in + 1) && isWord(in + 2, "DO"))
+                if (const std::string coll = typeOfName(t[in + 1].text); !coll.empty())
+                    if (const auto st = types::stepIndex(*sc_.project, coll); !st.type.empty())
+                        eachVars_.push_back({up(t[f + 2].text), from, to, st.type});
         }
         // Les declarations (le texte entier : VAR, VAR_TEMP et VAR_INPUT sont
         // blanchis dans le corps) : un nom que les variables locales n'ont pas.
@@ -1200,18 +1208,33 @@ private:
             return {};
         }
         // 1.13.0 : une locale (un parametre) d'un type objet - VAR q : T_Pompe; q.Heures : un membre ou une methode prive
-        // lu d'ici est refuse, comme sur une variable IHM (pathProblems) ; a toute profondeur (q.Moteur.Heures).
-        if (const auto* l = local(root.text); l && p && !elementary(l->type)) {
-            std::string t = types::normalized(l->type);
+        // lu d'ici est refuse, comme sur une variable IHM (pathProblems) ; a toute profondeur (q.Moteur.Heures) ; a
+        // travers une reference (r^.Heures, r.Heures : REF_TO T_Pompe) ; la variable d'un FOR EACH p IN Pompes.
+        {
+            std::string t;
+            if (const auto* l = local(root.text); l && p && !elementary(l->type)) t = types::normalized(l->type);
+            else if (p && !local(root.text))
+                for (const auto& ev : eachVars_)
+                    if (ev.upper == up(root.text) && root.at >= ev.from && root.at < ev.to) t = ev.type;
+            // REF_TO T, POINTER TO T : le type vise (le ^ ne fait pas de segment).
+            const auto target = [](std::string x) {
+                for (;;) {
+                    while (!x.empty() && x.front() == ' ') x.erase(0, 1);
+                    const std::string u = up(x);
+                    if (u.rfind("REF_TO ", 0) == 0) x.erase(0, 7);
+                    else if (u.rfind("POINTER TO ", 0) == 0) x.erase(0, 11);
+                    else return x;
+                }
+            };
             std::string at = root.text;
             for (const auto& s : segs) {
-                if (s.index || s.member.empty()) break;
+                if (t.empty() || s.index || s.member.empty()) break;
+                t = target(t);
                 if (const std::string why = types::privateMemberUse(*p, t, s.member); !why.empty()) {
                     reportTok(i, j, S::Error, at + "." + s.member + " : " + why);
                     return {};
                 }
                 const auto st = types::stepMember(*p, t, s.member);
-                if (st.type.empty()) break;
                 at += "." + s.member;
                 t = st.type;
             }

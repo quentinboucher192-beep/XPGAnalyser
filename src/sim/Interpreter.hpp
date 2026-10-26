@@ -256,6 +256,14 @@ public:
         (void)from; (void)to;
         return false;
     }
+    // 1.13.0 : UN MEMBRE (ou une methode) PRIVE d'un type IHM, lu, ecrit ou appele par `member`. Son porteur : `type`
+    // (le type d'un objet), ou, vide, `path` (le chemin de l'environnement qui le porte : Pompe1, Pompes[2]). Vide :
+    // permis (public, inconnu) ; sinon le message, et `owner` recoit le type qui le declare (son nom complet) - le
+    // moteur ne le permet que dans une methode de ce type (ou d'un type qui en herite). Par defaut : rien n'est prive.
+    virtual std::string privateMember(std::string_view type, std::string_view path, std::string_view member, std::string& owner) {
+        (void)type; (void)path; (void)member; (void)owner;
+        return {};
+    }
     // 1.13.0 (lot J1) : le nom est-il celui d'une INTERFACE de l'IHM (I_Demarrable) ? Elle n'a pas de membre (pas de
     // structMembers) mais reste une cible de DYNAMIC_CAST<I_x>. Par defaut : non (l'automate n'a pas d'interfaces).
     virtual bool interfaceType(std::string_view name) {
@@ -446,6 +454,10 @@ struct OperatorSource {
     // 1.13.0 (J1b) : l'identifiant que l'environnement donne a cette source (une methode d'un type IHM : son id,
     // pour ses points d'arret) ; 0 : aucun.
     std::uint64_t id{0};
+    // 1.13.0 : une methode d'un type IHM - le type de SELF (celui qui la definit, son nom complet) ; et, privee, le
+    // message (vide : publique) : elle ne s'appelle que d'une methode de ce type (ou d'un type qui en herite).
+    std::string selfType{};
+    std::string privateWhy{};
 };
 
 // Lot API 8 : OU EN EST L'EXECUTION. Le runner y ecrit le numero de la section

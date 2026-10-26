@@ -2763,6 +2763,8 @@ private:
             case Expr::Kind::Member: {
                 auto base = qualify(*e.lhs);
                 if (!base) return base;
+                // 1.13.0 : un membre (une methode) prive d'un type IHM, hors des methodes de son type : refuse.
+                if (const std::string why = privateRefused({}, *base, e.name); !why.empty()) return dialectError(why);
                 return *base + "." + e.name;
             }
             case Expr::Kind::Index: {
@@ -4594,6 +4596,8 @@ private:
                 if (!base) return base;
                 Place p = *base;
                 if (!p.obj) {
+                    // 1.13.0 : un membre prive d'une variable IHM (ou de la cible d'une REF_TO : Pompe1), hors des methodes.
+                    if (const std::string why = privateRefused({}, p.name, e.name); !why.empty()) return dialectError(why);
                     // 1.12.4 : un membre objet d'une structure de l'environnement (Recette.Etapes) : son objet.
                     std::string name = p.name + "." + e.name;
                     if (dialect_)
@@ -4604,7 +4608,11 @@ private:
                 while (isIndirect(p.obj)) {
                     auto t = follow(p.obj);
                     if (!t) return t;
-                    if (!t->obj) return Place{nullptr, t->name + "." + e.name, false, false};
+                    if (!t->obj) {
+                        // 1.13.0 : r^.Heures - une REF_TO vers une variable IHM : son membre prive, hors des methodes.
+                        if (const std::string why = privateRefused({}, t->name, e.name); !why.empty()) return dialectError(why);
+                        return Place{nullptr, t->name + "." + e.name, false, false};
+                    }
                     p = *t;
                 }
                 // 1.13.0 : un membre (.Count, .First...) sur une valeur ANY ouvre sa boite JSON (un objet, un tableau).
@@ -4615,6 +4623,9 @@ private:
                 }
                 const auto& type = *p.obj->type;
                 const std::string m = upperOf(e.name);
+                // 1.13.0 : un membre prive d'un objet d'un type IHM (FOR EACH p IN Pompes, une locale, r^), hors des methodes.
+                if (type.kind == TypeDesc::Kind::Struct)
+                    if (const std::string why = privateRefused(type.name, {}, e.name); !why.empty()) return dialectError(why);
                 if (type.kind == TypeDesc::Kind::Struct || type.kind == TypeDesc::Kind::Tuple) {
                     for (std::size_t k = 0; k < type.members.size() && k < p.obj->items.size(); ++k)
                         if (upperOf(type.members[k].first) == m) return Place{p.obj->items[k], {}, p.constant, p.temp};
@@ -4945,6 +4956,35 @@ private:
         static std::map<std::string, std::shared_ptr<const Function>> cache;
         return cache;
     }
+    // 1.13.0 : les FUNCTION des methodes (gardees dans operatorCache, jamais retirees) et le type de leur SELF.
+    static std::map<const Function*, std::string>& methodTypes() {
+        static std::map<const Function*, std::string> types;
+        return types;
+    }
+    // 1.13.0 : LE PRIVE A L'EXECUTION. Le code qui tourne est-il une methode de `owner` (ou d'un type qui en herite) ?
+    // Le cadre le plus proche qui n'est pas une LAMBDA (une LAMBDA ecrite dans une methode voit ce qu'elle voit). Une
+    // sonde (la condition d'un point d'arret, une expression du debogueur, le trou {Heures} d'un message relu dans la
+    // methode qui leve) : permis.
+    bool insideMethodOf(std::string_view owner) {
+        if (probing_) return true;
+        for (auto it = frames_.rbegin(); it != frames_.rend(); ++it) {
+            if (!it->fn) return false;
+            if (it->fn->name == "LAMBDA") continue;
+            const auto& types = methodTypes();
+            const auto found = types.find(it->fn);
+            return found != types.end() && env_.typeConvertsTo(found->second, owner);
+        }
+        return false;
+    }
+    // Le membre (ou la methode) `member` de `type` (un objet) ou du chemin `path` de l'environnement : prive et lu hors
+    // des methodes de son type -> le message ; vide : permis. Seulement le dialecte IHM (l'automate n'a pas de prive).
+    std::string privateRefused(std::string_view type, std::string_view path, std::string_view member) {
+        if (!dialect_ || probing_) return {};
+        std::string owner;
+        std::string why = env_.privateMember(type, path, member, owner);
+        if (why.empty() || insideMethodOf(owner)) return {};
+        return why;
+    }
 
     // 1.13.0 (lot J1) : l'appel d'une methode d'un type IHM, chemin.Methode(args). Nul : ce n'est pas
     // une methode (l'appelant continue avec les autres resolutions). SELF (l'objet) est passe en premier
@@ -4960,6 +5000,9 @@ private:
         if (realType.empty()) return std::nullopt;
         OperatorSource src;
         if (!env_.findMethod(realType, method, src)) return std::nullopt;
+        // 1.13.0 : une methode privee ne s'appelle que d'une methode de son type (ou d'un type qui en herite).
+        if (!src.privateWhy.empty() && !insideMethodOf(src.selfType))
+            return std::optional<core::Result<RV>>(dialectError(src.privateWhy));
         std::shared_ptr<const Function> f;
         if (const auto it = operatorCache().find(src.key); it != operatorCache().end()) f = it->second;
         else {
@@ -4968,6 +5011,7 @@ private:
             operatorCache()[src.key] = *parsed;
             f = *parsed;
         }
+        if (!src.selfType.empty()) methodTypes()[f.get()] = src.selfType;   // 1.13.0 : son cadre est une methode de ce type
         env_.methodReady(src, *f);      // 1.13.0 (J1b) : ses points d'arret
         // Synthetiser l'appel : SELF (l'objet) devant, puis les arguments donnes.
         Expr call2 = e;
@@ -5530,6 +5574,7 @@ private:
                         operatorCache()[src.key] = *parsed;
                         f = *parsed;
                     }
+                    if (!src.selfType.empty()) methodTypes()[f.get()] = src.selfType;   // 1.13.0 : une methode (SUPER)
                     env_.methodReady(src, *f);      // 1.13.0 (J1b) : ses points d'arret
                     return callDeclared(*f, e, true);
                 }

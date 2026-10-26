@@ -1696,7 +1696,7 @@ std::string summary(const Project& p, std::string_view type, bool packBools) {
 namespace {
 // 1.13.0 (lot J1) : un membre ou une methode PRIVE de `typeName` (ou d'un de ses parents), lu de l'exterieur (un
 // script, une fonction, une fx : pathProblems ne lit jamais le corps d'une methode) : le message ; vide : permis.
-std::string privateUse(const Project& p, std::string_view typeName, std::string_view member) {
+std::string privateUse(const Project& p, std::string_view typeName, std::string_view member, std::string* declaredBy = nullptr) {
     const HmiType* ty = p.hmiTypeByName(trimmed(typeName));
     if (!ty || ty->kind != HmiTypeKind::Structure) return {};
     std::vector<const HmiType*> chain = baseChain(p, fullName(*ty));     // [parent, grand-parent...]
@@ -1704,19 +1704,22 @@ std::string privateUse(const Project& p, std::string_view typeName, std::string_
     chain.push_back(ty);
     for (const HmiType* t : chain)
         for (const auto& m : t->members)
-            if (sameText(m.name, member))
-                return m.visibility == Visibility::Private
-                           ? m.name + " est priv\xC3\xA9 dans " + t->name + " : seules ses m\xC3\xA9thodes le lisent et l'\xC3\xA9" "crivent"
-                           : std::string{};
+            if (sameText(m.name, member)) {
+                if (m.visibility != Visibility::Private) return {};
+                if (declaredBy) *declaredBy = fullName(*t);
+                return m.name + " est priv\xC3\xA9 dans " + t->name + " : seules ses m\xC3\xA9thodes le lisent et l'\xC3\xA9" "crivent";
+            }
     const HmiType* owner = nullptr;
-    if (const HmiFunction* f = effectiveMethod(p, fullName(*ty), member, &owner); f && owner && f->visibility == Visibility::Private)
+    if (const HmiFunction* f = effectiveMethod(p, fullName(*ty), member, &owner); f && owner && f->visibility == Visibility::Private) {
+        if (declaredBy) *declaredBy = fullName(*owner);
         return f->name + " est une m\xC3\xA9thode priv\xC3\xA9" "e de " + owner->name + " : seules ses m\xC3\xA9thodes l'appellent";
+    }
     return {};
 }
 } // namespace
 
-std::string privateMemberUse(const Project& p, std::string_view typeName, std::string_view member) {
-    return privateUse(p, typeName, member);
+std::string privateMemberUse(const Project& p, std::string_view typeName, std::string_view member, std::string* owner) {
+    return privateUse(p, typeName, member, owner);
 }
 
 std::vector<PathProblem> pathProblems(const Project& p, std::string_view source) {

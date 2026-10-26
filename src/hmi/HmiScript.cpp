@@ -7,7 +7,7 @@
 #include "HmiDecl.hpp"              // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiMarkers.hpp"          // 1.11.1 (REP) : les $ des reperes, transparents dans un script ST
 #include "HmiOperators.hpp"        // 1.11.17 : la signature d'un operateur (le lieu d'un appel)
-#include "HmiMethods.hpp"          // 1.13.0 : une methode du meme nom passe avant une fonction (renommer)
+#include "HmiMethods.hpp"          // 1.13.0 : les noms nus d'une methode qui visent SELF (renommer, Appelee par)
 #include "HmiSymbols.hpp"          // 1.11.17 : la portee d'un symbole, rewriteNames (les textes d'un objet)
 #include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : les types d'une locale
 #include "HmiTypes.hpp"            // 1.12.20 : un rappel nomme (T_Filtre)
@@ -1609,7 +1609,9 @@ void visitProject(P& p, Visit& visit) {
         // 1.13.0 : le corps des methodes (renommer une fonction, un espace, un type ; qui appelle quoi).
         for (auto& m : t.methods) {
             const CodeSite site{.ownerType = &t, .where = "type " + fullName(t) + ", m\xC3\xA9thode " + m.name, .ns = t.ns};
-            visit(m.body, CodeForm::Code, site);
+            CodeSite body = site;
+            body.method = &m;
+            visit(m.body, CodeForm::Code, body);
             visitDeclarations(m.decls, site, visit);
         }
     }
@@ -1663,6 +1665,32 @@ void visitProject(P& p, Visit& visit) {
 // Un appel court de `name` y vise la fonction du symbole, pas la fonction IHM.
 bool shadowed(const CodeSite& s, std::string_view name) { return s.scope && symbolFunction(*s.scope, name); }
 
+// 1.13.0 : LE CORPS D'UNE METHODE. Ses noms nus qui visent SELF (un membre lu comme valeur, une methode du type
+// appelee, son propre nom : le retour - methodSelfWords) ne sont ni des appels ni des valeurs d'une fonction du projet :
+// un renommage de fonction et « Appelee par » les sautent. Chacun recoit la marque "\x02." devant (renameCalls et
+// renameItemInCode sautent un mot precede d'un point) ; unguardSelf la retire. Ailleurs : le texte tel quel.
+constexpr std::string_view kSelfMark = "\x02.";
+std::string guardSelf(const Project& p, const CodeSite& s, const std::string& text) {
+    if (!s.method || !s.ownerType || text.find('\x02') != std::string::npos) return text;
+    const auto words = methodSelfWords(p, fullName(*s.ownerType), *s.method, text);
+    if (words.empty()) return text;
+    std::string out;
+    out.reserve(text.size() + kSelfMark.size() * words.size());
+    std::size_t copied = 0;
+    for (const auto& w : words) {
+        if (w.first < copied || w.first >= text.size()) continue;
+        out.append(text, copied, w.first - copied);
+        out += kSelfMark;
+        copied = w.first;
+    }
+    out.append(text, copied, std::string::npos);
+    return out;
+}
+std::string unguardSelf(std::string text) {
+    for (auto at = text.find(kSelfMark); at != std::string::npos; at = text.find(kSelfMark, at)) text.erase(at, kSelfMark.size());
+    return text;
+}
+
 bool callsIn(const std::string& text, CodeForm form, std::string_view name) {
     if (text.empty()) return false;
     const auto next = form == CodeForm::Template ? renameCallsInText(text, name, "\x01") : renameCalls(text, name, "\x01", false, true);
@@ -1705,8 +1733,10 @@ std::size_t renameFunctionEverywhere(Project& p, std::string_view from, std::str
     forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite& s) {
         if (text.empty() || shadowed(s, from)) return;
         const bool bare = s.own && (upper(s.own->name) == key || upper(s.own->name) == next);
-        auto out = form == CodeForm::Template ? renameCallsInText(text, from, to) : renameCalls(text, from, to, bare, true);   // 1.12.19 : passee en rappel aussi
-        if (out != text) { text = std::move(out); ++changed; }
+        // 1.13.0 : dans une methode, un membre (Debit) ou une methode du type (Journal()) n'est pas la fonction.
+        const std::string in = guardSelf(p, s, text);
+        auto out = form == CodeForm::Template ? renameCallsInText(in, from, to) : renameCalls(in, from, to, bare, true);   // 1.12.19 : passee en rappel aussi
+        if (out != in) { text = unguardSelf(std::move(out)); ++changed; }
     });
     // 1.12.19 (R5) : la valeur initiale d'une variable rappel (=Valider), la cible d'une action Appeler - le texte
     // entier la nomme : il prend le nouveau nom (et garde son =).
@@ -1727,11 +1757,12 @@ std::size_t renameFunctionEverywhere(Project& p, std::string_view ns, std::strin
         if (text.empty() || shadowed(s, from)) return;
         // son propre corps (ou celui d'une surcharge) : son nom y est aussi son retour
         const bool bare = s.own && upper(s.own->ns) == upper(ns) && (upper(s.own->name) == key || upper(s.own->name) == next);
-        // une methode qui porte ce nom : l'appel nu vise la methode (SELF.X), pas la fonction
-        if (s.ownerType && effectiveMethod(p, fullName(*s.ownerType), from)) return;
+        // dans une methode : l'appel nu d'une methode du meme nom (SELF.X), un membre lu comme valeur, ne sont pas la
+        // fonction - mot a mot (Util.Moyenne(...) du meme corps suit)
+        const std::string in = guardSelf(p, s, text);
         const auto one = [&](std::string_view e) { return names::renameItemInCode(ix, e, s.ns, targetFull, to, bare); };
-        std::string out = form == CodeForm::Template ? rewriteInText(text, one) : one(text);
-        if (out != text) { text = std::move(out); ++changed; }
+        std::string out = form == CodeForm::Template ? rewriteInText(in, one) : one(in);
+        if (out != in) { text = unguardSelf(std::move(out)); ++changed; }
     });
     // La valeur initiale d'une variable rappel (=Valider, =Util.Valider), la cible d'une action Appeler.
     const auto follow = [&](std::string_view written) {
@@ -1753,7 +1784,8 @@ std::vector<std::string> functionCallers(const Project& p, std::string_view name
     forEachCode(p, [&](const std::string& text, CodeForm form, const CodeSite& s) {
         if ((s.own && upper(s.own->name) == key) || shadowed(s, name)) return;   // pas elle-meme
         const std::string& group = s.group.empty() ? s.where : s.group;
-        if (said.count(group) || !callsIn(text, form, name)) return;
+        // 1.13.0 : dans une methode, Journal() d'une methode du meme nom (SELF.Journal()) n'est pas un appel de la fonction
+        if (said.count(group) || !callsIn(guardSelf(p, s, text), form, name)) return;
         said.insert(group);
         out.push_back(s.where);
     });

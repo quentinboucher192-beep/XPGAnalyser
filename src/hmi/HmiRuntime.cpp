@@ -322,6 +322,12 @@ public:
     // demarrage) ? Sans unite, declaredUnit rend vide tout de suite : l'affectation d'un chemin, que le moteur
     // regarde a chaque fois, ne coute rien a un projet qui n'en met pas.
     int anyUnit{-1};
+    // 1.13.0 : le projet a-t-il un membre ou une methode prive (-1 : pas encore regarde, remis a chaque demarrage) ?
+    // Sans prive, privateMember rend vide tout de suite : un chemin lu ne coute rien de plus.
+    int anyPrivate{-1};
+    // Le prive deja lu, par "TYPE|MEMBRE" (majuscules) : le message et le type qui le declare (vide : permis). Remis
+    // avec anyPrivate : une boucle qui lit Pompes[i].Debit ne refait pas la recherche dans le type a chaque tour.
+    std::map<std::string, std::pair<std::string, std::string>> privateSeen;
     struct CallerLocals {
         Env& env;
         explicit CallerLocals(Env& e) : env(e) { ++env.callerLocals; }
@@ -804,6 +810,8 @@ public:
         out.function = std::move(c.function);
         out.owner = std::move(c.owner);
         out.id = c.method;
+        out.selfType = std::move(c.selfType);        // 1.13.0 : le prive a l'execution
+        out.privateWhy = std::move(c.privateWhy);
         return true;
     }
     // 1.13.0 (lot J1) : SUPER.M(...) emis comme METHODE_<parent>_M - l'interpreteur le resout ici.
@@ -814,7 +822,44 @@ public:
         out.function = std::move(c.function);
         out.owner = std::move(c.owner);
         out.id = c.method;
+        out.selfType = std::move(c.selfType);        // 1.13.0 : son cadre est une methode de ce type (le prive)
         return true;
+    }
+    // 1.13.0 : LE PRIVE A L'EXECUTION (sim::Environment::privateMember) - le porteur : le type d'un objet, ou celui du
+    // chemin (une variable IHM, une case, un membre). Le debogueur (une expression sondee) voit tout.
+    std::string privateMember(std::string_view type, std::string_view path, std::string_view member, std::string& owner) override {
+        if (!rt_.project_ || rt_.debugProbing_ > 0) return {};
+        const Project& p = *rt_.project_;
+        if (anyPrivate < 0) {
+            bool any = false;
+            const auto scan = [&](const HmiType& t) {
+                for (const auto& m : t.members) any = any || m.visibility == Visibility::Private;
+                for (const auto& m : t.methods) any = any || m.visibility == Visibility::Private;
+            };
+            for (const auto& t : p.programs.types) scan(t);
+            p.forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { scan(t); });
+            anyPrivate = any ? 1 : 0;
+        }
+        if (anyPrivate == 0) return {};
+        std::string holder(type);
+        if (holder.empty()) {
+            if (path.empty()) return {};
+            const std::string r = resolved(path);
+            if (r.empty() || r[0] == '$') return {};
+            holder = types::typeOfPath(p, r);
+            if (holder.empty()) return {};
+        }
+        std::string key = upper(holder);
+        key += '|';
+        key += upper(member);
+        auto it = privateSeen.find(key);
+        if (it == privateSeen.end()) {
+            std::string declared;
+            std::string why = types::privateMemberUse(p, holder, member, &declared);
+            it = privateSeen.emplace(std::move(key), std::make_pair(std::move(why), std::move(declared))).first;
+        }
+        owner = it->second.second;
+        return it->second.first;
     }
     // 1.13.0 (J1b) : une methode lue va etre appelee - ses points d'arret (la marge de son editeur), comme une
     // fonction aux types riches (markRichFunction : la FUNCTION interne a son en-tete sur la ligne 1).
@@ -3838,6 +3883,8 @@ void Runtime::start(double now) {
         debugTick(now);
     }
     env_->anyUnit = -1;                 // 1.13.0 (lot J6) : les unites du projet se relisent a chaque demarrage
+    env_->anyPrivate = -1;              // 1.13.0 : le prive aussi (un membre rendu prive depuis)
+    env_->privateSeen.clear();
     // 1.12.2 : les sources d'elements (itemsFrom) se lisent dans ce moteur tant qu'il tourne.
     registerChoiceResolver(this, [this](const Object& o, std::string_view source, std::vector<Choice>& out) { return resolveChoices(source, out, &o); });
     composed_.clear(); boundCalls_.clear();

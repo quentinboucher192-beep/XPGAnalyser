@@ -142,8 +142,10 @@ std::string methodSignature(std::string_view typeName, const HmiFunction& m) {
 // dans un texte, les trous {Debit:0.0} d'un message (LEVER, IHM_LOG, IHM_JOURNAL) lisent SELF.Debit - seulement
 // la : JSON_LIRE('{"Debit":1}'), CONCAT('{Debit}', ...) restent tels quels. Un commentaire est recopie tel quel (ses
 // apostrophes n'ouvrent pas de chaine).
+// `bound` (facultatif) : les mots nus que le corps lit sur SELF ([debut, fin) dans le corps sans reperes) - un membre lu
+// comme valeur, une methode appelee, son propre nom (le retour) : methodSelfWords.
 static std::string rewriteBody(const Project& p, std::string_view ownerType, const HmiFunction& m,
-                               std::string_view internal) {
+                               std::string_view internal, std::vector<std::pair<std::size_t, std::size_t>>* bound = nullptr) {
     const std::string body = markers::strip(m.body);
     const std::string code = codeOnly(body);
     const std::string kind = kindsOf(body);
@@ -286,7 +288,11 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
             out += word;
             continue;
         }
-        if (U == ret && !call) { out += internal; continue; }
+        if (U == ret && !call) {
+            out += internal;
+            if (bound) bound->emplace_back(start, i);
+            continue;
+        }
         // un argument nomme, un champ d'un litteral : (Consigne := x), Ecrire(a, Consigne := x) - son nom reste
         const bool named = [&] {
             if (k + 1 >= body.size() || body[k] != ':' || body[k + 1] != '=') return false;
@@ -294,10 +300,18 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
             while (b > 0 && std::isspace(static_cast<unsigned char>(code[b - 1]))) --b;
             return b > 0 && (code[b - 1] == '(' || code[b - 1] == ',');
         }();
-        if (memberSet.count(U) && !shadow.count(U) && !call && !named) { out += "SELF." + word; continue; }
+        if (memberSet.count(U) && !shadow.count(U) && !call && !named) {
+            out += "SELF." + word;
+            if (bound) bound->emplace_back(start, i);
+            continue;
+        }
         // 1.13.0 : une autre methode du type, appelee par son nom nu (Journal()) : SELF.Journal() - SELF est l'objet reel
         // (VAR_IN_OUT), l'appel garde le dispatch virtuel. Une methode passe avant une fonction de meme nom.
-        if (call && method(word)) { out += "SELF." + word; continue; }
+        if (call && method(word)) {
+            out += "SELF." + word;
+            if (bound) bound->emplace_back(start, i);
+            continue;
+        }
         out += word;
     }
     return out;
@@ -314,6 +328,30 @@ std::string methodFunctionText(const Project& p, std::string_view ownerType, con
     // l'editeur (les messages de Compiler, les points d'arret du debogueur).
     std::string self = " VAR_IN_OUT SELF : " + std::string(trimmed(ownerType)) + "; END_VAR ";
     return head + self + decl::codeOf(m2) + "\nEND_FUNCTION\n";
+}
+
+std::vector<std::pair<std::size_t, std::size_t>> methodSelfWords(const Project& p, std::string_view ownerType, const HmiFunction& m,
+                                                                 std::string_view body) {
+    HmiFunction copy = m;
+    copy.body = std::string(body);
+    std::vector<std::pair<std::size_t, std::size_t>> bound;
+    (void)rewriteBody(p, ownerType, copy, methodFunctionName(ownerType, m), &bound);
+    // rewriteBody lit le corps sans les $ des reperes : ses positions ramenees au texte tel qu'il est ecrit.
+    const auto kept = markers::stripKeep(body);
+    if (kept.removed.empty()) return bound;
+    const auto back = [&](std::size_t at) {
+        for (const std::size_t r : kept.removed) {
+            if (r > at) break;
+            ++at;
+        }
+        return at;
+    };
+    for (auto& [a, b] : bound) {
+        const std::size_t length = b - a;
+        a = back(a);
+        b = a + length;
+    }
+    return bound;
 }
 
 // ---------------------------------------------------------------- heritage ---
@@ -463,6 +501,10 @@ bool resolveMethod(const Project& p, std::string_view selfType, std::string_view
     out.owner = "type " + ownerName + ", m\xC3\xA9thode " + m->name;
     out.key = "methode|" + upperOf(ownerName) + "|" + upperOf(m->name) + "|"
             + std::to_string(std::hash<std::string>{}(out.function));
+    // 1.13.0 : une methode privee - le moteur ne l'appelle que d'une methode de son type (le message de Generer).
+    out.privateWhy = m->visibility == Visibility::Private
+                         ? m->name + " est une m\xC3\xA9thode priv\xC3\xA9" "e de " + owner->name + " : seules ses m\xC3\xA9thodes l'appellent"
+                         : std::string{};
     return true;
 }
 
