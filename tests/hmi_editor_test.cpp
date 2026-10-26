@@ -31050,6 +31050,20 @@ void natives1200() {
     }
     check(sel && accentC, "natives : LIMIT, le selecteur ST | C | C++ (C choisie)");
     check(param, "natives : LIMIT, ses param\xC3\xA8tres (MN)");
+    // 1.13.0 (captures, lot F1 R11) : "Ou l'ecrire" - une condition attend un BOOL. JSON_LIRE (ANY : une MAP, une LIST) n'y
+    // est pas cochee ; un BOOL (MAP_HAS) l'est, un type qui suit ses arguments aussi (LIMIT : comme IN) ; un nombre (SQRT) :
+    // dans une comparaison.
+    const auto conditionRow = [](const char* key) {
+        for (const auto& b : app::natives::article(key, "ST").blocks)
+            if (b.kind == ui::HelpBlockKind::Table)
+                if (const auto at = b.text.find("Condition d'alarme, d'historique\t"); at != std::string::npos)
+                    return b.text.substr(at + std::string("Condition d'alarme, d'historique\t").size());
+        return std::string("?");
+    };
+    check(conditionRow("fonction:JSON_LIRE").rfind("non", 0) == 0, "natives : JSON_LIRE (ANY) pas cochee en condition : " + conditionRow("fonction:JSON_LIRE"));
+    same_text(conditionRow("fonction:MAP_HAS"), "\xE2\x9C\x93", "natives : MAP_HAS (BOOL) cochee en condition");
+    same_text(conditionRow("fonction:LIMIT"), "\xE2\x9C\x93", "natives : LIMIT (comme IN) cochee en condition");
+    check(conditionRow("fonction:SQRT").find("comparaison") != std::string::npos, "natives : SQRT (REAL), en condition dans une comparaison : " + conditionRow("fonction:SQRT"));
     // Les mots : F1 dans un script.
     same_text(app::natives::keyOfWord("limit"), "fonction:LIMIT", "natives : F1 sur limit");
     same_text(app::natives::keyOfWord("INT_TO_REAL"), "conversion:INT_TO_REAL", "natives : F1 sur INT_TO_REAL");

@@ -429,6 +429,7 @@ void HmiBreakpointMargin::attach(ui::Widget& owner, ui::MultiLineText& editor, T
         const auto code = target_ ? target_() : HmiDebugTarget{};
         std::string why;
         const bool placed = HmiDebugSession::instance().toggle(code, static_cast<std::uint32_t>(line0 + 1), &why);
+        conditionOf_ = {};                       // 1.13.0 : un autre message - l'apercu d'une condition ne se redit plus
         if (say_) {
             if (!why.empty()) say_(why, true);
             else if (placed) say_("Point d'arr\xC3\xAAt pos\xC3\xA9 ligne " + std::to_string(line0 + 1) + " : la simulation s'y arr\xC3\xAAtera (Maj+clic : le d\xC3\xA9sactiver).", false);
@@ -443,6 +444,7 @@ void HmiBreakpointMargin::attach(ui::Widget& owner, ui::MultiLineText& editor, T
             if (const auto* b = session.find(id)) {
                 const bool on = !b->enabled;
                 (void)session.setEnabled(id, on);
+                conditionOf_ = {};
                 if (say_)
                     say_(std::string(on ? "Point d'arr\xC3\xAAt r\xC3\xA9" "activ\xC3\xA9 ligne " : "Point d'arr\xC3\xAAt d\xC3\xA9" "sactiv\xC3\xA9 ligne ")
                              + std::to_string(line0 + 1) + (on ? std::string(" : la simulation s'y arr\xC3\xAAtera.")
@@ -478,9 +480,33 @@ void HmiBreakpointMargin::edited() {
     baselineOf_ = code;
 }
 
+namespace {
+// 1.13.0 : l'etat de la simulation dont depend l'apercu d'une condition : arretee, en marche, en pause (laquelle).
+std::string conditionRunState() {
+    const hmi::Runtime* rt = HmiDebugSession::instance().runtime();
+    if (!rt || !rt->running()) return "arretee";
+    return rt->paused() ? "pause " + std::to_string(rt->pauseCount()) : std::string("marche");
+}
+} // namespace
+
 void HmiBreakpointMargin::refresh() {
     if (!editor_) return;
     auto& s = HmiDebugSession::instance();
+    // 1.13.0 : l'apercu d'une condition dit plus haut (la barre du volet) date d'un autre etat de la simulation : il se
+    // redit, recalcule pour l'etat d'ici ("Maintenant, c'est vrai (k = 3)", "Elle sera essayee au passage...").
+    // Elle se redit a chaque changement (la marche, chaque pause, la reprise) jusqu'a l'arret qui suit la marche (dit une
+    // derniere fois), ou jusqu'a ce que la marge dise autre chose.
+    if (!conditionOf_.empty()) {
+        if (const std::string state = conditionRunState(); state != conditionState_) {
+            const bool ran = conditionState_ != "arretee";
+            conditionState_ = state;
+            const auto* b = s.find(s.at(conditionOf_, conditionLine_));
+            const HmiDebugTarget code = conditionOf_;
+            if (!b || blankText(b->condition) || (ran && state == "arretee")) conditionOf_ = {};
+            if (b && !blankText(b->condition) && say_)
+                say_("Condition du point d'arr\xC3\xAAt : " + trimmed(b->condition) + " - " + conditionPreview(code, b->condition), false);
+        }
+    }
     const auto code = target_ ? target_() : HmiDebugTarget{};
     std::vector<ui::MultiLineText::BreakMark> marks;
     std::string sig = std::to_string(code.script) + ":" + std::to_string(code.function);
@@ -562,6 +588,7 @@ void HmiBreakpointMargin::openMenu(std::size_t line0, gfx::Point at) {
 
 void HmiBreakpointMargin::choose(int item) {
     auto& s = HmiDebugSession::instance();
+    if (item != 2) conditionOf_ = {};          // 1.13.0 : un autre geste - l'apercu d'une condition ne se redit plus
     const auto code = target_ ? target_() : HmiDebugTarget{};
     const std::uint32_t id = s.at(code, menuLine_);
     switch (item) {
@@ -595,7 +622,13 @@ void HmiBreakpointMargin::askCondition(std::uint32_t line) {
         const auto lines = splitLines(editor_->text());
         if (line >= 1 && line <= lines.size()) text = lines[line - 1];
     }
-    askBreakpointCondition(code, line, say_, text);
+    // 1.13.0 : l'apercu dit apres Valider se redira, recalcule, au prochain changement d'etat de la simulation (refresh).
+    askBreakpointCondition(code, line, [this, code, line](const std::string& t, bool warning) {
+        if (say_) say_(t, warning);
+        conditionOf_ = code;
+        conditionLine_ = line;
+        conditionState_ = conditionRunState();
+    }, text);
     refresh();
 }
 

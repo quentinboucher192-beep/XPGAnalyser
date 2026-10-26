@@ -1446,7 +1446,9 @@ private:
                         + " : une expression ne change rien ; fais-le dans un script (une action \xC2\xAB Ex\xC3\xA9" "cuter un script \xC2\xBB)");
             else if (u == "WAIT")                           // 1.12.26
                 problem("WAIT attend dans un script, pas dans une expression : une expression calcule sa valeur tout de suite");
-            else if (u == "WAIT_UNTIL")                     // 1.13.0
+            // 1.13.0 : dans un script, WAIT_UNTIL lue comme BOOL (IF WAIT_UNTIL(c, T#2s) THEN) est permise ; un script non
+            // detache a son propre avertissement (Compiler : coche Detache). Dans une fx, non.
+            else if (u == "WAIT_UNTIL" && !ctx_.script)
                 problem("WAIT_UNTIL attend dans un script d\xC3\xA9tach\xC3\xA9, pas dans une expression : une expression calcule sa valeur tout de suite");
             else if (u == "IHM_POINT_ARRET")                // 1.13.0 (lot J2) : le debogueur
                 problem("IHM_POINT_ARRET s'arr\xC3\xAAte dans un script, pas dans une expression : une expression calcule sa valeur tout de suite"

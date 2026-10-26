@@ -643,8 +643,321 @@ void seconde() {
     }
 }
 
+// ---- les captures de la 1.13.0 (lot F1) ---------------------------------------
+//  C1 : RELEVER refuse par Generer ("variable inexistante : RELEVER").
+//  C2 : un LEVER dans une fonction IHM simple, appelee sous TRY, arrivait au CATCH en E_MOTEUR
+//  ("'Verifier_Niveau' : fonction ou bloc inconnu du simulateur") et ecrivait une ERROR a la Console.
+namespace {
+// Une fonction du projet comme l'editeur la range : ses parametres dans ses declarations.
+void addSimpleFunction(Project& p, const std::string& name, const std::string& ret,
+                       const std::vector<std::pair<std::string, std::string>>& params, const std::string& body) {
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = name;
+    f.returnType = ret;
+    for (const auto& [pn, pt] : params) {
+        Declaration d;
+        d.id = p.allocate();
+        d.kind = DeclKind::Parameter;
+        d.name = pn;
+        d.type = pt;
+        d.mode = PassMode::In;
+        f.decls.push_back(std::move(d));
+    }
+    f.body = body;
+    p.programs.functions.push_back(std::move(f));
+}
+std::string journalOf(const Runtime& rt, const std::string& kind) {
+    std::string out;
+    for (const auto& e : rt.journal())
+        if (e.kind == kind) out += " | " + e.message;
+    return out;
+}
+const char* kVerifierNiveau =
+    "(* Leve E_Niveau quand le niveau sort de 0..100 % *)\n"            // 1
+    "IF n < 0.0 OR n > 100.0 THEN\n"                                     // 2
+    "    LEVER('E_Niveau', 'niveau hors plage : {n:0.0} %');\n"          // 3
+    "END_IF;\n"                                                          // 4
+    "Verifier_Niveau := TRUE;\n";                                        // 5
+// Le CATCH ecrit tout ce qu'il recoit : code | ligne | message.
+const char* kCatchAll = "CATCH e\n    R := CONCAT(e.Code, '|', DINT_TO_STRING(e.Ligne), '|', e.Message);\nEND_TRY";
+} // namespace
+
+void capturesF1() {
+    std::printf("-- captures 1.13.0 (lot F1) : RELEVER passe Generer ; un LEVER traverse l'appel d'une fonction\n");
+    // ---- C1 : Generer (HmiCheck) ne prend plus RELEVER pour une variable inexistante ----
+    {
+        Project p;
+        addVariable(p, "D_NIVEAU_MESURE", "REAL", "0.0");
+        addVariable(p, "Compteur", "INT", "0");
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "Controle_Niveau";
+        sc.event = "Appel";
+        sc.body = "(* Controle du niveau : une erreur levee, rattrapee, puis relevee *)\n"
+                  "n := D_NIVEAU_MESURE;\n"
+                  "TRY\n    IF n > 100.0 THEN\n        LEVER('E_Niveau', 'niveau hors plage : {n:0.0} %');\n    END_IF;\n"
+                  "CATCH e\n    IHM_LOG(WARNING, 'rattrape : {e.Code} - {e.Message}');\n    RELEVER;   (* l erreur repart *)\nEND_TRY;";
+        Declaration n;
+        n.id = p.allocate();
+        n.kind = DeclKind::Variable;
+        n.name = "n";
+        n.type = "REAL";
+        sc.decls.push_back(n);
+        p.programs.scripts.push_back(sc);
+        // Une fonction du projet aussi : RELEVER dans son CATCH, sur la meme ligne qu'un appel (un ';' oublie).
+        addSimpleFunction(p, "Relire", "BOOL", {{"x", "REAL"}},
+                          "TRY\n    LEVER('E_X', 'x');\nCATCH e\n    IHM_LOG(INFO, 'vu') RELEVER\nEND_TRY;\nRelire := TRUE;");
+        std::string all;
+        for (const auto& i : generate(p, [](std::string_view) { return false; }))
+            if (i.severity == Issue::Severity::Error) all += " | " + i.message;
+        check(all.find("RELEVER") == std::string::npos, "C1 : Generer ne dit plus 'variable inexistante : RELEVER'" + all);
+        // Hors d'un CATCH : Generer le refuse avec le message clair de Compiler (pas "variable inexistante").
+        {
+            Project q = p;
+            q.programs.scripts.back().body = "n := 1.0;\nRELEVER;";
+            q.programs.functions.clear();
+            std::string outside;
+            for (const auto& i : generate(q, [](std::string_view) { return false; }))
+                if (i.severity == Issue::Severity::Error) outside += " | " + i.message;
+            check(outside.find("RELEVER n'est permis que dans un CATCH") != std::string::npos && outside.find("variable inexistante") == std::string::npos,
+                  "C1 : RELEVER hors CATCH : Generer dit 'n'est permis que dans un CATCH'" + outside);
+        }
+        // Un nom Relever LU dans une expression reste un nom : inconnu, il est dit.
+        p.programs.scripts.back().body = "Compteur := Relever + 1;";
+        p.programs.scripts.back().decls.clear();
+        p.programs.functions.clear();
+        all.clear();
+        for (const auto& i : generate(p, [](std::string_view) { return false; }))
+            if (i.severity == Issue::Severity::Error) all += " | " + i.message;
+        check(all.find("variable inexistante : Relever") != std::string::npos, "C1 : Compteur := Relever + 1 (Relever inconnu) reste dit" + all);
+    }
+
+    // ---- C2 : un LEVER dans une fonction IHM simple, appelee sous TRY ----
+    const auto withVerifier = [](Project& p) {
+        addVariable(p, "Mesure", "REAL", "120.0");
+        addVariable(p, "Ok", "BOOL", "FALSE");
+        addSimpleFunction(p, "Verifier_Niveau", "BOOL", {{"n", "REAL"}}, kVerifierNiveau);
+    };
+    {
+        Bench b("STRING", std::string("TRY\n    Ok := Verifier_Niveau(Mesure);\n    R := 'dans la plage';\n") + kCatchAll, withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r == "E_Niveau|2|niveau hors plage : 120.0 %", "C2 : le CATCH recoit E_Niveau, la ligne de l'appel (2) et le message [" + r + "]");
+        check(err.empty(), "C2 : rattrapee, l'erreur n'arrete pas le script (" + err + ")");
+        check(journalOf(b.rt, "Erreur").empty(), "C2 : rattrapee, pas de ligne ERROR a la Console" + journalOf(b.rt, "Erreur"));
+    }
+    // Non rattrapee : la Console nomme la fonction, sa ligne et le code (une seule ligne).
+    {
+        Bench b("STRING", "R := 'a';\nOk := Verifier_Niveau(Mesure);\nR := 'b';", withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        const std::string errs = journalOf(b.rt, "Erreur");
+        check(r == "a" && err.find("E_Niveau") != std::string::npos && err.find("Verifier_Niveau") != std::string::npos,
+              "C2 : non rattrapee, le script s'arrete et le dit (" + err + ")");
+        check(errs.find("E_Niveau") != std::string::npos && errs.find("ligne 3") != std::string::npos
+                  && errs.find(" | ", 3) == std::string::npos,
+              "C2 : non rattrapee, une seule ERROR, la ligne 3 de la fonction" + errs);
+    }
+    // Deux niveaux : Controle appelle Verifier_Niveau (sans TRY) ; le TRY du script recoit E_Niveau a SA ligne.
+    {
+        const auto twoLevels = [&](Project& p) {
+            withVerifier(p);
+            addSimpleFunction(p, "Controle", "BOOL", {{"v", "REAL"}}, "Controle := Verifier_Niveau(v);\nControle := FALSE;");
+        };
+        Bench b("STRING", std::string("R := 'x';\nTRY\n    Ok := Controle(Mesure);\n") + kCatchAll, twoLevels);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r == "E_Niveau|3|niveau hors plage : 120.0 %" && err.empty(), "C2 : deux niveaux d'appel : E_Niveau a la ligne 3 du script [" + r + "] " + err);
+        check(journalOf(b.rt, "Erreur").empty(), "C2 : deux niveaux, rattrapee : pas d'ERROR" + journalOf(b.rt, "Erreur"));
+    }
+    // Le TRY est dans la fonction intermediaire : elle l'attrape, le script n'en sait rien.
+    {
+        const auto inner = [&](Project& p) {
+            withVerifier(p);
+            addSimpleFunction(p, "Controle_Sur", "STRING", {{"v", "REAL"}},
+                              "TRY\n    Ok := Verifier_Niveau(v);\n    Controle_Sur := 'ok';\nCATCH e\n    Controle_Sur := e.Code;\nEND_TRY;");
+        };
+        Bench b("STRING", "R := Controle_Sur(Mesure);", inner);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r == "E_Niveau" && err.empty() && journalOf(b.rt, "Erreur").empty(),
+              "C2 : le TRY d'une fonction attrape le LEVER de celle qu'elle appelle [" + r + "] " + err + journalOf(b.rt, "Erreur"));
+    }
+    // RELEVER dans la fonction : l'erreur repart vers le TRY du script, telle quelle.
+    {
+        const auto relay = [&](Project& p) {
+            withVerifier(p);
+            addSimpleFunction(p, "Relais", "BOOL", {{"v", "REAL"}},
+                              "TRY\n    Relais := Verifier_Niveau(v);\nCATCH e\n    IHM_LOG(INFO, 'vu {e.Code}');\n    RELEVER;\nEND_TRY;");
+        };
+        Bench b("STRING", std::string("TRY\n    Ok := Relais(Mesure);\n") + kCatchAll, relay);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r == "E_Niveau|2|niveau hors plage : 120.0 %" && err.empty() && journalOf(b.rt, "Erreur").empty(),
+              "C2 : RELEVER dans une fonction : le TRY du script recoit l'erreur telle quelle [" + r + "] " + err + journalOf(b.rt, "Erreur"));
+    }
+    // Une erreur du moteur dans une fonction simple : son code ET son message francais (pas "fonction inconnue").
+    {
+        const auto div = [](Project& p) {
+            addVariable(p, "Diviseur", "INT", "0");
+            addSimpleFunction(p, "Diviser", "INT", {{"a", "INT"}}, "Diviser := a / Diviseur;");
+        };
+        Bench b("STRING", std::string("TRY\n    Compteur := Diviser(10);\n") + kCatchAll, div);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r.rfind("E_DIVISION|2|", 0) == 0 && r.find("division par z") != std::string::npos && r.find("inconnu") == std::string::npos,
+              "C2 : division par zero dans une fonction simple : E_DIVISION, son message [" + r + "]");
+        check(err.empty() && journalOf(b.rt, "Erreur").empty(), "C2 : rattrapee : ni echec ni ERROR" + err + journalOf(b.rt, "Erreur"));
+    }
+    // ?? : a gauche, le LEVER d'une fonction simple choisit la valeur de droite, sans ERROR.
+    {
+        Bench b("REAL", "R := TO_REAL(Verifier_Niveau(Mesure)) ?? 80.0;", withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r == "80" && err.empty() && journalOf(b.rt, "Erreur").empty(), "C2 : Verifier_Niveau(...) ?? : 80, sans ERROR [" + r + "] " + err + journalOf(b.rt, "Erreur"));
+    }
+    // Une methode de type, un operateur : le LEVER arrive au CATCH du script.
+    {
+        const auto typed = [](Project& p) {
+            HmiType t;
+            t.id = p.allocate();
+            t.name = "T_Cuve";
+            TypeMember m;
+            m.name = "Niveau";
+            m.type = "REAL";
+            t.members.push_back(m);
+            HmiFunction meth;
+            meth.id = p.allocate();
+            meth.name = "Verifier";
+            meth.body = "IF Niveau > 100.0 THEN\n    LEVER('E_Cuve', 'cuve pleine : {Niveau:0.0}');\nEND_IF;\n";
+            t.methods.push_back(meth);
+            HmiOperator op;
+            op.id = p.allocate();
+            op.op = "+";
+            op.left = "T_Cuve";
+            op.right = "T_Cuve";
+            op.result = "T_Cuve";
+            op.body = "Resultat.Niveau := a.Niveau + b.Niveau;\nIF Resultat.Niveau > 100.0 THEN\n    LEVER('E_Somme', 'trop');\nEND_IF;\n";
+            t.operators.push_back(op);
+            p.programs.types.push_back(t);
+            addVariable(p, "c1", "T_Cuve", "");
+            addVariable(p, "c2", "T_Cuve", "");
+            addVariable(p, "c3", "T_Cuve", "");
+        };
+        Bench m("STRING", std::string("c1.Niveau := 150.0;\nTRY\n    c1.Verifier();\n") + kCatchAll, typed);
+        std::string err;
+        std::string r = m.runScript(&err);
+        check(r == "E_Cuve|3|cuve pleine : 150.0" && err.empty() && journalOf(m.rt, "Erreur").empty(),
+              "C2 : une methode : E_Cuve, la ligne de l'appel (3) [" + r + "] " + err + journalOf(m.rt, "Erreur"));
+        Bench o("STRING", std::string("c1.Niveau := 60.0;\nc2.Niveau := 50.0;\nTRY\n    c3 := c1 + c2;\n") + kCatchAll, typed);
+        r = o.runScript(&err);
+        check(r == "E_Somme|4|trop" && err.empty() && journalOf(o.rt, "Erreur").empty(),
+              "C2 : un operateur : E_Somme, la ligne de l'appel (4) [" + r + "] " + err + journalOf(o.rt, "Erreur"));
+        // Non rattrapee : la Console nomme la methode (ou l'operateur) comme son code, pas sa FUNCTION interne.
+        Bench mu("STRING", "c1.Niveau := 150.0;\nc1.Verifier();", typed);
+        (void)mu.runScript(&err);
+        const std::string mErr = journalOf(mu.rt, "Erreur");
+        check(mErr.find("m\xC3\xA9thode T_Cuve.Verifier, ligne 2") != std::string::npos && mErr.find("METHODE_") == std::string::npos
+                  && err.find("METHODE_") == std::string::npos,
+              "C4 : un LEVER non rattrape dans une methode : la Console dit 'methode T_Cuve.Verifier, ligne 2'" + mErr + " / " + err);
+        Bench ou("STRING", "c1.Niveau := 60.0;\nc2.Niveau := 50.0;\nc3 := c1 + c2;", typed);
+        (void)ou.runScript(&err);
+        const std::string oErr = journalOf(ou.rt, "Erreur");
+        check(oErr.find("op\xC3\xA9rateur +, ligne 3") != std::string::npos && oErr.find("OPERATEUR_") == std::string::npos,
+              "C4 : un LEVER non rattrape dans un operateur : la Console dit 'operateur +, ligne 3'" + oErr);
+    }
+    // Une LAMBDA qui appelle la fonction : le LEVER la traverse aussi.
+    {
+        Bench b("STRING", std::string("VAR\n    L : LIST OF REAL;\nEND_VAR\nLIST_ADD(L, Mesure);\nTRY\n"
+                                      "    Ok := LIST_ANY(L, LAMBDA (x : REAL) : BOOL => Verifier_Niveau(x));\n") + kCatchAll, withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r.rfind("E_Niveau|", 0) == 0 && r.find("niveau hors plage : 120.0 %") != std::string::npos && journalOf(b.rt, "Erreur").empty(),
+              "C2 : une LAMBDA qui appelle Verifier_Niveau : E_Niveau au CATCH, sans ERROR [" + r + "] " + err + journalOf(b.rt, "Erreur"));
+    }
+    // Une fonction de vue, appelee par un script de la vue sous TRY.
+    {
+        Project p;
+        addVariable(p, "Mesure", "REAL", "120.0");
+        addVariable(p, "R", "STRING", "");
+        View v = makeView(p, "Vue_Cuve");
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Verifier_Vue";
+        f.returnType = "BOOL";
+        Declaration d;
+        d.id = p.allocate();
+        d.kind = DeclKind::Parameter;
+        d.name = "n";
+        d.type = "REAL";
+        f.decls.push_back(d);
+        f.body = "IF n > 100.0 THEN\n    LEVER('E_Vue', 'hors plage {n:0.0}');\nEND_IF;\nVerifier_Vue := TRUE;\n";
+        v.functions.push_back(f);
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "OnOpen";
+        sc.event = "OnOpen";
+        sc.body = "TRY\n    IF Verifier_Vue(Mesure) THEN R := 'ok'; END_IF;\nCATCH e\n    R := CONCAT(e.Code, '|', DINT_TO_STRING(e.Ligne), '|', e.Message);\nEND_TRY";
+        v.scripts.push_back(sc);
+        p.views.push_back(v);
+        p.config.startView = p.views.back().id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        sim::Value out;
+        const std::string r = rt.environment().read("R", out) ? out.asString() : std::string("#");
+        check(r == "E_Vue|2|hors plage 120.0" && journalOf(rt, "Erreur").empty(),
+              "C2 : une fonction de vue : E_Vue au CATCH de l'OnOpen, sans ERROR [" + r + "]" + journalOf(rt, "Erreur"));
+    }
+
+    // ---- C3 : WAIT_UNTIL lue comme BOOL (IF, WHILE, une affectation) dans un script DETACHE : aucun avertissement,
+    // ni de Compiler (Saisie, l'arbre) ni de Generer ; non detache : le seul avertissement juste (coche Detache) ----
+    {
+        Project p;
+        addVariable(p, "D_T", "INT", "0");
+        addVariable(p, "A", "INT", "0");
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "Sequence_Remplissage";
+        sc.event = "Appel";
+        sc.detached = true;
+        sc.body = "IF WAIT_UNTIL(D_T > 0, T#2s) THEN\n    A := 1;\nEND_IF;\n"
+                  "WHILE NOT WAIT_UNTIL(D_T > 5, T#1s) DO\n    A := A + 1;\nEND_WHILE;\n"
+                  "A := BOOL_TO_INT(WAIT_UNTIL(D_T > 0, T#1s));\nWAIT_UNTIL(D_T > 0, T#1s);";
+        p.programs.scripts.push_back(sc);
+        const auto said = [](const std::vector<Issue>& is) {
+            std::string out;
+            for (const auto& i : is)
+                if (i.message.find("WAIT_UNTIL") != std::string::npos) out += " | " + i.message;
+            return out;
+        };
+        const NameExists none = [](std::string_view) { return false; };
+        const std::string compiler = said(scriptcheck::projectIssues(p, none, {}, nullptr));
+        const std::string generer = said(generate(p, none));
+        check(compiler.empty(), "C3 : detache, IF/WHILE/affectation WAIT_UNTIL : Compiler n'avertit pas" + compiler);
+        check(generer.empty(), "C3 : detache : Generer non plus (les deux disent la meme chose)" + generer);
+        scriptcheck::Scope scope;
+        scope.project = &p;
+        scope.plcKnown = none;
+        std::string saisie;
+        for (const auto& f : scriptcheck::check(scope, sc.body))
+            if (f.message.find("WAIT_UNTIL") != std::string::npos) saisie += " | " + f.message;
+        check(saisie.empty(), "C3 : la Saisie (l'editeur) ne souligne plus IF WAIT_UNTIL" + saisie);
+        // Non detache : l'avertissement juste (coche Detache), pas "pas dans une expression".
+        p.programs.scripts.back().detached = false;
+        const std::string notDetached = said(scriptcheck::projectIssues(p, none, {}, nullptr));
+        check(notDetached.find("coche D") != std::string::npos && notDetached.find("pas dans une expression") == std::string::npos,
+              "C3 : non detache : 'coche Detache', pas 'pas dans une expression'" + notDetached);
+        const std::string generer2 = said(generate(p, none));
+        check(generer2 == notDetached, "C3 : non detache : Generer dit la meme chose que Compiler" + generer2 + " / " + notDetached);
+    }
+}
+
 int main() {
     std::printf("1.13.0 : lever ses erreurs (LEVER, RELEVER, CATCH e, codes E_*) et WAIT_UNTIL\n");
+    capturesF1();
     lever();
     codesMoteur();
     waitUntil();

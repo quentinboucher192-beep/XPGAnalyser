@@ -119,6 +119,20 @@ std::string operatorShownName(const HmiOperator& o, const std::string& name) {
     return std::string(kResultName) + name.substr(internal.size());
 }
 
+// 1.13.0 : un nom lu dans le code `function` (une methode, un operateur), montre comme son code l'ecrit : le nom interne
+// de sa valeur rendue - METHODE_T_SONDE_ECART_RELATIF (METHODE_..._X.Membre), OPERATEUR_ADD - redevient le nom que son
+// code lui donne (Ecart_Relatif, Resultat). Un autre code, un autre nom : tel quel.
+std::string codeShownName(const Project& p, Id function, const std::string& name) {
+    if (const HmiOperator* o = operatorOf(p, function)) return operatorShownName(*o, name);
+    const HmiType* owner = nullptr;
+    const HmiFunction* m = codeMethodById(p, function, &owner);
+    if (!m || !owner) return name;
+    const std::string internal = upperText(methodFunctionName(fullName(*owner), *m));
+    if (name.size() < internal.size() || upperText(std::string_view(name).substr(0, internal.size())) != internal) return name;
+    if (name.size() > internal.size() && identChar(name[internal.size()])) return name;      // METHODE_..._XY : un autre nom
+    return m->name + name.substr(internal.size());
+}
+
 // Le texte d'un operateur pour le debogueur : sa FUNCTION interne, l'en-tete sur la ligne 1 avec le debut du corps - les
 // lignes sont celles de son editeur (le moteur, lui, lit l'en-tete seul sur sa ligne : kOperatorHeaderLines).
 std::string operatorDebugText(const HmiOperator& o) {
@@ -772,10 +786,10 @@ std::vector<DebugFrame> Runtime::debugStack(const std::vector<sim::LineProbe::Fr
         d.function = function;
         d.line = frameLine(*f, f->line);
         d.locals = f->locals;
-        // 1.13.0 : un operateur - son resultat sous le nom que son code lui donne (Resultat), pas son nom interne.
-        if (script == kNoId && project_)
-            if (const HmiOperator* o = operatorOf(*project_, function))
-                for (auto& l : d.locals) l.name = operatorShownName(*o, l.name);
+        // 1.13.0 : un operateur, une methode - leur resultat sous le nom que leur code lui donne (Resultat, Ecart_Relatif),
+        // pas leur nom interne (OPERATEUR_ADD, METHODE_T_SONDE_ECART_RELATIF).
+        if (script == kNoId && function != kNoId && project_)
+            for (auto& l : d.locals) l.name = codeShownName(*project_, function, l.name);
         std::string code = project_ ? debugCodeName(*project_, script, function) : std::string{};
         if (code.empty() && script == kNoId) code = boundCodeName(function);   // 1.13.0 : une redefinition d'instance
         if (f->function.empty()) d.label = code.empty() ? std::string("code") : code;
@@ -951,8 +965,9 @@ void Runtime::debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe
     hit.cycle = static_cast<std::uint64_t>(cycles_);
     hit.detached = taskIsDetached(currentTask_);
     probeQuietly([&] { hit.values = probe.lineValues(); });
-    // 1.13.0 : les valeurs de la ligne d'un operateur, sous les noms de son code (Resultat.X, pas OPERATEUR_ADD.X).
-    const HmiOperator* pausedOperator = owner.first == kNoId && project_ ? operatorOf(*project_, owner.second) : nullptr;
+    // 1.13.0 : les valeurs de la ligne d'un operateur ou d'une methode, sous les noms de son code (Resultat.X, pas
+    // OPERATEUR_ADD.X ; Ecart_Relatif, pas METHODE_T_SONDE_ECART_RELATIF).
+    const bool pausedInCode = owner.first == kNoId && owner.second != kNoId && project_;
     for (auto& [name, value] : hit.values) {
         if (value.empty()) {
             const bool aggregate = envOf().richVariable(name) != nullptr || this->aggregate(name) != nullptr;
@@ -960,7 +975,7 @@ void Runtime::debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe
         } else if (variableForced(name)) {
             value += " (forc\xC3\xA9" "e)";
         }
-        if (pausedOperator) name = operatorShownName(*pausedOperator, name);
+        if (pausedInCode) name = codeShownName(*project_, owner.second, name);
     }
     hit.stack = debugStack(chain, here);
     hit.context = hit.stack.empty() ? std::string{} : hit.stack.front().label;
@@ -995,7 +1010,18 @@ void Runtime::debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe
     stepAll_ = false;
     ++pauseCount_;
     ++debugRev_;
-    logAt(LogLevel::Info, "D\xC3\xA9" "bogage", source_, said, static_cast<int>(at));
+    // 1.13.0 : la Console nomme le code en pause et sa ligne a lui - une methode, un operateur, une fonction aux types riches
+    // tournent dans le script qui les appelle (source_ : le script) ; le double clic mene a leur editeur.
+    if (owner.first == kNoId && owner.second != kNoId) {
+        const CodeOrigin callerOrigin = origin_;
+        origin_ = CodeOrigin{};
+        origin_.name = shownName;
+        origin_.function = owner.second;
+        logAt(LogLevel::Info, "D\xC3\xA9" "bogage", shownName, said, static_cast<int>(at));
+        origin_ = callerOrigin;
+    } else {
+        logAt(LogLevel::Info, "D\xC3\xA9" "bogage", source_, said, static_cast<int>(at));
+    }
 
     // La pause : le fil du travail rend la main a celui de l'IHM et attend Continuer, un pas, ou l'arret. Le temps de la
     // pause ne compte ni dans les Performances ni dans le journal des lenteurs (les mesures en cours le retranchent).
@@ -1102,7 +1128,27 @@ bool Runtime::debugEvaluate(const std::string& expression, std::string& value, s
         probeQuietly([&] { r = sim::evaluate(**parsed, envOf()); });
     }
     if (!r) {
-        if (why) *why = conditionFrench(r.error());
+        if (why) {
+            *why = conditionFrench(r.error());
+            // 1.13.0 : en pause, un nom inconnu ICI mais locale d'un autre niveau de la pile (P, locale du script qui
+            // appelle la fonction en pause) : hors de portee ici - pas "non declare", qui ferait croire a une faute.
+            if (paused_ && debugHit_) {
+                const std::string& m = !r.error().context.empty() ? r.error().context : r.error().message();
+                const auto close = m.size() > 2 && m.front() == '\'' ? m.find('\'', 1) : std::string::npos;
+                if (close != std::string::npos && std::string_view(m).substr(close + 1) == " is not declared") {
+                    const std::string name = m.substr(1, close - 1);
+                    const auto& stack = debugHit_->stack;
+                    for (std::size_t k = stack.size(); k-- > 1;) {           // du dessous de la ligne en pause vers le bas
+                        if (k + 1 == stack.size()) continue;                  // le niveau en pause : il ne la connait pas
+                        const auto it = std::find_if(stack[k].locals.begin(), stack[k].locals.end(),
+                                                     [&](const DebugLocal& l) { return upperText(l.name) == upperText(name); });
+                        if (it == stack[k].locals.end()) continue;
+                        *why = it->name + " est hors de port\xC3\xA9" "e ici (une locale de " + stack[k].label + ")";
+                        break;
+                    }
+                }
+            }
+        }
         return false;
     }
     value = r->type() == sim::Type::String ? "'" + r->asString() + "'" : r->display();

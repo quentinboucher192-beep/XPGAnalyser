@@ -109,7 +109,10 @@ public:
     }
     [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override {
         if (r >= rows.size()) return {};
-        return rows[r].note.empty() ? "Double clic : le code, \xC3\xA0 sa ligne. La case : actif ou non." : rows[r].note;
+        // 1.13.0 : en trois colonnes, "Ou" se coupe - l'infobulle dit le point en entier (son code, sa ligne, sa condition).
+        const auto& x = rows[r];
+        const std::string head = x.where + (x.condition.empty() ? std::string{} : " si " + x.condition) + " \xC2\xB7 " + x.hits;
+        return head + "\n" + (x.note.empty() ? std::string("Double clic : le code, \xC3\xA0 sa ligne. La case : actif ou non.") : x.note);
     }
 private:
     HmiDebugPane& pane_;
@@ -182,6 +185,12 @@ public:
     }
     [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
     [[nodiscard]] bool editable(ui::RowIndex r, std::size_t c) const override { return r < pane_.watches_.size() && c == 0; }
+    // 1.13.0 : la colonne Valeur se coupe (trois colonnes) - l'infobulle dit l'espion et sa valeur (ou pourquoi) en entier.
+    [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override {
+        if (r >= pane_.watches_.size()) return {};
+        const std::string v = r < pane_.watchValues_.size() ? pane_.watchValues_[r] : std::string{};
+        return v.empty() ? std::string{} : pane_.watches_[r] + " = " + v;
+    }
     bool setCellText(ui::RowIndex r, std::size_t c, std::string_view text) override {
         if (r >= pane_.watches_.size() || c != 0) return false;
         const std::string t = trimmed(text);
@@ -652,7 +661,9 @@ void HmiDebugPane::rebuildBreakpoints() {
         BreakModel::Row r;
         r.id = b.id;
         const std::string name = codeName(b.script, b.function);
-        r.where = (name.empty() ? std::string("?") : name) + " : " + std::to_string(b.effectiveLine ? b.effectiveLine : b.line);
+        // 1.13.0 : la ligne d'abord - en trois colonnes, "Ou" se coupe a droite ("script Statistiqu...") et deux points
+        // du meme code ne se distinguaient plus.
+        r.where = "l. " + std::to_string(b.effectiveLine ? b.effectiveLine : b.line) + " \xC2\xB7 " + (name.empty() ? std::string("?") : name);
         r.condition = b.condition;
         r.hits = plural(b.hits, "passage", "passages");
         r.note = b.note;

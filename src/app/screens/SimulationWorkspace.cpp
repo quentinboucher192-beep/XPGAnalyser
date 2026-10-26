@@ -120,6 +120,7 @@ struct MainAnalysisScreen::SimCenterState {
     std::uint64_t         forcingSignature{0};
     // l'IHM
     bool                  hmiRunning{false};
+    bool                  hmiPausedSeen{false};  // 1.13.0 : la pause du debogueur vue au dernier rapport
     std::uint64_t         hmiView{0};
     std::string           hmiUser;
     std::map<std::uint64_t, std::string> alarms; // actives : id -> message
@@ -305,6 +306,14 @@ void MainAnalysisScreen::tickSimCenter(double now) {
         st.nextPoll = t + 0.25;
         pollSimCenter(t);
         st.reportDirty = true;
+    }
+    // 1.13.0 : une pause du debogueur (ou sa reprise) se dit tout de suite dans l'arbre, comme la pastille du haut.
+    if (auto* paneNow = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"))) {
+        const bool pausedNow = paneNow->runtime().running() && paneNow->runtime().paused();
+        if (pausedNow != st.hmiPausedSeen) {
+            st.hmiPausedSeen = pausedNow;
+            st.reportDirty = true;
+        }
     }
     if (st.reportDirty || t >= st.nextReport) {
         st.reportDirty = false;
@@ -709,6 +718,7 @@ ss::Snapshot MainAnalysisScreen::simSnapshot(double t) {
     h.exists = doc && !doc->project.views.empty();
     auto* hmiPane = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
     h.running = hmiPane && hmiPane->runtime().running();
+    h.paused = h.running && hmiPane->runtime().paused();     // 1.13.0 : le debogueur des scripts
     if (h.running) {
         auto& run = hmiPane->runtime();
         if (const auto* v = doc ? doc->project.view(run.currentView()) : nullptr) h.view = v->name;

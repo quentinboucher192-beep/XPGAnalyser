@@ -1426,6 +1426,12 @@ namespace ui {
             std::string text;
             return valueProvider_(hoverSymbol_, text) ? text : std::string{};
         }
+        // 1.13.0 : une ligne qui porte une note (les valeurs au passage, coupees au bord droit) la dit en entier au survol.
+        if (!notes_.empty() && !lines_.empty() && bounds().contains(mouse)) {
+            const auto line = lineAt(mouse.y);
+            for (const auto& n : notes_)
+                if (n.line == line && !n.text.empty()) return n.text;
+        }
         return Widget::liveTooltip(mouse);
     }
 
@@ -1895,7 +1901,7 @@ namespace ui {
         return true;
     }
 
-    bool MultiLineText::hasTooltip() const { return Widget::hasTooltip() || breakGutter_ || !squiggles_.empty(); }
+    bool MultiLineText::hasTooltip() const { return Widget::hasTooltip() || breakGutter_ || !squiggles_.empty() || !notes_.empty(); }
     // ---- fin Lot API 8 ----
 
     // ---- 1.10 : les fautes soulignees ----

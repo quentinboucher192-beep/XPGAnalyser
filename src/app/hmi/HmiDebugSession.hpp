@@ -141,6 +141,12 @@ private:
     std::string        shown_;            // ce que la marge montre deja (une signature)
     std::string        baseline_;         // le texte d'avant la frappe
     HmiDebugTarget     baselineOf_{};
+    // 1.13.0 : l'apercu d'une condition validee ("La simulation ne tourne pas...") vaut pour l'etat de la simulation
+    // d'alors : il se redit, recalcule, a chaque changement (elle demarre, se met en pause, reprend), jusqu'a l'arret qui
+    // suit la marche ou un autre message de la marge.
+    HmiDebugTarget     conditionOf_{};
+    std::uint32_t      conditionLine_{0};
+    std::string        conditionState_;
     core::ConnectionScope links_;
 };
 

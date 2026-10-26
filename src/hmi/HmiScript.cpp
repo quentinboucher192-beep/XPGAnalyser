@@ -808,6 +808,10 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
     int line = 1;
     std::size_t i = 0;
     std::string open;   // 1.12.14 : les parentheses et crochets ouverts, le plus interieur a la fin
+    // 1.13.0 : ce qui precede (hors blancs et commentaires) - RELEVER en tete d'instruction est l'instruction du
+    // dialecte, pas un nom lu. `prevChar` : le dernier signe (0 : rien encore, 'v' : une valeur, 'w' : un mot).
+    char prevChar = 0;
+    std::string prevWord;
     const auto advanceTo = [&](std::size_t to) {
         for (; i < to && i < s.size(); ++i) if (s[i] == '\n') ++line;
     };
@@ -817,6 +821,7 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
         if (c == '\'' || c == '"') {
             const auto end = s.find(c, i + 1);
             advanceTo(end == std::string_view::npos ? s.size() : end + 1);
+            prevChar = 'v';
             continue;
         }
         if (c == '(' && i + 1 < s.size() && s[i + 1] == '*') {
@@ -831,6 +836,7 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
         }
         if (std::isdigit(static_cast<unsigned char>(c))) {
             while (i < s.size() && (identChar(s[i]) || s[i] == '#' || s[i] == '.')) ++i;
+            prevChar = 'v';
             continue;
         }
         if (identStart(c)) {
@@ -838,6 +844,10 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
             while (i < s.size() && identChar(s[i])) ++i;
             const std::string word(s.substr(start, i - start));
             const bool member = start > 0 && s[start - 1] == '.';
+            const char before = prevChar;
+            const std::string beforeWord = std::move(prevWord);
+            prevChar = 'w';
+            prevWord = upper(word);
             const bool typed = i < s.size() && s[i] == '#';
             std::size_t k = i;
             while (k < s.size() && (s[k] == ' ' || s[k] == '\t')) ++k;
@@ -881,12 +891,23 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
                 continue;
             }
             if (member || call || stKeywords().count(upper(word)) || operatorWord(upper(word))) continue;
+            // 1.13.0 : RELEVER (sans := ni parenthese) en tete d'instruction - au debut, apres ';', ':', une valeur ou un
+            // mot qui ne demande pas d'operande (THEN, ELSE, DO, le nom d'un CATCH...) - est l'instruction (comme le moteur
+            // et Compiler). Apres :=, un operateur, une virgule, une parenthese ouvrante ou AND, OR, IF... : un nom.
+            if (prevWord == "RELEVER" && !(k + 1 < s.size() && s[k] == ':' && s[k + 1] == '=')) {   // prevWord : ce mot-ci, deja lu
+                static const std::set<std::string> operandBefore = {"AND", "OR", "XOR", "NOT", "MOD", "ENTRE", "ET", "IF", "ELSIF",
+                                                                     "WHILE", "UNTIL", "TO", "BY", "CASE", "RETURN", "IN", "OF"};
+                const bool statement = before == 0 || before == ';' || before == ':' || before == ')' || before == ']' || before == 'v'
+                                    || (before == 'w' && !operandBefore.count(beforeWord));
+                if (statement) continue;
+            }
             const bool seen = std::any_of(out.begin(), out.end(), [&](const NameUse& u) { return upper(u.name) == upper(word); });
             if (!seen) out.push_back({word, line});
             continue;
         }
         if (c == '(' || c == '[') open += c;
         else if ((c == ')' || c == ']') && !open.empty()) open.pop_back();
+        if (!std::isspace(static_cast<unsigned char>(c))) prevChar = c;
         ++i;
     }
     return out;

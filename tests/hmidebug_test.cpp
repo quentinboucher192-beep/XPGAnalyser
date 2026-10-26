@@ -1246,6 +1246,13 @@ void paneKeepsAndCancels() {
     (void)s.add(app::HmiDebugTarget{b.stats, kNoId}, 11);
     pane.refresh(0.0);
     check(pane.breakpointTable().selectedModelRows().empty() && pane.breakpointLines().size() == 2, "deux points dans le tableau");
+    // 1.13.0 (captures F1, R9) : "Ou" commence par la ligne (en trois colonnes, la fin se coupe) ; l'infobulle dit tout.
+    check(pane.breakpointLines()[0].rfind("l. 10 \xC2\xB7 script Statistiques_Pression", 0) == 0
+              && pane.breakpointLines()[1].rfind("l. 11 \xC2\xB7 ", 0) == 0,
+          "Ou : la ligne d'abord : " + pane.breakpointLines()[0]);
+    if (const auto& m = pane.breakpointTable().model())
+        check(m->rowTooltip(0).rfind("l. 10 \xC2\xB7 script Statistiques_Pression \xC2\xB7 0 passage", 0) == 0,
+              "l'infobulle d'un point le dit en entier : " + m->rowTooltip(0));
     pane.breakpointTable().selectModelRows({1}, false);
     (void)s.setEnabled(s.breakpoints()[0].id, false);          // un changement : le volet se refait
     pane.refresh(0.1);
@@ -2146,9 +2153,171 @@ void operatorResultCondition() {
     rt.stop(0.4);
 }
 
+// =============================================================================
+//  Les captures de la 1.13.0 (lot F1) : en pause dans une methode, son retour se
+//  nomme comme son code l'ecrit (C4 a) et la Console dit la methode et sa ligne
+//  (C4 b) ; un espion hors de portee le dit (R7).
+// =============================================================================
+
+// ---- C4 : la methode T_Sonde.Ecart_Relatif - Ecart_Relatif (pas METHODE_T_SONDE_ECART_RELATIF), la Console a sa ligne ----
+void methodShownInPause() {
+    std::printf("-- captures F1 (C4) : en pause dans une methode, son retour se nomme Ecart_Relatif ; la Console dit la methode\n");
+    Project p;
+    HmiType t;
+    t.id = p.allocate();
+    t.name = "T_Sonde";
+    for (const char* n : {"Valeur", "Consigne"}) {
+        TypeMember m;
+        m.name = n;
+        m.type = "REAL";
+        t.members.push_back(m);
+    }
+    HmiFunction m;
+    m.id = p.allocate();
+    m.name = "Ecart_Relatif";
+    m.returnType = "REAL";
+    m.body = "(* SELF : la sonde *)\n"                                     // 1
+             "IF ABS(Consigne) < 1.0 THEN\n"                               // 2
+             "    Ecart_Relatif := 0.0;\n"                                 // 3
+             "ELSE\n"                                                      // 4
+             "    Ecart_Relatif := (Valeur - Consigne) / ABS(Consigne);\n" // 5
+             "END_IF;\n";                                                  // 6
+    const Id mid = m.id;
+    t.methods.push_back(m);
+    p.programs.types.push_back(t);
+    var(p, "Sonde", "T_Sonde", "");
+    var(p, "R", "REAL", "0.0");
+    View v = makeView(p, "Vue_Essai");
+    p.views.push_back(v);
+    p.config.startView = p.views.back().id;
+    const Id sid = script(p, "Statistiques_Pression", "Sonde.Valeur := 36.7;\nSonde.Consigne := 38.0;\nR := Sonde.Ecart_Relatif();\n");
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.tick(0.1);
+    const auto lastDebugLine = [&]() -> const JournalEntry* {
+        const JournalEntry* last = nullptr;
+        for (const auto& e : rt.journal())
+            if (e.kind == "D\xC3\xA9" "bogage" && e.message.find("pause") != std::string::npos) last = &e;
+            else if (e.kind == "D\xC3\xA9" "bogage" && e.message.find("arr\xC3\xAAt\xC3\xA9") != std::string::npos) last = &e;
+        return last;
+    };
+    // (a) le point de la ligne 5 de la methode : les locales et les valeurs de la ligne nomment Ecart_Relatif.
+    rt.setBreakpoints({at(1, kNoId, mid, 5)});
+    (void)rt.callScript("Statistiques_Pression", 0.2);
+    check(rt.paused() && rt.debugHit() && rt.debugHit()->function == mid && rt.debugHit()->line == 5,
+          "le point de la ligne 5 de la methode s'arrete : " + (rt.debugHit() ? rt.debugHit()->where : std::string("pas d'arret")));
+    if (rt.debugHit()) {
+        const auto& hit = *rt.debugHit();
+        const DebugFrame& top = hit.stack.back();
+        std::string names;
+        for (const auto& l : top.locals) names += " " + l.name;
+        check(local(top, "Ecart_Relatif") != nullptr && names.find("METHODE_") == std::string::npos,
+              "les locales nomment le retour Ecart_Relatif, pas METHODE_T_SONDE_ECART_RELATIF :" + names);
+        bool shown = false, internal = false;
+        std::string vals;
+        for (const auto& [name, val] : hit.values) {
+            vals += " " + name + "=" + val;
+            if (name == "Ecart_Relatif") shown = true;
+            if (name.find("METHODE_") != std::string::npos) internal = true;
+        }
+        check(shown && !internal, "les valeurs de la ligne (la ligne d'etat) : Ecart_Relatif, pas son nom interne :" + vals);
+        // (b) la Console : la methode, sa ligne a elle, et le double clic y mene (la fonction : la methode).
+        const JournalEntry* e = lastDebugLine();
+        check(e && e->source == "m\xC3\xA9thode T_Sonde.Ecart_Relatif" && e->line == 5 && e->function == mid && e->script == kNoId,
+              "la Console : Source 'methode T_Sonde.Ecart_Relatif', L. 5, et elle mene a la methode : "
+                  + (e ? e->source + " L." + std::to_string(e->line) + " " + e->message : std::string("rien")));
+    }
+    (void)rt.debugContinue();
+    // Un pas dans la methode (Entrer depuis le script) : la Console dit la methode, a la ligne 2.
+    rt.setBreakpoints({at(1, sid, kNoId, 3)});
+    (void)rt.callScript("Statistiques_Pression", 0.3);
+    check(rt.paused() && rt.debugHit() && rt.debugHit()->line == 3, "en pause ligne 3 du script");
+    check(rt.debugStep(DebugStep::Into) && rt.paused() && rt.debugHit() && rt.debugHit()->function == mid,
+          "Entrer : dans la methode : " + (rt.debugHit() ? rt.debugHit()->where : std::string("-")));
+    if (const JournalEntry* e = lastDebugLine(); rt.debugHit())
+        check(e && e->source == "m\xC3\xA9thode T_Sonde.Ecart_Relatif" && e->line == static_cast<int>(rt.debugHit()->line) && e->function == mid,
+              "le pas : Source la methode, sa ligne (" + std::to_string(rt.debugHit()->line) + ") : "
+                  + (e ? e->source + " L." + std::to_string(e->line) : std::string("rien")));
+    (void)rt.debugContinue();
+    // Le script, lui, reste la source de ses propres arrets.
+    rt.setBreakpoints({at(1, sid, kNoId, 3)});
+    (void)rt.callScript("Statistiques_Pression", 0.4);
+    if (const JournalEntry* e = lastDebugLine())
+        check(e->source == "script Statistiques_Pression" && e->line == 3 && e->script == sid, "un arret du script : sa source, sa ligne : " + e->source);
+    (void)rt.debugContinue();
+    check(!rt.paused() && errors(rt).empty(), "la methode finit sans erreur" + errors(rt));
+    rt.stop(0.5);
+}
+
+// ---- R7 : un espion lu hors de sa portee (une locale du script appelant, en pause dans la fonction) ----
+void watchOutOfScope() {
+    std::printf("-- captures F1 (R7) : un espion d'une locale de l'appelant, en pause dans la fonction : hors de portee ici\n");
+    Bench b;
+    b.go();
+    b.rt.setBreakpoints({at(1, kNoId, b.moyenne, 5)});
+    (void)b.rt.callScript("Statistiques_Pression", 0.2);
+    check(b.rt.paused() && b.rt.debugHit() && b.rt.debugHit()->function == b.moyenne, "en pause dans Moyenne_Pression");
+    std::string v, why;
+    check(!b.rt.debugEvaluate("P * 2.0", v, &why) && why.find("hors de port") != std::string::npos
+              && why.find("Statistiques_Pression") != std::string::npos && why.find("pas d\xC3\xA9" "clar") == std::string::npos,
+          "P * 2.0 (P : locale du script appelant) : hors de portee ici, pas 'non declare' : " + why);
+    why.clear();
+    check(!b.rt.debugEvaluate("Presion", v, &why) && why.find("n'est pas d\xC3\xA9" "clar") != std::string::npos,
+          "Presion (une faute de frappe) : reste 'n'est pas declare' : " + why);
+    why.clear();
+    check(b.rt.debugEvaluate("Somme", v, &why) || why.find("hors de port") == std::string::npos, "Somme (locale d'ici) se lit : " + v + why);
+    // R8 : la colonne Valeur des espions se coupe en trois colonnes - l'infobulle de la ligne dit la valeur entiere.
+    {
+        auto& s = app::HmiDebugSession::instance();
+        auto doc = std::make_shared<hmi::Document>();
+        doc->project = b.p;
+        s.bindProject(doc);
+        s.setRuntime(&b.rt);
+        app::HmiDebugPane pane("essai.debogage.espions", doc, [&b] { return &b.rt; });
+        pane.setBounds({0.f, 0.f, 1200.f, 600.f});
+        (void)pane.addWatch("P * 2.0");
+        pane.refresh(0.3);
+        const auto& m = pane.watchTable().model();
+        const std::string tip = m ? m->rowTooltip(0) : std::string{};
+        check(tip.rfind("P * 2.0 = (P est hors de port", 0) == 0 && tip.find("Statistiques_Pression)") != std::string::npos,
+              "l'infobulle d'un espion : sa valeur (ou pourquoi) en entier : " + tip);
+        s.setRuntime(nullptr);
+    }
+    (void)b.rt.debugContinue();
+}
+
+// ---- C5 : l'arret sur modification - la Console tient une ligne (le saut de ligne de la carte s'y montrait en U+FFFD) ----
+void stopForModificationOneLine() {
+    std::printf("-- captures F1 (C5) : 'La simulation a ete arretee car le projet IHM a ete modifie' tient une ligne a la Console\n");
+    Bench b;
+    auto doc = std::make_shared<hmi::Document>();
+    doc->project = b.p;
+    app::HmiSimulationHost host;
+    host.fullScreenWindow = [](bool) {};
+    {
+        app::HmiSimulationPane pane("essai.simulation.modif", doc, host);
+        pane.startHmi("essai");
+        check(pane.hmiRunning(), "la simulation de l'IHM demarre");
+        pane.stopForModification("1 \xC3\xA9l\xC3\xA9ment modifi\xC3\xA9 : 1 \xC3\xA0 compiler\n\xC2\xB7 Controle_Niveau (script, \xC3\xA0 compiler)");
+        std::string said;
+        for (const auto& e : pane.runtime().journal())
+            if (e.message.find("car le projet IHM a") != std::string::npos) said = e.message;
+        check(!said.empty() && said.find('\n') == std::string::npos
+                  && said.find("1 \xC3\xA0 compiler \xC2\xB7 Controle_Niveau (script") != std::string::npos,
+              "une ligne, les lignes de la carte a la suite : " + said);
+        check(!pane.hmiRunning(), "la simulation s'est arretee");
+    }
+    app::HmiDebugSession::instance().setRuntime(nullptr);
+}
+
 } // namespace
 
 int main() {
+    methodShownInPause();
+    watchOutOfScope();
+    stopForModificationOneLine();
     pauseAndLocals();
     conditions();
     shifted();

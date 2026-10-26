@@ -63,6 +63,59 @@ std::string upper(std::string_view s) {
     return out;
 }
 
+// 1.13.0 : un message du moteur nomme une methode ou un operateur par la FUNCTION interne qui le porte ("fonction
+// METHODE_T_CUVE_VERIFIER, ligne 2", "fonction OPERATEUR_ADD, ligne 4") : la Console, le CATCH disent leur nom et la
+// ligne de leur editeur ("methode T_Cuve.Verifier, ligne 2", "operateur +, ligne 3" - le moteur lit l'en-tete d'un
+// operateur sur sa propre ligne), comme le debogueur. Un autre nom : tel quel.
+std::string shownCodeNames(const Project* p, std::string text) {
+    if (!p || text.find("fonction ") == std::string::npos) return text;
+    // labelOf : le nom montre (vide : inconnu) et les lignes d'en-tete que le moteur lit avant le corps.
+    const auto rename = [&](std::string_view prefix, const std::function<std::pair<std::string, int>(const std::string&)>& labelOf) {
+        const std::string head = "fonction " + std::string(prefix);
+        for (std::size_t at = text.find(head); at != std::string::npos; at = text.find(head, at + 1)) {
+            const std::size_t b = at + 9;
+            std::size_t e = b;
+            while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_')) ++e;
+            const auto [label, header] = labelOf(upper(std::string_view(text).substr(b, e - b)));
+            if (label.empty()) continue;
+            std::string shown = label;
+            static constexpr std::string_view kLine = ", ligne ";
+            std::size_t end = e;
+            if (text.compare(e, kLine.size(), kLine) == 0) {
+                std::size_t d = e + kLine.size();
+                while (d < text.size() && std::isdigit(static_cast<unsigned char>(text[d]))) ++d;
+                if (d > e + kLine.size()) {
+                    const int n = std::stoi(text.substr(e + kLine.size(), d - e - kLine.size()));
+                    shown += std::string(kLine) + std::to_string(n > header ? n - header : n);
+                    end = d;
+                }
+            }
+            text.replace(at, end - at, shown);
+        }
+    };
+    rename("METHODE_", [&](const std::string& internal) {
+        std::string label;
+        const auto look = [&](const HmiType& t) {
+            if (!label.empty()) return;
+            for (const auto& m : t.methods)
+                if (upper(methodFunctionName(fullName(t), m)) == internal) {
+                    label = "m\xC3\xA9thode " + fullName(t) + "." + m.name;
+                    return;
+                }
+        };
+        for (const auto& t : p->programs.types) look(t);
+        if (label.empty()) p->forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { look(t); });
+        return std::make_pair(label, 0);
+    });
+    rename("OPERATEUR_", [&](const std::string& internal) {
+        for (const auto& o : allOperators(*p))
+            if (o.op && upper(operatorInternalName(*o.op)) == internal)
+                return std::make_pair(o.op->op == kConversionOp ? "conversion " + operatorFunctionName(*o.op) : "op\xC3\xA9rateur " + o.op->op, 1);
+        return std::make_pair(std::string{}, 0);
+    });
+    return text;
+}
+
 // "Acc\xC3\xA9l\xC3\xA9r\xC3\xA9" "e" -> "acceleree" : les courbes se comparent sans accents ni casse.
 std::string plain(std::string_view s) {
     std::string out;
@@ -309,6 +362,12 @@ public:
     // 1.13.0 : le message brut du moteur (en anglais) de la derniere fonction du projet qui a echoue - le code E_* d'un
     // TRY de l'appelant (lastCallError) ; vide : pas de cause connue.
     std::string lastCallRaw;
+    // 1.13.0 : ... et ce que le TRY de l'appelant en recoit tel quel (lastCallRaised) : son code, son message, ou elle
+    // est nee. Pose par callFunction, vide a chaque appel.
+    struct RaisedCall {
+        std::string code, message, origin;
+    };
+    std::optional<RaisedCall> lastRaised;
     // Lot 7 : les variables locales du script (ou de la fonction) qui tourne.
     // Seul le cadre du dessus est vu : un script appele ne voit pas celles de
     // l'appelant.
@@ -574,9 +633,17 @@ public:
         return (r.find('.') != std::string::npos && rt_.publicExists(r)) || (rt_.plc_ && rt_.plc_->exists(plcOf(r)));
     }
     std::string lastCallError() override { return lastCallRaw; }
+    bool lastCallRaised(std::string& code, std::string& message, std::string& origin) override {
+        if (!lastRaised) return false;
+        code = lastRaised->code;
+        message = lastRaised->message;
+        origin = lastRaised->origin;
+        return true;
+    }
     bool call(std::string_view name, std::string_view instance,
               const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result) override {
         lastCallRaw.clear();                                   // 1.13.0 : la cause d'un echec, posee par callFunction
+        lastRaised.reset();
         const auto u = upper(name);
         if (u.rfind("IHM_", 0) == 0) return ihm(u, args, result);
         // 1.12.16 : une fonction de la vue, par son nom dans la vue (elle passe avant celles du projet).
@@ -669,7 +736,7 @@ public:
             || u == "IHM_SCRIPT_ACTIF";                                                     // 1.12.26
     }
     void report(sim::Diagnostic d) override { diagnostics.push_back(std::move(d)); }
-    std::string caughtMessage(std::string_view m) override { return frenchSimMessage(m); }   // 1.12.1 : CATCH Erreur
+    std::string caughtMessage(std::string_view m) override { return shownCodeNames(rt_.project_, frenchSimMessage(m)); }   // 1.12.1 : CATCH Erreur
     // 1.13.0 : le code stable d'une erreur du moteur, lu par CATCH e dans e.Code. Le message est brut
     // (avant frenchSimMessage) : "division by zero" est anglais, les erreurs du dialecte deja francaises.
     std::string caughtCode(std::string_view m) override {
@@ -1770,6 +1837,7 @@ void Runtime::probeQuietly(const std::function<void()>& run) {
     const std::string savedAbort = abort_;
     auto savedDiagnostics = env_->diagnostics;
     const std::string savedLastCall = env_->lastCallRaw;
+    const auto savedRaised = env_->lastRaised;
     const std::size_t savedFloor = env_->probeFloor;
     env_->probeFloor = env_->frames.size() + 1;                  // les cadres d'avant, plus un (0 : pas de lecture)
     ++debugProbing_;
@@ -1779,6 +1847,7 @@ void Runtime::probeQuietly(const std::function<void()>& run) {
     --debugProbing_;
     env_->probeFloor = savedFloor;
     env_->lastCallRaw = savedLastCall;
+    env_->lastRaised = savedRaised;
     env_->diagnostics = std::move(savedDiagnostics);
     abort_ = savedAbort;
 }
@@ -2594,6 +2663,9 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     prepareDebug(*program, scriptId, kNoId, limits);
     debugExec_.push_back(DebugExec{sim::programTag(*program), nullptr, nullptr});
     ++execDepth_;
+    // 1.13.0 : un script lance par un autre (IHM_APPELER) : les erreurs de ses fonctions se disent ou se rattrapent ici
+    // (son TRY), pas d'apres le TRY de celui qui l'a lance (callerCatches).
+    const sim::CallBoundary boundary;
     const auto result = sim::execute(*program, *env_, limits);
     const bool abandoned = endExecution();
     if (!debugExec_.empty()) debugExec_.pop_back();
@@ -2611,7 +2683,7 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     int whyLine = -1;                // -1 : pas de ligne (un budget depasse)
     for (const auto& d : env_->diagnostics)
         if (d.severity == sim::Diagnostic::Severity::Error) {
-            why = (d.line ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + frenchSimMessage(d.message);
+            why = (d.line ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + shownCodeNames(project_, frenchSimMessage(d.message));
             if (d.line) whyLine = static_cast<int>(d.line);
             break;
         }
@@ -2827,13 +2899,16 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     // Depuis une expression de vue (evaluee a chaque image), elle ne se dit
     // qu'une fois pour toutes, et l'echec s'arrete a l'expression.
     int failLine = 0;                // 1.11.14 : la ligne de la faute dans la fonction (0 : celle de l'appel)
+    // 1.13.0 : l'erreur sera rattrapee par l'appelant (un TRY, ??) : elle ne se dit pas a la Console et ne coupe pas
+    // l'enchainement (abort_) - elle lui revient telle quelle (lastCallRaised).
+    bool caughtAbove = false;
     const auto say = [&](const std::string& message) {
         if (debugProbing_ > 0) return;           // 1.13.0 : un espion, une condition de point - l'echec se dit la, pas ici
         if (readOnly_ > 0 && !functionErrors_.insert(fnName + "|" + message).second) return;
         logAt(LogLevel::Error, "Erreur", source, message, failLine);
     };
     const auto fail = [&](const std::string& why) {
-        if (abort_.empty()) {
+        if (abort_.empty() && !caughtAbove) {
             say(why);
             abort_ = source + " : " + why;
         }
@@ -2936,11 +3011,24 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     if (abandoned || (currentTask_ && currentTask_->task->cancelled())) return false;
     std::string why = initWhy;
     failLine = -1;
+    env_->lastRaised.reset();                                  // 1.13.0 : rien d'une fonction qu'elle a appelee
     for (const auto& d : mine)
         if (d.severity == sim::Diagnostic::Severity::Error) {
-            why = (d.line ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + frenchSimMessage(d.message);
+            why = (d.line ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + shownCodeNames(project_, frenchSimMessage(d.message));
             if (d.line) failLine = static_cast<int>(d.line);
             env_->lastCallRaw = d.message;                     // 1.13.0 : son code E_* pour le CATCH de l'appelant
+            // 1.13.0 : ce que le TRY de l'appelant recoit TEL QUEL - une erreur levee (son code, son message) ou du moteur
+            // (son code E_*, son message francais), nee ici a sa ligne ou plus bas (son origine). Sauf une boucle sans
+            // fin, un cycle trop long : ceux-la ne se rattrapent pas (l'appel echoue comme avant).
+            const std::string& raw = d.raw.empty() ? d.message : d.raw;
+            if (raw.find(" loop ran more than ") == std::string::npos && raw.find("the scan exceeded") == std::string::npos) {
+                Env::RaisedCall r;
+                r.code = d.code.empty() ? env_->caughtCode(raw) : d.code;
+                r.message = d.code.empty() ? frenchSimMessage(raw) : d.raw;
+                r.origin = !d.origin.empty() ? shownCodeNames(project_, d.origin) : source + (d.line ? ", ligne " + std::to_string(d.line) : std::string{});
+                env_->lastRaised = std::move(r);
+                caughtAbove = sim::callerCatches();
+            }
             break;
         }
     if (why.empty() && !run.completed) why = "arr\xC3\xAAt\xC3\xA9" " : budget d'instructions d\xC3\xA9pass\xC3\xA9 (boucle sans fin ?)";
@@ -3240,7 +3328,7 @@ bool Runtime::computeOne(const Script& sc, const Declaration& d, Id view, sim::O
     }
     for (const auto& dg : env_->diagnostics)
         if (dg.severity == sim::Diagnostic::Severity::Error) {
-            why = (dg.line ? "ligne " + std::to_string(dg.line) + " : " : std::string{}) + frenchSimMessage(dg.message);
+            why = (dg.line ? "ligne " + std::to_string(dg.line) + " : " : std::string{}) + shownCodeNames(project_, frenchSimMessage(dg.message));
             break;
         }
     if (!abort_.empty()) {
