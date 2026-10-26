@@ -310,10 +310,10 @@ std::string methodFunctionText(const Project& p, std::string_view ownerType, con
     std::string head = "FUNCTION " + internal + (m.returnType.empty() ? std::string{} : " : " + displayType(m.returnType));
     // SELF, en VAR_IN_OUT : une methode qui ecrit un membre le modifie pour de bon. SELF a le type qui
     // DEFINIT la methode ; un sous-type passe la ou ce parent est attendu (montee du VAR_IN_OUT).
-    std::string self = "VAR_IN_OUT\n    SELF : " + std::string(trimmed(ownerType)) + ";\nEND_VAR\n";
-    std::string body = decl::codeOf(m2);
-    if (!body.empty() && body.back() != '\n') body += '\n';
-    return head + "\n" + self + body + "END_FUNCTION\n";
+    // 1.13.0 (J1b) : l'en-tete et SELF sur la LIGNE 1, comme functionText - la ligne N du corps est la ligne N de
+    // l'editeur (les messages de Compiler, les points d'arret du debogueur).
+    std::string self = " VAR_IN_OUT SELF : " + std::string(trimmed(ownerType)) + "; END_VAR ";
+    return head + self + decl::codeOf(m2) + "\nEND_FUNCTION\n";
 }
 
 // ---------------------------------------------------------------- heritage ---
@@ -434,6 +434,17 @@ std::vector<std::string> interfaceMisses(const Project& p, const HmiType& type) 
     return out;
 }
 
+const HmiFunction* methodById(const Project& p, Id id, const HmiType** owner) {
+    if (id == kNoId) return nullptr;
+    for (const auto& t : p.programs.types)
+        for (const auto& m : t.methods)
+            if (m.id == id) {
+                if (owner) *owner = &t;
+                return &m;
+            }
+    return nullptr;
+}
+
 // -------------------------------------------- l'interface avec l'interpreteur ---
 bool resolveMethod(const Project& p, std::string_view selfType, std::string_view method, MethodCall& out) {
     const HmiType* owner = nullptr;
@@ -446,6 +457,7 @@ bool resolveMethod(const Project& p, std::string_view selfType, std::string_view
     const std::string ownerName = fullName(*owner);
     out.selfType = ownerName;
     out.isVirtual = m->isVirtual;
+    out.method = m->id;
     out.function = methodFunctionText(p, ownerName, *m);
     if (!owner->ns.empty() || names::mentionsUsing(m->body)) out.function = names::qualify(p, out.function, owner->ns, {"SELF"}, true);
     out.owner = "type " + ownerName + ", m\xC3\xA9thode " + m->name;
@@ -462,6 +474,7 @@ bool resolveMethodInternal(const Project& p, std::string_view internalName, Meth
             if (methodFunctionName(tn, m) == internalName) {
                 out.selfType = tn;
                 out.isVirtual = m.isVirtual;
+                out.method = m.id;
                 out.function = methodFunctionText(p, tn, m);
                 if (!t.ns.empty() || names::mentionsUsing(m.body)) out.function = names::qualify(p, out.function, t.ns, {"SELF"}, true);
                 out.owner = "type " + tn + ", m\xC3\xA9thode " + m.name;
@@ -507,8 +520,12 @@ std::string overrideTemplate(const Project& p, std::string_view typeName, const 
     (void)p;
     (void)typeName;
     std::string s = "(* redefinit " + parent.name + " ; SUPER." + parent.name + "(\xE2\x80\xA6) rappelle le corps du parent *)\n";
-    if (!parent.returnType.empty()) s += parent.name + " := SUPER." + parent.name + "();\n";
-    else s += "SUPER." + parent.name + "();\n";
+    // 1.13.0 (J1b) : les parametres passes tels quels au parent, dans l'ordre (SUPER.Demarrer(Consigne)).
+    std::string args;
+    for (const auto& d : parent.decls)
+        if (d.kind == DeclKind::Parameter) args += (args.empty() ? "" : ", ") + d.name;
+    if (!parent.returnType.empty()) s += parent.name + " := SUPER." + parent.name + "(" + args + ");\n";
+    else s += "SUPER." + parent.name + "(" + args + ");\n";
     return s;
 }
 
@@ -685,6 +702,205 @@ std::size_t renameTypeEverywhere(Project& p, Id id, std::string_view newName) {
 
 void renumberMethods(Project& pr, std::vector<HmiFunction>& methods) {
     for (auto& m : methods) m.id = pr.allocate();
+}
+
+// ------------------------------------------------ l'ecran des objets (J1b) ---
+std::string methodParamsText(const HmiFunction& m) {
+    std::string out;
+    for (const auto& d : m.decls) {
+        if (d.kind != DeclKind::Parameter) continue;
+        if (!out.empty()) out += "; ";
+        if (d.mode == PassMode::InOut) out += "VAR_IN_OUT ";
+        else if (d.mode == PassMode::Out) out += "VAR_OUTPUT ";
+        out += d.name + " : " + d.type;
+    }
+    return out;
+}
+
+bool setMethodParams(HmiFunction& m, std::string_view text, const std::function<Id()>& allocate, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    // Les morceaux : un ; ou une , de premier niveau (ARRAY[1..3, 1..2] OF REAL, MAP[STRING] OF INT restent entiers).
+    std::vector<std::string> parts;
+    {
+        std::string cur;
+        int depth = 0;
+        for (const char c : text) {
+            if (c == '[' || c == '(' || c == '<') ++depth;
+            if ((c == ']' || c == ')' || c == '>') && depth > 0) --depth;
+            if ((c == ';' || c == ',') && depth == 0) {
+                parts.push_back(cur);
+                cur.clear();
+                continue;
+            }
+            cur += c;
+        }
+        parts.push_back(cur);
+    }
+    std::vector<Declaration> params;
+    std::set<std::string> seen;
+    for (auto& raw : parts) {
+        std::string part(trimmed(raw));
+        if (part.empty()) continue;
+        PassMode mode = PassMode::In;
+        const std::string up = upperOf(part);
+        for (const auto& [word, pm] : {std::pair<const char*, PassMode>{"VAR_IN_OUT ", PassMode::InOut}, {"VAR_OUTPUT ", PassMode::Out},
+                                       {"VAR_INPUT ", PassMode::In}})
+            if (up.rfind(word, 0) == 0) {
+                mode = pm;
+                part = std::string(trimmed(std::string_view(part).substr(std::string_view(word).size())));
+                break;
+            }
+        const auto colon = part.find(':');
+        if (colon == std::string::npos) return fail("\xC2\xAB " + part + " \xC2\xBB : \xC3\xA9" "cris nom : type (Entree : REAL)");
+        const std::string name(trimmed(std::string_view(part).substr(0, colon)));
+        const std::string type(trimmed(std::string_view(part).substr(colon + 1)));
+        if (!isIdentifier(name)) return fail("nom de param\xC3\xA8tre invalide \xC2\xAB " + name + " \xC2\xBB");
+        if (type.empty()) return fail("le param\xC3\xA8tre " + name + " n'a pas de type");
+        if (!seen.insert(upperOf(name)).second) return fail("param\xC3\xA8tre en double : " + name);
+        if (sameName(name, m.name)) return fail(name + " est le nom de la m\xC3\xA9thode (son retour)");
+        Declaration d;
+        for (const auto& old : m.decls)
+            if (old.kind == DeclKind::Parameter && sameName(old.name, name)) d = old;   // son id, sa description
+        if (d.id == kNoId && allocate) d.id = allocate();
+        d.kind = DeclKind::Parameter;
+        d.name = name;
+        d.type = type;
+        d.mode = mode;
+        params.push_back(std::move(d));
+    }
+    // Les parametres d'abord (dans l'ordre ecrit), puis les locales et constantes de toujours.
+    std::vector<Declaration> next = std::move(params);
+    for (const auto& d : m.decls)
+        if (d.kind != DeclKind::Parameter) next.push_back(d);
+    m.decls = std::move(next);
+    return true;
+}
+
+namespace {
+// Dans `body` (code seulement : ni chaine ni commentaire), chaque mot `from` (sans casse) qui convient a `pick` devient
+// `to`. `pick(prefix, call)` : `prefix` le mot devant le point ("SELF", "SUPER"... ; vide : un nom nu), `call` suivi d'une
+// parenthese. Rend vrai si le texte change.
+bool renameWordIn(std::string& body, std::string_view from, std::string_view to,
+                  const std::function<bool(std::string_view prefix, bool call)>& pick) {
+    const std::string kinds = kindsOf(body);
+    std::string out;
+    out.reserve(body.size() + 8);
+    bool changed = false;
+    std::size_t i = 0;
+    while (i < body.size()) {
+        if (kinds[i] != 0 || !identStart(body[i]) || (i > 0 && identPart(body[i - 1]))) {
+            out += body[i++];
+            continue;
+        }
+        std::size_t j = i;
+        while (j < body.size() && identPart(body[j])) ++j;
+        const std::string_view word(body.data() + i, j - i);
+        if (!sameName(word, from)) {
+            out.append(word);
+            i = j;
+            continue;
+        }
+        // Le mot devant le point (SELF.X, SUPER.X, Pompe1.X) ; vide : un nom nu. Un # devant : un litteral (T#X).
+        std::string prefix;
+        std::size_t b = i;
+        while (b > 0 && (body[b - 1] == ' ' || body[b - 1] == '\t')) --b;
+        bool skip = b > 0 && body[b - 1] == '#';
+        if (!skip && b > 0 && body[b - 1] == '.') {
+            std::size_t e = b - 1;
+            while (e > 0 && (body[e - 1] == ' ' || body[e - 1] == '\t')) --e;
+            std::size_t s0 = e;
+            while (s0 > 0 && identPart(body[s0 - 1])) --s0;
+            prefix = body.substr(s0, e - s0);
+            if (prefix.empty()) skip = true;           // a[1].X, F().X : pas un nom simple devant
+        }
+        std::size_t k = j;
+        while (k < body.size() && (body[k] == ' ' || body[k] == '\t')) ++k;
+        const bool call = k < body.size() && body[k] == '(';
+        if (!skip && pick(prefix, call)) {
+            out.append(to);
+            changed = true;
+        } else {
+            out.append(word);
+        }
+        i = j;
+    }
+    if (changed) body = std::move(out);
+    return changed;
+}
+} // namespace
+
+std::size_t renameMethodEverywhere(Project& p, Id method, std::string_view rawName) {
+    const std::string name(trimmed(rawName));
+    const HmiType* ownerC = nullptr;
+    const HmiFunction* mc = methodById(p, method, &ownerC);
+    if (!mc || !ownerC || name.empty() || mc->name == name) return 0;
+    const std::string old = mc->name;
+    const Id ownerId = ownerC->id;
+    // Le type et ses sous-types (par identite : un homonyme d'un autre espace ne suit pas).
+    std::set<Id> family{ownerId};
+    for (const auto& t : p.programs.types) {
+        if (t.id == ownerId) continue;
+        for (const HmiType* b : baseChain(p, fullName(t)))
+            if (b->id == ownerId) {
+                family.insert(t.id);
+                break;
+            }
+    }
+    std::size_t changed = 0;
+    for (auto& t : p.programs.types) {
+        if (!family.count(t.id)) continue;
+        for (auto& m : t.methods) {
+            // La methode elle-meme et ses redefinitions : le nom, et dans le corps le nom nu (le retour, un appel).
+            const bool self = m.id == method || (t.id != ownerId && sameName(m.name, old));
+            if (self) {
+                m.name = name;
+                ++changed;
+            }
+            const bool body = renameWordIn(m.body, old, name, [&](std::string_view prefix, bool call) {
+                if (prefix.empty()) return self || call;                 // EnDefaut := ... (soi) ; Journal() (une soeur)
+                return sameName(prefix, "SELF") || sameName(prefix, "THIS") || sameName(prefix, "SUPER");
+            });
+            changed += body ? 1 : 0;
+        }
+    }
+    return changed;
+}
+
+std::vector<std::string> implementersOf(const Project& p, const HmiType& iface) {
+    std::vector<std::string> out;
+    if (iface.kind != HmiTypeKind::Interface) return out;
+    const std::string full = fullName(iface);
+    for (const auto& t : p.programs.types)
+        if (t.kind == HmiTypeKind::Structure && implementsInterface(p, fullName(t), full)) out.push_back(fullName(t));
+    return out;
+}
+
+std::string interfaceDeclaration(const HmiType& t) {
+    std::string s = "TYPE " + t.name + " INTERFACE\n";
+    for (const auto& m : t.methods) {
+        s += "    METHOD " + m.name;
+        const std::string params = methodParamsText(m);
+        if (!params.empty()) s += " (" + params + ")";
+        if (!m.returnType.empty()) s += " : " + m.returnType;
+        s += "\n";
+    }
+    s += "END_TYPE";
+    return s;
+}
+
+std::vector<std::string> baseChoices(const Project& p, const HmiType& t) {
+    std::vector<std::string> out{"(aucun)"};
+    for (const auto& c : p.programs.types) {
+        if (c.id == t.id || c.kind != HmiTypeKind::Structure) continue;
+        bool descendant = false;                     // c descend de t : le choisir ferait un cycle
+        for (const HmiType* b : baseChain(p, fullName(c)))
+            if (b->id == t.id) descendant = true;
+        if (!descendant) out.push_back(fullName(c));
+    }
+    return out;
 }
 
 } // namespace hmi

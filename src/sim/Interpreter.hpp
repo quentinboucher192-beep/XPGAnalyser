@@ -244,6 +244,11 @@ public:
         (void)internalName; (void)out;
         return false;
     }
+    // 1.13.0 (J1b) : la FUNCTION d'une methode (findMethod / findMethodByInternal), lue, va etre appelee - a chaque
+    // appel (lue ou deja en cache) : l'IHM y pose les points d'arret de la methode. Par defaut : rien.
+    virtual void methodReady(const OperatorSource& src, const Function& fn) {
+        (void)src; (void)fn;
+    }
     // 1.13.0 (lot J1) : le type `from` va-t-il dans `to` par une MONTEE (meme type, un sous-type vers
     // un parent EXTENDS, un type vers une interface qu'il implemente) ? Pour DYNAMIC_CAST<to>(objet) :
     // vrai -> une reference vers l'objet ; faux -> NULL. Par defaut : seulement le meme nom.
@@ -438,6 +443,9 @@ struct CallSite {
 // complet (en-tete compris), `owner` pour les messages.
 struct OperatorSource {
     std::string key, function, owner;
+    // 1.13.0 (J1b) : l'identifiant que l'environnement donne a cette source (une methode d'un type IHM : son id,
+    // pour ses points d'arret) ; 0 : aucun.
+    std::uint64_t id{0};
 };
 
 // Lot API 8 : OU EN EST L'EXECUTION. Le runner y ecrit le numero de la section

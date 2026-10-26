@@ -555,7 +555,8 @@ void interfaceDeclarations(const Project& p, const std::vector<Declaration>& dec
 // VAR_IN_OUT, ses membres prefixes) : sa syntaxe, et ses noms - un membre (herites compris), une methode du type,
 // SELF / THIS / SUPER, ses parametres et ses locales, ou ce que le projet connait. Avant, une faute ne se voyait
 // qu'au premier appel, en marche. La ligne : celle du corps de la methode.
-void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
+// 1.13.0 (J1b) : `only` - la seule methode a lire (son editeur) ; kNoId : toutes.
+void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issue>& out, Id only = kNoId) {
     using S = Issue::Severity;
     // 1.13.0 : IHM Studio n'a pas d'automate - un nom que le projet ne connait pas n'existe nulle part (avant, l'automate
     // absent rendait tout nom connu : « Marche := Debitt > 1.0; » passait). API Studio sans automate charge : comme avant.
@@ -568,10 +569,12 @@ void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issu
         for (const auto& m : types::membersOf(p, tn)) here.insert(upperText(m.name));
         for (const auto& om : allMethods(p, tn)) here.insert(upperText(om.method->name));
         for (const auto& m : ty.methods) {
+            if (only != kNoId && m.id != only) continue;
             const auto issue = [&](Issue::Severity sev, const std::string& msg, int line) {
                 add(out, sev, "Type IHM", kNoId, kNoId, ty.name,
                     ty.name + "." + m.name + (line > 0 ? ", ligne " + std::to_string(line) : std::string{}) + " : " + msg, kNoId, line);
                 out.back().item = ty.id;
+                out.back().object = m.id;   // 1.13.0 (J1b) : la methode (y aller : son editeur, a la ligne)
             };
             if (markers::strip(m.body).find_first_not_of(" \t\r\n") == std::string::npos) continue;   // rien a lire
             if (!isIdentifier(m.name)) continue;                                                        // methodProblem le dit
@@ -582,8 +585,8 @@ void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issu
                 const std::string raw = fn.error().context.empty() ? fn.error().message() : fn.error().context;
                 std::string rest;
                 const int line = splitLine(raw, &rest);
-                // La FUNCTION interne a quatre lignes d'en-tete (FUNCTION, VAR_IN_OUT, SELF, END_VAR) avant le corps.
-                issue(S::Error, frenchSimMessage(rest), line > 4 ? line - 4 : 0);
+                // La FUNCTION interne porte son en-tete sur la ligne 1 (methodFunctionText) : la ligne est celle du corps.
+                issue(S::Error, frenchSimMessage(rest), line);
                 continue;
             }
             const std::string code = decl::codeOf(m);
@@ -638,6 +641,27 @@ void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issu
             }
         }
     }
+}
+
+// 1.13.0 (J1b) : les constats d'une seule methode (son editeur, a chaque frappe) - son corps (syntaxe, noms, appels
+// ambigus) et sa forme (methodProblem : nom, redefinition, prive et virtuel, retour, parametres).
+std::vector<Issue> checkMethod(const Project& p, const NameExists& plcHasName, Id method) {
+    std::vector<Issue> out;
+    const HmiType* owner = nullptr;
+    const HmiFunction* m = methodById(p, method, &owner);
+    if (!m || !owner) return out;
+    if (const std::string mp = methodProblem(p, *owner, *m); !mp.empty()) {
+        Issue i;
+        i.severity = Issue::Severity::Error;
+        i.category = "Type IHM";
+        i.property = owner->name;
+        i.message = mp;
+        i.item = owner->id;
+        i.object = m->id;
+        out.push_back(std::move(i));
+    }
+    checkMethodBodies(p, plcHasName, out, method);
+    return out;
 }
 
 // La programmation generale, les scripts de vue, les actions, et les
@@ -809,8 +833,11 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                         ty.name + " : " + m.name + " est \xC3\xA0 la fois un membre et une m\xC3\xA9thode");
                     break;
                 }
-            if (const std::string mp = methodProblem(p, ty, m); !mp.empty())
+            if (const std::string mp = methodProblem(p, ty, m); !mp.empty()) {
                 add(out, S::Error, cat, kNoId, kNoId, ty.name, mp);
+                out.back().item = ty.id;
+                out.back().object = m.id;   // 1.13.0 (J1b) : la methode en cause
+            }
         }
         // IMPLEMENTS : chaque interface declaree est satisfaite (chaque signature presente, nommee si manquante).
         for (const auto& miss : interfaceMisses(p, ty))

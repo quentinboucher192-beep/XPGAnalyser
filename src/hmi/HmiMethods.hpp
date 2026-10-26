@@ -33,6 +33,7 @@
 #include "HmiOperators.hpp"   // OperatorName (reutilise pour la legende SELF)
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -72,6 +73,9 @@ struct OwnedMethod {
 [[nodiscard]] const HmiFunction* effectiveMethod(const Project&, std::string_view typeName, std::string_view name,
                                                  const HmiType** owner = nullptr);
 
+// 1.13.0 (J1b) : la methode d'identifiant `id` (d'un type du projet) et le type qui la porte ; nulle : aucune.
+[[nodiscard]] const HmiFunction* methodById(const Project&, Id id, const HmiType** owner = nullptr);
+
 // ------------------------------------------------------------- predicats ----
 // `sub` est-il `base`, ou en descend par EXTENDS (transitif, sans casse) ?
 [[nodiscard]] bool isA(const Project&, std::string_view sub, std::string_view base);
@@ -96,6 +100,7 @@ struct MethodCall {
     std::string owner;       // "type T_Pompe, m\xC3\xA9thode Demarrer" (pour les messages)
     std::string selfType;    // le type de SELF (le porteur reel)
     bool        isVirtual{false};
+    Id          method{kNoId};   // 1.13.0 (J1b) : l'id de la methode appelee (ses points d'arret)
 };
 // La methode `method` (sans casse) de `selfType` (ou d'un de ses parents) : vrai et
 // `out`. Faux : aucune (ou `selfType` n'est pas un type a methodes).
@@ -136,5 +141,27 @@ struct MethodCall {
 std::size_t renameTypeEverywhere(Project&, Id type, std::string_view newName);
 // Des identifiants neufs pour une liste de methodes (Dupliquer un type).
 void renumberMethods(Project&, std::vector<HmiFunction>&);
+
+// ------------------------------------------------ l'ecran des objets (J1b) ---
+// Les parametres d'une methode en une ligne : "Entree : REAL; VAR_IN_OUT Cible : T_Pompe; VAR_OUTPUT Etat : INT"
+// (dans l'ordre ; vide : aucun). Ce que montre la colonne Parametres, ce que la case attend.
+[[nodiscard]] std::string methodParamsText(const HmiFunction&);
+// Le contraire : "a : REAL; b : INT" (un ; ou une , entre deux ; VAR_IN_OUT ou VAR_OUTPUT devant un nom : son mode) -
+// les parametres de `m` remplaces (ses locales et constantes gardees ; un nom deja la garde son id ; un neuf en recoit
+// un de `allocate`). Faux et `why` : illisible (un nom invalide, un type manquant, un nom en double) ; `m` inchange.
+bool setMethodParams(HmiFunction& m, std::string_view text, const std::function<Id()>& allocate, std::string* why = nullptr);
+// RENOMMER UNE METHODE (la commande Renommer des Methodes) : son nom ; dans son corps, son nom nu (le retour, un appel
+// recursif) ; ses redefinitions dans les sous-types (meme nom) et leur corps ; dans les methodes du type et de ses
+// sous-types, SELF.X( / THIS.X( / SUPER.X( et l'appel nu X(. Le reste du projet (Pompe1.X() dans un script) n'est pas
+// recrit : Compiler signale l'ancien nom. Rend le nombre de textes changes (0 : introuvable ou meme nom).
+std::size_t renameMethodEverywhere(Project&, Id method, std::string_view newName);
+// Les types qui implementent l'interface `iface` (eux-memes, ou par un parent), par leur nom - la colonne de droite de
+// la page d'une interface ("Types qui l'implementent").
+[[nodiscard]] std::vector<std::string> implementersOf(const Project&, const HmiType& iface);
+// L'apercu d'une interface : "TYPE I_Demarrable INTERFACE\n    METHOD Demarrer\n    METHOD EnDefaut : BOOL\nEND_TYPE".
+[[nodiscard]] std::string interfaceDeclaration(const HmiType&);
+// Les parents qu'on peut choisir pour `t` (Herite de... : des structures, pas lui-meme ni un de ses descendants - un
+// cycle), par leur nom complet ; le premier est "(aucun)".
+[[nodiscard]] std::vector<std::string> baseChoices(const Project&, const HmiType& t);
 
 } // namespace hmi

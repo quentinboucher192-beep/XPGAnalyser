@@ -4,6 +4,7 @@
 #include "HmiDebugPane.hpp"
 
 #include "../../ui/Commands.hpp"
+#include "../../hmi/HmiMethods.hpp"   // 1.13.0 (J1b) : le code d'une methode en pause
 
 #include <algorithm>
 #include <cctype>
@@ -338,6 +339,7 @@ std::string HmiDebugPane::codeText(Id script, Id function) const {
         for (const auto& v : doc_->project.views)
             for (const auto& f : v.functions)
                 if (f.id == function) return f.body;
+        if (const auto* m = hmi::methodById(doc_->project, function)) return m->body;   // 1.13.0 (J1b) : une methode
     }
     return {};
 }

@@ -4968,6 +4968,7 @@ private:
             operatorCache()[src.key] = *parsed;
             f = *parsed;
         }
+        env_.methodReady(src, *f);      // 1.13.0 (J1b) : ses points d'arret
         // Synthetiser l'appel : SELF (l'objet) devant, puis les arguments donnes.
         Expr call2 = e;
         call2.lhs = nullptr;
@@ -5529,6 +5530,7 @@ private:
                         operatorCache()[src.key] = *parsed;
                         f = *parsed;
                     }
+                    env_.methodReady(src, *f);      // 1.13.0 (J1b) : ses points d'arret
                     return callDeclared(*f, e, true);
                 }
             if (auto mine = natives1220(callee, e)) return std::move(*mine);          // 1.12.20 : les dernieres natives a rappel

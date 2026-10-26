@@ -803,6 +803,7 @@ public:
         out.key = std::move(c.key);
         out.function = std::move(c.function);
         out.owner = std::move(c.owner);
+        out.id = c.method;
         return true;
     }
     // 1.13.0 (lot J1) : SUPER.M(...) emis comme METHODE_<parent>_M - l'interpreteur le resout ici.
@@ -812,7 +813,13 @@ public:
         out.key = std::move(c.key);
         out.function = std::move(c.function);
         out.owner = std::move(c.owner);
+        out.id = c.method;
         return true;
+    }
+    // 1.13.0 (J1b) : une methode lue va etre appelee - ses points d'arret (la marge de son editeur), comme une
+    // fonction aux types riches (markRichFunction : la FUNCTION interne a son en-tete sur la ligne 1).
+    void methodReady(const sim::OperatorSource& src, const sim::Function& fn) override {
+        if (src.id != 0) rt_.markRichFunction(fn, static_cast<Id>(src.id));
     }
     // 1.13.0 (lot J1) : la montee - un sous-type vers un parent, un type vers une interface implementee
     // (pour DYNAMIC_CAST<to>(objet)). Le meme type va toujours.

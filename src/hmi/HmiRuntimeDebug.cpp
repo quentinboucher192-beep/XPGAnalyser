@@ -33,7 +33,9 @@
 #include "HmiEnums.hpp"
 #include "HmiLog.hpp"
 #include "HmiMarkers.hpp"
+#include "HmiMethods.hpp"   // 1.13.0 (J1b) : les points d'arret dans une methode d'un type IHM
 #include "HmiScript.hpp"
+#include "HmiTypes.hpp"
 #include "../sim/DebugShared.hpp"
 #include "../sim/Interpreter.hpp"
 
@@ -67,7 +69,7 @@ const HmiFunction* functionById(const Project& p, Id id) {
     for (const auto& v : p.views)
         for (const auto& f : v.functions)
             if (f.id == id) return &f;
-    return nullptr;
+    return methodById(p, id);   // 1.13.0 (J1b) : une methode d'un type IHM
 }
 
 // Le texte d'un code a deboguer, tel que le moteur le lit (les lignes du corps restent les memes que
@@ -85,6 +87,19 @@ bool debugText(const Project& p, Id script, Id function, std::string& text, bool
         }
         text = markers::strip(decl::codeOf(*sc));
         isFunction = false;
+        return true;
+    }
+    // 1.13.0 (J1b) : une methode - sa FUNCTION interne telle que le moteur la lit (methodFunctionText, en-tete sur la
+    // ligne 1 : les lignes du corps sont celles de l'editeur).
+    const HmiType* owner = nullptr;
+    if (const HmiFunction* m = methodById(p, function, &owner); m && owner) {
+        MethodCall mc;
+        if (!resolveMethodInternal(p, methodFunctionName(fullName(*owner), *m), mc)) {
+            if (why) *why = "m\xC3\xA9thode introuvable : il ne s'arr\xC3\xAAtera pas";
+            return false;
+        }
+        text = mc.function;
+        isFunction = true;
         return true;
     }
     if (const HmiFunction* f = functionById(p, function)) {
@@ -237,6 +252,8 @@ std::string Runtime::debugCodeName(const Project& p, Id script, Id function) {
         for (const auto& v : p.views)
             for (const auto& f : v.functions)
                 if (f.id == function) return "fonction " + v.name + "." + f.name;
+        const HmiType* owner = nullptr;   // 1.13.0 (J1b) : "methode T_Pompe.Demarrer"
+        if (const auto* m = methodById(p, function, &owner); m && owner) return "m\xC3\xA9thode " + owner->name + "." + m->name;
     }
     return {};
 }
@@ -338,6 +355,13 @@ void Runtime::resolveBreakpoints() {
             } else if (const HmiFunction* f = functionById(*project_, bp.function)) {
                 for (const auto& d : f->decls) declared.insert(upperText(d.name));
                 declared.insert(upperText(f->name));
+                // 1.13.0 (J1b) : une methode lit SELF (THIS) et les membres de son type par leur nom.
+                const HmiType* owner = nullptr;
+                if (methodById(*project_, bp.function, &owner) && owner) {
+                    declared.insert("SELF");
+                    declared.insert("THIS");
+                    for (const auto& mem : types::membersOf(*project_, fullName(*owner))) declared.insert(upperText(mem.name));
+                }
             }
             std::string unknown;
             for (const auto& root : conditionRoots(bp.condition)) {
@@ -450,6 +474,8 @@ void Runtime::debugTick(double now) {
         for (const auto& sc : v.scripts) any = any || (sc.lang == ScriptLang::ST && writes(sc.body));
         for (const auto& f : v.functions) any = any || writes(f.body);
     }
+    for (const auto& t : project_->programs.types)     // 1.13.0 (J1b) : le corps des methodes aussi
+        for (const auto& m : t.methods) any = any || writes(m.body);
     codeBreaks_ = any;
     for (std::size_t i = 0; i < breakpoints_.size() && i < breakStates_.size(); ++i)
         if (debugCodeHash(breakpoints_[i].script, breakpoints_[i].function) != breakStates_[i].codeHash) {
