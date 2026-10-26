@@ -492,6 +492,12 @@ void checkNamespaces(const Project& p, std::vector<Issue>& out) {
     }
 }
 
+// 1.13.0 : une fonction nommee Lever (un projet d'avant : lever une barriere) - LEVER est devenu un mot du langage.
+std::string leverNameWarning(const std::string& name) {
+    return name + " : LEVER est aussi l'instruction qui l\xC3\xA8ve une erreur ; " + name
+         + "(...) en t\xC3\xAAte d'instruction appelle encore ta fonction, mais renomme-la (Lever_Barriere) pour lever le doute";
+}
+
 // La programmation generale, les scripts de vue, les actions, et les
 // references circulaires entre eux.
 void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
@@ -818,6 +824,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                 out.push_back(std::move(i));
             };
             if (!isIdentifier(f.name)) issue(S::Error, "nom invalide : '" + f.name + "'");
+            if (upperText(f.name) == "LEVER") issue(S::Warning, leverNameWarning(f.name));
             for (const auto& c : clashes)
                 if (c.function == f.id) issue(S::Error, c.message);
             std::string what;
@@ -875,6 +882,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         for (const auto& c : fnClashes)
             if (c.function == f.id) issue(S::Error, c.message);
         if (key.rfind("IHM_", 0) == 0) issue(S::Error, "le pr\xC3\xA9" "fixe IHM_ est r\xC3\xA9serv\xC3\xA9 aux fonctions de l'IHM");
+        if (key == "LEVER") issue(S::Warning, leverNameWarning(f.name));
         if (p.variable(f.name)) issue(S::Error, "une variable IHM porte d\xC3\xA9j\xC3\xA0 ce nom : " + f.name);
         if (plc && plc(f.name)) issue(S::Warning, "'" + f.name + "' existe aussi dans l'automate : la fonction IHM passe avant");
         const std::string code = decl::codeOf(f);                     // 1.11.18 (lot 3) : ses parametres du modele

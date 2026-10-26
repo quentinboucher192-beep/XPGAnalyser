@@ -864,20 +864,24 @@ private:
     // 1.13.0 (dialecte IHM) : LEVER('E_Code' [, 'message {trou}']) - leve une erreur a soi, d'un code
     // et d'un message (optionnel). Le code et le message sont des expressions (lues a l'execution) ;
     // `value` porte le code, `condition` le message (nul : aucun).
+    // L'appel est lu en entier et garde (`target`) : une fonction nommee Lever (un projet d'avant la 1.13.0 :
+    // lever une barriere) le prend a l'execution, avec tous ses arguments ; sinon c'est LEVER. Un appel qui
+    // n'a pas la forme de LEVER (aucun argument, plus de deux, un argument nomme) n'a ni `value` ni
+    // `condition` : raiseStmt le dit, s'il n'y a pas de telle fonction.
     core::Result<StmtPtr> raiseStatement() {
         auto s = std::make_shared<Stmt>();
         s->kind = Stmt::Kind::Raise;
-        s->line = advance().line;                       // LEVER
-        if (!accept("(")) return error("expected '(' after LEVER");
-        auto code = expression();
-        if (!code) return core::Err<core::Error>(code.error());
-        s->value = *code;
-        if (accept(",")) {
-            auto msg = expression();
-            if (!msg) return core::Err<core::Error>(msg.error());
-            s->condition = *msg;
+        s->line = peek().line;                          // LEVER
+        auto call = expression();
+        if (!call) return core::Err<core::Error>(call.error());
+        const Expr& c = **call;
+        if (c.kind != Expr::Kind::Call) return error("expected '(' after LEVER");
+        s->target = *call;
+        const bool unnamed = std::all_of(c.arguments.begin(), c.arguments.end(), [](const auto& a) { return a.first.empty(); });
+        if (unnamed && c.outputs.empty() && (c.arguments.size() == 1 || c.arguments.size() == 2)) {
+            s->value = c.arguments[0].second;
+            if (c.arguments.size() == 2) s->condition = c.arguments[1].second;
         }
-        if (!accept(")")) return error("expected ')' to close LEVER");
         accept(";");
         return s;
     }
@@ -2272,7 +2276,9 @@ private:
             expr(s.condition);
             return;
         }
-        expr(s.target);
+        // 1.13.0 : LEVER('E_x', 'msg') garde l'appel entier dans `target` (une fonction Lever d'avant le prend) :
+        // ses arguments (value, condition) suffisent ; sans cette forme, l'appel lui-meme.
+        if (!(s.kind == Stmt::Kind::Raise && s.value)) expr(s.target);
         for (const auto& t : s.extraTargets) expr(t);
         expr(s.value);
         expr(s.condition);
@@ -2356,7 +2362,7 @@ void collectStmts(const std::vector<StmtPtr>& body, std::uint32_t line, std::vec
 
 void collectStmt(const Stmt& s, std::uint32_t line, std::vector<LineName>& out) {
     if (s.kind == Stmt::Kind::For && s.line == line) out.emplace_back(nullptr, s.loopVariable);
-    collectExpr(s.target, line, out);
+    if (!(s.kind == Stmt::Kind::Raise && s.value)) collectExpr(s.target, line, out);   // 1.13.0 : LEVER (voir CallWalker)
     for (const auto& t : s.extraTargets) collectExpr(t, line, out);
     collectExpr(s.value, line, out);
     collectExpr(s.condition, line, out);
@@ -2531,26 +2537,33 @@ public:
     }
 
 private:
-    void fail(std::uint32_t line, std::string message) {
+    void fail(std::uint32_t line, std::string message) { failCaused(line, std::move(message), {}); }
+    // `cause` : le message brut qui donne le code E_* (vide : `message` lui-meme) - l'echec d'une fonction appelee.
+    void failCaused(std::uint32_t line, std::string message, std::string cause) {
         // Lot API 8 : une lecture au passage (point d'arret) ne dit rien au
         // journal et n'arrete pas le cycle : l'erreur revient en valeur.
         // 1.12.1 : le cote gauche de a ?? b non plus (son erreur choisit b).
-        if (probing_ || quiet_ > 0) return;
+        // 1.13.0 : sauf dans un TRY ouvert DANS ce cote gauche (une fonction appelee a gauche de ??) : il l'attrape.
+        if (probing_ || (quiet_ > 0 && catching_ <= quietCatching_)) return;
         // 1.10 : dans le dialecte IHM, le message seul (sans "invalid argument: ") ;
         // dans une fonction du projet, sa ligne a elle, l'appel a la ligne de l'appelant.
+        std::string origin;
         if (dialect_) {
             for (std::string_view prefix : {"invalid argument: ", "not implemented: "})
                 if (message.rfind(prefix, 0) == 0) message.erase(0, prefix.size());
             if (!calleeLabel_.empty()) {
-                message = "fonction " + calleeLabel_ + ", ligne " + std::to_string(line) + " : " + message;
+                origin = "fonction " + calleeLabel_ + ", ligne " + std::to_string(line);
                 line = calleeLine_;
             }
         }
+        // 1.13.0 : le message brut (sans le prefixe « fonction F, ligne N : ») garde son code E_* (caughtCode).
+        std::string raw = cause.empty() ? message : std::move(cause);
+        if (!origin.empty()) message = origin + " : " + message;
         // 1.12.1 : dans un TRY, l'erreur est gardee pour son CATCH (pas au journal) - sauf une
         // boucle sans fin, un cycle trop long : ceux-la arretent tout, comme avant.
         if (catching_ > 0 && !caught_.any && message.find(" loop ran more than ") == std::string::npos
             && message.find("the scan exceeded") == std::string::npos) {
-            caught_ = Caught{true, {}, std::move(message), line};   // 1.13.0 : code vide (erreur moteur)
+            caught_ = Caught{true, {}, std::move(message), line, std::move(raw), std::move(origin)};   // 1.13.0 : code vide (erreur moteur)
             aborted_ = true;
             return;
         }
@@ -2862,7 +2875,8 @@ private:
             // Lot API 7 : l'environnement peut choisir de continuer - l'appel
             // rend 0, rien n'est rendu aux variables passees, le cycle va au bout.
             if (env_.tolerateUnknownCall(*target, e.line)) return Value::integer(Type::DInt, 0);
-            fail(e.line, "'" + *target + "' is not a function or a block this simulator knows");
+            // 1.13.0 : une fonction du projet qui a echoue (pas inconnue) : sa cause donne le code E_* du CATCH.
+            failCaused(e.line, "'" + *target + "' is not a function or a block this simulator knows", env_.lastCallError());
             return core::fail(core::ErrorCode::NotImplemented, *target);
         }
         // Lot API 8 : une lecture au passage ne rend rien aux variables passees.
@@ -3069,12 +3083,45 @@ private:
 
     // 1.13.0 : une erreur gardee par TRY. `code` vide : une erreur du moteur (traduite en E_* par
     // l'environnement au moment du CATCH) ; non vide : un LEVER (ou E_ATTENTE) au message deja final.
-    struct Caught { bool any{false}; std::string code; std::string message; std::uint32_t line{0}; };
+    // `raw` : le message du moteur avant le prefixe « fonction F, ligne N : » (son code E_* se lit dessus) ;
+    // `origin` : ce prefixe (« fonction F, ligne N »), pose une fois - une erreur nee dans une fonction
+    // isolee (une methode, une fonction du projet aux types riches) porte alors la ligne de l'appel.
+    struct Caught {
+        bool any{false};
+        std::string code;
+        std::string message;
+        std::uint32_t line{0};
+        std::string raw;
+        std::string origin;
+    };
+
+    // Le cote gauche de a ?? b : ses erreurs choisissent b (fail et LEVER se taisent), sauf dans un TRY
+    // ouvert plus bas (quietCatching_ : la profondeur des TRY a l'ouverture).
+    struct QuietSide {
+        explicit QuietSide(Runner& r) : runner(r), saved(r.quietCatching_) {
+            if (runner.quiet_++ == 0) runner.quietCatching_ = runner.catching_;
+        }
+        ~QuietSide() {
+            --runner.quiet_;
+            runner.quietCatching_ = saved;
+        }
+        QuietSide(const QuietSide&) = delete;
+        QuietSide& operator=(const QuietSide&) = delete;
+        Runner& runner;
+        int     saved;
+    };
 
     // 1.13.0 : le code et le message (final, trous remplis) d'une erreur telle que CATCH e la lit :
     // un LEVER (ou E_ATTENTE) garde les siens ; une erreur du moteur recoit son code E_* et son
-    // message francais de l'environnement (caughtCode, caughtMessage).
-    std::string errorCode(const Caught& c) { return c.code.empty() ? env_.caughtCode(c.message) : c.code; }
+    // message francais de l'environnement (caughtCode, caughtMessage). Le code se lit sur le message
+    // BRUT (sans « fonction Charger_JSON, ligne 2 : », qui faussait starts() et has("JSON")) ; un appel
+    // qui a echoue sans dire pourquoi (« 'F' is not a function... », le nom entre apostrophes) : E_MOTEUR.
+    std::string errorCode(const Caught& c) {
+        if (!c.code.empty()) return c.code;
+        const std::string& m = c.raw.empty() ? c.message : c.raw;
+        if (m.find("' is not a function or a block this simulator knows") != std::string::npos) return "E_MOTEUR";
+        return env_.caughtCode(m);
+    }
     std::string errorMessage(const Caught& c) { return c.code.empty() ? env_.caughtMessage(c.message) : c.message; }
 
     // 1.13.0 : le type natif T_Erreur (Code STRING, Message STRING, Ligne DINT), en lecture seule.
@@ -3114,16 +3161,29 @@ private:
         aborted_ = false;
         // 1.13.0 : un nom deja declare (une locale, ou une variable du projet) recoit le message comme
         // en 1.12.1 (CATCH Erreur) ; un nom NON declare (le cas recommande, CATCH e) devient le T_Erreur.
-        const bool declared = !s.loopVariable.empty() && (findLocal(s.loopVariable) != nullptr || env_.exists(s.loopVariable));
+        // L'erreur d'un CATCH englobant (CATCH e dans le handler d'un autre CATCH e, ou une fonction du
+        // script appelee depuis ce handler) n'est pas une declaration : le e interieur la masque le temps
+        // de son handler, puis l'exterieur revient.
+        const Place* prev = s.loopVariable.empty() ? nullptr : findLocal(s.loopVariable);
+        const bool outerError = prev && isErrorObj(prev->obj);
+        const bool declared = !s.loopVariable.empty() && !outerError && (prev != nullptr || env_.exists(s.loopVariable));
         if (!s.loopVariable.empty() && declared
             && !assignName(s.loopVariable, Value::text(errorMessage(got)), s.line))
             return {Flow::Kind::Aborted};
-        if (!s.loopVariable.empty() && !declared) bindError(s.loopVariable, got);
+        std::optional<Place> shadowed;                   // le e de meme nom dans CETTE portee (un CATCH englobant)
+        if (!s.loopVariable.empty() && !declared) {
+            auto& names = frames_.back().scopes.back().names;
+            if (const auto it = names.find(upperOf(s.loopVariable)); it != names.end()) shadowed = it->second;
+            bindError(s.loopVariable, got);
+        }
         handling_.push_back(got);                        // 1.13.0 : RELEVER reemet cette erreur
         const Flow out = sequence(s.elseBody, s.line);
         handling_.pop_back();
-        if (!s.loopVariable.empty() && !declared)
-            frames_.back().scopes.back().names.erase(upperOf(s.loopVariable));   // e ne vit que le handler
+        if (!s.loopVariable.empty() && !declared) {      // e ne vit que le handler
+            auto& names = frames_.back().scopes.back().names;
+            if (shadowed) names[upperOf(s.loopVariable)] = *shadowed;
+            else names.erase(upperOf(s.loopVariable));
+        }
         return out;
     }
 
@@ -3136,6 +3196,16 @@ private:
     // 1.13.0 : LEVER('E_Code' [, 'message']) - leve une erreur a soi. Dans un TRY : gardee pour son
     // CATCH (comme une erreur du moteur) ; hors d'un TRY : le script s'arrete, la Console la montre.
     Flow raiseStmt(const Stmt& s) {
+        // Une fonction de ce nom (du script, du projet, de la vue) : un appel ordinaire, comme en 1.12.31.
+        if (s.target && (!findFunctions("LEVER").empty() || env_.overloads("LEVER") > 0 || env_.dialectFunction("LEVER"))) {
+            Stmt call;
+            call.kind = Stmt::Kind::Call;
+            call.line = s.line;
+            call.value = s.target;
+            return statement(call, s.line);
+        }
+        if (!s.value)
+            return failAt(s.line, "LEVER prend un code et, au plus, un message : LEVER('E_Code') ou LEVER('E_Code', 'message')");
         auto codeV = evaluate(*s.value);
         if (!codeV) { if (!aborted_) fail(s.line, codeV.error().message()); return {Flow::Kind::Aborted}; }
         if (codeV->type() != Type::String)
@@ -3152,7 +3222,7 @@ private:
             const CallerScope caller(this);
             message = env_.interpolateMessage(msgV->asString());
         }
-        return raise(Caught{true, std::move(code), std::move(message), s.line});
+        return raise(Caught{true, std::move(code), std::move(message), s.line, {}, {}});
     }
 
     // 1.13.0 : RELEVER - reemet l'erreur du CATCH courant (meme code, meme message, meme ligne) vers
@@ -3165,13 +3235,24 @@ private:
 
     // 1.13.0 : garde l'erreur pour le TRY englobant (son CATCH), ou - aucun - l'ecrit a la Console et
     // arrete le script, avec son code en tete (E_Niveau : niveau hors plage...).
+    // 1.13.0 : a gauche de ?? (le cote a), un LEVER se tait comme une erreur du moteur : ?? choisit b, le script
+    // continue (sauf un TRY ouvert plus bas, qui l'attrape). Dans une fonction isolee (une methode, une fonction
+    // du projet aux types riches), comme fail : la ligne de l'appel dans le script, et la Console nomme la
+    // fonction et sa ligne (« fonction METHODE_..., ligne 2 : E_Debit : ... ») ; e.Message garde le message.
     Flow raise(Caught c) {
+        if (probing_ || (quiet_ > 0 && catching_ <= quietCatching_)) return {Flow::Kind::Aborted};
+        if (dialect_ && !calleeLabel_.empty() && c.origin.empty()) {
+            c.origin = "fonction " + calleeLabel_ + ", ligne " + std::to_string(c.line);
+            c.line = calleeLine_;
+        }
         if (catching_ > 0 && !caught_.any) {
             caught_ = std::move(c);
             aborted_ = true;
             return {Flow::Kind::Aborted};
         }
-        std::string shown = c.code.empty() ? errorMessage(c) : c.code + (c.message.empty() ? "" : " : " + c.message);
+        std::string shown = c.code.empty() ? errorMessage(c)
+                                           : (c.origin.empty() ? std::string{} : c.origin + " : ") + c.code
+                                                 + (c.message.empty() ? "" : " : " + c.message);
         env_.report(Diagnostic{Diagnostic::Severity::Error, std::move(shown), c.line, section_});
         aborted_ = true;
         return {Flow::Kind::Aborted};
@@ -4511,9 +4592,10 @@ private:
             case Expr::Kind::Coalesce: {
                 // 1.12.1 : a ?? b - b quand a ne se lit pas (un nom inconnu, une case hors du
                 // tableau, une cle absente, une division par zero) ou vaut NULL.
-                ++quiet_;
-                auto a = rich(*e.lhs);
-                --quiet_;
+                auto a = [&] {
+                    const QuietSide quietSide(*this);
+                    return rich(*e.lhs);
+                }();
                 if (a && !(a->o && a->o->type && a->o->type->kind == TypeDesc::Kind::Pointer && !a->o->type->element)) return a;
                 return rich(*e.rhs);
             }
@@ -4770,18 +4852,16 @@ private:
         for (const auto& p : f.params) {
             TypeRef t;
             if (p.type && !generic) {
-                ++quiet_;
+                const QuietSide quietSide(*this);
                 auto r = resolve(p.type);
-                --quiet_;
                 if (r) t = *r;
             }
             params.emplace_back(p.name, t);
         }
         TypeRef result;
         if (f.result && !generic) {
-            ++quiet_;
+            const QuietSide quietSide(*this);
             auto r = resolve(f.result);
-            --quiet_;
             if (r) result = *r;
         }
         auto d = std::make_shared<TypeDesc>(*callbackType(std::move(params), result));
@@ -4922,9 +5002,8 @@ private:
             return nullptr;
         }
         if ((x.kind == Expr::Kind::Member || x.kind == Expr::Kind::Index) && needsLocate(x)) {
-            ++quiet_;
+            const QuietSide quietSide(*this);
             auto p = locate(x, false);
-            --quiet_;
             if (p && isCallbackObj(p->obj)) return p->obj;
         }
         return nullptr;
@@ -8953,7 +9032,7 @@ private:
                     if (!again) return core::Err<core::Error>(again.error());
                     if (*again) return RV{Value::boolean(true), nullptr};
                 }
-                return timedOut(ignored, delayMs, e.line);
+                return timedOut(ignored, waitMs, e.line);      // le temps vraiment attendu (plafonne a 10 s)
             }
             // Detache : le delai se mesure sur l'heure du script (now_), qui avance entre deux reprises.
             if (delayMs >= 0 && (env_.scriptNow() - start) * 1000.0 >= static_cast<double>(delayMs))
@@ -8971,7 +9050,7 @@ private:
     core::Result<RV> timedOut(bool ignored, std::int64_t delayMs, std::uint32_t line) {
         if (!ignored) return RV{Value::boolean(false), nullptr};
         const std::string msg = "la condition n'est pas devenue vraie en " + delayText(delayMs);
-        raise(Caught{true, "E_ATTENTE", msg, line});
+        raise(Caught{true, "E_ATTENTE", msg, line, {}, {}});
         return core::fail(core::ErrorCode::InvalidArgument, "E_ATTENTE");
     }
 
@@ -9478,6 +9557,9 @@ private:
     const std::vector<std::uint8_t>* breaks_{&noBreakLines()};
     bool                             probing_{false};
     int                              quiet_{0};       // 1.12.1 : a ?? b, le cote a en cours
+    // 1.13.0 : la profondeur des TRY quand le cote a s'est ouvert - un TRY ouvert plus bas (dans une
+    // fonction appelee a gauche de ??) attrape encore ses erreurs (fail, LEVER).
+    int                              quietCatching_{0};
     // 1.12.1 : TRY ... CATCH - la profondeur, l'erreur gardee (la premiere).
     int                              catching_{0};
     Caught                           caught_{};

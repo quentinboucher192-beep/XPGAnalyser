@@ -1453,9 +1453,9 @@ fn(name="WAIT_UNTIL", cat="script",
    ret="BOOL",
    short="Attend que CONDITION (un BOOL) devienne vraie, revue à chaque reprise de la tâche. Employé (IF, affectation), il rend TRUE devenu vrai, FALSE au délai ; seul en instruction, un délai dépassé lève E_ATTENTE. Demande un script détaché.",
    st="Vanne_Entree := TRUE;\nWAIT_UNTIL(Niveau_Cuve >= Consigne, T#2m);\nVanne_Entree := FALSE;",
-   c="/* une boucle : tester la condition, WAIT, recommencer */",
-   cpp="while (!(Niveau_Cuve >= Consigne)) WAIT(T#20ms);   // WAIT_UNTIL demande un script détaché",
-   inc="None", incpp="None", expr=False,
+   c="while (!(Niveau_Cuve >= Consigne)) WAIT(20);   /* ms ; dans un script détaché */",
+   cpp="while (!(Niveau_Cuve >= Consigne)) WAIT(20ms);   // WAIT_UNTIL demande un script détaché",
+   inc="Equivalent", incpp="Equivalent", expr=False,
    notes=["Dans un script non détaché, l'IHM est figée : la condition ne changera pas - coche Détaché (l'attente est plafonnée à 10 s, comme WAIT).",
           "Un délai dépassé lève E_ATTENTE quand WAIT_UNTIL est seul (une instruction) ; dans un IF ou une affectation, il rend FALSE sans erreur. Sans délai, il attend indéfiniment (IHM_SCRIPT_ARRETER l'arrête)."])
 

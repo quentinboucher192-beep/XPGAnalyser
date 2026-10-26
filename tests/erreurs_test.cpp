@@ -14,9 +14,12 @@
 #include "../src/hmi/HmiScript.hpp"
 #include "../src/hmi/HmiScriptCheck.hpp"
 #include "../src/hmi/HmiExprCheck.hpp"
+#include "../src/hmi/HmiCheck.hpp"         // relecture : Generer (une fonction nommee Lever)
 #include "../src/sim/Interpreter.hpp"     // le ST de l'automate (sans le dialecte)
 
+#include <cctype>
 #include <cstdio>
+#include <map>
 #include <cstdlib>
 #include <functional>
 #include <string>
@@ -328,10 +331,11 @@ void automateInchange() {
     const auto parses = [](const char* src, bool dialect) {
         return static_cast<bool>(sim::parse(src, "essai", sim::ParseOptions{dialect}));
     };
-    // LEVER : une instruction du dialecte (LEVER() sans code y est refuse) ; dans l'automate,
-    // c'est un appel ordinaire (0 argument y passe a l'analyse, comme n'importe quelle fonction).
+    // LEVER : une instruction du dialecte ; dans l'automate, un appel ordinaire (0 argument y passe a l'analyse,
+    // comme n'importe quelle fonction). 1.13.0 (relecture) : dans le dialecte aussi, LEVER() se LIT (une fonction
+    // nommee Lever d'un projet d'avant le prend a l'execution) ; sans elle, Compiler et le moteur le refusent.
     check(parses("LEVER();", false), "automate : LEVER() passe comme un appel ordinaire");
-    check(!parses("LEVER();", true), "dialecte : LEVER() sans code est refuse (une instruction)");
+    check(parses("LEVER();", true), "dialecte : LEVER() se lit (une fonction Lever d'avant peut le prendre)");
     check(parses("LEVER('E_X', 'msg');", true), "dialecte : LEVER('E_X', 'msg') se lit (une instruction)");
 
     // RELEVER : une instruction du dialecte ; dans l'automate, c'est un nom ordinaire
@@ -346,6 +350,220 @@ void automateInchange() {
 
 } // namespace
 
+// ---- la relecture de la 1.13.0 (groupe B, les erreurs) ------------------------
+//  Chaque essai suit le scenario d'un defaut confirme : il echouait avant la correction.
+namespace {
+// Une fonction du projet (le corps porte ses declarations, VAR_IN_OUT : une fonction aux types riches, qui tourne
+// dans le dialecte comme une methode).
+void addFunction(Project& p, const std::string& name, const std::string& body, const std::string& ret = {}) {
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = name;
+    f.returnType = ret;
+    f.body = body;
+    p.programs.functions.push_back(f);
+}
+void addVariable(Project& p, const char* n, const char* t, const char* init) {
+    Variable v;
+    v.id = p.allocate();
+    v.name = n;
+    v.type = t;
+    v.initial = init;
+    p.programs.variables.push_back(v);
+}
+// Un environnement minimal pour le moteur seul : des variables, l'attente immediate (WAIT_UNTIL non detache).
+struct WaitEnv final : sim::Environment {
+    std::map<std::string, sim::Value> vars;
+    std::vector<sim::Diagnostic> diags;
+    std::vector<std::int64_t> waits;
+    static std::string key(std::string_view n) {
+        std::string u(n);
+        for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        return u;
+    }
+    bool read(std::string_view n, sim::Value& out) override {
+        const auto it = vars.find(key(n));
+        if (it == vars.end()) return false;
+        out = it->second;
+        return true;
+    }
+    bool write(std::string_view n, const sim::Value& v) override {
+        vars[key(n)] = v;
+        return true;
+    }
+    bool exists(std::string_view n) override { return vars.count(key(n)) != 0; }
+    bool call(std::string_view, std::string_view, const std::vector<std::pair<std::string, sim::Value>>&, sim::Value&) override { return false; }
+    void report(sim::Diagnostic d) override { diags.push_back(std::move(d)); }
+    bool wait(std::int64_t ms, std::string&) override {
+        waits.push_back(ms);
+        return true;
+    }
+};
+} // namespace
+
+void relecture() {
+    std::printf("-- relecture 1.13.0 : erreurs (CATCH imbriques, codes, LEVER dans une fonction, Lever/Relever)\n");
+    std::string err;
+    const auto run = [](const std::string& type, const std::string& body, const std::function<void(Project&)>& extra = {},
+                        std::string* error = nullptr) {
+        Bench b(type, body, extra);
+        return b.runScript(error);
+    };
+
+    // n27 : deux CATCH e imbriques - le CATCH interieur s'execute, puis l'exterieur revient.
+    check(run("STRING", "VAR\n    n : INT;\nEND_VAR\nn := 0;\nTRY\n    Compteur := 10 / n;\nCATCH e\n    TRY\n        LEVER('E_Log', 'x');\n"
+                        "    CATCH e\n        R := e.Code;\n    END_TRY\n    R := CONCAT(R, '/', e.Code);\nEND_TRY", {}, &err) == "E_Log/E_DIVISION",
+          "n27 : CATCH e dans le handler d'un CATCH e : l'interieur voit E_Log, puis l'exterieur E_DIVISION (" + err + ")");
+    // ... et une fonction interne du script, appelee depuis le handler, avec son propre TRY ... CATCH e.
+    check(run("STRING", "FUNCTION Journaliser : STRING\n    TRY\n        LEVER('E_Interne', 'y');\n    CATCH e\n        Journaliser := e.Code;\n    END_TRY\n"
+                        "END_FUNCTION\nTRY\n    LEVER('E_Ext', 'x');\nCATCH e\n    R := CONCAT(Journaliser(), '/', e.Code);\nEND_TRY", {}, &err)
+              == "E_Interne/E_Ext",
+          "n27 : une fonction interne au TRY ... CATCH e, appelee depuis un CATCH e (" + err + ")");
+
+    // n28 : e.Code juste pour une erreur nee dans une fonction isolee (une fonction du projet aux types riches).
+    const auto withFunctions = [](Project& p) {
+        addVariable(p, "Diviseur", "INT", "0");
+        addFunction(p, "Charger_JSON", "VAR_IN_OUT\n    c : INT;\nEND_VAR\nc := 10 / Diviseur;");
+        addFunction(p, "Verifier_Haut", "VAR_IN_OUT\n    c : INT;\nEND_VAR\nASSERT(c < 5, 'haut');");
+        addFunction(p, "Charger_Simple_JSON", "Compteur := 10 / Diviseur;");
+    };
+    check(run("STRING", "TRY\n    Charger_JSON(Compteur);\nCATCH e\n    R := e.Code;\nEND_TRY", withFunctions, &err) == "E_DIVISION",
+          "n28 : une division par zero dans Charger_JSON : e.Code = E_DIVISION (pas E_JSON)");
+    check(run("STRING", "TRY\n    Verifier_Haut(Compteur);\nCATCH e\n    R := e.Code;\nEND_TRY", withFunctions, &err) == "E_ASSERT",
+          "n28 : ASSERT faux dans une fonction : e.Code = E_ASSERT (pas E_MOTEUR)");
+    check(run("STRING", "TRY\n    Charger_Simple_JSON();\nCATCH e\n    R := e.Code;\nEND_TRY", withFunctions, &err) == "E_DIVISION",
+          "n28 : une division par zero dans une fonction simple nommee ..._JSON : E_DIVISION (pas E_JSON)");
+
+    // n44 : LEVER dans une fonction isolee : e.Ligne = la ligne de l'appel ; la Console nomme la fonction.
+    const auto withVerif = [](Project& p) {
+        addFunction(p, "Verif", "VAR_IN_OUT\n    c : INT;\nEND_VAR\nIF c > 0 THEN\n    LEVER('E_N', 'trop');\nEND_IF;");
+    };
+    check(run("DINT", "Compteur := 7;\nTRY\n    Verif(Compteur);\nCATCH e\n    R := e.Ligne;\nEND_TRY", withVerif, &err) == "3",
+          "n44 : LEVER dans Verif, attrape : e.Ligne = 3 (la ligne de l'appel), comme une erreur du moteur");
+    (void)run("STRING", "R := 'a';\nVerif(Compteur);", withVerif, &err);
+    check(err.find("Verif") != std::string::npos && err.find("E_N") != std::string::npos,
+          "n44 : LEVER non attrape dans Verif : la Console nomme la fonction (" + err + ")");
+
+    // n45 : LEVER a gauche de ?? : le repli est pris, le script continue (comme une erreur du moteur).
+    const auto withSeuil = [](Project& p) {
+        addFunction(p, "Lire_Seuil", "VAR_IN_OUT\n    c : INT;\nEND_VAR\nLEVER('E_Seuil', 'inconnu');\nLire_Seuil := 1.0;", "REAL");
+        addFunction(p, "Seuil_Sur", "VAR_IN_OUT\n    c : INT;\nEND_VAR\nTRY\n    LEVER('E_X', 'x');\nCATCH e\n    Seuil_Sur := 5.0;\nEND_TRY;", "REAL");
+    };
+    check(run("REAL", "R := Lire_Seuil(Compteur) ?? 80.0;\nR := R + 1.0;", withSeuil, &err) == "81" && err.empty(),
+          "n45 : Lire_Seuil(...) ?? 80.0 avec un LEVER : 80 et le script continue (" + err + ")");
+    check(run("REAL", "R := Seuil_Sur(Compteur) ?? 80.0;", withSeuil, &err) == "5",
+          "n45 : un TRY dans la fonction a gauche de ?? attrape encore son LEVER (5)");
+
+    // n14 : une variable nommee Relever ou Lever (un projet d'avant) : Compiler ne la prend plus pour RELEVER / LEVER.
+    {
+        Project p;
+        addVariable(p, "Relever", "BOOL", "FALSE");
+        addVariable(p, "Lever", "INT", "0");
+        addVariable(p, "Marche", "BOOL", "FALSE");
+        addVariable(p, "Compteur", "INT", "0");
+        scriptcheck::Scope sc;
+        sc.project = &p;
+        sc.plcKnown = [](std::string_view) { return false; };
+        std::string all;
+        for (const auto& f : scriptcheck::check(sc, "Relever := TRUE;\nMarche := Relever;\nLever := 3;\nCompteur := Lever + 1;"))
+            if (f.severity == scriptcheck::Finding::Severity::Error) all += " | " + f.message;
+        check(all.empty(), "n14 : Relever := TRUE; Marche := Relever; Lever := 3 : aucune erreur" + all);
+        // le moteur aussi.
+        check(run("STRING", "Relever := TRUE;\nIF Relever THEN R := 'ok'; END_IF;",
+                  [](Project& q) { addVariable(q, "Relever", "BOOL", "FALSE"); }, &err) == "ok",
+              "n14 : le moteur lit Relever comme une variable (" + err + ")");
+        // RELEVER seul hors CATCH reste refuse, et un ';' oublie avant RELEVER se lit encore.
+        std::string relever;
+        for (const auto& f : scriptcheck::check(sc, "RELEVER;"))
+            if (f.severity == scriptcheck::Finding::Severity::Error) relever += f.message;
+        check(relever.find("RELEVER") != std::string::npos, "n14 : RELEVER seul hors CATCH reste refuse");
+    }
+
+    // n49 : une fonction du projet nommee Lever (lever une barriere) : Lever(Barriere1); l'appelle encore.
+    {
+        const auto withLever = [](Project& p) {
+            addVariable(p, "Barriere1", "BOOL", "FALSE");
+            HmiFunction f;
+            f.id = p.allocate();
+            f.name = "Lever";
+            f.body = "VAR_INPUT\n    b : BOOL;\nEND_VAR\nR := 'barriere levee';";
+            p.programs.functions.push_back(f);
+        };
+        check(run("STRING", "Lever(Barriere1);", withLever, &err) == "barriere levee" && err.empty(),
+              "n49 : Lever(Barriere1); appelle la fonction Lever du projet (" + err + ")");
+        Project p;
+        withLever(p);
+        const auto is = generate(p, [](std::string_view) { return false; });
+        bool warned = false;
+        for (const auto& i : is) warned = warned || (i.severity == Issue::Severity::Warning && i.message.find("Lever_Barriere") != std::string::npos);
+        check(warned, "n49 : Generer conseille de renommer la fonction Lever");
+        scriptcheck::Scope sc;
+        sc.project = &p;
+        std::string errs;
+        for (const auto& f : scriptcheck::check(sc, "Lever(Barriere1);"))
+            if (f.severity == scriptcheck::Finding::Severity::Error) errs += " | " + f.message;
+        check(errs.find("LEVER") == std::string::npos, "n49 : Compiler lit Lever(Barriere1) comme un appel" + errs);
+        // sans fonction Lever, LEVER() reste refuse (Compiler et le moteur).
+        scriptcheck::Scope none;
+        std::string zero;
+        for (const auto& f : scriptcheck::check(none, "LEVER();")) zero += f.message;
+        check(zero.find("il manque le code") != std::string::npos, "n49 : LEVER() sans fonction Lever : il manque le code");
+        (void)run("STRING", "LEVER();", {}, &err);
+        check(err.find("LEVER") != std::string::npos, "n49 : LEVER() sans fonction Lever : le moteur le refuse (" + err + ")");
+    }
+
+    // n34 : le nom d'un CATCH ne vaut que dans son handler : FOR EACH e ailleurs n'est pas un T_Erreur.
+    {
+        scriptcheck::Scope sc;
+        std::string all;
+        for (const auto& f : scriptcheck::check(sc, "VAR\n    L : LIST OF REAL;\n    Total : REAL;\nEND_VAR\nTRY\n    Total := 1.0;\nCATCH e\n    Total := 0.0;\nEND_TRY\n"
+                                                    "FOR EACH e IN L DO\n    Total := Total + e;\nEND_FOR;"))
+            if (f.message.find("T_Erreur") != std::string::npos || f.message.find("lecture seule") != std::string::npos) all += " | " + f.message;
+        check(all.empty(), "n34 : FOR EACH e apres un CATCH e : e n'y est pas l'erreur attrapee" + all);
+    }
+
+    // n40 / n51 : WAIT_UNTIL non detache, delai depasse : le message dit le temps vraiment attendu (10 s au plus).
+    {
+        const auto timeout = [](const char* src) {
+            WaitEnv env;
+            env.vars["PRET"] = sim::Value::boolean(false);
+            auto prog = sim::parse(src, "essai", sim::ParseOptions{true});
+            if (!prog) return std::string("illisible : ") + prog.error().message();
+            (void)sim::execute(**prog, env);
+            std::string all;
+            for (const auto& d : env.diags) all += d.message;
+            return all;
+        };
+        const std::string sans = timeout("WAIT_UNTIL(Pret);");
+        check(sans.find("E_ATTENTE") != std::string::npos && sans.find("10 s") != std::string::npos && sans.find("0 ms") == std::string::npos,
+              "n40 : WAIT_UNTIL(Pret) non detache : 'en 10 s' (pas 'en 0 ms') : " + sans);
+        const std::string long2 = timeout("WAIT_UNTIL(Pret, T#2m);");
+        check(long2.find("10 s") != std::string::npos && long2.find("2 min") == std::string::npos,
+              "n40 : WAIT_UNTIL(Pret, T#2m) non detache : 'en 10 s' (pas 'en 2 min') : " + long2);
+    }
+
+    // n41 : WAIT_UNTIL dans un script non detache : Compiler l'avertit (coche Detache) ; detache : rien.
+    {
+        Project p;
+        addVariable(p, "Pret", "BOOL", "FALSE");
+        Script a;
+        a.id = p.allocate();
+        a.name = "Attente";
+        a.event = "Appel";
+        a.body = "WAIT_UNTIL(Pret, T#2m);";
+        p.programs.scripts.push_back(a);
+        const auto warnings = [](const Project& q) {
+            std::string out;
+            for (const auto& i : scriptcheck::projectIssues(q, [](std::string_view) { return false; }, {}, nullptr))
+                if (i.severity == Issue::Severity::Warning && i.message.find("WAIT_UNTIL dans un script non d") != std::string::npos) out += i.message;
+            return out;
+        };
+        check(!warnings(p).empty(), "n41 : WAIT_UNTIL dans un script non detache : Compiler avertit");
+        p.programs.scripts.back().detached = true;
+        check(warnings(p).empty(), "n41 : detache : pas d'avertissement");
+    }
+}
+
 int main() {
     std::printf("1.13.0 : lever ses erreurs (LEVER, RELEVER, CATCH e, codes E_*) et WAIT_UNTIL\n");
     lever();
@@ -353,6 +571,7 @@ int main() {
     waitUntil();
     controle();
     automateInchange();
+    relecture();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

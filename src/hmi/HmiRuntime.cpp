@@ -302,6 +302,9 @@ public:
     }
     std::map<std::string, sim::Value, std::less<>> vars;
     std::vector<sim::Diagnostic> diagnostics;
+    // 1.13.0 : le message brut du moteur (en anglais) de la derniere fonction du projet qui a echoue - le code E_* d'un
+    // TRY de l'appelant (lastCallError) ; vide : pas de cause connue.
+    std::string lastCallRaw;
     // Lot 7 : les variables locales du script (ou de la fonction) qui tourne.
     // Seul le cadre du dessus est vu : un script appele ne voit pas celles de
     // l'appelant.
@@ -517,8 +520,10 @@ public:
         }
         return (r.find('.') != std::string::npos && rt_.publicExists(r)) || (rt_.plc_ && rt_.plc_->exists(plcOf(r)));
     }
+    std::string lastCallError() override { return lastCallRaw; }
     bool call(std::string_view name, std::string_view instance,
               const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result) override {
+        lastCallRaw.clear();                                   // 1.13.0 : la cause d'un echec, posee par callFunction
         const auto u = upper(name);
         if (u.rfind("IHM_", 0) == 0) return ihm(u, args, result);
         // 1.12.16 : une fonction de la vue, par son nom dans la vue (elle passe avant celles du projet).
@@ -2360,6 +2365,7 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
         if (d.severity == sim::Diagnostic::Severity::Error) {
             why = (d.line ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + frenchSimMessage(d.message);
             if (d.line) failLine = static_cast<int>(d.line);
+            env_->lastCallRaw = d.message;                     // 1.13.0 : son code E_* pour le CATCH de l'appelant
             break;
         }
     if (why.empty() && !run.completed) why = "arr\xC3\xAAt\xC3\xA9" " : budget d'instructions d\xC3\xA9pass\xC3\xA9 (boucle sans fin ?)";
