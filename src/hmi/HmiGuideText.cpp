@@ -14929,10 +14929,11 @@ const std::vector<Topic>& topics() {
                          "elle-m\xC3\xAAme), sans souci de la casse : `BAR` devient `bar`, `m3h` devient "
                          "`m3/h`. Un symbole inconnu est refus\xC3\xA9, la raison dans la barre.", {}},
              {K::Bullet, "**Ctrl+Espace** propose les unit\xC3\xA9s dont le symbole, le nom ou la famille "
-                         "contient ce que tu tapes (`temp` : K, degC, degF) ; la derni\xC3\xA8re ligne, "
-                         "**Choisir une unit\xC3\xA9\xE2\x80\xA6**, ouvre le s\xC3\xA9lecteur. Un "
-                         "double-clic sur la case l'ouvre aussi, comme le bouton **\xE2\x80\xA6** de la case "
-                         "dans la fiche.", {}},
+                         "contient ce que tu tapes (`deg` : degC, degF ; `temp` : K, degC, degF, mais aussi "
+                         "la famille Temps - s, ms, min, h, j -, dont le nom contient \xC2\xAB temp "
+                         "\xC2\xBB) ; la derni\xC3\xA8re ligne, **Choisir une unit\xC3\xA9\xE2\x80\xA6**, "
+                         "ouvre le s\xC3\xA9lecteur. Un double-clic sur la case l'ouvre aussi, comme le "
+                         "bouton **\xE2\x80\xA6** de la case dans la fiche.", {}},
              {K::Bullet, "Une unit\xC3\xA9 ne va que sur un **type num\xC3\xA9rique** (REAL, INT\xE2\x80\xA6 "
                          "; sur un ARRAY OF REAL, elle porte sur l'\xC3\xA9l\xC3\xA9ment) : la case d'un "
                          "BOOL, d'un texte ou d'une structure est gris\xC3\xA9" "e. Si le type devient non "
@@ -19041,8 +19042,8 @@ const std::vector<Topic>& topics() {
                          "Pour un REAL (ou un g\xC3\xA9n\xC3\xA9rique r\xC3\xA9" "el), `NAN`, `INF` et "
                          "`-INF` se tapent tels quels (`nan` devient `NAN`). Exemple, le cas \xC2\xAB "
                          "moyenne simple \xC2\xBB de Moyenne_Pression :", {}},
-             {K::Table, "Champ\tValeur\nA\t12.0\nB\t20.0\nPoids_A\t*(vide : la valeur par d\xC3\xA9" "faut, "
-                         "0.5)*\nAttendu\t16.0\nVerdict\tr\xC3\xA9ussi", {}},
+             {K::Table, "Champ\tValeur\nA\t12.0\nB\t20.0\nPoids_A\t(vide : la valeur par d\xC3\xA9" "faut, "
+                         "0.5)\nAttendu\t16.0\nVerdict\tr\xC3\xA9ussi", {}},
              {K::Paragraph, "Tout se modifie ensuite dans la liste ou la fiche, et chaque geste se reprend par "
                          "Ctrl+Z. Sont refus\xC3\xA9s, la raison dans la barre : un nom vide ou "
                          "d\xC3\xA9j\xC3\xA0 pris, un argument qui ne se lit pas dans le type de son "
@@ -19087,7 +19088,7 @@ const std::vector<Topic>& topics() {
                          "simulation. Dans Configuration, **Tests des fonctions** : **Rejouer les tests au "
                          "Compiler/D\xC3\xA9marrer** (coch\xC3\xA9 ; d\xC3\xA9" "coche-le pour un gros "
                          "projet) et **Un test en \xC3\xA9" "chec emp\xC3\xAA" "che le d\xC3\xA9marrage** "
-                         "(d\xC3\xA9" "coch\xC3\xA9 : un \xC3\xA9" "chec n'est alors qu'un avertissement ; "
+                         "(d\xC3\xA9" "coch\xC3\xA9 : un \xC3\xA9" "chec ne bloque pas le d\xC3\xA9marrage ; "
                          "coch\xC3\xA9, la simulation ne d\xC3\xA9marre pas et la barre le dit ; la note de "
                          "la simulation renvoie aux Sorties, cat\xC3\xA9gorie Tests, o\xC3\xB9 un "
                          "double-clic m\xC3\xA8ne au cas).", {}},
@@ -19106,14 +19107,15 @@ const std::vector<Topic>& topics() {
                          "constantes de sa vue", {}},
              {K::Paragraph, "Le verdict est une pastille verte ou rouge dans la colonne Verdict. Les "
                          "r\xC3\xA9sultats partent aussi aux **Sorties** du panneau du bas, cat\xC3\xA9gorie "
-                         "**Tests** : le bilan, puis une ligne par cas ; un double-clic sur une ligne ouvre "
-                         "la fonction sur son onglet Tests, le cas choisi. La barre d'\xC3\xA9tat du volet "
-                         "Fonctions compte \xC2\xAB tests : 7 cas \xC2\xB7 6 r\xC3\xA9ussis, 1 "
-                         "\xC3\xA9" "chec \xC2\xBB. Dans l'arbre, sous la fonction, le groupe **Tests** "
-                         "(\xC2\xAB Tests \xC2\xB7 2 cas \xC2\xB7 1 r\xC3\xA9ussi, 1 \xC3\xA9" "chec "
-                         "\xC2\xBB) a une ligne par cas avec sa pastille ; la fonction (du projet, d'une "
-                         "vue, d'une popup ou d'un symbole) porte \xC2\xAB 1 test rouge \xC2\xBB quand un "
-                         "cas \xC3\xA9" "choue. Un clic sur un cas de l'arbre ouvre l'onglet Tests sur lui.", {}},
+                         "**Tests** : le bilan, puis une ligne par cas (un \xC3\xA9" "chec ou une erreur au "
+                         "niveau Erreur, comme sa pastille) ; un double-clic sur une ligne ouvre la fonction "
+                         "sur son onglet Tests, le cas choisi. La barre d'\xC3\xA9tat du volet Fonctions "
+                         "compte \xC2\xAB tests : 7 cas \xC2\xB7 6 r\xC3\xA9ussis, 1 \xC3\xA9" "chec "
+                         "\xC2\xBB. Dans l'arbre, sous la fonction, le groupe **Tests** (\xC2\xAB Tests "
+                         "\xC2\xB7 2 cas \xC2\xB7 1 r\xC3\xA9ussi, 1 \xC3\xA9" "chec \xC2\xBB) a une ligne "
+                         "par cas avec sa pastille ; la fonction (du projet, d'une vue, d'une popup ou d'un "
+                         "symbole) porte \xC2\xAB 1 test rouge \xC2\xBB quand un cas \xC3\xA9" "choue. Un "
+                         "clic sur un cas de l'arbre ouvre l'onglet Tests sur lui.", {}},
              {K::Heading, "Attendre une erreur", {}},
              {K::Paragraph, "Un cas peut **attendre une erreur** (la case **Erreur attendue** de sa fiche) : il "
                          "r\xC3\xA9ussit si la fonction l\xC3\xA8ve bien le code attendu (`E_Niveau`), "

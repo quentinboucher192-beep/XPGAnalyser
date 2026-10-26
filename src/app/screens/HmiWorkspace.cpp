@@ -3914,6 +3914,22 @@ bool MainAnalysisScreen::openHmiHelpNow() {
                 return true;
             }
         }
+        // 1.13.0 (lot F3) : l'onglet Tests d'une fonction (le volet Fonctions, ou les fonctions d'une vue, d'une popup, d'un
+        // symbole) : son sujet, Les tests unitaires d'une fonction - et non le mot sous le curseur du code, cache derriere.
+        static_assert(HmiFunctionsPane::CodeTabTests == 4, "help::f1::placeOfFunctionTab suit l'ordre des onglets de HmiFunctionsPane");
+        {
+            HmiFunctionsPane* functionsHere = dynamic_cast<HmiFunctionsPane*>(hmiTab(key));
+            if (!functionsHere)
+                if (auto* editor = dynamic_cast<HmiEditor*>(hmiTab(key))) {
+                    if (editor->viewTabs() && editor->viewTabs()->current() == HmiSymbolTabs::Functions) functionsHere = editor->viewFunctions();
+                    else if (editor->symbolTabs() && editor->symbolTabs()->current() == HmiSymbolTabs::Functions) functionsHere = editor->symbolFunctions();
+                }
+            if (functionsHere && functionsHere->currentCodeTab() == HmiFunctionsPane::CodeTabTests) {
+                const auto own = help::f1::keyForPlace(help::f1::placeOfFunctionTab(functionsHere->currentCodeTab()));
+                openHmiHelp(own.empty() ? std::string("fonctions") : own);
+                return true;
+            }
+        }
         std::string word;
         ui::MultiLineText* codeEditor = nullptr;
         if (auto* scripts = dynamic_cast<HmiScriptsPane*>(hmiTab(key))) codeEditor = &scripts->editor();

@@ -19311,10 +19311,14 @@ void centreAide111() {
         const auto n = hc::tutorialCount(ix);
         // Decision 12 du chef : les notes de version (9 en 1.11.1) n'ont pas de tutoriel ; le compteur ne les compte pas.
         // 1.12.28 : ni les pages des parcours du didacticiel (le parcours est leur tutoriel).
-        std::size_t parcours = 0;
+        std::size_t parcours = 0, retires = 0;
         for (const auto& t : ix.topics()) parcours += help::trails::ofPage(t.key) != nullptr ? 1u : 0u;
-        check(parcours == 6 && n.total == ix.topics().size() - ix.count(hc::Chapter::Notes) - parcours && n.provided == 0,
-              "ecran : le compteur, sans les notes de version ni les parcours (tout est estime tant que T1 ne fournit rien)");
+        // 1.13.0 (lot F3) : ni le sujet de ce qui est retire (page-web : ni tutoriel ni Essayer).
+        for (const auto& t : ix.topics()) retires += t.kind == hc::kRetiredKind ? 1u : 0u;
+        check(retires == 1 && ix.find("page-web") && ix.find("page-web")->kind == hc::kRetiredKind && !hc::hasTutorial(*ix.find("page-web")),
+              "lot F3 : le sujet retire (page-web) n'a ni tutoriel ni Essayer");
+        check(parcours == 6 && n.total == ix.topics().size() - ix.count(hc::Chapter::Notes) - parcours - retires && n.provided == 0,
+              "ecran : le compteur, sans les notes de version, les parcours ni les sujets retires (tout est estime tant que T1 ne fournit rien)");
         const auto pied = hc::pageFooter(ix, "objet-vanne");
         check(!pied.prevKey.empty() && !pied.nextKey.empty(), "ecran : precedent / suivant en bas de page");
         check(hc::pageFooter(ix, ix.topics().front().key).prevKey.empty(), "ecran : rien avant le premier sujet");
@@ -36444,6 +36448,9 @@ void testsUnitaires113() {
         const auto labels = nc->parameterLabels();
         check(labels.size() == 3 && labels[0] == "A : REAL" && labels[2].find("Poids_A : REAL") == 0 && labels[2].find("d\xC3\xA9" "faut 0.5") != std::string::npos,
               "une case par param\xC3\xA8tre : A : REAL ... Poids_A : REAL (d\xC3\xA9" "faut 0.5)");
+        // 1.13.0 (lot F3) : la colonne des libelles s'adapte au plus long (plus de " Poids_A : REAL  (defaut " coupe).
+        check(labels.size() == 3 && nc->labelWidth() > 170.f && nc->labelWidth() >= ui::measureWidth(labels[2], gfx::FontId{16}) + 16.f,
+              "C5 : la colonne des libell\xC3\xA9s tient Poids_A : REAL  (d\xC3\xA9" "faut 0.5) (" + std::to_string(nc->labelWidth()) + " px)");
         check(nc->answer().name == "cas 1" && nc->toleranceUsable() && nc->expectedUsable(), "un nom libre (cas 1) ; un retour REAL : attendu et tol\xC3\xA9rance");
         nc->setName("moyenne simple");
         nc->setArgument(0, "12,0");
@@ -36499,8 +36506,10 @@ void testsUnitaires113() {
     check(r2 && r2->verdict == hmi::Verdict::Failed && page.cases().model()->cellText(1, 4) == "\xC3\xA9" "chec"
               && page.cases().model()->cellStyle(1, 4).fgTone == ui::Tone::Error && r2->detail.find("obtenu 18.0") != std::string::npos,
           "Lancer ce cas : \xC3\xA9" "chec, en rouge (" + (r2 ? r2->detail : std::string("?")) + ")");
-    check(lines.size() == 2 && lines[1].severity == hmi::pipeline::Severity::Warning && lines[1].element == app::testElement(c2),
-          "un \xC3\xA9" "chec : un avertissement aux Sorties, qui m\xC3\xA8ne au cas");
+    // 1.13.0 (lot F3) : un echec est une Erreur aux Sorties (son verdict est rouge), l'en-tete aussi.
+    check(lines.size() == 2 && lines[1].severity == hmi::pipeline::Severity::Error && lines[0].severity == hmi::pipeline::Severity::Error
+              && lines[1].element == app::testElement(c2),
+          "un \xC3\xA9" "chec : une erreur aux Sorties (l'en-t\xC3\xAA" "te aussi), qui m\xC3\xA8ne au cas");
     check(fns.codeTabs().tab(app::HmiFunctionsPane::CodeTabTests)->badge == "2"
               && fns.codeTabs().tab(app::HmiFunctionsPane::CodeTabTests)->badgeTone == ui::Tone::Error,
           "le titre de l'onglet : 2 cas, la pastille rouge");
@@ -36628,8 +36637,10 @@ void testsUnitaires113() {
                 }
         check(tally.find("3 cas") == 0 && !report.empty(), "Configuration : le bilan des tests (" + tally + "), Rapport des tests\xE2\x80\xA6");
         std::string where;
-        check(cfg.exportTestsReport(hmi::ExportFormat::Pdf, &where) && written.back().format == "PDF" && written.back().rows >= 5 && cfgLines.size() == 5,
-              "Rapport des tests (PDF) : toute la campagne rejou\xC3\xA9" "e, " + where);
+        // 1.13.0 (lot F3) : le rejeu du rapport ne rejournalise pas chaque cas - une ligne, le fichier et le bilan.
+        check(cfg.exportTestsReport(hmi::ExportFormat::Pdf, &where) && written.back().format == "PDF" && written.back().rows >= 5 && cfgLines.size() == 1
+                  && cfgLines[0].text.find("Rapport des tests \xC3\xA9" "crit : exports/tests_") == 0 && cfgLines[0].text.find("3 cas") != std::string::npos,
+              "Rapport des tests (PDF) : toute la campagne rejou\xC3\xA9" "e, une seule ligne aux Sorties (" + (cfgLines.empty() ? std::string("?") : cfgLines[0].text) + ")");
     }
 
     // ---- Generer : un cas fautif, en rouge ----
@@ -37567,6 +37578,141 @@ void unites113() {
     }
 }
 
+// 1.13.0 (lot F3) : LES DEFAUTS VUS AUX CAPTURES (unites, tests unitaires, aide F1) - la correction d'un clic
+//  sur la ligne Saisie, Filtrer sur ce que montre la colonne Element, les formules de conversion, les largeurs
+//  des colonnes (Variables IHM, Unites de mesure, Nouveau cas), F1 sur l'onglet Tests.
+//  HMI_TEST_F3=1 : ces essais seuls.
+void lotF3_113() {
+    std::printf("1.13.0 (lot F3) : la correction en Saisie, Filtrer sur l'\xC3\xA9l\xC3\xA9ment, les conversions, les largeurs, F1 sur Tests\n");
+    namespace pl = hmi::pipeline;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    Project& p = doc->project;
+    const auto var = [&](const char* name, const char* unit) {
+        Variable v;
+        v.id = p.allocate();
+        v.name = name;
+        v.type = "REAL";
+        v.unit = unit;
+        v.initial = "0.0";
+        p.programs.variables.push_back(v);
+    };
+    var("D_PRESSION_GAZ", "bar");
+    var("D_PRESSION_BASSE", "mbar");
+    var("D_PRESSION_TOTALE", "bar");
+
+    // ---- C1 : la ligne Saisie (en direct) porte la correction d'un clic, comme la ligne Validation ----
+    app::HmiScriptsPane pane("f3.scripts", doc, apply);
+    pane.setBounds({0, 0, 1400, 800});
+    pane.layout();
+    Script spec;
+    spec.name = "Bilan_Pressions";
+    spec.lang = ScriptLang::ST;
+    spec.event = "Cyclique";
+    const Id sid = pane.addScript(spec);
+    const std::string line4 = "D_PRESSION_TOTALE := D_PRESSION_GAZ + D_PRESSION_BASSE;";
+    check(sid != kNoId && pane.setBody(sid, "(* bilan *)\nD_COMPTEUR := 1;\n\n" + line4 + "\n"), "le script de la capture : bar + mbar");
+    const pl::Diagnostic* live = nullptr;
+    const auto lives = pane.liveDiagnostics();
+    for (const auto& d : lives)
+        if (d.message.find("ne s'additionnent pas") != std::string::npos) live = &d;
+    check(live && live->step == "Saisie" && live->fixFrom == "D_PRESSION_BASSE" && live->fixTo == "EN(D_PRESSION_BASSE, 'bar')"
+              && live->fixColumn == static_cast<int>(line4.find("D_PRESSION_BASSE")) + 1 && live->line == 4,
+          "C1 : la ligne Saisie porte la correction EN(D_PRESSION_BASSE, 'bar'), a sa colonne ("
+              + (live ? live->fixFrom + " -> " + live->fixTo + ", col. " + std::to_string(live->fixColumn) : std::string("aucune")) + ")");
+    // Le panneau du bas : Appliquer la correction n'est plus grise ; Filtrer sur ce que montre la colonne Element.
+    app::HmiBuildOutputPane out("f3.out");
+    const gfx::Rect area{0, 0, 1200, 320};
+    out.setBounds(area);
+    out.layout();
+    out.showTab(app::HmiBuildOutputPane::kDiagnostics);
+    out.setLive(pane.liveElement(), lives);
+    out.layout();
+    std::size_t row = 0;
+    const auto shown = out.shownDiagnostics();
+    for (std::size_t r = 0; r < shown.size(); ++r)
+        if (shown[r].message.find("ne s'additionnent pas") != std::string::npos) row = r;
+    gfx::Rect rr{};
+    check(!shown.empty() && out.diagnosticTable().rowRect(row, rr), "la ligne Saisie est a l'ecran");
+    // Un clic la choisit (et donne le clavier a la table) ; Ctrl+. demande la correction.
+    std::optional<pl::Diagnostic> asked;
+    core::ConnectionScope links;
+    links += out.fixRequested->connect([&](const pl::Diagnostic& d) { asked = d; });
+    out.diagnosticTable().dispatch(ui::MouseDown{{rr.x + 60.f, rr.y + rr.h / 2.f}, ui::MouseButton::Left, 1, {}});
+    out.diagnosticTable().dispatch(ui::MouseUp{{rr.x + 60.f, rr.y + rr.h / 2.f}, ui::MouseButton::Left, {}});
+    out.diagnosticTable().dispatch(ui::KeyDown{ui::Key::Period, ui::KeyMods{true, false, false, false}, false});
+    check(asked && asked->fixFrom == "D_PRESSION_BASSE" && asked->script == sid, "C1 : Ctrl+. sur la ligne Saisie demande la correction");
+    out.diagnosticTable().dispatch(ui::MouseDown{{rr.x + 60.f, rr.y + rr.h / 2.f}, ui::MouseButton::Right, 1, {}});
+    auto* menu = out.diagnosticTable().contextMenu();
+    const auto* fix = menu ? findItemStarting(menu->items(), "Appliquer la correction") : nullptr;
+    check(fix && fix->enabled && fix->label == "Appliquer la correction : D_PRESSION_BASSE \xE2\x86\x92 EN(D_PRESSION_BASSE, 'bar')",
+          "C1 : le menu de la ligne Saisie propose la correction (" + (fix ? fix->label : std::string("absente")) + ")");
+    const auto* filter = menu ? findItemStarting(menu->items(), "Filtrer sur") : nullptr;
+    check(filter && filter->label == "Filtrer sur \xC2\xAB Bilan_Pressions \xC2\xBB" && filter->label.find("script:") == std::string::npos,
+          "R8 : Filtrer sur ce que montre la colonne \xC3\x89l\xC3\xA9ment, pas la cl\xC3\xA9 interne (" + (filter ? filter->label : std::string("absent")) + ")");
+    if (menu) menu->close();
+    // R1 : la correction appliquee dit ou est le texte remplace (le curseur y va, l'ancienne plage ne vaut plus).
+    if (asked) {
+        FixPlace at;
+        at.script = asked->script;
+        at.line = asked->line;
+        at.column = asked->fixColumn;
+        FixPlace done;
+        Project q = p;
+        check(applyFix(q, at, asked->fixFrom, asked->fixTo, nullptr, &done) && done.line == 4
+                  && done.column == static_cast<int>(line4.find("D_PRESSION_BASSE")) + 1,
+              "R1 : applyFix dit la ligne et la colonne du texte remplace (" + std::to_string(done.line) + ", " + std::to_string(done.column) + ")");
+    }
+
+    // ---- C9 / R13 : les formules de conversion, ecrites proprement ----
+    {
+        const std::string degF = app::unitui::describe(p, "degF"), degC = app::unitui::describe(p, "degC"), mbar = app::unitui::describe(p, "mbar");
+        check(degF.find("x degF = x \xC3\x97 0.555556 + 255.372 K") != std::string::npos && degF.find("0.5555555556") == std::string::npos,
+              "R13 : degF, 6 chiffres significatifs (" + degF + ")");
+        check(degC.find("x degC = x + 273.15 K") != std::string::npos && degC.find("\xC3\x97 1 ") == std::string::npos,
+              "R13 : degC, un decalage seul, sans \xC2\xAB \xC3\x97 1 \xC2\xBB (" + degC + ")");
+        check(mbar.find("1 mbar = 100 Pa") != std::string::npos, "R13 : mbar, un facteur seul (" + mbar + ")");
+    }
+    // ---- C9 / R14 : Configuration > Unites de mesure, les titres se lisent ----
+    {
+        app::HmiMeasureUnitsPane mu("f3.mesure", doc, apply);
+        mu.setBounds({0, 0, 1600, 900});
+        mu.layout();
+        const auto widthOf = [](ui::TableView& t, const std::string& title) {
+            for (const auto& c : t.columns())
+                if (c.title == title) return c.width;
+            return 0.f;
+        };
+        check(widthOf(mu.units(), "Emplois") >= 100.f && widthOf(mu.families(), "R\xC3\xA9" "f\xC3\xA9rence") >= 120.f
+                  && widthOf(mu.units(), "Conversion") >= 280.f,
+              "R14 : Emplois, R\xC3\xA9" "f\xC3\xA9rence et Conversion assez larges");
+    }
+    // ---- C2 : Variables IHM, les titres des colonnes se lisent a l'ouverture ----
+    {
+        app::HmiVariablesPane vars("f3.vars", doc, apply);
+        vars.setBounds({0, 0, 1600, 800});
+        vars.layout();
+        bool lisibles = true;
+        std::string court;
+        for (const char* title : {"Unit\xC3\xA9", "Initiale", "R\xC3\xA9manente", "Adresse", "\xC3\x89quipement", "Acc\xC3\xA8s"})
+            for (const auto& c : vars.table().columns())
+                if (c.title == title && c.width - 54.f < ui::measureWidth(title, gfx::FontId{16})) {
+                    lisibles = false;
+                    court += std::string(title) + " ";
+                }
+        check(lisibles, "C2 : Unit\xC3\xA9, Initiale, R\xC3\xA9manente, Adresse... lisibles (le tri et l'entonnoir compris) " + court);
+    }
+    // ---- C3 : F1 sur l'onglet Tests d'une fonction : Les tests unitaires d'une fonction ----
+    {
+        namespace f1 = help::f1;
+        check(f1::placeOfFunctionTab(app::HmiFunctionsPane::CodeTabTests) == "tests-fonctions"
+                  && f1::keyForPlace(f1::placeOfFunctionTab(app::HmiFunctionsPane::CodeTabTests)) == "tests-fonctions"
+                  && f1::placeOfFunctionTab(app::HmiFunctionsPane::CodeTabCode) == "fonctions" && f1::keyForPlace("fonctions") == "fonctions",
+              "C3 : F1 sur l'onglet Tests ouvre tests-fonctions ; sur le code, Fonctions IHM");
+    }
+}
+
 // ============================================== 1.13.0 (J1b) ===============
 //  L'ECRAN DES OBJETS : la section Methodes (Ajouter une methode..., le corps,
 //  Privee, Redefinissable, Renommer, Dupliquer, Supprimer, Monter, Redefinir),
@@ -37924,6 +38070,12 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_J46"); only && *only == '1') {
         testsUnitaires113();
         unites113();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.13.0 (lot F3) : HMI_TEST_F3=1 - les defauts vus aux captures (unites, tests, aide F1), seuls.
+    if (const char* only = std::getenv("HMI_TEST_F3"); only && *only == '1') {
+        lotF3_113();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -38468,6 +38620,7 @@ int main(int argc, char** argv) {
     objets113();                            // 1.13.0 (J1b) : l'ecran des objets - methodes, visibilite, heritage, interfaces
     testsUnitaires113();                    // 1.13.0 (lot J4b) : les tests unitaires - l'onglet Tests, les verdicts, l'arbre
     unites113();                            // 1.13.0 (lot J6b) : les unites - la colonne Unite, le selecteur, Unites de mesure
+    lotF3_113();                            // 1.13.0 (lot F3) : les defauts vus aux captures (unites, tests, aide F1)
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

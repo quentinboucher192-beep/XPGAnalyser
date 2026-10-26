@@ -23,6 +23,12 @@ std::vector<SourceTopic> guideSources() {
         s.headings = static_cast<int>(std::count_if(t.blocks.begin(), t.blocks.end(), [](const hmi::guide::Block& b) {
             return b.kind == hmi::guide::BlockKind::Heading;
         }));
+        // 1.13.0 (lot F3) : un sujet de ce qui est RETIRE (son premier intertitre : " Retire en 1.13.0 ") - rien a
+        // regarder ni a essayer (hasTutorial).
+        const auto first = std::find_if(t.blocks.begin(), t.blocks.end(), [](const hmi::guide::Block& b) {
+            return b.kind == hmi::guide::BlockKind::Heading;
+        });
+        if (first != t.blocks.end() && first->text.rfind("Retir\xC3\xA9 en ", 0) == 0) s.kind = kRetiredKind;
         out.push_back(std::move(s));
     }
     return out;

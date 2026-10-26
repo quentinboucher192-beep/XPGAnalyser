@@ -73,6 +73,8 @@ struct TreeState {
 // 1.11, decision 12 du chef : les pages des notes de version n'ont pas de
 // tutoriel. Leur page n'a pas la carte "Regarder le tutoriel", leur ligne de
 // l'arbre pas de pastille, et le compteur ne les compte pas.
+// 1.13.0 (lot F3) : ni le sujet d'une fonction retiree (Topic::kind kRetiredKind : page-web, " Retire en 1.13.0 ") - on
+// ne regarde ni n'essaie ce qui n'existe plus.
 [[nodiscard]] bool hasTutorial(const Topic& t);
 
 // Le compteur de la barre : les sujets dont le tutoriel est fourni (non

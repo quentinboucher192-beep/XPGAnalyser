@@ -139,7 +139,7 @@ const std::vector<Note>& table() {
         // 1.13.0 : l'export et l'import de l'IHM et du programme en page web, retires (un
         // navigateur ne dialogue pas en Modbus) ; les archives et l'acces web en direct restent.
         note("1.13.0", "Projet", Kind::Changed,
-         "Retire : l'export et l'import en page web (.html), de l'IHM dans IHM Studio et du programme dans API Studio (Projet \xE2\x80\xBA Exporter en page web, Importer depuis une page web) : un navigateur ne peut pas dialoguer en Modbus. Les archives .xihm/.xapi et l'acc\xC3\xA8s web en direct restent.",
+         "Retir\xC3\xA9 : l'export et l'import en page web (.html), de l'IHM dans IHM Studio et du programme dans API Studio (Projet \xE2\x80\xBA Exporter en page web, Importer depuis une page web) : un navigateur ne peut pas dialoguer en Modbus. Les archives .xihm/.xapi et l'acc\xC3\xA8s web en direct restent.",
          "page-web", ""),
         // 1.13.0 (lot J1 : les types objets - methodes, prive, heritage, interfaces ; J1b : leur ecran).
         note("1.13.0", "Types", Kind::New,
