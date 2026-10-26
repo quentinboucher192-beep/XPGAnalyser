@@ -309,6 +309,12 @@ public:
     // 1.13.0 : le message brut du moteur (en anglais) de la derniere fonction du projet qui a echoue - le code E_* d'un
     // TRY de l'appelant (lastCallError) ; vide : pas de cause connue.
     std::string lastCallRaw;
+    // 1.13.0 : ... et ce que le TRY de l'appelant en recoit tel quel (lastCallRaised) : son code, son message, ou elle
+    // est nee. Pose par callFunction, vide a chaque appel.
+    struct RaisedCall {
+        std::string code, message, origin;
+    };
+    std::optional<RaisedCall> lastRaised;
     // Lot 7 : les variables locales du script (ou de la fonction) qui tourne.
     // Seul le cadre du dessus est vu : un script appele ne voit pas celles de
     // l'appelant.
@@ -574,9 +580,17 @@ public:
         return (r.find('.') != std::string::npos && rt_.publicExists(r)) || (rt_.plc_ && rt_.plc_->exists(plcOf(r)));
     }
     std::string lastCallError() override { return lastCallRaw; }
+    bool lastCallRaised(std::string& code, std::string& message, std::string& origin) override {
+        if (!lastRaised) return false;
+        code = lastRaised->code;
+        message = lastRaised->message;
+        origin = lastRaised->origin;
+        return true;
+    }
     bool call(std::string_view name, std::string_view instance,
               const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result) override {
         lastCallRaw.clear();                                   // 1.13.0 : la cause d'un echec, posee par callFunction
+        lastRaised.reset();
         const auto u = upper(name);
         if (u.rfind("IHM_", 0) == 0) return ihm(u, args, result);
         // 1.12.16 : une fonction de la vue, par son nom dans la vue (elle passe avant celles du projet).
@@ -1770,6 +1784,7 @@ void Runtime::probeQuietly(const std::function<void()>& run) {
     const std::string savedAbort = abort_;
     auto savedDiagnostics = env_->diagnostics;
     const std::string savedLastCall = env_->lastCallRaw;
+    const auto savedRaised = env_->lastRaised;
     const std::size_t savedFloor = env_->probeFloor;
     env_->probeFloor = env_->frames.size() + 1;                  // les cadres d'avant, plus un (0 : pas de lecture)
     ++debugProbing_;
@@ -1779,6 +1794,7 @@ void Runtime::probeQuietly(const std::function<void()>& run) {
     --debugProbing_;
     env_->probeFloor = savedFloor;
     env_->lastCallRaw = savedLastCall;
+    env_->lastRaised = savedRaised;
     env_->diagnostics = std::move(savedDiagnostics);
     abort_ = savedAbort;
 }
@@ -2594,6 +2610,9 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     prepareDebug(*program, scriptId, kNoId, limits);
     debugExec_.push_back(DebugExec{sim::programTag(*program), nullptr, nullptr});
     ++execDepth_;
+    // 1.13.0 : un script lance par un autre (IHM_APPELER) : les erreurs de ses fonctions se disent ou se rattrapent ici
+    // (son TRY), pas d'apres le TRY de celui qui l'a lance (callerCatches).
+    const sim::CallBoundary boundary;
     const auto result = sim::execute(*program, *env_, limits);
     const bool abandoned = endExecution();
     if (!debugExec_.empty()) debugExec_.pop_back();
@@ -2827,13 +2846,16 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     // Depuis une expression de vue (evaluee a chaque image), elle ne se dit
     // qu'une fois pour toutes, et l'echec s'arrete a l'expression.
     int failLine = 0;                // 1.11.14 : la ligne de la faute dans la fonction (0 : celle de l'appel)
+    // 1.13.0 : l'erreur sera rattrapee par l'appelant (un TRY, ??) : elle ne se dit pas a la Console et ne coupe pas
+    // l'enchainement (abort_) - elle lui revient telle quelle (lastCallRaised).
+    bool caughtAbove = false;
     const auto say = [&](const std::string& message) {
         if (debugProbing_ > 0) return;           // 1.13.0 : un espion, une condition de point - l'echec se dit la, pas ici
         if (readOnly_ > 0 && !functionErrors_.insert(fnName + "|" + message).second) return;
         logAt(LogLevel::Error, "Erreur", source, message, failLine);
     };
     const auto fail = [&](const std::string& why) {
-        if (abort_.empty()) {
+        if (abort_.empty() && !caughtAbove) {
             say(why);
             abort_ = source + " : " + why;
         }
@@ -2936,11 +2958,24 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     if (abandoned || (currentTask_ && currentTask_->task->cancelled())) return false;
     std::string why = initWhy;
     failLine = -1;
+    env_->lastRaised.reset();                                  // 1.13.0 : rien d'une fonction qu'elle a appelee
     for (const auto& d : mine)
         if (d.severity == sim::Diagnostic::Severity::Error) {
             why = (d.line ? "ligne " + std::to_string(d.line) + " : " : std::string{}) + frenchSimMessage(d.message);
             if (d.line) failLine = static_cast<int>(d.line);
             env_->lastCallRaw = d.message;                     // 1.13.0 : son code E_* pour le CATCH de l'appelant
+            // 1.13.0 : ce que le TRY de l'appelant recoit TEL QUEL - une erreur levee (son code, son message) ou du moteur
+            // (son code E_*, son message francais), nee ici a sa ligne ou plus bas (son origine). Sauf une boucle sans
+            // fin, un cycle trop long : ceux-la ne se rattrapent pas (l'appel echoue comme avant).
+            const std::string& raw = d.raw.empty() ? d.message : d.raw;
+            if (raw.find(" loop ran more than ") == std::string::npos && raw.find("the scan exceeded") == std::string::npos) {
+                Env::RaisedCall r;
+                r.code = d.code.empty() ? env_->caughtCode(raw) : d.code;
+                r.message = d.code.empty() ? frenchSimMessage(raw) : d.raw;
+                r.origin = !d.origin.empty() ? d.origin : source + (d.line ? ", ligne " + std::to_string(d.line) : std::string{});
+                env_->lastRaised = std::move(r);
+                caughtAbove = sim::callerCatches();
+            }
             break;
         }
     if (why.empty() && !run.completed) why = "arr\xC3\xAAt\xC3\xA9" " : budget d'instructions d\xC3\xA9pass\xC3\xA9 (boucle sans fin ?)";

@@ -2483,6 +2483,9 @@ thread_local Runner* t_caller = nullptr;
 // la plus ancienne a la plus recente - la pile d'un point d'arret atteint dans une fonction IHM simple
 // (elle tourne dans sa propre execution, appelee par le script).
 thread_local std::vector<Runner*> t_chain;
+// 1.13.0 : la limite posee par CallBoundary - les executions de t_chain sous cet indice ne comptent pas pour
+// callerCatches (un script lance par un autre).
+thread_local std::size_t t_floor = 0;
 struct ChainScope {
     explicit ChainScope(Runner* r) { t_chain.push_back(r); }
     ~ChainScope() { t_chain.pop_back(); }
@@ -2644,6 +2647,10 @@ public:
         return out;
     }
 
+    // 1.13.0 : une erreur qui sortirait maintenant d'un appel de l'environnement serait-elle rattrapee ici : un TRY
+    // ouvert (son CATCH n'a encore rien), le cote gauche de ?? (son erreur choisit la droite), une lecture du debogueur ?
+    [[nodiscard]] bool catchesNow() const noexcept { return probing_ || quiet_ > 0 || (catching_ > 0 && !caught_.any); }
+
 private:
     void fail(std::uint32_t line, std::string message) { failCaused(line, std::move(message), {}); }
     // `cause` : le message brut qui donne le code E_* (vide : `message` lui-meme) - l'echec d'une fonction appelee.
@@ -2679,7 +2686,13 @@ private:
             aborted_ = true;
             return;
         }
-        env_.report(Diagnostic{Diagnostic::Severity::Error, std::move(message), line, section_});
+        // 1.13.0 : le message brut (son code E_*) et l'origine, pour le TRY d'un appelant (une fonction IHM simple).
+        Diagnostic d{Diagnostic::Severity::Error, std::move(message), line, section_};
+        if (dialect_) {
+            d.raw = std::move(raw);
+            d.origin = std::move(origin);
+        }
+        env_.report(std::move(d));
         aborted_ = true;
     }
 
@@ -3044,6 +3057,16 @@ private:
             if (env_.runStopped()) {
                 aborted_ = true;
                 return core::fail(core::ErrorCode::InvalidArgument, "arr\xC3\xAAt\xC3\xA9");
+            }
+            // 1.13.0 (dialecte IHM) : la fonction appelee (une fonction IHM simple, sa propre execution) a echoue sur une
+            // erreur qu'elle n'a pas rattrapee - un LEVER, ou une erreur du moteur : elle traverse l'appel TELLE QUELLE (son
+            // code, son message, ou elle est nee), a la ligne de l'appel, vers le TRY d'ici (ou la Console, ou ??).
+            if (dialect_ && !probing_) {
+                std::string code, message, origin;
+                if (env_.lastCallRaised(code, message, origin)) {
+                    (void)raise(Caught{true, std::move(code), std::move(message), e.line, {}, std::move(origin)});
+                    return core::fail(core::ErrorCode::NotImplemented, *target);
+                }
             }
             // Lot API 7 : l'environnement peut choisir de continuer - l'appel
             // rend 0, rien n'est rendu aux variables passees, le cycle va au bout.
@@ -3428,8 +3451,9 @@ private:
     // fonction et sa ligne (« fonction METHODE_..., ligne 2 : E_Debit : ... ») ; e.Message garde le message.
     Flow raise(Caught c) {
         if (probing_ || (quiet_ > 0 && catching_ <= quietCatching_)) return {Flow::Kind::Aborted};
-        if (dialect_ && !calleeLabel_.empty() && c.origin.empty()) {
-            c.origin = "fonction " + calleeLabel_ + ", ligne " + std::to_string(c.line);
+        // 1.13.0 : nee plus bas (une fonction IHM simple appelee d'ici : son origine), elle porte aussi la ligne de l'appel.
+        if (dialect_ && !calleeLabel_.empty()) {
+            if (c.origin.empty()) c.origin = "fonction " + calleeLabel_ + ", ligne " + std::to_string(c.line);
             c.line = calleeLine_;
         }
         if (catching_ > 0 && !caught_.any) {
@@ -3440,7 +3464,13 @@ private:
         std::string shown = c.code.empty() ? errorMessage(c)
                                            : (c.origin.empty() ? std::string{} : c.origin + " : ") + c.code
                                                  + (c.message.empty() ? "" : " : " + c.message);
-        env_.report(Diagnostic{Diagnostic::Severity::Error, std::move(shown), c.line, section_});
+        // 1.13.0 : ce que le TRY d'un appelant en recevra tel quel (une fonction IHM simple : sa propre execution) - le code
+        // (celui d'une erreur du moteur relevee : son code E_*), le message, l'origine.
+        Diagnostic d{Diagnostic::Severity::Error, std::move(shown), c.line, section_};
+        d.code = c.code.empty() ? errorCode(c) : c.code;
+        d.raw = c.code.empty() ? errorMessage(c) : c.message;
+        d.origin = c.origin;
+        env_.report(std::move(d));
         aborted_ = true;
         return {Flow::Kind::Aborted};
     }
@@ -10266,6 +10296,15 @@ RunResult execute(const Program& program, Environment& env, const RunLimits& lim
 }
 
 bool readCallerLocal(std::string_view name, Value& out) { return t_caller && t_caller->readLocal(name, out); }
+
+bool callerCatches() {
+    for (std::size_t k = t_chain.size(); k > t_floor; --k)
+        if (t_chain[k - 1] && t_chain[k - 1]->catchesNow()) return true;
+    return false;
+}
+
+CallBoundary::CallBoundary() : saved_(t_floor) { t_floor = t_chain.size(); }
+CallBoundary::~CallBoundary() { t_floor = saved_; }
 
 ObjRef makeRichValue(std::string_view type, std::string_view initial, Environment& env, std::string* why) {
     Runner runner(env, RunLimits{}, "valeur");

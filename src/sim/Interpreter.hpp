@@ -27,6 +27,7 @@
 #include "Value.hpp"
 
 #include <functional>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -40,6 +41,14 @@ struct Diagnostic {
     std::string message;
     std::uint32_t line{0};
     std::string   section;
+    // 1.13.0 (dialecte IHM) : CE QU'UN TRY DE L'APPELANT EN RECEVRAIT, quand l'erreur sort de son execution sans etre
+    // rattrapee (une fonction IHM simple tourne dans la sienne). `code` : le code d'une erreur levee (LEVER, RELEVER,
+    // E_ATTENTE) ; vide : une erreur du moteur. `raw` : le message de l'erreur levee, ou le message brut du moteur (qui
+    // donne son code E_*), sans son origine. `origin` : ou elle est nee quand ce n'est pas `line` de ce code
+    // (« fonction F, ligne 3 ») ; vide : ici. Vides : rien de plus que `message`.
+    std::string   code{};
+    std::string   raw{};
+    std::string   origin{};
 };
 
 class LineProbe;   // lot API 8 : plus bas
@@ -109,6 +118,14 @@ public:
     // 1.13.0 : un appel (call) vient d'echouer dans la fonction appelee (une division par zero, un ASSERT) : le message
     // brut du moteur, qui donne son code E_* au CATCH de l'appelant ; vide : pas de cause connue (E_MOTEUR).
     [[nodiscard]] virtual std::string lastCallError() { return {}; }
+    // 1.13.0 : ... et ce que le TRY de l'appelant en recoit TEL QUEL - le code (E_Niveau, ou le code E_* d'une erreur du
+    // moteur), le message (celui du LEVER, ou le message francais du moteur) et ou elle est nee (« fonction F, ligne 3 ») :
+    // l'erreur traverse l'appel, a la ligne de l'appel. Faux (par defaut) : rien de tel - l'appel echoue comme avant
+    // (« fonction ou bloc inconnu », son code tire de lastCallError).
+    [[nodiscard]] virtual bool lastCallRaised(std::string& code, std::string& message, std::string& origin) {
+        (void)code; (void)message; (void)origin;
+        return false;
+    }
 
     // Lot API 7 : UNE FONCTION QUE LE SIMULATEUR NE CONNAIT PAS. Vrai : l'appel
     // rend 0 et le cycle continue (l'environnement le note, pour le dire) ;
@@ -580,6 +597,23 @@ struct RunResult {
 // IHM_JOURNAL('mini {Mini:0.0}') dans un script qui declare Mini. Faux : pas d'appel en
 // cours, pas de locale de ce nom, ou une locale qui n'est pas une valeur simple.
 [[nodiscard]] bool readCallerLocal(std::string_view name, Value& out);
+
+// 1.13.0 : PENDANT UN APPEL DE L'ENVIRONNEMENT, l'erreur qui en sortirait serait-elle rattrapee par une des executions
+// qui l'attendent sur ce fil (un TRY ouvert, le cote gauche de ??, une lecture du debogueur) - jusqu'a la limite posee
+// par le dernier CallBoundary ? L'environnement tait alors ce qu'il dirait de l'echec (la Console) : l'erreur remonte
+// d'appel en appel (Environment::lastCallRaised) jusqu'a celui qui la rattrape. Faux : pas d'appel en cours.
+[[nodiscard]] bool callerCatches();
+// ... la limite : les executions qui attendent deja un appel sur ce fil quand elle est posee n'y comptent plus (un script
+// lance par un autre : l'echec de l'un ne remonte pas forcement a l'autre). Le temps de sa vie.
+class CallBoundary {
+public:
+    CallBoundary();
+    ~CallBoundary();
+    CallBoundary(const CallBoundary&) = delete;
+    CallBoundary& operator=(const CallBoundary&) = delete;
+private:
+    std::size_t saved_;
+};
 
 // Exposed for the tests and for the editor's own use later.
 [[nodiscard]] core::Result<Value> evaluateExpression(std::string_view source, Environment&);
