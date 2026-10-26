@@ -114,6 +114,12 @@ struct Scope {
 // correction.
 [[nodiscard]] bool applyFix(const Finding&, std::string& code);
 
+// 1.13.0 : WAIT_UNTIL dans un script NON detache, ou dans un script de vue (`viewScript` : il ne se detache pas) - l'IHM
+// est figee pendant l'attente, la condition ne changera pas : un avertissement a chaque WAIT_UNTIL (sa ligne, sa colonne,
+// sa longueur), avec le remede. Un script general detache : rien. Compiler (projectIssues) et la Saisie (l'editeur, la
+// colonne Etat) disent les memes (relecture F1).
+[[nodiscard]] std::vector<Finding> waitUntilWarnings(const Script& sc, bool viewScript);
+
 // Tous les scripts du projet : generaux, de vue (popups, symboles : avec leurs
 // parametres), les actions Executer un script, les fonctions IHM. Chaque
 // constat a sa ligne et sa colonne (Issue::column, Issue::length).

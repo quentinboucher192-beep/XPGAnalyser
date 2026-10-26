@@ -31064,6 +31064,13 @@ void natives1200() {
     same_text(conditionRow("fonction:MAP_HAS"), "\xE2\x9C\x93", "natives : MAP_HAS (BOOL) cochee en condition");
     same_text(conditionRow("fonction:LIMIT"), "\xE2\x9C\x93", "natives : LIMIT (comme IN) cochee en condition");
     check(conditionRow("fonction:SQRT").find("comparaison") != std::string::npos, "natives : SQRT (REAL), en condition dans une comparaison : " + conditionRow("fonction:SQRT"));
+    // 1.13.0 (relecture F1-4) : un retour "comme A" (A : un SET), "comme T" (T : ARRAY, LIST, VECTOR) est un conteneur : non.
+    for (const char* key : {"fonction:SET_SYMMETRIC_DIFFERENCE", "fonction:PARTIAL_SUM", "fonction:INCLUSIVE_SCAN", "fonction:EXCLUSIVE_SCAN",
+                            "fonction:TRANSFORM_INCLUSIVE_SCAN", "fonction:TRANSFORM_EXCLUSIVE_SCAN", "fonction:ADJACENT_DIFFERENCE"})
+        check(conditionRow(key).rfind("non", 0) == 0, std::string("natives : ") + key + " (un conteneur) pas cochee en condition : " + conditionRow(key));
+    // ... un retour "comme" un parametre qui n'est pas un conteneur garde sa ligne.
+    same_text(conditionRow("fonction:ABS"), "\xE2\x9C\x93", "natives : ABS (comme IN) cochee en condition");
+    check(conditionRow("fonction:ACCUMULATE").rfind("non", 0) != 0, "natives : ACCUMULATE (comme INIT, un nombre) reste permise en condition : " + conditionRow("fonction:ACCUMULATE"));
     // Les mots : F1 dans un script.
     same_text(app::natives::keyOfWord("limit"), "fonction:LIMIT", "natives : F1 sur limit");
     same_text(app::natives::keyOfWord("INT_TO_REAL"), "conversion:INT_TO_REAL", "natives : F1 sur INT_TO_REAL");
@@ -38410,7 +38417,76 @@ void correctifsF2_113() {
     }
 }
 
+// ---- 1.13.0 (relecture F1-2) : WAIT_UNTIL dans un script NON detache, dans un script de vue - la Saisie (l'editeur, la
+//  colonne Etat) dit l'avertissement de Compiler ("coche Detache", "script de vue") ; un script detache : rien ----
+void relectureF1_113() {
+    std::printf("1.13.0 (relecture F1) : la Saisie avertit WAIT_UNTIL comme Compiler\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    doc->project.programs.variables.push_back(Variable{doc->project.allocate(), "D_T", "INT", "0", {}});
+    doc->project.programs.variables.push_back(Variable{doc->project.allocate(), "A", "INT", "0", {}});
+    const std::string body = "IF WAIT_UNTIL(D_T > 0, T#2s) THEN\n    A := 1;\nEND_IF;\n";
+    const auto waitWarning = [](const std::vector<ScriptDiagnostic>& ds, std::string_view says) -> const ScriptDiagnostic* {
+        for (const auto& d : ds)
+            if (d.severity == ScriptDiagnostic::Severity::Warning && d.message.find("WAIT_UNTIL") != std::string::npos
+                && d.message.find(says) != std::string::npos)
+                return &d;
+        return nullptr;
+    };
+    const auto all = [](const std::vector<ScriptDiagnostic>& ds) {
+        std::string out;
+        for (const auto& d : ds) out += " | " + d.message;
+        return out;
+    };
+    app::HmiScriptsPane pane("progRF1", doc, apply);
+    pane.setBounds({0, 0, 1400, 800});
+    pane.layout();
+    Script spec;
+    spec.name = "Sequence";
+    spec.lang = ScriptLang::ST;
+    spec.event = "Appel";
+    const Id sid = pane.addScript(spec);
+    check(sid != kNoId && pane.setBody(sid, body), "un script general non detache : IF WAIT_UNTIL(...) THEN");
+    {
+        const auto* w = waitWarning(pane.diagnostics(), "coche D\xC3\xA9tach\xC3\xA9");
+        check(w && w->line == 1 && w->column == 4 && w->length == 10,
+              "F1-2 : non detache, la Saisie souligne WAIT_UNTIL (ligne 1, colonne 4) : 'coche Detache'" + all(pane.diagnostics()));
+        same_text(cellOf(pane.scriptTable(), "Sequence", 5), "1 avertissement", "F1-2 : la colonne Etat dit l'avertissement, comme Compiler");
+    }
+    // Detache : ni la Saisie ni la colonne Etat n'avertissent.
+    if (auto* sc = doc->project.script(sid)) sc->detached = true;
+    pane.refresh();
+    pane.selectScript(sid);
+    check(waitWarning(pane.diagnostics(), "WAIT_UNTIL") == nullptr, "F1-2 : detache, la Saisie n'avertit pas" + all(pane.diagnostics()));
+    same_text(cellOf(pane.scriptTable(), "Sequence", 5), "OK", "F1-2 : detache, la colonne Etat dit OK");
+    // Un script de vue : il ne se detache pas - l'avertissement 'script de vue'.
+    View v = makeView(doc->project, "Vue_Attente");
+    Script open;
+    open.id = doc->project.allocate();
+    open.name = "OnOpen";
+    open.lang = ScriptLang::ST;
+    open.event = "OnOpen";
+    open.body = body;
+    v.scripts.push_back(open);
+    const Id vid = v.id;
+    doc->project.views.push_back(v);
+    app::HmiScriptsPane vpane("vsRF1", doc, apply, vid);
+    vpane.setBounds({0, 0, 1400, 800});
+    vpane.layout();
+    vpane.selectEvent("OnOpen");
+    check(waitWarning(vpane.diagnostics(), "script de vue") != nullptr,
+          "F1-2 : un script de vue, la Saisie avertit 'script de vue'" + all(vpane.diagnostics()));
+}
+
 int main(int argc, char** argv) {
+    // 1.13.0 (relecture F1) : HMI_TEST_RF1=1 - la relecture du lot F1 (WAIT_UNTIL a la Saisie, les fiches des natives), seule.
+    if (const char* only = std::getenv("HMI_TEST_RF1"); only && *only == '1') {
+        relectureF1_113();
+        natives1200();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.13.0 (correctifs F2) : HMI_TEST_F2=1 - les correctifs F2 (objets, interfaces, generiques, espaces), seuls.
     if (const char* only = std::getenv("HMI_TEST_F2"); only && *only == '1') {
         correctifsF2_113();
@@ -38973,6 +39049,7 @@ int main(int argc, char** argv) {
     unites113();                            // 1.13.0 (lot J6b) : les unites - la colonne Unite, le selecteur, Unites de mesure
     lotF3_113();                            // 1.13.0 (lot F3) : les defauts vus aux captures (unites, tests, aide F1)
     correctifsF2_113();                     // 1.13.0 (correctifs F2) : ce que les captures des objets et des espaces ont montre
+    relectureF1_113();                      // 1.13.0 (relecture F1) : WAIT_UNTIL a la Saisie comme Compiler
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

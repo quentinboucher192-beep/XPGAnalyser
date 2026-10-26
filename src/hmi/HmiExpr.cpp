@@ -414,6 +414,12 @@ core::Result<sim::Value> Expression::evaluate(sim::Environment& plc, const Scope
     sim::RunLimits limits;
     limits.maxIterationsPerLoop = 1000;
     limits.maxStatementsPerScan = 1000;
+    // 1.13.0 (relecture F1) : une expression ne fait jamais remonter l'erreur d'une fonction qu'elle appelle (son echec
+    // devient une valeur : ### dans un texte a trous, un parametre illisible ; ReadOnlyEnv ne relaie pas lastCallRaised).
+    // Les executions qui attendent plus haut (le TRY d'un script qui ecrit ce texte, ou le cote gauche de son ??) ne la
+    // recevront donc pas : elles ne comptent pas pour callerCatches - l'erreur se dit a la Console et le script echoue,
+    // comme avant. Seul le ?? de l'expression elle-meme (au-dessus de cette limite) la rattrape.
+    const sim::CallBoundary boundary;
     (void)sim::execute(*program_, env, limits);
     if (!env.got())
         return core::fail(core::ErrorCode::InvalidArgument,

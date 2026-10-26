@@ -2704,6 +2704,34 @@ std::string actionWhere(std::size_t index, const Action& a) {
 }
 } // namespace
 
+// 1.13.0 : WAIT_UNTIL dans un script NON detache (ou de vue) - l'IHM est figee pendant l'attente : la condition ne changera
+// pas (l'attente est plafonnee a 10 s, comme WAIT). Un avertissement a chaque WAIT_UNTIL, avec le remede. Relecture F1 : sorti
+// de projectIssues pour que la Saisie (l'editeur) le dise aussi.
+std::vector<Finding> waitUntilWarnings(const Script& sc, bool viewScript) {
+    std::vector<Finding> out;
+    if (sc.detached && !viewScript) return out;
+    const std::string code = markers::strip(sc.body);
+    const auto toks = lex(code);
+    for (std::size_t k = 0; k + 1 < toks.size(); ++k) {
+        if (toks[k].k != Tok::K::Ident || up(toks[k].text) != "WAIT_UNTIL" || toks[k + 1].k != Tok::K::Op || toks[k + 1].text != "(") continue;
+        if (k > 0 && toks[k - 1].k == Tok::K::Op && toks[k - 1].text == ".") continue;
+        const std::size_t at = std::min(toks[k].at, code.size());
+        const std::size_t lineStart = code.rfind('\n', at == 0 ? 0 : at - 1);
+        Finding f;
+        f.severity = Finding::Severity::Warning;
+        f.message = viewScript
+            ? "WAIT_UNTIL dans un script de vue : l'IHM est fig\xC3\xA9" "e pendant l'attente, la condition ne changera pas (10 s au plus) "
+              "\xE2\x80\x94 un script de vue ne se d\xC3\xA9tache pas : lance la s\xC3\xA9quence par IHM_APPELER, dans un script g\xC3\xA9n\xC3\xA9ral d\xC3\xA9tach\xC3\xA9"
+            : "WAIT_UNTIL dans un script non d\xC3\xA9tach\xC3\xA9 : l'IHM est fig\xC3\xA9" "e pendant l'attente, la condition ne "
+              "changera pas (10 s au plus) \xE2\x80\x94 coche D\xC3\xA9tach\xC3\xA9";
+        f.line = 1 + static_cast<int>(std::count(code.begin(), code.begin() + static_cast<std::ptrdiff_t>(at), '\n'));
+        f.column = static_cast<int>(at - (lineStart == std::string::npos || at == 0 ? 0 : lineStart + 1)) + 1;
+        f.length = static_cast<int>(toks[k].text.size());
+        out.push_back(std::move(f));
+    }
+    return out;
+}
+
 std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPaths,
                                  const CompileFocus* focus) {
     std::vector<Issue> out;
@@ -2730,27 +2758,15 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
         i.fixColumn = f.fixColumn;      // 1.13.0 (seconde passe) : son occurrence
         out.push_back(std::move(i));
     };
-    // 1.13.0 : WAIT_UNTIL dans un script NON detache - l'IHM est figee pendant l'attente : la condition ne changera pas
-    // (l'attente est plafonnee a 10 s, comme WAIT). Un avertissement a chaque WAIT_UNTIL, avec le remede.
+    // 1.13.0 : WAIT_UNTIL dans un script NON detache, ou de vue (waitUntilWarnings : la Saisie dit les memes).
     const auto waitUntilHere = [&](const Script& sc, const Issue& base, bool viewScript) {
-        if (sc.detached && !viewScript) return;
-        const std::string code = markers::strip(sc.body);
-        const auto toks = lex(code);
-        for (std::size_t k = 0; k + 1 < toks.size(); ++k) {
-            if (toks[k].k != Tok::K::Ident || up(toks[k].text) != "WAIT_UNTIL" || toks[k + 1].k != Tok::K::Op || toks[k + 1].text != "(") continue;
-            if (k > 0 && toks[k - 1].k == Tok::K::Op && toks[k - 1].text == ".") continue;
-            const std::size_t at = std::min(toks[k].at, code.size());
-            const std::size_t lineStart = code.rfind('\n', at == 0 ? 0 : at - 1);
+        for (const auto& f : waitUntilWarnings(sc, viewScript)) {
             Issue i = base;
             i.severity = Issue::Severity::Warning;
-            i.message = viewScript
-                ? "WAIT_UNTIL dans un script de vue : l'IHM est fig\xC3\xA9" "e pendant l'attente, la condition ne changera pas (10 s au plus) "
-                  "\xE2\x80\x94 un script de vue ne se d\xC3\xA9tache pas : lance la s\xC3\xA9quence par IHM_APPELER, dans un script g\xC3\xA9n\xC3\xA9ral d\xC3\xA9tach\xC3\xA9"
-                : "WAIT_UNTIL dans un script non d\xC3\xA9tach\xC3\xA9 : l'IHM est fig\xC3\xA9" "e pendant l'attente, la condition ne "
-                  "changera pas (10 s au plus) \xE2\x80\x94 coche D\xC3\xA9tach\xC3\xA9";
-            i.line = 1 + static_cast<int>(std::count(code.begin(), code.begin() + static_cast<std::ptrdiff_t>(at), '\n'));
-            i.column = static_cast<int>(at - (lineStart == std::string::npos || at == 0 ? 0 : lineStart + 1)) + 1;
-            i.length = static_cast<int>(toks[k].text.size());
+            i.message = f.message;
+            i.line = f.line;
+            i.column = f.column;
+            i.length = f.length;
             out.push_back(std::move(i));
         }
     };

@@ -166,8 +166,17 @@ ui::HelpArticle functionCard(const hn::Function& f, std::string_view notation) {
         const std::string r(f.returns);
         const auto starts = [&](std::string_view w) { return r.rfind(w, 0) == 0; };
         const bool maybeBool = r == "BOOL" || r == "T" || starts("T,") || starts("T (") || starts("comme") || starts("le type");
-        const bool container = r == "ANY" || starts("LIST") || starts("SET") || starts("ARRAY") || starts("MAP") || starts("REF_TO")
-                            || starts("POINTER");
+        bool container = r == "ANY" || starts("LIST") || starts("SET") || starts("ARRAY") || starts("MAP") || starts("REF_TO")
+                      || starts("POINTER");
+        // 1.13.0 (relecture F1-4) : "comme A" suit le type du parametre A - un conteneur (SET_SYMMETRIC_DIFFERENCE : A est
+        // un SET ; PARTIAL_SUM, les *_SCAN, ADJACENT_DIFFERENCE : T est un ARRAY, une LIST, un VECTOR) rend un conteneur.
+        if (starts("comme ")) {
+            const std::string_view x = std::string_view(r).substr(6);
+            for (const auto& p : f.params)
+                if (p.name == x)
+                    for (const std::string_view w : {"SET", "LIST", "ARRAY", "VECTOR", "MAP", "RING"})
+                        container = container || p.type.rfind(w, 0) == 0;
+        }
         if (container) inCondition = "non : son retour (" + r + ") n'est pas un BOOL";
         else if (!maybeBool && !r.empty()) inCondition = yes + " dans une comparaison (son retour, " + r + ", n'est pas un BOOL)";
     }
