@@ -889,6 +889,47 @@ void capturesF1() {
               "C2 : une fonction de vue : E_Vue au CATCH de l'OnOpen, sans ERROR [" + r + "]" + journalOf(rt, "Erreur"));
     }
 
+    // ---- C3 : WAIT_UNTIL lue comme BOOL (IF, WHILE, une affectation) dans un script DETACHE : aucun avertissement,
+    // ni de Compiler (Saisie, l'arbre) ni de Generer ; non detache : le seul avertissement juste (coche Detache) ----
+    {
+        Project p;
+        addVariable(p, "D_T", "INT", "0");
+        addVariable(p, "A", "INT", "0");
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "Sequence_Remplissage";
+        sc.event = "Appel";
+        sc.detached = true;
+        sc.body = "IF WAIT_UNTIL(D_T > 0, T#2s) THEN\n    A := 1;\nEND_IF;\n"
+                  "WHILE NOT WAIT_UNTIL(D_T > 5, T#1s) DO\n    A := A + 1;\nEND_WHILE;\n"
+                  "A := BOOL_TO_INT(WAIT_UNTIL(D_T > 0, T#1s));\nWAIT_UNTIL(D_T > 0, T#1s);";
+        p.programs.scripts.push_back(sc);
+        const auto said = [](const std::vector<Issue>& is) {
+            std::string out;
+            for (const auto& i : is)
+                if (i.message.find("WAIT_UNTIL") != std::string::npos) out += " | " + i.message;
+            return out;
+        };
+        const NameExists none = [](std::string_view) { return false; };
+        const std::string compiler = said(scriptcheck::projectIssues(p, none, {}, nullptr));
+        const std::string generer = said(generate(p, none));
+        check(compiler.empty(), "C3 : detache, IF/WHILE/affectation WAIT_UNTIL : Compiler n'avertit pas" + compiler);
+        check(generer.empty(), "C3 : detache : Generer non plus (les deux disent la meme chose)" + generer);
+        scriptcheck::Scope scope;
+        scope.project = &p;
+        scope.plcKnown = none;
+        std::string saisie;
+        for (const auto& f : scriptcheck::check(scope, sc.body))
+            if (f.message.find("WAIT_UNTIL") != std::string::npos) saisie += " | " + f.message;
+        check(saisie.empty(), "C3 : la Saisie (l'editeur) ne souligne plus IF WAIT_UNTIL" + saisie);
+        // Non detache : l'avertissement juste (coche Detache), pas « pas dans une expression ».
+        p.programs.scripts.back().detached = false;
+        const std::string notDetached = said(scriptcheck::projectIssues(p, none, {}, nullptr));
+        check(notDetached.find("coche D") != std::string::npos && notDetached.find("pas dans une expression") == std::string::npos,
+              "C3 : non detache : 'coche Detache', pas 'pas dans une expression'" + notDetached);
+        const std::string generer2 = said(generate(p, none));
+        check(generer2 == notDetached, "C3 : non detache : Generer dit la meme chose que Compiler" + generer2 + " / " + notDetached);
+    }
 }
 
 int main() {
