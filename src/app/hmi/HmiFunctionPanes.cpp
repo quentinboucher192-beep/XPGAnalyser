@@ -52,6 +52,11 @@ using hmi::Id;
 using hmi::kNoId;
 using hmikit::Rows;
 
+hmi::ScriptParts functionDeclarations(const hmi::HmiFunction& f) {
+    // Tous les types sont lus (comme overload::signatureOf) : la forme seule compte ici, le controle juge les types.
+    return hmi::splitDeclarations(hmi::decl::codeOf(f), true, [](std::string_view) { return true; });
+}
+
 namespace {
 
 // L'editeur et, dessous, la barre du nom ou est le curseur (comme les scripts).
@@ -134,7 +139,7 @@ std::string functionLabel(const hmi::HmiFunction& f) {
 
 std::string parameterList(const hmi::HmiFunction& f) {
     std::string out;
-    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(f), true);   // les pointeurs de parameters() vivent avec lui ; 1.11.18 : le modele aussi
+    const auto parts = functionDeclarations(f);   // les pointeurs de parameters() vivent avec lui ; 1.13.0 (F2) : a : T compris
     for (const auto* in : parts.parameters())                                  // 1.11.20 : E/S (par reference) et sorties comprises
         out += (out.empty() ? "" : ", ")
              + std::string(in->section == hmi::LocalVar::Section::InOut ? "VAR_IN_OUT " : in->section == hmi::LocalVar::Section::Output ? "VAR_OUTPUT " : "")
@@ -567,10 +572,12 @@ void HmiFunctionsPane::showSelected() {
     const auto* f = current();
     syncing_ = true;
     const std::string body = f ? f->body : std::string{};
+    const bool other = !f || f->id != shownId_;     // 1.13.0 (correctifs F2) : une autre fonction montree
     if (editor_->text() != body) {      // 1.12.2 : la meme fonction (annuler) garde la vue
         if (f && f->id == shownId_) editor_->reloadText(body);
         else editor_->setText(body);
     }
+    if (other) editor_->clearModified();   // "modifie" suit la fonction montree, pas la saisie d'une autre
     shownId_ = f ? f->id : hmi::kNoId;
     margin_.reset();                       // 1.13.0 (lot J2) : les points de cette fonction
     editor_->setReadOnly(f == nullptr);
@@ -719,7 +726,7 @@ void HmiFunctionsPane::rebuildProperties() {
     c.properties.push_back(hmikit::prop("Description", f->description, PG::ValueType::Text,
         [this, id](std::string_view v) { return setDescription(id, std::string(v)); }));
     c.properties.push_back(hmikit::prop("Signature", hmi::functionSignature(*f), PG::ValueType::ReadOnly));
-    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // 1.11.18 (lot 3) : ses declarations du modele aussi
+    const auto parts = functionDeclarations(*f);   // 1.11.18 (lot 3) : ses declarations du modele ; 1.13.0 (F2) : a : T compris
     std::size_t kept = 0, temps = 0;
     for (const auto& l : parts.locals) {
         kept += l.section == hmi::LocalVar::Section::Var;
@@ -777,6 +784,15 @@ void HmiFunctionsPane::rebuildProperties() {
     const auto callers = hmi::functionCallers(doc_->project, f->name);
     c.properties.push_back(hmikit::prop("Appel\xC3\xA9" "e par", callers.empty() ? std::string("(personne)") : hmikit::fewOf(callers, 3),
                                         PG::ValueType::ReadOnly));
+    // 1.13.0 (correctifs F2) : le nom d'une fonction standard (Max) - le moteur appelle celle-ci a la place de la standard
+    // (MAX(...) partout : "Appelee par" le dit) ; Generer l'avertit, l'inspecteur aussi.
+    if (f->ns.empty() && hmi::isStandardFunction(f->name)) {
+        auto warn = hmikit::prop("Attention", "elle cache la fonction standard " + upperOf(f->name) + " : chaque " + upperOf(f->name)
+                                                  + "(...) du projet l'appelle (renomme-la pour garder la standard)",
+                                 PG::ValueType::ReadOnly);
+        warn.valueTone = ui::Tone::Warning;
+        c.properties.push_back(std::move(warn));
+    }
     }
     c.properties.push_back(hmikit::prop("Lignes", std::to_string(lineCount(f->body)), PG::ValueType::ReadOnly));
     props_->setCategories({std::move(c)});
@@ -1378,7 +1394,7 @@ bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& argume
     for (const auto& v : doc_->project.programs.variables)
         if (const auto* val = rt.variable(v.name)) before.emplace_back(v.name, hmi::formatValue(*val));
 
-    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // 1.11.18 (lot 3) : ses parametres du modele aussi
+    const auto parts = functionDeclarations(*f);   // 1.11.18 (lot 3) : ses parametres du modele ; 1.13.0 (F2) : a : T compris
     // 1.11.20 : tous ses parametres, dans l'ordre : une E/S recoit sa valeur de depart, une sortie
     // n'en demande pas (sa case est ignoree) ; leur valeur finale est montree apres l'essai.
     const auto inputs = parts.parameters();
@@ -1396,7 +1412,11 @@ bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& argume
         }
         // 1.12.19 (la regle des cases) : l'argument se lit comme toute case de valeur, dans le type du
         // parametre (2,5 -> 2.5, VRAI -> TRUE, Azote -> 'Azote', 5 s -> T#5s, =formule). Avant : du ST seul.
-        const auto cell = hmi::cellValue(&doc_->project, inputs[k]->type, text);
+        // 1.13.0 (correctifs F2) : un parametre de type T (generique) se lit sans type (2,5 -> 2.5) : le moteur deduit T.
+        std::string asType = inputs[k]->type;
+        for (const auto& g : f->generics)
+            if (upperOf(g.name) == upperOf(asType)) asType.clear();
+        const auto cell = hmi::cellValue(&doc_->project, asType, text);
         if (!cell.ok()) {
             trial_.error = inputs[k]->name + " : " + cell.why;
             bad = true;

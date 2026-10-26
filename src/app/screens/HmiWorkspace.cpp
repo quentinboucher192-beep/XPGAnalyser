@@ -3763,7 +3763,7 @@ void MainAnalysisScreen::askHmiTryFunction(std::uint64_t functionId) {
     const auto* f = doc ? doc->project.function(asId(functionId)) : nullptr;
     auto* pane = dynamic_cast<HmiFunctionsPane*>(hmiTab("fonctions"));
     if (!f || !pane) return;
-    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(*f), true);   // 1.11.18 (lot 3) : ses parametres du modele aussi
+    const auto parts = functionDeclarations(*f);   // 1.11.18 (lot 3) : ses parametres du modele ; 1.13.0 (F2) : a : T compris
     const auto inputs = parts.parameters();     // 1.11.20 : E/S et sorties comprises (l'ordre de l'appel)
     // Sans parametre : l'essai part tout de suite.
     if (inputs.empty()) {
@@ -3776,7 +3776,13 @@ void MainAnalysisScreen::askHmiTryFunction(std::uint64_t functionId) {
         const std::string mode = in->section == S::InOut ? " (E/S : sa valeur de d\xC3\xA9part)"
                                : in->section == S::Output ? " (sortie : rendue apr\xC3\xA8s l'essai)" : std::string{};
         // 1.12.19 (la regle des cases) : l'invite de toute case vide, « 12 · valeur par défaut ».
-        const std::string fallback = in->initial.empty() ? hmi::shownLiteral(app::initvalue::zeroOf(doc->project, in->type)) : hmi::shownCell(in->initial);
+        // 1.13.0 (correctifs F2) : un parametre de type T (generique) n'a pas de zero a lui : le moteur deduit T de la valeur.
+        const bool generic = std::any_of(f->generics.begin(), f->generics.end(), [&](const hmi::GenericParam& g) {
+            return upper(g.name) == upper(in->type);
+        });
+        const std::string fallback = !in->initial.empty() ? hmi::shownCell(in->initial)
+                                     : generic           ? std::string{}
+                                                         : hmi::shownLiteral(app::initvalue::zeroOf(doc->project, in->type));
         fields.push_back({in->name + " : " + in->type + mode, "",
                           in->section == S::Output ? std::string("rendue par la fonction")
                                                    : hmi::roles::defaultInvite(fallback.empty() ? std::string("vide") : fallback),
