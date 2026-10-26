@@ -158,8 +158,21 @@ ui::HelpArticle functionCard(const hn::Function& f, std::string_view notation) {
     a.blocks.push_back(block(K::Heading, "O\xC3\xB9 l'\xC3\xA9" "crire"));
     const std::string yes = "\xE2\x9C\x93";
     const std::string inExpr = f.expression ? yes : std::string("non : elle agit (une action, un script)");
+    // 1.13.0 : une condition d'alarme, d'historique attend un BOOL - coche si le retour peut en etre un (BOOL, ou un type qui
+    // suit ses arguments : T, comme IN...) ; un nombre, un texte : dans une comparaison ; un conteneur (ANY de JSON_LIRE,
+    // une LIST, une MAP...), non.
+    std::string inCondition = inExpr;
+    if (f.expression) {
+        const std::string r(f.returns);
+        const auto starts = [&](std::string_view w) { return r.rfind(w, 0) == 0; };
+        const bool maybeBool = r == "BOOL" || r == "T" || starts("T,") || starts("T (") || starts("comme") || starts("le type");
+        const bool container = r == "ANY" || starts("LIST") || starts("SET") || starts("ARRAY") || starts("MAP") || starts("REF_TO")
+                            || starts("POINTER");
+        if (container) inCondition = "non : son retour (" + r + ") n'est pas un BOOL";
+        else if (!maybeBool && !r.empty()) inCondition = yes + " dans une comparaison (son retour, " + r + ", n'est pas un BOOL)";
+    }
     a.blocks.push_back(block(K::Table, "Script, fonction IHM\t" + yes + "\nExpression fx d'une propri\xC3\xA9t\xC3\xA9\t" + inExpr + "\nTexte \xC3\xA0 trous {...}\t" + inExpr
-                                           + "\nCondition d'alarme, d'historique\t" + inExpr));
+                                           + "\nCondition d'alarme, d'historique\t" + inCondition));
     if (!f.params.empty()) {
         a.blocks.push_back(block(K::Heading, "Param\xC3\xA8tres"));
         for (const auto& p : f.params) {
