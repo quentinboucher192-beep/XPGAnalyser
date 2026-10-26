@@ -2330,7 +2330,7 @@ private:
         // 1.13.0 : LEVER(...) garde l'appel entier dans `target`. Une fonction Lever de l'utilisateur (du script, du
         // projet, de la vue) le prend a l'execution (raiseStmt) : c'est alors un appel, controle comme les autres. Sinon
         // c'est l'instruction LEVER : ses arguments seulement (une forme fausse, LEVER() ou trois arguments, est dite
-        // par Compiler - pas une seconde fois comme « fonction LEVER inconnue »).
+        // par Compiler - pas une seconde fois comme "fonction LEVER inconnue").
         if (s.kind == Stmt::Kind::Raise) {
             if (userLever()) expr(s.target);
             else if (!s.value && s.target)
@@ -5017,20 +5017,31 @@ private:
         static std::map<const Function*, std::string> types;
         return types;
     }
+    // 1.13.0 : le droit d'une LAMBDA sur le prive - celui du code OU ELLE EST ECRITE, pas de celui qui l'appelle : le type
+    // de la methode qui la definit (vide : un script, une fonction - aucun droit). Pose a sa creation (makeLambda), par
+    // sa FUNCTION (une LAMBDA ecrite a un endroit ne se cree que la).
+    static std::map<const Function*, std::string>& lambdaTypes() {
+        static std::map<const Function*, std::string> types;
+        return types;
+    }
+    // Le type dont le code du cadre `f` lit le prive : une methode, son type ; une LAMBDA, celui du code qui l'a ecrite ;
+    // le reste (un script, une fonction) : aucun.
+    static std::string privateRight(const Frame& f) {
+        if (!f.fn) return {};
+        const auto& types = f.fn->name == "LAMBDA" ? lambdaTypes() : methodTypes();
+        const auto found = types.find(f.fn);
+        return found == types.end() ? std::string{} : found->second;
+    }
     // 1.13.0 : LE PRIVE A L'EXECUTION. Le code qui tourne est-il une methode de `owner` (ou d'un type qui en herite) ?
-    // Le cadre le plus proche qui n'est pas une LAMBDA (une LAMBDA ecrite dans une methode voit ce qu'elle voit). Une
-    // sonde (la condition d'un point d'arret, une expression du debogueur, le trou {Heures} d'un message relu dans la
-    // methode qui leve) : permis.
+    // Le cadre en cours : une methode ; une LAMBDA, par le code ou elle est ecrite (une LAMBDA ecrite dans une methode
+    // garde son droit quand IHM_APRES la lance plus tard ; une LAMBDA d'un script passee a une methode n'en prend aucun).
+    // Une sonde (la condition d'un point d'arret, une expression du debogueur, le trou {Heures} d'un message relu dans
+    // la methode qui leve) : permis.
     bool insideMethodOf(std::string_view owner) {
         if (probing_) return true;
-        for (auto it = frames_.rbegin(); it != frames_.rend(); ++it) {
-            if (!it->fn) return false;
-            if (it->fn->name == "LAMBDA") continue;
-            const auto& types = methodTypes();
-            const auto found = types.find(it->fn);
-            return found != types.end() && env_.typeConvertsTo(found->second, owner);
-        }
-        return false;
+        if (frames_.empty()) return false;
+        const std::string right = privateRight(frames_.back());
+        return !right.empty() && env_.typeConvertsTo(right, owner);
     }
     // Le membre (ou la methode) `member` de `type` (un objet) ou du chemin `path` de l'environnement : prive et lu hors
     // des methodes de son type -> le message ; vide : permis. Seulement le dialecte IHM (l'automate n'a pas de prive).
@@ -5303,6 +5314,8 @@ private:
         if (!e.fn) return dialectError("LAMBDA sans corps");
         auto code = std::make_shared<LambdaCode>();
         code->fn = e.fn;
+        // 1.13.0 : son droit sur le prive, celui du code qui l'ecrit (une methode, une LAMBDA ecrite dans une methode).
+        if (dialect_) lambdaTypes()[e.fn.get()] = frames_.empty() ? std::string{} : privateRight(frames_.back());
         code->captured = std::make_shared<Locals>();
         if (!typeBindings_.empty()) code->bindings = typeBindings_.back();
         if (!frames_.empty()) {

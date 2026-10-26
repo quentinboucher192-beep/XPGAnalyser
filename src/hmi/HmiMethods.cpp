@@ -72,7 +72,7 @@ std::string codeOnly(std::string_view s) {
 }
 
 // 1.13.0 : ce qu'est chaque caractere du texte - 0 : du code, 's' : une chaine (ses guillemets compris), 'c' : un
-// commentaire. codeOnly blanchit les deux pareil : une apostrophe d'un commentaire (« // s'il faut ») n'ouvre pas une chaine.
+// commentaire. codeOnly blanchit les deux pareil : une apostrophe d'un commentaire ("// s'il faut") n'ouvre pas une chaine.
 std::string kindsOf(std::string_view s) {
     std::string out(s.size(), '\0');
     std::size_t i = 0;
@@ -473,6 +473,10 @@ std::vector<std::string> interfaceMisses(const Project& p, const HmiType& type) 
             else if (!sameMethodSignature(*mine, sig))
                 out.push_back(type.name + "." + sig.name + " ne respecte pas la signature de " + iname + " : "
                               + methodSignature(iname, sig).substr(iname.size() + 1));
+            // 1.13.0 : une methode privee ne remplit pas un contrat - l'appel par l'interface (e^.Demarrer()) viendrait
+            // d'ailleurs que du type, et le moteur le refuserait en marche.
+            else if (mine->visibility == Visibility::Private)
+                out.push_back(mine->name + " est priv\xC3\xA9" "e : elle ne remplit pas l'interface " + iname);
         }
     }
     return out;
@@ -634,6 +638,11 @@ std::string methodProblem(const Project& p, const HmiType& owner, const HmiFunct
         if (const HmiFunction* pm = ownMethod(*b, m.name)) { overridesParent = true; def = b;
             if (!pm->isVirtual)
                 return here + " red\xC3\xA9" "finit " + b->name + "." + m.name + " qui n'est pas virtuelle (VIRTUAL) : rien \xC3\xA0 red\xC3\xA9" "finir";
+            // 1.13.0 : un appel par le parent (p^.Demarrer() sur une T_Pompe) arriverait, par le dispatch, dans la
+            // redefinition privee - que le moteur refuserait en marche.
+            if (m.visibility == Visibility::Private && pm->visibility != Visibility::Private)
+                return here + " : une red\xC3\xA9" "finition ne peut pas \xC3\xAAtre plus priv\xC3\xA9" "e que la m\xC3\xA9thode qu'elle red\xC3\xA9" "finit ("
+                       + b->name + "." + m.name + " est publique)";
             if (!sameMethodSignature(*pm, m))
                 return here + " red\xC3\xA9" "finit " + b->name + "." + m.name + " mais change sa signature (attendu " + methodSignature(b->name, *pm).substr(b->name.size() + 1) + ")";
             break;

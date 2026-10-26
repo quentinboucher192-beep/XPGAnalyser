@@ -1442,6 +1442,23 @@ void methodOperatorOverride() {
     check(value(rt, "R") == 0.0 && rt.breakpoints()[0].hits == 1, "rien d'ecrit apres la ligne ; un passage");
     (void)rt.debugContinue();
     check(!rt.paused() && value(rt, "R") == 7.0, "Continuer : la methode finit (R = 3 * 2 + 1)" + errors(rt));
+    // La condition d'un point dans une methode se lit comme son corps : un membre par son nom (X), THIS.X, SELF.X.
+    for (const char* cond : {"X > 5.0", "THIS.X > 5.0", "SELF.X > 5.0"}) {
+        rt.setBreakpoints({at(1, kNoId, mid, 2, cond)});
+        check(rt.breakpoints()[0].note.empty(), std::string("la condition ") + cond + " se comprend dans la methode : " + rt.breakpoints()[0].note);
+        (void)rt.callScript("Avec_Methode", 0.2);
+        check(rt.paused() && rt.debugHit() && rt.debugHit()->function == mid && rt.debugHit()->line == 2,
+              std::string("la condition ") + cond + " (X vaut 6 a la ligne 2) arrete : " + rt.breakpoints()[0].note);
+        if (rt.paused()) {
+            std::string shown, why;
+            check(rt.debugEvaluate("X", shown, &why) && (shown == "6" || shown == "6.0"), "un espion X dans la methode lit son membre : " + shown + why);
+            (void)rt.debugContinue();
+        }
+    }
+    rt.setBreakpoints({at(1, kNoId, mid, 2, "X > 100.0")});
+    (void)rt.callScript("Avec_Methode", 0.2);
+    check(!rt.paused() && rt.breakpoints()[0].note.empty() && value(rt, "R") == 7.0,
+          "la condition X > 100.0 fausse : pas d'arret, le point reste arme : " + rt.breakpoints()[0].note + errors(rt));
     // L'operateur : son nom, sa ligne, son code (le volet), son point.
     check(Runtime::debugCodeName(p, kNoId, oid) == "op\xC3\xA9rateur + (type T_Vec)", "le nom de l'operateur : " + Runtime::debugCodeName(p, kNoId, oid));
     check(Runtime::debugCodeBody(p, kNoId, oid) == op.body, "son code, tel que son editeur le montre");

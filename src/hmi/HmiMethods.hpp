@@ -98,6 +98,7 @@ struct OwnedMethod {
 // ------------------------------------------------------------- interfaces ---
 // Les signatures des interfaces de `type` qu'il ne satisfait pas, nommees :
 //   "T_Vanne declare I_Demarrable mais n'a pas EnDefaut() : BOOL"
+// 1.13.0 : une methode privee ne remplit pas une signature ("Demarrer est privee : elle ne remplit pas l'interface ...").
 // Vide : conforme (ou `type` n'implemente rien).
 [[nodiscard]] std::vector<std::string> interfaceMisses(const Project&, const HmiType& type);
 // Deux methodes ont-elles la MEME signature (retour + parametres : nom, type, mode) ?
@@ -138,7 +139,7 @@ struct MethodCall {
 // ------------------------------------------------------- Generer (le modele) ---
 // Pourquoi la methode `m` ne va pas sur le type `owner` (vide : elle va) : nom
 // invalide, redefinition (meme nom qu'une methode d'un parent) d'une methode non
-// virtuelle ou de signature differente, privee et virtuelle, type de retour inconnu,
+// virtuelle ou de signature differente, ou privee d'une methode publique (1.13.0), privee et virtuelle, type de retour inconnu,
 // un parametre illisible. Une methode n'a pas de drapeau OVERRIDE : un nom mal tape
 // fait une methode nouvelle (rien a refuser), pas une redefinition.
 [[nodiscard]] std::string methodProblem(const Project&, const HmiType& owner, const HmiFunction& m);

@@ -490,6 +490,7 @@ public:
         lineStarts_.push_back(0);
         for (std::size_t i = 0; i < body_.size(); ++i)
             if (body_[i] == '\n') lineStarts_.push_back(i + 1);
+        for (const auto& lp : lambdaPrivate_) report(lp.from, lp.to, Finding::Severity::Error, lp.message);
         // Les compteurs de boucle : FOR i := ...
         for (std::size_t i = 0; i + 2 < toks_.size(); ++i)
             if (isWord(i, "FOR") && isIdent(i + 1) && isOp(i + 2, ":=")) counters_.insert(up(toks_[i + 1].text));
@@ -528,19 +529,54 @@ public:
         };
         for (std::size_t k = toks_.size(); k-- > 0;) {          // de la derniere a la premiere : les imbriquees d'abord
             if (!word(k, "LAMBDA") || !op(k + 1, "(")) continue;
-            // Les parametres : (x : REAL; y, z : INT)
+            // Les parametres : (x : REAL; y, z : INT) - et leur type (1.13.0 : le prive qu'ils liraient).
             std::set<std::string> params;
+            std::map<std::string, std::string> paramTypes;
+            std::vector<std::string> pending;
+            std::string typeText;
+            const auto settle = [&] {
+                for (const auto& n : pending) paramTypes[n] = typeText;
+                pending.clear();
+                typeText.clear();
+            };
             std::size_t j = k + 2;
             int depth = 1;
             bool name = true;
             for (; j < toks_.size() && toks_[j].k != Tok::K::End; ++j) {
                 if (op(j, "(")) ++depth;
                 else if (op(j, ")") && --depth == 0) break;
-                else if (depth == 1 && (op(j, ";") || op(j, ","))) name = true;
+                else if (depth == 1 && op(j, ";")) { settle(); name = true; }
+                else if (depth == 1 && op(j, ",")) name = true;
                 else if (depth == 1 && op(j, ":")) name = false;
-                else if (depth == 1 && name && toks_[j].k == Tok::K::Ident) params.insert(up(toks_[j].text));
+                else if (depth == 1 && name && toks_[j].k == Tok::K::Ident) {
+                    params.insert(up(toks_[j].text));
+                    pending.push_back(up(toks_[j].text));
+                } else if (depth == 1 && !name) typeText += (typeText.empty() ? "" : " ") + toks_[j].text;
             }
             if (j >= toks_.size() || toks_[j].k == Tok::K::End) continue;
+            settle();
+            // 1.13.0 : LE PRIVE PAR UNE LAMBDA. Ce code n'est pas une methode : une LAMBDA ecrite ici n'a pas le droit de
+            // lire le prive d'un type (le moteur le refuse en marche, meme si une methode du type l'appelle) - p.Heures,
+            // p.Journal() sur un parametre d'un type connu se refusent ici, a leur place. Un chemin plus long, un autre nom
+            // (une locale de la LAMBDA) : le moteur le dit en marche.
+            const auto privateRead = [&](std::size_t from, std::size_t to) {
+                if (!sc_.project) return;
+                for (std::size_t m = from; m + 2 < to; ++m) {
+                    if (toks_[m].k != Tok::K::Ident || !op(m + 1, ".") || toks_[m + 2].k != Tok::K::Ident || (m > 0 && op(m - 1, ".")))
+                        continue;
+                    const auto pt = paramTypes.find(up(toks_[m].text));
+                    if (pt == paramTypes.end() || pt->second.empty()) continue;
+                    std::string t = pt->second;
+                    for (const char* ref : {"REF_TO ", "POINTER TO "})
+                        if (up(t).rfind(ref, 0) == 0) t.erase(0, std::string(ref).size());
+                    const std::string why = types::privateMemberUse(*sc_.project, types::normalized(t), toks_[m + 2].text);
+                    if (why.empty()) continue;
+                    lambdaPrivate_.push_back({toks_[m].at, toks_[m + 2].end(),
+                                              toks_[m].text + "." + toks_[m + 2].text + " : " + why
+                                                  + " (une LAMBDA \xC3\xA9" "crite hors de ses m\xC3\xA9thodes n'en a pas le droit, "
+                                                    "m\xC3\xAAme lanc\xC3\xA9" "e par une de ses m\xC3\xA9thodes)"});
+                }
+            };
             std::size_t h = j + 1;                               // apres la parenthese : : T, puis => ou le bloc
             std::size_t arrow = toks_.size();
             for (std::size_t m = h; m < toks_.size() && toks_[m].k != Tok::K::End; ++m) {
@@ -559,6 +595,7 @@ public:
                                         || word(e, "END_IF") || word(e, "END_FOR") || word(e, "END_WHILE") || word(e, "UNTIL")))
                         break;
                 }
+                privateRead(arrow + 1, e);
                 for (std::size_t m = arrow + 1; m < e; ++m)
                     if (toks_[m].k == Tok::K::Ident && params.count(up(toks_[m].text)) && !(m > 0 && op(m - 1, ".")))
                         toks_[m] = value(toks_[m]);
@@ -573,6 +610,7 @@ public:
                 else if (word(e, "END_LAMBDA") && --nest == 0) break;
             }
             if (e >= toks_.size() || toks_[e].k == Tok::K::End) continue;      // pas de fin : la syntaxe le dit
+            privateRead(h, e);
             const Tok v = value(toks_[k]);
             toks_.erase(toks_.begin() + static_cast<std::ptrdiff_t>(k + 1), toks_.begin() + static_cast<std::ptrdiff_t>(e + 1));
             toks_[k] = v;
@@ -716,6 +754,10 @@ private:
     // 1.13.0 : la variable d'un FOR EACH x IN L et le type d'un element de L, sur sa boucle (le prive de ses membres).
     struct EachVar { std::string upper; std::size_t from{0}, to{0}; std::string type; };
     std::vector<EachVar> eachVars_;
+    // 1.13.0 : le prive lu par le parametre d'une LAMBDA (LAMBDA (p : T_Pompe) => p.Heures) - releve par foldLambdas
+    // (avant les lignes), dit apres : [debut, fin) dans le corps, le message.
+    struct LambdaPrivate { std::size_t from{0}, to{0}; std::string message; };
+    std::vector<LambdaPrivate> lambdaPrivate_;
     struct InternalFunction { std::string name; std::size_t from{0}, to{0}; };
     std::vector<InternalFunction> internal_;
     std::set<std::string>    typeWords_;         // les mots des types (en-tetes, declarations), en majuscules

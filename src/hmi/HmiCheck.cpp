@@ -464,7 +464,7 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
         if (a.operation == Operation::CallScript) {
             if (a.target.empty()) add(out, S::Error, "Action", v.id, obj, where, "aucun script \xC3\xA0 appeler");
             else if (!p.generalScript(target)) {
-                // 1.13.0 : un nom court que deux espaces definissent (Gaz.Horloge, Util.Horloge) : lequel, pas « introuvable ».
+                // 1.13.0 : un nom court que deux espaces definissent (Gaz.Horloge, Util.Horloge) : lequel, pas "introuvable".
                 std::vector<std::string> spaces;
                 if (target.find('.') == std::string::npos) {
                     for (const auto& sc : p.programs.scripts)
@@ -576,7 +576,7 @@ void interfaceDeclarations(const Project& p, const std::vector<Declaration>& dec
 void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issue>& out, Id only = kNoId) {
     using S = Issue::Severity;
     // 1.13.0 : IHM Studio n'a pas d'automate - un nom que le projet ne connait pas n'existe nulle part (avant, l'automate
-    // absent rendait tout nom connu : « Marche := Debitt > 1.0; » passait). API Studio sans automate charge : comme avant.
+    // absent rendait tout nom connu : "Marche := Debitt > 1.0;" passait). API Studio sans automate charge : comme avant.
     static const NameExists kNone = [](std::string_view) { return false; };
     const NameExists& names = (!plc && !core::hasApi()) ? kNone : plc;
     for (const auto& ty : p.programs.types) {

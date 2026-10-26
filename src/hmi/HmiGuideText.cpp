@@ -14518,9 +14518,9 @@ const std::vector<Topic>& topics() {
                          "**Red\xC3\xA9" "finissable (virtuelle)**, la description) ; **Dupliquer**, "
                          "**Supprimer**, **Monter**, **Descendre** dans la barre. Chaque geste se reprend "
                          "par **Ctrl+Z** ; ce que la forme d'une m\xC3\xA9thode refuserait (une "
-                         "red\xC3\xA9" "finition d'une m\xC3\xA9thode non virtuelle, une m\xC3\xA9thode "
-                         "priv\xC3\xA9" "e et virtuelle) est refus\xC3\xA9 avant d'\xC3\xAAtre fait, et dit "
-                         "pourquoi.", {}, "1.13.0"},
+                         "red\xC3\xA9" "finition d'une m\xC3\xA9thode non virtuelle ou plus priv\xC3\xA9" "e "
+                         "qu'elle, une m\xC3\xA9thode priv\xC3\xA9" "e et virtuelle) est refus\xC3\xA9 avant "
+                         "d'\xC3\xAAtre fait, et dit pourquoi.", {}, "1.13.0"},
              {K::Bullet, "Renommer une m\xC3\xA9thode fait suivre son corps, ses red\xC3\xA9" "finitions "
                          "dans les sous-types et les appels `SELF.X()`, `X()` et `SUPER.X()` des "
                          "m\xC3\xA9thodes du type ; un appel \xC3\xA9" "crit ailleurs (`Pompe1.Demarrer()` "
@@ -14574,13 +14574,23 @@ const std::vector<Topic>& topics() {
                          "Priv\xC3\xA9 (avec un cadenas) ; le clic droit sur un membre propose **Rendre "
                          "priv\xC3\xA9** ou **Rendre public** (Ctrl+Z l'annule). La privacit\xC3\xA9 ne "
                          "touche pas la place Modbus : un membre priv\xC3\xA9 d'une structure li\xC3\xA9" "e "
-                         "garde son adresse ; seul le code ST est contraint.", {}},
+                         "garde son adresse ; seul le code ST est contraint. Une **LAMBDA** a le droit du "
+                         "code **o\xC3\xB9 elle est \xC3\xA9" "crite**, pas de celui qui l'appelle : "
+                         "\xC3\xA9" "crite dans une m\xC3\xA9thode de T_Pompe, elle lit le priv\xC3\xA9 "
+                         "d'une T_Pompe, m\xC3\xAAme lanc\xC3\xA9" "e plus tard par IHM_APRES ou "
+                         "IHM_SUR_CHANGEMENT ; \xC3\xA9" "crite dans un script ou une fonction, elle n'y a "
+                         "pas droit, m\xC3\xAAme pass\xC3\xA9" "e \xC3\xA0 une m\xC3\xA9thode de T_Pompe qui "
+                         "l'appelle - `Pompe1.Appliquer(LAMBDA (p : T_Pompe) : REAL => p.Heures)` est "
+                         "refus\xC3\xA9.", {}},
              {K::Tip, "Ce que G\xC3\xA9n\xC3\xA9rer voit : un membre priv\xC3\xA9 lu depuis une variable "
-                         "IHM, une locale, un param\xC3\xA8tre, une r\xC3\xA9" "f\xC3\xA9rence (`r^.Heures`) "
-                         "ou la variable d'un `FOR EACH p IN Pompes`. Ce qu'il ne voit pas - une case d'une "
-                         "liste locale (`L[0].Heures`), le corps d'une m\xC3\xA9thode d'un autre type -, le "
-                         "moteur le refuse en marche. Le d\xC3\xA9" "bogueur et les expressions "
-                         "ajout\xC3\xA9" "es en simulation lisent tout, priv\xC3\xA9 compris.", {}},
+                         "IHM, une locale, un param\xC3\xA8tre, une r\xC3\xA9" "f\xC3\xA9rence "
+                         "(`r^.Heures`), la variable d'un `FOR EACH p IN Pompes` ou le param\xC3\xA8tre "
+                         "d'une LAMBDA \xC3\xA9" "crite hors d'une m\xC3\xA9thode (`LAMBDA (p : T_Pompe) => "
+                         "p.Heures`). Ce qu'il ne voit pas - une case d'une liste locale (`L[0].Heures`), le "
+                         "corps d'une m\xC3\xA9thode d'un autre type, un chemin plus long derri\xC3\xA8re le "
+                         "param\xC3\xA8tre d'une LAMBDA (`p.Moteur.Heures`) -, le moteur le refuse en "
+                         "marche. Le d\xC3\xA9" "bogueur et les expressions ajout\xC3\xA9" "es en simulation "
+                         "lisent tout, priv\xC3\xA9 compris.", {}},
              {K::Heading, "H\xC3\xA9ritage : EXTENDS, VIRTUAL, OVERRIDE, SUPER", {}},
              {K::Paragraph, "Dans les propri\xC3\xA9t\xC3\xA9s du type, **H\xC3\xA9rite de\xE2\x80\xA6 "
                          "(EXTENDS)** choisit un **parent** parmi les structures du projet : ni "
@@ -14596,7 +14606,12 @@ const std::vector<Topic>& topics() {
                          "red\xC3\xA9" "finit T_Pompe.EnDefaut \xC2\xBB) ; sur une virtuelle "
                          "h\xC3\xA9rit\xC3\xA9" "e, **Red\xC3\xA9" "finir** la cr\xC3\xA9" "e, son corps "
                          "pr\xC3\xA9rempli avec `SUPER.EnDefaut()` (les param\xC3\xA8tres pass\xC3\xA9s tels "
-                         "quels). **SUPER.M\xC3\xA9thode()** rappelle le corps du parent.", {}},
+                         "quels). **SUPER.M\xC3\xA9thode()** rappelle le corps du parent. Une "
+                         "red\xC3\xA9" "finition garde la visibilit\xC3\xA9 de ce qu'elle "
+                         "red\xC3\xA9" "finit : priv\xC3\xA9" "e, elle est refus\xC3\xA9" "e (\xC2\xAB une "
+                         "red\xC3\xA9" "finition ne peut pas \xC3\xAAtre plus priv\xC3\xA9" "e que la "
+                         "m\xC3\xA9thode qu'elle red\xC3\xA9" "finit \xC2\xBB) - un appel par le parent y "
+                         "m\xC3\xA8nerait d'ailleurs que du type.", {}},
              {K::Code, "TYPE T_PompeDoublee EXTENDS T_Pompe\n    Secours : BOOL;\n    METHOD PUBLIC "
                          "OVERRIDE EnDefaut : BOOL\nEND_TYPE\n\n(* corps de EnDefaut red\xC3\xA9" "finie "
                          "*)\nEnDefaut := SUPER.EnDefaut() AND NOT Secours;", "ST"},
@@ -14623,7 +14638,10 @@ const std::vector<Topic>& topics() {
                          "propri\xC3\xA9t\xC3\xA9s : une case par interface du projet, plusieurs possibles ; "
                          "G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie qu'il a chaque signature, et nomme ce qui "
                          "manque : \xC2\xAB T_Vanne d\xC3\xA9" "clare I_Demarrable mais n'a pas EnDefaut() : "
-                         "BOOL \xC2\xBB.", {}},
+                         "BOOL \xC2\xBB. Une m\xC3\xA9thode **priv\xC3\xA9" "e** ne remplit pas une "
+                         "signature (l'appel par l'interface vient d'ailleurs que du type) : \xC2\xAB "
+                         "Demarrer est priv\xC3\xA9" "e : elle ne remplit pas l'interface I_Demarrable "
+                         "\xC2\xBB.", {}},
              {K::Code, "TYPE I_Demarrable INTERFACE\n    METHOD Demarrer\n    METHOD EnDefaut : "
                          "BOOL\nEND_TYPE\n\nTYPE T_Vanne IMPLEMENTS I_Demarrable\n    Position : REAL;\n    "
                          "METHOD PUBLIC Demarrer\n    METHOD PUBLIC EnDefaut : BOOL\nEND_TYPE", "ST"},

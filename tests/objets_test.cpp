@@ -226,6 +226,7 @@ void controle();
 void relecture();
 void seconde();
 void troisieme();
+void quatrieme();
 
 int main() {
     std::printf("1.13.0 (lot J1) : les objets - methodes, prive, heritage, interfaces\n");
@@ -236,6 +237,7 @@ int main() {
     relecture();
     seconde();
     troisieme();
+    quatrieme();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
@@ -1146,5 +1148,107 @@ void troisieme() {
               "D2b-7 : Appelee par ne cite pas T_Pompe.Demarrer (Journal() y vise la methode)" + said);
         check(std::find(by.begin(), by.end(), "type T_Vanne, m\xC3\xA9thode Fermer") != by.end(),
               "D2b-7 : Appelee par cite T_Vanne.Fermer (sans methode Journal : la fonction)" + said);
+    }
+}
+
+// =============================================================================
+//  7) LES DERNIERS RESTES (relecture de D2b) : le droit d'une LAMBDA sur le prive est
+//     celui du code ou elle est ecrite ; une methode privee ne remplit pas une interface ;
+//     une redefinition n'est pas plus privee que ce qu'elle redefinit.
+// =============================================================================
+namespace {
+// Les erreurs du journal du moteur (" | message" chacune).
+std::string journalErrors(const Runtime& rt) {
+    std::string out;
+    for (const auto& e : rt.journal())
+        if (e.kind == "Erreur") out += " | " + e.message;
+    return out;
+}
+} // namespace
+
+void quatrieme() {
+    std::printf("-- derniers restes : le droit d'une LAMBDA, une interface et une redefinition privees\n");
+    std::string err;
+    const std::string prive = "Heures est priv\xC3\xA9 dans T_Pompe";
+    // Une methode publique qui applique un rappel a SELF : f(SELF).
+    const auto withApply = [] {
+        Project p = buildProject();
+        typeNamed(p, "T_Pompe")->methods.push_back(method(p, "Appliquer", "REAL", "Appliquer := f(SELF);", Visibility::Public, false,
+                                                          {param(p, "f", "CALLBACK (p : T_Pompe) : REAL")}));
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "R", "REAL");
+        return p;
+    };
+    // LA FUITE : une LAMBDA ecrite dans un script, passee a une methode publique qui l'appelle, ne lit pas le prive.
+    {
+        Project p = withApply();
+        check(!runs(p, "R := Pompe1.Appliquer(LAMBDA (p : T_Pompe) : REAL => p.Heures);", &err) && err.find(prive) != std::string::npos,
+              "une LAMBDA d'un script passee a Appliquer (f(SELF)) ne lit pas p.Heures : refusee en marche [" + err + "]");
+        Project q = withApply();
+        const std::string r = run(q, "Pompe1.Debit := 12.5;\nR := Pompe1.Appliquer(LAMBDA (p : T_Pompe) : REAL => p.Debit);", &err);
+        check(r == "12.5" && err.empty(), "le public (p.Debit) passe par la meme LAMBDA [" + r + " " + err + "]");
+    }
+    // Generer le dit a sa place : le parametre d'une LAMBDA ecrite hors d'une methode, d'un type connu.
+    {
+        Project p = withApply();
+        addScript(p, "S_Lambda", "R := Pompe1.Appliquer(LAMBDA (p : T_Pompe) : REAL => p.Heures);");
+        const auto is = compilerOf(p);
+        check(!issuesWith(is, "p.Heures : " + prive).empty() && !issuesWith(is, "LAMBDA").empty(),
+              "Compiler refuse p.Heures dans une LAMBDA ecrite dans un script" + errorsOf(is));
+        Project q = withApply();
+        addScript(q, "S_Lambda_Bloc", "R := Pompe1.Appliquer(LAMBDA (p : T_Pompe) : REAL\n    RETURN p.Heures;\nEND_LAMBDA);");
+        check(!issuesWith(compilerOf(q), prive).empty(), "et dans une LAMBDA en bloc" + errorsOf(compilerOf(q)));
+        Project ok = withApply();
+        addScript(ok, "S_Lambda_Public", "R := Pompe1.Appliquer(LAMBDA (p : T_Pompe) : REAL => p.Debit);");
+        check(issuesWith(compilerOf(ok), "priv\xC3\xA9").empty(), "le public (p.Debit) dans une LAMBDA reste permis" + issuesWith(compilerOf(ok), "priv\xC3\xA9"));
+    }
+    // LE FAUX REFUS : une LAMBDA ecrite dans une methode de T_Pompe garde son droit, lancee plus tard par IHM_APRES.
+    {
+        Project p = buildProject();
+        typeNamed(p, "T_Pompe")->methods.push_back(method(p, "Fixer", {}, "Heures := h;", Visibility::Public, false, {param(p, "h", "REAL")}));
+        // Une autre pompe q, recue en parametre (une copie que la LAMBDA garde) : son prive, lu plus tard.
+        typeNamed(p, "T_Pompe")->methods.push_back(method(p, "PlusTard", {}, "IHM_APRES(T#100ms, LAMBDA () R := q.Heures; END_LAMBDA);",
+                                                          Visibility::Public, false, {param(p, "q", "T_Pompe")}));
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "Pompe2", "T_Pompe");
+        addVar(p, "R", "REAL", "0.0");
+        addScript(p, "Essai", "Pompe2.Fixer(42.0);\nPompe1.PlusTard(Pompe2);");
+        View v = makeView(p, "Vue_Essai");
+        p.views.push_back(v);
+        p.config.startView = p.views.back().id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        rt.tick(0.1);
+        std::string e;
+        const bool ok = rt.callScript("Essai", 0.2, &e);
+        rt.tick(0.25);
+        rt.tick(0.45);
+        sim::Value out;
+        const std::string r = rt.environment().read("R", out) ? shown(out) : std::string("#");
+        check(ok && r == "42" && journalErrors(rt).empty(),
+              "une LAMBDA ecrite dans une methode lit Heures quand IHM_APRES la lance [" + r + " " + e + journalErrors(rt) + "]");
+    }
+    // Une interface remplie par une methode PRIVEE : Generer le refuse (l'appel par l'interface echouerait en marche).
+    {
+        Project p = buildProject();
+        check(issuesWith(generOf(p), "ne remplit pas").empty() && issuesWith(generOf(p), "plus priv").empty(),
+              "le projet d'essai ne porte ni interface privee ni redefinition privee" + errorsOf(generOf(p)));
+        for (auto& m : typeNamed(p, "T_Vanne")->methods)
+            if (m.name == "Demarrer") m.visibility = Visibility::Private;
+        check(hasError(generOf(p), "Demarrer est priv\xC3\xA9" "e : elle ne remplit pas l'interface I_Demarrable"),
+              "Generer : Demarrer privee ne remplit pas I_Demarrable" + errorsOf(generOf(p)));
+    }
+    // Une redefinition privee d'une methode publique du parent : refusee (le dispatch y menerait d'ailleurs).
+    {
+        Project p = buildProject();
+        for (auto& m : typeNamed(p, "T_PompeDoublee")->methods)
+            if (m.name == "EnDefaut") m.visibility = Visibility::Private;
+        check(hasError(generOf(p), "une red\xC3\xA9" "finition ne peut pas \xC3\xAAtre plus priv\xC3\xA9" "e que la m\xC3\xA9thode qu'elle red\xC3\xA9" "finit"),
+              "Generer : une redefinition privee de EnDefaut (publique) est refusee" + errorsOf(generOf(p)));
+        const HmiType* t = typeNamed(p, "T_PompeDoublee");
+        const HmiFunction* m = methodOf(p, "T_PompeDoublee", "EnDefaut");
+        check(t && m && methodProblem(p, *t, *m).find("plus priv\xC3\xA9" "e") != std::string::npos,
+              "methodProblem le dit aussi (l'ecran des objets refuse le geste)");
     }
 }
