@@ -188,8 +188,9 @@ void TopBar::layoutLot8() const {
             rx -= 4.f;
             putR("ihm-arreter", 32.f);
             putR("ihm-demarrer", 32.f);
-            putR("ihm", 9.f + 8.f + 7.f + std::max(ui::measureWidth("IHM arr\xC3\xAAt\xC3\xA9" "e", kSmall8),
-                                                    ui::measureWidth("Maj+F8 l'arr\xC3\xAAte", kTiny8)) + 10.f);
+            // 1.13.0 : en pause (le debogueur), la pastille s'elargit pour "IHM en pause (debogage)" et sa seconde ligne.
+            putR("ihm", 9.f + 8.f + 7.f + std::max(ui::measureWidth(hmi_ == Hmi::Paused ? "IHM en pause (d\xC3\xA9" "bogage)" : "IHM arr\xC3\xAAt\xC3\xA9" "e", kSmall8),
+                                                    ui::measureWidth(hmi_ == Hmi::Paused ? hmiHint() : std::string("Maj+F8 l'arr\xC3\xAAte"), kTiny8)) + 10.f);
             rx -= 8.f;
         }
         const float simEnd = rx;

@@ -711,8 +711,8 @@ bool TopBar::partEnabled(const Part& p) const {
     if (p.key == "cycle") return sim_ != Sim::Halted;
     if (p.key == "version") return !version_.title.empty();
     if (p.key == "simuler") return sim_ != Sim::Halted;
-    if (p.key == "ihm-demarrer") return hmi_ != Hmi::Running;   // 1.10
-    if (p.key == "ihm-arreter") return hmi_ == Hmi::Running;
+    if (p.key == "ihm-demarrer") return hmi_ != Hmi::Running && hmi_ != Hmi::Paused;   // 1.10 ; 1.13.0 : en pause, elle tourne
+    if (p.key == "ihm-arreter") return hmi_ == Hmi::Running || hmi_ == Hmi::Paused;
     return true;
 }
 
@@ -883,7 +883,7 @@ void TopBar::paintSim(const ui::PaintContext& ctx) const {
 }
 
 // 1.10 : la pastille de l'IHM - verte en marche, orange arretee ; dessous, ce
-// qu'un clic fait.
+// qu'un clic fait. 1.13.0 : orange aussi en pause (le debogueur) - un clic l'arrete, F5 continue (hmiHint).
 void TopBar::paintHmi(const ui::PaintContext& ctx, const Part& p, bool hot) const {
     const auto& c = ctx.theme.color;
     const auto r = p.rect;
@@ -892,13 +892,21 @@ void TopBar::paintHmi(const ui::PaintContext& ctx, const Part& p, bool hot) cons
     ctx.r.fillRoundedRect({r.x + 1.f, r.y + 1.f, r.w - 2.f, r.h - 2.f}, c.panelBg, 6.f);
     ctx.r.fillRoundedRect({r.x + 1.f, r.y + 1.f, r.w - 2.f, r.h - 2.f}, tone.withAlpha(ctx.theme.isDark() ? 38 : 26), 6.f);
     const gfx::Rect dot{r.x + 9.f, r.y + r.h * 0.5f - 4.f, 8.f, 8.f};
-    if (hmi_ == Hmi::Running) ctx.r.fillRoundedRect({dot.x - 3.f, dot.y - 3.f, 14.f, 14.f}, tone.withAlpha(50), 7.f);
+    if (hmi_ == Hmi::Running || hmi_ == Hmi::Paused) ctx.r.fillRoundedRect({dot.x - 3.f, dot.y - 3.f, 14.f, 14.f}, tone.withAlpha(50), 7.f);
     ctx.r.fillRoundedRect(dot, tone, 4.f);
     const float tx = dot.right() + 7.f;
-    const std::string line1 = hmi_ == Hmi::Running ? "IHM en marche" : "IHM arr\xC3\xAAt\xC3\xA9" "e";
+    const std::string line1 = hmi_ == Hmi::Running ? "IHM en marche"
+                              : hmi_ == Hmi::Paused ? "IHM en pause (d\xC3\xA9" "bogage)" : "IHM arr\xC3\xAAt\xC3\xA9" "e";
     ctx.r.drawText({tx, r.y + 2.f}, line1, kSmall, c.text);
     ctx.r.drawText({tx + 0.6f, r.y + 2.f}, line1, kSmall, c.text);
-    ctx.r.drawText({tx, r.y + 18.f}, hmi_ == Hmi::Running ? "Maj+F8 l'arr\xC3\xAAte" : "F8 la d\xC3\xA9marre", kTiny, c.textMuted);
+    ctx.r.drawText({tx, r.y + 18.f}, hmiHint(), kTiny, c.textMuted);
+}
+
+std::string TopBar::hmiHint() const {
+    if (hmi_ == Hmi::Running) return "Maj+F8 l'arr\xC3\xAAte";
+    // 1.13.0 : en pause, la pastille ARRETE l'IHM (hmi.toggle : elle tourne) - pas "continuer" : la ligne le dit.
+    if (hmi_ == Hmi::Paused) return "Maj+F8 l'arr\xC3\xAAte, F5 continue";
+    return "F8 la d\xC3\xA9marre";
 }
 
 void TopBar::onPaint(const ui::PaintContext& ctx) {

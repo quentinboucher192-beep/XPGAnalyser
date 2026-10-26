@@ -441,9 +441,11 @@ struct ObjectAlarm;   // 1.9 : HmiObjectAlarms.hpp
 
 // ---- 1.13.0 : LE DEBOGUEUR DES SCRIPTS IHM (HmiRuntimeDebug.cpp) ------------------------------------
 //  En simulation (Runtime::setDebugger), un point d'arret pose sur une ligne d'un script ST (general,
-//  de vue) ou d'une fonction IHM ARRETE VRAIMENT le script la, au milieu de son execution : il tourne
-//  alors sur un fil a lui (ScriptTask, comme un script detache), qui rend la main a l'IHM. L'IHM se fige
-//  (le prochain cycle attend la reprise, les gestes sont ignores), l'ecran continue de peindre.
+//  de vue) ou d'une fonction IHM ARRETE VRAIMENT le script la, au milieu de son execution : le travail
+//  qui le lance (le cycle IHM, un geste, le demarrage) tourne alors sur un fil a lui (ScriptTask, comme un
+//  script detache), qui rend la main a l'IHM. L'IHM se fige : la suite de ce cycle ou de ce geste attend
+//  la reprise, le prochain cycle aussi, les gestes sont ignores (un relachement est rejoue apres), l'ecran
+//  continue de peindre.
 //  Continuer, Suivant (par-dessus un appel), Entrer (dans la fonction appelee), Sortir (jusqu'a
 //  l'appelant). IHM_POINT_ARRET([condition]) est un point d'arret ecrit dans le code. Sans point arme
 //  ni pas demande, rien ne change : les scripts tournent sur le fil de l'IHM, comme avant.
@@ -564,7 +566,9 @@ public:
     // `plc` peut etre nul (pas de simulateur) : seules les variables IHM existent.
     void bind(const Project* project, sim::Environment* plc);
     [[nodiscard]] const Project* project() const noexcept { return project_; }   // lot 12 : le menu de connexion le dessine
-    void setHooks(Hooks h) { hooks_ = std::move(h); }
+    // 1.13.0 (le debogueur) : un crochet qui agit sur l'ecran (un son, la Console, une question, la barre d'etat),
+    // appele depuis une tache (un script detache, un travail du debogueur), tourne sur le fil de l'IHM.
+    void setHooks(Hooks h);
 
     // Variables IHM a leur valeur initiale, scripts Demarrage, vue de demarrage
     // ouverte (OnOpen, actions d'ouverture).
@@ -944,19 +948,35 @@ public:
     bool debugContinue();
     bool debugStep(DebugStep step);
     void debugPause();
+    // 1.13.0 : une pause demandee qui n'a encore rien arrete se retire (faux : aucune demande en cours).
+    bool debugCancelPause();
     [[nodiscard]] bool pauseAsked() const noexcept { return pauseAsked_; }
     [[nodiscard]] bool stepping() const noexcept { return step_.has_value(); }
     [[nodiscard]] std::uint64_t debugRevision() const noexcept { return debugRev_; }
+    // Le nombre de pauses depuis le demarrage : une nouvelle pause (le volet revient a la ligne d'arret).
+    [[nodiscard]] std::uint64_t pauseCount() const noexcept { return pauseCount_; }
     // En pause : une expression (un espion, le nom sous le curseur, l'apercu d'une condition) dans la portee
-    // de la ligne d'arret - ses locales se lisent, rien ne s'ecrit. Hors pause : dans la portee de l'IHM.
-    // Faux et `why` : ne se lit pas.
-    bool debugEvaluate(const std::string& expression, std::string& value, std::string* why = nullptr);
+    // de la ligne d'arret - ses locales se lisent, rien ne s'ecrit (une ecriture est refusee et dite), une
+    // fonction en echec ne laisse rien au script. Hors pause : dans la portee de l'IHM. Faux et `why` : ne se
+    // lit pas. `type` : le type de la valeur ("BOOL", "INT"...).
+    bool debugEvaluate(const std::string& expression, std::string& value, std::string* why = nullptr, std::string* type = nullptr);
+    // La condition d'un point de ce code : ce qui l'empeche de se lire (elle ne se lit pas, un nom inconnu du code
+    // ou de l'IHM) ; vide : elle se lit (son type, lui, ne se sait qu'au passage).
+    [[nodiscard]] std::string conditionProblem(Id script, Id function, const std::string& condition) const;
     // Les lignes ou un point d'arret peut se poser (1 = la premiere) : celles qui commencent une instruction
     // du script (ses fonctions internes comprises) ou de la fonction ; vide : le code ne se lit pas, ou n'est
     // pas du ST execute (C, C++).
     [[nodiscard]] static std::vector<std::uint32_t> breakableLines(const Project&, Id script, Id function);
-    // Le nom d'un code a deboguer : "script Calcul", "Vue_A.OnCycle", "fonction Moyenne" ; vide : inconnu.
+    // Le nom d'un code a deboguer : "script Calcul", "Vue_A.OnCycle", "fonction Util.Moyenne", "fonction Vue_Four.Pourcent"
+    // (une fonction de vue, de popup ou de symbole), "methode T_Pompe.Demarrer", "operateur + (type T_Vecteur)" ; vide :
+    // inconnu.
     [[nodiscard]] static std::string debugCodeName(const Project&, Id script, Id function);
+    // Le texte de ce code tel que son editeur le montre (le volet Debogage, ses lignes) ; vide : inconnu.
+    [[nodiscard]] static std::string debugCodeBody(const Project&, Id script, Id function);
+    // 1.13.0 : une redefinition d'instance deja appelee (pas dans le projet sous cet id) : son nom, son code ; vide :
+    // inconnue.
+    [[nodiscard]] std::string boundCodeName(Id function) const;
+    [[nodiscard]] std::string boundCodeBody(Id function) const;
     // Combien de fois un script a tourne ; sa derniere erreur.
     [[nodiscard]] std::size_t runs(Id script) const;
     [[nodiscard]] std::string lastError(Id script) const;
@@ -1874,7 +1894,12 @@ private:
         DebugStep   step{DebugStep::Over};
         std::size_t depth{0};
         TaskState*  task{nullptr};
+        std::string what;                    // 1.13.0 : le code d'ou part le pas ("script Calcul est fini")
     };
+    std::string                          pausedName_;             // 1.13.0 : le code de la ligne d'arret (son nom)
+    // Une methode d'un type IHM tourne sous le texte de methodFunctionText : 4 lignes d'en-tete avant son corps (FUNCTION,
+    // VAR_IN_OUT, SELF, END_VAR) - la ligne montree est celle du corps, comme dans l'editeur.
+    [[nodiscard]] std::uint32_t frameLine(const sim::LineProbe::Frame& f, std::uint32_t line) const;
     // Une execution en cours (runStatements, callFunction) : son code (le numero de son programme), et les
     // locales d'une fonction simple (le cadre du moteur ; nul : celles du programme).
     struct DebugExec {
@@ -1902,12 +1927,56 @@ private:
     std::vector<std::pair<Id, Id>>       tagOwners_;              // le numero d'un programme - 1 : (script, fonction)
     std::map<std::pair<Id, Id>, std::uint32_t> ownerTags_;
     std::vector<DebugExec>               debugExec_;              // echange avec les taches (ExecState)
+    std::uint64_t                        pauseCount_{0};          // les pauses depuis le demarrage (pauseCount)
+    std::int64_t                         pausedNs_{0};            // le temps passe en pause : les mesures le retranchent
+    int                                  callbackDepth_{0};       // dans un rappel (minuteur, surveillance) : pas d'arret
+    // Les relachements arrives pendant la pause (une touche, le bouton de la souris sur un objet appuye avant) :
+    // rejoues a la reprise, dans l'ordre (le KeyRelease d'un pas a pas n'est jamais perdu, l'impulsion retombe).
+    struct DeferredInput {
+        bool        key{true};           // une touche (sinon : le bouton de la souris)
+        std::string token;
+        Id          object{kNoId};
+        bool        inside{false};       // 1.13.0 : le bouton relache sur l'objet (un clic, comme sans debogueur)
+    };
+    std::vector<DeferredInput>           deferred_;
+    // Rejoues des que la pause finit (Continuer, un pas qui va au bout), et avant tout nouvel appui.
+    void replayDeferredInput(double now);
+    // 1.13.0 : LE CODE A CHANGE PENDANT LA PAUSE - ce script (son execution, et celles qui l'appellent dans ce travail)
+    // s'arrete la, sans erreur ; le reste du travail (le cycle, le geste, le demarrage) continue. `execDepth_` : les
+    // executions en cours dans ce travail (runStatements, callFunction), echangees avec les taches (ExecState).
+    int                                  execDepth_{0};
+    bool endExecution() noexcept;                                  // vrai : cette execution etait abandonnee
+    void abandonTask(TaskState*) noexcept;                         // le code en pause a change : ses executions s'arretent
+    // 1.13.0 : les REDEFINITIONS D'INSTANCE deja appelees (une copie liee sans fonction d'origine) - par leur id (le
+    // hachage de leur chemin) : leur nom ("redefinition Vue_Vannes.Vanne_3.Ouvrir") et leur code tel qu'il tourne. La
+    // pile les nomme, le volet montre leur code, un point s'y pose.
+    struct BoundCode {
+        std::string name, text, body;    // le nom montre ; le texte que le moteur lit ; le corps (le volet)
+    };
+    std::map<Id, BoundCode>              boundCodes_;
+    // Le texte d'un code a deboguer, comme le moteur le lit (le projet, puis les redefinitions deja appelees).
+    bool debugTextOf(Id script, Id function, std::string& text, bool& isFunction, std::string* why) const;
+    // Les lignes d'en-tete qu'ajoute le texte que le moteur lit (une methode : 4, un operateur : 1 ; sinon 0).
+    [[nodiscard]] std::uint32_t debugHeaderLines(Id function) const;
+    // 1.13.0 : une exception sortie d'une tache du debogueur (non detachee) remonte sur le fil de l'IHM.
+    void rethrowTaskFailure(TaskState& t);
     [[nodiscard]] bool debugWanted() const noexcept;
+    // LA PAUSE FIGE LE TRAVAIL ENTIER. Un point arme (ou un pas, une pause demandee) : le travail qui peut lancer
+    // un script - un tick (le cycle, les minuteries), un geste, le demarrage - tourne sur une tache a lui (non
+    // detachee) ; un script qui s'y arrete fige aussi la suite (les autres scripts du cycle, les actions suivantes
+    // du geste) jusqu'a la reprise. Sans debogueur : ici, comme avant. `unitWanted` : un tel travail commence.
+    [[nodiscard]] bool unitWanted() const noexcept;
+    bool debugUnit(std::string label, std::function<void()> body);     // vrai : fini d'un trait ; faux : en pause
+    // Un travail sur une tache non detachee (le debogueur peut l'arreter au milieu) ; `finished` : fini d'un trait.
+    bool runDebugTask(std::string name, std::function<bool(std::string*)> work, std::string* error, bool* finished);
     bool startDebugTask(const Script&, const std::string& source, double now, std::string* error);
+    // La tache qui tourne est arretee (la simulation s'arrete pendant une pause) : plus rien ne s'execute.
+    [[nodiscard]] bool taskStopped() const noexcept;
     std::uint32_t debugTag(Id script, Id function);
     void          prepareDebug(sim::Program& program, Id script, Id function, sim::RunLimits& limits);
     void          markRichFunction(const sim::Function& fn, Id function);
     void          resolveBreakpoints();
+    [[nodiscard]] std::string unknownConditionName(const std::string& text, Id script, Id function, const std::string& condition) const;
     void          remarkPrograms();
     void          debugTick(double now);
     void          debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe& probe, bool code);
@@ -1919,6 +1988,8 @@ private:
     [[nodiscard]] std::vector<DebugFrame> debugStack(const std::vector<sim::LineProbe::Frame>& chain,
                                                      const std::vector<sim::LineProbe::Frame>& here) const;
     std::map<const sim::Function*, Id>   richOwners_;             // une fonction IHM aux types riches -> son id
+    // Une methode d'un type IHM (METHODE_T_POMPE_DEMARRER) : sa fonction (son id) ; nul : pas une methode.
+    [[nodiscard]] const HmiFunction* methodOfFrame(std::string_view internalName) const;
     std::size_t                          pausedDepth_{0};         // la profondeur de la pile a la pause (le pas)
     std::set<std::string>                debugSaid_;              // les IHM_POINT_ARRET sans arret, deja dits
     // Les taches, vues du debogueur (HmiRuntime.cpp : TaskState n'y est complet que la).
@@ -1930,6 +2001,7 @@ private:
     void resumePaused(TaskState*);                                 // le fil de l'IHM : la reprendre
     void cancelTask(TaskState*) noexcept;
     void withTaskState(TaskState*, const std::function<void()>& run);   // son contexte, le temps de `run`
+    void probeQuietly(const std::function<void()>& run);                 // une lecture du debogueur : rien ne reste
     // 1.12.26 : les fichiers et les ressources des scripts (HmiRuntimeFiles.cpp) ; une raison dite une fois a la Console.
     bool fileOp(std::string_view op, const std::vector<std::string>& args, sim::Environment::FileResult& out, std::string& why);
     void fileFailed(const std::string& op, const std::string& why);
@@ -2017,7 +2089,9 @@ private:
     // 1.11.10 : les fonctions de symbole appelees ("Vue.Instance.Fonction", en majuscules),
     // pretes a tourner (nul : pas une fonction d'instance) ; refaites avec composed_.
     std::map<std::string, std::shared_ptr<const HmiFunction>> boundCalls_;
-    [[nodiscard]] const HmiFunction* symbolCall(std::string_view call);
+    // 1.13.0 (le debogueur) : partagee - l'appel la garde en vie jusqu'a son retour, meme si le cache se vide
+    // pendant qu'elle tourne (un geste, une propriete ecrite, une pause dans la fonction).
+    [[nodiscard]] std::shared_ptr<const HmiFunction> symbolCall(std::string_view call);
     std::map<Id, Id>                 recipeSelection_;  // gestionnaire -> jeu choisi
     std::map<Id, std::string>        tableSources_;     // tableau -> fichier externe (Lier un tableau)
     bool                             systemShown_{false};

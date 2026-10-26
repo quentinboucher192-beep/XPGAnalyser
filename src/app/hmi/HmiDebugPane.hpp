@@ -73,6 +73,7 @@ public:
     [[nodiscard]] ui::InputText& breakpointField() noexcept { return *bpField_; }
     [[nodiscard]] ui::InputText& watchField() noexcept { return *watchField_; }
     [[nodiscard]] gfx::Rect buttonRect(int action) const;
+    [[nodiscard]] std::string buttonText(int action) const;            // 1.13.0 : "Pause", "Annuler la pause"
     // Aller au code (le double clic sur un point, un niveau) : l'hote ouvre le script ou la fonction a sa ligne.
     std::function<void(hmi::Id script, hmi::Id function, int line)> goTo;
 

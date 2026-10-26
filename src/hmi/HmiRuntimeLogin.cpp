@@ -223,6 +223,13 @@ std::size_t Runtime::loginRows() const {
 
 // ============================================================ une partie ===
 void Runtime::loginPart(std::string_view part, double now) {
+    if (paused_) return;                                 // 1.13.0 : en pause (le debogueur), l'IHM est figee
+    // 1.13.0 : un point arme - la connexion et ce qu'elle ouvre (la vue de son groupe, son OnOpen) sur une tache du
+    // debogueur : une pause y fige la suite du geste.
+    if (unitWanted()) {
+        (void)debugUnit("Connexion", [this, p = std::string(part), now] { loginPart(p, now); });
+        return;
+    }
     now_ = std::max(now_, now);
     lastActivity_ = std::max(lastActivity_, now);        // un toucher
     if (!loginShown_) return;

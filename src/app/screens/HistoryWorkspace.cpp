@@ -22,6 +22,7 @@
 #include "../HistoryPanel.hpp"
 #include "../TopBar.hpp"
 #include "../hmi/HmiAskDialog.hpp"
+#include "../hmi/HmiSimulation.hpp"     // 1.13.0 : les touches du debogueur IHM, ou que soit le clavier
 #include "../hmi/HmiTutorial.hpp"
 #include "../SearchFocus.hpp"          // lot API 8 : finitions (Ctrl+F)
 
@@ -320,6 +321,9 @@ void MainAnalysisScreen::cycleCentreTab(int step) {
 }
 
 bool MainAnalysisScreen::handleShortcut(const KeyDown& k, bool beforeWidgets) {
+    // 1.13.0 (le debogueur IHM) : en pause, F5, F10, F11, Maj+F11 pilotent le pas a pas ou que soit le clavier
+    // (l'editeur du script en pause, l'arbre) - avant un editeur de code, ou F5 voudrait dire Simuler.
+    if (beforeWidgets && app_.hmi() && HmiSimulationPane::debugKeyAnywhere(k)) return true;
     // 1.12.2 : un editeur de code (profil Visual Studio) garde les touches de son profil :
     // Ctrl+K y commence un accord (Ctrl+T : Aller a), Ctrl+Maj+F y cherche dans tout le
     // projet. Apres les widgets, ce qu'il a laisse passer revient a l'ecran.

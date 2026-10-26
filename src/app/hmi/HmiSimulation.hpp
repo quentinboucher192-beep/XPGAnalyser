@@ -673,6 +673,8 @@ public:
     void setAutoStart(bool on) noexcept { autoStart_ = on; }
     [[nodiscard]] bool autoStart() const noexcept { return autoStart_; }
     [[nodiscard]] bool hmiRunning() const noexcept { return started_; }
+    // 1.13.0 : l'IHM tourne mais un script est arrete (le debogueur) : la barre du haut, la bande d'etat, l'arbre le disent.
+    [[nodiscard]] bool hmiDebugPaused() const noexcept { return started_ && runtime_.paused(); }
     void startHmi(const std::string& source = {});
     void stopHmi(const std::string& source = {});
     // 1.11.13 : la fin du build d'un demarrage (l'hote, buildGate) - valide : l'IHM
@@ -754,7 +756,13 @@ public:
     // F11 : un onglet Simulation . IHM a l'ecran (ou en plein ecran) la prend - dans
     // la fenetre principale (windowRoot nul : les volets hors des fenetres detachees),
     // ou dans la fenetre detachee de racine `windowRoot` (DetachedWindows).
+    // 1.13.0 : une IHM en pause (le debogueur) prend aussi F11 (Entrer), ou que soit le clavier.
     [[nodiscard]] static bool claimsKey(ui::Key key, const ui::Widget* windowRoot = nullptr);
+    // 1.13.0 : EN PAUSE, les touches du debogueur ou que soit le clavier (l'editeur du script, l'arbre, un autre onglet ;
+    // la fenetre principale quand l'onglet Simulation est detache dans la sienne) : F5 Continuer, F10 Suivant, F11
+    // Entrer, Maj+F11 Sortir - d'abord l'onglet de cette fenetre, sinon celui d'une autre. Vrai : prise (l'ecran
+    // l'appelle avant les widgets).
+    static bool debugKeyAnywhere(const ui::KeyDown& k, const ui::Widget* windowRoot = nullptr);
     [[nodiscard]] bool requestsOverlayPass() const override { return fullScreen_; }
     [[nodiscard]] gfx::Rect eventBounds() const override { return fullScreen_ ? fullRect_ : bounds(); }
 protected:

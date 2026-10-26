@@ -437,6 +437,13 @@ void Runtime::signatureCancel(double now, const std::string& why) {
 }
 
 void Runtime::signaturePart(std::string_view part, double now) {
+    if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee
+    // 1.13.0 : un point arme - la signature validee et la commande qu'elle libere (ses actions) sur une tache du
+    // debogueur, comme les autres gestes : un script de la commande qui s'arrete fige la suite (Ouvrir la popup attend).
+    if (unitWanted()) {
+        (void)debugUnit("Signature", [this, p = std::string(part), now] { signaturePart(p, now); });
+        return;
+    }
     now_ = std::max(now_, now);
     lastActivity_ = std::max(lastActivity_, now);
     if (!signature_ || !project_) return;

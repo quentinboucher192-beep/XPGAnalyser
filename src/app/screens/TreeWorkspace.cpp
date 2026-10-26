@@ -1125,8 +1125,9 @@ void MainAnalysisScreen::refreshTreeChrome() {
         const auto tab = hmiTabs_.find("simulation");
         const auto* hsim = dynamic_cast<const HmiSimulationPane*>(tab != hmiTabs_.end() ? tab->second : nullptr);
         const bool running = hsim && hsim->hmiRunning();
-        simText = running ? "IHM en marche" : "IHM arr\xC3\xAAt\xC3\xA9" "e";
-        simTone = running ? ui::Tone::Ok : ui::Tone::Muted;
+        const bool paused = hsim && hsim->hmiDebugPaused();   // 1.13.0 : un script arrete (le debogueur)
+        simText = paused ? "IHM en pause (d\xC3\xA9" "bogage)" : running ? "IHM en marche" : "IHM arr\xC3\xAAt\xC3\xA9" "e";
+        simTone = paused ? ui::Tone::Warning : running ? ui::Tone::Ok : ui::Tone::Muted;
         if (treeModel_->setSimStatus(simText, running) && explorer_) explorer_->invalidate();
     } else if (treeModel_) {
         const bool running = host.attached() && host.state() == SimulationHost::State::Running;

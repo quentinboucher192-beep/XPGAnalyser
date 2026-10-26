@@ -19053,9 +19053,10 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Un **clic dans la marge** de l'\xC3\xA9" "diteur, \xC3\xA0 gauche des "
                          "num\xC3\xA9ros de ligne - un script g\xC3\xA9n\xC3\xA9ral (Programmation "
                          "g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Scripts), un script de vue (OnOpen, OnCycle, "
-                         "OnClose) ou une fonction IHM : un **rond rouge**. Un nouveau clic l'enl\xC3\xA8ve "
-                         "; **Maj+clic** le d\xC3\xA9sactive (un anneau) ; **F9** pose ou enl\xC3\xA8ve "
-                         "celui de la ligne du curseur.", {}},
+                         "OnClose) ou une fonction IHM (du projet, d'une vue, d'une popup, d'un symbole) : "
+                         "un **rond rouge**. Un nouveau clic l'enl\xC3\xA8ve ; **Maj+clic** le "
+                         "d\xC3\xA9sactive (un anneau) ; **F9** pose ou enl\xC3\xA8ve celui de la ligne du "
+                         "curseur.", {}},
              {K::Bullet, "Le **clic droit** dans la marge : Point d'arr\xC3\xAAt, **Condition\xE2\x80\xA6**, "
                          "D\xC3\xA9sactiver, Retirer les points de ce code.", {}},
              {K::Bullet, "Une ligne sans instruction (un commentaire, une ligne vide) : le point se "
@@ -19065,9 +19066,18 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Dans Simulation \xE2\x80\xBA IHM \xE2\x80\xBA **D\xC3\xA9" "bogage**, le champ "
                          "\xC2\xAB + Point d'arr\xC3\xAAt \xC2\xBB : `Statistiques_Pression 14`, "
                          "`Statistiques_Pression 14 si P < 5`, `Vue_A.OnCycle 3`, `Moyenne_Pression 5`.", {}},
-             {K::Bullet, "Un point suit son **code**, pas son texte : taper au-dessus le garde sur sa ligne. "
-                         "Un script C ou C++ n'est pas ex\xC3\xA9" "cut\xC3\xA9 en simulation : sa marge "
-                         "refuse le point.", {}},
+             {K::Bullet, "Un point suit son **code**, pas son texte : taper, supprimer ou joindre des lignes "
+                         "au-dessus, Annuler (Ctrl+Z), R\xC3\xA9tablir, \xC2\xAB Migrer ce code \xC2\xBB le "
+                         "gardent sur sa ligne ; si sa ligne dispara\xC3\xAEt, il reste sur ce qu'il en "
+                         "reste. Deux points qui se retrouvent sur la m\xC3\xAAme ligne n'en font plus "
+                         "qu'un, qui s'arr\xC3\xAAte l\xC3\xA0 o\xC3\xB9 l'un des deux s'arr\xC3\xAAtait : "
+                         "actif si l'un l'\xC3\xA9tait, les conditions des points actifs jointes par OR, "
+                         "leurs passages ajout\xC3\xA9s. Un script C ou C++ n'est pas "
+                         "ex\xC3\xA9" "cut\xC3\xA9 en simulation : sa marge refuse le point.", {}},
+             {K::Bullet, "En pause, la marge du code montr\xC3\xA9 dans D\xC3\xA9" "bogage pose aussi un "
+                         "point dans ce qui n'a pas de marge \xC3\xA0 lui : une **m\xC3\xA9thode** d'un "
+                         "type, un **op\xC3\xA9rateur** ou une conversion, la **red\xC3\xA9" "finition** "
+                         "d'une instance de symbole.", {}},
              {K::Code, "(* Statistiques_Pression : un point sur la ligne IF P < Mini *)\nP := "
                          "Armoires[0].ana.PT1.mes;\nTours := Tours + 1;\nIF P < Mini THEN          (* le "
                          "moteur s'arr\xC3\xAAte AVANT cette instruction *)\n    Mini := P;\nEND_IF;", "ST"},
@@ -19080,28 +19090,60 @@ const std::vector<Topic>& topics() {
              {K::Heading, "La pause est r\xC3\xA9" "elle", {}},
              {K::Paragraph, "Le script s'arr\xC3\xAAte **au milieu de son ex\xC3\xA9" "cution**, avant la ligne "
                          "du point : rien de cette ligne n'est fait, rien n'est \xC3\xA9" "crit tant que tu "
-                         "ne continues pas. L'IHM se fige - la pastille de la barre dit **IHM : en pause "
-                         "(d\xC3\xA9" "bogage)**, en orange - : le prochain cycle IHM attend la reprise, les "
-                         "clics dans la vue sont ignor\xC3\xA9s, l'\xC3\xA9" "cran garde la derni\xC3\xA8re "
-                         "image. Les \xC3\xA9" "critures de ce cycle vers l'automate ne sont pas encore "
-                         "parties.", {}},
+                         "ne continues pas. L'IHM se fige - la pastille de la barre du haut, la bande "
+                         "d'\xC3\xA9tat, l'arbre et l'onglet Simulation disent **IHM en pause "
+                         "(d\xC3\xA9" "bogage)**, en orange (un clic sur la pastille **arr\xC3\xAAte** "
+                         "l'IHM, comme Maj+F8 : sa seconde ligne le dit, \xC2\xAB Maj+F8 l'arr\xC3\xAAte, F5 "
+                         "continue \xC2\xBB) :", {}},
+             {K::Bullet, "**tout le travail en cours attend** : la suite du cycle (les autres scripts, "
+                         "l'OnCycle des vues, les d\xC3\xA9" "clencheurs, les alarmes, les courbes), les "
+                         "actions suivantes du clic - ou de la commande sign\xC3\xA9" "e, une fois "
+                         "sign\xC3\xA9" "e (une popup \xC3\xA0 ouvrir, une valeur \xC3\xA0 \xC3\xA9" "crire) "
+                         "-, la premi\xC3\xA8re vue d'un d\xC3\xA9marrage. Un point atteint dans un de ces "
+                         "scripts s'arr\xC3\xAAte \xC3\xA0 son tour, apr\xC3\xA8s la reprise. Un script "
+                         "d\xC3\xA9tach\xC3\xA9 lanc\xC3\xA9 par le geste re\xC3\xA7oit sa premi\xC3\xA8re "
+                         "tranche tout de suite, comme sans d\xC3\xA9" "bogueur ;", {}},
+             {K::Bullet, "le prochain cycle IHM attend la reprise, l'\xC3\xA9" "cran garde la "
+                         "derni\xC3\xA8re image ;", {}},
+             {K::Bullet, "**les gestes dans la vue ne font rien** : un clic, la croix d'une popup, un "
+                         "glissement, un curseur, une saisie ; la barre d'\xC3\xA9tat le dit. Une touche ou "
+                         "un bouton rel\xC3\xA2" "ch\xC3\xA9 pendant la pause n'est pas perdu : il part "
+                         "d\xC3\xA8s que la pause finit (et avant un nouvel appui) - "
+                         "rel\xC3\xA2" "ch\xC3\xA9 sur l'objet appuy\xC3\xA9 avant la pause, c'est son clic, "
+                         "comme sans d\xC3\xA9" "bogueur ;", {}},
+             {K::Bullet, "les touches **F5, F10, F11, Maj+F11** pilotent la pause **o\xC3\xB9 que soit le "
+                         "clavier** - l'\xC3\xA9" "diteur du script en pause, l'arbre, un autre onglet, la "
+                         "fen\xC3\xAAtre principale quand l'onglet Simulation est d\xC3\xA9tach\xC3\xA9 dans "
+                         "la sienne ; F11 n'y met pas la fen\xC3\xAAtre en plein \xC3\xA9" "cran. Dans une "
+                         "**autre** fen\xC3\xAAtre d\xC3\xA9tach\xC3\xA9" "e (un \xC3\xA9" "diteur "
+                         "d\xC3\xA9tach\xC3\xA9), elles ne la pilotent pas : reviens \xC3\xA0 la "
+                         "fen\xC3\xAAtre principale ou \xC3\xA0 celle de l'onglet Simulation ;", {}},
+             {K::Bullet, "IHM_SCRIPT_ACTIF et IHM_SCRIPT_ARRETER ne voient que les scripts "
+                         "**d\xC3\xA9tach\xC3\xA9s**, comme sans d\xC3\xA9" "bogueur : un script en pause "
+                         "qui ne l'est pas n'est ni \xC2\xAB actif \xC2\xBB ni arr\xC3\xAAt\xC3\xA9 par eux.", {}},
              {K::Tip, "Sans point arm\xC3\xA9 ni pas demand\xC3\xA9, rien ne change : les scripts "
-                         "tournent comme avant, au m\xC3\xAAme co\xC3\xBBt.", {}},
+                         "tournent comme avant (un IHM_POINT_ARRET en commentaire ne compte pas). Avec un "
+                         "point arm\xC3\xA9, les scripts restent mesur\xC3\xA9s dans les Performances, sans "
+                         "le temps de la pause.", {}},
              {K::Heading, "Le sous-onglet D\xC3\xA9" "bogage", {}},
              {K::Paragraph, "Simulation \xE2\x80\xBA IHM \xE2\x80\xBA **D\xC3\xA9" "bogage** :", {}},
              {K::Table, "Partie\tCe qu'elle montre\nLa barre\tContinuer (F5), Suivant (F10), Entrer (F11), "
-                         "Sortir (Maj+F11), Pause ; Tout retirer\nL'\xC3\xA9tat\t\xC2\xAB En pause au point "
-                         "2 : script Statistiques_Pression, ligne 14, cycle IHM 1 243 - P = 3.2 "
-                         "\xC2\xBB\nPoints d'arr\xC3\xAAt\tla case (actif), o\xC3\xB9, la condition "
-                         "(modifiable sur place, double clic), les passages, ce qu'en dit le moteur ; Suppr "
-                         "retire le point choisi\nEspions\tune expression, sa valeur maintenant (en pause : "
-                         "dans la port\xC3\xA9" "e de la ligne d'arr\xC3\xAAt, locales comprises)\nPile\tde "
-                         "la ligne d'arr\xC3\xAAt (en haut) au contexte (en bas : le cycle IHM, le clic qui "
-                         "l'a lanc\xC3\xA9, le script d\xC3\xA9tach\xC3\xA9) ; un clic montre ce niveau, un "
-                         "double clic ouvre son code\nCode\tle code du niveau choisi, en lecture seule, la "
-                         "ligne surlign\xC3\xA9" "e, les valeurs de la ligne \xC3\xA0 droite ; sa marge pose "
-                         "des points aussi\nLocales\tVAR, VAR_TEMP, param\xC3\xA8tres, compteurs de boucle "
-                         "du niveau choisi ; une structure, un tableau, une liste, une MAP se d\xC3\xA9plient", {}},
+                         "Sortir (Maj+F11), Pause (une pause demand\xC3\xA9" "e : **Annuler la pause**) ; "
+                         "Tout retirer\nL'\xC3\xA9tat\t\xC2\xAB En pause au point 2 : script "
+                         "Statistiques_Pression, ligne 14, cycle IHM 1 243 - P = 3.2 \xC2\xBB\nPoints "
+                         "d'arr\xC3\xAAt\tla case (actif), o\xC3\xB9, la condition (modifiable sur place, "
+                         "double clic), les passages (un passage compte quand il s'arr\xC3\xAAte), ce qu'en "
+                         "dit le moteur ; Suppr retire le point choisi\nEspions\tune expression, sa valeur "
+                         "maintenant (en pause : dans la port\xC3\xA9" "e de la ligne d'arr\xC3\xAAt, "
+                         "locales comprises) ; **en lecture seule** : un espion ne modifie rien (VECTOR_POP, "
+                         "une fonction qui \xC3\xA9" "crit : refus\xC3\xA9s, et dits)\nPile\tde la ligne "
+                         "d'arr\xC3\xAAt (en haut) au contexte (en bas : le cycle IHM, le clic qui l'a "
+                         "lanc\xC3\xA9, le script d\xC3\xA9tach\xC3\xA9) ; un clic montre ce niveau, un "
+                         "double clic ouvre son code ; chaque nouvelle pause revient en haut\nCode\tle code "
+                         "du niveau choisi, en lecture seule, la ligne surlign\xC3\xA9" "e, les valeurs de "
+                         "la ligne \xC3\xA0 droite ; sa marge pose des points aussi\nLocales\tVAR, VAR_TEMP, "
+                         "param\xC3\xA8tres, compteurs de boucle du niveau choisi ; une structure, un "
+                         "tableau, une liste, une MAP se d\xC3\xA9plient", {}},
              {K::Paragraph, "Dans le panneau de droite, \xC3\xA9troit, le sous-onglet se range en lignes : la "
                          "pile et le code, les locales, puis les points et les espions c\xC3\xB4te \xC3\xA0 "
                          "c\xC3\xB4te. \xC3\x89largis le panneau : les trois colonnes reviennent. La "
@@ -19111,12 +19153,21 @@ const std::vector<Topic>& topics() {
                          "m\xC3\xA8ne au code.", {}},
              {K::Heading, "La condition d'un point", {}},
              {K::Paragraph, "Du ST, **dans la port\xC3\xA9" "e du code** : ses locales (VAR, param\xC3\xA8tres, "
-                         "compteurs) et les variables IHM. Elle est lue quand tu la poses : un nom inconnu "
-                         "se dit tout de suite - \xC2\xAB condition invalide : Presion n'est pas "
+                         "compteurs), les variables IHM, les noms de son espace de noms ; `P ENTRE 2.0 ET "
+                         "5.0` s'y \xC3\xA9" "crit aussi. Elle est lue quand tu la poses : un nom inconnu se "
+                         "dit tout de suite - \xC2\xAB condition invalide : Presion n'est pas "
                          "d\xC3\xA9" "clar\xC3\xA9" "e ici ; il ne s'arr\xC3\xAAtera pas \xC2\xBB - et le "
-                         "rond passe en gris. Elle est essay\xC3\xA9" "e \xC3\xA0 chaque passage : il ne "
-                         "s'arr\xC3\xAAte que si elle est vraie ; une erreur \xC3\xA0 ce moment (un indice "
-                         "hors des bornes pour cette instance) d\xC3\xA9sarme le point, et le dit.", {}},
+                         "rond passe en gris. Elle est essay\xC3\xA9" "e \xC3\xA0 chaque passage, **en "
+                         "lecture seule** : il ne s'arr\xC3\xAAte que si elle est vraie ; une erreur "
+                         "\xC3\xA0 ce moment (un indice hors des bornes pour cette instance, une "
+                         "\xC3\xA9" "criture) d\xC3\xA9sarme le point, et le dit. Elle doit rendre un "
+                         "**BOOL** : `Tours MOD 100` (le \xC2\xAB = 0 \xC2\xBB oubli\xC3\xA9) rend un nombre "
+                         "- le point se d\xC3\xA9sarme au premier passage, et le dit : \xC2\xAB condition "
+                         "invalide : elle rend un DINT, pas un BOOL \xC2\xBB. L'aper\xC3\xA7u de "
+                         "Condition\xE2\x80\xA6 juge la condition **dans le code du point** : en pause dans "
+                         "ce code, \xC2\xAB Maintenant, c'est vrai (P = 3.2) \xC2\xBB ; en pause ailleurs, "
+                         "\xC2\xAB Elle sera essay\xC3\xA9" "e au passage dans fonction Moyenne_Pression "
+                         "\xC2\xBB.", {}},
              {K::Code, "P < 5.0 OR Tours MOD 100 = 0", "ST"},
              {K::Code, "/* La condition d'un point s'\xC3\xA9" "crit en ST, quelle que soit la notation du "
                          "code. */", "C"},
@@ -19129,7 +19180,8 @@ const std::vector<Topic>& topics() {
                          "native, comme Suivant\nSortir\tMaj+F11\tjusqu'au retour dans le code qui l'a "
                          "appel\xC3\xA9" "e\nContinuer\tF5\tjusqu'au prochain point "
                          "d'arr\xC3\xAAt\nPause\t-\ts'arr\xC3\xAAte \xC3\xA0 la prochaine ligne d'un script "
-                         "qui tourne", {}},
+                         "qui tourne ; tant que rien ne s'est arr\xC3\xAAt\xC3\xA9, le bouton devient "
+                         "Annuler la pause", {}},
              {K::Code, "(* \xC2\xAB Entrer \xC2\xBB (F11) sur cette ligne descend dans le corps de "
                          "Moyenne_Pression *)\nIF Moyenne_Pression(P, Armoires[1].ana.PT1.mes) > 30.0 THEN\n "
                          "   Tracer_Evenement('Moyenne haute', 2);\nEND_IF;", "ST"},
@@ -19146,8 +19198,18 @@ const std::vector<Topic>& topics() {
              {K::Heading, "IHM_POINT_ARRET : un point d'arr\xC3\xAAt \xC3\xA9" "crit dans le code", {}},
              {K::Paragraph, "`IHM_POINT_ARRET` sans argument s'arr\xC3\xAAte \xC3\xA0 chaque passage ; avec un "
                          "BOOL, seulement s'il est vrai. Pratique dans une boucle ou un script "
-                         "d\xC3\xA9tach\xC3\xA9. Hors simulation (le poste d'exploitation), il ne fait rien "
-                         "; dans une expression (fx), il est refus\xC3\xA9, comme WAIT.", {}},
+                         "d\xC3\xA9tach\xC3\xA9. Il s'\xC3\xA9" "crit dans un script, une fonction (du "
+                         "projet, d'une vue, d'un symbole, d'une biblioth\xC3\xA8que), une m\xC3\xA9thode "
+                         "d'un type (la pile dit \xC2\xAB m\xC3\xA9thode T_Pompe.Demarrer \xC2\xBB, \xC3\xA0 "
+                         "la ligne de son corps), un op\xC3\xA9rateur ou une conversion d'un type ou d'un "
+                         "symbole (\xC2\xAB op\xC3\xA9rateur + (type T_Vecteur) \xC2\xBB, \xC3\xA0 la ligne "
+                         "de son corps), la red\xC3\xA9" "finition d'une instance (\xC2\xAB "
+                         "red\xC3\xA9" "finition Synoptique.V1.Ouvrir \xC2\xBB : D\xC3\xA9" "bogage montre "
+                         "son code ; elle n'a pas d'\xC3\xA9" "diteur \xC3\xA0 ouvrir d'un double clic dans "
+                         "la pile - son code est dans l'inspecteur de l'instance) ou le code d'une action "
+                         "\xC2\xAB Ex\xC3\xA9" "cute du ST \xC3\xA9" "crit ici \xC2\xBB. Hors simulation (le "
+                         "poste d'exploitation), il ne fait rien ; dans une expression (fx), il est "
+                         "refus\xC3\xA9, comme WAIT.", {}},
              {K::Code, "FOR f := 1 TO Fours.High DO\n    IHM_POINT_ARRET(Fours[f].Temperature > 900.0);   "
                          "(* s'arr\xC3\xAAte au 1er four trop chaud *)\n    IF Fours[f].Temperature > "
                          "Fours[f].Consigne + 20.0 THEN\n        Fours[f].Vannes[1].Position := 0;\n    "
@@ -19173,22 +19235,40 @@ const std::vector<Topic>& topics() {
                          "effet \xC3\xA0 la cible)\nVanne_Entree = true;\nwhile (Niveau < Consigne_Niveau) { "
                          "IHM_POINT_ARRET(); WAIT(500ms); }\nVanne_Entree = false;", "C++"},
              {K::Heading, "Ce qui ne s'arr\xC3\xAAte pas", {}},
+             {K::Paragraph, "Les scripts du cycle, les gestes (un clic, une touche, la croix d'une popup), le "
+                         "d\xC3\xA9marrage et les actions **Appeler** et **Ex\xC3\xA9" "cute du ST "
+                         "\xC3\xA9" "crit ici** s'arr\xC3\xAAtent. Pas ceci - le point le dit dans \xC2\xAB "
+                         "Ce qu'en dit le moteur \xC2\xBB (IHM_POINT_ARRET, \xC3\xA0 la Console) :", {}},
              {K::Bullet, "Une fonction appel\xC3\xA9" "e par une **expression** de vue (fx) : elle doit "
-                         "rendre sa valeur tout de suite (comme pour WAIT) ; le point le dit - \xC2\xAB "
-                         "appel\xC3\xA9" "e par une expression : pas d'arr\xC3\xAAt \xC2\xBB.", {}},
-             {K::Bullet, "Un rappel lanc\xC3\xA9 par un minuteur (IHM_APRES, IHM_CHAQUE) ou une surveillance "
-                         "(IHM_SUR_CHANGEMENT) : \xC2\xAB hors d'un script lanc\xC3\xA9 par l'IHM \xC2\xBB.", {}},
+                         "rendre sa valeur tout de suite (comme pour WAIT) - \xC2\xAB appel\xC3\xA9" "e par "
+                         "une expression : pas d'arr\xC3\xAAt \xC2\xBB.", {}},
+             {K::Bullet, "Un **rappel** lanc\xC3\xA9 par un minuteur (IHM_APRES, IHM_CHAQUE) ou une "
+                         "surveillance (IHM_SUR_CHANGEMENT) - \xC2\xAB dans un rappel (IHM_APRES, "
+                         "IHM_CHAQUE, IHM_SUR_CHANGEMENT) : pas d'arr\xC3\xAAt \xC2\xBB.", {}},
+             {K::Bullet, "Un code lanc\xC3\xA9 hors du cycle et des gestes de l'IHM en marche (l'essai d'une "
+                         "fonction dans l'onglet Tests) - \xC2\xAB hors du cycle et des gestes de l'IHM en "
+                         "marche \xC2\xBB.", {}},
+             {K::Bullet, "Le menu Param\xC3\xA8tres syst\xC3\xA8me : ses commandes (Red\xC3\xA9marrer "
+                         "l'IHM...) ne lancent pas de script \xC3\xA0 elles ; un red\xC3\xA9marrage relance "
+                         "les scripts de D\xC3\xA9marrage, qui s'arr\xC3\xAAtent, eux.", {}},
+             {K::Bullet, "Un autre code lanc\xC3\xA9 pendant une pause (depuis un autre onglet) - \xC2\xAB "
+                         "un autre script est d\xC3\xA9j\xC3\xA0 en pause : pas d'arr\xC3\xAAt \xC2\xBB.", {}},
              {K::Bullet, "Le **poste d'exploitation** : jamais.", {}},
              {K::Heading, "Modifier pendant la pause, o\xC3\xB9 vivent les points", {}},
              {K::Paragraph, "En pause, tu peux forcer une variable IHM (Variables IHM) et suivre des espions. "
                          "Si tu changes le **code** du script arr\xC3\xAAt\xC3\xA9, il ne peut pas reprendre "
-                         "au milieu d'une ligne qui n'existe plus : \xC2\xAB le script a chang\xC3\xA9 "
-                         "pendant la pause : il reprendra au prochain cycle \xC2\xBB. Arr\xC3\xAAter la "
-                         "simulation pendant la pause arr\xC3\xAAte le script sans erreur. Les points "
-                         "d'arr\xC3\xAAt ne sont **pas dans le projet** : ils restent pour la "
+                         "au milieu d'une ligne qui n'existe plus : \xC2\xAB son ex\xC3\xA9" "cution "
+                         "s'arr\xC3\xAAte l\xC3\xA0, sans erreur ; la suite du cycle ou du geste continue "
+                         "(un script cyclique repart au prochain cycle) \xC2\xBB. Seul ce script "
+                         "s'arr\xC3\xAAte (avec ce qui l'appelle dans ce travail) : les autres scripts du "
+                         "cycle, les actions suivantes du clic, la premi\xC3\xA8re vue d'un d\xC3\xA9marrage "
+                         "partent quand m\xC3\xAAme. Arr\xC3\xAAter la simulation pendant la pause "
+                         "arr\xC3\xAAte le script sans erreur - m\xC3\xAAme dans une fonction "
+                         "appel\xC3\xA9" "e sous TRY : ni le CATCH ni la suite du script ne tournent. Les "
+                         "points d'arr\xC3\xAAt ne sont **pas dans le projet** : ils restent pour la "
                          "s\xC3\xA9" "ance - fermer le sous-onglet ou arr\xC3\xAAter la simulation ne les "
-                         "enl\xC3\xA8ve pas ; ouvrir un autre projet, si. Un projet ne change pas d'un octet "
-                         "quand tu d\xC3\xA9" "bogues.", {}},
+                         "enl\xC3\xA8ve pas ; fermer le projet ou en ouvrir un autre, si. Un projet ne "
+                         "change pas d'un octet quand tu d\xC3\xA9" "bogues.", {}},
          },
          {"scripts", "fonctions", "fonctions-internes", "simulation", "variables-locales", "erreurs-scripts", "reference", "tests-fonctions"},
          {"point d'arr\xC3\xAAt", "points d'arr\xC3\xAAt", "d\xC3\xA9" "bogueur", "d\xC3\xA9" "boguer", "pas \xC3\xA0 pas", "Entrer", "Sortir", "Suivant", "Continuer", "pile d'appels", "locales", "rond rouge", "marge", "Condition\xE2\x80\xA6", "IHM en pause"},

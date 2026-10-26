@@ -132,6 +132,17 @@ public:
     virtual void debugBreak(std::uint32_t tag, std::uint32_t line, LineProbe& probe) {
         (void)tag; (void)line; (void)probe;
     }
+    // 1.13.0 (le debogueur des scripts IHM) : l'execution est ARRETEE (la simulation s'arrete pendant une pause dans
+    // une fonction appelee) - l'appel qui vient d'echouer n'est pas une erreur : ni message, ni CATCH, l'appelant
+    // s'arrete aussi. Par defaut : jamais (l'automate, le poste, la page web).
+    [[nodiscard]] virtual bool runStopped() { return false; }
+    // 1.13.0 (le debogueur IHM) : une lecture du debogueur (un espion, une condition) est en cours - une ecriture refusee
+    // le dit ainsi (lecture seule), meme dans une fonction appelee a part.
+    [[nodiscard]] virtual bool debugReading() { return false; }
+    // 1.13.0 (le debogueur IHM) : une methode ou un operateur du projet va tourner, sous la fonction `f` (lue une fois,
+    // gardee par l'interpreteur) ; `id` : OperatorSource::debugId. L'environnement y marque ses points d'arret. Par
+    // defaut : rien.
+    virtual void debugFunction(const Function& f, std::uint32_t id) { (void)f; (void)id; }
 
     // ---- 1.10 : le dialecte IHM (jamais appele pour le ST de l'automate) ----
     // Le type declare d'un nom ("REAL", "T_FOUR", "ARRAY[0..9] OF REAL") ; vide : inconnu.
@@ -445,6 +456,9 @@ struct CallSite {
 // complet (en-tete compris), `owner` pour les messages.
 struct OperatorSource {
     std::string key, function, owner;
+    // 1.13.0 (le debogueur des scripts IHM) : le code que montre ce texte, pour l'environnement (une methode, un
+    // operateur du projet : leur id) ; 0 : aucun. La fonction lue lui est passee a chaque appel (debugFunction).
+    std::uint32_t debugId{0};
 };
 
 // Lot API 8 : OU EN EST L'EXECUTION. Le runner y ecrit le numero de la section

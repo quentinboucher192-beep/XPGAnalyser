@@ -3307,7 +3307,7 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     runtime_.setHooks(std::move(hooks));
     // 1.13.0 (lot J2) : le debogueur des scripts IHM (la simulation de l'editeur ; le poste ne s'arrete jamais).
     runtime_.setDebugger(true);
-    HmiDebugSession::instance().bindProject(&doc_->project);
+    HmiDebugSession::instance().bindProject(doc_);
     HmiDebugSession::instance().setRuntime(&runtime_);
 
     links_ += doc_->changed->connect([this](Id) {
@@ -3316,7 +3316,15 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         noteTwinChanges();            // ... et les courbes marquent ce qui a change
     });
     noteTwinChanges();
-    links_ += canvas_->pressed->connect([this](Id object) {
+    // 1.13.0 (le debogueur) : EN PAUSE, la vue est figee - un geste n'y fait rien, et la barre d'etat le dit une fois.
+    const auto frozen = [this] {
+        if (!runtime_.paused()) return false;
+        if (status_)
+            status_->setTransientMessage("L'IHM est en pause (d\xC3\xA9" "bogage) : la vue ne r\xC3\xA9pond pas. F5 continue, F10 fait un pas.", 4.0);
+        return true;
+    };
+    links_ += canvas_->pressed->connect([this, frozen](Id object) {
+        if (frozen()) return;
         runtime_.press(object, now_);
         const auto* v = doc_->project.view(runtime_.topView());
         const auto* o = v ? v->object(object) : nullptr;
@@ -3392,7 +3400,8 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         status_->setTransientMessage("Zoom de la vue : " + std::to_string(static_cast<int>(std::lround(percent))) + " %", 3.0);
     });
     // Lot 9 : le curseur et le potentiometre.
-    links_ += canvas_->valueDragged->connect([this](Id object, double fraction, bool commit) {
+    links_ += canvas_->valueDragged->connect([this, frozen](Id object, double fraction, bool commit) {
+        if (frozen()) return;
         runtime_.dragValue(object, fraction, commit, now_);
         refreshNow();
     });
@@ -3409,16 +3418,19 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         refreshNow();
     });
     // Lot 10 : le menu natif Parametres systeme, l'ecran en veille.
-    links_ += canvas_->loginPartClicked->connect([this](const std::string& part) {
+    links_ += canvas_->loginPartClicked->connect([this, frozen](const std::string& part) {
+        if (frozen()) return;
         runtime_.loginPart(part, now_);
         refreshNow();
     });
-    links_ += canvas_->systemPartClicked->connect([this](const std::string& part) {
+    links_ += canvas_->systemPartClicked->connect([this, frozen](const std::string& part) {
+        if (frozen()) return;
         runtime_.systemPart(part, now_);
         refreshNow();
     });
     // 1.12.24 : la fenetre du Reglage PID ; Copier les valeurs passe par le presse-papiers.
-    links_ += canvas_->pidPartClicked->connect([this](const std::string& part) {
+    links_ += canvas_->pidPartClicked->connect([this, frozen](const std::string& part) {
+        if (frozen()) return;
         runtime_.pidPart(part, now_);
         if (part == "copier" && !runtime_.pidWindow().clipboard.empty()) ui::setClipboardText(runtime_.pidWindow().clipboard);
         refreshNow();
@@ -3432,20 +3444,25 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
         runtime_.promptPart(part, now_);
         refreshNow();
     });
-    links_ += canvas_->signaturePartClicked->connect([this](const std::string& part) {
+    links_ += canvas_->signaturePartClicked->connect([this, frozen](const std::string& part) {
+        if (frozen()) return;
         runtime_.signaturePart(part, now_);
         refreshNow();
     });
-    links_ += canvas_->stayRequested->connect([this] {
+    links_ += canvas_->stayRequested->connect([this, frozen] {
+        if (frozen()) return;
         runtime_.stayConnected(now_);
         status_->setTransientMessage("Toujours connect\xC3\xA9 : la minuterie repart", 4.0, ui::StatusBar::Severity::Success);
         refreshNow();
     });
-    links_ += canvas_->wakeRequested->connect([this] {
+    links_ += canvas_->wakeRequested->connect([this, frozen] {
+        if (frozen()) return;
         (void)runtime_.wake(now_);
         refreshNow();
     });
-    links_ += canvas_->doubleClicked->connect([this](Id object) { runtime_.doubleClick(object, now_); });
+    links_ += canvas_->doubleClicked->connect([this, frozen](Id object) {
+        if (!frozen()) runtime_.doubleClick(object, now_);
+    });
     // 1.12.18 (planche 16) : le clic droit sur la vue en marche - le menu de l'objet, sauf quand le
     // projet lit le bouton droit (Maj+clic droit alors) ; sur le poste, Acquitter seulement.
     canvas_->setContextWanted([this](gfx::Point at, bool shift) {
@@ -3576,6 +3593,9 @@ gfx::Rect HmiSimulationPane::fullScreenBarPart(std::string_view part) const {
 bool HmiSimulationPane::claimsKey(ui::Key key, const ui::Widget* windowRoot) {
     if (key != ui::Key::F11) return false;
     for (const auto* p : simPanes()) {
+        // 1.13.0 : EN PAUSE, F11 est au debogueur (Entrer) ou que soit le clavier - dans la fenetre de l'onglet
+        // Simulation comme dans une autre (l'onglet detache, la fenetre principale) : jamais le plein ecran.
+        if (!p->station_ && p->debugPane_ && p->runtime_.paused()) return true;
         // La fenetre du volet : sa racine ("detached.root" : une fenetre detachee,
         // DetachedWindows) - F11 d'une fenetre ne va qu'aux volets de cette fenetre.
         const ui::Widget* top = p;
@@ -3587,6 +3607,23 @@ bool HmiSimulationPane::claimsKey(ui::Key key, const ui::Widget* windowRoot) {
         for (const ui::Widget* w = p; w && shown; w = w->parent()) shown = w->visible();
         if (shown) return true;
     }
+    return false;
+}
+
+bool HmiSimulationPane::debugKeyAnywhere(const ui::KeyDown& k, const ui::Widget* windowRoot) {
+    if (k.repeat || k.mods.ctrl || k.mods.alt) return false;
+    if (!((k.key == ui::Key::F5 && !k.mods.shift) || (k.key == ui::Key::F10 && !k.mods.shift) || k.key == ui::Key::F11)) return false;
+    // D'abord l'onglet Simulation de cette fenetre ; 1.13.0 : sinon celui d'une autre - l'onglet detache dans sa propre
+    // fenetre se pilote aussi depuis la fenetre principale (l'editeur du script en pause, l'arbre).
+    for (int pass = 0; pass < 2; ++pass)
+        for (auto* p : simPanes()) {
+            const ui::Widget* top = p;
+            while (top->parent()) top = top->parent();
+            const bool here = windowRoot ? top == windowRoot : top->id() != "detached.root";
+            if ((pass == 0) != here) continue;
+            if (p->station_ || !p->debugPane_ || !p->runtime_.paused()) continue;
+            if (p->debugPane_->debugKey(k.key, k.mods.shift)) return true;
+        }
     return false;
 }
 
@@ -4707,7 +4744,7 @@ void HmiSimulationPane::refreshAt(double now) {
 void HmiSimulationPane::debugSync() {
     if (station_) return;
     auto& s = HmiDebugSession::instance();
-    s.bindProject(&doc_->project);
+    s.bindProject(doc_);
     if (s.runtime() != &runtime_) s.setRuntime(&runtime_);
     if (s.revision() != debugPushed_) {
         debugPushed_ = s.revision();
@@ -4900,7 +4937,8 @@ void HmiSimulationPane::refreshPane() {
                                                               : runtime_.userLogin() + " (niveau " + std::to_string(runtime_.level()) + ")");
     if (const auto open = runtime_.unacknowledged())
         line += "  \xC2\xB7  " + std::to_string(open) + " alarme(s) \xC3\xA0 acquitter";
-    line += "  \xC2\xB7  IHM en marche" + (core::hasApi() ? "  \xC2\xB7  API " + plcStateText() : std::string{});   // 1.10 : les deux etats ; 1.12.0 : l'IHM seule
+    line += std::string(runtime_.paused() ? "  \xC2\xB7  IHM en pause (d\xC3\xA9" "bogage)" : "  \xC2\xB7  IHM en marche")   // 1.13.0 : un script arrete
+            + (core::hasApi() ? "  \xC2\xB7  API " + plcStateText() : std::string{});   // 1.10 : les deux etats ; 1.12.0 : l'IHM seule
     // Lot 13 : l'essai en cours, son pas.
     if (scenario_ && scenario_->current() < scenario_->scenario().steps.size())
         line = "Essai " + scenario_->scenario().name + " : pas " + std::to_string(scenario_->current() + 1) + " / "

@@ -473,10 +473,11 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
         const auto tab = hmiTabs_.find("simulation");
         const auto* hsim = dynamic_cast<const HmiSimulationPane*>(tab != hmiTabs_.end() ? tab->second : nullptr);
         const bool running = hsim && hsim->hmiRunning();
+        const bool paused = hsim && hsim->hmiDebugPaused();   // 1.13.0 : un script arrete (le debogueur)
         st.sim->setShown(project != nullptr);
         if (project) {
-            st.sim->setText(running ? "IHM en marche" : "IHM arr\xC3\xAAt\xC3\xA9" "e");
-            st.sim->setDot(true, running ? Tone::Ok : Tone::Warning);
+            st.sim->setText(paused ? "IHM en pause (d\xC3\xA9" "bogage)" : running ? "IHM en marche" : "IHM arr\xC3\xAAt\xC3\xA9" "e");
+            st.sim->setDot(true, running && !paused ? Tone::Ok : Tone::Warning);
         }
     } else {
         using State = SimulationHost::State;

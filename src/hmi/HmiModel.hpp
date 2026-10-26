@@ -911,6 +911,11 @@ struct HmiFunction {
     //  complet devient Util.Moyenne ; ailleurs on l'appelle Util.Moyenne(...) ou, sous USING Util;, Moyenne(...).
     //  Une fonction de vue, de symbole ou une methode n'en a pas (l'espace est celui de son porteur).
     std::string ns{};
+    // 1.13.0 (le debogueur) : une COPIE LIEE (la fonction d'une vue, d'une popup ou d'une instance de symbole, prete a
+    //  tourner : HmiSymbols.hpp) garde ici l'id de la fonction qu'elle copie - ses points d'arret, son nom dans la pile.
+    //  kNoId : pas une copie (ou une redefinition d'instance, dont le code n'est pas celui de la fonction). Jamais
+    //  enregistre : une fonction du projet l'a toujours vide.
+    Id          debugOrigin{kNoId};
     bool operator==(const HmiFunction&) const = default;
 };
 
