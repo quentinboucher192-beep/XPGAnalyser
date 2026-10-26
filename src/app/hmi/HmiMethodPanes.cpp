@@ -98,9 +98,10 @@ public:
     using Editable = std::function<bool(std::size_t, std::size_t)>;
     using Choices = std::function<std::vector<std::string>(std::size_t, std::size_t)>;
     using Commit = std::function<bool(std::size_t, std::size_t, const std::string&)>;
-    MethodRows(std::vector<std::string> headers, std::vector<std::vector<std::string>> rows, Style s, Editable e, Choices c, Commit m)
+    MethodRows(std::vector<std::string> headers, std::vector<std::vector<std::string>> rows, Style s, Editable e, Choices c, Commit m,
+               std::vector<std::string> tips = {})
         : headers_(std::move(headers)), rows_(std::move(rows)), style_(std::move(s)), editable_(std::move(e)), choices_(std::move(c)),
-          commit_(std::move(m)) {}
+          commit_(std::move(m)), tips_(std::move(tips)) {}
     [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
     [[nodiscard]] std::size_t columnCount() const override { return headers_.size(); }
     [[nodiscard]] std::string headerText(std::size_t c) const override { return c < headers_.size() ? headers_[c] : std::string{}; }
@@ -114,6 +115,8 @@ public:
         return choices_ ? choices_(r, c) : std::vector<std::string>{};
     }
     bool setCellText(ui::RowIndex r, std::size_t c, std::string_view text) override { return commit_ && commit_(r, c, std::string(text)); }
+    // 1.13.0 (correctifs F2) : la ligne entiere au survol (sa signature, sa visibilite, son genre, son origine).
+    [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override { return r < tips_.size() ? tips_[r] : std::string{}; }
 private:
     std::vector<std::string> headers_;
     std::vector<std::vector<std::string>> rows_;
@@ -121,7 +124,15 @@ private:
     Editable editable_;
     Choices  choices_;
     Commit   commit_;
+    std::vector<std::string> tips_;
 };
+
+// 1.13.0 (correctifs F2) : LES COLONNES DE LA LISTE. Avant : Methode, Parametres, Retour, Visibilite, Genre, Origine
+// (764 px) - la section n'en montre que 300 a 400 : la visibilite, le genre et l'origine ("redefinit T_Pompe.EnDefaut")
+// restaient hors de vue, la methode privee ne paraissait pas privee. Maintenant : le nom, le cadenas (une colonne
+// courte, rien pour une publique), le genre et l'origine, puis la signature (aussi au titre du corps et dans les
+// proprietes) ; la ligne entiere en infobulle.
+enum MethodColumn : std::size_t { ColName = 0, ColVisibility, ColKind, ColOrigin, ColParams, ColReturn, ColCount };
 
 using PG = ui::PropertyGrid;
 PG::Property prop(std::string name, std::string value, PG::ValueType t = PG::ValueType::ReadOnly,
@@ -337,7 +348,8 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".listPanel", "M\xC3\x89THODES");
         auto table = std::make_unique<ui::TableView>(base + ".methods");
-        table->setColumns({{"M\xC3\xA9thode", 140.f}, {"Param\xC3\xA8tres", 190.f}, {"Retour", 90.f}, {"Visibilit\xC3\xA9", 84.f}, {"Genre", 90.f}, {"Origine", 170.f}});
+        table->setColumns({{"M\xC3\xA9thode", 120.f, 60.f}, {"", 30.f, 24.f}, {"Genre", 72.f, 40.f}, {"Origine", 170.f, 60.f},
+                           {"Param\xC3\xA8tres", 150.f, 50.f}, {"Retour", 70.f, 40.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         table_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*table_, HmiToolStrip::ListKeys{ADelete, ADuplicate, AAdd, AUp, ADown, 0});
@@ -350,6 +362,7 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         grid->setShowDescriptionPane(false);
         grid->setNameColumnRatio(0.40f);
         props_ = &static_cast<ui::PropertyGrid&>(panel->setBody(std::move(grid)));
+        propsPanel_ = panel.get();
         left->addPane(std::move(panel), 0.42f, 80.f);
     }
     split->addPane(std::move(left), 0.44f, 260.f);
@@ -397,6 +410,7 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         if (syncing_) return;
         selectedRow_ = rows.empty() ? -1 : static_cast<int>(rows.front());
         showSelected();
+        status_->setMessage(statusText());   // 1.13.0 (correctifs F2) : l'appel de la methode choisie
     });
     links_ += editor_->textChanged->connect([this](const std::string& text) {
         if (syncing_) return;
@@ -487,9 +501,28 @@ void HmiMethodsPane::refresh() {
     const Id keep = selectedRowMethod();
     rows_.clear();
     std::vector<std::vector<std::string>> cells;
+    std::vector<std::string> tips;
     const auto& p = doc_->project;
     const auto* t = owner();
     const bool iface = t && t->kind == hmi::HmiTypeKind::Interface;
+    // 1.13.0 (correctifs F2) : une ligne dans l'ordre des colonnes (MethodColumn), et son infobulle.
+    const auto row = [&](const hmi::HmiType& where, const hmi::HmiFunction& m, const std::string& kind, const std::string& origin) {
+        std::vector<std::string> r(ColCount);
+        const bool priv = !iface && m.visibility == hmi::Visibility::Private;
+        r[ColName] = m.name;
+        r[ColVisibility] = priv ? kPrivate : std::string{};     // le cadenas ; une publique : rien
+        r[ColKind] = kind;
+        r[ColOrigin] = origin;
+        r[ColParams] = hmi::methodParamsText(m);
+        r[ColReturn] = m.returnType.empty() ? std::string("\xE2\x80\x94") : m.returnType;
+        cells.push_back(std::move(r));
+        std::string tip = hmi::methodSignature(where.name, m) + "\n" + (iface ? std::string("signature d'interface")
+                                                                             : std::string(priv ? "priv\xC3\xA9" "e (vue des seules m\xC3\xA9thodes du type)"
+                                                                                                : "publique"));
+        if (kind != "\xE2\x80\x94" && !iface) tip += " \xC2\xB7 " + kind;
+        if (!iface) tip += " \xC2\xB7 " + origin;
+        tips.push_back(std::move(tip));
+    };
     if (t) {
         const std::string full = hmi::fullName(*t);
         const auto bases = hmi::baseChain(p, full);
@@ -500,43 +533,41 @@ void HmiMethodsPane::refresh() {
         };
         for (const auto& m : t->methods) {
             rows_.push_back({m.id, t->id, true});
-            cells.push_back({m.name, hmi::methodParamsText(m), m.returnType.empty() ? std::string("\xE2\x80\x94") : m.returnType,
-                             iface || m.visibility == hmi::Visibility::Public ? kPublic : kPrivate,
-                             iface ? std::string("signature") : m.isVirtual ? std::string("virtuelle") : std::string("\xE2\x80\x94"),
-                             iface ? std::string("propre") : origin(m)});
+            row(*t, m, iface ? std::string("signature") : m.isVirtual ? std::string("virtuelle") : std::string("\xE2\x80\x94"),
+                iface ? std::string("propre") : origin(m));
         }
         if (!iface)
             for (const auto& om : hmi::allMethods(p, full)) {
                 if (!om.owner || !om.method || om.owner->id == t->id) continue;
                 const auto& m = *om.method;
                 rows_.push_back({m.id, om.owner->id, false});
-                cells.push_back({m.name, hmi::methodParamsText(m), m.returnType.empty() ? std::string("\xE2\x80\x94") : m.returnType,
-                                 m.visibility == hmi::Visibility::Public ? kPublic : kPrivate, m.isVirtual ? std::string("virtuelle") : std::string("\xE2\x80\x94"),
-                                 "(h\xC3\xA9rit\xC3\xA9 de " + om.owner->name + ")"});
+                row(*om.owner, m, m.isVirtual ? std::string("virtuelle") : std::string("\xE2\x80\x94"), "(h\xC3\xA9rit\xC3\xA9 de " + om.owner->name + ")");
             }
     }
     std::vector<bool> own, priv;
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         own.push_back(rows_[i].own);
-        priv.push_back(cells[i][3] == kPrivate);
+        priv.push_back(cells[i][ColVisibility] == kPrivate);
     }
     model_ = std::make_shared<MethodRows>(
-        std::vector<std::string>{"M\xC3\xA9thode", "Param\xC3\xA8tres", "Retour", "Visibilit\xC3\xA9", "Genre", "Origine"}, std::move(cells),
+        std::vector<std::string>{"M\xC3\xA9thode", "", "Genre", "Origine", "Param\xC3\xA8tres", "Retour"}, std::move(cells),
         [own, priv](ui::RowIndex r, std::size_t c) {
             ui::CellStyle s;
             const bool mine = r < own.size() && own[r];
-            if (c == 0) {
+            if (c == ColName) {
                 s.icon = ui::Icon::Function;
                 s.bold = mine;
             }
-            if (c == 1) s.monospace = true;
-            if (c == 3 && r < priv.size() && priv[r]) s.icon = ui::Icon::Lock;
-            if (!mine || c == 5) s.fgTone = ui::Tone::Muted;
+            if (c == ColParams) s.monospace = true;
+            if (c == ColVisibility && r < priv.size() && priv[r]) s.icon = ui::Icon::Lock;
+            if (!mine || c == ColOrigin) s.fgTone = ui::Tone::Muted;
             return s;
         },
-        [own, iface](std::size_t r, std::size_t c) { return r < own.size() && own[r] && (c <= 2 || (c == 3 && !iface)); },
+        [own, iface](std::size_t r, std::size_t c) {
+            return r < own.size() && own[r] && (c == ColName || c == ColParams || c == ColReturn || (c == ColVisibility && !iface));
+        },
         [](std::size_t, std::size_t c) {
-            if (c == 3) return std::vector<std::string>{kPublic, kPrivate};
+            if (c == ColVisibility) return std::vector<std::string>{kPublic, kPrivate};
             return std::vector<std::string>{};
         },
         [this](std::size_t r, std::size_t c, const std::string& text) {
@@ -544,13 +575,14 @@ void HmiMethodsPane::refresh() {
             const Id id = rows_[r].id;
             std::string why;
             bool ok = false;
-            if (c == 0) ok = renameMethod(id, text, &why);
-            else if (c == 1) ok = setParams(id, text, &why);
-            else if (c == 2) ok = setReturnType(id, text == "\xE2\x80\x94" ? std::string{} : text, &why);
-            else if (c == 3) ok = setPrivate(id, text == kPrivate, &why);
+            if (c == ColName) ok = renameMethod(id, text, &why);
+            else if (c == ColParams) ok = setParams(id, text, &why);
+            else if (c == ColReturn) ok = setReturnType(id, text == "\xE2\x80\x94" ? std::string{} : text, &why);
+            else if (c == ColVisibility) ok = setPrivate(id, text == kPrivate, &why);
             if (!ok && !why.empty()) say("Refus\xC3\xA9 : " + why, true);
             return ok;
-        });
+        },
+        std::move(tips));
     syncing_ = true;
     table_->setModel(model_);
     selectedRow_ = -1;
@@ -564,25 +596,51 @@ void HmiMethodsPane::refresh() {
         selectedRow_ = 0;
     }
     syncing_ = false;
-    const std::size_t mine = ownCount();
     if (t)
         listPanel_->setTitle(std::string(iface ? "SIGNATURES DE " : "M\xC3\x89THODES DE ") + upperOf(t->name) + " (" + std::to_string(rows_.size()) + ")");
     else
         listPanel_->setTitle("M\xC3\x89THODES");
+    // 1.13.0 (correctifs F2) : une interface n'a que des signatures (pas de "proprietes de la methode").
+    if (propsPanel_) propsPanel_->setTitle(iface ? "PROPRI\xC3\x89T\xC3\x89S DE LA SIGNATURE" : "PROPRI\xC3\x89T\xC3\x89S DE LA M\xC3\x89THODE");
     tools_->setText(AAdd, iface ? "Ajouter une signature : son nom, son retour, ses param\xC3\xA8tres (sans corps)"
                                 : "Ajouter une m\xC3\xA9thode : son nom, son retour, ses param\xC3\xA8tres, Priv\xC3\xA9" "e, Red\xC3\xA9" "finissable (virtuelle)",
                     iface ? "Ajouter une signature\xE2\x80\xA6" : "Ajouter une m\xC3\xA9thode\xE2\x80\xA6");
     showSelected();
-    if (!t)
-        status_->setMessage("Choisis une structure ou une interface : ses m\xC3\xA9thodes.");
-    else if (iface)
-        status_->setMessage(std::to_string(mine) + " signature(s) \xC2\xB7 une interface n'a ni membre ni corps ; un type qui l'impl\xC3\xA9mente \xC3\xA9" "crit chaque m\xC3\xA9thode");
-    else if (rows_.empty())
-        status_->setMessage("Aucune m\xC3\xA9thode : Ajouter une m\xC3\xA9thode\xE2\x80\xA6 (elle voit SELF, les membres par leur nom, ses param\xC3\xA8tres).");
-    else
-        status_->setMessage(std::to_string(mine) + " m\xC3\xA9thode(s) propre(s), " + std::to_string(rows_.size() - mine)
-                            + " h\xC3\xA9rit\xC3\xA9" "e(s) \xC2\xB7 appel : Pompe1.Demarrer() dans un script, Demarrer() ou SELF.Demarrer() dans une m\xC3\xA9thode");
+    status_->setMessage(statusText());
     invalidate();
+}
+
+// 1.13.0 (correctifs F2) : avant, "appel : Pompe1.Demarrer() dans un script..." etait ecrit en dur - pour tout type,
+// meme T_PompeDoublee (dont l'instance est Pompe2). L'instance : une variable IHM de ce type ; sinon <instance>.
+std::string HmiMethodsPane::callHint() const {
+    const auto* t = owner();
+    if (!t || t->kind == hmi::HmiTypeKind::Interface || rows_.empty()) return {};
+    const hmi::HmiFunction* m = current();
+    if (!m) m = hmi::methodById(doc_->project, rows_.front().id);
+    if (!m) return {};
+    const auto& p = doc_->project;
+    std::string instance = "<instance>";
+    for (const auto& v : p.programs.variables)
+        if (p.hmiTypeByName(trimmedOf(v.type)) == t) {
+            instance = v.name;
+            break;
+        }
+    const bool params = !hmi::methodParamsText(*m).empty();
+    const std::string call = m->name + (params ? "(\xE2\x80\xA6)" : "()");
+    if (m->visibility == hmi::Visibility::Private)
+        return "appel : " + call + " ou SELF." + call + " dans une m\xC3\xA9thode de " + t->name + " (priv\xC3\xA9" "e : pas d'un script)";
+    return "appel : " + instance + "." + call + " dans un script, " + call + " ou SELF." + call + " dans une m\xC3\xA9thode";
+}
+
+std::string HmiMethodsPane::statusText() const {
+    const auto* t = owner();
+    if (!t) return "Choisis une structure ou une interface : ses m\xC3\xA9thodes.";
+    const std::size_t mine = ownCount();
+    if (t->kind == hmi::HmiTypeKind::Interface)
+        return std::to_string(mine) + " signature(s) \xC2\xB7 une interface n'a ni membre ni corps ; un type qui l'impl\xC3\xA9mente \xC3\xA9" "crit chaque m\xC3\xA9thode";
+    if (rows_.empty())
+        return "Aucune m\xC3\xA9thode : Ajouter une m\xC3\xA9thode\xE2\x80\xA6 (elle voit SELF, les membres par leur nom, ses param\xC3\xA8tres).";
+    return std::to_string(mine) + " m\xC3\xA9thode(s) propre(s), " + std::to_string(rows_.size() - mine) + " h\xC3\xA9rit\xC3\xA9" "e(s) \xC2\xB7 " + callHint();
 }
 
 std::string HmiMethodsPane::legendText() const {
@@ -616,10 +674,15 @@ void HmiMethodsPane::showSelected() {
     const bool mine = selectedMethod() != kNoId;
     syncing_ = true;
     const std::string body = m && !iface ? m->body : std::string{};
+    const bool other = !m || m->id != shownId_;     // 1.13.0 (correctifs F2) : une autre methode montree
     if (editor_->text() != body) {
         if (m && m->id == shownId_) editor_->reloadText(body);
         else editor_->setText(body);
     }
+    // 1.13.0 (correctifs F2) : "modifie" suit la methode montree. Avant, le mot de l'editeur (partage par toutes les
+    // methodes) restait apres une saisie dans une autre : Demarrer apres la seule pose d'un point d'arret, EnDefaut
+    // d'un autre type. Un point d'arret ne touche pas le corps.
+    if (other) editor_->clearModified();
     shownId_ = m ? m->id : kNoId;
     margin_.reset();
     editor_->setReadOnly(!mine || iface);

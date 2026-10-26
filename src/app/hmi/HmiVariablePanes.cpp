@@ -3790,6 +3790,10 @@ void HmiTypesPane::refresh() {
 void HmiTypesPane::refreshMembers() {
     if (operators_)   // 1.10 (chantier S2) : les operateurs du type choisi
         if (const auto* t = doc_->project.hmiType(current_)) operators_->setOwner(hmi::ownerOfType(*t));
+    // 1.13.0 (correctifs F2) : une interface n'a ni membre ni corps - pas de section Operateurs (ni "Ajouter un operateur").
+    if (operators_)
+        if (auto* mid = dynamic_cast<ui::Splitter*>(operators_->parent()))
+            mid->collapsePane(2, showsInterface());
     const auto& p = doc_->project;
     const auto* t = p.hmiType(current_);
     // 1.13.0 (J1b) : la section Methodes suit le type choisi (une structure, une interface).
@@ -4704,9 +4708,36 @@ void HmiTypesPane::rebuildProperties() {
         for (const auto& i : p.programs.types) {
             if (i.kind != hmi::HmiTypeKind::Interface) continue;
             const std::string full = hmi::fullName(i);
-            const bool on = std::any_of(t->interfaces.begin(), t->interfaces.end(), [&](const std::string& x) {
-                return hmi::types::typeFrom(p, t->ns, x, t) == &i;
-            });
+            const auto declares = [&](const hmi::HmiType& ty) {
+                return std::any_of(ty.interfaces.begin(), ty.interfaces.end(), [&](const std::string& x) {
+                    return hmi::types::typeFrom(p, ty.ns, x, &ty) == &i;
+                });
+            };
+            const bool on = declares(*t);
+            // 1.13.0 (correctifs F2) : implementee par un parent (EXTENDS) - la case cochee, grisee, "heritee de T_Pompe",
+            // et rien a decocher ici (avant : decochee sans un mot, quand la page de l'interface la disait conforme).
+            const hmi::HmiType* from = nullptr;
+            if (!on)
+                for (const hmi::HmiType* b : bases)
+                    if (declares(*b)) {
+                        from = b;
+                        break;
+                    }
+            if (from) {
+                PG::Property inherited = prop(full, "TRUE", PG::ValueType::Boolean, {}, {},
+                                              "H\xC3\xA9rit\xC3\xA9" "e de " + from->name + " : " + t->name + " remplit le contrat " + full
+                                                  + " par son parent (EXTENDS) - elle se d\xC3\xA9" "coche sur " + from->name + ".");
+                inherited.type = PG::ValueType::Boolean;   // prop() la mettrait en texte (sans commit) : la case, grisee
+                inherited.locked = true;
+                ui::ColorPill pill;
+                pill.text = "h\xC3\xA9rit\xC3\xA9" "e de " + from->name;
+                pill.ink = gfx::Color::rgb(0x7A8794);
+                pill.border = gfx::Color::rgb(0x7A8794);
+                pill.fill = gfx::Color::rgb(0x7A8794).withAlpha(30);
+                inherited.pill = std::move(pill);
+                c.properties.push_back(std::move(inherited));
+                continue;
+            }
             std::string help = "Coch\xC3\xA9" "e : " + t->name + " remplit le contrat " + full + " (chaque signature doit y \xC3\xAAtre une m\xC3\xA9thode).";
             for (const auto& miss : misses)
                 if (on && miss.find(i.name) != std::string::npos) help = miss;
