@@ -15,15 +15,19 @@
 //
 //  HMIDEBUG_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
+#include "../src/hmi/HmiEdit.hpp"
 #include "../src/hmi/HmiExpr.hpp"
+#include "../src/hmi/HmiKeys.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/sim/DebugShared.hpp"
 #include "../src/sim/Interpreter.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace hmi;
@@ -365,11 +369,22 @@ void richAndInner() {
     if (rt.debugHit()) {
         const auto& top = rt.debugHit()->stack.back();
         check(top.label == "fonction Ajouter" && local(top, "X") && local(top, "X")->value == "1.5", "la pile nomme Ajouter, ses locales (X = 1.5)");
+        // 1.13.0 : les valeurs de la ligne sont celles de la ligne arretee (Cumul), pas celles du script appelant.
+        bool cumul = false, caller = false;
+        for (const auto& [name, val] : rt.debugHit()->values) {
+            cumul = cumul || name == "Cumul";
+            caller = caller || name == "Total";
+        }
+        check(cumul && !caller, "les valeurs de la ligne : Cumul (la ligne 2 d'Ajouter), pas Total (celle du script)");
     }
     (void)rt.debugContinue();
     check(rt.paused() && rt.debugHit()->script == s && rt.debugHit()->line == 3, "arret dans la fonction interne Double, ligne 3");
-    if (rt.debugHit())
+    if (rt.debugHit()) {
         check(rt.debugHit()->stack.back().label.find("Double (fonction interne") == 0, "le niveau dit la fonction interne : " + stackText(*rt.debugHit()));
+        bool x = false;
+        for (const auto& [name, val] : rt.debugHit()->values) x = x || (name == "x" && val == "1.5");
+        check(x, "les valeurs de la ligne 3 de Double : x = 1.5");
+    }
     (void)rt.debugContinue();
     check(!rt.paused() && value(rt, "Total") == 3.0 && errors(rt).empty(), "Total = (0 + 1.5) * 2 = 3" + errors(rt));
 }
@@ -531,6 +546,545 @@ void sharedWords() {
     check(static_cast<bool>(plc), "le ST de l'automate lit l'appel comme un appel quelconque (sans le connaitre)");
 }
 
+
+// =============================================================================
+//  1.13.0 (seconde passe) : la pause fige TOUT le travail en cours ; les codes
+//  copies (fonctions de vue) ; les gestes pendant la pause ; les actions qui
+//  s'arretent ; les espions qui ne modifient rien ; l'arret sous TRY ; les
+//  valeurs de la ligne ; les methodes ; ENTRE ; une condition non BOOL ; le cout.
+// =============================================================================
+
+Script& addViewScript(Project& p, View& v, const char* event, const std::string& body) {
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = event;
+    sc.event = event;
+    sc.body = body;
+    v.scripts.push_back(sc);
+    return v.scripts.back();
+}
+
+Script& addGeneral(Project& p, const char* name, const char* event, const std::string& body, int periodMs = 100) {
+    Script sc;
+    sc.id = p.allocate();
+    sc.name = name;
+    sc.event = event;
+    sc.periodMs = periodMs;
+    sc.body = body;
+    p.programs.scripts.push_back(sc);
+    return p.programs.scripts.back();
+}
+
+Action action(Trigger t, Operation o, std::string target = {}, std::string value = {}, std::string key = {}) {
+    Action a;
+    a.trigger = t;
+    a.operation = o;
+    a.target = std::move(target);
+    a.value = std::move(value);
+    a.key = std::move(key);
+    return a;
+}
+
+// ---- T2-1, T2-2, T2-13 : une fonction de vue (une copie liee) : le point s'y arrete, la pile la nomme ; en pause,
+// une touche relachee ou un glissement ne la liberent pas ----
+void viewFunction() {
+    std::printf("-- une fonction de vue : son point s'arrete, la pile la nomme ; en pause, rien ne la libere\n");
+    Project p;
+    var(p, "Niveau", "REAL", "10.0");
+    var(p, "R", "REAL", "0.0");
+    View v = makeView(p, "Vue_Four");
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = "Pourcent";
+    f.returnType = "REAL";
+    Declaration d;
+    d.id = p.allocate();
+    d.kind = DeclKind::Parameter;
+    d.name = "x";
+    d.type = "REAL";
+    d.mode = PassMode::In;
+    f.decls.push_back(d);
+    f.body = "Pourcent := x * 2.0;\n"            // 1
+             "Pourcent := Pourcent + 1.0;\n";    // 2
+    const Id fn = f.id;
+    v.functions.push_back(f);
+    const Id cyc = addViewScript(p, v, "OnCycle", "R := R + Pourcent(Niveau);\n").id;
+    p.views.push_back(v);
+    p.config.startView = p.views.back().id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.setBreakpoints({at(1, kNoId, fn, 2)});
+    check(rt.breakpoints()[0].note.empty() && rt.breakpoints()[0].effectiveLine == 2, "le point de Pourcent se comprend : " + rt.breakpoints()[0].note);
+    rt.tick(0.1);
+    check(rt.paused(), "le point pose dans la fonction de la vue s'arrete (l'OnCycle l'appelle)");
+    if (!rt.paused() || !rt.debugHit()) return;
+    const auto& hit = *rt.debugHit();
+    check(hit.function == fn && hit.line == 2 && hit.where == "fonction Vue_Four.Pourcent, ligne 2", "ou : " + hit.where);
+    check(hit.stack.back().label == "fonction Vue_Four.Pourcent" && hit.stack.back().function == fn, "la pile la nomme : " + stackText(hit));
+    check(rt.breakpoints()[0].hits == 1, "le passage compte (il s'est arrete)");
+    // En pause : une touche relachee (le relachement de F10 arrive au canevas), un glissement - rien ne se vide.
+    check(!rt.keyUp("F10", 0.15), "en pause, une touche relachee (non tenue) ne fait rien");
+    std::string why;
+    check(!rt.swipe(1, 0.16, &why) && why == "l'IHM est en pause (d\xC3\xA9" "bogage) : Continuer (F5) d'abord", "en pause, glisser est refuse : " + why);
+    check(rt.debugContinue() && !rt.paused(), "Continuer");
+    check(value(rt, "R") == 21.0 && errors(rt).empty(), "la fonction rend sa valeur (R = 10 * 2 + 1 = 21)" + errors(rt));
+
+    // Entrer depuis le script de la vue : la fonction copiee se montre par son nom et sa ligne ; des touches relachees a
+    // chaque pas ne la liberent pas, la valeur rendue arrive.
+    rt.setBreakpoints({at(1, cyc, kNoId, 1)});
+    rt.tick(0.3);
+    check(rt.paused() && rt.debugHit() && rt.debugHit()->where == "Vue_Four.OnCycle, ligne 1",
+          "en pause dans l'OnCycle de la vue : " + (rt.debugHit() ? rt.debugHit()->where : std::string("-")));
+    check(rt.debugStep(DebugStep::Into) && rt.paused() && rt.debugHit() && rt.debugHit()->where == "fonction Vue_Four.Pourcent, ligne 1",
+          "Entrer : dans Pourcent, ligne 1 : " + (rt.debugHit() ? rt.debugHit()->where : std::string("-")));
+    (void)rt.keyUp("F11", 0.31);
+    check(rt.debugStep(DebugStep::Over) && rt.paused() && rt.debugHit() && rt.debugHit()->line == 2, "Suivant : ligne 2 de Pourcent");
+    (void)rt.keyUp("F10", 0.32);
+    (void)rt.swipe(-1, 0.33);
+    check(rt.debugStep(DebugStep::Over) && !rt.paused(), "Suivant : la fonction rend la main, l'OnCycle finit");
+    check(value(rt, "R") == 42.0 && errors(rt).empty(), "la valeur rendue n'est pas perdue (R = 21 + 21)" + errors(rt));
+}
+
+// ---- T2-3, T2-14 : la pause fige le reste du cycle (les autres scripts, l'OnCycle) ; le point d'un autre script
+// s'arrete a son tour ----
+void cycleFrozen() {
+    std::printf("-- la pause fige le reste du cycle : les autres scripts et l'OnCycle attendent la reprise\n");
+    Project p;
+    var(p, "Calcul", "REAL", "0.0");
+    var(p, "Consigne", "REAL", "0.0");
+    var(p, "Vu", "REAL", "0.0");
+    var(p, "Tours_B", "REAL", "0.0");
+    var(p, "Tours_Vue", "REAL", "0.0");
+    View v = makeView(p, "Vue_Essai");
+    addViewScript(p, v, "OnCycle", "Tours_Vue := Tours_Vue + 1.0;\n");
+    p.views.push_back(v);
+    p.config.startView = p.views.back().id;
+    const Id a = addGeneral(p, "A", "Cyclique", "Calcul := Calcul + 1.0;\n"     // 1
+                                                 "Consigne := Calcul;\n").id;  // 2
+    const Id b = addGeneral(p, "B", "Cyclique", "Vu := Consigne;\n"            // 1
+                                                 "Tours_B := Tours_B + 1.0;\n").id;   // 2
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.tick(0.1);
+    rt.tick(0.2);                                          // les cycliques ont tourne une fois au moins
+    const double toursB = value(rt, "Tours_B"), toursVue = value(rt, "Tours_Vue"), consigne = value(rt, "Consigne");
+    check(toursB >= 1.0 && toursVue >= 1.0, "sans point, A, B et l'OnCycle tournent a chaque cycle");
+    rt.setBreakpoints({at(1, a, kNoId, 2), at(2, b, kNoId, 1)});
+    rt.tick(0.35);
+    check(rt.paused() && rt.debugHit() && rt.debugHit()->script == a && rt.debugHit()->line == 2, "A s'arrete ligne 2");
+    check(value(rt, "Tours_B") == toursB && value(rt, "Tours_Vue") == toursVue,
+          "B et l'OnCycle de la vue attendent (rien n'a tourne apres A) : B " + std::to_string(value(rt, "Tours_B")) + ", vue "
+              + std::to_string(value(rt, "Tours_Vue")));
+    check(rt.breakpoints()[1].hits == 0 && rt.breakpoints()[1].note.empty(), "le point de B n'a ni passage ni note : B n'a pas tourne");
+    check(rt.debugContinue(), "Continuer");
+    check(rt.paused() && rt.debugHit() && rt.debugHit()->script == b, "puis B s'arrete a son point (le meme cycle reprend)");
+    check(value(rt, "Consigne") == consigne + 1.0 && value(rt, "Tours_Vue") == toursVue, "A a fini (Consigne + 1) ; l'OnCycle attend encore");
+    check(rt.debugContinue() && !rt.paused(), "Continuer");
+    check(value(rt, "Vu") == consigne + 1.0 && value(rt, "Tours_B") == toursB + 1.0 && value(rt, "Tours_Vue") == toursVue + 1.0,
+          "B lit la Consigne finie de A, puis l'OnCycle tourne (une fois chacun)");
+    check(rt.breakpoints()[0].hits == 1 && rt.breakpoints()[1].hits == 1, "un passage chacun");
+    check(errors(rt).empty(), "sans erreur" + errors(rt));
+}
+
+// ---- T2-49 (et T2-3) : un geste a deux actions, le demarrage : la suite attend la fin du script en pause ----
+void gestureFrozen() {
+    std::printf("-- un clic a deux actions, le demarrage : la suite attend la fin du script en pause\n");
+    {
+        Project p;
+        var(p, "X", "INT", "0");
+        var(p, "Commande", "INT", "0");
+        View v = makeView(p, "Vue_Essai");
+        p.views.push_back(v);
+        View& shown = p.views.back();
+        p.config.startView = shown.id;
+        const Id btn = edit::add(p, shown, Kind::Button, 10, 10);
+        shown.object(btn)->name = "Btn_Recette";
+        shown.object(btn)->actions.push_back(action(Trigger::Click, Operation::CallScript, "Preparer_Recette"));
+        shown.object(btn)->actions.push_back(action(Trigger::Click, Operation::Assign, "Commande", "X"));
+        const Id prep = addGeneral(p, "Preparer_Recette", "Appel", "X := 5;\n"           // 1
+                                                                   "X := X + 1;\n").id;  // 2
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.setDebugger(true);
+        rt.start(0.0);
+        rt.tick(0.1);
+        rt.setBreakpoints({at(1, prep, kNoId, 2)});
+        rt.press(btn, 0.2);
+        rt.release(btn, 0.25, true);
+        check(rt.paused() && rt.debugHit() && rt.debugHit()->script == prep, "le clic s'arrete dans Preparer_Recette, ligne 2");
+        if (rt.debugHit()) check(rt.debugHit()->stack.front().label.find("Btn_Recette") != std::string::npos, "le bas de la pile : le clic : " + stackText(*rt.debugHit()));
+        check(value(rt, "Commande") == 0.0, "l'action suivante du clic (Commande := X) attend");
+        check(rt.debugContinue() && !rt.paused(), "Continuer");
+        check(value(rt, "X") == 6.0 && value(rt, "Commande") == 6.0, "puis elle part, avec la valeur que le script a finie (6)");
+        check(errors(rt).empty(), "sans erreur" + errors(rt));
+    }
+    {   // un script de Demarrage : la premiere vue et son OnOpen attendent
+        Project p;
+        var(p, "Init", "INT", "0");
+        var(p, "Ouvert", "INT", "0");
+        View v = makeView(p, "Vue_Essai");
+        addViewScript(p, v, "OnOpen", "Ouvert := Init;\n");
+        p.views.push_back(v);
+        p.config.startView = p.views.back().id;
+        const Id init = addGeneral(p, "Initialiser", "Demarrage", "Init := 1;\n"     // 1
+                                                                  "Init := 2;\n").id; // 2
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.setDebugger(true);
+        rt.setBreakpoints({at(1, init, kNoId, 2)});
+        rt.start(0.0);
+        check(rt.paused() && rt.debugHit() && rt.debugHit()->script == init, "le script de Demarrage s'arrete ligne 2");
+        check(value(rt, "Ouvert") == 0.0, "la premiere vue n'est pas encore ouverte (son OnOpen attend)");
+        check(rt.debugContinue() && !rt.paused(), "Continuer");
+        check(value(rt, "Ouvert") == 2.0, "puis la vue s'ouvre, son OnOpen lit Init = 2");
+    }
+}
+
+// ---- T2-4 : en pause, les gestes ne font rien : la touche relachee attend la reprise, la croix d'une popup, glisser ----
+void gesturesWhilePaused() {
+    std::printf("-- en pause : la touche relachee attend la reprise, la croix d'une popup et glisser ne font rien\n");
+    Project p;
+    var(p, "Marche", "BOOL", "FALSE");
+    var(p, "Pas", "INT", "0");
+    var(p, "Ferme", "INT", "0");
+    View v = makeView(p, "Vue_Essai");
+    View pop = makeView(p, "Pop_Pas");
+    pop.role = "popup";
+    pop.popup.modal = false;
+    pop.actions.push_back(action(Trigger::KeyPress, Operation::CallScript, "Marche_Pas_A_Pas", {}, "F2"));
+    pop.actions.push_back(action(Trigger::KeyRelease, Operation::Reset, "Marche", {}, "F2"));
+    addViewScript(p, pop, "OnClose", "Ferme := Ferme + 1;\n");
+    const Id popId = pop.id;
+    p.views = {v, pop};
+    p.config.startView = p.views.front().id;
+    const Id pas = addGeneral(p, "Marche_Pas_A_Pas", "Appel", "Marche := TRUE;\n"     // 1
+                                                              "Pas := Pas + 1;\n").id; // 2
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.tick(0.1);
+    check(rt.openPopup(popId, Transition{}, 0.12) && rt.popups().size() == 1, "la popup est ouverte");
+    rt.setBreakpoints({at(1, pas, kNoId, 2)});
+    check(rt.keyDown(*keys::parseChord("F2"), 0.2), "F2 enfoncee : la popup la prend");
+    check(rt.paused() && value(rt, "Marche") == 1.0, "le script lance par F2 s'arrete ligne 2 (Marche = TRUE)");
+    check(rt.keyUp("F2", 0.25), "F2 relachee pendant la pause : la touche est prise...");
+    check(value(rt, "Marche") == 1.0, "... mais Touche relachee ne part pas pendant la pause (Marche reste TRUE)");
+    check(!rt.closePopupAt(0, Transition{}, 0.3) && rt.popups().size() == 1 && value(rt, "Ferme") == 0.0,
+          "la croix de la popup ne ferme rien pendant la pause (ni OnClose)");
+    std::string why;
+    check(!rt.swipe(1, 0.31, &why) && !why.empty(), "glisser ne change pas de vue pendant la pause : " + why);
+    check(rt.debugContinue() && !rt.paused() && value(rt, "Pas") == 1.0, "Continuer : le script finit");
+    check(value(rt, "Marche") == 1.0, "le relachement attend le prochain tick (dans l'ordre)");
+    rt.tick(0.5);
+    check(value(rt, "Marche") == 0.0 && !rt.keyHeld("F2"), "au tick suivant, Touche relachee part (Marche = FALSE), F2 n'est plus tenue");
+    check(rt.closePopupAt(0, Transition{}, 0.6) && rt.popups().empty() && value(rt, "Ferme") == 1.0, "hors pause, la croix ferme (OnClose)");
+    check(errors(rt).empty(), "sans erreur" + errors(rt));
+}
+
+// ---- T2-5, T2-20 : les actions Appeler et Execute du ST ecrit ici s'arretent (un point, IHM_POINT_ARRET) ----
+void actionsStop() {
+    std::printf("-- les actions Appeler et Execute du ST ecrit ici s'arretent comme un script\n");
+    Bench b;
+    View& shown = b.p.views.back();
+    const Id btn = edit::add(b.p, shown, Kind::Button, 10, 10);
+    shown.object(btn)->name = "Btn_Moyenne";
+    shown.object(btn)->actions.push_back(action(Trigger::Click, Operation::Call, "Moyenne_Pression", "1.0, 3.0"));
+    shown.object(btn)->actions.push_back(action(Trigger::Click, Operation::Assign, "R", "77.0"));
+    const Id code = edit::add(b.p, shown, Kind::Button, 10, 60);
+    shown.object(code)->name = "Btn_Code";
+    shown.object(code)->actions.push_back(action(Trigger::Click, Operation::RunScript, {}, "Moy := 1.0;\nIHM_POINT_ARRET;\nMoy := 2.0;\n"));
+    b.go();
+    b.rt.setBreakpoints({at(1, kNoId, b.moyenne, 5)});
+    b.rt.press(btn, 0.2);
+    b.rt.release(btn, 0.25, true);
+    check(b.rt.paused() && b.rt.debugHit() && b.rt.debugHit()->function == b.moyenne && b.rt.debugHit()->line == 5,
+          "Appeler Moyenne_Pression : arret ligne 5 de la fonction");
+    check(b.rt.breakpoints()[0].note.empty(), "le point ne dit aucune fausse raison : " + b.rt.breakpoints()[0].note);
+    check(value(b.rt, "R") == 0.0, "l'action suivante du clic attend");
+    check(b.rt.debugContinue() && !b.rt.paused() && value(b.rt, "R") == 77.0, "Continuer : la fonction finit, puis l'action suivante");
+    // Sans point arme : IHM_POINT_ARRET dans le code d'une action (le debogueur le voit dans le projet).
+    b.rt.setBreakpoints({});
+    b.rt.tick(1.4);
+    b.rt.press(code, 1.5);
+    b.rt.release(code, 1.55, true);
+    check(b.rt.paused() && b.rt.debugHit() && b.rt.debugHit()->why == DebugHit::Why::Code && b.rt.debugHit()->line == 2,
+          "IHM_POINT_ARRET dans le code de l'action : arret ligne 2");
+    if (b.rt.debugHit()) check(b.rt.debugHit()->where.find("Btn_Code") != std::string::npos, "ou : " + b.rt.debugHit()->where);
+    check(value(b.rt, "Moy") == 1.0, "rien n'est ecrit apres la ligne (Moy = 1)");
+    check(b.rt.debugContinue() && value(b.rt, "Moy") == 2.0, "Continuer : le code finit (Moy = 2)");
+    check(console(b.rt, "D\xC3\xA9" "bogage").find("hors d") == std::string::npos, "aucune fausse raison a la Console");
+    check(errors(b.rt).empty(), "sans erreur" + errors(b.rt));
+}
+
+// ---- T2-6 : un espion ou une condition ne modifie rien ; une fonction en echec dans un espion ne fait pas echouer le script ----
+void probesReadOnly() {
+    std::printf("-- un espion, une condition : en lecture seule ; une faute d'espion ne reste pas au script\n");
+    Bench b;
+    var(b.p, "Historique", "LIST OF REAL", "");
+    var(b.p, "Taille", "INT", "0");
+    var(b.p, "Fin", "INT", "0");
+    (void)function(b.p, "Ajoute_Histo", "INT", {}, "REAL", "LIST_ADD(Historique, 1.0);\nAjoute_Histo := 1;\n");
+    const Id s = script(b.p, "Avec_Pile",
+                        "VAR\n"                                  // 1
+                        "    Pile : VECTOR OF INT;\n"            // 2
+                        "    Index : INT;\n"                     // 3
+                        "END_VAR\n"                              // 4
+                        "VECTOR_PUSH(Pile, 1);\n"                // 5
+                        "VECTOR_PUSH(Pile, 2);\n"                // 6
+                        "Index := Index + 1;\n"                  // 7
+                        "Taille := VECTOR_SIZE(Pile);\n"         // 8
+                        "Fin := Index;\n");                      // 9
+    b.go();
+    b.rt.setBreakpoints({at(1, s, kNoId, 8)});
+    std::string err;
+    (void)b.rt.callScript("Avec_Pile", 0.2, &err);
+    check(b.rt.paused(), "en pause ligne 8");
+    std::string shown, why;
+    check(!b.rt.debugEvaluate("VECTOR_POP(Pile)", shown, &why) && why.find("lecture seule") != std::string::npos,
+          "l'espion VECTOR_POP(Pile) est refuse (lecture seule) : " + shown + why);
+    check(b.rt.debugEvaluate("VECTOR_SIZE(Pile)", shown, &why) && shown == "2", "la pile garde ses 2 elements : " + shown + why);
+    check(!b.rt.debugEvaluate("Moyenne_Pression(P, 0, 1)", shown, &why), "l'espion d'une fonction qui echoue (trop d'arguments) : " + why);
+    why.clear();
+    shown.clear();
+    const bool histo = b.rt.debugEvaluate("Ajoute_Histo()", shown, &why);
+    check(!histo && why.find("lecture seule") != std::string::npos,
+          "un espion qui ajoute a une LIST de l'IHM est refuse (lecture seule) : " + std::string(histo ? "rendu " : "refus ") + shown + why);
+    shown.clear();
+    check(b.rt.debugEvaluate("LIST_COUNT(Historique)", shown, &why) && shown == "0", "en pause, Historique reste vide : " + shown);
+    check(console(b.rt, "Erreur").empty(), "rien a la Console" + console(b.rt, "Erreur"));
+    check(b.rt.debugContinue() && !b.rt.paused(), "Continuer");
+    check(value(b.rt, "Taille") == 2.0 && value(b.rt, "Fin") == 1.0, "le script finit comme sans debogueur (Taille = 2, Fin = 1)");
+    check(errors(b.rt).empty(), "la faute de l'espion ne reste pas au script" + errors(b.rt));
+    // Hors pause, l'espion ne l'ecrit pas non plus : la liste reste vide (un script la compte).
+    (void)b.rt.debugEvaluate("Ajoute_Histo()", shown, &why);
+    (void)script(b.p, "Compter", "Taille := LIST_COUNT(Historique);\n");
+    (void)b.rt.callScript("Compter", 0.3, &err);
+    check(value(b.rt, "Taille") == 0.0, "Historique reste vide (LIST_COUNT = 0) : " + err);
+    // La condition d'un point qui ecrit (une fonction interne qui avance Index) : refusee, et dite ; le script inchange.
+    const Id s2 = script(b.p, "Avec_Prochain",
+                         "VAR Index : INT; END_VAR\n"            // 1
+                         "FUNCTION Prochain : INT\n"             // 2
+                         "    Index := Index + 1;\n"             // 3
+                         "    Prochain := Index;\n"              // 4
+                         "END_FUNCTION\n"                        // 5
+                         "Index := 10;\n"                        // 6
+                         "Fin := Index;\n");                     // 7
+    b.rt.setBreakpoints({at(1, s2, kNoId, 7, "Prochain() > 5")});
+    (void)b.rt.callScript("Avec_Prochain", 0.4, &err);
+    check(!b.rt.paused() && value(b.rt, "Fin") == 10.0, "la condition n'avance pas Index (Fin = 10) : " + err);
+    check(b.rt.breakpoints()[0].note.find("lecture seule") != std::string::npos, "le point le dit : " + b.rt.breakpoints()[0].note);
+}
+
+// ---- T2-7 : Arreter pendant une pause dans une fonction appelee sous TRY : ni CATCH ni suite ----
+void stopUnderTry() {
+    std::printf("-- Arreter pendant une pause dans une fonction appelee sous TRY : ni le CATCH ni la suite ne tournent\n");
+    Project p;
+    var(p, "Vanne", "BOOL", "TRUE");
+    var(p, "Pompe", "BOOL", "FALSE");
+    var(p, "Pris", "BOOL", "FALSE");
+    var(p, "Cuve", "REAL", "0.0");
+    View v = makeView(p, "Vue_Essai");
+    p.views.push_back(v);
+    p.config.startView = p.views.back().id;
+    const Id remplir = function(p, "Remplir", "", {{"Quantite", PassMode::In}}, "REAL", "Cuve := Cuve + Quantite;\n");
+    (void)script(p, "Sequence",
+                 "TRY\n"                                    // 1
+                 "    Remplir(5.0);\n"                      // 2
+                 "CATCH e\n"                                // 3
+                 "    Pris := TRUE;\n"                      // 4
+                 "END_TRY;\n"                               // 5
+                 "Vanne := FALSE;\n"                        // 6
+                 "Pompe := TRUE;\n");                       // 7
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.tick(0.1);
+    rt.setBreakpoints({at(1, kNoId, remplir, 1)});
+    (void)rt.callScript("Sequence", 0.2);
+    check(rt.paused() && rt.debugHit() && rt.debugHit()->function == remplir, "en pause dans Remplir");
+    rt.stop(0.3);
+    check(!rt.paused(), "Arreter : plus de pause");
+    check(value(rt, "Pris") == 0.0 && value(rt, "Vanne") == 1.0 && value(rt, "Pompe") == 0.0,
+          "ni le CATCH ni la suite n'ont tourne (Pris faux, Vanne vraie, Pompe fausse)");
+    check(errors(rt).empty(), "sans erreur" + errors(rt));
+}
+
+// ---- T2-9, T2-56 : IHM_POINT_ARRET dans une methode, sans autre point : arret, nomme et a sa ligne ----
+void methodBreak() {
+    std::printf("-- IHM_POINT_ARRET dans une methode : l'arret, son nom (T_Compteur.Incr) et sa ligne a elle\n");
+    Project p;
+    HmiType t;
+    t.id = p.allocate();
+    t.name = "T_Compteur";
+    TypeMember n;
+    n.name = "N";
+    n.type = "INT";
+    t.members.push_back(n);
+    HmiFunction m;
+    m.id = p.allocate();
+    m.name = "Incr";
+    m.body = "N := N + 1;\n"            // 1
+             "IHM_POINT_ARRET;\n"       // 2
+             "N := N + 10;\n";          // 3
+    const Id mid = m.id;
+    t.methods.push_back(m);
+    p.programs.types.push_back(t);
+    var(p, "c", "T_Compteur", "");
+    var(p, "R", "INT", "0");
+    View v = makeView(p, "Vue_Essai");
+    p.views.push_back(v);
+    p.config.startView = p.views.back().id;
+    (void)script(p, "Essai", "c.Incr();\nR := c.N;\n");
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.tick(1.3);                                          // le debogueur voit IHM_POINT_ARRET dans la methode
+    (void)rt.callScript("Essai", 1.4);
+    check(rt.paused() && rt.debugHit() && rt.debugHit()->why == DebugHit::Why::Code, "IHM_POINT_ARRET dans la methode s'arrete");
+    if (rt.debugHit()) {
+        const auto& hit = *rt.debugHit();
+        check(hit.line == 2 && hit.function == mid && hit.where == "m\xC3\xA9thode T_Compteur.Incr, ligne 2", "ou : " + hit.where);
+        check(hit.stack.back().label == "m\xC3\xA9thode T_Compteur.Incr" && hit.stack.back().line == 2, "la pile : " + stackText(hit));
+    }
+    check(console(rt, "D\xC3\xA9" "bogage").find("hors d") == std::string::npos, "aucune fausse raison a la Console");
+    (void)rt.debugContinue();
+    check(!rt.paused() && value(rt, "R") == 11.0 && errors(rt).empty(), "la methode finit (R = 11)" + errors(rt));
+}
+
+// ---- T2-56 (a) : une condition se lit dans l'espace de noms de son code ----
+void namespacedCondition() {
+    std::printf("-- une condition se lit comme son code : son espace de noms d'abord\n");
+    Bench b;
+    HmiFunction root;
+    root.id = b.p.allocate();
+    root.name = "EnDefaut";
+    root.returnType = "BOOL";
+    root.body = "EnDefaut := FALSE;\n";
+    b.p.programs.functions.push_back(root);
+    HmiFunction gaz = root;
+    gaz.id = b.p.allocate();
+    gaz.ns = "Gaz";
+    gaz.body = "EnDefaut := TRUE;\n";
+    b.p.programs.functions.push_back(gaz);
+    Script sc;
+    sc.id = b.p.allocate();
+    sc.name = "Surveiller";
+    sc.event = "Appel";
+    sc.ns = "Gaz";
+    sc.body = "R := 1.0;\nR := 2.0;\n";
+    b.p.programs.scripts.push_back(sc);
+    b.go();
+    b.rt.setBreakpoints({at(1, sc.id, kNoId, 2, "EnDefaut()")});
+    check(b.rt.breakpoints()[0].note.empty(), "la condition se lit : " + b.rt.breakpoints()[0].note);
+    (void)b.rt.callScript("Gaz.Surveiller", 0.2);
+    check(b.rt.paused(), "EnDefaut() appelle Gaz.EnDefaut (vrai), comme le code du script : arret");
+    std::string shown, why;
+    check(b.rt.debugEvaluate("EnDefaut()", shown, &why) && shown == "TRUE", "l'espion aussi lit Gaz.EnDefaut : " + shown + why);
+    (void)b.rt.debugContinue();
+}
+
+// ---- T2-10, T2-11 : ENTRE ... ET ... ; une condition qui n'est pas un BOOL ----
+void conditionKinds() {
+    std::printf("-- une condition ENTRE ... ET ... se lit ; une condition qui n'est pas un BOOL est refusee, et dite\n");
+    {
+        Bench b;
+        b.go();
+        b.rt.setBreakpoints({at(1, b.stats, kNoId, 10, "P ENTRE 2.0 ET 5.0")});
+        check(b.rt.breakpoints()[0].note.empty(), "P ENTRE 2.0 ET 5.0 se comprend : " + b.rt.breakpoints()[0].note);
+        (void)b.rt.callScript("Statistiques_Pression", 0.2);
+        check(b.rt.paused(), "P = 3.2 est entre 2 et 5 : arret");
+        (void)b.rt.debugContinue();
+    }
+    {
+        Bench b;
+        b.go();
+        b.rt.setBreakpoints({at(1, b.stats, kNoId, 10, "Tours MOD 100")});
+        (void)b.rt.callScript("Statistiques_Pression", 0.2);
+        check(!b.rt.paused(), "Tours MOD 100 (un INT, le = 0 oublie) : pas d'arret");
+        const auto& note = b.rt.breakpoints()[0].note;
+        check(note.find("condition invalide : elle rend un") != std::string::npos && note.find("pas un BOOL ; il ne s'arr\xC3\xAAtera pas") != std::string::npos,
+              "la note le dit : " + note);
+        check(errors(b.rt).empty() && value(b.rt, "R") > 3.0, "le script va au bout" + errors(b.rt));
+        std::string shown, why, type;
+        check(b.rt.debugEvaluate("Pression * 2.0", shown, &why, &type) && type == "REAL", "debugEvaluate dit le type : " + type);
+    }
+}
+
+// ---- T2-12 : IHM_POINT_ARRET en commentaire ne compte pas ; un script debogable reste mesure ; IHM_SCRIPT_ACTIF ----
+void sameCost() {
+    std::printf("-- sans point arme : IHM_POINT_ARRET en commentaire ne change rien ; les scripts restent mesures\n");
+    Bench b;
+    var(b.p, "Texte", "STRING", "''");
+    (void)script(b.p, "Commente", "(* IHM_POINT_ARRET; *)\nTexte := 'IHM_POINT_ARRET';\n");
+    var(b.p, "Actif", "BOOL", "TRUE");
+    const Id act = script(b.p, "Calcul", "Actif := IHM_SCRIPT_ACTIF('Calcul');\n");
+    b.go();
+    b.rt.tick(1.3);                                        // le debogueur relit le projet
+    const auto runsOf = [&](Id id) {
+        const auto it = b.rt.perf().scripts.find(id);
+        return it == b.rt.perf().scripts.end() ? std::size_t{0} : it->second.time.count;
+    };
+    const std::size_t before = runsOf(b.stats);
+    check(!b.rt.paused(), "pas de pause");
+    (void)b.rt.callScript("Statistiques_Pression", 1.4);
+    check(runsOf(b.stats) == before + 1, "le script est mesure (Performances) : le commentaire ne compte pas");
+    // Un point arme ailleurs : le script tourne sur une tache du debogueur, il reste mesure ; IHM_SCRIPT_ACTIF ne voit
+    // que les scripts detaches.
+    b.rt.setBreakpoints({at(1, b.stats, kNoId, 10)});
+    const std::size_t before2 = runsOf(act);
+    (void)b.rt.callScript("Calcul", 1.5);
+    check(!b.rt.paused() && runsOf(act) == before2 + 1, "sur une tache du debogueur, le script est mesure aussi");
+    check(value(b.rt, "Actif") == 0.0, "IHM_SCRIPT_ACTIF('Calcul') dans Calcul (non detache) : FALSE, comme sans debogueur");
+    // Le temps d'une pause ne compte pas dans la mesure du script.
+    const std::size_t before3 = runsOf(b.stats);
+    (void)b.rt.callScript("Statistiques_Pression", 1.6);
+    check(b.rt.paused(), "en pause");
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    (void)b.rt.debugContinue();
+    const auto it = b.rt.perf().scripts.find(b.stats);
+    check(runsOf(b.stats) == before3 + 1 && it != b.rt.perf().scripts.end() && it->second.time.last < 200.0,
+          "la pause (250 ms) ne compte pas dans la mesure : " + (it == b.rt.perf().scripts.end() ? std::string("-") : std::to_string(it->second.time.last)));
+}
+
+// ---- T2-21 : un point appele par une expression ne compte pas de passage ; T2-23 : une pause demandee s'annule ----
+void quietCounts() {
+    std::printf("-- un point appele par une expression ne compte aucun passage ; une pause demandee s'annule\n");
+    Bench b;
+    b.go();
+    b.rt.setBreakpoints({at(1, kNoId, b.moyenne, 5)});
+    (void)Expression::compile("Moyenne_Pression(1.0, 3.0)").evaluate(b.rt.environment());
+    const auto rev = b.rt.debugRevision();
+    for (int i = 0; i < 5; ++i) (void)Expression::compile("Moyenne_Pression(1.0, 3.0)").evaluate(b.rt.environment());
+    check(b.rt.breakpoints()[0].hits == 0, "aucun passage compte (il ne s'arrete pas)");
+    check(b.rt.debugRevision() == rev, "le debogueur ne change pas a chaque evaluation (le volet ne se refait pas)");
+    // Pendant une pause, l'expression de la vue dit encore la bonne raison.
+    b.rt.setBreakpoints({at(1, b.stats, kNoId, 10), at(2, kNoId, b.moyenne, 5)});
+    (void)b.rt.callScript("Statistiques_Pression", 0.2);
+    check(b.rt.paused(), "en pause dans le script");
+    (void)Expression::compile("Moyenne_Pression(1.0, 3.0)").evaluate(b.rt.environment());
+    check(b.rt.breakpoints()[1].note.find("appel\xC3\xA9" "e par une expression") != std::string::npos,
+          "pendant la pause, la raison reste l'expression : " + b.rt.breakpoints()[1].note);
+    b.rt.setBreakpoints({});
+    while (b.rt.paused()) (void)b.rt.debugContinue();
+    // Pause demandee, puis annulee : le script suivant va au bout.
+    b.rt.debugPause();
+    check(b.rt.pauseAsked(), "Pause demandee");
+    const auto pauses = b.rt.pauseCount();
+    check(b.rt.debugCancelPause() && !b.rt.pauseAsked(), "Annuler la pause");
+    check(console(b.rt, "D\xC3\xA9" "bogage").find("pause annul\xC3\xA9" "e : l'IHM continue sans s'arr\xC3\xAAter") != std::string::npos,
+          "la Console le dit");
+    (void)b.rt.callScript("Statistiques_Pression", 0.4);
+    check(!b.rt.paused() && b.rt.pauseCount() == pauses, "le script suivant ne s'arrete pas");
+    check(!b.rt.debugCancelPause(), "rien a annuler");
+}
+
 } // namespace
 
 int main() {
@@ -546,6 +1100,18 @@ int main() {
     cScript();
     zeroCost();
     sharedWords();
+    viewFunction();
+    cycleFrozen();
+    gestureFrozen();
+    gesturesWhilePaused();
+    actionsStop();
+    probesReadOnly();
+    stopUnderTry();
+    methodBreak();
+    namespacedCondition();
+    conditionKinds();
+    sameCost();
+    quietCounts();
     std::printf("%d verifications, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

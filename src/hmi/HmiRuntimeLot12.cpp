@@ -171,6 +171,19 @@ bool Runtime::navigateByUser(const View& v, const Object* o, Operation op, const
 }
 
 bool Runtime::swipe(int direction, double now, std::string* why) {
+    // 1.13.0 : EN PAUSE (le debogueur), l'IHM est figee : le glissement ne change pas de vue (ni OnClose ni OnOpen), et
+    // rien ne se vide (une fonction de vue peut etre arretee au milieu).
+    if (paused_) {
+        if (why) *why = "l'IHM est en pause (d\xC3\xA9" "bogage) : Continuer (F5) d'abord";
+        return false;
+    }
+    if (unitWanted()) {
+        auto done = std::make_shared<bool>(false);
+        auto said = std::make_shared<std::string>();
+        (void)debugUnit("Glisser", [this, direction, now, done, said] { *done = swipe(direction, now, said.get()); });
+        if (why) *why = *said;
+        return *done;
+    }
     now_ = std::max(now_, now);
     lastActivity_ = now;
     composed_.clear(); boundCalls_.clear();

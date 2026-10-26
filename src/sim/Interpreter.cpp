@@ -2545,6 +2545,7 @@ public:
     core::Result<Value> evaluateQuietly(const Expr& e) {
         const bool was = probing_;
         probing_ = true;
+        if (!was) probeFailure_.clear();
         auto v = evaluate(e);
         probing_ = was;
         return v;
@@ -2555,9 +2556,13 @@ public:
         std::vector<std::pair<std::string, std::string>> out;
         if (!program_) return out;
         std::vector<LineName> names;
-        collectStmts(program_->body, line, names);
+        // 1.13.0 (le debogueur IHM) : les noms de la ligne du cadre qui s'execute - une fonction interne, une fonction aux
+        // types riches, une methode, une LAMBDA ont leur corps (et leurs lignes) a eux, pas ceux du script appelant.
+        const Function* running = frames_.empty() ? nullptr : frames_.back().fn;
+        collectStmts(running ? running->body : program_->body, line, names);
         const bool was = probing_;
         probing_ = true;
+        if (!was) probeFailure_.clear();
         for (const auto& [expr, plain] : names) {
             std::string name = plain;
             if (expr) {
@@ -2601,7 +2606,11 @@ private:
         // journal et n'arrete pas le cycle : l'erreur revient en valeur.
         // 1.12.1 : le cote gauche de a ?? b non plus (son erreur choisit b).
         // 1.13.0 : sauf dans un TRY ouvert DANS ce cote gauche (une fonction appelee a gauche de ??) : il l'attrape.
-        if (probing_ || (quiet_ > 0 && catching_ <= quietCatching_)) return;
+        if (probing_) {                                  // 1.13.0 : la premiere cause, pour le dire (probeFailure_)
+            if (probeFailure_.empty()) probeFailure_ = message;
+            return;
+        }
+        if (quiet_ > 0 && catching_ <= quietCatching_) return;
         // 1.10 : dans le dialecte IHM, le message seul (sans "invalid argument: ") ;
         // dans une fonction du projet, sa ligne a elle, l'appel a la ligne de l'appelant.
         std::string origin;
@@ -2654,6 +2663,7 @@ public:
         std::vector<LineProbe::Frame> out;
         const bool was = probing_;
         probing_ = true;
+        if (!was) probeFailure_.clear();
         for (std::size_t k = 0; k < frames_.size(); ++k) {
             const Frame& f = frames_[k];
             LineProbe::Frame x;
@@ -2673,10 +2683,23 @@ public:
         probing_ = was;
         return out;
     }
-    // La condition d'un point d'arret, dans la portee de la ligne : rien n'est ecrit ni dit.
+    // La condition d'un point d'arret, dans la portee de la ligne : rien n'est ecrit ni dit. 1.13.0 : rien du tout - les
+    // locales du code en pause et les variables qu'il voit se lisent seulement (une ecriture, un VECTOR_POP, une fonction
+    // interne qui ecrirait une VAR du script : refuses, et dits) ; les cadres neufs (une fonction appelee) s'ecrivent.
     core::Result<Value> evaluateHere(const Expression& e) {
         if (!e.root) return core::fail(core::ErrorCode::InvalidArgument, "empty expression");
-        return evaluateQuietly(*e.root);
+        const std::size_t floor = probeFloor_;
+        probeFloor_ = std::max<std::size_t>(frames_.size(), 1);
+        probeFailure_.clear();
+        auto v = evaluateQuietly(*e.root);
+        probeFloor_ = floor;
+        probeFailure_.clear();
+        return v;
+    }
+    // Le refus d'une ecriture sur une constante ; dans une lecture du debogueur, ce qu'il en est vraiment.
+    [[nodiscard]] std::string constantRefusal() const {
+        return probeFloor_ > 0 || env_.debugReading() ? std::string("un espion ou une condition de point ne modifie rien (lecture seule)")
+                               : std::string("une constante ne s'\xC3\xA9" "crit pas");
     }
 private:
 
@@ -2968,11 +2991,22 @@ private:
             called = env_.call(*target, *target, arguments, result);
         }
         if (!called) {
+            // 1.13.0 (le debogueur IHM) : arretee pendant une pause dans l'appelee (la simulation s'arrete) - pas une
+            // faute : ni message ni CATCH (un TRY ne l'attrape pas), tout s'arrete ici aussi.
+            if (env_.runStopped()) {
+                aborted_ = true;
+                return core::fail(core::ErrorCode::InvalidArgument, "arr\xC3\xAAt\xC3\xA9");
+            }
             // Lot API 7 : l'environnement peut choisir de continuer - l'appel
             // rend 0, rien n'est rendu aux variables passees, le cycle va au bout.
             if (env_.tolerateUnknownCall(*target, e.line)) return Value::integer(Type::DInt, 0);
             // 1.13.0 : une fonction du projet qui a echoue (pas inconnue) : sa cause donne le code E_* du CATCH.
             failCaused(e.line, "'" + *target + "' is not a function or a block this simulator knows", env_.lastCallError());
+            // 1.13.0 (le debogueur IHM) : un espion, une condition - la cause de l'echec d'une fonction connue (une
+            // ecriture refusee : lecture seule), pas "inconnue".
+            if (probing_ && dialect_)
+                if (const std::string cause = env_.lastCallError(); !cause.empty())
+                    return core::fail(core::ErrorCode::InvalidArgument, *target + " : " + cause);
             return core::fail(core::ErrorCode::NotImplemented, *target);
         }
         // Lot API 8 : une lecture au passage ne rend rien aux variables passees.
@@ -3466,6 +3500,16 @@ public:
         bool        temp{false};          // une valeur calculee (le retour d'un appel...)
         bool        setItem{false};       // 1.12.7 : un element d'un SET (S[0], FOR EACH x IN S) : il se lit, ne s'ecrit pas
     };
+
+    // 1.13.0 (le debogueur IHM) : un emplacement d'un cadre d'avant la lecture du debogueur en cours (le code en pause) : il ne s'ecrit pas.
+    [[nodiscard]] bool probeGuarded(const Place* p) const {
+        if (probeFloor_ == 0 || !p) return false;
+        for (std::size_t k = 0; k < probeFloor_ && k < frames_.size(); ++k)
+            for (const auto& s : frames_[k].scopes)
+                for (const auto& [name, place] : s.names)
+                    if (&place == p) return true;
+        return false;
+    }
 
     // 1.12.19 : un rappel appele depuis l'exterieur (callCallback) : ses valeurs, ce qu'il rend.
     core::Result<Value> callFromOutside(const Obj& cb, const std::vector<Value>& args) {
@@ -4454,7 +4498,7 @@ private:
         if (p.constant) {
             if (why) *why = isErrorObj(p.obj)       // 1.13.0 : e := ... (le T_Erreur entier)
                                 ? "l'erreur attrap\xC3\xA9" "e est en lecture seule (Code, Message, Ligne)"
-                                : "une constante ne s'\xC3\xA9" "crit pas";
+                                : constantRefusal();
             return false;
         }
         if (p.obj) return store(*p.obj, v, why);
@@ -4520,7 +4564,15 @@ private:
     core::Result<Place> locate(const Expr& e, bool create) {
         switch (e.kind) {
             case Expr::Kind::Reference: {
-                if (auto* p = findLocal(e.name)) return *p;
+                if (auto* p = findLocal(e.name)) {
+                    // 1.13.0 (le debogueur IHM) : une locale du code en pause, vue d'un espion : en lecture seule.
+                    if (probeGuarded(p)) {
+                        Place readOnly = *p;
+                        readOnly.constant = true;
+                        return readOnly;
+                    }
+                    return *p;
+                }
                 if (dialect_)                                   // 1.12.2 : une variable du projet a taille variable
                     if (auto o = env_.richVariable(e.name)) return Place{o, {}, env_.constantVariable(e.name), false};
                 return Place{nullptr, e.name, false, false};
@@ -4720,7 +4772,7 @@ private:
                         if (!create)
                             return dialectError("cl\xC3\xA9 absente de la MAP : " + keyText(*isText, text, integer)
                                                 + " (MAP_HAS(m, cl\xC3\xA9) pour tester, MAP_GET(m, cl\xC3\xA9, d\xC3\xA9" "faut) pour une valeur par d\xC3\xA9" "faut)");
-                        if (p.constant) return dialectError("une constante ne s'\xC3\xA9" "crit pas");
+                        if (p.constant) return dialectError(constantRefusal());
                         auto made = instantiate(type.element);
                         if (!made) return core::Err<core::Error>(made.error());
                         entry = *made;
@@ -5782,8 +5834,11 @@ private:
         }
         --depth_;
         frames_.pop_back();
-        if (!ok || flow.kind == Flow::Kind::Aborted || aborted_)
+        if (!ok || flow.kind == Flow::Kind::Aborted || aborted_) {
+            // 1.13.0 (le debogueur IHM) : dans un espion, une condition, la faute tue (fail ne dit rien) - sa cause.
+            if (probing_ && dialect_ && !probeFailure_.empty()) return dialectError(f.name + " : " + probeFailure_);
             return dialectError(f.name + " : l'appel a \xC3\xA9" "chou\xC3\xA9");
+        }
         for (const auto& [place, obj] : outputs) {
             std::string why;
             if (!writePlace(place, obj->type && obj->type->kind == TypeDesc::Kind::Scalar ? RV{obj->value, nullptr} : RV{{}, obj}, &why))
@@ -6170,7 +6225,7 @@ private:
             return dialectError(u + " : une liste ou un vecteur est attendu (LIST OF T, VECTOR OF T), pas un "
                                 + (list.type ? list.type->text() : std::string("?")));
         }
-        if (writes && held.constant) return dialectError(u + " : une constante ne s'\xC3\xA9" "crit pas");
+        if (writes && held.constant) return dialectError(u + " : " + constantRefusal());
         // 1.12.7 : UN SET se range tout seul - il refuse ce qui ecrit a une place (LIST_INSERT, LIST_SORT...) ;
         // LIST_ADD (VECTOR_PUSH) y range la valeur, une seule fois. UN RING : LIST_ADD ajoute a la fin, et la
         // plus ancienne part quand il est plein. Apres une ecriture, la liste reprend sa forme (normalizeList).
@@ -6549,7 +6604,7 @@ private:
         }
         if (u == "MAP_CLEAR") {
             if (!want(1, 1)) return bad("MAP_CLEAR(m)");
-            if (subjectConstant) return core::Result<RV>(dialectError(u + " : une constante ne s'\xC3\xA9" "crit pas"));
+            if (subjectConstant) return core::Result<RV>(dialectError(u + " : " + constantRefusal()));
             o->textKeys.clear();
             o->intKeys.clear();
             return core::Result<RV>(RV{Value::boolean(true), nullptr});
@@ -6599,7 +6654,7 @@ private:
         }
         if (u == "MAP_HAS") return core::Result<RV>(RV{Value::boolean(entry != nullptr), nullptr});
         if (u == "MAP_REMOVE") {
-            if (subjectConstant) return core::Result<RV>(dialectError(u + " : une constante ne s'\xC3\xA9" "crit pas"));
+            if (subjectConstant) return core::Result<RV>(dialectError(u + " : " + constantRefusal()));
             if (*isText) o->textKeys.erase(text);
             else o->intKeys.erase(integer);
             return core::Result<RV>(RV{Value::boolean(entry != nullptr), nullptr});
@@ -6715,7 +6770,7 @@ private:
         if (s->obj && !s->isScalar && s->obj->type && s->obj->type->kind == TypeDesc::Kind::Tuple) return s;
         return dialectError(u + " : un TUPLE est attendu, pas " + kindName(*s));
     }
-    core::Err<core::Error> constantRefused(const std::string& u) const { return dialectError(u + " : une constante ne s'\xC3\xA9" "crit pas"); }
+    core::Err<core::Error> constantRefused(const std::string& u) const { return dialectError(u + " : " + constantRefusal()); }
     // Apres une ecriture : une variable de l'environnement copiee est recopiee.
     core::Result<bool> commitArg(const std::string& u, const ObjArg& a) {
         if (a.envName.empty()) return true;
@@ -9916,6 +9971,11 @@ private:
     const std::vector<std::uint8_t>* breaks_{&noBreakLines()};
     std::uint32_t                    line_{0};        // 1.13.0 : la ligne de l'instruction en cours
     bool                             probing_{false};
+    // 1.13.0 (le debogueur IHM) : un espion, la condition d'un point (evaluateHere) - les cadres d'avant lui (le script
+    // en pause, ses fonctions) se lisent sans s'ecrire ; une fonction qu'il appelle ecrit seulement ses propres locales.
+    // 0 : pas de lecture du debogueur en cours.
+    std::size_t                      probeFloor_{0};
+    std::string                      probeFailure_;   // 1.13.0 : la premiere faute tue pendant une lecture (probing_)
     int                              quiet_{0};       // 1.12.1 : a ?? b, le cote a en cours
     // 1.13.0 : la profondeur des TRY quand le cote a s'est ouvert - un TRY ouvert plus bas (dans une
     // fonction appelee a gauche de ??) attrape encore ses erreurs (fail, LEVER).

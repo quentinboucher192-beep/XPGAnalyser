@@ -132,6 +132,13 @@ public:
     virtual void debugBreak(std::uint32_t tag, std::uint32_t line, LineProbe& probe) {
         (void)tag; (void)line; (void)probe;
     }
+    // 1.13.0 (le debogueur des scripts IHM) : l'execution est ARRETEE (la simulation s'arrete pendant une pause dans
+    // une fonction appelee) - l'appel qui vient d'echouer n'est pas une erreur : ni message, ni CATCH, l'appelant
+    // s'arrete aussi. Par defaut : jamais (l'automate, le poste, la page web).
+    [[nodiscard]] virtual bool runStopped() { return false; }
+    // 1.13.0 (le debogueur IHM) : une lecture du debogueur (un espion, une condition) est en cours - une ecriture refusee
+    // le dit ainsi (lecture seule), meme dans une fonction appelee a part.
+    [[nodiscard]] virtual bool debugReading() { return false; }
 
     // ---- 1.10 : le dialecte IHM (jamais appele pour le ST de l'automate) ----
     // Le type declare d'un nom ("REAL", "T_FOUR", "ARRAY[0..9] OF REAL") ; vide : inconnu.

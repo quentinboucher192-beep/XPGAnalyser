@@ -1700,6 +1700,9 @@ bool boundSymbolFunction(const Project& p, std::string_view call, BoundFunction&
     std::uint64_t h = 1469598103934665603ull;
     for (const char c : upperCopy(call)) { h ^= static_cast<unsigned char>(c); h *= 1099511628211ull; }
     out.function.id = static_cast<Id>(0x80000000u | static_cast<std::uint32_t>((h ^ (h >> 31)) & 0x7FFFFFFFu));
+    // 1.13.0 (le debogueur) : la fonction du symbole qu'elle copie (ses points d'arret, son nom dans la pile) - pas une
+    // redefinition de l'instance : son code n'est pas celui que montre le sous-onglet Fonctions du symbole.
+    out.function.debugOrigin = overridden ? kNoId : f->id;
     out.instance = path;
     out.symbol = at.symbol->name;
     out.overridden = overridden;
@@ -1812,6 +1815,7 @@ bool bound(const Project& p, std::string_view call, HmiFunction& out) {
     std::uint64_t h = 1469598103934665603ull;
     for (const char c : upperCopy(call)) { h ^= static_cast<unsigned char>(c); h *= 1099511628211ull; }
     out.id = static_cast<Id>(0x80000000u | static_cast<std::uint32_t>((h ^ (h >> 29)) & 0x7FFFFFFFu));
+    out.debugOrigin = f->id;                                   // 1.13.0 (le debogueur) : la fonction de la vue qu'elle copie
     return true;
 }
 

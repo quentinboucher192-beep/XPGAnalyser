@@ -100,6 +100,13 @@ Id Runtime::keyOwner(const keys::Chord& c) const {
 
 bool Runtime::keyDown(const keys::Chord& chord, double now, bool repeat, bool typing) {
     if (paused_) return false;                   // 1.13.0 : en pause (le debogueur), l'IHM est figee
+    // 1.13.0 : un point arme - le geste entier sur une tache du debogueur (une pause y fige ses actions suivantes) ;
+    // en pause au milieu, la touche est prise (elle avait un raccourci).
+    if (unitWanted()) {
+        auto taken = std::make_shared<bool>(true);
+        (void)debugUnit("Touche", [this, chord, now, repeat, typing, taken] { *taken = keyDown(chord, now, repeat, typing); });
+        return *taken;
+    }
     composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     keyModifiers(chord.ctrl, chord.shift, chord.alt);
@@ -148,6 +155,21 @@ bool Runtime::keyDown(const keys::Chord& chord, double now, bool repeat, bool ty
 }
 
 bool Runtime::keyUp(std::string_view key, double now) {
+    // 1.13.0 : EN PAUSE (le debogueur), rien ne tourne ni ne se vide (une fonction de vue peut etre arretee au milieu) :
+    // le relachement d'une touche tenue est garde, et rejoue a la reprise - ses actions KeyRelease partent alors, dans
+    // l'ordre (un "Marche := FALSE" n'est jamais perdu), la touche ne reste pas enfoncee.
+    if (paused_) {
+        const auto held = keysDown_.find(key);
+        if (held == keysDown_.end()) return false;
+        if (std::none_of(deferred_.begin(), deferred_.end(), [&](const DeferredInput& d) { return d.key && d.token == key; }))
+            deferred_.push_back(DeferredInput{true, std::string(key), kNoId});
+        return held->second.owner != kNoId;
+    }
+    if (unitWanted()) {
+        auto taken = std::make_shared<bool>(true);
+        (void)debugUnit("Touche", [this, k = std::string(key), now, taken] { *taken = keyUp(k, now); });
+        return *taken;
+    }
     composed_.clear(); boundCalls_.clear();
     now_ = std::max(now_, now);
     const auto it = keysDown_.find(key);
@@ -173,7 +195,7 @@ void Runtime::releaseAllKeys(double now) {
     std::vector<std::string> held;
     held.reserve(keysDown_.size());
     for (const auto& [k, h] : keysDown_) held.push_back(k);
-    for (const auto& k : held) (void)keyUp(k, now);
+    for (const auto& k : held) (void)keyUp(k, now);       // 1.13.0 : en pause, chacun garde pour la reprise (keyUp)
     keyModifiers(false, false, false);
 }
 
