@@ -100,6 +100,12 @@ Id Runtime::keyOwner(const keys::Chord& c) const {
 
 bool Runtime::keyDown(const keys::Chord& chord, double now, bool repeat, bool typing) {
     if (paused_) return false;                   // 1.13.0 : en pause (le debogueur), l'IHM est figee
+    // 1.13.0 : un relachement garde pendant une pause qui vient de finir part avant ce nouvel appui - la touche rappuyee
+    // n'est pas prise pour une repetition, et son KeyRelease ne part pas apres, touche enfoncee.
+    if (!deferred_.empty() && !currentTask_) {
+        replayDeferredInput(now);
+        if (paused_) return false;
+    }
     // 1.13.0 : un point arme - le geste entier sur une tache du debogueur (une pause y fige ses actions suivantes) ;
     // en pause au milieu, la touche est prise (elle avait un raccourci).
     if (unitWanted()) {

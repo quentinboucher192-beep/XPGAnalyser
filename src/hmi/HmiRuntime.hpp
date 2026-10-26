@@ -566,7 +566,9 @@ public:
     // `plc` peut etre nul (pas de simulateur) : seules les variables IHM existent.
     void bind(const Project* project, sim::Environment* plc);
     [[nodiscard]] const Project* project() const noexcept { return project_; }   // lot 12 : le menu de connexion le dessine
-    void setHooks(Hooks h) { hooks_ = std::move(h); }
+    // 1.13.0 (le debogueur) : un crochet qui agit sur l'ecran (un son, la Console, une question, la barre d'etat),
+    // appele depuis une tache (un script detache, un travail du debogueur), tourne sur le fil de l'IHM.
+    void setHooks(Hooks h);
 
     // Variables IHM a leur valeur initiale, scripts Demarrage, vue de demarrage
     // ouverte (OnOpen, actions d'ouverture).
@@ -966,10 +968,15 @@ public:
     // pas du ST execute (C, C++).
     [[nodiscard]] static std::vector<std::uint32_t> breakableLines(const Project&, Id script, Id function);
     // Le nom d'un code a deboguer : "script Calcul", "Vue_A.OnCycle", "fonction Util.Moyenne", "fonction Vue_Four.Pourcent"
-    // (une fonction de vue, de popup ou de symbole), "methode T_Pompe.Demarrer" ; vide : inconnu.
+    // (une fonction de vue, de popup ou de symbole), "methode T_Pompe.Demarrer", "operateur + (type T_Vecteur)" ; vide :
+    // inconnu.
     [[nodiscard]] static std::string debugCodeName(const Project&, Id script, Id function);
     // Le texte de ce code tel que son editeur le montre (le volet Debogage, ses lignes) ; vide : inconnu.
     [[nodiscard]] static std::string debugCodeBody(const Project&, Id script, Id function);
+    // 1.13.0 : une redefinition d'instance deja appelee (pas dans le projet sous cet id) : son nom, son code ; vide :
+    // inconnue.
+    [[nodiscard]] std::string boundCodeName(Id function) const;
+    [[nodiscard]] std::string boundCodeBody(Id function) const;
     // Combien de fois un script a tourne ; sa derniere erreur.
     [[nodiscard]] std::size_t runs(Id script) const;
     [[nodiscard]] std::string lastError(Id script) const;
@@ -1927,9 +1934,30 @@ private:
         bool        key{true};           // une touche (sinon : le bouton de la souris)
         std::string token;
         Id          object{kNoId};
+        bool        inside{false};       // 1.13.0 : le bouton relache sur l'objet (un clic, comme sans debogueur)
     };
     std::vector<DeferredInput>           deferred_;
+    // Rejoues des que la pause finit (Continuer, un pas qui va au bout), et avant tout nouvel appui.
     void replayDeferredInput(double now);
+    // 1.13.0 : LE CODE A CHANGE PENDANT LA PAUSE - ce script (son execution, et celles qui l'appellent dans ce travail)
+    // s'arrete la, sans erreur ; le reste du travail (le cycle, le geste, le demarrage) continue. `execDepth_` : les
+    // executions en cours dans ce travail (runStatements, callFunction), echangees avec les taches (ExecState).
+    int                                  execDepth_{0};
+    bool endExecution() noexcept;                                  // vrai : cette execution etait abandonnee
+    void abandonTask(TaskState*) noexcept;                         // le code en pause a change : ses executions s'arretent
+    // 1.13.0 : les REDEFINITIONS D'INSTANCE deja appelees (une copie liee sans fonction d'origine) - par leur id (le
+    // hachage de leur chemin) : leur nom ("redefinition Vue_Vannes.Vanne_3.Ouvrir") et leur code tel qu'il tourne. La
+    // pile les nomme, le volet montre leur code, un point s'y pose.
+    struct BoundCode {
+        std::string name, text, body;    // le nom montre ; le texte que le moteur lit ; le corps (le volet)
+    };
+    std::map<Id, BoundCode>              boundCodes_;
+    // Le texte d'un code a deboguer, comme le moteur le lit (le projet, puis les redefinitions deja appelees).
+    bool debugTextOf(Id script, Id function, std::string& text, bool& isFunction, std::string* why) const;
+    // Les lignes d'en-tete qu'ajoute le texte que le moteur lit (une methode : 4, un operateur : 1 ; sinon 0).
+    [[nodiscard]] std::uint32_t debugHeaderLines(Id function) const;
+    // 1.13.0 : une exception sortie d'une tache du debogueur (non detachee) remonte sur le fil de l'IHM.
+    void rethrowTaskFailure(TaskState& t);
     [[nodiscard]] bool debugWanted() const noexcept;
     // LA PAUSE FIGE LE TRAVAIL ENTIER. Un point arme (ou un pas, une pause demandee) : le travail qui peut lancer
     // un script - un tick (le cycle, les minuteries), un geste, le demarrage - tourne sur une tache a lui (non

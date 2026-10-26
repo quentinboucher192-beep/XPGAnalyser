@@ -6,7 +6,10 @@
 //  pause demandee, IHM_POINT_ARRET quelque part dans le projet) : le TRAVAIL qui
 //  peut lancer un script - un tick (le cycle, les minuteries), un geste, le
 //  demarrage - tourne sur un fil a lui (ScriptTask, celui des scripts detaches,
-//  1.12.26), meme s'il n'est pas detache. Au point d'arret, ce fil rend la main a
+//  1.12.26 ; un fil repris d'un travail a l'autre, pas un fil neuf par image),
+//  meme s'il n'est pas detache. Ce qui touche l'ecran (les crochets : un son, la
+//  Console, une question) y retourne au fil de l'IHM ; une exception du travail
+//  remonte sur le fil de l'IHM. Au point d'arret, ce fil rend la main a
 //  celui de l'IHM (yield) et attend : la suite du travail (les autres scripts du
 //  cycle, les actions suivantes du clic, la premiere vue apres les scripts de
 //  Demarrage) attend avec lui. L'IHM se fige (tick ne fait plus rien, les gestes
@@ -21,8 +24,11 @@
 //  numero de programme (sim::setProgramTag) qui dit son code ; une fonction aux
 //  types riches tourne dans le script qui l'appelle, sous sa propre Function
 //  (richOwners_) ; une copie liee (fonction de vue, de popup, de symbole) porte
-//  l'id de la fonction qu'elle copie (HmiFunction::debugOrigin) ; une methode se
-//  reconnait a son nom interne (METHODE_<type>_<methode>). La pile se lit dans le
+//  l'id de la fonction qu'elle copie (HmiFunction::debugOrigin) ; une methode et un
+//  operateur, lus par le moteur (sa reserve), y sont marques par leur id comme une
+//  fonction riche (sim::Environment::debugFunction ; une methode se reconnait aussi
+//  a son nom interne, METHODE_<type>_<methode>) ; une redefinition d'instance, par
+//  son id de copie (boundCodes_). La pile se lit dans le
 //  moteur : les executions qui attendent un appel (sim::callerFrames), puis celle
 //  de la ligne (LineProbe::frames), et au bas le contexte (le cycle IHM, un
 //  geste, un script detache).
@@ -46,6 +52,7 @@
 #include "HmiMarkers.hpp"
 #include "HmiMethods.hpp"
 #include "HmiNames.hpp"
+#include "HmiOperators.hpp"
 #include "HmiScript.hpp"
 #include "../sim/DebugShared.hpp"
 #include "../sim/Interpreter.hpp"
@@ -61,6 +68,7 @@ namespace hmi {
 namespace {
 
 constexpr std::uint32_t kMethodHeaderLines = 4;   // methodFunctionText : FUNCTION, VAR_IN_OUT, SELF, END_VAR
+constexpr std::uint32_t kOperatorHeaderLines = 1; // operatorFunctionText : FUNCTION OPERATEUR_ADD(a : T; b : REAL) : T
 
 std::string upperText(std::string_view s) {
     std::string out(s);
@@ -95,6 +103,19 @@ const HmiFunction* methodById(const Project& p, Id id, const HmiType** owner = n
     return found;
 }
 
+// 1.13.0 : un operateur d'un type IHM ou d'un symbole par son id ; `owner` : son porteur.
+const HmiOperator* operatorOf(const Project& p, Id id, OperatorOwner* owner = nullptr) {
+    return id == kNoId ? nullptr : operatorById(p, id, owner);
+}
+
+// Le texte d'un operateur pour le debogueur : sa FUNCTION interne, l'en-tete sur la ligne 1 avec le debut du corps - les
+// lignes sont celles de son editeur (le moteur, lui, lit l'en-tete seul sur sa ligne : kOperatorHeaderLines).
+std::string operatorDebugText(const HmiOperator& o) {
+    std::string t = operatorFunctionText(o);
+    if (const auto nl = t.find('\n'); nl != std::string::npos) t[nl] = ' ';
+    return markers::strip(t);
+}
+
 // Une fonction a deboguer par son id : du projet (ou d'une bibliotheque), d'une vue, d'une popup ou d'un symbole, une
 // methode d'un type IHM.
 const HmiFunction* functionById(const Project& p, Id id) {
@@ -125,6 +146,11 @@ bool debugText(const Project& p, Id script, Id function, std::string& text, bool
     }
     if (const HmiFunction* f = functionById(p, function)) {
         text = functionText(*f);
+        isFunction = true;
+        return true;
+    }
+    if (const HmiOperator* o = operatorOf(p, function)) {            // 1.13.0 : un operateur, une conversion
+        text = operatorDebugText(*o);
         isFunction = true;
         return true;
     }
@@ -278,6 +304,13 @@ bool codeSpace(const Project& p, Id script, Id function, std::string& ns, std::s
         body = f->body;
         return true;
     }
+    OperatorOwner owner;
+    if (const HmiOperator* o = operatorOf(p, function, &owner)) {        // 1.13.0 : un operateur - l'espace de son type
+        const HmiType* t = owner.kind == OperatorOwner::Kind::Type ? p.hmiType(owner.id) : nullptr;
+        ns = t ? t->ns : std::string{};
+        body = o->body;
+        return true;
+    }
     return false;
 }
 
@@ -343,6 +376,10 @@ std::string Runtime::debugCodeName(const Project& p, Id script, Id function) {
                 if (f.id == function) return "fonction " + v.name + "." + f.name;
         const HmiType* owner = nullptr;
         if (const auto* m = methodById(p, function, &owner); m && owner) return "m\xC3\xA9thode " + fullName(*owner) + "." + m->name;
+        // 1.13.0 : "operateur + (type T_Vecteur)", "conversion TO_REAL (symbole Sym_Pompe)".
+        OperatorOwner by;
+        if (const auto* o = operatorOf(p, function, &by))
+            return (o->op == kConversionOp ? "conversion " + operatorFunctionName(*o) : "op\xC3\xA9rateur " + o->op) + " (" + by.label() + ")";
     }
     return {};
 }
@@ -352,15 +389,45 @@ std::string Runtime::debugCodeBody(const Project& p, Id script, Id function) {
         const Script* sc = p.script(script);
         return sc ? sc->body : std::string{};
     }
-    const HmiFunction* f = functionById(p, function);
-    return f ? f->body : std::string{};
+    if (const HmiFunction* f = functionById(p, function)) return f->body;
+    const HmiOperator* o = operatorOf(p, function);
+    return o ? o->body : std::string{};
+}
+
+std::string Runtime::boundCodeName(Id function) const {
+    const auto it = boundCodes_.find(function);
+    return it == boundCodes_.end() ? std::string{} : it->second.name;
+}
+
+std::string Runtime::boundCodeBody(Id function) const {
+    const auto it = boundCodes_.find(function);
+    return it == boundCodes_.end() ? std::string{} : it->second.body;
+}
+
+bool Runtime::debugTextOf(Id script, Id function, std::string& text, bool& isFunction, std::string* why) const {
+    if (project_ && debugText(*project_, script, function, text, isFunction, nullptr)) return true;
+    // 1.13.0 : une redefinition d'instance deja appelee (sa copie liee porte un id a elle).
+    if (script == kNoId)
+        if (const auto it = boundCodes_.find(function); it != boundCodes_.end()) {
+            text = it->second.text;
+            isFunction = true;
+            return true;
+        }
+    if (!project_) return false;
+    return debugText(*project_, script, function, text, isFunction, why);
+}
+
+std::uint32_t Runtime::debugHeaderLines(Id function) const {
+    if (!project_ || function == kNoId) return 0;
+    if (methodById(*project_, function)) return kMethodHeaderLines;
+    if (operatorOf(*project_, function)) return kOperatorHeaderLines;
+    return 0;
 }
 
 std::size_t Runtime::debugCodeHash(Id script, Id function) const {
-    if (!project_) return 0;
     std::string text;
     bool isFunction = false;
-    if (!debugText(*project_, script, function, text, isFunction, nullptr)) return 0;
+    if (!debugTextOf(script, function, text, isFunction, nullptr)) return 0;
     return textHash(text);
 }
 
@@ -392,10 +459,12 @@ const HmiFunction* Runtime::methodOfFrame(std::string_view internalName) const {
 }
 
 std::uint32_t Runtime::frameLine(const sim::LineProbe::Frame& f, std::uint32_t line) const {
-    if (f.standalone && line > kMethodHeaderLines && richOwners_.find(static_cast<const sim::Function*>(f.code)) == richOwners_.end()
-        && methodOfFrame(f.function))
-        return line - kMethodHeaderLines;
-    return line;
+    if (!f.standalone) return line;
+    // Une methode, un operateur : les lignes de l'en-tete que le moteur lit avant son corps.
+    std::uint32_t header = 0;
+    if (const auto it = richOwners_.find(static_cast<const sim::Function*>(f.code)); it != richOwners_.end()) header = debugHeaderLines(it->second);
+    else if (methodOfFrame(f.function)) header = kMethodHeaderLines;
+    return line > header ? line - header : line;
 }
 
 std::pair<Id, Id> Runtime::frameOwner(const sim::LineProbe::Frame& f) const {
@@ -446,6 +515,12 @@ std::string Runtime::unknownConditionName(const std::string& text, Id script, Id
         for (const auto& d : f->decls) declared.insert(upperText(d.name));
         declared.insert(upperText(f->name));
         if (methodById(*project_, function)) declared.insert("SELF");      // une methode : SELF, l'objet
+    } else if (const HmiOperator* o = operatorOf(*project_, function)) {
+        // 1.13.0 : un operateur - a, b, Resultat (et le nom d'une conversion), ses declarations.
+        for (const auto& d : o->decls) declared.insert(upperText(d.name));
+        for (const char* n : {"A", "B"}) declared.insert(n);
+        declared.insert(upperText(kResultName));
+        if (const auto fn = operatorFunctionName(*o); !fn.empty()) declared.insert(upperText(fn));
     }
     for (const auto& root : conditionRoots(condition)) {
         const std::string u = upperText(root);
@@ -471,7 +546,7 @@ std::string Runtime::conditionProblem(Id script, Id function, const std::string&
     if (blank(condition) || !project_) return {};
     std::string text, why;
     bool isFunction = false;
-    if (!debugText(*project_, script, function, text, isFunction, &why)) return why;
+    if (!debugTextOf(script, function, text, isFunction, &why)) return why;
     auto parsed = sim::parseExpression(qualifiedCondition(*project_, script, function, condition), dialectOptions());
     if (!parsed) return conditionFrench(parsed.error());
     const std::string unknown = unknownConditionName(text, script, function, condition);
@@ -492,7 +567,7 @@ void Runtime::resolveBreakpoints() {
         if (!project_) continue;
         std::string text, why;
         bool isFunction = false;
-        if (!debugText(*project_, bp.script, bp.function, text, isFunction, &why)) {
+        if (!debugTextOf(bp.script, bp.function, text, isFunction, &why)) {
             bp.note = why;
             continue;
         }
@@ -534,12 +609,12 @@ void Runtime::resolveBreakpoints() {
 // Les lignes marquees de chaque programme deja lu et de chaque fonction aux types riches, refaites tout
 // de suite (un point pose pendant la pause sert des la reprise) ; aucun point : plus rien de marque.
 void Runtime::remarkPrograms() {
-    const auto linesOf = [this](Id script, Id function) {
+    const auto linesOf = [this](Id script, Id function, std::uint32_t header) {
         std::vector<std::uint32_t> lines;
         for (std::size_t i = 0; i < breakpoints_.size() && i < breakStates_.size(); ++i)
             if (breakStates_[i].armed && breakpoints_[i].effectiveLine && breakpoints_[i].script == script
                 && breakpoints_[i].function == function)
-                lines.push_back(breakpoints_[i].effectiveLine);
+                lines.push_back(breakpoints_[i].effectiveLine + header);
         return lines;
     };
     if (!anyArmed_ && !marked_) return;
@@ -551,10 +626,11 @@ void Runtime::remarkPrograms() {
             continue;
         }
         const auto [script, function] = tagOwners_[tag - 1];
-        sim::setBreakLines(*prep.program, anyArmed_ ? linesOf(script, function) : std::vector<std::uint32_t>{});
+        sim::setBreakLines(*prep.program, anyArmed_ ? linesOf(script, function, 0) : std::vector<std::uint32_t>{});
     }
+    // Une fonction riche, une methode, un operateur : ses lignes dans le texte que le moteur lit (apres son en-tete).
     for (const auto& [fn, id] : richOwners_)
-        if (fn) sim::setBreakLines(*fn, anyArmed_ ? linesOf(kNoId, id) : std::vector<std::uint32_t>{});
+        if (fn) sim::setBreakLines(*fn, anyArmed_ ? linesOf(kNoId, id, debugHeaderLines(id)) : std::vector<std::uint32_t>{});
     marked_ = anyArmed_;
 }
 
@@ -573,16 +649,19 @@ void Runtime::prepareDebug(sim::Program& program, Id script, Id function, sim::R
     sim::setBreakLines(program, lines);
 }
 
+// Une fonction lue a part (une fonction IHM aux types riches, une methode, un operateur) : son id, ses lignes marquees.
 void Runtime::markRichFunction(const sim::Function& fn, Id function) {
     if (!debugOn_) return;
     richOwners_[&fn] = function;
     if (!anyArmed_ && !marked_) return;
     std::vector<std::uint32_t> lines;
-    if (anyArmed_)
+    if (anyArmed_) {
+        const std::uint32_t header = debugHeaderLines(function);   // 1.13.0 : une methode, un operateur - apres l'en-tete
         for (std::size_t i = 0; i < breakpoints_.size() && i < breakStates_.size(); ++i)
             if (breakStates_[i].armed && breakpoints_[i].effectiveLine && breakpoints_[i].script == kNoId
                 && breakpoints_[i].function == function)
-                lines.push_back(breakpoints_[i].effectiveLine);
+                lines.push_back(breakpoints_[i].effectiveLine + header);
+    }
     sim::setBreakLines(fn, lines);
 }
 
@@ -654,7 +733,8 @@ std::vector<DebugFrame> Runtime::debugStack(const std::vector<sim::LineProbe::Fr
         d.function = function;
         d.line = frameLine(*f, f->line);
         d.locals = f->locals;
-        const std::string code = project_ ? debugCodeName(*project_, script, function) : std::string{};
+        std::string code = project_ ? debugCodeName(*project_, script, function) : std::string{};
+        if (code.empty() && script == kNoId) code = boundCodeName(function);   // 1.13.0 : une redefinition d'instance
         if (f->function.empty()) d.label = code.empty() ? std::string("code") : code;
         else if (f->standalone) d.label = code.empty() ? "fonction " + f->function : code;
         else d.label = f->function + " (fonction interne de " + (code.empty() ? std::string("ce code") : code) + ")";
@@ -706,7 +786,7 @@ std::vector<DebugFrame> Runtime::debugStack(const std::vector<sim::LineProbe::Fr
 void Runtime::debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe& probe, bool code) {
     (void)tag;
     if (!debugOn_ || debugProbing_ > 0 || !running_) return;
-    if (currentTask_ && taskIsCancelled(currentTask_)) {
+    if (taskStopped()) {                       // arretee, ou son code change pendant la pause : elle se defait
         probe.stop();
         return;
     }
@@ -838,7 +918,8 @@ void Runtime::debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe
     }
     hit.stack = debugStack(chain, here);
     hit.context = hit.stack.empty() ? std::string{} : hit.stack.front().label;
-    const std::string codeName = project_ ? debugCodeName(*project_, owner.first, owner.second) : std::string{};
+    std::string codeName = project_ ? debugCodeName(*project_, owner.first, owner.second) : std::string{};
+    if (codeName.empty() && owner.first == kNoId) codeName = boundCodeName(owner.second);   // 1.13.0 : une redefinition
     // Un code sans nom (le code d'une action "Execute du ST ecrit ici") : sa source ("Vue_A/Btn (script de l'action)").
     const std::string shownName = !codeName.empty() ? codeName : (!source_.empty() ? source_ : std::string("code"));
     hit.where = shownName + ", ligne " + std::to_string(at);
@@ -887,12 +968,16 @@ void Runtime::debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe
         probe.stop();
         return;
     }
-    // Le code a change pendant la pause : il ne peut pas reprendre au milieu d'une ligne qui n'existe plus.
+    // Le code a change pendant la pause : il ne peut pas reprendre au milieu d'une ligne qui n'existe plus. Ce script
+    // (avec ce qui l'appelle dans ce travail) s'arrete la, sans erreur ; le reste du travail continue - la suite du
+    // cycle, du geste, la premiere vue d'un demarrage (pas tout le travail : abandonTask, pas cancelTask).
     if (debugCodeHash(owner.first, owner.second) != pausedHash_) {
         logAt(LogLevel::Warning, "D\xC3\xA9" "bogage", source_,
-              (codeName.empty() ? std::string("le script") : codeName) + " a chang\xC3\xA9 pendant la pause : il reprendra au prochain cycle",
+              (codeName.empty() ? std::string("le script") : codeName)
+                  + " a chang\xC3\xA9 pendant la pause : son ex\xC3\xA9" "cution s'arr\xC3\xAAte l\xC3\xA0, sans erreur ; la suite du cycle "
+                    "ou du geste continue (un script cyclique repart au prochain cycle)",
               static_cast<int>(at));
-        cancelTask(self);
+        abandonTask(self);
         probe.stop();
     }
 }

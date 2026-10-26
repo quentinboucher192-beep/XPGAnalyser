@@ -383,6 +383,7 @@ bool resolveMethod(const Project& p, std::string_view selfType, std::string_view
     const std::string ownerName = fullName(*owner);
     out.selfType = ownerName;
     out.isVirtual = m->isVirtual;
+    out.method = m->id;                                               // 1.13.0 : ses points d'arret (le debogueur)
     out.function = methodFunctionText(p, ownerName, *m);
     if (!owner->ns.empty() || names::mentionsUsing(m->body)) out.function = names::qualify(p, out.function, owner->ns, {"SELF"}, true);
     out.owner = "type " + ownerName + ", m\xC3\xA9thode " + m->name;
@@ -399,6 +400,7 @@ bool resolveMethodInternal(const Project& p, std::string_view internalName, Meth
             if (methodFunctionName(tn, m) == internalName) {
                 out.selfType = tn;
                 out.isVirtual = m.isVirtual;
+                out.method = m.id;                                    // 1.13.0 : ses points d'arret (le debogueur)
                 out.function = methodFunctionText(p, tn, m);
                 if (!t.ns.empty() || names::mentionsUsing(m.body)) out.function = names::qualify(p, out.function, t.ns, {"SELF"}, true);
                 out.owner = "type " + tn + ", m\xC3\xA9thode " + m.name;

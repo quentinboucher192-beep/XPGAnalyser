@@ -45,6 +45,8 @@
 #include <deque>
 #include <iterator>
 #include <limits>
+#include <optional>
+#include <type_traits>
 
 namespace hmi {
 
@@ -816,6 +818,14 @@ public:
         out.key = std::move(c.key);
         out.function = std::move(c.function);
         out.owner = std::move(c.owner);
+        // 1.13.0 (le debogueur) : l'operateur trouve (son id) - ses points d'arret, son nom dans la pile. Le meme choix
+        // que resolveOperator : une conversion par sa source ou sa cible, un operateur par ses deux types.
+        if (rt_.debugOn_) {
+            const std::string u = upper(std::string(op));
+            const HmiOperator* found = u.size() > 3 && u.compare(0, 3, "TO_") == 0 ? hmi::findConversion(*rt_.project_, u, l)
+                                                                                   : hmi::findOperator(*rt_.project_, op, l, r);
+            if (found) out.debugId = found->id;
+        }
         return true;
     }
     // 1.13.0 (lot J1) : une methode d'un type IHM (chemin.Methode(args)) - S2 (hmi::resolveMethod) la
@@ -826,6 +836,7 @@ public:
         out.key = std::move(c.key);
         out.function = std::move(c.function);
         out.owner = std::move(c.owner);
+        out.debugId = c.method;                                       // 1.13.0 (le debogueur) : ses points d'arret
         return true;
     }
     // 1.13.0 (lot J1) : SUPER.M(...) emis comme METHODE_<parent>_M - l'interpreteur le resout ici.
@@ -835,8 +846,11 @@ public:
         out.key = std::move(c.key);
         out.function = std::move(c.function);
         out.owner = std::move(c.owner);
+        out.debugId = c.method;                                       // 1.13.0 (le debogueur) : ses points d'arret
         return true;
     }
+    // 1.13.0 (le debogueur) : une methode, un operateur va tourner - ses points d'arret (ses lignes apres son en-tete).
+    void debugFunction(const sim::Function& f, std::uint32_t id) override { rt_.markRichFunction(f, static_cast<Id>(id)); }
     // 1.13.0 (lot J1) : la montee - un sous-type vers un parent, un type vers une interface implementee
     // (pour DYNAMIC_CAST<to>(objet)). Le meme type va toujours.
     bool typeConvertsTo(std::string_view from, std::string_view to) override {
@@ -1278,6 +1292,7 @@ struct Runtime::ExecState {
     int                          callerLocals{0};
     std::vector<sim::Diagnostic> diagnostics;
     std::vector<DebugExec>       debugExec;       // 1.13.0 : les executions en cours (le debogueur)
+    int                          execDepth{0};    // 1.13.0 : leur nombre (un code change pendant la pause)
 };
 
 struct Runtime::TaskState {
@@ -1299,6 +1314,9 @@ struct Runtime::TaskState {
     std::string                  why;                 // sa faute (un script non detache fini d'un trait)
     std::shared_ptr<const Scope> keepScope;           // les parametres de la vue, gardes en vie pendant la pause
     std::function<bool(std::string*)> work;           // ce qu'elle fait (un script, un tick, un geste, le demarrage)
+    // 1.13.0 : le code en pause a change - ses executions en cours (execDepth_ > 0) s'arretent sans erreur, puis le
+    // travail reprend (la suite du cycle, du geste, le demarrage).
+    bool                         abandon{false};
 };
 
 void Runtime::exchange(ExecState& s) {
@@ -1321,6 +1339,7 @@ void Runtime::exchange(ExecState& s) {
     std::swap(env_->callerLocals, s.callerLocals);
     std::swap(env_->diagnostics, s.diagnostics);
     std::swap(debugExec_, s.debugExec);              // 1.13.0
+    std::swap(execDepth_, s.execDepth);
 }
 
 namespace {
@@ -1366,8 +1385,10 @@ bool Runtime::startDetached(const Script& sc, const std::string& source, double 
     });
     logAt(LogLevel::Info, "Script", source, sc.name + " : d\xC3\xA9marr\xC3\xA9 en arri\xC3\xA8re-plan (d\xC3\xA9tach\xC3\xA9)");
     tasks_.push_back(std::move(t));
-    // Sa premiere tranche tout de suite ; lance depuis une autre tache : a la reprise suivante, par le fil de l'IHM.
-    if (!currentTask_) {
+    // Sa premiere tranche tout de suite ; lance depuis un autre script detache : a la reprise suivante, par le fil de
+    // l'IHM. 1.13.0 : depuis un travail du debogueur (un geste, un cycle sur sa tache), tout de suite aussi - comme sans
+    // debogueur, avant la suite du geste.
+    if (!currentTask_ || !currentTask_->detached) {
         resumeTask(*raw);
         finishTasks();
     }
@@ -1496,11 +1517,13 @@ bool Runtime::scriptRunning(std::string_view name) const {
     return false;
 }
 
+// 1.13.0 : les scripts DETACHES seulement, comme IHM_SCRIPT_ACTIF - une tache du debogueur (un cycle, un geste, un
+// script qui peut s'arreter) n'en est pas un : IHM_SCRIPT_ARRETER ne l'arrete pas (FAUX, comme sans debogueur).
 bool Runtime::stopScript(std::string_view name) {
     const std::string u = upper(name);
     bool any = false;
     for (const auto& t : tasks_)
-        if (upper(t->name) == u && !t->task->finished() && !t->task->cancelled()) {
+        if (t->detached && upper(t->name) == u && !t->task->finished() && !t->task->cancelled()) {
             t->stopAsked = true;
             t->task->cancel();
             any = true;
@@ -1535,7 +1558,21 @@ void Runtime::resumePaused(TaskState* t) {
     if (!t) return;
     if (currentTask_) return;                          // jamais depuis une tache : le fil de l'IHM le fera
     resumeTask(*t);
+    rethrowTaskFailure(*t);
     finishTasks();
+    // 1.13.0 : la pause est finie (le travail est alle au bout) - les relachements gardes partent tout de suite, avant
+    // qu'une touche ne soit rappuyee (sinon : prise pour une repetition, puis relachee alors qu'elle est enfoncee).
+    if (!paused_) replayDeferredInput(now_);
+}
+
+// 1.13.0 : une exception sortie du travail d'une tache du debogueur (non detachee) n'est pas perdue : elle remonte ici,
+// sur le fil de l'IHM, comme quand le travail tournait la (le rapport de plantage). Un script detache : comme avant.
+void Runtime::rethrowTaskFailure(TaskState& t) {
+    if (t.detached || !t.task || !t.task->finished()) return;
+    if (std::exception_ptr failure = t.task->takeFailure()) {
+        finishTasks();
+        std::rethrow_exception(failure);
+    }
 }
 
 void Runtime::withTaskState(TaskState* t, const std::function<void()>& run) {
@@ -1611,6 +1648,7 @@ bool Runtime::runDebugTask(std::string name, std::function<bool(std::string*)> w
     tasks_.push_back(std::move(t));
     resumeTask(*raw);
     if (raw->task->finished()) {
+        rethrowTaskFailure(*raw);                      // une exception du travail : sur le fil de l'IHM, comme avant
         // Fini d'un trait : comme avant - sa faute, et la cause premiere d'un enchainement coupe.
         const bool ok = raw->ok;
         if (!ok && error) *error = raw->why;
@@ -1641,11 +1679,28 @@ bool Runtime::debugUnit(std::string label, std::function<void()> body) {
     return finished;
 }
 
-bool Runtime::taskStopped() const noexcept { return currentTask_ && currentTask_->task && currentTask_->task->cancelled(); }
+// Arretee (la simulation s'arrete pendant une pause), ou abandonnee (son code a change pendant la pause) le temps que ses
+// executions en cours se defassent.
+bool Runtime::taskStopped() const noexcept {
+    return currentTask_ && currentTask_->task && (currentTask_->task->cancelled() || (currentTask_->abandon && execDepth_ > 0));
+}
 
-// Les relachements arrives pendant la pause, rejoues une fois la pause finie (au tick suivant) : la touche relachee
-// (ses actions KeyRelease), le bouton relache sur l'objet appuye (l'impulsion retombe, sans clic). Une reprise qui se
-// remet en pause garde le reste pour la suivante.
+// Une execution (runStatements, callFunction) finit : vrai si elle etait abandonnee (son code a change pendant la pause).
+// La plus basse du travail finie, l'abandon s'efface : le reste du travail reprend.
+bool Runtime::endExecution() noexcept {
+    if (execDepth_ > 0) --execDepth_;
+    if (!currentTask_ || !currentTask_->abandon) return false;
+    if (execDepth_ == 0) currentTask_->abandon = false;
+    return true;
+}
+
+void Runtime::abandonTask(TaskState* t) noexcept {
+    if (t) t->abandon = true;
+}
+
+// Les relachements arrives pendant la pause, rejoues des que la pause finit (la reprise qui va au bout, sinon le tick
+// suivant ou le prochain appui) : la touche relachee (ses actions KeyRelease), le bouton relache - sur l'objet : le clic,
+// comme sans debogueur ; dehors : l'impulsion retombe. Une reprise qui se remet en pause garde le reste pour la suivante.
 void Runtime::replayDeferredInput(double now) {
     if (deferred_.empty() || paused_ || currentTask_) return;
     std::vector<DeferredInput> list;
@@ -1656,7 +1711,7 @@ void Runtime::replayDeferredInput(double now) {
             return;
         }
         if (list[i].key) (void)keyUp(list[i].token, now);
-        else release(list[i].object, now, false);
+        else release(list[i].object, now, list[i].inside);
     }
 }
 
@@ -1668,6 +1723,47 @@ Runtime::~Runtime() {
 void Runtime::bind(const Project* project, sim::Environment* plc) {
     project_ = project;
     plc_ = plc;
+}
+
+namespace {
+// 1.13.0 (le debogueur) : un crochet appele depuis une tache (un script detache, un travail du debogueur - un tick, un
+// geste) tourne sur le fil de l'IHM (ScriptTask::onRootThread) : la tache attend sa reponse, comme s'il etait appele
+// la. Un son, la Console, une question, la barre d'etat ne sont jamais touches d'un autre fil.
+template <class R, class... A>
+void onUiThread(std::function<R(A...)>& hook) {
+    if (!hook) return;
+    hook = [inner = std::move(hook)](A... args) -> R {
+        if (!ScriptTask::onTaskThread()) return inner(std::forward<A>(args)...);
+        if constexpr (std::is_void_v<R>) {
+            ScriptTask::onRootThread([&] { inner(std::forward<A>(args)...); });
+        } else {
+            std::optional<R> out;
+            ScriptTask::onRootThread([&] { out.emplace(inner(std::forward<A>(args)...)); });
+            return std::move(*out);
+        }
+    };
+}
+} // namespace
+
+void Runtime::setHooks(Hooks h) {
+    // Ce qui agit sur l'ecran ou sur ce que l'interface tient : sur le fil de l'IHM. Les lectures pures (l'etat de
+    // l'automate, du poste, des equipements, un forcage commun, le dossier du projet) restent directes : la tache a la
+    // main seule, rien ne bouge pendant qu'elle lit.
+    onUiThread(h.playSound);
+    onUiThread(h.stopSounds);
+    onUiThread(h.journaled);
+    onUiThread(h.askLogin);
+    onUiThread(h.recipeRequest);
+    onUiThread(h.requestResource);
+    onUiThread(h.userRequest);
+    onUiThread(h.restart);
+    onUiThread(h.exportFile);
+    onUiThread(h.audited);
+    onUiThread(h.alarmNotice);
+    onUiThread(h.reportWritten);
+    onUiThread(h.simSlaveCommand);
+    onUiThread(h.askExport);
+    hooks_ = std::move(h);
 }
 
 sim::Environment& Runtime::environment() { return *env_; }
@@ -2298,14 +2394,17 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     // 1.13.0 : le debogueur - le numero de ce code, ses lignes marquees, le pas a pas.
     prepareDebug(*program, scriptId, kNoId, limits);
     debugExec_.push_back(DebugExec{sim::programTag(*program), nullptr, nullptr});
+    ++execDepth_;
     const auto result = sim::execute(*program, *env_, limits);
+    const bool abandoned = endExecution();
     if (!debugExec_.empty()) debugExec_.pop_back();
     trace_ = callerTrace;
     env_->frames.pop_back();
     source_ = previous;
     if (scriptId) ++runs_[scriptId];
-    // 1.12.26 : un script detache arrete (la simulation s'arrete, IHM_SCRIPT_ARRETER) : ni erreur, ni message.
-    if (currentTask_ && currentTask_->task->cancelled()) {
+    // 1.12.26 : un script detache arrete (la simulation s'arrete, IHM_SCRIPT_ARRETER) : ni erreur, ni message. 1.13.0 : de
+    // meme un code change pendant la pause (abandonne) - la suite du travail, elle, continue.
+    if (abandoned || (currentTask_ && currentTask_->task->cancelled())) {
         if (depth_ <= 1) abort_.clear();
         return false;
     }
@@ -2493,7 +2592,17 @@ std::shared_ptr<const HmiFunction> Runtime::symbolCall(std::string_view call) {
     const std::string key = upper(call);
     if (const auto it = boundCalls_.find(key); it != boundCalls_.end()) return it->second;
     std::shared_ptr<const HmiFunction> fn;
-    if (BoundFunction b; boundSymbolFunction(*project_, call, b)) fn = std::make_shared<const HmiFunction>(std::move(b.function));
+    if (BoundFunction b; boundSymbolFunction(*project_, call, b)) {
+        // 1.13.0 (le debogueur) : une redefinition d'instance n'a pas de fonction d'origine (son code est a elle) - le
+        // debogueur la connait par l'id de sa copie : son nom, son code (la pile, le volet, un point d'arret).
+        if (b.overridden && debugOn_) {
+            std::string shown = b.function.name;
+            if (const auto dot = std::string_view(call).rfind('.'); dot != std::string_view::npos) shown = std::string(call.substr(dot + 1));
+            if (const auto hash = shown.find('#'); hash != std::string::npos) shown.resize(hash);
+            boundCodes_[b.function.id] = BoundCode{"red\xC3\xA9" "finition " + b.instance + "." + shown, functionText(b.function), b.function.body};
+        }
+        fn = std::make_shared<const HmiFunction>(std::move(b.function));
+    }
     boundCalls_[key] = fn;
     return fn;
 }
@@ -2607,7 +2716,9 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     // 1.13.0 : le debogueur - le numero de ce code, ses lignes marquees, ses locales (le cadre du moteur).
     prepareDebug(*prep.program, kNoId, debugId, limits);
     debugExec_.push_back(DebugExec{sim::programTag(*prep.program), &frame, &prep.locals});
+    ++execDepth_;
     const auto run = sim::execute(*prep.program, *env_, limits);
+    const bool abandoned = endExecution();
     if (!debugExec_.empty()) debugExec_.pop_back();
     --depth_;
     trace_ = callerTrace;
@@ -2616,8 +2727,9 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     auto mine = std::move(env_->diagnostics);
     env_->diagnostics = std::move(saved);
     ++runs_[fnId];
-    // 1.13.0 : arretee pendant une pause (la simulation s'arrete) : sans erreur, l'appelant s'arrete aussi.
-    if (currentTask_ && currentTask_->task->cancelled()) return false;
+    // 1.13.0 : arretee pendant une pause (la simulation s'arrete), ou son code change pendant la pause (abandonnee) : sans
+    // erreur, l'appelant s'arrete aussi.
+    if (abandoned || (currentTask_ && currentTask_->task->cancelled())) return false;
     std::string why = initWhy;
     failLine = -1;
     for (const auto& d : mine)
@@ -4513,6 +4625,11 @@ void Runtime::stop(double now, const std::string& why) {
 
 void Runtime::press(Id object, double now) {
     if (paused_) return;                         // 1.13.0 : en pause (le debogueur), l'IHM est figee : le geste est ignore
+    // 1.13.0 : un relachement garde pendant une pause qui vient de finir part avant ce nouvel appui (dans l'ordre).
+    if (!deferred_.empty() && !currentTask_) {
+        replayDeferredInput(now);
+        if (paused_) return;
+    }
     // 1.13.0 : un point arme - le geste entier sur une tache du debogueur (une pause y fige la suite du geste).
     if (unitWanted()) { (void)debugUnit("Appui", [this, object, now] { press(object, now); }); return; }
     composed_.clear(); boundCalls_.clear();
@@ -4532,11 +4649,12 @@ void Runtime::press(Id object, double now) {
 }
 
 void Runtime::release(Id object, double now, bool inside) {
-    // 1.13.0 : en pause (le debogueur), l'IHM est figee : le clic est ignore - mais l'objet appuye avant la pause ne reste
-    // pas enfonce : le relachement est rejoue a la reprise, comme relache dehors (l'impulsion retombe, sans clic).
+    // 1.13.0 : en pause (le debogueur), l'IHM est figee : rien ne part tout de suite - mais l'objet appuye avant la pause
+    // ne reste pas enfonce : le relachement est rejoue a la reprise, tel qu'il est arrive (sur l'objet : son clic, ses
+    // actions Clic, comme sans debogueur ; dehors : l'impulsion retombe, sans clic).
     if (paused_) {
         if (object != kNoId && pressed_ == object)
-            deferred_.push_back(DeferredInput{false, {}, object});
+            deferred_.push_back(DeferredInput{false, {}, object, inside});
         return;
     }
     if (unitWanted()) { (void)debugUnit("Clic", [this, object, now, inside] { release(object, now, inside); }); return; }
@@ -4629,7 +4747,9 @@ void Runtime::doubleClick(Id object, double now) {
     evaluateProps(snapshot.id, *snapshot.object(object));   // 1.12.6 (lot B) : tel que l'ecran le montre
     GestureGuard gesture(*this, where(snapshot, snapshot.object(object)), "Double-clic sur");         // lot 13 : l'audit
     runActions(snapshot, snapshot.object(object), Trigger::DoubleClick, now);
-    if (o->kind == Kind::Table) tableGesture(snapshot, *snapshot.object(object), Trigger::CellDoubleClick, now);   // 1.12.13
+    // 1.13.0 (le debogueur) : la copie, pas l'objet de la vue - les actions ont pu s'arreter (une pause), et la vue changer
+    // pendant ce temps (un objet ajoute : l'objet d'avant n'est plus a sa place).
+    if (snapshot.object(object)->kind == Kind::Table) tableGesture(snapshot, *snapshot.object(object), Trigger::CellDoubleClick, now);   // 1.12.13
 }
 
 void Runtime::watchTriggers(const View& view, double now, bool cycleTick) {

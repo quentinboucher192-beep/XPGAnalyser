@@ -96,6 +96,7 @@ struct MethodCall {
     std::string owner;       // "type T_Pompe, m\xC3\xA9thode Demarrer" (pour les messages)
     std::string selfType;    // le type de SELF (le porteur reel)
     bool        isVirtual{false};
+    Id          method{kNoId};   // 1.13.0 (le debogueur) : la methode appelee (celle du type qui la definit)
 };
 // La methode `method` (sans casse) de `selfType` (ou d'un de ses parents) : vrai et
 // `out`. Faux : aucune (ou `selfType` n'est pas un type a methodes).

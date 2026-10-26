@@ -4936,13 +4936,17 @@ private:
         OperatorSource src;
         if (!env_.findOperator(op, left, right, src)) return nullptr;
         if (owner) *owner = src.owner;
-        if (const auto it = operatorCache().find(src.key); it != operatorCache().end()) return it->second;
+        if (const auto it = operatorCache().find(src.key); it != operatorCache().end()) {
+            if (src.debugId && it->second) env_.debugFunction(*it->second, src.debugId);   // 1.13.0 : ses points d'arret
+            return it->second;
+        }
         auto f = parseFunction(src.function, src.owner.empty() ? std::string(op) : src.owner);
         if (!f) {
             fail(0, (src.owner.empty() ? std::string(op) : src.owner) + " : " + f.error().message());
             return nullptr;
         }
         operatorCache()[src.key] = *f;
+        if (src.debugId) env_.debugFunction(**f, src.debugId);
         return *f;
     }
     static std::map<std::string, std::shared_ptr<const Function>>& operatorCache() {
@@ -4972,6 +4976,7 @@ private:
             operatorCache()[src.key] = *parsed;
             f = *parsed;
         }
+        if (src.debugId && f) env_.debugFunction(*f, src.debugId);      // 1.13.0 (le debogueur IHM) : ses points d'arret
         // Synthetiser l'appel : SELF (l'objet) devant, puis les arguments donnes.
         Expr call2 = e;
         call2.lhs = nullptr;
@@ -5533,6 +5538,7 @@ private:
                         operatorCache()[src.key] = *parsed;
                         f = *parsed;
                     }
+                    if (src.debugId && f) env_.debugFunction(*f, src.debugId);   // 1.13.0 (le debogueur IHM)
                     return callDeclared(*f, e, true);
                 }
             if (auto mine = natives1220(callee, e)) return std::move(*mine);          // 1.12.20 : les dernieres natives a rappel
