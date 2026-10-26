@@ -32,6 +32,10 @@ struct ScriptDiagnostic {
     // 1.10 : ou souligner (1 = le premier octet de la ligne ; 0 : la ligne).
     int         column{0};
     int         length{0};
+    // 1.13.0 (lot F3) : la correction d'un clic que le controle a donnee (scriptcheck::Finding::fixFrom) - la ligne
+    // Saisie du panneau Diagnostics la porte comme celle de Validation ; vide : aucune.
+    std::string fixFrom{}, fixTo{};
+    int         fixColumn{0};
 };
 
 // 1.10 : un nom de type IHM (structure) connu du projet ? (vide : aucun, comme en 1.9)

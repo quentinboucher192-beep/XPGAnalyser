@@ -302,9 +302,16 @@ bool HmiConfigPane::exportTestsReport(hmi::ExportFormat format, std::string* whe
     TestCampaign c;
     std::string path;
     const bool ok = exportTestReport(doc_->project, testHosts_.plc ? testHosts_.plc() : nullptr, format, testHosts_.exportFile, &path, &c);
-    if (testHosts_.output) testHosts_.output(c.lines);
     message_ = ok ? "Rapport des tests \xC3\xA9" "crit : " + path + " (" + c.tally.text() + ")"
                   : "Rapport des tests impossible \xC3\xA0 \xC3\xA9" "crire" + (path.empty() ? std::string{} : " : " + path);
+    // 1.13.0 (lot F3) : le rejeu du rapport ne se journalise pas cas par cas (le journal se repetait ; les verdicts sont
+    // gardes, l'arbre et les onglets Tests les montrent) - une ligne aux Sorties : le fichier et le bilan.
+    if (testHosts_.output) {
+        TestLine l;
+        l.severity = ok ? hmi::pipeline::Severity::Information : hmi::pipeline::Severity::Error;
+        l.text = ok ? message_ : message_ + " (" + c.tally.text() + ")";
+        testHosts_.output({l});
+    }
     if (!ok) ui::PropertyGrid::refuse(message_);
     if (testHosts_.message) testHosts_.message(message_, !ok);      // 1.13.0 (seconde passe) : la barre le dit
     if (where) *where = path;

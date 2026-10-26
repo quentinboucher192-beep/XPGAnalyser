@@ -18,6 +18,7 @@
 // =============================================================================
 #include "../src/hmi/HmiFunctionTests.hpp"
 #include "../src/hmi/HmiCheck.hpp"
+#include "../src/hmi/HmiExport.hpp"          // 1.13.0 (lot F3) : fileNamePart (le nom du rapport)
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiStore.hpp"
 
@@ -915,6 +916,35 @@ void nanSaisi() {
     check(rep.results.size() == 1 && rep.results[0].verdict != Verdict::Pending, "1.0 / 0.0 attendu +INF : joue (" + (rep.results.empty() ? std::string{} : rep.results[0].detail) + ")");
 }
 
+// 1.13.0 (lot F3) : les defauts vus aux captures - l'ecart ecrit comme l'obtenu et l'attendu (ecart 1.0, plus
+// ecart 1) ; le nom du rapport garde ses lettres (demonstration, plus d__monstration).
+void lotF3() {
+    std::printf("-- lot F3 : l'ecart d'un echec ; le nom du rapport\n");
+    Project p = bench();
+    const HmiFunction* moy = p.functionByName("Moyenne_Pression");
+    check(moy != nullptr, "Moyenne_Pression existe");
+    if (moy) {
+        FunctionTest t = caseOf(p, moy->id, "poids 75 %");
+        t.arguments = {"12.0", "20.0", "0.75"};
+        t.expected = "15.0";
+        t.tolerance = "0.001";
+        const auto r = runFunctionTest(p, *moy, t);
+        check(r.verdict == Verdict::Failed && r.detail == "obtenu 14.0, attendu 15.0 (\xC3\xA9" "cart 1.0)",
+              "R17 : l'ecart au meme format que l'obtenu (" + r.detail + ")");
+        t.expected = "14.0";
+        const auto ok = runFunctionTest(p, *moy, t);
+        check(ok.verdict == Verdict::Passed && ok.detail.find("(\xC3\xA9" "cart 0.0)") != std::string::npos, "R17 : ecart 0.0 (" + ok.detail + ")");
+        t.expected = "14.25";
+        const auto half = runFunctionTest(p, *moy, t);
+        check(half.detail.find("(\xC3\xA9" "cart 0.25)") != std::string::npos, "R17 : ecart 0.25 tel quel (" + half.detail + ")");
+    }
+    check(fileNamePart("B3.2 EXTRACTIONS TE-LUNA (d\xC3\xA9monstration)") == "B3_2_EXTRACTIONS_TE-LUNA__demonstration_",
+          "C6 : le e accent devient e, un caractere interdit un seul _ (" + fileNamePart("B3.2 EXTRACTIONS TE-LUNA (d\xC3\xA9monstration)") + ")");
+    check(fileNamePart("\xC3\x89tat \xC5\x93uvre \xC3\xA7" "a \xC3\x9F") == "Etat_oeuvre_ca_ss", "C6 : E accent, oe, c cedille, ss");
+    check(fileNamePart("\xE2\x82\xAC-\xE6\xB0\xB4") == "_-_" && fileNamePart("", "projet") == "projet",
+          "C6 : un caractere non latin : un seul _ ; vide : la valeur donnee");
+}
+
 } // namespace
 
 int main() {
@@ -936,6 +966,7 @@ int main() {
     argumentsSuivent();
     attenduNomDObjet();     // 1.13.0 (D3b)
     nanSaisi();
+    lotF3();                // 1.13.0 (lot F3) : les defauts vus aux captures
     std::printf("\n%d verifications, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

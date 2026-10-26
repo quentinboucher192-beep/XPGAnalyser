@@ -55,4 +55,9 @@ struct Place {
 // (le volet lui-meme). F1 sur Variables IHM et Types IHM menait au sujet des scripts.
 [[nodiscard]] std::string_view placeOfProgrammingTab(std::size_t tab) noexcept;
 
+// 1.13.0 (lot F3) : le lieu d'un onglet de l'editeur d'une fonction, dans l'ordre de HmiFunctionsPane::CodeTab :
+// 4 Tests ("tests-fonctions" : Les tests unitaires d'une fonction) ; les autres, la fonction ("fonctions"). F1 sur
+// l'onglet Tests menait a Fonctions IHM (les deux sujets citent "fonctions", le premier gagnait).
+[[nodiscard]] std::string_view placeOfFunctionTab(std::size_t tab) noexcept;
+
 } // namespace help::f1

@@ -189,7 +189,10 @@ std::size_t findBounded(std::string_view text, std::string_view from, std::size_
     return best;
 }
 // `column` (1.13.0, seconde passe) : l'occurrence visee, sur la ligne (ou dans le texte entier, line 0) ; 0 : la premiere.
-bool replaceIn(std::string& text, int line, std::string_view from, std::string_view to, int column = 0) {
+// 1.13.0 (lot F3) : `placed` - ou le remplacement commence dans le texte (un octet ; npos : rien de remplace).
+bool replaceIn(std::string& text, int line, std::string_view from, std::string_view to, int column = 0,
+               std::size_t* placed = nullptr) {
+    if (placed) *placed = std::string::npos;
     if (from.empty()) return false;
     // Une correction qui emballe le texte (EN(x, 'bar') : x suit une parenthese ouvrante) le veut entier.
     const bool whole = to.find("(" + std::string(from)) != std::string_view::npos;
@@ -210,30 +213,56 @@ bool replaceIn(std::string& text, int line, std::string_view from, std::string_v
     if (at == std::string::npos) at = findBounded(text, from, 0, text.size(), whole);   // la ligne a bouge : tout le texte
     if (at == std::string::npos) return false;
     text.replace(at, from.size(), to);
+    if (placed) *placed = at;
     return true;
+}
+// 1.13.0 (lot F3) : la ligne et la colonne (1 = la premiere ; le premier octet de la ligne) d'un octet du texte.
+void placeOf(std::string_view text, std::size_t at, FixPlace* done) {
+    if (!done || at == std::string::npos || at > text.size()) return;
+    int line = 1;
+    std::size_t begin = 0;
+    for (std::size_t k = 0; k < at; ++k)
+        if (text[k] == '\n') {
+            ++line;
+            begin = k + 1;
+        }
+    done->line = line;
+    done->column = static_cast<int>(at - begin) + 1;
 }
 } // namespace
 
-bool applyFix(Project& p, const FixPlace& at, std::string_view from, std::string_view to, std::string* what) {
+bool applyFix(Project& p, const FixPlace& at, std::string_view from, std::string_view to, std::string* what, FixPlace* done) {
+    if (done) {
+        *done = at;
+        done->line = 0;
+        done->column = 0;
+    }
     const auto say = [&](std::string w) {
         if (what) *what = std::move(w);
+        return true;
+    };
+    // 1.13.0 (lot F3) : un code (script, fonction) - le remplacement a sa ligne et sa colonne (`done`).
+    const auto inCode = [&](std::string& body) {
+        std::size_t placed = std::string::npos;
+        if (!replaceIn(body, at.line, from, to, at.column, &placed)) return false;
+        placeOf(body, placed, done);
         return true;
     };
     // Un script (general ou de vue), a sa ligne.
     if (at.script != kNoId) {
         for (auto& sc : p.programs.scripts)
-            if (sc.id == at.script) return replaceIn(sc.body, at.line, from, to, at.column) && say("le script " + sc.name);
+            if (sc.id == at.script) return inCode(sc.body) && say("le script " + sc.name);
         for (auto& v : p.views)
             for (auto& sc : v.scripts)
-                if (sc.id == at.script) return replaceIn(sc.body, at.line, from, to, at.column) && say("le script " + v.name + "." + sc.name);
+                if (sc.id == at.script) return inCode(sc.body) && say("le script " + v.name + "." + sc.name);
         return false;
     }
     if (at.item != kNoId) {
         for (auto& f : p.programs.functions)
-            if (f.id == at.item) return replaceIn(f.body, at.line, from, to, at.column) && say("la fonction " + f.name);
+            if (f.id == at.item) return inCode(f.body) && say("la fonction " + f.name);
         for (auto& v : p.views)
             for (auto& f : v.functions)
-                if (f.id == at.item) return replaceIn(f.body, at.line, from, to, at.column) && say("la fonction " + v.name + "." + f.name);
+                if (f.id == at.item) return inCode(f.body) && say("la fonction " + v.name + "." + f.name);
         for (auto& var : p.programs.variables)
             if (var.id == at.item) return replaceIn(var.initial, 0, from, to) && say("la valeur initiale de " + var.name);
         return false;

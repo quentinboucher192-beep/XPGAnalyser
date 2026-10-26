@@ -52,6 +52,10 @@ inline constexpr std::string_view kExportFormats[] = {"CSV", "Excel", "PDF"};
 // remplaces par '-', l'extension du format (remplace une autre extension
 // connue). Vide : "export".
 [[nodiscard]] std::string exportFileName(std::string_view wanted, ExportFormat);
+// 1.13.0 (lot F3) : UN MORCEAU DE NOM DE FICHIER, ASCII - lettres et chiffres, _ et - ; une lettre accentuee perd son
+// accent ("demonstration", "Etat", oe, ae, ss), tout autre caractere (espace, point, parenthese, un caractere UTF-8
+// non latin) devient UN _ (pas un par octet). Vide : `empty`. Le nom d'un projet dans celui d'un rapport.
+[[nodiscard]] std::string fileNamePart(std::string_view text, std::string_view empty = "_");
 
 // Les sources d'un export (en plus de "recette:Nom" et "objet:Nom").
 inline constexpr std::string_view kExportSources[] = {"alarmes", "historique", "\xC3\xA9v\xC3\xA9nements", "syst\xC3\xA8me", "mesures", "audit"};   // lot 13 : audit

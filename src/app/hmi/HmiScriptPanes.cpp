@@ -244,6 +244,9 @@ std::vector<hmi::ScriptDiagnostic> placedScriptDiagnostics(const hmi::Project& p
         d.message = f.message;
         d.column = f.column;
         d.length = f.length;
+        d.fixFrom = f.fixFrom;                               // 1.13.0 (lot F3) : la correction d'un clic, en Saisie aussi
+        d.fixTo = f.fixTo;
+        d.fixColumn = f.fixColumn;
         out.push_back(std::move(d));
         if (fixes && f.fixLine > 0) fixes->push_back(f);     // 1.10 (I2) : sa correction proposee
     }

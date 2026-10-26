@@ -1395,6 +1395,7 @@ void HelpArticleView::onPaint(const PaintContext& ctx) {
     // ---- le sommaire flottant -------------------------------------------------
     tocRects_.clear();
     const float tw = tocWidth(r.w);
+    std::string tocTip;      // 1.13.0 (lot F3) : l'intertitre entier d'une ligne coupee, sous la souris
     if (tw > 0.f && !layout_.sections.empty()) {
         const float x = r.right() - tw + 8.f;
         float y = r.y + 16.f;
@@ -1415,8 +1416,19 @@ void HelpArticleView::onPaint(const PaintContext& ctx) {
             if (on) ctx.r.fillRect({x - 8.f, y, 2.f, lh}, th.color.accent);
             if (static_cast<int>(i) == hoveredToc_)
                 ctx.r.fillRoundedRect({row.x + 4.f, row.y, row.w - 4.f, row.h}, th.brand.hover, 4.f);
-            ctx.r.drawText({x + 4.f, y + 5.f}, layout_.sections[i].title, th.font.caption,
-                           on ? th.color.accent : th.color.textMuted);
+            // 1.13.0 (lot F3) : un intertitre trop long se coupe avec "..." avant la barre de defilement (il etait
+            // coupe net par elle) ; le survol le montre entier.
+            const std::string& title = layout_.sections[i].title;
+            const float maxW = std::max(0.f, tw - 32.f);
+            const auto fits = ctx.r.fitCharacters(title, th.font.caption, maxW);
+            std::string shown = title;
+            if (fits < title.size()) {
+                std::size_t keep = fits > 3 ? fits - 3 : 0;
+                while (keep > 0 && (static_cast<unsigned char>(title[keep]) & 0xC0) == 0x80) --keep;   // pas un demi caractere
+                shown = title.substr(0, keep) + "...";
+                if (static_cast<int>(i) == hoveredToc_) tocTip = title;
+            }
+            ctx.r.drawText({x + 4.f, y + 5.f}, shown, th.font.caption, on ? th.color.accent : th.color.textMuted);
             y += lh;
         }
     }
@@ -1427,9 +1439,12 @@ void HelpArticleView::onPaint(const PaintContext& ctx) {
     // 1.11.4 : elle se tire.
     if (maxScroll() > 0.f) sbar_.paint(ctx, {r.x, r.y, r.w - 2.f, r.h}, r.h + maxScroll(), r.h, scrollY_);
 
-    // L'infobulle d'une puce : ce que designe un nom, sans avoir a l'ouvrir.
-    if (hoveredSpot_ >= 0 && hoveredSpot_ < static_cast<int>(layout_.hotspots.size())) {
-        const auto& tip = layout_.hotspots[static_cast<std::size_t>(hoveredSpot_)].tip;
+    // L'infobulle d'une puce : ce que designe un nom, sans avoir a l'ouvrir. 1.13.0 (lot F3) : ou l'intertitre entier
+    // d'une ligne coupee du sommaire.
+    {
+        std::string tip = tocTip;
+        if (tip.empty() && hoveredSpot_ >= 0 && hoveredSpot_ < static_cast<int>(layout_.hotspots.size()))
+            tip = layout_.hotspots[static_cast<std::size_t>(hoveredSpot_)].tip;
         if (!tip.empty()) {
             const float maxW = 360.f;
             const auto lines = wrapWith(tip, maxW - 20.f, [&](std::string_view s) {

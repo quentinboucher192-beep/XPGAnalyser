@@ -266,6 +266,35 @@ std::string_view exportExtension(ExportFormat f) noexcept {
     return "csv";
 }
 
+std::string fileNamePart(std::string_view text, std::string_view empty) {
+    std::string out;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const auto c = static_cast<unsigned char>(text[i]);
+        if (c < 0x80) {
+            out += (std::isalnum(c) || c == '_' || c == '-') ? static_cast<char>(c) : '_';
+            continue;
+        }
+        // Les lettres latines accentuees (U+00C0 a U+00FF, et oe / OE) : leur lettre de base, la casse gardee.
+        const char* base = nullptr;
+        if (c == 0xC3 && i + 1 < text.size()) {
+            static const char* const kLatin1[64] = {
+                "A", "A", "A", "A", "A", "A", "AE", "C", "E", "E", "E", "E", "I", "I", "I", "I",          // C0 - CF
+                "D", "N", "O", "O", "O", "O", "O", nullptr, "O", "U", "U", "U", "U", "Y", nullptr, "ss",  // D0 - DF
+                "a", "a", "a", "a", "a", "a", "ae", "c", "e", "e", "e", "e", "i", "i", "i", "i",          // E0 - EF
+                "d", "n", "o", "o", "o", "o", "o", nullptr, "o", "u", "u", "u", "u", "y", nullptr, "y"};  // F0 - FF
+            const auto n = static_cast<unsigned char>(text[i + 1]);
+            if (n >= 0x80 && n <= 0xBF) base = kLatin1[n - 0x80];
+        } else if (c == 0xC5 && i + 1 < text.size()) {
+            const auto n = static_cast<unsigned char>(text[i + 1]);
+            if (n == 0x92) base = "OE";
+            else if (n == 0x93) base = "oe";
+        }
+        out += base ? base : "_";
+        while (i + 1 < text.size() && (static_cast<unsigned char>(text[i + 1]) & 0xC0) == 0x80) ++i;   // la suite du caractere
+    }
+    return out.empty() ? std::string(empty) : out;
+}
+
 std::string exportFileName(std::string_view wanted, ExportFormat f) {
     std::string out;
     for (const char c : wanted) {

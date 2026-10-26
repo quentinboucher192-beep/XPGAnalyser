@@ -63,6 +63,8 @@ struct SourceTopic {
     std::string kind;       // "objet" (un @objet du guide), "macro", "dfb", "ddt" ; vide : un sujet
     int         headings{0};   // le nombre d'intertitres (### du guide) : l'estimation du tutoriel
 };
+// 1.13.0 (lot F3) : le genre d'un sujet du guide sur ce qui est retire (son premier intertitre : " Retire en 1.13.0 ").
+inline constexpr const char* kRetiredKind = "retire";
 
 struct Inputs {
     std::vector<SourceTopic> guide;     // dans l'ordre du guide

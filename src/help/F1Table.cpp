@@ -15,6 +15,7 @@ const std::vector<Place>& places() {
         {Kind::HmiPlace, "scripts-vue", "Script d'une vue", "scripts", "help.hmi"},
         {Kind::HmiPlace, "scripts", "Scripts g\xC3\xA9n\xC3\xA9raux", "scripts", "help.hmi"},
         {Kind::HmiPlace, "fonctions", "Fonctions", "fonctions", "help.hmi"},
+        {Kind::HmiPlace, "tests-fonctions", "Fonctions \xE2\x80\xBA onglet Tests", "tests-fonctions", "help.hmi"},   // 1.13.0 (lot F3)
         {Kind::HmiPlace, "ihm", "IHM (le dossier de l'arbre)", "ihm", "help.hmi"},
         {Kind::HmiPlace, "vues", "Vues", "vues", "help.hmi"},
         {Kind::HmiPlace, "config", "Configuration", "configuration", "help.hmi"},
@@ -116,5 +117,7 @@ std::string_view placeOfProgrammingTab(std::size_t tab) noexcept {
     static constexpr std::string_view kTabs[] = {"scripts", "variables", "types-ihm", "methodes-symboles"};
     return tab < std::size(kTabs) ? kTabs[tab] : kTabs[0];
 }
+
+std::string_view placeOfFunctionTab(std::size_t tab) noexcept { return tab == 4 ? "tests-fonctions" : "fonctions"; }
 
 } // namespace help::f1

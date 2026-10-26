@@ -631,7 +631,7 @@ void TopBar::openMenu(Menu m) {
         }
         it.enabled = en.enabled && (!enabled_ || en.action.rfind("version.", 0) == 0 || enabled_(en.action));
         if (!it.enabled) it.disabledReason = !en.disabledReason.empty() ? en.disabledReason
-                                           : en.action == "project.unlock" ? "le projet n'est pas LOCK" : "pas maintenant";
+                                           : en.action == "project.unlock" ? "le projet n'est pas verrouill\xC3\xA9" : "pas maintenant";
         it.id = static_cast<int>(popupActions_.size());
         popupActions_.push_back(en.action);
         items.push_back(std::move(it));

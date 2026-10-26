@@ -251,6 +251,8 @@ public:
     [[nodiscard]] const Answer& answer() const noexcept { return answer_; }
     // Une case par parametre : "A : REAL", "Poids_A : REAL  (defaut 0.5)" ; ce que le cas ecrit a sa place.
     [[nodiscard]] std::vector<std::string> parameterLabels() const;
+    // 1.13.0 (lot F3) : la largeur de la colonne des libelles - le plus long, entier (170 px au moins).
+    [[nodiscard]] float labelWidth() const;
     [[nodiscard]] std::string preview() const;                    // "Moyenne_Pression(12.0, 20.0, 0.25)"
     [[nodiscard]] std::string nameProblem() const;                // vide : le nom va
     [[nodiscard]] std::string argumentProblem(std::size_t index) const;

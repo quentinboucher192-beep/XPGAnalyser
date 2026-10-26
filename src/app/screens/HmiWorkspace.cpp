@@ -493,6 +493,7 @@ void MainAnalysisScreen::bindHmi() {
         // " Gerer les unites... " : la page s'ouvrirait sous la fenetre, inaccessible tant qu'elle reste ouverte.
         if (const menu::IMenu* under = app_.menus().top())
             if (const auto kind = under->traits().kind; kind == menu::MenuKind::Dialog || kind == menu::MenuKind::Modal) spec.canManage = false;
+        refreshStatusSelection();     // 1.13.0 (lot F3) : la ligne choisie par le double-clic, dans le bandeau bas
         app_.menus().ShowDialog(std::make_unique<HmiUnitPicker>(std::move(spec)), [this, done = std::move(done)](const menu::DialogResult& r) {
             if (!r.accepted()) return;
             HmiUnitPicker::Answer a;
@@ -3700,6 +3701,7 @@ void MainAnalysisScreen::askHmiType(HmiTypePicker::Spec spec, typepicker::Done d
     if (!spec.doc) return;
     if (!spec.plc.names) spec.plc = hmiparams::plcTypesOf(app_.project().get());
     spec.recents = app_.settings().getList("hmi.types.recents");
+    refreshStatusSelection();         // 1.13.0 (lot F3) : la ligne choisie par le double-clic, dans le bandeau bas
     app_.menus().ShowDialog(std::make_unique<HmiTypePicker>(std::move(spec)), [this, done](const menu::DialogResult& r) {
         if (!r.accepted()) return;
         const auto a = HmiTypePicker::parse(r.payload);
@@ -3909,6 +3911,22 @@ bool MainAnalysisScreen::openHmiHelpNow() {
             if (tab == HmiScriptsPane::TabVariables || tab == HmiScriptsPane::TabTypes) {
                 const auto own = help::f1::keyForPlace(help::f1::placeOfProgrammingTab(tab));
                 openHmiHelp(own.empty() ? std::string("ihm") : own);
+                return true;
+            }
+        }
+        // 1.13.0 (lot F3) : l'onglet Tests d'une fonction (le volet Fonctions, ou les fonctions d'une vue, d'une popup, d'un
+        // symbole) : son sujet, Les tests unitaires d'une fonction - et non le mot sous le curseur du code, cache derriere.
+        static_assert(HmiFunctionsPane::CodeTabTests == 4, "help::f1::placeOfFunctionTab suit l'ordre des onglets de HmiFunctionsPane");
+        {
+            HmiFunctionsPane* functionsHere = dynamic_cast<HmiFunctionsPane*>(hmiTab(key));
+            if (!functionsHere)
+                if (auto* editor = dynamic_cast<HmiEditor*>(hmiTab(key))) {
+                    if (editor->viewTabs() && editor->viewTabs()->current() == HmiSymbolTabs::Functions) functionsHere = editor->viewFunctions();
+                    else if (editor->symbolTabs() && editor->symbolTabs()->current() == HmiSymbolTabs::Functions) functionsHere = editor->symbolFunctions();
+                }
+            if (functionsHere && functionsHere->currentCodeTab() == HmiFunctionsPane::CodeTabTests) {
+                const auto own = help::f1::keyForPlace(help::f1::placeOfFunctionTab(functionsHere->currentCodeTab()));
+                openHmiHelp(own.empty() ? std::string("fonctions") : own);
                 return true;
             }
         }

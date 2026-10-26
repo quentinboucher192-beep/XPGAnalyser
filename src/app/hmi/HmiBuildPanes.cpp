@@ -817,7 +817,9 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
         }
         items.push_back({fix ? "Appliquer la correction : " + from + " \xE2\x86\x92 " + to : std::string("Appliquer la correction"), "Ctrl+.",
                          "ce message ne propose pas de remplacement", ui::Icon::Wrench, fix, false, 2007});
-        const std::string who = !d->element.empty() ? d->element : d->path;
+        // 1.13.0 (lot F3) : ce que montre la colonne Element (son chemin), pas la cle interne du build ("script:1920") -
+        // la recherche le retrouve (shown lit le chemin).
+        const std::string who = d->path;
         items.push_back({who.empty() ? std::string("Filtrer sur cet \xC3\xA9l\xC3\xA9ment") : "Filtrer sur \xC2\xAB " + who + " \xC2\xBB", {},
                          "aucun \xC3\xA9l\xC3\xA9ment", ui::Icon::Filter, !who.empty(), false, 2002});
         items.push_back({"Copier la ligne (texte)", "Ctrl+C", {}, ui::Icon::Copy, true, false, 2003});
@@ -1018,7 +1020,7 @@ void HmiBuildOutputPane::rowMenu(int action) {
         case 2002: {
             std::string who;
             if (diag) {
-                if (const auto* d = selectedDiagnostic()) who = !d->element.empty() ? d->element : d->path;
+                if (const auto* d = selectedDiagnostic()) who = d->path;     // 1.13.0 (lot F3) : ce que montre la colonne Element
             } else if (!sel.empty() && sel.front() < outRows_.size()) {
                 who = lines_[outRows_[sel.front()]].element;
             }

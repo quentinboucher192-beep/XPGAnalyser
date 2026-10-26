@@ -10,6 +10,7 @@
 #include "../ExportTarget.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiEquipment.hpp"
+#include "../../hmi/HmiExport.hpp"
 #include "../../hmi/HmiHistory.hpp"
 
 #include <algorithm>
@@ -31,11 +32,7 @@ const char* const kPlcChoice = "automate du projet";
 const char* const kNoName = "Sans nom";
 
 std::string stemOf(const std::string& name) {
-    std::string out;
-    for (const char c : name) {
-        const auto u = static_cast<unsigned char>(c);
-        out += (std::isalnum(u) && u < 0x80) || c == '-' || c == '_' ? c : '_';
-    }
+    std::string out = hmi::fileNamePart(name, "");     // 1.13.0 (lot F3) : un accent perdu, pas la lettre
     while (out.find("__") != std::string::npos) out.replace(out.find("__"), 2, "_");
     return out.empty() ? std::string("jeu") : out;
 }

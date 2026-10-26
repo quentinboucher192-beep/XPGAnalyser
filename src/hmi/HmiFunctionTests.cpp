@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -90,14 +91,16 @@ std::string seconds(double s) {
 }
 
 // La valeur montree : un REAL garde sa virgule (18.0, pas 18), une chaine ses apostrophes.
+// Un reel comme le detail le montre : 14.0 (un entier garde son .0), 0.5, 6 chiffres significatifs au plus.
+std::string realText(double x) {
+    char b[48];
+    if (std::isfinite(x) && std::fabs(x) < 1e15 && std::floor(x) == x) std::snprintf(b, sizeof b, "%.1f", x);
+    else std::snprintf(b, sizeof b, "%.6g", x);
+    return b;
+}
+
 std::string valueText(const sim::Value& v) {
-    if (v.type() == sim::Type::Real) {
-        const double x = v.asReal();
-        char b[48];
-        if (std::isfinite(x) && std::fabs(x) < 1e15 && std::floor(x) == x) std::snprintf(b, sizeof b, "%.1f", x);
-        else std::snprintf(b, sizeof b, "%.6g", x);
-        return b;
-    }
+    if (v.type() == sim::Type::Real) return realText(v.asReal());
     if (v.type() == sim::Type::String) return "'" + v.asString() + "'";
     return formatValue(v);
 }
@@ -211,9 +214,14 @@ Compared compareValue(const sim::Value& got, const std::string& expectedRaw, con
         double tol = 0;
         (void)parseNumber(trim(tolRaw), tol);
         const double ecart = std::fabs(a - b);
-        char buf[160];
-        std::snprintf(buf, sizeof buf, "obtenu %s, attendu %s (\xC3\xA9" "cart %.6g)", gotText.c_str(), expected.c_str(), ecart);
-        return {ecart <= tol, buf};
+        // 1.13.0 (lot F3) : l'ecart ecrit comme l'obtenu et l'attendu ("ecart 1.0", plus "ecart 1").
+        double shownEcart = ecart;
+        {
+            char r[48];
+            std::snprintf(r, sizeof r, "%.6g", ecart);     // 0.9999999999 se lit 1 : arrondi comme il s'ecrit
+            shownEcart = std::strtod(r, nullptr);
+        }
+        return {ecart <= tol, "obtenu " + gotText + ", attendu " + expected + " (\xC3\xA9" "cart " + realText(shownEcart) + ")"};
     }
     const std::string note = "obtenu " + gotText + ", attendu " + expected;
     if (got.type() == sim::Type::Bool) {

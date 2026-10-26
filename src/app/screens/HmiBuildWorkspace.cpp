@@ -187,8 +187,8 @@ void MainAnalysisScreen::startHmiBuild(const std::string& source) {
 //  Au Compiler (Generer et compiler, Regenerer et compiler) et au Demarrer, apres la verification du code (un
 //  build reussi), si Configuration le veut (Rejouer les tests au Compiler/Demarrer, coche d'office) : tous les
 //  cas actifs, chacun sur son banc (rien du projet ni de la simulation n'est touche) ; leurs verdicts aux Sorties
-//  (categorie Tests ; le panneau s'ouvre a un echec). Un echec est un avertissement ; au Demarrer, avec " Un test
-//  en echec empeche le demarrage ", il bloque (vrai).
+//  (categorie Tests ; le panneau s'ouvre a un echec). Un echec est ecrit en Erreur (1.13.0, lot F3 : comme son verdict)
+//  sans bloquer ; au Demarrer, avec " Un test en echec empeche le demarrage ", il bloque (vrai).
 bool MainAnalysisScreen::replayHmiTests(const pl::Report& rep, pl::Mode mode) {
     const auto doc = app_.hmi();
     if (!doc || !rep.ok || rep.cancelled || rep.locked) return false;
@@ -200,7 +200,7 @@ bool MainAnalysisScreen::replayHmiTests(const pl::Report& rep, pl::Mode mode) {
     const auto campaign = runAllTests(doc->project, plc);
     const bool blocks = mode == pl::Mode::Start && cfg.testFailBlocksStart && campaign.failed();
     if (auto* out = hmiBuildOutput(campaign.failed())) {
-        out->say(campaign.failed() ? (blocks ? pl::Severity::Critical : pl::Severity::Warning) : pl::Severity::Success, "Tests",
+        out->say(campaign.failed() ? (blocks ? pl::Severity::Critical : pl::Severity::Error) : pl::Severity::Success, "Tests",
                  campaign.summary() + (blocks ? " \xE2\x80\x94 la simulation ne d\xC3\xA9marre pas (Configuration : un test en \xC3\xA9" "chec "
                                                 "emp\xC3\xAA" "che le d\xC3\xA9marrage)"
                                               : std::string{}));
@@ -363,9 +363,10 @@ void MainAnalysisScreen::wireBottomPanel() {
             at.line = d.line;
             at.column = d.fixColumn;                      // 1.13.0 (seconde passe) : l'occurrence visee
             std::string what;
+            hmi::FixPlace done;
             {
                 hmi::Project probe = doc->project;          // l'endroit existe-t-il encore ?
-                if (!hmi::applyFix(probe, at, d.fixFrom, d.fixTo, &what)) {
+                if (!hmi::applyFix(probe, at, d.fixFrom, d.fixTo, &what, &done)) {
                     if (status_) status_->setTransientMessage("Rien \xC3\xA0 corriger : " + d.fixFrom + " n'est plus l\xC3\xA0.", 6.0);
                     return;
                 }
@@ -373,7 +374,15 @@ void MainAnalysisScreen::wireBottomPanel() {
             auto cmd = hmi::changeProject(doc, "Corriger : " + d.fixFrom + " \xE2\x86\x92 " + d.fixTo,
                                           [&](hmi::Project& pp) { (void)hmi::applyFix(pp, at, d.fixFrom, d.fixTo); });
             if (cmd) app_.apply(std::move(cmd), /*refreshViews=*/true);
-            openHmiDiagnostic(d);
+            // 1.13.0 (lot F3) : la plage de la faute ne vaut plus (le texte a change de longueur) - le curseur juste apres
+            // le texte remplace, rien de selectionne.
+            pl::Diagnostic shown(d);
+            if (done.line > 0 && done.column > 0) {
+                shown.line = done.line;
+                shown.column = done.column + static_cast<int>(d.fixTo.size());
+                shown.length = 0;
+            }
+            openHmiDiagnostic(shown);
             if (status_) status_->setTransientMessage("Corrig\xC3\xA9 dans " + what + " : " + d.fixFrom + " \xE2\x86\x92 " + d.fixTo + " (Ctrl+Z pour revenir)", 8.0);
             return;
         }

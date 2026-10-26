@@ -153,7 +153,8 @@ std::string tutorialCardText(const TutorialInfo& info) {
 // 1.12.28 : la page d'un parcours du didacticiel n'a pas de tutoriel deduit : le parcours en est un
 // (sa carte, Commencer, en tete de page).
 bool hasTutorial(const Topic& t) {
-    return t.source != Source::NotesPage && !(t.source == Source::Guide && t.ref.rfind("parcours-", 0) == 0);
+    return t.source != Source::NotesPage && !(t.source == Source::Guide && t.ref.rfind("parcours-", 0) == 0)
+           && t.kind != kRetiredKind;                    // 1.13.0 (lot F3) : un sujet retire (page-web)
 }
 
 TutorialCount tutorialCount(const Index& ix) {
