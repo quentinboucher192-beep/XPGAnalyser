@@ -103,6 +103,9 @@ std::string methodSignature(std::string_view typeName, const HmiFunction& m) {
 // (le retour) -> le nom interne, SUPER.M(...) -> METHODE_<Parent>_M(SELF[, ...]).
 // `selfType` : le type de SELF (ses membres) ; `definingOwner` : le type qui definit la methode
 // (son parent sert a SUPER).
+// 1.13.0 : une autre methode du type appelee par son nom nu (Journal()) -> SELF.Journal() (le dispatch suit le
+// type reel de SELF) ; un argument nomme ou un champ de litteral (F(Consigne := x), (Debit := 1.0)) garde son nom ;
+// dans un texte, les trous {Debit:0.0} d'un message (LEVER, IHM_LOG, IHM_JOURNAL) lisent SELF.Debit.
 static std::string rewriteBody(const Project& p, std::string_view ownerType, const HmiFunction& m,
                                std::string_view internal) {
     const std::string body = markers::strip(m.body);
@@ -112,7 +115,50 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
     for (const auto& mm : allMembers(p, ownerType)) memberSet.insert(upperOf(mm.name));
     std::set<std::string> shadow;                                   // parametres et locales : ils cachent un membre
     for (const auto& d : m.decls) shadow.insert(upperOf(d.name));
+    // les locales ecrites dans le corps (VAR ... END_VAR) cachent aussi un membre
+    for (const auto& d : decl::extract(body).decls) shadow.insert(upperOf(d.name));
     const std::string ret = upperOf(m.name);
+    const auto method = [&](std::string_view w) { return !shadow.count(upperOf(w)) && effectiveMethod(p, ownerType, w) != nullptr; };
+
+    // Les identifiants d'une expression d'un trou {...} : un membre (ou un appel de methode) prend SELF.
+    const auto holeExpr = [&](std::string_view x) {
+        std::string r;
+        for (std::size_t j = 0; j < x.size();) {
+            if (!identStart(x[j]) || (j > 0 && (identPart(x[j - 1]) || x[j - 1] == '.' || x[j - 1] == '#'))) { r += x[j++]; continue; }
+            std::size_t e = j;
+            while (e < x.size() && identPart(x[e])) ++e;
+            const std::string w(x.substr(j, e - j));
+            std::size_t q = e;
+            while (q < x.size() && (x[q] == ' ' || x[q] == '\t')) ++q;
+            const bool isCall = q < x.size() && x[q] == '(';
+            const std::string U = upperOf(w);
+            if ((!isCall && memberSet.count(U) && !shadow.count(U)) || (isCall && method(w))) r += "SELF.";
+            r += w;
+            j = e;
+        }
+        return r;
+    };
+    // Un texte entre apostrophes (ou guillemets) : ses trous {expr[:format]} relus ; le reste tel quel.
+    const auto rewriteText = [&](std::string_view t) {
+        std::string r;
+        for (std::size_t j = 0; j < t.size();) {
+            if (t[j] == '$' && j + 1 < t.size()) { r += t.substr(j, 2); j += 2; continue; }       // $' $$ $N : un echappement
+            if (t[j] == '{' && j + 1 < t.size() && t[j + 1] == '{') { r += "{{"; j += 2; continue; }   // une accolade ecrite
+            if (t[j] != '{') { r += t[j++]; continue; }
+            const std::size_t close = t.find('}', j + 1);
+            if (close == std::string_view::npos) { r += t.substr(j); break; }
+            const std::string_view inside = t.substr(j + 1, close - j - 1);
+            std::size_t cut = inside.size();                      // le format : apres le dernier ':' (pas un :=)
+            if (const auto colon = inside.rfind(':'); colon != std::string_view::npos && (colon + 1 >= inside.size() || inside[colon + 1] != '='))
+                cut = colon;
+            r += '{';
+            r += holeExpr(inside.substr(0, cut));
+            r += inside.substr(cut);
+            r += '}';
+            j = close + 1;
+        }
+        return r;
+    };
 
     // Le type parent (pour SUPER) : celui du type qui DEFINIT la methode.
     const HmiType* self = p.hmiTypeByName(ownerType);
@@ -122,7 +168,18 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
     out.reserve(body.size() + 32);
     std::size_t i = 0;
     while (i < body.size()) {
-        // dans un commentaire ou une chaine : tel quel
+        // une chaine : ses trous {Membre} lisent SELF.Membre (le reste tel quel)
+        if (code[i] == ' ' && (body[i] == '\'' || body[i] == '"')) {
+            std::size_t k = i + 1;
+            while (k < body.size() && body[k] != body[i]) k += body[k] == '$' ? 2 : 1;
+            const std::size_t close = std::min(k, body.size());   // l'apostrophe fermante (ou la fin)
+            out += body[i];
+            out += rewriteText(std::string_view(body).substr(i + 1, close - (i + 1)));
+            if (close < body.size()) out += body[close];
+            i = close < body.size() ? close + 1 : body.size();
+            continue;
+        }
+        // dans un commentaire : tel quel
         if (code[i] == ' ' && body[i] != ' ') { out += body[i++]; continue; }
         if (!identStart(body[i]) || (i > 0 && (identPart(body[i - 1]) || body[i - 1] == '.' || body[i - 1] == '#'))) {
             out += body[i++];
@@ -167,7 +224,17 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
             continue;
         }
         if (U == ret && !call) { out += internal; continue; }
-        if (memberSet.count(U) && !shadow.count(U) && !call) { out += "SELF." + word; continue; }
+        // un argument nomme, un champ d'un litteral : (Consigne := x), Ecrire(a, Consigne := x) - son nom reste
+        const bool named = [&] {
+            if (k + 1 >= body.size() || body[k] != ':' || body[k + 1] != '=') return false;
+            std::size_t b = start;
+            while (b > 0 && std::isspace(static_cast<unsigned char>(code[b - 1]))) --b;
+            return b > 0 && (code[b - 1] == '(' || code[b - 1] == ',');
+        }();
+        if (memberSet.count(U) && !shadow.count(U) && !call && !named) { out += "SELF." + word; continue; }
+        // 1.13.0 : une autre methode du type, appelee par son nom nu (Journal()) : SELF.Journal() - SELF est l'objet reel
+        // (VAR_IN_OUT), l'appel garde le dispatch virtuel. Une methode passe avant une fonction de meme nom.
+        if (call && method(word)) { out += "SELF." + word; continue; }
         out += word;
     }
     return out;
@@ -417,17 +484,24 @@ std::string methodProblem(const Project& p, const HmiType& owner, const HmiFunct
     // une methode privee ne peut pas etre virtuelle (rien a redefinir de l'exterieur)
     if (m.visibility == Visibility::Private && m.isVirtual)
         return here + " : une m\xC3\xA9thode priv\xC3\xA9" "e ne peut pas \xC3\xAAtre virtuelle (rien \xC3\xA0 red\xC3\xA9" "finir de l'ext\xC3\xA9rieur)";
-    // retour inconnu ?
-    if (!m.returnType.empty()) {
+    // 1.13.0 : le retour et les parametres se lisent comme ceux d'une fonction IHM (une locale) : un type simple, un type
+    // IHM, une reference (REF_TO I_Demarrable), ANY, POINTER TO... - pas comme un membre (une place Modbus) ; une
+    // interface seule y est refusee (REF_TO I_x).
+    const auto knownName = [&p](std::string_view t) { return types::knownTypeName(p, t); };
+    const auto typeProblem = [&](const std::string& t) -> std::string {
+        if (const std::string iface = types::interfaceAsData(p, t, true); !iface.empty()) return iface;
+        if (localTypeSupported(t) || richLocalType(t, knownName)) return {};
         std::string why;
-        if (!types::validType(p, m.returnType, &why)) return here + " : type de retour " + why;
-    }
+        if (types::validType(p, t, &why)) return {};
+        return why.empty() ? "type illisible \xC2\xAB " + t + " \xC2\xBB" : why;
+    };
+    // retour inconnu ?
+    if (!m.returnType.empty())
+        if (const std::string why = typeProblem(m.returnType); !why.empty()) return here + " : type de retour " + why;
     // parametres illisibles ?
     for (const auto& d : m.decls)
-        if (d.kind == DeclKind::Parameter) {
-            std::string why;
-            if (!types::validType(p, d.type, &why)) return here + " : param\xC3\xA8tre " + d.name + " : " + why;
-        }
+        if (d.kind == DeclKind::Parameter)
+            if (const std::string why = typeProblem(d.type); !why.empty()) return here + " : param\xC3\xA8tre " + d.name + " : " + why;
     // OVERRIDE : la meme methode doit exister VIRTUAL chez un parent, meme signature.
     bool overridesParent = false;
     const HmiType* def = nullptr;

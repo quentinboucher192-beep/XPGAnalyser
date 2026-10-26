@@ -245,6 +245,12 @@ public:
         (void)from; (void)to;
         return false;
     }
+    // 1.13.0 (lot J1) : le nom est-il celui d'une INTERFACE de l'IHM (I_Demarrable) ? Elle n'a pas de membre (pas de
+    // structMembers) mais reste une cible de DYNAMIC_CAST<I_x>. Par defaut : non (l'automate n'a pas d'interfaces).
+    virtual bool interfaceType(std::string_view name) {
+        (void)name;
+        return false;
+    }
     // Le nom canonique d'une variable de l'environnement (un parametre de vue
     // -> son chemin) : une reference le garde, pour viser la meme chose ailleurs.
     virtual std::string canonicalName(std::string_view name) { return std::string(name); }

@@ -2478,8 +2478,22 @@ public:
         return *obj;
     }
 
-    // 1.11.17 : une locale de valeur simple (readCallerLocal).
+    // 1.11.17 : une locale de valeur simple (readCallerLocal). 1.13.0 : ou un chemin depuis une locale (SELF.Debit
+    // dans le message d'un LEVER d'une methode, r^.Nom, T[2]) - lu sans effet (une lecture au passage).
     bool readLocal(std::string_view name, Value& out) {
+        if (const auto cut = name.find_first_of(".[^"); cut != std::string_view::npos) {
+            // Une seule a la fois : la lecture du chemin peut repasser par l'environnement (une VAR_IN_OUT liee a une
+            // variable IHM de meme nom), qui redemanderait le meme chemin.
+            if (readingPath_ || cut == 0 || !findLocal(name.substr(0, cut))) return false;
+            auto parsed = parseExpression(name);
+            if (!parsed || !(*parsed)->root) return false;
+            readingPath_ = true;
+            auto v = evaluateQuietly(*(*parsed)->root);
+            readingPath_ = false;
+            if (!v) return false;
+            out = *v;
+            return true;
+        }
         const Place* p = findLocal(name);
         if (!p || !p->obj || (p->obj->type && p->obj->type->aggregate())) return false;
         out = p->obj->value;
@@ -4149,8 +4163,10 @@ private:
     // ---- lire et ecrire un emplacement ------------------------------------
     // 1.13.0 : e seul (un T_Erreur) se lit comme e.Message - compatible avec le CATCH Erreur de
     // la 1.12.1, qui recevait deja le message.
+    // Le type natif par son IDENTITE (errorType), pas par son nom : un type IHM du projet nomme T_Erreur (un projet
+    // d'avant la 1.13.0) reste une structure ordinaire, lue et copiee en entier.
     static bool isErrorObj(const ObjRef& o) {
-        return o && o->type && o->type->kind == TypeDesc::Kind::Struct && o->type->name == "T_Erreur";
+        return o && o->type && o->type == errorType();
     }
     core::Result<RV> readPlace(const Place& p) {
         if (p.obj) {
@@ -4371,7 +4387,7 @@ private:
                         if (upperOf(type.members[k].first) == m) return Place{p.obj->items[k], {}, p.constant, p.temp};
                     if (type.kind == TypeDesc::Kind::Tuple)
                         return dialectError("un " + type.text() + " a Item1 \xC3\xA0 Item" + std::to_string(type.members.size()) + ", pas '" + e.name + "'");
-                    if (type.name == "T_Erreur")            // 1.13.0 : l'erreur attrapee
+                    if (&type == errorType().get())          // 1.13.0 : l'erreur attrapee (le type natif, pas un homonyme)
                         return dialectError("T_Erreur n'a que Code, Message et Ligne, pas '" + e.name + "'");
                     return dialectError(type.name + " n'a pas de membre '" + e.name + "'");
                 }
@@ -8316,8 +8332,13 @@ private:
         auto tt = typeFromText(tmpl);
         if (!tt) return notAType(tt.error().message());
         auto rt = resolve(*tt);
-        if (!rt) return notAType(rt.error().message());
-        const TypeDesc& target = **rt;
+        // 1.13.0 (lot J1) : une interface (I_Demarrable) n'a pas de membre : resolve echoue, mais c'est une cible
+        // valable (DYNAMIC_CAST<I_Demarrable>(Vanne1) : une REF_TO l'interface, si le type reel l'implemente).
+        TypeRef targetRef;
+        if (rt) targetRef = *rt;
+        else if ((*tt)->kind == TypeDesc::Kind::Struct && !(*tt)->name.empty() && env_.interfaceType((*tt)->name)) targetRef = *tt;
+        else return notAType(rt.error().message());
+        const TypeDesc& target = *targetRef;
         std::string tname = upperOf(target.name);
         // 1.13.0 (lot J1) : DYNAMIC_CAST<T>(objet) vers un type IHM ou une interface - une MONTEE/DESCENTE
         // sur une reference : si le type REEL de l'objet va dans T (sous-type ou interface implementee),
@@ -8335,7 +8356,7 @@ private:
                     const bool ok = !checked || env_.typeConvertsTo(realType, target.name) || upperOf(realType) == tname;
                     auto refT = std::make_shared<TypeDesc>();
                     refT->kind = TypeDesc::Kind::Ref;
-                    refT->element = *rt;
+                    refT->element = targetRef;
                     auto o = std::make_shared<Obj>();
                     o->type = refT;
                     o->bound = ok;
@@ -9629,6 +9650,7 @@ private:
     // 1.13.0 : la profondeur des TRY quand le cote a s'est ouvert - un TRY ouvert plus bas (dans une
     // fonction appelee a gauche de ??) attrape encore ses erreurs (fail, LEVER).
     int                              quietCatching_{0};
+    bool                             readingPath_{false};   // 1.13.0 : readLocal lit un chemin (SELF.Debit)
     // 1.12.1 : TRY ... CATCH - la profondeur, l'erreur gardee (la premiere).
     int                              catching_{0};
     Caught                           caught_{};

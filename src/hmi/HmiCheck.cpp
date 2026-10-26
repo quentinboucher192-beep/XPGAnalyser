@@ -498,6 +498,66 @@ std::string leverNameWarning(const std::string& name) {
          + "(...) en t\xC3\xAAte d'instruction appelle encore ta fonction, mais renomme-la (Lever_Barriere) pour lever le doute";
 }
 
+// 1.13.0 (lot J1) : une interface employee comme donnee dans les declarations d'un code (une locale, un parametre, le
+// retour d'une fonction) : e : I_Demarrable n'aurait ni membre ni methode a viser - REF_TO I_Demarrable.
+void interfaceDeclarations(const Project& p, const std::vector<Declaration>& decls, const std::string& body,
+                           const std::string& returnType, const std::function<void(const std::string&, int)>& report) {
+    const auto look = [&](const std::string& name, const std::string& type, int line) {
+        if (const std::string why = types::interfaceAsData(p, type, true); !why.empty())
+            report("d\xC3\xA9" "claration \xC2\xAB " + name + " \xC2\xBB : " + why, line);
+    };
+    for (const auto& d : decls) look(d.name, d.type, 0);
+    const auto ex = decl::extract(body);
+    for (const auto& d : ex.decls) look(d.name, d.type, d.line);
+    for (const auto& f : ex.functions) {
+        for (const auto& d : f.decls) look(d.name, d.type, d.line);
+        if (!f.returnType.empty()) look(f.name, f.returnType, f.firstLine);
+    }
+    if (!returnType.empty()) look("retour", returnType, 0);
+}
+
+// 1.13.0 (lot J1) : LE CORPS DES METHODES, lu comme le moteur le lira (la FUNCTION interne de la methode, SELF en
+// VAR_IN_OUT, ses membres prefixes) : sa syntaxe, et ses noms - un membre (herites compris), une methode du type,
+// SELF / THIS / SUPER, ses parametres et ses locales, ou ce que le projet connait. Avant, une faute ne se voyait
+// qu'au premier appel, en marche. La ligne : celle du corps de la methode.
+void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    for (const auto& ty : p.programs.types) {
+        if (ty.kind != HmiTypeKind::Structure || ty.methods.empty()) continue;
+        const std::string tn = fullName(ty);
+        std::set<std::string> here{"SELF", "THIS", "SUPER"};
+        for (const auto& m : types::membersOf(p, tn)) here.insert(upperText(m.name));
+        for (const auto& om : allMethods(p, tn)) here.insert(upperText(om.method->name));
+        for (const auto& m : ty.methods) {
+            const auto issue = [&](Issue::Severity sev, const std::string& msg, int line) {
+                add(out, sev, "Type IHM", kNoId, kNoId, ty.name,
+                    ty.name + "." + m.name + (line > 0 ? ", ligne " + std::to_string(line) : std::string{}) + " : " + msg, kNoId, line);
+                out.back().item = ty.id;
+            };
+            if (markers::strip(m.body).find_first_not_of(" \t\r\n") == std::string::npos) continue;   // rien a lire
+            if (!isIdentifier(m.name)) continue;                                                        // methodProblem le dit
+            MethodCall mc;
+            if (!resolveMethodInternal(p, methodFunctionName(tn, m), mc)) continue;
+            auto fn = sim::parseFunction(mc.function, mc.owner);
+            if (!fn) {
+                const std::string raw = fn.error().context.empty() ? fn.error().message() : fn.error().context;
+                std::string rest;
+                const int line = splitLine(raw, &rest);
+                // La FUNCTION interne a quatre lignes d'en-tete (FUNCTION, VAR_IN_OUT, SELF, END_VAR) avant le corps.
+                issue(S::Error, frenchSimMessage(rest), line > 4 ? line - 4 : 0);
+                continue;
+            }
+            const std::string code = decl::codeOf(m);
+            const auto dialect = scriptcheck::dialectDeclared(code);
+            for (const auto& u : scriptNames(code)) {
+                const std::string U = upperText(u.name);
+                if (here.count(U) || dialect.count(U) || known(p, plc, u.name)) continue;
+                issue(S::Error, "variable inexistante : " + u.name + " (ni membre de " + ty.name + ", ni variable)", u.line);
+            }
+        }
+    }
+}
+
 // La programmation generale, les scripts de vue, les actions, et les
 // references circulaires entre eux.
 void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
@@ -526,7 +586,9 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                 "'" + var.name + "' existe aussi dans l'automate : la variable IHM la masque");
         // Lot 16 : un type IHM, un tableau (bornes, cases), un dossier.
         std::string why;
-        if (!types::validType(p, var.type, &why)) {
+        // 1.13.0 (lot J1) : validMemberType = validType + une interface n'est pas une donnee (Equip : I_Demarrable,
+        // L : LIST OF I_Demarrable) - la variable n'aurait aucune case et ses methodes ne viseraient rien.
+        if (!types::validMemberType(p, var.type, &why)) {
             add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, var.name + " : " + why);
         } else if (const std::string cbForm = types::callbackForm(&p, var.type); types::isRich(var.type) || !cbForm.empty()) {
             // 1.12.2 : un type objet (LIST, VECTOR, MAP, TUPLE) - sa valeur initiale, un litteral.
@@ -585,8 +647,10 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         else if (types::isElementary(ty.name)) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : le nom d'un type \xC3\xA9l\xC3\xA9mentaire");
         else if (!typeNames.insert(upperText(fullName(ty))).second)   // 1.13.0 (lot J8) : par son nom complet (Gaz.T_Vanne)
             add(out, S::Error, cat, kNoId, kNoId, ty.name, "type IHM en double : " + fullName(ty));
-        // 1.12.13 : une enumeration n'a pas de membres (ses valeurs) - pas d'avertissement.
-        if (ty.members.empty() && ty.kind == HmiTypeKind::Structure) add(out, S::Warning, cat, kNoId, kNoId, ty.name, ty.name + " : aucun membre");
+        // 1.12.13 : une enumeration n'a pas de membres (ses valeurs) - pas d'avertissement. 1.13.0 (lot J1) : un sous-type
+        // qui n'ajoute que des methodes (ou rien) a les membres de son parent ; une structure qui porte des methodes non plus.
+        if (ty.kind == HmiTypeKind::Structure && types::membersOf(p, fullName(ty)).empty() && ty.methods.empty())
+            add(out, S::Warning, cat, kNoId, kNoId, ty.name, ty.name + " : aucun membre");
         // 1.12.20 : un type rappel - sa signature (CALLBACK (x : REAL) : BOOL) se lit.
         if (ty.kind == HmiTypeKind::Callback) {
             const std::string sig = trimmedCopy(ty.signature);
@@ -596,9 +660,20 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                     ty.name + " : sa signature se lit CALLBACK (x : REAL) : BOOL" + (sig.empty() ? std::string(" (vide)") : " (" + sig + (r.why.empty() ? std::string{} : " : " + r.why) + ")"));
         }
         std::set<std::string> members;
+        // 1.13.0 (lot J1) : les membres herites (EXTENDS) - le sous-type ne les redeclare pas : deux cases au meme chemin
+        // (X.Debit), deux adresses Modbus, et une lecture qui ne trouverait que la premiere.
+        std::map<std::string, std::string> inherited;                 // NOM -> le parent qui le declare
+        for (const HmiType* b : baseChain(p, fullName(ty)))
+            for (const auto& m : b->members) inherited.emplace(upperText(m.name), b->name);
         for (const auto& m : ty.members) {
             std::string why;
             if (!isIdentifier(m.name)) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : nom de membre invalide '" + m.name + "'");
+            else if (const auto it = inherited.find(upperText(m.name)); it != inherited.end())
+                add(out, S::Error, cat, kNoId, kNoId, ty.name,
+                    ty.name + " : " + m.name + " est d\xC3\xA9j\xC3\xA0 un membre de " + it->second + " (h\xC3\xA9rit\xC3\xA9) : renomme-le ou retire-le");
+            else if (!ty.base.empty() && effectiveMethod(p, ty.base, m.name))
+                add(out, S::Error, cat, kNoId, kNoId, ty.name,
+                    ty.name + " : " + m.name + " est d\xC3\xA9j\xC3\xA0 une m\xC3\xA9thode de " + ty.base + " (h\xC3\xA9rit\xC3\xA9" "e) : renomme le membre");
             else if (!members.insert(upperText(m.name)).second) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : membre en double " + m.name);
             const bool memberOk = types::validMemberType(p, m.type, &why, ty.name);
             if (!memberOk) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : " + why);
@@ -646,7 +721,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         for (const auto& m : ty.methods) {
             if (isIdentifier(m.name) && !methodSeen.insert(upperText(m.name)).second)
                 add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : m\xC3\xA9thode en double " + m.name);
-            for (const auto& mem : ty.members)
+            for (const auto& mem : types::membersOf(p, fullName(ty)))   // 1.13.0 (lot J1) : herites compris
                 if (sameTypeName(mem.name, m.name)) {
                     add(out, S::Error, cat, kNoId, kNoId, ty.name,
                         ty.name + " : " + m.name + " est \xC3\xA0 la fois un membre et une m\xC3\xA9thode");
@@ -659,6 +734,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         for (const auto& miss : interfaceMisses(p, ty))
             add(out, S::Error, cat, kNoId, kNoId, ty.name, miss);
     }
+    checkMethodBodies(p, plc, out);     // 1.13.0 (lot J1) : le corps des methodes (syntaxe, noms)
     // 1.12.7 : Reglages.Seuils - la constante d'un script general, lue d'ailleurs : publique, existante,
     // jamais ecrite. `report` recoit le message et sa ligne.
     const auto qualifiedUses = [&](const std::string& code, Id from, const std::function<void(const std::string&, int)>& report,
@@ -706,6 +782,10 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         // Lot 16 : les structures et tableaux IHM - membres, indices constants, proprietes.
         for (const auto& pp : types::pathProblems(p, code))
             add(out, S::Error, "Script", view, kNoId, sc.name, pp.message, sc.id, pp.line);
+        // 1.13.0 (lot J1) : une locale d'un type interface (e : I_Demarrable) - REF_TO I_Demarrable.
+        interfaceDeclarations(p, sc.decls, sc.body, {}, [&](const std::string& message, int line) {
+            add(out, S::Error, "Script", view, kNoId, sc.name, message, sc.id, line);
+        });
         qualifiedUses(code, sc.id, [&](const std::string& message, int line) {
             add(out, S::Error, "Script", view, kNoId, sc.name, message, sc.id, line);
         }, owner);
@@ -838,6 +918,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                 if (upperText(u.name) != key && !known(p, plc, u.name, &v) && !dialect.count(upperText(u.name)))
                     issue(S::Error, "variable inexistante : " + u.name, u.line);
             qualifiedUses(code, kNoId, [&](const std::string& m, int line) { issue(S::Error, m, line); }, &v);
+            interfaceDeclarations(p, f.decls, f.body, f.returnType, [&](const std::string& m, int line) { issue(S::Error, m, line); });   // 1.13.0
         }
     };
     for (const auto& v : p.views) {
@@ -891,6 +972,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
             if (upperOf(u.name) != key && !known(p, plc, u.name) && !dialect.count(upperOf(u.name)))
                 issue(S::Error, "variable inexistante : " + u.name, u.line);
         qualifiedUses(code, kNoId, [&](const std::string& message, int line) { issue(S::Error, message, line); });   // 1.12.7
+        interfaceDeclarations(p, f.decls, f.body, f.returnType, [&](const std::string& message, int line) { issue(S::Error, message, line); });   // 1.13.0
         auto& to = fnCalls[f.name];
         for (const auto& c : scriptCallees(code))
             if (const auto* g = p.functionByName(c.name)) to.push_back(g->name);
@@ -4628,6 +4710,9 @@ std::vector<Issue> compileWith(const Project& p, const NameExists& plcHasName, c
         i.length = oi.length;
         out.push_back(std::move(i));
     }
+    // 1.13.0 (lot J1) : le corps des methodes - le projet entier seulement (Generer le dit aussi : checkPrograms ; une
+    // compilation partielle, celle de Generer pas a pas, le laisse a Generer).
+    if (!focus) checkMethodBodies(p, plcHasName, out);
     dropTemplateHints(p, out);
     return out;
 }

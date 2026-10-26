@@ -801,6 +801,8 @@ public:
         if (!rt_.project_) return false;
         return hmi::isA(*rt_.project_, from, to) || hmi::implementsInterface(*rt_.project_, from, to);
     }
+    // 1.13.0 : une interface du projet, cible de DYNAMIC_CAST<I_x> (elle n'a pas de membre).
+    bool interfaceType(std::string_view name) override { return rt_.project_ && hmi::isInterface(*rt_.project_, name); }
     // Une fonction IHM du projet qui emploie les types riches (VAR_IN_OUT, REF_TO,
     // POINTER TO, ARRAY, MAP, structure) tourne dans le dialecte, appelee du
     // script avec ses arguments riches ; une fonction simple, comme avant (env.call).

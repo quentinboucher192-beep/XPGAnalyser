@@ -118,9 +118,10 @@ struct MethodCall {
 
 // ------------------------------------------------------- Generer (le modele) ---
 // Pourquoi la methode `m` ne va pas sur le type `owner` (vide : elle va) : nom
-// invalide/en double, OVERRIDE sans virtuelle au parent / de signature differente /
-// d'une methode inexistante, privee et virtuelle, type de retour inconnu, un
-// parametre illisible - chacun avec son message et, s'il y a lieu, "veux-tu dire ?".
+// invalide, redefinition (meme nom qu'une methode d'un parent) d'une methode non
+// virtuelle ou de signature differente, privee et virtuelle, type de retour inconnu,
+// un parametre illisible. Une methode n'a pas de drapeau OVERRIDE : un nom mal tape
+// fait une methode nouvelle (rien a refuser), pas une redefinition.
 [[nodiscard]] std::string methodProblem(const Project&, const HmiType& owner, const HmiFunction& m);
 // Pourquoi le type `t` ne peut pas EXTENDS son parent (vide : il peut) : parent
 // inconnu, hors structure, cycle d'heritage.
