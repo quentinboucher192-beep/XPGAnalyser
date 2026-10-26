@@ -880,6 +880,10 @@ void attenduNomDObjet() {
     check(s.ok() && !s.formula && s.kept == "'Arret'", "testExpected(STRING, Arret) : le texte 'Arret' (" + s.kept + ")");
     const TestExpected var = testExpected(p, "REAL", "Seuil");
     check(var.ok() && var.formula && var.kept == "=Seuil", "testExpected(REAL, Seuil) : une variable reste un calcul (" + var.kept + ")");
+    // Un chemin qui part d'une vue (une constante de vue, que le banc lit) reste un calcul.
+    const TestExpected chemin = testExpected(p, "STRING", "Vue_Commandes.TITRE");
+    check(chemin.ok() && chemin.formula && chemin.kept == "=Vue_Commandes.TITRE",
+          "testExpected(STRING, Vue_Commandes.TITRE) : un chemin de vue reste un calcul (" + chemin.kept + ")");
     const TestExpected nombre = testExpected(p, "REAL", "Arret");
     check(!nombre.ok() && nombre.why.find("nombre") != std::string::npos, "testExpected(REAL, Arret) : illisible (" + nombre.why + ")");
     const auto r1 = runFunctionTests(p, regler);

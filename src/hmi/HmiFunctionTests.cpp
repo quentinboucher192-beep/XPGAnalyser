@@ -354,8 +354,9 @@ TestExpected testExpected(const Project& p, std::string_view typeRaw, std::strin
     }
     const std::string read = type.empty() ? std::string("ANY") : type;
     const CellText cell = cellValue(&p, read, t);
-    if (cell.ok() && cell.formula && isVariablePath(t) && !benchValue(p, rootName(t))) {
+    if (cell.ok() && cell.formula && isVariablePath(t) && t.find_first_of(".[") == std::string::npos && !benchValue(p, rootName(t))) {
         // Un mot seul qui nomme un objet, une vue, une fonction, un type : pas une valeur du banc - la valeur fixe.
+        // Un chemin (Vue_Four.TITRE, une constante de vue que le banc lit) reste un calcul, comme avant.
         std::string why;
         std::string lit = argumentLiteral(&p, read, t, &why);
         if (lit.empty()) return fail(why);
