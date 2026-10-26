@@ -14483,9 +14483,13 @@ const std::vector<Topic>& topics() {
                          "(virtuelle)**), puis un \xC3\xA9" "diteur de script. Une m\xC3\xA9thode voit "
                          "**SELF** (l'instance ; **THIS** vaut SELF), les membres par leur nom (ou `SELF.X` "
                          "pour lever une ambigu\xC3\xAFt\xC3\xA9 avec une locale), ses param\xC3\xA8tres et "
-                         "les autres m\xC3\xA9thodes du type. Une m\xC3\xA9thode **proc\xC3\xA9" "dure** n'a "
-                         "pas de retour (`Pompe1.Demarrer()`) ; une m\xC3\xA9thode **fonction** rend sa "
-                         "valeur par son nom (`EnDefaut := \xE2\x80\xA6`) ou par RETURN.", {}},
+                         "les autres m\xC3\xA9thodes du type (`Journal()` appelle la m\xC3\xA9thode Journal "
+                         "de l'instance). Dans un message (LEVER, IHM_LOG, IHM_JOURNAL), un trou "
+                         "`{Debit:0.0}` lit le membre de l'instance ; un argument nomm\xC3\xA9 "
+                         "(`Ecrire(Consigne := Consigne)`) garde son nom. Une m\xC3\xA9thode "
+                         "**proc\xC3\xA9" "dure** n'a pas de retour (`Pompe1.Demarrer()`) ; une "
+                         "m\xC3\xA9thode **fonction** rend sa valeur par son nom (`EnDefaut := "
+                         "\xE2\x80\xA6`) ou par RETURN.", {}},
              {K::Code, "TYPE T_Pompe\n    Nom     : STRING;\n    Debit   : REAL;\n    Marche  : BOOL;\n    "
                          "PRIVATE Heures : REAL := 0.0;   (* vu des seules m\xC3\xA9thodes de T_Pompe *)\n\n "
                          "   METHOD PUBLIC Demarrer                 (* une proc\xC3\xA9" "dure *)\n    "
@@ -14552,13 +14556,17 @@ const std::vector<Topic>& topics() {
                          "~I_Demarrable() = default;\n};\nstruct T_Vanne : I_Demarrable {\n    float "
                          "Position = 0;\n    void Demarrer() override;\n    bool EnDefaut() override;\n};", "C++"},
              {K::Heading, "La liste h\xC3\xA9t\xC3\xA9rog\xC3\xA8ne, et DYNAMIC_CAST pour redescendre", {}},
-             {K::Paragraph, "Une interface ne s'emploie que par **REF_TO** (une instance a des "
-                         "donn\xC3\xA9" "es, pas un contrat) : `v : I_Demarrable` est refus\xC3\xA9 "
-                         "(\xC2\xAB emploie REF_TO I_Demarrable \xC2\xBB). Une `LIST OF REF_TO I_Demarrable` "
-                         "tient des pompes et des vannes ; `e^.Demarrer()` part sur le **type "
-                         "r\xC3\xA9" "el** de la cible de la r\xC3\xA9" "f\xC3\xA9rence (le dispatch "
-                         "dynamique). `DYNAMIC_CAST<T_Pompe>(e^)` rend une r\xC3\xA9" "f\xC3\xA9rence si "
-                         "c'en est une, NULL sinon.", {}},
+             {K::Paragraph, "Une interface ne s'emploie que derri\xC3\xA8re une **r\xC3\xA9" "f\xC3\xA9rence** "
+                         "(une instance a des donn\xC3\xA9" "es, pas un contrat) : une locale ou un "
+                         "param\xC3\xA8tre `v : I_Demarrable` est refus\xC3\xA9 (\xC2\xAB emploie REF_TO "
+                         "I_Demarrable \xC2\xBB) ; une variable IHM ou un membre prend une liste de "
+                         "r\xC3\xA9" "f\xC3\xA9rences (`LIST OF REF_TO I_Demarrable`) ou un type qui "
+                         "l'impl\xC3\xA9mente. Une `LIST OF REF_TO I_Demarrable` tient des pompes et des "
+                         "vannes ; `e^.Demarrer()` part sur le **type r\xC3\xA9" "el** de la cible de la "
+                         "r\xC3\xA9" "f\xC3\xA9rence (le dispatch dynamique). `DYNAMIC_CAST<T_Pompe>(e^)` "
+                         "rend une r\xC3\xA9" "f\xC3\xA9rence si c'en est une, NULL sinon ; "
+                         "`DYNAMIC_CAST<I_Demarrable>(Vanne1)` rend une r\xC3\xA9" "f\xC3\xA9rence \xC3\xA0 "
+                         "l'interface si le type l'impl\xC3\xA9mente.", {}},
              {K::Code, "VAR Equipements : LIST OF REF_TO I_Demarrable; END_VAR\nLIST_ADD(Equipements, "
                          "REF(Pompe1));\nLIST_ADD(Equipements, REF(Vanne_Entree));\nFOR EACH e IN "
                          "Equipements DO\n    e^.Demarrer();\n    IF e^.EnDefaut() THEN Defauts := Defauts + "
@@ -14576,13 +14584,21 @@ const std::vector<Topic>& topics() {
                          "debit_total += p->Debit;\n}", "C++"},
              {K::Heading, "Ce que G\xC3\xA9n\xC3\xA9rer refuse", {}},
              {K::Bullet, "un membre ou une m\xC3\xA9thode **priv\xC3\xA9** lu de l'ext\xC3\xA9rieur ;", {}},
-             {K::Bullet, "**OVERRIDE** sans VIRTUAL au parent, ou de signature diff\xC3\xA9rente, ou d'une "
-                         "m\xC3\xA9thode inexistante ;", {}},
+             {K::Bullet, "une **red\xC3\xA9" "finition** (le nom d'une m\xC3\xA9thode du parent) d'une "
+                         "m\xC3\xA9thode non VIRTUAL, ou de signature diff\xC3\xA9rente ;", {}},
+             {K::Bullet, "un **membre red\xC3\xA9" "clar\xC3\xA9** par un sous-type (d\xC3\xA9j\xC3\xA0 un "
+                         "membre du parent : deux cases au m\xC3\xAAme chemin) ;", {}},
+             {K::Bullet, "une faute dans le **corps d'une m\xC3\xA9thode** (sa syntaxe, un nom inconnu), "
+                         "\xC3\xA0 sa ligne ;", {}},
              {K::Bullet, "une **interface non satisfaite** (la m\xC3\xA9thode manquante est "
                          "nomm\xC3\xA9" "e) ;", {}},
              {K::Bullet, "**EXTENDS** hors structure, ou un **cycle** d'h\xC3\xA9ritage ;", {}},
              {K::Bullet, "une **interface employ\xC3\xA9" "e comme donn\xC3\xA9" "e** (sans REF_TO) ;", {}},
              {K::Bullet, "une **m\xC3\xA9thode d'un type inconnu**.", {}},
+             {K::Tip, "Une m\xC3\xA9thode n'a pas de case OVERRIDE : c'est le nom qui "
+                         "red\xC3\xA9" "finit. Un nom mal tap\xC3\xA9 (EnDefault) fait une m\xC3\xA9thode "
+                         "nouvelle, que `e^.EnDefaut()` ne voit pas - v\xC3\xA9rifie le nom de la "
+                         "red\xC3\xA9" "finition.", {}},
              {K::Tip, "Un op\xC3\xA9rateur (a, b, Resultat) et une m\xC3\xA9thode (SELF) coexistent : un "
                          "op\xC3\xA9rateur peut appeler une m\xC3\xA9thode. Les m\xC3\xA9thodes de type "
                          "reprennent le m\xC3\xA9" "canisme virtuel/SUPER des fonctions de symbole.", {}},
@@ -14990,11 +15006,12 @@ const std::vector<Topic>& topics() {
              {K::Warning, "WAIT_UNTIL demande un script **d\xC3\xA9tach\xC3\xA9** : dans un script non "
                          "d\xC3\xA9tach\xC3\xA9, l'IHM est fig\xC3\xA9" "e pendant l'attente, donc la "
                          "condition ne changera pas - Compiler l'avertit (coche D\xC3\xA9tach\xC3\xA9), et "
-                         "l'attente est plafonn\xC3\xA9" "e \xC3\xA0 10 s comme WAIT. La condition doit "
-                         "\xC3\xAAtre une **pure lecture** : un appel qui \xC3\xA9" "crit y est "
-                         "rejou\xC3\xA9 \xC3\xA0 chaque essai. Dans une expression (fx), WAIT_UNTIL est "
-                         "refus\xC3\xA9. La fiche de WAIT_UNTIL (Natives \xE2\x80\xBA Scripts et temps) la "
-                         "montre en ST, C et C++.", {}},
+                         "l'attente est plafonn\xC3\xA9" "e \xC3\xA0 10 s comme WAIT (E_ATTENTE dit alors "
+                         "\xC2\xAB en 10 s \xC2\xBB). La condition doit \xC3\xAAtre une **pure lecture** : "
+                         "un appel qui \xC3\xA9" "crit y est rejou\xC3\xA9 \xC3\xA0 chaque essai. Dans une "
+                         "expression (fx), WAIT_UNTIL est refus\xC3\xA9. La fiche de WAIT_UNTIL (Natives "
+                         "\xE2\x80\xBA Scripts et temps) la montre en ST, et son \xC3\xA9quivalent en C et "
+                         "C++ (une boucle qui teste la condition et appelle WAIT).", {}},
              {K::Heading, "Lire et \xC3\xA9" "crire des fichiers, les ressources du projet", {}, "1.12.26"},
              {K::Paragraph, "Les natives du dossier **Fichiers** lisent et \xC3\xA9" "crivent des fichiers "
                          "texte (UTF-8), parcourent un dossier et lisent les ressources du projet. Un chemin "
@@ -15173,12 +15190,22 @@ const std::vector<Topic>& topics() {
                          "LEVER('E_Niveau', 'niveau hors plage : {n:0.0} %'); END_IF; END_FUNCTION`, puis "
                          "`TRY Verifier_Niveau(Niveau_Cuve); CATCH e IHM_LOG(WARNING, '{e.Code} (ligne "
                          "{e.Ligne}) : {e.Message}'); END_TRY`. Les fiches LEVER, RELEVER et T_Erreur "
-                         "(Natives, onglet Types) les montrent en ST, C et C++. Les erreurs du moteur "
-                         "portent aussi un **code int\xC3\xA9gr\xC3\xA9**, lu dans `e.Code` : `E_DIVISION` "
-                         "(division par z\xC3\xA9ro), `E_BORNE` (hors des bornes d'un tableau), "
-                         "`E_CONVERSION` (DYNAMIC_CAST / STATIC_CAST refus\xC3\xA9), `E_CLE` (cl\xC3\xA9 "
-                         "absente d'une MAP), `E_ASSERT` (ASSERT faux), `E_ATTENTE` (WAIT_UNTIL en "
-                         "instruction, d\xC3\xA9lai d\xC3\xA9pass\xC3\xA9), `E_MOTEUR` (le reste). "
+                         "(Natives, onglet Types) les montrent en ST, C et C++. Lev\xC3\xA9" "e dans une "
+                         "fonction ou une m\xC3\xA9thode, l'erreur porte la **ligne de l'appel** "
+                         "(`e.Ligne`), comme une erreur du moteur, et la Console nomme la fonction et sa "
+                         "ligne. \xC3\x80 gauche de `??`, un LEVER se comporte comme une erreur du moteur : "
+                         "`??` prend la valeur de droite et le script continue. Deux `CATCH e` "
+                         "imbriqu\xC3\xA9s sont permis : le `e` int\xC3\xA9rieur vaut dans son handler, puis "
+                         "l'ext\xC3\xA9rieur revient ; le nom d'un CATCH ne vaut que de son `CATCH` \xC3\xA0 "
+                         "son `END_TRY` (un `FOR EACH e` ailleurs garde son sens). Un projet d'avant garde "
+                         "ses noms : `Relever := TRUE` reste une affectation, et une fonction "
+                         "nomm\xC3\xA9" "e `Lever` est encore appel\xC3\xA9" "e par `Lever(...)` en "
+                         "t\xC3\xAAte d'instruction (G\xC3\xA9n\xC3\xA9rer conseille de la renommer). Les "
+                         "erreurs du moteur portent aussi un **code int\xC3\xA9gr\xC3\xA9**, lu dans "
+                         "`e.Code` : `E_DIVISION` (division par z\xC3\xA9ro), `E_BORNE` (hors des bornes "
+                         "d'un tableau), `E_CONVERSION` (DYNAMIC_CAST / STATIC_CAST refus\xC3\xA9), `E_CLE` "
+                         "(cl\xC3\xA9 absente d'une MAP), `E_ASSERT` (ASSERT faux), `E_ATTENTE` (WAIT_UNTIL "
+                         "en instruction, d\xC3\xA9lai d\xC3\xA9pass\xC3\xA9), `E_MOTEUR` (le reste). "
                          "`e.Message` reste le message fran\xC3\xA7" "ais existant.", {}},
              {K::Tip, "`CATCH` et un nom **d\xC3\xA9j\xC3\xA0 d\xC3\xA9" "clar\xC3\xA9** (une variable "
                          "STRING) re\xC3\xA7oit le message comme en 1.12.1 (pas de `.Code`) ; un nom **non "
@@ -15744,10 +15771,11 @@ const std::vector<Topic>& topics() {
                          "**d\xC3\xA9" "faut** facultatif : avec lui, une valeur absente ou du mauvais genre "
                          "rend le d\xC3\xA9" "faut, sans erreur ; sans lui, elle l\xC3\xA8ve `E_JSON`, "
                          "rattrapable par TRY \xE2\x80\xA6 CATCH.", {}},
-             {K::Bullet, "Une **cl\xC3\xA9 absente** rend `JSON_Absent` (pas d'erreur) ; `JSON_A(obj, "
-                         "'cl\xC3\xA9')` teste sa pr\xC3\xA9sence, `JSON_TYPE(v)` donne son genre "
-                         "(`JSON_Objet`, `JSON_Liste`, `JSON_Texte`, `JSON_Nombre`, `JSON_Bool`, `JSON_Nul`, "
-                         "`JSON_Absent`), `JSON_CLES(obj)` la liste des cl\xC3\xA9s.", {}},
+             {K::Bullet, "Une **cl\xC3\xA9 absente** rend `JSON_Absent` (pas d'erreur), dans une valeur ANY "
+                         "comme dans une `MAP[STRING] OF ANY` ; `JSON_A(obj, 'cl\xC3\xA9')` teste sa "
+                         "pr\xC3\xA9sence, `JSON_TYPE(v)` donne son genre (`JSON_Objet`, `JSON_Liste`, "
+                         "`JSON_Texte`, `JSON_Nombre`, `JSON_Bool`, `JSON_Nul`, `JSON_Absent`), "
+                         "`JSON_CLES(obj)` la liste des cl\xC3\xA9s.", {}},
              {K::Heading, "Construire et \xC3\xA9" "crire un JSON", {}},
              {K::Paragraph, "On construit avec les litt\xC3\xA9raux du dialecte (`[..]`, `['cl\xC3\xA9' := "
                          "..]`) : pas de nouvelle syntaxe. `JSON_ECRIRE` accepte une valeur ANY, une MAP / "
@@ -15788,8 +15816,16 @@ const std::vector<Topic>& topics() {
                          "complet), ou emploie le dialecte C / C++, o\xC3\xB9 `$` est ordinaire.", {}},
              {K::Bullet, "`\\w`, `\\d`, `\\s` travaillent sur les octets UTF-8 : pour les lettres "
                          "accentu\xC3\xA9" "es (H\xC3\xA9lium), \xC3\xA9" "cris des classes explicites. "
-                         "`REGEX_VALIDE(motif)` teste un motif saisi avant de l'employer ; un motif invalide "
-                         "l\xC3\xA8ve `E_REGEX`.", {}},
+                         "`REGEX_VALIDE(motif)` teste un motif saisi avant de l'employer : TRUE seulement si "
+                         "`REGEX_TROUVE` l'accepte ; un motif invalide l\xC3\xA8ve `E_REGEX`.", {}},
+             {K::Bullet, "Ce que la grammaire n'a pas : les lookbehind `(?<=\xE2\x80\xA6)`, les groupes "
+                         "nomm\xC3\xA9s `(?<nom>\xE2\x80\xA6)` et les r\xC3\xA9" "f\xC3\xA9rences "
+                         "arri\xC3\xA8re `\\1` (refus\xC3\xA9s : `E_REGEX`). Entre deux choix qui commencent "
+                         "au m\xC3\xAAme endroit, le plus long l'emporte (`Auto|Automatique` trouve \xC2\xAB "
+                         "Automatique \xC2\xBB). La recherche ne revient pas en arri\xC3\xA8re : un motif "
+                         "comme `^(\\w+\\s?)*$$` reste rapide, m\xC3\xAAme sur un long texte.", {}},
+             {K::Bullet, "Le texte fouill\xC3\xA9 fait **1 Mo au plus** (au-del\xC3\xA0 : `E_REGEX`) : lis "
+                         "un gros fichier ligne par ligne (`FILE_READ_LINES`).", {}},
              {K::Heading, "G\xC3\xA9rer une erreur de donn\xC3\xA9" "es", {}},
              {K::Paragraph, "`JSON_LIRE` sur un texte mal form\xC3\xA9, ou un accesseur de mauvais type sans "
                          "d\xC3\xA9" "faut, l\xC3\xA8ve une erreur claire et **rattrapable** (`e.Code` = "
