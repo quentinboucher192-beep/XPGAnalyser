@@ -18734,7 +18734,10 @@ const std::vector<Topic>& topics() {
                          "r\xC3\xA9ussit si `|obtenu - attendu| <= tol\xC3\xA9rance`. Vide, c'est "
                          "l'\xC3\xA9galit\xC3\xA9 stricte. Tout autre type (INT, BOOL, STRING, \xC3\xA9num, "
                          "structure, tableau, MAP) se compare en \xC3\xA9galit\xC3\xA9 exacte : la "
-                         "tol\xC3\xA9rance est gris\xC3\xA9" "e.", {}},
+                         "tol\xC3\xA9rance est gris\xC3\xA9" "e. Un texte se compare tel quel, majuscules et "
+                         "accents compris (`'AZOTE'` n'est pas `Azote`) ; une \xC3\xA9num\xC3\xA9ration par "
+                         "sa valeur, \xC3\xA9" "crite par son nom (`Auto`), son litt\xC3\xA9ral "
+                         "(`E_Mode#Auto`) ou son num\xC3\xA9ro, et le d\xC3\xA9tail montre `Auto (2)`.", {}},
              {K::Heading, "Quand ils se rejouent", {}},
              {K::Paragraph, "Les cas actifs se rejouent **tout seuls** apr\xC3\xA8s la v\xC3\xA9rification du "
                          "code, \xC3\xA0 chaque **Compiler** et au **D\xC3\xA9marrer** de la simulation. "
@@ -18760,7 +18763,11 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Un cas peut **attendre une erreur** : il r\xC3\xA9ussit si la fonction l\xC3\xA8ve "
                          "bien le code attendu (`E_Niveau`), \xC3\xA9" "choue sinon. Le code se lit sur "
                          "l'erreur lev\xC3\xA9" "e par LEVER (voir \xC2\xAB Les erreurs des scripts "
-                         "\xC2\xBB). Exemple : `Niveau := 130.0`, Attendu : *l\xC3\xA8ve l'erreur* "
+                         "\xC2\xBB) et doit \xC3\xAAtre celui-l\xC3\xA0 exactement, sans tenir compte de la "
+                         "casse : `E_Niveau_Bas` lev\xC3\xA9 ne vaut pas `E_Niveau`, ni un `E_Niveau` "
+                         "cit\xC3\xA9 dans le message. Une erreur du moteur (une division par "
+                         "z\xC3\xA9ro\xE2\x80\xA6) se reconna\xC3\xAEt \xC3\xA0 un mot entier de son message "
+                         "(`division`). Exemple : `Niveau := 130.0`, Attendu : *l\xC3\xA8ve l'erreur* "
                          "`E_Niveau` ; la fonction l\xC3\xA8ve bien `E_Niveau : \xC2\xAB niveau hors plage: "
                          "130 \xC2\xBB`, donc verdict **r\xC3\xA9ussi**. Un cas normal dont la fonction "
                          "l\xC3\xA8ve une erreur a le verdict **erreur**.", {}},

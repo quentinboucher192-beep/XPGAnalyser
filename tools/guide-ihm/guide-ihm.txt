@@ -9287,7 +9287,7 @@ Une procédure (sans retour), ou une fonction qui lit ou écrit des variables, s
 | Vérifier après | `Compteur_Clics = 1` ; `JOURNAL contient '[ALERTE] Porte A ouverte'` |
 | Verdict | réussi |
 ### La tolérance (REAL)
-La tolérance ne sert qu'à un retour **REAL** ou **LREAL** : le cas réussit si `|obtenu - attendu| <= tolérance`. Vide, c'est l'égalité stricte. Tout autre type (INT, BOOL, STRING, énum, structure, tableau, MAP) se compare en égalité exacte : la tolérance est grisée.
+La tolérance ne sert qu'à un retour **REAL** ou **LREAL** : le cas réussit si `|obtenu - attendu| <= tolérance`. Vide, c'est l'égalité stricte. Tout autre type (INT, BOOL, STRING, énum, structure, tableau, MAP) se compare en égalité exacte : la tolérance est grisée. Un texte se compare tel quel, majuscules et accents compris (`'AZOTE'` n'est pas `Azote`) ; une énumération par sa valeur, écrite par son nom (`Auto`), son littéral (`E_Mode#Auto`) ou son numéro, et le détail montre `Auto (2)`.
 ### Quand ils se rejouent
 Les cas actifs se rejouent **tout seuls** après la vérification du code, à chaque **Compiler** et au **Démarrer** de la simulation. **Lancer les tests** (la barre du volet Fonctions) les joue tous à la main ; **Lancer ce cas** et un double-clic sur une ligne en jouent un. Dans Configuration : **Rejouer les tests des fonctions au Compiler/Démarrer** (coché ; décoche-le pour un gros projet) et **Un test en échec empêche le démarrage de la simulation** (décoché : un échec n'est alors qu'un avertissement).
 ### Le verdict et le détail
@@ -9299,7 +9299,7 @@ Le même vocabulaire que les essais :
 | non joué | le cas est inactif |
 Les résultats partent aux **Sorties** du panneau du bas, catégorie **Tests** (un clic sur une ligne ouvre la fonction sur son onglet Tests) ; la barre d'état du volet compte « 7 cas · 6 réussis, 1 échec » ; l'arbre porte un nœud **Tests** sous la fonction, une pastille rouge si un cas échoue.
 ### Attendre une erreur
-Un cas peut **attendre une erreur** : il réussit si la fonction lève bien le code attendu (`E_Niveau`), échoue sinon. Le code se lit sur l'erreur levée par LEVER (voir « Les erreurs des scripts »). Exemple : `Niveau := 130.0`, Attendu : *lève l'erreur* `E_Niveau` ; la fonction lève bien `E_Niveau : « niveau hors plage: 130 »`, donc verdict **réussi**. Un cas normal dont la fonction lève une erreur a le verdict **erreur**.
+Un cas peut **attendre une erreur** : il réussit si la fonction lève bien le code attendu (`E_Niveau`), échoue sinon. Le code se lit sur l'erreur levée par LEVER (voir « Les erreurs des scripts ») et doit être celui-là exactement, sans tenir compte de la casse : `E_Niveau_Bas` levé ne vaut pas `E_Niveau`, ni un `E_Niveau` cité dans le message. Une erreur du moteur (une division par zéro…) se reconnaît à un mot entier de son message (`division`). Exemple : `Niveau := 130.0`, Attendu : *lève l'erreur* `E_Niveau` ; la fonction lève bien `E_Niveau : « niveau hors plage: 130 »`, donc verdict **réussi**. Un cas normal dont la fonction lève une erreur a le verdict **erreur**.
 ### Le rapport
 **Rapport des tests** (CSV, Excel ou PDF, dossier `exports/`) : une fonction (Cas, Arguments, Attendu, Verdict, Détail, Durée) ou toute la campagne, avec le bilan en sous-titre. Ce n'est pas un procès-verbal de réception : il ne porte pas de visa.
 ### Générer

@@ -6,15 +6,19 @@
 
 #include "HmiCheck.hpp"             // Issue (les controles de Generer)
 #include "HmiDecl.hpp"             // decl::codeOf
+#include "HmiEnums.hpp"            // 1.13.0 : un retour ou une verif d'enumeration, compare par son nom
 #include "HmiExpr.hpp"             // Expression, cellValue n'est pas ici
 #include "HmiRuntime.hpp"
 #include "HmiScript.hpp"           // splitDeclarations, LocalVar
 #include "HmiSymbols.hpp"          // cellValue (la regle des cases)
+#include "HmiTypeRegistry.hpp"     // 1.13.0 : un attendu lisible dans le type du retour (Generer)
+#include "HmiTypes.hpp"            // 1.13.0 : types::typeOfPath (le type d'une verif)
 
 #include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -54,6 +58,12 @@ std::string folded(std::string_view s) {
 }
 
 bool iequals(std::string_view a, std::string_view b) { return folded(a) == folded(b); }
+
+std::string upperAscii(std::string_view s) {
+    std::string out(s);
+    for (auto& c : out) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return out;
+}
 
 std::string stripQuotes(std::string s) {
     if (s.size() >= 2 && (s.front() == '\'' || s.front() == '"') && s.back() == s.front())
@@ -107,19 +117,6 @@ private:
     std::unique_ptr<sim::Runtime> standard_;
 };
 
-// Le code E_* en tete du message d'arret d'une erreur levee (LEVER E_Niveau ...).
-// Le message a la forme "fonction X : ligne N : E_Niveau : ...". Vide : aucun code lisible
-// (une erreur du moteur, dont le message est deja francais : on retombe sur le texte).
-std::string errorCodeOf(std::string_view why) {
-    for (std::size_t i = 0; i + 1 < why.size(); ++i)
-        if (why[i] == 'E' && why[i + 1] == '_' && (i == 0 || !std::isalnum(static_cast<unsigned char>(why[i - 1])))) {
-            std::size_t j = i;
-            while (j < why.size() && (std::isalnum(static_cast<unsigned char>(why[j])) || why[j] == '_')) ++j;
-            return std::string(why.substr(i, j - i));
-        }
-    return {};
-}
-
 // Le message d'arret sans le prefixe "fonction X : " (plus lisible dans le detail).
 std::string cleanWhy(std::string_view why) {
     std::string s = trim(why);
@@ -127,12 +124,61 @@ std::string cleanWhy(std::string_view why) {
     return s;
 }
 
+// Ce que la fonction a dit en s'arretant : le message sans "fonction X : " ni "ligne N : ".
+std::string stopMessage(std::string_view why) {
+    std::string s = cleanWhy(why);
+    if (s.rfind("ligne ", 0) == 0) {
+        std::size_t k = 6;
+        while (k < s.size() && std::isdigit(static_cast<unsigned char>(s[k]))) ++k;
+        if (k > 6 && s.compare(k, 3, " : ") == 0) s = s.substr(k + 3);
+    }
+    return s;
+}
+
+// 1.13.0 : le code E_* d'une erreur levee (LEVER('E_Niveau', ...)). Le message d'arret a la forme
+// "fonction X : ligne N : E_Niveau : message" (ou "... : E_Niveau" sans message) : le code est EN TETE
+// de ce que la fonction a dit, seul ou suivi de " : " - pas un E_ cite dans le message ou dans le nom
+// de la fonction (Verifier_E_Niveau). Vide : aucun code (une erreur du moteur, au message francais).
+std::string errorCodeOf(std::string_view why) {
+    const std::string s = stopMessage(why);
+    const std::string head = s.substr(0, std::min(s.find(" : "), s.size()));
+    if (head.size() < 3 || (head[0] != 'E' && head[0] != 'e') || head[1] != '_') return {};
+    for (const char c : head)
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') return {};
+    return head;
+}
+
+// `word` dans `text`, en mot entier (ni lettre, ni chiffre, ni _ de part et d'autre), sans casse ni accents.
+bool containsWord(std::string_view text, std::string_view word) {
+    const std::string t = folded(text), w = folded(trim(word));
+    if (w.empty()) return false;
+    const auto inWord = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (auto at = t.find(w); at != std::string::npos; at = t.find(w, at + 1))
+        if ((at == 0 || !inWord(t[at - 1])) && (at + w.size() >= t.size() || !inWord(t[at + w.size()]))) return true;
+    return false;
+}
+
 // Compare la valeur obtenue a l'attendu (texte). `real` : le type est REAL/LREAL (la tolerance joue,
 // vide = egalite stricte). Les autres types : egalite exacte (sim::Value). `note` : "obtenu X, attendu Y".
+// 1.13.0 : `enumeration` (non nul : le type attendu est une enumeration IHM) - la valeur, un DINT en
+// marche, se compare a l'attendu ecrit par son nom (Auto), son litteral (E_Mode#Auto), son texte ou
+// son numero ; un STRING se compare tel quel, casse et accents compris.
 struct Compared { bool ok{false}; std::string note; };
-Compared compareValue(const sim::Value& got, const std::string& expectedRaw, const std::string& tolRaw, bool real) {
+Compared compareValue(const sim::Value& got, const std::string& expectedRaw, const std::string& tolRaw, bool real,
+                      const HmiType* enumeration = nullptr) {
     const std::string expected = stripQuotes(trim(expectedRaw));
     const std::string gotText = valueText(got);
+    if (enumeration) {
+        double n = 0;
+        const bool number = parseNumber(gotText, n);
+        const auto gotNumber = static_cast<std::int64_t>(std::llround(n));
+        const std::string shown = number ? enumDisplay(*enumeration, gotNumber) : gotText;
+        std::int64_t want = 0;
+        if (!enumNumberOf(*enumeration, expected, want))
+            return {false, "obtenu " + shown + ", attendu " + expected + " (pas une valeur de " + enumeration->name + ")"};
+        return {number && gotNumber == want, "obtenu " + shown + ", attendu " + expected};
+    }
+    if (got.type() == sim::Type::String) return {got.asString() == expected, "obtenu " + gotText + ", attendu " + expected};
     double b = 0;
     const bool expNum = parseNumber(expected, b);
     if (real && expNum) {
@@ -155,7 +201,8 @@ Compared compareValue(const sim::Value& got, const std::string& expectedRaw, con
     double a = 0;
     if (expNum && parseNumber(stripQuotes(gotText), a))
         return {std::fabs(a - b) <= 1e-9 * std::max(1.0, std::fabs(b)), note};
-    return {folded(stripQuotes(gotText)) == folded(expected), note};
+    // Un litteral type (T#5s, D#2026-10-09) : sans casse, comme en ST (t#5S vaut T#5s). Pas d'accent a y oter.
+    return {upperAscii(stripQuotes(gotText)) == upperAscii(expected), note};
 }
 
 } // namespace
@@ -278,9 +325,11 @@ FunctionTestResult runFunctionTest(const Project& p, const HmiFunction& f, const
             res.verdict = Verdict::Failed;
             res.detail = "aucune erreur lev\xC3\xA9" "e, attendu " + test.errorCode;
         } else {
+            // 1.13.0 : le code LEVE (en tete du message) doit etre l'attendu, exactement (sans casse) :
+            // E_Niveau n'accepte ni E_Niveau_Bas, ni un E_Niveau cite dans le message ou le nom de la
+            // fonction. Sans code (une erreur du moteur) : l'attendu, en mot entier, dans son message.
             const std::string code = errorCodeOf(why);
-            const bool match = (!code.empty() && iequals(code, test.errorCode))
-                            || folded(why).find(folded(test.errorCode)) != std::string::npos;
+            const bool match = !code.empty() ? iequals(code, trim(test.errorCode)) : containsWord(stopMessage(why), test.errorCode);
             res.verdict = match ? Verdict::Passed : Verdict::Failed;
             res.detail = match ? "l\xC3\xA8ve " + cleanWhy(why)
                                : "attendu " + test.errorCode + ", obtenu " + cleanWhy(why);
@@ -301,7 +350,8 @@ FunctionTestResult runFunctionTest(const Project& p, const HmiFunction& f, const
     std::string detail;
     if (!f.returnType.empty()) res.got = valueText(result);
     if (!f.returnType.empty() && !trim(test.expected).empty()) {
-        const auto cmp = compareValue(result, test.expected, test.tolerance, isRealType(f.returnType));
+        const auto cmp = compareValue(result, test.expected, test.tolerance, isRealType(f.returnType),
+                                      findEnumeration(p, trim(f.returnType)));          // 1.13.0 : E_Mode -> Auto
         detail = cmp.note;
         if (!cmp.ok) verdict = Verdict::Failed;
     }
@@ -334,7 +384,8 @@ FunctionTestResult runFunctionTest(const Project& p, const HmiFunction& f, const
                 detail = "v\xC3\xA9rif " + qmark(target) + " ne s'\xC3\xA9value pas";
                 break;
             }
-            const auto cmp = compareValue(*v, c.expected, c.tolerance, v->type() == sim::Type::Real);
+            const auto cmp = compareValue(*v, c.expected, c.tolerance, v->type() == sim::Type::Real,
+                                          findEnumeration(p, types::typeOfPath(p, target)));   // 1.13.0 : une variable d'enumeration
             if (!cmp.ok) {
                 verdict = Verdict::Failed;
                 detail = target + " : " + cmp.note;
@@ -425,6 +476,34 @@ void forEachFunction(const Project& p, const std::function<void(const HmiFunctio
     for (const auto& v : p.views)
         for (const auto& f : v.functions) fn(f, v.name, v.id);
 }
+
+// 1.13.0 : la premiere racine de `e` qui n'est pas un nom connu (variable IHM ou de l'automate, SYS,
+// une vue, une fonction, un type...) ; vide : toutes le sont.
+std::string unknownRoot(const Project& p, const Expression& e) {
+    for (const auto& r : e.roots())
+        if (!isKnownName(&p, r)) return r;
+    return {};
+}
+
+// 1.13.0 : pourquoi l'attendu du retour de `f` ne se lit pas comme le moteur le comparera ; vide : il
+// se lit. Un nombre pour un retour numerique, VRAI/FAUX pour un BOOL, une valeur pour une enumeration ;
+// un generique (T), un texte, un autre type : rien a redire ici.
+std::string unreadableExpected(const Project& p, const HmiFunction& f, const std::string& expectedRaw) {
+    const std::string type = trim(f.returnType);
+    const std::string expected = stripQuotes(trim(expectedRaw));
+    for (const auto& g : f.generics)
+        if (iequals(g.name, type)) return {};
+    if (const HmiType* en = findEnumeration(p, type)) {
+        std::int64_t n = 0;
+        return enumNumberOf(*en, expected, n) ? std::string{} : expected + " n'est pas une valeur de " + en->name;
+    }
+    if (typereg::simTypeOf(type) == sim::Type::Bool)
+        return sim::trueWord(folded(expected)) || sim::falseWord(folded(expected)) ? std::string{}
+                                                                                    : expected + " n'est pas un bool\xC3\xA9" "en (VRAI ou FAUX)";
+    double x = 0;
+    if (typereg::isNumber(type) && !parseNumber(expected, x)) return expected + " n'est pas un nombre";
+    return {};
+}
 } // namespace
 
 void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
@@ -471,11 +550,22 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
                 if (!cell.ok()) { add(S::Error, t, inputs[k]->name + " : " + cell.why); continue; }
                 if (!Expression::compile(cell.text).valid()) add(S::Error, t, inputs[k]->name + " : " + text + " illisible");
             }
+            // 1.13.0 : l'attendu du retour, lisible comme le moteur le compare (un nombre, un booleen, une
+            // valeur de l'enumeration) ; un generique (T) ou un autre type : laisse a l'appel.
+            if (!f.returnType.empty() && !trim(t.expected).empty() && t.errorCode.empty())
+                if (const std::string why = unreadableExpected(p, f, t.expected); !why.empty())
+                    add(S::Error, t, "attendu illisible : " + why);
             // Les poses : une variable connue, une valeur lisible.
             for (const auto& g : t.givens) {
                 const std::string target = trim(g.target);
                 if (target.empty()) { add(S::Error, t, "pose sans cible"); continue; }
-                if (!Expression::compile(target).valid()) { add(S::Warning, t, "pose " + qmark(target) + " : cible illisible"); continue; }
+                const Expression ex = Expression::compile(target);
+                if (!ex.valid()) { add(S::Warning, t, "pose " + qmark(target) + " : cible illisible"); continue; }
+                // 1.13.0 : la variable posee existe (une faute de frappe se voit ici, pas seulement en jouant le cas).
+                if (const std::string unknown = unknownRoot(p, ex); !unknown.empty()) {
+                    add(S::Error, t, "pose " + qmark(target) + " : variable inconnue (" + unknown + ")");
+                    continue;
+                }
                 // Une valeur scalaire lisible (une structure/liste [..] ou (..) : laissee a l'ecriture).
                 const std::string val = trim(g.value);
                 if (!val.empty() && val.front() != '[' && val.front() != '(' && !Expression::compile(val).valid())
@@ -486,7 +576,10 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
                 const std::string target = trim(c.target);
                 if (target.empty()) { add(S::Error, t, "v\xC3\xA9rif sans cible"); continue; }
                 if (iequals(target, "JOURNAL")) continue;
-                if (!Expression::compile(target).valid()) add(S::Warning, t, "v\xC3\xA9rif " + qmark(target) + " : cible illisible");
+                const Expression ex = Expression::compile(target);
+                if (!ex.valid()) add(S::Warning, t, "v\xC3\xA9rif " + qmark(target) + " : cible illisible");
+                else if (const std::string unknown = unknownRoot(p, ex); !unknown.empty())
+                    add(S::Error, t, "v\xC3\xA9rif " + qmark(target) + " : variable inconnue (" + unknown + ")");
                 if (trim(c.expected).empty()) add(S::Warning, t, "v\xC3\xA9rif " + qmark(target) + " : aucun attendu");
             }
             // Un cas qui ne juge rien (ni retour attendu, ni verif, ni erreur attendue).
