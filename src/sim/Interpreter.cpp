@@ -2240,6 +2240,14 @@ public:
     }
     void walkExpression(const ExprPtr& e) { expr(e); }
 
+    // 1.13.0 : une fonction nommee Lever existe-t-elle (la meme regle que raiseStmt) ?
+    bool userLever() {
+        if (program_)
+            for (const auto& f : program_->functions)
+                if (f && upperOf(f->name) == "LEVER") return true;
+        return env_.overloads("LEVER") > 0 || env_.dialectFunction("LEVER") != nullptr;
+    }
+
     std::vector<CallSite> finish() {
         std::stable_sort(sites_.begin(), sites_.end(), [](const CallSite& a, const CallSite& b) { return a.line < b.line; });
         std::map<std::pair<std::string, std::uint32_t>, std::uint32_t> seen;
@@ -2319,9 +2327,17 @@ private:
             expr(s.condition);
             return;
         }
-        // 1.13.0 : LEVER('E_x', 'msg') garde l'appel entier dans `target` (une fonction Lever d'avant le prend) :
-        // ses arguments (value, condition) suffisent ; sans cette forme, l'appel lui-meme.
-        if (!(s.kind == Stmt::Kind::Raise && s.value)) expr(s.target);
+        // 1.13.0 : LEVER(...) garde l'appel entier dans `target`. Une fonction Lever de l'utilisateur (du script, du
+        // projet, de la vue) le prend a l'execution (raiseStmt) : c'est alors un appel, controle comme les autres. Sinon
+        // c'est l'instruction LEVER : ses arguments seulement (une forme fausse, LEVER() ou trois arguments, est dite
+        // par Compiler - pas une seconde fois comme « fonction LEVER inconnue »).
+        if (s.kind == Stmt::Kind::Raise) {
+            if (userLever()) expr(s.target);
+            else if (!s.value && s.target)
+                for (const auto& a : s.target->arguments) expr(a.second);
+        } else {
+            expr(s.target);
+        }
         for (const auto& t : s.extraTargets) expr(t);
         expr(s.value);
         expr(s.condition);
@@ -3228,10 +3244,12 @@ private:
     };
 
     // Le cote gauche de a ?? b : ses erreurs choisissent b (fail et LEVER se taisent), sauf dans un TRY
-    // ouvert plus bas (quietCatching_ : la profondeur des TRY a l'ouverture).
+    // ouvert plus bas (quietCatching_ : la profondeur des TRY a l'ouverture du ?? le plus INTERIEUR - un a ?? b
+    // dans un TRY d'une fonction appelee a gauche d'un autre ?? : son erreur choisit b, pas le CATCH).
     struct QuietSide {
         explicit QuietSide(Runner& r) : runner(r), saved(r.quietCatching_) {
-            if (runner.quiet_++ == 0) runner.quietCatching_ = runner.catching_;
+            ++runner.quiet_;
+            runner.quietCatching_ = runner.catching_;
         }
         ~QuietSide() {
             --runner.quiet_;
@@ -9688,12 +9706,12 @@ private:
     const std::regex* regexCompile(const std::string& pattern, std::string& why) {
         if (const auto it = regexCache_.find(pattern); it != regexCache_.end()) return &it->second;
         if (!regexValidate(pattern, why)) return nullptr;                // WASM-safe : pas de construction d'un motif invalide
-#ifdef __GLIBCXX__
+        // 1.13.0 : refusees sur TOUTES les cibles (avant : sous libstdc++ seulement) - un meme projet ne doit pas tourner ici
+        // et echouer la (une construction MSVC garde l'executeur en profondeur ; l'exe livre est construit avec MinGW).
         if (regexBackReference(pattern)) {
             why = "les r\xC3\xA9" "f\xC3\xA9rences arri\xC3\xA8re (\\1, \\2...) ne sont pas prises en charge";
             return nullptr;
         }
-#endif
         // 1.13.0 : un cache borne - une tache detachee qui compose ses motifs (CONCAT('^ID=', ...)) ne le fait plus
         // grossir sans fin. Le pointeur rendu ne sert que pendant la native en cours : vider ici est sur.
         if (regexCache_.size() >= 64) regexCache_.clear();

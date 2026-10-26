@@ -361,6 +361,17 @@ void relecture() {
           "n52 : 200 motifs differents puis le premier : 201 correspondances (le cache borne se vide sans rien casser) " + err);
 }
 
+// La seconde relecture (lot D2) : R22 - le sens des motifs est celui que l'aide decrit, le meme partout.
+void seconde() {
+    std::printf("-- seconde relecture : le sens des motifs (R22)\n");
+    std::string err;
+    check(run("STRING", "R := REGEX_TROUVE('Automatique', 'Auto|Automatique');", &err) == "Automatique",
+          "R22 : deux choix au meme depart : le plus long l'emporte (Auto|Automatique -> Automatique), comme l'aide le dit (" + err + ")");
+    check(run("STRING", "TRY\n    R := REGEX_TROUVE('aa', '(a)\\1');\nCATCH e\n    R := e.Code;\nEND_TRY") == "E_REGEX",
+          "R22 : une reference arriere (\\1) est refusee (E_REGEX) - sur toutes les cibles");
+    check(run("BOOL", "R := REGEX_VALIDE('(a)\\1');", &err) == "FALSE", "R22 : REGEX_VALIDE('(a)\\1') = FALSE (" + err + ")");
+}
+
 } // namespace
 
 int main() {
@@ -374,6 +385,7 @@ int main() {
     regexErreur();
     automateInchange();
     relecture();
+    seconde();
     std::printf("=== %d verifications, %d echec(s) ===\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
