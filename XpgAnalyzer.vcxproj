@@ -154,6 +154,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiAssetPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiAssist.cpp" />
     <ClCompile Include="src\app\hmi\HmiCanvas.cpp" />
+    <ClCompile Include="src\app\hmi\HmiMethodPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiPartage.cpp" />
     <ClCompile Include="src\app\hmi\HmiChartsPainter.cpp" />
     <ClCompile Include="src\app\hmi\HmiCommHost.cpp" />
@@ -681,6 +682,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiAddressDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiAskDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiAssetPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiMethodPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiResourceFilter.hpp" />
     <ClInclude Include="src\app\hmi\HmiAssist.hpp" />
     <ClInclude Include="src\app\hmi\HmiCanvas.hpp" />
