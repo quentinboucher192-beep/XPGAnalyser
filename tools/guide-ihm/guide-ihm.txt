@@ -6758,7 +6758,7 @@ if (dernieres.size() > 100) dernieres.pop_front();
 - **Les affectations** : une LIST dans un SET se range et perd ses doublons ; une LIST (ou un ARRAY) dans un RING garde ses N dernières valeurs ; un SET ou un RING dans une LIST en fait une LIST ordinaire. Une variable IHM peut être un SET ou un RING (Ensemble (SET), Tampon (RING) dans le sélecteur de types) : de taille variable, elle vit dans la mémoire de l'IHM (ni équipement, ni adresse).
 
 == unites-mesure | Les unités de mesure dans les types
-: Donne une unité physique (bar, mbar, degC, m3/h, %) à une variable ou à un membre : la compilation refuse bar + mbar, convertit d'office ce qui est compatible, et l'unité remonte jusqu'à l'affichage - sans rien changer pour qui n'en met pas.
+: Donne une unité physique (bar, mbar, degC, m3/h, %) à une variable ou à un membre : la compilation refuse bar + mbar, l'affectation d'une variable convertit d'office ce qui est compatible, et l'unité remonte jusqu'à l'affichage - sans rien changer pour qui n'en met pas.
 @mots unité, unités, unite, mesure, EN, UNITE, SANS_UNITE, famille, conversion, strictes, Unités strictes, Choisir une unité, sélecteur d'unités, Unités de mesure
 @lieux unites-mesure, types-ihm, variables-ihm, unites-formats
 @voir types-ihm, variables-ihm, unites-formats, retours-fonctions, operateurs, erreurs-scripts, reference
@@ -6802,27 +6802,30 @@ Dans l'arbre, sous Configuration : la bibliothèque des unités du projet.
 - **Retirer** : une unité du projet que rien n'emploie (la colonne Emplois dit où elle sert), ou une famille du projet dont aucune unité n'est employée. Une unité fournie ne se retire pas.
 - La case **Unités strictes : une affectation de même famille exige EN(…)** (voir plus bas). Chaque geste se reprend par Ctrl+Z.
 ### Deux règles, voulues différentes
-L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) exigent la **même unité exacte** : bar et mbar ne s'additionnent pas, il faut convertir l'un des deux avec **EN(…)**. L'**affectation** (:=, passer un argument, RETURN) de la même famille **convertit d'office** (une info) ; la case « Unités strictes » (Configuration › Unités de mesure) exige alors EN(…) au lieu de convertir. Deux **familles différentes** (une pression et une température) : toujours refusé, et le message nomme les deux. Une valeur **sans unité** (un littéral 9.0, une variable nue) adopte l'unité de l'autre ; une cible sans unité reçoit le nombre tel quel.
+L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) exigent la **même unité exacte** : bar et mbar ne s'additionnent pas, il faut convertir l'un des deux avec **EN(…)** (la correction d'un clic l'insère). Dans un script comme dans une expression, c'est une **erreur** : la simulation ne démarre pas. L'**affectation** := d'une **variable ou d'un membre lu tel quel** (Pression := PressionBasse, Pression := Ligne.Vannes[2]) de la même famille **se convertit d'office** en marche (une info). Le reste ne se convertit pas tout seul, et la compilation demande EN(…) : un **calcul** (Pression := PressionBasse * 2.0), un **RETURN** (ou l'affectation au nom de la fonction) vers l'unité du retour, un **argument** passé à un paramètre qui a une unité. La case « Unités strictes » (Configuration › Unités de mesure) exige EN(…) partout, l'affectation d'une variable comprise. Deux **familles différentes** (une pression et une température) : toujours refusé, et le message nomme les deux. Une valeur **sans unité** (un littéral 9.0, une variable nue, une variable locale ou un paramètre sans unité, même s'il porte le nom d'une variable IHM) adopte l'unité de l'autre ; une cible sans unité reçoit le nombre tel quel.
 ```ST
 Ecart := Pression - EN(PressionBasse, 'bar');   (* bar et mbar : convertis d'abord *)
 IF Pression > 9.0 THEN ... END_IF;              (* 9.0 pris en bar *)
 Pression := PressionBasse;                      (* mbar -> bar : converti d'office *)
+Pression := EN(PressionBasse, 'bar') * 2.0;     (* un calcul : EN sur la variable *)
 Pression := Temperature;                        (* REFUSÉ : pression <- température *)
 ```
 ```C
 ecart = pression - pb_mbar * 0.001f;            /* conversion à la main en C */
 if (pression > 9.0f) { /* ... */ }
 pression = pb_mbar * 0.001f;
+pression = pb_mbar * 0.001f * 2.0f;
 /* pression = temperature;  // deux grandeurs sans rapport */
 ```
 ```C++
 ecart = pression - pb_mbar * 0.001f;            // conversion à la main en C++
 if (pression > 9.0f) { /* ... */ }
 pression = pb_mbar * 0.001f;
+pression = pb_mbar * 0.001f * 2.0f;
 // pression = temperature;  // deux grandeurs sans rapport
 ```
 ### EN, UNITE, SANS_UNITE ; produit et division
-**EN(valeur, 'unité')** convertit vers une unité de la même famille (sinon « on ne convertit pas des bar en degC ») ; la température est affine (facteur ET décalage : + 273,15 vers les K). **UNITE(x)** rend le symbole ('bar'), **SANS_UNITE(x)** enlève l'unité (un nombre nu). Multiplier par un nombre garde l'unité ; diviser deux fois la même unité donne un rapport **sans unité** ; un autre produit ou division perd l'unité (une info - pas d'algèbre d'unités composées). Cas particuliers : **%** est une famille sans dimension (EN(x, 'ratio') = × 0,01) ; **Nm3/h** (débit normalisé) est une famille à part, non convertible vers m3/h.
+**EN(valeur, 'unité')** convertit vers une unité de la même famille (sinon « on ne convertit pas des bar en degC ») ; la température est affine (facteur ET décalage : + 273,15 vers les K). EN convertit une **variable ou un membre** (Pression, Ligne.Vannes[2], Pressions[i]) : le moteur lit son unité sur sa déclaration. Pas un calcul ni un appel : écris EN(PressionBasse, 'bar') * 1.1, pas EN(PressionBasse * 1.1, 'bar') (refusé). **UNITE(x)** rend le symbole ('bar'), **SANS_UNITE(x)** enlève l'unité (un nombre nu). MIN, MAX, LIMIT et ABS gardent l'unité de leurs arguments ; multiplier par un nombre la garde aussi ; diviser deux fois la même unité donne un rapport **sans unité** ; un autre produit ou division perd l'unité (une info - pas d'algèbre d'unités composées). Cas particuliers : **%** est une famille sans dimension (EN(x, 'ratio') = × 0,01) ; **Nm3/h** (débit normalisé) est une famille à part, non convertible vers m3/h.
 ```ST
 Taux    := EN(Debit, 'm3/h') / EN(DebitMax, 'm3/h') * 100.0;   (* un % *)
 Texte   := TO_STRING(EN(Temperature, 'K'));                    (* degC -> K : + 273,15 *)
@@ -6841,7 +6844,7 @@ double brut = pression;                    // pas d'unité à enlever en C++
 ```
 ### L'unité remonte à l'affichage
 En marche, l'unité physique d'une variable devient son **unité d'affichage par défaut**, écrite comme on la lit (degC : °C, m3/h : m³/h). L'afficheur, le champ de saisie, la jauge, le cadran… qui montrent la variable et laissent leur unité vide la prennent, comme chaque ligne d'un tableau de variables ; `{Pression:u}` écrit « 9.08 bar », dans un texte comme dans le message d'une alarme. Un objet qui décoche **Format de la variable** garde la sienne.
-Dans Configuration › Unités et formats, la case Unité d'une ligne vide montre cette unité en gris. Une unité tapée sur la ligne ou sur l'objet l'emporte, mais ce n'est qu'un **libellé** : la valeur n'est pas convertie. Pour montrer des mbar d'une variable en bar, mets `EN(Pression, 'mbar')` dans la valeur de l'objet et tape mbar dans son unité.
+Dans Configuration › Unités et formats, la case Unité d'une ligne vide montre cette unité en gris. L'affichage **ne convertit pas** : sur une variable qui a une unité, une ligne « Unités et formats » ou un objet garde la même, ou la laisse vide ; une autre unité, même de la même famille, est une **erreur** de Générer (9.08 bar se lirait « 9.08 mbar »). Pour montrer des mbar d'une variable en bar, convertis dans une expression : `{EN(Pression, 'mbar'):0} mbar`, ou mets `EN(Pression, 'mbar')` dans la valeur de l'objet et tape mbar dans son unité.
 
 = Programmer › Scripts et fonctions
 

@@ -156,6 +156,24 @@ bool richLiteral(std::string_view type, std::string_view text, const Project* pr
 
 // 1.12.20 : LA CORRECTION D'UN CLIC - `from` remplace par `to` dans le texte en cause, sur sa ligne d'abord.
 namespace {
+bool wordChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
+// 1.13.0 : une occurrence de `from` a `at` qui est le meme nom, pas le morceau d'un autre - PressionBasse ne se
+// corrige pas dans PressionBasseMax, ni Pression au debut de PressionBasse, ni dans Ligne.Pression (un membre).
+// Un bord qui n'est pas un nom ('Valider', un appel) n'a pas de borne a respecter.
+bool boundedAt(std::string_view text, std::size_t at, std::string_view from) {
+    if (wordChar(from.front()) && at > 0 && (wordChar(text[at - 1]) || text[at - 1] == '.')) return false;
+    const std::size_t after = at + from.size();
+    if ((wordChar(from.back()) || from.back() == ']') && after < text.size()
+        && (wordChar(text[after]) || text[after] == '.' || text[after] == '['))
+        return false;
+    return true;
+}
+// La premiere occurrence bornee de `from` dans [begin, end) ; npos : aucune.
+std::size_t findBounded(std::string_view text, std::string_view from, std::size_t begin, std::size_t end) {
+    for (std::size_t at = text.find(from, begin); at != std::string_view::npos && at + from.size() <= end; at = text.find(from, at + 1))
+        if (boundedAt(text, at, from)) return at;
+    return std::string_view::npos;
+}
 bool replaceIn(std::string& text, int line, std::string_view from, std::string_view to) {
     if (from.empty()) return false;
     std::size_t begin = 0, end = text.size();
@@ -170,8 +188,8 @@ bool replaceIn(std::string& text, int line, std::string_view from, std::string_v
             if (end == std::string::npos) end = text.size();
         }
     }
-    std::size_t at = text.find(from, begin);
-    if (at == std::string::npos || at + from.size() > end) at = text.find(from);   // la ligne a bouge : tout le texte
+    std::size_t at = findBounded(text, from, begin, end);
+    if (at == std::string::npos) at = findBounded(text, from, 0, text.size());   // la ligne a bouge : tout le texte
     if (at == std::string::npos) return false;
     text.replace(at, from.size(), to);
     return true;
@@ -3921,6 +3939,23 @@ void checkDisplay(const Project& p, const NameExists& plc, std::vector<Issue>& o
         if (d.unit.empty() && d.format.empty() && d.min.empty() && d.max.empty() && d.low.empty() && d.high.empty() && d.lowAlarm.empty()
             && d.highAlarm.empty())
             issue(S::Info, d.path + " : ni unit\xC3\xA9 ni format - la ligne ne change rien");
+        // 1.13.0 (lot J6) : l'unite d'affichage contre l'unite physique de la variable. L'affichage ne convertit rien :
+        // il colle son symbole a la valeur telle qu'elle est - une autre unite tromperait l'operateur (9.08 bar montre
+        // « 9.08 mbar »), qu'elle soit de la meme famille ou d'une autre.
+        if (const std::string shown = trimmedCopy(d.unit); !shown.empty())
+            if (const std::string phys = units::unitOfPath(p, d.path); !phys.empty()) {
+                const units::Catalog cat(p.config);
+                const units::Rel rel = cat.relation(phys, shown);
+                if (rel == units::Rel::OtherFamily)
+                    issue(S::Error, d.path + " est en " + phys + " (" + cat.familyPhrase(phys) + ") : on ne l'affiche pas en " + shown + " ("
+                                        + cat.familyPhrase(shown) + ") \xE2\x80\x94 laisse l'unit\xC3\xA9 vide (elle reprend " + phys + ")");
+                else if (rel == units::Rel::SameFamily)
+                    issue(S::Error, d.path + " est en " + phys + " : l'affichage ne convertit pas, il montrerait la valeur en " + phys
+                                        + " suivie de \xC2\xAB " + shown + " \xC2\xBB \xE2\x80\x94 laisse l'unit\xC3\xA9 vide (elle reprend " + phys
+                                        + (d.path.find("[]") == std::string::npos
+                                               ? "), ou montre EN(" + d.path + ", '" + cat.canonical(shown) + "') dans une fx"
+                                               : std::string(")")));
+            }
     }
     const auto& c = p.config;
     if (c.textScale < 50 || c.textScale > 300)

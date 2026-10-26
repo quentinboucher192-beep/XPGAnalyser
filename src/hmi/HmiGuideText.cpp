@@ -14785,8 +14785,9 @@ const std::vector<Topic>& topics() {
         // ---- Programmer  Variables et types / unites-mesure
         {"unites-mesure", "Les unit\xC3\xA9s de mesure dans les types", "Programmer \xE2\x80\xBA Variables et types",
          "Donne une unit\xC3\xA9 physique (bar, mbar, degC, m3/h, %) \xC3\xA0 une variable ou \xC3\xA0 un "
-         "membre : la compilation refuse bar + mbar, convertit d'office ce qui est compatible, et "
-         "l'unit\xC3\xA9 remonte jusqu'\xC3\xA0 l'affichage - sans rien changer pour qui n'en met pas.",
+         "membre : la compilation refuse bar + mbar, l'affectation d'une variable convertit d'office ce qui "
+         "est compatible, et l'unit\xC3\xA9 remonte jusqu'\xC3\xA0 l'affichage - sans rien changer pour qui "
+         "n'en met pas.",
          {
              {K::Heading, "Poser une unit\xC3\xA9 : la colonne Unit\xC3\xA9", {}},
              {K::Paragraph, "Une colonne **Unit\xC3\xA9**, juste apr\xC3\xA8s **Type**, dans la grille des "
@@ -14856,36 +14857,51 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Deux r\xC3\xA8gles, voulues diff\xC3\xA9rentes", {}},
              {K::Paragraph, "L'**addition, la soustraction et la comparaison** (+, -, <, >, =, MIN, MAX, LIMIT) "
                          "exigent la **m\xC3\xAAme unit\xC3\xA9 exacte** : bar et mbar ne s'additionnent "
-                         "pas, il faut convertir l'un des deux avec **EN(\xE2\x80\xA6)**. L'**affectation** "
-                         "(:=, passer un argument, RETURN) de la m\xC3\xAAme famille **convertit d'office** "
-                         "(une info) ; la case \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB (Configuration "
-                         "\xE2\x80\xBA Unit\xC3\xA9s de mesure) exige alors EN(\xE2\x80\xA6) au lieu de "
-                         "convertir. Deux **familles diff\xC3\xA9rentes** (une pression et une "
+                         "pas, il faut convertir l'un des deux avec **EN(\xE2\x80\xA6)** (la correction d'un "
+                         "clic l'ins\xC3\xA8re). Dans un script comme dans une expression, c'est une "
+                         "**erreur** : la simulation ne d\xC3\xA9marre pas. L'**affectation** := d'une "
+                         "**variable ou d'un membre lu tel quel** (Pression := PressionBasse, Pression := "
+                         "Ligne.Vannes[2]) de la m\xC3\xAAme famille **se convertit d'office** en marche "
+                         "(une info). Le reste ne se convertit pas tout seul, et la compilation demande "
+                         "EN(\xE2\x80\xA6) : un **calcul** (Pression := PressionBasse * 2.0), un **RETURN** "
+                         "(ou l'affectation au nom de la fonction) vers l'unit\xC3\xA9 du retour, un "
+                         "**argument** pass\xC3\xA9 \xC3\xA0 un param\xC3\xA8tre qui a une unit\xC3\xA9. La "
+                         "case \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB (Configuration \xE2\x80\xBA "
+                         "Unit\xC3\xA9s de mesure) exige EN(\xE2\x80\xA6) partout, l'affectation d'une "
+                         "variable comprise. Deux **familles diff\xC3\xA9rentes** (une pression et une "
                          "temp\xC3\xA9rature) : toujours refus\xC3\xA9, et le message nomme les deux. Une "
-                         "valeur **sans unit\xC3\xA9** (un litt\xC3\xA9ral 9.0, une variable nue) adopte "
-                         "l'unit\xC3\xA9 de l'autre ; une cible sans unit\xC3\xA9 re\xC3\xA7oit le nombre "
-                         "tel quel.", {}},
+                         "valeur **sans unit\xC3\xA9** (un litt\xC3\xA9ral 9.0, une variable nue, une "
+                         "variable locale ou un param\xC3\xA8tre sans unit\xC3\xA9, m\xC3\xAAme s'il porte "
+                         "le nom d'une variable IHM) adopte l'unit\xC3\xA9 de l'autre ; une cible sans "
+                         "unit\xC3\xA9 re\xC3\xA7oit le nombre tel quel.", {}},
              {K::Code, "Ecart := Pression - EN(PressionBasse, 'bar');   (* bar et mbar : convertis d'abord "
                          "*)\nIF Pression > 9.0 THEN ... END_IF;              (* 9.0 pris en bar "
                          "*)\nPression := PressionBasse;                      (* mbar -> bar : converti "
-                         "d'office *)\nPression := Temperature;                        (* REFUS\xC3\x89 : "
+                         "d'office *)\nPression := EN(PressionBasse, 'bar') * 2.0;     (* un calcul : EN sur "
+                         "la variable *)\nPression := Temperature;                        (* REFUS\xC3\x89 : "
                          "pression <- temp\xC3\xA9rature *)", "ST"},
              {K::Code, "ecart = pression - pb_mbar * 0.001f;            /* conversion \xC3\xA0 la main en "
-                         "C */\nif (pression > 9.0f) { /* ... */ }\npression = pb_mbar * 0.001f;\n/* "
-                         "pression = temperature;  // deux grandeurs sans rapport */", "C"},
+                         "C */\nif (pression > 9.0f) { /* ... */ }\npression = pb_mbar * 0.001f;\npression = "
+                         "pb_mbar * 0.001f * 2.0f;\n/* pression = temperature;  // deux grandeurs sans "
+                         "rapport */", "C"},
              {K::Code, "ecart = pression - pb_mbar * 0.001f;            // conversion \xC3\xA0 la main en "
-                         "C++\nif (pression > 9.0f) { /* ... */ }\npression = pb_mbar * 0.001f;\n// pression "
-                         "= temperature;  // deux grandeurs sans rapport", "C++"},
+                         "C++\nif (pression > 9.0f) { /* ... */ }\npression = pb_mbar * 0.001f;\npression = "
+                         "pb_mbar * 0.001f * 2.0f;\n// pression = temperature;  // deux grandeurs sans "
+                         "rapport", "C++"},
              {K::Heading, "EN, UNITE, SANS_UNITE ; produit et division", {}},
              {K::Paragraph, "**EN(valeur, 'unit\xC3\xA9')** convertit vers une unit\xC3\xA9 de la m\xC3\xAAme "
                          "famille (sinon \xC2\xAB on ne convertit pas des bar en degC \xC2\xBB) ; la "
                          "temp\xC3\xA9rature est affine (facteur ET d\xC3\xA9" "calage : + 273,15 vers les "
-                         "K). **UNITE(x)** rend le symbole ('bar'), **SANS_UNITE(x)** enl\xC3\xA8ve "
-                         "l'unit\xC3\xA9 (un nombre nu). Multiplier par un nombre garde l'unit\xC3\xA9 ; "
-                         "diviser deux fois la m\xC3\xAAme unit\xC3\xA9 donne un rapport **sans "
-                         "unit\xC3\xA9** ; un autre produit ou division perd l'unit\xC3\xA9 (une info - pas "
-                         "d'alg\xC3\xA8" "bre d'unit\xC3\xA9s compos\xC3\xA9" "es). Cas particuliers : **%** "
-                         "est une famille sans dimension (EN(x, 'ratio') = \xC3\x97 0,01) ; **Nm3/h** "
+                         "K). EN convertit une **variable ou un membre** (Pression, Ligne.Vannes[2], "
+                         "Pressions[i]) : le moteur lit son unit\xC3\xA9 sur sa d\xC3\xA9" "claration. Pas "
+                         "un calcul ni un appel : \xC3\xA9" "cris EN(PressionBasse, 'bar') * 1.1, pas "
+                         "EN(PressionBasse * 1.1, 'bar') (refus\xC3\xA9). **UNITE(x)** rend le symbole "
+                         "('bar'), **SANS_UNITE(x)** enl\xC3\xA8ve l'unit\xC3\xA9 (un nombre nu). MIN, MAX, "
+                         "LIMIT et ABS gardent l'unit\xC3\xA9 de leurs arguments ; multiplier par un nombre "
+                         "la garde aussi ; diviser deux fois la m\xC3\xAAme unit\xC3\xA9 donne un rapport "
+                         "**sans unit\xC3\xA9** ; un autre produit ou division perd l'unit\xC3\xA9 (une info "
+                         "- pas d'alg\xC3\xA8" "bre d'unit\xC3\xA9s compos\xC3\xA9" "es). Cas particuliers : "
+                         "**%** est une famille sans dimension (EN(x, 'ratio') = \xC3\x97 0,01) ; **Nm3/h** "
                          "(d\xC3\xA9" "bit normalis\xC3\xA9) est une famille \xC3\xA0 part, non convertible "
                          "vers m3/h.", {}},
              {K::Code, "Taux    := EN(Debit, 'm3/h') / EN(DebitMax, 'm3/h') * 100.0;   (* un % *)\nTexte   "
@@ -14907,11 +14923,14 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9" "crit \xC2\xAB 9.08 bar \xC2\xBB, dans un texte comme dans le message "
                          "d'une alarme. Un objet qui d\xC3\xA9" "coche **Format de la variable** garde la "
                          "sienne. Dans Configuration \xE2\x80\xBA Unit\xC3\xA9s et formats, la case "
-                         "Unit\xC3\xA9 d'une ligne vide montre cette unit\xC3\xA9 en gris. Une unit\xC3\xA9 "
-                         "tap\xC3\xA9" "e sur la ligne ou sur l'objet l'emporte, mais ce n'est qu'un "
-                         "**libell\xC3\xA9** : la valeur n'est pas convertie. Pour montrer des mbar d'une "
-                         "variable en bar, mets `EN(Pression, 'mbar')` dans la valeur de l'objet et tape "
-                         "mbar dans son unit\xC3\xA9.", {}},
+                         "Unit\xC3\xA9 d'une ligne vide montre cette unit\xC3\xA9 en gris. L'affichage **ne "
+                         "convertit pas** : sur une variable qui a une unit\xC3\xA9, une ligne \xC2\xAB "
+                         "Unit\xC3\xA9s et formats \xC2\xBB ou un objet garde la m\xC3\xAAme, ou la laisse "
+                         "vide ; une autre unit\xC3\xA9, m\xC3\xAAme de la m\xC3\xAAme famille, est une "
+                         "**erreur** de G\xC3\xA9n\xC3\xA9rer (9.08 bar se lirait \xC2\xAB 9.08 mbar "
+                         "\xC2\xBB). Pour montrer des mbar d'une variable en bar, convertis dans une "
+                         "expression : `{EN(Pression, 'mbar'):0} mbar`, ou mets `EN(Pression, 'mbar')` dans "
+                         "la valeur de l'objet et tape mbar dans son unit\xC3\xA9.", {}},
          },
          {"types-ihm", "variables-ihm", "unites-formats", "retours-fonctions", "operateurs", "erreurs-scripts", "reference"},
          {"unit\xC3\xA9", "unit\xC3\xA9s", "unite", "mesure", "EN", "UNITE", "SANS_UNITE", "famille", "conversion", "strictes", "Unit\xC3\xA9s strictes", "Choisir une unit\xC3\xA9", "s\xC3\xA9lecteur d'unit\xC3\xA9s", "Unit\xC3\xA9s de mesure"},

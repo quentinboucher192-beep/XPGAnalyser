@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -162,6 +163,18 @@ std::string fieldBare(std::string_view key, std::string_view value) {
 }
 std::string fieldInt(std::string_view key, long long v) { return fieldBare(key, std::to_string(v)); }
 std::string fieldBool(std::string_view key, bool v) { return fieldBare(key, v ? "1" : "0"); }
+// 1.13.0 (lot J6) : un nombre ecrit SANS PERTE - le plus court qui se relit a l'identique (0.000001 -> 1e-06,
+// 6894.757293, 5/9). Le facteur et le decalage d'une unite du projet : formatNumber les arrondissait a trois
+// decimales (un micro-ampere relu avec un facteur nul, un degre a 2,6 % pres).
+std::string exactNumber(double v) {
+    if (!std::isfinite(v)) return "0";
+    char b[48];
+    for (int prec = 15; prec <= 17; ++prec) {
+        std::snprintf(b, sizeof b, "%.*g", prec, v);
+        if (std::strtod(b, nullptr) == v) break;
+    }
+    return b;
+}
 // 1.13.0 (lot J1) : les interfaces d'un type (des identifiants, sans ';') jointes pour une seule case.
 std::string joinSemicolon(const std::vector<std::string>& v) {
     std::string out;
@@ -1284,7 +1297,7 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                + (f.label.empty() ? std::string{} : field("libelle", f.label)) + "\n";
     for (const auto& u : cfg.units)
         index += "unite_mesure" + field("symbole", u.symbol) + field("famille", u.family)
-               + fieldBare("facteur", formatNumber(u.factor)) + fieldBare("decalage", formatNumber(u.offset))
+               + fieldBare("facteur", exactNumber(u.factor)) + fieldBare("decalage", exactNumber(u.offset))
                + (u.label.empty() ? std::string{} : field("libelle", u.label)) + "\n";
     if (cfg.strictUnits) index += "unites_strictes" + fieldBool("actif", true) + "\n";
     // 1.13.0 (lot J8, format 33) : les bibliotheques reliees - le LIEN (nom, version, plancher, chemin) et le cache
@@ -1907,11 +1920,21 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             u.symbol = toStr(r.get("symbole"));
             u.family = toStr(r.get("famille"));
             double d = 1.0;
-            u.factor = r.get("facteur") && parseNumber(toStr(r.get("facteur")), d) ? d : 1.0;
+            const bool factorRead = !r.get("facteur") || parseNumber(toStr(r.get("facteur")), d);
+            u.factor = r.get("facteur") && factorRead ? d : 1.0;
             d = 0.0;
             u.offset = r.get("decalage") && parseNumber(toStr(r.get("decalage")), d) ? d : 0.0;
             u.label = toStr(r.get("libelle"));
-            if (!u.symbol.empty()) p.config.units.push_back(std::move(u));
+            // 1.13.0 : un facteur nul (ou illisible) casserait toutes les conversions sans rien dire (tout vaudrait 0,
+            // ou rien ne se convertirait vers elle) : l'unite est ignoree, et le dit - ses variables deviennent
+            // « unite inconnue » a Generer.
+            if (!u.symbol.empty() && (!factorRead || u.factor == 0.0)) {
+                if (report)
+                    report->warnings.push_back("unit\xC3\xA9 du projet '" + u.symbol + "' : facteur nul ou illisible (" + toStr(r.get("facteur"))
+                                               + "), ignor\xC3\xA9" "e");
+            } else if (!u.symbol.empty()) {
+                p.config.units.push_back(std::move(u));
+            }
         } else if (r.word == "unites_strictes") {                         // 1.13.0 (lot J6)
             p.config.strictUnits = toBool(r.get("actif"), true);
         } else if (r.word == "bibliotheque") {                            // 1.13.0 (lot J8) : un lien
