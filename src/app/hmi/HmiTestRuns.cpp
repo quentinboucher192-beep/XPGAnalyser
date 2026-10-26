@@ -1,6 +1,8 @@
 // Les derniers verdicts des tests unitaires (1.13.0, lot J4b) : voir HmiTestRuns.hpp.
 #include "HmiTestRuns.hpp"
 
+#include "../../core/Command.hpp"   // 1.13.0 (D3b) : la pile de l'application - le projet a-t-il change ?
+
 #include <cctype>
 #include <deque>
 #include <functional>
@@ -107,80 +109,197 @@ std::size_t fingerprint(const hmi::HmiFunction& f, const hmi::FunctionTest& t) {
     return std::hash<std::string>{}(s);
 }
 
-// 1.13.0 (seconde passe) : CE QUE LA FONCTION LIT, de proche en proche - les fonctions IHM qu'elle appelle (du projet,
-// de sa vue), les variables IHM qu'elle nomme (et leurs types IHM), les constantes de sa vue. Les noms cites par ses
-// cas (poses, verifs, attendus calcules) comptent aussi.
-std::size_t context(const hmi::Project& p, const hmi::HmiFunction& f) {
-    const hmi::View* owner = nullptr;
-    for (const auto& v : p.views)
-        for (const auto& g : v.functions)
-            if (g.id == f.id) owner = &v;
+// 1.13.0 (seconde passe, D3b) : CE QUE LA FONCTION LIT, de proche en proche, par les noms que citent son code, ses
+// declarations (valeurs et types) et ses cas : les fonctions IHM de ce nom (du projet, de toute vue, popup ou symbole -
+// une instance appelle celles de son symbole -, les methodes des types, les fonctions des bibliotheques reliees), les
+// redefinitions d'une instance, les variables IHM, les types IHM (membres, valeurs, base, operateurs ; ceux des
+// bibliotheques aussi), les constantes de sa vue et d'une vue nommee. Un nom pris pour un autre (deux fonctions
+// Calculer) compte les deux : au pire, un cas repart " a jouer " pour rien.
+namespace {
+struct ContextIndex {
+    std::multimap<std::string, const hmi::HmiFunction*>      functions;
+    std::multimap<std::string, const hmi::FunctionOverride*> overrides;
+    std::multimap<std::string, const hmi::Variable*>         variables;
+    std::multimap<std::string, const hmi::HmiType*>          types;
+    std::multimap<std::string, const hmi::View*>             views;
+    std::map<Id, const hmi::View*>                           ownerOf;     // une fonction de vue -> sa vue
+};
+
+ContextIndex contextIndexOf(const hmi::Project& p) {
+    ContextIndex ix;
+    const auto addTypes = [&ix](const std::vector<hmi::HmiType>& types) {
+        for (const auto& ty : types) {
+            ix.types.emplace(upperOf(ty.name), &ty);
+            for (const auto& m : ty.methods) ix.functions.emplace(upperOf(m.name), &m);
+        }
+    };
+    for (const auto& g : p.programs.functions) ix.functions.emplace(upperOf(g.name), &g);
+    for (const auto& v : p.programs.variables) ix.variables.emplace(upperOf(v.name), &v);
+    addTypes(p.programs.types);
+    for (const auto& v : p.views) {
+        ix.views.emplace(upperOf(v.name), &v);
+        for (const auto& g : v.functions) {
+            ix.functions.emplace(upperOf(g.name), &g);
+            ix.ownerOf.emplace(g.id, &v);
+        }
+        for (const auto& o : v.objects)
+            for (const auto& r : o.functionOverrides) ix.overrides.emplace(upperOf(r.function), &r);
+    }
+    if (const auto& libs = p.libraryCache.loaded)
+        for (const auto& lib : *libs) {
+            for (const auto& g : lib.content.functions) ix.functions.emplace(upperOf(g.name), &g);
+            addTypes(lib.content.types);
+        }
+    return ix;
+}
+
+std::size_t& computed() {
+    static std::size_t n = 0;
+    return n;
+}
+
+std::size_t contextWith(const ContextIndex& ix, const hmi::HmiFunction& f) {
+    ++computed();
     std::set<std::string> names;
+    std::deque<std::string> pending;
+    const auto cite = [&](std::string_view code) {
+        std::set<std::string> found;
+        namesIn(code, found);
+        for (auto& n : found)
+            if (names.insert(n).second) pending.push_back(n);
+    };
+    const auto citeDecls = [&](const std::vector<hmi::Declaration>& decls) {
+        for (const auto& d : decls) {
+            cite(d.value);
+            cite(d.type);
+            cite(d.calc);
+        }
+    };
     const auto scan = [&](const hmi::HmiFunction& g) {
-        namesIn(g.body, names);
-        for (const auto& d : g.decls) namesIn(d.value, names);
+        cite(g.body);
+        cite(g.returnType);
+        citeDecls(g.decls);
     };
     scan(f);
     for (const auto& t : f.tests) {
-        for (const auto& a : t.arguments) namesIn(a, names);
-        namesIn(t.expected, names);
-        for (const auto& g : t.givens) { namesIn(g.target, names); namesIn(g.value, names); }
-        for (const auto& c : t.checks) { namesIn(c.target, names); namesIn(c.expected, names); }
+        for (const auto& a : t.arguments) cite(a);
+        cite(t.expected);
+        for (const auto& g : t.givens) { cite(g.target); cite(g.value); }
+        for (const auto& c : t.checks) { cite(c.target); cite(c.expected); }
     }
     std::string s;
-    // Les fonctions appelees, de proche en proche (chacune une fois).
-    std::set<Id> seen{f.id};
-    std::deque<const hmi::HmiFunction*> todo;
-    const auto reach = [&] {
-        bool more = false;
-        const auto visit = [&](const hmi::HmiFunction& g) {
-            if (seen.count(g.id) || !names.count(upperOf(g.name))) return;
-            seen.insert(g.id);
-            todo.push_back(&g);
-            more = true;
-        };
-        for (const auto& g : p.programs.functions) visit(g);
-        if (owner)
-            for (const auto& g : owner->functions) visit(g);
-        return more;
-    };
-    while (reach())
-        while (!todo.empty()) {
-            const auto* g = todo.front();
-            todo.pop_front();
-            scan(*g);
-            s += g->name + '\x1f' + g->returnType + '\x1f' + g->returnUnit + '\x1f' + g->body + '\x1f';
-            addDecls(s, g->decls);
-            for (const auto& gp : g->generics) s += gp.name + ':' + gp.constraint + '\x1f';
+    std::set<const void*> seen;
+    std::set<Id> seenFunctions{f.id};        // par identifiant : la fonction elle-meme (ou sa copie) n'en est pas
+    const auto first = [&seen](const void* x) { return seen.insert(x).second; };
+    // Les constantes de sa vue (une fonction de vue les lit par leur nom).
+    if (const auto it = ix.ownerOf.find(f.id); it != ix.ownerOf.end()) {
+        s += '\x1a' + it->second->name + '\x1f';
+        addDecls(s, it->second->constants);
+        citeDecls(it->second->constants);
+    }
+    while (!pending.empty()) {
+        const std::string n = pending.front();
+        pending.pop_front();
+        for (auto [a, b] = ix.functions.equal_range(n); a != b; ++a) {
+            const hmi::HmiFunction& g = *a->second;
+            if (!seenFunctions.insert(g.id).second) continue;
+            s += '\x1d' + g.ns + '.' + g.name + '\x1f' + g.returnType + '\x1f' + g.returnUnit + '\x1f' + g.body + '\x1f';
+            addDecls(s, g.decls);
+            for (const auto& gp : g.generics) s += gp.name + ':' + gp.constraint + '\x1f';
+            scan(g);
         }
-    // Les variables IHM nommees, et les types IHM de proche en proche (leurs membres, leurs valeurs).
-    std::set<std::string> typeNames;
-    for (const auto& v : p.programs.variables)
-        if (names.count(upperOf(v.name))) {
+        for (auto [a, b] = ix.overrides.equal_range(n); a != b; ++a) {
+            const hmi::FunctionOverride& r = *a->second;
+            if (!first(&r)) continue;
+            s += '\x19' + r.function + '\x1f' + r.body + '\x1f';
+            addDecls(s, r.decls);
+            cite(r.body);
+            citeDecls(r.decls);
+        }
+        for (auto [a, b] = ix.variables.equal_range(n); a != b; ++a) {
+            const hmi::Variable& v = *a->second;
+            if (!first(&v)) continue;
             s += '\x1c' + v.name + '\x1e' + v.type + '\x1e' + v.initial + '\x1e' + v.unit + '\x1f';
-            typeNames.insert(upperOf(v.type));
+            cite(v.type);
+            cite(v.initial);
         }
-    std::set<std::string> typesDone;
-    for (bool more = true; more;) {
-        more = false;
-        for (const auto& ty : p.programs.types) {
-            const std::string u = upperOf(ty.name);
-            if (!typeNames.count(u) || typesDone.count(u)) continue;
-            typesDone.insert(u);
-            more = true;
-            s += '\x1b' + ty.name + '\x1e' + ty.base + '\x1f';
-            if (!ty.base.empty()) typeNames.insert(upperOf(ty.base));
+        for (auto [a, b] = ix.types.equal_range(n); a != b; ++a) {
+            const hmi::HmiType& ty = *a->second;
+            if (!first(&ty)) continue;
+            s += '\x1b' + ty.ns + '.' + ty.name + '\x1e' + ty.base + '\x1e' + ty.signature + '\x1f';
+            cite(ty.base);
+            cite(ty.signature);
             for (const auto& m : ty.members) {
                 s += m.name + '\x1e' + m.type + '\x1e' + m.initial + '\x1e' + m.unit + '\x1f';
-                typeNames.insert(upperOf(m.type));
+                cite(m.type);
+                cite(m.initial);
             }
             for (const auto& e : ty.values) s += e.name + '=' + std::to_string(e.value) + '\x1f';
+            for (const auto& o : ty.operators) {          // appeles sans leur nom (a + b, TO_T_X)
+                s += o.op + '\x1e' + o.left + '\x1e' + o.right + '\x1e' + o.result + '\x1e' + o.body + '\x1f';
+                addDecls(s, o.decls);
+                cite(o.body);
+                citeDecls(o.decls);
+            }
+        }
+        for (auto [a, b] = ix.views.equal_range(n); a != b; ++a) {      // Vue_Four.SEUIL : ses constantes
+            const hmi::View& v = *a->second;
+            if (!first(&v)) continue;
+            s += '\x1a' + v.name + '\x1f';
+            addDecls(s, v.constants);
+            citeDecls(v.constants);
         }
     }
-    // Les constantes de sa vue (une fonction de vue les lit par leur nom).
-    if (owner) addDecls(s, owner->constants);
     return std::hash<std::string>{}(s);
 }
+
+// LE CACHE DES CONTEXTES : ceux de toutes les fonctions a cas du projet, refaits d'un coup quand le projet a pu changer
+// - une commande faite, annulee ou refaite (la pile de l'application : CommandGroupScope), un autre projet, un oubli
+// (forget), d'autres bibliotheques lues. Sans pile enregistree (un essai), rien n'est garde : chaque lecture recalcule.
+struct ContextCache {
+    const void*               project{nullptr};
+    const core::CommandStack* stack{nullptr};
+    std::uint64_t             revision{0};
+    std::uint64_t             epoch{0};
+    const void*               libraries{nullptr};
+    bool                      valid{false};
+    std::map<Id, std::size_t> byFunction;
+};
+ContextCache& contextCache() {
+    static ContextCache c;
+    return c;
+}
+std::uint64_t& epoch() {
+    static std::uint64_t e = 0;
+    return e;
+}
+} // namespace
+
+std::size_t context(const hmi::Project& p, const hmi::HmiFunction& f) {
+    const core::CommandStack* stack = core::CommandGroupScope::stack();
+    if (!stack) return contextWith(contextIndexOf(p), f);
+    auto& c = contextCache();
+    const void* libs = p.libraryCache.loaded.get();
+    if (!c.valid || c.project != &p || c.stack != stack || c.revision != stack->revision() || c.epoch != epoch() || c.libraries != libs) {
+        c.byFunction.clear();
+        const ContextIndex ix = contextIndexOf(p);
+        for (const auto& g : p.programs.functions)
+            if (!g.tests.empty()) c.byFunction[g.id] = contextWith(ix, g);
+        for (const auto& v : p.views)
+            for (const auto& g : v.functions)
+                if (!g.tests.empty()) c.byFunction[g.id] = contextWith(ix, g);
+        c.project = &p;
+        c.stack = stack;
+        c.revision = stack->revision();
+        c.epoch = epoch();
+        c.libraries = libs;
+        c.valid = true;
+    }
+    if (const auto it = c.byFunction.find(f.id); it != c.byFunction.end()) return it->second;
+    return contextWith(contextIndexOf(p), f);         // une fonction hors du projet (ou sans cas encore)
+}
+
+std::size_t contextsComputed() noexcept { return computed(); }
 
 void record(const hmi::Project& p, const hmi::HmiFunction& f, const hmi::FunctionTestResult& r) {
     for (const auto& t : f.tests)
@@ -260,6 +379,7 @@ Tally tally(const hmi::Project& p) {
 
 void forget() {
     entries().clear();
+    ++epoch();                  // les contextes gardes aussi (l'adresse d'un projet ferme peut resservir)
     bump();
 }
 

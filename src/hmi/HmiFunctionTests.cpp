@@ -258,6 +258,7 @@ Compared compareComputed(const sim::Value& got, const sim::Value& want, const st
 // 1.13.0 (seconde passe) : L'ATTENDU D'UN CAS (du retour ou d'une verif) EST-IL UNE FORMULE - ecrit =calcul, ou un nom
 // connu seul (la regle des cases : Seuil_Haut vaut =Seuil_Haut) ? `type` : le type attendu (vide : inconnu). Vrai :
 // `formula` recoit le calcul, sans son =, a evaluer apres l'appel. Une valeur fixe (16.0, TRUE, Auto) : faux.
+// 1.13.0 (D3b) : un mot seul n'y est un attendu calcule que s'il nomme une valeur que le banc lit (testExpected).
 bool expectedFormula(const Project& p, std::string_view type, const std::string& raw, std::string& formula) {
     const std::string t = trim(raw);
     if (t.empty()) return false;
@@ -265,10 +266,33 @@ bool expectedFormula(const Project& p, std::string_view type, const std::string&
         formula = trim(std::string_view(t).substr(1));
         return true;
     }
-    const auto cell = cellValue(&p, trim(type).empty() ? std::string_view("ANY") : type, t);
-    if (!cell.ok() || !cell.formula) return false;
-    formula = cell.text;
+    const TestExpected e = testExpected(p, type, t);
+    if (!e.ok() || !e.formula) return false;
+    formula = trim(std::string_view(e.kept).substr(1));
     return true;
+}
+
+// 1.13.0 (D3b) : la racine d'un chemin (Cuve de Cuve.Niveau, Pressions de Pressions[2]).
+std::string rootName(std::string_view t) {
+    std::size_t i = 0;
+    while (i < t.size() && (std::isalnum(static_cast<unsigned char>(t[i])) || t[i] == '_')) ++i;
+    return std::string(t.substr(0, i));
+}
+
+// 1.13.0 (D3b) : une VALEUR que le banc lit par son nom - une variable IHM, SYS, une variable de l'automate (le
+// programme relie) ; pas un objet, une vue, une fonction, un type, une fonction standard qui porterait ce nom.
+bool benchValue(const Project& p, std::string_view root) {
+    if (root.empty()) return false;
+    const std::string u = upperAscii(root);
+    if (u == "SYS" || p.variable(root)) return true;
+    if (u == "THIS" || u == "TRUE" || u == "FALSE" || isStandardFunction(root)) return false;
+    return isKnownName(nullptr, root);
+}
+
+// 1.13.0 (D3b) : un attendu de ce type peut-il etre NAN, INF (REAL, LREAL, un generique qui admet un reel) ?
+bool realExpected(std::string_view type) {
+    const std::string u = upperAscii(trim(type));
+    return u == "REAL" || u == "LREAL" || u == "ANY_REAL" || u == "ANY_NUM" || u == "ANY_MAGNITUDE";
 }
 
 // 1.13.0 (seconde passe) : LA VALEUR D'UNE POSE telle que le banc l'ecrit - lue comme toute case dans le type de sa
@@ -302,6 +326,47 @@ const GenericParam* genericNamed(const HmiFunction& f, std::string_view type) {
 }
 
 } // namespace
+
+// ============================================================ 1.13.0 (D3b) : l'attendu d'un cas ===
+TestExpected testExpected(const Project& p, std::string_view typeRaw, std::string_view typed) {
+    TestExpected out;
+    const std::string t = trim(typed);
+    if (t.empty()) return out;
+    const auto fail = [&](std::string why) {
+        while (!why.empty() && why.back() == '.') why.pop_back();
+        out.why = why.empty() ? qmark(t) + " ne se lit pas" : std::move(why);
+        out.kept.clear();
+        out.formula = false;
+        return out;
+    };
+    if (t.front() == '=') {
+        const std::string e = trim(std::string_view(t).substr(1));
+        if (e.empty()) return fail("rien apr\xC3\xA8s le = : \xC3\xA9" "cris le calcul (=Seuil * 2)");
+        out.kept = "=" + e;
+        out.formula = true;
+        return out;
+    }
+    const std::string type = trim(typeRaw);
+    double x = 0;
+    if (realExpected(type) && specialReal(t, x)) {      // NAN, INF, -INF : un reel que la fonction peut rendre
+        out.kept = upperAscii(t);
+        return out;
+    }
+    const std::string read = type.empty() ? std::string("ANY") : type;
+    const CellText cell = cellValue(&p, read, t);
+    if (cell.ok() && cell.formula && isVariablePath(t) && !benchValue(p, rootName(t))) {
+        // Un mot seul qui nomme un objet, une vue, une fonction, un type : pas une valeur du banc - la valeur fixe.
+        std::string why;
+        std::string lit = argumentLiteral(&p, read, t, &why);
+        if (lit.empty()) return fail(why);
+        out.kept = std::move(lit);
+        return out;
+    }
+    if (!cell.ok()) return fail(cell.why);
+    out.kept = cell.formula ? "=" + cell.text : cell.text;
+    out.formula = cell.formula;
+    return out;
+}
 
 // ============================================================ 1.13.0 : les types d'un cas ===
 std::string testCellType(const HmiFunction& f, std::string_view declared) {
@@ -721,7 +786,8 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
                 add(S::Warning, t, "la fonction n'a pas de retour : l'attendu est ignor\xC3\xA9");
             // 1.13.0 (seconde passe) : un cas qui attend une erreur juge sur elle - son attendu ne sert pas.
             else if (!t.errorCode.empty() && !trim(t.expected).empty())
-                add(S::Warning, t, "le cas attend l'erreur " + t.errorCode + " : l'attendu (" + trim(t.expected) + ") est ignor\xC3\xA9");
+                add(S::Warning, t, "le cas attend l'erreur " + t.errorCode + " : l'attendu (" + trim(t.expected)
+                                       + ") est ignor\xC3\xA9 - vide sa case dans la fiche du cas (Attendu ignor\xC3\xA9)");
             // La tolerance : un nombre (REAL seulement).
             double num = 0;
             if (!trim(t.tolerance).empty() && !parseNumber(trim(t.tolerance), num))

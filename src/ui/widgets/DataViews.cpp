@@ -1738,8 +1738,16 @@ void TableView::setModel(std::shared_ptr<ITableModel> m) {
     rebuildView();
 }
 
+int TableView::f2ClickedColumn() const {
+    if (f2Columns_.empty() || cellClickColumn_ < 0 || selection_.empty() || !model_) return -1;
+    const auto c = static_cast<std::size_t>(cellClickColumn_);
+    if (c >= columns_.size() || !columns_[c].visible || std::find(f2Columns_.begin(), f2Columns_.end(), c) == f2Columns_.end()) return -1;
+    return model_->editable(selection_.back(), c) ? cellClickColumn_ : -1;
+}
+
 void TableView::setColumns(std::vector<Column> cols) {
     columns_ = std::move(cols);
+    cellClickColumn_ = -1;          // 1.13.0 (D3b) : d'autres colonnes - le clic d'avant ne vise plus rien
     invalidateLayout();
     // Lot API 8 : les filtres retenus attendaient les colonnes (posees a la mise en page).
     if (memoryPending_) recallColumnFilters();
@@ -2341,6 +2349,7 @@ EventResult TableView::onEvent(const InputEvent& ev) {
         }
         const int vi = static_cast<int>((d->pos.y - area.y - headerH + scrollY_) / rowH);
         lastClickColumn_ = columnAtX(d->pos.x);          // lot 20 : la case d'ou coller
+        if (d->button == MouseButton::Left) cellClickColumn_ = lastClickColumn_;   // 1.13.0 (D3b) : la case que F2 tape
         if (vi >= 0 && vi < static_cast<int>(view_.size())) {
             const RowIndex row = view_[static_cast<std::size_t>(vi)];
             // Lot 16 : la fleche d'une table en arbre - deplier ou replier.
@@ -2578,11 +2587,10 @@ EventResult TableView::onEvent(const InputEvent& ev) {
         if (!selection_.empty() && (k->key == Key::F2 || k->key == Key::Left || k->key == Key::Right) && k->mods.none()) {
             const RowIndex row = selection_.back();
             if (k->key == Key::F2) {
-                // 1.13.0 (seconde passe) : la case du dernier clic, si elle s'edite (cliquer la case Unite puis F2 : un
-                // champ ou taper) ; sinon la premiere case editable de la ligne.
-                if (lastClickColumn_ >= 0 && static_cast<std::size_t>(lastClickColumn_) < columns_.size()
-                    && columns_[static_cast<std::size_t>(lastClickColumn_)].visible && model_->editable(row, static_cast<std::size_t>(lastClickColumn_))) {
-                    (void)beginCellEdit(row, static_cast<std::size_t>(lastClickColumn_));
+                // 1.13.0 (D3b) : dans une colonne choisie par l'hote (setF2ClickedColumns : la case Unite), la case du
+                // dernier clic ; sinon - et dans toute table qui ne le demande pas - la premiere case editable.
+                if (const int c = f2ClickedColumn(); c >= 0) {
+                    (void)beginCellEdit(row, static_cast<std::size_t>(c));
                     return EventResult::Consumed;
                 }
                 for (std::size_t c = 0; c < columns_.size(); ++c)

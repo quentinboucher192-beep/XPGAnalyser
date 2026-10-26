@@ -273,10 +273,12 @@ const std::vector<Topic>& topics() {
                          "Ctrl+PgPr\xC3\xA9" "c\tL'onglet suivant, pr\xC3\xA9" "c\xC3\xA9" "dent (la bande "
                          "du haut)\nF1\tL'aide de l'endroit (le volet, l'objet, le nom sous le "
                          "curseur)\nF2\tRenommer ce qui est choisi : le dialogue Renommer (la case Nom, "
-                         "Entr\xC3\xA9" "e et le double-clic aussi)\nF5, Maj+F5\tSimuler (en pause : "
-                         "Continuer), Arr\xC3\xAAter la simulation\nF9\tSimulation \xE2\x80\xBA Vue "
-                         "d'ensemble ; dans le code d'une section : un point d'arr\xC3\xAAt sur la ligne du "
-                         "curseur\nF10\tSection suivante (la simulation en pause, Simulation \xE2\x80\xBA "
+                         "Entr\xC3\xA9" "e et le double-clic aussi) ; apr\xC3\xA8s un clic sur une case "
+                         "**Unit\xC3\xA9** (Variables IHM, membres d'un type, onglets de "
+                         "d\xC3\xA9" "clarations), taper l'unit\xC3\xA9 dans la case\nF5, Maj+F5\tSimuler "
+                         "(en pause : Continuer), Arr\xC3\xAAter la simulation\nF9\tSimulation \xE2\x80\xBA "
+                         "Vue d'ensemble ; dans le code d'une section : un point d'arr\xC3\xAAt sur la ligne "
+                         "du curseur\nF10\tSection suivante (la simulation en pause, Simulation \xE2\x80\xBA "
                          "D\xC3\xA9" "bogage)\nCtrl+F\tLe champ de recherche du volet (la recherche et les "
                          "filtres sont retenus d'une s\xC3\xA9" "ance \xC3\xA0 l'autre)\nF11\tLe plein "
                          "\xC3\xA9" "cran\nF12\tUne capture de la fen\xC3\xAAtre (dossier captures/)", {}},
@@ -15384,7 +15386,7 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA0 l'autre, l'ancien VAR), **Persistante** (gard\xC3\xA9" "e aussi d'un "
                          "lancement \xC3\xA0 l'autre : avec la r\xC3\xA9manence de simulation, et sur le "
                          "poste d'exploitation) ;", {}, "1.11.18"},
-             {K::Bullet, "on \xC3\xA9" "crit dans la case (double-clic, ou un clic puis F2) ; le type et le "
+             {K::Bullet, "on \xC3\xA9" "crit dans la case d'un double-clic (F2 : le nom) ; le type et le "
                          "stockage se choisissent dans une liste ; l'unit\xC3\xA9 se tape (un clic sur sa "
                          "case puis F2, Ctrl+Espace propose les unit\xC3\xA9s) ou se choisit d'un "
                          "double-clic (voir \xC2\xAB Les unit\xC3\xA9s de mesure dans les types \xC2\xBB) ; "
@@ -18913,9 +18915,13 @@ const std::vector<Topic>& topics() {
                          "Un param\xC3\xA8tre laiss\xC3\xA9 vide prend sa valeur par d\xC3\xA9" "faut. "
                          "L'**attendu** aussi peut \xC3\xAAtre une formule (`=Seuil * 2`) : elle se calcule "
                          "apr\xC3\xA8s l'appel, et le d\xC3\xA9tail montre les deux (\xC2\xAB obtenu 31, "
-                         "attendu =Seuil * 2 (32) \xC2\xBB) ; pour un REAL, `NAN` et `INF` "
-                         "s'\xC3\xA9" "crivent tels quels. Exemple, le cas \xC2\xAB moyenne simple \xC2\xBB "
-                         "de Moyenne_Pression :", {}},
+                         "attendu =Seuil * 2 (32) \xC2\xBB) ; un mot seul n'est un calcul que s'il nomme une "
+                         "variable (IHM ou de l'automate : `Seuil_Haut` vaut `=Seuil_Haut`) - un objet, une "
+                         "vue, une fonction ou un type du m\xC3\xAAme nom ne comptent pas : `Arret` attendu "
+                         "d'un STRING reste le texte `'Arret'`, m\xC3\xAAme si un bouton s'appelle Arret. "
+                         "Pour un REAL (ou un g\xC3\xA9n\xC3\xA9rique r\xC3\xA9" "el), `NAN`, `INF` et "
+                         "`-INF` se tapent tels quels (`nan` devient `NAN`). Exemple, le cas \xC2\xAB "
+                         "moyenne simple \xC2\xBB de Moyenne_Pression :", {}},
              {K::Table, "Champ\tValeur\nA\t12.0\nB\t20.0\nPoids_A\t*(vide : la valeur par d\xC3\xA9" "faut, "
                          "0.5)*\nAttendu\t16.0\nVerdict\tr\xC3\xA9ussi", {}},
              {K::Paragraph, "Tout se modifie ensuite dans la liste ou la fiche, et chaque geste se reprend par "
@@ -18933,10 +18939,11 @@ const std::vector<Topic>& topics() {
                          "variables mises avant l'appel) et **V\xC3\xA9rifier apr\xC3\xA8s l'appel** (Cible, "
                          "Attendu, Tol\xC3\xA9rance : des post-conditions lues apr\xC3\xA8s) ; **+** et "
                          "**\xE2\x88\x92** ajoutent et retirent une ligne. Une pose ou une v\xC3\xA9rif sur "
-                         "une variable inconnue est refus\xC3\xA9" "e. La cible sp\xC3\xA9" "ciale "
-                         "**JOURNAL** v\xC3\xA9rifie que la fonction a \xC3\xA9" "crit un texte "
-                         "(IHM_JOURNAL). Exemple, le cas \xC2\xAB alerte compte le clic \xC2\xBB de la "
-                         "proc\xC3\xA9" "dure Tracer_Evenement :", {}},
+                         "une variable inconnue est refus\xC3\xA9" "e ; l'attendu d'une v\xC3\xA9rif se lit "
+                         "et se garde dans le type de sa cible, comme celui du retour (un attendu illisible "
+                         "est refus\xC3\xA9). La cible sp\xC3\xA9" "ciale **JOURNAL** v\xC3\xA9rifie que la "
+                         "fonction a \xC3\xA9" "crit un texte (IHM_JOURNAL). Exemple, le cas \xC2\xAB alerte "
+                         "compte le clic \xC2\xBB de la proc\xC3\xA9" "dure Tracer_Evenement :", {}},
              {K::Table, "Bloc\tContenu\nPoser avant\t`Compteur_Clics := 0`\nArguments\t`Quoi := 'Porte A "
                          "ouverte'` , `Niveau := 2`\nV\xC3\xA9rifier apr\xC3\xA8s\t`Compteur_Clics = 1` ; "
                          "`JOURNAL contient '[ALERTE] Porte A ouverte'`\nVerdict\tr\xC3\xA9ussi", {}},
@@ -18972,9 +18979,12 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9tail dit l'attendu et l'obtenu\nerreur\tla fonction s'arr\xC3\xAAte "
                          "(division par z\xC3\xA9ro, hors bornes) alors qu'aucune erreur n'\xC3\xA9tait "
                          "attendue\nnon jou\xC3\xA9\tle cas est inactif\n\xC3\xA0 jouer\tpas encore "
-                         "jou\xC3\xA9 dans ce projet, ou le cas, la fonction ou ce qu'elle lit (les "
-                         "fonctions qu'elle appelle, les variables IHM, les constantes de sa vue) a "
-                         "chang\xC3\xA9 depuis", {}},
+                         "jou\xC3\xA9 dans ce projet (les verdicts ne s'enregistrent pas : un projet ouvert, "
+                         "ou rouvert, part \xC2\xAB \xC3\xA0 jouer \xC2\xBB), ou le cas, la fonction ou ce "
+                         "qu'elle lit a chang\xC3\xA9 depuis : les fonctions qu'elle appelle (du projet, "
+                         "d'une vue, d'un symbole par son instance, les m\xC3\xA9thodes d'un type, celles "
+                         "d'une biblioth\xC3\xA8que reli\xC3\xA9" "e), les variables et les types IHM, les "
+                         "constantes de sa vue", {}},
              {K::Paragraph, "Le verdict est une pastille verte ou rouge dans la colonne Verdict. Les "
                          "r\xC3\xA9sultats partent aussi aux **Sorties** du panneau du bas, cat\xC3\xA9gorie "
                          "**Tests** : le bilan, puis une ligne par cas ; un double-clic sur une ligne ouvre "
@@ -18999,8 +19009,9 @@ const std::vector<Topic>& topics() {
                          "**r\xC3\xA9ussi**. Un cas normal dont la fonction l\xC3\xA8ve une erreur a le "
                          "verdict **erreur**. Avec une Erreur attendue, l'**Attendu** ne compte pas : sa "
                          "case se grise (\xC2\xAB l\xC3\xA8ve E_Niveau \xC2\xBB) et ne se tape plus ; vide "
-                         "d'abord l'Erreur attendue pour comparer le retour. G\xC3\xA9n\xC3\xA9rer "
-                         "pr\xC3\xA9vient d'un attendu rest\xC3\xA9 l\xC3\xA0.", {}},
+                         "d'abord l'Erreur attendue pour comparer le retour. Un attendu rest\xC3\xA9 "
+                         "l\xC3\xA0 (G\xC3\xA9n\xC3\xA9rer le signale) se vide dans la fiche : sa case "
+                         "**Attendu (ignor\xC3\xA9)** ne prend que le vide.", {}},
              {K::Heading, "Le rapport", {}},
              {K::Paragraph, "**Rapport Excel** ou **Rapport PDF** (la barre de l'onglet) : les cas de la "
                          "fonction, rejou\xC3\xA9s d'abord (Cas, Arguments, Attendu, Verdict, D\xC3\xA9tail, "

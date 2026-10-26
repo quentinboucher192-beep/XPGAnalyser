@@ -551,6 +551,12 @@ void HmiDeclGrid::rebuildColumns() {
         view.push_back({de::columnTitle(c, tab_), w, 50.f, true, !order});
     }
     table_->setColumns(std::move(view));
+    // 1.13.0 (D3b) : un clic sur une case Unite, puis F2 : son champ (le double-clic ouvre le selecteur) ; ailleurs, F2
+    // edite le nom, comme dans toute table.
+    std::vector<std::size_t> f2;
+    for (std::size_t i = 0; i < columns_.size(); ++i)
+        if (columns_[i] != kUses && static_cast<de::Column>(columns_[i]) == de::Column::Unit) f2.push_back(i);
+    table_->setF2ClickedColumns(std::move(f2));
     rows_->columns = columns_;
     rows_->role = role_;
     rows_->project = doc_ ? &doc_->project : nullptr;   // 1.12.19 (U3)

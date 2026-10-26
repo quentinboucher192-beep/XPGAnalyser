@@ -853,6 +853,64 @@ void argumentsSuivent() {
     check(!remapTestArguments(same, {"A", "B", "Poids_A"}, {"A", "B", "Poids_A"}), "rien de change : rien a remettre");
 }
 
+// D3b-4 : un mot seul egal au nom d'un objet (un bouton Arret) reste un texte dans l'attendu d'un STRING - le banc et
+// Generer le lisent pareil (avant : le banc en faisait la formule =Arret, Erreur, et Generer ne disait rien).
+void attenduNomDObjet() {
+    std::printf("-- D3b-4 : Arret (un bouton du meme nom) attendu d'un STRING : un texte\n");
+    Project p = bench();
+    addVar(p, "Etat", "STRING", "''");
+    addVar(p, "Seuil", "REAL", "4.0");
+    View v;
+    v.id = p.allocate();
+    v.name = "Vue_Commandes";
+    Object bouton;
+    bouton.id = p.allocate();
+    bouton.name = "Arret";
+    v.objects.push_back(bouton);
+    p.views.push_back(v);
+    HmiFunction& regler = addFunction(p, "Regler_Etat", nullptr, {}, "Etat := 'Arret';");
+    HmiFunction& mode = addFunction(p, "Mode_Texte", "STRING", {}, "Mode_Texte := 'Arret';");
+    FunctionTest verif = caseOf(p, regler.id, "verif Arret");
+    verif.checks = {{"Etat", "Arret", ""}};
+    regler.tests = {verif};
+    FunctionTest retour = caseOf(p, mode.id, "retour Arret");
+    retour.expected = "Arret";
+    mode.tests = {retour};
+    const TestExpected s = testExpected(p, "STRING", "Arret");
+    check(s.ok() && !s.formula && s.kept == "'Arret'", "testExpected(STRING, Arret) : le texte 'Arret' (" + s.kept + ")");
+    const TestExpected var = testExpected(p, "REAL", "Seuil");
+    check(var.ok() && var.formula && var.kept == "=Seuil", "testExpected(REAL, Seuil) : une variable reste un calcul (" + var.kept + ")");
+    const TestExpected nombre = testExpected(p, "REAL", "Arret");
+    check(!nombre.ok() && nombre.why.find("nombre") != std::string::npos, "testExpected(REAL, Arret) : illisible (" + nombre.why + ")");
+    const auto r1 = runFunctionTests(p, regler);
+    check(r1.results.size() == 1 && r1.results[0].verdict == Verdict::Passed,
+          "verif Etat = Arret : reussi (" + (r1.results.empty() ? std::string{} : verdict(r1.results[0].verdict) + ", " + r1.results[0].detail) + ")");
+    const auto r2 = runFunctionTests(p, mode);
+    check(r2.results.size() == 1 && r2.results[0].verdict == Verdict::Passed,
+          "retour Arret : reussi (" + (r2.results.empty() ? std::string{} : verdict(r2.results[0].verdict) + ", " + r2.results[0].detail) + ")");
+    std::vector<Issue> issues;
+    checkFunctionTests(p, issues);
+    check(!issueWith(issues, "verif Arret", "attendu") && !issueWith(issues, "retour Arret", "attendu"), "Generer : rien a redire");
+}
+
+// D3b-5 : NAN, INF, -INF se tapent comme attendu d'un reel (avant : refuses a la saisie, " n'est pas un nombre (REAL) ").
+void nanSaisi() {
+    std::printf("-- D3b-5 : NAN, INF, -INF a la saisie d'un attendu REAL\n");
+    Project p = bench();
+    const TestExpected n = testExpected(p, "REAL", "nan"), i = testExpected(p, "LREAL", "+inf"), m = testExpected(p, "ANY_REAL", "-Inf");
+    check(n.ok() && n.kept == "NAN" && i.ok() && i.kept == "+INF" && m.ok() && m.kept == "-INF",
+          "nan, +inf, -Inf : NAN, +INF, -INF (" + n.kept + ", " + i.kept + ", " + m.kept + ")");
+    const TestExpected entier = testExpected(p, "INT", "INF");
+    check(!entier.ok(), "INF pour un INT : refuse (" + entier.why + ")");
+    HmiFunction* div = const_cast<HmiFunction*>(p.functionByName("Diviser"));
+    FunctionTest inf = caseOf(p, div->id, "inf");
+    inf.arguments = {"1.0", "0.0"};
+    inf.expected = i.kept;
+    div->tests = {inf};
+    const auto rep = runFunctionTests(p, *div);
+    check(rep.results.size() == 1 && rep.results[0].verdict != Verdict::Pending, "1.0 / 0.0 attendu +INF : joue (" + (rep.results.empty() ? std::string{} : rep.results[0].detail) + ")");
+}
+
 } // namespace
 
 int main() {
@@ -872,6 +930,8 @@ int main() {
     nanEtInf();
     generiqueLu();
     argumentsSuivent();
+    attenduNomDObjet();     // 1.13.0 (D3b)
+    nanSaisi();
     std::printf("\n%d verifications, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

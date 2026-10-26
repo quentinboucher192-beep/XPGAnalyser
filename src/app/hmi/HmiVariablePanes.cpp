@@ -384,8 +384,10 @@ protected:
             if (contextMenu() && contextMenu()->isOpen()) onContextMenu(d->pos);
             return r;
         }
+        // 1.13.0 (D3b) : apres un clic sur la case Unite, F2 la tape (la table) au lieu de renommer la variable.
         if (const auto* k = std::get_if<ui::KeyDown>(&ev);
-            k && k->key == ui::Key::F2 && k->mods.none() && !k->repeat && focused() && !cellEditing() && onRename && onRename())
+            k && k->key == ui::Key::F2 && k->mods.none() && !k->repeat && focused() && !cellEditing() && f2ClickedColumn() < 0 && onRename
+            && onRename())
             return ui::EventResult::Consumed;
         if (const auto* d = std::get_if<ui::MouseDown>(&ev);
             d && d->button == ui::MouseButton::Left && d->clickCount >= 2 && d->mods.none() && !cellEditing() && onNameDoubleClick)
@@ -731,6 +733,7 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
                        {"\xC3\x89quipement", 140.f, 60.f, true, false}, {"Adresse", 86.f, 50.f, true, false}, {"Acc\xC3\xA8s", 112.f, 50.f, true, false},
                        {"Place Modbus", 180.f, 60.f, true, false, true, ui::Align::Start, 0, false},
                        {"Qualit\xC3\xA9 (en marche)", 170.f, 60.f, true, false, true, ui::Align::Start, 0, false}});
+    table->setF2ClickedColumns({CUnit});   // 1.13.0 (D3b) : un clic sur la case Unite, puis F2 : son champ
     // Lot 20 : plusieurs lignes se choisissent (Maj, Ctrl) - pour les copier vers Excel.
     table->setSelectionMode(ui::SelectionMode::Extended);
     // Lot recherche : LES FILTRES DES COLONNES. Le volet les applique (Host) : ils
@@ -3495,6 +3498,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         table->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Unit\xC3\xA9", 70.f, 40.f, true, false},
                            {"Initiale", 90.f, 40.f, true, false},
                            {"D\xC3\xA9" "calage", 90.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false}, {"Description", 240.f, 60.f, true, false}});
+        table->setF2ClickedColumns({2});   // 1.13.0 (D3b) : un clic sur la case Unite d'un membre, puis F2 : son champ
         table->setSelectionMode(ui::SelectionMode::Extended);           // 1.10 : plusieurs membres a copier
         table->onCopy = [this] {
             (void)copyMembers();
@@ -3552,8 +3556,9 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                 if (a == kMenuBase - kMemberDuplicate) {
                     if (selectedMember() >= 0) (void)duplicateMember(selectedType(), static_cast<std::size_t>(selectedMember()));
                 } else if (a == kMenuBase - kMemberRename) {
+                    // 1.13.0 (D3b) : le nom du membre, meme apres un clic sur sa case Unite (que F2 taperait alors).
                     members_->takeFocus();
-                    (void)members_->dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+                    if (selectedMember() >= 0) (void)members_->beginCellEdit(static_cast<ui::RowIndex>(selectedMember()), 0);
                 } else if (a < kMenuBase && a > kMenuBase - 100) {
                     tools_->triggered->emit(kMenuBase - a);
                 }
@@ -3769,6 +3774,8 @@ void HmiTypesPane::refreshMembers() {
                            {"Initiale", 90.f, 40.f, true, false},
                                   {"D\xC3\xA9" "calage", 90.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false},
                                   {"Description", 240.f, 60.f, true, false}});
+        // 1.13.0 (D3b) : un clic sur la case Unite d'un membre (2), puis F2 : son champ ; un rappel n'en a pas.
+        members_->setF2ClickedColumns(cb ? std::vector<std::size_t>{} : std::vector<std::size_t>{2});
         if (membersPanel_) static_cast<HmiTitledPanel*>(membersPanel_)->setTitle(cb ? "RAPPEL" : "MEMBRES");
     }
     if (cb) {

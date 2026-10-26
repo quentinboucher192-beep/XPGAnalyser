@@ -17,6 +17,7 @@
 #include "VersionClose.hpp"
 #include "hmi/HmiAskDialog.hpp"
 #include "hmi/HmiImportDialog.hpp"   // 1.11.2 (decision 188) : un paquet lache ouvre la fenetre d import
+#include "hmi/HmiTestRuns.hpp"       // 1.13.0 (D3b) : les verdicts des tests, oublies a chaque document IHM
 #include "Capture.hpp"
 #include "ClipboardFiles.hpp"
 #include "ScriptRunner.hpp"
@@ -1883,6 +1884,9 @@ void App::bindHmi() {
         cfg.startView = start.id;
         doc->project.views.push_back(std::move(start));
     }
+    // 1.13.0 (D3b) : un autre document IHM - les verdicts des tests unitaires de l'ancien ne valent plus (un document
+    // neuf peut reprendre l'adresse d'un projet ferme : une copie aux memes identifiants aurait herite de " reussi ").
+    testruns::forget();
     hmi_ = std::move(doc);
 }
 

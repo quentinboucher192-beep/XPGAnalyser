@@ -80,6 +80,20 @@ void checkFunctionTests(const Project&, std::vector<Issue>& out);
 // pour un generique de la fonction (T), sa contrainte (ANY_NUM ; ANY sans contrainte) : 2,5 -> 2.5, VRAI -> TRUE,
 // Azote -> 'Azote' s'y lisent comme dans toute case (la regle des cases), au lieu d'un refus "par une variable".
 [[nodiscard]] std::string testCellType(const HmiFunction&, std::string_view declared);
+// 1.13.0 (D3b) : L'ATTENDU D'UN CAS (du retour, d'une verif) lu dans `type` - la regle des cases (2,5 -> 2.5, VRAI ->
+// TRUE, Azote -> 'Azote', =calcul : un attendu calcule apres l'appel), a deux nuances pres. Un MOT SEUL n'est un attendu
+// calcule que s'il nomme une valeur que le banc lit : une variable IHM ou de l'automate (Seuil_Haut vaut =Seuil_Haut) ;
+// un objet, une vue, une fonction, un type du meme nom ne comptent pas (Arret reste le texte 'Arret' dans un STRING,
+// meme si un bouton s'appelle Arret). Un reel (REAL, LREAL, un T : ANY_REAL, ANY_NUM) prend aussi NAN, INF, -INF.
+// `kept` : la forme gardee (=calcul, ou la valeur lue) ; `formula` : un attendu calcule ; `why` non vide : illisible.
+// L'onglet Tests garde l'attendu ainsi ; le banc et Generer le relisent ainsi.
+struct TestExpected {
+    std::string kept;
+    bool        formula{false};
+    std::string why;
+    [[nodiscard]] bool ok() const noexcept { return why.empty(); }
+};
+[[nodiscard]] TestExpected testExpected(const Project&, std::string_view type, std::string_view typed);
 // 1.13.0 (seconde passe) : la tolerance sert-elle au retour de cette fonction - REAL, LREAL, ou un generique qui peut
 // etre un reel (T : ANY_REAL, ANY_NUM, ANY...). Le banc la joue aussi des que la valeur obtenue est un REAL.
 [[nodiscard]] bool testToleranceApplies(const HmiFunction&);

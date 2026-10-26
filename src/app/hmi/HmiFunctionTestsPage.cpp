@@ -11,6 +11,7 @@
 #include "../../hmi/HmiHistory.hpp"       // wallStamp : la date du rapport
 #include "../../hmi/HmiScript.hpp"        // splitDeclarations, LocalVar
 #include "../../hmi/HmiSymbols.hpp"       // cellValue (la regle des cases)
+#include "../../hmi/HmiTypes.hpp"         // 1.13.0 (D3b) : types::typeOfPath - le type d'une verif
 #include "../../hmi/HmiUnits.hpp"         // withUnit : REAL [bar]
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/DialogFrame.hpp"
@@ -701,7 +702,15 @@ void HmiFunctionTestsPage::rebuildProperties() {
     c.properties.push_back(prop("Description", t->description, PG::ValueType::Text, edit(Field::Description)));
     c.properties.push_back(prop("Actif", t->enabled ? "TRUE" : "FALSE", PG::ValueType::Boolean, edit(Field::Enabled),
                                 "D\xC3\xA9" "coch\xC3\xA9 : le cas reste mais ne se joue plus (verdict \xC2\xAB non jou\xC3\xA9 \xC2\xBB)."));
-    if (!f->returnType.empty() && !t->errorCode.empty())     // 1.13.0 : le cas juge sur l'erreur, pas sur le retour
+    if (!f->returnType.empty() && !t->errorCode.empty() && !trim(t->expected).empty()) {
+        // 1.13.0 (D3b) : un attendu reste d'avant l'Erreur attendue - ignore (Generer le dit), il se vide ici : la case ne
+        // prend que le vide (un attendu tape est refuse, avec la raison).
+        auto pi = prop("Attendu (ignor\xC3\xA9)", t->expected, PG::ValueType::Text, edit(Field::Expected),
+                       "Le cas attend l'erreur " + t->errorCode + " : cet attendu ne sert pas. Vide la case pour l'\xC3\xB4ter ; pour comparer le "
+                       "retour, vide d'abord l'Erreur attendue.");
+        pi.valueTone = ui::Tone::Warning;
+        c.properties.push_back(std::move(pi));
+    } else if (!f->returnType.empty() && !t->errorCode.empty())     // 1.13.0 : le cas juge sur l'erreur, pas sur le retour
         c.properties.push_back(prop("Attendu", "(le cas attend l'erreur " + t->errorCode + " : vide l'Erreur attendue pour comparer le retour)",
                                     PG::ValueType::ReadOnly));
     else if (!f->returnType.empty())
@@ -844,7 +853,7 @@ Id HmiFunctionTestsPage::addCase(const NewCase& nc, std::string* why) {
     if (!trim(nc.expected).empty()) {
         if (f->returnType.empty()) return refuse("la fonction n'a pas de retour : v\xC3\xA9rifie plut\xC3\xB4t ses variables (V\xC3\xA9rifier apr\xC3\xA8s)");
         if (!trim(nc.errorCode).empty()) return refuse("le cas attend l'erreur " + trim(nc.errorCode) + " : il juge sur elle, pas sur un attendu");
-        if (const auto cell = hmi::cellValue(&doc_->project, returnRead, trim(nc.expected)); !cell.ok()) return refuse("attendu : " + cell.why);
+        if (const auto e = hmi::testExpected(doc_->project, returnRead, trim(nc.expected)); !e.ok()) return refuse("attendu : " + e.why);
     }
     if (!trim(nc.tolerance).empty()) {
         double d = 0;
@@ -857,7 +866,8 @@ Id HmiFunctionTestsPage::addCase(const NewCase& nc, std::string* why) {
         const std::string text = trim(nc.arguments[k]);
         kept.push_back(text.empty() || params[k].output ? text : keptCell(doc_->project, params[k].read, text));
     }
-    const std::string keptExpected = trim(nc.expected).empty() ? std::string{} : keptCell(doc_->project, returnRead, trim(nc.expected));
+    // 1.13.0 (D3b) : l'attendu garde comme le banc le relit (un mot seul n'est un calcul que s'il nomme une variable ; NAN).
+    const std::string keptExpected = trim(nc.expected).empty() ? std::string{} : hmi::testExpected(doc_->project, returnRead, trim(nc.expected)).kept;
     Id made = kNoId;
     const Id view = view_, fid = function_;
     auto cmd = hmi::changeProject(doc_, "Nouveau cas " + name + " (" + f->name + ")", [&](hmi::Project& p) {
@@ -978,9 +988,11 @@ bool HmiFunctionTestsPage::setField(Id tid, Field field, const std::string& raw,
                 // 1.13.0 (seconde passe) : un cas qui attend une erreur juge sur elle - un attendu tape ne servirait a rien.
                 if (!t->errorCode.empty())
                     return refuse("le cas attend l'erreur " + t->errorCode + " : vide d'abord l'Erreur attendue (sa fiche) pour comparer le retour");
-                const std::string read = hmi::testCellType(*f, f->returnType);
-                if (const auto cell = hmi::cellValue(&doc_->project, read, text); !cell.ok()) return refuse("attendu : " + cell.why);
-                text = keptCell(doc_->project, read, text);
+                // 1.13.0 (D3b) : lu comme le banc le relira (testExpected : Arret reste un texte meme si un bouton
+                // porte ce nom ; NAN, INF pour un REAL).
+                const auto e = hmi::testExpected(doc_->project, hmi::testCellType(*f, f->returnType), text);
+                if (!e.ok()) return refuse("attendu : " + e.why);
+                text = e.kept;
             }
             if (text == t->expected) return true;
             label = "Attendu du cas " + t->name;
@@ -1153,12 +1165,29 @@ bool HmiFunctionTestsPage::removeGiven(Id tid, std::size_t index, std::string* w
     return ok;
 }
 
+namespace {
+// 1.13.0 (D3b) : l'attendu d'une verif, lu et garde dans le type de sa cible comme celui du retour (testExpected) : le
+// banc le relit pareil, quoi que le projet nomme ensuite. JOURNAL : le texte cherche, tel quel.
+bool keptCheckExpected(const hmi::Project& p, const std::string& target, std::string& expected, std::string* why) {
+    if (expected.empty() || sameText(target, "JOURNAL")) return true;
+    const auto e = hmi::testExpected(p, hmi::types::typeOfPath(p, target), expected);
+    if (!e.ok()) {
+        if (why) *why = target + " : attendu : " + e.why;
+        return false;
+    }
+    expected = e.kept;
+    return true;
+}
+} // namespace
+
 bool HmiFunctionTestsPage::addCheck(Id tid, const std::string& rawTarget, const std::string& rawExpected, const std::string& rawTol, std::string* why) {
-    const std::string target = trim(rawTarget), expected = trim(rawExpected), tol = trim(rawTol);
+    const std::string target = trim(rawTarget), tol = trim(rawTol);
+    std::string expected = trim(rawExpected);
     if (const std::string bad = targetProblem(doc_->project, target, true); !bad.empty()) {
         if (why) *why = bad;
         return false;
     }
+    if (!keptCheckExpected(doc_->project, target, expected, why)) return false;
     double d = 0;
     if (!tol.empty() && (!parseTolerance(tol, d) || d < 0)) {
         if (why) *why = "tol\xC3\xA9rance \xC2\xAB " + tol + " \xC2\xBB : un nombre positif";
@@ -1180,13 +1209,16 @@ bool HmiFunctionTestsPage::setCheck(Id tid, std::size_t index, const std::string
         if (why) *why = "v\xC3\xA9rif introuvable";
         return false;
     }
-    const std::string target = trim(rawTarget), expected = trim(rawExpected), tol = trim(rawTol);
+    const std::string target = trim(rawTarget), tol = trim(rawTol);
+    std::string expected = trim(rawExpected);
     const auto& cur = t->checks[index];
     if (cur.target == target && cur.expected == expected && cur.tolerance == tol) return true;
     if (const std::string bad = targetProblem(doc_->project, target, true); !bad.empty()) {
         if (why) *why = bad;
         return false;
     }
+    if (!keptCheckExpected(doc_->project, target, expected, why)) return false;
+    if (cur.target == target && cur.expected == expected && cur.tolerance == tol) return true;
     double d = 0;
     if (!tol.empty() && (!parseTolerance(tol, d) || d < 0)) {
         if (why) *why = "tol\xC3\xA9rance \xC2\xAB " + tol + " \xC2\xBB : un nombre positif";
@@ -1516,8 +1548,7 @@ std::string HmiNewTestCaseDialog::expectedProblem() const {
     if (v.empty()) return {};
     const auto* f = fn();
     if (!f || f->returnType.empty()) return "La fonction n'a pas de retour : rien \xC3\xA0 attendre.";
-    const auto cell = hmi::cellValue(&spec_.doc->project, hmi::testCellType(*f, f->returnType), v);   // 1.13.0 : T dans sa contrainte
-    return cell.ok() ? std::string{} : cell.why;
+    return hmi::testExpected(spec_.doc->project, hmi::testCellType(*f, f->returnType), v).why;   // 1.13.0 : T dans sa contrainte ; NAN
 }
 
 std::string HmiNewTestCaseDialog::toleranceProblem() const {
