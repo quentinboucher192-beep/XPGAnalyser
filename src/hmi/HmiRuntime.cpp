@@ -45,6 +45,8 @@
 #include <deque>
 #include <iterator>
 #include <limits>
+#include <memory>
+#include <optional>
 
 namespace hmi {
 
@@ -321,6 +323,33 @@ public:
     // demarrage) ? Sans unite, declaredUnit rend vide tout de suite : l'affectation d'un chemin, que le moteur
     // regarde a chaque fois, ne coute rien a un projet qui n'en met pas.
     int anyUnit{-1};
+    // 1.13.0 (seconde passe) : LES UNITES DECLAREES DU CODE EN COURS - pour un cadre (frames), les declarations de sa
+    // fonction ou de son script (la colonne Unite de ses onglets) et l'unite du retour sous le nom de la fonction.
+    // Une entree par cadre, retrouvee par son cadre (une tache detachee peut s'intercaler) ; retiree avec lui.
+    struct CodeUnits {
+        const Frame*                    frame{nullptr};
+        const std::vector<Declaration>* decls{nullptr};
+        std::string                     function, returnType, returnUnit;
+    };
+    std::vector<CodeUnits> codeUnits;
+    struct CodeUnitsGuard {
+        Env&         env;
+        const Frame* frame;
+        CodeUnitsGuard(Env& e, CodeUnits c) : env(e), frame(c.frame) { env.codeUnits.push_back(std::move(c)); }
+        ~CodeUnitsGuard() {
+            for (auto it = env.codeUnits.rbegin(); it != env.codeUnits.rend(); ++it)
+                if (it->frame == frame) {
+                    env.codeUnits.erase(std::next(it).base());
+                    break;
+                }
+        }
+        CodeUnitsGuard(const CodeUnitsGuard&) = delete;
+        CodeUnitsGuard& operator=(const CodeUnitsGuard&) = delete;
+    };
+    // 1.13.0 (seconde passe) : l'unite d'un chemin deja demande (le chemin resolu -> l'unite) et la bibliotheque des
+    // unites, relues a chaque demarrage (avant : deux parcours des variables et un catalogue refait a chaque affectation).
+    std::map<std::string, std::string, std::less<>> unitCache;
+    std::unique_ptr<units::Catalog>                 unitCatalog;
     struct CallerLocals {
         Env& env;
         explicit CallerLocals(Env& e) : env(e) { ++env.callerLocals; }
@@ -674,29 +703,85 @@ public:
     }
     // 1.13.0 (lot J6) : l'unite physique declaree d'un chemin (EN / UNITE, l'affectation convertie d'office). Une
     // variable IHM, un membre d'une structure (herite compris), une case d'un tableau ("Vannes[0]" : l'unite de
-    // l'element). Une locale ou un parametre d'une fonction n'arrive jamais ici : l'interpreteur ne demande que les
-    // chemins qui ne partent pas d'un nom local (Interpreter::unitPath).
+    // l'element). 1.13.0 (seconde passe) : un parametre ou une locale d'une fonction IHM (le cadre du moteur les tient)
+    // porte l'unite de SA declaration (la colonne Unite) - pas celle d'une variable IHM du meme nom ; une constante de
+    // vue (Vue_Four.Seuil_Haut, ou Seuil_Haut dans sa vue) la sienne. Les locales d'un script, tenues par
+    // l'interpreteur, passent par localUnit.
+    void readAnyUnit() {
+        const Project& p = *rt_.project_;
+        bool any = !p.libraries.empty();                 // une bibliotheque reliee : ses types peuvent en porter
+        for (const auto& v : p.programs.variables) any = any || !v.unit.empty();
+        for (const auto& t : p.programs.types)
+            for (const auto& m : t.members) any = any || !m.unit.empty();
+        forEachDeclarations(p, [&](const std::vector<Declaration>& decls) {
+            for (const auto& d : decls) any = any || !d.unit.empty();
+        });
+        for (const auto& f : p.programs.functions) any = any || !f.returnUnit.empty();
+        for (const auto& v : p.views)
+            for (const auto& f : v.functions) any = any || !f.returnUnit.empty();
+        anyUnit = any ? 1 : 0;
+        unitCache.clear();
+        unitCatalog.reset();
+    }
+    // L'unite d'un chemin qui part d'un nom du code en cours (`frame` : son cadre) ; nullopt : pas un nom de ce code.
+    std::optional<std::string> codeUnit(const Frame* frame, std::string_view path) const {
+        if (!rt_.project_ || !frame) return std::nullopt;
+        const CodeUnits* cu = nullptr;
+        for (auto it = codeUnits.rbegin(); it != codeUnits.rend() && !cu; ++it)
+            if (it->frame == frame) cu = &*it;
+        if (!cu) return std::nullopt;
+        std::size_t n = 0;
+        while (n < path.size() && (std::isalnum(static_cast<unsigned char>(path[n])) || path[n] == '_')) ++n;
+        const std::string root = upper(path.substr(0, n));
+        const std::string_view rest = path.substr(n);
+        if (cu->decls)
+            for (const auto& d : *cu->decls)
+                if (upper(d.name) == root) return units::unitAlong(*rt_.project_, d.type, d.unit, rest);
+        if (!cu->function.empty() && upper(cu->function) == root) return units::unitAlong(*rt_.project_, cu->returnType, cu->returnUnit, rest);
+        return std::nullopt;
+    }
+    // Une constante de vue : Vue_Four.Seuil_Haut[.membre...] ; vide : pas une constante (ou sans unite).
+    std::string viewConstantUnit(std::string_view r) const {
+        const auto dot = r.find('.');
+        if (dot == std::string_view::npos) return {};
+        const View* v = rt_.project_->viewByName(r.substr(0, dot));
+        if (!v) return {};
+        std::size_t n = dot + 1;
+        while (n < r.size() && (std::isalnum(static_cast<unsigned char>(r[n])) || r[n] == '_')) ++n;
+        const Declaration* c = viewmembers::constant(*v, r.substr(dot + 1, n - dot - 1));
+        return c ? units::unitAlong(*rt_.project_, c->type, c->unit, r.substr(n)) : std::string{};
+    }
     std::string declaredUnit(std::string_view n) override {
         if (!rt_.project_) return {};
-        if (anyUnit < 0) {
-            const Project& p = *rt_.project_;
-            bool any = !p.libraries.empty();                 // une bibliotheque reliee : ses types peuvent en porter
-            for (const auto& v : p.programs.variables) any = any || !v.unit.empty();
-            for (const auto& t : p.programs.types)
-                for (const auto& m : t.members) any = any || !m.unit.empty();
-            anyUnit = any ? 1 : 0;
-        }
+        if (anyUnit < 0) readAnyUnit();
         if (anyUnit == 0) return {};
+        if (!frames.empty()) {
+            std::size_t k = 0;
+            while (k < n.size() && (std::isalnum(static_cast<unsigned char>(n[k])) || n[k] == '_')) ++k;
+            if (k > 0 && frames.back()->count(upper(n.substr(0, k)))) return codeUnit(frames.back(), n).value_or(std::string{});
+        }
         const std::string r = resolved(n);
         if (r.empty()) return {};
-        if (const Variable* var = rt_.project_->variable(r)) return var->unit;
-        return units::unitOfPath(*rt_.project_, r);
+        if (const auto it = unitCache.find(r); it != unitCache.end()) return it->second;
+        std::string u;
+        if (const Variable* var = rt_.project_->variable(r)) u = var->unit;
+        else u = units::unitOfPath(*rt_.project_, r);
+        if (u.empty() && !rt_.project_->variable(r.substr(0, r.find_first_of(".["))) ) u = viewConstantUnit(r);
+        unitCache.emplace(r, u);
+        return u;
+    }
+    // 1.13.0 (seconde passe) : une locale du script ou de la fonction en cours, tenue par l'interpreteur.
+    std::string localUnit(std::string_view path) override {
+        if (!rt_.project_ || frames.empty()) return {};
+        if (anyUnit < 0) readAnyUnit();
+        if (anyUnit == 0) return {};
+        return codeUnit(frames.back(), path).value_or(std::string{});
     }
     // 1.13.0 (lot J6) : la conversion d'une unite vers une autre (meme famille), par la bibliotheque du projet.
     bool convertUnit(std::string_view from, std::string_view to, double& value) override {
         if (!rt_.project_) return false;
-        const units::Catalog cat(rt_.project_->config);
-        if (const auto aff = cat.convert(from, to)) { value = aff->apply(value); return true; }
+        if (!unitCatalog) unitCatalog = std::make_unique<units::Catalog>(rt_.project_->config);   // une fois par demarrage
+        if (const auto aff = unitCatalog->convert(from, to)) { value = aff->apply(value); return true; }
         return false;
     }
     // 1.12.6 (lot B) : les valeurs d'une enumeration du projet (le lecteur montre leur texte, une
@@ -2192,6 +2277,9 @@ bool Runtime::runStatements(const std::string& code, const std::string& source, 
     // du moteur reste vide (un script ne voit pas les locales de l'appelant).
     Env::Frame frame;
     env_->frames.push_back(&frame);
+    // 1.13.0 (seconde passe) : les unites de ses declarations (la colonne Unite de ses Variables, de ses Constantes).
+    const Script* declared = scriptId && project_ ? project_->script(scriptId) : nullptr;
+    const Env::CodeUnitsGuard declaredUnits(*env_, Env::CodeUnits{&frame, declared && !declared->decls.empty() ? &declared->decls : nullptr, {}, {}, {}});
     sim::Locals* kept = nullptr;
     if (!prep.locals.empty()) kept = &scriptLocals_[scriptId ? "s" + std::to_string(scriptId) : "c" + code];
     // 1.11.18 (lot 5) : la premiere execution depuis le demarrage - ses declarations Persistantes.
@@ -2481,6 +2569,8 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
         given[k] = true;
     }
     env_->frames.push_back(&frame);
+    // 1.13.0 (seconde passe) : les unites de ses parametres et locales (la colonne Unite), et celle de son retour.
+    const Env::CodeUnitsGuard declaredUnits(*env_, Env::CodeUnits{&frame, &f.decls, f.name, f.returnType, f.returnUnit});
     std::string initWhy;
     for (std::size_t j = 0; j < inputs.size(); ++j)
         if (!given[j]) frame[upper(inputs[j]->name)] = localInitial(*inputs[j], *env_, &initWhy);

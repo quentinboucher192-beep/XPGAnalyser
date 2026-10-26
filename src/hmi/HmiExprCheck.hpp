@@ -73,6 +73,10 @@ struct Context {
     // fonction) : il cache la variable IHM du meme nom - ni son type ni son unite ne valent pour lui (le
     // moteur lit la locale). Vide : aucun.
     std::function<bool(std::string_view root)> hidden{};
+    // 1.13.0 (seconde passe) : L'UNITE DECLAREE d'un chemin qui part d'un de ces noms (`path` : Debit, Mesures[0],
+    // Ligne.Pression) - la colonne Unite d'une locale, d'un parametre (Declaration::unit), l'unite du retour pour le nom
+    // de la fonction ; vide : aucune. Le moteur la lit de meme (EN, UNITE, l'affectation convertie).
+    std::function<std::string(std::string_view path)> localUnit{};
 };
 
 struct Problem {
@@ -92,6 +96,9 @@ struct Problem {
     // 1.13.0 : un verdict d'unite (bar + mbar, EN mal employe, une affectation de deux familles) - une erreur
     // partout, un script compris (sauf `warning` : une info, l'unite perdue ou convertie d'office).
     bool        unit{false};
+    // 1.13.0 (seconde passe) : ou est fixFrom dans le texte controle (son premier octet) ; npos : pas dit. La correction
+    // d'un clic remplace cette occurrence-la quand le meme nom revient (PressionBasse < 900.0 AND Pression > PressionBasse).
+    std::size_t fixAt{static_cast<std::size_t>(-1)};
 };
 
 // Les problemes d'une expression qui se lit (sinon : rien, la syntaxe est
@@ -113,6 +120,7 @@ struct Shape {
     // forme dont le moteur connait l'unite (EN la convertit, l'affectation aussi). Un calcul, un appel : non.
     bool        plain{false};
     std::string unitFrom;      // le chemin, tel qu'ecrit, qui donne son unite a la valeur (PressionBasse dans PressionBasse * 2)
+    std::size_t unitFromAt{static_cast<std::size_t>(-1)};   // 1.13.0 (seconde passe) : sa place dans le texte (npos : pas dite)
     [[nodiscard]] bool whole() const noexcept { return !what.empty(); }
 };
 [[nodiscard]] Shape shapeOf(const Context&, std::string_view source);

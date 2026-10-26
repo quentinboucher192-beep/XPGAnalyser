@@ -37,6 +37,7 @@
 #if __has_include("HmiScriptCheck110.hpp")
 #include "HmiScriptCheck110.hpp"
 #include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : un type est-il un nombre ?
+#include "HmiUnits.hpp"          // 1.13.0 (seconde passe) : l'unite declaree d'une locale (units::unitAlong)
 #define XPG_HMI_LANG110 1
 #endif
 
@@ -1000,6 +1001,17 @@ private:
         if (out_.size() > before && !pb.fixFrom.empty()) {
             out_.back().fixFrom = pb.fixFrom;
             out_.back().fixTo = pb.fixTo;
+            // 1.13.0 (seconde passe) : la colonne de l'occurrence a corriger, si elle est sur la ligne de la faute (le meme
+            // nom peut revenir : PressionBasse < 900.0 AND Pression > PressionBasse).
+            if (pb.fixAt != static_cast<std::size_t>(-1) && !atEnd(a)) {
+                const std::size_t abs = toks_[a].at + pb.fixAt;
+                const std::size_t lineStart = body_.rfind('\n', abs == 0 ? 0 : abs - 1);
+                const std::size_t begin = lineStart == std::string::npos ? 0 : lineStart + 1;
+                const std::size_t tokLine = body_.rfind('\n', toks_[a].at == 0 ? 0 : toks_[a].at - 1);
+                const bool sameLine = (tokLine == std::string::npos ? 0 : tokLine + 1) == begin;
+                if (abs < body_.size() && sameLine && body_.compare(abs, pb.fixFrom.size(), pb.fixFrom) == 0)
+                    out_.back().fixColumn = static_cast<int>(abs - begin) + 1;
+            }
         }
     }
     // 1.13.0 : la gravite d'un probleme d'exprcheck dans un script - une faute d'unite est une erreur (comme dans une
@@ -2022,6 +2034,22 @@ private:
         c.hidden = [this, at](std::string_view n) {
             return local(n) != nullptr || counter(n) || catchVar(n) || selfName(n) || dialectName(n, at);
         };
+        // 1.13.0 (seconde passe) : l'unite declaree d'une locale, d'un parametre (la colonne Unite de ses onglets) ; le nom
+        // de la fonction : l'unite de son retour. Pas dans une fonction interne (ses noms sont a elle).
+        c.localUnit = [this, at](std::string_view path) -> std::string {
+            if (!sc_.project || insideInternal(at)) return {};
+            std::size_t n = 0;
+            while (n < path.size() && (std::isalnum(static_cast<unsigned char>(path[n])) || path[n] == '_')) ++n;
+            const std::string root(path.substr(0, n));
+            const std::string_view rest = path.substr(n);
+            if (sc_.function && selfName(root))
+                return rest.empty() ? trimmedText(sc_.function->returnUnit) : std::string{};
+            const std::vector<Declaration>* decls = sc_.decls ? sc_.decls : sc_.function ? &sc_.function->decls : nullptr;
+            if (!decls || !local(root)) return {};
+            for (const auto& d : *decls)
+                if (up(d.name) == up(root)) return units::unitAlong(*sc_.project, d.type, d.unit, rest);
+            return {};
+        };
         return c;
     }
     // Les problemes de type d'une expression [a, b) (pas les noms, membres ou
@@ -2202,6 +2230,7 @@ private:
         if (U == "CASE") {
             const std::size_t e = findWord(i + 1, {"OF"});
             walkNames(i + 1, e);
+            unitProblems(i + 1, e);                             // 1.13.0 (seconde passe) : CASE Pression - PressionBasse OF
             i = isOp(e, ";") ? e : after(e);
             return;
         }
@@ -2252,12 +2281,15 @@ private:
             if (isOp(k, ":=")) ++k;
             const std::size_t to = findWord(k, {"TO"});
             walkNames(k, to);
+            unitProblems(k, to);                                // 1.13.0 (seconde passe) : les bornes d'un FOR aussi
             const std::size_t by = findWord(after(to), {"BY", "DO"});
             walkNames(to + 1, by);
+            unitProblems(to + 1, by);
             std::size_t d = by;
             if (isWord(by, "BY")) {
                 d = findWord(by + 1, {"DO"});
                 walkNames(by + 1, d);
+                unitProblems(by + 1, d);
             }
             i = isOp(d, ";") ? d : after(d);
             return;
@@ -2311,14 +2343,15 @@ private:
             i = isOp(after(close), ";") ? after(close) + 1 : after(close);
             return;
         }
-        // 1.13.0 : RETURN x dans une fonction IHM qui rend une unite - le verdict d'unite (le moteur ne convertit pas).
-        // La valeur est sur la ligne du RETURN (comme le parseur du moteur) ; ailleurs, rien ne change.
-        if (U == "RETURN" && sc_.function && !sc_.function->returnUnit.empty() && !atEnd(i + 1) && !isOp(i + 1, ";")
-            && body_.find('\n', t.end()) >= toks_[i + 1].at) {
+        // 1.13.0 : RETURN x - un melange d'unites dans la valeur (RETURN Pression - PressionBasse : 1.13.0, seconde passe),
+        // puis, dans une fonction IHM qui rend une unite, le verdict d'unite (le moteur ne convertit pas). La valeur est
+        // sur la ligne du RETURN (comme le parseur du moteur) ; ailleurs, rien ne change.
+        if (U == "RETURN" && !atEnd(i + 1) && !isOp(i + 1, ";") && body_.find('\n', t.end()) >= toks_[i + 1].at) {
             const std::size_t e = statementEnd(i + 1);
             if (e > i + 1) {
                 walkNames(i + 1, e);
-                returnUnit(i + 1, e);
+                unitProblems(i + 1, e);
+                if (sc_.function && !sc_.function->returnUnit.empty()) returnUnit(i + 1, e);
                 i = e;
                 return;
             }
@@ -2350,6 +2383,7 @@ private:
         if (isOp(j, "("))                                       // 1.11.10 : Vanne_3.Ouvrir(...);
             if (const HmiFunction* f = instanceFunction(i, j)) {
                 const std::size_t after = instanceCall(i, j, *f, true);
+                unitProblems(i, after);                         // 1.13.0 (seconde passe) : Vanne_3.Regler(PressionBasse); aussi
                 const std::size_t e = statementEnd(after);
                 walkNames(after, e);
                 i = e;
@@ -2457,7 +2491,9 @@ std::vector<Finding> check(const Scope& scope, std::string_view body, const std:
                                                    [](const Declaration& d) { return d.kind == DeclKind::Parameter; });
     if (decls.empty() && !inherits) return check(scope, body);
     const auto composed = decl::composeCode(body, decls, role, inherited);
-    auto out = check(scope, composed.text);
+    Scope withDecls = scope;                       // 1.13.0 (seconde passe) : leurs unites (la colonne Unite)
+    if (!withDecls.decls) withDecls.decls = &decls;
+    auto out = check(withDecls, composed.text);
     for (auto& f : out) {
         if (composed.inDeclarations(f.line, f.column)) {
             const Id id = composed.declarationAt(f.line, f.column);
@@ -2470,6 +2506,7 @@ std::vector<Finding> check(const Scope& scope, std::string_view body, const std:
             f.line = f.column = f.length = 0;
             f.fixLine = 0;                       // une correction du texte : pas dans une declaration
         } else {
+            if (f.fixColumn > 0) f.fixColumn = composed.bodyColumn(f.line, f.fixColumn);   // 1.13.0 (seconde passe)
             f.column = composed.bodyColumn(f.line, f.column);
         }
     }
@@ -2559,6 +2596,7 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
         i.length = f.length;
         i.fixFrom = f.fixFrom;          // 1.12.20 : la correction d'un clic
         i.fixTo = f.fixTo;
+        i.fixColumn = f.fixColumn;      // 1.13.0 (seconde passe) : son occurrence
         out.push_back(std::move(i));
     };
     // 1.13.0 : WAIT_UNTIL dans un script NON detache - l'IHM est figee pendant l'attente : la condition ne changera pas

@@ -94,5 +94,8 @@ private:
 // garde son unite. Sert au simulateur (EN / UNITE, l'affectation convertie) via HmiRuntime::declaredUnit, et au
 // controle statique (exprcheck) : les deux lisent la meme unite.
 [[nodiscard]] std::string unitOfPath(const Project&, std::string_view path);
+// 1.13.0 (seconde passe) : la meme lecture depuis un depart connu - une declaration (locale, parametre, constante de
+// vue) de type `type` et d'unite `unit`, suivie de `rest` (".Debit", "[2]", "[i].Pression" ; vide : elle-meme).
+[[nodiscard]] std::string unitAlong(const Project&, std::string_view type, std::string_view unit, std::string_view rest);
 
 } // namespace hmi::units

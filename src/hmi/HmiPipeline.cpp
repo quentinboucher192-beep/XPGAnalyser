@@ -930,6 +930,7 @@ Diagnostic fromIssue(const Issue& i, std::string_view step) {
     d.property = i.property;
     d.fixFrom = i.fixFrom;          // 1.12.20 : la correction d'un clic
     d.fixTo = i.fixTo;
+    d.fixColumn = i.fixColumn;      // 1.13.0 (seconde passe) : son occurrence
     if (!d.fixFrom.empty() && d.suggestion.empty()) d.suggestion = "Correction (Ctrl+.) : " + d.fixFrom + " \xE2\x86\x92 " + d.fixTo;
     return d;
 }
@@ -943,7 +944,8 @@ std::string diagLine(const std::string& owner, const Diagnostic& d) {
          + " categorie=" + quote(d.category) + " message=" + quote(d.message) + " ligne=" + std::to_string(d.line) + " colonne=" + std::to_string(d.column)
          + " longueur=" + std::to_string(d.length) + " etape=" + quote(d.step) + " date=" + quote(d.date) + " suggestion=" + quote(d.suggestion)
          + " vue=" + std::to_string(d.view) + " objet=" + std::to_string(d.object) + " script=" + std::to_string(d.script) + " item=" + std::to_string(d.item)
-         + " propriete=" + quote(d.property) + " fichier=" + quote(d.file) + " corriger_de=" + quote(d.fixFrom) + " corriger_en=" + quote(d.fixTo) + "\n";
+         + " propriete=" + quote(d.property) + " fichier=" + quote(d.file) + " corriger_de=" + quote(d.fixFrom) + " corriger_en=" + quote(d.fixTo)
+         + (d.fixColumn > 0 ? " corriger_col=" + std::to_string(d.fixColumn) : std::string{}) + "\n";
 }
 Severity severityFrom(std::string_view s) {
     for (int i = 0; i <= static_cast<int>(Severity::Critical); ++i)
@@ -1045,6 +1047,7 @@ Cache parseCache(std::string_view text) {
             d.suggestion = get("suggestion");
             d.fixFrom = get("corriger_de");     // 1.12.20 (absents d'un cache plus ancien : vides)
             d.fixTo = get("corriger_en");
+            d.fixColumn = std::atoi(get("corriger_col").c_str());   // 1.13.0 (seconde passe) ; absent : 0
             d.view = static_cast<Id>(std::strtoul(get("vue").c_str(), nullptr, 10));
             d.object = static_cast<Id>(std::strtoul(get("objet").c_str(), nullptr, 10));
             d.script = static_cast<Id>(std::strtoul(get("script").c_str(), nullptr, 10));

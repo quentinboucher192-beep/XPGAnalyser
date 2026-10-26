@@ -52,13 +52,18 @@ struct Issue {
     // cause : la case de l'objet (property), l'action (property "action N (...)" : sa valeur, sa cible), le script
     // ou la fonction a sa ligne, la valeur initiale de la variable (item). Vide : aucune.
     std::string fixFrom{}, fixTo{};
+    // 1.13.0 (seconde passe) : la colonne de l'occurrence de fixFrom a remplacer (1 = le premier octet de sa ligne, ou du
+    // texte de la case) ; 0 : la premiere trouvee. Le meme nom peut revenir (PressionBasse < 900.0 AND Pression > PressionBasse).
+    int         fixColumn{0};
 };
 
 // 1.12.20 : ou s'applique une correction d'un clic (les champs d'un Issue, ou d'un diagnostic du build).
+// 1.13.0 (seconde passe) : `column` - l'occurrence visee (Issue::fixColumn) ; 0 : la premiere.
 struct FixPlace {
     Id          view{kNoId}, object{kNoId}, script{kNoId}, item{kNoId};
     std::string category, property;
     int         line{0};
+    int         column{0};
 };
 // Remplace `from` par `to` a cet endroit (la premiere fois sur la ligne, sinon dans tout le texte). Faux : rien de
 // change (l'endroit n'existe plus, ou `from` n'y est plus). `what` : l'endroit, dit a l'utilisateur.

@@ -361,6 +361,7 @@ void MainAnalysisScreen::wireBottomPanel() {
             at.category = d.category;
             at.property = d.property;
             at.line = d.line;
+            at.column = d.fixColumn;                      // 1.13.0 (seconde passe) : l'occurrence visee
             std::string what;
             {
                 hmi::Project probe = doc->project;          // l'endroit existe-t-il encore ?

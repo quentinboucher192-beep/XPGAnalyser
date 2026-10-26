@@ -225,6 +225,7 @@ struct Val {
     // PressionBasse * 2) ; [t0, t1) : ses jetons (le texte exact, pour la correction d'un clic).
     bool        plain{false};
     std::string unitFrom;
+    std::size_t unitAt{static_cast<std::size_t>(-1)};   // 1.13.0 (seconde passe) : la place de unitFrom dans le texte
     std::size_t t0{0}, t1{0};
 };
 
@@ -317,7 +318,8 @@ std::vector<Tok> withNamespaces(const Context& ctx, std::vector<Tok> toks) {
 // un RETURN, un argument ne se convertissent pas : la compilation demande EN. Rien : pas d'unite des deux cotes,
 // la meme, ou un symbole inconnu (Generer le dit).
 std::optional<Problem> unitPassVerdict(const units::Catalog& cat, const std::string& tu, const std::string& su, const std::string& src,
-                                       bool plain, const std::string& unitFrom, UnitPass pass, const std::string& target, bool strict) {
+                                       bool plain, const std::string& unitFrom, UnitPass pass, const std::string& target, bool strict,
+                                       std::size_t srcAt = static_cast<std::size_t>(-1), std::size_t unitFromAt = static_cast<std::size_t>(-1)) {
     if (tu.empty() || su.empty()) return std::nullopt;
     const units::Rel rel = cat.relation(su, tu);
     if (rel != units::Rel::SameFamily && rel != units::Rel::OtherFamily) return std::nullopt;
@@ -353,6 +355,7 @@ std::optional<Problem> unitPassVerdict(const units::Catalog& cat, const std::str
     if (!what.empty()) {
         pb.fixFrom = what;
         pb.fixTo = en;
+        pb.fixAt = plain ? srcAt : unitFromAt;          // 1.13.0 (seconde passe) : cette occurrence-la
     }
     return pb;
 }
@@ -387,13 +390,18 @@ private:
         if (to <= from || to > src_.size()) return v.show;
         return std::string(src_.substr(from, to - from));
     }
-    // 1.13.0 : le chemin qui porte l'unite d'un resultat - celui de l'operande dont il garde l'unite.
-    static std::string unitSource(const std::string& unit, const Val& a, const Val& b) {
-        if (unit.empty()) return {};
-        if (unit == a.unit) return a.unitFrom;
-        if (unit == b.unit) return b.unitFrom;
-        return {};
+    // 1.13.0 : le chemin qui porte l'unite d'un resultat - celui de l'operande dont il garde l'unite (et sa place).
+    static void keepUnitFrom(Val& r, const Val& a, const Val& b) {
+        r.unitFrom.clear();
+        r.unitAt = static_cast<std::size_t>(-1);
+        if (r.unit.empty()) return;
+        const Val* from = r.unit == a.unit ? &a : r.unit == b.unit ? &b : nullptr;
+        if (!from) return;
+        r.unitFrom = from->unitFrom;
+        r.unitAt = from->unitAt;
     }
+    // 1.13.0 (seconde passe) : la place d'une valeur dans le texte (son premier jeton) ; npos : pas dite.
+    std::size_t placeOf(const Val& v) const { return v.t1 > v.t0 && v.t0 < toks_.size() ? toks_[v.t0].at : static_cast<std::size_t>(-1); }
     // 1.13.0 (lot J6) : LA REGLE DE + - ET DE LA COMPARAISON (meme unite exacte ; MIN, MAX, LIMIT aussi). Deux
     // unites de meme famille mais differentes, ou de familles differentes : une erreur, avec la correction d'un clic
     // (inserer EN sur l'operande de droite - ou, dans un calcul, sur le chemin qui lui donne son unite : EN ne
@@ -411,6 +419,7 @@ private:
             if (!what.empty()) {
                 pb.fixFrom = what;
                 pb.fixTo = "EN(" + what + ", '" + target + "')";
+                pb.fixAt = b.plain ? placeOf(b) : b.unitAt;     // 1.13.0 (seconde passe) : cette occurrence-la
             }
             pushUnit(std::move(pb));
             return a.unit;
@@ -754,7 +763,7 @@ private:
             } else if (op == "MOD") {
                 r.unit = a.unit;
             }
-            r.unitFrom = unitSource(r.unit, a, b);     // 1.13.0 : le chemin qui porte cette unite
+            keepUnitFrom(r, a, b);                     // 1.13.0 : le chemin qui porte cette unite
         }
         return r;
     }
@@ -827,7 +836,10 @@ private:
         Val v = primaryValue();
         v.t0 = start;
         v.t1 = std::max(at_, start);
-        if (v.plain && !v.unit.empty() && v.unitFrom.empty()) v.unitFrom = spanText(v);
+        if (v.plain && !v.unit.empty() && v.unitFrom.empty()) {
+            v.unitFrom = spanText(v);
+            v.unitAt = placeOf(v);
+        }
         return v;
     }
     Val primaryValue() {
@@ -1024,7 +1036,14 @@ private:
             v.plain = true;                                                      // 1.13.0 : lue telle quelle
             return v;
         }
-        if (hidden) return v;                                                    // une locale : rien de connu ici
+        // Une locale, un parametre : rien de connu ici - sauf leur unite declaree (1.13.0, seconde passe : la colonne
+        // Unite des onglets Parametres, Locales, Constantes), que le moteur lit de meme.
+        if (hidden) {
+            if (ctx_.localUnit) v.unit = ctx_.localUnit(text);
+            if (!v.unit.empty()) v.type = T::Num;                                // une unite ne va que sur un nombre
+            v.plain = true;
+            return v;
+        }
         // 1.9 : un parametre type de la vue - Moteur.Vitesse est REAL d'apres T_Moteur.
         // 1.11.13 : ou du symbole qui porte la popup (Vanne.POSITION dans Pop_Vanne de S_Vanne).
         if (p && ctx_.view) {
@@ -1062,6 +1081,9 @@ private:
             }
             if (c) {
                 if (const std::string t = viewmembers::typeAlong(*p, c->type, rest); !t.empty()) typed(v, t);
+                // 1.13.0 (seconde passe) : l'unite de la constante (sa colonne Unite) - le moteur la lit sur le meme chemin.
+                v.unit = units::unitAlong(*p, c->type, c->unit, rest);
+                v.plain = true;
                 return v;
             }
         }
@@ -1230,23 +1252,41 @@ private:
     // 1.13.0 : passer un argument a un parametre qui porte une unite (VAR_INPUT Consigne : REAL [bar]) - le moteur
     // ne convertit rien a l'appel : meme famille, EN ; familles differentes, un refus. Par position seulement (un
     // appel nomme se juge ailleurs), et pour une seule surcharge possible.
-    void argumentUnits(const std::string& name, const HmiFunction& f, const std::vector<Val>& args) {
+    // 1.13.0 (seconde passe) : `names` - un appel nomme (F(Consigne := x)) : l'argument k va au parametre de ce nom.
+    void argumentUnits(const std::string& name, const HmiFunction& f, const std::vector<Val>& args, const std::vector<std::string>& names = {}) {
         const auto sig = overload::signatureOf(f);
-        for (std::size_t k = 0; k < args.size() && k < sig.params.size(); ++k) {
-            const auto& prm = sig.params[k];
-            if (prm.mode == overload::Mode::Out || args[k].unit.empty()) continue;
+        for (std::size_t k = 0; k < args.size(); ++k) {
+            const overload::Param* prm = nullptr;
+            if (k < names.size() && !names[k].empty()) {
+                for (const auto& q : sig.params)
+                    if (up(q.name) == up(names[k])) prm = &q;
+            } else if (k < sig.params.size()) {
+                prm = &sig.params[k];
+            }
+            if (!prm || prm->mode == overload::Mode::Out || args[k].unit.empty()) continue;
             std::string pu;
             for (const auto& d : f.decls)
-                if (d.kind == DeclKind::Parameter && up(d.name) == up(prm.name)) { pu = trimmed(d.unit); break; }
+                if (d.kind == DeclKind::Parameter && up(d.name) == up(prm->name)) { pu = trimmed(d.unit); break; }
             if (pu.empty()) continue;
-            const std::string target = "le param\xC3\xA8tre " + prm.name + " de " + name;
+            const std::string target = "le param\xC3\xA8tre " + prm->name + " de " + name;
+            // 1.13.0 (seconde passe) : un VAR_IN_OUT recoit la variable elle-meme (une reference) : rien ne s'y convertit,
+            // et EN(...) n'est pas une variable - il faut une variable dans la bonne unite.
+            if (prm->mode == overload::Mode::InOut) {
+                const units::Rel rel = cat_.relation(args[k].unit, pu);
+                if (rel != units::Rel::SameFamily && rel != units::Rel::OtherFamily) continue;
+                Problem pb{target + " est un VAR_IN_OUT en " + pu + " et " + spanText(args[k]) + " est en " + args[k].unit
+                               + " : une r\xC3\xA9" "f\xC3\xA9rence ne se convertit pas, passe une variable en " + pu, {}, {}};
+                pb.unit = true;
+                pushUnit(std::move(pb));
+                continue;
+            }
             if (auto pb = unitPassVerdict(cat_, pu, args[k].unit, spanText(args[k]), args[k].plain, args[k].unitFrom, UnitPass::Argument,
-                                          target, false))
+                                          target, false, placeOf(args[k]), args[k].unitAt))
                 pushUnit(std::move(*pb));
         }
     }
     void userCall(const std::string& name, const std::vector<const HmiFunction*>& fs, int n, Val& r,
-                  const std::vector<Val>& args = {}, bool named = false) {
+                  const std::vector<Val>& args = {}, bool named = false, const std::vector<std::string>& argNames = {}) {
         std::vector<const HmiFunction*> fitting;
         int lo = -1, hi = 0;
         for (const auto* f : fs) {
@@ -1268,7 +1308,7 @@ private:
         r.type = rt.empty() ? T::Unknown : typeOfName(rt);
         // 1.13.0 : un retour generique (la lettre T) : le type deduit des arguments, pas Unknown.
         if (r.type == T::Unknown && pool.size() == 1 && !pool.front()->generics.empty())
-            r.type = deducedGenericReturn(*pool.front(), args);
+            r.type = deducedGenericReturn(*pool.front(), named ? std::vector<Val>{} : args);
         // 1.13.0 (lot J6) : l'unite du retour se propage comme une variable de ce type (toutes les surcharges
         // qui conviennent doivent s'accorder, sinon pas d'unite).
         if (r.type == T::Num) {
@@ -1276,7 +1316,8 @@ private:
             for (const auto* f : pool) if (f->returnUnit != ru) ru.clear();
             r.unit = ru;
         }
-        if (!named && pool.size() == 1 && !fitting.empty()) argumentUnits(name, *pool.front(), args);   // 1.13.0
+        // 1.13.0 : les unites des arguments - par position, ou par leur nom (1.13.0, seconde passe : F(Consigne := x)).
+        if (pool.size() == 1 && (!fitting.empty() || named)) argumentUnits(name, *pool.front(), args, named ? argNames : std::vector<std::string>{});
         if (!anyResult) {
             problem(name + " ne rend pas de valeur : une expression ne peut appeler qu'une fonction qui rend quelque chose");
             return;
@@ -1300,9 +1341,19 @@ private:
             if (const auto fs = viewmembers::functions(*ctx_.view, name); !fs.empty()) symFn = fs.front();
         next();    // (
         std::vector<Val> args;
+        std::vector<std::string> argNames;        // 1.13.0 (seconde passe) : le nom d'un argument nomme ; vide : par position
         bool named = false;                       // 1.13.0 : F(a := 1.5) - les arguments ne vont pas par position
         if (!isOp(")"))
             for (;;) {
+                // 1.13.0 (seconde passe) : nom := valeur (ou nom => sortie) - la valeur se lit, et va au parametre de ce nom.
+                std::string argName;
+                if (peek().k == Tok::K::Ident && at_ + 1 < toks_.size() && toks_[at_ + 1].k == Tok::K::Op
+                    && (toks_[at_ + 1].text == ":=" || toks_[at_ + 1].text == "=>")) {
+                    argName = next().text;
+                    next();
+                    named = true;
+                }
+                argNames.push_back(argName);
                 args.push_back(orExpr());
                 if (isOp(":=") || isOp("=>")) named = true;
                 if (isOp(",")) { next(); continue; }
@@ -1325,7 +1376,7 @@ private:
                 }
         };
         if (symFn) {
-            userCall(name, siblingsOf(symFn), n, r, args, named);
+            userCall(name, siblingsOf(symFn), n, r, args, named, argNames);
             lambdaCall(siblingsOf(symFn), name);                // 1.12.20 : dans une LAMBDA d'une fx
             return r;
         }
@@ -1501,12 +1552,16 @@ private:
                     Val acc = args[0];
                     for (std::size_t k = 1; k < args.size(); ++k) {
                         if (acc.unit.empty() && args[k].unit.empty()) continue;
-                        const std::string ru = unitAddCompare(acc, args[k], u, true);
-                        acc.unitFrom = unitSource(ru, acc, args[k]);
-                        acc.unit = ru;
+                        Val next = acc;
+                        next.unit = unitAddCompare(acc, args[k], u, true);
+                        keepUnitFrom(next, acc, args[k]);
+                        acc.unit = next.unit;
+                        acc.unitFrom = next.unitFrom;
+                        acc.unitAt = next.unitAt;
                     }
                     r.unit = acc.unit;
                     r.unitFrom = acc.unitFrom;
+                    r.unitAt = acc.unitAt;
                 }
             } else if (u != "MUX") {
                 r.type = T::Num;
@@ -1514,13 +1569,14 @@ private:
                 if ((u == "ABS" || u == "NEG" || u == "TRUNC" || u == "ROUND") && n >= 1) {
                     r.unit = args[0].unit;
                     r.unitFrom = args[0].unitFrom;
+                    r.unitAt = args[0].unitAt;
                 }
             }
             return r;
         }
         if (const Project* p = ctx_.project)
             if (const auto fs = p->functionsNamed(name); !fs.empty()) {
-                userCall(name, fs, n, r, args, named);    // 1.11.20 : ses surcharges, tous leurs parametres
+                userCall(name, fs, n, r, args, named, argNames);    // 1.11.20 : ses surcharges, tous leurs parametres
                 lambdaCall(fs, name);              // 1.12.20 : dans une LAMBDA d'une fx
                 return r;
             }
@@ -1801,6 +1857,7 @@ Shape shapeOf(const Context& ctx, std::string_view written) {
     s.unit = v.unit;                            // 1.13.0 (lot J6) : l'unite physique de la valeur
     s.plain = v.plain;                          // 1.13.0 : lue telle quelle sur un chemin (le moteur lit son unite)
     s.unitFrom = v.unitFrom;
+    s.unitFromAt = v.unitAt;                    // 1.13.0 (seconde passe)
     if (!v.whole.empty()) {
         s.type = v.wholeType;
         s.what = v.whole;
@@ -1860,7 +1917,18 @@ std::vector<Problem> passUnit(const Context& ctx, std::string_view targetUnit, s
     const units::Catalog cat(ctx.project ? ctx.project->config : kEmpty);
     // Le texte de la source, sans ses reperes : celui que la correction d'un clic retrouve.
     const std::string src = trimmed(markers::strip(source, markers::Mode::Expression));
-    if (auto pb = unitPassVerdict(cat, tu, sh.unit, src, sh.plain, sh.unitFrom, pass, std::string(targetText), strict))
+    // 1.13.0 (seconde passe) : un tableau (ou une structure) ENTIER se copie en bloc - le moteur ne convertit pas ses
+    // cases : de meme famille, ce n'est pas une conversion d'office, c'est une erreur (case par case, chacune se convertit).
+    if (sh.whole() && pass == UnitPass::Assign && cat.relation(sh.unit, tu) == units::Rel::SameFamily) {
+        Problem pb{std::string(targetText) + " est en " + tu + " et " + src + " en " + sh.unit + " : " + sh.entire
+                       + " se copie tel quel, sans conversion - affecte case par case (FOR i := ... DO " + std::string(targetText) + "[i] := "
+                       + src + "[i]; END_FOR), chaque case se convertit",
+                   {}, {}};
+        pb.unit = true;
+        out.push_back(std::move(pb));
+        return out;
+    }
+    if (auto pb = unitPassVerdict(cat, tu, sh.unit, src, sh.plain, sh.unitFrom, pass, std::string(targetText), strict, 0, sh.unitFromAt))
         out.push_back(std::move(*pb));
     return out;
 }

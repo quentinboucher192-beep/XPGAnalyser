@@ -159,23 +159,39 @@ namespace {
 bool wordChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
 // 1.13.0 : une occurrence de `from` a `at` qui est le meme nom, pas le morceau d'un autre - PressionBasse ne se
 // corrige pas dans PressionBasseMax, ni Pression au debut de PressionBasse, ni dans Ligne.Pression (un membre).
-// Un bord qui n'est pas un nom ('Valider', un appel) n'a pas de borne a respecter.
-bool boundedAt(std::string_view text, std::size_t at, std::string_view from) {
+// Un bord qui n'est pas un nom ('Valider', un appel) n'a pas de borne a respecter. 1.13.0 (seconde passe) : `whole` -
+// la correction emballe le texte (EN(Pression, 'mbar')) : il doit etre un chemin entier, pas le debut de Pression.X
+// ni de Pression[2] ; une correction qui le remplace (un nom d'espace mal ecrit, Gaz.Vanes -> Gaz.Vannes) peut
+// toucher le debut d'un chemin plus long (Gaz.Vanes.T_Vanne).
+bool boundedAt(std::string_view text, std::size_t at, std::string_view from, bool whole) {
     if (wordChar(from.front()) && at > 0 && (wordChar(text[at - 1]) || text[at - 1] == '.')) return false;
     const std::size_t after = at + from.size();
     if ((wordChar(from.back()) || from.back() == ']') && after < text.size()
-        && (wordChar(text[after]) || text[after] == '.' || text[after] == '['))
+        && (wordChar(text[after]) || (whole && (text[after] == '.' || text[after] == '['))))
         return false;
     return true;
 }
-// La premiere occurrence bornee de `from` dans [begin, end) ; npos : aucune.
-std::size_t findBounded(std::string_view text, std::string_view from, std::size_t begin, std::size_t end) {
-    for (std::size_t at = text.find(from, begin); at != std::string_view::npos && at + from.size() <= end; at = text.find(from, at + 1))
-        if (boundedAt(text, at, from)) return at;
-    return std::string_view::npos;
+// L'occurrence bornee de `from` dans [begin, end) : celle qui commence a `hint` si elle y est, sinon la plus proche de
+// `hint` (npos : la premiere) ; npos : aucune.
+std::size_t findBounded(std::string_view text, std::string_view from, std::size_t begin, std::size_t end, bool whole,
+                        std::size_t hint = std::string_view::npos) {
+    std::size_t best = std::string_view::npos, bestGap = std::string_view::npos;
+    for (std::size_t at = text.find(from, begin); at != std::string_view::npos && at + from.size() <= end; at = text.find(from, at + 1)) {
+        if (!boundedAt(text, at, from, whole)) continue;
+        if (hint == std::string_view::npos) return at;
+        const std::size_t gap = at > hint ? at - hint : hint - at;
+        if (gap < bestGap) {
+            best = at;
+            bestGap = gap;
+        }
+    }
+    return best;
 }
-bool replaceIn(std::string& text, int line, std::string_view from, std::string_view to) {
+// `column` (1.13.0, seconde passe) : l'occurrence visee, sur la ligne (ou dans le texte entier, line 0) ; 0 : la premiere.
+bool replaceIn(std::string& text, int line, std::string_view from, std::string_view to, int column = 0) {
     if (from.empty()) return false;
+    // Une correction qui emballe le texte (EN(x, 'bar') : x suit une parenthese ouvrante) le veut entier.
+    const bool whole = to.find("(" + std::string(from)) != std::string_view::npos;
     std::size_t begin = 0, end = text.size();
     if (line > 0) {
         for (int l = 1; l < line && begin != std::string::npos; ++l) {
@@ -188,8 +204,9 @@ bool replaceIn(std::string& text, int line, std::string_view from, std::string_v
             if (end == std::string::npos) end = text.size();
         }
     }
-    std::size_t at = findBounded(text, from, begin, end);
-    if (at == std::string::npos) at = findBounded(text, from, 0, text.size());   // la ligne a bouge : tout le texte
+    const std::size_t hint = column > 0 ? begin + static_cast<std::size_t>(column - 1) : std::string::npos;
+    std::size_t at = findBounded(text, from, begin, end, whole, hint);
+    if (at == std::string::npos) at = findBounded(text, from, 0, text.size(), whole);   // la ligne a bouge : tout le texte
     if (at == std::string::npos) return false;
     text.replace(at, from.size(), to);
     return true;
@@ -204,18 +221,18 @@ bool applyFix(Project& p, const FixPlace& at, std::string_view from, std::string
     // Un script (general ou de vue), a sa ligne.
     if (at.script != kNoId) {
         for (auto& sc : p.programs.scripts)
-            if (sc.id == at.script) return replaceIn(sc.body, at.line, from, to) && say("le script " + sc.name);
+            if (sc.id == at.script) return replaceIn(sc.body, at.line, from, to, at.column) && say("le script " + sc.name);
         for (auto& v : p.views)
             for (auto& sc : v.scripts)
-                if (sc.id == at.script) return replaceIn(sc.body, at.line, from, to) && say("le script " + v.name + "." + sc.name);
+                if (sc.id == at.script) return replaceIn(sc.body, at.line, from, to, at.column) && say("le script " + v.name + "." + sc.name);
         return false;
     }
     if (at.item != kNoId) {
         for (auto& f : p.programs.functions)
-            if (f.id == at.item) return replaceIn(f.body, at.line, from, to) && say("la fonction " + f.name);
+            if (f.id == at.item) return replaceIn(f.body, at.line, from, to, at.column) && say("la fonction " + f.name);
         for (auto& v : p.views)
             for (auto& f : v.functions)
-                if (f.id == at.item) return replaceIn(f.body, at.line, from, to) && say("la fonction " + v.name + "." + f.name);
+                if (f.id == at.item) return replaceIn(f.body, at.line, from, to, at.column) && say("la fonction " + v.name + "." + f.name);
         for (auto& var : p.programs.variables)
             if (var.id == at.item) return replaceIn(var.initial, 0, from, to) && say("la valeur initiale de " + var.name);
         return false;
@@ -237,7 +254,7 @@ bool applyFix(Project& p, const FixPlace& at, std::string_view from, std::string
     // Une case de l'objet : son expression, sinon sa valeur.
     if (o && !at.property.empty()) {
         std::string e = o->expr(at.property);
-        if (!e.empty() && replaceIn(e, 0, from, to)) {
+        if (!e.empty() && replaceIn(e, 0, from, to, at.column)) {
             o->setExpr(at.property, e);
             return say(v->name + " \xE2\x80\xBA " + o->name + " \xE2\x80\xBA " + at.property);
         }
@@ -4160,10 +4177,11 @@ struct ExprWalker {
 
     void push(const Where& w, std::string msg, const std::string& unknownName = {}, const std::string& suggestion = {},
               const std::string& source = {}, Issue::Severity severity = Issue::Severity::Error, bool blocking = false,
-              const std::string& fixFrom = {}, const std::string& fixTo = {}) {
+              const std::string& fixFrom = {}, const std::string& fixTo = {}, int fixColumn = 0) {
         Issue i;
         i.fixFrom = fixFrom;                            // 1.12.20 : la correction d'un clic
         i.fixTo = fixTo;
+        i.fixColumn = fixColumn;                        // 1.13.0 (seconde passe) : son occurrence
         i.severity = severity;                          // 1.11.21 : un avertissement d'appel (exprcheck::Problem::warning)
         i.blocking = blocking;                          // 1.12.17 : un tableau entier (exprcheck::Problem::whole)
         i.category = w.category;
@@ -4199,7 +4217,8 @@ struct ExprWalker {
         return {};
     }
 
-    void expr(const Where& w, const std::string& source, exprcheck::Want want, const std::string& prefix = {}, bool strict = true) {
+    void expr(const Where& w, const std::string& source, exprcheck::Want want, const std::string& prefix = {}, bool strict = true,
+              std::size_t base = 0) {
         const std::string s = trimmedCopy(source);
         if (s.empty()) return;   // 1.11 (REP) : un repere se verifie comme le reste (ses $ sont transparents)
         const auto e = Expression::compile(s);
@@ -4219,12 +4238,17 @@ struct ExprWalker {
             if (syntax || !hint.empty()) push(w, prefix + s + " : " + e.error() + hint, {}, {}, s);
             return;
         }
+        // 1.13.0 (seconde passe) : l'occurrence a corriger, dans le texte de la case (`base` : la place de `s` dans ce texte).
+        const std::size_t lead = source.find_first_not_of(" \t\r\n");
         for (auto& pb : exprcheck::check(context(w.view), s, want, strict))
             push(w, prefix + s + " : " + pb.message + dup::markerHint(s, pb.unknownName), pb.unknownName, pb.suggestion, {},
-                 pb.warning ? Issue::Severity::Warning : Issue::Severity::Error, pb.whole, pb.fixFrom, pb.fixTo);
+                 pb.warning ? Issue::Severity::Warning : Issue::Severity::Error, pb.whole, pb.fixFrom, pb.fixTo,
+                 pb.fixAt == std::string::npos || base == std::string::npos ? 0
+                                                                           : static_cast<int>(base + (lead == std::string::npos ? 0 : lead) + pb.fixAt) + 1);
     }
     void text(const Where& w, const std::string& value, const std::string& prefix = {}) {
-        for (const auto& piece : exprcheck::templateExpressions(value)) expr(w, piece, exprcheck::Want::Any, prefix + "{" + piece + "} : ");
+        for (const auto& piece : exprcheck::templateExpressions(value))
+            expr(w, piece, exprcheck::Want::Any, prefix + "{" + piece + "} : ", true, value.find(piece));   // sa place dans le texte
     }
     // 1.12.17 : `writes` - ce qu'on y ecrit (un booleen, un nombre, une valeur seule) ; un tableau entier ne le recoit pas.
     void target(const Where& w, const std::string& target, const std::string& prefix, exprcheck::Want writes = exprcheck::Want::Any) {

@@ -808,6 +808,248 @@ void signeMicro() {
     check(pcat.unit("um") && pcat.unit("um")->symbol == "\xC2\xB5m", "um (sans le signe) trouve \xC2\xB5m");
 }
 
+// ================================================================ 1.13.0 (seconde passe, lot D3) ===
+Declaration declared(Project& p, DeclKind kind, const char* name, const char* type, const char* unit, PassMode mode = PassMode::In) {
+    Declaration d;
+    d.id = p.allocate();
+    d.kind = kind;
+    d.name = name;
+    d.type = type;
+    d.unit = unit;
+    d.mode = mode;
+    if (kind == DeclKind::Constant) d.value = "2.5";
+    return d;
+}
+
+// T2-36 : la colonne Unite des Parametres, Locales et Constantes compte - au controle, en marche.
+void colonneUniteDesDeclarations() {
+    std::printf("-- T2-36 : l'unite d'un parametre, d'une locale, d'une constante de vue (controle et moteur)\n");
+    Project p;
+    var(p, "Pression", "REAL", "bar");
+    var(p, "PressionBasse", "REAL", "mbar");
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = "EnMbar";
+    f.returnType = "REAL";
+    f.decls = {declared(p, DeclKind::Parameter, "p", "REAL", "bar")};
+    f.body = "EnMbar := EN(p, 'mbar');";
+    scriptcheck::Scope sc;
+    sc.project = &p;
+    sc.function = &f;
+    check(!findingWith(scriptcheck::check(sc, f.body, f.decls, decl::Role::Function), "EN demande une valeur"),
+          "EN(p, 'mbar') sur un parametre p : REAL [bar] : accepte (avant : \xC2\xAB pose une unit\xC3\xA9 sur sa d\xC3\xA9" "claration \xC2\xBB)");
+    check(hasFinding(scriptcheck::check(sc, "EnMbar := p - PressionBasse;", f.decls, decl::Role::Function), "ne s'additionnent pas",
+                     scriptcheck::Finding::Severity::Error),
+          "p [bar] - PressionBasse [mbar] : refuse");
+    sc.function = nullptr;
+    Script s;
+    s.id = p.allocate();
+    s.name = "Essai";
+    s.decls = {declared(p, DeclKind::Variable, "Locale", "REAL", "bar")};
+    check(hasFinding(scriptcheck::check(sc, "Locale := PressionBasse;", s.decls, decl::Role::Script), "converti", scriptcheck::Finding::Severity::Warning),
+          "une locale de script en bar recoit PressionBasse : convertie d'office (une info)");
+    // Une constante de vue.
+    View v = makeView(p, "Vue_Four");
+    v.constants.push_back(declared(p, DeclKind::Constant, "Seuil_Haut", "REAL", "bar"));
+    p.views.push_back(v);
+    exprcheck::Context ctx = ctxOf(p);
+    ctx.view = &p.views.back();
+    check(!has(exprcheck::check(ctx, "EN(Seuil_Haut, 'mbar') > 0"), "demande une valeur"), "fx : EN(Seuil_Haut, 'mbar') sur la constante de vue [bar] : accepte");
+    check(has(exprcheck::check(ctx, "PressionBasse > Seuil_Haut"), "ne se comparent pas"), "fx : PressionBasse [mbar] > Seuil_Haut [bar] : refuse");
+    check(exprcheck::shapeOf(ctx, "Seuil_Haut").unit == "bar", "la constante de vue porte bar");
+    // En marche : le parametre, la locale de script, la constante qualifiee.
+    {
+        Bench b("R := EnMbar(2.5);", {{"Pression", "REAL", "bar", "0"}}, [&](Project& q) {
+            HmiFunction g = f;
+            g.id = q.allocate();
+            for (auto& d : g.decls) d.id = q.allocate();
+            q.programs.functions.push_back(g);
+        });
+        const double v2 = b.real();
+        check(std::fabs(v2 - 2500.0) < 1e-6, "en marche : EnMbar(2.5) avec p [bar] = 2500 mbar (" + std::to_string(v2) + ", avant 2.5)");
+    }
+    {
+        Bench b("R := Bas(2.5);", {{"p", "REAL", "bar", "0"}}, [&](Project& q) {
+            HmiFunction g;
+            g.id = q.allocate();
+            g.name = "Bas";
+            g.returnType = "REAL";
+            g.decls = {declared(q, DeclKind::Parameter, "p", "REAL", "")};
+            g.body = "Bas := EN(p, 'mbar');";
+            q.programs.functions.push_back(g);
+        });
+        const double v2 = b.real();
+        check(std::fabs(v2 - 2.5) < 1e-9, "un parametre p sans unite, homonyme d'une variable IHM p [bar] : inchange (" + std::to_string(v2) + ")");
+    }
+    {
+        Bench b("Locale := 2.5;\nR := EN(Locale, 'mbar');\nPression := Locale;", {{"Pression", "REAL", "mbar", "0"}}, [&](Project& q) {
+            (void)q;
+        });
+        b.p.programs.scripts.back().decls = {declared(b.p, DeclKind::Variable, "Locale", "REAL", "bar")};
+        std::string err;
+        const double v2 = b.real(&err);
+        check(err.empty() && std::fabs(v2 - 2500.0) < 1e-6, "en marche : une locale de script [bar] - EN(Locale, 'mbar') = 2500 (" + std::to_string(v2) + ") " + err);
+        sim::Value pv;
+        check(b.rt.environment().read("Pression", pv) && std::fabs(pv.asReal() - 2500.0) < 1e-6,
+              "en marche : Pression [mbar] := Locale [bar] convertie d'office (" + std::to_string(pv.asReal()) + ")");
+    }
+    {
+        Bench b("R := EN(Vue_Constantes.Seuil_Haut, 'mbar');", {}, [&](Project& q) {
+            View w = makeView(q, "Vue_Constantes");
+            w.constants.push_back(declared(q, DeclKind::Constant, "Seuil_Haut", "REAL", "bar"));
+            q.views.push_back(w);
+        });
+        const double v2 = b.real();
+        check(std::fabs(v2 - 2500.0) < 1e-6, "en marche : EN(Vue_Constantes.Seuil_Haut, 'mbar') = 2500 (" + std::to_string(v2) + ")");
+    }
+}
+
+// R4, R6 : la correction d'un clic vise la bonne occurrence ; une correction d'espace de noms touche le debut d'un chemin.
+void correctionALaBonnePlace() {
+    std::printf("-- R4 / R6 : la correction d'un clic, a la bonne occurrence ; un nom d'espace dans un chemin plus long\n");
+    Project p;
+    var(p, "Pression", "REAL", "bar");
+    var(p, "PressionBasse", "REAL", "mbar");
+    const auto ctx = ctxOf(p);
+    const std::string fx = "PressionBasse < 900.0 AND Pression > PressionBasse";
+    const auto ps = exprcheck::check(ctx, fx);
+    const auto* pb = problemWith(ps, "ne se comparent pas");
+    check(pb && pb->fixAt == fx.rfind("PressionBasse"), "le probleme dit ou est l'occurrence (la seconde PressionBasse)");
+    Project q = p;
+    Script s;
+    s.id = q.allocate();
+    s.name = "S";
+    s.body = fx;
+    q.programs.scripts.push_back(s);
+    FixPlace at;
+    at.script = s.id;
+    at.line = 1;
+    at.column = pb ? static_cast<int>(pb->fixAt) + 1 : 0;
+    check(pb && applyFix(q, at, pb->fixFrom, pb->fixTo)
+              && q.programs.scripts.back().body == "PressionBasse < 900.0 AND Pression > EN(PressionBasse, 'bar')",
+          "appliquee : " + q.programs.scripts.back().body + " (pas la premiere PressionBasse)");
+    scriptcheck::Scope sc;
+    sc.project = &p;
+    const auto fs = scriptcheck::check(sc, "IF PressionBasse < 900.0 AND Pression > PressionBasse THEN Pression := 1.0; END_IF;");
+    const auto* f = findingWith(fs, "ne se comparent pas");
+    check(f && f->fixColumn == static_cast<int>(std::string("IF PressionBasse < 900.0 AND Pression > ").size()) + 1,
+          "script : la colonne de l'occurrence a corriger (" + std::to_string(f ? f->fixColumn : -1) + ")");
+    // R6 : un espace mal ecrit suivi du reste du chemin (Gaz.Vanes.T_Vanne) se corrige encore.
+    Project r = p;
+    Script t;
+    t.id = r.allocate();
+    t.name = "T";
+    t.body = "VAR V : Gaz.Vanes.T_Vanne; END_VAR";
+    r.programs.scripts.push_back(t);
+    FixPlace at2;
+    at2.script = t.id;
+    at2.line = 1;
+    check(applyFix(r, at2, "Gaz.Vanes", "Gaz.Vannes") && r.programs.scripts.back().body == "VAR V : Gaz.Vannes.T_Vanne; END_VAR",
+          "R6 : Gaz.Vanes -> Gaz.Vannes dans Gaz.Vanes.T_Vanne (" + r.programs.scripts.back().body + ")");
+    exprcheck::Problem en;
+    en.fixFrom = "Pression";
+    en.fixTo = "EN(Pression, 'mbar')";
+    Project u = p;
+    Script w;
+    w.id = u.allocate();
+    w.name = "W";
+    w.body = "X := Pression.Valide OR Pression > 1.0;";
+    u.programs.scripts.push_back(w);
+    FixPlace at3;
+    at3.script = w.id;
+    at3.line = 1;
+    check(applyFix(u, at3, en.fixFrom, en.fixTo) && u.programs.scripts.back().body == "X := Pression.Valide OR EN(Pression, 'mbar') > 1.0;",
+          "une correction EN(...) ne touche toujours pas Pression.Valide (" + u.programs.scripts.back().body + ")");
+}
+
+// R7, R5, R13, R10 : VAR_IN_OUT, appel nomme, appel d'instance seul, RETURN / CASE / FOR.
+void passagesEtInstructions() {
+    std::printf("-- R7 / R5 / R13 / R10 : VAR_IN_OUT, appel nomme, appel d'instance, RETURN, CASE, FOR\n");
+    Project p;
+    var(p, "Pression", "REAL", "bar");
+    var(p, "PressionBasse", "REAL", "mbar");
+    var(p, "i", "INT", "");
+    HmiFunction g;
+    g.id = p.allocate();
+    g.name = "Regler";
+    g.decls = {declared(p, DeclKind::Parameter, "Consigne", "REAL", "bar", PassMode::InOut)};
+    g.body = "Consigne := Consigne + 1.0;";
+    p.programs.functions.push_back(g);
+    HmiFunction h;
+    h.id = p.allocate();
+    h.name = "Consigner";
+    h.returnType = "REAL";
+    h.decls = {declared(p, DeclKind::Parameter, "Consigne", "REAL", "bar")};
+    h.body = "Consigner := Consigne;";
+    p.programs.functions.push_back(h);
+    scriptcheck::Scope sc;
+    sc.project = &p;
+    const auto inout = scriptcheck::check(sc, "Regler(PressionBasse);");
+    const auto* io = findingWith(inout, "VAR_IN_OUT");
+    check(io && io->fixTo.empty() && io->severity == scriptcheck::Finding::Severity::Error,
+          "R7 : un VAR_IN_OUT en bar recoit PressionBasse : erreur, sans correction EN (" + std::string(io ? io->message : "?") + ")");
+    check(has(exprcheck::check(ctxOf(p), "Consigner(Consigne := PressionBasse) > 0"), "un argument ne se convertit pas"),
+          "R5 : un appel nomme est juge (Consigne := PressionBasse)");
+    check(!problemWith(exprcheck::check(ctxOf(p), "Consigner(Consigne := Pression) > 0"), "argument"), "R5 : appel nomme dans la bonne unite : bon");
+    // R10 : RETURN, CASE, FOR.
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = "Ecart";
+    f.returnType = "REAL";
+    sc.function = &f;
+    check(hasFinding(scriptcheck::check(sc, "RETURN Pression - PressionBasse;"), "ne s'additionnent pas", scriptcheck::Finding::Severity::Error),
+          "R10 : RETURN Pression - PressionBasse (retour sans unite) : le melange est dit");
+    sc.function = nullptr;
+    check(hasFinding(scriptcheck::check(sc, "CASE TO_INT(Pression - PressionBasse) OF\n1: i := 1;\nEND_CASE;"), "ne s'additionnent pas",
+                     scriptcheck::Finding::Severity::Error),
+          "R10 : le selecteur d'un CASE est juge");
+    check(hasFinding(scriptcheck::check(sc, "FOR i := 1 TO TO_INT(Pression - PressionBasse) DO\nPression := 1.0;\nEND_FOR;"), "ne s'additionnent pas",
+                     scriptcheck::Finding::Severity::Error),
+          "R10 : les bornes d'un FOR sont jugees");
+    // R13 : un appel de fonction d'instance seul sur sa ligne.
+    View sym = makeView(p, "S_Vanne");
+    sym.role = "symbole";
+    HmiFunction rv;
+    rv.id = p.allocate();
+    rv.name = "Regler";
+    rv.decls = {declared(p, DeclKind::Parameter, "Consigne", "REAL", "bar")};
+    rv.body = "Pression := Consigne;";
+    sym.functions.push_back(rv);
+    p.views.push_back(sym);
+    View use = makeView(p, "Vue_Vannes");
+    Object inst;
+    inst.id = p.allocate();
+    inst.kind = Kind::SymbolInstance;
+    inst.name = "Vanne_3";
+    inst.props.push_back({"symbol", "S_Vanne", ""});
+    use.objects.push_back(inst);
+    p.views.push_back(use);
+    sc.view = &p.views.back();
+    check(hasFinding(scriptcheck::check(sc, "Vanne_3.Regler(PressionBasse);"), "un argument ne se convertit pas", scriptcheck::Finding::Severity::Error),
+          "R13 : Vanne_3.Regler(PressionBasse); seul sur sa ligne : juge");
+}
+
+// R1 / R8 : un tableau entier ne se convertit pas d'office.
+void tableauEntier() {
+    std::printf("-- R1 / R8 : Pressions [bar] := Mesures [mbar] - un tableau entier ne se convertit pas\n");
+    Project p;
+    var(p, "Pressions", "ARRAY[1..3] OF REAL", "bar");
+    var(p, "Mesures", "ARRAY[1..3] OF REAL", "mbar");
+    var(p, "Copie", "ARRAY[1..3] OF REAL", "bar");
+    const auto ps = exprcheck::assignmentUnit(ctxOf(p), "Pressions", "Mesures");
+    check(has(ps, "case par case") && !has(ps, "converti", true), "Pressions := Mesures : une erreur (case par case), plus l'info \xC2\xAB converti d'office \xC2\xBB");
+    check(exprcheck::assignmentUnit(ctxOf(p), "Pressions", "Copie").empty(), "Pressions := Copie (meme unite) : rien a dire");
+    check(has(exprcheck::assignmentUnit(ctxOf(p), "Pressions[1]", "Mesures[1]"), "converti", true), "Pressions[1] := Mesures[1] : convertie d'office (une case)");
+}
+
+// R11 : le moteur ne relit plus les variables a chaque affectation (cache) et reste juste apres un changement.
+void cacheDesUnites() {
+    std::printf("-- R11 : les unites lues une fois par demarrage\n");
+    Bench b("Pression := PressionBasse;\nPression := PressionBasse;", {{"Pression", "REAL", "bar", "0"}, {"PressionBasse", "REAL", "mbar", "1500"}});
+    const double v = b.after("Pression");
+    check(std::fabs(v - 1.5) < 1e-9, "deux affectations : 1500 mbar -> 1,5 bar a chaque fois (" + std::to_string(v) + ")");
+}
+
 } // namespace
 
 int main() {
@@ -833,6 +1075,11 @@ int main() {
     genreDesFamilles();
     localesRetourArguments();
     signeMicro();
+    colonneUniteDesDeclarations();   // 1.13.0 (seconde passe, lot D3)
+    correctionALaBonnePlace();
+    passagesEtInstructions();
+    tableauEntier();
+    cacheDesUnites();
     std::printf("=== %d verifications, %d echec(s) ===\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
