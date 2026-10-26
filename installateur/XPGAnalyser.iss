@@ -351,6 +351,8 @@ Type: files; Name: "{app}\XpgAnalyzer-IHM.exe"
 Type: filesandordirs; Name: "{autoprograms}\{#Cle}"
 Type: files; Name: "{autodesktop}\{#Cle} API.lnk"
 Type: files; Name: "{autodesktop}\{#Cle} IHM.lnk"
+; 1.13.0 : la page web est retiree - le moteur de la page (web\, pose par la 1.12.31) s'en va.
+Type: filesandordirs; Name: "{app}\web"
 
 [Icons]
 Name: "{autoprograms}\{#Nom}\{#NomApi}"; Filename: "{app}\{#Exe}"; WorkingDir: "{app}"; Comment: "Le programme de l'automate : analyse, variables, tables, simulation"
