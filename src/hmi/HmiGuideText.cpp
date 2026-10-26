@@ -14479,21 +14479,59 @@ const std::vector<Topic>& topics() {
          "et respecte des contrats (INTERFACE). On traite ainsi une liste h\xC3\xA9t\xC3\xA9rog\xC3\xA8ne de "
          "pompes et de vannes par un contrat commun.",
          {
+             {K::Heading, "La section M\xC3\xA9thodes de Types IHM", {}, "1.13.0"},
+             {K::Paragraph, "Dans l'onglet Types IHM, sous la grille des membres (au-dessus des "
+                         "Op\xC3\xA9rateurs), la section **M\xC3\xA9thodes** du type choisi : \xC3\xA0 "
+                         "gauche la liste (M\xC3\xA9thode, Param\xC3\xA8tres, Retour, Visibilit\xC3\xA9, "
+                         "Genre, Origine) et les **Propri\xC3\xA9t\xC3\xA9s de la m\xC3\xA9thode**, \xC3\xA0 "
+                         "droite son **Corps**.", {}, "1.13.0"},
+             {K::Bullet, "**Ajouter une m\xC3\xA9thode\xE2\x80\xA6** ouvre la fen\xC3\xAAtre \xC2\xAB "
+                         "Nouvelle m\xC3\xA9thode de T_Pompe \xC2\xBB : le nom, le retour (vide : une "
+                         "proc\xC3\xA9" "dure ; **Choisir\xE2\x80\xA6** ouvre le s\xC3\xA9lecteur de types), "
+                         "les param\xC3\xA8tres sur une ligne (`Consigne : REAL; VAR_IN_OUT Cible : "
+                         "T_Pompe`, VAR_OUTPUT pour une sortie), les cases **Priv\xC3\xA9" "e** et "
+                         "**Red\xC3\xA9" "finissable (virtuelle)**. La signature et ce qui ne va pas "
+                         "s'\xC3\xA9" "crivent en direct (un nom d\xC3\xA9j\xC3\xA0 pris par un membre, une "
+                         "m\xC3\xA9thode priv\xC3\xA9" "e et virtuelle) ; **Cr\xC3\xA9" "er la "
+                         "m\xC3\xA9thode** ouvre son corps pr\xC3\xA9rempli dans l'\xC3\xA9" "diteur.", {}, "1.13.0"},
+             {K::Bullet, "Le corps s'\xC3\xA9" "crit dans le m\xC3\xAAme \xC3\xA9" "diteur que les fonctions "
+                         "IHM : color\xC3\xA9, num\xC3\xA9rot\xC3\xA9, l'aide \xC3\xA0 la saisie "
+                         "conna\xC3\xAEt SELF, les membres et les param\xC3\xA8tres. Au-dessus, la "
+                         "l\xC3\xA9gende : \xC2\xAB SELF : l'instance de T_Pompe (THIS vaut SELF) \xC2\xB7 "
+                         "ses membres se lisent par leur nom ou SELF.X \xC2\xB7 rends par EnDefaut := "
+                         "\xE2\x80\xA6 \xC2\xBB. Une faute (une syntaxe, un nom inconnu) est "
+                         "soulign\xC3\xA9" "e \xC3\xA0 sa ligne pendant que tu tapes ; **Compiler (F7)** "
+                         "compte celles de la m\xC3\xA9thode montr\xC3\xA9" "e.", {}, "1.13.0"},
+             {K::Bullet, "Le nom, les param\xC3\xA8tres, le retour et la visibilit\xC3\xA9 se changent dans "
+                         "leur case de la liste ou dans les propri\xC3\xA9t\xC3\xA9s (avec la case "
+                         "**Red\xC3\xA9" "finissable (virtuelle)**, la description) ; **Dupliquer**, "
+                         "**Supprimer**, **Monter**, **Descendre** dans la barre. Chaque geste se reprend "
+                         "par **Ctrl+Z** ; ce que la forme d'une m\xC3\xA9thode refuserait (une "
+                         "red\xC3\xA9" "finition d'une m\xC3\xA9thode non virtuelle, une m\xC3\xA9thode "
+                         "priv\xC3\xA9" "e et virtuelle) est refus\xC3\xA9 avant d'\xC3\xAAtre fait, et dit "
+                         "pourquoi.", {}, "1.13.0"},
+             {K::Bullet, "Renommer une m\xC3\xA9thode fait suivre son corps, ses red\xC3\xA9" "finitions "
+                         "dans les sous-types et les appels `SELF.X()`, `X()` et `SUPER.X()` des "
+                         "m\xC3\xA9thodes du type ; un appel \xC3\xA9" "crit ailleurs (`Pompe1.Demarrer()` "
+                         "dans un script) garde l'ancien nom, et Compiler le signale (\xC2\xAB Pompe1 "
+                         "(T_Pompe) n'a pas de membre Demarrer \xC2\xBB).", {}, "1.13.0"},
+             {K::Bullet, "La marge \xC3\xA0 gauche du corps pose les **points d'arr\xC3\xAAt** comme dans un "
+                         "script (voir \xC2\xAB D\xC3\xA9" "boguer les scripts IHM \xC2\xBB) : en "
+                         "simulation, l'appel `Pompe1.Demarrer()` s'arr\xC3\xAAte sur la ligne, la pile "
+                         "nomme \xC2\xAB m\xC3\xA9thode T_Pompe.Demarrer \xC2\xBB. Une faute de Compiler ou "
+                         "un niveau de la pile m\xC3\xA8ne au corps de la m\xC3\xA9thode, \xC3\xA0 sa ligne.", {}, "1.13.0"},
              {K::Heading, "Une m\xC3\xA9thode : SELF et les membres par leur nom", {}},
-             {K::Paragraph, "Dans l'onglet Types IHM, sous la grille des membres (\xC3\xA0 c\xC3\xB4t\xC3\xA9 "
-                         "des Op\xC3\xA9rateurs), la section **M\xC3\xA9thodes** : **Ajouter une "
-                         "m\xC3\xA9thode\xE2\x80\xA6** ouvre un dialogue (nom, retour facultatif, "
-                         "param\xC3\xA8tres, **Public**/**Priv\xC3\xA9**, case **Red\xC3\xA9" "finissable "
-                         "(virtuelle)**), puis un \xC3\xA9" "diteur de script. Une m\xC3\xA9thode voit "
-                         "**SELF** (l'instance ; **THIS** vaut SELF), les membres par leur nom (ou `SELF.X` "
-                         "pour lever une ambigu\xC3\xAFt\xC3\xA9 avec une locale), ses param\xC3\xA8tres et "
-                         "les autres m\xC3\xA9thodes du type (`Journal()` appelle la m\xC3\xA9thode Journal "
-                         "de l'instance). Dans un message (LEVER, IHM_LOG, IHM_JOURNAL), un trou "
-                         "`{Debit:0.0}` lit le membre de l'instance ; un argument nomm\xC3\xA9 "
-                         "(`Ecrire(Consigne := Consigne)`) garde son nom. Une m\xC3\xA9thode "
-                         "**proc\xC3\xA9" "dure** n'a pas de retour (`Pompe1.Demarrer()`) ; une "
-                         "m\xC3\xA9thode **fonction** rend sa valeur par son nom (`EnDefaut := "
-                         "\xE2\x80\xA6`) ou par RETURN.", {}},
+             {K::Paragraph, "Une m\xC3\xA9thode voit **SELF** (l'instance ; **THIS** vaut SELF), les membres "
+                         "par leur nom (ou `SELF.X` pour lever une ambigu\xC3\xAFt\xC3\xA9 avec une locale), "
+                         "ses param\xC3\xA8tres et les autres m\xC3\xA9thodes du type (`Journal()` appelle "
+                         "la m\xC3\xA9thode Journal de l'instance - m\xC3\xAAme si une fonction Journal "
+                         "existe aussi : Compiler le dit en avertissement, renomme l'une des deux pour lever "
+                         "le doute). Dans un message (LEVER, IHM_LOG, IHM_JOURNAL), un trou `{Debit:0.0}` "
+                         "lit le membre de l'instance ; dans une autre cha\xC3\xAEne (un JSON, un CONCAT), "
+                         "`{Debit}` reste tel quel ; un argument nomm\xC3\xA9 (`Ecrire(Consigne := "
+                         "Consigne)`) garde son nom. Une m\xC3\xA9thode **proc\xC3\xA9" "dure** n'a pas de "
+                         "retour (`Pompe1.Demarrer()`) ; une m\xC3\xA9thode **fonction** rend sa valeur par "
+                         "son nom (`EnDefaut := \xE2\x80\xA6`) ou par RETURN.", {}},
              {K::Code, "TYPE T_Pompe\n    Nom     : STRING;\n    Debit   : REAL;\n    Marche  : BOOL;\n    "
                          "PRIVATE Heures : REAL := 0.0;   (* vu des seules m\xC3\xA9thodes de T_Pompe *)\n\n "
                          "   METHOD PUBLIC Demarrer                 (* une proc\xC3\xA9" "dure *)\n    "
@@ -14518,16 +14556,31 @@ const std::vector<Topic>& topics() {
                          "\xE2\x80\xA6`). Un membre ou une m\xC3\xA9thode **priv\xC3\xA9** ne se lit et ne "
                          "s'appelle **que depuis une m\xC3\xA9thode du m\xC3\xAAme type** ; ailleurs, "
                          "G\xC3\xA9n\xC3\xA9rer le refuse : \xC2\xAB `Heures` est priv\xC3\xA9 dans T_Pompe "
-                         "\xC2\xBB. La privacit\xC3\xA9 ne touche pas la place Modbus : un membre "
-                         "priv\xC3\xA9 d'une structure li\xC3\xA9" "e garde son adresse ; seul le code ST "
-                         "est contraint.", {}},
+                         "\xC2\xBB. Dans la grille des membres, la colonne **Visibilit\xC3\xA9** dit Public "
+                         "ou Priv\xC3\xA9 (avec un cadenas) ; le clic droit sur un membre propose **Rendre "
+                         "priv\xC3\xA9** ou **Rendre public** (Ctrl+Z l'annule). La privacit\xC3\xA9 ne "
+                         "touche pas la place Modbus : un membre priv\xC3\xA9 d'une structure li\xC3\xA9" "e "
+                         "garde son adresse ; seul le code ST est contraint.", {}},
+             {K::Tip, "Ce que G\xC3\xA9n\xC3\xA9rer voit : un membre priv\xC3\xA9 lu depuis une variable "
+                         "IHM, une locale ou un param\xC3\xA8tre de ce type. \xC3\x80 travers une "
+                         "r\xC3\xA9" "f\xC3\xA9rence (`r^.Heures`) ou dans un `FOR EACH p IN Pompes`, il ne "
+                         "le voit pas encore, et le moteur ne le garde pas \xC3\xA0 l'ex\xC3\xA9" "cution.", {}},
              {K::Heading, "H\xC3\xA9ritage : EXTENDS, VIRTUAL, OVERRIDE, SUPER", {}},
-             {K::Paragraph, "En en-t\xC3\xAAte du type, le champ **H\xC3\xA9rite de\xE2\x80\xA6 (EXTENDS)** "
-                         "choisit un **parent** (une structure). Le sous-type a tous les membres du parent "
-                         "(la place Modbus du parent d'abord), puis les siens, et h\xC3\xA9rite de ses "
-                         "m\xC3\xA9thodes. Une m\xC3\xA9thode **VIRTUAL** du parent se red\xC3\xA9" "finit "
-                         "par une m\xC3\xA9thode **OVERRIDE** de m\xC3\xAAme signature ; "
-                         "**SUPER.M\xC3\xA9thode()** rappelle le corps du parent.", {}},
+             {K::Paragraph, "Dans les propri\xC3\xA9t\xC3\xA9s du type, **H\xC3\xA9rite de\xE2\x80\xA6 "
+                         "(EXTENDS)** choisit un **parent** parmi les structures du projet : ni "
+                         "lui-m\xC3\xAAme ni un de ses sous-types (pas de cycle), et pas tant qu'un de ses "
+                         "membres red\xC3\xA9" "clare un membre du parent. Le sous-type a tous les membres "
+                         "du parent (la place Modbus du parent d'abord), puis les siens, et h\xC3\xA9rite de "
+                         "ses m\xC3\xA9thodes : la grille des membres les montre \xC3\xA0 la suite des "
+                         "siens, gris\xC3\xA9s, \xC2\xAB (h\xC3\xA9rit\xC3\xA9 de T_Pompe) \xC2\xBB, et la "
+                         "section M\xC3\xA9thodes ses m\xC3\xA9thodes h\xC3\xA9rit\xC3\xA9" "es, "
+                         "gris\xC3\xA9" "es, \xC2\xAB (h\xC3\xA9rit\xC3\xA9 de T_Pompe) \xC2\xBB, en lecture "
+                         "seule. Une m\xC3\xA9thode **VIRTUAL** du parent se red\xC3\xA9" "finit par une "
+                         "m\xC3\xA9thode de m\xC3\xAAme signature (la colonne Origine dit \xC2\xAB "
+                         "red\xC3\xA9" "finit T_Pompe.EnDefaut \xC2\xBB) ; sur une virtuelle "
+                         "h\xC3\xA9rit\xC3\xA9" "e, **Red\xC3\xA9" "finir** la cr\xC3\xA9" "e, son corps "
+                         "pr\xC3\xA9rempli avec `SUPER.EnDefaut()` (les param\xC3\xA8tres pass\xC3\xA9s tels "
+                         "quels). **SUPER.M\xC3\xA9thode()** rappelle le corps du parent.", {}},
              {K::Code, "TYPE T_PompeDoublee EXTENDS T_Pompe\n    Secours : BOOL;\n    METHOD PUBLIC "
                          "OVERRIDE EnDefaut : BOOL\nEND_TYPE\n\n(* corps de EnDefaut red\xC3\xA9" "finie "
                          "*)\nEnDefaut := SUPER.EnDefaut() AND NOT Secours;", "ST"},
@@ -14541,11 +14594,17 @@ const std::vector<Topic>& topics() {
                          "mont\xC3\xA9" "e) ; `T_Pompe := T_PompeDoublee` copie la tranche parente. "
                          "L'inverse (descendre) demande DYNAMIC_CAST.", {}},
              {K::Heading, "Interface : un contrat que plusieurs types respectent", {}},
-             {K::Paragraph, "Le menu **Nouveau type \xE2\x96\xBE** gagne une entr\xC3\xA9" "e "
+             {K::Paragraph, "Le menu **Nouveau type \xE2\x96\xBE** a une entr\xC3\xA9" "e "
                          "**Interface\xE2\x80\xA6** (le quatri\xC3\xA8me genre, apr\xC3\xA8s structure, "
-                         "\xC3\xA9num\xC3\xA9ration, rappel). Une interface n'a ni membre ni corps : des "
-                         "**signatures**. Un type l'**impl\xC3\xA9mente** (champ "
-                         "**Impl\xC3\xA9mente\xE2\x80\xA6 (IMPLEMENTS)**, plusieurs possibles) ; "
+                         "\xC3\xA9num\xC3\xA9ration, rappel) : elle cr\xC3\xA9" "e I_Interface avec une "
+                         "signature d'exemple (Demarrer), \xC3\xA0 renommer. Une interface n'a ni membre ni "
+                         "corps : des **signatures** - sa section **Signatures** (Ajouter une "
+                         "signature\xE2\x80\xA6, sans corps), ses propri\xC3\xA9t\xC3\xA9s avec "
+                         "l'aper\xC3\xA7u de sa **D\xC3\xA9" "claration** (`TYPE I_Demarrable INTERFACE "
+                         "\xE2\x80\xA6 END_TYPE`) et la cat\xC3\xA9gorie **Types qui l'impl\xC3\xA9mentent** "
+                         "(conforme, ou ce qui manque). Une structure l'**impl\xC3\xA9mente** par la "
+                         "cat\xC3\xA9gorie **Impl\xC3\xA9mente (IMPLEMENTS)** de ses "
+                         "propri\xC3\xA9t\xC3\xA9s : une case par interface du projet, plusieurs possibles ; "
                          "G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie qu'il a chaque signature, et nomme ce qui "
                          "manque : \xC2\xAB T_Vanne d\xC3\xA9" "clare I_Demarrable mais n'a pas EnDefaut() : "
                          "BOOL \xC2\xBB.", {}},
@@ -14586,8 +14645,20 @@ const std::vector<Topic>& topics() {
                          "equipements) {\n    e->Demarrer();\n    if (e->EnDefaut()) ++defauts;\n    if "
                          "(auto* p = dynamic_cast<T_Pompe*>(e))   // nullptr si ce n'en est pas une\n        "
                          "debit_total += p->Debit;\n}", "C++"},
+             {K::Heading, "Dans l'arbre du projet", {}, "1.13.0"},
+             {K::Paragraph, "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Types IHM : un type qui a des "
+                         "m\xC3\xA9thodes montre **M\xC3\xA9thodes (n)** avant Op\xC3\xA9rateurs (n) (une "
+                         "interface : **Signatures (n)**), chaque m\xC3\xA9thode avec sa signature, \xC2\xAB "
+                         "virtuelle \xC2\xBB ou \xC2\xAB priv\xC3\xA9" "e \xC2\xBB \xC3\xA0 droite ; un clic "
+                         "m\xC3\xA8ne \xC3\xA0 la m\xC3\xA9thode dans la section M\xC3\xA9thodes. Une "
+                         "interface a son ic\xC3\xB4ne et \xC2\xAB (interface) \xC2\xBB ; un sous-type "
+                         "affiche \xC2\xAB \xE2\x96\xB8 h\xC3\xA9rite de T_Pompe \xC2\xBB. Renommer un type "
+                         "fait suivre EXTENDS et IMPLEMENTS des types qui le visent, les variables, les "
+                         "membres, les signatures des m\xC3\xA9thodes et les `DYNAMIC_CAST<\xE2\x80\xA6>` du "
+                         "code.", {}, "1.13.0"},
              {K::Heading, "Ce que G\xC3\xA9n\xC3\xA9rer refuse", {}},
-             {K::Bullet, "un membre ou une m\xC3\xA9thode **priv\xC3\xA9** lu de l'ext\xC3\xA9rieur ;", {}},
+             {K::Bullet, "un membre ou une m\xC3\xA9thode **priv\xC3\xA9** lu de l'ext\xC3\xA9rieur (depuis "
+                         "une variable IHM, une locale ou un param\xC3\xA8tre de ce type) ;", {}},
              {K::Bullet, "une **red\xC3\xA9" "finition** (le nom d'une m\xC3\xA9thode du parent) d'une "
                          "m\xC3\xA9thode non VIRTUAL, ou de signature diff\xC3\xA9rente ;", {}},
              {K::Bullet, "un **membre red\xC3\xA9" "clar\xC3\xA9** par un sous-type (d\xC3\xA9j\xC3\xA0 un "
@@ -16345,6 +16416,14 @@ const std::vector<Topic>& topics() {
                          "version ; le fichier va dans **libs/** du projet (`libs/Gaz-1.4.0.xpgbib`). Ce qui "
                          "ne voyage pas (une variable IHM employ\xC3\xA9" "e, par exemple) est dit "
                          "apr\xC3\xA8s la publication. Le projet ne change pas.", {}},
+             {K::Paragraph, "Les **unit\xC3\xA9s de mesure propres** du projet (ses familles et ses "
+                         "unit\xC3\xA9s, Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure) voyagent avec "
+                         "la biblioth\xC3\xA8que : le projet qui la relie les conna\xC3\xAEt, "
+                         "gard\xC3\xA9" "es avec le lien m\xC3\xAAme quand le fichier est introuvable ; une "
+                         "unit\xC3\xA9 du projet de m\xC3\xAAme symbole l'emporte. Un membre `Volume_jour : "
+                         "REAL [Nm3/j]` d'un type de la biblioth\xC3\xA8que se convertit donc par "
+                         "`EN(Compteur.Volume_jour, 'Nm3/h')` dans ce projet (240 Nm3/j donnent 10 Nm3/h), "
+                         "et Compiler ne dit plus l'unit\xC3\xA9 inconnue.", {}, "1.13.0"},
              {K::Heading, "Relier, mettre \xC3\xA0 jour, d\xC3\xA9lier", {}},
              {K::Paragraph, "**Relier une biblioth\xC3\xA8que\xE2\x80\xA6** choisit un fichier .xpgbib (le "
                          "bouton \xE2\x80\xA6 ouvre l'explorateur), puis dit ce qu'il apporte. Le projet "
@@ -18983,9 +19062,10 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Un **clic dans la marge** de l'\xC3\xA9" "diteur, \xC3\xA0 gauche des "
                          "num\xC3\xA9ros de ligne - un script g\xC3\xA9n\xC3\xA9ral (Programmation "
                          "g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Scripts), un script de vue (OnOpen, OnCycle, "
-                         "OnClose) ou une fonction IHM : un **rond rouge**. Un nouveau clic l'enl\xC3\xA8ve "
-                         "; **Maj+clic** le d\xC3\xA9sactive (un anneau) ; **F9** pose ou enl\xC3\xA8ve "
-                         "celui de la ligne du curseur.", {}},
+                         "OnClose), une fonction IHM ou une m\xC3\xA9thode d'un type IHM (Types IHM, section "
+                         "M\xC3\xA9thodes) : un **rond rouge**. Un nouveau clic l'enl\xC3\xA8ve ; "
+                         "**Maj+clic** le d\xC3\xA9sactive (un anneau) ; **F9** pose ou enl\xC3\xA8ve celui "
+                         "de la ligne du curseur.", {}},
              {K::Bullet, "Le **clic droit** dans la marge : Point d'arr\xC3\xAAt, **Condition\xE2\x80\xA6**, "
                          "D\xC3\xA9sactiver, Retirer les points de ce code.", {}},
              {K::Bullet, "Une ligne sans instruction (un commentaire, une ligne vide) : le point se "

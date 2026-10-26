@@ -6432,8 +6432,16 @@ Un objet (une instance de symbole), un symbole et un type IHM ont un nœud **Op�
 @mots méthode, méthodes, METHOD, SELF, THIS, privé, PRIVATE, PUBLIC, visibilité, cadenas, héritage, EXTENDS, hérite, VIRTUAL, virtuelle, OVERRIDE, redéfinir, SUPER, interface, INTERFACE, IMPLEMENTS, implémente, contrat, REF_TO, dispatch, type réel, DYNAMIC_CAST, descendre, redéfinissable
 @lieux types-ihm
 @voir types-ihm, operateurs, enum-types, rappels, symboles, parcours-symbole, scripts, erreurs-scripts
+@nouveau 1.13.0
+### La section Méthodes de Types IHM
+Dans l'onglet Types IHM, sous la grille des membres (au-dessus des Opérateurs), la section **Méthodes** du type choisi : à gauche la liste (Méthode, Paramètres, Retour, Visibilité, Genre, Origine) et les **Propriétés de la méthode**, à droite son **Corps**.
+- **Ajouter une méthode…** ouvre la fenêtre « Nouvelle méthode de T_Pompe » : le nom, le retour (vide : une procédure ; **Choisir…** ouvre le sélecteur de types), les paramètres sur une ligne (`Consigne : REAL; VAR_IN_OUT Cible : T_Pompe`, VAR_OUTPUT pour une sortie), les cases **Privée** et **Redéfinissable (virtuelle)**. La signature et ce qui ne va pas s'écrivent en direct (un nom déjà pris par un membre, une méthode privée et virtuelle) ; **Créer la méthode** ouvre son corps prérempli dans l'éditeur.
+- Le corps s'écrit dans le même éditeur que les fonctions IHM : coloré, numéroté, l'aide à la saisie connaît SELF, les membres et les paramètres. Au-dessus, la légende : « SELF : l'instance de T_Pompe (THIS vaut SELF) · ses membres se lisent par leur nom ou SELF.X · rends par EnDefaut := … ». Une faute (une syntaxe, un nom inconnu) est soulignée à sa ligne pendant que tu tapes ; **Compiler (F7)** compte celles de la méthode montrée.
+- Le nom, les paramètres, le retour et la visibilité se changent dans leur case de la liste ou dans les propriétés (avec la case **Redéfinissable (virtuelle)**, la description) ; **Dupliquer**, **Supprimer**, **Monter**, **Descendre** dans la barre. Chaque geste se reprend par **Ctrl+Z** ; ce que la forme d'une méthode refuserait (une redéfinition d'une méthode non virtuelle, une méthode privée et virtuelle) est refusé avant d'être fait, et dit pourquoi.
+- Renommer une méthode fait suivre son corps, ses redéfinitions dans les sous-types et les appels `SELF.X()`, `X()` et `SUPER.X()` des méthodes du type ; un appel écrit ailleurs (`Pompe1.Demarrer()` dans un script) garde l'ancien nom, et Compiler le signale (« Pompe1 (T_Pompe) n'a pas de membre Demarrer »).
+- La marge à gauche du corps pose les **points d'arrêt** comme dans un script (voir « Déboguer les scripts IHM ») : en simulation, l'appel `Pompe1.Demarrer()` s'arrête sur la ligne, la pile nomme « méthode T_Pompe.Demarrer ». Une faute de Compiler ou un niveau de la pile mène au corps de la méthode, à sa ligne.
 ### Une méthode : SELF et les membres par leur nom
-Dans l'onglet Types IHM, sous la grille des membres (à côté des Opérateurs), la section **Méthodes** : **Ajouter une méthode…** ouvre un dialogue (nom, retour facultatif, paramètres, **Public**/**Privé**, case **Redéfinissable (virtuelle)**), puis un éditeur de script. Une méthode voit **SELF** (l'instance ; **THIS** vaut SELF), les membres par leur nom (ou `SELF.X` pour lever une ambiguïté avec une locale), ses paramètres et les autres méthodes du type (`Journal()` appelle la méthode Journal de l'instance). Dans un message (LEVER, IHM_LOG, IHM_JOURNAL), un trou `{Debit:0.0}` lit le membre de l'instance ; un argument nommé (`Ecrire(Consigne := Consigne)`) garde son nom.
+Une méthode voit **SELF** (l'instance ; **THIS** vaut SELF), les membres par leur nom (ou `SELF.X` pour lever une ambiguïté avec une locale), ses paramètres et les autres méthodes du type (`Journal()` appelle la méthode Journal de l'instance - même si une fonction Journal existe aussi : Compiler le dit en avertissement, renomme l'une des deux pour lever le doute). Dans un message (LEVER, IHM_LOG, IHM_JOURNAL), un trou `{Debit:0.0}` lit le membre de l'instance ; dans une autre chaîne (un JSON, un CONCAT), `{Debit}` reste tel quel ; un argument nommé (`Ecrire(Consigne := Consigne)`) garde son nom.
 Une méthode **procédure** n'a pas de retour (`Pompe1.Demarrer()`) ; une méthode **fonction** rend sa valeur par son nom (`EnDefaut := …`) ou par RETURN.
 ```ST
 TYPE T_Pompe
@@ -6472,9 +6480,10 @@ private:
 ```
 ### Appeler une méthode, partout où l'on tient l'instance
 `Pompe1.Demarrer()`, `Pompes[3].EnDefaut()`, `Fours[f].Vanne_Entree.Debit_Reel()` : sur une variable, une case de tableau, un membre composé. Mêmes règles que les fonctions IHM (arguments dans l'ordre ou nommés `a := …`).
-Un membre ou une méthode **privé** ne se lit et ne s'appelle **que depuis une méthode du même type** ; ailleurs, Générer le refuse : « `Heures` est privé dans T_Pompe ». La privacité ne touche pas la place Modbus : un membre privé d'une structure liée garde son adresse ; seul le code ST est contraint.
+Un membre ou une méthode **privé** ne se lit et ne s'appelle **que depuis une méthode du même type** ; ailleurs, Générer le refuse : « `Heures` est privé dans T_Pompe ». Dans la grille des membres, la colonne **Visibilité** dit Public ou Privé (avec un cadenas) ; le clic droit sur un membre propose **Rendre privé** ou **Rendre public** (Ctrl+Z l'annule). La privacité ne touche pas la place Modbus : un membre privé d'une structure liée garde son adresse ; seul le code ST est contraint.
+> Ce que Générer voit : un membre privé lu depuis une variable IHM, une locale ou un paramètre de ce type. À travers une référence (`r^.Heures`) ou dans un `FOR EACH p IN Pompes`, il ne le voit pas encore, et le moteur ne le garde pas à l'exécution.
 ### Héritage : EXTENDS, VIRTUAL, OVERRIDE, SUPER
-En en-tête du type, le champ **Hérite de… (EXTENDS)** choisit un **parent** (une structure). Le sous-type a tous les membres du parent (la place Modbus du parent d'abord), puis les siens, et hérite de ses méthodes. Une méthode **VIRTUAL** du parent se redéfinit par une méthode **OVERRIDE** de même signature ; **SUPER.Méthode()** rappelle le corps du parent.
+Dans les propriétés du type, **Hérite de… (EXTENDS)** choisit un **parent** parmi les structures du projet : ni lui-même ni un de ses sous-types (pas de cycle), et pas tant qu'un de ses membres redéclare un membre du parent. Le sous-type a tous les membres du parent (la place Modbus du parent d'abord), puis les siens, et hérite de ses méthodes : la grille des membres les montre à la suite des siens, grisés, « (hérité de T_Pompe) », et la section Méthodes ses méthodes héritées, grisées, « (hérité de T_Pompe) », en lecture seule. Une méthode **VIRTUAL** du parent se redéfinit par une méthode de même signature (la colonne Origine dit « redéfinit T_Pompe.EnDefaut ») ; sur une virtuelle héritée, **Redéfinir** la crée, son corps prérempli avec `SUPER.EnDefaut()` (les paramètres passés tels quels). **SUPER.Méthode()** rappelle le corps du parent.
 ```ST
 TYPE T_PompeDoublee EXTENDS T_Pompe
     Secours : BOOL;
@@ -6498,7 +6507,7 @@ struct T_PompeDoublee : T_Pompe {
 ```
 Un `T_PompeDoublee` **passe là où un `T_Pompe` est attendu** (la montée) ; `T_Pompe := T_PompeDoublee` copie la tranche parente. L'inverse (descendre) demande DYNAMIC_CAST.
 ### Interface : un contrat que plusieurs types respectent
-Le menu **Nouveau type ▾** gagne une entrée **Interface…** (le quatrième genre, après structure, énumération, rappel). Une interface n'a ni membre ni corps : des **signatures**. Un type l'**implémente** (champ **Implémente… (IMPLEMENTS)**, plusieurs possibles) ; Générer vérifie qu'il a chaque signature, et nomme ce qui manque : « T_Vanne déclare I_Demarrable mais n'a pas EnDefaut() : BOOL ».
+Le menu **Nouveau type ▾** a une entrée **Interface…** (le quatrième genre, après structure, énumération, rappel) : elle crée I_Interface avec une signature d'exemple (Demarrer), à renommer. Une interface n'a ni membre ni corps : des **signatures** - sa section **Signatures** (Ajouter une signature…, sans corps), ses propriétés avec l'aperçu de sa **Déclaration** (`TYPE I_Demarrable INTERFACE … END_TYPE`) et la catégorie **Types qui l'implémentent** (conforme, ou ce qui manque). Une structure l'**implémente** par la catégorie **Implémente (IMPLEMENTS)** de ses propriétés : une case par interface du projet, plusieurs possibles ; Générer vérifie qu'il a chaque signature, et nomme ce qui manque : « T_Vanne déclare I_Demarrable mais n'a pas EnDefaut() : BOOL ».
 ```ST
 TYPE I_Demarrable INTERFACE
     METHOD Demarrer
@@ -6559,8 +6568,11 @@ for (auto* e : equipements) {
         debit_total += p->Debit;
 }
 ```
+@nouveau 1.13.0
+### Dans l'arbre du projet
+Programmation générale › Types IHM : un type qui a des méthodes montre **Méthodes (n)** avant Opérateurs (n) (une interface : **Signatures (n)**), chaque méthode avec sa signature, « virtuelle » ou « privée » à droite ; un clic mène à la méthode dans la section Méthodes. Une interface a son icône et « (interface) » ; un sous-type affiche « ▸ hérite de T_Pompe ». Renommer un type fait suivre EXTENDS et IMPLEMENTS des types qui le visent, les variables, les membres, les signatures des méthodes et les `DYNAMIC_CAST<…>` du code.
 ### Ce que Générer refuse
-- un membre ou une méthode **privé** lu de l'extérieur ;
+- un membre ou une méthode **privé** lu de l'extérieur (depuis une variable IHM, une locale ou un paramètre de ce type) ;
 - une **redéfinition** (le nom d'une méthode du parent) d'une méthode non VIRTUAL, ou de signature différente ;
 - un **membre redéclaré** par un sous-type (déjà un membre du parent : deux cases au même chemin) ;
 - une faute dans le **corps d'une méthode** (sa syntaxe, un nom inconnu), à sa ligne ;
@@ -7978,6 +7990,8 @@ Compiler et Générer disent, à sa ligne :
 L'aide à la saisie, après `Gaz.`, propose les sous-espaces, les types, les fonctions (avec leur signature) et les scripts de Gaz.
 ### Publier une bibliothèque
 **Publier une bibliothèque…** écrit un espace (et ses sous-espaces) dans un fichier **.xpgbib** : ses types, ses fonctions et ses scripts généraux, avec un nom et une version (`1.4.0`). Choisis **correctif**, **mineur** ou **majeur** (1.4.1, 1.5.0, 2.0.0), ou une autre version ; le fichier va dans **libs/** du projet (`libs/Gaz-1.4.0.xpgbib`). Ce qui ne voyage pas (une variable IHM employée, par exemple) est dit après la publication. Le projet ne change pas.
+@nouveau 1.13.0
+Les **unités de mesure propres** du projet (ses familles et ses unités, Configuration › Unités de mesure) voyagent avec la bibliothèque : le projet qui la relie les connaît, gardées avec le lien même quand le fichier est introuvable ; une unité du projet de même symbole l'emporte. Un membre `Volume_jour : REAL [Nm3/j]` d'un type de la bibliothèque se convertit donc par `EN(Compteur.Volume_jour, 'Nm3/h')` dans ce projet (240 Nm3/j donnent 10 Nm3/h), et Compiler ne dit plus l'unité inconnue.
 ### Relier, mettre à jour, délier
 **Relier une bibliothèque…** choisit un fichier .xpgbib (le bouton … ouvre l'explorateur), puis dit ce qu'il apporte. Le projet garde le lien : le nom, la version, le chemin et l'**interface** (les types et les signatures). Le code reste dans le fichier. Si le projet a déjà un espace de ce nom, relie-la sous un autre nom. Ses éléments se lisent sous son nom (`Gaz.T_Vanne`), avec un cadenas : en lecture seule.
 | L'état | Ce qu'il veut dire |
@@ -9364,7 +9378,7 @@ Sans jouer, Générer signale la case fautive : un mauvais nombre d'arguments (l
 @lieux scripts, fonctions, simulation
 @voir scripts, fonctions, fonctions-internes, simulation, variables-locales, erreurs-scripts, reference, tests-fonctions
 ### Poser un point d'arrêt
-- Un **clic dans la marge** de l'éditeur, à gauche des numéros de ligne - un script général (Programmation générale › Scripts), un script de vue (OnOpen, OnCycle, OnClose) ou une fonction IHM : un **rond rouge**. Un nouveau clic l'enlève ; **Maj+clic** le désactive (un anneau) ; **F9** pose ou enlève celui de la ligne du curseur.
+- Un **clic dans la marge** de l'éditeur, à gauche des numéros de ligne - un script général (Programmation générale › Scripts), un script de vue (OnOpen, OnCycle, OnClose), une fonction IHM ou une méthode d'un type IHM (Types IHM, section Méthodes) : un **rond rouge**. Un nouveau clic l'enlève ; **Maj+clic** le désactive (un anneau) ; **F9** pose ou enlève celui de la ligne du curseur.
 - Le **clic droit** dans la marge : Point d'arrêt, **Condition…**, Désactiver, Retirer les points de ce code.
 - Une ligne sans instruction (un commentaire, une ligne vide) : le point se **décale** sur l'instruction suivante, et le dit - « décalé à la ligne 15 : la ligne 14 n'a pas d'instruction ».
 - Dans Simulation › IHM › **Débogage**, le champ « + Point d'arrêt » : `Statistiques_Pression 14`, `Statistiques_Pression 14 si P < 5`, `Vue_A.OnCycle 3`, `Moyenne_Pression 5`.
