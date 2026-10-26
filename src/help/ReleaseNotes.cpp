@@ -163,7 +163,7 @@ const std::vector<Note>& table() {
          "tests-fonctions", ""),
         // 1.13.0 (lot J7 : les fonctions generiques (TEMPLATE) partout).
         note("1.13.0", "Scripts", Kind::New,
-         "LES FONCTIONS G\xC3\x89N\xC3\x89RIQUES PARTOUT : une fonction IHM porte ses propres types g\xC3\xA9n\xC3\xA9riques (la propri\xC3\xA9t\xC3\xA9 G\xC3\xA9n\xC3\xA9riques : T, T : ANY_NUM, K, V), dans son inspecteur comme dans Nouvelle fonction ; un param\xC3\xA8tre, le retour ou une locale est alors de type T. \xC3\x80 l'appel, T se d\xC3\xA9" "duit des arguments (Max(P_A, P_B)) ou se donne entre chevrons (Max<INT>(Rang, 0)), et sa contrainte refuse un type hors de sa famille. Elle s'appelle d'un script, d'une autre fonction ou d'une fx, et l'aide \xC3\xA0 la saisie propose sa signature.",
+         "LES FONCTIONS G\xC3\x89N\xC3\x89RIQUES PARTOUT : une fonction IHM porte ses propres types g\xC3\xA9n\xC3\xA9riques (la propri\xC3\xA9t\xC3\xA9 G\xC3\xA9n\xC3\xA9riques : T, T : ANY_NUM, K, V), dans son inspecteur comme dans Nouvelle fonction ; un param\xC3\xA8tre, le retour ou une locale est alors de type T. \xC3\x80 l'appel, T se d\xC3\xA9" "duit des arguments (Plus_Grand(P_A, P_B)) ou se donne entre chevrons (Plus_Grand<INT>(Rang, 0)), et sa contrainte refuse un type hors de sa famille. Elle s'appelle d'un script, d'une autre fonction ou d'une fx, et l'aide \xC3\xA0 la saisie propose sa signature.",
          "fonctions", ""),
         // 1.13.0 (lots J6 et J6b) : les unites de mesure dans les types (moteur, controle, natives EN/UNITE/SANS_UNITE, interface).
         note("1.13.0", "Types", Kind::New,

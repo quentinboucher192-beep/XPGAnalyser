@@ -724,7 +724,7 @@ void HmiFunctionsPane::rebuildProperties() {
     c.properties.push_back(hmikit::prop("G\xC3\xA9n\xC3\xA9riques", hmi::genericsText(f->generics), PG::ValueType::Text,
         [this, id](std::string_view v) { return setGenerics(id, std::string(v)); },
         "TEMPLATE <T> : vide, une fonction ordinaire ; T (ou T : ANY_NUM, ou K, V) : un param\xC3\xA8tre, le retour ou une "
-        "locale peut \xC3\xAAtre de type T. \xC3\x80 l'appel, T se d\xC3\xA9" "duit des arguments (Max(a, b)), ou se donne (Max<INT>(...))."));
+        "locale peut \xC3\xAAtre de type T. \xC3\x80 l'appel, T se d\xC3\xA9" "duit des arguments (Plus_Grand(a, b)), ou se donne (Plus_Grand<INT>(...))."));
     c.properties.push_back(hmikit::prop("Description", f->description, PG::ValueType::Text,
         [this, id](std::string_view v) { return setDescription(id, std::string(v)); }));
     c.properties.push_back(hmikit::prop("Signature", hmi::functionSignature(*f), PG::ValueType::ReadOnly));
