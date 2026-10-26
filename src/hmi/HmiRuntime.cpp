@@ -709,10 +709,27 @@ public:
     // l'interpreteur, passent par localUnit.
     void readAnyUnit() {
         const Project& p = *rt_.project_;
-        bool any = !p.libraries.empty();                 // une bibliotheque reliee : ses types peuvent en porter
-        for (const auto& v : p.programs.variables) any = any || !v.unit.empty();
-        for (const auto& t : p.programs.types)
+        bool any = false;
+        const auto inType = [&](const HmiType& t) {
             for (const auto& m : t.members) any = any || !m.unit.empty();
+            for (const auto& f : t.methods) {
+                any = any || !f.returnUnit.empty();
+                for (const auto& d : f.decls) any = any || !d.unit.empty();
+            }
+        };
+        const auto inFunction = [&](const HmiFunction& f) {
+            any = any || !f.returnUnit.empty();
+            for (const auto& d : f.decls) any = any || !d.unit.empty();
+        };
+        for (const auto& v : p.programs.variables) any = any || !v.unit.empty();
+        for (const auto& t : p.programs.types) inType(t);
+        // Une bibliotheque reliee : ses types et ses fonctions peuvent en porter (avant : toute bibliotheque comptait,
+        // meme sans aucune unite, et chaque affectation payait la recherche).
+        p.forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { inType(t); });
+        p.forEachLibraryFunction([&](const HmiFunction& f, const LoadedLibrary&) { inFunction(f); });
+        p.forEachLibraryScript([&](const Script& sc, const LoadedLibrary&) {
+            for (const auto& d : sc.decls) any = any || !d.unit.empty();
+        });
         forEachDeclarations(p, [&](const std::vector<Declaration>& decls) {
             for (const auto& d : decls) any = any || !d.unit.empty();
         });
