@@ -86,6 +86,9 @@ public:
         std::string              type;         // le type qui la porte (REAL) ; vide : non dit
         hmi::DocumentPtr         doc;          // le projet : ses unites, relues a chaque changement
         std::vector<std::string> recents{};    // les dernieres choisies (les plus recentes d'abord)
+        // 1.13.0 (seconde passe) : faux - ouvert depuis une fenetre modale (Nouvelle fonction, Nouvelle variable) : pas
+        // de " Gerer les unites... " (la page s'ouvrirait dessous, inaccessible). L'hote le decide.
+        bool                     canManage{true};
     };
     struct Answer {
         std::string unit;            // le symbole choisi ; vide : sans unite
@@ -109,7 +112,8 @@ public:
     [[nodiscard]] std::string notice() const;        // ce qui ne va pas (le type non numerique, l'unite actuelle inconnue)
     void choose();                                   // Choisir (rien si aucune ligne)
     void chooseNone();                               // Sans unite
-    void manage();                                   // Gerer les unites...
+    void manage();                                   // Gerer les unites... (rien sans canManage)
+    [[nodiscard]] bool manageShown() const noexcept;  // le bouton Gerer les unites... est-il la ?
     void finish(bool ok);
     [[nodiscard]] ui::TableView* table() const noexcept { return table_; }
 

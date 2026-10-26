@@ -36869,9 +36869,33 @@ void unites113() {
         a.unit = answer;
         done(a);
     });
-    check(vars.table().beginCellEdit(static_cast<ui::RowIndex>(vars.rowOf("Pression")), 2) && !vars.table().cellEditing() && asked.size() == 1
+    // T2-41 (seconde passe) : F2 / Entree - un champ (Ctrl+Espace y propose les unites) ; le double-clic - le selecteur.
+    check(vars.table().beginCellEdit(static_cast<ui::RowIndex>(vars.rowOf("Pression")), 2) && vars.table().cellEditing()
+              && vars.table().activeCellField() != nullptr && asked.empty(),
+          "T2-41 : F2 sur la case Unit\xC3\xA9 : un champ o\xC3\xB9 taper (avant : le s\xC3\xA9lecteur, sans champ)");
+    vars.table().finishCellEdit(false, {});
+    {
+        gfx::Rect cr{};
+        const auto rowP = static_cast<std::size_t>(vars.rowOf("Pression"));
+        check(vars.table().cellRect(rowP, 2, cr), "T2-41 : la case Unit\xC3\xA9 de Pression \xC3\xA0 l'\xC3\xA9" "cran");
+        const gfx::Point on{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f};
+        vars.table().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+        vars.table().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+        vars.table().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 2, {}});
+        vars.table().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+    }
+    check(!vars.table().cellEditing() && asked.size() == 1
               && asked[0].current == "mbar" && asked[0].type == "REAL" && asked[0].field == "Unit\xC3\xA9 de Pression" && p.variableById(pres)->unit == "degC",
-          "la case Unit\xC3\xA9 ouvre le s\xC3\xA9lecteur (sur mbar) ; degC choisi");
+          "T2-41 : le double-clic sur la case Unit\xC3\xA9 ouvre le s\xC3\xA9lecteur (sur mbar) ; degC choisi");
+    {
+        // La fiche : un champ, et le bouton ... pour le selecteur (avant : la case ouvrait le selecteur a la place du champ).
+        vars.selectVariable(pres);
+        bool field = false;
+        for (const auto& c : vars.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Unit\xC3\xA9") field = pr.commit && !pr.dialog && pr.open && pr.openTip == app::unitpicker::kChoose;
+        check(field, "T2-41 : la fiche de la variable - la case Unit\xC3\xA9 se tape, le bouton \xE2\x80\xA6 ouvre le s\xC3\xA9lecteur");
+    }
     {
         auto assist = app::unitui::fieldAssist([&]() -> const hmi::Project* { return &p; }, "Unit\xC3\xA9 de Pression", "REAL");
         std::size_t from = 0;
@@ -36920,6 +36944,13 @@ void unites113() {
         check(types.applyMemberPaste(plan, &why) && memberUnit("Debit") == "L/min", "Appliquer : Debit en L/min (une commande)");
         (void)stack.undo();
         check(memberUnit("Debit") == "m3/h", "Ctrl+Z : m3/h revient");
+        // T2-43 (seconde passe) : une case Unite vide garde l'unite, comme les autres cases (avant : elle la retirait).
+        const auto keep = types.planMemberPaste(tl, "Nom\tType\tUnit\xC3\xA9\nDebit\tREAL\t\n");
+        std::string kept = "?";
+        for (const auto& m : keep.result)
+            if (m.name == "Debit") kept = m.unit;
+        check(keep.replaced.size() == 1 && keep.refused.empty() && kept == "m3/h",
+              "T2-43 : recoller Debit avec la case Unit\xC3\xA9 vide : m3/h reste (avant : retir\xC3\xA9" "e) [" + kept + "]");
     }
     // une variable du type : la case Unite de son membre (venue du type, en gris)
     const Id ligne = vars.addVariable("Ligne1", "T_Ligne", {}, &why);
@@ -36929,6 +36960,39 @@ void unites113() {
         check(ligne != kNoId && rm >= 0 && vars.table().model()->cellText(static_cast<ui::RowIndex>(rm), 2) == "m3/h"
                   && vars.table().model()->cellStyle(static_cast<ui::RowIndex>(rm), 2).fgTone == ui::Tone::Muted,
               "Ligne1.Debit : m3/h, venue du type (en gris)");
+    }
+    // T2-44 (seconde passe) : la fiche d'une case de tableau dit d'ou vient son unite ; un type sans unite le dit.
+    {
+        const Id pressions = vars.addVariable("Pressions", "ARRAY[1..3] OF REAL", {}, &why);
+        check(pressions != kNoId && vars.setUnit(pressions, "bar", &why), "Pressions : ARRAY[1..3] OF REAL [bar]");
+        vars.selectPath("Pressions[2]");
+        std::string fiche;
+        for (const auto& c : vars.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Unit\xC3\xA9") fiche = pr.value;
+        check(fiche.find("bar (de la variable Pressions") == 0 && fiche.find("du type") == std::string::npos,
+              "T2-44 : la fiche de Pressions[2] - \xC2\xAB bar (de la variable Pressions...) \xC2\xBB, plus \xC2\xAB (du type) \xC2\xBB [" + fiche + "]");
+        vars.selectPath("Ligne1.Debit");
+        fiche.clear();
+        for (const auto& c : vars.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Unit\xC3\xA9") fiche = pr.value;
+        check(fiche == "m3/h (du type)", "T2-44 : la fiche de Ligne1.Debit - \xC2\xAB m3/h (du type) \xC2\xBB [" + fiche + "]");
+        check(vars.setType(pressions, "LIST OF REAL", &why) && p.variableById(pressions)->unit.empty()
+                  && vars.lastMessage().find("unit\xC3\xA9 bar retir\xC3\xA9" "e") != std::string::npos,
+              "T2-44 : Pressions devient LIST OF REAL - \xC2\xAB unit\xC3\xA9 bar retir\xC3\xA9" "e \xC2\xBB est dit (" + vars.lastMessage() + ")");
+        (void)stack.undo();
+        hmi::HmiType e;
+        e.id = p.allocate();
+        e.name = "E_Mode";
+        e.kind = hmi::HmiTypeKind::Enumeration;
+        e.values = {{"Arret", 0, "", ""}, {"Marche", 1, "", ""}};
+        p.programs.types.push_back(e);
+        check(vars.setType(pressions, "E_Mode", &why) && p.variableById(pressions)->unit.empty()
+                  && vars.lastMessage().find("unit\xC3\xA9 bar retir\xC3\xA9" "e") != std::string::npos,
+              "T2-44 : Pressions devient E_Mode - \xC2\xAB unit\xC3\xA9 bar retir\xC3\xA9" "e \xC2\xBB est dit (" + vars.lastMessage() + ")");
+        (void)stack.undo();
+        p.programs.types.pop_back();
     }
 
     // ---- les grilles de declarations : la colonne Unite ----
@@ -36954,6 +37018,18 @@ void unites113() {
     check(p.function(alarme.id)->decls[0].type == "REAL" && p.function(alarme.id)->decls[0].unit == "kPa", "Ctrl+Z : REAL [kPa]");
     const std::string pasted = "Nom\tType\tUnit\xC3\xA9\np\tREAL\tbar\n";
     check(params.table().pasteText(pasted, false) && p.function(alarme.id)->decls[0].unit == "bar", "coller d'Excel : la colonne Unit\xC3\xA9 reconnue");
+    // T2-41 (seconde passe) : avec l'hote du selecteur, la case Unite d'une declaration se tape aussi (F2) ; le
+    // double-clic ouvre le selecteur.
+    {
+        std::size_t askedUnits = 0;
+        app::unitpicker::setHost([&](app::HmiUnitPicker::Spec, app::unitpicker::Done) { ++askedUnits; });
+        check(params.table().beginCellEdit(0, 2) && params.table().cellEditing() && askedUnits == 0,
+              "T2-41 : F2 sur la case Unit\xC3\xA9 d'un param\xC3\xA8tre : un champ (Ctrl+Espace)");
+        params.table().finishCellEdit(false, {});
+        check(params.table().model()->doubleClickInDialog(0, 2) && askedUnits == 1, "T2-41 : le double-clic ouvre le s\xC3\xA9lecteur d'unit\xC3\xA9s");
+        check(!params.table().model()->doubleClickInDialog(0, 0), "T2-41 : le double-clic sur le Nom ne l'ouvre pas");
+        app::unitpicker::setHost({});
+    }
     // ---- l'unite du retour ----
     fns.selectFunction(debitF.id);
     check(fns.setReturnUnit(debitF.id, "m3/h", &why) && p.function(debitF.id)->returnUnit == "m3/h", "DebitTotal rend un REAL [m3/h]");
@@ -37044,9 +37120,34 @@ void unites113() {
         }
         up = open("bar", "REAL");
         if (up) {
+            check(up->manageShown(), "le s\xC3\xA9lecteur ouvert depuis une grille : G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6 est l\xC3\xA0");
             up->manage();
             dm.applyPending();
             check(accepted && got.manage, "G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6 : la page Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure");
+        }
+        // T2-42 (seconde passe) : depuis une fenetre modale (Nouvelle fonction), pas de Gerer les unites... (la page
+        // s'ouvrirait dessous) ; l'hote le dit par Spec::canManage.
+        {
+            app::HmiUnitPicker::Spec spec;
+            spec.doc = doc;
+            spec.field = "Unit\xC3\xA9 du retour";
+            spec.current = "bar";
+            spec.type = "REAL";
+            spec.canManage = false;
+            accepted = false;
+            dm.ShowDialog(std::make_unique<app::HmiUnitPicker>(std::move(spec)), [&](const menu::DialogResult& r) {
+                accepted = r.accepted() && app::HmiUnitPicker::parse(r.payload, got);
+            });
+            dm.applyPending();
+            auto* modal = dynamic_cast<app::HmiUnitPicker*>(dm.top());
+            check(modal && !modal->manageShown(), "T2-42 : ouvert d'une fen\xC3\xAAtre modale, le s\xC3\xA9lecteur n'offre pas G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6");
+            if (modal) {
+                modal->manage();
+                dm.applyPending();
+                check(!accepted && dynamic_cast<app::HmiUnitPicker*>(dm.top()) == modal, "T2-42 : manage() n'y fait rien (le s\xC3\xA9lecteur reste ouvert)");
+                modal->finish(false);
+                dm.applyPending();
+            }
         }
     }
 
@@ -37083,6 +37184,41 @@ void unites113() {
         check(mu.removeUnit("inH2O", &why) && p.config.units.empty(), "plus employ\xC3\xA9" "e : retir\xC3\xA9" "e");
         (void)stack.undo();
         check(p.config.units.size() == 1, "Ctrl+Z : elle revient");
+        // T2-38 (seconde passe) : une constante de vue, une locale d'operateur comptent dans les emplois.
+        {
+            hmi::View four = hmi::makeView(p, "Vue_Four");
+            hmi::Declaration seuil;
+            seuil.id = p.allocate();
+            seuil.kind = hmi::DeclKind::Constant;
+            seuil.name = "Seuil_Haut";
+            seuil.type = "REAL";
+            seuil.value = "2.5";
+            seuil.unit = "inH2O";
+            four.constants.push_back(seuil);
+            p.views.push_back(four);
+            check(app::unitui::usesOf(p, "inH2O") == std::vector<std::string>{"Vue_Four.Seuil_Haut"},
+                  "T2-38 : inH2O sur la constante Vue_Four.Seuil_Haut - un emploi (avant : aucun)");
+            check(!mu.removeUnit("inH2O", &why) && why.find("Vue_Four.Seuil_Haut") != std::string::npos,
+                  "T2-38 : retirer inH2O est refus\xC3\xA9 (" + why + ")");
+            check(!mu.renameUnit("inH2O", "inHg", &why) && why.find("employ") != std::string::npos, "T2-38 : la renommer aussi");
+            p.views.pop_back();
+            hmi::HmiOperator plus;
+            plus.id = p.allocate();
+            plus.op = "+";
+            plus.left = plus.right = plus.result = "T_Ligne";
+            hmi::Declaration k;
+            k.id = p.allocate();
+            k.kind = hmi::DeclKind::Variable;
+            k.name = "k";
+            k.type = "REAL";
+            k.unit = "inH2O";
+            plus.decls.push_back(k);
+            p.hmiType(tl)->operators.push_back(plus);
+            const auto uses = app::unitui::usesOf(p, "inH2O");
+            check(uses.size() == 1 && uses[0].rfind("T_Ligne.", 0) == 0 && uses[0].find(".k") != std::string::npos,
+                  "T2-38 : une locale de l'op\xC3\xA9rateur + de T_Ligne compte aussi (" + (uses.empty() ? std::string{} : uses[0]) + ")");
+            p.hmiType(tl)->operators.pop_back();
+        }
         check(!mu.addFamily("D\xC3\xA9" "bit massique", "kg/h", {}, &why), "un nom de famille avec accent et espace : refus\xC3\xA9");
         check(!mu.addFamily("debit_massique", "bar", {}, &why) && why.find("d\xC3\xA9j\xC3\xA0") != std::string::npos, "une r\xC3\xA9" "f\xC3\xA9rence d\xC3\xA9j\xC3\xA0 prise : refus\xC3\xA9" "e");
         const std::size_t familiesBefore = mu.families().model()->rowCount();
@@ -37154,9 +37290,16 @@ void unites113() {
         check(up.addDisplay("Pression", {}, "0.0", &why) && p.displays.back().unit.empty() && up.message().find("vient de la variable : \xC2\xB0" "C") != std::string::npos,
               "Unit\xC3\xA9s et formats, une ligne pour Pression : son unit\xC3\xA9 reste vide, celle de la variable (" + up.message() + ")");
         const auto& m = up.table().model();
-        check(m && m->rowCount() == 1 && m->cellText(0, 1).find("\xC2\xB0" "C") != std::string::npos && m->cellStyle(0, 1).fgTone == ui::Tone::Muted
-                  && m->cellText(0, 9).find("\xC2\xB0" "C") != std::string::npos,
-              "la case Unit\xC3\xA9 montre \xC2\xB0" "C en gris, l'exemple aussi (" + (m ? m->cellText(0, 9) : std::string{}) + ")");
+        // T2-37 (seconde passe) : l'unite physique en TEXTE D'ATTENTE - la case reste vide (Ctrl+C la copie vide).
+        check(m && m->rowCount() == 1 && m->cellText(0, 1).empty() && m->cellStyle(0, 1).placeholder.find("\xC2\xB0" "C") != std::string::npos
+                  && m->cellStyle(0, 1).fgTone == ui::Tone::Muted && m->cellText(0, 9).find("\xC2\xB0" "C") != std::string::npos,
+              "la case Unit\xC3\xA9 montre \xC2\xB0" "C en gris (texte d'attente, la case vide), l'exemple aussi (" + (m ? m->cellText(0, 9) : std::string{}) + ")");
+        up.table().selectModelRows({0});
+        const std::string copied = up.table().copyText(true);
+        check(copied.find("unit\xC3\xA9 physique") == std::string::npos, "T2-37 : Ctrl+C ne copie pas \xC2\xAB \xC2\xB0" "C \xC2\xB7 unit\xC3\xA9 physique \xC2\xBB [" + copied + "]");
+        check(!up.setField("Pression", "unite", "\xC2\xB0" "C \xC2\xB7 unit\xC3\xA9 physique", &why) && p.displays.back().unit.empty()
+                  && why.find("texte gris") != std::string::npos,
+              "T2-37 : coller le texte gris d'une ancienne copie est refus\xC3\xA9 (" + why + ")");
         check(up.setField("Pression", "unite", "K", &why) && hmi::effectiveUnit(p, v.objects[0]) == "K", "une unit\xC3\xA9 tap\xC3\xA9" "e sur la ligne l'emporte (un libell\xC3\xA9)");
         (void)stack.undo();
         check(hmi::effectiveUnit(p, v.objects[0]) == "\xC2\xB0" "C", "Ctrl+Z : l'unit\xC3\xA9 de la variable revient");

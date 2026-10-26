@@ -750,6 +750,7 @@ void HmiUnitsPane::refresh() {
     std::vector<std::vector<std::string>> rows;
     std::vector<bool> unused;
     std::vector<std::vector<bool>> greyed;   // 1.12.10 : Min, Max de la mise a l'echelle (pas tapes)
+    std::vector<std::string> unitInvites;    // 1.13.0 (seconde passe) : l'unite physique, en texte d'attente
     for (const auto& d : p.displays) {
         order_.push_back(d.path);
         const auto uses = hmi::displayUses(p, d);
@@ -757,10 +758,13 @@ void HmiUnitsPane::refresh() {
         std::vector<bool> grey(11, false);
         // 1.13.0 (lot J6b) : une ligne sans unite d'affichage - l'unite physique de la variable, en gris : c'est
         // celle que les objets montrent (hmi::physicalDisplayUnit), tant qu'on n'en tape pas une autre.
+        // 1.13.0 (seconde passe) : en TEXTE D'ATTENTE (CellStyle::placeholder), plus dans la case - Ctrl+C la copiait
+        // et un recollage posait l'unite "bar . unite physique".
         hmi::VariableDisplay shown = d;
+        unitInvites.emplace_back();
         if (hmikit::trimmed(d.unit).empty())
-            if (const std::string physical = hmi::physicalDisplayUnit(p, d.path); !physical.empty()) {
-                row[1] = hmi::roles::defaultInvite(physical, "unit\xC3\xA9 physique");
+            if (const std::string physical = hmi::physicalDisplayUnit(p, d.path, nullptr, d.format); !physical.empty()) {
+                unitInvites.back() = hmi::roles::defaultInvite(physical, "unit\xC3\xA9 physique");
                 grey[1] = true;
                 shown.unit = physical;
             }
@@ -785,9 +789,10 @@ void HmiUnitsPane::refresh() {
     }
     model_ = std::make_shared<Rows>(std::vector<std::string>{"Variable", "Unit\xC3\xA9", "Format", "Min", "Max", "Seuil bas", "Seuil haut", "Alarme basse",
                                                              "Alarme haute", "Exemple", "Montr\xC3\xA9" "e par"}, std::move(rows),
-                                    [unused, greyed](ui::RowIndex r, std::size_t c) {
+                                    [unused, greyed, unitInvites](ui::RowIndex r, std::size_t c) {
                                         ui::CellStyle st;
                                         if (r >= unused.size()) return st;
+                                        if (c == 1 && r < unitInvites.size()) st.placeholder = unitInvites[r];
                                         if (c == 0) { st.bold = true; st.icon = ui::Icon::Variable; st.iconTone = unused[r] ? ui::Tone::Muted : ui::Tone::Ok; }
                                         if (c < greyed[r].size() && greyed[r][c]) st.fgTone = ui::Tone::Muted;
                                         if (c == 9) st.fgTone = ui::Tone::Accent;
@@ -837,7 +842,7 @@ void HmiUnitsPane::rebuildProperties() {
                                       "un chemin exact (Armoires[2].ana.PT1.mes) l'emporte."));
     {
         // 1.13.0 (lot J6b) : vide, l'unite physique de la variable (en gris), sinon chaque objet garde la sienne.
-        const std::string physical = hmi::physicalDisplayUnit(p, d->path);
+        const std::string physical = hmi::physicalDisplayUnit(p, d->path, nullptr, d->format);
         auto unitProp = prop("Unit\xC3\xA9", d->unit, PG::ValueType::Text, commit("unite"),
                              physical.empty() ? std::string("bar, \xC2\xB0" "C, %, m\xC2\xB3/h... Vide : chaque objet garde la sienne.")
                                               : "Vide : l'unit\xC3\xA9 physique de la variable (" + physical
@@ -852,7 +857,7 @@ void HmiUnitsPane::rebuildProperties() {
                                 {"", "0", "0.0", "0.00", "0.000", "000", "0.0%"}));
     {
         hmi::VariableDisplay shown = *d;
-        if (hmikit::trimmed(shown.unit).empty()) shown.unit = hmi::physicalDisplayUnit(p, d->path);
+        if (hmikit::trimmed(shown.unit).empty()) shown.unit = hmi::physicalDisplayUnit(p, d->path, nullptr, d->format);
         c.properties.push_back(prop("Exemple", hmi::displaySample(shown), PG::ValueType::ReadOnly));
     }
     // 1.12.10 (lot F) : la plage et les seuils de la variable, repris par les objets qui laissent les leurs vides.
@@ -899,7 +904,7 @@ bool HmiUnitsPane::addDisplay(const std::string& rawPath, const std::string& uni
     // 1.13.0 (lot J6b) : sans unite tapee, la ligne la laisse vide - les objets montrent l'unite physique de la
     // variable (bar, degC lu \xC2\xB0C), et suivront si elle change ; le message le dit.
     const std::string typed = trimmed(unit);
-    const std::string physical = typed.empty() ? hmi::physicalDisplayUnit(doc_->project, path) : std::string{};
+    const std::string physical = typed.empty() ? hmi::physicalDisplayUnit(doc_->project, path, nullptr, f) : std::string{};
     auto cmd = hmi::changeProject(doc_, "Unit\xC3\xA9 de " + path, [&](hmi::Project& pr) { pr.displays.push_back({path, typed, f}); });
     if (!cmd) return fail("non ajout\xC3\xA9" "e");
     apply_(std::move(cmd));
@@ -950,7 +955,14 @@ bool HmiUnitsPane::setField(const std::string& path, const std::string& key, con
         // 1.12.10 (lot F) : Min, Max, un seuil - un nombre, ou une variable tapee sans = ; vide : non regle.
         if (!hmi::ranges::validValue(value))
             return fail(hmi::ranges::label(key) + " \xC2\xAB " + value + " \xC2\xBB : un nombre (10, 2,5) ou un nom de variable (Consigne_Max)");
-    } else if (key != "unite") {
+    } else if (key == "unite") {
+        // 1.13.0 (seconde passe) : le texte gris de la case (l'unite physique) n'est pas une unite - un collage qui le
+        // rapporte (une ancienne copie) le dit au lieu de le poser.
+        static const std::string invite = " \xC2\xB7 unit\xC3\xA9 physique";
+        if (value.size() > invite.size() && value.compare(value.size() - invite.size(), invite.size(), invite) == 0)
+            return fail("unit\xC3\xA9 \xC2\xAB " + value + " \xC2\xBB : c'est le texte gris de la case (l'unit\xC3\xA9 physique de la variable) - "
+                        "laisse la case vide pour la garder, ou tape une unit\xC3\xA9 (bar)");
+    } else {
         return fail("champ inconnu : " + key);
     }
     const std::string old = cur->path;

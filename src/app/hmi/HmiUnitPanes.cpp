@@ -4,6 +4,7 @@
 // =============================================================================
 #include "HmiUnitPanes.hpp"
 #include "../../hmi/HmiDisplay.hpp"   // hmi::unitLabel (l'unite comme la simulation la montre)
+#include "../../hmi/HmiOperators.hpp" // 1.13.0 (seconde passe) : le nom d'un operateur (ses emplois d'unite)
 #include "HmiPaneKit.hpp"
 #include "../../core/FieldCodec.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -188,18 +189,28 @@ std::vector<std::string> usesOf(const hmi::Project& p, std::string_view symbol) 
         if (is(f.returnUnit)) out.push_back(name + " (retour)");
         decls(f.decls, name);
     };
+    // 1.13.0 (seconde passe) : chaque porteur de declarations (hmi::forEachDeclarations en a la liste) - avec les
+    // constantes de vue, les operateurs (d'un type, d'un symbole) et les redefinitions d'une instance.
+    const auto operators = [&](const std::vector<hmi::HmiOperator>& ops, const std::string& owner) {
+        for (const auto& o : ops) decls(o.decls, owner + "." + hmi::operatorFunctionName(o));
+    };
     for (const auto& v : p.programs.variables)
         if (is(v.unit)) out.push_back(v.name);
     for (const auto& t : p.programs.types) {
         for (const auto& m : t.members)
             if (is(m.unit)) out.push_back(t.name + "." + m.name);
         for (const auto& m : t.methods) function(m, t.name);
+        operators(t.operators, t.name);
     }
     for (const auto& f : p.programs.functions) function(f, {});
     for (const auto& s : p.programs.scripts) decls(s.decls, s.name);
     for (const auto& v : p.views) {
+        decls(v.constants, v.name);
         for (const auto& f : v.functions) function(f, v.name);
         for (const auto& s : v.scripts) decls(s.decls, v.name + "." + s.event);
+        operators(v.operators, v.name);
+        for (const auto& ob : v.objects)
+            for (const auto& fo : ob.functionOverrides) decls(fo.decls, v.name + "." + ob.name + "." + fo.function);
     }
     return out;
 }
@@ -498,9 +509,12 @@ void HmiUnitPicker::chooseNone() {
 }
 
 void HmiUnitPicker::manage() {
+    if (!spec_.canManage) return;
     answer_.manage = true;
     finish(true);
 }
+
+bool HmiUnitPicker::manageShown() const noexcept { return spec_.canManage; }
 
 std::string HmiUnitPicker::encode(const Answer& a) { return core::joinFields({a.unit, a.manage ? "1" : "0"}); }
 
@@ -560,9 +574,11 @@ core::Status HmiUnitPicker::buildUi() {
             choose();
         }
     });
-    body->manage = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6", base + ".manage")));
-    body->manage->setTooltip("Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure : les familles et les unit\xC3\xA9s du projet");
-    links_ += body->manage->clicked->connect([this] { manage(); });
+    if (spec_.canManage) {   // 1.13.0 (seconde passe) : pas depuis une fenetre modale (la page s'ouvrirait dessous)
+        body->manage = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6", base + ".manage")));
+        body->manage->setTooltip("Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure : les familles et les unit\xC3\xA9s du projet");
+        links_ += body->manage->clicked->connect([this] { manage(); });
+    }
     body->none = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("Sans unit\xC3\xA9", base + ".none")));
     links_ += body->none->clicked->connect([this] { chooseNone(); });
     body->cancel = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("Annuler", base + ".cancel")));

@@ -705,7 +705,10 @@ void HmiFunctionsPane::rebuildProperties() {
             "L'unit\xC3\xA9 physique de ce que rend la fonction (Rend : REAL [m3/h]) : un appel la propage comme une variable "
             "de ce type ; vide : sans unit\xC3\xA9.");
         pu.placeholder = "sans";
-        if (unitpicker::available()) pu.dialog = [this, id] { pickReturnUnit(id); };
+        if (unitpicker::available()) {                         // 1.13.0 (seconde passe) : un champ, et le bouton
+            pu.open = [this, id] { pickReturnUnit(id); };
+            pu.openTip = unitpicker::kChoose;
+        }
         c.properties.push_back(std::move(pu));
     }
     // 1.13.0 : les generiques de la fonction (TEMPLATE <T>) - comme une structure ou un symbole.

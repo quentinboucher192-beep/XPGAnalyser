@@ -210,18 +210,21 @@ public:
         }
     }
     // 1.12.14 : la case Type ouvre le selecteur de types (il compose aussi les types imbriques) ; sans
-    // hote (un essai), la liste et " Autre type... ". 1.13.0 (lot J6b) : la case Unite, le selecteur
-    // d'unites (sans hote : un champ, Ctrl+Espace propose les unites).
+    // hote (un essai), la liste et " Autre type... ". 1.13.0 (seconde passe) : la case Unite SE TAPE (F2,
+    // Entree : un champ, Ctrl+Espace propose les unites, sa derniere ligne ouvre le selecteur) ; le
+    // double-clic ouvre le selecteur d'unites (doubleClickInDialog).
     bool editInDialog(ui::RowIndex r, std::size_t c) override {
         if (r >= rows.size() || c >= columns.size() || columns[c] == kUses) return false;
-        if (static_cast<de::Column>(columns[c]) == de::Column::Unit) {
-            if (!askPickUnit || !unitpicker::available()) return false;
-            askPickUnit(r);
-            return true;
-        }
+        if (static_cast<de::Column>(columns[c]) == de::Column::Unit) return false;
         if (!askPickType || !typepicker::available()) return false;
         if (static_cast<de::Column>(columns[c]) != de::Column::Type) return false;
         askPickType(r);
+        return true;
+    }
+    bool doubleClickInDialog(ui::RowIndex r, std::size_t c) override {
+        if (r >= rows.size() || c >= columns.size() || columns[c] == kUses) return false;
+        if (static_cast<de::Column>(columns[c]) != de::Column::Unit || !askPickUnit || !unitpicker::available()) return false;
+        askPickUnit(r);
         return true;
     }
     bool setCellText(ui::RowIndex r, std::size_t c, std::string_view text) override {

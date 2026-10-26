@@ -2408,9 +2408,9 @@ EventResult TableView::onEvent(const InputEvent& ev) {
             if (d->clickCount >= 2) {
                 // Lot 16 : double-clic sur une case editable : on l'edite ; sinon, activer.
                 const int col = columnAtX(d->pos.x);
-                if (doubleClickEdits_ && col >= 0 && model_->editable(row, static_cast<std::size_t>(col)))
-                    (void)beginCellEdit(row, static_cast<std::size_t>(col));
-                else activated->emit(row);
+                if (doubleClickEdits_ && col >= 0 && model_->editable(row, static_cast<std::size_t>(col))) {
+                    if (!model_->doubleClickInDialog(row, static_cast<std::size_t>(col))) (void)beginCellEdit(row, static_cast<std::size_t>(col));
+                } else activated->emit(row);
             }
             invalidate();
         }

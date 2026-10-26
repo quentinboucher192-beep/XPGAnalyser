@@ -467,6 +467,9 @@ public:
     // 1.12.14 : une case qui s'edite dans une fenetre (le selecteur de types) : vrai, le modele l'a
     // ouverte - ni liste ni champ dans la case ; la reponse revient par le modele lui-meme.
     virtual bool editInDialog(RowIndex, std::size_t) { return false; }
+    // 1.13.0 (seconde passe) : une case qui SE TAPE (F2, Entree : un champ, son aide a la saisie) mais que le
+    // double-clic ouvre dans une fenetre (le selecteur d'unites) : vrai, le modele l'a ouverte.
+    virtual bool doubleClickInDialog(RowIndex, std::size_t) { return false; }
     // Lot 16 : l'infobulle d'une ligne, au survol (vide : celle de la table).
     [[nodiscard]] virtual std::string rowTooltip(RowIndex) const { return {}; }
     // Lot 16 : glisser la ligne `from` sur la ligne `to` (lignes du modele) est-il

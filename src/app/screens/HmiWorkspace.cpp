@@ -487,6 +487,10 @@ void MainAnalysisScreen::bindHmi() {
     // 1.13.0 (lot J6b) : le selecteur d'unites - " Gerer les unites... " mene a Configuration > Unites de mesure.
     unitpicker::setHost([this](HmiUnitPicker::Spec spec, unitpicker::Done done) {
         if (!spec.doc) spec.doc = app_.hmi();
+        // 1.13.0 (seconde passe) : demande depuis une fenetre modale (Nouvelle fonction, Nouvelle variable) - pas de
+        // " Gerer les unites... " : la page s'ouvrirait sous la fenetre, inaccessible tant qu'elle reste ouverte.
+        if (const menu::IMenu* under = app_.menus().top())
+            if (const auto kind = under->traits().kind; kind == menu::MenuKind::Dialog || kind == menu::MenuKind::Modal) spec.canManage = false;
         app_.menus().ShowDialog(std::make_unique<HmiUnitPicker>(std::move(spec)), [this, done = std::move(done)](const menu::DialogResult& r) {
             if (!r.accepted()) return;
             HmiUnitPicker::Answer a;
