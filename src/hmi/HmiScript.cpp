@@ -7,6 +7,7 @@
 #include "HmiDecl.hpp"              // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiMarkers.hpp"          // 1.11.1 (REP) : les $ des reperes, transparents dans un script ST
 #include "HmiOperators.hpp"        // 1.11.17 : la signature d'un operateur (le lieu d'un appel)
+#include "HmiMethods.hpp"          // 1.13.0 : une methode du meme nom passe avant une fonction (renommer)
 #include "HmiSymbols.hpp"          // 1.11.17 : la portee d'un symbole, rewriteNames (les textes d'un objet)
 #include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : les types d'une locale
 #include "HmiTypes.hpp"            // 1.12.20 : un rappel nomme (T_Filtre)
@@ -861,7 +862,7 @@ std::vector<NameUse> scriptNamesRaw(std::string_view s) {
                     std::size_t a = k + 1;
                     while (a < s.size() && (s[a] == ' ' || s[a] == '\t')) ++a;
                     std::size_t b = a;
-                    while (b < s.size() && identChar(s[b])) ++b;
+                    while (b < s.size() && (identChar(s[b]) || (s[b] == '.' && b + 1 < s.size() && identStart(s[b + 1])))) ++b;   // 1.13.0 : <Gaz.T_Pompe>
                     while (b < s.size() && (s[b] == ' ' || s[b] == '\t')) ++b;
                     if (b > a && b < s.size() && s[b] == '>') advanceTo(b + 1);
                 }
@@ -1593,17 +1594,25 @@ void visitProject(P& p, Visit& visit) {
     };
     for (auto& sc : p.programs.scripts) {
         if (sc.lang != ScriptLang::ST) continue;
-        const CodeSite site{.where = "script " + sc.name};
+        const CodeSite site{.where = "script " + sc.name, .ns = sc.ns};
         visit(sc.body, CodeForm::Code, site);
         visit(sc.watch, CodeForm::Expression, site);
         visitDeclarations(sc.decls, site, visit);
     }
     for (auto& f : p.programs.functions) {
-        const CodeSite site{.own = &f, .where = "fonction " + f.name};
+        const CodeSite site{.own = &f, .where = "fonction " + f.name, .ns = f.ns};
         visit(f.body, CodeForm::Code, site);
         visitDeclarations(f.decls, site, visit);
     }
-    for (auto& t : p.programs.types) ops(t.operators, "type " + t.name);
+    for (auto& t : p.programs.types) {
+        ops(t.operators, "type " + t.name);
+        // 1.13.0 : le corps des methodes (renommer une fonction, un espace, un type ; qui appelle quoi).
+        for (auto& m : t.methods) {
+            const CodeSite site{.ownerType = &t, .where = "type " + fullName(t) + ", m\xC3\xA9thode " + m.name, .ns = t.ns};
+            visit(m.body, CodeForm::Code, site);
+            visitDeclarations(m.decls, site, visit);
+        }
+    }
     for (auto& v : p.views) {
         // Le code d'un symbole, et d'une popup qu'il porte : un appel court y vise d'abord ses fonctions.
         const View* scope = isSymbolView(v) ? &v : popupOwner(p, v);
@@ -1706,6 +1715,34 @@ std::size_t renameFunctionEverywhere(Project& p, std::string_view from, std::str
         text = (t.size() > 1 && t.front() == '=' ? "=" : "") + std::string(to);
         ++changed;
     });
+    return changed;
+}
+
+std::size_t renameFunctionEverywhere(Project& p, std::string_view ns, std::string_view from, std::string_view to) {
+    if (!names::active(p)) return renameFunctionEverywhere(p, from, to);
+    const names::Index ix(p);                     // fait avant : les noms des items ne changent pas ici
+    const std::string targetFull = qualifiedName(ns, from), key = upper(from), next = upper(to);
+    std::size_t changed = 0;
+    forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite& s) {
+        if (text.empty() || shadowed(s, from)) return;
+        // son propre corps (ou celui d'une surcharge) : son nom y est aussi son retour
+        const bool bare = s.own && upper(s.own->ns) == upper(ns) && (upper(s.own->name) == key || upper(s.own->name) == next);
+        // une methode qui porte ce nom : l'appel nu vise la methode (SELF.X), pas la fonction
+        if (s.ownerType && effectiveMethod(p, fullName(*s.ownerType), from)) return;
+        const auto one = [&](std::string_view e) { return names::renameItemInCode(ix, e, s.ns, targetFull, to, bare); };
+        std::string out = form == CodeForm::Template ? rewriteInText(text, one) : one(text);
+        if (out != text) { text = std::move(out); ++changed; }
+    });
+    // La valeur initiale d'une variable rappel (=Valider, =Util.Valider), la cible d'une action Appeler.
+    const auto follow = [&](std::string_view written) {
+        forEachCallbackValue(p, written, [&](std::string& text, const std::string&) {
+            const std::string t = trimmed(text);
+            text = (t.size() > 1 && t.front() == '=' ? "=" : "") + (written.find('.') != std::string_view::npos ? qualifiedName(ns, to) : std::string(to));
+            ++changed;
+        });
+    };
+    if (ns.empty()) follow(from);
+    else follow(targetFull);
     return changed;
 }
 

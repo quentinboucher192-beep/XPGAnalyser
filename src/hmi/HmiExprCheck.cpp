@@ -26,6 +26,7 @@
 #include "../project/MemberTree.hpp"
 #include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : un type est-il un nombre ?
 #include "HmiUnits.hpp"   // 1.13.0 (lot J6) : les unites de mesure (familles, conversions, verdict)
+#include "HmiLibrary.hpp" // 1.13.0 : biblio::unitConfig (les unites des bibliotheques reliees)
 
 #include <algorithm>
 #include <cctype>
@@ -360,7 +361,7 @@ std::optional<Problem> unitPassVerdict(const units::Catalog& cat, const std::str
 class Checker {
 public:
     Checker(const Context& ctx, std::vector<Tok> toks, std::string_view source = {})
-        : ctx_(ctx), toks_(std::move(toks)), src_(source), cat_(ctx.project ? units::Catalog(ctx.project->config) : units::Catalog()) {}
+        : ctx_(ctx), toks_(std::move(toks)), src_(source), cat_(ctx.project ? units::Catalog(biblio::unitConfig(*ctx.project)) : units::Catalog()) {}
 
     Val run() { return orExpr(); }
     std::vector<Problem> problems;
@@ -1679,7 +1680,9 @@ std::string templatesAsValues(const Context& ctx, std::string_view s) {
         if (k < s.size() && s[k] == '<') {
             const std::size_t a = spaces(k + 1);
             if (ident(a)) {
-                const std::size_t b = spaces(identEnd(a));
+                std::size_t te = identEnd(a);
+                while (te + 1 < s.size() && s[te] == '.' && ident(te + 1)) te = identEnd(te + 1);   // 1.13.0 : <Gaz.T_Pompe>
+                const std::size_t b = spaces(te);
                 if (b < s.size() && s[b] == '>') {
                     angled = true;
                     k = spaces(b + 1);
@@ -1856,8 +1859,7 @@ std::vector<Problem> passUnit(const Context& ctx, std::string_view targetUnit, s
     if (tu.empty()) return out;                        // une cible sans unite : rien a exiger (elle recoit le nombre)
     const Shape sh = shapeOf(ctx, source);
     if (sh.unit.empty()) return out;                   // une source sans unite : le nu adopte celle de la cible
-    static const Config kEmpty{};
-    const units::Catalog cat(ctx.project ? ctx.project->config : kEmpty);
+    const units::Catalog cat = ctx.project ? units::Catalog(biblio::unitConfig(*ctx.project)) : units::Catalog();   // 1.13.0 : bibliotheques comprises
     // Le texte de la source, sans ses reperes : celui que la correction d'un clic retrouve.
     const std::string src = trimmed(markers::strip(source, markers::Mode::Expression));
     if (auto pb = unitPassVerdict(cat, tu, sh.unit, src, sh.plain, sh.unitFrom, pass, std::string(targetText), strict))

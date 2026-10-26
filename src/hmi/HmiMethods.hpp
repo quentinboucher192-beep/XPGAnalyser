@@ -128,9 +128,12 @@ struct MethodCall {
 [[nodiscard]] std::string extendsProblem(const Project&, const HmiType& t);
 
 // ------------------------------------------- renommage et duplication (UI) ---
-// Un type renomme : base, interfaces, les SUPER et les appels .Methode() dans les
-// corps suivent. Rend le nombre de textes changes.
-std::size_t renameTypeInMethods(Project&, std::string_view from, std::string_view to);
+// 1.13.0 : RENOMMER UN TYPE IHM, PARTOUT - son nom, et tout ce qui le nomme : les membres, les variables, les
+// declarations, les retours des fonctions, les parametres des popups et symboles, les signatures des methodes,
+// le parent (EXTENDS) et les interfaces (IMPLEMENTS) des types qui le visent (par identite : un homonyme d'un autre
+// espace ne suit pas), les operateurs, T_ANCIEN#x, la liaison Equipement, DYNAMIC_CAST<T> dans le code. Rend le
+// nombre de textes changes (0 : rien, type introuvable ou meme nom). La commande de Types IHM l'emploie.
+std::size_t renameTypeEverywhere(Project&, Id type, std::string_view newName);
 // Des identifiants neufs pour une liste de methodes (Dupliquer un type).
 void renumberMethods(Project&, std::vector<HmiFunction>&);
 

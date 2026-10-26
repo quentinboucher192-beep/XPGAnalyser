@@ -727,6 +727,75 @@ std::string renameInCode(std::string_view code, std::string_view from, std::stri
     return fixed;
 }
 
+std::string renameItemInCode(const Index& ix, std::string_view code, std::string_view own, std::string_view targetFull,
+                             std::string_view newShort, bool bare) {
+    const auto [targetNs, targetName] = splitQualified(targetFull);
+    if (targetName.empty() || newShort.empty() || same(targetName, newShort)) return std::string(code);
+    const auto us = usings(code);
+    const std::string text = blankUsings(code);
+    Scope scope;
+    scope.own = std::string(own);
+    for (const auto& u : us) scope.imports.push_back(u.ns);
+    scope.hidden = declaredNames(text, true);
+    // Un nom court vise-t-il la cible ? Son espace (ou un parent), la racine, un import, le seul de ce nom.
+    const auto targets = [&](std::string_view word) {
+        if (scope.hidden.count(upperOf(word))) return false;
+        if (ix.empty()) return targetNs.empty();
+        const Resolved r = resolveBare(ix, scope, word);
+        if (!r.full.empty()) return same(r.full, targetFull);
+        if (!r.ambiguous.empty() && r.hint.empty()) return false;               // ambigu sous USING : ni l'un ni l'autre
+        if (ix.rootHas(word)) return targetNs.empty();                          // la racine le definit : c'est lui
+        if (ix.project().variable(word)) return false;
+        return !targetNs.empty() && r.ambiguous.size() <= 1 && same(r.hint, targetFull);   // le seul de ce nom, d'un espace
+    };
+    std::string out;
+    out.reserve(code.size() + 16);
+    std::size_t copied = 0;
+    const auto put = [&](std::size_t at, std::size_t end) {
+        out.append(code, copied, at - copied);
+        out += newShort;
+        copied = end;
+    };
+    scanWords(text, [&](const Word& w) -> std::size_t {
+        if (w.prev == '.') return w.end;
+        const std::string_view word = std::string_view(text).substr(w.at, w.end - w.at);
+        const Chain c = chainAt(text, w.at, w.end);
+        if (c.segs.size() > 1 && !ix.empty() && ix.isNamespace(c.segs.front()) && !scope.hidden.count(upperOf(c.segs.front()))) {
+            // Util.Moyenne(...) : la forme qualifiee - le dernier segment de l'item.
+            std::string full;
+            const std::size_t n = qualifiedPrefix(ix, c.segs, &full);
+            if (n >= 2 && same(full, targetFull)) {
+                const std::size_t end = c.ends[n - 1];
+                put(end - c.segs[n - 1].size(), end);
+            }
+            return c.ends.back();
+        }
+        if (!same(word, targetName)) return w.end;
+        if (namedArgument(text, w.end, depthAt(text, w.at))) return w.end;
+        if (!targets(word)) return w.end;
+        if (!bare) {
+            // un appel (le nom suivi de '('), ou le nom passe en valeur (LIST_FILTER(L, Est_Valide), f := Valider)
+            std::size_t k = w.end;
+            while (k < text.size() && (text[k] == ' ' || text[k] == '\t')) ++k;
+            const bool call = k < text.size() && text[k] == '(';
+            bool value = false;
+            if (!call) {
+                std::size_t b = w.at;
+                while (b > 0 && std::isspace(uc(text[b - 1]))) --b;
+                const bool after = b > 0 && (text[b - 1] == '(' || text[b - 1] == ',' || (text[b - 1] == '=' && b > 1 && text[b - 2] == ':'));
+                std::size_t e = k;
+                while (e < text.size() && std::isspace(uc(text[e]))) ++e;
+                value = after && (e >= text.size() || text[e] == ';' || text[e] == ')' || text[e] == ',');
+            }
+            if (!call && !value) return w.end;
+        }
+        put(w.at, w.end);
+        return w.end;
+    });
+    out.append(code, copied, std::string::npos);
+    return out;
+}
+
 std::string renameInType(std::string_view type, std::string_view from, std::string_view to) {
     if (from.empty() || to.empty() || same(from, to) || type.find('.') == std::string_view::npos) return std::string(type);
     std::string out;
@@ -876,8 +945,23 @@ bool setItemNamespace(Project& p, ItemKind kind, Id id, std::string_view nsIn, s
                         text = out;
                     };
                     for (auto& v : p.programs.variables) follow(v.type);
-                    for (auto& ty : p.programs.types) for (auto& m : ty.members) follow(m.type);
+                    for (auto& ty : p.programs.types) {
+                        for (auto& m : ty.members) follow(m.type);
+                        // 1.13.0 : le parent, les interfaces et les signatures des methodes qui le nommaient en entier.
+                        follow(ty.base);
+                        for (auto& i : ty.interfaces) follow(i);
+                        for (auto& m : ty.methods) {
+                            follow(m.returnType);
+                            for (auto& d : m.decls) follow(d.type);
+                        }
+                    }
                     for (auto& f : p.programs.functions) follow(f.returnType);
+                    // 1.13.0 : les parametres des popups et des symboles (le selecteur donne le nom complet), les retours de
+                    // leurs fonctions.
+                    for (auto& v : p.views) {
+                        for (auto& prm : v.params) follow(prm.type);
+                        for (auto& fn : v.functions) follow(fn.returnType);
+                    }
                     forEachDeclarations(p, [&](std::vector<Declaration>& list) { for (auto& d : list) follow(d.type); });
                 }
             }

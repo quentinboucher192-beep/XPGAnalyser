@@ -157,6 +157,7 @@ struct Item {
     Choice      choice{Choice::Add};
     std::string newName;               // Rename : le nom retenu (libre dans le projet)
     std::string detail;                // "identique", "diff\xC3\xA9rente (12 objets, 10 dans le projet)"...
+    std::string ns{};                  // 1.13.0 : l'espace d'un type, d'une fonction, d'un script (vide : la racine)
     [[nodiscard]] std::vector<Choice> choices() const;   // ce qu'on peut choisir pour lui
 };
 

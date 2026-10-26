@@ -198,8 +198,13 @@ struct CodeSite {
     // dans son code (qualifyViewCalls, qualifySymbolCalls) ; nullptr : seulement Vue.Instance.
     const View*        view{nullptr};
     const HmiFunction* own{nullptr};    // le corps d'une fonction IHM : son nom y est aussi son retour
+    // 1.13.0 : le corps d'une methode - son type (ses membres et ses methodes s'y lisent par leur nom nu).
+    const HmiType*     ownerType{nullptr};
     std::string        where;           // "script Calcul", "Vue_A/Btn (action)", "fonction Pompe.Ouvrir"...
     std::string        group{};         // "Appelee par" ne cite un groupe qu'une fois ; "" : `where`
+    // 1.13.0 : l'espace de noms du code (un script, une fonction, une methode d'un type de Gaz) : un nom court y vise
+    // d'abord son espace. Vide : la racine (une vue n'a pas d'espace).
+    std::string        ns{};
 };
 using CodeVisit = std::function<void(std::string& text, CodeForm, const CodeSite&)>;
 using ConstCodeVisit = std::function<void(const std::string& text, CodeForm, const CodeSite&)>;
@@ -211,6 +216,10 @@ void forEachCode(const Project&, const ConstCodeVisit&);
 // Partout dans le projet (forEachCode). Dans un symbole qui a sa propre fonction
 // `from`, un appel court la vise, elle : il ne change pas. Rend le nombre de textes changes.
 std::size_t renameFunctionEverywhere(Project&, std::string_view from, std::string_view to);
+// 1.13.0 : la fonction `from` de l'espace `ns` (vide : la racine), renommee `to` partout, PAR IDENTITE : Util.Moyenne(a, b)
+// suit, un appel court de Gaz qui vise Gaz.Moyenne ne change pas (names::renameItemInCode). Sans aucun espace dans le
+// projet : comme renameFunctionEverywhere.
+std::size_t renameFunctionEverywhere(Project&, std::string_view ns, std::string_view from, std::string_view to);
 // Qui appelle cette fonction : "script Demarrage", "fonction Moyenne",
 // "Vue_A.OnOpen", "Vue_A/Btn (action)", "Vue_A/Texte_1 (text)", "alarme Haute_P",
 // "fonction Pompe.Ouvrir", "Vue_A/Pompe_1.Ouvrir (redefinition)"...

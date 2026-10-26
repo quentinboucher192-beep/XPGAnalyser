@@ -19,6 +19,7 @@
 #include "HmiCalc.hpp"        // 1.12.7 : les valeurs calculees au demarrage
 #include "HmiMethods.hpp"     // 1.13.0 (lot J1) : les methodes des types IHM (S2) a l'execution (S1)
 #include "HmiUnits.hpp"       // 1.13.0 (lot J6) : les unites de mesure (EN / UNITE : declaredUnit, convertUnit)
+#include "HmiLibrary.hpp"     // 1.13.0 : biblio::unitConfig (les unites des bibliotheques reliees)
 #include "HmiNames.hpp"       // 1.13.0 (lot J8) : les espaces de noms - le code qualifie avant le moteur
 #include "HmiOperators.hpp"   // 1.10 (integration) : les operateurs du projet (S2) a l'execution (S1)
 #include "HmiRoles.hpp"       // 1.12.6 (lot B) : le lecteur du role, l'ecriture vers le type
@@ -695,7 +696,7 @@ public:
     // 1.13.0 (lot J6) : la conversion d'une unite vers une autre (meme famille), par la bibliotheque du projet.
     bool convertUnit(std::string_view from, std::string_view to, double& value) override {
         if (!rt_.project_) return false;
-        const units::Catalog cat(rt_.project_->config);
+        const units::Catalog cat(biblio::unitConfig(*rt_.project_));   // 1.13.0 : celles des bibliotheques reliees aussi
         if (const auto aff = cat.convert(from, to)) { value = aff->apply(value); return true; }
         return false;
     }

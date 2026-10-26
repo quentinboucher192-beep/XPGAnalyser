@@ -20,12 +20,16 @@
 // =============================================================================
 #include "../src/hmi/HmiCheck.hpp"
 #include "../src/hmi/HmiLibrary.hpp"
+#include "../src/hmi/HmiMethods.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiNames.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
+#include "../src/hmi/HmiScript.hpp"
 #include "../src/hmi/HmiScriptCheck.hpp"
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/hmi/HmiTypeRegistry.hpp"
+#include "../src/hmi/HmiTypes.hpp"
+#include "../src/hmi/HmiUnits.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -741,6 +745,300 @@ void bibliotheques() {
     fs::remove_all(root, ec);
 }
 
+// =============================================================================
+//  7) LA SECONDE RELECTURE (lot D2) : deux types de meme nom court dans deux espaces
+// =============================================================================
+namespace {
+std::string leavesOf(const types::Flat& f) {
+    std::string out;
+    for (const auto& l : f.leaves) out += (out.empty() ? "" : ",") + l.path;
+    return out;
+}
+} // namespace
+
+void homonymes() {
+    std::printf("-- seconde relecture : homonymes d'espaces (depliage, heritage)\n");
+    std::string err;
+    // T2-45 : une variable Gaz.T_Vanne prend les membres de Gaz.T_Vanne, pas ceux du T_Vanne de la racine.
+    {
+        Project p;
+        addType(p, "T_Vanne").members.push_back(member("Etat", "BOOL"));
+        HmiType& g = addType(p, "T_Vanne", "Gaz");
+        g.members.push_back(member("Position", "REAL"));
+        g.members.push_back(member("Defaut", "BOOL"));
+        g.members.push_back(member("Commande", "INT"));
+        const auto fl = types::flatten(p, "V1", "Gaz.T_Vanne");
+        check(fl.ok() && leavesOf(fl) == "V1.Position,V1.Defaut,V1.Commande",
+              "T2-45 : V1 : Gaz.T_Vanne a les 3 cases de Gaz (pas V1.Etat de la racine) [" + leavesOf(fl) + " " + fl.error + "]");
+        check(!fl.aggregates.empty() && fl.aggregates.back().typeName == "Gaz.T_Vanne", "T2-45 : l'agregat porte le nom complet");
+        addVar(p, "V1", "Gaz.T_Vanne");
+        addVar(p, "R", "REAL");
+        const std::string r = run(p, "V1.Position := 50.0;\nR := V1.Position;", &err);
+        check(r == "50", "T2-45 : V1.Position := 50.0 tourne en marche [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+    // T2-45 : Gaz.T_Vanne et Util.T_Vanne sans type racine ; un membre Util.T_Vanne dans Gaz.T_Vanne n'est pas un cycle.
+    {
+        Project p;
+        addType(p, "T_Vanne", "Util").members.push_back(member("X", "INT"));
+        HmiType& g = addType(p, "T_Vanne", "Gaz");
+        g.members.push_back(member("Position", "REAL"));
+        g.members.push_back(member("Secours", "Util.T_Vanne"));
+        const auto fl = types::flatten(p, "V1", "Gaz.T_Vanne");
+        check(fl.ok() && leavesOf(fl) == "V1.Position,V1.Secours.X",
+              "T2-45 : deux T_Vanne d'espaces : les cases de Gaz, Secours (Util.T_Vanne) sans faux cycle [" + leavesOf(fl) + " " + fl.error + "]");
+        check(types::cycleOf(p, "Gaz.T_Vanne").empty(), "T2-45 : cycleOf ne prend pas Util.T_Vanne pour Gaz.T_Vanne");
+        bool dup = false;
+        for (const auto& i : generOf(p)) dup = dup || i.message.find("se contient") != std::string::npos;
+        check(!dup, "T2-45 : Generer ne dit pas \"se contient lui-meme\"");
+    }
+    // T2-48 : Gaz.T_Vanne EXTENDS Base.T_Vanne - le parent n'est pas pris pour un cycle.
+    {
+        Project p;
+        HmiType& b = addType(p, "T_Vanne", "Base");
+        b.members.push_back(member("Position", "REAL"));
+        HmiFunction ouvrir;
+        ouvrir.id = p.allocate();
+        ouvrir.name = "Ouvrir";
+        ouvrir.body = "Position := 100.0;";
+        b.methods.push_back(ouvrir);
+        HmiType& g = addType(p, "T_Vanne", "Gaz");
+        g.base = "Base.T_Vanne";
+        g.members.push_back(member("Pression", "REAL"));
+        check(types::membersOf(p, "Gaz.T_Vanne").size() == 2, "T2-48 : membersOf(Gaz.T_Vanne) = Position (herite) + Pression");
+        check(baseChain(p, "Gaz.T_Vanne").size() == 1, "T2-48 : baseChain(Gaz.T_Vanne) = [Base.T_Vanne]");
+        check(isA(p, "Gaz.T_Vanne", "Base.T_Vanne"), "T2-48 : isA(Gaz.T_Vanne, Base.T_Vanne)");
+        check(effectiveMethod(p, "Gaz.T_Vanne", "Ouvrir") != nullptr, "T2-48 : la methode Ouvrir heritee est vue");
+        for (const auto& ty : p.programs.types)
+            if (ty.ns == "Gaz") check(extendsProblem(p, ty).empty(), "T2-48 : Generer ne voit pas de cycle (" + extendsProblem(p, ty) + ")");
+        addVar(p, "V1", "Gaz.T_Vanne");
+        addVar(p, "R", "REAL");
+        const std::string r = run(p, "V1.Position := 10.0;\nV1.Ouvrir();\nR := V1.Position + V1.Pression;", &err);
+        check(r == "100", "T2-48 : V1.Position et V1.Ouvrir() (herites) tournent [" + r + (err.empty() ? "" : " err=" + err) + "]");
+        // un vrai cycle reste dit
+        Project q;
+        addType(q, "T_A", "Gaz").base = "Gaz.T_B";
+        addType(q, "T_B", "Gaz").base = "Gaz.T_A";
+        check(extendsProblem(q, q.programs.types.front()).find("lui-m\xC3\xAAme") != std::string::npos, "T2-48 : un vrai cycle d'heritage reste dit");
+    }
+    // T2-48 : Gaz.T_Vanne et Util.T_Vanne implementent I_Demarrable : chacun se juge sur ses propres methodes.
+    {
+        Project p;
+        HmiType& i = addType(p, "I_Demarrable");
+        i.kind = HmiTypeKind::Interface;
+        HmiFunction sig;
+        sig.id = p.allocate();
+        sig.name = "Demarrer";
+        i.methods.push_back(sig);
+        for (const char* ns : {"Gaz", "Util"}) {
+            HmiType& t = addType(p, "T_Vanne", ns);
+            t.interfaces = {"I_Demarrable"};
+            t.members.push_back(member("Marche", "BOOL"));
+            HmiFunction m;
+            m.id = p.allocate();
+            m.name = "Demarrer";
+            m.body = "Marche := TRUE;";
+            t.methods.push_back(m);
+        }
+        std::string misses;
+        for (const auto& t : p.programs.types)
+            for (const auto& miss : interfaceMisses(p, t)) misses += " | " + miss;
+        check(misses.empty(), "T2-48 : deux T_Vanne d'espaces qui implementent I_Demarrable : aucun faux manque" + misses);
+    }
+}
+
+// T2-46 : un cast et un appel generique explicite dans un script d'un espace (le moteur lit le texte qualifie).
+void chevrons() {
+    std::printf("-- seconde relecture : DYNAMIC_CAST<T> et F<INT>() dans un espace\n");
+    std::string err;
+    const auto build = [] {
+        Project p;
+        addType(p, "T_Equip", "Gaz").members.push_back(member("N", "INT"));
+        HmiType& pompe = addType(p, "T_Pompe", "Gaz");
+        pompe.base = "T_Equip";
+        pompe.members.push_back(member("Debit", "REAL"));
+        HmiFunction& lim = addFn(p, "Limiter", "T", "IF x < lo THEN Limiter := lo; ELSIF x > hi THEN Limiter := hi; ELSE Limiter := x; END_IF", "Gaz");
+        lim.generics = {GenericParam{"T", "ANY_NUM"}};
+        for (const char* n : {"x", "lo", "hi"}) {
+            Declaration d;
+            d.id = p.allocate();
+            d.kind = DeclKind::Parameter;
+            d.name = n;
+            d.type = "T";
+            d.mode = PassMode::In;
+            lim.decls.push_back(d);
+        }
+        addVar(p, "P1", "Gaz.T_Pompe");
+        addVar(p, "R", "REAL");
+        return p;
+    };
+    {
+        Project p = build();
+        const std::string r = run(p, "VAR q : REF_TO T_Pompe; END_VAR\nP1.Debit := 4.0;\nq := DYNAMIC_CAST<T_Pompe>(P1);\n"
+                                     "IF q <> NULL THEN R := q^.Debit; ELSE R := -1.0; END_IF;", &err, "Gaz");
+        check(r == "4", "T2-46 : DYNAMIC_CAST<T_Pompe>(P1) dans un script de Gaz tourne [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+    {
+        Project p = build();
+        const std::string r = run(p, "R := Limiter<INT>(250, 0, 100);", &err, "Gaz");
+        check(r == "100", "T2-46 : Limiter<INT>(...) d'un script de Gaz tourne [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+    {
+        Project p = build();
+        const std::string r = run(p, "VAR q : REF_TO Gaz.T_Pompe; END_VAR\nP1.Debit := 2.5;\nq := DYNAMIC_CAST<Gaz.T_Pompe>(P1);\n"
+                                     "R := Gaz.Limiter<REAL>(q^.Debit, 0.0, 10.0);", &err);
+        check(r == "2.5", "T2-46 : DYNAMIC_CAST<Gaz.T_Pompe> et Gaz.Limiter<REAL>(...) ecrits en entier depuis la racine [" + r
+                              + (err.empty() ? "" : " err=" + err) + "]");
+        check(!hasFinding(checkOf(p, "VAR q : REF_TO Gaz.T_Pompe; END_VAR\nq := DYNAMIC_CAST<Gaz.T_Pompe>(P1);\nR := Gaz.Limiter<REAL>(1.0, 0.0, 10.0);"), ""),
+              "T2-46 : Compiler accepte la syntaxe complete" + allMessages(checkOf(p, "VAR q : REF_TO Gaz.T_Pompe; END_VAR\nq := DYNAMIC_CAST<Gaz.T_Pompe>(P1);\nR := Gaz.Limiter<REAL>(1.0, 0.0, 10.0);")));
+    }
+    {
+        // Compiler : ni « REAL n'existe pas » (le type d'un appel generique), ni une comparaison de structure (le cast).
+        Project p = build();
+        for (const char* c : {"R := Limiter<REAL>(1.0, 0.0, 10.0);", "VAR q : REF_TO T_Pompe; END_VAR\nq := DYNAMIC_CAST<T_Pompe>(P1);"})
+            check(!hasFinding(checkOf(p, c, "Gaz"), ""), std::string("T2-46 : Compiler accepte dans Gaz : ") + c + allMessages(checkOf(p, c, "Gaz")));
+        check(hasFinding(checkOf(p, "R := Limiter<REAL>(1.0, 0.0, 10.0);"), "Limiter est dans l'espace Gaz", false),
+              "T2-46 : a la racine, le nom court d'un generique de Gaz reste dit");
+    }
+    {
+        Project p = build();
+        const std::string r = run(p, "USING Gaz;\nR := Limiter<INT>(-5, 0, 100);", &err);
+        check(r == "0", "T2-46 : Limiter<INT>(...) sous USING Gaz tourne [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+}
+
+// T2-47 : les unites propres d'une bibliotheque voyagent avec elle (relier, EN, le cache).
+void unitesBibliotheque() {
+    std::printf("-- seconde relecture : les unites d'une bibliotheque reliee\n");
+    std::string err;
+    const fs::path root = tempRoot();
+    const fs::path projectDir = root / "Projet";
+    fs::create_directories(projectDir / "libs");
+    Project src;
+    src.config.name = "Source";
+    UnitDef nm3j;
+    nm3j.symbol = "Nm3/j";
+    nm3j.family = "debit_normalise";
+    nm3j.factor = 1.0 / 24.0;
+    src.config.units.push_back(nm3j);
+    TypeMember vol = member("Volume_jour", "REAL");
+    vol.unit = "Nm3/j";
+    addType(src, "T_Compteur", "Gaz").members.push_back(vol);
+    biblio::PublishSpec spec;
+    spec.name = "Gaz";
+    spec.version = "1.0.0";
+    const auto pub = biblio::collect(src, spec);
+    const std::string file = (projectDir / "libs" / "Gaz-1.0.0.xpgbib").string();
+    check(pub.refusal.empty() && static_cast<bool>(biblio::writeFile(pub.package, file)), "T2-47 : Gaz publiee avec son unite Nm3/j");
+
+    Project p;
+    p.config.name = "Projet";
+    addVar(p, "R", "REAL");
+    const auto plan = biblio::planLink(p, file, projectDir.string());
+    check(plan.ok() && biblio::link(p, plan, projectDir.string()), "T2-47 : Gaz reliee (" + plan.refusal + ")");
+    check(!p.libraries.empty() && p.libraries.front().units.size() == 1, "T2-47 : le lien garde l'unite de la bibliotheque (cache)");
+    check(units::Catalog(biblio::unitConfig(p)).known("Nm3/j") && !units::Catalog(p.config).known("Nm3/j"),
+          "T2-47 : le catalogue du projet voit Nm3/j par la bibliotheque (pas dans sa propre config)");
+    addVar(p, "Compteur", "Gaz.T_Compteur");
+    const std::string r = run(p, "Compteur.Volume_jour := 240.0;\nR := EN(Compteur.Volume_jour, 'Nm3/h');", &err);
+    check(r == "10", "T2-47 : EN(Compteur.Volume_jour, 'Nm3/h') convertit (240 Nm3/j -> 10 Nm3/h) [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    // Relu sans le fichier : le cache garde l'unite (bib_unite).
+    const auto files = serializeProject(p);
+    check(indexText(files).find("bib_unite") != std::string::npos, "T2-47 : bib_unite ecrit dans le cache du lien");
+    auto back = parseProject(readerOf(files));
+    check(back && !back->libraries.empty() && back->libraries.front().units.size() == 1
+              && units::Catalog(biblio::unitConfig(*back)).known("Nm3/j"),
+          "T2-47 : relu sans le fichier, le cache donne encore Nm3/j");
+    // Le projet garde la main : son unite du meme symbole passe avant celle de la bibliotheque.
+    Project q = p;
+    UnitDef mine = nm3j;
+    mine.factor = 1.0;
+    q.config.units.push_back(mine);
+    const auto qc = biblio::unitConfig(q);
+    check(qc.units.size() == 1 && qc.units.front().factor == 1.0, "T2-47 : une unite du projet de meme symbole l'emporte");
+    std::error_code ec;
+    fs::remove_all(root, ec);
+}
+
+// T2-51 : changer l'espace d'un type, renommer un espace - parametres de popup, heritage, corps des methodes suivent.
+// T2-52 : renommer une fonction ou un script d'un espace - par identite.
+void renommerEspaces() {
+    std::printf("-- seconde relecture : changer d'espace, renommer un espace, une fonction, un script\n");
+    std::string err;
+    {
+        Project p = buildProject();                                   // Gaz.T_Vanne, Gaz.EnDefaut
+        View pop = makeView(p, "Popup_Vanne");
+        ViewParam prm;
+        prm.name = "Vanne";
+        prm.type = "Gaz.T_Vanne";
+        pop.params.push_back(prm);
+        p.views.push_back(pop);
+        HmiType& rob = addType(p, "T_Robinet");
+        rob.base = "Gaz.T_Vanne";
+        HmiFunction m;
+        m.id = p.allocate();
+        m.name = "Verifier";
+        m.returnType = "BOOL";
+        m.body = "Verifier := Gaz.EnDefaut(SELF);";
+        rob.methods.push_back(m);
+        Id vanne = kNoId;
+        for (const auto& t : p.programs.types) if (t.name == "T_Vanne") vanne = t.id;
+        std::string why;
+        check(names::setItemNamespace(p, names::ItemKind::Type, vanne, "Gaz.Vannes", &why), "T2-51 : Gaz.T_Vanne -> Gaz.Vannes (" + why + ")");
+        check(p.views.back().params.front().type == "Gaz.Vannes.T_Vanne", "T2-51 : le parametre de popup suit (" + p.views.back().params.front().type + ")");
+        const HmiType* r = p.hmiTypeByName("T_Robinet");
+        check(r && r->base == "Gaz.Vannes.T_Vanne" && types::membersOf(p, "T_Robinet").size() == 2, "T2-51 : le sous-type garde son parent (herite=Gaz.Vannes.T_Vanne)");
+        check(names::renameNamespace(p, "Gaz", "GazNat") > 0, "T2-51 : renommer l'espace Gaz en GazNat");
+        r = p.hmiTypeByName("T_Robinet");
+        check(r && r->methods.front().body == "Verifier := GazNat.EnDefaut(SELF);", "T2-51 : le corps de la methode suit (GazNat.EnDefaut) ["
+                                                                                  + (r ? r->methods.front().body : std::string("?")) + "]");
+    }
+    {
+        // T2-52 : Util.Moyenne et Gaz.Moyenne ; un script de la racine appelle Util.Moyenne, un script de Gaz sa voisine.
+        Project p = buildProject();
+        addFn(p, "Moyenne", "REAL", "VAR_INPUT a : REAL; b : REAL; END_VAR\nMoyenne := a;", "Gaz");
+        addScript(p, "S_Racine", "R := Util.Moyenne(1.0, 3.0);");
+        addScript(p, "S_Gaz", "R := Moyenne(1.0, 3.0);", "Gaz");
+        addScript(p, "S_Using", "USING Util;\nR := Moyenne(2.0, 4.0);");
+        (void)renameFunctionEverywhere(p, "Util", "Moyenne", "MoyenneGlissante");
+        for (auto& f : p.programs.functions) if (f.name == "Moyenne" && f.ns == "Util") f.name = "MoyenneGlissante";
+        const Script* a = p.generalScript("S_Racine");
+        const Script* b = p.generalScript("Gaz.S_Gaz");
+        const Script* c = p.generalScript("S_Using");
+        check(a && a->body == "R := Util.MoyenneGlissante(1.0, 3.0);", "T2-52 : Util.Moyenne(a, b) suit [" + (a ? a->body : std::string("?")) + "]");
+        check(b && b->body == "R := Moyenne(1.0, 3.0);", "T2-52 : Moyenne(c, d) d'un script de Gaz (vise Gaz.Moyenne) ne change pas [" + (b ? b->body : std::string("?")) + "]");
+        check(c && c->body == "USING Util;\nR := MoyenneGlissante(2.0, 4.0);", "T2-52 : sous USING Util, le nom court suit [" + (c ? c->body : std::string("?")) + "]");
+        check(run(p, "R := Util.MoyenneGlissante(1.0, 3.0);", &err) == "2", "T2-52 : l'appel renomme tourne (" + err + ")");
+    }
+    {
+        // T2-52 : renommer une fonction de la racine n'atteint pas l'homonyme d'un espace.
+        Project p;
+        addVar(p, "R", "REAL");
+        addFn(p, "Calcul", "REAL", "Calcul := 1.0;");
+        addFn(p, "Calcul", "REAL", "Calcul := 2.0;", "Gaz");
+        addScript(p, "S_Gaz", "R := Calcul();", "Gaz");
+        addScript(p, "S_Racine", "R := Calcul();");
+        (void)renameFunctionEverywhere(p, "", "Calcul", "Calcul2");
+        check(p.generalScript("Gaz.S_Gaz")->body == "R := Calcul();" && p.generalScript("S_Racine")->body == "R := Calcul2();",
+              "T2-52 : renommer Calcul (racine) : son appel suit, celui de Gaz (Gaz.Calcul) non");
+    }
+    {
+        // T2-52 : une action Script general vers un nom court que deux espaces definissent : Generer dit lequel.
+        Project p;
+        addVar(p, "R", "REAL");
+        addScript(p, "Horloge", "R := 1.0;", "Gaz");
+        addScript(p, "Horloge", "R := 2.0;", "Util");
+        View v = makeView(p, "Vue_A");
+        Action a;
+        a.operation = Operation::CallScript;
+        a.target = "Horloge";
+        v.actions.push_back(a);
+        p.views.push_back(v);
+        check(hasIssue(generOf(p), "ambigu : Gaz.Horloge ou Util.Horloge"), "T2-52 : Script general 'Horloge' ambigu : Generer nomme les deux");
+        p.views.back().actions.front().target = "Gaz.Horloge";
+        check(!hasIssue(generOf(p), "Horloge"), "T2-52 : la cible par son nom complet (Gaz.Horloge) est trouvee");
+    }
+}
+
 int main() {
     std::printf("1.13.0 (lot J8) : les espaces de noms et les bibliotheques\n");
     std::srand(static_cast<unsigned>(std::time(nullptr)));
@@ -750,6 +1048,10 @@ int main() {
     controle();
     serialisation();
     bibliotheques();
+    homonymes();
+    chevrons();
+    unitesBibliotheque();
+    renommerEspaces();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

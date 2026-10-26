@@ -1006,6 +1006,114 @@ void paquetsObjets() {
     check(gi && gi->state == pk::State::Different, "un generique de difference : differente");
 }
 
+// La seconde relecture (lot D2) : un paquet et les espaces de noms (T2-53), un renommage dans le paquet qui suit l'heritage
+// et les methodes (R27), les variables des cas de test qui voyagent (R29).
+void paquetsEspaces() {
+    std::printf("8 ter. un paquet et les espaces de noms, l'heritage renomme, les variables des cas de test\n");
+    core::setEdition(core::Edition::Ihm);
+    // T2-53 : le paquet porte Gaz.T_Vanne ; le projet a Util.T_Vanne (memes membres).
+    {
+        hmi::Project src;
+        hmi::HmiType g = structure(src, "T_Vanne");
+        g.ns = "Gaz";
+        src.programs.types.push_back(g);
+        const auto tpkg = pk::collectPrograms(src, pk::ProgramKind::Types, {src.programs.types.back().id});
+        hmi::Project dst;
+        dst.nextId = 1000;
+        hmi::HmiType u = structure(dst, "T_Vanne");
+        u.ns = "Util";
+        dst.programs.types.push_back(u);
+        const auto plan = pk::plan(dst, tpkg);
+        const pk::Item* it = plan.find(pk::ItemKind::Type, "T_Vanne");
+        check(it && it->state == pk::State::Missing && it->choice == pk::Choice::Add && it->ns == "Gaz",
+              "T2-53 : Gaz.T_Vanne du paquet n'est pas Util.T_Vanne du projet : absent, ajoute (" + (it ? it->detail : std::string("?")) + ")");
+        (void)pk::importInto(dst, tpkg, plan);
+        check(dst.hmiTypeByName("Gaz.T_Vanne") && dst.hmiTypeByName("Util.T_Vanne") && dst.programs.types.size() == 2,
+              "T2-53 : Gaz.T_Vanne ajoute a cote de Util.T_Vanne");
+        // Le projet a deja Gaz.T_Vanne ET Util.T_Vanne : identique, pas de doublon.
+        hmi::Project both = dst;
+        const auto again = pk::plan(both, tpkg);
+        const pk::Item* same = again.find(pk::ItemKind::Type, "T_Vanne");
+        check(same && same->state == pk::State::Same, "T2-53 : Gaz.T_Vanne deja la (avec Util.T_Vanne) : identique, garde (pas de doublon)");
+        (void)pk::importInto(both, tpkg, again);
+        check(both.programs.types.size() == 2, "T2-53 : aucun Gaz.T_Vanne en double");
+    }
+    // T2-53 : une fonction d'espace n'est pas appariee a l'homonyme d'un autre espace.
+    {
+        hmi::Project src;
+        hmi::HmiFunction f;
+        f.id = src.allocate();
+        f.name = "EnDefaut";
+        f.ns = "Gaz";
+        f.returnType = "BOOL";
+        f.body = "EnDefaut := TRUE;";
+        src.programs.functions.push_back(f);
+        const auto fpkg = pk::collectPrograms(src, pk::ProgramKind::Functions, {f.id});
+        hmi::Project dst;
+        dst.nextId = 1000;
+        hmi::HmiFunction g = f;
+        g.id = dst.allocate();
+        g.ns = "Util";
+        dst.programs.functions.push_back(g);
+        const auto plan = pk::plan(dst, fpkg);
+        const pk::Item* it = plan.find(pk::ItemKind::Function, "EnDefaut");
+        check(it && it->state == pk::State::Missing, "T2-53 : Gaz.EnDefaut n'est pas Util.EnDefaut : absente, ajoutee");
+        (void)pk::importInto(dst, fpkg, plan);
+        check(dst.functionByName("Gaz.EnDefaut") && dst.functionByName("Util.EnDefaut"), "T2-53 : Gaz.EnDefaut ajoutee a cote de Util.EnDefaut");
+    }
+    // R27 : un type renomme a l'import - son sous-type du paquet (EXTENDS) et la methode qui le nomme suivent.
+    {
+        hmi::Project src;
+        src.programs.types.push_back(structure(src, "T_Vanne"));
+        hmi::HmiType mot = structure(src, "T_Vanne_Motorisee");
+        mot.base = "T_Vanne";
+        hmi::HmiFunction m = method(src, "Copie", "VAR v : T_Vanne; END_VAR\nv.Etat := TRUE;");
+        m.returnType = "T_Vanne";
+        mot.methods.push_back(m);
+        src.programs.types.push_back(mot);
+        src.programs.types.front().methods.push_back(method(src, "Ouvrir", "Etat := TRUE;"));   // differe du projet : renomme
+        const auto tpkg = pk::collectPrograms(src, pk::ProgramKind::Types, {src.programs.types[0].id, src.programs.types[1].id});
+        hmi::Project dst;
+        dst.nextId = 1000;
+        dst.programs.types.push_back(structure(dst, "T_Vanne"));
+        auto plan = pk::plan(dst, tpkg);
+        const pk::Item* it = plan.find(pk::ItemKind::Type, "T_Vanne");
+        check(it && it->choice == pk::Choice::Rename && !it->newName.empty(), "R27 : T_Vanne different, choisi : importe sous un autre nom");
+        const std::string newName = it ? it->newName : std::string{};
+        (void)pk::importInto(dst, tpkg, plan);
+        const hmi::HmiType* sub = dst.hmiTypeByName("T_Vanne_Motorisee");
+        check(sub && sub->base == newName, "R27 : le sous-type importe herite du type renomme (" + (sub ? sub->base : std::string("?")) + ")");
+        check(sub && !sub->methods.empty() && sub->methods.front().returnType == newName
+                  && sub->methods.front().body.find(newName) != std::string::npos,
+              "R27 : la methode du sous-type (retour, corps) vise le type renomme");
+    }
+    // R29 : une fonction dont un cas de test pose Compteur_Clics emporte la variable.
+    {
+        hmi::Project src;
+        hmi::Variable v;
+        v.id = src.allocate();
+        v.name = "Compteur_Clics";
+        v.type = "INT";
+        src.programs.variables.push_back(v);
+        hmi::HmiFunction f;
+        f.id = src.allocate();
+        f.name = "Incrementer";
+        f.body = "Compteur_Clics := Compteur_Clics + 1;";
+        hmi::FunctionTest t;
+        t.id = src.allocate();
+        t.name = "un";
+        t.givens.push_back({"Compteur_Clics", "0"});
+        t.checks.push_back({"Compteur_Clics", "1", ""});
+        f.tests.push_back(t);
+        f.body = "RETURN;";                                   // le corps ne nomme plus la variable : seul le cas la pose
+        src.programs.functions.push_back(f);
+        const auto fpkg = pk::collectPrograms(src, pk::ProgramKind::Functions, {f.id});
+        check(std::any_of(fpkg.content.programs.variables.begin(), fpkg.content.programs.variables.end(),
+                          [](const hmi::Variable& x) { return x.name == "Compteur_Clics"; }),
+              "R29 : le paquet de la fonction emporte la variable que posent ses cas de test");
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -1017,6 +1125,7 @@ int main(int argc, char** argv) {
     baseCommune();
     pageWebRefusee();            // 1.13.0 (relecture)
     paquetsObjets();
+    paquetsEspaces();             // 1.13.0 (seconde relecture)
     if (fs::exists(bac / "project.xpgproj")) {
         archiveIhm(bac);
         cacheDeConstruction(bac);         // 1.12.31 : le cache de construction voyage

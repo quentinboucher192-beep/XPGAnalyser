@@ -2116,6 +2116,10 @@ struct Library {
     std::vector<LibraryTypeSig>     types{};       // le cache de l'interface (verifier sans le fichier)
     std::vector<LibraryFunctionSig> functions{};
     std::vector<std::string>        scripts{};     // les scripts appelables (IHM_APPELER('Gaz.Horloge'))
+    // 1.13.0 : les unites propres de la bibliotheque (familles et unites de son projet d'origine), gardees dans le cache
+    // (bib_famille_unite, bib_unite) : EN et Compiler les connaissent meme si le fichier manque.
+    std::vector<UnitFamily>         unitFamilies{};
+    std::vector<UnitDef>            units{};
     [[nodiscard]] const std::string& publishedName() const noexcept { return published.empty() ? name : published; }
     bool operator==(const Library&) const = default;
 };
@@ -2136,6 +2140,9 @@ struct LoadedLibrary {
     std::string  message{};           // ce qu'on dit de l'etat (une phrase)
     bool         fromCache{true};     // le contenu vient du cache d'interface (types et signatures, sans corps)
     Programs     content{};           // ses types, fonctions et scripts (ns = name ou name.sous), en lecture seule
+    // 1.13.0 : ses unites propres (le Config du paquet) - un type de la bibliotheque peut en employer (Debit [t/h]).
+    std::vector<UnitFamily> unitFamilies{};
+    std::vector<UnitDef>    units{};
 };
 //  Le contenu lu, partage entre les copies du projet (une commande annulable copie le projet : le contenu
 //  reste le meme) ; jamais compare (il se refait au chargement). Vide : aucune bibliotheque resolue.

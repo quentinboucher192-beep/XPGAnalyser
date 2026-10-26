@@ -6,6 +6,7 @@
 #include "HmiNames.hpp"
 #include "HmiScript.hpp"     // forEachCode, splitDeclarations
 #include "HmiStore.hpp"      // serializeProject, parseProject, parseRecord, quote, nowStamp
+#include "HmiUnits.hpp"      // 1.13.0 : les unites des bibliotheques (unitConfig)
 #include "../core/Version.hpp"
 #include "../../third_party/miniz.h"
 
@@ -589,6 +590,9 @@ LoadedLibrary loadContent(const Library& link, const Package& pkg, std::size_t i
     c.types = pkg.content.programs.types;
     c.functions = pkg.content.programs.functions;
     c.scripts = pkg.content.programs.scripts;
+    // 1.13.0 : les unites propres du paquet (collect les y a mises) : ses types peuvent en employer.
+    out.unitFamilies = pkg.content.config.unitFamilies;
+    out.units = pkg.content.config.units;
     const auto code = [&](std::string& t) { if (renamed) t = names::renameInCode(t, published, alias); };
     const auto type = [&](std::string& t) { if (renamed) t = names::renameInType(t, published, alias); };
     for (auto& t : c.types) {
@@ -633,6 +637,8 @@ LoadedLibrary fromCache(const Library& link, std::size_t index) {
     out.name = link.name;
     out.fromCache = true;
     out.foundVersion.clear();
+    out.unitFamilies = link.unitFamilies;      // 1.13.0 : ses unites, gardees dans le cache
+    out.units = link.units;
     Id next = 1;
     const auto place = [&](std::string_view relative, std::string& ns, std::string& name) {
         const auto [sub, last] = splitQualified(relative);
@@ -829,6 +835,8 @@ LinkPlan planLink(const Project& p, const std::string& file, const std::string& 
     Project shown;
     shown.programs = content.content;
     interfaceOf(shown, name, l.types, l.functions, l.scripts);
+    l.unitFamilies = content.unitFamilies;      // 1.13.0 : ses unites, dans le cache aussi
+    l.units = content.units;
     if (fs::path(pathOf(l.path)).is_absolute())
         plan.warnings.push_back("le fichier est hors du projet : le lien garde son chemin absolu (copie-le dans libs/ du projet pour qu'il voyage avec lui)");
     for (const auto& [dep, floor] : plan.package.manifest.dependencies)
@@ -975,6 +983,8 @@ bool applyUpdate(Project& p, const UpdatePlan& plan, const std::string& projectF
     Project shown;
     shown.programs = content.content;
     interfaceOf(shown, it->name, it->types, it->functions, it->scripts);
+    it->unitFamilies = content.unitFamilies;    // 1.13.0 : ses unites, dans le cache aussi
+    it->units = content.units;
     resolve(p, projectFolder);
     return true;
 }
@@ -1053,6 +1063,30 @@ std::vector<LinkIssue> linkIssues(const Project& p) {
                            true, false});
     }
     return out;
+}
+
+// 1.13.0 : LES UNITES QUE VOIT LE PROJET - les siennes, puis celles de chaque bibliotheque reliee (son contenu lu, ou
+// son cache) que ni le projet ni la liste fournie ne definissent deja (le projet garde la main sur un meme nom).
+Config unitConfig(const Project& p) {
+    Config c;
+    c.unitFamilies = p.config.unitFamilies;
+    c.units = p.config.units;
+    if (p.libraries.empty()) return c;
+    const units::Catalog known(p.config);
+    const auto addFrom = [&](const std::vector<UnitFamily>& families, const std::vector<UnitDef>& defs) {
+        for (const auto& f : families)
+            if (!known.family(f.name)
+                && std::none_of(c.unitFamilies.begin(), c.unitFamilies.end(), [&](const UnitFamily& x) { return same(x.name, f.name); }))
+                c.unitFamilies.push_back(f);
+        for (const auto& u : defs)
+            if (!known.unit(u.symbol) && std::none_of(c.units.begin(), c.units.end(), [&](const UnitDef& x) { return same(x.symbol, u.symbol); }))
+                c.units.push_back(u);
+    };
+    for (const auto& lib : p.libraries) {
+        if (const LoadedLibrary* l = p.loadedLibrary(lib.name)) addFrom(l->unitFamilies, l->units);
+        else addFrom(lib.unitFamilies, lib.units);
+    }
+    return c;
 }
 
 } // namespace hmi::biblio

@@ -221,6 +221,7 @@ void modeleHelpers();
 void moteur();
 void controle();
 void relecture();
+void seconde();
 
 int main() {
     std::printf("1.13.0 (lot J1) : les objets - methodes, prive, heritage, interfaces\n");
@@ -229,6 +230,7 @@ int main() {
     controle();
     moteur();
     relecture();
+    seconde();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
@@ -821,5 +823,61 @@ void relecture() {
         addVar(p, "R", "STRING");
         const std::string r = run(p, "VAR\n    d : T_Erreur;\n    d2 : T_Erreur;\nEND_VAR\nd.Code := 3;\nd.Texte := 'abc';\nd2 := d;\nR := CONCAT(d2.Texte, INT_TO_STRING(d2.Code));", &err);
         check(r == "abc3", "n48 : un type du projet nomme T_Erreur se copie en entier (d2 := d) [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+}
+
+// =============================================================================
+//  LA SECONDE RELECTURE (lot D2) : renommer un type, le corps des methodes, CATCH,
+//  les chaines d'un corps, le prive.
+// =============================================================================
+namespace {
+HmiType* typeNamed(Project& p, const std::string& n) {
+    for (auto& t : p.programs.types) if (t.name == n) return &t;
+    return nullptr;
+}
+} // namespace
+
+void seconde() {
+    std::printf("-- seconde relecture : renommer un type, corps des methodes, CATCH, chaines, prive\n");
+    std::string err;
+    // T2-50 : renommer un parent : le sous-type garde ses membres herites (EXTENDS suit) ; une interface renommee : IMPLEMENTS suit.
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe2", "T_PompeDoublee");
+        typeNamed(p, "T_Pompe")->methods.push_back(method(p, "Copier", "T_Pompe", "Copier := SELF;", Visibility::Public, false,
+                                                          {param(p, "autre", "T_Pompe")}));
+        addScript(p, "S_Cast", "VAR r : REF_TO T_Pompe; END_VAR\nr := DYNAMIC_CAST<T_Pompe>(Pompe2);");
+        const Id pompe = typeNamed(p, "T_Pompe")->id;
+        check(renameTypeEverywhere(p, pompe, "T_PompeCentrifuge") > 0, "T2-50 : renameTypeEverywhere renomme");
+        const HmiType* d = typeNamed(p, "T_PompeDoublee");
+        check(d && d->base == "T_PompeCentrifuge", "T2-50 : EXTENDS du sous-type suit (" + (d ? d->base : std::string("?")) + ")");
+        check(types::membersOf(p, "T_PompeDoublee").size() == 5, "T2-50 : Pompe2 garde Nom, Debit, Marche, Heures (herites) + Secours");
+        check(issuesWith(generOf(p), "type inconnu").empty(), "T2-50 : Generer ne dit pas \"herite de T_Pompe : type inconnu\"" + issuesWith(generOf(p), "type inconnu"));
+        const HmiType* c = typeNamed(p, "T_PompeCentrifuge");
+        const HmiFunction* copier = c ? ownMethod(*c, "Copier") : nullptr;
+        check(copier && copier->returnType == "T_PompeCentrifuge" && copier->decls.front().type == "T_PompeCentrifuge",
+              "T2-50 : la signature des methodes suit (retour, parametre)");
+        bool cast = false;
+        for (const auto& sc : p.programs.scripts) cast = cast || sc.body.find("DYNAMIC_CAST<T_PompeCentrifuge>") != std::string::npos;
+        check(cast, "T2-50 : DYNAMIC_CAST<T_Pompe> dans le code suit");
+        const Id iface = typeNamed(p, "I_Demarrable")->id;
+        (void)renameTypeEverywhere(p, iface, "I_Marche");
+        check(typeNamed(p, "T_PompeCentrifuge")->interfaces.front() == "I_Marche" && typeNamed(p, "T_Vanne")->interfaces.front() == "I_Marche",
+              "T2-50 : IMPLEMENTS suit l'interface renommee");
+        check(issuesWith(generOf(p), "n'est pas une interface").empty() && issuesWith(generOf(p), "mais n'a pas").empty(),
+              "T2-50 : les interfaces renommees restent satisfaites");
+    }
+    // T2-50 : un homonyme d'un autre espace ne suit pas (identite).
+    {
+        Project p;
+        addType(p, "T_Base").members.push_back(member("A", "INT"));
+        HmiType& g = addType(p, "T_Base");
+        g.ns = "Gaz";
+        g.members.push_back(member("B", "INT"));
+        HmiType& s = addType(p, "T_Fils");
+        s.ns = "Gaz";
+        s.base = "T_Base";                                  // lu depuis Gaz : Gaz.T_Base
+        (void)renameTypeEverywhere(p, p.programs.types.front().id, "T_Racine");
+        check(p.programs.types[2].base == "T_Base", "T2-50 : renommer T_Base de la racine ne touche pas le parent Gaz.T_Base de Gaz.T_Fils");
     }
 }

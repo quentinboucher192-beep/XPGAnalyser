@@ -25,6 +25,7 @@
 #include "../../ui/Theme.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 #include "../../hmi/HmiNames.hpp"          // 1.13.0 (lot J8) : l'espace de noms d'un type
+#include "../../hmi/HmiMethods.hpp"        // 1.13.0 : les methodes, l'heritage, les interfaces ; renommer un type partout
 #include "HmiTypePicker.hpp"                // 1.11.19 (refonte, lot 6) : "Choisir un type..."
 #include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement suit le type et ses membres
 #include "../../hmi/HmiRoles.hpp"           // 1.12.14 : les types d'un tuple
@@ -4032,60 +4033,13 @@ bool HmiTypesPane::renameType(Id id, const std::string& raw, std::string* why) {
         return fail(why, "le type " + hmi::qualifiedName(t->ns, name) + " existe d\xC3\xA9j\xC3\xA0");
     if (t->name == name) return true;
     const std::string before = t->name;
-    const std::string beforeFull = hmi::fullName(*t), afterFull = hmi::qualifiedName(t->ns, name);
-    // Les variables et les membres qui l'emploient suivent.
-    const auto rename = [&](std::string& type) {
-        ty::Spec s;
-        const bool generic = type.find('<') != std::string::npos;      // 1.12.20 (lot G) : T_Mesure<REAL>, T_Paire<T_Four, INT>
-        if (ty::parseSpec(type, s) && !generic) {
-            // 1.13.0 (lot J8) : son nom complet (Gaz.T_Vanne) suit aussi.
-            if (!beforeFull.empty() && beforeFull != before && sameText(s.element, beforeFull)) {
-                s.element = afterFull;
-                type = ty::specText(s);
-                return;
-            }
-            if (!sameText(s.element, before)) return;
-            s.element = name;
-            type = ty::specText(s);
-            return;
-        }
-        // 1.12.4 : un type objet (LIST OF T_Four, MAP[STRING] OF T_Four, TUPLE(INT, T_Four)) : le nom
-        // parmi ses mots (un membre objet, une variable objet, une declaration).
-        if (!ty::isRich(type) && !generic) return;
-        std::string out;
-        for (std::size_t i = 0; i < type.size();) {
-            if (std::isalpha(static_cast<unsigned char>(type[i])) || type[i] == '_') {
-                std::size_t j = i;
-                // 1.13.0 (lot J8) : un nom complet (Gaz.T_Vanne) se lit d'un bloc.
-                while (j < type.size() && (std::isalnum(static_cast<unsigned char>(type[j])) || type[j] == '_'
-                                           || (type[j] == '.' && j + 1 < type.size() && (std::isalpha(static_cast<unsigned char>(type[j + 1])) || type[j + 1] == '_'))))
-                    ++j;
-                const std::string word = type.substr(i, j - i);
-                out += sameText(word, beforeFull) ? afterFull : sameText(word, before) ? name : word;
-                i = j;
-            } else {
-                out += type[i++];
-            }
-        }
-        type = out;
-    };
-    apply_(hmi::changeProject(doc_, "Renommer le type " + before + " en " + name, [&](hmi::Project& p) {
-        for (auto& x : p.programs.types) {
-            if (x.id == id) x.name = name;
-            for (auto& m : x.members) rename(m.type);
-        }
-        for (auto& v : p.programs.variables) rename(v.type);
-        // 1.11.18 (refonte, lot 3) : les declarations du modele des scripts et des fonctions aussi.
-        hmi::forEachDeclarations(p, [&](std::vector<hmi::Declaration>& list) { for (auto& d : list) rename(d.type); });
-        (void)hmi::renameTypeInOperators(p, before, name);   // 1.10 (chantier S2) : les operateurs suivent
-        (void)hmi::renameEnumType(p, before, name);          // 1.10 (chantier E) : T_ANCIEN#x -> T_NOUVEAU#x
-        (void)hmi::eqlink::renameType(p, before, name);      // 1.12.11 (lot G) : sa liaison Equipement
-        // 1.12.11 (lot G) : les parametres des popups et des symboles de ce type (Moteur : T_Moteur) - leur
-        // liaison Equipement en depend (avant : le parametre gardait l'ancien nom, un type inconnu).
-        for (auto& vw : p.views)
-            for (auto& prm : vw.params) rename(prm.type);
-    }));
-    say("Type renomm\xC3\xA9 : " + before + " \xE2\x86\x92 " + name + " (les variables et les membres qui l'emploient suivent)");
+    // 1.13.0 : tout ce qui le nomme suit (hmi::renameTypeEverywhere) - les variables, les membres, les declarations, les
+    // parametres des popups, les retours, et aussi les sous-types (EXTENDS), les types qui l'implementent (IMPLEMENTS),
+    // les signatures des methodes et DYNAMIC_CAST<T> dans le code. Avant, un sous-type gardait l'ancien parent.
+    apply_(hmi::changeProject(doc_, "Renommer le type " + before + " en " + name,
+                              [&](hmi::Project& p) { (void)hmi::renameTypeEverywhere(p, id, name); }));
+    say("Type renomm\xC3\xA9 : " + before + " \xE2\x86\x92 " + name
+        + " (les variables, les membres, les sous-types, les interfaces et les m\xC3\xA9thodes qui l'emploient suivent ; Ctrl+Z l'annule)");
     return true;
 }
 

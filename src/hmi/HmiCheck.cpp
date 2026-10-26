@@ -445,8 +445,24 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
         }
         if (a.operation == Operation::CallScript) {
             if (a.target.empty()) add(out, S::Error, "Action", v.id, obj, where, "aucun script \xC3\xA0 appeler");
-            else if (!p.generalScript(target))
-                add(out, S::Error, "Action", v.id, obj, where, "script g\xC3\xA9n\xC3\xA9ral '" + target + "' introuvable" + dup::markerHint(a.target, target));
+            else if (!p.generalScript(target)) {
+                // 1.13.0 : un nom court que deux espaces definissent (Gaz.Horloge, Util.Horloge) : lequel, pas « introuvable ».
+                std::vector<std::string> spaces;
+                if (target.find('.') == std::string::npos) {
+                    for (const auto& sc : p.programs.scripts)
+                        if (!sc.ns.empty() && sameTypeName(sc.name, target)) spaces.push_back(fullName(sc));
+                    p.forEachLibraryScript([&](const Script& sc, const LoadedLibrary&) {
+                        if (!sc.ns.empty() && sameTypeName(sc.name, target)) spaces.push_back(fullName(sc));
+                    });
+                }
+                if (spaces.size() > 1) {
+                    std::string list;
+                    for (std::size_t k = 0; k < spaces.size(); ++k) list += (k ? (k + 1 == spaces.size() ? " ou " : ", ") : "") + spaces[k];
+                    add(out, S::Error, "Action", v.id, obj, where, "script g\xC3\xA9n\xC3\xA9ral '" + target + "' ambigu : " + list + " - choisis-le par son nom complet");
+                } else {
+                    add(out, S::Error, "Action", v.id, obj, where, "script g\xC3\xA9n\xC3\xA9ral '" + target + "' introuvable" + dup::markerHint(a.target, target));
+                }
+            }
         }
         if ((a.operation == Operation::Assign || a.operation == Operation::Log || a.operation == Operation::RunScript) && a.value.empty())
             add(out, S::Error, "Action", v.id, obj, where, "valeur vide");
@@ -594,7 +610,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                     if (assignsLambda(text, n)) lambdaHeld.insert(upperCopy(n));
             });
     }
-    const units::Catalog unitCat(p.config);   // 1.13.0 (lot J6) : la bibliotheque des unites (fournies + projet)
+    const units::Catalog unitCat(biblio::unitConfig(p));   // 1.13.0 : les unites (fournies + projet + bibliotheques reliees)
     for (const auto& var : p.programs.variables) {
         const std::string key = [&] { std::string u = var.name; for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c))); return u; }();
         if (!isIdentifier(var.name)) add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, "nom invalide : '" + var.name + "'");
@@ -689,7 +705,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
             else if (const auto it = inherited.find(upperText(m.name)); it != inherited.end())
                 add(out, S::Error, cat, kNoId, kNoId, ty.name,
                     ty.name + " : " + m.name + " est d\xC3\xA9j\xC3\xA0 un membre de " + it->second + " (h\xC3\xA9rit\xC3\xA9) : renomme-le ou retire-le");
-            else if (!ty.base.empty() && effectiveMethod(p, ty.base, m.name))
+            else if (const HmiType* parent = types::baseOf(p, ty); parent && effectiveMethod(p, fullName(*parent), m.name))
                 add(out, S::Error, cat, kNoId, kNoId, ty.name,
                     ty.name + " : " + m.name + " est d\xC3\xA9j\xC3\xA0 une m\xC3\xA9thode de " + ty.base + " (h\xC3\xA9rit\xC3\xA9" "e) : renomme le membre");
             else if (!members.insert(upperText(m.name)).second) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : membre en double " + m.name);
@@ -723,7 +739,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                     add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : unit\xC3\xA9 inconnue '" + m.unit + "'");
             }
         }
-        if (const auto cycle = types::cycleOf(p, ty.name); !cycle.empty())
+        if (const auto cycle = types::cycleOf(p, fullName(ty)); !cycle.empty())
             add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " se contient lui-m\xC3\xAAme : " + cycle);
         // 1.13.0 (lot J1) : l'heritage, les methodes, les interfaces.
         // EXTENDS : parent connu, entre structures, sans cycle (extendsProblem).
@@ -4034,7 +4050,7 @@ void checkDisplay(const Project& p, const NameExists& plc, std::vector<Issue>& o
         // « 9.08 mbar »), qu'elle soit de la meme famille ou d'une autre.
         if (const std::string shown = trimmedCopy(d.unit); !shown.empty())
             if (const std::string phys = units::unitOfPath(p, d.path); !phys.empty()) {
-                const units::Catalog cat(p.config);
+                const units::Catalog cat(biblio::unitConfig(p));   // 1.13.0 : bibliotheques comprises
                 const units::Rel rel = cat.relation(phys, shown);
                 if (rel == units::Rel::OtherFamily)
                     issue(S::Error, d.path + " est en " + phys + " (" + cat.familyPhrase(phys) + ") : on ne l'affiche pas en " + shown + " ("

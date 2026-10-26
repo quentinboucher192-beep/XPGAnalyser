@@ -262,6 +262,14 @@ struct PublicProperty {
 [[nodiscard]] std::vector<PublicProperty> publicProperties(std::string_view type);
 // Les membres d'un type IHM (vide : pas une structure).
 [[nodiscard]] std::vector<TypeMember> membersOf(const Project&, std::string_view typeName);
+// 1.13.0 : LE PARENT (EXTENDS) d'un type, lu depuis l'espace du type : un nom complet (Base.T_Vanne) tel quel ;
+// un nom court, d'abord dans l'espace du type et ses parents (sans se prendre lui-meme), puis la racine ou le
+// seul de ce nom. Nul : pas de parent, ou inconnu. Deux types de meme nom court (Gaz.T_Vanne EXTENDS
+// Base.T_Vanne) ne se confondent pas : les gardes de cycle comparent les noms complets.
+[[nodiscard]] const HmiType* baseOf(const Project&, const HmiType&);
+// 1.13.0 : un nom de type lu depuis l'espace `ns` (le parent, une interface d'un type de cet espace) : complet tel quel ;
+// court, l'espace et ses parents d'abord, puis la racine ou le seul de ce nom. `self` n'est jamais rendu.
+[[nodiscard]] const HmiType* typeFrom(const Project&, std::string_view ns, std::string_view name, const HmiType* self = nullptr);
 // 1.12.17 : CE QUI N'EST PAS UNE VALEUR SEULE - un tableau, une liste, un vecteur, un ensemble, un tampon
 // circulaire, une MAP, un tuple, une structure (un type IHM qui a des membres ; `project` nul : pas de
 // structure connue). Une plume, la valeur d'une jauge, une condition, une cible qu'on met a 1 en veulent

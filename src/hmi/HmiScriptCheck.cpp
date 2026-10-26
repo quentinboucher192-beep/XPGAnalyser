@@ -1869,14 +1869,17 @@ private:
         const std::string& name = toks_[k].text;
         if (local(name) || dialectName(name, toks_[k].at) || (sc_.project && sc_.project->variable(name))) return k;
         using S = Finding::Severity;
-        const bool angled = isOp(k + 1, "<") && isIdent(k + 2) && isOp(k + 3, ">");
+        // 1.13.0 : le type peut etre complet (DYNAMIC_CAST<Gaz.T_Pompe>) : NOM < Ident(.Ident)* >
+        std::size_t typeEnd = k + 3;
+        while (isOp(typeEnd, ".") && isIdent(typeEnd + 1)) typeEnd += 2;
+        const bool angled = isOp(k + 1, "<") && isIdent(k + 2) && isOp(typeEnd, ">");
         // NOM<TYPE sans son > (NUMERIC_LIMITS<UINT.MAX(), SATURATE_CAST<INT(x)) : « le type, puis > » (la maquette).
         // Seulement devant un nom de type : NOM < x reste une comparaison.
         if (!angled && isOp(k + 1, "<") && isIdent(k + 2) && !isOp(k + 3, "#") && sim::lib::elementaryTypeName(toks_[k + 2].text)) {
             reportTok(k, k + 3, S::Error, std::string(info->name) + " : le type, puis > \xE2\x80\x94 " + std::string(info->example));
             return k + 3;
         }
-        std::size_t next = angled ? k + 4 : k + 1;
+        std::size_t next = angled ? typeEnd + 1 : k + 1;
         const auto closeOf = [&](std::size_t open) {
             int depth = 0;
             std::size_t m = open;
@@ -1921,6 +1924,35 @@ private:
         if (const auto* nat = sim::lib::native(info->name); nat && (n < nat->min || (nat->max >= 0 && n > nat->max)))
             reportTok(k, k + 1, S::Error, std::string(info->name) + " prend " + arityText(nat->min, nat->max) + ", pas " + std::to_string(n));
         walkNames(next + 1, close);
+        return atEnd(close) ? close : close + 1;
+    }
+
+    // 1.13.0 : un appel generique aux types donnes - Limiter<INT>(x, 0, 100), Gaz.Limiter<REAL>(...), Max<Gaz.T_Point>(p, q).
+    // Ses types ne sont pas des noms a lire (REAL n'est pas une variable inconnue) ; ses arguments, si. Rend l'index qui
+    // suit l'appel, ou k : pas un tel appel (a < b reste une comparaison).
+    std::size_t genericCallUse(std::size_t k) {
+        if (!isIdent(k) || (k > 0 && isOp(k - 1, ".")) || sim::lib::templateInfo(toks_[k].text)) return k;
+        std::size_t h = k + 1;
+        while (isOp(h, ".") && isIdent(h + 1)) h += 2;
+        if (!isOp(h, "<")) return k;
+        std::size_t m = h + 1;
+        bool closed = false, any = false;
+        while (isIdent(m)) {
+            any = true;
+            ++m;
+            while (isOp(m, ".") && isIdent(m + 1)) m += 2;
+            if (isOp(m, ",")) { ++m; continue; }
+            if (isOp(m, ">")) { ++m; closed = true; }
+            break;
+        }
+        if (!closed || !any || !isOp(m, "(")) return k;
+        int depth = 0;
+        std::size_t close = m;
+        for (; !atEnd(close); ++close) {
+            if (isOp(close, "(")) ++depth;
+            else if (isOp(close, ")") && --depth == 0) break;
+        }
+        walkNames(m + 1, close);
         return atEnd(close) ? close : close + 1;
     }
 
@@ -1989,6 +2021,10 @@ private:
                 if (k > 0 && (isOp(k - 1, "(") || isOp(k - 1, ","))) { ++k; continue; }
             }
             if (const std::size_t past = templateUse(k); past != k) {                  // 1.12.7 : NUMERIC_LIMITS<UINT>.MAX()
+                k = std::max(past, k + 1);
+                continue;
+            }
+            if (const std::size_t past = genericCallUse(k); past != k) {               // 1.13.0 : Gaz.Limiter<REAL>(x, 0.0, 1.0)
                 k = std::max(past, k + 1);
                 continue;
             }

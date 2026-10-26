@@ -1313,6 +1313,14 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                    + (t.kind.empty() ? std::string{} : fieldBare("genre", t.kind)) + "\n";
         for (const auto& f : lib.functions) index += "bib_fonction" + field("nom", f.name) + field("signature", f.signature) + "\n";
         for (const auto& sc : lib.scripts) index += "bib_script" + field("nom", sc) + "\n";
+        // 1.13.0 : ses unites propres (le format reste 33 : un lecteur sans elles les ignore, un lien sans elles n'en ecrit pas).
+        for (const auto& f : lib.unitFamilies)
+            index += "bib_famille_unite" + field("nom", f.name) + field("reference", f.reference)
+                   + (f.label.empty() ? std::string{} : field("libelle", f.label)) + "\n";
+        for (const auto& u : lib.units)
+            index += "bib_unite" + field("symbole", u.symbol) + field("famille", u.family)
+                   + fieldBare("facteur", exactNumber(u.factor)) + fieldBare("decalage", exactNumber(u.offset))
+                   + (u.label.empty() ? std::string{} : field("libelle", u.label)) + "\n";
     }
     // Lot 14 : la communication avec l'automate reel - seulement si elle change
     // (un projet qui reste sur le simulateur n'ecrit rien).
@@ -1956,6 +1964,30 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             if (r.word == "bib_type") lib.types.push_back({toStr(r.get("nom")), toStr(r.get("membres")), toStr(r.get("genre"))});
             else if (r.word == "bib_fonction") lib.functions.push_back({toStr(r.get("nom")), toStr(r.get("signature"))});
             else lib.scripts.push_back(toStr(r.get("nom")));
+        } else if (r.word == "bib_famille_unite" || r.word == "bib_unite") {   // 1.13.0 : les unites propres d'une bibliotheque
+            if (p.libraries.empty()) {
+                if (report) report->warnings.push_back(r.word + " sans biblioth\xC3\xA8que : ignor\xC3\xA9");
+                continue;
+            }
+            auto& lib = p.libraries.back();
+            if (r.word == "bib_famille_unite") {
+                UnitFamily f;
+                f.name = toStr(r.get("nom"));
+                f.reference = toStr(r.get("reference"));
+                f.label = toStr(r.get("libelle"));
+                if (!f.name.empty()) lib.unitFamilies.push_back(std::move(f));
+            } else {
+                UnitDef u;
+                u.symbol = toStr(r.get("symbole"));
+                u.family = toStr(r.get("famille"));
+                double d = 1.0;
+                const bool factorRead = !r.get("facteur") || parseNumber(toStr(r.get("facteur")), d);
+                u.factor = r.get("facteur") && factorRead ? d : 1.0;
+                d = 0.0;
+                u.offset = r.get("decalage") && parseNumber(toStr(r.get("decalage")), d) ? d : 0.0;
+                u.label = toStr(r.get("libelle"));
+                if (!u.symbol.empty() && factorRead && u.factor != 0.0) lib.units.push_back(std::move(u));   // un facteur nul : ignore
+            }
         } else if (r.word == "communication") {                           // lot 14
             auto& c = p.comm;
             const Communication def{};

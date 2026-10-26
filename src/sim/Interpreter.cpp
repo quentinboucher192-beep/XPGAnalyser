@@ -1287,25 +1287,49 @@ private:
         if (dialect_ && t.kind == Tok::Identifier && upperOf(t.text) == "LAMBDA") return lambdaExpr();
         // 1.12.19 : l'appel d'une fonction generique, ses types donnes - Limiter<INT>(x, 0, 100) ;
         // seulement NOM < TYPE [, TYPE] > ( : a < b reste une comparaison.
-        if (dialect_ && t.kind == Tok::Identifier && !lib::templateInfo(t.text) && peek(1).kind == Tok::Punct && peek(1).text == "<") {
-            std::size_t k = 2;
-            std::vector<std::string> types;
-            bool closed = false;
-            while (peek(k).kind == Tok::Identifier) {
-                types.push_back(upperOf(peek(k).text));
-                ++k;
-                if (peek(k).kind == Tok::Punct && peek(k).text == ",") { ++k; continue; }
-                if (peek(k).kind == Tok::Punct && peek(k).text == ">") { ++k; closed = true; }
-                break;
+        // 1.13.0 : le nom et les types peuvent etre complets (Util.Max<INT>(a, b), Max<Gaz.T_Point>(p, q)) - c'est
+        // ainsi que names::qualify les ecrit pour le moteur dans un script d'un espace (ou sous USING).
+        if (dialect_ && t.kind == Tok::Identifier && !lib::templateInfo(t.text)) {
+            std::size_t h = 1;
+            std::vector<std::string> segs{t.raw};
+            while (peek(h).kind == Tok::Punct && peek(h).text == "." && peek(h + 1).kind == Tok::Identifier) {
+                segs.push_back(peek(h + 1).raw);
+                h += 2;
             }
-            if (closed && !types.empty() && peek(k).kind == Tok::Punct && peek(k).text == "(") {
-                auto node = std::make_shared<Expr>();
-                node->kind = Expr::Kind::Reference;
-                node->name = t.raw;
-                node->line = t.line;
-                node->typeArgs = std::move(types);
-                for (std::size_t i = 0; i < k; ++i) advance();
-                return node;
+            if (peek(h).kind == Tok::Punct && peek(h).text == "<") {
+                std::size_t k = h + 1;
+                std::vector<std::string> types;
+                bool closed = false;
+                while (peek(k).kind == Tok::Identifier) {
+                    std::string ty = upperOf(peek(k).text);
+                    ++k;
+                    while (peek(k).kind == Tok::Punct && peek(k).text == "." && peek(k + 1).kind == Tok::Identifier) {
+                        ty += "." + upperOf(peek(k + 1).text);
+                        k += 2;
+                    }
+                    types.push_back(std::move(ty));
+                    if (peek(k).kind == Tok::Punct && peek(k).text == ",") { ++k; continue; }
+                    if (peek(k).kind == Tok::Punct && peek(k).text == ">") { ++k; closed = true; }
+                    break;
+                }
+                if (closed && !types.empty() && peek(k).kind == Tok::Punct && peek(k).text == "(") {
+                    auto node = std::make_shared<Expr>();
+                    node->kind = Expr::Kind::Reference;
+                    node->name = segs.front();
+                    node->line = t.line;
+                    // Gaz.Limiter : la meme chaine de membres qu'un appel qualifie sans types (callResolved la qualifie).
+                    for (std::size_t i = 1; i < segs.size(); ++i) {
+                        auto m = std::make_shared<Expr>();
+                        m->kind = Expr::Kind::Member;
+                        m->lhs = node;
+                        m->name = segs[i];
+                        m->line = t.line;
+                        node = m;
+                    }
+                    node->typeArgs = std::move(types);
+                    for (std::size_t i = 0; i < k; ++i) advance();
+                    return node;
+                }
             }
         }
         if (dialect_ && t.kind == Tok::Identifier && upperOf(t.text) == "NULL") {
@@ -1317,10 +1341,18 @@ private:
         }
         // 1.12.7 (dialecte IHM) : un template - NUMERIC_LIMITS<UINT>.MAX(), NUMBERS<REAL>.PI, SATURATE_CAST<INT>(x),
         // ADD_SAT<INT>(a, b). Seulement pour ces noms, et seulement NOM < TYPE > : a < b ne change pas.
+        // 1.13.0 : le type d'un espace (DYNAMIC_CAST<Gaz.T_Pompe>) - names::qualify l'ecrit ainsi dans un espace.
+        const std::size_t templateClose = [&]() -> std::size_t {
+            if (peek(2).kind != Tok::Identifier) return 0;
+            std::size_t k = 3;
+            while (peek(k).kind == Tok::Punct && peek(k).text == "." && peek(k + 1).kind == Tok::Identifier) k += 2;
+            return peek(k).kind == Tok::Punct && peek(k).text == ">" ? k : 0;
+        }();
         if (dialect_ && t.kind == Tok::Identifier && lib::templateInfo(t.text) && peek(1).kind == Tok::Punct && peek(1).text == "<"
-            && peek(2).kind == Tok::Identifier && peek(3).kind == Tok::Punct && peek(3).text == ">") {
+            && templateClose != 0) {
             const auto* info = lib::templateInfo(t.text);
-            const std::string type = upperOf(peek(2).text);
+            std::string type = upperOf(peek(2).text);
+            for (std::size_t k = 3; k < templateClose; k += 2) type += "." + upperOf(peek(k + 1).text);
             const std::string head = std::string(info->name) + "<" + type + ">";
             const auto exampleFor = [&] {
                 std::string x(info->example);
@@ -1339,9 +1371,7 @@ private:
                 }
                 return errorHere(head + " : " + std::string(info->want));
             }
-            advance();
-            advance();
-            advance();
+            for (std::size_t k = 0; k < templateClose; ++k) advance();   // < TYPE[.TYPE] > (le nom est deja pris)
             auto node = std::make_shared<Expr>();
             node->kind = Expr::Kind::Reference;
             node->name = head;
