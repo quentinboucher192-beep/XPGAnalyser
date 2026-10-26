@@ -2578,6 +2578,13 @@ EventResult TableView::onEvent(const InputEvent& ev) {
         if (!selection_.empty() && (k->key == Key::F2 || k->key == Key::Left || k->key == Key::Right) && k->mods.none()) {
             const RowIndex row = selection_.back();
             if (k->key == Key::F2) {
+                // 1.13.0 (seconde passe) : la case du dernier clic, si elle s'edite (cliquer la case Unite puis F2 : un
+                // champ ou taper) ; sinon la premiere case editable de la ligne.
+                if (lastClickColumn_ >= 0 && static_cast<std::size_t>(lastClickColumn_) < columns_.size()
+                    && columns_[static_cast<std::size_t>(lastClickColumn_)].visible && model_->editable(row, static_cast<std::size_t>(lastClickColumn_))) {
+                    (void)beginCellEdit(row, static_cast<std::size_t>(lastClickColumn_));
+                    return EventResult::Consumed;
+                }
                 for (std::size_t c = 0; c < columns_.size(); ++c)
                     if (columns_[c].visible && model_->editable(row, c)) {
                         (void)beginCellEdit(row, c);

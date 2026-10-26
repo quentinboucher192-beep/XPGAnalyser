@@ -36888,6 +36888,21 @@ void unites113() {
               && asked[0].current == "mbar" && asked[0].type == "REAL" && asked[0].field == "Unit\xC3\xA9 de Pression" && p.variableById(pres)->unit == "degC",
           "T2-41 : le double-clic sur la case Unit\xC3\xA9 ouvre le s\xC3\xA9lecteur (sur mbar) ; degC choisi");
     {
+        // Un clic sur la case Unite, puis F2 : le champ de CETTE case (avant : F2 ouvrait toujours la premiere, le Nom).
+        gfx::Rect cr{};
+        const auto rowP = static_cast<std::size_t>(vars.rowOf("Pression"));
+        if (vars.table().cellRect(rowP, 2, cr)) {
+            const gfx::Point on{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f};
+            vars.table().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+            vars.table().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+        }
+        vars.table().takeFocus();
+        vars.table().dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(vars.table().cellEditing() && vars.table().editedColumn() == 2 && asked.size() == 1,
+              "T2-41 : un clic sur la case Unit\xC3\xA9 puis F2 - son champ (colonne " + std::to_string(vars.table().editedColumn()) + ")");
+        vars.table().finishCellEdit(false, {});
+    }
+    {
         // La fiche : un champ, et le bouton ... pour le selecteur (avant : la case ouvrait le selecteur a la place du champ).
         vars.selectVariable(pres);
         bool field = false;
