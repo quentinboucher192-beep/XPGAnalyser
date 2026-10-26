@@ -22,8 +22,10 @@
 //     ce seul element ; une archive d'avant (sans cache) : tout se regenere, comme avant.
 //  7. Un projet passe en argument (le projet de demonstration, en copie) : l'aller-retour ;
 //     1.12.31 : un build complet d'abord, le build a jour apres le deballage.
-//  8. 1.13.0 (relecture) : l'import d'un paquet de types ou de fonctions voit les methodes, le parent,
-//     les interfaces, les generiques et les cas de test (plus "identique" a tort).
+//  8. 1.13.0 (relecture) : une page web (.html) ouverte - un refus en francais, dans les deux editions,
+//     avant l'importeur d'API Studio ; l'import d'un paquet de types ou de fonctions voit les methodes,
+//     le parent, les interfaces, les generiques et les cas de test (plus "identique" a tort).
+#include "../src/app/App.hpp"               // 1.13.0 : App::webPageRefusal (une page web ne s'ouvre plus)
 #include "../src/app/hmi/HmiBuild.hpp"      // 1.12.31 : l'etat du build, tel que l'arbre le montre
 #include "../src/core/AtomicFile.hpp"
 #include "../src/core/Edition.hpp"
@@ -852,6 +854,26 @@ void allerRetour(const fs::path& given) {
 }
 
 // ======================================================= 8. 1.13.0 (relecture) ==
+// n31 : une page web (.html) ouverte dans API Studio tombait dans l'importeur ("no parser recognises this
+// file", sous un titre anglais) et prenait la place des sources du projet en main. Le refus est dit avant.
+void pageWebRefusee() {
+    std::printf("8. une page web (.html) ouverte : refusee en francais, dans les deux editions\n");
+    core::setEdition(core::Edition::Api);
+    const auto api = app::App::webPageRefusal("D:/Projets/Ligne_gaz.html");
+    check(api && api->title == "Pas un projet de l'automate" && api->text.rfind("Ligne_gaz.html : une page web ne s'ouvre plus", 0) == 0
+              && api->text.find("API Studio ouvre") != std::string::npos && api->text.find(".XHW") != std::string::npos,
+          "API Studio : Ligne_gaz.html refusee, en francais, avec ce qu'il ouvre (" + (api ? api->title : std::string("rien")) + ")");
+    check(app::App::webPageRefusal("/tmp/Notice.HTM").has_value(), "API Studio : .HTM (en majuscules) aussi");
+    check(!app::App::webPageRefusal("/tmp/Config.XHW") && !app::App::webPageRefusal("/tmp/Ligne.xapi")
+              && !app::App::webPageRefusal("/tmp/MAST.XPG") && !app::App::webPageRefusal("/tmp/html"),
+          "API Studio : un export .XHW, une archive .xapi, un .XPG, un dossier nomme html : pas refuses ici");
+    core::setEdition(core::Edition::Ihm);
+    const auto ihm = app::App::webPageRefusal("/tmp/Synoptique.html");
+    check(ihm && ihm->title == "Pas un projet IHM" && ihm->text.find("IHM Studio ouvre") != std::string::npos
+              && ihm->text.find("API Studio") == std::string::npos,
+          "IHM Studio : la page refusee, avec ce qu'IHM Studio ouvre (sans parler d'API Studio)");
+}
+
 namespace pk = hmi::pkg;
 
 hmi::HmiFunction method(hmi::Project& p, const char* name, const char* body) {
@@ -993,7 +1015,8 @@ int main(int argc, char** argv) {
     fs::remove_all(scratch(), ec);
     fs::create_directories(scratch(), ec);
     baseCommune();
-    paquetsObjets();             // 1.13.0 (relecture)
+    pageWebRefusee();            // 1.13.0 (relecture)
+    paquetsObjets();
     if (fs::exists(bac / "project.xpgproj")) {
         archiveIhm(bac);
         cacheDeConstruction(bac);         // 1.12.31 : le cache de construction voyage
