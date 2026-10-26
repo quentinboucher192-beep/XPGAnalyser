@@ -1701,6 +1701,10 @@ std::string privateUse(const Project& p, std::string_view typeName, std::string_
 }
 } // namespace
 
+std::string privateMemberUse(const Project& p, std::string_view typeName, std::string_view member) {
+    return privateUse(p, typeName, member);
+}
+
 std::vector<PathProblem> pathProblems(const Project& p, std::string_view source) {
     std::vector<PathProblem> out;
     if (p.programs.variables.empty()) return out;

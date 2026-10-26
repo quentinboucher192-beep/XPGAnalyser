@@ -17,6 +17,7 @@
 
 #include "HmiEdit.hpp"
 #include "HmiExpr.hpp"
+#include "../sim/DialectLib.hpp"   // 1.13.0 : sim::lib::native (une native du meme nom qu'une methode)
 #include "HmiAssets.hpp"
 #include "HmiSymbols.hpp"
 #include "HmiTemplates.hpp"
@@ -556,6 +557,10 @@ void interfaceDeclarations(const Project& p, const std::vector<Declaration>& dec
 // qu'au premier appel, en marche. La ligne : celle du corps de la methode.
 void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
     using S = Issue::Severity;
+    // 1.13.0 : IHM Studio n'a pas d'automate - un nom que le projet ne connait pas n'existe nulle part (avant, l'automate
+    // absent rendait tout nom connu : « Marche := Debitt > 1.0; » passait). API Studio sans automate charge : comme avant.
+    static const NameExists kNone = [](std::string_view) { return false; };
+    const NameExists& names = (!plc && !core::hasApi()) ? kNone : plc;
     for (const auto& ty : p.programs.types) {
         if (ty.kind != HmiTypeKind::Structure || ty.methods.empty()) continue;
         const std::string tn = fullName(ty);
@@ -585,8 +590,51 @@ void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issu
             const auto dialect = scriptcheck::dialectDeclared(code);
             for (const auto& u : scriptNames(code)) {
                 const std::string U = upperText(u.name);
-                if (here.count(U) || dialect.count(U) || known(p, plc, u.name)) continue;
+                if (here.count(U) || dialect.count(U) || known(p, names, u.name)) continue;
                 issue(S::Error, "variable inexistante : " + u.name + " (ni membre de " + ty.name + ", ni variable)", u.line);
+            }
+            // 1.13.0 : un appel nu X() d'un nom qui est a la fois une methode du type et une fonction (du projet, standard,
+            // une native) vise la METHODE (SELF.X()) - le dire, plutot qu'un changement silencieux.
+            {
+                const std::string body = markers::strip(code);
+                std::set<std::string> said;
+                int line = 1;
+                for (std::size_t i = 0; i < body.size();) {
+                    const char c = body[i];
+                    if (c == '\n') { ++line; ++i; continue; }
+                    if (c == '\'' || c == '"') {
+                        std::size_t k = i + 1;
+                        while (k < body.size() && body[k] != c) { if (body[k] == '\n') ++line; k += body[k] == '$' ? 2 : 1; }
+                        i = k + 1;
+                        continue;
+                    }
+                    if (c == '(' && i + 1 < body.size() && body[i + 1] == '*') {
+                        const auto e = body.find("*)", i + 2);
+                        const std::size_t stop = e == std::string::npos ? body.size() : e + 2;
+                        for (std::size_t k = i; k < stop; ++k) if (body[k] == '\n') ++line;
+                        i = stop;
+                        continue;
+                    }
+                    if (c == '/' && i + 1 < body.size() && body[i + 1] == '/') {
+                        while (i < body.size() && body[i] != '\n') ++i;
+                        continue;
+                    }
+                    if (!(std::isalpha(static_cast<unsigned char>(c)) || c == '_')) { ++i; continue; }
+                    std::size_t j = i;
+                    while (j < body.size() && (std::isalnum(static_cast<unsigned char>(body[j])) || body[j] == '_')) ++j;
+                    const std::string w = body.substr(i, j - i);
+                    const bool member = i > 0 && (body[i - 1] == '.' || body[i - 1] == '#' || std::isalnum(static_cast<unsigned char>(body[i - 1])));
+                    std::size_t k = j;
+                    while (k < body.size() && (body[k] == ' ' || body[k] == '\t')) ++k;
+                    const bool call = k < body.size() && body[k] == '(';
+                    i = j;
+                    if (member || !call || !effectiveMethod(p, tn, w)) continue;
+                    const std::string W = upperText(w);
+                    const bool function = !p.functionsNamed(w).empty() || isStandardFunction(W) || isHmiFunction(W) || sim::lib::native(W);
+                    if (!function || !said.insert(W).second) continue;
+                    issue(S::Warning, w + "() appelle la m\xC3\xA9thode " + ty.name + "." + w + " (SELF." + w + "()), pas la fonction " + w
+                                          + " du m\xC3\xAAme nom - renomme l'une des deux pour lever le doute", line);
+                }
             }
         }
     }

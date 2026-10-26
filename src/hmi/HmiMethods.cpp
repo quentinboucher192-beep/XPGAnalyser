@@ -71,6 +71,38 @@ std::string codeOnly(std::string_view s) {
     return out;
 }
 
+// 1.13.0 : ce qu'est chaque caractere du texte - 0 : du code, 's' : une chaine (ses guillemets compris), 'c' : un
+// commentaire. codeOnly blanchit les deux pareil : une apostrophe d'un commentaire (« // s'il faut ») n'ouvre pas une chaine.
+std::string kindsOf(std::string_view s) {
+    std::string out(s.size(), '\0');
+    std::size_t i = 0;
+    const auto mark = [&](std::size_t from, std::size_t to, char k) {
+        for (std::size_t m = from; m < to && m < out.size(); ++m) out[m] = k;
+    };
+    while (i < s.size()) {
+        const char c = s[i];
+        if (c == '\'' || c == '"') {
+            std::size_t k = i + 1;
+            while (k < s.size() && s[k] != c) k += s[k] == '$' ? 2 : 1;
+            mark(i, k + 1, 's');
+            i = k + 1;
+        } else if (c == '(' && i + 1 < s.size() && s[i + 1] == '*') {
+            const auto end = s.find("*)", i + 2);
+            const std::size_t stop = end == std::string_view::npos ? s.size() : end + 2;
+            mark(i, stop, 'c');
+            i = stop;
+        } else if (c == '/' && i + 1 < s.size() && s[i + 1] == '/') {
+            const auto end = s.find('\n', i);
+            const std::size_t stop = end == std::string_view::npos ? s.size() : end;
+            mark(i, stop, 'c');
+            i = stop;
+        } else {
+            ++i;
+        }
+    }
+    return out;
+}
+
 // Un identifiant ST valide (pour le nom interne : ses caracteres non valides, '_').
 std::string sanitize(std::string_view s) {
     std::string out;
@@ -107,11 +139,37 @@ std::string methodSignature(std::string_view typeName, const HmiFunction& m) {
 // (son parent sert a SUPER).
 // 1.13.0 : une autre methode du type appelee par son nom nu (Journal()) -> SELF.Journal() (le dispatch suit le
 // type reel de SELF) ; un argument nomme ou un champ de litteral (F(Consigne := x), (Debit := 1.0)) garde son nom ;
-// dans un texte, les trous {Debit:0.0} d'un message (LEVER, IHM_LOG, IHM_JOURNAL) lisent SELF.Debit.
+// dans un texte, les trous {Debit:0.0} d'un message (LEVER, IHM_LOG, IHM_JOURNAL) lisent SELF.Debit - seulement
+// la : JSON_LIRE('{"Debit":1}'), CONCAT('{Debit}', ...) restent tels quels. Un commentaire est recopie tel quel (ses
+// apostrophes n'ouvrent pas de chaine).
 static std::string rewriteBody(const Project& p, std::string_view ownerType, const HmiFunction& m,
                                std::string_view internal) {
     const std::string body = markers::strip(m.body);
     const std::string code = codeOnly(body);
+    const std::string kind = kindsOf(body);
+    // L'appel dont une chaine est un argument direct : LEVER('E_X', 'msg {Debit}') -> "LEVER" ; aucun : vide.
+    const auto enclosingCall = [&](std::size_t at) -> std::string {
+        int depth = 0;
+        for (std::size_t k = at; k-- > 0;) {
+            const char ch = code[k];
+            if (ch == ')' || ch == ']') ++depth;
+            else if (ch == '(' || ch == '[') {
+                if (depth == 0) {
+                    if (ch == '[') return {};
+                    std::size_t e = k;
+                    while (e > 0 && (code[e - 1] == ' ' || code[e - 1] == '\t')) --e;
+                    std::size_t b = e;
+                    while (b > 0 && identPart(code[b - 1])) --b;
+                    return upperOf(std::string_view(code).substr(b, e - b));
+                }
+                --depth;
+            } else if (ch == ';' && depth == 0) {
+                return {};
+            }
+        }
+        return {};
+    };
+    const auto messageCall = [](std::string_view u) { return u == "LEVER" || u == "RELEVER" || u == "IHM_LOG" || u == "IHM_JOURNAL"; };
 
     std::set<std::string> memberSet;
     for (const auto& mm : allMembers(p, ownerType)) memberSet.insert(upperOf(mm.name));
@@ -171,19 +229,21 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
     out.reserve(body.size() + 32);
     std::size_t i = 0;
     while (i < body.size()) {
-        // une chaine : ses trous {Membre} lisent SELF.Membre (le reste tel quel)
-        if (code[i] == ' ' && (body[i] == '\'' || body[i] == '"')) {
+        // dans un commentaire : tel quel (une apostrophe n'y ouvre pas de chaine)
+        if (kind[i] == 'c') { out += body[i++]; continue; }
+        // une chaine : celle d'un message (LEVER, IHM_LOG, IHM_JOURNAL) - ses trous {Membre} lisent SELF.Membre ; une
+        // autre (JSON_LIRE('{"Debit":1}'), un texte ecrit) : telle quelle.
+        if (kind[i] == 's') {
             std::size_t k = i + 1;
             while (k < body.size() && body[k] != body[i]) k += body[k] == '$' ? 2 : 1;
             const std::size_t close = std::min(k, body.size());   // l'apostrophe fermante (ou la fin)
+            const std::string_view inner = std::string_view(body).substr(i + 1, close - (i + 1));
             out += body[i];
-            out += rewriteText(std::string_view(body).substr(i + 1, close - (i + 1)));
+            out += messageCall(enclosingCall(i)) ? rewriteText(inner) : std::string(inner);
             if (close < body.size()) out += body[close];
             i = close < body.size() ? close + 1 : body.size();
             continue;
         }
-        // dans un commentaire : tel quel
-        if (code[i] == ' ' && body[i] != ' ') { out += body[i++]; continue; }
         if (!identStart(body[i]) || (i > 0 && (identPart(body[i - 1]) || body[i - 1] == '.' || body[i - 1] == '#'))) {
             out += body[i++];
             continue;

@@ -617,7 +617,7 @@ public:
     // standard ou IHM, une native, l'automate...) - names::check ne le dit pas " d'un autre espace ".
     [[nodiscard]] bool knownOtherwise(std::string_view n) const {
         const std::string U = up(n);
-        if (local(n) || param(n) || counter(n) || selfName(n) || catchVar(n) || viewConstant(n) || viewFunctionHere(n)) return true;
+        if (local(n) || param(n) || counter(n) || selfName(n) || catchVarOnly(n) || viewConstant(n) || viewFunctionHere(n)) return true;
         if (internalFunction(std::string(n)) || isStandardFunction(U) || isHmiFunction(U) || natives::isOwnFunction(U) || sim::lib::native(U)
             || dialectFunctions().count(U) || conversion(U))
             return true;
@@ -682,6 +682,8 @@ public:
         std::set<std::string> out;
         for (const auto& d : dialectNames_) out.insert(d.upper);
         for (const auto& f : internal_) out.insert(up(f.name));
+        // 1.13.0 : le nom d'un CATCH (CATCH e ... e.Code) n'est pas une variable inexistante (Generer, corps des methodes).
+        for (const auto& c : catchVars_) out.insert(c.upper);
         if (!out.empty()) out.insert(typeWords_.begin(), typeWords_.end());
         return out;
     }
@@ -727,7 +729,7 @@ private:
     [[nodiscard]] bool knownElsewhere(std::string_view n) const {
         const Project* p = sc_.project;
         if (local(n) || param(n) || counter(n) || selfName(n)) return true;
-        if (catchVar(n)) return true;                                  // 1.13.0 : l'erreur d'un CATCH
+        if (catchVarOnly(n)) return true;                              // 1.13.0 : l'erreur d'un CATCH (dans son seul handler)
         if (viewConstant(n) || viewFunctionHere(n)) return true;      // 1.12.16 : un membre de la vue
         if (p && (p->variable(n) || pub::isSysRoot(n) || pub::viewNamed(*p, n) || p->functionByName(n))) return true;
         return !sc_.plcKnown || sc_.plcKnown(n);     // l'automate inconnu : tout peut etre a lui
@@ -739,7 +741,7 @@ private:
         const std::string root = s.substr(0, cut);
         if (const auto* l = local(root)) return cut == std::string::npos ? l->type : std::string{};
         if (counter(root)) return cut == std::string::npos ? std::string("INT") : std::string{};
-        if (catchVar(root) && !local(root) && !param(root) && !(p && p->variable(root))) {   // 1.13.0 : e.Code/e.Message (STRING), e.Ligne (DINT), e seul (STRING)
+        if (catchVarOnly(root) && !local(root) && !param(root) && !(p && p->variable(root))) {   // 1.13.0 : e.Code/e.Message (STRING), e.Ligne (DINT), e seul (STRING)
             if (cut == std::string::npos) return "STRING";
             const std::string m = up(s.substr(cut + 1));
             return m == "LIGNE" ? "DINT" : m == "CODE" || m == "MESSAGE" ? "STRING" : std::string{};
@@ -1030,6 +1032,17 @@ private:
         return std::any_of(catchVars_.begin(), catchVars_.end(), [&](const CatchName& c) { return c.upper == U; });
     }
     // ... a cette place du texte (dans son handler).
+    // 1.13.0 : un nom de CATCH employe SEULEMENT dans son handler (pour les lecteurs qui ne donnent pas la place : le
+    // dialecte, les espaces) - employe ailleurs, c'est un autre nom (ou une faute de frappe) : pas l'erreur attrapee.
+    [[nodiscard]] bool catchVarOnly(std::string_view name) const {
+        if (!catchVar(name)) return false;
+        const std::string U = up(name);
+        for (std::size_t k = 0; k < toks_.size(); ++k) {
+            if (!isIdent(k) || up(toks_[k].text) != U || (k > 0 && isOp(k - 1, "."))) continue;
+            if (!catchVarAt(name, toks_[k].at)) return false;
+        }
+        return true;
+    }
     [[nodiscard]] bool catchVarAt(std::string_view name, std::size_t at) const {
         const std::string U = up(name);
         return std::any_of(catchVars_.begin(), catchVars_.end(), [&](const CatchName& c) { return c.upper == U && at >= c.from && at < c.to; });
@@ -1185,6 +1198,23 @@ private:
             if (segs.size() == 1 && (m == "CODE" || m == "MESSAGE" || m == "LIGNE")) return m == "LIGNE" ? "DINT" : "STRING";
             reportTok(i, j, S::Error, "T_Erreur n'a que Code, Message et Ligne, pas " + s.member);
             return {};
+        }
+        // 1.13.0 : une locale (un parametre) d'un type objet - VAR q : T_Pompe; q.Heures : un membre ou une methode prive
+        // lu d'ici est refuse, comme sur une variable IHM (pathProblems) ; a toute profondeur (q.Moteur.Heures).
+        if (const auto* l = local(root.text); l && p && !elementary(l->type)) {
+            std::string t = types::normalized(l->type);
+            std::string at = root.text;
+            for (const auto& s : segs) {
+                if (s.index || s.member.empty()) break;
+                if (const std::string why = types::privateMemberUse(*p, t, s.member); !why.empty()) {
+                    reportTok(i, j, S::Error, at + "." + s.member + " : " + why);
+                    return {};
+                }
+                const auto st = types::stepMember(*p, t, s.member);
+                if (st.type.empty()) break;
+                at += "." + s.member;
+                t = st.type;
+            }
         }
         // 1.10 : une locale d'un type riche du dialecte (ARRAY, MAP, REF_TO...) : S1.
         if (const auto* l = local(root.text); l && !elementary(l->type)) return {};

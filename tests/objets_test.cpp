@@ -11,6 +11,7 @@
 //
 //  OBJ_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
+#include "../src/core/Edition.hpp"
 #include "../src/hmi/HmiCheck.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiMethods.hpp"
@@ -879,5 +880,77 @@ void seconde() {
         s.base = "T_Base";                                  // lu depuis Gaz : Gaz.T_Base
         (void)renameTypeEverywhere(p, p.programs.types.front().id, "T_Racine");
         check(p.programs.types[2].base == "T_Base", "T2-50 : renommer T_Base de la racine ne touche pas le parent Gaz.T_Base de Gaz.T_Fils");
+    }
+    // R19 : une apostrophe d'un commentaire n'ouvre pas une chaine ; R20 : seuls les messages (LEVER, IHM_LOG, IHM_JOURNAL)
+    // relisent leurs trous {Membre} - JSON_LIRE('{"Debit":1}'), CONCAT('{Debit}', ...) restent tels quels.
+    {
+        Project p = buildProject();
+        HmiFunction m = method(p, "Tracer", {},
+            "// d\xC3\xA9marre s'il faut\nMarche := TRUE;\nHeures := Heures + 1.0;\nIHM_LOG(INFO, 'Debit bas {Debit}');\n"
+            "Nom := CONCAT('{Debit}', '');");
+        const std::string txt = methodFunctionText(p, "T_Pompe", m);
+        check(txt.find("SELF.Marche := TRUE") != std::string::npos && txt.find("SELF.Heures := SELF.Heures + 1.0") != std::string::npos,
+              "R19 : apres un commentaire \"s'il faut\", les membres prennent SELF. [" + txt + "]");
+        check(txt.find("'Debit bas {SELF.Debit}'") != std::string::npos && txt.find("SELF.Debit bas") == std::string::npos,
+              "R19 : le message garde son texte, son trou lit SELF.Debit");
+        check(txt.find("CONCAT('{Debit}', '')") != std::string::npos, "R20 : un texte hors message ({Debit} de CONCAT) reste tel quel");
+        check(static_cast<bool>(sim::parseFunction(txt, "essai")), "R19 : la FUNCTION de la methode se lit");
+        typeNamed(p, "T_Pompe")->methods.push_back(m);
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "R", "STRING");
+        const std::string r = run(p, "Pompe1.Debit := 3.0;\nPompe1.Tracer();\nR := Pompe1.Nom;", &err);
+        check(r == "{Debit}", "R20 : en marche, CONCAT('{Debit}', '') rend {Debit} [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+    // R15/R16 : le prive lu par une locale ou un parametre d'un type objet (pas seulement une variable IHM).
+    {
+        Project p = buildProject();
+        addScript(p, "S_Locale", "VAR\n    q : T_Pompe;\nEND_VAR\nq.Heures := 0.0;\nq.Journal();");
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Lire";
+        f.returnType = "REAL";
+        f.decls.push_back(param(p, "x", "T_Pompe"));
+        f.body = "Lire := x.Heures;";
+        p.programs.functions.push_back(f);
+        const auto is = compilerOf(p);
+        check(!issuesWith(is, "q.Heures : Heures est priv\xC3\xA9 dans T_Pompe").empty(), "R15 : VAR q : T_Pompe; q.Heures (prive) refuse" + errorsOf(is));
+        check(!issuesWith(is, "q.Journal : Journal est une m\xC3\xA9thode priv\xC3\xA9" "e").empty(), "R16 : q.Journal() (privee) refusee sur une locale" + errorsOf(is));
+        check(!issuesWith(is, "x.Heures : Heures est priv\xC3\xA9").empty(), "R15 : un parametre x : T_Pompe, x.Heures refuse" + errorsOf(is));
+        Project q = buildProject();
+        addScript(q, "S_Ok", "VAR\n    q : T_Pompe;\nEND_VAR\nq.Debit := 1.0;\nq.Demarrer();");
+        check(issuesWith(compilerOf(q), "priv\xC3\xA9").empty(), "R15 : le public d'une locale reste permis");
+    }
+    // R25 : dans une methode, l'appel nu d'un nom qui est aussi une fonction du projet vise la methode : Generer le dit.
+    {
+        Project p = buildProject();
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Journal";
+        f.body = "RETURN;";
+        p.programs.functions.push_back(f);
+        const auto is = generOf(p);
+        check(!issuesWith(is, "Journal() appelle la m\xC3\xA9thode T_Pompe.Journal", Issue::Severity::Warning).empty(),
+              "R25 : Journal() (methode ET fonction du projet) : Generer avertit qu'il vise la methode");
+        check(issuesWith(generOf(buildProject()), "appelle la m\xC3\xA9thode", Issue::Severity::Warning).empty(),
+              "R25 : sans fonction du meme nom : aucun avertissement");
+    }
+    // R14 : IHM Studio (sans automate) : un nom inconnu dans une methode est dit. R23 : le nom d'un CATCH n'est pas inconnu.
+    {
+        const auto before = core::edition();
+        core::setEdition(core::Edition::Ihm);
+        Project p = buildProject();
+        typeNamed(p, "T_Pompe")->methods.push_back(method(p, "Verifier", {}, "Marche := Debitt > 1.0;"));
+        const auto is = generate(p, NameExists{});          // IHM Studio : pas d'automate
+        check(!issuesWith(is, "variable inexistante : Debitt").empty(), "R14 : sans automate, Debitt (inconnu) est dit dans la methode" + errorsOf(is));
+        check(issuesWith(is, "variable inexistante : Marche").empty() && issuesWith(is, "variable inexistante : Heures").empty(),
+              "R14 : les membres (Marche, Heures prive) restent connus" + errorsOf(is));
+        Project q = buildProject();
+        typeNamed(q, "T_Pompe")->methods.push_back(method(q, "Surveiller", {},
+            "TRY\n    Marche := TRUE;\nCATCH e\n    IHM_LOG(INFO, e.Message);\n    Nom := e.Code;\nEND_TRY"));
+        for (const auto& plcNames : {NameExists{}, NameExists([](std::string_view) { return false; })}) {
+            const auto iq = generate(q, plcNames);
+            check(issuesWith(iq, "variable inexistante : e").empty(), "R23 : CATCH e ... e.Code dans une methode : pas de fausse erreur" + errorsOf(iq));
+        }
+        core::setEdition(before);
     }
 }
