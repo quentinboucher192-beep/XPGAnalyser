@@ -31064,6 +31064,13 @@ void natives1200() {
     same_text(conditionRow("fonction:MAP_HAS"), "\xE2\x9C\x93", "natives : MAP_HAS (BOOL) cochee en condition");
     same_text(conditionRow("fonction:LIMIT"), "\xE2\x9C\x93", "natives : LIMIT (comme IN) cochee en condition");
     check(conditionRow("fonction:SQRT").find("comparaison") != std::string::npos, "natives : SQRT (REAL), en condition dans une comparaison : " + conditionRow("fonction:SQRT"));
+    // 1.13.0 (relecture F1-4) : un retour "comme A" (A : un SET), "comme T" (T : ARRAY, LIST, VECTOR) est un conteneur : non.
+    for (const char* key : {"fonction:SET_SYMMETRIC_DIFFERENCE", "fonction:PARTIAL_SUM", "fonction:INCLUSIVE_SCAN", "fonction:EXCLUSIVE_SCAN",
+                            "fonction:TRANSFORM_INCLUSIVE_SCAN", "fonction:TRANSFORM_EXCLUSIVE_SCAN", "fonction:ADJACENT_DIFFERENCE"})
+        check(conditionRow(key).rfind("non", 0) == 0, std::string("natives : ") + key + " (un conteneur) pas cochee en condition : " + conditionRow(key));
+    // ... un retour "comme" un parametre qui n'est pas un conteneur garde sa ligne.
+    same_text(conditionRow("fonction:ABS"), "\xE2\x9C\x93", "natives : ABS (comme IN) cochee en condition");
+    check(conditionRow("fonction:ACCUMULATE").rfind("non", 0) != 0, "natives : ACCUMULATE (comme INIT, un nombre) reste permise en condition : " + conditionRow("fonction:ACCUMULATE"));
     // Les mots : F1 dans un script.
     same_text(app::natives::keyOfWord("limit"), "fonction:LIMIT", "natives : F1 sur limit");
     same_text(app::natives::keyOfWord("INT_TO_REAL"), "conversion:INT_TO_REAL", "natives : F1 sur INT_TO_REAL");
