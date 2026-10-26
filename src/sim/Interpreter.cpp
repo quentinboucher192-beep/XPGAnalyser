@@ -3061,13 +3061,7 @@ private:
             // 1.13.0 (dialecte IHM) : la fonction appelee (une fonction IHM simple, sa propre execution) a echoue sur une
             // erreur qu'elle n'a pas rattrapee - un LEVER, ou une erreur du moteur : elle traverse l'appel TELLE QUELLE (son
             // code, son message, ou elle est nee), a la ligne de l'appel, vers le TRY d'ici (ou la Console, ou ??).
-            if (dialect_ && !probing_) {
-                std::string code, message, origin;
-                if (env_.lastCallRaised(code, message, origin)) {
-                    (void)raise(Caught{true, std::move(code), std::move(message), e.line, {}, std::move(origin)});
-                    return core::fail(core::ErrorCode::NotImplemented, *target);
-                }
-            }
+            if (auto raised = raiseFromCall(*target, e.line)) return *raised;
             // Lot API 7 : l'environnement peut choisir de continuer - l'appel
             // rend 0, rien n'est rendu aux variables passees, le cycle va au bout.
             if (env_.tolerateUnknownCall(*target, e.line)) return Value::integer(Type::DInt, 0);
@@ -3473,6 +3467,20 @@ private:
         env_.report(std::move(d));
         aborted_ = true;
         return {Flow::Kind::Aborted};
+    }
+
+    // 1.13.0 (relecture F1) : un appel de l'environnement a echoue et la fonction appelee (une fonction IHM simple, sa propre
+    // execution) a leve une erreur qu'elle n'a pas rattrapee (un LEVER, une erreur du moteur) : elle traverse l'appel TELLE
+    // QUELLE (son code, son message, ou elle est nee), a la ligne `line`, vers le TRY d'ici (ou la Console, ou ??). Le meme
+    // relais pour F(x), pour une fonction passee par son nom a une native a rappel (LIST_ANY(L, F), REDUCE...) et pour l'OP
+    // de LIST_TRANSFORM : callFunction l'a tue a la Console parce qu'un TRY d'ici l'attend (callerCatches) - sans ce relais,
+    // le CATCH ne recevait qu'un message generique. Vide : rien de leve, l'echec ordinaire suit.
+    std::optional<core::Err<core::Error>> raiseFromCall(const std::string& callee, std::uint32_t line) {
+        if (!dialect_ || probing_) return std::nullopt;
+        std::string code, message, origin;
+        if (!env_.lastCallRaised(code, message, origin)) return std::nullopt;
+        (void)raise(Caught{true, std::move(code), std::move(message), line, {}, std::move(origin)});
+        return core::fail(core::ErrorCode::NotImplemented, callee);
     }
 
     // 1.13.0 : une erreur du dialecte signalee a une ligne (LEVER mal forme, RELEVER hors CATCH) :
@@ -5470,7 +5478,10 @@ private:
             const ChainScope chain(this);                       // 1.13.0 : la pile du debogueur IHM
             called = env_.call(key, key, values, result);
         }
-        if (!called) return dialectError("l'appel de " + cb.callee + " a \xC3\xA9" "chou\xC3\xA9");
+        if (!called) {
+            if (auto raised = raiseFromCall(cb.callee, line)) return *raised;
+            return dialectError("l'appel de " + cb.callee + " a \xC3\xA9" "chou\xC3\xA9");
+        }
         return RV{result, nullptr};
     }
 
@@ -10077,7 +10088,10 @@ private:
             const ChainScope chain(this);                       // 1.13.0 : la pile du debogueur IHM
             called = env_.call(key, key, {{std::string{}, x.v}}, result);
         }
-        if (!called) return dialectError(u + " : l'appel de " + name + " a \xC3\xA9" "chou\xC3\xA9");
+        if (!called) {
+            if (auto raised = raiseFromCall(name, line)) return *raised;
+            return dialectError(u + " : l'appel de " + name + " a \xC3\xA9" "chou\xC3\xA9");
+        }
         return RV{result, nullptr};
     }
 

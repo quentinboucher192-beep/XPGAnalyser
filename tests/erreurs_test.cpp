@@ -955,9 +955,176 @@ void capturesF1() {
     }
 }
 
+// ---- la relecture du lot F1 : l'erreur d'une fonction ne se tait a la Console QUE si elle arrive au CATCH qui la
+//  rattrape. Un texte a trous, le message d'un LEVER, une expression (un parametre de popup, comme une fx) ne font pas
+//  remonter l'erreur de la fonction qu'ils appellent : elle se dit a la Console et le script echoue (comme avant le
+//  correctif C2). Une native a rappel (LIST_ANY(L, F), LIST_TRANSFORM(..., 'F')), elle, la fait remonter telle quelle.
+void relectureF1() {
+    std::printf("-- relecture F1 : l'erreur d'une fonction se tait seulement si elle arrive au CATCH\n");
+    const auto withVerifier = [](Project& p) {
+        addVariable(p, "Mesure", "REAL", "120.0");
+        addVariable(p, "Ok", "BOOL", "FALSE");
+        addSimpleFunction(p, "Verifier_Niveau", "BOOL", {{"n", "REAL"}}, kVerifierNiveau);
+    };
+    // La Console : la source (la fonction) et le message de chaque ERROR.
+    const auto consoleOf = [](const Runtime& rt) {
+        std::string out;
+        for (const auto& e : rt.journal())
+            if (e.kind == "Erreur") out += " | " + e.source + " : " + e.message;
+        return out;
+    };
+    const auto saidAtConsole = [](const std::string& errs) {
+        return errs.find("Verifier_Niveau") != std::string::npos && errs.find("E_Niveau") != std::string::npos;
+    };
+    // F1-1 / F1-3 : un trou d'IHM_LOG sous TRY - le trou ne fait pas remonter l'erreur (il ecrit ###) : la Console la dit.
+    {
+        Bench b("STRING", "TRY\n    IHM_LOG(INFO, 'niveau {Verifier_Niveau(Mesure)}');\n    R := 'suite';\nCATCH e\n    R := e.Code;\nEND_TRY",
+                withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        const std::string errs = consoleOf(b.rt);
+        check(saidAtConsole(errs), "F1-1 : IHM_LOG('{Verifier_Niveau(...)}') sous TRY : l'erreur se dit a la Console" + errs);
+        check(r == "suite" && err.find("E_Niveau") != std::string::npos,
+              "F1-1 : ... le CATCH ne la recoit pas, le script est compte en echec [" + r + "] " + err);
+    }
+    // ... de meme IHM_JOURNAL.
+    {
+        Bench b("STRING", "TRY\n    IHM_JOURNAL('niveau {Verifier_Niveau(Mesure)}');\n    R := 'suite';\nCATCH e\n    R := e.Code;\nEND_TRY",
+                withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(saidAtConsole(consoleOf(b.rt)) && r == "suite" && !err.empty(),
+              "F1-3 : IHM_JOURNAL('{Verifier_Niveau(...)}') sous TRY : la Console la dit [" + r + "] " + err + consoleOf(b.rt));
+    }
+    // Le message d'un LEVER sous TRY : son CATCH recoit E_X ; l'erreur du trou, elle, se dit a la Console.
+    {
+        Bench b("STRING", std::string("TRY\n    LEVER('E_X', 'msg {Verifier_Niveau(Mesure)}');\n") + kCatchAll, withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        const std::string errs = consoleOf(b.rt);
+        check(r.rfind("E_X|2|msg ", 0) == 0, "F1-1 : LEVER('E_X', 'msg {Verifier_Niveau(...)}') : son CATCH recoit E_X [" + r + "]");
+        check(saidAtConsole(errs) && err.find("E_Niveau") != std::string::npos,
+              "F1-1 : ... et l'erreur du trou se dit a la Console, le script echoue" + errs + " / " + err);
+    }
+    // ?? : DANS le trou, il rattrape (rien a la Console) ; A GAUCHE de ?? (l'appel IHM_LOG), le trou ne fait rien remonter.
+    {
+        Bench b("STRING", "TRY\n    IHM_LOG(INFO, 'niveau {Verifier_Niveau(Mesure) ?? FALSE}');\n    R := 'suite';\nCATCH e\n    R := e.Code;\nEND_TRY",
+                withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r == "suite" && err.empty() && consoleOf(b.rt).empty(),
+              "F1-1 : '{Verifier_Niveau(...) ?? FALSE}' : le ?? du trou la rattrape, rien a la Console [" + r + "] " + err + consoleOf(b.rt));
+        Bench g("STRING", "Ok := IHM_LOG(INFO, 'niveau {Verifier_Niveau(Mesure)}') ?? FALSE;\nR := 'suite';", withVerifier);
+        const std::string rg = g.runScript(&err);
+        check(saidAtConsole(consoleOf(g.rt)) && !err.empty(),
+              "F1-1 : IHM_LOG('{Verifier_Niveau(...)}') ?? FALSE : le ?? ne la recoit pas, la Console la dit [" + rg + "] " + err
+                  + consoleOf(g.rt));
+    }
+    // Une expression evaluee pendant l'appel (un parametre de popup, comme une fx) : la Console la dit.
+    {
+        const auto withPopup = [&](Project& p) {
+            withVerifier(p);
+            View pop = makeView(p, "Pop_Niveau");
+            pop.role = "popup";
+            ViewParam seuil;
+            seuil.name = "Seuil";
+            seuil.defaultValue = "FALSE";
+            seuil.type = "BOOL";
+            pop.params.push_back(seuil);
+            p.views.push_back(pop);
+        };
+        Bench b("STRING", "TRY\n    IHM_POPUP('Pop_Niveau', 'Seuil := Verifier_Niveau(Mesure)');\n    R := 'suite';\nCATCH e\n    R := e.Code;\nEND_TRY",
+                withPopup);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        const std::string errs = consoleOf(b.rt);
+        check(saidAtConsole(errs) && r == "suite" && err.find("E_Niveau") != std::string::npos,
+              "F1-1 : une expression (parametre de popup) sous TRY : la Console la dit, le script echoue [" + r + "] " + err + errs);
+    }
+    // IHM_APPELER : le script appele ne fait pas remonter l'erreur de sa fonction au TRY de l'appelant : la Console la dit.
+    {
+        const auto withCalled = [&](Project& p) {
+            withVerifier(p);
+            Script sc;
+            sc.id = p.allocate();
+            sc.name = "Sous_Controle";
+            sc.event = "Appel";
+            sc.body = "Ok := Verifier_Niveau(Mesure);";
+            p.programs.scripts.push_back(sc);
+        };
+        Bench b("STRING", "TRY\n    IHM_APPELER('Sous_Controle');\n    R := 'suite';\nCATCH e\n    R := e.Code;\nEND_TRY", withCalled);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(saidAtConsole(consoleOf(b.rt)) && r == "suite",
+              "F1-1 : IHM_APPELER d'un script dont la fonction leve, sous TRY : la Console la dit [" + r + "] " + err + consoleOf(b.rt));
+    }
+    // La condition d'une alarme (une expression lue a chaque cycle, hors de tout script) : la Console la dit, comme avant.
+    {
+        const auto withAlarm = [&](Project& p) {
+            withVerifier(p);
+            AlarmDef a;
+            a.id = p.allocate();
+            a.name = "Niveau_Hors_Plage";
+            a.condition = "NOT Verifier_Niveau(Mesure)";
+            a.message = "niveau";
+            p.alarms.push_back(a);
+        };
+        Bench b("STRING", "R := 'x';", withAlarm);
+        b.rt.tick(0.5);
+        check(saidAtConsole(consoleOf(b.rt)), "F1-1 : une condition d'alarme qui appelle Verifier_Niveau : la Console la dit" + consoleOf(b.rt));
+    }
+    // F1-5 : une fonction passee par son nom a une native a rappel : son LEVER arrive au CATCH tel quel (code, message).
+    {
+        Bench b("STRING", std::string("VAR\n    L : LIST OF REAL;\nEND_VAR\nLIST_ADD(L, Mesure);\nTRY\n    Ok := LIST_ANY(L, Verifier_Niveau);\n")
+                              + kCatchAll, withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r == "E_Niveau|6|niveau hors plage : 120.0 %" && err.empty() && consoleOf(b.rt).empty(),
+              "F1-5 : LIST_ANY(L, Verifier_Niveau) sous TRY : E_Niveau, la ligne de l'appel, son message ; sans ERROR [" + r + "] " + err
+                  + consoleOf(b.rt));
+    }
+    {
+        Bench b("STRING", std::string("VAR\n    L : LIST OF REAL;\n    D : LIST OF BOOL;\nEND_VAR\nLIST_ADD(L, Mesure);\nTRY\n"
+                                      "    Compteur := LIST_COUNT_IF(L, Verifier_Niveau);\n") + kCatchAll, withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r == "E_Niveau|7|niveau hors plage : 120.0 %" && err.empty() && consoleOf(b.rt).empty(),
+              "F1-5 : LIST_COUNT_IF(L, Verifier_Niveau) sous TRY : E_Niveau au CATCH, sans ERROR [" + r + "] " + err + consoleOf(b.rt));
+    }
+    // LIST_TRANSFORM(S, D, 'Verifier_Niveau') : l'OP par son nom (un texte) - le meme chemin.
+    {
+        Bench b("STRING", std::string("VAR\n    L : LIST OF REAL;\n    D : LIST OF BOOL;\n    i : DINT;\nEND_VAR\nLIST_ADD(L, Mesure);\nTRY\n"
+                                      "    i := LIST_TRANSFORM(L, D, 'Verifier_Niveau');\n") + kCatchAll, withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r == "E_Niveau|8|niveau hors plage : 120.0 %" && err.empty() && consoleOf(b.rt).empty(),
+              "F1-5 : LIST_TRANSFORM(L, D, 'Verifier_Niveau') sous TRY : E_Niveau au CATCH, sans ERROR [" + r + "] " + err + consoleOf(b.rt));
+    }
+    // Non rattrapee : une seule ERROR, avec son code ; le script s'arrete.
+    {
+        Bench b("STRING", "VAR\n    L : LIST OF REAL;\nEND_VAR\nLIST_ADD(L, Mesure);\nR := 'a';\nOk := LIST_ANY(L, Verifier_Niveau);\nR := 'b';",
+                withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        const std::string errs = consoleOf(b.rt);
+        check(r == "a" && err.find("E_Niveau") != std::string::npos && saidAtConsole(errs) && errs.find(" | ", 3) == std::string::npos,
+              "F1-5 : LIST_ANY(L, Verifier_Niveau) non rattrapee : une ERROR, le script s'arrete [" + r + "] " + err + errs);
+    }
+    // ?? autour de la native : il choisit la droite, sans ERROR.
+    {
+        Bench b("STRING", "VAR\n    L : LIST OF REAL;\nEND_VAR\nLIST_ADD(L, Mesure);\nOk := LIST_ANY(L, Verifier_Niveau) ?? TRUE;\nR := 'suite';",
+                withVerifier);
+        std::string err;
+        const std::string r = b.runScript(&err);
+        check(r == "suite" && err.empty() && consoleOf(b.rt).empty(),
+              "F1-5 : LIST_ANY(L, Verifier_Niveau) ?? TRUE : sans ERROR [" + r + "] " + err + consoleOf(b.rt));
+    }
+}
+
 int main() {
     std::printf("1.13.0 : lever ses erreurs (LEVER, RELEVER, CATCH e, codes E_*) et WAIT_UNTIL\n");
     capturesF1();
+    relectureF1();
     lever();
     codesMoteur();
     waitUntil();
