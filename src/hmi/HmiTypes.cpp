@@ -82,14 +82,16 @@ std::vector<const HmiType*> namedTypesOf(const Project& p, std::string_view type
     return out;
 }
 
-// 1.12.4 : le type `from` contient-il `owner` (un de ses membres, ou plus bas, objets compris) ?
+// 1.12.4 : le type `from` contient-il `owner` (un de ses membres, ou plus bas, objets compris) ? 1.13.0 : par IDENTITE
+// quand `owner` nomme un type du projet (Gaz.T_Vanne n'est pas Util.T_Vanne) ; sinon par son nom.
 bool reaches(const Project& p, const HmiType& from, std::string_view owner) {
-    std::set<std::string> seen;
+    const HmiType* target = p.hmiTypeByName(trimmed(owner));
+    std::set<const HmiType*> seen;
     std::function<bool(const HmiType&)> go = [&](const HmiType& t) {
-        if (!seen.insert(upperOf(t.name)).second) return false;
+        if (!seen.insert(&t).second) return false;
         for (const auto& m : t.members)
             for (const HmiType* sub : namedTypesOf(p, m.type))
-                if (sameText(sub->name, owner) || go(*sub)) return true;
+                if ((target ? sub == target : sameText(sub->name, owner)) || go(*sub)) return true;
         return false;
     };
     return go(from);
@@ -600,12 +602,17 @@ bool validMemberType(const Project& p, std::string_view type, std::string* why, 
     if (const std::string iface = interfaceAsData(p, type); !iface.empty()) return fail(why, iface);
     // 1.12.4 : un membre objet peut tout contenir, sauf le type qui le porte (T_Noeud.Enfants :
     // LIST OF T_Noeud) - ni directement, ni par un autre type.
-    if (!owner.empty() && isRich(type))
-        for (const HmiType* t : namedTypesOf(p, type))
-            if (sameText(t->name, owner) || reaches(p, *t, owner))
+    // 1.13.0 : par identite (le porteur nomme en entier : Gaz.T_Noeud ne se confond pas avec Util.T_Noeud).
+    if (!owner.empty() && isRich(type)) {
+        const HmiType* self = p.hmiTypeByName(trimmed(owner));
+        for (const HmiType* t : namedTypesOf(p, type)) {
+            const bool itself = self ? t == self : sameText(t->name, owner);
+            if (itself || reaches(p, *t, owner))
                 return fail(why, "un type IHM ne se contient pas lui-m\xC3\xAAme, m\xC3\xAAme dans une liste : " + std::string(owner)
                                      + " \xE2\x86\x92 " + normalized(type)
-                                     + (sameText(t->name, owner) ? std::string{} : " \xE2\x86\x92 " + t->name + " \xE2\x86\x92 \xE2\x80\xA6 \xE2\x86\x92 " + std::string(owner)));
+                                     + (itself ? std::string{} : " \xE2\x86\x92 " + fullName(*t) + " \xE2\x86\x92 \xE2\x80\xA6 \xE2\x86\x92 " + std::string(owner)));
+        }
+    }
     return true;
 }
 
@@ -713,7 +720,14 @@ std::string cycleOf(const Project& p, std::string_view typeName) {
 
 std::vector<std::string> usersOf(const Project& p, std::string_view typeName) {
     std::vector<std::string> out;
+    // 1.13.0 : par IDENTITE - le type que nomme `typeName` (Gaz.T_Vanne, lu en entier) ; chaque type ecrit se lit comme
+    // le depliage le lit (namedTypesOf) : un homonyme d'un autre espace (T_Vanne de la racine, Util.T_Vanne) n'est pas lui.
+    const HmiType* target = p.hmiTypeByName(trimmed(typeName));
     const auto uses = [&](std::string_view type) {
+        if (target) {
+            const auto named = namedTypesOf(p, type);
+            return std::find(named.begin(), named.end(), target) != named.end();
+        }
         Spec s;
         // 1.12.20 (lot G) : T_Mesure<REAL> - le nom parmi ses mots (la structure generique, ses types).
         if (parseSpec(type, s) && s.element.find('<') == std::string::npos) return sameText(s.element, typeName);
@@ -734,7 +748,7 @@ std::vector<std::string> usersOf(const Project& p, std::string_view typeName) {
     for (const auto& ty : p.programs.types)
         for (const auto& m : ty.members)
             if (uses(m.type)) {
-                out.push_back(ty.name + "." + m.name);
+                out.push_back(fullName(ty) + "." + m.name);
                 break;
             }
     for (const auto& v : p.programs.variables)

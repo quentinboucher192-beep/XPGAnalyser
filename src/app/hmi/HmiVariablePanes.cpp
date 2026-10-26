@@ -3697,7 +3697,9 @@ void HmiTypesPane::refresh() {
     std::set<Id> interfaces;   // 1.13.0 (J1b) : leur icone a part
     for (const auto& t : p.programs.types) {
         typeOrder_.push_back(t.id);
-        const auto users = ty::usersOf(p, t.name);
+        // 1.13.0 : par le nom complet (Gaz.T_Vanne a cote d'un T_Vanne racine : les siens, pas ceux de l'homonyme).
+        const std::string full = hmi::fullName(t);
+        const auto users = ty::usersOf(p, full);
         std::string used;
         for (std::size_t i = 0; i < users.size() && i < 3; ++i) used += (used.empty() ? "" : ", ") + users[i];
         if (users.size() > 3) used += " +" + std::to_string(users.size() - 3);
@@ -3723,7 +3725,7 @@ void HmiTypesPane::refresh() {
             cells[t.id] = {t.name, "rappel", "\xE2\x80\x94", used.empty() ? std::string("(aucune variable)") : used};
             continue;
         }
-        const bool cycle = !ty::cycleOf(p, t.name).empty();
+        const bool cycle = !ty::cycleOf(p, full).empty();
         broken[t.id] = cycle;
         // 1.12.20 (lot G) : une structure generique - T_Mesure<T>, sa place selon ses types.
         // 1.12.23 : « selon K », « selon T, K » - ses generiques a elle (avant : « selon T » pour tous).
@@ -3731,7 +3733,7 @@ void HmiTypesPane::refresh() {
         std::string selon;
         for (const auto& g : t.generics) selon += (selon.empty() ? "selon " : ", ") + g.name;
         cells[t.id] = {generic ? t.name + "<" + hmi::genericsText(t.generics) + ">" : t.name, std::to_string(t.members.size()),
-                       cycle ? std::string("?") : generic ? selon : std::to_string(ty::weightOf(p, t.name).words),
+                       cycle ? std::string("?") : generic ? selon : std::to_string(ty::weightOf(p, full).words),
                        used.empty() ? std::string("(aucune variable)") : used};
     }
     syncing_ = true;
@@ -3802,11 +3804,12 @@ void HmiTypesPane::refreshMembers() {
         for (const auto* b : hmi::baseChain(p, hmi::fullName(*t)))
             for (const auto& m : b->members) {
                 inherited.push_back(m);
-                inheritedFrom.push_back(b->name);
+                inheritedFrom.push_back(hmi::fullName(*b));
             }
     if (t) {
-        // Le decalage et la taille : la place Modbus de chaque membre dans la structure.
-        const auto flat = ty::flatten(p, "x", t->name);
+        // Le decalage et la taille : la place Modbus de chaque membre dans la structure. 1.13.0 : par le nom complet
+        // (Gaz.T_Vanne, comme le registre Modbus) - pas l'homonyme d'un autre espace ni « ? » si deux espaces l'ont.
+        const auto flat = ty::flatten(p, "x", hmi::fullName(*t));
         std::vector<hmi::TypeMember> shown = t->members;
         shown.insert(shown.end(), inherited.begin(), inherited.end());
         for (std::size_t k = 0; k < shown.size(); ++k) {
@@ -4007,9 +4010,9 @@ bool HmiTypesPane::change(Id id, std::string label, const std::function<bool(hmi
     hmi::Project trial = doc_->project;
     auto* tt = trial.hmiType(id);
     if (!edit(*tt, why)) return false;
-    if (const auto cycle = ty::cycleOf(trial, tt->name); !cycle.empty()) return fail(why, "le type se contiendrait lui-m\xC3\xAAme : " + cycle);
+    if (const auto cycle = ty::cycleOf(trial, hmi::fullName(*tt)); !cycle.empty()) return fail(why, "le type se contiendrait lui-m\xC3\xAAme : " + cycle);
     for (const auto& m : tt->members)
-        if (!ty::validMemberType(trial, m.type, why, tt->name)) return false;
+        if (!ty::validMemberType(trial, m.type, why, hmi::fullName(*tt))) return false;
     bool ok = true;
     apply_(hmi::changeProject(doc_, std::move(label), [&](hmi::Project& p) {
         if (auto* x = p.hmiType(id)) {
@@ -4243,7 +4246,7 @@ bool HmiTypesPane::setTypeGenerics(Id id, const std::string& text, std::string* 
     (void)hmi::generics::applyToType(trial, id, g);
     if (const auto* tt = trial.hmiType(id))
         for (const auto& m : tt->members)
-            if (!ty::validMemberType(trial, m.type, why, tt->name)) return false;
+            if (!ty::validMemberType(trial, m.type, why, hmi::fullName(*tt))) return false;
     const std::string name = t->name;
     hmi::generics::Report report;
     apply_(hmi::changeProject(doc_, "G\xC3\xA9n\xC3\xA9riques de " + name, [&](hmi::Project& p) {
@@ -4286,7 +4289,7 @@ bool HmiTypesPane::setTypeNamespace(Id id, const std::string& text, std::string*
 bool HmiTypesPane::deleteType(Id id, std::string* why) {
     const auto* t = doc_->project.hmiType(id);
     if (!t) return fail(why, "type introuvable");
-    const auto users = ty::usersOf(doc_->project, t->name);
+    const auto users = ty::usersOf(doc_->project, hmi::fullName(*t));   // 1.13.0 : les siens, pas ceux d'un homonyme
     if (!users.empty()) {
         std::string list;
         for (std::size_t i = 0; i < users.size() && i < 4; ++i) list += (list.empty() ? "" : ", ") + users[i];
@@ -4373,7 +4376,7 @@ bool HmiTypesPane::setMember(Id id, std::size_t index, const hmi::TypeMember& ty
         if (index >= t.members.size()) return fail(w, "membre introuvable");
         for (std::size_t i = 0; i < t.members.size(); ++i)
             if (i != index && sameText(t.members[i].name, m.name)) return fail(w, "le membre " + m.name + " existe d\xC3\xA9j\xC3\xA0");
-        if (!ty::validMemberType(doc_->project, m.type, w, t.name)) return false;
+        if (!ty::validMemberType(doc_->project, m.type, w, hmi::fullName(t))) return false;
         t.members[index] = m;
         return true;
     }, why);
@@ -4486,7 +4489,8 @@ void HmiTypesPane::rebuildProperties() {
         PG::Category vars;
         vars.name = "Variables IHM de type " + t->name;
         for (const auto& v : p.programs.variables)
-            if (sameText(v.type, t->name)) vars.properties.push_back(prop(v.name, v.initial.empty() ? std::string("NULL") : v.initial));
+            if (p.hmiTypeByName(trimmed(v.type)) == t)   // 1.13.0 : par identite (Gaz.T_Filtre n'est pas Util.T_Filtre)
+                vars.properties.push_back(prop(v.name, v.initial.empty() ? std::string("NULL") : v.initial));
         if (vars.properties.empty()) vars.properties.push_back(prop("Aucune", "aucune variable de ce type"));
         cats.push_back(std::move(vars));
         props_->setCategories(std::move(cats));
@@ -4567,7 +4571,7 @@ void HmiTypesPane::rebuildProperties() {
         std::vector<std::string> choices;
         for (const auto& x : t->values) choices.push_back(hmi::enumDisplay(*t, x.value));
         for (const auto& v : p.programs.variables) {
-            if (!sameText(v.type, t->name)) continue;
+            if (p.hmiTypeByName(trimmed(v.type)) != t) continue;   // 1.13.0 : par identite
             const Id vid = v.id;
             vars.properties.push_back(prop(v.name, enumInitialText(*t, v.initial), PG::ValueType::Enum, [this, vid, id](std::string_view text) {
                 const auto* t2 = doc_->project.hmiType(id);
@@ -4635,7 +4639,7 @@ void HmiTypesPane::rebuildProperties() {
             return ok;
         }, {}, "TEMPLATE <T> : vide, une structure ordinaire ; T (ou T : ANY_NUM, ou K, V) : une structure g\xC3\xA9n\xC3\xA9rique - ses membres "
                "peuvent \xC3\xAAtre de type T (LIST OF T aussi), une variable s'\xC3\xA9" "crit " + t->name + "<REAL>."));
-        std::string sample = t->name;
+        std::string sample = hmi::fullName(*t);                 // 1.13.0 : le sien (Gaz.T_Vanne), pas un homonyme
         if (!t->generics.empty()) {
             sample += "<";
             for (std::size_t k = 0; k < t->generics.size(); ++k) sample += (k ? ", " : "") + hmi::genericSample(t->generics[k].constraint);
@@ -4655,7 +4659,7 @@ void HmiTypesPane::rebuildProperties() {
         c.properties.push_back(prop("Poids", (t->generics.empty() ? std::string{} : sample + " : ") + std::to_string(w.words) + " mots, "
                                                  + std::to_string(w.bytes) + " octets", PG::ValueType::ReadOnly, {}, {},
                                     "La place Modbus d'une variable de ce type (.Words, .Bytes dans les scripts)."));
-        const auto users = ty::usersOf(p, t->name);
+        const auto users = ty::usersOf(p, hmi::fullName(*t));
         std::string used;
         for (const auto& u : users) used += (used.empty() ? "" : ", ") + u;
         c.properties.push_back(prop("Utilis\xC3\xA9 par", used.empty() ? std::string("aucune variable") : used));
@@ -4736,7 +4740,7 @@ void HmiTypesPane::rebuildProperties() {
     {
         PG::Category c;
         c.name = "V\xC3\xA9rifications";
-        const auto cycle = ty::cycleOf(p, t->name);
+        const auto cycle = ty::cycleOf(p, hmi::fullName(*t));
         c.properties.push_back(prop("Imbrication", cycle.empty() ? std::string("sans boucle") : "boucle : " + cycle));
         std::size_t props = 0;
         for (const auto& m : t->members) props += ty::property(m.name) ? 1 : 0;
@@ -4886,7 +4890,7 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
         if (hasType) {
             const std::string norm = ty::normalized(type);
             std::string why;
-            if (!ty::validMemberType(trial, norm, &why, tt->name)) {
+            if (!ty::validMemberType(trial, norm, &why, hmi::fullName(*tt))) {
                 // 1.12.4 : un type connu mais refuse (un membre objet qui contiendrait son type) : la raison.
                 if (ty::validType(trial, norm)) {
                     plan.refused.push_back({line, name, why});
@@ -4918,7 +4922,7 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
         const hmi::HmiType before = *tt;
         if (exists) tt->members[index] = m;
         else tt->members.push_back(m);
-        if (const auto cycle = ty::cycleOf(trial, tt->name); !cycle.empty()) {
+        if (const auto cycle = ty::cycleOf(trial, hmi::fullName(*tt)); !cycle.empty()) {
             *tt = before;
             plan.refused.push_back({line, name, "le type se contiendrait lui-m\xC3\xAAme : " + cycle});
             continue;

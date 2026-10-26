@@ -91,7 +91,8 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why = nullptr);
 [[nodiscard]] std::string unbindableReason(const Project&, std::string_view type);
 // Un type IHM qui se contient lui-meme : le chemin du cycle ("T_A -> T_B -> T_A") ; vide : aucun.
 [[nodiscard]] std::string cycleOf(const Project&, std::string_view typeName);
-// Les variables et les types qui emploient ce type IHM (ses noms).
+// Les variables et les types qui emploient ce type IHM (leurs noms ; un membre : Type.Membre, le type par son nom complet).
+// 1.13.0 : par identite - `typeName` en entier (Gaz.T_Vanne) ; un homonyme d'un autre espace ne compte pas.
 [[nodiscard]] std::vector<std::string> usersOf(const Project&, std::string_view typeName);
 
 inline constexpr long long kMaxElements = 100000;    // les cases d'une variable, au plus

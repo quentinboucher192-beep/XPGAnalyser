@@ -1112,6 +1112,72 @@ void paquetsEspaces() {
                           [](const hmi::Variable& x) { return x.name == "Compteur_Clics"; }),
               "R29 : le paquet de la fonction emporte la variable que posent ses cas de test");
     }
+    // D2b-8 : un paquet a espaces porte Gaz.T_Vanne (different de celui du projet : importe sous un autre nom) et
+    // Util.T_Vanne. Le renommage DANS LE PAQUET suit l'identite : Gaz.T_Vanne et le T_Vanne court lu depuis Gaz prennent
+    // le nouveau nom ; Util.T_Vanne, et le T_Vanne court lu depuis Util, restent (avant : chaque mot T_Vanne changeait).
+    {
+        hmi::Project src;
+        const auto typed = [](const char* name, const char* type) {
+            hmi::TypeMember m;
+            m.name = name;
+            m.type = type;
+            return m;
+        };
+        hmi::HmiType g = structure(src, "T_Vanne");
+        g.ns = "Gaz";
+        g.methods.push_back(method(src, "Ouvrir", "Etat := TRUE;"));          // differe du Gaz.T_Vanne du projet
+        g.members.push_back(typed("Secours", "Util.T_Vanne"));
+        src.programs.types.push_back(g);
+        hmi::HmiType u = structure(src, "T_Vanne");
+        u.ns = "Util";
+        src.programs.types.push_back(u);
+        hmi::HmiType banc = structure(src, "T_Banc");
+        banc.ns = "Util";
+        banc.members.push_back(typed("A", "T_Vanne"));                         // lu depuis Util : Util.T_Vanne
+        banc.members.push_back(typed("B", "Util.T_Vanne"));
+        banc.members.push_back(typed("C", "Gaz.T_Vanne"));
+        banc.methods.push_back(method(src, "Copier", "VAR\n    v : T_Vanne;\n    w : Gaz.T_Vanne;\nEND_VAR\nv.Etat := w.Etat;"));
+        src.programs.types.push_back(banc);
+        hmi::HmiType poste = structure(src, "T_Poste");
+        poste.ns = "Gaz";
+        poste.members.push_back(typed("D", "T_Vanne"));                        // lu depuis Gaz : Gaz.T_Vanne
+        src.programs.types.push_back(poste);
+        std::vector<hmi::Id> ids;
+        for (const auto& t : src.programs.types) ids.push_back(t.id);
+        const auto tpkg = pk::collectPrograms(src, pk::ProgramKind::Types, ids);
+        hmi::Project dst;
+        dst.nextId = 1000;
+        hmi::HmiType ours = structure(dst, "T_Vanne");
+        ours.ns = "Gaz";
+        dst.programs.types.push_back(ours);
+        auto plan = pk::plan(dst, tpkg);
+        std::string newName;
+        for (const auto& it : plan.items)
+            if (it.kind == pk::ItemKind::Type && it.name == "T_Vanne" && it.ns == "Gaz" && it.choice == pk::Choice::Rename) newName = it.newName;
+        check(!newName.empty(), "D2b-8 : Gaz.T_Vanne du paquet, different, s'importe sous un autre nom (" + newName + ")");
+        (void)pk::importInto(dst, tpkg, plan);
+        const auto typeOf = [&](const char* full) -> const hmi::HmiType* { return dst.hmiTypeByName(full); };
+        const auto memberType = [](const hmi::HmiType* t, const char* m) -> std::string {
+            if (t)
+                for (const auto& x : t->members)
+                    if (x.name == m) return x.type;
+            return "?";
+        };
+        const hmi::HmiType* gz = typeOf(("Gaz." + newName).c_str());
+        const hmi::HmiType* ut = typeOf("Util.T_Vanne");
+        const hmi::HmiType* bc = typeOf("Util.T_Banc");
+        const hmi::HmiType* ps = typeOf("Gaz.T_Poste");
+        check(gz && ut && bc && ps && typeOf("Gaz.T_Vanne") && typeOf("Gaz.T_Vanne")->methods.empty(),
+              "D2b-8 : le projet a son Gaz.T_Vanne, et Gaz." + newName + ", Util.T_Vanne, Util.T_Banc, Gaz.T_Poste importes");
+        check(memberType(gz, "Secours") == "Util.T_Vanne", "D2b-8 : Gaz." + newName + ".Secours vise toujours Util.T_Vanne (" + memberType(gz, "Secours") + ")");
+        check(memberType(bc, "A") == "T_Vanne" && memberType(bc, "B") == "Util.T_Vanne",
+              "D2b-8 : Util.T_Banc : A (T_Vanne lu depuis Util) et B (Util.T_Vanne) restent (" + memberType(bc, "A") + ", " + memberType(bc, "B") + ")");
+        check(memberType(bc, "C") == "Gaz." + newName, "D2b-8 : Util.T_Banc.C (Gaz.T_Vanne) suit : " + memberType(bc, "C"));
+        check(memberType(ps, "D") == newName, "D2b-8 : Gaz.T_Poste.D (T_Vanne lu depuis Gaz) suit : " + memberType(ps, "D"));
+        const std::string body = bc && !bc->methods.empty() ? bc->methods.front().body : std::string{};
+        check(body.find("v : T_Vanne;") != std::string::npos && body.find("w : Gaz." + newName + ";") != std::string::npos,
+              "D2b-8 : la methode de Util.T_Banc : v : T_Vanne reste, w : Gaz.T_Vanne suit [" + body + "]");
+    }
 }
 
 } // namespace

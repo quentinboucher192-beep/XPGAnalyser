@@ -6,7 +6,9 @@
 #include "HmiAssets.hpp"
 #include "HmiDesign.hpp"
 #include "HmiExport.hpp"
+#include "HmiNames.hpp"     // 1.13.0 : renommer dans un paquet a espaces, par identite (renameItemInCode)
 #include "HmiOverload.hpp"   // 1.11.20 : une fonction se reconnait a son nom ET a sa forme (les surcharges)
+#include "HmiScript.hpp"    // 1.13.0 : forEachCode, renameFunctionEverywhere (le paquet a espaces)
 #include "HmiStore.hpp"
 #include "HmiSymbols.hpp"
 #include "HmiTemplates.hpp"
@@ -304,6 +306,76 @@ const Script* scriptIn(const Project& p, const std::string& ns, const std::strin
 
 bool chosenItem(const Package& pkg, std::string_view name) {
     return std::any_of(pkg.manifest.items.begin(), pkg.manifest.items.end(), [&](const std::string& x) { return upper(x) == upper(name); });
+}
+
+// 1.13.0 : UN PAQUET A ESPACES - le type ou la fonction `it` renomme DANS LE PAQUET PAR IDENTITE : seuls les noms qui
+// visent CET item (lus depuis l'espace de leur code ou de leur type : le sien, la racine, un USING ; ou sa forme complete
+// Gaz.T_Vanne) prennent le nouveau nom. Util.T_Vanne, et un T_Vanne court qui vise un autre espace, restent tels quels
+// (avant : chaque mot T_Vanne, Util.T_Vanne compris, devenait T_Vanne_2). Une fonction : comme Renommer
+// (renameFunctionEverywhere, ses appels et ses rappels).
+void renameInPackage(Project& src, const Item& it) {
+    if (it.kind == ItemKind::Function) {
+        (void)hmi::renameFunctionEverywhere(src, it.ns, it.name, it.newName);
+        for (auto& f : src.programs.functions)
+            if (upper(f.name) == upper(it.name) && upper(f.ns) == upper(it.ns)) f.name = it.newName;
+        return;
+    }
+    const names::Index ix(src);                         // avant le renommage : les noms du paquet tels qu'ils sont
+    const std::string full = qualifiedName(it.ns, it.name);
+    const auto one = [&](std::string_view text, std::string_view ns) {
+        return names::renameItemInCode(ix, text, ns, full, it.newName, /*bare*/ true);
+    };
+    // Le code (scripts, fonctions, methodes, operateurs, vues, alarmes...), lu depuis son espace.
+    forEachCode(src, [&](std::string& text, CodeForm form, const CodeSite& site) {
+        if (text.empty()) return;
+        const auto here = [&](std::string_view e) { return one(e, site.ns); };
+        text = form == CodeForm::Template ? rewriteInText(text, here) : here(text);
+    });
+    // Les textes de type, lus depuis l'espace de leur porteur.
+    const auto type = [&](std::string& text, std::string_view ns) {
+        if (!text.empty()) text = one(text, ns);
+    };
+    const auto decls = [&](std::vector<Declaration>& list, std::string_view ns) {
+        for (auto& d : list) type(d.type, ns);
+    };
+    for (auto& t : src.programs.types) {
+        for (auto& m : t.members) type(m.type, t.ns);
+        type(t.base, t.ns);
+        for (auto& i : t.interfaces) type(i, t.ns);
+        for (auto& m : t.methods) {
+            type(m.returnType, t.ns);
+            decls(m.decls, t.ns);
+        }
+        for (auto& op : t.operators) {
+            type(op.left, t.ns);
+            type(op.right, t.ns);
+            type(op.result, t.ns);
+            decls(op.decls, t.ns);
+        }
+    }
+    for (auto& f : src.programs.functions) {
+        type(f.returnType, f.ns);
+        decls(f.decls, f.ns);
+    }
+    for (auto& sc : src.programs.scripts) decls(sc.decls, sc.ns);
+    for (auto& v : src.programs.variables) type(v.type, {});
+    for (auto& v : src.views) {
+        for (auto& prm : v.params) type(prm.type, {});
+        for (auto& fn : v.functions) {
+            type(fn.returnType, {});
+            decls(fn.decls, {});
+        }
+        for (auto& sc : v.scripts) decls(sc.decls, {});
+        decls(v.constants, {});
+        for (auto& op : v.operators) {
+            type(op.left, {});
+            type(op.right, {});
+            type(op.result, {});
+            decls(op.decls, {});
+        }
+    }
+    for (auto& t : src.programs.types)
+        if (upper(t.name) == upper(it.name) && upper(t.ns) == upper(it.ns)) t.name = it.newName;
 }
 
 } // namespace
@@ -973,6 +1045,11 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
                             if (pr.key == "namedStyle" && upper(pr.value) == upper(it.name)) pr.value = it.newName;
                 break;
             case ItemKind::Type: case ItemKind::Function: {
+                // 1.13.0 : un paquet qui a des espaces de noms - par identite (Util.T_Vanne ne devient pas Util.T_Vanne_2).
+                if (names::active(src)) {
+                    renameInPackage(src, it);
+                    break;
+                }
                 // 1.11.2 (decision 174) : le type ou la fonction, et tout ce qui le cite
                 // dans le paquet (vues, scripts, corps des fonctions - le sien aussi :
                 // une fonction rend sa valeur en l'affectant a son nom -, membres et

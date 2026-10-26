@@ -37298,6 +37298,56 @@ void objets113() {
         check(!said.empty(), "Compiler signale Pompe1.Demarrer(12.5) dans le script : " + said);
     }
     (void)stack.undo();
+
+    // ---- D2b-1 / D2b-9 : la page d'un type d'espace (Gaz.T_Vanne a cote d'un T_Vanne racine) - le decalage, la taille,
+    //      le poids et « Utilise par » sont les siens (par son nom complet), pas ceux de l'homonyme ----
+    {
+        auto d3 = std::make_shared<Document>();
+        core::CommandStack st3;
+        auto apply3 = [&](core::CommandPtr c) { (void)st3.push(std::move(c)); };
+        Project& q = d3->project;
+        HmiType racine;
+        racine.id = q.allocate();
+        racine.name = "T_Vanne";
+        racine.members = {{"Etat", "BOOL", "", ""}};
+        q.programs.types.push_back(racine);
+        HmiType gaz;
+        gaz.id = q.allocate();
+        gaz.name = "T_Vanne";
+        gaz.ns = "Gaz";
+        gaz.members = {{"Position", "REAL", "", ""}, {"Defaut", "BOOL", "", ""}, {"Commande", "INT", "", ""}};
+        const Id gazId = gaz.id;
+        q.programs.types.push_back(gaz);
+        for (const auto& [n, t] : {std::pair<const char*, const char*>{"V0", "T_Vanne"}, {"V1", "Gaz.T_Vanne"}}) {
+            Variable v;
+            v.id = q.allocate();
+            v.name = n;
+            v.type = t;
+            q.programs.variables.push_back(v);
+        }
+        app::HmiTypesPane tp3("ty113b", d3, apply3);
+        tp3.setBounds({0, 0, 1800, 1000});
+        tp3.layout();
+        tp3.selectType(gazId);
+        const auto flat = types::flatten(q, "x", "Gaz.T_Vanne");
+        std::string commande = "?";
+        for (const auto& l : flat.leaves)
+            if (l.path == "x.Commande") commande = "mot " + std::to_string(l.word);
+        const auto mm = tp3.memberTable().model();
+        check(mm && mm->rowCount() == 3 && mm->cellText(0, 4) == "mot 0" && mm->cellText(0, 5) == "2 mots" && commande != "?"
+                  && mm->cellText(2, 4) == commande,
+              "D2b-9 : Gaz.T_Vanne - Position mot 0, 2 mots ; Commande " + commande + " (les siens, pas \xC2\xAB ? \xC2\xBB ni ceux du T_Vanne racine) : "
+                  + (mm ? mm->cellText(0, 4) + " / " + mm->cellText(0, 5) + " / " + mm->cellText(2, 4) : std::string("?")));
+        const auto cats = tp3.properties().categories();
+        const auto words = types::weightOf(q, "Gaz.T_Vanne").words;
+        check(words > types::weightOf(q, "T_Vanne").words && gridValue(cats, "Poids").rfind(std::to_string(words) + " mots", 0) == 0,
+              "D2b-1 : le Poids de Gaz.T_Vanne est le sien (" + gridValue(cats, "Poids") + ")");
+        check(gridValue(cats, "Utilis\xC3\xA9 par") == "V1", "D2b-1 : Utilis\xC3\xA9 par de Gaz.T_Vanne : V1 seule (" + gridValue(cats, "Utilis\xC3\xA9 par") + ")");
+        const auto tm = tp3.typeTable().model();
+        check(tm && tm->rowCount() == 2 && tm->cellText(0, 3) == "V0" && tm->cellText(1, 3) == "V1" && tm->cellText(1, 2) == std::to_string(words),
+              "D2b-1 : la liste des types - T_Vanne utilise par V0, Gaz.T_Vanne par V1, son poids " + std::to_string(words)
+                  + (tm ? " (" + tm->cellText(0, 3) + ", " + tm->cellText(1, 3) + ", " + tm->cellText(1, 2) + ")" : std::string{}));
+    }
 }
 
 int main(int argc, char** argv) {
