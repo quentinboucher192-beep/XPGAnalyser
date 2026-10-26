@@ -549,6 +549,17 @@ void HmiMethodsPane::refresh() {
         own.push_back(rows_[i].own);
         priv.push_back(cells[i][ColVisibility] == kPrivate);
     }
+    // 1.13.0 (relecture F2) : une interface n'a ni visibilite, ni genre, ni origine ("signature", "propre" sur
+    // chaque ligne) : ces trois colonnes se cachent, Parametres suit la signature dans la liste etroite (avant : a
+    // 392 px, hors de vue). Une structure les retrouve telles que l'utilisateur les avait laissees.
+    if (iface != ifaceColumns_) {
+        const std::size_t hidden[3] = {ColVisibility, ColKind, ColOrigin};
+        for (std::size_t i = 0; i < 3; ++i) {
+            if (iface) keptColumns_[i] = hidden[i] < table_->columns().size() && table_->columns()[hidden[i]].visible;
+            table_->setColumnVisible(hidden[i], !iface && keptColumns_[i]);
+        }
+        ifaceColumns_ = iface;
+    }
     model_ = std::make_shared<MethodRows>(
         std::vector<std::string>{"M\xC3\xA9thode", "", "Genre", "Origine", "Param\xC3\xA8tres", "Retour"}, std::move(cells),
         [own, priv](ui::RowIndex r, std::size_t c) {

@@ -38288,6 +38288,7 @@ void correctifsF2_113() {
                   "un type sans variable : <instance> [" + methods->callHint() + "]");
         }
         // d) la page de l'interface : la Declaration sur une ligne (son infobulle entiere), pas d'Operateurs, "de la signature".
+        methods->methodTable().setColumnVisible(3, false);   // relecture F2 : l'utilisateur a masque Origine sur une structure
         types.selectType(ifaceId);
         check(types.operators() && types.operators()->visibility() == ui::Visibility::Collapsed,
               "une interface : pas de section Op\xC3\xA9rateurs (ni \xC2\xAB Ajouter un op\xC3\xA9rateur \xC2\xBB)");
@@ -38306,6 +38307,18 @@ void correctifsF2_113() {
                                                                                     : std::string{};
         check(dtip.find("TYPE I_Demarrable INTERFACE\n    METHOD Demarrer\n") != std::string::npos,
               "son infobulle : la d\xC3\xA9" "claration enti\xC3\xA8re, ligne \xC3\xA0 ligne [" + dtip.substr(0, 60) + "]");
+        // Relecture F2 (F2-3) : une interface n'a ni visibilite, ni genre, ni origine - ces colonnes se cachent,
+        // Parametres suit Methode (avant : a 392 px, hors de la liste large de 310 px).
+        {
+            const auto& cols = methods->methodTable().columns();
+            check(cols.size() == 6 && !cols[1].visible && !cols[2].visible && !cols[3].visible && cols[4].visible && cols[5].visible,
+                  "la liste des signatures : ni cadenas, ni Genre, ni Origine ; Param\xC3\xA8tres et Retour");
+            float before = 0.f;   // la place de Parametres : les colonnes montrees avant elle (comme TableView::cellRect)
+            for (std::size_t c = 0; c < 4 && c < cols.size(); ++c)
+                if (cols[c].visible) before += cols[c].width;
+            check(!cols.empty() && before == cols[0].width,
+                  "Param\xC3\xA8tres suit M\xC3\xA9thode (\xC3\xA0 " + std::to_string(static_cast<int>(before)) + " px)");
+        }
         // e) Nouveau type > Interface... : l'hote est prevenu (l'arbre la montre et la choisit).
         types.openNewTypeMenu();
         if (auto* menu = types.newTypeMenu()) {
@@ -38316,6 +38329,11 @@ void correctifsF2_113() {
         check(made && !created.empty() && created.back() == made->id, "Nouveau type \xE2\x80\xBA Interface\xE2\x80\xA6 : l'arbre est pr\xC3\xA9venu (I_Interface)");
         types.selectType(pompeId);
         check(types.operators()->visibility() == ui::Visibility::Visible, "une structure : la section Op\xC3\xA9rateurs revient");
+        {
+            const auto& cols = methods->methodTable().columns();
+            check(cols.size() == 6 && cols[1].visible && cols[2].visible && !cols[3].visible && cols[4].visible,
+                  "T_Pompe ensuite : le cadenas et Genre reviennent ; Origine, masqu\xC3\xA9" "e par l'utilisateur avant l'interface, le reste");
+        }
     }
 
     // ---- 3. La grille : un nom ou une valeur coupes, en infobulle ; la case d'une liste a la largeur de ses choix ----
