@@ -3,7 +3,7 @@
 // -----------------------------------------------------------------------------
 //  LA PAGE DES ESPACES DE NOMS ET DES BIBLIOTHEQUES RELIEES (Programmation
 //  generale > Bibliotheques dans l'arbre). Deux listes :
-//    - les BIBLIOTHEQUES reliees : nom, version, etat (reliee, plus recente dispo,
+//    - les BIBLIOTHEQUES reliees : nom, version, etat (reliee, plus recente disponible,
 //      plus ancienne, incompatible, introuvable) avec sa pastille, chemin, contenu
 //      (types, fonctions, scripts) - chacune verrouillee (lecture seule) ;
 //    - les ESPACES du projet : leur nom, ce qu'ils rangent (types, fonctions,
@@ -86,7 +86,9 @@ protected:
 private:
     void rebuildProperties();
     void say(std::string text, bool error = false);
-    bool commit(const std::string& label, const std::function<bool(hmi::Project&, std::string*)>& change, std::string* why);
+    // `done` : ce que la ligne d'etat dit apres (un resultat : "Mesures 1.0.0 reliee") ; vide : `label`, le nom de la commande.
+    bool commit(const std::string& label, const std::function<bool(hmi::Project&, std::string*)>& change, std::string* why,
+                const std::string& done = {});
     hmi::DocumentPtr  doc_;
     Apply             apply_;
     Hosts             hosts_;

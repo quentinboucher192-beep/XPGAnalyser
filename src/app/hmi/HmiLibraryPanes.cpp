@@ -67,7 +67,8 @@ HmiLibrariesPane::HmiLibrariesPane(std::string id, hmi::DocumentPtr doc, Apply a
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".libsPanel", "BIBLIOTH\xC3\x88QUES RELI\xC3\x89" "ES");
         auto table = std::make_unique<ui::TableView>(base + ".libs");
-        table->setColumns({{"Biblioth\xC3\xA8que", 160.f}, {"Version", 110.f}, {"\xC3\x89tat", 150.f}, {"Chemin", 260.f}, {"Contenu", 220.f}});
+        // 1.13.0 (correctifs F2) : "1.0.0 (trouvee 1.1.0)" et "plus recente disponible" tiennent (avant : 110 et 150 px, coupes).
+        table->setColumns({{"Biblioth\xC3\xA8que", 140.f}, {"Version", 190.f}, {"\xC3\x89tat", 200.f}, {"Chemin", 220.f}, {"Contenu", 190.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         libraries_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         librariesPanel_ = &static_cast<HmiTitledPanel&>(addChild(std::move(panel)));
@@ -171,8 +172,15 @@ void HmiLibrariesPane::refresh() {
         const hmi::LibraryState st = ld ? ld->state : hmi::LibraryState::Missing;
         std::string version = l.version;
         if (ld && !ld->foundVersion.empty() && ld->foundVersion != l.version) version += " (trouv\xC3\xA9" "e " + ld->foundVersion + ")";
+        // 1.13.0 (correctifs F2) : le contenu de la VERSION RELIEE (son interface, ce que dit "Son interface" a cote) -
+        // avant : celui du fichier trouve (Util reliee en 1.0.0 disait "1 type, 3 fonctions", ceux de la 1.1.0 trouvee).
+        std::vector<std::string> parts;
+        if (!l.types.empty()) parts.push_back(countText(l.types.size(), "type", "types"));
+        if (!l.functions.empty()) parts.push_back(countText(l.functions.size(), "fonction", "fonctions"));
+        if (!l.scripts.empty()) parts.push_back(countText(l.scripts.size(), "script", "scripts"));
         std::string contents;
-        if (ld) {
+        for (std::size_t k = 0; k < parts.size(); ++k) contents += (k ? ", " : "") + parts[k];
+        if (contents.empty() && ld) {   // un lien sans cache d'interface (un projet d'avant) : ce qui a ete lu
             hmi::Project shown;
             shown.programs = ld->content;
             contents = hmi::biblio::contentsText(shown);
@@ -302,7 +310,8 @@ void HmiLibrariesPane::rebuildProperties() {
     grid_->setCategories(std::move(cats));
 }
 
-bool HmiLibrariesPane::commit(const std::string& label, const std::function<bool(hmi::Project&, std::string*)>& change, std::string* why) {
+bool HmiLibrariesPane::commit(const std::string& label, const std::function<bool(hmi::Project&, std::string*)>& change, std::string* why,
+                              const std::string& done) {
     std::string reason;
     bool ok = true;
     auto cmd = hmi::changeProject(doc_, label, [&](hmi::Project& p) { ok = change(p, &reason); });
@@ -311,7 +320,9 @@ bool HmiLibrariesPane::commit(const std::string& label, const std::function<bool
         return false;
     }
     if (cmd) apply_(std::move(cmd));
-    say(label + " (Ctrl+Z l'annule)");
+    // 1.13.0 (correctifs F2) : la ligne d'etat dit le RESULTAT ("Mesures 1.0.0 reliee") ; `label` reste le nom de la
+    // commande (Edition > Annuler Relier la bibliotheque Mesures 1.0.0).
+    say((done.empty() ? label : done) + " (Ctrl+Z l'annule)");
     refresh();
     return true;
 }
@@ -329,7 +340,7 @@ bool HmiLibrariesPane::link(const std::string& file, const std::string& alias, s
                                if (w) *w = "la biblioth\xC3\xA8que " + plan.link.name + " est d\xC3\xA9j\xC3\xA0 reli\xC3\xA9" "e";
                                return false;
                            },
-                           why);
+                           why, plan.link.name + " " + plan.link.version + " reli\xC3\xA9" "e");
     if (ok) {
         if (!plan.warnings.empty()) say(plan.warnings.front());
         selectLibrary(plan.link.name);
@@ -342,13 +353,21 @@ bool HmiLibrariesPane::unlink(const std::string& name, std::string* why) {
         if (hmi::biblio::unlink(p, name)) return true;
         if (w) *w = "aucune biblioth\xC3\xA8que " + name;
         return false;
-    }, why);
+    }, why, name + " d\xC3\xA9li\xC3\xA9" "e");
 }
 
 bool HmiLibrariesPane::relocate(const std::string& name, const std::string& file, std::string* why) {
     const std::string folder = projectFolder();
-    return commit("Localiser la biblioth\xC3\xA8que " + name,
-                  [&](hmi::Project& p, std::string* w) { return hmi::biblio::relocate(p, name, file, folder, w); }, why);
+    std::string where;
+    const bool ok = commit("Localiser la biblioth\xC3\xA8que " + name,
+                           [&](hmi::Project& p, std::string* w) {
+                               if (!hmi::biblio::relocate(p, name, file, folder, w)) return false;
+                               if (const auto* l = p.libraryByName(name)) where = l->path;
+                               return true;
+                           },
+                           why, name + " localis\xC3\xA9" "e");
+    if (ok && !where.empty()) say(name + " localis\xC3\xA9" "e : " + where + " (Ctrl+Z l'annule)");
+    return ok;
 }
 
 bool HmiLibrariesPane::update(const std::string& name, const std::string& file, std::string* why) {
@@ -359,7 +378,8 @@ bool HmiLibrariesPane::update(const std::string& name, const std::string& file, 
         return false;
     }
     return commit("Mettre \xC3\xA0 jour " + name + " : " + plan.from + " \xE2\x86\x92 " + plan.to,
-                  [&](hmi::Project& p, std::string*) { return hmi::biblio::applyUpdate(p, plan, folder); }, why);
+                  [&](hmi::Project& p, std::string*) { return hmi::biblio::applyUpdate(p, plan, folder); }, why,
+                  name + " mise \xC3\xA0 jour : " + plan.from + " \xE2\x86\x92 " + plan.to);
 }
 
 bool HmiLibrariesPane::publish(const hmi::biblio::PublishSpec& spec, const std::string& file, std::string* why) {
@@ -378,7 +398,8 @@ bool HmiLibrariesPane::publish(const hmi::biblio::PublishSpec& spec, const std::
 }
 
 bool HmiLibrariesPane::addNamespace(const std::string& ns, std::string* why) {
-    const bool ok = commit("Nouvel espace de noms " + ns, [&](hmi::Project& p, std::string* w) { return hmi::names::addEmptyNamespace(p, ns, w); }, why);
+    const bool ok = commit("Nouvel espace de noms " + ns, [&](hmi::Project& p, std::string* w) { return hmi::names::addEmptyNamespace(p, ns, w); }, why,
+                           "Espace de noms " + ns + " cr\xC3\xA9\xC3\xA9");
     if (ok) selectNamespace(ns);
     return ok;
 }
@@ -400,7 +421,7 @@ bool HmiLibrariesPane::renameNamespace(const std::string& from, const std::strin
     const bool ok = commit("Renommer l'espace " + from + " en " + target, [&](hmi::Project& p, std::string*) {
         hmi::names::renameNamespace(p, from, target);
         return true;
-    }, why);
+    }, why, "Espace " + from + " renomm\xC3\xA9 en " + target);
     if (ok) selectNamespace(target);
     return ok;
 }
@@ -415,7 +436,7 @@ bool HmiLibrariesPane::removeNamespace(const std::string& ns, std::string* why) 
         if (hmi::names::removeEmptyNamespace(p, ns)) return true;
         if (w) *w = "l'espace " + ns + " n'est pas un espace vide garde";
         return false;
-    }, why);
+    }, why, "Espace " + ns + " retir\xC3\xA9");
 }
 
 void HmiLibrariesPane::reload() {

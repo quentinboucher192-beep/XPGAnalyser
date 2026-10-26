@@ -597,6 +597,20 @@ void bibliotheques() {
     auto plan = biblio::planLink(p, file, projectDir.string());
     check(plan.ok() && plan.link.path == "libs/Util-1.2.0.xpgbib" && plan.link.version == "1.2.0" && plan.link.functions.size() == 3,
           "planLink : chemin relatif au projet, version, interface (" + plan.refusal + ")");
+    {
+        // 1.13.0 (correctif F2) : le chemin TAPE relatif (libs/Util-1.2.0.xpgbib, ce que la fenetre Relier conseille) se lit
+        // depuis le dossier du projet, pas depuis le dossier courant de l'application (avant : "fichier introuvable").
+        std::error_code ec;
+        const fs::path cwd = fs::current_path(ec);
+        check(!fs::exists(cwd / "libs" / "Util-1.2.0.xpgbib", ec), "(le dossier courant de l'essai n'a pas ce fichier)");
+        const auto rel = biblio::planLink(p, "libs/Util-1.2.0.xpgbib", projectDir.string());
+        check(rel.ok() && rel.link.path == "libs/Util-1.2.0.xpgbib" && fs::equivalent(rel.file, file, ec) && rel.package.manifest.name == "Util",
+              "planLink(libs/Util-1.2.0.xpgbib) : lu depuis le dossier du projet, le lien reste relatif [" + rel.refusal + " " + rel.link.path + "]");
+        const auto relDot = biblio::planLink(p, "./libs/../libs/Util-1.2.0.xpgbib", projectDir.string());
+        check(relDot.ok() && relDot.link.path == "libs/Util-1.2.0.xpgbib", "un chemin relatif avec . et .. : le meme lien [" + relDot.link.path + "]");
+        const auto none = biblio::planLink(p, "libs/Absente.xpgbib", projectDir.string());
+        check(!none.ok() && none.refusal.find("introuvable") != std::string::npos, "un chemin relatif qui n'existe pas : introuvable [" + none.refusal + "]");
+    }
     check(biblio::link(p, plan, projectDir.string()) && p.libraries.size() == 1, "relier");
     const LoadedLibrary* ld = p.loadedLibrary("Util");
     check(ld && ld->state == LibraryState::Linked && !ld->fromCache, "le contenu est lu (reliee)");
@@ -687,6 +701,15 @@ void bibliotheques() {
         check(biblio::applyUpdate(q, up, projectDir.string()) && q.libraries.front().version == "1.4.0" && q.libraries.front().compat == "1.2.0"
                   && q.loadedLibrary("Util")->state == LibraryState::Linked,
               "appliquer : la version figee a 1.4.0, le plancher reste 1.2.0");
+        // 1.13.0 (correctif F2) : Mettre a jour vers un fichier donne par un chemin relatif au projet.
+        Project r = p;
+        r.libraries.front().path = "libs/Util-1.4.0.xpgbib";
+        biblio::resolve(r, projectDir.string());
+        const auto upRel = biblio::planUpdate(r, "Util", projectDir.string(), "libs/Util-1.4.0.xpgbib");
+        check(upRel.refusal.empty() && upRel.to == "1.4.0" && biblio::applyUpdate(r, upRel, projectDir.string())
+                  && r.libraries.front().path == "libs/Util-1.4.0.xpgbib",
+              "mettre a jour depuis libs/Util-1.4.0.xpgbib (relatif) : lu, le lien reste relatif [" + upRel.refusal + " "
+                  + r.libraries.front().path + "]");
     }
     // Plus ancienne : 1.1.0 pour un plancher 1.2.0.
     {
@@ -728,6 +751,14 @@ void bibliotheques() {
         std::string why;
         check(biblio::relocate(q, "Util", newer, projectDir.string(), &why) && q.loadedLibrary("Util")->state != LibraryState::Missing,
               "Localiser... : un autre chemin, relue (" + why + ")");
+        // 1.13.0 (correctif F2) : Localiser avec un chemin tape relatif au projet.
+        Project r = p;
+        r.libraries.front().path = "libs/Absente.xpgbib";
+        biblio::resolve(r, projectDir.string());
+        why.clear();
+        check(biblio::relocate(r, "Util", "libs/Util-1.4.0.xpgbib", projectDir.string(), &why) && r.libraries.front().path == "libs/Util-1.4.0.xpgbib"
+                  && r.loadedLibrary("Util")->state != LibraryState::Missing,
+              "Localiser... libs/Util-1.4.0.xpgbib (relatif au projet) : relue, le lien reste relatif [" + why + " " + r.libraries.front().path + "]");
     }
     // Delier.
     {

@@ -562,10 +562,12 @@ void HmiOperatorsPane::showSelected() {
     const auto* o = current();
     syncing_ = true;
     const std::string body = o ? o->body : std::string{};
+    const bool other = !o || o->id != shownId_;     // 1.13.0 (correctifs F2) : un autre operateur montre
     if (editor_->text() != body) {      // 1.12.2 : le meme operateur (annuler) garde la vue
         if (o && o->id == shownId_) editor_->reloadText(body);
         else editor_->setText(body);
     }
+    if (other) editor_->clearModified();   // "modifie" suit l'operateur montre, pas la saisie d'un autre
     shownId_ = o ? o->id : hmi::kNoId;
     editor_->setReadOnly(o == nullptr);
     syncing_ = false;

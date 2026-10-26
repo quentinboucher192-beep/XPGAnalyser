@@ -3126,6 +3126,15 @@ namespace ui {
 
         float x = b.x;
         float w = b.w;
+        // 1.13.0 (correctifs F2) : la liste au moins aussi large que son plus long choix ("Taper un nom ou un repere
+        // $...$..." d'une liste Espace de noms etait coupe en plein mot) : le texte (6 px de marge a gauche, autant a
+        // droite), le cadre et la barre si elle defile. Au bord de la fenetre, elle se decale vers la gauche (plus bas).
+        {
+            float widest = 0.f;
+            for (const auto& it : items_) widest = std::max(widest, measureWidth(it.label, gfx::FontId{ 16 }));
+            const bool scrolls = static_cast<int>(items_.size()) > visibleRows();
+            w = std::max(w, widest + 12.f + 2.f * kListPadding + (scrolls ? kScrollbarWidth : 0.f));
+        }
         if (const auto surface = surfaceSize(); surface.w > 0.f) {
             w = std::min(w, surface.w);
             if (x + w > surface.w) x = std::max(0.f, surface.w - w);

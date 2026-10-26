@@ -257,4 +257,9 @@ private:
     core::ConnectionScope links_;
 };
 
+// 1.13.0 (correctifs F2) : les declarations d'une fonction telles que l'ecran les montre (la liste IHM . Fonctions, son
+// inspecteur, Essayer) - TOUT TYPE LU : un parametre de type T (generique), une structure, un tableau. Sans types
+// connus, a : T etait refuse et Max<T>(a : T; b : T) comptait 0 parametre (la colonne disait "-").
+[[nodiscard]] hmi::ScriptParts functionDeclarations(const hmi::HmiFunction&);
+
 } // namespace app

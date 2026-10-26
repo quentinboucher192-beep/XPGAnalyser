@@ -359,6 +359,9 @@ public:
         // 1.11.2 (decision 174) : Exporter (les elements coches, celui-ci d'avance) et Importer... (tout paquet).
         std::function<void(hmi::Id)>            exportItems;
         std::function<void()>                   importAny;
+        // 1.13.0 (correctifs F2) : un type cree ici (Nouveau type : structure, enumeration, rappel, interface) - l'arbre du
+        // projet le montre et le choisit (sans rien rouvrir).
+        std::function<void(hmi::Id)>            typeCreated;
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
 

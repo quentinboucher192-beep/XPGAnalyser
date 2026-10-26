@@ -1191,6 +1191,18 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
             if (c.function == f.id) issue(S::Error, c.message);
         if (key.rfind("IHM_", 0) == 0) issue(S::Error, "le pr\xC3\xA9" "fixe IHM_ est r\xC3\xA9serv\xC3\xA9 aux fonctions de l'IHM");
         if (key == "LEVER") issue(S::Warning, leverNameWarning(f.name));
+        // 1.13.0 (correctif F2) : une fonction de la racine qui porte le nom d'une fonction standard (Max, MAX) - le moteur
+        // l'appelle a sa place, partout (une fonction du projet passe avant : MAX(...) l'appelle). La fenetre Nouvelle
+        // fonction refuse ce nom ; un projet ecrit a la main, importe ou d'avant peut l'avoir : on le dit.
+        if (f.ns.empty() && isStandardFunction(f.name)) {
+            const auto callers = functionCallers(p, f.name);
+            std::string where;
+            for (std::size_t k = 0; k < callers.size() && k < 2; ++k) where += (k ? ", " : "") + callers[k];
+            if (callers.size() > 2) where += " (+" + std::to_string(callers.size() - 2) + ")";
+            issue(S::Warning, f.name + " porte le nom de la fonction standard " + key + " : la fonction IHM passe avant, chaque " + key
+                                  + "(...) du projet l'appelle" + (where.empty() ? std::string{} : " (" + where + ")")
+                                  + " ; renomme-la pour garder la fonction standard");
+        }
         if (p.variable(f.name)) issue(S::Error, "une variable IHM porte d\xC3\xA9j\xC3\xA0 ce nom : " + f.name);
         if (plc && plc(f.name)) issue(S::Warning, "'" + f.name + "' existe aussi dans l'automate : la fonction IHM passe avant");
         const std::string code = decl::codeOf(f);                     // 1.11.18 (lot 3) : ses parametres du modele

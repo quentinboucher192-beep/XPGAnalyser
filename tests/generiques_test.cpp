@@ -16,6 +16,7 @@
 //
 //  GEN_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
+#include "../src/hmi/HmiCheck.hpp"     // generate (Generer)
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiScript.hpp"
@@ -474,6 +475,59 @@ void automateInchange() {
     check(parses("x := 1 + 2;", true) && parses("x := 1 + 2;", false), "une affectation ST ordinaire : lue par le dialecte ET l'automate");
 }
 
+// ---- 1.13.0 (correctif F2) : une fonction du projet qui porte le nom d'une fonction standard (Max / MAX) ----
+// Le moteur l'appelle a la place de la standard (une fonction du projet passe avant : Env::call, functionByKey sans
+// casse) ; "Appelee par" dit donc vrai en citant les MAX(...) du projet. Generer doit le signaler (la fenetre
+// Nouvelle fonction refuse deja ce nom : "est un type ou une fonction standard").
+void homonymeStandard() {
+    std::printf("-- Max<T> du projet et MAX standard : le moteur prend celle du projet, Generer le dit\n");
+    {
+        Project p;
+        addVar(p, "R", "DINT", "0");
+        addFn(p, "Max", "T", {{"T", "ANY_NUM"}}, {{"a", "T"}, {"b", "T"}}, "Max := a + b + 100;");
+        std::string err;
+        const std::string got = run(p, "R := MAX(3, 7);", &err);
+        check(got == "110" && err.empty(), "MAX(3, 7) avec une fonction Max du projet : le moteur appelle Max du projet (3 + 7 + 100) [" + got + " " + err + "]");
+    }
+    {
+        Project p;
+        addVar(p, "R", "DINT", "0");
+        std::string err;
+        const std::string got = run(p, "R := MAX(3, 7);", &err);
+        check(got == "7" && err.empty(), "sans fonction Max du projet : MAX(3, 7) est la standard (7) [" + got + " " + err + "]");
+    }
+    {
+        Project p;
+        addVar(p, "R", "REAL", "0");
+        HmiFunction& max = addFn(p, "Max", "T", {{"T", "ANY_NUM"}}, {{"a", "T"}, {"b", "T"}}, "IF a > b THEN Max := a; ELSE Max := b; END_IF");
+        const Id maxId = max.id;
+        Script s;
+        s.id = p.allocate();
+        s.name = "Demo_Boucles";
+        s.event = "Appel";
+        s.body = "R := MAX(R * 1.2, 1.0);";
+        p.programs.scripts.push_back(s);
+        // Appelee par : le script qui ecrit MAX(...) appelle bien cette fonction (le moteur le fait).
+        const auto callers = functionCallers(p, "Max");
+        check(callers.size() == 1 && callers.front().find("Demo_Boucles") != std::string::npos,
+              "Appelee par : le script Demo_Boucles (son MAX(...) appelle Max du projet)");
+        const auto issues = generate(p, [](std::string_view) { return false; });
+        bool warned = false;
+        for (const auto& i : issues)
+            if (i.severity == Issue::Severity::Warning && i.item == maxId && i.message.find("fonction standard MAX") != std::string::npos
+                && i.message.find("Demo_Boucles") != std::string::npos)
+                warned = true;
+        check(warned, "Generer : Max porte le nom de la fonction standard MAX (un avertissement qui cite Demo_Boucles)");
+        // Une fonction au nom libre : rien de tel.
+        Project q;
+        addFn(q, "Plus_Grand", "T", {{"T", "ANY_NUM"}}, {{"a", "T"}, {"b", "T"}}, "Plus_Grand := a;");
+        bool quiet = true;
+        for (const auto& i : generate(q, [](std::string_view) { return false; }))
+            if (i.message.find("fonction standard") != std::string::npos) quiet = false;
+        check(quiet, "Plus_Grand<T> : aucun avertissement de fonction standard");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -488,6 +542,7 @@ int main() {
     generer();
     pasDeFauxRefus();
     automateInchange();
+    homonymeStandard();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

@@ -142,8 +142,15 @@ float drawPips(const PaintContext& ctx, const gfx::Rect& row, const CellStyle& s
 // "gras" identique au texte courant ne hierarchise rien.
 void drawMaybeBold(const PaintContext& ctx, gfx::Point at, std::string_view text,
                    gfx::FontId font, gfx::Color colour, float maxWidth, bool bold) {
-    drawClipped(ctx, at, text, font, colour, maxWidth);
-    if (bold) drawClipped(ctx, {at.x + 0.6f, at.y}, text, font, colour, maxWidth - 0.6f);
+    if (!bold) {
+        drawClipped(ctx, at, text, font, colour, maxWidth);
+        return;
+    }
+    // 1.13.0 (correctif F2) : les deux passes du gras coupent AU MEME ENDROIT. Avant, la premiere avait maxWidth et la
+    // seconde 0,6 px de moins : un nom qui tenait juste (T_SuiviVE) se dessinait entier, puis coupe par-dessus
+    // ("T_Suiv..." sur "T_SuiviVE" : T_Suiv.iVE a l'ecran).
+    drawClipped(ctx, at, text, font, colour, maxWidth - 0.6f);
+    drawClipped(ctx, {at.x + 0.6f, at.y}, text, font, colour, maxWidth - 0.6f);
 }
 
 // 1.9 : le melange de deux couleurs (t de 0 a 1), opaque.
@@ -2668,6 +2675,23 @@ protected:
 // 1.12.19 : les mots d'un booleen, les memes partout (sim/ValueText).
 bool isTrueText(std::string_view v) { return sim::trueWord(v); }
 
+// 1.13.0 (correctifs F2) : une valeur sur plusieurs lignes, montree dans une case d'une ligne - ses sauts (et ses
+// tabulations) en espaces ; `collapse` : chaque suite de blancs en une seule (sans : la meme longueur, les reperes
+// surlignes gardent leurs positions). "TYPE I_Demarrable INTERFACE METHOD Demarrer METHOD EnDefaut : BOOL END_TYPE".
+std::string oneLineValue(std::string_view v, bool collapse) {
+    if (v.find_first_of("\r\n\t") == std::string_view::npos) return std::string(v);
+    std::string out;
+    out.reserve(v.size());
+    for (const char ch : v) {
+        const bool blank = ch == '\r' || ch == '\n' || ch == '\t' || ch == ' ';
+        if (collapse && blank && (out.empty() || out.back() == ' ')) continue;
+        out += blank ? ' ' : ch;
+    }
+    if (collapse)
+        while (!out.empty() && out.back() == ' ') out.pop_back();
+    return out;
+}
+
 // "#RRGGBB" ou "#RRGGBBAA" -> couleur, pour la pastille des cases Color.
 bool hexColor(std::string_view v, gfx::Color& out) {
     if ((v.size() != 7 && v.size() != 9) || v[0] != '#') return false;
@@ -3952,6 +3976,39 @@ std::string_view shownName(const PropertyGrid::Property& p) {
 bool showsClear(const PropertyGrid::Property& p) {
     return exprfield::accepts(p) && !p.expression.empty() && p.commit && p.type != PropertyGrid::ValueType::ReadOnly;
 }
+// 1.13.0 (correctifs F2) : UNE CASE QUI NE MONTRE PAS TOUT. Le nom ou la valeur d'une propriete simple coupes "..."
+// ("Herite de... (..." dans une colonne etroite), ou une valeur sur plusieurs lignes montree sur une : l'infobulle
+// les donne entiers. Mesure comme le dessin (la police de la grille, 16 px ; un a-peu-pres d'un pixel ne fait que
+// montrer une infobulle de trop). `nameAvail`, `valueAvail` : la place du nom et de la valeur sur la ligne.
+std::string cutTip(const PropertyGrid::Property& p, float nameAvail, float valueAvail) {
+    if (p.type == PropertyGrid::ValueType::Boolean || (p.pill && p.pillOnly)) valueAvail = 1e9f;   // une case, une pastille
+    if (p.pill) valueAvail -= measureWidth(p.pill->text, gfx::FontId{13}) + 20.f;
+    const gfx::FontId font{16};
+    const std::string_view name = shownName(p);
+    const bool multi = p.value.find_first_of("\r\n") != std::string::npos;
+    const bool nameCut = measureWidth(name, font) > nameAvail;
+    const bool valueCut = !p.value.empty() && (multi || measureWidth(oneLineValue(p.value, true), font) > valueAvail);
+    if (!nameCut && !valueCut) return {};
+    std::string tip(name);
+    if (!p.value.empty() && p.type != PropertyGrid::ValueType::Boolean) tip += "\n" + p.value;
+    return tip;
+}
+// Une propriete simple (pas d'expression, de surcharge, de legende, de bouton : celles-la ont leur infobulle) ?
+bool plainProperty(const PropertyGrid::Property& p) {
+    return p.expression.empty() && !p.overridden && !p.revert && !exprfield::accepts(p) && !p.legend && !p.open;
+}
+// cutTip a sa place dans la grille : `area` (contentRect), le partage nom / valeur, la profondeur de la ligne (comme
+// onPaint : le retrait, la marge, le cadenas, la pastille d'une couleur).
+std::string cutTipAt(const PropertyGrid::Property& p, const gfx::Rect& area, float nameRatio, std::uint16_t depth) {
+    if (!plainProperty(p)) return {};
+    const float split = area.x + area.w * nameRatio;
+    const float indent = area.x + 4.f + static_cast<float>(depth) * 12.f;
+    float valueRight = area.right() - 6.f;
+    if (p.locked) valueRight -= 20.f;
+    float valueX = split + 6.f;
+    if (p.type == PropertyGrid::ValueType::Color) valueX += 20.f;
+    return cutTip(p, (split - 6.f) - (indent + 6.f), valueRight - valueX);
+}
 gfx::Rect beforeClear(const PropertyGrid::Property& p, const gfx::Rect& row) {
     if (!showsClear(p)) return row;
     const gfx::Rect b = revertBox(row);
@@ -3975,6 +4032,10 @@ bool PropertyGrid::hasTooltip() const {
         if (vr.prop && (!vr.prop->expression.empty() || vr.prop->overridden || vr.prop->revert || exprfield::accepts(*vr.prop)
                         || vr.prop->legend))
             return true;
+    // 1.13.0 (correctifs F2) : un nom ou une valeur coupes, une valeur sur plusieurs lignes : leur infobulle.
+    const auto area = contentRect();
+    for (const auto& vr : rows_)
+        if (vr.prop && (vr.depth & kNoteRow) == 0 && !cutTipAt(*vr.prop, area, nameRatio_, vr.depth).empty()) return true;
     return false;
 }
 
@@ -3993,8 +4054,15 @@ std::string PropertyGrid::liveTooltip(gfx::Point mouse) const {
         const std::string base = Widget::liveTooltip(mouse);
         return base.empty() ? mtip : mtip + "\n" + base;
     }
-    if (!p || (p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p) && !p->legend && !p->open))
+    if (!p || (p->expression.empty() && !p->overridden && !p->revert && !exprfield::accepts(*p) && !p->legend && !p->open)) {
+        // 1.13.0 (correctifs F2) : un nom ou une valeur coupes (ou sur plusieurs lignes) : entiers, en infobulle.
+        if (p && (rows_[static_cast<std::size_t>(ri)].depth & kNoteRow) == 0)
+            if (std::string cut = cutTipAt(*p, contentRect(), nameRatio_, rows_[static_cast<std::size_t>(ri)].depth); !cut.empty()) {
+                const std::string base = Widget::liveTooltip(mouse);
+                return base.empty() ? cut : cut + "\n" + base;
+            }
         return Widget::liveTooltip(mouse);
+    }
     // 1.10 (chantier K) : le X dit ce qu'il fait ; une case vide, ce qu'elle accepte.
     {
         const auto area = contentRect();
@@ -4403,8 +4471,11 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
             if (vr.prop->type == ValueType::Boolean) {
                 const gfx::Rect box{valueX, r.y + (rowH - 14.f) * 0.5f, 14.f, 14.f};
                 const bool on = isTrueText(vr.prop->value);
-                ctx.r.fillRect(box, on ? c.accent : c.inputBg);
-                ctx.r.strokeRect(box, on ? c.accent : c.border, 1.f);
+                // 1.13.0 (correctifs F2) : une case reprise d'ailleurs (locked : une interface heritee du parent) se lit
+                // grisee - cochee, mais pas a decocher ici.
+                const gfx::Color onColour = locked ? c.textDisabled : c.accent;
+                ctx.r.fillRect(box, on ? onColour : c.inputBg);
+                ctx.r.strokeRect(box, on ? onColour : c.border, 1.f);
                 if (vr.prop->mixed && !on) {          // 1.12.3 : « - » : les objets choisis different
                     ctx.r.line({box.x + 3.f, box.y + 7.f}, {box.x + 11.f, box.y + 7.f}, c.text, 2.f);
                 } else if (on) {
@@ -4448,7 +4519,11 @@ void PropertyGrid::onPaint(const PaintContext& ctx) {
                                               c.warning.withAlpha(110), 3.f);
                     }
                 }
-                drawClipped(ctx, {valueX, r.y + textY}, waiting ? std::string_view(invite) : std::string_view(vr.prop->value), font,
+                // 1.13.0 (correctifs F2) : une valeur sur plusieurs lignes (la Declaration d'une interface) se montre sur une
+                // (ses sauts et ses retraits en une espace ; l'infobulle la donne entiere) - avant, le saut de ligne se
+                // dessinait en glyphe de remplacement ("INTERFACE<?> ...").
+                const std::string flat = waiting ? std::string{} : oneLineValue(vr.prop->value, marks.empty());
+                drawClipped(ctx, {valueX, r.y + textY}, waiting ? std::string_view(invite) : std::string_view(flat), font,
                             waiting ? c.textDisabled : valueCol, valueRight - valueX);
             }
         }

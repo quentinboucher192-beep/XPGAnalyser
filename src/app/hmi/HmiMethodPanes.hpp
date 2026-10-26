@@ -157,6 +157,10 @@ public:
 
     // La legende au-dessus du corps : SELF, ses membres, le retour.
     [[nodiscard]] std::string legendText() const;
+    // 1.13.0 (correctifs F2) : comment s'appelle la methode choisie (la ligne d'etat) - avec une vraie instance du type
+    // (Pompe2.EnDefaut() pour T_PompeDoublee), sinon <instance> ; une privee, seulement d'une methode du type.
+    [[nodiscard]] std::string callHint() const;
+    [[nodiscard]] std::string statusText() const;
     [[nodiscard]] std::string editorTitle() const;
     // F7 : les fautes de la methode montree (Compiler du document) ; rend leur nombre.
     std::size_t compileCurrent();
@@ -196,6 +200,7 @@ private:
     ui::Splitter*      split_{nullptr};
     HmiTitledPanel*    listPanel_{nullptr};
     ui::TableView*     table_{nullptr};
+    HmiTitledPanel*    propsPanel_{nullptr};   // 1.13.0 (correctifs F2) : "de la signature" sur une interface
     ui::PropertyGrid*  props_{nullptr};
     HmiTitledPanel*    editorPanel_{nullptr};
     ui::StatusBar*     legend_{nullptr};

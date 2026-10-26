@@ -1,6 +1,7 @@
 #include "Syntax.hpp"
 
 #include "Theme.hpp"
+#include "../core/Edition.hpp"   // 1.13.0 (correctif F2) : les mots du dialecte IHM, la ou il y a une IHM
 
 #include <algorithm>
 #include <array>
@@ -63,6 +64,15 @@ constexpr std::string_view kStKeywords[] = {
     "transition", "true", "type", "until", "var", "var_global", "var_in_out",
     "var_input", "var_output", "var_temp", "while", "with", "xor",
     "try", "catch", "end_try",          // 1.12.1 : le dialecte de l'IHM
+};
+// 1.13.0 (correctif F2) : LES MOTS DU DIALECTE DE L'IHM que le ST de l'automate n'a pas - ceux que le dialecte reserve
+// (hmi::stKeywords : ENTRE, CALLBACK, LAMBDA, END_LAMBDA, TEMPLATE, NULL ; CONTINUE, TRY, CATCH, END_TRY sont plus haut)
+// et la directive USING (1.13.0). Colores la ou il y a une IHM (IHM Studio) ; API Studio n'edite que l'automate et ne
+// les colore pas (un nom de variable de l'automate, Null ou Entre, reste un nom). Les mots des types objets (EXTENDS,
+// IMPLEMENTS, INTERFACE, METHOD, PRIVATE...) ne s'ecrivent dans aucun code de l'IHM (la page Types IHM les pose) ;
+// SELF, THIS, SUPER sont des noms (comme le retour d'une fonction) ; WAIT_UNTIL, LEVER sont des appels (colores comme tels).
+constexpr std::string_view kHmiStKeywords[] = {
+    "using", "entre", "callback", "lambda", "end_lambda", "template", "null",
 };
 constexpr std::string_view kStTypes[] = {
     "bool", "byte", "date", "date_and_time", "dint", "dt", "dword", "ebool", "int",
@@ -258,6 +268,8 @@ void tokenizeLine(std::string_view line, Language lang, std::vector<Token>& out,
             } else if (stLike) {
                 // ST is case-insensitive, so IF, If and if are one keyword.
                 if (inTable(word, kStKeywords, std::size(kStKeywords), false))       cls = TokenClass::Keyword;
+                else if (core::hasIhm() && inTable(word, kHmiStKeywords, std::size(kHmiStKeywords), false))
+                    cls = TokenClass::Keyword;                                     // 1.13.0 (correctif F2) : USING...
                 else if (inTable(word, kStTypes, std::size(kStTypes), false))        cls = TokenClass::Type;
                 else if (inTable(word, kStFunctions, std::size(kStFunctions), false)) cls = TokenClass::Function;
             }

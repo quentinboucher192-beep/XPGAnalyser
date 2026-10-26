@@ -229,7 +229,7 @@ LibraryState stateOf(std::string_view found, std::string_view recorded, std::str
 std::string_view stateLabel(LibraryState s) noexcept {
     switch (s) {
         case LibraryState::Linked: return "reli\xC3\xA9" "e";
-        case LibraryState::Newer: return "plus r\xC3\xA9" "cente dispo";
+        case LibraryState::Newer: return "plus r\xC3\xA9" "cente disponible";   // 1.13.0 (correctif F2) : pas d'abreviation
         case LibraryState::Older: return "plus ancienne";
         case LibraryState::Incompatible: return "incompatible";
         case LibraryState::Missing: return "introuvable";
@@ -564,6 +564,25 @@ std::string findFile(const Library& lib, const std::string& projectFolder) {
     return {};
 }
 
+namespace {
+// 1.13.0 (correctif F2) : un fichier DONNE (tape dans Relier, Localiser, Mettre a jour) : relatif, il se lit depuis le
+// dossier du projet (libs/Gaz-1.4.0.xpgbib, ce que la fenetre conseille) et jamais depuis le dossier courant de
+// l'application ; absolu, tel quel. Rend le chemin absolu, normalise.
+std::string givenFile(const std::string& file, const std::string& projectFolder) {
+    std::error_code ec;
+    fs::path f = pathOf(file);
+    if (f.is_relative() && !projectFolder.empty()) f = pathOf(projectFolder) / f;
+    return utf8Of(fs::absolute(f, ec).lexically_normal());
+}
+// Pourquoi le fichier donne ne se lit pas : un fichier absent est nomme comme on l'a tape (libs/Gaz.xpgbib), et dit ou
+// il a ete cherche quand le chemin etait relatif.
+std::string unreadable(const core::Error& e, const std::string& typed, const std::string& projectFolder) {
+    if (e.code == core::ErrorCode::FileNotFound && pathOf(typed).is_relative() && !projectFolder.empty())
+        return "fichier introuvable : " + typed + " (cherch\xC3\xA9 dans le dossier du projet)";
+    return e.context.empty() ? e.message() : e.context;
+}
+} // namespace
+
 std::string pathToRecord(const std::string& file, const std::string& projectFolder) {
     std::error_code ec;
     const fs::path f = fs::absolute(pathOf(file), ec).lexically_normal();
@@ -792,11 +811,10 @@ void resolve(Project& p, const std::string& projectFolder) {
 
 LinkPlan planLink(const Project& p, const std::string& file, const std::string& projectFolder, std::string_view alias) {
     LinkPlan plan;
-    std::error_code ec;
-    plan.file = utf8Of(fs::absolute(pathOf(file), ec).lexically_normal());
-    auto pkg = readFile(file);
+    plan.file = givenFile(file, projectFolder);     // 1.13.0 (correctif F2) : relatif au projet (avant : au dossier courant)
+    auto pkg = readFile(plan.file);
     if (!pkg) {
-        plan.refusal = pkg.error().context.empty() ? pkg.error().message() : pkg.error().context;
+        plan.refusal = unreadable(pkg.error(), file, projectFolder);
         return plan;
     }
     plan.package = std::move(*pkg);
@@ -873,16 +891,17 @@ bool relocate(Project& p, std::string_view name, const std::string& file, const 
         if (why) *why = "aucune biblioth\xC3\xA8que " + std::string(name);
         return false;
     }
-    auto pkg = readFile(file);
+    const std::string found = givenFile(file, projectFolder);   // 1.13.0 (correctif F2) : relatif au projet
+    auto pkg = readFile(found);
     if (!pkg) {
-        if (why) *why = pkg.error().context.empty() ? pkg.error().message() : pkg.error().context;
+        if (why) *why = unreadable(pkg.error(), file, projectFolder);
         return false;
     }
     if (!same(pkg->manifest.name, it->publishedName())) {
         if (why) *why = "ce fichier est la biblioth\xC3\xA8que " + pkg->manifest.name + ", pas " + it->publishedName();
         return false;
     }
-    it->path = pathToRecord(file, projectFolder);
+    it->path = pathToRecord(found, projectFolder);
     resolve(p, projectFolder);
     return true;
 }
@@ -901,14 +920,15 @@ UpdatePlan planUpdate(const Project& p, std::string_view name, const std::string
     }
     plan.name = l->name;
     plan.from = l->version;
-    plan.file = file.empty() ? findFile(*l, projectFolder) : file;
+    // 1.13.0 (correctif F2) : un fichier donne relatif se lit depuis le dossier du projet.
+    plan.file = file.empty() ? findFile(*l, projectFolder) : givenFile(file, projectFolder);
     if (plan.file.empty()) {
         plan.refusal = l->name + " introuvable (" + l->path + ") : localise-la d'abord";
         return plan;
     }
     auto pkg = readFile(plan.file);
     if (!pkg) {
-        plan.refusal = pkg.error().context.empty() ? pkg.error().message() : pkg.error().context;
+        plan.refusal = unreadable(pkg.error(), file.empty() ? plan.file : file, projectFolder);
         return plan;
     }
     if (!same(pkg->manifest.name, l->publishedName())) {
