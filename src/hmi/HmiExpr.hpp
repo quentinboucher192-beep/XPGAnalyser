@@ -158,6 +158,11 @@ private:
 // qu'une expression de vue peut appeler de l'automate (lot 7 : et le banc
 // d'essai des fonctions IHM).
 [[nodiscard]] bool isStandardFunction(std::string_view name);
+// 1.13.0 (relecture F2) : une fonction de l'IHM de ce nom cache-t-elle une fonction standard que le moteur sait
+// appeler ? MAX, ABS, RGB : oui ; un nom X_TO_Y seulement si la conversion existe (son type d'arrivee connu du
+// moteur, comme sim::Runtime : INT_TO_REAL, REAL_TO_LREAL, STRING_TO_ASCII) - Deg_To_Rad, Bar_To_Psi ne cachent
+// rien. Generer et l'inspecteur des fonctions ("cache la fonction standard") ; un seul predicat.
+[[nodiscard]] bool hidesStandardFunction(std::string_view name);
 
 // Les racines lues par une expression, sans la compiler.
 [[nodiscard]] std::vector<std::string> scanRoots(std::string_view source);

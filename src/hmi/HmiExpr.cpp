@@ -196,6 +196,19 @@ private:
 
 bool isStandardFunction(std::string_view name) { return isPureFunction(name); }
 
+bool hidesStandardFunction(std::string_view name) {
+    if (!isPureFunction(name)) return false;
+    const std::string u = upper(name);
+    const auto to = u.find("_TO_");
+    if (to == std::string::npos || natives::isOwnFunction(u)) return true;   // MAX, ABS, RGB, RANDOM...
+    if (u == "STRING_TO_ASCII") return true;                                   // sim::Runtime la traite a part
+    // isPureFunction prend tout X_TO_Y ; sim::Runtime ne convertit que vers un type qu'il connait (typeFromName, ou
+    // LREAL, SINT, USINT qu'il ramene a son type de calcul) : DEG_TO_RAD, BAR_TO_PSI n'existent pas.
+    const std::string target = u.substr(to + 4);
+    return sim::typeFromName(target) != sim::Type::Unknown || target == "LREAL" || target == "LINT" || target == "ULINT"
+        || target == "LWORD" || target == "SINT" || target == "USINT";
+}
+
 // ---------------------------------------------------------------- Scope ----
 // Lot 8 : sans casse, comme le ST (Moteur, MOTEUR et moteur sont le meme nom).
 void Scope::setValue(std::string name, sim::Value v) { values_[upper(name)] = std::move(v); }

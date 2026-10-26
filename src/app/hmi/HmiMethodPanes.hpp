@@ -216,6 +216,10 @@ private:
     hmi::Id            shownId_{hmi::kNoId};
     std::string        message_;
     bool               syncing_{false};
+    // 1.13.0 (relecture F2) : la liste montre une interface (le cadenas, Genre et Origine caches) ; ce que
+    // l'utilisateur avait laisse de ces trois colonnes sur une structure, rendu au retour.
+    bool               ifaceColumns_{false};
+    bool               keptColumns_[3]{true, true, true};
     core::ConnectionScope links_;
 };
 
