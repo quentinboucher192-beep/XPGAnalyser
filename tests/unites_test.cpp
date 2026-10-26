@@ -969,6 +969,43 @@ void correctionALaBonnePlace() {
           "une correction EN(...) ne touche toujours pas Pression.Valide (" + u.programs.scripts.back().body + ")");
 }
 
+// 1.13.0 (lot F3) : les defauts vus aux captures - le message des Unites strictes nomme la variable et ses deux unites,
+// la correction en tete ; la correction appliquee dit ou est le texte remplace (le curseur y va).
+void lotF3() {
+    std::printf("-- lot F3 : le message des Unites strictes ; la place du texte corrige\n");
+    Project p;
+    var(p, "D_PRESSION_BASSE", "REAL", "mbar");
+    var(p, "D_PRESSION_TOTALE", "REAL", "bar");
+    p.config.strictUnits = true;
+    scriptcheck::Scope sc;
+    sc.project = &p;
+    const auto fs = scriptcheck::check(sc, "D_PRESSION_TOTALE := D_PRESSION_BASSE;");
+    const auto* f = findingWith(fs, "Unit\xC3\xA9s strictes");
+    check(f && f->message.rfind("D_PRESSION_BASSE est en mbar, la cible en bar : \xC3\xA9" "cris EN(D_PRESSION_BASSE, 'bar')", 0) == 0
+              && f->fixTo == "EN(D_PRESSION_BASSE, 'bar')",
+          "R10 : la variable, ses deux unites, puis la correction (" + (f ? f->message : std::string("aucun message")) + ")");
+    const auto calc = exprcheck::assignmentUnit(ctxOf(p), "D_PRESSION_TOTALE", "D_PRESSION_BASSE * 2.0", true);
+    check(has(calc, "le calcul (D_PRESSION_BASSE * 2.0) est en mbar, la cible en bar : \xC3\xA9" "cris EN(D_PRESSION_BASSE, 'bar') dans le calcul"),
+          "R10 : un calcul en mode strict - EN dans le calcul");
+    // R1 : applyFix rend la place du texte remplace (ligne, colonne) : le curseur y va, l'ancienne plage ne vaut plus.
+    Project q = p;
+    Script s;
+    s.id = q.allocate();
+    s.name = "Bilan";
+    s.body = "(* bilan *)\nX := 1;\nD_PRESSION_TOTALE := D_PRESSION_TOTALE + D_PRESSION_BASSE;\n";
+    q.programs.scripts.push_back(s);
+    FixPlace at;
+    at.script = s.id;
+    at.line = 3;
+    FixPlace done;
+    check(applyFix(q, at, "D_PRESSION_BASSE", "EN(D_PRESSION_BASSE, 'bar')", nullptr, &done) && done.line == 3
+              && done.column == static_cast<int>(std::string("D_PRESSION_TOTALE := D_PRESSION_TOTALE + ").size()) + 1
+              && q.programs.scripts.back().body.find("+ EN(D_PRESSION_BASSE, 'bar');") != std::string::npos,
+          "R1 : la ligne et la colonne du texte remplace (" + std::to_string(done.line) + ", " + std::to_string(done.column) + ")");
+    FixPlace none;
+    check(!applyFix(q, at, "N_EXISTE_PAS", "X", nullptr, &none) && none.line == 0 && none.column == 0, "R1 : rien de remplace, aucune place");
+}
+
 // R7, R5, R13, R10 : VAR_IN_OUT, appel nomme, appel d'instance seul, RETURN / CASE / FOR.
 void passagesEtInstructions() {
     std::printf("-- R7 / R5 / R13 / R10 : VAR_IN_OUT, appel nomme, appel d'instance, RETURN, CASE, FOR\n");
@@ -1172,6 +1209,7 @@ int main() {
     tableauEntier();
     cacheDesUnites();
     affichageEtDeclarations();
+    lotF3();                   // 1.13.0 (lot F3) : les defauts vus aux captures
     std::printf("=== %d verifications, %d echec(s) ===\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

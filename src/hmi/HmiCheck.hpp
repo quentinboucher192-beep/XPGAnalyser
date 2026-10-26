@@ -66,8 +66,10 @@ struct FixPlace {
     int         column{0};
 };
 // Remplace `from` par `to` a cet endroit (la premiere fois sur la ligne, sinon dans tout le texte). Faux : rien de
-// change (l'endroit n'existe plus, ou `from` n'y est plus). `what` : l'endroit, dit a l'utilisateur.
-bool applyFix(Project&, const FixPlace&, std::string_view from, std::string_view to, std::string* what = nullptr);
+// change (l'endroit n'existe plus, ou `from` n'y est plus). `what` : l'endroit, dit a l'utilisateur. 1.13.0 (lot F3) :
+// `done` - dans un code (script, fonction), la ligne et la colonne ou commence le texte remplace (0 : ailleurs).
+bool applyFix(Project&, const FixPlace&, std::string_view from, std::string_view to, std::string* what = nullptr,
+              FixPlace* done = nullptr);
 
 struct IssueCounts {
     std::size_t errors{0}, warnings{0}, infos{0};

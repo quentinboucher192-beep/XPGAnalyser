@@ -363,9 +363,10 @@ void MainAnalysisScreen::wireBottomPanel() {
             at.line = d.line;
             at.column = d.fixColumn;                      // 1.13.0 (seconde passe) : l'occurrence visee
             std::string what;
+            hmi::FixPlace done;
             {
                 hmi::Project probe = doc->project;          // l'endroit existe-t-il encore ?
-                if (!hmi::applyFix(probe, at, d.fixFrom, d.fixTo, &what)) {
+                if (!hmi::applyFix(probe, at, d.fixFrom, d.fixTo, &what, &done)) {
                     if (status_) status_->setTransientMessage("Rien \xC3\xA0 corriger : " + d.fixFrom + " n'est plus l\xC3\xA0.", 6.0);
                     return;
                 }
@@ -373,7 +374,15 @@ void MainAnalysisScreen::wireBottomPanel() {
             auto cmd = hmi::changeProject(doc, "Corriger : " + d.fixFrom + " \xE2\x86\x92 " + d.fixTo,
                                           [&](hmi::Project& pp) { (void)hmi::applyFix(pp, at, d.fixFrom, d.fixTo); });
             if (cmd) app_.apply(std::move(cmd), /*refreshViews=*/true);
-            openHmiDiagnostic(d);
+            // 1.13.0 (lot F3) : la plage de la faute ne vaut plus (le texte a change de longueur) - le curseur juste apres
+            // le texte remplace, rien de selectionne.
+            pl::Diagnostic shown(d);
+            if (done.line > 0 && done.column > 0) {
+                shown.line = done.line;
+                shown.column = done.column + static_cast<int>(d.fixTo.size());
+                shown.length = 0;
+            }
+            openHmiDiagnostic(shown);
             if (status_) status_->setTransientMessage("Corrig\xC3\xA9 dans " + what + " : " + d.fixFrom + " \xE2\x86\x92 " + d.fixTo + " (Ctrl+Z pour revenir)", 8.0);
             return;
         }

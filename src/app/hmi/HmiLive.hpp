@@ -60,6 +60,11 @@ inline constexpr const char* kLiveStep = "Saisie";
     x.length = d.length;
     x.step = kLiveStep;
     x.suggestion = suggestion;
+    // 1.13.0 (lot F3) : la correction d'un clic (EN(...), un nom corrige) - la meme que la ligne Validation.
+    x.fixFrom = d.fixFrom;
+    x.fixTo = d.fixTo;
+    x.fixColumn = d.fixColumn;
+    if (!x.fixFrom.empty() && x.suggestion.empty()) x.suggestion = "Correction (Ctrl+.) : " + x.fixFrom + " \xE2\x86\x92 " + x.fixTo;
     return x;
 }
 
