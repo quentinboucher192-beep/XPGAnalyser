@@ -57,7 +57,7 @@ struct Version {
 [[nodiscard]] int     compare(const Version&, const Version&) noexcept;   // <0, 0, >0
 // L'etat d'un fichier trouve en `found`, pour un lien a `recorded` de plancher `floor`.
 [[nodiscard]] LibraryState stateOf(std::string_view found, std::string_view recorded, std::string_view floor);
-[[nodiscard]] std::string_view stateLabel(LibraryState) noexcept;    // "reli\xC3\xA9" "e", "plus r\xC3\xA9" "cente dispo"...
+[[nodiscard]] std::string_view stateLabel(LibraryState) noexcept;    // "reli\xC3\xA9" "e", "plus r\xC3\xA9" "cente disponible"...
 // La version suivante proposee : majeur (rupture), mineur (ajout), correctif (sans changement d'interface).
 enum class Bump : std::uint8_t { Major, Minor, Patch };
 [[nodiscard]] std::string bumped(std::string_view version, Bump);

@@ -229,7 +229,7 @@ LibraryState stateOf(std::string_view found, std::string_view recorded, std::str
 std::string_view stateLabel(LibraryState s) noexcept {
     switch (s) {
         case LibraryState::Linked: return "reli\xC3\xA9" "e";
-        case LibraryState::Newer: return "plus r\xC3\xA9" "cente dispo";
+        case LibraryState::Newer: return "plus r\xC3\xA9" "cente disponible";   // 1.13.0 (correctif F2) : pas d'abreviation
         case LibraryState::Older: return "plus ancienne";
         case LibraryState::Incompatible: return "incompatible";
         case LibraryState::Missing: return "introuvable";
