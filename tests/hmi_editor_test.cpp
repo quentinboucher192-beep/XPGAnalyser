@@ -38150,6 +38150,20 @@ void correctifsF2_113() {
                 if (pr.name == "Attention") degWarn = pr.value;
         check(degWarn.empty(), "l'inspecteur de Deg_To_Rad : pas de \xC2\xAB cache la fonction standard \xC2\xBB (aucune DEG_TO_RAD) [" + degWarn + "]");
     }
+    // ---- 1 bis. Relecture F2 (F2-2) : l'aide a la saisie lit les parametres de type T (Plus_Grand<T>(a : T; b : T)) ----
+    {
+        Project p;
+        HmiFunction pg = makeFunction(p, "Plus_Grand", "T", "IF a > b THEN\n    Plus_Grand := a;\nELSE\n    Plus_Grand := b;\nEND_IF;");
+        pg.generics = {{"T", "ANY_NUM"}};
+        pg.decls = {testParam(p, "a", "T"), testParam(p, "b", "T")};
+        p.programs.functions.push_back(pg);
+        const auto items = app::assist::suggest(p, nullptr, "x := ", "Plus_");
+        const auto it = std::find_if(items.begin(), items.end(), [](const app::assist::Item& i) { return i.text == "Plus_Grand"; });
+        check(it != items.end() && it->detail.find("T \xC2\xB7 d\xC3\xA9" "duit de a") != std::string::npos,
+              "l'aide \xC3\xA0 la saisie de Plus_Grand<T> : \xC2\xAB T \xC2\xB7 d\xC3\xA9" "duit de a \xC2\xBB [" + (it == items.end() ? std::string("?") : it->detail) + "]");
+        check(it != items.end() && it->insert == "Plus_Grand()" && it->caret == std::string("Plus_Grand").size() + 1,
+              "Plus_Grand() : le curseur entre les parenth\xC3\xA8ses (elle a deux param\xC3\xA8tres)");
+    }
 
     // ---- 2. Les objets : l'interface heritee, la page d'une interface, la section Methodes ----
     using PG = ui::PropertyGrid;

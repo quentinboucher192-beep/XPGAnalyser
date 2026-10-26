@@ -427,10 +427,18 @@ std::string functionReturnLabel(const hmi::HmiFunction& f) {
     if (typeMentionsAnyGeneric(f.returnType, f.generics)) return "selon " + f.returnType;
     return f.returnType;
 }
+// 1.13.0 (relecture F2) : les declarations d'une fonction, tous les types lus (comme bubbleOf et
+// app::functionDeclarations) : la forme seule compte ici, le controle juge les types. Sans ce predicat,
+// "a : T" (une generique) ou "a : T_Pompe" etait refuse : 0 parametre, "T . donne", Plus_Grand() avec
+// le curseur apres les parentheses.
+hmi::ScriptParts declarationsOf(const hmi::HmiFunction& f) {
+    return hmi::splitDeclarations(hmi::decl::codeOf(f), true, [](std::string_view) { return true; });
+}
+
 // 1.13.0 : l'indice de deduction "T . deduit de a" (le premier parametre qui porte chaque generique).
 std::string genericHint(const hmi::HmiFunction& f) {
     if (f.generics.empty()) return {};
-    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(f), true);
+    const auto parts = declarationsOf(f);
     std::string out;
     for (const auto& g : f.generics) {
         std::string where;
@@ -458,7 +466,7 @@ Item userFunctionItem(const hmi::HmiFunction& f, int rank) {
               + (about.empty() ? std::string{} : "  \xC2\xB7  " + about);
     it.kind = Kind::UserFunction;
     it.rank = rank;
-    const bool params = !hmi::splitDeclarations(hmi::decl::codeOf(f), true).parameters().empty();   // 1.11.18 : le modele aussi ; 1.11.20 : E/S, sorties
+    const bool params = !declarationsOf(f).parameters().empty();   // 1.11.18 : le modele aussi ; 1.11.20 : E/S, sorties ; 1.13.0 : a : T
     it.insert = f.name + "()";
     it.caret = params ? f.name.size() + 1 : it.insert.size();
     return it;
@@ -3492,7 +3500,7 @@ HmiFunctionPicker::Entry userEntry(const hmi::HmiFunction& f, std::vector<std::s
                                 d.description.empty() ? modeWord(d.mode == hmi::PassMode::InOut, d.mode == hmi::PassMode::Out) : d.description,
                                 !d.value.empty()});
     if (e.params.empty())     // une fonction d'avant le modele des declarations : VAR_INPUT dans son code
-        for (const auto* p : hmi::splitDeclarations(hmi::decl::codeOf(f), true).parameters())
+        for (const auto* p : declarationsOf(f).parameters())
             e.params.push_back({p->name, p->type,
                                 modeWord(p->section == hmi::LocalVar::Section::InOut, p->section == hmi::LocalVar::Section::Output), false});
     std::string args;
