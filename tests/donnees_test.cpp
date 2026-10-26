@@ -365,8 +365,21 @@ void relecture() {
 void seconde() {
     std::printf("-- seconde relecture : le sens des motifs (R22)\n");
     std::string err;
+#ifdef __GLIBCXX__
+    // L'exe livre (MinGW, libstdc++) : la recherche sans retour arriere - entre deux choix au meme depart, le plus long.
     check(run("STRING", "R := REGEX_TROUVE('Automatique', 'Auto|Automatique');", &err) == "Automatique",
           "R22 : deux choix au meme depart : le plus long l'emporte (Auto|Automatique -> Automatique), comme l'aide le dit (" + err + ")");
+    check(run("STRING", "R := REGEX_TROUVE('Pompe12', 'Pompe(1|12)', 1);", &err) == "12", "R22 : Pompe(1|12) sur Pompe12 : le groupe 12 (le plus long)");
+#else
+    // D2b-4 : une construction Visual Studio (MSVC) suit la regle ECMAScript - le premier choix qui convient : l'aide le dit.
+    check(run("STRING", "R := REGEX_TROUVE('Automatique', 'Auto|Automatique');", &err) == "Auto",
+          "R22 : hors MinGW (MSVC), le premier choix qui convient l'emporte (Auto|Automatique -> Auto), comme l'aide le dit (" + err + ")");
+#endif
+    // D2b-4 : ce qui ne change pas selon la cible - un quantificateur paresseux prend le plus court, l'ordre ab|a garde ab.
+    check(run("STRING", "R := REGEX_TROUVE('<a><b>', '<.+?>');", &err) == "<a>", "D2b-4 : <.+?> sur <a><b> : <a> partout (" + err + ")");
+    check(run("STRING", "R := REGEX_TROUVE('x=12;y=3', '[a-z]=[0-9]+?');", &err) == "x=1", "D2b-4 : [0-9]+? : le plus court partout (" + err + ")");
+    check(run("STRING", "R := REGEX_TROUVE('Automatique', 'Automatique|Auto');", &err) == "Automatique",
+          "D2b-4 : le choix le plus long ecrit d'abord : le meme resultat partout (" + err + ")");
     check(run("STRING", "TRY\n    R := REGEX_TROUVE('aa', '(a)\\1');\nCATCH e\n    R := e.Code;\nEND_TRY") == "E_REGEX",
           "R22 : une reference arriere (\\1) est refusee (E_REGEX) - sur toutes les cibles");
     check(run("BOOL", "R := REGEX_VALIDE('(a)\\1');", &err) == "FALSE", "R22 : REGEX_VALIDE('(a)\\1') = FALSE (" + err + ")");

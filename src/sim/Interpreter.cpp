@@ -9725,7 +9725,12 @@ private:
     // 1.13.0 : les drapeaux du motif. Sous libstdc++ (MinGW, Linux), l'executeur par defaut parcourt le texte
     // en profondeur, une trame de pile par caractere : `.*` sur quelques milliers de caracteres debordait la
     // pile (plantage), et (\w+\s?)*$ prenait un temps exponentiel (l'IHM figee). Le mode polynomial (un
-    // automate en largeur) n'a ni l'un ni l'autre ; il refuse les references arriere (\1).
+    // automate en largeur) n'a ni l'un ni l'autre ; il refuse les references arriere (\1). Son sens : entre deux
+    // choix au meme depart, le plus long l'emporte (Auto|Automatique -> Automatique) ; un quantificateur paresseux
+    // (+?, *?) garde le plus court. Ailleurs (une construction MSVC, sans ce mode) : la regle ECMAScript, le premier
+    // choix qui convient (-> Auto), et le retour arriere (un motif comme (\w+\s?)*$ peut y etre lent) - les deux
+    // differences, l'aide (donnees-scripts) les dit ; aucun moyen simple de donner a MSVC le parcours en largeur ni a
+    // libstdc++ le premier choix sans le retour arriere. Les references arriere sont refusees partout (le meme motif).
     static std::regex::flag_type regexFlags() {
 #ifdef __GLIBCXX__
         return std::regex::ECMAScript | std::regex_constants::__polynomial;

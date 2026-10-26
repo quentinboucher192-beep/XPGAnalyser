@@ -14554,17 +14554,22 @@ const std::vector<Topic>& topics() {
                          ": sur une variable, une case de tableau, un membre compos\xC3\xA9. M\xC3\xAAmes "
                          "r\xC3\xA8gles que les fonctions IHM (arguments dans l'ordre ou nomm\xC3\xA9s `a := "
                          "\xE2\x80\xA6`). Un membre ou une m\xC3\xA9thode **priv\xC3\xA9** ne se lit et ne "
-                         "s'appelle **que depuis une m\xC3\xA9thode du m\xC3\xAAme type** ; ailleurs, "
+                         "s'appelle **que depuis une m\xC3\xA9thode du m\xC3\xAAme type** (ou d'un type qui "
+                         "en h\xC3\xA9rite : une m\xC3\xA9thode de T_PompeDoublee lit Heures) ; ailleurs, "
                          "G\xC3\xA9n\xC3\xA9rer le refuse : \xC2\xAB `Heures` est priv\xC3\xA9 dans T_Pompe "
-                         "\xC2\xBB. Dans la grille des membres, la colonne **Visibilit\xC3\xA9** dit Public "
-                         "ou Priv\xC3\xA9 (avec un cadenas) ; le clic droit sur un membre propose **Rendre "
+                         "\xC2\xBB, et en marche le moteur aussi (une lecture, une \xC3\xA9" "criture ou un "
+                         "appel venus d'ailleurs arr\xC3\xAAtent le script sur cette erreur, \xC3\xA0 sa "
+                         "ligne). Dans la grille des membres, la colonne **Visibilit\xC3\xA9** dit Public ou "
+                         "Priv\xC3\xA9 (avec un cadenas) ; le clic droit sur un membre propose **Rendre "
                          "priv\xC3\xA9** ou **Rendre public** (Ctrl+Z l'annule). La privacit\xC3\xA9 ne "
                          "touche pas la place Modbus : un membre priv\xC3\xA9 d'une structure li\xC3\xA9" "e "
                          "garde son adresse ; seul le code ST est contraint.", {}},
              {K::Tip, "Ce que G\xC3\xA9n\xC3\xA9rer voit : un membre priv\xC3\xA9 lu depuis une variable "
-                         "IHM, une locale ou un param\xC3\xA8tre de ce type. \xC3\x80 travers une "
-                         "r\xC3\xA9" "f\xC3\xA9rence (`r^.Heures`) ou dans un `FOR EACH p IN Pompes`, il ne "
-                         "le voit pas encore, et le moteur ne le garde pas \xC3\xA0 l'ex\xC3\xA9" "cution.", {}},
+                         "IHM, une locale, un param\xC3\xA8tre, une r\xC3\xA9" "f\xC3\xA9rence (`r^.Heures`) "
+                         "ou la variable d'un `FOR EACH p IN Pompes`. Ce qu'il ne voit pas - une case d'une "
+                         "liste locale (`L[0].Heures`), le corps d'une m\xC3\xA9thode d'un autre type -, le "
+                         "moteur le refuse en marche. Le d\xC3\xA9" "bogueur et les expressions "
+                         "ajout\xC3\xA9" "es en simulation lisent tout, priv\xC3\xA9 compris.", {}},
              {K::Heading, "H\xC3\xA9ritage : EXTENDS, VIRTUAL, OVERRIDE, SUPER", {}},
              {K::Paragraph, "Dans les propri\xC3\xA9t\xC3\xA9s du type, **H\xC3\xA9rite de\xE2\x80\xA6 "
                          "(EXTENDS)** choisit un **parent** parmi les structures du projet : ni "
@@ -14658,7 +14663,8 @@ const std::vector<Topic>& topics() {
                          "code.", {}, "1.13.0"},
              {K::Heading, "Ce que G\xC3\xA9n\xC3\xA9rer refuse", {}},
              {K::Bullet, "un membre ou une m\xC3\xA9thode **priv\xC3\xA9** lu de l'ext\xC3\xA9rieur (depuis "
-                         "une variable IHM, une locale ou un param\xC3\xA8tre de ce type) ;", {}},
+                         "une variable IHM, une locale, un param\xC3\xA8tre, une r\xC3\xA9" "f\xC3\xA9rence "
+                         "ou la variable d'un FOR EACH ; en marche, le moteur refuse aussi le reste) ;", {}},
              {K::Bullet, "une **red\xC3\xA9" "finition** (le nom d'une m\xC3\xA9thode du parent) d'une "
                          "m\xC3\xA9thode non VIRTUAL, ou de signature diff\xC3\xA9rente ;", {}},
              {K::Bullet, "un **membre red\xC3\xA9" "clar\xC3\xA9** par un sous-type (d\xC3\xA9j\xC3\xA0 un "
@@ -15703,9 +15709,13 @@ const std::vector<Topic>& topics() {
                          "s'arr\xC3\xAAte pas : elle doit rendre sa valeur tout de suite.", {}, "1.13.0"},
              {K::Heading, "Renommer, supprimer", {}},
              {K::Paragraph, "Renommer une fonction (propri\xC3\xA9t\xC3\xA9 Nom) renomme **tous ses appels** : "
-                         "scripts, fonctions, actions, expressions, textes \xC3\xA0 trous, alarmes ; un seul "
-                         "Ctrl+Z reprend le tout. La propri\xC3\xA9t\xC3\xA9 **Appel\xC3\xA9" "e par** dit "
-                         "qui l'utilise ; supprimer une fonction le rappelle avant de confirmer.", {}},
+                         "scripts, fonctions, corps des m\xC3\xA9thodes des types, actions, expressions, "
+                         "textes \xC3\xA0 trous, alarmes ; un seul Ctrl+Z reprend le tout. Dans une "
+                         "m\xC3\xA9thode, un nom nu qui vise l'instance n'est pas la fonction : un membre "
+                         "(`Debit`) ou une m\xC3\xA9thode du type du m\xC3\xAAme nom (`Journal()` appelle la "
+                         "m\xC3\xA9thode) garde son nom, et Appel\xC3\xA9" "e par ne le compte pas. La "
+                         "propri\xC3\xA9t\xC3\xA9 **Appel\xC3\xA9" "e par** dit qui l'utilise ; supprimer "
+                         "une fonction le rappelle avant de confirmer.", {}},
              {K::Warning, "G\xC3\xA9n\xC3\xA9rer refuse un nom qui commence par IHM_, deux fonctions de "
                          "m\xC3\xAAme nom et de m\xC3\xAAme forme, un nom d\xC3\xA9j\xC3\xA0 port\xC3\xA9 "
                          "par une variable IHM, une variable inconnue dans son corps ; il avertit d'un appel "
@@ -15988,10 +15998,19 @@ const std::vector<Topic>& topics() {
                          "`REGEX_TROUVE` l'accepte ; un motif invalide l\xC3\xA8ve `E_REGEX`.", {}},
              {K::Bullet, "Ce que la grammaire n'a pas : les lookbehind `(?<=\xE2\x80\xA6)`, les groupes "
                          "nomm\xC3\xA9s `(?<nom>\xE2\x80\xA6)` et les r\xC3\xA9" "f\xC3\xA9rences "
-                         "arri\xC3\xA8re `\\1` (refus\xC3\xA9s : `E_REGEX`). Entre deux choix qui commencent "
-                         "au m\xC3\xAAme endroit, le plus long l'emporte (`Auto|Automatique` trouve \xC2\xAB "
-                         "Automatique \xC2\xBB). La recherche ne revient pas en arri\xC3\xA8re : un motif "
-                         "comme `^(\\w+\\s?)*$$` reste rapide, m\xC3\xAAme sur un long texte.", {}},
+                         "arri\xC3\xA8re `\\1` (refus\xC3\xA9s : `E_REGEX`). Dans IHM Studio tel qu'il est "
+                         "livr\xC3\xA9 (l'exe Windows, construit par MinGW), la recherche ne revient pas en "
+                         "arri\xC3\xA8re : un motif comme `^(\\w+\\s?)*$$` reste rapide, m\xC3\xAAme sur un "
+                         "long texte ; entre deux choix qui commencent au m\xC3\xAAme endroit, le plus long "
+                         "l'emporte (`Auto|Automatique` trouve \xC2\xAB Automatique \xC2\xBB) ; un "
+                         "quantificateur paresseux (`+?`, `*?`) garde le plus court (`<.+?>` trouve `<a>` "
+                         "dans `<a><b>`).", {}},
+             {K::Bullet, "Une construction Visual Studio (MSVC) du m\xC3\xAAme code suit la r\xC3\xA8gle "
+                         "ECMAScript : le **premier** choix qui convient l'emporte (`Auto|Automatique` y "
+                         "trouve \xC2\xAB Auto \xC2\xBB) et la recherche y revient en arri\xC3\xA8re (le "
+                         "motif `^(\\w+\\s?)*$$` peut y \xC3\xAAtre lent). Pour un m\xC3\xAAme "
+                         "r\xC3\xA9sultat partout, \xC3\xA9" "cris le choix le plus long d'abord "
+                         "(`Automatique|Auto`) ou un motif sans ambigu\xC3\xAFt\xC3\xA9 (`Auto(matique)?`).", {}},
              {K::Bullet, "Le texte fouill\xC3\xA9 fait **1 Mo au plus** (au-del\xC3\xA0 : `E_REGEX`) : lis "
                          "un gros fichier ligne par ligne (`FILE_READ_LINES`).", {}},
              {K::Heading, "G\xC3\xA9rer une erreur de donn\xC3\xA9" "es", {}},
