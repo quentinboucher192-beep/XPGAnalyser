@@ -981,11 +981,11 @@ void lotF3() {
     sc.project = &p;
     const auto fs = scriptcheck::check(sc, "D_PRESSION_TOTALE := D_PRESSION_BASSE;");
     const auto* f = findingWith(fs, "Unit\xC3\xA9s strictes");
-    check(f && f->message.rfind("D_PRESSION_BASSE est en mbar, la cible en bar : \xC3\xA9" "cris EN(D_PRESSION_BASSE, 'bar')", 0) == 0
+    check(f && f->message.rfind("\xC3\xA9" "cris EN(D_PRESSION_BASSE, 'bar') : D_PRESSION_BASSE est en mbar, la cible en bar", 0) == 0
               && f->fixTo == "EN(D_PRESSION_BASSE, 'bar')",
-          "R10 : la variable, ses deux unites, puis la correction (" + (f ? f->message : std::string("aucun message")) + ")");
+          "R10 : la correction d'abord, puis la variable et ses deux unites (" + (f ? f->message : std::string("aucun message")) + ")");
     const auto calc = exprcheck::assignmentUnit(ctxOf(p), "D_PRESSION_TOTALE", "D_PRESSION_BASSE * 2.0", true);
-    check(has(calc, "le calcul (D_PRESSION_BASSE * 2.0) est en mbar, la cible en bar : \xC3\xA9" "cris EN(D_PRESSION_BASSE, 'bar') dans le calcul"),
+    check(has(calc, "\xC3\xA9" "cris EN(D_PRESSION_BASSE, 'bar') dans le calcul : le calcul (D_PRESSION_BASSE * 2.0) est en mbar, la cible en bar"),
           "R10 : un calcul en mode strict - EN dans le calcul");
     // R1 : applyFix rend la place du texte remplace (ligne, colonne) : le curseur y va, l'ancienne plage ne vaut plus.
     Project q = p;

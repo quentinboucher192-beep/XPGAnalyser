@@ -938,8 +938,8 @@ void lotF3() {
         const auto half = runFunctionTest(p, *moy, t);
         check(half.detail.find("(\xC3\xA9" "cart 0.25)") != std::string::npos, "R17 : ecart 0.25 tel quel (" + half.detail + ")");
     }
-    check(fileNamePart("B3.2 EXTRACTIONS TE-LUNA (d\xC3\xA9monstration)") == "B3_2_EXTRACTIONS_TE-LUNA__demonstration_",
-          "C6 : le e accent devient e, un caractere interdit un seul _ (" + fileNamePart("B3.2 EXTRACTIONS TE-LUNA (d\xC3\xA9monstration)") + ")");
+    check(fileNamePart("A1.2 ARMOIRE GAZ (d\xC3\xA9monstration)") == "A1_2_ARMOIRE_GAZ__demonstration_",
+          "C6 : le e accent devient e, un caractere interdit un seul _ (" + fileNamePart("A1.2 ARMOIRE GAZ (d\xC3\xA9monstration)") + ")");
     check(fileNamePart("\xC3\x89tat \xC5\x93uvre \xC3\xA7" "a \xC3\x9F") == "Etat_oeuvre_ca_ss", "C6 : E accent, oe, c cedille, ss");
     check(fileNamePart("\xE2\x82\xAC-\xE6\xB0\xB4") == "_-_" && fileNamePart("", "projet") == "projet",
           "C6 : un caractere non latin : un seul _ ; vide : la valeur donnee");

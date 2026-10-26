@@ -440,7 +440,7 @@ void HmiConfigPane::rebuild() {
                                         pp.config.testFailBlocksStart = hmi::parseBool(v, false);
                                     }),
                                     "Coch\xC3\xA9, un cas en \xC3\xA9" "chec emp\xC3\xAA" "che de d\xC3\xA9marrer la simulation ; sinon, un \xC3\xA9" "chec "
-                                    "n'est qu'un avertissement."));
+                                    "ne bloque pas le d\xC3\xA9marrage (il reste une erreur aux Sorties)."));
     // 1.13.0 (lot J4b) : le bilan, et le rapport de toute la campagne (les cas rejoues d'abord).
     {
         const auto tally = testruns::tally(p);

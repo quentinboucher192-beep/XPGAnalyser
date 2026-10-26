@@ -344,10 +344,11 @@ std::optional<Problem> unitPassVerdict(const units::Catalog& cat, const std::str
     const std::string what = plain ? src : unitFrom;
     const std::string canon = cat.canonical(tu).empty() ? tu : cat.canonical(tu);
     const std::string en = "EN(" + (what.empty() ? std::string("variable") : what) + ", '" + canon + "')";
-    // 1.13.0 (lot F3) : la faute nomme la variable et ses deux unites, puis la correction (la colonne Message coupe la fin).
+    // 1.13.0 (lot F3) : la correction d'abord (la colonne Message coupe la fin), puis la variable et ses deux unites.
     if (pass == UnitPass::Assign && strict)
-        pb.message = (plain ? src : "le calcul (" + src + ")") + " est en " + su + ", la cible en " + tu + " : \xC3\xA9" "cris " + en
-                   + (plain ? std::string{} : std::string(" dans le calcul")) + " (option \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB)";
+        pb.message = "\xC3\xA9" "cris " + en + (plain ? std::string{} : std::string(" dans le calcul")) + " : "
+                   + (plain ? src : "le calcul (" + src + ")") + " est en " + su + ", la cible en " + tu
+                   + " (option \xC2\xAB Unit\xC3\xA9s strictes \xC2\xBB)";
     else if (pass == UnitPass::Assign)
         pb.message = target + " est en " + tu + " et le calcul (" + src + ") en " + su
                    + " : seule une variable ou un membre lu tel quel se convertit d'office ; \xC3\xA9" "cris " + en + " dans le calcul";
