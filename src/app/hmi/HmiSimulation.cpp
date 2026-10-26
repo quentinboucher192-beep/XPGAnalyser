@@ -4389,7 +4389,7 @@ void HmiSimulationPane::buildAndRestart(const std::string& source) {
 void HmiSimulationPane::stopForModification(const std::string& what) {
     if (!started_) return;
     const bool kept = saveData("arr\xC3\xAAt sur modification");
-    // 1.13.0 : la Console tient une ligne par message - les lignes de la carte (« · Controle (script, a compiler) »)
+    // 1.13.0 : la Console tient une ligne par message - les lignes de la carte ("- Controle (script, a compiler)")
     // s'y suivent (un saut de ligne s'y montrait en caractere de remplacement).
     std::string oneLine = what;
     std::replace(oneLine.begin(), oneLine.end(), '\n', ' ');

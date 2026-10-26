@@ -63,9 +63,9 @@ std::string upper(std::string_view s) {
     return out;
 }
 
-// 1.13.0 : un message du moteur nomme une methode ou un operateur par la FUNCTION interne qui le porte (« fonction
-// METHODE_T_CUVE_VERIFIER, ligne 2 », « fonction OPERATEUR_ADD, ligne 4 ») : la Console, le CATCH disent leur nom et la
-// ligne de leur editeur (« methode T_Cuve.Verifier, ligne 2 », « operateur +, ligne 3 » - le moteur lit l'en-tete d'un
+// 1.13.0 : un message du moteur nomme une methode ou un operateur par la FUNCTION interne qui le porte ("fonction
+// METHODE_T_CUVE_VERIFIER, ligne 2", "fonction OPERATEUR_ADD, ligne 4") : la Console, le CATCH disent leur nom et la
+// ligne de leur editeur ("methode T_Cuve.Verifier, ligne 2", "operateur +, ligne 3" - le moteur lit l'en-tete d'un
 // operateur sur sa propre ligne), comme le debogueur. Un autre nom : tel quel.
 std::string shownCodeNames(const Project* p, std::string text) {
     if (!p || text.find("fonction ") == std::string::npos) return text;

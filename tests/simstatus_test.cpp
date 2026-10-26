@@ -399,7 +399,7 @@ void ihmSeule11214() {
     check(has(r.cards[1].sentence, "F8") && r.folderBadge == "arr\xC3\xAAt\xC3\xA9" "e" && !has(said(r), "automate"),
           "arr\xC3\xAAt\xC3\xA9" "e : D\xC3\xA9marrer l'IHM (F8) ; la pastille arr\xC3\xAAt\xC3\xA9" "e");
     // 1.13.0 (captures F1, R6) : un script arrete par le debogueur - la pastille du dossier et la carte disent la pause,
-    // comme la pastille du haut et le pied de l'explorateur (pas « en marche »).
+    // comme la pastille du haut et le pied de l'explorateur (pas "en marche").
     s.hmi.running = true;
     s.hmi.paused = true;
     r = ss::compute(s);

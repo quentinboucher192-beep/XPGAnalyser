@@ -109,7 +109,7 @@ public:
     }
     [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override {
         if (r >= rows.size()) return {};
-        // 1.13.0 : en trois colonnes, « Ou » se coupe - l'infobulle dit le point en entier (son code, sa ligne, sa condition).
+        // 1.13.0 : en trois colonnes, "Ou" se coupe - l'infobulle dit le point en entier (son code, sa ligne, sa condition).
         const auto& x = rows[r];
         const std::string head = x.where + (x.condition.empty() ? std::string{} : " si " + x.condition) + " \xC2\xB7 " + x.hits;
         return head + "\n" + (x.note.empty() ? std::string("Double clic : le code, \xC3\xA0 sa ligne. La case : actif ou non.") : x.note);
@@ -661,7 +661,7 @@ void HmiDebugPane::rebuildBreakpoints() {
         BreakModel::Row r;
         r.id = b.id;
         const std::string name = codeName(b.script, b.function);
-        // 1.13.0 : la ligne d'abord - en trois colonnes, « Ou » se coupe a droite (« script Statistiqu... ») et deux points
+        // 1.13.0 : la ligne d'abord - en trois colonnes, "Ou" se coupe a droite ("script Statistiqu...") et deux points
         // du meme code ne se distinguaient plus.
         r.where = "l. " + std::to_string(b.effectiveLine ? b.effectiveLine : b.line) + " \xC2\xB7 " + (name.empty() ? std::string("?") : name);
         r.condition = b.condition;

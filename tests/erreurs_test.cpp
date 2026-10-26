@@ -644,9 +644,9 @@ void seconde() {
 }
 
 // ---- les captures de la 1.13.0 (lot F1) ---------------------------------------
-//  C1 : RELEVER refuse par Generer (« variable inexistante : RELEVER »).
+//  C1 : RELEVER refuse par Generer ("variable inexistante : RELEVER").
 //  C2 : un LEVER dans une fonction IHM simple, appelee sous TRY, arrivait au CATCH en E_MOTEUR
-//  (« 'Verifier_Niveau' : fonction ou bloc inconnu du simulateur ») et ecrivait une ERROR a la Console.
+//  ("'Verifier_Niveau' : fonction ou bloc inconnu du simulateur") et ecrivait une ERROR a la Console.
 namespace {
 // Une fonction du projet comme l'editeur la range : ses parametres dans ses declarations.
 void addSimpleFunction(Project& p, const std::string& name, const std::string& ret,
@@ -712,7 +712,7 @@ void capturesF1() {
         for (const auto& i : generate(p, [](std::string_view) { return false; }))
             if (i.severity == Issue::Severity::Error) all += " | " + i.message;
         check(all.find("RELEVER") == std::string::npos, "C1 : Generer ne dit plus 'variable inexistante : RELEVER'" + all);
-        // Hors d'un CATCH : Generer le refuse avec le message clair de Compiler (pas « variable inexistante »).
+        // Hors d'un CATCH : Generer le refuse avec le message clair de Compiler (pas "variable inexistante").
         {
             Project q = p;
             q.programs.scripts.back().body = "n := 1.0;\nRELEVER;";
@@ -797,7 +797,7 @@ void capturesF1() {
         check(r == "E_Niveau|2|niveau hors plage : 120.0 %" && err.empty() && journalOf(b.rt, "Erreur").empty(),
               "C2 : RELEVER dans une fonction : le TRY du script recoit l'erreur telle quelle [" + r + "] " + err + journalOf(b.rt, "Erreur"));
     }
-    // Une erreur du moteur dans une fonction simple : son code ET son message francais (pas « fonction inconnue »).
+    // Une erreur du moteur dans une fonction simple : son code ET son message francais (pas "fonction inconnue").
     {
         const auto div = [](Project& p) {
             addVariable(p, "Diviseur", "INT", "0");
@@ -945,7 +945,7 @@ void capturesF1() {
         for (const auto& f : scriptcheck::check(scope, sc.body))
             if (f.message.find("WAIT_UNTIL") != std::string::npos) saisie += " | " + f.message;
         check(saisie.empty(), "C3 : la Saisie (l'editeur) ne souligne plus IF WAIT_UNTIL" + saisie);
-        // Non detache : l'avertissement juste (coche Detache), pas « pas dans une expression ».
+        // Non detache : l'avertissement juste (coche Detache), pas "pas dans une expression".
         p.programs.scripts.back().detached = false;
         const std::string notDetached = said(scriptcheck::projectIssues(p, none, {}, nullptr));
         check(notDetached.find("coche D") != std::string::npos && notDetached.find("pas dans une expression") == std::string::npos,

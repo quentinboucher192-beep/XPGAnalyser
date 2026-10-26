@@ -45,7 +45,7 @@ struct Diagnostic {
     // rattrapee (une fonction IHM simple tourne dans la sienne). `code` : le code d'une erreur levee (LEVER, RELEVER,
     // E_ATTENTE) ; vide : une erreur du moteur. `raw` : le message de l'erreur levee, ou le message brut du moteur (qui
     // donne son code E_*), sans son origine. `origin` : ou elle est nee quand ce n'est pas `line` de ce code
-    // (« fonction F, ligne 3 ») ; vide : ici. Vides : rien de plus que `message`.
+    // ("fonction F, ligne 3") ; vide : ici. Vides : rien de plus que `message`.
     std::string   code{};
     std::string   raw{};
     std::string   origin{};
@@ -119,9 +119,9 @@ public:
     // brut du moteur, qui donne son code E_* au CATCH de l'appelant ; vide : pas de cause connue (E_MOTEUR).
     [[nodiscard]] virtual std::string lastCallError() { return {}; }
     // 1.13.0 : ... et ce que le TRY de l'appelant en recoit TEL QUEL - le code (E_Niveau, ou le code E_* d'une erreur du
-    // moteur), le message (celui du LEVER, ou le message francais du moteur) et ou elle est nee (« fonction F, ligne 3 ») :
+    // moteur), le message (celui du LEVER, ou le message francais du moteur) et ou elle est nee ("fonction F, ligne 3") :
     // l'erreur traverse l'appel, a la ligne de l'appel. Faux (par defaut) : rien de tel - l'appel echoue comme avant
-    // (« fonction ou bloc inconnu », son code tire de lastCallError).
+    // ("fonction ou bloc inconnu", son code tire de lastCallError).
     [[nodiscard]] virtual bool lastCallRaised(std::string& code, std::string& message, std::string& origin) {
         (void)code; (void)message; (void)origin;
         return false;

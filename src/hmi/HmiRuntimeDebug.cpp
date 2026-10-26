@@ -1131,7 +1131,7 @@ bool Runtime::debugEvaluate(const std::string& expression, std::string& value, s
         if (why) {
             *why = conditionFrench(r.error());
             // 1.13.0 : en pause, un nom inconnu ICI mais locale d'un autre niveau de la pile (P, locale du script qui
-            // appelle la fonction en pause) : hors de portee ici - pas « non declare », qui ferait croire a une faute.
+            // appelle la fonction en pause) : hors de portee ici - pas "non declare", qui ferait croire a une faute.
             if (paused_ && debugHit_) {
                 const std::string& m = !r.error().context.empty() ? r.error().context : r.error().message();
                 const auto close = m.size() > 2 && m.front() == '\'' ? m.find('\'', 1) : std::string::npos;

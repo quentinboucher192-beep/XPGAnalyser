@@ -1246,7 +1246,7 @@ void paneKeepsAndCancels() {
     (void)s.add(app::HmiDebugTarget{b.stats, kNoId}, 11);
     pane.refresh(0.0);
     check(pane.breakpointTable().selectedModelRows().empty() && pane.breakpointLines().size() == 2, "deux points dans le tableau");
-    // 1.13.0 (captures F1, R9) : « Ou » commence par la ligne (en trois colonnes, la fin se coupe) ; l'infobulle dit tout.
+    // 1.13.0 (captures F1, R9) : "Ou" commence par la ligne (en trois colonnes, la fin se coupe) ; l'infobulle dit tout.
     check(pane.breakpointLines()[0].rfind("l. 10 \xC2\xB7 script Statistiques_Pression", 0) == 0
               && pane.breakpointLines()[1].rfind("l. 11 \xC2\xB7 ", 0) == 0,
           "Ou : la ligne d'abord : " + pane.breakpointLines()[0]);

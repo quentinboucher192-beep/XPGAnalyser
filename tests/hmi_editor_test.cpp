@@ -31046,7 +31046,7 @@ void natives1200() {
     }
     check(sel && accentC, "natives : LIMIT, le selecteur ST | C | C++ (C choisie)");
     check(param, "natives : LIMIT, ses param\xC3\xA8tres (MN)");
-    // 1.13.0 (captures, lot F1 R11) : « Ou l'ecrire » - une condition attend un BOOL. JSON_LIRE (ANY : une MAP, une LIST) n'y
+    // 1.13.0 (captures, lot F1 R11) : "Ou l'ecrire" - une condition attend un BOOL. JSON_LIRE (ANY : une MAP, une LIST) n'y
     // est pas cochee ; un BOOL (MAP_HAS) l'est, un type qui suit ses arguments aussi (LIMIT : comme IN) ; un nombre (SQRT) :
     // dans une comparaison.
     const auto conditionRow = [](const char* key) {

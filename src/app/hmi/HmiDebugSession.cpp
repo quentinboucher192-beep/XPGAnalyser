@@ -493,7 +493,7 @@ void HmiBreakpointMargin::refresh() {
     if (!editor_) return;
     auto& s = HmiDebugSession::instance();
     // 1.13.0 : l'apercu d'une condition dit plus haut (la barre du volet) date d'un autre etat de la simulation : il se
-    // redit, recalcule pour l'etat d'ici (« Maintenant, c'est vrai (k = 3) », « Elle sera essayee au passage... »).
+    // redit, recalcule pour l'etat d'ici ("Maintenant, c'est vrai (k = 3)", "Elle sera essayee au passage...").
     // Elle se redit a chaque changement (la marche, chaque pause, la reprise) jusqu'a l'arret qui suit la marche (dit une
     // derniere fois), ou jusqu'a ce que la marge dise autre chose.
     if (!conditionOf_.empty()) {
