@@ -1114,6 +1114,9 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         th.exportFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeHmiExport(rq, where); };
         th.plc = [this]() -> ::sim::Environment* { return app_.simulation().attached() ? app_.simulationRuntime() : nullptr; };
         th.output = [this](const std::vector<TestLine>& lines) { showHmiTestLines(lines); };
+        th.message = [this](const std::string& text, bool warning) {      // 1.13.0 (seconde passe) : le chemin ecrit
+            status_->setTransientMessage(text, 8.0, warning ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
+        };
         pane->setTestHosts(std::move(th));
         page = std::move(pane);
         title = "IHM \xC2\xB7 Configuration";

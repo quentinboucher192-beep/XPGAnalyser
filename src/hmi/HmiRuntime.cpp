@@ -2111,6 +2111,14 @@ int announcedLine(const std::string& why) {
     return n > 0 ? n : -1;
 }
 
+// 1.13.0 (seconde passe) : `type` est-il un generique de `f` (T, sans plus) ?
+bool genericType(const HmiFunction& f, std::string_view type) {
+    const std::string t = upper(trimmedView(type));
+    for (const auto& g : f.generics)
+        if (upper(g.name) == t) return true;
+    return false;
+}
+
 // La valeur de depart d'une variable locale : son type, puis son ":= valeur".
 sim::Value localInitial(const LocalVar& l, sim::Environment& env, std::string* why) {
     sim::Value v = sim::Value::defaultOf(typereg::simTypeOf(l.type));   // 1.11.19 : LINT, USINT, lreal... (avant : un INT)
@@ -2123,8 +2131,10 @@ sim::Value localInitial(const LocalVar& l, sim::Environment& env, std::string* w
 }
 } // namespace
 
-const Runtime::Prepared& Runtime::prepare(const std::string& code, const std::string& source, bool function) {
-    const std::string key = function ? "\x01" + code : code;     // VAR_INPUT n'est permis qu'a une fonction
+const Runtime::Prepared& Runtime::prepare(const std::string& code, const std::string& source, bool function,
+                                          const std::vector<GenericParam>* generics) {
+    std::string key = function ? "\x01" + code : code;           // VAR_INPUT n'est permis qu'a une fonction
+    if (generics && !generics->empty()) key += "\x02" + genericsText(*generics);   // 1.13.0 : T, un type de CE code
     if (const auto it = programs_.find(key); it != programs_.end()) return it->second;
     Prepared prep;
     // 1.11.1 (REP) : le code se lit sans les $ de ses reperes, comme une expression (les
@@ -2133,8 +2143,15 @@ const Runtime::Prepared& Runtime::prepare(const std::string& code, const std::st
     // 1.13.0 (lot J8) : les directives USING ne vont jamais au moteur (blanchies : les lignes restent).
     const std::string st = names::blankUsings(markers::strip(code));
     // 1.10 : une locale peut etre d'un type IHM du projet (structure).
-    auto parts = splitDeclarations(st, function, [this](std::string_view type) {
-        return project_ && types::knownTypeName(*project_, type);   // 1.12.20 : un rappel nomme aussi
+    auto parts = splitDeclarations(st, function, [this, generics](std::string_view type) {
+        if (project_ && types::knownTypeName(*project_, type)) return true;   // 1.12.20 : un rappel nomme aussi
+        // 1.13.0 (seconde passe) : un generique de la fonction (T, LIST OF T) - son exemple dans la contrainte decide,
+        // comme au controle (checkFunction) ; la valeur recue garde son type (T vaut ce qu'on lui passe).
+        if (!generics || generics->empty()) return false;
+        std::vector<std::string> samples;
+        for (const auto& g : *generics) samples.push_back(genericSample(g.constraint));
+        const std::string concrete = substituteGenerics(type, *generics, samples);
+        return concrete != std::string(type) && (localTypeSupported(concrete) || richLocalType(concrete));
     });
     prep.locals = std::move(parts.locals);
     if (!parts.errors.empty()) {
@@ -2429,7 +2446,7 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     // 1.13.0 (lot J8) : une fonction d'un espace, ou qui importe des espaces (USING) : ses noms courts ecrits en
     // entier avant le moteur (Borne -> Util.Borne). Sans espace : le code tel quel.
     const bool spaced = project_ && (!f.ns.empty() || names::mentionsUsing(f.body));
-    const Prepared& prep = prepare(spaced ? names::qualify(*project_, code, f.ns, {f.name}, true) : code, source, true);
+    const Prepared& prep = prepare(spaced ? names::qualify(*project_, code, f.ns, {f.name}, true) : code, source, true, &f.generics);
     if (!prep.program) return fail(prep.error);
     Env::Frame frame;
     // Les parametres : dans l'ordre (Moyenne(1, 2)) ou par leur nom (Moyenne(b := 2, a := 1)).
@@ -2457,6 +2474,9 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
         if (inputs[k]->section == LocalVar::Section::Output) continue;      // une sortie : sa valeur par defaut
         sim::Value v = sim::Value::defaultOf(typereg::simTypeOf(inputs[k]->type));
         v.assignFrom(value);
+        // 1.13.0 (seconde passe) : un parametre generique (T) prend la valeur recue telle quelle - T vaut ce qu'on lui
+        // passe (un cadre de type inconnu est un INT : 1.5 y devenait 2).
+        if (genericType(f, inputs[k]->type)) v = value;
         frame[upper(inputs[k]->name)] = v;
         given[k] = true;
     }
@@ -2467,7 +2487,7 @@ bool Runtime::callFunction(const HmiFunction& f, const std::vector<std::pair<std
     // Une fonction n'a pas de memoire : ses VAR et VAR_TEMP repartent a chaque appel.
     for (const auto& l : prep.locals)
         if (!l.isParameter()) frame[upper(l.name)] = localInitial(l, *env_, &initWhy);
-    if (!f.returnType.empty()) frame[upper(f.name)] = sim::Value::defaultOf(rt);
+    if (!f.returnType.empty()) frame[upper(f.name)] = genericType(f, f.returnType) ? sim::Value{} : sim::Value::defaultOf(rt);   // T : ce qu'on y range
     auto saved = std::move(env_->diagnostics);
     env_->diagnostics.clear();
     const std::string previous = source_;

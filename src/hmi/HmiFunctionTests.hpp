@@ -25,6 +25,7 @@
 
 #include <cstddef>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -74,5 +75,21 @@ struct FunctionTestReport {
 // procedure. Chaque Issue designe la fonction et le cas fautif.
 struct Issue;
 void checkFunctionTests(const Project&, std::vector<Issue>& out);
+
+// 1.13.0 (seconde passe) : LE TYPE DANS LEQUEL UN CAS LIT UNE CASE (un argument, l'attendu) - le type declare ;
+// pour un generique de la fonction (T), sa contrainte (ANY_NUM ; ANY sans contrainte) : 2,5 -> 2.5, VRAI -> TRUE,
+// Azote -> 'Azote' s'y lisent comme dans toute case (la regle des cases), au lieu d'un refus « par une variable ».
+[[nodiscard]] std::string testCellType(const HmiFunction&, std::string_view declared);
+// 1.13.0 (seconde passe) : la tolerance sert-elle au retour de cette fonction - REAL, LREAL, ou un generique qui peut
+// etre un reel (T : ANY_REAL, ANY_NUM, ANY...). Le banc la joue aussi des que la valeur obtenue est un REAL.
+[[nodiscard]] bool testToleranceApplies(const HmiFunction&);
+// 1.13.0 (seconde passe) : REMET LES ARGUMENTS DES CAS sur les parametres de la fonction apres un changement de sa
+// signature (un parametre retire, deplace, ajoute) : `before` et `after` sont les noms des parametres, dans l'ordre,
+// avant et apres. Chaque argument suit son parametre par son nom (celui d'un parametre retire disparait, un parametre
+// ajoute part vide) ; ce qui depassait deja la signature reste au bout ; les vides de fin sont otes. Vrai : un cas a
+// change. Les noms d'un parametre renomme ne bougent pas de place : rien a remettre.
+bool remapTestArguments(HmiFunction&, const std::vector<std::string>& before, const std::vector<std::string>& after);
+// Les noms des parametres d'une fonction, dans l'ordre (ceux du modele et d'un ancien bloc VAR_INPUT du code).
+[[nodiscard]] std::vector<std::string> testParameterNames(const HmiFunction&);
 
 } // namespace hmi

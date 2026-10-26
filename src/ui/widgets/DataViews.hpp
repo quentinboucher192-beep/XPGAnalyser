@@ -557,6 +557,9 @@ public:
     void setSelectionMode(SelectionMode m) { selectionMode_ = m; }
     void setAlternatingRowColors(bool a) { altRows_ = a; invalidate(); }
     void setFrozenColumns(std::size_t n) { frozen_ = n; invalidateLayout(); }
+    // 1.13.0 : faux - un double-clic active la ligne meme sur une case editable (F2 l'edite toujours) ; vrai (defaut) :
+    // un double-clic edite une case editable.
+    void setDoubleClickEdits(bool on) noexcept { doubleClickEdits_ = on; }
 
     void sortBy(std::size_t column, SortOrder order);
     void setFilter(FilterChain chain);                 // rebuilds the index vector
@@ -839,6 +842,7 @@ private:
     std::size_t                  sortColumn_{0}, frozen_{0};
     SortOrder                    sortOrder_{SortOrder::None};
     SelectionMode                selectionMode_{SelectionMode::Extended};
+    bool                         doubleClickEdits_{true};     // 1.13.0 : setDoubleClickEdits
     bool                         altRows_{true};
     int                          resizingColumn_{-1};
     float                        resizeOrigin_{0.f};

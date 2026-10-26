@@ -21,7 +21,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <functional>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -58,6 +60,10 @@ std::string folded(std::string_view s) {
 }
 
 bool iequals(std::string_view a, std::string_view b) { return folded(a) == folded(b); }
+
+// 1.13.0 (seconde passe) : les parametres se lisent quel que soit leur type (un T generique, une structure IHM) - comme
+// la signature (overload::signatureOf) : sans cela, un parametre de type T disparaissait et les arguments glissaient.
+bool anyType(std::string_view) { return true; }
 
 std::string upperAscii(std::string_view s) {
     std::string out(s);
@@ -164,6 +170,24 @@ bool containsWord(std::string_view text, std::string_view word) {
 // marche, se compare a l'attendu ecrit par son nom (Auto), son litteral (E_Mode#Auto), son texte ou
 // son numero ; un STRING se compare tel quel, casse et accents compris.
 struct Compared { bool ok{false}; std::string note; };
+
+// 1.13.0 (seconde passe) : NAN, INF, +INF, -INF - les nombres qu'un retour REAL peut rendre et que readDecimal ne lit pas.
+bool specialReal(std::string_view text, double& out) {
+    const std::string u = upperAscii(trim(text));
+    if (u == "NAN") { out = std::numeric_limits<double>::quiet_NaN(); return true; }
+    if (u == "INF" || u == "+INF") { out = std::numeric_limits<double>::infinity(); return true; }
+    if (u == "-INF") { out = -std::numeric_limits<double>::infinity(); return true; }
+    return false;
+}
+
+// Deux reels egaux pour un cas : NAN vaut NAN, un infini le meme infini ; sinon l'ecart (la tolerance, ou presque rien).
+bool sameReal(double a, double b, bool hasTol, double tol) {
+    if (std::isnan(b)) return std::isnan(a);
+    if (std::isinf(b)) return a == b;
+    const double ecart = std::fabs(a - b);
+    return hasTol ? ecart <= tol : ecart <= 1e-9 * std::max(1.0, std::fabs(b));
+}
+
 Compared compareValue(const sim::Value& got, const std::string& expectedRaw, const std::string& tolRaw, bool real,
                       const HmiType* enumeration = nullptr) {
     const std::string expected = stripQuotes(trim(expectedRaw));
@@ -180,9 +204,10 @@ Compared compareValue(const sim::Value& got, const std::string& expectedRaw, con
     }
     if (got.type() == sim::Type::String) return {got.asString() == expected, "obtenu " + gotText + ", attendu " + expected};
     double b = 0;
-    const bool expNum = parseNumber(expected, b);
+    const bool expNum = parseNumber(expected, b) || (real && specialReal(expected, b));   // 1.13.0 : NAN, INF aussi
     if (real && expNum) {
         const double a = got.asReal();
+        if (!std::isfinite(b)) return {sameReal(a, b, false, 0), "obtenu " + gotText + ", attendu " + expected};
         double tol = 0;
         (void)parseNumber(trim(tolRaw), tol);
         const double ecart = std::fabs(a - b);
@@ -205,7 +230,125 @@ Compared compareValue(const sim::Value& got, const std::string& expectedRaw, con
     return {upperAscii(stripQuotes(gotText)) == upperAscii(expected), note};
 }
 
+// 1.13.0 (seconde passe) : compare la valeur obtenue a un ATTENDU CALCULE (=Seuil_Haut - 5, ou un nom connu seul),
+// evalue apres l'appel sur le meme banc. `shown` : l'attendu tel qu'ecrit (=Seuil_Haut). Deux nombres : l'ecart (la
+// tolerance si elle sert), sinon presque rien ; un booleen, un texte : egaux ; le reste : le meme texte.
+Compared compareComputed(const sim::Value& got, const sim::Value& want, const std::string& shown, const std::string& tolRaw, bool real,
+                         const HmiType* enumeration = nullptr) {
+    const std::string gotText = valueText(got), wantText = valueText(want);
+    std::string gotShown = gotText, wantShown = wantText;
+    const auto number = [](const sim::Value& v) { return sim::isNumeric(v.type()) || v.type() == sim::Type::Time; };
+    if (enumeration && number(got) && number(want)) {
+        gotShown = enumDisplay(*enumeration, static_cast<std::int64_t>(std::llround(got.asReal())));
+        wantShown = enumDisplay(*enumeration, static_cast<std::int64_t>(std::llround(want.asReal())));
+    }
+    const std::string note = "obtenu " + gotShown + ", attendu " + shown + " (" + wantShown + ")";
+    if (got.type() == sim::Type::String || want.type() == sim::Type::String)
+        return {got.type() == want.type() && got.asString() == want.asString(), note};
+    if (got.type() == sim::Type::Bool || want.type() == sim::Type::Bool)
+        return {got.type() == want.type() && got.isTruthy() == want.isTruthy(), note};
+    if (number(got) && number(want)) {
+        double tol = 0;
+        const bool hasTol = real && parseNumber(trim(tolRaw), tol);
+        return {sameReal(got.asReal(), want.asReal(), hasTol, tol), note};
+    }
+    return {upperAscii(gotText) == upperAscii(wantText), note};
+}
+
+// 1.13.0 (seconde passe) : L'ATTENDU D'UN CAS (du retour ou d'une verif) EST-IL UNE FORMULE - ecrit =calcul, ou un nom
+// connu seul (la regle des cases : Seuil_Haut vaut =Seuil_Haut) ? `type` : le type attendu (vide : inconnu). Vrai :
+// `formula` recoit le calcul, sans son =, a evaluer apres l'appel. Une valeur fixe (16.0, TRUE, Auto) : faux.
+bool expectedFormula(const Project& p, std::string_view type, const std::string& raw, std::string& formula) {
+    const std::string t = trim(raw);
+    if (t.empty()) return false;
+    if (t.front() == '=') {
+        formula = trim(std::string_view(t).substr(1));
+        return true;
+    }
+    const auto cell = cellValue(&p, trim(type).empty() ? std::string_view("ANY") : type, t);
+    if (!cell.ok() || !cell.formula) return false;
+    formula = cell.text;
+    return true;
+}
+
+// 1.13.0 (seconde passe) : LA VALEUR D'UNE POSE telle que le banc l'ecrit - lue comme toute case dans le type de sa
+// cible (une variable, un membre, une case : 2,5 -> 2.5, =Seuil -> Seuil) ; une cible au type inconnu (l'automate) :
+// le = de tete ote. Faux : illisible, `why` dit pourquoi. Le banc et Generer la lisent ainsi tous les deux.
+bool givenText(const Project& p, const std::string& target, const std::string& raw, std::string& out, std::string& why) {
+    out = trim(raw);
+    if (out.empty()) return true;
+    std::string type;
+    if (const Variable* var = p.variable(target)) type = var->type;
+    else type = types::typeOfPath(p, target);
+    if (!type.empty()) {
+        const auto cell = cellValue(&p, type, out);
+        if (!cell.ok()) {
+            why = cell.why;
+            return false;
+        }
+        out = cell.text;
+        return true;
+    }
+    if (out.front() == '=') out = trim(std::string_view(out).substr(1));
+    return true;
+}
+
+// Le generique de `f` qui porte ce nom (T) ; nul : un type ordinaire.
+const GenericParam* genericNamed(const HmiFunction& f, std::string_view type) {
+    const std::string t = trim(type);
+    for (const auto& g : f.generics)
+        if (iequals(g.name, t)) return &g;
+    return nullptr;
+}
+
 } // namespace
+
+// ============================================================ 1.13.0 : les types d'un cas ===
+std::string testCellType(const HmiFunction& f, std::string_view declared) {
+    if (const GenericParam* g = genericNamed(f, declared)) return trim(g->constraint).empty() ? std::string("ANY") : trim(g->constraint);
+    return std::string(declared);
+}
+
+bool testToleranceApplies(const HmiFunction& f) {
+    if (isRealType(trim(f.returnType))) return true;
+    const GenericParam* g = genericNamed(f, f.returnType);
+    if (!g) return false;
+    const std::string c = upperAscii(trim(g->constraint));
+    return c.empty() || c == "ANY" || c == "ANY_NUM" || c == "ANY_REAL" || c == "ANY_MAGNITUDE" || c == "ANY_ELEMENTARY";
+}
+
+std::vector<std::string> testParameterNames(const HmiFunction& f) {
+    std::vector<std::string> out;
+    const auto parts = splitDeclarations(decl::codeOf(f), true, anyType);
+    for (const auto* l : parts.parameters()) out.push_back(l->name);
+    return out;
+}
+
+bool remapTestArguments(HmiFunction& f, const std::vector<std::string>& before, const std::vector<std::string>& after) {
+    if (before.size() == after.size()) {
+        bool same = true;
+        for (std::size_t k = 0; k < before.size() && same; ++k) same = iequals(before[k], after[k]);
+        if (same) return false;
+    }
+    bool changed = false;
+    for (auto& t : f.tests) {
+        std::vector<std::string> args(after.size());
+        for (std::size_t j = 0; j < after.size(); ++j)
+            for (std::size_t i = 0; i < before.size(); ++i)
+                if (iequals(before[i], after[j])) {
+                    if (i < t.arguments.size()) args[j] = t.arguments[i];
+                    break;
+                }
+        // Ce qui depassait deja la signature (un ancien desordre) : garde au bout, pour que l'onglet le montre.
+        for (std::size_t i = before.size(); i < t.arguments.size(); ++i) args.push_back(t.arguments[i]);
+        while (!args.empty() && trim(args.back()).empty()) args.pop_back();
+        if (args != t.arguments) {
+            t.arguments = std::move(args);
+            changed = true;
+        }
+    }
+    return changed;
+}
 
 // ============================================================ le rapport ======
 std::size_t FunctionTestReport::count(Verdict v) const {
@@ -253,13 +396,9 @@ FunctionTestResult runFunctionTest(const Project& p, const HmiFunction& f, const
     for (const auto& g : test.givens) {
         const std::string target = trim(g.target);
         if (target.empty()) continue;
-        std::string valueText = trim(g.value);
-        if (const Variable* var = p.variable(target)) {                 // la regle des cases, dans le type connu
-            const auto cell = cellValue(&p, var->type, valueText);
-            if (!cell.ok()) { poseFail(target, cell.why); return res; }
-            valueText = cell.text;
-        }
-        std::string why;
+        std::string valueText, why;
+        // La regle des cases, dans le type de la cible (une variable, un membre, une case : =Seuil -> Seuil).
+        if (!givenText(p, target, g.value, valueText, why)) { poseFail(target, why); return res; }
         if (rt.richVariable(target) != nullptr) {                       // une variable objet : un litteral
             if (!rt.setRichVariable(target, valueText, &why)) { poseFail(target, why); return res; }
             continue;
@@ -272,7 +411,7 @@ FunctionTestResult runFunctionTest(const Project& p, const HmiFunction& f, const
     }
 
     // 2) Les arguments, un par parametre (vide : la valeur par defaut), nommes (pas de collision d'ordre).
-    const auto parts = splitDeclarations(decl::codeOf(f), true);
+    const auto parts = splitDeclarations(decl::codeOf(f), true, anyType);
     const auto inputs = parts.parameters();
     std::vector<std::pair<std::string, sim::Value>> args;
     std::string shown;
@@ -286,7 +425,7 @@ FunctionTestResult runFunctionTest(const Project& p, const HmiFunction& f, const
             return res;
         }
         if (inputs[k]->section == LocalVar::Section::Output) continue;
-        const auto cell = cellValue(&p, inputs[k]->type, text);
+        const auto cell = cellValue(&p, testCellType(f, inputs[k]->type), text);      // 1.13.0 : T se lit dans sa contrainte
         if (!cell.ok()) {
             res.verdict = Verdict::Error;
             res.detail = inputs[k]->name + " : " + cell.why;
@@ -349,11 +488,34 @@ FunctionTestResult runFunctionTest(const Project& p, const HmiFunction& f, const
     Verdict verdict = Verdict::Passed;
     std::string detail;
     if (!f.returnType.empty()) res.got = valueText(result);
+    // 1.13.0 (seconde passe) : un ATTENDU CALCULE (=Seuil_Haut - 5, ou un nom connu seul) s'evalue apres l'appel, sur
+    // le meme banc ; une valeur fixe se compare telle quelle. La tolerance joue sur un retour REAL - ou sur un T qui
+    // vaut un REAL ici (la valeur obtenue le dit).
+    const auto judge = [&](const sim::Value& got, const std::string& expected, const std::string& tol, bool real,
+                           std::string_view type, const HmiType* enumeration, Compared& out) {
+        std::string formula;
+        if (!expectedFormula(p, type, expected, formula)) {
+            out = compareValue(got, expected, tol, real, enumeration);
+            return true;
+        }
+        const auto e = Expression::compile(formula);
+        std::optional<sim::Value> want;
+        if (e.valid())
+            if (auto v = e.evaluate(rt.environment())) want = *v;
+        if (!want) {
+            out.ok = false;
+            out.note = "attendu =" + formula + (e.valid() ? " ne s'\xC3\xA9value pas" : " illisible");
+            return false;
+        }
+        out = compareComputed(got, *want, "=" + formula, tol, real, enumeration);
+        return true;
+    };
     if (!f.returnType.empty() && !trim(test.expected).empty()) {
-        const auto cmp = compareValue(result, test.expected, test.tolerance, isRealType(f.returnType),
-                                      findEnumeration(p, trim(f.returnType)));          // 1.13.0 : E_Mode -> Auto
+        Compared cmp;
+        const bool read = judge(result, test.expected, test.tolerance, isRealType(f.returnType) || result.type() == sim::Type::Real,
+                                testCellType(f, f.returnType), findEnumeration(p, trim(f.returnType)), cmp);   // E_Mode -> Auto
         detail = cmp.note;
-        if (!cmp.ok) verdict = Verdict::Failed;
+        if (!cmp.ok) verdict = read ? Verdict::Failed : Verdict::Error;
     }
     if (verdict == Verdict::Passed) {
         for (const auto& c : test.checks) {
@@ -384,10 +546,12 @@ FunctionTestResult runFunctionTest(const Project& p, const HmiFunction& f, const
                 detail = "v\xC3\xA9rif " + qmark(target) + " ne s'\xC3\xA9value pas";
                 break;
             }
-            const auto cmp = compareValue(*v, c.expected, c.tolerance, v->type() == sim::Type::Real,
-                                          findEnumeration(p, types::typeOfPath(p, target)));   // 1.13.0 : une variable d'enumeration
+            const std::string targetType = types::typeOfPath(p, target);
+            Compared cmp;
+            const bool read = judge(*v, c.expected, c.tolerance, v->type() == sim::Type::Real, targetType,
+                                    findEnumeration(p, targetType), cmp);   // 1.13.0 : une variable d'enumeration, un attendu calcule
             if (!cmp.ok) {
-                verdict = Verdict::Failed;
+                verdict = read ? Verdict::Failed : Verdict::Error;
                 detail = target + " : " + cmp.note;
                 break;
             }
@@ -485,14 +649,26 @@ std::string unknownRoot(const Project& p, const Expression& e) {
     return {};
 }
 
-// 1.13.0 : pourquoi l'attendu du retour de `f` ne se lit pas comme le moteur le comparera ; vide : il
-// se lit. Un nombre pour un retour numerique, VRAI/FAUX pour un BOOL, une valeur pour une enumeration ;
-// un generique (T), un texte, un autre type : rien a redire ici.
-std::string unreadableExpected(const Project& p, const HmiFunction& f, const std::string& expectedRaw) {
-    const std::string type = trim(f.returnType);
+// 1.13.0 : pourquoi un attendu ne se lit pas dans le type `typeRaw` comme le moteur le comparera ; vide : il se lit.
+// 1.13.0 (seconde passe) : pour le retour comme pour une verif. Une formule (=calcul, un nom connu seul) : lisible, et
+// ses noms connus ; un nombre pour un type numerique (NAN, INF, -INF aussi pour un reel : un retour REAL peut les
+// rendre) ; VRAI/FAUX pour un BOOL ; une valeur pour une enumeration ; un generique (ANY...) ou un autre type : rien
+// a redire ici (sauf un nombre attendu par ANY_NUM, ANY_REAL, ANY_INT).
+std::string unreadableExpected(const Project& p, const std::string& typeRaw, const std::string& expectedRaw) {
+    const std::string type = trim(typeRaw);
+    std::string formula;
+    if (expectedFormula(p, type, expectedRaw, formula)) {
+        const Expression e = Expression::compile(formula);
+        if (formula.empty() || !e.valid()) return "=" + formula + " ne se lit pas";
+        if (const std::string unknown = unknownRoot(p, e); !unknown.empty()) return unknown + " n'est pas un nom connu";
+        return {};
+    }
     const std::string expected = stripQuotes(trim(expectedRaw));
-    for (const auto& g : f.generics)
-        if (iequals(g.name, type)) return {};
+    double x = 0;
+    const std::string u = upperAscii(type);
+    if (u == "ANY_NUM" || u == "ANY_REAL" || u == "ANY_INT")
+        return parseNumber(expected, x) || (u != "ANY_INT" && specialReal(expected, x)) ? std::string{} : expected + " n'est pas un nombre";
+    if (type.empty() || u.rfind("ANY", 0) == 0) return {};
     if (const HmiType* en = findEnumeration(p, type)) {
         std::int64_t n = 0;
         return enumNumberOf(*en, expected, n) ? std::string{} : expected + " n'est pas une valeur de " + en->name;
@@ -500,8 +676,16 @@ std::string unreadableExpected(const Project& p, const HmiFunction& f, const std
     if (typereg::simTypeOf(type) == sim::Type::Bool)
         return sim::trueWord(folded(expected)) || sim::falseWord(folded(expected)) ? std::string{}
                                                                                     : expected + " n'est pas un bool\xC3\xA9" "en (VRAI ou FAUX)";
-    double x = 0;
-    if (typereg::isNumber(type) && !parseNumber(expected, x)) return expected + " n'est pas un nombre";
+    if (typereg::isNumber(type) && !parseNumber(expected, x) && !(isRealType(type) && specialReal(expected, x)))
+        return expected + " n'est pas un nombre";
+    return {};
+}
+
+// 1.13.0 (seconde passe) : un membre ou un indice d'une cible (pose, verif) qui n'existe pas (Cuve.Niveu) - le controle
+// des chemins des scripts ; vide : le chemin se tient (ou sa racine n'est pas une variable IHM).
+std::string pathFault(const Project& p, const std::string& target) {
+    for (const auto& pp : types::pathProblems(p, target))
+        if (!pp.message.empty()) return pp.message;
     return {};
 }
 } // namespace
@@ -510,7 +694,7 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
     using S = Issue::Severity;
     forEachFunction(p, [&](const HmiFunction& f, const std::string& owner, Id view) {
         if (f.tests.empty()) return;
-        const auto parts = splitDeclarations(decl::codeOf(f), true);
+        const auto parts = splitDeclarations(decl::codeOf(f), true, anyType);
         const std::size_t nParams = parts.parameters().size();
         const std::string fname = owner.empty() ? f.name : owner + "." + f.name;
         const auto add = [&](S sev, const FunctionTest& t, std::string msg) {
@@ -535,25 +719,28 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
             // Un attendu sur une procedure (sans retour) n'a pas de sens.
             if (f.returnType.empty() && !trim(t.expected).empty())
                 add(S::Warning, t, "la fonction n'a pas de retour : l'attendu est ignor\xC3\xA9");
+            // 1.13.0 (seconde passe) : un cas qui attend une erreur juge sur elle - son attendu ne sert pas.
+            else if (!t.errorCode.empty() && !trim(t.expected).empty())
+                add(S::Warning, t, "le cas attend l'erreur " + t.errorCode + " : l'attendu (" + trim(t.expected) + ") est ignor\xC3\xA9");
             // La tolerance : un nombre (REAL seulement).
             double num = 0;
             if (!trim(t.tolerance).empty() && !parseNumber(trim(t.tolerance), num))
                 add(S::Error, t, "tol\xC3\xA9rance non num\xC3\xA9rique : " + t.tolerance);
-            if (!trim(t.tolerance).empty() && !isRealType(f.returnType))
+            if (!trim(t.tolerance).empty() && !testToleranceApplies(f))
                 add(S::Info, t, "la tol\xC3\xA9rance ne sert qu'\xC3\xA0 un retour REAL : ignor\xC3\xA9" "e");
             // Les arguments lisibles.
             const auto inputs = parts.parameters();
             for (std::size_t k = 0; k < t.arguments.size() && k < inputs.size(); ++k) {
                 const std::string text = trim(t.arguments[k]);
                 if (text.empty()) continue;
-                const auto cell = cellValue(&p, inputs[k]->type, text);
+                const auto cell = cellValue(&p, testCellType(f, inputs[k]->type), text);      // 1.13.0 : T dans sa contrainte
                 if (!cell.ok()) { add(S::Error, t, inputs[k]->name + " : " + cell.why); continue; }
                 if (!Expression::compile(cell.text).valid()) add(S::Error, t, inputs[k]->name + " : " + text + " illisible");
             }
             // 1.13.0 : l'attendu du retour, lisible comme le moteur le compare (un nombre, un booleen, une
             // valeur de l'enumeration) ; un generique (T) ou un autre type : laisse a l'appel.
             if (!f.returnType.empty() && !trim(t.expected).empty() && t.errorCode.empty())
-                if (const std::string why = unreadableExpected(p, f, t.expected); !why.empty())
+                if (const std::string why = unreadableExpected(p, testCellType(f, f.returnType), t.expected); !why.empty())
                     add(S::Error, t, "attendu illisible : " + why);
             // Les poses : une variable connue, une valeur lisible.
             for (const auto& g : t.givens) {
@@ -566,8 +753,18 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
                     add(S::Error, t, "pose " + qmark(target) + " : variable inconnue (" + unknown + ")");
                     continue;
                 }
-                // Une valeur scalaire lisible (une structure/liste [..] ou (..) : laissee a l'ecriture).
-                const std::string val = trim(g.value);
+                // 1.13.0 (seconde passe) : un membre, un indice qui n'existe pas (Cuve.Niveu).
+                if (const std::string fault = pathFault(p, target); !fault.empty()) {
+                    add(S::Error, t, "pose " + qmark(target) + " : " + fault);
+                    continue;
+                }
+                // La valeur, lue comme le banc l'ecrit (la regle des cases, dans le type de la cible : =Seuil -> Seuil,
+                // 2,5 -> 2.5) ; une structure/liste [..] ou (..) : laissee a l'ecriture.
+                std::string val, why;
+                if (!givenText(p, target, g.value, val, why)) {
+                    add(S::Error, t, "pose " + qmark(target) + " : " + why);
+                    continue;
+                }
                 if (!val.empty() && val.front() != '[' && val.front() != '(' && !Expression::compile(val).valid())
                     add(S::Error, t, "pose " + qmark(target) + " : valeur illisible");
             }
@@ -577,10 +774,19 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
                 if (target.empty()) { add(S::Error, t, "v\xC3\xA9rif sans cible"); continue; }
                 if (iequals(target, "JOURNAL")) continue;
                 const Expression ex = Expression::compile(target);
-                if (!ex.valid()) add(S::Warning, t, "v\xC3\xA9rif " + qmark(target) + " : cible illisible");
-                else if (const std::string unknown = unknownRoot(p, ex); !unknown.empty())
+                if (!ex.valid()) {
+                    add(S::Warning, t, "v\xC3\xA9rif " + qmark(target) + " : cible illisible");
+                } else if (const std::string unknown = unknownRoot(p, ex); !unknown.empty()) {
                     add(S::Error, t, "v\xC3\xA9rif " + qmark(target) + " : variable inconnue (" + unknown + ")");
+                    continue;
+                } else if (const std::string fault = pathFault(p, target); !fault.empty()) {    // 1.13.0 : Cuve.Niveu
+                    add(S::Error, t, "v\xC3\xA9rif " + qmark(target) + " : " + fault);
+                    continue;
+                }
                 if (trim(c.expected).empty()) add(S::Warning, t, "v\xC3\xA9rif " + qmark(target) + " : aucun attendu");
+                // 1.13.0 (seconde passe) : l'attendu d'une verif, lisible dans le type de sa cible (comme celui du retour).
+                else if (const std::string why = unreadableExpected(p, types::typeOfPath(p, target), c.expected); !why.empty())
+                    add(S::Error, t, "v\xC3\xA9rif " + qmark(target) + " : attendu illisible : " + why);
             }
             // Un cas qui ne juge rien (ni retour attendu, ni verif, ni erreur attendue).
             if (trim(t.expected).empty() && t.checks.empty() && t.errorCode.empty())

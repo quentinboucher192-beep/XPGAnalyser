@@ -55,7 +55,8 @@ bool sameText(std::string_view a, std::string_view b) { return hmikit::same(a, b
 
 std::string plural(std::size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
 
-bool isReal(std::string_view type) { return sameText(trim(type), "REAL") || sameText(trim(type), "LREAL"); }
+// 1.13.0 (seconde passe) : la tolerance sert-elle a ce retour (REAL, LREAL, ou un T qui peut etre un reel) ?
+bool toleranceApplies(const hmi::HmiFunction* f) { return f && hmi::testToleranceApplies(*f); }
 
 bool parseTolerance(std::string_view text, double& out) {
     std::string t = trim(text);
@@ -85,17 +86,20 @@ hmi::HmiFunction* functionIn(hmi::Project& p, Id view, Id id) {
 }
 
 // Ses parametres, dans l'ordre (le modele et un ancien bloc VAR_INPUT du code).
+// 1.13.0 (seconde passe) : `read` - le type dans lequel la case se lit (T generique : sa contrainte, ANY_NUM) ; tous
+// les types se lisent ici (un T, une structure IHM), comme la signature : sinon un parametre T disparaissait.
 struct Param {
-    std::string name, type, initial, unit;
+    std::string name, type, initial, unit, read;
     bool        output{false};
 };
 std::vector<Param> paramsOf(const hmi::HmiFunction& f) {
     std::vector<Param> out;
-    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(f), true);
+    const auto parts = hmi::splitDeclarations(hmi::decl::codeOf(f), true, [](std::string_view) { return true; });
     for (const auto* l : parts.parameters()) {
         Param p;
         p.name = l->name;
         p.type = l->type;
+        p.read = hmi::testCellType(f, l->type);
         p.initial = l->initial;
         p.output = l->section == hmi::LocalVar::Section::Output;
         for (const auto& d : f.decls)
@@ -227,14 +231,15 @@ void runOne(TestCampaign& c, const hmi::Project& p, const hmi::HmiFunction& f, I
     run.owner = owner;
     run.function = f;
     run.report = hmi::runFunctionTests(p, f, plc);
-    testruns::record(f, run.report);
+    testruns::record(p, f, run.report);
     for (auto& l : testLines(f, run.report, owner)) c.lines.push_back(std::move(l));
-    c.tally += testruns::tally(f);
+    c.tally += testruns::tally(p, f);
     c.runs.push_back(std::move(run));
 }
 } // namespace
 
 TestCampaign runAllTests(const hmi::Project& p, sim::Environment* plc) {
+    const testruns::Batch batch;          // 1.13.0 : les volets se refont une fois, a la fin de la campagne
     TestCampaign c;
     for (const auto& f : p.programs.functions) runOne(c, p, f, kNoId, {}, plc);
     for (const auto& v : p.views)
@@ -243,6 +248,7 @@ TestCampaign runAllTests(const hmi::Project& p, sim::Environment* plc) {
 }
 
 TestCampaign runTestsOf(const hmi::Project& p, const std::vector<hmi::HmiFunction>& list, Id view, std::string owner, sim::Environment* plc) {
+    const testruns::Batch batch;          // 1.13.0 : une seule annonce pour toute la liste
     TestCampaign c;
     for (const auto& f : list) runOne(c, p, f, view, owner, plc);
     return c;
@@ -284,6 +290,7 @@ public:
         Verdict                  verdict{Verdict::Pending};
         bool                     played{false};
         bool                     enabled{true};
+        bool                     expectsError{false};   // 1.13.0 : une Erreur attendue - l'Attendu ne sert pas
         std::string              fault;
         std::string              tip;
     };
@@ -327,9 +334,11 @@ public:
         return s;
     }
     [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override { return cellText(a, c) < cellText(b, c); }
+    // 1.13.0 (seconde passe) : F2 edite le nom ; un double-clic lance le cas (la table ne l'edite pas, voir le
+    // constructeur). L'Attendu d'un cas qui attend une erreur ne se tape pas ici : le cas juge sur l'erreur.
     [[nodiscard]] bool editable(ui::RowIndex r, std::size_t c) const override {
         if (r >= rows.size()) return false;
-        return c == 0 || (c == 2 && hasReturn) || (c == 3 && realReturn);
+        return c == 0 || (c == 2 && hasReturn && !rows[r].expectsError) || (c == 3 && realReturn && !rows[r].expectsError);
     }
     bool setCellText(ui::RowIndex r, std::size_t c, std::string_view text) override { return commit && commit(r, c, std::string(text)); }
     [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override { return r < rows.size() ? rows[r].tip : std::string{}; }
@@ -365,6 +374,7 @@ HmiFunctionTestsPage::HmiFunctionTestsPage(std::string id, hmi::DocumentPtr doc,
     table->setColumns({{"Cas", 170.f, 60.f, true, false}, {"Arguments", 190.f, 60.f, true, false}, {"Attendu", 110.f, 50.f, true, false},
                        {"Tol\xC3\xA9rance", 90.f, 40.f, true, false}, {"Verdict", 100.f, 60.f, true, false}, {"D\xC3\xA9tail", 320.f, 60.f, true, false}});
     table->setSelectionMode(ui::SelectionMode::Single);
+    table->setDoubleClickEdits(false);        // 1.13.0 (seconde passe) : un double-clic lance le cas, F2 edite
     cases_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     tools_->bindListKeys(*cases_, {TDelete, TDuplicate, TNew});
     rows_ = std::make_shared<CaseRows>();
@@ -520,13 +530,13 @@ std::size_t HmiFunctionTestsPage::caseCount() const {
 ui::Tone HmiFunctionTestsPage::badgeTone() const {
     const auto* f = fn();
     if (!f) return ui::Tone::None;
-    const auto t = testruns::tally(*f);
+    const auto t = testruns::tally(doc_->project, *f);
     return t.red() ? ui::Tone::Error : t.cases && t.passed == t.cases ? ui::Tone::Ok : ui::Tone::None;
 }
 
 std::string HmiFunctionTestsPage::summary() const {
     const auto* f = fn();
-    return f ? testruns::tally(*f).text() : std::string("aucune fonction choisie");
+    return f ? testruns::tally(doc_->project, *f).text() : std::string("aucune fonction choisie");
 }
 
 std::string HmiFunctionTestsPage::faultsOf(Id t) const {
@@ -542,7 +552,7 @@ void HmiFunctionTestsPage::refresh() {
     faults_.clear();
     rows_->rows.clear();
     rows_->hasReturn = f && !f->returnType.empty();
-    rows_->realReturn = f && isReal(f->returnType);
+    rows_->realReturn = toleranceApplies(f);
     if (f) {
         // Les fautes que Generer dirait sur les cas de CETTE fonction (sans jouer).
         hmi::Project probe;
@@ -556,8 +566,9 @@ void HmiFunctionTestsPage::refresh() {
             order_.push_back(t.id);
             CaseRows::Row row;
             row.enabled = t.enabled;
+            row.expectsError = !t.errorCode.empty();
             row.fault = faultsOf(t.id);
-            const auto* r = testruns::last(*f, t);
+            const auto* r = testruns::last(doc_->project, *f, t);
             row.played = r != nullptr;
             if (r) row.verdict = r->verdict;
             const std::string verdict = !t.enabled ? std::string("inactif")
@@ -565,6 +576,7 @@ void HmiFunctionTestsPage::refresh() {
                                           : std::string("\xC3\xA0 jouer");
             row.cells = {t.name, argsSummary(t, params), expectedSummary(t), trim(t.tolerance), verdict, r ? r->detail : std::string{}};
             row.tip = t.name + (t.description.empty() ? std::string{} : "\n" + t.description)
+                    + (t.errorCode.empty() ? std::string{} : "\nLe cas attend l'erreur " + t.errorCode + " : l'attendu ne sert pas")
                     + (r && !r->call.empty() ? "\nAppel : " + r->call : std::string{})
                     + (row.fault.empty() ? std::string{} : "\nFaute : " + row.fault);
             rows_->rows.push_back(std::move(row));
@@ -585,8 +597,8 @@ void HmiFunctionTestsPage::refresh() {
                             "\xC3\xA0 chaque Compiler et D\xC3\xA9marrer.",
                             ui::StatusBar::Severity::Info);
     else
-        status_->setMessage(f->name + " : " + testruns::tally(*f).text() + "  \xC2\xB7  double-clic : lancer le cas ; les verdicts aussi au panneau du bas",
-                            testruns::tally(*f).red() ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Info);
+        status_->setMessage(f->name + " : " + testruns::tally(doc_->project, *f).text() + "  \xC2\xB7  double-clic : lancer le cas ; F2 : le renommer ; les verdicts aussi au panneau du bas",
+                            testruns::tally(doc_->project, *f).red() ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Info);
     countsChanged->emit();
     invalidate();
 }
@@ -689,19 +701,23 @@ void HmiFunctionTestsPage::rebuildProperties() {
     c.properties.push_back(prop("Description", t->description, PG::ValueType::Text, edit(Field::Description)));
     c.properties.push_back(prop("Actif", t->enabled ? "TRUE" : "FALSE", PG::ValueType::Boolean, edit(Field::Enabled),
                                 "D\xC3\xA9" "coch\xC3\xA9 : le cas reste mais ne se joue plus (verdict \xC2\xAB non jou\xC3\xA9 \xC2\xBB)."));
-    if (!f->returnType.empty())
+    if (!f->returnType.empty() && !t->errorCode.empty())     // 1.13.0 : le cas juge sur l'erreur, pas sur le retour
+        c.properties.push_back(prop("Attendu", "(le cas attend l'erreur " + t->errorCode + " : vide l'Erreur attendue pour comparer le retour)",
+                                    PG::ValueType::ReadOnly));
+    else if (!f->returnType.empty())
         c.properties.push_back(prop("Attendu", t->expected, PG::ValueType::Text, edit(Field::Expected),
                                     "Ce que la fonction doit rendre (" + hmi::units::withUnit(f->returnType, f->returnUnit) + ") : il se lit comme toute case "
-                                    "(2,5 -> 2.5, VRAI -> TRUE). Vide : seules les v\xC3\xA9rifs jugent."));
+                                    "(2,5 -> 2.5, VRAI -> TRUE) ; =formule (=Seuil_Haut - 5) se calcule apr\xC3\xA8s l'appel. Vide : seules les v\xC3\xA9rifs jugent."));
     else
         c.properties.push_back(prop("Attendu", "(proc\xC3\xA9" "dure : rien \xC3\xA0 comparer - ses v\xC3\xA9rifs jugent)", PG::ValueType::ReadOnly));
-    if (isReal(f->returnType)) {
+    if (toleranceApplies(f) && t->errorCode.empty()) {
         auto pt = prop("Tol\xC3\xA9rance", t->tolerance, PG::ValueType::Text, edit(Field::Tolerance),
                        "|obtenu - attendu| \xE2\x89\xA4 tol\xC3\xA9rance ; vide : \xC3\xA9galit\xC3\xA9 stricte.");
         pt.placeholder = "exacte";
         c.properties.push_back(std::move(pt));
     } else {
-        c.properties.push_back(prop("Tol\xC3\xA9rance", "(exacte : seulement pour un retour REAL)", PG::ValueType::ReadOnly));
+        c.properties.push_back(prop("Tol\xC3\xA9rance", t->errorCode.empty() ? "(exacte : seulement pour un retour REAL)" : "(le cas attend une erreur)",
+                                    PG::ValueType::ReadOnly));
     }
     {
         auto pe = prop("Erreur attendue", t->errorCode, PG::ValueType::Text, edit(Field::ErrorCode),
@@ -732,11 +748,26 @@ void HmiFunctionTestsPage::rebuildProperties() {
         pa.placeholder = p.initial.empty() ? std::string("vide") : "d\xC3\xA9" "faut " + p.initial;
         a.properties.push_back(std::move(pa));
     }
-    if (params.empty()) a.properties.push_back(prop("Param\xC3\xA8tres", "aucun", PG::ValueType::ReadOnly));
+    // 1.13.0 (seconde passe) : un argument au-dela de la signature (un parametre retire d'un ancien projet) se voit et
+    // se retire : vider sa case l'ote du cas.
+    for (std::size_t k = params.size(); k < t->arguments.size(); ++k) {
+        if (trim(t->arguments[k]).empty()) continue;
+        auto px = prop("Argument " + std::to_string(k + 1) + " (en trop)", t->arguments[k], PG::ValueType::Text,
+                       [this, tid, k](std::string_view v) {
+                           std::string why;
+                           const bool ok = setArgument(tid, k, std::string(v), &why);
+                           if (!ok) say("Refus\xC3\xA9 : " + why, true);
+                           return ok;
+                       },
+                       f->name + " n'a plus ce param\xC3\xA8tre : vide la case pour retirer l'argument du cas.");
+        px.valueTone = ui::Tone::Error;
+        a.properties.push_back(std::move(px));
+    }
+    if (params.empty() && t->arguments.empty()) a.properties.push_back(prop("Param\xC3\xA8tres", "aucun", PG::ValueType::ReadOnly));
     cats.push_back(std::move(a));
     PG::Category r;
     r.name = "Derni\xC3\xA8re ex\xC3\xA9" "cution";
-    if (const auto* res = testruns::last(*f, *t)) {
+    if (const auto* res = testruns::last(doc_->project, *f, *t)) {
         auto pv = prop("Verdict", std::string(hmi::verdictLabel(res->verdict)), PG::ValueType::ReadOnly);
         pv.valueTone = toneOf(res->verdict);
         r.properties.push_back(std::move(pv));
@@ -807,24 +838,26 @@ Id HmiFunctionTestsPage::addCase(const NewCase& nc, std::string* why) {
     for (std::size_t k = 0; k < nc.arguments.size(); ++k) {
         const std::string text = trim(nc.arguments[k]);
         if (text.empty() || params[k].output) continue;
-        if (const auto cell = hmi::cellValue(&doc_->project, params[k].type, text); !cell.ok()) return refuse(params[k].name + " : " + cell.why);
+        if (const auto cell = hmi::cellValue(&doc_->project, params[k].read, text); !cell.ok()) return refuse(params[k].name + " : " + cell.why);
     }
+    const std::string returnRead = hmi::testCellType(*f, f->returnType);     // 1.13.0 : un T se lit dans sa contrainte
     if (!trim(nc.expected).empty()) {
         if (f->returnType.empty()) return refuse("la fonction n'a pas de retour : v\xC3\xA9rifie plut\xC3\xB4t ses variables (V\xC3\xA9rifier apr\xC3\xA8s)");
-        if (const auto cell = hmi::cellValue(&doc_->project, f->returnType, trim(nc.expected)); !cell.ok()) return refuse("attendu : " + cell.why);
+        if (!trim(nc.errorCode).empty()) return refuse("le cas attend l'erreur " + trim(nc.errorCode) + " : il juge sur elle, pas sur un attendu");
+        if (const auto cell = hmi::cellValue(&doc_->project, returnRead, trim(nc.expected)); !cell.ok()) return refuse("attendu : " + cell.why);
     }
     if (!trim(nc.tolerance).empty()) {
         double d = 0;
-        if (!isReal(f->returnType)) return refuse("la tol\xC3\xA9rance ne sert qu'\xC3\xA0 un retour REAL (ici " + (f->returnType.empty() ? std::string("aucun") : f->returnType) + ")");
+        if (!toleranceApplies(f)) return refuse("la tol\xC3\xA9rance ne sert qu'\xC3\xA0 un retour REAL (ici " + (f->returnType.empty() ? std::string("aucun") : f->returnType) + ")");
         if (!parseTolerance(nc.tolerance, d) || d < 0) return refuse("tol\xC3\xA9rance \xC2\xAB " + trim(nc.tolerance) + " \xC2\xBB : un nombre positif (0.001)");
     }
     // Ce qui est tape, garde lu (2,5 -> 2.5) : la liste, l'apercu et le rapport montrent ce que le banc joue.
     std::vector<std::string> kept;
     for (std::size_t k = 0; k < nc.arguments.size(); ++k) {
         const std::string text = trim(nc.arguments[k]);
-        kept.push_back(text.empty() || params[k].output ? text : keptCell(doc_->project, params[k].type, text));
+        kept.push_back(text.empty() || params[k].output ? text : keptCell(doc_->project, params[k].read, text));
     }
-    const std::string keptExpected = trim(nc.expected).empty() ? std::string{} : keptCell(doc_->project, f->returnType, trim(nc.expected));
+    const std::string keptExpected = trim(nc.expected).empty() ? std::string{} : keptCell(doc_->project, returnRead, trim(nc.expected));
     Id made = kNoId;
     const Id view = view_, fid = function_;
     auto cmd = hmi::changeProject(doc_, "Nouveau cas " + name + " (" + f->name + ")", [&](hmi::Project& p) {
@@ -942,8 +975,12 @@ bool HmiFunctionTestsPage::setField(Id tid, Field field, const std::string& raw,
         case Field::Expected:
             if (!text.empty()) {
                 if (f->returnType.empty()) return refuse("la fonction n'a pas de retour : v\xC3\xA9rifie plut\xC3\xB4t ses variables (V\xC3\xA9rifier apr\xC3\xA8s)");
-                if (const auto cell = hmi::cellValue(&doc_->project, f->returnType, text); !cell.ok()) return refuse("attendu : " + cell.why);
-                text = keptCell(doc_->project, f->returnType, text);
+                // 1.13.0 (seconde passe) : un cas qui attend une erreur juge sur elle - un attendu tape ne servirait a rien.
+                if (!t->errorCode.empty())
+                    return refuse("le cas attend l'erreur " + t->errorCode + " : vide d'abord l'Erreur attendue (sa fiche) pour comparer le retour");
+                const std::string read = hmi::testCellType(*f, f->returnType);
+                if (const auto cell = hmi::cellValue(&doc_->project, read, text); !cell.ok()) return refuse("attendu : " + cell.why);
+                text = keptCell(doc_->project, read, text);
             }
             if (text == t->expected) return true;
             label = "Attendu du cas " + t->name;
@@ -952,7 +989,7 @@ bool HmiFunctionTestsPage::setField(Id tid, Field field, const std::string& raw,
             if (text == t->tolerance) return true;
             double d = 0;
             if (!text.empty()) {
-                if (!isReal(f->returnType))
+                if (!toleranceApplies(f))
                     return refuse("la tol\xC3\xA9rance ne sert qu'\xC3\xA0 un retour REAL (ici " + (f->returnType.empty() ? std::string("aucun") : f->returnType) + ")");
                 if (!parseTolerance(text, d) || d < 0) return refuse("tol\xC3\xA9rance \xC2\xAB " + text + " \xC2\xBB : un nombre positif (0.001)");
             }
@@ -994,21 +1031,32 @@ bool HmiFunctionTestsPage::setArgument(Id tid, std::size_t index, const std::str
         return false;
     }
     const auto params = paramsOf(*f);
+    std::string text = trim(raw);
     if (index >= params.size()) {
-        if (why) *why = "pas de param\xC3\xA8tre " + std::to_string(index + 1) + " (" + f->name + " en a " + std::to_string(params.size()) + ")";
+        // 1.13.0 (seconde passe) : un argument en trop (au-dela de la signature) ne se retape pas, il se retire.
+        if (index < t->arguments.size() && text.empty()) {
+            const bool ok = change("Retirer l'argument " + std::to_string(index + 1) + " du cas " + t->name, [index](hmi::FunctionTest& x, std::string*) {
+                if (index < x.arguments.size()) x.arguments[index].clear();
+                while (!x.arguments.empty() && trim(x.arguments.back()).empty()) x.arguments.pop_back();
+                return true;
+            }, tid, why);
+            if (ok) say("Argument " + std::to_string(index + 1) + " retir\xC3\xA9 du cas " + t->name + " (Ctrl+Z le rend).");
+            return ok;
+        }
+        if (why) *why = "pas de param\xC3\xA8tre " + std::to_string(index + 1) + " (" + f->name + " en a " + std::to_string(params.size())
+                        + ") : vide la case pour retirer cet argument";
         return false;
     }
-    std::string text = trim(raw);
     if (!text.empty() && params[index].output) {
         if (why) *why = params[index].name + " est une sortie : rien \xC3\xA0 lui donner";
         return false;
     }
     if (!text.empty())
-        if (const auto cell = hmi::cellValue(&doc_->project, params[index].type, text); !cell.ok()) {
+        if (const auto cell = hmi::cellValue(&doc_->project, params[index].read, text); !cell.ok()) {
             if (why) *why = params[index].name + " : " + cell.why;
             return false;
         }
-    text = keptCell(doc_->project, params[index].type, text);
+    text = keptCell(doc_->project, params[index].read, text);
     if ((index < t->arguments.size() ? t->arguments[index] : std::string{}) == text) return true;
     const std::string pname = params[index].name;
     const bool ok = change("Argument " + pname + " du cas " + t->name, [index, text](hmi::FunctionTest& x, std::string*) {
@@ -1182,7 +1230,7 @@ bool HmiFunctionTestsPage::runCase(Id tid) {
     rep.function = copy.id;
     rep.functionName = copy.name;
     rep.results.push_back(hmi::runFunctionTest(doc_->project, copy, one, hosts_.plc ? hosts_.plc() : nullptr));
-    testruns::record(copy, rep.results.front());
+    testruns::record(doc_->project, copy, rep.results.front());
     emitLines(testLines(copy, rep, ownerName()));
     const auto& r = rep.results.front();
     const bool passed = r.verdict == Verdict::Passed;
@@ -1199,9 +1247,9 @@ std::size_t HmiFunctionTestsPage::runAll() {
     }
     const hmi::HmiFunction copy = *f;
     const auto rep = hmi::runFunctionTests(doc_->project, copy, hosts_.plc ? hosts_.plc() : nullptr);
-    testruns::record(copy, rep);
+    testruns::record(doc_->project, copy, rep);
     emitLines(testLines(copy, rep, ownerName()));
-    const auto tally = testruns::tally(copy);
+    const auto tally = testruns::tally(doc_->project, copy);
     say("Tests de " + copy.name + " : " + tally.text(), tally.red());
     return tally.passed;
 }
@@ -1209,7 +1257,7 @@ std::size_t HmiFunctionTestsPage::runAll() {
 const hmi::FunctionTestResult* HmiFunctionTestsPage::lastResult(Id tid) const {
     const auto* f = fn();
     const auto* t = test(tid);
-    return f && t ? testruns::last(*f, *t) : nullptr;
+    return f && t ? testruns::last(doc_->project, *f, *t) : nullptr;
 }
 
 bool HmiFunctionTestsPage::exportReport(hmi::ExportFormat format, std::string* where) {
@@ -1377,6 +1425,7 @@ HmiNewTestCaseDialog::HmiNewTestCaseDialog(Spec spec) : menu::WidgetMenu(spec.id
         for (const auto& p : paramsOf(*f)) {
             paramNames_.push_back(p.name);
             paramTypes_.push_back(p.type);
+            paramReads_.push_back(p.read);
             paramUnits_.push_back(p.unit);
             paramDefaults_.push_back(p.initial);
             paramOutput_.push_back(p.output);
@@ -1426,7 +1475,7 @@ std::string HmiNewTestCaseDialog::preview() const {
         const std::string v = k < answer_.arguments.size() ? trim(answer_.arguments[k]) : std::string{};
         std::string shown = v;
         if (!v.empty() && spec_.doc)
-            if (const auto cell = hmi::cellValue(&spec_.doc->project, paramTypes_[k], v); cell.ok()) shown = cell.text;
+            if (const auto cell = hmi::cellValue(&spec_.doc->project, paramReads_[k], v); cell.ok()) shown = cell.text;
         if (shown.empty()) shown = paramDefaults_[k].empty() ? std::string("\xE2\x80\xA6") : paramDefaults_[k];
         s += (first ? "" : ", ") + shown;
         first = false;
@@ -1451,7 +1500,7 @@ std::string HmiNewTestCaseDialog::argumentProblem(std::size_t k) const {
     const std::string v = trim(answer_.arguments[k]);
     if (v.empty()) return {};
     if (paramOutput_[k]) return paramNames_[k] + " est une sortie : rien \xC3\xA0 lui donner.";
-    const auto cell = hmi::cellValue(&spec_.doc->project, paramTypes_[k], v);
+    const auto cell = hmi::cellValue(&spec_.doc->project, paramReads_[k], v);
     return cell.ok() ? std::string{} : cell.why;
 }
 
@@ -1460,17 +1509,14 @@ bool HmiNewTestCaseDialog::expectedUsable() const {
     return f && !f->returnType.empty();
 }
 
-bool HmiNewTestCaseDialog::toleranceUsable() const {
-    const auto* f = fn();
-    return f && isReal(f->returnType);
-}
+bool HmiNewTestCaseDialog::toleranceUsable() const { return toleranceApplies(fn()); }
 
 std::string HmiNewTestCaseDialog::expectedProblem() const {
     const std::string v = trim(answer_.expected);
     if (v.empty()) return {};
     const auto* f = fn();
     if (!f || f->returnType.empty()) return "La fonction n'a pas de retour : rien \xC3\xA0 attendre.";
-    const auto cell = hmi::cellValue(&spec_.doc->project, f->returnType, v);
+    const auto cell = hmi::cellValue(&spec_.doc->project, hmi::testCellType(*f, f->returnType), v);   // 1.13.0 : T dans sa contrainte
     return cell.ok() ? std::string{} : cell.why;
 }
 

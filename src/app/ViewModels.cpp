@@ -3968,7 +3968,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 codeIconStyle(s, project::codeicons::iconOf(*project_, core::codeicons::keyOf(core::codeicons::Kind::HmiFunction, {}, f->name)));
             // 1.13.0 (lot J4b) : un cas en echec (ou en erreur) - une pastille rouge.
             if (const auto* f = hmi_ ? byId(hmi_->project.programs.functions, i) : nullptr; f && !f->tests.empty()) {
-                const auto t = testruns::tally(*f);
+                const auto t = testruns::tally(hmi_->project, *f);
                 if (t.red()) {
                     s.badge = std::to_string(t.failed + t.errors) + (t.failed + t.errors > 1 ? " tests rouges" : " test rouge");
                     s.badgeTone = ui::Tone::Error;
@@ -4019,8 +4019,22 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiObjectOperators: s.icon = ui::Icon::Folder; break;
         case NodeKind::HmiObjectOperator:  s.icon = ui::Icon::Code; break;
         // 1.11.10 : les fonctions d'un symbole, en violet ; une redefinition, une pastille.
-        case NodeKind::HmiObjectFunctions:
-        case NodeKind::HmiSymbolFunction:  s.icon = ui::Icon::FunctionBlock; s.iconTone = ui::Tone::InOut; break;
+        case NodeKind::HmiObjectFunctions: s.icon = ui::Icon::FunctionBlock; s.iconTone = ui::Tone::InOut; break;
+        case NodeKind::HmiSymbolFunction: {
+            s.icon = ui::Icon::FunctionBlock;
+            s.iconTone = ui::Tone::InOut;
+            // 1.13.0 (seconde passe) : une fonction de vue, de popup ou de symbole porte aussi « 1 test rouge ».
+            const auto* v = hmiViewById(hmi_.get(), i);
+            const auto k = static_cast<std::size_t>(subOf(n));
+            if (v && k < v->functions.size() && !v->functions[k].tests.empty()) {
+                const auto t = testruns::tally(hmi_->project, v->functions[k]);
+                if (t.red()) {
+                    s.badge = std::to_string(t.failed + t.errors) + (t.failed + t.errors > 1 ? " tests rouges" : " test rouge");
+                    s.badgeTone = ui::Tone::Error;
+                }
+            }
+            break;
+        }
         case NodeKind::HmiObjectFunction: {
             s.icon = ui::Icon::FunctionBlock;
             s.iconTone = ui::Tone::InOut;
@@ -4222,14 +4236,14 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
     // ---- 1.13.0 (lot J4b) : le groupe Tests d'une fonction - " Tests . 3 cas . 2 reussis, 1 echec ", un cas par
     //  ligne avec son dernier verdict (app::testruns : tant que ni le cas ni la fonction n'ont change) ----
     namespace {
-    std::optional<hmitree::OutlineGroup> testsGroupOf(const hmi::HmiFunction& f) {
+    std::optional<hmitree::OutlineGroup> testsGroupOf(const hmi::Project& p, const hmi::HmiFunction& f) {
         if (f.tests.empty()) return std::nullopt;
         hmitree::OutlineGroup g;
         g.kind = hmitree::OutlineKind::Tests;
-        g.label = "Tests \xC2\xB7 " + testruns::tally(f).text();
+        g.label = "Tests \xC2\xB7 " + testruns::tally(p, f).text();
         for (const auto& t : f.tests) {
             hmitree::OutlineItem it;
-            const auto* r = testruns::last(f, t);
+            const auto* r = testruns::last(p, f, t);
             const std::string verdict = !t.enabled ? std::string("inactif") : r ? std::string(hmi::verdictLabel(r->verdict)) : std::string("\xC3\xA0 jouer");
             it.label = (t.name.empty() ? std::string("(sans nom)") : t.name) + "   \xE2\x80\x94 " + verdict;
             it.name = t.name;
@@ -4270,12 +4284,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         } else if (codeKind == kCodeFunction) {
             if (const auto* f = byId(p.programs.functions, id)) {
                 o->groups = hmitree::outlineOf(*f);
-                if (auto g = testsGroupOf(*f)) o->groups.push_back(std::move(*g));   // 1.13.0 (lot J4b)
+                if (auto g = testsGroupOf(p, *f)) o->groups.push_back(std::move(*g));   // 1.13.0 (lot J4b)
             }
         } else if (codeKind == kCodeSymbolFunction) {
             if (const auto* f = symbolFunctionById(p, id)) {
                 o->groups = hmitree::outlineOf(*f);
-                if (auto g = testsGroupOf(*f)) o->groups.push_back(std::move(*g));   // 1.13.0 (lot J4b)
+                if (auto g = testsGroupOf(p, *f)) o->groups.push_back(std::move(*g));   // 1.13.0 (lot J4b)
             }
         }
         const auto* raw = o.get();

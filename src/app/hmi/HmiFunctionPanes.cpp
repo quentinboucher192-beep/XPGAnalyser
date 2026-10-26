@@ -556,7 +556,7 @@ void HmiFunctionsPane::refresh() {
     // 1.13.0 (lot J4b) : les tests unitaires du volet - " 24 cas . 22 reussis, 1 echec, 1 erreur ".
     if (list) {
         testruns::Tally tally;
-        for (const auto& f : *list) tally += testruns::tally(f);
+        for (const auto& f : *list) tally += testruns::tally(doc_->project, f);
         if (tally.cases) countsText_ += "  \xC2\xB7  tests : " + tally.text();
     }
     showStatus();

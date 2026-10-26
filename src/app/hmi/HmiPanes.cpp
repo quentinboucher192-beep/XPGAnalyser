@@ -306,6 +306,7 @@ bool HmiConfigPane::exportTestsReport(hmi::ExportFormat format, std::string* whe
     message_ = ok ? "Rapport des tests \xC3\xA9" "crit : " + path + " (" + c.tally.text() + ")"
                   : "Rapport des tests impossible \xC3\xA0 \xC3\xA9" "crire" + (path.empty() ? std::string{} : " : " + path);
     if (!ok) ui::PropertyGrid::refuse(message_);
+    if (testHosts_.message) testHosts_.message(message_, !ok);      // 1.13.0 (seconde passe) : la barre le dit
     if (where) *where = path;
     return ok;
 }
@@ -444,10 +445,14 @@ void HmiConfigPane::rebuild() {
                                const auto format = v.rfind("PDF", 0) == 0 ? hmi::ExportFormat::Pdf
                                                  : v.rfind("CSV", 0) == 0 ? hmi::ExportFormat::Csv : hmi::ExportFormat::Excel;
                                std::string where;
-                               (void)exportTestsReport(format, &where);
-                               dirty_ = true;          // la case revient a " choisis le format "
-                               invalidateLayout();
-                               return true;
+                               // 1.13.0 (seconde passe) : un echec se dit sous la case (le refus de la grille) et dans la
+                               // barre ; une reussite dans la barre, avec le chemin ecrit.
+                               const bool ok = exportTestsReport(format, &where);
+                               if (ok) {
+                                   dirty_ = true;      // la case revient a " choisis le format "
+                                   invalidateLayout();
+                               }
+                               return ok;
                            },
                            "Tous les cas de toutes les fonctions rejou\xC3\xA9s, puis le rapport (Fonction, Cas, Verdict, D\xC3\xA9tail) dans exports/. "
                            "Ce n'est pas un proc\xC3\xA8s-verbal de r\xC3\xA9" "ception (pas de visa).",

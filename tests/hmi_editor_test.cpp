@@ -36635,6 +36635,174 @@ void testsUnitaires113() {
     page.refresh();
     check(!page.faultsOf(c2).empty() && page.cases().model()->cellStyle(1, 0).fgTone == ui::Tone::Error,
           "trop d'arguments (G\xC3\xA9n\xC3\xA9rer le dit) : le nom du cas en rouge (" + page.faultsOf(c2) + ")");
+
+    // ======== 1.13.0 (seconde passe, lot D3) ========
+    // T2-25 (secours) : l'argument en trop se voit dans la fiche et se retire en vidant sa case.
+    page.selectCase(c2);
+    {
+        bool extra = false;
+        for (const auto& c : page.properties().categories())
+            for (const auto& pr : c.properties) extra = extra || (pr.name == "Argument 4 (en trop)" && pr.value == "4");
+        check(extra, "T2-25 : la fiche montre l'argument en trop (Argument 4 (en trop) = 4)");
+        check(page.setArgument(c2, 3, "", &why) && doc->project.function(fm)->tests[1].arguments.size() == 3 && page.faultsOf(c2).empty(),
+              "T2-25 : le vider le retire du cas (plus de faute) [" + why + "]");
+        check(!page.setArgument(c2, 5, "9", &why) && why.find("vide la case") != std::string::npos, "T2-25 : on ne tape pas d'argument au-del\xC3\xA0 (" + why + ")");
+        (void)stack.undo();
+        check(doc->project.function(fm)->tests[1].arguments.size() == 4, "T2-25 : Ctrl+Z rend l'argument retir\xC3\xA9");
+        for (auto& f : doc->project.programs.functions)
+            if (f.id == fm) f.tests[1].arguments = {"12.0", "20.0", "0.25"};
+        page.refresh();
+    }
+    // T2-25 : retirer ou deplacer un parametre - les arguments des cas suivent leur parametre, dans la meme commande.
+    {
+        hmi::decledit::Place at;
+        at.kind = hmi::decledit::Place::Kind::Function;
+        at.id = fm;
+        auto cmd = hmi::changeProject(doc, "Supprimer B", [&](hmi::Project& pp) {
+            (void)hmi::decledit::remove(pp, at, hmi::decledit::Tab::Parameters, {1}, &why);
+        });
+        apply(std::move(cmd));
+        check(doc->project.function(fm)->tests[1].arguments == std::vector<std::string>{"12.0", "0.25"}
+                  && doc->project.function(fm)->tests[0].arguments == std::vector<std::string>{"12.0"},
+              "T2-25 : B retir\xC3\xA9 - poids 25 % garde 12.0 ; 0.25 (Poids_A), moyenne simple 12.0");
+        (void)stack.undo();
+        check(doc->project.function(fm)->tests[1].arguments == std::vector<std::string>{"12.0", "20.0", "0.25"},
+              "T2-25 : Ctrl+Z rend B et les arguments d'avant");
+        auto up = hmi::changeProject(doc, "Monter Poids_A", [&](hmi::Project& pp) {
+            (void)hmi::decledit::move(pp, at, hmi::decledit::Tab::Parameters, 2, -1, &why);
+        });
+        apply(std::move(up));
+        check(doc->project.function(fm)->tests[1].arguments == std::vector<std::string>{"12.0", "0.25", "20.0"},
+              "T2-25 : Poids_A mont\xC3\xA9 - sa valeur monte avec lui");
+        (void)stack.undo();
+    }
+    // T2-29 : un double-clic sur le NOM d'un cas le lance (il ne le renomme plus) ; F2 le renomme.
+    {
+        page.layout();
+        gfx::Rect rr{};
+        check(page.cases().rowRect(0, rr), "T2-29 : la ligne du premier cas \xC3\xA0 l'\xC3\xA9" "cran");
+        const gfx::Point on{rr.x + 30.f, rr.y + rr.h * 0.5f};
+        lines.clear();
+        page.cases().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+        page.cases().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+        page.cases().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 2, {}});
+        page.cases().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+        check(!page.cases().cellEditing() && !lines.empty() && lines.back().element == app::testElement(c1),
+              "T2-29 : double-clic sur \xC2\xAB moyenne simple \xC2\xBB : le cas se joue, rien \xC3\xA0 renommer");
+        page.cases().dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(page.cases().cellEditing(), "T2-29 : F2 ouvre le renommage");
+        page.cases().dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+    }
+    // T2-33 : un cas qui attend une erreur - son Attendu ne se tape plus (ni dans la liste, ni par la fiche).
+    {
+        check(page.setField(c1, app::HmiFunctionTestsPage::Field::ErrorCode, "E_Niveau", &why), "T2-33 : Erreur attendue E_Niveau");
+        check(!page.cases().model()->editable(0, 2) && page.cases().model()->cellText(0, 2) == "l\xC3\xA8ve E_Niveau",
+              "T2-33 : la case Attendu montre \xC2\xAB l\xC3\xA8ve E_Niveau \xC2\xBB et ne s'\xC3\xA9" "dite plus");
+        check(!page.setField(c1, app::HmiFunctionTestsPage::Field::Expected, "17", &why) && why.find("attend l'erreur E_Niveau") != std::string::npos,
+              "T2-33 : un attendu tap\xC3\xA9 est refus\xC3\xA9 (" + why + ")");
+        (void)stack.undo();
+        check(page.cases().model()->editable(0, 2), "T2-33 : Ctrl+Z - l'Attendu redevient \xC3\xA9" "ditable");
+    }
+    // T2-31 : une campagne ne dit changed() qu'une fois (les volets ne se refont plus a chaque fonction).
+    {
+        int said = 0;
+        core::ConnectionScope links;
+        links += app::testruns::changed()->connect([&] { ++said; });
+        (void)app::runAllTests(doc->project, nullptr);
+        check(said == 1, "T2-31 : Lancer les tests (2 fonctions) : une seule annonce (" + std::to_string(said) + ")");
+    }
+    // T2-30 : un verdict vaut pour son projet, et pour ce que la fonction appelle.
+    {
+        (void)app::runAllTests(doc->project, nullptr);
+        const auto* f = doc->project.function(fm);
+        check(f && app::testruns::last(doc->project, *f, f->tests[0]) != nullptr, "T2-30 : le verdict, dans son projet");
+        auto copy = std::make_shared<Document>();
+        copy->project = doc->project;                                   // une copie : les memes identifiants
+        const auto* g = copy->project.function(fm);
+        check(g && app::testruns::last(copy->project, *g, g->tests[0]) == nullptr && app::testruns::tally(copy->project, *g).pending == 2,
+              "T2-30 : la copie du projet : \xC2\xAB \xC3\xA0 jouer \xC2\xBB (rien n'y a \xC3\xA9t\xC3\xA9 jou\xC3\xA9)");
+        HmiFunction helper = makeFunction(doc->project, "Facteur", "REAL", "Facteur := 1.0;");
+        doc->project.programs.functions.push_back(helper);
+        for (auto& h : doc->project.programs.functions)
+            if (h.id == fm) h.body = "Moyenne_Pression := Facteur() * (A * Poids_A + B * (1.0 - Poids_A));";
+        (void)app::runAllTests(doc->project, nullptr);
+        f = doc->project.function(fm);
+        check(f && app::testruns::last(doc->project, *f, f->tests[0]) != nullptr, "T2-30 : rejou\xC3\xA9 avec Facteur()");
+        for (auto& h : doc->project.programs.functions)
+            if (h.name == "Facteur") h.body = "Facteur := 2.0;";
+        f = doc->project.function(fm);
+        check(f && app::testruns::last(doc->project, *f, f->tests[0]) == nullptr,
+              "T2-30 : Facteur (appel\xC3\xA9" "e) a chang\xC3\xA9 : le cas redevient \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
+        for (auto& v : doc->project.programs.variables)
+            if (v.name == "Compteur_Clics") v.initial = "7";
+        const auto* t = doc->project.function(ft);
+        check(t && !t->tests.empty() && app::testruns::last(doc->project, *t, t->tests[0]) == nullptr,
+              "T2-30 : Compteur_Clics (lue par Tracer) a chang\xC3\xA9 : son cas redevient \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
+    }
+    // T2-34 : une fonction de vue dont un cas echoue porte « 1 test rouge » dans l'arbre.
+    {
+        View four = makeView(doc->project, "Vue_Four");
+        HmiFunction rampe = makeFunction(doc->project, "Calcul_Rampe", "REAL", "Calcul_Rampe := 1.0;");
+        FunctionTest faux;
+        faux.id = doc->project.allocate();
+        faux.name = "rampe fausse";
+        faux.expected = "2.0";
+        rampe.tests.push_back(faux);
+        four.functions.push_back(rampe);
+        doc->project.views.push_back(four);
+        const auto& vf = doc->project.views.back();
+        (void)app::runTestsOf(doc->project, vf.functions, vf.id, vf.name, nullptr);
+        auto plc = std::make_shared<domain::Project>();
+        app::ProjectTreeModel tree(plc);
+        tree.setHmi(doc);
+        const auto node = app::ProjectTreeModel::pack(app::ProjectTreeModel::NodeKind::HmiSymbolFunction,
+                                                      static_cast<domain::Index>(vf.id & 0x0FFFFFFFu), 0);
+        const auto st = tree.style(node);
+        check(st.badge == "1 test rouge" && st.badgeTone == ui::Tone::Error, "T2-34 : Vue_Four.Calcul_Rampe porte \xC2\xAB 1 test rouge \xC2\xBB (" + st.badge + ")");
+    }
+    // T2-32 : Configuration > Rapport des tests... dit le chemin ecrit ; un echec se dit sous la case et dans la barre.
+    {
+        app::HmiConfigPane cfg("tu.config2", doc, apply, std::make_shared<domain::Project>(), nullptr);
+        std::vector<std::pair<std::string, bool>> said;
+        bool fail = false;
+        app::HmiConfigPane::TestHosts th;
+        th.exportFile = [&](const hmi::ExportRequest& rq, std::string* where) {
+            if (where) *where = "exports/" + rq.fileName;
+            return !fail;
+        };
+        th.message = [&](const std::string& m, bool warning) { said.emplace_back(m, warning); };
+        cfg.setTestHosts(std::move(th));
+        cfg.setBounds({0, 0, 1200, 800});
+        cfg.layout();
+        cfg.ensureBuilt();
+        std::function<bool(std::string_view)> commit;
+        for (const auto& c : cfg.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Rapport des tests\xE2\x80\xA6") commit = pr.commit;
+        check(commit && commit("PDF\xE2\x80\xA6") && !said.empty() && !said.back().second
+                  && said.back().first.find("Rapport des tests \xC3\xA9" "crit : exports/tests_") == 0,
+              "T2-32 : PDF\xE2\x80\xA6 - la barre dit \xC2\xAB " + (said.empty() ? std::string("?") : said.back().first) + " \xC2\xBB");
+        fail = true;
+        check(commit && !commit("PDF\xE2\x80\xA6") && said.back().second && said.back().first.find("impossible") != std::string::npos,
+              "T2-32 : une \xC3\xA9" "criture rat\xC3\xA9" "e : refus\xC3\xA9" "e sous la case, et dite (" + said.back().first + ")");
+    }
+    // T2-35 : demarrage bloque par un test - la note mene aux Sorties, pas aux Diagnostics.
+    {
+        app::HmiSimulationHost host;
+        bool gate = false;
+        host.buildGate = [&](const std::string&) { gate = true; };
+        app::HmiSimulationPane sim("tu.sim113", doc, host);
+        sim.setBounds({0, 0, 1200, 800});
+        sim.layout();
+        sim.command("hmi.start");
+        check(gate && sim.waitingBuild(), "T2-35 : D\xC3\xA9marrer attend son build");
+        sim.buildDone(false, "un test des fonctions rouge (\xC3\xA9" "chec ou erreur ; panneau du bas, Sorties : Tests)",
+                      "Corrige le cas (panneau du bas, Sorties : un double-clic m\xC3\xA8ne au cas), puis D\xC3\xA9marrer l'IHM.");
+        sim.refreshNow();
+        const std::string note = sim.canvas().stoppedNote();
+        check(note.find("Sorties : un double-clic m\xC3\xA8ne au cas") != std::string::npos && note.find("Diagnostics") == std::string::npos,
+              "T2-35 : la note : " + note);
+    }
     app::testruns::forget();
 }
 

@@ -173,7 +173,8 @@ void MainAnalysisScreen::startHmiBuild(const std::string& source) {
         else if (!r.ok) why = plural(r.errors, "erreur bloquante", "erreurs bloquantes");
         // 1.13.0 (lot J4b) : " Un test en echec empeche le demarrage " (Configuration) - un cas rouge l'arrete.
         if (r.ok && hmiTestsBlockStart_) {
-            sim->buildDone(false, "un test des fonctions en \xC3\xA9" "chec (panneau du bas, Sorties : Tests)");
+            sim->buildDone(false, "un test des fonctions rouge (\xC3\xA9" "chec ou erreur ; panneau du bas, Sorties : Tests)",
+                           "Corrige le cas (panneau du bas, Sorties : un double-clic m\xC3\xA8ne au cas), puis D\xC3\xA9marrer l'IHM.");
             return;
         }
         sim->buildDone(r.ok, why);
