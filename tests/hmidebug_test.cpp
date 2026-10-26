@@ -21,6 +21,7 @@
 //
 //  HMIDEBUG_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
+#include "../src/app/TopBar.hpp"
 #include "../src/app/hmi/HmiDebugPane.hpp"
 #include "../src/app/hmi/HmiDebugSession.hpp"
 #include "../src/app/hmi/HmiSimulation.hpp"
@@ -1298,6 +1299,20 @@ void keysAnywhere() {
     (void)s;
 }
 
+
+// ---- T2-18 : la pastille IHM de la barre du haut dit la pause ----
+void pausedChip() {
+    std::printf("-- la barre du haut : la pastille IHM en pause (debogage)\n");
+    app::TopBar bar("essai.barre");
+    bar.setBounds({0.f, 0.f, 1800.f, 48.f});
+    bar.setHmi(app::TopBar::Hmi::Running);
+    const float running = bar.partRect("ihm").w;
+    bar.setHmi(app::TopBar::Hmi::Paused);
+    check(bar.hmi() == app::TopBar::Hmi::Paused, "la barre connait l'etat En pause");
+    check(bar.partRect("ihm").w > running, "la pastille s'elargit pour IHM en pause (debogage) : " + std::to_string(bar.partRect("ihm").w)
+                                                + " > " + std::to_string(running));
+}
+
 } // namespace
 
 int main() {
@@ -1330,6 +1345,7 @@ int main() {
     sessionLevelAndPreview();
     paneKeepsAndCancels();
     keysAnywhere();
+    pausedChip();
     std::printf("%d verifications, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
