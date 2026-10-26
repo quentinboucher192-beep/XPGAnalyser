@@ -757,8 +757,10 @@ public:
     // ou dans la fenetre detachee de racine `windowRoot` (DetachedWindows).
     // 1.13.0 : une IHM en pause (le debogueur) prend aussi F11 (Entrer), ou que soit le clavier.
     [[nodiscard]] static bool claimsKey(ui::Key key, const ui::Widget* windowRoot = nullptr);
-    // 1.13.0 : EN PAUSE, les touches du debogueur ou que soit le clavier (l'editeur du script, l'arbre, un autre onglet) :
-    // F5 Continuer, F10 Suivant, F11 Entrer, Maj+F11 Sortir. Vrai : prise (l'ecran l'appelle avant les widgets).
+    // 1.13.0 : EN PAUSE, les touches du debogueur ou que soit le clavier (l'editeur du script, l'arbre, un autre onglet ;
+    // la fenetre principale quand l'onglet Simulation est detache dans la sienne) : F5 Continuer, F10 Suivant, F11
+    // Entrer, Maj+F11 Sortir - d'abord l'onglet de cette fenetre, sinon celui d'une autre. Vrai : prise (l'ecran
+    // l'appelle avant les widgets).
     static bool debugKeyAnywhere(const ui::KeyDown& k, const ui::Widget* windowRoot = nullptr);
     [[nodiscard]] bool requestsOverlayPass() const override { return fullScreen_; }
     [[nodiscard]] gfx::Rect eventBounds() const override { return fullScreen_ ? fullRect_ : bounds(); }

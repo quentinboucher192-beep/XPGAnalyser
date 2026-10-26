@@ -67,7 +67,8 @@ public:
     // Le code a change : les lignes 1..prefix sont restees, celles a partir de `from` (1 = la premiere, comptee dans
     // l'ancien texte) aussi, decalees de `delta` ; entre les deux, la partie changee (supprimee, remplacee, jointe).
     // Un point du bas glisse avec sa ligne ; un point de la partie changee reste dans ce qu'il en reste (sa premiere
-    // ligne si elle a disparu) ; deux points sur une meme ligne n'en font plus qu'un.
+    // ligne si elle a disparu) ; deux points sur une meme ligne n'en font plus qu'un, qui s'arrete la ou l'un des deux
+    // s'arretait (actif si l'un l'etait, les conditions des actifs jointes par OR, les passages ajoutes).
     void shiftLines(HmiDebugTarget code, std::uint32_t prefix, std::uint32_t from, int delta);
     // Le meme calcul, d'un texte a l'autre (la frappe, Annuler, Retablir, Migrer ce code).
     void followText(HmiDebugTarget code, const std::string& before, const std::string& after);

@@ -110,6 +110,9 @@ public:
     enum class Hmi : std::uint8_t { None, Stopped, Running, Paused };
     void setHmi(Hmi state);
     [[nodiscard]] Hmi hmi() const noexcept { return hmi_; }
+    // La seconde ligne de la pastille : ce que fait un clic (sa touche). 1.13.0 : en pause, un clic l'ARRETE (elle tourne,
+    // un script est arrete) - la ligne le dit, et que F5 continue.
+    [[nodiscard]] std::string hmiHint() const;
 
     [[nodiscard]] ui::SizeHint sizeHint() const override;
 

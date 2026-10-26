@@ -883,7 +883,7 @@ void TopBar::paintSim(const ui::PaintContext& ctx) const {
 }
 
 // 1.10 : la pastille de l'IHM - verte en marche, orange arretee ; dessous, ce
-// qu'un clic fait. 1.13.0 : orange aussi en pause (le debogueur), F5 la fait continuer.
+// qu'un clic fait. 1.13.0 : orange aussi en pause (le debogueur) - un clic l'arrete, F5 continue (hmiHint).
 void TopBar::paintHmi(const ui::PaintContext& ctx, const Part& p, bool hot) const {
     const auto& c = ctx.theme.color;
     const auto r = p.rect;
@@ -899,9 +899,14 @@ void TopBar::paintHmi(const ui::PaintContext& ctx, const Part& p, bool hot) cons
                               : hmi_ == Hmi::Paused ? "IHM en pause (d\xC3\xA9" "bogage)" : "IHM arr\xC3\xAAt\xC3\xA9" "e";
     ctx.r.drawText({tx, r.y + 2.f}, line1, kSmall, c.text);
     ctx.r.drawText({tx + 0.6f, r.y + 2.f}, line1, kSmall, c.text);
-    ctx.r.drawText({tx, r.y + 18.f},
-                   hmi_ == Hmi::Running ? "Maj+F8 l'arr\xC3\xAAte" : hmi_ == Hmi::Paused ? "F5 : continuer" : "F8 la d\xC3\xA9marre", kTiny,
-                   c.textMuted);
+    ctx.r.drawText({tx, r.y + 18.f}, hmiHint(), kTiny, c.textMuted);
+}
+
+std::string TopBar::hmiHint() const {
+    if (hmi_ == Hmi::Running) return "Maj+F8 l'arr\xC3\xAAte";
+    // 1.13.0 : en pause, la pastille ARRETE l'IHM (hmi.toggle : elle tourne) - pas "continuer" : la ligne le dit.
+    if (hmi_ == Hmi::Paused) return "Maj+F8 l'arr\xC3\xAAte, F5 continue";
+    return "F8 la d\xC3\xA9marre";
 }
 
 void TopBar::onPaint(const ui::PaintContext& ctx) {

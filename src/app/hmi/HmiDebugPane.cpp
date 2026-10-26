@@ -318,7 +318,10 @@ HmiDebugPane::HmiDebugPane(std::string id, hmi::DocumentPtr doc, std::function<h
     });
     links_ += stackTable_->activated->connect([this](ui::RowIndex r) {
         const auto* f = (static_cast<void>(chooseLevel(r)), shownFrame());
-        if (f && goTo && (f->script != kNoId || f->function != kNoId)) goTo(f->script, f->function, static_cast<int>(f->line));
+        // 1.13.0 : un code du projet seulement (une redefinition d'instance se montre ici, dans CODE, sans editeur a ouvrir).
+        if (f && goTo && (f->script != kNoId || f->function != kNoId) && doc_
+            && !hmi::Runtime::debugCodeName(doc_->project, f->script, f->function).empty())
+            goTo(f->script, f->function, static_cast<int>(f->line));
     });
     links_ += localsTable_->expanderClicked->connect([this](ui::RowIndex r) {
         if (r >= locals_.size()) return;
@@ -338,13 +341,20 @@ HmiDebugPane::~HmiDebugPane() = default;
 hmi::Runtime* HmiDebugPane::runtime() const { return runtimeOf_ ? runtimeOf_() : nullptr; }
 
 std::string HmiDebugPane::codeName(Id script, Id function) const {
-    return doc_ ? hmi::Runtime::debugCodeName(doc_->project, script, function) : std::string{};
+    std::string name = doc_ ? hmi::Runtime::debugCodeName(doc_->project, script, function) : std::string{};
+    // 1.13.0 : une redefinition d'instance (le moteur la connait par l'id de sa copie).
+    if (name.empty() && script == kNoId)
+        if (const auto* rt = runtime()) name = rt->boundCodeName(function);
+    return name;
 }
 
 std::string HmiDebugPane::codeText(Id script, Id function) const {
     // 1.13.0 : tout code que le moteur peut arreter - un script, une fonction (du projet, d'une bibliotheque, d'une vue,
-    // d'une popup, d'un symbole), une methode d'un type.
-    return doc_ ? hmi::Runtime::debugCodeBody(doc_->project, script, function) : std::string{};
+    // d'une popup, d'un symbole), une methode ou un operateur d'un type, une redefinition d'instance.
+    std::string text = doc_ ? hmi::Runtime::debugCodeBody(doc_->project, script, function) : std::string{};
+    if (text.empty() && script == kNoId)
+        if (const auto* rt = runtime()) text = rt->boundCodeBody(function);
+    return text;
 }
 
 void HmiDebugPane::say(const std::string& text, bool warning) {

@@ -226,15 +226,32 @@ void HmiDebugSession::shiftLines(HmiDebugTarget code, std::uint32_t prefix, std:
         any = true;
     }
     if (!any) return;
-    // Deux points sur une meme ligne de ce code (une ligne supprimee entre eux) : le premier pose reste.
+    // Deux points sur une meme ligne de ce code (une ligne supprimee entre eux) : un seul reste (le premier pose), qui
+    // s'arrete la ou l'un des deux s'arretait - rien ne se perd sans un mot. Actif si l'un l'etait ; sa condition : celle
+    // des points actifs, jointes par OR (un point actif sans condition : sans condition) ; leurs passages s'ajoutent.
     std::vector<hmi::DebugBreakpoint> kept;
     kept.reserve(list_.size());
+    const auto joined = [](const std::string& a, const std::string& b) {
+        if (a.empty() || b.empty()) return std::string{};
+        if (a == b) return a;
+        return "(" + a + ") OR (" + b + ")";
+    };
     for (auto& b : list_) {
-        const bool twice = b.script == code.script && b.function == code.function
-                           && std::any_of(kept.begin(), kept.end(), [&](const hmi::DebugBreakpoint& k) {
-                                  return k.script == b.script && k.function == b.function && k.line == b.line;
-                              });
-        if (!twice) kept.push_back(std::move(b));
+        const auto same = std::find_if(kept.begin(), kept.end(), [&](const hmi::DebugBreakpoint& k) {
+            return b.script == code.script && b.function == code.function && k.script == b.script && k.function == b.function
+                   && k.line == b.line;
+        });
+        if (same == kept.end()) {
+            kept.push_back(std::move(b));
+            continue;
+        }
+        hmi::DebugBreakpoint& k = *same;
+        if (k.enabled && b.enabled) k.condition = joined(k.condition, b.condition);
+        else if (b.enabled) k.condition = b.condition;                 // le seul actif : sa condition
+        else if (!k.enabled) k.condition = joined(k.condition, b.condition);
+        k.enabled = k.enabled || b.enabled;
+        k.hits += b.hits;
+        k.note.clear();
     }
     list_ = std::move(kept);
     touch(true);

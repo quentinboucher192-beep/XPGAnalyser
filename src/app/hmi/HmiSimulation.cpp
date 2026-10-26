@@ -3593,13 +3593,15 @@ gfx::Rect HmiSimulationPane::fullScreenBarPart(std::string_view part) const {
 bool HmiSimulationPane::claimsKey(ui::Key key, const ui::Widget* windowRoot) {
     if (key != ui::Key::F11) return false;
     for (const auto* p : simPanes()) {
+        // 1.13.0 : EN PAUSE, F11 est au debogueur (Entrer) ou que soit le clavier - dans la fenetre de l'onglet
+        // Simulation comme dans une autre (l'onglet detache, la fenetre principale) : jamais le plein ecran.
+        if (!p->station_ && p->debugPane_ && p->runtime_.paused()) return true;
         // La fenetre du volet : sa racine ("detached.root" : une fenetre detachee,
         // DetachedWindows) - F11 d'une fenetre ne va qu'aux volets de cette fenetre.
         const ui::Widget* top = p;
         while (top->parent()) top = top->parent();
         if (windowRoot ? top != windowRoot : top->id() == "detached.root") continue;
         if (p->fullScreen_) return true;
-        if (!p->station_ && p->debugPane_ && p->runtime_.paused()) return true;   // 1.13.0 : Entrer, pas le plein ecran
         if (p->station_ || !p->host_.fullScreenWindow || p->bounds().empty()) continue;
         bool shown = true;
         for (const ui::Widget* w = p; w && shown; w = w->parent()) shown = w->visible();
@@ -3611,13 +3613,17 @@ bool HmiSimulationPane::claimsKey(ui::Key key, const ui::Widget* windowRoot) {
 bool HmiSimulationPane::debugKeyAnywhere(const ui::KeyDown& k, const ui::Widget* windowRoot) {
     if (k.repeat || k.mods.ctrl || k.mods.alt) return false;
     if (!((k.key == ui::Key::F5 && !k.mods.shift) || (k.key == ui::Key::F10 && !k.mods.shift) || k.key == ui::Key::F11)) return false;
-    for (auto* p : simPanes()) {
-        const ui::Widget* top = p;
-        while (top->parent()) top = top->parent();
-        if (windowRoot ? top != windowRoot : top->id() == "detached.root") continue;
-        if (p->station_ || !p->debugPane_ || !p->runtime_.paused()) continue;
-        if (p->debugPane_->debugKey(k.key, k.mods.shift)) return true;
-    }
+    // D'abord l'onglet Simulation de cette fenetre ; 1.13.0 : sinon celui d'une autre - l'onglet detache dans sa propre
+    // fenetre se pilote aussi depuis la fenetre principale (l'editeur du script en pause, l'arbre).
+    for (int pass = 0; pass < 2; ++pass)
+        for (auto* p : simPanes()) {
+            const ui::Widget* top = p;
+            while (top->parent()) top = top->parent();
+            const bool here = windowRoot ? top == windowRoot : top->id() != "detached.root";
+            if ((pass == 0) != here) continue;
+            if (p->station_ || !p->debugPane_ || !p->runtime_.paused()) continue;
+            if (p->debugPane_->debugKey(k.key, k.mods.shift)) return true;
+        }
     return false;
 }
 

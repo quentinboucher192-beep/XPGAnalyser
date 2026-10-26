@@ -1260,6 +1260,15 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
                                 if (auto* pane = editor->symbolFunctions(); pane && line > 0) pane->goTo(function, line);
                             return;
                         }
+                // 1.13.0 : un operateur (une conversion) d'un type ou d'un symbole - sa section Operateurs, a sa ligne.
+                if (hmi::operatorById(hmiDoc->project, function)) {
+                    hmi::Issue op;
+                    op.category = "Op\xC3\xA9rateur";
+                    op.item = function;
+                    op.line = line;
+                    openHmiIssue(op);
+                    return;
+                }
                 // 1.13.0 : une methode d'un type IHM - Types IHM, son type choisi.
                 for (const auto& t : hmiDoc->project.programs.types)
                     for (const auto& m : t.methods)
