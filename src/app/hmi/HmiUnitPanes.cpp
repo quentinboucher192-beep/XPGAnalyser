@@ -15,6 +15,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 namespace app {
 
@@ -64,14 +65,34 @@ std::string number(double v) {
     return b;
 }
 
-// "1 mbar = 100 Pa" ; une affine : "x degC = x + 273.15 K".
+// 1.13.0 (lot F3) : un nombre a lire (une formule) - 6 chiffres significatifs au plus, sans exposant ni zeros inutiles
+// (0.5555555556 -> 0.555556, 1e-06 -> 0.000001). La fiche garde number() : la valeur exacte, a modifier.
+std::string shortNumber(double v) {
+    char b[64];
+    std::snprintf(b, sizeof b, "%.6g", v);
+    const double r = std::strtod(b, nullptr);
+    const double a = std::fabs(r);
+    if (a == 0.0) return "0";
+    if (a < 1e-9 || a >= 1e12) return b;
+    const int decimals = std::max(0, 5 - static_cast<int>(std::floor(std::log10(a))));
+    std::snprintf(b, sizeof b, "%.*f", decimals, r);
+    std::string s(b);
+    if (s.find('.') != std::string::npos) {
+        while (!s.empty() && s.back() == '0') s.pop_back();
+        if (!s.empty() && s.back() == '.') s.pop_back();
+    }
+    return s;
+}
+
+// "1 mbar = 0.001 bar" ; une affine : "x degF = x \xC3\x97 0.555556 + 255.372 K", un decalage seul : "x degC = x + 273.15 K".
 std::string conversionText(const hu::Catalog& cat, const hmi::UnitDef& u) {
     const auto* f = cat.family(u.family);
     const std::string ref = f ? f->reference : std::string{};
     if (ref.empty() || hu::Catalog().relation(u.symbol, ref) == hu::Rel::Same || fold(u.symbol) == fold(ref))
         return "r\xC3\xA9" "f\xC3\xA9rence de la famille";
-    if (u.offset == 0.0) return "1 " + u.symbol + " = " + number(u.factor) + " " + ref;
-    return "x " + u.symbol + " = x \xC3\x97 " + number(u.factor) + (u.offset >= 0 ? " + " : " - ") + number(std::fabs(u.offset)) + " " + ref;
+    if (u.offset == 0.0) return "1 " + u.symbol + " = " + shortNumber(u.factor) + " " + ref;
+    const std::string scaled = shortNumber(u.factor) == "1" ? std::string("x") : "x \xC3\x97 " + shortNumber(u.factor);
+    return "x " + u.symbol + " = " + scaled + (u.offset >= 0 ? " + " : " - ") + shortNumber(std::fabs(u.offset)) + " " + ref;
 }
 
 bool parseDouble(std::string_view text, double& out) {
@@ -297,7 +318,7 @@ protected:
         ctx.r.drawText({panel.x + 12.f, panel.y + (th - ctx.r.lineHeight(ctx.theme.font.uiBold)) * 0.5f}, d_.title(), ctx.theme.font.uiBold, c.text);
         const float left = panel.x + 20.f;
         ctx.r.pushClip({panel.x + 8.f, panel.y + th, panel.w - 16.f, panel.h - th});
-        ctx.r.drawText({left, textY_}, "Vide : sans unit\xC3\xA9 (comme avant). Une unit\xC3\xA9 ne va que sur un nombre ; la recherche plie la casse et les accents.",
+        ctx.r.drawText({left, textY_}, "Vide : sans unit\xC3\xA9. Une unit\xC3\xA9 ne va que sur un nombre. La recherche ignore les majuscules et les accents.",
                        kSmall, c.textMuted);
         ctx.r.drawText({left, infoY_}, d_.description(), ctx.theme.font.ui, c.text);
         if (const std::string n = d_.notice(); !n.empty()) ctx.r.drawText({left, infoY_ + 22.f}, n, kSmall, c.warning);
@@ -559,7 +580,7 @@ core::Status HmiUnitPicker::buildUi() {
         if (const auto* it = familyBox_->selectedItem()) (void)setFamily(it->value);
     });
     auto table = std::make_unique<ui::TableView>(base + ".table");
-    table->setColumns({{"Unit\xC3\xA9", 90.f}, {"Nom", 230.f}, {"Famille", 150.f}, {"Conversion", 260.f}});
+    table->setColumns({{"Unit\xC3\xA9", 90.f}, {"Nom", 220.f}, {"Famille", 150.f}, {"Conversion", 280.f}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table->setEnterActivates(true);
     table_ = &static_cast<ui::TableView&>(body->addChild(std::move(table)));
@@ -646,8 +667,9 @@ HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, A
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".familiesPanel", "FAMILLES");
         auto table = std::make_unique<ui::TableView>(base + ".families");
-        table->setColumns({{"Famille", 170.f}, {"R\xC3\xA9" "f\xC3\xA9rence", 90.f}, {"Unit\xC3\xA9s", 70.f, 40.f, true, true, true, ui::Align::End},
-                           {"Provenance", 120.f}});
+        // 1.13.0 (lot F3) : des largeurs qui laissent lire les titres (Reference, Emplois : plus de "Refer..." ni "Em...").
+        table->setColumns({{"Famille", 160.f}, {"R\xC3\xA9" "f\xC3\xA9rence", 120.f}, {"Unit\xC3\xA9s", 80.f, 40.f, true, true, true, ui::Align::End},
+                           {"Provenance", 110.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         families_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         familiesPanel_ = &static_cast<HmiTitledPanel&>(addChild(std::move(panel)));
@@ -655,8 +677,8 @@ HmiMeasureUnitsPane::HmiMeasureUnitsPane(std::string id, hmi::DocumentPtr doc, A
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".unitsPanel", "UNIT\xC3\x89S");
         auto table = std::make_unique<ui::TableView>(base + ".units");
-        table->setColumns({{"Unit\xC3\xA9", 90.f}, {"Nom", 200.f}, {"Conversion", 230.f}, {"Provenance", 120.f},
-                           {"Emplois", 70.f, 40.f, true, true, true, ui::Align::End}});
+        table->setColumns({{"Unit\xC3\xA9", 90.f}, {"Nom", 200.f}, {"Conversion", 280.f}, {"Provenance", 110.f},
+                           {"Emplois", 100.f, 40.f, true, true, true, ui::Align::End}});
         table->setSelectionMode(ui::SelectionMode::Single);
         units_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         unitsPanel_ = &static_cast<HmiTitledPanel&>(addChild(std::move(panel)));

@@ -36,6 +36,7 @@
 #include "../../hmi/HmiUnits.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <iterator>
 #include <cctype>
 #include <optional>
@@ -48,6 +49,10 @@ namespace ty = hmi::types;
 namespace eq = hmi::equip;
 
 namespace {
+
+// 1.13.0 (lot F3) : une largeur de colonne qui laisse lire son titre - le gras, les marges, le tri et l'entonnoir du
+// filtre (36 + 20 px) ; `w` au moins. Plus de "...", "In...", "R...", "Ad..." a l'ouverture des Variables IHM.
+float titled(const char* title, float w) { return std::max(w, std::ceil(ui::measureWidth(title, gfx::FontId{16}) * 1.08f) + 58.f); }
 
 enum VarAction : int { VAdd = 1, VFolder, VType, VRename, VDuplicate, VDelete, VLink, VUnlink, VShow,
                        VTrend,                // 1.10 (chantier O) : la visualisation graphique
@@ -730,10 +735,11 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
     table->onContextMenu = [this](gfx::Point at) { openContextMenu(at); };     // 1.10 (chantier O)
     // ---- fin Lot API 8 ----
     table->setColumns({{"Nom", 240.f, 80.f, true, false}, {"Type", 175.f, 60.f, true, false},
-                       {"Unit\xC3\xA9", 70.f, 40.f, true, false},   // 1.13.0 (lot J6b) : l'unite physique (bar, degC, %)
-                       {"Initiale", 80.f, 40.f, true, false},
-                       {"R\xC3\xA9manente", 92.f, 50.f, true, false},   // 1.11.16 : la remanence d'exploitation (pres de la valeur initiale)
-                       {"\xC3\x89quipement", 140.f, 60.f, true, false}, {"Adresse", 86.f, 50.f, true, false}, {"Acc\xC3\xA8s", 112.f, 50.f, true, false},
+                       {"Unit\xC3\xA9", titled("Unit\xC3\xA9", 100.f), 40.f, true, false},   // 1.13.0 (lot J6b) : l'unite physique (bar, degC, %)
+                       {"Initiale", titled("Initiale", 120.f), 40.f, true, false},
+                       {"R\xC3\xA9manente", titled("R\xC3\xA9manente", 140.f), 50.f, true, false},   // 1.11.16 : la remanence d'exploitation
+                       {"\xC3\x89quipement", titled("\xC3\x89quipement", 140.f), 60.f, true, false}, {"Adresse", titled("Adresse", 125.f), 50.f, true, false},
+                       {"Acc\xC3\xA8s", titled("Acc\xC3\xA8s", 112.f), 50.f, true, false},
                        {"Place Modbus", 180.f, 60.f, true, false, true, ui::Align::Start, 0, false},
                        {"Qualit\xC3\xA9 (en marche)", 170.f, 60.f, true, false, true, ui::Align::Start, 0, false}});
     table->setF2ClickedColumns({CUnit});   // 1.13.0 (D3b) : un clic sur la case Unite, puis F2 : son champ
@@ -3500,7 +3506,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         auto table = std::make_unique<MemberTable>(base + ".members");     // 1.10 : Ctrl+C, le clic droit
         table->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Unit\xC3\xA9", 70.f, 40.f, true, false},
                            {"Initiale", 90.f, 40.f, true, false},
-                           {"D\xC3\xA9" "calage", 90.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false}, {"Description", 240.f, 60.f, true, false},
+                           {"D\xC3\xA9" "calage", 110.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false}, {"Description", 240.f, 60.f, true, false},
                            {"Visibilit\xC3\xA9", 90.f, 50.f, true, false}});   // 1.13.0 (J1b) : Public / Prive
         table->setF2ClickedColumns({2});   // 1.13.0 (D3b) : un clic sur la case Unite d'un membre, puis F2 : son champ
         table->setSelectionMode(ui::SelectionMode::Extended);           // 1.10 : plusieurs membres a copier
@@ -3814,7 +3820,7 @@ void HmiTypesPane::refreshMembers() {
         else
             members_->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Unit\xC3\xA9", 70.f, 40.f, true, false},
                            {"Initiale", 90.f, 40.f, true, false},
-                                  {"D\xC3\xA9" "calage", 90.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false},
+                                  {"D\xC3\xA9" "calage", 110.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false},
                                   {"Description", 240.f, 60.f, true, false}, {"Visibilit\xC3\xA9", 90.f, 50.f, true, false}});
         // 1.13.0 (D3b) : un clic sur la case Unite d'un membre (2), puis F2 : son champ ; un rappel n'en a pas.
         members_->setF2ClickedColumns(cb ? std::vector<std::size_t>{} : std::vector<std::size_t>{2});

@@ -327,6 +327,9 @@ private:
     std::shared_ptr<StatusStripState> strip_;
     void buildStatusStrip(ui::OverlayHost& host);
     void tickStatusStrip(double now);
+    // 1.13.0 (lot F3) : la selection du bandeau bas relue tout de suite - avant d'ouvrir une fenetre (le selecteur
+    // d'unites, de types) qui fige l'ecran dessous : le double-clic qui choisit la ligne et l'ouvre d'un coup.
+    void refreshStatusSelection();
     void runStatusMenu(int id);
     void openStatusMenu(int which);                        // 1 : le zoom, 2 : le theme
     // 1.12.30 : le zoom de chaque page (ses widgets Scaled ensemble).

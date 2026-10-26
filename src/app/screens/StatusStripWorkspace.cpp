@@ -383,6 +383,11 @@ void MainAnalysisScreen::buildStatusStrip(OverlayHost& host) {
     status_->setMessageClick([this] { openMessageJournal(!messageJournalOpen()); });
 }
 
+// 1.13.0 (lot F3) : le temps du dernier compte : la selection seule se relit (les compteurs attendent leur tour).
+void MainAnalysisScreen::refreshStatusSelection() {
+    if (strip_) tickStatusStrip(strip_->lastCount);
+}
+
 // ------------------------------------------------------------------- tick ---
 void MainAnalysisScreen::tickStatusStrip(double now) {
     if (!strip_ || !status_) return;

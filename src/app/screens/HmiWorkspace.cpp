@@ -493,6 +493,7 @@ void MainAnalysisScreen::bindHmi() {
         // " Gerer les unites... " : la page s'ouvrirait sous la fenetre, inaccessible tant qu'elle reste ouverte.
         if (const menu::IMenu* under = app_.menus().top())
             if (const auto kind = under->traits().kind; kind == menu::MenuKind::Dialog || kind == menu::MenuKind::Modal) spec.canManage = false;
+        refreshStatusSelection();     // 1.13.0 (lot F3) : la ligne choisie par le double-clic, dans le bandeau bas
         app_.menus().ShowDialog(std::make_unique<HmiUnitPicker>(std::move(spec)), [this, done = std::move(done)](const menu::DialogResult& r) {
             if (!r.accepted()) return;
             HmiUnitPicker::Answer a;
@@ -3700,6 +3701,7 @@ void MainAnalysisScreen::askHmiType(HmiTypePicker::Spec spec, typepicker::Done d
     if (!spec.doc) return;
     if (!spec.plc.names) spec.plc = hmiparams::plcTypesOf(app_.project().get());
     spec.recents = app_.settings().getList("hmi.types.recents");
+    refreshStatusSelection();         // 1.13.0 (lot F3) : la ligne choisie par le double-clic, dans le bandeau bas
     app_.menus().ShowDialog(std::make_unique<HmiTypePicker>(std::move(spec)), [this, done](const menu::DialogResult& r) {
         if (!r.accepted()) return;
         const auto a = HmiTypePicker::parse(r.payload);
