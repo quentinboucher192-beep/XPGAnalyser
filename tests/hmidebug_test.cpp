@@ -2288,11 +2288,36 @@ void watchOutOfScope() {
     (void)b.rt.debugContinue();
 }
 
+// ---- C5 : l'arret sur modification - la Console tient une ligne (le saut de ligne de la carte s'y montrait en U+FFFD) ----
+void stopForModificationOneLine() {
+    std::printf("-- captures F1 (C5) : 'La simulation a ete arretee car le projet IHM a ete modifie' tient une ligne a la Console\n");
+    Bench b;
+    auto doc = std::make_shared<hmi::Document>();
+    doc->project = b.p;
+    app::HmiSimulationHost host;
+    host.fullScreenWindow = [](bool) {};
+    {
+        app::HmiSimulationPane pane("essai.simulation.modif", doc, host);
+        pane.startHmi("essai");
+        check(pane.hmiRunning(), "la simulation de l'IHM demarre");
+        pane.stopForModification("1 \xC3\xA9l\xC3\xA9ment modifi\xC3\xA9 : 1 \xC3\xA0 compiler\n\xC2\xB7 Controle_Niveau (script, \xC3\xA0 compiler)");
+        std::string said;
+        for (const auto& e : pane.runtime().journal())
+            if (e.message.find("car le projet IHM a") != std::string::npos) said = e.message;
+        check(!said.empty() && said.find('\n') == std::string::npos
+                  && said.find("1 \xC3\xA0 compiler \xC2\xB7 Controle_Niveau (script") != std::string::npos,
+              "une ligne, les lignes de la carte a la suite : " + said);
+        check(!pane.hmiRunning(), "la simulation s'est arretee");
+    }
+    app::HmiDebugSession::instance().setRuntime(nullptr);
+}
+
 } // namespace
 
 int main() {
     methodShownInPause();
     watchOutOfScope();
+    stopForModificationOneLine();
     pauseAndLocals();
     conditions();
     shifted();
