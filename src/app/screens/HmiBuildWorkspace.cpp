@@ -24,6 +24,8 @@
 #include "../hmi/HmiEditor.hpp"
 #include "../hmi/HmiFunctionPanes.hpp"
 #include "../hmi/HmiLive.hpp"               // 1.11.21 : les diagnostics en direct
+#include "../../hmi/HmiMethods.hpp"         // 1.13.0 : la Console mene a une methode (methodById)
+#include "../../hmi/HmiOperators.hpp"       // ... ou a un operateur (operatorById)
 #include "../hmi/HmiObjectAlarmPanes.hpp"   // 1.13.0 (lot J4b) : HmiSymbolTabs (un cas de test d'un symbole)
 #include "../hmi/HmiOperatorPanes.hpp"        // 1.11.17 : Compiler les operateurs (le build du porteur)
 #include "../hmi/HmiPanels.hpp"
@@ -432,6 +434,27 @@ void MainAnalysisScreen::openConsoleSource(const ConsoleEntry& e) {
                     openHmiView(v.id, static_cast<int>(ProjectTreeModel::HmiPart::Functions));
                     return;
                 }
+        // 1.13.0 : une methode d'un type IHM, un operateur (le debogueur s'y arrete) - son editeur, a la ligne.
+        const hmi::HmiType* methodOwner = nullptr;
+        if (hmi::methodById(p, e.function, &methodOwner) && methodOwner) {
+            hmi::Issue i;
+            i.category = "Type IHM";
+            i.item = methodOwner->id;
+            i.object = e.function;
+            i.line = e.line;
+            i.message = e.message;
+            openHmiIssue(i);
+            return;
+        }
+        if (hmi::operatorById(p, e.function)) {
+            hmi::Issue i;
+            i.category = "Op\xC3\xA9rateur";
+            i.item = e.function;
+            i.line = e.line;
+            i.message = e.message;
+            openHmiIssue(i);
+            return;
+        }
     }
     if (e.script != hmi::kNoId && p.script(e.script)) {
         hmi::Issue i;

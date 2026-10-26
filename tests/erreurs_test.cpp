@@ -843,6 +843,18 @@ void capturesF1() {
         r = o.runScript(&err);
         check(r == "E_Somme|4|trop" && err.empty() && journalOf(o.rt, "Erreur").empty(),
               "C2 : un operateur : E_Somme, la ligne de l'appel (4) [" + r + "] " + err + journalOf(o.rt, "Erreur"));
+        // Non rattrapee : la Console nomme la methode (ou l'operateur) comme son code, pas sa FUNCTION interne.
+        Bench mu("STRING", "c1.Niveau := 150.0;\nc1.Verifier();", typed);
+        (void)mu.runScript(&err);
+        const std::string mErr = journalOf(mu.rt, "Erreur");
+        check(mErr.find("m\xC3\xA9thode T_Cuve.Verifier, ligne 2") != std::string::npos && mErr.find("METHODE_") == std::string::npos
+                  && err.find("METHODE_") == std::string::npos,
+              "C4 : un LEVER non rattrape dans une methode : la Console dit 'methode T_Cuve.Verifier, ligne 2'" + mErr + " / " + err);
+        Bench ou("STRING", "c1.Niveau := 60.0;\nc2.Niveau := 50.0;\nc3 := c1 + c2;", typed);
+        (void)ou.runScript(&err);
+        const std::string oErr = journalOf(ou.rt, "Erreur");
+        check(oErr.find("op\xC3\xA9rateur +, ligne 3") != std::string::npos && oErr.find("OPERATEUR_") == std::string::npos,
+              "C4 : un LEVER non rattrape dans un operateur : la Console dit 'operateur +, ligne 3'" + oErr);
     }
     // Une LAMBDA qui appelle la fonction : le LEVER la traverse aussi.
     {
