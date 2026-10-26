@@ -9364,11 +9364,11 @@ Sans jouer, Générer signale la case fautive : un mauvais nombre d'arguments (l
 @lieux scripts, fonctions, simulation
 @voir scripts, fonctions, fonctions-internes, simulation, variables-locales, erreurs-scripts, reference, tests-fonctions
 ### Poser un point d'arrêt
-- Un **clic dans la marge** de l'éditeur, à gauche des numéros de ligne - un script général (Programmation générale › Scripts), un script de vue (OnOpen, OnCycle, OnClose) ou une fonction IHM : un **rond rouge**. Un nouveau clic l'enlève ; **Maj+clic** le désactive (un anneau) ; **F9** pose ou enlève celui de la ligne du curseur.
+- Un **clic dans la marge** de l'éditeur, à gauche des numéros de ligne - un script général (Programmation générale › Scripts), un script de vue (OnOpen, OnCycle, OnClose) ou une fonction IHM (du projet, d'une vue, d'une popup, d'un symbole) : un **rond rouge**. Un nouveau clic l'enlève ; **Maj+clic** le désactive (un anneau) ; **F9** pose ou enlève celui de la ligne du curseur.
 - Le **clic droit** dans la marge : Point d'arrêt, **Condition…**, Désactiver, Retirer les points de ce code.
 - Une ligne sans instruction (un commentaire, une ligne vide) : le point se **décale** sur l'instruction suivante, et le dit - « décalé à la ligne 15 : la ligne 14 n'a pas d'instruction ».
 - Dans Simulation › IHM › **Débogage**, le champ « + Point d'arrêt » : `Statistiques_Pression 14`, `Statistiques_Pression 14 si P < 5`, `Vue_A.OnCycle 3`, `Moyenne_Pression 5`.
-- Un point suit son **code**, pas son texte : taper au-dessus le garde sur sa ligne. Un script C ou C++ n'est pas exécuté en simulation : sa marge refuse le point.
+- Un point suit son **code**, pas son texte : taper, supprimer ou joindre des lignes au-dessus, Annuler (Ctrl+Z), Rétablir, « Migrer ce code » le gardent sur sa ligne ; si sa ligne disparaît, il reste sur ce qu'il en reste. Un script C ou C++ n'est pas exécuté en simulation : sa marge refuse le point.
 ```ST
 (* Statistiques_Pression : un point sur la ligne IF P < Mini *)
 P := Armoires[0].ana.PT1.mes;
@@ -9390,22 +9390,27 @@ p = Armoires[0].ana.PT1.mes;
 if (p < mini) mini = p;
 ```
 ### La pause est réelle
-Le script s'arrête **au milieu de son exécution**, avant la ligne du point : rien de cette ligne n'est fait, rien n'est écrit tant que tu ne continues pas. L'IHM se fige - la pastille de la barre dit **IHM : en pause (débogage)**, en orange - : le prochain cycle IHM attend la reprise, les clics dans la vue sont ignorés, l'écran garde la dernière image. Les écritures de ce cycle vers l'automate ne sont pas encore parties.
-> Sans point armé ni pas demandé, rien ne change : les scripts tournent comme avant, au même coût.
+Le script s'arrête **au milieu de son exécution**, avant la ligne du point : rien de cette ligne n'est fait, rien n'est écrit tant que tu ne continues pas. L'IHM se fige - la pastille de la barre du haut, la bande d'état, l'arbre et l'onglet Simulation disent **IHM en pause (débogage)**, en orange :
+- **tout le travail en cours attend** : la suite du cycle (les autres scripts, l'OnCycle des vues, les déclencheurs, les alarmes, les courbes), les actions suivantes du clic (une popup à ouvrir, une valeur à écrire), la première vue d'un démarrage. Un point atteint dans un de ces scripts s'arrête à son tour, après la reprise ;
+- le prochain cycle IHM attend la reprise, l'écran garde la dernière image ;
+- **les gestes dans la vue ne font rien** : un clic, la croix d'une popup, un glissement, un curseur, une saisie ; la barre d'état le dit. Une touche ou un bouton relâché pendant la pause n'est pas perdu : il part à la reprise ;
+- les touches **F5, F10, F11, Maj+F11** pilotent la pause **où que soit le clavier** - l'éditeur du script en pause, l'arbre, un autre onglet ; F11 n'y met pas la fenêtre en plein écran.
+> Sans point armé ni pas demandé, rien ne change : les scripts tournent comme avant (un IHM_POINT_ARRET en commentaire ne compte pas). Avec un point armé, les scripts restent mesurés dans les Performances, sans le temps de la pause.
 ### Le sous-onglet Débogage
 Simulation › IHM › **Débogage** :
 | Partie | Ce qu'elle montre |
-| La barre | Continuer (F5), Suivant (F10), Entrer (F11), Sortir (Maj+F11), Pause ; Tout retirer |
+| La barre | Continuer (F5), Suivant (F10), Entrer (F11), Sortir (Maj+F11), Pause (une pause demandée : **Annuler la pause**) ; Tout retirer |
 | L'état | « En pause au point 2 : script Statistiques_Pression, ligne 14, cycle IHM 1 243 - P = 3.2 » |
-| Points d'arrêt | la case (actif), où, la condition (modifiable sur place, double clic), les passages, ce qu'en dit le moteur ; Suppr retire le point choisi |
-| Espions | une expression, sa valeur maintenant (en pause : dans la portée de la ligne d'arrêt, locales comprises) |
-| Pile | de la ligne d'arrêt (en haut) au contexte (en bas : le cycle IHM, le clic qui l'a lancé, le script détaché) ; un clic montre ce niveau, un double clic ouvre son code |
+| Points d'arrêt | la case (actif), où, la condition (modifiable sur place, double clic), les passages (un passage compte quand il s'arrête), ce qu'en dit le moteur ; Suppr retire le point choisi |
+| Espions | une expression, sa valeur maintenant (en pause : dans la portée de la ligne d'arrêt, locales comprises) ; **en lecture seule** : un espion ne modifie rien (VECTOR_POP, une fonction qui écrit : refusés, et dits) |
+| Pile | de la ligne d'arrêt (en haut) au contexte (en bas : le cycle IHM, le clic qui l'a lancé, le script détaché) ; un clic montre ce niveau, un double clic ouvre son code ; chaque nouvelle pause revient en haut |
 | Code | le code du niveau choisi, en lecture seule, la ligne surlignée, les valeurs de la ligne à droite ; sa marge pose des points aussi |
 | Locales | VAR, VAR_TEMP, paramètres, compteurs de boucle du niveau choisi ; une structure, un tableau, une liste, une MAP se déplient |
 Dans le panneau de droite, étroit, le sous-onglet se range en lignes : la pile et le code, les locales, puis les points et les espions côte à côte. Élargis le panneau : les trois colonnes reviennent.
 La **Console** du panneau du bas dit chaque arrêt (« arrêté au point 1 (script Statistiques_Pression, ligne 10) »), chaque pas, chaque reprise, avec leur source ; un double clic mène au code.
 ### La condition d'un point
-Du ST, **dans la portée du code** : ses locales (VAR, paramètres, compteurs) et les variables IHM. Elle est lue quand tu la poses : un nom inconnu se dit tout de suite - « condition invalide : Presion n'est pas déclarée ici ; il ne s'arrêtera pas » - et le rond passe en gris. Elle est essayée à chaque passage : il ne s'arrête que si elle est vraie ; une erreur à ce moment (un indice hors des bornes pour cette instance) désarme le point, et le dit.
+Du ST, **dans la portée du code** : ses locales (VAR, paramètres, compteurs), les variables IHM, les noms de son espace de noms ; `P ENTRE 2.0 ET 5.0` s'y écrit aussi. Elle est lue quand tu la poses : un nom inconnu se dit tout de suite - « condition invalide : Presion n'est pas déclarée ici ; il ne s'arrêtera pas » - et le rond passe en gris. Elle est essayée à chaque passage, **en lecture seule** : il ne s'arrête que si elle est vraie ; une erreur à ce moment (un indice hors des bornes pour cette instance, une écriture) désarme le point, et le dit. Elle doit rendre un **BOOL** : `Tours MOD 100` (le « = 0 » oublié) rend un nombre - le point se désarme au premier passage, et le dit : « condition invalide : elle rend un DINT, pas un BOOL ».
+L'aperçu de Condition… juge la condition **dans le code du point** : en pause dans ce code, « Maintenant, c'est vrai (P = 3.2) » ; en pause ailleurs, « Elle sera essayée au passage dans fonction Moyenne_Pression ».
 ```ST
 P < 5.0 OR Tours MOD 100 = 0
 ```
@@ -9421,7 +9426,7 @@ P < 5.0 OR Tours MOD 100 = 0
 | Entrer | F11 | descend dans la fonction appelée sur la ligne (une fonction IHM, une fonction interne) ; sur une native, comme Suivant |
 | Sortir | Maj+F11 | jusqu'au retour dans le code qui l'a appelée |
 | Continuer | F5 | jusqu'au prochain point d'arrêt |
-| Pause | - | s'arrête à la prochaine ligne d'un script qui tourne |
+| Pause | - | s'arrête à la prochaine ligne d'un script qui tourne ; tant que rien ne s'est arrêté, le bouton devient Annuler la pause |
 ```ST
 (* « Entrer » (F11) sur cette ligne descend dans le corps de Moyenne_Pression *)
 IF Moyenne_Pression(P, Armoires[1].ana.PT1.mes) > 30.0 THEN
@@ -9438,7 +9443,7 @@ if (Moyenne_Pression(p, Armoires[1].ana.PT1.mes) > 30.0f) Tracer_Evenement("Moye
 ```
 Dans la fonction, la pile devient « script Statistiques_Pression › fonction Moyenne_Pression » et les locales montrées sont les siennes (A, B, Poids_A, Somme) ; Sortir revient dans le script, après l'appel.
 ### IHM_POINT_ARRET : un point d'arrêt écrit dans le code
-`IHM_POINT_ARRET` sans argument s'arrête à chaque passage ; avec un BOOL, seulement s'il est vrai. Pratique dans une boucle ou un script détaché. Hors simulation (le poste d'exploitation), il ne fait rien ; dans une expression (fx), il est refusé, comme WAIT.
+`IHM_POINT_ARRET` sans argument s'arrête à chaque passage ; avec un BOOL, seulement s'il est vrai. Pratique dans une boucle ou un script détaché. Il s'écrit dans un script, une fonction (du projet, d'une vue, d'un symbole, d'une bibliothèque), une méthode d'un type (la pile dit « méthode T_Pompe.Demarrer », à la ligne de son corps) ou le code d'une action « Exécute du ST écrit ici ». Hors simulation (le poste d'exploitation), il ne fait rien ; dans une expression (fx), il est refusé, comme WAIT.
 ```ST
 FOR f := 1 TO Fours.High DO
     IHM_POINT_ARRET(Fours[f].Temperature > 900.0);   (* s'arrête au 1er four trop chaud *)
@@ -9483,12 +9488,15 @@ while (Niveau < Consigne_Niveau) { IHM_POINT_ARRET(); WAIT(500ms); }
 Vanne_Entree = false;
 ```
 ### Ce qui ne s'arrête pas
-- Une fonction appelée par une **expression** de vue (fx) : elle doit rendre sa valeur tout de suite (comme pour WAIT) ; le point le dit - « appelée par une expression : pas d'arrêt ».
-- Un rappel lancé par un minuteur (IHM_APRES, IHM_CHAQUE) ou une surveillance (IHM_SUR_CHANGEMENT) : « hors d'un script lancé par l'IHM ».
+Les scripts du cycle, les gestes (un clic, une touche, la croix d'une popup), le démarrage et les actions **Appeler** et **Exécute du ST écrit ici** s'arrêtent. Pas ceci - le point le dit dans « Ce qu'en dit le moteur » (IHM_POINT_ARRET, à la Console) :
+- Une fonction appelée par une **expression** de vue (fx) : elle doit rendre sa valeur tout de suite (comme pour WAIT) - « appelée par une expression : pas d'arrêt ».
+- Un **rappel** lancé par un minuteur (IHM_APRES, IHM_CHAQUE) ou une surveillance (IHM_SUR_CHANGEMENT) - « dans un rappel (IHM_APRES, IHM_CHAQUE, IHM_SUR_CHANGEMENT) : pas d'arrêt ».
+- Un code lancé hors du cycle et des gestes de l'IHM en marche (l'essai d'une fonction dans l'onglet Tests) - « hors du cycle et des gestes de l'IHM en marche ».
+- Un autre code lancé pendant une pause (depuis un autre onglet) - « un autre script est déjà en pause : pas d'arrêt ».
 - Le **poste d'exploitation** : jamais.
 ### Modifier pendant la pause, où vivent les points
-En pause, tu peux forcer une variable IHM (Variables IHM) et suivre des espions. Si tu changes le **code** du script arrêté, il ne peut pas reprendre au milieu d'une ligne qui n'existe plus : « le script a changé pendant la pause : il reprendra au prochain cycle ». Arrêter la simulation pendant la pause arrête le script sans erreur.
-Les points d'arrêt ne sont **pas dans le projet** : ils restent pour la séance - fermer le sous-onglet ou arrêter la simulation ne les enlève pas ; ouvrir un autre projet, si. Un projet ne change pas d'un octet quand tu débogues.
+En pause, tu peux forcer une variable IHM (Variables IHM) et suivre des espions. Si tu changes le **code** du script arrêté, il ne peut pas reprendre au milieu d'une ligne qui n'existe plus : « le script a changé pendant la pause : il reprendra au prochain cycle ». Arrêter la simulation pendant la pause arrête le script sans erreur - même dans une fonction appelée sous TRY : ni le CATCH ni la suite du script ne tournent.
+Les points d'arrêt ne sont **pas dans le projet** : ils restent pour la séance - fermer le sous-onglet ou arrêter la simulation ne les enlève pas ; fermer le projet ou en ouvrir un autre, si. Un projet ne change pas d'un octet quand tu débogues.
 
 == essais | Les essais de réception
 : Un essai rejoue sur l'IHM en marche ce que ferait l'opérateur - ouvrir une vue, cliquer, saisir, se connecter, signer, acquitter - et vérifie ce qui doit en résulter. Chaque pas reçoit son verdict ; le rapport s'exporte en PDF ou en Excel, avec le visa de qui l'a joué.
