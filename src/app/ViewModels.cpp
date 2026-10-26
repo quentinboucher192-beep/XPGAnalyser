@@ -4023,7 +4023,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiSymbolFunction: {
             s.icon = ui::Icon::FunctionBlock;
             s.iconTone = ui::Tone::InOut;
-            // 1.13.0 (seconde passe) : une fonction de vue, de popup ou de symbole porte aussi « 1 test rouge ».
+            // 1.13.0 (seconde passe) : une fonction de vue, de popup ou de symbole porte aussi "1 test rouge".
             const auto* v = hmiViewById(hmi_.get(), i);
             const auto k = static_cast<std::size_t>(subOf(n));
             if (v && k < v->functions.size() && !v->functions[k].tests.empty()) {

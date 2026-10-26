@@ -721,7 +721,7 @@ void attenduCalcule() {
     check(issueWith(issues, "formule", "Seuil_Bas n'est pas un nom connu"), "Generer : une formule sur un nom inconnu est dite");
 }
 
-// T2-27, R26 : une pose =Variable n'est plus « illisible » ; un membre mal ecrit, l'attendu d'une verif sont controles.
+// T2-27, R26 : une pose =Variable n'est plus "illisible" ; un membre mal ecrit, l'attendu d'une verif sont controles.
 void posesEtVerifs() {
     std::printf("-- T2-27 / R26 : poses en formule, membres, attendu d'une verif\n");
     Project p = bench();
@@ -773,7 +773,7 @@ void posesEtVerifs() {
           "pose Cuve.Niveau := 2,5 jouee : reussi (" + (rep.results.size() == 5 ? rep.results[4].detail : std::string{}) + ")");
 }
 
-// R28 : NAN et INF pour un retour REAL ne sont pas « illisibles ».
+// R28 : NAN et INF pour un retour REAL ne sont pas "illisibles".
 void nanEtInf() {
     std::printf("-- R28 : NAN, INF, -INF pour un retour REAL\n");
     Project p = bench();

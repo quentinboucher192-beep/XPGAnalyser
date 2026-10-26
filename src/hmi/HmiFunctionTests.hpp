@@ -78,7 +78,7 @@ void checkFunctionTests(const Project&, std::vector<Issue>& out);
 
 // 1.13.0 (seconde passe) : LE TYPE DANS LEQUEL UN CAS LIT UNE CASE (un argument, l'attendu) - le type declare ;
 // pour un generique de la fonction (T), sa contrainte (ANY_NUM ; ANY sans contrainte) : 2,5 -> 2.5, VRAI -> TRUE,
-// Azote -> 'Azote' s'y lisent comme dans toute case (la regle des cases), au lieu d'un refus « par une variable ».
+// Azote -> 'Azote' s'y lisent comme dans toute case (la regle des cases), au lieu d'un refus "par une variable".
 [[nodiscard]] std::string testCellType(const HmiFunction&, std::string_view declared);
 // 1.13.0 (seconde passe) : la tolerance sert-elle au retour de cette fonction - REAL, LREAL, ou un generique qui peut
 // etre un reel (T : ANY_REAL, ANY_NUM, ANY...). Le banc la joue aussi des que la valeur obtenue est un REAL.

@@ -36739,7 +36739,7 @@ void testsUnitaires113() {
         check(t && !t->tests.empty() && app::testruns::last(doc->project, *t, t->tests[0]) == nullptr,
               "T2-30 : Compteur_Clics (lue par Tracer) a chang\xC3\xA9 : son cas redevient \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
     }
-    // T2-34 : une fonction de vue dont un cas echoue porte « 1 test rouge » dans l'arbre.
+    // T2-34 : une fonction de vue dont un cas echoue porte "1 test rouge" dans l'arbre.
     {
         View four = makeView(doc->project, "Vue_Four");
         HmiFunction rampe = makeFunction(doc->project, "Calcul_Rampe", "REAL", "Calcul_Rampe := 1.0;");
