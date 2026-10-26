@@ -1588,6 +1588,13 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             HmiTypesPane::Hosts th;
             th.exportItems = [this](hmi::Id t) { askHmiExportPrograms(0, t); };   // 1.11.2 (decision 174)
             th.importAny = [this] { askHmiImport(); };
+            // 1.13.0 (correctifs F2) : un type cree par Nouveau type : l'arbre le montre et le choisit (setCurrentNode n'ouvre
+            // rien) - avant, apres Nouveau type > Interface..., l'arbre gardait I_Demarrable choisi.
+            th.typeCreated = [this](hmi::Id id) {
+                if (!treeModel_ || !explorer_ || id == hmi::kNoId) return;
+                const auto node = ProjectTreeModel::pack(ProjectTreeModel::NodeKind::HmiTypeNode, static_cast<domain::Index>(id & ((1ull << 28) - 1)));   // comme hmilists::itemNode
+                if (revealTreeNode(node)) explorer_->setCurrentNode(node);
+            };
             types->setHosts(std::move(th));
             // 1.11.17 (refonte, lot 1) : Compiler les operateurs d'un type - le build du type.
             if (auto* ops = types->operators())

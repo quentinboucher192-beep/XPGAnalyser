@@ -4081,6 +4081,7 @@ Id HmiTypesPane::addType(const std::string& raw, std::string* why) {
     member_ = -1;
     refresh();
     say("Type IHM cr\xC3\xA9\xC3\xA9 : " + name + " (deux membres pour commencer : Valeur, Marche)");
+    if (hosts_.typeCreated) hosts_.typeCreated(made);   // 1.13.0 (correctifs F2) : l'arbre le montre
     return made;
 }
 
@@ -4111,6 +4112,7 @@ Id HmiTypesPane::addCallbackType(const std::string& raw, const std::string& sign
     member_ = -1;
     refresh();
     say("Type rappel cr\xC3\xA9\xC3\xA9 : " + name + " (" + trimmed(signature) + ") \xC2\xB7 sa signature se change dans sa page \xC2\xB7 Ctrl+Z annule");
+    if (hosts_.typeCreated) hosts_.typeCreated(made);   // 1.13.0 (correctifs F2) : l'arbre le montre
     return made;
 }
 
@@ -4219,6 +4221,8 @@ Id HmiTypesPane::addInterfaceType(const std::string& raw, std::string* why) {
     refresh();
     say("Interface cr\xC3\xA9\xC3\xA9" "e : " + name + " (une signature d'exemple, Demarrer) \xC2\xB7 ses signatures dans la section du dessous ; "
         "une structure l'impl\xC3\xA9mente par sa case Impl\xC3\xA9mente \xC2\xB7 Ctrl+Z annule");
+    // 1.13.0 (correctifs F2) : l'arbre du projet montre la nouvelle interface (avant : il gardait le type d'avant choisi).
+    if (hosts_.typeCreated) hosts_.typeCreated(made);
     return made;
 }
 
@@ -4705,6 +4709,7 @@ void HmiTypesPane::rebuildProperties() {
         PG::Category c;
         c.name = "Impl\xC3\xA9mente (IMPLEMENTS)";
         const auto misses = hmi::interfaceMisses(p, *t);
+        const auto bases = hmi::baseChain(p, hmi::fullName(*t));
         for (const auto& i : p.programs.types) {
             if (i.kind != hmi::HmiTypeKind::Interface) continue;
             const std::string full = hmi::fullName(i);
@@ -5261,6 +5266,7 @@ Id HmiTypesPane::createEnumerationFromPanel(std::string* why) {
     member_ = -1;
     refresh();
     say("\xC3\x89num\xC3\xA9ration " + doc_->project.hmiType(made)->name + " cr\xC3\xA9\xC3\xA9" "e, avec toString et fromString pr\xC3\xA9remplis \xC2\xB7 Ctrl+Z annule");
+    if (hosts_.typeCreated) hosts_.typeCreated(made);   // 1.13.0 (correctifs F2) : l'arbre la montre
     return made;
 }
 

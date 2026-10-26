@@ -857,7 +857,9 @@ void MainAnalysisScreen::refreshTreeShortcuts() {
         const auto k = ProjectTreeModel::kindOf(n);
         if (ProjectTreeModel::isSimNode(n)) return "Simulation";
         if (k == Kind::VersionsFolder || k == Kind::VersionItem) return "Versions";
-        return isHmiNode(n) ? "IHM" : "API";
+        // 1.13.0 (correctifs F2) : un dossier d'une liste de l'IHM (le dossier Automate des Types IHM) est de l'IHM - avant,
+        // les Recents disaient "Automate  API", meme dans IHM Studio (le lot 21 l'avait oublie ici).
+        return isHmiNode(n) || k == Kind::HmiListFolder ? "IHM" : "API";
     };
     std::vector<ProjectTreeModel::ShortcutRow> pins, recents;
     for (const auto n : treePins_) pins.push_back({n, domain(n)});
