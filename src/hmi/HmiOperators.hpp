@@ -113,6 +113,11 @@ struct OwnedOperator {
 //   <le corps>
 //   END_FUNCTION
 [[nodiscard]] std::string operatorFunctionText(const HmiOperator&);
+// 1.13.0 (le debogueur) : le nom interne du resultat (OPERATEUR_ADD, OPERATEUR_TO_REAL) ; un texte ecrit dans
+// l'operateur (son corps, la condition d'un point, un espion) tel que le moteur le lit : Resultat et le nom de la
+// conversion, non suivis d'une parenthese, deviennent ce nom interne - la meme regle que operatorFunctionText.
+[[nodiscard]] std::string operatorInternalName(const HmiOperator&);
+[[nodiscard]] std::string operatorInternalText(const HmiOperator&, std::string_view text);
 struct OperatorCall {
     std::string key;               // porteur|op|gauche|droite|empreinte du corps : change avec le script
     std::string function;          // operatorFunctionText

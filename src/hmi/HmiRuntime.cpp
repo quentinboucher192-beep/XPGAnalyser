@@ -1317,6 +1317,9 @@ struct Runtime::TaskState {
     // 1.13.0 : le code en pause a change - ses executions en cours (execDepth_ > 0) s'arretent sans erreur, puis le
     // travail reprend (la suite du cycle, du geste, le demarrage).
     bool                         abandon{false};
+    // 1.13.0 : un script detache arrete (un point) dans sa premiere tranche, recue dans un travail du debogueur (un geste,
+    // un cycle) : ce travail, qui attend avec lui la fin de cette pause (startDetached, resumePaused).
+    TaskState*                   heldWork{nullptr};
 };
 
 void Runtime::exchange(ExecState& s) {
@@ -1389,7 +1392,17 @@ bool Runtime::startDetached(const Script& sc, const std::string& source, double 
     // l'IHM. 1.13.0 : depuis un travail du debogueur (un geste, un cycle sur sa tache), tout de suite aussi - comme sans
     // debogueur, avant la suite du geste.
     if (!currentTask_ || !currentTask_->detached) {
+        TaskState* launcher = currentTask_;
         resumeTask(*raw);
+        // 1.13.0 : cette premiere tranche s'est arretee (un point) - le travail qui l'a lancee attend avec elle, comme
+        // tout le travail en cours attend une pause : la suite du geste (un autre script, une popup) part a la reprise,
+        // une fois la tranche finie (resumePaused), dans l'ordre d'un geste sans debogueur.
+        if (launcher && paused_ == raw) {
+            raw->heldWork = launcher;
+            // Faux : la simulation s'arrete (stopTasks reprend chaque tache jusqu'a sa fin) - rien a ranger ici, la suite
+            // du geste se defait seule (taskStopped).
+            if (!pauseTask(launcher)) return true;
+        }
         finishTasks();
     }
     return true;
@@ -1559,7 +1572,19 @@ void Runtime::resumePaused(TaskState* t) {
     if (currentTask_) return;                          // jamais depuis une tache : le fil de l'IHM le fera
     resumeTask(*t);
     rethrowTaskFailure(*t);
+    // 1.13.0 : un script detache arrete dans sa premiere tranche - le travail qui l'a lance (un geste) l'attendait : sa
+    // tranche finie (ni une nouvelle pause, ni un pas qui s'y arrete), ce travail reprend la ou il etait.
+    TaskState* held = nullptr;
+    if (paused_ != t && t->heldWork) {
+        held = t->heldWork;
+        t->heldWork = nullptr;
+    }
     finishTasks();
+    if (held) {
+        resumeTask(*held);
+        rethrowTaskFailure(*held);
+        finishTasks();
+    }
     // 1.13.0 : la pause est finie (le travail est alle au bout) - les relachements gardes partent tout de suite, avant
     // qu'une touche ne soit rappuyee (sinon : prise pour une repetition, puis relachee alors qu'elle est enfoncee).
     if (!paused_) replayDeferredInput(now_);
@@ -1694,8 +1719,10 @@ bool Runtime::endExecution() noexcept {
     return true;
 }
 
+// 1.13.0 : seulement si la pause est dans une execution comptee (execDepth_) - sinon l'abandon resterait leve et
+// couperait sans un mot la prochaine execution du travail (endExecution ne l'effacerait qu'a sa fin).
 void Runtime::abandonTask(TaskState* t) noexcept {
-    if (t) t->abandon = true;
+    if (t && t == currentTask_ && execDepth_ > 0) t->abandon = true;
 }
 
 // Les relachements arrives pendant la pause, rejoues des que la pause finit (la reprise qui va au bout, sinon le tick
@@ -3019,12 +3046,21 @@ bool Runtime::computeOne(const Script& sc, const Declaration& d, Id view, sim::O
     trace_ = {};
     limits.trace = &trace_;
     ++depth_;
+    // 1.13.0 (le debogueur) : une execution du travail (execDepth_) - un operateur, une methode qu'elle appelle peut
+    // s'arreter, et son code changer pendant la pause : le calcul s'arrete la, sans erreur (why vide, voir computeAtOpen).
+    ++execDepth_;
     const auto result = sim::execute(*prep.program, *env_, limits);
+    const bool abandoned = endExecution();
     --depth_;
     trace_ = callerTrace;
     origin_ = callerOrigin;
     source_ = previous;
     env_->frames.pop_back();
+    if (abandoned || taskStopped()) {
+        abort_.clear();
+        why.clear();
+        return false;
+    }
     for (const auto& dg : env_->diagnostics)
         if (dg.severity == sim::Diagnostic::Severity::Error) {
             why = (dg.line ? "ligne " + std::to_string(dg.line) + " : " : std::string{}) + frenchSimMessage(dg.message);
@@ -3169,6 +3205,15 @@ void Runtime::computeAtOpen(Id id) {
             std::string why;
             if (!inHolder || !computeOne(holder, *inHolder, kNoId, value, why, scope)) {
                 const std::string path = v->name + "." + d->name;
+                // 1.13.0 (le debogueur) : arrete sans erreur (un code qu'il appelait a change pendant la pause, la
+                // simulation s'arrete) - pas de faute ; la vue s'ouvre, son OnOpen part.
+                if (inHolder && why.empty()) {
+                    if (!taskStopped())
+                        logAt(LogLevel::Warning, "D\xC3\xA9" "bogage", "calcul " + path + " (\xC3\xA0 l'ouverture)",
+                              "arr\xC3\xAAt\xC3\xA9 sans erreur (son code a chang\xC3\xA9 pendant la pause) : pas de nouvelle valeur, "
+                              "elle se recalcule \xC3\xA0 la prochaine ouverture");
+                    continue;
+                }
                 const CodeOrigin was = origin_;
                 origin_ = CodeOrigin{"calcul " + path, id, kNoId, kNoId, kNoId, d->name};
                 logAt(LogLevel::Error, "Erreur", "calcul " + path + " (\xC3\xA0 l'ouverture)", why, announcedLine(why));
