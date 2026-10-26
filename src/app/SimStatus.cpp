@@ -348,6 +348,12 @@ Card hmiCard(const Snapshot& s) {
         c.tone = Tone::Off;
         c.state = "pas d'IHM";
         c.sentence = "Le projet n'a pas encore de vue : IHM \xE2\x80\xBA Vues en cr\xC3\xA9" "e une.";
+    } else if (h.running && h.paused) {
+        // 1.13.0 : un script arrete par le debogueur - tout attend la reprise (comme la pastille du haut).
+        c.tone = Tone::Warning;
+        c.state = "en pause (d\xC3\xA9" "bogage)";
+        c.sentence = "Un script est arr\xC3\xAAt\xC3\xA9 par le d\xC3\xA9" "bogueur : l'IHM attend la reprise (Continuer, F5)"
+                   + (h.view.empty() ? std::string(".") : " sur " + h.view + ".");
     } else if (h.running) {
         c.tone = h.scriptErrors ? Tone::Error : h.unacked ? Tone::Warning : Tone::Ok;
         c.state = "en marche";
@@ -695,8 +701,11 @@ Report compute(const Snapshot& s) {
     if (!s.project) {
         r.folderTone = Tone::Off;
     } else if (!core::hasApi()) {     // 1.12.14 : IHM Studio - la simulation est celle de l'IHM
-        r.folderBadge = s.hmi.running ? "en marche" : "arr\xC3\xAAt\xC3\xA9" "e";
-        r.folderTone = s.hmi.running ? Tone::Ok : Tone::Off;
+        // 1.13.0 : en pause (le debogueur), comme la pastille du haut et le pied de l'explorateur.
+        r.folderBadge = s.hmi.running && s.hmi.paused ? std::string("en pause (d\xC3\xA9" "bogage)")
+                      : s.hmi.running             ? std::string("en marche")
+                                                  : std::string("arr\xC3\xAAt\xC3\xA9" "e");
+        r.folderTone = s.hmi.running && s.hmi.paused ? Tone::Warning : s.hmi.running ? Tone::Ok : Tone::Off;
     } else if (p.prepared && p.state == State::Running) {
         r.folderBadge = "en marche";
         r.folderTone = Tone::Ok;

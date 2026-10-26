@@ -562,6 +562,7 @@ private:
     ui::Widget*                       treeFollowedPage_{nullptr};   // la derniere page suivie
     std::uint64_t                     treeLibRevision_{~0ull};      // les mises a jour, recomptees quand le projet change
     double                            treeChromeAt_{0.0};
+    bool                              treeChromePaused_{false};   // 1.13.0 : la pause du debogueur IHM, vue au pied
     void refreshTreeChrome();                                       // le rail et le pied (leurs etats)
     void openTreeHealth(const std::string& part);                   // un morceau du pied
     void treeHoverAction(ui::NodeId node, std::size_t action);      // Epingler, Detacher, ...

@@ -835,6 +835,13 @@ void MainAnalysisScreen::tickTree(double now) {
     noteCodePage();     // 1.12.0 : Inserer d'une native y ecrit
     followActiveTab();
     if (explorer_ && app_.scripted() && explorer_->hasHoverActions()) explorer_->setHoverActions({});   // un script : pas d'actions au survol
+    // 1.13.0 : une pause du debogueur des scripts (ou sa reprise) se dit tout de suite au pied de l'explorateur, comme la
+    // pastille du haut - pas jusqu'a une demi-seconde plus tard.
+    if (const auto tab = hmiTabs_.find("simulation"); tab != hmiTabs_.end())
+        if (const auto* hsim = dynamic_cast<const HmiSimulationPane*>(tab->second); hsim && hsim->hmiDebugPaused() != treeChromePaused_) {
+            treeChromePaused_ = hsim->hmiDebugPaused();
+            treeChromeAt_ = now - 1.0;
+        }
     if (now - treeChromeAt_ >= 0.5) {
         treeChromeAt_ = now;
         const auto project = app_.project();

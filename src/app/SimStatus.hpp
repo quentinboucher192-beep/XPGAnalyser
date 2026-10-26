@@ -88,6 +88,7 @@ struct PlcFacts {
 struct HmiFacts {
     bool          exists{false};          // le projet a une IHM (au moins une vue)
     bool          running{false};         // la simulation de l'IHM tourne
+    bool          paused{false};          // 1.13.0 : ... en pause (un script arrete par le debogueur) - running reste vrai
     std::string   view;                   // la vue affichee
     std::string   user;                   // l'utilisateur connecte ; vide : personne
     std::size_t   alarms{0};              // alarmes dans la liste (actives ou pas acquittees)
