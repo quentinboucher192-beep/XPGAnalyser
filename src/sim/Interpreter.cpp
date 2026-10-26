@@ -5020,6 +5020,9 @@ private:
     // 1.13.0 : le droit d'une LAMBDA sur le prive - celui du code OU ELLE EST ECRITE, pas de celui qui l'appelle : le type
     // de la methode qui la definit (vide : un script, une fonction - aucun droit). Pose a sa creation (makeLambda), par
     // sa FUNCTION (une LAMBDA ecrite a un endroit ne se cree que la).
+    // Le droit d'une LAMBDA (le type de la methode ou elle est ecrite ; vide : aucun), par son code. Invariant : seul
+    // makeLambda cree un code de LAMBDA, et il ecrit son entree avant toute execution - une adresse reutilisee par un
+    // nouveau code recoit donc toujours son propre droit. Toute autre creation d'une LAMBDA doit faire de meme.
     static std::map<const Function*, std::string>& lambdaTypes() {
         static std::map<const Function*, std::string> types;
         return types;

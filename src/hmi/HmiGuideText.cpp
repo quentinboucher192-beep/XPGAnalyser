@@ -14581,16 +14581,19 @@ const std::vector<Topic>& topics() {
                          "IHM_SUR_CHANGEMENT ; \xC3\xA9" "crite dans un script ou une fonction, elle n'y a "
                          "pas droit, m\xC3\xAAme pass\xC3\xA9" "e \xC3\xA0 une m\xC3\xA9thode de T_Pompe qui "
                          "l'appelle - `Pompe1.Appliquer(LAMBDA (p : T_Pompe) : REAL => p.Heures)` est "
-                         "refus\xC3\xA9.", {}},
+                         "refus\xC3\xA9. Lanc\xC3\xA9" "e plus tard (IHM_APRES, IHM_SUR_CHANGEMENT), une "
+                         "LAMBDA \xC3\xA9" "crite dans une m\xC3\xA9thode ne voit plus SELF : un membre lu "
+                         "par son nom (`Heures`) y \xC3\xA9" "choue - passe l'objet en param\xC3\xA8tre "
+                         "(`LAMBDA (q : T_Pompe) => q.Heures`) et donne-le \xC3\xA0 l'appel.", {}},
              {K::Tip, "Ce que G\xC3\xA9n\xC3\xA9rer voit : un membre priv\xC3\xA9 lu depuis une variable "
                          "IHM, une locale, un param\xC3\xA8tre, une r\xC3\xA9" "f\xC3\xA9rence "
                          "(`r^.Heures`), la variable d'un `FOR EACH p IN Pompes` ou le param\xC3\xA8tre "
                          "d'une LAMBDA \xC3\xA9" "crite hors d'une m\xC3\xA9thode (`LAMBDA (p : T_Pompe) => "
                          "p.Heures`). Ce qu'il ne voit pas - une case d'une liste locale (`L[0].Heures`), le "
                          "corps d'une m\xC3\xA9thode d'un autre type, un chemin plus long derri\xC3\xA8re le "
-                         "param\xC3\xA8tre d'une LAMBDA (`p.Moteur.Heures`) -, le moteur le refuse en "
-                         "marche. Le d\xC3\xA9" "bogueur et les expressions ajout\xC3\xA9" "es en simulation "
-                         "lisent tout, priv\xC3\xA9 compris.", {}},
+                         "param\xC3\xA8tre d'une LAMBDA (`p.Moteur.Heures`), une LAMBDA \xC3\xA9" "crite "
+                         "dans une autre LAMBDA -, le moteur le refuse en marche. Le d\xC3\xA9" "bogueur et "
+                         "les expressions ajout\xC3\xA9" "es en simulation lisent tout, priv\xC3\xA9 compris.", {}},
              {K::Heading, "H\xC3\xA9ritage : EXTENDS, VIRTUAL, OVERRIDE, SUPER", {}},
              {K::Paragraph, "Dans les propri\xC3\xA9t\xC3\xA9s du type, **H\xC3\xA9rite de\xE2\x80\xA6 "
                          "(EXTENDS)** choisit un **parent** parmi les structures du projet : ni "
@@ -14610,8 +14613,8 @@ const std::vector<Topic>& topics() {
                          "red\xC3\xA9" "finition garde la visibilit\xC3\xA9 de ce qu'elle "
                          "red\xC3\xA9" "finit : priv\xC3\xA9" "e, elle est refus\xC3\xA9" "e (\xC2\xAB une "
                          "red\xC3\xA9" "finition ne peut pas \xC3\xAAtre plus priv\xC3\xA9" "e que la "
-                         "m\xC3\xA9thode qu'elle red\xC3\xA9" "finit \xC2\xBB) - un appel par le parent y "
-                         "m\xC3\xA8nerait d'ailleurs que du type.", {}},
+                         "m\xC3\xA9thode qu'elle red\xC3\xA9" "finit \xC2\xBB) : un appel par la "
+                         "m\xC3\xA9thode publique du parent y m\xC3\xA8nerait depuis hors du type.", {}},
              {K::Code, "TYPE T_PompeDoublee EXTENDS T_Pompe\n    Secours : BOOL;\n    METHOD PUBLIC "
                          "OVERRIDE EnDefaut : BOOL\nEND_TYPE\n\n(* corps de EnDefaut red\xC3\xA9" "finie "
                          "*)\nEnDefaut := SUPER.EnDefaut() AND NOT Secours;", "ST"},
