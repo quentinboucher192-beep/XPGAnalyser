@@ -712,6 +712,17 @@ void capturesF1() {
         for (const auto& i : generate(p, [](std::string_view) { return false; }))
             if (i.severity == Issue::Severity::Error) all += " | " + i.message;
         check(all.find("RELEVER") == std::string::npos, "C1 : Generer ne dit plus 'variable inexistante : RELEVER'" + all);
+        // Hors d'un CATCH : Generer le refuse avec le message clair de Compiler (pas « variable inexistante »).
+        {
+            Project q = p;
+            q.programs.scripts.back().body = "n := 1.0;\nRELEVER;";
+            q.programs.functions.clear();
+            std::string outside;
+            for (const auto& i : generate(q, [](std::string_view) { return false; }))
+                if (i.severity == Issue::Severity::Error) outside += " | " + i.message;
+            check(outside.find("RELEVER n'est permis que dans un CATCH") != std::string::npos && outside.find("variable inexistante") == std::string::npos,
+                  "C1 : RELEVER hors CATCH : Generer dit 'n'est permis que dans un CATCH'" + outside);
+        }
         // Un nom Relever LU dans une expression reste un nom : inconnu, il est dit.
         p.programs.scripts.back().body = "Compteur := Relever + 1;";
         p.programs.scripts.back().decls.clear();
