@@ -1249,6 +1249,30 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         host.goToCode = [this](hmi::Id script, hmi::Id function, int line) {
             auto hmiDoc = app_.hmi();
             if (!hmiDoc) return;
+            if (script == hmi::kNoId && function != hmi::kNoId) {
+                // 1.13.0 : une fonction d'un symbole (ou de sa popup) - son sous-onglet Fonctions, a sa ligne.
+                for (const auto& v : hmiDoc->project.views)
+                    for (const auto& f : v.functions)
+                        if (f.id == function && hmi::isSymbolView(v)) {
+                            const hmi::Id viewId = v.id;
+                            openHmiFunctionDefinition(viewId, function);
+                            if (auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(viewId))))
+                                if (auto* pane = editor->symbolFunctions(); pane && line > 0) pane->goTo(function, line);
+                            return;
+                        }
+                // 1.13.0 : une methode d'un type IHM - Types IHM, son type choisi.
+                for (const auto& t : hmiDoc->project.programs.types)
+                    for (const auto& m : t.methods)
+                        if (m.id == function) {
+                            const hmi::Id typeId = t.id;
+                            openHmiPane("scripts");
+                            if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
+                                pane->showTab(HmiScriptsPane::TabTypes);
+                                if (auto* types = pane->typesPane()) types->selectType(typeId);
+                            }
+                            return;
+                        }
+            }
             hmi::Issue issue;
             issue.line = line;
             if (script != hmi::kNoId) {

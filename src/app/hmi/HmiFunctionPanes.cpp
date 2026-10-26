@@ -380,7 +380,7 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     });
     // 1.13.0 (lot J2) : LA MARGE DES POINTS D'ARRET - un point dans le corps d'une fonction l'arrete a chaque appel
     // (depuis un script ; pas depuis une expression de vue, qui doit rendre sa valeur tout de suite).
-    HmiDebugSession::instance().bindProject(&doc_->project);
+    HmiDebugSession::instance().bindProject(doc_);
     margin_.attach(*this, *editor_, [this] {
         const auto* f = current();
         return f ? HmiDebugTarget{hmi::kNoId, f->id} : HmiDebugTarget{};

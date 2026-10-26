@@ -619,7 +619,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     });
     // 1.13.0 (lot J2) : LA MARGE DES POINTS D'ARRET - un clic a gauche des numeros pose un rond rouge ; la
     // simulation de l'IHM s'y arretera (le sous-onglet Debogage). Un script C ou C++ n'en prend pas.
-    HmiDebugSession::instance().bindProject(&doc_->project);
+    HmiDebugSession::instance().bindProject(doc_);
     margin_.attach(*this, *editor_, [this] {
         const auto* sc = current();
         return sc ? HmiDebugTarget{sc->id, hmi::kNoId} : HmiDebugTarget{};

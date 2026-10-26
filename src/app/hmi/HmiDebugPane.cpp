@@ -48,6 +48,15 @@ std::string plural(std::uint64_t n, std::string_view one, std::string_view many)
     return grouped(n) + " " + std::string(n > 1 ? many : one);
 }
 
+// 1.13.0 : un tableau refait (a chaque revision du moteur, parfois a chaque image) garde ce que l'utilisateur y avait :
+// la ligne choisie, le defilement.
+void refill(ui::TableView& table, const std::shared_ptr<ui::ITableModel>& model, std::vector<ui::RowIndex> chosen) {
+    const float y = table.scrollOffset();
+    table.setModel(model);
+    if (!chosen.empty()) table.selectModelRows(std::move(chosen), false);
+    table.setScrollOffset(y);
+}
+
 } // namespace
 
 // ------------------------------------------------------------------- modeles ---
@@ -90,9 +99,12 @@ public:
     [[nodiscard]] bool editable(ui::RowIndex r, std::size_t c) const override { return r < rows.size() && c == 1; }
     bool setCellText(ui::RowIndex r, std::size_t c, std::string_view text) override {
         if (r >= rows.size() || c != 1) return false;
-        const bool ok = HmiDebugSession::instance().setCondition(rows[r].id, std::string(text));
+        auto& session = HmiDebugSession::instance();
+        const auto* b = session.find(rows[r].id);
+        const HmiDebugTarget code = b ? HmiDebugTarget{b->script, b->function} : HmiDebugTarget{};
+        const bool ok = session.setCondition(rows[r].id, std::string(text));
         if (ok) pane_.say(trimmed(text).empty() ? std::string("Sans condition : il s'arr\xC3\xAAtera \xC3\xA0 chaque passage.")
-                                                 : "Condition : " + trimmed(text) + " - " + conditionPreview(std::string(text)));
+                                                 : "Condition : " + trimmed(text) + " - " + conditionPreview(code, std::string(text)));
         return ok;
     }
     [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override {
@@ -192,7 +204,7 @@ HmiDebugPane::HmiDebugPane(std::string id, hmi::DocumentPtr doc, std::function<h
         {"Suivant", "F10 : la ligne suivante de ce code (un appel s'ex\xC3\xA9" "cute d'un trait)", AStepOver},
         {"Entrer", "F11 : dans la fonction appel\xC3\xA9" "e sur cette ligne (fonction IHM, interne, op\xC3\xA9rateur)", AStepInto},
         {"Sortir", "Maj+F11 : jusqu'au retour dans le code qui l'a appel\xC3\xA9" "e", AStepOut},
-        {"Pause", "S'arr\xC3\xAAter \xC3\xA0 la prochaine ligne d'un script qui tourne", APause},
+        {"Pause", "S'arr\xC3\xAAter \xC3\xA0 la prochaine ligne d'un script qui tourne (demand\xC3\xA9" "e : Annuler la pause)", APause},
     };
     for (const auto& b : kButtons) {
         auto btn = std::make_unique<ui::Button>(b.label, base + ".b" + std::to_string(b.action));
@@ -330,16 +342,9 @@ std::string HmiDebugPane::codeName(Id script, Id function) const {
 }
 
 std::string HmiDebugPane::codeText(Id script, Id function) const {
-    if (!doc_) return {};
-    if (script != kNoId)
-        if (const auto* sc = doc_->project.script(script)) return sc->body;
-    if (function != kNoId) {
-        if (const auto* f = doc_->project.function(function)) return f->body;
-        for (const auto& v : doc_->project.views)
-            for (const auto& f : v.functions)
-                if (f.id == function) return f.body;
-    }
-    return {};
+    // 1.13.0 : tout code que le moteur peut arreter - un script, une fonction (du projet, d'une bibliotheque, d'une vue,
+    // d'une popup, d'un symbole), une methode d'un type.
+    return doc_ ? hmi::Runtime::debugCodeBody(doc_->project, script, function) : std::string{};
 }
 
 void HmiDebugPane::say(const std::string& text, bool warning) {
@@ -356,6 +361,12 @@ gfx::Rect HmiDebugPane::buttonRect(int action) const {
     return {};
 }
 
+std::string HmiDebugPane::buttonText(int action) const {
+    if (action >= AContinue && action <= APause) return buttons_[static_cast<std::size_t>(action - AContinue)]->text();
+    if (action == AClearBreakpoints) return clearBtn_->text();
+    return {};
+}
+
 // ------------------------------------------------------------------ gestes ---
 void HmiDebugPane::runAction(int action) {
     auto* rt = runtime();
@@ -363,6 +374,8 @@ void HmiDebugPane::runAction(int action) {
     // Continuer, un pas : la pause suivante peut venir avant le retour (le script reprend tout de suite) - ce qui est
     // dit ici date d'avant elle, son etat passera devant.
     const std::uint64_t before = rt ? rt->debugRevision() : 0;
+    // La reprise : la pause suivante se montre a sa ligne d'arret (le niveau 0), pas au niveau choisi avant.
+    if (action == AContinue || action == AStepOver || action == AStepInto || action == AStepOut) s.setLevel(0);
     switch (action) {
         case AContinue:
             if (rt && rt->debugContinue()) say("Continu\xC3\xA9 : le script reprend jusqu'au prochain point d'arr\xC3\xAAt.");
@@ -380,7 +393,10 @@ void HmiDebugPane::runAction(int action) {
         case APause:
             if (!rt || !rt->running()) say("L'IHM ne tourne pas : d\xC3\xA9marre-la d'abord.", true);
             else if (rt->paused()) say("D\xC3\xA9j\xC3\xA0 en pause.", true);
-            else {
+            else if (rt->pauseAsked()) {                 // 1.13.0 : le meme bouton, Annuler la pause
+                (void)rt->debugCancelPause();
+                say("Pause annul\xC3\xA9" "e : l'IHM continue sans s'arr\xC3\xAAter.");
+            } else {
                 rt->debugPause();
                 say("Pause demand\xC3\xA9" "e : le prochain script qui tourne s'arr\xC3\xAAtera \xC3\xA0 sa ligne.");
             }
@@ -586,7 +602,7 @@ void HmiDebugPane::rebuild() {
     } else if (rt->stepping()) {
         state_ = "Le pas continue : le script attend (un WAIT) - il s'arr\xC3\xAAtera \xC3\xA0 sa prochaine ligne, l'IHM respire en attendant.";
     } else if (rt->pauseAsked()) {
-        state_ = "Pause demand\xC3\xA9" "e : le prochain script qui tourne s'arr\xC3\xAAtera \xC3\xA0 sa ligne.";
+        state_ = "Pause demand\xC3\xA9" "e : le prochain script qui tourne s'arr\xC3\xAAtera \xC3\xA0 sa ligne (Annuler la pause : la retirer).";
     } else if (armed > 0) {
         state_ = "En marche - " + plural(armed, "point d'arr\xC3\xAAt arm\xC3\xA9", "points d'arr\xC3\xAAt arm\xC3\xA9s") + " : la simulation s'arr\xC3\xAAtera dessus.";
     } else {
@@ -595,6 +611,14 @@ void HmiDebugPane::rebuild() {
     for (std::size_t i = 0; i < buttons_.size(); ++i) {
         const int action = static_cast<int>(i) + AContinue;
         buttons_[i]->setEnabled(action == APause ? live && !(rt && rt->paused()) : paused);
+    }
+    // Une pause demandee qui n'a encore rien arrete : le bouton la retire.
+    const bool asked = live && rt->pauseAsked() && !rt->paused();
+    if (auto* pause = buttons_[static_cast<std::size_t>(APause - AContinue)]; pause->text() != (asked ? "Annuler la pause" : "Pause")) {
+        pause->setText(asked ? "Annuler la pause" : "Pause");
+        pause->setTooltip(asked ? "Retirer la pause demand\xC3\xA9" "e : l'IHM continue sans s'arr\xC3\xAAter"
+                                : "S'arr\xC3\xAAter \xC3\xA0 la prochaine ligne d'un script qui tourne (demand\xC3\xA9" "e : Annuler la pause)");
+        invalidateLayout();
     }
     clearBtn_->setEnabled(!s.breakpoints().empty());
     rebuildBreakpoints();
@@ -609,6 +633,9 @@ void HmiDebugPane::rebuildBreakpoints() {
     auto& s = HmiDebugSession::instance();
     auto* rt = runtime();
     const std::uint32_t hitId = rt && rt->paused() && rt->debugHit() ? rt->debugHit()->breakpoint : 0;
+    std::vector<std::uint32_t> chosenIds;                // le point choisi, par son id (la liste peut avoir change)
+    for (const auto r : bpTable_->selectedModelRows())
+        if (r < bpIds_.size()) chosenIds.push_back(bpIds_[r]);
     bpModel_->rows.clear();
     bpIds_.clear();
     for (const auto& b : s.breakpoints()) {
@@ -625,15 +652,20 @@ void HmiDebugPane::rebuildBreakpoints() {
         bpModel_->rows.push_back(std::move(r));
         bpIds_.push_back(b.id);
     }
-    bpTable_->setModel(bpModel_);
+    std::vector<ui::RowIndex> again;
+    for (std::size_t i = 0; i < bpIds_.size(); ++i)
+        if (std::find(chosenIds.begin(), chosenIds.end(), bpIds_[i]) != chosenIds.end()) again.push_back(static_cast<ui::RowIndex>(i));
+    refill(*bpTable_, bpModel_, std::move(again));
 }
 
 void HmiDebugPane::rebuildStack() {
     auto* rt = runtime();
     stackModel_->rows.clear();
+    std::vector<ui::RowIndex> shown;
     if (rt && rt->paused() && rt->debugHit()) {
         const auto& stack = rt->debugHit()->stack;
         const std::size_t chosen = std::min(HmiDebugSession::instance().level(), stack.empty() ? 0 : stack.size() - 1);
+        if (!stack.empty()) shown.push_back(static_cast<ui::RowIndex>(chosen));   // la ligne choisie : le niveau montre
         for (std::size_t k = 0; k < stack.size(); ++k) {
             const auto& f = stack[stack.size() - 1 - k];
             StackModel::Row r;
@@ -644,7 +676,7 @@ void HmiDebugPane::rebuildStack() {
             stackModel_->rows.push_back(std::move(r));
         }
     }
-    stackTable_->setModel(stackModel_);
+    refill(*stackTable_, stackModel_, std::move(shown));
 }
 
 void HmiDebugPane::rebuildCode() {
@@ -679,6 +711,9 @@ void HmiDebugPane::rebuildCode() {
 }
 
 void HmiDebugPane::rebuildLocals() {
+    std::vector<std::string> chosenKeys;                 // la locale choisie, par son chemin (la liste se refait)
+    for (const auto r : localsTable_->selectedModelRows())
+        if (r < locals_.size()) chosenKeys.push_back(locals_[r].key);
     locals_.clear();
     const auto* f = shownFrame();
     if (f) {
@@ -700,7 +735,10 @@ void HmiDebugPane::rebuildLocals() {
         };
         for (const auto& l : f->locals) add(l, 0, f->label);
     }
-    localsTable_->setModel(localsModel_);
+    std::vector<ui::RowIndex> again;
+    for (std::size_t i = 0; i < locals_.size(); ++i)
+        if (std::find(chosenKeys.begin(), chosenKeys.end(), locals_[i].key) != chosenKeys.end()) again.push_back(static_cast<ui::RowIndex>(i));
+    refill(*localsTable_, localsModel_, std::move(again));
 }
 
 void HmiDebugPane::readWatches() {
@@ -715,7 +753,7 @@ void HmiDebugPane::readWatches() {
         if (rt->debugEvaluate(watches_[i], v, &why)) watchValues_[i] = v;
         else watchValues_[i] = rt->paused() ? "(" + why + ")" : "(se lira en pause, ou n'existe pas ici)";
     }
-    watchTable_->setModel(watchModel_);
+    refill(*watchTable_, watchModel_, watchTable_->selectedModelRows());
     invalidate();
 }
 

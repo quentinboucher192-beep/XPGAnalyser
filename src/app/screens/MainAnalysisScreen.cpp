@@ -2002,7 +2002,9 @@ void MainAnalysisScreen::refreshHmiChip() {
     if (!app_.hmi()) { topBar_->setHmi(TopBar::Hmi::None); return; }
     const auto tab = hmiTabs_.find("simulation");   // aussi detache dans sa fenetre (hmiTab ne le voit pas)
     const auto* hsim = dynamic_cast<const HmiSimulationPane*>(tab != hmiTabs_.end() ? tab->second : nullptr);
-    topBar_->setHmi(hsim && hsim->hmiRunning() ? TopBar::Hmi::Running : TopBar::Hmi::Stopped);
+    topBar_->setHmi(hsim && hsim->hmiDebugPaused() ? TopBar::Hmi::Paused   // 1.13.0 : un script arrete (le debogueur)
+                    : hsim && hsim->hmiRunning()   ? TopBar::Hmi::Running
+                                                   : TopBar::Hmi::Stopped);
 }
 
 void MainAnalysisScreen::refreshSimulationIndicator() {

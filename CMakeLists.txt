@@ -624,7 +624,9 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(bibliotheques_test tests/bibliotheques_test.cpp)  # 1.13.0 (lot J8) : les espaces de noms et les bibliotheques
     xpg_target_link_libraries(bibliotheques_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmidebug_test tests/hmidebug_test.cpp)            # 1.13.0 (lot J2) : le debogueur des scripts IHM
-    xpg_target_link_libraries(hmidebug_test PRIVATE xpg_hmi)
+    # 1.13.0 (seconde passe) : xpg_app - la seance des points, la marge, le volet Debogage, les touches de la simulation
+    # (deja construit pour les deux applications : rien a recompiler).
+    xpg_target_link_libraries(hmidebug_test PRIVATE xpg_app)
     xpg_add_test_executable(hmi_natives1127_test tests/hmi_natives1127_test.cpp)   # 1.12.7 : conteneurs, std::numeric, templates, <bit>
     xpg_target_link_libraries(hmi_natives1127_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_setring_test tests/hmi_setring_test.cpp)      # 1.12.7 : SET OF T et RING[N] OF T

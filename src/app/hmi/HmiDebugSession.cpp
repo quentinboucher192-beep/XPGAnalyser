@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <map>
 
 namespace app {
 
@@ -42,7 +43,7 @@ std::vector<std::string> splitLines(const std::string& text) {
 // Les noms d'une condition (P, Tours, Fours[f].Temperature : le debut de chaque chemin), sans les mots du
 // langage, les nombres, les litteraux types (T#5s), les chaines ni les fonctions appelees.
 std::vector<std::string> conditionNames(std::string_view c) {
-    static const char* const kWords[] = {"AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE", "NULL"};
+    static const char* const kWords[] = {"AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE", "NULL", "IN", "ENTRE", "ET"};
     std::vector<std::string> out;
     for (std::size_t i = 0; i < c.size();) {
         const char ch = c[i];
@@ -96,13 +97,23 @@ void HmiDebugSession::touch(bool user) {
     changed->emit();
 }
 
-void HmiDebugSession::bindProject(const hmi::Project* owner) {
-    if (owner == owner_ || !owner) return;
+void HmiDebugSession::bindProject(const hmi::DocumentPtr& doc) {
+    if (!doc) return;
+    // Le meme document, toujours vivant : rien ne change. Un autre (ou le meme emplacement, apres la fermeture du
+    // projet : le lien faible est mort) : les points partent.
+    if (const auto current = owner_.lock(); bound_ && current && current.get() == doc.get()) return;
     const bool had = !list_.empty();
-    owner_ = owner;
+    owner_ = doc;
+    bound_ = true;
     list_.clear();
+    followed_.clear();
     level_ = 0;
     if (had) touch(true);
+}
+
+const hmi::Project* HmiDebugSession::project() const noexcept {
+    const auto doc = owner_.lock();
+    return doc ? &doc->project : nullptr;
 }
 
 std::uint32_t HmiDebugSession::add(HmiDebugTarget code, std::uint32_t line, std::string condition, std::string* why) {
@@ -199,17 +210,54 @@ const hmi::DebugBreakpoint* HmiDebugSession::find(std::uint32_t id) const {
     return nullptr;
 }
 
-void HmiDebugSession::shiftLines(HmiDebugTarget code, std::uint32_t from, int delta) {
-    if (delta == 0) return;
+void HmiDebugSession::shiftLines(HmiDebugTarget code, std::uint32_t prefix, std::uint32_t from, int delta) {
+    if (delta == 0 || code.empty()) return;
+    // La derniere ligne de la partie changee, comptee dans le nouveau texte (prefix : rien n'en reste).
+    const long long lastChanged = static_cast<long long>(from) - 1 + delta;
     bool any = false;
     for (auto& b : list_) {
-        if (b.script != code.script || b.function != code.function || b.line < from) continue;
-        const long long moved = static_cast<long long>(b.line) + delta;
-        b.line = static_cast<std::uint32_t>(std::max<long long>(from, moved));
+        if (b.script != code.script || b.function != code.function || b.line <= prefix) continue;
+        long long moved = b.line >= from ? static_cast<long long>(b.line) + delta                       // le bas : sa ligne
+                                         : std::min<long long>(b.line, std::max<long long>(prefix + 1, lastChanged));
+        moved = std::max<long long>(1, moved);
+        if (moved == static_cast<long long>(b.line)) continue;
+        b.line = static_cast<std::uint32_t>(moved);
         b.effectiveLine = 0;                      // le moteur la relira
         any = true;
     }
-    if (any) touch(true);
+    if (!any) return;
+    // Deux points sur une meme ligne de ce code (une ligne supprimee entre eux) : le premier pose reste.
+    std::vector<hmi::DebugBreakpoint> kept;
+    kept.reserve(list_.size());
+    for (auto& b : list_) {
+        const bool twice = b.script == code.script && b.function == code.function
+                           && std::any_of(kept.begin(), kept.end(), [&](const hmi::DebugBreakpoint& k) {
+                                  return k.script == b.script && k.function == b.function && k.line == b.line;
+                              });
+        if (!twice) kept.push_back(std::move(b));
+    }
+    list_ = std::move(kept);
+    touch(true);
+}
+
+void HmiDebugSession::followText(HmiDebugTarget code, const std::string& beforeText, const std::string& afterText) {
+    if (code.empty() || beforeText == afterText) return;
+    // Deja suivi (un autre editeur du meme code, le volet Debogage qui le montre) : pas deux fois.
+    auto& seen = followed_[std::make_pair(code.script, code.function)];
+    if (seen == afterText) return;
+    seen = afterText;
+    const auto before = splitLines(beforeText);
+    const auto after = splitLines(afterText);
+    const int delta = static_cast<int>(after.size()) - static_cast<int>(before.size());
+    if (delta == 0) return;
+    // Les lignes du haut (le prefixe commun) restent ; celles du bas (le suffixe commun) glissent de `delta`.
+    std::size_t prefix = 0;
+    while (prefix < before.size() && prefix < after.size() && before[prefix] == after[prefix]) ++prefix;
+    std::size_t suffix = 0;
+    while (suffix < before.size() - prefix && suffix < after.size() - prefix
+           && before[before.size() - 1 - suffix] == after[after.size() - 1 - suffix])
+        ++suffix;
+    shiftLines(code, static_cast<std::uint32_t>(prefix), static_cast<std::uint32_t>(before.size() - suffix + 1), delta);
 }
 
 void HmiDebugSession::setRuntime(hmi::Runtime* rt) {
@@ -230,7 +278,9 @@ void HmiDebugSession::pullFrom(const hmi::Runtime& rt) {
                 any = true;
             }
     (void)any;
-    if (!rt.paused()) level_ = 0;
+    // Hors pause, ou une nouvelle pause (apres un pas, Continuer) : la ligne d'arret, en haut de la pile.
+    if (!rt.paused() || rt.pauseCount() != pauses_) level_ = 0;
+    pauses_ = rt.pauseCount();
     touch(false);
 }
 
@@ -253,26 +303,45 @@ bool HmiDebugSession::pausedAt(HmiDebugTarget& code, std::uint32_t& line, bool* 
 }
 
 // ------------------------------------------------------- la condition, ici ---
-std::string conditionPreview(const std::string& condition) {
+std::string conditionPreview(HmiDebugTarget code, const std::string& condition) {
     const std::string c = trimmed(condition);
     if (c.empty()) return "Sans condition : il s'arr\xC3\xAAtera \xC3\xA0 chaque passage.";
     if (!sim::parseExpression(c, hmi::dialectOptions()))
         return "Elle ne se lit pas : v\xC3\xA9rifie les parenth\xC3\xA8ses, les op\xC3\xA9rateurs (AND, OR, =, <>).";
     hmi::Runtime* rt = HmiDebugSession::instance().runtime();
     if (!rt || !rt->running()) return "La simulation ne tourne pas : elle sera essay\xC3\xA9" "e \xC3\xA0 chaque passage.";
-    std::string value, why;
-    if (!rt->debugEvaluate(c, value, &why))
-        return rt->paused() ? "Elle ne se lit pas ici : " + why
-                            : "Elle se lira au passage (les locales du code n'existent que pendant son ex\xC3\xA9" "cution).";
-    std::string facts;
-    for (const auto& n : conditionNames(c)) {
-        std::string v;
-        if (!rt->debugEvaluate(n, v)) continue;
-        facts += (facts.empty() ? "" : ", ") + n + " = " + v;
-        if (facts.size() > 80) break;
+    const hmi::Project* p = rt->project();
+    const std::string name = p && !code.empty() ? hmi::Runtime::debugCodeName(*p, code.script, code.function) : std::string{};
+    // Le verdict d'une valeur : vrai, faux (les noms et leurs valeurs), ou pas un BOOL (le point se desarmera).
+    const auto verdict = [&](const std::string& value, const std::string& type) {
+        if (type != "BOOL")
+            return "Elle rend un " + type + ", pas un BOOL : le point se d\xC3\xA9sarmera au passage (une comparaison oubli\xC3\xA9" "e, \xC2\xAB = 0 \xC2\xBB ?).";
+        std::string facts;
+        for (const auto& n : conditionNames(c)) {
+            std::string v;
+            if (!rt->debugEvaluate(n, v)) continue;
+            facts += (facts.empty() ? "" : ", ") + n + " = " + v;
+            if (facts.size() > 80) break;
+        }
+        return std::string(value == "TRUE" ? "Maintenant, c'est vrai" : "Maintenant, c'est faux") + (facts.empty() ? std::string{} : " (" + facts + ")") + ".";
+    };
+    // En pause dans CE code (la ligne d'arret) : elle se lit la, comme au passage.
+    const hmi::DebugHit* hit = rt->paused() && rt->debugHit() ? &*rt->debugHit() : nullptr;
+    const bool here = hit && !hit->stack.empty() && !code.empty()
+                      && HmiDebugTarget{hit->stack.back().script, hit->stack.back().function} == code;
+    std::string value, why, type;
+    if (here) {
+        if (!rt->debugEvaluate(c, value, &why, &type)) return "Elle ne se lit pas ici : " + why;
+        return verdict(value, type);
     }
-    const bool truth = value == "TRUE";
-    return std::string(truth ? "Maintenant, c'est vrai" : "Maintenant, c'est faux") + (facts.empty() ? std::string{} : " (" + facts + ")") + ".";
+    // Ailleurs : ses noms, juges dans le code du point (ses VAR, ses parametres, les variables IHM).
+    if (!code.empty())
+        if (const std::string problem = rt->conditionProblem(code.script, code.function, c); !problem.empty())
+            return "Elle ne se lit pas dans " + (name.empty() ? std::string("ce code") : name) + " : " + problem + ".";
+    // Hors pause, les variables de l'IHM se lisent maintenant ; les locales du code, seulement au passage.
+    if (!rt->paused() && rt->debugEvaluate(c, value, &why, &type)) return verdict(value, type);
+    return name.empty() ? std::string("Elle sera essay\xC3\xA9" "e au passage.")
+                        : "Elle sera essay\xC3\xA9" "e au passage dans " + name + " (ses locales n'existent que pendant son ex\xC3\xA9" "cution).";
 }
 
 void askBreakpointCondition(HmiDebugTarget code, std::uint32_t line, const std::function<void(const std::string&, bool)>& say,
@@ -297,7 +366,7 @@ void askBreakpointCondition(HmiDebugTarget code, std::uint32_t line, const std::
     spec.text = "Il ne s'arr\xC3\xAAte que si elle est vraie. Du ST, dans la port\xC3\xA9" "e du code : ses locales (VAR, param\xC3\xA8tres), "
                 "les variables IHM. Vide : \xC3\xA0 chaque passage.";
     if (!lineText.empty()) spec.text += "\nLa ligne : " + trimmed(lineText);
-    if (bp && !bp->condition.empty()) spec.text += "\n" + conditionPreview(bp->condition);
+    if (bp && !bp->condition.empty()) spec.text += "\n" + conditionPreview(code, bp->condition);
     HmiAskDialog::Option o;
     o.label = "Condition";
     o.hasField = true;
@@ -314,12 +383,12 @@ void askBreakpointCondition(HmiDebugTarget code, std::uint32_t line, const std::
     spec.note = "Une condition qui ne se lit pas au passage (un indice hors des bornes) d\xC3\xA9sarme le point, et le dit.";
     spec.confirm = "Valider";
     spec.width = 620.f;
-    manager->ShowDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [id, say](const menu::DialogResult& r) {
+    manager->ShowDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [id, say, code](const menu::DialogResult& r) {
         if (!r.accepted()) return;
         const auto a = HmiAskDialog::parse(r.payload);
         (void)HmiDebugSession::instance().setCondition(id, a.field);
         if (say) say(blankText(a.field) ? "Point d'arr\xC3\xAAt sans condition : il s'arr\xC3\xAAtera \xC3\xA0 chaque passage."
-                                        : "Condition du point d'arr\xC3\xAAt : " + trimmed(a.field) + " - " + conditionPreview(a.field),
+                                        : "Condition du point d'arr\xC3\xAAt : " + trimmed(a.field) + " - " + conditionPreview(code, a.field),
                      false);
     });
 }
@@ -366,8 +435,12 @@ void HmiBreakpointMargin::attach(ui::Widget& owner, ui::MultiLineText& editor, T
 
 void HmiBreakpointMargin::reset() {
     if (!editor_) return;
-    baseline_ = editor_->text();
-    baselineOf_ = target_ ? target_() : HmiDebugTarget{};
+    const auto code = target_ ? target_() : HmiDebugTarget{};
+    const std::string now = editor_->text();
+    // Le meme code recharge (Annuler, Retablir, Migrer ce code, un remplacement) : ses points suivent leurs lignes.
+    if (code == baselineOf_ && !code.empty()) HmiDebugSession::instance().followText(code, baseline_, now);
+    baseline_ = now;
+    baselineOf_ = code;
     shown_.clear();
     refresh();
 }
@@ -376,25 +449,9 @@ void HmiBreakpointMargin::edited() {
     if (!editor_) return;
     const auto code = target_ ? target_() : HmiDebugTarget{};
     const std::string now = editor_->text();
-    if (!(code == baselineOf_)) {
-        baseline_ = now;
-        baselineOf_ = code;
-        return;
-    }
-    const auto before = splitLines(baseline_);
-    const auto after = splitLines(now);
+    if (code == baselineOf_) HmiDebugSession::instance().followText(code, baseline_, now);
     baseline_ = now;
-    const int delta = static_cast<int>(after.size()) - static_cast<int>(before.size());
-    if (delta == 0 || code.empty()) return;
-    // Les lignes du bas qui n'ont pas change (le suffixe commun) glissent de `delta`.
-    std::size_t prefix = 0;
-    while (prefix < before.size() && prefix < after.size() && before[prefix] == after[prefix]) ++prefix;
-    std::size_t suffix = 0;
-    while (suffix < before.size() - prefix && suffix < after.size() - prefix
-           && before[before.size() - 1 - suffix] == after[after.size() - 1 - suffix])
-        ++suffix;
-    const auto from = static_cast<std::uint32_t>(before.size() - suffix + 1);   // la premiere ligne (1 = la premiere) qui glisse
-    HmiDebugSession::instance().shiftLines(code, from, delta);
+    baselineOf_ = code;
 }
 
 void HmiBreakpointMargin::refresh() {

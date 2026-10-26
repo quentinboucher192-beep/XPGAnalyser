@@ -13,8 +13,18 @@
 //  enjambe le WAIT : l'IHM respire), l'arret de la simulation en pause. Et le
 //  debogueur de l'automate (RuntimeDebug) dit toujours les memes mots.
 //
+//  1.13.0 (seconde passe) : la pause fige tout le travail en cours (le cycle, le
+//  geste, le demarrage), les gestes pendant la pause, les fonctions de vue, les
+//  methodes, les actions Appeler et Execute du ST, les espions en lecture seule,
+//  l'arret sous TRY ; la seance des points (suivre son code, un autre projet), le
+//  volet Debogage et les touches de la simulation (avec xpg_app, sans ecran).
+//
 //  HMIDEBUG_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
+#include "../src/app/hmi/HmiDebugPane.hpp"
+#include "../src/app/hmi/HmiDebugSession.hpp"
+#include "../src/app/hmi/HmiSimulation.hpp"
+#include "../src/hmi/HmiCommands.hpp"
 #include "../src/hmi/HmiEdit.hpp"
 #include "../src/hmi/HmiExpr.hpp"
 #include "../src/hmi/HmiKeys.hpp"
@@ -1085,6 +1095,209 @@ void quietCounts() {
     check(!b.rt.debugCancelPause(), "rien a annuler");
 }
 
+
+// =============================================================================
+//  1.13.0 (seconde passe) : la seance des points, la marge, le volet Debogage,
+//  les touches de la simulation (l'interface, sans ecran).
+// =============================================================================
+
+std::string numbered(int n, int skip = 0, const std::string& at = {}, int atLine = 0) {
+    std::string out;
+    for (int i = 1; i <= n; ++i) {
+        if (i == skip) continue;
+        out += (i == atLine ? at : "L" + std::to_string(i) + " := " + std::to_string(i) + ";") + "\n";
+    }
+    return out;
+}
+
+// ---- T2-17, T2-19 : un point suit son code - supprimer, joindre au-dessus ; Annuler, Retablir (le texte recharge) ----
+void sessionFollowsCode() {
+    std::printf("-- un point suit son code : supprimer ou joindre au-dessus, Annuler, Retablir\n");
+    auto& s = app::HmiDebugSession::instance();
+    auto doc = std::make_shared<hmi::Document>();
+    const Id sc = script(doc->project, "Calcul", numbered(12));
+    s.bindProject(doc);
+    s.clear();
+    const app::HmiDebugTarget code{sc, kNoId};
+    (void)s.add(code, 10);
+    const auto line0 = [&] { return s.breakpoints().empty() ? 0u : s.breakpoints()[0].line; };
+    // La ligne 9 supprimee : le point (la ligne 10) remonte en 9, avec son instruction.
+    s.followText(code, numbered(12), numbered(12, 9));
+    check(line0() == 9, "la ligne au-dessus supprimee : le point remonte avec son instruction (9) : " + std::to_string(line0()));
+    // Deux lignes tapees au-dessus : il descend de deux.
+    s.followText(code, numbered(12, 9), "X := 0;\nY := 0;\n" + numbered(12, 9));
+    check(line0() == 11, "deux lignes au-dessus : le point descend de deux (11) : " + std::to_string(line0()));
+    // Joindre deux lignes (Retour arriere en debut de ligne) : la ligne 10 rejoint la 9.
+    s.clear();
+    (void)s.add(code, 10);
+    s.followText(code, numbered(12), numbered(12, 10, "L9 := 9; L10 := 10;", 9));
+    check(line0() == 9, "la ligne 10 jointe a la 9 : le point la suit (9) : " + std::to_string(line0()));
+    // Un bloc supprime qui contenait le point : il reste sur ce qu'il en reste (la ligne qui suit le bloc).
+    s.clear();
+    (void)s.add(code, 5);
+    std::string without;
+    for (int i = 1; i <= 12; ++i)
+        if (i < 4 || i > 6) without += "L" + std::to_string(i) + " := " + std::to_string(i) + ";\n";
+    s.followText(code, numbered(12), without);
+    check(line0() == 4, "le bloc 4..6 supprime : le point va a la ligne qui le suit (4) : " + std::to_string(line0()));
+    // La marge : la frappe, puis Annuler (le texte recharge du projet) - le point revient a sa ligne.
+    s.clear();
+    (void)s.add(code, 12);
+    ui::MultiLineText editor("essai.code");
+    editor.setText(numbered(12));
+    app::HmiBreakpointMargin margin;
+    margin.attach(editor, editor, [code] { return code; }, nullptr);
+    editor.setText("A := 1;\nB := 2;\n" + numbered(12));
+    margin.edited();
+    check(line0() == 14, "deux lignes tapees au-dessus : 14 : " + std::to_string(line0()));
+    editor.setText(numbered(12));                            // Ctrl+Z : le volet recharge le code du projet
+    margin.reset();
+    check(line0() == 12, "Annuler : le point revient a sa ligne (12) : " + std::to_string(line0()));
+    editor.setText("A := 1;\nB := 2;\n" + numbered(12));    // Ctrl+Y
+    margin.reset();
+    check(line0() == 14, "Retablir : il redescend (14) : " + std::to_string(line0()));
+    // Le meme changement vu par un second editeur (le volet Debogage qui montre ce code) : pas deux fois.
+    ui::MultiLineText shown("essai.montre");
+    shown.setText(numbered(12));
+    app::HmiBreakpointMargin second;
+    second.attach(shown, shown, [code] { return code; }, nullptr);
+    shown.setText("A := 1;\nB := 2;\n" + numbered(12));
+    second.reset();
+    check(line0() == 14, "un second editeur du meme code ne le decale pas une seconde fois (14) : " + std::to_string(line0()));
+    s.clear();
+}
+
+// ---- T2-24 : un autre projet, meme a la meme place en memoire : les points partent ----
+void sessionProject() {
+    std::printf("-- les points de la seance : un projet ferme puis un autre ouvert, meme a la meme place : ils partent\n");
+    auto& s = app::HmiDebugSession::instance();
+    auto a = std::make_shared<hmi::Document>();
+    const Id sa = script(a->project, "Calcul", numbered(5));
+    s.bindProject(a);
+    s.clear();
+    (void)s.add(app::HmiDebugTarget{sa, kNoId}, 3);
+    s.bindProject(a);
+    check(s.breakpoints().size() == 1, "le meme projet : les points restent");
+    const void* where = a.get();
+    a.reset();                                               // Fichier > Fermer le projet
+    auto b = std::make_shared<hmi::Document>();              // ... puis un autre (souvent a la meme place)
+    (void)script(b->project, "Autre", numbered(5));
+    s.bindProject(b);
+    check(s.breakpoints().empty(), std::string("un autre projet : les points partent") + (b.get() == where ? " (a la meme adresse)" : ""));
+    check(s.project() == &b->project, "la seance connait le nouveau projet");
+}
+
+// ---- T2-16 : une nouvelle pause revient au niveau 0 ; T2-22 : l'apercu d'une condition dans le code du point ----
+void sessionLevelAndPreview() {
+    std::printf("-- une nouvelle pause revient a la ligne d'arret ; l'apercu d'une condition juge dans le code du point\n");
+    auto& s = app::HmiDebugSession::instance();
+    Bench b;
+    b.go();
+    s.setRuntime(&b.rt);
+    b.rt.setBreakpoints({at(1, b.stats, kNoId, 14)});
+    (void)b.rt.callScript("Statistiques_Pression", 0.2);
+    (void)b.rt.debugStep(DebugStep::Into);
+    s.pullFrom(b.rt);
+    s.setLevel(1);
+    check(b.rt.paused() && s.level() == 1, "en pause dans Moyenne_Pression ; le niveau 1 (le script) choisi");
+    (void)b.rt.debugStep(DebugStep::Out);
+    s.pullFrom(b.rt);
+    app::HmiDebugTarget code;
+    std::uint32_t line = 0;
+    check(s.level() == 0 && s.pausedAt(code, line) && code.script == b.stats && line == 15,
+          "Sortir : la nouvelle pause se montre a sa ligne d'arret (niveau 0, script ligne 15) : niveau " + std::to_string(s.level()));
+    // En pause dans le script : la condition d'un point de Moyenne_Pression se juge dans Moyenne_Pression.
+    const app::HmiDebugTarget fn{kNoId, b.moyenne};
+    const std::string later = app::conditionPreview(fn, "A > 1000.0");
+    check(later.find("essay\xC3\xA9" "e au passage dans fonction Moyenne_Pression") != std::string::npos, "un parametre de la fonction : " + later);
+    const std::string unknown = app::conditionPreview(fn, "Inconnu > 1.0");
+    check(unknown.find("Elle ne se lit pas dans fonction Moyenne_Pression : Inconnu n'est pas d\xC3\xA9" "clar\xC3\xA9" "e ici") != std::string::npos,
+          "un nom inconnu de la fonction : " + unknown);
+    const std::string here = app::conditionPreview(app::HmiDebugTarget{b.stats, kNoId}, "P < 5.0");
+    check(here.find("Maintenant, c'est vrai (P = 3.2)") == 0, "dans le code en pause : sa valeur, la : " + here);
+    const std::string notBool = app::conditionPreview(app::HmiDebugTarget{b.stats, kNoId}, "Tours MOD 100");
+    check(notBool.find("pas un BOOL") != std::string::npos, "une condition qui n'est pas un BOOL le dit : " + notBool);
+    (void)b.rt.debugContinue();
+    s.setRuntime(nullptr);
+}
+
+// ---- T2-21 : les tableaux du volet gardent la ligne choisie ; T2-23 : Annuler la pause ; T2-16 : la reprise au niveau 0 ----
+void paneKeepsAndCancels() {
+    std::printf("-- le volet Debogage : la ligne choisie reste, Pause devient Annuler la pause\n");
+    auto& s = app::HmiDebugSession::instance();
+    Bench b;
+    auto doc = std::make_shared<hmi::Document>();
+    doc->project = b.p;
+    b.go();
+    s.bindProject(doc);
+    s.clear();
+    s.setRuntime(&b.rt);
+    app::HmiDebugPane pane("essai.debogage", doc, [&b] { return &b.rt; });
+    pane.setBounds({0.f, 0.f, 1200.f, 600.f});
+    (void)s.add(app::HmiDebugTarget{b.stats, kNoId}, 10);
+    (void)s.add(app::HmiDebugTarget{b.stats, kNoId}, 11);
+    pane.refresh(0.0);
+    check(pane.breakpointTable().selectedModelRows().empty() && pane.breakpointLines().size() == 2, "deux points dans le tableau");
+    pane.breakpointTable().selectModelRows({1}, false);
+    (void)s.setEnabled(s.breakpoints()[0].id, false);          // un changement : le volet se refait
+    pane.refresh(0.1);
+    check(pane.breakpointTable().selectedModelRows() == std::vector<ui::RowIndex>{1}, "le volet refait : le point choisi le reste");
+    (void)s.setEnabled(s.breakpoints()[0].id, true);
+    // Pause demandee : le bouton devient Annuler la pause ; un clic la retire.
+    b.rt.debugPause();
+    pane.refresh(0.2);
+    check(pane.buttonText(app::HmiDebugPane::APause) == "Annuler la pause", "Pause demandee : le bouton dit Annuler la pause");
+    pane.runAction(app::HmiDebugPane::APause);
+    check(!b.rt.pauseAsked(), "un clic : la pause demandee est retiree");
+    pane.refresh(0.3);
+    check(pane.buttonText(app::HmiDebugPane::APause) == "Pause", "le bouton redevient Pause");
+    // Le niveau choisi, puis Suivant : la pause suivante se montre a sa ligne.
+    b.rt.setBreakpoints({at(1, b.stats, kNoId, 14)});
+    (void)b.rt.callScript("Statistiques_Pression", 0.4);
+    (void)b.rt.debugStep(DebugStep::Into);
+    pane.refresh(0.5);
+    check(pane.chooseLevel(1) && s.level() == 1, "le niveau 1 choisi dans la pile");
+    pane.runAction(app::HmiDebugPane::AStepOut);
+    check(s.level() == 0, "Sortir : la nouvelle pause au niveau 0");
+    (void)b.rt.debugContinue();
+    s.setRuntime(nullptr);
+    s.clear();
+}
+
+// ---- T2-15 : en pause, F5, F10, F11 ou que soit le clavier ; F11 n'est plus le plein ecran ----
+void keysAnywhere() {
+    std::printf("-- en pause : F10, F11, F5 pilotent le debogueur ou que soit le clavier ; F11 n'est pas le plein ecran\n");
+    auto& s = app::HmiDebugSession::instance();
+    Bench b;
+    auto doc = std::make_shared<hmi::Document>();
+    doc->project = b.p;
+    app::HmiSimulationHost host;
+    host.fullScreenWindow = [](bool) {};
+    app::HmiSimulationPane pane("essai.simulation", doc, host);
+    pane.setVisibility(ui::Visibility::Collapsed);              // l'onglet Simulation n'est pas a l'ecran
+    auto& rt = pane.runtime();
+    rt.bind(&doc->project, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.tick(0.1);
+    check(!app::HmiSimulationPane::claimsKey(ui::Key::F11), "hors pause, l'onglet cache : F11 reste a l'appli (le plein ecran)");
+    rt.setBreakpoints({at(1, b.stats, kNoId, 14)});
+    (void)rt.callScript("Statistiques_Pression", 0.2);
+    check(rt.paused(), "en pause ligne 14");
+    check(app::HmiSimulationPane::claimsKey(ui::Key::F11), "en pause : F11 est au debogueur (Entrer), pas au plein ecran");
+    check(app::HmiSimulationPane::debugKeyAnywhere(ui::KeyDown{ui::Key::F11, {}, false}) && rt.paused() && rt.debugHit()
+              && rt.debugHit()->function == b.moyenne,
+          "F11 (l'onglet cache) : Entrer dans Moyenne_Pression");
+    ui::KeyMods shift;
+    shift.shift = true;
+    check(app::HmiSimulationPane::debugKeyAnywhere(ui::KeyDown{ui::Key::F11, shift, false}) && rt.paused() && rt.debugHit()
+              && rt.debugHit()->line == 15,
+          "Maj+F11 : Sortir, ligne 15 du script");
+    check(app::HmiSimulationPane::debugKeyAnywhere(ui::KeyDown{ui::Key::F10, {}, false}) && !rt.paused(), "F10 : Suivant, le script finit");
+    check(!app::HmiSimulationPane::debugKeyAnywhere(ui::KeyDown{ui::Key::F5, {}, false}), "hors pause, F5 n'est pas pris (Simuler, ailleurs)");
+    (void)s;
+}
+
 } // namespace
 
 int main() {
@@ -1112,6 +1325,11 @@ int main() {
     conditionKinds();
     sameCost();
     quietCounts();
+    sessionFollowsCode();
+    sessionProject();
+    sessionLevelAndPreview();
+    paneKeepsAndCancels();
+    keysAnywhere();
     std::printf("%d verifications, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

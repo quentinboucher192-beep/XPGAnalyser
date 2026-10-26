@@ -12,17 +12,22 @@
 //  les montrent (HmiBreakpointMargin) ; la simulation de l'IHM les donne a son
 //  moteur (hmi::Runtime::setBreakpoints) et en rapporte ce qu'il en a compris :
 //  les passages, la ligne ou il s'arrete, la note (pullFrom). Un point suit son
-//  CODE (l'identifiant du script ou de la fonction), pas son texte : taper
-//  au-dessus le garde a sa place (shiftLines).
+//  CODE (l'identifiant du script ou de la fonction), pas son texte : taper,
+//  supprimer, joindre des lignes au-dessus, Annuler, Retablir, Migrer ce code le
+//  gardent sur sa ligne (shiftLines). Le projet se reconnait a son document (pas
+//  a son adresse) : un autre document, meme a la meme place, vide la liste.
 // =============================================================================
 #pragma once
 
 #include "../../core/Signal.hpp"
+#include "../../hmi/HmiCommands.hpp"     // hmi::DocumentPtr
 #include "../../hmi/HmiRuntime.hpp"
 #include "../../ui/widgets/Controls.hpp"
 
 #include <cstdint>
 #include <functional>
+#include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -41,9 +46,10 @@ public:
     static HmiDebugSession& instance();
 
     // Le projet dont ce sont les points (un autre : ils partent). Les volets qui montrent du code et la
-    // simulation le donnent ; il sert a refuser un script C ou C++ et a nommer un code.
-    void bindProject(const hmi::Project* project);
-    [[nodiscard]] const hmi::Project* project() const noexcept { return owner_; }
+    // simulation le donnent ; il sert a refuser un script C ou C++ et a nommer un code. 1.13.0 : reconnu par son
+    // document (un lien faible), pas par son adresse - un projet ferme puis un autre ouvert a la meme place : ils partent.
+    void bindProject(const hmi::DocumentPtr& doc);
+    [[nodiscard]] const hmi::Project* project() const noexcept;
     [[nodiscard]] const std::vector<hmi::DebugBreakpoint>& breakpoints() const noexcept { return list_; }
     // Poser (faux et `why` : refuse - un script C, une ligne inconnue) ; enlever ; poser ou enlever (le clic
     // dans la marge : vrai, pose ; faux, enleve ou refuse).
@@ -58,8 +64,13 @@ public:
     [[nodiscard]] std::uint32_t at(HmiDebugTarget code, std::uint32_t line) const;
     [[nodiscard]] std::size_t rankOf(std::uint32_t id) const;
     [[nodiscard]] const hmi::DebugBreakpoint* find(std::uint32_t id) const;
-    // Le code a change : les points de ce code a partir de la ligne `from` (1 = la premiere) glissent de `delta`.
-    void shiftLines(HmiDebugTarget code, std::uint32_t from, int delta);
+    // Le code a change : les lignes 1..prefix sont restees, celles a partir de `from` (1 = la premiere, comptee dans
+    // l'ancien texte) aussi, decalees de `delta` ; entre les deux, la partie changee (supprimee, remplacee, jointe).
+    // Un point du bas glisse avec sa ligne ; un point de la partie changee reste dans ce qu'il en reste (sa premiere
+    // ligne si elle a disparu) ; deux points sur une meme ligne n'en font plus qu'un.
+    void shiftLines(HmiDebugTarget code, std::uint32_t prefix, std::uint32_t from, int delta);
+    // Le meme calcul, d'un texte a l'autre (la frappe, Annuler, Retablir, Migrer ce code).
+    void followText(HmiDebugTarget code, const std::string& before, const std::string& after);
     // Ce que l'utilisateur a change (le moteur relit) ; ce qui a change tout court (les marges suivent).
     [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
     [[nodiscard]] std::uint64_t stateRevision() const noexcept { return state_; }
@@ -67,7 +78,8 @@ public:
     // ---- la simulation qui tourne (le moteur de l'IHM ; nul : aucune) ----
     void setRuntime(hmi::Runtime* rt);
     [[nodiscard]] hmi::Runtime* runtime() const noexcept { return runtime_; }
-    // Les passages, les lignes, les notes du moteur ; la pause.
+    // Les passages, les lignes, les notes du moteur ; la pause. 1.13.0 : une NOUVELLE pause (apres un pas, Continuer)
+    // revient au niveau 0 - la ligne d'arret, pas le niveau choisi dans la pile d'avant.
     void pullFrom(const hmi::Runtime& rt);
     // Le niveau de la pile choisi dans le volet Debogage (0 : la ligne d'arret ; 1 : celui d'en dessous...).
     void setLevel(std::size_t level);
@@ -83,9 +95,12 @@ private:
     std::vector<hmi::DebugBreakpoint> list_;
     std::uint32_t                     nextId_{1};
     std::uint64_t                     revision_{1}, state_{1};
-    const hmi::Project*               owner_{nullptr};
+    std::weak_ptr<const hmi::Document> owner_;
+    bool                              bound_{false};
     hmi::Runtime*                     runtime_{nullptr};
     std::size_t                       level_{0};
+    std::uint64_t                     pauses_{0};     // les pauses du moteur deja vues (Runtime::pauseCount)
+    std::map<std::pair<hmi::Id, hmi::Id>, std::string> followed_;   // le dernier texte suivi de chaque code (followText)
 };
 
 // LA MARGE D'UN EDITEUR DE CODE : la colonne des points d'arret (un clic pose ou enleve un rond rouge,
@@ -97,7 +112,8 @@ public:
     using Target = std::function<HmiDebugTarget()>;
     using Say = std::function<void(const std::string&, bool warning)>;
     void attach(ui::Widget& owner, ui::MultiLineText& editor, Target target, Say say);
-    // Le code montre a change (un autre script, Annuler) : la reference de la frappe repart d'ici.
+    // Le code montre a ete recharge : un autre code, la reference repart d'ici ; le meme (Annuler, Retablir, Migrer
+    // ce code), ses points suivent leurs lignes d'un texte a l'autre, comme a la frappe.
     void reset();
     // L'utilisateur a tape : les points sous la ligne changee glissent avec elle.
     void edited();
@@ -128,7 +144,9 @@ private:
 // (P = 3.2) », « Sans condition : il s'arretera a chaque passage »).
 void askBreakpointCondition(HmiDebugTarget code, std::uint32_t line, const std::function<void(const std::string&, bool)>& say,
                             const std::string& lineText = {});
-// L'apercu d'une condition dans la simulation qui tourne (en pause : dans la portee de la ligne d'arret).
-[[nodiscard]] std::string conditionPreview(const std::string& condition);
+// L'apercu de la condition d'un point de `code` dans la simulation qui tourne : en pause dans ce code (la ligne
+// d'arret), sa valeur ; ailleurs, ses noms juges dans ce code (ses VAR, ses parametres) - elle sera essayee au passage.
+// Une condition qui ne rend pas un BOOL le dit (le point se desarmera).
+[[nodiscard]] std::string conditionPreview(HmiDebugTarget code, const std::string& condition);
 
 } // namespace app
