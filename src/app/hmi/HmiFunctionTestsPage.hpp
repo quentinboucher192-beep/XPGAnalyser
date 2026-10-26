@@ -279,6 +279,7 @@ private:
     bool        done_{false};
     bool        syncing_{false};
     std::vector<std::string> paramNames_, paramTypes_, paramUnits_, paramDefaults_;
+    std::vector<std::string> paramReads_;     // 1.13.0 : le type ou se lit chaque case (un T : sa contrainte)
     std::vector<bool>        paramOutput_;   // une sortie : rien a donner
     Body*           body_{nullptr};
     ui::InputText*  nameField_{nullptr};

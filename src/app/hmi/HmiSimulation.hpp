@@ -677,7 +677,8 @@ public:
     void stopHmi(const std::string& source = {});
     // 1.11.13 : la fin du build d'un demarrage (l'hote, buildGate) - valide : l'IHM
     // demarre ; sinon elle reste arretee et dit pourquoi (les sorties, la source).
-    void buildDone(bool ok, const std::string& why = {});
+    // 1.13.0 (seconde passe) : `remedy` - ce que la note dit de faire ; vide : corriger la source (Diagnostics).
+    void buildDone(bool ok, const std::string& why = {}, const std::string& remedy = {});
     [[nodiscard]] bool waitingBuild() const noexcept { return waitingBuild_; }
     // ---- 1.11.15 : DEMARRER, ARRETER, REDEMARRER, GENERER ET REDEMARRER ------------------
     //  Demarrer (startHmi) : le build de ce qui a change, les donnees gardees rendues

@@ -384,8 +384,10 @@ protected:
             if (contextMenu() && contextMenu()->isOpen()) onContextMenu(d->pos);
             return r;
         }
+        // 1.13.0 (D3b) : apres un clic sur la case Unite, F2 la tape (la table) au lieu de renommer la variable.
         if (const auto* k = std::get_if<ui::KeyDown>(&ev);
-            k && k->key == ui::Key::F2 && k->mods.none() && !k->repeat && focused() && !cellEditing() && onRename && onRename())
+            k && k->key == ui::Key::F2 && k->mods.none() && !k->repeat && focused() && !cellEditing() && f2ClickedColumn() < 0 && onRename
+            && onRename())
             return ui::EventResult::Consumed;
         if (const auto* d = std::get_if<ui::MouseDown>(&ev);
             d && d->button == ui::MouseButton::Left && d->clickCount >= 2 && d->mods.none() && !cellEditing() && onNameDoubleClick)
@@ -491,6 +493,9 @@ public:
     using Dialog = std::function<bool(std::size_t, std::size_t)>;
     void setDialog(Dialog d) { dialog_ = std::move(d); }
     bool editInDialog(ui::RowIndex r, std::size_t c) override { return dialog_ && dialog_(r, c); }
+    // 1.13.0 (seconde passe) : une case qui se tape mais que le double-clic ouvre dans une fenetre (l'unite).
+    void setDoubleClickDialog(Dialog d) { doubleClick_ = std::move(d); }
+    bool doubleClickInDialog(ui::RowIndex r, std::size_t c) override { return doubleClick_ && doubleClick_(r, c); }
     // Glisser une variable sur un dossier (ou sous les lignes : la racine) - pas
     // sur celui ou elle est deja.
     [[nodiscard]] bool canDrop(ui::RowIndex from, ui::RowIndex to) const override {
@@ -539,6 +544,7 @@ private:
     Choices  choices_;
     Commit   commit_;
     Dialog   dialog_;
+    Dialog   doubleClick_;
 };
 
 // Un modele simple : du texte, un style, et l'edition.
@@ -569,6 +575,9 @@ public:
     using Dialog = std::function<bool(std::size_t, std::size_t)>;
     void setDialog(Dialog d) { dialog_ = std::move(d); }
     bool editInDialog(ui::RowIndex r, std::size_t c) override { return dialog_ && dialog_(r, c); }
+    // 1.13.0 (seconde passe) : une case qui se tape mais que le double-clic ouvre dans une fenetre (l'unite).
+    void setDoubleClickDialog(Dialog d) { doubleClick_ = std::move(d); }
+    bool doubleClickInDialog(ui::RowIndex r, std::size_t c) override { return doubleClick_ && doubleClick_(r, c); }
 private:
     std::vector<std::string> headers_;
     std::vector<std::vector<std::string>> rows_;
@@ -577,6 +586,7 @@ private:
     Choices  choices_;
     Commit   commit_;
     Dialog   dialog_;
+    Dialog   doubleClick_;
 };
 
 using PG = ui::PropertyGrid;
@@ -723,6 +733,7 @@ HmiVariablesPane::HmiVariablesPane(std::string id, hmi::DocumentPtr doc, Apply a
                        {"\xC3\x89quipement", 140.f, 60.f, true, false}, {"Adresse", 86.f, 50.f, true, false}, {"Acc\xC3\xA8s", 112.f, 50.f, true, false},
                        {"Place Modbus", 180.f, 60.f, true, false, true, ui::Align::Start, 0, false},
                        {"Qualit\xC3\xA9 (en marche)", 170.f, 60.f, true, false, true, ui::Align::Start, 0, false}});
+    table->setF2ClickedColumns({CUnit});   // 1.13.0 (D3b) : un clic sur la case Unite, puis F2 : son champ
     // Lot 20 : plusieurs lignes se choisissent (Maj, Ctrl) - pour les copier vers Excel.
     table->setSelectionMode(ui::SelectionMode::Extended);
     // Lot recherche : LES FILTRES DES COLONNES. Le volet les applique (Host) : ils
@@ -1498,12 +1509,14 @@ void HmiVariablesPane::refresh() {
             [this](std::size_t r, std::size_t c) { return choicesFor(r, c); },
             [this](std::size_t r, std::size_t c, const std::string& text) { return commitCell(r, c, text); });
         // 1.12.14 : la case Type d'une variable ouvre le selecteur de types.
+        // 1.13.0 (seconde passe) : la case Unite d'une variable se tape (F2, Entree : Ctrl+Espace propose les unites) ;
+        // le double-clic ouvre le selecteur d'unites.
+        vm->setDoubleClickDialog([this](std::size_t r, std::size_t c) {
+            if (c != CUnit || r >= rows_.size() || rows_[r].kind != Row::Kind::Variable || !unitpicker::available()) return false;
+            pickUnit(rows_[r].var);
+            return true;
+        });
         vm->setDialog([this](std::size_t r, std::size_t c) {
-            // 1.13.0 (lot J6b) : la case Unite d'une variable ouvre le selecteur d'unites (sans hote : un champ).
-            if (c == CUnit && r < rows_.size() && rows_[r].kind == Row::Kind::Variable && unitpicker::available()) {
-                pickUnit(rows_[r].var);
-                return true;
-            }
             if (c != CType || r >= rows_.size() || rows_[r].kind != Row::Kind::Variable) return false;
             const auto* v = doc_->project.variableById(rows_[r].var);
             if (!v) return false;
@@ -1859,13 +1872,15 @@ bool HmiVariablesPane::setType(Id id, const std::string& raw, std::string* why) 
         if (sameText(v->type, type)) return true;
         const std::string first = e->values.empty() ? std::string{} : e->values.front().name;
         const std::string name = e->name;
+        const std::string varName = v->name, lostUnit = v->unit;   // 1.13.0 (seconde passe) : l'unite retiree, dite
         change(id, "Type de " + v->name + " : " + name, [&](hmi::Variable& x) {
             x.type = name;
             x.initial = first;
             if (x.scaled()) x.rawMin = x.rawMax = x.engMin = x.engMax = 0;
             x.unit.clear();                       // 1.13.0 (lot J6b) : une enumeration n'a jamais d'unite
         });
-        say(v->name + " : " + name + " (\xC3\xA9num\xC3\xA9ration, un DINT) \xC2\xB7 valeur initiale " + (first.empty() ? std::string("vide") : first));
+        say(varName + " : " + name + " (\xC3\xA9num\xC3\xA9ration, un DINT) \xC2\xB7 valeur initiale " + (first.empty() ? std::string("vide") : first)
+            + (lostUnit.empty() ? std::string{} : " \xC2\xB7 unit\xC3\xA9 " + lostUnit + " retir\xC3\xA9" "e (une \xC3\xA9num\xC3\xA9ration n'en prend pas)"));
         return true;
     }
     // 1.12.2 : UN TYPE OBJET (LIST, VECTOR, MAP, TUPLE) vit dans la memoire de l'IHM : la variable
@@ -1877,6 +1892,7 @@ bool HmiVariablesPane::setType(Id id, const std::string& raw, std::string* why) 
         const std::string was = v->equipment + (v->address.empty() ? std::string{} : " (" + v->address + ")");
         const bool wasRetained = v->retain;
         const std::string name = v->name;
+        const std::string lostUnit = v->unit;     // 1.13.0 (seconde passe) : l'unite retiree, dite
         change(id, "Type de " + v->name + " : " + type, [&](hmi::Variable& x) {
             x.type = type;
             if (!validInitial(doc_->project, type, x.initial, nullptr)) x.initial.clear();
@@ -1894,6 +1910,7 @@ bool HmiVariablesPane::setType(Id id, const std::string& raw, std::string* why) 
         std::string text = name + " : " + type + " \xC2\xB7 " + std::string(hmi::typeform::summary(hmi::typeform::decompose(type).form));
         if (wasBound) text += " \xC2\xB7 d\xC3\xA9li\xC3\xA9" "e de " + was + " : " + ty::unbindableReason(type);
         if (wasRetained) text += " \xC2\xB7 R\xC3\xA9manente retir\xC3\xA9" "e";
+        if (!lostUnit.empty()) text += " \xC2\xB7 unit\xC3\xA9 " + lostUnit + " retir\xC3\xA9" "e (un " + type + " n'en prend pas)";
         say(text, wasBound);
         return true;
     }
@@ -2764,9 +2781,12 @@ void HmiVariablesPane::rebuildProperties() {
         c.name = "Membre";
         c.properties.push_back(prop("Chemin", row.key));
         c.properties.push_back(prop("Type", row.type));
-        // 1.13.0 (lot J6b) : l'unite du membre vient de son type (elle se change dans Types IHM).
+        // 1.13.0 (lot J6b) : l'unite du membre vient de son type (elle se change dans Types IHM). 1.13.0 (seconde passe) :
+        // une case d'un tableau (Pressions[2]) porte celle de la variable - elle se change sur la ligne de la variable.
         if (const std::string unit = hmi::units::unitOfPath(p, row.key); !unit.empty())
-            c.properties.push_back(prop("Unit\xC3\xA9", unit + " (du type)"));
+            c.properties.push_back(prop("Unit\xC3\xA9", row.key.find('.') != std::string::npos
+                                                          ? unit + " (du type)"
+                                                          : unit + " (de la variable " + v->name + " : elle se change sur sa ligne)"));
         c.properties.push_back(prop("Variable", v->name + " (" + v->type + ")"));
         if (v->bound()) {
             // 1.11.8 : interne (garde dans l'IHM) ou attribue a l'equipement de la structure.
@@ -2862,7 +2882,11 @@ void HmiVariablesPane::rebuildProperties() {
             }, {}, "L'unit\xC3\xA9 physique (bar, degC, m3/h, %) : Compiler refuse bar + mbar et convertit une affectation de m\xC3\xAA" "me "
                    "famille ; vide : sans unit\xC3\xA9. La valeur initiale se lit dans cette unit\xC3\xA9.");
             pu.placeholder = "sans";
-            if (unitpicker::available()) pu.dialog = [this, id] { pickUnit(id); };
+            // 1.13.0 (seconde passe) : la case se tape ; le bouton ... ouvre le selecteur (avant : il remplacait le champ).
+            if (unitpicker::available()) {
+                pu.open = [this, id] { pickUnit(id); };
+                pu.openTip = unitpicker::kChoose;
+            }
             c.properties.push_back(std::move(pu));
         }
         std::vector<std::string> folders{"(racine)"};
@@ -3474,6 +3498,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
         table->setColumns({{"Membre", 150.f, 60.f, true, false}, {"Type", 200.f, 60.f, true, false}, {"Unit\xC3\xA9", 70.f, 40.f, true, false},
                            {"Initiale", 90.f, 40.f, true, false},
                            {"D\xC3\xA9" "calage", 90.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false}, {"Description", 240.f, 60.f, true, false}});
+        table->setF2ClickedColumns({2});   // 1.13.0 (D3b) : un clic sur la case Unite d'un membre, puis F2 : son champ
         table->setSelectionMode(ui::SelectionMode::Extended);           // 1.10 : plusieurs membres a copier
         table->onCopy = [this] {
             (void)copyMembers();
@@ -3531,8 +3556,9 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                 if (a == kMenuBase - kMemberDuplicate) {
                     if (selectedMember() >= 0) (void)duplicateMember(selectedType(), static_cast<std::size_t>(selectedMember()));
                 } else if (a == kMenuBase - kMemberRename) {
+                    // 1.13.0 (D3b) : le nom du membre, meme apres un clic sur sa case Unite (que F2 taperait alors).
                     members_->takeFocus();
-                    (void)members_->dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+                    if (selectedMember() >= 0) (void)members_->beginCellEdit(static_cast<ui::RowIndex>(selectedMember()), 0);
                 } else if (a < kMenuBase && a > kMenuBase - 100) {
                     tools_->triggered->emit(kMenuBase - a);
                 }
@@ -3748,6 +3774,8 @@ void HmiTypesPane::refreshMembers() {
                            {"Initiale", 90.f, 40.f, true, false},
                                   {"D\xC3\xA9" "calage", 90.f, 40.f, true, false}, {"Taille", 80.f, 40.f, true, false},
                                   {"Description", 240.f, 60.f, true, false}});
+        // 1.13.0 (D3b) : un clic sur la case Unite d'un membre (2), puis F2 : son champ ; un rappel n'en a pas.
+        members_->setF2ClickedColumns(cb ? std::vector<std::size_t>{} : std::vector<std::size_t>{2});
         if (membersPanel_) static_cast<HmiTitledPanel*>(membersPanel_)->setTitle(cb ? "RAPPEL" : "MEMBRES");
     }
     if (cb) {
@@ -3813,13 +3841,15 @@ void HmiTypesPane::refreshMembers() {
         },
         [this](std::size_t r, std::size_t c, const std::string& text) { return commitMemberCell(r, c, text); });
     // 1.12.14 : la case Type d'un membre ouvre le selecteur de types (les types imbriques aussi).
+    // 1.13.0 (seconde passe) : la case Unite d'un membre se tape (Ctrl+Espace) ; le double-clic ouvre le selecteur d'unites.
+    static_cast<Rows&>(*memberModel_).setDoubleClickDialog([this, tid](std::size_t r, std::size_t c) {
+        const auto* t2 = doc_->project.hmiType(tid);
+        if (c != 2 || !t2 || r >= t2->members.size() || !unitpicker::available()) return false;
+        pickMemberUnit(tid, r);
+        return true;
+    });
     static_cast<Rows&>(*memberModel_).setDialog([this, tid](std::size_t r, std::size_t c) {
         const auto* t2 = doc_->project.hmiType(tid);
-        // 1.13.0 (lot J6b) : la case Unite d'un membre ouvre le selecteur d'unites (sans hote : un champ).
-        if (c == 2 && t2 && r < t2->members.size() && unitpicker::available()) {
-            pickMemberUnit(tid, r);
-            return true;
-        }
         if (c != 1 || !t2 || r >= t2->members.size()) return false;
         const std::weak_ptr<int> alive = alive_;
         return askTypeIn(doc_, "Type de " + t2->name + "." + t2->members[r].name, t2->members[r].type,
@@ -4506,7 +4536,10 @@ void HmiTypesPane::rebuildProperties() {
                 return edit([s](hmi::TypeMember& x) { x.unit = s; })(text);
             }, {}, "L'unit\xC3\xA9 physique du membre (REAL [bar]) : chaque variable du type la porte ; vide : sans unit\xC3\xA9.");
             pu.placeholder = "sans";
-            if (unitpicker::available()) pu.dialog = [this, id, index] { pickMemberUnit(id, index); };
+            if (unitpicker::available()) {                     // 1.13.0 (seconde passe) : un champ, et le bouton
+                pu.open = [this, id, index] { pickMemberUnit(id, index); };
+                pu.openTip = unitpicker::kChoose;
+            }
             c.properties.push_back(std::move(pu));
         }
         c.properties.push_back(prop("Initiale", hmi::shownCell(m.initial), PG::ValueType::Text, [edit](std::string_view text) {   // 1.12.19 (U3)
@@ -4643,7 +4676,8 @@ HmiTypesPane::MemberPaste HmiTypesPane::planMemberPaste(Id typeId, std::string_v
                 case FType: type = trimmed(row[c]); hasType = !type.empty(); break;
                 case FInitial: initial = trimmed(row[c]); hasInitial = !initial.empty(); break;
                 case FDescription: description = row[c]; hasDescription = !trimmed(row[c]).empty(); break;
-                case FUnit: unit = trimmed(row[c]); hasUnit = true; break;   // 1.13.0 (lot J6b) : une case vide retire l'unite
+                // 1.13.0 (seconde passe) : une case vide garde l'unite, comme les autres cases (avant : elle la retirait).
+                case FUnit: unit = trimmed(row[c]); hasUnit = !unit.empty(); break;
                 default: break;
             }
         }

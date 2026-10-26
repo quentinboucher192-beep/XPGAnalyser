@@ -72,7 +72,14 @@ struct DisplayOptions {
 // 1.13.0 (lot J6b) : l'unite physique d'une variable (Variables IHM, membres d'un type : unitOfPath), comme
 // l'operateur la lit - l'unite d'affichage par defaut quand aucune ligne Unites et formats n'en pose une.
 // "" : aucune, ou une expression. `in` : un parametre de la vue se lit comme ce qu'il designe.
-[[nodiscard]] std::string physicalDisplayUnit(const Project&, std::string_view path, const View* in = nullptr);
+// 1.13.0 (seconde passe) : une constante de vue aussi (sa colonne Unite) ; `format` : le format montre - un format
+// qui finit par % (0.0%) porte deja le signe, une unite de la famille pourcentage (%, ratio) ne s'y ajoute pas.
+[[nodiscard]] std::string physicalDisplayUnit(const Project&, std::string_view path, const View* in = nullptr,
+                                              std::string_view format = {});
+// 1.13.0 (seconde passe) : L'UNITE D'AFFICHAGE d'un chemin - celle de sa ligne Unites et formats, sinon son unite
+// physique (physicalDisplayUnit, le format de la ligne compris). Ce que lisent la colonne d'un Tableau, la saisie
+// d'une consigne, le Reglage PID et les rapports (avant : la ligne seule, sans repli sur l'unite physique).
+[[nodiscard]] std::string displayUnitOf(const Project&, std::string_view path, const View* in = nullptr);
 // Le symbole tel qu'on l'affiche : degC -> le degre C, m3/h et Nm3/h -> le 3 en exposant ; le reste tel quel.
 [[nodiscard]] std::string unitLabel(std::string_view symbol);
 // Tableau de variables : le format de la ligne `row` ("formats" au meme rang,

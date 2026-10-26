@@ -92,6 +92,8 @@ public:
         std::function<bool(const hmi::ExportRequest&, std::string*)> exportFile;
         std::function<sim::Environment*()>                           plc;
         std::function<void(const std::vector<TestLine>&)>            output;
+        // 1.13.0 (seconde passe) : ce que l'ecran dit dans sa barre ("Rapport des tests ecrit : ...") ; `warning` : un refus.
+        std::function<void(const std::string&, bool warning)>        message;
     };
     void setTestHosts(TestHosts h) { testHosts_ = std::move(h); dirty_ = true; invalidateLayout(); }
     bool exportTestsReport(hmi::ExportFormat format, std::string* where = nullptr);

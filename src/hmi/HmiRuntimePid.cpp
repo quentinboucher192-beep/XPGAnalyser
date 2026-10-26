@@ -168,7 +168,7 @@ void Runtime::pidResolve(PidLoop& L, const View& v, const Object& o, const Objec
     const std::string pvVar = ranges::isName(b.pv) ? b.pv : std::string{};
     b.unit = trimmed(shown.text("unit"));
     if (b.unit.empty() && !pvVar.empty() && project_)
-        if (const auto* d = displayOf(*project_, pvVar, &v)) b.unit = d->unit;
+        b.unit = displayUnitOf(*project_, pvVar, &v);                     // 1.13.0 (seconde passe) : l'unite physique en repli
     const auto bound = [&](const char* key, const char* inherited, double& out) {
         std::string t = trimmed(shown.text(key));
         if (t.empty() && !pvVar.empty() && project_) t = ranges::inheritedOf(*project_, pvVar, inherited, &v).value;

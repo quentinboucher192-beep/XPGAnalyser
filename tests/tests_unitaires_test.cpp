@@ -670,6 +670,251 @@ void genererInconnues() {
     check(!said("attendu lisible", "attendu illisible"), "Generer : un attendu lisible ne dit rien");
 }
 
+// =========================================== 1.13.0 (seconde passe, lot D3) ===
+const Issue* issueWith(const std::vector<Issue>& issues, const std::string& caseName, const std::string& needle) {
+    for (const auto& i : issues)
+        if (i.property.find(caseName) != std::string::npos && i.message.find(needle) != std::string::npos) return &i;
+    return nullptr;
+}
+
+// T2-26 : un attendu ecrit en formule (=Seuil_Haut - 5) ou par un nom connu (Seuil_Haut) s'evalue apres l'appel.
+void attenduCalcule() {
+    std::printf("-- T2-26 : un attendu calcule (=Seuil_Haut, =Seuil_Haut - 5, Seuil_Haut) s'evalue\n");
+    Project p = bench();
+    addVar(p, "Seuil_Haut", "REAL", "80.0");
+    addVar(p, "Sortie", "REAL", "0.0");
+    HmiFunction& lim = addFunction(p, "Limiter", "REAL", {param(p, "X", "REAL")},
+                                   "Sortie := Seuil_Haut - 5.0;\nLimiter := MIN(X, Seuil_Haut);");
+    FunctionTest formule = caseOf(p, lim.id, "formule");
+    formule.arguments = {"120.0"};
+    formule.expected = "=Seuil_Haut";
+    FunctionTest calcul = caseOf(p, lim.id, "calcul");
+    calcul.arguments = {"75.0"};
+    calcul.expected = "=Seuil_Haut - 5";
+    FunctionTest nom = caseOf(p, lim.id, "nom seul");
+    nom.arguments = {"120.0"};
+    nom.expected = "Seuil_Haut";
+    FunctionTest faux = caseOf(p, lim.id, "faux");
+    faux.arguments = {"10.0"};
+    faux.expected = "=Seuil_Haut";
+    FunctionTest verif = caseOf(p, lim.id, "verif calculee");
+    verif.arguments = {"1.0"};
+    verif.checks = {{"Sortie", "=Seuil_Haut - 5.0", ""}};
+    lim.tests = {formule, calcul, nom, faux, verif};
+    const auto rep = runFunctionTests(p, lim);
+    check(rep.results.size() == 5, "cinq cas joues");
+    if (rep.results.size() != 5) return;
+    check(rep.results[0].verdict == Verdict::Passed, "attendu =Seuil_Haut : reussi (" + verdict(rep.results[0].verdict) + ", " + rep.results[0].detail + ")");
+    check(rep.results[1].verdict == Verdict::Passed, "attendu =Seuil_Haut - 5 : reussi (" + rep.results[1].detail + ")");
+    check(rep.results[2].verdict == Verdict::Passed, "attendu Seuil_Haut (un nom connu seul) : reussi (" + rep.results[2].detail + ")");
+    check(rep.results[3].verdict == Verdict::Failed && rep.results[3].detail.find("attendu =Seuil_Haut (80.0)") != std::string::npos,
+          "attendu =Seuil_Haut sur 10.0 : echec, le detail montre la valeur calculee (" + rep.results[3].detail + ")");
+    check(rep.results[4].verdict == Verdict::Passed, "verif Sortie = =Seuil_Haut - 5.0 : reussi (" + rep.results[4].detail + ")");
+    std::vector<Issue> issues;
+    checkFunctionTests(p, issues);
+    check(!issueWith(issues, "formule", "illisible") && !issueWith(issues, "calcul", "illisible") && !issueWith(issues, "nom seul", "illisible"),
+          "Generer : un attendu calcule n'est pas illisible");
+    lim.tests = {formule};
+    lim.tests[0].expected = "=Seuil_Bas";
+    issues.clear();
+    checkFunctionTests(p, issues);
+    check(issueWith(issues, "formule", "Seuil_Bas n'est pas un nom connu"), "Generer : une formule sur un nom inconnu est dite");
+}
+
+// T2-27, R26 : une pose =Variable n'est plus "illisible" ; un membre mal ecrit, l'attendu d'une verif sont controles.
+void posesEtVerifs() {
+    std::printf("-- T2-27 / R26 : poses en formule, membres, attendu d'une verif\n");
+    Project p = bench();
+    addVar(p, "Seuil", "INT", "7");
+    HmiType cuve;
+    cuve.id = p.allocate();
+    cuve.name = "T_Cuve";
+    TypeMember niveau;
+    niveau.name = "Niveau";
+    niveau.type = "REAL";
+    cuve.members.push_back(niveau);
+    p.programs.types.push_back(cuve);
+    addVar(p, "Cuve", "T_Cuve", "");
+    addVar(p, "Mesure", "REAL", "0.0");
+    HmiFunction* tr = const_cast<HmiFunction*>(p.functionByName("Tracer_Evenement"));
+    FunctionTest pose = caseOf(p, tr->id, "pose formule");
+    pose.arguments = {"'x'", "1"};
+    pose.givens = {{"Compteur_Clics", "=Seuil"}};
+    pose.checks = {{"Compteur_Clics", "8", ""}};
+    FunctionTest calc = caseOf(p, tr->id, "pose calcul");
+    calc.arguments = {"'x'", "1"};
+    calc.givens = {{"Compteur_Clics", "=Seuil + 1"}};
+    calc.checks = {{"Compteur_Clics", "9", ""}};
+    FunctionTest membre = caseOf(p, tr->id, "membre faux");
+    membre.arguments = {"'x'", "1"};
+    membre.givens = {{"Cuve.Niveu", "2.5"}};
+    membre.checks = {{"Cuve.Niveux", "1", ""}};
+    FunctionTest verif = caseOf(p, tr->id, "verif illisible");
+    verif.arguments = {"'x'", "1"};
+    verif.checks = {{"Mesure", "seize", ""}};
+    FunctionTest virgule = caseOf(p, tr->id, "pose membre virgule");
+    virgule.arguments = {"'x'", "1"};
+    virgule.givens = {{"Cuve.Niveau", "2,5"}};
+    virgule.checks = {{"Cuve.Niveau", "2.5", ""}};
+    tr->tests = {pose, calc, membre, verif, virgule};
+    std::vector<Issue> issues;
+    checkFunctionTests(p, issues);
+    check(!issueWith(issues, "pose formule", "valeur illisible") && !issueWith(issues, "pose calcul", "valeur illisible"),
+          "Generer : une pose =Seuil (ou =Seuil + 1) n'est plus illisible");
+    check(issueWith(issues, "membre faux", "pose \xC2\xAB Cuve.Niveu \xC2\xBB"), "Generer : une pose sur Cuve.Niveu (membre inconnu) est dite");
+    check(issueWith(issues, "membre faux", "v\xC3\xA9rif \xC2\xAB Cuve.Niveux \xC2\xBB"), "Generer : une verif sur Cuve.Niveux (membre inconnu) est dite");
+    check(issueWith(issues, "verif illisible", "attendu illisible : seize n'est pas un nombre"),
+          "Generer : l'attendu d'une verif sur un REAL, illisible (seize), est dit");
+    check(!issueWith(issues, "pose membre virgule", "illisible"), "Generer : une pose 2,5 sur un membre REAL se lit");
+    const auto rep = runFunctionTests(p, *tr);
+    check(rep.results.size() == 5 && rep.results[0].verdict == Verdict::Passed, "pose =Seuil jouee : reussi");
+    check(rep.results.size() == 5 && rep.results[1].verdict == Verdict::Passed, "pose =Seuil + 1 jouee : reussi");
+    check(rep.results.size() == 5 && rep.results[4].verdict == Verdict::Passed,
+          "pose Cuve.Niveau := 2,5 jouee : reussi (" + (rep.results.size() == 5 ? rep.results[4].detail : std::string{}) + ")");
+}
+
+// R28 : NAN et INF pour un retour REAL ne sont pas "illisibles".
+void nanEtInf() {
+    std::printf("-- R28 : NAN, INF, -INF pour un retour REAL\n");
+    Project p = bench();
+    HmiFunction* div = const_cast<HmiFunction*>(p.functionByName("Diviser"));
+    FunctionTest n = caseOf(p, div->id, "nan");
+    n.arguments = {"1.0", "1.0"};
+    n.expected = "NAN";
+    FunctionTest i = caseOf(p, div->id, "inf");
+    i.arguments = {"1.0", "1.0"};
+    i.expected = "-INF";
+    div->tests = {n, i};
+    std::vector<Issue> issues;
+    checkFunctionTests(p, issues);
+    check(!issueWith(issues, "nan", "illisible") && !issueWith(issues, "inf", "illisible"), "Generer : NAN et -INF attendus d'un REAL : lisibles");
+    const auto rep = runFunctionTests(p, *div);
+    check(rep.results.size() == 2 && rep.results[0].verdict == Verdict::Failed && rep.results[1].verdict == Verdict::Failed,
+          "1.0 / 1.0 n'est ni NAN ni -INF : echec (pas une erreur)");
+}
+
+// T2-28 / T2-54 : une fonction generique - 2,5 et VRAI se lisent dans la contrainte, la tolerance sert a un T reel.
+void generiqueLu() {
+    std::printf("-- T2-28 / T2-54 : un T se lit dans sa contrainte ; la tolerance sur un T reel\n");
+    Project p = bench();
+    HmiFunction& moy = addFunction(p, "Moyenne3", "T", {param(p, "A", "T"), param(p, "B", "T"), param(p, "C", "T")},
+                                   "Moyenne3 := (A + B + C) / 3.0;");
+    moy.generics = {{"T", "ANY_REAL"}};
+    HmiFunction& egal = addFunction(p, "Pareil", "BOOL", {param(p, "X", "U"), param(p, "Y", "U")}, "Pareil := X = Y;");
+    egal.generics = {{"U", ""}};
+    check(testCellType(moy, "T") == "ANY_REAL" && testCellType(egal, "U") == "ANY" && testCellType(moy, "REAL") == "REAL",
+          "testCellType : T -> ANY_REAL, U sans contrainte -> ANY, REAL tel quel");
+    check(testToleranceApplies(moy) && !testToleranceApplies(egal) && testToleranceApplies(*p.functionByName("Diviser")),
+          "testToleranceApplies : un T : ANY_REAL oui, un BOOL non, un REAL oui");
+    FunctionTest t = caseOf(p, moy.id, "un tiers");
+    t.arguments = {"1,0", "2,0", "2"};
+    t.expected = "1.667";
+    t.tolerance = "0.001";
+    moy.tests = {t};
+    FunctionTest v = caseOf(p, egal.id, "vrai et vrai");
+    v.arguments = {"VRAI", "TRUE"};
+    v.expected = "VRAI";
+    FunctionTest a = caseOf(p, egal.id, "azote");
+    a.arguments = {"Azote", "'Azote'"};
+    a.expected = "TRUE";
+    egal.tests = {v, a};
+    std::vector<Issue> issues;
+    checkFunctionTests(p, issues);
+    check(!issueWith(issues, "un tiers", "se donne par une variable") && !issueWith(issues, "un tiers", "tol\xC3\xA9rance"),
+          "Generer : 1,0 pour un T : ANY_REAL se lit, la tolerance sert");
+    check(!issueWith(issues, "vrai et vrai", "variable") && !issueWith(issues, "azote", "variable"), "Generer : VRAI et Azote pour un U se lisent");
+    const auto rep = runFunctionTests(p, moy);
+    check(rep.results.size() == 1 && rep.results[0].verdict == Verdict::Passed,
+          "Moyenne3(1,0 ; 2,0 ; 2) = 1.667 a 0.001 pres : reussi (" + (rep.results.empty() ? std::string{} : rep.results[0].detail + " ; " + rep.results[0].call) + ")");
+    const auto rep2 = runFunctionTests(p, egal);
+    check(rep2.results.size() == 2 && rep2.results[0].verdict == Verdict::Passed && rep2.results[1].verdict == Verdict::Passed,
+          "Pareil(VRAI, TRUE) et Pareil(Azote, 'Azote') : reussis");
+}
+
+// T2-25 : les arguments suivent leur parametre (retire, deplace) ; le surplus reste au bout.
+void argumentsSuivent() {
+    std::printf("-- T2-25 : les arguments des cas suivent leur parametre\n");
+    Project p = bench();
+    HmiFunction* moy = const_cast<HmiFunction*>(p.functionByName("Moyenne_Pression"));
+    FunctionTest poids = caseOf(p, moy->id, "poids 25 %");
+    poids.arguments = {"12.0", "20.0", "0.25"};
+    FunctionTest simple = caseOf(p, moy->id, "moyenne simple");
+    simple.arguments = {"12.0", "20.0"};
+    moy->tests = {poids, simple};
+    check(testParameterNames(*moy) == std::vector<std::string>{"A", "B", "Poids_A"}, "les noms des parametres, dans l'ordre");
+    HmiFunction removed = *moy;
+    check(remapTestArguments(removed, {"A", "B", "Poids_A"}, {"A", "Poids_A"}), "B retire : les cas changent");
+    check(removed.tests[0].arguments == std::vector<std::string>{"12.0", "0.25"} && removed.tests[1].arguments == std::vector<std::string>{"12.0"},
+          "B retire : 12.0 ; 0.25 et 12.0 (pas 12.0 ; 20.0 ; 0.25)");
+    HmiFunction moved = *moy;
+    check(remapTestArguments(moved, {"A", "B", "Poids_A"}, {"B", "A", "Poids_A"}), "A descendu : les cas changent");
+    check(moved.tests[0].arguments == std::vector<std::string>{"20.0", "12.0", "0.25"}, "A et B permutes : leurs valeurs aussi");
+    HmiFunction same = *moy;
+    check(!remapTestArguments(same, {"A", "B", "Poids_A"}, {"A", "B", "Poids_A"}), "rien de change : rien a remettre");
+}
+
+// D3b-4 : un mot seul egal au nom d'un objet (un bouton Arret) reste un texte dans l'attendu d'un STRING - le banc et
+// Generer le lisent pareil (avant : le banc en faisait la formule =Arret, Erreur, et Generer ne disait rien).
+void attenduNomDObjet() {
+    std::printf("-- D3b-4 : Arret (un bouton du meme nom) attendu d'un STRING : un texte\n");
+    Project p = bench();
+    addVar(p, "Etat", "STRING", "''");
+    addVar(p, "Seuil", "REAL", "4.0");
+    View v;
+    v.id = p.allocate();
+    v.name = "Vue_Commandes";
+    Object bouton;
+    bouton.id = p.allocate();
+    bouton.name = "Arret";
+    v.objects.push_back(bouton);
+    p.views.push_back(v);
+    HmiFunction& regler = addFunction(p, "Regler_Etat", nullptr, {}, "Etat := 'Arret';");
+    HmiFunction& mode = addFunction(p, "Mode_Texte", "STRING", {}, "Mode_Texte := 'Arret';");
+    FunctionTest verif = caseOf(p, regler.id, "verif Arret");
+    verif.checks = {{"Etat", "Arret", ""}};
+    regler.tests = {verif};
+    FunctionTest retour = caseOf(p, mode.id, "retour Arret");
+    retour.expected = "Arret";
+    mode.tests = {retour};
+    const TestExpected s = testExpected(p, "STRING", "Arret");
+    check(s.ok() && !s.formula && s.kept == "'Arret'", "testExpected(STRING, Arret) : le texte 'Arret' (" + s.kept + ")");
+    const TestExpected var = testExpected(p, "REAL", "Seuil");
+    check(var.ok() && var.formula && var.kept == "=Seuil", "testExpected(REAL, Seuil) : une variable reste un calcul (" + var.kept + ")");
+    // Un chemin qui part d'une vue (une constante de vue, que le banc lit) reste un calcul.
+    const TestExpected chemin = testExpected(p, "STRING", "Vue_Commandes.TITRE");
+    check(chemin.ok() && chemin.formula && chemin.kept == "=Vue_Commandes.TITRE",
+          "testExpected(STRING, Vue_Commandes.TITRE) : un chemin de vue reste un calcul (" + chemin.kept + ")");
+    const TestExpected nombre = testExpected(p, "REAL", "Arret");
+    check(!nombre.ok() && nombre.why.find("nombre") != std::string::npos, "testExpected(REAL, Arret) : illisible (" + nombre.why + ")");
+    const auto r1 = runFunctionTests(p, regler);
+    check(r1.results.size() == 1 && r1.results[0].verdict == Verdict::Passed,
+          "verif Etat = Arret : reussi (" + (r1.results.empty() ? std::string{} : verdict(r1.results[0].verdict) + ", " + r1.results[0].detail) + ")");
+    const auto r2 = runFunctionTests(p, mode);
+    check(r2.results.size() == 1 && r2.results[0].verdict == Verdict::Passed,
+          "retour Arret : reussi (" + (r2.results.empty() ? std::string{} : verdict(r2.results[0].verdict) + ", " + r2.results[0].detail) + ")");
+    std::vector<Issue> issues;
+    checkFunctionTests(p, issues);
+    check(!issueWith(issues, "verif Arret", "attendu") && !issueWith(issues, "retour Arret", "attendu"), "Generer : rien a redire");
+}
+
+// D3b-5 : NAN, INF, -INF se tapent comme attendu d'un reel (avant : refuses a la saisie, " n'est pas un nombre (REAL) ").
+void nanSaisi() {
+    std::printf("-- D3b-5 : NAN, INF, -INF a la saisie d'un attendu REAL\n");
+    Project p = bench();
+    const TestExpected n = testExpected(p, "REAL", "nan"), i = testExpected(p, "LREAL", "+inf"), m = testExpected(p, "ANY_REAL", "-Inf");
+    check(n.ok() && n.kept == "NAN" && i.ok() && i.kept == "+INF" && m.ok() && m.kept == "-INF",
+          "nan, +inf, -Inf : NAN, +INF, -INF (" + n.kept + ", " + i.kept + ", " + m.kept + ")");
+    const TestExpected entier = testExpected(p, "INT", "INF");
+    check(!entier.ok(), "INF pour un INT : refuse (" + entier.why + ")");
+    HmiFunction* div = const_cast<HmiFunction*>(p.functionByName("Diviser"));
+    FunctionTest inf = caseOf(p, div->id, "inf");
+    inf.arguments = {"1.0", "0.0"};
+    inf.expected = i.kept;
+    div->tests = {inf};
+    const auto rep = runFunctionTests(p, *div);
+    check(rep.results.size() == 1 && rep.results[0].verdict != Verdict::Pending, "1.0 / 0.0 attendu +INF : joue (" + (rep.results.empty() ? std::string{} : rep.results[0].detail) + ")");
+}
+
 } // namespace
 
 int main() {
@@ -684,6 +929,13 @@ int main() {
     textesExacts();
     enumerations();
     genererInconnues();
+    attenduCalcule();       // 1.13.0 (seconde passe, lot D3)
+    posesEtVerifs();
+    nanEtInf();
+    generiqueLu();
+    argumentsSuivent();
+    attenduNomDObjet();     // 1.13.0 (D3b)
+    nanSaisi();
     std::printf("\n%d verifications, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

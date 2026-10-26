@@ -293,24 +293,14 @@ std::string stripArray(std::string_view type) {
 }
 } // namespace
 
-std::string unitOfPath(const Project& project, std::string_view path) {
-    // Decoupe le chemin : un identifiant, puis des .membre et des [indice].
-    std::string_view p = path;
-    while (!p.empty() && std::isspace(static_cast<unsigned char>(p.front()))) p.remove_prefix(1);
-    while (!p.empty() && std::isspace(static_cast<unsigned char>(p.back()))) p.remove_suffix(1);
-    if (p.empty()) return {};
-    std::size_t i = 0;
+namespace {
+// Suit `p` a partir de i (des .membre et des [indice]) depuis le type et l'unite d'un depart.
+std::string follow(const Project& project, std::string type, std::string unit, std::string_view p, std::size_t i) {
     const auto word = [&] {
         const std::size_t s = i;
         while (i < p.size() && (std::isalnum(static_cast<unsigned char>(p[i])) || p[i] == '_')) ++i;
         return std::string(p.substr(s, i - s));
     };
-    const std::string root = word();
-    if (root.empty()) return {};
-    const Variable* var = project.variable(root);
-    if (!var) return {};
-    std::string type = var->type;
-    std::string unit = var->unit;
     while (i < p.size()) {
         if (p[i] == '[') {                                  // un indice : l'element garde l'unite du membre
             const auto close = p.find(']', i);
@@ -345,6 +335,32 @@ std::string unitOfPath(const Project& project, std::string_view path) {
         break;
     }
     return unit;
+}
+} // namespace
+
+std::string unitOfPath(const Project& project, std::string_view path) {
+    // Decoupe le chemin : un identifiant, puis des .membre et des [indice].
+    std::string_view p = path;
+    while (!p.empty() && std::isspace(static_cast<unsigned char>(p.front()))) p.remove_prefix(1);
+    while (!p.empty() && std::isspace(static_cast<unsigned char>(p.back()))) p.remove_suffix(1);
+    if (p.empty()) return {};
+    std::size_t i = 0;
+    while (i < p.size() && (std::isalnum(static_cast<unsigned char>(p[i])) || p[i] == '_')) ++i;
+    const std::string root(p.substr(0, i));
+    if (root.empty()) return {};
+    const Variable* var = project.variable(root);
+    if (!var) return {};
+    return follow(project, var->type, var->unit, p, i);
+}
+
+std::string unitAlong(const Project& project, std::string_view type, std::string_view unit, std::string_view rest) {
+    std::string_view p = rest;
+    while (!p.empty() && std::isspace(static_cast<unsigned char>(p.front()))) p.remove_prefix(1);
+    while (!p.empty() && std::isspace(static_cast<unsigned char>(p.back()))) p.remove_suffix(1);
+    std::string u(unit);
+    while (!u.empty() && std::isspace(static_cast<unsigned char>(u.front()))) u.erase(0, 1);
+    while (!u.empty() && std::isspace(static_cast<unsigned char>(u.back()))) u.pop_back();
+    return follow(project, std::string(type), u, p, 0);
 }
 
 } // namespace hmi::units

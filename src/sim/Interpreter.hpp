@@ -146,6 +146,13 @@ public:
         (void)name;
         return {};
     }
+    // 1.13.0 (seconde passe) : l'unite declaree d'un chemin qui part d'une LOCALE du code en cours (une variable de son
+    // bloc VAR, au plus haut niveau du programme : pas celle d'une FUNCTION interne) - la colonne Unite de ses
+    // declarations, que l'IHM connait ; vide : aucune. Rien hors dialecte IHM.
+    virtual std::string localUnit(std::string_view path) {
+        (void)path;
+        return {};
+    }
     // 1.13.0 (lot J6) : convertit `value` de l'unite `from` vers `to` (meme famille). Vrai : `value` mis a
     // jour ; faux : pas convertible (inconnue, autre famille) - la valeur reste telle quelle. Servi par l'IHM
     // (hmi::units) ; l'interpreteur reste ignorant de la bibliotheque des unites (couche au-dessus).

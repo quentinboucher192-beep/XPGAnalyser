@@ -9559,8 +9559,27 @@ private:
                 return {};
         }
     }
-    // L'unite declaree de ce que designe `e` ("bar") ; vide : aucune, ou pas un chemin.
+    // 1.13.0 (seconde passe) : le chemin qui part d'une locale du programme lui-meme (pas d'une FUNCTION interne : son
+    // cadre est au-dessus) - Debit, Mesures[0], Ligne.Pression ; vide : autre chose.
+    std::string localPath(const Expr& e) {
+        switch (e.kind) {
+            case Expr::Kind::Reference:
+                return frames_.size() == 1 && findLocal(e.name) ? e.name : std::string{};
+            case Expr::Kind::Member:
+            case Expr::Kind::Index: {
+                if (!e.lhs) return {};
+                const std::string base = localPath(*e.lhs);
+                if (base.empty()) return {};
+                return e.kind == Expr::Kind::Member ? base + "." + e.name : base + "[0]";
+            }
+            default:
+                return {};
+        }
+    }
+    // L'unite declaree de ce que designe `e` ("bar") ; vide : aucune, ou pas un chemin. 1.13.0 (seconde passe) : une
+    // locale du code porte celle de sa declaration (la colonne Unite) - l'IHM la donne.
     std::string declaredUnitOf(const Expr& e) {
+        if (const std::string local = localPath(e); !local.empty()) return env_.localUnit(local);
         const std::string path = unitPath(e);
         return path.empty() ? std::string{} : env_.declaredUnit(path);
     }

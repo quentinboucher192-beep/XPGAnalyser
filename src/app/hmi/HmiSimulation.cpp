@@ -3976,12 +3976,15 @@ bool HmiSimulationPane::askBuild(const std::string& source) {
     return false;
 }
 
-void HmiSimulationPane::buildDone(bool ok, const std::string& why) {
+void HmiSimulationPane::buildDone(bool ok, const std::string& why, const std::string& remedy) {
     if (!waitingBuild_) return;
     waitingBuild_ = false;
     if (!ok) {
         autoStart_ = false;   // arretee : elle le reste jusqu'a Demarrer
-        blockedNote_ = "D\xC3\xA9marrage bloqu\xC3\xA9 : " + why + "\nCorrige (panneau du bas, Diagnostics : double-clic, la source), puis D\xC3\xA9marrer l'IHM.";
+        // 1.13.0 (seconde passe) : la consigne vient de l'appelant quand la faute n'est pas aux Diagnostics (un test
+        // rouge : ses verdicts sont aux Sorties).
+        blockedNote_ = "D\xC3\xA9marrage bloqu\xC3\xA9 : " + why + "\n"
+                     + (remedy.empty() ? std::string("Corrige (panneau du bas, Diagnostics : double-clic, la source), puis D\xC3\xA9marrer l'IHM.") : remedy);
         runtime_.logAt(hmi::LogLevel::Error, "Simulation", "IHM", "D\xC3\xA9marrage bloqu\xC3\xA9 : " + why);   // 1.11.14 : une erreur de la Console
         status_->setTransientMessage("D\xC3\xA9marrage bloqu\xC3\xA9 : " + why, 10.0, ui::StatusBar::Severity::Error);
         gateSource_.clear();

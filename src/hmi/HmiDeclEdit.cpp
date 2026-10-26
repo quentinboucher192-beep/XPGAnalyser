@@ -6,6 +6,7 @@
 #include "HmiTypeForms.hpp"     // 1.12.14 : la valeur d'une structure (le moteur la range)
 
 #include "HmiEnums.hpp"
+#include "HmiFunctionTests.hpp" // 1.13.0 (seconde passe) : les arguments des cas suivent leurs parametres
 #include "HmiGuide.hpp"       // guide::fold : sans casse ni accents
 #include "HmiOperators.hpp"
 #include "HmiScript.hpp"
@@ -212,6 +213,35 @@ void renameUses(Project& p, const Place& at, Code& c, std::size_t self, const st
                     if (!d.value.empty()) d.value = replacePath(d.value, from, to, false);
             }
 }
+
+// 1.13.0 (seconde passe) : LES CAS DE TEST SUIVENT LES PARAMETRES. Les arguments d'un cas vont par position : un
+// parametre ajoute, retire, duplique ou deplace dans l'onglet Parametres d'une fonction (du projet, d'une vue)
+// decalerait tous ceux qui suivent. On releve les noms avant le geste et, apres, chaque argument retrouve son
+// parametre par son nom (hmi::remapTestArguments) - dans la meme commande : Ctrl+Z rend les deux.
+HmiFunction* functionAt(Project& p, const Place& at) {
+    if (at.kind == Place::Kind::Function) {
+        for (auto& f : p.programs.functions)
+            if (f.id == at.id) return &f;
+    } else if (at.kind == Place::Kind::SymbolFunction) {
+        if (auto* v = p.view(at.view))
+            for (auto& f : v->functions)
+                if (f.id == at.id) return &f;
+    }
+    return nullptr;
+}
+struct TestsFollow {
+    HmiFunction*             f{nullptr};
+    std::vector<std::string> before;
+    TestsFollow(Project& p, const Place& at, Tab t) {
+        if (t != Tab::Parameters) return;
+        f = functionAt(p, at);
+        if (f && f->tests.empty()) f = nullptr;
+        if (f) before = testParameterNames(*f);
+    }
+    void done() {
+        if (f) (void)remapTestArguments(*f, before, testParameterNames(*f));
+    }
+};
 
 } // namespace
 
@@ -575,7 +605,9 @@ bool add(Project& p, const Place& at, Tab t, int after, std::string_view name, I
         pos = rows[r] + 1;
     }
     if (made) *made = d.id;
+    TestsFollow follow(p, at, t);          // 1.13.0 : un parametre insere au milieu - les arguments suivent
     c.decls->insert(c.decls->begin() + static_cast<std::ptrdiff_t>(pos), std::move(d));
+    follow.done();
     return true;
 }
 
@@ -591,7 +623,9 @@ bool remove(Project& p, const Place& at, Tab t, const std::vector<std::size_t>& 
     if (idx.empty()) return fail(why, "aucune ligne choisie");
     std::sort(idx.begin(), idx.end());
     idx.erase(std::unique(idx.begin(), idx.end()), idx.end());
+    TestsFollow follow(p, at, t);          // 1.13.0 : l'argument d'un parametre retire disparait, les autres suivent
     for (auto it = idx.rbegin(); it != idx.rend(); ++it) c.decls->erase(c.decls->begin() + static_cast<std::ptrdiff_t>(*it));
+    follow.done();
     return true;
 }
 
@@ -609,6 +643,7 @@ bool duplicate(Project& p, const Place& at, Tab t, const std::vector<std::size_t
     idx.erase(std::unique(idx.begin(), idx.end()), idx.end());
     // De la derniere a la premiere : chaque copie juste apres son original, les indices
     // des lignes d'avant ne bougent pas.
+    TestsFollow follow(p, at, t);          // 1.13.0 : la copie d'un parametre s'insere - les arguments suivent
     std::vector<Id> ids;
     for (auto it = idx.rbegin(); it != idx.rend(); ++it) {
         Declaration copy = (*c.decls)[*it];
@@ -620,6 +655,7 @@ bool duplicate(Project& p, const Place& at, Tab t, const std::vector<std::size_t
         ids.insert(ids.begin(), copy.id);
         c.decls->insert(c.decls->begin() + static_cast<std::ptrdiff_t>(*it + 1), std::move(copy));
     }
+    follow.done();
     if (made) *made = std::move(ids);
     return true;
 }
@@ -633,7 +669,9 @@ bool move(Project& p, const Place& at, Tab t, std::size_t row, int delta, std::s
     if (delta == 0) return true;
     if (target < 0) return fail(why, "d\xC3\xA9j\xC3\xA0 en t\xC3\xAAte");
     if (target >= static_cast<long>(rows.size())) return fail(why, "d\xC3\xA9j\xC3\xA0 en bas");
+    TestsFollow follow(p, at, t);          // 1.13.0 : Monter, Descendre - chaque argument suit son parametre
     std::swap((*c.decls)[rows[row]], (*c.decls)[rows[static_cast<std::size_t>(target)]]);
+    follow.done();
     return true;
 }
 

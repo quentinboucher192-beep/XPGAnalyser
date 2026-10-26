@@ -21,6 +21,7 @@
 #include "HmiMarkers.hpp"   // 1.12.5 : un chemin sans ses reperes
 #include "HmiRanges.hpp"    // 1.12.10 (lot F) : la variable dont un objet prend la plage
 #include "HmiUnits.hpp"     // 1.13.0 (lot J6b) : l'unite physique, unite d'affichage par defaut
+#include "HmiSymbols.hpp"   // 1.13.0 (seconde passe) : l'unite d'une constante de vue
 
 #include "HmiExpr.hpp"
 #include "HmiLanguages.hpp"
@@ -261,6 +262,9 @@ bool anyPhysicalUnit(const Project& p) {
     };
     for (const auto& t : p.programs.types)
         if (members(t)) return true;
+    for (const auto& v : p.views)                       // 1.13.0 (seconde passe) : une constante de vue a unite
+        for (const auto& c : v.constants)
+            if (!c.unit.empty()) return true;
     bool found = false;
     p.forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { found = found || members(t); });
     return found;
@@ -298,12 +302,42 @@ std::string unitLabel(std::string_view symbol) {
     return s;
 }
 
-std::string physicalDisplayUnit(const Project& p, std::string_view path, const View* in) {
+std::string physicalDisplayUnit(const Project& p, std::string_view path, const View* in, std::string_view format) {
     // Un chemin seul (Pression, Ligne1.Debit, Vannes[2]) ; une expression n'a pas d'unite a montrer.
     std::string wanted = trim(markers::strip(path, markers::Mode::Expression));
     if (wanted.empty() || !plainPath(wanted)) return {};
     if (const std::string via = throughParam(wanted, in); !via.empty()) wanted = via;
-    return unitLabel(units::unitOfPath(p, wanted));
+    std::string unit = units::unitOfPath(p, wanted);
+    // 1.13.0 (seconde passe) : une constante de vue (Seuil_Haut dans sa vue, Vue_Four.Seuil_Haut ailleurs) montre
+    // l'unite de sa declaration (sa colonne Unite) - une variable IHM du meme nom passe avant, comme au controle.
+    std::size_t n = 0;
+    while (n < wanted.size() && (std::isalnum(static_cast<unsigned char>(wanted[n])) || wanted[n] == '_')) ++n;
+    if (unit.empty() && n > 0 && !p.variable(wanted.substr(0, n))) {
+        const Declaration* c = in ? viewmembers::constant(*in, wanted.substr(0, n)) : nullptr;
+        std::string_view rest = std::string_view(wanted).substr(n);
+        if (!c && n < wanted.size() && wanted[n] == '.') {
+            viewmembers::Member m;
+            std::size_t k = n + 1;
+            while (k < wanted.size() && (std::isalnum(static_cast<unsigned char>(wanted[k])) || wanted[k] == '_')) ++k;
+            if (viewmembers::resolve(p, wanted.substr(0, k), m, nullptr, in) && m.constant) {
+                c = m.constant;
+                rest = std::string_view(wanted).substr(k);
+            }
+        }
+        if (c) unit = units::unitAlong(p, c->type, c->unit, rest);
+    }
+    // Un format en pourcentage (0.0%) ecrit deja " %" (la valeur x 100) : une unite % ou ratio en plus doublerait le
+    // signe (45.0 % ratio).
+    if (const std::string f = trim(format); !unit.empty() && !f.empty() && f.back() == '%'
+        && units::Catalog(p.config).familyOf(unit) == "pourcentage")
+        return {};
+    return unitLabel(unit);
+}
+
+std::string displayUnitOf(const Project& p, std::string_view path, const View* in) {
+    const VariableDisplay* d = displayOf(p, path, in);
+    if (d && !trim(d->unit).empty()) return trim(d->unit);
+    return physicalDisplayUnit(p, path, in, d ? std::string_view(d->format) : std::string_view{});
 }
 
 std::string displayRowPath(std::string_view path, const View* in) {
@@ -344,7 +378,8 @@ std::string effectiveUnit(const Project& p, const Object& o) {
     const std::string own = o.text("unit");
     // 1.13.0 (lot J6b) : sans unite a lui ni ligne Unites et formats, l'unite physique de sa variable.
     if (trim(own).empty() && followsVariableFormat(o))
-        if (std::string physical = physicalDisplayUnit(p, displayVariableOf(o)); !physical.empty()) return physical;
+        if (std::string physical = physicalDisplayUnit(p, displayVariableOf(o), nullptr, effectiveFormat(p, o)); !physical.empty())
+            return physical;
     return own;
 }
 
@@ -388,7 +423,7 @@ std::string formatTemplate(std::string_view text, const Project& p, const View* 
         if (withUnit) {
             // 1.13.0 (lot J6b) : sans ligne Unites et formats (ou sans unite), l'unite physique de la variable.
             std::string unit = d ? trim(d->unit) : std::string{};
-            if (unit.empty()) unit = physicalDisplayUnit(p, expr, in);
+            if (unit.empty()) unit = physicalDisplayUnit(p, expr, in, format);
             if (!unit.empty()) out += " " + unit;
         }
         i = close + 1;
@@ -543,7 +578,12 @@ View displayView(const View& v, const Project& p, const DisplayOptions& o) {
                     const auto* d = displayOf(p, vars[k], &v);
                     if (trim(units[k]).empty()) {
                         std::string unit = d ? trim(d->unit) : std::string{};
-                        if (unit.empty() && physical) unit = physicalDisplayUnit(p, vars[k], &v);
+                        if (unit.empty() && physical) {
+                            const std::string shownFormat = !trim(formats[k]).empty() ? trim(formats[k])
+                                                          : d && !trim(d->format).empty() ? trim(d->format)
+                                                                                         : obj.text("format");
+                            unit = physicalDisplayUnit(p, vars[k], &v, shownFormat);
+                        }
                         if (!unit.empty()) { units[k] = unit; changed = true; }
                     }
                     if (d && trim(formats[k]).empty() && !trim(d->format).empty()) { formats[k] = trim(d->format); changed = true; }
@@ -558,8 +598,10 @@ View displayView(const View& v, const Project& p, const DisplayOptions& o) {
                     if (auto* u = obj.find("unit"); u && u->expr.empty() && !trim(d->unit).empty()) u->value = trim(d->unit);
                     if (auto* f = obj.find("format"); f && f->expr.empty() && !trim(d->format).empty()) f->value = trim(d->format);
                 }
-                if (auto* u = obj.find("unit"); physical && u && u->expr.empty() && trim(u->value).empty())
-                    u->value = physicalDisplayUnit(p, shown, &v);
+                if (auto* u = obj.find("unit"); physical && u && u->expr.empty() && trim(u->value).empty()) {
+                    const auto* f = obj.find("format");
+                    u->value = physicalDisplayUnit(p, shown, &v, f && f->expr.empty() ? std::string_view(f->value) : std::string_view{});
+                }
             }
         }
         for (auto& prop : obj.props) {

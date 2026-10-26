@@ -56,6 +56,9 @@ struct Finding {
     bool        callArity{false};
     // 1.12.20 : la correction d'un clic (hmi::Issue::fixFrom) - remplacer ce texte de la ligne ; vide : aucune.
     std::string fixFrom{}, fixTo{};
+    // 1.13.0 (seconde passe) : la colonne de l'occurrence de fixFrom a remplacer sur la ligne (1 = le premier octet) ;
+    // 0 : la premiere trouvee.
+    int         fixColumn{0};
 };
 
 // Ce que le script voit.
@@ -71,6 +74,9 @@ struct Scope {
     // 1.13.0 (lot J8) : l'espace de noms de l'item controle (un script general ; une fonction : function->ns) - il
     // nomme ses voisins sans prefixe. Vide : la racine.
     std::string              ns{};
+    // 1.13.0 (seconde passe) : les declarations du modele du code controle (un script : ses Variables et Constantes ;
+    // nul : celles de `function`, s'il y en a) - l'unite de leurs locales (Declaration::unit).
+    const std::vector<Declaration>* decls{nullptr};
 };
 
 // Les fautes d'un code ST, dans l'ordre du texte (avec celles de dialectFindings).

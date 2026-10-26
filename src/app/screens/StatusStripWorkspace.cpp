@@ -603,7 +603,9 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
         const Widget* f = focusedUnder(root());
         std::string k;
         if (f && dynamic_cast<const TreeView*>(f)) k = "F2 renommer \xC2\xB7 Suppr supprimer \xC2\xB7 Ctrl+F chercher";
-        else if (f && dynamic_cast<const TableView*>(f)) k = "Ctrl+F chercher \xC2\xB7 Ctrl+C copier \xC2\xB7 F2 renommer";
+        // 1.13.0 (D3b) : apres un clic sur une case que F2 tape (l'Unite d'IHM Studio), F2 ne renomme pas.
+        else if (const auto* tv = dynamic_cast<const TableView*>(f))
+            k = std::string("Ctrl+F chercher \xC2\xB7 Ctrl+C copier \xC2\xB7 F2 ") + (tv->f2ClickedColumn() >= 0 ? "taper la case" : "renommer");
         else if (const auto* code = dynamic_cast<const MultiLineText*>(f); code && code->commandKeys()) {
             // 1.12.2 : les raccourcis de Visual Studio (ou ceux de la 1.12.1, profil classique).
             k = ui::keymap::current() == ui::keymap::Profile::VisualStudio

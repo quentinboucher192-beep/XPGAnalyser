@@ -36635,6 +36635,339 @@ void testsUnitaires113() {
     page.refresh();
     check(!page.faultsOf(c2).empty() && page.cases().model()->cellStyle(1, 0).fgTone == ui::Tone::Error,
           "trop d'arguments (G\xC3\xA9n\xC3\xA9rer le dit) : le nom du cas en rouge (" + page.faultsOf(c2) + ")");
+
+    // ======== 1.13.0 (seconde passe, lot D3) ========
+    // T2-25 (secours) : l'argument en trop se voit dans la fiche et se retire en vidant sa case.
+    page.selectCase(c2);
+    {
+        bool extra = false;
+        for (const auto& c : page.properties().categories())
+            for (const auto& pr : c.properties) extra = extra || (pr.name == "Argument 4 (en trop)" && pr.value == "4");
+        check(extra, "T2-25 : la fiche montre l'argument en trop (Argument 4 (en trop) = 4)");
+        check(page.setArgument(c2, 3, "", &why) && doc->project.function(fm)->tests[1].arguments.size() == 3 && page.faultsOf(c2).empty(),
+              "T2-25 : le vider le retire du cas (plus de faute) [" + why + "]");
+        check(!page.setArgument(c2, 5, "9", &why) && why.find("vide la case") != std::string::npos, "T2-25 : on ne tape pas d'argument au-del\xC3\xA0 (" + why + ")");
+        (void)stack.undo();
+        check(doc->project.function(fm)->tests[1].arguments.size() == 4, "T2-25 : Ctrl+Z rend l'argument retir\xC3\xA9");
+        for (auto& f : doc->project.programs.functions)
+            if (f.id == fm) f.tests[1].arguments = {"12.0", "20.0", "0.25"};
+        page.refresh();
+    }
+    // T2-25 : retirer ou deplacer un parametre - les arguments des cas suivent leur parametre, dans la meme commande.
+    {
+        hmi::decledit::Place at;
+        at.kind = hmi::decledit::Place::Kind::Function;
+        at.id = fm;
+        auto cmd = hmi::changeProject(doc, "Supprimer B", [&](hmi::Project& pp) {
+            (void)hmi::decledit::remove(pp, at, hmi::decledit::Tab::Parameters, {1}, &why);
+        });
+        apply(std::move(cmd));
+        check(doc->project.function(fm)->tests[1].arguments == std::vector<std::string>{"12.0", "0.25"}
+                  && doc->project.function(fm)->tests[0].arguments == std::vector<std::string>{"12.0"},
+              "T2-25 : B retir\xC3\xA9 - poids 25 % garde 12.0 ; 0.25 (Poids_A), moyenne simple 12.0");
+        (void)stack.undo();
+        check(doc->project.function(fm)->tests[1].arguments == std::vector<std::string>{"12.0", "20.0", "0.25"},
+              "T2-25 : Ctrl+Z rend B et les arguments d'avant");
+        auto up = hmi::changeProject(doc, "Monter Poids_A", [&](hmi::Project& pp) {
+            (void)hmi::decledit::move(pp, at, hmi::decledit::Tab::Parameters, 2, -1, &why);
+        });
+        apply(std::move(up));
+        check(doc->project.function(fm)->tests[1].arguments == std::vector<std::string>{"12.0", "0.25", "20.0"},
+              "T2-25 : Poids_A mont\xC3\xA9 - sa valeur monte avec lui");
+        (void)stack.undo();
+    }
+    // T2-29 : un double-clic sur le NOM d'un cas le lance (il ne le renomme plus) ; F2 le renomme.
+    {
+        page.layout();
+        gfx::Rect rr{};
+        check(page.cases().rowRect(0, rr), "T2-29 : la ligne du premier cas \xC3\xA0 l'\xC3\xA9" "cran");
+        const gfx::Point on{rr.x + 30.f, rr.y + rr.h * 0.5f};
+        lines.clear();
+        page.cases().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+        page.cases().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+        page.cases().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 2, {}});
+        page.cases().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+        check(!page.cases().cellEditing() && !lines.empty() && lines.back().element == app::testElement(c1),
+              "T2-29 : double-clic sur \xC2\xAB moyenne simple \xC2\xBB : le cas se joue, rien \xC3\xA0 renommer");
+        page.cases().dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(page.cases().cellEditing(), "T2-29 : F2 ouvre le renommage");
+        page.cases().dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+    }
+    // T2-33 : un cas qui attend une erreur - son Attendu ne se tape plus (ni dans la liste, ni par la fiche).
+    {
+        check(page.setField(c1, app::HmiFunctionTestsPage::Field::ErrorCode, "E_Niveau", &why), "T2-33 : Erreur attendue E_Niveau");
+        check(!page.cases().model()->editable(0, 2) && page.cases().model()->cellText(0, 2) == "l\xC3\xA8ve E_Niveau",
+              "T2-33 : la case Attendu montre \xC2\xAB l\xC3\xA8ve E_Niveau \xC2\xBB et ne s'\xC3\xA9" "dite plus");
+        check(!page.setField(c1, app::HmiFunctionTestsPage::Field::Expected, "17", &why) && why.find("attend l'erreur E_Niveau") != std::string::npos,
+              "T2-33 : un attendu tap\xC3\xA9 est refus\xC3\xA9 (" + why + ")");
+        (void)stack.undo();
+        check(page.cases().model()->editable(0, 2), "T2-33 : Ctrl+Z - l'Attendu redevient \xC3\xA9" "ditable");
+    }
+    // T2-31 : une campagne ne dit changed() qu'une fois (les volets ne se refont plus a chaque fonction).
+    {
+        int said = 0;
+        core::ConnectionScope links;
+        links += app::testruns::changed()->connect([&] { ++said; });
+        (void)app::runAllTests(doc->project, nullptr);
+        check(said == 1, "T2-31 : Lancer les tests (2 fonctions) : une seule annonce (" + std::to_string(said) + ")");
+    }
+    // T2-30 : un verdict vaut pour son projet, et pour ce que la fonction appelle.
+    {
+        (void)app::runAllTests(doc->project, nullptr);
+        const auto* f = doc->project.function(fm);
+        check(f && app::testruns::last(doc->project, *f, f->tests[0]) != nullptr, "T2-30 : le verdict, dans son projet");
+        auto copy = std::make_shared<Document>();
+        copy->project = doc->project;                                   // une copie : les memes identifiants
+        const auto* g = copy->project.function(fm);
+        check(g && app::testruns::last(copy->project, *g, g->tests[0]) == nullptr && app::testruns::tally(copy->project, *g).pending == 2,
+              "T2-30 : la copie du projet : \xC2\xAB \xC3\xA0 jouer \xC2\xBB (rien n'y a \xC3\xA9t\xC3\xA9 jou\xC3\xA9)");
+        HmiFunction helper = makeFunction(doc->project, "Facteur", "REAL", "Facteur := 1.0;");
+        doc->project.programs.functions.push_back(helper);
+        for (auto& h : doc->project.programs.functions)
+            if (h.id == fm) h.body = "Moyenne_Pression := Facteur() * (A * Poids_A + B * (1.0 - Poids_A));";
+        (void)app::runAllTests(doc->project, nullptr);
+        f = doc->project.function(fm);
+        check(f && app::testruns::last(doc->project, *f, f->tests[0]) != nullptr, "T2-30 : rejou\xC3\xA9 avec Facteur()");
+        for (auto& h : doc->project.programs.functions)
+            if (h.name == "Facteur") h.body = "Facteur := 2.0;";
+        f = doc->project.function(fm);
+        check(f && app::testruns::last(doc->project, *f, f->tests[0]) == nullptr,
+              "T2-30 : Facteur (appel\xC3\xA9" "e) a chang\xC3\xA9 : le cas redevient \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
+        for (auto& v : doc->project.programs.variables)
+            if (v.name == "Compteur_Clics") v.initial = "7";
+        const auto* t = doc->project.function(ft);
+        check(t && !t->tests.empty() && app::testruns::last(doc->project, *t, t->tests[0]) == nullptr,
+              "T2-30 : Compteur_Clics (lue par Tracer) a chang\xC3\xA9 : son cas redevient \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
+    }
+    // T2-34 : une fonction de vue dont un cas echoue porte "1 test rouge" dans l'arbre.
+    {
+        View four = makeView(doc->project, "Vue_Four");
+        HmiFunction rampe = makeFunction(doc->project, "Calcul_Rampe", "REAL", "Calcul_Rampe := 1.0;");
+        FunctionTest faux;
+        faux.id = doc->project.allocate();
+        faux.name = "rampe fausse";
+        faux.expected = "2.0";
+        rampe.tests.push_back(faux);
+        four.functions.push_back(rampe);
+        doc->project.views.push_back(four);
+        const auto& vf = doc->project.views.back();
+        (void)app::runTestsOf(doc->project, vf.functions, vf.id, vf.name, nullptr);
+        auto plc = std::make_shared<domain::Project>();
+        app::ProjectTreeModel tree(plc);
+        tree.setHmi(doc);
+        const auto node = app::ProjectTreeModel::pack(app::ProjectTreeModel::NodeKind::HmiSymbolFunction,
+                                                      static_cast<domain::Index>(vf.id & 0x0FFFFFFFu), 0);
+        const auto st = tree.style(node);
+        check(st.badge == "1 test rouge" && st.badgeTone == ui::Tone::Error, "T2-34 : Vue_Four.Calcul_Rampe porte \xC2\xAB 1 test rouge \xC2\xBB (" + st.badge + ")");
+    }
+    // T2-32 : Configuration > Rapport des tests... dit le chemin ecrit ; un echec se dit sous la case et dans la barre.
+    {
+        app::HmiConfigPane cfg("tu.config2", doc, apply, std::make_shared<domain::Project>(), nullptr);
+        std::vector<std::pair<std::string, bool>> said;
+        bool fail = false;
+        app::HmiConfigPane::TestHosts th;
+        th.exportFile = [&](const hmi::ExportRequest& rq, std::string* where) {
+            if (where) *where = "exports/" + rq.fileName;
+            return !fail;
+        };
+        th.message = [&](const std::string& m, bool warning) { said.emplace_back(m, warning); };
+        cfg.setTestHosts(std::move(th));
+        cfg.setBounds({0, 0, 1200, 800});
+        cfg.layout();
+        cfg.ensureBuilt();
+        std::function<bool(std::string_view)> commit;
+        for (const auto& c : cfg.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Rapport des tests\xE2\x80\xA6") commit = pr.commit;
+        check(commit && commit("PDF\xE2\x80\xA6") && !said.empty() && !said.back().second
+                  && said.back().first.find("Rapport des tests \xC3\xA9" "crit : exports/tests_") == 0,
+              "T2-32 : PDF\xE2\x80\xA6 - la barre dit \xC2\xAB " + (said.empty() ? std::string("?") : said.back().first) + " \xC2\xBB");
+        fail = true;
+        check(commit && !commit("PDF\xE2\x80\xA6") && said.back().second && said.back().first.find("impossible") != std::string::npos,
+              "T2-32 : une \xC3\xA9" "criture rat\xC3\xA9" "e : refus\xC3\xA9" "e sous la case, et dite (" + said.back().first + ")");
+    }
+    // T2-35 : demarrage bloque par un test - la note mene aux Sorties, pas aux Diagnostics.
+    {
+        app::HmiSimulationHost host;
+        bool gate = false;
+        host.buildGate = [&](const std::string&) { gate = true; };
+        app::HmiSimulationPane sim("tu.sim113", doc, host);
+        sim.setBounds({0, 0, 1200, 800});
+        sim.layout();
+        sim.command("hmi.start");
+        check(gate && sim.waitingBuild(), "T2-35 : D\xC3\xA9marrer attend son build");
+        sim.buildDone(false, "un test des fonctions rouge (\xC3\xA9" "chec ou erreur ; panneau du bas, Sorties : Tests)",
+                      "Corrige le cas (panneau du bas, Sorties : un double-clic m\xC3\xA8ne au cas), puis D\xC3\xA9marrer l'IHM.");
+        sim.refreshNow();
+        const std::string note = sim.canvas().stoppedNote();
+        check(note.find("Sorties : un double-clic m\xC3\xA8ne au cas") != std::string::npos && note.find("Diagnostics") == std::string::npos,
+              "T2-35 : la note : " + note);
+    }
+    // ---- 1.13.0 (D3b) : les restes de la seconde passe ----
+    // D3b-2 : la liste des cas ne demande pas F2 sur la case cliquee (rien ne change pour les tables qui ne le demandent
+    // pas) : un clic sur la case Attendu, puis F2 - le nom, comme le disent la barre (F2 : le renommer) et l'aide.
+    {
+        fns.selectFunction(fm);
+        page.setBounds({0, 0, 1200, 700});
+        page.layout();
+        gfx::Rect cr{};
+        check(page.cases().cellRect(0, 2, cr) && page.cases().model()->editable(0, 2), "D3b-2 : la case Attendu du premier cas, \xC3\xA9" "ditable");
+        const gfx::Point on{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f};
+        page.cases().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+        page.cases().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+        page.cases().takeFocus();
+        page.cases().dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(page.cases().cellEditing() && page.cases().editedColumn() == 0 && page.cases().f2ClickedColumn() < 0,
+              "D3b-2 : un clic sur Attendu puis F2 : le renommage du cas (colonne " + std::to_string(page.cases().editedColumn()) + ")");
+        page.cases().finishCellEdit(false, {});
+    }
+    // D3b-5 : NAN, INF, -INF se tapent comme attendu d'un retour REAL (avant : \xC2\xAB n'est pas un nombre (REAL) \xC2\xBB).
+    {
+        check(page.setField(c2, app::HmiFunctionTestsPage::Field::Expected, "nan", &why) && doc->project.function(fm)->tests[1].expected == "NAN",
+              "D3b-5 : l'attendu nan d'un REAL : gard\xC3\xA9 NAN [" + why + "]");
+        check(page.setField(c2, app::HmiFunctionTestsPage::Field::Expected, "-Inf", &why) && doc->project.function(fm)->tests[1].expected == "-INF",
+              "D3b-5 : -Inf : gard\xC3\xA9 -INF [" + why + "]");
+        (void)stack.undo();
+        (void)stack.undo();
+        check(doc->project.function(fm)->tests[1].expected == "17.5", "D3b-5 : Ctrl+Z deux fois : l'attendu d'avant (17.5)");
+    }
+    // D3b-7 : un attendu reste d'avant l'Erreur attendue se vide dans la fiche (avant : la case etait en lecture seule).
+    {
+        check(page.setField(c1, app::HmiFunctionTestsPage::Field::ErrorCode, "E_Niveau", &why) && doc->project.function(fm)->tests[0].expected == "16",
+              "D3b-7 : le cas attend E_Niveau, son ancien attendu (16) reste");
+        page.selectCase(c1);
+        std::function<bool(std::string_view)> commit;
+        bool readOnly = true;
+        for (const auto& c : page.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Attendu (ignor\xC3\xA9)") {
+                    commit = pr.commit;
+                    readOnly = pr.type == ui::PropertyGrid::ValueType::ReadOnly;
+                }
+        check(commit && !readOnly, "D3b-7 : la fiche montre \xC2\xAB Attendu (ignor\xC3\xA9) \xC2\xBB, une case qui s'\xC3\xA9" "crit");
+        check(commit && !commit("17") && doc->project.function(fm)->tests[0].expected == "16", "D3b-7 : un attendu tap\xC3\xA9 y est refus\xC3\xA9");
+        check(commit && commit("") && doc->project.function(fm)->tests[0].expected.empty(), "D3b-7 : vider la case \xC3\xB4te l'attendu ignor\xC3\xA9");
+        (void)stack.undo();
+        (void)stack.undo();
+        check(doc->project.function(fm)->tests[0].expected == "16" && doc->project.function(fm)->tests[0].errorCode.empty(),
+              "D3b-7 : Ctrl+Z deux fois : l'attendu 16, sans erreur attendue");
+    }
+    // D3b-4 : l'attendu d'une verif sur un STRING, Arret, quand un objet s'appelle Arret : un texte, pas un calcul (avant :
+    // le banc donnait Erreur \xC2\xAB attendu =Arret ne s'\xC3\xA9value pas \xC2\xBB et Generer ne disait rien).
+    {
+        Variable etat;
+        etat.id = doc->project.allocate();
+        etat.name = "Etat";
+        etat.type = "STRING";
+        etat.initial = "''";
+        doc->project.programs.variables.push_back(etat);
+        View tab = makeView(doc->project, "Vue_Commandes");
+        Object bouton;
+        bouton.id = doc->project.allocate();
+        bouton.name = "Arret";
+        tab.objects.push_back(bouton);
+        doc->project.views.push_back(tab);
+        HmiFunction regler = makeFunction(doc->project, "Regler_Etat", "", "Etat := 'Arret';");
+        FunctionTest un;
+        un.id = doc->project.allocate();
+        un.name = "arret";
+        regler.tests.push_back(un);
+        doc->project.programs.functions.push_back(regler);
+        doc->touched(kNoId);
+        fns.selectFunction(regler.id);
+        check(page.function() == regler.id && page.addCheck(un.id, "Etat", "Arret", {}, &why), "D3b-4 : v\xC3\xA9rifier Etat = Arret [" + why + "]");
+        const auto* g = doc->project.function(regler.id);
+        check(g && !g->tests.empty() && g->tests[0].checks.size() == 1 && g->tests[0].checks[0].expected == "'Arret'",
+              "D3b-4 : gard\xC3\xA9 'Arret' (un texte), pas =Arret (" + (g && !g->tests.empty() && !g->tests[0].checks.empty() ? g->tests[0].checks[0].expected : std::string("?")) + ")");
+        check(page.runCase(un.id), "D3b-4 : le cas se joue : r\xC3\xA9ussi (" + (page.lastResult(un.id) ? page.lastResult(un.id)->detail : std::string("?")) + ")");
+        check(page.addCheck(un.id, "Etat", "Compteur_Clics", {}, &why) && doc->project.function(regler.id)->tests[0].checks[1].expected == "=Compteur_Clics",
+              "D3b-4 : une variable reste un calcul (=Compteur_Clics)");
+    }
+    // D3b-1 : le contexte d'une fonction suit les methodes d'un type, les fonctions d'un symbole (appelees par une
+    // instance) et celles d'une bibliotheque reliee (avant : changer l'une d'elles laissait \xC2\xAB r\xC3\xA9ussi \xC2\xBB).
+    hmi::Project& pp = doc->project;
+    Id fa = kNoId;
+    const auto valid = [&] {
+        const auto* g = pp.function(fa);
+        return g && !g->tests.empty() && app::testruns::last(pp, *g, g->tests[0]) != nullptr;
+    };
+    {
+        HmiType ligne;
+        ligne.id = pp.allocate();
+        ligne.name = "T_Ligne";
+        ligne.methods.push_back(makeFunction(pp, "Calculer", "REAL", "Calculer := 1.0;"));
+        pp.programs.types.push_back(ligne);
+        View pompe = makeView(pp, "S_Pompe");
+        pompe.functions.push_back(makeFunction(pp, "Demarrer", "BOOL", "Demarrer := TRUE;"));
+        pp.views.push_back(pompe);
+        auto libs = std::make_shared<std::vector<hmi::LoadedLibrary>>();
+        hmi::LoadedLibrary gaz;
+        gaz.name = "Gaz";
+        HmiFunction defaut = makeFunction(pp, "EnDefaut", "BOOL", "EnDefaut := FALSE;");
+        defaut.ns = "Gaz";
+        gaz.content.functions.push_back(defaut);
+        libs->push_back(gaz);
+        pp.libraryCache.loaded = libs;
+        HmiFunction tout = makeFunction(pp, "Appelle_Tout", "REAL", "Appelle_Tout := Ligne1.Calculer() + Vue_Four.Pompe1.Demarrer() + Gaz.EnDefaut();");
+        FunctionTest un;
+        un.id = pp.allocate();
+        un.name = "un";
+        un.expected = "1.0";
+        tout.tests.push_back(un);
+        pp.programs.functions.push_back(tout);
+        fa = tout.id;
+        (void)app::runAllTests(pp, nullptr);
+        check(valid(), "D3b-1 : Appelle_Tout jou\xC3\xA9 (son verdict vaut)");
+        pp.programs.types.back().methods[0].body = "Calculer := 2.0;";
+        check(!valid(), "D3b-1 : la m\xC3\xA9thode T_Ligne.Calculer chang\xC3\xA9" "e : \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
+        (void)app::runAllTests(pp, nullptr);
+        pp.views.back().functions[0].body = "Demarrer := FALSE;";
+        check(!valid(), "D3b-1 : la fonction du symbole S_Pompe.Demarrer chang\xC3\xA9" "e : \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
+        (void)app::runAllTests(pp, nullptr);
+        auto libs2 = std::make_shared<std::vector<hmi::LoadedLibrary>>(*pp.libraryCache.loaded);
+        (*libs2)[0].content.functions[0].body = "EnDefaut := TRUE;";
+        pp.libraryCache.loaded = libs2;
+        check(!valid(), "D3b-1 : la fonction de biblioth\xC3\xA8que Gaz.EnDefaut chang\xC3\xA9" "e : \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
+        (void)app::runAllTests(pp, nullptr);
+        check(valid(), "D3b-1 : rejou\xC3\xA9 : le verdict vaut de nouveau");
+    }
+    // D3b-3 : avec la pile de l'application (CommandGroupScope), les contextes se gardent : cinquante bilans du projet n'en
+    // recalculent aucun (avant : chaque tally refaisait le contexte de chaque fonction) ; une commande les refait.
+    {
+        core::CommandStack appStack;
+        core::CommandGroupScope::registerStack(&appStack);
+        (void)app::runAllTests(pp, nullptr);
+        const std::size_t before = app::testruns::contextsComputed();
+        std::size_t cases = 0;
+        for (int k = 0; k < 50; ++k) cases += app::testruns::tally(pp).cases;
+        const std::size_t computedNow = app::testruns::contextsComputed() - before;
+        check(cases > 0 && computedNow == 0 && valid(), "D3b-3 : 50 bilans du projet : " + std::to_string(computedNow) + " contexte(s) recalcul\xC3\xA9(s)");
+        auto cmd = hmi::changeProject(doc, "Calculer", [&](hmi::Project& q) {
+            for (auto& ty : q.programs.types)
+                if (ty.name == "T_Ligne") ty.methods[0].body = "Calculer := 3.0;";
+        });
+        (void)appStack.push(std::move(cmd));
+        check(!valid(), "D3b-3 : une commande sur T_Ligne.Calculer : le contexte se refait - \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+    // D3b-6 : un document neuf qui reprend l'adresse d'un projet ferme, aux memes identifiants, heriterait de ses verdicts ;
+    // l'application oublie tout a chaque document IHM (App::bindHmi -> testruns::forget), la table ne garde rien.
+    {
+        (void)app::runAllTests(pp, nullptr);
+        alignas(hmi::Project) unsigned char slot[sizeof(hmi::Project)];
+        auto* first = new (slot) hmi::Project(pp);
+        (void)app::runAllTests(*first, nullptr);
+        const hmi::Project kept = *first;
+        first->~Project();
+        auto* again = new (slot) hmi::Project(kept);       // la meme adresse, les memes identifiants
+        const auto* g = again->function(fm);
+        check(again == first && g && app::testruns::last(*again, *g, g->tests[0]) != nullptr,
+              "D3b-6 : la m\xC3\xAAme adresse : sans oubli, le verdict de l'ancien passerait");
+        app::testruns::forget();                             // ce que fait App::bindHmi a chaque document IHM
+        check(g && app::testruns::last(*again, *g, g->tests[0]) == nullptr && app::testruns::tally(*again).passed == 0,
+              "D3b-6 : apr\xC3\xA8s l'oubli (un document ouvert) : tout est \xC2\xAB \xC3\xA0 jouer \xC2\xBB");
+        again->~Project();
+    }
     app::testruns::forget();
 }
 
@@ -36701,9 +37034,82 @@ void unites113() {
         a.unit = answer;
         done(a);
     });
-    check(vars.table().beginCellEdit(static_cast<ui::RowIndex>(vars.rowOf("Pression")), 2) && !vars.table().cellEditing() && asked.size() == 1
+    // T2-41 (seconde passe) : F2 / Entree - un champ (Ctrl+Espace y propose les unites) ; le double-clic - le selecteur.
+    check(vars.table().beginCellEdit(static_cast<ui::RowIndex>(vars.rowOf("Pression")), 2) && vars.table().cellEditing()
+              && vars.table().activeCellField() != nullptr && asked.empty(),
+          "T2-41 : F2 sur la case Unit\xC3\xA9 : un champ o\xC3\xB9 taper (avant : le s\xC3\xA9lecteur, sans champ)");
+    vars.table().finishCellEdit(false, {});
+    {
+        gfx::Rect cr{};
+        const auto rowP = static_cast<std::size_t>(vars.rowOf("Pression"));
+        check(vars.table().cellRect(rowP, 2, cr), "T2-41 : la case Unit\xC3\xA9 de Pression \xC3\xA0 l'\xC3\xA9" "cran");
+        const gfx::Point on{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f};
+        vars.table().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+        vars.table().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+        vars.table().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 2, {}});
+        vars.table().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+    }
+    check(!vars.table().cellEditing() && asked.size() == 1
               && asked[0].current == "mbar" && asked[0].type == "REAL" && asked[0].field == "Unit\xC3\xA9 de Pression" && p.variableById(pres)->unit == "degC",
-          "la case Unit\xC3\xA9 ouvre le s\xC3\xA9lecteur (sur mbar) ; degC choisi");
+          "T2-41 : le double-clic sur la case Unit\xC3\xA9 ouvre le s\xC3\xA9lecteur (sur mbar) ; degC choisi");
+    {
+        // Un clic sur la case Unite, puis F2 : le champ de CETTE case (avant : F2 ouvrait toujours la premiere, le Nom).
+        gfx::Rect cr{};
+        const auto rowP = static_cast<std::size_t>(vars.rowOf("Pression"));
+        if (vars.table().cellRect(rowP, 2, cr)) {
+            const gfx::Point on{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f};
+            vars.table().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+            vars.table().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+        }
+        vars.table().takeFocus();
+        vars.table().dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(vars.table().cellEditing() && vars.table().editedColumn() == 2 && asked.size() == 1,
+              "T2-41 : un clic sur la case Unit\xC3\xA9 puis F2 - son champ (colonne " + std::to_string(vars.table().editedColumn()) + ")");
+        vars.table().finishCellEdit(false, {});
+    }
+    {
+        // D3b-2 : F2 sur la case cliquee est reserve a la case Unite (setF2ClickedColumns). Avec le dialogue Renommer de
+        // l'ecran (le crochet que pose l'application), un clic sur Unite puis F2 tape l'unite (avant : le dialogue
+        // s'ouvrait a la place) ; un clic sur Type puis F2 renomme (avant le correctif de la seconde passe aussi), comme
+        // le dit la barre (F2 renommer) ; sans le crochet, F2 edite le Nom sur place.
+        const auto rowP = static_cast<std::size_t>(vars.rowOf("Pression"));
+        const auto clickAt = [&](std::size_t col) {
+            gfx::Rect cr{};
+            if (!vars.table().cellRect(rowP, col, cr)) return false;
+            const gfx::Point on{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f};
+            vars.table().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+            vars.table().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+            vars.table().takeFocus();
+            return true;
+        };
+        int renames = 0;
+        const auto saved = app::renameRequestHook();
+        app::renameRequestHook() = [&](const std::string&, const std::string&, const std::string&) { ++renames; return true; };
+        check(clickAt(2) && vars.table().f2ClickedColumn() == 2, "D3b-2 : un clic sur la case Unit\xC3\xA9 : F2 la vise");
+        vars.table().dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(vars.table().cellEditing() && vars.table().editedColumn() == 2 && renames == 0,
+              "D3b-2 : avec le dialogue Renommer de l'\xC3\xA9" "cran, un clic sur Unit\xC3\xA9 puis F2 : le champ de l'unit\xC3\xA9 (renommages : "
+                  + std::to_string(renames) + ")");
+        vars.table().finishCellEdit(false, {});
+        check(clickAt(1) && vars.table().f2ClickedColumn() < 0, "D3b-2 : un clic sur la case Type : F2 ne la vise pas");
+        vars.table().dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(!vars.table().cellEditing() && renames == 1 && asked.size() == 1, "D3b-2 : un clic sur Type puis F2 : le dialogue Renommer (ni le s\xC3\xA9lecteur de types, ni un champ)");
+        app::renameRequestHook() = saved;
+        check(clickAt(1), "D3b-2 : la case Type, de nouveau");
+        vars.table().dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(vars.table().cellEditing() && vars.table().editedColumn() == 0, "D3b-2 : sans \xC3\xA9" "cran, un clic sur Type puis F2 : le Nom, sur place (colonne "
+                                                                               + std::to_string(vars.table().editedColumn()) + ")");
+        vars.table().finishCellEdit(false, {});
+    }
+    {
+        // La fiche : un champ, et le bouton ... pour le selecteur (avant : la case ouvrait le selecteur a la place du champ).
+        vars.selectVariable(pres);
+        bool field = false;
+        for (const auto& c : vars.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Unit\xC3\xA9") field = pr.commit && !pr.dialog && pr.open && pr.openTip == app::unitpicker::kChoose;
+        check(field, "T2-41 : la fiche de la variable - la case Unit\xC3\xA9 se tape, le bouton \xE2\x80\xA6 ouvre le s\xC3\xA9lecteur");
+    }
     {
         auto assist = app::unitui::fieldAssist([&]() -> const hmi::Project* { return &p; }, "Unit\xC3\xA9 de Pression", "REAL");
         std::size_t from = 0;
@@ -36742,6 +37148,27 @@ void unites113() {
         bad.unit = "bar";
         check(!types.setMember(tl, static_cast<std::size_t>(rOuverte), bad, &why) && why.find("nombre") != std::string::npos, "une unit\xC3\xA9 sur un membre BOOL : refus\xC3\xA9" "e");
     }
+    {
+        // D3b-2 : un clic sur la case Unite d'un membre, puis F2 : son champ ; puis Renommer (le menu du clic droit, qui
+        // passait par F2) : le nom du membre, pas l'unite cliquee.
+        auto& mt = types.memberTable();
+        gfx::Rect cr{};
+        std::size_t viewRow = 0;
+        for (std::size_t i = 0; i < mt.visibleRowCount(); ++i)
+            if (mt.viewRow(i) == static_cast<ui::RowIndex>(rDebit)) viewRow = i;
+        check(mt.cellRect(viewRow, 2, cr), "D3b-2 : la case Unit\xC3\xA9 de Debit \xC3\xA0 l'\xC3\xA9" "cran");
+        const gfx::Point on{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f};
+        mt.dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+        mt.dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+        mt.takeFocus();
+        mt.dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(mt.cellEditing() && mt.editedColumn() == 2, "D3b-2 : un clic sur l'Unit\xC3\xA9 du membre puis F2 : son champ (colonne " + std::to_string(mt.editedColumn()) + ")");
+        mt.finishCellEdit(false, {});
+        constexpr int kRenameMember = -1000 - 51;           // kMenuBase - kMemberRename (HmiVariablePanes.cpp)
+        if (mt.contextMenu()) mt.contextMenu()->itemChosen->emit(kRenameMember);
+        check(mt.cellEditing() && mt.editedColumn() == 0, "D3b-2 : Renommer (le menu) : le nom du membre (colonne " + std::to_string(mt.editedColumn()) + ")");
+        mt.finishCellEdit(false, {});
+    }
     types.memberTable().selectModelRows({static_cast<ui::RowIndex>(rDebit)}, true);
     const std::string copied = types.copyMembersText();
     check(copied.find("\tUnit\xC3\xA9\r\n") != std::string::npos && copied.find("\tm3/h\r\n") != std::string::npos, "Ctrl+C : la colonne Unit\xC3\xA9 (au bout)");
@@ -36752,6 +37179,13 @@ void unites113() {
         check(types.applyMemberPaste(plan, &why) && memberUnit("Debit") == "L/min", "Appliquer : Debit en L/min (une commande)");
         (void)stack.undo();
         check(memberUnit("Debit") == "m3/h", "Ctrl+Z : m3/h revient");
+        // T2-43 (seconde passe) : une case Unite vide garde l'unite, comme les autres cases (avant : elle la retirait).
+        const auto keep = types.planMemberPaste(tl, "Nom\tType\tUnit\xC3\xA9\nDebit\tREAL\t\n");
+        std::string kept = "?";
+        for (const auto& m : keep.result)
+            if (m.name == "Debit") kept = m.unit;
+        check(keep.replaced.size() == 1 && keep.refused.empty() && kept == "m3/h",
+              "T2-43 : recoller Debit avec la case Unit\xC3\xA9 vide : m3/h reste (avant : retir\xC3\xA9" "e) [" + kept + "]");
     }
     // une variable du type : la case Unite de son membre (venue du type, en gris)
     const Id ligne = vars.addVariable("Ligne1", "T_Ligne", {}, &why);
@@ -36761,6 +37195,39 @@ void unites113() {
         check(ligne != kNoId && rm >= 0 && vars.table().model()->cellText(static_cast<ui::RowIndex>(rm), 2) == "m3/h"
                   && vars.table().model()->cellStyle(static_cast<ui::RowIndex>(rm), 2).fgTone == ui::Tone::Muted,
               "Ligne1.Debit : m3/h, venue du type (en gris)");
+    }
+    // T2-44 (seconde passe) : la fiche d'une case de tableau dit d'ou vient son unite ; un type sans unite le dit.
+    {
+        const Id pressions = vars.addVariable("Pressions", "ARRAY[1..3] OF REAL", {}, &why);
+        check(pressions != kNoId && vars.setUnit(pressions, "bar", &why), "Pressions : ARRAY[1..3] OF REAL [bar]");
+        vars.selectPath("Pressions[2]");
+        std::string fiche;
+        for (const auto& c : vars.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Unit\xC3\xA9") fiche = pr.value;
+        check(fiche.find("bar (de la variable Pressions") == 0 && fiche.find("du type") == std::string::npos,
+              "T2-44 : la fiche de Pressions[2] - \xC2\xAB bar (de la variable Pressions...) \xC2\xBB, plus \xC2\xAB (du type) \xC2\xBB [" + fiche + "]");
+        vars.selectPath("Ligne1.Debit");
+        fiche.clear();
+        for (const auto& c : vars.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Unit\xC3\xA9") fiche = pr.value;
+        check(fiche == "m3/h (du type)", "T2-44 : la fiche de Ligne1.Debit - \xC2\xAB m3/h (du type) \xC2\xBB [" + fiche + "]");
+        check(vars.setType(pressions, "LIST OF REAL", &why) && p.variableById(pressions)->unit.empty()
+                  && vars.lastMessage().find("unit\xC3\xA9 bar retir\xC3\xA9" "e") != std::string::npos,
+              "T2-44 : Pressions devient LIST OF REAL - \xC2\xAB unit\xC3\xA9 bar retir\xC3\xA9" "e \xC2\xBB est dit (" + vars.lastMessage() + ")");
+        (void)stack.undo();
+        hmi::HmiType e;
+        e.id = p.allocate();
+        e.name = "E_Mode";
+        e.kind = hmi::HmiTypeKind::Enumeration;
+        e.values = {{"Arret", 0, "", ""}, {"Marche", 1, "", ""}};
+        p.programs.types.push_back(e);
+        check(vars.setType(pressions, "E_Mode", &why) && p.variableById(pressions)->unit.empty()
+                  && vars.lastMessage().find("unit\xC3\xA9 bar retir\xC3\xA9" "e") != std::string::npos,
+              "T2-44 : Pressions devient E_Mode - \xC2\xAB unit\xC3\xA9 bar retir\xC3\xA9" "e \xC2\xBB est dit (" + vars.lastMessage() + ")");
+        (void)stack.undo();
+        p.programs.types.pop_back();
     }
 
     // ---- les grilles de declarations : la colonne Unite ----
@@ -36786,6 +37253,41 @@ void unites113() {
     check(p.function(alarme.id)->decls[0].type == "REAL" && p.function(alarme.id)->decls[0].unit == "kPa", "Ctrl+Z : REAL [kPa]");
     const std::string pasted = "Nom\tType\tUnit\xC3\xA9\np\tREAL\tbar\n";
     check(params.table().pasteText(pasted, false) && p.function(alarme.id)->decls[0].unit == "bar", "coller d'Excel : la colonne Unit\xC3\xA9 reconnue");
+    // T2-41 (seconde passe) : avec l'hote du selecteur, la case Unite d'une declaration se tape aussi (F2) ; le
+    // double-clic ouvre le selecteur.
+    {
+        std::size_t askedUnits = 0;
+        app::unitpicker::setHost([&](app::HmiUnitPicker::Spec, app::unitpicker::Done) { ++askedUnits; });
+        check(params.table().beginCellEdit(0, 2) && params.table().cellEditing() && askedUnits == 0,
+              "T2-41 : F2 sur la case Unit\xC3\xA9 d'un param\xC3\xA8tre : un champ (Ctrl+Espace)");
+        params.table().finishCellEdit(false, {});
+        check(params.table().model()->doubleClickInDialog(0, 2) && askedUnits == 1, "T2-41 : le double-clic ouvre le s\xC3\xA9lecteur d'unit\xC3\xA9s");
+        check(!params.table().model()->doubleClickInDialog(0, 0), "T2-41 : le double-clic sur le Nom ne l'ouvre pas");
+        // D3b-2 : dans la grille, un clic sur la case Unite puis F2 : son champ ; un clic sur Type puis F2 : le Nom (avant
+        // le correctif : F2 ouvrait la case du dernier clic, quelle qu'elle soit).
+        fns.showCodeTab(app::HmiFunctionsPane::CodeTabParameters);
+        fns.layout();
+        const auto clickAt = [&](std::size_t col) {
+            gfx::Rect cr{};
+            if (!params.table().cellRect(0, col, cr)) return false;
+            const gfx::Point on{cr.x + cr.w * 0.5f, cr.y + cr.h * 0.5f};
+            params.table().dispatch(ui::MouseDown{on, ui::MouseButton::Left, 1, {}});
+            params.table().dispatch(ui::MouseUp{on, ui::MouseButton::Left, {}});
+            params.table().takeFocus();
+            return true;
+        };
+        check(clickAt(2), "D3b-2 : la case Unit\xC3\xA9 du param\xC3\xA8tre p \xC3\xA0 l'\xC3\xA9" "cran");
+        params.table().dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(params.table().cellEditing() && params.table().editedColumn() == 2 && askedUnits == 1,
+              "D3b-2 : un clic sur Unit\xC3\xA9 puis F2 : son champ (colonne " + std::to_string(params.table().editedColumn()) + ")");
+        params.table().finishCellEdit(false, {});
+        check(clickAt(1), "D3b-2 : la case Type du param\xC3\xA8tre p");
+        params.table().dispatch(ui::KeyDown{ui::Key::F2, {}, false});
+        check(params.table().cellEditing() && params.table().editedColumn() == 0,
+              "D3b-2 : un clic sur Type puis F2 : le Nom (colonne " + std::to_string(params.table().editedColumn()) + ")");
+        params.table().finishCellEdit(false, {});
+        app::unitpicker::setHost({});
+    }
     // ---- l'unite du retour ----
     fns.selectFunction(debitF.id);
     check(fns.setReturnUnit(debitF.id, "m3/h", &why) && p.function(debitF.id)->returnUnit == "m3/h", "DebitTotal rend un REAL [m3/h]");
@@ -36876,9 +37378,34 @@ void unites113() {
         }
         up = open("bar", "REAL");
         if (up) {
+            check(up->manageShown(), "le s\xC3\xA9lecteur ouvert depuis une grille : G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6 est l\xC3\xA0");
             up->manage();
             dm.applyPending();
             check(accepted && got.manage, "G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6 : la page Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure");
+        }
+        // T2-42 (seconde passe) : depuis une fenetre modale (Nouvelle fonction), pas de Gerer les unites... (la page
+        // s'ouvrirait dessous) ; l'hote le dit par Spec::canManage.
+        {
+            app::HmiUnitPicker::Spec spec;
+            spec.doc = doc;
+            spec.field = "Unit\xC3\xA9 du retour";
+            spec.current = "bar";
+            spec.type = "REAL";
+            spec.canManage = false;
+            accepted = false;
+            dm.ShowDialog(std::make_unique<app::HmiUnitPicker>(std::move(spec)), [&](const menu::DialogResult& r) {
+                accepted = r.accepted() && app::HmiUnitPicker::parse(r.payload, got);
+            });
+            dm.applyPending();
+            auto* modal = dynamic_cast<app::HmiUnitPicker*>(dm.top());
+            check(modal && !modal->manageShown(), "T2-42 : ouvert d'une fen\xC3\xAAtre modale, le s\xC3\xA9lecteur n'offre pas G\xC3\xA9rer les unit\xC3\xA9s\xE2\x80\xA6");
+            if (modal) {
+                modal->manage();
+                dm.applyPending();
+                check(!accepted && dynamic_cast<app::HmiUnitPicker*>(dm.top()) == modal, "T2-42 : manage() n'y fait rien (le s\xC3\xA9lecteur reste ouvert)");
+                modal->finish(false);
+                dm.applyPending();
+            }
         }
     }
 
@@ -36915,6 +37442,41 @@ void unites113() {
         check(mu.removeUnit("inH2O", &why) && p.config.units.empty(), "plus employ\xC3\xA9" "e : retir\xC3\xA9" "e");
         (void)stack.undo();
         check(p.config.units.size() == 1, "Ctrl+Z : elle revient");
+        // T2-38 (seconde passe) : une constante de vue, une locale d'operateur comptent dans les emplois.
+        {
+            hmi::View four = hmi::makeView(p, "Vue_Four");
+            hmi::Declaration seuil;
+            seuil.id = p.allocate();
+            seuil.kind = hmi::DeclKind::Constant;
+            seuil.name = "Seuil_Haut";
+            seuil.type = "REAL";
+            seuil.value = "2.5";
+            seuil.unit = "inH2O";
+            four.constants.push_back(seuil);
+            p.views.push_back(four);
+            check(app::unitui::usesOf(p, "inH2O") == std::vector<std::string>{"Vue_Four.Seuil_Haut"},
+                  "T2-38 : inH2O sur la constante Vue_Four.Seuil_Haut - un emploi (avant : aucun)");
+            check(!mu.removeUnit("inH2O", &why) && why.find("Vue_Four.Seuil_Haut") != std::string::npos,
+                  "T2-38 : retirer inH2O est refus\xC3\xA9 (" + why + ")");
+            check(!mu.renameUnit("inH2O", "inHg", &why) && why.find("employ") != std::string::npos, "T2-38 : la renommer aussi");
+            p.views.pop_back();
+            hmi::HmiOperator plus;
+            plus.id = p.allocate();
+            plus.op = "+";
+            plus.left = plus.right = plus.result = "T_Ligne";
+            hmi::Declaration k;
+            k.id = p.allocate();
+            k.kind = hmi::DeclKind::Variable;
+            k.name = "k";
+            k.type = "REAL";
+            k.unit = "inH2O";
+            plus.decls.push_back(k);
+            p.hmiType(tl)->operators.push_back(plus);
+            const auto uses = app::unitui::usesOf(p, "inH2O");
+            check(uses.size() == 1 && uses[0].rfind("T_Ligne.", 0) == 0 && uses[0].find(".k") != std::string::npos,
+                  "T2-38 : une locale de l'op\xC3\xA9rateur + de T_Ligne compte aussi (" + (uses.empty() ? std::string{} : uses[0]) + ")");
+            p.hmiType(tl)->operators.pop_back();
+        }
         check(!mu.addFamily("D\xC3\xA9" "bit massique", "kg/h", {}, &why), "un nom de famille avec accent et espace : refus\xC3\xA9");
         check(!mu.addFamily("debit_massique", "bar", {}, &why) && why.find("d\xC3\xA9j\xC3\xA0") != std::string::npos, "une r\xC3\xA9" "f\xC3\xA9rence d\xC3\xA9j\xC3\xA0 prise : refus\xC3\xA9" "e");
         const std::size_t familiesBefore = mu.families().model()->rowCount();
@@ -36986,9 +37548,16 @@ void unites113() {
         check(up.addDisplay("Pression", {}, "0.0", &why) && p.displays.back().unit.empty() && up.message().find("vient de la variable : \xC2\xB0" "C") != std::string::npos,
               "Unit\xC3\xA9s et formats, une ligne pour Pression : son unit\xC3\xA9 reste vide, celle de la variable (" + up.message() + ")");
         const auto& m = up.table().model();
-        check(m && m->rowCount() == 1 && m->cellText(0, 1).find("\xC2\xB0" "C") != std::string::npos && m->cellStyle(0, 1).fgTone == ui::Tone::Muted
-                  && m->cellText(0, 9).find("\xC2\xB0" "C") != std::string::npos,
-              "la case Unit\xC3\xA9 montre \xC2\xB0" "C en gris, l'exemple aussi (" + (m ? m->cellText(0, 9) : std::string{}) + ")");
+        // T2-37 (seconde passe) : l'unite physique en TEXTE D'ATTENTE - la case reste vide (Ctrl+C la copie vide).
+        check(m && m->rowCount() == 1 && m->cellText(0, 1).empty() && m->cellStyle(0, 1).placeholder.find("\xC2\xB0" "C") != std::string::npos
+                  && m->cellStyle(0, 1).fgTone == ui::Tone::Muted && m->cellText(0, 9).find("\xC2\xB0" "C") != std::string::npos,
+              "la case Unit\xC3\xA9 montre \xC2\xB0" "C en gris (texte d'attente, la case vide), l'exemple aussi (" + (m ? m->cellText(0, 9) : std::string{}) + ")");
+        up.table().selectModelRows({0});
+        const std::string copied = up.table().copyText(true);
+        check(copied.find("unit\xC3\xA9 physique") == std::string::npos, "T2-37 : Ctrl+C ne copie pas \xC2\xAB \xC2\xB0" "C \xC2\xB7 unit\xC3\xA9 physique \xC2\xBB [" + copied + "]");
+        check(!up.setField("Pression", "unite", "\xC2\xB0" "C \xC2\xB7 unit\xC3\xA9 physique", &why) && p.displays.back().unit.empty()
+                  && why.find("texte gris") != std::string::npos,
+              "T2-37 : coller le texte gris d'une ancienne copie est refus\xC3\xA9 (" + why + ")");
         check(up.setField("Pression", "unite", "K", &why) && hmi::effectiveUnit(p, v.objects[0]) == "K", "une unit\xC3\xA9 tap\xC3\xA9" "e sur la ligne l'emporte (un libell\xC3\xA9)");
         (void)stack.undo();
         check(hmi::effectiveUnit(p, v.objects[0]) == "\xC2\xB0" "C", "Ctrl+Z : l'unit\xC3\xA9 de la variable revient");

@@ -467,6 +467,9 @@ public:
     // 1.12.14 : une case qui s'edite dans une fenetre (le selecteur de types) : vrai, le modele l'a
     // ouverte - ni liste ni champ dans la case ; la reponse revient par le modele lui-meme.
     virtual bool editInDialog(RowIndex, std::size_t) { return false; }
+    // 1.13.0 (seconde passe) : une case qui SE TAPE (F2, Entree : un champ, son aide a la saisie) mais que le
+    // double-clic ouvre dans une fenetre (le selecteur d'unites) : vrai, le modele l'a ouverte.
+    virtual bool doubleClickInDialog(RowIndex, std::size_t) { return false; }
     // Lot 16 : l'infobulle d'une ligne, au survol (vide : celle de la table).
     [[nodiscard]] virtual std::string rowTooltip(RowIndex) const { return {}; }
     // Lot 16 : glisser la ligne `from` sur la ligne `to` (lignes du modele) est-il
@@ -557,6 +560,15 @@ public:
     void setSelectionMode(SelectionMode m) { selectionMode_ = m; }
     void setAlternatingRowColors(bool a) { altRows_ = a; invalidate(); }
     void setFrozenColumns(std::size_t n) { frozen_ = n; invalidateLayout(); }
+    // 1.13.0 : faux - un double-clic active la ligne meme sur une case editable (F2 l'edite toujours) ; vrai (defaut) :
+    // un double-clic edite une case editable.
+    void setDoubleClickEdits(bool on) noexcept { doubleClickEdits_ = on; }
+    // 1.13.0 (D3b) : F2 EDITE LA CASE CLIQUEE dans ces colonnes (une case qui se tape mais que le double-clic ouvre
+    // dans une fenetre : l'Unite d'IHM Studio). Un clic sur une de leurs cases, puis F2 : son champ. Ailleurs, et par
+    // defaut (aucune colonne) : F2 edite la premiere case editable de la ligne (le nom), comme avant.
+    void setF2ClickedColumns(std::vector<std::size_t> columns) { f2Columns_ = std::move(columns); }
+    // La colonne que F2 editerait sur la ligne choisie, d'apres le dernier clic (-1 : la premiere case editable).
+    [[nodiscard]] int f2ClickedColumn() const;
 
     void sortBy(std::size_t column, SortOrder order);
     void setFilter(FilterChain chain);                 // rebuilds the index vector
@@ -839,6 +851,9 @@ private:
     std::size_t                  sortColumn_{0}, frozen_{0};
     SortOrder                    sortOrder_{SortOrder::None};
     SelectionMode                selectionMode_{SelectionMode::Extended};
+    bool                         doubleClickEdits_{true};     // 1.13.0 : setDoubleClickEdits
+    std::vector<std::size_t>     f2Columns_;                  // 1.13.0 (D3b) : setF2ClickedColumns
+    int                          cellClickColumn_{-1};        // la colonne du dernier clic gauche sur une case
     bool                         altRows_{true};
     int                          resizingColumn_{-1};
     float                        resizeOrigin_{0.f};

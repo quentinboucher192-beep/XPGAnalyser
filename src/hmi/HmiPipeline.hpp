@@ -142,6 +142,7 @@ struct Diagnostic {
     std::string step;          // "Génération", "Compilation", "Validation"
     std::string suggestion;
     std::string fixFrom, fixTo;  // 1.12.20 : la correction d'un clic (hmi::Issue::fixFrom) ; vide : aucune
+    int         fixColumn{0};    // 1.13.0 (seconde passe) : son occurrence (hmi::Issue::fixColumn) ; 0 : la premiere
     // aller a la source (l'ecran), comme hmi::Issue
     Id          view{kNoId}, object{kNoId}, script{kNoId}, item{kNoId};
     std::string property;

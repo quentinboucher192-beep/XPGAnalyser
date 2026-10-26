@@ -1814,7 +1814,9 @@ private:
         std::vector<LocalVar>         locals;
         std::string                   error;       // la premiere faute (declaration ou syntaxe)
     };
-    const Prepared& prepare(const std::string& code, const std::string& source, bool function);
+    // 1.13.0 (seconde passe) : `generics` - ceux d'une fonction generique (T est alors un type de ses declarations).
+    const Prepared& prepare(const std::string& code, const std::string& source, bool function,
+                            const std::vector<GenericParam>* generics = nullptr);
     void restorePersistent(Id script, sim::Locals& locals);            // 1.11.18 (lot 5)
     // Les cases de declaration de `cells` gardees pour leur script (les autres : rendues par l'appelant).
     std::vector<simdata::Cell> takePersistent(const std::vector<simdata::Cell>& cells);
