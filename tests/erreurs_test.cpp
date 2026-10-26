@@ -952,6 +952,22 @@ void capturesF1() {
               "C3 : non detache : 'coche Detache', pas 'pas dans une expression'" + notDetached);
         const std::string generer2 = said(generate(p, none));
         check(generer2 == notDetached, "C3 : non detache : Generer dit la meme chose que Compiler" + generer2 + " / " + notDetached);
+        // Relecture F1-2 : la Saisie (l'editeur) dit le meme avertissement que Compiler, a la meme place (waitUntilWarnings).
+        const auto saisieOf = [](const Script& s, bool view) {
+            std::string out;
+            for (const auto& f : scriptcheck::waitUntilWarnings(s, view))
+                out += " | " + std::to_string(f.line) + ":" + std::to_string(f.column) + ":" + std::to_string(f.length) + " " + f.message;
+            return out;
+        };
+        const auto first = scriptcheck::waitUntilWarnings(p.programs.scripts.back(), false);
+        check(first.size() == 4 && first.front().line == 1 && first.front().column == 4 && first.front().length == 10
+                  && first.front().severity == scriptcheck::Finding::Severity::Warning && first.front().message.find("coche D") != std::string::npos,
+              "C3 (relecture F1-2) : non detache, la Saisie avertit chaque WAIT_UNTIL (1:4, 'coche Detache')" + saisieOf(p.programs.scripts.back(), false));
+        check(notDetached.find(first.front().message) != std::string::npos, "C3 (relecture F1-2) : ... le message de Compiler" + notDetached);
+        p.programs.scripts.back().detached = true;
+        check(saisieOf(p.programs.scripts.back(), false).empty(), "C3 (relecture F1-2) : detache, la Saisie n'avertit pas" + saisieOf(p.programs.scripts.back(), false));
+        check(saisieOf(p.programs.scripts.back(), true).find("script de vue") != std::string::npos,
+              "C3 (relecture F1-2) : un script de vue avertit toujours ('script de vue')" + saisieOf(p.programs.scripts.back(), true));
     }
 }
 

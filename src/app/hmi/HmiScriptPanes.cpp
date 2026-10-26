@@ -170,6 +170,18 @@ std::vector<hmi::ScriptDiagnostic> allDiagnostics(const hmi::Project& p, const S
             if (!said) d.push_back({hmi::ScriptDiagnostic::Severity::Error, pp.line, pp.message});
         }
     d.insert(d.end(), placed.begin(), placed.end());
+    // 1.13.0 (relecture F1) : WAIT_UNTIL dans un script non detache, ou de vue (`v`) - l'avertissement de Compiler, a sa
+    // place (souligne, et la colonne Etat le compte) ; un script detache : rien, comme Compiler.
+    if (sc.lang == ScriptLang::ST)
+        for (const auto& f : hmi::scriptcheck::waitUntilWarnings(sc, v != nullptr)) {
+            hmi::ScriptDiagnostic w;
+            w.severity = hmi::ScriptDiagnostic::Severity::Warning;
+            w.line = f.line;
+            w.message = f.message;
+            w.column = f.column;
+            w.length = f.length;
+            d.push_back(std::move(w));
+        }
     return d;
 }
 
