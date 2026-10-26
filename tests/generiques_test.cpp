@@ -17,6 +17,7 @@
 //  GEN_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
 #include "../src/hmi/HmiCheck.hpp"     // generate (Generer)
+#include "../src/hmi/HmiExpr.hpp"      // hidesStandardFunction (relecture F2)
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiScript.hpp"
@@ -525,6 +526,29 @@ void homonymeStandard() {
         for (const auto& i : generate(q, [](std::string_view) { return false; }))
             if (i.message.find("fonction standard") != std::string::npos) quiet = false;
         check(quiet, "Plus_Grand<T> : aucun avertissement de fonction standard");
+    }
+    // Relecture F2 (F2-1) : un nom X_To_Y n'est une fonction standard que si le moteur sait faire la conversion
+    // (le type d'arrivee connu). Deg_To_Rad, Bar_To_Psi, Celsius_To_Kelvin ne cachent rien : pas d'avertissement ;
+    // Int_To_Real cache bien INT_TO_REAL.
+    {
+        const auto warnsStandard = [](const std::string& name) {
+            Project p;
+            addFn(p, name, "REAL", {}, {{"x", "REAL"}}, name + " := x;");
+            for (const auto& i : generate(p, [](std::string_view) { return false; }))
+                if (i.message.find("fonction standard") != std::string::npos) return true;
+            return false;
+        };
+        for (const char* n : {"Deg_To_Rad", "Bar_To_Psi", "Celsius_To_Kelvin"})
+            check(!warnsStandard(n), std::string(n) + " : aucune fonction standard de ce nom, aucun avertissement de Generer");
+        for (const char* n : {"Int_To_Real", "Real_To_LReal", "Max", "Abs"})
+            check(warnsStandard(n), std::string(n) + " : elle cache la fonction standard, Generer le dit");
+        // Le predicat lui-meme (Generer et l'inspecteur des fonctions) : les conversions que sim::Runtime sait faire.
+        for (const char* n : {"INT_TO_LREAL", "real_to_sint", "DINT_TO_USINT", "STRING_TO_ASCII", "ASCII_TO_STRING", "INT_TO_TIME", "RGB", "LIMIT"})
+            check(hidesStandardFunction(n), std::string(n) + " : une fonction standard (que le moteur sait appeler)");
+        for (const char* n : {"DEG_TO_RAD", "Bar_To_Psi", "Plus_Grand", "_TO_INT", "INT_TO_"})
+            check(!hidesStandardFunction(n), std::string(n) + " : rien de standard a cacher");
+        // Le reste ne change pas : isStandardFunction (le refus de Nouvelle fonction) prend toujours tout X_TO_Y.
+        check(isStandardFunction("DEG_TO_RAD"), "isStandardFunction(DEG_TO_RAD) inchange (Nouvelle fonction refuse toujours ce nom)");
     }
 }
 

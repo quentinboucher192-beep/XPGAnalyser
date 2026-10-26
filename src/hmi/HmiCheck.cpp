@@ -1194,7 +1194,8 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         // 1.13.0 (correctif F2) : une fonction de la racine qui porte le nom d'une fonction standard (Max, MAX) - le moteur
         // l'appelle a sa place, partout (une fonction du projet passe avant : MAX(...) l'appelle). La fenetre Nouvelle
         // fonction refuse ce nom ; un projet ecrit a la main, importe ou d'avant peut l'avoir : on le dit.
-        if (f.ns.empty() && isStandardFunction(f.name)) {
+        // Relecture F2 : seulement une standard qui existe (pas Deg_To_Rad : aucune conversion vers RAD).
+        if (f.ns.empty() && hidesStandardFunction(f.name)) {
             const auto callers = functionCallers(p, f.name);
             std::string where;
             for (std::size_t k = 0; k < callers.size() && k < 2; ++k) where += (k ? ", " : "") + callers[k];

@@ -38137,6 +38137,18 @@ void correctifsF2_113() {
         check(fns.editor().modified(), "une saisie dans Max<T> : l'\xC3\xA9" "diteur est \xC2\xAB modifi\xC3\xA9 \xC2\xBB");
         fns.selectFunction(moyId);
         check(!fns.editor().modified(), "Moyenne montr\xC3\xA9" "e ensuite : plus \xC2\xAB modifi\xC3\xA9 \xC2\xBB (rien n'y a \xC3\xA9t\xC3\xA9 tap\xC3\xA9)");
+        // Relecture F2 (F2-1) : Deg_To_Rad n'est pas une conversion (RAD n'est pas un type) - rien de cache, pas d'Attention.
+        HmiFunction deg = makeFunction(p, "Deg_To_Rad", "REAL", "Deg_To_Rad := x * 3.14159 / 180.0;");
+        deg.decls = {testParam(p, "x", "REAL")};
+        const Id degId = deg.id;
+        p.programs.functions.push_back(deg);
+        fns.refresh();
+        fns.selectFunction(degId);
+        std::string degWarn;
+        for (const auto& c : fns.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.name == "Attention") degWarn = pr.value;
+        check(degWarn.empty(), "l'inspecteur de Deg_To_Rad : pas de \xC2\xAB cache la fonction standard \xC2\xBB (aucune DEG_TO_RAD) [" + degWarn + "]");
     }
 
     // ---- 2. Les objets : l'interface heritee, la page d'une interface, la section Methodes ----

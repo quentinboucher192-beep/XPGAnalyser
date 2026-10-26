@@ -787,8 +787,9 @@ void HmiFunctionsPane::rebuildProperties() {
     c.properties.push_back(hmikit::prop("Appel\xC3\xA9" "e par", callers.empty() ? std::string("(personne)") : hmikit::fewOf(callers, 3),
                                         PG::ValueType::ReadOnly));
     // 1.13.0 (correctifs F2) : le nom d'une fonction standard (Max) - le moteur appelle celle-ci a la place de la standard
-    // (MAX(...) partout : "Appelee par" le dit) ; Generer l'avertit, l'inspecteur aussi.
-    if (f->ns.empty() && hmi::isStandardFunction(f->name)) {
+    // (MAX(...) partout : "Appelee par" le dit) ; Generer l'avertit, l'inspecteur aussi. Relecture F2 : le meme
+    // predicat que Generer (Deg_To_Rad ne cache rien : aucune conversion vers RAD).
+    if (f->ns.empty() && hmi::hidesStandardFunction(f->name)) {
         auto warn = hmikit::prop("Attention", "elle cache la fonction standard " + upperOf(f->name) + " : chaque " + upperOf(f->name)
                                                   + "(...) du projet l'appelle (renomme-la pour garder la standard)",
                                  PG::ValueType::ReadOnly);
