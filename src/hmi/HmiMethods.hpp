@@ -53,8 +53,8 @@ namespace hmi {
 [[nodiscard]] std::string methodSignature(std::string_view typeName, const HmiFunction& m);
 // 1.13.0 : les mots nus de `body` (le corps de `m`, porte par `ownerType`) que la methode lit sur SELF - un membre lu
 // comme valeur (Debit), une methode du type appelee (Journal()), son propre nom (le retour) - [debut, fin) dans `body`,
-// dans l'ordre. Ce ne sont ni des appels ni des valeurs d'une fonction du projet : renommer une fonction, « Appelee
-// par » les sautent (methodFunctionText les ecrit SELF.X).
+// dans l'ordre. Ce ne sont ni des appels ni des valeurs d'une fonction du projet : renommer une fonction, "Appelee
+// par" les sautent (methodFunctionText les ecrit SELF.X).
 [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> methodSelfWords(const Project&, std::string_view ownerType,
                                                                                const HmiFunction& m, std::string_view body);
 

@@ -963,7 +963,7 @@ void seconde() {
 // =============================================================================
 //  LES RESTES DE LA SECONDE RELECTURE (lot D2b) : le prive a travers une
 //  reference, dans un FOR EACH, et EN MARCHE ; renommer une fonction et
-//  « Appelee par » face au corps des methodes (un membre, une methode du meme nom).
+//  "Appelee par" face au corps des methodes (un membre, une methode du meme nom).
 // =============================================================================
 namespace {
 HmiFunction projectFunction(Project& p, const std::string& name, const std::string& ret, const std::string& body,
@@ -1133,7 +1133,7 @@ void troisieme() {
         check(tracer && tracer->body == "IHM_LOG(INFO, TO_STRING(Debit));",
               "D2b-6 : sans espace non plus, le membre Debit (TO_STRING(Debit)) reste [" + (tracer ? tracer->body : std::string("?")) + "]");
     }
-    // D2b-7 : « Appelee par » - l'appel nu Journal() d'une methode du meme nom n'est pas un appel de la fonction ; une
+    // D2b-7 : "Appelee par" - l'appel nu Journal() d'une methode du meme nom n'est pas un appel de la fonction ; une
     // methode d'un type sans Journal, si.
     {
         Project p = buildProject();

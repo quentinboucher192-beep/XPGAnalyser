@@ -37300,7 +37300,7 @@ void objets113() {
     (void)stack.undo();
 
     // ---- D2b-1 / D2b-9 : la page d'un type d'espace (Gaz.T_Vanne a cote d'un T_Vanne racine) - le decalage, la taille,
-    //      le poids et « Utilise par » sont les siens (par son nom complet), pas ceux de l'homonyme ----
+    //      le poids et "Utilise par" sont les siens (par son nom complet), pas ceux de l'homonyme ----
     {
         auto d3 = std::make_shared<Document>();
         core::CommandStack st3;

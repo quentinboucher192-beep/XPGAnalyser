@@ -1667,7 +1667,7 @@ bool shadowed(const CodeSite& s, std::string_view name) { return s.scope && symb
 
 // 1.13.0 : LE CORPS D'UNE METHODE. Ses noms nus qui visent SELF (un membre lu comme valeur, une methode du type
 // appelee, son propre nom : le retour - methodSelfWords) ne sont ni des appels ni des valeurs d'une fonction du projet :
-// un renommage de fonction et « Appelee par » les sautent. Chacun recoit la marque "\x02." devant (renameCalls et
+// un renommage de fonction et "Appelee par" les sautent. Chacun recoit la marque "\x02." devant (renameCalls et
 // renameItemInCode sautent un mot precede d'un point) ; unguardSelf la retire. Ailleurs : le texte tel quel.
 constexpr std::string_view kSelfMark = "\x02.";
 std::string guardSelf(const Project& p, const CodeSite& s, const std::string& text) {

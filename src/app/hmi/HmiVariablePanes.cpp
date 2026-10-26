@@ -3808,7 +3808,7 @@ void HmiTypesPane::refreshMembers() {
             }
     if (t) {
         // Le decalage et la taille : la place Modbus de chaque membre dans la structure. 1.13.0 : par le nom complet
-        // (Gaz.T_Vanne, comme le registre Modbus) - pas l'homonyme d'un autre espace ni « ? » si deux espaces l'ont.
+        // (Gaz.T_Vanne, comme le registre Modbus) - pas l'homonyme d'un autre espace ni "?" si deux espaces l'ont.
         const auto flat = ty::flatten(p, "x", hmi::fullName(*t));
         std::vector<hmi::TypeMember> shown = t->members;
         shown.insert(shown.end(), inherited.begin(), inherited.end());
