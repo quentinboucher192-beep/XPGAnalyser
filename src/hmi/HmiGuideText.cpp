@@ -18999,8 +18999,15 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Un point suit son **code**, pas son texte : taper, supprimer ou joindre des lignes "
                          "au-dessus, Annuler (Ctrl+Z), R\xC3\xA9tablir, \xC2\xAB Migrer ce code \xC2\xBB le "
                          "gardent sur sa ligne ; si sa ligne dispara\xC3\xAEt, il reste sur ce qu'il en "
-                         "reste. Un script C ou C++ n'est pas ex\xC3\xA9" "cut\xC3\xA9 en simulation : sa "
-                         "marge refuse le point.", {}},
+                         "reste. Deux points qui se retrouvent sur la m\xC3\xAAme ligne n'en font plus "
+                         "qu'un, qui s'arr\xC3\xAAte l\xC3\xA0 o\xC3\xB9 l'un des deux s'arr\xC3\xAAtait : "
+                         "actif si l'un l'\xC3\xA9tait, les conditions des points actifs jointes par OR, "
+                         "leurs passages ajout\xC3\xA9s. Un script C ou C++ n'est pas "
+                         "ex\xC3\xA9" "cut\xC3\xA9 en simulation : sa marge refuse le point.", {}},
+             {K::Bullet, "En pause, la marge du code montr\xC3\xA9 dans D\xC3\xA9" "bogage pose aussi un "
+                         "point dans ce qui n'a pas de marge \xC3\xA0 lui : une **m\xC3\xA9thode** d'un "
+                         "type, un **op\xC3\xA9rateur** ou une conversion, la **red\xC3\xA9" "finition** "
+                         "d'une instance de symbole.", {}},
              {K::Code, "(* Statistiques_Pression : un point sur la ligne IF P < Mini *)\nP := "
                          "Armoires[0].ana.PT1.mes;\nTours := Tours + 1;\nIF P < Mini THEN          (* le "
                          "moteur s'arr\xC3\xAAte AVANT cette instruction *)\n    Mini := P;\nEND_IF;", "ST"},
@@ -19015,21 +19022,35 @@ const std::vector<Topic>& topics() {
                          "du point : rien de cette ligne n'est fait, rien n'est \xC3\xA9" "crit tant que tu "
                          "ne continues pas. L'IHM se fige - la pastille de la barre du haut, la bande "
                          "d'\xC3\xA9tat, l'arbre et l'onglet Simulation disent **IHM en pause "
-                         "(d\xC3\xA9" "bogage)**, en orange :", {}},
+                         "(d\xC3\xA9" "bogage)**, en orange (un clic sur la pastille **arr\xC3\xAAte** "
+                         "l'IHM, comme Maj+F8 : sa seconde ligne le dit, \xC2\xAB Maj+F8 l'arr\xC3\xAAte, F5 "
+                         "continue \xC2\xBB) :", {}},
              {K::Bullet, "**tout le travail en cours attend** : la suite du cycle (les autres scripts, "
                          "l'OnCycle des vues, les d\xC3\xA9" "clencheurs, les alarmes, les courbes), les "
-                         "actions suivantes du clic (une popup \xC3\xA0 ouvrir, une valeur \xC3\xA0 "
-                         "\xC3\xA9" "crire), la premi\xC3\xA8re vue d'un d\xC3\xA9marrage. Un point atteint "
-                         "dans un de ces scripts s'arr\xC3\xAAte \xC3\xA0 son tour, apr\xC3\xA8s la reprise ;", {}},
+                         "actions suivantes du clic - ou de la commande sign\xC3\xA9" "e, une fois "
+                         "sign\xC3\xA9" "e (une popup \xC3\xA0 ouvrir, une valeur \xC3\xA0 \xC3\xA9" "crire) "
+                         "-, la premi\xC3\xA8re vue d'un d\xC3\xA9marrage. Un point atteint dans un de ces "
+                         "scripts s'arr\xC3\xAAte \xC3\xA0 son tour, apr\xC3\xA8s la reprise. Un script "
+                         "d\xC3\xA9tach\xC3\xA9 lanc\xC3\xA9 par le geste re\xC3\xA7oit sa premi\xC3\xA8re "
+                         "tranche tout de suite, comme sans d\xC3\xA9" "bogueur ;", {}},
              {K::Bullet, "le prochain cycle IHM attend la reprise, l'\xC3\xA9" "cran garde la "
                          "derni\xC3\xA8re image ;", {}},
              {K::Bullet, "**les gestes dans la vue ne font rien** : un clic, la croix d'une popup, un "
                          "glissement, un curseur, une saisie ; la barre d'\xC3\xA9tat le dit. Une touche ou "
                          "un bouton rel\xC3\xA2" "ch\xC3\xA9 pendant la pause n'est pas perdu : il part "
-                         "\xC3\xA0 la reprise ;", {}},
+                         "d\xC3\xA8s que la pause finit (et avant un nouvel appui) - "
+                         "rel\xC3\xA2" "ch\xC3\xA9 sur l'objet appuy\xC3\xA9 avant la pause, c'est son clic, "
+                         "comme sans d\xC3\xA9" "bogueur ;", {}},
              {K::Bullet, "les touches **F5, F10, F11, Maj+F11** pilotent la pause **o\xC3\xB9 que soit le "
-                         "clavier** - l'\xC3\xA9" "diteur du script en pause, l'arbre, un autre onglet ; F11 "
-                         "n'y met pas la fen\xC3\xAAtre en plein \xC3\xA9" "cran.", {}},
+                         "clavier** - l'\xC3\xA9" "diteur du script en pause, l'arbre, un autre onglet, la "
+                         "fen\xC3\xAAtre principale quand l'onglet Simulation est d\xC3\xA9tach\xC3\xA9 dans "
+                         "la sienne ; F11 n'y met pas la fen\xC3\xAAtre en plein \xC3\xA9" "cran. Dans une "
+                         "**autre** fen\xC3\xAAtre d\xC3\xA9tach\xC3\xA9" "e (un \xC3\xA9" "diteur "
+                         "d\xC3\xA9tach\xC3\xA9), elles ne la pilotent pas : reviens \xC3\xA0 la "
+                         "fen\xC3\xAAtre principale ou \xC3\xA0 celle de l'onglet Simulation ;", {}},
+             {K::Bullet, "IHM_SCRIPT_ACTIF et IHM_SCRIPT_ARRETER ne voient que les scripts "
+                         "**d\xC3\xA9tach\xC3\xA9s**, comme sans d\xC3\xA9" "bogueur : un script en pause "
+                         "qui ne l'est pas n'est ni \xC2\xAB actif \xC2\xBB ni arr\xC3\xAAt\xC3\xA9 par eux.", {}},
              {K::Tip, "Sans point arm\xC3\xA9 ni pas demand\xC3\xA9, rien ne change : les scripts "
                          "tournent comme avant (un IHM_POINT_ARRET en commentaire ne compte pas). Avec un "
                          "point arm\xC3\xA9, les scripts restent mesur\xC3\xA9s dans les Performances, sans "
@@ -19110,9 +19131,15 @@ const std::vector<Topic>& topics() {
                          "d\xC3\xA9tach\xC3\xA9. Il s'\xC3\xA9" "crit dans un script, une fonction (du "
                          "projet, d'une vue, d'un symbole, d'une biblioth\xC3\xA8que), une m\xC3\xA9thode "
                          "d'un type (la pile dit \xC2\xAB m\xC3\xA9thode T_Pompe.Demarrer \xC2\xBB, \xC3\xA0 "
-                         "la ligne de son corps) ou le code d'une action \xC2\xAB Ex\xC3\xA9" "cute du ST "
-                         "\xC3\xA9" "crit ici \xC2\xBB. Hors simulation (le poste d'exploitation), il ne "
-                         "fait rien ; dans une expression (fx), il est refus\xC3\xA9, comme WAIT.", {}},
+                         "la ligne de son corps), un op\xC3\xA9rateur ou une conversion d'un type ou d'un "
+                         "symbole (\xC2\xAB op\xC3\xA9rateur + (type T_Vecteur) \xC2\xBB, \xC3\xA0 la ligne "
+                         "de son corps), la red\xC3\xA9" "finition d'une instance (\xC2\xAB "
+                         "red\xC3\xA9" "finition Synoptique.V1.Ouvrir \xC2\xBB : D\xC3\xA9" "bogage montre "
+                         "son code ; elle n'a pas d'\xC3\xA9" "diteur \xC3\xA0 ouvrir d'un double clic dans "
+                         "la pile - son code est dans l'inspecteur de l'instance) ou le code d'une action "
+                         "\xC2\xAB Ex\xC3\xA9" "cute du ST \xC3\xA9" "crit ici \xC2\xBB. Hors simulation (le "
+                         "poste d'exploitation), il ne fait rien ; dans une expression (fx), il est "
+                         "refus\xC3\xA9, comme WAIT.", {}},
              {K::Code, "FOR f := 1 TO Fours.High DO\n    IHM_POINT_ARRET(Fours[f].Temperature > 900.0);   "
                          "(* s'arr\xC3\xAAte au 1er four trop chaud *)\n    IF Fours[f].Temperature > "
                          "Fours[f].Consigne + 20.0 THEN\n        Fours[f].Vannes[1].Position := 0;\n    "
@@ -19151,20 +19178,27 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Un code lanc\xC3\xA9 hors du cycle et des gestes de l'IHM en marche (l'essai d'une "
                          "fonction dans l'onglet Tests) - \xC2\xAB hors du cycle et des gestes de l'IHM en "
                          "marche \xC2\xBB.", {}},
+             {K::Bullet, "Le menu Param\xC3\xA8tres syst\xC3\xA8me : ses commandes (Red\xC3\xA9marrer "
+                         "l'IHM...) ne lancent pas de script \xC3\xA0 elles ; un red\xC3\xA9marrage relance "
+                         "les scripts de D\xC3\xA9marrage, qui s'arr\xC3\xAAtent, eux.", {}},
              {K::Bullet, "Un autre code lanc\xC3\xA9 pendant une pause (depuis un autre onglet) - \xC2\xAB "
                          "un autre script est d\xC3\xA9j\xC3\xA0 en pause : pas d'arr\xC3\xAAt \xC2\xBB.", {}},
              {K::Bullet, "Le **poste d'exploitation** : jamais.", {}},
              {K::Heading, "Modifier pendant la pause, o\xC3\xB9 vivent les points", {}},
              {K::Paragraph, "En pause, tu peux forcer une variable IHM (Variables IHM) et suivre des espions. "
                          "Si tu changes le **code** du script arr\xC3\xAAt\xC3\xA9, il ne peut pas reprendre "
-                         "au milieu d'une ligne qui n'existe plus : \xC2\xAB le script a chang\xC3\xA9 "
-                         "pendant la pause : il reprendra au prochain cycle \xC2\xBB. Arr\xC3\xAAter la "
-                         "simulation pendant la pause arr\xC3\xAAte le script sans erreur - m\xC3\xAAme dans "
-                         "une fonction appel\xC3\xA9" "e sous TRY : ni le CATCH ni la suite du script ne "
-                         "tournent. Les points d'arr\xC3\xAAt ne sont **pas dans le projet** : ils restent "
-                         "pour la s\xC3\xA9" "ance - fermer le sous-onglet ou arr\xC3\xAAter la simulation "
-                         "ne les enl\xC3\xA8ve pas ; fermer le projet ou en ouvrir un autre, si. Un projet "
-                         "ne change pas d'un octet quand tu d\xC3\xA9" "bogues.", {}},
+                         "au milieu d'une ligne qui n'existe plus : \xC2\xAB son ex\xC3\xA9" "cution "
+                         "s'arr\xC3\xAAte l\xC3\xA0, sans erreur ; la suite du cycle ou du geste continue "
+                         "(un script cyclique repart au prochain cycle) \xC2\xBB. Seul ce script "
+                         "s'arr\xC3\xAAte (avec ce qui l'appelle dans ce travail) : les autres scripts du "
+                         "cycle, les actions suivantes du clic, la premi\xC3\xA8re vue d'un d\xC3\xA9marrage "
+                         "partent quand m\xC3\xAAme. Arr\xC3\xAAter la simulation pendant la pause "
+                         "arr\xC3\xAAte le script sans erreur - m\xC3\xAAme dans une fonction "
+                         "appel\xC3\xA9" "e sous TRY : ni le CATCH ni la suite du script ne tournent. Les "
+                         "points d'arr\xC3\xAAt ne sont **pas dans le projet** : ils restent pour la "
+                         "s\xC3\xA9" "ance - fermer le sous-onglet ou arr\xC3\xAAter la simulation ne les "
+                         "enl\xC3\xA8ve pas ; fermer le projet ou en ouvrir un autre, si. Un projet ne "
+                         "change pas d'un octet quand tu d\xC3\xA9" "bogues.", {}},
          },
          {"scripts", "fonctions", "fonctions-internes", "simulation", "variables-locales", "erreurs-scripts", "reference", "tests-fonctions"},
          {"point d'arr\xC3\xAAt", "points d'arr\xC3\xAAt", "d\xC3\xA9" "bogueur", "d\xC3\xA9" "boguer", "pas \xC3\xA0 pas", "Entrer", "Sortir", "Suivant", "Continuer", "pile d'appels", "locales", "rond rouge", "marge", "Condition\xE2\x80\xA6", "IHM en pause"},
