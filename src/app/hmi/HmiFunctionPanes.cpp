@@ -390,8 +390,10 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
     links_ += codeTabs_->usesRequested->connect([this](const std::string& name) { (void)goToNextUse(name); });
     links_ += codeTabs_->useRequested->connect([this](const std::string& name, int k) { (void)goToNextUse(name, k); });   // 1.12.18
     links_ += codeTabs_->migrateRequested->connect([this] { (void)migrateCurrent(); });
-    // 1.13.0 (lot J4b) : l'onglet Tests parle dans la barre du volet ; son titre compte les cas (rouge : un echec).
-    links_ += testsPage_->message->connect([this](const std::string& t, bool warning) { say(t, warning); });
+    // 1.13.0 (lot J4b) : son titre compte les cas (rouge : un echec). 1.13.0 (lot F3) : ce que dit l'onglet Tests est
+    // ecrit dans SA barre (juste sous la liste des cas) - plus une seconde fois dans celle du volet ; le volet le garde
+    // (lastMessage).
+    links_ += testsPage_->message->connect([this](const std::string& t, bool) { message_ = t; });
     links_ += testsPage_->countsChanged->connect([this] { refreshTestsTab(); });
     links_ += testruns::changed()->connect([this] { refresh(); });   // un verdict garde : la barre recompte
     links_ += doc_->changed->connect([this](Id) { refresh(); });

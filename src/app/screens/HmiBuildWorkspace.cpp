@@ -187,8 +187,8 @@ void MainAnalysisScreen::startHmiBuild(const std::string& source) {
 //  Au Compiler (Generer et compiler, Regenerer et compiler) et au Demarrer, apres la verification du code (un
 //  build reussi), si Configuration le veut (Rejouer les tests au Compiler/Demarrer, coche d'office) : tous les
 //  cas actifs, chacun sur son banc (rien du projet ni de la simulation n'est touche) ; leurs verdicts aux Sorties
-//  (categorie Tests ; le panneau s'ouvre a un echec). Un echec est un avertissement ; au Demarrer, avec " Un test
-//  en echec empeche le demarrage ", il bloque (vrai).
+//  (categorie Tests ; le panneau s'ouvre a un echec). Un echec est ecrit en Erreur (1.13.0, lot F3 : comme son verdict)
+//  sans bloquer ; au Demarrer, avec " Un test en echec empeche le demarrage ", il bloque (vrai).
 bool MainAnalysisScreen::replayHmiTests(const pl::Report& rep, pl::Mode mode) {
     const auto doc = app_.hmi();
     if (!doc || !rep.ok || rep.cancelled || rep.locked) return false;
@@ -200,7 +200,7 @@ bool MainAnalysisScreen::replayHmiTests(const pl::Report& rep, pl::Mode mode) {
     const auto campaign = runAllTests(doc->project, plc);
     const bool blocks = mode == pl::Mode::Start && cfg.testFailBlocksStart && campaign.failed();
     if (auto* out = hmiBuildOutput(campaign.failed())) {
-        out->say(campaign.failed() ? (blocks ? pl::Severity::Critical : pl::Severity::Warning) : pl::Severity::Success, "Tests",
+        out->say(campaign.failed() ? (blocks ? pl::Severity::Critical : pl::Severity::Error) : pl::Severity::Success, "Tests",
                  campaign.summary() + (blocks ? " \xE2\x80\x94 la simulation ne d\xC3\xA9marre pas (Configuration : un test en \xC3\xA9" "chec "
                                                 "emp\xC3\xAA" "che le d\xC3\xA9marrage)"
                                               : std::string{}));

@@ -144,11 +144,8 @@ ui::Icon iconOf(Verdict v) {
     }
 }
 
-std::string fileSafe(std::string s) {
-    for (auto& c : s)
-        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_') c = '_';
-    return s.empty() ? std::string("projet") : s;
-}
+// 1.13.0 (lot F3) : un accent perdu, pas la lettre (demonstration, plus d__monstration : un _ par octet).
+std::string fileSafe(const std::string& s) { return hmi::fileNamePart(s, "projet"); }
 
 } // namespace
 
@@ -191,7 +188,8 @@ std::vector<TestLine> testLines(const hmi::HmiFunction& f, const hmi::FunctionTe
         else ++t.pending;
     }
     TestLine head;
-    head.severity = t.red() ? pl::Severity::Warning : pl::Severity::Information;
+    // 1.13.0 (lot F3) : un test rouge (echec, erreur) est une Erreur aux Sorties, comme son verdict (le filtre Erreurs le montre).
+    head.severity = t.red() ? pl::Severity::Error : pl::Severity::Information;
     head.text = "Tests de " + name + " : " + t.text();
     head.element = std::string(owner.empty() ? "fonction:" : "fonction-symbole:") + std::to_string(f.id);
     out.push_back(std::move(head));
@@ -205,7 +203,7 @@ std::vector<TestLine> testLines(const hmi::HmiFunction& f, const hmi::FunctionTe
                 l.text = who + "r\xC3\xA9ussi" + (r.got.empty() ? std::string{} : " (" + r.got + ")");
                 break;
             case Verdict::Failed:
-                l.severity = pl::Severity::Warning;
+                l.severity = pl::Severity::Error;
                 l.text = who + "\xC3\xA9" "chec" + (r.detail.empty() ? std::string{} : ", " + r.detail);
                 break;
             case Verdict::Error:
@@ -716,9 +714,10 @@ void HmiFunctionTestsPage::rebuildProperties() {
     else if (!f->returnType.empty())
         c.properties.push_back(prop("Attendu", t->expected, PG::ValueType::Text, edit(Field::Expected),
                                     "Ce que la fonction doit rendre (" + hmi::units::withUnit(f->returnType, f->returnUnit) + ") : il se lit comme toute case "
-                                    "(2,5 -> 2.5, VRAI -> TRUE) ; =formule (=Seuil_Haut - 5) se calcule apr\xC3\xA8s l'appel. Vide : seules les v\xC3\xA9rifs jugent."));
+                                    "(2,5 \xE2\x86\x92 2.5, VRAI \xE2\x86\x92 TRUE) ; =formule (=Seuil_Haut - 5) se calcule apr\xC3\xA8s l'appel. Vide : seules les "
+                                    "v\xC3\xA9rifications jugent."));
     else
-        c.properties.push_back(prop("Attendu", "(proc\xC3\xA9" "dure : rien \xC3\xA0 comparer - ses v\xC3\xA9rifs jugent)", PG::ValueType::ReadOnly));
+        c.properties.push_back(prop("Attendu", "(proc\xC3\xA9" "dure : rien \xC3\xA0 comparer - ses v\xC3\xA9rifications jugent)", PG::ValueType::ReadOnly));
     if (toleranceApplies(f) && t->errorCode.empty()) {
         auto pt = prop("Tol\xC3\xA9rance", t->tolerance, PG::ValueType::Text, edit(Field::Tolerance),
                        "|obtenu - attendu| \xE2\x89\xA4 tol\xC3\xA9rance ; vide : \xC3\xA9galit\xC3\xA9 stricte.");
@@ -1300,7 +1299,6 @@ bool HmiFunctionTestsPage::exportReport(hmi::ExportFormat format, std::string* w
     }
     const hmi::HmiFunction copy = *f;
     TestCampaign c = runTestsOf(doc_->project, {copy}, view_, ownerName(), hosts_.plc ? hosts_.plc() : nullptr);
-    emitLines(c.lines);
     hmi::ExportTable table = testReportTable(c, &copy);
     table.subtitle = doc_->project.config.name + " - " + hmi::wallStamp().substr(0, 19) + " - " + table.subtitle;
     hmi::ExportRequest rq;
@@ -1314,6 +1312,14 @@ bool HmiFunctionTestsPage::exportReport(hmi::ExportFormat format, std::string* w
     const bool ok = hosts_.exportFile && hosts_.exportFile(rq, &path);
     if (where) *where = path;
     say(ok ? "Rapport des tests \xC3\xA9" "crit : " + path : "Rapport impossible \xC3\xA0 \xC3\xA9" "crire" + (path.empty() ? std::string{} : " : " + path), !ok);
+    // 1.13.0 (lot F3) : le rejeu du rapport ne se journalise pas cas par cas (la liste montre les verdicts) - une ligne
+    // aux Sorties : le fichier et le bilan.
+    TestLine l;
+    l.severity = ok ? pl::Severity::Information : pl::Severity::Error;
+    l.text = (ok ? "Rapport des tests de " + copy.name + " \xC3\xA9" "crit : " + path
+                 : "Rapport des tests de " + copy.name + " impossible \xC3\xA0 \xC3\xA9" "crire" + (path.empty() ? std::string{} : " : " + path))
+           + " (" + c.tally.text() + ")";
+    emitLines({l});
     return ok;
 }
 
@@ -1360,7 +1366,10 @@ protected:
         h += 10.f + 54.f + 56.f;                                         // l'apercu, les boutons
         h = std::min(h, r.h - 40.f);
         panel = ui::dialogframe::place(*this, {std::floor((r.w - w) * 0.5f), std::floor((r.h - h) * 0.5f), w, h});
-        const float left = panel.x + 20.f, fieldX = left + kLabelW, fieldW = panel.w - 40.f - kLabelW;
+        // 1.13.0 (lot F3) : la colonne des libelles s'adapte au plus long (" Poids_A : REAL  (defaut 0.5) "), sans manger
+        // plus de la moitie de la fenetre.
+        labelW_ = std::min(d_.labelWidth(), std::max(kLabelW, (panel.w - 40.f) * 0.5f));
+        const float left = panel.x + 20.f, fieldX = left + labelW_, fieldW = panel.w - 40.f - labelW_;
         float y = panel.y + 44.f + 10.f;
         textY_ = y;
         y += 40.f;
@@ -1395,14 +1404,14 @@ protected:
         const float th = ctx.theme.metric.headerHeight;
         ctx.r.fillRect({panel.x, panel.y, panel.w, th}, c.headerBg);
         ctx.r.drawText({panel.x + 12.f, panel.y + (th - ctx.r.lineHeight(ctx.theme.font.uiBold)) * 0.5f}, d_.title(), ctx.theme.font.uiBold, c.text);
-        const float left = panel.x + 20.f, fieldX = left + kLabelW;
+        const float left = panel.x + 20.f, fieldX = left + labelW_;
         ctx.r.pushClip({panel.x + 8.f, panel.y + th, panel.w - 16.f, panel.h - th});
         ctx.r.drawText({left, textY_}, "Un cas \xC3\xA9pingle des arguments et le r\xC3\xA9sultat attendu : il se rejoue \xC3\xA0 chaque Compiler et D\xC3\xA9marrer.",
                        ctx.theme.font.ui, c.text);
-        ctx.r.drawText({left, textY_ + 20.f}, "Chaque case se lit comme toute case de valeur (2,5 -> 2.5, VRAI -> TRUE) ; vide : la valeur par d\xC3\xA9" "faut.",
+        ctx.r.drawText({left, textY_ + 20.f}, "Chaque case se lit comme toute case de valeur (2,5 \xE2\x86\x92 2.5, VRAI \xE2\x86\x92 TRUE) ; vide : la valeur par d\xC3\xA9" "faut.",
                        kSmall, c.textMuted);
         const auto label = [&](float at, const std::string& text) {
-            ctx.r.pushClip({left, at, kLabelW - 8.f, kFieldH});
+            ctx.r.pushClip({left, at, labelW_ - 8.f, kFieldH});
             ctx.r.drawText({left, at + (kFieldH - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f}, text, ctx.theme.font.ui, c.textMuted);
             ctx.r.popClip();
         };
@@ -1426,8 +1435,8 @@ protected:
         if (i < ys_.size()) {
             label(ys_[i], "Attendu");
             const std::string p = d_.expectedProblem();
-            note(ys_[i], !p.empty() ? p : d_.expectedUsable() ? std::string("ce que la fonction doit rendre ; vide : seules les v\xC3\xA9rifs jugent")
-                                                             : std::string("une proc\xC3\xA9" "dure : ses v\xC3\xA9rifs jugent (onglet Tests)"),
+            note(ys_[i], !p.empty() ? p : d_.expectedUsable() ? std::string("ce que la fonction doit rendre ; vide : seules les v\xC3\xA9rifications jugent")
+                                                             : std::string("une proc\xC3\xA9" "dure : ses v\xC3\xA9rifications jugent (onglet Tests)"),
                  p.empty() ? c.textMuted : c.error);
             ++i;
         }
@@ -1450,6 +1459,7 @@ private:
     HmiNewTestCaseDialog& d_;
     std::vector<float>    ys_;
     float textY_{0}, previewY_{0};
+    float labelW_{kLabelW};
 };
 
 HmiNewTestCaseDialog::HmiNewTestCaseDialog(Spec spec) : menu::WidgetMenu(spec.id), spec_(std::move(spec)) {
@@ -1496,6 +1506,12 @@ std::vector<std::string> HmiNewTestCaseDialog::parameterLabels() const {
         out.push_back(paramNames_[k] + " : " + hmi::units::withUnit(paramTypes_[k], paramUnits_[k])
                       + (paramOutput_[k] ? std::string("  (sortie)") : paramDefaults_[k].empty() ? std::string{} : "  (d\xC3\xA9" "faut " + paramDefaults_[k] + ")"));
     return out;
+}
+
+float HmiNewTestCaseDialog::labelWidth() const {
+    float w = kLabelW;
+    for (const auto& l : parameterLabels()) w = std::max(w, ui::measureWidth(l, gfx::FontId{16}) + 16.f);
+    return std::ceil(w);
 }
 
 std::string HmiNewTestCaseDialog::preview() const {
