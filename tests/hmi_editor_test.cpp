@@ -140,6 +140,7 @@
 #include "../src/app/hmi/HmiCyclicPage.hpp"      // 1.9 : la lecture cyclique a plusieurs requetes
 #include "../src/app/hmi/HmiModbusToolPane.hpp"
 #include "../src/app/hmi/HmiVariablePanes.hpp"   // lot 16
+#include "../src/app/hmi/HmiMethodPanes.hpp"     // 1.13.0 (J1b) : la section Methodes
 #include "../src/app/hmi/HmiQuickTrend.hpp"      // 1.10 (chantier O) : la fenetre graphique temporaire
 #include "../src/app/hmi/HmiObjectAlarmTree.hpp"  // 1.10 (chantier O) : le noeud Alarmes d'un objet
 #include "../src/app/hmi/HmiTreeData.hpp"       // 1.10.2 (chantier A) : les familles d'un objet deplie
@@ -17622,9 +17623,11 @@ void v110_enumerations() {
     // ---- Nouveau type v : Structure / Enumeration ----
     types.tools().triggered->emit(1);
     auto* menu = types.newTypeMenu();
-    check(menu && menu->isOpen() && menu->items().size() == 3 && menu->items()[0].label.rfind("Structure", 0) == 0
-              && menu->items()[1].label.rfind("\xC3\x89num\xC3\xA9ration", 0) == 0 && menu->items()[2].label.rfind("Rappel", 0) == 0,
-          "Nouveau type \xE2\x96\xBE : un menu Structure\xE2\x80\xA6 / \xC3\x89num\xC3\xA9ration\xE2\x80\xA6 / Rappel\xE2\x80\xA6 (1.12.20)");
+    // 1.13.0 (J1b) : une quatrieme entree, Interface...
+    check(menu && menu->isOpen() && menu->items().size() == 4 && menu->items()[0].label.rfind("Structure", 0) == 0
+              && menu->items()[1].label.rfind("\xC3\x89num\xC3\xA9ration", 0) == 0 && menu->items()[2].label.rfind("Rappel", 0) == 0
+              && menu->items()[3].label.rfind("Interface", 0) == 0,
+          "Nouveau type \xE2\x96\xBE : un menu Structure\xE2\x80\xA6 / \xC3\x89num\xC3\xA9ration\xE2\x80\xA6 / Rappel\xE2\x80\xA6 / Interface\xE2\x80\xA6 (1.13.0)");
     check(menu && menu->bounds().w > 0.f && menu->popupRect().w > 0.f, "le menu a ses bornes (il se dessine)");
     if (menu) menu->close();
     menu->itemChosen->emit(2);
@@ -34437,7 +34440,7 @@ void typesRappelEcran1220() {
     types.layout();
     types.tools().triggered->emit(1);
     auto* menu = types.newTypeMenu();
-    check(menu && menu->items().size() == 3 && menu->items()[2].label.rfind("Rappel", 0) == 0, "Nouveau type \xE2\x96\xBE : Rappel\xE2\x80\xA6");
+    check(menu && menu->items().size() == 4 && menu->items()[2].label.rfind("Rappel", 0) == 0, "Nouveau type \xE2\x96\xBE : Rappel\xE2\x80\xA6");
     if (!menu) return;
     menu->close();
     menu->itemChosen->emit(3);
@@ -37564,11 +37567,369 @@ void unites113() {
     }
 }
 
+// ============================================== 1.13.0 (J1b) ===============
+//  L'ECRAN DES OBJETS : la section Methodes (Ajouter une methode..., le corps,
+//  Privee, Redefinissable, Renommer, Dupliquer, Supprimer, Monter, Redefinir),
+//  la colonne Visibilite des membres (clic droit Rendre prive), Herite de...
+//  (EXTENDS, un cycle refuse), Implemente (IMPLEMENTS), Nouveau type > Interface...,
+//  la page d'une interface, l'arbre, renommer le type ; Ctrl+Z de chaque geste ;
+//  un point d'arret dans une methode qui arrete la simulation.
+//  HMI_TEST_J1B=1 : ces essais seuls.
+void objets113() {
+    std::printf("1.13.0 (J1b) : l'\xC3\xA9" "cran des objets - m\xC3\xA9thodes, visibilit\xC3\xA9, h\xC3\xA9ritage, interfaces, arbre, point d'arr\xC3\xAAt\n");
+    using NK = app::ProjectTreeModel::NodeKind;
+    // IHM Studio (sans automate) : un nom inconnu du projet n'existe nulle part (le controle du corps le dit).
+    struct EditionIhm {
+        core::Edition before = core::edition();
+        EditionIhm() { core::setEdition(core::Edition::Ihm); }
+        ~EditionIhm() { core::setEdition(before); }
+    } editionIhm;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    Project& p = doc->project;
+    HmiType pompe;
+    pompe.id = p.allocate();
+    pompe.name = "T_Pompe";
+    pompe.members = {{"Debit", "REAL", "", ""}, {"Marche", "BOOL", "", ""}};
+    const Id pompeId = pompe.id;
+    p.programs.types.push_back(pompe);
+    {
+        Variable v;
+        v.id = p.allocate();
+        v.name = "Pompe1";
+        v.type = "T_Pompe";
+        p.programs.variables.push_back(v);
+    }
+    app::HmiTypesPane types("ty113", doc, apply);
+    types.setBounds({0, 0, 1800, 1000});
+    types.layout();
+    types.selectType(pompeId);
+    auto* methods = types.methods();
+    check(methods && methods->type() == pompeId && methods->count() == 0, "T_Pompe : la section M\xC3\xA9thodes, vide");
+    if (!methods) return;
+
+    // ---- 1. Ajouter une m\xC3\xA9thode... : la fen\xC3\xAAtre, la signature, Cr\xC3\xA9" "er ----
+    auto* dlg = types.methodDialog();
+    const int addTool = methods->tools().actionByTip("Ajouter une m\xC3\xA9thode");
+    check(addTool > 0 && dlg != nullptr, "l'outil \xC2\xAB Ajouter une m\xC3\xA9thode\xE2\x80\xA6 \xC2\xBB et sa fen\xC3\xAAtre");
+    if (!dlg || addTool <= 0) return;
+    methods->tools().triggered->emit(addTool);
+    check(dlg->isOpen() && dlg->title() == "Nouvelle m\xC3\xA9thode de T_Pompe", "la fen\xC3\xAAtre s'ouvre : " + dlg->title());
+    dlg->setName("Debit");
+    check(!dlg->problem().empty() && dlg->problem().find("d\xC3\xA9j\xC3\xA0 un membre") != std::string::npos,
+          "un nom de membre est refus\xC3\xA9 : " + dlg->problem());
+    dlg->setName("Demarrer");
+    dlg->setParams("Consigne : REAL");
+    dlg->setVirtual(true);
+    same_text(dlg->signature(), "T_Pompe.Demarrer(Consigne : REAL)", "la signature, en direct");
+    check(dlg->problem().empty() && dlg->createButton().enabled(), "rien \xC3\xA0 redire : Cr\xC3\xA9" "er la m\xC3\xA9thode est permis");
+    dlg->setPrivate(true);
+    check(dlg->problem().find("priv\xC3\xA9" "e ne peut pas \xC3\xAAtre virtuelle") != std::string::npos, "priv\xC3\xA9" "e et virtuelle : refus\xC3\xA9 (" + dlg->problem() + ")");
+    dlg->setPrivate(false);
+    dlg->createButton().clicked->emit();
+    const auto* tp = p.hmiType(pompeId);
+    const Id dem = tp && tp->methods.size() == 1 ? tp->methods[0].id : kNoId;
+    check(!dlg->isOpen() && dem != kNoId && tp->methods[0].name == "Demarrer" && tp->methods[0].isVirtual
+              && hmi::methodParamsText(tp->methods[0]) == "Consigne : REAL",
+          "Cr\xC3\xA9" "er la m\xC3\xA9thode : Demarrer(Consigne : REAL), virtuelle");
+    check(methods->selectedMethod() == dem && methods->editor().text() == tp->methods[0].body
+              && tp->methods[0].body.find("SELF : l'instance de T_Pompe") != std::string::npos,
+          "elle est choisie, son corps pr\xC3\xA9rempli (la l\xC3\xA9gende en commentaire) dans l'\xC3\xA9" "diteur");
+    check(methods->legendText().rfind("SELF : l'instance de T_Pompe (THIS vaut SELF)", 0) == 0, "la l\xC3\xA9gende au-dessus du corps : " + methods->legendText());
+    (void)stack.undo();
+    check(p.hmiType(pompeId)->methods.empty() && methods->count() == 0, "Ctrl+Z : la m\xC3\xA9thode dispara\xC3\xAEt");
+    (void)stack.redo();
+    check(p.hmiType(pompeId)->methods.size() == 1 && methods->count() == 1, "Ctrl+Y : elle revient");
+
+    // ---- 2. Le corps : la saisie, une faute a sa ligne, Ctrl+Z ----
+    const std::string prefilled = p.hmiType(pompeId)->methods[0].body;
+    check(methods->setBody(dem, "Marche := TRUE;\nDebit := Consigne;\n"), "\xC3\xA9" "crire le corps (Marche, Debit, le param\xC3\xA8tre)");
+    check(methods->compileCurrent() == 0, "Compiler (F7) : rien \xC3\xA0 redire");
+    check(methods->setBody(dem, "Marche := TRUE;\nDebitt := Consigne;\n"), "une faute de frappe \xC3\xA0 la ligne 2");
+    const auto& diags = methods->diagnostics();
+    check(!diags.empty() && diags.front().line == 2 && diags.front().message.find("Debitt") != std::string::npos,
+          "la faute \xC3\xA0 sa ligne : " + (diags.empty() ? std::string("(aucune)") : std::to_string(diags.front().line) + " " + diags.front().message));
+    check(methods->setBody(dem, "Marche := TRUE;\nDebit := Consigne;\n") && methods->diagnostics().empty(), "corrig\xC3\xA9" "e : plus de faute");
+    (void)stack.undo();
+    check(p.hmiType(pompeId)->methods[0].body == prefilled, "Ctrl+Z : la saisie (une seule commande) reprend le corps pr\xC3\xA9rempli");
+    (void)stack.redo();
+    check(p.hmiType(pompeId)->methods[0].body == "Marche := TRUE;\nDebit := Consigne;\n" && methods->editor().text() == p.hmiType(pompeId)->methods[0].body,
+          "Ctrl+Y : la saisie revient, dans l'\xC3\xA9" "diteur aussi");
+
+    // ---- 3. Visibilit\xC3\xA9 : la m\xC3\xA9thode, puis un membre (clic droit) ----
+    std::string why;
+    check(!methods->setPrivate(dem, true, &why) && why.find("virtuelle") != std::string::npos, "une virtuelle ne se rend pas priv\xC3\xA9" "e : " + why);
+    check(methods->setVirtual(dem, false) && !p.hmiType(pompeId)->methods[0].isVirtual, "Red\xC3\xA9" "finissable d\xC3\xA9" "coch\xC3\xA9" "e");
+    check(methods->setPrivate(dem, true) && p.hmiType(pompeId)->methods[0].visibility == hmi::Visibility::Private
+              && methods->methodTable().model()->cellText(0, 3) == "Priv\xC3\xA9" "e",
+          "Rendre priv\xC3\xA9" "e : la colonne Visibilit\xC3\xA9 dit Priv\xC3\xA9" "e");
+    (void)stack.undo();
+    (void)stack.undo();
+    check(p.hmiType(pompeId)->methods[0].visibility == hmi::Visibility::Public && p.hmiType(pompeId)->methods[0].isVirtual,
+          "Ctrl+Z deux fois : publique et virtuelle \xC3\xA0 nouveau");
+    types.selectMember(0);
+    types.openMemberMenu({10, 10});
+    const auto* rendre = types.memberMenu() ? findItem(types.memberMenu()->items(), "Rendre priv\xC3\xA9") : nullptr;
+    check(rendre && rendre->enabled, "clic droit sur Debit : \xC2\xAB Rendre priv\xC3\xA9 \xC2\xBB");
+    if (rendre) types.memberMenu()->itemChosen->emit(rendre->id);
+    check(p.hmiType(pompeId)->members[0].visibility == hmi::Visibility::Private && types.memberTable().model()->cellText(0, 7) == "Priv\xC3\xA9"
+              && types.memberTable().model()->cellStyle(0, 7).icon == ui::Icon::Lock,
+          "Debit priv\xC3\xA9 : \xC2\xAB Priv\xC3\xA9 \xC2\xBB et le cadenas dans la colonne Visibilit\xC3\xA9");
+    (void)stack.undo();
+    check(p.hmiType(pompeId)->members[0].visibility == hmi::Visibility::Public, "Ctrl+Z : Debit public \xC3\xA0 nouveau");
+
+    // ---- 4. H\xC3\xA9rite de... : le sous-type, ses membres et m\xC3\xA9thodes h\xC3\xA9rit\xC3\xA9s, Red\xC3\xA9" "finir, le cycle refus\xC3\xA9 ----
+    const Id sub = types.addType("T_PompeDoublee", &why);
+    check(sub != kNoId, "un nouveau type T_PompeDoublee");
+    why.clear();
+    check(!types.setTypeBase(sub, "T_Pompe", &why) && why.find("Marche est d\xC3\xA9j\xC3\xA0 un membre de T_Pompe") != std::string::npos,
+          "H\xC3\xA9rite de\xE2\x80\xA6 refus\xC3\xA9 tant qu'un membre red\xC3\xA9" "clare celui du parent (Marche)");
+    check(types.removeMember(sub, 1) && p.hmiType(sub)->members.size() == 1, "retirer son membre Marche");
+    why.clear();
+    const bool based = types.setTypeBase(sub, "T_Pompe", &why);
+    check(based && p.hmiType(sub)->base == "T_Pompe", "H\xC3\xA9rite de\xE2\x80\xA6 T_Pompe " + why);
+    if (!based) return;
+    types.selectType(sub);
+    const auto ownMembers = p.hmiType(sub)->members.size();
+    const auto model = types.memberTable().model();
+    check(model && model->rowCount() == ownMembers + 2 && model->cellText(ownMembers, 0) == "Debit"
+              && model->cellText(ownMembers, 6).rfind("(h\xC3\xA9rit\xC3\xA9 de T_Pompe)", 0) == 0 && !model->editable(ownMembers, 0),
+          "les membres h\xC3\xA9rit\xC3\xA9s \xC3\xA0 la suite, gris\xC3\xA9s \xC2\xAB (h\xC3\xA9rit\xC3\xA9 de T_Pompe) \xC2\xBB, non modifiables");
+    check(methods->type() == sub && methods->count() == 1 && !methods->rows()[0].own
+              && methods->methodTable().model()->cellText(0, 5) == "(h\xC3\xA9rit\xC3\xA9 de T_Pompe)",
+          "la m\xC3\xA9thode h\xC3\xA9rit\xC3\xA9" "e Demarrer : \xC2\xAB (h\xC3\xA9rit\xC3\xA9 de T_Pompe) \xC2\xBB");
+    methods->selectMethod(dem);
+    const int overTool = methods->tools().actionByTip("Red\xC3\xA9" "finir");
+    check(overTool > 0 && methods->tools().isEnabled(overTool), "Red\xC3\xA9" "finir est permis sur la virtuelle h\xC3\xA9rit\xC3\xA9" "e");
+    if (overTool > 0) methods->tools().triggered->emit(overTool);
+    const auto* ts = p.hmiType(sub);
+    const Id over = ts && ts->methods.size() == 1 ? ts->methods[0].id : kNoId;
+    if (over == kNoId) {
+        check(false, "Red\xC3\xA9" "finir : aucune m\xC3\xA9thode dans T_PompeDoublee");
+        return;
+    }
+    check(over != kNoId && ts->methods[0].name == "Demarrer" && ts->methods[0].body.find("SUPER.Demarrer(") != std::string::npos
+              && hmi::sameMethodSignature(ts->methods[0], p.hmiType(pompeId)->methods[0]),
+          "Red\xC3\xA9" "finir : Demarrer dans T_PompeDoublee, m\xC3\xAAme signature, son corps rappelle SUPER.Demarrer()");
+    check(methods->methodTable().model()->cellText(0, 5) == "red\xC3\xA9" "finit T_Pompe.Demarrer", "l'origine : \xC2\xAB red\xC3\xA9" "finit T_Pompe.Demarrer \xC2\xBB");
+    {
+        const auto found = hmi::checkMethod(p, {}, over);
+        check(found.empty() && ts->methods[0].body.find("SUPER.Demarrer(Consigne);") != std::string::npos,
+              "le corps pr\xC3\xA9rempli se lit (SUPER.Demarrer(Consigne);) : " + (found.empty() ? std::string("rien \xC3\xA0 redire") : found.front().message));
+    }
+    check(!types.setTypeBase(pompeId, "T_PompeDoublee", &why) && !why.empty(), "T_Pompe h\xC3\xA9rite de son sous-type : refus\xC3\xA9 (" + why + ")");
+    const auto choices = hmi::baseChoices(p, *p.hmiType(pompeId));
+    check(std::find(choices.begin(), choices.end(), "T_PompeDoublee") == choices.end() && choices.front() == "(aucun)",
+          "la liste H\xC3\xA9rite de\xE2\x80\xA6 de T_Pompe ne propose pas son sous-type");
+
+    // ---- 5. L'arbre : M\xC3\xA9thodes (n), h\xC3\xA9rite de, l'ic\xC3\xB4ne d'une interface ----
+    {
+        auto plc = std::make_shared<domain::Project>();
+        app::ProjectTreeModel tree(plc);
+        tree.setHmi(doc);
+        const auto pn = app::ProjectTreeModel::pack(NK::HmiTypeNode, pompeId);
+        const auto sn = app::ProjectTreeModel::pack(NK::HmiTypeNode, sub);
+        check(tree.childCount(pn) == 1 && tree.kindOf(tree.childAt(pn, 0)) == NK::HmiTypeMethods && tree.text(tree.childAt(pn, 0)) == "M\xC3\xA9thodes (1)",
+              "T_Pompe dans l'arbre : M\xC3\xA9thodes (1)");
+        const auto m0 = tree.childAt(tree.childAt(pn, 0), 0);
+        check(tree.kindOf(m0) == NK::HmiTypeMethod && tree.text(m0) == "Demarrer(Consigne : REAL)" && tree.style(m0).badge == "virtuelle"
+                  && tree.hmiIdOf(m0) == pompeId,
+              "la m\xC3\xA9thode : " + tree.text(m0) + " (virtuelle), le clic m\xC3\xA8ne au type");
+        check(tree.text(sn).find("\xE2\x96\xB8 h\xC3\xA9rite de T_Pompe") != std::string::npos, "le sous-type : " + tree.text(sn));
+    }
+
+    // ---- 6. Interface... : la page, Impl\xC3\xA9mente, Types qui l'impl\xC3\xA9mentent ----
+    types.openNewTypeMenu();
+    auto* menu = types.newTypeMenu();
+    check(menu && menu->items().size() == 4 && menu->items()[3].label == "Interface\xE2\x80\xA6", "Nouveau type \xE2\x96\xBE : Interface\xE2\x80\xA6");
+    if (menu) {
+        menu->close();
+        menu->itemChosen->emit(4);
+    }
+    const auto* iface = p.hmiTypeByName("I_Interface");
+    check(iface && iface->kind == hmi::HmiTypeKind::Interface && iface->methods.size() == 1 && types.showsInterface() && methods->type() == iface->id,
+          "Interface\xE2\x80\xA6 : I_Interface (une signature d'exemple), sa page");
+    const Id ifaceId = iface ? iface->id : kNoId;
+    check(methods->tools().actionByTip("Ajouter une signature") > 0 && methods->editor().readOnly(), "la page d'une interface : Ajouter une signature\xE2\x80\xA6, pas de corps");
+    check(hmi::interfaceDeclaration(*p.hmiType(ifaceId)) == "TYPE I_Interface INTERFACE\n    METHOD Demarrer\nEND_TYPE", "l'aper\xC3\xA7u de sa d\xC3\xA9" "claration");
+    if (methods->count() == 1) (void)methods->setParams(methods->rows()[0].id, "Consigne : REAL");
+    check(types.setTypeImplements(pompeId, "I_Interface", true, &why) && p.hmiType(pompeId)->interfaces.size() == 1
+              && hmi::interfaceMisses(p, *p.hmiType(pompeId)).empty(),
+          "T_Pompe impl\xC3\xA9mente I_Interface : conforme (il a Demarrer(Consigne : REAL))" + why);
+    const auto by = hmi::implementersOf(p, *p.hmiType(ifaceId));
+    check(by.size() == 2 && by[0] == "T_Pompe" && by[1] == "T_PompeDoublee", "Types qui l'impl\xC3\xA9mentent : T_Pompe et T_PompeDoublee (par son parent)");
+    (void)stack.undo();
+    check(p.hmiType(pompeId)->interfaces.empty(), "Ctrl+Z : T_Pompe n'impl\xC3\xA9mente plus I_Interface");
+
+    // ---- 7. Renommer le type, renommer la m\xC3\xA9thode ----
+    check(types.renameType(pompeId, "T_Pompe2", &why) && p.hmiType(sub)->base == "T_Pompe2" && p.variable("Pompe1")->type == "T_Pompe2",
+          "renommer T_Pompe en T_Pompe2 : EXTENDS du sous-type et la variable suivent");
+    (void)stack.undo();
+    check(p.hmiType(sub)->base == "T_Pompe", "Ctrl+Z : T_Pompe partout");
+    check(methods->renameMethod(dem, "Lancer", &why) && p.hmiType(pompeId)->methods[0].name == "Lancer" && p.hmiType(sub)->methods[0].name == "Lancer"
+              && p.hmiType(sub)->methods[0].body.find("SUPER.Lancer(") != std::string::npos,
+          "renommer Demarrer en Lancer : la red\xC3\xA9" "finition et son SUPER suivent" + why);
+    (void)stack.undo();
+    check(p.hmiType(pompeId)->methods[0].name == "Demarrer" && p.hmiType(sub)->methods[0].name == "Demarrer", "Ctrl+Z : Demarrer partout");
+
+    // ---- 8. Dupliquer, Monter, Supprimer ----
+    types.selectType(pompeId);
+    const Id copie = methods->duplicateMethod(dem, &why);
+    check(copie != kNoId && p.hmiType(pompeId)->methods.size() == 2 && p.hmiType(pompeId)->methods[1].name == "Demarrer_copie",
+          "Dupliquer : Demarrer_copie juste apr\xC3\xA8s");
+    check(methods->moveMethod(copie, -1) && p.hmiType(pompeId)->methods[0].id == copie, "Monter : la copie en t\xC3\xAAte");
+    check(methods->deleteMethod(copie) && p.hmiType(pompeId)->methods.size() == 1, "Supprimer la copie");
+    (void)stack.undo();
+    (void)stack.undo();
+    (void)stack.undo();
+    check(p.hmiType(pompeId)->methods.size() == 1 && p.hmiType(pompeId)->methods[0].id == dem, "Ctrl+Z trois fois : une seule m\xC3\xA9thode, Demarrer");
+
+    // ---- 9. Un point d'arr\xC3\xAAt dans la m\xC3\xA9thode arr\xC3\xAAte la simulation ----
+    {
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "Lancement";
+        sc.event = "Appel";
+        sc.body = "Pompe1.Demarrer(12.5);\n";
+        p.programs.scripts.push_back(sc);
+        View v = makeView(p, "Vue_Essai");
+        p.views.push_back(v);
+        p.config.startView = p.views.back().id;
+        hmi::Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.setDebugger(true);
+        rt.start(0.0);
+        rt.tick(0.1);
+        hmi::DebugBreakpoint b;
+        b.id = 1;
+        b.function = dem;
+        b.line = 2;
+        rt.setBreakpoints({b});
+        check(rt.breakpoints()[0].note.empty() && rt.breakpoints()[0].effectiveLine == 2,
+              "le point de la ligne 2 de Demarrer se comprend (" + rt.breakpoints()[0].note + ")");
+        check(hmi::Runtime::debugCodeName(p, kNoId, dem) == "m\xC3\xA9thode T_Pompe.Demarrer", "le code se nomme : m\xC3\xA9thode T_Pompe.Demarrer");
+        (void)rt.callScript("Lancement", 0.2);
+        check(rt.paused() && rt.debugHit() && rt.debugHit()->function == dem && rt.debugHit()->line == 2,
+              "arr\xC3\xAAt dans la m\xC3\xA9thode Demarrer, ligne 2");
+        if (rt.debugHit() && !rt.debugHit()->stack.empty())
+            check(rt.debugHit()->stack.back().label == "m\xC3\xA9thode T_Pompe.Demarrer", "la pile nomme la m\xC3\xA9thode : " + rt.debugHit()->stack.back().label);
+        (void)rt.debugContinue();
+        sim::Value debit;
+        check(!rt.paused() && rt.environment().read("Pompe1.Debit", debit) && debit.asReal() == 12.5, "Continuer : Pompe1.Debit = 12.5");
+    }
+    // ---- T2-52 : renommer un script d'un espace - l'action qui le vise par son nom complet suit, pas l'homonyme ----
+    {
+        auto d2 = std::make_shared<Document>();
+        core::CommandStack st2;
+        auto apply2 = [&](core::CommandPtr c) { (void)st2.push(std::move(c)); };
+        Project& q = d2->project;
+        const auto addScript = [&](const char* ns, const char* name) {
+            Script s2;
+            s2.id = q.allocate();
+            s2.name = name;
+            s2.ns = ns;
+            s2.event = "Appel";
+            s2.body = "IHM_LOG(INFO, 'tic');\n";
+            q.programs.scripts.push_back(s2);
+            return s2.id;
+        };
+        const Id gaz = addScript("Gaz", "Horloge");
+        (void)addScript("Util", "Horloge");
+        View vb = makeView(q, "Vue_Boutons");
+        const Id b1 = edit::add(q, vb, Kind::Button, 10, 10);
+        const Id b2 = edit::add(q, vb, Kind::Button, 10, 60);
+        for (const auto& [b, target] : {std::pair<Id, const char*>{b1, "Gaz.Horloge"}, {b2, "Util.Horloge"}}) {
+            Action a;
+            a.trigger = Trigger::Click;
+            a.operation = Operation::CallScript;
+            a.target = target;
+            vb.object(b)->actions.push_back(a);
+        }
+        const Id vbId = vb.id;
+        q.views.push_back(vb);
+        app::HmiScriptsPane sp("prog113", d2, apply2);
+        sp.setBounds({0, 0, 1400, 800});
+        sp.layout();
+        check(sp.renameScript(gaz, "Pendule", &why) && q.view(vbId)->object(b1)->actions.front().target == "Gaz.Pendule"
+                  && q.view(vbId)->object(b2)->actions.front().target == "Util.Horloge",
+              "T2-52 : renommer Gaz.Horloge en Pendule - l'action Gaz.Horloge suit (Gaz.Pendule), Util.Horloge reste " + why);
+        (void)st2.undo();
+        check(q.view(vbId)->object(b1)->actions.front().target == "Gaz.Horloge", "Ctrl+Z : l'action vise Gaz.Horloge");
+    }
+
+    // ---- 10. Renommer la methode : un appel ecrit ailleurs garde l'ancien nom, Compiler le dit ----
+    check(methods->renameMethod(dem, "Lancer", &why), "renommer Demarrer en Lancer");
+    {
+        std::string said;
+        for (const auto& i : hmi::compileWith(p, {}, {}))
+            if (i.message.find("Demarrer") != std::string::npos && i.severity == hmi::Issue::Severity::Error) said = i.message;
+        check(!said.empty(), "Compiler signale Pompe1.Demarrer(12.5) dans le script : " + said);
+    }
+    (void)stack.undo();
+
+    // ---- D2b-1 / D2b-9 : la page d'un type d'espace (Gaz.T_Vanne a cote d'un T_Vanne racine) - le decalage, la taille,
+    //      le poids et "Utilise par" sont les siens (par son nom complet), pas ceux de l'homonyme ----
+    {
+        auto d3 = std::make_shared<Document>();
+        core::CommandStack st3;
+        auto apply3 = [&](core::CommandPtr c) { (void)st3.push(std::move(c)); };
+        Project& q = d3->project;
+        HmiType racine;
+        racine.id = q.allocate();
+        racine.name = "T_Vanne";
+        racine.members = {{"Etat", "BOOL", "", ""}};
+        q.programs.types.push_back(racine);
+        HmiType gaz;
+        gaz.id = q.allocate();
+        gaz.name = "T_Vanne";
+        gaz.ns = "Gaz";
+        gaz.members = {{"Position", "REAL", "", ""}, {"Defaut", "BOOL", "", ""}, {"Commande", "INT", "", ""}};
+        const Id gazId = gaz.id;
+        q.programs.types.push_back(gaz);
+        for (const auto& [n, t] : {std::pair<const char*, const char*>{"V0", "T_Vanne"}, {"V1", "Gaz.T_Vanne"}}) {
+            Variable v;
+            v.id = q.allocate();
+            v.name = n;
+            v.type = t;
+            q.programs.variables.push_back(v);
+        }
+        app::HmiTypesPane tp3("ty113b", d3, apply3);
+        tp3.setBounds({0, 0, 1800, 1000});
+        tp3.layout();
+        tp3.selectType(gazId);
+        const auto flat = types::flatten(q, "x", "Gaz.T_Vanne");
+        std::string commande = "?";
+        for (const auto& l : flat.leaves)
+            if (l.path == "x.Commande") commande = "mot " + std::to_string(l.word);
+        const auto mm = tp3.memberTable().model();
+        check(mm && mm->rowCount() == 3 && mm->cellText(0, 4) == "mot 0" && mm->cellText(0, 5) == "2 mots" && commande != "?"
+                  && mm->cellText(2, 4) == commande,
+              "D2b-9 : Gaz.T_Vanne - Position mot 0, 2 mots ; Commande " + commande + " (les siens, pas \xC2\xAB ? \xC2\xBB ni ceux du T_Vanne racine) : "
+                  + (mm ? mm->cellText(0, 4) + " / " + mm->cellText(0, 5) + " / " + mm->cellText(2, 4) : std::string("?")));
+        const auto cats = tp3.properties().categories();
+        const auto words = types::weightOf(q, "Gaz.T_Vanne").words;
+        check(words > types::weightOf(q, "T_Vanne").words && gridValue(cats, "Poids").rfind(std::to_string(words) + " mots", 0) == 0,
+              "D2b-1 : le Poids de Gaz.T_Vanne est le sien (" + gridValue(cats, "Poids") + ")");
+        check(gridValue(cats, "Utilis\xC3\xA9 par") == "V1", "D2b-1 : Utilis\xC3\xA9 par de Gaz.T_Vanne : V1 seule (" + gridValue(cats, "Utilis\xC3\xA9 par") + ")");
+        const auto tm = tp3.typeTable().model();
+        check(tm && tm->rowCount() == 2 && tm->cellText(0, 3) == "V0" && tm->cellText(1, 3) == "V1" && tm->cellText(1, 2) == std::to_string(words),
+              "D2b-1 : la liste des types - T_Vanne utilise par V0, Gaz.T_Vanne par V1, son poids " + std::to_string(words)
+                  + (tm ? " (" + tm->cellText(0, 3) + ", " + tm->cellText(1, 3) + ", " + tm->cellText(1, 2) + ")" : std::string{}));
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.13.0 (lots J4b et J6b) : HMI_TEST_J46=1 - l'interface des tests unitaires et des unites, seule.
     if (const char* only = std::getenv("HMI_TEST_J46"); only && *only == '1') {
         testsUnitaires113();
         unites113();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.13.0 (J1b) : HMI_TEST_J1B=1 - l'ecran des objets (methodes, visibilite, heritage, interfaces), seul.
+    if (const char* only = std::getenv("HMI_TEST_J1B"); only && *only == '1') {
+        objets113();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -38104,6 +38465,7 @@ int main(int argc, char** argv) {
     langues11230();                         // 1.12.30 : les langues cote a cote, la pseudo-langue
     zoom11231();                            // 1.12.31 : le zoom de toute la page, la vue en ilot, le panneau du bas
     bibliotheques113();                     // 1.13.0 (lot J8) : espaces de noms et bibliotheques - le volet, l'arbre
+    objets113();                            // 1.13.0 (J1b) : l'ecran des objets - methodes, visibilite, heritage, interfaces
     testsUnitaires113();                    // 1.13.0 (lot J4b) : les tests unitaires - l'onglet Tests, les verdicts, l'arbre
     unites113();                            // 1.13.0 (lot J6b) : les unites - la colonne Unite, le selecteur, Unites de mesure
     if (argc > 1) configuration_et_variables(argv[1]);

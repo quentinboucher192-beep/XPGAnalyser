@@ -314,7 +314,7 @@ std::vector<std::string> scanRoots(std::string_view s) {
                     std::size_t a = k + 1;
                     while (a < s.size() && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
                     std::size_t b = a;
-                    while (b < s.size() && isIdentChar(s[b])) ++b;
+                    while (b < s.size() && (isIdentChar(s[b]) || (s[b] == '.' && b + 1 < s.size() && isIdentStart(s[b + 1])))) ++b;   // 1.13.0 : <Gaz.T_Pompe>
                     while (b < s.size() && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
                     if (b > a && b < s.size() && s[b] == '>') i = b + 1;
                 }

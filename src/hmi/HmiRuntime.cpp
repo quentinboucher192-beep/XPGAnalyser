@@ -19,6 +19,7 @@
 #include "HmiCalc.hpp"        // 1.12.7 : les valeurs calculees au demarrage
 #include "HmiMethods.hpp"     // 1.13.0 (lot J1) : les methodes des types IHM (S2) a l'execution (S1)
 #include "HmiUnits.hpp"       // 1.13.0 (lot J6) : les unites de mesure (EN / UNITE : declaredUnit, convertUnit)
+#include "HmiLibrary.hpp"     // 1.13.0 : biblio::unitConfig (les unites des bibliotheques reliees)
 #include "HmiNames.hpp"       // 1.13.0 (lot J8) : les espaces de noms - le code qualifie avant le moteur
 #include "HmiOperators.hpp"   // 1.10 (integration) : les operateurs du projet (S2) a l'execution (S1)
 #include "HmiRoles.hpp"       // 1.12.6 (lot B) : le lecteur du role, l'ecriture vers le type
@@ -354,6 +355,12 @@ public:
     // 1.13.0 (le debogueur) : pendant un espion ou une condition de point, le nombre de cadres d'avant lui (le code en
     // pause), plus un : ceux-la ne s'ecrivent pas (write). 0 : pas de lecture du debogueur en cours.
     std::size_t probeFloor{0};
+    // 1.13.0 : le projet a-t-il un membre ou une methode prive (-1 : pas encore regarde, remis a chaque demarrage) ?
+    // Sans prive, privateMember rend vide tout de suite : un chemin lu ne coute rien de plus.
+    int anyPrivate{-1};
+    // Le prive deja lu, par "TYPE|MEMBRE" (majuscules) : le message et le type qui le declare (vide : permis). Remis
+    // avec anyPrivate : une boucle qui lit Pompes[i].Debit ne refait pas la recherche dans le type a chaque tour.
+    std::map<std::string, std::pair<std::string, std::string>> privateSeen;
     struct CallerLocals {
         Env& env;
         explicit CallerLocals(Env& e) : env(e) { ++env.callerLocals; }
@@ -819,7 +826,8 @@ public:
     // 1.13.0 (lot J6) : la conversion d'une unite vers une autre (meme famille), par la bibliotheque du projet.
     bool convertUnit(std::string_view from, std::string_view to, double& value) override {
         if (!rt_.project_) return false;
-        if (!unitCatalog) unitCatalog = std::make_unique<units::Catalog>(rt_.project_->config);   // une fois par demarrage
+        // Une fois par demarrage ; 1.13.0 : celles des bibliotheques reliees aussi.
+        if (!unitCatalog) unitCatalog = std::make_unique<units::Catalog>(biblio::unitConfig(*rt_.project_));
         if (const auto aff = unitCatalog->convert(from, to)) { value = aff->apply(value); return true; }
         return false;
     }
@@ -938,6 +946,8 @@ public:
         out.function = std::move(c.function);
         out.owner = std::move(c.owner);
         out.debugId = c.method;                                       // 1.13.0 (le debogueur) : ses points d'arret
+        out.selfType = std::move(c.selfType);        // 1.13.0 : le prive a l'execution
+        out.privateWhy = std::move(c.privateWhy);
         return true;
     }
     // 1.13.0 (lot J1) : SUPER.M(...) emis comme METHODE_<parent>_M - l'interpreteur le resout ici.
@@ -948,9 +958,46 @@ public:
         out.function = std::move(c.function);
         out.owner = std::move(c.owner);
         out.debugId = c.method;                                       // 1.13.0 (le debogueur) : ses points d'arret
+        out.selfType = std::move(c.selfType);        // 1.13.0 : son cadre est une methode de ce type (le prive)
         return true;
     }
-    // 1.13.0 (le debogueur) : une methode, un operateur va tourner - ses points d'arret (ses lignes apres son en-tete).
+    // 1.13.0 : LE PRIVE A L'EXECUTION (sim::Environment::privateMember) - le porteur : le type d'un objet, ou celui du
+    // chemin (une variable IHM, une case, un membre). Le debogueur (une expression sondee) voit tout.
+    std::string privateMember(std::string_view type, std::string_view path, std::string_view member, std::string& owner) override {
+        if (!rt_.project_ || rt_.debugProbing_ > 0) return {};
+        const Project& p = *rt_.project_;
+        if (anyPrivate < 0) {
+            bool any = false;
+            const auto scan = [&](const HmiType& t) {
+                for (const auto& m : t.members) any = any || m.visibility == Visibility::Private;
+                for (const auto& m : t.methods) any = any || m.visibility == Visibility::Private;
+            };
+            for (const auto& t : p.programs.types) scan(t);
+            p.forEachLibraryType([&](const HmiType& t, const LoadedLibrary&) { scan(t); });
+            anyPrivate = any ? 1 : 0;
+        }
+        if (anyPrivate == 0) return {};
+        std::string holder(type);
+        if (holder.empty()) {
+            if (path.empty()) return {};
+            const std::string r = resolved(path);
+            if (r.empty() || r[0] == '$') return {};
+            holder = types::typeOfPath(p, r);
+            if (holder.empty()) return {};
+        }
+        std::string key = upper(holder);
+        key += '|';
+        key += upper(member);
+        auto it = privateSeen.find(key);
+        if (it == privateSeen.end()) {
+            std::string declared;
+            std::string why = types::privateMemberUse(p, holder, member, &declared);
+            it = privateSeen.emplace(std::move(key), std::make_pair(std::move(why), std::move(declared))).first;
+        }
+        owner = it->second.second;
+        return it->second.first;
+    }
+    // 1.13.0 (le debogueur) : une methode, un operateur va tourner - ses points d'arret (markRichFunction).
     void debugFunction(const sim::Function& f, std::uint32_t id) override { rt_.markRichFunction(f, static_cast<Id>(id)); }
     // 1.13.0 (lot J1) : la montee - un sous-type vers un parent, un type vers une interface implementee
     // (pour DYNAMIC_CAST<to>(objet)). Le meme type va toujours.
@@ -4278,6 +4325,9 @@ void Runtime::start(double now) {
         debugTick(now);
     }
     env_->anyUnit = -1;                 // 1.13.0 (lot J6) : les unites du projet se relisent a chaque demarrage
+    env_->unitCatalog.reset();          // (celles des bibliotheques reliees aussi)
+    env_->anyPrivate = -1;              // 1.13.0 : le prive aussi (un membre rendu prive depuis)
+    env_->privateSeen.clear();
     // 1.12.2 : les sources d'elements (itemsFrom) se lisent dans ce moteur tant qu'il tourne.
     registerChoiceResolver(this, [this](const Object& o, std::string_view source, std::vector<Choice>& out) { return resolveChoices(source, out, &o); });
     composed_.clear(); boundCalls_.clear();

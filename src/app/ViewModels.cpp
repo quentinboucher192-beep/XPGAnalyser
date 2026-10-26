@@ -7,6 +7,7 @@
 #include "../hmi/HmiTemplates.hpp"
 #include "../hmi/HmiTypes.hpp"
 #include "../hmi/HmiOperators.hpp"   // 1.10 (chantier O) : la signature d'un operateur dans l'arbre
+#include "../hmi/HmiMethods.hpp"     // 1.13.0 (J1b) : la signature d'une methode dans l'arbre
 #include "../hmi/HmiSymbols.hpp"     // 1.10 (chantier O) : le symbole d'une instance (ses operateurs)
 #include "../hmi/HmiFolders.hpp"      // lot 21 : les listes rangees en dossiers
 
@@ -1035,7 +1036,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiTypeNode: {
             const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
             if (!ty) return 0;
-            return (ty->kind == hmi::HmiTypeKind::Enumeration ? 1u : 0u) + (ty->operators.empty() ? 0u : 1u);
+            return (ty->kind == hmi::HmiTypeKind::Enumeration ? 1u : 0u) + (ty->methods.empty() ? 0u : 1u)   // 1.13.0 (J1b)
+                 + (ty->operators.empty() ? 0u : 1u);
+        }
+        case NodeKind::HmiTypeMethods: {
+            const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
+            return ty ? ty->methods.size() : 0;
         }
         case NodeKind::HmiTypeValues: {
             const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
@@ -1645,9 +1651,16 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
             if (!ty) return ui::kInvalidNode;
             const std::size_t values = ty->kind == hmi::HmiTypeKind::Enumeration ? 1u : 0u;
+            const std::size_t methods = ty->methods.empty() ? 0u : 1u;          // 1.13.0 (J1b) : "Methodes (n)"
             if (k < values) return pack(NodeKind::HmiTypeValues, i);
-            if (k == values && !ty->operators.empty()) return pack(NodeKind::HmiTypeOperators, i);
+            if (k < values + methods) return pack(NodeKind::HmiTypeMethods, i);
+            if (k == values + methods && !ty->operators.empty()) return pack(NodeKind::HmiTypeOperators, i);
             return ui::kInvalidNode;
+        }
+        case NodeKind::HmiTypeMethods: {
+            const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
+            if (!ty || k >= ty->methods.size() || k > 0xFFFF) return ui::kInvalidNode;
+            return pack(NodeKind::HmiTypeMethod, i, static_cast<Index>(k));
         }
         case NodeKind::HmiTypeValues:
         case NodeKind::HmiTypeOperators: {
@@ -1962,6 +1975,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || k == NK::HmiTypesFolder || k == NK::HmiTypeNode || k == NK::HmiVarFolder || k == NK::HmiListFolder
                 || k == NK::HmiObjectAlarms || k == NK::HmiObjectAlarm               // 1.10 (chantier O)
                 || k == NK::HmiTypeValues || k == NK::HmiTypeValue || k == NK::HmiTypeOperators || k == NK::HmiTypeOperator
+                || k == NK::HmiTypeMethods || k == NK::HmiTypeMethod                 // 1.13.0 (J1b)
                 || k == NK::HmiObjectOperators || k == NK::HmiObjectOperator
                 || (k >= NK::HmiObjectFunctions && k <= NK::HmiSymbolFunction)                       // 1.11.10
                 || (k >= NK::HmiCodeGroup && k <= NK::HmiSymbolOverloads)                            // 1.11.21 : le contenu d'un code
@@ -2772,9 +2786,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             const std::string shown = hmi::fullName(*ty);         // 1.13.0 (lot J8) : Gaz.T_Vanne, son espace en tete
             if (ty->kind == hmi::HmiTypeKind::Enumeration)       // 1.10 (decision 15)
                 return shown + "  (\xC3\xA9num\xC3\xA9ration)";
+            if (ty->kind == hmi::HmiTypeKind::Interface)         // 1.13.0 (J1b)
+                return shown + "  (interface)";
             const auto w = hmi::types::weightOf(hmi_->project, shown);
             return shown + "  [" + std::to_string(ty->members.size()) + " membre" + (ty->members.size() > 1 ? "s" : "") + ", "
-                 + std::to_string(w.words) + " mot" + (w.words > 1 ? "s" : "") + "]";
+                 + std::to_string(w.words) + " mot" + (w.words > 1 ? "s" : "") + "]"
+                 + (ty->base.empty() ? std::string{} : "  \xE2\x96\xB8 h\xC3\xA9rite de " + ty->base);   // 1.13.0 (J1b)
         }
         // ---- 1.13.0 (lot J8) : les bibliotheques reliees ----
         case NodeKind::HmiLibrariesFolder:
@@ -2872,6 +2889,19 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             if (!ty) return {};
             return kindOf(n) == NodeKind::HmiTypeValues ? "Valeurs (" + std::to_string(ty->values.size()) + ")"
                                                         : "Op\xC3\xA9rateurs (" + std::to_string(ty->operators.size()) + ")";
+        }
+        // ---- 1.13.0 (J1b) : "Methodes (2)", une signature "Demarrer()", "EnDefaut() : BOOL" ----
+        case NodeKind::HmiTypeMethods: {
+            const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
+            if (!ty) return {};
+            return std::string(ty->kind == hmi::HmiTypeKind::Interface ? "Signatures (" : "M\xC3\xA9thodes (") + std::to_string(ty->methods.size()) + ")";
+        }
+        case NodeKind::HmiTypeMethod: {
+            const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
+            const auto k = static_cast<std::size_t>(subOf(n));
+            if (!ty || k >= ty->methods.size()) return {};
+            const std::string sig = hmi::methodSignature(ty->name, ty->methods[k]);
+            return sig.substr(std::min(sig.size(), ty->name.size() + 1));
         }
         case NodeKind::HmiTypeValue: {
             const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
@@ -4012,7 +4042,28 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             }
             break;
         }
-        case NodeKind::HmiTypeNode:      s.icon = ui::Icon::DerivedType; s.iconTone = ui::Tone::Accent; break;
+        case NodeKind::HmiTypeNode: {    // 1.13.0 (J1b) : une interface a son icone (un contrat)
+            const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
+            s.icon = ty && ty->kind == hmi::HmiTypeKind::Interface ? ui::Icon::Link : ui::Icon::DerivedType;
+            s.iconTone = ui::Tone::Accent;
+            break;
+        }
+        case NodeKind::HmiTypeMethods:   s.icon = ui::Icon::Folder; break;
+        case NodeKind::HmiTypeMethod: {
+            const auto* ty = hmi_ ? byId(hmi_->project.programs.types, i) : nullptr;
+            const auto k = static_cast<std::size_t>(subOf(n));
+            s.icon = ui::Icon::Function;
+            if (ty && k < ty->methods.size()) {
+                if (ty->methods[k].visibility == hmi::Visibility::Private) {
+                    s.badge = "priv\xC3\xA9" "e";
+                    s.badgeTone = ui::Tone::Muted;
+                } else if (ty->methods[k].isVirtual) {
+                    s.badge = "virtuelle";
+                    s.badgeTone = ui::Tone::Info;
+                }
+            }
+            break;
+        }
         // ---- 1.10 (chantier O, decision 15) : le texte affiche d'une valeur, toString / fromString ----
         case NodeKind::HmiTypeValues:
         case NodeKind::HmiTypeOperators:
@@ -4475,6 +4526,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiVariable:      if (const auto* v = byId(p.programs.variables, i)) return v->id; return 0;
         case NodeKind::HmiTypeValues: case NodeKind::HmiTypeValue:            // 1.10 (chantier O) : le type
         case NodeKind::HmiTypeOperators: case NodeKind::HmiTypeOperator:
+        case NodeKind::HmiTypeMethods: case NodeKind::HmiTypeMethod:          // 1.13.0 (J1b)
         case NodeKind::HmiTypeNode:      if (const auto* ty = byId(p.programs.types, i)) return ty->id; return 0;   // lot 16
         default:                         return 0;
         }

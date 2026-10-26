@@ -1287,25 +1287,49 @@ private:
         if (dialect_ && t.kind == Tok::Identifier && upperOf(t.text) == "LAMBDA") return lambdaExpr();
         // 1.12.19 : l'appel d'une fonction generique, ses types donnes - Limiter<INT>(x, 0, 100) ;
         // seulement NOM < TYPE [, TYPE] > ( : a < b reste une comparaison.
-        if (dialect_ && t.kind == Tok::Identifier && !lib::templateInfo(t.text) && peek(1).kind == Tok::Punct && peek(1).text == "<") {
-            std::size_t k = 2;
-            std::vector<std::string> types;
-            bool closed = false;
-            while (peek(k).kind == Tok::Identifier) {
-                types.push_back(upperOf(peek(k).text));
-                ++k;
-                if (peek(k).kind == Tok::Punct && peek(k).text == ",") { ++k; continue; }
-                if (peek(k).kind == Tok::Punct && peek(k).text == ">") { ++k; closed = true; }
-                break;
+        // 1.13.0 : le nom et les types peuvent etre complets (Util.Max<INT>(a, b), Max<Gaz.T_Point>(p, q)) - c'est
+        // ainsi que names::qualify les ecrit pour le moteur dans un script d'un espace (ou sous USING).
+        if (dialect_ && t.kind == Tok::Identifier && !lib::templateInfo(t.text)) {
+            std::size_t h = 1;
+            std::vector<std::string> segs{t.raw};
+            while (peek(h).kind == Tok::Punct && peek(h).text == "." && peek(h + 1).kind == Tok::Identifier) {
+                segs.push_back(peek(h + 1).raw);
+                h += 2;
             }
-            if (closed && !types.empty() && peek(k).kind == Tok::Punct && peek(k).text == "(") {
-                auto node = std::make_shared<Expr>();
-                node->kind = Expr::Kind::Reference;
-                node->name = t.raw;
-                node->line = t.line;
-                node->typeArgs = std::move(types);
-                for (std::size_t i = 0; i < k; ++i) advance();
-                return node;
+            if (peek(h).kind == Tok::Punct && peek(h).text == "<") {
+                std::size_t k = h + 1;
+                std::vector<std::string> types;
+                bool closed = false;
+                while (peek(k).kind == Tok::Identifier) {
+                    std::string ty = upperOf(peek(k).text);
+                    ++k;
+                    while (peek(k).kind == Tok::Punct && peek(k).text == "." && peek(k + 1).kind == Tok::Identifier) {
+                        ty += "." + upperOf(peek(k + 1).text);
+                        k += 2;
+                    }
+                    types.push_back(std::move(ty));
+                    if (peek(k).kind == Tok::Punct && peek(k).text == ",") { ++k; continue; }
+                    if (peek(k).kind == Tok::Punct && peek(k).text == ">") { ++k; closed = true; }
+                    break;
+                }
+                if (closed && !types.empty() && peek(k).kind == Tok::Punct && peek(k).text == "(") {
+                    auto node = std::make_shared<Expr>();
+                    node->kind = Expr::Kind::Reference;
+                    node->name = segs.front();
+                    node->line = t.line;
+                    // Gaz.Limiter : la meme chaine de membres qu'un appel qualifie sans types (callResolved la qualifie).
+                    for (std::size_t i = 1; i < segs.size(); ++i) {
+                        auto m = std::make_shared<Expr>();
+                        m->kind = Expr::Kind::Member;
+                        m->lhs = node;
+                        m->name = segs[i];
+                        m->line = t.line;
+                        node = m;
+                    }
+                    node->typeArgs = std::move(types);
+                    for (std::size_t i = 0; i < k; ++i) advance();
+                    return node;
+                }
             }
         }
         if (dialect_ && t.kind == Tok::Identifier && upperOf(t.text) == "NULL") {
@@ -1317,10 +1341,18 @@ private:
         }
         // 1.12.7 (dialecte IHM) : un template - NUMERIC_LIMITS<UINT>.MAX(), NUMBERS<REAL>.PI, SATURATE_CAST<INT>(x),
         // ADD_SAT<INT>(a, b). Seulement pour ces noms, et seulement NOM < TYPE > : a < b ne change pas.
+        // 1.13.0 : le type d'un espace (DYNAMIC_CAST<Gaz.T_Pompe>) - names::qualify l'ecrit ainsi dans un espace.
+        const std::size_t templateClose = [&]() -> std::size_t {
+            if (peek(2).kind != Tok::Identifier) return 0;
+            std::size_t k = 3;
+            while (peek(k).kind == Tok::Punct && peek(k).text == "." && peek(k + 1).kind == Tok::Identifier) k += 2;
+            return peek(k).kind == Tok::Punct && peek(k).text == ">" ? k : 0;
+        }();
         if (dialect_ && t.kind == Tok::Identifier && lib::templateInfo(t.text) && peek(1).kind == Tok::Punct && peek(1).text == "<"
-            && peek(2).kind == Tok::Identifier && peek(3).kind == Tok::Punct && peek(3).text == ">") {
+            && templateClose != 0) {
             const auto* info = lib::templateInfo(t.text);
-            const std::string type = upperOf(peek(2).text);
+            std::string type = upperOf(peek(2).text);
+            for (std::size_t k = 3; k < templateClose; k += 2) type += "." + upperOf(peek(k + 1).text);
             const std::string head = std::string(info->name) + "<" + type + ">";
             const auto exampleFor = [&] {
                 std::string x(info->example);
@@ -1339,9 +1371,7 @@ private:
                 }
                 return errorHere(head + " : " + std::string(info->want));
             }
-            advance();
-            advance();
-            advance();
+            for (std::size_t k = 0; k < templateClose; ++k) advance();   // < TYPE[.TYPE] > (le nom est deja pris)
             auto node = std::make_shared<Expr>();
             node->kind = Expr::Kind::Reference;
             node->name = head;
@@ -2210,6 +2240,14 @@ public:
     }
     void walkExpression(const ExprPtr& e) { expr(e); }
 
+    // 1.13.0 : une fonction nommee Lever existe-t-elle (la meme regle que raiseStmt) ?
+    bool userLever() {
+        if (program_)
+            for (const auto& f : program_->functions)
+                if (f && upperOf(f->name) == "LEVER") return true;
+        return env_.overloads("LEVER") > 0 || env_.dialectFunction("LEVER") != nullptr;
+    }
+
     std::vector<CallSite> finish() {
         std::stable_sort(sites_.begin(), sites_.end(), [](const CallSite& a, const CallSite& b) { return a.line < b.line; });
         std::map<std::pair<std::string, std::uint32_t>, std::uint32_t> seen;
@@ -2289,9 +2327,17 @@ private:
             expr(s.condition);
             return;
         }
-        // 1.13.0 : LEVER('E_x', 'msg') garde l'appel entier dans `target` (une fonction Lever d'avant le prend) :
-        // ses arguments (value, condition) suffisent ; sans cette forme, l'appel lui-meme.
-        if (!(s.kind == Stmt::Kind::Raise && s.value)) expr(s.target);
+        // 1.13.0 : LEVER(...) garde l'appel entier dans `target`. Une fonction Lever de l'utilisateur (du script, du
+        // projet, de la vue) le prend a l'execution (raiseStmt) : c'est alors un appel, controle comme les autres. Sinon
+        // c'est l'instruction LEVER : ses arguments seulement (une forme fausse, LEVER() ou trois arguments, est dite
+        // par Compiler - pas une seconde fois comme « fonction LEVER inconnue »).
+        if (s.kind == Stmt::Kind::Raise) {
+            if (userLever()) expr(s.target);
+            else if (!s.value && s.target)
+                for (const auto& a : s.target->arguments) expr(a.second);
+        } else {
+            expr(s.target);
+        }
         for (const auto& t : s.extraTargets) expr(t);
         expr(s.value);
         expr(s.condition);
@@ -2740,6 +2786,8 @@ private:
             case Expr::Kind::Member: {
                 auto base = qualify(*e.lhs);
                 if (!base) return base;
+                // 1.13.0 : un membre (une methode) prive d'un type IHM, hors des methodes de son type : refuse.
+                if (const std::string why = privateRefused({}, *base, e.name); !why.empty()) return dialectError(why);
                 return *base + "." + e.name;
             }
             case Expr::Kind::Index: {
@@ -3232,10 +3280,12 @@ private:
     };
 
     // Le cote gauche de a ?? b : ses erreurs choisissent b (fail et LEVER se taisent), sauf dans un TRY
-    // ouvert plus bas (quietCatching_ : la profondeur des TRY a l'ouverture).
+    // ouvert plus bas (quietCatching_ : la profondeur des TRY a l'ouverture du ?? le plus INTERIEUR - un a ?? b
+    // dans un TRY d'une fonction appelee a gauche d'un autre ?? : son erreur choisit b, pas le CATCH).
     struct QuietSide {
         explicit QuietSide(Runner& r) : runner(r), saved(r.quietCatching_) {
-            if (runner.quiet_++ == 0) runner.quietCatching_ = runner.catching_;
+            ++runner.quiet_;
+            runner.quietCatching_ = runner.catching_;
         }
         ~QuietSide() {
             --runner.quiet_;
@@ -4598,6 +4648,8 @@ private:
                 if (!base) return base;
                 Place p = *base;
                 if (!p.obj) {
+                    // 1.13.0 : un membre prive d'une variable IHM (ou de la cible d'une REF_TO : Pompe1), hors des methodes.
+                    if (const std::string why = privateRefused({}, p.name, e.name); !why.empty()) return dialectError(why);
                     // 1.12.4 : un membre objet d'une structure de l'environnement (Recette.Etapes) : son objet.
                     std::string name = p.name + "." + e.name;
                     if (dialect_)
@@ -4608,7 +4660,11 @@ private:
                 while (isIndirect(p.obj)) {
                     auto t = follow(p.obj);
                     if (!t) return t;
-                    if (!t->obj) return Place{nullptr, t->name + "." + e.name, false, false};
+                    if (!t->obj) {
+                        // 1.13.0 : r^.Heures - une REF_TO vers une variable IHM : son membre prive, hors des methodes.
+                        if (const std::string why = privateRefused({}, t->name, e.name); !why.empty()) return dialectError(why);
+                        return Place{nullptr, t->name + "." + e.name, false, false};
+                    }
                     p = *t;
                 }
                 // 1.13.0 : un membre (.Count, .First...) sur une valeur ANY ouvre sa boite JSON (un objet, un tableau).
@@ -4619,6 +4675,9 @@ private:
                 }
                 const auto& type = *p.obj->type;
                 const std::string m = upperOf(e.name);
+                // 1.13.0 : un membre prive d'un objet d'un type IHM (FOR EACH p IN Pompes, une locale, r^), hors des methodes.
+                if (type.kind == TypeDesc::Kind::Struct)
+                    if (const std::string why = privateRefused(type.name, {}, e.name); !why.empty()) return dialectError(why);
                 if (type.kind == TypeDesc::Kind::Struct || type.kind == TypeDesc::Kind::Tuple) {
                     for (std::size_t k = 0; k < type.members.size() && k < p.obj->items.size(); ++k)
                         if (upperOf(type.members[k].first) == m) return Place{p.obj->items[k], {}, p.constant, p.temp};
@@ -4953,6 +5012,35 @@ private:
         static std::map<std::string, std::shared_ptr<const Function>> cache;
         return cache;
     }
+    // 1.13.0 : les FUNCTION des methodes (gardees dans operatorCache, jamais retirees) et le type de leur SELF.
+    static std::map<const Function*, std::string>& methodTypes() {
+        static std::map<const Function*, std::string> types;
+        return types;
+    }
+    // 1.13.0 : LE PRIVE A L'EXECUTION. Le code qui tourne est-il une methode de `owner` (ou d'un type qui en herite) ?
+    // Le cadre le plus proche qui n'est pas une LAMBDA (une LAMBDA ecrite dans une methode voit ce qu'elle voit). Une
+    // sonde (la condition d'un point d'arret, une expression du debogueur, le trou {Heures} d'un message relu dans la
+    // methode qui leve) : permis.
+    bool insideMethodOf(std::string_view owner) {
+        if (probing_) return true;
+        for (auto it = frames_.rbegin(); it != frames_.rend(); ++it) {
+            if (!it->fn) return false;
+            if (it->fn->name == "LAMBDA") continue;
+            const auto& types = methodTypes();
+            const auto found = types.find(it->fn);
+            return found != types.end() && env_.typeConvertsTo(found->second, owner);
+        }
+        return false;
+    }
+    // Le membre (ou la methode) `member` de `type` (un objet) ou du chemin `path` de l'environnement : prive et lu hors
+    // des methodes de son type -> le message ; vide : permis. Seulement le dialecte IHM (l'automate n'a pas de prive).
+    std::string privateRefused(std::string_view type, std::string_view path, std::string_view member) {
+        if (!dialect_ || probing_) return {};
+        std::string owner;
+        std::string why = env_.privateMember(type, path, member, owner);
+        if (why.empty() || insideMethodOf(owner)) return {};
+        return why;
+    }
 
     // 1.13.0 (lot J1) : l'appel d'une methode d'un type IHM, chemin.Methode(args). Nul : ce n'est pas
     // une methode (l'appelant continue avec les autres resolutions). SELF (l'objet) est passe en premier
@@ -4968,6 +5056,9 @@ private:
         if (realType.empty()) return std::nullopt;
         OperatorSource src;
         if (!env_.findMethod(realType, method, src)) return std::nullopt;
+        // 1.13.0 : une methode privee ne s'appelle que d'une methode de son type (ou d'un type qui en herite).
+        if (!src.privateWhy.empty() && !insideMethodOf(src.selfType))
+            return std::optional<core::Result<RV>>(dialectError(src.privateWhy));
         std::shared_ptr<const Function> f;
         if (const auto it = operatorCache().find(src.key); it != operatorCache().end()) f = it->second;
         else {
@@ -4976,6 +5067,7 @@ private:
             operatorCache()[src.key] = *parsed;
             f = *parsed;
         }
+        if (!src.selfType.empty()) methodTypes()[f.get()] = src.selfType;   // 1.13.0 : son cadre est une methode de ce type
         if (src.debugId && f) env_.debugFunction(*f, src.debugId);      // 1.13.0 (le debogueur IHM) : ses points d'arret
         // Synthetiser l'appel : SELF (l'objet) devant, puis les arguments donnes.
         Expr call2 = e;
@@ -5538,6 +5630,7 @@ private:
                         operatorCache()[src.key] = *parsed;
                         f = *parsed;
                     }
+                    if (!src.selfType.empty()) methodTypes()[f.get()] = src.selfType;   // 1.13.0 : une methode (SUPER)
                     if (src.debugId && f) env_.debugFunction(*f, src.debugId);   // 1.13.0 (le debogueur IHM)
                     return callDeclared(*f, e, true);
                 }
@@ -9710,7 +9803,12 @@ private:
     // 1.13.0 : les drapeaux du motif. Sous libstdc++ (MinGW, Linux), l'executeur par defaut parcourt le texte
     // en profondeur, une trame de pile par caractere : `.*` sur quelques milliers de caracteres debordait la
     // pile (plantage), et (\w+\s?)*$ prenait un temps exponentiel (l'IHM figee). Le mode polynomial (un
-    // automate en largeur) n'a ni l'un ni l'autre ; il refuse les references arriere (\1).
+    // automate en largeur) n'a ni l'un ni l'autre ; il refuse les references arriere (\1). Son sens : entre deux
+    // choix au meme depart, le plus long l'emporte (Auto|Automatique -> Automatique) ; un quantificateur paresseux
+    // (+?, *?) garde le plus court. Ailleurs (une construction MSVC, sans ce mode) : la regle ECMAScript, le premier
+    // choix qui convient (-> Auto), et le retour arriere (un motif comme (\w+\s?)*$ peut y etre lent) - les deux
+    // differences, l'aide (donnees-scripts) les dit ; aucun moyen simple de donner a MSVC le parcours en largeur ni a
+    // libstdc++ le premier choix sans le retour arriere. Les references arriere sont refusees partout (le meme motif).
     static std::regex::flag_type regexFlags() {
 #ifdef __GLIBCXX__
         return std::regex::ECMAScript | std::regex_constants::__polynomial;
@@ -9738,12 +9836,12 @@ private:
     const std::regex* regexCompile(const std::string& pattern, std::string& why) {
         if (const auto it = regexCache_.find(pattern); it != regexCache_.end()) return &it->second;
         if (!regexValidate(pattern, why)) return nullptr;                // WASM-safe : pas de construction d'un motif invalide
-#ifdef __GLIBCXX__
+        // 1.13.0 : refusees sur TOUTES les cibles (avant : sous libstdc++ seulement) - un meme projet ne doit pas tourner ici
+        // et echouer la (une construction MSVC garde l'executeur en profondeur ; l'exe livre est construit avec MinGW).
         if (regexBackReference(pattern)) {
             why = "les r\xC3\xA9" "f\xC3\xA9rences arri\xC3\xA8re (\\1, \\2...) ne sont pas prises en charge";
             return nullptr;
         }
-#endif
         // 1.13.0 : un cache borne - une tache detachee qui compose ses motifs (CONCAT('^ID=', ...)) ne le fait plus
         // grossir sans fin. Le pointeur rendu ne sert que pendant la native en cours : vider ici est sur.
         if (regexCache_.size() >= 64) regexCache_.clear();

@@ -137,6 +137,9 @@ struct CompileFocus {
                                              const CompileFocus& focus);
 [[nodiscard]] std::vector<Issue> compileWith(const Project&, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPaths,
                                              const CompileFocus* focus);
+// 1.13.0 (J1b) : les constats d'UNE methode d'un type IHM (son editeur, a la frappe) : sa forme (methodProblem) et son
+// corps (syntaxe, noms, appel nu ambigu), a sa ligne ; item = le type, object = la methode. Vide : rien a redire.
+[[nodiscard]] std::vector<Issue> checkMethod(const Project&, const NameExists& plcHasName, Id method);
 // Ces seules erreurs (et les expressions illisibles), pour un controle rapide.
 [[nodiscard]] std::vector<Issue> expressionIssues(const Project&, const NameExists& plcHasName, const exprcheck::PlcPaths& plcPaths = {});
 [[nodiscard]] IssueCounts        count(const std::vector<Issue>&);

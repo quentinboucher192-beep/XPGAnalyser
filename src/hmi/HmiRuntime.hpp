@@ -1899,8 +1899,8 @@ private:
         std::string what;                    // 1.13.0 : le code d'ou part le pas ("script Calcul est fini")
     };
     std::string                          pausedName_;             // 1.13.0 : le code de la ligne d'arret (son nom)
-    // Une methode d'un type IHM tourne sous le texte de methodFunctionText : 4 lignes d'en-tete avant son corps (FUNCTION,
-    // VAR_IN_OUT, SELF, END_VAR) - la ligne montree est celle du corps, comme dans l'editeur.
+    // La ligne d'un cadre telle que son editeur la montre : un operateur tourne sous operatorFunctionText (une ligne
+    // d'en-tete avant son corps) ; une methode sous methodFunctionText, son en-tete sur la ligne 1 (aucun decalage).
     [[nodiscard]] std::uint32_t frameLine(const sim::LineProbe::Frame& f, std::uint32_t line) const;
     // Une execution en cours (runStatements, callFunction) : son code (le numero de son programme), et les
     // locales d'une fonction simple (le cadre du moteur ; nul : celles du programme).
@@ -1959,7 +1959,7 @@ private:
     std::map<Id, BoundCode>              boundCodes_;
     // Le texte d'un code a deboguer, comme le moteur le lit (le projet, puis les redefinitions deja appelees).
     bool debugTextOf(Id script, Id function, std::string& text, bool& isFunction, std::string* why) const;
-    // Les lignes d'en-tete qu'ajoute le texte que le moteur lit (une methode : 4, un operateur : 1 ; sinon 0).
+    // Les lignes d'en-tete qu'ajoute le texte que le moteur lit (un operateur : 1 ; une methode, le reste : 0).
     [[nodiscard]] std::uint32_t debugHeaderLines(Id function) const;
     // 1.13.0 : une exception sortie d'une tache du debogueur (non detachee) remonte sur le fil de l'IHM.
     void rethrowTaskFailure(TaskState& t);

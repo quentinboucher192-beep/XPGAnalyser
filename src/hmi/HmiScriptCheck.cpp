@@ -618,7 +618,7 @@ public:
     // standard ou IHM, une native, l'automate...) - names::check ne le dit pas " d'un autre espace ".
     [[nodiscard]] bool knownOtherwise(std::string_view n) const {
         const std::string U = up(n);
-        if (local(n) || param(n) || counter(n) || selfName(n) || catchVar(n) || viewConstant(n) || viewFunctionHere(n)) return true;
+        if (local(n) || param(n) || counter(n) || selfName(n) || catchVarOnly(n) || viewConstant(n) || viewFunctionHere(n)) return true;
         if (internalFunction(std::string(n)) || isStandardFunction(U) || isHmiFunction(U) || natives::isOwnFunction(U) || sim::lib::native(U)
             || dialectFunctions().count(U) || conversion(U))
             return true;
@@ -683,6 +683,8 @@ public:
         std::set<std::string> out;
         for (const auto& d : dialectNames_) out.insert(d.upper);
         for (const auto& f : internal_) out.insert(up(f.name));
+        // 1.13.0 : le nom d'un CATCH (CATCH e ... e.Code) n'est pas une variable inexistante (Generer, corps des methodes).
+        for (const auto& c : catchVars_) out.insert(c.upper);
         if (!out.empty()) out.insert(typeWords_.begin(), typeWords_.end());
         return out;
     }
@@ -711,6 +713,9 @@ private:
     struct DialectName { std::string name, upper; std::size_t from{0}, to{0}; };
     std::vector<DialectName> dialectNames_;
     std::vector<DialectName> setLoopVars_;      // 1.12.7 : les variables d'un FOR EACH sur un SET (lues, jamais ecrites)
+    // 1.13.0 : la variable d'un FOR EACH x IN L et le type d'un element de L, sur sa boucle (le prive de ses membres).
+    struct EachVar { std::string upper; std::size_t from{0}, to{0}; std::string type; };
+    std::vector<EachVar> eachVars_;
     struct InternalFunction { std::string name; std::size_t from{0}, to{0}; };
     std::vector<InternalFunction> internal_;
     std::set<std::string>    typeWords_;         // les mots des types (en-tetes, declarations), en majuscules
@@ -728,7 +733,7 @@ private:
     [[nodiscard]] bool knownElsewhere(std::string_view n) const {
         const Project* p = sc_.project;
         if (local(n) || param(n) || counter(n) || selfName(n)) return true;
-        if (catchVar(n)) return true;                                  // 1.13.0 : l'erreur d'un CATCH
+        if (catchVarOnly(n)) return true;                              // 1.13.0 : l'erreur d'un CATCH (dans son seul handler)
         if (viewConstant(n) || viewFunctionHere(n)) return true;      // 1.12.16 : un membre de la vue
         if (p && (p->variable(n) || pub::isSysRoot(n) || pub::viewNamed(*p, n) || p->functionByName(n))) return true;
         return !sc_.plcKnown || sc_.plcKnown(n);     // l'automate inconnu : tout peut etre a lui
@@ -740,7 +745,7 @@ private:
         const std::string root = s.substr(0, cut);
         if (const auto* l = local(root)) return cut == std::string::npos ? l->type : std::string{};
         if (counter(root)) return cut == std::string::npos ? std::string("INT") : std::string{};
-        if (catchVar(root) && !local(root) && !param(root) && !(p && p->variable(root))) {   // 1.13.0 : e.Code/e.Message (STRING), e.Ligne (DINT), e seul (STRING)
+        if (catchVarOnly(root) && !local(root) && !param(root) && !(p && p->variable(root))) {   // 1.13.0 : e.Code/e.Message (STRING), e.Ligne (DINT), e seul (STRING)
             if (cut == std::string::npos) return "STRING";
             const std::string m = up(s.substr(cut + 1));
             return m == "LIGNE" ? "DINT" : m == "CODE" || m == "MESSAGE" ? "STRING" : std::string{};
@@ -833,6 +838,11 @@ private:
             if (isWord(in, "IN") && in > f + 2 && t[in - 1].k == Tok::K::Ident && isIdent(in + 1) && isWord(in + 2, "DO")
                 && setText(typeOfName(t[in + 1].text)))
                 setLoopVars_.push_back({t[in - 1].text, up(t[in - 1].text), from, to});
+            // 1.13.0 : FOR EACH p IN Pompes (une seule variable, une liste, un tableau nomme) - p a le type d'un element.
+            if (sc_.project && isWord(in, "IN") && in == f + 3 && t[f + 2].k == Tok::K::Ident && isIdent(in + 1) && isWord(in + 2, "DO"))
+                if (const std::string coll = typeOfName(t[in + 1].text); !coll.empty())
+                    if (const auto st = types::stepIndex(*sc_.project, coll); !st.type.empty())
+                        eachVars_.push_back({up(t[f + 2].text), from, to, st.type});
         }
         // Les declarations (le texte entier : VAR, VAR_TEMP et VAR_INPUT sont
         // blanchis dans le corps) : un nom que les variables locales n'ont pas.
@@ -1042,6 +1052,17 @@ private:
         return std::any_of(catchVars_.begin(), catchVars_.end(), [&](const CatchName& c) { return c.upper == U; });
     }
     // ... a cette place du texte (dans son handler).
+    // 1.13.0 : un nom de CATCH employe SEULEMENT dans son handler (pour les lecteurs qui ne donnent pas la place : le
+    // dialecte, les espaces) - employe ailleurs, c'est un autre nom (ou une faute de frappe) : pas l'erreur attrapee.
+    [[nodiscard]] bool catchVarOnly(std::string_view name) const {
+        if (!catchVar(name)) return false;
+        const std::string U = up(name);
+        for (std::size_t k = 0; k < toks_.size(); ++k) {
+            if (!isIdent(k) || up(toks_[k].text) != U || (k > 0 && isOp(k - 1, "."))) continue;
+            if (!catchVarAt(name, toks_[k].at)) return false;
+        }
+        return true;
+    }
     [[nodiscard]] bool catchVarAt(std::string_view name, std::size_t at) const {
         const std::string U = up(name);
         return std::any_of(catchVars_.begin(), catchVars_.end(), [&](const CatchName& c) { return c.upper == U && at >= c.from && at < c.to; });
@@ -1197,6 +1218,38 @@ private:
             if (segs.size() == 1 && (m == "CODE" || m == "MESSAGE" || m == "LIGNE")) return m == "LIGNE" ? "DINT" : "STRING";
             reportTok(i, j, S::Error, "T_Erreur n'a que Code, Message et Ligne, pas " + s.member);
             return {};
+        }
+        // 1.13.0 : une locale (un parametre) d'un type objet - VAR q : T_Pompe; q.Heures : un membre ou une methode prive
+        // lu d'ici est refuse, comme sur une variable IHM (pathProblems) ; a toute profondeur (q.Moteur.Heures) ; a
+        // travers une reference (r^.Heures, r.Heures : REF_TO T_Pompe) ; la variable d'un FOR EACH p IN Pompes.
+        {
+            std::string t;
+            if (const auto* l = local(root.text); l && p && !elementary(l->type)) t = types::normalized(l->type);
+            else if (p && !local(root.text))
+                for (const auto& ev : eachVars_)
+                    if (ev.upper == up(root.text) && root.at >= ev.from && root.at < ev.to) t = ev.type;
+            // REF_TO T, POINTER TO T : le type vise (le ^ ne fait pas de segment).
+            const auto target = [](std::string x) {
+                for (;;) {
+                    while (!x.empty() && x.front() == ' ') x.erase(0, 1);
+                    const std::string u = up(x);
+                    if (u.rfind("REF_TO ", 0) == 0) x.erase(0, 7);
+                    else if (u.rfind("POINTER TO ", 0) == 0) x.erase(0, 11);
+                    else return x;
+                }
+            };
+            std::string at = root.text;
+            for (const auto& s : segs) {
+                if (t.empty() || s.index || s.member.empty()) break;
+                t = target(t);
+                if (const std::string why = types::privateMemberUse(*p, t, s.member); !why.empty()) {
+                    reportTok(i, j, S::Error, at + "." + s.member + " : " + why);
+                    return {};
+                }
+                const auto st = types::stepMember(*p, t, s.member);
+                at += "." + s.member;
+                t = st.type;
+            }
         }
         // 1.10 : une locale d'un type riche du dialecte (ARRAY, MAP, REF_TO...) : S1.
         if (const auto* l = local(root.text); l && !elementary(l->type)) return {};
@@ -1881,14 +1934,17 @@ private:
         const std::string& name = toks_[k].text;
         if (local(name) || dialectName(name, toks_[k].at) || (sc_.project && sc_.project->variable(name))) return k;
         using S = Finding::Severity;
-        const bool angled = isOp(k + 1, "<") && isIdent(k + 2) && isOp(k + 3, ">");
+        // 1.13.0 : le type peut etre complet (DYNAMIC_CAST<Gaz.T_Pompe>) : NOM < Ident(.Ident)* >
+        std::size_t typeEnd = k + 3;
+        while (isOp(typeEnd, ".") && isIdent(typeEnd + 1)) typeEnd += 2;
+        const bool angled = isOp(k + 1, "<") && isIdent(k + 2) && isOp(typeEnd, ">");
         // NOM<TYPE sans son > (NUMERIC_LIMITS<UINT.MAX(), SATURATE_CAST<INT(x)) : « le type, puis > » (la maquette).
         // Seulement devant un nom de type : NOM < x reste une comparaison.
         if (!angled && isOp(k + 1, "<") && isIdent(k + 2) && !isOp(k + 3, "#") && sim::lib::elementaryTypeName(toks_[k + 2].text)) {
             reportTok(k, k + 3, S::Error, std::string(info->name) + " : le type, puis > \xE2\x80\x94 " + std::string(info->example));
             return k + 3;
         }
-        std::size_t next = angled ? k + 4 : k + 1;
+        std::size_t next = angled ? typeEnd + 1 : k + 1;
         const auto closeOf = [&](std::size_t open) {
             int depth = 0;
             std::size_t m = open;
@@ -1933,6 +1989,35 @@ private:
         if (const auto* nat = sim::lib::native(info->name); nat && (n < nat->min || (nat->max >= 0 && n > nat->max)))
             reportTok(k, k + 1, S::Error, std::string(info->name) + " prend " + arityText(nat->min, nat->max) + ", pas " + std::to_string(n));
         walkNames(next + 1, close);
+        return atEnd(close) ? close : close + 1;
+    }
+
+    // 1.13.0 : un appel generique aux types donnes - Limiter<INT>(x, 0, 100), Gaz.Limiter<REAL>(...), Max<Gaz.T_Point>(p, q).
+    // Ses types ne sont pas des noms a lire (REAL n'est pas une variable inconnue) ; ses arguments, si. Rend l'index qui
+    // suit l'appel, ou k : pas un tel appel (a < b reste une comparaison).
+    std::size_t genericCallUse(std::size_t k) {
+        if (!isIdent(k) || (k > 0 && isOp(k - 1, ".")) || sim::lib::templateInfo(toks_[k].text)) return k;
+        std::size_t h = k + 1;
+        while (isOp(h, ".") && isIdent(h + 1)) h += 2;
+        if (!isOp(h, "<")) return k;
+        std::size_t m = h + 1;
+        bool closed = false, any = false;
+        while (isIdent(m)) {
+            any = true;
+            ++m;
+            while (isOp(m, ".") && isIdent(m + 1)) m += 2;
+            if (isOp(m, ",")) { ++m; continue; }
+            if (isOp(m, ">")) { ++m; closed = true; }
+            break;
+        }
+        if (!closed || !any || !isOp(m, "(")) return k;
+        int depth = 0;
+        std::size_t close = m;
+        for (; !atEnd(close); ++close) {
+            if (isOp(close, "(")) ++depth;
+            else if (isOp(close, ")") && --depth == 0) break;
+        }
+        walkNames(m + 1, close);
         return atEnd(close) ? close : close + 1;
     }
 
@@ -2001,6 +2086,10 @@ private:
                 if (k > 0 && (isOp(k - 1, "(") || isOp(k - 1, ","))) { ++k; continue; }
             }
             if (const std::size_t past = templateUse(k); past != k) {                  // 1.12.7 : NUMERIC_LIMITS<UINT>.MAX()
+                k = std::max(past, k + 1);
+                continue;
+            }
+            if (const std::size_t past = genericCallUse(k); past != k) {               // 1.13.0 : Gaz.Limiter<REAL>(x, 0.0, 1.0)
                 k = std::max(past, k + 1);
                 continue;
             }

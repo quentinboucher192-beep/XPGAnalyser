@@ -17,6 +17,7 @@
 
 #include "HmiEdit.hpp"
 #include "HmiExpr.hpp"
+#include "../sim/DialectLib.hpp"   // 1.13.0 : sim::lib::native (une native du meme nom qu'une methode)
 #include "HmiAssets.hpp"
 #include "HmiSymbols.hpp"
 #include "HmiTemplates.hpp"
@@ -462,8 +463,24 @@ void checkActions(const Project& p, const NameExists& plc, const View& v, const 
         }
         if (a.operation == Operation::CallScript) {
             if (a.target.empty()) add(out, S::Error, "Action", v.id, obj, where, "aucun script \xC3\xA0 appeler");
-            else if (!p.generalScript(target))
-                add(out, S::Error, "Action", v.id, obj, where, "script g\xC3\xA9n\xC3\xA9ral '" + target + "' introuvable" + dup::markerHint(a.target, target));
+            else if (!p.generalScript(target)) {
+                // 1.13.0 : un nom court que deux espaces definissent (Gaz.Horloge, Util.Horloge) : lequel, pas « introuvable ».
+                std::vector<std::string> spaces;
+                if (target.find('.') == std::string::npos) {
+                    for (const auto& sc : p.programs.scripts)
+                        if (!sc.ns.empty() && sameTypeName(sc.name, target)) spaces.push_back(fullName(sc));
+                    p.forEachLibraryScript([&](const Script& sc, const LoadedLibrary&) {
+                        if (!sc.ns.empty() && sameTypeName(sc.name, target)) spaces.push_back(fullName(sc));
+                    });
+                }
+                if (spaces.size() > 1) {
+                    std::string list;
+                    for (std::size_t k = 0; k < spaces.size(); ++k) list += (k ? (k + 1 == spaces.size() ? " ou " : ", ") : "") + spaces[k];
+                    add(out, S::Error, "Action", v.id, obj, where, "script g\xC3\xA9n\xC3\xA9ral '" + target + "' ambigu : " + list + " - choisis-le par son nom complet");
+                } else {
+                    add(out, S::Error, "Action", v.id, obj, where, "script g\xC3\xA9n\xC3\xA9ral '" + target + "' introuvable" + dup::markerHint(a.target, target));
+                }
+            }
         }
         if ((a.operation == Operation::Assign || a.operation == Operation::Log || a.operation == Operation::RunScript) && a.value.empty())
             add(out, S::Error, "Action", v.id, obj, where, "valeur vide");
@@ -555,8 +572,13 @@ void interfaceDeclarations(const Project& p, const std::vector<Declaration>& dec
 // VAR_IN_OUT, ses membres prefixes) : sa syntaxe, et ses noms - un membre (herites compris), une methode du type,
 // SELF / THIS / SUPER, ses parametres et ses locales, ou ce que le projet connait. Avant, une faute ne se voyait
 // qu'au premier appel, en marche. La ligne : celle du corps de la methode.
-void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
+// 1.13.0 (J1b) : `only` - la seule methode a lire (son editeur) ; kNoId : toutes.
+void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issue>& out, Id only = kNoId) {
     using S = Issue::Severity;
+    // 1.13.0 : IHM Studio n'a pas d'automate - un nom que le projet ne connait pas n'existe nulle part (avant, l'automate
+    // absent rendait tout nom connu : « Marche := Debitt > 1.0; » passait). API Studio sans automate charge : comme avant.
+    static const NameExists kNone = [](std::string_view) { return false; };
+    const NameExists& names = (!plc && !core::hasApi()) ? kNone : plc;
     for (const auto& ty : p.programs.types) {
         if (ty.kind != HmiTypeKind::Structure || ty.methods.empty()) continue;
         const std::string tn = fullName(ty);
@@ -564,10 +586,12 @@ void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issu
         for (const auto& m : types::membersOf(p, tn)) here.insert(upperText(m.name));
         for (const auto& om : allMethods(p, tn)) here.insert(upperText(om.method->name));
         for (const auto& m : ty.methods) {
+            if (only != kNoId && m.id != only) continue;
             const auto issue = [&](Issue::Severity sev, const std::string& msg, int line) {
                 add(out, sev, "Type IHM", kNoId, kNoId, ty.name,
                     ty.name + "." + m.name + (line > 0 ? ", ligne " + std::to_string(line) : std::string{}) + " : " + msg, kNoId, line);
                 out.back().item = ty.id;
+                out.back().object = m.id;   // 1.13.0 (J1b) : la methode (y aller : son editeur, a la ligne)
             };
             if (markers::strip(m.body).find_first_not_of(" \t\r\n") == std::string::npos) continue;   // rien a lire
             if (!isIdentifier(m.name)) continue;                                                        // methodProblem le dit
@@ -578,19 +602,83 @@ void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issu
                 const std::string raw = fn.error().context.empty() ? fn.error().message() : fn.error().context;
                 std::string rest;
                 const int line = splitLine(raw, &rest);
-                // La FUNCTION interne a quatre lignes d'en-tete (FUNCTION, VAR_IN_OUT, SELF, END_VAR) avant le corps.
-                issue(S::Error, frenchSimMessage(rest), line > 4 ? line - 4 : 0);
+                // La FUNCTION interne porte son en-tete sur la ligne 1 (methodFunctionText) : la ligne est celle du corps.
+                issue(S::Error, frenchSimMessage(rest), line);
                 continue;
             }
             const std::string code = decl::codeOf(m);
             const auto dialect = scriptcheck::dialectDeclared(code);
             for (const auto& u : scriptNames(code)) {
                 const std::string U = upperText(u.name);
-                if (here.count(U) || dialect.count(U) || known(p, plc, u.name)) continue;
+                if (here.count(U) || dialect.count(U) || known(p, names, u.name)) continue;
                 issue(S::Error, "variable inexistante : " + u.name + " (ni membre de " + ty.name + ", ni variable)", u.line);
+            }
+            // 1.13.0 : un appel nu X() d'un nom qui est a la fois une methode du type et une fonction (du projet, standard,
+            // une native) vise la METHODE (SELF.X()) - le dire, plutot qu'un changement silencieux.
+            {
+                const std::string body = markers::strip(code);
+                std::set<std::string> said;
+                int line = 1;
+                for (std::size_t i = 0; i < body.size();) {
+                    const char c = body[i];
+                    if (c == '\n') { ++line; ++i; continue; }
+                    if (c == '\'' || c == '"') {
+                        std::size_t k = i + 1;
+                        while (k < body.size() && body[k] != c) { if (body[k] == '\n') ++line; k += body[k] == '$' ? 2 : 1; }
+                        i = k + 1;
+                        continue;
+                    }
+                    if (c == '(' && i + 1 < body.size() && body[i + 1] == '*') {
+                        const auto e = body.find("*)", i + 2);
+                        const std::size_t stop = e == std::string::npos ? body.size() : e + 2;
+                        for (std::size_t k = i; k < stop; ++k) if (body[k] == '\n') ++line;
+                        i = stop;
+                        continue;
+                    }
+                    if (c == '/' && i + 1 < body.size() && body[i + 1] == '/') {
+                        while (i < body.size() && body[i] != '\n') ++i;
+                        continue;
+                    }
+                    if (!(std::isalpha(static_cast<unsigned char>(c)) || c == '_')) { ++i; continue; }
+                    std::size_t j = i;
+                    while (j < body.size() && (std::isalnum(static_cast<unsigned char>(body[j])) || body[j] == '_')) ++j;
+                    const std::string w = body.substr(i, j - i);
+                    const bool member = i > 0 && (body[i - 1] == '.' || body[i - 1] == '#' || std::isalnum(static_cast<unsigned char>(body[i - 1])));
+                    std::size_t k = j;
+                    while (k < body.size() && (body[k] == ' ' || body[k] == '\t')) ++k;
+                    const bool call = k < body.size() && body[k] == '(';
+                    i = j;
+                    if (member || !call || !effectiveMethod(p, tn, w)) continue;
+                    const std::string W = upperText(w);
+                    const bool function = !p.functionsNamed(w).empty() || isStandardFunction(W) || isHmiFunction(W) || sim::lib::native(W);
+                    if (!function || !said.insert(W).second) continue;
+                    issue(S::Warning, w + "() appelle la m\xC3\xA9thode " + ty.name + "." + w + " (SELF." + w + "()), pas la fonction " + w
+                                          + " du m\xC3\xAAme nom - renomme l'une des deux pour lever le doute", line);
+                }
             }
         }
     }
+}
+
+// 1.13.0 (J1b) : les constats d'une seule methode (son editeur, a chaque frappe) - son corps (syntaxe, noms, appels
+// ambigus) et sa forme (methodProblem : nom, redefinition, prive et virtuel, retour, parametres).
+std::vector<Issue> checkMethod(const Project& p, const NameExists& plcHasName, Id method) {
+    std::vector<Issue> out;
+    const HmiType* owner = nullptr;
+    const HmiFunction* m = methodById(p, method, &owner);
+    if (!m || !owner) return out;
+    if (const std::string mp = methodProblem(p, *owner, *m); !mp.empty()) {
+        Issue i;
+        i.severity = Issue::Severity::Error;
+        i.category = "Type IHM";
+        i.property = owner->name;
+        i.message = mp;
+        i.item = owner->id;
+        i.object = m->id;
+        out.push_back(std::move(i));
+    }
+    checkMethodBodies(p, plcHasName, out, method);
+    return out;
 }
 
 // La programmation generale, les scripts de vue, les actions, et les
@@ -683,7 +771,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                     if (assignsLambda(text, n)) lambdaHeld.insert(upperCopy(n));
             });
     }
-    const units::Catalog unitCat(p.config);   // 1.13.0 (lot J6) : la bibliotheque des unites (fournies + projet)
+    const units::Catalog unitCat(biblio::unitConfig(p));   // 1.13.0 : les unites (fournies + projet + bibliotheques reliees)
     for (const auto& var : p.programs.variables) {
         const std::string key = [&] { std::string u = var.name; for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c))); return u; }();
         if (!isIdentifier(var.name)) add(out, S::Error, "Variable IHM", kNoId, kNoId, var.name, "nom invalide : '" + var.name + "'");
@@ -778,7 +866,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
             else if (const auto it = inherited.find(upperText(m.name)); it != inherited.end())
                 add(out, S::Error, cat, kNoId, kNoId, ty.name,
                     ty.name + " : " + m.name + " est d\xC3\xA9j\xC3\xA0 un membre de " + it->second + " (h\xC3\xA9rit\xC3\xA9) : renomme-le ou retire-le");
-            else if (!ty.base.empty() && effectiveMethod(p, ty.base, m.name))
+            else if (const HmiType* parent = types::baseOf(p, ty); parent && effectiveMethod(p, fullName(*parent), m.name))
                 add(out, S::Error, cat, kNoId, kNoId, ty.name,
                     ty.name + " : " + m.name + " est d\xC3\xA9j\xC3\xA0 une m\xC3\xA9thode de " + ty.base + " (h\xC3\xA9rit\xC3\xA9" "e) : renomme le membre");
             else if (!members.insert(upperText(m.name)).second) add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : membre en double " + m.name);
@@ -812,7 +900,7 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                     add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + "." + m.name + " : unit\xC3\xA9 inconnue '" + m.unit + "'");
             }
         }
-        if (const auto cycle = types::cycleOf(p, ty.name); !cycle.empty())
+        if (const auto cycle = types::cycleOf(p, fullName(ty)); !cycle.empty())
             add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " se contient lui-m\xC3\xAAme : " + cycle);
         // 1.13.0 (lot J1) : l'heritage, les methodes, les interfaces.
         // EXTENDS : parent connu, entre structures, sans cycle (extendsProblem).
@@ -834,8 +922,11 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                         ty.name + " : " + m.name + " est \xC3\xA0 la fois un membre et une m\xC3\xA9thode");
                     break;
                 }
-            if (const std::string mp = methodProblem(p, ty, m); !mp.empty())
+            if (const std::string mp = methodProblem(p, ty, m); !mp.empty()) {
                 add(out, S::Error, cat, kNoId, kNoId, ty.name, mp);
+                out.back().item = ty.id;
+                out.back().object = m.id;   // 1.13.0 (J1b) : la methode en cause
+            }
         }
         // IMPLEMENTS : chaque interface declaree est satisfaite (chaque signature presente, nommee si manquante).
         for (const auto& miss : interfaceMisses(p, ty))
@@ -4123,7 +4214,7 @@ void checkDisplay(const Project& p, const NameExists& plc, std::vector<Issue>& o
         // « 9.08 mbar »), qu'elle soit de la meme famille ou d'une autre.
         if (const std::string shown = trimmedCopy(d.unit); !shown.empty())
             if (const std::string phys = units::unitOfPath(p, d.path); !phys.empty()) {
-                const units::Catalog cat(p.config);
+                const units::Catalog cat(biblio::unitConfig(p));   // 1.13.0 : bibliotheques comprises
                 const units::Rel rel = cat.relation(phys, shown);
                 if (rel == units::Rel::OtherFamily)
                     issue(S::Error, d.path + " est en " + phys + " (" + cat.familyPhrase(phys) + ") : on ne l'affiche pas en " + shown + " ("

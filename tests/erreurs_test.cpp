@@ -564,6 +564,85 @@ void relecture() {
     }
 }
 
+// La seconde relecture (lot D2).
+void seconde() {
+    std::printf("-- seconde relecture : la portee d'un CATCH (R17), ?? imbrique dans un TRY (R21)\n");
+    // R21 : a ?? b dans un TRY d'une fonction appelee a gauche d'un autre ?? : ?? choisit b, le CATCH ne s'execute pas.
+    {
+        std::string err;
+        Bench b("INT", "FUNCTION F : INT\nVAR\n    x : INT;\n    d : INT;\nEND_VAR\nd := 0;\nTRY\n    x := (10 / d) ?? 1;\nCATCH e\n    x := -1;\n"
+                       "END_TRY\nF := x;\nEND_FUNCTION\nR := F() ?? 0;");
+        const std::string r = b.runScript(&err);
+        check(r == "1", "R21 : x := (10 / d) ?? 1 dans le TRY de F, appelee a gauche de ?? : x = 1, pas le CATCH (-1) [" + r + " " + err + "]");
+    }
+    // R17 : hors de son handler, le nom d'un CATCH ne masque plus un nom inconnu (dans une boucle FOR EACH aussi), et
+    // n'est pas un STRING pour la lecture du dialecte.
+    {
+        scriptcheck::Scope sc;
+        sc.plcKnown = [](std::string_view) { return false; };
+        std::string all;
+        for (const auto& f : scriptcheck::check(sc, "VAR\n    L : LIST OF REAL;\n    Total : REAL;\nEND_VAR\nTRY\n    Total := 1.0;\nCATCH Ecart\n    Total := 0.0;\nEND_TRY\n"
+                                                    "FOR EACH x IN L DO\n    Total := Total + Ecart;\nEND_FOR;"))
+            all += " | " + f.message;
+        check(all.find("Ecart") != std::string::npos, "R17 : Ecart (le nom du CATCH) lu hors de son handler, dans un FOR EACH : dit" + all);
+    }
+    // R24 : une fonction Lever de l'utilisateur : son appel LEVER(x, y) est controle comme un appel ; sans elle, LEVER(...)
+    // n'est pas une « fonction LEVER inconnue » (les appels de ses arguments restent controles).
+    {
+        struct LeverEnv final : sim::Environment {
+            int lever{0};
+            bool read(std::string_view, sim::Value&) override { return false; }
+            bool write(std::string_view, const sim::Value&) override { return true; }
+            bool exists(std::string_view) override { return false; }
+            bool call(std::string_view, std::string_view, const std::vector<std::pair<std::string, sim::Value>>&, sim::Value&) override { return false; }
+            void report(sim::Diagnostic) override {}
+            int overloads(std::string_view n) override {
+                std::string u(n);
+                for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                return u == "LEVER" ? lever : 0;
+            }
+        };
+        const auto calleesOf = [](const char* src, int lever) {
+            auto prog = sim::parse(src, "essai", sim::ParseOptions{true});
+            std::string out;
+            if (!prog) return std::string("illisible");
+            LeverEnv env;
+            env.lever = lever;
+            for (const auto& c : sim::callSites(**prog, env)) out += c.callee + ";";
+            return out;
+        };
+        check(calleesOf("LEVER('E_Barriere', 2);", 1).find("LEVER;") != std::string::npos,
+              "R24 : une fonction Lever existe : LEVER('E_Barriere', 2) est un appel controle (" + calleesOf("LEVER('E_Barriere', 2);", 1) + ")");
+        check(calleesOf("LEVER('E_X', 'm');", 0).find("LEVER") == std::string::npos, "R24 : sans fonction Lever : LEVER('E_X', 'm') n'est pas un appel");
+        const std::string bad = calleesOf("LEVER(F(), 2, 3);", 0);
+        check(bad.find("LEVER") == std::string::npos && bad.find("F;") != std::string::npos,
+              "R24 : sans fonction Lever, LEVER(F(), 2, 3) : pas de \"fonction LEVER inconnue\", F() reste controle (" + bad + ")");
+    }
+    // R17 : names::check (knownOtherwise) - un nom d'un espace, ecrit court hors du handler d'un CATCH du meme nom : dit.
+    {
+        Project p;
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Ecart";
+        f.ns = "Gaz";
+        f.returnType = "REAL";
+        f.body = "Ecart := 1.0;";
+        p.programs.functions.push_back(f);
+        scriptcheck::Scope sc;
+        sc.project = &p;
+        sc.plcKnown = [](std::string_view) { return false; };
+        std::string all;
+        for (const auto& fd : scriptcheck::check(sc, "VAR\n    Total : REAL;\nEND_VAR\nTRY\n    Total := 1.0;\nCATCH Ecart\n    Total := 0.0;\nEND_TRY\n"
+                                                     "Total := Ecart();"))
+            all += " | " + fd.message;
+        check(all.find("Ecart est dans l'espace Gaz") != std::string::npos, "R17 : hors du handler, Ecart() (Gaz.Ecart) est dit, pas masque par CATCH Ecart" + all);
+        std::string inside;
+        for (const auto& fd : scriptcheck::check(sc, "VAR\n    T : STRING;\nEND_VAR\nTRY\n    T := 'a';\nCATCH Ecart\n    T := Ecart.Message;\nEND_TRY"))
+            if (fd.severity == scriptcheck::Finding::Severity::Error) inside += " | " + fd.message;
+        check(inside.empty(), "R17 : dans son handler, Ecart.Message reste l'erreur attrapee" + inside);
+    }
+}
+
 int main() {
     std::printf("1.13.0 : lever ses erreurs (LEVER, RELEVER, CATCH e, codes E_*) et WAIT_UNTIL\n");
     lever();
@@ -572,6 +651,7 @@ int main() {
     controle();
     automateInchange();
     relecture();
+    seconde();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

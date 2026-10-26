@@ -1160,9 +1160,16 @@ bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::strin
         return false;
     }
     // 1.11.20 : ses surcharges (les fonctions du meme nom) sont renommees avec elle - leurs appels
-    // portent le meme nom et suivent tous : chacun garde sa cible.
+    // portent le meme nom et suivent tous : chacun garde sa cible. 1.13.0 : celles de SON espace seulement
+    // (Util.Moyenne et Gaz.Moyenne sont deux fonctions ; un nom court ambigu n'en rendait aucune).
+    const std::string oldNs = f->ns;
     std::vector<Id> group;
-    for (const auto* g : named(old)) group.push_back(g->id);
+    if (symbolView()) {
+        for (const auto* g : named(old)) group.push_back(g->id);
+    } else {
+        for (const auto& g : doc_->project.programs.functions)
+            if (hmikit::same(g.name, old) && hmikit::same(g.ns, oldNs)) group.push_back(g.id);
+    }
     std::size_t joining = 0;                                   // 1.11.22 : les fonctions de ce nom qu'elle rejoint
     for (const auto* o : named(name))
         if (!hmikit::same(o->name, old)) ++joining;
@@ -1172,7 +1179,7 @@ bool HmiFunctionsPane::renameFunction(Id id, const std::string& name, std::strin
         // et les redefinitions des instances suivent.
         if (const auto* sv = symbolView(); sv && !hmi::isSymbolView(*sv)) changed = hmi::viewmembers::renameMember(p, sv->name, old, name);   // 1.12.16
         else if (sv) changed = hmi::renameSymbolFunction(p, sv->name, old, name);
-        else changed = hmi::renameFunctionEverywhere(p, old, name);
+        else changed = hmi::renameFunctionEverywhere(p, oldNs, old, name);   // 1.13.0 : par identite (son espace)
         for (const Id g : group)
             if (auto* fn = fnOf(p, g)) fn->name = name;
         if (auto* fn = fnOf(p, id)) fn->name = name;

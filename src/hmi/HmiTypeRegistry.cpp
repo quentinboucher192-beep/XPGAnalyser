@@ -6,6 +6,7 @@
 #include "../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 
 #include "HmiPopupParams.hpp"
+#include "HmiTypes.hpp"          // 1.13.0 : types::baseOf (le parent lu depuis l'espace du type)
 
 #include <algorithm>
 #include <cctype>
@@ -751,11 +752,9 @@ std::shared_ptr<const Registry> Registry::build(const Project& p, const params::
         if (!t.base.empty()) {
             std::vector<const HmiType*> chain;              // [parent, grand-parent, ... racine]
             std::set<std::string> seen{upperOf(full)};
-            for (std::string b = t.base; !b.empty();) {
-                const HmiType* bt = p.hmiTypeByName(b);
-                if (!bt || !seen.insert(upperOf(fullName(*bt))).second) break;
+            for (const HmiType* bt = types::baseOf(p, t); bt; bt = types::baseOf(p, *bt)) {   // 1.13.0 : lu depuis l'espace du type
+                if (!seen.insert(upperOf(fullName(*bt))).second) break;
                 chain.push_back(bt);
-                b = bt->base;
             }
             for (auto it = chain.rbegin(); it != chain.rend(); ++it)
                 for (const auto& m : (*it)->members) e.members.emplace_back(m.name, m.type);

@@ -82,14 +82,16 @@ std::vector<const HmiType*> namedTypesOf(const Project& p, std::string_view type
     return out;
 }
 
-// 1.12.4 : le type `from` contient-il `owner` (un de ses membres, ou plus bas, objets compris) ?
+// 1.12.4 : le type `from` contient-il `owner` (un de ses membres, ou plus bas, objets compris) ? 1.13.0 : par IDENTITE
+// quand `owner` nomme un type du projet (Gaz.T_Vanne n'est pas Util.T_Vanne) ; sinon par son nom.
 bool reaches(const Project& p, const HmiType& from, std::string_view owner) {
-    std::set<std::string> seen;
+    const HmiType* target = p.hmiTypeByName(trimmed(owner));
+    std::set<const HmiType*> seen;
     std::function<bool(const HmiType&)> go = [&](const HmiType& t) {
-        if (!seen.insert(upperOf(t.name)).second) return false;
+        if (!seen.insert(&t).second) return false;
         for (const auto& m : t.members)
             for (const HmiType* sub : namedTypesOf(p, m.type))
-                if (sameText(sub->name, owner) || go(*sub)) return true;
+                if ((target ? sub == target : sameText(sub->name, owner)) || go(*sub)) return true;
         return false;
     };
     return go(from);
@@ -346,9 +348,12 @@ struct Walker {
             leaf(path, rel, "DINT", std::to_string(n), description);
             return;
         }
-        const std::string key = upperOf(ty->name);
+        // 1.13.0 : par le NOM COMPLET (Gaz.T_Vanne) - un type d'espace ne prend ni les membres ni la garde de
+        // cycle d'un homonyme (T_Vanne de la racine, Util.T_Vanne) ; le registre fait de meme (la place Modbus).
+        const std::string full = fullName(*ty);
+        const std::string key = upperOf(full);
         if (std::find(stack.begin(), stack.end(), key) != stack.end()) {
-            out.error = path + " : le type " + ty->name + " se contient lui-m\xC3\xAAme";
+            out.error = path + " : le type " + full + " se contient lui-m\xC3\xAAme";
             return;
         }
         stack.push_back(key);
@@ -357,9 +362,9 @@ struct Walker {
         Aggregate a;
         a.path = path;
         a.spec = s;
-        a.typeName = ty->name;
+        a.typeName = full;
         // 1.13.0 (lot J1) : l'heritage - la structure entiere (la tranche du parent d'abord), pour la place Modbus.
-        const auto allMems = membersOf(p, ty->name);
+        const auto allMems = membersOf(p, full);
         // 1.12.10 (lot F) : LA VALEUR INITIALE D'UNE STRUCTURE, (Marche := TRUE, Consigne := 12.5) - les membres
         // nommes la prennent, les autres gardent celle du type. Ce qui ne s'applique pas (un membre inconnu, un
         // texte pour un REAL) se dit (notes) et garde la valeur du type. "0" (la valeur d'une variable neuve) : rien.
@@ -597,12 +602,17 @@ bool validMemberType(const Project& p, std::string_view type, std::string* why, 
     if (const std::string iface = interfaceAsData(p, type); !iface.empty()) return fail(why, iface);
     // 1.12.4 : un membre objet peut tout contenir, sauf le type qui le porte (T_Noeud.Enfants :
     // LIST OF T_Noeud) - ni directement, ni par un autre type.
-    if (!owner.empty() && isRich(type))
-        for (const HmiType* t : namedTypesOf(p, type))
-            if (sameText(t->name, owner) || reaches(p, *t, owner))
+    // 1.13.0 : par identite (le porteur nomme en entier : Gaz.T_Noeud ne se confond pas avec Util.T_Noeud).
+    if (!owner.empty() && isRich(type)) {
+        const HmiType* self = p.hmiTypeByName(trimmed(owner));
+        for (const HmiType* t : namedTypesOf(p, type)) {
+            const bool itself = self ? t == self : sameText(t->name, owner);
+            if (itself || reaches(p, *t, owner))
                 return fail(why, "un type IHM ne se contient pas lui-m\xC3\xAAme, m\xC3\xAAme dans une liste : " + std::string(owner)
                                      + " \xE2\x86\x92 " + normalized(type)
-                                     + (sameText(t->name, owner) ? std::string{} : " \xE2\x86\x92 " + t->name + " \xE2\x86\x92 \xE2\x80\xA6 \xE2\x86\x92 " + std::string(owner)));
+                                     + (itself ? std::string{} : " \xE2\x86\x92 " + fullName(*t) + " \xE2\x86\x92 \xE2\x80\xA6 \xE2\x86\x92 " + std::string(owner)));
+        }
+    }
     return true;
 }
 
@@ -687,15 +697,17 @@ std::string cycleOf(const Project& p, std::string_view typeName) {
     std::string found;
     std::function<void(const HmiType&)> visit = [&](const HmiType& ty) {
         if (!found.empty()) return;
-        const std::string key = upperOf(ty.name);
+        // 1.13.0 : par le nom complet - Gaz.T_Vanne qui contient un Util.T_Vanne ne se contient pas lui-meme.
+        const std::string full = fullName(ty);
+        const std::string key = upperOf(full);
         for (std::size_t i = 0; i < path.size(); ++i)
             if (upperOf(path[i]) == key) {
                 for (std::size_t k = i; k < path.size(); ++k) found += path[k] + " -> ";
-                found += ty.name;
+                found += full;
                 return;
             }
         if (path.size() > 64) return;
-        path.push_back(ty.name);
+        path.push_back(full);
         for (const auto& m : ty.members) {
             // 1.12.4 : un membre objet (LIST OF T_Noeud) : les types qu'il nomme.
             for (const HmiType* sub : namedTypesOf(p, m.type)) visit(*sub);
@@ -708,7 +720,14 @@ std::string cycleOf(const Project& p, std::string_view typeName) {
 
 std::vector<std::string> usersOf(const Project& p, std::string_view typeName) {
     std::vector<std::string> out;
+    // 1.13.0 : par IDENTITE - le type que nomme `typeName` (Gaz.T_Vanne, lu en entier) ; chaque type ecrit se lit comme
+    // le depliage le lit (namedTypesOf) : un homonyme d'un autre espace (T_Vanne de la racine, Util.T_Vanne) n'est pas lui.
+    const HmiType* target = p.hmiTypeByName(trimmed(typeName));
     const auto uses = [&](std::string_view type) {
+        if (target) {
+            const auto named = namedTypesOf(p, type);
+            return std::find(named.begin(), named.end(), target) != named.end();
+        }
         Spec s;
         // 1.12.20 (lot G) : T_Mesure<REAL> - le nom parmi ses mots (la structure generique, ses types).
         if (parseSpec(type, s) && s.element.find('<') == std::string::npos) return sameText(s.element, typeName);
@@ -729,7 +748,7 @@ std::vector<std::string> usersOf(const Project& p, std::string_view typeName) {
     for (const auto& ty : p.programs.types)
         for (const auto& m : ty.members)
             if (uses(m.type)) {
-                out.push_back(ty.name + "." + m.name);
+                out.push_back(fullName(ty) + "." + m.name);
                 break;
             }
     for (const auto& v : p.programs.variables)
@@ -1469,7 +1488,7 @@ TypeStep stepMember(const Project& p, std::string_view type, std::string_view me
     }
     // 1.13.0 (lot J1) : une methode du type (ou heritee) - L[0].Incr(), Pompes[3].EnDefaut() : son appel, pas un membre
     // (son type n'est pas suivi ici : la chaine s'arrete).
-    if (effectiveMethod(p, ty->name, member)) return st;
+    if (effectiveMethod(p, fullName(*ty), member)) return st;
     std::string list;
     for (const auto& mm : inherited) list += (list.empty() ? "" : ", ") + mm.name;
     st.why = "(" + ty->name + ") n'a pas de membre " + std::string(member) + (list.empty() ? std::string{} : " (membres : " + list + ")");
@@ -1558,21 +1577,41 @@ std::string typeOfPath(const Project& p, std::string_view path) {
     return type;
 }
 
+const HmiType* typeFrom(const Project& p, std::string_view nsIn, std::string_view nameIn, const HmiType* self) {
+    const std::string name = trimmed(nameIn);
+    if (name.empty()) return nullptr;
+    if (name.find('.') != std::string::npos) {
+        const HmiType* t = p.hmiTypeByName(name);
+        return t == self ? nullptr : t;
+    }
+    // un nom court : l'espace, puis ses parents (Gaz.Ligne voit Gaz) - jamais `self`
+    for (std::string ns(nsIn); !ns.empty();) {
+        if (const HmiType* t = p.hmiTypeByName(qualifiedName(ns, name)); t && t != self) return t;
+        const auto dot = ns.rfind('.');
+        ns = dot == std::string::npos ? std::string{} : ns.substr(0, dot);
+    }
+    const HmiType* t = p.hmiTypeByName(name);
+    return t == self ? nullptr : t;
+}
+
+const HmiType* baseOf(const Project& p, const HmiType& t) {
+    return t.base.empty() ? nullptr : typeFrom(p, t.ns, t.base, &t);
+}
+
 std::vector<TypeMember> membersOf(const Project& p, std::string_view typeName) {
     Spec s;
     if (!parseSpec(typeName, s) || s.array()) return {};
     const auto* ty = p.hmiTypeByName(s.element);
     if (!ty) return {};
     // 1.13.0 (lot J1) : l'heritage - la tranche du parent D'ABORD (la racine en tete), puis les siens.
-    // La chaine de base (du parent vers la racine), avec un garde-fou contre un cycle.
+    // La chaine de base (du parent vers la racine), avec un garde-fou contre un cycle (par NOM COMPLET :
+    // Gaz.T_Vanne EXTENDS Base.T_Vanne n'est pas un cycle).
     if (ty->base.empty()) return ty->members;
     std::vector<const HmiType*> ancestors;      // [parent, grand-parent, ... racine]
-    std::set<std::string> seen{upperOf(ty->name)};
-    for (std::string base = ty->base; !base.empty();) {
-        const HmiType* b = p.hmiTypeByName(base);
-        if (!b || !seen.insert(upperOf(b->name)).second) break;
+    std::set<std::string> seen{upperOf(fullName(*ty))};
+    for (const HmiType* b = baseOf(p, *ty); b; b = baseOf(p, *b)) {
+        if (!seen.insert(upperOf(fullName(*b))).second) break;
         ancestors.push_back(b);
-        base = b->base;
     }
     std::vector<TypeMember> out;
     for (auto it = ancestors.rbegin(); it != ancestors.rend(); ++it)   // racine d'abord
@@ -1657,24 +1696,31 @@ std::string summary(const Project& p, std::string_view type, bool packBools) {
 namespace {
 // 1.13.0 (lot J1) : un membre ou une methode PRIVE de `typeName` (ou d'un de ses parents), lu de l'exterieur (un
 // script, une fonction, une fx : pathProblems ne lit jamais le corps d'une methode) : le message ; vide : permis.
-std::string privateUse(const Project& p, std::string_view typeName, std::string_view member) {
+std::string privateUse(const Project& p, std::string_view typeName, std::string_view member, std::string* declaredBy = nullptr) {
     const HmiType* ty = p.hmiTypeByName(trimmed(typeName));
     if (!ty || ty->kind != HmiTypeKind::Structure) return {};
-    std::vector<const HmiType*> chain = baseChain(p, ty->name);     // [parent, grand-parent...]
+    std::vector<const HmiType*> chain = baseChain(p, fullName(*ty));     // [parent, grand-parent...]
     std::reverse(chain.begin(), chain.end());                        // la racine d'abord, comme membersOf
     chain.push_back(ty);
     for (const HmiType* t : chain)
         for (const auto& m : t->members)
-            if (sameText(m.name, member))
-                return m.visibility == Visibility::Private
-                           ? m.name + " est priv\xC3\xA9 dans " + t->name + " : seules ses m\xC3\xA9thodes le lisent et l'\xC3\xA9" "crivent"
-                           : std::string{};
+            if (sameText(m.name, member)) {
+                if (m.visibility != Visibility::Private) return {};
+                if (declaredBy) *declaredBy = fullName(*t);
+                return m.name + " est priv\xC3\xA9 dans " + t->name + " : seules ses m\xC3\xA9thodes le lisent et l'\xC3\xA9" "crivent";
+            }
     const HmiType* owner = nullptr;
-    if (const HmiFunction* f = effectiveMethod(p, ty->name, member, &owner); f && owner && f->visibility == Visibility::Private)
+    if (const HmiFunction* f = effectiveMethod(p, fullName(*ty), member, &owner); f && owner && f->visibility == Visibility::Private) {
+        if (declaredBy) *declaredBy = fullName(*owner);
         return f->name + " est une m\xC3\xA9thode priv\xC3\xA9" "e de " + owner->name + " : seules ses m\xC3\xA9thodes l'appellent";
+    }
     return {};
 }
 } // namespace
+
+std::string privateMemberUse(const Project& p, std::string_view typeName, std::string_view member, std::string* owner) {
+    return privateUse(p, typeName, member, owner);
+}
 
 std::vector<PathProblem> pathProblems(const Project& p, std::string_view source) {
     std::vector<PathProblem> out;

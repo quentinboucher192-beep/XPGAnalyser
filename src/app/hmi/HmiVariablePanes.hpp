@@ -52,6 +52,8 @@
 namespace app {
 
 class HmiOperatorsPane;   // 1.10 (chantier S2) : HmiOperatorPanes.hpp
+class HmiMethodsPane;     // 1.13.0 (J1b) : HmiMethodPanes.hpp
+class HmiMethodDialog;
 class HmiEnumValuesPane;  // 1.10 (chantier U) : HmiEnumPanes.hpp
 class HmiEnumCreatePanel;
 class HmiEnumDialog;
@@ -333,6 +335,22 @@ public:
     [[nodiscard]] hmi::Id selectedType() const;
     [[nodiscard]] int     selectedMember() const;
     [[nodiscard]] HmiOperatorsPane* operators() noexcept { return operators_; }   // 1.10 (chantier S2)
+    // ---- 1.13.0 (J1b) : L'ECRAN DES OBJETS ----
+    //  La section Methodes (sous les membres, au-dessus des Operateurs) ; la colonne Visibilite des membres
+    //  (Publique / Privee, cadenas ; clic droit Rendre prive / Rendre public) ; les membres herites montres
+    //  grises "(herite de T_Base)" a la suite ; dans les proprietes du type, "Herite de... (EXTENDS)" (les
+    //  structures, sans cycle) et la categorie "Implemente (IMPLEMENTS)" (une case par interface) ; Nouveau
+    //  type > Interface... (I_Interface, une signature d'exemple) ; la page d'une interface : ses signatures,
+    //  l'apercu de sa declaration et "Types qui l'implementent". Chaque geste : une commande (Ctrl+Z).
+    [[nodiscard]] HmiMethodsPane*  methods() noexcept { return methods_; }
+    [[nodiscard]] HmiMethodDialog* methodDialog() noexcept { return methodDialog_; }
+    bool setMemberPrivate(hmi::Id type, std::size_t index, bool isPrivate, std::string* why = nullptr);
+    // "" ou "(aucun)" : plus de parent. Refuse : un type inconnu, hors structure, un cycle.
+    bool setTypeBase(hmi::Id type, const std::string& base, std::string* why = nullptr);
+    // Implementer (ou plus) l'interface `iface` (son nom complet).
+    bool setTypeImplements(hmi::Id type, const std::string& iface, bool on, std::string* why = nullptr);
+    hmi::Id addInterfaceType(const std::string& name, std::string* why = nullptr);
+    [[nodiscard]] bool showsInterface() const;
     void selectType(hmi::Id);
     void selectMember(int index);
 
@@ -433,6 +451,8 @@ private:
     ui::TableView*    members_{nullptr};
     ui::PropertyGrid* props_{nullptr};
     HmiOperatorsPane* operators_{nullptr};   // 1.10 (chantier S2) : la section Operateurs du type
+    HmiMethodsPane*   methods_{nullptr};     // 1.13.0 (J1b) : la section Methodes du type
+    HmiMethodDialog*  methodDialog_{nullptr};   // 1.13.0 (J1b) : la fenetre "Ajouter une methode..."
     ui::StatusBar*    status_{nullptr};
     std::shared_ptr<ui::ITableModel> typeModel_, memberModel_;
     std::vector<hmi::Id> typeOrder_;

@@ -6,7 +6,9 @@
 #include "HmiAssets.hpp"
 #include "HmiDesign.hpp"
 #include "HmiExport.hpp"
+#include "HmiNames.hpp"     // 1.13.0 : renommer dans un paquet a espaces, par identite (renameItemInCode)
 #include "HmiOverload.hpp"   // 1.11.20 : une fonction se reconnait a son nom ET a sa forme (les surcharges)
+#include "HmiScript.hpp"    // 1.13.0 : forEachCode, renameFunctionEverywhere (le paquet a espaces)
 #include "HmiStore.hpp"
 #include "HmiSymbols.hpp"
 #include "HmiTemplates.hpp"
@@ -266,14 +268,14 @@ bool sameScript(const Script& a, const Script& b) {
 
 // Un nom libre dans le projet ET dans le paquet (T_Mode_2...), pour un type, une
 // fonction, un script : les trois se citent par leur nom dans le meme ST.
-std::string uniqueProgramName(const Project& dst, const Project& src, ItemKind k, const std::string& base) {
+std::string uniqueProgramName(const Project& dst, const Project& src, ItemKind k, const std::string& base, const std::string& ns = {}) {
+    // 1.13.0 : libre dans SON espace (Gaz.T_Vanne_2 ne gene pas Util.T_Vanne_2).
     const auto taken = [&](const Project& p, const std::string& name) {
-        const auto same = [&](const std::string& x) { return upper(x) == upper(name); };
+        const auto same = [&](const auto& x) { return upper(x.name) == upper(name) && upper(x.ns) == upper(ns); };
         switch (k) {
-            case ItemKind::Type: return std::any_of(p.programs.types.begin(), p.programs.types.end(), [&](const HmiType& x) { return same(x.name); });
-            case ItemKind::Function:
-                return std::any_of(p.programs.functions.begin(), p.programs.functions.end(), [&](const HmiFunction& x) { return same(x.name); });
-            default: return std::any_of(p.programs.scripts.begin(), p.programs.scripts.end(), [&](const Script& x) { return same(x.name); });
+            case ItemKind::Type: return std::any_of(p.programs.types.begin(), p.programs.types.end(), same);
+            case ItemKind::Function: return std::any_of(p.programs.functions.begin(), p.programs.functions.end(), same);
+            default: return std::any_of(p.programs.scripts.begin(), p.programs.scripts.end(), same);
         }
     };
     for (int n = 2; n < 1000; ++n) {
@@ -283,8 +285,97 @@ std::string uniqueProgramName(const Project& dst, const Project& src, ItemKind k
     return base + "_import";
 }
 
+// 1.13.0 : l'item du projet de cet espace et de ce nom, exactement (un nom court ne vise ni la racine ni le seul de ce
+// nom d'un autre espace : Gaz.T_Vanne n'est pas Util.T_Vanne).
+const HmiType* typeIn(const Project& p, const std::string& ns, const std::string& name) {
+    for (const auto& t : p.programs.types)
+        if (upper(t.ns) == upper(ns) && upper(t.name) == upper(name)) return &t;
+    return nullptr;
+}
+std::vector<const HmiFunction*> functionsIn(const Project& p, const std::string& ns, const std::string& name) {
+    std::vector<const HmiFunction*> out;
+    for (const auto& f : p.programs.functions)
+        if (upper(f.ns) == upper(ns) && upper(f.name) == upper(name)) out.push_back(&f);
+    return out;
+}
+const Script* scriptIn(const Project& p, const std::string& ns, const std::string& name) {
+    for (const auto& sc : p.programs.scripts)
+        if (upper(sc.ns) == upper(ns) && upper(sc.name) == upper(name)) return &sc;
+    return nullptr;
+}
+
 bool chosenItem(const Package& pkg, std::string_view name) {
     return std::any_of(pkg.manifest.items.begin(), pkg.manifest.items.end(), [&](const std::string& x) { return upper(x) == upper(name); });
+}
+
+// 1.13.0 : UN PAQUET A ESPACES - le type ou la fonction `it` renomme DANS LE PAQUET PAR IDENTITE : seuls les noms qui
+// visent CET item (lus depuis l'espace de leur code ou de leur type : le sien, la racine, un USING ; ou sa forme complete
+// Gaz.T_Vanne) prennent le nouveau nom. Util.T_Vanne, et un T_Vanne court qui vise un autre espace, restent tels quels
+// (avant : chaque mot T_Vanne, Util.T_Vanne compris, devenait T_Vanne_2). Une fonction : comme Renommer
+// (renameFunctionEverywhere, ses appels et ses rappels).
+void renameInPackage(Project& src, const Item& it) {
+    if (it.kind == ItemKind::Function) {
+        (void)hmi::renameFunctionEverywhere(src, it.ns, it.name, it.newName);
+        for (auto& f : src.programs.functions)
+            if (upper(f.name) == upper(it.name) && upper(f.ns) == upper(it.ns)) f.name = it.newName;
+        return;
+    }
+    const names::Index ix(src);                         // avant le renommage : les noms du paquet tels qu'ils sont
+    const std::string full = qualifiedName(it.ns, it.name);
+    const auto one = [&](std::string_view text, std::string_view ns) {
+        return names::renameItemInCode(ix, text, ns, full, it.newName, /*bare*/ true);
+    };
+    // Le code (scripts, fonctions, methodes, operateurs, vues, alarmes...), lu depuis son espace.
+    forEachCode(src, [&](std::string& text, CodeForm form, const CodeSite& site) {
+        if (text.empty()) return;
+        const auto here = [&](std::string_view e) { return one(e, site.ns); };
+        text = form == CodeForm::Template ? rewriteInText(text, here) : here(text);
+    });
+    // Les textes de type, lus depuis l'espace de leur porteur.
+    const auto type = [&](std::string& text, std::string_view ns) {
+        if (!text.empty()) text = one(text, ns);
+    };
+    const auto decls = [&](std::vector<Declaration>& list, std::string_view ns) {
+        for (auto& d : list) type(d.type, ns);
+    };
+    for (auto& t : src.programs.types) {
+        for (auto& m : t.members) type(m.type, t.ns);
+        type(t.base, t.ns);
+        for (auto& i : t.interfaces) type(i, t.ns);
+        for (auto& m : t.methods) {
+            type(m.returnType, t.ns);
+            decls(m.decls, t.ns);
+        }
+        for (auto& op : t.operators) {
+            type(op.left, t.ns);
+            type(op.right, t.ns);
+            type(op.result, t.ns);
+            decls(op.decls, t.ns);
+        }
+    }
+    for (auto& f : src.programs.functions) {
+        type(f.returnType, f.ns);
+        decls(f.decls, f.ns);
+    }
+    for (auto& sc : src.programs.scripts) decls(sc.decls, sc.ns);
+    for (auto& v : src.programs.variables) type(v.type, {});
+    for (auto& v : src.views) {
+        for (auto& prm : v.params) type(prm.type, {});
+        for (auto& fn : v.functions) {
+            type(fn.returnType, {});
+            decls(fn.decls, {});
+        }
+        for (auto& sc : v.scripts) decls(sc.decls, {});
+        decls(v.constants, {});
+        for (auto& op : v.operators) {
+            type(op.left, {});
+            type(op.right, {});
+            type(op.result, {});
+            decls(op.decls, {});
+        }
+    }
+    for (auto& t : src.programs.types)
+        if (upper(t.name) == upper(it.name) && upper(t.ns) == upper(it.ns)) t.name = it.newName;
 }
 
 } // namespace
@@ -430,14 +521,14 @@ Package collectPrograms(const Project& p, ProgramKind kind, const std::vector<Id
             if (set.insert(upper(name)).second) out.manifest.items.push_back(name);
         };
         switch (kind) {
-            case ProgramKind::Types:
-                for (const auto& t : p.programs.types) if (t.id == id) pick(types, t.name);
+            case ProgramKind::Types:                                // 1.13.0 : par le nom complet (Gaz.T_Vanne)
+                for (const auto& t : p.programs.types) if (t.id == id) pick(types, fullName(t));
                 break;
             case ProgramKind::Functions:
-                for (const auto& f : p.programs.functions) if (f.id == id) pick(functions, f.name);
+                for (const auto& f : p.programs.functions) if (f.id == id) pick(functions, fullName(f));
                 break;
             case ProgramKind::Scripts:
-                for (const auto& sc : p.programs.scripts) if (sc.id == id) pick(scripts, sc.name);
+                for (const auto& sc : p.programs.scripts) if (sc.id == id) pick(scripts, fullName(sc));
                 break;
         }
     }
@@ -448,7 +539,7 @@ Package collectPrograms(const Project& p, ProgramKind kind, const std::vector<Id
         const std::size_t before = types.size() + functions.size() + variables.size();
         std::vector<std::string_view> texts;
         for (const auto& t : p.programs.types)
-            if (types.count(upper(t.name))) {
+            if (types.count(upper(fullName(t)))) {
                 for (const auto& m : t.members) texts.push_back(m.type);
                 for (const auto& o : t.operators) {
                     texts.push_back(o.left);
@@ -467,13 +558,19 @@ Package collectPrograms(const Project& p, ProgramKind kind, const std::vector<Id
                 }
             }
         for (const auto& f : p.programs.functions)
-            if (functions.count(upper(f.name))) {
+            if (functions.count(upper(fullName(f)))) {
                 texts.push_back(f.returnType);
                 texts.push_back(f.body);
                 for (const auto& d : f.decls) texts.push_back(d.type + " " + d.value);        // 1.11.18 (lot 3)
+                // 1.13.0 : les variables IHM que posent ou verifient ses cas de test voyagent avec elle.
+                for (const auto& t : f.tests) {
+                    for (const auto& g : t.givens) texts.push_back(g.target + " " + g.value);
+                    for (const auto& c : t.checks)
+                        if (upper(c.target) != "JOURNAL") texts.push_back(c.target);
+                }
             }
         for (const auto& sc : p.programs.scripts)
-            if (scripts.count(upper(sc.name))) {
+            if (scripts.count(upper(fullName(sc)))) {
                 texts.push_back(sc.body);
                 texts.push_back(sc.watch);
                 for (const auto& d : sc.decls) texts.push_back(d.type + " " + d.value);       // 1.11.18 (lot 3)
@@ -484,9 +581,9 @@ Package collectPrograms(const Project& p, ProgramKind kind, const std::vector<Id
             return std::any_of(texts.begin(), texts.end(), [&](std::string_view x) { return usesWord(x, name); });
         };
         for (const auto& t : p.programs.types)
-            if (!types.count(upper(t.name)) && used(t.name)) types.insert(upper(t.name));
+            if (!types.count(upper(fullName(t))) && used(t.name)) types.insert(upper(fullName(t)));
         for (const auto& f : p.programs.functions)
-            if (!functions.count(upper(f.name)) && used(f.name)) functions.insert(upper(f.name));
+            if (!functions.count(upper(fullName(f))) && used(f.name)) functions.insert(upper(fullName(f)));
         for (const auto& v : p.programs.variables)
             if (!variables.count(upper(v.name)) && used(v.name)) variables.insert(upper(v.name));
         if (types.size() + functions.size() + variables.size() == before) break;
@@ -496,11 +593,11 @@ Package collectPrograms(const Project& p, ProgramKind kind, const std::vector<Id
     c.config = p.config;
     c.nextId = p.nextId;
     for (const auto& t : p.programs.types)
-        if (types.count(upper(t.name))) c.programs.types.push_back(t);
+        if (types.count(upper(fullName(t)))) c.programs.types.push_back(t);
     for (const auto& f : p.programs.functions)
-        if (functions.count(upper(f.name))) c.programs.functions.push_back(f);
+        if (functions.count(upper(fullName(f)))) c.programs.functions.push_back(f);
     for (const auto& sc : p.programs.scripts)
-        if (scripts.count(upper(sc.name))) c.programs.scripts.push_back(sc);
+        if (scripts.count(upper(fullName(sc)))) c.programs.scripts.push_back(sc);
     for (const auto& v : p.programs.variables)
         if (variables.count(upper(v.name))) c.programs.variables.push_back(v);
     return out;
@@ -834,14 +931,15 @@ Plan plan(const Project& dst, const Package& pkg) {
         Item it;
         it.kind = ItemKind::Type;
         it.name = t.name;
-        const HmiType* ours = dst.hmiTypeByName(t.name);
+        it.ns = t.ns;                                           // 1.13.0 : apparie par son espace ET son nom
+        const HmiType* ours = typeIn(dst, t.ns, t.name);
         if (!ours) { it.state = State::Missing; it.choice = Choice::Add; it.detail = "absent du projet"; }
         else if (sameType(*ours, t)) { it.state = State::Same; it.choice = Choice::KeepOurs; it.detail = "identique, gard\xC3\xA9"; }
         else {
             it.state = State::Different;
-            it.newName = uniqueProgramName(dst, src, ItemKind::Type, t.name);   // 1.11.2 (decision 174)
+            it.newName = uniqueProgramName(dst, src, ItemKind::Type, t.name, t.ns);   // 1.11.2 (decision 174)
             // Un type choisi (paquet de types) : sous un autre nom par defaut ; un type employe : celui du projet.
-            const bool chosen = pkg.manifest.kind == "types" && chosenItem(pkg, t.name);
+            const bool chosen = pkg.manifest.kind == "types" && (chosenItem(pkg, fullName(t)) || chosenItem(pkg, t.name));
             it.choice = chosen ? Choice::Rename : Choice::KeepOurs;
             it.detail = chosen ? "diff\xC3\xA9rent : import\xC3\xA9 sous " + it.newName : "diff\xC3\xA9rent : celui du projet est gard\xC3\xA9";
         }
@@ -851,10 +949,11 @@ Plan plan(const Project& dst, const Package& pkg) {
         Item it;
         it.kind = ItemKind::Function;
         it.name = f.name;
+        it.ns = f.ns;                                           // 1.13.0 : apparie par son espace ET son nom
         // 1.11.20 : la fonction du projet de meme nom ET de meme forme (une surcharge d'une autre forme
         // s'ajoute a cote, elle ne remplace rien).
         const HmiFunction* ours = nullptr;
-        const auto sameName = dst.functionsNamed(f.name);
+        const auto sameName = functionsIn(dst, f.ns, f.name);
         for (const auto* g : sameName)
             if (overload::sameShape(overload::signatureOf(*g), overload::signatureOf(f))) ours = g;
         if (!ours && !sameName.empty()) {
@@ -865,8 +964,8 @@ Plan plan(const Project& dst, const Package& pkg) {
         else if (sameFunction(*ours, f)) { it.state = State::Same; it.choice = Choice::KeepOurs; it.detail = "identique, gard\xC3\xA9" "e"; }   // 1.13.0 : generiques, cas, unite
         else {
             it.state = State::Different;
-            it.newName = uniqueProgramName(dst, src, ItemKind::Function, f.name);   // 1.11.2 (decision 174)
-            const bool chosen = pkg.manifest.kind == "fonctions" && chosenItem(pkg, f.name);
+            it.newName = uniqueProgramName(dst, src, ItemKind::Function, f.name, f.ns);   // 1.11.2 (decision 174)
+            const bool chosen = pkg.manifest.kind == "fonctions" && (chosenItem(pkg, fullName(f)) || chosenItem(pkg, f.name));
             it.choice = chosen ? Choice::Rename : Choice::KeepOurs;
             it.detail = chosen ? "diff\xC3\xA9rente : import\xC3\xA9" "e sous " + it.newName : "diff\xC3\xA9rente : celle du projet est gard\xC3\xA9" "e";
         }
@@ -877,12 +976,13 @@ Plan plan(const Project& dst, const Package& pkg) {
         Item it;
         it.kind = ItemKind::Script;
         it.name = sc.name;
-        const Script* ours = dst.generalScript(sc.name);
+        it.ns = sc.ns;                                          // 1.13.0 : apparie par son espace ET son nom
+        const Script* ours = scriptIn(dst, sc.ns, sc.name);
         if (!ours) { it.state = State::Missing; it.choice = Choice::Add; it.detail = "absent du projet"; }
         else if (sameScript(*ours, sc)) { it.state = State::Same; it.choice = Choice::KeepOurs; it.detail = "identique, gard\xC3\xA9"; }
         else {
             it.state = State::Different;
-            it.newName = uniqueProgramName(dst, src, ItemKind::Script, sc.name);
+            it.newName = uniqueProgramName(dst, src, ItemKind::Script, sc.name, sc.ns);
             it.choice = Choice::Rename;
             it.detail = "diff\xC3\xA9rent : import\xC3\xA9 sous " + it.newName;
         }
@@ -945,6 +1045,11 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
                             if (pr.key == "namedStyle" && upper(pr.value) == upper(it.name)) pr.value = it.newName;
                 break;
             case ItemKind::Type: case ItemKind::Function: {
+                // 1.13.0 : un paquet qui a des espaces de noms - par identite (Util.T_Vanne ne devient pas Util.T_Vanne_2).
+                if (names::active(src)) {
+                    renameInPackage(src, it);
+                    break;
+                }
                 // 1.11.2 (decision 174) : le type ou la fonction, et tout ce qui le cite
                 // dans le paquet (vues, scripts, corps des fonctions - le sien aussi :
                 // une fonction rend sa valeur en l'affectant a son nom -, membres et
@@ -953,8 +1058,20 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
                 o.wholeWord = true;
                 (void)design::replaceAll(src, it.name, it.newName, o);
                 for (auto& t : src.programs.types) {
-                    if (it.kind == ItemKind::Type && upper(t.name) == upper(it.name)) t.name = it.newName;
+                    if (it.kind == ItemKind::Type && upper(t.name) == upper(it.name) && upper(t.ns) == upper(it.ns)) t.name = it.newName;
                     for (auto& m : t.members) m.type = renamedWord(m.type, it.name, it.newName);
+                    // 1.13.0 : le parent (EXTENDS), les interfaces et les methodes (corps, retour, declarations) du paquet suivent
+                    // aussi - avant, un sous-type importe visait encore le type du projet de l'ancien nom.
+                    t.base = renamedWord(t.base, it.name, it.newName);
+                    for (auto& i : t.interfaces) i = renamedWord(i, it.name, it.newName);
+                    for (auto& m : t.methods) {
+                        m.returnType = renamedWord(m.returnType, it.name, it.newName);
+                        m.body = renamedWord(m.body, it.name, it.newName);
+                        for (auto& d : m.decls) {
+                            d.type = renamedWord(d.type, it.name, it.newName);
+                            d.value = renamedWord(d.value, it.name, it.newName);
+                        }
+                    }
                     for (auto& op : t.operators) {
                         op.left = renamedWord(op.left, it.name, it.newName);
                         op.right = renamedWord(op.right, it.name, it.newName);
@@ -974,7 +1091,7 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
                     }
                 };
                 for (auto& f : src.programs.functions) {
-                    if (it.kind == ItemKind::Function && upper(f.name) == upper(it.name)) f.name = it.newName;
+                    if (it.kind == ItemKind::Function && upper(f.name) == upper(it.name) && upper(f.ns) == upper(it.ns)) f.name = it.newName;
                     f.returnType = renamedWord(f.returnType, it.name, it.newName);
                     f.body = renamedWord(f.body, it.name, it.newName);
                     decls(f.decls);
@@ -988,7 +1105,7 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
             }
             case ItemKind::Script:
                 for (auto& sc : src.programs.scripts)
-                    if (upper(sc.name) == upper(it.name)) sc.name = it.newName;
+                    if (upper(sc.name) == upper(it.name) && upper(sc.ns) == upper(it.ns)) sc.name = it.newName;
                 break;
             default: break;
         }
@@ -1102,13 +1219,20 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
             if (x.kind == k && x.choice == Choice::Rename && upper(x.newName) == upper(name)) return &x;
         return pl.find(k, name);
     };
+    // 1.13.0 : les types du paquet et leurs lignes du plan, dans le meme ordre (Gaz.T_Vanne et Util.T_Vanne portent le meme
+    // nom court : le nom ne suffit pas a retrouver la sienne).
+    std::vector<const Item*> typeItems;
+    for (const auto& x : pl.items)
+        if (x.kind == ItemKind::Type) typeItems.push_back(&x);
+    std::size_t typeAt = 0;
     for (const auto& t : src.programs.types) {
-        const Item* it = itemOf(ItemKind::Type, t.name);
+        const Item* it = typeAt < typeItems.size() ? typeItems[typeAt] : itemOf(ItemKind::Type, t.name);
+        ++typeAt;
         const Choice choice = it ? it->choice : Choice::Add;
-        if (choice == Choice::KeepOurs) { res.kept.push_back("type " + t.name); continue; }
+        if (choice == Choice::KeepOurs) { res.kept.push_back("type " + fullName(t)); continue; }
         if (choice == Choice::Replace) {
             for (auto& ours : dst.programs.types)
-                if (upper(ours.name) == upper(t.name)) {
+                if (upper(ours.name) == upper(t.name) && upper(ours.ns) == upper(t.ns)) {
                     // 1.11.2 : tout le type (une enumeration : ses valeurs), sauf son identifiant, son nom, son dossier.
                     const Id keepId = ours.id;
                     const std::string keepName = ours.name, keepFolder = ours.folder;
@@ -1144,7 +1268,8 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
             // Celle de meme nom et de meme forme seulement (ses surcharges restent).
             bool done = false;
             for (auto& ours : dst.programs.functions)
-                if (!done && upper(ours.name) == upper(f.name) && overload::sameShape(overload::signatureOf(ours), overload::signatureOf(f))) {
+                if (!done && upper(ours.name) == upper(f.name) && upper(ours.ns) == upper(f.ns)
+                    && overload::sameShape(overload::signatureOf(ours), overload::signatureOf(f))) {
                     ours.body = f.body;
                     ours.decls = f.decls;                  // 1.11.18 (lot 3) : leurs identifiants renouveles (changeProject)
                     ours.returnType = f.returnType;
@@ -1168,13 +1293,18 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
         else res.added.push_back("fonction " + f.name);
     }
     // 1.11.2 (decision 174) : les scripts generaux.
+    std::vector<const Item*> scriptItems;
+    for (const auto& x : pl.items)
+        if (x.kind == ItemKind::Script) scriptItems.push_back(&x);
+    std::size_t scriptAt = 0;
     for (const auto& sc : src.programs.scripts) {
-        const Item* it = itemOf(ItemKind::Script, sc.name);
+        const Item* it = scriptAt < scriptItems.size() ? scriptItems[scriptAt] : itemOf(ItemKind::Script, sc.name);
+        ++scriptAt;
         const Choice choice = it ? it->choice : Choice::Add;
-        if (choice == Choice::KeepOurs) { res.kept.push_back("script " + sc.name); continue; }
+        if (choice == Choice::KeepOurs) { res.kept.push_back("script " + fullName(sc)); continue; }
         if (choice == Choice::Replace) {
             for (auto& ours : dst.programs.scripts)
-                if (upper(ours.name) == upper(sc.name)) {
+                if (upper(ours.name) == upper(sc.name) && upper(ours.ns) == upper(sc.ns)) {
                     const Id keepId = ours.id;
                     const std::string keepName = ours.name, keepFolder = ours.folder;
                     ours = sc;

@@ -1093,8 +1093,10 @@ void HmiActionsPanel::rebuildGrid() {
         op.properties.push_back(prop("Effet", "plus personne n'est connect\xC3\xA9 (niveau 0)", PG::ValueType::ReadOnly, {}, nullptr,
                                      "Comme le bouton D\xC3\xA9" "connexion de la biblioth\xC3\xA8que."));
     } else if (a.operation == Operation::CallScript) {
+        // 1.13.0 : par leur nom complet (Gaz.Horloge, Util.Horloge : deux scripts), ceux des bibliotheques reliees aussi.
         std::vector<std::string> scripts;
-        for (const auto& sc : doc_->project.programs.scripts) scripts.push_back(sc.name);
+        for (const auto& sc : doc_->project.programs.scripts) scripts.push_back(hmi::fullName(sc));
+        doc_->project.forEachLibraryScript([&](const hmi::Script& sc, const hmi::LoadedLibrary&) { scripts.push_back(hmi::fullName(sc)); });
         if (std::find(scripts.begin(), scripts.end(), a.target) == scripts.end()) scripts.insert(scripts.begin(), a.target);
         op.properties.push_back(prop("Script g\xC3\xA9n\xC3\xA9ral", a.target, PG::ValueType::Enum, scripts,
                                      commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; })));

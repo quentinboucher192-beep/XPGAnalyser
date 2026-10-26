@@ -359,6 +359,9 @@ namespace app {
             // 1.13.0 (lot J6b) : Configuration > Unites de mesure (la bibliotheque des unites du projet) - un volet,
             // le douzieme sous-noeud de Configuration (apres Acces web). A LA FIN, toujours.
             HmiMeasureUnits,
+            // 1.13.0 (J1b) : sous un type IHM (une structure, une interface), "Methodes (n)" entre les valeurs et
+            //   les operateurs : HmiTypeMethods (index = le type), HmiTypeMethod (sub = son rang). A LA FIN, toujours.
+            HmiTypeMethods, HmiTypeMethod,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).

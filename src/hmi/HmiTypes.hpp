@@ -91,7 +91,8 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why = nullptr);
 [[nodiscard]] std::string unbindableReason(const Project&, std::string_view type);
 // Un type IHM qui se contient lui-meme : le chemin du cycle ("T_A -> T_B -> T_A") ; vide : aucun.
 [[nodiscard]] std::string cycleOf(const Project&, std::string_view typeName);
-// Les variables et les types qui emploient ce type IHM (ses noms).
+// Les variables et les types qui emploient ce type IHM (leurs noms ; un membre : Type.Membre, le type par son nom complet).
+// 1.13.0 : par identite - `typeName` en entier (Gaz.T_Vanne) ; un homonyme d'un autre espace ne compte pas.
 [[nodiscard]] std::vector<std::string> usersOf(const Project&, std::string_view typeName);
 
 inline constexpr long long kMaxElements = 100000;    // les cases d'une variable, au plus
@@ -252,6 +253,11 @@ struct TypeStep {
 };
 [[nodiscard]] TypeStep stepIndex(const Project&, std::string_view type);
 [[nodiscard]] TypeStep stepMember(const Project&, std::string_view type, std::string_view member);
+// 1.13.0 : un membre ou une methode PRIVE de `typeName` (ou d'un de ses parents), lu de l'exterieur de ses methodes :
+// le message ("Heures est prive dans T_Pompe : seules ses methodes le lisent et l'ecrivent") ; vide : permis. `owner`
+// (facultatif) recoit le type qui le DECLARE, par son nom complet (le moteur le permet dans ses methodes).
+[[nodiscard]] std::string privateMemberUse(const Project&, std::string_view typeName, std::string_view member,
+                                           std::string* owner = nullptr);
 // 1.12.14 : LES PROPRIETES PUBLIQUES d'un type a taille, celles qu'un point lit (Cuves.Count, Cuves.First,
 // T.Length) - les memes que stepMember et le moteur, dans l'ordre ou on les montre : le nom, son type
 // (DINT, BOOL, ou celui de l'element pour First et Last), ses autres noms, ce qu'elle dit. Vide : ni
@@ -262,6 +268,14 @@ struct PublicProperty {
 [[nodiscard]] std::vector<PublicProperty> publicProperties(std::string_view type);
 // Les membres d'un type IHM (vide : pas une structure).
 [[nodiscard]] std::vector<TypeMember> membersOf(const Project&, std::string_view typeName);
+// 1.13.0 : LE PARENT (EXTENDS) d'un type, lu depuis l'espace du type : un nom complet (Base.T_Vanne) tel quel ;
+// un nom court, d'abord dans l'espace du type et ses parents (sans se prendre lui-meme), puis la racine ou le
+// seul de ce nom. Nul : pas de parent, ou inconnu. Deux types de meme nom court (Gaz.T_Vanne EXTENDS
+// Base.T_Vanne) ne se confondent pas : les gardes de cycle comparent les noms complets.
+[[nodiscard]] const HmiType* baseOf(const Project&, const HmiType&);
+// 1.13.0 : un nom de type lu depuis l'espace `ns` (le parent, une interface d'un type de cet espace) : complet tel quel ;
+// court, l'espace et ses parents d'abord, puis la racine ou le seul de ce nom. `self` n'est jamais rendu.
+[[nodiscard]] const HmiType* typeFrom(const Project&, std::string_view ns, std::string_view name, const HmiType* self = nullptr);
 // 1.12.17 : CE QUI N'EST PAS UNE VALEUR SEULE - un tableau, une liste, un vecteur, un ensemble, un tampon
 // circulaire, une MAP, un tuple, une structure (un type IHM qui a des membres ; `project` nul : pas de
 // structure connue). Une plume, la valeur d'une jauge, une condition, une cible qu'on met a 1 en veulent

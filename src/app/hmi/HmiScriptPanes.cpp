@@ -1541,18 +1541,32 @@ bool HmiScriptsPane::renameScript(Id id, const std::string& name, std::string* w
     const auto* sc = doc_->project.script(id);
     if (!sc || !general()) return false;
     if (!hmi::isIdentifier(name)) { if (why) *why = "nom invalide"; say("Renommage refus\xC3\xA9 : nom invalide", true); return false; }
-    const auto* other = doc_->project.generalScript(name);
-    if (other && other->id != id) { if (why) *why = "nom d\xC3\xA9j\xC3\xA0 pris"; say("Renommage refus\xC3\xA9 : " + name + " existe d\xC3\xA9j\xC3\xA0", true); return false; }
-    const std::string old = sc->name;
+    // 1.13.0 : libre dans SON espace (Gaz.Horloge et Util.Horloge sont deux scripts).
+    const std::string full = hmi::qualifiedName(sc->ns, name);
+    const auto* other = doc_->project.generalScript(full);
+    if (other && other->id != id && other->ns == sc->ns) { if (why) *why = "nom d\xC3\xA9j\xC3\xA0 pris"; say("Renommage refus\xC3\xA9 : " + full + " existe d\xC3\xA9j\xC3\xA0", true); return false; }
+    const std::string old = sc->name, oldFull = hmi::fullName(*sc), ns = sc->ns;
+    const auto same = [](std::string_view a, std::string_view b) {
+        return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) {
+                   return std::toupper(static_cast<unsigned char>(x)) == std::toupper(static_cast<unsigned char>(y));
+               });
+    };
     std::size_t followed = 0;
     auto cmd = hmi::changeProject(doc_, "Renommer le script", [&](hmi::Project& p) {
         if (auto* s = p.script(id)) s->name = name;
-        // Les actions "Script general" qui l'appelaient suivent.
+        // Les actions "Script general" qui l'appelaient suivent - par son nom complet (Gaz.Horloge), ou par son nom court
+        // quand il est a la racine.
+        const auto follow = [&](hmi::Action& a) {
+            if (a.operation != hmi::Operation::CallScript) return;
+            if (same(a.target, oldFull)) a.target = full;
+            else if (ns.empty() && same(a.target, old)) a.target = name;
+            else return;
+            ++followed;
+        };
         for (auto& v : p.views) {
-            for (auto& a : v.actions) if (a.operation == hmi::Operation::CallScript && a.target == old) { a.target = name; ++followed; }
+            for (auto& a : v.actions) follow(a);
             for (auto& o : v.objects)
-                for (auto& a : o.actions)
-                    if (a.operation == hmi::Operation::CallScript && a.target == old) { a.target = name; ++followed; }
+                for (auto& a : o.actions) follow(a);
         }
     });
     if (cmd) apply_(std::move(cmd));

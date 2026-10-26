@@ -179,6 +179,14 @@ struct Run {
 // ---- renommer un espace ------------------------------------------------------------------
 // Dans un texte (code ou expression) : from.X -> to.X (les sous-espaces suivent), USING from; -> USING to;.
 [[nodiscard]] std::string renameInCode(std::string_view code, std::string_view from, std::string_view to);
+// 1.13.0 : RENOMMER UNE FONCTION D'UN ESPACE (ou de la racine) DANS UN CODE, PAR IDENTITE - `targetFull` (Util.Moyenne,
+// ou Moyenne a la racine) devient `newShort` : la forme qualifiee (Util.Moyenne(a, b) -> Util.MoyenneGlissante(a, b)) et
+// chaque nom court qui la vise depuis l'espace `own` du code et ses USING (son espace, la racine, un import, le seul de ce
+// nom). Un nom court qui vise une homonyme (Gaz.Moyenne depuis un script de Gaz), une locale, un argument nomme ou un
+// membre ne change pas. Seuls les appels et les noms passes en valeur (un rappel) changent ; `bare` : le corps de la
+// fonction elle-meme (son nom y est aussi son retour) - chaque nom court qui la vise.
+[[nodiscard]] std::string renameItemInCode(const Index&, std::string_view code, std::string_view own, std::string_view targetFull,
+                                           std::string_view newShort, bool bare = false);
 // Dans un texte de type (Variable::type, un membre, ARRAY[..] OF from.T, LIST OF from.T...).
 [[nodiscard]] std::string renameInType(std::string_view type, std::string_view from, std::string_view to);
 // Partout dans le projet : l'espace des items (from et ses sous-espaces), les espaces vides gardes, tous

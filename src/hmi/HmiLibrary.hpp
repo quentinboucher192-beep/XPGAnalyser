@@ -121,6 +121,9 @@ void setSharedFolders(std::vector<std::string> folders);
 [[nodiscard]] LoadedLibrary loadContent(const Library&, const Package&, std::size_t index);
 // Le contenu tire du seul cache d'interface (types et signatures, sans corps) : le projet reste verifiable.
 [[nodiscard]] LoadedLibrary fromCache(const Library&, std::size_t index);
+// 1.13.0 : les familles et unites que voit le projet : les siennes, puis celles des bibliotheques reliees qu'il ne
+// definit pas (un type d'une bibliotheque peut porter Debit [t/h]). A donner a units::Catalog (EN, Compiler, Generer).
+[[nodiscard]] Config unitConfig(const Project&);
 // Sans disque : chaque lien depuis son cache (parseProject). Avec : chaque lien cherche, lu, compare.
 void useCache(Project&);
 void resolve(Project&, const std::string& projectFolder);

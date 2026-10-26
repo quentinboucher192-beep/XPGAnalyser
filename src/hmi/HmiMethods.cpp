@@ -7,9 +7,11 @@
 
 #include "HmiCalc.hpp"       // hmi::closest : le nom connu le plus proche (veux-tu dire ?)
 #include "HmiDecl.hpp"       // 1.11.18 : les declarations du modele, reconstruites (decl::codeOf)
-#include "HmiEnums.hpp"      // typeKindLabel
+#include "HmiEnums.hpp"      // typeKindLabel, renameEnumType
+#include "HmiEquipmentLink.hpp" // 1.13.0 : eqlink::renameType (un type renomme : sa liaison Equipement)
 #include "HmiMarkers.hpp"    // 1.11.1 : le corps sans les $ des reperes
 #include "HmiNames.hpp"      // 1.13.0 (lot J8) : une methode voit les noms de l'espace de son type
+#include "HmiOperators.hpp"  // 1.13.0 : renameTypeInOperators
 #include "HmiScript.hpp"
 #include "HmiTypes.hpp"
 #include "HmiTypeRegistry.hpp"
@@ -69,6 +71,38 @@ std::string codeOnly(std::string_view s) {
     return out;
 }
 
+// 1.13.0 : ce qu'est chaque caractere du texte - 0 : du code, 's' : une chaine (ses guillemets compris), 'c' : un
+// commentaire. codeOnly blanchit les deux pareil : une apostrophe d'un commentaire (« // s'il faut ») n'ouvre pas une chaine.
+std::string kindsOf(std::string_view s) {
+    std::string out(s.size(), '\0');
+    std::size_t i = 0;
+    const auto mark = [&](std::size_t from, std::size_t to, char k) {
+        for (std::size_t m = from; m < to && m < out.size(); ++m) out[m] = k;
+    };
+    while (i < s.size()) {
+        const char c = s[i];
+        if (c == '\'' || c == '"') {
+            std::size_t k = i + 1;
+            while (k < s.size() && s[k] != c) k += s[k] == '$' ? 2 : 1;
+            mark(i, k + 1, 's');
+            i = k + 1;
+        } else if (c == '(' && i + 1 < s.size() && s[i + 1] == '*') {
+            const auto end = s.find("*)", i + 2);
+            const std::size_t stop = end == std::string_view::npos ? s.size() : end + 2;
+            mark(i, stop, 'c');
+            i = stop;
+        } else if (c == '/' && i + 1 < s.size() && s[i + 1] == '/') {
+            const auto end = s.find('\n', i);
+            const std::size_t stop = end == std::string_view::npos ? s.size() : end;
+            mark(i, stop, 'c');
+            i = stop;
+        } else {
+            ++i;
+        }
+    }
+    return out;
+}
+
 // Un identifiant ST valide (pour le nom interne : ses caracteres non valides, '_').
 std::string sanitize(std::string_view s) {
     std::string out;
@@ -105,11 +139,39 @@ std::string methodSignature(std::string_view typeName, const HmiFunction& m) {
 // (son parent sert a SUPER).
 // 1.13.0 : une autre methode du type appelee par son nom nu (Journal()) -> SELF.Journal() (le dispatch suit le
 // type reel de SELF) ; un argument nomme ou un champ de litteral (F(Consigne := x), (Debit := 1.0)) garde son nom ;
-// dans un texte, les trous {Debit:0.0} d'un message (LEVER, IHM_LOG, IHM_JOURNAL) lisent SELF.Debit.
+// dans un texte, les trous {Debit:0.0} d'un message (LEVER, IHM_LOG, IHM_JOURNAL) lisent SELF.Debit - seulement
+// la : JSON_LIRE('{"Debit":1}'), CONCAT('{Debit}', ...) restent tels quels. Un commentaire est recopie tel quel (ses
+// apostrophes n'ouvrent pas de chaine).
+// `bound` (facultatif) : les mots nus que le corps lit sur SELF ([debut, fin) dans le corps sans reperes) - un membre lu
+// comme valeur, une methode appelee, son propre nom (le retour) : methodSelfWords.
 static std::string rewriteBody(const Project& p, std::string_view ownerType, const HmiFunction& m,
-                               std::string_view internal) {
+                               std::string_view internal, std::vector<std::pair<std::size_t, std::size_t>>* bound = nullptr) {
     const std::string body = markers::strip(m.body);
     const std::string code = codeOnly(body);
+    const std::string kind = kindsOf(body);
+    // L'appel dont une chaine est un argument direct : LEVER('E_X', 'msg {Debit}') -> "LEVER" ; aucun : vide.
+    const auto enclosingCall = [&](std::size_t at) -> std::string {
+        int depth = 0;
+        for (std::size_t k = at; k-- > 0;) {
+            const char ch = code[k];
+            if (ch == ')' || ch == ']') ++depth;
+            else if (ch == '(' || ch == '[') {
+                if (depth == 0) {
+                    if (ch == '[') return {};
+                    std::size_t e = k;
+                    while (e > 0 && (code[e - 1] == ' ' || code[e - 1] == '\t')) --e;
+                    std::size_t b = e;
+                    while (b > 0 && identPart(code[b - 1])) --b;
+                    return upperOf(std::string_view(code).substr(b, e - b));
+                }
+                --depth;
+            } else if (ch == ';' && depth == 0) {
+                return {};
+            }
+        }
+        return {};
+    };
+    const auto messageCall = [](std::string_view u) { return u == "LEVER" || u == "RELEVER" || u == "IHM_LOG" || u == "IHM_JOURNAL"; };
 
     std::set<std::string> memberSet;
     for (const auto& mm : allMembers(p, ownerType)) memberSet.insert(upperOf(mm.name));
@@ -160,27 +222,30 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
         return r;
     };
 
-    // Le type parent (pour SUPER) : celui du type qui DEFINIT la methode.
+    // Le type parent (pour SUPER) : celui du type qui DEFINIT la methode (par son nom complet : 1.13.0).
     const HmiType* self = p.hmiTypeByName(ownerType);
-    const std::string parentName = self ? self->base : std::string{};
+    const HmiType* parent = self ? types::baseOf(p, *self) : nullptr;
+    const std::string parentName = parent ? fullName(*parent) : std::string{};
 
     std::string out;
     out.reserve(body.size() + 32);
     std::size_t i = 0;
     while (i < body.size()) {
-        // une chaine : ses trous {Membre} lisent SELF.Membre (le reste tel quel)
-        if (code[i] == ' ' && (body[i] == '\'' || body[i] == '"')) {
+        // dans un commentaire : tel quel (une apostrophe n'y ouvre pas de chaine)
+        if (kind[i] == 'c') { out += body[i++]; continue; }
+        // une chaine : celle d'un message (LEVER, IHM_LOG, IHM_JOURNAL) - ses trous {Membre} lisent SELF.Membre ; une
+        // autre (JSON_LIRE('{"Debit":1}'), un texte ecrit) : telle quelle.
+        if (kind[i] == 's') {
             std::size_t k = i + 1;
             while (k < body.size() && body[k] != body[i]) k += body[k] == '$' ? 2 : 1;
             const std::size_t close = std::min(k, body.size());   // l'apostrophe fermante (ou la fin)
+            const std::string_view inner = std::string_view(body).substr(i + 1, close - (i + 1));
             out += body[i];
-            out += rewriteText(std::string_view(body).substr(i + 1, close - (i + 1)));
+            out += messageCall(enclosingCall(i)) ? rewriteText(inner) : std::string(inner);
             if (close < body.size()) out += body[close];
             i = close < body.size() ? close + 1 : body.size();
             continue;
         }
-        // dans un commentaire : tel quel
-        if (code[i] == ' ' && body[i] != ' ') { out += body[i++]; continue; }
         if (!identStart(body[i]) || (i > 0 && (identPart(body[i - 1]) || body[i - 1] == '.' || body[i - 1] == '#'))) {
             out += body[i++];
             continue;
@@ -223,7 +288,11 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
             out += word;
             continue;
         }
-        if (U == ret && !call) { out += internal; continue; }
+        if (U == ret && !call) {
+            out += internal;
+            if (bound) bound->emplace_back(start, i);
+            continue;
+        }
         // un argument nomme, un champ d'un litteral : (Consigne := x), Ecrire(a, Consigne := x) - son nom reste
         const bool named = [&] {
             if (k + 1 >= body.size() || body[k] != ':' || body[k + 1] != '=') return false;
@@ -231,10 +300,18 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
             while (b > 0 && std::isspace(static_cast<unsigned char>(code[b - 1]))) --b;
             return b > 0 && (code[b - 1] == '(' || code[b - 1] == ',');
         }();
-        if (memberSet.count(U) && !shadow.count(U) && !call && !named) { out += "SELF." + word; continue; }
+        if (memberSet.count(U) && !shadow.count(U) && !call && !named) {
+            out += "SELF." + word;
+            if (bound) bound->emplace_back(start, i);
+            continue;
+        }
         // 1.13.0 : une autre methode du type, appelee par son nom nu (Journal()) : SELF.Journal() - SELF est l'objet reel
         // (VAR_IN_OUT), l'appel garde le dispatch virtuel. Une methode passe avant une fonction de meme nom.
-        if (call && method(word)) { out += "SELF." + word; continue; }
+        if (call && method(word)) {
+            out += "SELF." + word;
+            if (bound) bound->emplace_back(start, i);
+            continue;
+        }
         out += word;
     }
     return out;
@@ -247,10 +324,40 @@ std::string methodFunctionText(const Project& p, std::string_view ownerType, con
     std::string head = "FUNCTION " + internal + (m.returnType.empty() ? std::string{} : " : " + displayType(m.returnType));
     // SELF, en VAR_IN_OUT : une methode qui ecrit un membre le modifie pour de bon. SELF a le type qui
     // DEFINIT la methode ; un sous-type passe la ou ce parent est attendu (montee du VAR_IN_OUT).
-    std::string self = "VAR_IN_OUT\n    SELF : " + std::string(trimmed(ownerType)) + ";\nEND_VAR\n";
-    std::string body = decl::codeOf(m2);
-    if (!body.empty() && body.back() != '\n') body += '\n';
-    return head + "\n" + self + body + "END_FUNCTION\n";
+    // 1.13.0 (J1b) : l'en-tete et SELF sur la LIGNE 1, comme functionText - la ligne N du corps est la ligne N de
+    // l'editeur (les messages de Compiler, les points d'arret du debogueur).
+    std::string self = " VAR_IN_OUT SELF : " + std::string(trimmed(ownerType)) + "; END_VAR ";
+    return head + self + decl::codeOf(m2) + "\nEND_FUNCTION\n";
+}
+
+std::string methodInternalText(const Project& p, std::string_view ownerType, const HmiFunction& m, std::string_view text) {
+    HmiFunction copy = m;
+    copy.body = std::string(text);
+    return rewriteBody(p, ownerType, copy, methodFunctionName(ownerType, m));
+}
+
+std::vector<std::pair<std::size_t, std::size_t>> methodSelfWords(const Project& p, std::string_view ownerType, const HmiFunction& m,
+                                                                 std::string_view body) {
+    HmiFunction copy = m;
+    copy.body = std::string(body);
+    std::vector<std::pair<std::size_t, std::size_t>> bound;
+    (void)rewriteBody(p, ownerType, copy, methodFunctionName(ownerType, m), &bound);
+    // rewriteBody lit le corps sans les $ des reperes : ses positions ramenees au texte tel qu'il est ecrit.
+    const auto kept = markers::stripKeep(body);
+    if (kept.removed.empty()) return bound;
+    const auto back = [&](std::size_t at) {
+        for (const std::size_t r : kept.removed) {
+            if (r > at) break;
+            ++at;
+        }
+        return at;
+    };
+    for (auto& [a, b] : bound) {
+        const std::size_t length = b - a;
+        a = back(a);
+        b = a + length;
+    }
+    return bound;
 }
 
 // ---------------------------------------------------------------- heritage ---
@@ -259,13 +366,12 @@ std::vector<const HmiType*> baseChain(const Project& p, std::string_view typeNam
     std::set<std::string> seen;
     const HmiType* ty = p.hmiTypeByName(typeName);
     if (!ty) return chain;
-    seen.insert(upperOf(ty->name));
-    std::string base = ty->base;
-    while (!base.empty()) {
-        const HmiType* b = p.hmiTypeByName(base);
-        if (!b || !seen.insert(upperOf(b->name)).second) break;       // inconnu ou cycle : on s'arrete
+    // 1.13.0 : par le NOM COMPLET - Gaz.T_Vanne EXTENDS Base.T_Vanne n'est pas un cycle ; le parent se lit depuis
+    // l'espace du type (types::baseOf).
+    seen.insert(upperOf(fullName(*ty)));
+    for (const HmiType* b = types::baseOf(p, *ty); b; b = types::baseOf(p, *b)) {
+        if (!seen.insert(upperOf(fullName(*b))).second) break;       // cycle : on s'arrete
         chain.push_back(b);
-        base = b->base;
     }
     return chain;
 }
@@ -314,8 +420,9 @@ bool isA(const Project& p, std::string_view sub, std::string_view base) {
     // 1.13.0 (lot J8) : un meme type ecrit court ou complet (T_Pompe, Gaz.T_Pompe).
     const HmiType* target = p.hmiTypeByName(trimmed(base));
     if (const HmiType* self = p.hmiTypeByName(trimmed(sub)); self && self == target) return true;
+    // 1.13.0 : un parent connu se compare par identite (Base.T_Vanne n'est pas le T_Vanne de la racine).
     for (const HmiType* b : baseChain(p, sub))
-        if (sameName(b->name, base) || sameName(fullName(*b), base) || (target && b == target)) return true;
+        if (target ? b == target : (sameName(b->name, base) || sameName(fullName(*b), base))) return true;
     return false;
 }
 
@@ -330,7 +437,7 @@ bool implementsInterface(const Project& p, std::string_view type, std::string_vi
     const HmiType* wanted = p.hmiTypeByName(trimmed(iface));     // 1.13.0 (lot J8) : court ou complet
     const auto has = [&](const HmiType& t) {
         for (const auto& i : t.interfaces)
-            if (sameName(i, iface) || (wanted && p.hmiTypeByName(trimmed(i)) == wanted)) return true;
+            if (wanted ? types::typeFrom(p, t.ns, i, &t) == wanted : sameName(i, iface)) return true;
         return false;
     };
     if (has(*ty)) return true;
@@ -354,13 +461,13 @@ bool sameMethodSignature(const HmiFunction& a, const HmiFunction& b) {
 std::vector<std::string> interfaceMisses(const Project& p, const HmiType& type) {
     std::vector<std::string> out;
     for (const auto& iname : type.interfaces) {
-        const HmiType* iface = p.hmiTypeByName(iname);
+        const HmiType* iface = types::typeFrom(p, type.ns, iname, &type);     // 1.13.0 : lue depuis l'espace du type
         if (!iface || iface->kind != HmiTypeKind::Interface) {
             out.push_back(type.name + " d\xC3\xA9" "clare " + iname + " mais ce n'est pas une interface");
             continue;
         }
         for (const auto& sig : iface->methods) {
-            const HmiFunction* mine = effectiveMethod(p, type.name, sig.name);
+            const HmiFunction* mine = effectiveMethod(p, fullName(type), sig.name);   // 1.13.0 : nom complet
             if (!mine)
                 out.push_back(type.name + " d\xC3\xA9" "clare " + iname + " mais n'a pas " + methodSignature(iname, sig).substr(iname.size() + 1));
             else if (!sameMethodSignature(*mine, sig))
@@ -369,6 +476,17 @@ std::vector<std::string> interfaceMisses(const Project& p, const HmiType& type) 
         }
     }
     return out;
+}
+
+const HmiFunction* methodById(const Project& p, Id id, const HmiType** owner) {
+    if (id == kNoId) return nullptr;
+    for (const auto& t : p.programs.types)
+        for (const auto& m : t.methods)
+            if (m.id == id) {
+                if (owner) *owner = &t;
+                return &m;
+            }
+    return nullptr;
 }
 
 // -------------------------------------------- l'interface avec l'interpreteur ---
@@ -389,6 +507,10 @@ bool resolveMethod(const Project& p, std::string_view selfType, std::string_view
     out.owner = "type " + ownerName + ", m\xC3\xA9thode " + m->name;
     out.key = "methode|" + upperOf(ownerName) + "|" + upperOf(m->name) + "|"
             + std::to_string(std::hash<std::string>{}(out.function));
+    // 1.13.0 : une methode privee - le moteur ne l'appelle que d'une methode de son type (le message de Generer).
+    out.privateWhy = m->visibility == Visibility::Private
+                         ? m->name + " est une m\xC3\xA9thode priv\xC3\xA9" "e de " + owner->name + " : seules ses m\xC3\xA9thodes l'appellent"
+                         : std::string{};
     return true;
 }
 
@@ -446,8 +568,12 @@ std::string overrideTemplate(const Project& p, std::string_view typeName, const 
     (void)p;
     (void)typeName;
     std::string s = "(* redefinit " + parent.name + " ; SUPER." + parent.name + "(\xE2\x80\xA6) rappelle le corps du parent *)\n";
-    if (!parent.returnType.empty()) s += parent.name + " := SUPER." + parent.name + "();\n";
-    else s += "SUPER." + parent.name + "();\n";
+    // 1.13.0 (J1b) : les parametres passes tels quels au parent, dans l'ordre (SUPER.Demarrer(Consigne)).
+    std::string args;
+    for (const auto& d : parent.decls)
+        if (d.kind == DeclKind::Parameter) args += (args.empty() ? "" : ", ") + d.name;
+    if (!parent.returnType.empty()) s += parent.name + " := SUPER." + parent.name + "(" + args + ");\n";
+    else s += "SUPER." + parent.name + "(" + args + ");\n";
     return s;
 }
 
@@ -456,7 +582,7 @@ std::string extendsProblem(const Project& p, const HmiType& t) {
     if (t.base.empty()) return {};
     if (t.kind != HmiTypeKind::Structure)
         return std::string(typeKindLabel(t.kind)) + " " + t.name + " ne peut pas h\xC3\xA9riter (EXTENDS n'existe qu'entre structures)";
-    const HmiType* b = p.hmiTypeByName(t.base);
+    const HmiType* b = types::baseOf(p, t);
     if (!b) {
         std::vector<std::string> pool;
         for (const auto& x : p.programs.types)
@@ -466,16 +592,13 @@ std::string extendsProblem(const Project& p, const HmiType& t) {
     }
     if (b->kind != HmiTypeKind::Structure)
         return t.name + " ne peut h\xC3\xA9riter que d'une structure (" + t.base + " est " + std::string(typeKindLabel(b->kind)) + ")";
-    // cycle d'heritage
-    std::set<std::string> seen{upperOf(t.name)};
-    std::string chain = t.name;
-    std::string cur = t.base;
-    while (!cur.empty()) {
-        chain += " -> " + cur;
-        if (!seen.insert(upperOf(cur)).second)
+    // cycle d'heritage (1.13.0 : par les noms complets, chaque parent lu depuis l'espace de son enfant)
+    std::set<std::string> seen{upperOf(fullName(t))};
+    std::string chain = fullName(t);
+    for (const HmiType* c = b; c; c = types::baseOf(p, *c)) {
+        chain += " -> " + fullName(*c);
+        if (!seen.insert(upperOf(fullName(*c))).second)
             return t.name + " h\xC3\xA9rite de lui-m\xC3\xAAme : " + chain;
-        const HmiType* c = p.hmiTypeByName(cur);
-        cur = c ? c->base : std::string{};
     }
     return {};
 }
@@ -507,7 +630,7 @@ std::string methodProblem(const Project& p, const HmiType& owner, const HmiFunct
     // OVERRIDE : la meme methode doit exister VIRTUAL chez un parent, meme signature.
     bool overridesParent = false;
     const HmiType* def = nullptr;
-    for (const HmiType* b : baseChain(p, owner.name))
+    for (const HmiType* b : baseChain(p, fullName(owner)))      // 1.13.0 : nom complet (Gaz.T_Vanne)
         if (const HmiFunction* pm = ownMethod(*b, m.name)) { overridesParent = true; def = b;
             if (!pm->isVirtual)
                 return here + " red\xC3\xA9" "finit " + b->name + "." + m.name + " qui n'est pas virtuelle (VIRTUAL) : rien \xC3\xA0 red\xC3\xA9" "finir";
@@ -520,18 +643,312 @@ std::string methodProblem(const Project& p, const HmiType& owner, const HmiFunct
 }
 
 // ------------------------------------------- renommage et duplication (UI) ---
-std::size_t renameTypeInMethods(Project& pr, std::string_view from, std::string_view to) {
-    std::size_t changed = 0;
-    for (auto& t : pr.programs.types) {
-        if (sameName(t.base, from)) { t.base = std::string(to); ++changed; }
-        for (auto& i : t.interfaces)
-            if (sameName(i, from)) { i = std::string(to); ++changed; }
+namespace {
+// Un texte de type (INT, T_Pompe, ARRAY[1..3] OF Gaz.T_Pompe, LIST OF T_Pompe, T_Mesure<T_Pompe>) ou `before` (court) ou
+// `beforeFull` (complet) devient `after` / `afterFull`. Rend vrai si le texte change.
+bool renameTypeText(std::string& type, std::string_view before, std::string_view beforeFull, std::string_view after,
+                    std::string_view afterFull) {
+    std::string out;
+    out.reserve(type.size() + 8);
+    bool changed = false;
+    for (std::size_t i = 0; i < type.size();) {
+        if (!identStart(type[i]) || (i > 0 && (identPart(type[i - 1]) || type[i - 1] == '#'))) { out += type[i++]; continue; }
+        std::size_t j = i;
+        // un nom complet (Gaz.T_Vanne) se lit d'un bloc ; T_MODE#Auto : le mot avant # seulement
+        while (j < type.size() && (identPart(type[j]) || (type[j] == '.' && j + 1 < type.size() && identStart(type[j + 1])))) ++j;
+        const std::string word = type.substr(i, j - i);
+        if (!beforeFull.empty() && sameName(word, beforeFull)) { out += afterFull; changed = true; }
+        else if (sameName(word, before)) { out += after; changed = true; }
+        else out += word;
+        i = j;
     }
+    if (changed) type = std::move(out);
+    return changed;
+}
+// DYNAMIC_CAST<T_Pompe>, STATIC_CAST<Gaz.T_Pompe> dans du code : le type entre chevrons suit.
+std::string renameTypeInCasts(const std::string& code, std::string_view before, std::string_view beforeFull, std::string_view after,
+                              std::string_view afterFull) {
+    if (code.find('<') == std::string::npos) return code;
+    const std::string blank = codeOnly(code);
+    std::string out;
+    std::size_t copied = 0;
+    for (std::size_t i = 0; i < code.size(); ++i) {
+        if (blank[i] != '<' || i < 11) continue;
+        std::size_t h = i;
+        while (h > 0 && (code[h - 1] == ' ' || code[h - 1] == '\t')) --h;
+        std::size_t w = h;
+        while (w > 0 && identPart(code[w - 1])) --w;
+        const std::string head = upperOf(std::string_view(code).substr(w, h - w));
+        if (head != "DYNAMIC_CAST" && head != "STATIC_CAST") continue;
+        const auto close = code.find('>', i + 1);
+        if (close == std::string::npos) continue;
+        std::string inner = code.substr(i + 1, close - i - 1);
+        if (!renameTypeText(inner, before, beforeFull, after, afterFull)) continue;
+        out.append(code, copied, i + 1 - copied);
+        out += inner;
+        copied = close;
+    }
+    if (copied == 0) return code;
+    out.append(code, copied, std::string::npos);
+    return out;
+}
+} // namespace
+
+std::size_t renameTypeEverywhere(Project& p, Id id, std::string_view newName) {
+    HmiType* t = p.hmiType(id);
+    const std::string name = trimmed(newName);
+    if (!t || name.empty() || t->name == name) return 0;
+    const std::string before = t->name;
+    const std::string beforeFull = fullName(*t), afterFull = qualifiedName(t->ns, name);
+    // Qui en herite, qui l'implemente : par IDENTITE (lu depuis l'espace de chacun), avant de renommer - un homonyme
+    // d'un autre espace (Util.T_Vanne) ne suit pas.
+    std::vector<Id> extenders;
+    std::vector<std::pair<Id, std::size_t>> implementers;
+    for (const auto& x : p.programs.types) {
+        if (types::baseOf(p, x) == t) extenders.push_back(x.id);
+        for (std::size_t k = 0; k < x.interfaces.size(); ++k)
+            if (types::typeFrom(p, x.ns, x.interfaces[k], &x) == t) implementers.emplace_back(x.id, k);
+    }
+    std::size_t changed = 1;
+    const auto type = [&](std::string& text) { if (renameTypeText(text, before, beforeFull, name, afterFull)) ++changed; };
+    t->name = name;
+    for (auto& x : p.programs.types) {
+        for (auto& m : x.members) type(m.type);
+        for (auto& m : x.methods) {                     // les signatures des methodes (retour, parametres, locales)
+            type(m.returnType);
+            for (auto& d : m.decls) type(d.type);
+        }
+    }
+    for (const Id xid : extenders)
+        if (HmiType* x = p.hmiType(xid)) {
+            x->base = x->base.find('.') != std::string::npos ? afterFull : name;
+            ++changed;
+        }
+    for (const auto& [xid, k] : implementers)
+        if (HmiType* x = p.hmiType(xid); x && k < x->interfaces.size()) {
+            x->interfaces[k] = x->interfaces[k].find('.') != std::string::npos ? afterFull : name;
+            ++changed;
+        }
+    for (auto& v : p.programs.variables) type(v.type);
+    for (auto& f : p.programs.functions) type(f.returnType);
+    forEachDeclarations(p, [&](std::vector<Declaration>& list) { for (auto& d : list) type(d.type); });
+    for (auto& vw : p.views) {
+        for (auto& prm : vw.params) type(prm.type);      // 1.12.11 (lot G) : sa liaison Equipement en depend
+        for (auto& fn : vw.functions) type(fn.returnType);
+    }
+    changed += renameTypeInOperators(p, before, name);   // 1.10 (chantier S2) : les operateurs suivent
+    changed += renameEnumType(p, before, name);          // 1.10 (chantier E) : T_ANCIEN#x -> T_NOUVEAU#x
+    changed += eqlink::renameType(p, before, name);      // 1.12.11 (lot G) : sa liaison Equipement
+    // DYNAMIC_CAST<T_Pompe> dans le code (corps des methodes compris).
+    forEachCode(p, [&](std::string& text, CodeForm form, const CodeSite&) {
+        if (form != CodeForm::Code || text.empty()) return;
+        std::string next = renameTypeInCasts(text, before, beforeFull, name, afterFull);
+        if (next != text) { text = std::move(next); ++changed; }
+    });
     return changed;
 }
 
 void renumberMethods(Project& pr, std::vector<HmiFunction>& methods) {
     for (auto& m : methods) m.id = pr.allocate();
+}
+
+// ------------------------------------------------ l'ecran des objets (J1b) ---
+std::string methodParamsText(const HmiFunction& m) {
+    std::string out;
+    for (const auto& d : m.decls) {
+        if (d.kind != DeclKind::Parameter) continue;
+        if (!out.empty()) out += "; ";
+        if (d.mode == PassMode::InOut) out += "VAR_IN_OUT ";
+        else if (d.mode == PassMode::Out) out += "VAR_OUTPUT ";
+        out += d.name + " : " + d.type;
+    }
+    return out;
+}
+
+bool setMethodParams(HmiFunction& m, std::string_view text, const std::function<Id()>& allocate, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    // Les morceaux : un ; ou une , de premier niveau (ARRAY[1..3, 1..2] OF REAL, MAP[STRING] OF INT restent entiers).
+    std::vector<std::string> parts;
+    {
+        std::string cur;
+        int depth = 0;
+        for (const char c : text) {
+            if (c == '[' || c == '(' || c == '<') ++depth;
+            if ((c == ']' || c == ')' || c == '>') && depth > 0) --depth;
+            if ((c == ';' || c == ',') && depth == 0) {
+                parts.push_back(cur);
+                cur.clear();
+                continue;
+            }
+            cur += c;
+        }
+        parts.push_back(cur);
+    }
+    std::vector<Declaration> params;
+    std::set<std::string> seen;
+    for (auto& raw : parts) {
+        std::string part(trimmed(raw));
+        if (part.empty()) continue;
+        PassMode mode = PassMode::In;
+        const std::string up = upperOf(part);
+        for (const auto& [word, pm] : {std::pair<const char*, PassMode>{"VAR_IN_OUT ", PassMode::InOut}, {"VAR_OUTPUT ", PassMode::Out},
+                                       {"VAR_INPUT ", PassMode::In}})
+            if (up.rfind(word, 0) == 0) {
+                mode = pm;
+                part = std::string(trimmed(std::string_view(part).substr(std::string_view(word).size())));
+                break;
+            }
+        const auto colon = part.find(':');
+        if (colon == std::string::npos) return fail("\xC2\xAB " + part + " \xC2\xBB : \xC3\xA9" "cris nom : type (Entree : REAL)");
+        const std::string name(trimmed(std::string_view(part).substr(0, colon)));
+        const std::string type(trimmed(std::string_view(part).substr(colon + 1)));
+        if (!isIdentifier(name)) return fail("nom de param\xC3\xA8tre invalide \xC2\xAB " + name + " \xC2\xBB");
+        if (type.empty()) return fail("le param\xC3\xA8tre " + name + " n'a pas de type");
+        if (!seen.insert(upperOf(name)).second) return fail("param\xC3\xA8tre en double : " + name);
+        if (sameName(name, m.name)) return fail(name + " est le nom de la m\xC3\xA9thode (son retour)");
+        Declaration d;
+        for (const auto& old : m.decls)
+            if (old.kind == DeclKind::Parameter && sameName(old.name, name)) d = old;   // son id, sa description
+        if (d.id == kNoId && allocate) d.id = allocate();
+        d.kind = DeclKind::Parameter;
+        d.name = name;
+        d.type = type;
+        d.mode = mode;
+        params.push_back(std::move(d));
+    }
+    // Les parametres d'abord (dans l'ordre ecrit), puis les locales et constantes de toujours.
+    std::vector<Declaration> next = std::move(params);
+    for (const auto& d : m.decls)
+        if (d.kind != DeclKind::Parameter) next.push_back(d);
+    m.decls = std::move(next);
+    return true;
+}
+
+namespace {
+// Dans `body` (code seulement : ni chaine ni commentaire), chaque mot `from` (sans casse) qui convient a `pick` devient
+// `to`. `pick(prefix, call)` : `prefix` le mot devant le point ("SELF", "SUPER"... ; vide : un nom nu), `call` suivi d'une
+// parenthese. Rend vrai si le texte change.
+bool renameWordIn(std::string& body, std::string_view from, std::string_view to,
+                  const std::function<bool(std::string_view prefix, bool call)>& pick) {
+    const std::string kinds = kindsOf(body);
+    std::string out;
+    out.reserve(body.size() + 8);
+    bool changed = false;
+    std::size_t i = 0;
+    while (i < body.size()) {
+        if (kinds[i] != 0 || !identStart(body[i]) || (i > 0 && identPart(body[i - 1]))) {
+            out += body[i++];
+            continue;
+        }
+        std::size_t j = i;
+        while (j < body.size() && identPart(body[j])) ++j;
+        const std::string_view word(body.data() + i, j - i);
+        if (!sameName(word, from)) {
+            out.append(word);
+            i = j;
+            continue;
+        }
+        // Le mot devant le point (SELF.X, SUPER.X, Pompe1.X) ; vide : un nom nu. Un # devant : un litteral (T#X).
+        std::string prefix;
+        std::size_t b = i;
+        while (b > 0 && (body[b - 1] == ' ' || body[b - 1] == '\t')) --b;
+        bool skip = b > 0 && body[b - 1] == '#';
+        if (!skip && b > 0 && body[b - 1] == '.') {
+            std::size_t e = b - 1;
+            while (e > 0 && (body[e - 1] == ' ' || body[e - 1] == '\t')) --e;
+            std::size_t s0 = e;
+            while (s0 > 0 && identPart(body[s0 - 1])) --s0;
+            prefix = body.substr(s0, e - s0);
+            if (prefix.empty()) skip = true;           // a[1].X, F().X : pas un nom simple devant
+        }
+        std::size_t k = j;
+        while (k < body.size() && (body[k] == ' ' || body[k] == '\t')) ++k;
+        const bool call = k < body.size() && body[k] == '(';
+        if (!skip && pick(prefix, call)) {
+            out.append(to);
+            changed = true;
+        } else {
+            out.append(word);
+        }
+        i = j;
+    }
+    if (changed) body = std::move(out);
+    return changed;
+}
+} // namespace
+
+std::size_t renameMethodEverywhere(Project& p, Id method, std::string_view rawName) {
+    const std::string name(trimmed(rawName));
+    const HmiType* ownerC = nullptr;
+    const HmiFunction* mc = methodById(p, method, &ownerC);
+    if (!mc || !ownerC || name.empty() || mc->name == name) return 0;
+    const std::string old = mc->name;
+    const Id ownerId = ownerC->id;
+    // Le type et ses sous-types (par identite : un homonyme d'un autre espace ne suit pas).
+    std::set<Id> family{ownerId};
+    for (const auto& t : p.programs.types) {
+        if (t.id == ownerId) continue;
+        for (const HmiType* b : baseChain(p, fullName(t)))
+            if (b->id == ownerId) {
+                family.insert(t.id);
+                break;
+            }
+    }
+    std::size_t changed = 0;
+    for (auto& t : p.programs.types) {
+        if (!family.count(t.id)) continue;
+        for (auto& m : t.methods) {
+            // La methode elle-meme et ses redefinitions : le nom, et dans le corps le nom nu (le retour, un appel).
+            const bool self = m.id == method || (t.id != ownerId && sameName(m.name, old));
+            if (self) {
+                m.name = name;
+                ++changed;
+            }
+            const bool body = renameWordIn(m.body, old, name, [&](std::string_view prefix, bool call) {
+                if (prefix.empty()) return self || call;                 // EnDefaut := ... (soi) ; Journal() (une soeur)
+                return sameName(prefix, "SELF") || sameName(prefix, "THIS") || sameName(prefix, "SUPER");
+            });
+            changed += body ? 1 : 0;
+        }
+    }
+    return changed;
+}
+
+std::vector<std::string> implementersOf(const Project& p, const HmiType& iface) {
+    std::vector<std::string> out;
+    if (iface.kind != HmiTypeKind::Interface) return out;
+    const std::string full = fullName(iface);
+    for (const auto& t : p.programs.types)
+        if (t.kind == HmiTypeKind::Structure && implementsInterface(p, fullName(t), full)) out.push_back(fullName(t));
+    return out;
+}
+
+std::string interfaceDeclaration(const HmiType& t) {
+    std::string s = "TYPE " + t.name + " INTERFACE\n";
+    for (const auto& m : t.methods) {
+        s += "    METHOD " + m.name;
+        const std::string params = methodParamsText(m);
+        if (!params.empty()) s += " (" + params + ")";
+        if (!m.returnType.empty()) s += " : " + m.returnType;
+        s += "\n";
+    }
+    s += "END_TYPE";
+    return s;
+}
+
+std::vector<std::string> baseChoices(const Project& p, const HmiType& t) {
+    std::vector<std::string> out{"(aucun)"};
+    for (const auto& c : p.programs.types) {
+        if (c.id == t.id || c.kind != HmiTypeKind::Structure) continue;
+        bool descendant = false;                     // c descend de t : le choisir ferait un cycle
+        for (const HmiType* b : baseChain(p, fullName(c)))
+            if (b->id == t.id) descendant = true;
+        if (!descendant) out.push_back(fullName(c));
+    }
+    return out;
 }
 
 } // namespace hmi

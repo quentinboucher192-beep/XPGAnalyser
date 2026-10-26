@@ -11,15 +11,18 @@
 //
 //  OBJ_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
+#include "../src/core/Edition.hpp"
 #include "../src/hmi/HmiCheck.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiMethods.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
+#include "../src/hmi/HmiScript.hpp"
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/hmi/HmiTypes.hpp"
 #include "../src/hmi/HmiTypeRegistry.hpp"
 #include "../src/sim/Interpreter.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -221,6 +224,8 @@ void modeleHelpers();
 void moteur();
 void controle();
 void relecture();
+void seconde();
+void troisieme();
 
 int main() {
     std::printf("1.13.0 (lot J1) : les objets - methodes, prive, heritage, interfaces\n");
@@ -229,6 +234,8 @@ int main() {
     controle();
     moteur();
     relecture();
+    seconde();
+    troisieme();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
@@ -650,6 +657,10 @@ std::string errorsOf(const std::vector<Issue>& is, const std::string& category =
         if (i.severity == Issue::Severity::Error && (category.empty() || i.category == category)) out += " | " + i.message;
     return out;
 }
+HmiType* typeNamed(Project& p, const std::string& n) {
+    for (auto& t : p.programs.types) if (t.name == n) return &t;
+    return nullptr;
+}
 Script& addScript(Project& p, const std::string& name, const std::string& body) {
     Script s;
     s.id = p.allocate();
@@ -769,11 +780,14 @@ void relecture() {
     }
 
     // n24 : une methode appelle une autre methode du type par son nom nu (Journal()) - elle tourne.
+    // (D2b : Heures est prive, le moteur le garde aussi en marche - le script passe par deux methodes publiques.)
     {
         Project p = buildProject();
+        typeNamed(p, "T_Pompe")->methods.push_back(method(p, "Fixer", {}, "Heures := h;", Visibility::Public, false, {param(p, "h", "REAL")}));
+        typeNamed(p, "T_Pompe")->methods.push_back(method(p, "LireHeures", "REAL", "LireHeures := Heures;"));
         addVar(p, "Pompe1", "T_Pompe");
         addVar(p, "R", "REAL");
-        const std::string r = run(p, "Pompe1.Heures := 9000.0;\nPompe1.Demarrer();\nR := Pompe1.Heures;", &err);
+        const std::string r = run(p, "Pompe1.Fixer(9000.0);\nPompe1.Demarrer();\nR := Pompe1.LireHeures();", &err);
         check(r == "9001", "n24 : Demarrer appelle Journal() (nom nu) : Heures 9000 -> 9001 [" + r + (err.empty() ? "" : " err=" + err) + "]");
     }
 
@@ -821,5 +835,316 @@ void relecture() {
         addVar(p, "R", "STRING");
         const std::string r = run(p, "VAR\n    d : T_Erreur;\n    d2 : T_Erreur;\nEND_VAR\nd.Code := 3;\nd.Texte := 'abc';\nd2 := d;\nR := CONCAT(d2.Texte, INT_TO_STRING(d2.Code));", &err);
         check(r == "abc3", "n48 : un type du projet nomme T_Erreur se copie en entier (d2 := d) [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+}
+
+// =============================================================================
+//  LA SECONDE RELECTURE (lot D2) : renommer un type, le corps des methodes, CATCH,
+//  les chaines d'un corps, le prive.
+// =============================================================================
+
+void seconde() {
+    std::printf("-- seconde relecture : renommer un type, corps des methodes, CATCH, chaines, prive\n");
+    std::string err;
+    // T2-50 : renommer un parent : le sous-type garde ses membres herites (EXTENDS suit) ; une interface renommee : IMPLEMENTS suit.
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe2", "T_PompeDoublee");
+        typeNamed(p, "T_Pompe")->methods.push_back(method(p, "Copier", "T_Pompe", "Copier := SELF;", Visibility::Public, false,
+                                                          {param(p, "autre", "T_Pompe")}));
+        addScript(p, "S_Cast", "VAR r : REF_TO T_Pompe; END_VAR\nr := DYNAMIC_CAST<T_Pompe>(Pompe2);");
+        const Id pompe = typeNamed(p, "T_Pompe")->id;
+        check(renameTypeEverywhere(p, pompe, "T_PompeCentrifuge") > 0, "T2-50 : renameTypeEverywhere renomme");
+        const HmiType* d = typeNamed(p, "T_PompeDoublee");
+        check(d && d->base == "T_PompeCentrifuge", "T2-50 : EXTENDS du sous-type suit (" + (d ? d->base : std::string("?")) + ")");
+        check(types::membersOf(p, "T_PompeDoublee").size() == 5, "T2-50 : Pompe2 garde Nom, Debit, Marche, Heures (herites) + Secours");
+        check(issuesWith(generOf(p), "type inconnu").empty(), "T2-50 : Generer ne dit pas \"herite de T_Pompe : type inconnu\"" + issuesWith(generOf(p), "type inconnu"));
+        const HmiType* c = typeNamed(p, "T_PompeCentrifuge");
+        const HmiFunction* copier = c ? ownMethod(*c, "Copier") : nullptr;
+        check(copier && copier->returnType == "T_PompeCentrifuge" && copier->decls.front().type == "T_PompeCentrifuge",
+              "T2-50 : la signature des methodes suit (retour, parametre)");
+        bool cast = false;
+        for (const auto& sc : p.programs.scripts) cast = cast || sc.body.find("DYNAMIC_CAST<T_PompeCentrifuge>") != std::string::npos;
+        check(cast, "T2-50 : DYNAMIC_CAST<T_Pompe> dans le code suit");
+        const Id iface = typeNamed(p, "I_Demarrable")->id;
+        (void)renameTypeEverywhere(p, iface, "I_Marche");
+        check(typeNamed(p, "T_PompeCentrifuge")->interfaces.front() == "I_Marche" && typeNamed(p, "T_Vanne")->interfaces.front() == "I_Marche",
+              "T2-50 : IMPLEMENTS suit l'interface renommee");
+        check(issuesWith(generOf(p), "n'est pas une interface").empty() && issuesWith(generOf(p), "mais n'a pas").empty(),
+              "T2-50 : les interfaces renommees restent satisfaites");
+    }
+    // T2-50 : un homonyme d'un autre espace ne suit pas (identite).
+    {
+        Project p;
+        addType(p, "T_Base").members.push_back(member("A", "INT"));
+        HmiType& g = addType(p, "T_Base");
+        g.ns = "Gaz";
+        g.members.push_back(member("B", "INT"));
+        HmiType& s = addType(p, "T_Fils");
+        s.ns = "Gaz";
+        s.base = "T_Base";                                  // lu depuis Gaz : Gaz.T_Base
+        (void)renameTypeEverywhere(p, p.programs.types.front().id, "T_Racine");
+        check(p.programs.types[2].base == "T_Base", "T2-50 : renommer T_Base de la racine ne touche pas le parent Gaz.T_Base de Gaz.T_Fils");
+    }
+    // R19 : une apostrophe d'un commentaire n'ouvre pas une chaine ; R20 : seuls les messages (LEVER, IHM_LOG, IHM_JOURNAL)
+    // relisent leurs trous {Membre} - JSON_LIRE('{"Debit":1}'), CONCAT('{Debit}', ...) restent tels quels.
+    {
+        Project p = buildProject();
+        HmiFunction m = method(p, "Tracer", {},
+            "// d\xC3\xA9marre s'il faut\nMarche := TRUE;\nHeures := Heures + 1.0;\nIHM_LOG(INFO, 'Debit bas {Debit}');\n"
+            "Nom := CONCAT('{Debit}', '');");
+        const std::string txt = methodFunctionText(p, "T_Pompe", m);
+        check(txt.find("SELF.Marche := TRUE") != std::string::npos && txt.find("SELF.Heures := SELF.Heures + 1.0") != std::string::npos,
+              "R19 : apres un commentaire \"s'il faut\", les membres prennent SELF. [" + txt + "]");
+        check(txt.find("'Debit bas {SELF.Debit}'") != std::string::npos && txt.find("SELF.Debit bas") == std::string::npos,
+              "R19 : le message garde son texte, son trou lit SELF.Debit");
+        check(txt.find("CONCAT('{Debit}', '')") != std::string::npos, "R20 : un texte hors message ({Debit} de CONCAT) reste tel quel");
+        check(static_cast<bool>(sim::parseFunction(txt, "essai")), "R19 : la FUNCTION de la methode se lit");
+        typeNamed(p, "T_Pompe")->methods.push_back(m);
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "R", "STRING");
+        const std::string r = run(p, "Pompe1.Debit := 3.0;\nPompe1.Tracer();\nR := Pompe1.Nom;", &err);
+        check(r == "{Debit}", "R20 : en marche, CONCAT('{Debit}', '') rend {Debit} [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+    // R15/R16 : le prive lu par une locale ou un parametre d'un type objet (pas seulement une variable IHM).
+    {
+        Project p = buildProject();
+        addScript(p, "S_Locale", "VAR\n    q : T_Pompe;\nEND_VAR\nq.Heures := 0.0;\nq.Journal();");
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Lire";
+        f.returnType = "REAL";
+        f.decls.push_back(param(p, "x", "T_Pompe"));
+        f.body = "Lire := x.Heures;";
+        p.programs.functions.push_back(f);
+        const auto is = compilerOf(p);
+        check(!issuesWith(is, "q.Heures : Heures est priv\xC3\xA9 dans T_Pompe").empty(), "R15 : VAR q : T_Pompe; q.Heures (prive) refuse" + errorsOf(is));
+        check(!issuesWith(is, "q.Journal : Journal est une m\xC3\xA9thode priv\xC3\xA9" "e").empty(), "R16 : q.Journal() (privee) refusee sur une locale" + errorsOf(is));
+        check(!issuesWith(is, "x.Heures : Heures est priv\xC3\xA9").empty(), "R15 : un parametre x : T_Pompe, x.Heures refuse" + errorsOf(is));
+        Project q = buildProject();
+        addScript(q, "S_Ok", "VAR\n    q : T_Pompe;\nEND_VAR\nq.Debit := 1.0;\nq.Demarrer();");
+        check(issuesWith(compilerOf(q), "priv\xC3\xA9").empty(), "R15 : le public d'une locale reste permis");
+    }
+    // R25 : dans une methode, l'appel nu d'un nom qui est aussi une fonction du projet vise la methode : Generer le dit.
+    {
+        Project p = buildProject();
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Journal";
+        f.body = "RETURN;";
+        p.programs.functions.push_back(f);
+        const auto is = generOf(p);
+        check(!issuesWith(is, "Journal() appelle la m\xC3\xA9thode T_Pompe.Journal", Issue::Severity::Warning).empty(),
+              "R25 : Journal() (methode ET fonction du projet) : Generer avertit qu'il vise la methode");
+        check(issuesWith(generOf(buildProject()), "appelle la m\xC3\xA9thode", Issue::Severity::Warning).empty(),
+              "R25 : sans fonction du meme nom : aucun avertissement");
+    }
+    // R14 : IHM Studio (sans automate) : un nom inconnu dans une methode est dit. R23 : le nom d'un CATCH n'est pas inconnu.
+    {
+        const auto before = core::edition();
+        core::setEdition(core::Edition::Ihm);
+        Project p = buildProject();
+        typeNamed(p, "T_Pompe")->methods.push_back(method(p, "Verifier", {}, "Marche := Debitt > 1.0;"));
+        const auto is = generate(p, NameExists{});          // IHM Studio : pas d'automate
+        check(!issuesWith(is, "variable inexistante : Debitt").empty(), "R14 : sans automate, Debitt (inconnu) est dit dans la methode" + errorsOf(is));
+        check(issuesWith(is, "variable inexistante : Marche").empty() && issuesWith(is, "variable inexistante : Heures").empty(),
+              "R14 : les membres (Marche, Heures prive) restent connus" + errorsOf(is));
+        Project q = buildProject();
+        typeNamed(q, "T_Pompe")->methods.push_back(method(q, "Surveiller", {},
+            "TRY\n    Marche := TRUE;\nCATCH e\n    IHM_LOG(INFO, e.Message);\n    Nom := e.Code;\nEND_TRY"));
+        for (const auto& plcNames : {NameExists{}, NameExists([](std::string_view) { return false; })}) {
+            const auto iq = generate(q, plcNames);
+            check(issuesWith(iq, "variable inexistante : e").empty(), "R23 : CATCH e ... e.Code dans une methode : pas de fausse erreur" + errorsOf(iq));
+        }
+        core::setEdition(before);
+    }
+}
+
+// =============================================================================
+//  LES RESTES DE LA SECONDE RELECTURE (lot D2b) : le prive a travers une
+//  reference, dans un FOR EACH, et EN MARCHE ; renommer une fonction et
+//  "Appelee par" face au corps des methodes (un membre, une methode du meme nom).
+// =============================================================================
+namespace {
+HmiFunction projectFunction(Project& p, const std::string& name, const std::string& ret, const std::string& body,
+                            std::vector<Declaration> decls = {}, const std::string& ns = {}) {
+    HmiFunction f;
+    f.id = p.allocate();
+    f.name = name;
+    f.ns = ns;
+    f.returnType = ret;
+    f.body = body;
+    f.decls = std::move(decls);
+    return f;
+}
+const HmiFunction* methodOf(const Project& p, const std::string& type, const std::string& name) {
+    for (const auto& t : p.programs.types)
+        if (t.name == type)
+            for (const auto& m : t.methods)
+                if (m.name == name) return &m;
+    return nullptr;
+}
+// Le script Essai lance en marche : vrai s'il est alle au bout ; `err` : le message sinon.
+bool runs(Project& p, const std::string& body, std::string* err) {
+    (void)run(p, body, err);
+    return err->empty();
+}
+} // namespace
+
+void troisieme() {
+    std::printf("-- restes (D2b) : prive (REF_TO, FOR EACH, en marche), renommer une fonction, Appelee par\n");
+    std::string err;
+    const std::string prive = "Heures est priv\xC3\xA9 dans T_Pompe";
+    // D2b-2 : Compiler voit le prive a travers une reference (r^.Heures) et sur la variable d'un FOR EACH.
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe1", "T_Pompe");
+        addScript(p, "S_Ref", "VAR\n    r : REF_TO T_Pompe;\nEND_VAR\nr := REF(Pompe1);\nr^.Heures := 0.0;");
+        const auto is = compilerOf(p);
+        check(!issuesWith(is, prive).empty(), "D2b-2 : r^.Heures (REF_TO T_Pompe) refuse par Compiler" + errorsOf(is));
+        Project q = buildProject();
+        addVar(q, "Pompes", "LIST OF T_Pompe");
+        addScript(q, "S_Each", "FOR EACH x IN Pompes DO\n    x.Heures := 0.0;\nEND_FOR;");
+        const auto iq = compilerOf(q);
+        check(!issuesWith(iq, prive).empty(), "D2b-2 : FOR EACH x IN Pompes, x.Heures refuse par Compiler" + errorsOf(iq));
+        Project ok = buildProject();
+        addVar(ok, "Pompe1", "T_Pompe");
+        addVar(ok, "Pompes", "LIST OF T_Pompe");
+        addScript(ok, "S_Public", "VAR\n    r : REF_TO T_Pompe;\nEND_VAR\nr := REF(Pompe1);\nr^.Debit := 1.0;\n"
+                                   "FOR EACH x IN Pompes DO\n    x.Demarrer();\nEND_FOR;");
+        check(issuesWith(compilerOf(ok), "priv\xC3\xA9").empty(), "D2b-2 : le public (r^.Debit, x.Demarrer()) reste permis" + issuesWith(compilerOf(ok), "priv\xC3\xA9"));
+    }
+    // D2b-2 / D2b-3 : LE MOTEUR garde le prive en marche (avant : tout passait) - un script, une fonction, une reference,
+    // un FOR EACH, une methode privee appelee de l'exterieur ; une methode du type (et d'un sous-type) y a droit.
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "R", "REAL");
+        check(!runs(p, "Pompe1.Heures := 1.0;", &err) && err.find(prive) != std::string::npos,
+              "D2b-2 : en marche, Pompe1.Heures := 1.0 depuis un script est refuse [" + err + "]");
+    }
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "R", "REAL");
+        check(!runs(p, "R := Pompe1.Heures;", &err) && err.find(prive) != std::string::npos,
+              "D2b-2 : en marche, R := Pompe1.Heures (lecture) est refuse [" + err + "]");
+    }
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe1", "T_Pompe");
+        check(!runs(p, "Pompe1.Journal();", &err) && err.find("Journal est une m\xC3\xA9thode priv\xC3\xA9" "e de T_Pompe") != std::string::npos,
+              "D2b-3 : en marche, Pompe1.Journal() (privee) depuis un script est refuse [" + err + "]");
+    }
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "R", "REAL");
+        p.programs.functions.push_back(projectFunction(p, "Usure", "REAL", "Usure := x.Heures;", {param(p, "x", "T_Pompe")}));
+        check(!runs(p, "R := Usure(Pompe1);", &err) && err.find(prive) != std::string::npos,
+              "D2b-2 : en marche, une fonction qui lit x.Heures (x : T_Pompe) est refusee [" + err + "]");
+    }
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "R", "REAL");
+        check(!runs(p, "VAR\n    r : REF_TO T_Pompe;\nEND_VAR\nr := REF(Pompe1);\nR := r^.Heures;", &err) && err.find(prive) != std::string::npos,
+              "D2b-2 : en marche, r^.Heures (REF_TO) est refuse [" + err + "]");
+    }
+    {
+        Project p = buildProject();
+        addVar(p, "Pompes", "LIST OF T_Pompe");
+        addVar(p, "R", "REAL");
+        check(!runs(p, "VAR\n    q : T_Pompe;\nEND_VAR\nLIST_ADD(Pompes, q);\nFOR EACH x IN Pompes DO\n    R := x.Heures;\nEND_FOR;", &err)
+                  && err.find(prive) != std::string::npos,
+              "D2b-2 : en marche, x.Heures dans un FOR EACH est refuse [" + err + "]");
+    }
+    {
+        // Ce que Compiler ne suit pas (une case d'une liste locale) : le moteur le refuse en marche.
+        Project p = buildProject();
+        addVar(p, "R", "REAL");
+        check(!runs(p, "VAR\n    L : LIST OF T_Pompe;\n    q : T_Pompe;\nEND_VAR\nLIST_ADD(L, q);\nR := L[0].Heures;", &err)
+                  && err.find(prive) != std::string::npos,
+              "D2b-2 : en marche, L[0].Heures (une case d'une liste locale) est refuse [" + err + "]");
+    }
+    {
+        // Le droit des methodes : Demarrer (publique) appelle Journal (privee), qui ecrit Heures ; un sous-type lit
+        // Heures du parent ; une methode d'un AUTRE type (T_Vanne) qui lit p.Heures est refusee.
+        const auto build = [] {
+            Project p = buildProject();
+            typeNamed(p, "T_Pompe")->methods.push_back(method(p, "Fixer", {}, "Heures := h;", Visibility::Public, false, {param(p, "h", "REAL")}));
+            typeNamed(p, "T_PompeDoublee")->methods.push_back(method(p, "Usure", "REAL", "Usure := Heures;"));
+            typeNamed(p, "T_Vanne")->methods.push_back(method(p, "Espionner", "REAL", "Espionner := x.Heures;", Visibility::Public, false,
+                                                              {param(p, "x", "T_Pompe")}));
+            addVar(p, "Pompe1", "T_Pompe");
+            addVar(p, "Pompe2", "T_PompeDoublee");
+            addVar(p, "Vanne1", "T_Vanne");
+            addVar(p, "R", "REAL");
+            return p;
+        };
+        Project p = build();
+        const std::string r = run(p, "Pompe2.Fixer(9000.0);\nPompe2.Demarrer();\nR := Pompe2.Usure();", &err);
+        check(r == "9001" && err.empty(), "D2b-3 : les methodes du type (et d'un sous-type) lisent et ecrivent le prive en marche [" + r + " " + err + "]");
+        Project q = build();
+        check(!runs(q, "R := Vanne1.Espionner(Pompe1);", &err) && err.find(prive) != std::string::npos,
+              "D2b-2 : en marche, une methode de T_Vanne qui lit x.Heures (T_Pompe) est refusee [" + err + "]");
+    }
+    // D2b-5 : un projet SANS espace - renommer la fonction Journal ne touche pas l'appel nu de la methode Journal
+    // (Demarrer : Journal() vise SELF.Journal()) ; les vrais appels de la fonction suivent.
+    {
+        Project p = buildProject();
+        p.programs.functions.push_back(projectFunction(p, "Journal", {}, "RETURN;"));
+        typeNamed(p, "T_Vanne")->methods.push_back(method(p, "Fermer", {}, "Position := 0.0;\nJournal();"));
+        addScript(p, "S_Log", "Journal();");
+        (void)renameFunctionEverywhere(p, "Journal", "Journal2");
+        const HmiFunction* dem = methodOf(p, "T_Pompe", "Demarrer");
+        check(dem && dem->body.find("Journal();") != std::string::npos && dem->body.find("Journal2") == std::string::npos,
+              "D2b-5 : la methode Demarrer garde Journal() (la methode privee), pas Journal2() [" + (dem ? dem->body : std::string("?")) + "]");
+        const HmiFunction* fermer = methodOf(p, "T_Vanne", "Fermer");
+        check(fermer && fermer->body.find("Journal2();") != std::string::npos,
+              "D2b-5 : T_Vanne (sans methode Journal) appelle la fonction : Journal2() [" + (fermer ? fermer->body : std::string("?")) + "]");
+        check(p.programs.scripts.back().body == "Journal2();", "D2b-5 : le script suit (Journal2())");
+    }
+    // D2b-6 : version par espace - un appel qualifie Util.Moyenne(...) suit meme si le type a une methode Moyenne ; un
+    // membre Debit lu comme valeur n'est pas la fonction Gaz.Debit (les deux versions).
+    {
+        Project p;
+        HmiType& c = addType(p, "T_Capteur");
+        c.ns = "Gaz";
+        c.members.push_back(member("Debit", "REAL"));
+        c.members.push_back(member("Valeur", "REAL"));
+        c.methods.push_back(method(p, "Moyenne", "REAL", "Moyenne := Debit;"));
+        c.methods.push_back(method(p, "Calculer", {}, "Valeur := Util.Moyenne(Debit, 2.0) + Moyenne();"));
+        p.programs.functions.push_back(projectFunction(p, "Moyenne", "REAL", "Moyenne := (a + b) / 2.0;",
+                                                       {param(p, "a", "REAL"), param(p, "b", "REAL")}, "Util"));
+        p.programs.functions.push_back(projectFunction(p, "Debit", "REAL", "Debit := 1.0;", {}, "Gaz"));
+        (void)renameFunctionEverywhere(p, "Util", "Moyenne", "Moyenne2");
+        const HmiFunction* calc = methodOf(p, "T_Capteur", "Calculer");
+        check(calc && calc->body == "Valeur := Util.Moyenne2(Debit, 2.0) + Moyenne();",
+              "D2b-6 : Util.Moyenne(...) suit (Util.Moyenne2), Moyenne() (la methode) reste [" + (calc ? calc->body : std::string("?")) + "]");
+        (void)renameFunctionEverywhere(p, "Gaz", "Debit", "Flux");
+        check(calc && calc->body == "Valeur := Util.Moyenne2(Debit, 2.0) + Moyenne();",
+              "D2b-6 : renommer la fonction Gaz.Debit ne touche pas le membre Debit lu comme valeur [" + (calc ? calc->body : std::string("?")) + "]");
+        Project q = buildProject();             // sans espace
+        q.programs.functions.push_back(projectFunction(q, "Debit", "REAL", "Debit := 1.0;"));
+        typeNamed(q, "T_Pompe")->methods.push_back(method(q, "Tracer", {}, "IHM_LOG(INFO, TO_STRING(Debit));"));
+        (void)renameFunctionEverywhere(q, "Debit", "Flux");
+        const HmiFunction* tracer = methodOf(q, "T_Pompe", "Tracer");
+        check(tracer && tracer->body == "IHM_LOG(INFO, TO_STRING(Debit));",
+              "D2b-6 : sans espace non plus, le membre Debit (TO_STRING(Debit)) reste [" + (tracer ? tracer->body : std::string("?")) + "]");
+    }
+    // D2b-7 : "Appelee par" - l'appel nu Journal() d'une methode du meme nom n'est pas un appel de la fonction ; une
+    // methode d'un type sans Journal, si.
+    {
+        Project p = buildProject();
+        p.programs.functions.push_back(projectFunction(p, "Journal", {}, "RETURN;"));
+        typeNamed(p, "T_Vanne")->methods.push_back(method(p, "Fermer", {}, "Position := 0.0;\nJournal();"));
+        const auto by = functionCallers(p, "Journal");
+        std::string said;
+        for (const auto& w : by) said += " | " + w;
+        check(std::find(by.begin(), by.end(), "type T_Pompe, m\xC3\xA9thode Demarrer") == by.end(),
+              "D2b-7 : Appelee par ne cite pas T_Pompe.Demarrer (Journal() y vise la methode)" + said);
+        check(std::find(by.begin(), by.end(), "type T_Vanne, m\xC3\xA9thode Fermer") != by.end(),
+              "D2b-7 : Appelee par cite T_Vanne.Fermer (sans methode Journal : la fonction)" + said);
     }
 }

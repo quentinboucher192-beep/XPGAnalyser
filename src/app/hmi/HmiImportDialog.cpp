@@ -88,7 +88,8 @@ public:
         const auto& items = d_.spec_->plan.items;
         lines.push_back({LineKind::Head, -1, {}, 0});
         for (std::size_t i = 0; i < items.size(); ++i)
-            if (items[i].kind != ItemKind::Variable) lines.push_back({LineKind::Row, static_cast<int>(i), items[i].name, 0});
+            if (items[i].kind != ItemKind::Variable)   // 1.13.0 : un item d'un espace par son nom complet (Gaz.T_Vanne)
+                lines.push_back({LineKind::Row, static_cast<int>(i), hmi::qualifiedName(items[i].ns, items[i].name), 0});
         std::size_t conflicts = 0;
         for (std::size_t i = 0; i < items.size(); ++i)
             if (d_.groups_[i]) ++conflicts;

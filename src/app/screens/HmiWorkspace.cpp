@@ -84,6 +84,7 @@
 #include "../VersionsPane.hpp"
 #include "../../hmi/HmiVersionState.hpp"   // lot API 6 : la version en cours                       // lot 21 : les versions
 #include "../hmi/HmiVariablePanes.hpp"               // lot 16 : variables et types IHM
+#include "../hmi/HmiMethodPanes.hpp"                 // 1.13.0 (J1b) : la section Methodes des types IHM
 #include "../hmi/HmiEnumPanes.hpp"                   // 1.10 (chantier U) : choisir une valeur depuis l'arbre
 #include "../ExportTarget.hpp"                       // 1.10 (chantier O) : exporter les valeurs du graphique
 #include "../../hmi/HmiTypes.hpp"
@@ -397,6 +398,7 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || k == NK::HmiModbusTool                                            // lot 15 : l'outil Modbus
         || k == NK::HmiTypesFolder || k == NK::HmiTypeNode || k == NK::HmiVarFolder    // lot 16 : types, dossiers
         || k == NK::HmiTypeValues || k == NK::HmiTypeValue || k == NK::HmiTypeOperators || k == NK::HmiTypeOperator   // 1.10
+        || k == NK::HmiTypeMethods || k == NK::HmiTypeMethod                                                          // 1.13.0 (J1b)
         // 1.10.3 (Q1103) : sous un objet, les noeuds venus apres HmiUsedVariable (Alarmes,
         // Operateurs 1.10 ; familles, parametres, reperes 1.10.2) : sans eux, un clic n'y
         // faisait rien (openHmiNode les attendait pourtant).
@@ -867,6 +869,7 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::HmiTypeNode:
         case NK::HmiTypeValues: case NK::HmiTypeValue:            // 1.10 (chantier O) : le type choisi
         case NK::HmiTypeOperators: case NK::HmiTypeOperator:
+        case NK::HmiTypeMethods: case NK::HmiTypeMethod:          // 1.13.0 (J1b) : la section Methodes, la methode choisie
             openHmiPane("scripts");
             if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
                 pane->showTab(HmiScriptsPane::TabTypes);
@@ -876,6 +879,10 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
                         // 1.10 (chantier U) : un clic sur << Arret = 0 >> choisit la valeur dans la grille.
                         if (ProjectTreeModel::kindOf(n) == NK::HmiTypeValue && types->enumValues())
                             types->enumValues()->selectValue(static_cast<int>(ProjectTreeModel::subOf(n)));
+                        if (ProjectTreeModel::kindOf(n) == NK::HmiTypeMethod && types->methods())
+                            if (const auto* ty = app_.hmi() ? app_.hmi()->project.hmiType(asId(treeModel_->hmiIdOf(n))) : nullptr;
+                                ty && ProjectTreeModel::subOf(n) < ty->methods.size())
+                                types->methods()->selectMethod(ty->methods[ProjectTreeModel::subOf(n)].id);
                     }
             }
             break;
@@ -1276,23 +1283,16 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
                     openHmiIssue(op);
                     return;
                 }
-                // 1.13.0 : une methode d'un type IHM - Types IHM, son type choisi.
-                for (const auto& t : hmiDoc->project.programs.types)
-                    for (const auto& m : t.methods)
-                        if (m.id == function) {
-                            const hmi::Id typeId = t.id;
-                            openHmiPane("scripts");
-                            if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
-                                pane->showTab(HmiScriptsPane::TabTypes);
-                                if (auto* types = pane->typesPane()) types->selectType(typeId);
-                            }
-                            return;
-                        }
             }
             hmi::Issue issue;
             issue.line = line;
+            const hmi::HmiType* methodOwner = nullptr;
             if (script != hmi::kNoId) {
                 issue.script = script;
+            } else if (hmi::methodById(hmiDoc->project, function, &methodOwner) && methodOwner) {
+                issue.category = "Type IHM";            // 1.13.0 (J1b) : une methode - Types IHM, son editeur, a sa ligne
+                issue.item = methodOwner->id;
+                issue.object = function;
             } else {
                 issue.category = "Fonction";
                 issue.item = function;
@@ -3047,6 +3047,20 @@ void MainAnalysisScreen::openHmiIssue(const hmi::Issue& issue) {
         }
         return;
     }
+    // 1.13.0 (J1b) : un constat d'un type IHM (Generer, Compiler) - le type dans Types IHM ; celui d'une methode (object) :
+    // sa section Methodes, la methode choisie, son corps a la ligne.
+    if (issue.category == "Type IHM" && issue.item != hmi::kNoId && doc->project.hmiType(issue.item)) {
+        openHmiPane("scripts");
+        if (auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"))) {
+            pane->showTab(HmiScriptsPane::TabTypes);
+            if (auto* types = pane->typesPane()) {
+                types->selectType(issue.item);
+                if (issue.object != hmi::kNoId && hmi::methodById(doc->project, issue.object))
+                    if (auto* methods = types->methods()) methods->goTo(issue.object, issue.line);
+            }
+        }
+        return;
+    }
     if (issue.script != hmi::kNoId && doc->project.script(issue.script)) {
         const auto viewOf = doc->project.viewOfScript(issue.script);
         // 1.12.7 : la faute d'une valeur calculee au demarrage - son onglet, sa ligne, et la fenetre de
@@ -3830,6 +3844,7 @@ std::string placeOfNode(NK kind) {
             return "variables";
         case NK::HmiTypesFolder: case NK::HmiTypeNode:
         case NK::HmiTypeValues: case NK::HmiTypeValue: case NK::HmiTypeOperators: case NK::HmiTypeOperator:   // 1.10
+        case NK::HmiTypeMethods: case NK::HmiTypeMethod:                                                      // 1.13.0 (J1b)
             return "types-ihm";
         case NK::HmiSysFolder: case NK::HmiSysDomain: case NK::HmiSysVar:
             return "variables-systeme";

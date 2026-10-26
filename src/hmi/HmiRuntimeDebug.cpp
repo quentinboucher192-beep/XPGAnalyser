@@ -50,10 +50,11 @@
 #include "HmiEnums.hpp"
 #include "HmiLog.hpp"
 #include "HmiMarkers.hpp"
-#include "HmiMethods.hpp"
+#include "HmiMethods.hpp"   // 1.13.0 : les points d'arret dans une methode d'un type IHM
 #include "HmiNames.hpp"
 #include "HmiOperators.hpp"
 #include "HmiScript.hpp"
+#include "HmiTypes.hpp"
 #include "../sim/DebugShared.hpp"
 #include "../sim/Interpreter.hpp"
 
@@ -67,7 +68,8 @@ namespace hmi {
 
 namespace {
 
-constexpr std::uint32_t kMethodHeaderLines = 4;   // methodFunctionText : FUNCTION, VAR_IN_OUT, SELF, END_VAR
+// Une methode n'a pas de decalage : sa FUNCTION interne (methodFunctionText) porte son en-tete et SELF sur la ligne 1,
+// avec le debut du corps - la ligne N du moteur est la ligne N de l'editeur de la methode (marge, pile, Compiler).
 constexpr std::uint32_t kOperatorHeaderLines = 1; // operatorFunctionText : FUNCTION OPERATEUR_ADD(a : T; b : REAL) : T
 
 std::string upperText(std::string_view s) {
@@ -86,7 +88,7 @@ bool identChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c
 std::size_t textHash(std::string_view s) { return std::hash<std::string_view>{}(s) ^ (s.size() * 0x9E3779B97F4A7C15ULL); }
 
 // Une methode d'un type IHM (du projet, d'une bibliotheque reliee) par son id ; `owner` : son type.
-const HmiFunction* methodById(const Project& p, Id id, const HmiType** owner = nullptr) {
+const HmiFunction* codeMethodById(const Project& p, Id id, const HmiType** owner = nullptr) {
     if (id == kNoId) return nullptr;
     const HmiFunction* found = nullptr;
     const auto look = [&](const HmiType& t) {
@@ -133,7 +135,7 @@ const HmiFunction* functionById(const Project& p, Id id) {
     for (const auto& v : p.views)
         for (const auto& f : v.functions)
             if (f.id == id) return &f;
-    return methodById(p, id);
+    return codeMethodById(p, id);   // 1.13.0 : une methode d'un type IHM
 }
 
 // Le texte d'un code a deboguer, tel que le moteur le lit (les lignes du corps restent les memes que
@@ -151,6 +153,19 @@ bool debugText(const Project& p, Id script, Id function, std::string& text, bool
         }
         text = markers::strip(decl::codeOf(*sc));
         isFunction = false;
+        return true;
+    }
+    // 1.13.0 (J1b) : une methode - sa FUNCTION interne telle que le moteur la lit (methodFunctionText, en-tete sur la
+    // ligne 1 : les lignes du corps sont celles de l'editeur).
+    const HmiType* owner = nullptr;
+    if (const HmiFunction* m = codeMethodById(p, function, &owner); m && owner) {
+        MethodCall mc;
+        if (!resolveMethodInternal(p, methodFunctionName(fullName(*owner), *m), mc)) {
+            if (why) *why = "m\xC3\xA9thode introuvable : il ne s'arr\xC3\xAAtera pas";
+            return false;
+        }
+        text = mc.function;
+        isFunction = true;
         return true;
     }
     if (const HmiFunction* f = functionById(p, function)) {
@@ -308,7 +323,7 @@ bool codeSpace(const Project& p, Id script, Id function, std::string& ns, std::s
     }
     if (const HmiFunction* f = functionById(p, function)) {
         const HmiType* owner = nullptr;
-        if (methodById(p, function, &owner) && owner) ns = owner->ns;     // une methode : l'espace de son type
+        if (codeMethodById(p, function, &owner) && owner) ns = owner->ns;     // une methode : l'espace de son type
         else ns = f->ns;
         body = f->body;
         return true;
@@ -330,8 +345,12 @@ std::string qualifiedCondition(const Project& p, Id script, Id function, const s
     // 1.13.0 : dans un operateur, Resultat (et le nom de la conversion) se lit comme le moteur execute son code
     // (operatorFunctionText) : sous son nom interne, OPERATEUR_ADD. Sinon la condition "Resultat.X > 1" echouerait au
     // premier passage (le point se desarmerait, "condition invalide").
+    // Dans une methode, comme son corps (methodFunctionText) : THIS -> SELF, un membre -> SELF.X, son nom -> son retour.
     const HmiOperator* op = script == kNoId ? operatorOf(p, function) : nullptr;
-    const std::string condition = op ? operatorInternalText(*op, written) : written;
+    const HmiType* methodOwner = nullptr;
+    const HmiFunction* method = script == kNoId && !op ? codeMethodById(p, function, &methodOwner) : nullptr;
+    const std::string condition = op ? operatorInternalText(*op, written)
+                                     : method && methodOwner ? methodInternalText(p, fullName(*methodOwner), *method, written) : written;
     std::string ns, body;
     if (!codeSpace(p, script, function, ns, body)) return condition;
     if (ns.empty() && !names::mentionsUsing(body)) return condition;
@@ -388,8 +407,8 @@ std::string Runtime::debugCodeName(const Project& p, Id script, Id function) {
         for (const auto& v : p.views)                                                  // une vue, une popup, un symbole
             for (const auto& f : v.functions)
                 if (f.id == function) return "fonction " + v.name + "." + f.name;
-        const HmiType* owner = nullptr;
-        if (const auto* m = methodById(p, function, &owner); m && owner) return "m\xC3\xA9thode " + fullName(*owner) + "." + m->name;
+        const HmiType* owner = nullptr;   // 1.13.0 : "methode T_Pompe.Demarrer" (Gaz.T_Pompe.Demarrer dans un espace)
+        if (const auto* m = codeMethodById(p, function, &owner); m && owner) return "m\xC3\xA9thode " + fullName(*owner) + "." + m->name;
         // 1.13.0 : "operateur + (type T_Vecteur)", "conversion TO_REAL (symbole Sym_Pompe)".
         OperatorOwner by;
         if (const auto* o = operatorOf(p, function, &by))
@@ -433,7 +452,6 @@ bool Runtime::debugTextOf(Id script, Id function, std::string& text, bool& isFun
 
 std::uint32_t Runtime::debugHeaderLines(Id function) const {
     if (!project_ || function == kNoId) return 0;
-    if (methodById(*project_, function)) return kMethodHeaderLines;
     if (operatorOf(*project_, function)) return kOperatorHeaderLines;
     return 0;
 }
@@ -474,10 +492,9 @@ const HmiFunction* Runtime::methodOfFrame(std::string_view internalName) const {
 
 std::uint32_t Runtime::frameLine(const sim::LineProbe::Frame& f, std::uint32_t line) const {
     if (!f.standalone) return line;
-    // Une methode, un operateur : les lignes de l'en-tete que le moteur lit avant son corps.
+    // Un operateur : la ligne de l'en-tete que le moteur lit avant son corps (une methode : aucune).
     std::uint32_t header = 0;
     if (const auto it = richOwners_.find(static_cast<const sim::Function*>(f.code)); it != richOwners_.end()) header = debugHeaderLines(it->second);
-    else if (methodOfFrame(f.function)) header = kMethodHeaderLines;
     return line > header ? line - header : line;
 }
 
@@ -530,7 +547,13 @@ std::string Runtime::unknownConditionName(const std::string& text, Id script, Id
     } else if (const HmiFunction* f = functionById(*project_, function)) {
         for (const auto& d : f->decls) declared.insert(upperText(d.name));
         declared.insert(upperText(f->name));
-        if (methodById(*project_, function)) declared.insert("SELF");      // une methode : SELF, l'objet
+        // Une methode : SELF (THIS), l'objet, et les membres de son type par leur nom (lus comme son corps les lit).
+        const HmiType* owner = nullptr;
+        if (codeMethodById(*project_, function, &owner) && owner) {
+            declared.insert("SELF");
+            declared.insert("THIS");
+            for (const auto& mem : types::membersOf(*project_, fullName(*owner))) declared.insert(upperText(mem.name));
+        }
     } else if (const HmiOperator* o = operatorOf(*project_, function)) {
         // 1.13.0 : un operateur - a, b, Resultat (et le nom d'une conversion), ses declarations.
         for (const auto& d : o->decls) declared.insert(upperText(d.name));
