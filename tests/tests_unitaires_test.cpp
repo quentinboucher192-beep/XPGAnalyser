@@ -8,6 +8,8 @@
 //  leve (verdict erreur) ; la serialisation projet aller-retour (cas relus
 //  identiques, chaque surcharge ses cas) ; le compte des verdicts ; le refus
 //  d'un format trop recent ; le repli du format (sans cas : format d'avant).
+//  1.13.0 (relecture) : les cas d'une fonction GENERIQUE relus (projet, methode,
+//  vue).
 //
 //  TESTS_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
@@ -20,6 +22,7 @@
 #include <cstdlib>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace hmi;
@@ -394,6 +397,98 @@ void disque() {
     }
 }
 
+// =============================================================================
+//  1.13.0 (relecture) : les defauts trouves avant la livraison, chacun par son scenario.
+// =============================================================================
+const HmiFunction* projectFunction(const Project& p, const char* name) { return p.functionByName(name); }
+
+// Les avertissements de la relecture qui disent qu'un cas ou une ligne de test est ignore.
+bool testLinesIgnored(const LoadReport& report) {
+    for (const auto& w : report.warnings)
+        if (w.find("cas de test") != std::string::npos || w.find("ligne de test") != std::string::npos) return true;
+    return false;
+}
+
+// n4 : une fonction (ou une methode) GENERIQUE et ses cas - la ligne "generique" passe entre la fonction et ses
+// cas a l'ecriture ; la relecture les perdait (cas de test hors d'une fonction : ignore).
+void generiquesRelus() {
+    std::printf("-- les cas d'une fonction generique : relus (fonction du projet, methode d'un type, fonction de vue)\n");
+    Project p = bench();
+    {
+        HmiFunction& mx = addFunction(p, "Max_Gen", "T", {param(p, "A", "T"), param(p, "B", "T")},
+                                      "IF A > B THEN\n    Max_Gen := A;\nELSE\n    Max_Gen := B;\nEND_IF;");
+        mx.generics = {{"T", "ANY_NUM"}};
+        FunctionTest t = caseOf(p, mx.id, "deux entiers");
+        t.arguments = {"1", "3"};
+        t.expected = "3";
+        t.checks = {{"Compteur_Clics", "0", ""}};
+        mx.tests = {t};
+    }
+    {
+        HmiType ty;
+        ty.id = p.allocate();
+        ty.name = "T_Bac";
+        TypeMember m;
+        m.name = "Niveau";
+        m.type = "REAL";
+        ty.members.push_back(m);
+        HmiFunction meth;
+        meth.id = p.allocate();
+        meth.name = "Borne";
+        meth.returnType = "U";
+        meth.generics = {{"U", "ANY_NUM"}};
+        meth.decls = {param(p, "X", "U")};
+        meth.body = "Borne := X;";
+        FunctionTest t = caseOf(p, meth.id, "borne simple");
+        t.arguments = {"2"};
+        t.expected = "2";
+        meth.tests = {t};
+        ty.methods.push_back(meth);
+        p.programs.types.push_back(ty);
+    }
+    {
+        View v = makeView(p, "Vue_Four");
+        HmiFunction vf;
+        vf.id = p.allocate();
+        vf.name = "Moitie";
+        vf.returnType = "V";
+        vf.generics = {{"V", "ANY_REAL"}};
+        vf.decls = {param(p, "X", "V")};
+        vf.body = "Moitie := X / 2.0;";
+        FunctionTest t = caseOf(p, vf.id, "moitie de 10");
+        t.arguments = {"10.0"};
+        t.expected = "5.0";
+        t.givens = {{"Compteur_Clics", "4"}};
+        vf.tests = {t};
+        v.functions.push_back(vf);
+        p.views.push_back(v);
+    }
+    const auto files = serializeProject(p);
+    LoadReport report;
+    const auto back = parseProject(readerOf(files), &report);
+    check(back.has_value(), "relu");
+    if (!back.has_value()) return;
+    check(!testLinesIgnored(report), "aucune ligne de test ignoree a la relecture"
+                                        + (report.warnings.empty() ? std::string{} : " (" + report.warnings.front() + ")"));
+    const HmiFunction* mx = projectFunction(back.value(), "Max_Gen");
+    check(mx && mx->generics.size() == 1 && mx->tests.size() == 1 && mx->tests[0].arguments.size() == 2
+              && mx->tests[0].checks.size() == 1 && mx->tests[0].expected == "3",
+          "fonction du projet generique : son cas, ses deux arguments et sa verif relus");
+    const HmiType* bac = back.value().hmiTypeByName("T_Bac");
+    check(bac && bac->methods.size() == 1 && bac->methods[0].generics.size() == 1 && bac->methods[0].tests.size() == 1
+              && bac->methods[0].tests[0].arguments == std::vector<std::string>{"2"},
+          "methode generique d'un type : son cas et son argument relus");
+    const View* four = back.value().viewByName("Vue_Four");
+    check(four && four->functions.size() == 1 && four->functions[0].generics.size() == 1 && four->functions[0].tests.size() == 1
+              && four->functions[0].tests[0].givens.size() == 1,
+          "fonction generique d'une vue (fichier .vue) : son cas et sa pose relus");
+    // Et l'enregistrement suivant ne les efface pas : un second aller-retour garde tout.
+    const auto again = parseProject(readerOf(serializeProject(back.value())));
+    check(again.has_value() && again.value().programs.functions == back.value().programs.functions
+              && again.value().programs.types == back.value().programs.types && again.value().views == back.value().views,
+          "un second aller-retour : identique (les cas restent sur le disque)");
+}
+
 } // namespace
 
 int main() {
@@ -402,6 +497,7 @@ int main() {
     comptes();
     generer();
     disque();
+    generiquesRelus();      // 1.13.0 (relecture) : les cas d'une fonction generique relus
     std::printf("\n%d verifications, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
