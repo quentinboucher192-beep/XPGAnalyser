@@ -8,6 +8,7 @@
 #include "HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types elementaires d'une variable
 #include "HmiExpr.hpp"           // 1.12.10 (lot F) : la valeur d'un membre, lue comme le moteur la lira
 #include "HmiTypeForms.hpp"      // 1.12.14 : les pas dans les types imbriques (la forme d'un type)
+#include "HmiMethods.hpp"        // 1.13.0 (lot J1) : les methodes en vigueur (effectiveMethod), la chaine de base
 
 #include <algorithm>
 #include <cctype>
@@ -324,6 +325,11 @@ struct Walker {
             out.error = path + " : type inconnu \xC2\xAB " + s.element + " \xC2\xBB";
             return;
         }
+        // 1.13.0 (lot J1) : une interface est un contrat (des signatures), pas une donnee : ni case ni membre.
+        if (ty->kind == HmiTypeKind::Interface) {
+            out.error = path + " : " + interfaceAsData(p, ty->name);
+            return;
+        }
         // 1.12.20 : un rappel vise une fonction : il vit dans la memoire de l'IHM, il n'a pas de case.
         if (ty->kind == HmiTypeKind::Callback) {
             out.error = path + " : " + ty->name + " est un rappel (il vise une fonction) : il vit dans la m\xC3\xA9moire de l'IHM, ni \xC3\xA9quipement ni adresse";
@@ -585,12 +591,10 @@ bool validMemberType(const Project& p, std::string_view type, std::string* why, 
                 return validMemberType(p, concrete, why, owner);
         }
     if (!validType(p, type, why)) return false;
-    // 1.13.0 (lot J1) : une interface ne s'emploie que par REF_TO (c'est un contrat, pas une donnee) -
-    // ni directement (v : I_Demarrable), ni dans un conteneur sans REF_TO (LIST OF I_Demarrable).
-    if (upperOf(std::string(type)).find("REF_TO") == std::string::npos)
-        for (const HmiType* t : namedTypesOf(p, type))
-            if (t->kind == HmiTypeKind::Interface)
-                return fail(why, "emploie REF_TO " + t->name + " : une interface est un contrat, pas une donn\xC3\xA9" "e directe");
+    // 1.13.0 (lot J1) : une interface ne s'emploie que derriere une reference (c'est un contrat, pas une donnee) -
+    // ni directement (v : I_Demarrable), ni dans un conteneur sans REF_TO (LIST OF I_Demarrable). Chaque nom compte
+    // (TUPLE(REF_TO I_A, I_B) : I_B est refuse).
+    if (const std::string iface = interfaceAsData(p, type); !iface.empty()) return fail(why, iface);
     // 1.12.4 : un membre objet peut tout contenir, sauf le type qui le porte (T_Noeud.Enfants :
     // LIST OF T_Noeud) - ni directement, ni par un autre type.
     if (!owner.empty() && isRich(type))
@@ -600,6 +604,32 @@ bool validMemberType(const Project& p, std::string_view type, std::string* why, 
                                      + " \xE2\x86\x92 " + normalized(type)
                                      + (sameText(t->name, owner) ? std::string{} : " \xE2\x86\x92 " + t->name + " \xE2\x86\x92 \xE2\x80\xA6 \xE2\x86\x92 " + std::string(owner)));
     return true;
+}
+
+std::string interfaceAsData(const Project& p, std::string_view type, bool declaration) {
+    std::string prev;                              // le mot d'avant, en majuscules (vide apres une ponctuation)
+    for (std::size_t i = 0; i < type.size();) {
+        const auto c = static_cast<unsigned char>(type[i]);
+        if (!(std::isalpha(c) || type[i] == '_')) {
+            if (!std::isspace(c)) prev.clear();
+            ++i;
+            continue;
+        }
+        std::size_t j = i;
+        while (j < type.size() && (std::isalnum(static_cast<unsigned char>(type[j])) || type[j] == '_'
+                                   || (type[j] == '.' && j + 1 < type.size() && (std::isalpha(static_cast<unsigned char>(type[j + 1])) || type[j + 1] == '_'))))
+            ++j;
+        const std::string_view word = type.substr(i, j - i);
+        if (const HmiType* t = p.hmiTypeByName(word); t && t->kind == HmiTypeKind::Interface && prev != "REF_TO" && prev != "TO") {
+            const std::string head = t->name + " est une interface : un contrat, pas une donn\xC3\xA9" "e";
+            // Une locale, un parametre, un retour tiennent une reference ; une variable IHM, un membre, une liste.
+            if (declaration) return head + " - emploie REF_TO " + t->name;
+            return head + " - emploie un type qui l'impl\xC3\xA9mente, ou une liste de r\xC3\xA9" "f\xC3\xA9rences : LIST OF REF_TO " + t->name;
+        }
+        prev = upperOf(word);
+        i = j;
+    }
+    return {};
 }
 
 bool isRich(std::string_view type) {
@@ -1437,6 +1467,9 @@ TypeStep stepMember(const Project& p, std::string_view type, std::string_view me
         st.property = true;
         return st;
     }
+    // 1.13.0 (lot J1) : une methode du type (ou heritee) - L[0].Incr(), Pompes[3].EnDefaut() : son appel, pas un membre
+    // (son type n'est pas suivi ici : la chaine s'arrete).
+    if (effectiveMethod(p, ty->name, member)) return st;
     std::string list;
     for (const auto& mm : inherited) list += (list.empty() ? "" : ", ") + mm.name;
     st.why = "(" + ty->name + ") n'a pas de membre " + std::string(member) + (list.empty() ? std::string{} : " (membres : " + list + ")");
@@ -1621,6 +1654,28 @@ std::string summary(const Project& p, std::string_view type, bool packBools) {
 }
 
 // ------------------------------------------------- la verification ---------
+namespace {
+// 1.13.0 (lot J1) : un membre ou une methode PRIVE de `typeName` (ou d'un de ses parents), lu de l'exterieur (un
+// script, une fonction, une fx : pathProblems ne lit jamais le corps d'une methode) : le message ; vide : permis.
+std::string privateUse(const Project& p, std::string_view typeName, std::string_view member) {
+    const HmiType* ty = p.hmiTypeByName(trimmed(typeName));
+    if (!ty || ty->kind != HmiTypeKind::Structure) return {};
+    std::vector<const HmiType*> chain = baseChain(p, ty->name);     // [parent, grand-parent...]
+    std::reverse(chain.begin(), chain.end());                        // la racine d'abord, comme membersOf
+    chain.push_back(ty);
+    for (const HmiType* t : chain)
+        for (const auto& m : t->members)
+            if (sameText(m.name, member))
+                return m.visibility == Visibility::Private
+                           ? m.name + " est priv\xC3\xA9 dans " + t->name + " : seules ses m\xC3\xA9thodes le lisent et l'\xC3\xA9" "crivent"
+                           : std::string{};
+    const HmiType* owner = nullptr;
+    if (const HmiFunction* f = effectiveMethod(p, ty->name, member, &owner); f && owner && f->visibility == Visibility::Private)
+        return f->name + " est une m\xC3\xA9thode priv\xC3\xA9" "e de " + owner->name + " : seules ses m\xC3\xA9thodes l'appellent";
+    return {};
+}
+} // namespace
+
 std::vector<PathProblem> pathProblems(const Project& p, std::string_view source) {
     std::vector<PathProblem> out;
     if (p.programs.variables.empty()) return out;
@@ -1701,6 +1756,10 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
                     while (e < n && isPart(code[e])) ++e;
                     const std::string member(code.substr(k + 1, e - k - 1));
                     i = e;
+                    if (const std::string why = privateUse(p, type, member); !why.empty()) {   // 1.13.0 (lot J1)
+                        out.push_back({at, path + "." + member + " : " + why});
+                        break;
+                    }
                     const auto st = stepMember(p, type, member);
                     if (!st.why.empty()) {
                         out.push_back({at, path + " " + st.why});
@@ -1782,9 +1841,16 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
                 }
                 const auto* ty = p.hmiTypeByName(s.element);
                 if (!ty) break;
+                // 1.13.0 (lot J1) : les membres herites comptent (la tranche du parent d'abord, comme membersOf, le
+                // Walker et le moteur) ; un membre ou une methode prive ne se lit pas d'ici (seulement de ses methodes).
+                if (const std::string why = privateUse(p, s.element, member); !why.empty()) {
+                    out.push_back({at, path + "." + member + " : " + why});
+                    break;
+                }
+                const auto all = membersOf(p, s.element);
                 const TypeMember* found = nullptr;
-                for (const auto& m : ty->members)
-                    if (sameText(m.name, member)) found = &m;
+                for (const auto& m : all)
+                    if (!found && sameText(m.name, member)) found = &m;
                 if (found) {
                     path += "." + found->name;
                     type = normalized(found->type);
@@ -1795,8 +1861,10 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
                     if (written()) out.push_back({at, path + "." + member + " : une propri\xC3\xA9t\xC3\xA9 se lit seulement"});
                     break;
                 }
+                // 1.13.0 (lot J1) : une methode du type (ou heritee) : Pompe1.Demarrer(), Pompe2.EnDefaut() - son appel.
+                if (effectiveMethod(p, s.element, member)) break;
                 std::string list;
-                for (const auto& m : ty->members) list += (list.empty() ? "" : ", ") + m.name;
+                for (const auto& m : all) list += (list.empty() ? "" : ", ") + m.name;
                 out.push_back({at, path + " (" + ty->name + ") n'a pas de membre " + member + (list.empty() ? std::string{} : " (membres : " + list + ")")});
                 break;
             }

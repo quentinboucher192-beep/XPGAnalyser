@@ -220,6 +220,7 @@ void serialisation() {
 void modeleHelpers();
 void moteur();
 void controle();
+void relecture();
 
 int main() {
     std::printf("1.13.0 (lot J1) : les objets - methodes, prive, heritage, interfaces\n");
@@ -227,6 +228,7 @@ int main() {
     modeleHelpers();
     controle();
     moteur();
+    relecture();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
@@ -621,5 +623,203 @@ void moteur() {
         const std::string r = run(p, body, &err);
         check(r == "5", "DYNAMIC_CAST<T_Cube> : seul le cube passe (Cote 5), le carre donne NULL ["
               + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+}
+
+// =============================================================================
+//  5) LA RELECTURE DE LA 1.13.0 (groupe B, les objets) : chaque essai suit le
+//     scenario d'un defaut confirme - il echouait avant la correction.
+// =============================================================================
+namespace {
+// Les messages de Generer (generate) et de Compiler (compileWith) qui contiennent `needle`.
+std::string issuesWith(const std::vector<Issue>& is, const std::string& needle, Issue::Severity sev = Issue::Severity::Error) {
+    std::string out;
+    for (const auto& i : is)
+        if (i.severity == sev && i.message.find(needle) != std::string::npos) out += " | " + i.message;
+    return out;
+}
+std::vector<Issue> compilerOf(const Project& p) { return compileWith(p, [](std::string_view) { return false; }); }
+std::vector<Issue> bothOf(const Project& p) {
+    auto a = generOf(p);
+    for (auto& i : compilerOf(p)) a.push_back(std::move(i));
+    return a;
+}
+std::string errorsOf(const std::vector<Issue>& is, const std::string& category = {}) {
+    std::string out;
+    for (const auto& i : is)
+        if (i.severity == Issue::Severity::Error && (category.empty() || i.category == category)) out += " | " + i.message;
+    return out;
+}
+Script& addScript(Project& p, const std::string& name, const std::string& body) {
+    Script s;
+    s.id = p.allocate();
+    s.name = name;
+    s.event = "Appel";
+    s.body = body;
+    p.programs.scripts.push_back(s);
+    return p.programs.scripts.back();
+}
+} // namespace
+
+void relecture() {
+    std::printf("-- relecture 1.13.0 : objets (heritage, methodes, prive, interfaces)\n");
+    std::string err;
+
+    // n2 : un appel de methode et un membre herite ne sont pas des membres inconnus (Generer, Compiler).
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "Pompe2", "T_PompeDoublee");
+        addScript(p, "S_Appels", "Pompe1.Demarrer();\nPompe2.Debit := 3.0;\nPompe2.Demarrer();\nIF Pompe2.EnDefaut() THEN Pompe1.Debit := 1.0; END_IF;");
+        const auto is = bothOf(p);
+        check(issuesWith(is, "n'a pas de membre").empty(), "n2 : Pompe1.Demarrer() et Pompe2.Debit (herite) acceptes" + issuesWith(is, "n'a pas de membre"));
+        // la branche des types objets : L[0].Incr() sur une LIST OF T_Compteur.
+        Project q = counterProject();
+        addVar(q, "L", "LIST OF T_Compteur");
+        addScript(q, "S_Liste", "L[0].Incr();");
+        const auto iq = bothOf(q);
+        check(issuesWith(iq, "n'a pas de membre").empty(), "n2 : L[0].Incr() (une liste d'objets) accepte" + issuesWith(iq, "n'a pas de membre"));
+        // un vrai membre inconnu reste dit, avec les membres herites dans la liste.
+        Project r = buildProject();
+        addVar(r, "Pompe2", "T_PompeDoublee");
+        addScript(r, "S_Faute", "Pompe2.Debitt := 3.0;");
+        const std::string why = issuesWith(generOf(r), "n'a pas de membre Debitt");
+        check(!why.empty() && why.find("Debit") != std::string::npos && why.find("Secours") != std::string::npos,
+              "n2 : un membre inconnu reste refuse, la liste montre les membres herites" + why);
+    }
+
+    // n13 / n25 : un membre ou une methode prive lu de l'exterieur : Generer le refuse.
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe1", "T_Pompe");
+        addScript(p, "S_Prive", "Pompe1.Heures := 0.0;\nPompe1.Journal();");
+        const auto is = bothOf(p);
+        check(!issuesWith(is, "Heures est priv\xC3\xA9 dans T_Pompe").empty(), "n13 : Pompe1.Heures (prive) refuse hors de ses methodes" + errorsOf(is));
+        check(!issuesWith(is, "Journal est une m\xC3\xA9thode priv\xC3\xA9" "e de T_Pompe").empty(), "n13 : Pompe1.Journal() (privee) refusee" + errorsOf(is));
+        // le membre prive d'un parent, lu sur le sous-type, aussi.
+        Project q = buildProject();
+        addVar(q, "Pompe2", "T_PompeDoublee");
+        addScript(q, "S_Prive2", "Pompe2.Heures := 1.0;");
+        check(!issuesWith(generOf(q), "Heures est priv\xC3\xA9 dans T_Pompe").empty(), "n13 : le membre prive herite (Pompe2.Heures) refuse");
+        // dans ses methodes, aucun refus (le projet d'essai : Demarrer lit Heures, appelle Journal).
+        check(errorsOf(generOf(buildProject())).empty(), "n13 : les methodes de T_Pompe lisent Heures et appellent Journal sans erreur"
+                                                             + errorsOf(generOf(buildProject())));
+    }
+
+    // n5 : le corps d'une methode est compile (syntaxe, noms) par Generer et Compiler.
+    {
+        Project p = buildProject();
+        for (auto& t : p.programs.types)
+            if (t.name == "T_Pompe")
+                t.methods.push_back(method(p, "Verifier", {}, "IF Debitt > 1.0 THEN Marche := TRU;"));    // END_IF manque
+        const auto is = bothOf(p);
+        check(!issuesWith(is, "T_Pompe.Verifier").empty(), "n5 : une faute de syntaxe dans une methode est dite (Generer, Compiler)" + errorsOf(is));
+        Project q = buildProject();
+        for (auto& t : q.programs.types)
+            if (t.name == "T_Pompe") t.methods.push_back(method(q, "Verifier", {}, "Marche := Debitt > 1.0;"));
+        const auto iq = generOf(q);
+        check(!issuesWith(iq, "variable inexistante : Debitt").empty(), "n5 : un nom inconnu dans une methode est dit" + errorsOf(iq));
+        // les methodes correctes (SELF, membres herites, SUPER, une autre methode) : aucune erreur.
+        check(errorsOf(bothOf(formeCubeProject())).empty(), "n5 : SUPER et SELF dans les methodes : pas de faux refus" + errorsOf(bothOf(formeCubeProject())));
+    }
+
+    // n6 : un sous-type ne redeclare pas un membre du parent ; un sous-type sans membre propre n'est pas averti.
+    {
+        Project p = buildProject();
+        for (auto& t : p.programs.types)
+            if (t.name == "T_PompeDoublee") t.members.push_back(member("Debit", "INT"));
+        check(!issuesWith(generOf(p), "Debit est d\xC3\xA9j\xC3\xA0 un membre de T_Pompe").empty(), "n6 : T_PompeDoublee.Debit redeclare -> refuse");
+        Project q = formeCubeProject();                         // T_Cube EXTENDS T_Forme, sans membre propre
+        check(issuesWith(generOf(q), "aucun membre", Issue::Severity::Warning).empty(), "n6 : un sous-type sans membre propre n'est pas averti");
+        Project r;
+        addType(r, "T_Vide");
+        check(!issuesWith(generOf(r), "aucun membre", Issue::Severity::Warning).empty(), "n6 : une structure vraiment vide reste avertie");
+    }
+
+    // n15 : une interface employee comme donnee (variable IHM, LIST OF, locale) est refusee.
+    {
+        Project p = buildProject();
+        addVar(p, "Equip", "I_Demarrable");
+        addVar(p, "Liste", "LIST OF I_Demarrable");
+        addScript(p, "S_Iface", "VAR\n    e : I_Demarrable;\nEND_VAR\ne.Demarrer();");
+        const auto is = generOf(p);
+        check(!issuesWith(is, "Equip : I_Demarrable est une interface").empty(), "n15 : une variable IHM d'un type interface est refusee" + errorsOf(is));
+        check(!issuesWith(is, "Liste : I_Demarrable est une interface").empty(), "n15 : LIST OF I_Demarrable (sans REF_TO) refusee");
+        check(!issuesWith(is, "emploie REF_TO I_Demarrable").empty(), "n15 : une locale d'un type interface : emploie REF_TO I_Demarrable" + errorsOf(is));
+        check(!types::flatten(p, "Equip", "I_Demarrable").ok(), "n15 : flatten refuse une interface (aucune case)");
+        Project q = buildProject();
+        addVar(q, "Equipements", "LIST OF REF_TO I_Demarrable");
+        addScript(q, "S_Ref", "VAR\n    r : REF_TO I_Demarrable;\nEND_VAR\nr := NULL;");
+        check(issuesWith(generOf(q), "est une interface").empty(), "n15 : LIST OF REF_TO I_Demarrable et une locale REF_TO restent permises");
+    }
+
+    // n36 : le conseil mene a un type accepte ; une methode prend REF_TO I_x (et refuse I_x seul).
+    {
+        Project p = buildProject();
+        std::string why;
+        check(!types::validMemberType(p, "I_Demarrable", &why) && why.find("LIST OF REF_TO I_Demarrable") != std::string::npos
+                  && types::validMemberType(p, "LIST OF REF_TO I_Demarrable"),
+              "n36 : un membre I_x : le conseil (LIST OF REF_TO I_x) est un type accepte (" + why + ")");
+        HmiType* pompe = nullptr;
+        for (auto& t : p.programs.types) if (t.name == "T_Pompe") pompe = &t;
+        HmiFunction ok = method(p, "Ajouter", {}, "Marche := TRUE;", Visibility::Public, false, {param(p, "e", "REF_TO I_Demarrable")});
+        check(methodProblem(p, *pompe, ok).empty(), "n36 : une methode Ajouter(e : REF_TO I_Demarrable) est acceptee (" + methodProblem(p, *pompe, ok) + ")");
+        HmiFunction bad = method(p, "Ajouter2", {}, "Marche := TRUE;", Visibility::Public, false, {param(p, "e", "I_Demarrable")});
+        check(methodProblem(p, *pompe, bad).find("REF_TO I_Demarrable") != std::string::npos, "n36 : un parametre I_Demarrable seul : emploie REF_TO");
+    }
+
+    // n24 : une methode appelle une autre methode du type par son nom nu (Journal()) - elle tourne.
+    {
+        Project p = buildProject();
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "R", "REAL");
+        const std::string r = run(p, "Pompe1.Heures := 9000.0;\nPompe1.Demarrer();\nR := Pompe1.Heures;", &err);
+        check(r == "9001", "n24 : Demarrer appelle Journal() (nom nu) : Heures 9000 -> 9001 [" + r + (err.empty() ? "" : " err=" + err) + "]");
+    }
+
+    // n42 : un trou {Membre} d'un message lit SELF ; un argument nomme garde son nom.
+    {
+        Project p = buildProject();
+        for (auto& t : p.programs.types)
+            if (t.name == "T_Pompe")
+                t.methods.push_back(method(p, "Verifier", {}, "IF Debit < 1.0 THEN LEVER('E_Debit', 'debit bas : {Debit:0.0}'); END_IF;"));
+        addVar(p, "Pompe1", "T_Pompe");
+        addVar(p, "Debit", "REAL", "7.0");                      // une variable IHM du meme nom
+        addVar(p, "R", "STRING");
+        const std::string r = run(p, "Pompe1.Debit := 0.5;\nTRY\n    Pompe1.Verifier();\nCATCH e\n    R := e.Message;\nEND_TRY", &err);
+        check(r == "debit bas : 0.5", "n42 : le trou {Debit:0.0} lit SELF.Debit (0.5), pas la variable IHM (7.0) [" + r + "]");
+        HmiType& reg = addType(p, "T_Regul");
+        reg.members.push_back(member("Consigne", "REAL"));
+        HmiFunction ap = method(p, "Appliquer", {}, "Ecrire(Consigne := Consigne);\nIHM_LOG(INFO, 'c = {Consigne}');");
+        const std::string txt = methodFunctionText(p, "T_Regul", ap);
+        check(txt.find("Ecrire(Consigne := SELF.Consigne)") != std::string::npos && txt.find("{SELF.Consigne}") != std::string::npos,
+              "n42 : Ecrire(Consigne := Consigne) garde le nom de l'argument ; {Consigne} lit SELF");
+        check(static_cast<bool>(sim::parseFunction(txt, "essai")), "n42 : la FUNCTION de la methode se lit (plus d'erreur de syntaxe)");
+    }
+
+    // n47 : DYNAMIC_CAST<I_Demarrable>(objet) rend une reference si le type l'implemente, NULL sinon.
+    {
+        Project p = buildProject();
+        addVar(p, "Vanne1", "T_Vanne");
+        addType(p, "T_Autre").members.push_back(member("x", "INT"));
+        addVar(p, "Autre1", "T_Autre");
+        addVar(p, "R", "REAL");
+        const std::string r = run(p,
+            "VAR ref1 : REF_TO I_Demarrable; ref2 : REF_TO I_Demarrable; END_VAR\n"
+            "ref1 := DYNAMIC_CAST<I_Demarrable>(Vanne1);\nIF ref1 <> NULL THEN ref1^.Demarrer(); END_IF;\n"
+            "ref2 := DYNAMIC_CAST<I_Demarrable>(Autre1);\nR := Vanne1.Position;\nIF ref2 <> NULL THEN R := -1.0; END_IF;", &err);
+        check(r == "100", "n47 : DYNAMIC_CAST<I_Demarrable>(Vanne1) -> une reference (Demarrer appelee), T_Autre -> NULL [" + r
+                              + (err.empty() ? "" : " err=" + err) + "]");
+    }
+
+    // n48 : un type IHM du projet nomme T_Erreur reste une structure ordinaire (copiee en entier).
+    {
+        Project p;
+        HmiType& t = addType(p, "T_Erreur");
+        t.members.push_back(member("Code", "INT"));
+        t.members.push_back(member("Texte", "STRING"));
+        addVar(p, "R", "STRING");
+        const std::string r = run(p, "VAR\n    d : T_Erreur;\n    d2 : T_Erreur;\nEND_VAR\nd.Code := 3;\nd.Texte := 'abc';\nd2 := d;\nR := CONCAT(d2.Texte, INT_TO_STRING(d2.Code));", &err);
+        check(r == "abc3", "n48 : un type du projet nomme T_Erreur se copie en entier (d2 := d) [" + r + (err.empty() ? "" : " err=" + err) + "]");
     }
 }

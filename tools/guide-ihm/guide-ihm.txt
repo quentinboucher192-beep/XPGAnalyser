@@ -6432,7 +6432,7 @@ Un objet (une instance de symbole), un symbole et un type IHM ont un nœud **Op�
 @lieux types-ihm
 @voir types-ihm, operateurs, enum-types, rappels, symboles, parcours-symbole, scripts, erreurs-scripts
 ### Une méthode : SELF et les membres par leur nom
-Dans l'onglet Types IHM, sous la grille des membres (à côté des Opérateurs), la section **Méthodes** : **Ajouter une méthode…** ouvre un dialogue (nom, retour facultatif, paramètres, **Public**/**Privé**, case **Redéfinissable (virtuelle)**), puis un éditeur de script. Une méthode voit **SELF** (l'instance ; **THIS** vaut SELF), les membres par leur nom (ou `SELF.X` pour lever une ambiguïté avec une locale), ses paramètres et les autres méthodes du type.
+Dans l'onglet Types IHM, sous la grille des membres (à côté des Opérateurs), la section **Méthodes** : **Ajouter une méthode…** ouvre un dialogue (nom, retour facultatif, paramètres, **Public**/**Privé**, case **Redéfinissable (virtuelle)**), puis un éditeur de script. Une méthode voit **SELF** (l'instance ; **THIS** vaut SELF), les membres par leur nom (ou `SELF.X` pour lever une ambiguïté avec une locale), ses paramètres et les autres méthodes du type (`Journal()` appelle la méthode Journal de l'instance). Dans un message (LEVER, IHM_LOG, IHM_JOURNAL), un trou `{Debit:0.0}` lit le membre de l'instance ; un argument nommé (`Ecrire(Consigne := Consigne)`) garde son nom.
 Une méthode **procédure** n'a pas de retour (`Pompe1.Demarrer()`) ; une méthode **fonction** rend sa valeur par son nom (`EnDefaut := …`) ou par RETURN.
 ```ST
 TYPE T_Pompe
@@ -6528,7 +6528,7 @@ struct T_Vanne : I_Demarrable {
 };
 ```
 ### La liste hétérogène, et DYNAMIC_CAST pour redescendre
-Une interface ne s'emploie que par **REF_TO** (une instance a des données, pas un contrat) : `v : I_Demarrable` est refusé (« emploie REF_TO I_Demarrable »). Une `LIST OF REF_TO I_Demarrable` tient des pompes et des vannes ; `e^.Demarrer()` part sur le **type réel** de la cible de la référence (le dispatch dynamique). `DYNAMIC_CAST<T_Pompe>(e^)` rend une référence si c'en est une, NULL sinon.
+Une interface ne s'emploie que derrière une **référence** (une instance a des données, pas un contrat) : une locale ou un paramètre `v : I_Demarrable` est refusé (« emploie REF_TO I_Demarrable ») ; une variable IHM ou un membre prend une liste de références (`LIST OF REF_TO I_Demarrable`) ou un type qui l'implémente. Une `LIST OF REF_TO I_Demarrable` tient des pompes et des vannes ; `e^.Demarrer()` part sur le **type réel** de la cible de la référence (le dispatch dynamique). `DYNAMIC_CAST<T_Pompe>(e^)` rend une référence si c'en est une, NULL sinon ; `DYNAMIC_CAST<I_Demarrable>(Vanne1)` rend une référence à l'interface si le type l'implémente.
 ```ST
 VAR Equipements : LIST OF REF_TO I_Demarrable; END_VAR
 LIST_ADD(Equipements, REF(Pompe1));
@@ -6560,11 +6560,14 @@ for (auto* e : equipements) {
 ```
 ### Ce que Générer refuse
 - un membre ou une méthode **privé** lu de l'extérieur ;
-- **OVERRIDE** sans VIRTUAL au parent, ou de signature différente, ou d'une méthode inexistante ;
+- une **redéfinition** (le nom d'une méthode du parent) d'une méthode non VIRTUAL, ou de signature différente ;
+- un **membre redéclaré** par un sous-type (déjà un membre du parent : deux cases au même chemin) ;
+- une faute dans le **corps d'une méthode** (sa syntaxe, un nom inconnu), à sa ligne ;
 - une **interface non satisfaite** (la méthode manquante est nommée) ;
 - **EXTENDS** hors structure, ou un **cycle** d'héritage ;
 - une **interface employée comme donnée** (sans REF_TO) ;
 - une **méthode d'un type inconnu**.
+> Une méthode n'a pas de case OVERRIDE : c'est le nom qui redéfinit. Un nom mal tapé (EnDefault) fait une méthode nouvelle, que `e^.EnDefaut()` ne voit pas - vérifie le nom de la redéfinition.
 > Un opérateur (a, b, Resultat) et une méthode (SELF) coexistent : un opérateur peut appeler une méthode. Les méthodes de type reprennent le mécanisme virtuel/SUPER des fonctions de symbole.
 
 == tableaux-ihm | Les tableaux et leurs propriétés
@@ -6969,7 +6972,7 @@ Vanne_Entree = false;
 `WAIT_UNTIL(condition [, délai])` attend que la **condition** (un BOOL) devienne vraie. Elle est **revérifiée à chaque reprise** de la tâche : dans un script détaché, l'IHM respire entre deux essais (les vues, la communication, les autres scripts avancent), donc la condition peut évoluer. Le **délai** (facultatif) est une durée (`T#2m`) ou un nombre de millisecondes ; sans lui, l'attente est sans fin (`IHM_SCRIPT_ARRETER` l'arrête).
 - **En instruction** (seule sur sa ligne) : un délai dépassé **lève `E_ATTENTE`** (« la condition n'est pas devenue vraie en 5 s »), que `TRY…CATCH` rattrape. Exemple d'une séquence de remplissage : `Vanne_Entree := TRUE; WAIT_UNTIL(Niveau_Cuve >= Consigne_Niveau, T#2m); Vanne_Entree := FALSE;`.
 - **Lue comme BOOL** (dans un `IF`, une affectation, un argument) : elle rend **TRUE** si la condition est devenue vraie, **FALSE** au délai, sans lever d'erreur : `IF WAIT_UNTIL(Pression_Etablie, T#10s) THEN Pompe := TRUE; ELSE IHM_LOG(ERROR, 'pression non établie'); END_IF`.
-! WAIT_UNTIL demande un script **détaché** : dans un script non détaché, l'IHM est figée pendant l'attente, donc la condition ne changera pas - Compiler l'avertit (coche Détaché), et l'attente est plafonnée à 10 s comme WAIT. La condition doit être une **pure lecture** : un appel qui écrit y est rejoué à chaque essai. Dans une expression (fx), WAIT_UNTIL est refusé. La fiche de WAIT_UNTIL (Natives › Scripts et temps) la montre en ST, C et C++.
+! WAIT_UNTIL demande un script **détaché** : dans un script non détaché, l'IHM est figée pendant l'attente, donc la condition ne changera pas - Compiler l'avertit (coche Détaché), et l'attente est plafonnée à 10 s comme WAIT (E_ATTENTE dit alors « en 10 s »). La condition doit être une **pure lecture** : un appel qui écrit y est rejoué à chaque essai. Dans une expression (fx), WAIT_UNTIL est refusé. La fiche de WAIT_UNTIL (Natives › Scripts et temps) la montre en ST, et son équivalent en C et C++ (une boucle qui teste la condition et appelle WAIT).
 @nouveau 1.12.26
 ### Lire et écrire des fichiers, les ressources du projet
 Les natives du dossier **Fichiers** lisent et écrivent des fichiers texte (UTF-8), parcourent un dossier et lisent les ressources du projet. Un chemin relatif part du dossier **donnees/** du projet (`DIR_DATA()` le dit) ; un chemin complet (`C:/Donnees/recette.csv`) va où il dit.
@@ -7058,6 +7061,7 @@ Compiler connaît ce que les scripts de l'IHM gagnent en 1.10 (le sujet des scri
 ### Lever ses propres erreurs
 Un `TRY … CATCH … END_TRY` rattrape une erreur du bloc au lieu d'arrêter le script. Tu peux **lever la tienne** avec `LEVER('E_Code', 'message')` : le **code** est un texte non vide (convention : préfixe `E_` en majuscules), le **message** interpole `{expr[:format]}` comme `IHM_JOURNAL`, **figé au moment du LEVER**. Dans un `TRY`, le CATCH la reçoit ; hors d'un `TRY`, le script s'arrête et la Console l'affiche (« E_Niveau : niveau hors plage : 3 % »).
 Le nom du `CATCH e` est un **T_Erreur en lecture seule** : `e.Code` (STRING), `e.Message` (STRING), `e.Ligne` (DINT) ; `e` tout court se lit comme `e.Message` (compatible avec le `CATCH Erreur` de la 1.12.1, qui recevait déjà le message). `RELEVER` (sans argument), dans un CATCH, réémet l'erreur courante - même code, même message, même ligne - vers le `TRY` englobant, ou arrête le script s'il n'y en a pas ; hors d'un CATCH, Compiler le refuse. Un exemple : `FUNCTION Verifier_Niveau(n : REAL) IF n < 0.0 OR n > 100.0 THEN LEVER('E_Niveau', 'niveau hors plage : {n:0.0} %'); END_IF; END_FUNCTION`, puis `TRY Verifier_Niveau(Niveau_Cuve); CATCH e IHM_LOG(WARNING, '{e.Code} (ligne {e.Ligne}) : {e.Message}'); END_TRY`. Les fiches LEVER, RELEVER et T_Erreur (Natives, onglet Types) les montrent en ST, C et C++.
+Levée dans une fonction ou une méthode, l'erreur porte la **ligne de l'appel** (`e.Ligne`), comme une erreur du moteur, et la Console nomme la fonction et sa ligne. À gauche de `??`, un LEVER se comporte comme une erreur du moteur : `??` prend la valeur de droite et le script continue. Deux `CATCH e` imbriqués sont permis : le `e` intérieur vaut dans son handler, puis l'extérieur revient ; le nom d'un CATCH ne vaut que de son `CATCH` à son `END_TRY` (un `FOR EACH e` ailleurs garde son sens). Un projet d'avant garde ses noms : `Relever := TRUE` reste une affectation, et une fonction nommée `Lever` est encore appelée par `Lever(...)` en tête d'instruction (Générer conseille de la renommer).
 Les erreurs du moteur portent aussi un **code intégré**, lu dans `e.Code` : `E_DIVISION` (division par zéro), `E_BORNE` (hors des bornes d'un tableau), `E_CONVERSION` (DYNAMIC_CAST / STATIC_CAST refusé), `E_CLE` (clé absente d'une MAP), `E_ASSERT` (ASSERT faux), `E_ATTENTE` (WAIT_UNTIL en instruction, délai dépassé), `E_MOTEUR` (le reste). `e.Message` reste le message français existant.
 > `CATCH` et un nom **déjà déclaré** (une variable STRING) reçoit le message comme en 1.12.1 (pas de `.Code`) ; un nom **non déclaré** (le cas recommandé, `CATCH e`) est l'objet T_Erreur. `CATCH` sans nom reste permis quand on n'inspecte pas l'erreur.
 
@@ -7474,7 +7478,7 @@ for (auto& it : recettes)
         Consigne_Pression = it.value("pression", 0.0);
 ```
 - `JSON_NOMBRE`, `JSON_ENTIER`, `JSON_TEXTE`, `JSON_BOOL` prennent un **défaut** facultatif : avec lui, une valeur absente ou du mauvais genre rend le défaut, sans erreur ; sans lui, elle lève `E_JSON`, rattrapable par TRY … CATCH.
-- Une **clé absente** rend `JSON_Absent` (pas d'erreur) ; `JSON_A(obj, 'clé')` teste sa présence, `JSON_TYPE(v)` donne son genre (`JSON_Objet`, `JSON_Liste`, `JSON_Texte`, `JSON_Nombre`, `JSON_Bool`, `JSON_Nul`, `JSON_Absent`), `JSON_CLES(obj)` la liste des clés.
+- Une **clé absente** rend `JSON_Absent` (pas d'erreur), dans une valeur ANY comme dans une `MAP[STRING] OF ANY` ; `JSON_A(obj, 'clé')` teste sa présence, `JSON_TYPE(v)` donne son genre (`JSON_Objet`, `JSON_Liste`, `JSON_Texte`, `JSON_Nombre`, `JSON_Bool`, `JSON_Nul`, `JSON_Absent`), `JSON_CLES(obj)` la liste des clés.
 ### Construire et écrire un JSON
 On construit avec les littéraux du dialecte (`[..]`, `['clé' := ..]`) : pas de nouvelle syntaxe. `JSON_ECRIRE` accepte une valeur ANY, une MAP / LIST / TUPLE, une structure IHM (ses membres) ou un scalaire.
 ```ST
@@ -7521,7 +7525,9 @@ if (std::regex_search(trame, m, std::regex("PRES=([0-9.]+)bar")))
 Nom = std::regex_replace(Saisie, std::regex("[^A-Za-z0-9_]"), "_");
 ```
 - En **ST**, `$` est le caractère d'échappement d'une chaîne : écris l'ancre `$` comme `$$` (`'^[0-9]{13}$$'` pour un EAN-13 complet), ou emploie le dialecte C / C++, où `$` est ordinaire.
-- `\w`, `\d`, `\s` travaillent sur les octets UTF-8 : pour les lettres accentuées (Hélium), écris des classes explicites. `REGEX_VALIDE(motif)` teste un motif saisi avant de l'employer ; un motif invalide lève `E_REGEX`.
+- `\w`, `\d`, `\s` travaillent sur les octets UTF-8 : pour les lettres accentuées (Hélium), écris des classes explicites. `REGEX_VALIDE(motif)` teste un motif saisi avant de l'employer : TRUE seulement si `REGEX_TROUVE` l'accepte ; un motif invalide lève `E_REGEX`.
+- Ce que la grammaire n'a pas : les lookbehind `(?<=…)`, les groupes nommés `(?<nom>…)` et les références arrière `\1` (refusés : `E_REGEX`). Entre deux choix qui commencent au même endroit, le plus long l'emporte (`Auto|Automatique` trouve « Automatique »). La recherche ne revient pas en arrière : un motif comme `^(\w+\s?)*$$` reste rapide, même sur un long texte.
+- Le texte fouillé fait **1 Mo au plus** (au-delà : `E_REGEX`) : lis un gros fichier ligne par ligne (`FILE_READ_LINES`).
 ### Gérer une erreur de données
 `JSON_LIRE` sur un texte mal formé, ou un accesseur de mauvais type sans défaut, lève une erreur claire et **rattrapable** (`e.Code` = `E_JSON`, `e.Message` cite la position). Un motif invalide lève `E_REGEX`.
 ```ST

@@ -162,8 +162,9 @@ const std::set<std::string>& statementWords() {
                                             "END_CASE", "FOR",    "TO",      "BY",         "DO",     "END_FOR", "WHILE",
                                             "END_WHILE", "REPEAT", "UNTIL",  "END_REPEAT", "EXIT",   "RETURN",
                                             "EACH",  "IN",        "FUNCTION", "END_FUNCTION",    // 1.10 : le dialecte IHM (13)
-                                            "CONTINUE", "TRY", "CATCH", "END_TRY",               // 1.12.1
-                                            "LEVER", "RELEVER"};                                   // 1.13.0
+                                            "CONTINUE", "TRY", "CATCH", "END_TRY"};              // 1.12.1
+    // 1.13.0 : LEVER et RELEVER n'y sont pas - comme le moteur, ce sont des noms ordinaires devant := (et LEVER sans
+    // parenthese, RELEVER devant une parenthese) : une variable ou une fonction d'un projet d'avant (Relever := TRUE).
     return k;
 }
 // 1.10 (decisions 13 et 13 bis) : les fonctions du dialecte IHM - reconnues
@@ -491,9 +492,18 @@ public:
         // Les compteurs de boucle : FOR i := ...
         for (std::size_t i = 0; i + 2 < toks_.size(); ++i)
             if (isWord(i, "FOR") && isIdent(i + 1) && isOp(i + 2, ":=")) counters_.insert(up(toks_[i + 1].text));
-        // 1.13.0 : le nom d'un CATCH (CATCH e sur sa ligne) - un T_Erreur, connu dans son handler.
-        for (std::size_t i = 0; i + 1 < toks_.size(); ++i)
-            if (isCatchVar(i)) catchVars_.insert(up(toks_[i + 1].text));
+        // 1.13.0 : le nom d'un CATCH (CATCH e sur sa ligne) - un T_Erreur, connu dans son handler seulement (du
+        // CATCH a son END_TRY) : ailleurs, le meme nom est autre chose (FOR EACH e IN Pompes, une faute de frappe).
+        for (std::size_t i = 0; i + 1 < toks_.size(); ++i) {
+            if (!isCatchVar(i)) continue;
+            std::size_t e = i + 2;
+            for (int depth = 0; !atEnd(e); ++e) {
+                if (isWord(e, "TRY")) ++depth;
+                else if (isWord(e, "END_TRY") && depth-- == 0) break;
+            }
+            const std::size_t to = atEnd(e) ? body_.size() : toks_[e].end();
+            catchVars_.push_back({toks_[i + 1].text, up(toks_[i + 1].text), toks_[i].at, to});
+        }
         if (sc_.view && sc_.project && inherits(*sc_.project, *sc_.view)) composed_ = compose(*sc_.project, *sc_.view);
         scanDialect(code);
     }
@@ -685,7 +695,8 @@ private:
     std::vector<std::size_t> lineStarts_;
     std::set<std::string> counters_;
     std::set<std::string> constants_;         // VAR CONSTANT : en lecture seule
-    std::set<std::string> catchVars_;         // 1.13.0 : les noms d'un CATCH (un T_Erreur en lecture seule)
+    struct CatchName { std::string name, upper; std::size_t from{0}, to{0}; };
+    std::vector<CatchName> catchVars_;        // 1.13.0 : les noms d'un CATCH (un T_Erreur en lecture seule), sur [CATCH, END_TRY)
     std::vector<bool>     tryStack_;          // 1.13.0 : les TRY ouverts (true : dans leur CATCH)
     int                   handlerDepth_{0};   // 1.13.0 : combien de CATCH englobent (RELEVER n'y est permis)
     std::optional<View>   composed_;
@@ -889,6 +900,12 @@ private:
             if (d.upper == U && at >= d.from && at < d.to) return true;
         return false;
     }
+    // 1.13.0 : une fonction de ce nom ecrite par l'utilisateur (du script, du projet, de la vue) - LEVER(...) l'appelle alors.
+    [[nodiscard]] bool userFunction(std::string_view name) const {
+        if (internalFunction(name)) return true;
+        if (sc_.project && !sc_.project->functionsNamed(name).empty()) return true;
+        return sc_.view && !viewmembers::functions(*sc_.view, name).empty();
+    }
     [[nodiscard]] bool internalFunction(std::string_view name) const {
         const std::string U = up(name);
         for (const auto& f : internal_) if (up(f.name) == U) return true;
@@ -1008,7 +1025,15 @@ private:
     [[nodiscard]] const LocalVar* local(std::string_view name) const { return parts_.local(name); }
     [[nodiscard]] bool counter(std::string_view name) const { return counters_.count(up(name)) > 0; }
     // 1.13.0 : un nom lie par un CATCH (un T_Erreur en lecture seule).
-    [[nodiscard]] bool catchVar(std::string_view name) const { return catchVars_.count(up(name)) > 0; }
+    [[nodiscard]] bool catchVar(std::string_view name) const {
+        const std::string U = up(name);
+        return std::any_of(catchVars_.begin(), catchVars_.end(), [&](const CatchName& c) { return c.upper == U; });
+    }
+    // ... a cette place du texte (dans son handler).
+    [[nodiscard]] bool catchVarAt(std::string_view name, std::size_t at) const {
+        const std::string U = up(name);
+        return std::any_of(catchVars_.begin(), catchVars_.end(), [&](const CatchName& c) { return c.upper == U && at >= c.from && at < c.to; });
+    }
     // 1.13.0 : CATCH e - un nom seul sur la ligne du CATCH (ni CATCH Etat := 0;) ; comme le parseur du moteur.
     [[nodiscard]] bool isCatchVar(std::size_t i) const {
         if (!isWord(i, "CATCH") || !isIdent(i + 1)) return false;
@@ -1144,7 +1169,8 @@ private:
         // 1.13.0 : e (l'erreur d'un CATCH) - un T_Erreur en lecture seule : e.Code, e.Message, e.Ligne ;
         // e seul se lit comme e.Message. Un nom deja declare (variable locale STRING) passe avant : il
         // garde le comportement du CATCH Erreur de la 1.12.1 ; sinon c'est l'objet T_Erreur.
-        if (catchVar(root.text) && !local(root.text) && !param(root.text) && !(p && p->variable(root.text))) {
+        if (catchVarAt(root.text, root.at) && !dialectName(root.text, root.at) && !counter(root.text) && !local(root.text)
+            && !param(root.text) && !(p && p->variable(root.text))) {
             if (write) {
                 reportTok(i, i + 1, S::Error, "l'erreur attrap\xC3\xA9" "e " + root.text + " est en lecture seule (Code, Message, Ligne)");
                 return {};
@@ -2108,12 +2134,23 @@ private:
                 const std::string U = up(toks_[k].text);
                 if (U == "END_IF" || U == "ELSE" || U == "ELSIF" || U == "END_FOR" || U == "END_WHILE" || U == "END_CASE"
                     || U == "END_REPEAT" || U == "UNTIL" || U == "FUNCTION" || U == "END_FUNCTION"
-                    || U == "CATCH" || U == "END_TRY"                        // 1.12.1
-                    || U == "RELEVER")                                       // 1.13.0 (LEVER se reconnait a sa parenthese)
+                    || U == "CATCH" || U == "END_TRY")                       // 1.12.1
                     return k;
+                // 1.13.0 : RELEVER (sans := ni parenthese) commence une instruction quand une valeur vient de finir
+                // (un ';' oublie : IHM_LOG(...) RELEVER) ; apres :=, un operateur ou une virgule, c'est un nom
+                // (Compteur := Relever ; une variable d'un projet d'avant).
+                if (U == "RELEVER" && !isOp(k + 1, ":=") && !isOp(k + 1, "(") && k > 0 && operandEnded(k - 1)) return k;
             }
         }
         return k;
+    }
+    // 1.13.0 : le jeton k termine-t-il une valeur (un nom, un nombre, un texte, une parenthese ou un crochet fermant) ?
+    [[nodiscard]] bool operandEnded(std::size_t k) const {
+        if (k >= toks_.size()) return false;
+        const Tok& t = toks_[k];
+        if (t.k == Tok::K::Op) return t.text == ")" || t.text == "]" || t.text == "^";
+        if (t.k == Tok::K::Ident) return !operatorWords().count(up(t.text)) || up(t.text) == "TRUE" || up(t.text) == "FALSE" || up(t.text) == "NULL";
+        return t.k != Tok::K::End;
     }
     [[nodiscard]] std::size_t findWord(std::size_t k, std::initializer_list<const char*> words) const {
         int depth = 0;
@@ -2243,8 +2280,9 @@ private:
             ++i;
             return;
         }
-        // 1.13.0 : RELEVER - n'est permis que dans un CATCH ; reemet l'erreur courante.
-        if (U == "RELEVER") {
+        // 1.13.0 : RELEVER - n'est permis que dans un CATCH ; reemet l'erreur courante. Devant := ou une parenthese,
+        // c'est un nom ordinaire (comme le moteur) : une variable ou une fonction nommee Relever.
+        if (U == "RELEVER" && !isOp(i + 1, ":=") && !isOp(i + 1, "(")) {
             if (handlerDepth_ == 0)
                 reportTok(i, i + 1, Finding::Severity::Error, "RELEVER n'est permis que dans un CATCH (il r\xC3\xA9\xC3\xA9met l'erreur attrap\xC3\xA9" "e)");
             i = after(i);
@@ -2252,7 +2290,7 @@ private:
         }
         // 1.13.0 : LEVER('E_Code' [, 'message']) - le code (un texte non vide) et le message (un texte,
         // ses trous {expr} relus). La parenthese suit le mot.
-        if (U == "LEVER" && isOp(i + 1, "(")) {
+        if (U == "LEVER" && isOp(i + 1, "(") && !userFunction("LEVER")) {   // une fonction Lever (projet d'avant) : un appel
             int depth = 0;
             std::size_t close = i + 1;
             for (; !atEnd(close); ++close) {
@@ -2262,6 +2300,8 @@ private:
             const auto args = argsOf(i + 1, close);
             if (args.empty())
                 reportTok(i, i + 1, Finding::Severity::Error, "LEVER('E_Code' [, 'message']) : il manque le code (un texte, ex. 'E_Niveau')");
+            else if (args.size() > 2)
+                reportTok(i, i + 1, Finding::Severity::Error, "LEVER prend un code et, au plus, un message : LEVER('E_Code', 'message')");
             else {
                 const auto [a0, b0] = args.front();
                 if (b0 == a0 + 1 && toks_[a0].k == Tok::K::Str && toks_[a0].text.find_first_not_of("'\" \t") == std::string::npos)
@@ -2521,29 +2561,51 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
         i.fixTo = f.fixTo;
         out.push_back(std::move(i));
     };
+    // 1.13.0 : WAIT_UNTIL dans un script NON detache - l'IHM est figee pendant l'attente : la condition ne changera pas
+    // (l'attente est plafonnee a 10 s, comme WAIT). Un avertissement a chaque WAIT_UNTIL, avec le remede.
+    const auto waitUntilHere = [&](const Script& sc, const Issue& base, bool viewScript) {
+        if (sc.detached && !viewScript) return;
+        const std::string code = markers::strip(sc.body);
+        const auto toks = lex(code);
+        for (std::size_t k = 0; k + 1 < toks.size(); ++k) {
+            if (toks[k].k != Tok::K::Ident || up(toks[k].text) != "WAIT_UNTIL" || toks[k + 1].k != Tok::K::Op || toks[k + 1].text != "(") continue;
+            if (k > 0 && toks[k - 1].k == Tok::K::Op && toks[k - 1].text == ".") continue;
+            const std::size_t at = std::min(toks[k].at, code.size());
+            const std::size_t lineStart = code.rfind('\n', at == 0 ? 0 : at - 1);
+            Issue i = base;
+            i.severity = Issue::Severity::Warning;
+            i.message = viewScript
+                ? "WAIT_UNTIL dans un script de vue : l'IHM est fig\xC3\xA9" "e pendant l'attente, la condition ne changera pas (10 s au plus) "
+                  "\xE2\x80\x94 un script de vue ne se d\xC3\xA9tache pas : lance la s\xC3\xA9quence par IHM_APPELER, dans un script g\xC3\xA9n\xC3\xA9ral d\xC3\xA9tach\xC3\xA9"
+                : "WAIT_UNTIL dans un script non d\xC3\xA9tach\xC3\xA9 : l'IHM est fig\xC3\xA9" "e pendant l'attente, la condition ne "
+                  "changera pas (10 s au plus) \xE2\x80\x94 coche D\xC3\xA9tach\xC3\xA9";
+            i.line = 1 + static_cast<int>(std::count(code.begin(), code.begin() + static_cast<std::ptrdiff_t>(at), '\n'));
+            i.column = static_cast<int>(at - (lineStart == std::string::npos || at == 0 ? 0 : lineStart + 1)) + 1;
+            i.length = static_cast<int>(toks[k].text.size());
+            out.push_back(std::move(i));
+        }
+    };
     for (const auto& sc : p.programs.scripts) {
         if (sc.lang != ScriptLang::ST || (focus && !focus->scripts.count(sc.id))) continue;
         Scope own = scopeFor(nullptr, nullptr);
         own.ns = sc.ns;                                           // 1.13.0 (lot J8) : il voit son espace sans prefixe
-        for (const auto& f : check(own, sc.body, sc.decls, decl::Role::Script)) {
-            Issue i;
-            i.category = "Script";
-            i.property = sc.name;
-            i.script = sc.id;
-            fill(std::move(i), f);
-        }
+        Issue base;
+        base.category = "Script";
+        base.property = sc.name;
+        base.script = sc.id;
+        for (const auto& f : check(own, sc.body, sc.decls, decl::Role::Script)) fill(base, f);
+        waitUntilHere(sc, base, false);
     }
     for (const auto& v : p.views) {
         for (const auto& sc : v.scripts) {
             if (sc.lang != ScriptLang::ST || (focus && !focus->scripts.count(sc.id))) continue;
-            for (const auto& f : check(scopeFor(&v, nullptr), sc.body, sc.decls, decl::Role::Script)) {
-                Issue i;
-                i.category = "Script";
-                i.view = v.id;
-                i.property = sc.name;
-                i.script = sc.id;
-                fill(std::move(i), f);
-            }
+            Issue base;
+            base.category = "Script";
+            base.view = v.id;
+            base.property = sc.name;
+            base.script = sc.id;
+            for (const auto& f : check(scopeFor(&v, nullptr), sc.body, sc.decls, decl::Role::Script)) fill(base, f);
+            waitUntilHere(sc, base, true);
         }
         // 1.12.16 : les fonctions de la vue (ou de la popup) - elles voient ses constantes et ses fonctions.
         if (!isSymbolView(v))

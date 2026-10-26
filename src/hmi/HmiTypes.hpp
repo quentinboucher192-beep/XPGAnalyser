@@ -65,6 +65,11 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why = nullptr);
 // dans la memoire de l'IHM ; un type qui s'y contiendrait (T_Noeud.Enfants : LIST OF T_Noeud) est refuse.
 // `owner` : le type IHM du membre (vide : pas de controle du cycle).
 [[nodiscard]] bool validMemberType(const Project&, std::string_view type, std::string* why = nullptr, std::string_view owner = {});
+// 1.13.0 (lot J1) : une INTERFACE employee comme donnee (v : I_Demarrable, LIST OF I_Demarrable, TUPLE(REF_TO I_A, I_B)) :
+// le message ; vide : aucune (chaque interface est derriere REF_TO, POINTER TO ou REFERENCE TO). `declaration` : une
+// locale, un parametre, un retour (le conseil : REF_TO I_x) ; sinon une variable IHM, un membre (LIST OF REF_TO I_x : une
+// reference seule ne se range que dans une declaration).
+[[nodiscard]] std::string interfaceAsData(const Project&, std::string_view type, bool declaration = false);
 
 // 1.12.2 : LES TYPES OBJETS DE L'IHM - une MAP (MAP[STRING] OF REAL), une liste (LIST OF T), un
 // vecteur (VECTOR OF T), un tuple (TUPLE(INT, STRING)), ou un tableau de l'un d'eux. Une variable

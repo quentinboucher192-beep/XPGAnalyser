@@ -877,20 +877,24 @@ private:
     // 1.13.0 (dialecte IHM) : LEVER('E_Code' [, 'message {trou}']) - leve une erreur a soi, d'un code
     // et d'un message (optionnel). Le code et le message sont des expressions (lues a l'execution) ;
     // `value` porte le code, `condition` le message (nul : aucun).
+    // L'appel est lu en entier et garde (`target`) : une fonction nommee Lever (un projet d'avant la 1.13.0 :
+    // lever une barriere) le prend a l'execution, avec tous ses arguments ; sinon c'est LEVER. Un appel qui
+    // n'a pas la forme de LEVER (aucun argument, plus de deux, un argument nomme) n'a ni `value` ni
+    // `condition` : raiseStmt le dit, s'il n'y a pas de telle fonction.
     core::Result<StmtPtr> raiseStatement() {
         auto s = std::make_shared<Stmt>();
         s->kind = Stmt::Kind::Raise;
-        s->line = advance().line;                       // LEVER
-        if (!accept("(")) return error("expected '(' after LEVER");
-        auto code = expression();
-        if (!code) return core::Err<core::Error>(code.error());
-        s->value = *code;
-        if (accept(",")) {
-            auto msg = expression();
-            if (!msg) return core::Err<core::Error>(msg.error());
-            s->condition = *msg;
+        s->line = peek().line;                          // LEVER
+        auto call = expression();
+        if (!call) return core::Err<core::Error>(call.error());
+        const Expr& c = **call;
+        if (c.kind != Expr::Kind::Call) return error("expected '(' after LEVER");
+        s->target = *call;
+        const bool unnamed = std::all_of(c.arguments.begin(), c.arguments.end(), [](const auto& a) { return a.first.empty(); });
+        if (unnamed && c.outputs.empty() && (c.arguments.size() == 1 || c.arguments.size() == 2)) {
+            s->value = c.arguments[0].second;
+            if (c.arguments.size() == 2) s->condition = c.arguments[1].second;
         }
-        if (!accept(")")) return error("expected ')' to close LEVER");
         accept(";");
         return s;
     }
@@ -2285,7 +2289,9 @@ private:
             expr(s.condition);
             return;
         }
-        expr(s.target);
+        // 1.13.0 : LEVER('E_x', 'msg') garde l'appel entier dans `target` (une fonction Lever d'avant le prend) :
+        // ses arguments (value, condition) suffisent ; sans cette forme, l'appel lui-meme.
+        if (!(s.kind == Stmt::Kind::Raise && s.value)) expr(s.target);
         for (const auto& t : s.extraTargets) expr(t);
         expr(s.value);
         expr(s.condition);
@@ -2369,7 +2375,7 @@ void collectStmts(const std::vector<StmtPtr>& body, std::uint32_t line, std::vec
 
 void collectStmt(const Stmt& s, std::uint32_t line, std::vector<LineName>& out) {
     if (s.kind == Stmt::Kind::For && s.line == line) out.emplace_back(nullptr, s.loopVariable);
-    collectExpr(s.target, line, out);
+    if (!(s.kind == Stmt::Kind::Raise && s.value)) collectExpr(s.target, line, out);   // 1.13.0 : LEVER (voir CallWalker)
     for (const auto& t : s.extraTargets) collectExpr(t, line, out);
     collectExpr(s.value, line, out);
     collectExpr(s.condition, line, out);
@@ -2496,8 +2502,22 @@ public:
         return *obj;
     }
 
-    // 1.11.17 : une locale de valeur simple (readCallerLocal).
+    // 1.11.17 : une locale de valeur simple (readCallerLocal). 1.13.0 : ou un chemin depuis une locale (SELF.Debit
+    // dans le message d'un LEVER d'une methode, r^.Nom, T[2]) - lu sans effet (une lecture au passage).
     bool readLocal(std::string_view name, Value& out) {
+        if (const auto cut = name.find_first_of(".[^"); cut != std::string_view::npos) {
+            // Une seule a la fois : la lecture du chemin peut repasser par l'environnement (une VAR_IN_OUT liee a une
+            // variable IHM de meme nom), qui redemanderait le meme chemin.
+            if (readingPath_ || cut == 0 || !findLocal(name.substr(0, cut))) return false;
+            auto parsed = parseExpression(name);
+            if (!parsed || !(*parsed)->root) return false;
+            readingPath_ = true;
+            auto v = evaluateQuietly(*(*parsed)->root);
+            readingPath_ = false;
+            if (!v) return false;
+            out = *v;
+            return true;
+        }
         const Place* p = findLocal(name);
         if (!p || !p->obj || (p->obj->type && p->obj->type->aggregate())) return false;
         out = p->obj->value;
@@ -2574,26 +2594,33 @@ public:
     }
 
 private:
-    void fail(std::uint32_t line, std::string message) {
+    void fail(std::uint32_t line, std::string message) { failCaused(line, std::move(message), {}); }
+    // `cause` : le message brut qui donne le code E_* (vide : `message` lui-meme) - l'echec d'une fonction appelee.
+    void failCaused(std::uint32_t line, std::string message, std::string cause) {
         // Lot API 8 : une lecture au passage (point d'arret) ne dit rien au
         // journal et n'arrete pas le cycle : l'erreur revient en valeur.
         // 1.12.1 : le cote gauche de a ?? b non plus (son erreur choisit b).
-        if (probing_ || quiet_ > 0) return;
+        // 1.13.0 : sauf dans un TRY ouvert DANS ce cote gauche (une fonction appelee a gauche de ??) : il l'attrape.
+        if (probing_ || (quiet_ > 0 && catching_ <= quietCatching_)) return;
         // 1.10 : dans le dialecte IHM, le message seul (sans "invalid argument: ") ;
         // dans une fonction du projet, sa ligne a elle, l'appel a la ligne de l'appelant.
+        std::string origin;
         if (dialect_) {
             for (std::string_view prefix : {"invalid argument: ", "not implemented: "})
                 if (message.rfind(prefix, 0) == 0) message.erase(0, prefix.size());
             if (!calleeLabel_.empty()) {
-                message = "fonction " + calleeLabel_ + ", ligne " + std::to_string(line) + " : " + message;
+                origin = "fonction " + calleeLabel_ + ", ligne " + std::to_string(line);
                 line = calleeLine_;
             }
         }
+        // 1.13.0 : le message brut (sans le prefixe « fonction F, ligne N : ») garde son code E_* (caughtCode).
+        std::string raw = cause.empty() ? message : std::move(cause);
+        if (!origin.empty()) message = origin + " : " + message;
         // 1.12.1 : dans un TRY, l'erreur est gardee pour son CATCH (pas au journal) - sauf une
         // boucle sans fin, un cycle trop long : ceux-la arretent tout, comme avant.
         if (catching_ > 0 && !caught_.any && message.find(" loop ran more than ") == std::string::npos
             && message.find("the scan exceeded") == std::string::npos) {
-            caught_ = Caught{true, {}, std::move(message), line};   // 1.13.0 : code vide (erreur moteur)
+            caught_ = Caught{true, {}, std::move(message), line, std::move(raw), std::move(origin)};   // 1.13.0 : code vide (erreur moteur)
             aborted_ = true;
             return;
         }
@@ -2944,7 +2971,8 @@ private:
             // Lot API 7 : l'environnement peut choisir de continuer - l'appel
             // rend 0, rien n'est rendu aux variables passees, le cycle va au bout.
             if (env_.tolerateUnknownCall(*target, e.line)) return Value::integer(Type::DInt, 0);
-            fail(e.line, "'" + *target + "' is not a function or a block this simulator knows");
+            // 1.13.0 : une fonction du projet qui a echoue (pas inconnue) : sa cause donne le code E_* du CATCH.
+            failCaused(e.line, "'" + *target + "' is not a function or a block this simulator knows", env_.lastCallError());
             return core::fail(core::ErrorCode::NotImplemented, *target);
         }
         // Lot API 8 : une lecture au passage ne rend rien aux variables passees.
@@ -3157,12 +3185,45 @@ private:
 
     // 1.13.0 : une erreur gardee par TRY. `code` vide : une erreur du moteur (traduite en E_* par
     // l'environnement au moment du CATCH) ; non vide : un LEVER (ou E_ATTENTE) au message deja final.
-    struct Caught { bool any{false}; std::string code; std::string message; std::uint32_t line{0}; };
+    // `raw` : le message du moteur avant le prefixe « fonction F, ligne N : » (son code E_* se lit dessus) ;
+    // `origin` : ce prefixe (« fonction F, ligne N »), pose une fois - une erreur nee dans une fonction
+    // isolee (une methode, une fonction du projet aux types riches) porte alors la ligne de l'appel.
+    struct Caught {
+        bool any{false};
+        std::string code;
+        std::string message;
+        std::uint32_t line{0};
+        std::string raw;
+        std::string origin;
+    };
+
+    // Le cote gauche de a ?? b : ses erreurs choisissent b (fail et LEVER se taisent), sauf dans un TRY
+    // ouvert plus bas (quietCatching_ : la profondeur des TRY a l'ouverture).
+    struct QuietSide {
+        explicit QuietSide(Runner& r) : runner(r), saved(r.quietCatching_) {
+            if (runner.quiet_++ == 0) runner.quietCatching_ = runner.catching_;
+        }
+        ~QuietSide() {
+            --runner.quiet_;
+            runner.quietCatching_ = saved;
+        }
+        QuietSide(const QuietSide&) = delete;
+        QuietSide& operator=(const QuietSide&) = delete;
+        Runner& runner;
+        int     saved;
+    };
 
     // 1.13.0 : le code et le message (final, trous remplis) d'une erreur telle que CATCH e la lit :
     // un LEVER (ou E_ATTENTE) garde les siens ; une erreur du moteur recoit son code E_* et son
-    // message francais de l'environnement (caughtCode, caughtMessage).
-    std::string errorCode(const Caught& c) { return c.code.empty() ? env_.caughtCode(c.message) : c.code; }
+    // message francais de l'environnement (caughtCode, caughtMessage). Le code se lit sur le message
+    // BRUT (sans « fonction Charger_JSON, ligne 2 : », qui faussait starts() et has("JSON")) ; un appel
+    // qui a echoue sans dire pourquoi (« 'F' is not a function... », le nom entre apostrophes) : E_MOTEUR.
+    std::string errorCode(const Caught& c) {
+        if (!c.code.empty()) return c.code;
+        const std::string& m = c.raw.empty() ? c.message : c.raw;
+        if (m.find("' is not a function or a block this simulator knows") != std::string::npos) return "E_MOTEUR";
+        return env_.caughtCode(m);
+    }
     std::string errorMessage(const Caught& c) { return c.code.empty() ? env_.caughtMessage(c.message) : c.message; }
 
     // 1.13.0 : le type natif T_Erreur (Code STRING, Message STRING, Ligne DINT), en lecture seule.
@@ -3203,16 +3264,29 @@ private:
         aborted_ = false;
         // 1.13.0 : un nom deja declare (une locale, ou une variable du projet) recoit le message comme
         // en 1.12.1 (CATCH Erreur) ; un nom NON declare (le cas recommande, CATCH e) devient le T_Erreur.
-        const bool declared = !s.loopVariable.empty() && (findLocal(s.loopVariable) != nullptr || env_.exists(s.loopVariable));
+        // L'erreur d'un CATCH englobant (CATCH e dans le handler d'un autre CATCH e, ou une fonction du
+        // script appelee depuis ce handler) n'est pas une declaration : le e interieur la masque le temps
+        // de son handler, puis l'exterieur revient.
+        const Place* prev = s.loopVariable.empty() ? nullptr : findLocal(s.loopVariable);
+        const bool outerError = prev && isErrorObj(prev->obj);
+        const bool declared = !s.loopVariable.empty() && !outerError && (prev != nullptr || env_.exists(s.loopVariable));
         if (!s.loopVariable.empty() && declared
             && !assignName(s.loopVariable, Value::text(errorMessage(got)), s.line))
             return {Flow::Kind::Aborted};
-        if (!s.loopVariable.empty() && !declared) bindError(s.loopVariable, got);
+        std::optional<Place> shadowed;                   // le e de meme nom dans CETTE portee (un CATCH englobant)
+        if (!s.loopVariable.empty() && !declared) {
+            auto& names = frames_.back().scopes.back().names;
+            if (const auto it = names.find(upperOf(s.loopVariable)); it != names.end()) shadowed = it->second;
+            bindError(s.loopVariable, got);
+        }
         handling_.push_back(got);                        // 1.13.0 : RELEVER reemet cette erreur
         const Flow out = sequence(s.elseBody, s.line);
         handling_.pop_back();
-        if (!s.loopVariable.empty() && !declared)
-            frames_.back().scopes.back().names.erase(upperOf(s.loopVariable));   // e ne vit que le handler
+        if (!s.loopVariable.empty() && !declared) {      // e ne vit que le handler
+            auto& names = frames_.back().scopes.back().names;
+            if (shadowed) names[upperOf(s.loopVariable)] = *shadowed;
+            else names.erase(upperOf(s.loopVariable));
+        }
         return out;
     }
 
@@ -3225,6 +3299,16 @@ private:
     // 1.13.0 : LEVER('E_Code' [, 'message']) - leve une erreur a soi. Dans un TRY : gardee pour son
     // CATCH (comme une erreur du moteur) ; hors d'un TRY : le script s'arrete, la Console la montre.
     Flow raiseStmt(const Stmt& s) {
+        // Une fonction de ce nom (du script, du projet, de la vue) : un appel ordinaire, comme en 1.12.31.
+        if (s.target && (!findFunctions("LEVER").empty() || env_.overloads("LEVER") > 0 || env_.dialectFunction("LEVER"))) {
+            Stmt call;
+            call.kind = Stmt::Kind::Call;
+            call.line = s.line;
+            call.value = s.target;
+            return statement(call, s.line);
+        }
+        if (!s.value)
+            return failAt(s.line, "LEVER prend un code et, au plus, un message : LEVER('E_Code') ou LEVER('E_Code', 'message')");
         auto codeV = evaluate(*s.value);
         if (!codeV) { if (!aborted_) fail(s.line, codeV.error().message()); return {Flow::Kind::Aborted}; }
         if (codeV->type() != Type::String)
@@ -3241,7 +3325,7 @@ private:
             const CallerScope caller(this);
             message = env_.interpolateMessage(msgV->asString());
         }
-        return raise(Caught{true, std::move(code), std::move(message), s.line});
+        return raise(Caught{true, std::move(code), std::move(message), s.line, {}, {}});
     }
 
     // 1.13.0 : RELEVER - reemet l'erreur du CATCH courant (meme code, meme message, meme ligne) vers
@@ -3254,13 +3338,24 @@ private:
 
     // 1.13.0 : garde l'erreur pour le TRY englobant (son CATCH), ou - aucun - l'ecrit a la Console et
     // arrete le script, avec son code en tete (E_Niveau : niveau hors plage...).
+    // 1.13.0 : a gauche de ?? (le cote a), un LEVER se tait comme une erreur du moteur : ?? choisit b, le script
+    // continue (sauf un TRY ouvert plus bas, qui l'attrape). Dans une fonction isolee (une methode, une fonction
+    // du projet aux types riches), comme fail : la ligne de l'appel dans le script, et la Console nomme la
+    // fonction et sa ligne (« fonction METHODE_..., ligne 2 : E_Debit : ... ») ; e.Message garde le message.
     Flow raise(Caught c) {
+        if (probing_ || (quiet_ > 0 && catching_ <= quietCatching_)) return {Flow::Kind::Aborted};
+        if (dialect_ && !calleeLabel_.empty() && c.origin.empty()) {
+            c.origin = "fonction " + calleeLabel_ + ", ligne " + std::to_string(c.line);
+            c.line = calleeLine_;
+        }
         if (catching_ > 0 && !caught_.any) {
             caught_ = std::move(c);
             aborted_ = true;
             return {Flow::Kind::Aborted};
         }
-        std::string shown = c.code.empty() ? errorMessage(c) : c.code + (c.message.empty() ? "" : " : " + c.message);
+        std::string shown = c.code.empty() ? errorMessage(c)
+                                           : (c.origin.empty() ? std::string{} : c.origin + " : ") + c.code
+                                                 + (c.message.empty() ? "" : " : " + c.message);
         env_.report(Diagnostic{Diagnostic::Severity::Error, std::move(shown), c.line, section_});
         aborted_ = true;
         return {Flow::Kind::Aborted};
@@ -3964,6 +4059,8 @@ private:
             return false;
         }
         // 1.13.0 : une case ANY (une boite JSON) accepte toute valeur (litteral, scalaire, conteneur, ANY).
+        // x := x (ou L[w] := L[r] avec w = r) : la meme case, rien a faire (la vider d'abord la perdait).
+        if (v.o && &into == v.o.get()) return true;
         if (into.type->kind == TypeDesc::Kind::Any) return storeIntoAny(into, v, why);
         // 1.12.19 : un rappel recoit aussi le nom d'une fonction en texte ('Carre') - la maquette (decision 6).
         if (!v.o && into.type->kind == TypeDesc::Kind::Callback) return storeCallback(into, v, why);
@@ -4251,8 +4348,10 @@ private:
     // ---- lire et ecrire un emplacement ------------------------------------
     // 1.13.0 : e seul (un T_Erreur) se lit comme e.Message - compatible avec le CATCH Erreur de
     // la 1.12.1, qui recevait deja le message.
+    // Le type natif par son IDENTITE (errorType), pas par son nom : un type IHM du projet nomme T_Erreur (un projet
+    // d'avant la 1.13.0) reste une structure ordinaire, lue et copiee en entier.
     static bool isErrorObj(const ObjRef& o) {
-        return o && o->type && o->type->kind == TypeDesc::Kind::Struct && o->type->name == "T_Erreur";
+        return o && o->type && o->type == errorType();
     }
     core::Result<RV> readPlace(const Place& p) {
         if (p.obj) {
@@ -4473,7 +4572,7 @@ private:
                         if (upperOf(type.members[k].first) == m) return Place{p.obj->items[k], {}, p.constant, p.temp};
                     if (type.kind == TypeDesc::Kind::Tuple)
                         return dialectError("un " + type.text() + " a Item1 \xC3\xA0 Item" + std::to_string(type.members.size()) + ", pas '" + e.name + "'");
-                    if (type.name == "T_Erreur")            // 1.13.0 : l'erreur attrapee
+                    if (&type == errorType().get())          // 1.13.0 : l'erreur attrapee (le type natif, pas un homonyme)
                         return dialectError("T_Erreur n'a que Code, Message et Ligne, pas '" + e.name + "'");
                     return dialectError(type.name + " n'a pas de membre '" + e.name + "'");
                 }
@@ -4614,7 +4713,10 @@ private:
                         entry = it->second;
                     }
                     if (!entry) {
-                        if (jsonBase && !create) return Place{jsonAbsent(), {}, true, true};   // 1.13.0 : cle JSON absente -> JSON_Absent
+                        // 1.13.0 : cle JSON absente -> JSON_Absent - dans une boite ANY, et aussi dans une MAP[STRING] OF ANY
+                        // (l'objet JSON tel que JSON_LIRE le rend, ou range dans une variable de ce type).
+                        const bool jsonMap = jsonBase || (type.element && type.element->kind == TypeDesc::Kind::Any);
+                        if (jsonMap && !create) return Place{jsonAbsent(), {}, true, true};
                         if (!create)
                             return dialectError("cl\xC3\xA9 absente de la MAP : " + keyText(*isText, text, integer)
                                                 + " (MAP_HAS(m, cl\xC3\xA9) pour tester, MAP_GET(m, cl\xC3\xA9, d\xC3\xA9" "faut) pour une valeur par d\xC3\xA9" "faut)");
@@ -4696,9 +4798,10 @@ private:
             case Expr::Kind::Coalesce: {
                 // 1.12.1 : a ?? b - b quand a ne se lit pas (un nom inconnu, une case hors du
                 // tableau, une cle absente, une division par zero) ou vaut NULL.
-                ++quiet_;
-                auto a = rich(*e.lhs);
-                --quiet_;
+                auto a = [&] {
+                    const QuietSide quietSide(*this);
+                    return rich(*e.lhs);
+                }();
                 if (a && !(a->o && a->o->type && a->o->type->kind == TypeDesc::Kind::Pointer && !a->o->type->element)) return a;
                 return rich(*e.rhs);
             }
@@ -4955,18 +5058,16 @@ private:
         for (const auto& p : f.params) {
             TypeRef t;
             if (p.type && !generic) {
-                ++quiet_;
+                const QuietSide quietSide(*this);
                 auto r = resolve(p.type);
-                --quiet_;
                 if (r) t = *r;
             }
             params.emplace_back(p.name, t);
         }
         TypeRef result;
         if (f.result && !generic) {
-            ++quiet_;
+            const QuietSide quietSide(*this);
             auto r = resolve(f.result);
-            --quiet_;
             if (r) result = *r;
         }
         auto d = std::make_shared<TypeDesc>(*callbackType(std::move(params), result));
@@ -5107,9 +5208,8 @@ private:
             return nullptr;
         }
         if ((x.kind == Expr::Kind::Member || x.kind == Expr::Kind::Index) && needsLocate(x)) {
-            ++quiet_;
+            const QuietSide quietSide(*this);
             auto p = locate(x, false);
-            --quiet_;
             if (p && isCallbackObj(p->obj)) return p->obj;
         }
         return nullptr;
@@ -8451,8 +8551,13 @@ private:
         auto tt = typeFromText(tmpl);
         if (!tt) return notAType(tt.error().message());
         auto rt = resolve(*tt);
-        if (!rt) return notAType(rt.error().message());
-        const TypeDesc& target = **rt;
+        // 1.13.0 (lot J1) : une interface (I_Demarrable) n'a pas de membre : resolve echoue, mais c'est une cible
+        // valable (DYNAMIC_CAST<I_Demarrable>(Vanne1) : une REF_TO l'interface, si le type reel l'implemente).
+        TypeRef targetRef;
+        if (rt) targetRef = *rt;
+        else if ((*tt)->kind == TypeDesc::Kind::Struct && !(*tt)->name.empty() && env_.interfaceType((*tt)->name)) targetRef = *tt;
+        else return notAType(rt.error().message());
+        const TypeDesc& target = *targetRef;
         std::string tname = upperOf(target.name);
         // 1.13.0 (lot J1) : DYNAMIC_CAST<T>(objet) vers un type IHM ou une interface - une MONTEE/DESCENTE
         // sur une reference : si le type REEL de l'objet va dans T (sous-type ou interface implementee),
@@ -8470,7 +8575,7 @@ private:
                     const bool ok = !checked || env_.typeConvertsTo(realType, target.name) || upperOf(realType) == tname;
                     auto refT = std::make_shared<TypeDesc>();
                     refT->kind = TypeDesc::Kind::Ref;
-                    refT->element = *rt;
+                    refT->element = targetRef;
                     auto o = std::make_shared<Obj>();
                     o->type = refT;
                     o->bound = ok;
@@ -9172,7 +9277,7 @@ private:
                     if (!again) return core::Err<core::Error>(again.error());
                     if (*again) return RV{Value::boolean(true), nullptr};
                 }
-                return timedOut(ignored, delayMs, e.line);
+                return timedOut(ignored, waitMs, e.line);      // le temps vraiment attendu (plafonne a 10 s)
             }
             // Detache : le delai se mesure sur l'heure du script (now_), qui avance entre deux reprises.
             if (delayMs >= 0 && (env_.scriptNow() - start) * 1000.0 >= static_cast<double>(delayMs))
@@ -9208,7 +9313,7 @@ private:
     core::Result<RV> timedOut(bool ignored, std::int64_t delayMs, std::uint32_t line) {
         if (!ignored) return RV{Value::boolean(false), nullptr};
         const std::string msg = "la condition n'est pas devenue vraie en " + delayText(delayMs);
-        raise(Caught{true, "E_ATTENTE", msg, line});
+        raise(Caught{true, "E_ATTENTE", msg, line, {}, {}});
         return core::fail(core::ErrorCode::InvalidArgument, "E_ATTENTE");
     }
 
@@ -9522,12 +9627,49 @@ private:
         if (paren != 0) { why = "une parenth\xC3\xA8se '(' n'est pas ferm\xC3\xA9" "e (il manque " + std::to_string(paren) + " fois ')')"; return false; }
         return true;
     }
+    // 1.13.0 : les drapeaux du motif. Sous libstdc++ (MinGW, Linux), l'executeur par defaut parcourt le texte
+    // en profondeur, une trame de pile par caractere : `.*` sur quelques milliers de caracteres debordait la
+    // pile (plantage), et (\w+\s?)*$ prenait un temps exponentiel (l'IHM figee). Le mode polynomial (un
+    // automate en largeur) n'a ni l'un ni l'autre ; il refuse les references arriere (\1).
+    static std::regex::flag_type regexFlags() {
+#ifdef __GLIBCXX__
+        return std::regex::ECMAScript | std::regex_constants::__polynomial;
+#else
+        return std::regex::ECMAScript;
+#endif
+    }
+    // Une reference arriere (\1 a \9, hors d'une classe [...]) : refusee la ou le mode polynomial s'applique.
+    static bool regexBackReference(const std::string& p) {
+        bool inClass = false;
+        for (std::size_t i = 0; i < p.size(); ++i) {
+            if (p[i] == '\\') {
+                if (!inClass && i + 1 < p.size() && p[i + 1] >= '1' && p[i + 1] <= '9') return true;
+                ++i;
+                continue;
+            }
+            if (p[i] == '[') inClass = true;
+            else if (p[i] == ']') inClass = false;
+        }
+        return false;
+    }
+    // Le texte le plus long qu'une expression reguliere parcourt (au-dela : E_REGEX, plutot qu'un plantage ou
+    // une IHM figee).
+    static constexpr std::size_t kRegexMaxText = std::size_t{1} << 20;    // 1 Mo
     const std::regex* regexCompile(const std::string& pattern, std::string& why) {
         if (const auto it = regexCache_.find(pattern); it != regexCache_.end()) return &it->second;
         if (!regexValidate(pattern, why)) return nullptr;                // WASM-safe : pas de construction d'un motif invalide
+#ifdef __GLIBCXX__
+        if (regexBackReference(pattern)) {
+            why = "les r\xC3\xA9" "f\xC3\xA9rences arri\xC3\xA8re (\\1, \\2...) ne sont pas prises en charge";
+            return nullptr;
+        }
+#endif
+        // 1.13.0 : un cache borne - une tache detachee qui compose ses motifs (CONCAT('^ID=', ...)) ne le fait plus
+        // grossir sans fin. Le pointeur rendu ne sert que pendant la native en cours : vider ici est sur.
+        if (regexCache_.size() >= 64) regexCache_.clear();
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
         try {
-            auto [it, ok] = regexCache_.emplace(pattern, std::regex(pattern, std::regex::ECMAScript));
+            auto [it, ok] = regexCache_.emplace(pattern, std::regex(pattern, regexFlags()));
             (void)ok;
             return &it->second;
         } catch (const std::exception& ex) {
@@ -9535,7 +9677,7 @@ private:
             return nullptr;
         }
 #else
-        auto [it, ok] = regexCache_.emplace(pattern, std::regex(pattern, std::regex::ECMAScript));
+        auto [it, ok] = regexCache_.emplace(pattern, std::regex(pattern, regexFlags()));
         (void)ok;
         return &it->second;
 #endif
@@ -9553,34 +9695,61 @@ private:
             auto pat = text(0, "le motif");
             if (!pat) return core::Err<core::Error>(pat.error());
             std::string why;
+            // 1.13.0 : par le meme chemin que l'emploi (std::regex construit) : TRUE seulement si REGEX_TROUVE l'accepte
+            // ((?<=...), (?<nom>...), a{3,1}, [z-a] : FALSE). Sans exceptions (la page web) : le controle de syntaxe seul.
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
+            return RV{Value::boolean(regexCompile(*pat, why) != nullptr), nullptr};
+#else
             return RV{Value::boolean(regexValidate(*pat, why)), nullptr};
+#endif
         }
         auto subject = text(0, "le texte");
         if (!subject) return core::Err<core::Error>(subject.error());
         auto pat = text(1, "le motif");
         if (!pat) return core::Err<core::Error>(pat.error());
+        // Le remplacement et le groupe se lisent AVANT de compiler : leur code peut appeler une autre REGEX_, qui
+        // viderait le cache (le motif compile ne doit pas bouger pendant la recherche).
+        std::string replacement;
+        if (u == "REGEX_REMPLACE") {
+            auto rep = text(2, "le remplacement");
+            if (!rep) return core::Err<core::Error>(rep.error());
+            replacement = std::move(*rep);
+        }
+        int group = 0;
+        if (u == "REGEX_TROUVE" && e.arguments.size() > 2) {
+            auto g = intArg(u, arg(2), "le groupe");
+            if (!g) return core::Err<core::Error>(g.error());
+            group = static_cast<int>(*g);
+        }
         std::string why;
         const std::regex* re = regexCompile(*pat, why);
         if (!re) return dialectError("REGEX : motif invalide \xE2\x80\x94 " + why);   // E_REGEX
         const std::string& s = *subject;
+        if (s.size() > kRegexMaxText)
+            return dialectError("REGEX : texte trop long (" + std::to_string(s.size() / 1024) + " Ko, 1024 Ko au plus) \xE2\x80\x94 traite-le par morceaux (ligne par ligne)");
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
+        // Une recherche que la bibliotheque abandonne (trop complexe, pile) : E_REGEX, pas un plantage.
+        try {
+            return regexRun(u, *re, s, replacement, group);
+        } catch (const std::regex_error& ex) {
+            return dialectError(std::string("REGEX : recherche abandonn\xC3\xA9" "e (motif trop complexe pour ce texte) \xE2\x80\x94 ") + ex.what());
+        }
+#else
+        return regexRun(u, *re, s, replacement, group);
+#endif
+    }
+    // La recherche elle-meme (le motif compile, le texte borne).
+    core::Result<RV> regexRun(const std::string& u, const std::regex& reRef, const std::string& s, const std::string& replacement,
+                              int group) {
+        const std::regex* re = &reRef;
         const auto strList = [&](std::vector<std::string> items) {
             auto out = makeObj(listType(scalarType(Type::String)));
             for (auto& x : items) { auto it = makeObj(scalarType(Type::String)); it->value = Value::text(std::move(x)); out->items.push_back(it); }
             return core::Result<RV>(RV{{}, out});
         };
         if (u == "REGEX_TESTE") return RV{Value::boolean(std::regex_search(s, *re)), nullptr};
-        if (u == "REGEX_REMPLACE") {
-            auto rep = text(2, "le remplacement");
-            if (!rep) return core::Err<core::Error>(rep.error());
-            return RV{Value::text(std::regex_replace(s, *re, *rep)), nullptr};
-        }
+        if (u == "REGEX_REMPLACE") return RV{Value::text(std::regex_replace(s, *re, replacement)), nullptr};
         if (u == "REGEX_TROUVE") {
-            int group = 0;
-            if (e.arguments.size() > 2) {
-                auto g = intArg(u, arg(2), "le groupe");
-                if (!g) return core::Err<core::Error>(g.error());
-                group = static_cast<int>(*g);
-            }
             std::smatch m;
             if (!std::regex_search(s, m, *re)) return RV{Value::text(std::string{}), nullptr};
             if (group < 0 || static_cast<std::size_t>(group) >= m.size()) return RV{Value::text(std::string{}), nullptr};
@@ -9748,6 +9917,10 @@ private:
     std::uint32_t                    line_{0};        // 1.13.0 : la ligne de l'instruction en cours
     bool                             probing_{false};
     int                              quiet_{0};       // 1.12.1 : a ?? b, le cote a en cours
+    // 1.13.0 : la profondeur des TRY quand le cote a s'est ouvert - un TRY ouvert plus bas (dans une
+    // fonction appelee a gauche de ??) attrape encore ses erreurs (fail, LEVER).
+    int                              quietCatching_{0};
+    bool                             readingPath_{false};   // 1.13.0 : readLocal lit un chemin (SELF.Debit)
     // 1.12.1 : TRY ... CATCH - la profondeur, l'erreur gardee (la premiere).
     int                              catching_{0};
     Caught                           caught_{};

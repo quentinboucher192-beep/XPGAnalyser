@@ -106,6 +106,10 @@ public:
     // ecoule entre deux reprises d'une tache detachee. Par defaut : 0 (pas de temps ici).
     [[nodiscard]] virtual double scriptNow() { return 0.0; }
 
+    // 1.13.0 : un appel (call) vient d'echouer dans la fonction appelee (une division par zero, un ASSERT) : le message
+    // brut du moteur, qui donne son code E_* au CATCH de l'appelant ; vide : pas de cause connue (E_MOTEUR).
+    [[nodiscard]] virtual std::string lastCallError() { return {}; }
+
     // Lot API 7 : UNE FONCTION QUE LE SIMULATEUR NE CONNAIT PAS. Vrai : l'appel
     // rend 0 et le cycle continue (l'environnement le note, pour le dire) ;
     // faux : le cycle s'arrete dessus, comme avant. Par defaut : s'arreter.
@@ -245,6 +249,12 @@ public:
     // vrai -> une reference vers l'objet ; faux -> NULL. Par defaut : seulement le meme nom.
     virtual bool typeConvertsTo(std::string_view from, std::string_view to) {
         (void)from; (void)to;
+        return false;
+    }
+    // 1.13.0 (lot J1) : le nom est-il celui d'une INTERFACE de l'IHM (I_Demarrable) ? Elle n'a pas de membre (pas de
+    // structMembers) mais reste une cible de DYNAMIC_CAST<I_x>. Par defaut : non (l'automate n'a pas d'interfaces).
+    virtual bool interfaceType(std::string_view name) {
+        (void)name;
         return false;
     }
     // Le nom canonique d'une variable de l'environnement (un parametre de vue

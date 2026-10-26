@@ -284,19 +284,26 @@ bool assignObj(Obj& into, const Obj& from, std::string* why) {
         if (why) *why = "valeur sans type";
         return false;
     }
+    // 1.13.0 : un objet affecte a lui-meme (x := x, L[i] := L[i]) : rien a faire - une MAP ou une boite ANY
+    // se videraient avant d'etre relues.
+    if (&into == &from) return true;
     const auto& t = *into.type;
-    // 1.13.0 : une case ANY (une boite JSON) accepte toute valeur et en porte une copie (son vrai type).
+    // 1.13.0 : une case ANY (une boite JSON) accepte toute valeur et en porte une copie (son vrai type). La copie
+    // se fait AVANT de vider la case : `from` peut vivre dedans (o := o['cle'], la valeur d'un de ses enfants).
     if (t.kind == TypeDesc::Kind::Any) {
+        ObjRef payload;
+        bool bound = true;
+        if (from.type->kind == TypeDesc::Kind::Any) {
+            bound = from.bound;
+            if (!from.items.empty() && from.items.front()) payload = deepCopy(*from.items.front());
+        } else {
+            payload = deepCopy(from);
+        }
         into.textKeys.clear();
         into.intKeys.clear();
         into.items.clear();
-        if (from.type->kind == TypeDesc::Kind::Any) {
-            into.bound = from.bound;
-            if (!from.items.empty() && from.items.front()) into.items.push_back(deepCopy(*from.items.front()));
-        } else {
-            into.bound = true;
-            into.items.push_back(deepCopy(from));
-        }
+        into.bound = bound;
+        if (payload) into.items.push_back(std::move(payload));
         return true;
     }
     // 1.13.0 : une valeur ANY (JSON) vers une case concrete : conversion controlee a l'execution (DYNAMIC_CAST).
