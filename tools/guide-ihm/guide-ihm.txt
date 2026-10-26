@@ -6428,6 +6428,7 @@ Un objet (une instance de symbole), un symbole et un type IHM ont un nœud **Op�
 
 == objets-types | Les types objets : méthodes, privé, héritage, interfaces
 : Un type IHM n'est plus seulement des données : il porte des méthodes qui voient ses membres par SELF, cache ce qui est interne (PRIVATE), hérite d'un autre type (EXTENDS) et respecte des contrats (INTERFACE). On traite ainsi une liste hétérogène de pompes et de vannes par un contrat commun.
+@depuis 1.13.0
 @mots méthode, méthodes, METHOD, SELF, THIS, privé, PRIVATE, PUBLIC, visibilité, cadenas, héritage, EXTENDS, hérite, VIRTUAL, virtuelle, OVERRIDE, redéfinir, SUPER, interface, INTERFACE, IMPLEMENTS, implémente, contrat, REF_TO, dispatch, type réel, DYNAMIC_CAST, descendre, redéfinissable
 @lieux types-ihm
 @voir types-ihm, operateurs, enum-types, rappels, symboles, parcours-symbole, scripts, erreurs-scripts
@@ -6762,6 +6763,7 @@ if (dernieres.size() > 100) dernieres.pop_front();
 
 == unites-mesure | Les unités de mesure dans les types
 : Donne une unité physique (bar, mbar, degC, m3/h, %) à une variable ou à un membre : la compilation refuse bar + mbar, l'affectation d'une variable convertit d'office ce qui est compatible, et l'unité remonte jusqu'à l'affichage - sans rien changer pour qui n'en met pas.
+@depuis 1.13.0
 @mots unité, unités, unite, mesure, EN, UNITE, SANS_UNITE, famille, conversion, strictes, Unités strictes, Choisir une unité, sélecteur d'unités, Unités de mesure
 @lieux unites-mesure, types-ihm, variables-ihm, unites-formats
 @voir types-ihm, variables-ihm, unites-formats, retours-fonctions, operateurs, erreurs-scripts, reference
@@ -6908,6 +6910,7 @@ extern REAL Niveau;
 Sous une vue, **Scripts** : OnOpen (à l'ouverture), OnCycle (à chaque cycle IHM), OnClose (à la fermeture). Taper dans un événement vide crée son script.
 ### L'éditeur
 Coloration, repli, numéros de ligne, diagnostics en direct (ligne, gravité, message en français), ligne fautive marquée ; un clic sur un diagnostic mène à sa ligne. Une saisie continue est une seule annulation.
+@nouveau 1.13.0
 - **Poser un point d'arrêt** : un clic dans la marge, à gauche des numéros de ligne (un rond rouge) ; en simulation, le script s'y arrête vraiment et Simulation › IHM › Débogage montre la pile et les locales (voir « Déboguer les scripts IHM »).
 @nouveau 1.10
 ```ST
@@ -6968,6 +6971,7 @@ Vanne_Entree = false;
 - **La Console** dit le départ (« démarré en arrière-plan »), la fin et sa durée, ou l'arrêt ; une erreur, à sa ligne, comme pour un autre script. L'arrêt de l'IHM arrête les scripts détachés, sans erreur.
 - Un script détaché garde ses variables (VAR) d'une attente à l'autre ; les fonctions qu'il appelle peuvent attendre aussi. Les scripts de vue (OnOpen, OnCycle, OnClose) ne se détachent pas : un OnOpen lance une séquence par `IHM_APPELER('Sequence')`.
 ! Un WAIT dans un script non détaché fige l'IHM pendant l'attente, et les écritures vers l'automate ne partent qu'après : pour une séquence, coche Détaché. Dans une expression (fx), WAIT est refusé.
+@nouveau 1.13.0
 ### Attendre une condition : WAIT_UNTIL
 `WAIT_UNTIL(condition [, délai])` attend que la **condition** (un BOOL) devienne vraie. Elle est **revérifiée à chaque reprise** de la tâche : dans un script détaché, l'IHM respire entre deux essais (les vues, la communication, les autres scripts avancent), donc la condition peut évoluer. Le **délai** (facultatif) est une durée (`T#2m`) ou un nombre de millisecondes ; sans lui, l'attente est sans fin (`IHM_SCRIPT_ARRETER` l'arrête).
 - **En instruction** (seule sur sa ligne) : un délai dépassé **lève `E_ATTENTE`** (« la condition n'est pas devenue vraie en 5 s »), que `TRY…CATCH` rattrape. Exemple d'une séquence de remplissage : `Vanne_Entree := TRUE; WAIT_UNTIL(Niveau_Cuve >= Consigne_Niveau, T#2m); Vanne_Entree := FALSE;`.
@@ -7057,7 +7061,9 @@ Un nom est connu s'il est une **variable IHM**, une **variable de l'automate** (
 ### Le langage des scripts 1.10
 Compiler connaît ce que les scripts de l'IHM gagnent en 1.10 (le sujet des scripts de la 1.10 les décrit) : une **fonction interne** déclarée dans le script (`FUNCTION Moyenne(t : ARRAY[0..9] OF REAL) : REAL … END_FUNCTION`) s'appelle avant ou après sa déclaration, ses paramètres et ses variables sont connus **dans la fonction** ; les variables d'un `FOR EACH cle, valeur IN m DO … END_FOR` sont connues **dans la boucle** ; une variable déclarée `MAP[…] OF …`, `ARRAY[…] OF …`, `REF_TO …` ou `POINTER TO …`, `p^`, `NULL` et les fonctions `MAP_…`, `REF`, `ADR`, `SIZEOF`, `LOWER_BOUND`, `UPPER_BOUND` ne sont pas des noms inconnus. Un nom mal écrit reste dit : `Moyene(t)` → « fonction inconnue : Moyene : veux-tu dire Moyenne ? » ; `valeur` après le `END_FOR` → « valeur n'existe pas ». Les arguments, les types des références, des pointeurs et des MAP sont contrôlés avec ces constructions.
 > Un nom mal écrit est souvent un nom renommé ailleurs : « veux-tu dire » propose le nom connu le plus proche.
+@nouveau 1.13.0
 > Ces erreurs sont celles qui se voient à la lecture du code. **Une faute de logique** (le script tourne, mais ne fait pas ce que tu veux) se cherche avec le débogueur : un point d'arrêt, les locales, le pas à pas (voir « Déboguer les scripts IHM »).
+@nouveau 1.13.0
 ### Lever ses propres erreurs
 Un `TRY … CATCH … END_TRY` rattrape une erreur du bloc au lieu d'arrêter le script. Tu peux **lever la tienne** avec `LEVER('E_Code', 'message')` : le **code** est un texte non vide (convention : préfixe `E_` en majuscules), le **message** interpole `{expr[:format]}` comme `IHM_JOURNAL`, **figé au moment du LEVER**. Dans un `TRY`, le CATCH la reçoit ; hors d'un `TRY`, le script s'arrête et la Console l'affiche (« E_Niveau : niveau hors plage : 3 % »).
 Le nom du `CATCH e` est un **T_Erreur en lecture seule** : `e.Code` (STRING), `e.Message` (STRING), `e.Ligne` (DINT) ; `e` tout court se lit comme `e.Message` (compatible avec le `CATCH Erreur` de la 1.12.1, qui recevait déjà le message). `RELEVER` (sans argument), dans un CATCH, réémet l'erreur courante - même code, même message, même ligne - vers le `TRY` englobant, ou arrête le script s'il n'y en a pas ; hors d'un CATCH, Compiler le refuse. Un exemple : `FUNCTION Verifier_Niveau(n : REAL) IF n < 0.0 OR n > 100.0 THEN LEVER('E_Niveau', 'niveau hors plage : {n:0.0} %'); END_IF; END_FUNCTION`, puis `TRY Verifier_Niveau(Niveau_Cuve); CATCH e IHM_LOG(WARNING, '{e.Code} (ligne {e.Ligne}) : {e.Message}'); END_TRY`. Les fiches LEVER, RELEVER et T_Erreur (Natives, onglet Types) les montrent en ST, C et C++.
@@ -7170,6 +7176,7 @@ if (Tours % 5 == 0)
 - Une locale **passe avant** une variable IHM ou de l'automate du même nom.
 - Le code d'une action « Exécuter un script » peut aussi déclarer des VAR : elles sont gardées d'un clic à l'autre.
 - Les locales apparaissent dans les trous d'un `IHM_JOURNAL` : `{Maxi:0.0}`.
+@nouveau 1.13.0
 - Au **point d'arrêt** (en simulation), tes VAR, VAR_TEMP et VAR_INPUT se lisent dans Simulation › IHM › Débogage, colonne Locales - les structures et les tableaux se déplient (voir « Déboguer les scripts IHM »).
 ### L'aide à la saisie
 Les locales sont proposées **en tête** de la liste, avec leur type et leur bloc ; dans un bloc de déclaration, après `nom :`, la liste propose les types. La barre sous le code décrit la locale sous le curseur (type, bloc, valeur initiale, ligne).
@@ -7192,7 +7199,7 @@ Programmation générale › **Fonctions** › **Nouvelle fonction** : son nom, 
 @nouveau 1.12.24
 
 **La fenêtre Nouvelle fonction** (1.12.24) : comme le créateur de variable, la case **Retour** ouvre le **sélecteur de types** - il cherche, filtre et compose (un tableau, une liste, un dictionnaire, un tuple, les génériques T et K d'un symbole ou d'une popup) ; « Aucun » : une procédure. D'une vue ou d'une popup, sa **portée** (publique : Vue.Nom(…) ailleurs) ; d'un symbole, **virtuelle**. Un aperçu montre ce qui s'écrira et comment elle s'appellera ; un nom déjà pris est une surcharge, dite sous le nom.
-@nouveau -
+@nouveau 1.13.0
 ### Une fonction générique (TEMPLATE)
 Une fonction peut porter ses propres types génériques, comme une structure : une propriété **Génériques** (`T`, `T : ANY_NUM`, `K, V`) dans son inspecteur (catégorie Fonction), et le même champ dans **Nouvelle fonction**, au-dessus du Retour. Un paramètre, le retour ou une locale est alors de type **T** (le sélecteur de types met T et K en tête, puce **Génériques**). À l'appel, **T se déduit des arguments** (`Max(P_A, P_B)` : REAL ; 1 et 2.5 : REAL l'emporte), ou **se donne** entre chevrons (`Max<INT>(Rang, 0)`) ; sa **contrainte** (ANY_NUM, ANY_MAGNITUDE…) refuse un type hors règle (« T = STRING n'est pas un ANY_NUM »). L'arbre la montre `Max<T>`, l'aide à la saisie propose sa forme `Max(a : T; b : T) : T` avec l'indice « T · déduit de a », le filtre **Rend** la classe sous « selon T », et **Générer** écrit `template <typename T> T Max(T a, T b);` en C++ (un commentaire en C). Une fonction de vue, de popup ou de symbole peut en porter de même ; une fonction de symbole peut être **virtuelle ET générique** (une redéfinition d'instance garde la même forme). Changer ses génériques fait suivre ses paramètres, son retour et les types donnés à ses appels (Ctrl+Z reprend tout). Déduction, conteneurs et ordre supérieur : rappels.
 @nouveau 1.11.18
@@ -7265,8 +7272,10 @@ Tracer_Evenement("Porte A ouverte", 2);                     // sans retour : voi
 Une fonction peut en appeler une autre, et s'appeler elle-même (8 niveaux au plus).
 ### Essayer une fonction
 **Essayer** (ou double-clic sur la fonction) demande ses arguments en ST (`2.5`, `TRUE`, `'texte'`, `T#5s`, une expression) et l'exécute sur un banc : les variables IHM à leur valeur initiale, les variables de l'automate lues dans la simulation de l'API quand elle est chargée, même arrêtée (sans jamais y écrire ; la dernière ligne dit son état). Le résultat va aux **Sorties** du panneau du bas (catégorie Essai, 1.11.21 : plus de bandeau ESSAI) : l'appel, le résultat, les paramètres rendus (E/S, sorties), les lignes écrites au journal et les variables IHM changées. Le projet n'est pas modifié.
+@nouveau 1.13.0
 ### Tester une fonction
 L'**Essai** est un appel ponctuel ; un **test** est un cas gardé (arguments, résultat attendu, tolérance) et rejoué tout seul à chaque Compiler et Démarrer, avec un verdict. L'onglet **Tests** de la fonction les tient. Voir « Les tests unitaires d'une fonction ».
+@nouveau 1.13.0
 ### Déboguer une fonction
 Un point d'arrêt se pose aussi dans la marge du **corps d'une fonction** : la simulation s'y arrête à chaque appel depuis un script. Depuis le script, **Entrer** (F11) descend dans la fonction appelée sur la ligne, **Sortir** (Maj+F11) revient à l'appelant (voir « Déboguer les scripts IHM »). Appelée par une expression de vue, elle ne s'arrête pas : elle doit rendre sa valeur tout de suite.
 ### Renommer, supprimer
@@ -7345,6 +7354,7 @@ long fact(long n) { return n <= 1 ? 1 : n * fact(n - 1); }
 long fact(long n) { return n <= 1 ? 1 : n * fact(n - 1); }
 ```
 > Compiler (F7) vérifie les fonctions internes comme le reste du script : nom inconnu, mauvais nombre ou type d'arguments, retour du mauvais type.
+@nouveau 1.13.0
 > En simulation, un point d'arrêt se pose aussi dans une fonction interne, et **Entrer** (F11) descend dans celle qu'appelle la ligne (voir « Déboguer les scripts IHM »).
 
 == retours-fonctions | Ce qu'une fonction rend
@@ -7443,6 +7453,7 @@ borner(&debit, 120.0f);
 
 == donnees-scripts | JSON et expressions régulières dans les scripts
 : Tes scripts lisent et écrivent du JSON, et fouillent un texte au motif, directement — tout en local, sans réseau. Un fichier ou une ressource JSON se lit en une valeur **ANY** (`JSON_LIRE`), s'interroge par clé et par indice ; une trame texte se découpe au motif (`REGEX_`).
+@depuis 1.13.0
 @mots JSON, JSON_LIRE, JSON_ECRIRE, JSON_NOMBRE, JSON_TEXTE, JSON_BOOL, JSON_ENTIER, JSON_TYPE, JSON_A, JSON_CLES, ANY, REGEX, REGEX_TESTE, REGEX_TROUVE, REGEX_REMPLACE, REGEX_DECOUPE, REGEX_VALIDE, motif, expression régulière, expression reguliere
 @lieux scripts, fonctions
 @voir scripts, erreurs-scripts, enum-scripts, champs-expressions, fonctions, map-iterateurs
@@ -7921,6 +7932,7 @@ consigne = static_cast<std::int16_t>(valeur_lue);
 
 == biblio-espaces | Espaces de noms et bibliothèques
 : Range tes types, tes fonctions et tes scripts généraux dans des espaces de noms (Gaz, Gaz.Vannes) : deux noms pareils ne se gênent plus. Publie un espace en bibliothèque versionnée (.xpgbib) et relie-la à d'autres projets : son code reste dans le fichier, en lecture seule.
+@depuis 1.13.0
 @mots USING, espace de noms, espaces de noms, xpgbib, bibliothèque reliée, Relier une bibliothèque, Publier une bibliothèque, Délier
 @lieux bibliotheques
 @voir types-ihm, fonctions, scripts, reference, aide-saisie, verifier
@@ -7998,6 +8010,7 @@ L'aide à la saisie, après `Gaz.`, propose les sous-espaces, les types, les fon
 | IHM_APPELER('Script') | BOOL | exécute tout de suite un script général (détaché : il part en arrière-plan) |
 | IHM_SCRIPT_ACTIF('Script') | BOOL | vrai si ce script détaché tourne |
 | IHM_SCRIPT_ARRETER('Script') | BOOL | arrête un script détaché qui tourne |
+@nouveau 1.13.0
 | IHM_POINT_ARRET([condition]) | BOOL | un point d'arrêt écrit dans le code : en simulation, le script s'arrête ici (avec un BOOL : seulement s'il est vrai) ; hors simulation, rien - voir « Déboguer les scripts IHM » |
 | IHM_SON('bip.wav') | BOOL | joue un son des ressources (WAV, MP3, OGG) |
 | IHM_VUE() | STRING | le nom de la vue affichée |
@@ -9172,6 +9185,7 @@ Sur le poste d'exploitation, la barre est cachée : le clic droit en haut n'ouvr
 - **Performances** : le cycle de l'IHM, les scripts, le calcul, le dessin ;
 @nouveau 1.12.27
 - **Pourquoi ?** : clic droit sur un objet de la vue en marche › **Pourquoi ?** - ce qu'il montre et pourquoi, suivi à chaque image : chaque propriété calculée (sa formule, sa valeur), puis la valeur de **chaque terme** (les opérandes d'un AND / OR, les deux côtés d'une comparaison, les conditions des états, chaque nom lu, « forcée » s'il l'est) et **l'état retenu** (« allumé : #2ECC71 », « condition 1 vraie (Defaut) ; état 2 sur 3 », « zone 60..80 », « caché »). Double clic sur un nom : le forcer ; clic droit : Forcer, Relâcher, Suivre sur la courbe, Ajouter aux expressions, Copier la valeur, Copier le rapport ;
+@nouveau 1.13.0
 - **Débogage** : le débogueur des **scripts IHM** - les points d'arrêt posés dans la marge des scripts et des fonctions, la pause au milieu du script, le pas à pas (Continuer F5, Suivant F10, Entrer F11, Sortir Maj+F11), la pile, les locales, les espions (voir « Déboguer les scripts IHM ») ;
 - **Esclaves simulés** (l'ancien onglet Jumeaux) : les esclaves rangés par groupe - lié prêt, lié lu par l'IHM, seulement simulé - et les valeurs simulées des esclaves (animer, la zone de mouvement, forcer), serrées, pour régler pendant la marche ; les Graphiques de la vue marquent une zone tirée, un forçage (voir « Les valeurs simulées »).
 @nouveau 1.11.24
@@ -9300,6 +9314,7 @@ Compiler ne lit plus seulement la syntaxe des scripts : il dit aussi les noms in
 
 == tests-fonctions | Les tests unitaires d'une fonction
 : Un test vérifie qu'une fonction IHM rend bien ce qu'on attend : des cas (arguments, résultat attendu, tolérance), rejoués tout seuls à chaque Compiler et Démarrer, avec un verdict par cas et le détail d'un échec. C'est autre chose que les essais de réception, qui rejouent l'opérateur sur l'IHM en marche : ici on teste une fonction seule.
+@depuis 1.13.0
 @mots test unitaire, tests, cas de test, cas, tolérance, poser avant, vérifier après, Lancer les tests, Lancer ce cas, Lancer tout, Nouveau cas, verdict, à jouer, Rapport des tests
 @lieux fonctions
 @voir fonctions, essais, simulation, verifier, retours-fonctions, erreurs-scripts, configuration
@@ -9344,6 +9359,7 @@ Sans jouer, Générer signale la case fautive : un mauvais nombre d'arguments (l
 
 == deboguer-scripts | Déboguer les scripts IHM : points d'arrêt, pas à pas, pile et locales
 : Pose un point d'arrêt dans la marge d'un script IHM : en simulation, le moteur s'arrête vraiment dessus, au milieu du script. Tu vois la pile des appels, tes variables locales, les valeurs de la ligne et tes espions, puis tu avances pas à pas - Entrer, Sortir, Suivant.
+@depuis 1.13.0
 @mots point d'arrêt, points d'arrêt, débogueur, déboguer, pas à pas, Entrer, Sortir, Suivant, Continuer, pile d'appels, locales, rond rouge, marge, Condition…, IHM en pause
 @lieux scripts, fonctions, simulation
 @voir scripts, fonctions, fonctions-internes, simulation, variables-locales, erreurs-scripts, reference, tests-fonctions
@@ -9633,6 +9649,7 @@ Le **cache de construction** (`.xpg/build/build-cache.txt`) a suivi : ce qui ét
 @depuis 1.12.30
 @mots page web, HTML, .html, retiré, retrait, 1.13.0, navigateur, Modbus, accès web, archive, .xihm, .xapi
 @voir archive-projet, echange, dossier, simulation
+@nouveau 1.13.0
 ### Retiré en 1.13.0
 Jusqu'à la 1.12.x, **Projet › Exporter en page web (.html)…** écrivait l'IHM (ou le programme) dans un seul fichier `.html`, l'archive du projet dedans, et **Projet › Importer depuis une page web…** la relisait. C'est retiré : un navigateur ne laisse pas une page ouvrir une connexion Modbus à un appareil, donc l'IHM d'une page restait coupée de ses équipements.
 ### À la place

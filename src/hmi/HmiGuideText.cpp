@@ -14614,7 +14614,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.13.0"},
         // ---- Programmer  Variables et types / tableaux-ihm
         {"tableaux-ihm", "Les tableaux et leurs propri\xC3\xA9t\xC3\xA9s", "Programmer \xE2\x80\xBA Variables et types",
          "Une variable IHM peut \xC3\xAAtre un tableau \xC3\xA0 une ou deux dimensions, aux bornes libres "
@@ -14955,7 +14955,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.13.0"},
         // ---- Programmer  Scripts et fonctions / scripts
         {"scripts", "Scripts g\xC3\xA9n\xC3\xA9raux et scripts de vue", "Programmer \xE2\x80\xBA Scripts et fonctions",
          "Les scripts ST s'ex\xC3\xA9" "cutent dans la simulation : au d\xC3\xA9marrage, cycliquement, sur "
@@ -15008,7 +15008,7 @@ const std::vector<Topic>& topics() {
                          "num\xC3\xA9ros de ligne (un rond rouge) ; en simulation, le script s'y "
                          "arr\xC3\xAAte vraiment et Simulation \xE2\x80\xBA IHM \xE2\x80\xBA "
                          "D\xC3\xA9" "bogage montre la pile et les locales (voir \xC2\xAB D\xC3\xA9" "boguer "
-                         "les scripts IHM \xC2\xBB).", {}},
+                         "les scripts IHM \xC2\xBB).", {}, "1.13.0"},
              {K::Code, "IF Mode_Maintenance THEN\n    Message_Operateur := 'Maintenance en cours';\n    "
                          "IHM_JOURNAL('Passage en maintenance \xC3\xA0 {IHM_TEMPS():t}');\nELSE\n    "
                          "Message_Operateur := 'Production';\nEND_IF;", "ST", "1.10"},
@@ -15065,23 +15065,23 @@ const std::vector<Topic>& topics() {
                          "les \xC3\xA9" "critures vers l'automate ne partent qu'apr\xC3\xA8s : pour une "
                          "s\xC3\xA9quence, coche D\xC3\xA9tach\xC3\xA9. Dans une expression (fx), WAIT est "
                          "refus\xC3\xA9.", {}, "1.12.26"},
-             {K::Heading, "Attendre une condition : WAIT_UNTIL", {}},
+             {K::Heading, "Attendre une condition : WAIT_UNTIL", {}, "1.13.0"},
              {K::Paragraph, "`WAIT_UNTIL(condition [, d\xC3\xA9lai])` attend que la **condition** (un BOOL) "
                          "devienne vraie. Elle est **rev\xC3\xA9rifi\xC3\xA9" "e \xC3\xA0 chaque reprise** "
                          "de la t\xC3\xA2" "che : dans un script d\xC3\xA9tach\xC3\xA9, l'IHM respire entre "
                          "deux essais (les vues, la communication, les autres scripts avancent), donc la "
                          "condition peut \xC3\xA9voluer. Le **d\xC3\xA9lai** (facultatif) est une "
                          "dur\xC3\xA9" "e (`T#2m`) ou un nombre de millisecondes ; sans lui, l'attente est "
-                         "sans fin (`IHM_SCRIPT_ARRETER` l'arr\xC3\xAAte).", {}},
+                         "sans fin (`IHM_SCRIPT_ARRETER` l'arr\xC3\xAAte).", {}, "1.13.0"},
              {K::Bullet, "**En instruction** (seule sur sa ligne) : un d\xC3\xA9lai d\xC3\xA9pass\xC3\xA9 "
                          "**l\xC3\xA8ve `E_ATTENTE`** (\xC2\xAB la condition n'est pas devenue vraie en 5 s "
                          "\xC2\xBB), que `TRY\xE2\x80\xA6" "CATCH` rattrape. Exemple d'une s\xC3\xA9quence "
                          "de remplissage : `Vanne_Entree := TRUE; WAIT_UNTIL(Niveau_Cuve >= Consigne_Niveau, "
-                         "T#2m); Vanne_Entree := FALSE;`.", {}},
+                         "T#2m); Vanne_Entree := FALSE;`.", {}, "1.13.0"},
              {K::Bullet, "**Lue comme BOOL** (dans un `IF`, une affectation, un argument) : elle rend "
                          "**TRUE** si la condition est devenue vraie, **FALSE** au d\xC3\xA9lai, sans lever "
                          "d'erreur : `IF WAIT_UNTIL(Pression_Etablie, T#10s) THEN Pompe := TRUE; ELSE "
-                         "IHM_LOG(ERROR, 'pression non \xC3\xA9tablie'); END_IF`.", {}},
+                         "IHM_LOG(ERROR, 'pression non \xC3\xA9tablie'); END_IF`.", {}, "1.13.0"},
              {K::Warning, "WAIT_UNTIL demande un script **d\xC3\xA9tach\xC3\xA9** : dans un script non "
                          "d\xC3\xA9tach\xC3\xA9, l'IHM est fig\xC3\xA9" "e pendant l'attente, donc la "
                          "condition ne changera pas - Compiler l'avertit (coche D\xC3\xA9tach\xC3\xA9), et "
@@ -15090,7 +15090,7 @@ const std::vector<Topic>& topics() {
                          "un appel qui \xC3\xA9" "crit y est rejou\xC3\xA9 \xC3\xA0 chaque essai. Dans une "
                          "expression (fx), WAIT_UNTIL est refus\xC3\xA9. La fiche de WAIT_UNTIL (Natives "
                          "\xE2\x80\xBA Scripts et temps) la montre en ST, et son \xC3\xA9quivalent en C et "
-                         "C++ (une boucle qui teste la condition et appelle WAIT).", {}},
+                         "C++ (une boucle qui teste la condition et appelle WAIT).", {}, "1.13.0"},
              {K::Heading, "Lire et \xC3\xA9" "crire des fichiers, les ressources du projet", {}, "1.12.26"},
              {K::Paragraph, "Les natives du dossier **Fichiers** lisent et \xC3\xA9" "crivent des fichiers "
                          "texte (UTF-8), parcourent un dossier et lisent les ressources du projet. Un chemin "
@@ -15254,8 +15254,8 @@ const std::vector<Topic>& topics() {
              {K::Tip, "Ces erreurs sont celles qui se voient \xC3\xA0 la lecture du code. **Une faute de "
                          "logique** (le script tourne, mais ne fait pas ce que tu veux) se cherche avec le "
                          "d\xC3\xA9" "bogueur : un point d'arr\xC3\xAAt, les locales, le pas \xC3\xA0 pas "
-                         "(voir \xC2\xAB D\xC3\xA9" "boguer les scripts IHM \xC2\xBB).", {}},
-             {K::Heading, "Lever ses propres erreurs", {}},
+                         "(voir \xC2\xAB D\xC3\xA9" "boguer les scripts IHM \xC2\xBB).", {}, "1.13.0"},
+             {K::Heading, "Lever ses propres erreurs", {}, "1.13.0"},
              {K::Paragraph, "Un `TRY \xE2\x80\xA6 CATCH \xE2\x80\xA6 END_TRY` rattrape une erreur du bloc au "
                          "lieu d'arr\xC3\xAAter le script. Tu peux **lever la tienne** avec `LEVER('E_Code', "
                          "'message')` : le **code** est un texte non vide (convention : pr\xC3\xA9" "fixe "
@@ -15289,11 +15289,11 @@ const std::vector<Topic>& topics() {
                          "d'un tableau), `E_CONVERSION` (DYNAMIC_CAST / STATIC_CAST refus\xC3\xA9), `E_CLE` "
                          "(cl\xC3\xA9 absente d'une MAP), `E_ASSERT` (ASSERT faux), `E_ATTENTE` (WAIT_UNTIL "
                          "en instruction, d\xC3\xA9lai d\xC3\xA9pass\xC3\xA9), `E_MOTEUR` (le reste). "
-                         "`e.Message` reste le message fran\xC3\xA7" "ais existant.", {}},
+                         "`e.Message` reste le message fran\xC3\xA7" "ais existant.", {}, "1.13.0"},
              {K::Tip, "`CATCH` et un nom **d\xC3\xA9j\xC3\xA0 d\xC3\xA9" "clar\xC3\xA9** (une variable "
                          "STRING) re\xC3\xA7oit le message comme en 1.12.1 (pas de `.Code`) ; un nom **non "
                          "d\xC3\xA9" "clar\xC3\xA9** (le cas recommand\xC3\xA9, `CATCH e`) est l'objet "
-                         "T_Erreur. `CATCH` sans nom reste permis quand on n'inspecte pas l'erreur.", {}},
+                         "T_Erreur. `CATCH` sans nom reste permis quand on n'inspecte pas l'erreur.", {}, "1.13.0"},
          },
          {"scripts", "fonctions", "variables-locales", "verifier", "variables-systeme", "parametres-popups", "types-ihm", "deboguer-scripts"},
          {"n'existe pas", "veux-tu dire", "F7", "R\xC3\xA9sultats de Compiler", "FUNCTION", "FOR EACH", "fonction interne", "fonction inconnue", "prend", "arguments", "lecture seule", "tu lui affectes", "est attendu", "n'est pas un tableau", "n'a pas de membre", "Diagnostics", "colonne", "soulign\xC3\xA9", "soulignement", "trait ondul\xC3\xA9", "constante", "LEVER", "RELEVER", "CATCH", "TRY", "T_Erreur", "E_ATTENTE", "E_DIVISION", "E_CONVERSION", "E_CLE", "E_BORNE", "E_ASSERT", "E_MOTEUR"},
@@ -15476,7 +15476,7 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Au **point d'arr\xC3\xAAt** (en simulation), tes VAR, VAR_TEMP et VAR_INPUT se "
                          "lisent dans Simulation \xE2\x80\xBA IHM \xE2\x80\xBA D\xC3\xA9" "bogage, colonne "
                          "Locales - les structures et les tableaux se d\xC3\xA9plient (voir \xC2\xAB "
-                         "D\xC3\xA9" "boguer les scripts IHM \xC2\xBB).", {}},
+                         "D\xC3\xA9" "boguer les scripts IHM \xC2\xBB).", {}, "1.13.0"},
              {K::Heading, "L'aide \xC3\xA0 la saisie", {}},
              {K::Paragraph, "Les locales sont propos\xC3\xA9" "es **en t\xC3\xAAte** de la liste, avec leur "
                          "type et leur bloc ; dans un bloc de d\xC3\xA9" "claration, apr\xC3\xA8s `nom :`, "
@@ -15520,7 +15520,7 @@ const std::vector<Topic>& topics() {
                          "**port\xC3\xA9" "e** (publique : Vue.Nom(\xE2\x80\xA6) ailleurs) ; d'un symbole, "
                          "**virtuelle**. Un aper\xC3\xA7u montre ce qui s'\xC3\xA9" "crira et comment elle "
                          "s'appellera ; un nom d\xC3\xA9j\xC3\xA0 pris est une surcharge, dite sous le nom.", {}, "1.12.24"},
-             {K::Heading, "Une fonction g\xC3\xA9n\xC3\xA9rique (TEMPLATE)", {}},
+             {K::Heading, "Une fonction g\xC3\xA9n\xC3\xA9rique (TEMPLATE)", {}, "1.13.0"},
              {K::Paragraph, "Une fonction peut porter ses propres types g\xC3\xA9n\xC3\xA9riques, comme une "
                          "structure : une propri\xC3\xA9t\xC3\xA9 **G\xC3\xA9n\xC3\xA9riques** (`T`, `T : "
                          "ANY_NUM`, `K, V`) dans son inspecteur (cat\xC3\xA9gorie Fonction), et le "
@@ -15541,7 +15541,7 @@ const std::vector<Topic>& topics() {
                          "garde la m\xC3\xAAme forme). Changer ses g\xC3\xA9n\xC3\xA9riques fait suivre ses "
                          "param\xC3\xA8tres, son retour et les types donn\xC3\xA9s \xC3\xA0 ses appels "
                          "(Ctrl+Z reprend tout). D\xC3\xA9" "duction, conteneurs et ordre sup\xC3\xA9rieur : "
-                         "rappels.", {}},
+                         "rappels.", {}, "1.13.0"},
              {K::Heading, "Les onglets de la fonction (1.11.18)", {}, "1.11.18"},
              {K::Paragraph, "\xC3\x80 c\xC3\xB4t\xC3\xA9 du Code : **Param\xC3\xA8tres** (Nom, Type, Mode, "
                          "D\xC3\xA9" "faut, Documentation - l'ordre est la signature : Alt+Haut et Alt+Bas "
@@ -15617,19 +15617,19 @@ const std::vector<Topic>& topics() {
                          "r\xC3\xA9sultat, les param\xC3\xA8tres rendus (E/S, sorties), les lignes "
                          "\xC3\xA9" "crites au journal et les variables IHM chang\xC3\xA9" "es. Le projet "
                          "n'est pas modifi\xC3\xA9.", {}},
-             {K::Heading, "Tester une fonction", {}},
+             {K::Heading, "Tester une fonction", {}, "1.13.0"},
              {K::Paragraph, "L'**Essai** est un appel ponctuel ; un **test** est un cas gard\xC3\xA9 "
                          "(arguments, r\xC3\xA9sultat attendu, tol\xC3\xA9rance) et rejou\xC3\xA9 tout seul "
                          "\xC3\xA0 chaque Compiler et D\xC3\xA9marrer, avec un verdict. L'onglet **Tests** "
                          "de la fonction les tient. Voir \xC2\xAB Les tests unitaires d'une fonction "
-                         "\xC2\xBB.", {}},
-             {K::Heading, "D\xC3\xA9" "boguer une fonction", {}},
+                         "\xC2\xBB.", {}, "1.13.0"},
+             {K::Heading, "D\xC3\xA9" "boguer une fonction", {}, "1.13.0"},
              {K::Paragraph, "Un point d'arr\xC3\xAAt se pose aussi dans la marge du **corps d'une fonction** : "
                          "la simulation s'y arr\xC3\xAAte \xC3\xA0 chaque appel depuis un script. Depuis le "
                          "script, **Entrer** (F11) descend dans la fonction appel\xC3\xA9" "e sur la ligne, "
                          "**Sortir** (Maj+F11) revient \xC3\xA0 l'appelant (voir \xC2\xAB D\xC3\xA9" "boguer "
                          "les scripts IHM \xC2\xBB). Appel\xC3\xA9" "e par une expression de vue, elle ne "
-                         "s'arr\xC3\xAAte pas : elle doit rendre sa valeur tout de suite.", {}},
+                         "s'arr\xC3\xAAte pas : elle doit rendre sa valeur tout de suite.", {}, "1.13.0"},
              {K::Heading, "Renommer, supprimer", {}},
              {K::Paragraph, "Renommer une fonction (propri\xC3\xA9t\xC3\xA9 Nom) renomme **tous ses appels** : "
                          "scripts, fonctions, actions, expressions, textes \xC3\xA0 trous, alarmes ; un seul "
@@ -15733,7 +15733,7 @@ const std::vector<Topic>& topics() {
                          "inconnu, mauvais nombre ou type d'arguments, retour du mauvais type.", {}},
              {K::Tip, "En simulation, un point d'arr\xC3\xAAt se pose aussi dans une fonction interne, et "
                          "**Entrer** (F11) descend dans celle qu'appelle la ligne (voir \xC2\xAB "
-                         "D\xC3\xA9" "boguer les scripts IHM \xC2\xBB).", {}},
+                         "D\xC3\xA9" "boguer les scripts IHM \xC2\xBB).", {}, "1.13.0"},
          },
          {"copies-references", "tableaux-n", "map-iterateurs", "fonctions", "variables-locales", "scripts", "deboguer-scripts"},
          {"FUNCTION", "END_FUNCTION", "RETURN", "fonction interne", "VAR_INPUT", "VAR_IN_OUT", "VAR_OUTPUT"},
@@ -15946,7 +15946,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.13.0"},
         // ---- Programmer  Scripts et fonctions / enum-scripts
         {"enum-scripts", "Les \xC3\xA9num\xC3\xA9rations dans les scripts et les fonctions", "Programmer \xE2\x80\xBA Scripts et fonctions",
          "Une \xC3\xA9num\xC3\xA9ration IHM (T_MODE : Arret, Auto, Manu, Defaut) s'emploie dans les scripts "
@@ -16377,7 +16377,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.13.0"},
         // ---- Programmer  Scripts et fonctions / reference
         {"reference", "R\xC3\xA9" "f\xC3\xA9rence : les fonctions IHM_", "Programmer \xE2\x80\xBA Scripts et fonctions",
          "Les fonctions IHM_ agissent sur l'IHM depuis un script : naviguer, ouvrir et g\xC3\xA9rer les "
@@ -16404,12 +16404,12 @@ const std::vector<Topic>& topics() {
                          "g\xC3\xA9n\xC3\xA9ral (d\xC3\xA9tach\xC3\xA9 : il part en "
                          "arri\xC3\xA8re-plan)\nIHM_SCRIPT_ACTIF('Script')\tBOOL\tvrai si ce script "
                          "d\xC3\xA9tach\xC3\xA9 tourne\nIHM_SCRIPT_ARRETER('Script')\tBOOL\tarr\xC3\xAAte un "
-                         "script d\xC3\xA9tach\xC3\xA9 qui tourne\nIHM_POINT_ARRET([condition])\tBOOL\tun "
-                         "point d'arr\xC3\xAAt \xC3\xA9" "crit dans le code : en simulation, le script "
-                         "s'arr\xC3\xAAte ici (avec un BOOL : seulement s'il est vrai) ; hors simulation, "
-                         "rien - voir \xC2\xAB D\xC3\xA9" "boguer les scripts IHM "
-                         "\xC2\xBB\nIHM_SON('bip.wav')\tBOOL\tjoue un son des ressources (WAV, MP3, "
-                         "OGG)\nIHM_VUE()\tSTRING\tle nom de la vue "
+                         "script d\xC3\xA9tach\xC3\xA9 qui tourne", {}},
+             {K::Table, "IHM_POINT_ARRET([condition])\tBOOL\tun point d'arr\xC3\xAAt \xC3\xA9" "crit dans "
+                         "le code : en simulation, le script s'arr\xC3\xAAte ici (avec un BOOL : seulement "
+                         "s'il est vrai) ; hors simulation, rien - voir \xC2\xAB D\xC3\xA9" "boguer les "
+                         "scripts IHM \xC2\xBB\nIHM_SON('bip.wav')\tBOOL\tjoue un son des ressources (WAV, "
+                         "MP3, OGG)\nIHM_VUE()\tSTRING\tle nom de la vue "
                          "affich\xC3\xA9" "e\nIHM_TEMPS()\tTIME\tle temps \xC3\xA9" "coul\xC3\xA9 depuis le "
                          "lancement de l'IHM\nIHM_UTILISATEUR(), IHM_NOM_UTILISATEUR(), "
                          "IHM_GROUPE()\tSTRING\tl'identifiant, le nom, le groupe de l'utilisateur "
@@ -16452,7 +16452,7 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9v\xC3\xA9nements, syst\xC3\xA8me, mesures, recette:Nom, objet:Nom ; "
                          "l'extension (.csv, .xlsx, .pdf) choisit le format ; dans le script qu'un clic "
                          "lance, il demande o\xC3\xB9 l'enregistrer (demander FALSE : jamais) ; vrai s'il "
-                         "est \xC3\xA9" "crit ou la question pos\xC3\xA9" "e", {}},
+                         "est \xC3\xA9" "crit ou la question pos\xC3\xA9" "e", {}, "1.13.0"},
              {K::Code, "IF Armoires[0].ana.PT1.mes > 30.0 THEN\n    IHM_SON('bip_alarme.wav');\n    "
                          "IHM_POPUP('Popup_Aide');\nEND_IF;\nIHM_JOURNAL('Vue {IHM_VUE()} ouverte depuis "
                          "{IHM_TEMPS():t}');\nIF Capteur_En_Essai THEN\n    "
@@ -18491,7 +18491,7 @@ const std::vector<Topic>& topics() {
                          "d'arr\xC3\xAAt pos\xC3\xA9s dans la marge des scripts et des fonctions, la pause "
                          "au milieu du script, le pas \xC3\xA0 pas (Continuer F5, Suivant F10, Entrer F11, "
                          "Sortir Maj+F11), la pile, les locales, les espions (voir \xC2\xAB "
-                         "D\xC3\xA9" "boguer les scripts IHM \xC2\xBB) ;", {}},
+                         "D\xC3\xA9" "boguer les scripts IHM \xC2\xBB) ;", {}, "1.13.0"},
              {K::Bullet, "**Esclaves simul\xC3\xA9s** (l'ancien onglet Jumeaux) : les esclaves rang\xC3\xA9s "
                          "par groupe - li\xC3\xA9 pr\xC3\xAAt, li\xC3\xA9 lu par l'IHM, seulement "
                          "simul\xC3\xA9 - et les valeurs simul\xC3\xA9" "es des esclaves (animer, la zone de "
@@ -18971,7 +18971,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.13.0"},
         // ---- Tester et livrer  Tester / deboguer-scripts
         {"deboguer-scripts", "D\xC3\xA9" "boguer les scripts IHM : points d'arr\xC3\xAAt, pas \xC3\xA0 pas, pile et locales", "Tester et livrer \xE2\x80\xBA Tester",
          "Pose un point d'arr\xC3\xAAt dans la marge d'un script IHM : en simulation, le moteur "
@@ -19127,7 +19127,7 @@ const std::vector<Topic>& topics() {
          "",
          {},
          "",
-         {}},
+         {}, "1.13.0"},
         // ---- Tester et livrer  Tester / essais
         {"essais", "Les essais de r\xC3\xA9" "ception", "Tester et livrer \xE2\x80\xBA Tester",
          "Un essai rejoue sur l'IHM en marche ce que ferait l'op\xC3\xA9rateur - ouvrir une vue, cliquer, "
@@ -19457,13 +19457,13 @@ const std::vector<Topic>& topics() {
          "utilise l'acc\xC3\xA8s web en direct (le PC fait le Modbus, la page n'en re\xC3\xA7oit que "
          "l'image) ; pour transmettre un projet entier, l'archive .xihm ou .xapi.",
          {
-             {K::Heading, "Retir\xC3\xA9 en 1.13.0", {}},
+             {K::Heading, "Retir\xC3\xA9 en 1.13.0", {}, "1.13.0"},
              {K::Paragraph, "Jusqu'\xC3\xA0 la 1.12.x, **Projet \xE2\x80\xBA Exporter en page web "
                          "(.html)\xE2\x80\xA6** \xC3\xA9" "crivait l'IHM (ou le programme) dans un seul "
                          "fichier `.html`, l'archive du projet dedans, et **Projet \xE2\x80\xBA Importer "
                          "depuis une page web\xE2\x80\xA6** la relisait. C'est retir\xC3\xA9 : un navigateur "
                          "ne laisse pas une page ouvrir une connexion Modbus \xC3\xA0 un appareil, donc "
-                         "l'IHM d'une page restait coup\xC3\xA9" "e de ses \xC3\xA9quipements.", {}},
+                         "l'IHM d'une page restait coup\xC3\xA9" "e de ses \xC3\xA9quipements.", {}, "1.13.0"},
              {K::Heading, "\xC3\x80 la place", {}},
              {K::Bullet, "**L'acc\xC3\xA8s web en direct** diffuse l'IHM pendant qu'elle tourne sur le PC : "
                          "c'est le PC qui parle Modbus aux \xC3\xA9quipements, et la page n'en re\xC3\xA7oit "
