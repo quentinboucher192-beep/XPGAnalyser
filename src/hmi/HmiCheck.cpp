@@ -595,6 +595,78 @@ void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issu
 
 // La programmation generale, les scripts de vue, les actions, et les
 // references circulaires entre eux.
+// 1.13.0 (seconde passe) : L'UNITE DES DECLARATIONS (la colonne Unite des Parametres, Locales, Constantes) et du
+// retour d'une fonction - comme celle d'une variable : un nombre seulement, un symbole connu (une unite retiree de
+// Configuration > Unites de mesure, ou renommee, reste ecrite sur la declaration : Generer le dit).
+void checkDeclaredUnits(const Project& p, std::vector<Issue>& out) {
+    const units::Catalog cat(p.config);
+    const auto problem = [&](std::string_view type, const std::string& unit) -> std::string {
+        if (unit.empty()) return {};
+        if (!units::typeTakesUnit(type))
+            return "une unit\xC3\xA9 ne va que sur un nombre (ici " + (type.empty() ? std::string("sans type") : std::string(type)) + ")";
+        if (!cat.known(unit)) return "unit\xC3\xA9 inconnue '" + unit + "' (Configuration \xE2\x80\xBA Unit\xC3\xA9s de mesure)";
+        return {};
+    };
+    struct Where {
+        const char* category;
+        Id          view{kNoId}, script{kNoId}, item{kNoId};
+        std::string owner;
+        Id          object{kNoId};
+    };
+    const auto decls = [&](const std::vector<Declaration>& ds, const Where& w) {
+        for (const auto& d : ds)
+            if (const std::string why = problem(d.type, d.unit); !why.empty()) {
+                Issue i;
+                i.severity = Issue::Severity::Error;
+                i.category = w.category;
+                i.view = w.view;
+                i.script = w.script;
+                i.item = w.item;
+                i.object = w.object;
+                i.property = w.owner;
+                if (std::string_view(w.category) == "Constante") i.declaration = d.name;   // son sous-onglet, sa ligne
+                i.message = w.owner + "." + d.name + " : " + why;
+                out.push_back(std::move(i));
+            }
+    };
+    const auto function = [&](const HmiFunction& f, Where w) {
+        w.item = f.id;
+        if (const std::string why = problem(f.returnType, f.returnUnit); !why.empty()) {
+            Issue i;
+            i.severity = Issue::Severity::Error;
+            i.category = w.category;
+            i.view = w.view;
+            i.item = f.id;
+            i.property = w.owner;
+            i.message = w.owner + " (unit\xC3\xA9 du retour) : " + why;
+            out.push_back(std::move(i));
+        }
+        decls(f.decls, w);
+    };
+    const auto operators = [&](const std::vector<HmiOperator>& ops, const Where& base) {
+        for (const auto& o : ops) {
+            Where w = base;
+            w.item = o.id;
+            w.owner = base.owner + "." + operatorFunctionName(o);
+            decls(o.decls, w);
+        }
+    };
+    for (const auto& f : p.programs.functions) function(f, {"Fonction", kNoId, kNoId, kNoId, f.name});
+    for (const auto& sc : p.programs.scripts) decls(sc.decls, {"Script", kNoId, sc.id, kNoId, sc.name});
+    for (const auto& t : p.programs.types) {
+        for (const auto& m : t.methods) function(m, {"Type IHM", kNoId, kNoId, kNoId, t.name + "." + m.name});
+        operators(t.operators, {"Type IHM", kNoId, kNoId, kNoId, t.name});
+    }
+    for (const auto& v : p.views) {
+        decls(v.constants, {"Constante", v.id, kNoId, kNoId, v.name});
+        for (const auto& f : v.functions) function(f, {"Fonction", v.id, kNoId, kNoId, v.name + "." + f.name});
+        for (const auto& sc : v.scripts) decls(sc.decls, {"Script", v.id, sc.id, kNoId, sc.name});
+        operators(v.operators, {"Symbole", v.id, kNoId, kNoId, v.name});
+        for (const auto& ob : v.objects)
+            for (const auto& fo : ob.functionOverrides) decls(fo.decls, {"Objet", v.id, kNoId, kNoId, v.name + "." + ob.name + "." + fo.function, ob.id});
+    }
+}
+
 void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& out) {
     using S = Issue::Severity;
     std::set<std::string> varNames;
@@ -5169,6 +5241,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     }
     checkPrograms(p, plcHasName, out);
     checkNamespaces(p, out);            // 1.13.0 (lot J8) : les espaces de noms et les bibliotheques reliees
+    checkDeclaredUnits(p, out);         // 1.13.0 (seconde passe) : l'unite des declarations et des retours
     checkSupervision(p, plcHasName, out);
     checkLot6(p, plcHasName, out);
     checkLot8(p, plcHasName, out);

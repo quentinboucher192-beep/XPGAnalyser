@@ -916,7 +916,7 @@ bool Runtime::tablePrompt(const View& v, const Object& o, const table::Model& m,
         };
         p.min = bound("min");
         p.max = bound("max");
-        if (const auto* d = displayOf(*project_, p.target, shownIn); d && unit.empty()) unit = d->unit;
+        if (unit.empty()) unit = displayUnitOf(*project_, p.target, shownIn);   // 1.13.0 (seconde passe) : l'unite physique en repli
         Expression e = Expression::compile(p.target);
         if (e.valid()) {
             const std::string declared = e.pathType(envOf(), nullptr);

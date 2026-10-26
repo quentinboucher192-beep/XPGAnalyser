@@ -20,6 +20,9 @@
 //  UNITES_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
 #include "../src/hmi/HmiUnits.hpp"
+#include "../src/hmi/HmiDisplay.hpp"
+#include "../src/hmi/HmiReports.hpp"
+#include "../src/hmi/HmiTable.hpp"
 #include "../src/hmi/HmiExprCheck.hpp"
 #include "../src/hmi/HmiScriptCheck.hpp"
 #include "../src/hmi/HmiCheck.hpp"
@@ -857,6 +860,10 @@ void colonneUniteDesDeclarations() {
     check(!has(exprcheck::check(ctx, "EN(Seuil_Haut, 'mbar') > 0"), "demande une valeur"), "fx : EN(Seuil_Haut, 'mbar') sur la constante de vue [bar] : accepte");
     check(has(exprcheck::check(ctx, "PressionBasse > Seuil_Haut"), "ne se comparent pas"), "fx : PressionBasse [mbar] > Seuil_Haut [bar] : refuse");
     check(exprcheck::shapeOf(ctx, "Seuil_Haut").unit == "bar", "la constante de vue porte bar");
+    // L'affichage : un afficheur qui montre la constante montre son unite (dans sa vue, et qualifiee ailleurs).
+    check(physicalDisplayUnit(p, "Seuil_Haut", &p.views.back()) == "bar", "affichage : Seuil_Haut dans sa vue montre bar (avant : rien)");
+    check(physicalDisplayUnit(p, "Vue_Four.Seuil_Haut") == "bar", "affichage : Vue_Four.Seuil_Haut ailleurs montre bar");
+    check(physicalDisplayUnit(p, "Seuil_Haut").empty(), "affichage : Seuil_Haut hors de sa vue n'est pas une constante : rien");
     // En marche : le parametre, la locale de script, la constante qualifiee.
     {
         Bench b("R := EnMbar(2.5);", {{"Pression", "REAL", "bar", "0"}}, [&](Project& q) {
@@ -1050,6 +1057,90 @@ void cacheDesUnites() {
     check(std::fabs(v - 1.5) < 1e-9, "deux affectations : 1500 mbar -> 1,5 bar a chaque fois (" + std::to_string(v) + ")");
 }
 
+// T2-38 : Generer controle l'unite des declarations et des retours ; T2-39 : l'unite physique remonte au Tableau, a la
+// saisie, au PID, aux rapports ; T2-40 : un format en pourcentage ne double pas le signe.
+void affichageEtDeclarations() {
+    std::printf("-- T2-38 / T2-39 / T2-40 : Generer et les declarations, l'unite d'affichage partout, le format en pour cent\n");
+    const NameExists none = [](std::string_view) { return false; };
+    const auto err = [](const std::vector<Issue>& is, std::string_view text) {
+        for (const auto& i : is)
+            if (i.severity == Issue::Severity::Error && i.message.find(text) != std::string::npos) return true;
+        return false;
+    };
+    {
+        Project p;
+        View v = makeView(p, "Vue_Four");
+        v.constants.push_back(declared(p, DeclKind::Constant, "Seuil_Haut", "REAL", "inH2O"));
+        v.constants.push_back(declared(p, DeclKind::Constant, "Actif", "BOOL", "bar"));
+        p.views.push_back(v);
+        HmiFunction f;
+        f.id = p.allocate();
+        f.name = "Debit";
+        f.returnType = "REAL";
+        f.returnUnit = "m3hh";
+        f.body = "Debit := 1.0;";
+        p.programs.functions.push_back(f);
+        const auto is = hmi::generate(p, none);
+        check(err(is, "Vue_Four.Seuil_Haut : unit\xC3\xA9 inconnue 'inH2O'"), "Generer : une constante de vue en inH2O (retiree du projet) - unite inconnue (avant : rien)");
+        check(err(is, "Vue_Four.Actif : une unit\xC3\xA9 ne va que sur un nombre"), "Generer : une unite sur une constante BOOL - refusee");
+        check(err(is, "Debit (unit\xC3\xA9 du retour) : unit\xC3\xA9 inconnue 'm3hh'"), "Generer : l'unite du retour inconnue");
+    }
+    // T2-39 : l'unite d'affichage - la ligne Unites et formats, sinon l'unite physique.
+    {
+        Project p;
+        var(p, "Pression", "REAL", "bar", "9.08");
+        HmiType t;
+        t.id = p.allocate();
+        t.name = "T_Cuve";
+        TypeMember m;
+        m.name = "Niveau";
+        m.type = "REAL";
+        m.unit = "m";
+        t.members.push_back(m);
+        p.programs.types.push_back(t);
+        var(p, "Cuves", "ARRAY[1..2] OF T_Cuve", "", "");
+        check(displayUnitOf(p, "Pression") == "bar", "displayUnitOf : sans ligne Unites et formats, l'unite physique (bar)");
+        table::Column col;
+        col.title = "Niveau";
+        col.content = "[*].Niveau";
+        const auto info = table::analyzeColumn(p, table::analyzeSource(p, "Cuves"), col);
+        check(info.unit == "m", "Tableau : la colonne [*].Niveau montre m, l'unite du membre (avant : rien) [" + info.unit + "]");
+        p.displays.push_back(VariableDisplay{"Pression", "mbar", "0.0"});
+        check(displayUnitOf(p, "Pression") == "mbar", "displayUnitOf : une unite tapee sur la ligne l'emporte");
+        // Le rapport Mesures : l'unite physique de la variable archivee.
+        p.history.archived = {"Cuves[1].Niveau"};
+        Report daily;
+        daily.name = "Rapport_journalier";
+        const auto c = report::build(p, History{}, daily, 0.0, 86400.0, {}, "2026-10-26 06:00:00.000");
+        bool sawUnit = false;
+        for (const auto& sec : c.sections)
+            if (sec.title == "Mesures")
+                for (const auto& row : sec.rows) sawUnit = sawUnit || (row.size() > 1 && row[0] == "Cuves[1].Niveau" && row[1] == "m");
+        check(sawUnit, "rapport Mesures : Cuves[1].Niveau en m (avant : la colonne Unite vide)");
+    }
+    // T2-40 : un format 0.0% porte deja le signe.
+    {
+        Project p;
+        var(p, "Ouverture", "REAL", "ratio", "0.45");
+        check(physicalDisplayUnit(p, "Ouverture", nullptr, "0.0%").empty() && physicalDisplayUnit(p, "Ouverture", nullptr, "0.0") == "ratio",
+              "Ouverture [ratio] : avec le format 0.0% pas d'unite en plus (avant : 45.0 % ratio) ; avec 0.0, ratio");
+        p.displays.push_back(VariableDisplay{"Ouverture", "", "0.0%"});
+        check(formatTemplate("{Ouverture:u}", p) == "{Ouverture:0.0%}", "{Ouverture:u} avec la ligne 0.0% : le signe du format seul");
+        View v = makeView(p, "Vue");
+        Object o;
+        o.id = p.allocate();
+        o.kind = Kind::NumericDisplay;
+        o.setExpr("value", "Ouverture");
+        o.set("unit", "");
+        o.set("format", "0.0%");
+        v.objects.push_back(o);
+        const auto prepared = displayView(v, p, projectDisplay(p));
+        check(prepared.objects[0].text("unit").empty(), "l'afficheur en 0.0% sur une variable en ratio : pas d'unite accolee");
+        var(p, "Pression", "REAL", "bar", "1");
+        check(physicalDisplayUnit(p, "Pression", nullptr, "0.0%") == "bar", "un format % sur une autre famille (bar) garde l'unite");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -1080,6 +1171,7 @@ int main() {
     passagesEtInstructions();
     tableauEntier();
     cacheDesUnites();
+    affichageEtDeclarations();
     std::printf("=== %d verifications, %d echec(s) ===\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

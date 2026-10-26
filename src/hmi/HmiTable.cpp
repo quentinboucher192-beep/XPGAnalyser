@@ -866,10 +866,9 @@ ColumnInfo analyzeColumn(const Project& p, const Source& src, const Column& c) {
                 break;
             }
             info.type = r.type;
-            if (const auto* d = displayOf(p, representative(s, src, &p))) {
-                info.unit = d->unit;
-                info.format = d->format;
-            }
+            if (const auto* d = displayOf(p, representative(s, src, &p))) info.format = d->format;
+            // 1.13.0 (seconde passe) : l'unite de la ligne Unites et formats, sinon l'unite physique (comme un afficheur).
+            info.unit = displayUnitOf(p, representative(s, src, &p));
             checkWritable(p, src, s, r, info);
             break;
         }

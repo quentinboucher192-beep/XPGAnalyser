@@ -1,5 +1,6 @@
 // hmi/HmiReports.cpp - les rapports periodiques (lot 14).
 #include "HmiReports.hpp"
+#include "HmiDisplay.hpp"   // 1.13.0 (seconde passe) : l'unite physique d'une mesure
 
 #include <algorithm>
 #include <cctype>
@@ -304,16 +305,19 @@ Content build(const Project& p, const History& h, const Report& r, double from, 
     for (const auto& [name, st] : stats)
         if (std::find(order.begin(), order.end(), name) == order.end()) order.push_back(name);
     for (const auto& name : order) {
-        std::string unit;
+        std::string unit, format;
         int shown = -1;                       // les decimales du format de la variable (lot 13)
         for (const auto& d : p.displays)
             if (d.path == name) {
                 unit = d.unit;
+                format = d.format;
                 if (!d.format.empty()) {
                     const auto dot = d.format.find('.');
                     shown = dot == std::string::npos ? 0 : static_cast<int>(d.format.size() - dot - 1);
                 }
             }
+        // 1.13.0 (seconde passe) : sans unite sur sa ligne (ou sans ligne), l'unite physique de la variable.
+        if (unit.empty()) unit = physicalDisplayUnit(p, name, nullptr, format);
         const auto it = stats.find(name);
         if (it == stats.end() || it->second.n == 0) {
             measures.rows.push_back({name, unit, "\xE2\x80\x94", "\xE2\x80\x94", "\xE2\x80\x94", "\xE2\x80\x94", "0"});
