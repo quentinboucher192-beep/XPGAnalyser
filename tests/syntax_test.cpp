@@ -6,6 +6,7 @@
 //  keyword written in lower case, and C++ keywords that must NOT light up inside
 //  a Structured Text body.
 // =============================================================================
+#include "../src/core/Edition.hpp"
 #include "../src/ui/Syntax.hpp"
 #include "../src/ui/Theme.hpp"
 
@@ -99,6 +100,23 @@ int main() {
         assert(!has(asSt, TokenClass::Keyword, "class"));   // not an ST keyword
         const auto asCpp = classify("END_IF THEN", Language::Cpp);
         assert(asCpp.find(TokenClass::Keyword) == asCpp.end());
+    }
+
+    // --- 1.13.0 (correctif F2) : les mots du dialecte de l'IHM (USING...), colores la ou il y a une IHM ------------
+    {
+        const char* code = "USING Gaz;\nIF Gaz.EnDefaut(V1) THEN f := LAMBDA (x : REAL) : REAL RETURN x; END_LAMBDA; p := NULL; END_IF;";
+        core::setEdition(core::Edition::Ihm);
+        const auto ihm = classify(code, Language::StructuredText);
+        std::printf("IHM keywords: %s\n", ihm.at(TokenClass::Keyword).c_str());
+        assert(has(ihm, TokenClass::Keyword, "USING|"));      // USING Gaz; : un mot-cle, comme IF
+        assert(has(ihm, TokenClass::Keyword, "IF|") && has(ihm, TokenClass::Keyword, "THEN|"));
+        assert(has(ihm, TokenClass::Keyword, "LAMBDA|") && has(ihm, TokenClass::Keyword, "END_LAMBDA|") && has(ihm, TokenClass::Keyword, "NULL|"));
+        assert(!has(ihm, TokenClass::Keyword, "Gaz"));        // le nom de l'espace, non
+        core::setEdition(core::Edition::Api);
+        const auto api = classify(code, Language::StructuredText);
+        assert(!has(api, TokenClass::Keyword, "USING") && !has(api, TokenClass::Keyword, "NULL"));   // le ST de l'automate ne change pas
+        assert(has(api, TokenClass::Keyword, "IF|"));
+        core::setEdition(core::Edition::Both);
     }
 
     assert(languageFromExtension("Driver.hpp") == Language::Cpp);
