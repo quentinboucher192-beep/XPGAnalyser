@@ -1616,7 +1616,7 @@ const std::vector<Function>& functions() {
          "/* un analyseur JSON : cJSON, jsmn\xE2\x80\xA6 */",
          "auto j = nlohmann::json::parse(texte);",
          Avail::None, Avail::None, true, false, {"STRING", "JSON_TEXTE(JSON_LIRE('{\"gaz\":\"A\"}')['gaz'])", "A", ""},
-         {"Lis le texte avec FILE_READ ou RESOURCE_READ, puis JSON_LIRE. Sur la page web, FILE_READ est bloqu\xC3\xA9 mais RESOURCE_READ marche : le JSON tourne en entier dans la page."}},
+         {"Lis le texte avec FILE_READ ou RESOURCE_READ, puis JSON_LIRE."}},
         {"JSON_ECRIRE", "json", {{"VALEUR", "ANY", "ANY, MAP, LIST, SET, ARRAY, TUPLE, une structure, un scalaire", false}, {"INDENTE", "BOOL", "deux espaces par niveau (sinon compact)", true}}, "STRING",
          "\xC3\x89" "crit une valeur en JSON. Une structure IHM donne un objet (ses membres) ; un REAL infini ou NAN, une r\xC3\xA9" "f\xC3\xA9rence, un rappel sont refus\xC3\xA9s.",
          "FILE_WRITE('etat.json', JSON_ECRIRE(Etat, TRUE));",

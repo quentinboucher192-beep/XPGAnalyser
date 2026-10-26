@@ -1478,7 +1478,7 @@ fn(name="JSON_LIRE", cat="json", params=[("TEXTE", "STRING", "un texte JSON (d'u
    short="Analyse un texte JSON : un objet devient une MAP[STRING] OF ANY, un tableau une LIST OF ANY. Un texte mal formé lève E_JSON (la position citée), rattrapable par TRY…CATCH.",
    st="Recettes := JSON_LIRE(FILE_READ('recettes.json'));", c="/* un analyseur JSON : cJSON, jsmn… */", cpp="auto j = nlohmann::json::parse(texte);",
    inc="None", incpp="None", essai=("STRING", "JSON_TEXTE(JSON_LIRE('{\"gaz\":\"A\"}')['gaz'])", "A"),
-   notes=["Lis le texte avec FILE_READ ou RESOURCE_READ, puis JSON_LIRE. Sur la page web, FILE_READ est bloqué mais RESOURCE_READ marche : le JSON tourne en entier dans la page."])
+   notes=["Lis le texte avec FILE_READ ou RESOURCE_READ, puis JSON_LIRE."])
 fn(name="JSON_ECRIRE", cat="json", params=[("VALEUR", "ANY", "ANY, MAP, LIST, SET, ARRAY, TUPLE, une structure, un scalaire", False), ("INDENTE", "BOOL", "deux espaces par niveau (sinon compact)", True)], ret="STRING",
    short="Écrit une valeur en JSON. Une structure IHM donne un objet (ses membres) ; un REAL infini ou NAN, une référence, un rappel sont refusés.",
    st="FILE_WRITE('etat.json', JSON_ECRIRE(Etat, TRUE));", c="/* nlohmann::json ou autre : j.dump() */", cpp="std::string s = j.dump(2);",

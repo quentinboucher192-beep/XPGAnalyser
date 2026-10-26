@@ -8,6 +8,11 @@
 //  leve (verdict erreur) ; la serialisation projet aller-retour (cas relus
 //  identiques, chaque surcharge ses cas) ; le compte des verdicts ; le refus
 //  d'un format trop recent ; le repli du format (sans cas : format d'avant).
+//  1.13.0 (relecture) : les cas d'une fonction GENERIQUE relus (projet, methode,
+//  vue) ; le cas d'une fonction de vue joue ; l'erreur attendue lue par son code
+//  exact ; un STRING compare tel quel ; une enumeration comparee par son nom ;
+//  Generer signale une pose / une verif sur une variable inconnue, un attendu
+//  illisible.
 //
 //  TESTS_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
@@ -20,6 +25,7 @@
 #include <cstdlib>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace hmi;
@@ -394,6 +400,276 @@ void disque() {
     }
 }
 
+// =============================================================================
+//  1.13.0 (relecture) : les defauts trouves avant la livraison, chacun par son scenario.
+// =============================================================================
+const HmiFunction* projectFunction(const Project& p, const char* name) { return p.functionByName(name); }
+
+// Les avertissements de la relecture qui disent qu'un cas ou une ligne de test est ignore.
+bool testLinesIgnored(const LoadReport& report) {
+    for (const auto& w : report.warnings)
+        if (w.find("cas de test") != std::string::npos || w.find("ligne de test") != std::string::npos) return true;
+    return false;
+}
+
+// n4 : une fonction (ou une methode) GENERIQUE et ses cas - la ligne "generique" passe entre la fonction et ses
+// cas a l'ecriture ; la relecture les perdait (cas de test hors d'une fonction : ignore).
+void generiquesRelus() {
+    std::printf("-- les cas d'une fonction generique : relus (fonction du projet, methode d'un type, fonction de vue)\n");
+    Project p = bench();
+    {
+        HmiFunction& mx = addFunction(p, "Max_Gen", "T", {param(p, "A", "T"), param(p, "B", "T")},
+                                      "IF A > B THEN\n    Max_Gen := A;\nELSE\n    Max_Gen := B;\nEND_IF;");
+        mx.generics = {{"T", "ANY_NUM"}};
+        FunctionTest t = caseOf(p, mx.id, "deux entiers");
+        t.arguments = {"1", "3"};
+        t.expected = "3";
+        t.checks = {{"Compteur_Clics", "0", ""}};
+        mx.tests = {t};
+    }
+    {
+        HmiType ty;
+        ty.id = p.allocate();
+        ty.name = "T_Bac";
+        TypeMember m;
+        m.name = "Niveau";
+        m.type = "REAL";
+        ty.members.push_back(m);
+        HmiFunction meth;
+        meth.id = p.allocate();
+        meth.name = "Borne";
+        meth.returnType = "U";
+        meth.generics = {{"U", "ANY_NUM"}};
+        meth.decls = {param(p, "X", "U")};
+        meth.body = "Borne := X;";
+        FunctionTest t = caseOf(p, meth.id, "borne simple");
+        t.arguments = {"2"};
+        t.expected = "2";
+        meth.tests = {t};
+        ty.methods.push_back(meth);
+        p.programs.types.push_back(ty);
+    }
+    {
+        View v = makeView(p, "Vue_Four");
+        HmiFunction vf;
+        vf.id = p.allocate();
+        vf.name = "Moitie";
+        vf.returnType = "V";
+        vf.generics = {{"V", "ANY_REAL"}};
+        vf.decls = {param(p, "X", "V")};
+        vf.body = "Moitie := X / 2.0;";
+        FunctionTest t = caseOf(p, vf.id, "moitie de 10");
+        t.arguments = {"10.0"};
+        t.expected = "5.0";
+        t.givens = {{"Compteur_Clics", "4"}};
+        vf.tests = {t};
+        v.functions.push_back(vf);
+        p.views.push_back(v);
+    }
+    const auto files = serializeProject(p);
+    LoadReport report;
+    const auto back = parseProject(readerOf(files), &report);
+    check(back.has_value(), "relu");
+    if (!back.has_value()) return;
+    check(!testLinesIgnored(report), "aucune ligne de test ignoree a la relecture"
+                                        + (report.warnings.empty() ? std::string{} : " (" + report.warnings.front() + ")"));
+    const HmiFunction* mx = projectFunction(back.value(), "Max_Gen");
+    check(mx && mx->generics.size() == 1 && mx->tests.size() == 1 && mx->tests[0].arguments.size() == 2
+              && mx->tests[0].checks.size() == 1 && mx->tests[0].expected == "3",
+          "fonction du projet generique : son cas, ses deux arguments et sa verif relus");
+    const HmiType* bac = back.value().hmiTypeByName("T_Bac");
+    check(bac && bac->methods.size() == 1 && bac->methods[0].generics.size() == 1 && bac->methods[0].tests.size() == 1
+              && bac->methods[0].tests[0].arguments == std::vector<std::string>{"2"},
+          "methode generique d'un type : son cas et son argument relus");
+    const View* four = back.value().viewByName("Vue_Four");
+    check(four && four->functions.size() == 1 && four->functions[0].generics.size() == 1 && four->functions[0].tests.size() == 1
+              && four->functions[0].tests[0].givens.size() == 1,
+          "fonction generique d'une vue (fichier .vue) : son cas et sa pose relus");
+    // Et l'enregistrement suivant ne les efface pas : un second aller-retour garde tout.
+    const auto again = parseProject(readerOf(serializeProject(back.value())));
+    check(again.has_value() && again.value().programs.functions == back.value().programs.functions
+              && again.value().programs.types == back.value().programs.types && again.value().views == back.value().views,
+          "un second aller-retour : identique (les cas restent sur le disque)");
+}
+
+// n18 : le cas d'une fonction de VUE (ou de popup) se joue - avant : "fonction IHM introuvable", verdict erreur.
+void fonctionDeVue() {
+    std::printf("-- le cas d'une fonction de vue se joue (ses constantes de vue comprises)\n");
+    Project p = bench();
+    View v = makeView(p, "Vue_Four");
+    Declaration pente;
+    pente.id = p.allocate();
+    pente.kind = DeclKind::Constant;
+    pente.name = "Pente";
+    pente.type = "REAL";
+    pente.value = "2.0";
+    v.constants.push_back(pente);
+    HmiFunction rampe;
+    rampe.id = p.allocate();
+    rampe.name = "Calcul_Rampe";
+    rampe.returnType = "REAL";
+    rampe.decls = {param(p, "Debut", "REAL"), param(p, "Fin", "REAL")};
+    rampe.body = "Calcul_Rampe := (Fin - Debut) * Pente;";
+    v.functions.push_back(rampe);
+    p.views.push_back(v);
+    const HmiFunction& f = p.views.back().functions.back();
+    FunctionTest t = caseOf(p, f.id, "rampe nominale");
+    t.arguments = {"10.0", "20.0"};
+    t.expected = "20.0";
+    const auto r = runFunctionTest(p, f, t);
+    check(r.verdict == Verdict::Passed && r.got == "20.0",
+          "Vue_Four.Calcul_Rampe(10, 20) = 20.0 : reussi (" + verdict(r.verdict) + ", " + r.detail + ")");
+    FunctionTest wrong = caseOf(p, f.id, "rampe fausse");
+    wrong.arguments = {"10.0", "20.0"};
+    wrong.expected = "15.0";
+    const auto r2 = runFunctionTest(p, f, wrong);
+    check(r2.verdict == Verdict::Failed, "un attendu faux sur une fonction de vue : echec, pas erreur (" + verdict(r2.verdict) + ", " + r2.detail + ")");
+}
+
+// n19 : l'erreur attendue se lit par son CODE exact - avant, une sous-chaine du message suffisait.
+void codesErreur() {
+    std::printf("-- attendre une erreur : le code leve, exactement\n");
+    Project p = bench();
+    addFunction(p, "Verifier_Bas", nullptr, {param(p, "Niveau", "REAL")},
+                "IF Niveau < 10.0 THEN\n    LEVER('E_NIVEAU_BAS', 'trop bas');\nEND_IF;");
+    addFunction(p, "Verifier_Cite", nullptr, {param(p, "Niveau", "REAL")},
+                "LEVER('E_Autre', 'ce n est pas E_Niveau');");
+    addFunction(p, "Verifier_E_Niveau", "REAL", {param(p, "A", "REAL"), param(p, "B", "REAL")}, "Verifier_E_Niveau := A / B;");
+    const auto play = [&](const char* fn, std::vector<std::string> args, const char* code) {
+        const HmiFunction* f = p.functionByName(fn);
+        FunctionTest t = caseOf(p, f ? f->id : kNoId, code);
+        t.arguments = std::move(args);
+        t.errorCode = code;
+        return f ? runFunctionTest(p, *f, t) : FunctionTestResult{};
+    };
+    {
+        const auto r = play("Verifier_Bas", {"5.0"}, "E_NIVEAU");
+        check(r.verdict == Verdict::Failed, "attend E_NIVEAU, la fonction leve E_NIVEAU_BAS : echec (" + verdict(r.verdict) + ", " + r.detail + ")");
+    }
+    {
+        const auto r = play("Verifier_Bas", {"5.0"}, "E_Niveau_Bas");
+        check(r.verdict == Verdict::Passed, "attend E_Niveau_Bas (sans casse), E_NIVEAU_BAS levee : reussi (" + r.detail + ")");
+    }
+    {
+        const auto r = play("Verifier_Cite", {"5.0"}, "E_Niveau");
+        check(r.verdict == Verdict::Failed, "attend E_Niveau, E_Autre levee (E_Niveau cite dans son message) : echec (" + r.detail + ")");
+    }
+    {
+        const auto r = play("Verifier_E_Niveau", {"1.0", "0.0"}, "E_Niveau");
+        check(r.verdict == Verdict::Failed,
+              "attend E_Niveau, une division par zero dans Verifier_E_Niveau (le code dans le nom) : echec (" + r.detail + ")");
+    }
+    {
+        const auto r = play("Verifier_E_Niveau", {"1.0", "0.0"}, "division");
+        check(r.verdict == Verdict::Passed, "une erreur du moteur (sans code) : un mot entier de son message suffit (" + r.detail + ")");
+    }
+}
+
+// n20 : un retour STRING se compare tel quel (casse et accents compris) - avant : 'AZOTE' valait 'Azote'.
+void textesExacts() {
+    std::printf("-- un texte se compare en egalite exacte\n");
+    Project p = bench();
+    addFunction(p, "Libelle_Gaz", "STRING", {param(p, "Code", "INT")},
+                "CASE Code OF\n    1: Libelle_Gaz := 'AZOTE';\n    2: Libelle_Gaz := 'Arret';\nELSE\n    Libelle_Gaz := 'Azote';\nEND_CASE;");
+    addVar(p, "Libelle_Lu", "STRING", "''");
+    addFunction(p, "Poser_Libelle", nullptr, {param(p, "Texte", "STRING")}, "Libelle_Lu := Texte;");
+    const HmiFunction* f = p.functionByName("Libelle_Gaz");
+    const auto play = [&](const char* arg, const char* expected) {
+        FunctionTest t = caseOf(p, f->id, expected);
+        t.arguments = {arg};
+        t.expected = expected;
+        return runFunctionTest(p, *f, t);
+    };
+    check(play("1", "Azote").verdict == Verdict::Failed, "rend 'AZOTE', attendu Azote : echec (la casse compte)");
+    check(play("2", "Arr\xC3\xAAt").verdict == Verdict::Failed, "rend 'Arret', attendu Arret accentue : echec (l'accent compte)");
+    check(play("3", "Azote").verdict == Verdict::Passed && play("3", "'Azote'").verdict == Verdict::Passed,
+          "rend 'Azote', attendu Azote ou 'Azote' : reussi");
+    // Une verif sur une variable STRING : la meme regle.
+    const HmiFunction* pose = p.functionByName("Poser_Libelle");
+    FunctionTest t = caseOf(p, pose->id, "verif texte");
+    t.arguments = {"'AZOTE'"};
+    t.checks = {{"Libelle_Lu", "Azote", ""}};
+    const auto r = runFunctionTest(p, *pose, t);
+    check(r.verdict == Verdict::Failed, "une verif STRING 'AZOTE' contre Azote : echec (" + r.detail + ")");
+}
+
+// n37 : un retour (ou une verif) d'enumeration se compare par le nom de sa valeur - avant : "obtenu 2, attendu Auto".
+void enumerations() {
+    std::printf("-- une enumeration se compare par son nom\n");
+    Project p = bench();
+    HmiType mode;
+    mode.id = p.allocate();
+    mode.name = "E_Mode";
+    mode.kind = HmiTypeKind::Enumeration;
+    for (const auto& [n, v] : std::vector<std::pair<const char*, int>>{{"Arret", 0}, {"Manu", 1}, {"Auto", 2}}) {
+        HmiEnumValue ev;
+        ev.name = n;
+        ev.value = v;
+        mode.values.push_back(ev);
+    }
+    p.programs.types.push_back(mode);
+    addVar(p, "Mode_Actuel", "E_Mode", "E_Mode#Arret");
+    addFunction(p, "Mode_Demande", "E_Mode", {param(p, "Automatique", "BOOL")},
+                "IF Automatique THEN\n    Mode_Demande := E_Mode#Auto;\nELSE\n    Mode_Demande := E_Mode#Manu;\nEND_IF;");
+    addFunction(p, "Passer_Auto", nullptr, {}, "Mode_Actuel := E_Mode#Auto;");
+    const HmiFunction* f = p.functionByName("Mode_Demande");
+    const auto play = [&](const char* expected) {
+        FunctionTest t = caseOf(p, f->id, expected);
+        t.arguments = {"TRUE"};
+        t.expected = expected;
+        return runFunctionTest(p, *f, t);
+    };
+    {
+        const auto r = play("Auto");
+        check(r.verdict == Verdict::Passed, "rend Auto (2), attendu Auto : reussi (" + verdict(r.verdict) + ", " + r.detail + ")");
+        check(r.detail.find("Auto (2)") != std::string::npos, "le detail montre le nom de la valeur obtenue (" + r.detail + ")");
+    }
+    check(play("E_Mode#Auto").verdict == Verdict::Passed, "attendu E_Mode#Auto : reussi");
+    check(play("2").verdict == Verdict::Passed, "attendu 2 (le numero) : reussi, comme avant");
+    check(play("Manu").verdict == Verdict::Failed, "attendu Manu : echec");
+    const HmiFunction* pa = p.functionByName("Passer_Auto");
+    FunctionTest t = caseOf(p, pa->id, "passe en auto");
+    t.checks = {{"Mode_Actuel", "Auto", ""}};
+    const auto r = runFunctionTest(p, *pa, t);
+    check(r.verdict == Verdict::Passed, "une verif d'une variable E_Mode, attendu Auto : reussi (" + verdict(r.verdict) + ", " + r.detail + ")");
+}
+
+// n38 : Generer signale une pose ou une verif sur une variable inconnue, et un attendu illisible.
+void genererInconnues() {
+    std::printf("-- Generer : pose ou verif sur une variable inconnue, attendu illisible\n");
+    Project p = bench();
+    HmiFunction* tr = const_cast<HmiFunction*>(p.functionByName("Tracer_Evenement"));
+    HmiFunction* moy = const_cast<HmiFunction*>(p.functionByName("Moyenne_Pression"));
+    FunctionTest typo = caseOf(p, tr->id, "faute de frappe");
+    typo.arguments = {"'x'", "1"};
+    typo.givens = {{"Compteur_Clic", "0"}};
+    typo.checks = {{"Compteur_Clik", "1", ""}};
+    FunctionTest good = caseOf(p, tr->id, "bon");
+    good.arguments = {"'x'", "1"};
+    good.givens = {{"Compteur_Clics", "0"}};
+    good.checks = {{"Compteur_Clics", "1", ""}, {"JOURNAL", "x", ""}};
+    tr->tests = {typo, good};
+    FunctionTest bad = caseOf(p, moy->id, "attendu illisible");
+    bad.arguments = {"1.0", "2.0", ""};
+    bad.expected = "seize";
+    FunctionTest fine = caseOf(p, moy->id, "attendu lisible");
+    fine.arguments = {"1.0", "2.0", ""};
+    fine.expected = "1.5";
+    moy->tests = {bad, fine};
+    std::vector<Issue> issues;
+    checkFunctionTests(p, issues);
+    const auto said = [&](const std::string& caseName, const std::string& needle) {
+        for (const auto& i : issues)
+            if (i.property.find(caseName) != std::string::npos && i.message.find(needle) != std::string::npos) return true;
+        return false;
+    };
+    check(said("faute de frappe", "pose \xC2\xAB Compteur_Clic \xC2\xBB : variable inconnue"), "Generer : la pose sur Compteur_Clic (inconnue) est dite");
+    check(said("faute de frappe", "v\xC3\xA9rif \xC2\xAB Compteur_Clik \xC2\xBB : variable inconnue"), "Generer : la verif sur Compteur_Clik (inconnue) est dite");
+    check(!said("bon", "inconnue"), "Generer : rien sur les poses et verifs d'une variable connue (ni sur JOURNAL)");
+    check(said("attendu illisible", "attendu illisible : seize n'est pas un nombre"), "Generer : un attendu illisible sur un retour REAL est dit");
+    check(!said("attendu lisible", "attendu illisible"), "Generer : un attendu lisible ne dit rien");
+}
+
 } // namespace
 
 int main() {
@@ -402,6 +678,12 @@ int main() {
     comptes();
     generer();
     disque();
+    generiquesRelus();      // 1.13.0 (relecture) : les defauts du groupe C
+    fonctionDeVue();
+    codesErreur();
+    textesExacts();
+    enumerations();
+    genererInconnues();
     std::printf("\n%d verifications, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

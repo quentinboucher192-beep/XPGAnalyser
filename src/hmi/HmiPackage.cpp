@@ -220,8 +220,44 @@ bool sameOperators(const std::vector<HmiOperator>& a, const std::vector<HmiOpera
             return false;
     return true;
 }
+// 1.13.0 : deux listes de cas de test "identiques" : a leurs identifiants pres.
+bool sameTests(const std::vector<FunctionTest>& a, const std::vector<FunctionTest>& b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        FunctionTest x = a[i], y = b[i];
+        x.id = y.id = kNoId;
+        if (!(x == y)) return false;
+    }
+    return true;
+}
+// 1.13.0 : deux fonctions (ou deux methodes) "identiques" : a leurs identifiants pres - le corps, le retour et son
+// unite, les declarations, les generiques, les cas de test, virtuelle ou non, privee ou non (la description : non).
+bool sameFunction(const HmiFunction& a, const HmiFunction& b) {
+    return a.body == b.body && a.returnType == b.returnType && a.returnUnit == b.returnUnit && a.generics == b.generics
+        && a.isVirtual == b.isVirtual && a.visibility == b.visibility && sameDeclarations(a.decls, b.decls) && sameTests(a.tests, b.tests);
+}
+bool sameMethods(const std::vector<HmiFunction>& a, const std::vector<HmiFunction>& b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i)
+        if (a[i].name != b[i].name || !sameFunction(a[i], b[i])) return false;
+    return true;
+}
+// 1.13.0 : des identifiants neufs pour des cas de test copies d'un paquet (ceux du paquet sont ceux d'un autre projet).
+void renumberTests(Project& dst, std::vector<FunctionTest>& tests) {
+    for (auto& t : tests) t.id = dst.allocate();
+}
+// 1.13.0 (lot J1) : un type a des methodes - les leurs, et leurs cas, renumerotes comme ses operateurs.
+void renumberMethodsOf(Project& dst, HmiType& t) {
+    for (auto& m : t.methods) {
+        m.id = dst.allocate();
+        renumberTests(dst, m.tests);
+    }
+}
 bool sameType(const HmiType& a, const HmiType& b) {
-    return a.kind == b.kind && a.signature == b.signature && a.members == b.members && a.values == b.values && sameOperators(a.operators, b.operators);
+    // 1.13.0 : un type qui ne differe que par ses generiques, son parent (EXTENDS), ses interfaces (IMPLEMENTS) ou ses
+    // methodes n'est pas "identique" (avant : garde tel quel, ce que le paquet ajoutait se perdait sans rien dire).
+    return a.kind == b.kind && a.signature == b.signature && a.members == b.members && a.values == b.values && sameOperators(a.operators, b.operators)
+        && a.generics == b.generics && a.base == b.base && a.interfaces == b.interfaces && sameMethods(a.methods, b.methods);
 }
 bool sameScript(const Script& a, const Script& b) {
     return a.lang == b.lang && a.event == b.event && a.body == b.body && a.periodMs == b.periodMs && a.watch == b.watch
@@ -420,6 +456,14 @@ Package collectPrograms(const Project& p, ProgramKind kind, const std::vector<Id
                     texts.push_back(o.result);
                     texts.push_back(o.body);
                     for (const auto& d : o.decls) texts.push_back(d.type + " " + d.value);    // 1.11.18 (lot 3)
+                }
+                // 1.13.0 (lot J1) : son parent, ses interfaces et ses methodes viennent avec lui (ce qu'elles emploient aussi).
+                texts.push_back(t.base);
+                for (const auto& i : t.interfaces) texts.push_back(i);
+                for (const auto& m : t.methods) {
+                    texts.push_back(m.returnType);
+                    texts.push_back(m.body);
+                    for (const auto& d : m.decls) texts.push_back(d.type + " " + d.value);
                 }
             }
         for (const auto& f : p.programs.functions)
@@ -818,7 +862,7 @@ Plan plan(const Project& dst, const Package& pkg) {
             it.choice = Choice::Add;
             it.detail = "nouvelle surcharge de " + f.name + " (" + overload::signatureOf(f).shape() + ")";
         } else if (!ours) { it.state = State::Missing; it.choice = Choice::Add; it.detail = "absente du projet"; }
-        else if (ours->body == f.body && ours->returnType == f.returnType && sameDeclarations(ours->decls, f.decls)) { it.state = State::Same; it.choice = Choice::KeepOurs; it.detail = "identique, gard\xC3\xA9" "e"; }
+        else if (sameFunction(*ours, f)) { it.state = State::Same; it.choice = Choice::KeepOurs; it.detail = "identique, gard\xC3\xA9" "e"; }   // 1.13.0 : generiques, cas, unite
         else {
             it.state = State::Different;
             it.newName = uniqueProgramName(dst, src, ItemKind::Function, f.name);   // 1.11.2 (decision 174)
@@ -1072,6 +1116,7 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
                     ours.id = keepId;
                     ours.name = keepName;
                     ours.folder = keepFolder;
+                    renumberMethodsOf(dst, ours);          // 1.13.0 (lot J1) : ses methodes, aux identifiants du projet
                 }
             res.replaced.push_back("type " + t.name);
             continue;
@@ -1079,6 +1124,7 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
         HmiType copy = t;
         copy.id = dst.allocate();
         for (auto& op : copy.operators) op.id = dst.allocate();
+        renumberMethodsOf(dst, copy);                      // 1.13.0 (lot J1)
         dst.programs.types.push_back(std::move(copy));
         if (choice == Choice::Rename && it) res.renamed.push_back("type " + it->name + " \xE2\x86\x92 " + t.name);
         else res.added.push_back("type " + t.name);
@@ -1102,6 +1148,10 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
                     ours.body = f.body;
                     ours.decls = f.decls;                  // 1.11.18 (lot 3) : leurs identifiants renouveles (changeProject)
                     ours.returnType = f.returnType;
+                    ours.returnUnit = f.returnUnit;        // 1.13.0 (lot J6)
+                    ours.generics = f.generics;            // 1.13.0 : TEMPLATE <T>
+                    ours.tests = f.tests;                  // 1.13.0 (lot J4) : ses cas, aux identifiants du projet
+                    renumberTests(dst, ours.tests);
                     ours.description = f.description;
                     done = true;
                 }
@@ -1112,6 +1162,7 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
         }
         HmiFunction copy = f;
         copy.id = dst.allocate();
+        renumberTests(dst, copy.tests);                    // 1.13.0 (lot J4)
         dst.programs.functions.push_back(std::move(copy));
         if (choice == Choice::Rename && it) res.renamed.push_back("fonction " + it->name + " \xE2\x86\x92 " + f.name);
         else res.added.push_back("fonction " + f.name);

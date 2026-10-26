@@ -634,8 +634,9 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
                               "ligne " + std::to_string(lineNo) + " : " + error);
         // 1.13.0 : une ligne "generique" ne coupe pas la suite des "declaration" d'une fonction (elles se suivent).
         if (r.word != "declaration" && r.word != "locale" && r.word != "generique") holder = nullptr;
-        // 1.13.0 (lot J4) : les lignes de test suivent leur fonction, apres ses declarations.
-        if (r.word != "declaration" && r.word != "locale" && r.word != "cas_test"
+        // 1.13.0 (lot J4) : les lignes de test suivent leur fonction, apres ses declarations. Une ligne
+        // "generique" (une fonction generique : juste apres la fonction) ne les coupe pas non plus.
+        if (r.word != "declaration" && r.word != "locale" && r.word != "generique" && r.word != "cas_test"
             && r.word != "arg" && r.word != "pose" && r.word != "verif") { testHolder = nullptr; currentTest = nullptr; }
         if (r.word == "declaration") {                                // 1.11.18 (lot 3)
             Declaration d;
@@ -1551,8 +1552,9 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             return core::fail(core::ErrorCode::XmlMalformed, "ihm.txt ligne " + std::to_string(lineNo) + " : " + error);
         // 1.13.0 : une ligne "generique" ne coupe pas la suite des "declaration" d'une fonction.
         if (r.word != "declaration" && r.word != "locale" && r.word != "generique") holder = nullptr;
-        // 1.13.0 (lot J4) : les lignes de test suivent leur fonction, apres ses declarations.
-        if (r.word != "declaration" && r.word != "locale" && r.word != "cas_test"
+        // 1.13.0 (lot J4) : les lignes de test suivent leur fonction, apres ses declarations. Une ligne
+        // "generique" (une fonction ou une methode generique : juste apres elle) ne les coupe pas non plus.
+        if (r.word != "declaration" && r.word != "locale" && r.word != "generique" && r.word != "cas_test"
             && r.word != "arg" && r.word != "pose" && r.word != "verif") { testHolder = nullptr; currentTest = nullptr; }
         if (r.word == "declaration") {                                 // 1.11.18 (lot 3)
             Declaration d;

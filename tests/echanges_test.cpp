@@ -22,12 +22,17 @@
 //     ce seul element ; une archive d'avant (sans cache) : tout se regenere, comme avant.
 //  7. Un projet passe en argument (le projet de demonstration, en copie) : l'aller-retour ;
 //     1.12.31 : un build complet d'abord, le build a jour apres le deballage.
+//  8. 1.13.0 (relecture) : une page web (.html) ouverte - un refus en francais, dans les deux editions,
+//     avant l'importeur d'API Studio ; l'import d'un paquet de types ou de fonctions voit les methodes,
+//     le parent, les interfaces, les generiques et les cas de test (plus "identique" a tort).
+#include "../src/app/App.hpp"               // 1.13.0 : App::webPageRefusal (une page web ne s'ouvre plus)
 #include "../src/app/hmi/HmiBuild.hpp"      // 1.12.31 : l'etat du build, tel que l'arbre le montre
 #include "../src/core/AtomicFile.hpp"
 #include "../src/core/Edition.hpp"
 #include "../src/hmi/HmiArchive.hpp"
 #include "../src/hmi/HmiAssets.hpp"
 #include "../src/hmi/HmiHistory.hpp"
+#include "../src/hmi/HmiPackage.hpp"        // 1.13.0 : les paquets de types et de fonctions
 #include "../src/hmi/HmiPipeline.hpp"       // 1.12.31 : le cache de construction
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/project/ApiArchive.hpp"
@@ -848,6 +853,159 @@ void allerRetour(const fs::path& given) {
     for (const auto& s : out.skipped) std::printf("   laisse : %s\n", s.c_str());
 }
 
+// ======================================================= 8. 1.13.0 (relecture) ==
+// n31 : une page web (.html) ouverte dans API Studio tombait dans l'importeur ("no parser recognises this
+// file", sous un titre anglais) et prenait la place des sources du projet en main. Le refus est dit avant.
+void pageWebRefusee() {
+    std::printf("8. une page web (.html) ouverte : refusee en francais, dans les deux editions\n");
+    core::setEdition(core::Edition::Api);
+    const auto api = app::App::webPageRefusal("D:/Projets/Ligne_gaz.html");
+    check(api && api->title == "Pas un projet de l'automate" && api->text.rfind("Ligne_gaz.html : une page web ne s'ouvre plus", 0) == 0
+              && api->text.find("API Studio ouvre") != std::string::npos && api->text.find(".XHW") != std::string::npos,
+          "API Studio : Ligne_gaz.html refusee, en francais, avec ce qu'il ouvre (" + (api ? api->title : std::string("rien")) + ")");
+    check(app::App::webPageRefusal("/tmp/Notice.HTM").has_value(), "API Studio : .HTM (en majuscules) aussi");
+    check(!app::App::webPageRefusal("/tmp/Config.XHW") && !app::App::webPageRefusal("/tmp/Ligne.xapi")
+              && !app::App::webPageRefusal("/tmp/MAST.XPG") && !app::App::webPageRefusal("/tmp/html"),
+          "API Studio : un export .XHW, une archive .xapi, un .XPG, un dossier nomme html : pas refuses ici");
+    core::setEdition(core::Edition::Ihm);
+    const auto ihm = app::App::webPageRefusal("/tmp/Synoptique.html");
+    check(ihm && ihm->title == "Pas un projet IHM" && ihm->text.find("IHM Studio ouvre") != std::string::npos
+              && ihm->text.find("API Studio") == std::string::npos,
+          "IHM Studio : la page refusee, avec ce qu'IHM Studio ouvre (sans parler d'API Studio)");
+}
+
+namespace pk = hmi::pkg;
+
+hmi::HmiFunction method(hmi::Project& p, const char* name, const char* body) {
+    hmi::HmiFunction m;
+    m.id = p.allocate();
+    m.name = name;
+    m.body = body;
+    m.isVirtual = true;
+    return m;
+}
+hmi::HmiType structure(hmi::Project& p, const char* name) {
+    hmi::HmiType t;
+    t.id = p.allocate();
+    t.name = name;
+    for (const char* n : {"Etat", "Position"}) {
+        hmi::TypeMember m;
+        m.name = n;
+        m.type = std::string(n) == "Etat" ? "BOOL" : "REAL";
+        t.members.push_back(m);
+    }
+    return t;
+}
+
+// n22 : l'import d'un paquet - un type qui ne differe que par ses methodes, son parent ou ses interfaces, une
+// fonction qui ne differe que par ses cas de test ou ses generiques, etaient "identiques, garde(e)s".
+void paquetsObjets() {
+    std::printf("8 bis. un paquet de types ou de fonctions : methodes, heritage, interfaces, generiques, cas de test\n");
+    core::setEdition(core::Edition::Ihm);
+    // ---- un paquet de types : T_Vanne EXTENDS T_Equipement IMPLEMENTS I_Demarrable, deux methodes
+    hmi::Project src;
+    src.programs.types.push_back(structure(src, "T_Equipement"));
+    hmi::HmiType iface;
+    iface.id = src.allocate();
+    iface.name = "I_Demarrable";
+    iface.kind = hmi::HmiTypeKind::Interface;
+    iface.methods.push_back(method(src, "Ouvrir", ""));
+    src.programs.types.push_back(iface);
+    hmi::HmiType vanne = structure(src, "T_Vanne");
+    vanne.base = "T_Equipement";
+    vanne.interfaces = {"I_Demarrable"};
+    vanne.methods.push_back(method(src, "Ouvrir", "Etat := TRUE;"));
+    vanne.methods.push_back(method(src, "Fermer", "Etat := FALSE;"));
+    hmi::FunctionTest mt;
+    mt.id = src.allocate();
+    mt.name = "ouvre";
+    vanne.methods.back().tests.push_back(mt);
+    src.programs.types.push_back(vanne);
+    const hmi::Id vanneId = src.programs.types.back().id;
+    const auto tpkg = pk::collectPrograms(src, pk::ProgramKind::Types, {vanneId});
+    const auto has = [&](const char* n) {
+        return std::any_of(tpkg.content.programs.types.begin(), tpkg.content.programs.types.end(), [&](const hmi::HmiType& t) { return t.name == n; });
+    };
+    check(has("T_Vanne") && has("T_Equipement") && has("I_Demarrable"), "le paquet de T_Vanne emporte son parent et son interface");
+
+    // Le projet a un T_Vanne aux memes membres, sans methode, sans parent ni interface.
+    hmi::Project dst;
+    dst.nextId = 1000;
+    dst.programs.types.push_back(structure(dst, "T_Vanne"));
+    auto plan = pk::plan(dst, tpkg);
+    const pk::Item* it = plan.find(pk::ItemKind::Type, "T_Vanne");
+    check(it && it->state == pk::State::Different && it->detail.find("identique") == std::string::npos,
+          "T_Vanne du paquet (methodes, EXTENDS, IMPLEMENTS) : different de celui du projet, pas identique (" + (it ? it->detail : std::string("?")) + ")");
+    if (pk::Item* m = plan.find(pk::ItemKind::Type, "T_Vanne")) m->choice = pk::Choice::Replace;
+    (void)pk::importInto(dst, tpkg, plan);
+    const hmi::HmiType* got = dst.hmiTypeByName("T_Vanne");
+    check(got && got->methods.size() == 2 && got->base == "T_Equipement" && got->interfaces == std::vector<std::string>{"I_Demarrable"},
+          "remplace : le T_Vanne du projet recoit ses deux methodes, son parent et son interface");
+    check(got && got->methods.size() == 2 && got->methods[0].id >= 1000 && got->methods[1].id >= 1000
+              && !got->methods[1].tests.empty() && got->methods[1].tests[0].id >= 1000,
+          "ses methodes et leurs cas recoivent des identifiants du projet (pas ceux du paquet)");
+    // Ajoute (absent du projet) : les memes identifiants neufs.
+    hmi::Project fresh;
+    fresh.nextId = 5000;
+    (void)pk::importInto(fresh, tpkg, pk::plan(fresh, tpkg));
+    const hmi::HmiType* added = fresh.hmiTypeByName("T_Vanne");
+    check(added && added->methods.size() == 2 && added->methods[0].id >= 5000 && added->methods[1].tests[0].id >= 5000,
+          "ajoute : ses methodes et leurs cas renumerotes");
+    // Le meme type, identique en tout : toujours identique.
+    hmi::Project twin = src;
+    const auto twinPlan = pk::plan(twin, tpkg);
+    const pk::Item* same = twinPlan.find(pk::ItemKind::Type, "T_Vanne");
+    check(same && same->state == pk::State::Same, "le meme T_Vanne (methodes comprises) : identique, garde");
+
+    // ---- un paquet de fonctions : Moyenne, la meme que celle du projet, mais avec un cas de test et un generique
+    hmi::Project fsrc;
+    hmi::HmiFunction moy;
+    moy.id = fsrc.allocate();
+    moy.name = "Moyenne";
+    moy.returnType = "REAL";
+    moy.body = "Moyenne := (A + B) / 2.0;";
+    hmi::FunctionTest ft;
+    ft.id = fsrc.allocate();
+    ft.name = "deux";
+    ft.arguments = {"1.0", "3.0"};
+    ft.expected = "2.0";
+    moy.tests.push_back(ft);
+    moy.returnUnit = "bar";
+    fsrc.programs.functions.push_back(moy);
+    const auto fpkg = pk::collectPrograms(fsrc, pk::ProgramKind::Functions, {moy.id});
+    hmi::Project fdst;
+    fdst.nextId = 2000;
+    hmi::HmiFunction ours = moy;
+    ours.id = fdst.allocate();
+    ours.tests.clear();
+    ours.returnUnit.clear();
+    fdst.programs.functions.push_back(ours);
+    auto fplan = pk::plan(fdst, fpkg);
+    const pk::Item* fi = fplan.find(pk::ItemKind::Function, "Moyenne");
+    check(fi && fi->state == pk::State::Different, "Moyenne du paquet, avec un cas de test et une unite : differente (" + (fi ? fi->detail : std::string("?")) + ")");
+    if (pk::Item* m = fplan.find(pk::ItemKind::Function, "Moyenne")) m->choice = pk::Choice::Replace;
+    (void)pk::importInto(fdst, fpkg, fplan);
+    const hmi::HmiFunction* fgot = fdst.functionByName("Moyenne");
+    check(fgot && fgot->tests.size() == 1 && fgot->tests[0].name == "deux" && fgot->tests[0].id >= 2000 && fgot->returnUnit == "bar",
+          "remplacee : elle recoit son cas (identifiant du projet) et l'unite de son retour");
+    // Une fonction identique a ses identifiants pres (les cas compris) : identique.
+    hmi::Project fsame;
+    fsame.nextId = 3000;
+    hmi::HmiFunction copy = moy;
+    copy.id = fsame.allocate();
+    copy.tests[0].id = fsame.allocate();
+    fsame.programs.functions.push_back(copy);
+    const auto sp = pk::plan(fsame, fpkg);
+    const pk::Item* si = sp.find(pk::ItemKind::Function, "Moyenne");
+    check(si && si->state == pk::State::Same, "la meme Moyenne, son cas compris (autres identifiants) : identique");
+    // Une generique de plus : differente.
+    hmi::Project fgen = fsame;
+    fgen.programs.functions.back().generics = {{"T", "ANY_NUM"}};
+    const auto gp = pk::plan(fgen, fpkg);
+    const pk::Item* gi = gp.find(pk::ItemKind::Function, "Moyenne");
+    check(gi && gi->state == pk::State::Different, "un generique de difference : differente");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -857,6 +1015,8 @@ int main(int argc, char** argv) {
     fs::remove_all(scratch(), ec);
     fs::create_directories(scratch(), ec);
     baseCommune();
+    pageWebRefusee();            // 1.13.0 (relecture)
+    paquetsObjets();
     if (fs::exists(bac / "project.xpgproj")) {
         archiveIhm(bac);
         cacheDeConstruction(bac);         // 1.12.31 : le cache de construction voyage

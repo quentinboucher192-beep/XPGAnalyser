@@ -365,7 +365,7 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     a->subscriptions_ += a->bus_.subscribe<importer::ImportFailed>(
         [self](const importer::ImportFailed& e) {
             self->menus().ShowDialog(std::make_unique<MessageDialog>(
-                                         "Import failed", e.message, MessageDialog::Icon::Error),
+                                         "Import impossible", e.message, MessageDialog::Icon::Error),   // 1.13.0 : en francais
                                      [](const menu::DialogResult&) {});
         });
 
@@ -1445,6 +1445,13 @@ void App::openPath(std::string path) {
     // (IHM-Studio.exe chemin.xihm), une autre instance, un fichier lache : relue, verifiee,
     // deballee (ou l'on veut), puis le projet s'ouvre (app/ProjectExchange).
     if (exchange::openArchive(*this, path)) return;
+    // 1.13.0 : une page web (.html) ne s'ouvre plus - un refus en francais, avant l'importeur d'API Studio (qui
+    // repondait "no parser recognises this file") et sans toucher aux sources du projet en main.
+    if (const auto refused = webPageRefusal(path)) {
+        menus_->ShowDialog(std::make_unique<MessageDialog>(refused->title, refused->text, MessageDialog::Icon::Info),
+                           [](const menu::DialogResult&) {});
+        return;
+    }
     // 1.12.0 : IHM Studio ouvre ses dossiers de projet, pas les exports de Control Expert.
     if (!core::hasApi()) {
         if (project::ProjectStore::isProjectFolder(path)) {
@@ -1480,6 +1487,19 @@ void App::openPath(std::string path) {
     sources_ = batch;
 
     importer_->importAsync(std::move(batch));
+}
+
+std::optional<App::Refusal> App::webPageRefusal(const std::string& path) {
+    std::string ext = std::filesystem::path(path).extension().string();
+    for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (ext != ".html" && ext != ".htm") return std::nullopt;
+    const std::string leaf = std::filesystem::path(path).filename().string();
+    const std::string why = leaf + " : une page web ne s'ouvre plus (l'export et l'import en page web sont retir\xC3\xA9s en 1.13.0).\n\n";
+    if (core::hasApi())
+        return Refusal{"Pas un projet de l'automate",
+                       why + "API Studio ouvre les dossiers de projet, les archives .xapi et les exports de Control Expert "
+                             "(.XPG, .XHW, .XDB, .XEF)."};
+    return Refusal{"Pas un projet IHM", why + "IHM Studio ouvre les dossiers de ses projets (Projets\\ihm) et leurs archives (.xihm)."};
 }
 
 // The master key is asked for once, on the first run, and cannot be dismissed:

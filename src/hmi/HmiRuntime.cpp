@@ -4264,6 +4264,21 @@ bool Runtime::runFunction(std::string_view name, const std::vector<std::pair<std
 bool Runtime::runFunction(Id id, const std::vector<std::pair<std::string, sim::Value>>& args, sim::Value& result,
                           std::string* why, std::vector<std::pair<std::string, sim::Value>>* outputs) {
     const auto* f = project_ ? project_->function(id) : nullptr;
+    // 1.13.0 (tests unitaires) : une fonction d'une vue, d'une popup ou d'un symbole - Project::function ne voit que
+    //  celles du projet. Celle d'une vue ou d'une popup se prepare comme son appel Vue.Fonction (ses constantes de
+    //  vue qualifiees) ; celle d'un symbole tourne telle quelle (sans instance : ses parametres ne sont pas lies).
+    HmiFunction ofView;
+    if (!f && project_)
+        for (const auto& v : project_->views) {
+            for (const auto& vf : v.functions)
+                if (vf.id == id) {
+                    if (isSymbolView(v) || !viewmembers::bound(*project_, v.name + "." + vf.name + "#" + std::to_string(id), ofView))
+                        ofView = vf;
+                    f = &ofView;
+                    break;
+                }
+            if (f) break;
+        }
     if (!f) {
         if (why) *why = "fonction IHM introuvable";
         return false;

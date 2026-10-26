@@ -18898,7 +18898,10 @@ const std::vector<Topic>& topics() {
                          "r\xC3\xA9ussit si `|obtenu - attendu| <= tol\xC3\xA9rance`. Vide, c'est "
                          "l'\xC3\xA9galit\xC3\xA9 stricte. Tout autre type (INT, BOOL, STRING, \xC3\xA9num, "
                          "structure, tableau, MAP) se compare en \xC3\xA9galit\xC3\xA9 exacte : la "
-                         "tol\xC3\xA9rance est gris\xC3\xA9" "e.", {}},
+                         "tol\xC3\xA9rance est gris\xC3\xA9" "e. Un texte se compare tel quel, majuscules et "
+                         "accents compris (`'AZOTE'` n'est pas `Azote`) ; une \xC3\xA9num\xC3\xA9ration par "
+                         "sa valeur, \xC3\xA9" "crite par son nom (`Auto`), son litt\xC3\xA9ral "
+                         "(`E_Mode#Auto`) ou son num\xC3\xA9ro, et le d\xC3\xA9tail montre `Auto (2)`.", {}},
              {K::Heading, "Quand ils se rejouent", {}},
              {K::Paragraph, "**Lancer ce cas** (ou un double-clic sur sa ligne) joue le cas choisi, **Lancer "
                          "tout** les cas de la fonction, **Lancer les tests** (la barre du volet Fonctions) "
@@ -18933,10 +18936,15 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Un cas peut **attendre une erreur** (la case **Erreur attendue** de sa fiche) : il "
                          "r\xC3\xA9ussit si la fonction l\xC3\xA8ve bien le code attendu (`E_Niveau`), "
                          "\xC3\xA9" "choue sinon. Le code se lit sur l'erreur lev\xC3\xA9" "e par LEVER "
-                         "(voir \xC2\xAB Les erreurs des scripts \xC2\xBB). Exemple : `Niveau := 130.0`, "
-                         "Erreur attendue : `E_Niveau` ; la fonction l\xC3\xA8ve bien `E_Niveau : \xC2\xAB "
-                         "niveau hors plage: 130 \xC2\xBB`, donc verdict **r\xC3\xA9ussi**. Un cas normal "
-                         "dont la fonction l\xC3\xA8ve une erreur a le verdict **erreur**.", {}},
+                         "(voir \xC2\xAB Les erreurs des scripts \xC2\xBB) et doit \xC3\xAAtre "
+                         "celui-l\xC3\xA0 exactement, sans tenir compte de la casse : `E_Niveau_Bas` "
+                         "lev\xC3\xA9 ne vaut pas `E_Niveau`, ni un `E_Niveau` cit\xC3\xA9 dans le message. "
+                         "Une erreur du moteur (une division par z\xC3\xA9ro\xE2\x80\xA6) se "
+                         "reconna\xC3\xAEt \xC3\xA0 un mot entier de son message (`division`). Exemple : "
+                         "`Niveau := 130.0`, Erreur attendue : `E_Niveau` ; la fonction l\xC3\xA8ve bien "
+                         "`E_Niveau : \xC2\xAB niveau hors plage: 130 \xC2\xBB`, donc verdict "
+                         "**r\xC3\xA9ussi**. Un cas normal dont la fonction l\xC3\xA8ve une erreur a le "
+                         "verdict **erreur**.", {}},
              {K::Heading, "Le rapport", {}},
              {K::Paragraph, "**Rapport Excel** ou **Rapport PDF** (la barre de l'onglet) : les cas de la "
                          "fonction, rejou\xC3\xA9s d'abord (Cas, Arguments, Attendu, Verdict, D\xC3\xA9tail, "

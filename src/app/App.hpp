@@ -161,6 +161,10 @@ public:
     // the current sources together with the new file, in one pass.
     void openPath(std::string path);
     [[nodiscard]] const std::vector<std::string>& sourcePaths() const noexcept { return sources_; }
+    // 1.13.0 : une page web (.html, .htm) ne s'ouvre plus (l'export et l'import en page web sont retires) :
+    // le titre et le texte du refus que openPath montre, selon l'edition ; vide : ce n'est pas une page web.
+    struct Refusal { std::string title, text; };
+    [[nodiscard]] static std::optional<Refusal> webPageRefusal(const std::string& path);
 
     // ---- projects ---------------------------------------------------------
     [[nodiscard]] const std::string&        projectFolder() const noexcept { return projectFolder_; }
