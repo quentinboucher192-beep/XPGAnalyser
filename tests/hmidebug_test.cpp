@@ -1841,6 +1841,294 @@ void pausedChipHint() {
           "en pause : un clic (Maj+F8) l'arrete, F5 continue : " + bar.hmiHint());
 }
 
+
+// =============================================================================
+//  1.13.0 (les dernieres regressions, D1c) : un script detache arrete dans sa
+//  premiere tranche fige le geste qui l'a lance ; une constante calculee a
+//  l'ouverture dont le code change pendant la pause ; les passages de deux
+//  points fondus, a travers le moteur ; F11 d'une autre fenetre detachee ;
+//  Resultat dans la condition d'un point d'operateur.
+// =============================================================================
+
+// Un type T_Vec (X : REAL) et son operateur + (deux lignes) : pour D1c-2 et D1c-5.
+Id vecWithPlus(Project& p) {
+    HmiType t;
+    t.id = p.allocate();
+    t.name = "T_Vec";
+    TypeMember x;
+    x.name = "X";
+    x.type = "REAL";
+    t.members.push_back(x);
+    HmiOperator op;
+    op.id = p.allocate();
+    op.op = "+";
+    op.left = "T_Vec";
+    op.right = "T_Vec";
+    op.result = "T_Vec";
+    op.body = "Resultat.X := a.X + b.X;\n"         // 1
+              "Resultat.X := Resultat.X + 0.5;\n";  // 2
+    const Id oid = op.id;
+    t.operators.push_back(op);
+    p.programs.types.push_back(t);
+    return oid;
+}
+
+// ---- D1c-1 : un script detache lance par un clic s'arrete dans sa premiere tranche : la suite du clic attend ----
+void detachedPauseHoldsGesture() {
+    std::printf("-- un script detache s'arrete dans sa premiere tranche (lancee par un clic) : la suite du clic attend avec lui\n");
+    const auto build = [](Project& p, Id& remplir, Id& calcul, Id& btn, Id& popId) {
+        var(p, "Debut", "INT", "0");
+        var(p, "Calc", "INT", "0");
+        View v = makeView(p, "Vue_Essai");
+        View pop = makeView(p, "Pop");
+        pop.role = "popup";
+        popId = pop.id;
+        btn = edit::add(p, v, Kind::Button, 10, 10);
+        v.object(btn)->name = "Btn_Remplir";
+        v.object(btn)->actions.push_back(action(Trigger::Click, Operation::CallScript, "Remplir"));
+        v.object(btn)->actions.push_back(action(Trigger::Click, Operation::CallScript, "Calcul"));
+        v.object(btn)->actions.push_back(action(Trigger::Click, Operation::Popup, "Pop"));
+        p.views = {v, pop};
+        p.config.startView = p.views.front().id;
+        remplir = script(p, "Remplir", "Debut := 1;\n"          // 1
+                                       "Debut := 2;\n"          // 2
+                                       "WAIT(T#1s);\n"          // 3
+                                       "Debut := 3;\n", true);  // 4
+        calcul = script(p, "Calcul", "Calc := 1;\n"             // 1
+                                     "Calc := Debut * 10;\n");  // 2
+    };
+    {
+        Project p;
+        Id remplir = kNoId, calcul = kNoId, btn = kNoId, popId = kNoId;
+        build(p, remplir, calcul, btn, popId);
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.setDebugger(true);
+        rt.start(0.0);
+        rt.tick(0.1);
+        rt.setBreakpoints({at(1, remplir, kNoId, 2), at(2, calcul, kNoId, 2)});
+        rt.press(btn, 0.2);
+        rt.release(btn, 0.25, true);
+        check(rt.paused() && rt.debugHit() && rt.debugHit()->script == remplir && rt.debugHit()->line == 2,
+              "le clic : arret dans Remplir (detache, sa premiere tranche), ligne 2");
+        check(value(rt, "Calc") == 0.0 && rt.popups().empty(), "la suite du clic attend : Calcul n'a pas tourne, la popup n'est pas ouverte");
+        check(rt.debugContinue(), "Continuer");
+        check(rt.paused() && rt.debugHit() && rt.debugHit()->script == calcul && rt.debugHit()->line == 2,
+              "la tranche de Remplir finie (son WAIT), la suite du clic part : arret dans Calcul, ligne 2 (pas refuse)");
+        check(value(rt, "Debut") == 2.0 && value(rt, "Calc") == 1.0 && rt.popups().empty(), "Remplir attend (Debut = 2) ; la popup attend encore");
+        check(rt.breakpoints().size() == 2 && rt.breakpoints()[1].note.empty(),
+              "le point de Calcul n'a pas la note 'un autre script est deja en pause' : "
+                  + (rt.breakpoints().size() == 2 ? rt.breakpoints()[1].note : std::string("-")));
+        check(rt.debugContinue() && !rt.paused(), "Continuer");
+        check(value(rt, "Calc") == 20.0 && rt.popups().size() == 1 && rt.popups().front() == popId,
+              "Calcul finit (Calc = Debut * 10 = 20), puis la popup s'ouvre : l'ordre d'un clic sans debogueur");
+        rt.setBreakpoints({});
+        rt.tick(1.6);
+        check(!rt.paused() && value(rt, "Debut") == 3.0, "le WAIT fini, Remplir finit en arriere-plan (Debut = 3)");
+        check(errors(rt).empty(), "sans erreur" + errors(rt));
+    }
+    {   // Arreter la simulation pendant cette pause : le script et le clic qui l'attend s'arretent, sans erreur
+        Project p;
+        Id remplir = kNoId, calcul = kNoId, btn = kNoId, popId = kNoId;
+        build(p, remplir, calcul, btn, popId);
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.setDebugger(true);
+        rt.start(0.0);
+        rt.tick(0.1);
+        rt.setBreakpoints({at(1, remplir, kNoId, 2)});
+        rt.press(btn, 0.2);
+        rt.release(btn, 0.25, true);
+        check(rt.paused(), "arret dans Remplir");
+        rt.stop(0.3);
+        check(!rt.paused() && value(rt, "Calc") == 0.0 && rt.popups().empty(), "Arreter : la suite du clic ne part pas");
+        check(errors(rt).empty(), "sans erreur" + errors(rt));
+    }
+}
+
+// ---- D1c-2 : l'operateur en pause dans le calcul d'une constante a l'ouverture change : sans erreur, l'OnOpen part ----
+void changedInConstantAtOpen() {
+    std::printf("-- un operateur arrete dans le calcul d'une constante a l'ouverture change : sans erreur, l'OnOpen de la vue part\n");
+    Project p;
+    const Id oid = vecWithPlus(p);
+    var(p, "a", "T_Vec", "");
+    var(p, "b", "T_Vec", "");
+    var(p, "Ouvert", "INT", "0");
+    View va = makeView(p, "Vue_A");
+    View vb = makeView(p, "Vue_B");
+    const Id vbId = vb.id;
+    Declaration c;
+    c.id = p.allocate();
+    c.kind = DeclKind::Constant;
+    c.name = "Somme";
+    c.type = "T_Vec";
+    c.computed = true;
+    c.reopen = true;                                       // calculee a chaque ouverture
+    c.calc = "Somme := a + b;\n";
+    vb.constants.push_back(c);
+    (void)function(p, "Un", "INT", {}, "INT", "Un := 1;\n");
+    // Une fonction IHM appelee : la ou un abandon reste leve coupait l'OnOpen sans un mot.
+    (void)addViewScript(p, vb, "OnOpen", "Ouvert := Un();\n"
+                                         "Ouvert := Ouvert + 1;\n");
+    const Id btn = edit::add(p, va, Kind::Button, 10, 10);
+    va.object(btn)->name = "Btn_B";
+    va.object(btn)->actions.push_back(action(Trigger::Click, Operation::Navigate, "Vue_B"));
+    p.views = {va, vb};
+    p.config.startView = p.views.front().id;
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.tick(0.1);
+    rt.setBreakpoints({at(1, kNoId, oid, 2)});
+    rt.press(btn, 0.2);
+    rt.release(btn, 0.25, true);
+    check(rt.paused() && rt.debugHit() && rt.debugHit()->function == oid && rt.debugHit()->line == 2,
+          "le clic ouvre Vue_B : sa constante Somme (a + b) s'arrete dans l'operateur +, ligne 2");
+    for (auto& t : p.programs.types)
+        for (auto& o : t.operators) o.body += "Resultat.X := Resultat.X + 100.0;\n";
+    check(rt.debugContinue() && !rt.paused(), "Continuer");
+    check(errors(rt).empty(), "sans erreur (pas 'arrete : trop long')" + errors(rt));
+    check(rt.currentView() == vbId && value(rt, "Ouvert") == 2.0, "Vue_B s'ouvre et son OnOpen va au bout (Ouvert = 2), il n'est pas abandonne");
+    const std::string said = console(rt, "D\xC3\xA9" "bogage");
+    check(said.find("pas de nouvelle valeur") != std::string::npos, "la Console dit que la constante n'a pas de nouvelle valeur :" + said);
+    // Une autre ouverture la recalcule, avec le code change (a + b + 0.5 + 100).
+    rt.setBreakpoints({});
+    rt.stop(0.3);
+}
+
+// ---- D1c-3 : deux points fondus en un : leurs passages s'ajoutent, aussi une fois passes par le moteur ----
+void mergedHitsThroughEngine() {
+    std::printf("-- deux points fondus en un : leurs passages s'ajoutent (la seance, puis le moteur)\n");
+    auto& s = app::HmiDebugSession::instance();
+    auto doc = std::make_shared<hmi::Document>();
+    for (int i = 1; i <= 12; ++i) var(doc->project, ("L" + std::to_string(i)).c_str(), "INT", "0");
+    View v = makeView(doc->project, "Vue_Essai");
+    doc->project.views.push_back(v);
+    doc->project.config.startView = doc->project.views.back().id;
+    const Id sc = script(doc->project, "Calcul", numbered(12));
+    s.bindProject(doc);
+    s.clear();
+    const app::HmiDebugTarget code{sc, kNoId};
+    const auto first = s.add(code, 9);
+    const auto second = s.add(code, 10);
+    Runtime rt;
+    rt.bind(&doc->project, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.tick(0.1);
+    rt.setBreakpoints(s.breakpoints());                    // debugSync : la seance donne ses points au moteur
+    double t = 0.2;
+    for (int k = 0; k < 3; ++k, t += 0.1) {               // 3 passages a chaque ligne
+        (void)rt.callScript("Calcul", t);
+        while (rt.paused()) (void)rt.debugContinue();
+    }
+    (void)s.setEnabled(first, false);                      // le point 9 desactive : 2 passages de plus au point 10
+    rt.setBreakpoints(s.breakpoints());
+    for (int k = 0; k < 2; ++k, t += 0.1) {
+        (void)rt.callScript("Calcul", t);
+        while (rt.paused()) (void)rt.debugContinue();
+    }
+    s.pullFrom(rt);
+    const auto* a = s.find(first);
+    const auto* b = s.find(second);
+    check(a && b && a->hits == 3 && b->hits == 5, "les passages : 3 au point 9, 5 au point 10");
+    s.followText(code, numbered(12), numbered(12, 9));     // la ligne 9 supprimee : le point 10 remonte en 9
+    check(s.breakpoints().size() == 1 && s.breakpoints()[0].hits == 8, "la seance : un seul point, 8 passages");
+    rt.setBreakpoints(s.breakpoints());                    // debugSync : le moteur recoit le point fondu
+    s.pullFrom(rt);                                        // ... et la seance relit ce qu'il en dit
+    check(!rt.breakpoints().empty() && rt.breakpoints()[0].hits == 8, "le moteur garde la somme (8), pas les 3 du point garde");
+    check(s.breakpoints().size() == 1 && s.breakpoints()[0].hits == 8,
+          "la seance montre 8 passages apres le moteur : " + (s.breakpoints().empty() ? std::string("-") : std::to_string(s.breakpoints()[0].hits)));
+    // Un redemarrage : le moteur repart de zero passage ; la seance aussi, avant de lui redonner sa liste (debugSync :
+    // followStart, puis setBreakpoints) - l'ancien compte (8) ne revient pas par max().
+    rt.stop(t);
+    rt.start(t + 1.0);
+    s.followStart(rt);
+    (void)s.add(code, 11);                                 // un point pose entre les deux marches (la liste a change)
+    rt.setBreakpoints(s.breakpoints());
+    s.pullFrom(rt);
+    bool zero = !s.breakpoints().empty();
+    for (const auto& bp : s.breakpoints()) zero = zero && bp.hits == 0;
+    check(zero, "apres un redemarrage : les passages repartent de zero (seance et moteur)");
+    rt.stop(t + 2.0);
+    s.clear();
+}
+
+// ---- D1c-4 : en pause, F11 d'une AUTRE fenetre detachee (un editeur detache) reste son plein ecran ----
+void keysOtherDetachedWindow() {
+    std::printf("-- en pause : F11 d'une autre fenetre detachee (un editeur) reste son plein ecran ; celle de la simulation et la principale : le debogueur\n");
+    Bench b;
+    auto doc = std::make_shared<hmi::Document>();
+    doc->project = b.p;
+    app::HmiSimulationHost host;
+    host.fullScreenWindow = [](bool) {};
+    ui::Widget simWindow("detached.root");                 // la fenetre de l'onglet Simulation detache
+    auto& pane = static_cast<app::HmiSimulationPane&>(simWindow.addChild(std::make_unique<app::HmiSimulationPane>("essai.detache2", doc, host)));
+    ui::Widget editorWindow("detached.root");              // une autre fenetre detachee : un editeur, pas de simulation
+    auto& rt = pane.runtime();
+    rt.bind(&doc->project, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.tick(0.1);
+    check(!app::HmiSimulationPane::claimsKey(ui::Key::F11, &editorWindow), "hors pause : F11 de l'editeur detache est son plein ecran");
+    rt.setBreakpoints({at(1, b.stats, kNoId, 14)});
+    (void)rt.callScript("Statistiques_Pression", 0.2);
+    check(rt.paused(), "en pause ligne 14");
+    check(!app::HmiSimulationPane::claimsKey(ui::Key::F11, &editorWindow),
+          "en pause : l'editeur detache ne pilote pas la pause - F11 y reste son plein ecran (pas une touche morte)");
+    check(app::HmiSimulationPane::claimsKey(ui::Key::F11, &simWindow), "la fenetre de l'onglet Simulation : F11 est au debogueur");
+    check(app::HmiSimulationPane::claimsKey(ui::Key::F11), "la fenetre principale : F11 est au debogueur (elle pilote la pause)");
+    (void)rt.debugContinue();
+    check(!rt.paused(), "Continuer");
+}
+
+// ---- D1c-5 : Resultat dans la condition d'un point d'operateur ; les locales et les valeurs le nomment ainsi ----
+void operatorResultCondition() {
+    std::printf("-- un point d'operateur : la condition lit Resultat, les locales et les valeurs de la ligne le nomment ainsi\n");
+    Project p;
+    const Id oid = vecWithPlus(p);
+    var(p, "a", "T_Vec", "");
+    var(p, "b", "T_Vec", "");
+    var(p, "c", "T_Vec", "");
+    var(p, "R", "REAL", "0.0");
+    View v = makeView(p, "Vue_Essai");
+    p.views.push_back(v);
+    p.config.startView = p.views.back().id;
+    (void)script(p, "Avec_Operateur", "a.X := 1.0;\nb.X := 2.0;\nc := a + b;\nR := c.X;\n");
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.setDebugger(true);
+    rt.start(0.0);
+    rt.tick(0.1);
+    rt.setBreakpoints({at(1, kNoId, oid, 2, "Resultat.X > 1.0")});
+    check(rt.breakpoints()[0].note.empty(), "pose sans alerte (Resultat est connu dans un operateur) : " + rt.breakpoints()[0].note);
+    (void)rt.callScript("Avec_Operateur", 0.2);
+    check(rt.paused() && rt.debugHit() && rt.debugHit()->function == oid && rt.debugHit()->line == 2,
+          "Resultat.X > 1.0 (3 > 1) est vraie : arret ligne 2 de l'operateur ; note : " + rt.breakpoints()[0].note);
+    if (rt.debugHit()) {
+        const auto& hit = *rt.debugHit();
+        const DebugFrame& top = hit.stack.back();
+        check(local(top, "Resultat") != nullptr && local(top, "OPERATEUR_ADD") == nullptr,
+              "les locales nomment le resultat Resultat, pas OPERATEUR_ADD");
+        bool shown = false, internal = false;
+        for (const auto& [name, val] : hit.values) {
+            if (name == "Resultat.X") shown = true;
+            if (name.find("OPERATEUR_") != std::string::npos) internal = true;
+        }
+        check(shown && !internal, "les valeurs de la ligne : Resultat.X, pas OPERATEUR_ADD.X");
+        std::string val, why;
+        check(rt.debugEvaluate("Resultat.X", val, &why) && val.rfind("3", 0) == 0, "un espion Resultat.X : " + val + why);
+    }
+    (void)rt.debugContinue();
+    check(!rt.paused() && value(rt, "R") == 3.5 && errors(rt).empty(), "Continuer : R = 3.5" + errors(rt));
+    rt.setBreakpoints({at(2, kNoId, oid, 2, "Resultat.X > 10.0")});
+    (void)rt.callScript("Avec_Operateur", 0.3);
+    check(!rt.paused() && rt.breakpoints()[0].note.empty() && rt.breakpoints()[0].hits == 0,
+          "Resultat.X > 10.0 est fausse : pas d'arret, et le point reste arme (pas 'condition invalide') : " + rt.breakpoints()[0].note);
+    rt.stop(0.4);
+}
+
 } // namespace
 
 int main() {
@@ -1886,6 +2174,11 @@ int main() {
     mergedBreakpoints();
     keysDetachedWindow();
     pausedChipHint();
+    detachedPauseHoldsGesture();
+    changedInConstantAtOpen();
+    mergedHitsThroughEngine();
+    keysOtherDetachedWindow();
+    operatorResultCondition();
     std::printf("%d verifications, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

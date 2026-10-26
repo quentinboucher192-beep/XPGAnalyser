@@ -524,17 +524,25 @@ std::string operatorFunctionText(const HmiOperator& o) {
     // Un nom interne : le resultat se donne par Resultat := ... (ou TO_REAL := ...,
     // le nom de la conversion), tous deux renommes ; un APPEL TO_STRING(x) dans le
     // corps reste un appel (la conversion standard, ou celle d'un autre type).
-    const std::string internal = "OPERATEUR_" + upperOf(operatorFunctionName(o));
+    const std::string internal = operatorInternalName(o);
     std::string head = "FUNCTION " + internal + "(";
     if (fam == OperatorFamily::Assignment) head += "VAR_IN_OUT ";
     head += "a : " + displayType(o.left);
     if (fam != OperatorFamily::Conversion) head += "; b : " + displayType(o.right);
     head += ")";
     if (fam != OperatorFamily::Assignment && !o.result.empty()) head += " : " + displayType(o.result);
-    std::string body = renameBareWord(decl::codeOf(o), kResultName, internal);   // 1.11.18 (lot 3) : ses declarations du modele
-    if (const auto fn = operatorFunctionName(o); !fn.empty()) body = renameBareWord(body, fn, internal);
+    std::string body = operatorInternalText(o, decl::codeOf(o));   // 1.11.18 (lot 3) : ses declarations du modele
     if (!body.empty() && body.back() != '\n') body += '\n';
     return head + "\n" + body + "END_FUNCTION\n";
+}
+
+std::string operatorInternalName(const HmiOperator& o) { return "OPERATEUR_" + upperOf(operatorFunctionName(o)); }
+
+std::string operatorInternalText(const HmiOperator& o, std::string_view text) {
+    const std::string internal = operatorInternalName(o);
+    std::string out = renameBareWord(text, kResultName, internal);
+    if (const auto fn = operatorFunctionName(o); !fn.empty()) out = renameBareWord(out, fn, internal);
+    return out;
 }
 
 bool resolveOperator(const Project& p, std::string_view op, std::string_view left, std::string_view right,

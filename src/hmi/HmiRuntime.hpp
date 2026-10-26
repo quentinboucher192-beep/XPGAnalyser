@@ -955,6 +955,8 @@ public:
     [[nodiscard]] std::uint64_t debugRevision() const noexcept { return debugRev_; }
     // Le nombre de pauses depuis le demarrage : une nouvelle pause (le volet revient a la ligne d'arret).
     [[nodiscard]] std::uint64_t pauseCount() const noexcept { return pauseCount_; }
+    // 1.13.0 : les demarrages (start) : la seance du debogueur remet ses passages a zero quand il change.
+    [[nodiscard]] std::uint64_t startCount() const noexcept { return startCount_; }
     // En pause : une expression (un espion, le nom sous le curseur, l'apercu d'une condition) dans la portee
     // de la ligne d'arret - ses locales se lisent, rien ne s'ecrit (une ecriture est refusee et dite), une
     // fonction en echec ne laisse rien au script. Hors pause : dans la portee de l'IHM. Faux et `why` : ne se
@@ -1927,6 +1929,7 @@ private:
     std::vector<std::pair<Id, Id>>       tagOwners_;              // le numero d'un programme - 1 : (script, fonction)
     std::map<std::pair<Id, Id>, std::uint32_t> ownerTags_;
     std::vector<DebugExec>               debugExec_;              // echange avec les taches (ExecState)
+    std::uint64_t                        startCount_{0};          // les demarrages (startCount)
     std::uint64_t                        pauseCount_{0};          // les pauses depuis le demarrage (pauseCount)
     std::int64_t                         pausedNs_{0};            // le temps passe en pause : les mesures le retranchent
     int                                  callbackDepth_{0};       // dans un rappel (minuteur, surveillance) : pas d'arret

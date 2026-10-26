@@ -108,6 +108,15 @@ const HmiOperator* operatorOf(const Project& p, Id id, OperatorOwner* owner = nu
     return id == kNoId ? nullptr : operatorById(p, id, owner);
 }
 
+// 1.13.0 : un nom (une locale, une valeur de la ligne) lu dans un operateur, montre comme son code l'ecrit : son nom
+// interne (OPERATEUR_ADD, OPERATEUR_ADD.X) redevient Resultat (Resultat.X) - l'inverse de operatorInternalText.
+std::string operatorShownName(const HmiOperator& o, const std::string& name) {
+    const std::string internal = upperText(operatorInternalName(o));
+    if (name.size() < internal.size() || upperText(std::string_view(name).substr(0, internal.size())) != internal) return name;
+    if (name.size() > internal.size() && identChar(name[internal.size()])) return name;      // OPERATEUR_ADDX : un autre nom
+    return std::string(kResultName) + name.substr(internal.size());
+}
+
 // Le texte d'un operateur pour le debogueur : sa FUNCTION interne, l'en-tete sur la ligne 1 avec le debut du corps - les
 // lignes sont celles de son editeur (le moteur, lui, lit l'en-tete seul sur sa ligne : kOperatorHeaderLines).
 std::string operatorDebugText(const HmiOperator& o) {
@@ -317,7 +326,12 @@ bool codeSpace(const Project& p, Id script, Id function, std::string& ns, std::s
 // Une condition (un espion) lue comme le code qui la porte lit ses noms : dans un espace de noms ou sous USING, ses noms
 // courts ecrits en entier (EnDefaut -> Gaz.EnDefaut), comme le moteur le fait pour le code (names::qualify) ; les
 // locales du code (`hidden`) ne bougent pas. Sans espace : telle quelle.
-std::string qualifiedCondition(const Project& p, Id script, Id function, const std::string& condition) {
+std::string qualifiedCondition(const Project& p, Id script, Id function, const std::string& written) {
+    // 1.13.0 : dans un operateur, Resultat (et le nom de la conversion) se lit comme le moteur execute son code
+    // (operatorFunctionText) : sous son nom interne, OPERATEUR_ADD. Sinon la condition "Resultat.X > 1" echouerait au
+    // premier passage (le point se desarmerait, "condition invalide").
+    const HmiOperator* op = script == kNoId ? operatorOf(p, function) : nullptr;
+    const std::string condition = op ? operatorInternalText(*op, written) : written;
     std::string ns, body;
     if (!codeSpace(p, script, function, ns, body)) return condition;
     if (ns.empty() && !names::mentionsUsing(body)) return condition;
@@ -491,10 +505,12 @@ void Runtime::setDebugger(bool on) {
 }
 
 void Runtime::setBreakpoints(std::vector<DebugBreakpoint> list) {
-    // Les passages comptes restent (le meme point, par son identifiant).
+    // Les passages comptes restent (le meme point, par son identifiant). 1.13.0 : un point qui en a recueilli un autre
+    // (deux points fondus sur une ligne, HmiDebugSession::shiftLines) arrive avec leur somme : la plus grande des deux
+    // valeurs reste (la liste ne compte jamais moins que le moteur, sauf ce fondu qui compte plus).
     for (auto& bp : list)
         for (const auto& old : breakpoints_)
-            if (old.id == bp.id) bp.hits = old.hits;
+            if (old.id == bp.id) bp.hits = std::max(bp.hits, old.hits);
     breakpoints_ = std::move(list);
     resolveBreakpoints();
 }
@@ -733,6 +749,10 @@ std::vector<DebugFrame> Runtime::debugStack(const std::vector<sim::LineProbe::Fr
         d.function = function;
         d.line = frameLine(*f, f->line);
         d.locals = f->locals;
+        // 1.13.0 : un operateur - son resultat sous le nom que son code lui donne (Resultat), pas son nom interne.
+        if (script == kNoId && project_)
+            if (const HmiOperator* o = operatorOf(*project_, function))
+                for (auto& l : d.locals) l.name = operatorShownName(*o, l.name);
         std::string code = project_ ? debugCodeName(*project_, script, function) : std::string{};
         if (code.empty() && script == kNoId) code = boundCodeName(function);   // 1.13.0 : une redefinition d'instance
         if (f->function.empty()) d.label = code.empty() ? std::string("code") : code;
@@ -908,6 +928,8 @@ void Runtime::debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe
     hit.cycle = static_cast<std::uint64_t>(cycles_);
     hit.detached = taskIsDetached(currentTask_);
     probeQuietly([&] { hit.values = probe.lineValues(); });
+    // 1.13.0 : les valeurs de la ligne d'un operateur, sous les noms de son code (Resultat.X, pas OPERATEUR_ADD.X).
+    const HmiOperator* pausedOperator = owner.first == kNoId && project_ ? operatorOf(*project_, owner.second) : nullptr;
     for (auto& [name, value] : hit.values) {
         if (value.empty()) {
             const bool aggregate = envOf().richVariable(name) != nullptr || this->aggregate(name) != nullptr;
@@ -915,6 +937,7 @@ void Runtime::debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe
         } else if (variableForced(name)) {
             value += " (forc\xC3\xA9" "e)";
         }
+        if (pausedOperator) name = operatorShownName(*pausedOperator, name);
     }
     hit.stack = debugStack(chain, here);
     hit.context = hit.stack.empty() ? std::string{} : hit.stack.front().label;

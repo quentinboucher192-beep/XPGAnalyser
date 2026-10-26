@@ -19102,7 +19102,9 @@ const std::vector<Topic>& topics() {
                          "-, la premi\xC3\xA8re vue d'un d\xC3\xA9marrage. Un point atteint dans un de ces "
                          "scripts s'arr\xC3\xAAte \xC3\xA0 son tour, apr\xC3\xA8s la reprise. Un script "
                          "d\xC3\xA9tach\xC3\xA9 lanc\xC3\xA9 par le geste re\xC3\xA7oit sa premi\xC3\xA8re "
-                         "tranche tout de suite, comme sans d\xC3\xA9" "bogueur ;", {}},
+                         "tranche tout de suite, comme sans d\xC3\xA9" "bogueur ; s'il s'arr\xC3\xAAte dans "
+                         "cette tranche, le geste attend avec lui : la suite du geste part \xC3\xA0 la "
+                         "reprise, une fois sa tranche finie (son premier WAIT, sa fin) ;", {}},
              {K::Bullet, "le prochain cycle IHM attend la reprise, l'\xC3\xA9" "cran garde la "
                          "derni\xC3\xA8re image ;", {}},
              {K::Bullet, "**les gestes dans la vue ne font rien** : un clic, la croix d'une popup, un "
@@ -19116,8 +19118,9 @@ const std::vector<Topic>& topics() {
                          "fen\xC3\xAAtre principale quand l'onglet Simulation est d\xC3\xA9tach\xC3\xA9 dans "
                          "la sienne ; F11 n'y met pas la fen\xC3\xAAtre en plein \xC3\xA9" "cran. Dans une "
                          "**autre** fen\xC3\xAAtre d\xC3\xA9tach\xC3\xA9" "e (un \xC3\xA9" "diteur "
-                         "d\xC3\xA9tach\xC3\xA9), elles ne la pilotent pas : reviens \xC3\xA0 la "
-                         "fen\xC3\xAAtre principale ou \xC3\xA0 celle de l'onglet Simulation ;", {}},
+                         "d\xC3\xA9tach\xC3\xA9), elles ne la pilotent pas - F11 y reste le plein "
+                         "\xC3\xA9" "cran de cette fen\xC3\xAAtre : reviens \xC3\xA0 la fen\xC3\xAAtre "
+                         "principale ou \xC3\xA0 celle de l'onglet Simulation ;", {}},
              {K::Bullet, "IHM_SCRIPT_ACTIF et IHM_SCRIPT_ARRETER ne voient que les scripts "
                          "**d\xC3\xA9tach\xC3\xA9s**, comme sans d\xC3\xA9" "bogueur : un script en pause "
                          "qui ne l'est pas n'est ni \xC2\xAB actif \xC2\xBB ni arr\xC3\xAAt\xC3\xA9 par eux.", {}},
@@ -19163,11 +19166,13 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA9" "criture) d\xC3\xA9sarme le point, et le dit. Elle doit rendre un "
                          "**BOOL** : `Tours MOD 100` (le \xC2\xAB = 0 \xC2\xBB oubli\xC3\xA9) rend un nombre "
                          "- le point se d\xC3\xA9sarme au premier passage, et le dit : \xC2\xAB condition "
-                         "invalide : elle rend un DINT, pas un BOOL \xC2\xBB. L'aper\xC3\xA7u de "
-                         "Condition\xE2\x80\xA6 juge la condition **dans le code du point** : en pause dans "
-                         "ce code, \xC2\xAB Maintenant, c'est vrai (P = 3.2) \xC2\xBB ; en pause ailleurs, "
-                         "\xC2\xAB Elle sera essay\xC3\xA9" "e au passage dans fonction Moyenne_Pression "
-                         "\xC2\xBB.", {}},
+                         "invalide : elle rend un DINT, pas un BOOL \xC2\xBB. Dans un **op\xC3\xA9rateur**, "
+                         "le r\xC3\xA9sultat s'\xC3\xA9" "crit `Resultat`, comme dans son code (`Resultat.X "
+                         "> 1.0`, dans une condition comme dans un espion) ; les locales et les valeurs de "
+                         "la ligne le montrent sous ce nom. L'aper\xC3\xA7u de Condition\xE2\x80\xA6 juge la "
+                         "condition **dans le code du point** : en pause dans ce code, \xC2\xAB Maintenant, "
+                         "c'est vrai (P = 3.2) \xC2\xBB ; en pause ailleurs, \xC2\xAB Elle sera "
+                         "essay\xC3\xA9" "e au passage dans fonction Moyenne_Pression \xC2\xBB.", {}},
              {K::Code, "P < 5.0 OR Tours MOD 100 = 0", "ST"},
              {K::Code, "/* La condition d'un point s'\xC3\xA9" "crit en ST, quelle que soit la notation du "
                          "code. */", "C"},
@@ -19262,8 +19267,12 @@ const std::vector<Topic>& topics() {
                          "(un script cyclique repart au prochain cycle) \xC2\xBB. Seul ce script "
                          "s'arr\xC3\xAAte (avec ce qui l'appelle dans ce travail) : les autres scripts du "
                          "cycle, les actions suivantes du clic, la premi\xC3\xA8re vue d'un d\xC3\xA9marrage "
-                         "partent quand m\xC3\xAAme. Arr\xC3\xAAter la simulation pendant la pause "
-                         "arr\xC3\xAAte le script sans erreur - m\xC3\xAAme dans une fonction "
+                         "partent quand m\xC3\xAAme. Arr\xC3\xAAt\xC3\xA9 dans le calcul d'une constante "
+                         "\xC3\xA0 l'ouverture d'une vue (un op\xC3\xA9rateur, une m\xC3\xA9thode qu'il "
+                         "appelle), ce calcul s'arr\xC3\xAAte sans erreur : la constante n'a pas de nouvelle "
+                         "valeur cette fois (la Console le dit) et se recalcule \xC3\xA0 la prochaine "
+                         "ouverture ; la vue s'ouvre, son OnOpen part. Arr\xC3\xAAter la simulation pendant "
+                         "la pause arr\xC3\xAAte le script sans erreur - m\xC3\xAAme dans une fonction "
                          "appel\xC3\xA9" "e sous TRY : ni le CATCH ni la suite du script ne tournent. Les "
                          "points d'arr\xC3\xAAt ne sont **pas dans le projet** : ils restent pour la "
                          "s\xC3\xA9" "ance - fermer le sous-onglet ou arr\xC3\xAAter la simulation ne les "

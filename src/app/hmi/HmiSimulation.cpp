@@ -3593,13 +3593,14 @@ gfx::Rect HmiSimulationPane::fullScreenBarPart(std::string_view part) const {
 bool HmiSimulationPane::claimsKey(ui::Key key, const ui::Widget* windowRoot) {
     if (key != ui::Key::F11) return false;
     for (const auto* p : simPanes()) {
-        // 1.13.0 : EN PAUSE, F11 est au debogueur (Entrer) ou que soit le clavier - dans la fenetre de l'onglet
-        // Simulation comme dans une autre (l'onglet detache, la fenetre principale) : jamais le plein ecran.
-        if (!p->station_ && p->debugPane_ && p->runtime_.paused()) return true;
         // La fenetre du volet : sa racine ("detached.root" : une fenetre detachee,
         // DetachedWindows) - F11 d'une fenetre ne va qu'aux volets de cette fenetre.
         const ui::Widget* top = p;
         while (top->parent()) top = top->parent();
+        // 1.13.0 : EN PAUSE, F11 est au debogueur (Entrer) dans les fenetres qui pilotent la pause - celle de l'onglet
+        // Simulation, et la fenetre principale (debugKeyAnywhere : l'onglet detache s'y pilote aussi) : pas le plein
+        // ecran. Une AUTRE fenetre detachee (un editeur detache) ne pilote pas la pause : F11 y reste son plein ecran.
+        if (!p->station_ && p->debugPane_ && p->runtime_.paused() && (!windowRoot || top == windowRoot)) return true;
         if (windowRoot ? top != windowRoot : top->id() == "detached.root") continue;
         if (p->fullScreen_) return true;
         if (p->station_ || !p->host_.fullScreenWindow || p->bounds().empty()) continue;
@@ -4746,6 +4747,7 @@ void HmiSimulationPane::debugSync() {
     auto& s = HmiDebugSession::instance();
     s.bindProject(doc_);
     if (s.runtime() != &runtime_) s.setRuntime(&runtime_);
+    s.followStart(runtime_);                      // 1.13.0 : un redemarrage remet les passages de la seance a zero
     if (s.revision() != debugPushed_) {
         debugPushed_ = s.revision();
         runtime_.setBreakpoints(s.breakpoints());

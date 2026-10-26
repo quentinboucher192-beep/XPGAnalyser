@@ -82,6 +82,9 @@ public:
     // Les passages, les lignes, les notes du moteur ; la pause. 1.13.0 : une NOUVELLE pause (apres un pas, Continuer)
     // revient au niveau 0 - la ligne d'arret, pas le niveau choisi dans la pile d'avant.
     void pullFrom(const hmi::Runtime& rt);
+    // 1.13.0 : un nouveau demarrage du moteur - ses passages repartent de zero, ceux de la seance aussi (avant de
+    // lui redonner la liste : un ancien compte ne revient pas).
+    void followStart(const hmi::Runtime& rt);
     // Le niveau de la pile choisi dans le volet Debogage (0 : la ligne d'arret ; 1 : celui d'en dessous...).
     void setLevel(std::size_t level);
     [[nodiscard]] std::size_t level() const noexcept { return level_; }
@@ -101,6 +104,7 @@ private:
     hmi::Runtime*                     runtime_{nullptr};
     std::size_t                       level_{0};
     std::uint64_t                     pauses_{0};     // les pauses du moteur deja vues (Runtime::pauseCount)
+    std::uint64_t                     starts_{0};     // le demarrage du moteur deja vu (Runtime::startCount)
     std::map<std::pair<hmi::Id, hmi::Id>, std::string> followed_;   // le dernier texte suivi de chaque code (followText)
 };
 

@@ -295,10 +295,17 @@ void HmiDebugSession::pullFrom(const hmi::Runtime& rt) {
                 any = true;
             }
     (void)any;
+    starts_ = rt.startCount();
     // Hors pause, ou une nouvelle pause (apres un pas, Continuer) : la ligne d'arret, en haut de la pile.
     if (!rt.paused() || rt.pauseCount() != pauses_) level_ = 0;
     pauses_ = rt.pauseCount();
     touch(false);
+}
+
+void HmiDebugSession::followStart(const hmi::Runtime& rt) {
+    if (rt.startCount() == starts_) return;
+    starts_ = rt.startCount();
+    for (auto& b : list_) b.hits = 0;
 }
 
 void HmiDebugSession::setLevel(std::size_t level) {
