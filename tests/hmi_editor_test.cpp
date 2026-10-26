@@ -37662,7 +37662,8 @@ void objets113() {
     check(!methods->setPrivate(dem, true, &why) && why.find("virtuelle") != std::string::npos, "une virtuelle ne se rend pas priv\xC3\xA9" "e : " + why);
     check(methods->setVirtual(dem, false) && !p.hmiType(pompeId)->methods[0].isVirtual, "Red\xC3\xA9" "finissable d\xC3\xA9" "coch\xC3\xA9" "e");
     check(methods->setPrivate(dem, true) && p.hmiType(pompeId)->methods[0].visibility == hmi::Visibility::Private
-              && methods->methodTable().model()->cellText(0, 3) == "Priv\xC3\xA9" "e",
+              && methods->methodTable().model()->cellText(0, 1) == "Priv\xC3\xA9" "e"   // 1.13.0 (F2) : la 2e colonne, le cadenas
+              && methods->methodTable().model()->cellStyle(0, 1).icon == ui::Icon::Lock,
           "Rendre priv\xC3\xA9" "e : la colonne Visibilit\xC3\xA9 dit Priv\xC3\xA9" "e");
     (void)stack.undo();
     (void)stack.undo();
@@ -37697,7 +37698,7 @@ void objets113() {
               && model->cellText(ownMembers, 6).rfind("(h\xC3\xA9rit\xC3\xA9 de T_Pompe)", 0) == 0 && !model->editable(ownMembers, 0),
           "les membres h\xC3\xA9rit\xC3\xA9s \xC3\xA0 la suite, gris\xC3\xA9s \xC2\xAB (h\xC3\xA9rit\xC3\xA9 de T_Pompe) \xC2\xBB, non modifiables");
     check(methods->type() == sub && methods->count() == 1 && !methods->rows()[0].own
-              && methods->methodTable().model()->cellText(0, 5) == "(h\xC3\xA9rit\xC3\xA9 de T_Pompe)",
+              && methods->methodTable().model()->cellText(0, 3) == "(h\xC3\xA9rit\xC3\xA9 de T_Pompe)",   // 1.13.0 (F2) : Origine, 4e colonne
           "la m\xC3\xA9thode h\xC3\xA9rit\xC3\xA9" "e Demarrer : \xC2\xAB (h\xC3\xA9rit\xC3\xA9 de T_Pompe) \xC2\xBB");
     methods->selectMethod(dem);
     const int overTool = methods->tools().actionByTip("Red\xC3\xA9" "finir");
@@ -37712,7 +37713,7 @@ void objets113() {
     check(over != kNoId && ts->methods[0].name == "Demarrer" && ts->methods[0].body.find("SUPER.Demarrer(") != std::string::npos
               && hmi::sameMethodSignature(ts->methods[0], p.hmiType(pompeId)->methods[0]),
           "Red\xC3\xA9" "finir : Demarrer dans T_PompeDoublee, m\xC3\xAAme signature, son corps rappelle SUPER.Demarrer()");
-    check(methods->methodTable().model()->cellText(0, 5) == "red\xC3\xA9" "finit T_Pompe.Demarrer", "l'origine : \xC2\xAB red\xC3\xA9" "finit T_Pompe.Demarrer \xC2\xBB");
+    check(methods->methodTable().model()->cellText(0, 3) == "red\xC3\xA9" "finit T_Pompe.Demarrer", "l'origine : \xC2\xAB red\xC3\xA9" "finit T_Pompe.Demarrer \xC2\xBB");
     {
         const auto found = hmi::checkMethod(p, {}, over);
         check(found.empty() && ts->methods[0].body.find("SUPER.Demarrer(Consigne);") != std::string::npos,
@@ -37919,7 +37920,343 @@ void objets113() {
     }
 }
 
+// ------------------------------------------------ 1.13.0 (correctifs F2) : ce que les captures ont montre --
+// Les objets, les interfaces, les generiques, les espaces et les bibliotheques, a l'ecran : Max<T> et ses deux
+// parametres, une fonction qui cache une fonction standard, sans SDL comme le reste.
+void correctifsF2_113() {
+    std::printf("1.13.0 (correctifs F2) : objets, interfaces, g\xC3\xA9n\xC3\xA9riques, espaces et biblioth\xC3\xA8ques - l'\xC3\xA9" "cran\n");
+    std::string why;
+    // ---- 1. Max<T> (a : T; b : T) : ses deux parametres dans la liste, l'inspecteur et Essayer ----
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        auto& p = doc->project;
+        HmiFunction mx = makeFunction(p, "Max", "T", "IF a > b THEN\n    Max := a;\nELSE\n    Max := b;\nEND_IF;");
+        mx.generics = {{"T", "ANY_NUM"}};
+        mx.decls = {testParam(p, "a", "T"), testParam(p, "b", "T")};
+        const Id maxId = mx.id;
+        p.programs.functions.push_back(mx);
+        HmiFunction moy = makeFunction(p, "Moyenne", "REAL", "Moyenne := (a + b) / 2.0;");
+        moy.decls = {testParam(p, "a", "REAL"), testParam(p, "b", "REAL")};
+        p.programs.functions.push_back(moy);
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "Demo_Boucles";
+        sc.event = "Appel";
+        sc.body = "R := MAX(R * 1.2, 1.0);";
+        p.programs.scripts.push_back(sc);
+        Variable r;
+        r.id = p.allocate();
+        r.name = "R";
+        r.type = "REAL";
+        p.programs.variables.push_back(r);
+        app::HmiFunctionsPane fns("f2.fonctions", doc, apply);
+        fns.setBounds({0, 0, 1500, 900});
+        fns.layout();
+        fns.selectFunction(maxId);
+        same_text(cellOf(fns.functionTable(), "Max<T>", 2), "a : T, b : T", "la liste IHM \xC2\xB7 Fonctions : Max<T>, ses param\xC3\xA8tres a : T, b : T");
+        same_text(cellOf(fns.functionTable(), "Moyenne", 2), "a : REAL, b : REAL", "Moyenne (non g\xC3\xA9n\xC3\xA9rique) : inchang\xC3\xA9" "e");
+        std::string nParams = "?", nLocals = "?", callers = "?", warn;
+        for (const auto& c : fns.properties().categories())
+            for (const auto& pr : c.properties) {
+                if (pr.name == "Param\xC3\xA8tres") nParams = pr.value;
+                if (pr.name == "Locales") nLocals = pr.value;
+                if (pr.name == "Appel\xC3\xA9" "e par") callers = pr.value;
+                if (pr.name == "Attention") warn = pr.value;
+            }
+        same_text(nParams, "2", "l'inspecteur de Max<T> : Param\xC3\xA8tres 2");
+        same_text(nLocals, "0", "l'inspecteur de Max<T> : Locales 0 (elle n'en a pas)");
+        check(callers.find("Demo_Boucles") != std::string::npos, "Appel\xC3\xA9" "e par : script Demo_Boucles (son MAX(...) appelle Max du projet) [" + callers + "]");
+        check(warn.find("fonction standard MAX") != std::string::npos, "l'inspecteur le dit : Max cache la fonction standard MAX [" + warn + "]");
+        check(fns.tryFunction(maxId, {"7", "3"}) && fns.lastTrial().ok && fns.lastTrial().result == "7",
+              "Essayer Max<T>(7, 3) : 7 [" + fns.lastTrial().error + " " + fns.lastTrial().result + "]");
+        // Le badge "modifie" de l'editeur suit la fonction montree.
+        const Id moyId = p.programs.functions.back().id;
+        fns.editor().insertText(" ");
+        check(fns.editor().modified(), "une saisie dans Max<T> : l'\xC3\xA9" "diteur est \xC2\xAB modifi\xC3\xA9 \xC2\xBB");
+        fns.selectFunction(moyId);
+        check(!fns.editor().modified(), "Moyenne montr\xC3\xA9" "e ensuite : plus \xC2\xAB modifi\xC3\xA9 \xC2\xBB (rien n'y a \xC3\xA9t\xC3\xA9 tap\xC3\xA9)");
+    }
+
+    // ---- 2. Les objets : l'interface heritee, la page d'une interface, la section Methodes ----
+    using PG = ui::PropertyGrid;
+    const auto theme = ui::Theme::dark();
+    {
+        ui::PlatformServices svc;   // les mesures de texte sans ecran (8 px par caractere, comme Recorder)
+        svc.measureWidth = [](std::string_view t, gfx::FontId) { return 8.f * static_cast<float>(t.size()); };
+        svc.lineHeight = [](gfx::FontId f) { return static_cast<float>(f.v) + 4.f; };
+        ui::installPlatformServices(std::move(svc));
+    }
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        Project& p = doc->project;
+        const auto method = [&p](const char* name, const char* ret, const char* body, bool virt = false, bool priv = false) {
+            HmiFunction m = makeFunction(p, name, ret, body);
+            m.isVirtual = virt;
+            if (priv) m.visibility = hmi::Visibility::Private;
+            return m;
+        };
+        HmiType iface;
+        iface.id = p.allocate();
+        iface.name = "I_Demarrable";
+        iface.kind = hmi::HmiTypeKind::Interface;
+        iface.methods = {method("Demarrer", "", ""), method("EnDefaut", "BOOL", "")};
+        const Id ifaceId = iface.id;
+        p.programs.types.push_back(iface);
+        HmiType pompe;
+        pompe.id = p.allocate();
+        pompe.name = "T_Pompe";
+        pompe.members = {{"Debit", "REAL", "", ""}, {"Marche", "BOOL", "", ""}};
+        pompe.interfaces = {"I_Demarrable"};
+        pompe.methods = {method("Demarrer", "", "Marche := TRUE;"), method("EnDefaut", "BOOL", "EnDefaut := Marche AND Debit < 1.0;", true),
+                         method("Journal", "", "IHM_JOURNAL('pompe');", false, true)};
+        const Id pompeId = pompe.id;
+        const Id demarrerId = pompe.methods[0].id, endefautId = pompe.methods[1].id, journalId = pompe.methods[2].id;
+        p.programs.types.push_back(pompe);
+        HmiType dbl;
+        dbl.id = p.allocate();
+        dbl.name = "T_PompeDoublee";
+        dbl.base = "T_Pompe";
+        dbl.members = {{"Secours", "BOOL", "", ""}};
+        dbl.methods = {method("EnDefaut", "BOOL", "EnDefaut := SUPER.EnDefaut() AND NOT Secours;", true)};
+        const Id dblId = dbl.id;
+        p.programs.types.push_back(dbl);
+        for (const auto& [n, t] : std::vector<std::pair<const char*, const char*>>{{"Pompe1", "T_Pompe"}, {"Pompe2", "T_PompeDoublee"}}) {
+            Variable v;
+            v.id = p.allocate();
+            v.name = n;
+            v.type = t;
+            p.programs.variables.push_back(v);
+        }
+        app::HmiTypesPane types("f2.types", doc, apply);
+        std::vector<Id> created;
+        {
+            app::HmiTypesPane::Hosts h;
+            h.typeCreated = [&created](Id id) { created.push_back(id); };
+            types.setHosts(std::move(h));
+        }
+        types.setBounds({0, 0, 1800, 1000});
+        types.layout();
+        const auto findProp = [&types](const std::string& category, const std::string& name) -> const PG::Property* {
+            for (const auto& c : types.properties().categories())
+                if (c.name == category)
+                    for (const auto& pr : c.properties)
+                        if (pr.name == name) return &pr;
+            return nullptr;
+        };
+        // a) T_PompeDoublee : I_Demarrable (heritee de T_Pompe) cochee, grisee, sans case a decocher.
+        types.selectType(dblId);
+        const PG::Property* inh = findProp("Impl\xC3\xA9mente (IMPLEMENTS)", "I_Demarrable");
+        check(inh && inh->value == "TRUE" && inh->type == PG::ValueType::Boolean && !inh->commit && inh->locked && inh->pill
+                  && inh->pill->text == "h\xC3\xA9rit\xC3\xA9" "e de T_Pompe",
+              "T_PompeDoublee : Impl\xC3\xA9mente \xE2\x80\xBA I_Demarrable coch\xC3\xA9" "e, gris\xC3\xA9" "e, \xC2\xAB h\xC3\xA9rit\xC3\xA9" "e de T_Pompe \xC2\xBB, rien \xC3\xA0 d\xC3\xA9" "cocher");
+        // b) la section Methodes de T_PompeDoublee : l'appel avec sa vraie instance (Pompe2), les colonnes utiles d'abord.
+        auto* methods = types.methods();
+        check(methods && methods->type() == dblId, "T_PompeDoublee : sa section M\xC3\xA9thodes");
+        if (!methods) return;
+        methods->selectMethod(dbl.methods[0].id);
+        check(methods->callHint() == "appel : Pompe2.EnDefaut() dans un script, EnDefaut() ou SELF.EnDefaut() dans une m\xC3\xA9thode",
+              "la ligne d'\xC3\xA9tat de T_PompeDoublee : Pompe2.EnDefaut() (avant : Pompe1.Demarrer() \xC3\xA9" "crit en dur) [" + methods->callHint() + "]");
+        check(methods->statusText().find("Pompe2.EnDefaut()") != std::string::npos, "la ligne d'\xC3\xA9tat elle-m\xC3\xAA" "me : " + methods->statusText());
+        const auto mm = methods->methodTable().model();
+        check(mm && mm->columnCount() == 6 && mm->headerText(2) == "Genre" && mm->headerText(3) == "Origine" && mm->headerText(4) == "Param\xC3\xA8tres",
+              "les colonnes : M\xC3\xA9thode, le cadenas, Genre, Origine, puis Param\xC3\xA8tres et Retour");
+        check(mm && mm->cellText(0, 3) == "red\xC3\xA9" "finit T_Pompe.EnDefaut" && mm->rowTooltip(0).find("red\xC3\xA9" "finit T_Pompe.EnDefaut") != std::string::npos,
+              "EnDefaut de T_PompeDoublee : son origine dans la 4e colonne, et dans l'infobulle de la ligne");
+        float shown = 0.f;
+        for (std::size_t c = 0; c <= 3; ++c) shown += methods->methodTable().columns()[c].width;
+        check(shown <= 400.f, "M\xC3\xA9thode, cadenas, Genre et Origine tiennent en 400 px (" + std::to_string(static_cast<int>(shown)) + ")");
+        // c) T_Pompe : la privee Journal (le cadenas, son appel), le badge "modifie" qui suit la methode montree.
+        types.selectType(pompeId);
+        methods->selectMethod(journalId);
+        check(methods->callHint().find("Journal() ou SELF.Journal() dans une m\xC3\xA9thode de T_Pompe") != std::string::npos
+                  && methods->callHint().find("Pompe1.") == std::string::npos,
+              "Journal (priv\xC3\xA9" "e) : seulement d'une m\xC3\xA9thode du type [" + methods->callHint() + "]");
+        {
+            const auto m2 = methods->methodTable().model();
+            int row = -1;
+            for (std::size_t r = 0; m2 && r < m2->rowCount(); ++r)
+                if (m2->cellText(r, 0) == "Journal") row = static_cast<int>(r);
+            check(row >= 0 && m2->cellStyle(static_cast<ui::RowIndex>(row), 1).icon == ui::Icon::Lock && m2->cellText(0, 1).empty(),
+                  "Journal : le cadenas dans la 2e colonne ; une publique : rien");
+        }
+        methods->selectMethod(demarrerId);
+        methods->editor().insertText(" ");
+        check(methods->editor().modified(), "une saisie dans Demarrer : \xC2\xAB modifi\xC3\xA9 \xC2\xBB");
+        methods->selectMethod(endefautId);
+        check(!methods->editor().modified(), "EnDefaut montr\xC3\xA9" "e ensuite : plus \xC2\xAB modifi\xC3\xA9 \xC2\xBB");
+        types.selectType(dblId);
+        check(!methods->editor().modified(), "EnDefaut de T_PompeDoublee : pas \xC2\xAB modifi\xC3\xA9 \xC2\xBB");
+        {
+            HmiType alone;
+            alone.id = p.allocate();
+            alone.name = "T_Seule";
+            alone.methods = {method("Faire", "", "")};
+            const Id aloneId = alone.id;
+            p.programs.types.push_back(alone);
+            types.selectType(aloneId);
+            check(methods->callHint() == "appel : <instance>.Faire() dans un script, Faire() ou SELF.Faire() dans une m\xC3\xA9thode",
+                  "un type sans variable : <instance> [" + methods->callHint() + "]");
+        }
+        // d) la page de l'interface : la Declaration sur une ligne (son infobulle entiere), pas d'Operateurs, "de la signature".
+        types.selectType(ifaceId);
+        check(types.operators() && types.operators()->visibility() == ui::Visibility::Collapsed,
+              "une interface : pas de section Op\xC3\xA9rateurs (ni \xC2\xAB Ajouter un op\xC3\xA9rateur \xC2\xBB)");
+        Recorder rec;
+        types.render(ui::PaintContext{rec, theme, {0, 0, 1800, 1000}, 0.0, nullptr});
+        check(rec.wrote("PROPRI\xC3\x89T\xC3\x89S DE LA SIGNATURE") && !rec.wrote("PROPRI\xC3\x89T\xC3\x89S DE LA M\xC3\x89THODE"),
+              "le volet des signatures : \xC2\xAB Propri\xC3\xA9t\xC3\xA9s de la signature \xC2\xBB");
+        bool newline = false, flat = false;
+        for (const auto& t : rec.texts) {
+            newline = newline || (t.find("INTERFACE") != std::string::npos && t.find('\n') != std::string::npos);
+            flat = flat || t.rfind("TYPE I_Demarrable INTERFAC", 0) == 0;
+        }
+        check(!newline && flat, "la D\xC3\xA9" "claration de l'interface : sur une ligne (ni saut ni glyphe), \xC2\xAB TYPE I_Demarrable INTERFACE ... \xC2\xBB");
+        gfx::Rect dr;
+        const std::string dtip = types.properties().valueRect("D\xC3\xA9" "claration", dr) ? types.properties().liveTooltip({dr.x + 20.f, dr.y + dr.h * 0.5f})
+                                                                                    : std::string{};
+        check(dtip.find("TYPE I_Demarrable INTERFACE\n    METHOD Demarrer\n") != std::string::npos,
+              "son infobulle : la d\xC3\xA9" "claration enti\xC3\xA8re, ligne \xC3\xA0 ligne [" + dtip.substr(0, 60) + "]");
+        // e) Nouveau type > Interface... : l'hote est prevenu (l'arbre la montre et la choisit).
+        types.openNewTypeMenu();
+        if (auto* menu = types.newTypeMenu()) {
+            menu->close();
+            menu->itemChosen->emit(4);
+        }
+        const auto* made = p.hmiTypeByName("I_Interface");
+        check(made && !created.empty() && created.back() == made->id, "Nouveau type \xE2\x80\xBA Interface\xE2\x80\xA6 : l'arbre est pr\xC3\xA9venu (I_Interface)");
+        types.selectType(pompeId);
+        check(types.operators()->visibility() == ui::Visibility::Visible, "une structure : la section Op\xC3\xA9rateurs revient");
+    }
+
+    // ---- 3. La grille : un nom ou une valeur coupes, en infobulle ; la case d'une liste a la largeur de ses choix ----
+    {
+        PG grid("f2.grille");
+        PG::Category cat;
+        cat.name = "Type";
+        PG::Property base;
+        base.name = "H\xC3\xA9rite de\xE2\x80\xA6 (EXTENDS)";
+        base.value = "T_Pompe";
+        cat.properties.push_back(base);
+        PG::Property court;
+        court.name = "Nom";
+        court.value = "T_Pompe";
+        cat.properties.push_back(court);
+        grid.setCategories({cat});
+        grid.setNameColumnRatio(0.4f);
+        grid.setBounds({0, 0, 300, 200});
+        grid.layout();
+        Recorder rec;
+        grid.render(ui::PaintContext{rec, theme, {0, 0, 300, 200}, 0.0, nullptr});
+        gfx::Rect r;
+        const std::string cut = grid.valueRect(base.name, r) ? grid.liveTooltip({r.x - 40.f, r.y + r.h * 0.5f}) : std::string{};
+        check(grid.hasTooltip() && cut.rfind("H\xC3\xA9rite de\xE2\x80\xA6 (EXTENDS)\nT_Pompe", 0) == 0,
+              "\xC2\xAB H\xC3\xA9rite de\xE2\x80\xA6 (\xE2\x80\xA6 \xC2\xBB coup\xC3\xA9 : son infobulle le donne entier [" + cut + "]");
+        const std::string plain = grid.valueRect("Nom", r) ? grid.liveTooltip({r.x + 4.f, r.y + r.h * 0.5f}) : std::string("?");
+        check(plain.empty(), "Nom (entier) : pas d'infobulle de plus [" + plain + "]");
+    }
+    {
+        ui::DropDown drop("f2.liste");
+        drop.setItems({{"(racine)", "r"}, {"Gaz", "g"}, {std::string(ui::PropertyGrid::kTypeInLabel), "t"}});
+        drop.setBounds({100, 100, 120, 24});
+        const float widest = ui::measureWidth(ui::PropertyGrid::kTypeInLabel, gfx::FontId{16});
+        check(drop.popupRect().w >= widest + 12.f,
+              "la liste Espace de noms : au moins aussi large que \xC2\xAB Taper un nom ou un rep\xC3\xA8re \xE2\x80\xA6 \xC2\xBB ("
+                  + std::to_string(static_cast<int>(drop.popupRect().w)) + " px pour " + std::to_string(static_cast<int>(widest)) + ")");
+    }
+
+    // ---- 5. Le volet Espaces et bibliotheques : Relier libs/... (relatif), le contenu de la version reliee, les messages ----
+    {
+        namespace fs = std::filesystem;
+        const fs::path work = fs::temp_directory_path() / "hmi_editor_f2_bibliotheques";
+        std::error_code ec;
+        fs::remove_all(work, ec);
+        fs::create_directories(work / "libs", ec);
+        app::setHmiProjectFolder(work.string());
+        const auto publishUtil = [&](const std::string& version, bool third) {
+            Project src;
+            HmiType cpt;
+            cpt.id = src.allocate();
+            cpt.name = "T_Compteur";
+            cpt.ns = "Util";
+            cpt.members = {{"Valeur", "DINT", "", ""}};
+            src.programs.types.push_back(cpt);
+            for (const char* n : {"Borne", "Moyenne3", "Ecart"}) {
+                if (std::string(n) == "Ecart" && !third) continue;
+                HmiFunction f = makeFunction(src, n, "REAL", (std::string(n) + " := 1.0;").c_str());
+                f.ns = "Util";
+                src.programs.functions.push_back(f);
+            }
+            hmi::biblio::PublishSpec spec;
+            spec.name = "Util";
+            spec.version = version;
+            return static_cast<bool>(hmi::biblio::writeFile(hmi::biblio::collect(src, spec).package, (work / "libs" / "Util.xpgbib").string()));
+        };
+        check(publishUtil("1.0.0", false), "Util 1.0.0 (1 type, 2 fonctions) dans libs/Util.xpgbib");
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+        app::HmiLibrariesPane pane("f2.bib", doc, apply);
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        check(pane.link("libs/Util.xpgbib", {}, &why) && doc->project.libraries.size() == 1 && doc->project.libraries[0].path == "libs/Util.xpgbib",
+              "Relier libs/Util.xpgbib (un chemin relatif au projet) [" + why + "]");
+        same_text(pane.message(), "Util 1.0.0 reli\xC3\xA9" "e (Ctrl+Z l'annule)", "la ligne d'\xC3\xA9tat dit le r\xC3\xA9sultat");
+        check(publishUtil("1.1.0", true), "le fichier devient Util 1.1.0 (une fonction de plus)");
+        pane.reload();
+        same_text(cellOf(pane.libraries(), "Util", 2), "plus r\xC3\xA9" "cente disponible", "l'\xC3\xA9tat, sans abr\xC3\xA9viation");
+        same_text(cellOf(pane.libraries(), "Util", 4), "1 type, 2 fonctions", "Contenu : la version reli\xC3\xA9" "e (1.0.0), comme \xC2\xAB Son interface \xC2\xBB");
+        check(pane.libraries().columns()[1].width >= 8.f * static_cast<float>(cellOf(pane.libraries(), "Util", 1).size()) + 12.f,
+              "la colonne Version tient \xC2\xAB " + cellOf(pane.libraries(), "Util", 1) + " \xC2\xBB");
+        check(pane.update("Util", {}, &why), "Mettre \xC3\xA0 jour Util [" + why + "]");
+        same_text(pane.message(), "Util mise \xC3\xA0 jour : 1.0.0 \xE2\x86\x92 1.1.0 (Ctrl+Z l'annule)", "la ligne d'\xC3\xA9tat dit le r\xC3\xA9sultat");
+        same_text(cellOf(pane.libraries(), "Util", 4), "1 type, 3 fonctions", "Contenu : la version reli\xC3\xA9" "e (1.1.0)");
+        same_text(stack.undoLabel(), "Mettre \xC3\xA0 jour Util : 1.0.0 \xE2\x86\x92 1.1.0", "Edition \xE2\x80\xBA Annuler garde le nom de la commande");
+        app::setHmiProjectFolder({});
+        fs::remove_all(work, ec);
+    }
+
+    // ---- 4. La table : un nom en gras qui tient juste n'est plus dessine deux fois (T_Suiv.iVE) ----
+    {
+        struct Gras final : ui::ITableModel {
+            [[nodiscard]] std::size_t rowCount() const override { return 1; }
+            [[nodiscard]] std::size_t columnCount() const override { return 1; }
+            [[nodiscard]] std::string headerText(std::size_t) const override { return "Nom"; }
+            [[nodiscard]] std::string cellText(ui::RowIndex, std::size_t) const override { return "T_SuiviVE"; }
+            [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex, std::size_t) const override {
+                ui::CellStyle s;
+                s.bold = true;
+                return s;
+            }
+            [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
+        };
+        ui::TableView table("f2.gras");
+        table.setColumns({{"Nom", 12.f + 9.f * 8.f}});   // 9 caracteres : la place juste
+        table.setModel(std::make_shared<Gras>());
+        table.setBounds({0, 0, 400, 200});
+        table.layout();
+        Recorder rec;
+        table.render(ui::PaintContext{rec, theme, {0, 0, 400, 200}, 0.0, nullptr});
+        int full = 0, cutDraws = 0;
+        for (const auto& t : rec.texts) {
+            full += t == "T_SuiviVE";
+            cutDraws += t.rfind("T_Sui", 0) == 0 && t != "T_SuiviVE";
+        }
+        check(!(full > 0 && cutDraws > 0), "T_SuiviVE en gras, \xC3\xA0 la place juste : jamais entier ET coup\xC3\xA9 par-dessus (" + std::to_string(full) + " entier(s), "
+                                            + std::to_string(cutDraws) + " coup\xC3\xA9(s))");
+    }
+}
+
 int main(int argc, char** argv) {
+    // 1.13.0 (correctifs F2) : HMI_TEST_F2=1 - les correctifs F2 (objets, interfaces, generiques, espaces), seuls.
+    if (const char* only = std::getenv("HMI_TEST_F2"); only && *only == '1') {
+        correctifsF2_113();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.13.0 (lots J4b et J6b) : HMI_TEST_J46=1 - l'interface des tests unitaires et des unites, seule.
     if (const char* only = std::getenv("HMI_TEST_J46"); only && *only == '1') {
         testsUnitaires113();
@@ -38468,6 +38805,7 @@ int main(int argc, char** argv) {
     objets113();                            // 1.13.0 (J1b) : l'ecran des objets - methodes, visibilite, heritage, interfaces
     testsUnitaires113();                    // 1.13.0 (lot J4b) : les tests unitaires - l'onglet Tests, les verdicts, l'arbre
     unites113();                            // 1.13.0 (lot J6b) : les unites - la colonne Unite, le selecteur, Unites de mesure
+    correctifsF2_113();                     // 1.13.0 (correctifs F2) : ce que les captures des objets et des espaces ont montre
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);
