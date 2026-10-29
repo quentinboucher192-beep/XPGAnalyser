@@ -2131,9 +2131,13 @@ const std::vector<KeyInfo>& keyInfos() {
          "lin\xC3\xA9" "aire : les points reli\xC3\xA9s ; escalier : la valeur tenue jusqu'\xC3\xA0 la suivante ; points : seuls."},
         {"legend", "L\xC3\xA9gende", PG::ValueType::Boolean, {}, "Le nom et la derni\xC3\xA8re valeur de chaque plume."},
         // 1.12.16 : une courbe pilotable - l'operateur la fige et la reprend.
-        {"pilotable", "Pilotable (pause / continuer)", PG::ValueType::Boolean, {},
-         "En marche (simulation, poste d'exploitation), un bouton en haut \xC3\xA0 droite de la courbe : Pause fige l'affichage "
-         "(les mesures continuent d'\xC3\xAAtre prises), Continuer reprend le temps r\xC3\xA9" "el."},
+        // 1.13.1 : et la barre entiere - Figer (l'acquisition), les curseurs, le zoom, l'export de la zone.
+        {"pilotable", "Pilotable (pause, figer, curseurs, zoom)", PG::ValueType::Boolean, {},
+         "En marche (simulation, poste d'exploitation), une barre en haut \xC3\xA0 droite de la courbe : Pause fige l'affichage "
+         "(les mesures continuent), Figer arr\xC3\xAAte l'acquisition (aucune mesure n'entre ; Reprendre laisse un trou), Curseurs "
+         "pose deux lignes A et B (leurs heures, l'\xC3\xA9" "cart, la valeur de chaque plume ; CSV et Excel exportent la zone entre "
+         "elles), Tout voir revient \xC3\xA0 la dur\xC3\xA9" "e. La molette zoome le temps autour de la souris (Maj : les valeurs), "
+         "glisser d\xC3\xA9place, un clic pose un curseur ; F fige, C les curseurs, D\xC3\xA9" "but tout voir."},
         {"penVisible", "Plumes : visibles si (a;b;\xE2\x80\xA6)", PG::ValueType::Text, {},
          "Une condition par plume, dans l'ordre (vide : toujours visible) : fausse, la plume et sa l\xC3\xA9gende se cachent ; "
          "ses mesures continuent. Plus simple : Contenu > la plume > Visible si."},

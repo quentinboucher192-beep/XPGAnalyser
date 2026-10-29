@@ -31,6 +31,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
+#include <tuple>
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -607,6 +609,60 @@ void drawHistoryObject(const Ctx& c, const hmi::View&) {
 // echelle fixe ou automatique, une interpolation (lineaire, escalier, points).
 // Temps reel : les mesures du moteur IHM ; historique : les mesures archivees
 // (ou un fichier externe : 1re colonne le temps, puis une colonne par plume).
+// 1.13.1 : EN MARCHE, PILOTABLE - la fenetre du moteur (le zoom, glisser, le gel), l'echelle zoomee, les trous des
+// gels, les deux curseurs et le cadre de leurs mesures, la barre (Pause, Figer, Curseurs, Tout voir) ; la geometrie
+// est celle du clic (hmi::trendLayout).
+namespace {
+
+// Les morceaux d'une plume dans la fenetre [start, end] : coupes aux trous (un gel), prolonges jusqu'aux bords
+// (zoomee plus fin que deux mesures, la courbe montre encore ce qui les relie) ; `step` : la valeur tenue.
+std::vector<std::vector<std::pair<double, double>>> trendRuns(const std::vector<std::pair<double, double>>& pts, double start, double end,
+                                                              bool step, const std::vector<std::pair<double, double>>& gaps) {
+    std::vector<std::vector<std::pair<double, double>>> runs;
+    std::vector<std::pair<double, double>> cur;
+    const auto crosses = [&](double t0, double t1) {
+        for (const auto& g : gaps)
+            if (g.first >= t0 - 1e-9 && g.second <= t1 + 1e-9) return true;
+        return false;
+    };
+    const auto at = [&](const std::pair<double, double>& a, const std::pair<double, double>& b, double t) {
+        if (step || b.first - a.first <= 0) return a.second;
+        return a.second + (b.second - a.second) * (t - a.first) / (b.first - a.first);
+    };
+    for (std::size_t k = 0; k < pts.size(); ++k) {
+        const auto& p = pts[k];
+        const bool cut = k > 0 && crosses(pts[k - 1].first, p.first);
+        if (cut && !cur.empty()) {
+            runs.push_back(std::move(cur));
+            cur.clear();
+        }
+        if (p.first < start) continue;
+        const bool linked = k > 0 && !cut;
+        if (cur.empty() && linked && pts[k - 1].first < start) cur.emplace_back(start, at(pts[k - 1], p, start));
+        if (p.first > end) {
+            if (linked && pts[k - 1].first <= end) cur.emplace_back(end, at(pts[k - 1], p, end));
+            break;
+        }
+        cur.push_back(p);
+    }
+    if (!cur.empty()) runs.push_back(std::move(cur));
+    return runs;
+}
+
+// Une graduation des valeurs : deux decimales (comme avant), plus quand l'axe est zoome tres pres.
+std::string valueLabel(double v, double range) {
+    const int decimals = std::clamp(static_cast<int>(std::ceil(-std::log10(std::max(1e-12, range / 4.0)))) + 1, 2, 9);
+    if (decimals <= 2) return hmi::formatNumber(std::round(v * 100) / 100);
+    char b[64];
+    std::snprintf(b, sizeof b, "%.*f", decimals, v);
+    std::string out = b;
+    while (!out.empty() && out.back() == '0') out.pop_back();
+    if (!out.empty() && out.back() == '.') out.pop_back();
+    return out == "-0" ? std::string("0") : out;
+}
+
+} // namespace
+
 void drawTrendObject(const Ctx& c, const hmi::View& view) {
     fillAndStroke(c, rectLocal(c.w(), c.h()));
     const double w = c.w(), h = c.h();
@@ -629,24 +685,25 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
     // Les donnees : une serie (temps, valeur) par plume, et la fin de la fenetre.
     std::vector<std::vector<std::pair<double, double>>> series(pens.size());
     std::vector<bool> shown(pens.size(), true);   // 1.12.16 : la condition de chaque plume (penVisible)
-    double end = 0;
+    double end = 0, start = 0;
     bool preview = false;
     bool paused = false;
     std::string endLabel;
     const auto* rt = c.opt.runtime;
+    const hmi::TrendState* st = nullptr;                    // 1.13.1 : le gel, la fenetre, les curseurs
+    const std::vector<hmi::TrendSeries>* live = nullptr;
     if (!c.opt.editor && rt && !historyMode) {
-        end = rt->now();
         // 1.12.16 : une courbe pilotable en pause - figee a l'instant de la pause (les mesures continuent).
-        if (const auto at = rt->trendPausedAt(view.id, c.o.id)) {
-            end = *at;
-            paused = true;
-        }
-        if (const auto* list = rt->trend(view.id, c.o.id))
-            for (std::size_t i = 0; i < pens.size() && i < list->size(); ++i) {
-                for (const auto& pt : (*list)[i].points) series[i].push_back(pt);
-                shown[i] = (*list)[i].visible;
+        // 1.13.1 : la fenetre du moteur - finie au present, a la pause, au gel (rien n'entre), ou la ou on l'a posee.
+        paused = rt->trendPausedAt(view.id, c.o.id).has_value();
+        st = rt->trendState(view.id, c.o.id);
+        std::tie(start, end) = rt->trendWindowOf(view.id, c.o.id, duration);
+        if ((live = rt->trend(view.id, c.o.id)) != nullptr)
+            for (std::size_t i = 0; i < pens.size() && i < live->size(); ++i) {
+                for (const auto& pt : (*live)[i].points) series[i].push_back(pt);
+                shown[i] = (*live)[i].visible;
             }
-        endLabel = paused ? "pause" : "0 s";
+        endLabel = paused ? "pause" : st && st->frozen ? "fig\xC3\xA9" "e" : "0 s";
     } else if (!c.opt.editor && historyMode) {
         const std::string source = c.src.text(c.o, "source");
         if (!source.empty() && c.opt.assets) {
@@ -676,10 +733,12 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
                         if (smp.epoch >= end) { end = smp.epoch; endLabel = clock(smp.stamp); }
                     }
         }
+        start = end - duration;
     } else {
         // L'editeur : un apercu, pour juger des couleurs et de l'interpolation.
         preview = true;
         end = duration;
+        start = 0;
         for (std::size_t i = 0; i < pens.size(); ++i)
             for (int k = 0; k <= 48; ++k) {
                 const double t = duration * k / 48.0;
@@ -689,11 +748,19 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
             }
         endLabel = "aper\xC3\xA7u";
     }
-    const double start = end - duration;
+    const double span = std::max(1e-12, end - start);
+    const bool frozen = st && st->frozen;
+    const bool spanZoom = st && st->span > 0;         // 1.13.1 : la largeur zoomee
+    const bool pinned = st && st->pinned;             // ... la fenetre posee (un glisser, un zoom hors du direct)
+    static const std::vector<std::pair<double, double>> noGaps;
+    const auto& gaps = st ? st->gaps : noGaps;
 
     // L'echelle.
     double lo = c.src.number(c.o, "ymin", 0), hi = c.src.number(c.o, "ymax", 100);
-    if (autoScale) {
+    if (live || (rt && !c.opt.editor && !historyMode)) {
+        // 1.13.1 : celle du clic (hmi::trendScale) - le zoom des valeurs, sinon Axe Y ou les valeurs de la fenetre.
+        std::tie(lo, hi) = hmi::trendScale(c.o, live, start, end, st);
+    } else if (autoScale) {
         bool any = false;
         double mn = 0, mx = 0;
         for (const auto& s : series)
@@ -712,16 +779,17 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
     }
     if (hi <= lo) hi = lo + 1;
 
-    // La zone de trace : la legende en haut, les graduations a gauche et en bas.
-    const double top = legend && !pens.empty() ? 24 : 8, left = 46, bottom = 20, right = 10;
-    const double pw = std::max(10.0, w - left - right), ph = std::max(10.0, h - top - bottom);
+    // La zone de trace : la legende (et la barre d'une courbe pilotable) en haut, les graduations a gauche et en bas.
+    const auto layout = hmi::trendLayout(c.o, w, h, st && st->cursors());
+    const double top = layout.plot.y, left = layout.plot.x, bottom = 20;
+    const double pw = layout.plot.w, ph = layout.plot.h;
     const gfx::Color grid = c.fixed(0x323A47);
     const gfx::Color axis = c.fixed(0x5A6678);
     const gfx::Color label = c.fixed(0x9AA6B8);
     for (int k = 0; k <= 4; ++k) {
         const double y = top + ph * k / 4.0;
         c.r.line(c.map(left, y), c.map(left + pw, y), k == 4 ? axis : grid, 1);
-        text(c, hmi::formatNumber(std::round((hi - (hi - lo) * k / 4.0) * 100) / 100), 0, y - 9, left - 4, 18, label, 11, "droite");
+        text(c, valueLabel(hi - (hi - lo) * k / 4.0, hi - lo), 0, y - 9, left - 4, 18, label, 11, "droite");
     }
     for (int k = 0; k <= 4; ++k) {
         const double x = left + pw * k / 4.0;
@@ -730,12 +798,17 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
     // 1.12.25 : les graduations du temps restent dans l'objet - la derniere (l'heure) en
     // debordait de la moitie de sa largeur, coupee par la carte voisine - et ne se touchent
     // pas : sur une courbe etroite, celle qui toucherait une voisine deja posee est omise.
+    // 1.13.1 : zoomee, dans l'unite de la fenetre (-2.5 ms) ; posee, l'heure de ses deux bords.
     {
         const auto px = static_cast<std::uint16_t>(std::clamp(11.0 * c.vp.zoom, 6.0, 200.0));
         const double kx = std::max(0.01, static_cast<double>(c.vp.zoomX()));
         std::vector<std::pair<double, double>> taken;
         for (const int k : {4, 0, 2, 1, 3}) {
-            const std::string t = k == 4 ? endLabel : "-" + hmi::formatNumber(std::round(duration * (4 - k) / 4.0)) + " s";
+            std::string t;
+            if (k == 4) t = pinned && rt ? rt->clockText(end) : endLabel;
+            else if (k == 0 && pinned && rt) t = rt->clockText(start);
+            else if (spanZoom || pinned) t = hmi::trendTick(-span * (4 - k) / 4.0, span);
+            else t = "-" + hmi::formatNumber(std::round(duration * (4 - k) / 4.0)) + " s";
             if (t.empty()) continue;
             const double tw = c.r.measure(t, gfx::FontId{px}).width / kx;
             const double x0 = std::clamp(left + pw * k / 4.0 - tw / 2.0, 2.0, std::max(2.0, w - 2.0 - tw));
@@ -748,8 +821,16 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
     }
 
     // Les plumes.
-    const auto X = [&](double t) { return left + (t - start) / duration * pw; };
+    const auto X = [&](double t) { return left + (t - start) / span * pw; };
     const auto Y = [&](double v) { return top + (1 - (std::clamp(v, lo, hi) - lo) / (hi - lo)) * ph; };
+    // 1.13.1 : les trous des gels passes - une bande pale, "gel" dessus quand elle est assez large.
+    for (const auto& g : gaps) {
+        if (g.second < start || g.first > end) continue;
+        const auto x0 = static_cast<float>(std::clamp(X(g.first), left, left + pw)), x1 = static_cast<float>(std::clamp(X(g.second), left, left + pw));
+        const auto y0 = static_cast<float>(top), y1 = static_cast<float>(top + ph);
+        shapes::fillPolygon(c.r, c.map({{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}), fade(c.fixed(0x56CCF2), 0.10f));
+        if (x1 - x0 > 30) text(c, "gel", x0, top + ph - 18, x1 - x0, 16, fade(c.fixed(0x56CCF2), 0.8f), 10, "centre");
+    }
     // Lot 18 : les marques - une zone de mouvement tiree, un forcage (sur une plume de la courbe).
     if (!c.opt.editor && rt && !historyMode) {
         // 1.9 : les traits d'abord, puis les textes, du plus recent au plus ancien (une
@@ -796,35 +877,61 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
             }
         }
     }
+    const bool step = interp == "escalier";
     for (std::size_t i = 0; i < series.size(); ++i) {
         if (!shown[i]) continue;   // 1.12.16 : sa condition est fausse
         const auto col = penColor(i);
-        std::vector<gfx::Point> pts;
-        for (const auto& [t, v] : series[i]) {
-            if (t < start - duration * 0.02 || t > end + 1e-9) continue;
-            const double x = std::clamp(X(t), left, left + pw);
-            if (interp == "escalier" && !pts.empty())
-                pts.push_back({pts.back().x, static_cast<float>(Y(v))});
-            pts.push_back({static_cast<float>(x), static_cast<float>(Y(v))});
-        }
-        if (pts.empty()) continue;
         if (interp == "points") {
-            for (const auto& p : pts) {
-                const auto m = c.map(p.x, p.y);
+            for (const auto& [t, v] : series[i]) {
+                if (t < start || t > end + 1e-9) continue;
+                const auto m = c.map(X(t), Y(v));
                 const float r = std::max(1.5f, 2.2f * c.vp.zoom);
                 c.r.fillRect({m.x - r, m.y - r, 2 * r, 2 * r}, col);
             }
-        } else {
-            if (interp == "escalier" && !preview && !c.opt.editor) pts.push_back({static_cast<float>(X(end)), pts.back().y});
+            continue;
+        }
+        // 1.13.1 : par morceaux (un gel coupe la plume), prolonges jusqu'aux bords de la fenetre ; l'escalier tient
+        // la valeur jusqu'a la mesure suivante (la valeur que lisent les curseurs).
+        const auto runs = trendRuns(series[i], start, end, step, gaps);
+        for (std::size_t r = 0; r < runs.size(); ++r) {
+            std::vector<gfx::Point> pts;
+            for (const auto& [t, v] : runs[r]) {
+                const auto x = static_cast<float>(std::clamp(X(t), left, left + pw));
+                if (step && !pts.empty()) pts.push_back({x, pts.back().y});
+                pts.push_back({x, static_cast<float>(Y(v))});
+            }
+            if (pts.empty()) continue;
+            // La derniere valeur tenue jusqu'au bord droit (le present, la pause, le gel).
+            if (step && !preview && !c.opt.editor && r + 1 == runs.size() && runs[r].back().first < end)
+                pts.push_back({static_cast<float>(X(end)), pts.back().y});
+            if (pts.size() == 1) {
+                const auto m = c.map(pts[0].x, pts[0].y);
+                const float rr = std::max(1.5f, 2.f * c.vp.zoom);
+                c.r.fillRect({m.x - rr, m.y - rr, 2 * rr, 2 * rr}, col);
+                continue;
+            }
             shapes::strokePolyline(c.r, c.map(pts), false, col, std::max(1.f, 1.8f * c.vp.zoom));
         }
     }
+    // 1.13.1 : LES CURSEURS - deux lignes verticales (A jaune, B bleu clair) et leur lettre en haut.
+    const gfx::Color colA = c.fixed(0xF2C94C), colB = c.fixed(0x56CCF2);
+    if (st && rt)
+        for (int which = 0; which < 2; ++which) {
+            const auto& cursor = which == 0 ? st->cursorA : st->cursorB;
+            if (!cursor || *cursor < start || *cursor > end) continue;
+            const double x = X(*cursor);
+            const gfx::Color col = which == 0 ? colA : colB;
+            for (double y = top; y < top + ph; y += 6) c.r.line(c.map(x, y), c.map(x, std::min(top + ph, y + 4)), col, std::max(1.f, 1.5f * c.vp.zoom));
+            const auto tx0 = static_cast<float>(x - 6), tx1 = static_cast<float>(x + 6), ty0 = static_cast<float>(top), ty1 = static_cast<float>(top + 13);
+            shapes::fillPolygon(c.r, c.map({{tx0, ty0}, {tx1, ty0}, {tx1, ty1}, {tx0, ty1}}), col);
+            text(c, which == 0 ? "A" : "B", x - 6, top, 12, 13, c.fixedOn(0x101318), 10, "centre");
+        }
     // La legende : une pastille, le nom, et la derniere valeur.
     if (legend && !pens.empty()) {
         double x = left;
         // Lot 6 : le nom de la plume ("names"), sinon son expression.
         const auto names = hmi::splitSemicolons(c.src.text(c.o, "names"));
-        const double legendRight = w - (pilotable ? 34.0 : 0.0);   // 1.12.16 : la place du bouton Pause
+        const double legendRight = layout.legendRight;   // 1.12.16 : la place du bouton Pause (1.13.1 : de la barre)
         for (std::size_t i = 0; i < pens.size(); ++i) {
             if (!shown[i]) continue;   // 1.12.16 : cachee, sa legende aussi
             std::string name = i < names.size() && !names[i].empty() ? names[i] : pens[i];
@@ -841,21 +948,92 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
             x += tw + 8;
         }
     }
-    // 1.12.16 : une courbe pilotable - le bouton Pause (deux barres) / Continuer (un triangle), en haut a droite ;
-    // en pause, un bandeau le dit sur la zone de trace.
+    // 1.12.16 : une courbe pilotable - le bouton Pause (deux barres) / Continuer (un triangle), en haut a droite.
+    // 1.13.1 : a sa gauche, Figer / Reprendre, Curseurs, Tout voir (ceux qui tiennent) ; les bandeaux en bas de la
+    // zone de trace (Figee, en pause, zoom pose) ; figee, le cadre de la zone de trace passe au bleu glace.
     if (pilotable) {
-        const auto b = hmi::trendPauseBox(w, h);
-        const float bx = static_cast<float>(b[0]), by = static_cast<float>(b[1]), bw = static_cast<float>(b[2]), bh = static_cast<float>(b[3]);
-        const gfx::Color face = paused ? c.fixed(0xF2C94C) : c.fixed(0x2F6FD6);
-        shapes::fillPolygon(c.r, c.map({{bx, by}, {bx + bw, by}, {bx + bw, by + bh}, {bx, by + bh}}), fade(face, c.alpha * (c.opt.editor ? 0.5f : 1.f)));
-        const gfx::Color ink = fade(c.fixed(0x101318), c.alpha);
-        if (paused) {
-            shapes::fillPolygon(c.r, c.map({{bx + 9.f, by + 4.f}, {bx + 17.f, by + bh / 2.f}, {bx + 9.f, by + bh - 4.f}}), ink);
-        } else {
-            shapes::fillPolygon(c.r, c.map({{bx + 8.f, by + 4.f}, {bx + 11.f, by + 4.f}, {bx + 11.f, by + bh - 4.f}, {bx + 8.f, by + bh - 4.f}}), ink);
-            shapes::fillPolygon(c.r, c.map({{bx + 14.f, by + 4.f}, {bx + 17.f, by + 4.f}, {bx + 17.f, by + bh - 4.f}, {bx + 14.f, by + bh - 4.f}}), ink);
+        const float dim = c.opt.editor ? 0.5f : 1.f;
+        for (const auto& b : layout.buttons) {
+            if (b.part == "pause") {
+                const float bx = static_cast<float>(b.box.x), by = static_cast<float>(b.box.y), bw = static_cast<float>(b.box.w), bh = static_cast<float>(b.box.h);
+                const gfx::Color face = paused ? c.fixed(0xF2C94C) : c.fixed(0x2F6FD6);
+                shapes::fillPolygon(c.r, c.map({{bx, by}, {bx + bw, by}, {bx + bw, by + bh}, {bx, by + bh}}), fade(face, c.alpha * dim));
+                const gfx::Color ink = fade(c.fixed(0x101318), c.alpha);
+                if (paused) {
+                    shapes::fillPolygon(c.r, c.map({{bx + 9.f, by + 4.f}, {bx + 17.f, by + bh / 2.f}, {bx + 9.f, by + bh - 4.f}}), ink);
+                } else {
+                    shapes::fillPolygon(c.r, c.map({{bx + 8.f, by + 4.f}, {bx + 11.f, by + 4.f}, {bx + 11.f, by + bh - 4.f}, {bx + 8.f, by + bh - 4.f}}), ink);
+                    shapes::fillPolygon(c.r, c.map({{bx + 14.f, by + 4.f}, {bx + 17.f, by + 4.f}, {bx + 17.f, by + bh - 4.f}, {bx + 14.f, by + bh - 4.f}}), ink);
+                }
+                continue;
+            }
+            std::string what;
+            gfx::Color face = c.fixed(0x2F6FD6);
+            float alpha = dim;
+            bool lit = false;   // allume (fige, curseurs poses) : l'encre sombre sur la couleur claire
+            if (b.part == "figer") {
+                what = frozen ? "Reprendre" : "Figer";
+                if ((lit = frozen)) face = c.fixed(0x56CCF2);
+            } else if (b.part == "curseurs") {
+                what = "Curseurs";
+                if ((lit = st && (st->cursorA || st->cursorB))) face = c.fixed(0xF2C94C);
+            } else {
+                what = "Tout voir";
+                if (!(st && st->zoomed())) alpha *= 0.55f;   // rien a revoir : estompe
+            }
+            drawButtonBox(c, b.box, what, fade(face, c.alpha * alpha), lit ? c.fixedOn(0x101318) : c.fixedOn(0xFFFFFF), 11);
         }
-        if (paused) text(c, "en pause - Continuer pour reprendre", left, top + 2, pw, 16, c.fixed(0xF2C94C), 11, "centre");
+        std::vector<std::pair<std::string, gfx::Color>> banners;
+        if (frozen && rt)
+            banners.emplace_back("FIG\xC3\x89" "E depuis " + rt->clockText(st->frozenAt) + " - aucune mesure n'entre (Reprendre ou F)", c.fixed(0x56CCF2));
+        if (paused) banners.emplace_back("en pause - Continuer pour reprendre", c.fixed(0xF2C94C));
+        if (pinned && !paused && !frozen) banners.emplace_back("zoom pos\xC3\xA9 - Tout voir revient au direct", label);
+        for (std::size_t k = 0; k < banners.size(); ++k)
+            text(c, banners[k].first, left, top + ph - 18.0 * static_cast<double>(k + 1), pw, 16, banners[k].second, 11, "centre");
+        if (frozen) {
+            const auto x0 = static_cast<float>(left), y0 = static_cast<float>(top), x1 = static_cast<float>(left + pw), y1 = static_cast<float>(top + ph);
+            shapes::strokePolyline(c.r, c.map({{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}), true, c.fixed(0x56CCF2), std::max(1.f, 2.f * c.vp.zoom));
+        }
+    }
+    // 1.13.1 : LE CADRE DES MESURES DES CURSEURS - l'ecart, les heures, chaque plume en A, en B et la difference ;
+    // ses boutons CSV et Excel exportent la zone entre A et B.
+    if (st && rt && live && st->cursors() && layout.readout.w > 0) {
+        const auto readings = hmi::trendReadings(c.o, *live, *st);
+        std::vector<std::size_t> rows;
+        for (std::size_t i = 0; i < readings.size(); ++i)
+            if (readings[i].visible) rows.push_back(i);
+        const double rowH = 15;
+        const std::size_t fit = static_cast<std::size_t>(std::max(0.0, std::floor((ph - 8 - 20 - rowH - 4) / rowH)));
+        const std::size_t count = std::min(rows.size(), fit);
+        const hmi::Box& rb = layout.readout;
+        const double bh = 20 + rowH + rowH * static_cast<double>(count) + 4;
+        const auto x0 = static_cast<float>(rb.x), y0 = static_cast<float>(rb.y), x1 = static_cast<float>(rb.x + rb.w), y1 = static_cast<float>(rb.y + bh);
+        shapes::fillPolygon(c.r, c.map({{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}), fade(c.fixed(0x101318), 0.88f));
+        shapes::strokePolyline(c.r, c.map({{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}), true, axis, 1);
+        const double a = *st->cursorA, b = *st->cursorB;
+        const gfx::Color ink = c.fixedText(0xE6EAF0);
+        const double textW = layout.exportCsv.w > 0 ? layout.exportCsv.x - rb.x - 8 : rb.w - 8;
+        text(c, fitted(c, "\xCE\x94t = " + hmi::trendDuration(b - a), textW, 11), rb.x + 6, rb.y + 2, textW, 16, ink, 11, "gauche");
+        if (layout.exportCsv.w > 0) {
+            drawButtonBox(c, layout.exportCsv, "CSV", c.fixed(0x2F6FD6), c.fixedOn(0xFFFFFF), 10);
+            drawButtonBox(c, layout.exportExcel, "Excel", c.fixed(0x2F6FD6), c.fixedOn(0xFFFFFF), 10);
+        }
+        const double half = (rb.w - 12) / 2;
+        text(c, fitted(c, "A " + rt->clockText(a), half, 11), rb.x + 6, rb.y + 20, half, rowH, colA, 11, "gauche");
+        text(c, fitted(c, "B " + rt->clockText(b), half, 11), rb.x + 6 + half, rb.y + 20, half, rowH, colB, 11, "gauche");
+        for (std::size_t k = 0; k < count; ++k) {
+            const auto& r = readings[rows[k]];
+            const double y = rb.y + 20 + rowH * static_cast<double>(k + 1);
+            const auto sx = static_cast<float>(rb.x + 6), sy = static_cast<float>(y + 4);
+            shapes::fillPolygon(c.r, c.map({{sx, sy}, {sx + 8.f, sy}, {sx + 8.f, sy + 8.f}, {sx, sy + 8.f}}), penColor(rows[k]));
+            const std::string va = r.a ? hmi::trendNumber(*r.a) : std::string("-"), vb = r.b ? hmi::trendNumber(*r.b) : std::string("-");
+            std::string diff = "-";
+            if (r.a && r.b) diff = (*r.b - *r.a >= 0 ? "+" : "") + hmi::trendNumber(*r.b - *r.a);
+            const std::string line = r.name + "   A " + va + "   B " + vb + "   \xCE\x94 " + diff;
+            text(c, fitted(c, line, rb.w - 24, 11), rb.x + 18, y, rb.w - 24, rowH, ink, 11, "gauche");
+        }
+        if (count < rows.size())
+            text(c, "\xE2\x80\xA6", rb.x + rb.w - 18, y1 - 14, 12, 12, ink, 11, "centre");
     }
     if (pens.empty()) text(c, "Courbe : aucune plume (Variables trac\xC3\xA9" "es)", 0, 0, w, h, label, 12, "centre");
     else if (historyMode && !c.opt.editor && std::all_of(series.begin(), series.end(), [](const auto& s) { return s.empty(); }))

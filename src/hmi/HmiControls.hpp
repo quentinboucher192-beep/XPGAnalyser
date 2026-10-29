@@ -179,9 +179,9 @@ struct TrendSeries {
 };
 
 // ---- 1.13.1 : LA COURBE EN MARCHE - figer, curseurs, zoom, export de la zone ------------------------------
-//  (« dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs, + pouvoir
+//  ("dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs, + pouvoir
 //  ajouter des lignes verticales pour faire des mesures de temps + pouvoir zoomer/dezoomer etirer/detendre de
-//  maniere hyper zoomee, pouvoir exporter que la zone dans une balise de lignes verticales »)
+//  maniere hyper zoomee, pouvoir exporter que la zone dans une balise de lignes verticales")
 //  Sur une courbe pilotable (sa case Pilotable), en marche - la simulation et le poste d'exploitation :
 //   - FIGER arrete l'ACQUISITION : aucune mesure n'entre dans les plumes, aucune ne tombe (la fenetre reste entiere
 //     aussi longtemps qu'on veut) ; Reprendre la relance, le temps du gel reste un trou (gaps). La PAUSE de la

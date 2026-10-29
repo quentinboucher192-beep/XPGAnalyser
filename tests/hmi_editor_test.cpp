@@ -33795,6 +33795,184 @@ void valeurInitiale11216() {
     }
 }
 
+// 1.13.1 ("dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs, + pouvoir ajouter
+// des lignes verticales pour faire des mesures de temps + pouvoir zoomer/dezoomer etirer/detendre de maniere hyper zoomee,
+// pouvoir exporter que la zone dans une balise de lignes verticales") : la courbe en marche a l'ecran, sans ecran - la
+// barre, la molette (Maj : les valeurs ; Ctrl : la vue), glisser, les curseurs et leur cadre, le menu du clic droit, le poste.
+void courbesEnMarche1131() {
+    std::printf("== 1.13.1 : la courbe en marche \xC3\xA0 l'\xC3\xA9" "cran (barre, molette, glisser, curseurs, menu, poste) ==\n");
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    {
+        Variable var;
+        var.id = p.allocate();
+        var.name = "Niveau";
+        var.type = "REAL";
+        var.initial = "42";
+        p.programs.variables.push_back(var);
+    }
+    View v = makeView(p, "Vue_Courbe");
+    v.width = 1000;
+    v.height = 600;
+    const Id trend = edit::add(p, v, Kind::Trend, 100, 100);
+    {
+        auto* o = v.object(trend);
+        o->name = "Courbe";
+        o->setNumber("w", 600);
+        o->setNumber("h", 300);
+        o->set("variables", "Niveau");
+        o->setNumber("duration", 10);
+        o->setFlag("pilotable", true);
+    }
+    p.config.startView = v.id;
+    p.views.push_back(v);
+    std::vector<hmi::ExportRequest> asked;
+    app::HmiSimulationHost host;
+    host.exportFile = [&asked](const hmi::ExportRequest& rq, std::string* where) {
+        asked.push_back(rq);
+        if (where) *where = "exports/" + rq.fileName;
+        return true;
+    };
+    app::HmiSimulationPane pane("sim1131", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    double now = 0;
+    auto paintAt = [&](double t) {
+        now = t;
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    };
+    for (double t = 0; t <= 12.01; t += 0.1) paintAt(t);   // 12 s de mesures
+    auto& rt = pane.runtime();
+    const Id view = p.views[0].id;
+    const auto centre = [](const gfx::Rect& r) { return gfx::Point{r.x + r.w / 2, r.y + r.h / 2}; };
+    const auto click = [&](gfx::Point at) {
+        pane.canvas().dispatch(ui::MouseDown{at, ui::MouseButton::Left, 1, {}});
+        pane.canvas().dispatch(ui::MouseUp{at, ui::MouseButton::Left, {}});
+    };
+    gfx::Rect bFig{}, bCur{}, bAll{}, plot{};
+    check(pane.canvas().partRect("Courbe", "figer", bFig) && pane.canvas().partRect("Courbe", "curseurs", bCur)
+              && pane.canvas().partRect("Courbe", "toutvoir", bAll) && pane.canvas().partRect("Courbe", "trace", plot),
+          "la barre de la courbe pilotable : Figer, Curseurs, Tout voir, et sa zone de trace");
+    // (Le faux rendu compte 8 px par lettre a toute taille : les libelles se coupent - leur debut suffit.)
+    check(rec.wrote("Figer") && rec.wrote("Cu") && rec.wrote("To"), "les boutons sont dessin\xC3\xA9s, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de Pause");
+    // Figer : le bouton, l'indicateur.
+    click(centre(bFig));
+    const auto* st = rt.trendState(view, trend);
+    check(st && st->frozen, "un clic sur Figer : la courbe est fig\xC3\xA9" "e");
+    const auto* series = rt.trend(view, trend);
+    const std::size_t count = series && !series->empty() ? (*series)[0].points.size() : 0;
+    for (double t = 12.1; t <= 13.01; t += 0.1) paintAt(t);
+    check(series && (*series)[0].points.size() == count, "fig\xC3\xA9" "e : plus une mesure n'entre (l'\xC3\xA9" "cran tourne)");
+    check(rec.wrote("FIG\xC3\x89" "E depuis") && rec.wrote("Repr"), "l'indicateur : FIG\xC3\x89" "E depuis ..., le bouton dit Reprendre");
+    // La molette sur la zone de trace : le temps autour de la souris ; Maj : les valeurs ; Ctrl : pas la courbe.
+    pane.canvas().dispatch(ui::MouseWheel{centre(plot), 0.f, 2.f, {}});
+    check(st->pinned && st->span > 0 && st->span < 10, "la molette : le temps zoom\xC3\xA9 autour de la souris (" + hmi::trendDuration(st->span) + ")");
+    pane.canvas().dispatch(ui::MouseWheel{centre(plot), 0.f, 1.f, ui::KeyMods{false, true, false, false}});
+    check(st->valueZoom && st->hi - st->lo < 100, "Maj+molette : l'axe des valeurs zoom\xC3\xA9");
+    const double spanBefore = st->span;
+    pane.canvas().dispatch(ui::MouseWheel{centre(plot), 0.f, 1.f, ui::KeyMods{true, false, false, false}});
+    check(st->span == spanBefore, "Ctrl+molette : la vue, pas la courbe");
+    paintAt(13.1);
+    check(!rec.wrote("-10 s"), "zoom\xC3\xA9" "e : les graduations dans l'unit\xC3\xA9 de la fen\xC3\xAAtre (plus de -10 s)");
+    // Ctrl+molette a zoome la vue : les boutons ont bouge a l'ecran.
+    check(pane.canvas().partRect("Courbe", "figer", bFig) && pane.canvas().partRect("Courbe", "curseurs", bCur)
+              && pane.canvas().partRect("Courbe", "toutvoir", bAll) && pane.canvas().partRect("Courbe", "trace", plot),
+          "la vue zoom\xC3\xA9" "e : la barre et la zone de trace suivent");
+    // Tout voir.
+    click(centre(bAll));
+    check(!st->zoomed(), "Tout voir : la dur\xC3\xA9" "e et l'\xC3\xA9" "chelle de l'objet");
+    // Glisser sur la zone de trace : la fenetre recule ; aucun curseur ne se pose.
+    {
+        const gfx::Point a = centre(plot), b{a.x + 120.f, a.y};
+        pane.canvas().dispatch(ui::MouseDown{a, ui::MouseButton::Left, 1, {}});
+        for (int k = 1; k <= 4; ++k) pane.canvas().dispatch(ui::MouseMove{{a.x + 30.f * static_cast<float>(k), a.y}, {0, 0}, {}});
+        pane.canvas().dispatch(ui::MouseUp{b, ui::MouseButton::Left, {}});
+        check(st->pinned && !st->cursorA && rt.trendWindowOf(view, trend, 10).second < rt.trendEdge(view, trend) - 0.5,
+              "glisser vers la droite : la fen\xC3\xAAtre recule dans le temps, pas de curseur");
+    }
+    click(centre(bAll));
+    // Deux clics : A puis B ; le cadre des mesures, ses boutons d'export.
+    click({plot.x + plot.w * 0.3f, plot.y + plot.h * 0.5f});
+    click({plot.x + plot.w * 0.7f, plot.y + plot.h * 0.5f});
+    check(st->cursors() && *st->cursorA < *st->cursorB, "deux clics sur la zone de trace : les curseurs A et B");
+    paintAt(13.2);
+    gfx::Rect bXls{};
+    check(rec.wrote("\xCE\x94t = 4 s") && rec.wrote("Niveau   A 42   B 42") && rec.wrote("CSV") && pane.canvas().partRect("Courbe", "zone:excel", bXls)
+              && rec.wrote("FIG\xC3\x89" "E depuis") && rec.wrote("A ") && rec.wrote("B "),
+          "le cadre : \xCE\x94t = 4 s, Niveau en A et en B, les boutons CSV et Excel");
+    gfx::Rect bCsv{};
+    check(pane.canvas().partRect("Courbe", "zone:csv", bCsv), "le bouton CSV du cadre");
+    click(centre(bCsv));
+    check(asked.size() == 1 && asked[0].source == "zone:Courbe" && asked[0].rows >= 30, "CSV : la zone entre A et B s'exporte (" +
+          std::to_string(asked.empty() ? 0 : asked[0].rows) + " lignes)");
+    // Tirer A : la souris sur sa ligne, puis plus a droite.
+    {
+        const auto w = rt.trendWindowOf(view, trend, 10);
+        const float ax = plot.x + static_cast<float>((*st->cursorA - w.first) / (w.second - w.first)) * plot.w;
+        const double before = *st->cursorA;
+        pane.canvas().dispatch(ui::MouseDown{{ax + 1.f, plot.y + 40.f}, ui::MouseButton::Left, 1, {}});
+        pane.canvas().dispatch(ui::MouseMove{{ax + 40.f, plot.y + 40.f}, {0, 0}, {}});
+        pane.canvas().dispatch(ui::MouseUp{{ax + 40.f, plot.y + 40.f}, ui::MouseButton::Left, {}});
+        check(*st->cursorA > before + 0.3, "tirer A vers la droite : il suit la souris");
+    }
+    // Le menu du clic droit (la simulation) : Reprendre, les curseurs, l'export de la zone.
+    pane.canvas().dispatch(ui::MouseDown{centre(plot), ui::MouseButton::Right, 1, {}});
+    pane.canvas().dispatch(ui::MouseUp{centre(plot), ui::MouseButton::Right, {}});
+    auto* vm = pane.viewMenu();
+    const auto findIn = [&](std::string_view label) -> const ui::PopupMenu::Item* {
+        if (!vm) return nullptr;
+        for (const auto& it : vm->items())
+            if (!it.separator && !it.heading && it.label == label) return &it;
+        return nullptr;
+    };
+    const auto* resume = findIn("Reprendre l'acquisition");
+    const auto* excel = findIn("Exporter la zone (Excel)\xE2\x80\xA6");
+    check(vm && vm->isOpen() && resume && resume->enabled && findIn("Retirer les curseurs") && excel && excel->enabled,
+          "le clic droit : Reprendre l'acquisition, Retirer les curseurs, Exporter la zone (CSV, Excel)");
+    if (vm && excel) {
+        const int excelId = excel->id, resumeId = resume ? resume->id : -1;
+        vm->close();
+        vm->itemChosen->emit(excelId);
+        check(asked.size() == 2 && asked[1].format == "Excel", "Exporter la zone (Excel) : le .xlsx");
+        vm->itemChosen->emit(resumeId);
+        check(!st->frozen && st->gaps.size() == 1, "Reprendre l'acquisition : elle repart, un trou pour le temps du gel");
+    }
+    // Pas pilotable : la molette ne prend pas la courbe, le menu le dit.
+    {
+        auto* raw = doc->project.views[0].object(trend);
+        raw->setFlag("pilotable", false);
+        for (double t = 13.3; t <= 13.61; t += 0.1) paintAt(t);
+        gfx::Rect none{};
+        check(!pane.canvas().partRect("Courbe", "figer", none), "Pilotable d\xC3\xA9" "coch\xC3\xA9" "e : plus de barre");
+        const double span = st->span;
+        pane.canvas().dispatch(ui::MouseWheel{centre(plot), 0.f, 2.f, {}});
+        check(st->span == span, "pas pilotable : la molette ne zoome pas la courbe");
+        raw->setFlag("pilotable", true);
+    }
+    // Le poste d'exploitation : la meme barre, les memes gestes.
+    {
+        app::HmiSimulationPane station("station1131", doc, host);
+        station.setStationMode(true);
+        station.setBounds({0, 0, 1200, 800});
+        Recorder srec;
+        for (double t = 0; t <= 1.01; t += 0.1) {
+            srec.clear();
+            station.layout();
+            station.render(ui::PaintContext{srec, theme, {0, 0, 1200, 800}, t, nullptr});
+        }
+        gfx::Rect sf{}, sp{};
+        check(station.canvas().partRect("Courbe", "figer", sf) && station.canvas().partRect("Courbe", "trace", sp), "le poste : la barre de la courbe");
+        station.canvas().dispatch(ui::MouseDown{centre(sf), ui::MouseButton::Left, 1, {}});
+        station.canvas().dispatch(ui::MouseUp{centre(sf), ui::MouseButton::Left, {}});
+        station.canvas().dispatch(ui::MouseWheel{centre(sp), 0.f, 3.f, {}});
+        const auto* sst = station.runtime().trendState(station.runtime().currentView(), trend);
+        check(sst && sst->frozen && sst->span > 0 && sst->span < 10, "le poste : Figer et la molette, comme en simulation");
+    }
+}
+
 // ---- 1.12.16 (T2) : les sous-onglets Dessin | Constantes | Fonctions d'une vue, d'une popup ----
 // 1.12.16 (« sur les courbes ... une option 'Pilotable' dans Proprietes / pouvoir ajouter une condition dynamique pour
 // afficher/cacher une plume ») : la case Pilotable de l'inspecteur, la case « Visible si » d'une plume dans Contenu.
@@ -33807,8 +33985,8 @@ void courbes11216() {
     b.v().object(trend)->set("variables", "Pression;Debit;Niveau");
     b.v().object(trend)->set("names", "Pression;D\xC3\xA9" "bit;Niveau");
     b.editor->layout();
-    check(hasProperty(b.editor->properties(), "Pilotable (pause / continuer)"), "1.12.16 : la case Pilotable dans les propri\xC3\xA9t\xC3\xA9s d'une courbe");
-    check(commitIn(b.editor->properties(), "Pilotable (pause / continuer)", "TRUE") && b.v().object(trend)->flag("pilotable", false),
+    check(hasProperty(b.editor->properties(), "Pilotable (pause, figer, curseurs, zoom)"), "1.12.16 : la case Pilotable dans les propri\xC3\xA9t\xC3\xA9s d'une courbe");
+    check(commitIn(b.editor->properties(), "Pilotable (pause, figer, curseurs, zoom)", "TRUE") && b.v().object(trend)->flag("pilotable", false),
           "1.12.16 : Pilotable coch\xC3\xA9" "e");
     check(content.mode() == app::HmiContentPanel::Mode::Trend && content.count() == 3, "trois plumes dans Contenu");
     content.selectIndex(1);
@@ -38524,6 +38702,13 @@ void relectureF1_113() {
 }
 
 int main(int argc, char** argv) {
+    // 1.13.1 : HMI_TEST_1131=1 - la courbe en marche a l'ecran (figer, zoom, curseurs, export de la zone), seule.
+    if (const char* only = std::getenv("HMI_TEST_1131"); only && *only == '1') {
+        courbes11216();
+        courbesEnMarche1131();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.13.0 (relecture F1) : HMI_TEST_RF1=1 - la relecture du lot F1 (WAIT_UNTIL a la Saisie, les fiches des natives), seule.
     if (const char* only = std::getenv("HMI_TEST_RF1"); only && *only == '1') {
         relectureF1_113();
@@ -39070,6 +39255,7 @@ int main(int argc, char** argv) {
     valeurInitiale11216();                  // 1.12.16 (T4) : la valeur initiale, en brut ou en code
     vueOnglets11216();                      // 1.12.16 (T2) : les sous-onglets Constantes et Fonctions d'une vue
     courbes11216();                         // 1.12.16 : Pilotable, Visible si par plume
+    courbesEnMarche1131();                  // 1.13.1 : la courbe en marche (figer, zoom, curseurs, export de la zone)
     dupliquerElements11216();               // 1.12.16 : Dupliquer... une plume, une ligne, une action
     assistVue11216();                       // 1.12.16 (T1) : l'aide a la saisie des constantes et fonctions d'une vue
     surcharges1120();                       // 1.11.20 : les signatures et les surcharges

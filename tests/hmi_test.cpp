@@ -2347,7 +2347,7 @@ void courbesPilotables11216() {
     }
 }
 
-// 1.13.1 (« dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs ») : avant
+// 1.13.1 ("dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs") : avant
 // d'ajouter le gel, la pause de la 1.12.16 - elle fige l'affichage, les mesures continuent... et les plus vieilles
 // tombaient a 1,2 fois la duree : en pause plus longtemps que la duree, la fenetre montree se vidait.
 void pauseGardeSaFenetre1131() {
@@ -2475,9 +2475,9 @@ void courbeModele1131() {
     check(hmi::trendNumber(7.123456789) == "7.12346" && hmi::trendNumber(-0.0) == "0", "une valeur lue : six chiffres");
 }
 
-// 1.13.1 (« dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs, + pouvoir ajouter
+// 1.13.1 ("dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs, + pouvoir ajouter
 // des lignes verticales pour faire des mesures de temps + pouvoir zoomer/dezoomer etirer/detendre de maniere hyper zoomee,
-// pouvoir exporter que la zone dans une balise de lignes verticales ») : le moteur.
+// pouvoir exporter que la zone dans une balise de lignes verticales") : le moteur.
 void courbesEnMarche1131() {
     std::printf("== 1.13.1 : la courbe en marche - figer, zoom, curseurs, export de la zone ==\n");
     Supervision s;

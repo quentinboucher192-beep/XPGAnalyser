@@ -53,6 +53,19 @@ using hmi::kNoId;
 
 namespace {
 
+// 1.13.1 : une courbe pilotable - l'echelle des valeurs qu'elle montre (celle que le dessin a tracee, hmi::trendScale),
+// jointe a un geste ("lo:hi", tous les chiffres) : le moteur zoome et deplace l'axe des valeurs depuis celle-ci.
+std::string trendScaleText(const hmi::Runtime& rt, Id view, const hmi::Object& o) {
+    double duration = 60;
+    if (const std::string t = o.text("duration"); !t.empty() && !hmi::roles::readNumber(t, duration)) duration = 60;
+    duration = std::max(1.0, duration);
+    const auto [start, end] = rt.trendWindowOf(view, o.id, duration);
+    const auto [lo, hi] = hmi::trendScale(o, rt.trend(view, o.id), start, end, rt.trendState(view, o.id));
+    char b[96];
+    std::snprintf(b, sizeof b, "%.17g:%.17g", lo, hi);
+    return b;
+}
+
 // 1.9 : "14:02:31", une heure murale (s depuis 1970), en heure locale.
 std::string wallClock(double wall) {
     if (wall <= 0) return {};
@@ -1733,6 +1746,18 @@ bool HmiLiveCanvas::partRect(std::string_view name, std::string_view part, gfx::
                         }
                         break;
                     }
+                    // 1.13.1 : une courbe pilotable - sa barre ("pause", "figer", "curseurs", "toutvoir"), les boutons
+                    // d'export de la zone ("zone:csv", "zone:excel"), la zone de trace ("trace").
+                    case hmi::Kind::Trend: {
+                        const auto* st = runtime_ ? runtime_->trendState(layers_[li].view.id, o.id) : nullptr;
+                        const auto l = hmi::trendLayout(o, box.w, box.h, st && st->cursors());
+                        for (const auto& b : l.buttons)
+                            if (b.part == part) { local = b.box; found = true; }
+                        if (part == "zone:csv" && l.exportCsv.w > 0) { local = l.exportCsv; found = true; }
+                        else if (part == "zone:excel" && l.exportExcel.w > 0) { local = l.exportExcel; found = true; }
+                        else if (part == "trace") { local = l.plot; found = true; }
+                        break;
+                    }
                     // Lot 13 : un bouton du selecteur de theme ("theme:jour", "theme:nuit").
                     case hmi::Kind::ThemeSelector: {
                         const auto l = hmi::languageSelectorLayout(o, box.w, box.h, 2);
@@ -1954,9 +1979,21 @@ void HmiLiveCanvas::pressObject(std::size_t layer, gfx::Point p, int clickCount)
             }
         }
         // 1.12.16 : une courbe pilotable - son bouton Pause / Continuer.
-        if (o->kind == hmi::Kind::Trend && runtime_) {
-            if (const std::string part = hmi::trendHit(*o, box.w, box.h, lx, ly); !part.empty()) {
+        // 1.13.1 : toute sa barre (Figer, Curseurs, Tout voir) et les boutons d'export de la zone ; sur la zone de trace,
+        // un geste que le moteur suit (glisser deplace, un clic pose un curseur, tirer un curseur le deplace).
+        if (o->kind == hmi::Kind::Trend && runtime_ && o->flag("pilotable", false)) {
+            const auto* st = runtime_->trendState(layers_[layer].view.id, id);
+            const bool cursors = st && st->cursors();
+            if (const std::string part = hmi::trendHit(*o, box.w, box.h, lx, ly, cursors); !part.empty()) {
+                if (runtime_->focusedObject() != kNoId) clickedAway->emit(id);
                 partClicked->emit(id, part);
+                return;
+            }
+            if (hmi::trendLayout(*o, box.w, box.h, cursors).plot.contains(lx, ly)) {
+                if (runtime_->focusedObject() != kNoId) clickedAway->emit(id);
+                trendDrag_ = id;
+                trendDragLayer_ = layer;
+                partClicked->emit(id, "trend:press:" + hmi::formatNumber(lx) + ":" + hmi::formatNumber(ly));
                 return;
             }
         }
@@ -2272,6 +2309,17 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
                 for (auto it = order.rbegin(); it != order.rend(); ++it) {
                     const auto* o = *it;
                     if (!o->flag("visible", true) || !o->box().contains(x, y) || hmi::clippedAt(layers_[li].view, *o, x, y)) continue;
+                    // 1.13.1 : sur une courbe pilotable, la molette zoome le temps autour de la souris, Maj+molette les
+                    // valeurs ; Ctrl+molette reste le zoom de la vue.
+                    if (o->kind == hmi::Kind::Trend && o->flag("pilotable", false) && !w->mods.ctrl) {
+                        const double notches = std::clamp(static_cast<double>(w->dy != 0 ? w->dy : w->dx), -4.0, 4.0);
+                        const double tlx = x - o->box().x, tly = y - o->box().y;
+                        if (notches != 0)
+                            partClicked->emit(o->id, "trend:wheel:" + hmi::formatNumber(notches) + ":" + hmi::formatNumber(tlx) + ":"
+                                                         + hmi::formatNumber(tly) + (w->mods.shift ? ":1:" : ":0:")
+                                                         + trendScaleText(*runtime_, layers_[li].view.id, *o));
+                        return ui::EventResult::Consumed;
+                    }
                     if (o->kind != hmi::Kind::DocumentViewer) break;   // un autre objet par-dessus : il garde la molette
                     const double lx = x - o->box().x, ly = y - o->box().y;
                     if (w->mods.ctrl) {
@@ -2382,6 +2430,17 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
                 pidHovered->emit(t);
             }
         }
+        // 1.13.1 : une courbe pilotable - le geste commence sur sa zone de trace (glisser, tirer un curseur).
+        if (trendDrag_ != kNoId) {
+            if (trendDragLayer_ < layers_.size() && trendDragLayer_ < vps_.size())
+                if (const auto* o = layers_[trendDragLayer_].view.object(trendDrag_)) {
+                    const auto& vp = vps_[trendDragLayer_];
+                    const double lx = vp.toViewX(m->pos.x) - o->box().x, ly = vp.toViewY(m->pos.y) - o->box().y;
+                    partClicked->emit(trendDrag_, "trend:drag:" + hmi::formatNumber(lx) + ":" + hmi::formatNumber(ly) + ":"
+                                                      + trendScaleText(*runtime_, layers_[trendDragLayer_].view.id, *o));
+                }
+            return ui::EventResult::Consumed;
+        }
         // 1.12.30 : la page d'une visionneuse suit la souris (en pixels de la vue).
         if (docDrag_ != kNoId) {
             if (docDragLayer_ < vps_.size()) {
@@ -2445,6 +2504,19 @@ ui::EventResult HmiLiveCanvas::onEvent(const ui::InputEvent& ev) {
         }
         if (docDrag_ != kNoId) {     // 1.12.30
             docDrag_ = kNoId;
+            return ui::EventResult::Consumed;
+        }
+        if (trendDrag_ != kNoId) {   // 1.13.1 : sans avoir glisse, le moteur y pose un curseur
+            const Id id = trendDrag_;
+            trendDrag_ = kNoId;
+            double lx = -1, ly = -1;
+            if (trendDragLayer_ < layers_.size() && trendDragLayer_ < vps_.size())
+                if (const auto* o = layers_[trendDragLayer_].view.object(id)) {
+                    const auto& vp = vps_[trendDragLayer_];
+                    lx = vp.toViewX(u->pos.x) - o->box().x;
+                    ly = vp.toViewY(u->pos.y) - o->box().y;
+                }
+            if (runtime_) partClicked->emit(id, "trend:release:" + hmi::formatNumber(lx) + ":" + hmi::formatNumber(ly));
             return ui::EventResult::Consumed;
         }
         if (panning_) {
@@ -5155,6 +5227,7 @@ void HmiSimulationPane::viewMenuChosen(int id) {
 
 // Une entree d'un menu : "forcer:<chemin>", "relacher:<chemin>", "suivre:<chemin>", "expr:<chemin>",
 // "copier:<texte>", "objet:<vue>:<objet>", "pause:<vue>:<objet>", "csv:<objet>", "acquitter:<alarme>",
+// "courbe:<vue>:<objet>:<geste>" (1.13.1 : figer, curseurs, toutvoir, zone:csv, zone:excel),
 // "@basculer:<ligne>", "@deplier-tout", "@replier-tout".
 void HmiSimulationPane::runMenuKey(const std::string& key) {
     const auto arg = [&key](std::string_view prefix) { return key.rfind(prefix, 0) == 0 ? key.substr(prefix.size()) : std::string{}; };
@@ -5207,6 +5280,16 @@ void HmiSimulationPane::runMenuKey(const std::string& key) {
         if (!twoIds(pauseArg, view, obj)) return;
         const bool paused = runtime_.trendPausedAt(view, obj).has_value();
         if (runtime_.setTrendPaused(view, obj, !paused)) say(paused ? "La courbe reprend." : "La courbe est en pause (la simulation continue).", false);
+        refreshNow();
+    } else if (const auto courbe = arg("courbe:"); !courbe.empty()) {   // 1.13.1 : "courbe:<vue>:<objet>:<geste>"
+        Id view = kNoId, obj = kNoId;
+        const auto second = courbe.find(':', courbe.find(':') + 1);
+        if (!twoIds(courbe, view, obj) || second == std::string::npos) return;
+        const std::string gesture = courbe.substr(second + 1);
+        runtime_.objectPart(obj, gesture, now_);
+        if (const auto* ts = runtime_.trendState(view, obj); ts && gesture == "figer")
+            say(ts->frozen ? "La courbe est fig\xC3\xA9" "e : aucune mesure n'entre (Reprendre la relance)."
+                           : "L'acquisition reprend (un trou pour le temps du gel).", false);
         refreshNow();
     } else if (const auto name = arg("csv:"); !name.empty()) {
         std::string why;
@@ -5439,8 +5522,22 @@ bool HmiSimulationPane::openViewMenu(gfx::Point at) {
             const auto pens = hmi::roles::splitList(o->text("variables"));
             items.push_back(ui::cmd::heading(o->name, std::to_string(pens.size()) + (pens.size() > 1 ? " plumes" : " plume")));
             const bool paused = runtime_.trendPausedAt(view, obj).has_value();
-            add(entry(paused ? "Continuer" : "Pause", o->flag("pilotable", false), "pas pilotable (Propri\xC3\xA9t\xC3\xA9s : Pilotable)"),
-                "pause:" + std::to_string(view) + ":" + std::to_string(obj));
+            const bool pil = o->flag("pilotable", false);
+            const std::string notPil = "pas pilotable (Propri\xC3\xA9t\xC3\xA9s : Pilotable)";
+            const std::string ids = std::to_string(view) + ":" + std::to_string(obj);
+            add(entry(paused ? "Continuer" : "Pause", pil, notPil), "pause:" + ids);
+            // 1.13.1 : figer (l'acquisition), les curseurs, tout voir, l'export de la zone entre les curseurs.
+            {
+                const auto* ts = runtime_.trendState(view, obj);
+                const bool frozen = ts && ts->frozen, cursors = ts && ts->cursors();
+                add(entry(frozen ? "Reprendre l'acquisition" : "Figer (arr\xC3\xAAter l'acquisition)", pil, notPil), "courbe:" + ids + ":figer");
+                add(entry(ts && (ts->cursorA || ts->cursorB) ? "Retirer les curseurs" : "Curseurs (mesurer un \xC3\xA9" "cart)", pil, notPil),
+                    "courbe:" + ids + ":curseurs");
+                add(entry("Tout voir", pil && ts && ts->zoomed(), pil ? std::string("pas de zoom") : notPil), "courbe:" + ids + ":toutvoir");
+                const std::string noZone = pil ? std::string("pose d'abord les deux curseurs") : notPil;
+                add(entry("Exporter la zone (CSV)\xE2\x80\xA6", pil && cursors, noZone), "courbe:" + ids + ":zone:csv");
+                add(entry("Exporter la zone (Excel)\xE2\x80\xA6", pil && cursors, noZone), "courbe:" + ids + ":zone:excel");
+            }
             add(entry("Exporter (CSV)\xE2\x80\xA6"), "csv:" + o->name);
             items.push_back(ui::cmd::separator());
             add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);

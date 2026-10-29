@@ -493,6 +493,8 @@ private:
     hmi::Id                   docDrag_{hmi::kNoId};
     std::size_t               docDragLayer_{0};
     gfx::Point                docDragLast_{};
+    hmi::Id                   trendDrag_{hmi::kNoId};   // 1.13.1 : le geste sur une courbe pilotable
+    std::size_t               trendDragLayer_{0};
     bool                      swipeArmed_{false};
     gfx::Point                swipeFrom_{};
     std::size_t               swipeLayer_{0};
