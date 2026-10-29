@@ -3907,6 +3907,13 @@ void HmiTypesPane::refresh() {
                                                                  : " type(s) IHM : des structures et des \xC3\xA9num\xC3\xA9rations. ")   // 1.12.2
                                                + "Une variable de ce type a tous ses membres (Four1.Temperature)."
                                          : message_);
+    // 1.13.1 (lot K4) : l'onglet de document dit de quel type il est, et comment revenir a l'arbre.
+    if (isDocument() && message_.empty()) {
+        const auto* t = p.hmiType(document_);
+        status_->setMessage(t ? hmi::fullName(*t) + " dans son onglet : les m\xC3\xAAmes onglets que dans Types IHM, chaque geste repris par Ctrl+Z "
+                                                    "\xC2\xB7 le clic droit sur l'onglet : Afficher dans l'arbre"
+                              : std::string("Ce type n'existe plus : son onglet se ferme (Ctrl+Z le rend)."));
+    }
 }
 
 void HmiTypesPane::refreshMembers() {
