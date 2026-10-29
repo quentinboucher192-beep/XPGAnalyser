@@ -1370,8 +1370,10 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Modifier** le texte puis **Appliquer** ; **Revenir** reprend le code de l'objet.", {}, "1.13.1"},
              {K::Bullet, "Par d\xC3\xA9" "faut l'objet **garde son nom et sa position** ; coche **Prendre "
                          "aussi le nom et la position** pour prendre ceux du code (un nom d\xC3\xA9j\xC3\xA0 "
-                         "pris dans la vue en re\xC3\xA7oit un libre, le message le dit). Il garde toujours "
-                         "son calque, son groupe, sa place dans l'ordre de dessin, son verrou.", {}, "1.13.1"},
+                         "pris dans la vue en re\xC3\xA7oit un libre, le message le dit). Case "
+                         "d\xC3\xA9" "coch\xC3\xA9" "e, un texte qui ne change que le nom ou la position ne "
+                         "change donc rien : le message le dit et ton texte reste. Il garde toujours son "
+                         "calque, son groupe, sa place dans l'ordre de dessin, son verrou.", {}, "1.13.1"},
              {K::Bullet, "Un code ne remplace qu'un objet **du m\xC3\xAAme genre** (un bouton par un bouton) "
                          ": un autre genre est refus\xC3\xA9, rien ne change. Un groupe prend les objets du "
                          "code \xC3\xA0 la place des siens.", {}, "1.13.1"},
@@ -1380,8 +1382,10 @@ const std::vector<Topic>& topics() {
                          "ne change.", {}, "1.13.1"},
              {K::Bullet, "Coller et Appliquer sont **une modification** : **Ctrl+Z** l'annule.", {}, "1.13.1"},
              {K::Bullet, "**Clic droit** sur un objet - sur la vue, dans l'Explorateur d'objets, dans "
-                         "l'arbre du projet sous une vue, sur la vue en marche en Simulation : **Copier le "
-                         "code brut**, **Coller le code brut**, **Code brut\xE2\x80\xA6** (l'onglet). "
+                         "l'arbre du projet sous une vue : **Copier le code brut**, **Coller le code brut**, "
+                         "**Code brut\xE2\x80\xA6** (l'onglet). Sur la vue en marche en Simulation : Copier "
+                         "le code brut et Coller le code brut (le code de l'objet du projet) ; dans l'onglet "
+                         "Expressions, sur un objet d\xC3\xA9" "ball\xC3\xA9 : Copier le code brut. "
                          "Plusieurs objets choisis : Copier le code brut les prend tous.", {}, "1.13.1"},
              {K::Bullet, "**Ctrl+V** d'un code brut dans une vue (ou clic droit \xE2\x80\xBA **Coller ici**) "
                          "en pose les objets, **neufs** : des noms libres, d\xC3\xA9" "cal\xC3\xA9s de 20 px "

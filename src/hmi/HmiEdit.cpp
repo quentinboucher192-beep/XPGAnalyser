@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cmath>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 
@@ -400,7 +401,7 @@ bool applyCode(Project& p, View& v, Id target, const std::vector<Object>& code, 
         Object c = o;
         c.id = renamed[o.id];
         c.parent = renamed.count(o.parent) ? renamed[o.parent] : root.id;
-        if (!v.layer(c.layer)) c.layer = root.layer;
+        c.layer = root.layer;   // un groupe et ses membres sur un meme calque (comme group et moveToLayer)
         c.name = freeName(o.name, taken);
         if (c.name != o.name)
             notes += std::string(notes.empty() ? "" : " ; ") + o.name + " s'appelle " + c.name + " (nom d\xC3\xA9j\xC3\xA0 pris)";
@@ -461,14 +462,28 @@ std::vector<Id> pasteCode(Project& p, View& v, const std::vector<Object>& code, 
     std::map<Id, Id> renamed;
     for (const auto& o : code) renamed[o.id] = p.allocate();
     const Id fallbackLayer = v.layer(v.activeLayer) ? v.activeLayer : (v.layers.empty() ? kNoId : v.layers.front().id);
-    std::map<Id, Id> layerOf;   // un enfant sans calque connu suit son parent
+    // Un groupe et ses membres sont sur un meme calque (comme group et moveToLayer) : un objet colle dans
+    // un groupe prend le calque du groupe, un enfant du code celui de son parent (le code est du texte,
+    // modifiable a la main : son calque ecrit ne compte que pour un objet du haut).
+    const Object* host = insideGroup != kNoId ? v.object(insideGroup) : nullptr;
+    const std::optional<Id> hostLayer = host ? std::optional<Id>(host->layer) : std::nullopt;
+    std::map<Id, Id> layerOf;   // par id du code ; un enfant peut venir avant son parent dans le texte
+    for (const auto& o : code)
+        if (!codeIds.count(o.parent)) layerOf[o.id] = hostLayer ? *hostLayer : (v.layer(o.layer) ? o.layer : fallbackLayer);
+    for (bool more = true; more;) {
+        more = false;
+        for (const auto& o : code)
+            if (!layerOf.count(o.id) && layerOf.count(o.parent)) {
+                layerOf[o.id] = layerOf[o.parent];
+                more = true;
+            }
+    }
     for (const auto& o : code) {
         Object c = o;
         const bool isTop = !codeIds.count(o.parent);
         c.id = renamed[o.id];
         c.parent = isTop ? insideGroup : renamed[o.parent];
-        if (!v.layer(c.layer)) c.layer = isTop || !layerOf.count(c.parent) ? fallbackLayer : layerOf[c.parent];
-        layerOf[c.id] = c.layer;
+        c.layer = layerOf.count(o.id) ? layerOf[o.id] : fallbackLayer;
         c.locked = false;
         c.name = freeName(o.name, taken);
         taken.insert(upperName(c.name));

@@ -678,11 +678,11 @@ Chaque objet a son **texte complet**, qui se copie d'un objet à l'autre : l'ong
 - **Copier** : le code part dans le presse-papiers.
 - **Coller** : le code du presse-papiers **remplace** l'objet choisi (le code d'un autre objet, d'une autre vue, d'un autre projet).
 - **Modifier** le texte puis **Appliquer** ; **Revenir** reprend le code de l'objet.
-- Par défaut l'objet **garde son nom et sa position** ; coche **Prendre aussi le nom et la position** pour prendre ceux du code (un nom déjà pris dans la vue en reçoit un libre, le message le dit). Il garde toujours son calque, son groupe, sa place dans l'ordre de dessin, son verrou.
+- Par défaut l'objet **garde son nom et sa position** ; coche **Prendre aussi le nom et la position** pour prendre ceux du code (un nom déjà pris dans la vue en reçoit un libre, le message le dit). Case décochée, un texte qui ne change que le nom ou la position ne change donc rien : le message le dit et ton texte reste. Il garde toujours son calque, son groupe, sa place dans l'ordre de dessin, son verrou.
 - Un code ne remplace qu'un objet **du même genre** (un bouton par un bouton) : un autre genre est refusé, rien ne change. Un groupe prend les objets du code à la place des siens.
 - Une faute de frappe : le message dit **la ligne** et ce qui ne va pas (« ligne 7 : 'cle' sans '=' »), la ligne est marquée en rouge, rien ne change.
 - Coller et Appliquer sont **une modification** : **Ctrl+Z** l'annule.
-- **Clic droit** sur un objet - sur la vue, dans l'Explorateur d'objets, dans l'arbre du projet sous une vue, sur la vue en marche en Simulation : **Copier le code brut**, **Coller le code brut**, **Code brut…** (l'onglet). Plusieurs objets choisis : Copier le code brut les prend tous.
+- **Clic droit** sur un objet - sur la vue, dans l'Explorateur d'objets, dans l'arbre du projet sous une vue : **Copier le code brut**, **Coller le code brut**, **Code brut…** (l'onglet). Sur la vue en marche en Simulation : Copier le code brut et Coller le code brut (le code de l'objet du projet) ; dans l'onglet Expressions, sur un objet déballé : Copier le code brut. Plusieurs objets choisis : Copier le code brut les prend tous.
 - **Ctrl+V** d'un code brut dans une vue (ou clic droit › **Coller ici**) en pose les objets, **neufs** : des noms libres, décalés de 20 px s'ils tombaient sur l'original.
 @nouveau 1.12.26
 ### L'historique des modifications des objets

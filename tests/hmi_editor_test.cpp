@@ -24882,6 +24882,45 @@ void codeBrut1131() {
     ed.rawCode().revert();
     same_text(ed.rawCode().text(), serializeObjectCode(b.v(), {btn}), "Revenir : le code de l'objet");
 
+    // 4b. Seuls le nom et x changent, la case decochee : rien ne change, le texte reste, le message dit pourquoi.
+    {
+        const View avant = b.v();
+        const std::size_t d = b.stack.done().size();
+        std::string renamed = ed.rawCode().text();
+        const std::string nameField = "nom=\"BtnMarche\"";
+        const auto nameAt = renamed.find(nameField), xAt = renamed.find("prop cle=x valeur=");
+        check(nameAt != std::string::npos && xAt != std::string::npos, "le code porte le nom et x");
+        if (nameAt == std::string::npos || xAt == std::string::npos) return;
+        renamed.replace(nameAt, nameField.size(), "nom=\"BtnStart\"");
+        const auto xLine = renamed.find("prop cle=x valeur=");
+        renamed.replace(xLine, renamed.find('\n', xLine) - xLine, "prop cle=x valeur=\"333\"");
+        ed.rawCode().setText(renamed);
+        (void)ed.rawCode().applyText();
+        check(b.v() == avant && b.stack.done().size() == d, "nom et x seuls, case decochee : l'objet ne change pas, aucune commande");
+        check(ed.rawCode().text() == renamed && ed.rawCode().edited(), "le texte tape n'est pas efface");
+        check(ed.rawCode().message().find("Prendre aussi le nom et la position") != std::string::npos
+                  && ed.rawCode().message().find("d\xC3\xA9j\xC3\xA0 ce code") == std::string::npos,
+              "le message dit la vraie raison et renvoie a la case (" + ed.rawCode().message() + ")");
+        ed.rawCode().refresh();
+        check(ed.rawCode().text() == renamed, "un rafraichissement ne l'efface pas non plus");
+        // Le meme texte avec une autre propriete changee : elle s'applique, et le message dit le nom garde.
+        std::string more = renamed;
+        more.replace(more.find("valeur=\"Marche\""), 15, "valeur=\"Marche 2\"");
+        ed.rawCode().setText(more);
+        check(ed.rawCode().applyText() && b.v().object(btn)->text("text") == "Marche 2" && b.v().object(btn)->name == "BtnMarche",
+              "une autre propriete changee s'applique, le nom est garde");
+        check(ed.rawCode().message().find("garde son nom") != std::string::npos,
+              "le message dit que le nom et la position sont gardes (" + ed.rawCode().message() + ")");
+        (void)b.stack.undo();
+        ed.refresh();
+        // Le code de l'objet tel quel : rien a changer, c'est bien le meme code.
+        ed.rawCode().revert();
+        (void)ed.rawCode().applyText();
+        check(b.v() == avant && ed.rawCode().message().find("d\xC3\xA9j\xC3\xA0 ce code") != std::string::npos,
+              "le code tel quel : l'objet a deja ce code (" + ed.rawCode().message() + ")");
+        ed.rawCode().revert();
+    }
+
     // 5. Une faute de syntaxe : la ligne, rien ne change.
     {
         const View avant = b.v();

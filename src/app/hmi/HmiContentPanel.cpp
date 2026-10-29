@@ -3821,6 +3821,15 @@ bool HmiRawCodePanel::applyCode(const std::string& code, const std::string& labe
         say("Rien n'a chang\xC3\xA9 : " + why, true, lineOfWhy(why));
         return false;
     }
+    // La case decochee : le nom et la place du code ne comptent pas. S'ils different de ceux de l'objet,
+    // le message le dit (sinon un texte qui ne change qu'eux semblerait applique, ou deja la).
+    bool keptNameOrPlace = false;
+    if (!take_ && !parsed->roots.empty())
+        for (const auto& c : parsed->objects)
+            if (c.id == parsed->roots.front()) {
+                const auto from = c.box(), to = o->box();
+                keptNameOrPlace = c.name != o->name || from.x != to.x || from.y != to.y;
+            }
     std::string why, note;
     bool ok = false;
     const Id target = object_;
@@ -3833,6 +3842,11 @@ bool HmiRawCodePanel::applyCode(const std::string& code, const std::string& labe
         return false;
     }
     if (!cmd) {
+        if (keptNameOrPlace) {   // le texte n'est pas recharge : ce qui a ete tape reste
+            say("Rien n'a chang\xC3\xA9 : ton code ne diff\xC3\xA8re que par le nom ou la position, et l'objet garde les siens. "
+                "Coche Prendre aussi le nom et la position pour prendre ceux du code.", true);
+            return false;
+        }
         load();
         say("Rien \xC3\xA0 changer : l'objet a d\xC3\xA9j\xC3\xA0 ce code.", false);
         return true;
@@ -3840,6 +3854,9 @@ bool HmiRawCodePanel::applyCode(const std::string& code, const std::string& labe
     if (apply_) apply_(std::move(cmd));
     load();
     const auto* now = doc_->project.view(view_) ? doc_->project.view(view_)->object(target) : nullptr;
+    if (keptNameOrPlace)
+        note += std::string(note.empty() ? "" : " ; ")
+              + "il garde son nom et sa position";
     const std::string msg = "Code appliqu\xC3\xA9 \xC3\xA0 " + (now ? now->name : std::string("l'objet")) + " (Ctrl+Z annule)"
                           + (note.empty() ? std::string{} : " - " + note);
     say(msg, false);

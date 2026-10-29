@@ -29902,11 +29902,22 @@ void codeBrut1131() {
 
     // 2. Le code d'un objet applique a un autre du meme genre : les memes proprietes, sauf nom et position.
     {
+        // La cible : dans un groupe, sur un autre calque que le code, et pas la derniere de l'ordre de dessin
+        // (un code qui prendrait le calque, le groupe ou la fin de la liste serait vu).
         View w = vv;
         const Id other = edit::add(p, w, Kind::Button, 600, 500);
         w.object(other)->name = "BtnArret";
         w.object(other)->set("text", "Arret");
+        const Id mate = edit::add(p, w, Kind::Rectangle, 700, 500);
+        const Id holder = edit::group(p, w, {other, mate});
+        const Id front = edit::addLayer(p, w, "Avant");
+        edit::moveToLayer(w, {holder}, front);
+        (void)edit::add(p, w, Kind::Text, 900, 500);   // un objet apres elle
         const Object before = *w.object(other);
+        const int rankBefore = w.indexOf(other);
+        check(before.layer == front && before.layer != w.object(btn)->layer && before.parent == holder
+                  && w.object(btn)->parent == kNoId && rankBefore < static_cast<int>(w.objects.size()) - 1,
+              "la cible : dans un groupe, sur un autre calque que le code, pas la derniere");
         auto code = parseObjectCode(serializeObjectCode(w, {btn}));
         std::string why, note;
         const bool ok = code && edit::applyCode(p, w, other, code->objects, false, &why, &note);
@@ -29918,7 +29929,9 @@ void codeBrut1131() {
         check(after && after->actions == w.object(btn)->actions, "les actions sont celles du code");
         check(after && after->id == before.id && after->layer == before.layer && after->parent == before.parent,
               "l'id, le calque et le groupe sont gardes");
-        check(w.indexOf(other) == static_cast<int>(w.objects.size()) - 1, "la place dans l'ordre de dessin est gardee");
+        check(w.indexOf(other) == rankBefore, "la place dans l'ordre de dessin est gardee (" + std::to_string(w.indexOf(other)) + ")");
+        check(after && after->layer == front, "le calque (Avant) est garde, pas celui du code");
+        check(after && after->parent == holder && w.childrenOf(holder).size() == 2, "le groupe est garde");
         // La case : prendre aussi le nom et la position - le nom est pris (le bouton d'origine est la) : un nom libre.
         View w2 = vv;
         const Id other2 = edit::add(p, w2, Kind::Button, 600, 500);
@@ -29987,6 +30000,10 @@ void codeBrut1131() {
         const Id c = edit::add(p, w, Kind::Ellipse, 650, 400);
         const Id d = edit::add(p, w, Kind::Ellipse, 700, 400);
         const Id g2 = edit::group(p, w, {a, c, d});
+        // Le groupe cible sur un autre calque que celui du code : ses nouveaux enfants le suivent.
+        const Id front = edit::addLayer(p, w, "Avant");
+        edit::moveToLayer(w, {g2}, front);
+        check(w.object(g2)->layer == front && vv.object(t1)->layer != front, "le groupe cible est sur Avant, le code sur Fond");
         const Box gb = w.object(g2)->box();
         auto code = parseObjectCode(serializeObjectCode(w, {grp}));
         std::string why, note;
@@ -30009,6 +30026,35 @@ void codeBrut1131() {
         for (const Id k : kids)
             if (const auto* o = w.object(k); o->kind == Kind::Rectangle) action = o->actions.size() == 1 && o->actions[0].target == "Vue_2";
         check(action, "l'action de l'enfant suit");
+        bool onLayer = w.object(g2)->layer == front;
+        for (const Id k : kids) onLayer = onLayer && w.object(k)->layer == front;
+        check(onLayer, "le groupe et ses nouveaux enfants sont sur son calque (Avant), pas sur celui du code");
+        // Un code ecrit a la main ou un enfant n'est pas sur le calque de son groupe : il suit le groupe.
+        std::string hand = serializeObjectCode(vv, {grp});
+        const std::string layerField = "calque=" + std::to_string(vv.object(t1)->layer);
+        const auto at = hand.find(layerField, hand.find("objet id=" + std::to_string(t1)));
+        hand.replace(at, layerField.size(), "calque=" + std::to_string(front));
+        auto mixed = parseObjectCode(hand);
+        View w2 = w;   // les deux calques y sont : le calque ecrit dans le code existe
+        const auto top = mixed ? edit::pasteCode(p, w2, mixed->objects) : std::vector<Id>{};
+        bool follows = top.size() == 1;
+        for (const Id k : top.empty() ? std::vector<Id>{} : w2.childrenOf(top.front()))
+            follows = follows && w2.object(k)->layer == w2.object(top.front())->layer;
+        check(follows, "Ctrl+V d'un code : chaque enfant est sur le calque de son groupe");
+        // Les enfants ecrits avant leur groupe (un code reordonne a la main) : ils le suivent aussi.
+        auto reversed = mixed ? mixed->objects : std::vector<Object>{};
+        std::reverse(reversed.begin(), reversed.end());
+        View w3 = w;
+        const auto top3 = edit::pasteCode(p, w3, reversed);
+        bool follows3 = top3.size() == 1 && w3.childrenOf(top3.front()).size() == 2;
+        for (const Id k : top3.empty() ? std::vector<Id>{} : w3.childrenOf(top3.front()))
+            follows3 = follows3 && w3.object(k)->layer == w3.object(top3.front())->layer;
+        check(follows3, "Ctrl+V d'un code ou les enfants viennent avant le groupe : sur son calque");
+        // Coller dans un groupe (on y est entre) : les objets colles sont sur le calque du groupe.
+        auto bcode = parseObjectCode(serializeObjectCode(w, {btn}));
+        const auto in = bcode ? edit::pasteCode(p, w, bcode->objects, g2) : std::vector<Id>{};
+        check(in.size() == 1 && w.object(in.front())->parent == g2 && w.object(in.front())->layer == front,
+              "Ctrl+V d'un code dans un groupe : sur le calque du groupe");
     }
 
     // 6. Ctrl+Z : une commande, annulee d'un coup.
