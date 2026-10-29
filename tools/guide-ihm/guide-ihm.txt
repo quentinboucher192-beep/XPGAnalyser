@@ -5970,7 +5970,7 @@ Le type choisi dans la liste se règle dans **ses onglets**, comme une fonction 
 ### Un type dans son propre onglet (1.13.1)
 Un **double-clic** sur un type, dans la liste des Types IHM ou dans l'arbre du projet, ou le clic droit › **Ouvrir dans un onglet**, l'ouvre dans **son propre onglet** de document, comme une vue : l'onglet porte le nom du type (Gaz.T_Vanne pour un type d'un espace) et montre les mêmes onglets, sans la liste. Ouvert depuis la page Types IHM, il s'ouvre sur l'onglet qu'elle montrait ; depuis Méthodes (n) de l'arbre, sur Méthodes.
 - **Plusieurs types** s'ouvrent à la fois : chacun son onglet, côte à côte par le clic droit sur un onglet › Diviser à droite.
-- **Renommer** le type renomme son onglet ; le **supprimer** ferme l'onglet (Ctrl+Z rend le type : un double-clic le rouvre ; Ctrl+Maj+T rouvre le dernier onglet fermé).
+- **Renommer** le type renomme son onglet ; le **supprimer** ferme l'onglet. Ctrl+Z rend le type ; son onglet se rouvre alors par Ctrl+Maj+T (Rouvrir le dernier fermé) ou d'un double-clic.
 - **Va-et-vient avec l'arbre** : l'arbre suit l'onglet actif (le type y est choisi) ; le clic droit sur l'onglet › **Afficher dans l'arbre** ; un clic dans l'arbre sur un type déjà ouvert mène à son onglet ; **Aller à** (Ctrl+K) propose aussi les types IHM et les ouvre dans leur onglet. Un emploi d'un autre type (l'onglet Emplois) ouvre l'onglet de cet autre type.
 - Tout s'y fait comme dans la page : les membres (Ctrl+C / Ctrl+V avec Excel, le clic droit Rendre privé…), les méthodes et leur corps (la marge des points d'arrêt), les opérateurs, Exporter le type…, Supprimer le type ; chaque geste se reprend par Ctrl+Z, et la page Types IHM le voit aussi.
 ### L'employer

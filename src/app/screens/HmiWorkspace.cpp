@@ -623,8 +623,17 @@ void MainAnalysisScreen::bindHmi() {
                 else
                     gone.push_back(page);
             }
-            for (auto* page : gone)
+            // 1.13.1 (lot K4, contre-relecture) : l'onglet d'un type supprime se ferme par closePages - son endroit
+            // entre dans les onglets fermes : Ctrl+Z rend le type, Ctrl+Maj+T rouvre son onglet.
+            std::vector<ui::Widget*> goneTypes;
+            for (auto* page : gone) {
+                if (dynamic_cast<HmiTypesPane*>(page)) {
+                    goneTypes.push_back(page);
+                    continue;
+                }
                 if (const int at = centre_->indexOf(page); at >= 0) closeDocument(static_cast<std::size_t>(at));
+            }
+            if (!goneTypes.empty()) (void)closePages(goneTypes, nullptr);
         });
         if (!app_.hmiWarnings().empty()) {
             const auto& w = app_.hmiWarnings();

@@ -13986,9 +13986,9 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Plusieurs types** s'ouvrent \xC3\xA0 la fois : chacun son onglet, c\xC3\xB4te "
                          "\xC3\xA0 c\xC3\xB4te par le clic droit sur un onglet \xE2\x80\xBA Diviser \xC3\xA0 "
                          "droite.", {}, "1.13.1"},
-             {K::Bullet, "**Renommer** le type renomme son onglet ; le **supprimer** ferme l'onglet (Ctrl+Z "
-                         "rend le type : un double-clic le rouvre ; Ctrl+Maj+T rouvre le dernier onglet "
-                         "ferm\xC3\xA9).", {}, "1.13.1"},
+             {K::Bullet, "**Renommer** le type renomme son onglet ; le **supprimer** ferme l'onglet. Ctrl+Z "
+                         "rend le type ; son onglet se rouvre alors par Ctrl+Maj+T (Rouvrir le dernier "
+                         "ferm\xC3\xA9) ou d'un double-clic.", {}, "1.13.1"},
              {K::Bullet, "**Va-et-vient avec l'arbre** : l'arbre suit l'onglet actif (le type y est choisi) "
                          "; le clic droit sur l'onglet \xE2\x80\xBA **Afficher dans l'arbre** ; un clic dans "
                          "l'arbre sur un type d\xC3\xA9j\xC3\xA0 ouvert m\xC3\xA8ne \xC3\xA0 son onglet ; "
