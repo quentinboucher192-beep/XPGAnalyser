@@ -3306,6 +3306,31 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**en simulation et sur le poste**, la case se calcule : `=$V[1].Ouv$` montre la "
                          "valeur de `V[1].Ouv`. Jusqu'\xC3\xA0 la 1.10.4, elle ne l'\xC3\xA9tait pas "
                          "(\xC2\xAB rep\xC3\xA8re non remplac\xC3\xA9 \xC2\xBB).", {}},
+             {K::Heading, "L'aide \xC3\xA0 la saisie dans un rep\xC3\xA8re", {}, "1.13.1"},
+             {K::Paragraph, "Les `$` d'un rep\xC3\xA8re sont aussi **transparents pour l'aide \xC3\xA0 la "
+                         "saisie** (la liste qui s'ouvre en tapant, ou Ctrl+Espace), dans une case "
+                         "\xC6\x92x, un champ de l'inspecteur, un texte \xC3\xA0 trous `{\xE2\x80\xA6}` et "
+                         "un script :", {}, "1.13.1"},
+             {K::Bullet, "**dans un rep\xC3\xA8re ouvert** (`=$Mar`, `=$V[0].`) : ce que tu peux y mettre, "
+                         "comme sans `$` - les variables et leurs membres, les constantes (`$Reglages.Se` "
+                         "propose `Seuil`), les fonctions ; dans un symbole, ses **param\xC3\xA8tres** "
+                         "(`$Van` propose `Vanne`) ; et avec eux, les **rep\xC3\xA8res d\xC3\xA9j\xC3\xA0 "
+                         "employ\xC3\xA9s** dans la vue (`$Po` propose `Pompe`), pour garder le m\xC3\xAAme "
+                         "nom d'un objet \xC3\xA0 l'autre - en t\xC3\xAAte dans un champ ; dans une case "
+                         "\xC6\x92x qui attend un type (X, un nombre), apr\xC3\xA8s ce qui a ce type, car le "
+                         "type d'un rep\xC3\xA8re n'est pas connu ;", {}, "1.13.1"},
+             {K::Bullet, "**apr\xC3\xA8s un rep\xC3\xA8re ferm\xC3\xA9 et son point** (`=$V[0]$.`, "
+                         "`=$Vanne$.` dans un symbole) : les **membres** de ce qu'il entoure (`OUV`, "
+                         "`Position`). Un rep\xC3\xA8re qui n'est ni une variable ni un param\xC3\xA8tre "
+                         "(l'ancien `$Vanne$`) n'a pas de membres : seul ce qui le suit d\xC3\xA9j\xC3\xA0 "
+                         "dans la vue est propos\xC3\xA9 (`$Pompe$.` propose `OUV`), jamais une variable au "
+                         "nom voisin - Entr\xC3\xA9" "e ne change pas `$Vanne$.F0` en "
+                         "`$Vanne$.Commands_TOR16_I4_F0` ;", {}, "1.13.1"},
+             {K::Bullet, "**hors des rep\xC3\xA8res** (`=NOT $V[0]$.OUV AND Mar`), la liste est celle d'une "
+                         "expression sans `$` ; rien ne se colle \xC3\xA0 un rep\xC3\xA8re ferm\xC3\xA9 "
+                         "(`$V[0]$Ma` n'ouvre pas de liste).", {}, "1.13.1"},
+             {K::Paragraph, "Jusqu'\xC3\xA0 la 1.13.0, rien n'\xC3\xA9tait propos\xC3\xA9 dans un rep\xC3\xA8re "
+                         "ni juste apr\xC3\xA8s lui.", {}, "1.13.1"},
              {K::Heading, "Compiler et G\xC3\xA9n\xC3\xA9rer", {}},
              {K::Paragraph, "Depuis la 1.11, un rep\xC3\xA8re **n'est jamais une faute** : **Compiler** "
                          "v\xC3\xA9rifie l'expression sans ses `$`, comme les autres, et n'en fait ni erreur "
@@ -15561,6 +15586,29 @@ const std::vector<Topic>& topics() {
                          "s'\xC3\xA9" "crit** (`Reglages.Total := 1` est refus\xC3\xA9 par Compiler et par "
                          "le moteur). Apr\xC3\xA8s `Reglages.`, l'aide \xC3\xA0 la saisie propose ses "
                          "constantes publiques ; renommer une constante renomme `Reglages.X` partout.", {}, "1.12.7"},
+             {K::Tip, "1.13.1 : dans une **formule de propri\xC3\xA9t\xC3\xA9** (une case \xC6\x92x de "
+                         "l'inspecteur, d'un objet de vue, de popup ou de symbole), une constante globale "
+                         "n'est plus marqu\xC3\xA9" "e en erreur : la case dit \xC2\xAB Constante : "
+                         "Reglages.Seuil \xC2\xB7 INT \xC2\xB7 constante de Reglages = 5 \xC2\xBB, sans "
+                         "carr\xC3\xA9 rouge ; son **type** compte (`Reglages.Libelle` n'est pas un nombre), "
+                         "le long du chemin aussi (`Reglages.Four.Temp`, `Reglages.Table[1]`), et son "
+                         "**unit\xC3\xA9** aussi : `EN(Reglages.Pression, 'mbar')` convertit, dans "
+                         "l'inspecteur, Compiler, G\xC3\xA9n\xC3\xA9rer et en marche. Jusqu'\xC3\xA0 la "
+                         "1.13.0, la case disait \xC2\xAB Reglages n'existe pas \xC2\xBB et EN ne voyait pas "
+                         "l'unit\xC3\xA9. Dans sa vue (ou sa popup), une constante de la vue "
+                         "s'\xC3\xA9" "crit aussi sans le nom de la vue (`Seuil_Haut`), et `EN(Seuil_Haut, "
+                         "'mbar')` convertit ; dans une popup, `EN(Pression, 'bar')` sur un param\xC3\xA8tre "
+                         "par r\xC3\xA9" "f\xC3\xA9rence prend l'unit\xC3\xA9 de la variable qu'il "
+                         "d\xC3\xA9signe. Un script rang\xC3\xA9 dans un espace de noms (`Gaz.Reglages`) : "
+                         "ses constantes se lisent par son **nom court**, `Reglages.Seuil` - c'est ce nom "
+                         "que l'aide \xC3\xA0 la saisie propose (deux scripts du m\xC3\xAAme nom court dans "
+                         "deux espaces : ni l'un ni l'autre). **Dans les scripts aussi**, l'unit\xC3\xA9 "
+                         "d'une constante globale compte d\xC3\xA9sormais, comme celle d'une variable : "
+                         "`Consigne_mbar := Reglages.Pression;` (2,5 bar, une cible en mbar) se convertit "
+                         "d'office et donne 2500 (2,5 jusqu'\xC3\xA0 la 1.13.0), et un calcul qui en part "
+                         "vers une cible d'une autre unit\xC3\xA9 demande EN : `Consigne_mbar := "
+                         "Reglages.Pression * 1000.0;`, accept\xC3\xA9 jusqu'\xC3\xA0 la 1.13.0, est une "
+                         "**erreur de Compiler** - \xC3\xA9" "cris `EN(Reglages.Pression, 'mbar')`.", {}, "1.13.1"},
              {K::Paragraph, "**Le d\xC3\xA9" "ballage** : sous la grille, la valeur \xC3\xA0 taille de la ligne "
                          "choisie (LIST, VECTOR, MAP, ARRAY \xC3\xA0 une ou deux dimensions avec ses vrais "
                          "indices, TUPLE, structure), \xC3\xA9" "crite ou calcul\xC3\xA9" "e, se lit "

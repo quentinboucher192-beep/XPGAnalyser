@@ -15,6 +15,9 @@
 #include "../src/hmi/HmiExprCheck.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiPackage.hpp"      // lot API 8 : finitions (un modele de vue garde dans le projet)
+#include "../src/hmi/HmiLive.hpp"         // 1.13.1 : les constantes globales en marche
+#include "../src/hmi/HmiRuntime.hpp"
+#include "../src/hmi/HmiSymbols.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -442,6 +445,248 @@ void compteurTrs() {
 }
 // ---- fin Lot API 8 : corrections des captures ----
 
+
+// ---- 1.13.1 : LES CONSTANTES GLOBALES DANS LES FORMULES DES PROPRIETES ----
+// La demande du 29/10 : "dans les formules des proprietes si je mets des constantes globales ca met
+// erreur". Une constante globale : une constante publique d'un script general (Programmation generale
+// > Scripts > Reglages, onglet Constantes), lue partout par son nom qualifie (Reglages.Seuil). Dans une
+// propriete d'un objet de vue, de popup et de symbole : Compiler, Generer et les expressions impossibles
+// ne disent rien ; en marche, la valeur est juste (INT, REAL avec son unite, BOOL, STRING, une structure,
+// un tableau). IHM Studio : l'automate est un projet vide (aucun nom n'est a lui).
+bool noPlc(std::string_view) { return false; }
+
+Declaration constante(std::string name, std::string type, std::string value, std::string unit = {}) {
+    Declaration d;
+    d.kind = DeclKind::Constant;
+    d.name = std::move(name);
+    d.type = std::move(type);
+    d.value = std::move(value);
+    d.unit = std::move(unit);
+    d.visibility = Visibility::Public;
+    return d;
+}
+
+// Les formules qui citent les constantes, posees sur un rectangle et un texte de `v`.
+void poseFormules(Project& p, View& v, const char* suffix, Id& bloc, Id& texte) {
+    bloc = addObject(p, v, Kind::Rectangle, (std::string("Bloc") + suffix).c_str());
+    auto* b = v.object(bloc);
+    b->setExpr("x", "Reglages.Seuil * 10");                       // INT : 50
+    b->setExpr("y", "Reglages.Four.Temp");                        // un membre d'une structure : 20
+    b->setExpr("w", "Reglages.Pression * 4.0");                   // REAL [bar] : 10
+    b->setExpr("h", "Reglages.Table[1]");                         // une case d'un tableau : 20
+    b->setExpr("rot", "EN(Reglages.Pression, 'mbar') / 100.0");   // l'unite de la constante : 25
+    b->setExpr("visible", "Reglages.Actif");                      // BOOL
+    b->setExpr("blink", "Reglages.Four.Porte AND NOT Reglages.Actif");
+    b->setExpr("fill", "SEL(Reglages.Actif, '#808080', '#00A000')");
+    b->setExpr("radius", "EN(Pression_Var, 'mbar') / 100.0");       // une variable IHM [bar] : 15
+    texte = addObject(p, v, Kind::Text, (std::string("Etiquette") + suffix).c_str());
+    v.object(texte)->set("text", "{Reglages.Libelle} : {Reglages.Seuil}");   // STRING dans un texte a trous
+}
+
+struct Globales {
+    Project p;
+    Id vue{kNoId}, popup{kNoId}, symbole{kNoId}, hote{kNoId}, instance{kNoId};
+    Id bloc{kNoId}, texte{kNoId}, blocPop{kNoId}, textePop{kNoId}, blocSym{kNoId}, texteSym{kNoId};
+};
+
+Globales globales() {
+    Globales g;
+    Project& p = g.p;
+    p.programs.types.push_back(HmiType{p.allocate(), "T_Four", {}, {TypeMember{"Temp", "REAL"}, TypeMember{"Porte", "BOOL"}}});
+    p.programs.variables.push_back(Variable{p.allocate(), "Niveau", "REAL", "0", {}});
+    Variable pv{p.allocate(), "Pression_Var", "REAL", "1.5", {}};
+    pv.unit = "bar";                                                  // une variable IHM avec son unite (EN en fx aussi)
+    p.programs.variables.push_back(pv);
+    Script r;
+    r.id = p.allocate();
+    r.name = "Reglages";
+    r.event = "Appel";
+    r.decls = {constante("Seuil", "INT", "5"),
+               constante("Pression", "REAL", "2.5", "bar"),
+               constante("Actif", "BOOL", "TRUE"),
+               constante("Libelle", "STRING", "'Four A'"),
+               constante("Table", "ARRAY[0..2] OF INT", "[10, 20, 30]"),
+               constante("Four", "T_Four", "(Temp := 20.0, Porte := TRUE)")};
+    p.programs.scripts.push_back(r);
+    // Une vue
+    View v = makeView(p, "Vue_Four");
+    poseFormules(p, v, "", g.bloc, g.texte);
+    g.vue = v.id;
+    p.views.push_back(std::move(v));
+    // Une popup
+    View pop = makeView(p, "Pop_Four");
+    pop.role = "popup";
+    poseFormules(p, pop, "_Pop", g.blocPop, g.textePop);
+    g.popup = pop.id;
+    p.views.push_back(std::move(pop));
+    // Un symbole, et la vue qui en porte une instance
+    View sym = makeView(p, "S_Four");
+    sym.role = std::string(kSymbolRole);
+    sym.width = 400;
+    sym.height = 200;
+    poseFormules(p, sym, "_Sym", g.blocSym, g.texteSym);
+    g.symbole = sym.id;
+    p.views.push_back(std::move(sym));
+    View hote = makeView(p, "Vue_Hote");
+    g.instance = placeSymbol(p, hote, "S_Four", 0, 0);
+    g.hote = hote.id;
+    p.views.push_back(std::move(hote));
+    uniqueDeclarationIds(p);
+    p.config.startView = g.vue;
+    return g;
+}
+
+std::string errorsAt(const std::vector<Issue>& issues, const Globales& g) {
+    std::string out;
+    for (const auto& i : issues)
+        if (i.severity == S::Error && (i.object == g.bloc || i.object == g.texte || i.object == g.blocPop || i.object == g.textePop
+                                       || i.object == g.blocSym || i.object == g.texteSym || i.object == g.instance))
+            out += "\n         [" + i.category + "] " + i.property + " : " + i.message;
+    return out;
+}
+
+void constantesGlobales1131() {
+    std::printf("1.13.1 : les constantes globales dans les formules des propri\xC3\xA9t\xC3\xA9s\n");
+    Globales g = globales();
+    const Project& p = g.p;
+    // Compiler, Generer, les expressions impossibles : rien a dire (vue, popup, symbole, l'instance).
+    const std::string compiled = errorsAt(compileWith(p, noPlc), g);
+    check(compiled.empty(), "Compiler : Reglages.Seuil, .Pression, .Actif, .Libelle, .Table[1], .Four.Temp sans erreur" + compiled);
+    const std::string generated = errorsAt(generateWith(p, noPlc, GenerateOptions{}), g);
+    check(generated.empty(), "G\xC3\xA9n\xC3\xA9rer : sans faute" + generated);
+    const std::string sites = errorsAt(expressionIssues(p, noPlc), g);
+    check(sites.empty(), "les expressions impossibles : aucune" + sites);
+    // Le controle d'une formule seule (celui de l'inspecteur) : le type de chaque constante est connu.
+    for (const View* v : {p.view(g.vue), p.view(g.popup), p.view(g.symbole)}) {
+        exprcheck::Context c;
+        c.project = &p;
+        c.view = v;
+        c.known = [&](std::string_view root) { return p.variable(root) != nullptr; };   // un automate vide
+        using W = exprcheck::Want;
+        const std::pair<const char*, W> cases[] = {{"Reglages.Seuil * 10", W::Number}, {"Reglages.Pression * 4.0", W::Number},
+                                                   {"Reglages.Actif", W::Bool},          {"Reglages.Libelle", W::Text},
+                                                   {"Reglages.Table[1]", W::Number},     {"Reglages.Four.Temp", W::Number},
+                                                   {"Reglages.Four.Porte", W::Bool},     {"EN(Reglages.Pression, 'mbar') / 100.0", W::Number}};
+        for (const auto& [expr, want] : cases) {
+            std::string said;
+            for (const auto& pb : exprcheck::check(c, expr, want))
+                if (!pb.warning) said += " | " + pb.message;
+            check(said.empty(), std::string("le controle d'une formule (") + v->name + ") : " + expr + said);
+        }
+        // Le type : un texte n'est pas un nombre - la constante a bien son type.
+        bool typed = false;
+        for (const auto& pb : exprcheck::check(c, "Reglages.Libelle", W::Number)) typed = typed || !pb.warning;
+        check(typed, std::string("... et son type compte : Reglages.Libelle n'est pas un nombre (") + v->name + ")");
+        const auto shape = exprcheck::shapeOf(c, "Reglages.Pression");
+        check(shape.unit == "bar", std::string("... et son unit\xC3\xA9 : Reglages.Pression est en bar (") + v->name + ") - " + shape.unit);
+    }
+    // En marche : la valeur juste, dans la vue, la popup et l'instance du symbole.
+    Runtime rt;
+    rt.bind(&g.p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    check(rt.running() && rt.startError().empty(), "en marche : d\xC3\xA9marre (" + rt.startError() + ")");
+    const auto valuesOf = [&](Id view, Id bloc, Id texte, const std::string& label) {
+        const View* composed = rt.composedView(view);
+        if (!composed) {
+            check(false, "en marche : " + label + " compos\xC3\xA9" "e");
+            return;
+        }
+        LiveView live;
+        live.bind(*composed);
+        const View shown = live.evaluate(rt.environment());
+        const Object* b = shown.object(bloc);
+        const Object* t = shown.object(texte);
+        const std::string got = b ? b->text("x") + " " + b->text("y") + " " + b->text("w") + " " + b->text("h") + " " + b->text("rot") + " "
+                                        + b->text("visible") + " " + b->text("blink") + " " + b->text("fill")
+                                  : std::string("?");
+        check(b && b->number("x") == 50 && b->number("y") == 20 && b->number("w") == 10 && b->number("h") == 20 && b->number("rot") == 25,
+              "en marche (" + label + ") : Seuil * 10 = 50, Four.Temp = 20, Pression * 4 = 10, Table[1] = 20, EN(Pression, mbar) / 100 = 25 - " + got);
+        check(b && b->number("radius") == 15, "en marche (" + label + ") : EN(Pression_Var, 'mbar') / 100 = 15 (une variable IHM en bar) - "
+                                                  + (b ? b->text("radius") : std::string("?")));
+        check(b && b->flag("visible", false) && !b->flag("blink", true) && b->text("fill") == "#00A000",
+              "en marche (" + label + ") : Actif vrai, Four.Porte AND NOT Actif faux, SEL(Actif) vert - " + got);
+        check(t && t->text("text") == "Four A : 5", "en marche (" + label + ") : {Reglages.Libelle} : {Reglages.Seuil} - " + (t ? t->text("text") : std::string("?")));
+    };
+    valuesOf(g.vue, g.bloc, g.texte, "la vue");
+    check(rt.openPopup(g.popup, Transition{}, 0.2), "en marche : la popup s'ouvre");
+    rt.tick(0.3);
+    valuesOf(g.popup, g.blocPop, g.textePop, "la popup");
+    rt.navigate(g.hote, Transition{}, 0.4);
+    rt.tick(0.5);
+    valuesOf(g.hote, expandedId(g.instance, g.blocSym), expandedId(g.instance, g.texteSym), "l'instance du symbole");
+}
+
+// 1.13.1 (contre-verification) : EN et UNITE en marche passent par la PORTEE de la vue, comme la lecture.
+// Une constante de vue ecrite sans le nom de la vue (Seuil_Haut, alias de Vue_Four.Seuil_Haut) a l'unite de
+// la constante ; un parametre de popup par reference (Pression, relie a Pression_L2 [mbar]) a l'unite de ce
+// qu'il designe, pas celle d'une variable IHM globale du meme nom (Pression [bar]).
+void unitesParLaPortee1131() {
+    std::printf("1.13.1 : EN et UNITE par la port\xC3\xA9" "e de la vue (constante de vue, param\xC3\xA8tre de popup)\n");
+    Project p;
+    Variable globale{p.allocate(), "Pression", "REAL", "1.5", {}};
+    globale.unit = "bar";
+    p.programs.variables.push_back(globale);
+    Variable ligne{p.allocate(), "Pression_L2", "REAL", "1000.0", {}};
+    ligne.unit = "mbar";
+    p.programs.variables.push_back(ligne);
+    View v = makeView(p, "Vue_Four");
+    v.constants.push_back(constante("Seuil_Haut", "REAL", "1.5", "bar"));
+    const Id bloc = addObject(p, v, Kind::Rectangle, "Bloc");
+    v.object(bloc)->setExpr("x", "EN(Seuil_Haut, 'mbar')");               // 1500
+    v.object(bloc)->setExpr("y", "EN(Vue_Four.Seuil_Haut, 'mbar')");      // 1500 (le nom qualifie marchait deja)
+    const Id texte = addObject(p, v, Kind::Text, "Unite");
+    v.object(texte)->set("text", "{UNITE(Seuil_Haut)}");
+    const Id vue = v.id;
+    p.views.push_back(std::move(v));
+    View pop = makeView(p, "Pop_Pression");
+    pop.role = "popup";
+    pop.params.push_back(ViewParam{"Pression", "", "", "REAL", ParamMode::Reference});
+    const Id blocPop = addObject(p, pop, Kind::Rectangle, "BlocPop");
+    pop.object(blocPop)->setExpr("x", "EN(Pression, 'bar')");                 // Pression_L2 : 1000 mbar = 1 bar
+    pop.object(blocPop)->setExpr("y", "EN(Pression, 'mbar')");                // 1000
+    const Id textePop = addObject(p, pop, Kind::Text, "UnitePop");
+    pop.object(textePop)->set("text", "{UNITE(Pression)}");
+    const Id popup = pop.id;
+    p.views.push_back(std::move(pop));
+    uniqueDeclarationIds(p);
+    p.config.startView = vue;
+
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    check(rt.running() && rt.startError().empty(), "en marche : d\xC3\xA9marre (" + rt.startError() + ")");
+    const auto shown = [&](Id view) -> View {
+        const View* composed = rt.composedView(view);
+        if (!composed) return View{};
+        LiveView live;
+        live.bind(*composed);
+        return live.evaluate(rt.environment(), nullptr, rt.viewScope(view));
+    };
+    {
+        const View s = shown(vue);
+        const Object* b = s.object(bloc);
+        const Object* t = s.object(texte);
+        check(b && b->number("x") == 1500, "EN(Seuil_Haut, 'mbar') : la constante de vue sans le nom de la vue (1,5 bar) = 1500 - "
+                                               + (b ? b->text("x") : std::string("?")));
+        check(b && b->number("y") == 1500, "EN(Vue_Four.Seuil_Haut, 'mbar') = 1500 - " + (b ? b->text("y") : std::string("?")));
+        check(t && t->text("text") == "bar", "UNITE(Seuil_Haut) = bar - '" + (t ? t->text("text") : std::string("?")) + "'");
+    }
+    check(rt.openPopup(popup, Transition{}, 0.2, "Pression := Pression_L2", {}, kNoId), "la popup s'ouvre (Pression := Pression_L2)");
+    rt.tick(0.3);
+    {
+        const View s = shown(popup);
+        const Object* b = s.object(blocPop);
+        const Object* t = s.object(textePop);
+        check(b && b->number("x") == 1, "EN(Pression, 'bar') dans la popup : Pression_L2 (1000 mbar) = 1 bar, pas l'unit\xC3\xA9 de la variable "
+                                        "globale Pression - " + (b ? b->text("x") : std::string("?")));
+        check(b && b->number("y") == 1000, "EN(Pression, 'mbar') dans la popup = 1000 - " + (b ? b->text("y") : std::string("?")));
+        check(t && t->text("text") == "mbar", "UNITE(Pression) dans la popup = mbar - '" + (t ? t->text("text") : std::string("?")) + "'");
+    }
+}
+// ---- fin 1.13.1 ----
+
 } // namespace
 
 int main() {
@@ -452,6 +697,8 @@ int main() {
     exemples();
     finitions();     // ---- Lot API 8 : finitions ----
     compteurTrs();   // ---- Lot API 8 : corrections des captures ----
+    constantesGlobales1131();   // 1.13.1
+    unitesParLaPortee1131();    // 1.13.1 (contre-verification)
     std::printf("%d controle(s), %d echec(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }
