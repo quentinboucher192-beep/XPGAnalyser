@@ -29,6 +29,7 @@
 #include "../../hmi/HmiPopupParams.hpp"   // 1.11.22 : ses emplois (un retrait a blanc)
 #include "../../hmi/HmiChoiceLists.hpp"   // 1.12.7 (lot D) : l'unite que proposent les lettres ISA
 #include "../../hmi/HmiRanges.hpp"        // 1.12.10 (lot F) : la plage et les seuils de la variable
+#include "../../hmi/HmiStore.hpp"         // 1.13.1 (lot K3) : le code brut des objets
 
 #include <set>
 
@@ -374,6 +375,14 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
                                                          [this](core::CommandPtr c) { apply_(std::move(c)); });
         content_ = content.get();
         tabs->addTab(ui::TabControl::Tab{"Contenu", ui::Icon::AnimationTable, false, false}, std::move(content));
+        // 1.13.1 (lot K3) : l'onglet Code brut - montre quand un seul objet est choisi (onLayout).
+        auto raw = std::make_unique<HmiRawCodePanel>(base + ".codeBrut", doc_, viewId_,
+                                                     [this](core::CommandPtr c) { apply_(std::move(c)); });
+        rawCode_ = raw.get();
+        rawCodePage_ = std::move(raw);
+        links_ += rawCode_->status->connect([this](const std::string& m) {
+            statusBar_->setTransientMessage(m, 6.0, ui::StatusBar::Severity::Success);
+        });
         // 1.11.23 : la section Raccourcis - montree quand rien n'est choisi (onLayout).
         auto keys = std::make_unique<HmiActionsPanel>(base + ".shortcuts", doc_, viewId_,
                                                       [this](core::CommandPtr c) { apply_(std::move(c)); },
@@ -887,6 +896,7 @@ void HmiEditor::refresh() {
     if (actions_) actions_->refresh();
     if (shortcuts_) shortcuts_->refresh();          // 1.11.23
     if (content_) content_->refresh();
+    if (rawCode_) rawCode_->refresh();              // 1.13.1 (lot K3)
     if (viewConstants_ && viewTabs_ && viewTabs_->current() == HmiSymbolTabs::Constants) viewConstants_->refresh();   // 1.12.16
     invalidateLayout();
     invalidate();
@@ -1841,6 +1851,7 @@ enum CanvasMenu : int {
     MLibrary = 22, MZoom50 = 23, MZoom100 = 24, MZoom200 = 25, MGuideV = 26, MGuideH = 27, MHelpTarget = 28,
     MShow = 29, MHistory = 30, MViewHistory = 31, MEditsTip = 32, MEditsDots = 33,
     MRulersHelp = 34,   // 1.12.30 : l'aide des regles et des guides
+    MRawCopy = 35, MRawPaste = 36, MRawShow = 37, MRawCopyTarget = 38,   // 1.13.1 (lot K3) : le code brut
 };
 constexpr int kMenuCanvas = 0, kMenuLayers = 1, kMenuPalette = 2;   // le menu ouvert (context_ sert aux trois)
 enum PaletteMenu : int { kPalettePlace = 1, kPaletteFavorite = 2, kPaletteHelp = 3 };
@@ -2105,6 +2116,7 @@ void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
         items.push_back(cmd::heading(o->name, "verrouill\xC3\xA9"));
         items.push_back(cmd::item(cmd::Id::Deverrouiller, MUnlockTarget));
         items.push_back(cmd::item(cmd::Id::Copier, MCopyTarget));
+        items.push_back(plain("Copier le code brut", MRawCopyTarget));   // 1.13.1 (lot K3)
         items.push_back(cmd::item(cmd::Id::Aide, MHelpTarget, static_cast<bool>(openHelp_), "l'aide n'est pas joignable ici",
                                   "Aide sur " + kindName(o->kind)));
         items.push_back(cmd::separator());
@@ -2257,6 +2269,18 @@ void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
     items.push_back(cmd::item(cmd::Id::Coller, MPaste));
     items.push_back(cmd::item(cmd::Id::Dupliquer, MDuplicate));
     items.push_back(cmd::item(cmd::Id::DupliquerFenetre, MDupWindow));
+    // 1.13.1 (lot K3) : le code brut - copier celui des objets choisis, coller un code sur l'objet choisi
+    // (il le remplace : meme genre, nom et position gardes), l'onglet Code brut.
+    {
+        auto copyCode = plain("Copier le code brut", MRawCopy);
+        copyCode.icon = ui::Icon::Code;
+        items.push_back(std::move(copyCode));
+        const bool clipCode = hmi::isObjectCode(ui::clipboardText());
+        items.push_back(plain("Coller le code brut", MRawPaste, one != nullptr && clipCode,
+                              one == nullptr ? std::string("un objet \xC3\xA0 la fois")
+                                             : std::string("le presse-papiers n'a pas de code brut d'objet")));
+        items.push_back(plain("Code brut\xE2\x80\xA6", MRawShow, one != nullptr, "un objet \xC3\xA0 la fois"));
+    }
     if (!(one && one->kind == hmi::Kind::Group))
         items.push_back(cmd::item(cmd::Id::Grouper, act(ActGroup), sel.size() >= 2, "deux objets ou plus"));
     items.push_back(cmd::separator());
@@ -2331,6 +2355,47 @@ void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
     }
     context_->setItems(std::move(items));
     openMenuAt(*context_, at);
+}
+
+// ---- 1.13.1 (lot K3) : le code brut, depuis le clic droit ------------------------------
+bool HmiEditor::showRawCode() {
+    const auto sel = canvas_->selection();
+    if (sel.size() != 1) return false;
+    invalidateLayout();
+    layout();   // l'onglet suit la selection (onLayout)
+    const int at = inspector_->indexOf(rawCode_);
+    if (at < 0) return false;
+    if (inspector_->tabHidden(static_cast<std::size_t>(at))) inspector_->setTabHidden(static_cast<std::size_t>(at), false);
+    inspector_->setCurrentIndex(static_cast<std::size_t>(at));
+    return true;
+}
+
+bool HmiEditor::copyRawCode() {
+    const auto* v = doc_->project.view(viewId_);
+    const auto sel = canvas_->selection();
+    if (!v || sel.empty()) return false;
+    const auto units = hmi::edit::units(*v, sel);
+    const std::string code = hmi::serializeObjectCode(*v, units);
+    if (code.empty()) return false;
+    ui::setClipboardText(code);
+    const std::string who = units.size() == 1 && v->object(units.front()) ? v->object(units.front())->name
+                                                                         : std::to_string(units.size()) + " objets";
+    statusBar_->setTransientMessage("Code brut de " + who + " copi\xC3\xA9 : Coller le code brut sur un objet du m\xC3\xAAme genre, "
+                                    "ou Ctrl+V dans une vue (des objets neufs).", 6.0, ui::StatusBar::Severity::Success);
+    return true;
+}
+
+bool HmiEditor::pasteRawCode() {
+    const auto sel = canvas_->selection();
+    if (sel.size() != 1) {
+        statusBar_->setTransientMessage("Coller le code brut : choisis un seul objet (il est remplac\xC3\xA9 par le code).", 8.0,
+                                        ui::StatusBar::Severity::Warning);
+        return false;
+    }
+    if (rawCode_->object() != sel.front()) rawCode_->setObject(sel.front());
+    const bool ok = rawCode_->paste();
+    if (!ok) statusBar_->setTransientMessage(rawCode_->message(), 8.0, ui::StatusBar::Severity::Warning);
+    return ok;
 }
 
 // ---- 1.12.18 (planche 7) : le menu d'un calque - le clic droit ne le rend plus actif ----
@@ -2550,6 +2615,16 @@ void HmiEditor::canvasMenuChosen(int a) {
         case MHelpTarget:
             if (const auto* o = v->object(c.contextLocked())) helpOn(o->kind);
             break;
+        case MRawCopy: (void)copyRawCode(); break;              // 1.13.1 (lot K3)
+        case MRawPaste: (void)pasteRawCode(); break;
+        case MRawShow: (void)showRawCode(); break;
+        case MRawCopyTarget: {
+            const Id id = c.contextLocked();
+            if (!v->object(id)) break;
+            ui::setClipboardText(hmi::serializeObjectCode(*v, {id}));
+            statusBar_->setTransientMessage("Code brut de " + v->object(id)->name + " copi\xC3\xA9.", 5.0, ui::StatusBar::Severity::Success);
+            break;
+        }
         case MShow: c.hideSelection(false); break;
         case MHistory:
             if (openHistory_) openHistory_(viewId_, c.selection());
@@ -2821,6 +2896,22 @@ void HmiEditor::onLayout() {
         inspector_->setTabBadge(at, n ? std::to_string(n) : std::string{}, ui::Tone::Accent);
     } else if (!wantContent && contentTab >= 0) {
         contentPage_ = inspector_->takeTab(static_cast<std::size_t>(contentTab));
+    }
+    // 1.13.1 (lot K3) : l'onglet Code brut, un seul objet choisi (juste apres Contenu, ou Actions).
+    const bool wantCode = sel.size() == 1;
+    if (wantCode && rawCode_->object() != owner) rawCode_->setObject(owner);
+    const int codeTab = inspector_->indexOf(rawCode_);
+    if (wantCode && codeTab < 0 && rawCodePage_) {
+        (void)inspector_->addTab(ui::TabControl::Tab{"Code brut", ui::Icon::Code, false, false}, std::move(rawCodePage_));
+    } else if (!wantCode && codeTab >= 0) {
+        rawCodePage_ = inspector_->takeTab(static_cast<std::size_t>(codeTab));
+        rawCode_->setObject(kNoId);
+    } else if (wantCode && codeTab >= 0 && inspector_->indexOf(content_) > codeTab) {
+        // Contenu vient d'etre remis (apres lui) : Code brut repasse au bout, choisi s'il l'etait.
+        const bool current = inspector_->currentIndex() == static_cast<std::size_t>(codeTab);
+        auto page = inspector_->takeTab(static_cast<std::size_t>(codeTab));
+        const std::size_t at = inspector_->addTab(ui::TabControl::Tab{"Code brut", ui::Icon::Code, false, false}, std::move(page));
+        if (current) inspector_->setCurrentIndex(at);
     }
     // 1.11.23 : l'onglet Raccourcis, rien de choisi (la vue) - pas pour un symbole (ses
     // instances ne prennent pas le clavier).

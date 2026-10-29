@@ -1320,6 +1320,32 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             }
             openHmiView(owner != hmi::kNoId ? owner : view, -1, object);
         };
+        // 1.13.1 (lot K3) : "Coller le code brut" sur un objet de la vue en marche - l'objet du projet est remplace
+        // (la vue qui le porte : celle du clic, sinon celle qui l'a) ; une commande, Ctrl+Z.
+        host.pasteCode = [this](hmi::Id view, hmi::Id object, std::string* why) {
+            auto hmiDoc = app_.hmi();
+            if (!hmiDoc) return false;
+            hmi::Id owner = hmi::kNoId;
+            if (const auto* v = hmiDoc->project.view(view); v && v->object(object)) owner = view;
+            for (const auto& v : hmiDoc->project.views)
+                if (owner == hmi::kNoId && v.object(object)) owner = v.id;
+            if (owner == hmi::kNoId) {
+                if (why) *why = "l'objet n'est pas dans le projet";
+                return false;
+            }
+            auto parsed = hmi::parseObjectCode(ui::clipboardText());
+            if (!parsed) {
+                if (why) *why = "rien n'a chang\xC3\xA9 - " + parsed.error().context;
+                return false;
+            }
+            bool ok = false;
+            auto cmd = hmi::changeView(hmiDoc, owner, "Coller le code brut", [&](hmi::Project& p, hmi::View& v) {
+                ok = hmi::edit::applyCode(p, v, object, parsed->objects, false, why);
+            });
+            if (!ok) return false;
+            if (cmd) app_.apply(std::move(cmd), false);
+            return true;
+        };
         // 1.10 (decision 12) : le plein ecran de l'IHM - la fenetre en plein ecran, puis
         // rendue comme avant (deja en plein ecran par F11 : elle le reste).
         host.fullScreenWindow = [this, before = std::make_shared<bool>(false)](bool on) {

@@ -70,6 +70,8 @@
 #include <string>
 #include <vector>
 
+namespace ui { class MultiLineText; class Checkbox; }   // 1.13.1 : l'onglet Code brut
+
 namespace app {
 
 class HmiContentPanel final : public ui::Widget {
@@ -189,6 +191,76 @@ private:
     std::size_t      lastCount_{static_cast<std::size_t>(-1)};
     DialogHost       host_;                                          // 1.12.16 : Dupliquer...
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);   // une reponse apres la fermeture : ignoree
+    core::ConnectionScope links_;
+};
+
+// =============================================================================
+//  1.13.1 (lot K3) : L'ONGLET CODE BRUT de l'inspecteur
+// -----------------------------------------------------------------------------
+//  "dans tous les objets des pages/vues avoir un onglet 'code brut' que l'on peut
+//  copier coller" : le texte complet de l'objet choisi (hmi::serializeObjectCode -
+//  ses lignes du fichier de sa vue : proprietes, formules, actions, contenu,
+//  redefinitions, alarmes surchargees, et ses enfants s'il en a), dans un editeur.
+//    Copier     le texte de l'editeur part dans le presse-papiers ;
+//    Coller     le code du presse-papiers REMPLACE l'objet ;
+//    Appliquer  le texte modifie dans l'editeur remplace l'objet ;
+//    Revenir    l'editeur reprend le code de l'objet.
+//  Par defaut l'objet garde son nom et sa position ; la case "Prendre aussi le nom
+//  et la position" prend ceux du code. Un code illisible : la ligne et la faute,
+//  la ligne marquee dans l'editeur, rien ne change. Un code d'un autre genre
+//  d'objet : refuse (hmi::edit::applyCode). Une commande : Ctrl+Z annule.
+// =============================================================================
+class HmiRawCodePanel final : public ui::Widget {
+public:
+    using Apply = std::function<void(core::CommandPtr)>;
+    enum Act : int { ACopy = 1, APaste, AApply, ARevert };
+    HmiRawCodePanel(std::string id, hmi::DocumentPtr doc, hmi::Id view, Apply apply);
+
+    void setObject(hmi::Id object);                 // kNoId : rien
+    [[nodiscard]] hmi::Id object() const noexcept { return object_; }
+    // Le document a change : l'editeur reprend le code de l'objet, sauf un texte en cours de
+    // modification (garde ; le message dit que l'objet a change depuis).
+    void refresh();
+    [[nodiscard]] std::string text() const;          // le texte de l'editeur
+    void setText(std::string text);                  // comme une frappe (essais, scripts)
+    [[nodiscard]] bool edited() const;               // modifie et pas encore applique
+    [[nodiscard]] std::string objectCode() const;    // le code de l'objet tel qu'il est
+    bool copy();                                     // faux : rien a copier
+    bool paste();                                    // faux : rien n'a change (le message dit pourquoi)
+    bool applyText();                                // idem
+    void revert();
+    void setTakeNameAndPlace(bool on);
+    [[nodiscard]] bool takeNameAndPlace() const noexcept { return take_; }
+    // Ce que dit la ligne sous la barre : vide, une reussite, ou une faute (error()).
+    [[nodiscard]] const std::string& message() const noexcept { return message_; }
+    [[nodiscard]] bool error() const noexcept { return error_; }
+    [[nodiscard]] int  errorLine() const noexcept { return errorLine_; }   // 1 = la premiere ; 0 : aucune
+    [[nodiscard]] HmiToolStrip&       tools() noexcept { return *tools_; }
+    [[nodiscard]] ui::MultiLineText&  editor() noexcept { return *editor_; }
+    [[nodiscard]] ui::Checkbox&       takeBox() noexcept { return *takeBox_; }
+    // Une reussite (pour la barre d'etat de l'editeur).
+    const core::SignalPtr<const std::string&> status = core::Signal<const std::string&>::create();
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext&) override;
+
+private:
+    bool applyCode(const std::string& code, const std::string& label);
+    void say(std::string text, bool error, int line = 0);
+    void load();                                    // l'editeur recoit le code de l'objet
+    hmi::DocumentPtr   doc_;
+    hmi::Id            view_;
+    hmi::Id            object_{hmi::kNoId};
+    Apply              apply_;
+    HmiToolStrip*      tools_{nullptr};
+    ui::Checkbox*      takeBox_{nullptr};
+    ui::MultiLineText* editor_{nullptr};
+    std::string        shown_;                      // le code charge dans l'editeur
+    std::string        message_;
+    bool               error_{false};
+    int                errorLine_{0};
+    bool               take_{false};
     core::ConnectionScope links_;
 };
 

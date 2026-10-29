@@ -7,6 +7,7 @@
 #include "../../hmi/HmiTemplates.hpp"
 #include "../../hmi/HmiDuplicate.hpp"   // 1.10.2 (D) : les modeles d'objets
 #include "../../hmi/HmiRanges.hpp"   // 1.12.10 (lot F) : un objet pose suit la plage de sa variable
+#include "../../hmi/HmiStore.hpp"    // 1.13.1 (lot K3) : le code brut d'un objet
 
 #include "../../ui/Shapes.hpp"
 #include "../../ui/widgets/Controls.hpp"   // 1.12.18 : KeyboardMenuScope (Maj+F10 sur la vue)
@@ -530,6 +531,8 @@ void HmiCanvas::paste() {
     if (const std::string sys = ui::clipboardText();
         !sys.empty() && (sys != c.systemText || c.fromDoc != doc_.get()) && pasteShared(sys))
         return;
+    // 1.13.1 (lot K3) : un code brut d'objet (Copier le code brut) : ses objets, neufs.
+    if (const std::string sys = ui::clipboardText(); sys != c.systemText && hmi::isObjectCode(sys) && pasteCode(sys)) return;
     // Lot 20 : le presse-papiers du systeme a change depuis la derniere copie
     // d'objets (une colonne copiee dans Excel) : ce sont des variables.
     if (const std::string sys = ui::clipboardText(); !sys.empty() && sys != c.systemText) {
@@ -768,6 +771,44 @@ void HmiCanvas::cancelPlacement() {
     }
 }
 
+// ---- 1.13.1 (lot K3) : un code brut colle dans la vue -----------------------------------
+bool HmiCanvas::pasteCode(const std::string& text, std::optional<hmi::edit::Pt> at) {
+    if (!hmi::isObjectCode(text) || !view()) return false;
+    auto parsed = hmi::parseObjectCode(text);
+    if (!parsed) {
+        status->emit("Coller le code brut : rien n'a chang\xC3\xA9 - " + parsed.error().context);
+        return true;
+    }
+    auto objects = parsed->objects;
+    if (at) {
+        // Le coin haut-gauche des objets du haut vient au point.
+        double minX = 0, minY = 0;
+        bool first = true;
+        for (const Id r : parsed->roots)
+            for (const auto& o : objects)
+                if (o.id == r) {
+                    if (first || o.number("x") < minX) minX = o.number("x");
+                    if (first || o.number("y") < minY) minY = o.number("y");
+                    first = false;
+                }
+        for (auto& o : objects) {
+            o.setNumber("x", o.number("x") - minX + at->x);
+            o.setNumber("y", o.number("y") - minY + at->y);
+        }
+    }
+    std::vector<Id> top;
+    std::string why;
+    const std::size_t n = objects.size();
+    (void)edit("Coller le code brut", [&](hmi::Project& p, hmi::View& v) { top = hmi::edit::pasteCode(p, v, objects, insideGroup_, &why); });
+    if (top.empty()) {
+        status->emit("Coller le code brut : rien n'a chang\xC3\xA9 - " + (why.empty() ? std::string("aucun objet") : why));
+        return true;
+    }
+    setSelection(top);
+    status->emit("Code brut coll\xC3\xA9 : " + std::to_string(n) + (n > 1 ? " objets neufs" : " objet neuf") + " (Ctrl+Z annule).");
+    return true;
+}
+
 bool HmiCanvas::pasteShared(const std::string& text, std::optional<hmi::edit::Pt> at) {
     if (!doc_ || !view()) return false;
     const auto copie = partage::lire(text);
@@ -856,6 +897,7 @@ void HmiCanvas::pasteAt(gfx::Point screen) {
         Pt at = toView(screen);
         if (v && v->grid.snapGrid) { at.x = hmi::edit::snapToGrid(at.x, v->grid.step); at.y = hmi::edit::snapToGrid(at.y, v->grid.step); }
         if (pasteShared(sys, at)) return;
+        if (hmi::isObjectCode(sys) && pasteCode(sys, at)) return;   // 1.13.1 (lot K3) : un code brut, au point
     }
     if (c.objects.empty()) { paste(); return; }   // des noms de variables (Excel) : la colonne habituelle
     // Le coin haut-gauche de ce qui est colle (les objets du haut) vient au point du clic.

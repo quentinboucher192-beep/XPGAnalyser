@@ -11,6 +11,7 @@
 #include "HmiSimMarks.hpp"               // 1.9 : les reperes des lectures simulees
 #include "../../hmi/HmiTwin.hpp"
 #include "../../hmi/HmiSymbols.hpp"   // 1.11.6 : expandInstances (sur la vue actuelle, arretee)
+#include "../../hmi/HmiStore.hpp"     // 1.13.1 (lot K3) : le code brut d'un objet
 #include "../../hmi/HmiMarkers.hpp"   // 1.11 (REP-1) : recette et groupe sans les $ de leurs reperes
 #include "../../hmi/HmiTypes.hpp"
 #include "../../hmi/HmiControls.hpp"
@@ -5202,6 +5203,25 @@ void HmiSimulationPane::runMenuKey(const std::string& key) {
     } else if (const auto rest = arg("objet:"); !rest.empty()) {
         Id view = kNoId, obj = kNoId;
         if (twoIds(rest, view, obj) && host_.goToObject) host_.goToObject(view, obj);
+    } else if (const auto codeArg = arg("codebrut-copier:"); !codeArg.empty()) {   // 1.13.1 (lot K3)
+        Id view = kNoId, obj = kNoId;
+        if (!twoIds(codeArg, view, obj) || !doc_) return;
+        // La vue du projet qui porte l'objet (une popup, la vue, un symbole).
+        const hmi::View* owner = doc_->project.view(view);
+        if (!owner || !owner->object(obj)) {
+            owner = nullptr;
+            for (const auto& v : doc_->project.views)
+                if (v.object(obj)) { owner = &v; break; }
+        }
+        if (!owner) { say("Copier le code brut : l'objet n'est pas dans le projet.", true); return; }
+        ui::setClipboardText(hmi::serializeObjectCode(*owner, {obj}));
+        say("Code brut de " + owner->object(obj)->name + " copi\xC3\xA9.", false);
+    } else if (const auto pasteArg = arg("codebrut-coller:"); !pasteArg.empty()) {
+        Id view = kNoId, obj = kNoId;
+        if (!twoIds(pasteArg, view, obj) || !host_.pasteCode) return;
+        std::string why;
+        if (host_.pasteCode(view, obj, &why)) say("Code brut coll\xC3\xA9 : l'objet du projet est remplac\xC3\xA9 (Ctrl+Z annule).", false);
+        else say("Coller le code brut : " + why, true);
     } else if (const auto pauseArg = arg("pause:"); !pauseArg.empty()) {
         Id view = kNoId, obj = kNoId;
         if (!twoIds(pauseArg, view, obj)) return;
@@ -5472,6 +5492,16 @@ bool HmiSimulationPane::openViewMenu(gfx::Point at) {
             add(entry("Aller \xC3\xA0 l'objet dans l'\xC3\xA9" "diteur", static_cast<bool>(host_.goToObject), "pas ici"), goObject);
         }
     }
+    if (!station_) {   // 1.13.1 (lot K3) : le code brut de l'objet du projet - le copier, coller un code a sa place
+        items.push_back(ui::cmd::separator());
+        auto code = entry("Copier le code brut");
+        code.icon = ui::Icon::Code;
+        add(std::move(code), "codebrut-copier:" + std::to_string(view) + ":" + std::to_string(source));
+        const bool clip = hmi::isObjectCode(ui::clipboardText());
+        add(entry("Coller le code brut", static_cast<bool>(host_.pasteCode) && clip,
+                  !host_.pasteCode ? std::string("pas ici") : std::string("le presse-papiers n'a pas de code brut d'objet")),
+            "codebrut-coller:" + std::to_string(view) + ":" + std::to_string(source));
+    }
     if (!station_) {   // 1.12.27 : Pourquoi ? - ce que montre l'objet, ses formules, la valeur de chaque terme
         auto why = entry("Pourquoi ?");
         why.icon = ui::Icon::Help;
@@ -5529,6 +5559,16 @@ std::vector<ui::PopupMenu::Item> HmiSimulationPane::exprMenuItems() {
         } else {
             items.push_back(ui::cmd::heading(row.label, std::to_string(row.count)));
             add(ui::cmd::item(row.open ? ui::cmd::Id::Replier : ui::cmd::Id::Deplier, 0), "@basculer:" + std::to_string(r));
+            // 1.13.1 (lot K3) : un objet deballe (ses expressions dessous) - son code brut, celui du projet.
+            Id object = kNoId;
+            for (const auto& lv : values_)
+                if (lv.objectName == row.path && lv.object != kNoId && (lv.object & 0x80000000u) == 0) { object = lv.object; break; }
+            if (object != kNoId && !station_) {
+                ui::PopupMenu::Item code;
+                code.label = "Copier le code brut";
+                code.icon = ui::Icon::Code;
+                add(std::move(code), "codebrut-copier:" + std::to_string(runtime_.currentView()) + ":" + std::to_string(object));
+            }
         }
         items.push_back(ui::cmd::separator());
     }

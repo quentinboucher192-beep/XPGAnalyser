@@ -92,6 +92,14 @@ public:
     [[nodiscard]] HmiActionsPanel*  shortcuts() noexcept { return shortcuts_; }
     // Lot 6 : l'onglet Contenu (lignes d'un tableau, plumes, etats, recette).
     [[nodiscard]] HmiContentPanel&  content() noexcept { return *content_; }
+    // ---- 1.13.1 (lot K3) : L'ONGLET CODE BRUT (HmiContentPanel.hpp) ----
+    //  Un seul objet choisi : son code brut (lire, Copier, Coller, modifier puis Appliquer).
+    //  Le clic droit d'un objet (la vue, l'Explorateur d'objets) : Copier le code brut (les objets
+    //  choisis), Coller le code brut (remplace l'objet choisi), Code brut... (cet onglet).
+    [[nodiscard]] HmiRawCodePanel&  rawCode() noexcept { return *rawCode_; }
+    bool showRawCode();                         // l'onglet Code brut, devant ; faux : pas un seul objet choisi
+    bool copyRawCode();                         // le code des objets choisis dans le presse-papiers
+    bool pasteRawCode();                        // le code du presse-papiers remplace l'objet choisi
     bool openStatesTable();                     // 1.12.3 : Contenu > Etats de l'objet choisi
     void applyDisposition();                    // 1.12.3 : Projet > Disposition (les onglets de l'inspecteur)
     // Aller a une action (Generer / Compiler) : l'objet choisi (kNoId : la vue),
@@ -266,6 +274,8 @@ private:
     // 1.10.4 (K3) : l'onglet Contenu cache (un objet qui ne peut pas avoir de contenu) :
     // sa page est gardee ici, et remise quand un objet qui en a est choisi.
     ui::WidgetPtr     contentPage_;
+    HmiRawCodePanel*  rawCode_{nullptr};        // 1.13.1 (lot K3) : l'onglet Code brut (un seul objet choisi)
+    ui::WidgetPtr     rawCodePage_;             // ... sa page, gardee ici quand l'onglet est cache
     ui::InputText*    paletteSearch_{nullptr};
     HmiPalette*       palette_{nullptr};
     ui::StatusBar*    statusBar_{nullptr};
