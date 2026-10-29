@@ -160,6 +160,22 @@ const std::vector<Note>& table() {
         note("1.13.1", "Types", Kind::New,
          "UN TYPE DANS SON PROPRE ONGLET : un double-clic sur un type (dans la liste des Types IHM ou dans l'arbre du projet), ou le clic droit \xE2\x80\xBA Ouvrir dans un onglet, l'ouvre dans son onglet de document, comme une vue - le nom du type, les m\xC3\xAAmes onglets, sans la liste. Plusieurs types s'ouvrent \xC3\xA0 la fois ; renommer le type renomme l'onglet, le supprimer le ferme. L'arbre suit l'onglet actif, Afficher dans l'arbre et Aller \xC3\xA0 (Ctrl+K, qui propose aussi les types IHM) font le va-et-vient.",
          "types-ihm", ""),
+        // 1.13.1 (lot K2 : les courbes en marche - figer, curseurs, zoom, export de la zone).
+        note("1.13.1", "Courbes", Kind::New,
+         "FIGER UNE COURBE : une courbe Pilotable porte maintenant, \xC3\xA0 c\xC3\xB4t\xC3\xA9 de Pause, le bouton Figer (touche F) - il arr\xC3\xAAte l'ACQUISITION : aucune mesure n'entre dans les plumes, aucune ne tombe, aussi longtemps qu'il faut ; le cadre passe au bleu glac\xC3\xA9 et dit \xC2\xAB FIG\xC3\x89" "E depuis 14:02:31.125 \xC2\xBB. Reprendre relance l'acquisition : le temps du gel reste un trou (une bande p\xC3\xA2le \xC2\xAB gel \xC2\xBB, la plume coup\xC3\xA9" "e). La Pause, elle, fige l'affichage seul : les mesures continuent. En mode historique (la courbe relit un fichier), rien \xC3\xA0 piloter : pas de barre.",
+         "objet-courbe", ""),
+        note("1.13.1", "Courbes", Kind::New,
+         "DEUX CURSEURS POUR MESURER UN TEMPS : le bouton Curseurs (touche C) pose deux lignes verticales A et B ; un clic sur la courbe pose A, puis B, puis d\xC3\xA9place la plus proche, et on les tire \xC3\xA0 la souris. Leur cadre donne l'\xC3\xA9" "cart \xCE\x94t (2.35 s, 12.5 ms, 250 \xC2\xB5s), l'heure de chacune \xC3\xA0 la milliseconde et, pour chaque plume, sa valeur en A, en B et la diff\xC3\xA9rence, arrondies et \xC3\xA9crites avec autant de d\xC3\xA9cimales toutes les trois (46.73, 32.01, -14.72). Une courbe qui a ses propres actions Clic, Double clic ou Appui long les garde : sans curseurs, un clic sur le trac\xC3\xA9 les d\xC3\xA9" "clenche, comme avant ; apr\xC3\xA8s Curseurs, le trac\xC3\xA9 sert \xC3\xA0 la mesure jusqu'\xC3\xA0 ce qu'on les retire.",
+         "objet-courbe", ""),
+        note("1.13.1", "Courbes", Kind::New,
+         "ZOOMER TR\xC3\x88S PR\xC3\x88S : la molette zoome le temps autour de la souris, jusqu'\xC3\xA0 0,1 ms sur toute la largeur (en direct, le bord droit reste le pr\xC3\xA9sent) ; Maj+molette zoome l'axe des valeurs ; glisser d\xC3\xA9place la fen\xC3\xAAtre ; Tout voir (touche D\xC3\xA9" "but) revient \xC3\xA0 la dur\xC3\xA9" "e et \xC3\xA0 l'\xC3\xA9" "chelle de l'objet. Fig\xC3\xA9" "e, en pause ou en marche ; zoom\xC3\xA9" "es, les graduations parlent dans l'unit\xC3\xA9 de la fen\xC3\xAAtre (-2.5 ms).",
+         "objet-courbe", ""),
+        note("1.13.1", "Courbes", Kind::New,
+         "EXPORTER LA ZONE ENTRE LES CURSEURS : les boutons CSV et Excel du cadre des curseurs \xC3\xA9" "crivent seulement les mesures entre A et B - l'heure, l'\xC3\xA9" "cart \xC3\xA0 A en secondes, puis chaque plume (Courbe_1_zone.csv, l\xC3\xA0 o\xC3\xB9 l'on choisit). L'action Exporter, le bouton d'export et IHM_EXPORTER le font aussi, la source zone:Courbe_1 (propos\xC3\xA9" "e dans leur liste Donn\xC3\xA9" "es, v\xC3\xA9rifi\xC3\xA9" "e par G\xC3\xA9n\xC3\xA9rer). En simulation, le clic droit sur la courbe propose aussi Figer, Curseurs, Tout voir et Exporter la zone.",
+         "objet-courbe", ""),
+        note("1.13.1", "Courbes", Kind::Fixed,
+         "Une courbe en pause plus longtemps que sa dur\xC3\xA9" "e affich\xC3\xA9" "e gardait la fen\xC3\xAAtre qu'elle montrait mais en perdait les mesures (les plus vieilles tombaient \xC3\xA0 1,2 fois la dur\xC3\xA9" "e) : elle restait vide. La fen\xC3\xAAtre montr\xC3\xA9" "e garde maintenant ses mesures tant que dure la pause. En escalier, la courbe tient chaque valeur jusqu'\xC3\xA0 la mesure suivante (elle montrait la suivante d\xC3\xA8s la pr\xC3\xA9" "c\xC3\xA9" "dente).",
+         "objet-courbe", ""),
         // 1.13.0 : l'export et l'import de l'IHM et du programme en page web, retires (un
         // navigateur ne dialogue pas en Modbus) ; les archives et l'acces web en direct restent.
         note("1.13.0", "Projet", Kind::Changed,

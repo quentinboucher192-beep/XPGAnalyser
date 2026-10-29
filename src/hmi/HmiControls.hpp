@@ -22,6 +22,9 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
+#include <optional>
+#include <utility>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -162,9 +165,135 @@ struct TableLayout {
 [[nodiscard]] TableLayout tableLayout(const Object&, double w, double h, std::size_t count, std::size_t first);
 [[nodiscard]] std::string tableHit(const Object&, double w, double h, double x, double y, std::size_t count, std::size_t first);
 // 1.12.16 : une courbe pilotable - son bouton Pause / Continuer (en haut a droite) : "pause" ; "" : ailleurs.
-[[nodiscard]] std::string trendHit(const Object&, double w, double h, double x, double y);
+// 1.13.1 : toute sa barre - "figer", "curseurs", "toutvoir" ; `cursors` : les deux curseurs sont poses, le cadre de
+// leurs mesures porte les deux boutons d'export de la zone, "zone:csv" et "zone:excel" (trendLayout).
+[[nodiscard]] std::string trendHit(const Object&, double w, double h, double x, double y, bool cursors = false);
+// 1.13.1 : une courbe dont la barre et les gestes agissent - sa case Pilotable cochee ET en temps reel. En mode
+// historique, elle relit un fichier : rien a mettre en pause ni a figer, ni curseurs ni zoom - pas de barre (l'objet
+// tel que l'ecran le montre : son mode peut suivre une formule).
+[[nodiscard]] bool trendPilotable(const Object&);
+// 1.13.1 : une courbe qui a des actions au pointeur (Clic, Double clic, Appui long). Sans curseurs, un clic sur sa zone
+// de trace part vers elles (comme en 1.13.0) ; ses curseurs montres, la zone de trace sert a la mesure.
+[[nodiscard]] bool trendKeepsClick(const Object&);
 // ... et ou il est, dans le repere de l'objet (x, y, largeur, hauteur).
 [[nodiscard]] std::array<double, 4> trendPauseBox(double w, double h);
+// 1.13.1 (la lisibilite) : la taille des textes de la legende et de la barre, la hauteur des boutons de la barre, la
+// taille des textes du cadre des curseurs (en pixels de vue, comme les autres tailles de texte).
+inline constexpr double kTrendBarFont     = 13;
+inline constexpr double kTrendBarH        = 20;
+inline constexpr double kTrendReadoutFont = 12;
+// Le libelle d'un bouton de la barre ("figer" : Figer, ou Reprendre la courbe figee ; "curseurs", "toutvoir") et sa
+// largeur - celle de son plus long libelle a kTrendBarFont, et sa marge : le dessin et le clic l'ont du meme endroit.
+[[nodiscard]] std::string trendButtonText(std::string_view part, bool frozen);
+[[nodiscard]] double trendButtonWidth(std::string_view part);
+
+// ---- courbes : les points d'une plume d'un objet Courbe (1.13.1 : ici, avec la courbe en marche) ---------
+struct TrendSeries {
+    std::string expression;
+    std::deque<std::pair<double, double>> points;   // (instant IHM en s, valeur)
+    bool        visible{true};                      // 1.12.16 : sa condition (penVisible) ; fausse : cachee, mesuree quand meme
+};
+
+// ---- 1.13.1 : LA COURBE EN MARCHE - figer, curseurs, zoom, export de la zone ------------------------------
+//  ("dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs, + pouvoir
+//  ajouter des lignes verticales pour faire des mesures de temps + pouvoir zoomer/dezoomer etirer/detendre de
+//  maniere hyper zoomee, pouvoir exporter que la zone dans une balise de lignes verticales")
+//  Sur une courbe pilotable (sa case Pilotable), en marche - la simulation et le poste d'exploitation :
+//   - FIGER arrete l'ACQUISITION : aucune mesure n'entre dans les plumes, aucune ne tombe (la fenetre reste entiere
+//     aussi longtemps qu'on veut) ; Reprendre la relance, le temps du gel reste un trou (gaps). La PAUSE de la
+//     1.12.16 fige l'affichage seul : les mesures continuent, Continuer les montre ;
+//   - LA FENETRE : `span` secondes (0 : la duree de l'objet), finie au bord direct (l'instant present, celui de la
+//     pause ou du gel) - ou posee (`pinned`) a `end`, apres un glisser ou un zoom hors du direct. La molette zoome
+//     le temps autour de la souris (en direct, le bord droit reste le present), Maj+molette les valeurs (lo, hi),
+//     glisser deplace, Tout voir revient a la duree et a l'echelle de l'objet ;
+//   - DEUX CURSEURS (A, B) : deux instants poses (le bouton Curseurs, ou un clic) et tires a la souris : leurs
+//     heures, l'ecart, la valeur de chaque plume a chacun et la difference ;
+//   - L'EXPORT DE LA ZONE : les mesures entre A et B, l'heure et toutes les plumes (CSV, Excel).
+//  Le moteur garde un TrendState par courbe ; le dessin et le clic lisent ces fonctions-ci (sans ecran : hmi_test).
+struct TrendState {
+    bool   frozen{false};
+    double frozenAt{0};                              // l'instant du gel
+    std::vector<std::pair<double, double>> gaps;     // les gels passes (debut, fin) : des trous sur la courbe
+    double span{0};                                  // la largeur de la fenetre (s) ; 0 : la duree de l'objet
+    bool   pinned{false};                            // la fenetre posee a `end` ; faux : elle finit au bord direct
+    double end{0};
+    bool   valueZoom{false};                         // l'axe des valeurs zoome (lo, hi) ; faux : celui de l'objet
+    double lo{0}, hi{0};
+    std::optional<double> cursorA, cursorB;          // les deux curseurs (des instants IHM)
+    // Le geste en cours (la souris tenue sur la zone de trace) : 1 le curseur A, 2 le curseur B, 3 la fenetre.
+    int    grab{0};
+    double pressX{0}, pressY{0}, lastX{0}, lastY{0};
+    bool   moved{false};
+    [[nodiscard]] bool zoomed() const noexcept { return span > 0 || pinned || valueZoom; }
+    [[nodiscard]] bool cursors() const noexcept { return cursorA.has_value() && cursorB.has_value(); }
+};
+inline constexpr double      kTrendMinSpan   = 1e-4;     // au plus pres, 0,1 ms sur toute la largeur
+inline constexpr std::size_t kTrendMaxPoints = 200000;   // par plume au plus (une longue pause, une fenetre posee)
+
+// La geometrie d'une courbe (le dessin et le clic) : la zone de trace (la legende - ou la barre - en haut, les
+// graduations a gauche et en bas) ; pilotable, sa barre en haut a droite, de droite a gauche Pause (l'icone de la
+// 1.12.16), Figer / Reprendre, Curseurs, Tout voir - un bouton qui ne tient pas n'y est pas ; avec les curseurs, le
+// cadre de leurs mesures en haut a gauche de la zone de trace (sa hauteur : le dessin) et ses boutons CSV, Excel.
+struct TrendLayout {
+    struct Button {
+        std::string part;     // "pause", "figer", "curseurs", "toutvoir"
+        Box         box;
+    };
+    Box                 plot;
+    bool                pilotable{false};  // Pilotable cochee et en temps reel : la barre (trendPilotable)
+    std::vector<Button> buttons;
+    double              legendRight{0};    // la legende s'arrete avant la barre
+    Box                 readout;           // x, y, largeur (h : 0)
+    Box                 exportCsv, exportExcel;   // w = 0 : le cadre est trop etroit
+};
+[[nodiscard]] TrendLayout trendLayout(const Object&, double w, double h, bool cursors = false);
+
+// La largeur de la fenetre : le zoom, sinon la duree. La fenetre : (debut, fin) ; `edge`, le bord direct.
+[[nodiscard]] double trendSpan(const TrendState*, double duration);
+[[nodiscard]] std::pair<double, double> trendWindow(const TrendState*, double duration, double edge);
+// La molette sur le temps : `factor` < 1 rapproche (sans limite genante : kTrendMinSpan), > 1 eloigne (jusqu'a la
+// duree) ; l'instant `at` reste sous la souris. `moving` : le bord direct avance (ni pause ni gel) - une fenetre qui
+// le suit garde alors son bord droit au present.
+void trendZoomTime(TrendState&, double factor, double at, double duration, double edge, bool moving);
+// Maj+molette : l'axe des valeurs autour de `at` ; lo, hi : l'echelle montree jusque-la. Faux : trop pres.
+bool trendZoomValues(TrendState&, double factor, double at, double lo, double hi);
+// Glisser : la fenetre avance de `dt` secondes (negatif : vers le passe), jamais apres le bord direct ni loin avant
+// `oldest` (la plus vieille mesure) ; revenue au bord, elle le suit de nouveau. `dv` : l'axe des valeurs, s'il est zoome.
+void trendPan(TrendState&, double dt, double dv, double duration, double edge, double oldest);
+void trendShowAll(TrendState&);   // la duree et l'echelle de l'objet (les curseurs restent)
+// Les curseurs : le bouton (sans curseur, A et B au tiers et aux deux tiers de la fenetre ; sinon ils partent) ;
+// un clic a l'instant t (A, puis B, puis le plus proche s'y pose) ; celui qui est a moins de `reach` pixels de x
+// dans la zone de trace (1 : A, 2 : B, 0 : aucun).
+void trendToggleCursors(TrendState&, double start, double end);
+void trendPlaceCursor(TrendState&, double t);
+[[nodiscard]] int trendCursorNear(const TrendState&, double x, const Box& plot, double start, double end, double reach = 6);
+// La valeur d'une plume a l'instant t : lineaire entre deux mesures, ou tenue (`step`, l'escalier) ; nullopt : pas de
+// mesure la - avant la premiere, dans un trou (un gel), plus de deux periodes apres la derniere.
+[[nodiscard]] std::optional<double> trendValueAt(const std::deque<std::pair<double, double>>& points, double t, bool step,
+                                                 const std::vector<std::pair<double, double>>& gaps = {});
+// L'echelle montree : le zoom des valeurs, sinon Axe Y min / max (Echelle fixe) ou les valeurs de la fenetre (auto).
+[[nodiscard]] std::pair<double, double> trendScale(const Object&, const std::vector<TrendSeries>* series, double start, double end,
+                                                   const TrendState*);
+// Les mesures des curseurs : par plume, son nom (Noms des plumes, sinon l'expression), sa valeur en A et en B.
+struct TrendReading {
+    std::string           name;
+    std::optional<double> a, b;
+    bool                  visible{true};
+};
+[[nodiscard]] std::vector<TrendReading> trendReadings(const Object&, const std::vector<TrendSeries>& series, const TrendState&);
+// "2.35 s", "12.5 ms", 250 micro-secondes (le signe garde) ; une valeur lue : six chiffres significatifs au plus.
+[[nodiscard]] std::string trendDuration(double seconds);
+[[nodiscard]] std::string trendNumber(double v);
+// 1.13.1 (la lisibilite) : les valeurs d'une plume aux curseurs, A, B et l'ecart (B - A, signe), ECRITES PAREIL - le
+// meme nombre de decimales pour les trois : quatre chiffres significatifs sur la plus grande valeur, trois sur l'ecart
+// (un ecart minuscule se lit encore), neuf au plus, sans les zeros de fin communs aux trois. "46.73", "32.01", "-14.72" ;
+// "32", "48", "+16" ; "-" : pas de valeur la (l'ecart, des qu'il en manque une).
+struct TrendReadingText {
+    std::string a, b, delta;
+};
+[[nodiscard]] TrendReadingText trendReadingText(std::optional<double> a, std::optional<double> b);
+// La graduation `k` (1..3 sur 4) d'une fenetre zoomee : son ecart au bord droit, dans l'unite de la fenetre (-2.5 ms).
+[[nodiscard]] std::string trendTick(double offset, double span);
 // 1.12.13 : LA CASE TOUCHEE d'un tableau (lignes dynamiques, cases fixes : la meme mise en page) - "entete:C" (l'en-tete
 // de la colonne C, 0...), "case:R:C" (la ligne R du modele, la premiere montree comprise, et sa colonne), "case:-1:-1"
 // ailleurs dans l'objet (sous les lignes) ; "" sur la barre de defilement (tableHit) ou dehors. `widths` : les largeurs

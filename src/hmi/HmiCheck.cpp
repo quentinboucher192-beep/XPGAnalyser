@@ -2828,6 +2828,15 @@ bool validExportSource(const Project& p, const View& v, std::string_view source,
         if (why) *why = "objet '" + name + "' introuvable dans la vue " + v.name;
         return false;
     }
+    // 1.13.1 : la zone d'une courbe (les mesures entre ses deux curseurs) - une Courbe de la vue, comme objet:.
+    if (s.rfind("zone:", 0) == 0) {
+        const std::string name = trimmedCopy(s.substr(5));
+        const Object* t = v.objectByName(name);
+        if (t && t->kind == Kind::Trend) return true;
+        if (why) *why = t ? "'" + name + "' n'est pas une courbe (zone:Courbe : les mesures entre ses deux curseurs)"
+                          : "courbe '" + name + "' introuvable dans la vue " + v.name;
+        return false;
+    }
     if (why) *why = "source inconnue : " + s;
     return false;
 }

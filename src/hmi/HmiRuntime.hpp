@@ -298,12 +298,7 @@ struct RecipeEditorState {
     [[nodiscard]] bool dirty() const noexcept;
 };
 
-// ---- courbes : les points d'une plume d'un objet Courbe --------------------------
-struct TrendSeries {
-    std::string expression;
-    std::deque<std::pair<double, double>> points;   // (instant IHM en s, valeur)
-    bool        visible{true};                      // 1.12.16 : sa condition (penVisible) ; fausse : cachee, mesuree quand meme
-};
+// ---- courbes : les points d'une plume d'un objet Courbe (TrendSeries) : 1.13.1, dans HmiControls.hpp ----------
 
 // ---- lot 6 : ce que le moteur demande a l'ecran -------------------------------
 //  LE GESTIONNAIRE DE RECETTES change le PROJET (ajouter, modifier, supprimer un
@@ -598,6 +593,32 @@ public:
     // pilotable de la vue.
     bool setTrendPaused(Id view, Id object, bool paused);
     [[nodiscard]] std::optional<double> trendPausedAt(Id view, Id object) const;
+    // 1.13.1 : LA COURBE EN MARCHE (HmiControls.hpp : TrendState) - sur une courbe pilotable de la vue. FIGER arrete
+    // l'acquisition : aucune mesure n'entre, aucune ne tombe ; Reprendre la relance, le temps du gel reste un trou. La
+    // fenetre (la molette, glisser, Tout voir), les deux curseurs, l'export de la zone entre eux. Faux : pas une courbe
+    // pilotable de la vue (ou rien a faire). La barre de la courbe (objectPart "figer", "curseurs", "toutvoir",
+    // "zone:csv", "zone:excel") et ses gestes, x et y dans l'objet : "trend:press:x:y", "trend:drag:x:y[:lo:hi]",
+    // "trend:release:x:y", "trend:wheel:crans:x:y:axe[:lo:hi]" (axe 1 : les valeurs ; lo, hi : l'echelle montree).
+    // Le clavier, la souris sur la courbe (sinon la seule courbe pilotable montree) : F fige, C les curseurs, Debut
+    // revient a tout voir - quand aucun raccourci de la vue ne prend la touche.
+    bool setTrendFrozen(Id view, Id object, bool frozen);
+    [[nodiscard]] const TrendState* trendState(Id view, Id object) const;
+    // Le bord direct : l'instant present - celui de la pause ou du gel s'il est plus tot.
+    [[nodiscard]] double trendEdge(Id view, Id object) const;
+    // La fenetre montree (debut, fin), pour la duree de l'objet (evaluee par l'appelant).
+    [[nodiscard]] std::pair<double, double> trendWindowOf(Id view, Id object, double duration) const;
+    bool trendZoom(Id view, Id object, double factor, double at);   // `at` : l'instant sous la souris
+    bool trendZoomValueAxis(Id view, Id object, double factor, double at, double lo, double hi);
+    bool trendPanBy(Id view, Id object, double dt, double dv);
+    bool trendResetView(Id view, Id object);                         // Tout voir
+    bool setTrendCursors(Id view, Id object, std::optional<double> a, std::optional<double> b);
+    bool toggleTrendCursors(Id view, Id object);
+    [[nodiscard]] std::vector<TrendReading> trendCursorReadings(Id view, Id object) const;
+    // L'export de la zone entre les curseurs ("CSV" ou "Excel") : un export de l'operateur, source "zone:Nom"
+    // (aussi pour l'action Exporter et IHM_EXPORTER) - l'heure, l'ecart au curseur A, toutes les plumes.
+    bool exportTrendZone(Id view, Id object, std::string_view format, double now, bool askWhere = true, std::string* why = nullptr);
+    // Une heure de l'IHM a l'ecran : "14:02:31.125".
+    [[nodiscard]] std::string clockText(double at) const;
     [[nodiscard]] Id pressed() const noexcept { return pressed_; }
 
     // ---- 1.11.23 : LA SOURIS ET LE CLAVIER (SYS.Mouse*, SYS.Key*, SYS.Key.<touche>) ET LES
@@ -1711,6 +1732,13 @@ private:
     void docsCycle(double now);
     void docRefresh(const View&, const Object& raw, const Object& shown, double now);
     void docObjectPart(const View&, const Object&, std::string_view part, double now);
+    // 1.13.1 : la barre et les gestes d'une courbe pilotable (HmiRuntime.cpp, les courbes) ; F, C, Debut.
+    void trendObjectPart(const View&, const Object&, std::string_view part, double now);
+    bool trendKey(const keys::Chord&);
+    [[nodiscard]] std::string trendKeyOf(Id view, Id object) const;
+    // Une courbe pilotable de la vue (nulle : pas une courbe, pas pilotable, ou en mode historique - son mode tel que
+    // l'ecran le montre : rien a piloter, pas de barre ; hmi::trendPilotable).
+    [[nodiscard]] const Object* pilotableTrend(const View*, Id object) const;
     void docTypeText(const View&, const Object&, std::string_view text, double now);
     void docTypeKey(const View&, const Object&, EditKey, double now);
     void docApply(const View&, const Object&, DocViewer&, const docview::Effect&, double now);
@@ -2080,6 +2108,7 @@ private:
     void runKeyActions(const View&, Trigger, const keys::Chord&, double now, const std::function<bool(std::size_t)>& pick = {});
     std::map<std::string, std::vector<TrendSeries>> trends_;   // "vue:objet"
     std::map<std::string, double> trendPaused_;                // 1.12.16 : "vue:objet" -> l'instant fige
+    std::map<std::string, TrendState> trendStates_;            // 1.13.1 : "vue:objet" -> gel, fenetre, curseurs
     std::vector<TrendMarker>                        markers_;  // lot 18
     double                           nextSample_{-1};
     // lot 6 : les vues composees (modeles, en-tete, pied), refaites a chaque

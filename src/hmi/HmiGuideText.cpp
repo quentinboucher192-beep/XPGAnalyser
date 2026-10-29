@@ -8046,9 +8046,11 @@ const std::vector<Topic>& topics() {
                          "l'ordre.\nInterpolation\tlin\xC3\xA9" "aire\tlin\xC3\xA9" "aire : les points "
                          "reli\xC3\xA9s ; escalier : la valeur tenue jusqu'\xC3\xA0 la suivante ; points : "
                          "seuls.\nL\xC3\xA9gende\tTRUE\tLe nom et la derni\xC3\xA8re valeur de chaque "
-                         "plume.\nPilotable (pause / continuer)\tFALSE\tEn marche, un bouton en haut "
-                         "\xC3\xA0 droite : Pause fige l'affichage (les mesures continuent), Continuer "
-                         "reprend le temps r\xC3\xA9" "el.\nPlumes : visibles si "
+                         "plume.\nPilotable (pause, figer, curseurs, zoom)\tFALSE\tEn marche, une barre en "
+                         "haut \xC3\xA0 droite : Pause fige l'affichage (les mesures continuent), Figer "
+                         "arr\xC3\xAAte l'acquisition, Curseurs pose deux lignes de mesure, Tout voir "
+                         "revient \xC3\xA0 la dur\xC3\xA9" "e ; la molette zoome, glisser d\xC3\xA9place "
+                         "(voir \xC2\xAB En marche \xC2\xBB plus bas).\nPlumes : visibles si "
                          "(a;b;\xE2\x80\xA6)\t(vide)\tUne condition par plume (vide : toujours visible) ; "
                          "fausse, la plume et sa l\xC3\xA9gende se cachent. Plus simple : Contenu "
                          "\xE2\x80\xBA la plume \xE2\x80\xBA Visible si.\nRemplissage\t#1B2028\tLe fond du "
@@ -8072,6 +8074,64 @@ const std::vector<Topic>& topics() {
                          "par cuve. **Dupliquer\xE2\x80\xA6** (Contenu) fait N copies d'une plume, ses "
                          "indices suivis (Cuves[0] \xE2\x86\x92 Cuves[1]\xE2\x80\xA6), son nom "
                          "num\xC3\xA9rot\xC3\xA9, sa couleur prise dans la palette.", {}, "1.12.16"},
+             {K::Heading, "En marche : figer, mesurer, zoomer, exporter une zone", {}, "1.13.1"},
+             {K::Paragraph, "Une courbe **Pilotable** (Propri\xC3\xA9t\xC3\xA9s) porte en marche - en "
+                         "simulation comme au poste d'exploitation - une barre en haut \xC3\xA0 droite : "
+                         "**Pause**, **Figer**, **Curseurs**, **Tout voir**. Ses gestes :", {}, "1.13.1"},
+             {K::Table, "Geste\tCe qu'il fait\nPause / Continuer\tfige l'**affichage** : les mesures "
+                         "continuent d'\xC3\xAAtre prises, Continuer montre tout ce qui s'est pass\xC3\xA9 "
+                         "entre-temps. La fen\xC3\xAAtre montr\xC3\xA9" "e garde ses mesures tant que dure "
+                         "la pause.\nFiger / Reprendre (touche F)\tarr\xC3\xAAte l'**acquisition** : aucune "
+                         "mesure n'entre dans les plumes, aucune ne tombe, aussi longtemps qu'il faut ; le "
+                         "cadre de la courbe passe au bleu glac\xC3\xA9 et dit \xC2\xAB FIG\xC3\x89" "E "
+                         "depuis 14:02:31.125 \xC2\xBB. Reprendre relance l'acquisition : le temps du gel "
+                         "reste un **trou** (une bande p\xC3\xA2le marqu\xC3\xA9" "e \xC2\xAB gel \xC2\xBB, "
+                         "la plume coup\xC3\xA9" "e).\nCurseurs (touche C)\tpose deux lignes verticales "
+                         "**A** (jaune) et **B** (bleu clair) au tiers et aux deux tiers de la "
+                         "fen\xC3\xAAtre ; encore une fois, elles partent. Un clic sur la courbe pose A, "
+                         "puis B, puis d\xC3\xA9place la plus proche ; tirer une ligne la "
+                         "d\xC3\xA9place.\nTout voir (touche D\xC3\xA9" "but)\trevient \xC3\xA0 la "
+                         "dur\xC3\xA9" "e et \xC3\xA0 l'\xC3\xA9" "chelle de l'objet.\nMolette\tzoome le "
+                         "**temps** autour de la souris (l'instant sous la souris y reste), jusqu'\xC3\xA0 "
+                         "0,1 ms sur toute la largeur ; d\xC3\xA9zoomer s'arr\xC3\xAAte \xC3\xA0 la "
+                         "dur\xC3\xA9" "e de l'objet. En direct, le bord droit reste le pr\xC3\xA9sent. "
+                         "Zoom\xC3\xA9" "es, les graduations parlent dans l'unit\xC3\xA9 de la "
+                         "fen\xC3\xAAtre (-2.5 ms) et une fen\xC3\xAAtre d\xC3\xA9plac\xC3\xA9" "e montre "
+                         "l'heure de ses deux bords.\nMaj+molette\tzoome l'axe des **valeurs** autour de la "
+                         "souris (Ctrl+molette reste le zoom de la vue).\nGlisser\td\xC3\xA9place la "
+                         "fen\xC3\xAAtre dans le temps (et les valeurs, une fois zoom\xC3\xA9" "es) ; "
+                         "revenue au bord droit, elle suit de nouveau le pr\xC3\xA9sent.", {}, "1.13.1"},
+             {K::Paragraph, "Le **cadre des curseurs**, en haut \xC3\xA0 gauche de la courbe : "
+                         "l'\xC3\xA9" "cart **\xCE\x94t** (2.35 s, 12.5 ms, 250 \xC2\xB5s), l'heure de A et "
+                         "de B \xC3\xA0 la milliseconde, puis pour chaque plume sa valeur en A, en B et la "
+                         "diff\xC3\xA9rence \xCE\x94, arrondies et \xC3\xA9" "crites avec autant de "
+                         "d\xC3\xA9" "cimales toutes les trois (quatre chiffres significatifs, trois pour un "
+                         "\xC3\xA9" "cart minuscule : 46.73, 32.01, -14.72) (\xC2\xAB - \xC2\xBB : pas de "
+                         "mesure \xC3\xA0 cet instant, dans un trou par exemple). Ses boutons **CSV** et "
+                         "**Excel** exportent la **zone** entre A et B : une ligne par mesure - l'heure, "
+                         "l'\xC3\xA9" "cart \xC3\xA0 A en secondes, puis chaque plume ; le fichier "
+                         "Courbe_1_zone.csv (ou .xlsx) va l\xC3\xA0 o\xC3\xB9 l'on choisit, comme les autres "
+                         "exports de l'op\xC3\xA9rateur. L'action Exporter, le bouton d'export et "
+                         "IHM_EXPORTER le font aussi, la source `zone:Courbe_1` (propos\xC3\xA9" "e dans "
+                         "leur liste Donn\xC3\xA9" "es ; G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie qu'elle nomme "
+                         "une courbe de la vue).", {}, "1.13.1"},
+             {K::Tip, "Pause ou Figer ? Pause pour regarder un instant pendant que tout continue "
+                         "d'\xC3\xAAtre enregistr\xC3\xA9 ; Figer pour garder intacte la fen\xC3\xAAtre "
+                         "qu'on \xC3\xA9tudie, aussi longtemps qu'il faut, au prix d'un trou dans la courbe.", {}, "1.13.1"},
+             {K::Paragraph, "Les touches F, C et D\xC3\xA9" "but agissent sur la courbe sous la souris (sinon "
+                         "la seule courbe pilotable de la vue), quand aucun raccourci de la vue ne prend la "
+                         "touche. En simulation, le clic droit sur la courbe propose aussi Figer, Curseurs, "
+                         "Tout voir et Exporter la zone (CSV, Excel). D\xC3\xA9" "cocher Pilotable retire la "
+                         "barre et les gestes : la courbe reste celle d'avant. Une courbe qui a ses propres "
+                         "actions **Clic**, **Double clic** ou **Appui long** (onglet Actions) les garde : "
+                         "sans curseurs, un clic sur le trac\xC3\xA9 les d\xC3\xA9" "clenche, comme avant. "
+                         "Pour mesurer, appuyer d'abord sur **Curseurs** (ou C) : tant que les curseurs sont "
+                         "l\xC3\xA0, le trac\xC3\xA9 sert \xC3\xA0 la mesure (un clic d\xC3\xA9place le "
+                         "curseur le plus proche, glisser d\xC3\xA9place la fen\xC3\xAAtre) et les actions "
+                         "attendent ; retirer les curseurs les rend. La barre, la molette et les touches "
+                         "marchent dans les deux cas. En mode **historique**, la courbe relit un fichier : "
+                         "il n'y a rien \xC3\xA0 mettre en pause ni \xC3\xA0 figer, Pilotable n'y met pas de "
+                         "barre et la molette reste \xC3\xA0 la vue.", {}, "1.13.1"},
          },
          {"objet-communs", "historiques", "contenu"},
          {},
@@ -8104,9 +8164,11 @@ const std::vector<Topic>& topics() {
             "suivante ; points : seuls."},
            {"legend", "L\xC3\xA9gende", "TRUE",
             "Le nom et la derni\xC3\xA8re valeur de chaque plume."},
-           {"pilotable", "Pilotable (pause / continuer)", "FALSE",
-            "En marche, un bouton en haut \xC3\xA0 droite : Pause fige l'affichage (les mesures continuent), "
-            "Continuer reprend le temps r\xC3\xA9" "el."},
+           {"pilotable", "Pilotable (pause, figer, curseurs, zoom)", "FALSE",
+            "En marche, une barre en haut \xC3\xA0 droite : Pause fige l'affichage (les mesures continuent), "
+            "Figer arr\xC3\xAAte l'acquisition, Curseurs pose deux lignes de mesure, Tout voir revient "
+            "\xC3\xA0 la dur\xC3\xA9" "e ; la molette zoome, glisser d\xC3\xA9place (voir \xC2\xAB En marche "
+            "\xC2\xBB plus bas)."},
            {"penVisible", "Plumes : visibles si (a;b;\xE2\x80\xA6)", "(vide)",
             "Une condition par plume (vide : toujours visible) ; fausse, la plume et sa l\xC3\xA9gende se "
             "cachent. Plus simple : Contenu \xE2\x80\xBA la plume \xE2\x80\xBA Visible si."},

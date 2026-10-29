@@ -1306,11 +1306,15 @@ void HmiActionsPanel::rebuildGrid() {
                 if (o.kind == hmi::Kind::Trend || o.kind == hmi::Kind::Table || hmi::kindIsChart(o.kind) || o.kind == hmi::Kind::VariableTable
                     || o.kind == hmi::Kind::ProductionCounter || o.kind == hmi::Kind::AlarmStats || o.kind == hmi::Kind::History)
                     sources.push_back("objet:" + o.name);
+        // 1.13.1 : la zone d'une courbe - les mesures entre ses deux curseurs.
+        if (const auto* v = doc_->project.view(view_))
+            for (const auto& o : v->objects)
+                if (o.kind == hmi::Kind::Trend) sources.push_back("zone:" + o.name);
         if (std::find(sources.begin(), sources.end(), a.target) == sources.end()) sources.insert(sources.begin(), a.target);
         op.properties.push_back(prop("Donn\xC3\xA9" "es", a.target.empty() ? std::string("alarmes") : a.target, PG::ValueType::Enum, sources,
                                      commitWith([](Action& n, std::string_view v) { n.target = std::string(v); return true; }),
                                      "Les alarmes en cours, l'historique, les \xC3\xA9v\xC3\xA9nements, le journal, les mesures, les jeux d'une "
-                                     "recette, ou le contenu d'un objet de la vue."));
+                                     "recette, le contenu d'un objet de la vue, ou la zone d'une courbe (zone:Courbe : les mesures entre ses deux curseurs)."));
         op.properties.push_back(prop("Fichier", a.value, PG::ValueType::Text, {},
                                      commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
                                      "Texte \xC3\xA0 trous ; son extension choisit le format : alarmes_{SYS.Date}.csv, .xlsx (Excel) ou .pdf. "

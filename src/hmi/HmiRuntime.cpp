@@ -4514,6 +4514,7 @@ void Runtime::start(double now) {
     pidWindow_ = PidWindow{};
     trends_.clear();
     trendPaused_.clear();   // 1.12.16
+    trendStates_.clear();   // 1.13.1 : le gel, la fenetre, les curseurs
     resetLot11();            // lot 11 : graphiques, mises de cote, production, editeurs, export
     resetLot13();            // lot 13 : signature, renouvellement, badge (l'audit et les verrous restent)
     resetLot12();            // lot 12 : l'historique de navigation, le zoom
@@ -5970,25 +5971,311 @@ void Runtime::addTrendMarker(std::string variable, std::string text, bool forced
 
 bool Runtime::setTrendPaused(Id view, Id object, bool paused) {
     const View* v = viewOf(view);
-    const Object* o = v ? v->object(object) : nullptr;
-    if (!o || o->kind != Kind::Trend || !o->flag("pilotable", false)) return false;
-    const std::string key = std::to_string(view) + ":" + std::to_string(object) + argumentsKey(view);
+    const Object* o = pilotableTrend(v, object);   // 1.13.1 : pas en mode historique
+    if (!o) return false;
+    const std::string key = trendKeyOf(view, object);
     if (paused) {
         if (!trendPaused_.count(key)) trendPaused_[key] = now_;
     } else {
         trendPaused_.erase(key);
+        // 1.13.1 : Continuer revient au present (le zoom du temps reste, Tout voir l'enleve).
+        if (const auto st = trendStates_.find(key); st != trendStates_.end()) st->second.pinned = false;
     }
     event(paused ? "Courbe en pause" : "Courbe reprise", v->name + "." + o->name, paused ? "affichage fig\xC3\xA9 (les mesures continuent)" : "temps r\xC3\xA9" "el");
     return true;
 }
 
+// ---- 1.13.1 : la courbe en marche - figer, la fenetre, les curseurs, l'export de la zone ----------------------
+std::string Runtime::trendKeyOf(Id view, Id object) const {
+    return std::to_string(view) + ":" + std::to_string(object) + argumentsKey(view);
+}
+
+// Une courbe pilotable de la vue (nulle : pas une courbe, pas pilotable, ou - 1.13.1, la contre-verification - en mode
+// historique : elle relit un fichier, ni pause ni gel ni curseurs ni zoom ; son mode tel que l'ecran le montre).
+const Object* Runtime::pilotableTrend(const View* v, Id object) const {
+    const Object* o = v ? v->object(object) : nullptr;
+    if (!o || o->kind != Kind::Trend || !o->flag("pilotable", false)) return nullptr;
+    if (trimText(shownText(v->id, *o, "mode", "temps r\xC3\xA9" "el")).rfind("historique", 0) == 0) return nullptr;
+    return o;
+}
+
+bool Runtime::setTrendFrozen(Id view, Id object, bool frozen) {
+    const View* v = viewOf(view);
+    const Object* o = pilotableTrend(v, object);
+    if (!o) return false;
+    auto& st = trendStates_[trendKeyOf(view, object)];
+    if (st.frozen == frozen) return true;
+    if (frozen) {
+        st.frozen = true;
+        st.frozenAt = now_;
+    } else {
+        st.frozen = false;
+        if (now_ > st.frozenAt) st.gaps.emplace_back(st.frozenAt, now_);   // le temps du gel : un trou
+        st.pinned = false;                                                  // Reprendre revient au present
+    }
+    event(frozen ? "Courbe fig\xC3\xA9" "e" : "Courbe d\xC3\xA9" "fig\xC3\xA9" "e", v->name + "." + o->name,
+          frozen ? "acquisition arr\xC3\xAAt\xC3\xA9" "e (aucune mesure n'entre, aucune ne tombe)"
+                 : "acquisition reprise (un trou pour le temps du gel)");
+    return true;
+}
+
+const TrendState* Runtime::trendState(Id view, Id object) const {
+    const auto it = trendStates_.find(trendKeyOf(view, object));
+    return it == trendStates_.end() ? nullptr : &it->second;
+}
+
+double Runtime::trendEdge(Id view, Id object) const {
+    const std::string key = trendKeyOf(view, object);
+    double edge = now_;
+    if (const auto p = trendPaused_.find(key); p != trendPaused_.end()) edge = std::min(edge, p->second);
+    if (const auto st = trendStates_.find(key); st != trendStates_.end() && st->second.frozen) edge = std::min(edge, st->second.frozenAt);
+    return edge;
+}
+
+std::pair<double, double> Runtime::trendWindowOf(Id view, Id object, double duration) const {
+    return hmi::trendWindow(trendState(view, object), duration, trendEdge(view, object));
+}
+
+namespace {
+// La duree de la courbe telle qu'elle se montre (sa formule evaluee), comme le dessin.
+double shownDuration(const Object& evaluated) {
+    double d = 60;
+    const std::string t = evaluated.text("duration");
+    if (!t.empty() && !roles::readNumber(t, d)) d = 60;
+    return std::max(1.0, d);
+}
+} // namespace
+
+bool Runtime::trendZoom(Id view, Id object, double factor, double at) {
+    const View* v = viewOf(view);
+    const Object* raw = pilotableTrend(v, object);
+    if (!raw) return false;
+    Object o = *raw;
+    evaluateProps(view, o);
+    const std::string key = trendKeyOf(view, object);
+    auto& st = trendStates_[key];
+    const bool moving = !st.frozen && !trendPaused_.count(key);
+    hmi::trendZoomTime(st, factor, at, shownDuration(o), trendEdge(view, object), moving);
+    return true;
+}
+
+bool Runtime::trendZoomValueAxis(Id view, Id object, double factor, double at, double lo, double hi) {
+    if (!pilotableTrend(viewOf(view), object)) return false;
+    return hmi::trendZoomValues(trendStates_[trendKeyOf(view, object)], factor, at, lo, hi);
+}
+
+bool Runtime::trendPanBy(Id view, Id object, double dt, double dv) {
+    const View* v = viewOf(view);
+    const Object* raw = pilotableTrend(v, object);
+    if (!raw) return false;
+    Object o = *raw;
+    evaluateProps(view, o);
+    const double edge = trendEdge(view, object);
+    double oldest = edge;
+    if (const auto* list = trend(view, object))
+        for (const auto& s : *list)
+            if (!s.points.empty()) oldest = std::min(oldest, s.points.front().first);
+    hmi::trendPan(trendStates_[trendKeyOf(view, object)], dt, dv, shownDuration(o), edge, oldest);
+    return true;
+}
+
+bool Runtime::trendResetView(Id view, Id object) {
+    if (!pilotableTrend(viewOf(view), object)) return false;
+    hmi::trendShowAll(trendStates_[trendKeyOf(view, object)]);
+    return true;
+}
+
+bool Runtime::setTrendCursors(Id view, Id object, std::optional<double> a, std::optional<double> b) {
+    if (!pilotableTrend(viewOf(view), object)) return false;
+    auto& st = trendStates_[trendKeyOf(view, object)];
+    st.cursorA = a;
+    st.cursorB = b;
+    return true;
+}
+
+bool Runtime::toggleTrendCursors(Id view, Id object) {
+    const View* v = viewOf(view);
+    const Object* raw = pilotableTrend(v, object);
+    if (!raw) return false;
+    Object o = *raw;
+    evaluateProps(view, o);
+    const auto [start, end] = trendWindowOf(view, object, shownDuration(o));
+    hmi::trendToggleCursors(trendStates_[trendKeyOf(view, object)], start, end);
+    return true;
+}
+
+std::vector<TrendReading> Runtime::trendCursorReadings(Id view, Id object) const {
+    const View* v = viewOf(view);
+    const Object* raw = pilotableTrend(v, object);
+    const auto* st = trendState(view, object);
+    const auto* list = trend(view, object);
+    if (!raw || !st || !list) return {};
+    Object o = *raw;
+    evaluateProps(view, o);
+    return hmi::trendReadings(o, *list, *st);
+}
+
+std::string Runtime::clockText(double at) const {
+    const std::string stamp = dateStampOf(at);
+    return stamp.size() > 11 ? stamp.substr(11) : stamp;
+}
+
+bool Runtime::exportTrendZone(Id view, Id object, std::string_view format, double now, bool askWhere, std::string* why) {
+    now_ = std::max(now_, now);
+    const View* v = viewOf(view);
+    const Object* o = pilotableTrend(v, object);
+    if (!o) {
+        if (why) *why = "pas une courbe pilotable de la vue";
+        return false;
+    }
+    const auto* st = trendState(view, object);
+    if (!st || !st->cursors()) {
+        if (why) *why = "pose d'abord les deux curseurs (le bouton Curseurs) : la zone est entre eux";
+        return false;
+    }
+    GestureGuard gesture(*this, where(*v, o), "Clic sur");
+    return exportData("zone:" + o->name, o->name + "_zone", format, now, "Op\xC3\xA9rateur", why, askWhere);
+}
+
+// La barre et les gestes d'une courbe pilotable : x, y dans l'objet (pixels de la vue).
+void Runtime::trendObjectPart(const View& v, const Object& raw, std::string_view part, double now) {
+    if (!pilotableTrend(&v, raw.id)) return;   // 1.13.1 : ni pas pilotable, ni en mode historique
+    if (part == "figer" || part == "curseurs" || part == "toutvoir") {
+        GestureGuard gesture(*this, where(v, &raw), "Clic sur");
+        const std::string key = trendKeyOf(v.id, raw.id);
+        if (part == "figer") {
+            const auto it = trendStates_.find(key);
+            (void)setTrendFrozen(v.id, raw.id, !(it != trendStates_.end() && it->second.frozen));
+        } else if (part == "curseurs") {
+            (void)toggleTrendCursors(v.id, raw.id);
+        } else {
+            (void)trendResetView(v.id, raw.id);
+        }
+        return;
+    }
+    if (part == "zone:csv" || part == "zone:excel") {
+        std::string why;
+        if (!exportTrendZone(v.id, raw.id, part == "zone:csv" ? "CSV" : "Excel", now, true, &why))
+            event("Export", v.name + "." + raw.name, "zone refus\xC3\xA9" "e : " + why);
+        return;
+    }
+    if (part.rfind("trend:", 0) != 0) return;
+    // "trend:<geste>:a:b:..." - les nombres qui suivent le geste.
+    std::vector<std::string> bits;
+    for (std::size_t from = 0;;) {
+        const auto at = part.find(':', from);
+        bits.emplace_back(part.substr(from, at == std::string_view::npos ? std::string_view::npos : at - from));
+        if (at == std::string_view::npos) break;
+        from = at + 1;
+    }
+    std::vector<double> n;
+    for (std::size_t i = 2; i < bits.size(); ++i) {
+        double x = 0;
+        if (!parseNumber(bits[i], x)) return;
+        n.push_back(x);
+    }
+    const std::string gesture = bits.size() > 1 ? bits[1] : std::string{};
+    Object o = raw;
+    evaluateProps(v.id, o);
+    const std::string key = trendKeyOf(v.id, raw.id);
+    auto& st = trendStates_[key];
+    const double duration = shownDuration(o);
+    const double edge = trendEdge(v.id, raw.id);
+    const auto layout = hmi::trendLayout(o, o.number("w"), o.number("h"), st.cursors());
+    const auto& plot = layout.plot;
+    const auto window = hmi::trendWindow(&st, duration, edge);
+    const double start = window.first, end = window.second;
+    const auto* list = trend(v.id, raw.id);
+    const auto toTime = [&](double x) { return start + (x - plot.x) / std::max(1.0, plot.w) * (end - start); };
+    // L'echelle montree : celle que l'ecran a dessinee (lo, hi), sinon celle du moteur.
+    const auto scale = [&](std::size_t at) {
+        if (st.valueZoom) return std::pair<double, double>{st.lo, st.hi};
+        if (n.size() >= at + 2 && n[at + 1] > n[at]) return std::pair<double, double>{n[at], n[at + 1]};
+        return hmi::trendScale(o, list, start, end, &st);
+    };
+    if (gesture == "press" && n.size() >= 2) {
+        GestureGuard guard(*this, where(v, &raw), "Clic sur");
+        const int near = hmi::trendCursorNear(st, n[0], plot, start, end);
+        st.grab = near ? near : 3;
+        st.pressX = st.lastX = n[0];
+        st.pressY = st.lastY = n[1];
+        st.moved = false;
+    } else if (gesture == "drag" && n.size() >= 2) {
+        if (!st.grab) return;
+        if (!st.moved && std::fabs(n[0] - st.pressX) + std::fabs(n[1] - st.pressY) < 3) return;   // un clic qui tremble
+        st.moved = true;
+        if (st.grab == 1 || st.grab == 2) {
+            // Le curseur suit la souris (de ce qu'elle a bouge : attrape a 3 px de sa ligne, il ne saute pas).
+            auto& cursor = st.grab == 1 ? st.cursorA : st.cursorB;
+            const double from = cursor ? *cursor : toTime(st.lastX);
+            cursor = std::clamp(from + (n[0] - st.lastX) / std::max(1.0, plot.w) * (end - start), start, end);
+        } else {
+            const auto [lo, hi] = scale(2);
+            const double dt = -(n[0] - st.lastX) / std::max(1.0, plot.w) * (end - start);
+            const double dv = (n[1] - st.lastY) / std::max(1.0, plot.h) * (hi - lo);
+            double oldest = edge;
+            if (list)
+                for (const auto& s : *list)
+                    if (!s.points.empty()) oldest = std::min(oldest, s.points.front().first);
+            hmi::trendPan(st, dt, dv, duration, edge, oldest);
+        }
+        st.lastX = n[0];
+        st.lastY = n[1];
+    } else if (gesture == "release") {
+        const bool click = st.grab != 0 && !st.moved;
+        st.grab = 0;
+        st.moved = false;
+        // Un clic (sans glisser) dans la zone de trace pose un curseur : A, puis B, puis le plus proche.
+        if (click && n.size() >= 2 && plot.contains(n[0], n[1])) hmi::trendPlaceCursor(st, std::clamp(toTime(n[0]), start, end));
+    } else if (gesture == "wheel" && n.size() >= 4) {
+        // Un cran vers le haut rapproche (x 0,8), vers le bas eloigne ; Maj (axe 1) : les valeurs.
+        const double factor = std::pow(0.8, std::clamp(n[0], -10.0, 10.0));
+        if (n[3] >= 0.5) {
+            const auto [lo, hi] = scale(4);
+            const double at = hi - (n[2] - plot.y) / std::max(1.0, plot.h) * (hi - lo);
+            (void)hmi::trendZoomValues(st, factor, at, lo, hi);
+        } else {
+            const bool moving = !st.frozen && !trendPaused_.count(key);
+            hmi::trendZoomTime(st, factor, toTime(n[1]), duration, edge, moving);
+        }
+    }
+}
+
+// F, C, Debut sur la courbe sous la souris - sinon la seule courbe pilotable montree.
+bool Runtime::trendKey(const keys::Chord& chord) {
+    if (chord.ctrl || chord.alt || chord.shift) return false;
+    if (chord.key != "F" && chord.key != "C" && chord.key != "Home") return false;
+    Id view = kNoId, object = kNoId;
+    if (pointer_.view != kNoId && !pointer_.objectName.empty())
+        if (const View* v = viewOf(pointer_.view)) {
+            const std::string name = pointer_.objectName.substr(pointer_.objectName.find('.') + 1);
+            for (const auto& o : v->objects)
+                if (o.name == name && pilotableTrend(v, o.id)) { view = v->id; object = o.id; }
+        }
+    if (object == kNoId) {
+        std::vector<Id> shown{current_};
+        shown.insert(shown.end(), popups_.begin(), popups_.end());
+        int found = 0;
+        for (const Id id : shown)
+            if (const View* v = viewOf(id))
+                for (const auto& o : v->objects)
+                    if (pilotableTrend(v, o.id)) { ++found; view = id; object = o.id; }
+        if (found != 1) return false;
+    }
+    const View* v = viewOf(view);
+    const Object* o = v ? v->object(object) : nullptr;
+    if (!o) return false;
+    trendObjectPart(*v, *o, chord.key == "F" ? "figer" : chord.key == "C" ? "curseurs" : "toutvoir", now_);
+    return true;
+}
+
 std::optional<double> Runtime::trendPausedAt(Id view, Id object) const {
-    const auto it = trendPaused_.find(std::to_string(view) + ":" + std::to_string(object) + argumentsKey(view));
+    const auto it = trendPaused_.find(trendKeyOf(view, object));
     return it == trendPaused_.end() ? std::nullopt : std::optional<double>(it->second);
 }
 
 const std::vector<TrendSeries>* Runtime::trend(Id view, Id object) const {
-    const auto it = trends_.find(std::to_string(view) + ":" + std::to_string(object) + argumentsKey(view));
+    const auto it = trends_.find(trendKeyOf(view, object));
     return it == trends_.end() ? nullptr : &it->second;
 }
 
@@ -6046,13 +6333,19 @@ void Runtime::sampleTrends(double now) {
             // selon leurs formules (avant : les valeurs fixes).
             Object o = so;
             evaluateProps(id, o);
+            const std::string key = std::to_string(id) + ":" + std::to_string(o.id) + argumentsKey(id);   // 1.12.3 : par jeu d'arguments
             const std::string mode = o.text("mode", "temps r\xC3\xA9" "el");
-            if (mode.rfind("historique", 0) == 0) continue;
+            if (trimText(mode).rfind("historique", 0) == 0) {
+                // 1.13.1 (contre-verification) : passee en historique, rien a piloter - ni gel, ni pause, ni zoom ne restent.
+                trendStates_.erase(key);
+                trendPaused_.erase(key);
+                continue;
+            }
             // 1.12.6 (lot C) : le decoupeur unique - une plume M['a;b'] ou $A;B$ reste entiere.
             std::vector<std::string> pens;
             for (auto& pen : roles::splitList(o.text("variables")))
                 if (!pen.empty()) pens.push_back(std::move(pen));
-            auto& series = trends_[std::to_string(id) + ":" + std::to_string(o.id) + argumentsKey(id)];   // 1.12.3 : par jeu d'arguments
+            auto& series = trends_[key];
             bool same = series.size() == pens.size();
             for (std::size_t i = 0; same && i < pens.size(); ++i) same = series[i].expression == pens[i];
             if (!same) {
@@ -6068,15 +6361,33 @@ void Runtime::sampleTrends(double now) {
                     series[i].visible = c.empty() || evalBool(c, true);
                 }
             }
+            // 1.13.1 : Pilotable decochee en marche : plus de barre pour reprendre - ni gel, ni pause, ni zoom.
+            if (!o.flag("pilotable", false)) {
+                trendStates_.erase(key);
+                trendPaused_.erase(key);
+            }
+            // 1.13.1 : FIGEE - l'acquisition s'arrete : rien n'entre, rien ne tombe (Reprendre laisse un trou).
+            TrendState* st = nullptr;
+            if (const auto it = trendStates_.find(key); it != trendStates_.end()) st = &it->second;
+            if (st && st->frozen) continue;
             const double keep = std::max(1.0, o.number("duration", 60)) * 1.2 + 1.0;
+            // 1.13.1 : les mesures plus vieilles que la fenetre tombent - celles de la fenetre montree restent : en
+            // pause (avant : la fenetre se vidait apres 1,2 fois la duree), posee dans le passe (un glisser).
+            double holdFrom = now - keep;
+            if (const auto p = trendPaused_.find(key); p != trendPaused_.end()) holdFrom = std::min(holdFrom, p->second - keep);
+            if (st && st->pinned) holdFrom = std::min(holdFrom, st->end - keep);
+            double oldest = now;
             for (auto& s : series) {
                 // Lot 14 : une valeur de l'automate pas encore lue ne se trace pas.
                 // 1.12.6 (lot B) : lue en nombre par le lecteur du role (un TIME : des secondes).
                 double number = 0;
                 const bool ok = !plcUnread(s.expression) && sampleNumber(s.expression, number);
                 if (ok) s.points.emplace_back(now, number);
-                while (!s.points.empty() && s.points.front().first < now - keep) s.points.pop_front();
+                while (!s.points.empty() && (s.points.front().first < holdFrom || s.points.size() > kTrendMaxPoints)) s.points.pop_front();
+                if (!s.points.empty()) oldest = std::min(oldest, s.points.front().first);
             }
+            // Les trous d'avant la plus vieille mesure n'ont plus rien a couper.
+            if (st) std::erase_if(st->gaps, [&](const std::pair<double, double>& g) { return g.second < oldest; });
         }
     }
 }
@@ -6641,6 +6952,12 @@ void Runtime::objectPart(Id object, std::string_view part, double now) {
     if (found->kind == Kind::Trend && part == "pause") {
         GestureGuard gesture(*this, where(*v, found), "Clic sur");
         (void)setTrendPaused(v->id, object, !trendPausedAt(v->id, object).has_value());
+        return;
+    }
+    // 1.13.1 : Figer, Curseurs, Tout voir, l'export de la zone, et les gestes sur la zone de trace.
+    if (found->kind == Kind::Trend
+        && (part == "figer" || part == "curseurs" || part == "toutvoir" || part.rfind("zone:", 0) == 0 || part.rfind("trend:", 0) == 0)) {
+        trendObjectPart(*v, *found, part, now);
         return;
     }
     // 1.12.6 (lot B, § 2.7) : l'objet tel que l'ecran le montre (ses positions, ses valeurs, ses

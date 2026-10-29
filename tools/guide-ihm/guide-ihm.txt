@@ -3592,7 +3592,7 @@ Dans l'éditeur, un graphique montre un **aperçu** réaliste (des barres, une c
 @param colors | Couleurs des plumes (a;b;…) | #4FA3FF;#F2994A;#2ECC71;#E5534B | Une couleur par plume, dans l'ordre.
 @param interpolation | Interpolation | linéaire | linéaire : les points reliés ; escalier : la valeur tenue jusqu'à la suivante ; points : seuls.
 @param legend | Légende | TRUE | Le nom et la dernière valeur de chaque plume.
-@param pilotable | Pilotable (pause / continuer) | FALSE | En marche, un bouton en haut à droite : Pause fige l'affichage (les mesures continuent), Continuer reprend le temps réel.
+@param pilotable | Pilotable (pause, figer, curseurs, zoom) | FALSE | En marche, une barre en haut à droite : Pause fige l'affichage (les mesures continuent), Figer arrête l'acquisition, Curseurs pose deux lignes de mesure, Tout voir revient à la durée ; la molette zoome, glisser déplace (voir « En marche » plus bas).
 @param penVisible | Plumes : visibles si (a;b;…) | (vide) | Une condition par plume (vide : toujours visible) ; fausse, la plume et sa légende se cachent. Plus simple : Contenu › la plume › Visible si.
 @param fill | Remplissage | #1B2028 | Le fond du tracé.
 @param stroke | Contour | #3A4556 | Le cadre et la grille.
@@ -3604,6 +3604,22 @@ Dans l'éditeur, un graphique montre un **aperçu** réaliste (des barres, une c
 @nouveau 1.12.16
 
 1.12.16 : **Pilotable** (Propriétés) - en marche, un bouton en haut à droite de la courbe : **Pause** fige l'affichage pour lire un instant précis (les mesures continuent d'être prises), **Continuer** reprend le temps réel. Chaque plume peut aussi n'apparaître que sous une condition : Contenu › la plume › **Visible si** (Four.Chauffe AND Niveau > 10) - fausse, la plume et sa légende se cachent ; une plume à joker (Cuves[*].Niveau) prend Cuves[*].Actif, une condition par cuve. **Dupliquer…** (Contenu) fait N copies d'une plume, ses indices suivis (Cuves[0] → Cuves[1]…), son nom numéroté, sa couleur prise dans la palette.
+@nouveau 1.13.1
+### En marche : figer, mesurer, zoomer, exporter une zone
+Une courbe **Pilotable** (Propriétés) porte en marche - en simulation comme au poste d'exploitation - une barre en haut à droite : **Pause**, **Figer**, **Curseurs**, **Tout voir**. Ses gestes :
+| Geste | Ce qu'il fait |
+| Pause / Continuer | fige l'**affichage** : les mesures continuent d'être prises, Continuer montre tout ce qui s'est passé entre-temps. La fenêtre montrée garde ses mesures tant que dure la pause. |
+| Figer / Reprendre (touche F) | arrête l'**acquisition** : aucune mesure n'entre dans les plumes, aucune ne tombe, aussi longtemps qu'il faut ; le cadre de la courbe passe au bleu glacé et dit « FIGÉE depuis 14:02:31.125 ». Reprendre relance l'acquisition : le temps du gel reste un **trou** (une bande pâle marquée « gel », la plume coupée). |
+| Curseurs (touche C) | pose deux lignes verticales **A** (jaune) et **B** (bleu clair) au tiers et aux deux tiers de la fenêtre ; encore une fois, elles partent. Un clic sur la courbe pose A, puis B, puis déplace la plus proche ; tirer une ligne la déplace. |
+| Tout voir (touche Début) | revient à la durée et à l'échelle de l'objet. |
+| Molette | zoome le **temps** autour de la souris (l'instant sous la souris y reste), jusqu'à 0,1 ms sur toute la largeur ; dézoomer s'arrête à la durée de l'objet. En direct, le bord droit reste le présent. Zoomées, les graduations parlent dans l'unité de la fenêtre (-2.5 ms) et une fenêtre déplacée montre l'heure de ses deux bords. |
+| Maj+molette | zoome l'axe des **valeurs** autour de la souris (Ctrl+molette reste le zoom de la vue). |
+| Glisser | déplace la fenêtre dans le temps (et les valeurs, une fois zoomées) ; revenue au bord droit, elle suit de nouveau le présent. |
+Le **cadre des curseurs**, en haut à gauche de la courbe : l'écart **Δt** (2.35 s, 12.5 ms, 250 µs), l'heure de A et de B à la milliseconde, puis pour chaque plume sa valeur en A, en B et la différence Δ, arrondies et écrites avec autant de décimales toutes les trois (quatre chiffres significatifs, trois pour un écart minuscule : 46.73, 32.01, -14.72) (« - » : pas de mesure à cet instant, dans un trou par exemple). Ses boutons **CSV** et **Excel** exportent la **zone** entre A et B : une ligne par mesure - l'heure, l'écart à A en secondes, puis chaque plume ; le fichier Courbe_1_zone.csv (ou .xlsx) va là où l'on choisit, comme les autres exports de l'opérateur. L'action Exporter, le bouton d'export et IHM_EXPORTER le font aussi, la source `zone:Courbe_1` (proposée dans leur liste Données ; Générer vérifie qu'elle nomme une courbe de la vue).
+> Pause ou Figer ? Pause pour regarder un instant pendant que tout continue d'être enregistré ; Figer pour garder intacte la fenêtre qu'on étudie, aussi longtemps qu'il faut, au prix d'un trou dans la courbe.
+Les touches F, C et Début agissent sur la courbe sous la souris (sinon la seule courbe pilotable de la vue), quand aucun raccourci de la vue ne prend la touche. En simulation, le clic droit sur la courbe propose aussi Figer, Curseurs, Tout voir et Exporter la zone (CSV, Excel). Décocher Pilotable retire la barre et les gestes : la courbe reste celle d'avant.
+Une courbe qui a ses propres actions **Clic**, **Double clic** ou **Appui long** (onglet Actions) les garde : sans curseurs, un clic sur le tracé les déclenche, comme avant. Pour mesurer, appuyer d'abord sur **Curseurs** (ou C) : tant que les curseurs sont là, le tracé sert à la mesure (un clic déplace le curseur le plus proche, glisser déplace la fenêtre) et les actions attendent ; retirer les curseurs les rend. La barre, la molette et les touches marchent dans les deux cas.
+En mode **historique**, la courbe relit un fichier : il n'y a rien à mettre en pause ni à figer, Pilotable n'y met pas de barre et la molette reste à la vue.
 
 == objet-graphique-en-barres | Graphique en barres
 : Une barre par valeur, verticales ou horizontales : les niveaux des cuves, les consommations par atelier, la production par poste ; une barre qui franchit un seuil passe au rouge.
