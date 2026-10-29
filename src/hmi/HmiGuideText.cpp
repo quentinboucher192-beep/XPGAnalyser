@@ -13937,6 +13937,69 @@ const std::vector<Topic>& topics() {
                          "type simple, un autre type IHM, un tableau), valeur initiale, description. "
                          "**Monter**, **Descendre** changent leur ordre (celui de la place Modbus) ; "
                          "**Dupliquer** copie le type.", {}},
+             {K::Heading, "Les onglets d'un type (1.13.1)", {}, "1.13.1"},
+             {K::Paragraph, "Le type choisi dans la liste se r\xC3\xA8gle dans **ses onglets**, comme une "
+                         "fonction IHM (Code, Param\xC3\xA8tres, Locales\xE2\x80\xA6) : chacun prend toute "
+                         "la hauteur de la page, son titre compte ce qu'il montre (**Membres 4**, "
+                         "**M\xC3\xA9thodes 5** ; en rouge : une faute), et l'onglet choisi reste quand on "
+                         "passe d'un type \xC3\xA0 l'autre - un type qui ne l'a pas montre son "
+                         "\xC3\xA9quivalent (M\xC3\xA9thodes et Signatures, Membres et Valeurs, "
+                         "H\xC3\xA9ritage et interfaces et Impl\xC3\xA9menteurs). Le titre de la page dit le "
+                         "genre et le nom : \xC2\xAB STRUCTURE \xC2\xB7 T_Pompe \xC2\xBB.", {}, "1.13.1"},
+             {K::Table, "Genre\tSes onglets\nStructure\t**Membres** (la grille, puis les "
+                         "propri\xC3\xA9t\xC3\xA9s du membre choisi), **M\xC3\xA9thodes**, "
+                         "**Op\xC3\xA9rateurs**, **H\xC3\xA9ritage et interfaces** (H\xC3\xA9rite "
+                         "de\xE2\x80\xA6 (EXTENDS), la lign\xC3\xA9" "e, les sous-types, ce qui est "
+                         "h\xC3\xA9rit\xC3\xA9, Impl\xC3\xA9mente (IMPLEMENTS)), "
+                         "**Propri\xC3\xA9t\xC3\xA9s** (le nom, la description, l'espace de noms, les "
+                         "g\xC3\xA9n\xC3\xA9riques, le poids, Utilis\xC3\xA9 par, les v\xC3\xA9rifications), "
+                         "**Emplois**\nInterface\t**Signatures**, **Impl\xC3\xA9menteurs** (chaque type qui "
+                         "l'impl\xC3\xA9mente : conforme, ou ce qui lui manque ; par sa case ou par son "
+                         "parent), **Propri\xC3\xA9t\xC3\xA9s** (avec l'aper\xC3\xA7u de sa "
+                         "d\xC3\xA9" "claration)\n\xC3\x89num\xC3\xA9ration\t**Valeurs**, "
+                         "**Op\xC3\xA9rateurs** (toString, fromString\xE2\x80\xA6), "
+                         "**Propri\xC3\xA9t\xC3\xA9s** (avec la valeur initiale de chaque variable), "
+                         "**Emplois**\nRappel\t**Signature** (sa forme, ses entr\xC3\xA9" "es, son retour, "
+                         "les fonctions qui conviennent), **Op\xC3\xA9rateurs**, "
+                         "**Propri\xC3\xA9t\xC3\xA9s**, **Emplois**", {}, "1.13.1"},
+             {K::Bullet, "**Emplois** dit o\xC3\xB9 le type sert : les variables IHM, les membres des autres "
+                         "types, les sous-types, les param\xC3\xA8tres, locales, constantes et retours des "
+                         "fonctions, des m\xC3\xA9thodes et des scripts, les param\xC3\xA8tres des popups et "
+                         "les constantes des vues. Un **double-clic** sur une ligne y m\xC3\xA8ne (un membre "
+                         ": son type, sur sa ligne ; une variable : Variables IHM).", {}, "1.13.1"},
+             {K::Bullet, "La barre garde ses boutons : **Membre** (Inser) ouvre l'onglet Membres sur le "
+                         "membre ajout\xC3\xA9, son nom \xC3\xA0 \xC3\xA9" "crire ; les outils des membres "
+                         "(Membre, Monter, Descendre, Supprimer le membre, Copier, Coller) ne se montrent "
+                         "que pour une structure. Le clic droit sur un onglet le choisit (et propose "
+                         "Disposition\xE2\x80\xA6).", {}, "1.13.1"},
+             {K::Bullet, "**F1** ouvre l'aide de l'onglet ouvert : M\xC3\xA9thodes, Signatures, "
+                         "Impl\xC3\xA9menteurs, H\xC3\xA9ritage et interfaces m\xC3\xA8nent \xC3\xA0 "
+                         "\xC2\xAB Les types objets \xC2\xBB, Op\xC3\xA9rateurs \xC3\xA0 \xC2\xAB Les "
+                         "op\xC3\xA9rateurs \xC2\xBB, Valeurs aux \xC3\xA9num\xC3\xA9rations.", {}, "1.13.1"},
+             {K::Heading, "Un type dans son propre onglet (1.13.1)", {}, "1.13.1"},
+             {K::Paragraph, "Un **double-clic** sur un type, dans la liste des Types IHM ou dans l'arbre du "
+                         "projet, ou le clic droit \xE2\x80\xBA **Ouvrir dans un onglet**, l'ouvre dans "
+                         "**son propre onglet** de document, comme une vue : l'onglet porte le nom du type "
+                         "(Gaz.T_Vanne pour un type d'un espace) et montre les m\xC3\xAAmes onglets, sans la "
+                         "liste. Ouvert depuis la page Types IHM, il s'ouvre sur l'onglet qu'elle montrait ; "
+                         "depuis M\xC3\xA9thodes (n) de l'arbre, sur M\xC3\xA9thodes.", {}, "1.13.1"},
+             {K::Bullet, "**Plusieurs types** s'ouvrent \xC3\xA0 la fois : chacun son onglet, c\xC3\xB4te "
+                         "\xC3\xA0 c\xC3\xB4te par le clic droit sur un onglet \xE2\x80\xBA Diviser \xC3\xA0 "
+                         "droite.", {}, "1.13.1"},
+             {K::Bullet, "**Renommer** le type renomme son onglet ; le **supprimer** ferme l'onglet (Ctrl+Z "
+                         "rend le type : un double-clic le rouvre ; Ctrl+Maj+T rouvre le dernier onglet "
+                         "ferm\xC3\xA9).", {}, "1.13.1"},
+             {K::Bullet, "**Va-et-vient avec l'arbre** : l'arbre suit l'onglet actif (le type y est choisi) "
+                         "; le clic droit sur l'onglet \xE2\x80\xBA **Afficher dans l'arbre** ; un clic dans "
+                         "l'arbre sur un type d\xC3\xA9j\xC3\xA0 ouvert m\xC3\xA8ne \xC3\xA0 son onglet ; "
+                         "**Aller \xC3\xA0** (Ctrl+K) propose aussi les types IHM et les ouvre dans leur "
+                         "onglet. Un emploi d'un autre type (l'onglet Emplois) ouvre l'onglet de cet autre "
+                         "type.", {}, "1.13.1"},
+             {K::Bullet, "Tout s'y fait comme dans la page : les membres (Ctrl+C / Ctrl+V avec Excel, le "
+                         "clic droit Rendre priv\xC3\xA9\xE2\x80\xA6), les m\xC3\xA9thodes et leur corps (la "
+                         "marge des points d'arr\xC3\xAAt), les op\xC3\xA9rateurs, Exporter le "
+                         "type\xE2\x80\xA6, Supprimer le type ; chaque geste se reprend par Ctrl+Z, et la "
+                         "page Types IHM le voit aussi.", {}, "1.13.1"},
              {K::Heading, "L'employer", {}},
              {K::Paragraph, "Une variable IHM de type `T_Four` (le dialogue ou la case Type) a tous les membres "
                          "du type : `Four1.Temperature`, `Four1.Vannes[2].Ouverte`. Un **tableau de "
@@ -13997,9 +14060,9 @@ const std::vector<Topic>& topics() {
                          "de popup ou de symbole : l'aide \xC3\xA0 la saisie propose ses membres, une copie "
                          "les capture tous (voir \xC2\xAB Les param\xC3\xA8tres d'une popup \xC2\xBB).", {}},
              {K::Heading, "Les op\xC3\xA9rateurs, Excel (1.10)", {}, "1.10"},
-             {K::Bullet, "Un type IHM a ses **op\xC3\xA9rateurs** (la section Op\xC3\xA9rateurs sous ses "
-                         "membres) : `v1 + v2`, `v += 1.5`, `TO_REAL(v)`. Voir \xC2\xAB Les "
-                         "op\xC3\xA9rateurs des symboles et des types IHM \xC2\xBB.", {}, "1.10"},
+             {K::Bullet, "Un type IHM a ses **op\xC3\xA9rateurs** (1.13.1 : son onglet Op\xC3\xA9rateurs) : "
+                         "`v1 + v2`, `v += 1.5`, `TO_REAL(v)`. Voir \xC2\xAB Les op\xC3\xA9rateurs des "
+                         "symboles et des types IHM \xC2\xBB.", {}, "1.13.1"},
              {K::Bullet, "Ses membres se copient vers Excel et se collent depuis Excel (Ctrl+C, Ctrl+V, avec "
                          "l'aper\xC3\xA7u) : voir \xC2\xAB Les membres d'un type avec Excel \xC2\xBB.", {}, "1.10"},
              {K::Bullet, "Une **\xC3\xA9num\xC3\xA9ration** (T_MODE : Arret, Auto, Manu...) se "
@@ -14164,9 +14227,10 @@ const std::vector<Topic>& topics() {
                          "En d\xC3\xA9" "faut\n};\nstd::string to_string(T_MODE a);\nT_MODE "
                          "from_string(const std::string& a);", "C++"},
              {K::Heading, "Les valeurs", {}},
-             {K::Paragraph, "Une \xC3\xA9num\xC3\xA9ration choisie dans Types IHM montre **ses valeurs \xC3\xA0 "
-                         "la place des membres** : une grille **# | Nom | Valeur | Texte affich\xC3\xA9 | "
-                         "Description**, et \xC3\xA0 droite la **d\xC3\xA9" "claration** (ST, C ou C++).", {}},
+             {K::Paragraph, "Une \xC3\xA9num\xC3\xA9ration choisie dans Types IHM montre **ses valeurs dans son "
+                         "onglet Valeurs** (1.13.1 ; avant : \xC3\xA0 la place des membres) : une grille **# "
+                         "| Nom | Valeur | Texte affich\xC3\xA9 | Description**, et \xC3\xA0 droite la "
+                         "**d\xC3\xA9" "claration** (ST, C ou C++).", {}, "1.13.1"},
              {K::Bullet, "**Modifier une case** : double-clic ou **F2** ; **Entr\xC3\xA9" "e** valide, "
                          "**Tab** passe \xC3\xA0 la case suivante, **\xC3\x89" "chap** annule.", {}},
              {K::Bullet, "**Les contr\xC3\xB4les se font en direct** : nom vide, nom ST invalide, mot "
@@ -14490,14 +14554,15 @@ const std::vector<Topic>& topics() {
          "et respecte des contrats (INTERFACE). On traite ainsi une liste h\xC3\xA9t\xC3\xA9rog\xC3\xA8ne de "
          "pompes et de vannes par un contrat commun.",
          {
-             {K::Heading, "La section M\xC3\xA9thodes de Types IHM", {}, "1.13.0"},
-             {K::Paragraph, "Dans l'onglet Types IHM, sous la grille des membres (au-dessus des "
-                         "Op\xC3\xA9rateurs), la section **M\xC3\xA9thodes** du type choisi : \xC3\xA0 "
-                         "gauche la liste (M\xC3\xA9thode, un cadenas pour une priv\xC3\xA9" "e, Genre, "
-                         "Origine, puis Param\xC3\xA8tres et Retour ; la ligne enti\xC3\xA8re en infobulle) "
-                         "et les **Propri\xC3\xA9t\xC3\xA9s de la m\xC3\xA9thode**, \xC3\xA0 droite son "
-                         "**Corps** ; la ligne d'\xC3\xA9tat dit comment l'appeler, avec une variable de ce "
-                         "type (Pompe2.EnDefaut() pour T_PompeDoublee).", {}, "1.13.0"},
+             {K::Heading, "Les m\xC3\xA9thodes d'un type : l'onglet M\xC3\xA9thodes", {}, "1.13.0"},
+             {K::Paragraph, "Dans Types IHM (ou l'onglet du type ouvert seul), l'onglet **M\xC3\xA9thodes** du "
+                         "type choisi, sur toute la hauteur (1.13.1 ; avant : une section sous la grille des "
+                         "membres) : \xC3\xA0 gauche la liste (M\xC3\xA9thode, un cadenas pour une "
+                         "priv\xC3\xA9" "e, Genre, Origine, puis Param\xC3\xA8tres et Retour ; la ligne "
+                         "enti\xC3\xA8re en infobulle) et les **Propri\xC3\xA9t\xC3\xA9s de la "
+                         "m\xC3\xA9thode**, \xC3\xA0 droite son **Corps** ; la ligne d'\xC3\xA9tat dit "
+                         "comment l'appeler, avec une variable de ce type (Pompe2.EnDefaut() pour "
+                         "T_PompeDoublee).", {}, "1.13.1"},
              {K::Bullet, "**Ajouter une m\xC3\xA9thode\xE2\x80\xA6** ouvre la fen\xC3\xAAtre \xC2\xAB "
                          "Nouvelle m\xC3\xA9thode de T_Pompe \xC2\xBB : le nom, le retour (vide : une "
                          "proc\xC3\xA9" "dure ; **Choisir\xE2\x80\xA6** ouvre le s\xC3\xA9lecteur de types), "
@@ -14597,26 +14662,26 @@ const std::vector<Topic>& topics() {
                          "dans une autre LAMBDA -, le moteur le refuse en marche. Le d\xC3\xA9" "bogueur et "
                          "les expressions ajout\xC3\xA9" "es en simulation lisent tout, priv\xC3\xA9 compris.", {}},
              {K::Heading, "H\xC3\xA9ritage : EXTENDS, VIRTUAL, OVERRIDE, SUPER", {}},
-             {K::Paragraph, "Dans les propri\xC3\xA9t\xC3\xA9s du type, **H\xC3\xA9rite de\xE2\x80\xA6 "
-                         "(EXTENDS)** choisit un **parent** parmi les structures du projet : ni "
-                         "lui-m\xC3\xAAme ni un de ses sous-types (pas de cycle), et pas tant qu'un de ses "
-                         "membres red\xC3\xA9" "clare un membre du parent. Le sous-type a tous les membres "
-                         "du parent (la place Modbus du parent d'abord), puis les siens, et h\xC3\xA9rite de "
-                         "ses m\xC3\xA9thodes : la grille des membres les montre \xC3\xA0 la suite des "
-                         "siens, gris\xC3\xA9s, \xC2\xAB (h\xC3\xA9rit\xC3\xA9 de T_Pompe) \xC2\xBB, et la "
-                         "section M\xC3\xA9thodes ses m\xC3\xA9thodes h\xC3\xA9rit\xC3\xA9" "es, "
-                         "gris\xC3\xA9" "es, \xC2\xAB (h\xC3\xA9rit\xC3\xA9 de T_Pompe) \xC2\xBB, en lecture "
-                         "seule. Une m\xC3\xA9thode **VIRTUAL** du parent se red\xC3\xA9" "finit par une "
-                         "m\xC3\xA9thode de m\xC3\xAAme signature (la colonne Origine dit \xC2\xAB "
-                         "red\xC3\xA9" "finit T_Pompe.EnDefaut \xC2\xBB) ; sur une virtuelle "
-                         "h\xC3\xA9rit\xC3\xA9" "e, **Red\xC3\xA9" "finir** la cr\xC3\xA9" "e, son corps "
-                         "pr\xC3\xA9rempli avec `SUPER.EnDefaut()` (les param\xC3\xA8tres pass\xC3\xA9s tels "
-                         "quels). **SUPER.M\xC3\xA9thode()** rappelle le corps du parent. Une "
-                         "red\xC3\xA9" "finition garde la visibilit\xC3\xA9 de ce qu'elle "
-                         "red\xC3\xA9" "finit : priv\xC3\xA9" "e, elle est refus\xC3\xA9" "e (\xC2\xAB une "
-                         "red\xC3\xA9" "finition ne peut pas \xC3\xAAtre plus priv\xC3\xA9" "e que la "
-                         "m\xC3\xA9thode qu'elle red\xC3\xA9" "finit \xC2\xBB) : un appel par la "
-                         "m\xC3\xA9thode publique du parent y m\xC3\xA8nerait depuis hors du type.", {}},
+             {K::Paragraph, "Dans l'onglet **H\xC3\xA9ritage et interfaces** du type (1.13.1 ; avant : ses "
+                         "propri\xC3\xA9t\xC3\xA9s), **H\xC3\xA9rite de\xE2\x80\xA6 (EXTENDS)** choisit un "
+                         "**parent** parmi les structures du projet : ni lui-m\xC3\xAAme ni un de ses "
+                         "sous-types (pas de cycle), et pas tant qu'un de ses membres red\xC3\xA9" "clare un "
+                         "membre du parent. Le sous-type a tous les membres du parent (la place Modbus du "
+                         "parent d'abord), puis les siens, et h\xC3\xA9rite de ses m\xC3\xA9thodes : "
+                         "l'onglet Membres les montre \xC3\xA0 la suite des siens, gris\xC3\xA9s, \xC2\xAB "
+                         "(h\xC3\xA9rit\xC3\xA9 de T_Pompe) \xC2\xBB, et l'onglet M\xC3\xA9thodes ses "
+                         "m\xC3\xA9thodes h\xC3\xA9rit\xC3\xA9" "es, gris\xC3\xA9" "es, \xC2\xAB "
+                         "(h\xC3\xA9rit\xC3\xA9 de T_Pompe) \xC2\xBB, en lecture seule. Une m\xC3\xA9thode "
+                         "**VIRTUAL** du parent se red\xC3\xA9" "finit par une m\xC3\xA9thode de m\xC3\xAAme "
+                         "signature (la colonne Origine dit \xC2\xAB red\xC3\xA9" "finit T_Pompe.EnDefaut "
+                         "\xC2\xBB) ; sur une virtuelle h\xC3\xA9rit\xC3\xA9" "e, **Red\xC3\xA9" "finir** la "
+                         "cr\xC3\xA9" "e, son corps pr\xC3\xA9rempli avec `SUPER.EnDefaut()` (les "
+                         "param\xC3\xA8tres pass\xC3\xA9s tels quels). **SUPER.M\xC3\xA9thode()** rappelle "
+                         "le corps du parent. Une red\xC3\xA9" "finition garde la visibilit\xC3\xA9 de ce "
+                         "qu'elle red\xC3\xA9" "finit : priv\xC3\xA9" "e, elle est refus\xC3\xA9" "e "
+                         "(\xC2\xAB une red\xC3\xA9" "finition ne peut pas \xC3\xAAtre plus priv\xC3\xA9" "e "
+                         "que la m\xC3\xA9thode qu'elle red\xC3\xA9" "finit \xC2\xBB) : un appel par la "
+                         "m\xC3\xA9thode publique du parent y m\xC3\xA8nerait depuis hors du type.", {}, "1.13.1"},
              {K::Code, "TYPE T_PompeDoublee EXTENDS T_Pompe\n    Secours : BOOL;\n    METHOD PUBLIC "
                          "OVERRIDE EnDefaut : BOOL\nEND_TYPE\n\n(* corps de EnDefaut red\xC3\xA9" "finie "
                          "*)\nEnDefaut := SUPER.EnDefaut() AND NOT Secours;", "ST"},
@@ -14634,22 +14699,24 @@ const std::vector<Topic>& topics() {
                          "**Interface\xE2\x80\xA6** (le quatri\xC3\xA8me genre, apr\xC3\xA8s structure, "
                          "\xC3\xA9num\xC3\xA9ration, rappel) : elle cr\xC3\xA9" "e I_Interface avec une "
                          "signature d'exemple (Demarrer), \xC3\xA0 renommer. Une interface n'a ni membre ni "
-                         "corps : des **signatures** - sa section **Signatures** (Ajouter une "
-                         "signature\xE2\x80\xA6, sans corps ; ni section Op\xC3\xA9rateurs), les "
-                         "**Propri\xC3\xA9t\xC3\xA9s de la signature**, ses propri\xC3\xA9t\xC3\xA9s avec "
+                         "corps : des **signatures**. Ses onglets (1.13.1) : **Signatures** (Ajouter une "
+                         "signature\xE2\x80\xA6, sans corps, et les **Propri\xC3\xA9t\xC3\xA9s de la "
+                         "signature** ; ni onglet Op\xC3\xA9rateurs), **Impl\xC3\xA9menteurs** (chaque type "
+                         "qui l'impl\xC3\xA9mente : conforme, ou ce qui lui manque ; par sa case IMPLEMENTS "
+                         "ou h\xC3\xA9rit\xC3\xA9 de son parent) et **Propri\xC3\xA9t\xC3\xA9s**, avec "
                          "l'aper\xC3\xA7u de sa **D\xC3\xA9" "claration** (`TYPE I_Demarrable INTERFACE "
-                         "\xE2\x80\xA6 END_TYPE` sur une ligne, enti\xC3\xA8re en infobulle) et la "
-                         "cat\xC3\xA9gorie **Types qui l'impl\xC3\xA9mentent** (conforme, ou ce qui manque). "
-                         "Une structure l'**impl\xC3\xA9mente** par la cat\xC3\xA9gorie **Impl\xC3\xA9mente "
-                         "(IMPLEMENTS)** de ses propri\xC3\xA9t\xC3\xA9s : une case par interface du projet, "
-                         "plusieurs possibles (celle que son parent impl\xC3\xA9mente d\xC3\xA9j\xC3\xA0 est "
-                         "coch\xC3\xA9" "e, gris\xC3\xA9" "e, \xC2\xAB h\xC3\xA9rit\xC3\xA9" "e de T_Pompe "
-                         "\xC2\xBB : elle se d\xC3\xA9" "coche sur le parent) ; G\xC3\xA9n\xC3\xA9rer "
-                         "v\xC3\xA9rifie qu'il a chaque signature, et nomme ce qui manque : \xC2\xAB T_Vanne "
-                         "d\xC3\xA9" "clare I_Demarrable mais n'a pas EnDefaut() : BOOL \xC2\xBB. Une "
-                         "m\xC3\xA9thode **priv\xC3\xA9" "e** ne remplit pas une signature (l'appel par "
-                         "l'interface vient d'ailleurs que du type) : \xC2\xAB Demarrer est priv\xC3\xA9" "e "
-                         ": elle ne remplit pas l'interface I_Demarrable \xC2\xBB.", {}},
+                         "\xE2\x80\xA6 END_TYPE` sur une ligne, enti\xC3\xA8re en infobulle). Une structure "
+                         "l'**impl\xC3\xA9mente** par la cat\xC3\xA9gorie **Impl\xC3\xA9mente (IMPLEMENTS)** "
+                         "de son onglet **H\xC3\xA9ritage et interfaces** : une case par interface du "
+                         "projet, plusieurs possibles (celle que son parent impl\xC3\xA9mente "
+                         "d\xC3\xA9j\xC3\xA0 est coch\xC3\xA9" "e, gris\xC3\xA9" "e, \xC2\xAB "
+                         "h\xC3\xA9rit\xC3\xA9" "e de T_Pompe \xC2\xBB : elle se d\xC3\xA9" "coche sur le "
+                         "parent) ; G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie qu'il a chaque signature, et nomme "
+                         "ce qui manque : \xC2\xAB T_Vanne d\xC3\xA9" "clare I_Demarrable mais n'a pas "
+                         "EnDefaut() : BOOL \xC2\xBB. Une m\xC3\xA9thode **priv\xC3\xA9" "e** ne remplit pas "
+                         "une signature (l'appel par l'interface vient d'ailleurs que du type) : \xC2\xAB "
+                         "Demarrer est priv\xC3\xA9" "e : elle ne remplit pas l'interface I_Demarrable "
+                         "\xC2\xBB.", {}, "1.13.1"},
              {K::Code, "TYPE I_Demarrable INTERFACE\n    METHOD Demarrer\n    METHOD EnDefaut : "
                          "BOOL\nEND_TYPE\n\nTYPE T_Vanne IMPLEMENTS I_Demarrable\n    Position : REAL;\n    "
                          "METHOD PUBLIC Demarrer\n    METHOD PUBLIC EnDefaut : BOOL\nEND_TYPE", "ST"},
@@ -14692,12 +14759,13 @@ const std::vector<Topic>& topics() {
                          "m\xC3\xA9thodes montre **M\xC3\xA9thodes (n)** avant Op\xC3\xA9rateurs (n) (une "
                          "interface : **Signatures (n)**), chaque m\xC3\xA9thode avec sa signature, \xC2\xAB "
                          "virtuelle \xC2\xBB ou \xC2\xAB priv\xC3\xA9" "e \xC2\xBB \xC3\xA0 droite ; un clic "
-                         "m\xC3\xA8ne \xC3\xA0 la m\xC3\xA9thode dans la section M\xC3\xA9thodes. Une "
+                         "m\xC3\xA8ne \xC3\xA0 la m\xC3\xA9thode dans l'onglet M\xC3\xA9thodes (1.13.1 ; un "
+                         "double-clic ouvre le type dans son propre onglet, sur M\xC3\xA9thodes). Une "
                          "interface a son ic\xC3\xB4ne et \xC2\xAB (interface) \xC2\xBB ; un sous-type "
                          "affiche \xC2\xAB \xE2\x96\xB8 h\xC3\xA9rite de T_Pompe \xC2\xBB. Renommer un type "
                          "fait suivre EXTENDS et IMPLEMENTS des types qui le visent, les variables, les "
                          "membres, les signatures des m\xC3\xA9thodes et les `DYNAMIC_CAST<\xE2\x80\xA6>` du "
-                         "code.", {}, "1.13.0"},
+                         "code.", {}, "1.13.1"},
              {K::Heading, "Ce que G\xC3\xA9n\xC3\xA9rer refuse", {}},
              {K::Bullet, "un membre ou une m\xC3\xA9thode **priv\xC3\xA9** lu de l'ext\xC3\xA9rieur (depuis "
                          "une variable IHM, une locale, un param\xC3\xA8tre, une r\xC3\xA9" "f\xC3\xA9rence "
