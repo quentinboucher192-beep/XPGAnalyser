@@ -75,6 +75,8 @@ enum VarMenu : int { MTrend = 1, MCopyName, MRename, MDuplicate, MDelete,
 constexpr int kMenuToolBase = 100, kMenuUseBase = 200;
 constexpr int kMemberDuplicate = 50, kMemberRename = 51;   // 1.12.18 : le menu des membres d'un type
 constexpr int kMemberPrivate = 52, kMemberPublic = 53;     // 1.13.0 (J1b) : Rendre prive / Rendre public
+// 1.13.1 (lot K4) : les entrees du type en tete du menu de la liste des types (TableView : 1000 et plus, par contextAction).
+constexpr int kTypeMenuOpen = 1001, kTypeMenuRename = 1002, kTypeMenuDuplicate = 1003, kTypeMenuExport = 1004, kTypeMenuDelete = 1005;
 
 // 1.11.8 : le meme membre dans toutes les cases : chaque indice devient [*] ("[0].NOM" -> "[*].NOM").
 std::string allElementsOf(std::string_view rel) {
@@ -3482,13 +3484,16 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     {
         auto panel = std::make_unique<HmiTitledPanel>(base + ".typesPanel", "TYPES IHM");
-        auto table = std::make_unique<MemberTable>(base + ".types");   // 1.13.1 (lot K4) : son clic droit (Ouvrir dans un onglet...)
+        auto table = std::make_unique<ui::TableView>(base + ".types");
         table->setColumns({{"Nom", 150.f}, {"Membres", 80.f, 40.f, true, true, true, ui::Align::End}, {"Mots", 60.f, 40.f, true, true, true, ui::Align::End},
                            {"Utilis\xC3\xA9 par", 170.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
         // 1.13.1 (lot K4) : le double-clic ouvre le type dans son onglet (F2 renomme, comme avant ; un dossier : son nom).
+        // Entree aussi (le clic droit l'affiche). Le clic droit sur une ligne : les entrees du type, en tete du menu de la
+        // table (Copier, Tout choisir, les filtres restent) ; celui d'un titre de colonne reste le sien (trier, largeur...).
         table->setDoubleClickEdits(false);
-        table->onContextMenu = [this](gfx::Point at) { openTypeMenu(at); };
+        table->setEnterActivates(true);
+        table->setExtraContextItems([this] { return typeMenuItems(); });
         types_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*types_, {TDelete, TDuplicate, TAdd});   // 1.12.27 : Suppr, Ctrl+D, Inser
         split->addPane(std::move(panel), 0.27f, 200.f);
@@ -3776,25 +3781,23 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
         }
         if (const Id t = folders_->itemAt(r); t != kNoId && !openInTab(t)) say("Ouvrir dans un onglet : rien pour l'ouvrir ici.", true);
     });
-    if (auto* tm = types_->contextMenu()) {
-        typeMenu_ = tm;
-        links_ += tm->itemChosen->connect([this](int a) {
-            const Id t = selectedType();
-            std::string why;
-            switch (a) {
-                case kMenuBase - 1: if (t != kNoId) (void)openInTab(t); break;                         // Ouvrir dans un onglet
-                case kMenuBase - 2: {                                                                  // Renommer (F2) : un type, un dossier
-                    const auto rows = types_->selectedModelRows();
-                    if (!rows.empty()) (void)types_->beginCellEdit(rows.front(), 0);
-                    break;
-                }
-                case kMenuBase - 3: tools_->triggered->emit(TDuplicate); break;
-                case kMenuBase - 4: tools_->triggered->emit(TExport); break;
-                case kMenuBase - 5: tools_->triggered->emit(TDelete); break;
-                default: break;
+    // Les entrees du type (typeMenuItems : 1000 et plus) reviennent par contextAction ; la table garde les siennes.
+    typeMenu_ = types_->contextMenu();
+    links_ += types_->contextAction->connect([this](int a) {
+        const Id t = selectedType();
+        switch (a) {
+            case kTypeMenuOpen: if (t != kNoId) (void)openInTab(t); break;
+            case kTypeMenuRename: {                                   // Renommer (F2) : un type, un dossier
+                const auto rows = types_->selectedModelRows();
+                if (!rows.empty()) (void)types_->beginCellEdit(rows.front(), 0);
+                break;
             }
-        });
-    }
+            case kTypeMenuDuplicate: tools_->triggered->emit(TDuplicate); break;
+            case kTypeMenuExport: tools_->triggered->emit(TExport); break;
+            case kTypeMenuDelete: tools_->triggered->emit(TDelete); break;
+            default: break;
+        }
+    });
     // Emplois : le double-clic va a l'emploi ; Implementeurs : au type qui implemente.
     links_ += usesTable_->activated->connect([this](ui::RowIndex r) { (void)goToUse(static_cast<std::size_t>(r)); });
     links_ += implementers_->activated->connect([this](ui::RowIndex r) {
@@ -5663,28 +5666,35 @@ bool HmiTypesPane::goToUse(std::size_t index) {
     using K = TypeUse::Kind;
     if (u.kind == K::Member || u.kind == K::Subtype || u.kind == K::Method || u.kind == K::Operator) {
         const std::size_t tab = u.kind == K::Method ? TabMethods : u.kind == K::Operator ? TabOperators : TabMembers;
+        if (!doc_->project.hmiType(u.item)) return false;
         if (isDocument() && u.item != document_) {
-            if (!hosts_.openTypeTab || !doc_->project.hmiType(u.item)) return false;
-            hosts_.openTypeTab(u.item, tab);
+            // Contre-relecture K4 : l'onglet de l'autre type, et l'emploi y est choisi (le membre, la methode, l'operateur).
+            if (!hosts_.openTypeTab) return false;
+            if (auto* pane = hosts_.openTypeTab(u.item, tab)) pane->revealUse(u, tab);
             return true;
         }
-        if (!doc_->project.hmiType(u.item)) return false;
         selectType(u.item);
-        showTypeTab(tab);
-        if (u.kind == K::Member)
-            if (const auto* o = doc_->project.hmiType(u.item)) {
-                const std::string name = u.where.substr(u.where.rfind('.') + 1);
-                for (std::size_t k = 0; k < o->members.size(); ++k)
-                    if (o->members[k].name == name) selectMember(static_cast<int>(k));
-            }
-        if (u.kind == K::Method && methods_) methods_->selectMethod(u.sub);
-        if (u.kind == K::Operator && operators_) operators_->goTo(u.sub, 0);
-        say("Emploi de " + doc_->project.hmiType(current_)->name + " : " + u.where + " (" + u.what + ")");
+        revealUse(u, tab);
         return true;
     }
     if (!hosts_.openUse) return false;
     hosts_.openUse(u);
     return true;
+}
+
+void HmiTypesPane::revealUse(const TypeUse& u, std::size_t tab) {
+    using K = TypeUse::Kind;
+    showTypeTab(tab);
+    const auto* o = doc_->project.hmiType(u.item);
+    if (!o || o->id != selectedType()) return;
+    if (u.kind == K::Member) {
+        const std::string name = u.where.substr(u.where.rfind('.') + 1);
+        for (std::size_t k = 0; k < o->members.size(); ++k)
+            if (o->members[k].name == name) selectMember(static_cast<int>(k));
+    }
+    if (u.kind == K::Method && methods_) methods_->selectMethod(u.sub);
+    if (u.kind == K::Operator && operators_) operators_->goTo(u.sub, 0);
+    say("Emploi de " + o->name + " : " + u.where + " (" + u.what + ")");
 }
 
 std::string HmiTypesPane::documentTitle() const {
@@ -5697,14 +5707,18 @@ bool HmiTypesPane::documentGone() const { return isDocument() && !doc_->project.
 bool HmiTypesPane::openInTab(Id type) {
     if (!hosts_.openTypeTab || !doc_->project.hmiType(type)) return false;
     // L'onglet ouvert : celui que montre ce volet (une structure ouverte depuis Methodes s'ouvre sur Methodes).
-    hosts_.openTypeTab(type, preferredTab_);
+    (void)hosts_.openTypeTab(type, preferredTab_);
     return true;
 }
 
+// Contre-relecture K4 : par la table (TableView::setExtraContextItems) - ses propres entrees (Copier, Tout choisir, les
+// filtres) suivent, et le clic droit d'un titre de colonne garde son menu (avant : tout etait remplace).
 void HmiTypesPane::openTypeMenu(gfx::Point at) {
-    if (!typeMenu_ || !types_) return;
+    if (types_) types_->openContextMenu(at);
+}
+
+std::vector<ui::PopupMenu::Item> HmiTypesPane::typeMenuItems() const {
     namespace cmd = ui::cmd;
-    types_->openContextMenu(at);
     const Id id = selectedType();
     const auto* t = doc_->project.hmiType(id);
     const bool folder = !t && folders_ && !folders_->selectedFolder().empty();
@@ -5725,17 +5739,17 @@ void HmiTypesPane::openTypeMenu(gfx::Point at) {
                                                          : t->kind == hmi::HmiTypeKind::Callback ? std::string("rappel")
                                                                                                   : std::string("\xC3\xA9num\xC3\xA9ration")));
     else if (folder) items.push_back(cmd::heading(folders_->selectedFolder(), "dossier"));
-    items.push_back(entry("Ouvrir dans un onglet", kMenuBase - 1, "Entr\xC3\xA9" "e", t && static_cast<bool>(hosts_.openTypeTab),
+    items.push_back(entry("Ouvrir dans un onglet", kTypeMenuOpen, "Entr\xC3\xA9" "e", t && static_cast<bool>(hosts_.openTypeTab),
                           t ? std::string("pas d'onglet de document ici") : noType, ui::Icon::Window));
     items.push_back(cmd::separator());
-    items.push_back(cmd::item(cmd::Id::Renommer, kMenuBase - 2, t || folder, noType));
-    items.push_back(cmd::item(cmd::Id::Dupliquer, kMenuBase - 3, t != nullptr, noType));
+    items.push_back(cmd::item(cmd::Id::Renommer, kTypeMenuRename, t || folder, noType));
+    items.push_back(cmd::item(cmd::Id::Dupliquer, kTypeMenuDuplicate, t != nullptr, noType));
     items.push_back(cmd::separator());
-    items.push_back(entry("Exporter le type\xE2\x80\xA6", kMenuBase - 4, {}, t && static_cast<bool>(hosts_.exportItems),
+    items.push_back(entry("Exporter le type\xE2\x80\xA6", kTypeMenuExport, {}, t && static_cast<bool>(hosts_.exportItems),
                           t ? std::string("pas d'export ici") : noType, ui::Icon::Export));
     items.push_back(cmd::separator());
-    items.push_back(entry(folder ? "Supprimer le dossier" : "Supprimer le type", kMenuBase - 5, "Suppr", t || folder, noType, ui::Icon::Delete));
-    typeMenu_->setItems(std::move(items));
+    items.push_back(entry(folder ? "Supprimer le dossier" : "Supprimer le type", kTypeMenuDelete, "Suppr", t || folder, noType, ui::Icon::Delete));
+    return items;
 }
 
 void HmiTypesPane::onLayout() {

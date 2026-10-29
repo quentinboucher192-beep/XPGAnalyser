@@ -3731,7 +3731,10 @@ void MainAnalysisScreen::wireHmiTypesHosts(HmiTypesPane& types) {
         const auto node = ProjectTreeModel::pack(ProjectTreeModel::NodeKind::HmiTypeNode, static_cast<domain::Index>(id & ((1ull << 28) - 1)));   // comme hmilists::itemNode
         if (revealTreeNode(node)) explorer_->setCurrentNode(node);
     };
-    th.openTypeTab = [this](hmi::Id id, std::size_t tab) { openHmiTypeTab(id, static_cast<int>(tab)); };
+    th.openTypeTab = [this](hmi::Id id, std::size_t tab) -> HmiTypesPane* {   // l'onglet ouvert : un emploi y est choisi
+        openHmiTypeTab(id, static_cast<int>(tab));
+        return dynamic_cast<HmiTypesPane*>(hmiTab("type:" + std::to_string(id)));
+    };
     th.openUse = [this](const HmiTypesPane::TypeUse& u) {
         using K = HmiTypesPane::TypeUse::Kind;
         switch (u.kind) {

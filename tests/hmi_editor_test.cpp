@@ -38588,7 +38588,17 @@ void typesOnglets1131() {
     ligne.id = p.allocate();
     ligne.name = "T_Ligne";
     ligne.members = {{"Nom", "STRING", "", ""}, {"Pompes", "ARRAY[1..3] OF T_Pompe", "", ""}};
-    const Id ligneId = ligne.id;
+    {
+        HmiFunction m = makeFunction(p, "Arreter", "", "");
+        Declaration d;
+        d.id = p.allocate();
+        d.kind = hmi::DeclKind::Parameter;
+        d.name = "P";
+        d.type = "T_Pompe";
+        m.decls.push_back(d);
+        ligne.methods = {m};
+    }
+    const Id ligneId = ligne.id, arreterLigneId = ligne.methods[0].id;
     p.programs.types.push_back(ligne);
     HmiType mode;
     mode.id = p.allocate();
@@ -38636,7 +38646,10 @@ void typesOnglets1131() {
     std::vector<TP::TypeUse> went;
     {
         TP::Hosts h;
-        h.openTypeTab = [&opened](Id id, std::size_t tab) { opened.emplace_back(id, tab); };
+        h.openTypeTab = [&opened](Id id, std::size_t tab) -> TP* {
+            opened.emplace_back(id, tab);
+            return nullptr;
+        };
         h.openUse = [&went](const TP::TypeUse& u) { went.push_back(u); };
         types.setHosts(std::move(h));
     }
@@ -38789,8 +38802,34 @@ void typesOnglets1131() {
     const auto* openItem = menu ? findItem(menu->items(), "Ouvrir dans un onglet") : nullptr;
     check(openItem && openItem->enabled && findItem(menu->items(), "Supprimer le type") && findItem(menu->items(), "Dupliquer"),
           "le clic droit sur un type : Ouvrir dans un onglet, Dupliquer, Supprimer le type");
+    // Contre-relecture K4 (1) : les entrees de la table restent (Copier, Copier sans les titres) apres celles du type.
+    check(menu && findItem(menu->items(), "Copier") && findItem(menu->items(), "Copier sans les titres"),
+          "le clic droit sur un type garde Copier et Copier sans les titres de la table");
     if (openItem) menu->itemChosen->emit(openItem->id);
     check(opened.size() == 2 && opened[1].first == pompeId, "Ouvrir dans un onglet : l'h\xC3\xB4te l'ouvre");
+    {
+        // Contre-relecture K4 (1) : un vrai clic droit - sur une ligne : le menu du type et celui de la table ; sur un
+        // titre de colonne : le menu du titre (trier, largeur, masquer...), sans les entrees du type.
+        auto& list = types.typeTable();
+        types.layout();
+        gfx::Rect rr;
+        const bool hasRow = row >= 0 && list.rowRect(static_cast<std::size_t>(row), rr);
+        if (hasRow) (void)list.dispatch(ui::MouseDown{{rr.x + 30.f, rr.y + rr.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+        check(hasRow && menu && menu->isOpen() && findItem(menu->items(), "Ouvrir dans un onglet") && findItem(menu->items(), "Copier"),
+              "clic droit sur la ligne T_Pompe : Ouvrir dans un onglet, puis Copier");
+        if (auto* m = types.typeMenu()) m->close();
+        const auto lb = list.bounds();
+        (void)list.dispatch(ui::MouseDown{{lb.x + 40.f, lb.y + 6.f}, ui::MouseButton::Right, 1, {}});
+        check(menu && menu->isOpen() && findItem(menu->items(), "Trier de A \xC3\xA0 Z") && !findItem(menu->items(), "Ouvrir dans un onglet"),
+              "clic droit sur le titre Nom : le menu du titre (Trier de A \xC3\xA0 Z...), pas celui du type");
+        if (auto* m = types.typeMenu()) m->close();
+        // Contre-relecture K4 (2) : Entree sur un type l'ouvre dans son onglet (le menu l'affiche).
+        list.takeFocus();
+        if (row >= 0) list.selectModelRows({static_cast<ui::RowIndex>(row)}, false);
+        const auto before = opened.size();
+        (void)list.dispatch(ui::KeyDown{ui::Key::Return, ui::KeyMods{}, false});
+        check(opened.size() == before + 1 && opened.back().first == pompeId, "Entr\xC3\xA9" "e sur T_Pompe : l'h\xC3\xB4te l'ouvre dans son onglet");
+    }
 
     // ---- 5. L'onglet de document : fige sur son type, son titre suit le nom, il sait quand le type n'est plus ----
     app::HmiTypesPane own("ty1131.doc", doc, apply, pompeId);
@@ -38831,16 +38870,26 @@ void typesOnglets1131() {
     check(p.hmiType(pompeId)->members.size() == 2 && own.typeTabs().tab(TP::TabMembers)->badge == "2", "Ctrl+Z : il repart, dans l'onglet aussi");
     // Les emplois d'un autre type, depuis l'onglet de document : son onglet a lui (par l'hote).
     {
+        // Contre-relecture K4 (3) : l'hote rend l'onglet ouvert (ici, celui de T_Ligne) ; l'emploi y est choisi, sur sa ligne.
         std::vector<std::pair<Id, std::size_t>> asked;
         TP::Hosts h;
-        h.openTypeTab = [&asked](Id id, std::size_t tab) { asked.emplace_back(id, tab); };
+        h.openTypeTab = [&asked, &other](Id id, std::size_t tab) -> TP* {
+            asked.emplace_back(id, tab);
+            return id == other.documentType() ? &other : nullptr;
+        };
         own.setHosts(std::move(h));
-        std::size_t member = own.uses().size();
-        for (std::size_t k = 0; k < own.uses().size(); ++k)
+        std::size_t member = own.uses().size(), method = own.uses().size();
+        for (std::size_t k = 0; k < own.uses().size(); ++k) {
             if (own.uses()[k].kind == TP::TypeUse::Kind::Member) member = k;
+            if (own.uses()[k].kind == TP::TypeUse::Kind::Method && own.uses()[k].item == ligneId) method = k;
+        }
+        other.showTypeTab(TP::TabProperties);
         check(own.goToUse(member) && own.selectedType() == pompeId && asked.size() == 1 && asked[0].first == ligneId
-                  && asked[0].second == TP::TabMembers,
-              "Emplois \xE2\x80\xBA T_Ligne.Pompes depuis l'onglet de T_Pompe : l'onglet de T_Ligne s'ouvre (sur Membres)");
+                  && asked[0].second == TP::TabMembers && other.currentTypeTab() == TP::TabMembers && other.selectedMember() == 1,
+              "Emplois \xE2\x80\xBA T_Ligne.Pompes depuis l'onglet de T_Pompe : l'onglet de T_Ligne, sur Membres, Pompes choisi");
+        check(method < own.uses().size() && own.goToUse(method) && asked.size() == 2 && other.currentTypeTab() == TP::TabMethods
+                  && other.methods() && other.methods()->selectedMethod() == arreterLigneId,
+              "Emplois \xE2\x80\xBA T_Ligne.Arreter (param\xC3\xA8tre P) : l'onglet de T_Ligne, sur M\xC3\xA9thodes, Arreter choisie");
     }
     // Renommer : le titre suit ; supprimer : l'onglet sait que son type n'est plus (l'hote le ferme).
     std::string why;

@@ -420,7 +420,8 @@ public:
     [[nodiscard]] bool isDocument() const noexcept { return document_ != hmi::kNoId; }
     [[nodiscard]] std::string documentTitle() const;          // "T_Pompe", "Gaz.T_Detecteur" ; vide : plus de type
     [[nodiscard]] bool documentGone() const;
-    // Le clic droit sur la liste des types : Ouvrir dans un onglet, Renommer, Dupliquer, Exporter, Supprimer.
+    // Le clic droit sur la liste des types : Ouvrir dans un onglet, Renommer, Dupliquer, Exporter, Supprimer - en tete
+    // du menu de la table (Copier, Tout choisir, les filtres suivent) ; un titre de colonne garde le sien.
     void openTypeMenu(gfx::Point at);
     [[nodiscard]] ui::PopupMenu* typeMenu() const noexcept { return typeMenu_; }
     // Le double-clic sur un type de la liste (ou Entree) : l'hote l'ouvre dans son onglet (openTypeTab). Faux : pas d'hote.
@@ -436,7 +437,8 @@ public:
         std::function<void(hmi::Id)>            typeCreated;
         // 1.13.1 (lot K4) : ouvrir un type dans son propre onglet de document (le double-clic dans la liste, le clic
         // droit Ouvrir dans un onglet, un emploi dans un autre type depuis un onglet de document) ; `tab` : le sous-onglet.
-        std::function<void(hmi::Id, std::size_t)> openTypeTab;
+        // Rend le volet de cet onglet (nul : pas d'onglet) : un emploi y est choisi, sur sa ligne.
+        std::function<HmiTypesPane*(hmi::Id, std::size_t)> openTypeTab;
         // 1.13.1 : aller a un emploi du type (l'onglet Emplois) hors des types - une variable, une fonction, un script, une vue.
         std::function<void(const TypeUse&)>     openUse;
     };
@@ -528,6 +530,8 @@ private:
     void syncTypeTabs(const hmi::HmiType* t);           // montres, titres, comptes ; l'onglet prefere (ou son equivalent)
     [[nodiscard]] std::size_t tabFor(std::size_t wanted, const hmi::HmiType* t) const;
     [[nodiscard]] bool tabMakesSense(std::size_t tab, const hmi::HmiType* t) const;
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> typeMenuItems() const;   // les entrees du type (clic droit de la liste)
+    void revealUse(const TypeUse& u, std::size_t tab);   // un emploi sur sa ligne, dans ce volet (son type deja montre)
 
     hmi::DocumentPtr  doc_;
     Apply             apply_;
