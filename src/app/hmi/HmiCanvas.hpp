@@ -108,6 +108,11 @@ public:
     // texte est `text` : ses objets et ce qui manque au projet, en un seul Ctrl+Z ; `at` :
     // le coin haut-gauche au point (Coller ici, un lacher). Faux : pas de telle copie.
     bool pasteShared(const std::string& text, std::optional<hmi::edit::Pt> at = std::nullopt);
+    // 1.13.1 (lot K3) : un CODE BRUT d'objet (hmi::serializeObjectCode, le clic droit "Copier le code
+    // brut") colle par Ctrl+V : ses objets, neufs (ids, noms libres), a leur place (decales s'ils
+    // tomberaient sur l'original) ou le coin haut-gauche a `at` (Coller ici) ; un seul Ctrl+Z. Faux : ce
+    // n'est pas un code brut. Un code illisible : rien ne change, la barre d'etat dit la ligne (vrai).
+    bool pasteCode(const std::string& text, std::optional<hmi::edit::Pt> at = std::nullopt);
     // 1.12.27 : le glisser en cours sort de la fenetre : les objets restent ici (le
     // deplacement s'annule) et leur copie part avec la souris (ui::dragText).
     void dragOut();

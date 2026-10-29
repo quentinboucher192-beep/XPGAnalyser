@@ -146,6 +146,13 @@ const std::vector<Note>& table() {
         note("1.13.1", "Vues", Kind::Fixed,
          "L'AIDE \xC3\x80 LA SAISIE DANS LES REP\xC3\x88RES $\xE2\x80\xA6$ : dans un rep\xC3\xA8re ouvert (=$Mar, =$V[0].) et apr\xC3\xA8s un rep\xC3\xA8re ferm\xC3\xA9 et son point (=$V[0]$.), la liste propose de nouveau ce qui peut y aller - les variables et leurs membres, les constantes, dans un symbole ses param\xC3\xA8tres ($Van : Vanne ; $Vanne$. : OUV, Position), et avec eux les rep\xC3\xA8res d\xC3\xA9j\xC3\xA0 employ\xC3\xA9s dans la vue (en t\xC3\xAA" "te dans un champ ; dans une case \xC6\x92x typ\xC3\xA9" "e, apr\xC3\xA8s ce qui a le bon type) - dans une case \xC6\x92x, un champ, un texte \xC3\xA0 trous {\xE2\x80\xA6} et un script. Hors des rep\xC3\xA8res, elle marche comme sans $. Un rep\xC3\xA8re qui n'est pas une variable ($Vanne$.F0) ne se voit toujours pas remplacer F0 par une variable au nom voisin.",
          "dupliquer-reperes", ""),
+        // 1.13.1 (lot K3) : le code brut des objets - l'onglet de l'inspecteur, le clic droit, Ctrl+V.
+        note("1.13.1", "Vues", Kind::New,
+         "LE CODE BRUT D'UN OBJET : un seul objet choisi, l'onglet Code brut de l'inspecteur montre son texte complet, celui que l'enregistrement \xC3\xA9" "crit - ses propri\xC3\xA9t\xC3\xA9s et formules (fx), ses actions, son contenu (plumes, lignes, \xC3\xA9tats), ses fonctions red\xC3\xA9" "finies, ses alarmes surcharg\xC3\xA9" "es et, pour un groupe, ses objets. Copier le met dans le presse-papiers ; Coller remplace l'objet par le code copi\xC3\xA9 (d'un objet du m\xC3\xAAme genre, d'une autre vue, d'un autre projet) ; le texte se modifie puis s'Applique. L'objet garde son nom et sa position (la case Prendre aussi le nom et la position prend ceux du code). Une faute dit sa ligne et ne change rien ; un code d'un autre genre d'objet est refus\xC3\xA9 ; Ctrl+Z annule.",
+         "editeur", ""),
+        note("1.13.1", "Vues", Kind::New,
+         "COPIER ET COLLER LE CODE BRUT PARTOUT : le clic droit d'un objet - sur la vue, dans l'Explorateur d'objets, dans l'arbre du projet sous une vue - propose Copier le code brut, Coller le code brut (il remplace l'objet) et Code brut\xE2\x80\xA6 (l'onglet) ; sur la vue en marche en Simulation, Copier et Coller le code brut ; dans l'onglet Expressions, sur un objet d\xC3\xA9" "ball\xC3\xA9, Copier le code brut. Ctrl+V d'un code brut dans une vue (ou Coller ici) en pose les objets, neufs, avec des noms libres.",
+         "editeur", ""),
         // 1.13.0 : l'export et l'import de l'IHM et du programme en page web, retires (un
         // navigateur ne dialogue pas en Modbus) ; les archives et l'acces web en direct restent.
         note("1.13.0", "Projet", Kind::Changed,

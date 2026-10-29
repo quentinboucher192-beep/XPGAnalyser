@@ -18439,7 +18439,7 @@ void centreAide111() {
     // 1.11.13 : 21.
     // 1.11.14 : 22 ; 1.11.15 : 23 ; 1.11.16 : 24 ; 1.11.17 : 25 ; 1.11.18 : 26 ; 1.11.19 : 27 ; 1.11.20 : 28 ; 1.11.21 : 29.
     // 1.11.22 : 30 ; 1.11.23 : 31 ; 1.11.24 : 32 ; 1.12.0 : 33 (la 1.12.0 en tete, un rang de plus pour les autres) ; 1.12.1 : 34.
-    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65.
+    // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65 ; 1.13.1 : 66.
     const auto& rel = hn::releases();
     check(rel.size() == 66 && rel.front().version == "1.13.1" && rel[1].version == "1.13.0" && rel[2].version == "1.12.31" && rel[3].version == "1.12.30" && rel[4].version == "1.12.29" && rel[5].version == "1.12.28" && rel[6].version == "1.12.27" && rel[7].version == "1.12.26" && rel[8].version == "1.12.25" && rel[9].version == "1.12.24" && rel[10].version == "1.12.23" && rel[11].version == "1.12.22" && rel[12].version == "1.12.21" && rel[13].version == "1.12.20" && rel[14].version == "1.12.19" && rel[15].version == "1.12.18" && rel[16].version == "1.12.17" && rel[17].version == "1.12.16" && rel[18].version == "1.12.15" && rel[19].version == "1.12.14" && rel[20].version == "1.12.13" && rel[21].version == "1.12.12" && rel[22].version == "1.12.11" && rel[23].version == "1.12.10" && rel[24].version == "1.12.9" && rel[25].version == "1.12.8" && rel[26].version == "1.12.7" && rel[27].version == "1.12.6" && rel[28].version == "1.12.5" && rel[29].version == "1.12.4" && rel[30].version == "1.12.3" && rel[31].version == "1.12.2" && rel[32].version == "1.12.1"
               && rel[33].version == "1.12.0" && rel[34].version == "1.11.24" && rel[35].version == "1.11.23"
@@ -18452,7 +18452,7 @@ void centreAide111() {
               && rel[51].version == "1.11.7" && rel[52].version == "1.11.6" && rel[53].version == "1.11.5"
               && rel[54].version == "1.11.4" && rel[55].version == "1.11.3" && rel[56].version == "1.11.2"
               && rel[57].version == "1.11.1" && rel[58].version == "1.11" && rel[59].version == "1.10.4",
-          "notes : 66 versions, la 1.13.1 en tete (1.13.1 : lot K1), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
+          "notes : 66 versions, la 1.13.1 en tete (1.13.1 : lots K1, K3), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
     {
@@ -18723,7 +18723,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 440,   // 1.13.1 (lot K1) : + 2 (les constantes globales en formule, l'aide dans les reperes) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 442,   // 1.13.1 : + 4 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -18935,7 +18935,7 @@ void centreAide111() {
         check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 66
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.13.1" && hc::notesPage("9.9").version == "1.13.1",
+        check(hc::notesPage("").version == "1.13.1" && hc::notesPage("9.9").version == "1.13.1",   // 1.13.1 (lot K3) : la plus recente
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -24783,6 +24783,395 @@ void simulationVariables1115(const std::string& xpg) {
 // =============================================================================
 // 1.12.18 (planche 16) : les menus de la simulation de l'IHM - la vue en marche (une jauge, une
 // courbe ; Maj+clic droit quand le projet lit le bouton droit), les Variables IHM, les Expressions.
+// ---- 1.13.1 (lot K3) : L'ONGLET CODE BRUT, ses gestes, le clic droit, Ctrl+V d'un code ------------------
+namespace {
+int ongletDe(app::HmiEditor& ed, std::string_view title) {
+    auto& t = ed.inspector();
+    for (std::size_t i = 0; i < t.tabCount(); ++i)
+        if (t.tab(i) && t.tab(i)->title == title) return static_cast<int>(i);
+    return -1;
+}
+std::vector<Prop> sansPlace(const Object& o) {
+    std::vector<Prop> out;
+    for (const auto& pr : o.props)
+        if (pr.key != "x" && pr.key != "y") out.push_back(pr);
+    return out;
+}
+}   // namespace
+
+void codeBrut1131() {
+    std::printf("== 1.13.1 (lot K3) : l'onglet Code brut, le clic droit, Ctrl+V d'un code brut ==\n");
+    Bench b;
+    installerPressePapiers();
+    auto& ed = *b.editor;
+    const Id btn = b.place(Kind::Button, 100, 100);
+    b.v().object(btn)->name = "BtnMarche";
+    b.v().object(btn)->set("text", "Marche");
+    b.v().object(btn)->setExpr("fill", "Defaut ? 'red' : 'green'");
+    b.v().object(btn)->set("tooltip", "Vanne $Vanne$ et $$ 5");
+    Action a;
+    a.trigger = Trigger::Click;
+    a.operation = Operation::Set;
+    a.target = "Marche";
+    b.v().object(btn)->actions.push_back(a);
+    const Id btn2 = b.place(Kind::Button, 400, 100);
+    b.v().object(btn2)->name = "BtnArret";
+    const Id ind = b.place(Kind::Indicator, 700, 100);
+    const Id tab = b.place(Kind::Table, 100, 300);
+    ed.refresh();
+
+    // 1. L'onglet : un seul objet choisi ; rien, ou plusieurs : pas d'onglet.
+    ed.canvas().setSelection({});
+    ed.layout();
+    check(ongletDe(ed, "Code brut") < 0, "rien de choisi : pas d'onglet Code brut");
+    ed.canvas().setSelection({btn, btn2});
+    ed.layout();
+    check(ongletDe(ed, "Code brut") < 0, "deux objets choisis : pas d'onglet Code brut");
+    ed.canvas().setSelection({btn});
+    ed.layout();
+    check(ongletDe(ed, "Code brut") >= 0, "un objet choisi : l'onglet Code brut");
+    check(ed.rawCode().object() == btn, "l'onglet montre l'objet choisi");
+    const std::string code = serializeObjectCode(b.v(), {btn});
+    same_text(ed.rawCode().text(), code, "l'onglet montre le code brut de l'objet");
+    check(ed.rawCode().text().find("prop cle=text valeur=\"Marche\"") != std::string::npos
+              && ed.rawCode().text().find("expr=\"Defaut ? 'red' : 'green'\"") != std::string::npos
+              && ed.rawCode().text().find("action objet=" + std::to_string(btn)) != std::string::npos,
+          "le code se lit : ses proprietes, sa formule, son action");
+    ed.canvas().setSelection({tab});
+    ed.layout();
+    check(ongletDe(ed, "Contenu") >= 0 && ongletDe(ed, "Code brut") > ongletDe(ed, "Contenu"),
+          "un tableau : Contenu puis Code brut (au bout)");
+    ed.canvas().setSelection({btn});
+    ed.layout();
+
+    // 2. Copier : le presse-papiers recoit le code.
+    essaiPressePapiers().clear();
+    check(ed.rawCode().copy() && essaiPressePapiers() == code, "Copier : le code dans le presse-papiers");
+
+    // 3. Coller sur un autre bouton : ses proprietes sont celles du code, son nom et sa position gardes ; Ctrl+Z.
+    ed.canvas().setSelection({btn2});
+    ed.layout();
+    const View before = b.v();
+    const std::size_t depth = b.stack.done().size();
+    check(ed.rawCode().paste(), "Coller sur BtnArret : applique (" + ed.rawCode().message() + ")");
+    const auto* o2 = b.v().object(btn2);
+    check(o2 && o2->name == "BtnArret" && o2->number("x") == before.object(btn2)->number("x")
+              && o2->number("y") == before.object(btn2)->number("y"),
+          "le nom et la position de BtnArret sont gardes");
+    check(o2 && sansPlace(*o2) == sansPlace(*b.v().object(btn)) && o2->actions == b.v().object(btn)->actions,
+          "ses proprietes, sa formule, ses reperes et ses actions sont ceux du code");
+    check(b.stack.done().size() == depth + 1, "une seule commande");
+    check(!ed.rawCode().error() && ed.rawCode().message().find("Ctrl+Z") != std::string::npos, "le message dit Ctrl+Z");
+    same_text(ed.rawCode().text(), serializeObjectCode(b.v(), {btn2}), "l'onglet montre le nouveau code de BtnArret");
+    (void)b.stack.undo();
+    ed.refresh();
+    check(b.v() == before, "Ctrl+Z : BtnArret redevient ce qu'il etait");
+
+    // 4. Modifier le texte puis Appliquer.
+    ed.canvas().setSelection({btn});
+    ed.layout();
+    std::string modified = ed.rawCode().text();
+    modified.replace(modified.find("valeur=\"Marche\""), 15, "valeur=\"Marche forcee\"");
+    ed.rawCode().setText(modified);
+    check(ed.rawCode().edited(), "le texte modifie se voit (Appliquer, Revenir)");
+    ed.refresh();   // un autre changement du document ne l'efface pas
+    check(ed.rawCode().edited() && ed.rawCode().text() == modified, "un texte en cours de modification est garde");
+    check(ed.rawCode().applyText() && b.v().object(btn)->text("text") == "Marche forcee", "Appliquer : le texte de l'objet change");
+    check(!ed.rawCode().edited(), "apres Appliquer : plus rien en attente");
+    (void)b.stack.undo();
+    ed.refresh();
+    check(b.v().object(btn)->text("text") == "Marche", "Ctrl+Z : le texte revient");
+    // Revenir
+    ed.rawCode().setText("n'importe quoi");
+    ed.rawCode().revert();
+    same_text(ed.rawCode().text(), serializeObjectCode(b.v(), {btn}), "Revenir : le code de l'objet");
+
+    // 4b. Seuls le nom et x changent, la case decochee : rien ne change, le texte reste, le message dit pourquoi.
+    {
+        const View avant = b.v();
+        const std::size_t d = b.stack.done().size();
+        std::string renamed = ed.rawCode().text();
+        const std::string nameField = "nom=\"BtnMarche\"";
+        const auto nameAt = renamed.find(nameField), xAt = renamed.find("prop cle=x valeur=");
+        check(nameAt != std::string::npos && xAt != std::string::npos, "le code porte le nom et x");
+        if (nameAt == std::string::npos || xAt == std::string::npos) return;
+        renamed.replace(nameAt, nameField.size(), "nom=\"BtnStart\"");
+        const auto xLine = renamed.find("prop cle=x valeur=");
+        renamed.replace(xLine, renamed.find('\n', xLine) - xLine, "prop cle=x valeur=\"333\"");
+        ed.rawCode().setText(renamed);
+        (void)ed.rawCode().applyText();
+        check(b.v() == avant && b.stack.done().size() == d, "nom et x seuls, case decochee : l'objet ne change pas, aucune commande");
+        check(ed.rawCode().text() == renamed && ed.rawCode().edited(), "le texte tape n'est pas efface");
+        check(ed.rawCode().message().find("Prendre aussi le nom et la position") != std::string::npos
+                  && ed.rawCode().message().find("d\xC3\xA9j\xC3\xA0 ce code") == std::string::npos,
+              "le message dit la vraie raison et renvoie a la case (" + ed.rawCode().message() + ")");
+        ed.rawCode().refresh();
+        check(ed.rawCode().text() == renamed, "un rafraichissement ne l'efface pas non plus");
+        // Le meme texte avec une autre propriete changee : elle s'applique, et le message dit le nom garde.
+        std::string more = renamed;
+        more.replace(more.find("valeur=\"Marche\""), 15, "valeur=\"Marche 2\"");
+        ed.rawCode().setText(more);
+        check(ed.rawCode().applyText() && b.v().object(btn)->text("text") == "Marche 2" && b.v().object(btn)->name == "BtnMarche",
+              "une autre propriete changee s'applique, le nom est garde");
+        check(ed.rawCode().message().find("garde son nom") != std::string::npos,
+              "le message dit que le nom et la position sont gardes (" + ed.rawCode().message() + ")");
+        (void)b.stack.undo();
+        ed.refresh();
+        // Le code de l'objet tel quel : rien a changer, c'est bien le meme code.
+        ed.rawCode().revert();
+        (void)ed.rawCode().applyText();
+        check(b.v() == avant && ed.rawCode().message().find("d\xC3\xA9j\xC3\xA0 ce code") != std::string::npos,
+              "le code tel quel : l'objet a deja ce code (" + ed.rawCode().message() + ")");
+        ed.rawCode().revert();
+    }
+
+    // 5. Une faute de syntaxe : la ligne, rien ne change.
+    {
+        const View avant = b.v();
+        std::string bad = ed.rawCode().text();
+        const auto at = bad.find("prop cle=text");
+        int line = 1;
+        for (std::size_t i = 0; i < at; ++i) line += bad[i] == '\n';
+        bad.replace(at, 13, "prop cle text");
+        ed.rawCode().setText(bad);
+        const std::size_t d = b.stack.done().size();
+        check(!ed.rawCode().applyText(), "un code faux ne s'applique pas");
+        check(ed.rawCode().error() && ed.rawCode().errorLine() == line
+                  && ed.rawCode().message().find("ligne " + std::to_string(line) + " : ") != std::string::npos,
+              "la faute dit sa ligne (" + ed.rawCode().message() + ")");
+        check(b.v() == avant && b.stack.done().size() == d, "rien n'a change, aucune commande");
+        ed.rawCode().revert();
+    }
+
+    // 6. Un code d'un autre genre : refuse.
+    {
+        ed.canvas().setSelection({ind});
+        ed.layout();
+        essaiPressePapiers() = code;
+        const View avant = b.v();
+        check(!ed.rawCode().paste(), "le code d'un bouton sur un voyant : refuse");
+        check(ed.rawCode().error() && ed.rawCode().message().find("m\xC3\xAAme genre") != std::string::npos,
+              "le refus dit pourquoi (" + ed.rawCode().message() + ")");
+        check(b.v() == avant, "le voyant n'a pas change");
+        essaiPressePapiers() = "Nom\tGenre\nX\tY";
+        check(!ed.rawCode().paste() && ed.rawCode().message().find("pas de code brut") != std::string::npos,
+              "un presse-papiers sans code : refuse, dit pourquoi");
+    }
+
+    // 7. La case "Prendre aussi le nom et la position".
+    {
+        ed.canvas().setSelection({btn2});
+        ed.layout();
+        essaiPressePapiers() = code;
+        ed.rawCode().setTakeNameAndPlace(true);
+        check(ed.rawCode().takeBox().isChecked(), "la case se coche");
+        check(ed.rawCode().paste(), "coller en prenant le nom et la position");
+        const auto* o = b.v().object(btn2);
+        check(o && o->name == "BtnMarche_1" && o->number("x") == b.v().object(btn)->number("x"),
+              "le nom (deja pris : un libre) et la position du code (" + (o ? o->name : std::string("?")) + ")");
+        check(ed.rawCode().message().find("BtnMarche_1") != std::string::npos, "le message dit le nom pris");
+        (void)b.stack.undo();
+        ed.refresh();
+        ed.rawCode().setTakeNameAndPlace(false);
+    }
+
+    // 8. Le clic droit (la vue, l'Explorateur d'objets) : Copier le code brut, Coller le code brut, Code brut...
+    for (const bool explorer : {false, true}) {
+        const std::string where = explorer ? "l'Explorateur d'objets" : "la vue";
+        ed.canvas().setSelection({btn2});
+        essaiPressePapiers() = code;
+        if (explorer) {
+            ed.openCanvasMenu(b.screen(410, 110), true);
+        } else {   // le clic droit sur l'objet, dans la vue
+            const auto box = b.v().object(btn2)->box();
+            const auto at = b.screen(box.x + box.w / 2, box.y + box.h / 2);
+            ed.canvas().dispatch(ui::MouseDown{at, ui::MouseButton::Right, 1, {}});
+            ed.canvas().dispatch(ui::MouseUp{at, ui::MouseButton::Right, {}});
+        }
+        auto* m = ed.canvasMenu();
+        const auto* cp = m ? findItem(m->items(), "Copier le code brut") : nullptr;
+        const auto* ps = m ? findItem(m->items(), "Coller le code brut") : nullptr;
+        const auto* sh = m ? findItem(m->items(), "Code brut\xE2\x80\xA6") : nullptr;
+        check(cp && cp->enabled && ps && ps->enabled && sh && sh->enabled, where + " : Copier le code brut, Coller le code brut, Code brut...");
+        if (!cp || !ps || !sh) continue;
+        const int cpId = cp->id, psId = ps->id, shId = sh->id;
+        m->close();
+        essaiPressePapiers().clear();
+        ed.canvasMenuChosen(cpId);
+        same_text(essaiPressePapiers(), serializeObjectCode(b.v(), {btn2}), where + " : Copier le code brut");
+        essaiPressePapiers() = code;
+        ed.canvasMenuChosen(psId);
+        check(sansPlace(*b.v().object(btn2)) == sansPlace(*b.v().object(btn)) && b.v().object(btn2)->name == "BtnArret",
+              where + " : Coller le code brut remplace l'objet choisi (nom garde)");
+        (void)b.stack.undo();
+        ed.refresh();
+        ed.inspector().setCurrentIndex(0);
+        ed.canvasMenuChosen(shId);
+        check(ongletDe(ed, "Code brut") >= 0 && ed.inspector().currentIndex() == static_cast<std::size_t>(ongletDe(ed, "Code brut")),
+              where + " : Code brut... ouvre l'onglet");
+    }
+    {
+        // Sans code dans le presse-papiers, Coller est grise et dit pourquoi ; plusieurs objets : un a la fois.
+        essaiPressePapiers() = "rien";
+        ed.canvas().setSelection({btn});
+        ed.openCanvasMenu(b.screen(110, 110), true);
+        const auto* ps = findItem(ed.canvasMenu()->items(), "Coller le code brut");
+        check(ps && !ps->enabled && ps->disabledReason.find("pas de code brut") != std::string::npos, "Coller le code brut : grise sans code");
+        ed.canvasMenu()->close();
+        ed.canvas().setSelection({btn, btn2});
+        essaiPressePapiers() = code;
+        ed.openCanvasMenu(b.screen(110, 110), true);
+        const auto* ps2 = findItem(ed.canvasMenu()->items(), "Coller le code brut");
+        const auto* cp2 = findItem(ed.canvasMenu()->items(), "Copier le code brut");
+        check(ps2 && !ps2->enabled && cp2 && cp2->enabled, "deux objets : Copier oui, Coller un objet a la fois");
+        if (cp2) {
+            const int id2 = cp2->id;
+            ed.canvasMenu()->close();
+            ed.canvasMenuChosen(id2);
+            auto both = parseObjectCode(essaiPressePapiers());
+            check(both && both->roots.size() == 2, "Copier le code brut de deux objets : un code a deux objets du haut");
+        }
+    }
+
+    // 9. Ctrl+V d'un code brut dans la vue : des objets neufs ; Ctrl+Z les retire.
+    {
+        ed.canvas().setSelection({});
+        essaiPressePapiers() = code;
+        const std::size_t n = b.v().objects.size();
+        b.key(ui::Key::V, ui::KeyMods{true, false, false, false});
+        check(b.v().objects.size() == n + 1, "Ctrl+V d'un code brut : un objet neuf");
+        const auto sel = ed.canvas().selection();
+        const auto* made = sel.size() == 1 ? b.v().object(sel.front()) : nullptr;
+        check(made && made->kind == Kind::Button && made->id != btn && made->name == "BtnMarche_1"
+                  && made->number("x") == b.v().object(btn)->number("x") + 20,
+              "un bouton neuf, un nom libre, decale de 20 px, choisi");
+        check(made && sansPlace(*made) == sansPlace(*b.v().object(btn)), "ses proprietes sont celles du code");
+        (void)b.stack.undo();
+        ed.refresh();
+        check(b.v().objects.size() == n, "Ctrl+Z le retire");
+        // Un code faux colle dans la vue : rien ne change, la barre d'etat le dit.
+        std::string said;
+        auto link = ed.canvas().status->connect([&said](const std::string& t) { said = t; });
+        essaiPressePapiers() = code.substr(0, code.rfind("fin"));
+        b.key(ui::Key::V, ui::KeyMods{true, false, false, false});
+        check(b.v().objects.size() == n && said.find("'fin' manque") != std::string::npos, "un code coupe : rien, et la raison (" + said + ")");
+    }
+
+    // 10. Un groupe : son code porte ses enfants ; Ctrl+V les recree ; applique a un autre groupe, ses enfants changent.
+    {
+        const Id t1 = b.place(Kind::Text, 100, 500);
+        const Id r1 = b.place(Kind::Rectangle, 200, 500);
+        Id grp = kNoId;
+        (void)ed.canvas().edit("Grouper", [&](hmi::Project& p, hmi::View& v) { grp = edit::group(p, v, {t1, r1}); });
+        ed.canvas().setSelection({grp});
+        ed.layout();
+        const std::string gcode = ed.rawCode().text();
+        check(gcode.find("objet id=" + std::to_string(t1)) != std::string::npos && gcode.find("objet id=" + std::to_string(r1)) != std::string::npos,
+              "le code d'un groupe porte ses enfants");
+        essaiPressePapiers() = gcode;
+        ed.canvas().setSelection({});
+        const std::size_t n = b.v().objects.size();
+        b.key(ui::Key::V, ui::KeyMods{true, false, false, false});
+        check(b.v().objects.size() == n + 3, "Ctrl+V : le groupe et ses deux enfants, neufs");
+        (void)b.stack.undo();
+        ed.refresh();
+    }
+
+    // 11. Un objet verrouille : son menu a aussi "Copier le code brut".
+    {
+        (void)ed.canvas().edit("Verrouiller", [&](hmi::Project&, hmi::View& v) { edit::setLocked(v, {ind}, true); });
+        ed.canvas().setSelection({});
+        const auto at = b.screen(b.v().object(ind)->number("x") + 5, b.v().object(ind)->number("y") + 5);
+        ed.canvas().dispatch(ui::MouseDown{at, ui::MouseButton::Right, 1, {}});
+        ed.canvas().dispatch(ui::MouseUp{at, ui::MouseButton::Right, {}});
+        auto* m = ed.canvasMenu();
+        const auto* cp = m && m->isOpen() ? findItem(m->items(), "Copier le code brut") : nullptr;
+        check(cp != nullptr, "un objet verrouille : Copier le code brut");
+        if (cp) {
+            const int id = cp->id;
+            m->close();
+            essaiPressePapiers().clear();
+            ed.canvasMenuChosen(id);
+            check(parseObjectCode(essaiPressePapiers()) && parseObjectCode(essaiPressePapiers())->roots.front() == ind,
+                  "son code est copie");
+        }
+    }
+}
+
+void codeBrutSimulation1131() {
+    std::printf("== 1.13.1 (lot K3) : le code brut dans le menu de la vue en marche ==\n");
+    installerPressePapiers();
+    auto doc = std::make_shared<Document>();
+    auto& p = doc->project;
+    View v = makeView(p, "Supervision");
+    const Id b1 = edit::add(p, v, Kind::Button, 100, 100);
+    v.object(b1)->name = "Marche";
+    v.object(b1)->set("text", "Marche");
+    const Id b2 = edit::add(p, v, Kind::Button, 400, 100);
+    v.object(b2)->name = "Arret";
+    v.object(b2)->set("text", "Arret");
+    p.config.startView = v.id;
+    p.views.push_back(v);
+    const Id vid = v.id;
+    app::HmiSimulationHost host;
+    std::pair<Id, Id> asked{kNoId, kNoId};
+    host.pasteCode = [&](Id view, Id object, std::string* why) {
+        asked = {view, object};
+        auto parsed = parseObjectCode(ui::clipboardText());
+        if (!parsed) { if (why) *why = parsed.error().context; return false; }
+        bool ok = false;
+        auto cmd = changeView(doc, view, "Coller le code brut", [&](Project& pp, View& vv) {
+            ok = edit::applyCode(pp, vv, object, parsed->objects, false, why);
+        });
+        if (ok && cmd) (void)cmd->execute();
+        return ok;
+    };
+    app::HmiSimulationPane pane("sim1131", doc, host);
+    pane.setBounds({0, 0, 1600, 900});
+    Recorder rec;
+    const auto theme = ui::Theme::dark();
+    for (const double t : {0.0, 0.1}) {
+        rec.clear();
+        pane.layout();
+        pane.render(ui::PaintContext{rec, theme, {0, 0, 1600, 900}, t, nullptr});
+    }
+    const auto findIn = [](const std::vector<ui::PopupMenu::Item>& items, std::string_view label) -> const ui::PopupMenu::Item* {
+        for (const auto& it : items)
+            if (!it.separator && !it.heading && it.label == label) return &it;
+        return nullptr;
+    };
+    const auto menuOn = [&](const char* name) -> ui::PopupMenu* {
+        gfx::Rect r{};
+        if (!pane.canvas().objectRect(name, r)) return nullptr;
+        const gfx::Point at{r.x + r.w * 0.5f, r.y + r.h * 0.5f};
+        pane.canvas().dispatch(ui::MouseDown{at, ui::MouseButton::Right, 1, {}});
+        pane.canvas().dispatch(ui::MouseUp{at, ui::MouseButton::Right, {}});
+        auto* m = pane.viewMenu();
+        return m && m->isOpen() ? m : nullptr;
+    };
+    essaiPressePapiers() = "rien";
+    auto* m = menuOn("Marche");
+    const auto* cp = m ? findIn(m->items(), "Copier le code brut") : nullptr;
+    const auto* ps = m ? findIn(m->items(), "Coller le code brut") : nullptr;
+    check(cp && cp->enabled && ps && !ps->enabled, "la vue en marche : Copier le code brut ; Coller grise sans code");
+    if (!cp || !m) return;
+    const int cpId = cp->id;
+    m->close();
+    m->itemChosen->emit(cpId);
+    same_text(essaiPressePapiers(), serializeObjectCode(*p.view(vid), {b1}), "Copier le code brut : le code de l'objet du projet");
+    // Coller sur Arret : l'objet du projet prend le code de Marche (nom et position gardes).
+    m = menuOn("Arret");
+    const auto* ps2 = m ? findIn(m->items(), "Coller le code brut") : nullptr;
+    check(ps2 && ps2->enabled, "un code dans le presse-papiers : Coller le code brut");
+    if (!ps2 || !m) return;
+    const int psId = ps2->id;
+    m->close();
+    m->itemChosen->emit(psId);
+    check(asked.first == vid && asked.second == b2, "Coller le code brut : l'hote recoit la vue et l'objet du projet");
+    const auto* a = p.view(vid)->object(b2);
+    check(a && a->text("text") == "Marche" && a->name == "Arret", "l'objet du projet a le code de Marche, son nom garde");
+}
+
 void menusSimulation11218() {
     std::printf("== 1.12.18 : les menus de la simulation (la vue en marche, les variables, les expressions) ==\n");
     installerPressePapiers();
@@ -27513,7 +27902,8 @@ void inspecteur_range_1104() {
     b.editor->canvas().setSelection({bv});
     b.editor->layout();
     // 1.12.11 (lot G) : une vanne a l'onglet Contenu - son mode \xC3\x89tat (avant : pas d'onglet).
-    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Contenu", "une vanne : l'onglet Contenu, son mode \xC3\x89tat (1.12.11)");
+    // 1.13.1 (lot K3) : un objet choisi seul a aussi l'onglet Code brut, au bout.
+    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Contenu | Code brut", "une vanne : l'onglet Contenu, son mode \xC3\x89tat (1.12.11)");
     {
         const auto names = k3Names(b.editor->properties().categories());
         same_text(k3Join(names), "Objet, Position et taille, Apparence, S\xC3\xA9" "curit\xC3\xA9, Alarmes de l'objet, Variables publiques de l'objet, Vanne",
@@ -27547,16 +27937,16 @@ void inspecteur_range_1104() {
     b.editor->setPropertyFilter(F::Filled, false);
     b.editor->canvas().setSelection({bt});
     b.editor->layout();
-    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Contenu", "un tableau : l'onglet Contenu revient (ses lignes)");
+    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Contenu | Code brut", "un tableau : l'onglet Contenu revient (ses lignes)");
     b.editor->canvas().setSelection({bg});
     b.editor->layout();
-    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Contenu", "un groupe : l'onglet Contenu, ses objets");
+    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Contenu | Code brut", "un groupe : l'onglet Contenu, ses objets");
     check(b.editor->content().mode() == app::HmiContentPanel::Mode::Members && b.editor->content().count() == 2,
           "le contenu d'un groupe : ses deux objets (" + std::to_string(b.editor->content().count()) + ")");
     check(b.editor->inspector().tab(2) && b.editor->inspector().tab(2)->badge == "2", "la pastille de Contenu : 2");
     b.editor->canvas().setSelection({bb});
     b.editor->layout();
-    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions", "un bouton : pas d'onglet Contenu");
+    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Code brut", "un bouton : pas d'onglet Contenu (1.13.1 : Code brut)");
     b.editor->canvas().setSelection({});
     b.editor->layout();
     same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Raccourcis", "la vue seule : pas d'onglet Contenu ; 1.11.23 : l'onglet Raccourcis");
@@ -29388,7 +29778,7 @@ void raccourcis1123() {
     };
     b.editor->canvas().setSelection({btn});
     b.editor->layout();
-    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions", "un objet choisi : pas d'onglet Raccourcis (ils sont \xC3\xA0 la vue)");
+    same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Code brut", "un objet choisi : pas d'onglet Raccourcis (ils sont \xC3\xA0 la vue ; 1.13.1 : Code brut)");
     b.editor->canvas().setSelection({});
     b.editor->layout();
     same_text(tabsOf(), "Propri\xC3\xA9t\xC3\xA9s | Actions | Raccourcis", "rien de choisi : l'onglet Raccourcis");
@@ -39361,6 +39751,8 @@ int main(int argc, char** argv) {
     correctifsF2_113();                     // 1.13.0 (correctifs F2) : ce que les captures des objets et des espaces ont montre
     relectureF1_113();                      // 1.13.0 (relecture F1) : WAIT_UNTIL a la Saisie comme Compiler
     formulesK1_1131();                      // 1.13.1 (lot K1) : constantes globales en formule, aide dans les reperes
+    codeBrut1131();                         // 1.13.1 (lot K3) : l'onglet Code brut, le clic droit, Ctrl+V d'un code brut
+    codeBrutSimulation1131();               // 1.13.1 (lot K3) : le code brut dans le menu de la vue en marche
     if (argc > 1) configuration_et_variables(argv[1]);
     if (argc > 1) aide_saisie_scripts(argv[1]);
     if (argc > 1) aide_saisie_champs(argv[1]);

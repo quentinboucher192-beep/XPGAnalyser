@@ -59,6 +59,23 @@ Id add(Project&, View&, Kind, double x, double y);
 Id addObject(View&, Object);   // en haut de son calque
 [[nodiscard]] std::vector<Id> duplicate(Project&, View&, const std::vector<Id>& ids, double dx, double dy);
 void remove(View&, const std::vector<Id>& ids);   // avec les enfants ; un groupe vide disparait
+
+// ---- 1.13.1 : LE CODE BRUT (hmi::serializeObjectCode / parseObjectCode, HmiStore.hpp) ----
+//  Remplacer l'objet `target` par les objets d'un code (relu) : un seul objet du haut, du MEME
+//  GENRE que lui (sinon : refus, `why` le dit, rien ne change). Ses proprietes, formules, actions,
+//  redefinitions, alarmes surchargees et son contenu sont ceux du code ; ses enfants (un groupe)
+//  remplacent les siens, avec des ids neufs. Il garde son id, son calque, son groupe, sa place dans
+//  l'ordre de dessin, son verrou et son etat cache ; et, sauf `takeNameAndPlace`, son nom et sa
+//  position (x, y : les enfants suivent). Les reperes ($Vanne$) et les formules restent tels
+//  qu'ecrits, comme Dupliquer. Un nom deja pris par un autre objet de la vue en prend un libre :
+//  `note` le dit. A envelopper dans une commande (Ctrl+Z).
+bool applyCode(Project&, View&, Id target, const std::vector<Object>& code, bool takeNameAndPlace,
+               std::string* why = nullptr, std::string* note = nullptr);
+// Poser les objets d'un code dans la vue (Ctrl+V d'un code brut) : des ids neufs, des noms libres,
+// dans le groupe `insideGroup` (kNoId : la vue) ; decales de 20 px tant qu'un objet du meme genre
+// est deja a cette place. Rend les objets du haut poses (vide et `why` : un nom illisible).
+[[nodiscard]] std::vector<Id> pasteCode(Project&, View&, const std::vector<Object>& code, Id insideGroup = kNoId,
+                                        std::string* why = nullptr);
 [[nodiscard]] bool rename(View&, Id, const std::string& name, std::string* error = nullptr);
 [[nodiscard]] bool validName(const std::string&) noexcept;
 

@@ -635,6 +635,7 @@ N'importe quelle vue peut s'ouvrir par-dessus (une popup) par l'action « Ouvrir
 
 == editeur | L'éditeur de vues
 : L'éditeur de vues pose, déplace, aligne et règle les objets d'une vue, avec ses calques, ses groupes, l'explorateur d'objets et l'inspecteur.
+@mots Code brut, Copier le code brut, Coller le code brut, Prendre aussi le nom et la position
 @lieux vue
 @voir objets, proprietes, actions, contenu
 @capture PNG_005_calques_et_fond.png | L'éditeur : explorateur d'objets, calques, la vue, l'inspecteur et la bibliothèque.
@@ -643,6 +644,8 @@ N'importe quelle vue peut s'ouvrir par-dessus (une popup) par l'action « Ouvrir
 - à gauche, l'**explorateur d'objets** (recherche par nom ou type, filtre par type) et les **calques** ;
 - au centre, la **vue** et sa barre d'outils ;
 - à droite, l'**inspecteur** (onglets Propriétés, Actions, Contenu) et la **bibliothèque** des composants.
+@nouveau 1.13.1
+- un seul objet choisi : l'onglet **Code brut** de l'inspecteur, son texte complet (voir « Le code brut d'un objet » plus bas).
 ### Poser et déplacer
 1. Dans la bibliothèque, clique sur un composant (ou cherche-le par son nom).
 2. Clique dans la vue : l'objet se pose à cet endroit, avec un nom libre (Bouton_1, Bouton_2...).
@@ -669,6 +672,18 @@ Chaque vue a au moins un calque. Un calque se renomme, s'ordonne, se masque (ses
 > L'éditeur suit le thème de l'application ; la vue garde sa propre couleur de fond.
 @nouveau 1.12.12
 1.12.12 : les sommets d'une ligne, d'un polygone, d'une zone de plan et de la référence d'une courbe XY ont des poignées rondes : glisser (Alt : sans magnétisme), double-clic sur un segment pour ajouter, clic droit › Retirer le sommet ou Suppr. Chaque geste s'annule d'un Ctrl+Z.
+@nouveau 1.13.1
+### Le code brut d'un objet
+Chaque objet a son **texte complet**, qui se copie d'un objet à l'autre : l'onglet **Code brut** de l'inspecteur (un seul objet choisi). Ce sont ses lignes telles que l'enregistrement les écrit : `objet` (son genre, son nom, son calque), une ligne `prop` par propriété (sa valeur, et `expr=` pour une formule fx), ses actions (`action objet=…`), son contenu (les plumes d'une courbe, les lignes d'un tableau, les états : des propriétés), ses fonctions redéfinies et ses alarmes surchargées (une instance de symbole), puis, pour un groupe, ses objets. Les repères (`$Vanne$`, `$$`) et les formules restent tels qu'écrits, comme avec Dupliquer.
+- **Copier** : le code part dans le presse-papiers.
+- **Coller** : le code du presse-papiers **remplace** l'objet choisi (le code d'un autre objet, d'une autre vue, d'un autre projet).
+- **Modifier** le texte puis **Appliquer** ; **Revenir** reprend le code de l'objet.
+- Par défaut l'objet **garde son nom et sa position** ; coche **Prendre aussi le nom et la position** pour prendre ceux du code (un nom déjà pris dans la vue en reçoit un libre, le message le dit). Case décochée, un texte qui ne change que le nom ou la position ne change donc rien : le message le dit et ton texte reste. Il garde toujours son calque, son groupe, sa place dans l'ordre de dessin, son verrou.
+- Un code ne remplace qu'un objet **du même genre** (un bouton par un bouton) : un autre genre est refusé, rien ne change. Un groupe prend les objets du code à la place des siens.
+- Une faute de frappe : le message dit **la ligne** et ce qui ne va pas (« ligne 7 : 'cle' sans '=' »), la ligne est marquée en rouge, rien ne change.
+- Coller et Appliquer sont **une modification** : **Ctrl+Z** l'annule.
+- **Clic droit** sur un objet - sur la vue, dans l'Explorateur d'objets, dans l'arbre du projet sous une vue : **Copier le code brut**, **Coller le code brut**, **Code brut…** (l'onglet). Sur la vue en marche en Simulation : Copier le code brut et Coller le code brut (le code de l'objet du projet) ; dans l'onglet Expressions, sur un objet déballé : Copier le code brut. Plusieurs objets choisis : Copier le code brut les prend tous.
+- **Ctrl+V** d'un code brut dans une vue (ou clic droit › **Coller ici**) en pose les objets, **neufs** : des noms libres, décalés de 20 px s'ils tombaient sur l'original.
 @nouveau 1.12.26
 ### L'historique des modifications des objets
 À chaque **Enregistrer**, chaque objet créé, modifié ou supprimé depuis le dernier enregistrement est noté dans le projet (ihm/historique-edition), propriété par propriété, signé de la date, du PC, du compte Windows et de la version ; 100 entrées par objet.

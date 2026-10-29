@@ -26,10 +26,14 @@
 #include "../../hmi/HmiWidgets.hpp"
 #include "../../hmi/HmiTable.hpp"     // 1.12.13 : le Tableau, un mode a la fois
 #include "../../hmi/HmiRanges.hpp"   // 1.12.10 (lot F) : l'echelle des zones, Min et Max herites
+#include "../../hmi/HmiEdit.hpp"     // 1.13.1 (lot K3) : le code brut applique a l'objet
+#include "../../hmi/HmiStore.hpp"    // 1.13.1 (lot K3) : le code brut d'un objet
+#include "../../ui/widgets/Controls.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : les champs a expression, partout pareils
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -3654,5 +3658,234 @@ void HmiContentPanel::onLayout() {
 }
 
 void HmiContentPanel::onPaint(const ui::PaintContext& ctx) { ctx.r.fillRect(bounds(), ctx.theme.color.panelBg); }
+
+// =============================================================================
+//  1.13.1 (lot K3) : L'ONGLET CODE BRUT
+// =============================================================================
+namespace {
+// "ligne 7 : ..." -> 7 ; 0 : la faute ne dit pas de ligne.
+int lineOfWhy(const std::string& why) {
+    if (why.rfind("ligne ", 0) != 0) return 0;
+    return std::atoi(why.c_str() + 6);
+}
+// Le texte sans les \r ni les blancs de la fin : ce qui compte pour dire "modifie".
+std::string plainCode(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (const char c : text)
+        if (c != '\r') out += c;
+    while (!out.empty() && std::isspace(static_cast<unsigned char>(out.back()))) out.pop_back();
+    return out;
+}
+}   // namespace
+
+HmiRawCodePanel::HmiRawCodePanel(std::string id, hmi::DocumentPtr doc, Id view, Apply apply)
+    : ui::Widget(std::move(id)), doc_(std::move(doc)), view_(view), apply_(std::move(apply)) {
+    const std::string base = this->id();
+    auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
+    tools->add(ACopy, HmiGlyph::Copy, "Copier le code dans le presse-papiers (le texte de l'\xC3\xA9" "diteur)", "Copier");
+    tools->add(APaste, HmiGlyph::Paste,
+               "Coller : le code du presse-papiers remplace cet objet (m\xC3\xAAme genre d'objet ; Ctrl+Z annule)", "Coller");
+    tools->add(AApply, HmiGlyph::Check, "Appliquer le code modifi\xC3\xA9 \xC3\xA0 l'objet (Ctrl+Z annule)", "Appliquer");
+    tools->add(ARevert, HmiGlyph::Undo, "Revenir au code de l'objet (oublier les modifications)", "Revenir");
+    tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
+    tools_->setEnabledWhen(ACopy, [this] { return object_ != kNoId; });
+    tools_->setEnabledWhen(APaste, [this] { return object_ != kNoId; });
+    tools_->setEnabledWhen(AApply, [this] { return object_ != kNoId && edited(); });
+    tools_->setEnabledWhen(ARevert, [this] { return object_ != kNoId && edited(); });
+    links_ += tools_->triggered->connect([this](int a) {
+        switch (a) {
+            case ACopy: (void)copy(); break;
+            case APaste: (void)paste(); break;
+            case AApply: (void)applyText(); break;
+            case ARevert: revert(); break;
+            default: break;
+        }
+    });
+    auto box = std::make_unique<ui::Checkbox>("Prendre aussi le nom et la position", base + ".prendre");
+    box->setTooltip("D\xC3\xA9" "coch\xC3\xA9" "e (par d\xC3\xA9" "faut) : coller ou appliquer garde le nom et la position de l'objet. "
+                    "Coch\xC3\xA9" "e : il prend ceux du code (un nom d\xC3\xA9j\xC3\xA0 pris dans la vue en devient un libre).");
+    takeBox_ = &static_cast<ui::Checkbox&>(addChild(std::move(box)));
+    links_ += takeBox_->stateChanged->connect([this](ui::Checkbox::State st) { take_ = st == ui::Checkbox::State::Checked; });
+    auto ed = std::make_unique<ui::MultiLineText>(base + ".editeur");
+    ed->setShowLineNumbers(true);
+    ed->setTabInsertsSpaces(4);
+    ed->setReadOnly(true);
+    editor_ = &static_cast<ui::MultiLineText&>(addChild(std::move(ed)));
+    links_ += editor_->textChanged->connect([this](const std::string&) { invalidate(); });
+}
+
+std::string HmiRawCodePanel::objectCode() const {
+    const auto* v = doc_ ? doc_->project.view(view_) : nullptr;
+    if (!v || object_ == kNoId || !v->object(object_)) return {};
+    return hmi::serializeObjectCode(*v, {object_});
+}
+
+std::string HmiRawCodePanel::text() const { return editor_->text(); }
+
+void HmiRawCodePanel::setText(std::string text) {
+    editor_->setText(std::move(text));
+    invalidate();
+}
+
+bool HmiRawCodePanel::edited() const { return object_ != kNoId && plainCode(editor_->text()) != plainCode(shown_); }
+
+void HmiRawCodePanel::load() {
+    shown_ = objectCode();
+    editor_->setText(shown_);
+    editor_->clearModified();
+    editor_->setReadOnly(object_ == kNoId);
+    editor_->setMarkedLines({});
+    invalidate();
+}
+
+void HmiRawCodePanel::setObject(Id object) {
+    if (object == object_ && !shown_.empty()) return;
+    object_ = object;
+    message_.clear();
+    error_ = false;
+    errorLine_ = 0;
+    load();
+}
+
+void HmiRawCodePanel::refresh() {
+    const auto* v = doc_ ? doc_->project.view(view_) : nullptr;
+    if (object_ != kNoId && (!v || !v->object(object_))) {
+        setObject(kNoId);
+        return;
+    }
+    if (!edited()) {
+        if (plainCode(objectCode()) != plainCode(shown_)) load();
+        return;
+    }
+    // Un texte en cours de modification est garde ; l'objet a pu changer depuis (Proprietes, Ctrl+Z).
+    if (plainCode(objectCode()) != plainCode(shown_) && !error_)
+        say("L'objet a chang\xC3\xA9 depuis que tu modifies son code : Appliquer le remplace par ton texte, "
+            "Revenir reprend son code.", false);
+}
+
+void HmiRawCodePanel::say(std::string text, bool error, int line) {
+    message_ = std::move(text);
+    error_ = error;
+    errorLine_ = line;
+    std::vector<std::pair<std::size_t, gfx::Color>> marks;
+    if (line > 0) marks.emplace_back(static_cast<std::size_t>(line - 1), gfx::Color{231, 76, 60, 255});
+    editor_->setMarkedLines(std::move(marks));
+    if (line > 0) editor_->goToLine(static_cast<std::size_t>(line - 1));
+    invalidate();
+}
+
+bool HmiRawCodePanel::copy() {
+    const std::string code = editor_->text();
+    if (object_ == kNoId || code.empty()) return false;
+    ui::setClipboardText(code);
+    say("Code copi\xC3\xA9 : colle-le dans l'onglet Code brut d'un objet du m\xC3\xAAme genre (Coller), "
+        "ou dans une vue (Ctrl+V : un objet neuf).", false);
+    return true;
+}
+
+bool HmiRawCodePanel::paste() {
+    if (object_ == kNoId) return false;
+    const std::string clip = ui::clipboardText();
+    if (!hmi::isObjectCode(clip)) {
+        say("Le presse-papiers ne contient pas de code brut d'objet : copie d'abord le code d'un objet "
+            "(cet onglet, ou clic droit \xE2\x80\xBA Copier le code brut).", true);
+        return false;
+    }
+    setText(clip);   // le code colle reste lisible (et corrigeable) s'il ne s'applique pas
+    return applyCode(clip, "Coller le code brut");
+}
+
+bool HmiRawCodePanel::applyText() { return applyCode(editor_->text(), "Code brut"); }
+
+void HmiRawCodePanel::revert() {
+    load();
+    say({}, false);
+}
+
+void HmiRawCodePanel::setTakeNameAndPlace(bool on) {
+    take_ = on;
+    takeBox_->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+}
+
+bool HmiRawCodePanel::applyCode(const std::string& code, const std::string& label) {
+    const auto* v = doc_ ? doc_->project.view(view_) : nullptr;
+    const auto* o = v ? v->object(object_) : nullptr;
+    if (!o) {
+        say("Aucun objet choisi.", true);
+        return false;
+    }
+    auto parsed = hmi::parseObjectCode(code);
+    if (!parsed) {
+        const std::string why = parsed.error().context;
+        say("Rien n'a chang\xC3\xA9 : " + why, true, lineOfWhy(why));
+        return false;
+    }
+    // La case decochee : le nom et la place du code ne comptent pas. S'ils different de ceux de l'objet,
+    // le message le dit (sinon un texte qui ne change qu'eux semblerait applique, ou deja la).
+    bool keptNameOrPlace = false;
+    if (!take_ && !parsed->roots.empty())
+        for (const auto& c : parsed->objects)
+            if (c.id == parsed->roots.front()) {
+                const auto from = c.box(), to = o->box();
+                keptNameOrPlace = c.name != o->name || from.x != to.x || from.y != to.y;
+            }
+    std::string why, note;
+    bool ok = false;
+    const Id target = object_;
+    const bool take = take_;
+    auto cmd = hmi::changeView(doc_, view_, label + " : " + o->name, [&](hmi::Project& p, hmi::View& vv) {
+        ok = hmi::edit::applyCode(p, vv, target, parsed->objects, take, &why, &note);
+    });
+    if (!ok) {
+        say("Rien n'a chang\xC3\xA9 : " + why, true);
+        return false;
+    }
+    if (!cmd) {
+        if (keptNameOrPlace) {   // le texte n'est pas recharge : ce qui a ete tape reste
+            say("Rien n'a chang\xC3\xA9 : ton code ne diff\xC3\xA8re que par le nom ou la position, et l'objet garde les siens. "
+                "Coche Prendre aussi le nom et la position pour prendre ceux du code.", true);
+            return false;
+        }
+        load();
+        say("Rien \xC3\xA0 changer : l'objet a d\xC3\xA9j\xC3\xA0 ce code.", false);
+        return true;
+    }
+    if (apply_) apply_(std::move(cmd));
+    load();
+    const auto* now = doc_->project.view(view_) ? doc_->project.view(view_)->object(target) : nullptr;
+    if (keptNameOrPlace)
+        note += std::string(note.empty() ? "" : " ; ")
+              + "il garde son nom et sa position";
+    const std::string msg = "Code appliqu\xC3\xA9 \xC3\xA0 " + (now ? now->name : std::string("l'objet")) + " (Ctrl+Z annule)"
+                          + (note.empty() ? std::string{} : " - " + note);
+    say(msg, false);
+    status->emit(msg);
+    return true;
+}
+
+void HmiRawCodePanel::onLayout() {
+    const auto b = bounds();
+    tools_->setBounds({b.x, b.y, b.w, 34});
+    takeBox_->setBounds({b.x + 8, b.y + 36, std::max(0.f, b.w - 16), 24});
+    const float msgH = 22.f, top = 36 + 24 + msgH + 2;
+    editor_->setBounds({b.x, b.y + top, b.w, std::max(0.f, b.h - top)});
+}
+
+void HmiRawCodePanel::onPaint(const ui::PaintContext& ctx) {
+    const auto b = bounds();
+    ctx.r.fillRect(b, ctx.theme.color.panelBg);
+    std::string line = message_;
+    gfx::Color col = error_ ? ctx.theme.color.error : ctx.theme.color.ok;
+    if (line.empty()) {
+        col = ctx.theme.color.textMuted;
+        line = object_ == kNoId ? std::string("Choisis un objet : son code brut s'affiche ici.")
+             : edited()         ? std::string("Modifi\xC3\xA9 : Appliquer remplace l'objet par ce code, Revenir l'oublie.")
+                                : std::string("Le code de l'objet : ses propri\xC3\xA9t\xC3\xA9s, formules, actions et son contenu.");
+    }
+    const auto font = ctx.theme.font.smallUi;
+    const float lh = ctx.r.lineHeight(font);
+    ctx.r.drawText({b.x + 8, b.y + 36 + 24 + (22 - lh) / 2}, line, font, col);
+}
 
 } // namespace app

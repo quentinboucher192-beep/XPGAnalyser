@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cmath>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 
@@ -310,6 +311,191 @@ std::vector<Id> duplicate(Project& p, View& v, const std::vector<Id>& ids, doubl
         created.push_back(renamed[id]);
     }
     return created;
+}
+
+// ---- 1.13.1 : le code brut ----------------------------------------------------
+namespace {
+// Les ids d'un code, et ses objets du haut (ni enfant d'un autre objet du code).
+std::vector<std::size_t> codeRoots(const std::vector<Object>& code) {
+    std::set<Id> ids;
+    for (const auto& o : code) ids.insert(o.id);
+    std::vector<std::size_t> roots;
+    for (std::size_t i = 0; i < code.size(); ++i)
+        if (!ids.count(code[i].parent)) roots.push_back(i);
+    return roots;
+}
+std::string upperName(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return s;
+}
+// Un nom libre parmi `taken` (en majuscules) : le nom lui-meme, sinon base_1, base_2...
+std::string freeName(const std::string& name, const std::set<std::string>& taken) {
+    if (!taken.count(upperName(name))) return name;
+    std::string base = baseName(name);
+    if (base.empty()) base = "Objet";
+    for (int i = 1; i < 100000; ++i) {
+        std::string candidate = base + "_" + std::to_string(i);
+        if (!taken.count(upperName(candidate))) return candidate;
+    }
+    return name;
+}
+std::string badNameWhy(const Object& o) {
+    return "le nom '" + o.name + "' (" + std::string(kindLabel(o.kind))
+           + ") n'est pas un nom d'objet : une lettre ou _, puis lettres, chiffres ou _ (64 au plus)";
+}
+}   // namespace
+
+bool applyCode(Project& p, View& v, Id target, const std::vector<Object>& code, bool takeNameAndPlace,
+               std::string* why, std::string* note) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const Object* old = v.object(target);
+    if (!old) return fail("l'objet n'est plus dans la vue");
+    if (code.empty()) return fail("le code ne contient aucun objet");
+    const auto roots = codeRoots(code);
+    if (roots.size() != 1)
+        return fail("le code porte " + std::to_string(roots.size())
+                    + " objets du haut : il en faut un seul pour remplacer un objet (Ctrl+V dans la vue les pose tous)");
+    const Object& src = code[roots.front()];
+    if (src.kind != old->kind)
+        return fail("ce code est celui d'un objet " + std::string(kindLabel(src.kind)) + ", l'objet choisi est un "
+                    + std::string(kindLabel(old->kind)) + " : rien n'est chang\xC3\xA9 (le code brut ne remplace qu'un objet du m\xC3\xAAme genre)");
+    // Les noms pris : ceux de la vue, sans l'objet ni ses enfants d'avant (ils sont remplaces).
+    std::set<Id> doomed;
+    for (Id d : v.descendantsOf(target)) doomed.insert(d);
+    std::set<std::string> taken;
+    for (const auto& o : v.objects)
+        if (o.id != target && !doomed.count(o.id)) taken.insert(upperName(o.name));
+    // L'objet : le code, a la place (id, calque, groupe, verrou, cache) de l'ancien.
+    Object root = src;
+    root.id = old->id;
+    root.parent = old->parent;
+    root.layer = old->layer;
+    root.locked = old->locked;
+    root.hidden = old->hidden;
+    double dx = 0, dy = 0;
+    std::string notes;
+    if (takeNameAndPlace) {
+        if (!validName(src.name)) return fail(badNameWhy(src));
+        root.name = freeName(src.name, taken);
+        if (root.name != src.name) notes = "le nom " + src.name + " est d\xC3\xA9j\xC3\xA0 pris : l'objet s'appelle " + root.name;
+    } else {
+        root.name = old->name;
+        const Box from = src.box(), to = old->box();
+        dx = to.x - from.x;
+        dy = to.y - from.y;
+        root.setNumber("x", to.x);
+        root.setNumber("y", to.y);
+    }
+    taken.insert(upperName(root.name));
+    // Ses enfants (un groupe) : des ids neufs, decales comme lui, leurs noms libres.
+    std::map<Id, Id> renamed{{src.id, root.id}};
+    for (const auto& o : code)
+        if (o.id != src.id) renamed[o.id] = p.allocate();
+    std::vector<Object> children;
+    for (const auto& o : code) {
+        if (o.id == src.id) continue;
+        if (!validName(o.name)) return fail(badNameWhy(o));
+        Object c = o;
+        c.id = renamed[o.id];
+        c.parent = renamed.count(o.parent) ? renamed[o.parent] : root.id;
+        c.layer = root.layer;   // un groupe et ses membres sur un meme calque (comme group et moveToLayer)
+        c.name = freeName(o.name, taken);
+        if (c.name != o.name)
+            notes += std::string(notes.empty() ? "" : " ; ") + o.name + " s'appelle " + c.name + " (nom d\xC3\xA9j\xC3\xA0 pris)";
+        taken.insert(upperName(c.name));
+        if (dx != 0 || dy != 0) {
+            c.setNumber("x", c.number("x") + dx);
+            c.setNumber("y", c.number("y") + dy);
+        }
+        children.push_back(std::move(c));
+    }
+    // A sa place dans l'ordre de dessin, ses enfants juste apres lui (comme un groupe).
+    std::vector<Object> rest;
+    rest.reserve(v.objects.size() + children.size());
+    for (auto& o : v.objects) {
+        if (doomed.count(o.id)) continue;
+        if (o.id == target) {
+            rest.push_back(root);
+            for (auto& c : children) rest.push_back(std::move(c));
+            continue;
+        }
+        rest.push_back(std::move(o));
+    }
+    v.objects = std::move(rest);
+    refreshGroupBounds(v);
+    if (note) *note = std::move(notes);
+    return true;
+}
+
+std::vector<Id> pasteCode(Project& p, View& v, const std::vector<Object>& code, Id insideGroup, std::string* why) {
+    std::vector<Id> top;
+    if (code.empty()) {
+        if (why) *why = "le code ne contient aucun objet";
+        return top;
+    }
+    for (const auto& o : code)
+        if (!validName(o.name)) {
+            if (why) *why = badNameWhy(o);
+            return top;
+        }
+    const auto roots = codeRoots(code);
+    // Decale tant qu'un objet du meme genre est deja a la place d'un objet du haut (le code recolle
+    // dans sa propre vue ne se pose pas dessus).
+    double off = 0;
+    const auto occupied = [&](double d) {
+        for (const std::size_t r : roots) {
+            const Box b = code[r].box();
+            for (const auto& o : v.objects)
+                if (o.kind == code[r].kind && std::fabs(o.number("x") - (b.x + d)) < 0.5 && std::fabs(o.number("y") - (b.y + d)) < 0.5)
+                    return true;
+        }
+        return false;
+    };
+    for (int guard = 0; guard < 50 && occupied(off); ++guard) off += 20;
+    std::set<std::string> taken;
+    for (const auto& o : v.objects) taken.insert(upperName(o.name));
+    std::set<Id> codeIds;
+    for (const auto& o : code) codeIds.insert(o.id);
+    std::map<Id, Id> renamed;
+    for (const auto& o : code) renamed[o.id] = p.allocate();
+    const Id fallbackLayer = v.layer(v.activeLayer) ? v.activeLayer : (v.layers.empty() ? kNoId : v.layers.front().id);
+    // Un groupe et ses membres sont sur un meme calque (comme group et moveToLayer) : un objet colle dans
+    // un groupe prend le calque du groupe, un enfant du code celui de son parent (le code est du texte,
+    // modifiable a la main : son calque ecrit ne compte que pour un objet du haut).
+    const Object* host = insideGroup != kNoId ? v.object(insideGroup) : nullptr;
+    const std::optional<Id> hostLayer = host ? std::optional<Id>(host->layer) : std::nullopt;
+    std::map<Id, Id> layerOf;   // par id du code ; un enfant peut venir avant son parent dans le texte
+    for (const auto& o : code)
+        if (!codeIds.count(o.parent)) layerOf[o.id] = hostLayer ? *hostLayer : (v.layer(o.layer) ? o.layer : fallbackLayer);
+    for (bool more = true; more;) {
+        more = false;
+        for (const auto& o : code)
+            if (!layerOf.count(o.id) && layerOf.count(o.parent)) {
+                layerOf[o.id] = layerOf[o.parent];
+                more = true;
+            }
+    }
+    for (const auto& o : code) {
+        Object c = o;
+        const bool isTop = !codeIds.count(o.parent);
+        c.id = renamed[o.id];
+        c.parent = isTop ? insideGroup : renamed[o.parent];
+        c.layer = layerOf.count(o.id) ? layerOf[o.id] : fallbackLayer;
+        c.locked = false;
+        c.name = freeName(o.name, taken);
+        taken.insert(upperName(c.name));
+        if (off != 0) {
+            c.setNumber("x", c.number("x") + off);
+            c.setNumber("y", c.number("y") + off);
+        }
+        if (isTop) top.push_back(c.id);
+        v.objects.push_back(std::move(c));
+    }
+    refreshGroupBounds(v);
+    return top;
 }
 
 void remove(View& v, const std::vector<Id>& ids) {

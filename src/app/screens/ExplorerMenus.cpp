@@ -32,6 +32,8 @@
 #include "../ProjectExchange.hpp"   // 1.12.30 : la racine du projet - archive
 #include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio - sans automate
 #include "../hmi/HmiNativesCards.hpp"   // 1.12.0 : ce qu'Inserer pose
+#include "../hmi/HmiEditor.hpp"          // 1.13.1 (lot K3) : Coller le code brut, l'onglet Code brut
+#include "../../hmi/HmiStore.hpp"        // 1.13.1 (lot K3) : le code brut d'un objet
 
 #include "../AnimationTablesPane.hpp"
 #include "../ApiPanes.hpp"
@@ -1627,6 +1629,30 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         const auto* view = hmiDoc ? hmiDoc->project.view(static_cast<hmi::Id>(viewId)) : nullptr;
         const auto* object = view && treeModel_ ? view->object(static_cast<hmi::Id>(treeModel_->hmiObjectOf(node))) : nullptr;
         if (object) m.add("Copier le nom", Icon::Copy, copy(view->name + "." + object->name));
+        // 1.13.1 (lot K3) : le code brut de l'objet - le copier, coller un code a sa place, l'onglet Code brut.
+        if (object) {
+            const std::uint64_t vId = view->id, oId = object->id;
+            m.separator();
+            m.add("Copier le code brut", Icon::Code, [this, vId, oId] {
+                auto d = app_.hmi();
+                const auto* v = d ? d->project.view(static_cast<hmi::Id>(vId)) : nullptr;
+                if (!v || !v->object(static_cast<hmi::Id>(oId))) return;
+                ui::setClipboardText(hmi::serializeObjectCode(*v, {static_cast<hmi::Id>(oId)}));
+                if (status_)
+                    status_->setTransientMessage("Code brut de " + v->name + "." + v->object(static_cast<hmi::Id>(oId))->name
+                                                     + " copi\xC3\xA9.", 5.0, StatusBar::Severity::Success);
+            });
+            const bool clip = hmi::isObjectCode(ui::clipboardText());
+            m.add("Coller le code brut", Icon::Paste, [this, vId, oId, refused] {
+                openHmiView(vId, -1, oId);
+                auto* ed = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(vId)));
+                if (ed && !ed->pasteRawCode()) refused("Coller le code brut", ed->rawCode().message());
+            }, {}, clip ? std::string{} : std::string("le presse-papiers n'a pas de code brut d'objet"));
+            m.add("Code brut" + kDots, Icon::Code, [this, vId, oId] {
+                openHmiView(vId, -1, oId);
+                if (auto* ed = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(vId)))) (void)ed->showRawCode();
+            });
+        }
         break;
     }
 

@@ -167,6 +167,10 @@ struct HmiSimulationHost {
     //  vue et l'objet du projet dans l'editeur. Nuls : pas d'entree.
     std::function<bool(const std::string& path, std::string* why)> follow;
     std::function<void(hmi::Id view, hmi::Id object)>               goToObject;
+    // 1.13.1 (lot K3) : "Coller le code brut" sur un objet de la vue en marche - le code du
+    // presse-papiers remplace l'objet du projet (une modification du projet, Ctrl+Z). Faux : why.
+    // Nul : l'entree est grisee.
+    std::function<bool(hmi::Id view, hmi::Id object, std::string* why)> pasteCode;
     // ---- 1.13.0 (lot J2) : LE DEBOGUEUR DES SCRIPTS IHM ----
     //  goToCode : le script (ou la fonction) dans son editeur, le curseur a la ligne (1 = la premiere) -
     //  le double clic sur un point d'arret, sur un niveau de la pile. Nul : pas de lien.
