@@ -2,6 +2,7 @@
 #include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "HmiRoles.hpp"   // 1.12.6 (lot C) : le decoupeur unique des listes
 #include "HmiMarkers.hpp"   // 1.12.5 : la source sans ses reperes
+#include "HmiQuality.hpp"   // 1.13.1 : la largeur estimee d'un texte (les boutons de la courbe)
 
 #include <algorithm>
 #include <mutex>
@@ -543,10 +544,26 @@ TableLayout tableLayout(const Object& o, double w, double h, std::size_t count, 
     return l;
 }
 
-// 1.12.16 : le bouton Pause / Continuer d'une courbe pilotable - en haut a droite, 24 x 18.
+// 1.12.16 : le bouton Pause / Continuer d'une courbe pilotable - en haut a droite (1.13.1, la lisibilite : 26 x 20,
+// la hauteur des autres boutons de la barre).
 std::array<double, 4> trendPauseBox(double w, double h) {
     (void)h;
-    return {std::max(0.0, w - 30.0), 4.0, 24.0, 18.0};
+    return {std::max(0.0, w - 32.0), 4.0, 26.0, kTrendBarH};
+}
+
+std::string trendButtonText(std::string_view part, bool frozen) {
+    if (part == "figer") return frozen ? "Reprendre" : "Figer";
+    if (part == "curseurs") return "Curseurs";
+    if (part == "toutvoir") return "Tout voir";
+    return {};
+}
+
+double trendButtonWidth(std::string_view part) {
+    // L'estimation de la largeur (HmiQuality) compte la taille comme un cadratin : plus large que la vraie police
+    // (sa taille est la hauteur de ses lignes) - le libelle tient, avec sa marge (drawButtonBox en garde 8).
+    const double widest = std::max(estimateTextWidth(trendButtonText(part, false), kTrendBarFont),
+                                   estimateTextWidth(trendButtonText(part, true), kTrendBarFont));
+    return std::ceil(widest) + 14;
 }
 
 bool trendPilotable(const Object& o) {
@@ -602,7 +619,8 @@ TrendLayout trendLayout(const Object& o, double w, double h, bool cursors) {
     l.pilotable = pilotable;
     const bool legend = trendFlagProp(o, "legend", true) && trendPenCount(o) > 0;
     // La legende en haut (et la barre d'une courbe pilotable), les graduations a gauche et en bas.
-    const double top = legend || pilotable ? 24 : 8, left = 46, bottom = 20, right = 10;
+    // 1.13.1 (la lisibilite) : la legende et la barre ecrites en kTrendBarFont, la bande du haut un peu plus haute.
+    const double top = legend || pilotable ? 8 + kTrendBarH : 8, left = 46, bottom = 20, right = 10;
     l.plot = {left, top, std::max(10.0, w - left - right), std::max(10.0, h - top - bottom)};
     l.legendRight = w;
     if (pilotable) {
@@ -610,19 +628,23 @@ TrendLayout trendLayout(const Object& o, double w, double h, bool cursors) {
         l.buttons.push_back({"pause", {p[0], p[1], p[2], p[3]}});
         double next = p[0] - 4;
         // De droite a gauche : celui qui ne tient plus (une courbe etroite) et ceux d'apres n'y sont pas.
-        for (const auto& [part, width] : {std::pair<const char*, double>{"figer", 66}, {"curseurs", 62}, {"toutvoir", 62}}) {
+        // 1.13.1 (la lisibilite) : chacun a la largeur de son plus long libelle (Figer : Reprendre) a kTrendBarFont.
+        for (const char* part : {"figer", "curseurs", "toutvoir"}) {
+            const double width = trendButtonWidth(part);
             const double x0 = next - width;
             if (x0 < 4) break;
-            l.buttons.push_back({part, {x0, 4, width, 18}});
+            l.buttons.push_back({part, {x0, 4, width, kTrendBarH}});
             next = x0 - 4;
         }
         l.legendRight = l.buttons.back().box.x - 4;
     }
     if (cursors) {
-        l.readout = {l.plot.x + 4, l.plot.y + 4, std::min(l.plot.w - 8, 340.0), 0};
+        l.readout = {l.plot.x + 4, l.plot.y + 4, std::min(l.plot.w - 8, 360.0), 0};
         if (l.readout.w >= 150) {
-            l.exportExcel = {l.readout.x + l.readout.w - 4 - 46, l.readout.y + 2, 46, 16};
-            l.exportCsv = {l.exportExcel.x - 4 - 40, l.readout.y + 2, 40, 16};
+            // 1.13.1 (la lisibilite) : CSV et Excel a kTrendReadoutFont, chacun a la largeur de son libelle.
+            const double wx = std::ceil(estimateTextWidth("Excel", kTrendReadoutFont)) + 14, wc = std::ceil(estimateTextWidth("CSV", kTrendReadoutFont)) + 14;
+            l.exportExcel = {l.readout.x + l.readout.w - 4 - wx, l.readout.y + 3, wx, 18};
+            l.exportCsv = {l.exportExcel.x - 4 - wc, l.readout.y + 3, wc, 18};
         }
     }
     return l;
@@ -816,6 +838,49 @@ std::string trendNumber(double v) {
     std::string s = b;
     if (s == "-0") s = "0";
     return s;
+}
+
+TrendReadingText trendReadingText(std::optional<double> a, std::optional<double> b) {
+    TrendReadingText out{"-", "-", "-"};
+    if (a && !std::isfinite(*a)) a.reset();
+    if (b && !std::isfinite(*b)) b.reset();
+    if (!a && !b) return out;
+    // Les decimales : quatre chiffres significatifs sur la plus grande valeur, trois sur l'ecart (un ecart minuscule
+    // entre deux grandes valeurs se lit encore) ; au plus neuf, comme les graduations.
+    const double big = std::max(a ? std::fabs(*a) : 0.0, b ? std::fabs(*b) : 0.0);
+    int decimals = big > 0 ? 3 - static_cast<int>(std::floor(std::log10(big))) : 0;
+    const bool both = a && b;
+    const double gap = both ? *b - *a : 0.0;
+    if (both && std::fabs(gap) > 0) decimals = std::max(decimals, 2 - static_cast<int>(std::floor(std::log10(std::fabs(gap)))));
+    decimals = std::clamp(decimals, 0, 9);
+    const auto fixed = [&](double v) {
+        char buf[96];
+        std::snprintf(buf, sizeof buf, "%.*f", decimals, v);
+        return std::string(buf);
+    };
+    // Les zeros de fin communs aux trois tombent : 32, 48, +16 plutot que 32.00, 48.00, +16.00 ; 36.8, 37.2, +0.4.
+    std::vector<std::string*> shown;
+    std::string sa, sb, sd;
+    if (a) { sa = fixed(*a); shown.push_back(&sa); }
+    if (b) { sb = fixed(*b); shown.push_back(&sb); }
+    if (both) { sd = fixed(gap); shown.push_back(&sd); }
+    int keep = 0;
+    for (const auto* s : shown) {
+        const auto dot = s->find('.');
+        if (dot == std::string::npos) continue;
+        std::size_t last = s->size();
+        while (last > dot + 1 && (*s)[last - 1] == '0') --last;
+        keep = std::max(keep, static_cast<int>(last - dot - 1));
+    }
+    for (auto* s : shown) {
+        if (const auto dot = s->find('.'); dot != std::string::npos) s->resize(keep > 0 ? dot + 1 + static_cast<std::size_t>(keep) : dot);
+        // Un -0.00 (arrondi a zero) s'ecrit sans signe.
+        if (!s->empty() && s->front() == '-' && s->find_first_not_of("-0.") == std::string::npos) s->erase(0, 1);
+    }
+    if (a) out.a = sa;
+    if (b) out.b = sb;
+    if (both) out.delta = (sd.empty() || sd.front() != '-' ? "+" : "") + sd;
+    return out;
 }
 
 std::string trendTick(double offset, double span) {

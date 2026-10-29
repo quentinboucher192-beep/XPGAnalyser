@@ -2391,10 +2391,11 @@ void courbeModele1131() {
         for (const auto& b : l.buttons) if (b.part == part) return b.box;
         return hmi::Box{};
     };
-    check(l.buttons.size() == 4 && box("pause").x == 370 && box("figer").right() < box("pause").x && box("curseurs").right() < box("figer").x
+    // (1.13.1, la lisibilite : la barre a 20 de haut, Pause 26 x 20 - la zone de trace commence a 28.)
+    check(l.buttons.size() == 4 && box("pause").x == 368 && box("figer").right() < box("pause").x && box("curseurs").right() < box("figer").x
               && box("toutvoir").right() < box("curseurs").x && l.legendRight < box("toutvoir").x,
           "pilotable : Pause, Figer, Curseurs, Tout voir de droite \xC3\xA0 gauche ; la l\xC3\xA9gende s'arr\xC3\xAAte avant");
-    check(l.plot.x == 46 && l.plot.y == 24 && l.plot.w == 344 && l.plot.h == 156, "la zone de trace (sous la barre)");
+    check(l.plot.x == 46 && l.plot.y == 28 && l.plot.w == 344 && l.plot.h == 152, "la zone de trace (sous la barre)");
     check(hmi::trendHit(o, 400, 200, box("figer").cx(), box("figer").cy()) == "figer"
               && hmi::trendHit(o, 400, 200, box("toutvoir").cx(), box("toutvoir").cy()) == "toutvoir"
               && hmi::trendHit(o, 400, 200, box("pause").cx(), box("pause").cy()) == "pause" && hmi::trendHit(o, 400, 200, 200, 100).empty(),
@@ -2475,6 +2476,89 @@ void courbeModele1131() {
     check(hmi::trendNumber(7.123456789) == "7.12346" && hmi::trendNumber(-0.0) == "0", "une valeur lue : six chiffres");
 }
 
+// 1.13.1 (la lisibilite des courbes, apres les captures) : les valeurs du cadre des curseurs arrondies et ecrites pareil
+// en A, en B et pour l'ecart (avant : "\xCE\x94 -14.7166", "\xCE\x94 +0.00050914") ; les boutons de la barre a la largeur de leur
+// libelle, mesure avec une vraie police quand la machine en a une. Sans moteur, sans ecran.
+void courbeLisibilite1131() {
+    std::printf("== 1.13.1 : la lisibilit\xC3\xA9 des courbes (valeurs des curseurs arrondies, boutons \xC3\xA0 la taille du texte) ==\n");
+    const auto said = [](const hmi::TrendReadingText& t) { return "A " + t.a + "   B " + t.b + "   \xCE\x94 " + t.delta; };
+    // Le meme nombre de decimales pour les trois.
+    const auto decimals = [](const std::string& v) {
+        const auto dot = v.find('.');
+        return dot == std::string::npos ? std::size_t{0} : v.size() - dot - 1;
+    };
+    const auto same = [&](const hmi::TrendReadingText& t) { return decimals(t.a) == decimals(t.b) && decimals(t.b) == decimals(t.delta); };
+    auto t = hmi::trendReadingText(46.7256, 32.009);
+    check(t.a == "46.73" && t.b == "32.01" && t.delta == "-14.72" && same(t), "la capture 15 : A 46.73   B 32.01   \xCE\x94 -14.72 (avant -14.7166) - " + said(t));
+    t = hmi::trendReadingText(34.519412, 34.519921);
+    check(t.a == "34.519412" && t.b == "34.519921" && t.delta == "+0.000509" && same(t),
+          "la capture 17 (zoom tr\xC3\xA8s fin) : un \xC3\xA9" "cart minuscule, trois chiffres - et A, B autant de d\xC3\xA9" "cimales (avant +0.00050914) - " + said(t));
+    t = hmi::trendReadingText(34.2286, 34.9027);
+    check(t.a == "34.229" && t.b == "34.903" && t.delta == "+0.674" && same(t), "la capture 16 : A 34.229   B 34.903   \xCE\x94 +0.674 - " + said(t));
+    t = hmi::trendReadingText(32, 48);
+    check(t.a == "32" && t.b == "48" && t.delta == "+16", "des entiers restent entiers : 32, 48, +16 - " + said(t));
+    t = hmi::trendReadingText(36.8, 37.2);
+    check(t.a == "36.8" && t.b == "37.2" && t.delta == "+0.4" && same(t), "les z\xC3\xA9ros de fin communs tombent : 36.8, 37.2, +0.4 - " + said(t));
+    t = hmi::trendReadingText(48, 48);
+    check(t.a == "48" && t.b == "48" && t.delta == "+0", "pas d'\xC3\xA9" "cart : +0 - " + said(t));
+    t = hmi::trendReadingText(-0.0004, 0.0003);
+    check(t.a == "-0.0004" && t.b == "0.0003" && t.delta == "+0.0007" && same(t), "de petites valeurs : quatre chiffres - " + said(t));
+    t = hmi::trendReadingText(1234567.25, 1234567.75);
+    check(t.a == "1234567.25" && t.b == "1234567.75" && t.delta == "+0.50" && same(t),
+          "de grandes valeurs proches : l'\xC3\xA9" "cart se lit - " + said(t));
+    t = hmi::trendReadingText(-0.0, 5);
+    check(t.a == "0" && t.b == "5" && t.delta == "+5", "un -0 s'\xC3\xA9" "crit 0 - " + said(t));
+    t = hmi::trendReadingText(42, std::nullopt);
+    check(t.a == "42" && t.b == "-" && t.delta == "-", "B sans valeur (un gel, avant la premi\xC3\xA8re mesure) : - et pas d'\xC3\xA9" "cart - " + said(t));
+    t = hmi::trendReadingText(std::nan(""), 5.5);
+    check(t.a == "-" && t.b == "5.5" && t.delta == "-", "une valeur non finie : - - " + said(t));
+    t = hmi::trendReadingText(std::nullopt, std::nullopt);
+    check(t.a == "-" && t.b == "-" && t.delta == "-", "rien : -, -, -");
+    // La barre : des boutons a la taille de leur libelle (Figer : la place de Reprendre), sous la bande du haut.
+    Object o = makeObject(Kind::Trend, 1, "Courbe", 0, 0, kNoId);
+    o.set("variables", "Pression;Debit");
+    o.setFlag("pilotable", true);
+    const auto l = hmi::trendLayout(o, 600, 300, true);
+    bool inBand = l.buttons.size() == 4;
+    for (const auto& b : l.buttons) inBand = inBand && b.box.h >= hmi::kTrendBarH && b.box.bottom() <= l.plot.y;
+    check(inBand && l.plot.y >= 4 + hmi::kTrendBarH, "les boutons de la barre (20 de haut) au-dessus de la zone de trace");
+    // Avec une vraie police (stb_truetype, comme l'ecran) : chaque libelle tient dans son bouton (drawButtonBox garde 8).
+    hmi::Bytes face;
+    std::string facePath;
+    for (const char* path : {"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "C:/Windows/Fonts/segoeui.ttf",
+                             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", "/Library/Fonts/Arial.ttf"}) {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) continue;
+        face.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        if (!face.empty()) { facePath = path; break; }
+    }
+    const auto realWidth = [&](const std::string& label, double fs) {
+        hmi::Rgba img;
+        return hmi::renderFontText(face, label, static_cast<float>(fs), img) ? img.width - 2 : 9999;
+    };
+    if (face.empty()) {
+        std::printf("  (pas de police sur cette machine : la largeur r\xC3\xA9" "elle des libell\xC3\xA9s n'est pas mesur\xC3\xA9" "e)\n");
+    } else {
+        std::string report;
+        bool fits = true;
+        for (const auto& b : l.buttons) {
+            if (b.part == "pause") continue;
+            for (const bool frozen : {false, true}) {
+                const std::string label = hmi::trendButtonText(b.part, frozen);
+                const int real = realWidth(label, hmi::kTrendBarFont);
+                fits = fits && real <= b.box.w - 8;
+                report += " " + label + " " + std::to_string(real) + "/" + std::to_string(static_cast<int>(b.box.w - 8));
+            }
+        }
+        for (const auto& [label, box] : {std::pair<const char*, hmi::Box>{"CSV", l.exportCsv}, {"Excel", l.exportExcel}}) {
+            const int real = realWidth(label, hmi::kTrendReadoutFont);
+            fits = fits && box.w > 0 && real <= box.w - 8;
+            report += std::string(" ") + label + " " + std::to_string(real) + "/" + std::to_string(static_cast<int>(box.w - 8));
+        }
+        check(fits, "avec " + facePath + " : chaque libell\xC3\xA9 tient dans son bouton (largeur r\xC3\xA9" "elle / place) -" + report);
+    }
+}
+
 // 1.13.1 ("dans les courbes il faut ajouter un mode freeze qui bloque l'acquisition de nouvelles valeurs, + pouvoir ajouter
 // des lignes verticales pour faire des mesures de temps + pouvoir zoomer/dezoomer etirer/detendre de maniere hyper zoomee,
 // pouvoir exporter que la zone dans une balise de lignes verticales") : le moteur.
@@ -2543,8 +2627,8 @@ void courbesEnMarche1131() {
                                                           + ", " + std::to_string(shown) + " mesure(s))");
     s.rt.objectPart(trend, "toutvoir", s.t);
     check(!st->zoomed(), "Tout voir : la dur\xC3\xA9" "e de l'objet");
-    // Maj+molette : l'axe des valeurs, autour de la valeur sous la souris (y = 102 : le milieu de 24..180 -> 50 sur 0..100).
-    s.rt.objectPart(trend, "trend:wheel:1:200:102:1:0:100", s.t);
+    // Maj+molette : l'axe des valeurs, autour de la valeur sous la souris (y = 104 : le milieu de 28..180 -> 50 sur 0..100).
+    s.rt.objectPart(trend, "trend:wheel:1:200:104:1:0:100", s.t);
     check(st->valueZoom && std::fabs(st->lo - 10) < 1e-9 && std::fabs(st->hi - 90) < 1e-9, "Maj+molette : 0..100 -> 10..90 autour de 50");
     // REPRENDRE : l'acquisition repart, le temps du gel reste un trou.
     s.rt.objectPart(trend, "figer", s.t);
@@ -30190,6 +30274,7 @@ int main(int argc, char** argv) {
     if (const char* only = std::getenv("HMI_TEST_1131"); only && *only == '1') {
         pauseGardeSaFenetre1131();
         courbeModele1131();
+        courbeLisibilite1131();
         courbesEnMarche1131();
         courbeContreVerif1131();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
@@ -30311,6 +30396,7 @@ int main(int argc, char** argv) {
     courbesPilotables11216();         // 1.12.16 : pause / continuer, Visible si par plume
     pauseGardeSaFenetre1131();        // 1.13.1 : la pause garde sa fenetre (avant : vide apres 1,2 fois la duree)
     courbeModele1131();               // 1.13.1 : la barre, la fenetre, le zoom, les curseurs (le modele)
+    courbeLisibilite1131();           // 1.13.1 : les valeurs des curseurs arrondies, les boutons a la taille du texte
     courbesEnMarche1131();            // 1.13.1 : figer, zoom, curseurs, export de la zone (le moteur)
     courbeContreVerif1131();          // 1.13.1 : zone:Courbe a Generer, la courbe historique sans barre
     dupliquerElement11216();          // 1.12.16 : Dupliquer une plume, une action, une ligne

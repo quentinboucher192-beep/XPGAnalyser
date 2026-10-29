@@ -786,7 +786,23 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
     const double pw = layout.plot.w, ph = layout.plot.h;
     const gfx::Color grid = c.fixed(0x323A47);
     const gfx::Color axis = c.fixed(0x5A6678);
-    const gfx::Color label = c.fixed(0x9AA6B8);
+    // 1.13.1 (la lisibilite) : les textes poses sur le fond de l'objet (la legende, les graduations) - pales sur un
+    // fond sombre (celui par defaut), fonces sur un fond clair (un fond blanc choisi, le theme jour).
+    const gfx::Color fillSeen = c.color("fill");
+    const bool lightFill = fillSeen.a > 0 && (0.2126 * fillSeen.r + 0.7152 * fillSeen.g + 0.0722 * fillSeen.b) / 255.0 > 0.55;
+    const gfx::Color label = lightFill ? c.fixedOn(0x4A5566) : c.fixed(0x9AA6B8);
+    // La largeur d'un texte a la taille `fs`, dans le repere de l'objet.
+    const auto widthAt = [&](std::string_view t, double fs) {
+        const auto px = static_cast<std::uint16_t>(std::clamp(fs * c.vp.zoom, 6.0, 200.0));
+        return static_cast<double>(c.r.measure(t, gfx::FontId{px}).width) / std::max(0.01, static_cast<double>(c.vp.zoomX()));
+    };
+    // Un cartouche : un fond plein (et son trait), un texte dessus - lisible par-dessus la grille et les plumes.
+    const auto cartouche = [&](double x, double y, double bw, double bh, gfx::Color fill, gfx::Color ink, const std::string& what, double fs) {
+        const auto x0 = static_cast<float>(x), y0 = static_cast<float>(y), x1 = static_cast<float>(x + bw), y1 = static_cast<float>(y + bh);
+        shapes::fillPolygon(c.r, c.map(shapes::roundedRect(x0, y0, x1 - x0, y1 - y0, 3)), fill);
+        shapes::strokePolyline(c.r, c.map(shapes::roundedRect(x0, y0, x1 - x0, y1 - y0, 3)), true, fade(axis, 0.8f), 1);
+        text(c, what, x, y, bw, bh, ink, fs, "centre");
+    };
     for (int k = 0; k <= 4; ++k) {
         const double y = top + ph * k / 4.0;
         c.r.line(c.map(left, y), c.map(left + pw, y), k == 4 ? axis : grid, 1);
@@ -825,12 +841,14 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
     const auto X = [&](double t) { return left + (t - start) / span * pw; };
     const auto Y = [&](double v) { return top + (1 - (std::clamp(v, lo, hi) - lo) / (hi - lo)) * ph; };
     // 1.13.1 : les trous des gels passes - une bande pale, "gel" dessus quand elle est assez large.
+    // (La lisibilite : l'etiquette sur son cartouche, au milieu de la bande - aucune plume n'y passe -, apres les plumes.)
+    std::vector<std::pair<double, double>> gelBands;
     for (const auto& g : gaps) {
         if (g.second < start || g.first > end) continue;
         const auto x0 = static_cast<float>(std::clamp(X(g.first), left, left + pw)), x1 = static_cast<float>(std::clamp(X(g.second), left, left + pw));
         const auto y0 = static_cast<float>(top), y1 = static_cast<float>(top + ph);
         shapes::fillPolygon(c.r, c.map({{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}), fade(c.fixed(0x56CCF2), 0.10f));
-        if (x1 - x0 > 30) text(c, "gel", x0, top + ph - 18, x1 - x0, 16, fade(c.fixed(0x56CCF2), 0.8f), 10, "centre");
+        gelBands.emplace_back(x0, x1);
     }
     // Lot 18 : les marques - une zone de mouvement tiree, un forcage (sur une plume de la courbe).
     if (!c.opt.editor && rt && !historyMode) {
@@ -914,6 +932,12 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
             shapes::strokePolyline(c.r, c.map(pts), false, col, std::max(1.f, 1.8f * c.vp.zoom));
         }
     }
+    // 1.13.1 (la lisibilite) : "gel" sur son cartouche bleu glace, l'encre sombre, au milieu de la bande.
+    for (const auto& [x0, x1] : gelBands) {
+        const double bw = widthAt("gel", 12) + 12, bh = 18;
+        if (x1 - x0 < bw + 4) continue;
+        cartouche((x0 + x1 - bw) / 2, top + (ph - bh) / 2, bw, bh, c.fixed(0x56CCF2), c.fixedOn(0x101318), "gel", 12);
+    }
     // 1.13.1 : LES CURSEURS - deux lignes verticales (A jaune, B bleu clair) et leur lettre en haut.
     const gfx::Color colA = c.fixed(0xF2C94C), colB = c.fixed(0x56CCF2);
     if (st && rt)
@@ -923,9 +947,9 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
             const double x = X(*cursor);
             const gfx::Color col = which == 0 ? colA : colB;
             for (double y = top; y < top + ph; y += 6) c.r.line(c.map(x, y), c.map(x, std::min(top + ph, y + 4)), col, std::max(1.f, 1.5f * c.vp.zoom));
-            const auto tx0 = static_cast<float>(x - 6), tx1 = static_cast<float>(x + 6), ty0 = static_cast<float>(top), ty1 = static_cast<float>(top + 13);
+            const auto tx0 = static_cast<float>(x - 7), tx1 = static_cast<float>(x + 7), ty0 = static_cast<float>(top), ty1 = static_cast<float>(top + 15);
             shapes::fillPolygon(c.r, c.map({{tx0, ty0}, {tx1, ty0}, {tx1, ty1}, {tx0, ty1}}), col);
-            text(c, which == 0 ? "A" : "B", x - 6, top, 12, 13, c.fixedOn(0x101318), 10, "centre");
+            text(c, which == 0 ? "A" : "B", x - 7, top, 14, 15, c.fixedOn(0x101318), 12, "centre");
         }
     // La legende : une pastille, le nom, et la derniere valeur.
     if (legend && !pens.empty()) {
@@ -937,15 +961,16 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
             if (!shown[i]) continue;   // 1.12.16 : cachee, sa legende aussi
             std::string name = i < names.size() && !names[i].empty() ? names[i] : pens[i];
             if (!series[i].empty() && !preview) name += " = " + hmi::formatNumber(std::round(series[i].back().second * 100) / 100);
-            // La largeur du libelle, mesuree a la taille ou il sera ecrit.
-            const auto px = static_cast<std::uint16_t>(std::clamp(11.0 * c.vp.zoom, 6.0, 200.0));
-            const double textW = c.r.measure(name, gfx::FontId{px}).width / std::max(0.01f, c.vp.zoomX());
+            // La largeur du libelle, mesuree a la taille ou il sera ecrit (1.13.1, la lisibilite : kTrendBarFont).
+            const double fs = hmi::kTrendBarFont, bandH = hmi::kTrendBarH;
+            const double textW = widthAt(name, fs);
             const double tw = std::min(legendRight - x - 8, 26.0 + textW);
             if (tw < 40) break;
-            const auto sw = c.map({{static_cast<float>(x), 8.f}, {static_cast<float>(x + 10), 8.f},
-                                   {static_cast<float>(x + 10), 16.f}, {static_cast<float>(x), 16.f}});
+            const auto sy0 = static_cast<float>(4 + (bandH - 10) / 2), sy1 = sy0 + 10.f;
+            const auto sw = c.map({{static_cast<float>(x), sy0}, {static_cast<float>(x + 10), sy0},
+                                   {static_cast<float>(x + 10), sy1}, {static_cast<float>(x), sy1}});
             shapes::fillPolygon(c.r, sw, penColor(i));
-            text(c, fitted(c, name, tw - 16, 11), x + 12, 3, tw - 14, 18, label, 11, "gauche");
+            text(c, fitted(c, name, tw - 16, fs), x + 12, 4, tw - 14, bandH, label, fs, "gauche");
             x += tw + 8;
         }
     }
@@ -960,37 +985,49 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
                 const gfx::Color face = paused ? c.fixed(0xF2C94C) : c.fixed(0x2F6FD6);
                 shapes::fillPolygon(c.r, c.map({{bx, by}, {bx + bw, by}, {bx + bw, by + bh}, {bx, by + bh}}), fade(face, c.alpha * dim));
                 const gfx::Color ink = fade(c.fixed(0x101318), c.alpha);
+                const float cx = bx + bw / 2.f;   // 1.13.1 : l'icone au milieu du bouton (26 x 20)
                 if (paused) {
-                    shapes::fillPolygon(c.r, c.map({{bx + 9.f, by + 4.f}, {bx + 17.f, by + bh / 2.f}, {bx + 9.f, by + bh - 4.f}}), ink);
+                    shapes::fillPolygon(c.r, c.map({{cx - 4.f, by + 4.f}, {cx + 5.f, by + bh / 2.f}, {cx - 4.f, by + bh - 4.f}}), ink);
                 } else {
-                    shapes::fillPolygon(c.r, c.map({{bx + 8.f, by + 4.f}, {bx + 11.f, by + 4.f}, {bx + 11.f, by + bh - 4.f}, {bx + 8.f, by + bh - 4.f}}), ink);
-                    shapes::fillPolygon(c.r, c.map({{bx + 14.f, by + 4.f}, {bx + 17.f, by + 4.f}, {bx + 17.f, by + bh - 4.f}, {bx + 14.f, by + bh - 4.f}}), ink);
+                    shapes::fillPolygon(c.r, c.map({{cx - 5.f, by + 4.f}, {cx - 2.f, by + 4.f}, {cx - 2.f, by + bh - 4.f}, {cx - 5.f, by + bh - 4.f}}), ink);
+                    shapes::fillPolygon(c.r, c.map({{cx + 2.f, by + 4.f}, {cx + 5.f, by + 4.f}, {cx + 5.f, by + bh - 4.f}, {cx + 2.f, by + bh - 4.f}}), ink);
                 }
                 continue;
             }
-            std::string what;
             gfx::Color face = c.fixed(0x2F6FD6);
             float alpha = dim;
             bool lit = false;   // allume (fige, curseurs poses) : l'encre sombre sur la couleur claire
             if (b.part == "figer") {
-                what = frozen ? "Reprendre" : "Figer";
                 if ((lit = frozen)) face = c.fixed(0x56CCF2);
             } else if (b.part == "curseurs") {
-                what = "Curseurs";
                 if ((lit = st && (st->cursorA || st->cursorB))) face = c.fixed(0xF2C94C);
             } else {
-                what = "Tout voir";
                 if (!(st && st->zoomed())) alpha *= 0.55f;   // rien a revoir : estompe
             }
-            drawButtonBox(c, b.box, what, fade(face, c.alpha * alpha), lit ? c.fixedOn(0x101318) : c.fixedOn(0xFFFFFF), 11);
+            // 1.13.1 (la lisibilite) : le libelle a kTrendBarFont, dans un bouton a sa largeur (hmi::trendButtonWidth).
+            drawButtonBox(c, b.box, hmi::trendButtonText(b.part, frozen), fade(face, c.alpha * alpha), lit ? c.fixedOn(0x101318) : c.fixedOn(0xFFFFFF),
+                          hmi::kTrendBarFont);
         }
-        std::vector<std::pair<std::string, gfx::Color>> banners;
+        // Les bandeaux, en bas de la zone de trace. 1.13.1 (la lisibilite) : chacun sur son cartouche plein (la couleur
+        // de son etat, l'encre sombre ; le zoom pose : le fond du cadre des curseurs), au-dessus de la grille et des plumes.
+        struct Banner {
+            std::string what;
+            gfx::Color  fill, ink;
+        };
+        std::vector<Banner> banners;
         if (frozen && rt)
-            banners.emplace_back("FIG\xC3\x89" "E depuis " + rt->clockText(st->frozenAt) + " - aucune mesure n'entre (Reprendre ou F)", c.fixed(0x56CCF2));
-        if (paused) banners.emplace_back("en pause - Continuer pour reprendre", c.fixed(0xF2C94C));
-        if (pinned && !paused && !frozen) banners.emplace_back("zoom pos\xC3\xA9 - Tout voir revient au direct", label);
-        for (std::size_t k = 0; k < banners.size(); ++k)
-            text(c, banners[k].first, left, top + ph - 18.0 * static_cast<double>(k + 1), pw, 16, banners[k].second, 11, "centre");
+            banners.push_back({"FIG\xC3\x89" "E depuis " + rt->clockText(st->frozenAt) + " - aucune mesure n'entre (Reprendre ou F)",
+                               c.fixed(0x56CCF2), c.fixedOn(0x101318)});
+        if (paused) banners.push_back({"en pause - Continuer pour reprendre", c.fixed(0xF2C94C), c.fixedOn(0x101318)});
+        if (pinned && !paused && !frozen) banners.push_back({"zoom pos\xC3\xA9 - Tout voir revient au direct", c.fixed(0x101318), c.fixedText(0xE6EAF0)});
+        const double bannerFs = 13, bannerH = 20;
+        for (std::size_t k = 0; k < banners.size(); ++k) {
+            const std::string shown = fitted(c, banners[k].what, pw - 32, bannerFs);
+            const double bw = std::min(pw - 12, widthAt(shown, bannerFs) + 20);
+            const double y = top + ph - 6 - bannerH - (bannerH + 4) * static_cast<double>(k);
+            if (shown.empty() || bw < 20 || y < top + 2) continue;
+            cartouche(left + (pw - bw) / 2, y, bw, bannerH, banners[k].fill, banners[k].ink, shown, bannerFs);
+        }
         if (frozen) {
             const auto x0 = static_cast<float>(left), y0 = static_cast<float>(top), x1 = static_cast<float>(left + pw), y1 = static_cast<float>(top + ph);
             shapes::strokePolyline(c.r, c.map({{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}), true, c.fixed(0x56CCF2), std::max(1.f, 2.f * c.vp.zoom));
@@ -1003,38 +1040,45 @@ void drawTrendObject(const Ctx& c, const hmi::View& view) {
         std::vector<std::size_t> rows;
         for (std::size_t i = 0; i < readings.size(); ++i)
             if (readings[i].visible) rows.push_back(i);
-        const double rowH = 15;
-        const std::size_t fit = static_cast<std::size_t>(std::max(0.0, std::floor((ph - 8 - 20 - rowH - 4) / rowH)));
+        // 1.13.1 (la lisibilite) : un fond PLEIN (la grille ne le traverse plus), les textes a kTrendReadoutFont, les valeurs
+        // arrondies et ecrites pareil en A, en B et pour l'ecart (hmi::trendReadingText).
+        const double fs = hmi::kTrendReadoutFont, headH = 24, rowH = 17;
+        const std::size_t fit = static_cast<std::size_t>(std::max(0.0, std::floor((ph - 8 - headH - rowH - 4) / rowH)));
         const std::size_t count = std::min(rows.size(), fit);
         const hmi::Box& rb = layout.readout;
-        const double bh = 20 + rowH + rowH * static_cast<double>(count) + 4;
+        const double bh = headH + rowH + rowH * static_cast<double>(count) + 4;
         const auto x0 = static_cast<float>(rb.x), y0 = static_cast<float>(rb.y), x1 = static_cast<float>(rb.x + rb.w), y1 = static_cast<float>(rb.y + bh);
-        shapes::fillPolygon(c.r, c.map({{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}), fade(c.fixed(0x101318), 0.88f));
+        shapes::fillPolygon(c.r, c.map({{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}), c.fixed(0x101318));
         shapes::strokePolyline(c.r, c.map({{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}), true, axis, 1);
         const double a = *st->cursorA, b = *st->cursorB;
         const gfx::Color ink = c.fixedText(0xE6EAF0);
         const double textW = layout.exportCsv.w > 0 ? layout.exportCsv.x - rb.x - 8 : rb.w - 8;
-        text(c, fitted(c, "\xCE\x94t = " + hmi::trendDuration(b - a), textW, 11), rb.x + 6, rb.y + 2, textW, 16, ink, 11, "gauche");
+        text(c, fitted(c, "\xCE\x94t = " + hmi::trendDuration(b - a), textW, fs), rb.x + 6, rb.y + 2, textW, headH - 2, ink, fs, "gauche");
         if (layout.exportCsv.w > 0) {
-            drawButtonBox(c, layout.exportCsv, "CSV", c.fixed(0x2F6FD6), c.fixedOn(0xFFFFFF), 10);
-            drawButtonBox(c, layout.exportExcel, "Excel", c.fixed(0x2F6FD6), c.fixedOn(0xFFFFFF), 10);
+            drawButtonBox(c, layout.exportCsv, "CSV", c.fixed(0x2F6FD6), c.fixedOn(0xFFFFFF), fs);
+            drawButtonBox(c, layout.exportExcel, "Excel", c.fixed(0x2F6FD6), c.fixedOn(0xFFFFFF), fs);
         }
         const double half = (rb.w - 12) / 2;
-        text(c, fitted(c, "A " + rt->clockText(a), half, 11), rb.x + 6, rb.y + 20, half, rowH, colA, 11, "gauche");
-        text(c, fitted(c, "B " + rt->clockText(b), half, 11), rb.x + 6 + half, rb.y + 20, half, rowH, colB, 11, "gauche");
+        text(c, fitted(c, "A " + rt->clockText(a), half, fs), rb.x + 6, rb.y + headH, half, rowH, colA, fs, "gauche");
+        text(c, fitted(c, "B " + rt->clockText(b), half, fs), rb.x + 6 + half, rb.y + headH, half, rowH, colB, fs, "gauche");
+        const double lineW = rb.w - 26;
         for (std::size_t k = 0; k < count; ++k) {
             const auto& r = readings[rows[k]];
-            const double y = rb.y + 20 + rowH * static_cast<double>(k + 1);
-            const auto sx = static_cast<float>(rb.x + 6), sy = static_cast<float>(y + 4);
-            shapes::fillPolygon(c.r, c.map({{sx, sy}, {sx + 8.f, sy}, {sx + 8.f, sy + 8.f}, {sx, sy + 8.f}}), penColor(rows[k]));
-            const std::string va = r.a ? hmi::trendNumber(*r.a) : std::string("-"), vb = r.b ? hmi::trendNumber(*r.b) : std::string("-");
-            std::string diff = "-";
-            if (r.a && r.b) diff = (*r.b - *r.a >= 0 ? "+" : "") + hmi::trendNumber(*r.b - *r.a);
-            const std::string line = r.name + "   A " + va + "   B " + vb + "   \xCE\x94 " + diff;
-            text(c, fitted(c, line, rb.w - 24, 11), rb.x + 18, y, rb.w - 24, rowH, ink, 11, "gauche");
+            const double y = rb.y + headH + rowH * static_cast<double>(k + 1);
+            const auto sx = static_cast<float>(rb.x + 6), sy = static_cast<float>(y + (rowH - 9) / 2);
+            shapes::fillPolygon(c.r, c.map({{sx, sy}, {sx + 9.f, sy}, {sx + 9.f, sy + 9.f}, {sx, sy + 9.f}}), penColor(rows[k]));
+            const auto shownValues = hmi::trendReadingText(r.a, r.b);
+            const std::string values = "   A " + shownValues.a + "   B " + shownValues.b + "   \xCE\x94 " + shownValues.delta;
+            // Trop long : le nom se raccourcit, les valeurs restent entieres (l'ecart surtout).
+            std::string line = r.name + values;
+            if (widthAt(line, fs) > lineW) {
+                const double nameW = lineW - widthAt(values, fs);
+                line = nameW >= 30 ? fitted(c, r.name, nameW, fs) + values : fitted(c, line, lineW, fs);
+            }
+            text(c, line, rb.x + 18, y, lineW, rowH, ink, fs, "gauche");
         }
         if (count < rows.size())
-            text(c, "\xE2\x80\xA6", rb.x + rb.w - 18, y1 - 14, 12, 12, ink, 11, "centre");
+            text(c, "\xE2\x80\xA6", rb.x + rb.w - 18, y1 - 15, 12, 13, ink, fs, "centre");
     }
     if (pens.empty()) text(c, "Courbe : aucune plume (Variables trac\xC3\xA9" "es)", 0, 0, w, h, label, 12, "centre");
     else if (historyMode && !c.opt.editor && std::all_of(series.begin(), series.end(), [](const auto& s) { return s.empty(); }))

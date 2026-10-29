@@ -33867,6 +33867,21 @@ void courbesEnMarche1131() {
     for (double t = 12.1; t <= 13.01; t += 0.1) paintAt(t);
     check(series && (*series)[0].points.size() == count, "fig\xC3\xA9" "e : plus une mesure n'entre (l'\xC3\xA9" "cran tourne)");
     check(rec.wrote("FIG\xC3\x89" "E depuis") && rec.wrote("Repr"), "l'indicateur : FIG\xC3\x89" "E depuis ..., le bouton dit Reprendre");
+    {
+        // 1.13.1 (la lisibilite, captures 13 et 14) : le bandeau et les boutons de la barre plus grands que les graduations.
+        // Le premier texte ecrit tel quel (exact) ou qui commence par `part` (clear() vide les textes, pas les tailles :
+        // celles de la derniere image sont les dernieres).
+        const auto fontOf = [&](std::string_view part, bool exact) {
+            if (rec.fonts.size() < rec.texts.size()) return 0;
+            const std::size_t from = rec.fonts.size() - rec.texts.size();
+            for (std::size_t k = 0; k < rec.texts.size(); ++k)
+                if (exact ? rec.texts[k] == part : rec.texts[k].rfind(part, 0) == 0) return rec.fonts[from + k];
+            return 0;
+        };
+        const int tick = fontOf("fig\xC3\xA9" "e", true), banner = fontOf("FIG\xC3\x89" "E depuis", false), button = fontOf("Repr", false);
+        check(tick > 0 && banner > tick && button > tick, "le bandeau (" + std::to_string(banner) + " px) et le bouton Reprendre (" + std::to_string(button)
+                                                           + " px) \xC3\xA9" "crits plus grands que les graduations (" + std::to_string(tick) + " px)");
+    }
     // La molette sur la zone de trace : le temps autour de la souris ; Maj : les valeurs ; Ctrl : pas la courbe.
     pane.canvas().dispatch(ui::MouseWheel{centre(plot), 0.f, 2.f, {}});
     check(st->pinned && st->span > 0 && st->span < 10, "la molette : le temps zoom\xC3\xA9 autour de la souris (" + hmi::trendDuration(st->span) + ")");

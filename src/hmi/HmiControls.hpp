@@ -177,6 +177,15 @@ struct TableLayout {
 [[nodiscard]] bool trendKeepsClick(const Object&);
 // ... et ou il est, dans le repere de l'objet (x, y, largeur, hauteur).
 [[nodiscard]] std::array<double, 4> trendPauseBox(double w, double h);
+// 1.13.1 (la lisibilite) : la taille des textes de la legende et de la barre, la hauteur des boutons de la barre, la
+// taille des textes du cadre des curseurs (en pixels de vue, comme les autres tailles de texte).
+inline constexpr double kTrendBarFont     = 13;
+inline constexpr double kTrendBarH        = 20;
+inline constexpr double kTrendReadoutFont = 12;
+// Le libelle d'un bouton de la barre ("figer" : Figer, ou Reprendre la courbe figee ; "curseurs", "toutvoir") et sa
+// largeur - celle de son plus long libelle a kTrendBarFont, et sa marge : le dessin et le clic l'ont du meme endroit.
+[[nodiscard]] std::string trendButtonText(std::string_view part, bool frozen);
+[[nodiscard]] double trendButtonWidth(std::string_view part);
 
 // ---- courbes : les points d'une plume d'un objet Courbe (1.13.1 : ici, avec la courbe en marche) ---------
 struct TrendSeries {
@@ -275,6 +284,14 @@ struct TrendReading {
 // "2.35 s", "12.5 ms", 250 micro-secondes (le signe garde) ; une valeur lue : six chiffres significatifs au plus.
 [[nodiscard]] std::string trendDuration(double seconds);
 [[nodiscard]] std::string trendNumber(double v);
+// 1.13.1 (la lisibilite) : les valeurs d'une plume aux curseurs, A, B et l'ecart (B - A, signe), ECRITES PAREIL - le
+// meme nombre de decimales pour les trois : quatre chiffres significatifs sur la plus grande valeur, trois sur l'ecart
+// (un ecart minuscule se lit encore), neuf au plus, sans les zeros de fin communs aux trois. "46.73", "32.01", "-14.72" ;
+// "32", "48", "+16" ; "-" : pas de valeur la (l'ecart, des qu'il en manque une).
+struct TrendReadingText {
+    std::string a, b, delta;
+};
+[[nodiscard]] TrendReadingText trendReadingText(std::optional<double> a, std::optional<double> b);
 // La graduation `k` (1..3 sur 4) d'une fenetre zoomee : son ecart au bord droit, dans l'unite de la fenetre (-2.5 ms).
 [[nodiscard]] std::string trendTick(double offset, double span);
 // 1.12.13 : LA CASE TOUCHEE d'un tableau (lignes dynamiques, cases fixes : la meme mise en page) - "entete:C" (l'en-tete
