@@ -2636,7 +2636,16 @@ void courbesEnMarche1131() {
     ctrlF.ctrl = true;
     check(!s.rt.keyDown(ctrlF, s.t), "Ctrl+F : pas pour la courbe");
     (void)s.rt.keyUp("F", s.t);
+    // Pilotable decochee en marche (la simulation de l'editeur) : plus de bouton pour reprendre - ni gel ni pause ne restent.
+    check(st->frozen && s.rt.setTrendPaused(s.view, trend, true), "fig\xC3\xA9" "e et en pause");
+    const double lastBefore = (*series)[0].points.back().first;
+    s.v().object(trend)->setFlag("pilotable", false);
+    s.run(0.5);
+    check(!s.rt.trendState(s.view, trend) && !s.rt.trendPausedAt(s.view, trend) && (*series)[0].points.back().first > lastBefore,
+          "Pilotable d\xC3\xA9" "coch\xC3\xA9" "e : ni gel ni pause, l'acquisition reprend");
+    s.v().object(trend)->setFlag("pilotable", true);
     // Un nouveau lancement : rien ne reste.
+    s.rt.objectPart(trend, "curseurs", s.t);
     s.rt.start(s.t);
     check(!s.rt.trendState(s.view, trend), "un nouveau lancement : ni gel, ni zoom, ni curseurs");
 }

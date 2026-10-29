@@ -6344,6 +6344,11 @@ void Runtime::sampleTrends(double now) {
                     series[i].visible = c.empty() || evalBool(c, true);
                 }
             }
+            // 1.13.1 : Pilotable decochee en marche : plus de barre pour reprendre - ni gel, ni pause, ni zoom.
+            if (!o.flag("pilotable", false)) {
+                trendStates_.erase(key);
+                trendPaused_.erase(key);
+            }
             // 1.13.1 : FIGEE - l'acquisition s'arrete : rien n'entre, rien ne tombe (Reprendre laisse un trou).
             TrendState* st = nullptr;
             if (const auto it = trendStates_.find(key); it != trendStates_.end()) st = &it->second;

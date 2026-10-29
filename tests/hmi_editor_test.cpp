@@ -33940,16 +33940,19 @@ void courbesEnMarche1131() {
         vm->itemChosen->emit(resumeId);
         check(!st->frozen && st->gaps.size() == 1, "Reprendre l'acquisition : elle repart, un trou pour le temps du gel");
     }
-    // Pas pilotable : la molette ne prend pas la courbe, le menu le dit.
+    // Pilotable decochee en marche : plus de barre, plus d'etat (rien ne reste fige sans bouton pour reprendre), la
+    // molette ne prend plus la courbe.
     {
+        rt.objectPart(trend, "figer", now);
+        check(rt.trendState(view, trend) && rt.trendState(view, trend)->frozen, "fig\xC3\xA9" "e de nouveau");
         auto* raw = doc->project.views[0].object(trend);
         raw->setFlag("pilotable", false);
         for (double t = 13.3; t <= 13.61; t += 0.1) paintAt(t);
         gfx::Rect none{};
         check(!pane.canvas().partRect("Courbe", "figer", none), "Pilotable d\xC3\xA9" "coch\xC3\xA9" "e : plus de barre");
-        const double span = st->span;
+        check(!rt.trendState(view, trend), "... ni gel, ni zoom, ni curseurs : la courbe reprend son acquisition");
         pane.canvas().dispatch(ui::MouseWheel{centre(plot), 0.f, 2.f, {}});
-        check(st->span == span, "pas pilotable : la molette ne zoome pas la courbe");
+        check(!rt.trendState(view, trend), "pas pilotable : la molette ne zoome pas la courbe");
         raw->setFlag("pilotable", true);
     }
     // Le poste d'exploitation : la meme barre, les memes gestes.
