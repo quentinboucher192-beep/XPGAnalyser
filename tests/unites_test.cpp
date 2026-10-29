@@ -1178,6 +1178,51 @@ void affichageEtDeclarations() {
     }
 }
 
+// 1.13.1 (lot K1) : l'unite d'une constante globale (Reglages.Pression [bar]) vaut aussi DANS LES SCRIPTS - la regle des
+// variables : l'affectation a une cible d'une autre unite convertit d'office, un calcul qui en part demande EN.
+// Jusqu'a la 1.13.0, cette unite etait ignoree (le nombre passait tel quel, le calcul compilait).
+void constanteGlobaleDansUnScript() {
+    std::printf("-- 1.13.1 : l'unite d'une constante globale dans un script\n");
+    const auto reglages = [](Project& q) {
+        Script r;
+        r.id = q.allocate();
+        r.name = "Reglages";
+        r.event = "Appel";
+        Declaration d;
+        d.kind = DeclKind::Constant;
+        d.name = "Pression";
+        d.type = "REAL";
+        d.value = "2.5";
+        d.unit = "bar";
+        d.visibility = Visibility::Public;
+        r.decls.push_back(d);
+        q.programs.scripts.push_back(r);
+        uniqueDeclarationIds(q);
+    };
+    {
+        Bench b("Consigne_mbar := Reglages.Pression;", {{"Consigne_mbar", "REAL", "mbar", "0"}}, reglages);
+        std::string err;
+        const double v = b.after("Consigne_mbar", &err);
+        check(err.empty() && std::fabs(v - 2500.0) < 1e-9, "Consigne_mbar := Reglages.Pression (2,5 bar) : 2500, converti d'office (" + std::to_string(v) + ") " + err);
+    }
+    {
+        Bench b("R := EN(Reglages.Pression, 'mbar');\nRS := UNITE(Reglages.Pression);", {}, reglages);
+        const double v = b.real();
+        check(std::fabs(v - 2500.0) < 1e-9, "EN(Reglages.Pression, 'mbar') dans un script : 2500 (" + std::to_string(v) + ")");
+        sim::Value s;
+        check(b.rt.environment().read("RS", s) && s.asString() == "bar", "UNITE(Reglages.Pression) dans un script : 'bar'");
+    }
+    Project p;
+    reglages(p);
+    var(p, "Consigne_mbar", "REAL", "mbar");
+    scriptcheck::Scope sc;
+    sc.project = &p;
+    check(hasFinding(scriptcheck::check(sc, "Consigne_mbar := Reglages.Pression * 1000.0;"), "seule une variable", scriptcheck::Finding::Severity::Error),
+          "Compiler : Consigne_mbar := Reglages.Pression * 1000.0 - une erreur, le calcul demande EN (avant 1.13.1 : accepte)");
+    check(!hasFinding(scriptcheck::check(sc, "Consigne_mbar := EN(Reglages.Pression, 'mbar') * 2.0;"), "seule une variable", scriptcheck::Finding::Severity::Error),
+          "Compiler : Consigne_mbar := EN(Reglages.Pression, 'mbar') * 2.0 - accept\xC3\xA9");
+}
+
 } // namespace
 
 int main() {
@@ -1210,6 +1255,7 @@ int main() {
     cacheDesUnites();
     affichageEtDeclarations();
     lotF3();                   // 1.13.0 (lot F3) : les defauts vus aux captures
+    constanteGlobaleDansUnScript();   // 1.13.1 (lot K1)
     std::printf("=== %d verifications, %d echec(s) ===\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

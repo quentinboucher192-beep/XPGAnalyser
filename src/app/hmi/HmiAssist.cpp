@@ -2417,11 +2417,13 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                 }
             // 1.13.1 : les scripts generaux qui ont des constantes publiques - les constantes globales (Reglages.Seuil),
             // dans un champ comme dans un script ; le point pose, la liste se rouvre sur elles (une variable IHM du meme
-            // nom passe avant : c'est elle qu'on lit).
+            // nom passe avant : c'est elle qu'on lit). Son nom COURT, celui que lisent le controle (calc::qualified), le moteur
+            // et la case fx (Etalons.Debit, meme range dans l'espace Gaz) ; un script que ce nom ne designe pas (deux Doublon
+            // dans deux espaces, ou un homonyme a la racine) ne se lit pas ainsi : pas propose.
             if (!needle.empty())
                 for (const auto& sc : hp.programs.scripts) {
-                    const std::string scName = hmi::fullName(sc);
-                    if (hp.variable(scName)) continue;
+                    const std::string& scName = sc.name;
+                    if (hp.variable(scName) || hp.generalScript(scName) != &sc) continue;
                     std::size_t constants = 0;
                     for (const auto& d : sc.decls)
                         if (d.kind == hmi::DeclKind::Constant && d.visibility == hmi::Visibility::Public) ++constants;

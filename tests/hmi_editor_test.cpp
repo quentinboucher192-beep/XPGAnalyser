@@ -38646,6 +38646,48 @@ void formulesK1_1131() {
         check(k1::has(members, "Seuil") && k1::has(members, "Pression") && k1::has(members, "Four"),
               "l'aide : Reglages. propose ses constantes (" + k1::names(members) + ")");
     }
+    // Un script range dans un espace de noms (Gaz.Etalons) : une constante globale se lit par le nom COURT du script
+    // (Etalons.Debit : calc::qualified, le moteur, la case fx) - l'aide propose ce nom-la, et la liste se rouvre sur
+    // ses constantes. Deux scripts du meme nom court dans deux espaces : aucun des deux ne se lit ainsi - pas proposes.
+    {
+        Project& q = doc->project;
+        Script e;
+        e.id = q.allocate();
+        e.name = "Etalons";
+        e.ns = "Gaz";
+        e.lang = ScriptLang::ST;
+        e.event = "Appel";
+        e.decls = {k1::constante("Debit", "REAL", "4.5", "m3/h")};
+        q.programs.scripts.push_back(e);
+        for (const char* space : {"Eau", "Air"}) {
+            Script d;
+            d.id = q.allocate();
+            d.name = "Doublon";
+            d.ns = space;
+            d.lang = ScriptLang::ST;
+            d.event = "Appel";
+            d.decls = {k1::constante("Valeur", "INT", "1")};
+            q.programs.scripts.push_back(d);
+        }
+        uniqueDeclarationIds(q);
+        auto a = as::fieldAssist(as::sourcesFor(doc));
+        std::vector<ui::InputText::Suggestion> out, members, twice;
+        std::size_t from = 0;
+        a("Etal", from, out);
+        check(k1::has(out, "Etalons") && !k1::has(out, "Gaz.Etalons"),
+              "l'aide : Etal propose Etalons (le nom court, celui qui se lit), pas Gaz.Etalons (" + k1::names(out) + ")");
+        const auto it = std::find_if(out.begin(), out.end(), [](const auto& s) { return s.text == "Etalons"; });
+        check(it != out.end() && it->insert == "Etalons.", "... et ins\xC3\xA8re Etalons. (" + (it != out.end() ? it->insert : std::string("?")) + ")");
+        a("Etalons.", from, members);
+        check(k1::has(members, "Debit"), "l'aide : Etalons. propose sa constante Debit (" + k1::names(members) + ")");
+        const vk::Env env{&p, p.view(vueId), &plc};
+        const auto res = vk::classify(env, "Etalons.Debit * 2.0", true, "NOMBRE");
+        check(!res.error(), "la case fx : Etalons.Debit * 2.0 accept\xC3\xA9" "e - " + vk::summary(res) + " " + vk::firstProblem(res));
+        a("Doubl", from, twice);
+        check(!k1::has(twice, "Doublon") && !k1::has(twice, "Eau.Doublon") && !k1::has(twice, "Air.Doublon"),
+              "l'aide : deux Doublon dans deux espaces - aucun propos\xC3\xA9 (" + k1::names(twice) + ")");
+        q.programs.scripts.resize(q.programs.scripts.size() - 3);
+    }
 
     // ---- BUG 2 : l'aide a la saisie dans les reperes $...$ ----
     const auto suggestions = [&](std::string_view typed, bool templateText = false) {
@@ -38702,6 +38744,25 @@ void formulesK1_1131() {
         if (auto g = rule("", px)) g("=$V[1]$.", from, gx);
         if (auto g = rule("", pv)) g("NOT $V[1]$.", from, gv);
         check(k1::has(gx, "Position") && k1::has(gv, "OUV"), "la grille : =$V[1]$. et NOT $V[1]$. proposent les membres (" + k1::names(gx) + " / " + k1::names(gv) + ")");
+        // L'ordre (ce que disent l'aide F1 et la note) : dans un champ, les reperes deja employes en tete ; dans une case fx
+        // typee (X, un nombre), ce qui a le bon type d'abord (la regle de typedAssist), le repere ensuite - son type n'est pas su.
+        doc->project.programs.variables.push_back(Variable{doc->project.allocate(), "Poids", "REAL", "0", {}});
+        {
+            const auto field = suggestions("$Po");
+            check(!field.empty() && field.front().text == "Pompe" && k1::has(field, "Poids"),
+                  "un champ : $Po - le rep\xC3\xA8re Pompe en t\xC3\xAA" "te, puis Poids (" + k1::names(field) + ")");
+            PG::Property fx = px;                                      // la case X de l'inspecteur : nombre ou = expression
+            ui::exprfield::mark(fx, ui::exprfield::Expect::Number);
+            std::vector<ui::InputText::Suggestion> typed;
+            std::size_t at = 0;
+            if (auto g = rule("", fx)) g("=$Po", at, typed);
+            const auto pos = [&](std::string_view t) {
+                return std::find_if(typed.begin(), typed.end(), [&](const auto& s) { return s.text == t; }) - typed.begin();
+            };
+            check(k1::has(typed, "Pompe") && k1::has(typed, "Poids") && pos("Poids") < pos("Pompe"),
+                  "la case X (un nombre) : =$Po - Poids (REAL) d'abord, le rep\xC3\xA8re Pompe ensuite (" + k1::names(typed) + ")");
+        }
+        doc->project.programs.variables.pop_back();
         // Un script : $V[0]$. dans le code.
         const auto code = as::suggest(p, nullptr, "x := $V[0]$.", "", true);
         check(std::any_of(code.begin(), code.end(), [](const as::Item& it) { return it.text == "OUV"; }), "un script : x := $V[0]$. propose les membres");

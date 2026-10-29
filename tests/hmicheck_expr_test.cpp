@@ -616,6 +616,75 @@ void constantesGlobales1131() {
     rt.tick(0.5);
     valuesOf(g.hote, expandedId(g.instance, g.blocSym), expandedId(g.instance, g.texteSym), "l'instance du symbole");
 }
+
+// 1.13.1 (contre-verification) : EN et UNITE en marche passent par la PORTEE de la vue, comme la lecture.
+// Une constante de vue ecrite sans le nom de la vue (Seuil_Haut, alias de Vue_Four.Seuil_Haut) a l'unite de
+// la constante ; un parametre de popup par reference (Pression, relie a Pression_L2 [mbar]) a l'unite de ce
+// qu'il designe, pas celle d'une variable IHM globale du meme nom (Pression [bar]).
+void unitesParLaPortee1131() {
+    std::printf("1.13.1 : EN et UNITE par la port\xC3\xA9" "e de la vue (constante de vue, param\xC3\xA8tre de popup)\n");
+    Project p;
+    Variable globale{p.allocate(), "Pression", "REAL", "1.5", {}};
+    globale.unit = "bar";
+    p.programs.variables.push_back(globale);
+    Variable ligne{p.allocate(), "Pression_L2", "REAL", "1000.0", {}};
+    ligne.unit = "mbar";
+    p.programs.variables.push_back(ligne);
+    View v = makeView(p, "Vue_Four");
+    v.constants.push_back(constante("Seuil_Haut", "REAL", "1.5", "bar"));
+    const Id bloc = addObject(p, v, Kind::Rectangle, "Bloc");
+    v.object(bloc)->setExpr("x", "EN(Seuil_Haut, 'mbar')");               // 1500
+    v.object(bloc)->setExpr("y", "EN(Vue_Four.Seuil_Haut, 'mbar')");      // 1500 (le nom qualifie marchait deja)
+    const Id texte = addObject(p, v, Kind::Text, "Unite");
+    v.object(texte)->set("text", "{UNITE(Seuil_Haut)}");
+    const Id vue = v.id;
+    p.views.push_back(std::move(v));
+    View pop = makeView(p, "Pop_Pression");
+    pop.role = "popup";
+    pop.params.push_back(ViewParam{"Pression", "", "", "REAL", ParamMode::Reference});
+    const Id blocPop = addObject(p, pop, Kind::Rectangle, "BlocPop");
+    pop.object(blocPop)->setExpr("x", "EN(Pression, 'bar')");                 // Pression_L2 : 1000 mbar = 1 bar
+    pop.object(blocPop)->setExpr("y", "EN(Pression, 'mbar')");                // 1000
+    const Id textePop = addObject(p, pop, Kind::Text, "UnitePop");
+    pop.object(textePop)->set("text", "{UNITE(Pression)}");
+    const Id popup = pop.id;
+    p.views.push_back(std::move(pop));
+    uniqueDeclarationIds(p);
+    p.config.startView = vue;
+
+    Runtime rt;
+    rt.bind(&p, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    check(rt.running() && rt.startError().empty(), "en marche : d\xC3\xA9marre (" + rt.startError() + ")");
+    const auto shown = [&](Id view) -> View {
+        const View* composed = rt.composedView(view);
+        if (!composed) return View{};
+        LiveView live;
+        live.bind(*composed);
+        return live.evaluate(rt.environment(), nullptr, rt.viewScope(view));
+    };
+    {
+        const View s = shown(vue);
+        const Object* b = s.object(bloc);
+        const Object* t = s.object(texte);
+        check(b && b->number("x") == 1500, "EN(Seuil_Haut, 'mbar') : la constante de vue sans le nom de la vue (1,5 bar) = 1500 - "
+                                               + (b ? b->text("x") : std::string("?")));
+        check(b && b->number("y") == 1500, "EN(Vue_Four.Seuil_Haut, 'mbar') = 1500 - " + (b ? b->text("y") : std::string("?")));
+        check(t && t->text("text") == "bar", "UNITE(Seuil_Haut) = bar - '" + (t ? t->text("text") : std::string("?")) + "'");
+    }
+    check(rt.openPopup(popup, Transition{}, 0.2, "Pression := Pression_L2", {}, kNoId), "la popup s'ouvre (Pression := Pression_L2)");
+    rt.tick(0.3);
+    {
+        const View s = shown(popup);
+        const Object* b = s.object(blocPop);
+        const Object* t = s.object(textePop);
+        check(b && b->number("x") == 1, "EN(Pression, 'bar') dans la popup : Pression_L2 (1000 mbar) = 1 bar, pas l'unit\xC3\xA9 de la variable "
+                                        "globale Pression - " + (b ? b->text("x") : std::string("?")));
+        check(b && b->number("y") == 1000, "EN(Pression, 'mbar') dans la popup = 1000 - " + (b ? b->text("y") : std::string("?")));
+        check(t && t->text("text") == "mbar", "UNITE(Pression) dans la popup = mbar - '" + (t ? t->text("text") : std::string("?")) + "'");
+    }
+}
 // ---- fin 1.13.1 ----
 
 } // namespace
@@ -629,6 +698,7 @@ int main() {
     finitions();     // ---- Lot API 8 : finitions ----
     compteurTrs();   // ---- Lot API 8 : corrections des captures ----
     constantesGlobales1131();   // 1.13.1
+    unitesParLaPortee1131();    // 1.13.1 (contre-verification)
     std::printf("%d controle(s), %d echec(s)\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

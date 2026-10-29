@@ -179,10 +179,12 @@ public:
     // 1.13.1 : L'UNITE DECLAREE D'UN CHEMIN ET LA CONVERSION - EN, UNITE et SANS_UNITE dans une formule de propriete :
     // l'hote les sait (une variable IHM, un membre, une constante globale Reglages.Pression, une constante de vue). Avant,
     // ces relais manquaient : dans une case fx, EN(Pression, 'mbar') rendait la valeur telle quelle et UNITE() rien.
-    // Un nom de la portee qui porte une valeur (un parametre passe par valeur) n'a pas d'unite.
+    // Un nom de la portee qui porte une valeur (un parametre passe par valeur) n'a pas d'unite. Le nom passe par la
+    // portee comme pour read et declaredType, point ou non : Seuil_Haut (une constante de la vue, sans le nom de la
+    // vue) et un parametre par reference (Pression := Pression_L2) ont l'unite de ce qu'ils designent.
     std::string declaredUnit(std::string_view name) override {
-        if (scope_ && scope_->value(name)) return {};
-        return plc_.declaredUnit(throughScope(name));
+        if (scope_ && (scope_->value(name) || scope_->object(name))) return {};
+        return plc_.declaredUnit(scope_ ? scope_->resolve(name) : std::string(name));
     }
     bool convertUnit(std::string_view from, std::string_view to, double& value) override { return plc_.convertUnit(from, to, value); }
 
